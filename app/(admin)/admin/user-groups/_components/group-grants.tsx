@@ -28,6 +28,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { createGroupGrantAction, deleteGroupGrantAction } from "../_actions";
+import { PhanTrangBang } from "@/components/ui/phan-trang-bang";
 
 type GrantRow = {
   id: string;
@@ -244,71 +245,73 @@ export function GroupGrants({
         <p className="text-sm text-muted-foreground">Nhóm chưa có grant nào.</p>
       ) : (
         <div className="overflow-x-auto rounded-lg border">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Quyền</TableHead>
-                <TableHead>Effect</TableHead>
-                <TableHead>Phạm vi</TableHead>
-                <TableHead>fieldMask</TableHead>
-                <TableHead>Lý do</TableHead>
-                <TableHead>Tạo lúc</TableHead>
-                <TableHead className="text-right">Thao tác</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {grants.map((g) => (
-                <TableRow key={g.id}>
-                  <TableCell>
-                    <span className="font-mono text-sm font-semibold">{g.permissionKey}</span>
-                    <span className="ml-1.5 text-xs text-muted-foreground">{g.module}</span>
-                    {g.keyInactive && (
-                      <Badge variant="outline" className="ml-1.5 text-state-warning-ink">
-                        key đã tắt
-                      </Badge>
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    {g.effect === "DENY" ? (
-                      <Badge variant="destructive">DENY</Badge>
-                    ) : (
-                      <Badge>ALLOW</Badge>
-                    )}
-                  </TableCell>
-                  <TableCell className="text-sm">{g.dataScope}</TableCell>
-                  <TableCell className="max-w-48 text-sm">
-                    {g.fieldMask.length > 0 ? (
-                      <span className="font-mono text-xs">{g.fieldMask.join(", ")}</span>
-                    ) : g.effect === "DENY" ? (
-                      <span className="text-xs text-muted-foreground">— chặn toàn action —</span>
-                    ) : (
-                      "—"
-                    )}
-                  </TableCell>
-                  <TableCell className="max-w-56 truncate text-sm text-muted-foreground" title={g.reason}>
-                    {g.reason || "—"}
-                  </TableCell>
-                  <TableCell className="whitespace-nowrap text-xs text-muted-foreground">
-                    {g.createdAt}
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <button
-                      onClick={() => removeGrant(g.id)}
-                      disabled={pending}
-                      className={
-                        confirmId === g.id
-                          ? "inline-flex items-center gap-1 rounded-md bg-state-danger-ink px-2.5 py-1 text-xs font-semibold text-white disabled:opacity-50"
-                          : "inline-flex items-center gap-1 text-xs text-state-danger-ink hover:underline disabled:opacity-50"
-                      }
-                    >
-                      <Trash2 className="h-3.5 w-3.5" />
-                      {confirmId === g.id ? "Bấm lần nữa để xoá" : "Xoá"}
-                    </button>
-                  </TableCell>
+          <PhanTrangBang>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Quyền</TableHead>
+                  <TableHead>Effect</TableHead>
+                  <TableHead>Phạm vi</TableHead>
+                  <TableHead>fieldMask</TableHead>
+                  <TableHead>Lý do</TableHead>
+                  <TableHead>Tạo lúc</TableHead>
+                  <TableHead className="text-right">Thao tác</TableHead>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+              </TableHeader>
+              <TableBody>
+                {grants.map((g) => (
+                  <TableRow key={g.id}>
+                    <TableCell>
+                      <span className="font-mono text-sm font-semibold">{g.permissionKey}</span>
+                      <span className="ml-1.5 text-xs text-muted-foreground">{g.module}</span>
+                      {g.keyInactive && (
+                        <Badge variant="outline" className="ml-1.5 text-state-warning-ink">
+                          key đã tắt
+                        </Badge>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      {g.effect === "DENY" ? (
+                        <Badge variant="destructive">DENY</Badge>
+                      ) : (
+                        <Badge>ALLOW</Badge>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-sm">{g.dataScope}</TableCell>
+                    <TableCell className="max-w-48 text-sm">
+                      {g.fieldMask.length > 0 ? (
+                        <span className="font-mono text-xs">{g.fieldMask.join(", ")}</span>
+                      ) : g.effect === "DENY" ? (
+                        <span className="text-xs text-muted-foreground">— chặn toàn action —</span>
+                      ) : (
+                        "—"
+                      )}
+                    </TableCell>
+                    <TableCell className="max-w-56 truncate text-sm text-muted-foreground" title={g.reason}>
+                      {g.reason || "—"}
+                    </TableCell>
+                    <TableCell className="whitespace-nowrap text-xs text-muted-foreground">
+                      {g.createdAt}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <button
+                        onClick={() => removeGrant(g.id)}
+                        disabled={pending}
+                        className={
+                          confirmId === g.id
+                            ? "inline-flex items-center gap-1 rounded-md bg-state-danger-ink px-2.5 py-1 text-xs font-semibold text-white disabled:opacity-50"
+                            : "inline-flex items-center gap-1 text-xs text-state-danger-ink hover:underline disabled:opacity-50"
+                        }
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                        {confirmId === g.id ? "Bấm lần nữa để xoá" : "Xoá"}
+                      </button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </PhanTrangBang>
         </div>
       )}
     </section>

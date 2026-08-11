@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
 import { createRule, toggleRule, grantCoins, reverseCoinTx } from "../_actions";
+import { PhanTrangBang } from "@/components/ui/phan-trang-bang";
 
 const TX_TYPE_LABEL: Record<string, string> = {
   EARN: "Cộng coin",
@@ -147,49 +148,51 @@ export function SataCoinAdmin({
       {/* Ledger */}
       <section className="rounded-xl border border-border bg-card">
         <div className="border-b px-4 py-2 text-sm font-semibold text-foreground">Sổ cái gần đây</div>
-        <table className="w-full text-sm">
-          <thead className="text-left text-xs text-muted-foreground">
-            <tr>
-              <th className="px-4 py-2">Học viên</th>
-              <th className="px-4 py-2">Loại</th>
-              <th className="px-4 py-2">Lý do</th>
-              <th className="px-4 py-2 text-right">Coin</th>
-              <th className="px-4 py-2">Ngày</th>
-              <th className="px-4 py-2">Thao tác</th>
-            </tr>
-          </thead>
-          <tbody>
-            {recentTxns.length === 0 ? (
+        <PhanTrangBang>
+          <table className="w-full text-sm">
+            <thead className="text-left text-xs text-muted-foreground">
               <tr>
-                <td colSpan={6} className="px-4 py-6 text-center text-muted-foreground">
-                  Chưa có giao dịch.
-                </td>
+                <th className="px-4 py-2">Học viên</th>
+                <th className="px-4 py-2">Loại</th>
+                <th className="px-4 py-2">Lý do</th>
+                <th className="px-4 py-2 text-right">Coin</th>
+                <th className="px-4 py-2">Ngày</th>
+                <th className="px-4 py-2">Thao tác</th>
               </tr>
-            ) : (
-              recentTxns.map((t) => (
-                <tr key={t.id} className="border-t">
-                  <td className="px-4 py-2 font-medium">{t.studentName}</td>
-                  <td className="px-4 py-2 text-xs text-muted-foreground">{TX_TYPE_LABEL[t.type] ?? t.type}</td>
-                  <td className="px-4 py-2 text-muted-foreground">{TX_REASON_LABEL[t.reason] ?? t.reason}</td>
-                  <td className={`px-4 py-2 text-right font-semibold ${t.amount >= 0 ? "text-state-success-ink" : "text-state-danger-ink"}`}>
-                    {t.amount >= 0 ? "+" : ""}
-                    {t.amount}
-                  </td>
-                  <td className="px-4 py-2 text-muted-foreground">{t.createdAt}</td>
-                  <td className="px-4 py-2">
-                    {!t.isReversal && !t.alreadyReversed ? (
-                      <button onClick={() => reverse(t)} disabled={pending} className="rounded bg-state-danger-soft px-2 py-0.5 text-xs text-state-danger-ink disabled:opacity-50">
-                        Đảo
-                      </button>
-                    ) : (
-                      <span className="text-xs text-muted-foreground">{t.alreadyReversed ? "đã đảo" : "—"}</span>
-                    )}
+            </thead>
+            <tbody>
+              {recentTxns.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="px-4 py-6 text-center text-muted-foreground">
+                    Chưa có giao dịch.
                   </td>
                 </tr>
-              ))
-            )}
-          </tbody>
-        </table>
+              ) : (
+                recentTxns.map((t) => (
+                  <tr key={t.id} className="border-t">
+                    <td className="px-4 py-2 font-medium">{t.studentName}</td>
+                    <td className="px-4 py-2 text-xs text-muted-foreground">{TX_TYPE_LABEL[t.type] ?? t.type}</td>
+                    <td className="px-4 py-2 text-muted-foreground">{TX_REASON_LABEL[t.reason] ?? t.reason}</td>
+                    <td className={`px-4 py-2 text-right font-semibold ${t.amount >= 0 ? "text-state-success-ink" : "text-state-danger-ink"}`}>
+                      {t.amount >= 0 ? "+" : ""}
+                      {t.amount}
+                    </td>
+                    <td className="px-4 py-2 text-muted-foreground">{t.createdAt}</td>
+                    <td className="px-4 py-2">
+                      {!t.isReversal && !t.alreadyReversed ? (
+                        <button onClick={() => reverse(t)} disabled={pending} className="rounded bg-state-danger-soft px-2 py-0.5 text-xs text-state-danger-ink disabled:opacity-50">
+                          Đảo
+                        </button>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">{t.alreadyReversed ? "đã đảo" : "—"}</span>
+                      )}
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </PhanTrangBang>
       </section>
     </div>
   );

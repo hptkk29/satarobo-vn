@@ -13,6 +13,7 @@ import { checkPermission } from "@/lib/auth/check-permission";
 import { redirect } from "next/navigation";
 import { getInventoryStats } from "@/lib/inventory-stats";
 import { formatDateVN } from "@/lib/format/date";
+import { PhanTrangBang } from "@/components/ui/phan-trang-bang";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Kho — Tổng quan | Admin" };
@@ -115,61 +116,63 @@ export default async function InventoryDashboardPage() {
             </h2>
           </header>
           <div className="max-h-[400px] overflow-y-auto">
-            <table className="w-full text-sm">
-              <thead className="sticky top-0 bg-muted border-b text-xs uppercase tracking-wider text-muted-foreground">
-                <tr>
-                  <th className="px-4 py-2 text-left">Mặt hàng</th>
-                  <th className="px-4 py-2 text-left">Cơ sở</th>
-                  <th className="px-4 py-2 text-right">Tồn</th>
-                  <th className="px-4 py-2 text-right">Ngưỡng</th>
-                  <th className="px-4 py-2 text-right">Hành động</th>
-                </tr>
-              </thead>
-              <tbody>
-                {stats.lowStockAlerts.slice(0, 50).map((a) => (
-                  <tr
-                    key={`${a.itemId}-${a.centerId}`}
-                    className={
-                      "border-b " +
-                      (a.severity === "CRITICAL"
-                        ? "bg-state-danger-soft"
-                        : "bg-state-warning-soft/60")
-                    }
-                  >
-                    <td className="px-4 py-2">
-                      <div className="font-medium text-foreground">
-                        {a.itemName}
-                      </div>
-                      <div className="text-xs text-muted-foreground tabular-nums">
-                        {a.itemCode}
-                      </div>
-                    </td>
-                    <td className="px-4 py-2 text-muted-foreground">{a.centerName}</td>
-                    <td
-                      className={`px-4 py-2 text-right font-bold tabular-nums ${ a.severity === "CRITICAL" ? "text-state-danger-ink" : "text-state-warning-ink" }`}
-                    >
-                      {a.quantity} {a.unit}
-                      {a.severity === "CRITICAL" && (
-                        <span className="ml-1 text-[10px] uppercase tracking-wider">
-                          (Hết)
-                        </span>
-                      )}
-                    </td>
-                    <td className="px-4 py-2 text-right tabular-nums text-muted-foreground">
-                      {a.threshold}
-                    </td>
-                    <td className="px-4 py-2 text-right">
-                      <Link
-                        href={`/inventory/items/${a.itemId}/edit`}
-                        className="text-xs font-semibold text-primary hover:underline"
-                      >
-                        Mở →
-                      </Link>
-                    </td>
+            <PhanTrangBang>
+              <table className="w-full text-sm">
+                <thead className="sticky top-0 bg-muted border-b text-xs uppercase tracking-wider text-muted-foreground">
+                  <tr>
+                    <th className="px-4 py-2 text-left">Mặt hàng</th>
+                    <th className="px-4 py-2 text-left">Cơ sở</th>
+                    <th className="px-4 py-2 text-right">Tồn</th>
+                    <th className="px-4 py-2 text-right">Ngưỡng</th>
+                    <th className="px-4 py-2 text-right">Hành động</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {stats.lowStockAlerts.slice(0, 50).map((a) => (
+                    <tr
+                      key={`${a.itemId}-${a.centerId}`}
+                      className={
+                        "border-b " +
+                        (a.severity === "CRITICAL"
+                          ? "bg-state-danger-soft"
+                          : "bg-state-warning-soft/60")
+                      }
+                    >
+                      <td className="px-4 py-2">
+                        <div className="font-medium text-foreground">
+                          {a.itemName}
+                        </div>
+                        <div className="text-xs text-muted-foreground tabular-nums">
+                          {a.itemCode}
+                        </div>
+                      </td>
+                      <td className="px-4 py-2 text-muted-foreground">{a.centerName}</td>
+                      <td
+                        className={`px-4 py-2 text-right font-bold tabular-nums ${ a.severity === "CRITICAL" ? "text-state-danger-ink" : "text-state-warning-ink" }`}
+                      >
+                        {a.quantity} {a.unit}
+                        {a.severity === "CRITICAL" && (
+                          <span className="ml-1 text-[10px] uppercase tracking-wider">
+                            (Hết)
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-4 py-2 text-right tabular-nums text-muted-foreground">
+                        {a.threshold}
+                      </td>
+                      <td className="px-4 py-2 text-right">
+                        <Link
+                          href={`/inventory/items/${a.itemId}/edit`}
+                          className="text-xs font-semibold text-primary hover:underline"
+                        >
+                          Mở →
+                        </Link>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </PhanTrangBang>
             {stats.lowStockAlerts.length > 50 && (
               <p className="border-t border-border bg-muted py-2 text-center text-xs text-muted-foreground">
                 Hiển thị 50 mục đầu tiên · Tổng: {stats.lowStockAlerts.length}
@@ -186,61 +189,63 @@ export default async function InventoryDashboardPage() {
           </h2>
         </header>
         <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-border text-sm">
-            <thead className="bg-muted">
-              <tr>
-                <th className="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  Cơ sở
-                </th>
-                <th className="px-4 py-2 text-right text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  Mặt hàng có tồn
-                </th>
-                <th className="px-4 py-2 text-right text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  Tổng giá trị
-                </th>
-                <th className="px-4 py-2 text-right text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  Cảnh báo thấp
-                </th>
-                <th className="px-4 py-2 text-right text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  Hoạt động gần nhất
-                </th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border">
-              {stats.centers.length === 0 ? (
+          <PhanTrangBang>
+            <table className="min-w-full divide-y divide-border text-sm">
+              <thead className="bg-muted">
                 <tr>
-                  <td
-                    colSpan={5}
-                    className="px-4 py-8 text-center text-sm text-muted-foreground"
-                  >
-                    Chưa có cơ sở nào có tồn kho.
-                  </td>
+                  <th className="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                    Cơ sở
+                  </th>
+                  <th className="px-4 py-2 text-right text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                    Mặt hàng có tồn
+                  </th>
+                  <th className="px-4 py-2 text-right text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                    Tổng giá trị
+                  </th>
+                  <th className="px-4 py-2 text-right text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                    Cảnh báo thấp
+                  </th>
+                  <th className="px-4 py-2 text-right text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                    Hoạt động gần nhất
+                  </th>
                 </tr>
-              ) : (
-                stats.centers.map((c) => (
-                  <tr key={c.centerId} className="hover:bg-muted/60">
-                    <td className="px-4 py-2 font-medium text-foreground">
-                      {c.centerName}
-                    </td>
-                    <td className="px-4 py-2 text-right tabular-nums text-foreground">
-                      {c.distinctItems}
-                    </td>
-                    <td className="px-4 py-2 text-right tabular-nums font-semibold text-foreground">
-                      {formatVnd(c.totalValue)}
-                    </td>
+              </thead>
+              <tbody className="divide-y divide-border">
+                {stats.centers.length === 0 ? (
+                  <tr>
                     <td
-                      className={`px-4 py-2 text-right tabular-nums ${ c.lowStockItems > 0 ? "font-bold text-state-danger-ink" : "text-muted-foreground" }`}
+                      colSpan={5}
+                      className="px-4 py-8 text-center text-sm text-muted-foreground"
                     >
-                      {c.lowStockItems}
-                    </td>
-                    <td className="px-4 py-2 text-right text-xs text-muted-foreground">
-                      {formatRelative(c.lastActivity)}
+                      Chưa có cơ sở nào có tồn kho.
                     </td>
                   </tr>
-                ))
-              )}
-            </tbody>
-          </table>
+                ) : (
+                  stats.centers.map((c) => (
+                    <tr key={c.centerId} className="hover:bg-muted/60">
+                      <td className="px-4 py-2 font-medium text-foreground">
+                        {c.centerName}
+                      </td>
+                      <td className="px-4 py-2 text-right tabular-nums text-foreground">
+                        {c.distinctItems}
+                      </td>
+                      <td className="px-4 py-2 text-right tabular-nums font-semibold text-foreground">
+                        {formatVnd(c.totalValue)}
+                      </td>
+                      <td
+                        className={`px-4 py-2 text-right tabular-nums ${ c.lowStockItems > 0 ? "font-bold text-state-danger-ink" : "text-muted-foreground" }`}
+                      >
+                        {c.lowStockItems}
+                      </td>
+                      <td className="px-4 py-2 text-right text-xs text-muted-foreground">
+                        {formatRelative(c.lastActivity)}
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </PhanTrangBang>
         </div>
       </section>
     </div>

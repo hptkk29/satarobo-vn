@@ -7,6 +7,7 @@ import { checkPermission } from "@/lib/auth/check-permission";
 import { resolveActor } from "@/lib/auth/actor";
 import { scopedDb } from "@/lib/db-scope";
 import { OPEN_FIELDS, CLOSE_FIELDS, type ChecklistKey } from "@/lib/center-checklist";
+import { PhanTrangBang } from "@/components/ui/phan-trang-bang";
 
 export const metadata = { title: "Tổng quan checklist cơ sở | Admin" };
 export const dynamic = "force-dynamic";
@@ -103,43 +104,45 @@ export default async function ChecklistOverviewPage() {
       </p>
 
       <div className="overflow-x-auto rounded-xl border border-border bg-card">
-        <table className="min-w-full text-sm">
-          <thead className="bg-muted text-left text-xs text-muted-foreground">
-            <tr>
-              <th className="px-3 py-2">Cơ sở</th>
-              {dates.map((d) => (
-                <th key={ymd(d)} className="px-2 py-2 text-center">
-                  {String(d.getDate()).padStart(2, "0")}/{String(d.getMonth() + 1).padStart(2, "0")}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {centers.map((c) => (
-              <tr key={c.id} className="border-t">
-                <td className="px-3 py-2 font-medium text-foreground">{c.name}</td>
-                {dates.map((d) => {
-                  const st = status(byKey.get(`${c.id}|${ymd(d)}`));
-                  const full = st.open && st.close;
-                  const partial = st.open || st.close;
-                  const sym = full ? "●" : partial ? "◐" : "○";
-                  const cls = full ? "text-state-success-ink" : partial ? "text-state-warning-ink" : "text-state-danger-ink";
-                  const title = `${c.name} ${ymd(d)} — mở: ${st.open ? "đủ" : "thiếu"}, đóng: ${st.close ? "đủ" : "thiếu"}`;
-                  return (
-                    <td key={ymd(d)} className={`px-2 py-2 text-center text-lg ${cls}`} title={title}>
-                      {sym}
-                    </td>
-                  );
-                })}
-              </tr>
-            ))}
-            {centers.length === 0 && (
+        <PhanTrangBang>
+          <table className="min-w-full text-sm">
+            <thead className="bg-muted text-left text-xs text-muted-foreground">
               <tr>
-                <td colSpan={DAYS + 1} className="px-3 py-8 text-center text-muted-foreground">Không có cơ sở.</td>
+                <th className="px-3 py-2">Cơ sở</th>
+                {dates.map((d) => (
+                  <th key={ymd(d)} className="px-2 py-2 text-center">
+                    {String(d.getDate()).padStart(2, "0")}/{String(d.getMonth() + 1).padStart(2, "0")}
+                  </th>
+                ))}
               </tr>
-            )}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {centers.map((c) => (
+                <tr key={c.id} className="border-t">
+                  <td className="px-3 py-2 font-medium text-foreground">{c.name}</td>
+                  {dates.map((d) => {
+                    const st = status(byKey.get(`${c.id}|${ymd(d)}`));
+                    const full = st.open && st.close;
+                    const partial = st.open || st.close;
+                    const sym = full ? "●" : partial ? "◐" : "○";
+                    const cls = full ? "text-state-success-ink" : partial ? "text-state-warning-ink" : "text-state-danger-ink";
+                    const title = `${c.name} ${ymd(d)} — mở: ${st.open ? "đủ" : "thiếu"}, đóng: ${st.close ? "đủ" : "thiếu"}`;
+                    return (
+                      <td key={ymd(d)} className={`px-2 py-2 text-center text-lg ${cls}`} title={title}>
+                        {sym}
+                      </td>
+                    );
+                  })}
+                </tr>
+              ))}
+              {centers.length === 0 && (
+                <tr>
+                  <td colSpan={DAYS + 1} className="px-3 py-8 text-center text-muted-foreground">Không có cơ sở.</td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </PhanTrangBang>
       </div>
     </div>
   );

@@ -40,6 +40,7 @@ import { PageHeader } from "../_components/ui/page-header";
 import { StatCard } from "../_components/ui/stat-card";
 import { EmptyState } from "../_components/ui/empty-state";
 import { AdjustRequestDialog } from "./_components/adjust-request-dialog";
+import { PhanTrangBang } from "@/components/ui/phan-trang-bang";
 
 export const metadata = { title: "Bảng công | Giáo viên Sata Robo" };
 
@@ -380,86 +381,88 @@ export default async function TeacherTimesheetPage({
           ) : (
             <div className="t-card overflow-hidden">
               <div className="overflow-x-auto">
-                <table className="min-w-[770px] w-full border-collapse text-left text-sm">
-                  <thead>
-                    <tr className="border-b border-border bg-muted/50 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
-                      <th scope="col" className="px-4 py-3">
-                        Ca
-                      </th>
-                      <th scope="col" className="px-4 py-3">
-                        Loại
-                      </th>
-                      <th scope="col" className="px-4 py-3">
-                        Ngày
-                      </th>
-                      <th scope="col" className="px-4 py-3">
-                        Giờ
-                      </th>
-                      <th scope="col" className="px-4 py-3">
-                        Giờ công
-                      </th>
-                      <th scope="col" className="px-4 py-3">
-                        Trạng thái
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {rows.map((r) => (
-                      <tr
-                        key={r.key}
-                        className="border-b border-border/60 transition-colors last:border-0 hover:bg-muted/50"
-                      >
-                        <td className="px-4 py-3">
-                          <p className="font-semibold text-foreground">
-                            {r.name}
-                          </p>
-                          {r.subtitle && (
-                            <p className="text-xs text-muted-foreground">
-                              {r.subtitle}
-                            </p>
-                          )}
-                        </td>
-                        <td className="px-4 py-3 whitespace-nowrap">
-                          <span
-                            className={cn(
-                              "inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold",
-                              TYPE_TONE[r.type],
-                            )}
-                          >
-                            {r.type}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3 whitespace-nowrap text-muted-foreground">
-                          {viDate(r.dateLabel)}
-                        </td>
-                        <td className="px-4 py-3 whitespace-nowrap text-foreground">
-                          {r.timeLabel}
-                        </td>
-                        <td className="px-4 py-3 whitespace-nowrap font-semibold text-foreground">
-                          {r.hours != null ? (
-                            `${fmtHours(r.hours)}h`
-                          ) : (
-                            <span className="font-normal text-muted-foreground">
-                              —
-                            </span>
-                          )}
-                        </td>
-                        <td className="px-4 py-3 whitespace-nowrap">
-                          <span
-                            className={cn(
-                              "inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold",
-                              r.done
-                                ? "bg-state-success-soft text-state-success-ink dark:bg-state-success-soft dark:text-state-success-ink"
-                                : "bg-state-info-soft text-state-info-ink",
-                            )}
-                          >
-                            {r.done ? "Đã làm" : "Sắp tới"}
-                          </span>
-                        </td>
+                <PhanTrangBang>
+                  <table className="min-w-[770px] w-full border-collapse text-left text-sm">
+                    <thead>
+                      <tr className="border-b border-border bg-muted/50 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+                        <th scope="col" className="px-4 py-3">
+                          Ca
+                        </th>
+                        <th scope="col" className="px-4 py-3">
+                          Loại
+                        </th>
+                        <th scope="col" className="px-4 py-3">
+                          Ngày
+                        </th>
+                        <th scope="col" className="px-4 py-3">
+                          Giờ
+                        </th>
+                        <th scope="col" className="px-4 py-3">
+                          Giờ công
+                        </th>
+                        <th scope="col" className="px-4 py-3">
+                          Trạng thái
+                        </th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody>
+                      {rows.map((r) => (
+                        <tr
+                          key={r.key}
+                          className="border-b border-border/60 transition-colors last:border-0 hover:bg-muted/50"
+                        >
+                          <td className="px-4 py-3">
+                            <p className="font-semibold text-foreground">
+                              {r.name}
+                            </p>
+                            {r.subtitle && (
+                              <p className="text-xs text-muted-foreground">
+                                {r.subtitle}
+                              </p>
+                            )}
+                          </td>
+                          <td className="px-4 py-3 whitespace-nowrap">
+                            <span
+                              className={cn(
+                                "inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold",
+                                TYPE_TONE[r.type],
+                              )}
+                            >
+                              {r.type}
+                            </span>
+                          </td>
+                          <td className="px-4 py-3 whitespace-nowrap text-muted-foreground">
+                            {viDate(r.dateLabel)}
+                          </td>
+                          <td className="px-4 py-3 whitespace-nowrap text-foreground">
+                            {r.timeLabel}
+                          </td>
+                          <td className="px-4 py-3 whitespace-nowrap font-semibold text-foreground">
+                            {r.hours != null ? (
+                              `${fmtHours(r.hours)}h`
+                            ) : (
+                              <span className="font-normal text-muted-foreground">
+                                —
+                              </span>
+                            )}
+                          </td>
+                          <td className="px-4 py-3 whitespace-nowrap">
+                            <span
+                              className={cn(
+                                "inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold",
+                                r.done
+                                  ? "bg-state-success-soft text-state-success-ink dark:bg-state-success-soft dark:text-state-success-ink"
+                                  : "bg-state-info-soft text-state-info-ink",
+                              )}
+                            >
+                              {r.done ? "Đã làm" : "Sắp tới"}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </PhanTrangBang>
               </div>
             </div>
           )}

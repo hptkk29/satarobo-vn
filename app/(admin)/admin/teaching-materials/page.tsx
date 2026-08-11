@@ -25,6 +25,7 @@ import {
 } from "@/lib/teachers/materials";
 import { ENROLLMENT_ACTIVE_STATUS_LIST } from "@/lib/enrollment-status";
 import { PageHelp } from "@/components/admin/ui/page-help";
+import { PhanTrangBang } from "@/components/ui/phan-trang-bang";
 
 export const metadata = { title: "Tài liệu lớp tôi | Admin" };
 export const dynamic = "force-dynamic";
@@ -383,61 +384,63 @@ export default async function TeachingMaterialsPage({
                   {/* Bài tập của buổi + thống kê nộp */}
                   {l.assignments.length > 0 ? (
                     <div className="overflow-hidden rounded-lg border border-border">
-                      <table className="w-full text-sm">
-                        <thead className="bg-muted text-xs text-muted-foreground">
-                          <tr>
-                            <th className="px-3 py-2 text-left font-medium">
-                              <NotebookPen className="mr-1 inline h-3.5 w-3.5" />
-                              Bài tập
-                            </th>
-                            <th className="px-3 py-2 text-right font-medium">
-                              Đã nộp
-                            </th>
-                            <th className="px-3 py-2 text-right font-medium">
-                              Đã chấm
-                            </th>
-                            <th className="px-3 py-2 text-right font-medium">
-                              Chưa nộp
-                            </th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-border">
-                          {l.assignments.map((a) => (
-                            <tr key={a.id}>
-                              <td className="px-3 py-2">
-                                <div className="font-medium text-foreground">
-                                  {a.title}
-                                </div>
-                                <div className="text-xs text-muted-foreground">
-                                  {a.totalPoints} điểm
-                                  {a.dueAt
-                                    ? ` · hạn ${new Intl.DateTimeFormat(
-                                        "vi-VN",
-                                        {
-                                          dateStyle: "short",
-                                        },
-                                      ).format(a.dueAt)}`
-                                    : ""}
-                                </div>
-                              </td>
-                              <td className="px-3 py-2 text-right tabular-nums text-foreground">
-                                {a.stats.submitted}/{a.stats.total}
-                                {a.stats.late > 0 && (
-                                  <span className="ml-1 text-xs text-state-warning-ink">
-                                    ({a.stats.late} muộn)
-                                  </span>
-                                )}
-                              </td>
-                              <td className="px-3 py-2 text-right tabular-nums text-state-success-ink">
-                                {a.stats.graded}
-                              </td>
-                              <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">
-                                {a.stats.notSubmitted}
-                              </td>
+                      <PhanTrangBang>
+                        <table className="w-full text-sm">
+                          <thead className="bg-muted text-xs text-muted-foreground">
+                            <tr>
+                              <th className="px-3 py-2 text-left font-medium">
+                                <NotebookPen className="mr-1 inline h-3.5 w-3.5" />
+                                Bài tập
+                              </th>
+                              <th className="px-3 py-2 text-right font-medium">
+                                Đã nộp
+                              </th>
+                              <th className="px-3 py-2 text-right font-medium">
+                                Đã chấm
+                              </th>
+                              <th className="px-3 py-2 text-right font-medium">
+                                Chưa nộp
+                              </th>
                             </tr>
-                          ))}
-                        </tbody>
-                      </table>
+                          </thead>
+                          <tbody className="divide-y divide-border">
+                            {l.assignments.map((a) => (
+                              <tr key={a.id}>
+                                <td className="px-3 py-2">
+                                  <div className="font-medium text-foreground">
+                                    {a.title}
+                                  </div>
+                                  <div className="text-xs text-muted-foreground">
+                                    {a.totalPoints} điểm
+                                    {a.dueAt
+                                      ? ` · hạn ${new Intl.DateTimeFormat(
+                                          "vi-VN",
+                                          {
+                                            dateStyle: "short",
+                                          },
+                                        ).format(a.dueAt)}`
+                                      : ""}
+                                  </div>
+                                </td>
+                                <td className="px-3 py-2 text-right tabular-nums text-foreground">
+                                  {a.stats.submitted}/{a.stats.total}
+                                  {a.stats.late > 0 && (
+                                    <span className="ml-1 text-xs text-state-warning-ink">
+                                      ({a.stats.late} muộn)
+                                    </span>
+                                  )}
+                                </td>
+                                <td className="px-3 py-2 text-right tabular-nums text-state-success-ink">
+                                  {a.stats.graded}
+                                </td>
+                                <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">
+                                  {a.stats.notSubmitted}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </PhanTrangBang>
                     </div>
                   ) : (
                     <p className="text-xs text-muted-foreground">

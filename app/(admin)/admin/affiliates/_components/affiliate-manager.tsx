@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Copy, Plus } from "lucide-react";
 import { createAffiliateAction, updateAffiliateAction } from "../_actions";
+import { PhanTrangBang } from "@/components/ui/phan-trang-bang";
 
 export type AffiliateRow = {
   id: string;
@@ -255,67 +256,69 @@ export function AffiliateManager({
         </p>
       ) : (
         <div className="overflow-hidden rounded-xl border border-border bg-card">
-          <table className="w-full text-sm">
-            <thead className="border-b border-border bg-muted text-left text-xs uppercase tracking-wider text-muted-foreground">
-              <tr>
-                <th className="px-4 py-2">Mã</th>
-                <th className="px-4 py-2">Người giới thiệu</th>
-                <th className="px-4 py-2 text-center">Lead</th>
-                <th className="px-4 py-2 text-center">Đã chốt</th>
-                <th className="px-4 py-2 text-center">% HH</th>
-                <th className="px-4 py-2"></th>
-              </tr>
-            </thead>
-            <tbody>
-              {affiliates.map((a) => (
-                <tr key={a.id} className="border-b border-border last:border-0">
-                  <td className="px-4 py-2 font-mono font-semibold text-foreground">
-                    {a.code}
-                    {!a.isActive && (
-                      <span className="ml-2 rounded bg-muted px-1.5 py-0.5 text-[10px] font-semibold text-muted-foreground">
-                        TẮT
-                      </span>
-                    )}
-                  </td>
-                  <td className="px-4 py-2 text-foreground">
-                    {a.name}
-                    {(a.phone || a.email) && (
-                      <span className="block text-xs text-muted-foreground">
-                        {[a.phone, a.email].filter(Boolean).join(" · ")}
-                      </span>
-                    )}
-                  </td>
-                  <td className="px-4 py-2 text-center tabular-nums">{a.leadCount}</td>
-                  <td className="px-4 py-2 text-center tabular-nums font-semibold text-state-success-ink">
-                    {a.convertedCount}
-                  </td>
-                  <td className="px-4 py-2 text-center tabular-nums">
-                    {a.commissionPercent != null ? `${a.commissionPercent}%` : "—"}
-                  </td>
-                  <td className="px-4 py-2">
-                    <div className="flex items-center justify-end gap-3">
-                      <button
-                        type="button"
-                        onClick={() => copyLink(a.code)}
-                        className="inline-flex items-center gap-1 text-xs font-semibold text-muted-foreground hover:text-primary"
-                      >
-                        <Copy className="h-3.5 w-3.5" /> Link
-                      </button>
-                      {canManage && (
+          <PhanTrangBang>
+            <table className="w-full text-sm">
+              <thead className="border-b border-border bg-muted text-left text-xs uppercase tracking-wider text-muted-foreground">
+                <tr>
+                  <th className="px-4 py-2">Mã</th>
+                  <th className="px-4 py-2">Người giới thiệu</th>
+                  <th className="px-4 py-2 text-center">Lead</th>
+                  <th className="px-4 py-2 text-center">Đã chốt</th>
+                  <th className="px-4 py-2 text-center">% HH</th>
+                  <th className="px-4 py-2"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {affiliates.map((a) => (
+                  <tr key={a.id} className="border-b border-border last:border-0">
+                    <td className="px-4 py-2 font-mono font-semibold text-foreground">
+                      {a.code}
+                      {!a.isActive && (
+                        <span className="ml-2 rounded bg-muted px-1.5 py-0.5 text-[10px] font-semibold text-muted-foreground">
+                          TẮT
+                        </span>
+                      )}
+                    </td>
+                    <td className="px-4 py-2 text-foreground">
+                      {a.name}
+                      {(a.phone || a.email) && (
+                        <span className="block text-xs text-muted-foreground">
+                          {[a.phone, a.email].filter(Boolean).join(" · ")}
+                        </span>
+                      )}
+                    </td>
+                    <td className="px-4 py-2 text-center tabular-nums">{a.leadCount}</td>
+                    <td className="px-4 py-2 text-center tabular-nums font-semibold text-state-success-ink">
+                      {a.convertedCount}
+                    </td>
+                    <td className="px-4 py-2 text-center tabular-nums">
+                      {a.commissionPercent != null ? `${a.commissionPercent}%` : "—"}
+                    </td>
+                    <td className="px-4 py-2">
+                      <div className="flex items-center justify-end gap-3">
                         <button
                           type="button"
-                          onClick={() => beginEdit(a)}
-                          className="text-xs font-semibold text-primary hover:underline"
+                          onClick={() => copyLink(a.code)}
+                          className="inline-flex items-center gap-1 text-xs font-semibold text-muted-foreground hover:text-primary"
                         >
-                          Sửa
+                          <Copy className="h-3.5 w-3.5" /> Link
                         </button>
-                      )}
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+                        {canManage && (
+                          <button
+                            type="button"
+                            onClick={() => beginEdit(a)}
+                            className="text-xs font-semibold text-primary hover:underline"
+                          >
+                            Sửa
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </PhanTrangBang>
         </div>
       )}
     </div>

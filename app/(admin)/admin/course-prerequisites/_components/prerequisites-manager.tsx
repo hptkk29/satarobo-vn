@@ -8,6 +8,7 @@ import {
   setCoursePrerequisites,
   clearCoursePrerequisites,
 } from "../_actions";
+import { PhanTrangBang } from "@/components/ui/phan-trang-bang";
 
 type CourseOpt = { id: string; label: string };
 type Row = { courseId: string; courseLabel: string; prereqs: CourseOpt[] };
@@ -50,70 +51,72 @@ export function PrerequisitesManager({
       </div>
 
       <div className="overflow-hidden rounded-xl border border-border bg-card">
-        <table className="min-w-full divide-y divide-border">
-          <thead className="bg-muted">
-            <tr>
-              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">Khoá</th>
-              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">Phải hoàn thành trước</th>
-              <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-muted-foreground">Thao tác</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-border">
-            {rows.length === 0 ? (
+        <PhanTrangBang>
+          <table className="min-w-full divide-y divide-border">
+            <thead className="bg-muted">
               <tr>
-                <td colSpan={3} className="px-4 py-12 text-center text-sm text-muted-foreground">
-                  Chưa có khoá nào cấu hình tiên quyết. Bấm “Thêm điều kiện tiên quyết”.
-                </td>
+                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">Khoá</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">Phải hoàn thành trước</th>
+                <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-muted-foreground">Thao tác</th>
               </tr>
-            ) : (
-              rows.map((r) => (
-                <tr key={r.courseId} className="hover:bg-muted/60">
-                  <td className="px-4 py-3 font-medium text-foreground">{r.courseLabel}</td>
-                  <td className="px-4 py-3">
-                    <div className="flex flex-wrap gap-1.5">
-                      {r.prereqs.map((p) => (
-                        <span key={p.id} className="rounded-full bg-primary-soft px-2.5 py-0.5 text-xs font-medium text-primary">
-                          {p.label}
-                        </span>
-                      ))}
-                    </div>
-                  </td>
-                  <td className="px-4 py-3 text-right">
-                    <div className="inline-flex items-center gap-1">
-                      <button
-                        type="button"
-                        onClick={() => setEditing({ courseId: r.courseId, fixed: true })}
-                        className="rounded p-1.5 text-state-info-ink hover:bg-state-info-soft"
-                        title="Sửa"
-                      >
-                        <Pencil className="h-4 w-4" />
-                      </button>
-                      {confirmDelete === r.courseId ? (
-                        <button
-                          type="button"
-                          onClick={() => remove(r.courseId)}
-                          disabled={pending}
-                          className="rounded bg-state-danger-soft px-2 py-1 text-xs font-semibold text-state-danger-ink hover:bg-state-danger-soft-hover disabled:opacity-50"
-                        >
-                          Xác nhận xoá?
-                        </button>
-                      ) : (
-                        <button
-                          type="button"
-                          onClick={() => setConfirmDelete(r.courseId)}
-                          className="rounded p-1.5 text-state-danger-ink hover:bg-state-danger-soft"
-                          title="Xoá toàn bộ tiên quyết của khoá này"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </button>
-                      )}
-                    </div>
+            </thead>
+            <tbody className="divide-y divide-border">
+              {rows.length === 0 ? (
+                <tr>
+                  <td colSpan={3} className="px-4 py-12 text-center text-sm text-muted-foreground">
+                    Chưa có khoá nào cấu hình tiên quyết. Bấm “Thêm điều kiện tiên quyết”.
                   </td>
                 </tr>
-              ))
-            )}
-          </tbody>
-        </table>
+              ) : (
+                rows.map((r) => (
+                  <tr key={r.courseId} className="hover:bg-muted/60">
+                    <td className="px-4 py-3 font-medium text-foreground">{r.courseLabel}</td>
+                    <td className="px-4 py-3">
+                      <div className="flex flex-wrap gap-1.5">
+                        {r.prereqs.map((p) => (
+                          <span key={p.id} className="rounded-full bg-primary-soft px-2.5 py-0.5 text-xs font-medium text-primary">
+                            {p.label}
+                          </span>
+                        ))}
+                      </div>
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      <div className="inline-flex items-center gap-1">
+                        <button
+                          type="button"
+                          onClick={() => setEditing({ courseId: r.courseId, fixed: true })}
+                          className="rounded p-1.5 text-state-info-ink hover:bg-state-info-soft"
+                          title="Sửa"
+                        >
+                          <Pencil className="h-4 w-4" />
+                        </button>
+                        {confirmDelete === r.courseId ? (
+                          <button
+                            type="button"
+                            onClick={() => remove(r.courseId)}
+                            disabled={pending}
+                            className="rounded bg-state-danger-soft px-2 py-1 text-xs font-semibold text-state-danger-ink hover:bg-state-danger-soft-hover disabled:opacity-50"
+                          >
+                            Xác nhận xoá?
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => setConfirmDelete(r.courseId)}
+                            className="rounded p-1.5 text-state-danger-ink hover:bg-state-danger-soft"
+                            title="Xoá toàn bộ tiên quyết của khoá này"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </PhanTrangBang>
       </div>
 
       {editing && (

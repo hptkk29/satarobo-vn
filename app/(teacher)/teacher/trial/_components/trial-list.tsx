@@ -9,6 +9,7 @@ import {
   type SelectFilter,
 } from "../../_components/ui/list-toolbar";
 import { EmptyState } from "../../_components/ui/empty-state";
+import { PhanTrangBang } from "@/components/ui/phan-trang-bang";
 
 /** Học viên Trial (plain — câu 46: KHÔNG có phụ huynh). */
 export interface TrialStudentView {
@@ -182,81 +183,83 @@ export function TrialList({ slots }: { slots: TrialSlotView[] }) {
                       </p>
                     ) : (
                       <div className="overflow-x-auto">
-                        <table className="min-w-[560px] w-full border-collapse text-left text-sm">
-                          <thead>
-                            <tr className="border-b border-border text-xs font-semibold tracking-wide text-muted-foreground uppercase">
-                              <th scope="col" className="px-5 py-2.5">
-                                Học viên
-                              </th>
-                              <th scope="col" className="px-5 py-2.5">
-                                Khóa học
-                              </th>
-                              <th
-                                scope="col"
-                                className="px-5 py-2.5 text-right"
-                              >
-                                Đánh giá
-                              </th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {s.students.map((st2) => (
-                              <tr
-                                key={st2.enrollmentId}
-                                className="border-b border-border/60 last:border-0"
-                              >
-                                <td className="px-5 py-3">
-                                  <p className="font-medium text-foreground">
-                                    {st2.studentName}
-                                  </p>
-                                  {st2.birthYear && (
-                                    <p className="text-xs text-muted-foreground">
-                                      {st2.birthYear}
+                        <PhanTrangBang>
+                          <table className="min-w-[560px] w-full border-collapse text-left text-sm">
+                            <thead>
+                              <tr className="border-b border-border text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+                                <th scope="col" className="px-5 py-2.5">
+                                  Học viên
+                                </th>
+                                <th scope="col" className="px-5 py-2.5">
+                                  Khóa học
+                                </th>
+                                <th
+                                  scope="col"
+                                  className="px-5 py-2.5 text-right"
+                                >
+                                  Đánh giá
+                                </th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {s.students.map((st2) => (
+                                <tr
+                                  key={st2.enrollmentId}
+                                  className="border-b border-border/60 last:border-0"
+                                >
+                                  <td className="px-5 py-3">
+                                    <p className="font-medium text-foreground">
+                                      {st2.studentName}
                                     </p>
-                                  )}
-                                </td>
-                                <td className="px-5 py-3 whitespace-nowrap text-muted-foreground">
-                                  {st2.courseName ?? "—"}
-                                </td>
-                                <td className="px-5 py-3 text-right whitespace-nowrap">
-                                  <div className="inline-flex items-center gap-1.5">
-                                    <Link
-                                      href={`?enrollmentId=${st2.enrollmentId}`}
-                                      className={cn(
-                                        "inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring",
-                                        st2.evaluated
-                                          ? "border border-border text-foreground hover:bg-muted"
-                                          : "bg-primary text-white hover:bg-primary-darker",
-                                      )}
-                                    >
-                                      <ClipboardPen
-                                        className="h-3.5 w-3.5"
-                                        aria-hidden
-                                      />
-                                      {st2.evaluated
-                                        ? "Xem phiếu"
-                                        : "Nhập phiếu"}
-                                    </Link>
-                                    {st2.evaluated && (
-                                      <a
-                                        href={`/teacher/trial/pdf/${st2.enrollmentId}`}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs font-semibold text-foreground outline-none transition-colors hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring"
+                                    {st2.birthYear && (
+                                      <p className="text-xs text-muted-foreground">
+                                        {st2.birthYear}
+                                      </p>
+                                    )}
+                                  </td>
+                                  <td className="px-5 py-3 whitespace-nowrap text-muted-foreground">
+                                    {st2.courseName ?? "—"}
+                                  </td>
+                                  <td className="px-5 py-3 text-right whitespace-nowrap">
+                                    <div className="inline-flex items-center gap-1.5">
+                                      <Link
+                                        href={`?enrollmentId=${st2.enrollmentId}`}
+                                        className={cn(
+                                          "inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring",
+                                          st2.evaluated
+                                            ? "border border-border text-foreground hover:bg-muted"
+                                            : "bg-primary text-white hover:bg-primary-darker",
+                                        )}
                                       >
-                                        <FileDown
+                                        <ClipboardPen
                                           className="h-3.5 w-3.5"
                                           aria-hidden
-                                        />{" "}
-                                        Xuất PDF
-                                      </a>
-                                    )}
-                                  </div>
-                                </td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
+                                        />
+                                        {st2.evaluated
+                                          ? "Xem phiếu"
+                                          : "Nhập phiếu"}
+                                      </Link>
+                                      {st2.evaluated && (
+                                        <a
+                                          href={`/teacher/trial/pdf/${st2.enrollmentId}`}
+                                          target="_blank"
+                                          rel="noopener noreferrer"
+                                          className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs font-semibold text-foreground outline-none transition-colors hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring"
+                                        >
+                                          <FileDown
+                                            className="h-3.5 w-3.5"
+                                            aria-hidden
+                                          />{" "}
+                                          Xuất PDF
+                                        </a>
+                                      )}
+                                    </div>
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </PhanTrangBang>
                       </div>
                     )}
                   </div>

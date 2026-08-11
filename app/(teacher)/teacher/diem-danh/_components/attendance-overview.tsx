@@ -8,6 +8,7 @@ import {
   type SelectFilter,
 } from "../../_components/ui/list-toolbar";
 import { EmptyState } from "../../_components/ui/empty-state";
+import { PhanTrangBang } from "@/components/ui/phan-trang-bang";
 
 /** 1 buổi đã diễn ra (plain — câu 46: chỉ metadata + đếm). */
 export interface AttendanceRow {
@@ -80,77 +81,79 @@ export function AttendanceOverview({ rows }: { rows: AttendanceRow[] }) {
       ) : (
         <div className="t-card overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="min-w-[770px] w-full border-collapse text-left text-sm">
-              <thead>
-                <tr className="border-b border-border bg-muted/50 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
-                  <th scope="col" className="px-5 py-3">
-                    Buổi học
-                  </th>
-                  <th scope="col" className="px-5 py-3">
-                    Lớp
-                  </th>
-                  <th scope="col" className="px-5 py-3">
-                    Ngày
-                  </th>
-                  <th scope="col" className="px-5 py-3">
-                    Có mặt
-                  </th>
-                  <th scope="col" className="px-5 py-3">
-                    Điểm danh
-                  </th>
-                  <th scope="col" className="px-5 py-3 text-right">
-                    <span className="sr-only">Mở</span>
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {filtered.map((r) => (
-                  <tr
-                    key={r.id}
-                    className="border-b border-border/60 transition-colors last:border-0 hover:bg-muted/50"
-                  >
-                    <td className="px-5 py-3.5">
-                      <p className="font-semibold text-foreground">{r.topic}</p>
-                      {r.time && (
-                        <p className="text-xs text-muted-foreground">
-                          {r.time}
-                        </p>
-                      )}
-                    </td>
-                    <td className="px-5 py-3.5 whitespace-nowrap text-foreground">
-                      {r.className}
-                    </td>
-                    <td className="px-5 py-3.5 whitespace-nowrap text-foreground">
-                      {r.date}
-                    </td>
-                    <td className="px-5 py-3.5 whitespace-nowrap font-semibold text-foreground">
-                      {r.done ? `${r.present}/${r.roster}` : "—"}
-                    </td>
-                    <td className="px-5 py-3.5 whitespace-nowrap">
-                      {r.done ? (
-                        <span className="inline-flex items-center gap-1 rounded-full bg-state-success-soft px-2.5 py-1 text-xs font-semibold text-state-success-ink">
-                          <CircleCheck className="h-3.5 w-3.5" aria-hidden /> Đã
-                          xong
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center rounded-full bg-state-warning-soft px-2.5 py-1 text-xs font-semibold text-state-warning-ink">
-                          Chưa điểm danh
-                        </span>
-                      )}
-                    </td>
-                    <td className="px-5 py-3.5 text-right whitespace-nowrap">
-                      <Link
-                        href={`/teacher/lop?classId=${r.classId}&sessionId=${r.id}`}
-                        className="inline-flex items-center gap-1 rounded-sm text-sm font-semibold text-primary-ink outline-none hover:text-primary-ink-hover focus-visible:ring-2 focus-visible:ring-ring"
-                      >
-                        {r.done ? "Xem" : "Điểm danh"}
-                        <ChevronRight className="h-4 w-4" aria-hidden />
-                      </Link>
-                    </td>
+            <PhanTrangBang>
+              <table className="min-w-[770px] w-full border-collapse text-left text-sm">
+                <thead>
+                  <tr className="border-b border-border bg-muted/50 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+                    <th scope="col" className="px-5 py-3">
+                      Buổi học
+                    </th>
+                    <th scope="col" className="px-5 py-3">
+                      Lớp
+                    </th>
+                    <th scope="col" className="px-5 py-3">
+                      Ngày
+                    </th>
+                    <th scope="col" className="px-5 py-3">
+                      Có mặt
+                    </th>
+                    <th scope="col" className="px-5 py-3">
+                      Điểm danh
+                    </th>
+                    <th scope="col" className="px-5 py-3 text-right">
+                      <span className="sr-only">Mở</span>
+                    </th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {filtered.map((r) => (
+                    <tr
+                      key={r.id}
+                      className="border-b border-border/60 transition-colors last:border-0 hover:bg-muted/50"
+                    >
+                      <td className="px-5 py-3.5">
+                        <p className="font-semibold text-foreground">{r.topic}</p>
+                        {r.time && (
+                          <p className="text-xs text-muted-foreground">
+                            {r.time}
+                          </p>
+                        )}
+                      </td>
+                      <td className="px-5 py-3.5 whitespace-nowrap text-foreground">
+                        {r.className}
+                      </td>
+                      <td className="px-5 py-3.5 whitespace-nowrap text-foreground">
+                        {r.date}
+                      </td>
+                      <td className="px-5 py-3.5 whitespace-nowrap font-semibold text-foreground">
+                        {r.done ? `${r.present}/${r.roster}` : "—"}
+                      </td>
+                      <td className="px-5 py-3.5 whitespace-nowrap">
+                        {r.done ? (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-state-success-soft px-2.5 py-1 text-xs font-semibold text-state-success-ink">
+                            <CircleCheck className="h-3.5 w-3.5" aria-hidden /> Đã
+                            xong
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center rounded-full bg-state-warning-soft px-2.5 py-1 text-xs font-semibold text-state-warning-ink">
+                            Chưa điểm danh
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-5 py-3.5 text-right whitespace-nowrap">
+                        <Link
+                          href={`/teacher/lop?classId=${r.classId}&sessionId=${r.id}`}
+                          className="inline-flex items-center gap-1 rounded-sm text-sm font-semibold text-primary-ink outline-none hover:text-primary-ink-hover focus-visible:ring-2 focus-visible:ring-ring"
+                        >
+                          {r.done ? "Xem" : "Điểm danh"}
+                          <ChevronRight className="h-4 w-4" aria-hidden />
+                        </Link>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </PhanTrangBang>
           </div>
         </div>
       )}

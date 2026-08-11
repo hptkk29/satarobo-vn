@@ -12,6 +12,7 @@ import { getNonEnrollableCenterIds } from "@/lib/enrollment-flow";
 import { TransferForm } from "./_components/transfer-form";
 import { RequestActions } from "./_components/request-actions";
 import { PageHelp } from "@/components/admin/ui/page-help";
+import { PhanTrangBang } from "@/components/ui/phan-trang-bang";
 
 export const metadata = { title: "Chuyển lớp / cơ sở | Admin" };
 export const dynamic = "force-dynamic";
@@ -148,62 +149,64 @@ export default async function TransferPage({ searchParams }: PageProps) {
         <div className="border-b px-4 py-2 text-sm font-semibold text-foreground">
           Yêu cầu đang chờ
         </div>
-        <table className="w-full text-sm">
-          <thead className="text-left text-xs text-muted-foreground">
-            <tr>
-              <th className="px-4 py-2">Học viên</th>
-              <th className="px-4 py-2">Trạng thái</th>
-              <th className="px-4 py-2">Lý do</th>
-              <th className="px-4 py-2">Ngày</th>
-              <th className="px-4 py-2">Thao tác</th>
-            </tr>
-          </thead>
-          <tbody>
-            {requests.length === 0 ? (
+        <PhanTrangBang>
+          <table className="w-full text-sm">
+            <thead className="text-left text-xs text-muted-foreground">
               <tr>
-                <td
-                  colSpan={5}
-                  className="px-4 py-6 text-center text-muted-foreground"
-                >
-                  Không có yêu cầu.
-                </td>
+                <th className="px-4 py-2">Học viên</th>
+                <th className="px-4 py-2">Trạng thái</th>
+                <th className="px-4 py-2">Lý do</th>
+                <th className="px-4 py-2">Ngày</th>
+                <th className="px-4 py-2">Thao tác</th>
               </tr>
-            ) : (
-              requests.map((r) => (
-                <tr key={r.id} className="border-t align-top">
-                  <td className="px-4 py-2 font-medium">
-                    {r.student.name}
-                    {r.student.studentCode ? ` (${r.student.studentCode})` : ""}
-                  </td>
-                  <td className="px-4 py-2">
-                    <span
-                      className={
-                        r.status === "WAITLISTED"
-                          ? "rounded bg-state-warning-soft px-2 py-0.5 text-xs text-state-warning-ink"
-                          : "rounded bg-state-info-soft px-2 py-0.5 text-xs text-state-info-ink"
-                      }
-                    >
-                      {r.status === "WAITLISTED" ? "Chờ chỗ" : "Chờ duyệt"}
-                    </span>
-                  </td>
-                  <td className="px-4 py-2 text-muted-foreground">
-                    {r.reason ?? "—"}
-                  </td>
-                  <td className="px-4 py-2 text-muted-foreground">
-                    {r.createdAt.toISOString().slice(0, 10)}
-                  </td>
-                  <td className="px-4 py-2">
-                    <RequestActions
-                      id={r.id}
-                      hasTarget={!!r.toClassId}
-                      canManage={canApprove}
-                    />
+            </thead>
+            <tbody>
+              {requests.length === 0 ? (
+                <tr>
+                  <td
+                    colSpan={5}
+                    className="px-4 py-6 text-center text-muted-foreground"
+                  >
+                    Không có yêu cầu.
                   </td>
                 </tr>
-              ))
-            )}
-          </tbody>
-        </table>
+              ) : (
+                requests.map((r) => (
+                  <tr key={r.id} className="border-t align-top">
+                    <td className="px-4 py-2 font-medium">
+                      {r.student.name}
+                      {r.student.studentCode ? ` (${r.student.studentCode})` : ""}
+                    </td>
+                    <td className="px-4 py-2">
+                      <span
+                        className={
+                          r.status === "WAITLISTED"
+                            ? "rounded bg-state-warning-soft px-2 py-0.5 text-xs text-state-warning-ink"
+                            : "rounded bg-state-info-soft px-2 py-0.5 text-xs text-state-info-ink"
+                        }
+                      >
+                        {r.status === "WAITLISTED" ? "Chờ chỗ" : "Chờ duyệt"}
+                      </span>
+                    </td>
+                    <td className="px-4 py-2 text-muted-foreground">
+                      {r.reason ?? "—"}
+                    </td>
+                    <td className="px-4 py-2 text-muted-foreground">
+                      {r.createdAt.toISOString().slice(0, 10)}
+                    </td>
+                    <td className="px-4 py-2">
+                      <RequestActions
+                        id={r.id}
+                        hasTarget={!!r.toClassId}
+                        canManage={canApprove}
+                      />
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </PhanTrangBang>
       </div>
     </div>
   );

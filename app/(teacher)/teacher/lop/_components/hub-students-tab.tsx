@@ -16,6 +16,7 @@ import { ENROLLMENT_STATUS } from "@/lib/labels/registry";
 import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "../../_components/ui/empty-state";
 import { initialsOf } from "@/lib/ui/initials";
+import { PhanTrangBang } from "@/components/ui/phan-trang-bang";
 
 export async function HubStudentsTab({
   actor,
@@ -69,70 +70,72 @@ export async function HubStudentsTab({
       </p>
       <div className="t-card overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="min-w-[560px] w-full border-collapse text-left text-sm">
-            <thead>
-              <tr className="border-b border-border bg-muted/50 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
-                <th scope="col" className="px-5 py-3">
-                  Học viên
-                </th>
-                <th scope="col" className="px-5 py-3">
-                  Năm sinh
-                </th>
-                <th scope="col" className="px-5 py-3">
-                  Trạng thái
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {roster.map((e) => {
-                const st = e.student;
-                return (
-                  <tr
-                    key={st.id}
-                    className="border-b border-border/60 transition-colors last:border-0 hover:bg-muted/50"
-                  >
-                    <td className="px-5 py-3.5">
-                      <div className="flex items-center gap-3">
-                        {st.avatarUrl ? (
-                          // Thumbnail nội bộ nhỏ — cùng ngoại lệ <img> như /admin/students.
-                          <img
-                            src={st.avatarUrl}
-                            alt={st.name}
-                            className="h-10 w-10 shrink-0 rounded-full border border-border object-cover"
-                          />
-                        ) : (
-                          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary-soft text-xs font-semibold text-primary-ink">
-                            {initialsOf(st.name)}
-                          </span>
-                        )}
-                        <div className="min-w-0">
-                          <Link
-                            href={`/teacher/hoc-vien?s=${st.id}`}
-                            className="font-semibold text-foreground outline-none hover:text-primary-ink-hover focus-visible:ring-2 focus-visible:ring-ring"
-                          >
-                            {st.name}
-                          </Link>
-                          {st.studentCode && (
-                            <p className="text-xs text-muted-foreground">
-                              {st.studentCode}
-                            </p>
+          <PhanTrangBang>
+            <table className="min-w-[560px] w-full border-collapse text-left text-sm">
+              <thead>
+                <tr className="border-b border-border bg-muted/50 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+                  <th scope="col" className="px-5 py-3">
+                    Học viên
+                  </th>
+                  <th scope="col" className="px-5 py-3">
+                    Năm sinh
+                  </th>
+                  <th scope="col" className="px-5 py-3">
+                    Trạng thái
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {roster.map((e) => {
+                  const st = e.student;
+                  return (
+                    <tr
+                      key={st.id}
+                      className="border-b border-border/60 transition-colors last:border-0 hover:bg-muted/50"
+                    >
+                      <td className="px-5 py-3.5">
+                        <div className="flex items-center gap-3">
+                          {st.avatarUrl ? (
+                            // Thumbnail nội bộ nhỏ — cùng ngoại lệ <img> như /admin/students.
+                            <img
+                              src={st.avatarUrl}
+                              alt={st.name}
+                              className="h-10 w-10 shrink-0 rounded-full border border-border object-cover"
+                            />
+                          ) : (
+                            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary-soft text-xs font-semibold text-primary-ink">
+                              {initialsOf(st.name)}
+                            </span>
                           )}
+                          <div className="min-w-0">
+                            <Link
+                              href={`/teacher/hoc-vien?s=${st.id}`}
+                              className="font-semibold text-foreground outline-none hover:text-primary-ink-hover focus-visible:ring-2 focus-visible:ring-ring"
+                            >
+                              {st.name}
+                            </Link>
+                            {st.studentCode && (
+                              <p className="text-xs text-muted-foreground">
+                                {st.studentCode}
+                              </p>
+                            )}
+                          </div>
                         </div>
-                      </div>
-                    </td>
-                    <td className="px-5 py-3.5 whitespace-nowrap text-foreground">
-                      {st.dateOfBirth ? st.dateOfBirth.getUTCFullYear() : "—"}
-                    </td>
-                    <td className="px-5 py-3.5 whitespace-nowrap">
-                      <Badge variant="outline">
-                        {ENROLLMENT_STATUS.label(e.status)}
-                      </Badge>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+                      </td>
+                      <td className="px-5 py-3.5 whitespace-nowrap text-foreground">
+                        {st.dateOfBirth ? st.dateOfBirth.getUTCFullYear() : "—"}
+                      </td>
+                      <td className="px-5 py-3.5 whitespace-nowrap">
+                        <Badge variant="outline">
+                          {ENROLLMENT_STATUS.label(e.status)}
+                        </Badge>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </PhanTrangBang>
         </div>
       </div>
     </div>

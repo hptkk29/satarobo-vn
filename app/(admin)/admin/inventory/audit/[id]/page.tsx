@@ -6,6 +6,7 @@ import { checkPermission } from "@/lib/auth/check-permission";
 import { resolveActor } from "@/lib/auth/actor";
 import { scopedDb } from "@/lib/db-scope";
 import { InventoryAuditStatus } from "@prisma/client";
+import { PhanTrangBang } from "@/components/ui/phan-trang-bang";
 
 export const dynamic = "force-dynamic";
 
@@ -137,85 +138,87 @@ export default async function AuditDetailPage({ params }: Props) {
           </h2>
         </header>
         <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-border text-sm">
-            <thead className="bg-muted">
-              <tr>
-                <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  Mã
-                </th>
-                <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  Tên hàng
-                </th>
-                <th className="px-3 py-2 text-right text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  Hệ thống
-                </th>
-                <th className="px-3 py-2 text-right text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  Thực tế
-                </th>
-                <th className="px-3 py-2 text-right text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  Δ
-                </th>
-                <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  Lý do
-                </th>
-                <th className="px-3 py-2 text-center text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  Movement
-                </th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border">
-              {audit.items.map((line) => {
-                const rowBg =
-                  line.delta > 0
-                    ? "bg-state-success-soft/60"
-                    : line.delta < 0
-                      ? "bg-state-danger-soft/60"
-                      : "";
-                const deltaColor =
-                  line.delta > 0
-                    ? "text-state-success-ink"
-                    : line.delta < 0
-                      ? "text-state-danger-ink"
-                      : "text-muted-foreground";
-                return (
-                  <tr key={line.id} className={rowBg}>
-                    <td className="px-3 py-2 font-mono text-xs text-muted-foreground">
-                      {line.item.itemCode}
-                    </td>
-                    <td className="px-3 py-2 text-foreground">
-                      {line.item.name}
-                      <span className="ml-1 text-xs text-muted-foreground">
-                        ({line.item.unit})
-                      </span>
-                    </td>
-                    <td className="px-3 py-2 text-right tabular-nums text-foreground">
-                      {line.previousQty}
-                    </td>
-                    <td className="px-3 py-2 text-right tabular-nums text-foreground">
-                      {line.actualQty}
-                    </td>
-                    <td
-                      className={`px-3 py-2 text-right tabular-nums font-bold ${deltaColor}`}
-                    >
-                      {line.delta > 0 ? `+${line.delta}` : line.delta}
-                    </td>
-                    <td className="px-3 py-2 text-xs text-foreground max-w-[260px]">
-                      {line.reason ?? (
-                        <span className="text-muted-foreground">—</span>
-                      )}
-                    </td>
-                    <td className="px-3 py-2 text-center text-xs">
-                      {line.movement ? (
-                        <span className="text-state-success-ink">✓</span>
-                      ) : (
-                        <span className="text-muted-foreground">—</span>
-                      )}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+          <PhanTrangBang>
+            <table className="min-w-full divide-y divide-border text-sm">
+              <thead className="bg-muted">
+                <tr>
+                  <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                    Mã
+                  </th>
+                  <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                    Tên hàng
+                  </th>
+                  <th className="px-3 py-2 text-right text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                    Hệ thống
+                  </th>
+                  <th className="px-3 py-2 text-right text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                    Thực tế
+                  </th>
+                  <th className="px-3 py-2 text-right text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                    Δ
+                  </th>
+                  <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                    Lý do
+                  </th>
+                  <th className="px-3 py-2 text-center text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                    Movement
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border">
+                {audit.items.map((line) => {
+                  const rowBg =
+                    line.delta > 0
+                      ? "bg-state-success-soft/60"
+                      : line.delta < 0
+                        ? "bg-state-danger-soft/60"
+                        : "";
+                  const deltaColor =
+                    line.delta > 0
+                      ? "text-state-success-ink"
+                      : line.delta < 0
+                        ? "text-state-danger-ink"
+                        : "text-muted-foreground";
+                  return (
+                    <tr key={line.id} className={rowBg}>
+                      <td className="px-3 py-2 font-mono text-xs text-muted-foreground">
+                        {line.item.itemCode}
+                      </td>
+                      <td className="px-3 py-2 text-foreground">
+                        {line.item.name}
+                        <span className="ml-1 text-xs text-muted-foreground">
+                          ({line.item.unit})
+                        </span>
+                      </td>
+                      <td className="px-3 py-2 text-right tabular-nums text-foreground">
+                        {line.previousQty}
+                      </td>
+                      <td className="px-3 py-2 text-right tabular-nums text-foreground">
+                        {line.actualQty}
+                      </td>
+                      <td
+                        className={`px-3 py-2 text-right tabular-nums font-bold ${deltaColor}`}
+                      >
+                        {line.delta > 0 ? `+${line.delta}` : line.delta}
+                      </td>
+                      <td className="px-3 py-2 text-xs text-foreground max-w-[260px]">
+                        {line.reason ?? (
+                          <span className="text-muted-foreground">—</span>
+                        )}
+                      </td>
+                      <td className="px-3 py-2 text-center text-xs">
+                        {line.movement ? (
+                          <span className="text-state-success-ink">✓</span>
+                        ) : (
+                          <span className="text-muted-foreground">—</span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </PhanTrangBang>
         </div>
       </section>
     </div>

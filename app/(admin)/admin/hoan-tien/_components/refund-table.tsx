@@ -22,6 +22,7 @@ import {
 } from "@/components/ui/dialog";
 import type { RefundRow } from "@/lib/finance/refund";
 import { approveRefundAction, rejectRefundAction } from "../_actions";
+import { PhanTrangBang } from "@/components/ui/phan-trang-bang";
 
 function vnd(n: number): string {
   return n.toLocaleString("vi-VN") + " đ";
@@ -91,90 +92,92 @@ export function RefundTable({
   return (
     <>
       <div className="overflow-x-auto rounded-lg border border-border">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Học viên / Lớp</TableHead>
-              <TableHead>Lý do</TableHead>
-              <TableHead className="text-right">Đã thu</TableHead>
-              <TableHead className="text-right">Buổi (học/tổng)</TableHead>
-              <TableHead className="text-right">Đề xuất hoàn</TableHead>
-              <TableHead>Trạng thái</TableHead>
-              <TableHead className="text-right">Thao tác</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {rows.length === 0 && (
+        <PhanTrangBang>
+          <Table>
+            <TableHeader>
               <TableRow>
-                <TableCell
-                  colSpan={7}
-                  className="py-8 text-center text-sm text-muted-foreground"
-                >
-                  Không có yêu cầu hoàn tiền
-                </TableCell>
+                <TableHead>Học viên / Lớp</TableHead>
+                <TableHead>Lý do</TableHead>
+                <TableHead className="text-right">Đã thu</TableHead>
+                <TableHead className="text-right">Buổi (học/tổng)</TableHead>
+                <TableHead className="text-right">Đề xuất hoàn</TableHead>
+                <TableHead>Trạng thái</TableHead>
+                <TableHead className="text-right">Thao tác</TableHead>
               </TableRow>
-            )}
-            {rows.map((r) => (
-              <TableRow key={r.id}>
-                <TableCell>
-                  <div className="font-medium text-foreground">
-                    {r.studentName ?? "(Không rõ HV)"}
-                  </div>
-                  <div className="text-xs text-muted-foreground">
-                    {r.className ?? r.enrollmentId.slice(0, 8)}
-                  </div>
-                </TableCell>
-                <TableCell>
-                  <Badge variant="secondary">{TRIGGER_LABEL[r.trigger]}</Badge>
-                  <div className="mt-1 max-w-[16rem] truncate text-xs text-muted-foreground">
-                    {r.reason}
-                  </div>
-                </TableCell>
-                <TableCell className="text-right">{vnd(r.paidConfirmed)}</TableCell>
-                <TableCell className="text-right">
-                  {r.sessionsLearned}/{r.sessionsTotal}
-                </TableCell>
-                <TableCell className="text-right font-semibold">
-                  {vnd(r.status === "APPROVED" && r.approvedAmount != null
-                    ? r.approvedAmount
-                    : r.proposedAmount)}
-                </TableCell>
-                <TableCell>
-                  <Badge className={STATUS_BADGE[r.status]}>
-                    {STATUS_LABEL[r.status]}
-                  </Badge>
-                </TableCell>
-                <TableCell className="text-right">
-                  {canApprove && r.status === "PENDING" ? (
-                    <div className="flex justify-end gap-2">
-                      <Button
-                        size="sm"
-                        variant={confirmId === r.id ? "default" : "outline"}
-                        disabled={isPending}
-                        onClick={() => onApprove(r.id)}
-                      >
-                        {confirmId === r.id ? "Xác nhận duyệt" : "Duyệt"}
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        disabled={isPending}
-                        onClick={() => {
-                          setRejectId(r.id);
-                          setRejectNote("");
-                        }}
-                      >
-                        Từ chối
-                      </Button>
+            </TableHeader>
+            <TableBody>
+              {rows.length === 0 && (
+                <TableRow>
+                  <TableCell
+                    colSpan={7}
+                    className="py-8 text-center text-sm text-muted-foreground"
+                  >
+                    Không có yêu cầu hoàn tiền
+                  </TableCell>
+                </TableRow>
+              )}
+              {rows.map((r) => (
+                <TableRow key={r.id}>
+                  <TableCell>
+                    <div className="font-medium text-foreground">
+                      {r.studentName ?? "(Không rõ HV)"}
                     </div>
-                  ) : (
-                    <span className="text-xs text-muted-foreground">—</span>
-                  )}
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
+                    <div className="text-xs text-muted-foreground">
+                      {r.className ?? r.enrollmentId.slice(0, 8)}
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    <Badge variant="secondary">{TRIGGER_LABEL[r.trigger]}</Badge>
+                    <div className="mt-1 max-w-[16rem] truncate text-xs text-muted-foreground">
+                      {r.reason}
+                    </div>
+                  </TableCell>
+                  <TableCell className="text-right">{vnd(r.paidConfirmed)}</TableCell>
+                  <TableCell className="text-right">
+                    {r.sessionsLearned}/{r.sessionsTotal}
+                  </TableCell>
+                  <TableCell className="text-right font-semibold">
+                    {vnd(r.status === "APPROVED" && r.approvedAmount != null
+                      ? r.approvedAmount
+                      : r.proposedAmount)}
+                  </TableCell>
+                  <TableCell>
+                    <Badge className={STATUS_BADGE[r.status]}>
+                      {STATUS_LABEL[r.status]}
+                    </Badge>
+                  </TableCell>
+                  <TableCell className="text-right">
+                    {canApprove && r.status === "PENDING" ? (
+                      <div className="flex justify-end gap-2">
+                        <Button
+                          size="sm"
+                          variant={confirmId === r.id ? "default" : "outline"}
+                          disabled={isPending}
+                          onClick={() => onApprove(r.id)}
+                        >
+                          {confirmId === r.id ? "Xác nhận duyệt" : "Duyệt"}
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          disabled={isPending}
+                          onClick={() => {
+                            setRejectId(r.id);
+                            setRejectNote("");
+                          }}
+                        >
+                          Từ chối
+                        </Button>
+                      </div>
+                    ) : (
+                      <span className="text-xs text-muted-foreground">—</span>
+                    )}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </PhanTrangBang>
       </div>
 
       <Dialog

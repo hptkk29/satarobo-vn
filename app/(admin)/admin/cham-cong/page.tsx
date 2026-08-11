@@ -17,6 +17,7 @@ import {
 } from "@/lib/work-schedule";
 import { SHIFT_DEFS, SHIFT_ORDER } from "@/lib/shifts";
 import { getSetting } from "@/lib/settings/service";
+import { PhanTrangBang } from "@/components/ui/phan-trang-bang";
 
 export const metadata = { title: "Chấm công | Admin" };
 export const dynamic = "force-dynamic";
@@ -151,54 +152,56 @@ export default async function ChamCongPage({ searchParams }: Props) {
         </p>
       ) : (
         <div className="overflow-x-auto rounded-xl border border-border bg-card">
-          <table className="min-w-full divide-y divide-border text-sm">
-            <thead className="bg-muted text-left text-xs uppercase tracking-wide text-muted-foreground">
-              <tr>
-                <th className="px-4 py-3 font-semibold">Nhân viên</th>
-                <th className="px-4 py-3 font-semibold">Cơ sở</th>
-                <th className="px-4 py-3 font-semibold">Ca đăng ký</th>
-                <th className="px-4 py-3 text-center font-semibold">Check-in</th>
-                <th className="px-4 py-3 text-center font-semibold">Check-out</th>
-                <th className="px-4 py-3 text-center font-semibold">Giờ công</th>
-                <th className="px-4 py-3 text-center font-semibold">Tình trạng</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border">
-              {list.map((a, i) => (
-                <tr key={i} className="hover:bg-muted/60">
-                  <td className="px-4 py-2.5 font-medium text-foreground">{a.userName}</td>
-                  <td className="px-4 py-2.5 text-muted-foreground">
-                    {a.centerId ? centerName.get(a.centerId) ?? "—" : "—"}
-                  </td>
-                  <td className="px-4 py-2.5 text-foreground">
-                    {formatRegisteredShifts(a.registeredShifts)}
-                  </td>
-                  <td className="px-4 py-2.5 text-center tabular-nums text-foreground">
-                    {formatVNTime(a.checkIn)}
-                  </td>
-                  <td className="px-4 py-2.5 text-center tabular-nums text-foreground">
-                    {formatVNTime(a.checkOut)}
-                  </td>
-                  <td className="px-4 py-2.5 text-center tabular-nums font-medium text-foreground">
-                    {a.checkIn && a.checkOut ? `${a.status.workedHours}h` : "—"}
-                  </td>
-                  <td className="px-4 py-2.5 text-center">
-                    <div className="flex flex-wrap items-center justify-center gap-1">
-                      {a.status.tags.map((t, j) => (
-                        <span
-                          key={j}
-                          className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium ${TAG_TONE[t.tone]}`}
-                        >
-                          {t.label === "Ngoài vùng" && <MapPinOff className="h-3 w-3" />}
-                          {t.label}
-                        </span>
-                      ))}
-                    </div>
-                  </td>
+          <PhanTrangBang>
+            <table className="min-w-full divide-y divide-border text-sm">
+              <thead className="bg-muted text-left text-xs uppercase tracking-wide text-muted-foreground">
+                <tr>
+                  <th className="px-4 py-3 font-semibold">Nhân viên</th>
+                  <th className="px-4 py-3 font-semibold">Cơ sở</th>
+                  <th className="px-4 py-3 font-semibold">Ca đăng ký</th>
+                  <th className="px-4 py-3 text-center font-semibold">Check-in</th>
+                  <th className="px-4 py-3 text-center font-semibold">Check-out</th>
+                  <th className="px-4 py-3 text-center font-semibold">Giờ công</th>
+                  <th className="px-4 py-3 text-center font-semibold">Tình trạng</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody className="divide-y divide-border">
+                {list.map((a, i) => (
+                  <tr key={i} className="hover:bg-muted/60">
+                    <td className="px-4 py-2.5 font-medium text-foreground">{a.userName}</td>
+                    <td className="px-4 py-2.5 text-muted-foreground">
+                      {a.centerId ? centerName.get(a.centerId) ?? "—" : "—"}
+                    </td>
+                    <td className="px-4 py-2.5 text-foreground">
+                      {formatRegisteredShifts(a.registeredShifts)}
+                    </td>
+                    <td className="px-4 py-2.5 text-center tabular-nums text-foreground">
+                      {formatVNTime(a.checkIn)}
+                    </td>
+                    <td className="px-4 py-2.5 text-center tabular-nums text-foreground">
+                      {formatVNTime(a.checkOut)}
+                    </td>
+                    <td className="px-4 py-2.5 text-center tabular-nums font-medium text-foreground">
+                      {a.checkIn && a.checkOut ? `${a.status.workedHours}h` : "—"}
+                    </td>
+                    <td className="px-4 py-2.5 text-center">
+                      <div className="flex flex-wrap items-center justify-center gap-1">
+                        {a.status.tags.map((t, j) => (
+                          <span
+                            key={j}
+                            className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium ${TAG_TONE[t.tone]}`}
+                          >
+                            {t.label === "Ngoài vùng" && <MapPinOff className="h-3 w-3" />}
+                            {t.label}
+                          </span>
+                        ))}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </PhanTrangBang>
         </div>
       )}
     </div>

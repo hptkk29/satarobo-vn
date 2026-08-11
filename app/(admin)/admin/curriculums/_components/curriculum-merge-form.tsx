@@ -10,6 +10,7 @@ import {
   previewMergeLessons,
   type MergePreviewRow,
 } from "../_actions";
+import { PhanTrangBang } from "@/components/ui/phan-trang-bang";
 
 // 08/08/2026 — khoá Combo là khoá GỘP (Sata 1 buổi 1–16 + Sata 2 buổi 17–32).
 // Panel này nạp nội dung bài từ một giáo trình khác vào giáo trình đang mở, GHI ĐÈ TẠI
@@ -182,30 +183,32 @@ export function CurriculumMergeForm({
           )}
 
           <div className="max-h-72 overflow-y-auto rounded-lg border border-border">
-            <table className="w-full text-sm">
-              <thead className="sticky top-0 bg-muted text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                <tr>
-                  <th className="px-3 py-2">Buổi</th>
-                  <th className="px-3 py-2">Đang là</th>
-                  <th className="px-3 py-2">Sẽ thành</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border">
-                {preview.rows.map((r) => (
-                  <tr key={r.targetOrder}>
-                    <td className="px-3 py-1.5 tabular-nums text-muted-foreground">{r.targetOrder}</td>
-                    <td className="px-3 py-1.5 text-muted-foreground">
-                      {r.action === "create" ? (
-                        <span className="italic text-state-success-ink">(tạo mới)</span>
-                      ) : (
-                        r.currentTitle
-                      )}
-                    </td>
-                    <td className="px-3 py-1.5 font-medium text-foreground">{r.sourceTitle}</td>
+            <PhanTrangBang>
+              <table className="w-full text-sm">
+                <thead className="sticky top-0 bg-muted text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  <tr>
+                    <th className="px-3 py-2">Buổi</th>
+                    <th className="px-3 py-2">Đang là</th>
+                    <th className="px-3 py-2">Sẽ thành</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody className="divide-y divide-border">
+                  {preview.rows.map((r) => (
+                    <tr key={r.targetOrder}>
+                      <td className="px-3 py-1.5 tabular-nums text-muted-foreground">{r.targetOrder}</td>
+                      <td className="px-3 py-1.5 text-muted-foreground">
+                        {r.action === "create" ? (
+                          <span className="italic text-state-success-ink">(tạo mới)</span>
+                        ) : (
+                          r.currentTitle
+                        )}
+                      </td>
+                      <td className="px-3 py-1.5 font-medium text-foreground">{r.sourceTitle}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </PhanTrangBang>
           </div>
 
           <div className="mt-3 flex items-center gap-3">

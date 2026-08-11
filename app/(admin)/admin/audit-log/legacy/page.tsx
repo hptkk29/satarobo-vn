@@ -9,6 +9,7 @@ import {
   canViewLegacyPii,
   queryLegacyAuditLogs,
 } from "@/lib/audit/legacy-log";
+import { PhanTrangBang } from "@/components/ui/phan-trang-bang";
 
 export const metadata = { title: "Lịch sử cũ (đọc-only) | Admin" };
 export const dynamic = "force-dynamic";
@@ -71,36 +72,38 @@ export default async function LegacyAuditLogPage() {
         </p>
       ) : (
         <div className="overflow-x-auto rounded-xl border border-border bg-card">
-          <table className="min-w-full text-sm">
-            <thead className="bg-muted text-left text-xs uppercase text-muted-foreground">
-              <tr>
-                <th className="px-4 py-3">Thời gian</th>
-                <th className="px-4 py-3">Nguồn</th>
-                <th className="px-4 py-3">Hành động</th>
-                <th className="px-4 py-3">Đối tượng</th>
-                <th className="px-4 py-3">Người thực hiện</th>
-                <th className="px-4 py-3">Lý do</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border">
-              {rows.map((r) => (
-                <tr key={`${r.source}:${r.id}`}>
-                  <td className="whitespace-nowrap px-4 py-3 text-muted-foreground">
-                    {r.createdAt.toLocaleString("vi-VN")}
-                  </td>
-                  <td className="px-4 py-3">
-                    <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-foreground">
-                      {SOURCE_LABEL[r.source] ?? r.source}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3 font-medium text-foreground">{r.action}</td>
-                  <td className="px-4 py-3 font-mono text-xs text-muted-foreground">{r.entityId}</td>
-                  <td className="px-4 py-3 text-foreground">{r.actorName}</td>
-                  <td className="px-4 py-3 text-muted-foreground">{r.reason ?? "—"}</td>
+          <PhanTrangBang>
+            <table className="min-w-full text-sm">
+              <thead className="bg-muted text-left text-xs uppercase text-muted-foreground">
+                <tr>
+                  <th className="px-4 py-3">Thời gian</th>
+                  <th className="px-4 py-3">Nguồn</th>
+                  <th className="px-4 py-3">Hành động</th>
+                  <th className="px-4 py-3">Đối tượng</th>
+                  <th className="px-4 py-3">Người thực hiện</th>
+                  <th className="px-4 py-3">Lý do</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody className="divide-y divide-border">
+                {rows.map((r) => (
+                  <tr key={`${r.source}:${r.id}`}>
+                    <td className="whitespace-nowrap px-4 py-3 text-muted-foreground">
+                      {r.createdAt.toLocaleString("vi-VN")}
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-foreground">
+                        {SOURCE_LABEL[r.source] ?? r.source}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 font-medium text-foreground">{r.action}</td>
+                    <td className="px-4 py-3 font-mono text-xs text-muted-foreground">{r.entityId}</td>
+                    <td className="px-4 py-3 text-foreground">{r.actorName}</td>
+                    <td className="px-4 py-3 text-muted-foreground">{r.reason ?? "—"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </PhanTrangBang>
         </div>
       )}
     </div>

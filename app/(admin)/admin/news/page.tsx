@@ -5,6 +5,7 @@ import { auth } from "@/lib/auth";
 import { resolveActor } from "@/lib/auth/actor";
 import { scopedDb } from "@/lib/db-scope";
 import { NewsListRow } from "./_components/news-list-row";
+import { PhanTrangBang } from "@/components/ui/phan-trang-bang";
 
 export const dynamic = "force-dynamic";
 
@@ -45,31 +46,33 @@ export default async function NewsAdminPage() {
       </div>
 
       <div className="overflow-hidden rounded-xl border border-border bg-card">
-        <table className="w-full">
-          <thead className="border-b border-border bg-muted text-left">
-            <tr>
-              <th className="p-4 text-xs font-bold uppercase tracking-wider text-foreground">Tiêu đề</th>
-              <th className="p-4 text-xs font-bold uppercase tracking-wider text-foreground">Danh mục</th>
-              <th className="p-4 text-center text-xs font-bold uppercase tracking-wider text-foreground">Trạng thái</th>
-              <th className="p-4 text-xs font-bold uppercase tracking-wider text-foreground">Ngày đăng</th>
-              <th className="p-4 text-right text-xs font-bold uppercase tracking-wider text-foreground">Thao tác</th>
-            </tr>
-          </thead>
-          <tbody>
-            {news.length === 0 ? (
+        <PhanTrangBang>
+          <table className="w-full">
+            <thead className="border-b border-border bg-muted text-left">
               <tr>
-                <td colSpan={5} className="p-12 text-center text-muted-foreground">
-                  Chưa có bài viết nào.{" "}
-                  <Link href="/news/new" className="text-primary hover:underline">
-                    Tạo bài đầu tiên →
-                  </Link>
-                </td>
+                <th className="p-4 text-xs font-bold uppercase tracking-wider text-foreground">Tiêu đề</th>
+                <th className="p-4 text-xs font-bold uppercase tracking-wider text-foreground">Danh mục</th>
+                <th className="p-4 text-center text-xs font-bold uppercase tracking-wider text-foreground">Trạng thái</th>
+                <th className="p-4 text-xs font-bold uppercase tracking-wider text-foreground">Ngày đăng</th>
+                <th className="p-4 text-right text-xs font-bold uppercase tracking-wider text-foreground">Thao tác</th>
               </tr>
-            ) : (
-              news.map((n) => <NewsListRow key={n.id} news={n} />)
-            )}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {news.length === 0 ? (
+                <tr>
+                  <td colSpan={5} className="p-12 text-center text-muted-foreground">
+                    Chưa có bài viết nào.{" "}
+                    <Link href="/news/new" className="text-primary hover:underline">
+                      Tạo bài đầu tiên →
+                    </Link>
+                  </td>
+                </tr>
+              ) : (
+                news.map((n) => <NewsListRow key={n.id} news={n} />)
+              )}
+            </tbody>
+          </table>
+        </PhanTrangBang>
       </div>
     </div>
   );

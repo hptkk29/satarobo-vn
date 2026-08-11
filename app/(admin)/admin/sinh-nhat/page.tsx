@@ -9,6 +9,7 @@ import { scopedDb } from "@/lib/db-scope";
 import { getSetting } from "@/lib/settings/service";
 import { formatDayKeyDMY, shiftDayKey, vnDayKey, vnDayStartUtc } from "@/lib/students/birthday-dates";
 import { CelebrateButton, RunScanButton } from "./_components/birthday-actions";
+import { PhanTrangBang } from "@/components/ui/phan-trang-bang";
 
 export const metadata = { title: "Sinh nhật học viên | Admin" };
 export const dynamic = "force-dynamic";
@@ -80,86 +81,88 @@ export default async function BirthdayPage() {
         </p>
       ) : (
         <div className="overflow-x-auto rounded-xl border border-border bg-card">
-          <table className="w-full text-sm">
-            <thead className="border-b border-border bg-muted text-left text-xs uppercase tracking-wider text-muted-foreground">
-              <tr>
-                <th className="px-4 py-2">Học viên</th>
-                <th className="px-4 py-2">Ngày sinh nhật</th>
-                <th className="px-4 py-2">Buổi tổ chức</th>
-                <th className="px-4 py-2">Tin Zalo</th>
-                <th className="px-4 py-2"></th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((r) => {
-                const birthdayKey = vnDayKey(r.birthdayDate);
-                const celebrationKey = r.celebrationDate ? vnDayKey(r.celebrationDate) : null;
-                const isToday = birthdayKey === todayKey;
-                const missed = !r.celebratedAt && celebrationKey !== null && celebrationKey < todayKey;
-                const zns = r.znsStatus ? ZNS_LABEL[r.znsStatus] : null;
-
-                return (
-                  <tr key={r.id} className="border-b border-border last:border-0">
-                    <td className="px-4 py-2 font-medium text-foreground">
-                      <Link
-                        href={`/students/${r.student.id}/edit`}
-                        className="text-primary hover:underline"
-                      >
-                        {r.student.name}
-                      </Link>
-                      {isToday && (
-                        <span className="ml-2 rounded-full bg-primary-soft px-2 py-0.5 text-[10px] font-bold text-primary">
-                          HÔM NAY
-                        </span>
-                      )}
-                    </td>
-                    <td className="px-4 py-2 text-foreground">{formatDayKeyDMY(birthdayKey)}</td>
-                    <td className="px-4 py-2 text-foreground">
-                      {celebrationKey ? (
-                        r.celebrationSessionId ? (
-                          <Link
-                            href={`/sessions/${r.celebrationSessionId}`}
-                            className="text-primary hover:underline"
-                          >
-                            {formatDayKeyDMY(celebrationKey)}
-                          </Link>
-                        ) : (
-                          formatDayKeyDMY(celebrationKey)
-                        )
-                      ) : (
-                        "—"
-                      )}
-                      {celebrationKey !== null && celebrationKey !== birthdayKey && (
-                        <span className="block text-xs text-muted-foreground">tổ chức trước sinh nhật</span>
-                      )}
-                      {missed && (
-                        <span className="block text-xs font-semibold text-state-danger-ink">
-                          buổi đã qua, chưa chúc
-                        </span>
-                      )}
-                    </td>
-                    <td className="px-4 py-2">
-                      {zns ? (
-                        <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${zns.cls}`}>
-                          {zns.text}
-                        </span>
-                      ) : (
-                        <span className="text-xs text-muted-foreground">chưa tới ngày</span>
-                      )}
-                    </td>
-                    <td className="px-4 py-2 text-right">
-                      <div className="flex items-center justify-end gap-2">
-                        {r.celebratedAt && (
-                          <span className="text-xs font-medium text-state-success-ink">đã chúc</span>
+          <PhanTrangBang>
+            <table className="w-full text-sm">
+              <thead className="border-b border-border bg-muted text-left text-xs uppercase tracking-wider text-muted-foreground">
+                <tr>
+                  <th className="px-4 py-2">Học viên</th>
+                  <th className="px-4 py-2">Ngày sinh nhật</th>
+                  <th className="px-4 py-2">Buổi tổ chức</th>
+                  <th className="px-4 py-2">Tin Zalo</th>
+                  <th className="px-4 py-2"></th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((r) => {
+                  const birthdayKey = vnDayKey(r.birthdayDate);
+                  const celebrationKey = r.celebrationDate ? vnDayKey(r.celebrationDate) : null;
+                  const isToday = birthdayKey === todayKey;
+                  const missed = !r.celebratedAt && celebrationKey !== null && celebrationKey < todayKey;
+                  const zns = r.znsStatus ? ZNS_LABEL[r.znsStatus] : null;
+  
+                  return (
+                    <tr key={r.id} className="border-b border-border last:border-0">
+                      <td className="px-4 py-2 font-medium text-foreground">
+                        <Link
+                          href={`/students/${r.student.id}/edit`}
+                          className="text-primary hover:underline"
+                        >
+                          {r.student.name}
+                        </Link>
+                        {isToday && (
+                          <span className="ml-2 rounded-full bg-primary-soft px-2 py-0.5 text-[10px] font-bold text-primary">
+                            HÔM NAY
+                          </span>
                         )}
-                        <CelebrateButton id={r.id} done={r.celebratedAt !== null} />
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+                      </td>
+                      <td className="px-4 py-2 text-foreground">{formatDayKeyDMY(birthdayKey)}</td>
+                      <td className="px-4 py-2 text-foreground">
+                        {celebrationKey ? (
+                          r.celebrationSessionId ? (
+                            <Link
+                              href={`/sessions/${r.celebrationSessionId}`}
+                              className="text-primary hover:underline"
+                            >
+                              {formatDayKeyDMY(celebrationKey)}
+                            </Link>
+                          ) : (
+                            formatDayKeyDMY(celebrationKey)
+                          )
+                        ) : (
+                          "—"
+                        )}
+                        {celebrationKey !== null && celebrationKey !== birthdayKey && (
+                          <span className="block text-xs text-muted-foreground">tổ chức trước sinh nhật</span>
+                        )}
+                        {missed && (
+                          <span className="block text-xs font-semibold text-state-danger-ink">
+                            buổi đã qua, chưa chúc
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-4 py-2">
+                        {zns ? (
+                          <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${zns.cls}`}>
+                            {zns.text}
+                          </span>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">chưa tới ngày</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-2 text-right">
+                        <div className="flex items-center justify-end gap-2">
+                          {r.celebratedAt && (
+                            <span className="text-xs font-medium text-state-success-ink">đã chúc</span>
+                          )}
+                          <CelebrateButton id={r.id} done={r.celebratedAt !== null} />
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </PhanTrangBang>
         </div>
       )}
     </div>

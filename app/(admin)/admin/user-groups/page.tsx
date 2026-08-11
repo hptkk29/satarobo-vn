@@ -20,6 +20,7 @@ import {
 } from "@/components/ui/table";
 import { CreateGroupForm } from "./_components/create-group-form";
 import { PageHelp } from "@/components/admin/ui/page-help";
+import { PhanTrangBang } from "@/components/ui/phan-trang-bang";
 
 export const metadata = { title: "Nhóm người dùng | Admin" };
 export const dynamic = "force-dynamic";
@@ -79,56 +80,58 @@ export default async function UserGroupsPage() {
       <CreateGroupForm />
 
       <div className="mt-8 rounded-lg border">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Tên nhóm</TableHead>
-              <TableHead>Mô tả</TableHead>
-              <TableHead className="text-right">Thành viên</TableHead>
-              <TableHead className="text-right">Grant</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {groups.length === 0 ? (
+        <PhanTrangBang>
+          <Table>
+            <TableHeader>
               <TableRow>
-                <TableCell
-                  colSpan={4}
-                  className="py-8 text-center text-sm text-muted-foreground"
-                >
-                  Chưa có nhóm nào. Tạo nhóm đầu tiên bằng form phía trên.
-                </TableCell>
+                <TableHead>Tên nhóm</TableHead>
+                <TableHead>Mô tả</TableHead>
+                <TableHead className="text-right">Thành viên</TableHead>
+                <TableHead className="text-right">Grant</TableHead>
               </TableRow>
-            ) : (
-              groups.map((g) => (
-                <TableRow key={g.id}>
-                  <TableCell>
-                    <Link
-                      href={`/user-groups/${g.id}`}
-                      className="font-semibold text-foreground hover:underline"
-                    >
-                      {g.name}
-                    </Link>
-                  </TableCell>
-                  <TableCell className="max-w-md truncate text-muted-foreground">
-                    {g.description ?? "—"}
-                  </TableCell>
-                  <TableCell className="text-right">
-                    {g._count.members}
-                  </TableCell>
-                  <TableCell className="text-right">
-                    {(grantCountByGroup.get(g.id) ?? 0) > 0 ? (
-                      <Badge variant="secondary">
-                        {grantCountByGroup.get(g.id)}
-                      </Badge>
-                    ) : (
-                      <span className="text-muted-foreground">0</span>
-                    )}
+            </TableHeader>
+            <TableBody>
+              {groups.length === 0 ? (
+                <TableRow>
+                  <TableCell
+                    colSpan={4}
+                    className="py-8 text-center text-sm text-muted-foreground"
+                  >
+                    Chưa có nhóm nào. Tạo nhóm đầu tiên bằng form phía trên.
                   </TableCell>
                 </TableRow>
-              ))
-            )}
-          </TableBody>
-        </Table>
+              ) : (
+                groups.map((g) => (
+                  <TableRow key={g.id}>
+                    <TableCell>
+                      <Link
+                        href={`/user-groups/${g.id}`}
+                        className="font-semibold text-foreground hover:underline"
+                      >
+                        {g.name}
+                      </Link>
+                    </TableCell>
+                    <TableCell className="max-w-md truncate text-muted-foreground">
+                      {g.description ?? "—"}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {g._count.members}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {(grantCountByGroup.get(g.id) ?? 0) > 0 ? (
+                        <Badge variant="secondary">
+                          {grantCountByGroup.get(g.id)}
+                        </Badge>
+                      ) : (
+                        <span className="text-muted-foreground">0</span>
+                      )}
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
+            </TableBody>
+          </Table>
+        </PhanTrangBang>
       </div>
     </div>
   );
