@@ -21,6 +21,7 @@ import { db } from "../../lib/db";
 import { assertTestDb, disconnectDb, seedOrg, seedRoles, seedUser } from "../e2e/_helpers/seed";
 import { resolveActorUncached } from "../../lib/auth/actor";
 import { can } from "../../lib/auth/can";
+import { scopedDb } from "../../lib/db-scope";
 import { childPath } from "../../lib/org/path";
 
 const DB_URL = process.env.TEST_DATABASE_URL ?? process.env.DATABASE_URL ?? "";
@@ -192,7 +193,16 @@ describe.skipIf(!RUN)("TS-11 · WorkScope mở/đóng truy cập cơ sở (Postg
       // Vai đã vào (đường US-08 chạy) — nên cái thiếu ở đây đúng là PHẠM VI, không phải quyền.
       expect(actor.permissions.some((p) => p.roleCode === "TEACHER")).toBe(true);
       expect(actor.visibleCenterIds).toEqual([]);
-      expect(can(actor, "classes:view-own", { centerId: W.cs1CenterId })).toBe(false);
+
+      // ⚠️ ĐO BẰNG `scopedDb`, KHÔNG đo bằng `can(...,{centerId})`: với TEACHER gần như
+      // mọi action seed GLOBAL, nên cách ly cơ sở của vai này đến từ scopedDb chứ không
+      // từ scopeType (CLAUDE.md, ghi chú đầu prisma/seed-roles.ts). Gác test bằng can()
+      // ở đây sẽ xanh/đỏ vì lý do chẳng liên quan gì tới điều động.
+      const lop = await scopedDb(actor).class.findMany({
+        where: { centerId: W.cs1CenterId },
+        select: { id: true },
+      });
+      expect(lop).toEqual([]);
     },
     CASE_TIMEOUT,
   );
@@ -214,9 +224,18 @@ describe.skipIf(!RUN)("TS-11 · WorkScope mở/đóng truy cập cơ sở (Postg
       // KHÔNG kèm CS2: điều động mở đúng một cơ sở, không mở cả khối.
       expect(actor.visibleCenterIds).not.toContain(W.cs2CenterId);
 
-      // Quyền lớp của GV là ASSIGNED ⇒ cùng ở CS1 nhưng chỉ lớp mình dạy mới qua.
-      expect(can(actor, "classes:view-own", { classId: W.lopCuaMinh })).toBe(true);
-      expect(can(actor, "classes:view-own", { classId: W.lopNguoiKhac })).toBe(false);
+      // Cửa dữ liệu CS1 đã mở…
+      const lop = await scopedDb(actor).class.findMany({
+        where: { name: { startsWith: P } },
+        select: { id: true },
+      });
+      expect(lop.map((c) => c.id).sort()).toEqual([W.lopCuaMinh, W.lopNguoiKhac].sort());
+
+      // …nhưng THAO TÁC theo lớp vẫn chặn ở lớp người khác: `attendance:mark` của GV
+      // seed scope CLASS, khớp theo lớp ĐƯỢC PHÂN CÔNG. Điều động mở CƠ SỞ, không phát
+      // thêm lớp — đúng câu "thấy đúng lớp mình được phân công" của TS-11.
+      expect(can(actor, "attendance:mark", { classId: W.lopCuaMinh })).toBe(true);
+      expect(can(actor, "attendance:mark", { classId: W.lopNguoiKhac })).toBe(false);
     },
     CASE_TIMEOUT,
   );
@@ -232,7 +251,12 @@ describe.skipIf(!RUN)("TS-11 · WorkScope mở/đóng truy cập cơ sở (Postg
 
       const actor = await resolveActorUncached(W.gv);
       expect(actor.visibleCenterIds).toEqual([]);
-      expect(can(actor, "classes:view-own", { centerId: W.cs1CenterId })).toBe(false);
+      expect(
+        await scopedDb(actor).class.findMany({
+          where: { centerId: W.cs1CenterId },
+          select: { id: true },
+        }),
+      ).toEqual([]);
 
       // "quyền HO của GV-HO không đổi": vẫn giữ nguyên vai tại phòng Đào tạo, không bị
       // hạ vai, không thành HO-level, và bản ghi điều động vẫn còn để tra soát.
