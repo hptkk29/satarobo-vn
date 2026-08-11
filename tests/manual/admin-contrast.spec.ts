@@ -26,6 +26,8 @@ const ROUTES = [
   "/admin/cau-hinh-van-hanh",
   "/admin/trials",
   "/admin/parent-requests",
+  // trang mới theo nhánh test (P2 · US-08/09) — chưa từng qua máy đo
+  "/admin/nhan-su/vi-tri",
 ];
 
 test("tuong phan site quan tri", async ({ page }) => {

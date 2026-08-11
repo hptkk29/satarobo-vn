@@ -203,6 +203,13 @@ export const ROLE_SEED: RoleSeed[] = [
       { action: "products:view", scopeType: "GLOBAL" },
       { action: "emails:view", scopeType: "GLOBAL" },
       { action: "emails:manage", scopeType: "GLOBAL" },
+      // 11/08 (chủ dự án chốt) — Marketing góp ảnh vào KHO của lớp; GV mới là người
+      // chọn ảnh gửi phụ huynh. CHỈ xem + đưa vào kho: KHÔNG `media:upload` (đăng
+      // thẳng tới PH) và KHÔNG `media:approve`. GLOBAL vì Marketing là vai Hội sở
+      // xuyên cơ sở (chủ dự án chọn phạm vi toàn hệ thống) + `media:view` là action
+      // gác trang /media (page-gates.test: action làm gate phải GLOBAL).
+      { action: "media:view", scopeType: "GLOBAL" },
+      { action: "media:upload-draft", scopeType: "GLOBAL" },
     ],
   },
   {
@@ -475,6 +482,13 @@ export const ROLE_SEED: RoleSeed[] = [
       // `classes:view-all` nên KHÔNG nới thêm quyền nào. GLOBAL là bắt buộc —
       // page-gates.test.ts khoá "action làm gate phải GLOBAL ở mọi RoleDef giữ nó".
       { action: "classes:view-own", scopeType: "GLOBAL" },
+      // 11/08 (chủ dự án chốt) — Giáo vụ góp ảnh vào KHO của lớp cơ sở mình; GV mới
+      // là người chọn ảnh gửi phụ huynh. KHÔNG `media:upload`/`media:approve`.
+      // GLOBAL + cách ly cơ sở do scopedDb/passesScope ở tầng query (mẫu R1) — vai
+      // này KHÔNG phải manager actor nên canManageClass không dùng được, xem
+      // canStageToClass trong app/(admin)/admin/media/actions.ts.
+      { action: "media:view", scopeType: "GLOBAL" },
+      { action: "media:upload-draft", scopeType: "GLOBAL" },
     ],
   },
   {

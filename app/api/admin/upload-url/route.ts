@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
+import { checkPermission } from "@/lib/auth/check-permission";
 import { PutObjectCommand } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { v4 as uuid } from "uuid";
@@ -24,12 +25,21 @@ export async function POST(req: NextRequest) {
   // (documents/videos/audio for their lessons).
   // TRAINING added 31/07 — Đào tạo quản lý toàn bộ LMS nên phải upload được học liệu.
   const allowedRoles = ["SUPER_ADMIN", "CENTER_MANAGER", "MARKETING", "TEACHER", "TRAINING"];
-  // B4 (02/08): SALES_CSM chỉ được ký category IMAGE — canUploadToClass (media/actions.ts)
+  // B4 (02/08): SALES_CSM chỉ được ký category IMAGE — canPublishToClass (media/actions.ts)
   // đã cho Sale phụ trách lớp upload ảnh lớp, nhưng list này chặn ngay bước presign nên
   // Sale thấy canUpload=true mà mọi file đều 403 (R7-09 chết từ bước ký). Giới hạn image
   // enforce SAU khi parse body (bên dưới) vì category lúc này chưa đọc.
+  //
+  // ⚠️ 11/08 — `session.user.role` là enum v1 SỐ ÍT: vai chỉ có ở RBAC v2 (Giáo vụ =
+  // CENTER_CLASS_MANAGER) không bao giờ khớp list trên nên chết 403 tại đây, trước cả
+  // khi tới Server Action. Mở thêm đường theo QUYỀN (media:upload-draft = được đưa ảnh
+  // vào kho lớp) và cũng chỉ cho category IMAGE — họ không upload học liệu.
   const isSalesImageOnly = session.user.role === "SALES_CSM";
-  if (!allowedRoles.includes(session.user.role) && !isSalesImageOnly) {
+  const isRoleAllowed = allowedRoles.includes(session.user.role);
+  const isDraftUploaderImageOnly =
+    !isRoleAllowed && !isSalesImageOnly && (await checkPermission("media:upload-draft"));
+  const imageOnly = isSalesImageOnly || isDraftUploaderImageOnly;
+  if (!isRoleAllowed && !imageOnly) {
     return NextResponse.json(
       { error: "Forbidden: insufficient permissions" },
       { status: 403 },
@@ -70,9 +80,10 @@ export async function POST(req: NextRequest) {
   }
 
   // B4: Sale phụ trách lớp chỉ upload ẢNH lớp — các category khác (học liệu…) giữ nguyên 403.
-  if (isSalesImageOnly && category !== "image") {
+  // 11/08: vai góp ảnh vào kho (Marketing/Giáo vụ qua media:upload-draft) cùng giới hạn.
+  if (imageOnly && category !== "image") {
     return NextResponse.json(
-      { error: "Forbidden: Sale chỉ được upload ảnh (category image)" },
+      { error: "Forbidden: vai này chỉ được upload ảnh (category image)" },
       { status: 403 },
     );
   }

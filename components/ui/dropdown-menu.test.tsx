@@ -74,7 +74,11 @@ describe("Quét tĩnh — không file nào dùng DropdownMenuLabel mà quên Gro
     return out;
   }
 
-  it("mọi <DropdownMenuLabel> đều có <DropdownMenuGroup> trong cùng file", () => {
+  // Timeout riêng: đây là QUÉT ĐĨA (đọc mọi .tsx của app/ + components/), không phải test
+  // logic. Trên Windows nó chạm ~4,3s khi cả bộ test chạy song song — tức mặc định 5s là
+  // ĐANG SÁT MÉP, và mỗi file .tsx thêm vào repo lại đẩy gần hơn. Đỏ vì hết giờ ở một
+  // test quét tĩnh đọc y hệt "code vi phạm", nên nâng trần thay vì để nó thỉnh thoảng đỏ.
+  it("mọi <DropdownMenuLabel> đều có <DropdownMenuGroup> trong cùng file", { timeout: 30_000 }, () => {
     const viPham: string[] = [];
     for (const f of [...walk(path.join(ROOT, "app")), ...walk(path.join(ROOT, "components"))]) {
       if (f.endsWith("dropdown-menu.tsx") || f.endsWith("dropdown-menu.test.tsx")) continue;

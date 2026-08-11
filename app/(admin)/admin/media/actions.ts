@@ -5,7 +5,7 @@ import { revalidatePath } from "next/cache";
 import type { Session } from "next-auth";
 import { auth } from "@/lib/auth";
 import { checkPermission } from "@/lib/auth/check-permission";
-import { scopedDb } from "@/lib/db-scope";
+import { scopedDb, passesScope } from "@/lib/db-scope";
 import { getAuditActor } from "@/lib/audit/log";
 import { writeAudit } from "@/lib/audit/audit-log";
 import { ENROLLMENT_ACTIVE_STATUS_LIST } from "@/lib/enrollment-status";
@@ -13,6 +13,7 @@ import { getNonConsentStudents } from "@/lib/lms/media-consent";
 import { resolveActor } from "@/lib/auth/actor";
 import { canManageClass } from "@/lib/auth/lms-scope";
 import { formatDateDMY } from "@/lib/format/date";
+import { getR2PublicUrl } from "@/lib/storage/r2-client";
 import {
   createDraftMediaBatch,
   publishClassMedia,
@@ -42,6 +43,13 @@ async function mediaClassInScope(userId: string | undefined, mediaId: string): P
 // ADMIN MEDIA — Phase NHÓM 3 + R7-09
 // GV/Sale-phụ-trách/QL upload ảnh lớp (PENDING) + gắn BUỔI + tag học sinh →
 // CENTER_MANAGER duyệt. Quyền upload theo LỚP (không chỉ theo role tĩnh).
+//
+// 11/08 — HAI cổng quyền tách nhau (chủ dự án chốt):
+//   canStageToClass   → đưa ảnh vào KHO (DRAFT, PH không thấy). Rộng: GV/Sale/QL +
+//                       vai chỉ-góp-ảnh giữ `media:upload-draft` (Marketing, Giáo vụ).
+//   canPublishToClass → đăng thẳng 1 ảnh HOẶC gửi ảnh trong kho tới PH. Hẹp: GV lớp,
+//                       Sale phụ trách lớp, người có `media:approve`.
+// Ai chỉ qua được cổng đầu thì ảnh nằm trong kho tới khi GIÁO VIÊN chọn gửi.
 // =============================================================================
 
 type SessionUser = NonNullable<Session["user"]>;
@@ -66,11 +74,15 @@ async function deriveClassSaleIds(
 }
 
 /**
- * Quyền upload ảnh vào 1 LỚP: GV lớp (teacherId/assistantId) ∪ Sale phụ trách lớp
- * (derive) ∪ người có quyền duyệt/quản lý media (media:approve). Sale KHÔNG phụ
- * trách lớp → false (AC4).
+ * Quyền ĐĂNG ẢNH TỚI PHỤ HUYNH cho 1 LỚP (đăng thẳng 1 ảnh, hoặc gửi ảnh từ kho):
+ * GV lớp (teacherId/assistantId) ∪ Sale phụ trách lớp (derive) ∪ người có quyền
+ * duyệt/quản lý media (media:approve). Sale KHÔNG phụ trách lớp → false (AC4).
+ *
+ * ⚠️ 11/08 — TÁCH khỏi quyền đưa ảnh vào kho (canStageToClass). Vai chỉ-góp-ảnh
+ * (Marketing, Giáo vụ) KHÔNG qua được hàm này: ảnh của họ nằm trong kho cho tới
+ * khi giáo viên chọn gửi.
  */
-async function canUploadToClass(
+async function canPublishToClass(
   user: SessionUser,
   classId: string,
 ): Promise<boolean> {
@@ -96,8 +108,58 @@ async function canUploadToClass(
   return saleIds.has(user.id);
 }
 
+/**
+ * Quyền ĐƯA ẢNH VÀO KHO (DRAFT) của 1 lớp — rộng hơn canPublishToClass:
+ * ai gửi PH được thì đương nhiên đưa vào kho được, CỘNG các vai chỉ-góp-ảnh giữ
+ * `media:upload-draft` (Marketing Hội sở, Giáo vụ — chủ dự án chốt 11/08).
+ *
+ * Cách ly cơ sở: lớp phải nằm trong tầm nhìn actor. KHÔNG dùng canManageClass ở
+ * đây — hàm đó đòi actor là quản lý (SUPER_ADMIN/HO/CENTER_MANAGER) hoặc GV phụ
+ * trách lớp, nên Giáo vụ (CENTER_CLASS_MANAGER) sẽ bị chặn oan; ranh giới đúng cho
+ * vai góp ảnh là passesScope theo cơ sở của lớp.
+ */
+async function canStageOnlyToClass(
+  user: SessionUser,
+  classId: string,
+): Promise<boolean> {
+  if (!(await checkPermission("media:upload-draft"))) return false;
+
+  const actor = await resolveActor(user.id);
+  // Class ∈ SCOPED_MODELS → sdb trả null nếu lớp ngoài tầm nhìn (cách ly cơ sở);
+  // passesScope lặp lại là chốt thứ hai, cùng mẫu mediaClassInScope ở trên.
+  const cls = await scopedDb(actor).class.findUnique({
+    where: { id: classId },
+    select: { centerId: true },
+  });
+  if (!cls) return false;
+  return passesScope("Class", { centerId: cls.centerId }, actor);
+}
+
+/** Đưa được ảnh vào kho = gửi PH được HOẶC là vai chỉ-góp-ảnh của lớp đó. */
+async function canStageToClass(user: SessionUser, classId: string): Promise<boolean> {
+  if (await canPublishToClass(user, classId)) return true;
+  return canStageOnlyToClass(user, classId);
+}
+
+/**
+ * Ảnh phải là object trên R2 CỦA HỆ THỐNG. Không có chốt này, ai qua được cổng
+ * upload đều nhét được URL ngoài vào album lớp: nội dung đổi được SAU khi quản lý
+ * duyệt, và mỗi lần phụ huynh mở album là một request lộ IP/Referer ra server lạ.
+ * Thiếu env R2 → không chặn (lúc đó chính luồng upload cũng không chạy được).
+ */
+function isOwnStorageUrl(fileUrl: string): boolean {
+  try {
+    return fileUrl.startsWith(getR2PublicUrl() + "/");
+  } catch {
+    return true;
+  }
+}
+
 export type ClassUploadContext = {
+  /** Được đưa ảnh vào KHO của lớp này (GV/Sale/QL + vai góp ảnh). */
   canUpload: boolean;
+  /** Được ĐĂNG/GỬI ảnh tới phụ huynh. false = chỉ góp ảnh vào kho. */
+  canPublish: boolean;
   students: { id: string; name: string }[];
   nonConsent: { id: string; name: string }[];
   sessions: { id: string; label: string; date: string }[];
@@ -109,13 +171,17 @@ export async function getClassUploadContext(
 ): Promise<ClassUploadContext> {
   const empty: ClassUploadContext = {
     canUpload: false,
+    canPublish: false,
     students: [],
     nonConsent: [],
     sessions: [],
   };
   const session = await auth();
   if (!session?.user) return empty;
-  if (!(await canUploadToClass(session.user, classId))) return empty;
+  // Đánh giá canPublish TRƯỚC rồi mới hỏi nhánh chỉ-góp-ảnh: canStageToClass gọi lại
+  // canPublishToClass (kèm join Order→OrderItem→Enrollment) nên hỏi 2 lần là phí.
+  const canPublish = await canPublishToClass(session.user, classId);
+  if (!canPublish && !(await canStageOnlyToClass(session.user, classId))) return empty;
 
   const sdb = scopedDb(await resolveActor(session.user.id));
   const [enr, nonConsent, sessions] = await Promise.all([
@@ -135,6 +201,7 @@ export async function getClassUploadContext(
 
   return {
     canUpload: true,
+    canPublish,
     students: enr.map((e) => e.student),
     nonConsent,
     sessions: sessions.map((s) => ({
@@ -182,9 +249,19 @@ export async function uploadClassMedia(input: {
   }
   const d = parsed.data;
 
-  // Quyền upload THEO LỚP (GV / Sale phụ trách / QL) — không chỉ role tĩnh (AC4).
-  if (!(await canUploadToClass(session.user, d.classId))) {
-    return { ok: false, error: "Bạn không phụ trách lớp này — không thể đăng ảnh" };
+  // Quyền ĐĂNG THẲNG TỚI PH theo LỚP (GV / Sale phụ trách / QL) — không chỉ role
+  // tĩnh (AC4). Vai chỉ-góp-ảnh (Marketing/Giáo vụ) KHÔNG đi đường này: ảnh của họ
+  // phải nằm trong kho chờ GV chọn (uploadClassMediaBatch).
+  if (!(await canPublishToClass(session.user, d.classId))) {
+    return {
+      ok: false,
+      error: (await canStageOnlyToClass(session.user, d.classId))
+        ? 'Bạn chỉ được đưa ảnh vào kho — dùng "Đưa vào kho", giáo viên sẽ chọn ảnh gửi phụ huynh'
+        : "Bạn không phụ trách lớp này — không thể đăng ảnh",
+    };
+  }
+  if (!isOwnStorageUrl(d.fileUrl)) {
+    return { ok: false, error: "Ảnh không hợp lệ — hãy chọn ảnh qua nút tải ảnh" };
   }
 
   const sdb = scopedDb(await resolveActor(session.user.id));
@@ -196,10 +273,29 @@ export async function uploadClassMedia(input: {
   // C6.3 / AC4 — KHÔNG cho tag HS chưa có consent CLASS_MEDIA (reject server-side).
   // Kiểm tra TRỰC TIẾP theo tagId (không chỉ dựa danh sách lớp) → chống payload tuỳ ý.
   if (tagIds.length > 0) {
-    const granted = await sdb.studentConsent.findMany({
-      where: { studentId: { in: tagIds }, type: "CLASS_MEDIA", status: "GRANTED" },
-      select: { studentId: true },
-    });
+    const [granted, enrolled] = await Promise.all([
+      sdb.studentConsent.findMany({
+        where: { studentId: { in: tagIds }, type: "CLASS_MEDIA", status: "GRANTED" },
+        select: { studentId: true },
+      }),
+      // Phải ĐANG HỌC LỚP NÀY — nếu không, payload tuỳ ý gắn được HS lớp khác (miễn
+      // em đó đã GRANTED consent) vào ảnh lớp này ⇒ phụ huynh lớp khác xem được ảnh
+      // của lớp không liên quan. Đường kho đã kiểm (lib/lms/media-publish.ts:177-205),
+      // đường "đăng ngay 1 ảnh" thì sót — vá cho hai đường cùng bất biến.
+      sdb.enrollment.findMany({
+        where: {
+          studentId: { in: tagIds },
+          classId: d.classId,
+          status: { in: ENROLLMENT_ACTIVE_STATUS_LIST },
+          deletedAt: null,
+        },
+        select: { studentId: true },
+      }),
+    ]);
+    const enrolledSet = new Set(enrolled.map((e) => e.studentId));
+    if (tagIds.some((id) => !enrolledSet.has(id))) {
+      return { ok: false, error: "Có học viên không thuộc lớp này — tải lại trang" };
+    }
     const grantedSet = new Set(granted.map((g) => g.studentId));
     const blockedIds = tagIds.filter((id) => !grantedSet.has(id));
     if (blockedIds.length > 0) {
@@ -389,9 +485,13 @@ export async function uploadClassMediaBatch(input: {
   }
   const d = parsed.data;
 
-  // Quyền upload THEO LỚP (GV / Sale phụ trách / QL) + cách ly cơ sở — như uploadClassMedia.
-  if (!(await canUploadToClass(session.user, d.classId))) {
-    return { ok: false, error: "Bạn không phụ trách lớp này — không thể đăng ảnh" };
+  // Quyền ĐƯA VÀO KHO theo LỚP (GV / Sale phụ trách / QL / Marketing / Giáo vụ) +
+  // cách ly cơ sở. Rộng hơn uploadClassMedia có chủ đích — ảnh vào kho chưa tới PH.
+  if (!(await canStageToClass(session.user, d.classId))) {
+    return { ok: false, error: "Bạn không được đưa ảnh vào kho của lớp này" };
+  }
+  if (d.files.some((f) => !isOwnStorageUrl(f.fileUrl))) {
+    return { ok: false, error: "Có ảnh không hợp lệ — hãy chọn ảnh qua nút tải ảnh" };
   }
 
   let takenAt: Date | null = null;
@@ -450,7 +550,7 @@ export async function publishClassMediaAction(input: {
   const mediaIds = [...new Set(d.mediaIds)];
 
   // Cách ly cơ sở (chống IDOR theo mediaId): mọi ảnh phải cùng 1 lớp, và lớp đó
-  // trong tầm nhìn + quyền upload của actor (mẫu mediaClassInScope + canUploadToClass).
+  // trong tầm nhìn + quyền gửi PH của actor (mẫu mediaClassInScope + canPublishToClass).
   const sdb = scopedDb(await resolveActor(session.user.id));
   const rows = await sdb.classSessionMedia.findMany({
     where: { id: { in: mediaIds } },
@@ -459,8 +559,15 @@ export async function publishClassMediaAction(input: {
   if (rows.length !== mediaIds.length) return { ok: false, error: "Không tìm thấy ảnh" };
   const classIds = [...new Set(rows.map((r) => r.classId))];
   if (classIds.length !== 1) return { ok: false, error: "Các ảnh phải thuộc cùng một lớp" };
-  if (!(await canUploadToClass(session.user, classIds[0]!))) {
-    return { ok: false, error: "Bạn không phụ trách lớp này" };
+  // GỬI PH = quyền hẹp (canPublishToClass). Vai chỉ-góp-ảnh đưa được ảnh vào kho
+  // nhưng KHÔNG tự gửi — giáo viên là người chọn (chốt 11/08).
+  if (!(await canPublishToClass(session.user, classIds[0]!))) {
+    return {
+      ok: false,
+      error: (await canStageOnlyToClass(session.user, classIds[0]!))
+        ? "Bạn chỉ được đưa ảnh vào kho — giáo viên là người chọn ảnh gửi phụ huynh"
+        : "Bạn không phụ trách lớp này",
+    };
   }
 
   const autoApprove = await checkPermission("media:approve");
@@ -490,8 +597,9 @@ const deleteDraftSchema = z.object({
 });
 
 /**
- * Xoá ảnh khỏi kho (chỉ row DRAFT). Uploader tự xoá DRAFT của MÌNH; người có
- * media:approve xoá được mọi DRAFT của lớp trong scope.
+ * Xoá ảnh khỏi kho (chỉ row DRAFT). Người được GỬI ảnh của lớp (GV/trợ giảng, Sale
+ * phụ trách, QL có media:approve) xoá được mọi DRAFT của lớp đó; vai chỉ-góp-ảnh
+ * (Marketing/Giáo vụ) chỉ xoá được ảnh do CHÍNH MÌNH đưa vào kho.
  */
 export async function deleteDraftMediaAction(input: {
   mediaIds: string[];
@@ -513,12 +621,16 @@ export async function deleteDraftMediaAction(input: {
   if (rows.length !== mediaIds.length) return { ok: false, error: "Không tìm thấy ảnh" };
   const classIds = [...new Set(rows.map((r) => r.classId))];
   if (classIds.length !== 1) return { ok: false, error: "Các ảnh phải thuộc cùng một lớp" };
-  // Scope theo lớp: GV/Sale phụ trách hoặc QL trong cơ sở (mẫu canUploadToClass).
-  if (!(await canUploadToClass(session.user, classIds[0]!))) {
-    return { ok: false, error: "Không tìm thấy ảnh" };
-  }
-  // Không có quyền duyệt → chỉ xoá ảnh do CHÍNH MÌNH đưa vào kho.
-  if (!(await checkPermission("media:approve"))) {
+  // Kho là của LỚP, không phải của người tải: ai được GỬI ảnh lớp đó (GV/trợ giảng,
+  // Sale phụ trách, QL) dọn được MỌI ảnh trong kho lớp đó — kể cả ảnh Marketing/Giáo
+  // vụ góp vào. Trước 11/08 luật là "không có media:approve thì chỉ xoá ảnh của
+  // mình", nghĩa là GV không dọn nổi ảnh rác người khác nhét vào kho lớp mình (và
+  // lô trộn thì fail cả lượt). Vai chỉ-góp-ảnh vẫn chỉ xoá được ảnh của CHÍNH MÌNH.
+  const classId = classIds[0]!;
+  if (!(await canPublishToClass(session.user, classId))) {
+    if (!(await canStageOnlyToClass(session.user, classId))) {
+      return { ok: false, error: "Không tìm thấy ảnh" };
+    }
     if (rows.some((r) => r.uploadedById !== session.user.id)) {
       return { ok: false, error: "Chỉ xoá được ảnh do chính bạn đưa vào kho" };
     }

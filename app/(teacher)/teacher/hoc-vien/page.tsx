@@ -84,27 +84,27 @@ const REPORT_STATUS: Record<string, { label: string; cls: string }> = {
 const ATT_BADGE: Record<AttendanceStatus, { label: string; cls: string }> = {
   PRESENT: {
     label: "Có mặt",
-    cls: "bg-state-success-soft text-state-success-ink dark:bg-state-success-soft dark:text-state-success-ink",
+    cls: "bg-state-success-soft text-state-success-ink",
   },
   LATE: {
     label: "Đi muộn",
-    cls: "bg-state-warning-soft text-state-warning-ink dark:bg-state-warning-soft dark:text-state-warning-ink",
+    cls: "bg-state-warning-soft text-state-warning-ink",
   },
   ABSENT: {
     label: "Vắng",
-    cls: "bg-state-danger-soft text-state-danger-ink dark:bg-state-danger-soft dark:text-state-danger-ink",
+    cls: "bg-state-danger-soft text-state-danger-ink",
   },
   EXCUSED: {
     label: "Có phép",
-    cls: "bg-state-info-soft text-state-info-ink dark:bg-state-info-soft dark:text-state-info-ink",
+    cls: "bg-state-info-soft text-state-info-ink",
   },
   ABSENT_EXCUSED: {
     label: "Vắng có phép",
-    cls: "bg-state-info-soft text-state-info-ink dark:bg-state-info-soft dark:text-state-info-ink",
+    cls: "bg-state-info-soft text-state-info-ink",
   },
   ABSENT_UNEXCUSED: {
     label: "Vắng",
-    cls: "bg-state-danger-soft text-state-danger-ink dark:bg-state-danger-soft dark:text-state-danger-ink",
+    cls: "bg-state-danger-soft text-state-danger-ink",
   },
 };
 

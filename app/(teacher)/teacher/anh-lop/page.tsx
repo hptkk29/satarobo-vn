@@ -10,9 +10,11 @@
 //
 // CONSENT (bất biến C6.2 — CLAUDE.md "media phải tag + tôn trọng StudentConsent"):
 // trang này KHÔNG tự viết luật consent — upload TÁI DÙNG uploadClassMedia +
-// getClassUploadContext của admin (gate canUploadToClass: GV lớp teacherId/assistantId
+// getClassUploadContext của admin (gate canPublishToClass: GV lớp teacherId/assistantId
 // → GV đăng ĐƯỢC, ảnh vào PENDING chờ QL duyệt). GV chỉ XEM mọi status (cần biết ảnh
 // nào chưa duyệt) + đăng — KHÔNG có nút duyệt/xoá (media:approve = QL).
+// 11/08: kho (DRAFT) của lớp còn nhận ảnh do Marketing/Giáo vụ góp (media:upload-draft)
+// — GV là người DUY NHẤT chọn ảnh trong kho gửi phụ huynh.
 //
 // Cách ly cơ sở: ClassSessionMedia ∉ SCOPED_MODELS (relation-scoped qua class.centerId,
 // xem app/(admin)/admin/media/actions.ts) → đọc pass-through SAU guard assignedClassIds
@@ -146,6 +148,9 @@ export default async function TeacherClassPhotosPage({
           classSessionId: true,
           takenAt: true,
           createdAt: true,
+          // Kho có ảnh của nhiều vai (GV/Marketing/Giáo vụ — chốt 11/08) → hiện tên
+          // người tải lên trên thẻ ảnh trong kho. Chỉ TÊN NHÂN SỰ, không PII PH.
+          uploadedByName: true,
           tags: { select: { studentId: true } },
         },
         orderBy: { createdAt: "desc" },
@@ -208,7 +213,12 @@ export default async function TeacherClassPhotosPage({
         sortKey = Number.NEGATIVE_INFINITY; // luôn xếp cuối
       }
       if (m.status === "DRAFT") {
-        draftItems.push({ id: m.id, url: displayUrls[i] ?? m.fileUrl, label });
+        draftItems.push({
+          id: m.id,
+          url: displayUrls[i] ?? m.fileUrl,
+          label,
+          uploader: m.uploadedByName,
+        });
         return;
       }
       const view: MediaView = {

@@ -16,6 +16,10 @@ export default defineConfig({
       "app/**/*.test.{ts,tsx}",
       // US-05 — bộ ma trận quyền chat (tầng động, tự skip khi không có DB local).
       "tests/chat/**/*.{test,spec}.ts",
+      // P2 — TS-08/TS-10 nền hệ thống. Không khai ở đây thì `vitest run tests/nen` báo
+      // "No test files found" và job CI đỏ dù test viết đúng: `include` là bộ lọc CỨNG,
+      // đường dẫn truyền ở dòng lệnh chỉ lọc TIẾP trong tập này chứ không mở rộng nó.
+      "tests/nen/**/*.{test,spec}.ts",
     ],
     coverage: {
       reporter: ["text", "json", "html"],

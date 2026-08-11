@@ -98,7 +98,17 @@ export const lmsModule: ModuleDecl = {
 
     // --- Media (ảnh lớp) ---
     { key: "media:view", action: "view" },
-    { key: "media:upload", action: "upload" },
+    {
+      key: "media:upload",
+      action: "upload",
+      description: "Đăng ảnh lớp tới phụ huynh (qua bước duyệt).",
+    },
+    {
+      key: "media:upload-draft",
+      action: "upload-draft",
+      description:
+        "Đưa ảnh vào KHO của lớp — phụ huynh chưa thấy, giáo viên chọn ảnh gửi sau.",
+    },
     {
       key: "media:approve",
       action: "approve",

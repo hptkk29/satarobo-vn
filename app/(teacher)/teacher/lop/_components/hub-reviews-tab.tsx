@@ -61,7 +61,7 @@ const ATT_BADGE: Record<AttendanceStatus, { label: string; cls: string }> = {
   },
   ABSENT: {
     label: "Vắng",
-    cls: "bg-state-danger-soft text-state-danger-ink dark:bg-state-danger-soft dark:text-state-danger-ink",
+    cls: "bg-state-danger-soft text-state-danger-ink",
   },
   EXCUSED: {
     label: "Có phép",
