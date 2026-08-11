@@ -214,7 +214,7 @@ export async function HubReviewsTab({
             <span>Buổi chưa điểm danh — đang hiện toàn bộ lớp.</span>
             <Link
               href={`?classId=${classId}&sessionId=${reviewSessionId}`}
-              className="inline-flex shrink-0 items-center gap-1 rounded-lg border border-state-warning-soft bg-white px-2.5 py-1 text-xs font-semibold text-state-warning-ink transition-colors hover:bg-state-warning-soft-hover dark:border-state-warning dark:bg-transparent"
+              className="inline-flex shrink-0 items-center gap-1 rounded-lg border border-state-warning-soft bg-card px-2.5 py-1 text-xs font-semibold text-state-warning-ink transition-colors hover:bg-state-warning-soft-hover dark:border-state-warning dark:bg-transparent"
             >
               <ClipboardCheck className="h-3.5 w-3.5" aria-hidden />
               Điểm danh buổi này
