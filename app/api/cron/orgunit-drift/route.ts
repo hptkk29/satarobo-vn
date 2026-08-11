@@ -8,6 +8,19 @@ import {
 
 export const dynamic = "force-dynamic";
 
+// ⚠️ Job này chạy 52 truy vấn đếm TUẦN TỰ. Đo thật 11/08 từ máy dev ở VN qua transaction
+// pooler tới Supabase ap-northeast-1: **35 giây** — quá mặc định 15s của Vercel Function.
+//
+// Phần lớn 35s đó là ĐỘ TRỄ ĐƯỜNG TRUYỀN chứ không phải công việc thật (52 lượt đi-về ×
+// ~600ms). Trên Vercel region `hnd1` (Tokyo, cùng vùng với DB) độ trễ mỗi lượt còn vài
+// mili-giây nên thực tế sẽ nhanh hơn hàng chục lần. NHƯNG "chắc là sẽ nhanh" không phải
+// lưới an toàn: nếu nó vượt mặc định thì job chết lặng và ta mất đúng thứ đang dựng ra để
+// phát hiện lệch. Khai tường minh 60s.
+//
+// Nếu về sau số bảng tăng làm job chạm trần này, cách sửa ĐÚNG là gộp 52 câu đếm thành
+// MỘT câu (UNION ALL), không phải nâng tiếp maxDuration.
+export const maxDuration = 60;
+
 // Nền Hệ thống P1 · US-07 AC3 — đối soát `centerId` ↔ `orgUnitId` hằng đêm, 03:00 VN
 // (vercel.json: 0 20 * * * UTC). Chạy SAU cron đối soát nhóm chat (02:00) để hai job
 // nặng không đè nhau.
