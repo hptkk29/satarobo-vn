@@ -13,6 +13,7 @@
 import { useMemo, useState, useTransition } from "react";
 import { toast } from "sonner";
 import { ketThucDieuDong, luuDieuDong } from "../_actions";
+import { BangPhanTrang } from "@/components/ui/bang-phan-trang";
 
 type LyDo = "TEACHING" | "MAKEUP" | "TRIAL" | "SUPPORT";
 
@@ -247,27 +248,24 @@ export function DieuDongEditor({
         </button>
       </div>
 
-      <div className="overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead className="border-b border-border text-left text-xs uppercase tracking-wider text-muted-foreground">
-            <tr>
-              <th className="px-3 py-2">Người — vị trí</th>
-              <th className="px-3 py-2">Nơi tác nghiệp</th>
-              <th className="px-3 py-2">Lý do</th>
-              <th className="px-3 py-2">Hiệu lực</th>
-              <th className="px-3 py-2">Ghi chú</th>
-              <th className="px-3 py-2 text-right">Thao tác</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-border">
-            {hienThi.length === 0 && (
-              <tr>
-                <td colSpan={6} className="px-3 py-8 text-center text-muted-foreground">
-                  {hienLichSu ? "Chưa có điều động nào." : "Không có điều động nào đang hiệu lực."}
-                </td>
-              </tr>
-            )}
-            {hienThi.map((d) => {
+      <BangPhanTrang
+        tenDonVi="điều động"
+        khoaGhiNho="dieu-dong"
+        colSpan={6}
+        trong={hienLichSu ? "Chưa có điều động nào." : "Không có điều động nào đang hiệu lực."}
+        theadClassName="border-b border-border text-left text-xs uppercase tracking-wider text-muted-foreground"
+        tbodyClassName="divide-y divide-border"
+        head={
+          <tr>
+            <th className="px-3 py-2">Người — vị trí</th>
+            <th className="px-3 py-2">Nơi tác nghiệp</th>
+            <th className="px-3 py-2">Lý do</th>
+            <th className="px-3 py-2">Hiệu lực</th>
+            <th className="px-3 py-2">Ghi chú</th>
+            <th className="px-3 py-2 text-right">Thao tác</th>
+          </tr>
+        }
+        rows={hienThi.map((d) => {
               const song = conHieuLuc(d);
               return (
                 <tr key={d.id} className={song ? "" : "opacity-55"}>
@@ -324,10 +322,8 @@ export function DieuDongEditor({
                   </td>
                 </tr>
               );
-            })}
-          </tbody>
-        </table>
-      </div>
+        })}
+      />
     </section>
   );
 }

@@ -10,6 +10,7 @@
 import { useMemo, useState, useTransition } from "react";
 import { toast } from "sonner";
 import { doiTrangThaiViTri, luuViTri } from "../_actions";
+import { BangPhanTrang } from "@/components/ui/bang-phan-trang";
 
 type ViTri = {
   id: string;
@@ -195,9 +196,15 @@ export function ViTriEditor({
         </div>
       </section>
 
-      <section className="overflow-hidden rounded-xl border border-border bg-card">
-        <table className="w-full text-sm">
-          <thead className="border-b border-border bg-muted/40 text-left text-xs uppercase tracking-wider text-muted-foreground">
+      <section className="rounded-xl border border-border bg-card p-4">
+        <BangPhanTrang
+          tenDonVi="vị trí"
+          khoaGhiNho="vi-tri"
+          colSpan={6}
+          trong="Chưa có vị trí nào. Tạo vị trí đầu tiên ở khối phía trên."
+          theadClassName="border-b border-border bg-muted/40 text-left text-xs uppercase tracking-wider text-muted-foreground"
+          tbodyClassName="divide-y divide-border"
+          head={
             <tr>
               <th className="px-4 py-3">Vị trí</th>
               <th className="px-4 py-3">Đơn vị</th>
@@ -206,16 +213,8 @@ export function ViTriEditor({
               <th className="px-4 py-3 text-right">Đang giữ</th>
               <th className="px-4 py-3 text-right">Thao tác</th>
             </tr>
-          </thead>
-          <tbody className="divide-y divide-border">
-            {positions.length === 0 && (
-              <tr>
-                <td colSpan={6} className="px-4 py-10 text-center text-muted-foreground">
-                  Chưa có vị trí nào. Tạo vị trí đầu tiên ở khối phía trên.
-                </td>
-              </tr>
-            )}
-            {positions.map((p) => (
+          }
+          rows={positions.map((p) => (
               <tr key={p.id} className={p.isActive ? "" : "opacity-50"}>
                 <td className="px-4 py-3">
                   <span className="font-medium text-foreground">{p.title}</span>
@@ -267,9 +266,8 @@ export function ViTriEditor({
                   </div>
                 </td>
               </tr>
-            ))}
-          </tbody>
-        </table>
+          ))}
+        />
       </section>
     </div>
   );

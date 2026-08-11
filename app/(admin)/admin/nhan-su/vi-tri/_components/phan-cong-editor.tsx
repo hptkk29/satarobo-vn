@@ -11,6 +11,7 @@
 import { useMemo, useState, useTransition } from "react";
 import { toast } from "sonner";
 import { ketThucPhanCong, luuPhanCong } from "../_actions";
+import { BangPhanTrang } from "@/components/ui/bang-phan-trang";
 
 type Kind = "PRIMARY" | "CONCURRENT" | "DELEGATED";
 
@@ -232,27 +233,24 @@ export function PhanCongEditor({
         </button>
       </div>
 
-      <div className="overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead className="border-b border-border text-left text-xs uppercase tracking-wider text-muted-foreground">
-            <tr>
-              <th className="px-3 py-2">Người</th>
-              <th className="px-3 py-2">Vị trí</th>
-              <th className="px-3 py-2">Kiểu</th>
-              <th className="px-3 py-2">Hiệu lực</th>
-              <th className="px-3 py-2">Ghi chú</th>
-              <th className="px-3 py-2 text-right">Thao tác</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-border">
-            {hienThi.length === 0 && (
-              <tr>
-                <td colSpan={6} className="px-3 py-8 text-center text-muted-foreground">
-                  {hienLichSu ? "Chưa có phân công nào." : "Không có phân công nào đang hiệu lực."}
-                </td>
-              </tr>
-            )}
-            {hienThi.map((a) => {
+      <BangPhanTrang
+        tenDonVi="phân công"
+        khoaGhiNho="phan-cong"
+        colSpan={6}
+        trong={hienLichSu ? "Chưa có phân công nào." : "Không có phân công nào đang hiệu lực."}
+        theadClassName="border-b border-border text-left text-xs uppercase tracking-wider text-muted-foreground"
+        tbodyClassName="divide-y divide-border"
+        head={
+          <tr>
+            <th className="px-3 py-2">Người</th>
+            <th className="px-3 py-2">Vị trí</th>
+            <th className="px-3 py-2">Kiểu</th>
+            <th className="px-3 py-2">Hiệu lực</th>
+            <th className="px-3 py-2">Ghi chú</th>
+            <th className="px-3 py-2 text-right">Thao tác</th>
+          </tr>
+        }
+        rows={hienThi.map((a) => {
               const song = conHieuLuc(a);
               return (
                 <tr key={a.id} className={song ? "" : "opacity-55"}>
@@ -314,10 +312,8 @@ export function PhanCongEditor({
                   </td>
                 </tr>
               );
-            })}
-          </tbody>
-        </table>
-      </div>
+        })}
+      />
     </section>
   );
 }
