@@ -103,3 +103,42 @@ Nợ ghi ở mục US-02 phía trên (*"pre-P1 hai mức UNIT_ONLY/UNIT_AND_BELO
 **V7 nới cho HO mang `centerId`** — xem `lib/org/orgunit-rules.ts`. Bịt Center `hoi-so` mồ côi; KHÔNG kéo theo việc HO thành "một cơ sở" vì `getSubtreeCenterIds`/`allCenterIds` vẫn lọc `type === "CENTER"`.
 
 **Nợ còn lại của P1:** US-07 (backfill `orgUnitId` cho 21 bảng còn thiếu + ghi kép + đối soát đêm). Cho tới khi nó xong, `visibleOrgUnitIds` vẫn chỉ là cột song song chưa ai enforce.
+
+## AS-BUILT — P2 · US-08/US-09 (11/08/2026)
+
+**Vị trí là NGUỒN THỨ HAI của cùng một loại dữ liệu, không phải đường quyền thứ hai.**
+`loadPositionRoleRows` (`lib/org/positions.ts`) trả về đúng khuôn `UserOrgRoleRow` để đổ
+thẳng vào `buildActor`, nên `centerScope`/`isHoLevel`/`visibleCenterIds` tính bằng CÙNG
+một thân code với `UserOrgRole`. Nếu Position tự resolve riêng thì hai đường sẽ trôi lệch,
+và cái lệch chỉ lộ ra ở người vừa có `UserOrgRole` vừa có `PositionAssignment` — đúng tập
+khó dựng lại nhất.
+
+**Hết hạn là thuộc tính của resolver (luật cứng #8).** Bộ lọc `status=ACTIVE` +
+`effectiveFrom <= now` + (`effectiveTo` null hoặc `>= now`) + `position.isActive` nằm ngay
+trong truy vấn. Không cron nào ghi. Bản ghi hết hạn giữ nguyên `status=ACTIVE` — TS-10
+khẳng định điều đó.
+
+**Bảng này từng ghi "DB constraint: unique PRIMARY assignment" — KHÔNG làm được như vậy.**
+"Còn hiệu lực" là một KHOẢNG THỜI GIAN, không phải cờ: partial unique index chỉ diễn tả
+nổi `status='ACTIVE'`, trong khi thứ cần cấm là *hai khoảng `[from,to)` giao nhau*.
+Postgres làm được bằng EXCLUDE + `btree_gist`, nhưng phải cài extension trên PROD cho đúng
+một quy tắc. Chốt: ràng buộc ở TẦNG GHI (`assertSinglePrimary`, gọi TRONG transaction), có
+test đơn vị + test DB. Ai thêm đường ghi `PositionAssignment` mới mà quên gọi hàm này thì
+DB sẽ KHÔNG cứu.
+
+**"Gỡ người khỏi vị trí" = đóng `effectiveTo`, không `delete`** (AC3). Chỉ ghi `effectiveTo`,
+KHÔNG đụng `status`: `status` dành cho đình chỉ (SUSPENDED), còn-hiệu-lực-hay-không là
+khoảng thời gian. Ghi cả hai chỗ = hai nguồn sự thật, và sớm muộn sẽ có bản ghi `EXPIRED`
+mà `effectiveTo` còn ở tương lai.
+
+**Cổng màn quản trị vị trí:** `/admin/nhan-su/vi-tri` gác `roles:manage` (chỉ SUPER_ADMIN,
+qua `PAGE_GATES`) — vị trí mang bộ vai trò nên sửa vị trí = sửa quyền của mọi người đang
+giữ nó, cùng hạng nguy hiểm với sửa RoleDef.
+
+**Nhóm sidebar "Hệ thống & Cấu hình" chỉ SUPER_ADMIN** (chủ dự án chốt 11/08/2026). Trước
+đó nhóm này hiện với gần như mọi vai, chỉ vì mục "Cây tổ chức" gác bằng `centers:view` —
+action mà 7 RoleDef giữ do nó là chìa khoá bộ lọc cơ sở ở hàng chục màn khác. Vá bằng cách
+đổi cổng `/to-chuc` sang `centers:edit` (chỉ SUPER_ADMIN, và đây vốn là màn SỬA cây),
+KHÔNG gỡ `centers:view` khỏi các vai. Ba màn Email/OTP tách sang nhóm riêng để Marketing
+Hội sở giữ nguyên `emails:view` đang dùng. `lib/auth/menu-permissions.test.ts` quét tĩnh
+sidebar và bắt mọi mục thêm sau này mượn action mà vai khác cũng giữ.
