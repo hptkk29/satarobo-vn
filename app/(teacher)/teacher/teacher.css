@@ -1,10 +1,17 @@
 /* Site giáo viên (giaovien.satarobo.vn) — design tokens port từ TeachUI.
  *
- * ⚠️ ĐẢO 11/08/2026 — TÍM LÀ MÀU THƯƠNG HIỆU.
- * Bản port 10/07 lấy cam #F97316 làm tone duy nhất và loại tím hoàn toàn. Chủ dự
- * án chốt ngược lại: tím #610B8A là nhận diện, cam là màu điểm xuyết. Site quản
- * trị đã đổi theo; để site giáo viên ở cam nghĩa là một công ty hai bộ nhận diện.
- * Nên `--primary` ở đây nay là TÍM, khớp `.admin-scope` trong app/globals.css.
+ * ⚠️ SITE NÀY CỐ Ý KHÁC SITE QUẢN TRỊ: quản trị dùng TÍM, giáo viên dùng CAM.
+ * Chủ dự án chốt 11/08/2026: giữ cam cho site giáo viên để phân biệt hai nơi làm
+ * việc — nhìn là biết đang ở đâu. (Trong ngày đã có một nhịp đổi sang tím rồi trả
+ * lại; nếu sau này ai định "thống nhất màu hai site" thì đây là quyết định có chủ
+ * ý, không phải sót.)
+ *
+ * ⚠️ SẮC CAM CHỌN THEO SỐ ĐO, KHÔNG LẤY NGUYÊN BẢN CŨ. Bản port 10/07 dùng #F97316
+ * làm nền nút với chữ TRẮNG — chỉ 2,8:1, tức MỌI nút chính đều trượt AA. #C2410C
+ * là sắc cam đậm nhất vẫn còn rõ là cam mà thoả cả hai ràng buộc: chữ trắng
+ * 5,18:1, và tách khỏi nền tối 3,45:1 (ngưỡng 3:1 cho thành phần giao diện) — nên
+ * dùng CHUNG được cho cả Sáng lẫn Tối. Cam rực #F97316 vẫn còn, ở vai nền tint /
+ * wash (những chỗ không mang chữ nên ràng buộc nhẹ hơn).
  *
  * Trạng thái ngữ nghĩa vẫn dùng thang riêng — emerald (thành công), amber (chờ),
  * red (lỗi/từ chối), blue (thông tin) — nhưng nay đọc qua token `--state-*` dùng
@@ -30,16 +37,20 @@
   --popover: hsl(0 0% 100%);
   --popover-foreground: hsl(222 47% 11%);
 
-  --primary: #610b8a; /* tím thương hiệu, khớp .admin-scope */
+  --primary: #c2410c; /* cam thương hiệu site GV — xem ghi chú số đo đầu file */
   --primary-foreground: #ffffff;
-  --primary-dark: #4e237d;
-  --primary-darker: #3b1a5e;
-  --primary-soft: rgba(97, 11, 138, 0.1);
-  --primary-soft-hover: rgba(97, 11, 138, 0.18);
-  /* Mực (CHỮ/ICON) tách khỏi `--primary` (NỀN nút): chữ cần 4.5:1, nền chỉ cần 3:1.
-     Tím #610B8A trên nền trắng đo 10.9:1. */
-  --primary-ink: #610b8a;
-  --primary-ink-hover: #4e237d;
+  --primary-dark: #9a3412;
+  --primary-darker: #7c2d12;
+  /* Tint dùng cam RỰC #F97316 chứ không phải #C2410C cho vệt màu tươi hơn.
+     Độ đục 0,10 chứ không phải 0,12: huy hiệu thường là MỰC ĐẶT TRÊN CHÍNH TINT
+     NÀY, và ở 0,12 thì #C2410C trên nền đó tụt còn 4,39:1 — trượt AA. */
+  --primary-soft: rgba(249, 115, 22, 0.1);
+  --primary-soft-hover: rgba(249, 115, 22, 0.18);
+  /* Mực (CHỮ/ICON) tách khỏi `--primary` (NỀN nút) vì hai ngưỡng khác nhau — và
+     đậm hơn nền nút một nhịp vì nó còn phải đọc được TRÊN NỀN TINT, chứ không
+     chỉ trên nền trắng. #B33C0B: 5,9:1 trên trắng, 5,3:1 trên tint. */
+  --primary-ink: #b33c0b;
+  --primary-ink-hover: #9a3412;
 
   --secondary: hsl(210 40% 96%); /* slate-100 */
   --secondary-foreground: hsl(222 47% 11%);
@@ -50,15 +61,15 @@
   --muted-foreground: hsl(215 16% 44%);
 
   /* `--accent` ở shadcn là lớp wash cho HOVER (menu, item danh sách) — KHÔNG phải
-     màu CTA. Giữ đúng vai đó, chỉ đổi sắc từ cam sang tím cho khớp nhận diện. */
-  --accent: rgba(97, 11, 138, 0.07);
-  --accent-foreground: #4e237d;
+     màu CTA. Wash rất nhạt nên dùng cam rực cho tươi. */
+  --accent: rgba(249, 115, 22, 0.08);
+  --accent-foreground: #9a3412;
 
   --destructive: hsl(0 84% 60%);
 
   --border: hsl(214 32% 91%); /* slate-200 */
   --input: hsl(214 32% 91%);
-  --ring: #610b8a;
+  --ring: #c2410c;
 
   --radius: 0.75rem;
 
@@ -77,21 +88,20 @@
   --popover: hsl(222 40% 14%);
   --popover-foreground: hsl(210 40% 98%);
 
-  /* Tím thương hiệu #610B8A trên nền tối #0F172A chỉ 1,6:1 — nút gần như tàng
-     hình. Nên chế độ Tối giữ NGUYÊN sắc độ (hue 285) mà nâng độ sáng:
-     #A32BC7 → 3,2:1 so với nền (đạt 3:1 cho thành phần giao diện) và chữ trắng
-     trên nó 5,6:1 (đạt 4,5:1 cho chữ). */
-  --primary: #a32bc7;
+  /* NỀN nút giữ NGUYÊN #C2410C của chế độ Sáng — nó đã thoả cả hai đầu: chữ trắng
+     5,18:1 và tách khỏi nền tối 3,45:1. Dùng chung một giá trị nên nút trông giống
+     nhau ở hai chế độ, đỡ phải cân hai lần. */
+  --primary: #c2410c;
   --primary-foreground: #ffffff;
-  --primary-dark: #b44ad3;
-  --primary-darker: #c66ede;
-  --primary-soft: rgba(163, 43, 199, 0.22);
-  --primary-soft-hover: rgba(163, 43, 199, 0.34);
-  /* MỰC thì đảo hẳn: tím rất nhạt (#D8B4FE) — 10,3:1 trên nền tối. Nhờ vậy
+  --primary-dark: #d8480e;
+  --primary-darker: #ea580c;
+  --primary-soft: rgba(249, 115, 22, 0.22);
+  --primary-soft-hover: rgba(249, 115, 22, 0.34);
+  /* MỰC thì đảo hẳn: cam rất nhạt (#FDBA74) — 10,6:1 trên nền tối. Nhờ vậy
      `text-primary-ink` viết MỘT lần là đúng ở cả Sáng lẫn Tối, không cần
      kèm biến thể `dark:` nào. */
-  --primary-ink: #d8b4fe;
-  --primary-ink-hover: #e9d5ff;
+  --primary-ink: #fdba74;
+  --primary-ink-hover: #fed7aa;
 
   --secondary: hsl(217 33% 20%);
   --secondary-foreground: hsl(210 40% 98%);
@@ -99,14 +109,14 @@
   --muted: hsl(217 33% 20%);
   --muted-foreground: hsl(215 20% 65%);
 
-  --accent: rgba(163, 43, 199, 0.16);
-  --accent-foreground: #e9d5ff;
+  --accent: rgba(249, 115, 22, 0.16);
+  --accent-foreground: #fed7aa;
 
   --destructive: hsl(0 63% 45%);
 
   --border: hsl(217 33% 22%);
   --input: hsl(217 33% 22%);
-  --ring: #a32bc7;
+  --ring: #d8480e;
 
   /* ── Trạng thái ngữ nghĩa cho nền TỐI ────────────────────────────────────
      Token `--state-*` ở app/globals.css được cân cho nền TRẮNG: mực là các sắc
@@ -148,17 +158,17 @@
     --secondary-foreground: hsl(222 47% 11%);
     --muted: hsl(210 40% 96%);
     --muted-foreground: hsl(215 16% 44%);
-    --accent: rgba(97, 11, 138, 0.07);
-    --accent-foreground: #4e237d;
+    --accent: rgba(249, 115, 22, 0.08);
+    --accent-foreground: #9a3412;
     --border: hsl(214 32% 91%);
     --input: hsl(214 32% 91%);
 
     /* Nền đã bị ép về TRẮNG ở trên ⇒ phải trả mực về bậc ĐẬM, không thì huy hiệu
        in ra là chữ xanh-lơ/vàng-nhạt trên giấy trắng (gần như không đọc được). */
-    --primary: #610b8a;
-    --primary-ink: #610b8a;
-    --primary-ink-hover: #4e237d;
-    --primary-soft: rgba(97, 11, 138, 0.1);
+    --primary: #c2410c;
+    --primary-ink: #c2410c;
+    --primary-ink-hover: #9a3412;
+    --primary-soft: rgba(249, 115, 22, 0.12);
     --state-success-ink: #047857;
     --state-warning-ink: #92400e;
     --state-danger-ink: #b91c1c;
@@ -264,15 +274,15 @@
 }
 
 /* ── Gradient thương hiệu — avatar tròn + dải tiêu đề phiếu Trial ───────────
-   Tím → cam: đi từ màu nhận diện sang màu điểm xuyết, nên chữ trắng đè lên luôn
-   đủ tương phản ở cả hai đầu (trắng/#610B8A = 12.6:1, trắng/#F8903B = 2.4:1 —
-   nên đầu cam chỉ chiếm đoạn cuối, phần mang chữ nằm ở đầu tím).
+   Cam đậm → cam tươi. Chữ TRẮNG đè lên nên CẢ dải phải đủ tối: chặn đầu sáng ở
+   #E2600F (trắng ~4,0:1) thay vì #F97316 (2,8:1) — vẫn ra vệt cam tươi mà không
+   có đoạn nào chữ bị chìm.
    (`.brand-text` — gradient tô CHỮ — đã gỡ: khai báo mà không nơi nào dùng.) */
 .teacher-root .brand-gradient {
   background-image: linear-gradient(
     135deg,
-    #610b8a 0%,
-    #7c3aa0 60%,
-    #b85a3f 100%
+    #9a3412 0%,
+    #c2410c 55%,
+    #e2600f 100%
   );
 }
