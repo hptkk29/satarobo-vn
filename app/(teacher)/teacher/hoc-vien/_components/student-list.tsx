@@ -69,7 +69,11 @@ export function StudentList({ rows }: { rows: StudentRow[] }) {
             <Link
               key={s.id}
               href={`?s=${s.id}`}
-              className="t-card t-card-hover flex items-center gap-3 p-4 outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              // `min-w-0` KHÔNG thừa dù bên trong đã có: thẻ này là ô của lưới, mà ô
+              // lưới mặc định `min-width: auto` ⇒ cột lấy sàn bằng min-content của
+              // thẻ (đo được 489px) và giãn rộng hơn cả khung 343px. Hệ quả ở 375px:
+              // cả trang cuộn ngang. Bỏ sàn đó thì `truncate` bên trong mới có tác dụng.
+              className="t-card t-card-hover flex min-w-0 items-center gap-3 p-4 outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
               <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary-soft text-xs font-semibold text-primary-ink">
                 {initialsOf(s.name)}

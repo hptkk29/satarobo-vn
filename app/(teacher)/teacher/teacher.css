@@ -194,6 +194,15 @@
    TeachUI dùng `.card` + `shadow-card`. Ở đây đặt tên `.t-card` để không đụng
    bất kỳ class toàn cục nào của repo, và scoped dưới .teacher-root cho chắc. */
 .teacher-root .t-card {
+  /* ⚠️ ĐỪNG BỎ `position: relative` — nó chặn một lỗi tràn ngang rất khó thấy.
+     Tailwind `sr-only` (chữ chỉ dành cho trình đọc màn hình, có trong tiêu đề cột
+     "Mở lớp") là `position: absolute`. Nếu không cấp nào trong chuỗi cha được
+     định vị, nó neo vào KHUNG CHỨA GỐC của trang — tức thoát hẳn khỏi khung
+     `overflow-x-auto` của bảng. Đo ở 375px: cả trang cuộn ngang 400px sang một
+     mảng TRẮNG RỖNG, trên 4 màn. `overflow: hidden/clip` ở `main` không cứu được
+     vì phần tử absolute không bị cắt bởi tổ tiên KHÔNG định vị. Một chữ ở đây
+     kéo khung chứa về lại trong thẻ. */
+  position: relative;
   border-radius: 0.75rem;
   border: 1px solid var(--border);
   background: var(--card);
