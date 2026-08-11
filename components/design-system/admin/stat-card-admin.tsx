@@ -46,7 +46,8 @@ export function StatCardAdmin({
     neutral: "bg-muted text-muted-foreground",
   };
 
-  const display = typeof value === "number" ? value.toLocaleString("vi-VN") : value;
+  const display =
+    typeof value === "number" ? value.toLocaleString("vi-VN") : value;
 
   return (
     <div
@@ -72,7 +73,9 @@ export function StatCardAdmin({
       )}
       {/* min-w-0 là thứ cho phép `truncate` bên dưới hoạt động. Bỏ nó ra là số tràn lại. */}
       <div className="min-w-0 flex-1">
-        <p className="truncate text-sm font-medium text-muted-foreground">{label}</p>
+        <p className="truncate text-sm font-medium text-muted-foreground">
+          {label}
+        </p>
         <div
           className="mt-0.5 truncate text-xl font-bold tabular-nums text-foreground"
           title={String(display)}
@@ -83,9 +86,11 @@ export function StatCardAdmin({
           <div
             className={cn(
               "mt-0.5 flex items-center gap-1 text-xs font-medium",
+              // Bậc MỰC, không phải màu tô đặc: #EF4444 làm chữ trên nền trắng chỉ
+              // đo được 3,76:1 — trượt AA. `-ink` là bậc đã cân cho chữ.
               trend.direction === "up"
-                ? "text-[color:var(--state-success)]"
-                : "text-[color:var(--state-danger)]",
+                ? "text-[color:var(--state-success-ink)]"
+                : "text-[color:var(--state-danger-ink)]",
             )}
           >
             {trend.direction === "up" ? (

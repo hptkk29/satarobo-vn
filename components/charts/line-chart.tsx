@@ -49,8 +49,15 @@ export function LineChart({
   const yTickFormatter = yFormat ? Y_FORMATTERS[yFormat] : undefined;
   return (
     <ResponsiveContainer width="100%" height={height}>
-      <RechartsLineChart data={data} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
-        <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" vertical={false} />
+      <RechartsLineChart
+        data={data}
+        margin={{ top: 10, right: 10, left: 0, bottom: 0 }}
+      >
+        <CartesianGrid
+          strokeDasharray="3 3"
+          stroke="#E5E7EB"
+          vertical={false}
+        />
         <XAxis dataKey={xKey} tick={{ fontSize: 12 }} />
         <YAxis
           tick={{ fontSize: 12 }}
@@ -67,7 +74,21 @@ export function LineChart({
             fontSize: 13,
           }}
         />
-        {showLegend && <Legend wrapperStyle={{ fontSize: 13 }} />}
+        {/* Ô màu vẫn nhận diện chuỗi dữ liệu; CHỮ thì trả về màu nội dung —
+            Recharts mặc định tô chữ chú giải theo màu chuỗi, mà cam #F97316
+            làm chữ trên nền trắng chỉ đo được 2,8:1. */}
+        {showLegend && (
+          <Legend
+            wrapperStyle={{ fontSize: 13 }}
+            // `wrapperStyle.color` KHÔNG thắng: Recharts đặt `color` INLINE lên
+            // từng mục theo màu chuỗi dữ liệu. Phải tự dựng nhãn thì chữ mới
+            // theo màu nội dung — cam #F97316 làm chữ chỉ đo được 2,8:1.
+            // Ô màu bên cạnh vẫn giữ nguyên vai nhận diện chuỗi.
+            formatter={(value) => (
+              <span className="text-foreground">{value}</span>
+            )}
+          />
+        )}
         {lines.map((line) => (
           <Line
             key={line.key}

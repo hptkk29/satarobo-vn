@@ -14,12 +14,15 @@ import { cn } from "@/lib/utils";
  */
 export type StatTone = "brand" | "success" | "warning" | "danger" | "info";
 
+// CHỮ dùng bậc `-ink`, KHÔNG dùng màu tô đặc: đo trên nền trắng thì #10B981 được
+// 2,3:1, #F59E0B 2,1:1, #EF4444 3,8:1, #3B82F6 3,7:1 — cả bốn đều trượt AA.
+// Màu tô đặc chỉ hợp làm NỀN (ngưỡng 3:1), xem toneTint ngay dưới.
 const toneText: Record<StatTone, string> = {
-  brand: "text-[color:var(--primary)]",
-  success: "text-[color:var(--state-success)]",
-  warning: "text-[color:var(--state-warning)]",
-  danger: "text-[color:var(--state-danger)]",
-  info: "text-[color:var(--state-info)]",
+  brand: "text-[color:var(--primary-ink)]",
+  success: "text-[color:var(--state-success-ink)]",
+  warning: "text-[color:var(--state-warning-ink)]",
+  danger: "text-[color:var(--state-danger-ink)]",
+  info: "text-[color:var(--state-info-ink)]",
 };
 
 const toneTint: Record<StatTone, string> = {
@@ -62,17 +65,32 @@ export function StatCard({
             toneTint[tone],
           )}
         >
-          <Icon className={cn("h-[18px] w-[18px]", toneText[tone])} strokeWidth={2} aria-hidden />
+          <Icon
+            className={cn("h-[18px] w-[18px]", toneText[tone])}
+            strokeWidth={2}
+            aria-hidden
+          />
         </span>
       )}
       {/* min-w-0: không có nó thì con `truncate` bên trong không bao giờ co lại,
           và thẻ nở ra ngoài lưới thay vì cắt chữ — đúng lỗi của bản cũ. */}
       <div className="min-w-0 flex-1">
-        <p className="truncate text-xs font-medium text-muted-foreground">{label}</p>
-        <p className={cn("mt-0.5 truncate text-xl font-bold leading-tight", toneText[tone])}>
+        <p className="truncate text-xs font-medium text-muted-foreground">
+          {label}
+        </p>
+        <p
+          className={cn(
+            "mt-0.5 truncate text-xl font-bold leading-tight",
+            toneText[tone],
+          )}
+        >
           {value}
         </p>
-        {hint && <p className="mt-0.5 truncate text-[11px] text-muted-foreground">{hint}</p>}
+        {hint && (
+          <p className="mt-0.5 truncate text-[11px] text-muted-foreground">
+            {hint}
+          </p>
+        )}
       </div>
     </div>
   );
