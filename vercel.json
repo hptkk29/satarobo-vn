@@ -82,6 +82,10 @@
       "schedule": "0 19 * * *"
     },
     {
+      "path": "/api/cron/orgunit-drift",
+      "schedule": "0 20 * * *"
+    },
+    {
       "path": "/api/cron/chat-zns-notify",
       "schedule": "*/30 * * * *"
     }

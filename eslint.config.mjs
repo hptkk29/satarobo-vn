@@ -3,6 +3,8 @@ import tseslint from 'typescript-eslint'
 import reactPlugin from 'eslint-plugin-react'
 import reactHooksPlugin from 'eslint-plugin-react-hooks'
 import { DB_IMPORT_ALLOWLIST } from './lib/eslint/db-import-allowlist.mjs'
+import { INLINE_AUTHZ_ALLOWLIST } from './lib/eslint/inline-authz-allowlist.mjs'
+import inlineAuthzPlugin from './lib/eslint/require-can-in-write-action.mjs'
 
 // R6-F1 — chặn import @/lib/db TRẦN trong route group admin/portal (nơi cần cách ly
 // cơ sở). Code mới PHẢI đi qua scopedDb(actor) (cổng an toàn dữ liệu, A0-04/D1).
@@ -55,6 +57,67 @@ const clientBlockedImports = {
     },
   ],
 }
+
+// TS-03 (US-02 AC5) — no-inline-authz tầng (a): cấm KIỂM QUYỀN inline trong action
+// files. Mọi kiểm tra quyền đi qua can(actor, permissionKey, target) — lib/permissions/can.
+// Escape hatch: so sánh DATA hợp lệ (không phải kiểm quyền) → eslint-disable-next-line
+// no-restricted-syntax kèm lý do tại chỗ.
+const noInlineAuthzSelectors = [
+  {
+    selector:
+      'CallExpression:matches([callee.name=/^(hasRole|isParentOnly|getEffectiveRoles)$/], [callee.property.name=/^(hasRole|isParentOnly|getEffectiveRoles)$/])',
+    message:
+      '❌ no-inline-authz (TS-03): không gọi hasRole()/isParentOnly()/getEffectiveRoles() trong Server Action — ' +
+      'kiểm quyền đi qua can(actor, permissionKey, target) từ lib/permissions/can (fallback đường cũ nằm TRONG can()).',
+  },
+  {
+    selector:
+      'CallExpression[callee.property.name="includes"]:matches([callee.object.property.name="roles"], [callee.object.name="roles"])',
+    message:
+      '❌ no-inline-authz (TS-03): không kiểm quyền bằng .roles.includes(...) — ' +
+      'dùng can(actor, permissionKey, target) từ lib/permissions/can.',
+  },
+  // 2 selector dưới loại trừ so sánh với undefined/null (cả 2 chiều) — đó là guard
+  // partial-update (`data.centerId !== undefined`) / change-detection, KHÔNG phải kiểm quyền
+  // (review đối kháng 09/08). PHẢI dùng regex `[*.name=/^undefined$/]` chứ KHÔNG dùng
+  // `[*.name="undefined"]`: esquery so sánh literal bằng template-string nên thuộc tính
+  // KHÔNG TỒN TẠI (undefined) cũng stringify thành "undefined" → :not giết nhầm mọi
+  // BinaryExpression có vế không phải Identifier; regex đòi typeof === 'string' nên an toàn.
+  // `[*.raw=/^null$/]` chỉ khớp Literal null (string 'null' có raw kèm nháy nên không dính).
+  {
+    selector:
+      'BinaryExpression[operator=/^(===|!==)$/]:matches([left.property.name="role"], [right.property.name="role"], [left.expression.property.name="role"], [right.expression.property.name="role"])' +
+      ':not([left.name=/^undefined$/]):not([right.name=/^undefined$/]):not([left.raw=/^null$/]):not([right.raw=/^null$/])',
+    message:
+      '❌ no-inline-authz (TS-03): không so sánh .role ===/!== trong Server Action — ' +
+      'dùng can(actor, permissionKey, target) từ lib/permissions/can. Nếu đây là so sánh DATA hợp lệ ' +
+      '(không phải kiểm quyền): eslint-disable-next-line no-restricted-syntax kèm lý do.',
+  },
+  {
+    selector:
+      'BinaryExpression[operator=/^(===|!==)$/]:matches([left.property.name="centerId"], [right.property.name="centerId"], [left.expression.property.name="centerId"], [right.expression.property.name="centerId"])' +
+      ':not([left.name=/^undefined$/]):not([right.name=/^undefined$/]):not([left.raw=/^null$/]):not([right.raw=/^null$/])',
+    message:
+      '❌ no-inline-authz (TS-03): không so sánh .centerId ===/!== để chặn quyền trong Server Action — ' +
+      'scope đi qua can(actor, permissionKey, target) từ lib/permissions/can hoặc scopedDb/passesScope. ' +
+      'Nếu đây là so sánh DATA hợp lệ (không phải kiểm quyền): eslint-disable-next-line no-restricted-syntax kèm lý do.',
+  },
+]
+
+// TS-03 — bộ glob scope file Server Action (dùng cho block bật 2 rule dưới; block off
+// grandfather cuối file dùng danh sách FILE trong INLINE_AUTHZ_ALLOWLIST — luôn là tập
+// con của scope này). Mở rộng 09/08 sau review đối kháng: 2 glob gốc bỏ sót 11 file
+// action thật (`_qr-actions.ts`, `_eval-actions.ts`, `_*-approval-actions.ts`,
+// `_schedule/_curriculum/_attendance-actions.ts`, logic-core `_qr-core.ts`/
+// `_feedback-core.ts`, thư mục `_actions/*.ts`). Đã tự kiểm bằng liệt kê match thật:
+// KHÔNG kéo nhầm file client ('use client' = 0 hit trong scope).
+const inlineAuthzActionGlobs = [
+  'app/**/_actions*.ts', // glob gốc: _actions.ts
+  'app/**/actions.ts', // glob gốc: actions.ts
+  'app/**/_*actions*.ts', // _eval-actions.ts, _qr-actions.ts, _installment-approval-actions.ts...
+  'app/**/_*-core.ts', // _qr-core.ts, _feedback-core.ts — logic THẬT của action tách khỏi "use server"
+  'app/**/_actions/**/*.ts', // app/(admin)/admin/_actions/active-role.ts, cron-trigger.ts
+]
 
 export default tseslint.config(
   { ignores: ['.next/**', 'node_modules/**', 'prisma/migrations/**'] },
@@ -167,6 +230,18 @@ export default tseslint.config(
     },
   },
 
+  // TS-03 (US-02 AC5) — no-inline-authz 2 tầng trên action files (Server Actions).
+  // Tầng (a): no-restricted-syntax cấm kiểm quyền inline (selectors ở đầu file).
+  // Tầng (b): plugin local `authz` — action GHI dữ liệu phải gọi can()/assertCan().
+  {
+    files: inlineAuthzActionGlobs,
+    plugins: { authz: inlineAuthzPlugin },
+    rules: {
+      'no-restricted-syntax': ['error', ...noInlineAuthzSelectors],
+      'authz/require-can-in-write-action': 'error',
+    },
+  },
+
   // R6-F1 — grandfather: 201 file hiện trạng tạm miễn db block (whitelist→0 theo
   // từng epic). Vẫn GIỮ Magic/Motion block (chỉ bỏ pattern @/lib/db). Override này
   // đặt CUỐI để thắng. Migrate file sang scopedDb → xóa entry khỏi allowlist.
@@ -176,4 +251,21 @@ export default tseslint.config(
       'no-restricted-imports': ['error', adminBlockedImports],
     },
   },
+
+  // TS-03 — grandfather no-inline-authz: file hiện trạng còn kiểm quyền inline
+  // (đo bằng lint thật 09/08) tạm miễn CẢ 2 tầng. Trả nợ dần → 0, CẤM thêm file mới
+  // (test freshness inline-authz.test.ts ép xoá entry đã sạch). Block ĐỘC LẬP đặt
+  // CUỐI CÙNG — KHÔNG gộp với block DB allowlist ở trên: override REPLACE theo TÊN
+  // rule, gộp block là rule của nhau đè mất nhau.
+  ...(INLINE_AUTHZ_ALLOWLIST.length > 0
+    ? [
+        {
+          files: INLINE_AUTHZ_ALLOWLIST,
+          rules: {
+            'no-restricted-syntax': 'off',
+            'authz/require-can-in-write-action': 'off',
+          },
+        },
+      ]
+    : []),
 )

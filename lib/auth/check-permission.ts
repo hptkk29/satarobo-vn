@@ -2,38 +2,48 @@
 // Chạy can() v1 (matrix) + can() v2 (actor) SONG SONG, log lệch (shadow), trả kết
 // quả theo cờ RBAC_V2_ENABLED. API mới cho code mới; callsite cũ migrate ở Phase C.
 // KHÔNG đổi hành vi prod khi flag OFF (vẫn dùng v1). Lõi thuần ở permission-eval.ts.
+//
+// US-02 (Nền Hệ thống P0, 09/08/2026): bảng PermissionGrant MỚI cắm vào TRƯỚC đường
+// cũ — grant khớp (hit) thì grant là nguồn sự thật; KHÔNG grant khớp → fallback
+// NGUYÊN TRẠNG v1/v2/shadow/flag (luật #2). Engine ship với bảng RỖNG = zero change.
 import { auth } from "@/lib/auth";
 import { resolveActor, type Target } from "@/lib/auth/actor";
 import { PermissionError } from "@/lib/auth/can";
-import { isRbacV2Enabled } from "@/lib/flags";
 import { evaluatePermission } from "@/lib/auth/permission-eval";
-import { recordPermissionShadow } from "@/lib/auth/shadow-report";
+import {
+  decidePermissionWithGrant,
+  decidePermissionDetailWithGrant,
+} from "@/lib/auth/permission-decision";
 
 export { evaluatePermission };
+// Lõi quyết định (grant mới → fallback đường cũ) nằm ở permission-decision.ts —
+// tách file để test integration import được mà không kéo theo next-auth.
+export { decidePermissionWithGrant };
 
-function targetKey(target?: Target): string | null {
-  if (!target) return null;
-  return target.centerId ?? target.classId ?? target.createdById ?? null;
-}
-
-/** Runtime: lấy session + resolveActor (1 query/request) → evaluatePermission.
- *  R6-F2: persist shadow-diff khi v1≠v2 (fire-and-forget) để dựng report bật flag. */
+/** Runtime: lấy session + resolveActor (1 query/request) → grant mới ưu tiên,
+ *  miss → evaluatePermission. R6-F2: persist shadow-diff khi v1≠v2 (fire-and-forget). */
 export async function checkPermission(action: string, target?: Target): Promise<boolean> {
   const session = await auth();
   if (!session?.user) return false;
   const actor = await resolveActor(session.user.id);
-  return evaluatePermission({
-    sessionUser: session.user,
-    actor,
-    action,
-    target,
-    flagOn: isRbacV2Enabled(),
-    onEvaluated: ({ v1, v2 }) => {
-      if (v1 !== v2) {
-        void recordPermissionShadow({ action, userId: actor.userId, v1, v2, targetKey: targetKey(target) });
-      }
-    },
-  });
+  return decidePermissionWithGrant({ sessionUser: session.user, actor, action, target });
+}
+
+/**
+ * US-02 (cho US-03 dùng — chưa có consumer): như checkPermission nhưng trả kèm
+ * fieldMask (DENY cấp trường từ grant). Miss grant → fieldMask [] (đường cũ
+ * không có khái niệm che trường).
+ */
+export async function checkPermissionDetail(
+  action: string,
+  target?: Target,
+): Promise<{ allowed: boolean; fieldMask: string[] }> {
+  const session = await auth();
+  if (!session?.user) return { allowed: false, fieldMask: [] };
+  const actor = await resolveActor(session.user.id);
+  // Mask VÔ ĐIỀU KIỆN (không gate theo grant hit) — DENY cấp trường đơn độc vẫn che
+  // trường dù quyết định action đến từ đường cũ (TS-02).
+  return decidePermissionDetailWithGrant({ sessionUser: session.user, actor, action, target });
 }
 
 /** Ném PermissionError nếu không đủ quyền (dùng đầu Server Action/route). */
@@ -56,22 +66,13 @@ export async function checkAnyPermission(
   const session = await auth();
   if (!session?.user) return false;
   const actor = await resolveActor(session.user.id);
-  const flagOn = isRbacV2Enabled();
 
   for (const action of actions) {
-    const ok = evaluatePermission({
-      sessionUser: session.user,
-      actor,
-      action,
-      target,
-      flagOn,
-      onEvaluated: ({ v1, v2 }) => {
-        if (v1 !== v2) {
-          void recordPermissionShadow({ action, userId: actor.userId, v1, v2, targetKey: targetKey(target) });
-        }
-      },
-    });
-    if (ok) return true;
+    // US-02: mỗi action đi qua cùng lõi grant-trước-fallback-sau như checkPermission;
+    // shadow-diff vẫn chỉ ghi cho action THỰC SỰ rơi xuống đường cũ (miss grant).
+    if (decidePermissionWithGrant({ sessionUser: session.user, actor, action, target })) {
+      return true;
+    }
   }
   return false;
 }

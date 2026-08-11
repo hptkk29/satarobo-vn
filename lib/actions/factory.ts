@@ -14,7 +14,10 @@
 // kiểm tra quyền vẫn chạy trước mọi mutation, và input không hợp lệ bị chặn sớm.
 import type { z } from "zod";
 import type { Actor, Target } from "@/lib/auth/actor";
-import { can } from "@/lib/auth/can";
+// US-02 (Nền Hệ thống P0): can() HỢP NHẤT — grant PermissionGrant mới ưu tiên,
+// không grant khớp → fallback nguyên trạng can() v2. An toàn: 0 consumer production
+// của factory (3 file chỉ import type ScopedDb); bảng grant ship rỗng = zero change.
+import { can } from "@/lib/permissions/can";
 import { scopedDb } from "@/lib/db-scope";
 import { writeAudit } from "@/lib/audit/audit-log";
 
