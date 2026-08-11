@@ -10,6 +10,7 @@ import { scopedDb } from "@/lib/db-scope";
 import { resolveActor } from "@/lib/auth/actor";
 import { ViTriEditor } from "./_components/vi-tri-editor";
 import { PhanCongEditor } from "./_components/phan-cong-editor";
+import { vnYmd } from "@/lib/time/vn";
 
 export const dynamic = "force-dynamic";
 
@@ -117,6 +118,11 @@ export default async function ViTriPage() {
           kind: a.kind,
           effectiveFrom: a.effectiveFrom.toISOString(),
           effectiveTo: a.effectiveTo?.toISOString() ?? null,
+          // Ngày cho ô `<input type="date">` phải tính theo GIỜ VN. Cắt 10 ký tự đầu của
+          // chuỗi ISO (UTC) là lệch một ngày với mọi mốc trước 07:00 VN — mà 00:00 VN,
+          // đúng thứ ta lưu, luôn rơi vào đó.
+          tuNgay: vnYmd(a.effectiveFrom),
+          denNgay: a.effectiveTo ? vnYmd(a.effectiveTo) : null,
           status: a.status,
           note: a.note,
         }))}

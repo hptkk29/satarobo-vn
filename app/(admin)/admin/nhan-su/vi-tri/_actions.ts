@@ -21,6 +21,7 @@ import {
   assertSinglePrimary,
 } from "@/lib/org/positions";
 import { writeAudit } from "@/lib/audit/audit-log";
+import { parseVnYmd, vnEndOfDay } from "@/lib/time/vn";
 
 export type ActionResult = { ok: true; id?: string } | { ok: false; error: string };
 
@@ -147,13 +148,13 @@ const phanCongSchema = z
     note: z.string().trim().max(500).optional().nullable(),
   })
   .superRefine((d, ctx) => {
-    const tu = new Date(d.effectiveFrom);
+    const tu = parseVnYmd(d.effectiveFrom) ?? new Date(NaN);
     if (Number.isNaN(tu.getTime())) {
       ctx.addIssue({ code: "custom", message: "Ngày bắt đầu không hợp lệ", path: ["effectiveFrom"] });
       return;
     }
     if (d.effectiveTo) {
-      const den = new Date(d.effectiveTo);
+      const den = parseVnYmd(d.effectiveTo) ?? new Date(NaN);
       if (Number.isNaN(den.getTime())) {
         ctx.addIssue({ code: "custom", message: "Ngày kết thúc không hợp lệ", path: ["effectiveTo"] });
       } else if (den < tu) {
@@ -171,8 +172,18 @@ export async function luuPhanCong(input: unknown): Promise<ActionResult> {
     return { ok: false, error: parsed.error.issues[0]?.message ?? "Dữ liệu không hợp lệ" };
   }
   const d = parsed.data;
-  const effectiveFrom = new Date(d.effectiveFrom);
-  const effectiveTo = d.effectiveTo ? new Date(d.effectiveTo) : null;
+  // ⚠️ `new Date("2026-08-11")` là 00:00 **UTC** = 07:00 giờ VN: phân công "từ hôm nay"
+  // sẽ chưa có hiệu lực suốt 0h–7h sáng hôm đó, và Vercel chạy UTC nên lỗi này KHÔNG
+  // lộ ra ở máy dev (+07). Ngày bắt đầu = 00:00 giờ VN, ngày kết thúc = HẾT ngày đó
+  // (bao trùm cả ngày cuối — người dùng nhập "đến 31/12" là có ý làm hết 31/12).
+  const effectiveFrom = parseVnYmd(d.effectiveFrom);
+  const effectiveTo = d.effectiveTo ? vnEndOfDay(parseVnYmd(d.effectiveTo) ?? new Date(NaN)) : null;
+  if (!effectiveFrom || Number.isNaN(effectiveFrom.getTime())) {
+    return { ok: false, error: "Ngày bắt đầu không hợp lệ" };
+  }
+  if (effectiveTo && Number.isNaN(effectiveTo.getTime())) {
+    return { ok: false, error: "Ngày kết thúc không hợp lệ" };
+  }
 
   try {
     const sdb = scopedDb(await resolveActor(session.user.id));

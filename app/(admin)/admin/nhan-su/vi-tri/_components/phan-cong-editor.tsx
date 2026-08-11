@@ -22,6 +22,9 @@ type PhanCong = {
   kind: Kind | string;
   effectiveFrom: string;
   effectiveTo: string | null;
+  /** Ngày theo GIỜ VN cho ô `<input type="date">` — KHÔNG cắt từ chuỗi ISO (lệch 1 ngày). */
+  tuNgay: string;
+  denNgay: string | null;
   status: string;
   note: string | null;
 };
@@ -283,8 +286,8 @@ export function PhanCongEditor({
                             positionId: a.positionId,
                             userId: a.userId,
                             kind: (a.kind as Kind) ?? "PRIMARY",
-                            effectiveFrom: a.effectiveFrom.slice(0, 10),
-                            effectiveTo: a.effectiveTo ? a.effectiveTo.slice(0, 10) : "",
+                            effectiveFrom: a.tuNgay,
+                            effectiveTo: a.denNgay ?? "",
                             note: a.note ?? "",
                           });
                           if (typeof window !== "undefined") {
