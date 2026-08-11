@@ -360,6 +360,7 @@ model OrgUnit {
   @@index([path(ops: raw("text_pattern_ops"))])
   @@index([legalEntityId])
   @@index([status])
+  positions          Position[]           @relation("PositionOrgUnit")
 }
 
 // [Nền Hệ thống P1 · US-06] Pháp nhân — TÁCH khỏi đơn vị vận hành (BA §2.3).
@@ -410,6 +411,7 @@ model RoleDef {
   userRoles   UserOrgRole[]
   createdAt   DateTime         @default(now()) @db.Timestamptz(6)
   updatedAt   DateTime         @updatedAt @db.Timestamptz(6)
+  positionRoles      PositionRole[]
 }
 
 model RolePermission {
@@ -602,6 +604,84 @@ model DomainEvent {
 
 // ─── A0-08 — EmployeeOrgAssignment (Doc 15 §2.2, OI-6/OI-8/OI-10) ───
 // Nhân sự/kiêm nhiệm/lương — KHÔNG sinh quyền (quyền chỉ từ UserOrgRole).
+/// P2 · US-08 — KIỂU PHÂN CÔNG VỊ TRÍ (BA §2.4). KHÁC hẳn `AssignmentType` ngay bên
+/// dưới: cái đó là phân bổ nhân sự/lương của `EmployeeOrgAssignment` và CỐ Ý KHÔNG sinh
+/// quyền; cái này quyết định người đó hưởng bộ quyền của Position nào.
+enum PositionAssignmentKind {
+  PRIMARY
+  CONCURRENT
+  DELEGATED
+}
+
+/// P2 · US-08 — VỊ TRÍ CÔNG VIỆC (BA §2.4). Quyền gắn vào VỊ TRÍ, không gắn vào người:
+/// người nghỉ → gỡ assignment, vị trí giữ nguyên bộ quyền cho người kế nhiệm.
+///
+/// `reportsToPositionId` là CÂY THỨ HAI, độc lập cây tổ chức (BA §10): dùng cho luồng
+/// duyệt, **KHÔNG** dùng để resolve dataScope. Chống vòng lặp enforce ở tầng ghi
+/// (`assertNoReportingCycle`) — Postgres không có ràng buộc đệ quy khai báo được.
+model Position {
+  id                  String    @id @default(cuid())
+  /// Đơn vị TRỰC THUỘC (biên chế) — nơi TÁC NGHIỆP là WorkScope của assignment (US-10).
+  orgUnitId           String
+  title               String
+  isManagerial        Boolean   @default(false)
+  reportsToPositionId String?
+  isActive            Boolean   @default(true)
+  deletedAt           DateTime? @db.Timestamptz(6)
+  createdAt           DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt           DateTime  @updatedAt @db.Timestamptz(6)
+
+  orgUnit     OrgUnit              @relation("PositionOrgUnit", fields: [orgUnitId], references: [id], onDelete: Restrict)
+  reportsTo   Position?            @relation("PositionReportsTo", fields: [reportsToPositionId], references: [id], onDelete: SetNull)
+  reports     Position[]           @relation("PositionReportsTo")
+  roles       PositionRole[]
+  assignments PositionAssignment[]
+
+  @@index([orgUnitId, isActive])
+  @@index([reportsToPositionId])
+}
+
+/// Bộ vai trò của một vị trí. Người nhận assignment vào vị trí hưởng đủ các vai này.
+model PositionRole {
+  positionId String
+  roleId     String
+  createdAt  DateTime @default(now()) @db.Timestamptz(6)
+
+  position Position @relation(fields: [positionId], references: [id], onDelete: Cascade)
+  role     RoleDef  @relation(fields: [roleId], references: [id], onDelete: Restrict)
+
+  @@id([positionId, roleId])
+  @@index([roleId])
+}
+
+/// Phân công một NGƯỜI vào một VỊ TRÍ, có thời hạn (US-09 mở rộng ràng buộc PRIMARY).
+///
+/// ⚠️ TÊN `Assignment` ĐÃ BỊ CHIẾM bởi bài tập LMS (`model Assignment` phía dưới), nên
+/// entity của BA mang tên `PositionAssignment`. Đừng đổi lại — đổi là va tên trên toàn
+/// bộ Prisma Client.
+///
+/// KHÔNG xoá lịch sử: hết hiệu lực thì đóng `effectiveTo`, quyền tự tắt vì resolver lọc
+/// theo mốc thời gian (US-09 AC2 — không cần cron gỡ tay).
+model PositionAssignment {
+  id            String                 @id @default(cuid())
+  positionId    String
+  userId        String
+  kind          PositionAssignmentKind @default(PRIMARY)
+  effectiveFrom DateTime               @default(now()) @db.Timestamptz(6)
+  effectiveTo   DateTime?              @db.Timestamptz(6)
+  status        AssignStatus           @default(ACTIVE)
+  note          String?
+  createdById   String?
+  createdAt     DateTime               @default(now()) @db.Timestamptz(6)
+  updatedAt     DateTime               @updatedAt @db.Timestamptz(6)
+
+  position Position @relation(fields: [positionId], references: [id], onDelete: Restrict)
+  user     User     @relation("UserPositionAssignments", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, status])
+  @@index([positionId, status])
+}
+
 enum AssignmentType {
   PRIMARY
   SECONDARY
@@ -958,6 +1038,7 @@ model User {
   @@index([role])
   @@index([deletedAt])
   @@index([orgUnitId])
+  positionAssignments PositionAssignment[] @relation("UserPositionAssignments")
 }
 
 model UserPermissionGrant {

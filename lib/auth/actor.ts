@@ -14,6 +14,7 @@ import type { OrgUnitNode } from "@/lib/org/types";
 // GrantRow lấy từ module type-lá (KHÔNG phải lib/permissions/can) — tránh vòng
 // actor→can→actor bị dependency-cruiser no-circular chặn ở CI.
 import type { GrantRow } from "@/lib/permissions/grant-types";
+import { loadPositionRoleRows } from "@/lib/org/positions";
 
 // REQ-02 (REVERTED) — cây OrgUnit đọc TRẦN mỗi request. Trước đây bọc unstable_cache
 // (TTL 300s) nhưng: (a) bảng OrgUnit RẤT NHỎ (HO+CS1+CS2…) → full-scan không đáng kể,
@@ -326,7 +327,7 @@ async function loadRelationshipRoles(userId: string): Promise<RelationshipRole[]
 
 export async function resolveActorUncached(userId: string): Promise<Actor> {
   const now = new Date();
-  const [rows, orgNodes, grants, classes, groupMemberships, relationshipRoles] =
+  const [rows, orgNodes, grants, classes, groupMemberships, relationshipRoles, positionRows] =
     await Promise.all([
     db.userOrgRole.findMany({
       where: {
@@ -355,6 +356,10 @@ export async function resolveActorUncached(userId: string): Promise<Actor> {
       select: { groupId: true },
     }),
       loadRelationshipRoles(userId),
+      // P2 · US-08 — vai hưởng QUA VỊ TRÍ. Trả về cùng khuôn `UserOrgRoleRow` nên nhập
+      // thẳng vào `rows` bên dưới; mọi logic scope của `buildActor` áp dụng y hệt, không
+      // có đường quyền thứ hai để trôi lệch. Xem khối chú thích đầu lib/org/positions.ts.
+      loadPositionRoleRows(userId, now),
     ]);
 
   // US-02/US-03 — query grant (phụ thuộc roleIds/groupIds nên nằm SAU Promise.all):
@@ -393,21 +398,24 @@ export async function resolveActorUncached(userId: string): Promise<Actor> {
     permissionGrants,
     groupIds,
     relationshipRoles,
-    rows: rows.map((r) => ({
-      orgUnitId: r.orgUnitId,
-      roleId: r.roleId,
-      status: r.status,
-      effectiveFrom: r.effectiveFrom,
-      effectiveTo: r.effectiveTo,
-      role: {
-        code: r.role.code,
-        isActive: r.role.isActive,
-        permissions: r.role.permissions.map((p) => ({
-          action: p.action,
-          scopeType: p.scopeType as ScopeType,
-        })),
-      },
-    })),
+    rows: [
+      ...rows.map((r) => ({
+        orgUnitId: r.orgUnitId,
+        roleId: r.roleId,
+        status: r.status,
+        effectiveFrom: r.effectiveFrom,
+        effectiveTo: r.effectiveTo,
+        role: {
+          code: r.role.code,
+          isActive: r.role.isActive,
+          permissions: r.role.permissions.map((p) => ({
+            action: p.action,
+            scopeType: p.scopeType as ScopeType,
+          })),
+        },
+      })),
+      ...positionRows,
+    ],
     grants: grants.map((g) => ({ action: g.action, grant: g.grant })),
     assignedClassIds: classes.map((c) => c.id),
   });
