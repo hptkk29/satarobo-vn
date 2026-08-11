@@ -22,12 +22,15 @@
  *    JOIN chứ không LEFT JOIN.
  *  · KHÔNG đụng dữ liệu còn nằm ngoài hệ (sheet của Sale) — E5 pre-mortem, ngoài phạm vi.
  */
-import { PrismaClient } from "@prisma/client";
 import { ALL_DRIFT_SPECS } from "../lib/org/drift-report";
 import "./_load-env";
+import { scriptDb } from "./_script-db";
 
 const APPLY = process.argv.includes("--apply");
-const db = new PrismaClient();
+// scriptDb, KHÔNG phải `new PrismaClient()`: 52 truy vấn liên tiếp qua transaction pooler
+// :6543 chết ở câu thứ 36 với `prepared statement "s36" does not exist` — ăn thật ở lần
+// dry-run ĐẦU TIÊN trên DB dev (11/08). Xem scripts/_script-db.ts.
+const db = scriptDb();
 
 /**
  * Cùng công thức ánh xạ với migration và với script đối soát: hai nhánh, nhánh thứ hai là

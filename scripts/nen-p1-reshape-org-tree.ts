@@ -24,13 +24,14 @@
  *    `isHoRoot()` vốn đã coi ROOT ≡ HO nên quyền của những người đó KHÔNG đổi.
  *  · Tính lại path/depth cho TOÀN BỘ cây ở cuối, bằng cùng công thức với lib/org/path.ts.
  */
-import { PrismaClient } from "@prisma/client";
 import { childPath, recomputeSubtree } from "../lib/org/path";
 import type { OrgUnitNode, OrgUnitType } from "../lib/org/types";
 import "./_load-env";
+import { scriptDb } from "./_script-db";
 
 const APPLY = process.argv.includes("--apply");
-const db = new PrismaClient();
+// Session pooler — xem scripts/_script-db.ts (quirk prepared statement của :6543).
+const db = scriptDb();
 
 /** Vùng mặc định gom CS1/CS2 — đúng cơ cấu thật (HO + CS1 + CS2 đều ở Đà Nẵng). */
 const REGION_CODE = "DANANG";
