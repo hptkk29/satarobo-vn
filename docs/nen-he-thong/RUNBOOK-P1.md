@@ -31,9 +31,22 @@ pnpm tsx scripts/nen-p1-reshape-org-tree.ts --apply
 pnpm tsx scripts/nen-p1-backfill-orgunit.ts            # XEM TRƯỚC — số dòng theo từng bảng
 pnpm tsx scripts/nen-p1-backfill-orgunit.ts --apply
 
-# (4) Xác nhận
+# (4) Tạo pháp nhân gốc + gắn 4 đơn vị vào (US-06 AC2)
+pnpm tsx prisma/seed-orgunit.ts
+
+# (5) Xác nhận
 pnpm tsx scripts/nen-p1-doi-soat-orgunit.ts
 ```
+
+**Bước (4) dễ bị quên** — phát hiện khi chạy thật trên DB dev 11/08. Bảng `LegalEntity` vừa
+được migration tạo nên **rỗng**, mà đường tạo pháp nhân gốc (`seedPrimaryLegalEntity`) chỉ
+chạy qua seed. Không có bước này thì mọi đơn vị có `legalEntityId = NULL`, và script dời cây
+in cảnh báo `⚠️ Chưa có pháp nhân gốc (isPrimary)`.
+
+Chạy `prisma/seed-orgunit.ts` **trực tiếp** chứ không `pnpm db:seed`: file có guard tự chạy
+nên chỉ gọi `seedOrgUnits`, không kéo theo cả `prisma/seed.ts`. Idempotent theo `code`, và
+**không đụng node `SATAROBO`** (nó không nằm trong danh sách seed nên giữ nguyên trạng thái
+đã đóng ở bước 2).
 
 **Vì sao (2) phải trước (3):** backfill ánh xạ theo `Center`, nên nó vẫn chạy đúng khi cây
 chưa dời — nhưng lúc đó chưa có node vùng, và mọi thứ phải soát lại sau khi dời. Chạy đúng
