@@ -161,12 +161,10 @@ export function ViTriEditor({
                         : [...form.roleIds, r.id],
                     })
                   }
+                  // Nhãn hiện tên tiếng Việt; mã (`CENTER_MANAGER`) để ở tooltip cho ai
+                  // cần đối chiếu với `prisma/seed-roles.ts`.
                   title={r.code}
-                  className={`rounded-full border px-3 py-1 text-xs font-medium transition-colors ${
-                    chon
-                      ? "border-primary bg-primary text-primary-foreground"
-                      : "border-border bg-background text-muted-foreground hover:border-primary/40"
-                  }`}
+                  className={`rounded-full border px-3 py-1 text-xs font-medium transition-colors ${ chon ? "border-primary bg-primary text-primary-foreground" : "border-border bg-background text-muted-foreground hover:border-primary/40" }`}
                 >
                   {r.name || r.code}
                 </button>
@@ -222,7 +220,7 @@ export function ViTriEditor({
                 <td className="px-4 py-3">
                   <span className="font-medium text-foreground">{p.title}</span>
                   {p.isManagerial && (
-                    <span className="ml-1.5 rounded-full bg-amber-100 px-1.5 py-0.5 text-[11px] font-semibold text-amber-700">
+                    <span className="ml-1.5 rounded-full bg-state-warning-soft px-1.5 py-0.5 text-[11px] font-semibold text-state-warning-ink">
                       Quản lý
                     </span>
                   )}

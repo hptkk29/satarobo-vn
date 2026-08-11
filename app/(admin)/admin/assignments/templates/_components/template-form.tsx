@@ -37,7 +37,7 @@ export type TemplateFormValue = {
 };
 
 const inputClass =
-  "w-full rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm outline-none focus:border-[#7C3AED] focus:ring-2 focus:ring-[#7C3AED]/20";
+  "w-full rounded-lg border border-border bg-card px-3 py-2 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20";
 
 export function TemplateForm({
   template,
@@ -110,19 +110,19 @@ export function TemplateForm({
   return (
     <form onSubmit={handleSubmit} className="space-y-5">
       {error && (
-        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+        <div className="rounded-lg border border-state-danger-soft bg-state-danger-soft px-4 py-3 text-sm text-state-danger-ink">
           {error}
         </div>
       )}
 
-      <section className="space-y-4 rounded-xl border border-neutral-200 bg-white p-6">
-        <h2 className="text-sm font-bold uppercase tracking-wider text-neutral-700">
+      <section className="space-y-4 rounded-xl border border-border bg-card p-6">
+        <h2 className="text-sm font-bold uppercase tracking-wider text-foreground">
           Thông tin mẫu bài tập
         </h2>
 
         <label className="block">
-          <span className="mb-1 block text-sm font-semibold text-neutral-700">
-            Tiêu đề <span className="text-red-500">*</span>
+          <span className="mb-1 block text-sm font-semibold text-foreground">
+            Tiêu đề <span className="text-state-danger-ink">*</span>
           </span>
           <input
             type="text"
@@ -136,7 +136,7 @@ export function TemplateForm({
         </label>
 
         <label className="block">
-          <span className="mb-1 block text-sm font-semibold text-neutral-700">
+          <span className="mb-1 block text-sm font-semibold text-foreground">
             Loại bài
           </span>
           <select
@@ -151,8 +151,8 @@ export function TemplateForm({
         </label>
 
         <label className="block">
-          <span className="mb-1 block text-sm font-semibold text-neutral-700">
-            Mô tả <span className="text-red-500">*</span>
+          <span className="mb-1 block text-sm font-semibold text-foreground">
+            Mô tả <span className="text-state-danger-ink">*</span>
           </span>
           <textarea
             value={description}
@@ -166,7 +166,7 @@ export function TemplateForm({
         </label>
 
         <label className="block">
-          <span className="mb-1 block text-sm font-semibold text-neutral-700">
+          <span className="mb-1 block text-sm font-semibold text-foreground">
             Hướng dẫn chi tiết
           </span>
           <textarea
@@ -181,7 +181,7 @@ export function TemplateForm({
 
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
           <label className="block">
-            <span className="mb-1 block text-sm font-semibold text-neutral-700">
+            <span className="mb-1 block text-sm font-semibold text-foreground">
               Khung chương trình
             </span>
             <select
@@ -202,7 +202,7 @@ export function TemplateForm({
             </select>
           </label>
           <label className="block">
-            <span className="mb-1 block text-sm font-semibold text-neutral-700">
+            <span className="mb-1 block text-sm font-semibold text-foreground">
               Buổi học (tuỳ chọn)
             </span>
             <select
@@ -222,8 +222,8 @@ export function TemplateForm({
         </div>
 
         <label className="block max-w-xs">
-          <span className="mb-1 block text-sm font-semibold text-neutral-700">
-            Tổng điểm <span className="text-red-500">*</span>
+          <span className="mb-1 block text-sm font-semibold text-foreground">
+            Tổng điểm <span className="text-state-danger-ink">*</span>
           </span>
           <input
             type="number"
@@ -246,9 +246,9 @@ export function TemplateForm({
               checked={allowText}
               onChange={(e) => setAllowText(e.target.checked)}
               disabled={pending}
-              className="h-4 w-4 rounded border-neutral-300"
+              className="h-4 w-4 rounded border-border"
             />
-            <span className="font-medium text-neutral-700">Cho phép trả lời text</span>
+            <span className="font-medium text-foreground">Cho phép trả lời text</span>
           </label>
           <label className="flex items-center gap-2 text-sm">
             <input
@@ -256,18 +256,18 @@ export function TemplateForm({
               checked={allowFile}
               onChange={(e) => setAllowFile(e.target.checked)}
               disabled={pending}
-              className="h-4 w-4 rounded border-neutral-300"
+              className="h-4 w-4 rounded border-border"
             />
-            <span className="font-medium text-neutral-700">Cho phép nộp file</span>
+            <span className="font-medium text-foreground">Cho phép nộp file</span>
           </label>
         </div>
       </section>
 
-      <div className="flex flex-wrap gap-3 border-t border-neutral-200 pt-5">
+      <div className="flex flex-wrap gap-3 border-t border-border pt-5">
         <button
           type="submit"
           disabled={pending}
-          className="rounded-xl bg-[#7C3AED] px-6 py-3 font-bold text-white shadow-md hover:opacity-90 disabled:opacity-60"
+          className="rounded-xl bg-primary px-6 py-3 font-bold text-white shadow-md hover:opacity-90 disabled:opacity-60"
         >
           {pending ? "Đang lưu..." : isEdit ? "Lưu thay đổi" : "Tạo mẫu"}
         </button>
@@ -275,7 +275,7 @@ export function TemplateForm({
           type="button"
           onClick={() => router.push("/assignments/templates")}
           disabled={pending}
-          className="rounded-xl border-2 border-neutral-200 bg-white px-6 py-3 font-bold text-neutral-700 hover:bg-neutral-50"
+          className="rounded-xl border-2 border-border bg-card px-6 py-3 font-bold text-foreground hover:bg-muted"
         >
           Huỷ
         </button>
@@ -285,7 +285,7 @@ export function TemplateForm({
             type="button"
             onClick={handleDelete}
             disabled={pending}
-            className="ml-auto rounded-xl border-2 border-red-200 bg-white px-6 py-3 font-bold text-red-700 hover:bg-red-50"
+            className="ml-auto rounded-xl border-2 border-state-danger-soft bg-card px-6 py-3 font-bold text-state-danger-ink hover:bg-state-danger-soft"
           >
             Xoá mẫu
           </button>

@@ -398,19 +398,20 @@ export function Sidebar({
   }
 
   return (
-    <aside className="flex h-full w-64 flex-col border-r border-neutral-200 bg-white">
-      <div className="flex h-16 items-center border-b border-neutral-200 px-6">
+    <aside className="flex h-full w-64 flex-col border-r border-border bg-card">
+      <div className="flex h-16 items-center border-b border-border px-6">
         <Link
           href="/dashboard"
           className="group text-xl font-bold transition-opacity hover:opacity-90"
         >
-          <span className="bg-gradient-to-r from-orange-500 to-purple-700 bg-clip-text text-transparent">
-            Sata
-          </span>
-          <span className="bg-gradient-to-r from-purple-700 to-orange-500 bg-clip-text text-transparent">
-            Robo
-          </span>
-          <span className="ml-1 text-xs font-normal text-neutral-400">Admin</span>
+          {/* DESIGN.md §7 — KHÔNG gradient trong admin. Bản cũ tô "Sata" bằng gradient
+              cam→tím và "Robo" bằng tím→cam, tức hai chữ chạy NGƯỢC CHIỀU nhau: chỗ nối
+              đổi màu đột ngột, và ở cỡ 20px chữ mảnh bị bệt. Gradient chữ thuộc site
+              public. Ở đây dùng hai màu ĐẶC của thương hiệu — vẫn nhận ra lockup mà đọc
+              rõ ở mọi cỡ. */}
+          <span className="text-[color:var(--accent)]">Sata</span>
+          <span className="text-[color:var(--primary)]">Robo</span>
+          <span className="ml-1.5 text-xs font-normal text-muted-foreground">Admin</span>
         </Link>
       </div>
 
@@ -422,7 +423,7 @@ export function Sidebar({
               <button
                 type="button"
                 onClick={() => toggleGroup(group.label)}
-                className="flex w-full items-center justify-between px-6 py-1 text-[10px] uppercase tracking-widest font-semibold text-neutral-400 hover:text-neutral-600"
+                className="flex w-full items-center justify-between px-6 py-1 text-[10px] uppercase tracking-widest font-semibold text-muted-foreground hover:text-muted-foreground"
                 aria-expanded={!isCollapsed}
               >
                 <span>{group.label}</span>
@@ -443,7 +444,7 @@ export function Sidebar({
                   return (
                     <Fragment key={item.href}>
                       {showCluster && (
-                        <div className="px-6 pb-0.5 pt-2 text-[10px] font-medium uppercase tracking-wider text-neutral-300">
+                        <div className="px-6 pb-0.5 pt-2 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
                           {item.cluster}
                         </div>
                       )}
@@ -452,15 +453,15 @@ export function Sidebar({
                         className={cn(
                           "flex items-center gap-3 px-6 py-2 text-sm font-medium transition-colors",
                           active
-                            ? "bg-orange-50 text-orange-700 border-l-2 border-orange-500"
-                            : "text-neutral-600 hover:bg-neutral-50 hover:text-neutral-900",
+                            ? "bg-primary-soft text-primary border-l-2 border-primary"
+                            : "text-muted-foreground hover:bg-muted hover:text-foreground",
                         )}
                       >
                         <Icon className="h-4 w-4 shrink-0" />
                         <span className="min-w-0 flex-1 truncate">{item.label}</span>
                         {item.badge === "chat" && chatCount > 0 && (
                           <span
-                            className="inline-flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-rose-500 px-1 text-[10px] font-bold text-white"
+                            className="inline-flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-state-danger px-1 text-[10px] font-bold text-white"
                             aria-label={`${chatCount} tin chưa đọc`}
                           >
                             {chatCount > 9 ? "9+" : chatCount}
@@ -475,7 +476,7 @@ export function Sidebar({
         })}
       </nav>
 
-      <div className="border-t border-neutral-200 p-4 text-xs text-neutral-400">
+      <div className="border-t border-border p-4 text-xs text-muted-foreground">
         <p className="font-medium">Sata Robo Admin</p>
         <p>v4.UI.FINAL · 2026</p>
       </div>

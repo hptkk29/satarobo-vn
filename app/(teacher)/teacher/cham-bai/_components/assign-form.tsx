@@ -19,7 +19,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { AttachmentUpload, type UploadedFile } from "@/components/assignments/attachment-upload";
+import {
+  AttachmentUpload,
+  type UploadedFile,
+} from "@/components/assignments/attachment-upload";
 import { assignTemplateAction } from "../_actions";
 
 export interface AssignClass {
@@ -59,7 +62,10 @@ export function AssignForm({
   const [attachments, setAttachments] = useState<UploadedFile[]>([]);
   const [pending, start] = useTransition();
 
-  const mineCount = useMemo(() => templates.filter((t) => t.isMine).length, [templates]);
+  const mineCount = useMemo(
+    () => templates.filter((t) => t.isMine).length,
+    [templates],
+  );
   const trainingCount = templates.length - mineCount;
 
   const visibleTemplates = useMemo(
@@ -116,10 +122,16 @@ export function AssignForm({
       <div className="space-y-1.5">
         <Label>Nguồn đầu bài</Label>
         <div className="flex gap-2">
-          <SourceBtn active={source === "mine"} onClick={() => switchSource("mine")}>
+          <SourceBtn
+            active={source === "mine"}
+            onClick={() => switchSource("mine")}
+          >
             Kho của tôi ({mineCount})
           </SourceBtn>
-          <SourceBtn active={source === "training"} onClick={() => switchSource("training")}>
+          <SourceBtn
+            active={source === "training"}
+            onClick={() => switchSource("training")}
+          >
             Thư viện Đào tạo ({trainingCount})
           </SourceBtn>
         </div>
@@ -131,7 +143,7 @@ export function AssignForm({
           <Label>Đầu bài</Label>
           <Link
             href={createHref}
-            className="inline-flex items-center gap-1 rounded-md px-1 py-0.5 text-xs font-semibold text-orange-600 outline-none hover:text-orange-700 focus-visible:ring-2 focus-visible:ring-ring dark:text-orange-400"
+            className="inline-flex items-center gap-1 rounded-md px-1 py-0.5 text-xs font-semibold text-primary-ink outline-none hover:text-primary-ink-hover focus-visible:ring-2 focus-visible:ring-ring"
           >
             <Plus className="h-3.5 w-3.5" aria-hidden /> Tạo bài tập mới
           </Link>
@@ -143,10 +155,15 @@ export function AssignForm({
               : "Thư viện Đào tạo chưa có đầu bài nào."}
           </p>
         ) : (
-          <Select value={templateId} onValueChange={(v) => v !== null && setTemplateId(v)}>
+          <Select
+            value={templateId}
+            onValueChange={(v) => v !== null && setTemplateId(v)}
+          >
             <SelectTrigger className="w-full">
               <SelectValue placeholder="Chọn đầu bài">
-                {(v: string | null) => visibleTemplates.find((t) => t.id === v)?.title ?? ""}
+                {(v: string | null) =>
+                  visibleTemplates.find((t) => t.id === v)?.title ?? ""
+                }
               </SelectValue>
             </SelectTrigger>
             <SelectContent>
@@ -164,10 +181,15 @@ export function AssignForm({
       {/* Lớp */}
       <div className="space-y-1.5">
         <Label>Lớp</Label>
-        <Select value={classId} onValueChange={(v) => v !== null && setClassId(v)}>
+        <Select
+          value={classId}
+          onValueChange={(v) => v !== null && setClassId(v)}
+        >
           <SelectTrigger className="w-full">
             <SelectValue>
-              {(v: string | null) => classes.find((c) => c.id === v)?.name ?? ""}
+              {(v: string | null) =>
+                classes.find((c) => c.id === v)?.name ?? ""
+              }
             </SelectValue>
           </SelectTrigger>
           <SelectContent>
@@ -183,9 +205,14 @@ export function AssignForm({
       {/* Đính kèm thêm cho lần giao này (BGĐ 31/07) */}
       <div className="space-y-1.5">
         <Label>Tệp đính kèm thêm (không bắt buộc)</Label>
-        <AttachmentUpload value={attachments} onChange={setAttachments} disabled={pending} />
+        <AttachmentUpload
+          value={attachments}
+          onChange={setAttachments}
+          disabled={pending}
+        />
         <p className="text-xs text-muted-foreground">
-          File có sẵn trong đề sẽ tự đính kèm; ở đây thêm file riêng cho lớp này.
+          File có sẵn trong đề sẽ tự đính kèm; ở đây thêm file riêng cho lớp
+          này.
         </p>
       </div>
 
@@ -213,7 +240,7 @@ export function AssignForm({
   );
 }
 
-/** Nút chọn nguồn đầu bài — cam-only segmented. */
+/** Nút chọn nguồn đầu bài — segmented, màu theo token thương hiệu. */
 function SourceBtn({
   active,
   onClick,
@@ -231,8 +258,8 @@ function SourceBtn({
       className={cn(
         "flex-1 rounded-lg border px-3 py-1.5 text-sm font-medium transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring",
         active
-          ? "border-orange-500 bg-orange-500 text-white"
-          : "border-input bg-background text-muted-foreground hover:border-orange-400 hover:text-foreground",
+          ? "border-primary bg-primary text-white"
+          : "border-input bg-background text-muted-foreground hover:border-primary-dark hover:text-foreground",
       )}
     >
       {children}

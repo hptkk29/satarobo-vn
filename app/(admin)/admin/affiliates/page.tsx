@@ -5,6 +5,7 @@ import { checkPermission } from "@/lib/auth/check-permission";
 import { resolveActor } from "@/lib/auth/actor";
 import { scopedDb } from "@/lib/db-scope";
 import { AffiliateManager } from "./_components/affiliate-manager";
+import { PageHelp } from "@/components/admin/ui/page-help";
 
 export const metadata = { title: "Nguồn giới thiệu | Admin" };
 export const dynamic = "force-dynamic";
@@ -14,7 +15,8 @@ export const dynamic = "force-dynamic";
 export default async function AffiliatesPage() {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  if (!(await checkPermission("leads:view-all"))) redirect("/dashboard?error=unauthorized");
+  if (!(await checkPermission("leads:view-all")))
+    redirect("/dashboard?error=unauthorized");
   const canManage = await checkPermission("leads:assign");
 
   const sdb = scopedDb(await resolveActor(session.user.id));
@@ -60,14 +62,19 @@ export default async function AffiliatesPage() {
   return (
     <div className="max-w-5xl space-y-4 p-6">
       <div>
-        <h1 className="flex items-center gap-2 text-2xl font-bold text-gray-900">
-          <Share2 className="h-6 w-6 text-[#7C3AED]" /> Nguồn giới thiệu (Affiliate)
+        <h1 className="flex items-center gap-2 text-2xl font-bold text-foreground">
+          <Share2 className="h-6 w-6 text-primary" /> Nguồn giới thiệu
+          (Affiliate)
         </h1>
-        <p className="mt-1 text-sm text-gray-500">
-          Mỗi người giới thiệu có 1 mã; chia sẻ link kèm <code>?ref=MÃ</code> để lead tự
-          gắn về đúng người. Hoa hồng đối soát tay theo % tham chiếu (chờ quy chế chính thức).
-        </p>
       </div>
+
+      <PageHelp>
+        <p>
+          Mỗi người giới thiệu có 1 mã; chia sẻ link kèm <code>?ref=MÃ</code> để
+          lead tự gắn về đúng người. Hoa hồng đối soát tay theo % tham chiếu
+          (chờ quy chế chính thức).
+        </p>
+      </PageHelp>
 
       <AffiliateManager
         canManage={canManage}

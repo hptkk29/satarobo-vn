@@ -179,7 +179,7 @@ export default async function HocCuPage() {
                             sizes="(max-width: 768px) 100vw, 50vw"
                           />
                         ) : (
-                          <div className="absolute inset-0 flex items-center justify-center text-neutral-400 text-sm p-4 text-center">
+                          <div className="absolute inset-0 flex items-center justify-center text-neutral-500 text-sm p-4 text-center">
                             Ảnh sản phẩm sẽ được upload qua admin
                           </div>
                         )}
@@ -190,7 +190,7 @@ export default async function HocCuPage() {
                             {kit.brand} / {kit.series}
                           </span>
                           {kit.code && (
-                            <span className="text-xs font-mono text-neutral-400">
+                            <span className="text-xs font-mono text-neutral-500">
                               {kit.code}
                             </span>
                           )}

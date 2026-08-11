@@ -65,14 +65,33 @@ function swapToFallback(e: React.SyntheticEvent<HTMLImageElement>) {
  * ĐÃ hỏng từ lúc SSR (error event bắn trước khi React gắn handler nên onError
  * một mình không đủ — 12 ảnh seed-placeholder:// vẫn vỡ).
  */
-function MediaImg({ src, alt, className }: { src: string; alt: string; className: string }) {
+function MediaImg({
+  src,
+  alt,
+  className,
+}: {
+  src: string;
+  alt: string;
+  className: string;
+}) {
   const checkBroken = (img: HTMLImageElement | null) => {
-    if (img && img.complete && img.naturalWidth === 0 && img.src !== FALLBACK_IMG) {
+    if (
+      img &&
+      img.complete &&
+      img.naturalWidth === 0 &&
+      img.src !== FALLBACK_IMG
+    ) {
       img.src = FALLBACK_IMG;
     }
   };
   return (
-    <img src={src} alt={alt} ref={checkBroken} onError={swapToFallback} className={className} />
+    <img
+      src={src}
+      alt={alt}
+      ref={checkBroken}
+      onError={swapToFallback}
+      className={className}
+    />
   );
 }
 
@@ -94,7 +113,7 @@ type MediaItem = {
 };
 
 const inputCls =
-  "w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-orange-400 focus:outline-none";
+  "w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary focus:outline-none";
 
 export function MediaClient({
   items,
@@ -112,7 +131,9 @@ export function MediaClient({
   const [pending, startTransition] = useTransition();
   const [classId, setClassId] = useState("");
   const [students, setStudents] = useState<{ id: string; name: string }[]>([]);
-  const [nonConsent, setNonConsent] = useState<{ id: string; name: string }[]>([]);
+  const [nonConsent, setNonConsent] = useState<{ id: string; name: string }[]>(
+    [],
+  );
   const [sessions, setSessions] = useState<SessionOpt[]>([]);
   const [sessionId, setSessionId] = useState("");
   const [takenAt, setTakenAt] = useState("");
@@ -137,14 +158,21 @@ export function MediaClient({
   const ctxReqRef = useRef(0);
   const classIdRef = useRef("");
   const [batchFiles, setBatchFiles] = useState<UploadedFile[]>([]);
-  const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
+  const [progress, setProgress] = useState<{
+    done: number;
+    total: number;
+  } | null>(null);
   // Xoá ảnh khỏi KHO (2-click confirm) — khác deleteMedia (ảnh đã vào luồng duyệt).
-  const [confirmDraftDelete, setConfirmDraftDelete] = useState<string | null>(null);
+  const [confirmDraftDelete, setConfirmDraftDelete] = useState<string | null>(
+    null,
+  );
   // QA 20/07 — xoá ảnh phải qua xác nhận (trước đây xoá ngay 1 click, không confirm).
   const [deleteTarget, setDeleteTarget] = useState<MediaItem | null>(null);
   // KHO ẢNH (DRAFT): mặc định thư viện GIỮ NHƯ CŨ (ẩn kho); chọn "Trong kho" để QL
   // nhìn ảnh GV chưa gửi — VIEW-ONLY, không duyệt/xoá (đường rời kho là GV gửi).
-  const [statusFilter, setStatusFilter] = useState<"ACTIVE" | "DRAFT">("ACTIVE");
+  const [statusFilter, setStatusFilter] = useState<"ACTIVE" | "DRAFT">(
+    "ACTIVE",
+  );
   const visible = items.filter((m) =>
     statusFilter === "DRAFT" ? m.status === "DRAFT" : m.status !== "DRAFT",
   );
@@ -245,7 +273,8 @@ export function MediaClient({
     const list = e.target.files ? [...e.target.files] : [];
     if (e.target) e.target.value = "";
     if (list.length === 0) return;
-    if (uploading) return toast.error("Đang tải lô ảnh — chờ xong rồi chọn thêm");
+    if (uploading)
+      return toast.error("Đang tải lô ảnh — chờ xong rồi chọn thêm");
 
     const images = list.filter((f) => f.type.startsWith("image/"));
     if (images.length < list.length) toast.error("Bỏ qua file không phải ảnh");
@@ -253,7 +282,9 @@ export function MediaClient({
 
     const room = BATCH_MAX - batchFiles.length;
     if (room <= 0) {
-      return toast.error(`Tối đa ${BATCH_MAX} ảnh mỗi lô — đưa lô này vào kho trước`);
+      return toast.error(
+        `Tối đa ${BATCH_MAX} ảnh mỗi lô — đưa lô này vào kho trước`,
+      );
     }
     const queue = images.slice(0, room);
     if (queue.length < images.length) {
@@ -280,7 +311,9 @@ export function MediaClient({
         }
       }
     };
-    await Promise.all(Array.from({ length: Math.min(3, queue.length) }, () => worker()));
+    await Promise.all(
+      Array.from({ length: Math.min(3, queue.length) }, () => worker()),
+    );
     setProgress(null);
     setUploading(false);
     if (classIdRef.current !== forClass) {
@@ -375,7 +408,11 @@ export function MediaClient({
     <div className="grid gap-6 lg:grid-cols-2">
       <section className="rounded-xl border border-gray-200 bg-white p-4">
         <h2 className="mb-3 text-sm font-bold uppercase tracking-wider text-gray-700">
-          {!classId ? "Đăng ảnh lớp" : canPublish ? "Đăng ảnh lớp" : "Góp ảnh vào kho của lớp"}
+          {!classId
+            ? "Đăng ảnh lớp"
+            : canPublish
+              ? "Đăng ảnh lớp"
+              : "Góp ảnh vào kho của lớp"}
         </h2>
         <div className="space-y-3">
           {/* Khoá lúc đang tải lô: đổi lớp giữa chừng là nguồn của lỗi "ảnh lớp cũ
@@ -395,16 +432,20 @@ export function MediaClient({
           </select>
 
           {blocked && (
-            <div className="rounded-lg border border-rose-200 bg-rose-50 p-2.5 text-xs text-rose-700">
+            <div className="rounded-lg border border-state-danger-soft bg-state-danger-soft p-2.5 text-xs text-state-danger-ink">
               Bạn không đăng được ảnh cho lớp này.
             </div>
           )}
 
           {/* Chế độ: KHO (nhiều ảnh, PH chưa thấy) vs đăng thẳng 1 ảnh tới PH.
               Vai chỉ-góp-ảnh (Marketing/Giáo vụ) không có lựa chọn — chỉ kho. */}
-          {classId && !blocked && (
-            canPublish ? (
-              <div className="grid grid-cols-2 gap-1 rounded-lg bg-gray-100 p-1" role="tablist">
+          {classId &&
+            !blocked &&
+            (canPublish ? (
+              <div
+                className="grid grid-cols-2 gap-1 rounded-lg bg-gray-100 p-1"
+                role="tablist"
+              >
                 {(
                   [
                     ["batch", "Đưa vào kho (nhiều ảnh)"],
@@ -418,34 +459,34 @@ export function MediaClient({
                     aria-selected={mode === m}
                     disabled={pending || uploading}
                     onClick={() => setMode(m)}
-                    className={`rounded-md px-2 py-1.5 text-xs font-semibold transition-colors ${
-                      mode === m
-                        ? "bg-white text-gray-900 shadow-sm"
-                        : "text-gray-500 hover:text-gray-800"
-                    }`}
+                    className={`rounded-md px-2 py-1.5 text-xs font-semibold transition-colors ${mode === m ? "bg-white text-gray-900 shadow-sm" : "text-gray-500 hover:text-gray-800"}`}
                   >
                     {label}
                   </button>
                 ))}
               </div>
             ) : (
-              <div className="rounded-lg border border-sky-200 bg-sky-50 p-2.5 text-xs text-sky-800">
-                Ảnh bạn tải lên vào <strong>kho của lớp</strong> — phụ huynh chưa nhìn
-                thấy. Giáo viên phụ trách sẽ chọn ảnh, gắn thẻ học viên rồi gửi.
+              <div className="rounded-lg border border-state-info-soft bg-state-info-soft p-2.5 text-xs text-state-info-ink">
+                Ảnh bạn tải lên vào <strong>kho của lớp</strong> — phụ huynh
+                chưa nhìn thấy. Giáo viên phụ trách sẽ chọn ảnh, gắn thẻ học
+                viên rồi gửi.
               </div>
-            )
-          )}
+            ))}
 
           {/* Banner cảnh báo HS chưa đồng ý dùng hình ảnh (consent). */}
           {classId && !blocked && nonConsent.length > 0 && (
-            <div className="flex gap-2 rounded-lg border border-amber-200 bg-amber-50 p-2.5 text-xs text-amber-800">
+            <div className="flex gap-2 rounded-lg border border-state-warning-soft bg-state-warning-soft p-2.5 text-xs text-state-warning-ink">
               <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
               <div>
-                <p className="font-semibold">Học viên CHƯA đồng ý dùng hình ảnh:</p>
-                <p className="mt-0.5">{nonConsent.map((s) => s.name).join(", ")}</p>
-                <p className="mt-1 text-amber-700">
-                  Vui lòng làm mờ thủ công hoặc loại các em này khỏi khung hình. Không
-                  thể gắn thẻ các em này.
+                <p className="font-semibold">
+                  Học viên CHƯA đồng ý dùng hình ảnh:
+                </p>
+                <p className="mt-0.5">
+                  {nonConsent.map((s) => s.name).join(", ")}
+                </p>
+                <p className="mt-1 text-state-warning-ink">
+                  Vui lòng làm mờ thủ công hoặc loại các em này khỏi khung hình.
+                  Không thể gắn thẻ các em này.
                 </p>
               </div>
             </div>
@@ -491,7 +532,11 @@ export function MediaClient({
                         type="button"
                         aria-label={`Bỏ ảnh ${f.fileName} khỏi lô`}
                         disabled={pending}
-                        onClick={() => setBatchFiles((prev) => prev.filter((_, j) => j !== i))}
+                        onClick={() =>
+                          setBatchFiles((prev) =>
+                            prev.filter((_, j) => j !== i),
+                          )
+                        }
                         className="absolute right-0.5 top-0.5 rounded-full bg-black/60 p-0.5 text-white opacity-0 transition-opacity focus:opacity-100 group-hover:opacity-100"
                       >
                         <X className="h-3 w-3" />
@@ -531,7 +576,11 @@ export function MediaClient({
                 />
               ) : (
                 <label className="flex cursor-pointer items-center justify-center gap-2 rounded-lg border-2 border-dashed border-gray-300 p-6 text-sm text-gray-500 hover:bg-gray-50">
-                  {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+                  {uploading ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Upload className="h-4 w-4" />
+                  )}
                   {uploading ? "Đang tải…" : "Chọn ảnh"}
                   <input
                     type="file"
@@ -563,7 +612,7 @@ export function MediaClient({
                     setWholeClass(e.target.checked);
                     if (e.target.checked) setTagged([]);
                   }}
-                  className="h-4 w-4 rounded border-gray-300 text-orange-500 focus:ring-orange-400"
+                  className="h-4 w-4 rounded border-gray-300 text-primary-ink focus:ring-primary"
                 />
                 Ảnh chung cả lớp (mọi phụ huynh trong lớp đều xem được)
               </label>
@@ -582,17 +631,15 @@ export function MediaClient({
                           key={s.id}
                           type="button"
                           disabled={noConsent}
-                          title={noConsent ? "Chưa đồng ý dùng hình ảnh" : undefined}
-                          onClick={() =>
-                            setTagged((p) => (on ? p.filter((x) => x !== s.id) : [...p, s.id]))
+                          title={
+                            noConsent ? "Chưa đồng ý dùng hình ảnh" : undefined
                           }
-                          className={`rounded-full px-2.5 py-1 text-xs font-medium ${
-                            noConsent
-                              ? "cursor-not-allowed bg-gray-100 text-gray-300 line-through"
-                              : on
-                                ? "bg-orange-500 text-white"
-                                : "bg-gray-100 text-gray-600"
-                          }`}
+                          onClick={() =>
+                            setTagged((p) =>
+                              on ? p.filter((x) => x !== s.id) : [...p, s.id],
+                            )
+                          }
+                          className={`rounded-full px-2.5 py-1 text-xs font-medium ${noConsent ? "cursor-not-allowed bg-gray-100 text-gray-300 line-through" : on ? "bg-primary text-white" : "bg-gray-100 text-gray-600"}`}
                         >
                           {s.name}
                         </button>
@@ -614,7 +661,7 @@ export function MediaClient({
               !classId ||
               (mode === "batch" && batchFiles.length === 0)
             }
-            className="rounded-lg bg-orange-500 px-4 py-2 text-sm font-semibold text-white hover:bg-orange-600 disabled:opacity-60"
+            className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white hover:bg-primary-dark disabled:opacity-60"
           >
             {mode === "batch"
               ? `Đưa vào kho${batchFiles.length > 0 ? ` (${batchFiles.length})` : ""}`
@@ -630,8 +677,10 @@ export function MediaClient({
           </h2>
           <select
             value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value as "ACTIVE" | "DRAFT")}
-            className="rounded-lg border border-gray-300 px-2 py-1 text-xs focus:border-orange-400 focus:outline-none"
+            onChange={(e) =>
+              setStatusFilter(e.target.value as "ACTIVE" | "DRAFT")
+            }
+            className="rounded-lg border border-gray-300 px-2 py-1 text-xs focus:border-primary focus:outline-none"
             aria-label="Lọc trạng thái ảnh"
           >
             <option value="ACTIVE">Chờ duyệt / Đã duyệt / Từ chối</option>
@@ -639,10 +688,10 @@ export function MediaClient({
           </select>
         </div>
         {statusFilter === "DRAFT" && visible.length > 0 && (
-          <p className="mb-2 rounded-lg bg-sky-50 p-2 text-xs text-sky-700">
-            Ảnh trong kho (giáo viên / marketing / giáo vụ tải lên), CHƯA gửi phụ
-            huynh. Giáo viên phụ trách lớp là người chọn ảnh gửi đi; khi gửi, ảnh vào
-            hàng chờ duyệt.
+          <p className="mb-2 rounded-lg bg-state-info-soft p-2 text-xs text-state-info-ink">
+            Ảnh trong kho (giáo viên / marketing / giáo vụ tải lên), CHƯA gửi
+            phụ huynh. Giáo viên phụ trách lớp là người chọn ảnh gửi đi; khi
+            gửi, ảnh vào hàng chờ duyệt.
           </p>
         )}
         {visible.length === 0 ? (
@@ -652,7 +701,10 @@ export function MediaClient({
         ) : (
           <div className="grid grid-cols-2 gap-3">
             {visible.map((m) => (
-              <div key={m.id} className="overflow-hidden rounded-lg border border-gray-100">
+              <div
+                key={m.id}
+                className="overflow-hidden rounded-lg border border-gray-100"
+              >
                 <MediaImg
                   src={m.fileUrl}
                   alt={m.caption ?? ""}
@@ -660,17 +712,11 @@ export function MediaClient({
                 />
                 <div className="p-2">
                   <div className="flex items-center justify-between">
-                    <span className="text-[10px] text-gray-400">{m.className}</span>
+                    <span className="text-[10px] text-muted-foreground">
+                      {m.className}
+                    </span>
                     <span
-                      className={`rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${
-                        m.status === "APPROVED"
-                          ? "bg-emerald-100 text-emerald-700"
-                          : m.status === "REJECTED"
-                            ? "bg-rose-100 text-rose-700"
-                            : m.status === "DRAFT"
-                              ? "bg-sky-100 text-sky-700"
-                              : "bg-amber-100 text-amber-700"
-                      }`}
+                      className={`rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${m.status === "APPROVED" ? "bg-state-success-soft text-state-success-ink" : m.status === "REJECTED" ? "bg-state-danger-soft text-state-danger-ink" : m.status === "DRAFT" ? "bg-state-info-soft text-state-info-ink" : "bg-state-warning-soft text-state-warning-ink"}`}
                     >
                       {m.status === "APPROVED"
                         ? "Duyệt"
@@ -682,33 +728,44 @@ export function MediaClient({
                     </span>
                   </div>
                   {m.takenAt && (
-                    <p className="mt-0.5 text-[10px] text-gray-400">
+                    <p className="mt-0.5 text-[10px] text-muted-foreground">
                       Buổi {formatDateVN(m.takenAt)}
                     </p>
                   )}
-                  {m.caption && <p className="mt-1 line-clamp-2 text-xs text-gray-600">{m.caption}</p>}
+                  {m.caption && (
+                    <p className="mt-1 line-clamp-2 text-xs text-gray-600">
+                      {m.caption}
+                    </p>
+                  )}
                   {m.tagNames.length > 0 && (
-                    <p className="mt-0.5 text-[10px] text-gray-400">Tag: {m.tagNames.join(", ")}</p>
+                    <p className="mt-0.5 text-[10px] text-muted-foreground">
+                      Tag: {m.tagNames.join(", ")}
+                    </p>
                   )}
                   {/* Ai đưa lên — trong kho có ảnh của nhiều vai (GV/marketing/giáo vụ) */}
                   {m.status === "DRAFT" && m.uploadedByName && (
-                    <p className="mt-0.5 text-[10px] text-gray-400">Tải lên: {m.uploadedByName}</p>
+                    <p className="mt-0.5 text-[10px] text-muted-foreground">
+                      Tải lên: {m.uploadedByName}
+                    </p>
                   )}
                   {/* DRAFT: KHÔNG duyệt/từ chối (server chặn reviewMedia trên DRAFT — đường
                       rời kho duy nhất là GV gửi). Chỉ cho DỌN kho: người duyệt xoá được mọi
                       ảnh, người khác chỉ ảnh của chính mình (server chốt lại). */}
-                  {m.status === "DRAFT" && (canApprove || m.uploadedById === currentUserId) && (
-                    <div className="mt-1.5">
-                      <button
-                        type="button"
-                        disabled={pending}
-                        onClick={() => removeDraft(m.id)}
-                        className="text-[11px] font-semibold text-rose-600 hover:text-rose-700 disabled:opacity-60"
-                      >
-                        {confirmDraftDelete === m.id ? "Chắc chắn xoá?" : "Xoá khỏi kho"}
-                      </button>
-                    </div>
-                  )}
+                  {m.status === "DRAFT" &&
+                    (canApprove || m.uploadedById === currentUserId) && (
+                      <div className="mt-1.5">
+                        <button
+                          type="button"
+                          disabled={pending}
+                          onClick={() => removeDraft(m.id)}
+                          className="text-[11px] font-semibold text-state-danger-ink hover:text-state-danger-ink-hover disabled:opacity-60"
+                        >
+                          {confirmDraftDelete === m.id
+                            ? "Chắc chắn xoá?"
+                            : "Xoá khỏi kho"}
+                        </button>
+                      </div>
+                    )}
                   {canApprove && m.status !== "DRAFT" && (
                     <div className="mt-1.5 flex gap-2">
                       {m.status !== "APPROVED" && (
@@ -716,11 +773,14 @@ export function MediaClient({
                           type="button"
                           onClick={() =>
                             startTransition(async () => {
-                              await reviewMedia({ id: m.id, decision: "APPROVED" });
+                              await reviewMedia({
+                                id: m.id,
+                                decision: "APPROVED",
+                              });
                               router.refresh();
                             })
                           }
-                          className="text-emerald-600 hover:text-emerald-700"
+                          className="text-state-success-ink hover:text-state-success-ink-hover"
                           aria-label="Duyệt"
                         >
                           <Check className="h-4 w-4" />
@@ -731,11 +791,14 @@ export function MediaClient({
                           type="button"
                           onClick={() =>
                             startTransition(async () => {
-                              await reviewMedia({ id: m.id, decision: "REJECTED" });
+                              await reviewMedia({
+                                id: m.id,
+                                decision: "REJECTED",
+                              });
                               router.refresh();
                             })
                           }
-                          className="text-amber-600 hover:text-amber-700"
+                          className="text-state-warning-ink hover:text-state-warning-ink-hover"
                           aria-label="Từ chối"
                         >
                           <X className="h-4 w-4" />
@@ -744,7 +807,7 @@ export function MediaClient({
                       <button
                         type="button"
                         onClick={() => setDeleteTarget(m)}
-                        className="text-rose-600 hover:text-rose-700"
+                        className="text-state-danger-ink hover:text-state-danger-ink-hover"
                         aria-label="Xoá"
                       >
                         <Trash2 className="h-4 w-4" />
@@ -769,8 +832,9 @@ export function MediaClient({
           deleteTarget ? (
             <>
               Ảnh của lớp <strong>{deleteTarget.className}</strong>
-              {deleteTarget.caption ? ` — "${deleteTarget.caption}"` : ""} sẽ bị xoá
-              vĩnh viễn (phụ huynh cũng không còn thấy). Hành động không thể hoàn tác.
+              {deleteTarget.caption ? ` — "${deleteTarget.caption}"` : ""} sẽ bị
+              xoá vĩnh viễn (phụ huynh cũng không còn thấy). Hành động không thể
+              hoàn tác.
             </>
           ) : undefined
         }

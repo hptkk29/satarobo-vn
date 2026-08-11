@@ -24,17 +24,17 @@ const STATUS_LABELS: Record<string, string> = {
 }
 
 const STATUS_COLORS: Record<string, string> = {
-  NEW: 'bg-blue-500',
-  ASSIGNED: 'bg-cyan-500',
-  CONTACTED: 'bg-yellow-500',
-  NO_ANSWER: 'bg-amber-500',
-  CONSULTING: 'bg-indigo-500',
-  TRIAL_SCHEDULED: 'bg-violet-500',
-  TRIAL_ATTENDED: 'bg-purple-500',
-  AWAITING_DECISION: 'bg-orange-500',
-  DEMO_SCHEDULED: 'bg-purple-500',
-  ENROLLED: 'bg-green-500',
-  NURTURING: 'bg-orange-500',
+  NEW: 'bg-state-info',
+  ASSIGNED: 'bg-state-info',
+  CONTACTED: 'bg-state-warning',
+  NO_ANSWER: 'bg-state-warning',
+  CONSULTING: 'bg-state-info',
+  TRIAL_SCHEDULED: 'bg-primary',
+  TRIAL_ATTENDED: 'bg-primary',
+  AWAITING_DECISION: 'bg-primary',
+  DEMO_SCHEDULED: 'bg-primary',
+  ENROLLED: 'bg-state-success',
+  NURTURING: 'bg-primary',
   LOST: 'bg-gray-400',
   DUPLICATE: 'bg-gray-300',
 }
@@ -104,8 +104,8 @@ export default async function MarketingPage() {
   return (
     <div className="space-y-8">
       <div>
-        <h1 className="text-2xl font-bold text-gray-900">Marketing Dashboard</h1>
-        <p className="mt-1 text-sm text-gray-500">Phân tích hiệu quả chiến dịch và tracking</p>
+        <h1 className="text-2xl font-bold text-foreground">Marketing Dashboard</h1>
+        <p className="mt-1 text-sm text-muted-foreground">Phân tích hiệu quả chiến dịch và tracking</p>
       </div>
 
       {/* Overview cards */}
@@ -116,27 +116,27 @@ export default async function MarketingPage() {
           { label: 'Đã chuyển đổi', value: enrolledCount.toLocaleString('vi-VN'), sub: 'Đã đăng ký + ghi danh' },
           { label: 'Tỉ lệ chuyển đổi', value: conversionRate, sub: 'Đã chuyển đổi / Tổng lead' },
         ].map((card) => (
-          <div key={card.label} className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-            <p className="text-sm font-medium text-gray-500">{card.label}</p>
-            <p className="mt-1 text-3xl font-bold text-gray-900">{card.value}</p>
-            <p className="mt-1 text-xs text-gray-400">{card.sub}</p>
+          <div key={card.label} className="rounded-xl border border-border bg-card p-5 shadow-sm">
+            <p className="text-sm font-medium text-muted-foreground">{card.label}</p>
+            <p className="mt-1 text-3xl font-bold text-foreground">{card.value}</p>
+            <p className="mt-1 text-xs text-muted-foreground">{card.sub}</p>
           </div>
         ))}
       </div>
 
       {/* Lead funnel */}
-      <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
-        <h2 className="mb-4 text-base font-bold text-gray-900">Phễu chuyển đổi Lead</h2>
+      <div className="rounded-xl border border-border bg-card p-6 shadow-sm">
+        <h2 className="mb-4 text-base font-bold text-foreground">Phễu chuyển đổi Lead</h2>
         <div className="space-y-3">
           {leadsByStatus.map((row) => (
             <div key={row.status}>
               <div className="mb-1 flex items-center justify-between text-sm">
-                <span className="font-medium text-gray-700">{STATUS_LABELS[row.status] ?? row.status}</span>
-                <span className="tabular-nums text-gray-500">
+                <span className="font-medium text-foreground">{STATUS_LABELS[row.status] ?? row.status}</span>
+                <span className="tabular-nums text-muted-foreground">
                   {row._count._all} ({pct(row._count._all, totalLeads)})
                 </span>
               </div>
-              <div className="h-2.5 w-full rounded-full bg-gray-100">
+              <div className="h-2.5 w-full rounded-full bg-muted">
                 <div
                   className={`h-2.5 rounded-full ${STATUS_COLORS[row.status] ?? 'bg-gray-400'}`}
                   style={{ width: pct(row._count._all, totalLeads) }}
@@ -149,16 +149,16 @@ export default async function MarketingPage() {
 
       <div className="grid gap-6 lg:grid-cols-3">
         {/* By source */}
-        <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
-          <h2 className="mb-4 text-base font-bold text-gray-900">Theo nguồn khóa học</h2>
+        <div className="rounded-xl border border-border bg-card p-6 shadow-sm">
+          <h2 className="mb-4 text-base font-bold text-foreground">Theo nguồn khóa học</h2>
           {leadsBySource.length === 0 ? (
-            <p className="text-sm text-gray-400">Chưa có dữ liệu</p>
+            <p className="text-sm text-muted-foreground">Chưa có dữ liệu</p>
           ) : (
             <ul className="space-y-2.5">
               {leadsBySource.map((row) => (
                 <li key={row.source} className="flex items-center justify-between gap-2">
-                  <span className="truncate text-sm text-gray-600">{row.source ?? '(trực tiếp)'}</span>
-                  <span className="shrink-0 text-sm font-bold text-gray-800">{row._count._all}</span>
+                  <span className="truncate text-sm text-muted-foreground">{row.source ?? '(trực tiếp)'}</span>
+                  <span className="shrink-0 text-sm font-bold text-foreground">{row._count._all}</span>
                 </li>
               ))}
             </ul>
@@ -166,16 +166,16 @@ export default async function MarketingPage() {
         </div>
 
         {/* By UTM source */}
-        <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
-          <h2 className="mb-4 text-base font-bold text-gray-900">Theo UTM Source</h2>
+        <div className="rounded-xl border border-border bg-card p-6 shadow-sm">
+          <h2 className="mb-4 text-base font-bold text-foreground">Theo UTM Source</h2>
           {leadsByUtmSource.length === 0 ? (
-            <p className="text-sm text-gray-400">Chưa có dữ liệu UTM</p>
+            <p className="text-sm text-muted-foreground">Chưa có dữ liệu UTM</p>
           ) : (
             <ul className="space-y-2.5">
               {leadsByUtmSource.map((row) => (
                 <li key={row.utmSource} className="flex items-center justify-between gap-2">
-                  <span className="truncate text-sm text-gray-600">{row.utmSource ?? '(none)'}</span>
-                  <span className="shrink-0 text-sm font-bold text-gray-800">{row._count._all}</span>
+                  <span className="truncate text-sm text-muted-foreground">{row.utmSource ?? '(none)'}</span>
+                  <span className="shrink-0 text-sm font-bold text-foreground">{row._count._all}</span>
                 </li>
               ))}
             </ul>
@@ -183,16 +183,16 @@ export default async function MarketingPage() {
         </div>
 
         {/* By UTM campaign */}
-        <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
-          <h2 className="mb-4 text-base font-bold text-gray-900">Theo UTM Campaign</h2>
+        <div className="rounded-xl border border-border bg-card p-6 shadow-sm">
+          <h2 className="mb-4 text-base font-bold text-foreground">Theo UTM Campaign</h2>
           {leadsByUtmCampaign.length === 0 ? (
-            <p className="text-sm text-gray-400">Chưa có dữ liệu UTM</p>
+            <p className="text-sm text-muted-foreground">Chưa có dữ liệu UTM</p>
           ) : (
             <ul className="space-y-2.5">
               {leadsByUtmCampaign.map((row) => (
                 <li key={row.utmCampaign} className="flex items-center justify-between gap-2">
-                  <span className="truncate text-sm text-gray-600">{row.utmCampaign ?? '(none)'}</span>
-                  <span className="shrink-0 text-sm font-bold text-gray-800">{row._count._all}</span>
+                  <span className="truncate text-sm text-muted-foreground">{row.utmCampaign ?? '(none)'}</span>
+                  <span className="shrink-0 text-sm font-bold text-foreground">{row._count._all}</span>
                 </li>
               ))}
             </ul>
@@ -201,8 +201,8 @@ export default async function MarketingPage() {
       </div>
 
       {/* Tracking config status */}
-      <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
-        <h2 className="mb-4 text-base font-bold text-gray-900">Trạng thái Tracking</h2>
+      <div className="rounded-xl border border-border bg-card p-6 shadow-sm">
+        <h2 className="mb-4 text-base font-bold text-foreground">Trạng thái Tracking</h2>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
           {[
             { label: 'Meta Pixel (client)', envKey: 'NEXT_PUBLIC_META_PIXEL_ID' },
@@ -212,11 +212,11 @@ export default async function MarketingPage() {
           ].map((item) => {
             const configured = !!(process.env[item.envKey])
             return (
-              <div key={item.label} className="flex items-center gap-3 rounded-lg border border-gray-100 bg-gray-50 px-4 py-3">
-                <div className={`h-2.5 w-2.5 shrink-0 rounded-full ${configured ? 'bg-green-500' : 'bg-red-400'}`} />
+              <div key={item.label} className="flex items-center gap-3 rounded-lg border border-border bg-muted px-4 py-3">
+                <div className={`h-2.5 w-2.5 shrink-0 rounded-full ${configured ? 'bg-state-success' : 'bg-state-danger'}`} />
                 <div>
-                  <p className="text-xs font-semibold text-gray-700">{item.label}</p>
-                  <p className="text-xs text-gray-400">{configured ? 'Đã cấu hình' : 'Chưa cấu hình'}</p>
+                  <p className="text-xs font-semibold text-foreground">{item.label}</p>
+                  <p className="text-xs text-muted-foreground">{configured ? 'Đã cấu hình' : 'Chưa cấu hình'}</p>
                 </div>
               </div>
             )

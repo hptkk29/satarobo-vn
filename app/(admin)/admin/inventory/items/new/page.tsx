@@ -19,12 +19,12 @@ export default async function NewInventoryItemPage() {
       <div>
         <Link
           href="/inventory/items"
-          className="mb-3 inline-flex items-center gap-1 text-sm text-neutral-500 hover:text-neutral-700"
+          className="mb-3 inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
         >
           <ChevronLeft className="h-4 w-4" /> Quay lại kho
         </Link>
-        <h1 className="text-2xl font-bold text-neutral-900">Thêm mặt hàng mới</h1>
-        <p className="mt-1 text-sm text-neutral-500">
+        <h1 className="text-2xl font-bold text-foreground">Thêm mặt hàng mới</h1>
+        <p className="mt-1 text-sm text-muted-foreground">
           Sau khi tạo, hệ thống sẽ tự khởi tạo tồn = 0 cho mọi cơ sở đang hoạt
           động.
         </p>

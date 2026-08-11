@@ -39,9 +39,9 @@ export function GroupSettingsForm({
   }
 
   return (
-    <section className="rounded-lg border bg-white p-5">
-      <h2 className="mb-3 flex items-center gap-2 text-lg font-bold text-neutral-900">
-        <Settings2 className="h-5 w-5 text-neutral-400" /> Thông tin nhóm
+    <section className="rounded-lg border bg-card p-5">
+      <h2 className="mb-3 flex items-center gap-2 text-lg font-bold text-foreground">
+        <Settings2 className="h-5 w-5 text-muted-foreground" /> Thông tin nhóm
       </h2>
       <div className="grid gap-3 sm:grid-cols-3">
         <div>

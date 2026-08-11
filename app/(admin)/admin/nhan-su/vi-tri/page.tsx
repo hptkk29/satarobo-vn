@@ -12,6 +12,7 @@ import { ViTriEditor } from "./_components/vi-tri-editor";
 import { PhanCongEditor } from "./_components/phan-cong-editor";
 import { DieuDongEditor } from "./_components/dieu-dong-editor";
 import { vnYmd } from "@/lib/time/vn";
+import { PageHelp } from "@/components/admin/ui/page-help";
 
 export const dynamic = "force-dynamic";
 
@@ -98,13 +99,19 @@ export default async function ViTriPage() {
     <div className="space-y-5">
       <div>
         <h1 className="text-2xl font-bold text-foreground">Vị trí công việc</h1>
-        <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
-          Quyền gắn vào <strong>vị trí</strong>, không gắn vào người. Người nghỉ thì gỡ phân
-          công — vị trí giữ nguyên bộ quyền cho người kế nhiệm. Cây báo cáo
-          (&ldquo;báo cáo cho&rdquo;) là cây riêng, dùng cho luồng duyệt, không dùng để tính
-          phạm vi dữ liệu.
+        <p className="mt-1 text-sm text-muted-foreground">
+          Quyền gắn theo vị trí, không gắn theo người
         </p>
       </div>
+
+      <PageHelp>
+        <p>
+          Quyền gắn vào <strong>vị trí</strong>, không gắn vào người. Người nghỉ
+          thì gỡ phân công — vị trí giữ nguyên bộ quyền cho người kế nhiệm. Cây
+          báo cáo (&ldquo;báo cáo cho&rdquo;) là cây riêng, dùng cho luồng
+          duyệt, không dùng để tính phạm vi dữ liệu.
+        </p>
+      </PageHelp>
 
       <ViTriEditor
         positions={positions.map((p) => ({
@@ -122,7 +129,11 @@ export default async function ViTriPage() {
       />
 
       <PhanCongEditor
-        positions={positions.map((p) => ({ id: p.id, title: p.title, isActive: p.isActive }))}
+        positions={positions.map((p) => ({
+          id: p.id,
+          title: p.title,
+          isActive: p.isActive,
+        }))}
         nhanSu={nhanSu.map((u) => ({
           id: u.id,
           ten: u.name ?? u.email ?? u.id,

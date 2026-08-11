@@ -59,26 +59,26 @@ const STATUS_META: Record<
   PRESENT: {
     label: "Có mặt",
     Icon: Check,
-    activeStyle: "bg-green-600 text-white border-green-600 shadow",
-    idleStyle: "bg-white text-neutral-600 border-neutral-200 hover:bg-green-50 hover:border-green-300",
+    activeStyle: "bg-state-success-ink text-white border-state-success-ink shadow",
+    idleStyle: "bg-card text-muted-foreground border-border hover:bg-state-success-soft hover:border-state-success",
   },
   ABSENT: {
     label: "Vắng",
     Icon: X,
-    activeStyle: "bg-red-600 text-white border-red-600 shadow",
-    idleStyle: "bg-white text-neutral-600 border-neutral-200 hover:bg-red-50 hover:border-red-300",
+    activeStyle: "bg-state-danger-ink text-white border-state-danger-ink shadow",
+    idleStyle: "bg-card text-muted-foreground border-border hover:bg-state-danger-soft hover:border-state-danger",
   },
   LATE: {
     label: "Muộn",
     Icon: Clock,
-    activeStyle: "bg-amber-500 text-white border-amber-500 shadow",
-    idleStyle: "bg-white text-neutral-600 border-neutral-200 hover:bg-amber-50 hover:border-amber-300",
+    activeStyle: "bg-state-warning text-white border-state-warning shadow",
+    idleStyle: "bg-card text-muted-foreground border-border hover:bg-state-warning-soft hover:border-state-warning",
   },
   EXCUSED: {
     label: "Phép",
     Icon: FileText,
-    activeStyle: "bg-blue-600 text-white border-blue-600 shadow",
-    idleStyle: "bg-white text-neutral-600 border-neutral-200 hover:bg-blue-50 hover:border-blue-300",
+    activeStyle: "bg-state-info-ink text-white border-state-info-ink shadow",
+    idleStyle: "bg-card text-muted-foreground border-border hover:bg-state-info-soft hover:border-state-info",
   },
 };
 
@@ -238,10 +238,10 @@ export function AttendanceGrid({ sessionId, rows }: Props) {
 
   if (rows.length === 0) {
     return (
-      <div className="rounded-xl border-2 border-dashed border-neutral-300 bg-neutral-50 p-12 text-center text-neutral-500">
+      <div className="rounded-xl border-2 border-dashed border-border bg-muted p-12 text-center text-muted-foreground">
         Lớp này chưa có học viên đang học.
         <br />
-        <a href="/enrollments" className="text-orange-600 hover:underline">
+        <a href="/enrollments" className="text-primary hover:underline">
           → Tạo đăng ký
         </a>
       </div>
@@ -250,21 +250,21 @@ export function AttendanceGrid({ sessionId, rows }: Props) {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-neutral-200 bg-white p-4">
-        <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5 text-sm text-neutral-600">
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-card p-4">
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5 text-sm text-muted-foreground">
           <span>
-            <strong className="text-neutral-900">{rows.length} HV</strong> ·{" "}
+            <strong className="text-foreground">{rows.length} HV</strong> ·{" "}
             {dirtyCount > 0 ? (
-              <span className="text-orange-600">{dirtyCount} thay đổi chưa lưu</span>
+              <span className="text-primary">{dirtyCount} thay đổi chưa lưu</span>
             ) : (
-              <span className="text-neutral-400">Không có thay đổi</span>
+              <span className="text-muted-foreground">Không có thay đổi</span>
             )}
           </span>
           {unmarked > 0 && (
-            <span className="inline-flex items-center gap-1.5 rounded-md border border-dashed border-neutral-300 bg-neutral-50 px-2 py-1 text-xs">
-              <span className="h-2 w-2 rounded-full border border-neutral-400" />
-              <span className="text-neutral-500">Chưa điểm danh</span>
-              <span className="font-bold text-neutral-900">{unmarked}</span>
+            <span className="inline-flex items-center gap-1.5 rounded-md border border-dashed border-border bg-muted px-2 py-1 text-xs">
+              <span className="h-2 w-2 rounded-full border border-border" />
+              <span className="text-muted-foreground">Chưa điểm danh</span>
+              <span className="font-bold text-foreground">{unmarked}</span>
             </span>
           )}
         </div>
@@ -273,7 +273,7 @@ export function AttendanceGrid({ sessionId, rows }: Props) {
             type="button"
             onClick={markAllPresent}
             disabled={pending}
-            className="rounded-lg border border-green-300 bg-white px-3 py-1.5 text-sm font-semibold text-green-700 hover:bg-green-50 disabled:opacity-50"
+            className="rounded-lg border border-state-success bg-card px-3 py-1.5 text-sm font-semibold text-state-success-ink hover:bg-state-success-soft disabled:opacity-50"
           >
             Đánh dấu tất cả Có mặt
           </button>
@@ -281,7 +281,7 @@ export function AttendanceGrid({ sessionId, rows }: Props) {
             type="button"
             onClick={save}
             disabled={pending || dirtyCount === 0}
-            className="inline-flex items-center gap-1.5 rounded-lg bg-orange-500 px-4 py-2 text-sm font-bold text-white shadow hover:bg-orange-600 disabled:opacity-50"
+            className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-sm font-bold text-white shadow hover:bg-primary-dark disabled:opacity-50"
           >
             <Save className="h-4 w-4" />
             {pending ? "Đang lưu..." : "Lưu điểm danh"}
@@ -291,27 +291,23 @@ export function AttendanceGrid({ sessionId, rows }: Props) {
 
       {feedback && (
         <div
-          className={`rounded-lg border px-4 py-3 text-sm ${
-            feedback.kind === "success"
-              ? "border-green-200 bg-green-50 text-green-700"
-              : "border-red-200 bg-red-50 text-red-700"
-          }`}
+          className={`rounded-lg border px-4 py-3 text-sm ${ feedback.kind === "success" ? "border-state-success-soft bg-state-success-soft text-state-success-ink" : "border-state-danger-soft bg-state-danger-soft text-state-danger-ink" }`}
         >
           {feedback.msg}
         </div>
       )}
 
-      <div className="overflow-hidden rounded-xl border border-neutral-200 bg-white">
+      <div className="overflow-hidden rounded-xl border border-border bg-card">
         <table className="w-full">
-          <thead className="border-b border-neutral-200 bg-neutral-50 text-left">
+          <thead className="border-b border-border bg-muted text-left">
             <tr>
-              <th className="p-4 text-xs font-bold uppercase tracking-wider text-neutral-700">
+              <th className="p-4 text-xs font-bold uppercase tracking-wider text-foreground">
                 Học viên
               </th>
-              <th className="p-4 text-center text-xs font-bold uppercase tracking-wider text-neutral-700">
+              <th className="p-4 text-center text-xs font-bold uppercase tracking-wider text-foreground">
                 Trạng thái
               </th>
-              <th className="p-4 text-xs font-bold uppercase tracking-wider text-neutral-700">
+              <th className="p-4 text-xs font-bold uppercase tracking-wider text-foreground">
                 Ghi chú
               </th>
             </tr>
@@ -323,21 +319,21 @@ export function AttendanceGrid({ sessionId, rows }: Props) {
               return (
                 <tr
                   key={r.studentId}
-                  className={`border-b border-neutral-200 ${dirty ? "bg-orange-50/40" : "hover:bg-neutral-50"}`}
+                  className={`border-b border-border ${dirty ? "bg-primary-soft/40" : "hover:bg-muted"}`}
                 >
                   <td className="p-4">
-                    <div className="flex items-center gap-2 font-bold text-neutral-900">
+                    <div className="flex items-center gap-2 font-bold text-foreground">
                       {r.studentName}
                       {r.makeupFromCenter && (
-                        <span className="rounded-full bg-[#7C3AED]/10 px-2 py-0.5 text-[11px] font-semibold text-[#7C3AED]">
+                        <span className="rounded-full bg-primary-soft px-2 py-0.5 text-[11px] font-semibold text-primary">
                           Học bù từ {r.makeupFromCenter}
                         </span>
                       )}
                     </div>
-                    <div className="mt-0.5 flex items-center gap-2 text-xs text-neutral-500">
+                    <div className="mt-0.5 flex items-center gap-2 text-xs text-muted-foreground">
                       {r.studentPhone && <span className="font-mono">{r.studentPhone}</span>}
                       {!r.makeupFromCenter && r.enrollmentStatus !== "ACTIVE" && (
-                        <span className="rounded bg-amber-100 px-1.5 py-0.5 font-medium text-amber-700">
+                        <span className="rounded bg-state-warning-soft px-1.5 py-0.5 font-medium text-state-warning-ink">
                           {ENROLLMENT_STATUS.label(r.enrollmentStatus)}
                         </span>
                       )}
@@ -355,9 +351,7 @@ export function AttendanceGrid({ sessionId, rows }: Props) {
                             type="button"
                             onClick={() => setStatus(r.studentId, status)}
                             disabled={pending}
-                            className={`inline-flex items-center gap-1 rounded-lg border px-3 py-1.5 text-xs font-bold transition disabled:opacity-50 ${
-                              active ? meta.activeStyle : meta.idleStyle
-                            }`}
+                            className={`inline-flex items-center gap-1 rounded-lg border px-3 py-1.5 text-xs font-bold transition disabled:opacity-50 ${ active ? meta.activeStyle : meta.idleStyle }`}
                           >
                             <Icon className="h-3.5 w-3.5" />
                             {meta.label}
@@ -373,17 +367,17 @@ export function AttendanceGrid({ sessionId, rows }: Props) {
                       onChange={(e) => setNote(r.studentId, e.target.value)}
                       placeholder="Ghi chú (tuỳ chọn)"
                       disabled={pending}
-                      className="w-full rounded-lg border border-neutral-200 bg-white px-3 py-1.5 text-sm outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/20 disabled:opacity-50"
+                      className="w-full rounded-lg border border-border bg-card px-3 py-1.5 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 disabled:opacity-50"
                     />
                     {s && isAbsent(s.status) && (
-                      <div className="mt-2 space-y-2 rounded-lg border border-red-100 bg-red-50/60 p-2">
+                      <div className="mt-2 space-y-2 rounded-lg border border-state-danger-soft bg-state-danger-soft/60 p-2">
                         <input
                           type="text"
                           value={s.absenceReason}
                           onChange={(e) => setAbsenceReason(r.studentId, e.target.value)}
                           placeholder="Lý do phụ huynh xin vắng"
                           disabled={pending}
-                          className="w-full rounded-lg border border-neutral-200 bg-white px-3 py-1.5 text-sm outline-none focus:border-red-400 disabled:opacity-50"
+                          className="w-full rounded-lg border border-border bg-card px-3 py-1.5 text-sm outline-none focus:border-state-danger disabled:opacity-50"
                         />
                         <div className="flex flex-wrap items-center gap-1.5">
                           {(
@@ -400,11 +394,7 @@ export function AttendanceGrid({ sessionId, rows }: Props) {
                                 type="button"
                                 onClick={() => setMakeupStatus(r.studentId, value)}
                                 disabled={pending}
-                                className={`rounded-md border px-2.5 py-1 text-xs font-semibold transition disabled:opacity-50 ${
-                                  active
-                                    ? "border-[#7C3AED] bg-[#7C3AED] text-white"
-                                    : "border-neutral-200 bg-white text-neutral-600 hover:border-[#7C3AED]"
-                                }`}
+                                className={`rounded-md border px-2.5 py-1 text-xs font-semibold transition disabled:opacity-50 ${ active ? "border-primary bg-primary text-white" : "border-border bg-card text-muted-foreground hover:border-primary" }`}
                               >
                                 {label}
                               </button>

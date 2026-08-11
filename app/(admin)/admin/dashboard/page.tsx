@@ -108,8 +108,8 @@ export default async function DashboardPage() {
   return (
     <div className="space-y-8">
       <div>
-        <h1 className="text-2xl font-bold text-neutral-900">Xin chào, {lastName} 👋</h1>
-        <p className="mt-1 text-sm text-neutral-500">
+        <h1 className="text-2xl font-bold text-foreground">Xin chào, {lastName} 👋</h1>
+        <p className="mt-1 text-sm text-muted-foreground">
           {activeRole
             ? `Đang xem theo vai trò: ${roleCodeLabel(activeRole)} — đổi ở góc trên bên phải. Quyền của bạn không thay đổi.`
             : multi
@@ -125,10 +125,10 @@ export default async function DashboardPage() {
         <section key={p.key} className="space-y-4">
           {multi && (
             <div className="flex items-center gap-2">
-              <span className="rounded-full bg-[#7C3AED] px-3 py-1 text-xs font-bold uppercase tracking-wide text-white">
+              <span className="rounded-full bg-primary px-3 py-1 text-xs font-bold uppercase tracking-wide text-white">
                 {p.label}
               </span>
-              <span className="h-px flex-1 bg-neutral-200" />
+              <span className="h-px flex-1 bg-muted" />
             </div>
           )}
           {p.node}

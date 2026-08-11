@@ -47,8 +47,8 @@ export function DeleteStudentButton({
       className={
         "rounded-md border px-2.5 py-1 text-xs font-semibold disabled:opacity-50 " +
         (confirming
-          ? "border-red-600 bg-red-600 text-white hover:bg-red-700"
-          : "border-red-300 text-red-700 hover:bg-red-50")
+          ? "border-state-danger-ink bg-state-danger-ink text-white hover:bg-state-danger-ink"
+          : "border-state-danger text-state-danger-ink hover:bg-state-danger-soft")
       }
     >
       {confirming ? "Xác nhận xoá?" : "Xoá"}

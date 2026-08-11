@@ -37,28 +37,28 @@ export function CriteriaManager({ courses }: { courses: CourseRow[] }) {
   return (
     <div className="space-y-3">
       {courses.map((course) => (
-        <section key={course.id} className="rounded-xl border border-neutral-200 bg-white p-4">
+        <section key={course.id} className="rounded-xl border border-border bg-card p-4">
           <div className="mb-2 flex items-center gap-2">
-            <h2 className="text-sm font-semibold text-neutral-800">{course.name}</h2>
+            <h2 className="text-sm font-semibold text-foreground">{course.name}</h2>
             {course.isTeachable ? (
-              <span className="rounded-full bg-purple-100 px-2 py-0.5 text-[10px] font-medium text-purple-700">
+              <span className="rounded-full bg-primary-soft px-2 py-0.5 text-[10px] font-medium text-primary">
                 Khoá dạy
               </span>
             ) : null}
           </div>
 
           {course.criteria.length === 0 ? (
-            <p className="mb-2 text-sm text-neutral-400">Chưa có tiêu chí.</p>
+            <p className="mb-2 text-sm text-muted-foreground">Chưa có tiêu chí.</p>
           ) : (
             <ul className="mb-2 divide-y text-sm">
               {course.criteria.map((c) => (
                 <li key={c.id} className="flex items-center justify-between py-1.5">
-                  <span className={c.active ? "" : "text-neutral-400 line-through"}>{c.name}</span>
+                  <span className={c.active ? "" : "text-muted-foreground line-through"}>{c.name}</span>
                   <button
                     type="button"
                     disabled={pending}
                     onClick={() => toggle(c.id, !c.active)}
-                    className="text-xs font-medium text-purple-700 disabled:opacity-50"
+                    className="text-xs font-medium text-primary disabled:opacity-50"
                   >
                     {c.active ? "Tắt" : "Bật"}
                   </button>
@@ -72,7 +72,7 @@ export function CriteriaManager({ courses }: { courses: CourseRow[] }) {
               value={drafts[course.id] ?? ""}
               placeholder="Tên tiêu chí mới"
               onChange={(e) => setDrafts((d) => ({ ...d, [course.id]: e.target.value }))}
-              className="flex-1 rounded-md border border-neutral-300 px-3 py-2 text-sm"
+              className="flex-1 rounded-md border border-border px-3 py-2 text-sm"
             />
             <button
               type="button"

@@ -68,7 +68,10 @@ export function AppShell({
           >
             <X className="h-5 w-5" aria-hidden />
           </button>
-          <SidebarContent onNavigate={() => setDrawerOpen(false)} chatUnread={chatCount} />
+          <SidebarContent
+            onNavigate={() => setDrawerOpen(false)}
+            chatUnread={chatCount}
+          />
         </div>
       </div>
 

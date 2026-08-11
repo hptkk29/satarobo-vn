@@ -8,6 +8,7 @@ import type { Prisma, TrialClassStatus } from "@prisma/client";
 import { TrialsList } from "./_components/trials-list";
 import { TRIAL_STATUS_LABEL, ALL_TRIAL_STATUSES } from "@/lib/trials/status";
 import { getAssignableTeachers } from "@/lib/teachers/assignable";
+import { PageHelp } from "@/components/admin/ui/page-help";
 
 export const metadata = { title: "Học thử | Admin" };
 export const dynamic = "force-dynamic";
@@ -29,14 +30,17 @@ export default async function TrialsPage({ searchParams }: Props) {
 
   const { status } = await searchParams;
   const isTeacher = hasRole(session.user, "TEACHER");
-  const canManage = (await checkPermission("trials:manage"));
+  const canManage = await checkPermission("trials:manage");
 
   // Luôn ẩn buổi học thử của lead đã xoá mềm (Lead.deletedAt != null).
   // Lead xoá là soft-delete → cascade onDelete không chạy → trial cũ vẫn còn → lọc ở đây.
   const where: Prisma.TrialClassWhereInput = { lead: { deletedAt: null } };
   if (status === "all") {
     // "Tất cả" — không lọc theo trạng thái (vẫn ẩn lead đã xoá mềm).
-  } else if (status && (ALL_TRIAL_STATUSES as readonly string[]).includes(status)) {
+  } else if (
+    status &&
+    (ALL_TRIAL_STATUSES as readonly string[]).includes(status)
+  ) {
     where.status = status as TrialClassStatus;
   } else {
     // Mặc định "Đang xử lý" — ẩn các trạng thái kết thúc (đỡ nhiễu).
@@ -72,7 +76,9 @@ export default async function TrialsPage({ searchParams }: Props) {
             phone: true,
             childName: true,
             centerId: true,
-            children: { select: { id: true, fullName: true, trialStatus: true } },
+            children: {
+              select: { id: true, fullName: true, trialStatus: true },
+            },
           },
         },
         center: { select: { name: true } },
@@ -145,12 +151,18 @@ export default async function TrialsPage({ searchParams }: Props) {
   return (
     <div className="max-w-6xl p-6">
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">Học thử</h1>
-        <p className="mt-1 text-sm text-gray-500">
-          Lịch học thử tự sinh khi lead chuyển sang &quot;Đã hẹn học thử&quot;. Giáo
-          viên nhập nhận xét sau buổi.
+        <h1 className="text-2xl font-bold text-foreground">Học thử</h1>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Buổi học thử và nhận xét của giáo viên
         </p>
       </div>
+
+      <PageHelp>
+        <p>
+          Lịch học thử tự sinh khi lead chuyển sang &quot;Đã hẹn học thử&quot;.
+          Giáo viên nhập nhận xét sau buổi.
+        </p>
+      </PageHelp>
 
       <TrialsList
         items={items}
@@ -166,7 +178,7 @@ export default async function TrialsPage({ searchParams }: Props) {
         }))}
         openTrialClasses={openTrialClasses}
         canManage={canManage}
-        canOverride={(await checkPermission("trials:override-capacity"))}
+        canOverride={await checkPermission("trials:override-capacity")}
         statusFilter={status ?? ""}
         statusLabels={TRIAL_STATUS_LABEL}
       />

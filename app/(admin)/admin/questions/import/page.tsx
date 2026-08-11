@@ -53,18 +53,18 @@ export default function ImportQuestionsPage() {
       <div>
         <Link
           href="/questions"
-          className="mb-3 inline-flex items-center gap-1 text-sm text-neutral-500 hover:text-neutral-700"
+          className="mb-3 inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
         >
           <ChevronLeft className="h-4 w-4" /> Quay lại danh sách
         </Link>
         <h1 className="text-2xl font-bold">Import Câu hỏi từ Excel</h1>
-        <p className="text-sm text-neutral-500 mt-1">
+        <p className="text-sm text-muted-foreground mt-1">
           <code>questionCode</code> = khoá upsert. Tối đa <strong>4 choices/row</strong>;
           câu hỏi cần &gt;4 lựa chọn phải dùng admin form.
         </p>
         {/* QA 21/07 — tester link khung CT TAY TỪNG CÂU sau import vì tưởng import
             không hỗ trợ (chỉ lesson mới defer). Nêu rõ ngay đầu trang. */}
-        <p className="mt-2 rounded-lg border border-purple-200 bg-purple-50 px-3 py-2 text-sm text-purple-800">
+        <p className="mt-2 rounded-lg border border-primary-soft bg-primary-soft px-3 py-2 text-sm text-primary">
           💡 Muốn gắn <strong>khung chương trình hàng loạt</strong> ngay khi import
           (để lọc được khi soạn bài tập): điền cột <code>courseSlug</code> (vd{" "}
           <code>laptrinhrobot</code>) + <code>curriculumVersion</code> (số) cho từng
@@ -171,8 +171,8 @@ export default function ImportQuestionsPage() {
         }}
       />
 
-      <div className="text-sm text-neutral-500 mt-4 space-y-1 rounded-xl border border-neutral-200 bg-neutral-50 p-4">
-        <p className="font-semibold text-neutral-700">Lưu ý:</p>
+      <div className="text-sm text-muted-foreground mt-4 space-y-1 rounded-xl border border-border bg-muted p-4">
+        <p className="font-semibold text-foreground">Lưu ý:</p>
         <ul className="list-disc list-inside space-y-0.5">
           <li>
             <code>type</code>: <code>MULTIPLE_CHOICE</code> /{" "}

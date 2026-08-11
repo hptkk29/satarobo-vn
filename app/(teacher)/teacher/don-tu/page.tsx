@@ -25,7 +25,9 @@ const dateFmt = new Intl.DateTimeFormat("vi-VN", {
 function startOfTodayUtc(): Date {
   const now = new Date();
   const vn = new Date(now.getTime() + 7 * 60 * 60 * 1000);
-  return new Date(Date.UTC(vn.getUTCFullYear(), vn.getUTCMonth(), vn.getUTCDate()));
+  return new Date(
+    Date.UTC(vn.getUTCFullYear(), vn.getUTCMonth(), vn.getUTCDate()),
+  );
 }
 
 export default async function DonTuPage({
@@ -49,11 +51,19 @@ export default async function DonTuPage({
       take: 200,
     }),
     classIds.length
-      ? sdb.class.findMany({ where: { id: { in: classIds } }, select: { id: true, name: true }, orderBy: { name: "asc" } })
+      ? sdb.class.findMany({
+          where: { id: { in: classIds } },
+          select: { id: true, name: true },
+          orderBy: { name: "asc" },
+        })
       : [],
     centerId
       ? sdb.user.findMany({
-          where: { centerId, id: { not: session.user.id }, roles: { has: "TEACHER" } },
+          where: {
+            centerId,
+            id: { not: session.user.id },
+            roles: { has: "TEACHER" },
+          },
           select: { id: true, name: true },
           orderBy: { name: "asc" },
           take: 100,
@@ -87,7 +97,10 @@ export default async function DonTuPage({
     <DonTuClient
       rows={rows}
       myClasses={myClasses}
-      otherTeachers={otherTeachers.map((t) => ({ id: t.id, name: t.name ?? "GV" }))}
+      otherTeachers={otherTeachers.map((t) => ({
+        id: t.id,
+        name: t.name ?? "GV",
+      }))}
       myShifts={myShifts.map((s) => ({
         id: s.id,
         label: `${dateFmt.format(s.date)} · ${s.shifts.map((sh) => shiftLabel(sh)).join(", ")}`,

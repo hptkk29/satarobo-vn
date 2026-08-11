@@ -9,7 +9,13 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { ChevronRight, CircleCheck, ClipboardPen, FileDown, Save } from "lucide-react";
+import {
+  ChevronRight,
+  CircleCheck,
+  ClipboardPen,
+  FileDown,
+  Save,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -39,7 +45,7 @@ export type StudentEvalExisting = {
 const GROUPS = groupedEvalCriteria();
 
 const inputCls =
-  "w-full rounded-lg border border-border bg-card px-3 py-1.5 text-sm text-foreground outline-none focus:border-orange-300 focus:ring-2 focus:ring-orange-100 dark:focus:ring-orange-500/20";
+  "w-full rounded-lg border border-border bg-card px-3 py-1.5 text-sm text-foreground outline-none focus:border-primary-soft focus:ring-2 focus:ring-primary-soft dark:focus:ring-primary";
 
 export function StudentEvalDialog({
   sessionId,
@@ -67,17 +73,26 @@ export function StudentEvalDialog({
   const [pending, start] = useTransition();
   const [saved, setSaved] = useState(done);
 
-  const [projectName, setProjectName] = useState(existing?.projectName ?? DEFAULT_PROJECT_NAME);
+  const [projectName, setProjectName] = useState(
+    existing?.projectName ?? DEFAULT_PROJECT_NAME,
+  );
   const [notes, setNotes] = useState<EvalNotes>(existing?.notes ?? EMPTY_NOTES);
   const [ratings, setRatings] = useState<Record<string, number>>(() => {
     const seed: Record<string, number> = {};
-    for (const c of EVAL_CRITERIA) seed[c.id] = existing?.rubric?.[c.id] ?? DEFAULT_EVAL_LEVEL;
+    for (const c of EVAL_CRITERIA)
+      seed[c.id] = existing?.rubric?.[c.id] ?? DEFAULT_EVAL_LEVEL;
     return seed;
   });
 
   function submit() {
     start(async () => {
-      const res = await saveSessionEval({ sessionId, studentId, projectName, notes, rubric: ratings });
+      const res = await saveSessionEval({
+        sessionId,
+        studentId,
+        projectName,
+        notes,
+        rubric: ratings,
+      });
       if (res.ok) {
         toast.success(`Đã lưu phiếu nhận xét — ${studentName}`);
         setSaved(true);
@@ -91,7 +106,11 @@ export function StudentEvalDialog({
 
   return (
     <div className="flex flex-wrap items-center justify-end gap-2">
-      <Button size="sm" variant={saved ? "outline" : "default"} onClick={() => setOpen(true)}>
+      <Button
+        size="sm"
+        variant={saved ? "outline" : "default"}
+        onClick={() => setOpen(true)}
+      >
         <ClipboardPen className="h-4 w-4" aria-hidden />
         {saved ? "Xem phiếu" : "Nhận xét"}
         <ChevronRight className="h-3.5 w-3.5" aria-hidden />
@@ -121,7 +140,9 @@ export function StudentEvalDialog({
           <div className="space-y-4">
             {/* Dự án */}
             <div>
-              <label className="mb-1 block text-sm font-semibold text-foreground">Dự án</label>
+              <label className="mb-1 block text-sm font-semibold text-foreground">
+                Dự án
+              </label>
               <input
                 value={projectName}
                 onChange={(e) => setProjectName(e.target.value)}
@@ -133,18 +154,20 @@ export function StudentEvalDialog({
               {/* ① Nhận xét của giáo viên */}
               <section>
                 <SectionTitle num={1} title="Nhận xét của giáo viên" />
-                <div className="space-y-2 rounded-xl border border-border border-l-4 border-l-orange-500 bg-muted/40 p-3.5">
+                <div className="space-y-2 rounded-xl border border-border border-l-4 border-l-primary bg-muted/40 p-3.5">
                   {EVAL_NOTE_FIELDS.map((f) => (
                     <div key={f.key}>
-                      <label className="mb-0.5 block text-xs font-bold text-orange-700 dark:text-orange-300">
+                      <label className="mb-0.5 block text-xs font-bold text-primary-ink">
                         {f.label}
                       </label>
                       <textarea
                         value={notes[f.key]}
-                        onChange={(e) => setNotes((n) => ({ ...n, [f.key]: e.target.value }))}
+                        onChange={(e) =>
+                          setNotes((n) => ({ ...n, [f.key]: e.target.value }))
+                        }
                         rows={1}
                         placeholder={`Nhận xét về ${f.label.toLowerCase()}...`}
-                        className="w-full resize-y rounded-lg border border-border bg-card px-2.5 py-1.5 text-xs text-foreground outline-none focus:border-orange-300 focus:ring-2 focus:ring-orange-100 dark:focus:ring-orange-500/20"
+                        className="w-full resize-y rounded-lg border border-border bg-card px-2.5 py-1.5 text-xs text-foreground outline-none focus:border-primary-soft focus:ring-2 focus:ring-primary-soft dark:focus:ring-primary"
                       />
                     </div>
                   ))}
@@ -156,13 +179,19 @@ export function StudentEvalDialog({
                 <SectionTitle num={2} title="Đánh giá chi tiết năng lực" />
                 <div className="space-y-3">
                   {GROUPS.map(([group, items]) => (
-                    <div key={group} className="rounded-xl border border-border p-3.5">
-                      <p className="mb-2 text-sm font-bold text-orange-700 dark:text-orange-400">
+                    <div
+                      key={group}
+                      className="rounded-xl border border-border p-3.5"
+                    >
+                      <p className="mb-2 text-sm font-bold text-primary-ink">
                         {group}
                       </p>
                       <div className="space-y-2">
                         {items.map((c) => (
-                          <div key={c.id} className="grid grid-cols-[1fr_1.2fr] items-center gap-1">
+                          <div
+                            key={c.id}
+                            className="grid grid-cols-[1fr_1.2fr] items-center gap-1"
+                          >
                             <label
                               htmlFor={`ev-${c.id}`}
                               className="line-clamp-2 text-xs font-semibold text-foreground"
@@ -173,9 +202,12 @@ export function StudentEvalDialog({
                               id={`ev-${c.id}`}
                               value={ratings[c.id]}
                               onChange={(e) =>
-                                setRatings((r) => ({ ...r, [c.id]: Number(e.target.value) }))
+                                setRatings((r) => ({
+                                  ...r,
+                                  [c.id]: Number(e.target.value),
+                                }))
                               }
-                              className="w-full rounded-lg border border-border bg-card px-2 py-1 text-xs text-foreground outline-none focus:border-orange-300 focus:ring-2 focus:ring-orange-100 dark:focus:ring-orange-500/20"
+                              className="w-full rounded-lg border border-border bg-card px-2 py-1 text-xs text-foreground outline-none focus:border-primary-soft focus:ring-2 focus:ring-primary-soft dark:focus:ring-primary"
                             >
                               {c.levels.map((lv) => (
                                 <option key={lv.value} value={lv.value}>
@@ -197,12 +229,17 @@ export function StudentEvalDialog({
               {saved && (
                 <Badge
                   variant="outline"
-                  className="border-emerald-300 bg-emerald-50 text-emerald-700 dark:border-emerald-500/40 dark:bg-emerald-600/15 dark:text-emerald-200"
+                  className="border-state-success-soft bg-state-success-soft text-state-success-ink dark:border-state-success"
                 >
-                  <CircleCheck className="h-3.5 w-3.5" aria-hidden /> Đã lưu nhận xét
+                  <CircleCheck className="h-3.5 w-3.5" aria-hidden /> Đã lưu
+                  nhận xét
                 </Badge>
               )}
-              <Button variant={saved ? "outline" : "default"} onClick={submit} disabled={pending}>
+              <Button
+                variant={saved ? "outline" : "default"}
+                onClick={submit}
+                disabled={pending}
+              >
                 <Save className="mr-1.5 h-4 w-4" aria-hidden />
                 {pending ? "Đang lưu…" : "Lưu nhận xét"}
               </Button>
@@ -217,10 +254,10 @@ export function StudentEvalDialog({
 function SectionTitle({ num, title }: { num: number; title: string }) {
   return (
     <div className="mb-2 flex items-center gap-2">
-      <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-orange-600 text-xs font-extrabold text-white">
+      <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-primary text-xs font-extrabold text-white">
         {num}
       </span>
-      <h3 className="text-sm font-bold uppercase tracking-wide text-orange-700 dark:text-orange-400">
+      <h3 className="text-sm font-bold uppercase tracking-wide text-primary-ink">
         {title}
       </h3>
     </div>

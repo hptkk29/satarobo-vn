@@ -20,19 +20,19 @@ interface Props {
 }
 
 const ACTION_COLORS: Record<string, string> = {
-  CREATE: "bg-green-100 text-green-700",
-  ADD: "bg-green-100 text-green-700",
-  ENABLE: "bg-green-100 text-green-700",
-  UPDATE: "bg-blue-100 text-blue-700",
-  STATUS_CHANGE: "bg-blue-100 text-blue-700",
-  ASSIGN: "bg-blue-100 text-blue-700",
-  DELETE: "bg-red-100 text-red-700",
-  REMOVE: "bg-red-100 text-red-700",
-  DISABLE: "bg-red-100 text-red-700",
-  EXPORT: "bg-purple-100 text-purple-700",
-  PASSWORD_RESET: "bg-orange-100 text-orange-700",
-  ROLE_CHANGE: "bg-purple-100 text-purple-700",
-  "audit.pii-unmasked": "bg-amber-100 text-amber-800",
+  CREATE: "bg-state-success-soft text-state-success-ink",
+  ADD: "bg-state-success-soft text-state-success-ink",
+  ENABLE: "bg-state-success-soft text-state-success-ink",
+  UPDATE: "bg-state-info-soft text-state-info-ink",
+  STATUS_CHANGE: "bg-state-info-soft text-state-info-ink",
+  ASSIGN: "bg-state-info-soft text-state-info-ink",
+  DELETE: "bg-state-danger-soft text-state-danger-ink",
+  REMOVE: "bg-state-danger-soft text-state-danger-ink",
+  DISABLE: "bg-state-danger-soft text-state-danger-ink",
+  EXPORT: "bg-primary-soft text-primary",
+  PASSWORD_RESET: "bg-primary-soft text-primary",
+  ROLE_CHANGE: "bg-primary-soft text-primary",
+  "audit.pii-unmasked": "bg-state-warning-soft text-state-warning-ink",
 };
 
 function formatDateTime(date: Date): string {
@@ -49,7 +49,7 @@ function formatDateTime(date: Date): string {
 export function AuditLogDetailModal({ open, onClose, row, revealed }: Props) {
   if (!row) return null;
 
-  const actionCls = ACTION_COLORS[row.action] ?? "bg-gray-100 text-gray-700";
+  const actionCls = ACTION_COLORS[row.action] ?? "bg-muted text-foreground";
   const hasOld = row.oldValues && Object.keys(row.oldValues).length > 0;
   const hasNew = row.newValues && Object.keys(row.newValues).length > 0;
 
@@ -71,11 +71,7 @@ export function AuditLogDetailModal({ open, onClose, row, revealed }: Props) {
         <div className="space-y-4">
           {/* PII state banner */}
           <div
-            className={`flex items-center gap-2 rounded-lg border p-2.5 text-xs ${
-              revealed
-                ? "border-amber-200 bg-amber-50 text-amber-800"
-                : "border-gray-200 bg-gray-50 text-gray-500"
-            }`}
+            className={`flex items-center gap-2 rounded-lg border p-2.5 text-xs ${ revealed ? "border-state-warning-soft bg-state-warning-soft text-state-warning-ink" : "border-border bg-muted text-muted-foreground" }`}
           >
             {revealed ? (
               <>
@@ -93,27 +89,27 @@ export function AuditLogDetailModal({ open, onClose, row, revealed }: Props) {
 
           {/* Actor */}
           <div>
-            <h4 className="text-xs font-bold uppercase tracking-wider text-gray-500">
+            <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
               Thực hiện bởi
             </h4>
-            <p className="mt-1 text-sm text-gray-900">{row.actorName}</p>
+            <p className="mt-1 text-sm text-foreground">{row.actorName}</p>
           </div>
 
           {/* Module / entity */}
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <h4 className="text-xs font-bold uppercase tracking-wider text-gray-500">
+              <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
                 Module
               </h4>
-              <p className="mt-1 text-sm text-gray-900">{row.module}</p>
+              <p className="mt-1 text-sm text-foreground">{row.module}</p>
             </div>
             <div>
-              <h4 className="text-xs font-bold uppercase tracking-wider text-gray-500">
+              <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
                 Đối tượng
               </h4>
-              <p className="mt-1 text-sm text-gray-900">
+              <p className="mt-1 text-sm text-foreground">
                 {row.entityType}
-                <span className="block break-all text-xs text-gray-500">
+                <span className="block break-all text-xs text-muted-foreground">
                   {row.entityId}
                 </span>
               </p>
@@ -122,10 +118,10 @@ export function AuditLogDetailModal({ open, onClose, row, revealed }: Props) {
 
           {/* Reason */}
           <div>
-            <h4 className="text-xs font-bold uppercase tracking-wider text-gray-500">
+            <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
               Lý do
             </h4>
-            <p className="mt-1 text-sm italic text-gray-700">
+            <p className="mt-1 text-sm italic text-foreground">
               {row.reason ?? "—"}
             </p>
           </div>
@@ -133,14 +129,14 @@ export function AuditLogDetailModal({ open, onClose, row, revealed }: Props) {
           {/* Changed fields */}
           {row.changedFields.length > 0 && (
             <div>
-              <h4 className="text-xs font-bold uppercase tracking-wider text-gray-500">
+              <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
                 Trường thay đổi
               </h4>
               <div className="mt-1 flex flex-wrap gap-1">
                 {row.changedFields.map((f) => (
                   <span
                     key={f}
-                    className="inline-flex rounded-full bg-blue-100 px-2 py-0.5 text-xs font-semibold text-blue-700"
+                    className="inline-flex rounded-full bg-state-info-soft px-2 py-0.5 text-xs font-semibold text-state-info-ink"
                   >
                     {f}
                   </span>
@@ -152,10 +148,10 @@ export function AuditLogDetailModal({ open, onClose, row, revealed }: Props) {
           {/* Old values */}
           {hasOld && (
             <div>
-              <h4 className="text-xs font-bold uppercase tracking-wider text-gray-500">
+              <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
                 Giá trị cũ
               </h4>
-              <pre className="mt-1 overflow-x-auto rounded-lg bg-gray-100 p-3 text-xs text-gray-800">
+              <pre className="mt-1 overflow-x-auto rounded-lg bg-muted p-3 text-xs text-foreground">
                 {JSON.stringify(row.oldValues, null, 2)}
               </pre>
             </div>
@@ -164,10 +160,10 @@ export function AuditLogDetailModal({ open, onClose, row, revealed }: Props) {
           {/* New values */}
           {hasNew && (
             <div>
-              <h4 className="text-xs font-bold uppercase tracking-wider text-gray-500">
+              <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
                 Giá trị mới
               </h4>
-              <pre className="mt-1 overflow-x-auto rounded-lg bg-green-50 p-3 text-xs text-gray-800">
+              <pre className="mt-1 overflow-x-auto rounded-lg bg-state-success-soft p-3 text-xs text-foreground">
                 {JSON.stringify(row.newValues, null, 2)}
               </pre>
             </div>
@@ -176,10 +172,10 @@ export function AuditLogDetailModal({ open, onClose, row, revealed }: Props) {
           {/* Metadata */}
           {(row.ip || row.userAgent) && (
             <div>
-              <h4 className="text-xs font-bold uppercase tracking-wider text-gray-500">
+              <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
                 Metadata
               </h4>
-              <div className="mt-1 space-y-0.5 text-xs italic text-gray-500">
+              <div className="mt-1 space-y-0.5 text-xs italic text-muted-foreground">
                 {row.ip && <div>IP: {row.ip}</div>}
                 {row.userAgent && (
                   <div className="break-all">UA: {row.userAgent}</div>

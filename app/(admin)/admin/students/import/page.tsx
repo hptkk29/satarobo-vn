@@ -4,7 +4,11 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { ChevronLeft } from "lucide-react";
 import { precheckUpsert } from "@/components/admin/import-precheck";
-import { ExcelImporter, type ImportResult } from "@/components/admin/ExcelImporter";
+import {
+  ExcelImporter,
+  type ImportResult,
+} from "@/components/admin/ExcelImporter";
+import { PageHelp } from "@/components/admin/ui/page-help";
 
 interface StudentImportRow {
   studentCode?: string;
@@ -74,16 +78,19 @@ export default function ImportStudentsPage() {
       <div>
         <Link
           href="/students"
-          className="mb-3 inline-flex items-center gap-1 text-sm text-neutral-500 hover:text-neutral-700"
+          className="mb-3 inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
         >
           <ChevronLeft className="h-4 w-4" /> Quay lại danh sách
         </Link>
         <h1 className="text-2xl font-bold">Import Học viên từ Excel</h1>
-        <p className="text-sm text-neutral-500 mt-1">
-          <code>studentCode</code> là khoá upsert — trùng mã sẽ UPDATE, mới sẽ CREATE.
-          Để trống → luôn CREATE (có thể tạo bản ghi trùng).
-        </p>
       </div>
+
+      <PageHelp>
+        <p>
+          <code>studentCode</code> là khoá upsert — trùng mã sẽ UPDATE, mới sẽ
+          CREATE. Để trống → luôn CREATE (có thể tạo bản ghi trùng).
+        </p>
+      </PageHelp>
 
       <ExcelImporter<StudentImportRow>
         title="Import Học viên"
@@ -132,11 +139,13 @@ export default function ImportStudentsPage() {
 
           if (!fullName) return { error: "Thiếu họ tên HS (fullName)" };
           if (!parentName) return { error: "Thiếu tên PH chính (parentName)" };
-          if (!parentPhone) return { error: "Thiếu SĐT PH chính (parentPhone)" };
+          if (!parentPhone)
+            return { error: "Thiếu SĐT PH chính (parentPhone)" };
 
           const grade = row.currentGrade;
           if (grade !== undefined && grade !== null && grade !== "") {
-            const g = typeof grade === "number" ? grade : parseInt(String(grade), 10);
+            const g =
+              typeof grade === "number" ? grade : parseInt(String(grade), 10);
             if (!Number.isFinite(g) || g < 1 || g > 12) {
               return { error: "Lớp phải từ 1 đến 12" };
             }
@@ -172,7 +181,9 @@ export default function ImportStudentsPage() {
             return { error: "Ngày sinh phải dạng YYYY-MM-DD hoặc DD/MM/YYYY" };
           }
           if (row.enrollmentDate && !looksLikeDate(row.enrollmentDate)) {
-            return { error: "Ngày đăng ký phải dạng YYYY-MM-DD hoặc DD/MM/YYYY" };
+            return {
+              error: "Ngày đăng ký phải dạng YYYY-MM-DD hoặc DD/MM/YYYY",
+            };
           }
 
           return {
@@ -194,7 +205,11 @@ export default function ImportStudentsPage() {
             district: asString(row.district),
             city: asString(row.city),
             centerSlug: asString(row.centerSlug),
-            enrollmentDate: row.enrollmentDate as string | number | Date | undefined,
+            enrollmentDate: row.enrollmentDate as
+              | string
+              | number
+              | Date
+              | undefined,
             status,
             bloodType,
             allergies: asString(row.allergies),
@@ -209,7 +224,9 @@ export default function ImportStudentsPage() {
             body: JSON.stringify({ rows }),
           });
           if (!res.ok) {
-            const err = (await res.json().catch(() => ({ error: "Unknown" }))) as {
+            const err = (await res
+              .json()
+              .catch(() => ({ error: "Unknown" }))) as {
               error?: string;
             };
             throw new Error(err.error || "Import thất bại");
@@ -220,34 +237,41 @@ export default function ImportStudentsPage() {
         }}
       />
 
-      <div className="text-sm text-neutral-500 mt-4 space-y-1 rounded-xl border border-neutral-200 bg-neutral-50 p-4">
-        <p className="font-semibold text-neutral-700">Lưu ý:</p>
+      <div className="text-sm text-muted-foreground mt-4 space-y-1 rounded-xl border border-border bg-muted p-4">
+        <p className="font-semibold text-foreground">Lưu ý:</p>
         <ul className="list-disc list-inside space-y-0.5">
           <li>
-            <code>studentCode</code> là khoá upsert. Trùng = UPDATE; mới = CREATE.
-            Để trống → luôn CREATE (có thể tạo trùng).
-          </li>
-          <li>Định dạng ngày: <code>YYYY-MM-DD</code> hoặc <code>DD/MM/YYYY</code>.</li>
-          <li>
-            <code>currentGrade</code>: số nguyên 1-12 (tương ứng lớp 1 đến lớp 12).
+            <code>studentCode</code> là khoá upsert. Trùng = UPDATE; mới =
+            CREATE. Để trống → luôn CREATE (có thể tạo trùng).
           </li>
           <li>
-            <code>gender</code>: <code>MALE</code> / <code>FEMALE</code> / <code>OTHER</code>.
+            Định dạng ngày: <code>YYYY-MM-DD</code> hoặc <code>DD/MM/YYYY</code>
+            .
+          </li>
+          <li>
+            <code>currentGrade</code>: số nguyên 1-12 (tương ứng lớp 1 đến lớp
+            12).
+          </li>
+          <li>
+            <code>gender</code>: <code>MALE</code> / <code>FEMALE</code> /{" "}
+            <code>OTHER</code>.
           </li>
           <li>
             <code>status</code>: <code>ACTIVE</code> / <code>PAUSED</code> /{" "}
-            <code>GRADUATED</code> / <code>INACTIVE</code>. Mặc định <code>ACTIVE</code>.
+            <code>GRADUATED</code> / <code>INACTIVE</code>. Mặc định{" "}
+            <code>ACTIVE</code>.
           </li>
           <li>
-            <code>bloodType</code>: <code>A_POS</code> = A+, <code>A_NEG</code> = A−, ...{" "}
-            <code>UNKNOWN</code> = chưa biết.
+            <code>bloodType</code>: <code>A_POS</code> = A+, <code>A_NEG</code>{" "}
+            = A−, ... <code>UNKNOWN</code> = chưa biết.
           </li>
           <li>
-            <code>allergies</code>: cách nhau bằng dấu phẩy (vd: &quot;Tôm, sữa, phấn hoa&quot;).
+            <code>allergies</code>: cách nhau bằng dấu phẩy (vd: &quot;Tôm, sữa,
+            phấn hoa&quot;).
           </li>
           <li>
-            <code>centerSlug</code>: slug của cơ sở mong muốn — rỗng = chưa chọn.
-            Sai slug → row bỏ qua.
+            <code>centerSlug</code>: slug của cơ sở mong muốn — rỗng = chưa
+            chọn. Sai slug → row bỏ qua.
           </li>
           <li>Avatar HS KHÔNG import từ Excel — upload sau qua admin form.</li>
         </ul>

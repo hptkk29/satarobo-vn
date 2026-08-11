@@ -102,7 +102,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   const chatUserId = canSeeChat ? session.user.id : "";
 
   return (
-    <div className="admin-scope flex h-screen overflow-hidden bg-gray-50">
+    <div className="admin-scope flex h-screen overflow-hidden bg-muted">
       {/* Desktop Sidebar */}
       <div className="hidden md:flex md:shrink-0">
         <Sidebar

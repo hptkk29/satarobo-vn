@@ -42,11 +42,11 @@ export default async function NewAssignmentPage() {
       <div>
         <Link
           href="/assignments"
-          className="mb-3 inline-flex items-center gap-1 text-sm text-neutral-500 hover:text-neutral-700"
+          className="mb-3 inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
         >
           <ChevronLeft className="h-4 w-4" /> Quay lại danh sách
         </Link>
-        <h1 className="text-2xl font-bold text-neutral-900">Tạo bài tập mới</h1>
+        <h1 className="text-2xl font-bold text-foreground">Tạo bài tập mới</h1>
       </div>
 
       <AssignmentForm

@@ -15,14 +15,7 @@ import { ENROLLMENT_ACTIVE_STATUS_LIST } from "@/lib/enrollment-status";
 import { ENROLLMENT_STATUS } from "@/lib/labels/registry";
 import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "../../_components/ui/empty-state";
-
-const initials = (name: string) =>
-  name
-    .split(" ")
-    .slice(-2)
-    .map((w) => w[0] ?? "")
-    .join("")
-    .toUpperCase();
+import { initialsOf } from "@/lib/ui/initials";
 
 export async function HubStudentsTab({
   actor,
@@ -46,7 +39,13 @@ export async function HubStudentsTab({
         select: {
           status: true,
           student: {
-            select: { id: true, name: true, studentCode: true, avatarUrl: true, dateOfBirth: true },
+            select: {
+              id: true,
+              name: true,
+              studentCode: true,
+              avatarUrl: true,
+              dateOfBirth: true,
+            },
           },
         },
         orderBy: { student: { name: "asc" } },
@@ -56,23 +55,32 @@ export async function HubStudentsTab({
   const roster = cls?.enrollments ?? [];
 
   if (roster.length === 0) {
-    return <EmptyState icon={GraduationCap} title="Lớp chưa có học viên đang học." />;
+    return (
+      <EmptyState icon={GraduationCap} title="Lớp chưa có học viên đang học." />
+    );
   }
 
   return (
     <div className="space-y-4">
       <p className="text-sm text-muted-foreground">
-        Sĩ số <span className="font-semibold text-foreground">{roster.length}</span> học viên —
-        bấm tên để xem hồ sơ chuyên cần, năng lực và bài tập.
+        Sĩ số{" "}
+        <span className="font-semibold text-foreground">{roster.length}</span>{" "}
+        học viên — bấm tên để xem hồ sơ chuyên cần, năng lực và bài tập.
       </p>
       <div className="t-card overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full border-collapse text-left text-sm">
+          <table className="min-w-[560px] w-full border-collapse text-left text-sm">
             <thead>
               <tr className="border-b border-border bg-muted/50 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
-                <th scope="col" className="px-5 py-3">Học viên</th>
-                <th scope="col" className="px-5 py-3">Năm sinh</th>
-                <th scope="col" className="px-5 py-3">Trạng thái</th>
+                <th scope="col" className="px-5 py-3">
+                  Học viên
+                </th>
+                <th scope="col" className="px-5 py-3">
+                  Năm sinh
+                </th>
+                <th scope="col" className="px-5 py-3">
+                  Trạng thái
+                </th>
               </tr>
             </thead>
             <tbody>
@@ -93,19 +101,21 @@ export async function HubStudentsTab({
                             className="h-10 w-10 shrink-0 rounded-full border border-border object-cover"
                           />
                         ) : (
-                          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-orange-100 text-xs font-semibold text-orange-700 dark:bg-orange-500/15 dark:text-orange-300">
-                            {initials(st.name)}
+                          <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary-soft text-xs font-semibold text-primary-ink">
+                            {initialsOf(st.name)}
                           </span>
                         )}
                         <div className="min-w-0">
                           <Link
                             href={`/teacher/hoc-vien?s=${st.id}`}
-                            className="font-semibold text-foreground outline-none hover:text-orange-700 focus-visible:ring-2 focus-visible:ring-ring dark:hover:text-orange-300"
+                            className="font-semibold text-foreground outline-none hover:text-primary-ink-hover focus-visible:ring-2 focus-visible:ring-ring"
                           >
                             {st.name}
                           </Link>
                           {st.studentCode && (
-                            <p className="text-xs text-muted-foreground">{st.studentCode}</p>
+                            <p className="text-xs text-muted-foreground">
+                              {st.studentCode}
+                            </p>
                           )}
                         </div>
                       </div>
@@ -114,7 +124,9 @@ export async function HubStudentsTab({
                       {st.dateOfBirth ? st.dateOfBirth.getUTCFullYear() : "—"}
                     </td>
                     <td className="px-5 py-3.5 whitespace-nowrap">
-                      <Badge variant="outline">{ENROLLMENT_STATUS.label(e.status)}</Badge>
+                      <Badge variant="outline">
+                        {ENROLLMENT_STATUS.label(e.status)}
+                      </Badge>
                     </td>
                   </tr>
                 );

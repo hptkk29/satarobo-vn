@@ -52,7 +52,7 @@ export function TestSendButton({
             <DialogTitle>Gửi test email</DialogTitle>
           </DialogHeader>
           <form onSubmit={handleSubmit} className="space-y-4 py-2">
-            <div className="p-3 bg-yellow-50 border border-yellow-200 rounded text-sm">
+            <div className="p-3 bg-state-warning-soft border border-state-warning-soft rounded text-sm">
               Email sẽ gửi với <strong>variables mẫu</strong> (định nghĩa trong
               SAMPLE_VARS). Subject + body sẽ có prefix <code>[TEST]</code>.
               Trigger: <strong>{trigger}</strong>

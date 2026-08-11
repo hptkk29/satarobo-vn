@@ -65,51 +65,51 @@ export function SessionListRow({
   }
 
   return (
-    <tr className="border-b border-neutral-200 hover:bg-neutral-50">
+    <tr className="border-b border-border hover:bg-muted">
       <td className="p-4 text-sm">
-        <div className="font-bold tabular-nums text-neutral-900">{formatDateTime(session.date)}</div>
+        <div className="font-bold tabular-nums text-foreground">{formatDateTime(session.date)}</div>
         <div className="mt-0.5 text-xs">
           {past ? (
-            <span className="text-neutral-400">Đã diễn ra</span>
+            <span className="text-muted-foreground">Đã diễn ra</span>
           ) : (
-            <span className="text-green-600">Sắp tới</span>
+            <span className="text-state-success-ink">Sắp tới</span>
           )}
         </div>
       </td>
       <td className="p-4">
-        <div className="font-semibold text-neutral-900">{session.className}</div>
+        <div className="font-semibold text-foreground">{session.className}</div>
         {session.topic && (
-          <div className="mt-0.5 text-xs text-neutral-500 line-clamp-2">📚 {session.topic}</div>
+          <div className="mt-0.5 text-xs text-muted-foreground line-clamp-2">📚 {session.topic}</div>
         )}
       </td>
       <td className="p-4 text-center">
         {session.attendanceCount > 0 ? (
-          <span className="inline-block rounded-full bg-blue-100 px-2 py-1 text-xs font-medium text-blue-700">
+          <span className="inline-block rounded-full bg-state-info-soft px-2 py-1 text-xs font-medium text-state-info-ink">
             {session.attendanceCount} điểm danh
           </span>
         ) : (
-          <span className="text-xs text-neutral-400">Chưa có</span>
+          <span className="text-xs text-muted-foreground">Chưa có</span>
         )}
       </td>
       <td className="p-4 text-right">
         <div className="inline-flex items-center gap-1">
           <Link
             href={`/attendance?sessionId=${session.id}`}
-            className="rounded p-1.5 text-blue-600 hover:bg-blue-50"
+            className="rounded p-1.5 text-state-info-ink hover:bg-state-info-soft"
             title="Điểm danh"
           >
             <ClipboardCheck className="h-4 w-4" />
           </Link>
           <Link
             href={`/sessions/${session.id}`}
-            className="rounded p-1.5 text-emerald-600 hover:bg-emerald-50"
+            className="rounded p-1.5 text-state-success-ink hover:bg-state-success-soft"
             title="Chi tiết / Nhận xét / Checklist"
           >
             <ListChecks className="h-4 w-4" />
           </Link>
           <Link
             href={editHref}
-            className="rounded p-1.5 text-purple-600 hover:bg-purple-50"
+            className="rounded p-1.5 text-primary hover:bg-primary-soft"
             title="Sửa"
           >
             <Pencil className="h-4 w-4" />
@@ -118,7 +118,7 @@ export function SessionListRow({
             type="button"
             onClick={() => setConfirmOpen(true)}
             disabled={pending}
-            className="rounded p-1.5 text-red-600 hover:bg-red-50 disabled:opacity-50"
+            className="rounded p-1.5 text-state-danger-ink hover:bg-state-danger-soft disabled:opacity-50"
             title="Xoá"
           >
             <Trash2 className="h-4 w-4" />

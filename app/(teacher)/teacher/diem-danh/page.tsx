@@ -16,7 +16,10 @@ import type { AttendanceStatus } from "@prisma/client";
 import { PageHeader } from "../_components/ui/page-header";
 import { EmptyState } from "../_components/ui/empty-state";
 import { ClipboardCheck } from "lucide-react";
-import { AttendanceOverview, type AttendanceRow } from "./_components/attendance-overview";
+import {
+  AttendanceOverview,
+  type AttendanceRow,
+} from "./_components/attendance-overview";
 
 export const metadata = { title: "Điểm danh | Giáo viên Sata Robo" };
 
@@ -30,7 +33,9 @@ const dayFmt = new Intl.DateTimeFormat("vi-VN", {
 const VN_OFFSET_MS = 7 * 60 * 60 * 1000;
 function vnTodayEndMs(now = new Date()): number {
   const vn = new Date(now.getTime() + VN_OFFSET_MS);
-  const startUtc = Date.UTC(vn.getUTCFullYear(), vn.getUTCMonth(), vn.getUTCDate()) - VN_OFFSET_MS;
+  const startUtc =
+    Date.UTC(vn.getUTCFullYear(), vn.getUTCMonth(), vn.getUTCDate()) -
+    VN_OFFSET_MS;
   return startUtc + 24 * 60 * 60 * 1000;
 }
 
@@ -53,7 +58,11 @@ export default async function TeacherAttendanceOverviewPage() {
           startTime: true,
           endTime: true,
           _count: {
-            select: { enrollments: { where: { status: { in: ENROLLMENT_ACTIVE_STATUS_LIST } } } },
+            select: {
+              enrollments: {
+                where: { status: { in: ENROLLMENT_ACTIVE_STATUS_LIST } },
+              },
+            },
           },
         },
       })
@@ -77,7 +86,13 @@ export default async function TeacherAttendanceOverviewPage() {
           status: { not: "CANCELLED" },
           date: { lte: new Date(todayEnd) },
         },
-        select: { id: true, classId: true, date: true, topic: true, status: true },
+        select: {
+          id: true,
+          classId: true,
+          date: true,
+          topic: true,
+          status: true,
+        },
         orderBy: { date: "desc" },
         take: 300,
       })
@@ -94,7 +109,8 @@ export default async function TeacherAttendanceOverviewPage() {
   const presentBy = new Map<string, number>();
   for (const a of att) {
     doneSet.add(a.sessionId);
-    if (ATTENDED.includes(a.status)) presentBy.set(a.sessionId, (presentBy.get(a.sessionId) ?? 0) + 1);
+    if (ATTENDED.includes(a.status))
+      presentBy.set(a.sessionId, (presentBy.get(a.sessionId) ?? 0) + 1);
   }
 
   const rows: AttendanceRow[] = sessions.map((s) => {
@@ -119,7 +135,10 @@ export default async function TeacherAttendanceOverviewPage() {
         subtitle="Theo dõi điểm danh các buổi đã diễn ra ở lớp bạn phụ trách. Bấm một buổi để mở bảng điểm danh chi tiết."
       />
       {rows.length === 0 ? (
-        <EmptyState icon={ClipboardCheck} title="Chưa có buổi học nào đã diễn ra." />
+        <EmptyState
+          icon={ClipboardCheck}
+          title="Chưa có buổi học nào đã diễn ra."
+        />
       ) : (
         <AttendanceOverview rows={rows} />
       )}

@@ -5,7 +5,12 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { isNavItemActive, navGroups, type NavGroup, type NavItem } from "./nav-config";
+import {
+  isNavItemActive,
+  navGroups,
+  type NavGroup,
+  type NavItem,
+} from "./nav-config";
 
 function NavLinkItem({
   item,
@@ -32,7 +37,9 @@ function NavLinkItem({
         <Icon
           className={cn(
             "h-[18px] w-[18px] shrink-0",
-            active ? "text-orange-600 dark:text-orange-300" : "text-muted-foreground",
+            active
+              ? "text-primary-ink dark:text-primary-ink"
+              : "text-muted-foreground",
           )}
           strokeWidth={2}
           aria-hidden
@@ -41,7 +48,7 @@ function NavLinkItem({
         <span className="min-w-0 flex-1 truncate">{item.label}</span>
         {badgeCount > 0 && (
           <span
-            className="inline-flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-rose-500 px-1 text-[10px] font-bold text-white"
+            className="inline-flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-state-danger px-1 text-[10px] font-bold text-white"
             aria-label={`${badgeCount} tin chưa đọc`}
           >
             {badgeCount > 9 ? "9+" : badgeCount}
@@ -90,7 +97,10 @@ function NavGroupBlock({
       >
         <span>{group.label}</span>
         <ChevronDown
-          className={cn("h-3.5 w-3.5 transition-transform", open ? "rotate-0" : "-rotate-90")}
+          className={cn(
+            "h-3.5 w-3.5 transition-transform",
+            open ? "rotate-0" : "-rotate-90",
+          )}
           aria-hidden
         />
       </button>

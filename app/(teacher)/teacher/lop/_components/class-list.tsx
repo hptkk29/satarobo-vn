@@ -4,7 +4,10 @@ import { useMemo, useState } from "react";
 import Link from "next/link";
 import { ArrowRight, CheckCircle2, ClipboardCheck } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { ListToolbar, type SelectFilter } from "../../_components/ui/list-toolbar";
+import {
+  ListToolbar,
+  type SelectFilter,
+} from "../../_components/ui/list-toolbar";
 import { EmptyState } from "../../_components/ui/empty-state";
 
 /** Một hàng lớp — plain data từ server (đã cách ly cơ sở qua scopedDb). */
@@ -32,12 +35,12 @@ const CLASS_STATUS_LABEL: Record<string, string> = {
 };
 
 const CLASS_STATUS_CLASS: Record<string, string> = {
-  ACTIVE: "bg-emerald-100 text-emerald-700 dark:bg-emerald-600/20 dark:text-emerald-200",
-  COMPLETED: "bg-blue-100 text-blue-700 dark:bg-blue-500/15 dark:text-blue-300",
-  RECRUITING: "bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300",
-  PENDING_APPROVAL: "bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300",
+  ACTIVE: "bg-state-success-soft text-state-success-ink",
+  COMPLETED: "bg-state-info-soft text-state-info-ink",
+  RECRUITING: "bg-state-warning-soft text-state-warning-ink",
+  PENDING_APPROVAL: "bg-state-warning-soft text-state-warning-ink",
   PLANNED: "bg-muted text-muted-foreground",
-  CANCELLED: "bg-red-100 text-red-700 dark:bg-red-500/15 dark:text-red-300",
+  CANCELLED: "bg-state-danger-soft text-state-danger-ink",
 };
 
 export function ClassStatusPill({ status }: { status: string }) {
@@ -65,12 +68,17 @@ export function ClassList({ rows }: { rows: ClassRow[] }) {
     const names = [...new Set(rows.map((r) => r.course))].sort((a, b) =>
       a.localeCompare(b, "vi"),
     );
-    return [{ value: ALL, label: "Tất cả khoá học" }, ...names.map((n) => ({ value: n, label: n }))];
+    return [
+      { value: ALL, label: "Tất cả khoá học" },
+      ...names.map((n) => ({ value: n, label: n })),
+    ];
   }, [rows]);
 
   const statusOptions = useMemo<SelectFilter["options"]>(() => {
     const present = [...new Set(rows.map((r) => r.status))];
-    const ordered = Object.keys(CLASS_STATUS_LABEL).filter((s) => present.includes(s));
+    const ordered = Object.keys(CLASS_STATUS_LABEL).filter((s) =>
+      present.includes(s),
+    );
     return [
       { value: ALL, label: "Mọi trạng thái" },
       ...ordered.map((s) => ({ value: s, label: CLASS_STATUS_LABEL[s]! })),
@@ -105,28 +113,28 @@ export function ClassList({ rows }: { rows: ClassRow[] }) {
 
       <div className="t-card overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full border-collapse text-left text-sm">
+          <table className="min-w-[880px] w-full border-collapse text-left text-sm">
             <thead>
               <tr className="border-b border-border bg-muted/50 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
-                <th scope="col" className="px-5 py-3">
+                <th scope="col" className="px-4 py-3">
                   Lớp
                 </th>
-                <th scope="col" className="px-5 py-3">
+                <th scope="col" className="px-4 py-3">
                   Khoá học
                 </th>
-                <th scope="col" className="px-5 py-3">
+                <th scope="col" className="px-4 py-3">
                   Lịch học
                 </th>
-                <th scope="col" className="px-5 py-3">
+                <th scope="col" className="px-4 py-3">
                   Sĩ số
                 </th>
-                <th scope="col" className="px-5 py-3">
+                <th scope="col" className="px-4 py-3">
                   Cần xử lý
                 </th>
-                <th scope="col" className="px-5 py-3">
+                <th scope="col" className="px-4 py-3">
                   Trạng thái
                 </th>
-                <th scope="col" className="px-5 py-3 text-right">
+                <th scope="col" className="px-4 py-3 text-right">
                   <span className="sr-only">Mở lớp</span>
                 </th>
               </tr>
@@ -134,7 +142,10 @@ export function ClassList({ rows }: { rows: ClassRow[] }) {
             <tbody>
               {filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="px-5 py-10 text-center text-sm text-muted-foreground">
+                  <td
+                    colSpan={7}
+                    className="px-5 py-10 text-center text-sm text-muted-foreground"
+                  >
                     Không có lớp khớp bộ lọc.
                   </td>
                 </tr>
@@ -144,10 +155,10 @@ export function ClassList({ rows }: { rows: ClassRow[] }) {
                     key={r.id}
                     className="border-b border-border/60 transition-colors last:border-0 hover:bg-muted/50"
                   >
-                    <td className="px-5 py-3.5">
+                    <td className="px-4 py-3.5">
                       <Link
                         href={`?classId=${r.id}`}
-                        className="rounded-sm font-semibold text-foreground outline-none hover:text-orange-700 hover:underline focus-visible:ring-2 focus-visible:ring-ring dark:hover:text-orange-300"
+                        className="rounded-sm font-semibold text-foreground outline-none hover:text-primary-ink-hover hover:underline focus-visible:ring-2 focus-visible:ring-ring"
                       >
                         {r.name}
                       </Link>
@@ -157,33 +168,38 @@ export function ClassList({ rows }: { rows: ClassRow[] }) {
                         </p>
                       )}
                     </td>
-                    <td className="px-5 py-3.5 whitespace-nowrap text-foreground">{r.course}</td>
-                    <td className="px-5 py-3.5 whitespace-nowrap text-muted-foreground">
+                    {/* KHÔNG whitespace-nowrap: tên khoá dài ("Combo — Full Lộ Trình
+                        Luyện Thi") là ô đẩy bảng lên 1108px, vượt khung 958px của
+                        laptop 1280 ⇒ phải cuộn ngang mới thấy cột Trạng thái. */}
+                    <td className="min-w-[9rem] px-4 py-3.5 text-foreground">
+                      {r.course}
+                    </td>
+                    <td className="px-4 py-3.5 whitespace-nowrap text-muted-foreground">
                       {r.schedule || "—"}
                     </td>
-                    <td className="px-5 py-3.5 whitespace-nowrap text-foreground">
+                    <td className="px-4 py-3.5 whitespace-nowrap text-foreground">
                       {r.enrolled}/{r.capacity}
                     </td>
-                    <td className="px-5 py-3.5 whitespace-nowrap">
+                    <td className="px-4 py-3.5 whitespace-nowrap">
                       {r.pending > 0 ? (
-                        <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2.5 py-1 text-xs font-semibold text-amber-700 dark:bg-amber-500/15 dark:text-amber-300">
+                        <span className="inline-flex items-center gap-1 rounded-full bg-state-warning-soft px-2.5 py-1 text-xs font-semibold text-state-warning-ink">
                           <ClipboardCheck className="h-3.5 w-3.5" aria-hidden />
                           {r.pending} điểm danh
                         </span>
                       ) : (
-                        <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-semibold text-emerald-700 dark:bg-emerald-600/20 dark:text-emerald-200">
+                        <span className="inline-flex items-center gap-1 rounded-full bg-state-success-soft px-2.5 py-1 text-xs font-semibold text-state-success-ink">
                           <CheckCircle2 className="h-3.5 w-3.5" aria-hidden />
                           Hoàn tất
                         </span>
                       )}
                     </td>
-                    <td className="px-5 py-3.5 whitespace-nowrap">
+                    <td className="px-4 py-3.5 whitespace-nowrap">
                       <ClassStatusPill status={r.status} />
                     </td>
-                    <td className="px-5 py-3.5 text-right whitespace-nowrap">
+                    <td className="px-4 py-3.5 text-right whitespace-nowrap">
                       <Link
                         href={`?classId=${r.id}`}
-                        className="inline-flex items-center gap-1 rounded-sm text-sm font-semibold text-orange-600 outline-none hover:text-orange-700 focus-visible:ring-2 focus-visible:ring-ring dark:text-orange-400"
+                        className="inline-flex items-center gap-1 rounded-sm text-sm font-semibold text-primary-ink outline-none hover:text-primary-ink-hover focus-visible:ring-2 focus-visible:ring-ring"
                       >
                         Mở lớp <ArrowRight className="h-4 w-4" aria-hidden />
                       </Link>
@@ -201,5 +217,10 @@ export function ClassList({ rows }: { rows: ClassRow[] }) {
 
 /** Empty state khi GV chưa được phân công lớp — tách để server tái dùng. */
 export function ClassListEmpty() {
-  return <EmptyState icon={ClipboardCheck} title="Bạn chưa được phân công lớp nào." />;
+  return (
+    <EmptyState
+      icon={ClipboardCheck}
+      title="Bạn chưa được phân công lớp nào."
+    />
+  );
 }

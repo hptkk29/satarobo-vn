@@ -20,17 +20,17 @@ export function TrialSessionEvalFill({
 }) {
   const [sessionId, setSessionId] = useState(trialSessions[0]?.id ?? "");
   if (trialSessions.length === 0) {
-    return <p className="text-sm text-gray-400">Lớp chưa có buổi nào.</p>;
+    return <p className="text-sm text-muted-foreground">Lớp chưa có buổi nào.</p>;
   }
 
   return (
     <div className="space-y-3">
       <div className="flex flex-wrap items-center gap-2">
-        <label className="text-sm font-medium text-gray-600">Buổi:</label>
+        <label className="text-sm font-medium text-muted-foreground">Buổi:</label>
         <select
           value={sessionId}
           onChange={(e) => setSessionId(e.target.value)}
-          className="rounded-lg border border-gray-300 px-2 py-1.5 text-sm"
+          className="rounded-lg border border-border px-2 py-1.5 text-sm"
         >
           {trialSessions.map((s) => (
             <option key={s.id} value={s.id}>

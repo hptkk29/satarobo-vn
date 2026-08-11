@@ -69,7 +69,7 @@ export default async function NewClassPage() {
 
   return (
     <div>
-      <h1 className="mb-6 text-3xl font-black text-neutral-900">Thêm lớp học mới</h1>
+      <h1 className="mb-6 text-3xl font-black text-foreground">Thêm lớp học mới</h1>
       <ClassForm
         hoCenterIds={hoCenterIds}
         courses={courses}

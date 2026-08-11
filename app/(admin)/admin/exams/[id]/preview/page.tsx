@@ -42,14 +42,14 @@ export default async function ExamPreviewPage({ params }: Props) {
       <div>
         <Link
           href={`/exams/${id}/builder`}
-          className="mb-3 inline-flex items-center gap-1 text-sm text-neutral-500 hover:text-neutral-700"
+          className="mb-3 inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
         >
           <ChevronLeft className="h-4 w-4" /> Quay lại builder
         </Link>
-        <h1 className="text-2xl font-bold text-neutral-900">
-          Xem trước: <span className="text-orange-600">{exam.title}</span>
+        <h1 className="text-2xl font-bold text-foreground">
+          Xem trước: <span className="text-primary">{exam.title}</span>
         </h1>
-        <p className="mt-1 text-sm text-neutral-500">
+        <p className="mt-1 text-sm text-muted-foreground">
           {exam.examQuestions.length} câu · {exam.totalPoints} điểm ·{" "}
           {exam.durationMinutes}′
         </p>
@@ -61,14 +61,14 @@ export default async function ExamPreviewPage({ params }: Props) {
           return (
             <li
               key={eq.id}
-              className="rounded-xl border border-neutral-200 bg-white p-5"
+              className="rounded-xl border border-border bg-card p-5"
             >
               <div className="flex items-baseline justify-between gap-3">
-                <p className="font-semibold text-neutral-900">
+                <p className="font-semibold text-foreground">
                   Câu {i + 1}.{" "}
                   <span className="whitespace-pre-line font-normal">{q.text}</span>
                 </p>
-                <span className="shrink-0 text-xs text-neutral-400">
+                <span className="shrink-0 text-xs text-muted-foreground">
                   {eq.points} điểm
                 </span>
               </div>
@@ -77,7 +77,7 @@ export default async function ExamPreviewPage({ params }: Props) {
                 <img
                   src={q.imageUrl}
                   alt={`ảnh câu ${i + 1}`}
-                  className="mt-3 max-h-60 rounded-lg border border-neutral-200"
+                  className="mt-3 max-h-60 rounded-lg border border-border"
                 />
               )}
 
@@ -85,13 +85,13 @@ export default async function ExamPreviewPage({ params }: Props) {
                 <ul className="mt-3 space-y-2">
                   {q.choices.map((c) => (
                     <li key={c.id} className="flex items-start gap-2 text-sm">
-                      <span className="font-bold text-neutral-500">
+                      <span className="font-bold text-muted-foreground">
                         {String.fromCharCode(64 + c.order)}.
                       </span>
                       <div>
                         <span
                           className={
-                            c.isCorrect ? "font-semibold text-green-700" : ""
+                            c.isCorrect ? "font-semibold text-state-success-ink" : ""
                           }
                         >
                           {c.text}
@@ -101,7 +101,7 @@ export default async function ExamPreviewPage({ params }: Props) {
                           <img
                             src={c.imageUrl}
                             alt={`ảnh đáp án ${c.order}`}
-                            className="mt-1 max-h-32 rounded border border-neutral-200"
+                            className="mt-1 max-h-32 rounded border border-border"
                           />
                         )}
                       </div>

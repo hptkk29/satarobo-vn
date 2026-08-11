@@ -41,7 +41,7 @@ export function RevenueTargetForm({
   }
 
   const selectClass =
-    "flex h-9 w-full rounded-md border border-neutral-200 bg-white px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-neutral-400";
+    "flex h-9 w-full rounded-md border border-border bg-card px-3 py-1 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-border";
 
   return (
     <form onSubmit={onSubmit} className="grid grid-cols-1 gap-3 md:grid-cols-5 md:items-end">
@@ -92,7 +92,7 @@ export function RevenueTargetForm({
       </div>
 
       {error ? (
-        <p className="md:col-span-5 text-sm text-red-600">{error}</p>
+        <p className="md:col-span-5 text-sm text-state-danger-ink">{error}</p>
       ) : null}
     </form>
   );

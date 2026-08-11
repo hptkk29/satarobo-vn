@@ -48,8 +48,8 @@ export default async function EditHonorPage({ params }: Props) {
   return (
     <div className="max-w-4xl">
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">Sửa: {displayName}</h1>
-        <p className="mt-1 text-sm text-gray-500">{honor.awardName}</p>
+        <h1 className="text-2xl font-bold text-foreground">Sửa: {displayName}</h1>
+        <p className="mt-1 text-sm text-muted-foreground">{honor.awardName}</p>
       </div>
 
       <HonorForm mode="edit" initial={honor} employees={employees} />

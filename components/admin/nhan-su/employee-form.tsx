@@ -172,7 +172,7 @@ export function EmployeeForm({
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
       {/* ─── Tier 1: cơ bản ─── */}
-      <section className="rounded-xl border border-gray-200 bg-white p-6">
+      <section className="rounded-xl border border-border bg-card p-6">
         <h2 className="mb-4 text-lg font-bold">Thông tin cơ bản</h2>
 
         <div className="grid gap-4 sm:grid-cols-2">
@@ -182,7 +182,7 @@ export function EmployeeForm({
               required
               value={data.employeeCode}
               onChange={(e) => setData({ ...data, employeeCode: e.target.value })}
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 font-mono text-sm focus:border-orange-500 focus:outline-none"
+              className="w-full rounded-lg border border-border px-3 py-2 font-mono text-sm focus:border-primary focus:outline-none"
               placeholder="SR.NV.001"
             />
           </div>
@@ -193,7 +193,7 @@ export function EmployeeForm({
               required
               value={data.fullName}
               onChange={(e) => setData({ ...data, fullName: e.target.value })}
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-orange-500 focus:outline-none"
+              className="w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-primary focus:outline-none"
             />
           </div>
 
@@ -203,7 +203,7 @@ export function EmployeeForm({
               required
               value={data.jobTitle}
               onChange={(e) => setData({ ...data, jobTitle: e.target.value })}
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-orange-500 focus:outline-none"
+              className="w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-primary focus:outline-none"
             />
           </div>
 
@@ -215,7 +215,7 @@ export function EmployeeForm({
               onChange={(e) =>
                 setData({ ...data, department: e.target.value as Department })
               }
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-orange-500 focus:outline-none"
+              className="w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-primary focus:outline-none"
             >
               {departments.map((d) => (
                 <option key={d.code} value={d.code}>
@@ -232,7 +232,7 @@ export function EmployeeForm({
                 type="email"
                 value={data.email}
                 onChange={(e) => setData({ ...data, email: e.target.value })}
-                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-orange-500 focus:outline-none"
+                className="w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-primary focus:outline-none"
               />
             </div>
           )}
@@ -243,7 +243,7 @@ export function EmployeeForm({
               type="date"
               value={data.joinedAt}
               onChange={(e) => setData({ ...data, joinedAt: e.target.value })}
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-orange-500 focus:outline-none"
+              className="w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-primary focus:outline-none"
             />
           </div>
         </div>
@@ -265,7 +265,7 @@ export function EmployeeForm({
             value={data.bio}
             onChange={(e) => setData({ ...data, bio: e.target.value })}
             placeholder="Giới thiệu ngắn về nhân sự — hỗ trợ Markdown."
-            className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-orange-500 focus:outline-none"
+            className="w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-primary focus:outline-none"
           />
         </div>
 
@@ -276,7 +276,7 @@ export function EmployeeForm({
             onChange={(e) =>
               setData({ ...data, status: e.target.value as EmploymentStatus })
             }
-            className="w-full max-w-xs rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-orange-500 focus:outline-none"
+            className="w-full max-w-xs rounded-lg border border-border px-3 py-2 text-sm focus:border-primary focus:outline-none"
           >
             {EMPLOYMENT_STATUS_OPTIONS.map((opt) => (
               <option key={opt.value} value={opt.value}>
@@ -284,7 +284,7 @@ export function EmployeeForm({
               </option>
             ))}
           </select>
-          <p className="mt-1 text-xs text-gray-500">
+          <p className="mt-1 text-xs text-muted-foreground">
             Mặc định <strong>Đang làm</strong>. <code>isActive</code> bên dưới chỉ là legacy
             flag — list filter chính dùng trạng thái này.
           </p>
@@ -318,7 +318,7 @@ export function EmployeeForm({
       </section>
 
       {/* ─── Tier 2: liên hệ + HR ─── */}
-      <section className="rounded-xl border border-gray-200 bg-white p-6">
+      <section className="rounded-xl border border-border bg-card p-6">
         <h2 className="mb-4 text-lg font-bold">Liên hệ & HR</h2>
 
         <div className="grid gap-4 sm:grid-cols-2">
@@ -328,13 +328,13 @@ export function EmployeeForm({
               <input
                 value={data.phone}
                 onChange={(e) => setData({ ...data, phone: e.target.value })}
-                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-orange-500 focus:outline-none"
+                className="w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-primary focus:outline-none"
               />
             </div>
           )}
 
           <div className="sm:col-span-2">
-            <label className="flex items-center gap-2 rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-2">
+            <label className="flex items-center gap-2 rounded-lg border border-state-info-soft bg-state-info-soft px-3 py-2">
               <Switch
                 checked={isHO}
                 onCheckedChange={(v) => {
@@ -342,11 +342,11 @@ export function EmployeeForm({
                   if (v) setData((d) => ({ ...d, orgUnitId: "" }));
                 }}
               />
-              <span className="text-sm font-medium text-indigo-900">
+              <span className="text-sm font-medium text-state-info-ink">
                 Nhân viên HO (Hội sở)
               </span>
             </label>
-            <p className="mt-1 text-xs text-gray-500">
+            <p className="mt-1 text-xs text-muted-foreground">
               Bật khi NV thuộc <strong>Hội sở</strong> (cross-center, không gắn 1 cơ sở
               cụ thể). Hệ thống gán <code>EmployeeOrgAssignment</code> PRIMARY tới đơn vị
               HO thay vì chọn cơ sở.
@@ -358,7 +358,7 @@ export function EmployeeForm({
             <select
               value={data.orgUnitId}
               onChange={(e) => setData({ ...data, orgUnitId: e.target.value })}
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-orange-500 focus:outline-none"
+              className="w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-primary focus:outline-none"
             >
               <option value="">— Không chỉ định —</option>
               {orgUnits.map((o) => (
@@ -367,7 +367,7 @@ export function EmployeeForm({
                 </option>
               ))}
             </select>
-            <p className="mt-1 text-xs text-gray-500">
+            <p className="mt-1 text-xs text-muted-foreground">
               Gồm Hội sở (HO) + các cơ sở. Lưu phân công PRIMARY vào đơn vị này.
             </p>
           </div>
@@ -380,7 +380,7 @@ export function EmployeeForm({
                   type="date"
                   value={data.dateOfBirth}
                   onChange={(e) => setData({ ...data, dateOfBirth: e.target.value })}
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-orange-500 focus:outline-none"
+                  className="w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-primary focus:outline-none"
                 />
               </div>
 
@@ -391,7 +391,7 @@ export function EmployeeForm({
                   onChange={(e) =>
                     setData({ ...data, gender: e.target.value as Gender | "" })
                   }
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-orange-500 focus:outline-none"
+                  className="w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-primary focus:outline-none"
                 >
                   <option value="">— Không chỉ định —</option>
                   {GENDER_OPTIONS.map((opt) => (
@@ -414,7 +414,7 @@ export function EmployeeForm({
                       contractType: e.target.value as ContractType | "",
                     })
                   }
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-orange-500 focus:outline-none"
+                  className="w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-primary focus:outline-none"
                 >
                   <option value="">— Không chỉ định —</option>
                   {CONTRACT_OPTIONS.map((opt) => (
@@ -432,7 +432,7 @@ export function EmployeeForm({
                 <select
                   value={data.managerId}
                   onChange={(e) => setData({ ...data, managerId: e.target.value })}
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-orange-500 focus:outline-none"
+                  className="w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-primary focus:outline-none"
                 >
                   <option value="">— Không có —</option>
                   {managers.map((m) => (
@@ -451,9 +451,9 @@ export function EmployeeForm({
                   type="date"
                   value={data.endDate}
                   onChange={(e) => setData({ ...data, endDate: e.target.value })}
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-orange-500 focus:outline-none"
+                  className="w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-primary focus:outline-none"
                 />
-                <p className="mt-1 text-xs text-gray-500">
+                <p className="mt-1 text-xs text-muted-foreground">
                   Cho hợp đồng có thời hạn. Để trống nếu vô thời hạn.
                 </p>
               </div>
@@ -464,7 +464,7 @@ export function EmployeeForm({
                   value={data.nationalId}
                   onChange={(e) => setData({ ...data, nationalId: e.target.value })}
                   placeholder="12 số CCCD hoặc 9 số CMND"
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2 font-mono text-sm focus:border-orange-500 focus:outline-none"
+                  className="w-full rounded-lg border border-border px-3 py-2 font-mono text-sm focus:border-primary focus:outline-none"
                 />
               </div>
 
@@ -474,7 +474,7 @@ export function EmployeeForm({
                   value={data.address}
                   onChange={(e) => setData({ ...data, address: e.target.value })}
                   placeholder="Số nhà, đường, phường, quận, thành phố"
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-orange-500 focus:outline-none"
+                  className="w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-primary focus:outline-none"
                 />
               </div>
 
@@ -488,7 +488,7 @@ export function EmployeeForm({
                     setData({ ...data, emergencyContact: e.target.value })
                   }
                   placeholder="Tên - Quan hệ - SĐT"
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-orange-500 focus:outline-none"
+                  className="w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-primary focus:outline-none"
                 />
               </div>
 
@@ -501,7 +501,7 @@ export function EmployeeForm({
                   value={data.notes}
                   onChange={(e) => setData({ ...data, notes: e.target.value })}
                   placeholder="Ghi chú HR nội bộ — không hiển thị public."
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-orange-500 focus:outline-none"
+                  className="w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-primary focus:outline-none"
                 />
               </div>
             </>
@@ -509,8 +509,8 @@ export function EmployeeForm({
         </div>
 
         {visibility.salary && (
-          <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-4">
-            <p className="mb-3 text-sm font-semibold text-amber-900">
+          <div className="mt-4 rounded-lg border border-state-warning-soft bg-state-warning-soft p-4">
+            <p className="mb-3 text-sm font-semibold text-state-warning-ink">
               💰 Lương (chỉ HR / Accountant / SUPER_ADMIN thấy)
             </p>
             <div className="grid gap-4 sm:grid-cols-3">
@@ -527,7 +527,7 @@ export function EmployeeForm({
                     setData({ ...data, salaryRank: e.target.value })
                   }
                   placeholder="1-9"
-                  className="w-full rounded border border-amber-300 px-2 py-1.5 text-sm"
+                  className="w-full rounded border border-state-warning px-2 py-1.5 text-sm"
                 />
               </div>
               <div>
@@ -541,7 +541,7 @@ export function EmployeeForm({
                     setData({ ...data, salaryLevel: e.target.value })
                   }
                   placeholder="1-5"
-                  className="w-full rounded border border-amber-300 px-2 py-1.5 text-sm"
+                  className="w-full rounded border border-state-warning px-2 py-1.5 text-sm"
                 />
               </div>
               <div>
@@ -555,11 +555,11 @@ export function EmployeeForm({
                   value={data.bhxhBase}
                   onChange={(e) => setData({ ...data, bhxhBase: e.target.value })}
                   placeholder="5000000"
-                  className="w-full rounded border border-amber-300 px-2 py-1.5 text-sm"
+                  className="w-full rounded border border-state-warning px-2 py-1.5 text-sm"
                 />
               </div>
             </div>
-            <p className="mt-2 text-xs text-amber-700">
+            <p className="mt-2 text-xs text-state-warning-ink">
               Tính lương cơ bản L1/L2 sẽ làm ở Phase 4.8 (Payroll). Hiện chỉ lưu Bậc/Mức + lương BHXH.
             </p>
           </div>
@@ -573,9 +573,9 @@ export function EmployeeForm({
             onChange={(e) =>
               setData({ ...data, displayOrder: Number(e.target.value || 0) })
             }
-            className="w-32 rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-orange-500 focus:outline-none"
+            className="w-32 rounded-lg border border-border px-3 py-2 text-sm focus:border-primary focus:outline-none"
           />
-          <p className="mt-1 text-xs text-gray-500">
+          <p className="mt-1 text-xs text-muted-foreground">
             Thứ tự hiển thị ở /vinh-danh, /ve-chung-toi. Số nhỏ hiện trước.
           </p>
         </div>
@@ -583,9 +583,9 @@ export function EmployeeForm({
 
       {/* ─── Chuyên môn giảng dạy (chỉ Đào tạo / Giảng dạy) ─── */}
       {teachingCodes.has(data.department) && (
-        <section className="rounded-xl border border-gray-200 bg-white p-6">
+        <section className="rounded-xl border border-border bg-card p-6">
           <h2 className="mb-4 text-lg font-bold">Chuyên môn giảng dạy</h2>
-          <p className="mb-4 text-xs text-gray-500">
+          <p className="mb-4 text-xs text-muted-foreground">
             Hiển thị khi phòng ban là <strong>Phòng Đào tạo</strong> hoặc{" "}
             <strong>Giảng dạy</strong>. Đổi phòng ban khác sẽ ẩn UI nhưng dữ liệu vẫn giữ.
           </p>
@@ -616,7 +616,7 @@ export function EmployeeForm({
         <button
           type="submit"
           disabled={isPending}
-          className="rounded-lg bg-[#7C3AED] px-6 py-2.5 text-sm font-bold text-white hover:opacity-90 disabled:opacity-50"
+          className="rounded-lg bg-primary px-6 py-2.5 text-sm font-bold text-white hover:opacity-90 disabled:opacity-50"
         >
           {isPending
             ? "Đang lưu..."
@@ -628,7 +628,7 @@ export function EmployeeForm({
           type="button"
           onClick={() => router.push("/nhan-su")}
           disabled={isPending}
-          className="rounded-lg border border-gray-300 px-6 py-2.5 text-sm font-semibold text-gray-700 hover:bg-gray-50"
+          className="rounded-lg border border-border px-6 py-2.5 text-sm font-semibold text-foreground hover:bg-muted"
         >
           Huỷ
         </button>

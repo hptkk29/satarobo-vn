@@ -100,7 +100,7 @@ export function Header() {
                 className="inline-flex items-center gap-1.5 text-xs font-semibold text-neutral-600 hover:text-orange-600 transition-colors"
               >
                 <Phone className="h-3.5 w-3.5" />
-                <span className="text-neutral-400">{c.code}</span>
+                <span className="text-neutral-500">{c.code}</span>
                 {c.hotline}
               </a>
             ))}

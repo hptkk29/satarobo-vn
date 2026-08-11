@@ -28,6 +28,7 @@ import type {
   SessionStatusValue,
 } from "@/lib/labels";
 import type { HomeworkAssignmentStatusValue } from "@/lib/reports/dao-tao";
+import { PageHelp } from "@/components/admin/ui/page-help";
 
 export const metadata = { title: "Báo cáo đào tạo | Admin" };
 export const dynamic = "force-dynamic";
@@ -45,26 +46,34 @@ function Stat({
 }) {
   const toneClass =
     tone === "good"
-      ? "text-emerald-700"
+      ? "text-state-success-ink"
       : tone === "warn"
-        ? "text-amber-700"
+        ? "text-state-warning-ink"
         : tone === "bad"
-          ? "text-rose-700"
-          : "text-neutral-900";
+          ? "text-state-danger-ink"
+          : "text-foreground";
   return (
-    <div className="rounded-xl border border-neutral-200 bg-white p-4">
-      <p className="text-xs font-medium text-neutral-500">{label}</p>
+    <div className="rounded-xl border border-border bg-card p-4">
+      <p className="text-xs font-medium text-muted-foreground">{label}</p>
       <p className={`mt-1 text-2xl font-bold ${toneClass}`}>{value}</p>
-      {hint ? <p className="mt-0.5 text-xs text-neutral-400">{hint}</p> : null}
+      {hint ? (
+        <p className="mt-0.5 text-xs text-muted-foreground">{hint}</p>
+      ) : null}
     </div>
   );
 }
 
 type SearchParams = {
-  searchParams: Promise<{ center?: string; dateFrom?: string; dateTo?: string }>;
+  searchParams: Promise<{
+    center?: string;
+    dateFrom?: string;
+    dateTo?: string;
+  }>;
 };
 
-export default async function TrainingReportPage({ searchParams }: SearchParams) {
+export default async function TrainingReportPage({
+  searchParams,
+}: SearchParams) {
   const session = await auth();
   if (!session?.user) redirect("/login");
   // Gate: quản lý đào tạo / xem lớp (Đào tạo + quản lý cơ sở + Admin).
@@ -96,11 +105,18 @@ export default async function TrainingReportPage({ searchParams }: SearchParams)
   return (
     <div className="space-y-5 p-4">
       <div>
-        <h1 className="text-xl font-bold text-neutral-900">Báo cáo đào tạo</h1>
-        <p className="text-sm text-neutral-500">
-          Chuyên cần, hoàn thành bài tập, buổi thiếu đề thi và ca học bù — theo phạm vi cơ sở của bạn.
+        <h1 className="text-xl font-bold text-foreground">Báo cáo đào tạo</h1>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Chuyên cần, bài tập và học bù theo cơ sở
         </p>
       </div>
+
+      <PageHelp>
+        <p>
+          Chuyên cần, hoàn thành bài tập, buổi thiếu đề thi và ca học bù — theo
+          phạm vi cơ sở của bạn.
+        </p>
+      </PageHelp>
 
       <ReportFilterBar
         basePath="/bao-cao/dao-tao"
@@ -138,31 +154,39 @@ export default async function TrainingReportPage({ searchParams }: SearchParams)
         />
       </section>
 
-      <section className="rounded-xl border border-neutral-200 bg-white p-4">
-        <h2 className="mb-3 text-sm font-semibold text-neutral-700">
+      <section className="rounded-xl border border-border bg-card p-4">
+        <h2 className="mb-3 text-sm font-semibold text-foreground">
           Tỷ lệ chuyên cần theo lớp
         </h2>
         {chartData.length > 0 ? (
           <BarChart
             data={chartData}
             xKey="name"
-            bars={[{ key: "Chuyên cần (%)", name: "Chuyên cần (%)", color: "#7C3AED" }]}
+            bars={[
+              {
+                key: "Chuyên cần (%)",
+                name: "Chuyên cần (%)",
+                color: "#7C3AED",
+              },
+            ]}
             height={300}
           />
         ) : (
-          <p className="py-8 text-center text-sm text-neutral-400">
+          <p className="py-8 text-center text-sm text-muted-foreground">
             Chưa có dữ liệu điểm danh trong kỳ.
           </p>
         )}
       </section>
 
-      <section className="rounded-xl border border-neutral-200 bg-white">
-        <div className="border-b border-neutral-100 px-4 py-3">
-          <h2 className="text-sm font-semibold text-neutral-700">Chi tiết theo lớp</h2>
+      <section className="rounded-xl border border-border bg-card">
+        <div className="border-b border-border px-4 py-3">
+          <h2 className="text-sm font-semibold text-foreground">
+            Chi tiết theo lớp
+          </h2>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full min-w-[560px] text-sm">
-            <thead className="text-left text-xs text-neutral-400">
+            <thead className="text-left text-xs text-muted-foreground">
               <tr>
                 <th className="px-4 py-2">Lớp</th>
                 <th className="px-4 py-2 text-right">Buổi tính</th>
@@ -176,7 +200,10 @@ export default async function TrainingReportPage({ searchParams }: SearchParams)
             <tbody>
               {report.perClass.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="px-4 py-6 text-center text-neutral-400">
+                  <td
+                    colSpan={7}
+                    className="px-4 py-6 text-center text-muted-foreground"
+                  >
                     Không có lớp trong phạm vi cơ sở.
                   </td>
                 </tr>
@@ -184,14 +211,26 @@ export default async function TrainingReportPage({ searchParams }: SearchParams)
                 report.perClass.map((c) => (
                   <tr key={c.classId} className="border-t">
                     <td className="px-4 py-2 font-medium">
-                      {c.classCode ? <span className="text-neutral-400">{c.classCode} · </span> : null}
+                      {c.classCode ? (
+                        <span className="text-muted-foreground">
+                          {c.classCode} ·{" "}
+                        </span>
+                      ) : null}
                       {c.className}
                     </td>
                     <td className="px-4 py-2 text-right">{c.counted}</td>
-                    <td className="px-4 py-2 text-right text-emerald-700">{c.attended}</td>
-                    <td className="px-4 py-2 text-right text-rose-600">{c.absent}</td>
-                    <td className="px-4 py-2 text-right text-amber-600">{c.needMakeup}</td>
-                    <td className="px-4 py-2 text-right text-purple-600">{c.madeUp}</td>
+                    <td className="px-4 py-2 text-right text-state-success-ink">
+                      {c.attended}
+                    </td>
+                    <td className="px-4 py-2 text-right text-state-danger-ink">
+                      {c.absent}
+                    </td>
+                    <td className="px-4 py-2 text-right text-state-warning-ink">
+                      {c.needMakeup}
+                    </td>
+                    <td className="px-4 py-2 text-right text-primary">
+                      {c.madeUp}
+                    </td>
                     <td className="px-4 py-2 text-right font-semibold">
                       {c.counted > 0 ? `${c.attendanceRate}%` : "—"}
                     </td>

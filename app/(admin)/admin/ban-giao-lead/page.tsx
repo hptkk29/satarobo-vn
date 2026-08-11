@@ -5,13 +5,21 @@ import { checkPermission } from "@/lib/auth/check-permission";
 import { scopedDb } from "@/lib/db-scope";
 import { resolveActor } from "@/lib/auth/actor";
 import { HandoverForm } from "./_components/handover-form";
+import { PageHelp } from "@/components/admin/ui/page-help";
 
 export const metadata = { title: "Bàn giao lead | Admin" };
 export const dynamic = "force-dynamic";
 
 const LEAD_STATUSES = [
-  "NEW", "ASSIGNED", "CONTACTED", "NO_ANSWER", "CONSULTING",
-  "TRIAL_SCHEDULED", "TRIAL_ATTENDED", "AWAITING_DECISION", "NURTURING",
+  "NEW",
+  "ASSIGNED",
+  "CONTACTED",
+  "NO_ANSWER",
+  "CONSULTING",
+  "TRIAL_SCHEDULED",
+  "TRIAL_ATTENDED",
+  "AWAITING_DECISION",
+  "NURTURING",
 ];
 
 export default async function HandoverPage() {
@@ -20,7 +28,8 @@ export default async function HandoverPage() {
   if (!(await checkPermission("leads:assign"))) redirect("/dashboard");
 
   const centerScope =
-    hasRole(session.user, "CENTER_MANAGER") && !hasRole(session.user, "SUPER_ADMIN")
+    hasRole(session.user, "CENTER_MANAGER") &&
+    !hasRole(session.user, "SUPER_ADMIN")
       ? session.user.centerId
       : null;
 
@@ -52,20 +61,33 @@ export default async function HandoverPage() {
     id: s.id,
     label: (s.name ?? s.email ?? s.id) + (s.isActive ? "" : " (đã nghỉ)"),
   }));
-  const campaignList = campaigns.map((c) => c.utmCampaign).filter((x): x is string => !!x);
+  const campaignList = campaigns
+    .map((c) => c.utmCampaign)
+    .filter((x): x is string => !!x);
 
   return (
     <div className="space-y-6 p-4">
       <div>
-        <h1 className="text-xl font-bold text-neutral-900">Bàn giao lead</h1>
-        <p className="text-sm text-neutral-500">
-          Chuyển hàng loạt lead của một sale (vd khi nghỉ việc) sang sale khác. Có thể lọc theo trạng thái,
-          chiến dịch, chỉ lead chưa đóng. Task đang mở cũng được chuyển. Ghi lịch sử + nhật ký kiểm toán;
-          KHÔNG sửa tài khoản sale cũ.
+        <h1 className="text-xl font-bold text-foreground">Bàn giao lead</h1>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Chuyển lead của một sale sang sale khác
         </p>
       </div>
 
-      <HandoverForm sales={saleOptions} statuses={LEAD_STATUSES} campaigns={campaignList} />
+      <PageHelp>
+        <p>
+          Chuyển hàng loạt lead của một sale (vd khi nghỉ việc) sang sale khác.
+          Có thể lọc theo trạng thái, chiến dịch, chỉ lead chưa đóng. Task đang
+          mở cũng được chuyển. Ghi lịch sử + nhật ký kiểm toán; KHÔNG sửa tài
+          khoản sale cũ.
+        </p>
+      </PageHelp>
+
+      <HandoverForm
+        sales={saleOptions}
+        statuses={LEAD_STATUSES}
+        campaigns={campaignList}
+      />
     </div>
   );
 }

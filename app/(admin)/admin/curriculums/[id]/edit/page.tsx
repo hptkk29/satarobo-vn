@@ -239,15 +239,15 @@ export default async function EditCurriculumPage({ params }: Props) {
       <div>
         <Link
           href="/curriculums"
-          className="mb-3 inline-flex items-center gap-1 text-sm text-neutral-500 hover:text-neutral-700"
+          className="mb-3 inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
         >
           <ChevronLeft className="h-4 w-4" /> Quay lại danh sách
         </Link>
-        <h1 className="text-2xl font-bold text-neutral-900">
+        <h1 className="text-2xl font-bold text-foreground">
           {curriculum.name}{" "}
-          <span className="text-neutral-400">v{curriculum.version}</span>
+          <span className="text-muted-foreground">v{curriculum.version}</span>
         </h1>
-        <p className="mt-1 text-sm text-neutral-500">
+        <p className="mt-1 text-sm text-muted-foreground">
           Khoá học: <strong>{curriculum.course.name}</strong>
         </p>
       </div>

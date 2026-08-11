@@ -106,13 +106,13 @@ export default async function SessionsAdminPage({ searchParams }: SearchParams) 
     <div>
       <div className="mb-6 flex items-center justify-between">
         <div>
-          <h1 className="flex items-center gap-2 text-3xl font-black text-neutral-900">
-            <CalendarDays className="h-7 w-7 text-orange-500" />
+          <h1 className="flex items-center gap-2 text-3xl font-black text-foreground">
+            <CalendarDays className="h-7 w-7 text-primary" />
             Buổi học
           </h1>
-          <p className="mt-1 text-neutral-600">
+          <p className="mt-1 text-muted-foreground">
             Đang xem:{" "}
-            <span className="font-semibold text-neutral-800">
+            <span className="font-semibold text-foreground">
               {scope === "upcoming" ? "Sắp tới" : scope === "past" ? "Đã diễn ra" : "Tất cả"}
             </span>{" "}
             · {sessions.length} buổi
@@ -121,7 +121,7 @@ export default async function SessionsAdminPage({ searchParams }: SearchParams) 
         </div>
         <Link
           href="/sessions/new"
-          className="inline-flex items-center gap-2 rounded-xl bg-orange-500 px-4 py-2 font-bold text-white shadow-md hover:bg-orange-600"
+          className="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2 font-bold text-white shadow-md hover:bg-primary-dark"
         >
           <Plus className="h-5 w-5" />
           Thêm buổi học
@@ -131,13 +131,13 @@ export default async function SessionsAdminPage({ searchParams }: SearchParams) 
       <SessionFilters scope={scope} classId={classFilter ?? ""} classes={classes} />
 
       {holidays.length > 0 && (
-        <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 p-3">
-          <p className="mb-1 text-xs font-bold uppercase tracking-wide text-amber-700">
+        <div className="mb-4 rounded-xl border border-state-warning-soft bg-state-warning-soft p-3">
+          <p className="mb-1 text-xs font-bold uppercase tracking-wide text-state-warning-ink">
             🎌 Ngày nghỉ sắp tới (buổi trùng đã được tự dời)
           </p>
-          <div className="flex flex-wrap gap-2 text-xs text-amber-800">
+          <div className="flex flex-wrap gap-2 text-xs text-state-warning-ink">
             {holidays.map((h) => (
-              <span key={h.id} className="rounded-full bg-white px-2.5 py-1">
+              <span key={h.id} className="rounded-full bg-card px-2.5 py-1">
                 {h.name}: {formatDateVN(h.date)}
                 {h.endDate ? `–${formatDateVN(h.endDate)}` : ""}
                 {h.center?.name ? ` · ${h.center.name}` : " · Toàn hệ thống"}
@@ -147,22 +147,22 @@ export default async function SessionsAdminPage({ searchParams }: SearchParams) 
         </div>
       )}
 
-      <div className="overflow-hidden rounded-xl border border-neutral-200 bg-white">
+      <div className="overflow-hidden rounded-xl border border-border bg-card">
         <table className="w-full">
-          <thead className="border-b border-neutral-200 bg-neutral-50 text-left">
+          <thead className="border-b border-border bg-muted text-left">
             <tr>
-              <th className="p-4 text-xs font-bold uppercase tracking-wider text-neutral-700">Thời gian</th>
-              <th className="p-4 text-xs font-bold uppercase tracking-wider text-neutral-700">Lớp / Chủ đề</th>
-              <th className="p-4 text-center text-xs font-bold uppercase tracking-wider text-neutral-700">Điểm danh</th>
-              <th className="p-4 text-right text-xs font-bold uppercase tracking-wider text-neutral-700">Thao tác</th>
+              <th className="p-4 text-xs font-bold uppercase tracking-wider text-foreground">Thời gian</th>
+              <th className="p-4 text-xs font-bold uppercase tracking-wider text-foreground">Lớp / Chủ đề</th>
+              <th className="p-4 text-center text-xs font-bold uppercase tracking-wider text-foreground">Điểm danh</th>
+              <th className="p-4 text-right text-xs font-bold uppercase tracking-wider text-foreground">Thao tác</th>
             </tr>
           </thead>
           <tbody>
             {sessions.length === 0 ? (
               <tr>
-                <td colSpan={4} className="p-12 text-center text-neutral-500">
+                <td colSpan={4} className="p-12 text-center text-muted-foreground">
                   Chưa có buổi học nào khớp bộ lọc.{" "}
-                  <Link href="/sessions/new" className="text-orange-600 hover:underline">
+                  <Link href="/sessions/new" className="text-primary hover:underline">
                     Tạo buổi học mới →
                   </Link>
                 </td>

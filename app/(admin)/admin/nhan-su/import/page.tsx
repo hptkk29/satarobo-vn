@@ -81,12 +81,12 @@ export default function ImportEmployeesPage() {
       <div>
         <Link
           href="/nhan-su"
-          className="mb-3 inline-flex items-center gap-1 text-sm text-neutral-500 hover:text-neutral-700"
+          className="mb-3 inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
         >
           <ChevronLeft className="h-4 w-4" /> Quay lại danh sách
         </Link>
         <h1 className="text-2xl font-bold">Import Nhân viên từ Excel</h1>
-        <p className="text-sm text-neutral-500 mt-1">
+        <p className="text-sm text-muted-foreground mt-1">
           Mã nhân viên (<code>employeeCode</code>) là khoá upsert — trùng mã sẽ UPDATE,
           mã mới sẽ CREATE.
         </p>
@@ -216,8 +216,8 @@ export default function ImportEmployeesPage() {
         }}
       />
 
-      <div className="text-sm text-neutral-500 mt-4 space-y-1 rounded-xl border border-neutral-200 bg-neutral-50 p-4">
-        <p className="font-semibold text-neutral-700">Lưu ý:</p>
+      <div className="text-sm text-muted-foreground mt-4 space-y-1 rounded-xl border border-border bg-muted p-4">
+        <p className="font-semibold text-foreground">Lưu ý:</p>
         <ul className="list-disc list-inside space-y-0.5">
           <li>
             <code>employeeCode</code> bắt buộc, là khoá upsert. Trùng = UPDATE; mới = CREATE.

@@ -59,16 +59,16 @@ export function HandoverForm({
   }
 
   return (
-    <div className="grid gap-3 rounded-xl border border-neutral-200 bg-white p-4 sm:grid-cols-2">
+    <div className="grid gap-3 rounded-xl border border-border bg-card p-4 sm:grid-cols-2">
       <label className="text-sm">
-        <span className="mb-1 block text-neutral-600">Sale bàn giao (nguồn)</span>
+        <span className="mb-1 block text-muted-foreground">Sale bàn giao (nguồn)</span>
         <select
           value={fromUserId}
           onChange={(e) => {
             setFromUserId(e.target.value);
             setCount(null);
           }}
-          className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm"
+          className="w-full rounded-md border border-border px-3 py-2 text-sm"
         >
           <option value="">— Chọn —</option>
           {sales.map((s) => (
@@ -80,11 +80,11 @@ export function HandoverForm({
       </label>
 
       <label className="text-sm">
-        <span className="mb-1 block text-neutral-600">Sale nhận (đích)</span>
+        <span className="mb-1 block text-muted-foreground">Sale nhận (đích)</span>
         <select
           value={toUserId}
           onChange={(e) => setToUserId(e.target.value)}
-          className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm"
+          className="w-full rounded-md border border-border px-3 py-2 text-sm"
         >
           <option value="">— Chọn —</option>
           {sales.map((s) => (
@@ -96,18 +96,14 @@ export function HandoverForm({
       </label>
 
       <div className="text-sm sm:col-span-2">
-        <span className="mb-1 block text-neutral-600">Lọc trạng thái (để trống = tất cả)</span>
+        <span className="mb-1 block text-muted-foreground">Lọc trạng thái (để trống = tất cả)</span>
         <div className="flex flex-wrap gap-1.5">
           {statuses.map((s) => (
             <button
               key={s}
               type="button"
               onClick={() => toggleStatus(s)}
-              className={`rounded-full border px-2.5 py-1 text-xs ${
-                selStatuses.includes(s)
-                  ? "border-purple-600 bg-purple-50 text-purple-700"
-                  : "border-neutral-300 text-neutral-500"
-              }`}
+              className={`rounded-full border px-2.5 py-1 text-xs ${ selStatuses.includes(s) ? "border-primary-dark bg-primary-soft text-primary" : "border-border text-muted-foreground" }`}
             >
               {s}
             </button>
@@ -116,14 +112,14 @@ export function HandoverForm({
       </div>
 
       <label className="text-sm">
-        <span className="mb-1 block text-neutral-600">Chiến dịch (utmCampaign)</span>
+        <span className="mb-1 block text-muted-foreground">Chiến dịch (utmCampaign)</span>
         <select
           value={campaign}
           onChange={(e) => {
             setCampaign(e.target.value);
             setCount(null);
           }}
-          className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm"
+          className="w-full rounded-md border border-border px-3 py-2 text-sm"
         >
           <option value="">— Mọi chiến dịch —</option>
           {campaigns.map((c) => (
@@ -143,17 +139,17 @@ export function HandoverForm({
             setCount(null);
           }}
         />
-        <span className="text-neutral-600">Chỉ lead chưa đóng (bỏ ENROLLED/LOST/DUPLICATE)</span>
+        <span className="text-muted-foreground">Chỉ lead chưa đóng (bỏ ENROLLED/LOST/DUPLICATE)</span>
       </label>
 
       <label className="text-sm sm:col-span-2">
-        <span className="mb-1 block text-neutral-600">Lý do bàn giao</span>
+        <span className="mb-1 block text-muted-foreground">Lý do bàn giao</span>
         <textarea
           value={reason}
           onChange={(e) => setReason(e.target.value)}
           rows={2}
           placeholder="VD: Sale Nguyễn Văn A nghỉ việc 06/2026"
-          className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm"
+          className="w-full rounded-md border border-border px-3 py-2 text-sm"
         />
       </label>
 
@@ -165,11 +161,11 @@ export function HandoverForm({
         >
           Xem trước số lead
         </button>
-        {count !== null ? <span className="text-sm text-neutral-600">→ {count} lead khớp điều kiện</span> : null}
+        {count !== null ? <span className="text-sm text-muted-foreground">→ {count} lead khớp điều kiện</span> : null}
         <button
           onClick={run}
           disabled={pending || count === null || count === 0}
-          className="ml-auto rounded-md bg-purple-700 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
+          className="ml-auto rounded-md bg-primary-dark px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
         >
           Thực hiện bàn giao
         </button>

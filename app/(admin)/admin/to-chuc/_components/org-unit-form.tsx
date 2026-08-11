@@ -137,7 +137,7 @@ export function OrgUnitForm({
             placeholder="CS3"
             maxLength={20}
           />
-          <p className="mt-1 text-xs text-neutral-500">
+          <p className="mt-1 text-xs text-muted-foreground">
             2–20 ký tự A–Z, 0–9 hoặc gạch dưới. Không sửa được sau khi tạo.
           </p>
         </div>
@@ -169,7 +169,7 @@ export function OrgUnitForm({
               </option>
             ))}
           </select>
-          <p className="mt-1 text-xs text-neutral-500">
+          <p className="mt-1 text-xs text-muted-foreground">
             Không đổi được sau khi tạo — loại đơn vị quyết định luật cha/con.
           </p>
         </div>
@@ -223,7 +223,7 @@ export function OrgUnitForm({
               </option>
             ))}
           </select>
-          <p className="mt-1 text-xs text-neutral-500">
+          <p className="mt-1 text-xs text-muted-foreground">
             Chỉ &quot;Đang hoạt động&quot; mới được coi là đơn vị còn sống khi tính quyền.
           </p>
         </div>
@@ -254,7 +254,7 @@ export function OrgUnitForm({
           onChange={(e) => setAddress(e.target.value)}
           placeholder="211 Nguyễn Hữu Thọ, Đà Nẵng"
         />
-        <p className="mt-1 text-xs text-neutral-500">
+        <p className="mt-1 text-xs text-muted-foreground">
           Chỉ là thông tin — KHÔNG dùng địa chỉ để suy quan hệ quản lý.
         </p>
       </div>

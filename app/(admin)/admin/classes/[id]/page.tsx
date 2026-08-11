@@ -50,12 +50,12 @@ const WEEKDAY_LABEL: Record<number, string> = {
 };
 
 const STATUS_BADGE: Record<string, { label: string; cls: string }> = {
-  PLANNED: { label: "Đang lên KH", cls: "bg-neutral-100 text-neutral-700" },
-  RECRUITING: { label: "Tuyển sinh", cls: "bg-blue-100 text-blue-700" },
-  PENDING_APPROVAL: { label: "Chờ duyệt", cls: "bg-amber-100 text-amber-700" },
-  ACTIVE: { label: "Đang dạy", cls: "bg-green-100 text-green-700" },
-  COMPLETED: { label: "Hoàn thành", cls: "bg-purple-100 text-purple-700" },
-  CANCELLED: { label: "Huỷ", cls: "bg-red-100 text-red-700" },
+  PLANNED: { label: "Đang lên KH", cls: "bg-muted text-foreground" },
+  RECRUITING: { label: "Tuyển sinh", cls: "bg-state-info-soft text-state-info-ink" },
+  PENDING_APPROVAL: { label: "Chờ duyệt", cls: "bg-state-warning-soft text-state-warning-ink" },
+  ACTIVE: { label: "Đang dạy", cls: "bg-state-success-soft text-state-success-ink" },
+  COMPLETED: { label: "Hoàn thành", cls: "bg-primary-soft text-primary" },
+  CANCELLED: { label: "Huỷ", cls: "bg-state-danger-soft text-state-danger-ink" },
 };
 
 /**
@@ -350,16 +350,16 @@ export default async function ClassDetailPage({ params }: Props) {
   return (
     <div className="space-y-6">
       {/* R2-CLASS-4 — header gọn 1 card */}
-      <div className="rounded-xl border border-neutral-200 bg-white p-5 shadow-sm">
+      <div className="rounded-xl border border-border bg-card p-5 shadow-sm">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="space-y-1">
             <div className="flex flex-wrap items-center gap-2">
-              <h1 className="text-2xl font-black text-neutral-900">{cls.name}</h1>
+              <h1 className="text-2xl font-black text-foreground">{cls.name}</h1>
               <span className={`rounded-full px-2.5 py-0.5 text-xs font-bold ${badge.cls}`}>
                 {badge.label}
               </span>
             </div>
-            <p className="text-sm text-neutral-500">
+            <p className="text-sm text-muted-foreground">
               {cls.classCode ? <span className="font-mono">{cls.classCode}</span> : "—"}
               {cls.course?.name ? <> · {cls.course.name}</> : null}
             </p>
@@ -367,13 +367,13 @@ export default async function ClassDetailPage({ params }: Props) {
           <div className="flex flex-wrap gap-2">
             <Link
               href={`/classes/${cls.id}/students`}
-              className="inline-flex items-center gap-1 rounded-lg border border-orange-200 bg-white px-3 py-1.5 text-sm font-semibold text-orange-700 hover:bg-orange-50"
+              className="inline-flex items-center gap-1 rounded-lg border border-primary-soft bg-card px-3 py-1.5 text-sm font-semibold text-primary hover:bg-primary-soft"
             >
               👥 Học sinh
             </Link>
             <Link
               href={`/classes/${cls.id}/progress`}
-              className="inline-flex items-center gap-1 rounded-lg border border-purple-200 bg-white px-3 py-1.5 text-sm font-semibold text-purple-700 hover:bg-purple-50"
+              className="inline-flex items-center gap-1 rounded-lg border border-primary-soft bg-card px-3 py-1.5 text-sm font-semibold text-primary hover:bg-primary-soft"
             >
               📊 Tiến độ
             </Link>
@@ -385,7 +385,7 @@ export default async function ClassDetailPage({ params }: Props) {
             {chatConversationId && (
               <Link
                 href={`/admin/tin-nhan?c=${chatConversationId}`}
-                className="inline-flex items-center gap-1 rounded-lg border border-sky-200 bg-white px-3 py-1.5 text-sm font-semibold text-sky-700 hover:bg-sky-50"
+                className="inline-flex items-center gap-1 rounded-lg border border-state-info-soft bg-card px-3 py-1.5 text-sm font-semibold text-state-info-ink hover:bg-state-info-soft"
               >
                 💬 Nhắn nhóm lớp
               </Link>
@@ -474,7 +474,7 @@ export default async function ClassDetailPage({ params }: Props) {
 
         <TabsContent value="sessions" className="space-y-8 pt-4">
           <section>
-            <h2 className="mb-3 text-sm font-bold uppercase tracking-wider text-neutral-700">
+            <h2 className="mb-3 text-sm font-bold uppercase tracking-wider text-foreground">
               Buổi học
             </h2>
             <ClassSessionsManage
@@ -486,7 +486,7 @@ export default async function ClassDetailPage({ params }: Props) {
             />
           </section>
           <section>
-            <h2 className="mb-3 text-sm font-bold uppercase tracking-wider text-neutral-700">
+            <h2 className="mb-3 text-sm font-bold uppercase tracking-wider text-foreground">
               Điểm danh
             </h2>
             <ClassAttendancePanel
@@ -511,7 +511,7 @@ export default async function ClassDetailPage({ params }: Props) {
         {canManageMakeup && (
           <TabsContent value="makeup" className="pt-4">
             {makeupItems.length === 0 ? (
-              <p className="rounded-xl border border-dashed border-neutral-300 p-8 text-center text-sm text-neutral-400">
+              <p className="rounded-xl border border-dashed border-border p-8 text-center text-sm text-muted-foreground">
                 Không có nhu cầu học bù nào đang chờ cho lớp này.
               </p>
             ) : (
@@ -526,38 +526,38 @@ export default async function ClassDetailPage({ params }: Props) {
 
         {canViewScorm && (
           <TabsContent value="scorm" className="pt-4">
-            <p className="mb-3 text-sm text-neutral-500">
+            <p className="mb-3 text-sm text-muted-foreground">
               Mở/present tài liệu SCORM của bài giảng theo từng buổi. Mỗi lần mở cấp vé
               10 phút + watermark (truy vết).
             </p>
             {scormSessions.length === 0 ? (
-              <p className="rounded-xl border border-dashed border-neutral-300 p-8 text-center text-sm text-neutral-400">
+              <p className="rounded-xl border border-dashed border-border p-8 text-center text-sm text-muted-foreground">
                 Lớp chưa có buổi học gắn bài giảng.
               </p>
             ) : (
-              <ul className="divide-y divide-neutral-100 rounded-xl border border-neutral-200 bg-white">
+              <ul className="divide-y divide-border rounded-xl border border-border bg-card">
                 {scormSessions.map((s) => (
                   <li key={s.sessionId} className="flex flex-wrap items-center justify-between gap-2 px-4 py-3">
                     <div className="text-sm">
-                      <span className="font-medium text-neutral-800">
+                      <span className="font-medium text-foreground">
                         {new Date(s.date).toLocaleDateString("vi-VN", {
                           day: "2-digit",
                           month: "2-digit",
                           year: "numeric",
                         })}
                       </span>
-                      {s.lessonTitle ? <span className="text-neutral-500"> · {s.lessonTitle}</span> : null}
-                      {s.topic ? <span className="text-neutral-400"> · {s.topic}</span> : null}
+                      {s.lessonTitle ? <span className="text-muted-foreground"> · {s.lessonTitle}</span> : null}
+                      {s.topic ? <span className="text-muted-foreground"> · {s.topic}</span> : null}
                     </div>
                     {s.scorm ? (
                       <Link
                         href={`/scorm/play/${s.scorm.id}?sessionId=${s.sessionId}`}
-                        className="inline-flex items-center gap-1 rounded-lg bg-[#7C3AED] px-3 py-1.5 text-xs font-semibold text-white hover:opacity-90"
+                        className="inline-flex items-center gap-1 rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-white hover:opacity-90"
                       >
                         ▶ Mở giảng
                       </Link>
                     ) : (
-                      <span className="text-xs text-neutral-400">Chưa có SCORM</span>
+                      <span className="text-xs text-muted-foreground">Chưa có SCORM</span>
                     )}
                   </li>
                 ))}
@@ -584,8 +584,8 @@ export default async function ClassDetailPage({ params }: Props) {
 function HeaderItem({ label, value }: { label: string; value: string }) {
   return (
     <div>
-      <dt className="text-xs font-semibold uppercase tracking-wide text-neutral-400">{label}</dt>
-      <dd className="mt-0.5 font-medium text-neutral-800">{value}</dd>
+      <dt className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{label}</dt>
+      <dd className="mt-0.5 font-medium text-foreground">{value}</dd>
     </div>
   );
 }

@@ -73,21 +73,21 @@ export function OrderKindSelect({
   }
 
   return (
-    <div className="rounded-xl border border-gray-200 bg-white p-4">
+    <div className="rounded-xl border border-border bg-card p-4">
       <div className="mb-3 flex items-center gap-2">
         {kind === "PRODUCT" ? (
-          <Package className="h-4 w-4 text-orange-500" />
+          <Package className="h-4 w-4 text-primary" />
         ) : (
-          <BookOpen className="h-4 w-4 text-orange-500" />
+          <BookOpen className="h-4 w-4 text-primary" />
         )}
-        <h2 className="text-sm font-semibold text-gray-700">Loại đơn dự kiến</h2>
+        <h2 className="text-sm font-semibold text-foreground">Loại đơn dự kiến</h2>
       </div>
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
         <select
           value={kind}
           onChange={(e) => handleKindChange(e.target.value)}
           disabled={pending || readOnly}
-          className="w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm disabled:opacity-50 sm:w-44"
+          className="w-full rounded-md border border-border px-2 py-1.5 text-sm disabled:opacity-50 sm:w-44"
         >
           <option value="">— chọn loại đơn —</option>
           {OPTIONS.map((o) => (
@@ -102,7 +102,7 @@ export function OrderKindSelect({
             value={itemId}
             onChange={(e) => handleItemChange(e.target.value)}
             disabled={pending || readOnly}
-            className="w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm disabled:opacity-50 sm:flex-1"
+            className="w-full rounded-md border border-border px-2 py-1.5 text-sm disabled:opacity-50 sm:flex-1"
           >
             <option value="">— chọn khoá học —</option>
             {courses.map((c) => (
@@ -118,7 +118,7 @@ export function OrderKindSelect({
             value={itemId}
             onChange={(e) => handleItemChange(e.target.value)}
             disabled={pending || readOnly}
-            className="w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm disabled:opacity-50 sm:flex-1"
+            className="w-full rounded-md border border-border px-2 py-1.5 text-sm disabled:opacity-50 sm:flex-1"
           >
             <option value="">— chọn sản phẩm —</option>
             {products.map((p) => (

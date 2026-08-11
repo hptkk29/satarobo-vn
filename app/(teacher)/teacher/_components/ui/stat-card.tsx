@@ -11,19 +11,19 @@ import { cn } from "@/lib/utils";
 export type StatTone = "brand" | "green" | "amber" | "red" | "blue";
 
 const tones: Record<StatTone, string> = {
-  brand: "text-orange-600 dark:text-orange-400",
-  green: "text-emerald-600 dark:text-emerald-400",
-  amber: "text-amber-600 dark:text-amber-400",
-  red: "text-red-600 dark:text-red-400",
-  blue: "text-blue-600 dark:text-blue-400",
+  brand: "text-primary-ink",
+  green: "text-state-success-ink",
+  amber: "text-state-warning-ink",
+  red: "text-state-danger-ink",
+  blue: "text-state-info-ink",
 };
 
 const tints: Record<StatTone, string> = {
-  brand: "bg-orange-50 dark:bg-orange-500/15",
-  green: "bg-emerald-50 dark:bg-emerald-500/15",
-  amber: "bg-amber-50 dark:bg-amber-500/15",
-  red: "bg-red-50 dark:bg-red-500/15",
-  blue: "bg-blue-50 dark:bg-blue-500/15",
+  brand: "bg-primary-soft",
+  green: "bg-state-success-soft",
+  amber: "bg-state-warning-soft",
+  red: "bg-state-danger-soft",
+  blue: "bg-state-info-soft",
 };
 
 export function StatCard({
@@ -47,12 +47,20 @@ export function StatCard({
           tints[tone],
         )}
       >
-        <Icon className={cn("h-[18px] w-[18px]", tones[tone])} strokeWidth={2} aria-hidden />
+        <Icon
+          className={cn("h-[18px] w-[18px]", tones[tone])}
+          strokeWidth={2}
+          aria-hidden
+        />
       </span>
       <div className="min-w-0">
-        <p className={cn("text-xl leading-tight font-bold", tones[tone])}>{value}</p>
+        <p className={cn("text-xl leading-tight font-bold", tones[tone])}>
+          {value}
+        </p>
         <p className="truncate text-xs text-muted-foreground">{label}</p>
-        {hint && <p className="truncate text-[11px] text-muted-foreground">{hint}</p>}
+        {hint && (
+          <p className="truncate text-[11px] text-muted-foreground">{hint}</p>
+        )}
       </div>
     </div>
   );

@@ -177,7 +177,7 @@ export function ImageUploader({
       {label && (
         <label className="text-sm font-medium">
           {label}
-          {required && <span className="text-red-500 ml-1">*</span>}
+          {required && <span className="text-state-danger-ink ml-1">*</span>}
         </label>
       )}
 
@@ -210,16 +210,16 @@ export function ImageUploader({
           {...getRootProps()}
           className={cn(
             "border-2 border-dashed rounded-lg p-8 text-center cursor-pointer transition-colors",
-            isDragActive ? "border-primary bg-primary/5" : "border-gray-300 hover:border-gray-400",
+            isDragActive ? "border-primary bg-primary/5" : "border-border hover:border-border",
             disabled && "opacity-50 cursor-not-allowed",
           )}
         >
           <input {...getInputProps()} />
-          <ImageIcon className="h-10 w-10 mx-auto text-gray-400 mb-2" />
+          <ImageIcon className="h-10 w-10 mx-auto text-muted-foreground mb-2" />
           <p className="text-sm font-medium">
             {isDragActive ? "Thả ảnh vào đây..." : "Kéo thả ảnh hoặc click để chọn"}
           </p>
-          <p className="text-xs text-gray-500 mt-1">JPG, PNG, WebP, GIF — tối đa 10MB</p>
+          <p className="text-xs text-muted-foreground mt-1">JPG, PNG, WebP, GIF — tối đa 10MB</p>
         </div>
       )}
 
@@ -233,15 +233,15 @@ export function ImageUploader({
             </Button>
           </div>
           <Progress value={state.progress} />
-          <p className="text-xs text-gray-500 text-right">{state.progress}%</p>
+          <p className="text-xs text-muted-foreground text-right">{state.progress}%</p>
         </div>
       )}
 
       {state.status === "error" && (
-        <div className="border-2 border-red-300 bg-red-50 rounded-lg p-4 flex items-start gap-2">
-          <AlertCircle className="h-5 w-5 text-red-500 flex-shrink-0 mt-0.5" />
+        <div className="border-2 border-state-danger bg-state-danger-soft rounded-lg p-4 flex items-start gap-2">
+          <AlertCircle className="h-5 w-5 text-state-danger-ink flex-shrink-0 mt-0.5" />
           <div className="flex-1">
-            <p className="text-sm text-red-700">{state.message}</p>
+            <p className="text-sm text-state-danger-ink">{state.message}</p>
             <Button
               type="button"
               variant="outline"
@@ -256,7 +256,7 @@ export function ImageUploader({
       )}
 
       {helperText && state.status === "idle" && (
-        <p className="text-xs text-gray-500">{helperText}</p>
+        <p className="text-xs text-muted-foreground">{helperText}</p>
       )}
     </div>
   );

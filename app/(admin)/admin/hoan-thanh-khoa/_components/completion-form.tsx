@@ -78,14 +78,14 @@ export function CompletionForm({ students }: { students: Opt[] }) {
   }
 
   return (
-    <div className="grid gap-3 rounded-xl border border-neutral-200 bg-white p-4 sm:grid-cols-2">
+    <div className="grid gap-3 rounded-xl border border-border bg-card p-4 sm:grid-cols-2">
       <label className="text-sm">
-        <span className="mb-1 block text-neutral-600">Bước 1 — Học viên</span>
+        <span className="mb-1 block text-muted-foreground">Bước 1 — Học viên</span>
         <select
           value={studentId}
           onChange={(e) => onPickStudent(e.target.value)}
           disabled={loading || pending}
-          className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm disabled:opacity-50"
+          className="w-full rounded-md border border-border px-3 py-2 text-sm disabled:opacity-50"
         >
           <option value="">— Chọn —</option>
           {students.map((s) => (
@@ -98,12 +98,12 @@ export function CompletionForm({ students }: { students: Opt[] }) {
       </label>
 
       <label className="text-sm">
-        <span className="mb-1 block text-neutral-600">Bước 2 — Khoá đang học</span>
+        <span className="mb-1 block text-muted-foreground">Bước 2 — Khoá đang học</span>
         <select
           value={courseId}
           onChange={(e) => onPickCourse(e.target.value)}
           disabled={!studentId || loading || pending}
-          className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm disabled:bg-neutral-50"
+          className="w-full rounded-md border border-border px-3 py-2 text-sm disabled:bg-muted"
         >
           <option value="">
             {!studentId
@@ -123,12 +123,12 @@ export function CompletionForm({ students }: { students: Opt[] }) {
       </label>
 
       <label className="text-sm sm:col-span-2">
-        <span className="mb-1 block text-neutral-600">Bước 3 — Lớp (theo khoá)</span>
+        <span className="mb-1 block text-muted-foreground">Bước 3 — Lớp (theo khoá)</span>
         <select
           value={classId}
           onChange={(e) => setClassId(e.target.value)}
           disabled={!courseId || pending}
-          className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm disabled:bg-neutral-50"
+          className="w-full rounded-md border border-border px-3 py-2 text-sm disabled:bg-muted"
         >
           <option value="">{!courseId ? "— Chọn khoá trước —" : "— Chọn lớp —"}</option>
           {classes.map((c) => (
@@ -140,23 +140,23 @@ export function CompletionForm({ students }: { students: Opt[] }) {
       </label>
 
       <label className="text-sm">
-        <span className="mb-1 block text-neutral-600">Xếp loại cuối khoá</span>
+        <span className="mb-1 block text-muted-foreground">Xếp loại cuối khoá</span>
         <input
           value={finalGrade}
           onChange={(e) => setFinalGrade(e.target.value)}
           placeholder="Giỏi / Khá / Xuất sắc…"
-          className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm"
+          className="w-full rounded-md border border-border px-3 py-2 text-sm"
         />
       </label>
 
       <label className="text-sm sm:col-span-2">
-        <span className="mb-1 block text-neutral-600">Đánh giá cuối khoá của GV *</span>
+        <span className="mb-1 block text-muted-foreground">Đánh giá cuối khoá của GV *</span>
         <textarea
           value={finalAssessment}
           onChange={(e) => setFinalAssessment(e.target.value)}
           rows={3}
           placeholder="Nhận xét quá trình học, kỹ năng đạt được, gợi ý phát triển…"
-          className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm"
+          className="w-full rounded-md border border-border px-3 py-2 text-sm"
         />
       </label>
 
@@ -164,7 +164,7 @@ export function CompletionForm({ students }: { students: Opt[] }) {
         <button
           onClick={submit}
           disabled={pending || loading}
-          className="rounded-md bg-purple-700 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
+          className="rounded-md bg-primary-dark px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
         >
           {pending ? "Đang xử lý…" : "Đánh dấu hoàn thành & sinh chứng chỉ"}
         </button>

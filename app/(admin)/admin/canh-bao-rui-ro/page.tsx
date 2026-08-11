@@ -20,9 +20,9 @@ const TYPE_LABEL: Record<string, string> = {
   OVERDUE_PAYMENT: "Công nợ quá hạn",
 };
 const SEV_BADGE: Record<string, string> = {
-  LOW: "bg-gray-100 text-gray-600",
-  MEDIUM: "bg-amber-100 text-amber-700",
-  HIGH: "bg-rose-100 text-rose-700",
+  LOW: "bg-muted text-muted-foreground",
+  MEDIUM: "bg-state-warning-soft text-state-warning-ink",
+  HIGH: "bg-state-danger-soft text-state-danger-ink",
 };
 
 export default async function RiskAlertPage() {
@@ -48,32 +48,32 @@ export default async function RiskAlertPage() {
   return (
     <div className="max-w-4xl p-6">
       <div className="mb-4">
-        <h1 className="flex items-center gap-2 text-2xl font-bold text-gray-900">
-          <AlertTriangle className="h-6 w-6 text-rose-500" /> Cảnh báo rủi ro học viên
+        <h1 className="flex items-center gap-2 text-2xl font-bold text-foreground">
+          <AlertTriangle className="h-6 w-6 text-state-danger-ink" /> Cảnh báo rủi ro học viên
         </h1>
-        <p className="mt-1 text-sm text-gray-500">Học viên có nguy cơ rời bỏ — cần chăm sóc kịp thời.</p>
+        <p className="mt-1 text-sm text-muted-foreground">Học viên có nguy cơ rời bỏ — cần chăm sóc kịp thời.</p>
       </div>
 
       {alerts.length === 0 ? (
-        <p className="rounded-xl border border-dashed border-gray-300 p-8 text-center text-sm text-gray-400">
+        <p className="rounded-xl border border-dashed border-border p-8 text-center text-sm text-muted-foreground">
           Không có cảnh báo nào.
         </p>
       ) : (
         <ul className="space-y-2">
           {alerts.map((a) => (
-            <li key={a.id} className="rounded-xl border border-gray-200 bg-white p-4">
+            <li key={a.id} className="rounded-xl border border-border bg-card p-4">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div>
-                  <Link href={`/students/${a.student.id}/edit`} className="font-semibold text-[#7C3AED] hover:underline">
+                  <Link href={`/students/${a.student.id}/edit`} className="font-semibold text-primary hover:underline">
                     {a.student.name}
                   </Link>
-                  <span className="ml-2 text-sm text-gray-600">{TYPE_LABEL[a.type] ?? a.type}</span>
+                  <span className="ml-2 text-sm text-muted-foreground">{TYPE_LABEL[a.type] ?? a.type}</span>
                 </div>
                 <span className={`rounded-full px-2.5 py-0.5 text-xs font-bold ${SEV_BADGE[a.severity]}`}>
                   {a.severity}{a.status === "ESCALATED" ? " · escalated" : ""}
                 </span>
               </div>
-              {a.detail && <p className="mt-1 text-sm text-gray-500">{a.detail}</p>}
+              {a.detail && <p className="mt-1 text-sm text-muted-foreground">{a.detail}</p>}
               <div className="mt-3">
                 <ResolveButtons id={a.id} />
               </div>

@@ -43,33 +43,33 @@ export function ReviewRow({ item }: { item: ReviewItem }) {
   }
 
   return (
-    <li className="rounded-xl border border-gray-200 bg-white p-4">
+    <li className="rounded-xl border border-border bg-card p-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <span className="font-semibold text-gray-900">
+        <span className="font-semibold text-foreground">
           {item.userName}
-          <span className="ml-2 text-sm font-normal text-gray-500">
+          <span className="ml-2 text-sm font-normal text-muted-foreground">
             {formatDateVN(item.date)}
           </span>
         </span>
-        {item.centerName && <span className="text-xs text-gray-400">{item.centerName}</span>}
+        {item.centerName && <span className="text-xs text-muted-foreground">{item.centerName}</span>}
       </div>
-      {item.requested && <p className="mt-1 text-sm text-gray-700">Đề nghị: {item.requested}</p>}
-      <p className="mt-1 whitespace-pre-wrap text-sm text-gray-600">{item.reason}</p>
+      {item.requested && <p className="mt-1 text-sm text-foreground">Đề nghị: {item.requested}</p>}
+      <p className="mt-1 whitespace-pre-wrap text-sm text-muted-foreground">{item.reason}</p>
 
       {item.locked ? (
-        <p className="mt-2 rounded-lg bg-rose-50 p-2 text-xs text-rose-700">
+        <p className="mt-2 rounded-lg bg-state-danger-soft p-2 text-xs text-state-danger-ink">
           {item.lockReason ?? "Quá hạn chỉnh — chỉ admin cấp cao xử lý được."}
         </p>
       ) : (
         <div className="mt-3 space-y-2">
           <div className="flex flex-wrap items-end gap-2">
             <label className="block">
-              <span className="mb-1 block text-xs text-gray-500">Giờ vào đúng</span>
-              <input type="time" value={checkIn} onChange={(e) => setCheckIn(e.target.value)} className="rounded-lg border border-gray-300 px-2 py-1 text-sm" />
+              <span className="mb-1 block text-xs text-muted-foreground">Giờ vào đúng</span>
+              <input type="time" value={checkIn} onChange={(e) => setCheckIn(e.target.value)} className="rounded-lg border border-border px-2 py-1 text-sm" />
             </label>
             <label className="block">
-              <span className="mb-1 block text-xs text-gray-500">Giờ ra đúng</span>
-              <input type="time" value={checkOut} onChange={(e) => setCheckOut(e.target.value)} className="rounded-lg border border-gray-300 px-2 py-1 text-sm" />
+              <span className="mb-1 block text-xs text-muted-foreground">Giờ ra đúng</span>
+              <input type="time" value={checkOut} onChange={(e) => setCheckOut(e.target.value)} className="rounded-lg border border-border px-2 py-1 text-sm" />
             </label>
           </div>
           <input
@@ -77,14 +77,14 @@ export function ReviewRow({ item }: { item: ReviewItem }) {
             value={note}
             onChange={(e) => setNote(e.target.value)}
             placeholder="Ghi chú duyệt (tuỳ chọn)"
-            className="w-full rounded-lg border border-gray-300 px-3 py-1.5 text-sm"
+            className="w-full rounded-lg border border-border px-3 py-1.5 text-sm"
           />
           <div className="flex gap-2">
             <button
               type="button"
               onClick={() => decide("APPROVED")}
               disabled={pending}
-              className="inline-flex items-center gap-1.5 rounded-lg bg-green-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-green-700 disabled:opacity-50"
+              className="inline-flex items-center gap-1.5 rounded-lg bg-state-success-ink px-3 py-1.5 text-sm font-semibold text-white hover:bg-state-success-ink-hover disabled:opacity-50"
             >
               <Check className="h-4 w-4" /> Duyệt + áp giờ
             </button>
@@ -92,12 +92,12 @@ export function ReviewRow({ item }: { item: ReviewItem }) {
               type="button"
               onClick={() => decide("REJECTED")}
               disabled={pending}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-rose-300 bg-white px-3 py-1.5 text-sm font-semibold text-rose-700 hover:bg-rose-50 disabled:opacity-50"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-state-danger bg-card px-3 py-1.5 text-sm font-semibold text-state-danger-ink hover:bg-state-danger-soft disabled:opacity-50"
             >
               <X className="h-4 w-4" /> Từ chối
             </button>
           </div>
-          <p className="text-[11px] text-gray-400">
+          <p className="text-[11px] text-muted-foreground">
             Bỏ trống giờ vào/ra = duyệt mà không đổi bản ghi công (chỉ phản hồi).
           </p>
         </div>

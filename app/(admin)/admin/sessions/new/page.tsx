@@ -47,7 +47,7 @@ export default async function NewSessionPage({ searchParams }: Props) {
 
   return (
     <div>
-      <h1 className="mb-6 text-3xl font-black text-neutral-900">Thêm buổi học</h1>
+      <h1 className="mb-6 text-3xl font-black text-foreground">Thêm buổi học</h1>
       <SessionForm
         defaultClassId={sp.classId}
         classes={classes.map((c) => ({

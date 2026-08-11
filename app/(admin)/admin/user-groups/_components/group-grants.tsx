@@ -127,18 +127,18 @@ export function GroupGrants({
   }
 
   return (
-    <section className="rounded-lg border bg-white p-5">
-      <h2 className="mb-1 flex items-center gap-2 text-lg font-bold text-neutral-900">
-        <ShieldCheck className="h-5 w-5 text-neutral-400" /> Grant của nhóm ({grants.length})
+    <section className="rounded-lg border bg-card p-5">
+      <h2 className="mb-1 flex items-center gap-2 text-lg font-bold text-foreground">
+        <ShieldCheck className="h-5 w-5 text-muted-foreground" /> Grant của nhóm ({grants.length})
       </h2>
-      <p className="mb-4 text-sm text-neutral-500">
+      <p className="mb-4 text-sm text-muted-foreground">
         DENY thắng ALLOW của mọi vai trò. DENY <em>không</em> fieldMask = chặn cả action;
         DENY <em>có</em> fieldMask = vẫn cho làm nhưng che các trường liệt kê. Không sửa tại
         chỗ — xoá rồi tạo lại để giữ vết audit.
       </p>
 
       {/* ── Form tạo grant ── */}
-      <div className="mb-6 rounded-lg border bg-neutral-50 p-4">
+      <div className="mb-6 rounded-lg border bg-muted p-4">
         <div className="grid gap-3 sm:grid-cols-3">
           <div className="sm:col-span-2">
             <Label htmlFor="grant-key">Permission key (registry — key đang hoạt động)</Label>
@@ -148,7 +148,7 @@ export function GroupGrants({
               value={permissionKey}
               onChange={(e) => setPermissionKey(e.target.value)}
               disabled={pending}
-              className="mt-1 h-9 w-full rounded-md border border-neutral-300 bg-white px-2 text-sm focus:border-orange-400 focus:outline-none"
+              className="mt-1 h-9 w-full rounded-md border border-border bg-card px-2 text-sm focus:border-primary focus:outline-none"
             >
               <option value="">— Chọn quyền —</option>
               {descriptors.map((d) => (
@@ -165,7 +165,7 @@ export function GroupGrants({
               value={effect}
               onChange={(e) => switchEffect(e.target.value as "ALLOW" | "DENY")}
               disabled={pending}
-              className="mt-1 h-9 w-full rounded-md border border-neutral-300 bg-white px-2 text-sm focus:border-orange-400 focus:outline-none"
+              className="mt-1 h-9 w-full rounded-md border border-border bg-card px-2 text-sm focus:border-primary focus:outline-none"
             >
               <option value="DENY">DENY — chặn / che trường</option>
               <option value="ALLOW">ALLOW — cấp thêm quyền</option>
@@ -194,7 +194,7 @@ export function GroupGrants({
                 className="mt-1"
               />
               {selectedDescriptor && selectedDescriptor.sensitiveFields.length > 0 && (
-                <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-xs text-neutral-500">
+                <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
                   <span>Trường nhạy cảm của quyền này:</span>
                   {selectedDescriptor.sensitiveFields.map((f) => (
                     <button
@@ -203,8 +203,8 @@ export function GroupGrants({
                       onClick={() => toggleSuggestedField(f)}
                       className={
                         fieldMask.includes(f)
-                          ? "rounded-full bg-orange-500 px-2 py-0.5 font-mono text-white"
-                          : "rounded-full border border-neutral-300 bg-white px-2 py-0.5 font-mono hover:border-orange-400"
+                          ? "rounded-full bg-primary px-2 py-0.5 font-mono text-white"
+                          : "rounded-full border border-border bg-card px-2 py-0.5 font-mono hover:border-primary"
                       }
                     >
                       {f}
@@ -241,7 +241,7 @@ export function GroupGrants({
 
       {/* ── Bảng grant hiện có ── */}
       {grants.length === 0 ? (
-        <p className="text-sm text-neutral-400">Nhóm chưa có grant nào.</p>
+        <p className="text-sm text-muted-foreground">Nhóm chưa có grant nào.</p>
       ) : (
         <div className="overflow-x-auto rounded-lg border">
           <Table>
@@ -261,9 +261,9 @@ export function GroupGrants({
                 <TableRow key={g.id}>
                   <TableCell>
                     <span className="font-mono text-sm font-semibold">{g.permissionKey}</span>
-                    <span className="ml-1.5 text-xs text-neutral-400">{g.module}</span>
+                    <span className="ml-1.5 text-xs text-muted-foreground">{g.module}</span>
                     {g.keyInactive && (
-                      <Badge variant="outline" className="ml-1.5 text-amber-600">
+                      <Badge variant="outline" className="ml-1.5 text-state-warning-ink">
                         key đã tắt
                       </Badge>
                     )}
@@ -280,15 +280,15 @@ export function GroupGrants({
                     {g.fieldMask.length > 0 ? (
                       <span className="font-mono text-xs">{g.fieldMask.join(", ")}</span>
                     ) : g.effect === "DENY" ? (
-                      <span className="text-xs text-neutral-400">— chặn toàn action —</span>
+                      <span className="text-xs text-muted-foreground">— chặn toàn action —</span>
                     ) : (
                       "—"
                     )}
                   </TableCell>
-                  <TableCell className="max-w-56 truncate text-sm text-neutral-500" title={g.reason}>
+                  <TableCell className="max-w-56 truncate text-sm text-muted-foreground" title={g.reason}>
                     {g.reason || "—"}
                   </TableCell>
-                  <TableCell className="whitespace-nowrap text-xs text-neutral-400">
+                  <TableCell className="whitespace-nowrap text-xs text-muted-foreground">
                     {g.createdAt}
                   </TableCell>
                   <TableCell className="text-right">
@@ -297,8 +297,8 @@ export function GroupGrants({
                       disabled={pending}
                       className={
                         confirmId === g.id
-                          ? "inline-flex items-center gap-1 rounded-md bg-rose-600 px-2.5 py-1 text-xs font-semibold text-white disabled:opacity-50"
-                          : "inline-flex items-center gap-1 text-xs text-rose-600 hover:underline disabled:opacity-50"
+                          ? "inline-flex items-center gap-1 rounded-md bg-state-danger-ink px-2.5 py-1 text-xs font-semibold text-white disabled:opacity-50"
+                          : "inline-flex items-center gap-1 text-xs text-state-danger-ink hover:underline disabled:opacity-50"
                       }
                     >
                       <Trash2 className="h-3.5 w-3.5" />

@@ -95,8 +95,8 @@ export function PaymentMethodForm({ method }: { method?: PaymentMethod }) {
   return (
     <form onSubmit={handleSubmit} className="max-w-3xl space-y-6">
       {/* Basic info */}
-      <section className="space-y-4 rounded-xl border border-gray-200 bg-white p-5">
-        <h2 className="text-sm font-bold uppercase tracking-wider text-gray-500">
+      <section className="space-y-4 rounded-xl border border-border bg-card p-5">
+        <h2 className="text-sm font-bold uppercase tracking-wider text-muted-foreground">
           Thông tin chung
         </h2>
 
@@ -112,10 +112,10 @@ export function PaymentMethodForm({ method }: { method?: PaymentMethod }) {
               required
             />
             {errors.code && (
-              <p className="text-xs text-red-600">{errors.code}</p>
+              <p className="text-xs text-state-danger-ink">{errors.code}</p>
             )}
             {isEdit && (
-              <p className="text-xs text-gray-500">
+              <p className="text-xs text-muted-foreground">
                 Mã không thể đổi sau khi tạo
               </p>
             )}
@@ -131,7 +131,7 @@ export function PaymentMethodForm({ method }: { method?: PaymentMethod }) {
               required
             />
             {errors.name && (
-              <p className="text-xs text-red-600">{errors.name}</p>
+              <p className="text-xs text-state-danger-ink">{errors.name}</p>
             )}
           </div>
         </div>
@@ -173,18 +173,18 @@ export function PaymentMethodForm({ method }: { method?: PaymentMethod }) {
             defaultValue={method?.image ?? ""}
             placeholder="https://..."
           />
-          <p className="text-xs text-gray-500">
+          <p className="text-xs text-muted-foreground">
             Tạm thời nhập URL. Upload qua R2 sẽ thêm ở sprint sau.
           </p>
           {errors.image && (
-            <p className="text-xs text-red-600">{errors.image}</p>
+            <p className="text-xs text-state-danger-ink">{errors.image}</p>
           )}
         </div>
       </section>
 
       {/* Allowed-for flags */}
-      <section className="space-y-3 rounded-xl border border-gray-200 bg-white p-5">
-        <h2 className="text-sm font-bold uppercase tracking-wider text-gray-500">
+      <section className="space-y-3 rounded-xl border border-border bg-card p-5">
+        <h2 className="text-sm font-bold uppercase tracking-wider text-muted-foreground">
           Cho phép thanh toán cho
         </h2>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -205,8 +205,8 @@ export function PaymentMethodForm({ method }: { method?: PaymentMethod }) {
 
       {/* Bank info */}
       {showBankFields && (
-        <section className="space-y-4 rounded-xl border-l-4 border-blue-300 border-y border-r border-gray-200 bg-blue-50/20 p-5">
-          <h2 className="text-sm font-bold uppercase tracking-wider text-blue-700">
+        <section className="space-y-4 rounded-xl border-l-4 border-state-info border-y border-r border-border bg-state-info-soft/20 p-5">
+          <h2 className="text-sm font-bold uppercase tracking-wider text-state-info-ink">
             Thông tin tài khoản ngân hàng
           </h2>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -235,7 +235,7 @@ export function PaymentMethodForm({ method }: { method?: PaymentMethod }) {
                 defaultValue={method?.bankAccountNumber ?? ""}
               />
               {errors.bankAccountNumber && (
-                <p className="text-xs text-red-600">
+                <p className="text-xs text-state-danger-ink">
                   {errors.bankAccountNumber}
                 </p>
               )}
@@ -248,7 +248,7 @@ export function PaymentMethodForm({ method }: { method?: PaymentMethod }) {
                 defaultValue={method?.bankAccountName ?? ""}
               />
               {errors.bankAccountName && (
-                <p className="text-xs text-red-600">
+                <p className="text-xs text-state-danger-ink">
                   {errors.bankAccountName}
                 </p>
               )}
@@ -259,13 +259,13 @@ export function PaymentMethodForm({ method }: { method?: PaymentMethod }) {
 
       {/* Gateway config */}
       {showGatewayFields && (
-        <section className="space-y-4 rounded-xl border-l-4 border-orange-300 border-y border-r border-gray-200 bg-orange-50/20 p-5">
-          <h2 className="text-sm font-bold uppercase tracking-wider text-orange-700">
+        <section className="space-y-4 rounded-xl border-l-4 border-primary border-y border-r border-border bg-primary-soft/20 p-5">
+          <h2 className="text-sm font-bold uppercase tracking-wider text-primary">
             Cấu hình gateway (JSON)
           </h2>
-          <p className="text-xs text-gray-500">
+          <p className="text-xs text-muted-foreground">
             VD:{" "}
-            <code className="rounded bg-gray-100 px-1.5 py-0.5">
+            <code className="rounded bg-muted px-1.5 py-0.5">
               {`{"merchantId":"XYZ","apiKey":"...","returnUrl":"..."}`}
             </code>
             . Sprint 5.6.5 sẽ tích hợp thực tế.
@@ -278,13 +278,13 @@ export function PaymentMethodForm({ method }: { method?: PaymentMethod }) {
             className="font-mono text-sm"
           />
           {errors.gatewayConfig && (
-            <p className="text-xs text-red-600">{errors.gatewayConfig}</p>
+            <p className="text-xs text-state-danger-ink">{errors.gatewayConfig}</p>
           )}
         </section>
       )}
 
       {/* Display & Active */}
-      <section className="space-y-4 rounded-xl border border-gray-200 bg-white p-5">
+      <section className="space-y-4 rounded-xl border border-border bg-card p-5">
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div className="space-y-1.5">
             <Label htmlFor="displayOrder">Thứ tự hiển thị</Label>

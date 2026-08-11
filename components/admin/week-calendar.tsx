@@ -48,28 +48,28 @@ export function WeekCalendar({ sessions, weekStart, weekEnd }: WeekCalendarProps
               <div
                 className={cn(
                   "flex items-baseline gap-2 mb-2 pb-1 border-b",
-                  isToday && "border-orange-300",
+                  isToday && "border-primary",
                 )}
               >
                 <h3
                   className={cn(
                     "font-semibold text-sm uppercase",
-                    isToday && "text-orange-600",
+                    isToday && "text-primary",
                   )}
                 >
                   {format(day, "EEEE", { locale: vi })}
                 </h3>
-                <span className="text-sm text-gray-500">
+                <span className="text-sm text-muted-foreground">
                   {format(day, "dd/MM/yyyy")}
                 </span>
                 {isToday && (
-                  <span className="text-xs px-1.5 py-0.5 bg-orange-100 text-orange-700 rounded">
+                  <span className="text-xs px-1.5 py-0.5 bg-primary-soft text-primary rounded">
                     Hôm nay
                   </span>
                 )}
               </div>
               {daySessions.length === 0 ? (
-                <p className="text-sm text-gray-400 italic">— Không có buổi nào —</p>
+                <p className="text-sm text-muted-foreground italic">— Không có buổi nào —</p>
               ) : (
                 <div className="space-y-2">
                   {daySessions.map((s) => (
@@ -93,13 +93,13 @@ export function WeekCalendar({ sessions, weekStart, weekEnd }: WeekCalendarProps
               <div
                 className={cn(
                   "text-center pb-2 mb-2 border-b-2",
-                  isToday ? "border-orange-400" : "border-gray-200",
+                  isToday ? "border-primary" : "border-border",
                 )}
               >
                 <div
                   className={cn(
                     "text-xs uppercase font-semibold",
-                    isToday && "text-orange-600",
+                    isToday && "text-primary",
                   )}
                 >
                   {format(day, "EEE", { locale: vi })}
@@ -107,7 +107,7 @@ export function WeekCalendar({ sessions, weekStart, weekEnd }: WeekCalendarProps
                 <div
                   className={cn(
                     "text-lg font-bold",
-                    isToday && "text-orange-600",
+                    isToday && "text-primary",
                   )}
                 >
                   {format(day, "dd/MM")}
@@ -118,7 +118,7 @@ export function WeekCalendar({ sessions, weekStart, weekEnd }: WeekCalendarProps
                   <SessionCard key={s.id} session={s} compact />
                 ))}
                 {daySessions.length === 0 && (
-                  <p className="text-xs text-gray-300 text-center italic mt-4">—</p>
+                  <p className="text-xs text-muted-foreground text-center italic mt-4">—</p>
                 )}
               </div>
             </div>
@@ -137,15 +137,15 @@ function SessionCard({
   compact?: boolean;
 }) {
   const inner = (
-    <div className="border border-blue-200 bg-blue-50 rounded-lg p-2 text-xs hover:border-blue-300 hover:shadow-sm transition">
-      <div className="font-semibold text-sm leading-tight text-gray-900">
+    <div className="border border-state-info-soft bg-state-info-soft rounded-lg p-2 text-xs hover:border-state-info hover:shadow-sm transition">
+      <div className="font-semibold text-sm leading-tight text-foreground">
         {session.className}
       </div>
       {!compact && session.courseName && (
-        <div className="text-xs text-gray-500 mt-0.5">{session.courseName}</div>
+        <div className="text-xs text-muted-foreground mt-0.5">{session.courseName}</div>
       )}
       {session.topic && (
-        <div className="flex items-start gap-1 mt-1 text-gray-700">
+        <div className="flex items-start gap-1 mt-1 text-foreground">
           <FileText className="h-3 w-3 mt-0.5 flex-shrink-0" />
           <span className={cn("truncate", compact && "line-clamp-1")}>
             {session.topic}
@@ -153,13 +153,13 @@ function SessionCard({
         </div>
       )}
       {session.centerName && (
-        <div className="flex items-start gap-1 mt-1 text-gray-600">
+        <div className="flex items-start gap-1 mt-1 text-muted-foreground">
           <MapPin className="h-3 w-3 mt-0.5 flex-shrink-0" />
           <span className="truncate">{session.centerName}</span>
         </div>
       )}
       {typeof session.attendanceCount === "number" && session.attendanceCount > 0 && (
-        <div className="mt-1 text-[10px] text-blue-700">
+        <div className="mt-1 text-[10px] text-state-info-ink">
           {session.attendanceCount} HV đã điểm danh
         </div>
       )}

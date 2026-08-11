@@ -107,7 +107,7 @@ export function StudentForm({
   return (
     <form action={action} className="max-w-4xl space-y-6">
       {error && (
-        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+        <div className="rounded-lg border border-state-danger-soft bg-state-danger-soft px-4 py-3 text-sm text-state-danger-ink">
           {error}
         </div>
       )}
@@ -241,8 +241,8 @@ export function StudentForm({
           )}
         </Grid>
 
-        <details className="border-t border-neutral-200 pt-3">
-          <summary className="cursor-pointer text-sm font-medium text-neutral-600 hover:text-neutral-900">
+        <details className="border-t border-border pt-3">
+          <summary className="cursor-pointer text-sm font-medium text-muted-foreground hover:text-foreground">
             Thêm phụ huynh thứ hai (tuỳ chọn)
           </summary>
           <div className="mt-3">
@@ -335,8 +335,8 @@ export function StudentForm({
       </Section>
 
       {/* 6. Health (collapsed by default — sensitive) */}
-      <details className="rounded-xl border border-neutral-200 bg-white">
-        <summary className="cursor-pointer px-6 py-4 text-sm font-bold uppercase tracking-wider text-neutral-700">
+      <details className="rounded-xl border border-border bg-card">
+        <summary className="cursor-pointer px-6 py-4 text-sm font-bold uppercase tracking-wider text-foreground">
           Sức khoẻ (tuỳ chọn)
         </summary>
         <div className="space-y-4 px-6 pb-6 pt-2">
@@ -351,7 +351,7 @@ export function StudentForm({
           />
 
           <div>
-            <label className="mb-1 block text-sm font-semibold text-neutral-700">
+            <label className="mb-1 block text-sm font-semibold text-foreground">
               Dị ứng
             </label>
             <StringArrayEditor
@@ -372,12 +372,12 @@ export function StudentForm({
         </div>
       </details>
 
-      <div className="flex gap-3 border-t border-neutral-200 pt-6">
+      <div className="flex gap-3 border-t border-border pt-6">
         <SubmitButton isEdit={isEdit} />
         <button
           type="button"
           onClick={() => router.push("/students")}
-          className="rounded-xl border-2 border-neutral-200 bg-white px-6 py-3 font-bold text-neutral-700 hover:bg-neutral-50"
+          className="rounded-xl border-2 border-border bg-card px-6 py-3 font-bold text-foreground hover:bg-muted"
         >
           Huỷ
         </button>
@@ -392,7 +392,7 @@ function SubmitButton({ isEdit }: { isEdit: boolean }) {
     <button
       type="submit"
       disabled={pending}
-      className="rounded-xl bg-[#7C3AED] px-6 py-3 font-bold text-white shadow-md hover:opacity-90 disabled:opacity-60"
+      className="rounded-xl bg-primary px-6 py-3 font-bold text-white shadow-md hover:opacity-90 disabled:opacity-60"
     >
       {pending ? "Đang lưu..." : isEdit ? "Cập nhật" : "Tạo học viên"}
     </button>
@@ -401,8 +401,8 @@ function SubmitButton({ isEdit }: { isEdit: boolean }) {
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <section className="rounded-xl border border-neutral-200 bg-white p-6">
-      <h2 className="mb-4 text-sm font-bold uppercase tracking-wider text-neutral-700">
+    <section className="rounded-xl border border-border bg-card p-6">
+      <h2 className="mb-4 text-sm font-bold uppercase tracking-wider text-foreground">
         {title}
       </h2>
       <div className="space-y-4">{children}</div>
@@ -442,12 +442,12 @@ function Field({
 }: FieldProps) {
   const value = defaultValue ?? "";
   const baseClass =
-    "w-full rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm outline-none focus:border-[#7C3AED] focus:ring-2 focus:ring-[#7C3AED]/20";
+    "w-full rounded-lg border border-border bg-card px-3 py-2 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20";
   return (
     <label className="block">
-      <span className="mb-1 block text-sm font-semibold text-neutral-700">
+      <span className="mb-1 block text-sm font-semibold text-foreground">
         {label}
-        {required && <span className="ml-1 text-red-500">*</span>}
+        {required && <span className="ml-1 text-state-danger-ink">*</span>}
       </span>
       {type === "textarea" ? (
         <textarea
@@ -470,7 +470,7 @@ function Field({
           className={baseClass}
         />
       )}
-      {helper && <span className="mt-1 block text-xs text-neutral-500">{helper}</span>}
+      {helper && <span className="mt-1 block text-xs text-muted-foreground">{helper}</span>}
     </label>
   );
 }
@@ -492,15 +492,15 @@ function SelectField({
 }) {
   return (
     <label className="block">
-      <span className="mb-1 block text-sm font-semibold text-neutral-700">
+      <span className="mb-1 block text-sm font-semibold text-foreground">
         {label}
-        {required && <span className="ml-1 text-red-500">*</span>}
+        {required && <span className="ml-1 text-state-danger-ink">*</span>}
       </span>
       <select
         name={name}
         defaultValue={defaultValue ?? ""}
         required={required}
-        className="w-full rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm outline-none focus:border-[#7C3AED] focus:ring-2 focus:ring-[#7C3AED]/20"
+        className="w-full rounded-lg border border-border bg-card px-3 py-2 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
       >
         {options.map((opt) => (
           <option key={opt.value} value={opt.value}>
@@ -508,7 +508,7 @@ function SelectField({
           </option>
         ))}
       </select>
-      {helper && <span className="mt-1 block text-xs text-neutral-500">{helper}</span>}
+      {helper && <span className="mt-1 block text-xs text-muted-foreground">{helper}</span>}
     </label>
   );
 }

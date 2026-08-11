@@ -34,7 +34,7 @@ export function GiveHomework({ sessionId }: { sessionId: string }) {
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="inline-flex items-center gap-1 rounded-md border border-purple-300 px-2 py-1 text-xs font-semibold text-purple-700 hover:bg-purple-50"
+        className="inline-flex items-center gap-1 rounded-md border border-primary px-2 py-1 text-xs font-semibold text-primary hover:bg-primary-soft"
       >
         <ClipboardCheck className="h-3.5 w-3.5" /> Giao bài
       </button>
@@ -42,16 +42,16 @@ export function GiveHomework({ sessionId }: { sessionId: string }) {
   }
 
   return (
-    <div className="mt-2 w-full space-y-2 rounded-lg bg-purple-50 p-3">
+    <div className="mt-2 w-full space-y-2 rounded-lg bg-primary-soft p-3">
       <label className="block">
-        <span className="mb-1 block text-xs font-semibold text-gray-600">
+        <span className="mb-1 block text-xs font-semibold text-muted-foreground">
           Hạn nộp (để trống = hạn mặc định theo cấu hình bài)
         </span>
         <input
           type="datetime-local"
           value={dueAt}
           onChange={(e) => setDueAt(e.target.value)}
-          className="w-full rounded-lg border border-gray-300 px-2 py-1.5 text-sm focus:border-purple-500 focus:outline-none"
+          className="w-full rounded-lg border border-border px-2 py-1.5 text-sm focus:border-primary focus:outline-none"
         />
       </label>
       <div className="flex gap-2">
@@ -59,14 +59,14 @@ export function GiveHomework({ sessionId }: { sessionId: string }) {
           type="button"
           onClick={submit}
           disabled={pending}
-          className="rounded-lg bg-[#7C3AED] px-4 py-2 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-50"
+          className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-50"
         >
           {pending ? "Đang giao…" : "Xác nhận giao bài"}
         </button>
         <button
           type="button"
           onClick={() => setOpen(false)}
-          className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50"
+          className="rounded-lg border border-border px-4 py-2 text-sm font-semibold text-foreground hover:bg-muted"
         >
           Huỷ
         </button>

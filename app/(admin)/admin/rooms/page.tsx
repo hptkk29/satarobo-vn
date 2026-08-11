@@ -84,25 +84,25 @@ export default async function RoomsAdminPage({ searchParams }: SearchParams) {
     <div>
       <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="flex items-center gap-2 text-3xl font-black text-neutral-900">
-            <DoorOpen className="h-7 w-7 text-orange-500" />
+          <h1 className="flex items-center gap-2 text-3xl font-black text-foreground">
+            <DoorOpen className="h-7 w-7 text-primary" />
             Phòng học
           </h1>
-          <p className="mt-1 text-neutral-600">
+          <p className="mt-1 text-muted-foreground">
             {rooms.length} phòng{rooms.length >= 200 && " (giới hạn 200, dùng filter để thu hẹp)"}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <Link
             href="/rooms/import"
-            className="inline-flex items-center gap-2 rounded-xl border-2 border-neutral-200 bg-white px-4 py-2 text-sm font-bold text-neutral-700 hover:bg-neutral-50"
+            className="inline-flex items-center gap-2 rounded-xl border-2 border-border bg-card px-4 py-2 text-sm font-bold text-foreground hover:bg-muted"
           >
             <FileSpreadsheet className="h-4 w-4" />
             Import Excel
           </Link>
           <Link
             href="/rooms/new"
-            className="inline-flex items-center gap-2 rounded-xl bg-orange-500 px-4 py-2 font-bold text-white shadow-md hover:bg-orange-600"
+            className="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2 font-bold text-white shadow-md hover:bg-primary-dark"
           >
             <Plus className="h-5 w-5" />
             Thêm phòng
@@ -119,12 +119,12 @@ export default async function RoomsAdminPage({ searchParams }: SearchParams) {
           name="q"
           defaultValue={q}
           placeholder="Tìm theo tên hoặc mã phòng..."
-          className="rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm outline-none focus:border-orange-500"
+          className="rounded-lg border border-border bg-card px-3 py-2 text-sm outline-none focus:border-primary"
         />
         <select
           name="centerId"
           defaultValue={centerFilter}
-          className="rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm outline-none focus:border-orange-500"
+          className="rounded-lg border border-border bg-card px-3 py-2 text-sm outline-none focus:border-primary"
         >
           <option value="">Tất cả cơ sở</option>
           {centers.map((c) => (
@@ -136,7 +136,7 @@ export default async function RoomsAdminPage({ searchParams }: SearchParams) {
         <select
           name="status"
           defaultValue={statusFilter}
-          className="rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm outline-none focus:border-orange-500"
+          className="rounded-lg border border-border bg-card px-3 py-2 text-sm outline-none focus:border-primary"
         >
           {STATUS_FILTERS.map((s) => (
             <option key={s.value} value={s.value}>
@@ -146,35 +146,35 @@ export default async function RoomsAdminPage({ searchParams }: SearchParams) {
         </select>
         <button
           type="submit"
-          className="rounded-lg bg-orange-500 px-4 py-2 text-sm font-bold text-white hover:bg-orange-600"
+          className="rounded-lg bg-primary px-4 py-2 text-sm font-bold text-white hover:bg-primary-dark"
         >
           Lọc
         </button>
       </form>
 
-      <div className="overflow-hidden rounded-xl border border-neutral-200 bg-white">
+      <div className="overflow-hidden rounded-xl border border-border bg-card">
         <table className="w-full">
-          <thead className="border-b border-neutral-200 bg-neutral-50 text-left">
+          <thead className="border-b border-border bg-muted text-left">
             <tr>
-              <th className="p-4 text-xs font-bold uppercase tracking-wider text-neutral-700">
+              <th className="p-4 text-xs font-bold uppercase tracking-wider text-foreground">
                 Mã / Tên
               </th>
-              <th className="p-4 text-xs font-bold uppercase tracking-wider text-neutral-700">
+              <th className="p-4 text-xs font-bold uppercase tracking-wider text-foreground">
                 Cơ sở
               </th>
-              <th className="p-4 text-center text-xs font-bold uppercase tracking-wider text-neutral-700">
+              <th className="p-4 text-center text-xs font-bold uppercase tracking-wider text-foreground">
                 Sức chứa
               </th>
-              <th className="p-4 text-xs font-bold uppercase tracking-wider text-neutral-700">
+              <th className="p-4 text-xs font-bold uppercase tracking-wider text-foreground">
                 Thiết bị
               </th>
-              <th className="p-4 text-center text-xs font-bold uppercase tracking-wider text-neutral-700">
+              <th className="p-4 text-center text-xs font-bold uppercase tracking-wider text-foreground">
                 Trạng thái
               </th>
-              <th className="p-4 text-center text-xs font-bold uppercase tracking-wider text-neutral-700">
+              <th className="p-4 text-center text-xs font-bold uppercase tracking-wider text-foreground">
                 Order
               </th>
-              <th className="p-4 text-right text-xs font-bold uppercase tracking-wider text-neutral-700">
+              <th className="p-4 text-right text-xs font-bold uppercase tracking-wider text-foreground">
                 Thao tác
               </th>
             </tr>
@@ -182,13 +182,13 @@ export default async function RoomsAdminPage({ searchParams }: SearchParams) {
           <tbody>
             {rooms.length === 0 ? (
               <tr>
-                <td colSpan={7} className="p-12 text-center text-neutral-500">
+                <td colSpan={7} className="p-12 text-center text-muted-foreground">
                   {q || centerFilter || statusFilter ? (
                     <>Không có phòng nào khớp bộ lọc.</>
                   ) : (
                     <>
                       Chưa có phòng nào.{" "}
-                      <Link href="/rooms/new" className="text-orange-600 hover:underline">
+                      <Link href="/rooms/new" className="text-primary hover:underline">
                         Thêm phòng đầu tiên →
                       </Link>
                     </>
@@ -197,16 +197,16 @@ export default async function RoomsAdminPage({ searchParams }: SearchParams) {
               </tr>
             ) : (
               rooms.map((r) => (
-                <tr key={r.id} className="border-b border-neutral-200 hover:bg-neutral-50">
+                <tr key={r.id} className="border-b border-border hover:bg-muted">
                   <td className="p-4">
-                    <div className="font-mono text-sm font-bold text-neutral-900">{r.code}</div>
-                    <div className="mt-0.5 text-sm text-neutral-600">{r.name}</div>
+                    <div className="font-mono text-sm font-bold text-foreground">{r.code}</div>
+                    <div className="mt-0.5 text-sm text-muted-foreground">{r.name}</div>
                   </td>
-                  <td className="p-4 text-sm text-neutral-700">{r.center.name}</td>
+                  <td className="p-4 text-sm text-foreground">{r.center.name}</td>
                   <td className="p-4 text-center text-sm">{r.capacity}</td>
-                  <td className="p-4 text-xs text-neutral-600">
+                  <td className="p-4 text-xs text-muted-foreground">
                     {r.equipment.length === 0 ? (
-                      <span className="text-neutral-400">—</span>
+                      <span className="text-muted-foreground">—</span>
                     ) : r.equipment.length <= 3 ? (
                       r.equipment.join(", ")
                     ) : (
@@ -220,7 +220,7 @@ export default async function RoomsAdminPage({ searchParams }: SearchParams) {
                   <td className="p-4 text-right">
                     <Link
                       href={`/rooms/${r.id}/edit`}
-                      className="inline-flex items-center gap-1 rounded p-1.5 text-purple-600 hover:bg-purple-50"
+                      className="inline-flex items-center gap-1 rounded p-1.5 text-primary hover:bg-primary-soft"
                       title="Sửa"
                     >
                       <Pencil className="h-4 w-4" />

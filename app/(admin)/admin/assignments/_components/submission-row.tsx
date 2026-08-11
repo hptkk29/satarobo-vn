@@ -11,10 +11,10 @@ import { RUBRIC_CRITERIA, RUBRIC_LEVELS } from "@/lib/rubric/criteria";
 type Status = "NOT_SUBMITTED" | "SUBMITTED" | "LATE" | "GRADED";
 
 const STATUS_INFO: Record<Status, { label: string; color: string }> = {
-  NOT_SUBMITTED: { label: "Chưa nộp", color: "bg-gray-100 text-gray-700" },
-  SUBMITTED: { label: "Đã nộp", color: "bg-blue-100 text-blue-700" },
-  LATE: { label: "Nộp muộn", color: "bg-amber-100 text-amber-700" },
-  GRADED: { label: "Đã chấm", color: "bg-green-100 text-green-700" },
+  NOT_SUBMITTED: { label: "Chưa nộp", color: "bg-muted text-foreground" },
+  SUBMITTED: { label: "Đã nộp", color: "bg-state-info-soft text-state-info-ink" },
+  LATE: { label: "Nộp muộn", color: "bg-state-warning-soft text-state-warning-ink" },
+  GRADED: { label: "Đã chấm", color: "bg-state-success-soft text-state-success-ink" },
 };
 
 export interface SubmissionRowData {
@@ -60,16 +60,16 @@ export function SubmissionRow({ row }: { row: SubmissionRowData }) {
   const canGrade = row.status === "SUBMITTED" || row.status === "LATE" || row.status === "GRADED";
 
   return (
-    <tr className="hover:bg-neutral-50/60">
+    <tr className="hover:bg-muted/60">
       <td className="px-3 py-3">
-        <div className="font-medium text-neutral-900">{row.studentName}</div>
+        <div className="font-medium text-foreground">{row.studentName}</div>
         {row.studentCode && (
-          <div className="text-xs text-neutral-400 tabular-nums">
+          <div className="text-xs text-muted-foreground tabular-nums">
             {row.studentCode}
           </div>
         )}
         {row.studentParentPhone && (
-          <div className="text-xs text-neutral-400 tabular-nums">
+          <div className="text-xs text-muted-foreground tabular-nums">
             PH: {row.studentParentPhone}
           </div>
         )}
@@ -81,14 +81,14 @@ export function SubmissionRow({ row }: { row: SubmissionRowData }) {
           {statusInfo.label}
         </span>
       </td>
-      <td className="px-3 py-3 text-xs text-neutral-500 tabular-nums">
+      <td className="px-3 py-3 text-xs text-muted-foreground tabular-nums">
         {fmtDateTime(row.submittedAt)}
       </td>
       <td className="px-3 py-3">
         {row.textAnswer || row.fileUrl || row.files.length > 0 ? (
           <div className="space-y-1 max-w-[260px]">
             {row.textAnswer && (
-              <p className="text-xs text-neutral-700 line-clamp-2">
+              <p className="text-xs text-foreground line-clamp-2">
                 {row.textAnswer}
               </p>
             )}
@@ -102,7 +102,7 @@ export function SubmissionRow({ row }: { row: SubmissionRowData }) {
                       href={f.url}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1 text-xs font-semibold text-blue-600 hover:underline"
+                      className="inline-flex items-center gap-1 text-xs font-semibold text-state-info-ink hover:underline"
                     >
                       <FileText className="h-3 w-3" />
                       {f.name}
@@ -117,7 +117,7 @@ export function SubmissionRow({ row }: { row: SubmissionRowData }) {
                   href={row.fileUrl}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1 text-xs font-semibold text-blue-600 hover:underline"
+                  className="inline-flex items-center gap-1 text-xs font-semibold text-state-info-ink hover:underline"
                 >
                   <FileText className="h-3 w-3" />
                   {row.fileName ?? "Tải file"}
@@ -126,20 +126,20 @@ export function SubmissionRow({ row }: { row: SubmissionRowData }) {
             )}
           </div>
         ) : (
-          <span className="text-neutral-300">—</span>
+          <span className="text-muted-foreground">—</span>
         )}
       </td>
-      <td className="px-3 py-3 text-right text-sm tabular-nums font-semibold text-neutral-700">
+      <td className="px-3 py-3 text-right text-sm tabular-nums font-semibold text-foreground">
         {row.score !== null ? `${row.score}/${row.totalPoints}` : "—"}
       </td>
-      <td className="px-3 py-3 text-xs text-neutral-500 max-w-[200px]">
+      <td className="px-3 py-3 text-xs text-muted-foreground max-w-[200px]">
         {row.feedback ? (
           <p className="line-clamp-2">{row.feedback}</p>
         ) : (
-          <span className="text-neutral-300">—</span>
+          <span className="text-muted-foreground">—</span>
         )}
         {row.gradedByName && (
-          <p className="mt-0.5 text-[10px] text-neutral-400">
+          <p className="mt-0.5 text-[10px] text-muted-foreground">
             bởi {row.gradedByName}
           </p>
         )}
@@ -150,7 +150,7 @@ export function SubmissionRow({ row }: { row: SubmissionRowData }) {
             <button
               type="button"
               onClick={() => setRecordOpen(true)}
-              className="inline-flex items-center gap-1 rounded-md border border-blue-300 bg-white px-2.5 py-1 text-xs font-semibold text-blue-700 hover:bg-blue-50"
+              className="inline-flex items-center gap-1 rounded-md border border-state-info bg-card px-2.5 py-1 text-xs font-semibold text-state-info-ink hover:bg-state-info-soft"
             >
               <ClipboardCheck className="h-3.5 w-3.5" />
               Ghi nhận
@@ -160,7 +160,7 @@ export function SubmissionRow({ row }: { row: SubmissionRowData }) {
             <button
               type="button"
               onClick={() => setGradeOpen(true)}
-              className="inline-flex items-center gap-1 rounded-md border border-purple-300 bg-white px-2.5 py-1 text-xs font-semibold text-purple-700 hover:bg-purple-50"
+              className="inline-flex items-center gap-1 rounded-md border border-primary bg-card px-2.5 py-1 text-xs font-semibold text-primary hover:bg-primary-soft"
             >
               <Gavel className="h-3.5 w-3.5" />
               {row.status === "GRADED" ? "Sửa điểm" : "Chấm"}
@@ -170,7 +170,7 @@ export function SubmissionRow({ row }: { row: SubmissionRowData }) {
             <button
               type="button"
               onClick={() => setRubricOpen(true)}
-              className="inline-flex items-center gap-1 rounded-md border border-emerald-300 bg-white px-2.5 py-1 text-xs font-semibold text-emerald-700 hover:bg-emerald-50"
+              className="inline-flex items-center gap-1 rounded-md border border-state-success bg-card px-2.5 py-1 text-xs font-semibold text-state-success-ink hover:bg-state-success-soft"
             >
               <ListChecks className="h-3.5 w-3.5" />
               Rubric
@@ -280,19 +280,19 @@ function RubricGradeDialog({
       className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/50 p-4 py-8"
       onClick={close}
     >
-      <div className="relative w-full max-w-xl rounded-xl bg-white p-6 shadow-xl" onClick={(e) => e.stopPropagation()}>
-        <button type="button" onClick={close} className="absolute right-4 top-4 text-neutral-400 hover:text-neutral-700">
+      <div className="relative w-full max-w-xl rounded-xl bg-card p-6 shadow-xl" onClick={(e) => e.stopPropagation()}>
+        <button type="button" onClick={close} className="absolute right-4 top-4 text-muted-foreground hover:text-foreground">
           <X className="h-5 w-5" />
         </button>
-        <h3 className="mb-1 text-lg font-bold text-neutral-900">Chấm theo rubric</h3>
-        <p className="mb-4 text-sm text-neutral-500">{studentName}</p>
+        <h3 className="mb-1 text-lg font-bold text-foreground">Chấm theo rubric</h3>
+        <p className="mb-4 text-sm text-muted-foreground">{studentName}</p>
 
         <div className="space-y-3">
           {RUBRIC_CRITERIA.map((c) => (
-            <div key={c.key} className="rounded-lg border border-neutral-200 p-3">
+            <div key={c.key} className="rounded-lg border border-border p-3">
               <div className="mb-2">
-                <div className="text-sm font-semibold text-neutral-800">{c.label}</div>
-                <div className="text-xs text-neutral-400">{c.desc}</div>
+                <div className="text-sm font-semibold text-foreground">{c.label}</div>
+                <div className="text-xs text-muted-foreground">{c.desc}</div>
               </div>
               <div className="flex flex-wrap gap-1.5">
                 {RUBRIC_LEVELS.map((l) => (
@@ -300,11 +300,7 @@ function RubricGradeDialog({
                     key={l.key}
                     type="button"
                     onClick={() => setLevels((prev) => ({ ...prev, [c.key]: l.key }))}
-                    className={`rounded-full border px-2.5 py-1 text-xs ${
-                      levels[c.key] === l.key
-                        ? "border-emerald-600 bg-emerald-50 font-semibold text-emerald-700"
-                        : "border-neutral-300 text-neutral-500"
-                    }`}
+                    className={`rounded-full border px-2.5 py-1 text-xs ${ levels[c.key] === l.key ? "border-state-success-ink bg-state-success-soft font-semibold text-state-success-ink" : "border-border text-muted-foreground" }`}
                   >
                     {l.label} ({l.points})
                   </button>
@@ -315,29 +311,29 @@ function RubricGradeDialog({
         </div>
 
         <label className="mt-4 block text-sm">
-          <span className="mb-1 block font-medium text-neutral-700">Nhận xét (bắt buộc)</span>
+          <span className="mb-1 block font-medium text-foreground">Nhận xét (bắt buộc)</span>
           <textarea
             value={feedback}
             onChange={(e) => setFeedback(e.target.value)}
             rows={3}
-            className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm"
+            className="w-full rounded-md border border-border px-3 py-2 text-sm"
             placeholder="Nhận xét chung về bài làm của học viên…"
           />
         </label>
 
-        <label className="mt-2 flex items-center gap-2 text-sm text-neutral-600">
+        <label className="mt-2 flex items-center gap-2 text-sm text-muted-foreground">
           <input type="checkbox" checked={sendEmail} onChange={(e) => setSendEmail(e.target.checked)} />
           Gửi email kết quả cho phụ huynh
         </label>
 
-        {error && <p className="mt-2 text-sm text-rose-600">{error}</p>}
+        {error && <p className="mt-2 text-sm text-state-danger-ink">{error}</p>}
 
         <div className="mt-4 flex justify-end gap-2">
           <button
             type="button"
             onClick={close}
             disabled={pending}
-            className="rounded-md border border-neutral-300 px-4 py-2 text-sm font-medium text-neutral-600"
+            className="rounded-md border border-border px-4 py-2 text-sm font-medium text-muted-foreground"
           >
             Huỷ
           </button>
@@ -345,7 +341,7 @@ function RubricGradeDialog({
             type="button"
             onClick={submit}
             disabled={pending}
-            className="rounded-md bg-emerald-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
+            className="rounded-md bg-state-success-ink px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
           >
             {pending ? "Đang lưu…" : "Lưu chấm"}
           </button>
@@ -407,39 +403,39 @@ function RecordSubmissionDialog({
       onClick={close}
     >
       <div
-        className="relative w-full max-w-lg rounded-xl bg-white p-6 shadow-xl"
+        className="relative w-full max-w-lg rounded-xl bg-card p-6 shadow-xl"
         onClick={(e) => e.stopPropagation()}
       >
         <button
           type="button"
           onClick={close}
           aria-label="Đóng"
-          className="absolute right-3 top-3 rounded-md p-1 text-neutral-500 hover:bg-neutral-100"
+          className="absolute right-3 top-3 rounded-md p-1 text-muted-foreground hover:bg-muted"
         >
           <X className="h-4 w-4" />
         </button>
 
-        <h2 className="flex items-center gap-2 text-lg font-bold text-neutral-900">
-          <ClipboardCheck className="h-5 w-5 text-blue-500" />
+        <h2 className="flex items-center gap-2 text-lg font-bold text-foreground">
+          <ClipboardCheck className="h-5 w-5 text-state-info-ink" />
           Ghi nhận bài nộp
         </h2>
-        <p className="mt-1 text-sm text-neutral-600">
+        <p className="mt-1 text-sm text-muted-foreground">
           HS: <strong>{studentName}</strong>
         </p>
-        <p className="mt-0.5 text-xs text-neutral-400">
+        <p className="mt-0.5 text-xs text-muted-foreground">
           Dùng cho luồng offline/Zalo — admin nhập thay HS. Nếu quá hạn sẽ tự
           set LATE.
         </p>
 
         {error && (
-          <div className="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+          <div className="mt-3 rounded-lg border border-state-danger-soft bg-state-danger-soft px-3 py-2 text-sm text-state-danger-ink">
             {error}
           </div>
         )}
 
         <div className="mt-4 space-y-3">
           <label className="block">
-            <span className="mb-1 block text-xs font-semibold text-neutral-700">
+            <span className="mb-1 block text-xs font-semibold text-foreground">
               Nội dung trả lời (text)
             </span>
             <textarea
@@ -448,11 +444,11 @@ function RecordSubmissionDialog({
               rows={4}
               disabled={pending}
               placeholder="Nội dung HS gửi qua Zalo/email/giấy..."
-              className="w-full resize-y rounded-md border border-neutral-300 px-2.5 py-1.5 text-sm outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
+              className="w-full resize-y rounded-md border border-border px-2.5 py-1.5 text-sm outline-none focus:border-state-info focus:ring-2 focus:ring-state-info/20"
             />
           </label>
           <div>
-            <span className="mb-1 block text-xs font-semibold text-neutral-700">
+            <span className="mb-1 block text-xs font-semibold text-foreground">
               File đính kèm (tuỳ chọn)
             </span>
             <DocumentUploader
@@ -468,7 +464,7 @@ function RecordSubmissionDialog({
             type="button"
             onClick={close}
             disabled={pending}
-            className="rounded-lg border border-neutral-300 px-4 py-2 text-sm font-semibold text-neutral-700 hover:bg-neutral-50 disabled:opacity-50"
+            className="rounded-lg border border-border px-4 py-2 text-sm font-semibold text-foreground hover:bg-muted disabled:opacity-50"
           >
             Huỷ
           </button>
@@ -476,7 +472,7 @@ function RecordSubmissionDialog({
             type="button"
             onClick={handleSubmit}
             disabled={pending}
-            className="rounded-lg bg-blue-500 px-4 py-2 text-sm font-bold text-white hover:bg-blue-600 disabled:opacity-50"
+            className="rounded-lg bg-state-info px-4 py-2 text-sm font-bold text-white hover:bg-state-info-ink disabled:opacity-50"
           >
             {pending ? "Đang lưu..." : "Lưu bài nộp"}
           </button>
@@ -545,35 +541,35 @@ function GradeSubmissionDialog({
       onClick={close}
     >
       <div
-        className="relative w-full max-w-md rounded-xl bg-white p-6 shadow-xl"
+        className="relative w-full max-w-md rounded-xl bg-card p-6 shadow-xl"
         onClick={(e) => e.stopPropagation()}
       >
         <button
           type="button"
           onClick={close}
           aria-label="Đóng"
-          className="absolute right-3 top-3 rounded-md p-1 text-neutral-500 hover:bg-neutral-100"
+          className="absolute right-3 top-3 rounded-md p-1 text-muted-foreground hover:bg-muted"
         >
           <X className="h-4 w-4" />
         </button>
 
-        <h2 className="flex items-center gap-2 text-lg font-bold text-neutral-900">
-          <Gavel className="h-5 w-5 text-purple-500" />
+        <h2 className="flex items-center gap-2 text-lg font-bold text-foreground">
+          <Gavel className="h-5 w-5 text-primary" />
           Chấm điểm bài nộp
         </h2>
-        <p className="mt-1 text-sm text-neutral-600">
+        <p className="mt-1 text-sm text-muted-foreground">
           HS: <strong>{studentName}</strong> · Tổng: {totalPoints}
         </p>
 
         {error && (
-          <div className="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+          <div className="mt-3 rounded-lg border border-state-danger-soft bg-state-danger-soft px-3 py-2 text-sm text-state-danger-ink">
             {error}
           </div>
         )}
 
         <div className="mt-4 space-y-3">
           <label className="block">
-            <span className="mb-1 block text-xs font-semibold text-neutral-700">
+            <span className="mb-1 block text-xs font-semibold text-foreground">
               Điểm * (0 - {totalPoints})
             </span>
             <input
@@ -586,12 +582,12 @@ function GradeSubmissionDialog({
                 setScore(Math.max(0, parseFloat(e.target.value) || 0))
               }
               disabled={pending}
-              className="w-full rounded-md border border-neutral-300 px-2.5 py-1.5 text-sm outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20"
+              className="w-full rounded-md border border-border px-2.5 py-1.5 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
             />
           </label>
 
           <label className="block">
-            <span className="mb-1 block text-xs font-semibold text-neutral-700">
+            <span className="mb-1 block text-xs font-semibold text-foreground">
               Nhận xét
             </span>
             <textarea
@@ -600,7 +596,7 @@ function GradeSubmissionDialog({
               rows={4}
               disabled={pending}
               placeholder="Đã làm tốt phần... cần improve..."
-              className="w-full resize-y rounded-md border border-neutral-300 px-2.5 py-1.5 text-sm outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20"
+              className="w-full resize-y rounded-md border border-border px-2.5 py-1.5 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
             />
           </label>
         </div>
@@ -610,7 +606,7 @@ function GradeSubmissionDialog({
             type="button"
             onClick={close}
             disabled={pending}
-            className="rounded-lg border border-neutral-300 px-4 py-2 text-sm font-semibold text-neutral-700 hover:bg-neutral-50 disabled:opacity-50"
+            className="rounded-lg border border-border px-4 py-2 text-sm font-semibold text-foreground hover:bg-muted disabled:opacity-50"
           >
             Huỷ
           </button>
@@ -618,7 +614,7 @@ function GradeSubmissionDialog({
             type="button"
             onClick={handleSubmit}
             disabled={pending}
-            className="rounded-lg bg-purple-500 px-4 py-2 text-sm font-bold text-white hover:bg-purple-600 disabled:opacity-50"
+            className="rounded-lg bg-primary px-4 py-2 text-sm font-bold text-white hover:bg-primary-dark disabled:opacity-50"
           >
             {pending ? "Đang lưu..." : "Lưu điểm"}
           </button>

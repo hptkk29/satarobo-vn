@@ -31,19 +31,19 @@ export default async function NewCurriculumPage() {
       <div>
         <Link
           href="/curriculums"
-          className="mb-3 inline-flex items-center gap-1 text-sm text-neutral-500 hover:text-neutral-700"
+          className="mb-3 inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
         >
           <ChevronLeft className="h-4 w-4" /> Quay lại danh sách
         </Link>
-        <h1 className="text-2xl font-bold text-neutral-900">Thêm giáo trình mới</h1>
+        <h1 className="text-2xl font-bold text-foreground">Thêm giáo trình mới</h1>
       </div>
 
       {courses.length === 0 ? (
-        <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+        <div className="rounded-xl border border-state-warning-soft bg-state-warning-soft p-4 text-sm text-state-warning-ink">
           Chưa có khoá học. Tạo khoá học trước tại{" "}
           <Link
             href="/courses"
-            className="font-semibold underline hover:text-amber-900"
+            className="font-semibold underline hover:text-state-warning-ink"
           >
             /admin/courses
           </Link>

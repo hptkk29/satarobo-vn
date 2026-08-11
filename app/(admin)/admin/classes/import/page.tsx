@@ -4,7 +4,11 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { ChevronLeft } from "lucide-react";
 import { precheckUpsert } from "@/components/admin/import-precheck";
-import { ExcelImporter, type ImportResult } from "@/components/admin/ExcelImporter";
+import {
+  ExcelImporter,
+  type ImportResult,
+} from "@/components/admin/ExcelImporter";
+import { PageHelp } from "@/components/admin/ui/page-help";
 
 interface ClassImportRow {
   classCode?: string;
@@ -61,17 +65,21 @@ export default function ImportClassesPage() {
       <div>
         <Link
           href="/classes"
-          className="mb-3 inline-flex items-center gap-1 text-sm text-neutral-500 hover:text-neutral-700"
+          className="mb-3 inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
         >
           <ChevronLeft className="h-4 w-4" /> Quay lại danh sách
         </Link>
         <h1 className="text-2xl font-bold">Import Lớp học từ Excel</h1>
-        <p className="text-sm text-neutral-500 mt-1">
-          <code>classCode</code> = khoá upsert. <strong>5 references</strong> phải tồn
-          tại trước: courseSlug, centerSlug, roomCode (theo center), teacherCode +
-          assistantCode (Employee role TEACHER/CENTER_MANAGER + có User account).
-        </p>
       </div>
+
+      <PageHelp>
+        <p>
+          <code>classCode</code> = khoá upsert. <strong>5 references</strong>{" "}
+          phải tồn tại trước: courseSlug, centerSlug, roomCode (theo center),
+          teacherCode + assistantCode (Employee role TEACHER/CENTER_MANAGER + có
+          User account).
+        </p>
+      </PageHelp>
 
       <ExcelImporter<ClassImportRow>
         title="Import Lớp học"
@@ -141,7 +149,8 @@ export default function ImportClassesPage() {
           for (const key of ["minStudents", "maxStudents"] as const) {
             const raw = row[key];
             if (raw !== undefined && raw !== null && raw !== "") {
-              const n = typeof raw === "number" ? raw : parseInt(String(raw), 10);
+              const n =
+                typeof raw === "number" ? raw : parseInt(String(raw), 10);
               if (!Number.isFinite(n) || n < 1) {
                 return { error: `${key} phải là số >= 1` };
               }
@@ -175,7 +184,9 @@ export default function ImportClassesPage() {
             body: JSON.stringify({ rows }),
           });
           if (!res.ok) {
-            const err = (await res.json().catch(() => ({ error: "Unknown" }))) as {
+            const err = (await res
+              .json()
+              .catch(() => ({ error: "Unknown" }))) as {
               error?: string;
             };
             throw new Error(err.error || "Import thất bại");
@@ -186,23 +197,24 @@ export default function ImportClassesPage() {
         }}
       />
 
-      <div className="text-sm text-neutral-500 mt-4 space-y-1 rounded-xl border border-neutral-200 bg-neutral-50 p-4">
-        <p className="font-semibold text-neutral-700">Lưu ý:</p>
+      <div className="text-sm text-muted-foreground mt-4 space-y-1 rounded-xl border border-border bg-muted p-4">
+        <p className="font-semibold text-foreground">Lưu ý:</p>
         <ul className="list-disc list-inside space-y-0.5">
           <li>
-            <code>scheduleDays</code> chấp nhận Vietnamese (vd <code>T2,T5</code>)
-            hoặc numeric (vd <code>1,4</code>). Quy ước: CN=0, T2=1, …, T7=6.
-            Phân tách bằng dấu phẩy.
+            <code>scheduleDays</code> chấp nhận Vietnamese (vd{" "}
+            <code>T2,T5</code>) hoặc numeric (vd <code>1,4</code>). Quy ước:
+            CN=0, T2=1, …, T7=6. Phân tách bằng dấu phẩy.
           </li>
           <li>
-            <code>roomCode</code> phải thuộc <code>centerSlug</code> đã chọn
-            (vd <code>DN-A1</code> chỉ tồn tại trong cơ sở <code>danang</code>).
-            Sai → row bỏ qua.
+            <code>roomCode</code> phải thuộc <code>centerSlug</code> đã chọn (vd{" "}
+            <code>DN-A1</code> chỉ tồn tại trong cơ sở <code>danang</code>). Sai
+            → row bỏ qua.
           </li>
           <li>
-            <code>teacherCode</code> / <code>assistantCode</code>: phải là Employee
-            có <strong>role TEACHER hoặc CENTER_MANAGER</strong> + <strong>status ACTIVE</strong>
-            + có User account active. Sai → row bỏ qua.
+            <code>teacherCode</code> / <code>assistantCode</code>: phải là
+            Employee có <strong>role TEACHER hoặc CENTER_MANAGER</strong> +{" "}
+            <strong>status ACTIVE</strong>+ có User account active. Sai → row bỏ
+            qua.
           </li>
           <li>GV phụ không được trùng GV chính → row bỏ qua.</li>
           <li>
@@ -210,9 +222,13 @@ export default function ImportClassesPage() {
             <code>HH:mm</code> (luôn pad số 0, vd <code>08:00</code> không phải{" "}
             <code>8:00</code>).
           </li>
-          <li>Default: <code>minStudents=5</code>, <code>maxStudents=20</code>, <code>status=PLANNED</code>.</li>
           <li>
-            <code>classCode</code> trùng → UPDATE; mới → CREATE; rỗng → luôn CREATE.
+            Default: <code>minStudents=5</code>, <code>maxStudents=20</code>,{" "}
+            <code>status=PLANNED</code>.
+          </li>
+          <li>
+            <code>classCode</code> trùng → UPDATE; mới → CREATE; rỗng → luôn
+            CREATE.
           </li>
         </ul>
       </div>

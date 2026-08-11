@@ -37,12 +37,12 @@ const ALL_STATUSES: OrderStatus[] = [
 const ALL_TYPES: OrderType[] = ["COURSE", "PACKAGE", "EXAM", "PRODUCT", "COMBO"];
 
 const STATUS_BADGE_CLASS: Record<OrderStatus, string> = {
-  DRAFT: "bg-gray-100 text-gray-700 hover:bg-gray-100",
-  PENDING_PAYMENT: "bg-yellow-100 text-yellow-800 hover:bg-yellow-100",
-  CONFIRMED: "bg-blue-100 text-blue-800 hover:bg-blue-100",
-  COMPLETED: "bg-green-100 text-green-800 hover:bg-green-100",
-  CANCELLED: "bg-red-100 text-red-800 hover:bg-red-100",
-  REFUNDED: "bg-purple-100 text-purple-800 hover:bg-purple-100",
+  DRAFT: "bg-muted text-foreground hover:bg-muted",
+  PENDING_PAYMENT: "bg-state-warning-soft text-state-warning-ink hover:bg-state-warning-soft",
+  CONFIRMED: "bg-state-info-soft text-state-info-ink hover:bg-state-info-soft",
+  COMPLETED: "bg-state-success-soft text-state-success-ink hover:bg-state-success-soft",
+  CANCELLED: "bg-state-danger-soft text-state-danger-ink hover:bg-state-danger-soft",
+  REFUNDED: "bg-primary-soft text-primary hover:bg-primary-soft",
 };
 
 function formatDateTime(date: Date): string {
@@ -100,7 +100,7 @@ export function OrdersListClient() {
 
   return (
     <div className="space-y-4">
-      <div className="rounded-xl border border-gray-200 bg-gray-50/50 p-3">
+      <div className="rounded-xl border border-border bg-muted/50 p-3">
         <div className="grid grid-cols-1 gap-2 md:grid-cols-3 lg:grid-cols-5">
           <Input
             type="date"
@@ -190,7 +190,7 @@ export function OrdersListClient() {
         </div>
       </div>
 
-      <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
+      <div className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
         <Table>
           <TableHeader>
             <TableRow>
@@ -209,20 +209,20 @@ export function OrdersListClient() {
               <TableRow>
                 <TableCell
                   colSpan={8}
-                  className="py-8 text-center text-gray-500"
+                  className="py-8 text-center text-muted-foreground"
                 >
                   Chưa có đơn hàng
                 </TableCell>
               </TableRow>
             ) : (
               items.map((o) => (
-                <TableRow key={o.id} className="hover:bg-gray-50/60">
+                <TableRow key={o.id} className="hover:bg-muted/60">
                   <TableCell className="font-mono text-sm">{o.code}</TableCell>
                   <TableCell>
-                    <div className="font-medium text-gray-900">
+                    <div className="font-medium text-foreground">
                       {o.customerName}
                     </div>
-                    <div className="text-xs text-gray-500">
+                    <div className="text-xs text-muted-foreground">
                       {o.customerPhone}
                     </div>
                   </TableCell>
@@ -234,7 +234,7 @@ export function OrdersListClient() {
                   <TableCell className="text-right font-medium tabular-nums">
                     {o.totalAmount.toLocaleString("vi-VN")}
                   </TableCell>
-                  <TableCell className="text-sm text-gray-700">
+                  <TableCell className="text-sm text-foreground">
                     {o.paymentMethod?.name ?? "—"}
                   </TableCell>
                   <TableCell>
@@ -249,8 +249,8 @@ export function OrdersListClient() {
                           <Badge
                             className={
                               b.color === "emerald"
-                                ? "bg-emerald-100 text-emerald-800 hover:bg-emerald-100"
-                                : "bg-amber-100 text-amber-800 hover:bg-amber-100"
+                                ? "bg-state-success-soft text-state-success-ink hover:bg-state-success-soft"
+                                : "bg-state-warning-soft text-state-warning-ink hover:bg-state-warning-soft"
                             }
                           >
                             {b.label}
@@ -259,7 +259,7 @@ export function OrdersListClient() {
                       })()}
                     </div>
                   </TableCell>
-                  <TableCell className="text-xs tabular-nums text-gray-600">
+                  <TableCell className="text-xs tabular-nums text-muted-foreground">
                     {formatDateTime(o.createdAt)}
                   </TableCell>
                   <TableCell className="text-right">
@@ -276,9 +276,9 @@ export function OrdersListClient() {
           </TableBody>
         </Table>
         {(hasMore || isPending) && (
-          <div className="flex justify-center border-t border-gray-100 p-3">
+          <div className="flex justify-center border-t border-border p-3">
             {isPending ? (
-              <div className="flex items-center gap-2 text-sm text-gray-500">
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
                 <Loader2 className="h-4 w-4 animate-spin" />
                 Đang tải...
               </div>

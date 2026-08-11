@@ -95,7 +95,7 @@ export default async function NewEnrollmentPage({
 
   return (
     <div>
-      <h1 className="mb-6 text-3xl font-black text-neutral-900">
+      <h1 className="mb-6 text-3xl font-black text-foreground">
         Đăng ký lớp cho học viên
       </h1>
       <EnrollForm

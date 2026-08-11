@@ -133,24 +133,24 @@ export default async function ExamBuilderPage({ params }: Props) {
       <div>
         <Link
           href="/exams"
-          className="mb-3 inline-flex items-center gap-1 text-sm text-neutral-500 hover:text-neutral-700"
+          className="mb-3 inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
         >
           <ChevronLeft className="h-4 w-4" /> Quay lại danh sách
         </Link>
         <div className="flex flex-wrap items-baseline justify-between gap-3">
-          <h1 className="text-2xl font-bold text-neutral-900">
-            Builder: <span className="text-orange-600">{exam.title}</span>
+          <h1 className="text-2xl font-bold text-foreground">
+            Builder: <span className="text-primary">{exam.title}</span>
           </h1>
           <div className="flex items-center gap-4">
             <Link
               href={`/exams/${id}/preview`}
-              className="text-sm font-semibold text-[#7C3AED] hover:underline"
+              className="text-sm font-semibold text-primary hover:underline"
             >
               Xem trước →
             </Link>
             <Link
               href={`/exams/${id}/attempts`}
-              className="text-sm font-semibold text-[#7C3AED] hover:underline"
+              className="text-sm font-semibold text-primary hover:underline"
             >
               Xem bài làm →
             </Link>
@@ -158,8 +158,8 @@ export default async function ExamBuilderPage({ params }: Props) {
         </div>
       </div>
 
-      <details className="rounded-xl border border-neutral-200 bg-white">
-        <summary className="cursor-pointer px-6 py-4 text-sm font-bold uppercase tracking-wider text-neutral-700">
+      <details className="rounded-xl border border-border bg-card">
+        <summary className="cursor-pointer px-6 py-4 text-sm font-bold uppercase tracking-wider text-foreground">
           Cấu hình đề thi
         </summary>
         <div className="px-6 pb-6">

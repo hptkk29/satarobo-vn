@@ -13,11 +13,11 @@ interface Props {
 // Status badge cho admin lists. Consistent colors across admin pages.
 export function StatusBadge({ variant, children, className }: Props) {
   const variants: Record<Variant, string> = {
-    success: "bg-emerald-50 text-emerald-700",
-    warning: "bg-amber-50 text-amber-700",
-    error: "bg-red-50 text-red-700",
-    info: "bg-blue-50 text-blue-700",
-    neutral: "bg-neutral-100 text-neutral-700",
+    success: "bg-state-success-soft text-state-success-ink",
+    warning: "bg-state-warning-soft text-state-warning-ink",
+    error: "bg-state-danger-soft text-state-danger-ink",
+    info: "bg-state-info-soft text-state-info-ink",
+    neutral: "bg-muted text-foreground",
   };
 
   return (

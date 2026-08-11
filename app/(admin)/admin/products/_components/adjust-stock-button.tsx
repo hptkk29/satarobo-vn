@@ -136,10 +136,10 @@ export function AdjustStockButton({
                 onChange={(e) => setQuantity(Number(e.target.value) || 0)}
                 required
               />
-              <p className="text-xs text-gray-500">
+              <p className="text-xs text-muted-foreground">
                 Tồn kho sau thay đổi: {newStock}
                 {wouldGoNegative && (
-                  <span className="ml-2 font-bold text-red-600">
+                  <span className="ml-2 font-bold text-state-danger-ink">
                     ⚠️ Không thể âm
                   </span>
                 )}

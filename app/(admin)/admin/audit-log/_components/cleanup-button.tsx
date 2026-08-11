@@ -43,7 +43,7 @@ export function CleanupButton() {
         variant="outline"
         size="sm"
         onClick={() => setOpen(true)}
-        className="border-red-300 text-red-700 hover:bg-red-50"
+        className="border-state-danger text-state-danger-ink hover:bg-state-danger-soft"
       >
         <Trash2 className="h-4 w-4" />
         Xoá log &gt; 365 ngày

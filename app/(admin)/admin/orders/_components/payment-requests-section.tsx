@@ -39,10 +39,10 @@ const STATUS_LABEL: Record<PaymentRequestRow["status"], string> = {
 };
 
 const STATUS_CLASS: Record<PaymentRequestRow["status"], string> = {
-  PENDING: "bg-amber-100 text-amber-800 hover:bg-amber-100",
-  PARTIAL: "bg-blue-100 text-blue-800 hover:bg-blue-100",
-  PAID: "bg-emerald-100 text-emerald-800 hover:bg-emerald-100",
-  VOID: "bg-neutral-200 text-neutral-600 hover:bg-neutral-200",
+  PENDING: "bg-state-warning-soft text-state-warning-ink hover:bg-state-warning-soft",
+  PARTIAL: "bg-state-info-soft text-state-info-ink hover:bg-state-info-soft",
+  PAID: "bg-state-success-soft text-state-success-ink hover:bg-state-success-soft",
+  VOID: "bg-muted text-muted-foreground hover:bg-muted",
 };
 
 function vnd(n: number): string {
@@ -79,12 +79,12 @@ function Countdown({
     return () => clearInterval(t);
   }, [expiresAt, onExpire]);
 
-  if (left <= 0) return <span className="font-semibold text-red-600">QR đã hết hạn</span>;
+  if (left <= 0) return <span className="font-semibold text-state-danger-ink">QR đã hết hạn</span>;
   const total = Math.floor(left / 1000);
   const mm = String(Math.floor(total / 60)).padStart(2, "0");
   const ss = String(total % 60).padStart(2, "0");
   return (
-    <span className="font-mono text-lg font-bold tabular-nums text-neutral-800">
+    <span className="font-mono text-lg font-bold tabular-nums text-foreground">
       {mm}:{ss}
     </span>
   );
@@ -108,7 +108,7 @@ function QrPanel({
   canManage: boolean;
 }) {
   return (
-    <div className="mt-3 rounded-lg border border-purple-200 bg-purple-50/40 p-4">
+    <div className="mt-3 rounded-lg border border-primary-soft bg-primary-soft/40 p-4">
       <div className="flex flex-col gap-4 sm:flex-row">
         <div className="shrink-0">
           {session.imageSrc ? (
@@ -122,20 +122,20 @@ function QrPanel({
               dimmed={expired}
             />
           ) : (
-            <div className="flex h-52 w-52 items-center justify-center rounded-lg border border-dashed border-neutral-300 bg-white text-xs text-neutral-400">
+            <div className="flex h-52 w-52 items-center justify-center rounded-lg border border-dashed border-border bg-card text-xs text-muted-foreground">
               Không dựng được ảnh QR
             </div>
           )}
         </div>
 
         <div className="min-w-0 flex-1 space-y-2 text-sm">
-          <p className="text-base font-bold text-neutral-900">
+          <p className="text-base font-bold text-foreground">
             {label}: {vnd(session.amountShown)}
           </p>
           {session.matchKey && (
-            <p className="break-all text-xs text-neutral-600">
+            <p className="break-all text-xs text-muted-foreground">
               Nội dung CK:{" "}
-              <span className="font-mono font-semibold text-neutral-800">
+              <span className="font-mono font-semibold text-foreground">
                 {session.matchKey}
               </span>
             </p>
@@ -145,21 +145,21 @@ function QrPanel({
               href={session.checkoutUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-block text-xs font-semibold text-purple-700 underline"
+              className="inline-block text-xs font-semibold text-primary underline"
             >
               Mở trang thanh toán của cổng →
             </a>
           )}
 
           <div className="flex flex-wrap items-center gap-2 pt-1">
-            <span className="text-xs uppercase tracking-wider text-neutral-500">
+            <span className="text-xs uppercase tracking-wider text-muted-foreground">
               Hiệu lực hiển thị
             </span>
             <Countdown expiresAt={session.expiresAt} onExpire={onExpire} />
           </div>
 
           {/* BẤT BIẾN THIẾT KẾ — đừng gỡ dòng này. */}
-          <p className="rounded-md bg-white/80 px-3 py-2 text-xs text-neutral-600">
+          <p className="rounded-md bg-white/80 px-3 py-2 text-xs text-muted-foreground">
             QR hết hạn <b>vẫn nhận được tiền</b> — nếu phụ huynh đã chuyển, không cần
             tạo lại. Đồng hồ chỉ để biết mã đã hiển thị bao lâu.
           </p>
@@ -226,15 +226,15 @@ export function PaymentRequestsSection({
   }
 
   return (
-    <section className="rounded-xl border border-neutral-200 bg-white p-5">
-      <h2 className="mb-4 flex items-center gap-2 text-sm font-bold uppercase tracking-wider text-neutral-700">
-        <Receipt className="h-4 w-4 text-[#7C3AED]" /> Phiếu thu &amp; QR theo đợt
+    <section className="rounded-xl border border-border bg-card p-5">
+      <h2 className="mb-4 flex items-center gap-2 text-sm font-bold uppercase tracking-wider text-foreground">
+        <Receipt className="h-4 w-4 text-primary" /> Phiếu thu &amp; QR theo đợt
       </h2>
 
       <div className="overflow-x-auto">
         <table className="w-full min-w-[560px] border-collapse text-sm">
           <thead>
-            <tr className="border-b border-neutral-200 bg-neutral-50 text-left">
+            <tr className="border-b border-border bg-muted text-left">
               <th className="p-2">Phiếu thu</th>
               <th className="p-2 text-right">Phải thu</th>
               <th className="p-2 text-right">Đã thu</th>
@@ -251,16 +251,16 @@ export function PaymentRequestsSection({
               const isOpen = openId === r.id && !!s;
               const canIssue = canManage && r.status !== "PAID" && r.status !== "VOID";
               return (
-                <tr key={r.id} className="border-b border-neutral-100 align-top">
-                  <td className="p-2 font-semibold text-neutral-900">{label}</td>
+                <tr key={r.id} className="border-b border-border align-top">
+                  <td className="p-2 font-semibold text-foreground">{label}</td>
                   <td className="p-2 text-right tabular-nums">{vnd(r.amountDue)}</td>
-                  <td className="p-2 text-right tabular-nums text-emerald-700">
+                  <td className="p-2 text-right tabular-nums text-state-success-ink">
                     {vnd(r.allocated)}
                   </td>
-                  <td className="p-2 text-right font-semibold tabular-nums text-neutral-900">
+                  <td className="p-2 text-right font-semibold tabular-nums text-foreground">
                     {vnd(outstanding(r))}
                   </td>
-                  <td className="p-2 text-neutral-600">
+                  <td className="p-2 text-muted-foreground">
                     {r.dueDate ? formatDateVN(r.dueDate) : "—"}
                   </td>
                   <td className="p-2">
@@ -288,7 +288,7 @@ export function PaymentRequestsSection({
                         {s && !expired[r.id] ? (isOpen ? "Ẩn QR" : "Xem QR") : "Xuất QR"}
                       </Button>
                     ) : (
-                      <span className="text-xs text-neutral-400">—</span>
+                      <span className="text-xs text-muted-foreground">—</span>
                     )}
                   </td>
                 </tr>
@@ -296,7 +296,7 @@ export function PaymentRequestsSection({
             })}
             {requests.length === 0 && (
               <tr>
-                <td colSpan={7} className="p-3 text-sm text-neutral-400">
+                <td colSpan={7} className="p-3 text-sm text-muted-foreground">
                   Chưa có phiếu thu nào cho đơn này.
                 </td>
               </tr>
@@ -325,7 +325,7 @@ export function PaymentRequestsSection({
       })()}
 
       {!installmentPlanApproved && (
-        <p className="mt-4 rounded-lg border border-dashed border-neutral-300 bg-neutral-50 px-3 py-2 text-xs text-neutral-600">
+        <p className="mt-4 rounded-lg border border-dashed border-border bg-muted px-3 py-2 text-xs text-muted-foreground">
           Đơn này <b>chưa có kế hoạch trả góp được duyệt</b> nên chỉ thu được toàn bộ
           đơn trong một lần. Muốn tách đợt: lập kế hoạch 2 đợt ở mục &ldquo;Kế hoạch
           thanh toán 2 đợt&rdquo; phía trên, gửi Quản lý cơ sở duyệt — duyệt xong bảng

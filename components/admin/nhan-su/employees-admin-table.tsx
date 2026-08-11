@@ -30,10 +30,10 @@ const STATUS_LABEL: Record<EmploymentStatus, string> = {
 };
 
 const STATUS_COLOR: Record<EmploymentStatus, string> = {
-  ACTIVE: "bg-green-100 text-green-700",
-  ON_LEAVE: "bg-amber-100 text-amber-700",
-  RESIGNED: "bg-gray-100 text-gray-600",
-  TERMINATED: "bg-red-100 text-red-700",
+  ACTIVE: "bg-state-success-soft text-state-success-ink",
+  ON_LEAVE: "bg-state-warning-soft text-state-warning-ink",
+  RESIGNED: "bg-muted text-muted-foreground",
+  TERMINATED: "bg-state-danger-soft text-state-danger-ink",
 };
 
 interface Props {
@@ -95,11 +95,11 @@ export function EmployeesAdminTable({ employees, canDelete, hoEmployeeIds = [] }
 
   if (employees.length === 0) {
     return (
-      <div className="rounded-lg border border-dashed border-gray-300 p-12 text-center text-gray-500">
+      <div className="rounded-lg border border-dashed border-border p-12 text-center text-muted-foreground">
         <p>Chưa có nhân sự nào khớp bộ lọc.</p>
         <Link
           href="/nhan-su/new"
-          className="mt-2 inline-block text-orange-600 hover:underline"
+          className="mt-2 inline-block text-primary hover:underline"
         >
           Thêm nhân sự đầu tiên →
         </Link>
@@ -108,9 +108,9 @@ export function EmployeesAdminTable({ employees, canDelete, hoEmployeeIds = [] }
   }
 
   return (
-    <div className="overflow-x-auto rounded-lg border border-gray-200 bg-white">
+    <div className="overflow-x-auto rounded-lg border border-border bg-card">
       <table className="w-full text-sm">
-        <thead className="bg-gray-50 text-left text-xs uppercase tracking-wider text-gray-500">
+        <thead className="bg-muted text-left text-xs uppercase tracking-wider text-muted-foreground">
           <tr>
             <th className="px-4 py-3">Họ tên</th>
             <th className="px-4 py-3">Email</th>
@@ -123,43 +123,43 @@ export function EmployeesAdminTable({ employees, canDelete, hoEmployeeIds = [] }
             <th className="px-4 py-3 text-right">Hành động</th>
           </tr>
         </thead>
-        <tbody className="divide-y divide-gray-100">
+        <tbody className="divide-y divide-border">
           {employees.map((emp) => (
-            <tr key={emp.id} className="hover:bg-gray-50">
+            <tr key={emp.id} className="hover:bg-muted">
               {/* Họ tên */}
               <td className="px-4 py-3">
-                <p className="font-semibold text-gray-900">
+                <p className="font-semibold text-foreground">
                   {emp.fullName}
                   {emp.isCEO && (
                     <span title="CEO" className="ml-1 inline-block align-middle">
-                      <Crown className="inline h-3.5 w-3.5 text-amber-500" />
+                      <Crown className="inline h-3.5 w-3.5 text-state-warning-ink" />
                     </span>
                   )}
                 </p>
-                <p className="text-xs text-gray-500">
+                <p className="text-xs text-muted-foreground">
                   {emp.jobTitle}
-                  <span className="ml-1 font-mono text-gray-400">· {emp.employeeCode}</span>
+                  <span className="ml-1 font-mono text-muted-foreground">· {emp.employeeCode}</span>
                 </p>
               </td>
               {/* Email */}
-              <td className="px-4 py-3 text-xs text-gray-700">{emp.email || "—"}</td>
+              <td className="px-4 py-3 text-xs text-foreground">{emp.email || "—"}</td>
               {/* SĐT */}
-              <td className="px-4 py-3 text-xs text-gray-700">{emp.phone || "—"}</td>
+              <td className="px-4 py-3 text-xs text-foreground">{emp.phone || "—"}</td>
               {/* Cơ sở (HO badge nếu là nhân viên Hội sở) */}
-              <td className="px-4 py-3 text-xs text-gray-600">
+              <td className="px-4 py-3 text-xs text-muted-foreground">
                 {hoSet.has(emp.id) ? (
-                  <span className="inline-flex items-center gap-1 rounded-full bg-indigo-100 px-2 py-0.5 text-xs font-semibold text-indigo-700">
+                  <span className="inline-flex items-center gap-1 rounded-full bg-state-info-soft px-2 py-0.5 text-xs font-semibold text-state-info-ink">
                     <Building2 className="h-3 w-3" /> HO (Hội sở)
                   </span>
                 ) : (
                   emp.center?.name || "—"
                 )}
                 {emp.manager && (
-                  <p className="text-gray-400">↑ {emp.manager.fullName}</p>
+                  <p className="text-muted-foreground">↑ {emp.manager.fullName}</p>
                 )}
               </td>
               {/* Bộ phận */}
-              <td className="px-4 py-3 text-gray-700">
+              <td className="px-4 py-3 text-foreground">
                 {DEPARTMENT_LABELS[emp.department]}
               </td>
               {/* Vai trò (hiện đủ role, vai trò chính có viền nổi bật) */}
@@ -178,11 +178,7 @@ export function EmployeesAdminTable({ employees, canDelete, hoEmployeeIds = [] }
                         {ordered.map((r) => (
                           <span
                             key={r}
-                            className={`inline-flex rounded-full px-2 py-0.5 text-xs font-semibold ${roleColor(r)} ${
-                              r === acc.role
-                                ? "ring-2 ring-amber-400 ring-offset-1"
-                                : ""
-                            }`}
+                            className={`inline-flex rounded-full px-2 py-0.5 text-xs font-semibold ${roleColor(r)} ${ r === acc.role ? "ring-2 ring-state-warning ring-offset-1" : "" }`}
                             title={
                               r === acc.role
                                 ? "Vai trò chính · Đổi: Sửa → Đổi vai trò"
@@ -196,7 +192,7 @@ export function EmployeesAdminTable({ employees, canDelete, hoEmployeeIds = [] }
                     );
                   })()
                 ) : (
-                  <span className="text-xs text-gray-400">Chưa có TK</span>
+                  <span className="text-xs text-muted-foreground">Chưa có TK</span>
                 )}
               </td>
                 <td className="px-4 py-3">
@@ -206,38 +202,38 @@ export function EmployeesAdminTable({ employees, canDelete, hoEmployeeIds = [] }
                     {STATUS_LABEL[emp.status]}
                   </span>
                 </td>
-                <td className="px-4 py-3 text-xs text-gray-600">{fmtDate(emp.joinedAt)}</td>
+                <td className="px-4 py-3 text-xs text-muted-foreground">{fmtDate(emp.joinedAt)}</td>
                 <td className="px-4 py-3 text-right">
                   <div className="inline-flex items-center gap-1">
                     <button
                       type="button"
                       onClick={() => handleToggleActive(emp.id)}
                       disabled={isPending}
-                      className="rounded p-1.5 hover:bg-gray-100 disabled:opacity-50"
+                      className="rounded p-1.5 hover:bg-muted disabled:opacity-50"
                       title={emp.isActive ? "Đang làm việc (legacy) — bấm để tắt" : "Bật đang làm việc"}
                     >
                       {emp.isActive ? (
-                        <UserCheck className="h-4 w-4 text-green-600" />
+                        <UserCheck className="h-4 w-4 text-state-success-ink" />
                       ) : (
-                        <UserX className="h-4 w-4 text-gray-400" />
+                        <UserX className="h-4 w-4 text-muted-foreground" />
                       )}
                     </button>
                     <button
                       type="button"
                       onClick={() => handleTogglePublic(emp.id)}
                       disabled={isPending}
-                      className="rounded p-1.5 hover:bg-gray-100 disabled:opacity-50"
+                      className="rounded p-1.5 hover:bg-muted disabled:opacity-50"
                       title={emp.isPublic ? "Đang hiển thị public — bấm để ẩn" : "Hiển thị public"}
                     >
                       {emp.isPublic ? (
-                        <Eye className="h-4 w-4 text-blue-600" />
+                        <Eye className="h-4 w-4 text-state-info-ink" />
                       ) : (
-                        <EyeOff className="h-4 w-4 text-gray-300" />
+                        <EyeOff className="h-4 w-4 text-muted-foreground" />
                       )}
                     </button>
                     <Link
                       href={`/nhan-su/${emp.id}/edit`}
-                      className="rounded p-1.5 text-blue-600 hover:bg-blue-50"
+                      className="rounded p-1.5 text-state-info-ink hover:bg-state-info-soft"
                       title="Sửa"
                     >
                       <Edit className="h-4 w-4" />
@@ -250,11 +246,7 @@ export function EmployeesAdminTable({ employees, canDelete, hoEmployeeIds = [] }
                           else setDeleteId(emp.id);
                         }}
                         disabled={isPending}
-                        className={`rounded p-1.5 ${
-                          deleteId === emp.id
-                            ? "bg-red-100 text-red-700"
-                            : "text-red-500 hover:bg-red-50"
-                        }`}
+                        className={`rounded p-1.5 ${ deleteId === emp.id ? "bg-state-danger-soft text-state-danger-ink" : "text-state-danger-ink hover:bg-state-danger-soft" }`}
                         title={deleteId === emp.id ? "Xác nhận xoá" : "Xoá"}
                       >
                         <Trash2 className="h-4 w-4" />

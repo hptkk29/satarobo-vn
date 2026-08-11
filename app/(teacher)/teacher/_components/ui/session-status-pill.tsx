@@ -15,10 +15,10 @@ export const SESSION_STATUS_LABEL: Record<string, string> = {
 };
 
 const SESSION_STATUS_CLASS: Record<string, string> = {
-  SCHEDULED: "bg-blue-100 text-blue-700 dark:bg-blue-500/15 dark:text-blue-300",
-  IN_PROGRESS: "bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300",
-  COMPLETED: "bg-emerald-100 text-emerald-700 dark:bg-emerald-600/20 dark:text-emerald-200",
-  CANCELLED: "bg-red-100 text-red-700 dark:bg-red-500/15 dark:text-red-300",
+  SCHEDULED: "bg-state-info-soft text-state-info-ink",
+  IN_PROGRESS: "bg-state-warning-soft text-state-warning-ink",
+  COMPLETED: "bg-state-success-soft text-state-success-ink",
+  CANCELLED: "bg-state-danger-soft text-state-danger-ink",
 };
 
 export function SessionStatusPill({ status }: { status: string }) {

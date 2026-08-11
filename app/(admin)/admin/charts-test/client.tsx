@@ -30,7 +30,7 @@ const sampleFunnelData = [
 export function ChartsTestClient() {
   return (
     <div className="space-y-8">
-      <section className="bg-white border rounded-lg p-6">
+      <section className="bg-card border rounded-lg p-6">
         <h2 className="text-lg font-semibold mb-4">
           📈 Line Chart — Leads vs Enrollments
         </h2>
@@ -44,7 +44,7 @@ export function ChartsTestClient() {
         />
       </section>
 
-      <section className="bg-white border rounded-lg p-6">
+      <section className="bg-card border rounded-lg p-6">
         <h2 className="text-lg font-semibold mb-4">📊 Bar Chart — Top Lead Sources</h2>
         <BarChart
           data={sampleSourceData}
@@ -53,7 +53,7 @@ export function ChartsTestClient() {
         />
       </section>
 
-      <section className="bg-white border rounded-lg p-6">
+      <section className="bg-card border rounded-lg p-6">
         <h2 className="text-lg font-semibold mb-4">
           ⏬ Funnel Chart — Conversion Pipeline
         </h2>

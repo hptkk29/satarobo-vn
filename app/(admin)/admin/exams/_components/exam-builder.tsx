@@ -61,11 +61,11 @@ const TYPE_LABEL: Record<QuestionType, string> = {
 };
 
 const TYPE_COLOR: Record<QuestionType, string> = {
-  MULTIPLE_CHOICE: "bg-blue-100 text-blue-700",
-  TRUE_FALSE: "bg-emerald-100 text-emerald-700",
-  SHORT_ANSWER: "bg-amber-100 text-amber-700",
-  ESSAY: "bg-purple-100 text-purple-700",
-  CODE: "bg-neutral-100 text-neutral-800",
+  MULTIPLE_CHOICE: "bg-state-info-soft text-state-info-ink",
+  TRUE_FALSE: "bg-state-success-soft text-state-success-ink",
+  SHORT_ANSWER: "bg-state-warning-soft text-state-warning-ink",
+  ESSAY: "bg-primary-soft text-primary",
+  CODE: "bg-muted text-foreground",
 };
 
 const DIFFICULTY_LABEL: Record<Difficulty, string> = {
@@ -216,13 +216,13 @@ export function ExamBuilder({
   return (
     <div className="space-y-3">
       {error && (
-        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+        <div className="rounded-lg border border-state-danger-soft bg-state-danger-soft px-4 py-3 text-sm text-state-danger-ink">
           {error}
         </div>
       )}
 
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="text-sm text-neutral-600">
+        <div className="text-sm text-muted-foreground">
           <strong>{selected.length}</strong> câu · Tổng điểm hiện tại:{" "}
           <strong>{totalPoints.toFixed(1)}</strong>
         </div>
@@ -230,7 +230,7 @@ export function ExamBuilder({
           type="button"
           onClick={() => setAutoGenOpen(true)}
           disabled={pending}
-          className="inline-flex items-center gap-1.5 rounded-lg border border-purple-300 bg-white px-3 py-1.5 text-sm font-semibold text-purple-700 hover:bg-purple-50 disabled:opacity-60"
+          className="inline-flex items-center gap-1.5 rounded-lg border border-primary bg-card px-3 py-1.5 text-sm font-semibold text-primary hover:bg-primary-soft disabled:opacity-60"
         >
           <Sparkles className="h-4 w-4" />
           Auto-generate từ ngân hàng
@@ -239,9 +239,9 @@ export function ExamBuilder({
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         {/* Left: bank picker */}
-        <section className="rounded-xl border border-neutral-200 bg-white">
-          <header className="border-b border-neutral-100 p-3">
-            <h3 className="text-sm font-bold uppercase tracking-wider text-neutral-700">
+        <section className="rounded-xl border border-border bg-card">
+          <header className="border-b border-border p-3">
+            <h3 className="text-sm font-bold uppercase tracking-wider text-foreground">
               Ngân hàng câu hỏi ({filteredBank.length})
             </h3>
             <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-3">
@@ -250,12 +250,12 @@ export function ExamBuilder({
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder="Tìm nội dung..."
-                className="sm:col-span-3 rounded-md border border-neutral-200 px-2.5 py-1.5 text-sm outline-none focus:border-[#7C3AED] focus:ring-2 focus:ring-[#7C3AED]/20"
+                className="sm:col-span-3 rounded-md border border-border px-2.5 py-1.5 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
               />
               <select
                 value={filterType}
                 onChange={(e) => setFilterType(e.target.value as QuestionType | "")}
-                className="rounded-md border border-neutral-200 px-2 py-1.5 text-sm focus:border-[#7C3AED] focus:outline-none"
+                className="rounded-md border border-border px-2 py-1.5 text-sm focus:border-primary focus:outline-none"
               >
                 <option value="">Mọi loại</option>
                 {(Object.keys(TYPE_LABEL) as QuestionType[]).map((t) => (
@@ -269,7 +269,7 @@ export function ExamBuilder({
                 onChange={(e) =>
                   setFilterDifficulty(e.target.value as Difficulty | "")
                 }
-                className="rounded-md border border-neutral-200 px-2 py-1.5 text-sm focus:border-[#7C3AED] focus:outline-none"
+                className="rounded-md border border-border px-2 py-1.5 text-sm focus:border-primary focus:outline-none"
               >
                 <option value="">Mọi độ khó</option>
                 {(Object.keys(DIFFICULTY_LABEL) as Difficulty[]).map((d) => (
@@ -280,9 +280,9 @@ export function ExamBuilder({
               </select>
             </div>
           </header>
-          <div className="max-h-[600px] overflow-y-auto divide-y divide-neutral-100">
+          <div className="max-h-[600px] overflow-y-auto divide-y divide-border">
             {filteredBank.length === 0 ? (
-              <div className="p-6 text-center text-sm text-neutral-400">
+              <div className="p-6 text-center text-sm text-muted-foreground">
                 Không có câu hỏi phù hợp.
               </div>
             ) : (
@@ -295,23 +295,23 @@ export function ExamBuilder({
                       >
                         {TYPE_LABEL[b.type]}
                       </span>
-                      <span className="text-[10px] font-semibold text-neutral-500">
+                      <span className="text-[10px] font-semibold text-muted-foreground">
                         {DIFFICULTY_LABEL[b.difficulty]}
                       </span>
                       {b.tags.slice(0, 3).map((t) => (
                         <span
                           key={t}
-                          className="inline-flex rounded bg-neutral-100 px-1 py-0.5 text-[10px] text-neutral-600"
+                          className="inline-flex rounded bg-muted px-1 py-0.5 text-[10px] text-muted-foreground"
                         >
                           {t}
                         </span>
                       ))}
                     </div>
-                    <div className="mt-1 text-sm text-neutral-800 line-clamp-2">
+                    <div className="mt-1 text-sm text-foreground line-clamp-2">
                       {b.text}
                     </div>
                     {b.lessonTitle && (
-                      <div className="text-[10px] text-neutral-400">
+                      <div className="text-[10px] text-muted-foreground">
                         Bài: {b.lessonTitle}
                       </div>
                     )}
@@ -320,7 +320,7 @@ export function ExamBuilder({
                     type="button"
                     onClick={() => handleAdd(b)}
                     disabled={pending}
-                    className="rounded-md bg-[#7C3AED] px-2.5 py-1 text-xs font-semibold text-white hover:opacity-90 disabled:opacity-50"
+                    className="rounded-md bg-primary px-2.5 py-1 text-xs font-semibold text-white hover:opacity-90 disabled:opacity-50"
                   >
                     <Plus className="h-3 w-3 inline" /> Thêm
                   </button>
@@ -331,24 +331,24 @@ export function ExamBuilder({
         </section>
 
         {/* Right: selected questions */}
-        <section className="rounded-xl border border-neutral-200 bg-white">
-          <header className="border-b border-neutral-100 p-3">
-            <h3 className="text-sm font-bold uppercase tracking-wider text-neutral-700">
+        <section className="rounded-xl border border-border bg-card">
+          <header className="border-b border-border p-3">
+            <h3 className="text-sm font-bold uppercase tracking-wider text-foreground">
               Câu hỏi trong đề ({selected.length})
             </h3>
-            <p className="mt-0.5 text-xs text-neutral-500">
+            <p className="mt-0.5 text-xs text-muted-foreground">
               Chỉnh điểm, sắp xếp thứ tự, hoặc xoá câu hỏi.
             </p>
           </header>
-          <div className="max-h-[600px] overflow-y-auto divide-y divide-neutral-100">
+          <div className="max-h-[600px] overflow-y-auto divide-y divide-border">
             {selected.length === 0 ? (
-              <div className="p-6 text-center text-sm text-neutral-400">
+              <div className="p-6 text-center text-sm text-muted-foreground">
                 Chưa có câu hỏi. Thêm từ ngân hàng bên trái hoặc dùng Auto-generate.
               </div>
             ) : (
               selected.map((s, idx) => (
                 <div key={s.id} className="flex items-start gap-2 p-3">
-                  <span className="w-8 pt-1 text-center font-bold tabular-nums text-neutral-500">
+                  <span className="w-8 pt-1 text-center font-bold tabular-nums text-muted-foreground">
                     {s.order}.
                   </span>
                   <div className="flex-1 min-w-0">
@@ -358,16 +358,16 @@ export function ExamBuilder({
                       >
                         {TYPE_LABEL[s.type]}
                       </span>
-                      <span className="text-[10px] font-semibold text-neutral-500">
+                      <span className="text-[10px] font-semibold text-muted-foreground">
                         {DIFFICULTY_LABEL[s.difficulty]}
                       </span>
                     </div>
-                    <div className="mt-1 text-sm text-neutral-800 line-clamp-2">
+                    <div className="mt-1 text-sm text-foreground line-clamp-2">
                       {s.text}
                     </div>
                   </div>
                   <div className="flex flex-col items-end gap-1">
-                    <label className="flex items-center gap-1 text-xs font-semibold text-neutral-700">
+                    <label className="flex items-center gap-1 text-xs font-semibold text-foreground">
                       Điểm:
                       <input
                         type="number"
@@ -377,7 +377,7 @@ export function ExamBuilder({
                         onChange={(e) => handlePointsChange(idx, e.target.value)}
                         onBlur={() => handlePointsBlur(idx)}
                         disabled={pending}
-                        className="w-16 rounded border border-neutral-300 px-1 py-0.5 text-xs text-right"
+                        className="w-16 rounded border border-border px-1 py-0.5 text-xs text-right"
                       />
                     </label>
                     <div className="flex gap-1">
@@ -386,7 +386,7 @@ export function ExamBuilder({
                         onClick={() => handleMove(idx, -1)}
                         disabled={pending || idx === 0}
                         aria-label="Lên"
-                        className="rounded p-1 text-neutral-600 hover:bg-neutral-100 disabled:opacity-30"
+                        className="rounded p-1 text-muted-foreground hover:bg-muted disabled:opacity-30"
                       >
                         <ChevronUp className="h-3.5 w-3.5" />
                       </button>
@@ -395,7 +395,7 @@ export function ExamBuilder({
                         onClick={() => handleMove(idx, 1)}
                         disabled={pending || idx === selected.length - 1}
                         aria-label="Xuống"
-                        className="rounded p-1 text-neutral-600 hover:bg-neutral-100 disabled:opacity-30"
+                        className="rounded p-1 text-muted-foreground hover:bg-muted disabled:opacity-30"
                       >
                         <ChevronDown className="h-3.5 w-3.5" />
                       </button>
@@ -404,7 +404,7 @@ export function ExamBuilder({
                         onClick={() => handleRemove(s.id, idx)}
                         disabled={pending}
                         aria-label="Xoá"
-                        className="rounded p-1 text-red-600 hover:bg-red-50 disabled:opacity-30"
+                        className="rounded p-1 text-state-danger-ink hover:bg-state-danger-soft disabled:opacity-30"
                       >
                         <Trash2 className="h-3.5 w-3.5" />
                       </button>
@@ -494,35 +494,35 @@ function AutoGenerateModal({
       onClick={close}
     >
       <div
-        className="relative w-full max-w-md rounded-xl bg-white p-6 shadow-xl"
+        className="relative w-full max-w-md rounded-xl bg-card p-6 shadow-xl"
         onClick={(e) => e.stopPropagation()}
       >
         <button
           type="button"
           onClick={close}
           aria-label="Đóng"
-          className="absolute right-3 top-3 rounded-md p-1 text-neutral-500 hover:bg-neutral-100"
+          className="absolute right-3 top-3 rounded-md p-1 text-muted-foreground hover:bg-muted"
         >
           <X className="h-4 w-4" />
         </button>
 
-        <h2 className="flex items-center gap-2 text-lg font-bold text-neutral-900">
-          <Sparkles className="h-5 w-5 text-purple-500" />
+        <h2 className="flex items-center gap-2 text-lg font-bold text-foreground">
+          <Sparkles className="h-5 w-5 text-primary" />
           Auto-generate câu hỏi
         </h2>
-        <p className="mt-1 text-xs text-neutral-500">
+        <p className="mt-1 text-xs text-muted-foreground">
           Random N câu từ ngân hàng (chỉ chọn câu Public, chưa có trong đề).
         </p>
 
         {localError && (
-          <div className="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+          <div className="mt-3 rounded-lg border border-state-danger-soft bg-state-danger-soft px-3 py-2 text-sm text-state-danger-ink">
             {localError}
           </div>
         )}
 
         <div className="mt-4 space-y-3">
           <label className="block">
-            <span className="mb-1 block text-xs font-semibold text-neutral-700">
+            <span className="mb-1 block text-xs font-semibold text-foreground">
               Bài học
             </span>
             <select
@@ -542,7 +542,7 @@ function AutoGenerateModal({
 
           <div className="grid grid-cols-2 gap-3">
             <label className="block">
-              <span className="mb-1 block text-xs font-semibold text-neutral-700">
+              <span className="mb-1 block text-xs font-semibold text-foreground">
                 Loại
               </span>
               <select
@@ -560,7 +560,7 @@ function AutoGenerateModal({
               </select>
             </label>
             <label className="block">
-              <span className="mb-1 block text-xs font-semibold text-neutral-700">
+              <span className="mb-1 block text-xs font-semibold text-foreground">
                 Độ khó
               </span>
               <select
@@ -579,7 +579,7 @@ function AutoGenerateModal({
           </div>
 
           <label className="block">
-            <span className="mb-1 block text-xs font-semibold text-neutral-700">
+            <span className="mb-1 block text-xs font-semibold text-foreground">
               Tags (cách ,)
             </span>
             <input
@@ -594,7 +594,7 @@ function AutoGenerateModal({
 
           <div className="grid grid-cols-2 gap-3">
             <label className="block">
-              <span className="mb-1 block text-xs font-semibold text-neutral-700">
+              <span className="mb-1 block text-xs font-semibold text-foreground">
                 Số câu cần lấy *
               </span>
               <input
@@ -610,7 +610,7 @@ function AutoGenerateModal({
               />
             </label>
             <label className="block">
-              <span className="mb-1 block text-xs font-semibold text-neutral-700">
+              <span className="mb-1 block text-xs font-semibold text-foreground">
                 Điểm mỗi câu
               </span>
               <input
@@ -633,7 +633,7 @@ function AutoGenerateModal({
             type="button"
             onClick={close}
             disabled={pending}
-            className="rounded-lg border border-neutral-300 px-4 py-2 text-sm font-semibold text-neutral-700 hover:bg-neutral-50 disabled:opacity-50"
+            className="rounded-lg border border-border px-4 py-2 text-sm font-semibold text-foreground hover:bg-muted disabled:opacity-50"
           >
             Huỷ
           </button>
@@ -641,7 +641,7 @@ function AutoGenerateModal({
             type="button"
             onClick={handleSubmit}
             disabled={pending}
-            className="rounded-lg bg-purple-500 px-4 py-2 text-sm font-bold text-white hover:bg-purple-600 disabled:opacity-50"
+            className="rounded-lg bg-primary px-4 py-2 text-sm font-bold text-white hover:bg-primary-dark disabled:opacity-50"
           >
             {pending ? "Đang lấy..." : `Lấy ${count} câu`}
           </button>
@@ -652,4 +652,4 @@ function AutoGenerateModal({
 }
 
 const modalInputClass =
-  "w-full rounded-md border border-neutral-300 px-2 py-1.5 text-sm outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20";
+  "w-full rounded-md border border-border px-2 py-1.5 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20";

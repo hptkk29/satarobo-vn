@@ -129,17 +129,17 @@ export default async function TransferReportPage({ searchParams }: Props) {
     <div className="max-w-5xl p-6">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="flex items-center gap-2 text-2xl font-bold text-gray-900">
-            <ArrowLeftRight className="h-6 w-6 text-[#7C3AED]" /> Chuyển lead liên cơ sở
+          <h1 className="flex items-center gap-2 text-2xl font-bold text-foreground">
+            <ArrowLeftRight className="h-6 w-6 text-primary" /> Chuyển lead liên cơ sở
           </h1>
-          <p className="mt-1 text-sm text-gray-500">
+          <p className="mt-1 text-sm text-muted-foreground">
             {isAll ? "Toàn hệ thống" : "Lead vào/ra cơ sở của bạn"} · tháng {month}
           </p>
         </div>
         <div className="flex items-center gap-2 text-sm">
-          <Link href={`/leads/bao-cao-chuyen?month=${mStr(prevM)}`} className="rounded-lg border border-gray-300 px-2 py-1.5 hover:bg-gray-50">←</Link>
-          <span className="font-semibold text-gray-700">{month}</span>
-          <Link href={`/leads/bao-cao-chuyen?month=${mStr(nextM)}`} className="rounded-lg border border-gray-300 px-2 py-1.5 hover:bg-gray-50">→</Link>
+          <Link href={`/leads/bao-cao-chuyen?month=${mStr(prevM)}`} className="rounded-lg border border-border px-2 py-1.5 hover:bg-muted">←</Link>
+          <span className="font-semibold text-foreground">{month}</span>
+          <Link href={`/leads/bao-cao-chuyen?month=${mStr(nextM)}`} className="rounded-lg border border-border px-2 py-1.5 hover:bg-muted">→</Link>
         </div>
       </div>
 
@@ -152,13 +152,13 @@ export default async function TransferReportPage({ searchParams }: Props) {
       </div>
 
       {rows.length === 0 ? (
-        <p className="rounded-xl border border-dashed border-gray-300 p-8 text-center text-sm text-gray-400">
+        <p className="rounded-xl border border-dashed border-border p-8 text-center text-sm text-muted-foreground">
           Không có lead chuyển liên cơ sở trong tháng này.
         </p>
       ) : (
-        <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white">
+        <div className="overflow-x-auto rounded-xl border border-border bg-card">
           <table className="min-w-full text-sm">
-            <thead className="border-b border-gray-200 bg-gray-50 text-left text-xs uppercase tracking-wider text-gray-500">
+            <thead className="border-b border-border bg-muted text-left text-xs uppercase tracking-wider text-muted-foreground">
               <tr>
                 <th className="px-3 py-2">Lead</th>
                 <th className="px-3 py-2">Chuyển</th>
@@ -170,26 +170,26 @@ export default async function TransferReportPage({ searchParams }: Props) {
             </thead>
             <tbody>
               {rows.map((r) => (
-                <tr key={r.id} className="border-b border-gray-100 last:border-0">
+                <tr key={r.id} className="border-b border-border last:border-0">
                   <td className="px-3 py-2">
-                    <Link href={`/leads/${r.leadId}`} className="font-medium text-[#7C3AED] hover:underline">
+                    <Link href={`/leads/${r.leadId}`} className="font-medium text-primary hover:underline">
                       {r.parentName}
                     </Link>
-                    <span className="block text-xs text-gray-400">{r.phone}</span>
+                    <span className="block text-xs text-muted-foreground">{r.phone}</span>
                   </td>
-                  <td className="px-3 py-2 whitespace-nowrap font-semibold text-gray-700">
+                  <td className="px-3 py-2 whitespace-nowrap font-semibold text-foreground">
                     {r.from} → {r.to}
                   </td>
-                  <td className="px-3 py-2 text-gray-600">{r.by}</td>
-                  <td className="px-3 py-2 max-w-xs truncate text-gray-600" title={r.reason}>{r.reason}</td>
+                  <td className="px-3 py-2 text-muted-foreground">{r.by}</td>
+                  <td className="px-3 py-2 max-w-xs truncate text-muted-foreground" title={r.reason}>{r.reason}</td>
                   <td className="px-3 py-2">
                     {r.closed ? (
-                      <span className="rounded bg-green-100 px-2 py-0.5 text-xs font-semibold text-green-700">Đã chốt</span>
+                      <span className="rounded bg-state-success-soft px-2 py-0.5 text-xs font-semibold text-state-success-ink">Đã chốt</span>
                     ) : (
-                      <span className="rounded bg-gray-100 px-2 py-0.5 text-xs font-semibold text-gray-500">Chưa</span>
+                      <span className="rounded bg-muted px-2 py-0.5 text-xs font-semibold text-muted-foreground">Chưa</span>
                     )}
                   </td>
-                  <td className="px-3 py-2 tabular-nums text-gray-500">
+                  <td className="px-3 py-2 tabular-nums text-muted-foreground">
                     {formatDateVN(r.createdAt)}
                   </td>
                 </tr>
@@ -204,9 +204,9 @@ export default async function TransferReportPage({ searchParams }: Props) {
 
 function Stat({ label, value, tone }: { label: string; value: number | string; tone?: "ok" }) {
   return (
-    <div className="rounded-xl border border-gray-200 bg-white p-3">
-      <div className={`text-2xl font-bold tabular-nums ${tone === "ok" ? "text-emerald-600" : "text-[#7C3AED]"}`}>{value}</div>
-      <div className="mt-0.5 text-xs text-gray-500">{label}</div>
+    <div className="rounded-xl border border-border bg-card p-3">
+      <div className={`text-2xl font-bold tabular-nums ${tone === "ok" ? "text-state-success-ink" : "text-primary"}`}>{value}</div>
+      <div className="mt-0.5 text-xs text-muted-foreground">{label}</div>
     </div>
   );
 }

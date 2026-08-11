@@ -21,7 +21,10 @@ import { checkPermission } from "@/lib/auth/check-permission";
 import { scopedDb } from "@/lib/db-scope";
 import { ENROLLMENT_ACTIVE_STATUS_LIST } from "@/lib/enrollment-status";
 import { templateToAssignmentData } from "@/lib/assignments/template";
-import { resolveTemplateDup, publishDraftAssignment } from "@/lib/assignments/publish-draft";
+import {
+  resolveTemplateDup,
+  publishDraftAssignment,
+} from "@/lib/assignments/publish-draft";
 import { getAuditActor } from "@/lib/audit/log";
 import { writeAudit } from "@/lib/audit/audit-log";
 
@@ -38,10 +41,15 @@ const schema = z.object({
   classId: z.string().min(1, "Hãy chọn lớp"),
   // "YYYY-MM-DD" từ input date, hoặc rỗng = không hạn.
   due: z.string().trim().optional().nullable(),
-  attachments: z.array(attachmentSchema).max(10, "Tối đa 10 tệp đính kèm").default([]),
+  attachments: z
+    .array(attachmentSchema)
+    .max(10, "Tối đa 10 tệp đính kèm")
+    .default([]),
 });
 
-type AssignResult = { ok: true; assignmentId: string } | { ok: false; error: string };
+type AssignResult =
+  | { ok: true; assignmentId: string }
+  | { ok: false; error: string };
 
 /** "YYYY-MM-DD" → cuối ngày đó theo giờ VN; rỗng/không hợp lệ → null. */
 function parseDue(due?: string | null): Date | null {
@@ -66,7 +74,10 @@ export async function assignTemplateAction(input: {
 
   const parsed = schema.safeParse(input);
   if (!parsed.success) {
-    return { ok: false, error: parsed.error.issues[0]?.message ?? "Dữ liệu không hợp lệ" };
+    return {
+      ok: false,
+      error: parsed.error.issues[0]?.message ?? "Dữ liệu không hợp lệ",
+    };
   }
   const { templateId, classId } = parsed.data;
   const dueAt = parseDue(parsed.data.due);
@@ -98,7 +109,13 @@ export async function assignTemplateAction(input: {
       allowFile: true,
       // BGĐ 31/07 — file đề bài có sẵn: copy tham chiếu sang bài giao.
       attachments: {
-        select: { fileUrl: true, fileName: true, fileSize: true, mimeType: true, uploadedById: true },
+        select: {
+          fileUrl: true,
+          fileName: true,
+          fileSize: true,
+          mimeType: true,
+          uploadedById: true,
+        },
       },
     },
   });
@@ -194,7 +211,12 @@ export async function assignTemplateAction(input: {
           lessonId: true,
           choices: {
             orderBy: { order: "asc" },
-            select: { order: true, text: true, isCorrect: true, imageUrl: true },
+            select: {
+              order: true,
+              text: true,
+              isCorrect: true,
+              imageUrl: true,
+            },
           },
         },
       },
@@ -218,7 +240,10 @@ export async function assignTemplateAction(input: {
   let assignmentId: string;
   try {
     assignmentId = await sdb.$transaction(async (tx) => {
-      const created = await tx.assignment.create({ data, select: { id: true } });
+      const created = await tx.assignment.create({
+        data,
+        select: { id: true },
+      });
 
       // BGĐ 31/07 — đính kèm: file có sẵn của đề (copy tham chiếu) + file GV thêm khi giao.
       const attachRows = [
@@ -338,7 +363,9 @@ const batchGradeSchema = z.object({
     .min(1, "Chưa nhập điểm cho học viên nào"),
 });
 
-type BatchGradeResult = { ok: true; graded: number } | { ok: false; error: string };
+type BatchGradeResult =
+  | { ok: true; graded: number }
+  | { ok: false; error: string };
 
 export async function gradeBatchAction(input: {
   assignmentId: string;
@@ -349,7 +376,10 @@ export async function gradeBatchAction(input: {
 
   const parsed = batchGradeSchema.safeParse(input);
   if (!parsed.success) {
-    return { ok: false, error: parsed.error.issues[0]?.message ?? "Dữ liệu không hợp lệ" };
+    return {
+      ok: false,
+      error: parsed.error.issues[0]?.message ?? "Dữ liệu không hợp lệ",
+    };
   }
   const { assignmentId, scores } = parsed.data;
 
@@ -379,7 +409,9 @@ export async function gradeBatchAction(input: {
     return { ok: false, error: "Bài không thuộc lớp bạn phụ trách" };
   }
   // (1) Role có capability chấm bài không.
-  const allowed = await checkPermission("assignments:grade", { classId: asg.classId });
+  const allowed = await checkPermission("assignments:grade", {
+    classId: asg.classId,
+  });
   if (!allowed) return { ok: false, error: "Không có quyền chấm bài" };
 
   // Chỉ chấm HV đang học của lớp + điểm trong thang.
@@ -389,7 +421,10 @@ export async function gradeBatchAction(input: {
       return { ok: false, error: "Có học viên không thuộc lớp" };
     }
     if (s.score < 0 || s.score > asg.totalPoints) {
-      return { ok: false, error: `Điểm phải trong khoảng 0–${asg.totalPoints}` };
+      return {
+        ok: false,
+        error: `Điểm phải trong khoảng 0–${asg.totalPoints}`,
+      };
     }
   }
 
@@ -404,8 +439,15 @@ export async function gradeBatchAction(input: {
     await sdb.$transaction(async (tx) => {
       for (const s of scores) {
         await tx.assignmentSubmission.upsert({
-          where: { assignmentId_studentId: { assignmentId, studentId: s.studentId } },
-          update: { status: "GRADED", score: s.score, gradedAt: now, gradedById },
+          where: {
+            assignmentId_studentId: { assignmentId, studentId: s.studentId },
+          },
+          update: {
+            status: "GRADED",
+            score: s.score,
+            gradedAt: now,
+            gradedById,
+          },
           create: {
             assignmentId,
             studentId: s.studentId,

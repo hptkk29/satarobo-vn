@@ -262,11 +262,7 @@ export function PhanCongEditor({
                   </td>
                   <td className="px-3 py-2">
                     <span
-                      className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${
-                        a.kind === "PRIMARY"
-                          ? "bg-primary/10 text-primary"
-                          : "bg-muted text-muted-foreground"
-                      }`}
+                      className={`rounded-full px-2 py-0.5 text-[11px] font-semibold ${ a.kind === "PRIMARY" ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground" }`}
                     >
                       {NHAN_KIND[a.kind] ?? a.kind}
                     </span>

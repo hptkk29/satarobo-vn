@@ -25,9 +25,9 @@ export function VietQrConfig({
   rows: VietQrCenterRow[];
 }) {
   return (
-    <section className="rounded-xl border border-neutral-200 bg-white p-4">
-      <h2 className="text-sm font-bold text-neutral-800">Tài khoản nhận tiền (VietQR)</h2>
-      <p className="mt-1 text-xs text-neutral-500">
+    <section className="rounded-xl border border-border bg-card p-4">
+      <h2 className="text-sm font-bold text-foreground">Tài khoản nhận tiền (VietQR)</h2>
+      <p className="mt-1 text-xs text-muted-foreground">
         QR thanh toán động dựng từ tài khoản này (ảnh public img.vietqr.io — không cần API key). Mã ngân
         hàng (BIN) 6 số theo chuẩn VietQR, vd Vietinbank 970415, Vietcombank 970436, MB 970422.
         Đơn hàng lấy tài khoản <strong>theo cơ sở của đơn</strong>; cơ sở chưa cấu hình thì dùng
@@ -66,13 +66,11 @@ function VietQrRow({ canEdit, row }: { canEdit: boolean; row: VietQrCenterRow })
   }
 
   return (
-    <div className="rounded-lg border border-neutral-200 p-3">
+    <div className="rounded-lg border border-border p-3">
       <div className="flex items-center justify-between">
-        <h3 className="text-sm font-semibold text-neutral-700">{row.centerName}</h3>
+        <h3 className="text-sm font-semibold text-foreground">{row.centerName}</h3>
         <span
-          className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${
-            row.current ? "bg-emerald-100 text-emerald-700" : "bg-neutral-200 text-neutral-500"
-          }`}
+          className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${ row.current ? "bg-state-success-soft text-state-success-ink" : "bg-muted text-muted-foreground" }`}
         >
           {row.current ? "Đã cấu hình" : "Chưa cấu hình"}
         </span>
@@ -84,32 +82,32 @@ function VietQrRow({ canEdit, row }: { canEdit: boolean; row: VietQrCenterRow })
             value={bankBin}
             onChange={(e) => setBankBin(e.target.value)}
             placeholder="Mã NH (BIN) — 970415"
-            className="rounded-md border border-neutral-300 px-3 py-2 text-sm"
+            className="rounded-md border border-border px-3 py-2 text-sm"
           />
           <input
             value={accountNumber}
             onChange={(e) => setAccountNumber(e.target.value)}
             placeholder="Số tài khoản"
-            className="rounded-md border border-neutral-300 px-3 py-2 text-sm"
+            className="rounded-md border border-border px-3 py-2 text-sm"
           />
           <input
             value={accountName}
             onChange={(e) => setAccountName(e.target.value)}
             placeholder="Chủ tài khoản"
-            className="rounded-md border border-neutral-300 px-3 py-2 text-sm"
+            className="rounded-md border border-border px-3 py-2 text-sm"
           />
           <div className="sm:col-span-3">
             <button
               onClick={save}
               disabled={pending}
-              className="rounded-md bg-purple-700 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
+              className="rounded-md bg-primary-dark px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
             >
               {pending ? "Đang lưu…" : "Lưu tài khoản nhận tiền"}
             </button>
           </div>
         </div>
       ) : (
-        <p className="mt-2 text-sm text-neutral-600">
+        <p className="mt-2 text-sm text-muted-foreground">
           {row.current
             ? `${row.current.accountName} · ${row.current.accountNumber} (BIN ${row.current.bankBin})`
             : "Chưa cấu hình — cần quyền cài đặt để thiết lập."}

@@ -266,8 +266,8 @@ export function OrderCreateForm({
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
       {/* Order header */}
-      <section className="space-y-4 rounded-xl border border-gray-200 bg-gray-50/50 p-5">
-        <h2 className="text-sm font-bold uppercase tracking-wider text-gray-500">
+      <section className="space-y-4 rounded-xl border border-border bg-muted/50 p-5">
+        <h2 className="text-sm font-bold uppercase tracking-wider text-muted-foreground">
           Thông tin đơn
         </h2>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
@@ -333,8 +333,8 @@ export function OrderCreateForm({
       </section>
 
       {/* Customer */}
-      <section className="space-y-4 rounded-xl border border-gray-200 bg-white p-5">
-        <h2 className="text-sm font-bold uppercase tracking-wider text-gray-500">
+      <section className="space-y-4 rounded-xl border border-border bg-card p-5">
+        <h2 className="text-sm font-bold uppercase tracking-wider text-muted-foreground">
           Khách hàng
         </h2>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -439,8 +439,8 @@ export function OrderCreateForm({
       </section>
 
       {/* Item */}
-      <section className="space-y-4 rounded-xl border-l-4 border-blue-300 border-y border-r border-gray-200 bg-blue-50/20 p-5">
-        <h2 className="text-sm font-bold uppercase tracking-wider text-blue-700">
+      <section className="space-y-4 rounded-xl border-l-4 border-state-info border-y border-r border-border bg-state-info-soft/20 p-5">
+        <h2 className="text-sm font-bold uppercase tracking-wider text-state-info-ink">
           Sản phẩm
         </h2>
         <div className="space-y-1.5">
@@ -462,7 +462,7 @@ export function OrderCreateForm({
                   </SelectItem>
                 ))}
               {orderType === "PRODUCT" && products.length === 0 && (
-                <div className="p-2 text-xs text-gray-500">
+                <div className="p-2 text-xs text-muted-foreground">
                   Không có sản phẩm ACTIVE. Tạo sản phẩm tại /products/new
                 </div>
               )}
@@ -482,7 +482,7 @@ export function OrderCreateForm({
           </Select>
           {/* O4 hardening — cảnh báo giá khoá học rỗng → nhập đơn giá tay */}
           {coursePriceMissing && (
-            <div className="mt-2 rounded-lg border border-amber-300 bg-amber-50 p-2 text-sm text-amber-800">
+            <div className="mt-2 rounded-lg border border-state-warning bg-state-warning-soft p-2 text-sm text-state-warning-ink">
               ⚠️ Khoá học này chưa có giá niêm yết. Vui lòng nhập đơn giá thủ
               công bên dưới.
             </div>
@@ -498,8 +498,8 @@ export function OrderCreateForm({
                   className={
                     "mt-2 rounded-lg p-2 text-sm " +
                     (insufficient
-                      ? "border border-red-200 bg-red-50 text-red-700"
-                      : "border border-blue-200 bg-blue-50 text-blue-700")
+                      ? "border border-state-danger-soft bg-state-danger-soft text-state-danger-ink"
+                      : "border border-state-info-soft bg-state-info-soft text-state-info-ink")
                   }
                 >
                   {insufficient ? "⚠️" : "ℹ️"} Tồn kho hiện tại:{" "}
@@ -532,8 +532,8 @@ export function OrderCreateForm({
       </section>
 
       {/* Pricing */}
-      <section className="space-y-4 rounded-xl border border-gray-200 bg-gray-50/50 p-5">
-        <h2 className="text-sm font-bold uppercase tracking-wider text-gray-500">
+      <section className="space-y-4 rounded-xl border border-border bg-muted/50 p-5">
+        <h2 className="text-sm font-bold uppercase tracking-wider text-muted-foreground">
           Định giá
         </h2>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -591,7 +591,7 @@ export function OrderCreateForm({
               maxLength={1000}
               placeholder="VD: HV cũ giới thiệu em ruột — ưu đãi theo chính sách anh chị em"
             />
-            <p className="text-xs text-amber-700">
+            <p className="text-xs text-state-warning-ink">
               Đơn có giảm giá sẽ ở trạng thái <strong>chờ Quản lý cơ sở duyệt</strong> — chỉ
               xác nhận được sau khi duyệt.
             </p>
@@ -599,7 +599,7 @@ export function OrderCreateForm({
         )}
 
         <div className="text-right">
-          <div className="text-sm text-gray-600">
+          <div className="text-sm text-muted-foreground">
             Tạm tính:{" "}
             <span className="tabular-nums">
               {subtotal.toLocaleString("vi-VN")}
@@ -607,7 +607,7 @@ export function OrderCreateForm({
             đ
           </div>
           {effectiveDiscount > 0 && (
-            <div className="text-sm text-gray-600">
+            <div className="text-sm text-muted-foreground">
               Giảm giá:{" "}
               <span className="tabular-nums">
                 −{effectiveDiscount.toLocaleString("vi-VN")}
@@ -618,7 +618,7 @@ export function OrderCreateForm({
                 : ""}
             </div>
           )}
-          <div className="text-2xl font-bold text-gray-900">
+          <div className="text-2xl font-bold text-foreground">
             Tổng:{" "}
             <span className="tabular-nums">
               {totalAmount.toLocaleString("vi-VN")}

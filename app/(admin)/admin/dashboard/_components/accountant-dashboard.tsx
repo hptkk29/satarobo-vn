@@ -75,7 +75,7 @@ export async function AccountantDashboard({ name, actor, embedded = false }: { n
 
   return (
     <div className="space-y-6">
-      {!embedded && <h1 className="text-2xl font-bold text-gray-900">Chào {name || "bạn"} 👋 · Tài chính</h1>}
+      {!embedded && <h1 className="text-2xl font-bold text-foreground">Chào {name || "bạn"} 👋 · Tài chính</h1>}
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <StatBig label="Đã thu (tổng)" value={vnd(paid)} tone="ok" icon={<Wallet className="h-5 w-5" />} />
@@ -85,16 +85,16 @@ export async function AccountantDashboard({ name, actor, embedded = false }: { n
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         {/* Công nợ theo cơ sở */}
-        <section className="rounded-xl border border-gray-200 bg-white p-5">
-          <h2 className="mb-3 text-sm font-bold uppercase tracking-wider text-gray-500">Công nợ theo cơ sở</h2>
+        <section className="rounded-xl border border-border bg-card p-5">
+          <h2 className="mb-3 text-sm font-bold uppercase tracking-wider text-muted-foreground">Công nợ theo cơ sở</h2>
           {debtByCenter.length === 0 ? (
-            <p className="text-sm text-gray-400">Không có công nợ.</p>
+            <p className="text-sm text-muted-foreground">Không có công nợ.</p>
           ) : (
             <ul className="space-y-1.5 text-sm">
               {debtByCenter.map((d, i) => (
                 <li key={i} className="flex items-center justify-between">
-                  <span className="text-gray-700">{d.label}</span>
-                  <span className="font-semibold tabular-nums text-rose-600">{vnd(d.amount)}</span>
+                  <span className="text-foreground">{d.label}</span>
+                  <span className="font-semibold tabular-nums text-state-danger-ink">{vnd(d.amount)}</span>
                 </li>
               ))}
             </ul>
@@ -102,21 +102,21 @@ export async function AccountantDashboard({ name, actor, embedded = false }: { n
         </section>
 
         {/* Hoá đơn quá hạn */}
-        <section className="rounded-xl border border-gray-200 bg-white p-5">
-          <h2 className="mb-3 flex items-center gap-2 text-sm font-bold uppercase tracking-wider text-gray-500">
-            <AlertTriangle className="h-4 w-4 text-rose-500" /> Hoá đơn quá hạn (&gt;7 ngày chưa thu)
+        <section className="rounded-xl border border-border bg-card p-5">
+          <h2 className="mb-3 flex items-center gap-2 text-sm font-bold uppercase tracking-wider text-muted-foreground">
+            <AlertTriangle className="h-4 w-4 text-state-danger-ink" /> Hoá đơn quá hạn (&gt;7 ngày chưa thu)
           </h2>
           {overdueOrders.length === 0 ? (
-            <p className="text-sm text-gray-400">Không có hoá đơn quá hạn.</p>
+            <p className="text-sm text-muted-foreground">Không có hoá đơn quá hạn.</p>
           ) : (
             <ul className="space-y-1.5 text-sm">
               {overdueOrders.map((o) => (
                 <li key={o.id} className="flex items-center justify-between gap-2">
-                  <Link href={`/orders/${o.id}`} className="truncate text-gray-800 hover:text-[#7C3AED]">
+                  <Link href={`/orders/${o.id}`} className="truncate text-foreground hover:text-primary">
                     {o.studentName}
-                    <span className="ml-1 text-xs text-gray-400">{o.centerName}</span>
+                    <span className="ml-1 text-xs text-muted-foreground">{o.centerName}</span>
                   </Link>
-                  <span className="shrink-0 font-semibold tabular-nums text-rose-600">{vnd(o.amount)}</span>
+                  <span className="shrink-0 font-semibold tabular-nums text-state-danger-ink">{vnd(o.amount)}</span>
                 </li>
               ))}
             </ul>
@@ -124,7 +124,7 @@ export async function AccountantDashboard({ name, actor, embedded = false }: { n
         </section>
       </div>
 
-      <Link href="/orders" className="inline-block text-sm font-semibold text-[#7C3AED] hover:underline">
+      <Link href="/orders" className="inline-block text-sm font-semibold text-primary hover:underline">
         Quản lý đơn hàng / học phí →
       </Link>
     </div>
@@ -136,11 +136,11 @@ function StatBig({
 }: {
   label: string; value: string; tone: "neutral" | "ok" | "danger"; icon: React.ReactNode;
 }) {
-  const toneCls = tone === "danger" ? "text-rose-600" : tone === "ok" ? "text-emerald-600" : "text-[#7C3AED]";
+  const toneCls = tone === "danger" ? "text-state-danger-ink" : tone === "ok" ? "text-state-success-ink" : "text-primary";
   return (
-    <div className="rounded-xl border border-gray-200 bg-white p-4">
+    <div className="rounded-xl border border-border bg-card p-4">
       <div className={`flex items-center gap-2 ${toneCls}`}>{icon}<span className="text-xl font-bold tabular-nums">{value}</span></div>
-      <div className="mt-1 text-xs text-gray-500">{label}</div>
+      <div className="mt-1 text-xs text-muted-foreground">{label}</div>
     </div>
   );
 }

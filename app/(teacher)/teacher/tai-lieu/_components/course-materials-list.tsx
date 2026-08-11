@@ -21,14 +21,14 @@ export interface CourseMaterialRow {
 
 // Chấm màu theo thứ tự (khớp phong cách reference — mỗi khoá 1 màu điểm nhấn).
 const DOTS = [
-  "bg-blue-500",
-  "bg-orange-500",
-  "bg-emerald-500",
-  "bg-sky-500",
-  "bg-rose-500",
-  "bg-amber-500",
-  "bg-indigo-500",
-  "bg-teal-500",
+  "bg-state-info",
+  "bg-primary",
+  "bg-state-success",
+  "bg-state-info",
+  "bg-state-danger",
+  "bg-state-warning",
+  "bg-state-info",
+  "bg-state-success",
 ];
 
 export function CourseMaterialsList({ rows }: { rows: CourseMaterialRow[] }) {
@@ -54,17 +54,28 @@ export function CourseMaterialsList({ rows }: { rows: CourseMaterialRow[] }) {
       />
 
       {rows.length === 0 ? (
-        <EmptyState icon={FileText} title="Chưa có khoá học nào có khung chương trình." />
+        <EmptyState
+          icon={FileText}
+          title="Chưa có khoá học nào có khung chương trình."
+        />
       ) : (
         <div className="t-card overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="w-full border-collapse text-left text-sm">
+            <table className="min-w-[660px] w-full border-collapse text-left text-sm">
               <thead>
                 <tr className="border-b border-border bg-muted/50 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
-                  <th scope="col" className="px-5 py-3">Khóa học</th>
-                  <th scope="col" className="px-5 py-3 text-center">Buổi học</th>
-                  <th scope="col" className="px-5 py-3 text-center">Giáo án</th>
-                  <th scope="col" className="px-5 py-3 text-center">Bài tập</th>
+                  <th scope="col" className="px-5 py-3">
+                    Khóa học
+                  </th>
+                  <th scope="col" className="px-5 py-3 text-center">
+                    Buổi học
+                  </th>
+                  <th scope="col" className="px-5 py-3 text-center">
+                    Giáo án
+                  </th>
+                  <th scope="col" className="px-5 py-3 text-center">
+                    Bài tập
+                  </th>
                   <th scope="col" className="px-5 py-3 text-right">
                     <span className="sr-only">Tài liệu</span>
                   </th>
@@ -73,7 +84,10 @@ export function CourseMaterialsList({ rows }: { rows: CourseMaterialRow[] }) {
               <tbody>
                 {filtered.length === 0 ? (
                   <tr>
-                    <td colSpan={5} className="px-5 py-10 text-center text-sm text-muted-foreground">
+                    <td
+                      colSpan={5}
+                      className="px-5 py-10 text-center text-sm text-muted-foreground"
+                    >
                       Không có khoá học khớp tìm kiếm.
                     </td>
                   </tr>
@@ -92,7 +106,7 @@ export function CourseMaterialsList({ rows }: { rows: CourseMaterialRow[] }) {
                           <div className="min-w-0">
                             <Link
                               href={`?courseId=${r.id}`}
-                              className="rounded-sm font-semibold text-foreground outline-none hover:text-orange-600 focus-visible:ring-2 focus-visible:ring-ring dark:hover:text-orange-400"
+                              className="rounded-sm font-semibold text-foreground outline-none hover:text-primary-ink-hover focus-visible:ring-2 focus-visible:ring-ring"
                             >
                               {r.name}
                             </Link>
@@ -107,16 +121,19 @@ export function CourseMaterialsList({ rows }: { rows: CourseMaterialRow[] }) {
                       <td className="px-5 py-3.5 text-center font-bold text-foreground">
                         {r.sessions}
                       </td>
-                      <td className="px-5 py-3.5 text-center text-muted-foreground">{r.plans}</td>
+                      <td className="px-5 py-3.5 text-center text-muted-foreground">
+                        {r.plans}
+                      </td>
                       <td className="px-5 py-3.5 text-center text-muted-foreground">
                         {r.homeworks}
                       </td>
                       <td className="px-5 py-3.5 text-right whitespace-nowrap">
                         <Link
                           href={`?courseId=${r.id}`}
-                          className="inline-flex items-center gap-1 rounded-sm text-sm font-semibold text-orange-600 outline-none hover:text-orange-700 focus-visible:ring-2 focus-visible:ring-ring dark:text-orange-400"
+                          className="inline-flex items-center gap-1 rounded-sm text-sm font-semibold text-primary-ink outline-none hover:text-primary-ink-hover focus-visible:ring-2 focus-visible:ring-ring"
                         >
-                          Xem tài liệu <ChevronRight className="h-4 w-4" aria-hidden />
+                          Xem tài liệu{" "}
+                          <ChevronRight className="h-4 w-4" aria-hidden />
                         </Link>
                       </td>
                     </tr>

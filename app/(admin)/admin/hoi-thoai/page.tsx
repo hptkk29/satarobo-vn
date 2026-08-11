@@ -93,8 +93,8 @@ export default async function AdminConversationsPage({
     <div className="space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="flex items-start gap-3">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-orange-50">
-            <MessagesSquare className="h-5 w-5 text-orange-600" />
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary-soft">
+            <MessagesSquare className="h-5 w-5 text-primary" />
           </div>
           <div>
             <h1 className="text-2xl font-bold text-foreground">Quản trị hội thoại</h1>
@@ -108,13 +108,13 @@ export default async function AdminConversationsPage({
         <div className="flex flex-wrap gap-2">
           <Link
             href="/audit-log"
-            className="inline-flex items-center gap-1.5 text-sm font-medium text-orange-600 hover:underline"
+            className="inline-flex items-center gap-1.5 text-sm font-medium text-primary hover:underline"
           >
             <ScrollText className="h-4 w-4" /> Nhật ký (lọc module &quot;chat&quot;)
           </Link>
           <Link
             href="/hoi-thoai/doi-soat"
-            className="inline-flex items-center gap-1.5 text-sm font-medium text-orange-600 hover:underline"
+            className="inline-flex items-center gap-1.5 text-sm font-medium text-primary hover:underline"
           >
             Đối soát thành viên
           </Link>
@@ -229,7 +229,7 @@ export default async function AdminConversationsPage({
                   <TableCell className="text-right">
                     <Link
                       href={`/hoi-thoai/${r.conversationId}`}
-                      className="text-sm font-medium text-orange-600 hover:underline"
+                      className="text-sm font-medium text-primary hover:underline"
                     >
                       Mở hồ sơ →
                     </Link>

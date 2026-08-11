@@ -14,6 +14,7 @@
 // Cây dựng từ `parentId` trong bộ nhớ: dữ liệu < 50 node, đừng tối ưu sớm.
 import { redirect } from "next/navigation";
 import { ChevronRight, Network } from "lucide-react";
+import { PageHelp } from "@/components/admin/ui/page-help";
 import { auth } from "@/lib/auth";
 import { checkAnyPermission, checkPermission } from "@/lib/auth/check-permission";
 import { PAGE_GATES } from "@/lib/auth/page-gates";
@@ -61,11 +62,16 @@ type UnitRow = {
  * cộng toàn bộ đường tổ tiên của những node đó (không có đường này thì cây gãy đoạn
  * và React không có gốc để render).
  */
-function keepVisibleBranches(rows: UnitRow[], allowedCenterIds: string[]): UnitRow[] {
+function keepVisibleBranches(
+  rows: UnitRow[],
+  allowedCenterIds: string[],
+): UnitRow[] {
   const allowed = new Set(allowedCenterIds);
   const byId = new Map(rows.map((r) => [r.id, r]));
   const matched = new Set(
-    rows.filter((r) => r.centerId != null && allowed.has(r.centerId)).map((r) => r.id),
+    rows
+      .filter((r) => r.centerId != null && allowed.has(r.centerId))
+      .map((r) => r.id),
   );
   if (matched.size === 0) return [];
 
@@ -79,7 +85,8 @@ function keepVisibleBranches(rows: UnitRow[], allowedCenterIds: string[]): UnitR
       chain.push(cur.id);
       cur = cur.parentId ? byId.get(cur.parentId) : undefined;
     }
-    if (chain.some((id) => matched.has(id))) for (const id of chain) keep.add(id);
+    if (chain.some((id) => matched.has(id)))
+      for (const id of chain) keep.add(id);
   }
   return rows.filter((r) => keep.has(r.id));
 }
@@ -107,29 +114,36 @@ function OrgTreeNode({
 
   return (
     <details open className="group">
-      <summary className="flex cursor-pointer list-none items-center gap-2 rounded-lg px-2 py-2 hover:bg-neutral-50 [&::-webkit-details-marker]:hidden">
+      <summary className="flex cursor-pointer list-none items-center gap-2 rounded-lg px-2 py-2 hover:bg-muted [&::-webkit-details-marker]:hidden">
         <ChevronRight
           className={cn(
-            "h-4 w-4 shrink-0 text-neutral-400 transition-transform group-open:rotate-90",
+            "h-4 w-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-90",
             kids.length === 0 && "invisible",
           )}
         />
         <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-1">
-          <span className="font-mono text-xs font-bold text-neutral-900">{node.code}</span>
-          <span className="truncate font-semibold text-neutral-900">{node.name}</span>
+          <span className="font-mono text-xs font-bold text-foreground">
+            {node.code}
+          </span>
+          <span className="truncate font-semibold text-foreground">
+            {node.name}
+          </span>
           <Badge variant="outline">{ORG_UNIT_TYPE_LABEL[node.type]}</Badge>
-          <Badge variant={node.relationshipType === "OWNED" ? "outline" : "default"}>
+          <Badge
+            variant={node.relationshipType === "OWNED" ? "outline" : "default"}
+          >
             {ORG_RELATIONSHIP_LABEL[node.relationshipType]}
           </Badge>
           <Badge variant={statusBadgeVariant(node.status)}>
             {ORG_STATUS_LABEL[node.status]}
           </Badge>
-          <span className="font-mono text-xs text-neutral-400">
+          <span className="font-mono text-xs text-muted-foreground">
             {node.path ?? "(chưa có đường dẫn)"}
           </span>
           {node.legalEntity && (
-            <span className="text-xs text-neutral-500">
-              Pháp nhân: {node.legalEntity.legalName} · MST {node.legalEntity.taxCode}
+            <span className="text-xs text-muted-foreground">
+              Pháp nhân: {node.legalEntity.legalName} · MST{" "}
+              {node.legalEntity.taxCode}
             </span>
           )}
         </div>
@@ -154,7 +168,7 @@ function OrgTreeNode({
       </summary>
 
       {kids.length > 0 && (
-        <div className="ml-4 border-l border-neutral-200 pl-3">
+        <div className="ml-4 border-l border-border pl-3">
           {kids.map((kid) => (
             <OrgTreeNode
               key={kid.id}
@@ -230,7 +244,9 @@ export default async function ToChucPage() {
     else childrenOf.set(u.parentId, [u]);
   }
   // Gốc = node không cha, HOẶC node có cha nằm ngoài tầm nhìn (đừng nuốt cả nhánh).
-  const roots = units.filter((u) => u.parentId == null || !byId.has(u.parentId));
+  const roots = units.filter(
+    (u) => u.parentId == null || !byId.has(u.parentId),
+  );
 
   const parentOptions: ParentOption[] = units.map((u) => ({
     id: u.id,
@@ -246,25 +262,44 @@ export default async function ToChucPage() {
     <div>
       <div className="mb-6 flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="flex items-center gap-2 text-3xl font-black text-neutral-900">
-            <Network className="h-7 w-7 text-orange-500" />
+          <h1 className="flex items-center gap-2 text-3xl font-black text-foreground">
+            <Network className="h-7 w-7 text-primary" />
             Cây tổ chức
           </h1>
-          <p className="mt-1 max-w-3xl text-sm text-neutral-500">
-            Hội sở → Khối vùng → Cơ sở. Mở cơ sở mới là thêm dữ liệu ở đây, không sửa
-            code. Đường dẫn (path) của mỗi node là thứ dùng để tính phạm vi quyền — đổi
-            đơn vị cha sẽ tính lại cả nhánh con. · {activeCount}/{units.length} đơn vị
-            đang hoạt động
+          {/* Dòng phụ chỉ nói TRẠNG THÁI, không giải thích cách dùng — phần hướng dẫn
+              nằm ở <PageHelp> bên dưới, đóng sẵn. Người vận hành mở trang này mỗi ngày
+              và cần nhìn thấy cây ngay, không phải đọc lại một đoạn văn. */}
+          <p className="mt-1 text-sm text-muted-foreground">
+            {activeCount}/{units.length} đơn vị đang hoạt động
           </p>
         </div>
         {canEdit && (
-          <CreateOrgUnitButton parents={parentOptions} legalEntities={legalEntities} />
+          <CreateOrgUnitButton
+            parents={parentOptions}
+            legalEntities={legalEntities}
+          />
         )}
       </div>
 
-      <div className="rounded-xl border border-neutral-200 bg-white p-3">
+      <PageHelp>
+        <p>
+          Cây tổ chức xếp theo ba tầng:{" "}
+          <strong>Hội sở → Khối vùng → Cơ sở</strong>.
+        </p>
+        <ul className="mt-2 list-disc space-y-1 pl-5">
+          <li>Mở cơ sở mới là thêm đơn vị ở đây — không cần lập trình viên.</li>
+          <li>
+            Đổi đơn vị cha sẽ tính lại đường dẫn của{" "}
+            <strong>cả nhánh con</strong>, và đường dẫn đó quyết định ai nhìn
+            thấy dữ liệu của cơ sở nào.
+          </li>
+          <li>Đơn vị còn đơn vị con đang hoạt động thì không xoá được.</li>
+        </ul>
+      </PageHelp>
+
+      <div className="rounded-xl border border-border bg-card p-3">
         {roots.length === 0 ? (
-          <p className="py-12 text-center text-sm text-neutral-400">
+          <p className="py-12 text-center text-sm text-muted-foreground">
             Chưa có đơn vị nào trong tầm nhìn của bạn.
           </p>
         ) : (
@@ -282,9 +317,9 @@ export default async function ToChucPage() {
       </div>
 
       {!canEdit && (
-        <p className="mt-3 text-xs text-neutral-500">
-          Bạn đang xem ở chế độ chỉ đọc — tạo/sửa đơn vị cần quyền quản trị cơ sở
-          (centers:edit).
+        <p className="mt-3 text-xs text-muted-foreground">
+          Bạn đang xem ở chế độ chỉ đọc — tạo/sửa đơn vị cần quyền quản trị cơ
+          sở (centers:edit).
         </p>
       )}
     </div>

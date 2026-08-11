@@ -69,7 +69,7 @@ export function TransferDialog({
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="inline-flex items-center gap-1.5 rounded-lg border border-gray-300 px-3 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50"
+        className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-2 text-sm font-semibold text-foreground hover:bg-muted"
       >
         <ArrowLeftRight size={14} /> Chuyển lead
       </button>
@@ -77,15 +77,15 @@ export function TransferDialog({
       {open && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <button type="button" aria-label="Đóng" className="absolute inset-0 bg-black/40" onClick={() => setOpen(false)} />
-          <div className="relative z-10 w-full max-w-md rounded-2xl border border-gray-200 bg-white p-5 shadow-xl">
-            <h3 className="mb-3 text-sm font-bold text-gray-900">Chuyển lead</h3>
+          <div className="relative z-10 w-full max-w-md rounded-2xl border border-border bg-card p-5 shadow-xl">
+            <h3 className="mb-3 text-sm font-bold text-foreground">Chuyển lead</h3>
             <div className="space-y-3">
               <label className="block">
-                <span className="mb-1 block text-xs text-gray-500">Cơ sở đích</span>
+                <span className="mb-1 block text-xs text-muted-foreground">Cơ sở đích</span>
                 <select
                   value={toCenterId}
                   onChange={(e) => { setToCenterId(e.target.value); setToSaleId(""); }}
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                  className="w-full rounded-lg border border-border px-3 py-2 text-sm"
                 >
                   <option value="">— Giữ nguyên / chưa rõ —</option>
                   {centers.map((c) => (
@@ -95,13 +95,13 @@ export function TransferDialog({
               </label>
 
               <label className="block">
-                <span className="mb-1 block text-xs text-gray-500">
+                <span className="mb-1 block text-xs text-muted-foreground">
                   Sale nhận {centerChanged && "(để trống = chia theo chế độ cơ sở mới)"}
                 </span>
                 <select
                   value={toSaleId}
                   onChange={(e) => setToSaleId(e.target.value)}
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                  className="w-full rounded-lg border border-border px-3 py-2 text-sm"
                 >
                   <option value="">
                     {centerChanged ? "— Chia theo chế độ cơ sở mới —" : "— Chọn sale —"}
@@ -113,7 +113,7 @@ export function TransferDialog({
               </label>
 
               <label className="block">
-                <span className="mb-1 block text-xs font-semibold text-rose-600">
+                <span className="mb-1 block text-xs font-semibold text-state-danger-ink">
                   Note bàn giao — đã tư vấn gì cho KH * (bắt buộc)
                 </span>
                 <textarea
@@ -121,16 +121,16 @@ export function TransferDialog({
                   onChange={(e) => setHandoverNote(e.target.value)}
                   rows={3}
                   placeholder="Tóm tắt nội dung đã tư vấn để sale mới không hỏi lại…"
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-[#7C3AED] focus:outline-none"
+                  className="w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-primary focus:outline-none"
                 />
               </label>
 
               <label className="block">
-                <span className="mb-1 block text-xs text-gray-500">Lý do chuyển (tuỳ chọn)</span>
+                <span className="mb-1 block text-xs text-muted-foreground">Lý do chuyển (tuỳ chọn)</span>
                 <input
                   value={reason}
                   onChange={(e) => setReason(e.target.value)}
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm"
+                  className="w-full rounded-lg border border-border px-3 py-2 text-sm"
                 />
               </label>
             </div>
@@ -140,14 +140,14 @@ export function TransferDialog({
                 type="button"
                 onClick={submit}
                 disabled={pending}
-                className="rounded-lg bg-[#7C3AED] px-4 py-2 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-50"
+                className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-50"
               >
                 {pending ? "Đang chuyển…" : "Chuyển lead"}
               </button>
               <button
                 type="button"
                 onClick={() => setOpen(false)}
-                className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                className="rounded-lg border border-border px-4 py-2 text-sm font-medium text-foreground hover:bg-muted"
               >
                 Huỷ
               </button>

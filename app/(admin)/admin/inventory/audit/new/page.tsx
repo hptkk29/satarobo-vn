@@ -6,6 +6,7 @@ import { redirect } from "next/navigation";
 import { resolveActor } from "@/lib/auth/actor";
 import { getSelectableOrgUnits } from "@/lib/org/org-service";
 import { StartAuditForm } from "../_components/start-audit-form";
+import { PageHelp } from "@/components/admin/ui/page-help";
 
 export const dynamic = "force-dynamic";
 
@@ -27,25 +28,28 @@ export default async function NewAuditPage() {
       <div>
         <Link
           href="/inventory/audit"
-          className="mb-3 inline-flex items-center gap-1 text-sm text-neutral-500 hover:text-neutral-700"
+          className="mb-3 inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
         >
           <ChevronLeft className="h-4 w-4" /> Quay lại danh sách
         </Link>
-        <h1 className="text-2xl font-bold text-neutral-900">
+        <h1 className="text-2xl font-bold text-foreground">
           Tạo phiếu kiểm kê
         </h1>
-        <p className="mt-1 text-sm text-neutral-500">
+      </div>
+
+      <PageHelp>
+        <p>
           Phiếu mới ở trạng thái DRAFT. Sau khi tạo, hệ thống mở form kiểm kê
           bulk cho toàn bộ mặt hàng active của cơ sở.
         </p>
-      </div>
+      </PageHelp>
 
       {orgUnits.length === 0 ? (
-        <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+        <div className="rounded-xl border border-state-warning-soft bg-state-warning-soft p-4 text-sm text-state-warning-ink">
           Chưa có cơ sở active nào. Tạo / kích hoạt cơ sở trước tại{" "}
           <Link
             href="/centers"
-            className="font-semibold underline hover:text-amber-900"
+            className="font-semibold underline hover:text-state-warning-ink"
           >
             /admin/centers
           </Link>

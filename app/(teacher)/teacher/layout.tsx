@@ -6,7 +6,7 @@
 // PARENT → portal). UI: shadcn thuần — KHÔNG Magic UI/Framer/Recharts (ESLint chặn).
 //
 // Giao diện port từ TeachUI: shell sidebar + topbar (thay top-nav ngang), tone
-// cam-only + Sáng/Tối. Token scoped trong ./teacher.css dưới `.teacher-root` →
+// màu theo token thương hiệu + Sáng/Tối. Token scoped trong ./teacher.css dưới `.teacher-root` →
 // admin/portal/public giữ nguyên nhận diện cam+tím.
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
@@ -57,9 +57,15 @@ export default async function TeacherLayout({
   const sdb = scopedDb(actor);
   const dbUser = await sdb.user.findUnique({
     where: { id: session.user.id },
-    select: { isActive: true, tokenVersion: true, deletedAt: true, mustChangePassword: true },
+    select: {
+      isActive: true,
+      tokenVersion: true,
+      deletedAt: true,
+      mustChangePassword: true,
+    },
   });
-  if (!dbUser || dbUser.deletedAt) redirect("/dang-xuat?reason=session-invalidated");
+  if (!dbUser || dbUser.deletedAt)
+    redirect("/dang-xuat?reason=session-invalidated");
   if (!dbUser.isActive) redirect("/dang-xuat?reason=session-disabled");
   if (dbUser.tokenVersion !== session.user.tokenVersion) {
     redirect("/dang-xuat?reason=session-invalidated");
@@ -78,7 +84,9 @@ export default async function TeacherLayout({
   // Badge "Tin nhắn" trên sidebar: SỐ BAN ĐẦU tính ở server (client không fetch lúc mount).
   // Đếm participant-based qua `lib/chat/unread` — cố ý KHÔNG scopedDb (GV dạy chéo cơ sở).
   // Hỏng thì badge = 0, không được làm chết cả site GV.
-  const chatUnread = await countChatUnreadForUser(session.user.id).catch(() => 0);
+  const chatUnread = await countChatUnreadForUser(session.user.id).catch(
+    () => 0,
+  );
 
   return (
     <AppShell

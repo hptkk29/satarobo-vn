@@ -26,11 +26,11 @@ export default async function RolesAdminPage() {
   return (
     <div>
       <div className="mb-6">
-        <h1 className="flex items-center gap-2 text-3xl font-black text-neutral-900">
-          <ShieldCheck className="h-7 w-7 text-orange-500" />
+        <h1 className="flex items-center gap-2 text-3xl font-black text-foreground">
+          <ShieldCheck className="h-7 w-7 text-primary" />
           Vai trò & quyền (RBAC)
         </h1>
-        <p className="mt-1 text-sm text-neutral-500">
+        <p className="mt-1 text-sm text-muted-foreground">
           Cấu hình role động. Mọi thay đổi yêu cầu lý do và được ghi nhật ký.
         </p>
       </div>

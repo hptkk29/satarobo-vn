@@ -62,13 +62,13 @@ function SettingRow({ row, canEdit }: { row: SettingRowView; canEdit: boolean })
   };
 
   return (
-    <div className="rounded-lg border border-gray-200 bg-white p-4">
+    <div className="rounded-lg border border-border bg-card p-4">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <p className="text-sm font-semibold text-gray-900">{row.label}</p>
-          <code className="text-xs text-gray-400">{row.key}</code>
+          <p className="text-sm font-semibold text-foreground">{row.label}</p>
+          <code className="text-xs text-muted-foreground">{row.key}</code>
           {row.centerOverridable && (
-            <span className="ml-2 rounded bg-indigo-50 px-1.5 py-0.5 text-[10px] font-medium text-indigo-600">
+            <span className="ml-2 rounded bg-state-info-soft px-1.5 py-0.5 text-[10px] font-medium text-state-info-ink">
               cho phép override theo cơ sở
             </span>
           )}
@@ -86,14 +86,12 @@ function SettingRow({ row, canEdit }: { row: SettingRowView; canEdit: boolean })
             aria-label={row.label}
           />
           <span
-            className={`text-sm font-medium ${
-              text === "true" ? "text-emerald-700" : "text-neutral-500"
-            }`}
+            className={`text-sm font-medium ${ text === "true" ? "text-state-success-ink" : "text-muted-foreground" }`}
           >
             {text === "true" ? "Đang BẬT" : "Đang TẮT"}
           </span>
           {text !== toText(row.value) && (
-            <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-800">
+            <span className="rounded-full bg-state-warning-soft px-2 py-0.5 text-xs font-semibold text-state-warning-ink">
               chưa lưu
             </span>
           )}
@@ -130,7 +128,7 @@ export function SettingsEditor({ rows, canEdit }: { rows: SettingRowView[]; canE
     <div className="space-y-6">
       {groups.map((g) => (
         <section key={g}>
-          <h2 className="mb-2 text-sm font-bold uppercase tracking-wide text-gray-500">
+          <h2 className="mb-2 text-sm font-bold uppercase tracking-wide text-muted-foreground">
             {GROUP_LABEL[g] ?? g}
           </h2>
           <div className="space-y-3">

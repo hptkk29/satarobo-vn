@@ -21,9 +21,9 @@ export const dynamic = "force-dynamic";
 const WEEKDAYS = ["T2", "T3", "T4", "T5", "T6", "T7", "CN"];
 
 const TAG_TONE: Record<AttendanceTag["tone"], string> = {
-  ok: "bg-emerald-100 text-emerald-700",
-  warn: "bg-amber-100 text-amber-700",
-  danger: "bg-rose-100 text-rose-700",
+  ok: "bg-state-success-soft text-state-success-ink",
+  warn: "bg-state-warning-soft text-state-warning-ink",
+  danger: "bg-state-danger-soft text-state-danger-ink",
 };
 
 function ymd(d: Date): string {
@@ -160,8 +160,8 @@ export default async function ManagerShiftsPage({ searchParams }: Props) {
   return (
     <div className="p-6">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-        <h1 className="flex items-center gap-2 text-2xl font-bold text-gray-900">
-          <Users className="h-6 w-6 text-[#7C3AED]" /> Tổng hợp công ca
+        <h1 className="flex items-center gap-2 text-2xl font-bold text-foreground">
+          <Users className="h-6 w-6 text-primary" /> Tổng hợp công ca
         </h1>
         <div className="flex items-center gap-2">
           {centers.length > 0 && (
@@ -170,7 +170,7 @@ export default async function ManagerShiftsPage({ searchParams }: Props) {
               <select
                 name="centerId"
                 defaultValue={filterCenter ?? ""}
-                className="rounded-lg border border-gray-300 px-2 py-1.5 text-sm"
+                className="rounded-lg border border-border px-2 py-1.5 text-sm"
               >
                 <option value="">Tất cả cơ sở</option>
                 {centers.map((c) => (
@@ -180,48 +180,48 @@ export default async function ManagerShiftsPage({ searchParams }: Props) {
               <button type="submit" className="rounded-lg bg-gray-800 px-2 py-1.5 text-xs font-medium text-white">Lọc</button>
             </form>
           )}
-          <Link href={linkBase(prev)} className="rounded-lg border border-gray-300 p-1.5 hover:bg-gray-50">
+          <Link href={linkBase(prev)} className="rounded-lg border border-border p-1.5 hover:bg-muted">
             <ChevronLeft className="h-4 w-4" />
           </Link>
-          <span className="text-sm font-semibold text-gray-700">
+          <span className="text-sm font-semibold text-foreground">
             Tuần {weekDates[0]} → {weekDates[6]}
           </span>
-          <Link href={linkBase(next)} className="rounded-lg border border-gray-300 p-1.5 hover:bg-gray-50">
+          <Link href={linkBase(next)} className="rounded-lg border border-border p-1.5 hover:bg-muted">
             <ChevronRight className="h-4 w-4" />
           </Link>
         </div>
       </div>
 
-      <p className="mb-3 text-xs text-gray-500">
-        Ca chính thức (APPROVED) · giờ vào/ra (GMT+7) · trạng thái · <MessageSquareWarning className="inline h-3.5 w-3.5 text-amber-600" /> = có giải trình/yêu cầu chỉnh công.
+      <p className="mb-3 text-xs text-muted-foreground">
+        Ca chính thức (APPROVED) · giờ vào/ra (GMT+7) · trạng thái · <MessageSquareWarning className="inline h-3.5 w-3.5 text-state-warning-ink" /> = có giải trình/yêu cầu chỉnh công.
       </p>
 
-      <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white">
-        <table className="min-w-full divide-y divide-gray-100 text-sm">
-          <thead className="bg-gray-50">
+      <div className="overflow-x-auto rounded-xl border border-border bg-card">
+        <table className="min-w-full divide-y divide-border text-sm">
+          <thead className="bg-muted">
             <tr>
-              <th className="px-3 py-2 text-left text-xs font-semibold uppercase text-gray-500">Nhân viên</th>
+              <th className="px-3 py-2 text-left text-xs font-semibold uppercase text-muted-foreground">Nhân viên</th>
               {weekDates.map((ds, i) => (
-                <th key={ds} className="px-2 py-2 text-center text-xs font-semibold text-gray-500">
-                  {WEEKDAYS[i]}<br /><span className="font-normal text-gray-400">{ds.slice(5)}</span>
+                <th key={ds} className="px-2 py-2 text-center text-xs font-semibold text-muted-foreground">
+                  {WEEKDAYS[i]}<br /><span className="font-normal text-muted-foreground">{ds.slice(5)}</span>
                 </th>
               ))}
             </tr>
           </thead>
-          <tbody className="divide-y divide-gray-50">
+          <tbody className="divide-y divide-border">
             {staff.length === 0 ? (
-              <tr><td colSpan={8} className="px-3 py-10 text-center text-gray-400">Không có nhân viên trong phạm vi.</td></tr>
+              <tr><td colSpan={8} className="px-3 py-10 text-center text-muted-foreground">Không có nhân viên trong phạm vi.</td></tr>
             ) : (
               staff.map((u) => {
                 const uRegs = regMap.get(u.id);
                 const uAtt = attMap.get(u.id);
                 const uAdj = adjMap.get(u.id);
                 return (
-                  <tr key={u.id} className="align-top hover:bg-gray-50/60">
+                  <tr key={u.id} className="align-top hover:bg-muted/60">
                     <td className="px-3 py-2">
-                      <div className="font-medium text-gray-900">{u.name ?? u.email}</div>
+                      <div className="font-medium text-foreground">{u.name ?? u.email}</div>
                       {!filterCenter && u.center?.name && (
-                        <div className="text-xs text-gray-400">{u.center.name}</div>
+                        <div className="text-xs text-muted-foreground">{u.center.name}</div>
                       )}
                     </td>
                     {weekDates.map((ds) => {
@@ -241,18 +241,18 @@ export default async function ManagerShiftsPage({ searchParams }: Props) {
                       return (
                         <td key={ds} className="px-2 py-2 text-center">
                           {!hasData ? (
-                            <span className="text-gray-300">—</span>
+                            <span className="text-muted-foreground">—</span>
                           ) : (
                             <div className="flex flex-col items-center gap-0.5">
                               {shifts.length > 0 ? (
-                                <span className="text-[10px] font-semibold text-gray-700">
+                                <span className="text-[10px] font-semibold text-foreground">
                                   {formatRegisteredShifts(shifts)}
                                 </span>
                               ) : (
-                                att.checkIn && <span className="text-[9px] text-amber-600">Chưa ĐK ca</span>
+                                att.checkIn && <span className="text-[9px] text-state-warning-ink">Chưa ĐK ca</span>
                               )}
                               {(att.checkIn || att.checkOut) && (
-                                <span className="text-[10px] tabular-nums text-gray-500">
+                                <span className="text-[10px] tabular-nums text-muted-foreground">
                                   {formatVNTime(att.checkIn)}–{formatVNTime(att.checkOut)}
                                 </span>
                               )}
@@ -264,7 +264,7 @@ export default async function ManagerShiftsPage({ searchParams }: Props) {
                               {adj && (
                                 <span
                                   title={`Giải trình (${adj.status}): ${adj.reason}`}
-                                  className="inline-flex items-center gap-0.5 rounded bg-amber-50 px-1 text-[9px] font-semibold text-amber-700"
+                                  className="inline-flex items-center gap-0.5 rounded bg-state-warning-soft px-1 text-[9px] font-semibold text-state-warning-ink"
                                 >
                                   <MessageSquareWarning className="h-3 w-3" /> giải trình
                                 </span>
@@ -283,7 +283,7 @@ export default async function ManagerShiftsPage({ searchParams }: Props) {
       </div>
 
       {!selfOnly && (
-        <p className="mt-3 flex items-center gap-1.5 text-xs text-gray-400">
+        <p className="mt-3 flex items-center gap-1.5 text-xs text-muted-foreground">
           <AlertTriangle className="h-3.5 w-3.5" /> Chỉ lịch chính thức (đã duyệt qua import Excel) mới tính công.
         </p>
       )}

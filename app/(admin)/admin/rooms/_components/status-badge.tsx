@@ -7,9 +7,9 @@ const LABELS: Record<RoomStatus, string> = {
 };
 
 const COLORS: Record<RoomStatus, string> = {
-  ACTIVE: "bg-green-100 text-green-700",
-  MAINTENANCE: "bg-yellow-100 text-yellow-700",
-  INACTIVE: "bg-neutral-100 text-neutral-600",
+  ACTIVE: "bg-state-success-soft text-state-success-ink",
+  MAINTENANCE: "bg-state-warning-soft text-state-warning-ink",
+  INACTIVE: "bg-muted text-muted-foreground",
 };
 
 export function StatusBadge({ status }: { status: RoomStatus }) {

@@ -23,7 +23,7 @@ export function ReportFilterBar({
     <form
       method="GET"
       action={basePath}
-      className="flex flex-wrap items-end gap-2 rounded-lg border border-neutral-200 bg-neutral-50 p-3"
+      className="flex flex-wrap items-end gap-2 rounded-lg border border-border bg-muted p-3"
     >
       {extra
         ? Object.entries(extra).map(([k, v]) => (
@@ -31,11 +31,11 @@ export function ReportFilterBar({
           ))
         : null}
       <div>
-        <label className="mb-1 block text-xs text-neutral-500">Cơ sở</label>
+        <label className="mb-1 block text-xs text-muted-foreground">Cơ sở</label>
         <select
           name="center"
           defaultValue={selection}
-          className="rounded border border-neutral-300 px-2 py-1.5 text-sm"
+          className="rounded border border-border px-2 py-1.5 text-sm"
         >
           {allowAll && <option value="ALL">Tất cả cơ sở</option>}
           {centers.map((c) => (
@@ -46,21 +46,21 @@ export function ReportFilterBar({
         </select>
       </div>
       <div>
-        <label className="mb-1 block text-xs text-neutral-500">Từ ngày</label>
+        <label className="mb-1 block text-xs text-muted-foreground">Từ ngày</label>
         <input
           type="date"
           name="dateFrom"
           defaultValue={dateFrom}
-          className="rounded border border-neutral-300 px-2 py-1.5 text-sm"
+          className="rounded border border-border px-2 py-1.5 text-sm"
         />
       </div>
       <div>
-        <label className="mb-1 block text-xs text-neutral-500">Đến ngày</label>
+        <label className="mb-1 block text-xs text-muted-foreground">Đến ngày</label>
         <input
           type="date"
           name="dateTo"
           defaultValue={dateTo}
-          className="rounded border border-neutral-300 px-2 py-1.5 text-sm"
+          className="rounded border border-border px-2 py-1.5 text-sm"
         />
       </div>
       <button
@@ -71,7 +71,7 @@ export function ReportFilterBar({
       </button>
       <Link
         href={basePath}
-        className="rounded border border-neutral-300 bg-white px-3 py-1.5 text-sm text-neutral-600 hover:bg-neutral-50"
+        className="rounded border border-border bg-card px-3 py-1.5 text-sm text-muted-foreground hover:bg-muted"
       >
         Xoá lọc
       </Link>

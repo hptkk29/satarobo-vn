@@ -34,7 +34,9 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 /** Mốc UTC 00:00 của NGÀY hôm nay theo giờ VN — khớp cột @db.Date của Trial. */
 function vnTodayUtc(now = new Date()): Date {
   const vn = new Date(now.getTime() + VN_OFFSET_MS);
-  return new Date(Date.UTC(vn.getUTCFullYear(), vn.getUTCMonth(), vn.getUTCDate()));
+  return new Date(
+    Date.UTC(vn.getUTCFullYear(), vn.getUTCMonth(), vn.getUTCDate()),
+  );
 }
 
 // @db.Date là UTC 00:00 của ngày lịch VN → format theo UTC ra đúng ngày.
@@ -66,13 +68,19 @@ export default async function TeacherTrialPage({
 
   // ── (b) Phiếu đánh giá rubric 1 HV trải nghiệm ──────────────────────────────
   if (enrollmentId) {
-    const ctx = await getTeacherTrialRubricContext(session.user.id, enrollmentId);
+    const ctx = await getTeacherTrialRubricContext(
+      session.user.id,
+      enrollmentId,
+    );
     if (!ctx) return <NotYours />;
 
     return (
       <div className="space-y-4">
         <BackLink href="?" label="Danh sách Trial" />
-        <PageHeader title="Phiếu đánh giá buổi thử" subtitle={ctx.trialClassName} />
+        <PageHeader
+          title="Phiếu đánh giá buổi thử"
+          subtitle={ctx.trialClassName}
+        />
         <TrialEvalForm
           enrollmentId={ctx.enrollmentId}
           studentName={ctx.studentName}
@@ -130,15 +138,20 @@ export default async function TeacherTrialPage({
               Chưa xếp buổi ({roster.unassigned.length})
             </h2>
             <p className="text-xs text-muted-foreground">
-              Học viên đã ghi danh lớp Trial của bạn nhưng chưa gắn vào buổi cụ thể —
-              nhờ quản lý xếp buổi, hoặc nhập phiếu đánh giá trực tiếp.
+              Học viên đã ghi danh lớp Trial của bạn nhưng chưa gắn vào buổi cụ
+              thể — nhờ quản lý xếp buổi, hoặc nhập phiếu đánh giá trực tiếp.
             </p>
           </header>
           <ul className="divide-y divide-border/60">
             {roster.unassigned.map((st) => (
-              <li key={st.enrollmentId} className="flex flex-wrap items-center justify-between gap-2 px-5 py-3">
+              <li
+                key={st.enrollmentId}
+                className="flex flex-wrap items-center justify-between gap-2 px-5 py-3"
+              >
                 <div>
-                  <p className="text-sm font-medium text-foreground">{st.studentName}</p>
+                  <p className="text-sm font-medium text-foreground">
+                    {st.studentName}
+                  </p>
                   <p className="text-xs text-muted-foreground">
                     {st.trialClassName}
                     {st.birthYear ? ` · ${st.birthYear}` : ""}

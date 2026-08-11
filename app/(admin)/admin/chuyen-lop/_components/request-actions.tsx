@@ -19,7 +19,7 @@ export function RequestActions({
   // P1-c: chỉ người có quyền DUYỆT (CENTER_MANAGER/SUPER_ADMIN) thấy nút. Người
   // tạo (sale) chỉ xem trạng thái chờ duyệt.
   if (!canManage) {
-    return <span className="text-xs text-neutral-400">Chờ quản lý duyệt</span>;
+    return <span className="text-xs text-muted-foreground">Chờ quản lý duyệt</span>;
   }
 
   function approve() {
@@ -48,7 +48,7 @@ export function RequestActions({
         <button
           onClick={approve}
           disabled={pending}
-          className="rounded bg-emerald-600 px-2.5 py-1 text-xs font-medium text-white disabled:opacity-50"
+          className="rounded bg-state-success-ink px-2.5 py-1 text-xs font-medium text-white disabled:opacity-50"
         >
           Duyệt
         </button>
@@ -56,7 +56,7 @@ export function RequestActions({
       <button
         onClick={reject}
         disabled={pending}
-        className="rounded bg-rose-600 px-2.5 py-1 text-xs font-medium text-white disabled:opacity-50"
+        className="rounded bg-state-danger-ink px-2.5 py-1 text-xs font-medium text-white disabled:opacity-50"
       >
         {confirmReject ? "Xác nhận?" : "Từ chối"}
       </button>

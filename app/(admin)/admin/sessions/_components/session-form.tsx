@@ -117,22 +117,22 @@ export function SessionForm({
   return (
     <form action={action} className="max-w-3xl space-y-6">
       {error && (
-        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+        <div className="rounded-lg border border-state-danger-soft bg-state-danger-soft px-4 py-3 text-sm text-state-danger-ink">
           {error}
         </div>
       )}
 
       <Section title="Thông tin buổi học">
         <label className="block">
-          <span className="mb-1 block text-sm font-semibold text-neutral-700">
-            Lớp <span className="ml-1 text-red-500">*</span>
+          <span className="mb-1 block text-sm font-semibold text-foreground">
+            Lớp <span className="ml-1 text-state-danger-ink">*</span>
           </span>
           <select
             name="classId"
             value={classId}
             onChange={(e) => onClassChange(e.target.value)}
             required
-            className="w-full rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/20"
+            className="w-full rounded-lg border border-border bg-card px-3 py-2 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
           >
             <option value="">— Chọn lớp —</option>
             {classes.map((c) => (
@@ -145,34 +145,34 @@ export function SessionForm({
         </label>
 
         <label className="block">
-          <span className="mb-1 block text-sm font-semibold text-neutral-700">
-            Thời gian (ngày + giờ) <span className="ml-1 text-red-500">*</span>
+          <span className="mb-1 block text-sm font-semibold text-foreground">
+            Thời gian (ngày + giờ) <span className="ml-1 text-state-danger-ink">*</span>
           </span>
           <input
             type="datetime-local"
             name="date"
             defaultValue={toDateTimeLocal(session?.date ?? null)}
             required
-            className="w-full rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/20"
+            className="w-full rounded-lg border border-border bg-card px-3 py-2 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
           />
-          <p className="mt-1 text-xs text-neutral-500">
+          <p className="mt-1 text-xs text-muted-foreground">
             Chọn ngày + giờ bắt đầu buổi học. Giờ kết thúc tính theo khung giờ của lớp.
           </p>
         </label>
 
         <label className="block">
-          <span className="mb-1 block text-sm font-semibold text-neutral-700">Chủ đề buổi học</span>
+          <span className="mb-1 block text-sm font-semibold text-foreground">Chủ đề buổi học</span>
           <input
             type="text"
             name="topic"
             defaultValue={session?.topic ?? ""}
             placeholder="Vd: Buổi 5 — Điều khiển động cơ servo"
-            className="w-full rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/20"
+            className="w-full rounded-lg border border-border bg-card px-3 py-2 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
           />
         </label>
 
         <label className="block">
-          <span className="mb-1 block text-sm font-semibold text-neutral-700">
+          <span className="mb-1 block text-sm font-semibold text-foreground">
             Bài học trong giáo trình
           </span>
           <select
@@ -180,7 +180,7 @@ export function SessionForm({
             value={lessonId}
             onChange={(e) => setLessonId(e.target.value)}
             disabled={!classId}
-            className="w-full rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/20 disabled:bg-neutral-50"
+            className="w-full rounded-lg border border-border bg-card px-3 py-2 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 disabled:bg-muted"
           >
             <option value="">
               {classId
@@ -193,14 +193,14 @@ export function SessionForm({
               </option>
             ))}
           </select>
-          <p className="mt-1 text-xs text-neutral-500">
+          <p className="mt-1 text-xs text-muted-foreground">
             Gắn bài học từ giáo trình active của khoá. Buổi không gắn vẫn được
             tính vào điểm danh, nhưng không cộng vào "lesson coverage".
           </p>
         </label>
 
         <label className="block">
-          <span className="mb-1 block text-sm font-semibold text-neutral-700">
+          <span className="mb-1 block text-sm font-semibold text-foreground">
             Ghi chú riêng buổi này (vs template bài học)
           </span>
           <textarea
@@ -208,28 +208,28 @@ export function SessionForm({
             rows={2}
             defaultValue={session?.lessonNotes ?? ""}
             placeholder="VD: HS làm chậm phần motor — tuần sau ôn lại"
-            className="w-full resize-y rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/20"
+            className="w-full resize-y rounded-lg border border-border bg-card px-3 py-2 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
           />
         </label>
 
         <label className="block">
-          <span className="mb-1 block text-sm font-semibold text-neutral-700">Ghi chú</span>
+          <span className="mb-1 block text-sm font-semibold text-foreground">Ghi chú</span>
           <textarea
             name="notes"
             rows={4}
             defaultValue={session?.notes ?? ""}
             placeholder="Mục tiêu, tài liệu, bài tập về nhà..."
-            className="w-full resize-y rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/20"
+            className="w-full resize-y rounded-lg border border-border bg-card px-3 py-2 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
           />
         </label>
       </Section>
 
-      <div className="flex gap-3 border-t border-neutral-200 pt-6">
+      <div className="flex gap-3 border-t border-border pt-6">
         <SubmitButton isEdit={isEdit} />
         <button
           type="button"
           onClick={() => router.push(backUrl)}
-          className="rounded-xl border-2 border-neutral-200 bg-white px-6 py-3 font-bold text-neutral-700 hover:bg-neutral-50"
+          className="rounded-xl border-2 border-border bg-card px-6 py-3 font-bold text-foreground hover:bg-muted"
         >
           Huỷ
         </button>
@@ -244,7 +244,7 @@ function SubmitButton({ isEdit }: { isEdit: boolean }) {
     <button
       type="submit"
       disabled={pending}
-      className="rounded-xl bg-orange-500 px-6 py-3 font-bold text-white shadow-md hover:bg-orange-600 disabled:opacity-60"
+      className="rounded-xl bg-primary px-6 py-3 font-bold text-white shadow-md hover:bg-primary-dark disabled:opacity-60"
     >
       {pending ? "Đang lưu..." : isEdit ? "Cập nhật" : "Tạo buổi học"}
     </button>
@@ -253,8 +253,8 @@ function SubmitButton({ isEdit }: { isEdit: boolean }) {
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <section className="rounded-xl border border-neutral-200 bg-white p-6">
-      <h2 className="mb-4 text-sm font-bold uppercase tracking-wider text-neutral-700">{title}</h2>
+    <section className="rounded-xl border border-border bg-card p-6">
+      <h2 className="mb-4 text-sm font-bold uppercase tracking-wider text-foreground">{title}</h2>
       <div className="space-y-4">{children}</div>
     </section>
   );

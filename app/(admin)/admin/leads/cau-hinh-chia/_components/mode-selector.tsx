@@ -39,15 +39,13 @@ export function ModeSelector({
   }
 
   return (
-    <div className="rounded-xl border border-gray-200 bg-white p-4">
-      <h3 className="mb-3 font-bold text-gray-900">{centerName}</h3>
+    <div className="rounded-xl border border-border bg-card p-4">
+      <h3 className="mb-3 font-bold text-foreground">{centerName}</h3>
       <div className="space-y-2">
         {MODES.map((m) => (
           <label
             key={m.value}
-            className={`flex cursor-pointer items-start gap-2 rounded-lg border p-2.5 ${
-              mode === m.value ? "border-[#7C3AED] bg-purple-50" : "border-gray-200 hover:border-gray-300"
-            }`}
+            className={`flex cursor-pointer items-start gap-2 rounded-lg border p-2.5 ${ mode === m.value ? "border-primary bg-primary-soft" : "border-border hover:border-border" }`}
           >
             <input
               type="radio"
@@ -58,8 +56,8 @@ export function ModeSelector({
               className="mt-0.5"
             />
             <span>
-              <span className="block text-sm font-semibold text-gray-900">{m.label}</span>
-              <span className="block text-xs text-gray-500">{m.desc}</span>
+              <span className="block text-sm font-semibold text-foreground">{m.label}</span>
+              <span className="block text-xs text-muted-foreground">{m.desc}</span>
             </span>
           </label>
         ))}

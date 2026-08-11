@@ -57,7 +57,7 @@ export function PaymentMethodsTable({ methods }: { methods: PaymentMethod[] }) {
 
   return (
     <>
-      <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
+      <div className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
         <Table>
           <TableHeader>
             <TableRow>
@@ -75,7 +75,7 @@ export function PaymentMethodsTable({ methods }: { methods: PaymentMethod[] }) {
               <TableRow>
                 <TableCell
                   colSpan={7}
-                  className="py-8 text-center text-gray-500"
+                  className="py-8 text-center text-muted-foreground"
                 >
                   Chưa có phương thức nào
                 </TableCell>
@@ -106,16 +106,16 @@ export function PaymentMethodsTable({ methods }: { methods: PaymentMethod[] }) {
                         {TYPE_LABEL[pm.type] ?? pm.type}
                       </Badge>
                     </TableCell>
-                    <TableCell className="text-xs text-gray-600">
+                    <TableCell className="text-xs text-muted-foreground">
                       {flags || "—"}
                     </TableCell>
                     <TableCell>
                       {pm.isActive ? (
-                        <Badge className="bg-green-100 text-green-700 hover:bg-green-100">
+                        <Badge className="bg-state-success-soft text-state-success-ink hover:bg-state-success-soft-hover">
                           Hoạt động
                         </Badge>
                       ) : (
-                        <Badge className="bg-gray-200 text-gray-700 hover:bg-gray-200">
+                        <Badge className="bg-muted text-foreground hover:bg-muted">
                           Tắt
                         </Badge>
                       )}

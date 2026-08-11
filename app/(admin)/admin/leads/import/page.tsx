@@ -17,16 +17,16 @@ export default function ImportLeadsPage() {
   return (
     <div className="mx-auto max-w-5xl space-y-4 p-6">
       <div>
-        <Link href="/leads" className="mb-3 inline-flex items-center gap-1 text-sm text-neutral-500 hover:text-neutral-700">
+        <Link href="/leads" className="mb-3 inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
           <ChevronLeft className="h-4 w-4" /> Danh sách lead
         </Link>
         <h1 className="text-2xl font-bold">Import lead từ Excel</h1>
-        <p className="mt-1 text-sm text-neutral-500">
+        <p className="mt-1 text-sm text-muted-foreground">
           Nhập nhiều lead thu ở sự kiện. Cột cố định, validate từng dòng, chống trùng theo SĐT.
         </p>
         <p className="mt-2 text-sm">
           Có file <b>danh sách khách ĐÃ ĐĂNG KÝ</b> của Sale (nhiều sheet theo tháng)?{" "}
-          <Link href="/leads/import/registered" className="text-blue-600 hover:underline">
+          <Link href="/leads/import/registered" className="text-state-info-ink hover:underline">
             Import danh sách đã đăng ký →
           </Link>
         </p>
@@ -99,8 +99,8 @@ export default function ImportLeadsPage() {
         }}
       />
 
-      <div className="space-y-1 rounded-xl border border-neutral-200 bg-neutral-50 p-4 text-sm text-neutral-500">
-        <p className="font-semibold text-neutral-700">Định dạng cột (cố định):</p>
+      <div className="space-y-1 rounded-xl border border-border bg-muted p-4 text-sm text-muted-foreground">
+        <p className="font-semibold text-foreground">Định dạng cột (cố định):</p>
         <ol className="list-decimal list-inside space-y-0.5">
           {LEAD_IMPORT_COLUMNS.map((c) => (
             <li key={c}>{c}</li>

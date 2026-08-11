@@ -68,25 +68,25 @@ export default async function HolidaysAdminPage({ searchParams }: SearchParams) 
     <div>
       <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="flex items-center gap-2 text-3xl font-black text-neutral-900">
-            <CalendarOff className="h-7 w-7 text-orange-500" />
+          <h1 className="flex items-center gap-2 text-3xl font-black text-foreground">
+            <CalendarOff className="h-7 w-7 text-primary" />
             Lịch nghỉ
           </h1>
-          <p className="mt-1 text-neutral-600">
+          <p className="mt-1 text-muted-foreground">
             Năm {year} — {holidays.length} ngày nghỉ
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <Link
             href="/holidays/import"
-            className="inline-flex items-center gap-2 rounded-xl border-2 border-neutral-200 bg-white px-4 py-2 text-sm font-bold text-neutral-700 hover:bg-neutral-50"
+            className="inline-flex items-center gap-2 rounded-xl border-2 border-border bg-card px-4 py-2 text-sm font-bold text-foreground hover:bg-muted"
           >
             <FileSpreadsheet className="h-4 w-4" />
             Import Excel
           </Link>
           <Link
             href="/holidays/new"
-            className="inline-flex items-center gap-2 rounded-xl bg-orange-500 px-4 py-2 font-bold text-white shadow-md hover:bg-orange-600"
+            className="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2 font-bold text-white shadow-md hover:bg-primary-dark"
           >
             <Plus className="h-5 w-5" />
             Thêm ngày nghỉ
@@ -101,7 +101,7 @@ export default async function HolidaysAdminPage({ searchParams }: SearchParams) 
         <select
           name="year"
           defaultValue={String(year)}
-          className="rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm outline-none focus:border-orange-500"
+          className="rounded-lg border border-border bg-card px-3 py-2 text-sm outline-none focus:border-primary"
         >
           {yearOptions.map((y) => (
             <option key={y} value={y}>
@@ -112,7 +112,7 @@ export default async function HolidaysAdminPage({ searchParams }: SearchParams) 
         <select
           name="centerId"
           defaultValue={centerFilter}
-          className="rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm outline-none focus:border-orange-500"
+          className="rounded-lg border border-border bg-card px-3 py-2 text-sm outline-none focus:border-primary"
         >
           <option value="">Tất cả phạm vi</option>
           <option value="ALL">Chỉ toàn hệ thống</option>
@@ -125,7 +125,7 @@ export default async function HolidaysAdminPage({ searchParams }: SearchParams) 
         <select
           name="type"
           defaultValue={typeFilter}
-          className="rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm outline-none focus:border-orange-500"
+          className="rounded-lg border border-border bg-card px-3 py-2 text-sm outline-none focus:border-primary"
         >
           <option value="">Tất cả loại</option>
           {(Object.keys(TYPE_LABELS) as HolidayType[]).map((t) => (
@@ -136,32 +136,32 @@ export default async function HolidaysAdminPage({ searchParams }: SearchParams) 
         </select>
         <button
           type="submit"
-          className="rounded-lg bg-orange-500 px-4 py-2 text-sm font-bold text-white hover:bg-orange-600"
+          className="rounded-lg bg-primary px-4 py-2 text-sm font-bold text-white hover:bg-primary-dark"
         >
           Lọc
         </button>
       </form>
 
-      <div className="overflow-hidden rounded-xl border border-neutral-200 bg-white">
+      <div className="overflow-hidden rounded-xl border border-border bg-card">
         <table className="w-full">
-          <thead className="border-b border-neutral-200 bg-neutral-50 text-left">
+          <thead className="border-b border-border bg-muted text-left">
             <tr>
-              <th className="p-4 text-xs font-bold uppercase tracking-wider text-neutral-700">
+              <th className="p-4 text-xs font-bold uppercase tracking-wider text-foreground">
                 Ngày
               </th>
-              <th className="p-4 text-xs font-bold uppercase tracking-wider text-neutral-700">
+              <th className="p-4 text-xs font-bold uppercase tracking-wider text-foreground">
                 Tên
               </th>
-              <th className="p-4 text-xs font-bold uppercase tracking-wider text-neutral-700">
+              <th className="p-4 text-xs font-bold uppercase tracking-wider text-foreground">
                 Phạm vi
               </th>
-              <th className="p-4 text-center text-xs font-bold uppercase tracking-wider text-neutral-700">
+              <th className="p-4 text-center text-xs font-bold uppercase tracking-wider text-foreground">
                 Loại
               </th>
-              <th className="p-4 text-xs font-bold uppercase tracking-wider text-neutral-700">
+              <th className="p-4 text-xs font-bold uppercase tracking-wider text-foreground">
                 Ghi chú
               </th>
-              <th className="p-4 text-right text-xs font-bold uppercase tracking-wider text-neutral-700">
+              <th className="p-4 text-right text-xs font-bold uppercase tracking-wider text-foreground">
                 Thao tác
               </th>
             </tr>
@@ -169,13 +169,13 @@ export default async function HolidaysAdminPage({ searchParams }: SearchParams) 
           <tbody>
             {holidays.length === 0 ? (
               <tr>
-                <td colSpan={6} className="p-12 text-center text-neutral-500">
+                <td colSpan={6} className="p-12 text-center text-muted-foreground">
                   {centerFilter || typeFilter ? (
                     <>Không có ngày nghỉ nào khớp bộ lọc cho năm {year}.</>
                   ) : (
                     <>
                       Chưa có ngày nghỉ nào trong năm {year}.{" "}
-                      <Link href="/holidays/new" className="text-orange-600 hover:underline">
+                      <Link href="/holidays/new" className="text-primary hover:underline">
                         Thêm ngày nghỉ đầu tiên →
                       </Link>
                     </>
@@ -184,28 +184,28 @@ export default async function HolidaysAdminPage({ searchParams }: SearchParams) 
               </tr>
             ) : (
               holidays.map((h) => (
-                <tr key={h.id} className="border-b border-neutral-200 hover:bg-neutral-50">
+                <tr key={h.id} className="border-b border-border hover:bg-muted">
                   <td className="p-4 text-sm">
                     <DateRange date={h.date} endDate={h.endDate} />
                   </td>
-                  <td className="p-4 text-sm font-semibold text-neutral-900">{h.name}</td>
+                  <td className="p-4 text-sm font-semibold text-foreground">{h.name}</td>
                   <td className="p-4">
                     <ScopeBadge center={h.center} />
                   </td>
                   <td className="p-4 text-center">
                     <TypeBadge type={h.type} />
                   </td>
-                  <td className="p-4 text-xs text-neutral-600">
+                  <td className="p-4 text-xs text-muted-foreground">
                     {h.note ? (
                       <span className="line-clamp-2">{h.note}</span>
                     ) : (
-                      <span className="text-neutral-400">—</span>
+                      <span className="text-muted-foreground">—</span>
                     )}
                   </td>
                   <td className="p-4 text-right">
                     <Link
                       href={`/holidays/${h.id}/edit`}
-                      className="inline-flex items-center gap-1 rounded p-1.5 text-purple-600 hover:bg-purple-50"
+                      className="inline-flex items-center gap-1 rounded p-1.5 text-primary hover:bg-primary-soft"
                       title="Sửa"
                     >
                       <Pencil className="h-4 w-4" />

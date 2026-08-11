@@ -41,8 +41,8 @@ export function GrantsTable({ grants }: { grants: GrantRow[] }) {
 
   if (grants.length === 0) {
     return (
-      <div className="rounded-xl border border-dashed border-gray-300 bg-gray-50/50 p-8 text-center">
-        <p className="text-sm text-gray-500">
+      <div className="rounded-xl border border-dashed border-border bg-muted/50 p-8 text-center">
+        <p className="text-sm text-muted-foreground">
           Chưa có quyền override nào — user dùng quyền mặc định theo role.
         </p>
       </div>
@@ -51,56 +51,56 @@ export function GrantsTable({ grants }: { grants: GrantRow[] }) {
 
   return (
     <>
-      <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
+      <div className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
         <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-gray-100">
-            <thead className="bg-gray-50">
+          <table className="min-w-full divide-y divide-border">
+            <thead className="bg-muted">
               <tr>
-                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">
+                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                   Quyền
                 </th>
-                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">
+                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                   Loại
                 </th>
-                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">
+                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                   Lý do
                 </th>
-                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">
+                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                   Người grant
                 </th>
-                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">
+                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                   Ngày tạo
                 </th>
-                <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-gray-500">
+                <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                   Hành động
                 </th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-50">
+            <tbody className="divide-y divide-border">
               {grants.map((g) => {
                 const meta = getActionMeta(g.action);
                 return (
-                  <tr key={g.id} className="hover:bg-gray-50/60">
+                  <tr key={g.id} className="hover:bg-muted/60">
                     <td className="px-4 py-3">
-                      <div className="text-xs text-gray-500">{meta.category}</div>
-                      <div className="font-medium text-gray-900">{meta.label}</div>
-                      <code className="text-[10px] text-gray-400">{g.action}</code>
+                      <div className="text-xs text-muted-foreground">{meta.category}</div>
+                      <div className="font-medium text-foreground">{meta.label}</div>
+                      <code className="text-[10px] text-muted-foreground">{g.action}</code>
                     </td>
                     <td className="px-4 py-3">
                       <GrantBadge grant={g.grant} />
                     </td>
                     <td className="px-4 py-3 max-w-[200px]">
                       {g.reason ? (
-                        <p className="text-xs italic text-gray-600">{g.reason}</p>
+                        <p className="text-xs italic text-muted-foreground">{g.reason}</p>
                       ) : (
-                        <span className="text-xs text-gray-400">—</span>
+                        <span className="text-xs text-muted-foreground">—</span>
                       )}
                     </td>
-                    <td className="px-4 py-3 text-xs text-gray-600">
+                    <td className="px-4 py-3 text-xs text-muted-foreground">
                       <div>{g.grantor.name ?? "—"}</div>
-                      <div className="text-gray-400">{g.grantor.email ?? "—"}</div>
+                      <div className="text-muted-foreground">{g.grantor.email ?? "—"}</div>
                     </td>
-                    <td className="px-4 py-3 text-xs tabular-nums text-gray-500">
+                    <td className="px-4 py-3 text-xs tabular-nums text-muted-foreground">
                       {formatDate(g.createdAt)}
                     </td>
                     <td className="px-4 py-3">
@@ -109,7 +109,7 @@ export function GrantsTable({ grants }: { grants: GrantRow[] }) {
                           type="button"
                           onClick={() => setEditing(g)}
                           title="Sửa"
-                          className="inline-flex h-7 w-7 items-center justify-center rounded-md text-gray-500 hover:bg-gray-100 hover:text-gray-700"
+                          className="inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
                         >
                           <Pencil className="h-3.5 w-3.5" />
                         </button>
@@ -117,7 +117,7 @@ export function GrantsTable({ grants }: { grants: GrantRow[] }) {
                           type="button"
                           onClick={() => setDeleting(g)}
                           title="Xoá"
-                          className="inline-flex h-7 w-7 items-center justify-center rounded-md text-red-500 hover:bg-red-50 hover:text-red-700"
+                          className="inline-flex h-7 w-7 items-center justify-center rounded-md text-state-danger-ink hover:bg-state-danger-soft hover:text-state-danger-ink"
                         >
                           <Trash2 className="h-3.5 w-3.5" />
                         </button>
@@ -140,14 +140,14 @@ export function GrantsTable({ grants }: { grants: GrantRow[] }) {
 export function GrantBadge({ grant }: { grant: "ALLOW" | "DENY" }) {
   if (grant === "ALLOW") {
     return (
-      <span className="inline-flex items-center gap-1 rounded-full border border-green-200 bg-green-100 px-2.5 py-0.5 text-xs font-semibold text-green-700">
+      <span className="inline-flex items-center gap-1 rounded-full border border-state-success-soft bg-state-success-soft px-2.5 py-0.5 text-xs font-semibold text-state-success-ink">
         <Check className="h-3 w-3" />
         ALLOW
       </span>
     );
   }
   return (
-    <span className="inline-flex items-center gap-1 rounded-full border border-red-200 bg-red-100 px-2.5 py-0.5 text-xs font-semibold text-red-700">
+    <span className="inline-flex items-center gap-1 rounded-full border border-state-danger-soft bg-state-danger-soft px-2.5 py-0.5 text-xs font-semibold text-state-danger-ink">
       <Ban className="h-3 w-3" />
       DENY
     </span>
@@ -196,7 +196,7 @@ function EditGrantDialog({
           <div className="space-y-2">
             <Label>Loại</Label>
             <div className="flex gap-2">
-              <label className="flex flex-1 cursor-pointer items-center justify-center gap-2 rounded-lg border-2 border-gray-200 p-3 text-sm has-checked:border-green-500 has-checked:bg-green-50">
+              <label className="flex flex-1 cursor-pointer items-center justify-center gap-2 rounded-lg border-2 border-border p-3 text-sm has-checked:border-state-success has-checked:bg-state-success-soft">
                 <input
                   type="radio"
                   name="grant"
@@ -204,10 +204,10 @@ function EditGrantDialog({
                   defaultChecked={grant.grant === "ALLOW"}
                   className="peer sr-only"
                 />
-                <Check className="h-4 w-4 text-green-600" />
-                <span className="font-semibold text-green-700">ALLOW</span>
+                <Check className="h-4 w-4 text-state-success-ink" />
+                <span className="font-semibold text-state-success-ink">ALLOW</span>
               </label>
-              <label className="flex flex-1 cursor-pointer items-center justify-center gap-2 rounded-lg border-2 border-gray-200 p-3 text-sm has-checked:border-red-500 has-checked:bg-red-50">
+              <label className="flex flex-1 cursor-pointer items-center justify-center gap-2 rounded-lg border-2 border-border p-3 text-sm has-checked:border-state-danger has-checked:bg-state-danger-soft">
                 <input
                   type="radio"
                   name="grant"
@@ -215,8 +215,8 @@ function EditGrantDialog({
                   defaultChecked={grant.grant === "DENY"}
                   className="peer sr-only"
                 />
-                <Ban className="h-4 w-4 text-red-600" />
-                <span className="font-semibold text-red-700">DENY</span>
+                <Ban className="h-4 w-4 text-state-danger-ink" />
+                <span className="font-semibold text-state-danger-ink">DENY</span>
               </label>
             </div>
           </div>

@@ -24,8 +24,8 @@ export default async function WebhookReplayPage() {
 
   return (
     <div>
-      <h1 className="mb-6 flex items-center gap-2 text-3xl font-black text-neutral-900">
-        <RefreshCw className="h-7 w-7 text-orange-500" />
+      <h1 className="mb-6 flex items-center gap-2 text-3xl font-black text-foreground">
+        <RefreshCw className="h-7 w-7 text-primary" />
         Webhook lỗi — Replay
       </h1>
       <div className="rounded-lg border">
@@ -42,7 +42,7 @@ export default async function WebhookReplayPage() {
           <TableBody>
             {failed.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={5} className="text-center text-sm text-neutral-500">
+                <TableCell colSpan={5} className="text-center text-sm text-muted-foreground">
                   Không có webhook FAILED.
                 </TableCell>
               </TableRow>
@@ -51,8 +51,8 @@ export default async function WebhookReplayPage() {
                 <TableRow key={d.id}>
                   <TableCell className="font-mono">{d.source}</TableCell>
                   <TableCell className="font-mono text-xs">{d.externalId ?? "—"}</TableCell>
-                  <TableCell className="text-sm text-neutral-500">{d.receivedAt.toISOString().slice(0, 16)}</TableCell>
-                  <TableCell className="max-w-xs truncate text-xs text-red-600">{d.errorMessage ?? ""}</TableCell>
+                  <TableCell className="text-sm text-muted-foreground">{d.receivedAt.toISOString().slice(0, 16)}</TableCell>
+                  <TableCell className="max-w-xs truncate text-xs text-state-danger-ink">{d.errorMessage ?? ""}</TableCell>
                   <TableCell className="text-right">
                     <ReplayButton deliveryId={d.id} />
                   </TableCell>

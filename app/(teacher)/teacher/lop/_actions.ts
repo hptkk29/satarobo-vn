@@ -20,7 +20,10 @@ import { getSessionRosterStudentIds } from "@/lib/attendance/roster";
 import { isSessionOwnedByTeacher } from "@/lib/lms/session-ownership";
 import { getAuditActor } from "@/lib/audit/log";
 import { writeAudit } from "@/lib/audit/audit-log";
-import { createMakeupNeed, cancelPendingMakeupNeed } from "@/lib/makeup/service";
+import {
+  createMakeupNeed,
+  cancelPendingMakeupNeed,
+} from "@/lib/makeup/service";
 import { notifyAttendanceForSession } from "@/lib/notify/attendance";
 import { evaluateAbsenceRisk } from "@/lib/risk/service";
 
@@ -32,7 +35,8 @@ const VN_OFFSET_MS = 7 * 60 * 60 * 1000; // Asia/Ho_Chi_Minh (UTC+7, không DST)
 function vnTodayEnd(now = new Date()): Date {
   const vn = new Date(now.getTime() + VN_OFFSET_MS);
   const startUtc =
-    Date.UTC(vn.getUTCFullYear(), vn.getUTCMonth(), vn.getUTCDate()) - VN_OFFSET_MS;
+    Date.UTC(vn.getUTCFullYear(), vn.getUTCMonth(), vn.getUTCDate()) -
+    VN_OFFSET_MS;
   return new Date(startUtc + 24 * 60 * 60 * 1000);
 }
 
@@ -61,9 +65,13 @@ function isAbsent(status: AttendanceStatus): boolean {
  * Suy makeupStatus khi component KHÔNG gửi tường minh (câu 50 "duyệt đúng toàn bộ"):
  * vắng KHÔNG phép → cần học bù; vắng có phép → NONE; có mặt → NONE.
  */
-function deriveMakeup(status: AttendanceStatus, explicit?: (typeof MAKEUP_STATUSES)[number]): MakeupStatus {
+function deriveMakeup(
+  status: AttendanceStatus,
+  explicit?: (typeof MAKEUP_STATUSES)[number],
+): MakeupStatus {
   if (explicit) return explicit;
-  if (status === "ABSENT_UNEXCUSED" || status === "ABSENT") return "NEEDS_MAKEUP";
+  if (status === "ABSENT_UNEXCUSED" || status === "ABSENT")
+    return "NEEDS_MAKEUP";
   return "NONE";
 }
 
@@ -82,7 +90,10 @@ export async function saveClassAttendanceAction(
 
   const parsed = payloadSchema.safeParse({ sessionId, records });
   if (!parsed.success) {
-    return { ok: false, error: parsed.error.issues[0]?.message ?? "Dữ liệu không hợp lệ" };
+    return {
+      ok: false,
+      error: parsed.error.issues[0]?.message ?? "Dữ liệu không hợp lệ",
+    };
   }
   const data = parsed.data;
 
@@ -109,7 +120,10 @@ export async function saveClassAttendanceAction(
   // KHÔNG cho điểm danh buổi CHƯA diễn ra — chặn ghi attendance trước + gửi
   // thông báo PH cho buổi tương lai.
   if (sess.date.getTime() > vnTodayEnd().getTime()) {
-    return { ok: false, error: "Buổi học chưa diễn ra — không thể điểm danh trước" };
+    return {
+      ok: false,
+      error: "Buổi học chưa diễn ra — không thể điểm danh trước",
+    };
   }
 
   // (2) Quyền sở hữu THẬT — chống GV điểm danh lớp không phân công.
@@ -126,7 +140,10 @@ export async function saveClassAttendanceAction(
   const centerId = sess.class.centerId ?? sess.centerId ?? null;
 
   // (3) Role có quyền điểm danh không (CLASS scope — seed TEACHER:attendance:mark[CLASS]).
-  const allowed = await checkPermission("attendance:mark", { classId: sess.classId, centerId });
+  const allowed = await checkPermission("attendance:mark", {
+    classId: sess.classId,
+    centerId,
+  });
   if (!allowed) return { ok: false, error: "Không có quyền điểm danh lớp này" };
 
   // (4) SEC-M02: mỗi studentId từ client PHẢI thuộc ROSTER hợp lệ của buổi (enrolled active
@@ -143,10 +160,17 @@ export async function saveClassAttendanceAction(
     await xdb.$transaction(
       data.records.map((r) => {
         const absent = isAbsent(r.status);
-        const makeupStatus = absent ? deriveMakeup(r.status, r.makeupStatus) : "NONE";
-        const absenceReason = absent ? (r.absenceReason?.trim() || null) : null;
+        const makeupStatus = absent
+          ? deriveMakeup(r.status, r.makeupStatus)
+          : "NONE";
+        const absenceReason = absent ? r.absenceReason?.trim() || null : null;
         return xdb.attendance.upsert({
-          where: { sessionId_studentId: { sessionId: data.sessionId, studentId: r.studentId } },
+          where: {
+            sessionId_studentId: {
+              sessionId: data.sessionId,
+              studentId: r.studentId,
+            },
+          },
           create: {
             sessionId: data.sessionId,
             studentId: r.studentId,
@@ -156,7 +180,12 @@ export async function saveClassAttendanceAction(
             absenceReason,
             centerId,
           },
-          update: { status: r.status, note: r.note ?? null, makeupStatus, absenceReason },
+          update: {
+            status: r.status,
+            note: r.note ?? null,
+            makeupStatus,
+            absenceReason,
+          },
         });
       }),
     );
@@ -173,7 +202,10 @@ export async function saveClassAttendanceAction(
   // treo của (HV, buổi này) — không để nhu cầu bù ma nằm ở /admin/hoc-bu.
   try {
     for (const r of data.records) {
-      if (isAbsent(r.status) && deriveMakeup(r.status, r.makeupStatus) === "NEEDS_MAKEUP") {
+      if (
+        isAbsent(r.status) &&
+        deriveMakeup(r.status, r.makeupStatus) === "NEEDS_MAKEUP"
+      ) {
         await createMakeupNeed({
           studentId: r.studentId,
           missedSessionId: data.sessionId,
@@ -181,7 +213,10 @@ export async function saveClassAttendanceAction(
           note: r.absenceReason?.trim() || null,
         });
       } else if (!isAbsent(r.status)) {
-        await cancelPendingMakeupNeed({ studentId: r.studentId, missedSessionId: data.sessionId });
+        await cancelPendingMakeupNeed({
+          studentId: r.studentId,
+          missedSessionId: data.sessionId,
+        });
       }
     }
   } catch (err) {

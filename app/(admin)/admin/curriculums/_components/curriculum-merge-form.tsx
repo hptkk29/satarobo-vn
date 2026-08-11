@@ -92,11 +92,11 @@ export function CurriculumMergeForm({
   const blocked = (preview?.errors.length ?? 0) > 0;
 
   return (
-    <section className="mb-6 rounded-xl border border-gray-200 bg-white p-5">
-      <h2 className="flex items-center gap-2 text-sm font-bold uppercase tracking-wider text-gray-500">
+    <section className="mb-6 rounded-xl border border-border bg-card p-5">
+      <h2 className="flex items-center gap-2 text-sm font-bold uppercase tracking-wider text-muted-foreground">
         <Layers className="h-4 w-4" /> Gộp bài từ giáo trình khác
       </h2>
-      <p className="mt-1 text-xs text-gray-500">
+      <p className="mt-1 text-xs text-muted-foreground">
         Dùng cho khoá gộp (vd Combo = Sata 1 buổi 1–16 + Sata 2 buổi 17–32). Chép NỘI DUNG bài
         (tên, mô tả, giáo án, mục tiêu, thiết bị, bài tập mặc định…) đè lên buổi đích, giữ nguyên
         buổi nên lớp đang chạy không bị lệch. KHÔNG chép học liệu SCORM / bài tập / đề thi / tài
@@ -105,7 +105,7 @@ export function CurriculumMergeForm({
 
       <div className="mt-4 flex flex-wrap items-end gap-3">
         <label className="flex min-w-[260px] flex-1 flex-col gap-1">
-          <span className="text-xs font-semibold text-gray-600">Giáo trình nguồn</span>
+          <span className="text-xs font-semibold text-muted-foreground">Giáo trình nguồn</span>
           <select
             value={sourceId}
             onChange={(e) => {
@@ -113,7 +113,7 @@ export function CurriculumMergeForm({
               setPreview(null);
             }}
             disabled={pending || sources === null}
-            className="rounded-lg border border-gray-300 px-3 py-2 text-sm"
+            className="rounded-lg border border-border px-3 py-2 text-sm"
           >
             <option value="">{sources === null ? "Đang tải…" : "— Chọn giáo trình —"}</option>
             {(sources ?? []).map((s) => (
@@ -125,7 +125,7 @@ export function CurriculumMergeForm({
         </label>
 
         <label className="flex w-40 flex-col gap-1">
-          <span className="text-xs font-semibold text-gray-600">Chèn từ buổi số</span>
+          <span className="text-xs font-semibold text-muted-foreground">Chèn từ buổi số</span>
           <input
             type="number"
             min={1}
@@ -135,7 +135,7 @@ export function CurriculumMergeForm({
               setPreview(null);
             }}
             disabled={pending}
-            className="rounded-lg border border-gray-300 px-3 py-2 text-sm tabular-nums"
+            className="rounded-lg border border-border px-3 py-2 text-sm tabular-nums"
           />
         </label>
 
@@ -143,14 +143,14 @@ export function CurriculumMergeForm({
           type="button"
           onClick={runPreview}
           disabled={pending}
-          className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+          className="rounded-lg border border-border px-4 py-2 text-sm font-semibold text-foreground hover:bg-muted disabled:opacity-50"
         >
           {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Xem trước"}
         </button>
       </div>
 
       {picked && (
-        <p className="mt-2 text-xs text-gray-500">
+        <p className="mt-2 text-xs text-muted-foreground">
           Sẽ ghi vào buổi {start || "?"} → {Number.isInteger(start) ? start + picked.lessonCount - 1 : "?"}{" "}
           (giáo trình này đang có {currentCount} buổi).
         </p>
@@ -159,7 +159,7 @@ export function CurriculumMergeForm({
       {preview && (
         <div className="mt-4">
           {preview.errors.length > 0 && (
-            <div className="mb-3 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800">
+            <div className="mb-3 rounded-lg border border-state-danger-soft bg-state-danger-soft p-3 text-sm text-state-danger-ink">
               <p className="flex items-center gap-2 font-semibold">
                 <AlertTriangle className="h-4 w-4" /> Không gộp được
               </p>
@@ -171,7 +171,7 @@ export function CurriculumMergeForm({
             </div>
           )}
           {preview.warnings.length > 0 && (
-            <div className="mb-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
+            <div className="mb-3 rounded-lg border border-state-warning-soft bg-state-warning-soft p-3 text-xs text-state-warning-ink">
               <p className="font-semibold">Cần biết trước khi gộp:</p>
               <ul className="mt-1 list-disc space-y-0.5 pl-5">
                 {preview.warnings.map((w) => (
@@ -181,27 +181,27 @@ export function CurriculumMergeForm({
             </div>
           )}
 
-          <div className="max-h-72 overflow-y-auto rounded-lg border border-gray-200">
+          <div className="max-h-72 overflow-y-auto rounded-lg border border-border">
             <table className="w-full text-sm">
-              <thead className="sticky top-0 bg-gray-50 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">
+              <thead className="sticky top-0 bg-muted text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                 <tr>
                   <th className="px-3 py-2">Buổi</th>
                   <th className="px-3 py-2">Đang là</th>
                   <th className="px-3 py-2">Sẽ thành</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-100">
+              <tbody className="divide-y divide-border">
                 {preview.rows.map((r) => (
                   <tr key={r.targetOrder}>
-                    <td className="px-3 py-1.5 tabular-nums text-gray-500">{r.targetOrder}</td>
-                    <td className="px-3 py-1.5 text-gray-500">
+                    <td className="px-3 py-1.5 tabular-nums text-muted-foreground">{r.targetOrder}</td>
+                    <td className="px-3 py-1.5 text-muted-foreground">
                       {r.action === "create" ? (
-                        <span className="italic text-emerald-700">(tạo mới)</span>
+                        <span className="italic text-state-success-ink">(tạo mới)</span>
                       ) : (
                         r.currentTitle
                       )}
                     </td>
-                    <td className="px-3 py-1.5 font-medium text-gray-900">{r.sourceTitle}</td>
+                    <td className="px-3 py-1.5 font-medium text-foreground">{r.sourceTitle}</td>
                   </tr>
                 ))}
               </tbody>
@@ -213,11 +213,11 @@ export function CurriculumMergeForm({
               type="button"
               onClick={runApply}
               disabled={pending || blocked}
-              className="rounded-lg bg-[#7C3AED] px-4 py-2 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-50"
+              className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-50"
             >
               {pending ? "Đang gộp…" : "Gộp vào giáo trình này"}
             </button>
-            <span className="text-xs text-gray-500">
+            <span className="text-xs text-muted-foreground">
               Ghi đè {preview.overwriteCount} buổi · tạo mới {preview.createCount} buổi
             </span>
           </div>

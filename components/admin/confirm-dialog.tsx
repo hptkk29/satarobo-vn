@@ -47,7 +47,7 @@ export function ConfirmDialog({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <AlertTriangle
-              className={`h-5 w-5 shrink-0 ${tone === "danger" ? "text-red-600" : "text-[#7C3AED]"}`}
+              className={`h-5 w-5 shrink-0 ${tone === "danger" ? "text-state-danger-ink" : "text-primary"}`}
             />
             {title}
           </DialogTitle>
@@ -58,7 +58,7 @@ export function ConfirmDialog({
             type="button"
             onClick={() => onOpenChange(false)}
             disabled={pending}
-            className="rounded-lg border border-neutral-200 bg-white px-4 py-2 text-sm font-semibold text-neutral-700 hover:bg-neutral-50 disabled:opacity-50"
+            className="rounded-lg border border-border bg-card px-4 py-2 text-sm font-semibold text-foreground hover:bg-muted disabled:opacity-50"
           >
             Huỷ
           </button>
@@ -66,11 +66,7 @@ export function ConfirmDialog({
             type="button"
             onClick={onConfirm}
             disabled={pending}
-            className={`inline-flex items-center justify-center gap-1.5 rounded-lg px-4 py-2 text-sm font-semibold text-white disabled:opacity-50 ${
-              tone === "danger"
-                ? "bg-red-600 hover:bg-red-700"
-                : "bg-[#7C3AED] hover:opacity-90"
-            }`}
+            className={`inline-flex items-center justify-center gap-1.5 rounded-lg px-4 py-2 text-sm font-semibold text-white disabled:opacity-50 ${ tone === "danger" ? "bg-state-danger-ink hover:bg-state-danger-ink" : "bg-primary hover:opacity-90" }`}
           >
             {pending && <Loader2 className="h-4 w-4 animate-spin" />}
             {confirmLabel}

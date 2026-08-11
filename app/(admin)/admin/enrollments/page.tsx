@@ -18,16 +18,16 @@ export const dynamic = "force-dynamic";
 export const metadata = { title: "Đăng ký học | Admin" };
 
 const STATUS_INFO: Record<EnrollmentStatus, { label: string; color: string }> = {
-  PENDING: { label: "Chờ xếp", color: "bg-gray-100 text-gray-700" },
-  CONFIRMED: { label: "Đã xếp", color: "bg-amber-100 text-amber-700" },
-  STUDYING: { label: "Đang học", color: "bg-green-100 text-green-700" },
-  PAUSED: { label: "Bảo lưu", color: "bg-yellow-100 text-yellow-700" },
-  COMPLETED: { label: "Hoàn thành", color: "bg-blue-100 text-blue-700" },
-  WITHDREW: { label: "Đã rút", color: "bg-red-100 text-red-700" },
-  TRANSFERRED: { label: "Đã chuyển", color: "bg-purple-100 text-purple-700" },
+  PENDING: { label: "Chờ xếp", color: "bg-muted text-foreground" },
+  CONFIRMED: { label: "Đã xếp", color: "bg-state-warning-soft text-state-warning-ink" },
+  STUDYING: { label: "Đang học", color: "bg-state-success-soft text-state-success-ink" },
+  PAUSED: { label: "Bảo lưu", color: "bg-state-warning-soft text-state-warning-ink" },
+  COMPLETED: { label: "Hoàn thành", color: "bg-state-info-soft text-state-info-ink" },
+  WITHDREW: { label: "Đã rút", color: "bg-state-danger-soft text-state-danger-ink" },
+  TRANSFERRED: { label: "Đã chuyển", color: "bg-primary-soft text-primary" },
   // Legacy values
-  ACTIVE: { label: "Đang học (legacy)", color: "bg-green-100 text-green-700" },
-  CANCELLED: { label: "Đã huỷ", color: "bg-red-100 text-red-700" },
+  ACTIVE: { label: "Đang học (legacy)", color: "bg-state-success-soft text-state-success-ink" },
+  CANCELLED: { label: "Đã huỷ", color: "bg-state-danger-soft text-state-danger-ink" },
 };
 
 const DEFAULT_ACTIVE_STATUSES: EnrollmentStatus[] = [
@@ -165,11 +165,11 @@ export default async function EnrollmentsAdminPage({ searchParams }: SearchParam
     <div>
       <div className="mb-6 flex items-start justify-between gap-4">
         <div>
-          <h1 className="flex items-center gap-2 text-2xl font-bold text-gray-900">
-            <ClipboardList className="h-6 w-6 text-[#7C3AED]" />
+          <h1 className="flex items-center gap-2 text-2xl font-bold text-foreground">
+            <ClipboardList className="h-6 w-6 text-primary" />
             Đăng ký học
           </h1>
-          <p className="mt-1 text-sm text-gray-500">
+          <p className="mt-1 text-sm text-muted-foreground">
             {enrollments.length > 0
               ? `${enrollments.length} đăng ký${statusFilter === "active" ? " (đang hoạt động)" : ""}`
               : "Chưa có đăng ký nào"}
@@ -177,7 +177,7 @@ export default async function EnrollmentsAdminPage({ searchParams }: SearchParam
         </div>
         <Link
           href="/enrollments/new"
-          className="inline-flex items-center gap-1.5 rounded-lg bg-[#7C3AED] px-4 py-2 text-sm font-semibold text-white shadow-sm hover:opacity-90"
+          className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white shadow-sm hover:opacity-90"
         >
           <Plus className="h-4 w-4" />
           Đăng ký mới
@@ -192,12 +192,12 @@ export default async function EnrollmentsAdminPage({ searchParams }: SearchParam
           name="q"
           defaultValue={q}
           placeholder="Tìm HS / SĐT PH / tên lớp / mã lớp..."
-          className="lg:col-span-2 rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-[#7C3AED] focus:outline-none focus:ring-2 focus:ring-[#7C3AED]/20"
+          className="lg:col-span-2 rounded-lg border border-border px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
         />
         <select
           name="status"
           defaultValue={statusParam ?? "active"}
-          className="rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-[#7C3AED] focus:outline-none"
+          className="rounded-lg border border-border px-3 py-2 text-sm focus:border-primary focus:outline-none"
         >
           <option value="active">Đang hoạt động (mặc định)</option>
           <option value="all">Tất cả trạng thái</option>
@@ -212,7 +212,7 @@ export default async function EnrollmentsAdminPage({ searchParams }: SearchParam
         <select
           name="classId"
           defaultValue={classFilter ?? ""}
-          className="rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-[#7C3AED] focus:outline-none"
+          className="rounded-lg border border-border px-3 py-2 text-sm focus:border-primary focus:outline-none"
         >
           <option value="">Tất cả lớp</option>
           {classes.map((c) => (
@@ -225,7 +225,7 @@ export default async function EnrollmentsAdminPage({ searchParams }: SearchParam
         <select
           name="centerId"
           defaultValue={centerFilter ?? ""}
-          className="rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-[#7C3AED] focus:outline-none"
+          className="rounded-lg border border-border px-3 py-2 text-sm focus:border-primary focus:outline-none"
         >
           <option value="">Tất cả cơ sở</option>
           {centers.map((c) => (
@@ -236,40 +236,40 @@ export default async function EnrollmentsAdminPage({ searchParams }: SearchParam
         </select>
         <button
           type="submit"
-          className="rounded-lg bg-[#7C3AED] px-4 py-2 text-sm font-semibold text-white hover:opacity-90 sm:col-span-2 lg:col-span-5"
+          className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white hover:opacity-90 sm:col-span-2 lg:col-span-5"
         >
           Áp dụng bộ lọc
         </button>
       </form>
 
-      <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
+      <div className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
         <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-gray-100">
-            <thead className="bg-gray-50">
+          <table className="min-w-full divide-y divide-border">
+            <thead className="bg-muted">
               <tr>
-                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">
+                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                   Học viên
                 </th>
-                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">
+                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                   Lớp / Cơ sở
                 </th>
-                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">
+                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                   Trạng thái
                 </th>
-                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">
+                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                   Ngày đăng ký
                 </th>
-                <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-gray-500">
+                <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                   Hành động
                 </th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-50">
+            <tbody className="divide-y divide-border">
               {enrollments.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="px-4 py-12 text-center text-sm text-gray-400">
+                  <td colSpan={5} className="px-4 py-12 text-center text-sm text-muted-foreground">
                     Chưa có đăng ký nào khớp bộ lọc.{" "}
-                    <Link href="/enrollments/new" className="text-[#7C3AED] hover:underline">
+                    <Link href="/enrollments/new" className="text-primary hover:underline">
                       Tạo đăng ký mới →
                     </Link>
                   </td>
@@ -279,7 +279,7 @@ export default async function EnrollmentsAdminPage({ searchParams }: SearchParam
                   const statusInfo =
                     STATUS_INFO[e.status] ?? {
                       label: e.status,
-                      color: "bg-gray-100 text-gray-500",
+                      color: "bg-muted text-muted-foreground",
                     };
                   const rawPhone = e.student.parentPhone ?? e.student.phone;
                   // Hiện đầy đủ = có quyền PII VÀ không bị DENY cấp trường (TS-02).
@@ -288,31 +288,31 @@ export default async function EnrollmentsAdminPage({ searchParams }: SearchParam
                       ? maskPhone(rawPhone)
                       : rawPhone;
                   return (
-                    <tr key={e.id} className="hover:bg-gray-50/60">
+                    <tr key={e.id} className="hover:bg-muted/60">
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-3">
                           {e.student.avatarUrl ? (
                             <img
                               src={e.student.avatarUrl}
                               alt={e.student.name}
-                              className="h-9 w-9 rounded-full border border-gray-200 object-cover"
+                              className="h-9 w-9 rounded-full border border-border object-cover"
                             />
                           ) : (
-                            <div className="flex h-9 w-9 items-center justify-center rounded-full bg-gray-100 text-xs font-bold text-gray-500">
+                            <div className="flex h-9 w-9 items-center justify-center rounded-full bg-muted text-xs font-bold text-muted-foreground">
                               {e.student.name.charAt(0).toUpperCase()}
                             </div>
                           )}
                           <div>
-                            <div className="font-medium text-gray-900">{e.student.name}</div>
+                            <div className="font-medium text-foreground">{e.student.name}</div>
                             {parentPhone && (
-                              <div className="text-xs text-gray-400 tabular-nums">{parentPhone}</div>
+                              <div className="text-xs text-muted-foreground tabular-nums">{parentPhone}</div>
                             )}
                           </div>
                         </div>
                       </td>
-                      <td className="px-4 py-3 text-sm text-gray-600">
-                        <div className="font-medium text-gray-900">{e.class.name}</div>
-                        <div className="text-xs text-gray-400">
+                      <td className="px-4 py-3 text-sm text-muted-foreground">
+                        <div className="font-medium text-foreground">{e.class.name}</div>
+                        <div className="text-xs text-muted-foreground">
                           {e.class.classCode ? `${e.class.classCode} · ` : ""}
                           {e.class.center?.name ?? "—"}
                         </div>
@@ -324,7 +324,7 @@ export default async function EnrollmentsAdminPage({ searchParams }: SearchParam
                           {statusInfo.label}
                         </span>
                       </td>
-                      <td className="px-4 py-3 text-sm tabular-nums text-gray-500">
+                      <td className="px-4 py-3 text-sm tabular-nums text-muted-foreground">
                         {formatDate(e.enrolledAt)}
                       </td>
                       <td className="px-4 py-3 text-right">
@@ -354,7 +354,7 @@ export default async function EnrollmentsAdminPage({ searchParams }: SearchParam
                             )}
                           <Link
                             href={`/enrollments/${e.id}/edit`}
-                            className="inline-flex items-center gap-1 rounded-md border border-gray-200 px-2.5 py-1 text-xs font-semibold text-gray-700 hover:bg-gray-50"
+                            className="inline-flex items-center gap-1 rounded-md border border-border px-2.5 py-1 text-xs font-semibold text-foreground hover:bg-muted"
                           >
                             <Pencil className="h-3.5 w-3.5" />
                             Sửa

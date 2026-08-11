@@ -24,7 +24,7 @@ type StudentRow = {
 }
 
 const inputCls =
-  'w-full rounded-lg border border-gray-300 px-3 py-1.5 text-sm focus:border-emerald-400 focus:outline-none focus:ring-1 focus:ring-emerald-400'
+  'w-full rounded-lg border border-border px-3 py-1.5 text-sm focus:border-state-success focus:outline-none focus:ring-1 focus:ring-state-success'
 
 function newKey() {
   return Math.random().toString(36).slice(2)
@@ -173,7 +173,7 @@ export function ConvertForm({
   return (
     <div className="space-y-6">
       {conflict && (
-        <div className="flex items-start gap-2 rounded-xl border border-red-300 bg-red-50 p-4 text-sm text-red-800">
+        <div className="flex items-start gap-2 rounded-xl border border-state-danger bg-state-danger-soft p-4 text-sm text-state-danger-ink">
           <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
           <div>
             <p className="font-semibold">Xung đột hồ sơ phụ huynh</p>
@@ -186,16 +186,16 @@ export function ConvertForm({
       )}
 
       {/* Phụ huynh */}
-      <div className="rounded-xl border border-gray-200 bg-white p-4">
-        <h2 className="mb-3 text-sm font-semibold text-gray-700">Phụ huynh</h2>
+      <div className="rounded-xl border border-border bg-card p-4">
+        <h2 className="mb-3 text-sm font-semibold text-foreground">Phụ huynh</h2>
         <div className="grid gap-3 sm:grid-cols-3">
           <label className="block">
-            <span className="mb-1 block text-xs font-medium text-gray-500">Họ tên *</span>
+            <span className="mb-1 block text-xs font-medium text-muted-foreground">Họ tên *</span>
             <input value={parentName} onChange={(e) => setParentName(e.target.value)} className={inputCls} />
           </label>
           <label className="block">
-            <span className="mb-1 block text-xs font-medium text-gray-500">
-              Email <span className="font-normal text-gray-400">(không bắt buộc)</span>
+            <span className="mb-1 block text-xs font-medium text-muted-foreground">
+              Email <span className="font-normal text-muted-foreground">(không bắt buộc)</span>
             </span>
             <input
               type="email"
@@ -206,11 +206,11 @@ export function ConvertForm({
             />
           </label>
           <label className="block">
-            <span className="mb-1 block text-xs font-medium text-gray-500">SĐT * (tài khoản đăng nhập)</span>
+            <span className="mb-1 block text-xs font-medium text-muted-foreground">SĐT * (tài khoản đăng nhập)</span>
             <input value={parentPhone} onChange={(e) => setParentPhone(e.target.value)} className={inputCls} />
           </label>
           <label className="block">
-            <span className="mb-1 block text-xs font-medium text-gray-500">CCCD / CMND</span>
+            <span className="mb-1 block text-xs font-medium text-muted-foreground">CCCD / CMND</span>
             <input
               value={parentCccd}
               onChange={(e) => setParentCccd(e.target.value)}
@@ -219,7 +219,7 @@ export function ConvertForm({
             />
           </label>
           <label className="block sm:col-span-2">
-            <span className="mb-1 block text-xs font-medium text-gray-500">Địa chỉ</span>
+            <span className="mb-1 block text-xs font-medium text-muted-foreground">Địa chỉ</span>
             <input
               value={parentAddress}
               onChange={(e) => setParentAddress(e.target.value)}
@@ -228,11 +228,11 @@ export function ConvertForm({
             />
           </label>
           <label className="block">
-            <span className="mb-1 block text-xs font-medium text-gray-500">Tỉnh / Thành</span>
+            <span className="mb-1 block text-xs font-medium text-muted-foreground">Tỉnh / Thành</span>
             <input value={parentCity} onChange={(e) => setParentCity(e.target.value)} className={inputCls} />
           </label>
           <label className="block">
-            <span className="mb-1 block text-xs font-medium text-gray-500">Phường / Xã</span>
+            <span className="mb-1 block text-xs font-medium text-muted-foreground">Phường / Xã</span>
             <input value={parentWard} onChange={(e) => setParentWard(e.target.value)} className={inputCls} />
           </label>
         </div>
@@ -242,17 +242,17 @@ export function ConvertForm({
       <div className="space-y-4">
         {students.map((s, idx) => {
           return (
-            <div key={s.key} className="rounded-xl border border-gray-200 bg-white p-4">
+            <div key={s.key} className="rounded-xl border border-border bg-card p-4">
               <div className="mb-3 flex items-center justify-between">
-                <h3 className="text-sm font-semibold text-gray-700">
+                <h3 className="text-sm font-semibold text-foreground">
                   Học viên {idx + 1}
-                  {s.leadChildId && <span className="ml-2 text-xs text-gray-400">(từ lead)</span>}
+                  {s.leadChildId && <span className="ml-2 text-xs text-muted-foreground">(từ lead)</span>}
                 </h3>
                 {students.length > 1 && (
                   <button
                     type="button"
                     onClick={() => removeStudent(s.key)}
-                    className="inline-flex items-center gap-1 text-xs text-red-500 hover:text-red-700"
+                    className="inline-flex items-center gap-1 text-xs text-state-danger-ink hover:text-state-danger-ink"
                   >
                     <Trash2 size={14} /> Xoá
                   </button>
@@ -260,7 +260,7 @@ export function ConvertForm({
               </div>
               <div className="grid gap-3 sm:grid-cols-2">
                 <label className="block">
-                  <span className="mb-1 block text-xs font-medium text-gray-500">Tên học viên *</span>
+                  <span className="mb-1 block text-xs font-medium text-muted-foreground">Tên học viên *</span>
                   <input
                     value={s.name}
                     onChange={(e) => patch(s.key, { name: e.target.value })}
@@ -268,7 +268,7 @@ export function ConvertForm({
                   />
                 </label>
                 <label className="block">
-                  <span className="mb-1 block text-xs font-medium text-gray-500">Ngày sinh</span>
+                  <span className="mb-1 block text-xs font-medium text-muted-foreground">Ngày sinh</span>
                   <input
                     type="date"
                     value={s.dob}
@@ -277,7 +277,7 @@ export function ConvertForm({
                   />
                 </label>
                 <label className="block">
-                  <span className="mb-1 block text-xs font-medium text-gray-500">Lớp đăng ký *</span>
+                  <span className="mb-1 block text-xs font-medium text-muted-foreground">Lớp đăng ký *</span>
                   <select
                     value={s.classId}
                     onChange={(e) => patch(s.key, { classId: e.target.value })}
@@ -292,12 +292,12 @@ export function ConvertForm({
                   </select>
                 </label>
               </div>
-              <label className="mt-3 flex items-start gap-2 text-sm text-gray-700">
+              <label className="mt-3 flex items-start gap-2 text-sm text-foreground">
                 <input
                   type="checkbox"
                   checked={s.consentMedia}
                   onChange={(e) => patch(s.key, { consentMedia: e.target.checked })}
-                  className="mt-0.5 h-4 w-4 rounded border-gray-300"
+                  className="mt-0.5 h-4 w-4 rounded border-border"
                 />
                 <span>
                   Phụ huynh đồng ý cho trung tâm sử dụng hình ảnh/video của học viên trong lớp cho mục
@@ -312,26 +312,26 @@ export function ConvertForm({
       <button
         type="button"
         onClick={addStudent}
-        className="inline-flex items-center gap-1.5 rounded-lg border border-dashed border-gray-300 px-3 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50"
+        className="inline-flex items-center gap-1.5 rounded-lg border border-dashed border-border px-3 py-2 text-sm font-medium text-muted-foreground hover:bg-muted"
       >
         <Plus size={14} /> Thêm học viên
       </button>
 
       {classes.length === 0 && (
-        <p className="text-xs text-amber-600">
+        <p className="text-xs text-state-warning-ink">
           Chưa có lớp nào đang mở (cùng cơ sở lead). Tạo lớp ở mục Lớp học trước khi chốt.
         </p>
       )}
 
       {/* FL2-01 — Học phí: 1 đợt (full) hoặc 2 đợt (đợt 1 đã thu + đợt 2 hẹn ngày). */}
       {hasOrder && (
-        <div className="rounded-xl border border-gray-200 bg-white p-4">
-          <h2 className="mb-1 text-sm font-semibold text-gray-700">Học phí</h2>
-          <p className="mb-3 text-xs text-gray-500">
+        <div className="rounded-xl border border-border bg-card p-4">
+          <h2 className="mb-1 text-sm font-semibold text-foreground">Học phí</h2>
+          <p className="mb-3 text-xs text-muted-foreground">
             Tổng đơn hàng: <strong>{orderTotal.toLocaleString('vi-VN')}đ</strong>
           </p>
           <div className="flex flex-wrap gap-4">
-            <label className="flex items-center gap-2 text-sm text-gray-700">
+            <label className="flex items-center gap-2 text-sm text-foreground">
               <input
                 type="radio"
                 name="install-plan"
@@ -341,7 +341,7 @@ export function ConvertForm({
               />
               Đóng đủ 1 đợt
             </label>
-            <label className="flex items-center gap-2 text-sm text-gray-700">
+            <label className="flex items-center gap-2 text-sm text-foreground">
               <input
                 type="radio"
                 name="install-plan"
@@ -356,7 +356,7 @@ export function ConvertForm({
           {installPlan === 'TWO' && (
             <div className="mt-3 grid gap-3 sm:grid-cols-3">
               <label className="block">
-                <span className="mb-1 block text-xs font-medium text-gray-500">Đợt 1 — đã thu (VNĐ)</span>
+                <span className="mb-1 block text-xs font-medium text-muted-foreground">Đợt 1 — đã thu (VNĐ)</span>
                 <input
                   type="number"
                   min={0}
@@ -368,15 +368,15 @@ export function ConvertForm({
                 />
               </label>
               <label className="block">
-                <span className="mb-1 block text-xs font-medium text-gray-500">Đợt 2 — còn lại</span>
+                <span className="mb-1 block text-xs font-medium text-muted-foreground">Đợt 2 — còn lại</span>
                 <input
                   value={`${dot2Num.toLocaleString('vi-VN')}đ`}
                   readOnly
-                  className={`${inputCls} bg-gray-50 text-gray-600`}
+                  className={`${inputCls} bg-muted text-muted-foreground`}
                 />
               </label>
               <label className="block">
-                <span className="mb-1 block text-xs font-medium text-gray-500">Đợt 2 — ngày hẹn đóng *</span>
+                <span className="mb-1 block text-xs font-medium text-muted-foreground">Đợt 2 — ngày hẹn đóng *</span>
                 <input
                   type="date"
                   value={dot2DueDate}
@@ -389,26 +389,26 @@ export function ConvertForm({
 
           {/* C4 — kế hoạch 2 đợt cần quản lý cơ sở duyệt trước khi đợt 2 được tính tiền. */}
           {installPlan === 'TWO' && (
-            <p className="mt-3 inline-flex items-center gap-1.5 rounded-lg bg-amber-50 px-2.5 py-1.5 text-xs font-medium text-amber-800">
+            <p className="mt-3 inline-flex items-center gap-1.5 rounded-lg bg-state-warning-soft px-2.5 py-1.5 text-xs font-medium text-state-warning-ink">
               <AlertTriangle className="h-3.5 w-3.5" /> Chờ quản lý cơ sở duyệt
             </p>
           )}
         </div>
       )}
 
-      <div className="flex gap-2 border-t border-gray-200 pt-4">
+      <div className="flex gap-2 border-t border-border pt-4">
         <button
           type="button"
           onClick={submit}
           disabled={pending || classes.length === 0}
-          className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
+          className="rounded-lg bg-state-success-ink px-4 py-2 text-sm font-semibold text-white hover:bg-state-success-ink-hover disabled:opacity-50"
         >
           {pending ? 'Đang xử lý…' : 'Xác nhận chuyển đổi'}
         </button>
         <button
           type="button"
           onClick={() => router.push(`/leads/${leadId}`)}
-          className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+          className="rounded-lg border border-border px-4 py-2 text-sm font-medium text-foreground hover:bg-muted"
         >
           Hủy
         </button>

@@ -33,30 +33,30 @@ export default async function MessengerInboxPage() {
 
   return (
     <div>
-      <h1 className="mb-6 flex items-center gap-2 text-3xl font-black text-neutral-900">
-        <MessageCircle className="h-7 w-7 text-orange-500" />
+      <h1 className="mb-6 flex items-center gap-2 text-3xl font-black text-foreground">
+        <MessageCircle className="h-7 w-7 text-primary" />
         Inbox Messenger
       </h1>
 
       {conversations.length === 0 ? (
-        <p className="text-sm text-neutral-500">Chưa có hội thoại nào trong phạm vi của bạn.</p>
+        <p className="text-sm text-muted-foreground">Chưa có hội thoại nào trong phạm vi của bạn.</p>
       ) : (
         <div className="space-y-4">
           {conversations.map((c) => (
             <div key={c.id} className="rounded-lg border p-4">
               <div className="mb-2 flex items-center justify-between">
-                <div className="font-semibold text-neutral-900">
+                <div className="font-semibold text-foreground">
                   {c.parentName ?? `PSID ${c.psid.slice(0, 8)}`}
                   {c.phone ? (
-                    <span className="ml-2 text-sm text-neutral-500">
+                    <span className="ml-2 text-sm text-muted-foreground">
                       {canViewPii ? c.phone : maskPhone(c.phone)}
                     </span>
                   ) : null}
                 </div>
                 <Badge variant={c.status === "QUALIFIED" ? "default" : "secondary"}>{c.status}</Badge>
               </div>
-              <p className="mb-3 text-sm text-neutral-600">
-                {c.messages[0]?.text ?? <span className="italic text-neutral-400">(chưa có tin nhắn)</span>}
+              <p className="mb-3 text-sm text-muted-foreground">
+                {c.messages[0]?.text ?? <span className="italic text-muted-foreground">(chưa có tin nhắn)</span>}
               </p>
               <ReplyBox conversationId={c.id} />
             </div>

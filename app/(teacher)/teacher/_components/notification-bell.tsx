@@ -34,7 +34,9 @@ export function NotificationBell() {
 
   const load = useCallback(async () => {
     try {
-      const res = await fetch("/api/admin/notifications/bell", { cache: "no-store" });
+      const res = await fetch("/api/admin/notifications/bell", {
+        cache: "no-store",
+      });
       if (!res.ok) return;
       const data = (await res.json()) as { unread: number; items: Item[] };
       setUnread(data.unread);
@@ -52,7 +54,8 @@ export function NotificationBell() {
 
   useEffect(() => {
     function onClick(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+      if (ref.current && !ref.current.contains(e.target as Node))
+        setOpen(false);
     }
     document.addEventListener("mousedown", onClick);
     return () => document.removeEventListener("mousedown", onClick);
@@ -64,7 +67,11 @@ export function NotificationBell() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ id }),
     });
-    setItems((cur) => cur.map((i) => (i.id === id ? { ...i, readAt: new Date().toISOString() } : i)));
+    setItems((cur) =>
+      cur.map((i) =>
+        i.id === id ? { ...i, readAt: new Date().toISOString() } : i,
+      ),
+    );
     setUnread((u) => Math.max(0, u - 1));
     const to = teacherHref(href);
     if (to) {
@@ -79,7 +86,9 @@ export function NotificationBell() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ all: true }),
     });
-    setItems((cur) => cur.map((i) => ({ ...i, readAt: i.readAt ?? new Date().toISOString() })));
+    setItems((cur) =>
+      cur.map((i) => ({ ...i, readAt: i.readAt ?? new Date().toISOString() })),
+    );
     setUnread(0);
   }
 
@@ -96,7 +105,7 @@ export function NotificationBell() {
       >
         <Bell className="h-4 w-4" aria-hidden />
         {unread > 0 && (
-          <span className="absolute -right-0.5 -top-0.5 inline-flex h-4 min-w-[16px] items-center justify-center rounded-full bg-rose-500 px-1 text-[10px] font-bold text-white">
+          <span className="absolute -right-0.5 -top-0.5 inline-flex h-4 min-w-[16px] items-center justify-center rounded-full bg-state-danger px-1 text-[10px] font-bold text-white">
             {unread > 9 ? "9+" : unread}
           </span>
         )}
@@ -118,7 +127,9 @@ export function NotificationBell() {
           </div>
           <div className="max-h-96 overflow-y-auto">
             {items.length === 0 ? (
-              <p className="px-3 py-8 text-center text-sm text-muted-foreground">Không có thông báo.</p>
+              <p className="px-3 py-8 text-center text-sm text-muted-foreground">
+                Không có thông báo.
+              </p>
             ) : (
               items.map((i) => {
                 const to = teacherHref(i.href);
@@ -127,16 +138,24 @@ export function NotificationBell() {
                     key={i.id}
                     type="button"
                     onClick={() => markRead(i.id, i.href)}
-                    className={`block w-full border-b border-border/50 px-3 py-2.5 text-left last:border-0 hover:bg-muted ${
-                      i.readAt ? "opacity-60" : "bg-primary/5"
-                    }`}
+                    className={`block w-full border-b border-border/50 px-3 py-2.5 text-left last:border-0 hover:bg-muted ${i.readAt ? "opacity-60" : "bg-primary/5"}`}
                   >
                     <div className="flex items-start gap-2">
-                      {!i.readAt && <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-primary" />}
+                      {!i.readAt && (
+                        <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-primary" />
+                      )}
                       <div className="min-w-0">
-                        <p className="text-sm font-semibold text-foreground">{i.title}</p>
-                        <p className="text-xs text-muted-foreground">{i.body}</p>
-                        {to && <p className="mt-0.5 text-[11px] text-primary">Xem chi tiết →</p>}
+                        <p className="text-sm font-semibold text-foreground">
+                          {i.title}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          {i.body}
+                        </p>
+                        {to && (
+                          <p className="mt-0.5 text-[11px] text-primary">
+                            Xem chi tiết →
+                          </p>
+                        )}
                       </div>
                     </div>
                   </button>

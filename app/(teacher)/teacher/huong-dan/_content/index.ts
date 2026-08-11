@@ -19,7 +19,10 @@ export function allGuides(): TeacherGuide[] {
   return sorted;
 }
 
-export function guidesByCategory(): { category: string; guides: TeacherGuide[] }[] {
+export function guidesByCategory(): {
+  category: string;
+  guides: TeacherGuide[];
+}[] {
   return GUIDE_CATEGORIES.map((category) => ({
     category,
     guides: sorted.filter((g) => g.category === category),
