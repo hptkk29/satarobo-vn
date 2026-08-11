@@ -34,15 +34,15 @@ export type BankTxnItem = {
 };
 
 const STATUS_UI: Record<string, { label: string; cls: string }> = {
-  MATCHED: { label: "Đã khớp", cls: "bg-green-100 text-green-800" },
-  UNMATCHED: { label: "Cần xử lý", cls: "bg-amber-100 text-amber-800" },
+  MATCHED: { label: "Đã khớp", cls: "bg-state-success-soft text-state-success-ink" },
+  UNMATCHED: { label: "Cần xử lý", cls: "bg-state-warning-soft text-state-warning-ink" },
   IGNORED: { label: "Bỏ qua", cls: "bg-gray-100 text-gray-600" },
 };
 
 const REQUEST_STATUS_UI: Record<string, { label: string; cls: string }> = {
   PENDING: { label: "chưa thu", cls: "text-gray-500" },
-  PARTIAL: { label: "thu một phần", cls: "text-amber-700" },
-  PAID: { label: "đã đủ", cls: "text-green-700" },
+  PARTIAL: { label: "thu một phần", cls: "text-state-warning-ink" },
+  PAID: { label: "đã đủ", cls: "text-state-success-ink" },
   VOID: { label: "đã huỷ", cls: "text-gray-400 line-through" },
 };
 
@@ -79,7 +79,7 @@ export function BankTxnClient({ items }: { items: BankTxnItem[] }) {
         value={q}
         onChange={(e) => setQ(e.target.value)}
         placeholder="Tìm theo mã đơn / nội dung CK / mã tham chiếu / số tiền / tên khách / cổng…"
-        className="w-full max-w-md rounded-md border border-gray-300 px-3 py-1.5 text-sm focus:border-orange-500 focus:outline-none focus:ring-1 focus:ring-orange-500"
+        className="w-full max-w-md rounded-md border border-gray-300 px-3 py-1.5 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
       />
 
       <div className="overflow-x-auto rounded-lg border border-gray-200">
@@ -109,7 +109,7 @@ export function BankTxnClient({ items }: { items: BankTxnItem[] }) {
               const allocated = i.allocations.reduce((s, a) => s + a.amount, 0);
               const leftover = i.amount - allocated;
               return (
-                <tr key={i.id} className={i.status === "UNMATCHED" ? "bg-amber-50/40" : undefined}>
+                <tr key={i.id} className={i.status === "UNMATCHED" ? "bg-state-warning-soft/40" : undefined}>
                   <td className="px-3 py-2 align-top text-xs text-gray-600">
                     {i.at.slice(0, 16).replace("T", " ")}
                   </td>
@@ -134,12 +134,12 @@ export function BankTxnClient({ items }: { items: BankTxnItem[] }) {
                       {ui.label}
                     </span>
                     {i.unmatchedNote && (
-                      <div className="mt-1 max-w-[160px] text-xs text-amber-700">{i.unmatchedNote}</div>
+                      <div className="mt-1 max-w-[160px] text-xs text-state-warning-ink">{i.unmatchedNote}</div>
                     )}
                   </td>
                   <td className="px-3 py-2 align-top">
                     {i.allocations.length === 0 ? (
-                      <span className="text-xs text-amber-700">
+                      <span className="text-xs text-state-warning-ink">
                         Chưa rót vào phiếu nào — mở đơn để xử lý tay
                       </span>
                     ) : (
@@ -154,7 +154,7 @@ export function BankTxnClient({ items }: { items: BankTxnItem[] }) {
                               {a.orderId ? (
                                 <Link
                                   href={`/orders/${a.orderId}`}
-                                  className="font-medium text-blue-600 hover:underline"
+                                  className="font-medium text-state-info-ink hover:underline"
                                 >
                                   {a.orderCode ?? "(đơn)"}
                                 </Link>
@@ -175,7 +175,7 @@ export function BankTxnClient({ items }: { items: BankTxnItem[] }) {
                           );
                         })}
                         {leftover > 0 && (
-                          <li className="text-xs text-amber-700">
+                          <li className="text-xs text-state-warning-ink">
                             Dư {fmt(leftover)}đ chưa rót — xem mục Tiền thừa bên dưới.
                           </li>
                         )}

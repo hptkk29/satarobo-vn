@@ -221,13 +221,13 @@ export function DesignSystemDemo() {
       <SectionBase eyebrow="DECORATIONS" title="Subtle decoration components">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div className="relative h-48 rounded-xl border border-neutral-200 bg-white overflow-hidden">
-            <Sparkles className="absolute inset-0 w-full h-full text-orange-500" />
+            <Sparkles className="absolute inset-0 w-full h-full text-primary" />
             <div className="absolute inset-0 flex items-center justify-center text-neutral-700 font-semibold">
               &lt;Sparkles /&gt;
             </div>
           </div>
           <div className="relative h-48 rounded-xl border border-neutral-200 bg-white overflow-hidden">
-            <DotGrid className="absolute inset-0 w-full h-full text-purple-200" />
+            <DotGrid className="absolute inset-0 w-full h-full text-primary" />
             <div className="absolute inset-0 flex items-center justify-center text-neutral-700 font-semibold">
               &lt;DotGrid /&gt;
             </div>

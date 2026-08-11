@@ -128,7 +128,7 @@ export default async function SessionDetailPage({ params }: Props) {
           <ChevronLeft className="h-4 w-4" /> Danh sách buổi học
         </Link>
         <h1 className="flex items-center gap-2 text-2xl font-bold text-gray-900">
-          <CalendarDays className="h-6 w-6 text-[#7C3AED]" />
+          <CalendarDays className="h-6 w-6 text-primary" />
           {sess.class.classCode ? `${sess.class.classCode} · ` : ""}{sess.class.name}
         </h1>
         <p className="mt-1 text-sm text-gray-500">
@@ -150,12 +150,12 @@ export default async function SessionDetailPage({ params }: Props) {
 
       {/* LMS-4 — chuẩn bị trước buổi học */}
       {pre && (
-        <section className="rounded-xl border border-indigo-200 bg-indigo-50/40 p-5">
-          <h2 className="mb-3 text-sm font-bold uppercase tracking-wider text-indigo-700">
+        <section className="rounded-xl border border-state-info-soft bg-state-info-soft/40 p-5">
+          <h2 className="mb-3 text-sm font-bold uppercase tracking-wider text-state-info-ink">
             Chuẩn bị trước buổi học
           </h2>
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-            <div className="rounded-lg border border-indigo-100 bg-white p-3">
+            <div className="rounded-lg border border-state-info-soft bg-white p-3">
               <div className="mb-1 flex items-center gap-1.5 text-xs font-bold text-gray-500">
                 <BookOpen className="h-4 w-4" /> BÀI DỰ KIẾN
               </div>
@@ -164,7 +164,7 @@ export default async function SessionDetailPage({ params }: Props) {
                   <p className="text-sm font-semibold text-gray-900">
                     Bài {pre.expectedLesson.order}: {pre.expectedLesson.title}
                     {pre.expectedIsSuggested && (
-                      <span className="ml-1 text-xs font-normal text-indigo-500">(gợi ý)</span>
+                      <span className="ml-1 text-xs font-normal text-state-info-ink">(gợi ý)</span>
                     )}
                   </p>
                   {pre.expectedLesson.materials.length > 0 && (
@@ -178,7 +178,7 @@ export default async function SessionDetailPage({ params }: Props) {
               )}
             </div>
 
-            <div className="rounded-lg border border-indigo-100 bg-white p-3">
+            <div className="rounded-lg border border-state-info-soft bg-white p-3">
               <div className="mb-1 flex items-center gap-1.5 text-xs font-bold text-gray-500">
                 <Users className="h-4 w-4" /> HỌC SINH ({pre.students.length})
               </div>
@@ -187,8 +187,8 @@ export default async function SessionDetailPage({ params }: Props) {
               </p>
             </div>
 
-            <div className="rounded-lg border border-amber-100 bg-white p-3">
-              <div className="mb-1 flex items-center gap-1.5 text-xs font-bold text-amber-600">
+            <div className="rounded-lg border border-state-warning-soft bg-white p-3">
+              <div className="mb-1 flex items-center gap-1.5 text-xs font-bold text-state-warning-ink">
                 <AlertTriangle className="h-4 w-4" /> CẦN LƯU Ý
               </div>
               {pre.studentsToNote.length === 0 ? (
@@ -204,8 +204,8 @@ export default async function SessionDetailPage({ params }: Props) {
               )}
             </div>
 
-            <div className="rounded-lg border border-rose-100 bg-white p-3">
-              <div className="mb-1 flex items-center gap-1.5 text-xs font-bold text-rose-600">
+            <div className="rounded-lg border border-state-danger-soft bg-white p-3">
+              <div className="mb-1 flex items-center gap-1.5 text-xs font-bold text-state-danger-ink">
                 <FileWarning className="h-4 w-4" /> BÀI TẬP CHƯA CHẤM ({pre.ungraded.length})
               </div>
               {pre.ungraded.length === 0 ? (

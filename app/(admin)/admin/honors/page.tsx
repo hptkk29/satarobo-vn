@@ -47,7 +47,7 @@ export default async function HonorsAdminPage() {
           </Link>
           <Link
             href="/honors/new"
-            className="inline-flex items-center gap-2 rounded-lg bg-[#7C3AED] px-4 py-2 text-sm font-bold text-white hover:opacity-90"
+            className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-bold text-white hover:opacity-90"
           >
             <Plus className="h-4 w-4" />
             Thêm nhân sự

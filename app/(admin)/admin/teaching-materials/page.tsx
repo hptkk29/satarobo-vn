@@ -232,7 +232,7 @@ export default async function TeachingMaterialsPage({ searchParams }: PageProps)
     <div className="max-w-5xl space-y-6 p-6">
       <div>
         <h1 className="flex items-center gap-2 text-2xl font-bold text-gray-900">
-          <Presentation className="h-6 w-6 text-orange-500" /> Tài liệu lớp tôi
+          <Presentation className="h-6 w-6 text-primary" /> Tài liệu lớp tôi
         </h1>
         <p className="mt-1 text-sm text-gray-500">
           Chọn lớp bạn dạy → xem từng buổi: slide bài học (PDF hoặc SCORM) trình chiếu dạng slider,
@@ -245,7 +245,7 @@ export default async function TeachingMaterialsPage({ searchParams }: PageProps)
         <select
           name="classId"
           defaultValue={selectedClassId ?? ""}
-          className="flex-1 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm outline-none focus:border-orange-500 sm:max-w-md"
+          className="flex-1 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm outline-none focus:border-primary sm:max-w-md"
         >
           <option value="">— Chọn lớp bạn dạy —</option>
           {classes.map((c) => (
@@ -257,33 +257,33 @@ export default async function TeachingMaterialsPage({ searchParams }: PageProps)
         </select>
         <button
           type="submit"
-          className="rounded-lg bg-orange-500 px-4 py-2 text-sm font-semibold text-white hover:bg-orange-600"
+          className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white hover:bg-primary-dark"
         >
           Mở
         </button>
       </form>
 
       {classes.length === 0 && (
-        <p className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-700">
+        <p className="rounded-xl border border-state-warning-soft bg-state-warning-soft p-4 text-sm text-state-warning-ink">
           <AlertCircle className="mr-1 inline h-4 w-4" />
           Bạn chưa được phân công lớp nào.
         </p>
       )}
 
       {selectedClassId && !selectedClass && (
-        <p className="rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700">
+        <p className="rounded-xl border border-state-danger-soft bg-state-danger-soft p-4 text-sm text-state-danger-ink">
           Không tìm thấy lớp hoặc bạn không có quyền xem lớp này.
         </p>
       )}
 
       {selectedClass && (
         <div className="space-y-4">
-          <div className="rounded-xl border border-gray-200 bg-gradient-to-br from-orange-50 to-purple-50 p-4">
-            <div className="text-xs font-bold uppercase tracking-wider text-orange-600">
+          <div className="rounded-xl border border-gray-200 bg-primary-soft p-4">
+            <div className="text-xs font-bold uppercase tracking-wider text-primary">
               Khung chương trình
             </div>
             <div className="mt-1 flex items-center gap-2 text-lg font-bold text-gray-900">
-              <BookOpen className="h-5 w-5 text-purple-500" />
+              <BookOpen className="h-5 w-5 text-primary" />
               {curriculumName ?? "Chưa gán khung chương trình"}
             </div>
             <div className="mt-0.5 text-sm text-gray-600">
@@ -332,7 +332,7 @@ export default async function TeachingMaterialsPage({ searchParams }: PageProps)
                               ? `/admin/scorm/play/${l.scorm.id}?sessionId=${l.sessionId}`
                               : `/admin/scorm/play/${l.scorm.id}`
                           }
-                          className="inline-flex shrink-0 items-center gap-1 rounded-md border border-orange-200 px-2.5 py-1.5 text-xs font-medium text-orange-700 hover:bg-orange-50"
+                          className="inline-flex shrink-0 items-center gap-1 rounded-md border border-primary-soft px-2.5 py-1.5 text-xs font-medium text-primary hover:bg-primary-soft"
                         >
                           <Play className="h-3.5 w-3.5" /> Xem slide
                         </Link>
@@ -378,12 +378,12 @@ export default async function TeachingMaterialsPage({ searchParams }: PageProps)
                               <td className="px-3 py-2 text-right tabular-nums text-gray-700">
                                 {a.stats.submitted}/{a.stats.total}
                                 {a.stats.late > 0 && (
-                                  <span className="ml-1 text-xs text-amber-600">
+                                  <span className="ml-1 text-xs text-state-warning-ink">
                                     ({a.stats.late} muộn)
                                   </span>
                                 )}
                               </td>
-                              <td className="px-3 py-2 text-right tabular-nums text-emerald-700">
+                              <td className="px-3 py-2 text-right tabular-nums text-state-success-ink">
                                 {a.stats.graded}
                               </td>
                               <td className="px-3 py-2 text-right tabular-nums text-gray-400">

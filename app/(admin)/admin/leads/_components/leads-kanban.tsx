@@ -136,9 +136,7 @@ export function LeadsKanban({
           return (
             <div
               key={col}
-              className={`flex w-72 flex-shrink-0 flex-col rounded-xl bg-gray-50 ${
-                overCol === col ? "ring-2 ring-orange-400" : ""
-              }`}
+              className={`flex w-72 flex-shrink-0 flex-col rounded-xl bg-gray-50 ${ overCol === col ? "ring-2 ring-primary" : "" }`}
               onDragOver={(e) => {
                 if (!canUpdate || !dragId) return;
                 e.preventDefault();
@@ -178,23 +176,19 @@ export function LeadsKanban({
                       setDragId(null);
                       setOverCol(null);
                     }}
-                    className={`rounded-lg border border-gray-200 bg-white p-3 shadow-sm transition ${
-                      canUpdate ? "cursor-grab active:cursor-grabbing" : ""
-                    } ${dragId === lead.id ? "opacity-50" : ""} ${
-                      lead.overdue ? "border-l-4 border-l-red-500" : ""
-                    }`}
+                    className={`rounded-lg border border-gray-200 bg-white p-3 shadow-sm transition ${ canUpdate ? "cursor-grab active:cursor-grabbing" : "" } ${dragId === lead.id ? "opacity-50" : ""} ${ lead.overdue ? "border-l-4 border-l-red-500" : "" }`}
                   >
                     <div className="flex items-start justify-between gap-2">
                       <Link
                         href={`/leads/${lead.id}`}
-                        className="font-semibold text-gray-900 hover:text-orange-600 hover:underline"
+                        className="font-semibold text-gray-900 hover:text-primary hover:underline"
                       >
                         {lead.parentName}
                       </Link>
                       <div className="flex flex-shrink-0 items-center gap-1">
                         <SharedBadge lead={lead} currentUserId={currentUserId} />
                         {lead.overdue && (
-                          <span className="rounded bg-red-100 px-1.5 py-0.5 text-[10px] font-bold text-red-700">
+                          <span className="rounded bg-state-danger-soft px-1.5 py-0.5 text-[10px] font-bold text-state-danger-ink">
                             Quá hạn
                           </span>
                         )}
@@ -202,7 +196,7 @@ export function LeadsKanban({
                     </div>
                     <a
                       href={`tel:${lead.phone}`}
-                      className="text-sm font-medium text-orange-600"
+                      className="text-sm font-medium text-primary"
                     >
                       {lead.phone}
                     </a>
@@ -210,7 +204,7 @@ export function LeadsKanban({
                       {lead.courseName && <div>Khoá: {lead.courseName}</div>}
                       {lead.source && <div>Nguồn: {lead.source}</div>}
                       <div className="flex flex-wrap items-center gap-1">
-                        <span className={lead.assignedToName ? "" : "font-medium text-amber-600"}>
+                        <span className={lead.assignedToName ? "" : "font-medium text-state-warning-ink"}>
                           Sale: {lead.assignedToName ?? "Chưa phân công"}
                         </span>
                         {!lead.assignedToName && canAssign && (
@@ -218,7 +212,7 @@ export function LeadsKanban({
                             type="button"
                             disabled={isPending}
                             onClick={() => quickAssign(lead.id)}
-                            className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700 hover:bg-amber-200 disabled:opacity-50"
+                            className="rounded bg-state-warning-soft px-1.5 py-0.5 text-[10px] font-semibold text-state-warning-ink hover:bg-state-warning-soft-hover disabled:opacity-50"
                           >
                             Phân công
                           </button>
@@ -226,7 +220,7 @@ export function LeadsKanban({
                         <span>· {fmtDate(lead.createdAt)}</span>
                       </div>
                       {lead.lastTrialDate && (
-                        <div className="font-medium text-violet-600">
+                        <div className="font-medium text-primary">
                           Đã học thử · {fmtDate(lead.lastTrialDate)}
                         </div>
                       )}
@@ -235,7 +229,7 @@ export function LeadsKanban({
                     {/* Hiện cho MỌI trạng thái (kể cả đã ghi danh) và mọi role xem được lead. */}
                     <Link
                       href={`/leads/${lead.id}`}
-                      className="mt-2 block w-full rounded-md bg-emerald-600 px-2 py-1 text-center text-xs font-semibold text-white hover:bg-emerald-700"
+                      className="mt-2 block w-full rounded-md bg-primary-soft px-2 py-1 text-center text-xs font-semibold text-primary hover:bg-primary-soft-hover"
                     >
                       Xem chi tiết lead
                     </Link>

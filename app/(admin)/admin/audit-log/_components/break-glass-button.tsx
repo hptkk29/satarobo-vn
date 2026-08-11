@@ -39,7 +39,7 @@ export function BreakGlassButton({
         variant="outline"
         size="sm"
         onClick={onHide}
-        className="border-amber-300 text-amber-700 hover:bg-amber-50"
+        className="border-state-warning text-state-warning-ink hover:bg-state-warning-soft"
       >
         <EyeOff className="h-4 w-4" />
         Ẩn PII lại
@@ -72,7 +72,7 @@ export function BreakGlassButton({
         variant="outline"
         size="sm"
         onClick={() => setOpen(true)}
-        className="border-amber-300 text-amber-700 hover:bg-amber-50"
+        className="border-state-warning text-state-warning-ink hover:bg-state-warning-soft"
       >
         <Eye className="h-4 w-4" />
         Xem đầy đủ
@@ -82,7 +82,7 @@ export function BreakGlassButton({
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <ShieldAlert className="h-5 w-5 text-amber-600" />
+              <ShieldAlert className="h-5 w-5 text-state-warning-ink" />
               Xem đầy đủ thông tin nhạy cảm
             </DialogTitle>
             <DialogDescription>

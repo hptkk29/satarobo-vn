@@ -69,7 +69,7 @@ export default async function HolidaysAdminPage({ searchParams }: SearchParams) 
       <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="flex items-center gap-2 text-3xl font-black text-neutral-900">
-            <CalendarOff className="h-7 w-7 text-orange-500" />
+            <CalendarOff className="h-7 w-7 text-primary" />
             Lịch nghỉ
           </h1>
           <p className="mt-1 text-neutral-600">
@@ -86,7 +86,7 @@ export default async function HolidaysAdminPage({ searchParams }: SearchParams) 
           </Link>
           <Link
             href="/holidays/new"
-            className="inline-flex items-center gap-2 rounded-xl bg-orange-500 px-4 py-2 font-bold text-white shadow-md hover:bg-orange-600"
+            className="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2 font-bold text-white shadow-md hover:bg-primary-dark"
           >
             <Plus className="h-5 w-5" />
             Thêm ngày nghỉ
@@ -101,7 +101,7 @@ export default async function HolidaysAdminPage({ searchParams }: SearchParams) 
         <select
           name="year"
           defaultValue={String(year)}
-          className="rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm outline-none focus:border-orange-500"
+          className="rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm outline-none focus:border-primary"
         >
           {yearOptions.map((y) => (
             <option key={y} value={y}>
@@ -112,7 +112,7 @@ export default async function HolidaysAdminPage({ searchParams }: SearchParams) 
         <select
           name="centerId"
           defaultValue={centerFilter}
-          className="rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm outline-none focus:border-orange-500"
+          className="rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm outline-none focus:border-primary"
         >
           <option value="">Tất cả phạm vi</option>
           <option value="ALL">Chỉ toàn hệ thống</option>
@@ -125,7 +125,7 @@ export default async function HolidaysAdminPage({ searchParams }: SearchParams) 
         <select
           name="type"
           defaultValue={typeFilter}
-          className="rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm outline-none focus:border-orange-500"
+          className="rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm outline-none focus:border-primary"
         >
           <option value="">Tất cả loại</option>
           {(Object.keys(TYPE_LABELS) as HolidayType[]).map((t) => (
@@ -136,7 +136,7 @@ export default async function HolidaysAdminPage({ searchParams }: SearchParams) 
         </select>
         <button
           type="submit"
-          className="rounded-lg bg-orange-500 px-4 py-2 text-sm font-bold text-white hover:bg-orange-600"
+          className="rounded-lg bg-primary px-4 py-2 text-sm font-bold text-white hover:bg-primary-dark"
         >
           Lọc
         </button>
@@ -175,7 +175,7 @@ export default async function HolidaysAdminPage({ searchParams }: SearchParams) 
                   ) : (
                     <>
                       Chưa có ngày nghỉ nào trong năm {year}.{" "}
-                      <Link href="/holidays/new" className="text-orange-600 hover:underline">
+                      <Link href="/holidays/new" className="text-primary hover:underline">
                         Thêm ngày nghỉ đầu tiên →
                       </Link>
                     </>
@@ -205,7 +205,7 @@ export default async function HolidaysAdminPage({ searchParams }: SearchParams) 
                   <td className="p-4 text-right">
                     <Link
                       href={`/holidays/${h.id}/edit`}
-                      className="inline-flex items-center gap-1 rounded p-1.5 text-purple-600 hover:bg-purple-50"
+                      className="inline-flex items-center gap-1 rounded p-1.5 text-primary hover:bg-primary-soft"
                       title="Sửa"
                     >
                       <Pencil className="h-4 w-4" />

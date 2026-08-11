@@ -164,7 +164,7 @@ export function CompletionForm({ students }: { students: Opt[] }) {
         <button
           onClick={submit}
           disabled={pending || loading}
-          className="rounded-md bg-purple-700 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
+          className="rounded-md bg-primary-dark px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
         >
           {pending ? "Đang xử lý…" : "Đánh dấu hoàn thành & sinh chứng chỉ"}
         </button>

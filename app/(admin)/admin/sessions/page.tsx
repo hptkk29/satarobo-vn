@@ -107,7 +107,7 @@ export default async function SessionsAdminPage({ searchParams }: SearchParams) 
       <div className="mb-6 flex items-center justify-between">
         <div>
           <h1 className="flex items-center gap-2 text-3xl font-black text-neutral-900">
-            <CalendarDays className="h-7 w-7 text-orange-500" />
+            <CalendarDays className="h-7 w-7 text-primary" />
             Buổi học
           </h1>
           <p className="mt-1 text-neutral-600">
@@ -121,7 +121,7 @@ export default async function SessionsAdminPage({ searchParams }: SearchParams) 
         </div>
         <Link
           href="/sessions/new"
-          className="inline-flex items-center gap-2 rounded-xl bg-orange-500 px-4 py-2 font-bold text-white shadow-md hover:bg-orange-600"
+          className="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2 font-bold text-white shadow-md hover:bg-primary-dark"
         >
           <Plus className="h-5 w-5" />
           Thêm buổi học
@@ -131,11 +131,11 @@ export default async function SessionsAdminPage({ searchParams }: SearchParams) 
       <SessionFilters scope={scope} classId={classFilter ?? ""} classes={classes} />
 
       {holidays.length > 0 && (
-        <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 p-3">
-          <p className="mb-1 text-xs font-bold uppercase tracking-wide text-amber-700">
+        <div className="mb-4 rounded-xl border border-state-warning-soft bg-state-warning-soft p-3">
+          <p className="mb-1 text-xs font-bold uppercase tracking-wide text-state-warning-ink">
             🎌 Ngày nghỉ sắp tới (buổi trùng đã được tự dời)
           </p>
-          <div className="flex flex-wrap gap-2 text-xs text-amber-800">
+          <div className="flex flex-wrap gap-2 text-xs text-state-warning-ink">
             {holidays.map((h) => (
               <span key={h.id} className="rounded-full bg-white px-2.5 py-1">
                 {h.name}: {formatDateVN(h.date)}
@@ -162,7 +162,7 @@ export default async function SessionsAdminPage({ searchParams }: SearchParams) 
               <tr>
                 <td colSpan={4} className="p-12 text-center text-neutral-500">
                   Chưa có buổi học nào khớp bộ lọc.{" "}
-                  <Link href="/sessions/new" className="text-orange-600 hover:underline">
+                  <Link href="/sessions/new" className="text-primary hover:underline">
                     Tạo buổi học mới →
                   </Link>
                 </td>

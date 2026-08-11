@@ -134,7 +134,7 @@ export function SendEmailModal({
                 onChange={(e) => setToName(e.target.value)}
               />
             </div>
-            <div className="p-2 bg-blue-50 text-xs text-blue-700 rounded">
+            <div className="p-2 bg-state-info-soft text-xs text-state-info-ink rounded">
               Email sẽ render variables từ thông tin đơn hàng này. Preview tại{" "}
               <a
                 href="/email-templates"

@@ -236,11 +236,11 @@ export default async function LeadDetailPage({ params }: Props) {
           <div className="mt-1 text-sm text-gray-600">
             {/* #11 T2 — non-holder: hiện SĐT mask + BỎ link tel: (href sẽ lộ số thật) */}
             {canViewPii ? (
-              <a href={`tel:${lead.phone}`} className="font-medium text-orange-600">
+              <a href={`tel:${lead.phone}`} className="font-medium text-primary">
                 {piiLead.phone}
               </a>
             ) : (
-              <span className="font-medium text-orange-600">{piiLead.phone}</span>
+              <span className="font-medium text-primary">{piiLead.phone}</span>
             )}
             {piiLead.email && <span> · {piiLead.email}</span>}
           </div>
@@ -286,10 +286,10 @@ export default async function LeadDetailPage({ params }: Props) {
 
       {/* PHẦN 3 — note bàn giao nổi bật */}
       {lead.handoverNote && (
-        <div className="mb-4 rounded-xl border border-amber-300 bg-amber-50 p-4">
-          <p className="text-xs font-bold uppercase tracking-wider text-amber-700">Bàn giao — đã tư vấn</p>
+        <div className="mb-4 rounded-xl border border-state-warning bg-state-warning-soft p-4">
+          <p className="text-xs font-bold uppercase tracking-wider text-state-warning-ink">Bàn giao — đã tư vấn</p>
           {/* #11 T2 — nội dung tư vấn là PII (Q7) → non-holder thấy MASKED_TEXT */}
-          <p className="mt-1 whitespace-pre-wrap text-sm text-amber-900">
+          <p className="mt-1 whitespace-pre-wrap text-sm text-state-warning-ink">
             {canViewPii ? lead.handoverNote : maskFreeText(lead.handoverNote)}
           </p>
         </div>
@@ -425,7 +425,7 @@ export default async function LeadDetailPage({ params }: Props) {
         <div className="mb-6">
           <Link
             href={`/leads/${lead.id}/convert`}
-            className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-2 text-sm font-semibold text-white hover:bg-emerald-700"
+            className="inline-flex items-center gap-1.5 rounded-lg bg-state-success-ink px-3 py-2 text-sm font-semibold text-white hover:bg-state-success-ink-hover"
           >
             Chuyển đổi
           </Link>
@@ -437,7 +437,7 @@ export default async function LeadDetailPage({ params }: Props) {
         <div className="mb-6 rounded-xl border border-gray-200 bg-white p-4">
           <div className="mb-3 flex items-center justify-between">
             <h2 className="text-sm font-semibold text-gray-700">Buổi học thử</h2>
-            <Link href="/trials" className="text-xs font-medium text-orange-600 hover:underline">
+            <Link href="/trials" className="text-xs font-medium text-primary hover:underline">
               Quản lý ở mục Học thử →
             </Link>
           </div>
@@ -466,7 +466,7 @@ export default async function LeadDetailPage({ params }: Props) {
                   )}
                 </div>
                 {t.feedback ? (
-                  <span className="text-xs font-medium text-indigo-600">
+                  <span className="text-xs font-medium text-state-info-ink">
                     Đã có nhận xét
                   </span>
                 ) : (

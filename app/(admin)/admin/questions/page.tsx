@@ -11,18 +11,18 @@ import { buildQuestionWhere } from "@/lib/questions/filter";
 export const dynamic = "force-dynamic";
 
 const TYPE_INFO: Record<QuestionType, { label: string; color: string }> = {
-  MULTIPLE_CHOICE: { label: "Trắc nghiệm", color: "bg-blue-100 text-blue-700" },
-  TRUE_FALSE: { label: "Đúng/Sai", color: "bg-emerald-100 text-emerald-700" },
-  SHORT_ANSWER: { label: "Trả lời ngắn", color: "bg-amber-100 text-amber-700" },
-  ESSAY: { label: "Tự luận", color: "bg-purple-100 text-purple-700" },
+  MULTIPLE_CHOICE: { label: "Trắc nghiệm", color: "bg-state-info-soft text-state-info-ink" },
+  TRUE_FALSE: { label: "Đúng/Sai", color: "bg-state-success-soft text-state-success-ink" },
+  SHORT_ANSWER: { label: "Trả lời ngắn", color: "bg-state-warning-soft text-state-warning-ink" },
+  ESSAY: { label: "Tự luận", color: "bg-primary-soft text-primary" },
   CODE: { label: "Lập trình", color: "bg-neutral-100 text-neutral-800" },
 };
 
 const DIFFICULTY_INFO: Record<QuestionDifficulty, { label: string; color: string }> = {
-  EASY: { label: "Dễ", color: "bg-green-100 text-green-700" },
-  MEDIUM: { label: "TB", color: "bg-yellow-100 text-yellow-700" },
-  HARD: { label: "Khó", color: "bg-orange-100 text-orange-700" },
-  EXPERT: { label: "Chuyên gia", color: "bg-red-100 text-red-700" },
+  EASY: { label: "Dễ", color: "bg-state-success-soft text-state-success-ink" },
+  MEDIUM: { label: "TB", color: "bg-state-warning-soft text-state-warning-ink" },
+  HARD: { label: "Khó", color: "bg-primary-soft text-primary" },
+  EXPERT: { label: "Chuyên gia", color: "bg-state-danger-soft text-state-danger-ink" },
 };
 
 const VALID_TYPES = Object.values(QuestionType);
@@ -112,7 +112,7 @@ export default async function QuestionsPage({ searchParams }: SearchParams) {
       <div className="mb-6 flex items-start justify-between gap-4">
         <div>
           <h1 className="flex items-center gap-2 text-2xl font-bold text-gray-900">
-            <HelpCircle className="h-6 w-6 text-[#7C3AED]" />
+            <HelpCircle className="h-6 w-6 text-primary" />
             Ngân hàng câu hỏi
           </h1>
           <p className="mt-1 text-sm text-gray-500">
@@ -124,7 +124,7 @@ export default async function QuestionsPage({ searchParams }: SearchParams) {
         <div className="flex gap-2">
           <Link
             href="/questions/new"
-            className="inline-flex items-center gap-1.5 rounded-lg bg-[#7C3AED] px-4 py-2 text-sm font-semibold text-white shadow-sm hover:opacity-90"
+            className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white shadow-sm hover:opacity-90"
           >
             <Plus className="h-4 w-4" />
             Thêm câu hỏi
@@ -147,12 +147,12 @@ export default async function QuestionsPage({ searchParams }: SearchParams) {
           name="q"
           defaultValue={q}
           placeholder="Tìm nội dung / mã câu hỏi..."
-          className="lg:col-span-2 rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-[#7C3AED] focus:outline-none focus:ring-2 focus:ring-[#7C3AED]/20"
+          className="lg:col-span-2 rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
         />
         <select
           name="type"
           defaultValue={typeFilter ?? ""}
-          className="rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-[#7C3AED] focus:outline-none"
+          className="rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:outline-none"
         >
           <option value="">Mọi loại</option>
           {Object.entries(TYPE_INFO).map(([v, { label }]) => (
@@ -164,7 +164,7 @@ export default async function QuestionsPage({ searchParams }: SearchParams) {
         <select
           name="difficulty"
           defaultValue={difficultyFilter ?? ""}
-          className="rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-[#7C3AED] focus:outline-none"
+          className="rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:outline-none"
         >
           <option value="">Mọi độ khó</option>
           {Object.entries(DIFFICULTY_INFO).map(([v, { label }]) => (
@@ -176,7 +176,7 @@ export default async function QuestionsPage({ searchParams }: SearchParams) {
         <select
           name="curriculumId"
           defaultValue={curriculumFilter ?? ""}
-          className="rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-[#7C3AED] focus:outline-none"
+          className="rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:outline-none"
         >
           <option value="">Mọi khung CT</option>
           {curriculums.map((c) => (
@@ -188,7 +188,7 @@ export default async function QuestionsPage({ searchParams }: SearchParams) {
         <select
           name="lessonId"
           defaultValue={lessonFilter ?? ""}
-          className="rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-[#7C3AED] focus:outline-none"
+          className="rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:outline-none"
         >
           <option value="">Mọi bài học</option>
           {lessons.map((l) => (
@@ -201,11 +201,11 @@ export default async function QuestionsPage({ searchParams }: SearchParams) {
           name="tag"
           defaultValue={tagFilter}
           placeholder="Tag (vd: loop)"
-          className="rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-[#7C3AED] focus:outline-none"
+          className="rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:outline-none"
         />
         <button
           type="submit"
-          className="rounded-lg bg-[#7C3AED] px-4 py-2 text-sm font-semibold text-white hover:opacity-90 sm:col-span-2 lg:col-span-4"
+          className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white hover:opacity-90 sm:col-span-2 lg:col-span-4"
         >
           Áp dụng bộ lọc
         </button>
@@ -249,7 +249,7 @@ export default async function QuestionsPage({ searchParams }: SearchParams) {
                     Chưa có câu hỏi nào khớp bộ lọc.{" "}
                     <Link
                       href="/questions/new"
-                      className="text-[#7C3AED] hover:underline"
+                      className="text-primary hover:underline"
                     >
                       Tạo mới →
                     </Link>

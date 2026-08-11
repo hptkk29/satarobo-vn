@@ -36,7 +36,7 @@ const mdComponents: Components = {
       return (
         <Link
           href={url}
-          className="font-medium text-orange-600 underline underline-offset-2 hover:text-orange-700"
+          className="font-medium text-primary underline underline-offset-2 hover:text-primary"
         >
           {children}
         </Link>
@@ -47,7 +47,7 @@ const mdComponents: Components = {
         href={url}
         target="_blank"
         rel="noopener noreferrer"
-        className="font-medium text-orange-600 underline underline-offset-2 hover:text-orange-700"
+        className="font-medium text-primary underline underline-offset-2 hover:text-primary"
       >
         {children}
       </a>
@@ -57,7 +57,7 @@ const mdComponents: Components = {
     <strong className="font-semibold text-neutral-900">{children}</strong>
   ),
   blockquote: ({ children }) => (
-    <blockquote className="my-4 rounded-r-lg border-l-4 border-orange-400 bg-orange-50/60 px-4 py-2 text-sm [&_p]:my-1">
+    <blockquote className="my-4 rounded-r-lg border-l-4 border-primary bg-primary-soft/60 px-4 py-2 text-sm [&_p]:my-1">
       {children}
     </blockquote>
   ),

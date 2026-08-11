@@ -45,11 +45,11 @@ function Stat({
 }) {
   const toneClass =
     tone === "good"
-      ? "text-emerald-700"
+      ? "text-state-success-ink"
       : tone === "warn"
-        ? "text-amber-700"
+        ? "text-state-warning-ink"
         : tone === "bad"
-          ? "text-rose-700"
+          ? "text-state-danger-ink"
           : "text-neutral-900";
   return (
     <div className="rounded-xl border border-neutral-200 bg-white p-4">
@@ -188,10 +188,10 @@ export default async function TrainingReportPage({ searchParams }: SearchParams)
                       {c.className}
                     </td>
                     <td className="px-4 py-2 text-right">{c.counted}</td>
-                    <td className="px-4 py-2 text-right text-emerald-700">{c.attended}</td>
-                    <td className="px-4 py-2 text-right text-rose-600">{c.absent}</td>
-                    <td className="px-4 py-2 text-right text-amber-600">{c.needMakeup}</td>
-                    <td className="px-4 py-2 text-right text-purple-600">{c.madeUp}</td>
+                    <td className="px-4 py-2 text-right text-state-success-ink">{c.attended}</td>
+                    <td className="px-4 py-2 text-right text-state-danger-ink">{c.absent}</td>
+                    <td className="px-4 py-2 text-right text-state-warning-ink">{c.needMakeup}</td>
+                    <td className="px-4 py-2 text-right text-primary">{c.madeUp}</td>
                     <td className="px-4 py-2 text-right font-semibold">
                       {c.counted > 0 ? `${c.attendanceRate}%` : "—"}
                     </td>

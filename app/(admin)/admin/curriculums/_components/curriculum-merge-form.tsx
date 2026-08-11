@@ -159,7 +159,7 @@ export function CurriculumMergeForm({
       {preview && (
         <div className="mt-4">
           {preview.errors.length > 0 && (
-            <div className="mb-3 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800">
+            <div className="mb-3 rounded-lg border border-state-danger-soft bg-state-danger-soft p-3 text-sm text-state-danger-ink">
               <p className="flex items-center gap-2 font-semibold">
                 <AlertTriangle className="h-4 w-4" /> Không gộp được
               </p>
@@ -171,7 +171,7 @@ export function CurriculumMergeForm({
             </div>
           )}
           {preview.warnings.length > 0 && (
-            <div className="mb-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
+            <div className="mb-3 rounded-lg border border-state-warning-soft bg-state-warning-soft p-3 text-xs text-state-warning-ink">
               <p className="font-semibold">Cần biết trước khi gộp:</p>
               <ul className="mt-1 list-disc space-y-0.5 pl-5">
                 {preview.warnings.map((w) => (
@@ -196,7 +196,7 @@ export function CurriculumMergeForm({
                     <td className="px-3 py-1.5 tabular-nums text-gray-500">{r.targetOrder}</td>
                     <td className="px-3 py-1.5 text-gray-500">
                       {r.action === "create" ? (
-                        <span className="italic text-emerald-700">(tạo mới)</span>
+                        <span className="italic text-state-success-ink">(tạo mới)</span>
                       ) : (
                         r.currentTitle
                       )}
@@ -213,7 +213,7 @@ export function CurriculumMergeForm({
               type="button"
               onClick={runApply}
               disabled={pending || blocked}
-              className="rounded-lg bg-[#7C3AED] px-4 py-2 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-50"
+              className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-50"
             >
               {pending ? "Đang gộp…" : "Gộp vào giáo trình này"}
             </button>

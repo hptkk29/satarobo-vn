@@ -14,9 +14,9 @@ export const dynamic = "force-dynamic";
 
 const STATUS_CLASS: Record<ReportCardStatusValue, string> = {
   DRAFT: "bg-neutral-100 text-neutral-600",
-  PENDING_REVIEW: "bg-amber-100 text-amber-700",
-  PUBLISHED: "bg-emerald-100 text-emerald-700",
-  RECALLED: "bg-rose-100 text-rose-700",
+  PENDING_REVIEW: "bg-state-warning-soft text-state-warning-ink",
+  PUBLISHED: "bg-state-success-soft text-state-success-ink",
+  RECALLED: "bg-state-danger-soft text-state-danger-ink",
 };
 
 function StatusBadge({ status }: { status: ReportCardStatusValue }) {
@@ -153,7 +153,7 @@ export default async function ReportCardsPage({
                   <td className="px-4 py-2 text-right">
                     <Link
                       href={`/report-cards/${r.enrollmentId}`}
-                      className="rounded-md bg-purple-700 px-3 py-1.5 text-xs font-medium text-white"
+                      className="rounded-md bg-primary-dark px-3 py-1.5 text-xs font-medium text-white"
                     >
                       {r.status ? "Mở học bạ" : "Nhập học bạ"}
                     </Link>

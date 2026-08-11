@@ -127,7 +127,7 @@ export default async function EditEmployeePage({ params }: Props) {
           {showScheduleLink && (
             <Link
               href={`/nhan-su/${id}/schedule`}
-              className="inline-flex items-center gap-2 rounded-lg border-2 border-orange-200 bg-white px-4 py-2 text-sm font-bold text-orange-600 hover:bg-orange-50"
+              className="inline-flex items-center gap-2 rounded-lg border-2 border-primary-soft bg-white px-4 py-2 text-sm font-bold text-primary hover:bg-primary-soft"
             >
               <CalendarDays className="h-4 w-4" />
               Xem lịch dạy
@@ -168,14 +168,14 @@ export default async function EditEmployeePage({ params }: Props) {
             {auditLogs.map((log) => (
               <div
                 key={log.id}
-                className="border-l-2 border-amber-400 pl-3 py-2 bg-amber-50/50 rounded-r"
+                className="border-l-2 border-state-warning pl-3 py-2 bg-state-warning-soft/50 rounded-r"
               >
                 <div className="flex flex-wrap items-baseline gap-2 text-sm">
                   <span className="font-medium text-gray-700">
                     {ROLE_LABEL[log.fromRole as Role] ?? log.fromRole}
                   </span>
                   <span className="text-gray-400">→</span>
-                  <span className="font-semibold text-amber-700">
+                  <span className="font-semibold text-state-warning-ink">
                     {ROLE_LABEL[log.toRole as Role] ?? log.toRole}
                   </span>
                   <span className="text-xs text-gray-500 ml-auto">

@@ -106,12 +106,12 @@ type FeeTreatment =
 
 /** Nhãn + màu cho từng cách xử lý. Đọc nhãn là biết máy làm gì với dòng đó. */
 const TREATMENT: Record<FeeTreatment, { label: string; cls: string }> = {
-  PAID_FULL: { label: "Đã thu đủ", cls: "bg-emerald-100 text-emerald-800" },
-  DISCOUNT_NOTED: { label: "Giảm giá (ghi chú nêu rõ)", cls: "bg-sky-100 text-sky-800" },
-  DISCOUNT_INFERRED: { label: "Giảm giá (máy suy)", cls: "bg-indigo-100 text-indigo-800" },
-  DEBT: { label: "Còn nợ", cls: "bg-amber-100 text-amber-900" },
+  PAID_FULL: { label: "Đã thu đủ", cls: "bg-state-success-soft text-state-success-ink" },
+  DISCOUNT_NOTED: { label: "Giảm giá (ghi chú nêu rõ)", cls: "bg-state-info-soft text-state-info-ink" },
+  DISCOUNT_INFERRED: { label: "Giảm giá (máy suy)", cls: "bg-state-info-soft text-state-info-ink" },
+  DEBT: { label: "Còn nợ", cls: "bg-state-warning-soft text-state-warning-ink" },
   REFUND: { label: "Hoàn phí — KHÔNG nhập", cls: "bg-neutral-200 text-neutral-700" },
-  REVIEW: { label: "Bạn quyết", cls: "bg-red-100 text-red-800" },
+  REVIEW: { label: "Bạn quyết", cls: "bg-state-danger-soft text-state-danger-ink" },
 };
 
 const vnd = (n: number) => `${n.toLocaleString("vi-VN")}đ`;
@@ -265,19 +265,19 @@ export default function ImportRegisteredLeadsPage() {
           </Button>
         </div>
         {error && (
-          <Alert className="border-red-500">
-            <AlertDescription className="text-red-600">{error}</AlertDescription>
+          <Alert className="border-state-danger">
+            <AlertDescription className="text-state-danger-ink">{error}</AlertDescription>
           </Alert>
         )}
       </div>
 
       {result && (
-        <Alert className="border-green-500">
+        <Alert className="border-state-success">
           <AlertDescription>
             ✅ Đã ghi: <b>{result.daTaoLead}</b> lead mới · <b>{result.daTaoHocVien}</b> học viên ·
             gộp <b>{result.daGopLead}</b> lead có sẵn · <b>{result.khongDoi}</b> không đổi (đã
             import trước đó).{" "}
-            <Link href="/leads/bulk-convert" className="font-semibold text-green-700 underline">
+            <Link href="/leads/bulk-convert" className="font-semibold text-state-success-ink underline">
               Bước tiếp theo: chốt hàng loạt →
             </Link>
           </AlertDescription>
@@ -322,7 +322,7 @@ export default function ImportRegisteredLeadsPage() {
             preview.coSoKhongKhop.length > 0 ||
             (preview.trungCoSoKhac?.length ?? 0) > 0 ||
             (preview.ngoaiPhamVi?.length ?? 0) > 0) && (
-            <Alert className="border-yellow-500">
+            <Alert className="border-state-warning">
               <AlertDescription className="space-y-1">
                 {(preview.ngoaiPhamVi?.length ?? 0) > 0 && (
                   <p>
@@ -380,13 +380,13 @@ export default function ImportRegisteredLeadsPage() {
                   <p className="text-xs text-neutral-600">Tổng đã thu ← đối chiếu sao kê</p>
                   <p className="text-lg font-bold text-neutral-900">{vnd(preview.doiChung.daThu)}</p>
                 </div>
-                <div className="rounded-md border border-sky-300 bg-sky-50 p-2">
+                <div className="rounded-md border border-state-info bg-state-info-soft p-2">
                   <p className="text-xs text-neutral-600">Tổng giảm giá</p>
-                  <p className="text-lg font-bold text-sky-800">{vnd(preview.doiChung.giam)}</p>
+                  <p className="text-lg font-bold text-state-info-ink">{vnd(preview.doiChung.giam)}</p>
                 </div>
-                <div className="rounded-md border border-amber-300 bg-amber-50 p-2">
+                <div className="rounded-md border border-state-warning bg-state-warning-soft p-2">
                   <p className="text-xs text-neutral-600">Tổng còn nợ</p>
-                  <p className="text-lg font-bold text-amber-800">{vnd(preview.doiChung.no)}</p>
+                  <p className="text-lg font-bold text-state-warning-ink">{vnd(preview.doiChung.no)}</p>
                 </div>
                 <div className="rounded-md border border-neutral-300 bg-neutral-50 p-2">
                   <p className="text-xs text-neutral-600">Bỏ qua (hoàn phí)</p>
@@ -399,9 +399,9 @@ export default function ImportRegisteredLeadsPage() {
           )}
 
           {(preview.nghiTrung?.length ?? 0) > 0 && (
-            <Alert className="border-red-500 bg-red-50/50">
+            <Alert className="border-state-danger bg-state-danger-soft/50">
               <AlertDescription className="space-y-2">
-                <p className="text-sm font-semibold text-red-900">
+                <p className="text-sm font-semibold text-state-danger-ink">
                   Nghi một học viên bị tách thành nhiều dòng ({preview.nghiTrung!.length})
                 </p>
                 <p className="text-xs text-neutral-700">
@@ -410,13 +410,9 @@ export default function ImportRegisteredLeadsPage() {
                   sửa trong Excel cho hai dòng <b>trùng tên học viên</b>, rồi tải lại.
                 </p>
                 {preview.nghiTrung!.map((r, i) => (
-                  <div key={`${r.sdt}-${i}`} className="rounded-md border border-red-200 bg-white p-2 text-xs">
+                  <div key={`${r.sdt}-${i}`} className="rounded-md border border-state-danger-soft bg-white p-2 text-xs">
                     <span
-                      className={`mr-2 rounded-full px-2 py-0.5 font-semibold ${
-                        r.ketLuan === "SAME_STUDENT"
-                          ? "bg-red-100 text-red-800"
-                          : "bg-amber-100 text-amber-900"
-                      }`}
+                      className={`mr-2 rounded-full px-2 py-0.5 font-semibold ${ r.ketLuan === "SAME_STUDENT" ? "bg-state-danger-soft text-state-danger-ink" : "bg-state-warning-soft text-state-warning-ink" }`}
                     >
                       {r.ketLuan === "SAME_STUDENT" ? "Gần chắc MỘT em" : "Chưa chắc"}
                     </span>
@@ -439,7 +435,7 @@ export default function ImportRegisteredLeadsPage() {
                   <b>Xem thử lại</b>
                 </p>
                 {editedCount > 0 && (
-                  <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-800">
+                  <span className="rounded-full bg-state-warning-soft px-2 py-0.5 text-xs font-semibold text-state-warning-ink">
                     đã sửa {editedCount} ô (chưa ghi)
                   </span>
                 )}
@@ -481,9 +477,7 @@ export default function ImportRegisteredLeadsPage() {
                   return (
                     <div
                       key={k}
-                      className={`rounded-lg border p-3 ${
-                        w.phaiXem ? "border-red-300 bg-red-50/40" : "border-amber-200 bg-amber-50/40"
-                      }`}
+                      className={`rounded-lg border p-3 ${ w.phaiXem ? "border-state-danger bg-state-danger-soft/40" : "border-state-warning-soft bg-state-warning-soft/40" }`}
                     >
                       <div className="mb-2 flex flex-wrap items-baseline gap-x-3 gap-y-1 text-sm">
                         <b className="text-neutral-900">{w.hocVien}</b>
@@ -506,7 +500,7 @@ export default function ImportRegisteredLeadsPage() {
                         <span className="text-xs text-neutral-600">{w.canCu}</span>
                       </div>
                       {w.thieu.length > 0 && (
-                        <p className="mb-2 text-xs text-amber-800">{w.thieu.join(" · ")}</p>
+                        <p className="mb-2 text-xs text-state-warning-ink">{w.thieu.join(" · ")}</p>
                       )}
                       <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
                         {EXCEL_COLS.map((c) => (
@@ -515,11 +509,7 @@ export default function ImportRegisteredLeadsPage() {
                             <input
                               value={val(c)}
                               onChange={(e) => setCell(w.sheet, w.dong, c, e.target.value)}
-                              className={`mt-0.5 w-full rounded border px-2 py-1 text-sm ${
-                                edited[c] !== undefined
-                                  ? "border-amber-400 bg-amber-50"
-                                  : "border-neutral-300"
-                              }`}
+                              className={`mt-0.5 w-full rounded border px-2 py-1 text-sm ${ edited[c] !== undefined ? "border-state-warning bg-state-warning-soft" : "border-neutral-300" }`}
                             />
                           </label>
                         ))}
@@ -562,18 +552,14 @@ export default function ImportRegisteredLeadsPage() {
                                 onChange={(e) =>
                                   setCell(w.sheet, w.dong, "dueDate2", e.target.value)
                                 }
-                                className={`rounded border px-2 py-0.5 text-xs ${
-                                  (edited.dueDate2 ?? w.hanDot2)
-                                    ? "border-neutral-300"
-                                    : "border-red-400 bg-red-50"
-                                }`}
+                                className={`rounded border px-2 py-0.5 text-xs ${ (edited.dueDate2 ?? w.hanDot2) ? "border-neutral-300" : "border-state-danger bg-state-danger-soft" }`}
                               />
                             </label>
                           )}
                           <span className="text-neutral-600">
                             Giá niêm yết: <b>{w.giaNiemYet.toLocaleString("vi-VN")}đ</b>
                             {w.giaNiemYet === 0 && (
-                              <span className="ml-1 text-red-600">(chưa khớp khoá)</span>
+                              <span className="ml-1 text-state-danger-ink">(chưa khớp khoá)</span>
                             )}
                           </span>
                           <span className="text-neutral-600">
@@ -583,7 +569,7 @@ export default function ImportRegisteredLeadsPage() {
                           <span className="text-neutral-600">
                             Đã nộp: <b>{(w.daDong ?? 0).toLocaleString("vi-VN")}đ</b>
                           </span>
-                          <span className={w.conLai > 0 ? "font-semibold text-amber-700" : "text-emerald-700"}>
+                          <span className={w.conLai > 0 ? "font-semibold text-state-warning-ink" : "text-state-success-ink"}>
                             Còn lại: <b>{w.conLai.toLocaleString("vi-VN")}đ</b>
                           </span>
                         </div>
@@ -679,9 +665,7 @@ function Stat({
     <div className="rounded-lg border border-neutral-200 p-3">
       <p className="text-xs text-neutral-500">{label}</p>
       <p
-        className={`text-xl font-bold ${
-          tone === "red" ? "text-red-600" : tone === "amber" ? "text-amber-600" : ""
-        }`}
+        className={`text-xl font-bold ${ tone === "red" ? "text-state-danger-ink" : tone === "amber" ? "text-state-warning-ink" : "" }`}
       >
         {value}
       </p>

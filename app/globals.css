@@ -77,6 +77,36 @@
   --color-secondary: var(--secondary);
   --color-primary-foreground: var(--primary-foreground);
   --color-primary: var(--primary);
+  /* P1-UI — biến thể token để thay class hardcode bằng utility THẬT
+     (`bg-primary-soft`, `text-state-danger`…) thay vì `bg-[color:var(--…)]`.
+     `--primary`/`--accent` được `.admin-scope` ghi đè, nên các utility này tự đổi
+     theo surface mà KHÔNG cần class riêng cho admin. */
+  --color-primary-dark: var(--primary-dark);
+  --color-primary-soft: var(--primary-soft);
+  --color-accent-dark: var(--accent-dark);
+  --color-state-success: var(--state-success);
+  --color-state-success-soft: var(--state-success-soft);
+  --color-state-warning: var(--state-warning);
+  --color-state-warning-soft: var(--state-warning-soft);
+  --color-state-danger: var(--state-danger);
+  --color-state-danger-soft: var(--state-danger-soft);
+  --color-state-info: var(--state-info);
+  --color-state-info-soft: var(--state-info-soft);
+  --color-state-success-ink: var(--state-success-ink);
+  --color-state-warning-ink: var(--state-warning-ink);
+  --color-state-danger-ink: var(--state-danger-ink);
+  --color-state-info-ink: var(--state-info-ink);
+  --color-accent-ink: var(--accent-ink);
+  --color-state-success-ink-hover: var(--state-success-ink-hover);
+  --color-state-warning-ink-hover: var(--state-warning-ink-hover);
+  --color-state-danger-ink-hover: var(--state-danger-ink-hover);
+  --color-state-info-ink-hover: var(--state-info-ink-hover);
+  --color-state-success-soft-hover: var(--state-success-soft-hover);
+  --color-state-warning-soft-hover: var(--state-warning-soft-hover);
+  --color-state-danger-soft-hover: var(--state-danger-soft-hover);
+  --color-state-info-soft-hover: var(--state-info-soft-hover);
+  --color-primary-darker: var(--primary-darker);
+  --color-primary-soft-hover: var(--primary-soft-hover);
   --color-popover-foreground: var(--popover-foreground);
   --color-popover: var(--popover);
   --color-card-foreground: var(--card-foreground);
@@ -152,6 +182,44 @@
   --parent-soft: rgba(97, 12, 141, 0.12);
   --student: #FD8F2D;
   --student-soft: rgba(253, 143, 45, 0.12);
+
+  /* Thang NGỮ NGHĨA (DESIGN.md §1) — tách hẳn khỏi màu thương hiệu. Trước đây
+     "Đang học / Đã duyệt" mượn tone brand, làm cam vừa nghĩa "thương hiệu" vừa nghĩa
+     "ổn" ⇒ người dùng hết đọc được trạng thái qua màu.
+     Khai ở :root chứ không ở .admin-scope: trạng thái là khái niệm dùng chung, không
+     phải bản sắc thương hiệu — portal và site GV về sau dùng đúng thang này. */
+  --state-success: #10B981;
+  --state-success-soft: rgba(16, 185, 129, 0.12);
+  --state-warning: #F59E0B;
+  --state-warning-soft: rgba(245, 158, 11, 0.12);
+  --state-danger: #EF4444;
+  --state-danger-soft: rgba(239, 68, 68, 0.12);
+  --state-info: #3B82F6;
+  --state-info-soft: rgba(59, 130, 246, 0.12);
+
+  /* ⚠️ BIẾN THỂ MỰC — bắt buộc, không phải cho đẹp.
+     Bốn màu ở trên là màu SÁNG, hợp cho nền/viền/icon nhưng KHÔNG đọc được khi làm CHỮ
+     trên nền trắng: #F59E0B chỉ ~2.1:1, #10B981 ~2.3:1 — trượt WCAG AA (cần 4.5:1).
+     Code cũ vốn đã dùng đúng: `text-amber-700` (#B45309) chứ không phải `text-amber-500`.
+     Thay `text-amber-700` bằng `--state-warning` là TỤT tương phản. Nên chữ dùng `-ink`.
+     Số đo trên nền trắng: */
+  --state-success-ink: #047857; /* 4.8:1 */
+  --state-warning-ink: #B45309; /* 4.7:1 */
+  --state-danger-ink: #B91C1C;  /* 6.1:1 */
+  --state-info-ink: #1D4ED8;    /* 6.3:1 */
+  --accent-ink: #B45309;
+
+  /* Bậc HOVER. Vì sao cần: bản gốc dùng cặp `bg-X-600 hover:bg-X-700`; khi cả 600 lẫn
+     700 cùng ánh xạ về `-ink` thì hover TRÙNG nền, và 49 nút mất sạch phản hồi rê chuột.
+     Nền đặc đậm thêm một bậc; nền tint tăng độ đục 0.12 → 0.20. */
+  --state-success-ink-hover: #065F46;
+  --state-warning-ink-hover: #92400E;
+  --state-danger-ink-hover: #991B1B;
+  --state-info-ink-hover: #1E40AF;
+  --state-success-soft-hover: rgba(16, 185, 129, 0.20);
+  --state-warning-soft-hover: rgba(245, 158, 11, 0.20);
+  --state-danger-soft-hover: rgba(239, 68, 68, 0.20);
+  --state-info-soft-hover: rgba(59, 130, 246, 0.20);
   --accent-soft: oklch(0.97 0 0);
   --destructive: oklch(0.577 0.245 27.325);
   --border: oklch(0.922 0 0);
@@ -587,17 +655,11 @@
   /* Mực tối, KHÔNG phải trắng — xem ghi chú tương phản ở trên. */
   --accent-foreground: #241a2e;
   --accent-soft: rgba(255, 143, 45, 0.12);
+  /* Cam #FF8F2D làm CHỮ trên nền trắng chỉ ~2.1:1 — trượt AA. Chữ cam dùng mực đậm. */
+  --accent-ink: #B45309;
   --primary-soft: rgba(97, 11, 138, 0.10);
+  --primary-soft-hover: rgba(97, 11, 138, 0.18);
+  /* Bậc sâu hơn `--primary-dark`, cho nút vốn viết `bg-purple-700 hover:bg-purple-800`. */
+  --primary-darker: #3B1A5E;
 
-  /* Thang NGỮ NGHĨA — tách hẳn khỏi màu thương hiệu (DESIGN.md §1).
-     Trước đây "Đang học/Đã duyệt" mượn tone brand, làm cam vừa nghĩa "thương
-     hiệu" vừa nghĩa "ổn" — người dùng không đọc được trạng thái qua màu nữa. */
-  --state-success: #10B981;
-  --state-success-soft: rgba(16, 185, 129, 0.12);
-  --state-warning: #F59E0B;
-  --state-warning-soft: rgba(245, 158, 11, 0.12);
-  --state-danger: #EF4444;
-  --state-danger-soft: rgba(239, 68, 68, 0.12);
-  --state-info: #3B82F6;
-  --state-info-soft: rgba(59, 130, 246, 0.12);
 }

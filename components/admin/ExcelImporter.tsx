@@ -293,7 +293,7 @@ export function ExcelImporter<T>({
         <a
           href={templateUrl}
           download={templateFilename}
-          className="inline-flex items-center gap-1 text-sm text-blue-600 hover:underline"
+          className="inline-flex items-center gap-1 text-sm text-state-info-ink hover:underline"
         >
           <Download className="h-4 w-4" />
           Tải Template
@@ -325,18 +325,18 @@ export function ExcelImporter<T>({
             <CheckCircle2 className="h-4 w-4" />
             <AlertDescription>
               File: <strong>{filename}</strong> — {rawRows.length} rows | ✅ Hợp lệ:{" "}
-              <strong className="text-green-600">{validRows.length}</strong> | ❌ Lỗi:{" "}
-              <strong className="text-red-600">{errorCount}</strong>
+              <strong className="text-state-success-ink">{validRows.length}</strong> | ❌ Lỗi:{" "}
+              <strong className="text-state-danger-ink">{errorCount}</strong>
               {warnCount > 0 && (
                 <>
                   {" "}| ⚠️ Ghi đè:{" "}
-                  <strong className="text-amber-600">{warnCount}</strong>
+                  <strong className="text-state-warning-ink">{warnCount}</strong>
                 </>
               )}
               {confirmedCount > 0 && (
                 <>
                   {" "}| 🔀 {mergeDuplicates ? "Sẽ gộp" : "Đã xác nhận gộp"}:{" "}
-                  <strong className="text-amber-600">{confirmedCount}</strong>
+                  <strong className="text-state-warning-ink">{confirmedCount}</strong>
                 </>
               )}
               {checkingDb && (
@@ -354,7 +354,7 @@ export function ExcelImporter<T>({
                   {columnHints.map((c) => (
                     <th key={c.key} className="px-2 py-1 text-left">
                       {c.label}
-                      {c.required && <span className="text-red-500">*</span>}
+                      {c.required && <span className="text-state-danger-ink">*</span>}
                     </th>
                   ))}
                   <th className="px-2 py-1 text-left">Status</th>
@@ -379,8 +379,8 @@ export function ExcelImporter<T>({
                       key={`${excelRows[idx] ?? idx}`}
                       className={cn(
                         "border-t",
-                        errored && "bg-red-50",
-                        (warn || confirmed || willMerge) && "bg-amber-50",
+                        errored && "bg-state-danger-soft",
+                        (warn || confirmed || willMerge) && "bg-state-warning-soft",
                       )}
                     >
                       <td className="px-2 py-1">{excelRows[idx] ?? idx + 2}</td>
@@ -391,39 +391,39 @@ export function ExcelImporter<T>({
                       ))}
                       <td className="px-2 py-1">
                         {isErrorRow(row) ? (
-                          <span className="text-red-600 text-xs">{row.error}</span>
+                          <span className="text-state-danger-ink text-xs">{row.error}</span>
                         ) : willMerge ? (
-                          <span className="text-amber-700 text-xs">
+                          <span className="text-state-warning-ink text-xs">
                             🔀 {mergeDuplicates!.label} — {dupError}
                           </span>
                         ) : confirmed ? (
-                          <span className="text-amber-700 text-xs">
+                          <span className="text-state-warning-ink text-xs">
                             🔀 Đã xác nhận gộp — sẽ xử lý khi Import.{" "}
                             <button
                               type="button"
                               onClick={() => toggleConfirm(excelRows[idx] ?? -1)}
-                              className="underline hover:text-amber-900"
+                              className="underline hover:text-state-warning-ink"
                             >
                               Hoàn tác
                             </button>
                           </span>
                         ) : dupError ? (
-                          <span className="text-red-600 text-xs">
+                          <span className="text-state-danger-ink text-xs">
                             {dupError}
                             {confirmDuplicates && (
                               <button
                                 type="button"
                                 onClick={() => toggleConfirm(excelRows[idx] ?? -1)}
-                                className="ml-1.5 rounded border border-amber-400 bg-amber-50 px-1.5 py-0.5 text-[11px] font-semibold text-amber-700 hover:bg-amber-100"
+                                className="ml-1.5 rounded border border-state-warning bg-state-warning-soft px-1.5 py-0.5 text-[11px] font-semibold text-state-warning-ink hover:bg-state-warning-soft-hover"
                               >
                                 {confirmDuplicates.label}
                               </button>
                             )}
                           </span>
                         ) : warn ? (
-                          <span className="text-amber-600 text-xs">⚠️ {warn}</span>
+                          <span className="text-state-warning-ink text-xs">⚠️ {warn}</span>
                         ) : (
-                          <span className="text-green-600">✓</span>
+                          <span className="text-state-success-ink">✓</span>
                         )}
                       </td>
                       <td className="px-2 py-1 text-center">
@@ -431,7 +431,7 @@ export function ExcelImporter<T>({
                           type="button"
                           title={`Xoá dòng ${excelRows[idx] ?? idx + 2} khỏi danh sách import`}
                           onClick={() => removeRows(new Set([idx]))}
-                          className="inline-flex h-6 w-6 items-center justify-center rounded text-gray-400 hover:bg-red-100 hover:text-red-600"
+                          className="inline-flex h-6 w-6 items-center justify-center rounded text-gray-400 hover:bg-state-danger-soft hover:text-state-danger-ink"
                         >
                           <X className="h-3.5 w-3.5" />
                         </button>
@@ -457,7 +457,7 @@ export function ExcelImporter<T>({
               <Button
                 variant="outline"
                 onClick={removeErrorRows}
-                className="border-red-300 text-red-600 hover:bg-red-50 hover:text-red-700"
+                className="border-state-danger text-state-danger-ink hover:bg-state-danger-soft hover:text-state-danger-ink"
               >
                 <Trash2 className="h-4 w-4 mr-1" />
                 Xoá {errorCount} dòng lỗi
@@ -505,11 +505,11 @@ export function ImportOutcome({
 
   return (
     <div className="space-y-3">
-      <Alert className={failures.length === 0 ? "border-green-500" : "border-yellow-500"}>
+      <Alert className={failures.length === 0 ? "border-state-success" : "border-state-warning"}>
         {failures.length === 0 ? (
-          <CheckCircle2 className="h-4 w-4 text-green-600" />
+          <CheckCircle2 className="h-4 w-4 text-state-success-ink" />
         ) : (
-          <AlertCircle className="h-4 w-4 text-yellow-600" />
+          <AlertCircle className="h-4 w-4 text-state-warning-ink" />
         )}
         <AlertDescription>
           ✅ Thành công: <strong>{result.success}</strong>
@@ -544,7 +544,7 @@ export function ImportOutcome({
               {failures.map((e, i) => (
                 <tr key={i} className="border-t">
                   <td className="px-2 py-1">{e.row}</td>
-                  <td className="px-2 py-1 text-red-600">{e.error}</td>
+                  <td className="px-2 py-1 text-state-danger-ink">{e.error}</td>
                 </tr>
               ))}
             </tbody>

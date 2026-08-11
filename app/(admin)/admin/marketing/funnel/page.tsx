@@ -41,7 +41,7 @@ export default async function MarketingFunnelPage() {
   return (
     <div>
       <h1 className="mb-6 flex items-center gap-2 text-3xl font-black text-neutral-900">
-        <TrendingUp className="h-7 w-7 text-orange-500" />
+        <TrendingUp className="h-7 w-7 text-primary" />
         Funnel Marketing
       </h1>
       <div className="grid grid-cols-2 gap-4 md:grid-cols-3">

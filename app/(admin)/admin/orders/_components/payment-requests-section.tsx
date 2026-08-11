@@ -39,9 +39,9 @@ const STATUS_LABEL: Record<PaymentRequestRow["status"], string> = {
 };
 
 const STATUS_CLASS: Record<PaymentRequestRow["status"], string> = {
-  PENDING: "bg-amber-100 text-amber-800 hover:bg-amber-100",
-  PARTIAL: "bg-blue-100 text-blue-800 hover:bg-blue-100",
-  PAID: "bg-emerald-100 text-emerald-800 hover:bg-emerald-100",
+  PENDING: "bg-state-warning-soft text-state-warning-ink hover:bg-state-warning-soft",
+  PARTIAL: "bg-state-info-soft text-state-info-ink hover:bg-state-info-soft",
+  PAID: "bg-state-success-soft text-state-success-ink hover:bg-state-success-soft",
   VOID: "bg-neutral-200 text-neutral-600 hover:bg-neutral-200",
 };
 
@@ -79,7 +79,7 @@ function Countdown({
     return () => clearInterval(t);
   }, [expiresAt, onExpire]);
 
-  if (left <= 0) return <span className="font-semibold text-red-600">QR đã hết hạn</span>;
+  if (left <= 0) return <span className="font-semibold text-state-danger-ink">QR đã hết hạn</span>;
   const total = Math.floor(left / 1000);
   const mm = String(Math.floor(total / 60)).padStart(2, "0");
   const ss = String(total % 60).padStart(2, "0");
@@ -108,7 +108,7 @@ function QrPanel({
   canManage: boolean;
 }) {
   return (
-    <div className="mt-3 rounded-lg border border-purple-200 bg-purple-50/40 p-4">
+    <div className="mt-3 rounded-lg border border-primary-soft bg-primary-soft/40 p-4">
       <div className="flex flex-col gap-4 sm:flex-row">
         <div className="shrink-0">
           {session.imageSrc ? (
@@ -145,7 +145,7 @@ function QrPanel({
               href={session.checkoutUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-block text-xs font-semibold text-purple-700 underline"
+              className="inline-block text-xs font-semibold text-primary underline"
             >
               Mở trang thanh toán của cổng →
             </a>
@@ -228,7 +228,7 @@ export function PaymentRequestsSection({
   return (
     <section className="rounded-xl border border-neutral-200 bg-white p-5">
       <h2 className="mb-4 flex items-center gap-2 text-sm font-bold uppercase tracking-wider text-neutral-700">
-        <Receipt className="h-4 w-4 text-[#7C3AED]" /> Phiếu thu &amp; QR theo đợt
+        <Receipt className="h-4 w-4 text-primary" /> Phiếu thu &amp; QR theo đợt
       </h2>
 
       <div className="overflow-x-auto">
@@ -254,7 +254,7 @@ export function PaymentRequestsSection({
                 <tr key={r.id} className="border-b border-neutral-100 align-top">
                   <td className="p-2 font-semibold text-neutral-900">{label}</td>
                   <td className="p-2 text-right tabular-nums">{vnd(r.amountDue)}</td>
-                  <td className="p-2 text-right tabular-nums text-emerald-700">
+                  <td className="p-2 text-right tabular-nums text-state-success-ink">
                     {vnd(r.allocated)}
                   </td>
                   <td className="p-2 text-right font-semibold tabular-nums text-neutral-900">

@@ -100,7 +100,7 @@ export function ChangeRoleDialog({ employeeId, employeeName, currentRole, curren
       <button
         type="button"
         onClick={() => setIsOpen(true)}
-        className="inline-flex items-center gap-2 rounded-lg border-2 border-amber-300 bg-white px-4 py-2 text-sm font-bold text-amber-700 hover:bg-amber-50"
+        className="inline-flex items-center gap-2 rounded-lg border-2 border-state-warning bg-white px-4 py-2 text-sm font-bold text-state-warning-ink hover:bg-state-warning-soft"
       >
         <ShieldAlert className="h-4 w-4" />
         Đổi vai trò
@@ -131,7 +131,7 @@ export function ChangeRoleDialog({ employeeId, employeeName, currentRole, curren
               id="change-role-title"
               className="flex items-center gap-2 text-lg font-bold text-neutral-900"
             >
-              <ShieldAlert className="h-5 w-5 text-amber-500" />
+              <ShieldAlert className="h-5 w-5 text-state-warning-ink" />
               Thay đổi vai trò
             </h2>
             <p className="mt-1 text-sm text-neutral-600">
@@ -142,7 +142,7 @@ export function ChangeRoleDialog({ employeeId, employeeName, currentRole, curren
             </p>
 
             {error && (
-              <div className="mt-4 rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-700">
+              <div className="mt-4 rounded-lg border border-state-danger bg-state-danger-soft px-3 py-2 text-sm text-state-danger-ink">
                 {error}
               </div>
             )}
@@ -171,13 +171,7 @@ export function ChangeRoleDialog({ employeeId, employeeName, currentRole, curren
                           type="button"
                           onClick={() => on && setPrimary(opt.value)}
                           disabled={!on || pending}
-                          className={`rounded-full px-2 py-0.5 text-xs font-semibold ${
-                            primary === opt.value
-                              ? "bg-amber-500 text-white"
-                              : on
-                                ? "bg-neutral-100 text-neutral-600 hover:bg-amber-100"
-                                : "bg-neutral-50 text-neutral-300"
-                          }`}
+                          className={`rounded-full px-2 py-0.5 text-xs font-semibold ${ primary === opt.value ? "bg-state-warning text-white" : on ? "bg-neutral-100 text-neutral-600 hover:bg-state-warning-soft" : "bg-neutral-50 text-neutral-300" }`}
                         >
                           {primary === opt.value ? "Vai trò chính" : "Đặt chính"}
                         </button>
@@ -204,7 +198,7 @@ export function ChangeRoleDialog({ employeeId, employeeName, currentRole, curren
                   rows={3}
                   disabled={pending}
                   required
-                  className="w-full resize-y rounded-lg border border-neutral-300 px-3 py-2 text-sm focus:border-amber-500 focus:outline-none"
+                  className="w-full resize-y rounded-lg border border-neutral-300 px-3 py-2 text-sm focus:border-state-warning focus:outline-none"
                 />
               </div>
             </div>
@@ -222,7 +216,7 @@ export function ChangeRoleDialog({ employeeId, employeeName, currentRole, curren
                 type="button"
                 onClick={handleSubmit}
                 disabled={pending || selected.length === 0}
-                className="rounded-lg bg-amber-500 px-4 py-2 text-sm font-bold text-white hover:bg-amber-600 disabled:opacity-50"
+                className="rounded-lg bg-state-warning px-4 py-2 text-sm font-bold text-white hover:bg-state-warning-ink disabled:opacity-50"
               >
                 {pending ? "Đang lưu..." : "Xác nhận thay đổi"}
               </button>

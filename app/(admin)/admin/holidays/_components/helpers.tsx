@@ -8,9 +8,9 @@ export const TYPE_LABELS: Record<HolidayType, string> = {
 };
 
 const TYPE_COLORS: Record<HolidayType, string> = {
-  HOLIDAY: "bg-red-100 text-red-700",
-  MAINTENANCE: "bg-yellow-100 text-yellow-700",
-  EVENT: "bg-purple-100 text-purple-700",
+  HOLIDAY: "bg-state-danger-soft text-state-danger-ink",
+  MAINTENANCE: "bg-state-warning-soft text-state-warning-ink",
+  EVENT: "bg-primary-soft text-primary",
   OTHER: "bg-neutral-100 text-neutral-700",
 };
 
@@ -25,7 +25,7 @@ export function TypeBadge({ type }: { type: HolidayType }) {
 export function ScopeBadge({ center }: { center: { name: string } | null }) {
   if (!center) {
     return (
-      <span className="inline-block rounded px-2 py-0.5 text-xs font-medium bg-blue-100 text-blue-700">
+      <span className="inline-block rounded px-2 py-0.5 text-xs font-medium bg-state-info-soft text-state-info-ink">
         Toàn hệ thống
       </span>
     );

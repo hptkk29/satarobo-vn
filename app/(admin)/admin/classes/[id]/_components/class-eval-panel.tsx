@@ -79,7 +79,7 @@ export function ClassEvalPanel({
         <select
           value={selectedId}
           onChange={(e) => onSelect(e.target.value)}
-          className="w-full rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm outline-none focus:border-[#7C3AED]"
+          className="w-full rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm outline-none focus:border-primary"
         >
           <option value="">— Chọn buổi học —</option>
           {sessions.map((s) => (
@@ -93,7 +93,7 @@ export function ClassEvalPanel({
       </label>
 
       {error && (
-        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+        <div className="rounded-lg border border-state-danger-soft bg-state-danger-soft px-4 py-3 text-sm text-state-danger-ink">
           {error}
         </div>
       )}

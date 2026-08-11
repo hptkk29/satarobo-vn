@@ -17,9 +17,9 @@ export const metadata = { title: "Đơn từ giáo viên | Admin" };
 export const dynamic = "force-dynamic";
 
 const STATUS_CLS: Record<WorkRequestStatusV, string> = {
-  PENDING: "bg-amber-100 text-amber-700",
-  APPROVED: "bg-emerald-100 text-emerald-700",
-  REJECTED: "bg-rose-100 text-rose-700",
+  PENDING: "bg-state-warning-soft text-state-warning-ink",
+  APPROVED: "bg-state-success-soft text-state-success-ink",
+  REJECTED: "bg-state-danger-soft text-state-danger-ink",
 };
 
 // BGĐ 31/07 — màn DUYỆT ĐƠN GV cho quản lý (trước đây chỉ có action, không có UI:
@@ -96,7 +96,7 @@ export default async function WorkRequestsAdminPage({
     <div className="max-w-5xl space-y-4 p-6">
       <div>
         <h1 className="flex items-center gap-2 text-2xl font-bold text-gray-900">
-          <ClipboardList className="h-6 w-6 text-[#7C3AED]" /> Đơn từ giáo viên
+          <ClipboardList className="h-6 w-6 text-primary" /> Đơn từ giáo viên
         </h1>
         <p className="mt-1 text-sm text-gray-500">
           Duyệt đơn <strong>Nghỉ buổi dạy</strong> / <strong>Dạy thay</strong> sẽ cập nhật
@@ -109,11 +109,7 @@ export default async function WorkRequestsAdminPage({
           <a
             key={t.key}
             href={`/don-tu?status=${t.key}`}
-            className={`rounded-lg px-3 py-1.5 text-sm font-semibold ${
-              statusFilter === t.key
-                ? "bg-[#7C3AED] text-white"
-                : "border border-neutral-200 bg-white text-neutral-600 hover:bg-neutral-50"
-            }`}
+            className={`rounded-lg px-3 py-1.5 text-sm font-semibold ${ statusFilter === t.key ? "bg-primary text-white" : "border border-neutral-200 bg-white text-neutral-600 hover:bg-neutral-50" }`}
           >
             {t.label}
           </a>
@@ -147,9 +143,7 @@ export default async function WorkRequestsAdminPage({
                   </p>
                 </div>
                 <span
-                  className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${
-                    STATUS_CLS[r.status as WorkRequestStatusV]
-                  }`}
+                  className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${ STATUS_CLS[r.status as WorkRequestStatusV] }`}
                 >
                   {WR_STATUS_LABEL[r.status as WorkRequestStatusV]}
                 </span>

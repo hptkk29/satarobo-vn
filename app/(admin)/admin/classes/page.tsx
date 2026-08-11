@@ -13,11 +13,11 @@ import { ClassFilters } from './_components/class-filters'
 
 const STATUS_INFO: Record<ClassStatus, { label: string; color: string }> = {
   PLANNED: { label: 'Đang lên KH', color: 'bg-gray-100 text-gray-700' },
-  RECRUITING: { label: 'Tuyển sinh', color: 'bg-amber-100 text-amber-700' },
-  PENDING_APPROVAL: { label: 'Chờ duyệt', color: 'bg-orange-100 text-orange-700' },
-  ACTIVE: { label: 'Đang dạy', color: 'bg-green-100 text-green-700' },
-  COMPLETED: { label: 'Hoàn thành', color: 'bg-blue-100 text-blue-700' },
-  CANCELLED: { label: 'Huỷ', color: 'bg-red-100 text-red-700' },
+  RECRUITING: { label: 'Tuyển sinh', color: 'bg-state-warning-soft text-state-warning-ink' },
+  PENDING_APPROVAL: { label: 'Chờ duyệt', color: 'bg-primary-soft text-primary' },
+  ACTIVE: { label: 'Đang dạy', color: 'bg-state-success-soft text-state-success-ink' },
+  COMPLETED: { label: 'Hoàn thành', color: 'bg-state-info-soft text-state-info-ink' },
+  CANCELLED: { label: 'Huỷ', color: 'bg-state-danger-soft text-state-danger-ink' },
 }
 
 const DAY_LABELS = ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7']
@@ -183,7 +183,7 @@ export default async function ClassesPage({ searchParams }: SearchParams) {
           <div className="flex gap-2">
             <Link
               href="/classes/new"
-              className="inline-flex items-center gap-1.5 rounded-lg bg-[#7C3AED] px-4 py-2 text-sm font-semibold text-white shadow-sm hover:opacity-90"
+              className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white shadow-sm hover:opacity-90"
             >
               <Plus className="h-4 w-4" />
               Thêm lớp
@@ -328,7 +328,7 @@ export default async function ClassesPage({ searchParams }: SearchParams) {
                           <div className="flex items-center justify-end gap-2">
                             <Link
                               href={`/classes/${cls.id}`}
-                              className="rounded-md border border-orange-200 px-2.5 py-1 text-xs font-semibold text-orange-700 hover:bg-orange-50"
+                              className="rounded-md border border-primary-soft px-2.5 py-1 text-xs font-semibold text-primary hover:bg-primary-soft"
                             >
                               Chi tiết
                             </Link>

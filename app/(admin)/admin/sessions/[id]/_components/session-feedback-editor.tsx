@@ -107,7 +107,7 @@ export function SessionFeedbackEditor({
                     disabled={!canEdit || pending}
                     rows={2}
                     placeholder="Nhận xét cho học sinh này trong buổi…"
-                    className="flex-1 resize-y rounded-lg border border-gray-300 px-3 py-1.5 text-sm focus:border-[#7C3AED] focus:outline-none disabled:bg-gray-50"
+                    className="flex-1 resize-y rounded-lg border border-gray-300 px-3 py-1.5 text-sm focus:border-primary focus:outline-none disabled:bg-gray-50"
                   />
                   <select
                     value={r.rating ?? ""}
@@ -115,7 +115,7 @@ export function SessionFeedbackEditor({
                       update(r.studentId, { rating: e.target.value ? Number(e.target.value) : null })
                     }
                     disabled={!canEdit || pending}
-                    className="h-9 rounded-lg border border-gray-300 px-2 text-sm focus:border-[#7C3AED] focus:outline-none disabled:bg-gray-50"
+                    className="h-9 rounded-lg border border-gray-300 px-2 text-sm focus:border-primary focus:outline-none disabled:bg-gray-50"
                     aria-label={`Điểm ${r.name}`}
                   >
                     <option value="">— sao —</option>

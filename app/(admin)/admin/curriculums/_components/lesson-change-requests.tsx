@@ -23,9 +23,9 @@ const STATUS_LABEL: Record<LessonChangeStatus, string> = {
 };
 
 const STATUS_CLASS: Record<LessonChangeStatus, string> = {
-  OPEN: "bg-amber-100 text-amber-700",
-  ACCEPTED: "bg-emerald-100 text-emerald-700",
-  REJECTED: "bg-red-100 text-red-700",
+  OPEN: "bg-state-warning-soft text-state-warning-ink",
+  ACCEPTED: "bg-state-success-soft text-state-success-ink",
+  REJECTED: "bg-state-danger-soft text-state-danger-ink",
 };
 
 export function LessonChangeRequests({
@@ -78,7 +78,7 @@ export function LessonChangeRequests({
       </h2>
 
       {error && (
-        <div className="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+        <div className="mt-3 rounded-lg border border-state-danger-soft bg-state-danger-soft px-3 py-2 text-sm text-state-danger-ink">
           {error}
         </div>
       )}
@@ -123,14 +123,14 @@ export function LessonChangeRequests({
                   placeholder="Phản hồi cho GV (tuỳ chọn)…"
                   rows={2}
                   disabled={pending}
-                  className="w-full resize-y rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm outline-none focus:border-[#7C3AED]"
+                  className="w-full resize-y rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm outline-none focus:border-primary"
                 />
                 <div className="flex gap-2">
                   <button
                     type="button"
                     onClick={() => handle(r.id, "ACCEPTED")}
                     disabled={pending}
-                    className="rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-bold text-white hover:opacity-90 disabled:opacity-50"
+                    className="rounded-lg bg-state-success-ink px-3 py-1.5 text-xs font-bold text-white hover:opacity-90 disabled:opacity-50"
                   >
                     Chấp nhận
                   </button>
@@ -138,7 +138,7 @@ export function LessonChangeRequests({
                     type="button"
                     onClick={() => handle(r.id, "REJECTED")}
                     disabled={pending}
-                    className="rounded-lg bg-red-600 px-3 py-1.5 text-xs font-bold text-white hover:opacity-90 disabled:opacity-50"
+                    className="rounded-lg bg-state-danger-ink px-3 py-1.5 text-xs font-bold text-white hover:opacity-90 disabled:opacity-50"
                   >
                     Từ chối
                   </button>

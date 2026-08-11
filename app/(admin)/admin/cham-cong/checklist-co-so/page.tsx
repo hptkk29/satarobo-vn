@@ -64,7 +64,7 @@ export default async function CenterChecklistPage({ searchParams }: Props) {
     <div className="max-w-3xl p-6">
       <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
         <h1 className="flex items-center gap-2 text-2xl font-bold text-gray-900">
-          <ClipboardCheck className="h-6 w-6 text-[#7C3AED]" /> Checklist mở/đóng cơ sở
+          <ClipboardCheck className="h-6 w-6 text-primary" /> Checklist mở/đóng cơ sở
         </h1>
         <Link href="/cham-cong/checklist-co-so/tong-quan" className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm font-semibold text-gray-700 hover:bg-gray-50">
           Tổng quan →

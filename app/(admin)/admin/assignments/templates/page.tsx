@@ -48,7 +48,7 @@ export default async function AssignmentTemplatesPage() {
       <div className="mb-6 flex items-start justify-between gap-4">
         <div>
           <h1 className="flex items-center gap-2 text-2xl font-bold text-gray-900">
-            <FileStack className="h-6 w-6 text-[#7C3AED]" />
+            <FileStack className="h-6 w-6 text-primary" />
             Mẫu bài tập (theo khung chương trình)
           </h1>
           <p className="mt-1 max-w-2xl text-sm text-gray-500">
@@ -58,7 +58,7 @@ export default async function AssignmentTemplatesPage() {
         </div>
         <Link
           href="/assignments/templates/new"
-          className="inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-[#7C3AED] px-4 py-2 text-sm font-semibold text-white shadow-sm hover:opacity-90"
+          className="inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white shadow-sm hover:opacity-90"
         >
           <Plus className="h-4 w-4" />
           Tạo mẫu mới
@@ -100,7 +100,7 @@ export default async function AssignmentTemplatesPage() {
                     Chưa có mẫu bài tập nào.{" "}
                     <Link
                       href="/assignments/templates/new"
-                      className="text-[#7C3AED] hover:underline"
+                      className="text-primary hover:underline"
                     >
                       Tạo mẫu mới →
                     </Link>
@@ -136,7 +136,7 @@ export default async function AssignmentTemplatesPage() {
                     <td className="px-3 py-3 text-right">
                       <Link
                         href={`/assignments/templates/${t.id}/edit`}
-                        className="inline-flex items-center gap-1 rounded-md border border-purple-200 px-2.5 py-1 text-xs font-semibold text-purple-700 hover:bg-purple-50"
+                        className="inline-flex items-center gap-1 rounded-md border border-primary-soft px-2.5 py-1 text-xs font-semibold text-primary hover:bg-primary-soft"
                       >
                         Mở
                       </Link>

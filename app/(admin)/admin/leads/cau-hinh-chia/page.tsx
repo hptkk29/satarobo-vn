@@ -40,7 +40,7 @@ export default async function AssignConfigPage() {
     <div className="max-w-3xl p-6">
       <div className="mb-4">
         <h1 className="flex items-center gap-2 text-2xl font-bold text-gray-900">
-          <Settings2 className="h-6 w-6 text-[#7C3AED]" /> Cấu hình chia lead
+          <Settings2 className="h-6 w-6 text-primary" /> Cấu hình chia lead
         </h1>
         <p className="mt-1 text-sm text-gray-500">
           Chọn cách chia lead trong cơ sở. Lead chưa chọn cơ sở được chia đều giữa các cơ sở vận hành trước. Lead đã

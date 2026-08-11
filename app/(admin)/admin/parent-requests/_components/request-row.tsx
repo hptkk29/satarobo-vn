@@ -77,7 +77,7 @@ export function RequestRow({ item }: { item: RequestItem }) {
             {REQUEST_TYPE_LABEL[item.type]}
           </span>
           {isAbsence && item.urgency === "URGENT" && (
-            <span className="rounded-full bg-red-100 px-2 py-0.5 text-xs font-bold text-red-700">
+            <span className="rounded-full bg-state-danger-soft px-2 py-0.5 text-xs font-bold text-state-danger-ink">
               GẤP
             </span>
           )}
@@ -132,7 +132,7 @@ export function RequestRow({ item }: { item: RequestItem }) {
                 onChange={(e) => setResponse(e.target.value)}
                 rows={2}
                 placeholder="Phản hồi / ghi chú xử lý cho phụ huynh (tuỳ chọn)…"
-                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-orange-400 focus:outline-none"
+                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary focus:outline-none"
               />
               {useAbsenceFlow ? (
                 <div className="flex flex-wrap gap-2">
@@ -140,7 +140,7 @@ export function RequestRow({ item }: { item: RequestItem }) {
                     type="button"
                     onClick={() => resolve("MAKEUP")}
                     disabled={pending}
-                    className="inline-flex items-center gap-1.5 rounded-lg bg-[#7C3AED] px-3 py-1.5 text-sm font-semibold text-white hover:bg-purple-700 disabled:opacity-60"
+                    className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-sm font-semibold text-white hover:bg-primary-dark disabled:opacity-60"
                   >
                     <RotateCcw className="h-4 w-4" /> Xếp học bù
                   </button>
@@ -156,7 +156,7 @@ export function RequestRow({ item }: { item: RequestItem }) {
                     type="button"
                     onClick={() => resolve("ABSENT", false)}
                     disabled={pending}
-                    className="inline-flex items-center gap-1.5 rounded-lg border border-red-300 bg-white px-3 py-1.5 text-sm font-semibold text-red-700 hover:bg-red-50 disabled:opacity-60"
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-state-danger bg-white px-3 py-1.5 text-sm font-semibold text-state-danger-ink hover:bg-state-danger-soft disabled:opacity-60"
                   >
                     <X className="h-4 w-4" /> Đánh vắng (không phép)
                   </button>
@@ -174,7 +174,7 @@ export function RequestRow({ item }: { item: RequestItem }) {
                     type="button"
                     onClick={() => decide("APPROVED")}
                     disabled={pending}
-                    className="rounded-lg bg-emerald-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-60"
+                    className="rounded-lg bg-state-success-ink px-3 py-1.5 text-sm font-semibold text-white hover:bg-state-success-ink-hover disabled:opacity-60"
                   >
                     Duyệt / Hoàn tất
                   </button>
@@ -182,7 +182,7 @@ export function RequestRow({ item }: { item: RequestItem }) {
                     type="button"
                     onClick={() => decide("REJECTED")}
                     disabled={pending}
-                    className="rounded-lg bg-rose-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-rose-700 disabled:opacity-60"
+                    className="rounded-lg bg-state-danger-ink px-3 py-1.5 text-sm font-semibold text-white hover:bg-state-danger-ink-hover disabled:opacity-60"
                   >
                     Từ chối
                   </button>
@@ -200,13 +200,13 @@ export function RequestRow({ item }: { item: RequestItem }) {
             <button
               type="button"
               onClick={() => setOpen(true)}
-              className="rounded-lg bg-orange-500 px-3 py-1.5 text-sm font-semibold text-white hover:bg-orange-600"
+              className="rounded-lg bg-primary px-3 py-1.5 text-sm font-semibold text-white hover:bg-primary-dark"
             >
               Xử lý
             </button>
           )}
           {isAbsence && !item.hasSession && (
-            <p className="mt-2 rounded-lg bg-amber-50 p-2 text-xs text-amber-700">
+            <p className="mt-2 rounded-lg bg-state-warning-soft p-2 text-xs text-state-warning-ink">
               Báo vắng không gắn buổi cụ thể — duyệt/từ chối thủ công, đánh vắng
               ở module điểm danh.
             </p>

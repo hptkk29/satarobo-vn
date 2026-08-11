@@ -103,11 +103,7 @@ export function HandoverForm({
               key={s}
               type="button"
               onClick={() => toggleStatus(s)}
-              className={`rounded-full border px-2.5 py-1 text-xs ${
-                selStatuses.includes(s)
-                  ? "border-purple-600 bg-purple-50 text-purple-700"
-                  : "border-neutral-300 text-neutral-500"
-              }`}
+              className={`rounded-full border px-2.5 py-1 text-xs ${ selStatuses.includes(s) ? "border-primary-dark bg-primary-soft text-primary" : "border-neutral-300 text-neutral-500" }`}
             >
               {s}
             </button>
@@ -169,7 +165,7 @@ export function HandoverForm({
         <button
           onClick={run}
           disabled={pending || count === null || count === 0}
-          className="ml-auto rounded-md bg-purple-700 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
+          className="ml-auto rounded-md bg-primary-dark px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
         >
           Thực hiện bàn giao
         </button>

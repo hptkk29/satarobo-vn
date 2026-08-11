@@ -67,7 +67,7 @@ export default async function EditDocumentPage({ params }: Props) {
         </Link>
         <h1 className="text-2xl font-bold text-neutral-900">
           Sửa tài liệu giảng dạy:{" "}
-          <span className="font-bold text-orange-600">{document.title}</span>
+          <span className="font-bold text-primary">{document.title}</span>
         </h1>
       </div>
 

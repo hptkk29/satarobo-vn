@@ -30,9 +30,7 @@ export function MisaControls({ enabled, canEdit }: { enabled: boolean; canEdit: 
       <button
         onClick={toggle}
         disabled={pending}
-        className={`rounded-md px-3 py-1.5 text-xs font-medium text-white disabled:opacity-50 ${
-          enabled ? "bg-rose-600" : "bg-emerald-600"
-        }`}
+        className={`rounded-md px-3 py-1.5 text-xs font-medium text-white disabled:opacity-50 ${ enabled ? "bg-state-danger-ink" : "bg-state-success-ink" }`}
       >
         {enabled ? "Tắt sync" : "Bật sync"}
       </button>

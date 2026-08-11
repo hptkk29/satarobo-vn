@@ -54,7 +54,7 @@ export function CenterForm({ center }: { center?: CenterFormValue }) {
   return (
     <form action={action} className="max-w-4xl space-y-6">
       {error && (
-        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+        <div className="rounded-lg border border-state-danger-soft bg-state-danger-soft px-4 py-3 text-sm text-state-danger-ink">
           {error}
         </div>
       )}
@@ -237,7 +237,7 @@ function SubmitButton({ isEdit }: { isEdit: boolean }) {
     <button
       type="submit"
       disabled={pending}
-      className="rounded-xl bg-orange-500 px-6 py-3 font-bold text-white shadow-md hover:bg-orange-600 disabled:opacity-60"
+      className="rounded-xl bg-primary px-6 py-3 font-bold text-white shadow-md hover:bg-primary-dark disabled:opacity-60"
     >
       {pending ? "Đang lưu..." : isEdit ? "Cập nhật" : "Tạo cơ sở"}
     </button>
@@ -283,12 +283,12 @@ function Field({
 }: FieldProps) {
   const value = defaultValue ?? "";
   const baseClass =
-    "w-full rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/20";
+    "w-full rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20";
   return (
     <label className="block">
       <span className="mb-1 block text-sm font-semibold text-neutral-700">
         {label}
-        {required && <span className="ml-1 text-red-500">*</span>}
+        {required && <span className="ml-1 text-state-danger-ink">*</span>}
       </span>
       {type === "textarea" ? (
         <textarea
@@ -328,7 +328,7 @@ function CheckboxField({
         type="checkbox"
         name={name}
         defaultChecked={defaultChecked}
-        className="h-4 w-4 rounded border-neutral-300 text-orange-500 focus:ring-2 focus:ring-orange-500/30"
+        className="h-4 w-4 rounded border-neutral-300 text-primary focus:ring-2 focus:ring-primary/30"
       />
       <span className="text-sm font-semibold text-neutral-700">{label}</span>
     </label>

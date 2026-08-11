@@ -157,7 +157,7 @@ export function ExamForm({
   return (
     <form onSubmit={handleSubmit} className="max-w-3xl space-y-5">
       {error && (
-        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+        <div className="rounded-lg border border-state-danger-soft bg-state-danger-soft px-4 py-3 text-sm text-state-danger-ink">
           {error}
         </div>
       )}
@@ -413,7 +413,7 @@ export function ExamForm({
         <button
           type="submit"
           disabled={pending}
-          className="rounded-xl bg-[#7C3AED] px-6 py-3 font-bold text-white shadow-md hover:opacity-90 disabled:opacity-60"
+          className="rounded-xl bg-primary px-6 py-3 font-bold text-white shadow-md hover:opacity-90 disabled:opacity-60"
         >
           {pending ? "Đang lưu..." : isEdit ? "Cập nhật" : "Tạo & mở Builder"}
         </button>
@@ -430,7 +430,7 @@ export function ExamForm({
             type="button"
             onClick={handleDelete}
             disabled={pending}
-            className="ml-auto rounded-xl border-2 border-red-200 bg-white px-6 py-3 font-bold text-red-700 hover:bg-red-50"
+            className="ml-auto rounded-xl border-2 border-state-danger-soft bg-white px-6 py-3 font-bold text-state-danger-ink hover:bg-state-danger-soft"
           >
             Xoá
           </button>
@@ -441,7 +441,7 @@ export function ExamForm({
 }
 
 const inputClass =
-  "w-full rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm outline-none focus:border-[#7C3AED] focus:ring-2 focus:ring-[#7C3AED]/20";
+  "w-full rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20";
 
 function Field({
   label,
@@ -456,7 +456,7 @@ function Field({
     <label className="block">
       <span className="mb-1 block text-sm font-semibold text-neutral-700">
         {label}
-        {required && <span className="ml-1 text-red-500">*</span>}
+        {required && <span className="ml-1 text-state-danger-ink">*</span>}
       </span>
       {children}
     </label>

@@ -46,7 +46,7 @@ export default async function InventoryDashboardPage() {
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="flex items-center gap-2 text-2xl font-bold text-gray-900">
-            <LayoutDashboard className="h-6 w-6 text-[#7C3AED]" />
+            <LayoutDashboard className="h-6 w-6 text-primary" />
             Tổng quan Kho
           </h1>
           <p className="mt-1 text-sm text-gray-500">
@@ -79,20 +79,20 @@ export default async function InventoryDashboardPage() {
 
       <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
         <StatCard
-          icon={<Package className="h-5 w-5 text-blue-500" />}
+          icon={<Package className="h-5 w-5 text-state-info-ink" />}
           label="Mặt hàng active"
           value={String(stats.totalItems)}
           sub={`${stats.totalBalances} entry có tồn`}
         />
         <StatCard
-          icon={<DollarSign className="h-5 w-5 text-green-500" />}
+          icon={<DollarSign className="h-5 w-5 text-state-success-ink" />}
           label="Tổng giá trị tồn"
           value={formatVnd(stats.totalStockValue)}
         />
         <StatCard
           icon={
             <AlertTriangle
-              className={`h-5 w-5 ${stats.lowStockCount > 0 ? "text-red-500" : "text-gray-400"}`}
+              className={`h-5 w-5 ${stats.lowStockCount > 0 ? "text-state-danger-ink" : "text-gray-400"}`}
             />
           }
           label="Cảnh báo tồn thấp"
@@ -100,17 +100,17 @@ export default async function InventoryDashboardPage() {
           danger={stats.lowStockCount > 0}
         />
         <StatCard
-          icon={<Activity className="h-5 w-5 text-purple-500" />}
+          icon={<Activity className="h-5 w-5 text-primary" />}
           label="Giao dịch 7 ngày"
           value={String(stats.recentMovements)}
         />
       </div>
 
       {stats.lowStockAlerts.length > 0 && (
-        <section className="overflow-hidden rounded-xl border-2 border-red-300 bg-white">
-          <header className="flex items-center gap-2 border-b border-red-300 bg-red-50 px-4 py-3">
-            <AlertTriangle className="h-5 w-5 text-red-600" />
-            <h2 className="font-semibold text-red-900">
+        <section className="overflow-hidden rounded-xl border-2 border-state-danger bg-white">
+          <header className="flex items-center gap-2 border-b border-state-danger bg-state-danger-soft px-4 py-3">
+            <AlertTriangle className="h-5 w-5 text-state-danger-ink" />
+            <h2 className="font-semibold text-state-danger-ink">
               Cảnh báo tồn thấp ({stats.lowStockAlerts.length} mục)
             </h2>
           </header>
@@ -132,8 +132,8 @@ export default async function InventoryDashboardPage() {
                     className={
                       "border-b " +
                       (a.severity === "CRITICAL"
-                        ? "bg-red-50"
-                        : "bg-amber-50/60")
+                        ? "bg-state-danger-soft"
+                        : "bg-state-warning-soft/60")
                     }
                   >
                     <td className="px-4 py-2">
@@ -146,11 +146,7 @@ export default async function InventoryDashboardPage() {
                     </td>
                     <td className="px-4 py-2 text-neutral-600">{a.centerName}</td>
                     <td
-                      className={`px-4 py-2 text-right font-bold tabular-nums ${
-                        a.severity === "CRITICAL"
-                          ? "text-red-700"
-                          : "text-amber-700"
-                      }`}
+                      className={`px-4 py-2 text-right font-bold tabular-nums ${ a.severity === "CRITICAL" ? "text-state-danger-ink" : "text-state-warning-ink" }`}
                     >
                       {a.quantity} {a.unit}
                       {a.severity === "CRITICAL" && (
@@ -165,7 +161,7 @@ export default async function InventoryDashboardPage() {
                     <td className="px-4 py-2 text-right">
                       <Link
                         href={`/inventory/items/${a.itemId}/edit`}
-                        className="text-xs font-semibold text-[#7C3AED] hover:underline"
+                        className="text-xs font-semibold text-primary hover:underline"
                       >
                         Mở →
                       </Link>
@@ -233,11 +229,7 @@ export default async function InventoryDashboardPage() {
                       {formatVnd(c.totalValue)}
                     </td>
                     <td
-                      className={`px-4 py-2 text-right tabular-nums ${
-                        c.lowStockItems > 0
-                          ? "font-bold text-red-600"
-                          : "text-neutral-400"
-                      }`}
+                      className={`px-4 py-2 text-right tabular-nums ${ c.lowStockItems > 0 ? "font-bold text-state-danger-ink" : "text-neutral-400" }`}
                     >
                       {c.lowStockItems}
                     </td>
@@ -277,9 +269,7 @@ function StatCard({
         {label}
       </p>
       <p
-        className={`mt-1 text-2xl font-bold ${
-          danger ? "text-red-600" : "text-neutral-900"
-        }`}
+        className={`mt-1 text-2xl font-bold ${ danger ? "text-state-danger-ink" : "text-neutral-900" }`}
       >
         {value}
       </p>

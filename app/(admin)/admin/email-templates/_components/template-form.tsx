@@ -173,7 +173,7 @@ export function TemplateForm({
       </section>
 
       {availableVars.length > 0 && (
-        <section className="bg-blue-50 border border-blue-200 rounded p-4">
+        <section className="bg-state-info-soft border border-state-info-soft rounded p-4">
           <h3 className="font-semibold text-sm mb-2">
             Biến có sẵn cho trigger {EMAIL_TRIGGER_LABEL[v.trigger]}:
           </h3>

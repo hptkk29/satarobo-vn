@@ -28,9 +28,9 @@ export function R2TestClient() {
       </div>
 
       {errors.length > 0 && (
-        <div className="bg-red-50 border border-red-200 rounded-lg p-4">
-          <p className="font-semibold text-red-900 mb-2">⚠️ Errors gần đây:</p>
-          <ul className="text-sm text-red-800 space-y-1">
+        <div className="bg-state-danger-soft border border-state-danger-soft rounded-lg p-4">
+          <p className="font-semibold text-state-danger-ink mb-2">⚠️ Errors gần đây:</p>
+          <ul className="text-sm text-state-danger-ink space-y-1">
             {errors.map((err, i) => (
               <li key={i}>• {err}</li>
             ))}
@@ -57,7 +57,7 @@ export function R2TestClient() {
                     href={file.url}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="text-blue-600 break-all underline"
+                    className="text-state-info-ink break-all underline"
                   >
                     {file.url}
                   </a>

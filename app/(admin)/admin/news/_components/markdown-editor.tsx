@@ -178,11 +178,7 @@ export function MarkdownEditor({
         <button
           type="button"
           onClick={() => setTab("edit")}
-          className={`inline-flex items-center gap-1.5 px-4 py-2 text-sm font-semibold transition ${
-            tab === "edit"
-              ? "bg-white text-orange-600 border-b-2 border-orange-500 -mb-px"
-              : "text-neutral-600 hover:text-neutral-900"
-          }`}
+          className={`inline-flex items-center gap-1.5 px-4 py-2 text-sm font-semibold transition ${ tab === "edit" ? "bg-white text-primary border-b-2 border-primary -mb-px" : "text-neutral-600 hover:text-neutral-900" }`}
         >
           <Edit3 className="h-4 w-4" />
           Edit
@@ -190,11 +186,7 @@ export function MarkdownEditor({
         <button
           type="button"
           onClick={() => setTab("preview")}
-          className={`inline-flex items-center gap-1.5 px-4 py-2 text-sm font-semibold transition ${
-            tab === "preview"
-              ? "bg-white text-orange-600 border-b-2 border-orange-500 -mb-px"
-              : "text-neutral-600 hover:text-neutral-900"
-          }`}
+          className={`inline-flex items-center gap-1.5 px-4 py-2 text-sm font-semibold transition ${ tab === "preview" ? "bg-white text-primary border-b-2 border-primary -mb-px" : "text-neutral-600 hover:text-neutral-900" }`}
         >
           <Eye className="h-4 w-4" />
           Preview
@@ -236,7 +228,7 @@ export function MarkdownEditor({
             onDragOver={(event) => event.preventDefault()}
             rows={rows}
             placeholder={placeholder}
-            className="w-full resize-y rounded-lg border border-neutral-200 bg-white p-3 font-mono text-sm leading-relaxed outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/20"
+            className="w-full resize-y rounded-lg border border-neutral-200 bg-white p-3 font-mono text-sm leading-relaxed outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
           />
         ) : (
           <div className="prose prose-sm min-h-[20rem] max-w-none rounded-lg border border-neutral-200 bg-neutral-50 p-4 prose-img:mx-auto prose-img:my-4 prose-img:h-auto prose-img:max-w-full prose-img:rounded-xl">

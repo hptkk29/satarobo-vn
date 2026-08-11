@@ -65,7 +65,7 @@ export function LessonChangeRequestDialog({
             <p className="mt-1 text-sm text-neutral-500">{lessonTitle}</p>
 
             {error && (
-              <div className="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+              <div className="mt-3 rounded-lg border border-state-danger-soft bg-state-danger-soft px-3 py-2 text-sm text-state-danger-ink">
                 {error}
               </div>
             )}
@@ -78,7 +78,7 @@ export function LessonChangeRequestDialog({
                 rows={5}
                 required
                 disabled={pending}
-                className="w-full resize-y rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm outline-none focus:border-[#7C3AED] focus:ring-2 focus:ring-[#7C3AED]/20"
+                className="w-full resize-y rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
               />
               <div className="flex justify-end gap-2">
                 <button
@@ -92,7 +92,7 @@ export function LessonChangeRequestDialog({
                 <button
                   type="submit"
                   disabled={pending}
-                  className="rounded-lg bg-[#7C3AED] px-4 py-2 text-sm font-bold text-white hover:opacity-90 disabled:opacity-50"
+                  className="rounded-lg bg-primary px-4 py-2 text-sm font-bold text-white hover:opacity-90 disabled:opacity-50"
                 >
                   {pending ? "Đang gửi..." : "Gửi đề xuất"}
                 </button>

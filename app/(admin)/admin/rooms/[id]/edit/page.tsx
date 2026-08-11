@@ -44,7 +44,7 @@ export default async function EditRoomPage({ params }: Props) {
           </Link>
           <h1 className="text-3xl font-black text-neutral-900">
             Sửa phòng:{" "}
-            <span className="font-mono text-orange-600">{room.code}</span>{" "}
+            <span className="font-mono text-primary">{room.code}</span>{" "}
             <span className="font-bold text-neutral-700">— {room.name}</span>
           </h1>
         </div>

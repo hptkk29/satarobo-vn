@@ -12,9 +12,9 @@ export const metadata = { title: "Yêu cầu chỉnh công | Admin" };
 export const dynamic = "force-dynamic";
 
 const STATUS_BADGE: Record<string, string> = {
-  PENDING: "bg-amber-100 text-amber-700",
-  APPROVED: "bg-green-100 text-green-700",
-  REJECTED: "bg-rose-100 text-rose-700",
+  PENDING: "bg-state-warning-soft text-state-warning-ink",
+  APPROVED: "bg-state-success-soft text-state-success-ink",
+  REJECTED: "bg-state-danger-soft text-state-danger-ink",
 };
 const STATUS_LABEL: Record<string, string> = {
   PENDING: "Chờ duyệt",
@@ -38,7 +38,7 @@ export default async function YeuCauCongPage() {
     <div className="max-w-2xl space-y-5 p-6">
       <div>
         <h1 className="flex items-center gap-2 text-2xl font-bold text-gray-900">
-          <ClipboardEdit className="h-6 w-6 text-[#7C3AED]" /> Yêu cầu chỉnh công
+          <ClipboardEdit className="h-6 w-6 text-primary" /> Yêu cầu chỉnh công
         </h1>
         <p className="mt-1 text-sm text-gray-500">
           Bạn không tự sửa công — gửi yêu cầu kèm lý do, quản lý cơ sở duyệt (admin cấp cao duyệt mọi lúc).
@@ -46,7 +46,7 @@ export default async function YeuCauCongPage() {
       </div>
 
       {!isWeekendEditWindow(new Date()) && (
-        <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-700">
+        <p className="rounded-lg bg-state-warning-soft px-3 py-2 text-xs text-state-warning-ink">
           Khuyến nghị gửi yêu cầu chỉnh sửa vào Thứ 7 / Chủ nhật. Ngày thường vẫn gửi được, quản lý
           sẽ xử lý theo lịch.
         </p>

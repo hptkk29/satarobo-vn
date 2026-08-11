@@ -85,7 +85,7 @@ export default async function RoomsAdminPage({ searchParams }: SearchParams) {
       <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="flex items-center gap-2 text-3xl font-black text-neutral-900">
-            <DoorOpen className="h-7 w-7 text-orange-500" />
+            <DoorOpen className="h-7 w-7 text-primary" />
             Phòng học
           </h1>
           <p className="mt-1 text-neutral-600">
@@ -102,7 +102,7 @@ export default async function RoomsAdminPage({ searchParams }: SearchParams) {
           </Link>
           <Link
             href="/rooms/new"
-            className="inline-flex items-center gap-2 rounded-xl bg-orange-500 px-4 py-2 font-bold text-white shadow-md hover:bg-orange-600"
+            className="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2 font-bold text-white shadow-md hover:bg-primary-dark"
           >
             <Plus className="h-5 w-5" />
             Thêm phòng
@@ -119,12 +119,12 @@ export default async function RoomsAdminPage({ searchParams }: SearchParams) {
           name="q"
           defaultValue={q}
           placeholder="Tìm theo tên hoặc mã phòng..."
-          className="rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm outline-none focus:border-orange-500"
+          className="rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm outline-none focus:border-primary"
         />
         <select
           name="centerId"
           defaultValue={centerFilter}
-          className="rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm outline-none focus:border-orange-500"
+          className="rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm outline-none focus:border-primary"
         >
           <option value="">Tất cả cơ sở</option>
           {centers.map((c) => (
@@ -136,7 +136,7 @@ export default async function RoomsAdminPage({ searchParams }: SearchParams) {
         <select
           name="status"
           defaultValue={statusFilter}
-          className="rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm outline-none focus:border-orange-500"
+          className="rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm outline-none focus:border-primary"
         >
           {STATUS_FILTERS.map((s) => (
             <option key={s.value} value={s.value}>
@@ -146,7 +146,7 @@ export default async function RoomsAdminPage({ searchParams }: SearchParams) {
         </select>
         <button
           type="submit"
-          className="rounded-lg bg-orange-500 px-4 py-2 text-sm font-bold text-white hover:bg-orange-600"
+          className="rounded-lg bg-primary px-4 py-2 text-sm font-bold text-white hover:bg-primary-dark"
         >
           Lọc
         </button>
@@ -188,7 +188,7 @@ export default async function RoomsAdminPage({ searchParams }: SearchParams) {
                   ) : (
                     <>
                       Chưa có phòng nào.{" "}
-                      <Link href="/rooms/new" className="text-orange-600 hover:underline">
+                      <Link href="/rooms/new" className="text-primary hover:underline">
                         Thêm phòng đầu tiên →
                       </Link>
                     </>
@@ -220,7 +220,7 @@ export default async function RoomsAdminPage({ searchParams }: SearchParams) {
                   <td className="p-4 text-right">
                     <Link
                       href={`/rooms/${r.id}/edit`}
-                      className="inline-flex items-center gap-1 rounded p-1.5 text-purple-600 hover:bg-purple-50"
+                      className="inline-flex items-center gap-1 rounded p-1.5 text-primary hover:bg-primary-soft"
                       title="Sửa"
                     >
                       <Pencil className="h-4 w-4" />

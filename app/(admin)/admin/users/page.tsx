@@ -87,7 +87,7 @@ export default async function UsersAdminPage() {
         </div>
         <Link
           href="/users/new"
-          className="inline-flex items-center gap-1.5 rounded-lg bg-orange-500 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-orange-600"
+          className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-primary-dark"
         >
           <Plus className="h-4 w-4" />
           Tạo tài khoản mới
@@ -153,12 +153,12 @@ export default async function UsersAdminPage() {
                       <td className="px-4 py-3">
                         <Link
                           href={`/users/${u.id}/edit`}
-                          className="font-medium text-gray-900 hover:text-orange-600"
+                          className="font-medium text-gray-900 hover:text-primary"
                         >
                           {u.email}
                         </Link>
                         {isSelf && (
-                          <span className="ml-2 inline-flex rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-semibold text-blue-700">
+                          <span className="ml-2 inline-flex rounded-full bg-state-info-soft px-2 py-0.5 text-[10px] font-semibold text-state-info-ink">
                             BẠN
                           </span>
                         )}
@@ -173,7 +173,7 @@ export default async function UsersAdminPage() {
                             <Link
                               href={`/users/${u.id}/permissions`}
                               title="Xem chi tiết overrides"
-                              className="inline-flex items-center gap-0.5 rounded-full bg-orange-100 px-2 py-0.5 text-[10px] font-semibold text-orange-700 hover:bg-orange-200"
+                              className="inline-flex items-center gap-0.5 rounded-full bg-primary-soft px-2 py-0.5 text-[10px] font-semibold text-primary hover:bg-primary-soft-hover"
                             >
                               <Shield className="h-2.5 w-2.5" />
                               {u._count.permissionGrants} override
@@ -185,7 +185,7 @@ export default async function UsersAdminPage() {
                         {u.employee ? (
                           <Link
                             href={`/nhan-su/${u.employee.id}`}
-                            className="text-orange-600 hover:underline"
+                            className="text-primary hover:underline"
                           >
                             {u.employee.fullName}
                             {u.employee.employeeCode && (
@@ -216,7 +216,7 @@ export default async function UsersAdminPage() {
                           );
                           if (idleDays === null) {
                             return (
-                              <span className="inline-flex items-center gap-1 italic text-yellow-700">
+                              <span className="inline-flex items-center gap-1 italic text-state-warning-ink">
                                 <AlertCircle className="h-3 w-3" />
                                 {text}
                               </span>
@@ -226,7 +226,7 @@ export default async function UsersAdminPage() {
                             return (
                               <div className="flex flex-col gap-0.5">
                                 <span className="text-gray-700">{text}</span>
-                                <span className="inline-flex w-fit items-center gap-1 rounded-full bg-yellow-100 px-1.5 py-0.5 text-[10px] font-semibold text-yellow-800">
+                                <span className="inline-flex w-fit items-center gap-1 rounded-full bg-state-warning-soft px-1.5 py-0.5 text-[10px] font-semibold text-state-warning-ink">
                                   <AlertCircle className="h-2.5 w-2.5" />
                                   Idle {idleDays}d
                                 </span>
@@ -253,8 +253,8 @@ export default async function UsersAdminPage() {
         </div>
       </div>
 
-      <div className="mt-4 flex items-start gap-2 rounded-lg border border-blue-200 bg-blue-50 p-3 text-xs text-blue-900">
-        <KeyRound className="mt-0.5 h-4 w-4 shrink-0 text-blue-600" />
+      <div className="mt-4 flex items-start gap-2 rounded-lg border border-state-info-soft bg-state-info-soft p-3 text-xs text-state-info-ink">
+        <KeyRound className="mt-0.5 h-4 w-4 shrink-0 text-state-info-ink" />
         <div>
           <strong>Lưu ý bảo mật:</strong> Khi đổi role hoặc reset password hoặc
           disable user → `tokenVersion` tự tăng → user đó bị đăng xuất khỏi

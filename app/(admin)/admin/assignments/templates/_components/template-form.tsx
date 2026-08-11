@@ -37,7 +37,7 @@ export type TemplateFormValue = {
 };
 
 const inputClass =
-  "w-full rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm outline-none focus:border-[#7C3AED] focus:ring-2 focus:ring-[#7C3AED]/20";
+  "w-full rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20";
 
 export function TemplateForm({
   template,
@@ -110,7 +110,7 @@ export function TemplateForm({
   return (
     <form onSubmit={handleSubmit} className="space-y-5">
       {error && (
-        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+        <div className="rounded-lg border border-state-danger-soft bg-state-danger-soft px-4 py-3 text-sm text-state-danger-ink">
           {error}
         </div>
       )}
@@ -122,7 +122,7 @@ export function TemplateForm({
 
         <label className="block">
           <span className="mb-1 block text-sm font-semibold text-neutral-700">
-            Tiêu đề <span className="text-red-500">*</span>
+            Tiêu đề <span className="text-state-danger-ink">*</span>
           </span>
           <input
             type="text"
@@ -152,7 +152,7 @@ export function TemplateForm({
 
         <label className="block">
           <span className="mb-1 block text-sm font-semibold text-neutral-700">
-            Mô tả <span className="text-red-500">*</span>
+            Mô tả <span className="text-state-danger-ink">*</span>
           </span>
           <textarea
             value={description}
@@ -223,7 +223,7 @@ export function TemplateForm({
 
         <label className="block max-w-xs">
           <span className="mb-1 block text-sm font-semibold text-neutral-700">
-            Tổng điểm <span className="text-red-500">*</span>
+            Tổng điểm <span className="text-state-danger-ink">*</span>
           </span>
           <input
             type="number"
@@ -267,7 +267,7 @@ export function TemplateForm({
         <button
           type="submit"
           disabled={pending}
-          className="rounded-xl bg-[#7C3AED] px-6 py-3 font-bold text-white shadow-md hover:opacity-90 disabled:opacity-60"
+          className="rounded-xl bg-primary px-6 py-3 font-bold text-white shadow-md hover:opacity-90 disabled:opacity-60"
         >
           {pending ? "Đang lưu..." : isEdit ? "Lưu thay đổi" : "Tạo mẫu"}
         </button>
@@ -285,7 +285,7 @@ export function TemplateForm({
             type="button"
             onClick={handleDelete}
             disabled={pending}
-            className="ml-auto rounded-xl border-2 border-red-200 bg-white px-6 py-3 font-bold text-red-700 hover:bg-red-50"
+            className="ml-auto rounded-xl border-2 border-state-danger-soft bg-white px-6 py-3 font-bold text-state-danger-ink hover:bg-state-danger-soft"
           >
             Xoá mẫu
           </button>

@@ -57,7 +57,7 @@ export default async function LegacyAuditLogPage() {
           <h1 className="text-2xl font-bold text-gray-900">Lịch sử cũ (đọc-only)</h1>
           <p className="mt-1 text-sm text-gray-500">
             5 bảng audit cũ đã đóng băng từ 09/07/2026 — không còn ghi mới. Thao tác từ đó trở đi nằm ở{" "}
-            <Link href="/audit-log" className="font-medium text-orange-600 hover:underline">
+            <Link href="/audit-log" className="font-medium text-primary hover:underline">
               Audit Log hợp nhất
             </Link>
             . Trang này giới hạn cho Quản trị / Hội sở vì bản ghi cũ không mang thông tin cơ sở.

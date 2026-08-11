@@ -135,13 +135,13 @@ export default async function ParentAccountsPage({
         <div className="flex gap-2 text-sm">
           <Link
             href="/students/tai-khoan"
-            className={`rounded-lg px-3 py-1.5 font-medium ${!showAll ? 'bg-orange-600 text-white' : 'border border-gray-300 text-gray-700 hover:bg-gray-50'}`}
+            className={`rounded-lg px-3 py-1.5 font-medium ${!showAll ? 'bg-primary-dark text-white' : 'border border-gray-300 text-gray-700 hover:bg-gray-50'}`}
           >
             Chờ kích hoạt ({pendingCount})
           </Link>
           <Link
             href="/students/tai-khoan?status=all"
-            className={`rounded-lg px-3 py-1.5 font-medium ${showAll ? 'bg-orange-600 text-white' : 'border border-gray-300 text-gray-700 hover:bg-gray-50'}`}
+            className={`rounded-lg px-3 py-1.5 font-medium ${showAll ? 'bg-primary-dark text-white' : 'border border-gray-300 text-gray-700 hover:bg-gray-50'}`}
           >
             Tất cả ({pendingCount + activeCount})
           </Link>
@@ -149,7 +149,7 @@ export default async function ParentAccountsPage({
       </div>
 
       {!znsTemplate && (
-        <div className="mb-4 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-800">
+        <div className="mb-4 rounded-lg border border-state-warning bg-state-warning-soft p-3 text-sm text-state-warning-ink">
           <b>Mẫu ZNS &quot;báo cấp tài khoản&quot; chưa cấu hình</b> (env{' '}
           <span className="font-mono">ZALO_ZNS_TEMPLATE_ACCOUNT</span> — mẫu 616899 đang chờ Zalo
           duyệt). Trong lúc chờ: dùng nút <b>Xuất CSV</b> để gọi điện/nhắn Zalo OA thủ công hướng

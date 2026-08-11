@@ -16,7 +16,7 @@ function Stars({ value }: { value: number }) {
       {[1, 2, 3, 4, 5].map((i) => (
         <Star
           key={i}
-          className={`h-4 w-4 ${i <= Math.round(value) ? "fill-amber-400 text-amber-400" : "text-gray-200"}`}
+          className={`h-4 w-4 ${i <= Math.round(value) ? "fill-state-warning-ink text-state-warning-ink" : "text-gray-200"}`}
         />
       ))}
     </span>
@@ -129,7 +129,7 @@ export function TeacherEvaluations({
                 value={score}
                 onChange={(e) => setScore(Number(e.target.value))}
                 disabled={pending}
-                className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm focus:border-[#7C3AED] focus:outline-none"
+                className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm focus:border-primary focus:outline-none"
               >
                 {[5, 4, 3, 2, 1].map((s) => (
                   <option key={s} value={s}>{s} sao</option>
@@ -141,13 +141,13 @@ export function TeacherEvaluations({
               onChange={(e) => setNote(e.target.value)}
               disabled={pending}
               placeholder="Nhận xét dự giờ (bắt buộc)…"
-              className="min-w-[16rem] flex-1 rounded-lg border border-gray-300 px-3 py-1.5 text-sm focus:border-[#7C3AED] focus:outline-none"
+              className="min-w-[16rem] flex-1 rounded-lg border border-gray-300 px-3 py-1.5 text-sm focus:border-primary focus:outline-none"
             />
             <button
               type="button"
               onClick={submit}
               disabled={pending}
-              className="rounded-lg bg-[#7C3AED] px-4 py-1.5 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-50"
+              className="rounded-lg bg-primary px-4 py-1.5 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-50"
             >
               {pending ? "Đang lưu…" : "Ghi đánh giá"}
             </button>

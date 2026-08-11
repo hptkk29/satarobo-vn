@@ -51,7 +51,7 @@ export function ClassGroupForm({
   return (
     <form action={action} className="max-w-2xl space-y-5">
       {error && (
-        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+        <div className="rounded-lg border border-state-danger-soft bg-state-danger-soft px-4 py-3 text-sm text-state-danger-ink">
           {error}
         </div>
       )}
@@ -66,7 +66,7 @@ export function ClassGroupForm({
           required
           maxLength={20}
           placeholder="A1"
-          className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
+          className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-state-info focus:outline-none focus:ring-2 focus:ring-state-info-soft"
         />
         <p className="mt-1 text-xs text-gray-500">
           Mã định danh đầy đủ (CS1.LOP.26.xxx) sẽ tự sinh khi tạo.
@@ -81,7 +81,7 @@ export function ClassGroupForm({
           name="name"
           defaultValue={group?.name ?? ""}
           placeholder="VD: Nhóm Sao Mai khai giảng 2026"
-          className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
+          className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-state-info focus:outline-none focus:ring-2 focus:ring-state-info-soft"
         />
       </div>
 
@@ -93,7 +93,7 @@ export function ClassGroupForm({
           name="orgUnitId"
           defaultValue={group?.orgUnitId ?? ""}
           required
-          className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
+          className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:border-state-info focus:outline-none focus:ring-2 focus:ring-state-info-soft"
         >
           <option value="">-- Chọn đơn vị --</option>
           {orgUnits.map((o) => (
@@ -111,7 +111,7 @@ export function ClassGroupForm({
         <select
           name="status"
           defaultValue={group?.status ?? "ACTIVE"}
-          className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
+          className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:border-state-info focus:outline-none focus:ring-2 focus:ring-state-info-soft"
         >
           {STATUS_OPTIONS.map((s) => (
             <option key={s.value} value={s.value}>
@@ -129,7 +129,7 @@ export function ClassGroupForm({
           name="notes"
           defaultValue={group?.notes ?? ""}
           rows={3}
-          className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
+          className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-state-info focus:outline-none focus:ring-2 focus:ring-state-info-soft"
         />
       </div>
 
@@ -153,7 +153,7 @@ function SubmitButton({ isEdit }: { isEdit: boolean }) {
     <button
       type="submit"
       disabled={pending}
-      className="rounded-lg bg-blue-600 px-6 py-2.5 text-sm font-bold text-white hover:bg-blue-700 disabled:opacity-60"
+      className="rounded-lg bg-state-info-ink px-6 py-2.5 text-sm font-bold text-white hover:bg-state-info-ink-hover disabled:opacity-60"
     >
       {pending ? "Đang lưu..." : isEdit ? "Cập nhật" : "Tạo nhóm lớp"}
     </button>

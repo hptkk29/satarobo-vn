@@ -103,7 +103,7 @@ export default async function ProductDetailPage({ params }: Props) {
           className={
             "rounded-xl border p-4 " +
             (isLowStock
-              ? "border-orange-200 bg-orange-50"
+              ? "border-primary-soft bg-primary-soft"
               : "border-gray-200 bg-gray-50")
           }
         >
@@ -118,7 +118,7 @@ export default async function ProductDetailPage({ params }: Props) {
             Ngưỡng cảnh báo: {product.minThreshold}
           </div>
         </div>
-        <div className="rounded-xl border border-gray-200 bg-blue-50 p-4">
+        <div className="rounded-xl border border-gray-200 bg-state-info-soft p-4">
           <div className="text-xs uppercase tracking-wider text-gray-600">
             Giá bán
           </div>
@@ -128,7 +128,7 @@ export default async function ProductDetailPage({ params }: Props) {
           <div className="text-xs text-gray-500">VND</div>
         </div>
         {product.rentalPricePerMonth != null && (
-          <div className="rounded-xl border border-gray-200 bg-purple-50 p-4">
+          <div className="rounded-xl border border-gray-200 bg-primary-soft p-4">
             <div className="text-xs uppercase tracking-wider text-gray-600">
               Giá thuê/tháng
             </div>
@@ -166,7 +166,7 @@ export default async function ProductDetailPage({ params }: Props) {
           🔗 Liên kết catalog kit:{" "}
           <Link
             href={`/kits/${product.zmroboKit.id}/edit`}
-            className="text-blue-600 hover:underline"
+            className="text-state-info-ink hover:underline"
           >
             {product.zmroboKit.title}
           </Link>
@@ -174,7 +174,7 @@ export default async function ProductDetailPage({ params }: Props) {
       )}
 
       {product.notes && (
-        <section className="rounded-xl border border-yellow-200 bg-yellow-50 p-4 text-sm text-yellow-900">
+        <section className="rounded-xl border border-state-warning-soft bg-state-warning-soft p-4 text-sm text-state-warning-ink">
           <strong>Ghi chú:</strong> {product.notes}
         </section>
       )}
@@ -225,7 +225,7 @@ export default async function ProductDetailPage({ params }: Props) {
                       <td
                         className={
                           "px-3 py-2 text-right font-mono " +
-                          (m.quantity > 0 ? "text-green-600" : "text-red-600")
+                          (m.quantity > 0 ? "text-state-success-ink" : "text-state-danger-ink")
                         }
                       >
                         {m.quantity > 0 ? "+" : ""}

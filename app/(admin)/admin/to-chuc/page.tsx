@@ -248,7 +248,7 @@ export default async function ToChucPage() {
       <div className="mb-6 flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="flex items-center gap-2 text-3xl font-black text-neutral-900">
-            <Network className="h-7 w-7 text-orange-500" />
+            <Network className="h-7 w-7 text-primary" />
             Cây tổ chức
           </h1>
           <p className="mt-1 max-w-3xl text-sm text-neutral-500">

@@ -62,7 +62,7 @@ export default async function AdminParentFeedbackPage() {
         </div>
         <div className="rounded-xl border border-gray-200 bg-white px-4 py-2 text-center">
           <p className="flex items-center gap-1 text-2xl font-bold text-gray-900">
-            <Star className="h-5 w-5 fill-amber-400 text-amber-400" /> {avg}
+            <Star className="h-5 w-5 fill-state-warning-ink text-state-warning-ink" /> {avg}
           </p>
           <p className="text-xs text-gray-400">{agg._count} đánh giá</p>
         </div>
@@ -81,11 +81,7 @@ export default async function AdminParentFeedbackPage() {
                   {Array.from({ length: 5 }).map((_, i) => (
                     <Star
                       key={i}
-                      className={`h-4 w-4 ${
-                        i < f.rating
-                          ? "fill-amber-400 text-amber-400"
-                          : "text-gray-300"
-                      }`}
+                      className={`h-4 w-4 ${ i < f.rating ? "fill-state-warning-ink text-state-warning-ink" : "text-gray-300" }`}
                     />
                   ))}
                 </div>

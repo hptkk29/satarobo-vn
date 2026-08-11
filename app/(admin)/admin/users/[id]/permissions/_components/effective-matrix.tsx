@@ -47,9 +47,9 @@ const SOURCE_LABEL: Record<Source, string> = {
 
 const SOURCE_COLOR: Record<Source, string> = {
   role: "text-gray-500",
-  override_allow: "text-green-600 font-semibold",
-  override_deny: "text-red-600 font-semibold",
-  super_admin: "text-purple-600 font-semibold",
+  override_allow: "text-state-success-ink font-semibold",
+  override_deny: "text-state-danger-ink font-semibold",
+  super_admin: "text-primary font-semibold",
 };
 
 export function EffectiveMatrix({ role, grants, roleMatrix }: Props) {
@@ -93,9 +93,7 @@ export function EffectiveMatrix({ role, grants, roleMatrix }: Props) {
           </p>
         </div>
         <ChevronDown
-          className={`h-5 w-5 text-gray-400 transition-transform ${
-            open ? "rotate-180" : ""
-          }`}
+          className={`h-5 w-5 text-gray-400 transition-transform ${ open ? "rotate-180" : "" }`}
         />
       </button>
 
@@ -156,12 +154,12 @@ export function EffectiveMatrix({ role, grants, roleMatrix }: Props) {
                               {SOURCE_LABEL[eff.source]}
                             </span>
                             {eff.allowed ? (
-                              <span className="inline-flex items-center gap-1 rounded-full bg-green-100 px-2 py-0.5 text-xs font-semibold text-green-700">
+                              <span className="inline-flex items-center gap-1 rounded-full bg-state-success-soft px-2 py-0.5 text-xs font-semibold text-state-success-ink">
                                 <Check className="h-3 w-3" />
                                 Cho phép
                               </span>
                             ) : (
-                              <span className="inline-flex items-center gap-1 rounded-full bg-red-100 px-2 py-0.5 text-xs font-semibold text-red-700">
+                              <span className="inline-flex items-center gap-1 rounded-full bg-state-danger-soft px-2 py-0.5 text-xs font-semibold text-state-danger-ink">
                                 <Ban className="h-3 w-3" />
                                 Từ chối
                               </span>

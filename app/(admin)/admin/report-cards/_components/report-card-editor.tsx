@@ -174,7 +174,7 @@ export function ReportCardEditor(props: {
             <button
               type="button"
               onClick={() => setPeriods((p) => [...p, { period: "", comment: "" }])}
-              className="text-xs font-medium text-purple-700"
+              className="text-xs font-medium text-primary"
             >
               + Thêm giai đoạn
             </button>
@@ -189,7 +189,7 @@ export function ReportCardEditor(props: {
                 {/* #17 (câu 55) — kỳ buổi 5 / buổi 12 là mốc cố định: hiện nhãn, khoá tên kỳ,
                     không cho xoá. Giai đoạn tự do cũ vẫn sửa/xoá được như trước. */}
                 {periodDisplayLabel(p.period) ? (
-                  <span className="flex items-center rounded-md bg-purple-50 px-3 py-2 text-sm font-medium text-purple-800 sm:w-48">
+                  <span className="flex items-center rounded-md bg-primary-soft px-3 py-2 text-sm font-medium text-primary sm:w-48">
                     {periodDisplayLabel(p.period)}
                   </span>
                 ) : (
@@ -216,7 +216,7 @@ export function ReportCardEditor(props: {
                   <button
                     type="button"
                     onClick={() => setPeriods((prev) => prev.filter((_, j) => j !== i))}
-                    className="text-xs text-rose-600"
+                    className="text-xs text-state-danger-ink"
                   >
                     Xoá
                   </button>
@@ -301,7 +301,7 @@ export function ReportCardEditor(props: {
 
       {/* Hành động */}
       {editable && !hasCriteria ? (
-        <p className="text-sm text-amber-700">
+        <p className="text-sm text-state-warning-ink">
           Cần cấu hình tiêu chí năng lực cho khoá trước khi lưu / nộp học bạ.
         </p>
       ) : null}
@@ -322,7 +322,7 @@ export function ReportCardEditor(props: {
             type="button"
             disabled={pending || !hasCriteria}
             onClick={() => transition("PENDING_REVIEW", false)}
-            className="rounded-md bg-amber-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
+            className="rounded-md bg-state-warning-ink px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
           >
             {status === "RECALLED" ? "Nộp lại để duyệt" : "Nộp duyệt"}
           </button>
@@ -334,7 +334,7 @@ export function ReportCardEditor(props: {
               type="button"
               disabled={pending}
               onClick={() => transition("PUBLISHED", false)}
-              className="rounded-md bg-emerald-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
+              className="rounded-md bg-state-success-ink px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
             >
               Phát hành
             </button>
@@ -354,7 +354,7 @@ export function ReportCardEditor(props: {
             type="button"
             disabled={pending}
             onClick={() => transition("RECALLED", true)}
-            className="rounded-md bg-rose-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
+            className="rounded-md bg-state-danger-ink px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
           >
             Thu hồi
           </button>

@@ -29,7 +29,7 @@ export interface LeadFormInitial {
 }
 
 const inputCls =
-  "w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-[#7C3AED] focus:outline-none";
+  "w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary focus:outline-none";
 
 export function LeadForm({
   orgUnits,
@@ -157,7 +157,7 @@ export function LeadForm({
             <button
               type="button"
               onClick={addKid}
-              className="inline-flex items-center gap-1 rounded-md border border-violet-300 px-2.5 py-1 text-xs font-semibold text-violet-700 hover:bg-violet-50"
+              className="inline-flex items-center gap-1 rounded-md border border-primary px-2.5 py-1 text-xs font-semibold text-primary hover:bg-primary-soft"
             >
               <Plus size={12} /> Thêm con
             </button>
@@ -167,13 +167,13 @@ export function LeadForm({
           ) : (
             <div className="space-y-3">
               {kids.map((kid, i) => (
-                <div key={i} className="rounded-lg border border-violet-200 bg-white p-3">
+                <div key={i} className="rounded-lg border border-primary-soft bg-white p-3">
                   <div className="mb-2 flex items-center justify-between">
-                    <span className="text-xs font-semibold text-violet-700">Con #{i + 1}</span>
+                    <span className="text-xs font-semibold text-primary">Con #{i + 1}</span>
                     <button
                       type="button"
                       onClick={() => removeKid(i)}
-                      className="inline-flex items-center gap-1 rounded-md border border-red-300 px-2 py-1 text-xs text-red-600 hover:bg-red-50"
+                      className="inline-flex items-center gap-1 rounded-md border border-state-danger px-2 py-1 text-xs text-state-danger-ink hover:bg-state-danger-soft"
                     >
                       <Trash2 size={12} /> Xoá
                     </button>
@@ -195,7 +195,7 @@ export function LeadForm({
         type="button"
         onClick={submit}
         disabled={pending}
-        className="rounded-lg bg-[#7C3AED] px-4 py-2 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-50"
+        className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-50"
       >
         {pending ? "Đang lưu…" : isEdit ? "Lưu thay đổi" : "Tạo lead"}
       </button>

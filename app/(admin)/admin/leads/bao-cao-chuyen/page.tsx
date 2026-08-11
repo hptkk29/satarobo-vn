@@ -130,7 +130,7 @@ export default async function TransferReportPage({ searchParams }: Props) {
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="flex items-center gap-2 text-2xl font-bold text-gray-900">
-            <ArrowLeftRight className="h-6 w-6 text-[#7C3AED]" /> Chuyển lead liên cơ sở
+            <ArrowLeftRight className="h-6 w-6 text-primary" /> Chuyển lead liên cơ sở
           </h1>
           <p className="mt-1 text-sm text-gray-500">
             {isAll ? "Toàn hệ thống" : "Lead vào/ra cơ sở của bạn"} · tháng {month}
@@ -172,7 +172,7 @@ export default async function TransferReportPage({ searchParams }: Props) {
               {rows.map((r) => (
                 <tr key={r.id} className="border-b border-gray-100 last:border-0">
                   <td className="px-3 py-2">
-                    <Link href={`/leads/${r.leadId}`} className="font-medium text-[#7C3AED] hover:underline">
+                    <Link href={`/leads/${r.leadId}`} className="font-medium text-primary hover:underline">
                       {r.parentName}
                     </Link>
                     <span className="block text-xs text-gray-400">{r.phone}</span>
@@ -184,7 +184,7 @@ export default async function TransferReportPage({ searchParams }: Props) {
                   <td className="px-3 py-2 max-w-xs truncate text-gray-600" title={r.reason}>{r.reason}</td>
                   <td className="px-3 py-2">
                     {r.closed ? (
-                      <span className="rounded bg-green-100 px-2 py-0.5 text-xs font-semibold text-green-700">Đã chốt</span>
+                      <span className="rounded bg-state-success-soft px-2 py-0.5 text-xs font-semibold text-state-success-ink">Đã chốt</span>
                     ) : (
                       <span className="rounded bg-gray-100 px-2 py-0.5 text-xs font-semibold text-gray-500">Chưa</span>
                     )}
@@ -205,7 +205,7 @@ export default async function TransferReportPage({ searchParams }: Props) {
 function Stat({ label, value, tone }: { label: string; value: number | string; tone?: "ok" }) {
   return (
     <div className="rounded-xl border border-gray-200 bg-white p-3">
-      <div className={`text-2xl font-bold tabular-nums ${tone === "ok" ? "text-emerald-600" : "text-[#7C3AED]"}`}>{value}</div>
+      <div className={`text-2xl font-bold tabular-nums ${tone === "ok" ? "text-state-success-ink" : "text-primary"}`}>{value}</div>
       <div className="mt-0.5 text-xs text-gray-500">{label}</div>
     </div>
   );

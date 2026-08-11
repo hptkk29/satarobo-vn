@@ -35,7 +35,7 @@ export function ReplyForm({ enrollmentId }: { enrollmentId: string }) {
         rows={2}
         maxLength={2000}
         placeholder="Trả lời phụ huynh…"
-        className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-[#7C3AED] focus:outline-none focus:ring-2 focus:ring-[#7C3AED]/20"
+        className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
         onKeyDown={(e) => {
           if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) submit();
         }}
@@ -44,7 +44,7 @@ export function ReplyForm({ enrollmentId }: { enrollmentId: string }) {
         type="button"
         onClick={submit}
         disabled={pending}
-        className="shrink-0 rounded-lg bg-[#7C3AED] px-4 py-2 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-60"
+        className="shrink-0 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-60"
       >
         {pending ? "Đang gửi…" : "Gửi"}
       </button>

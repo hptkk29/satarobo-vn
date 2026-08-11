@@ -24,17 +24,17 @@ const STATUS_LABELS: Record<string, string> = {
 }
 
 const STATUS_COLORS: Record<string, string> = {
-  NEW: 'bg-blue-500',
-  ASSIGNED: 'bg-cyan-500',
-  CONTACTED: 'bg-yellow-500',
-  NO_ANSWER: 'bg-amber-500',
-  CONSULTING: 'bg-indigo-500',
-  TRIAL_SCHEDULED: 'bg-violet-500',
-  TRIAL_ATTENDED: 'bg-purple-500',
-  AWAITING_DECISION: 'bg-orange-500',
-  DEMO_SCHEDULED: 'bg-purple-500',
-  ENROLLED: 'bg-green-500',
-  NURTURING: 'bg-orange-500',
+  NEW: 'bg-state-info',
+  ASSIGNED: 'bg-state-info',
+  CONTACTED: 'bg-state-warning',
+  NO_ANSWER: 'bg-state-warning',
+  CONSULTING: 'bg-state-info',
+  TRIAL_SCHEDULED: 'bg-primary',
+  TRIAL_ATTENDED: 'bg-primary',
+  AWAITING_DECISION: 'bg-primary',
+  DEMO_SCHEDULED: 'bg-primary',
+  ENROLLED: 'bg-state-success',
+  NURTURING: 'bg-primary',
   LOST: 'bg-gray-400',
   DUPLICATE: 'bg-gray-300',
 }
@@ -213,7 +213,7 @@ export default async function MarketingPage() {
             const configured = !!(process.env[item.envKey])
             return (
               <div key={item.label} className="flex items-center gap-3 rounded-lg border border-gray-100 bg-gray-50 px-4 py-3">
-                <div className={`h-2.5 w-2.5 shrink-0 rounded-full ${configured ? 'bg-green-500' : 'bg-red-400'}`} />
+                <div className={`h-2.5 w-2.5 shrink-0 rounded-full ${configured ? 'bg-state-success' : 'bg-state-danger'}`} />
                 <div>
                   <p className="text-xs font-semibold text-gray-700">{item.label}</p>
                   <p className="text-xs text-gray-400">{configured ? 'Đã cấu hình' : 'Chưa cấu hình'}</p>

@@ -82,7 +82,7 @@ export function NotificationBell() {
       >
         <Bell className="h-4 w-4" />
         {unread > 0 && (
-          <span className="absolute -right-0.5 -top-0.5 inline-flex h-4 min-w-[16px] items-center justify-center rounded-full bg-rose-500 px-1 text-[10px] font-bold text-white">
+          <span className="absolute -right-0.5 -top-0.5 inline-flex h-4 min-w-[16px] items-center justify-center rounded-full bg-state-danger px-1 text-[10px] font-bold text-white">
             {unread > 9 ? "9+" : unread}
           </span>
         )}
@@ -93,7 +93,7 @@ export function NotificationBell() {
           <div className="flex items-center justify-between border-b border-neutral-100 px-3 py-2">
             <span className="text-sm font-bold text-neutral-800">Thông báo</span>
             {unread > 0 && (
-              <button type="button" onClick={markAll} className="inline-flex items-center gap-1 text-xs text-[#7C3AED] hover:underline">
+              <button type="button" onClick={markAll} className="inline-flex items-center gap-1 text-xs text-primary hover:underline">
                 <CheckCheck className="h-3.5 w-3.5" /> Đọc hết
               </button>
             )}
@@ -107,12 +107,10 @@ export function NotificationBell() {
                   key={i.id}
                   type="button"
                   onClick={() => markRead(i.id, i.href)}
-                  className={`block w-full border-b border-neutral-50 px-3 py-2.5 text-left last:border-0 hover:bg-neutral-50 ${
-                    i.readAt ? "opacity-60" : "bg-purple-50/40"
-                  }`}
+                  className={`block w-full border-b border-neutral-50 px-3 py-2.5 text-left last:border-0 hover:bg-neutral-50 ${ i.readAt ? "opacity-60" : "bg-primary-soft/40" }`}
                 >
                   <div className="flex items-start gap-2">
-                    {!i.readAt && <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-[#7C3AED]" />}
+                    {!i.readAt && <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-primary" />}
                     <div className="min-w-0">
                       <p className="text-sm font-semibold text-neutral-900">{i.title}</p>
                       <p className="text-xs text-neutral-500">{i.body}</p>

@@ -15,19 +15,19 @@ interface Props {
 }
 
 const ACTION_COLORS: Record<string, string> = {
-  CREATE: "bg-green-100 text-green-700",
-  ADD: "bg-green-100 text-green-700",
-  ENABLE: "bg-green-100 text-green-700",
-  UPDATE: "bg-blue-100 text-blue-700",
-  STATUS_CHANGE: "bg-blue-100 text-blue-700",
-  ASSIGN: "bg-blue-100 text-blue-700",
-  DELETE: "bg-red-100 text-red-700",
-  REMOVE: "bg-red-100 text-red-700",
-  DISABLE: "bg-red-100 text-red-700",
-  EXPORT: "bg-purple-100 text-purple-700",
-  PASSWORD_RESET: "bg-orange-100 text-orange-700",
-  ROLE_CHANGE: "bg-purple-100 text-purple-700",
-  "audit.pii-unmasked": "bg-amber-100 text-amber-800",
+  CREATE: "bg-state-success-soft text-state-success-ink",
+  ADD: "bg-state-success-soft text-state-success-ink",
+  ENABLE: "bg-state-success-soft text-state-success-ink",
+  UPDATE: "bg-state-info-soft text-state-info-ink",
+  STATUS_CHANGE: "bg-state-info-soft text-state-info-ink",
+  ASSIGN: "bg-state-info-soft text-state-info-ink",
+  DELETE: "bg-state-danger-soft text-state-danger-ink",
+  REMOVE: "bg-state-danger-soft text-state-danger-ink",
+  DISABLE: "bg-state-danger-soft text-state-danger-ink",
+  EXPORT: "bg-primary-soft text-primary",
+  PASSWORD_RESET: "bg-primary-soft text-primary",
+  ROLE_CHANGE: "bg-primary-soft text-primary",
+  "audit.pii-unmasked": "bg-state-warning-soft text-state-warning-ink",
 };
 
 // Nhãn hành động (mã tự do — dịch mã phổ biến, còn lại giữ nguyên để không mất thông tin).
@@ -134,7 +134,7 @@ export function AuditLogTable({
                           {row.changedFields.slice(0, 4).map((f) => (
                             <span
                               key={f}
-                              className="inline-flex rounded bg-blue-50 px-1.5 py-0.5 text-[10px] font-medium text-blue-600"
+                              className="inline-flex rounded bg-state-info-soft px-1.5 py-0.5 text-[10px] font-medium text-state-info-ink"
                             >
                               {f}
                             </span>
@@ -155,7 +155,7 @@ export function AuditLogTable({
                     <button
                       type="button"
                       onClick={() => setSelected(row)}
-                      className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-semibold text-orange-600 hover:bg-orange-50"
+                      className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-semibold text-primary hover:bg-primary-soft"
                     >
                       <Eye className="h-3.5 w-3.5" />
                       Xem

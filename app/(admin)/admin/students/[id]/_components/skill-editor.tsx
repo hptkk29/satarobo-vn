@@ -62,7 +62,7 @@ export function SkillEditor({
               value={rows[skill].level}
               onChange={(e) => set(skill, { level: e.target.value as SkillLevel | "" })}
               disabled={!canEdit || pending}
-              className="rounded-lg border border-gray-300 px-2 py-1.5 text-sm focus:border-[#7C3AED] focus:outline-none disabled:bg-gray-50"
+              className="rounded-lg border border-gray-300 px-2 py-1.5 text-sm focus:border-primary focus:outline-none disabled:bg-gray-50"
             >
               <option value="">— chưa chấm —</option>
               {LEVELS.map((l) => (
@@ -74,7 +74,7 @@ export function SkillEditor({
               onChange={(e) => set(skill, { note: e.target.value })}
               disabled={!canEdit || pending}
               placeholder="Ghi chú (tuỳ chọn)"
-              className="flex-1 rounded-lg border border-gray-300 px-2 py-1.5 text-sm focus:border-[#7C3AED] focus:outline-none disabled:bg-gray-50"
+              className="flex-1 rounded-lg border border-gray-300 px-2 py-1.5 text-sm focus:border-primary focus:outline-none disabled:bg-gray-50"
             />
           </li>
         ))}
@@ -84,7 +84,7 @@ export function SkillEditor({
           type="button"
           onClick={save}
           disabled={pending}
-          className="inline-flex items-center gap-1.5 rounded-lg bg-[#7C3AED] px-4 py-2 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-50"
+          className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-50"
         >
           <Save className="h-4 w-4" />
           {pending ? "Đang lưu…" : "Lưu năng lực"}

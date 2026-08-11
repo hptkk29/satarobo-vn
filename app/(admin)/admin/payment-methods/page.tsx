@@ -29,8 +29,8 @@ export default async function PaymentMethodsPage() {
     <div>
       <div className="mb-6 flex flex-wrap items-start justify-between gap-3">
         <div className="flex items-start gap-3">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-orange-50">
-            <CreditCard className="h-5 w-5 text-orange-600" />
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary-soft">
+            <CreditCard className="h-5 w-5 text-primary" />
           </div>
           <div>
             <h1 className="text-2xl font-bold text-gray-900">

@@ -43,7 +43,7 @@ export function CelebrateButton({ id, done }: { id: string; done: boolean }) {
           } else toast.error(r.error ?? "Lỗi");
         })
       }
-      className="rounded-lg bg-green-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-green-700 disabled:opacity-50"
+      className="rounded-lg bg-state-success-ink px-3 py-1.5 text-xs font-semibold text-white hover:bg-state-success-ink-hover disabled:opacity-50"
     >
       Đã chúc
     </button>
@@ -70,7 +70,7 @@ export function RunScanButton() {
           } else toast.error(r.error ?? "Lỗi");
         })
       }
-      className="rounded-lg border border-[#7C3AED] px-3 py-1.5 text-xs font-semibold text-[#7C3AED] hover:bg-purple-50 disabled:opacity-50"
+      className="rounded-lg border border-primary px-3 py-1.5 text-xs font-semibold text-primary hover:bg-primary-soft disabled:opacity-50"
     >
       {pending ? "Đang quét…" : "Chạy quét sinh nhật"}
     </button>

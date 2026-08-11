@@ -223,15 +223,15 @@ export default async function CohortReportPage({ searchParams }: SearchParams) {
                     <td className="px-4 py-2 font-medium">{r.cohort}</td>
                     <td className="px-4 py-2 text-right">{num(r.total)}</td>
                     <td className="px-4 py-2 text-right font-semibold">{r.avgProgress}%</td>
-                    <td className="px-4 py-2 text-right text-emerald-700">
+                    <td className="px-4 py-2 text-right text-state-success-ink">
                       {num(r.completed)}{" "}
                       <span className="text-xs text-neutral-400">({r.completionRate}%)</span>
                     </td>
-                    <td className="px-4 py-2 text-right text-orange-600">
+                    <td className="px-4 py-2 text-right text-primary">
                       {num(r.studying)}{" "}
                       <span className="text-xs text-neutral-400">({r.studyingRate}%)</span>
                     </td>
-                    <td className="px-4 py-2 text-right text-rose-600">
+                    <td className="px-4 py-2 text-right text-state-danger-ink">
                       {num(r.withdrew)}{" "}
                       <span className="text-xs text-neutral-400">({r.withdrewRate}%)</span>
                     </td>

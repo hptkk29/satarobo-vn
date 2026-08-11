@@ -203,7 +203,7 @@ export function PdfSlidePlayer({
             <Loader2 className="h-4 w-4 animate-spin" /> Đang tải slide…
           </p>
         ) : error ? (
-          <p className="px-4 text-center text-sm text-rose-400">{error}</p>
+          <p className="px-4 text-center text-sm text-state-danger-ink">{error}</p>
         ) : (
           <canvas ref={canvasRef} className="max-h-full max-w-full rounded bg-white shadow-lg" />
         )}

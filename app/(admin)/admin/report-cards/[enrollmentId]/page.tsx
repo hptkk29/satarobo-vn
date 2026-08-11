@@ -55,10 +55,10 @@ export default async function ReportCardEditorPage({
   if (!scope.ok) {
     return (
       <div className="space-y-3 p-4">
-        <Link href="/report-cards" className="text-sm text-purple-700">
+        <Link href="/report-cards" className="text-sm text-primary">
           ← Danh sách học bạ
         </Link>
-        <p className="text-sm text-rose-600">{scope.error}</p>
+        <p className="text-sm text-state-danger-ink">{scope.error}</p>
       </div>
     );
   }
@@ -105,7 +105,7 @@ export default async function ReportCardEditorPage({
   return (
     <div className="space-y-5 p-4">
       <div>
-        <Link href={`/report-cards?classId=${enr.classId}`} className="text-sm text-purple-700">
+        <Link href={`/report-cards?classId=${enr.classId}`} className="text-sm text-primary">
           ← {enr.className}
         </Link>
         <h1 className="mt-1 text-xl font-bold text-neutral-900">
@@ -118,7 +118,7 @@ export default async function ReportCardEditorPage({
       </div>
 
       {criteria.length === 0 ? (
-        <div className="rounded-md border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+        <div className="rounded-md border border-state-warning bg-state-warning-soft px-4 py-3 text-sm text-state-warning-ink">
           Khoá học <b>{enr.courseName}</b> chưa có tiêu chí năng lực. Đào tạo cần{" "}
           <Link href="/report-cards/criteria" className="font-medium underline">
             cấu hình tiêu chí

@@ -114,7 +114,7 @@ export default async function TeachersPage({ searchParams }: SearchParams) {
         <h1 className="text-2xl font-bold text-gray-900">Giáo viên</h1>
         <p className="mt-1 text-sm text-gray-500">
           {staff.length} giáo viên · Quản lý toàn bộ nhân sự ở mục{" "}
-          <Link href="/nhan-su" className="font-medium text-[#7C3AED] hover:underline">
+          <Link href="/nhan-su" className="font-medium text-primary hover:underline">
             Nhân sự
           </Link>
         </p>
@@ -125,11 +125,11 @@ export default async function TeachersPage({ searchParams }: SearchParams) {
           name="q"
           defaultValue={q}
           placeholder="Tìm theo tên, email..."
-          className="flex-1 rounded-lg border border-gray-200 px-3 py-2 text-sm sm:max-w-xs focus:border-[#7C3AED] focus:outline-none focus:ring-2 focus:ring-[#7C3AED]/20"
+          className="flex-1 rounded-lg border border-gray-200 px-3 py-2 text-sm sm:max-w-xs focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
         />
         <button
           type="submit"
-          className="rounded-lg bg-[#7C3AED] px-4 py-2 text-sm font-semibold text-white hover:opacity-90"
+          className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white hover:opacity-90"
         >
           Tìm
         </button>
@@ -163,11 +163,11 @@ export default async function TeachersPage({ searchParams }: SearchParams) {
                   <tr key={u.id} className="hover:bg-gray-50/60">
                     <td className="px-4 py-3">
                       <Link href={`/teachers/${u.id}`} className="flex items-center gap-3 group">
-                        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-[#F97316] to-[#7C3AED] text-xs font-bold text-white">
+                        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-primary to-primary text-xs font-bold text-white">
                           {(u.name ?? u.email ?? "?")[0].toUpperCase()}
                         </div>
                         <div>
-                          <div className="font-medium text-gray-900 group-hover:text-[#7C3AED]">
+                          <div className="font-medium text-gray-900 group-hover:text-primary">
                             {u.name ?? "—"}
                           </div>
                           <div className="text-xs text-gray-400">{u.email}</div>
@@ -200,7 +200,7 @@ export default async function TeachersPage({ searchParams }: SearchParams) {
                         {load.sessionsPerWeek} buổi · {load.hoursPerWeek}h
                       </div>
                       {load.overloaded && (
-                        <span className="mt-0.5 inline-flex rounded-full bg-rose-100 px-2 py-0.5 text-[10px] font-semibold text-rose-700">
+                        <span className="mt-0.5 inline-flex rounded-full bg-state-danger-soft px-2 py-0.5 text-[10px] font-semibold text-state-danger-ink">
                           Quá tải
                         </span>
                       )}

@@ -48,7 +48,7 @@ export default async function ReportCardCriteriaPage() {
   return (
     <div className="space-y-5 p-4">
       <div>
-        <Link href="/report-cards" className="text-sm text-purple-700">
+        <Link href="/report-cards" className="text-sm text-primary">
           ← Học bạ năng lực
         </Link>
         <h1 className="mt-1 text-xl font-bold text-neutral-900">Cấu hình tiêu chí năng lực</h1>

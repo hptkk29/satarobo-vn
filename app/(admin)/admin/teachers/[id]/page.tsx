@@ -279,7 +279,7 @@ export default async function TeacherProfilePage({ params, searchParams }: Props
                 Tải giảng dạy / tuần
               </h2>
               {load.overloaded && (
-                <span className="rounded-full bg-rose-100 px-2.5 py-0.5 text-xs font-semibold text-rose-700">
+                <span className="rounded-full bg-state-danger-soft px-2.5 py-0.5 text-xs font-semibold text-state-danger-ink">
                   Quá tải (&gt; {overloadHours}h/tuần)
                 </span>
               )}
@@ -304,7 +304,7 @@ export default async function TeacherProfilePage({ params, searchParams }: Props
               type="month"
               name="month"
               defaultValue={monthValue}
-              className="rounded-lg border border-gray-300 px-2 py-1 text-sm focus:border-[#7C3AED] focus:outline-none"
+              className="rounded-lg border border-gray-300 px-2 py-1 text-sm focus:border-primary focus:outline-none"
             />
             <button type="submit" className="rounded-lg bg-gray-800 px-3 py-1 text-sm font-medium text-white">
               Xem

@@ -23,7 +23,7 @@ export function LeadPaymentCard({
       <div className="mt-2 grid grid-cols-3 gap-3 text-sm">
         <div>
           <div className="text-gray-500">Đã nộp</div>
-          <div className="font-semibold text-emerald-700">{fmt(paid)}</div>
+          <div className="font-semibold text-state-success-ink">{fmt(paid)}</div>
         </div>
         <div>
           <div className="text-gray-500">Tổng phải thu</div>
@@ -33,17 +33,17 @@ export function LeadPaymentCard({
         </div>
         <div>
           <div className="text-gray-500">Còn thiếu</div>
-          <div className="font-semibold text-amber-700">{hasOrder ? fmt(remaining) : "—"}</div>
+          <div className="font-semibold text-state-warning-ink">{hasOrder ? fmt(remaining) : "—"}</div>
         </div>
       </div>
 
       <div className="mt-3">
         {eligible ? (
-          <span className="inline-flex items-center rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-medium text-emerald-800">
+          <span className="inline-flex items-center rounded-full bg-state-success-soft px-2.5 py-1 text-xs font-medium text-state-success-ink">
             ✓ Đủ điều kiện chốt{scholarshipFull ? " (miễn phí / học bổng toàn phần)" : ""}
           </span>
         ) : (
-          <span className="inline-flex items-center rounded-full bg-amber-100 px-2.5 py-1 text-xs font-medium text-amber-800">
+          <span className="inline-flex items-center rounded-full bg-state-warning-soft px-2.5 py-1 text-xs font-medium text-state-warning-ink">
             Chưa đủ điều kiện chốt — cần ghi nhận thanh toán trước
           </span>
         )}

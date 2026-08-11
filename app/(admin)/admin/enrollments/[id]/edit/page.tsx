@@ -22,14 +22,14 @@ const CAPACITY_COUNT_STATUSES = ["PENDING", "CONFIRMED", "STUDYING", "ACTIVE"];
 
 const STATUS_INFO: Record<string, { label: string; color: string }> = {
   PENDING: { label: "Chờ xếp", color: "bg-gray-100 text-gray-700" },
-  CONFIRMED: { label: "Đã xếp", color: "bg-amber-100 text-amber-700" },
-  STUDYING: { label: "Đang học", color: "bg-green-100 text-green-700" },
-  PAUSED: { label: "Bảo lưu", color: "bg-yellow-100 text-yellow-700" },
-  COMPLETED: { label: "Hoàn thành", color: "bg-blue-100 text-blue-700" },
-  WITHDREW: { label: "Đã rút", color: "bg-red-100 text-red-700" },
-  TRANSFERRED: { label: "Đã chuyển", color: "bg-purple-100 text-purple-700" },
-  ACTIVE: { label: "Đang học (legacy)", color: "bg-green-100 text-green-700" },
-  CANCELLED: { label: "Đã huỷ", color: "bg-red-100 text-red-700" },
+  CONFIRMED: { label: "Đã xếp", color: "bg-state-warning-soft text-state-warning-ink" },
+  STUDYING: { label: "Đang học", color: "bg-state-success-soft text-state-success-ink" },
+  PAUSED: { label: "Bảo lưu", color: "bg-state-warning-soft text-state-warning-ink" },
+  COMPLETED: { label: "Hoàn thành", color: "bg-state-info-soft text-state-info-ink" },
+  WITHDREW: { label: "Đã rút", color: "bg-state-danger-soft text-state-danger-ink" },
+  TRANSFERRED: { label: "Đã chuyển", color: "bg-primary-soft text-primary" },
+  ACTIVE: { label: "Đang học (legacy)", color: "bg-state-success-soft text-state-success-ink" },
+  CANCELLED: { label: "Đã huỷ", color: "bg-state-danger-soft text-state-danger-ink" },
 };
 
 function fmtDateTime(d: Date | null) {
@@ -198,7 +198,7 @@ export default async function EditEnrollmentPage({ params }: Props) {
         </Link>
         <div className="flex flex-wrap items-center justify-between gap-3">
           <h1 className="flex items-center gap-2 text-2xl font-bold text-neutral-900">
-            <ClipboardList className="h-6 w-6 text-[#7C3AED]" />
+            <ClipboardList className="h-6 w-6 text-primary" />
             Đăng ký: {enrollment.student.name}
           </h1>
           <span
@@ -249,7 +249,7 @@ export default async function EditEnrollmentPage({ params }: Props) {
               )}
               <Link
                 href={`/students/${enrollment.student.id}/edit`}
-                className="mt-2 inline-block text-xs font-semibold text-[#7C3AED] hover:underline"
+                className="mt-2 inline-block text-xs font-semibold text-primary hover:underline"
               >
                 Mở hồ sơ học viên →
               </Link>
@@ -295,7 +295,7 @@ export default async function EditEnrollmentPage({ params }: Props) {
           </dl>
           <Link
             href={`/classes/${enrollment.class.id}/edit`}
-            className="mt-3 inline-block text-xs font-semibold text-[#7C3AED] hover:underline"
+            className="mt-3 inline-block text-xs font-semibold text-primary hover:underline"
           >
             Mở chi tiết lớp →
           </Link>
@@ -326,17 +326,17 @@ export default async function EditEnrollmentPage({ params }: Props) {
           </dd>
         </dl>
         {enrollment.transferReason && (
-          <div className="mt-3 rounded-lg border border-purple-200 bg-purple-50 p-3 text-sm">
-            <div className="flex items-center gap-1 font-semibold text-purple-800">
+          <div className="mt-3 rounded-lg border border-primary-soft bg-primary-soft p-3 text-sm">
+            <div className="flex items-center gap-1 font-semibold text-primary">
               <ArrowRightLeft className="h-4 w-4" /> Đã chuyển lớp
             </div>
-            <div className="mt-1 text-purple-700">
+            <div className="mt-1 text-primary">
               Lý do: {enrollment.transferReason}
             </div>
             {enrollment.transferredToId && (
               <Link
                 href={`/enrollments/${enrollment.transferredToId}/edit`}
-                className="mt-1 inline-block text-xs font-semibold text-purple-800 hover:underline"
+                className="mt-1 inline-block text-xs font-semibold text-primary hover:underline"
               >
                 Mở enrollment mới →
               </Link>
@@ -422,7 +422,7 @@ export default async function EditEnrollmentPage({ params }: Props) {
                             → Enrollment đích:{" "}
                             <Link
                               href={`/enrollments/${extra.transferredToId}/edit`}
-                              className="font-mono text-[#7C3AED] hover:underline"
+                              className="font-mono text-primary hover:underline"
                             >
                               {String(extra.transferredToId).slice(0, 12)}…
                             </Link>
@@ -433,7 +433,7 @@ export default async function EditEnrollmentPage({ params }: Props) {
                             ← Enrollment gốc:{" "}
                             <Link
                               href={`/enrollments/${extra.transferredFromId}/edit`}
-                              className="font-mono text-[#7C3AED] hover:underline"
+                              className="font-mono text-primary hover:underline"
                             >
                               {String(extra.transferredFromId).slice(0, 12)}…
                             </Link>

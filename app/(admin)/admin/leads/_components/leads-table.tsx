@@ -154,11 +154,7 @@ function DeleteCell({ lead, onDeleted }: { lead: LeadRow; onDeleted: () => void 
       type="button"
       onClick={handleClick}
       disabled={pending}
-      className={`inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium transition-colors disabled:opacity-50 ${
-        confirming
-          ? 'bg-red-600 text-white hover:bg-red-700'
-          : 'text-red-600 hover:bg-red-50'
-      }`}
+      className={`inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium transition-colors disabled:opacity-50 ${ confirming ? 'bg-state-danger-ink text-white hover:bg-state-danger-ink' : 'text-state-danger-ink hover:bg-state-danger-soft' }`}
       aria-label={confirming ? `Xác nhận xoá ${lead.parentName}` : `Xoá ${lead.parentName}`}
     >
       {pending ? (
@@ -470,7 +466,7 @@ export function LeadsTable({
                       {lead.assignedTo?.name ? (
                         <span className="text-gray-700">{lead.assignedTo.name}</span>
                       ) : (
-                        <span className="font-medium text-amber-600">Chưa phân công</span>
+                        <span className="font-medium text-state-warning-ink">Chưa phân công</span>
                       )}
                     </td>
                     <td className="px-4 py-3 text-sm text-gray-500 tabular-nums">
@@ -487,7 +483,7 @@ export function LeadsTable({
                           <Link
                             href={`/leads/${lead.id}`}
                             onClick={(e) => e.stopPropagation()}
-                            className="inline-flex items-center gap-1 rounded-md bg-emerald-600 px-2 py-1 text-xs font-semibold text-white hover:bg-emerald-700"
+                            className="inline-flex items-center gap-1 rounded-md bg-primary-soft px-2 py-1 text-xs font-semibold text-primary hover:bg-primary-soft-hover"
                           >
                             <CheckCircle2 className="h-3.5 w-3.5" />
                             Xem chi tiết lead

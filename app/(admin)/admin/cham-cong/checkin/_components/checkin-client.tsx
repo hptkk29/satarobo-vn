@@ -49,7 +49,7 @@ export function CheckinClient({
   if (done) {
     return (
       <div className="rounded-2xl bg-white p-8 text-center shadow-sm">
-        <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-full bg-emerald-100 text-emerald-600">
+        <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-full bg-state-success-soft text-state-success-ink">
           ✓
         </div>
         <p className="text-lg font-bold text-neutral-900">{done} thành công</p>
@@ -73,7 +73,7 @@ export function CheckinClient({
           type="button"
           onClick={() => submit("CHECK_IN")}
           disabled={pending}
-          className="flex flex-col items-center gap-2 rounded-xl bg-emerald-600 py-6 font-semibold text-white hover:bg-emerald-700 disabled:opacity-60"
+          className="flex flex-col items-center gap-2 rounded-xl bg-state-success-ink py-6 font-semibold text-white hover:bg-state-success-ink-hover disabled:opacity-60"
         >
           {pending ? <Loader2 className="h-6 w-6 animate-spin" /> : <LogIn className="h-6 w-6" />}
           Check-in
@@ -82,7 +82,7 @@ export function CheckinClient({
           type="button"
           onClick={() => submit("CHECK_OUT")}
           disabled={pending}
-          className="flex flex-col items-center gap-2 rounded-xl bg-orange-500 py-6 font-semibold text-white hover:bg-orange-600 disabled:opacity-60"
+          className="flex flex-col items-center gap-2 rounded-xl bg-primary py-6 font-semibold text-white hover:bg-primary-dark disabled:opacity-60"
         >
           {pending ? <Loader2 className="h-6 w-6 animate-spin" /> : <LogOut className="h-6 w-6" />}
           Check-out

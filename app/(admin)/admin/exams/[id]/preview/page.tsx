@@ -47,7 +47,7 @@ export default async function ExamPreviewPage({ params }: Props) {
           <ChevronLeft className="h-4 w-4" /> Quay lại builder
         </Link>
         <h1 className="text-2xl font-bold text-neutral-900">
-          Xem trước: <span className="text-orange-600">{exam.title}</span>
+          Xem trước: <span className="text-primary">{exam.title}</span>
         </h1>
         <p className="mt-1 text-sm text-neutral-500">
           {exam.examQuestions.length} câu · {exam.totalPoints} điểm ·{" "}
@@ -91,7 +91,7 @@ export default async function ExamPreviewPage({ params }: Props) {
                       <div>
                         <span
                           className={
-                            c.isCorrect ? "font-semibold text-green-700" : ""
+                            c.isCorrect ? "font-semibold text-state-success-ink" : ""
                           }
                         >
                           {c.text}

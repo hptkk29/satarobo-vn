@@ -83,11 +83,7 @@ export function ShiftApproval({
         <a
           href={ready ? exportUrl : undefined}
           aria-disabled={!ready}
-          className={`inline-flex items-center gap-1.5 rounded-lg px-4 py-2 text-sm font-semibold ${
-            ready
-              ? "bg-[#7C3AED] text-white hover:opacity-90"
-              : "pointer-events-none bg-gray-200 text-gray-400"
-          }`}
+          className={`inline-flex items-center gap-1.5 rounded-lg px-4 py-2 text-sm font-semibold ${ ready ? "bg-primary text-white hover:opacity-90" : "pointer-events-none bg-gray-200 text-gray-400" }`}
         >
           <Download className="h-4 w-4" /> Export lịch đề xuất
         </a>
@@ -102,7 +98,7 @@ export function ShiftApproval({
           parseRow={parseRow}
           onImport={onImport}
         />
-        <p className="mt-3 text-xs text-amber-700">
+        <p className="mt-3 text-xs text-state-warning-ink">
           ⚠ Import sẽ <b>ĐÈ HOÀN TOÀN</b> lịch chính thức của cơ sở trong tháng {month}. Export →
           sửa trong file → import lên lại (cùng định dạng cột).
         </p>

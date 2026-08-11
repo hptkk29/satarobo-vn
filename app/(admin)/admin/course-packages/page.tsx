@@ -48,7 +48,7 @@ export default async function CoursePackagesPage() {
         </div>
         <Link
           href="/course-packages/new"
-          className="inline-flex items-center gap-2 rounded-lg bg-[#F7941D] px-4 py-2 text-sm font-semibold text-white hover:bg-[#e58510]"
+          className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white hover:bg-primary-dark"
         >
           <Plus className="h-4 w-4" />
           Thêm gói

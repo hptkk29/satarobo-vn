@@ -139,18 +139,18 @@ export default async function ExamBuilderPage({ params }: Props) {
         </Link>
         <div className="flex flex-wrap items-baseline justify-between gap-3">
           <h1 className="text-2xl font-bold text-neutral-900">
-            Builder: <span className="text-orange-600">{exam.title}</span>
+            Builder: <span className="text-primary">{exam.title}</span>
           </h1>
           <div className="flex items-center gap-4">
             <Link
               href={`/exams/${id}/preview`}
-              className="text-sm font-semibold text-[#7C3AED] hover:underline"
+              className="text-sm font-semibold text-primary hover:underline"
             >
               Xem trước →
             </Link>
             <Link
               href={`/exams/${id}/attempts`}
-              className="text-sm font-semibold text-[#7C3AED] hover:underline"
+              className="text-sm font-semibold text-primary hover:underline"
             >
               Xem bài làm →
             </Link>

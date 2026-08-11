@@ -204,7 +204,7 @@ export default async function CompletionPage({ searchParams }: PageProps) {
                       href={`/api/admin/reports/certificate?code=${encodeURIComponent(c.certificateCode)}`}
                       target="_blank"
                       rel="noopener"
-                      className="text-purple-700 underline"
+                      className="text-primary underline"
                     >
                       {c.certificateCode}
                     </a>

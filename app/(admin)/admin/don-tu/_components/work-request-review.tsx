@@ -45,7 +45,7 @@ export function WorkRequestReview({
   return (
     <div className="mt-3 space-y-2 border-t border-neutral-100 pt-3">
       {appliesToSchedule && (
-        <p className="text-xs text-amber-700">
+        <p className="text-xs text-state-warning-ink">
           Duyệt đơn này sẽ cập nhật buổi học tương ứng (huỷ buổi hoặc gán GV dạy thay).
         </p>
       )}
@@ -54,14 +54,14 @@ export function WorkRequestReview({
         onChange={(e) => setNote(e.target.value)}
         maxLength={1000}
         placeholder="Ghi chú duyệt (bắt buộc khi từ chối)"
-        className="w-full rounded-lg border border-neutral-200 px-3 py-1.5 text-sm outline-none focus:border-[#7C3AED]"
+        className="w-full rounded-lg border border-neutral-200 px-3 py-1.5 text-sm outline-none focus:border-primary"
       />
       <div className="flex gap-2">
         <button
           type="button"
           onClick={() => decide("APPROVED")}
           disabled={pending}
-          className="rounded-lg bg-emerald-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
+          className="rounded-lg bg-state-success-ink px-3 py-1.5 text-sm font-semibold text-white hover:bg-state-success-ink-hover disabled:opacity-50"
         >
           {pending ? "Đang xử lý…" : "Duyệt"}
         </button>

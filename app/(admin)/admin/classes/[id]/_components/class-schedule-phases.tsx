@@ -166,14 +166,14 @@ export function ClassSchedulePhases({
               onChange={(e) => setReason(e.target.value)}
               disabled={pending}
               placeholder="Ghi vào nhật ký thay đổi của lớp"
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-orange-500 disabled:opacity-50"
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary disabled:opacity-50"
             />
           </label>
           <button
             type="button"
             onClick={save}
             disabled={pending}
-            className="inline-flex items-center gap-1.5 rounded-lg bg-orange-500 px-4 py-2 text-sm font-bold text-white hover:bg-orange-600 disabled:opacity-50"
+            className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-sm font-bold text-white hover:bg-primary-dark disabled:opacity-50"
           >
             <Save className="h-4 w-4" /> {pending ? "Đang lưu…" : "Lưu kế hoạch"}
           </button>
@@ -202,7 +202,7 @@ export function ClassSchedulePhases({
                 setPreview(null);
               }}
               disabled={pending}
-              className="rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-orange-500 disabled:opacity-50"
+              className="rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary disabled:opacity-50"
             />
           </label>
           <button
@@ -217,7 +217,7 @@ export function ClassSchedulePhases({
             type="button"
             onClick={apply}
             disabled={pending || !preview || preview.conflicts.length > 0 || preview.changedCount === 0}
-            className="rounded-lg bg-[#7C3AED] px-4 py-2 text-sm font-bold text-white hover:opacity-90 disabled:opacity-50"
+            className="rounded-lg bg-primary px-4 py-2 text-sm font-bold text-white hover:opacity-90 disabled:opacity-50"
             title={!preview ? "Bấm Xem trước đã" : undefined}
           >
             {pending ? "Đang áp dụng…" : "Áp dụng"}
@@ -235,12 +235,12 @@ export function ClassSchedulePhases({
             </p>
 
             {preview.conflicts.length > 0 && (
-              <div className="mb-2 rounded-lg border border-red-200 bg-red-50 p-3">
-                <p className="flex items-center gap-2 text-sm font-semibold text-red-800">
+              <div className="mb-2 rounded-lg border border-state-danger-soft bg-state-danger-soft p-3">
+                <p className="flex items-center gap-2 text-sm font-semibold text-state-danger-ink">
                   <AlertTriangle className="h-4 w-4" /> Lịch mới trùng phòng/giáo viên — không áp
                   dụng được
                 </p>
-                <ul className="mt-1 space-y-0.5 text-xs text-red-700">
+                <ul className="mt-1 space-y-0.5 text-xs text-state-danger-ink">
                   {preview.conflicts.map((c) => (
                     <li key={c.date}>
                       {fmt(c.date)} — {c.messages.join("; ")}
@@ -262,7 +262,7 @@ export function ClassSchedulePhases({
                       </span>
                     ) : (
                       <span
-                        className={`shrink-0 tabular-nums ${moved ? "font-semibold text-amber-700" : "text-gray-400"}`}
+                        className={`shrink-0 tabular-nums ${moved ? "font-semibold text-state-warning-ink" : "text-gray-400"}`}
                       >
                         {fmt(r.oldDate)} {fmtTime(r.oldDate)}
                         {moved && r.newDate ? ` → ${fmt(r.newDate)} ${fmtTime(r.newDate)}` : ""}

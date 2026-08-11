@@ -34,7 +34,7 @@ export default async function MessengerInboxPage() {
   return (
     <div>
       <h1 className="mb-6 flex items-center gap-2 text-3xl font-black text-neutral-900">
-        <MessageCircle className="h-7 w-7 text-orange-500" />
+        <MessageCircle className="h-7 w-7 text-primary" />
         Inbox Messenger
       </h1>
 

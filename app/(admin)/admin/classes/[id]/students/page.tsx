@@ -116,7 +116,7 @@ export default async function ClassStudentsPage({ params }: Props) {
       <div className="mb-6 flex flex-wrap items-baseline justify-between gap-3">
         <h1 className="text-3xl font-black text-neutral-900">
           Học sinh lớp:{" "}
-          <span className="font-bold text-orange-600">{cls.name}</span>
+          <span className="font-bold text-primary">{cls.name}</span>
         </h1>
         <Link
           href={`/classes/${cls.id}/edit`}

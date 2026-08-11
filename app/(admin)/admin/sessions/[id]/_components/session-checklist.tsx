@@ -16,9 +16,9 @@ const STATUS_LABEL: Record<SessionStatus, string> = {
 };
 const STATUS_COLOR: Record<SessionStatus, string> = {
   SCHEDULED: "bg-gray-100 text-gray-600",
-  IN_PROGRESS: "bg-amber-100 text-amber-700",
-  COMPLETED: "bg-emerald-100 text-emerald-700",
-  CANCELLED: "bg-rose-100 text-rose-700",
+  IN_PROGRESS: "bg-state-warning-soft text-state-warning-ink",
+  COMPLETED: "bg-state-success-soft text-state-success-ink",
+  CANCELLED: "bg-state-danger-soft text-state-danger-ink",
 };
 
 export function SessionChecklist({
@@ -151,7 +151,7 @@ export function SessionChecklist({
           disabled={!canEdit || pending}
           rows={2}
           placeholder="Mô tả sự cố trong buổi (nếu có)…"
-          className="mt-3 w-full resize-y rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-[#7C3AED] focus:outline-none disabled:bg-gray-50"
+          className="mt-3 w-full resize-y rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary focus:outline-none disabled:bg-gray-50"
         />
       )}
 
@@ -166,7 +166,7 @@ export function SessionChecklist({
           disabled={!canEdit || pending}
           rows={3}
           placeholder="Tóm tắt nội dung đã dạy, tình hình lớp, lưu ý cho buổi sau…"
-          className="w-full resize-y rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-[#7C3AED] focus:outline-none disabled:bg-gray-50"
+          className="w-full resize-y rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary focus:outline-none disabled:bg-gray-50"
         />
         <p className="mt-1 text-xs text-gray-400">Nhớ bấm “Lưu tiến trình” trước khi “Hoàn tất buổi”.</p>
       </div>
@@ -186,7 +186,7 @@ export function SessionChecklist({
               type="button"
               onClick={doStart}
               disabled={pending}
-              className="inline-flex items-center gap-1.5 rounded-lg bg-amber-500 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-600 disabled:opacity-50"
+              className="inline-flex items-center gap-1.5 rounded-lg bg-state-warning px-4 py-2 text-sm font-semibold text-white hover:bg-state-warning-ink disabled:opacity-50"
             >
               <Play className="h-4 w-4" /> Bắt đầu buổi
             </button>
@@ -197,7 +197,7 @@ export function SessionChecklist({
               onClick={doComplete}
               disabled={pending || !canComplete}
               title={canComplete ? "" : "Cần xong bước (1)(2)(3)"}
-              className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
+              className="inline-flex items-center gap-1.5 rounded-lg bg-state-success-ink px-4 py-2 text-sm font-semibold text-white hover:bg-state-success-ink-hover disabled:opacity-50"
             >
               <CheckCircle2 className="h-4 w-4" /> Hoàn tất buổi học
             </button>
@@ -212,13 +212,13 @@ function AutoStep({ n, done, label, hint, required }: { n: number; done: boolean
   return (
     <li className="flex items-start gap-2.5">
       {done ? (
-        <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-emerald-500" />
+        <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-state-success-ink" />
       ) : (
-        <Circle className={`mt-0.5 h-5 w-5 shrink-0 ${required ? "text-rose-400" : "text-gray-300"}`} />
+        <Circle className={`mt-0.5 h-5 w-5 shrink-0 ${required ? "text-state-danger-ink" : "text-gray-300"}`} />
       )}
       <div>
         <div className="text-sm font-medium text-gray-800">
-          {n}. {label} {required && <span className="text-rose-500">*</span>}
+          {n}. {label} {required && <span className="text-state-danger-ink">*</span>}
         </div>
         <div className="text-xs text-gray-400">{hint}</div>
       </div>
@@ -254,14 +254,14 @@ function ToggleStep({
         aria-label={label}
       >
         {checked ? (
-          <CheckCircle2 className="h-5 w-5 text-emerald-500" />
+          <CheckCircle2 className="h-5 w-5 text-state-success-ink" />
         ) : (
-          <Circle className={`h-5 w-5 ${required ? "text-rose-400" : "text-gray-300"}`} />
+          <Circle className={`h-5 w-5 ${required ? "text-state-danger-ink" : "text-gray-300"}`} />
         )}
       </button>
       <div>
         <div className="text-sm font-medium text-gray-800">
-          {n}. {label} {required && <span className="text-rose-500">*</span>}
+          {n}. {label} {required && <span className="text-state-danger-ink">*</span>}
         </div>
         <div className="text-xs text-gray-400">{hint}</div>
       </div>

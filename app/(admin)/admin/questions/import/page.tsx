@@ -64,7 +64,7 @@ export default function ImportQuestionsPage() {
         </p>
         {/* QA 21/07 — tester link khung CT TAY TỪNG CÂU sau import vì tưởng import
             không hỗ trợ (chỉ lesson mới defer). Nêu rõ ngay đầu trang. */}
-        <p className="mt-2 rounded-lg border border-purple-200 bg-purple-50 px-3 py-2 text-sm text-purple-800">
+        <p className="mt-2 rounded-lg border border-primary-soft bg-primary-soft px-3 py-2 text-sm text-primary">
           💡 Muốn gắn <strong>khung chương trình hàng loạt</strong> ngay khi import
           (để lọc được khi soạn bài tập): điền cột <code>courseSlug</code> (vd{" "}
           <code>laptrinhrobot</code>) + <code>curriculumVersion</code> (số) cho từng

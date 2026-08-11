@@ -149,7 +149,7 @@ export function ItemForm({
   return (
     <form onSubmit={handleSubmit} className="max-w-4xl space-y-5">
       {error && (
-        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+        <div className="rounded-lg border border-state-danger-soft bg-state-danger-soft px-4 py-3 text-sm text-state-danger-ink">
           {error}
         </div>
       )}
@@ -385,7 +385,7 @@ export function ItemForm({
         <button
           type="submit"
           disabled={pending}
-          className="rounded-xl bg-[#7C3AED] px-6 py-3 font-bold text-white shadow-md hover:opacity-90 disabled:opacity-60"
+          className="rounded-xl bg-primary px-6 py-3 font-bold text-white shadow-md hover:opacity-90 disabled:opacity-60"
         >
           {pending ? "Đang lưu..." : isEdit ? "Cập nhật" : "Tạo hàng"}
         </button>
@@ -402,7 +402,7 @@ export function ItemForm({
             type="button"
             onClick={handleDelete}
             disabled={pending}
-            className="ml-auto rounded-xl border-2 border-red-200 bg-white px-6 py-3 font-bold text-red-700 hover:bg-red-50"
+            className="ml-auto rounded-xl border-2 border-state-danger-soft bg-white px-6 py-3 font-bold text-state-danger-ink hover:bg-state-danger-soft"
           >
             Xoá
           </button>
@@ -459,12 +459,10 @@ function BalanceRowEditor({
   }
 
   return (
-    <tr className={isLow ? "bg-red-50/40" : undefined}>
+    <tr className={isLow ? "bg-state-danger-soft/40" : undefined}>
       <td className="px-3 py-2 font-medium text-neutral-900">{row.centerName}</td>
       <td
-        className={`px-3 py-2 text-right tabular-nums font-semibold ${
-          isLow ? "text-red-600" : "text-neutral-700"
-        }`}
+        className={`px-3 py-2 text-right tabular-nums font-semibold ${ isLow ? "text-state-danger-ink" : "text-neutral-700" }`}
       >
         {row.quantity}
       </td>
@@ -482,7 +480,7 @@ function BalanceRowEditor({
           placeholder={`${fallbackThreshold}`}
           className="w-24 rounded-md border border-neutral-200 px-2 py-1 text-right text-sm tabular-nums disabled:opacity-60"
         />
-        {error && <div className="mt-0.5 text-xs text-red-600">{error}</div>}
+        {error && <div className="mt-0.5 text-xs text-state-danger-ink">{error}</div>}
       </td>
       <td className="px-3 py-2 text-right whitespace-nowrap">
         <MovementActions
@@ -499,7 +497,7 @@ function BalanceRowEditor({
 }
 
 const inputClass =
-  "w-full rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm outline-none focus:border-[#7C3AED] focus:ring-2 focus:ring-[#7C3AED]/20";
+  "w-full rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20";
 
 function Field({
   label,
@@ -514,7 +512,7 @@ function Field({
     <label className="block">
       <span className="mb-1 block text-sm font-semibold text-neutral-700">
         {label}
-        {required && <span className="ml-1 text-red-500">*</span>}
+        {required && <span className="ml-1 text-state-danger-ink">*</span>}
       </span>
       {children}
     </label>

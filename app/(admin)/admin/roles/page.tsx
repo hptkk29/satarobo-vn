@@ -27,7 +27,7 @@ export default async function RolesAdminPage() {
     <div>
       <div className="mb-6">
         <h1 className="flex items-center gap-2 text-3xl font-black text-neutral-900">
-          <ShieldCheck className="h-7 w-7 text-orange-500" />
+          <ShieldCheck className="h-7 w-7 text-primary" />
           Vai trò & quyền (RBAC)
         </h1>
         <p className="mt-1 text-sm text-neutral-500">

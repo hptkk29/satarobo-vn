@@ -20,12 +20,12 @@ export const dynamic = "force-dynamic";
 export const metadata = { title: "Tài liệu giảng dạy | Admin" };
 
 const TYPE_INFO: Record<DocumentType, { label: string; color: string }> = {
-  PDF: { label: "PDF", color: "bg-red-100 text-red-700" },
-  IMAGE: { label: "Ảnh", color: "bg-blue-100 text-blue-700" },
-  VIDEO: { label: "Video", color: "bg-purple-100 text-purple-700" },
-  SLIDE: { label: "Slide", color: "bg-amber-100 text-amber-700" },
-  WORKSHEET: { label: "Worksheet", color: "bg-emerald-100 text-emerald-700" },
-  AUDIO: { label: "Audio", color: "bg-pink-100 text-pink-700" },
+  PDF: { label: "PDF", color: "bg-state-danger-soft text-state-danger-ink" },
+  IMAGE: { label: "Ảnh", color: "bg-state-info-soft text-state-info-ink" },
+  VIDEO: { label: "Video", color: "bg-primary-soft text-primary" },
+  SLIDE: { label: "Slide", color: "bg-state-warning-soft text-state-warning-ink" },
+  WORKSHEET: { label: "Worksheet", color: "bg-state-success-soft text-state-success-ink" },
+  AUDIO: { label: "Audio", color: "bg-primary-soft text-primary" },
   OTHER: { label: "Khác", color: "bg-neutral-100 text-neutral-700" },
 };
 
@@ -125,7 +125,7 @@ export default async function DocumentsPage({ searchParams }: SearchParams) {
       <div className="mb-6 flex items-start justify-between gap-4">
         <div>
           <h1 className="flex items-center gap-2 text-2xl font-bold text-gray-900">
-            <FolderOpen className="h-6 w-6 text-[#7C3AED]" />
+            <FolderOpen className="h-6 w-6 text-primary" />
             Tài liệu giảng dạy
           </h1>
           <p className="mt-1 text-sm text-gray-500">
@@ -136,7 +136,7 @@ export default async function DocumentsPage({ searchParams }: SearchParams) {
         </div>
         <Link
           href="/documents/new"
-          className="inline-flex items-center gap-1.5 rounded-lg bg-[#7C3AED] px-4 py-2 text-sm font-semibold text-white shadow-sm hover:opacity-90"
+          className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white shadow-sm hover:opacity-90"
         >
           <Plus className="h-4 w-4" />
           Tải lên tài liệu giảng dạy
@@ -151,12 +151,12 @@ export default async function DocumentsPage({ searchParams }: SearchParams) {
           name="q"
           defaultValue={q}
           placeholder="Tìm tiêu đề / tên file / mã..."
-          className="lg:col-span-2 rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-[#7C3AED] focus:outline-none focus:ring-2 focus:ring-[#7C3AED]/20"
+          className="lg:col-span-2 rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
         />
         <select
           name="type"
           defaultValue={typeFilter ?? ""}
-          className="rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-[#7C3AED] focus:outline-none"
+          className="rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:outline-none"
         >
           <option value="">Mọi loại</option>
           {Object.entries(TYPE_INFO).map(([v, { label }]) => (
@@ -168,7 +168,7 @@ export default async function DocumentsPage({ searchParams }: SearchParams) {
         <select
           name="lessonId"
           defaultValue={lessonFilter ?? ""}
-          className="rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-[#7C3AED] focus:outline-none"
+          className="rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:outline-none"
         >
           <option value="">Mọi bài học</option>
           {lessons.map((l) => (
@@ -180,7 +180,7 @@ export default async function DocumentsPage({ searchParams }: SearchParams) {
         <select
           name="isPublic"
           defaultValue={sp.isPublic ?? ""}
-          className="rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-[#7C3AED] focus:outline-none"
+          className="rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:outline-none"
         >
           <option value="">Mọi quyền truy cập</option>
           <option value="true">Public</option>
@@ -188,7 +188,7 @@ export default async function DocumentsPage({ searchParams }: SearchParams) {
         </select>
         <button
           type="submit"
-          className="rounded-lg bg-[#7C3AED] px-4 py-2 text-sm font-semibold text-white hover:opacity-90 sm:col-span-2 lg:col-span-5"
+          className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white hover:opacity-90 sm:col-span-2 lg:col-span-5"
         >
           Áp dụng bộ lọc
         </button>
@@ -235,7 +235,7 @@ export default async function DocumentsPage({ searchParams }: SearchParams) {
                     Chưa có tài liệu nào khớp bộ lọc.{" "}
                     <Link
                       href="/documents/new"
-                      className="text-[#7C3AED] hover:underline"
+                      className="text-primary hover:underline"
                     >
                       Tải lên →
                     </Link>
@@ -291,7 +291,7 @@ export default async function DocumentsPage({ searchParams }: SearchParams) {
                       </td>
                       <td className="px-3 py-3">
                         {d.isPublic ? (
-                          <span className="inline-flex rounded-full bg-green-100 px-2 py-0.5 text-xs font-semibold text-green-700">
+                          <span className="inline-flex rounded-full bg-state-success-soft px-2 py-0.5 text-xs font-semibold text-state-success-ink">
                             Public
                           </span>
                         ) : (
@@ -332,7 +332,7 @@ export default async function DocumentsPage({ searchParams }: SearchParams) {
                           </a>
                           <Link
                             href={`/documents/${d.id}/edit`}
-                            className="rounded-md border border-purple-200 px-2.5 py-1 text-xs font-semibold text-purple-700 hover:bg-purple-50"
+                            className="rounded-md border border-primary-soft px-2.5 py-1 text-xs font-semibold text-primary hover:bg-primary-soft"
                           >
                             Sửa
                           </Link>

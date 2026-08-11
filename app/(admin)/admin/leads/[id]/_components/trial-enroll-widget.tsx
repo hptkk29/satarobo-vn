@@ -99,7 +99,7 @@ export function TrialEnrollWidget({
   return (
     <div className="rounded-xl border border-gray-200 bg-white p-4">
       <div className="mb-3 flex items-center gap-2">
-        <FlaskConical className="h-4 w-4 text-orange-500" />
+        <FlaskConical className="h-4 w-4 text-primary" />
         <h2 className="text-sm font-semibold text-gray-700">
           Xếp con vào lớp trải nghiệm
         </h2>
@@ -123,7 +123,7 @@ export function TrialEnrollWidget({
                 {/* LD3(a) — banner lớp hiện tại của con */}
                 <div className="mb-2 text-xs">
                   {c.currentTrial ? (
-                    <span className="font-medium text-indigo-600">
+                    <span className="font-medium text-state-info-ink">
                       {c.fullName} đang học thử lớp {c.currentTrial.className}
                       {c.currentTrial.session && (
                         <span className="font-normal text-gray-500">
@@ -184,7 +184,7 @@ export function TrialEnrollWidget({
                     type="button"
                     onClick={() => enroll(c.id, false)}
                     disabled={pending}
-                    className="rounded-lg bg-orange-500 px-3 py-1.5 text-sm font-semibold text-white hover:bg-orange-600 disabled:opacity-50"
+                    className="rounded-lg bg-primary px-3 py-1.5 text-sm font-semibold text-white hover:bg-primary-dark disabled:opacity-50"
                   >
                     Xếp vào lớp
                   </button>

@@ -64,7 +64,7 @@ export default async function CurriculumsPage({ searchParams }: SearchParams) {
       <div className="mb-6 flex items-start justify-between gap-4">
         <div>
           <h1 className="flex items-center gap-2 text-2xl font-bold text-gray-900">
-            <BookOpen className="h-6 w-6 text-[#7C3AED]" />
+            <BookOpen className="h-6 w-6 text-primary" />
             Giáo trình
           </h1>
           <p className="mt-1 text-sm text-gray-500">
@@ -75,7 +75,7 @@ export default async function CurriculumsPage({ searchParams }: SearchParams) {
         </div>
         <Link
           href="/curriculums/new"
-          className="inline-flex items-center gap-1.5 rounded-lg bg-[#7C3AED] px-4 py-2 text-sm font-semibold text-white shadow-sm hover:opacity-90"
+          className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white shadow-sm hover:opacity-90"
         >
           <Plus className="h-4 w-4" />
           Thêm giáo trình
@@ -90,12 +90,12 @@ export default async function CurriculumsPage({ searchParams }: SearchParams) {
           name="q"
           defaultValue={q}
           placeholder="Tìm theo tên giáo trình..."
-          className="lg:col-span-2 rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-[#7C3AED] focus:outline-none focus:ring-2 focus:ring-[#7C3AED]/20"
+          className="lg:col-span-2 rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
         />
         <select
           name="courseId"
           defaultValue={courseFilter ?? ""}
-          className="rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-[#7C3AED] focus:outline-none"
+          className="rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:outline-none"
         >
           <option value="">Tất cả khoá học</option>
           {courses.map((c) => (
@@ -107,7 +107,7 @@ export default async function CurriculumsPage({ searchParams }: SearchParams) {
         <select
           name="isActive"
           defaultValue={sp.isActive ?? ""}
-          className="rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-[#7C3AED] focus:outline-none"
+          className="rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:outline-none"
         >
           <option value="">Mọi trạng thái</option>
           <option value="true">Đang sử dụng</option>
@@ -115,18 +115,18 @@ export default async function CurriculumsPage({ searchParams }: SearchParams) {
         </select>
         <button
           type="submit"
-          className="rounded-lg bg-[#7C3AED] px-4 py-2 text-sm font-semibold text-white hover:opacity-90 sm:col-span-2 lg:col-span-4"
+          className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white hover:opacity-90 sm:col-span-2 lg:col-span-4"
         >
           Áp dụng bộ lọc
         </button>
       </form>
 
       {courses.length === 0 ? (
-        <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+        <div className="rounded-xl border border-state-warning-soft bg-state-warning-soft p-4 text-sm text-state-warning-ink">
           Chưa có khoá học nào. Tạo khoá học trước tại{" "}
           <Link
             href="/courses"
-            className="font-semibold underline hover:text-amber-900"
+            className="font-semibold underline hover:text-state-warning-ink"
           >
             /admin/courses
           </Link>
@@ -166,7 +166,7 @@ export default async function CurriculumsPage({ searchParams }: SearchParams) {
                       Chưa có giáo trình nào khớp bộ lọc.{" "}
                       <Link
                         href="/curriculums/new"
-                        className="text-[#7C3AED] hover:underline"
+                        className="text-primary hover:underline"
                       >
                         Tạo mới →
                       </Link>
@@ -179,7 +179,7 @@ export default async function CurriculumsPage({ searchParams }: SearchParams) {
                       <td className="px-4 py-3 text-sm text-gray-600">{c.course.name}</td>
                       <td className="px-4 py-3">
                         {c.isActive ? (
-                          <span className="inline-flex rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-semibold text-green-700">
+                          <span className="inline-flex rounded-full bg-state-success-soft px-2.5 py-0.5 text-xs font-semibold text-state-success-ink">
                             Đang sử dụng
                           </span>
                         ) : (

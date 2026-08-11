@@ -199,7 +199,7 @@ export default async function EditAssignmentPage({ params }: Props) {
         </Link>
         <h1 className="text-2xl font-bold text-neutral-900">
           Sửa bài tập:{" "}
-          <span className="font-bold text-orange-600">{assignment.title}</span>
+          <span className="font-bold text-primary">{assignment.title}</span>
         </h1>
       </div>
 
@@ -279,7 +279,7 @@ export default async function EditAssignmentPage({ params }: Props) {
       )}
 
       {assignment.status === "DRAFT" && (
-        <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+        <div className="rounded-lg border border-state-warning-soft bg-state-warning-soft p-4 text-sm text-state-warning-ink">
           <strong>DRAFT:</strong> Hệ thống chưa tạo bản nộp bài cho HS.
           Bấm <strong>Publish</strong> ở trên để mở cho lớp.
         </div>

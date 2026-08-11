@@ -92,11 +92,7 @@ export function KitListRow({ kit }: { kit: Row }) {
             type="button"
             onClick={handleTogglePublish}
             disabled={pending}
-            className={`inline-flex items-center gap-1 rounded-full px-2 py-1 text-xs font-medium transition disabled:opacity-50 ${
-              kit.isPublished
-                ? "bg-green-100 text-green-700 hover:bg-green-200"
-                : "bg-neutral-100 text-neutral-600 hover:bg-neutral-200"
-            }`}
+            className={`inline-flex items-center gap-1 rounded-full px-2 py-1 text-xs font-medium transition disabled:opacity-50 ${ kit.isPublished ? "bg-state-success-soft text-state-success-ink hover:bg-state-success-soft" : "bg-neutral-100 text-neutral-600 hover:bg-neutral-200" }`}
           >
             {kit.isPublished ? "Đã đăng" : "Nháp"}
           </button>
@@ -104,11 +100,7 @@ export function KitListRow({ kit }: { kit: Row }) {
             type="button"
             onClick={handleToggleAvailable}
             disabled={pending}
-            className={`inline-flex items-center gap-1 rounded-full px-2 py-1 text-xs font-medium transition disabled:opacity-50 ${
-              kit.isAvailable
-                ? "bg-blue-100 text-blue-700 hover:bg-blue-200"
-                : "bg-red-100 text-red-700 hover:bg-red-200"
-            }`}
+            className={`inline-flex items-center gap-1 rounded-full px-2 py-1 text-xs font-medium transition disabled:opacity-50 ${ kit.isAvailable ? "bg-state-info-soft text-state-info-ink hover:bg-state-info-soft" : "bg-state-danger-soft text-state-danger-ink hover:bg-state-danger-soft" }`}
           >
             {kit.isAvailable ? "Có sẵn" : "Hết hàng"}
           </button>
@@ -121,7 +113,7 @@ export function KitListRow({ kit }: { kit: Row }) {
               href={`/hoc-cu#${kit.slug}`}
               target="_blank"
               rel="noopener noreferrer"
-              className="rounded p-1.5 text-blue-600 hover:bg-blue-50"
+              className="rounded p-1.5 text-state-info-ink hover:bg-state-info-soft"
               title="Xem trên trang công khai"
             >
               <Eye className="h-4 w-4" />
@@ -129,7 +121,7 @@ export function KitListRow({ kit }: { kit: Row }) {
           )}
           <Link
             href={`/kits/${kit.id}/edit`}
-            className="rounded p-1.5 text-purple-600 hover:bg-purple-50"
+            className="rounded p-1.5 text-primary hover:bg-primary-soft"
             title="Sửa"
           >
             <Pencil className="h-4 w-4" />
@@ -138,7 +130,7 @@ export function KitListRow({ kit }: { kit: Row }) {
             type="button"
             onClick={handleDelete}
             disabled={pending}
-            className="rounded p-1.5 text-red-600 hover:bg-red-50 disabled:opacity-50"
+            className="rounded p-1.5 text-state-danger-ink hover:bg-state-danger-soft disabled:opacity-50"
             title="Xoá"
           >
             <Trash2 className="h-4 w-4" />
@@ -156,7 +148,7 @@ export function KitSourceLink({ url }: { url: string | null }) {
       href={url}
       target="_blank"
       rel="noopener noreferrer"
-      className="inline-flex items-center gap-1 text-xs text-blue-600 hover:underline"
+      className="inline-flex items-center gap-1 text-xs text-state-info-ink hover:underline"
     >
       <ExternalLink className="h-3 w-3" />
       Source

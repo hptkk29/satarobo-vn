@@ -148,7 +148,7 @@ export function GroupGrants({
               value={permissionKey}
               onChange={(e) => setPermissionKey(e.target.value)}
               disabled={pending}
-              className="mt-1 h-9 w-full rounded-md border border-neutral-300 bg-white px-2 text-sm focus:border-orange-400 focus:outline-none"
+              className="mt-1 h-9 w-full rounded-md border border-neutral-300 bg-white px-2 text-sm focus:border-primary focus:outline-none"
             >
               <option value="">— Chọn quyền —</option>
               {descriptors.map((d) => (
@@ -165,7 +165,7 @@ export function GroupGrants({
               value={effect}
               onChange={(e) => switchEffect(e.target.value as "ALLOW" | "DENY")}
               disabled={pending}
-              className="mt-1 h-9 w-full rounded-md border border-neutral-300 bg-white px-2 text-sm focus:border-orange-400 focus:outline-none"
+              className="mt-1 h-9 w-full rounded-md border border-neutral-300 bg-white px-2 text-sm focus:border-primary focus:outline-none"
             >
               <option value="DENY">DENY — chặn / che trường</option>
               <option value="ALLOW">ALLOW — cấp thêm quyền</option>
@@ -203,8 +203,8 @@ export function GroupGrants({
                       onClick={() => toggleSuggestedField(f)}
                       className={
                         fieldMask.includes(f)
-                          ? "rounded-full bg-orange-500 px-2 py-0.5 font-mono text-white"
-                          : "rounded-full border border-neutral-300 bg-white px-2 py-0.5 font-mono hover:border-orange-400"
+                          ? "rounded-full bg-primary px-2 py-0.5 font-mono text-white"
+                          : "rounded-full border border-neutral-300 bg-white px-2 py-0.5 font-mono hover:border-primary"
                       }
                     >
                       {f}
@@ -263,7 +263,7 @@ export function GroupGrants({
                     <span className="font-mono text-sm font-semibold">{g.permissionKey}</span>
                     <span className="ml-1.5 text-xs text-neutral-400">{g.module}</span>
                     {g.keyInactive && (
-                      <Badge variant="outline" className="ml-1.5 text-amber-600">
+                      <Badge variant="outline" className="ml-1.5 text-state-warning-ink">
                         key đã tắt
                       </Badge>
                     )}
@@ -297,8 +297,8 @@ export function GroupGrants({
                       disabled={pending}
                       className={
                         confirmId === g.id
-                          ? "inline-flex items-center gap-1 rounded-md bg-rose-600 px-2.5 py-1 text-xs font-semibold text-white disabled:opacity-50"
-                          : "inline-flex items-center gap-1 text-xs text-rose-600 hover:underline disabled:opacity-50"
+                          ? "inline-flex items-center gap-1 rounded-md bg-state-danger-ink px-2.5 py-1 text-xs font-semibold text-white disabled:opacity-50"
+                          : "inline-flex items-center gap-1 text-xs text-state-danger-ink hover:underline disabled:opacity-50"
                       }
                     >
                       <Trash2 className="h-3.5 w-3.5" />

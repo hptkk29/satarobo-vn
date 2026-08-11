@@ -422,7 +422,7 @@ export function Sidebar({
                         className={cn(
                           "flex items-center gap-3 px-6 py-2 text-sm font-medium transition-colors",
                           active
-                            ? "bg-orange-50 text-orange-700 border-l-2 border-orange-500"
+                            ? "bg-primary-soft text-primary border-l-2 border-primary"
                             : "text-neutral-600 hover:bg-neutral-50 hover:text-neutral-900",
                         )}
                       >
@@ -430,7 +430,7 @@ export function Sidebar({
                         <span className="min-w-0 flex-1 truncate">{item.label}</span>
                         {item.badge === "chat" && chatCount > 0 && (
                           <span
-                            className="inline-flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-rose-500 px-1 text-[10px] font-bold text-white"
+                            className="inline-flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-state-danger px-1 text-[10px] font-bold text-white"
                             aria-label={`${chatCount} tin chưa đọc`}
                           >
                             {chatCount > 9 ? "9+" : chatCount}

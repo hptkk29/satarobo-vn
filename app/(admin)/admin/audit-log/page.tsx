@@ -40,8 +40,8 @@ export default async function AuditLogPage() {
   return (
     <div>
       <div className="mb-6 flex items-start gap-3">
-        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-orange-50">
-          <ScrollText className="h-5 w-5 text-orange-600" />
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary-soft">
+          <ScrollText className="h-5 w-5 text-primary" />
         </div>
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Audit Log</h1>
@@ -54,7 +54,7 @@ export default async function AuditLogPage() {
           {canReadLegacy ? (
             <Link
               href="/audit-log/legacy"
-              className="mt-2 inline-block text-sm font-medium text-orange-600 hover:underline"
+              className="mt-2 inline-block text-sm font-medium text-primary hover:underline"
             >
               Xem lịch sử cũ (đọc-only) →
             </Link>

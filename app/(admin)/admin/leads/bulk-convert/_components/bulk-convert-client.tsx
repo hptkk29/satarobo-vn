@@ -43,7 +43,7 @@ type CenterInfo = { id: string; name: string; code: string | null }
 type RowResult = { ok: boolean; message?: string; warning?: string }
 
 const inputCls =
-  'w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm focus:border-orange-500 focus:outline-none focus:ring-1 focus:ring-orange-500'
+  'w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary'
 
 const fmtVnd = (n: number) => new Intl.NumberFormat('vi-VN').format(n) + 'đ'
 
@@ -365,7 +365,7 @@ export function BulkConvertClient({
         <button type="button" onClick={() => consentAllVisible(true)} disabled={running} className="rounded-md border border-gray-300 px-2.5 py-1 hover:bg-gray-50">
           Đồng ý ảnh: tick tất cả
         </button>
-        <button type="button" onClick={fillPaidFromImport} disabled={running} className="rounded-md border border-emerald-300 bg-emerald-50 px-2.5 py-1 font-medium text-emerald-800 hover:bg-emerald-100">
+        <button type="button" onClick={fillPaidFromImport} disabled={running} className="rounded-md border border-state-success bg-state-success-soft px-2.5 py-1 font-medium text-state-success-ink hover:bg-state-success-soft-hover">
           Điền &quot;đã đóng&quot; theo file Excel (lead đã tick)
         </button>
         <button type="button" onClick={fillPaidListPrice} disabled={running} className="rounded-md border border-gray-300 px-2.5 py-1 hover:bg-gray-50">
@@ -407,12 +407,12 @@ export function BulkConvertClient({
               const noChildren = lead.children.length === 0
               const disabled = running || Boolean(res?.ok) || noChildren
               return lead.children.length === 0 ? (
-                <tr key={lead.id} className="bg-amber-50/40">
+                <tr key={lead.id} className="bg-state-warning-soft/40">
                   <td className="px-3 py-2"></td>
                   <td className="px-3 py-2">
                     <LeadCell lead={lead} centerLabel={(lead.centerId && centerName.get(lead.centerId)) || '—'} />
                   </td>
-                  <td colSpan={5} className="px-3 py-2 text-xs text-amber-700">
+                  <td colSpan={5} className="px-3 py-2 text-xs text-state-warning-ink">
                     Lead không có học viên đính kèm — chốt riêng tại{' '}
                     <Link href={`/leads/${lead.id}/convert`} className="underline">
                       màn chuyển đổi
@@ -424,7 +424,7 @@ export function BulkConvertClient({
                 lead.children.map((ch, idx) => {
                   const options = classesFor(lead, ch)
                   return (
-                    <tr key={ch.id} className={res?.ok ? 'bg-green-50/50' : res ? 'bg-red-50/40' : undefined}>
+                    <tr key={ch.id} className={res?.ok ? 'bg-state-success-soft/50' : res ? 'bg-state-danger-soft/40' : undefined}>
                       {idx === 0 && (
                         <td className="px-3 py-2 align-top" rowSpan={rowSpan}>
                           <input
@@ -467,7 +467,7 @@ export function BulkConvertClient({
                           ))}
                         </select>
                         {options.length === 0 && (
-                          <div className="mt-0.5 text-xs text-red-600">
+                          <div className="mt-0.5 text-xs text-state-danger-ink">
                             Chưa có lớp mở cùng khoá tại cơ sở này — tạo lớp trước.
                           </div>
                         )}
@@ -484,7 +484,7 @@ export function BulkConvertClient({
                       {idx === 0 && (
                         <td className="px-3 py-2 align-top" rowSpan={rowSpan}>
                           {hasPayment.has(lead.id) ? (
-                            <span className="inline-flex rounded-full bg-blue-50 px-2 py-0.5 text-xs font-medium text-blue-700">
+                            <span className="inline-flex rounded-full bg-state-info-soft px-2 py-0.5 text-xs font-medium text-state-info-ink">
                               Đã có khoản ghi nhận
                             </span>
                           ) : (
@@ -519,11 +519,11 @@ export function BulkConvertClient({
                       {idx === 0 && (
                         <td className="px-3 py-2 align-top text-xs" rowSpan={rowSpan}>
                           {res?.ok && (
-                            <div className="text-green-700">
+                            <div className="text-state-success-ink">
                               ✓ Đã chốt{res.warning ? ` — ${res.warning}` : ''}
                             </div>
                           )}
-                          {res && !res.ok && <div className="text-red-600">✗ {res.message}</div>}
+                          {res && !res.ok && <div className="text-state-danger-ink">✗ {res.message}</div>}
                           {!res && lead.note && (
                             <div className="max-w-[240px] truncate text-gray-400" title={lead.note}>
                               {lead.note}
@@ -548,7 +548,7 @@ export function BulkConvertClient({
           {doneCount > 0 && (
             <>
               {' '}
-              · Đã chốt: <span className="font-semibold text-green-700">{doneCount}</span>
+              · Đã chốt: <span className="font-semibold text-state-success-ink">{doneCount}</span>
             </>
           )}
         </div>
@@ -561,7 +561,7 @@ export function BulkConvertClient({
           type="button"
           onClick={submit}
           disabled={running || readyLeads.length === 0}
-          className="ml-auto rounded-md bg-orange-600 px-4 py-2 text-sm font-semibold text-white hover:bg-orange-700 disabled:opacity-50"
+          className="ml-auto rounded-md bg-primary-dark px-4 py-2 text-sm font-semibold text-white hover:bg-primary-darker disabled:opacity-50"
         >
           {running ? 'Đang chốt…' : `Chốt ${readyLeads.length} lead`}
         </button>

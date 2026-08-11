@@ -196,13 +196,13 @@ export function ImportWordClient({
   return (
     <div className="space-y-5">
       {error && (
-        <div className="flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+        <div className="flex items-start gap-2 rounded-lg border border-state-danger-soft bg-state-danger-soft px-4 py-3 text-sm text-state-danger-ink">
           <AlertCircle className="mt-0.5 h-4 w-4 flex-shrink-0" />
           <span>{error}</span>
         </div>
       )}
       {done && (
-        <div className="flex items-start gap-2 rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-700">
+        <div className="flex items-start gap-2 rounded-lg border border-state-success-soft bg-state-success-soft px-4 py-3 text-sm text-state-success-ink">
           <CheckCircle2 className="mt-0.5 h-4 w-4 flex-shrink-0" />
           <span>{done}</span>
         </div>
@@ -210,7 +210,7 @@ export function ImportWordClient({
 
       {/* Upload */}
       <div className="rounded-xl border border-neutral-200 bg-white p-6">
-        <label className="flex cursor-pointer flex-col items-center gap-2 rounded-lg border-2 border-dashed border-neutral-300 p-8 text-center hover:border-[#7C3AED]">
+        <label className="flex cursor-pointer flex-col items-center gap-2 rounded-lg border-2 border-dashed border-neutral-300 p-8 text-center hover:border-primary">
           <Upload className="h-8 w-8 text-neutral-400" />
           <span className="text-sm font-medium text-neutral-700">
             {parsing ? "Đang đọc file..." : "Chọn file .docx để parse"}
@@ -235,10 +235,10 @@ export function ImportWordClient({
           <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-neutral-200 bg-white px-5 py-4">
             <div className="text-sm text-neutral-700">
               Tổng <strong>{questions.length}</strong> câu · hợp lệ{" "}
-              <strong className="text-green-700">{validCount}</strong> · lỗi{" "}
-              <strong className="text-red-600">{questions.length - validCount}</strong>
+              <strong className="text-state-success-ink">{validCount}</strong> · lỗi{" "}
+              <strong className="text-state-danger-ink">{questions.length - validCount}</strong>
               {largeFile && (
-                <span className="ml-2 text-amber-600">
+                <span className="ml-2 text-state-warning-ink">
                   (file lớn &gt;50 câu — xử lý đồng bộ; job nền là follow-up)
                 </span>
               )}
@@ -261,7 +261,7 @@ export function ImportWordClient({
                 type="button"
                 onClick={handleConfirm}
                 disabled={pending || validCount === 0}
-                className="inline-flex items-center gap-1.5 rounded-lg bg-[#7C3AED] px-4 py-2 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-50"
+                className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-50"
               >
                 {pending && <Loader2 className="h-4 w-4 animate-spin" />}
                 Xác nhận import ({validCount})
@@ -273,32 +273,30 @@ export function ImportWordClient({
             {questions.map((q, idx) => (
               <div
                 key={idx}
-                className={`rounded-xl border bg-white p-4 ${
-                  q.valid ? "border-neutral-200" : "border-red-300"
-                }`}
+                className={`rounded-xl border bg-white p-4 ${ q.valid ? "border-neutral-200" : "border-state-danger" }`}
               >
                 <div className="mb-2 flex items-center gap-2">
                   <span className="rounded bg-neutral-100 px-2 py-0.5 font-mono text-xs">
                     {q.questionCode || "(thiếu code)"}
                   </span>
                   {q.dbExists && (
-                    <span className="rounded-full bg-blue-100 px-2 py-0.5 text-xs text-blue-700">
+                    <span className="rounded-full bg-state-info-soft px-2 py-0.5 text-xs text-state-info-ink">
                       sẽ cập nhật
                     </span>
                   )}
                   {q.valid ? (
-                    <span className="inline-flex items-center gap-1 rounded-full bg-green-100 px-2 py-0.5 text-xs text-green-700">
+                    <span className="inline-flex items-center gap-1 rounded-full bg-state-success-soft px-2 py-0.5 text-xs text-state-success-ink">
                       <CheckCircle2 className="h-3 w-3" /> hợp lệ
                     </span>
                   ) : (
-                    <span className="inline-flex items-center gap-1 rounded-full bg-red-100 px-2 py-0.5 text-xs font-semibold text-red-700">
+                    <span className="inline-flex items-center gap-1 rounded-full bg-state-danger-soft px-2 py-0.5 text-xs font-semibold text-state-danger-ink">
                       <AlertCircle className="h-3 w-3" /> {q.errors.length} lỗi
                     </span>
                   )}
                 </div>
 
                 {!q.valid && (
-                  <ul className="mb-2 list-inside list-disc text-xs text-red-600">
+                  <ul className="mb-2 list-inside list-disc text-xs text-state-danger-ink">
                     {q.errors.map((e, i) => (
                       <li key={i}>{e}</li>
                     ))}

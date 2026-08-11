@@ -58,7 +58,7 @@ type MediaItem = {
 };
 
 const inputCls =
-  "w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-orange-400 focus:outline-none";
+  "w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary focus:outline-none";
 
 export function MediaClient({
   items,
@@ -226,19 +226,19 @@ export function MediaClient({
           </select>
 
           {blocked && (
-            <div className="rounded-lg border border-rose-200 bg-rose-50 p-2.5 text-xs text-rose-700">
+            <div className="rounded-lg border border-state-danger-soft bg-state-danger-soft p-2.5 text-xs text-state-danger-ink">
               Bạn không phụ trách lớp này nên không thể đăng ảnh.
             </div>
           )}
 
           {/* Banner cảnh báo HS chưa đồng ý dùng hình ảnh (consent). */}
           {classId && !blocked && nonConsent.length > 0 && (
-            <div className="flex gap-2 rounded-lg border border-amber-200 bg-amber-50 p-2.5 text-xs text-amber-800">
+            <div className="flex gap-2 rounded-lg border border-state-warning-soft bg-state-warning-soft p-2.5 text-xs text-state-warning-ink">
               <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
               <div>
                 <p className="font-semibold">Học viên CHƯA đồng ý dùng hình ảnh:</p>
                 <p className="mt-0.5">{nonConsent.map((s) => s.name).join(", ")}</p>
-                <p className="mt-1 text-amber-700">
+                <p className="mt-1 text-state-warning-ink">
                   Vui lòng làm mờ thủ công hoặc loại các em này khỏi khung hình. Không
                   thể gắn thẻ các em này.
                 </p>
@@ -302,7 +302,7 @@ export function MediaClient({
                     setWholeClass(e.target.checked);
                     if (e.target.checked) setTagged([]);
                   }}
-                  className="h-4 w-4 rounded border-gray-300 text-orange-500 focus:ring-orange-400"
+                  className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
                 />
                 Ảnh chung cả lớp (mọi phụ huynh trong lớp đều xem được)
               </label>
@@ -325,13 +325,7 @@ export function MediaClient({
                           onClick={() =>
                             setTagged((p) => (on ? p.filter((x) => x !== s.id) : [...p, s.id]))
                           }
-                          className={`rounded-full px-2.5 py-1 text-xs font-medium ${
-                            noConsent
-                              ? "cursor-not-allowed bg-gray-100 text-gray-300 line-through"
-                              : on
-                                ? "bg-orange-500 text-white"
-                                : "bg-gray-100 text-gray-600"
-                          }`}
+                          className={`rounded-full px-2.5 py-1 text-xs font-medium ${ noConsent ? "cursor-not-allowed bg-gray-100 text-gray-300 line-through" : on ? "bg-primary text-white" : "bg-gray-100 text-gray-600" }`}
                         >
                           {s.name}
                         </button>
@@ -347,7 +341,7 @@ export function MediaClient({
             type="button"
             onClick={submit}
             disabled={pending || uploading || blocked}
-            className="rounded-lg bg-orange-500 px-4 py-2 text-sm font-semibold text-white hover:bg-orange-600 disabled:opacity-60"
+            className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white hover:bg-primary-dark disabled:opacity-60"
           >
             Đăng ảnh
           </button>
@@ -362,7 +356,7 @@ export function MediaClient({
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value as "ACTIVE" | "DRAFT")}
-            className="rounded-lg border border-gray-300 px-2 py-1 text-xs focus:border-orange-400 focus:outline-none"
+            className="rounded-lg border border-gray-300 px-2 py-1 text-xs focus:border-primary focus:outline-none"
             aria-label="Lọc trạng thái ảnh"
           >
             <option value="ACTIVE">Chờ duyệt / Đã duyệt / Từ chối</option>
@@ -370,7 +364,7 @@ export function MediaClient({
           </select>
         </div>
         {statusFilter === "DRAFT" && visible.length > 0 && (
-          <p className="mb-2 rounded-lg bg-sky-50 p-2 text-xs text-sky-700">
+          <p className="mb-2 rounded-lg bg-state-info-soft p-2 text-xs text-state-info-ink">
             Ảnh trong kho do giáo viên tải lên, CHƯA gửi phụ huynh — chỉ xem. Khi giáo
             viên gửi, ảnh sẽ vào hàng chờ duyệt.
           </p>
@@ -392,15 +386,7 @@ export function MediaClient({
                   <div className="flex items-center justify-between">
                     <span className="text-[10px] text-gray-400">{m.className}</span>
                     <span
-                      className={`rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${
-                        m.status === "APPROVED"
-                          ? "bg-emerald-100 text-emerald-700"
-                          : m.status === "REJECTED"
-                            ? "bg-rose-100 text-rose-700"
-                            : m.status === "DRAFT"
-                              ? "bg-sky-100 text-sky-700"
-                              : "bg-amber-100 text-amber-700"
-                      }`}
+                      className={`rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${ m.status === "APPROVED" ? "bg-state-success-soft text-state-success-ink" : m.status === "REJECTED" ? "bg-state-danger-soft text-state-danger-ink" : m.status === "DRAFT" ? "bg-state-info-soft text-state-info-ink" : "bg-state-warning-soft text-state-warning-ink" }`}
                     >
                       {m.status === "APPROVED"
                         ? "Duyệt"
@@ -432,7 +418,7 @@ export function MediaClient({
                               router.refresh();
                             })
                           }
-                          className="text-emerald-600 hover:text-emerald-700"
+                          className="text-state-success-ink hover:text-state-success-ink"
                           aria-label="Duyệt"
                         >
                           <Check className="h-4 w-4" />
@@ -447,7 +433,7 @@ export function MediaClient({
                               router.refresh();
                             })
                           }
-                          className="text-amber-600 hover:text-amber-700"
+                          className="text-state-warning-ink hover:text-state-warning-ink"
                           aria-label="Từ chối"
                         >
                           <X className="h-4 w-4" />
@@ -456,7 +442,7 @@ export function MediaClient({
                       <button
                         type="button"
                         onClick={() => setDeleteTarget(m)}
-                        className="text-rose-600 hover:text-rose-700"
+                        className="text-state-danger-ink hover:text-state-danger-ink"
                         aria-label="Xoá"
                       >
                         <Trash2 className="h-4 w-4" />

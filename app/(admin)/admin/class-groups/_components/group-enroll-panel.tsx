@@ -58,7 +58,7 @@ export function GroupEnrollPanel({
   return (
     <section className="mb-6 rounded-xl border border-gray-200 bg-white p-5">
       <h2 className="mb-3 flex items-center gap-2 text-lg font-bold text-gray-900">
-        <GraduationCap className="h-5 w-5 text-[#7C3AED]" /> Gán cả nhóm vào lớp
+        <GraduationCap className="h-5 w-5 text-primary" /> Gán cả nhóm vào lớp
       </h2>
       <label className="mb-3 block text-sm">
         <span className="mb-1 block text-xs text-gray-500">Lớp của nhóm (chọn khoá để cả nhóm vào)</span>
@@ -82,7 +82,7 @@ export function GroupEnrollPanel({
         ))}
       </ul>
 
-      <button onClick={run} disabled={pending} className="rounded-lg bg-[#7C3AED] px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">
+      <button onClick={run} disabled={pending} className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">
         {pending ? "Đang ghi danh…" : `Ghi danh ${selected.size} HV vào lớp`}
       </button>
     </section>

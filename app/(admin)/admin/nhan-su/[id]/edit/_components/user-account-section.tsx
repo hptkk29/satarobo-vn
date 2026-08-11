@@ -108,8 +108,8 @@ export function UserAccountSection({
     <section className="mt-8 rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="flex items-start gap-3">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-orange-50">
-            <KeyRound className="h-5 w-5 text-orange-600" />
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary-soft">
+            <KeyRound className="h-5 w-5 text-primary" />
           </div>
           <div>
             <h2 className="text-base font-semibold text-gray-900">
@@ -149,7 +149,7 @@ export function UserAccountSection({
             </dt>
             <dd className="mt-1">
               {existingUser.isActive ? (
-                <span className="inline-flex items-center gap-1 rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-semibold text-green-700">
+                <span className="inline-flex items-center gap-1 rounded-full bg-state-success-soft px-2.5 py-0.5 text-xs font-semibold text-state-success-ink">
                   <CheckCircle2 className="h-3 w-3" />
                   Hoạt động
                 </span>
@@ -170,11 +170,7 @@ export function UserAccountSection({
               Lần đăng nhập cuối
             </dt>
             <dd
-              className={`mt-0.5 text-sm tabular-nums ${
-                existingUser.lastLoginAt
-                  ? "text-gray-900"
-                  : "italic text-gray-400"
-              }`}
+              className={`mt-0.5 text-sm tabular-nums ${ existingUser.lastLoginAt ? "text-gray-900" : "italic text-gray-400" }`}
             >
               {formatDateTime(existingUser.lastLoginAt)}
             </dd>
@@ -197,7 +193,7 @@ export function UserAccountSection({
               <dd className="mt-1">
                 <Link
                   href={`/users/${existingUser.id}/permissions`}
-                  className="inline-flex items-center gap-1 rounded-full bg-orange-100 px-2.5 py-0.5 text-xs font-semibold text-orange-700 hover:bg-orange-200"
+                  className="inline-flex items-center gap-1 rounded-full bg-primary-soft px-2.5 py-0.5 text-xs font-semibold text-primary hover:bg-primary-soft-hover"
                 >
                   <Shield className="h-3 w-3" />
                   {existingUser._count.permissionGrants} quyền override
@@ -210,8 +206,8 @@ export function UserAccountSection({
 
       {/* Idle warning */}
       {isIdle && existingUser.isActive && (
-        <div className="mt-4 flex items-start gap-2 rounded-lg border border-yellow-200 bg-yellow-50 p-3 text-sm text-yellow-900">
-          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-yellow-600" />
+        <div className="mt-4 flex items-start gap-2 rounded-lg border border-state-warning-soft bg-state-warning-soft p-3 text-sm text-state-warning-ink">
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-state-warning-ink" />
           <div>
             <strong>Tài khoản idle:</strong> {idleLabel} — cân nhắc vô hiệu
             hoá nếu không còn cần đăng nhập.
@@ -230,14 +226,14 @@ export function UserAccountSection({
         </Link>
         <Link
           href={`/users/${existingUser.id}/reset-password`}
-          className="inline-flex items-center gap-1.5 rounded-lg border border-orange-300 bg-white px-3 py-1.5 text-sm font-semibold text-orange-700 hover:bg-orange-50"
+          className="inline-flex items-center gap-1.5 rounded-lg border border-primary bg-white px-3 py-1.5 text-sm font-semibold text-primary hover:bg-primary-soft"
         >
           <KeyRound className="h-4 w-4" />
           Đổi mật khẩu
         </Link>
         <Link
           href={`/users/${existingUser.id}/permissions`}
-          className="inline-flex items-center gap-1.5 rounded-lg border border-purple-300 bg-white px-3 py-1.5 text-sm font-semibold text-purple-700 hover:bg-purple-50"
+          className="inline-flex items-center gap-1.5 rounded-lg border border-primary bg-white px-3 py-1.5 text-sm font-semibold text-primary hover:bg-primary-soft"
         >
           <Shield className="h-4 w-4" />
           Phân quyền

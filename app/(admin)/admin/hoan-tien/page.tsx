@@ -56,8 +56,8 @@ export default async function HoanTienPage({
   return (
     <div>
       <div className="mb-6 flex items-start gap-3">
-        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-orange-50">
-          <Undo2 className="h-5 w-5 text-orange-600" />
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary-soft">
+          <Undo2 className="h-5 w-5 text-primary" />
         </div>
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Hoàn tiền</h1>
@@ -78,7 +78,7 @@ export default async function HoanTienPage({
               className={
                 "rounded-md border px-3 py-1.5 text-sm font-medium transition-colors " +
                 (active
-                  ? "border-orange-500 bg-orange-50 text-orange-700"
+                  ? "border-primary bg-primary-soft text-primary"
                   : "border-neutral-200 bg-white text-neutral-600 hover:bg-neutral-50")
               }
             >

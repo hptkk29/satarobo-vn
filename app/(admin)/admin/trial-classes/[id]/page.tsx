@@ -20,10 +20,10 @@ const STATUS_LABEL: Record<string, string> = {
   CANCELLED: "Đã huỷ",
 };
 const STATUS_BADGE: Record<string, string> = {
-  OPEN: "bg-emerald-100 text-emerald-700",
-  RUNNING: "bg-blue-100 text-blue-700",
+  OPEN: "bg-state-success-soft text-state-success-ink",
+  RUNNING: "bg-state-info-soft text-state-info-ink",
   COMPLETED: "bg-gray-100 text-gray-600",
-  CANCELLED: "bg-rose-100 text-rose-700",
+  CANCELLED: "bg-state-danger-soft text-state-danger-ink",
 };
 
 interface Props {
@@ -150,9 +150,7 @@ export default async function TrialClassDetailPage({ params }: Props) {
           <div className="flex flex-wrap items-center gap-2">
             <h1 className="text-2xl font-bold text-gray-900">{cls.name}</h1>
             <span
-              className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${
-                STATUS_BADGE[cls.status] ?? "bg-gray-100 text-gray-600"
-              }`}
+              className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${ STATUS_BADGE[cls.status] ?? "bg-gray-100 text-gray-600" }`}
             >
               {STATUS_LABEL[cls.status] ?? cls.status}
             </span>
@@ -169,7 +167,7 @@ export default async function TrialClassDetailPage({ params }: Props) {
         <div className="text-right">
           <div className="text-xs uppercase tracking-wide text-gray-400">Sĩ số</div>
           <div
-            className={`text-lg font-bold ${full ? "text-rose-600" : "text-gray-900"}`}
+            className={`text-lg font-bold ${full ? "text-state-danger-ink" : "text-gray-900"}`}
           >
             {activeUsed}/{cls.capacity}
           </div>
@@ -177,7 +175,7 @@ export default async function TrialClassDetailPage({ params }: Props) {
       </div>
 
       {full && (
-        <div className="mb-6 flex items-center gap-2 rounded-xl border border-rose-300 bg-rose-50 p-3 text-sm text-rose-700">
+        <div className="mb-6 flex items-center gap-2 rounded-xl border border-state-danger bg-state-danger-soft p-3 text-sm text-state-danger-ink">
           <AlertTriangle className="h-4 w-4 shrink-0" />
           Lớp đã đủ/vượt sĩ số. Cần quyền &quot;vượt sĩ số&quot; (QL) để xếp thêm.
         </div>

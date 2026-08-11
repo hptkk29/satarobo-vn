@@ -50,11 +50,11 @@ export function AbsenceRow({ item }: { item: AbsenceItem }) {
             <span className="text-xs text-neutral-400">{item.studentCode}</span>
           )}
           {item.urgency === "URGENT" ? (
-            <span className="rounded-full bg-red-100 px-2 py-0.5 text-xs font-bold text-red-700">
+            <span className="rounded-full bg-state-danger-soft px-2 py-0.5 text-xs font-bold text-state-danger-ink">
               GẤP
             </span>
           ) : (
-            <span className="rounded-full bg-green-100 px-2 py-0.5 text-xs font-semibold text-green-700">
+            <span className="rounded-full bg-state-success-soft px-2 py-0.5 text-xs font-semibold text-state-success-ink">
               Đúng hạn
             </span>
           )}
@@ -83,7 +83,7 @@ export function AbsenceRow({ item }: { item: AbsenceItem }) {
       <p className="mt-1 whitespace-pre-wrap text-sm text-neutral-700">{item.reason}</p>
 
       {!item.hasSession ? (
-        <p className="mt-2 rounded-lg bg-amber-50 p-2 text-xs text-amber-700">
+        <p className="mt-2 rounded-lg bg-state-warning-soft p-2 text-xs text-state-warning-ink">
           Yêu cầu không gắn buổi cụ thể — xử lý ở trang Yêu cầu phụ huynh.
         </p>
       ) : (
@@ -94,14 +94,14 @@ export function AbsenceRow({ item }: { item: AbsenceItem }) {
             onChange={(e) => setResponse(e.target.value)}
             placeholder="Phản hồi cho phụ huynh (tuỳ chọn)"
             disabled={pending}
-            className="w-full rounded-lg border border-neutral-200 px-3 py-1.5 text-sm outline-none focus:border-[#7C3AED] disabled:opacity-50"
+            className="w-full rounded-lg border border-neutral-200 px-3 py-1.5 text-sm outline-none focus:border-primary disabled:opacity-50"
           />
           <div className="flex flex-wrap gap-2">
             <button
               type="button"
               onClick={() => handle("MAKEUP")}
               disabled={pending}
-              className="inline-flex items-center gap-1.5 rounded-lg bg-[#7C3AED] px-3 py-1.5 text-sm font-semibold text-white hover:bg-purple-700 disabled:opacity-50"
+              className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-sm font-semibold text-white hover:bg-primary-dark disabled:opacity-50"
             >
               <RotateCcw className="h-4 w-4" /> Xếp học bù
             </button>
@@ -117,7 +117,7 @@ export function AbsenceRow({ item }: { item: AbsenceItem }) {
               type="button"
               onClick={() => handle("ABSENT", false)}
               disabled={pending}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-red-300 bg-white px-3 py-1.5 text-sm font-semibold text-red-700 hover:bg-red-50 disabled:opacity-50"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-state-danger bg-white px-3 py-1.5 text-sm font-semibold text-state-danger-ink hover:bg-state-danger-soft disabled:opacity-50"
             >
               <X className="h-4 w-4" /> Đánh vắng (không phép)
             </button>

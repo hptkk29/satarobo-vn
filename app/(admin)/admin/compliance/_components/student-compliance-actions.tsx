@@ -51,7 +51,7 @@ export function StudentComplianceActions({ studentId }: { studentId: string }) {
         type="button"
         onClick={erase}
         disabled={pending}
-        className="rounded border border-rose-300 px-2 py-1 text-xs text-rose-700 disabled:opacity-50"
+        className="rounded border border-state-danger px-2 py-1 text-xs text-state-danger-ink disabled:opacity-50"
       >
         Xoá (ẩn danh)
       </button>

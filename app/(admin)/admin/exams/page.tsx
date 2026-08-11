@@ -11,8 +11,8 @@ export const dynamic = "force-dynamic";
 
 const STATUS_INFO: Record<ExamStatus, { label: string; color: string }> = {
   DRAFT: { label: "Đang soạn", color: "bg-gray-100 text-gray-700" },
-  PUBLISHED: { label: "Đã publish", color: "bg-green-100 text-green-700" },
-  CLOSED: { label: "Đóng", color: "bg-amber-100 text-amber-700" },
+  PUBLISHED: { label: "Đã publish", color: "bg-state-success-soft text-state-success-ink" },
+  CLOSED: { label: "Đóng", color: "bg-state-warning-soft text-state-warning-ink" },
   ARCHIVED: { label: "Lưu trữ", color: "bg-neutral-100 text-neutral-500" },
 };
 
@@ -99,7 +99,7 @@ export default async function ExamsPage({ searchParams }: SearchParams) {
       <div className="mb-6 flex items-start justify-between gap-4">
         <div>
           <h1 className="flex items-center gap-2 text-2xl font-bold text-gray-900">
-            <FileText className="h-6 w-6 text-[#7C3AED]" />
+            <FileText className="h-6 w-6 text-primary" />
             Đề thi
           </h1>
           <p className="mt-1 text-sm text-gray-500">
@@ -109,14 +109,14 @@ export default async function ExamsPage({ searchParams }: SearchParams) {
         <div className="flex items-center gap-2">
           <Link
             href="/exams/import-word"
-            className="inline-flex items-center gap-1.5 rounded-lg border border-[#7C3AED] px-4 py-2 text-sm font-semibold text-[#7C3AED] hover:bg-[#7C3AED]/5"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-primary px-4 py-2 text-sm font-semibold text-primary hover:bg-primary-soft"
           >
             <FileText className="h-4 w-4" />
             Import Word
           </Link>
           <Link
             href="/exams/new"
-            className="inline-flex items-center gap-1.5 rounded-lg bg-[#7C3AED] px-4 py-2 text-sm font-semibold text-white shadow-sm hover:opacity-90"
+            className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white shadow-sm hover:opacity-90"
           >
             <Plus className="h-4 w-4" />
             Tạo đề mới
@@ -132,12 +132,12 @@ export default async function ExamsPage({ searchParams }: SearchParams) {
           name="q"
           defaultValue={q}
           placeholder="Tìm tiêu đề / mã đề..."
-          className="lg:col-span-2 rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-[#7C3AED] focus:outline-none focus:ring-2 focus:ring-[#7C3AED]/20"
+          className="lg:col-span-2 rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
         />
         <select
           name="status"
           defaultValue={statusFilter ?? ""}
-          className="rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-[#7C3AED] focus:outline-none"
+          className="rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:outline-none"
         >
           <option value="">Mọi trạng thái</option>
           {Object.entries(STATUS_INFO).map(([v, { label }]) => (
@@ -149,7 +149,7 @@ export default async function ExamsPage({ searchParams }: SearchParams) {
         <select
           name="classId"
           defaultValue={classFilter ?? ""}
-          className="rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-[#7C3AED] focus:outline-none"
+          className="rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:outline-none"
         >
           <option value="">Mọi lớp</option>
           {classes.map((c) => (
@@ -161,7 +161,7 @@ export default async function ExamsPage({ searchParams }: SearchParams) {
         </select>
         <button
           type="submit"
-          className="rounded-lg bg-[#7C3AED] px-4 py-2 text-sm font-semibold text-white hover:opacity-90 sm:col-span-2 lg:col-span-4"
+          className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white hover:opacity-90 sm:col-span-2 lg:col-span-4"
         >
           Áp dụng bộ lọc
         </button>
@@ -203,7 +203,7 @@ export default async function ExamsPage({ searchParams }: SearchParams) {
                     className="px-4 py-12 text-center text-sm text-gray-400"
                   >
                     Chưa có đề thi nào khớp bộ lọc.{" "}
-                    <Link href="/exams/new" className="text-[#7C3AED] hover:underline">
+                    <Link href="/exams/new" className="text-primary hover:underline">
                       Tạo mới →
                     </Link>
                   </td>
@@ -261,7 +261,7 @@ export default async function ExamsPage({ searchParams }: SearchParams) {
                           </Link>
                           <Link
                             href={`/exams/${e.id}/attempts`}
-                            className="rounded-md border border-purple-200 px-2.5 py-1 text-xs font-semibold text-purple-700 hover:bg-purple-50"
+                            className="rounded-md border border-primary-soft px-2.5 py-1 text-xs font-semibold text-primary hover:bg-primary-soft"
                           >
                             Bài làm
                           </Link>

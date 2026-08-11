@@ -54,7 +54,7 @@ export default async function UserGroupsPage() {
     <div>
       <div className="mb-6">
         <h1 className="flex items-center gap-2 text-3xl font-black text-neutral-900">
-          <UsersRound className="h-7 w-7 text-orange-500" />
+          <UsersRound className="h-7 w-7 text-primary" />
           Nhóm người dùng
         </h1>
         <p className="mt-1 text-sm text-neutral-500">

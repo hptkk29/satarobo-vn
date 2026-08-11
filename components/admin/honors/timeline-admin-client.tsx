@@ -108,7 +108,7 @@ export function TimelineAdminClient({ items, canDelete }: Props) {
           type="button"
           onClick={startNew}
           disabled={editingId !== null}
-          className="inline-flex items-center gap-2 rounded-lg bg-[#7C3AED] px-4 py-2 text-sm font-bold text-white hover:opacity-90 disabled:opacity-50"
+          className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-bold text-white hover:opacity-90 disabled:opacity-50"
         >
           <Plus className="h-4 w-4" />
           Thêm mốc mới
@@ -149,7 +149,7 @@ export function TimelineAdminClient({ items, canDelete }: Props) {
             >
               <div className="flex items-start justify-between gap-3">
                 <div className="flex-1">
-                  <p className="text-xs font-semibold uppercase tracking-wider text-orange-600">
+                  <p className="text-xs font-semibold uppercase tracking-wider text-primary">
                     {new Date(item.occurredAt).toLocaleDateString("vi-VN", {
                       year: "numeric",
                       month: "long",
@@ -166,7 +166,7 @@ export function TimelineAdminClient({ items, canDelete }: Props) {
                     type="button"
                     onClick={() => startEdit(item)}
                     disabled={editingId !== null}
-                    className="rounded p-1.5 text-blue-600 hover:bg-blue-50 disabled:opacity-50"
+                    className="rounded p-1.5 text-state-info-ink hover:bg-state-info-soft disabled:opacity-50"
                     title="Sửa"
                   >
                     <Edit2 className="h-4 w-4" />
@@ -176,7 +176,7 @@ export function TimelineAdminClient({ items, canDelete }: Props) {
                       type="button"
                       onClick={() => handleDelete(item.id)}
                       disabled={isPending || editingId !== null}
-                      className="rounded p-1.5 text-red-500 hover:bg-red-50 disabled:opacity-50"
+                      className="rounded p-1.5 text-state-danger-ink hover:bg-state-danger-soft disabled:opacity-50"
                       title="Xoá"
                     >
                       <Trash2 className="h-4 w-4" />
@@ -206,7 +206,7 @@ function TimelineEditCard({
   isPending: boolean;
 }) {
   return (
-    <div className="rounded-lg border-2 border-orange-300 bg-orange-50 p-4">
+    <div className="rounded-lg border-2 border-primary bg-primary-soft p-4">
       <div className="grid gap-3 sm:grid-cols-3">
         <div>
           <label className="mb-1 block text-xs font-semibold">Ngày *</label>
@@ -263,7 +263,7 @@ function TimelineEditCard({
             type="button"
             onClick={onSave}
             disabled={isPending}
-            className="inline-flex items-center gap-1 rounded bg-[#7C3AED] px-3 py-1.5 text-sm font-bold text-white hover:opacity-90 disabled:opacity-50"
+            className="inline-flex items-center gap-1 rounded bg-primary px-3 py-1.5 text-sm font-bold text-white hover:opacity-90 disabled:opacity-50"
           >
             <Check className="h-3.5 w-3.5" /> Lưu
           </button>

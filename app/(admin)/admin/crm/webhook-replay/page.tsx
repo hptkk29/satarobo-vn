@@ -25,7 +25,7 @@ export default async function WebhookReplayPage() {
   return (
     <div>
       <h1 className="mb-6 flex items-center gap-2 text-3xl font-black text-neutral-900">
-        <RefreshCw className="h-7 w-7 text-orange-500" />
+        <RefreshCw className="h-7 w-7 text-primary" />
         Webhook lỗi — Replay
       </h1>
       <div className="rounded-lg border">
@@ -52,7 +52,7 @@ export default async function WebhookReplayPage() {
                   <TableCell className="font-mono">{d.source}</TableCell>
                   <TableCell className="font-mono text-xs">{d.externalId ?? "—"}</TableCell>
                   <TableCell className="text-sm text-neutral-500">{d.receivedAt.toISOString().slice(0, 16)}</TableCell>
-                  <TableCell className="max-w-xs truncate text-xs text-red-600">{d.errorMessage ?? ""}</TableCell>
+                  <TableCell className="max-w-xs truncate text-xs text-state-danger-ink">{d.errorMessage ?? ""}</TableCell>
                   <TableCell className="text-right">
                     <ReplayButton deliveryId={d.id} />
                   </TableCell>

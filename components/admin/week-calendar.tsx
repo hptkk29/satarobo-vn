@@ -48,13 +48,13 @@ export function WeekCalendar({ sessions, weekStart, weekEnd }: WeekCalendarProps
               <div
                 className={cn(
                   "flex items-baseline gap-2 mb-2 pb-1 border-b",
-                  isToday && "border-orange-300",
+                  isToday && "border-primary",
                 )}
               >
                 <h3
                   className={cn(
                     "font-semibold text-sm uppercase",
-                    isToday && "text-orange-600",
+                    isToday && "text-primary",
                   )}
                 >
                   {format(day, "EEEE", { locale: vi })}
@@ -63,7 +63,7 @@ export function WeekCalendar({ sessions, weekStart, weekEnd }: WeekCalendarProps
                   {format(day, "dd/MM/yyyy")}
                 </span>
                 {isToday && (
-                  <span className="text-xs px-1.5 py-0.5 bg-orange-100 text-orange-700 rounded">
+                  <span className="text-xs px-1.5 py-0.5 bg-primary-soft text-primary rounded">
                     Hôm nay
                   </span>
                 )}
@@ -93,13 +93,13 @@ export function WeekCalendar({ sessions, weekStart, weekEnd }: WeekCalendarProps
               <div
                 className={cn(
                   "text-center pb-2 mb-2 border-b-2",
-                  isToday ? "border-orange-400" : "border-gray-200",
+                  isToday ? "border-primary" : "border-gray-200",
                 )}
               >
                 <div
                   className={cn(
                     "text-xs uppercase font-semibold",
-                    isToday && "text-orange-600",
+                    isToday && "text-primary",
                   )}
                 >
                   {format(day, "EEE", { locale: vi })}
@@ -107,7 +107,7 @@ export function WeekCalendar({ sessions, weekStart, weekEnd }: WeekCalendarProps
                 <div
                   className={cn(
                     "text-lg font-bold",
-                    isToday && "text-orange-600",
+                    isToday && "text-primary",
                   )}
                 >
                   {format(day, "dd/MM")}
@@ -137,7 +137,7 @@ function SessionCard({
   compact?: boolean;
 }) {
   const inner = (
-    <div className="border border-blue-200 bg-blue-50 rounded-lg p-2 text-xs hover:border-blue-300 hover:shadow-sm transition">
+    <div className="border border-state-info-soft bg-state-info-soft rounded-lg p-2 text-xs hover:border-state-info hover:shadow-sm transition">
       <div className="font-semibold text-sm leading-tight text-gray-900">
         {session.className}
       </div>
@@ -159,7 +159,7 @@ function SessionCard({
         </div>
       )}
       {typeof session.attendanceCount === "number" && session.attendanceCount > 0 && (
-        <div className="mt-1 text-[10px] text-blue-700">
+        <div className="mt-1 text-[10px] text-state-info-ink">
           {session.attendanceCount} HV đã điểm danh
         </div>
       )}

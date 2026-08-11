@@ -12,8 +12,8 @@ export const dynamic = "force-dynamic";
 
 const STATUS_INFO: Record<AssignmentStatus, { label: string; color: string }> = {
   DRAFT: { label: "Đang soạn", color: "bg-gray-100 text-gray-700" },
-  PUBLISHED: { label: "Đã giao", color: "bg-green-100 text-green-700" },
-  CLOSED: { label: "Đã đóng", color: "bg-amber-100 text-amber-700" },
+  PUBLISHED: { label: "Đã giao", color: "bg-state-success-soft text-state-success-ink" },
+  CLOSED: { label: "Đã đóng", color: "bg-state-warning-soft text-state-warning-ink" },
   ARCHIVED: { label: "Lưu trữ", color: "bg-neutral-100 text-neutral-500" },
 };
 
@@ -120,7 +120,7 @@ export default async function AssignmentsPage({ searchParams }: SearchParams) {
       <div className="mb-6 flex items-start justify-between gap-4">
         <div>
           <h1 className="flex items-center gap-2 text-2xl font-bold text-gray-900">
-            <ClipboardList className="h-6 w-6 text-[#7C3AED]" />
+            <ClipboardList className="h-6 w-6 text-primary" />
             Bài tập
           </h1>
           <p className="mt-1 text-sm text-gray-500">
@@ -133,7 +133,7 @@ export default async function AssignmentsPage({ searchParams }: SearchParams) {
           {canCreateAssignment && (
             <Link
               href="/assignments/templates"
-              className="inline-flex items-center gap-1.5 rounded-lg border border-purple-200 bg-white px-4 py-2 text-sm font-semibold text-purple-700 hover:bg-purple-50"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-primary-soft bg-white px-4 py-2 text-sm font-semibold text-primary hover:bg-primary-soft"
             >
               <FileStack className="h-4 w-4" />
               Mẫu bài tập
@@ -141,7 +141,7 @@ export default async function AssignmentsPage({ searchParams }: SearchParams) {
           )}
           <Link
             href="/assignments/new"
-            className="inline-flex items-center gap-1.5 rounded-lg bg-[#7C3AED] px-4 py-2 text-sm font-semibold text-white shadow-sm hover:opacity-90"
+            className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white shadow-sm hover:opacity-90"
           >
             <Plus className="h-4 w-4" />
             Tạo bài tập mới
@@ -157,12 +157,12 @@ export default async function AssignmentsPage({ searchParams }: SearchParams) {
           name="q"
           defaultValue={q}
           placeholder="Tìm tiêu đề..."
-          className="lg:col-span-2 rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-[#7C3AED] focus:outline-none focus:ring-2 focus:ring-[#7C3AED]/20"
+          className="lg:col-span-2 rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
         />
         <select
           name="status"
           defaultValue={statusFilter ?? ""}
-          className="rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-[#7C3AED] focus:outline-none"
+          className="rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:outline-none"
         >
           <option value="">Mọi trạng thái</option>
           {Object.entries(STATUS_INFO).map(([v, { label }]) => (
@@ -174,7 +174,7 @@ export default async function AssignmentsPage({ searchParams }: SearchParams) {
         <select
           name="classId"
           defaultValue={classFilter ?? ""}
-          className="rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-[#7C3AED] focus:outline-none"
+          className="rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:outline-none"
         >
           <option value="">Mọi lớp</option>
           {classes.map((c) => (
@@ -186,7 +186,7 @@ export default async function AssignmentsPage({ searchParams }: SearchParams) {
         </select>
         <button
           type="submit"
-          className="rounded-lg bg-[#7C3AED] px-4 py-2 text-sm font-semibold text-white hover:opacity-90 sm:col-span-2 lg:col-span-4"
+          className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white hover:opacity-90 sm:col-span-2 lg:col-span-4"
         >
           Áp dụng bộ lọc
         </button>
@@ -230,7 +230,7 @@ export default async function AssignmentsPage({ searchParams }: SearchParams) {
                     Chưa có bài tập nào khớp bộ lọc.{" "}
                     <Link
                       href="/assignments/new"
-                      className="text-[#7C3AED] hover:underline"
+                      className="text-primary hover:underline"
                     >
                       Tạo mới →
                     </Link>
@@ -287,7 +287,7 @@ export default async function AssignmentsPage({ searchParams }: SearchParams) {
                             </span>
                             <span className="text-gray-400">/{s.total}</span>
                             {s.graded > 0 && (
-                              <span className="ml-1 text-green-600">
+                              <span className="ml-1 text-state-success-ink">
                                 ({s.graded}✓)
                               </span>
                             )}
@@ -299,7 +299,7 @@ export default async function AssignmentsPage({ searchParams }: SearchParams) {
                       <td className="px-3 py-3 text-right">
                         <Link
                           href={`/assignments/${a.id}/edit`}
-                          className="inline-flex items-center gap-1 rounded-md border border-purple-200 px-2.5 py-1 text-xs font-semibold text-purple-700 hover:bg-purple-50"
+                          className="inline-flex items-center gap-1 rounded-md border border-primary-soft px-2.5 py-1 text-xs font-semibold text-primary hover:bg-primary-soft"
                         >
                           Mở
                         </Link>

@@ -65,7 +65,7 @@ export function SpecsEditor({ value, onChange, name }: SpecsEditorProps) {
               onChange={(e) => updateKey(idx, e.target.value)}
               placeholder="key (vd: pieces)"
               list={`spec-keys-${idx}`}
-              className="w-32 min-w-0 rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm font-mono outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/20"
+              className="w-32 min-w-0 rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm font-mono outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
             />
             <datalist id={`spec-keys-${idx}`}>
               {COMMON_KEYS.map((k) => (
@@ -77,12 +77,12 @@ export function SpecsEditor({ value, onChange, name }: SpecsEditorProps) {
               value={row.value}
               onChange={(e) => updateValue(idx, e.target.value)}
               placeholder="value (vd: 320-378 PCS)"
-              className="flex-1 rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/20"
+              className="flex-1 rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
             />
             <button
               type="button"
               onClick={() => remove(idx)}
-              className="rounded-lg p-2 text-red-600 hover:bg-red-50"
+              className="rounded-lg p-2 text-state-danger-ink hover:bg-state-danger-soft"
               aria-label="Xoá spec"
             >
               <X className="h-4 w-4" />
@@ -95,7 +95,7 @@ export function SpecsEditor({ value, onChange, name }: SpecsEditorProps) {
         <button
           type="button"
           onClick={() => add()}
-          className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1 text-sm font-semibold text-orange-600 hover:bg-orange-50"
+          className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1 text-sm font-semibold text-primary hover:bg-primary-soft"
         >
           <Plus className="h-4 w-4" />
           Thêm spec
@@ -106,7 +106,7 @@ export function SpecsEditor({ value, onChange, name }: SpecsEditorProps) {
             key={k}
             type="button"
             onClick={() => add(k)}
-            className="rounded-full bg-neutral-100 px-2 py-0.5 text-xs font-mono text-neutral-700 hover:bg-orange-100 hover:text-orange-700"
+            className="rounded-full bg-neutral-100 px-2 py-0.5 text-xs font-mono text-neutral-700 hover:bg-primary-soft hover:text-primary"
           >
             +{k}
           </button>

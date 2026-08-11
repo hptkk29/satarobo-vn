@@ -22,7 +22,7 @@ export default async function EditNewsPage({ params }: Props) {
     <div>
       <h1 className="mb-6 text-3xl font-black text-neutral-900">
         Sửa bài viết:{" "}
-        <span className="font-bold text-orange-600">{news.title}</span>
+        <span className="font-bold text-primary">{news.title}</span>
       </h1>
       <NewsForm
         news={{

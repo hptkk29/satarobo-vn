@@ -222,7 +222,7 @@ export default async function AttendanceAdminPage({ searchParams }: SearchParams
     <div>
       <div className="mb-6">
         <h1 className="flex items-center gap-2 text-3xl font-black text-neutral-900">
-          <ClipboardCheck className="h-7 w-7 text-orange-500" />
+          <ClipboardCheck className="h-7 w-7 text-primary" />
           Điểm danh
         </h1>
         <p className="mt-1 text-neutral-600">
@@ -251,10 +251,10 @@ export default async function AttendanceAdminPage({ searchParams }: SearchParams
             Chọn một buổi học từ dropdown phía trên để bắt đầu điểm danh.
           </p>
           {sessions.length === 0 && (
-            <p className="mt-2 text-sm text-amber-600">
+            <p className="mt-2 text-sm text-state-warning-ink">
               <AlertCircle className="mr-1 inline h-4 w-4" />
               Chưa có buổi học nào.{" "}
-              <Link href="/sessions/new" className="text-orange-600 hover:underline">
+              <Link href="/sessions/new" className="text-primary hover:underline">
                 Tạo buổi học →
               </Link>
             </p>
@@ -264,8 +264,8 @@ export default async function AttendanceAdminPage({ searchParams }: SearchParams
 
       {selectedSession && (
         <div className="space-y-4">
-          <div className="rounded-xl border border-neutral-200 bg-gradient-to-br from-orange-50 to-purple-50 p-5">
-            <div className="text-xs font-bold uppercase tracking-wider text-orange-600">
+          <div className="rounded-xl border border-neutral-200 bg-primary-soft p-5">
+            <div className="text-xs font-bold uppercase tracking-wider text-primary">
               Buổi học đang điểm danh
             </div>
             <div className="mt-1 text-2xl font-black text-neutral-900">

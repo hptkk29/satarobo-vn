@@ -13,26 +13,26 @@ const TYPE_INFO: Record<
   StockMovementType,
   { label: string; color: string; sign: "+" | "-" }
 > = {
-  RECEIPT: { label: "Nhập", color: "bg-green-100 text-green-700", sign: "+" },
-  ISSUE: { label: "Xuất", color: "bg-red-100 text-red-700", sign: "-" },
+  RECEIPT: { label: "Nhập", color: "bg-state-success-soft text-state-success-ink", sign: "+" },
+  ISSUE: { label: "Xuất", color: "bg-state-danger-soft text-state-danger-ink", sign: "-" },
   TRANSFER_OUT: {
     label: "Chuyển đi",
-    color: "bg-amber-100 text-amber-700",
+    color: "bg-state-warning-soft text-state-warning-ink",
     sign: "-",
   },
   TRANSFER_IN: {
     label: "Nhận về",
-    color: "bg-blue-100 text-blue-700",
+    color: "bg-state-info-soft text-state-info-ink",
     sign: "+",
   },
   ADJUSTMENT_INCREASE: {
     label: "Kiểm kê thừa",
-    color: "bg-purple-100 text-purple-700",
+    color: "bg-primary-soft text-primary",
     sign: "+",
   },
   ADJUSTMENT_DECREASE: {
     label: "Kiểm kê thiếu",
-    color: "bg-purple-100 text-purple-700",
+    color: "bg-primary-soft text-primary",
     sign: "-",
   },
 };
@@ -150,7 +150,7 @@ export default async function MovementsPage({ searchParams }: SearchParams) {
           <ChevronLeft className="h-4 w-4" /> Quay lại kho
         </Link>
         <h1 className="flex items-center gap-2 text-2xl font-bold text-gray-900">
-          <History className="h-6 w-6 text-[#7C3AED]" />
+          <History className="h-6 w-6 text-primary" />
           Lịch sử giao dịch kho
         </h1>
         <p className="mt-1 text-sm text-gray-500">
@@ -167,7 +167,7 @@ export default async function MovementsPage({ searchParams }: SearchParams) {
         <select
           name="type"
           defaultValue={typeFilter ?? ""}
-          className="rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-[#7C3AED] focus:outline-none"
+          className="rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:outline-none"
         >
           <option value="">Mọi loại</option>
           {Object.entries(TYPE_INFO).map(([v, { label }]) => (
@@ -179,7 +179,7 @@ export default async function MovementsPage({ searchParams }: SearchParams) {
         <select
           name="itemId"
           defaultValue={itemFilter ?? ""}
-          className="lg:col-span-2 rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-[#7C3AED] focus:outline-none"
+          className="lg:col-span-2 rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:outline-none"
         >
           <option value="">Mọi mặt hàng</option>
           {items.map((i) => (
@@ -191,7 +191,7 @@ export default async function MovementsPage({ searchParams }: SearchParams) {
         <select
           name="centerId"
           defaultValue={centerFilter ?? ""}
-          className="rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-[#7C3AED] focus:outline-none"
+          className="rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:outline-none"
         >
           <option value="">Mọi cơ sở</option>
           {centers.map((c) => (
@@ -205,18 +205,18 @@ export default async function MovementsPage({ searchParams }: SearchParams) {
           name="from"
           defaultValue={sp.from ?? ""}
           placeholder="Từ"
-          className="rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-[#7C3AED] focus:outline-none"
+          className="rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:outline-none"
         />
         <input
           type="date"
           name="to"
           defaultValue={sp.to ?? ""}
           placeholder="Đến"
-          className="rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-[#7C3AED] focus:outline-none"
+          className="rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:outline-none"
         />
         <button
           type="submit"
-          className="rounded-lg bg-[#7C3AED] px-4 py-2 text-sm font-semibold text-white hover:opacity-90 sm:col-span-2 lg:col-span-6"
+          className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white hover:opacity-90 sm:col-span-2 lg:col-span-6"
         >
           Áp dụng bộ lọc
         </button>
@@ -297,9 +297,7 @@ export default async function MovementsPage({ searchParams }: SearchParams) {
                         {m.center.name}
                       </td>
                       <td
-                        className={`px-3 py-3 text-right text-sm tabular-nums font-bold ${
-                          info.sign === "+" ? "text-green-700" : "text-red-700"
-                        }`}
+                        className={`px-3 py-3 text-right text-sm tabular-nums font-bold ${ info.sign === "+" ? "text-state-success-ink" : "text-state-danger-ink" }`}
                       >
                         {info.sign}
                         {m.quantity} {m.item.unit}

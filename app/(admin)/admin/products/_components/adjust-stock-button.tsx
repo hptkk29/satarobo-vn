@@ -139,7 +139,7 @@ export function AdjustStockButton({
               <p className="text-xs text-gray-500">
                 Tồn kho sau thay đổi: {newStock}
                 {wouldGoNegative && (
-                  <span className="ml-2 font-bold text-red-600">
+                  <span className="ml-2 font-bold text-state-danger-ink">
                     ⚠️ Không thể âm
                   </span>
                 )}

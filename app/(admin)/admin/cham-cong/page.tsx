@@ -26,9 +26,9 @@ interface Props {
 }
 
 const TAG_TONE: Record<AttendanceTag["tone"], string> = {
-  ok: "bg-emerald-100 text-emerald-700",
-  warn: "bg-amber-100 text-amber-700",
-  danger: "bg-rose-100 text-rose-700",
+  ok: "bg-state-success-soft text-state-success-ink",
+  warn: "bg-state-warning-soft text-state-warning-ink",
+  danger: "bg-state-danger-soft text-state-danger-ink",
 };
 
 export default async function ChamCongPage({ searchParams }: Props) {
@@ -130,7 +130,7 @@ export default async function ChamCongPage({ searchParams }: Props) {
         </div>
         <Link
           href="/cham-cong/man-hinh"
-          className="inline-flex items-center gap-1.5 rounded-lg bg-[#7C3AED] px-4 py-2 text-sm font-semibold text-white hover:bg-purple-800"
+          className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white hover:bg-primary-dark"
         >
           <Monitor className="h-4 w-4" /> Mở màn hình QR
         </Link>
@@ -139,7 +139,7 @@ export default async function ChamCongPage({ searchParams }: Props) {
       <div className="mb-4 flex items-center gap-3">
         <DateNavInput value={dateStr} />
         {missingOut > 0 && (
-          <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-700">
+          <span className="inline-flex items-center gap-1 rounded-full bg-state-warning-soft px-3 py-1 text-xs font-semibold text-state-warning-ink">
             <AlertTriangle className="h-3.5 w-3.5" /> {missingOut} người chưa check-out
           </span>
         )}

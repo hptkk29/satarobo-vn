@@ -97,7 +97,7 @@ export default async function UserGroupDetailPage({ params }: Props) {
       <div className="mb-6 flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="flex items-center gap-2 text-3xl font-black text-neutral-900">
-            <UsersRound className="h-7 w-7 text-orange-500" />
+            <UsersRound className="h-7 w-7 text-primary" />
             {group.name}
           </h1>
           <p className="mt-1 text-sm text-neutral-500">

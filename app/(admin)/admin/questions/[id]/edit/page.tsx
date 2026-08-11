@@ -89,7 +89,7 @@ export default async function EditQuestionPage({ params }: Props) {
         </Link>
         <h1 className="text-2xl font-bold text-neutral-900">
           Sửa câu hỏi:{" "}
-          <span className="font-bold text-orange-600">
+          <span className="font-bold text-primary">
             {question.text.slice(0, 80)}
             {question.text.length > 80 ? "…" : ""}
           </span>

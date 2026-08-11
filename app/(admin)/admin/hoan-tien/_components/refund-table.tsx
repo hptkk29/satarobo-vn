@@ -35,10 +35,10 @@ const TRIGGER_LABEL: Record<RefundRow["trigger"], string> = {
 };
 
 const STATUS_BADGE: Record<RefundRow["status"], string> = {
-  PENDING: "bg-yellow-100 text-yellow-800 hover:bg-yellow-100",
-  APPROVED: "bg-green-100 text-green-800 hover:bg-green-100",
-  REJECTED: "bg-red-100 text-red-800 hover:bg-red-100",
-  PAID: "bg-blue-100 text-blue-800 hover:bg-blue-100",
+  PENDING: "bg-state-warning-soft text-state-warning-ink hover:bg-state-warning-soft",
+  APPROVED: "bg-state-success-soft text-state-success-ink hover:bg-state-success-soft",
+  REJECTED: "bg-state-danger-soft text-state-danger-ink hover:bg-state-danger-soft",
+  PAID: "bg-state-info-soft text-state-info-ink hover:bg-state-info-soft",
 };
 const STATUS_LABEL: Record<RefundRow["status"], string> = {
   PENDING: "Chờ duyệt",

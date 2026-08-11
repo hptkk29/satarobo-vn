@@ -13,8 +13,8 @@ const STATUS_INFO: Record<
   InventoryAuditStatus,
   { label: string; color: string }
 > = {
-  DRAFT: { label: "Đang soạn", color: "bg-amber-100 text-amber-700" },
-  COMPLETED: { label: "Hoàn thành", color: "bg-green-100 text-green-700" },
+  DRAFT: { label: "Đang soạn", color: "bg-state-warning-soft text-state-warning-ink" },
+  COMPLETED: { label: "Hoàn thành", color: "bg-state-success-soft text-state-success-ink" },
   CANCELLED: { label: "Đã huỷ", color: "bg-neutral-100 text-neutral-500" },
 };
 
@@ -79,7 +79,7 @@ export default async function AuditDetailPage({ params }: Props) {
         <div className="flex flex-wrap items-baseline justify-between gap-3">
           <h1 className="text-2xl font-bold text-neutral-900">
             Phiếu kiểm kê:{" "}
-            <span className="font-mono text-orange-600">
+            <span className="font-mono text-primary">
               {audit.auditCode ?? audit.id.slice(0, 8) + "…"}
             </span>
           </h1>
@@ -121,12 +121,12 @@ export default async function AuditDetailPage({ params }: Props) {
         <SummaryCard
           label="Tổng tăng"
           value={`+${audit.totalIncreases}`}
-          color="text-green-700"
+          color="text-state-success-ink"
         />
         <SummaryCard
           label="Tổng giảm"
           value={`-${audit.totalDecreases}`}
-          color="text-red-700"
+          color="text-state-danger-ink"
         />
       </div>
 
@@ -167,15 +167,15 @@ export default async function AuditDetailPage({ params }: Props) {
               {audit.items.map((line) => {
                 const rowBg =
                   line.delta > 0
-                    ? "bg-green-50/60"
+                    ? "bg-state-success-soft/60"
                     : line.delta < 0
-                      ? "bg-red-50/60"
+                      ? "bg-state-danger-soft/60"
                       : "";
                 const deltaColor =
                   line.delta > 0
-                    ? "text-green-700"
+                    ? "text-state-success-ink"
                     : line.delta < 0
-                      ? "text-red-700"
+                      ? "text-state-danger-ink"
                       : "text-neutral-400";
                 return (
                   <tr key={line.id} className={rowBg}>
@@ -206,7 +206,7 @@ export default async function AuditDetailPage({ params }: Props) {
                     </td>
                     <td className="px-3 py-2 text-center text-xs">
                       {line.movement ? (
-                        <span className="text-green-600">✓</span>
+                        <span className="text-state-success-ink">✓</span>
                       ) : (
                         <span className="text-neutral-300">—</span>
                       )}
@@ -237,9 +237,7 @@ function SummaryCard({
         {label}
       </p>
       <p
-        className={`mt-1 text-2xl font-bold tabular-nums ${
-          color ?? "text-neutral-900"
-        }`}
+        className={`mt-1 text-2xl font-bold tabular-nums ${ color ?? "text-neutral-900" }`}
       >
         {value}
       </p>

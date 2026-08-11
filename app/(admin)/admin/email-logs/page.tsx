@@ -188,7 +188,7 @@ export default async function EmailLogsPage({ searchParams }: Props) {
                   {log.template ? (
                     <Link
                       href={`/email-templates/${log.template.id}/edit`}
-                      className="text-blue-600 hover:underline"
+                      className="text-state-info-ink hover:underline"
                     >
                       {log.template.name}
                     </Link>
@@ -208,7 +208,7 @@ export default async function EmailLogsPage({ searchParams }: Props) {
                   </span>
                   {log.failureReason && (
                     <div
-                      className="text-xs text-red-600 mt-1 max-w-xs truncate"
+                      className="text-xs text-state-danger-ink mt-1 max-w-xs truncate"
                       title={log.failureReason}
                     >
                       ⚠ {log.failureReason}

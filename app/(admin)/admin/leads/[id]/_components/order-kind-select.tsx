@@ -76,9 +76,9 @@ export function OrderKindSelect({
     <div className="rounded-xl border border-gray-200 bg-white p-4">
       <div className="mb-3 flex items-center gap-2">
         {kind === "PRODUCT" ? (
-          <Package className="h-4 w-4 text-orange-500" />
+          <Package className="h-4 w-4 text-primary" />
         ) : (
-          <BookOpen className="h-4 w-4 text-orange-500" />
+          <BookOpen className="h-4 w-4 text-primary" />
         )}
         <h2 className="text-sm font-semibold text-gray-700">Loại đơn dự kiến</h2>
       </div>

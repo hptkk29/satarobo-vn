@@ -48,11 +48,7 @@ export function SessionFilters({
             type="button"
             onClick={() => apply({ scope: s.key })}
             disabled={pending}
-            className={`rounded-md px-3 py-1.5 text-xs font-semibold transition-colors ${
-              scope === s.key
-                ? "bg-orange-500 text-white"
-                : "text-neutral-600 hover:bg-neutral-100"
-            }`}
+            className={`rounded-md px-3 py-1.5 text-xs font-semibold transition-colors ${ scope === s.key ? "bg-primary text-white" : "text-neutral-600 hover:bg-neutral-100" }`}
           >
             {s.label}
           </button>
@@ -62,7 +58,7 @@ export function SessionFilters({
         value={classId}
         onChange={(e) => apply({ classId: e.target.value })}
         disabled={pending}
-        className="rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm outline-none focus:border-orange-500"
+        className="rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm outline-none focus:border-primary"
       >
         <option value="">Tất cả lớp</option>
         {classes.map((c) => (

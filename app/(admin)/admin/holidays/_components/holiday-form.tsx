@@ -58,7 +58,7 @@ export function HolidayForm({
   return (
     <form action={action} className="max-w-3xl space-y-6">
       {error && (
-        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+        <div className="rounded-lg border border-state-danger-soft bg-state-danger-soft px-4 py-3 text-sm text-state-danger-ink">
           {error}
         </div>
       )}
@@ -143,7 +143,7 @@ function SubmitButton({ isEdit }: { isEdit: boolean }) {
     <button
       type="submit"
       disabled={pending}
-      className="rounded-xl bg-orange-500 px-6 py-3 font-bold text-white shadow-md hover:bg-orange-600 disabled:opacity-60"
+      className="rounded-xl bg-primary px-6 py-3 font-bold text-white shadow-md hover:bg-primary-dark disabled:opacity-60"
     >
       {pending ? "Đang lưu..." : isEdit ? "Cập nhật" : "Tạo ngày nghỉ"}
     </button>
@@ -167,7 +167,7 @@ function Grid({ children, cols = 2 }: { children: React.ReactNode; cols?: 2 | 3 
 }
 
 const baseInput =
-  "w-full rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/20";
+  "w-full rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20";
 
 function Field({
   label,
@@ -193,7 +193,7 @@ function Field({
     <label className="block">
       <span className="mb-1 block text-sm font-semibold text-neutral-700">
         {label}
-        {required && <span className="ml-1 text-red-500">*</span>}
+        {required && <span className="ml-1 text-state-danger-ink">*</span>}
       </span>
       {type === "textarea" ? (
         <textarea
@@ -238,7 +238,7 @@ function DateInput({
     <label className="block">
       <span className="mb-1 block text-sm font-semibold text-neutral-700">
         {label}
-        {required && <span className="ml-1 text-red-500">*</span>}
+        {required && <span className="ml-1 text-state-danger-ink">*</span>}
       </span>
       <input
         type="date"
@@ -270,7 +270,7 @@ function SelectField({
     <label className="block">
       <span className="mb-1 block text-sm font-semibold text-neutral-700">
         {label}
-        {required && <span className="ml-1 text-red-500">*</span>}
+        {required && <span className="ml-1 text-state-danger-ink">*</span>}
       </span>
       <select
         name={name}

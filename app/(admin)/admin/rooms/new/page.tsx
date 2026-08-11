@@ -26,14 +26,14 @@ export default async function NewRoomPage() {
           <ChevronLeft className="h-4 w-4" /> Quay lại danh sách
         </Link>
         <h1 className="mb-4 text-3xl font-black text-neutral-900">Thêm phòng học</h1>
-        <div className="rounded-xl border-2 border-dashed border-orange-300 bg-orange-50 p-8 text-center">
+        <div className="rounded-xl border-2 border-dashed border-primary bg-primary-soft p-8 text-center">
           <p className="font-semibold text-neutral-900">Chưa có cơ sở nào đang hoạt động.</p>
           <p className="mt-1 text-sm text-neutral-600">
             Tạo ít nhất 1 cơ sở (Active) trước khi thêm phòng.
           </p>
           <Link
             href="/centers/new"
-            className="mt-4 inline-flex items-center gap-2 rounded-lg bg-orange-500 px-4 py-2 text-sm font-bold text-white hover:bg-orange-600"
+            className="mt-4 inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-bold text-white hover:bg-primary-dark"
           >
             Thêm cơ sở →
           </Link>

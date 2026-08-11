@@ -154,7 +154,7 @@ export default async function GlobalSearchPage({
           defaultValue={q}
           autoFocus
           placeholder="Tìm leads, học viên, blog..."
-          className="w-full rounded-lg border border-gray-200 bg-white py-2.5 pl-9 pr-3 text-sm focus:border-orange-300 focus:outline-none focus:ring-2 focus:ring-orange-200"
+          className="w-full rounded-lg border border-gray-200 bg-white py-2.5 pl-9 pr-3 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary-soft"
         />
       </form>
 
@@ -256,7 +256,7 @@ function Section({
           {icon}
           {title}
         </h2>
-        <Link href={moreHref} className="text-xs font-medium text-orange-600 hover:underline">
+        <Link href={moreHref} className="text-xs font-medium text-primary hover:underline">
           Xem tất cả →
         </Link>
       </div>

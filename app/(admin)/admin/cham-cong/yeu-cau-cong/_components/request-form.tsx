@@ -6,7 +6,7 @@ import { toast } from "sonner";
 import { createAdjustmentRequest } from "../../chinh-cong/_actions";
 
 const inputCls =
-  "w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-[#7C3AED] focus:outline-none";
+  "w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary focus:outline-none";
 
 export function AdjustRequestForm() {
   const router = useRouter();
@@ -66,7 +66,7 @@ export function AdjustRequestForm() {
           type="button"
           onClick={submit}
           disabled={pending}
-          className="rounded-lg bg-[#7C3AED] px-4 py-2 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-50"
+          className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-50"
         >
           {pending ? "Đang gửi…" : "Gửi yêu cầu"}
         </button>

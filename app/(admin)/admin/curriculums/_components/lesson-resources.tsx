@@ -105,7 +105,7 @@ export function LessonResources({
       </header>
 
       {error && (
-        <div className="border-b border-red-100 bg-red-50 px-4 py-2 text-sm text-red-700">
+        <div className="border-b border-state-danger-soft bg-state-danger-soft px-4 py-2 text-sm text-state-danger-ink">
           {error}
         </div>
       )}
@@ -148,12 +148,12 @@ export function LessonResources({
                         <FileBox className="h-3.5 w-3.5" /> Giáo án giảng dạy (SCORM)
                       </h3>
                       {giaoAn ? (
-                        <div className="mt-2 flex flex-wrap items-center gap-2 rounded-md border border-emerald-200 bg-white px-2.5 py-1.5 text-sm">
-                          <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600" />
+                        <div className="mt-2 flex flex-wrap items-center gap-2 rounded-md border border-state-success-soft bg-white px-2.5 py-1.5 text-sm">
+                          <CheckCircle2 className="h-3.5 w-3.5 text-state-success-ink" />
                           <span className="font-medium text-neutral-800">{giaoAn.name}</span>
                           <Link
                             href={`/scorm/play/${giaoAn.id}`}
-                            className="inline-flex items-center gap-1 text-xs font-semibold text-orange-600 hover:underline"
+                            className="inline-flex items-center gap-1 text-xs font-semibold text-primary hover:underline"
                           >
                             <Play className="h-3.5 w-3.5" /> Xem thử
                           </Link>
@@ -163,7 +163,7 @@ export function LessonResources({
                                 type="button"
                                 disabled={pending}
                                 onClick={() => run(() => deleteScormPackage(giaoAn.id))}
-                                className="ml-auto inline-flex items-center gap-1 rounded-md bg-rose-600 px-2 py-0.5 text-xs font-semibold text-white hover:bg-rose-700 disabled:opacity-40"
+                                className="ml-auto inline-flex items-center gap-1 rounded-md bg-state-danger-ink px-2 py-0.5 text-xs font-semibold text-white hover:bg-state-danger-ink-hover disabled:opacity-40"
                               >
                                 <Trash2 className="h-3.5 w-3.5" /> Xác nhận
                               </button>
@@ -172,14 +172,14 @@ export function LessonResources({
                                 type="button"
                                 disabled={pending}
                                 onClick={() => setConfirmDelete(giaoAn.id)}
-                                className="ml-auto inline-flex items-center gap-1 rounded-md border border-rose-200 px-2 py-0.5 text-xs font-semibold text-rose-600 hover:bg-rose-50 disabled:opacity-40"
+                                className="ml-auto inline-flex items-center gap-1 rounded-md border border-state-danger-soft px-2 py-0.5 text-xs font-semibold text-state-danger-ink hover:bg-state-danger-soft disabled:opacity-40"
                               >
                                 <Trash2 className="h-3.5 w-3.5" /> Gỡ
                               </button>
                             ))}
                         </div>
                       ) : scormPending ? (
-                        <p className="mt-2 inline-flex items-center gap-1.5 text-xs text-sky-700">
+                        <p className="mt-2 inline-flex items-center gap-1.5 text-xs text-state-info-ink">
                           <Loader2 className="h-3.5 w-3.5 animate-spin" /> Đang xử lý{" "}
                           <span className="font-medium">{scormPending.name}</span> — giáo án sẽ hiện
                           sau giây lát.
@@ -189,7 +189,7 @@ export function LessonResources({
                           Chưa có giáo án cho buổi. Đẩy tệp .zip bên dưới hoặc{" "}
                           <Link
                             href="/scorm"
-                            className="inline-flex items-center gap-0.5 font-semibold text-[#7C3AED] hover:underline"
+                            className="inline-flex items-center gap-0.5 font-semibold text-primary hover:underline"
                           >
                             quản lý ở trang SCORM <ExternalLink className="h-3 w-3" />
                           </Link>
@@ -197,7 +197,7 @@ export function LessonResources({
                         </p>
                       )}
                       {scormFailed && (
-                        <p className="mt-2 flex flex-wrap items-center gap-2 text-xs text-rose-600">
+                        <p className="mt-2 flex flex-wrap items-center gap-2 text-xs text-state-danger-ink">
                           <AlertCircle className="h-3.5 w-3.5" /> Bản {scormFailed.name} lỗi
                           {scormFailed.error ? `: ${scormFailed.error}` : ""}.
                           {canActivateScorm && (
@@ -205,7 +205,7 @@ export function LessonResources({
                               type="button"
                               disabled={pending}
                               onClick={() => run(() => deleteScormPackage(scormFailed.id))}
-                              className="inline-flex items-center gap-1 rounded-md border border-rose-200 px-2 py-0.5 font-semibold hover:bg-rose-50 disabled:opacity-40"
+                              className="inline-flex items-center gap-1 rounded-md border border-state-danger-soft px-2 py-0.5 font-semibold hover:bg-state-danger-soft disabled:opacity-40"
                             >
                               <Trash2 className="h-3 w-3" /> Dọn
                             </button>
@@ -216,7 +216,7 @@ export function LessonResources({
                       {canActivateScorm && <LessonScormUpload lessonId={lesson.lessonId} />}
                       <Link
                         href="/scorm"
-                        className="mt-2 inline-flex items-center gap-0.5 text-xs font-semibold text-neutral-500 hover:text-[#7C3AED]"
+                        className="mt-2 inline-flex items-center gap-0.5 text-xs font-semibold text-neutral-500 hover:text-primary"
                       >
                         Quản lý gói SCORM <ExternalLink className="h-3 w-3" />
                       </Link>
@@ -254,7 +254,7 @@ export function LessonResources({
                               }
                               disabled={pending}
                               title="Gỡ bài tập khỏi buổi"
-                              className="ml-auto inline-flex items-center gap-1 rounded-md border border-neutral-200 px-2 py-0.5 text-xs font-semibold text-red-600 hover:bg-red-50 disabled:opacity-40"
+                              className="ml-auto inline-flex items-center gap-1 rounded-md border border-neutral-200 px-2 py-0.5 text-xs font-semibold text-state-danger-ink hover:bg-state-danger-soft disabled:opacity-40"
                             >
                               <X className="h-3.5 w-3.5" /> Gỡ
                             </button>
@@ -273,7 +273,7 @@ export function LessonResources({
                           }))
                         }
                         disabled={pending || availableAssignments.length === 0}
-                        className="min-w-0 flex-1 rounded-lg border border-neutral-200 bg-white px-2 py-1 text-xs outline-none focus:border-[#7C3AED] disabled:opacity-60"
+                        className="min-w-0 flex-1 rounded-lg border border-neutral-200 bg-white px-2 py-1 text-xs outline-none focus:border-primary disabled:opacity-60"
                       >
                         <option value="">
                           {availableAssignments.length === 0
@@ -299,7 +299,7 @@ export function LessonResources({
                           setPicks((s) => ({ ...s, [lesson.lessonId]: "" }));
                         }}
                         disabled={pending || !pick}
-                        className="inline-flex items-center gap-1 rounded-lg bg-[#7C3AED] px-3 py-1.5 text-xs font-semibold text-white hover:opacity-90 disabled:opacity-40"
+                        className="inline-flex items-center gap-1 rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-white hover:opacity-90 disabled:opacity-40"
                       >
                         <Plus className="h-3.5 w-3.5" /> Gắn
                       </button>
@@ -309,7 +309,7 @@ export function LessonResources({
                       tập mới ở{" "}
                       <Link
                         href="/assignments"
-                        className="font-semibold text-neutral-500 hover:text-[#7C3AED]"
+                        className="font-semibold text-neutral-500 hover:text-primary"
                       >
                         Quản lý bài tập
                       </Link>

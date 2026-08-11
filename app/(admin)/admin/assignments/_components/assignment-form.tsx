@@ -154,12 +154,12 @@ export function AssignmentForm({
   return (
     <form onSubmit={handleSubmit} className="space-y-5">
       {error && (
-        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+        <div className="rounded-lg border border-state-danger-soft bg-state-danger-soft px-4 py-3 text-sm text-state-danger-ink">
           {error}
         </div>
       )}
       {info && (
-        <div className="rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-700">
+        <div className="rounded-lg border border-state-success-soft bg-state-success-soft px-4 py-3 text-sm text-state-success-ink">
           {info}
         </div>
       )}
@@ -181,7 +181,7 @@ export function AssignmentForm({
 
         <label className="block">
           <span className="mb-1 block text-sm font-semibold text-neutral-700">
-            Tiêu đề <span className="text-red-500">*</span>
+            Tiêu đề <span className="text-state-danger-ink">*</span>
           </span>
           <input
             type="text"
@@ -209,7 +209,7 @@ export function AssignmentForm({
 
         <label className="block">
           <span className="mb-1 block text-sm font-semibold text-neutral-700">
-            Mô tả <span className="text-red-500">*</span>
+            Mô tả <span className="text-state-danger-ink">*</span>
           </span>
           <textarea
             value={description}
@@ -239,7 +239,7 @@ export function AssignmentForm({
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
           <label className="block">
             <span className="mb-1 block text-sm font-semibold text-neutral-700">
-              Lớp học <span className="text-red-500">*</span>
+              Lớp học <span className="text-state-danger-ink">*</span>
             </span>
             <select
               value={classId}
@@ -280,7 +280,7 @@ export function AssignmentForm({
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
           <label className="block">
             <span className="mb-1 block text-sm font-semibold text-neutral-700">
-              Tổng điểm <span className="text-red-500">*</span>
+              Tổng điểm <span className="text-state-danger-ink">*</span>
             </span>
             <input
               type="number"
@@ -341,7 +341,7 @@ export function AssignmentForm({
         <button
           type="submit"
           disabled={pending}
-          className="rounded-xl bg-[#7C3AED] px-6 py-3 font-bold text-white shadow-md hover:opacity-90 disabled:opacity-60"
+          className="rounded-xl bg-primary px-6 py-3 font-bold text-white shadow-md hover:opacity-90 disabled:opacity-60"
         >
           {pending ? "Đang lưu..." : isEdit ? "Lưu thay đổi" : "Tạo bài tập"}
         </button>
@@ -359,7 +359,7 @@ export function AssignmentForm({
             type="button"
             onClick={() => setConfirmPublish(true)}
             disabled={pending}
-            className="rounded-xl bg-green-600 px-6 py-3 font-bold text-white shadow-md hover:bg-green-700 disabled:opacity-60"
+            className="rounded-xl bg-state-success-ink px-6 py-3 font-bold text-white shadow-md hover:bg-state-success-ink-hover disabled:opacity-60"
           >
             Publish
           </button>
@@ -369,7 +369,7 @@ export function AssignmentForm({
             type="button"
             onClick={() => handleChangeStatus("CLOSED")}
             disabled={pending}
-            className="rounded-xl border-2 border-amber-300 bg-white px-6 py-3 font-bold text-amber-700 hover:bg-amber-50"
+            className="rounded-xl border-2 border-state-warning bg-white px-6 py-3 font-bold text-state-warning-ink hover:bg-state-warning-soft"
           >
             Đóng (CLOSED)
           </button>
@@ -390,7 +390,7 @@ export function AssignmentForm({
             type="button"
             onClick={() => setConfirmDelete(true)}
             disabled={pending}
-            className="ml-auto rounded-xl border-2 border-red-200 bg-white px-6 py-3 font-bold text-red-700 hover:bg-red-50"
+            className="ml-auto rounded-xl border-2 border-state-danger-soft bg-white px-6 py-3 font-bold text-state-danger-ink hover:bg-state-danger-soft"
           >
             Xoá
           </button>
@@ -421,7 +421,7 @@ export function AssignmentForm({
 }
 
 const inputClass =
-  "w-full rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm outline-none focus:border-[#7C3AED] focus:ring-2 focus:ring-[#7C3AED]/20";
+  "w-full rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20";
 
 function statusLabel(s: Status) {
   switch (s) {
@@ -441,9 +441,9 @@ function statusBadge(s: Status) {
     case "DRAFT":
       return "bg-gray-100 text-gray-700";
     case "PUBLISHED":
-      return "bg-green-100 text-green-700";
+      return "bg-state-success-soft text-state-success-ink";
     case "CLOSED":
-      return "bg-amber-100 text-amber-700";
+      return "bg-state-warning-soft text-state-warning-ink";
     case "ARCHIVED":
       return "bg-neutral-100 text-neutral-500";
   }

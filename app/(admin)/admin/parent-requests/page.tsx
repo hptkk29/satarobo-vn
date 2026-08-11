@@ -201,11 +201,7 @@ export default async function ParentRequestsPage({ searchParams }: Props) {
           <Link
             key={f.key}
             href={buildHref(f.key, activeStatus.key)}
-            className={`rounded-full px-3 py-1 text-xs font-medium ${
-              activeType.key === f.key
-                ? "bg-orange-500 text-white"
-                : "bg-gray-100 text-gray-600 hover:bg-gray-200"
-            }`}
+            className={`rounded-full px-3 py-1 text-xs font-medium ${ activeType.key === f.key ? "bg-primary text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200" }`}
           >
             {f.label}
           </Link>
@@ -218,11 +214,7 @@ export default async function ParentRequestsPage({ searchParams }: Props) {
           <Link
             key={f.key}
             href={buildHref(activeType.key, f.key)}
-            className={`rounded-full px-3 py-1 text-xs font-medium ${
-              activeStatus.key === f.key
-                ? "bg-[#7C3AED] text-white"
-                : "bg-gray-100 text-gray-600 hover:bg-gray-200"
-            }`}
+            className={`rounded-full px-3 py-1 text-xs font-medium ${ activeStatus.key === f.key ? "bg-primary text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200" }`}
           >
             {f.label}
           </Link>

@@ -24,7 +24,7 @@ type StudentRow = {
 }
 
 const inputCls =
-  'w-full rounded-lg border border-gray-300 px-3 py-1.5 text-sm focus:border-emerald-400 focus:outline-none focus:ring-1 focus:ring-emerald-400'
+  'w-full rounded-lg border border-gray-300 px-3 py-1.5 text-sm focus:border-state-success focus:outline-none focus:ring-1 focus:ring-state-success'
 
 function newKey() {
   return Math.random().toString(36).slice(2)
@@ -173,7 +173,7 @@ export function ConvertForm({
   return (
     <div className="space-y-6">
       {conflict && (
-        <div className="flex items-start gap-2 rounded-xl border border-red-300 bg-red-50 p-4 text-sm text-red-800">
+        <div className="flex items-start gap-2 rounded-xl border border-state-danger bg-state-danger-soft p-4 text-sm text-state-danger-ink">
           <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
           <div>
             <p className="font-semibold">Xung đột hồ sơ phụ huynh</p>
@@ -252,7 +252,7 @@ export function ConvertForm({
                   <button
                     type="button"
                     onClick={() => removeStudent(s.key)}
-                    className="inline-flex items-center gap-1 text-xs text-red-500 hover:text-red-700"
+                    className="inline-flex items-center gap-1 text-xs text-state-danger-ink hover:text-state-danger-ink"
                   >
                     <Trash2 size={14} /> Xoá
                   </button>
@@ -318,7 +318,7 @@ export function ConvertForm({
       </button>
 
       {classes.length === 0 && (
-        <p className="text-xs text-amber-600">
+        <p className="text-xs text-state-warning-ink">
           Chưa có lớp nào đang mở (cùng cơ sở lead). Tạo lớp ở mục Lớp học trước khi chốt.
         </p>
       )}
@@ -389,7 +389,7 @@ export function ConvertForm({
 
           {/* C4 — kế hoạch 2 đợt cần quản lý cơ sở duyệt trước khi đợt 2 được tính tiền. */}
           {installPlan === 'TWO' && (
-            <p className="mt-3 inline-flex items-center gap-1.5 rounded-lg bg-amber-50 px-2.5 py-1.5 text-xs font-medium text-amber-800">
+            <p className="mt-3 inline-flex items-center gap-1.5 rounded-lg bg-state-warning-soft px-2.5 py-1.5 text-xs font-medium text-state-warning-ink">
               <AlertTriangle className="h-3.5 w-3.5" /> Chờ quản lý cơ sở duyệt
             </p>
           )}
@@ -401,7 +401,7 @@ export function ConvertForm({
           type="button"
           onClick={submit}
           disabled={pending || classes.length === 0}
-          className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
+          className="rounded-lg bg-state-success-ink px-4 py-2 text-sm font-semibold text-white hover:bg-state-success-ink-hover disabled:opacity-50"
         >
           {pending ? 'Đang xử lý…' : 'Xác nhận chuyển đổi'}
         </button>

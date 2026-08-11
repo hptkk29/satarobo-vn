@@ -90,7 +90,7 @@ export default async function NewUserPage({ searchParams }: Props) {
           Tài khoản cho phép nhân viên đăng nhập admin panel.
         </p>
         {prefillData && (
-          <p className="mt-2 inline-flex items-center gap-1 rounded-full bg-blue-50 px-2.5 py-0.5 text-xs font-semibold text-blue-700">
+          <p className="mt-2 inline-flex items-center gap-1 rounded-full bg-state-info-soft px-2.5 py-0.5 text-xs font-semibold text-state-info-ink">
             Đã tự điền từ nhân sự: {prefillData.name}
           </p>
         )}

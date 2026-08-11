@@ -92,7 +92,7 @@ export function OrderInstallmentPlan({
   return (
     <section className="rounded-xl border border-neutral-200 bg-white p-5">
       <h2 className="mb-4 flex items-center gap-2 text-sm font-bold uppercase tracking-wider text-neutral-700">
-        <CalendarClock className="h-4 w-4 text-[#7C3AED]" /> Kế hoạch thanh toán 2 đợt
+        <CalendarClock className="h-4 w-4 text-primary" /> Kế hoạch thanh toán 2 đợt
       </h2>
 
       <div className="mb-3 space-y-2">
@@ -106,20 +106,20 @@ export function OrderInstallmentPlan({
               // PA-A: PAID = Sale đã thu; chỉ ghi "KT đã xác nhận" khi đơn không còn
               // khoản PENDING và kế toán đã ✓ (mapping đợt↔khoản là mức ĐƠN, không per-đợt).
               accounting.pending === 0 && accounting.confirmed > 0 ? (
-                <span className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-600">
+                <span className="inline-flex items-center gap-1 text-xs font-semibold text-state-success-ink">
                   <BadgeCheck className="h-4 w-4" /> Sale đã thu · KT đã xác nhận
                 </span>
               ) : (
-                <span className="inline-flex items-center gap-1 text-xs font-semibold text-amber-600">
+                <span className="inline-flex items-center gap-1 text-xs font-semibold text-state-warning-ink">
                   <BadgeCheck className="h-4 w-4" /> Sale đã thu — chờ kế toán
                 </span>
               )
             ) : canManage ? (
-              <button onClick={() => markPaid(i.id)} disabled={pending} className="rounded bg-emerald-600 px-2 py-0.5 text-xs font-semibold text-white disabled:opacity-50">
+              <button onClick={() => markPaid(i.id)} disabled={pending} className="rounded bg-state-success-ink px-2 py-0.5 text-xs font-semibold text-white disabled:opacity-50">
                 Đánh dấu đã đóng
               </button>
             ) : (
-              <span className="text-xs text-amber-600">Chờ đóng</span>
+              <span className="text-xs text-state-warning-ink">Chờ đóng</span>
             )}
           </div>
         ))}
@@ -132,13 +132,13 @@ export function OrderInstallmentPlan({
             <span className="text-neutral-400">Chưa có khoản thu nào được ghi nhận.</span>
           ) : (
             <>
-              <span className="font-semibold text-emerald-600">Đã xác nhận: {vnd(accounting.confirmed)}</span>
-              <span className={accounting.pending > 0 ? "font-semibold text-amber-600" : "text-neutral-400"}>
+              <span className="font-semibold text-state-success-ink">Đã xác nhận: {vnd(accounting.confirmed)}</span>
+              <span className={accounting.pending > 0 ? "font-semibold text-state-warning-ink" : "text-neutral-400"}>
                 Chờ xác nhận: {vnd(accounting.pending)}
               </span>
             </>
           )}
-          <a href="/payments" className="ml-auto font-semibold text-purple-700 underline">
+          <a href="/payments" className="ml-auto font-semibold text-primary underline">
             Mở sổ Khoản thu →
           </a>
         </div>
@@ -165,7 +165,7 @@ export function OrderInstallmentPlan({
             <span className="text-xs text-neutral-500">Nhắc công nợ trước (ngày)</span>
             <input type="number" min={0} value={reminderDays} onChange={(e) => setReminderDays(Math.max(0, Number(e.target.value) || 0))} disabled={dot2 <= 0} className="mt-0.5 w-full rounded-md border border-neutral-300 px-2 py-1.5 text-sm disabled:bg-neutral-50" />
           </label>
-          <button onClick={save} disabled={pending} className="w-full rounded-md bg-purple-700 px-3 py-2 text-sm font-semibold text-white disabled:opacity-50">
+          <button onClick={save} disabled={pending} className="w-full rounded-md bg-primary-dark px-3 py-2 text-sm font-semibold text-white disabled:opacity-50">
             {pending ? "Đang lưu…" : "Lưu kế hoạch thanh toán"}
           </button>
           <p className="text-[11px] text-neutral-400">
@@ -193,7 +193,7 @@ export function OrderQrSection({
   return (
     <section className="rounded-xl border border-neutral-200 bg-white p-5">
       <h2 className="mb-4 flex items-center gap-2 text-sm font-bold uppercase tracking-wider text-neutral-700">
-        <QrCode className="h-4 w-4 text-[#7C3AED]" /> Thanh toán & QR
+        <QrCode className="h-4 w-4 text-primary" /> Thanh toán & QR
       </h2>
       <div className="max-w-sm">
         {qrUrl ? (
@@ -222,7 +222,7 @@ export function OrderQrSection({
           <div className="flex h-56 flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-neutral-300 bg-neutral-50 p-4 text-center">
             <QrCode className="h-8 w-8 text-neutral-300" />
             <p className="text-sm text-neutral-500">Chưa cấu hình tài khoản nhận tiền.</p>
-            <a href="/tich-hop" className="text-xs font-semibold text-purple-700 underline">
+            <a href="/tich-hop" className="text-xs font-semibold text-primary underline">
               Cấu hình VietQR trong Tích hợp →
             </a>
           </div>

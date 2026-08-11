@@ -122,7 +122,7 @@ export function QuestionBuilder({
                           <button
                             type="button"
                             onClick={() => update(i, { options: q.options.filter((_, idx) => idx !== oi) })}
-                            className="rounded-md px-2 text-gray-400 hover:text-rose-600"
+                            className="rounded-md px-2 text-gray-400 hover:text-state-danger-ink"
                           >
                             <Trash2 className="h-3.5 w-3.5" />
                           </button>
@@ -133,7 +133,7 @@ export function QuestionBuilder({
                       <button
                         type="button"
                         onClick={() => update(i, { options: [...q.options, ""] })}
-                        className="inline-flex items-center gap-1 text-xs font-medium text-orange-600 hover:text-orange-700"
+                        className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:text-primary"
                       >
                         <Plus className="h-3 w-3" /> Thêm lựa chọn
                       </button>
@@ -173,7 +173,7 @@ export function QuestionBuilder({
                   <button type="button" onClick={() => move(i, 1)} className="text-gray-400 hover:text-gray-700">
                     <ArrowDown className="h-4 w-4" />
                   </button>
-                  <button type="button" onClick={() => remove(i)} className="text-gray-400 hover:text-rose-600">
+                  <button type="button" onClick={() => remove(i)} className="text-gray-400 hover:text-state-danger-ink">
                     <Trash2 className="h-4 w-4" />
                   </button>
                 </div>
@@ -187,7 +187,7 @@ export function QuestionBuilder({
         <button
           type="button"
           onClick={() => onChange([...questions, emptyQuestion()])}
-          className="inline-flex items-center gap-1.5 rounded-lg border border-dashed border-gray-300 px-3 py-2 text-sm font-medium text-gray-600 hover:border-orange-400 hover:text-orange-600"
+          className="inline-flex items-center gap-1.5 rounded-lg border border-dashed border-gray-300 px-3 py-2 text-sm font-medium text-gray-600 hover:border-primary hover:text-primary"
         >
           <Plus className="h-4 w-4" /> Thêm câu hỏi
         </button>

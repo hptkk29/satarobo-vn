@@ -200,7 +200,7 @@ export function PackageForm({ pkg, courses = [], defaultCourseId }: PackageFormP
   return (
     <form action={action} className="max-w-4xl space-y-6">
       {error ? (
-        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
+        <div className="rounded-lg border border-state-danger-soft bg-state-danger-soft px-4 py-3 text-sm font-medium text-state-danger-ink">
           {error}
         </div>
       ) : null}
@@ -306,7 +306,7 @@ export function PackageForm({ pkg, courses = [], defaultCourseId }: PackageFormP
 
       <Section title="Giáo trình">
         {linkedCourse ? (
-          <div className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800">
+          <div className="rounded-lg border border-state-info-soft bg-state-info-soft px-4 py-3 text-sm text-state-info-ink">
             Giáo trình hiển thị lấy từ khoá dạy liên kết:{" "}
             <strong>{linkedCourse.name}</strong>
             {linkedCourse.code ? ` (${linkedCourse.code})` : ""}. JSON dưới đây giữ làm
@@ -370,7 +370,7 @@ export function PackageForm({ pkg, courses = [], defaultCourseId }: PackageFormP
             name="courseId"
             value={courseId}
             onChange={(e) => setCourseId(e.target.value)}
-            className="h-10 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-[#F7941D] focus:ring-2 focus:ring-[#F7941D]/20"
+            className="h-10 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
           >
             <option value="">-- Không liên kết (dùng giáo trình JSON) --</option>
             {courses.map((c) => (
@@ -519,7 +519,7 @@ function Field({
   ...props
 }: FieldProps) {
   const inputClasses =
-    "w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-[#F7941D] focus:ring-2 focus:ring-[#F7941D]/20 disabled:bg-gray-50";
+    "w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 disabled:bg-gray-50";
 
   return (
     <label className="block space-y-1.5">
@@ -562,7 +562,7 @@ function SelectField({
       <select
         name={name}
         defaultValue={defaultValue ?? ""}
-        className="h-10 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-[#F7941D] focus:ring-2 focus:ring-[#F7941D]/20"
+        className="h-10 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
       >
         <option value="">-- Chon --</option>
         {options.map((option) => (
@@ -590,7 +590,7 @@ function CheckboxField({
         type="checkbox"
         name={name}
         defaultChecked={defaultChecked}
-        className="h-5 w-5 rounded border-gray-300 text-[#F7941D] focus:ring-[#F7941D]"
+        className="h-5 w-5 rounded border-gray-300 text-primary focus:ring-primary"
       />
       <span className="text-sm font-medium text-gray-700">{label}</span>
     </label>
@@ -604,7 +604,7 @@ function SubmitButton({ isEdit }: { isEdit: boolean }) {
     <button
       type="submit"
       disabled={pending}
-      className="rounded-lg bg-[#F7941D] px-5 py-2.5 text-sm font-bold text-white shadow-sm hover:bg-[#e58510] disabled:cursor-not-allowed disabled:opacity-70"
+      className="rounded-lg bg-primary px-5 py-2.5 text-sm font-bold text-white shadow-sm hover:bg-primary-dark disabled:cursor-not-allowed disabled:opacity-70"
     >
       {pending ? "Đang lưu..." : isEdit ? "Cập nhật" : "Tạo mới"}
     </button>

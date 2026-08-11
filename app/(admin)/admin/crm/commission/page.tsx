@@ -52,7 +52,7 @@ export default async function CommissionPage() {
   return (
     <div>
       <h1 className="mb-6 flex items-center gap-2 text-3xl font-black text-neutral-900">
-        <Coins className="h-7 w-7 text-orange-500" />
+        <Coins className="h-7 w-7 text-primary" />
         Bảng hoa hồng theo kỳ
       </h1>
       <div className="rounded-lg border">

@@ -45,8 +45,8 @@ export default async function CoursesPage() {
   return (
     <div>
       <div className="mb-6 flex items-start gap-3">
-        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-orange-50">
-          <BookOpen className="h-5 w-5 text-orange-600" />
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary-soft">
+          <BookOpen className="h-5 w-5 text-primary" />
         </div>
         <div className="flex-1">
           <h1 className="text-2xl font-bold text-gray-900">Khoá dạy (chương trình giảng)</h1>
@@ -88,7 +88,7 @@ export default async function CoursesPage() {
               courses.map((c) => (
                 <TableRow key={c.id} className="hover:bg-gray-50/60">
                   <TableCell className="font-medium">
-                    <Link href={`/courses/${c.id}`} className="text-blue-600 hover:underline">
+                    <Link href={`/courses/${c.id}`} className="text-state-info-ink hover:underline">
                       {c.name}
                     </Link>
                     <div className="text-xs text-gray-400">/{c.slug}</div>
@@ -103,7 +103,7 @@ export default async function CoursesPage() {
                   </TableCell>
                   <TableCell>
                     {c.isActive ? (
-                      <Badge className="bg-green-100 text-green-700 hover:bg-green-100">
+                      <Badge className="bg-state-success-soft text-state-success-ink hover:bg-state-success-soft-hover">
                         Hoạt động
                       </Badge>
                     ) : (

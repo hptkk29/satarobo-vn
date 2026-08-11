@@ -45,9 +45,7 @@ export function ModeSelector({
         {MODES.map((m) => (
           <label
             key={m.value}
-            className={`flex cursor-pointer items-start gap-2 rounded-lg border p-2.5 ${
-              mode === m.value ? "border-[#7C3AED] bg-purple-50" : "border-gray-200 hover:border-gray-300"
-            }`}
+            className={`flex cursor-pointer items-start gap-2 rounded-lg border p-2.5 ${ mode === m.value ? "border-primary bg-primary-soft" : "border-gray-200 hover:border-gray-300" }`}
           >
             <input
               type="radio"

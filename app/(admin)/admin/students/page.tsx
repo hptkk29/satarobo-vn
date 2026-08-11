@@ -34,9 +34,9 @@ const FILTER_FIELD =
   "focus:border-[color:var(--primary)] focus:outline-none focus:ring-2 focus:ring-[color:var(--primary-soft)]";
 
 const STATUS_INFO: Record<StudentStatus, { label: string; color: string }> = {
-  ACTIVE: { label: "Đang học", color: "bg-green-100 text-green-700" },
-  PAUSED: { label: "Bảo lưu", color: "bg-yellow-100 text-yellow-700" },
-  GRADUATED: { label: "Hoàn thành", color: "bg-blue-100 text-blue-700" },
+  ACTIVE: { label: "Đang học", color: "bg-state-success-soft text-state-success-ink" },
+  PAUSED: { label: "Bảo lưu", color: "bg-state-warning-soft text-state-warning-ink" },
+  GRADUATED: { label: "Hoàn thành", color: "bg-state-info-soft text-state-info-ink" },
   INACTIVE: { label: "Nghỉ học", color: "bg-gray-100 text-gray-500" },
 };
 
@@ -393,7 +393,7 @@ export default async function StudentsPage({ searchParams }: SearchParams) {
         {totalCount.toLocaleString("vi-VN")} học viên
         {view === "frequent-absent" &&
           totalCount === FREQUENT_ABSENT_FETCH_LIMIT && (
-            <span className="ml-2 text-orange-600">
+            <span className="ml-2 text-primary">
               (cap {FREQUENT_ABSENT_FETCH_LIMIT} — refine filter để xem hết)
             </span>
           )}
@@ -478,7 +478,7 @@ export default async function StudentsPage({ searchParams }: SearchParams) {
                         )}
                         {reserve && (
                           <div
-                            className="mt-0.5 text-xs text-yellow-700"
+                            className="mt-0.5 text-xs text-state-warning-ink"
                             title={reserve.reason}
                           >
                             🟡 Bảo lưu từ {formatDate(reserve.startedAt)}

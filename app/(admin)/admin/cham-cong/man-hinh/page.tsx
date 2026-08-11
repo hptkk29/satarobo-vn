@@ -41,11 +41,7 @@ export default async function ManHinhPage({ searchParams }: Props) {
               <Link
                 key={c.id}
                 href={`/cham-cong/man-hinh?centerId=${c.id}`}
-                className={`rounded-full px-3 py-1 text-xs font-medium ${
-                  active?.id === c.id
-                    ? "bg-orange-500 text-white"
-                    : "bg-white text-neutral-600 hover:bg-neutral-200"
-                }`}
+                className={`rounded-full px-3 py-1 text-xs font-medium ${ active?.id === c.id ? "bg-primary text-white" : "bg-white text-neutral-600 hover:bg-neutral-200" }`}
               >
                 {c.name}
               </Link>

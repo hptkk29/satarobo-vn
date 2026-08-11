@@ -85,7 +85,7 @@ export default async function EditInventoryItemPage({ params }: Props) {
         </Link>
         <h1 className="text-2xl font-bold text-neutral-900">
           Sửa mặt hàng:{" "}
-          <span className="font-bold text-orange-600">{item.name}</span>
+          <span className="font-bold text-primary">{item.name}</span>
         </h1>
         <p className="mt-1 text-sm text-neutral-500 tabular-nums">{item.itemCode}</p>
       </div>

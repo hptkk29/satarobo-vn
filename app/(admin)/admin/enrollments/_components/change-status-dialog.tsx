@@ -104,7 +104,7 @@ export function ChangeStatusDialog({
       <button
         type="button"
         onClick={() => setIsOpen(true)}
-        className="inline-flex items-center gap-2 rounded-lg border-2 border-amber-300 bg-white px-4 py-2 text-sm font-bold text-amber-700 hover:bg-amber-50"
+        className="inline-flex items-center gap-2 rounded-lg border-2 border-state-warning bg-white px-4 py-2 text-sm font-bold text-state-warning-ink hover:bg-state-warning-soft"
       >
         <ShieldAlert className="h-4 w-4" />
         Đổi trạng thái
@@ -135,7 +135,7 @@ export function ChangeStatusDialog({
               id="change-status-title"
               className="flex items-center gap-2 text-lg font-bold text-neutral-900"
             >
-              <ShieldAlert className="h-5 w-5 text-amber-500" />
+              <ShieldAlert className="h-5 w-5 text-state-warning-ink" />
               Đổi trạng thái đăng ký
             </h2>
             <p className="mt-1 text-sm text-neutral-600">
@@ -146,7 +146,7 @@ export function ChangeStatusDialog({
             </p>
 
             {error && (
-              <div className="mt-4 rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-700">
+              <div className="mt-4 rounded-lg border border-state-danger bg-state-danger-soft px-3 py-2 text-sm text-state-danger-ink">
                 {error}
               </div>
             )}
@@ -169,7 +169,7 @@ export function ChangeStatusDialog({
                   value={newStatus}
                   onChange={(e) => setNewStatus(e.target.value as Status)}
                   disabled={pending || targetOptions.length === 0}
-                  className="w-full rounded-lg border border-neutral-300 px-3 py-2 text-sm focus:border-amber-500 focus:outline-none"
+                  className="w-full rounded-lg border border-neutral-300 px-3 py-2 text-sm focus:border-state-warning focus:outline-none"
                 >
                   {targetOptions.length === 0 && (
                     <option value="">Không có chuyển trạng thái hợp lệ</option>
@@ -196,7 +196,7 @@ export function ChangeStatusDialog({
                   rows={3}
                   disabled={pending}
                   required
-                  className="w-full resize-y rounded-lg border border-neutral-300 px-3 py-2 text-sm focus:border-amber-500 focus:outline-none"
+                  className="w-full resize-y rounded-lg border border-neutral-300 px-3 py-2 text-sm focus:border-state-warning focus:outline-none"
                 />
               </div>
             </div>
@@ -214,7 +214,7 @@ export function ChangeStatusDialog({
                 type="button"
                 onClick={handleSubmit}
                 disabled={pending || targetOptions.length === 0 || newStatus === currentStatus}
-                className="rounded-lg bg-amber-500 px-4 py-2 text-sm font-bold text-white hover:bg-amber-600 disabled:opacity-50"
+                className="rounded-lg bg-state-warning px-4 py-2 text-sm font-bold text-white hover:bg-state-warning-ink disabled:opacity-50"
               >
                 {pending ? "Đang lưu..." : "Xác nhận"}
               </button>

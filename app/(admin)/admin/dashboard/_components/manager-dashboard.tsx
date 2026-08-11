@@ -210,22 +210,22 @@ export async function ManagerDashboard({
       {/* Việc CÁ NHÂN hôm nay (lead task của chính mình) — khác với khu "Cần xử lý"
           tổng hợp ở trên; giữ vì có giờ hẹn + thao tác nhanh. */}
       {myTasksToday.length > 0 && (
-        <div className="rounded-xl border border-orange-200 bg-orange-50 p-4">
+        <div className="rounded-xl border border-primary-soft bg-primary-soft p-4">
           <div className="mb-3 flex items-center justify-between">
-            <h2 className="text-sm font-bold text-orange-800">Việc của tôi hôm nay ({myTasksToday.length})</h2>
-            <Link href="/leads?view=kanban" className="text-xs text-orange-700 hover:underline">Xem pipeline →</Link>
+            <h2 className="text-sm font-bold text-primary">Việc của tôi hôm nay ({myTasksToday.length})</h2>
+            <Link href="/leads?view=kanban" className="text-xs text-primary hover:underline">Xem pipeline →</Link>
           </div>
           <ul className="space-y-2">
             {myTasksToday.map((t) => {
               const overdue = t.dueAt.getTime() < now.getTime();
               return (
                 <li key={t.id}>
-                  <Link href={`/leads/${t.lead.id}`} className="flex items-center justify-between gap-3 rounded-lg bg-white px-3 py-2 text-sm hover:bg-orange-100/40">
+                  <Link href={`/leads/${t.lead.id}`} className="flex items-center justify-between gap-3 rounded-lg bg-white px-3 py-2 text-sm hover:bg-primary-soft/40">
                     <span className="min-w-0 flex-1 truncate">
                       <strong className="text-gray-900">{t.title}</strong>
                       <span className="text-gray-500"> · {t.lead.parentName}</span>
                     </span>
-                    <span className={`flex-shrink-0 text-xs ${overdue ? "font-bold text-red-600" : "text-gray-500"}`}>
+                    <span className={`flex-shrink-0 text-xs ${overdue ? "font-bold text-state-danger-ink" : "text-gray-500"}`}>
                       {t.dueAt.toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" })}{overdue ? " · Quá hạn" : ""}
                     </span>
                   </Link>
@@ -317,7 +317,7 @@ export async function ManagerDashboard({
       <div>
         <div className="flex items-center justify-between mb-3">
           <h2 className="font-semibold text-neutral-900">Leads mới nhất</h2>
-          <Link href="/leads" className="text-sm font-semibold text-orange-600 hover:underline">Xem tất cả →</Link>
+          <Link href="/leads" className="text-sm font-semibold text-primary hover:underline">Xem tất cả →</Link>
         </div>
         <DataTableShell>
           <table className="w-full text-sm">
@@ -352,11 +352,11 @@ export async function ManagerDashboard({
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
         <div className="bg-white border border-neutral-200 rounded-xl p-4 flex items-center gap-3">
-          <FileText className="w-5 h-5 text-orange-500 shrink-0" />
+          <FileText className="w-5 h-5 text-primary shrink-0" />
           <div><p className="text-neutral-600">Tin tức đang publish</p><p className="font-semibold text-neutral-900">{totalPosts} bài</p></div>
         </div>
         <div className="bg-white border border-neutral-200 rounded-xl p-4 flex items-center gap-3">
-          <Users className="w-5 h-5 text-purple-700 shrink-0" />
+          <Users className="w-5 h-5 text-primary shrink-0" />
           <div><p className="text-neutral-600">Leads ENROLLED tất cả</p><p className="font-semibold text-neutral-900">{enrolledLeads} người</p></div>
         </div>
       </div>

@@ -57,7 +57,7 @@ export function ZnsTest({ canEdit }: { canEdit: boolean }) {
       </div>
       {result && (
         <p
-          className={`mt-2 break-all text-xs ${result.ok ? "text-emerald-700" : "text-rose-700"}`}
+          className={`mt-2 break-all text-xs ${result.ok ? "text-state-success-ink" : "text-state-danger-ink"}`}
         >
           {result.ok ? "✅ " : "❌ "}
           {result.text}

@@ -14,10 +14,10 @@ const ATTEMPT_STATUS_INFO: Record<
   AttemptStatus,
   { label: string; color: string }
 > = {
-  IN_PROGRESS: { label: "Đang làm", color: "bg-amber-100 text-amber-700" },
-  SUBMITTED: { label: "Đã nộp", color: "bg-blue-100 text-blue-700" },
-  GRADED: { label: "Đã chấm", color: "bg-green-100 text-green-700" },
-  REVIEWED: { label: "Đã xem", color: "bg-purple-100 text-purple-700" },
+  IN_PROGRESS: { label: "Đang làm", color: "bg-state-warning-soft text-state-warning-ink" },
+  SUBMITTED: { label: "Đã nộp", color: "bg-state-info-soft text-state-info-ink" },
+  GRADED: { label: "Đã chấm", color: "bg-state-success-soft text-state-success-ink" },
+  REVIEWED: { label: "Đã xem", color: "bg-primary-soft text-primary" },
 };
 
 function fmtDateTime(d: Date | null) {
@@ -102,12 +102,12 @@ export default async function ExamAttemptsPage({ params }: Props) {
         </Link>
         <div className="flex flex-wrap items-baseline justify-between gap-3">
           <h1 className="flex items-center gap-2 text-2xl font-bold text-neutral-900">
-            <ClipboardList className="h-6 w-6 text-[#7C3AED]" />
-            Bài làm: <span className="text-orange-600">{exam.title}</span>
+            <ClipboardList className="h-6 w-6 text-primary" />
+            Bài làm: <span className="text-primary">{exam.title}</span>
           </h1>
           <Link
             href={`/exams/${id}/builder`}
-            className="text-sm font-semibold text-[#7C3AED] hover:underline"
+            className="text-sm font-semibold text-primary hover:underline"
           >
             ← Builder
           </Link>
@@ -209,11 +209,11 @@ export default async function ExamAttemptsPage({ params }: Props) {
                       </td>
                       <td className="px-4 py-3 text-center">
                         {a.passed === true ? (
-                          <span className="inline-flex rounded-full bg-green-100 px-2 py-0.5 text-xs font-semibold text-green-700">
+                          <span className="inline-flex rounded-full bg-state-success-soft px-2 py-0.5 text-xs font-semibold text-state-success-ink">
                             Đạt
                           </span>
                         ) : a.passed === false ? (
-                          <span className="inline-flex rounded-full bg-red-100 px-2 py-0.5 text-xs font-semibold text-red-700">
+                          <span className="inline-flex rounded-full bg-state-danger-soft px-2 py-0.5 text-xs font-semibold text-state-danger-ink">
                             Không đạt
                           </span>
                         ) : (

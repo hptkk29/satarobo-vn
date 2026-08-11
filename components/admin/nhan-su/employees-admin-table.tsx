@@ -30,10 +30,10 @@ const STATUS_LABEL: Record<EmploymentStatus, string> = {
 };
 
 const STATUS_COLOR: Record<EmploymentStatus, string> = {
-  ACTIVE: "bg-green-100 text-green-700",
-  ON_LEAVE: "bg-amber-100 text-amber-700",
+  ACTIVE: "bg-state-success-soft text-state-success-ink",
+  ON_LEAVE: "bg-state-warning-soft text-state-warning-ink",
   RESIGNED: "bg-gray-100 text-gray-600",
-  TERMINATED: "bg-red-100 text-red-700",
+  TERMINATED: "bg-state-danger-soft text-state-danger-ink",
 };
 
 interface Props {
@@ -99,7 +99,7 @@ export function EmployeesAdminTable({ employees, canDelete, hoEmployeeIds = [] }
         <p>Chưa có nhân sự nào khớp bộ lọc.</p>
         <Link
           href="/nhan-su/new"
-          className="mt-2 inline-block text-orange-600 hover:underline"
+          className="mt-2 inline-block text-primary hover:underline"
         >
           Thêm nhân sự đầu tiên →
         </Link>
@@ -132,7 +132,7 @@ export function EmployeesAdminTable({ employees, canDelete, hoEmployeeIds = [] }
                   {emp.fullName}
                   {emp.isCEO && (
                     <span title="CEO" className="ml-1 inline-block align-middle">
-                      <Crown className="inline h-3.5 w-3.5 text-amber-500" />
+                      <Crown className="inline h-3.5 w-3.5 text-state-warning-ink" />
                     </span>
                   )}
                 </p>
@@ -148,7 +148,7 @@ export function EmployeesAdminTable({ employees, canDelete, hoEmployeeIds = [] }
               {/* Cơ sở (HO badge nếu là nhân viên Hội sở) */}
               <td className="px-4 py-3 text-xs text-gray-600">
                 {hoSet.has(emp.id) ? (
-                  <span className="inline-flex items-center gap-1 rounded-full bg-indigo-100 px-2 py-0.5 text-xs font-semibold text-indigo-700">
+                  <span className="inline-flex items-center gap-1 rounded-full bg-state-info-soft px-2 py-0.5 text-xs font-semibold text-state-info-ink">
                     <Building2 className="h-3 w-3" /> HO (Hội sở)
                   </span>
                 ) : (
@@ -178,11 +178,7 @@ export function EmployeesAdminTable({ employees, canDelete, hoEmployeeIds = [] }
                         {ordered.map((r) => (
                           <span
                             key={r}
-                            className={`inline-flex rounded-full px-2 py-0.5 text-xs font-semibold ${roleColor(r)} ${
-                              r === acc.role
-                                ? "ring-2 ring-amber-400 ring-offset-1"
-                                : ""
-                            }`}
+                            className={`inline-flex rounded-full px-2 py-0.5 text-xs font-semibold ${roleColor(r)} ${ r === acc.role ? "ring-2 ring-state-warning ring-offset-1" : "" }`}
                             title={
                               r === acc.role
                                 ? "Vai trò chính · Đổi: Sửa → Đổi vai trò"
@@ -217,7 +213,7 @@ export function EmployeesAdminTable({ employees, canDelete, hoEmployeeIds = [] }
                       title={emp.isActive ? "Đang làm việc (legacy) — bấm để tắt" : "Bật đang làm việc"}
                     >
                       {emp.isActive ? (
-                        <UserCheck className="h-4 w-4 text-green-600" />
+                        <UserCheck className="h-4 w-4 text-state-success-ink" />
                       ) : (
                         <UserX className="h-4 w-4 text-gray-400" />
                       )}
@@ -230,14 +226,14 @@ export function EmployeesAdminTable({ employees, canDelete, hoEmployeeIds = [] }
                       title={emp.isPublic ? "Đang hiển thị public — bấm để ẩn" : "Hiển thị public"}
                     >
                       {emp.isPublic ? (
-                        <Eye className="h-4 w-4 text-blue-600" />
+                        <Eye className="h-4 w-4 text-state-info-ink" />
                       ) : (
                         <EyeOff className="h-4 w-4 text-gray-300" />
                       )}
                     </button>
                     <Link
                       href={`/nhan-su/${emp.id}/edit`}
-                      className="rounded p-1.5 text-blue-600 hover:bg-blue-50"
+                      className="rounded p-1.5 text-state-info-ink hover:bg-state-info-soft"
                       title="Sửa"
                     >
                       <Edit className="h-4 w-4" />
@@ -250,11 +246,7 @@ export function EmployeesAdminTable({ employees, canDelete, hoEmployeeIds = [] }
                           else setDeleteId(emp.id);
                         }}
                         disabled={isPending}
-                        className={`rounded p-1.5 ${
-                          deleteId === emp.id
-                            ? "bg-red-100 text-red-700"
-                            : "text-red-500 hover:bg-red-50"
-                        }`}
+                        className={`rounded p-1.5 ${ deleteId === emp.id ? "bg-state-danger-soft text-state-danger-ink" : "text-state-danger-ink hover:bg-state-danger-soft" }`}
                         title={deleteId === emp.id ? "Xác nhận xoá" : "Xoá"}
                       >
                         <Trash2 className="h-4 w-4" />

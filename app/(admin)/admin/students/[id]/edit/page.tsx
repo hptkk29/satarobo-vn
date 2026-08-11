@@ -255,7 +255,7 @@ export default async function EditStudentPage({ params }: Props) {
       <div>
         <h1 className="mb-6 text-3xl font-black text-neutral-900">
           Sửa học viên:{" "}
-          <span className="font-bold text-orange-600">{student.name}</span>
+          <span className="font-bold text-primary">{student.name}</span>
         </h1>
         <StudentForm
           student={formValue}
@@ -295,7 +295,7 @@ export default async function EditStudentPage({ params }: Props) {
       {progressByClass.length > 0 && (
         <section>
           <h2 className="mb-3 flex items-center gap-2 text-lg font-bold text-neutral-900">
-            <LineChart className="h-5 w-5 text-[#7C3AED]" />
+            <LineChart className="h-5 w-5 text-primary" />
             Tiến độ học tập
           </h2>
           <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
@@ -304,8 +304,8 @@ export default async function EditStudentPage({ params }: Props) {
                 key={enrollment.id}
                 className="rounded-xl border border-neutral-200 bg-white p-4"
               >
-                <div className="mb-3 flex flex-wrap items-center gap-x-4 gap-y-1 rounded-lg bg-purple-50 px-3 py-2 text-sm">
-                  <span className="font-bold text-[#7C3AED]">
+                <div className="mb-3 flex flex-wrap items-center gap-x-4 gap-y-1 rounded-lg bg-primary-soft px-3 py-2 text-sm">
+                  <span className="font-bold text-primary">
                     Buổi {sessions.currentSession}/{sessions.total || "—"}
                   </span>
                   <span className="text-neutral-600">
@@ -329,7 +329,7 @@ export default async function EditStudentPage({ params }: Props) {
                     </p>
                     <Link
                       href={`/classes/${enrollment.class.id}/progress`}
-                      className="mt-0.5 inline-block text-xs font-semibold text-[#7C3AED] hover:underline"
+                      className="mt-0.5 inline-block text-xs font-semibold text-primary hover:underline"
                     >
                       Xem lớp →
                     </Link>
@@ -395,11 +395,11 @@ export default async function EditStudentPage({ params }: Props) {
                     <td className="px-4 py-2 text-neutral-600">{a.absenceReason ?? "—"}</td>
                     <td className="px-4 py-2">
                       {a.makeupStatus === "MADE_UP" ? (
-                        <span className="rounded bg-green-100 px-2 py-0.5 text-xs font-semibold text-green-700">
+                        <span className="rounded bg-state-success-soft px-2 py-0.5 text-xs font-semibold text-state-success-ink">
                           Đã bù
                         </span>
                       ) : a.makeupStatus === "NEEDS_MAKEUP" ? (
-                        <span className="rounded bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-700">
+                        <span className="rounded bg-state-warning-soft px-2 py-0.5 text-xs font-semibold text-state-warning-ink">
                           Cần bù
                         </span>
                       ) : (
@@ -420,7 +420,7 @@ export default async function EditStudentPage({ params }: Props) {
       {learningHistory.length > 0 && (
         <section>
           <h2 className="mb-3 flex items-center gap-2 text-lg font-bold text-neutral-900">
-            <LineChart className="h-5 w-5 text-[#7C3AED]" /> Lịch sử học tập
+            <LineChart className="h-5 w-5 text-primary" /> Lịch sử học tập
           </h2>
           <div className="overflow-x-auto rounded-xl border border-neutral-200 bg-white">
             <table className="w-full text-sm">
@@ -437,7 +437,7 @@ export default async function EditStudentPage({ params }: Props) {
                 {learningHistory.map((h) => (
                   <tr key={h.id} className="border-b border-neutral-100 last:border-0">
                     <td className="px-4 py-2">
-                      <Link href={`/classes/${h.classId}/progress`} className="font-medium text-[#7C3AED] hover:underline">
+                      <Link href={`/classes/${h.classId}/progress`} className="font-medium text-primary hover:underline">
                         {h.class.classCode ? `${h.class.classCode} · ` : ""}{h.class.name}
                       </Link>
                       <span className="block text-xs text-neutral-400">{h.class.course.name}</span>
@@ -445,7 +445,7 @@ export default async function EditStudentPage({ params }: Props) {
                     <td className="px-4 py-2 text-center tabular-nums text-neutral-700">
                       {h.sessions.attended}/{h.sessions.total || "—"}
                       {h.sessions.absentNoMakeup > 0 && (
-                        <span className="ml-1 text-xs text-rose-500">(vắng {h.sessions.absentNoMakeup})</span>
+                        <span className="ml-1 text-xs text-state-danger-ink">(vắng {h.sessions.absentNoMakeup})</span>
                       )}
                     </td>
                     <td className="px-4 py-2 text-center">

@@ -22,7 +22,7 @@ const TYPE_LABEL: Record<string, string> = {
 
 function TypeBadge({ type }: { type: string }) {
   return (
-    <span className="mt-0.5 inline-flex shrink-0 rounded-full bg-purple-50 px-2 py-0.5 text-[11px] font-semibold text-purple-700">
+    <span className="mt-0.5 inline-flex shrink-0 rounded-full bg-primary-soft px-2 py-0.5 text-[11px] font-semibold text-primary">
       {TYPE_LABEL[type] ?? type}
     </span>
   );
@@ -101,7 +101,7 @@ export function TemplateQuestionPicker({
       <header className="flex flex-wrap items-center justify-between gap-3 border-b border-neutral-100 p-4">
         <div>
           <h2 className="flex items-center gap-2 text-sm font-bold uppercase tracking-wider text-neutral-700">
-            <ListChecks className="h-4 w-4 text-[#7C3AED]" />
+            <ListChecks className="h-4 w-4 text-primary" />
             Câu hỏi của mẫu ({selected.length})
           </h2>
           <p className="mt-0.5 text-xs text-neutral-500">
@@ -114,7 +114,7 @@ export function TemplateQuestionPicker({
           type="button"
           onClick={save}
           disabled={pending}
-          className="inline-flex items-center gap-2 rounded-xl bg-[#7C3AED] px-5 py-2.5 text-sm font-bold text-white shadow-md hover:opacity-90 disabled:opacity-60"
+          className="inline-flex items-center gap-2 rounded-xl bg-primary px-5 py-2.5 text-sm font-bold text-white shadow-md hover:opacity-90 disabled:opacity-60"
         >
           <Save className="h-4 w-4" />
           {pending ? "Đang lưu..." : "Lưu câu hỏi"}
@@ -124,12 +124,12 @@ export function TemplateQuestionPicker({
       {(error || info) && (
         <div className="px-4 pt-4">
           {error && (
-            <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+            <div className="rounded-lg border border-state-danger-soft bg-state-danger-soft px-4 py-3 text-sm text-state-danger-ink">
               {error}
             </div>
           )}
           {info && (
-            <div className="rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-700">
+            <div className="rounded-lg border border-state-success-soft bg-state-success-soft px-4 py-3 text-sm text-state-success-ink">
               {info}
             </div>
           )}
@@ -190,7 +190,7 @@ export function TemplateQuestionPicker({
                         onClick={() => remove(id)}
                         disabled={pending}
                         title="Bỏ"
-                        className="rounded-md p-1 text-red-400 hover:bg-red-50 hover:text-red-600 disabled:opacity-30"
+                        className="rounded-md p-1 text-state-danger-ink hover:bg-state-danger-soft hover:text-state-danger-ink disabled:opacity-30"
                       >
                         <X className="h-4 w-4" />
                       </button>
@@ -235,7 +235,7 @@ export function TemplateQuestionPicker({
                     onClick={() => add(q.id)}
                     disabled={pending}
                     title="Thêm vào mẫu"
-                    className="shrink-0 rounded-md p-1 text-[#7C3AED] hover:bg-purple-50 disabled:opacity-30"
+                    className="shrink-0 rounded-md p-1 text-primary hover:bg-primary-soft disabled:opacity-30"
                   >
                     <Plus className="h-4 w-4" />
                   </button>

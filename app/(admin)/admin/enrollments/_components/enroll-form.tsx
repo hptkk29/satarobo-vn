@@ -97,7 +97,7 @@ export function EnrollForm({
   return (
     <form onSubmit={handleSubmit} className="max-w-2xl space-y-5">
       {error && (
-        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+        <div className="rounded-lg border border-state-danger-soft bg-state-danger-soft px-4 py-3 text-sm text-state-danger-ink">
           {error}
         </div>
       )}
@@ -105,14 +105,14 @@ export function EnrollForm({
       <section className="rounded-xl border border-neutral-200 bg-white p-6 space-y-4">
         <label className="block">
           <span className="mb-1 block text-sm font-semibold text-neutral-700">
-            Học viên <span className="text-red-500">*</span>
+            Học viên <span className="text-state-danger-ink">*</span>
           </span>
           <select
             value={studentId}
             onChange={(e) => setStudentId(e.target.value)}
             disabled={pending}
             required
-            className="w-full rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm outline-none focus:border-[#7C3AED] focus:ring-2 focus:ring-[#7C3AED]/20"
+            className="w-full rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
           >
             <option value="">— Chọn học viên —</option>
             {students.map((s) => (
@@ -127,14 +127,14 @@ export function EnrollForm({
 
         <label className="block">
           <span className="mb-1 block text-sm font-semibold text-neutral-700">
-            Lớp học <span className="text-red-500">*</span>
+            Lớp học <span className="text-state-danger-ink">*</span>
           </span>
           <select
             value={classId}
             onChange={(e) => setClassId(e.target.value)}
             disabled={pending}
             required
-            className="w-full rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm outline-none focus:border-[#7C3AED] focus:ring-2 focus:ring-[#7C3AED]/20"
+            className="w-full rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
           >
             <option value="">— Chọn lớp —</option>
             {classes.map((c) => {
@@ -159,8 +159,8 @@ export function EnrollForm({
                 className={
                   "inline-flex rounded-full px-2 py-0.5 font-semibold " +
                   (isFull
-                    ? "bg-red-100 text-red-700"
-                    : "bg-green-100 text-green-700")
+                    ? "bg-state-danger-soft text-state-danger-ink"
+                    : "bg-state-success-soft text-state-success-ink")
                 }
               >
                 Còn {Math.max(0, selectedClass.maxStudents - selectedClass.enrolledCount)}/
@@ -173,7 +173,7 @@ export function EnrollForm({
                 </strong>
               </span>
               {isClosed && (
-                <span className="text-red-600 font-semibold">
+                <span className="text-state-danger-ink font-semibold">
                   Lớp đã đóng — không nhận đăng ký mới
                 </span>
               )}
@@ -190,7 +190,7 @@ export function EnrollForm({
               value={renewedFrom}
               onChange={(e) => setRenewedFrom(e.target.value)}
               disabled={pending}
-              className="w-full rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm outline-none focus:border-[#7C3AED] focus:ring-2 focus:ring-[#7C3AED]/20"
+              className="w-full rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
             >
               <option value="">— Không phải tái tục —</option>
               {previousEnrollments.map((p) => (
@@ -216,7 +216,7 @@ export function EnrollForm({
             placeholder="VD: Đăng ký qua campaign 24 suất miễn phí…"
             rows={3}
             disabled={pending}
-            className="w-full resize-y rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm outline-none focus:border-[#7C3AED] focus:ring-2 focus:ring-[#7C3AED]/20"
+            className="w-full resize-y rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
           />
         </label>
       </section>
@@ -225,7 +225,7 @@ export function EnrollForm({
         <button
           type="submit"
           disabled={pending || isFull || isClosed}
-          className="rounded-xl bg-[#7C3AED] px-6 py-3 font-bold text-white shadow-md hover:opacity-90 disabled:opacity-60"
+          className="rounded-xl bg-primary px-6 py-3 font-bold text-white shadow-md hover:opacity-90 disabled:opacity-60"
         >
           {pending ? "Đang lưu..." : "Tạo đăng ký"}
         </button>

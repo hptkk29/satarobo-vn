@@ -16,7 +16,7 @@ export function WeeklySchedule({ slots }: { slots: TeacherClassSlot[] }) {
           Lịch dạy trong tuần
         </h2>
         {conflicts.length > 0 && (
-          <span className="inline-flex items-center gap-1 rounded-full bg-rose-100 px-2.5 py-0.5 text-xs font-semibold text-rose-700">
+          <span className="inline-flex items-center gap-1 rounded-full bg-state-danger-soft px-2.5 py-0.5 text-xs font-semibold text-state-danger-ink">
             <AlertTriangle className="h-3.5 w-3.5" /> {conflicts.length} xung đột giờ
           </span>
         )}
@@ -35,13 +35,7 @@ export function WeeklySchedule({ slots }: { slots: TeacherClassSlot[] }) {
                 entries.map((e, i) => (
                   <div
                     key={`${e.classId}-${i}`}
-                    className={`rounded-md border p-1.5 text-[11px] leading-tight ${
-                      e.conflict
-                        ? "border-rose-300 bg-rose-50 text-rose-700"
-                        : e.role === "assistant"
-                          ? "border-blue-200 bg-blue-50 text-blue-700"
-                          : "border-purple-200 bg-purple-50 text-purple-700"
-                    }`}
+                    className={`rounded-md border p-1.5 text-[11px] leading-tight ${ e.conflict ? "border-state-danger bg-state-danger-soft text-state-danger-ink" : e.role === "assistant" ? "border-state-info-soft bg-state-info-soft text-state-info-ink" : "border-primary-soft bg-primary-soft text-primary" }`}
                   >
                     <div className="font-semibold tabular-nums">
                       {e.start}–{e.end}
@@ -57,7 +51,7 @@ export function WeeklySchedule({ slots }: { slots: TeacherClassSlot[] }) {
       </div>
 
       {conflicts.length > 0 && (
-        <ul className="mt-3 space-y-1 text-xs text-rose-700">
+        <ul className="mt-3 space-y-1 text-xs text-state-danger-ink">
           {conflicts.map((c, i) => (
             <li key={i} className="flex items-start gap-1.5">
               <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />

@@ -41,7 +41,7 @@ export function CriteriaManager({ courses }: { courses: CourseRow[] }) {
           <div className="mb-2 flex items-center gap-2">
             <h2 className="text-sm font-semibold text-neutral-800">{course.name}</h2>
             {course.isTeachable ? (
-              <span className="rounded-full bg-purple-100 px-2 py-0.5 text-[10px] font-medium text-purple-700">
+              <span className="rounded-full bg-primary-soft px-2 py-0.5 text-[10px] font-medium text-primary">
                 Khoá dạy
               </span>
             ) : null}
@@ -58,7 +58,7 @@ export function CriteriaManager({ courses }: { courses: CourseRow[] }) {
                     type="button"
                     disabled={pending}
                     onClick={() => toggle(c.id, !c.active)}
-                    className="text-xs font-medium text-purple-700 disabled:opacity-50"
+                    className="text-xs font-medium text-primary disabled:opacity-50"
                   >
                     {c.active ? "Tắt" : "Bật"}
                   </button>

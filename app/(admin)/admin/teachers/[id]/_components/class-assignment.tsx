@@ -80,7 +80,7 @@ export function ClassAssignmentSection({
               value={pick}
               onChange={(e) => setPick(e.target.value)}
               disabled={pending}
-              className="min-w-[16rem] rounded-lg border border-gray-300 px-3 py-1.5 text-sm focus:border-[#7C3AED] focus:outline-none"
+              className="min-w-[16rem] rounded-lg border border-gray-300 px-3 py-1.5 text-sm focus:border-primary focus:outline-none"
             >
               <option value="">— Chọn lớp để gán —</option>
               {assignable.map((c) => (
@@ -91,7 +91,7 @@ export function ClassAssignmentSection({
               value={as}
               onChange={(e) => setAs(e.target.value as "teacher" | "assistant")}
               disabled={pending}
-              className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm focus:border-[#7C3AED] focus:outline-none"
+              className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm focus:border-primary focus:outline-none"
             >
               <option value="teacher">GV chính</option>
               <option value="assistant">Trợ giảng</option>
@@ -100,13 +100,13 @@ export function ClassAssignmentSection({
               type="button"
               onClick={add}
               disabled={pending || !pick}
-              className="inline-flex items-center gap-1 rounded-lg bg-[#7C3AED] px-3 py-1.5 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-50"
+              className="inline-flex items-center gap-1 rounded-lg bg-primary px-3 py-1.5 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-50"
             >
               <Plus className="h-4 w-4" /> Gán
             </button>
           </div>
           {warnOutOfScope && (
-            <p className="mt-2 inline-flex items-center gap-1.5 rounded-lg bg-amber-50 px-3 py-1.5 text-xs font-medium text-amber-700">
+            <p className="mt-2 inline-flex items-center gap-1.5 rounded-lg bg-state-warning-soft px-3 py-1.5 text-xs font-medium text-state-warning-ink">
               <AlertTriangle className="h-3.5 w-3.5" />
               GV chưa được đánh dấu dạy được khoá “{picked?.courseName}”. Vẫn gán được nhưng nên kiểm tra năng lực.
             </p>

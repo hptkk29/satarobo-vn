@@ -36,7 +36,7 @@ export default async function DuyetCaPage() {
     <div className="max-w-3xl p-6">
       <div className="mb-4">
         <h1 className="flex items-center gap-2 text-2xl font-bold text-gray-900">
-          <CalendarCheck className="h-6 w-6 text-[#7C3AED]" /> Duyệt ca (Export / Import Excel)
+          <CalendarCheck className="h-6 w-6 text-primary" /> Duyệt ca (Export / Import Excel)
         </h1>
         <p className="mt-1 text-sm text-gray-500">
           Nhân viên đề xuất ca → quản lý export, sửa trong Excel, import lên lại để chốt lịch chính
@@ -45,9 +45,7 @@ export default async function DuyetCaPage() {
       </div>
 
       <p
-        className={`mb-4 rounded-lg px-3 py-2 text-xs ${
-          importOpen ? "bg-indigo-50 text-indigo-700" : "bg-amber-50 text-amber-700"
-        }`}
+        className={`mb-4 rounded-lg px-3 py-2 text-xs ${ importOpen ? "bg-state-info-soft text-state-info-ink" : "bg-state-warning-soft text-state-warning-ink" }`}
       >
         {importOpen
           ? `Cửa sổ duyệt/import: trước ngày cuối tháng (${lastDayOfMonth(now)}). Hãy chốt lịch chính thức trước hạn.`

@@ -113,7 +113,7 @@ export function TransferDialog({
               </label>
 
               <label className="block">
-                <span className="mb-1 block text-xs font-semibold text-rose-600">
+                <span className="mb-1 block text-xs font-semibold text-state-danger-ink">
                   Note bàn giao — đã tư vấn gì cho KH * (bắt buộc)
                 </span>
                 <textarea
@@ -121,7 +121,7 @@ export function TransferDialog({
                   onChange={(e) => setHandoverNote(e.target.value)}
                   rows={3}
                   placeholder="Tóm tắt nội dung đã tư vấn để sale mới không hỏi lại…"
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-[#7C3AED] focus:outline-none"
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary focus:outline-none"
                 />
               </label>
 
@@ -140,7 +140,7 @@ export function TransferDialog({
                 type="button"
                 onClick={submit}
                 disabled={pending}
-                className="rounded-lg bg-[#7C3AED] px-4 py-2 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-50"
+                className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-50"
               >
                 {pending ? "Đang chuyển…" : "Chuyển lead"}
               </button>

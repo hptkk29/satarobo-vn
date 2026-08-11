@@ -51,11 +51,11 @@ export async function ReserveHistorySection({
         {reserves.map((r) => (
           <div
             key={r.id}
-            className="rounded-r-lg border-l-4 border-yellow-300 bg-yellow-50/40 px-3 py-2 text-sm"
+            className="rounded-r-lg border-l-4 border-state-warning bg-state-warning-soft/40 px-3 py-2 text-sm"
           >
             <div className="flex flex-wrap items-center gap-2">
               {r.isActive ? (
-                <span className="rounded-full bg-yellow-100 px-2 py-0.5 text-xs font-semibold text-yellow-800">
+                <span className="rounded-full bg-state-warning-soft px-2 py-0.5 text-xs font-semibold text-state-warning-ink">
                   Đang bảo lưu
                 </span>
               ) : (

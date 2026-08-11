@@ -227,7 +227,7 @@ export default async function ChatPilotReportPage({
                         )}
                       </>
                     ) : (
-                      <span className="text-amber-700">chưa có thông báo</span>
+                      <span className="text-state-warning-ink">chưa có thông báo</span>
                     )}
                   </TableCell>
                   <TableCell className="text-right">

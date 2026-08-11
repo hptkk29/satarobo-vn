@@ -23,7 +23,7 @@ type Item = {
 };
 
 const inputCls =
-  "w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-orange-400 focus:outline-none";
+  "w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary focus:outline-none";
 
 export function NotificationsClient({
   items,
@@ -146,7 +146,7 @@ export function NotificationsClient({
             type="button"
             onClick={submit}
             disabled={pending}
-            className="rounded-lg bg-orange-500 px-4 py-2 text-sm font-semibold text-white hover:bg-orange-600 disabled:opacity-60"
+            className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white hover:bg-primary-dark disabled:opacity-60"
           >
             Đăng thông báo
           </button>
@@ -166,11 +166,7 @@ export function NotificationsClient({
                 <div className="flex items-start justify-between gap-2">
                   <p className="font-medium text-gray-900">{n.title}</p>
                   <span
-                    className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold ${
-                      n.isPublished
-                        ? "bg-emerald-100 text-emerald-700"
-                        : "bg-neutral-100 text-neutral-500"
-                    }`}
+                    className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold ${ n.isPublished ? "bg-state-success-soft text-state-success-ink" : "bg-neutral-100 text-neutral-500" }`}
                   >
                     {n.isPublished ? "Hiển thị" : "Ẩn"}
                   </span>
@@ -190,7 +186,7 @@ export function NotificationsClient({
                         router.refresh();
                       })
                     }
-                    className="text-xs font-medium text-orange-600 hover:underline"
+                    className="text-xs font-medium text-primary hover:underline"
                   >
                     {n.isPublished ? "Ẩn" : "Hiển thị"}
                   </button>
@@ -207,7 +203,7 @@ export function NotificationsClient({
                         setConfirmDel(n.id);
                       }
                     }}
-                    className="text-xs font-medium text-red-600 hover:underline"
+                    className="text-xs font-medium text-state-danger-ink hover:underline"
                   >
                     {confirmDel === n.id ? "Xác nhận xoá?" : "Xoá"}
                   </button>

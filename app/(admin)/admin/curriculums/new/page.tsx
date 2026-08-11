@@ -39,11 +39,11 @@ export default async function NewCurriculumPage() {
       </div>
 
       {courses.length === 0 ? (
-        <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+        <div className="rounded-xl border border-state-warning-soft bg-state-warning-soft p-4 text-sm text-state-warning-ink">
           Chưa có khoá học. Tạo khoá học trước tại{" "}
           <Link
             href="/courses"
-            className="font-semibold underline hover:text-amber-900"
+            className="font-semibold underline hover:text-state-warning-ink"
           >
             /admin/courses
           </Link>

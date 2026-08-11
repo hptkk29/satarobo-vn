@@ -26,7 +26,7 @@ interface Props {
  *  2. THẺ CAO THẤP KHÁC NHAU. Nhãn "Doanh thu / mục tiêu (tháng)" xuống 2 dòng còn
  *     "Tổng leads" 1 dòng, nên cả hàng thẻ so le. Nhãn nay `truncate` — một dòng, luôn.
  *
- *  3. MÀU HARDCODE. `bg-orange-50 text-orange-500` / `text-purple-700` là hex rời không
+ *  3. MÀU HARDCODE. `bg-primary-soft text-primary` / `text-primary` là hex rời không
  *     đi qua token (DESIGN.md §1). Nay bám `.admin-scope`.
  *
  * `title={String(value)}` để số bị cắt vẫn đọc được đầy đủ khi rê chuột — cắt tiền mà

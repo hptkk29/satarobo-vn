@@ -89,7 +89,7 @@ export default async function ClassGroupDetailPage({ params }: Props) {
             <h1 className="text-2xl font-bold text-gray-900">
               {group.displayCode}
             </h1>
-            <span className="rounded bg-green-100 px-2 py-0.5 text-xs text-green-700">
+            <span className="rounded bg-state-success-soft px-2 py-0.5 text-xs text-state-success-ink">
               {STATUS_LABEL[group.status]}
             </span>
           </div>
@@ -115,7 +115,7 @@ export default async function ClassGroupDetailPage({ params }: Props) {
           <span className="font-semibold text-gray-700">
             Lộ trình nhóm — {done}/{total} khoá hoàn thành
           </span>
-          <span className="font-bold text-blue-600">{pct}%</span>
+          <span className="font-bold text-state-info-ink">{pct}%</span>
         </div>
         <div className="h-2 w-full overflow-hidden rounded-full bg-gray-100">
           <div
@@ -151,13 +151,13 @@ export default async function ClassGroupDetailPage({ params }: Props) {
               key={c.id}
               className="flex items-center gap-4 rounded-xl border border-gray-200 bg-white p-4"
             >
-              <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-blue-100 text-sm font-bold text-blue-700">
+              <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-state-info-soft text-sm font-bold text-state-info-ink">
                 {i + 1}
               </div>
               <div className="min-w-0 flex-1">
                 <Link
                   href={`/classes/${c.id}`}
-                  className="font-semibold text-gray-900 hover:text-blue-600 hover:underline"
+                  className="font-semibold text-gray-900 hover:text-state-info-ink hover:underline"
                 >
                   {c.name}
                 </Link>

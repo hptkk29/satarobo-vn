@@ -19,15 +19,15 @@ export const metadata = { title: "Đăng ký học | Admin" };
 
 const STATUS_INFO: Record<EnrollmentStatus, { label: string; color: string }> = {
   PENDING: { label: "Chờ xếp", color: "bg-gray-100 text-gray-700" },
-  CONFIRMED: { label: "Đã xếp", color: "bg-amber-100 text-amber-700" },
-  STUDYING: { label: "Đang học", color: "bg-green-100 text-green-700" },
-  PAUSED: { label: "Bảo lưu", color: "bg-yellow-100 text-yellow-700" },
-  COMPLETED: { label: "Hoàn thành", color: "bg-blue-100 text-blue-700" },
-  WITHDREW: { label: "Đã rút", color: "bg-red-100 text-red-700" },
-  TRANSFERRED: { label: "Đã chuyển", color: "bg-purple-100 text-purple-700" },
+  CONFIRMED: { label: "Đã xếp", color: "bg-state-warning-soft text-state-warning-ink" },
+  STUDYING: { label: "Đang học", color: "bg-state-success-soft text-state-success-ink" },
+  PAUSED: { label: "Bảo lưu", color: "bg-state-warning-soft text-state-warning-ink" },
+  COMPLETED: { label: "Hoàn thành", color: "bg-state-info-soft text-state-info-ink" },
+  WITHDREW: { label: "Đã rút", color: "bg-state-danger-soft text-state-danger-ink" },
+  TRANSFERRED: { label: "Đã chuyển", color: "bg-primary-soft text-primary" },
   // Legacy values
-  ACTIVE: { label: "Đang học (legacy)", color: "bg-green-100 text-green-700" },
-  CANCELLED: { label: "Đã huỷ", color: "bg-red-100 text-red-700" },
+  ACTIVE: { label: "Đang học (legacy)", color: "bg-state-success-soft text-state-success-ink" },
+  CANCELLED: { label: "Đã huỷ", color: "bg-state-danger-soft text-state-danger-ink" },
 };
 
 const DEFAULT_ACTIVE_STATUSES: EnrollmentStatus[] = [
@@ -166,7 +166,7 @@ export default async function EnrollmentsAdminPage({ searchParams }: SearchParam
       <div className="mb-6 flex items-start justify-between gap-4">
         <div>
           <h1 className="flex items-center gap-2 text-2xl font-bold text-gray-900">
-            <ClipboardList className="h-6 w-6 text-[#7C3AED]" />
+            <ClipboardList className="h-6 w-6 text-primary" />
             Đăng ký học
           </h1>
           <p className="mt-1 text-sm text-gray-500">
@@ -177,7 +177,7 @@ export default async function EnrollmentsAdminPage({ searchParams }: SearchParam
         </div>
         <Link
           href="/enrollments/new"
-          className="inline-flex items-center gap-1.5 rounded-lg bg-[#7C3AED] px-4 py-2 text-sm font-semibold text-white shadow-sm hover:opacity-90"
+          className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white shadow-sm hover:opacity-90"
         >
           <Plus className="h-4 w-4" />
           Đăng ký mới
@@ -192,12 +192,12 @@ export default async function EnrollmentsAdminPage({ searchParams }: SearchParam
           name="q"
           defaultValue={q}
           placeholder="Tìm HS / SĐT PH / tên lớp / mã lớp..."
-          className="lg:col-span-2 rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-[#7C3AED] focus:outline-none focus:ring-2 focus:ring-[#7C3AED]/20"
+          className="lg:col-span-2 rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
         />
         <select
           name="status"
           defaultValue={statusParam ?? "active"}
-          className="rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-[#7C3AED] focus:outline-none"
+          className="rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:outline-none"
         >
           <option value="active">Đang hoạt động (mặc định)</option>
           <option value="all">Tất cả trạng thái</option>
@@ -212,7 +212,7 @@ export default async function EnrollmentsAdminPage({ searchParams }: SearchParam
         <select
           name="classId"
           defaultValue={classFilter ?? ""}
-          className="rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-[#7C3AED] focus:outline-none"
+          className="rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:outline-none"
         >
           <option value="">Tất cả lớp</option>
           {classes.map((c) => (
@@ -225,7 +225,7 @@ export default async function EnrollmentsAdminPage({ searchParams }: SearchParam
         <select
           name="centerId"
           defaultValue={centerFilter ?? ""}
-          className="rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-[#7C3AED] focus:outline-none"
+          className="rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:outline-none"
         >
           <option value="">Tất cả cơ sở</option>
           {centers.map((c) => (
@@ -236,7 +236,7 @@ export default async function EnrollmentsAdminPage({ searchParams }: SearchParam
         </select>
         <button
           type="submit"
-          className="rounded-lg bg-[#7C3AED] px-4 py-2 text-sm font-semibold text-white hover:opacity-90 sm:col-span-2 lg:col-span-5"
+          className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white hover:opacity-90 sm:col-span-2 lg:col-span-5"
         >
           Áp dụng bộ lọc
         </button>
@@ -269,7 +269,7 @@ export default async function EnrollmentsAdminPage({ searchParams }: SearchParam
                 <tr>
                   <td colSpan={5} className="px-4 py-12 text-center text-sm text-gray-400">
                     Chưa có đăng ký nào khớp bộ lọc.{" "}
-                    <Link href="/enrollments/new" className="text-[#7C3AED] hover:underline">
+                    <Link href="/enrollments/new" className="text-primary hover:underline">
                       Tạo đăng ký mới →
                     </Link>
                   </td>

@@ -56,7 +56,7 @@ export default async function CentersAdminPage() {
       <div className="mb-6 flex items-center justify-between">
         <div>
           <h1 className="flex items-center gap-2 text-3xl font-black text-neutral-900">
-            <MapPin className="h-7 w-7 text-orange-500" />
+            <MapPin className="h-7 w-7 text-primary" />
             Cơ sở
           </h1>
           <p className="mt-1 text-neutral-600">
@@ -73,7 +73,7 @@ export default async function CentersAdminPage() {
           </Link>
           <Link
             href="/centers/new"
-            className="inline-flex items-center gap-2 rounded-xl bg-orange-500 px-4 py-2 font-bold text-white shadow-md hover:bg-orange-600"
+            className="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2 font-bold text-white shadow-md hover:bg-primary-dark"
           >
             <Plus className="h-5 w-5" />
             Thêm cơ sở
@@ -97,7 +97,7 @@ export default async function CentersAdminPage() {
               <tr>
                 <td colSpan={5} className="p-12 text-center text-neutral-500">
                   Chưa có cơ sở nào.{" "}
-                  <Link href="/centers/new" className="text-orange-600 hover:underline">
+                  <Link href="/centers/new" className="text-primary hover:underline">
                     Thêm cơ sở đầu tiên →
                   </Link>
                 </td>

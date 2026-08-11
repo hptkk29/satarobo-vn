@@ -9,10 +9,10 @@ import type { JobStatus } from '@prisma/client'
 
 const STATUS_COLORS: Record<JobStatus, string> = {
   DRAFT: 'bg-gray-100 text-gray-600',
-  OPEN: 'bg-green-100 text-green-700',
-  CLOSED: 'bg-red-100 text-red-700',
-  ON_HOLD: 'bg-yellow-100 text-yellow-700',
-  PAUSED: 'bg-orange-100 text-orange-700',
+  OPEN: 'bg-state-success-soft text-state-success-ink',
+  CLOSED: 'bg-state-danger-soft text-state-danger-ink',
+  ON_HOLD: 'bg-state-warning-soft text-state-warning-ink',
+  PAUSED: 'bg-primary-soft text-primary',
 }
 
 const STATUS_LABELS: Record<JobStatus, string> = {
@@ -84,7 +84,7 @@ function JobActions({ job, canEdit }: { job: JobRow; canEdit: boolean }) {
                 await deleteJobAction(job.id)
               })
             }}
-            className="rounded p-1.5 text-gray-400 hover:bg-red-50 hover:text-red-600 disabled:opacity-40"
+            className="rounded p-1.5 text-gray-400 hover:bg-state-danger-soft hover:text-state-danger-ink disabled:opacity-40"
           >
             <Trash2 className="h-4 w-4" />
           </button>
@@ -116,7 +116,7 @@ function StatusSelect({ job, canEdit }: { job: JobRow; canEdit: boolean }) {
             await changeJobStatusAction(job.id, e.target.value)
           })
         }
-        className={`rounded-full border-0 py-0.5 pl-2.5 pr-6 text-xs font-semibold focus:ring-2 focus:ring-purple-200 ${STATUS_COLORS[job.status]}`}
+        className={`rounded-full border-0 py-0.5 pl-2.5 pr-6 text-xs font-semibold focus:ring-2 focus:ring-primary-soft ${STATUS_COLORS[job.status]}`}
       >
         {JOB_STATUS.map((s) => (
           <option key={s.value} value={s.value}>{s.label}</option>

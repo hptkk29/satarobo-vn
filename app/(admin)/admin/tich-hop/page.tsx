@@ -15,11 +15,11 @@ export const metadata = { title: "Tích hợp | Admin" };
 export const dynamic = "force-dynamic";
 
 const STATUS_CLS: Record<string, string> = {
-  SENT: "bg-emerald-100 text-emerald-700",
-  SUCCESS: "bg-emerald-100 text-emerald-700",
-  SKIPPED: "bg-amber-100 text-amber-700",
-  FAILED: "bg-rose-100 text-rose-700",
-  PENDING: "bg-blue-100 text-blue-700",
+  SENT: "bg-state-success-soft text-state-success-ink",
+  SUCCESS: "bg-state-success-soft text-state-success-ink",
+  SKIPPED: "bg-state-warning-soft text-state-warning-ink",
+  FAILED: "bg-state-danger-soft text-state-danger-ink",
+  PENDING: "bg-state-info-soft text-state-info-ink",
 };
 
 export default async function IntegrationsPage() {
@@ -81,11 +81,7 @@ export default async function IntegrationsPage() {
         <div className="flex items-center justify-between">
           <h2 className="text-sm font-bold text-neutral-800">Rate limit (Upstash Redis)</h2>
           <span
-            className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${
-              getRateLimitBackend() === "upstash"
-                ? "bg-emerald-100 text-emerald-700"
-                : "bg-red-100 text-red-700"
-            }`}
+            className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${ getRateLimitBackend() === "upstash" ? "bg-state-success-soft text-state-success-ink" : "bg-state-danger-soft text-state-danger-ink" }`}
           >
             {getRateLimitBackend() === "upstash" ? "Redis (bền vững)" : "Memory (per-instance!)"}
           </span>
@@ -104,9 +100,7 @@ export default async function IntegrationsPage() {
         <div className="flex items-center justify-between">
           <h2 className="text-sm font-bold text-neutral-800">Zalo OA / ZNS</h2>
           <span
-            className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${
-              zaloLive ? "bg-emerald-100 text-emerald-700" : zaloConfigured ? "bg-amber-100 text-amber-700" : "bg-neutral-200 text-neutral-500"
-            }`}
+            className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${ zaloLive ? "bg-state-success-soft text-state-success-ink" : zaloConfigured ? "bg-state-warning-soft text-state-warning-ink" : "bg-neutral-200 text-neutral-500" }`}
           >
             {zaloLive ? "Đang bật (live)" : zaloConfigured ? "Có credential (mô phỏng)" : "Chưa cấu hình"}
           </span>
@@ -147,7 +141,7 @@ export default async function IntegrationsPage() {
                       {/* SENT + providerMessageId "SIMULATED-…" = ZALO_LIVE chưa bật: log xanh
                           nhưng KHÔNG tin nào rời hệ thống — phải phân biệt kẻo tưởng đã gửi. */}
                       {l.status === "SENT" && l.providerMessageId?.startsWith("SIMULATED-") ? (
-                        <span className="rounded-full bg-blue-100 px-2 py-0.5 text-xs text-blue-700">SENT (mô phỏng)</span>
+                        <span className="rounded-full bg-state-info-soft px-2 py-0.5 text-xs text-state-info-ink">SENT (mô phỏng)</span>
                       ) : (
                         <span className={`rounded-full px-2 py-0.5 text-xs ${STATUS_CLS[l.status] ?? ""}`}>{l.status}</span>
                       )}
@@ -168,13 +162,7 @@ export default async function IntegrationsPage() {
           <h2 className="text-sm font-bold text-neutral-800">MISA AMIS (kế toán)</h2>
           <div className="flex items-center gap-2">
             <span
-              className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${
-                misaCfg.isEnabled && misaLive
-                  ? "bg-emerald-100 text-emerald-700"
-                  : misaCfg.isEnabled && misaConfigured
-                    ? "bg-amber-100 text-amber-700"
-                    : "bg-neutral-200 text-neutral-500"
-              }`}
+              className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${ misaCfg.isEnabled && misaLive ? "bg-state-success-soft text-state-success-ink" : misaCfg.isEnabled && misaConfigured ? "bg-state-warning-soft text-state-warning-ink" : "bg-neutral-200 text-neutral-500" }`}
             >
               {misaCfg.isEnabled
                 ? misaLive

@@ -14,8 +14,8 @@ const STATUS_INFO: Record<
   InventoryAuditStatus,
   { label: string; color: string }
 > = {
-  DRAFT: { label: "Đang soạn", color: "bg-amber-100 text-amber-700" },
-  COMPLETED: { label: "Hoàn thành", color: "bg-green-100 text-green-700" },
+  DRAFT: { label: "Đang soạn", color: "bg-state-warning-soft text-state-warning-ink" },
+  COMPLETED: { label: "Hoàn thành", color: "bg-state-success-soft text-state-success-ink" },
   CANCELLED: { label: "Đã huỷ", color: "bg-neutral-100 text-neutral-500" },
 };
 
@@ -92,7 +92,7 @@ export default async function AuditListPage({ searchParams }: SearchParams) {
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <h1 className="flex items-center gap-2 text-2xl font-bold text-gray-900">
-              <ClipboardCheck className="h-6 w-6 text-[#7C3AED]" />
+              <ClipboardCheck className="h-6 w-6 text-primary" />
               Kiểm kê (Audit)
             </h1>
             <p className="mt-1 text-sm text-gray-500">
@@ -103,7 +103,7 @@ export default async function AuditListPage({ searchParams }: SearchParams) {
           </div>
           <Link
             href="/inventory/audit/new"
-            className="inline-flex items-center gap-1.5 rounded-lg bg-[#7C3AED] px-4 py-2 text-sm font-semibold text-white shadow-sm hover:opacity-90"
+            className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white shadow-sm hover:opacity-90"
           >
             <Plus className="h-4 w-4" />
             Tạo phiếu kiểm kê
@@ -118,7 +118,7 @@ export default async function AuditListPage({ searchParams }: SearchParams) {
         <select
           name="status"
           defaultValue={statusFilter ?? ""}
-          className="rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-[#7C3AED] focus:outline-none"
+          className="rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:outline-none"
         >
           <option value="">Mọi trạng thái</option>
           {Object.entries(STATUS_INFO).map(([v, { label }]) => (
@@ -130,7 +130,7 @@ export default async function AuditListPage({ searchParams }: SearchParams) {
         <select
           name="centerId"
           defaultValue={centerFilter ?? ""}
-          className="rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-[#7C3AED] focus:outline-none"
+          className="rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:outline-none"
         >
           <option value="">Mọi cơ sở</option>
           {centers.map((c) => (
@@ -141,7 +141,7 @@ export default async function AuditListPage({ searchParams }: SearchParams) {
         </select>
         <button
           type="submit"
-          className="rounded-lg bg-[#7C3AED] px-4 py-2 text-sm font-semibold text-white hover:opacity-90"
+          className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white hover:opacity-90"
         >
           Áp dụng bộ lọc
         </button>
@@ -191,7 +191,7 @@ export default async function AuditListPage({ searchParams }: SearchParams) {
                     Chưa có phiếu kiểm kê nào khớp bộ lọc.{" "}
                     <Link
                       href="/inventory/audit/new"
-                      className="text-[#7C3AED] hover:underline"
+                      className="text-primary hover:underline"
                     >
                       Tạo mới →
                     </Link>
@@ -224,13 +224,13 @@ export default async function AuditListPage({ searchParams }: SearchParams) {
                       </td>
                       <td className="px-3 py-3 text-center text-xs tabular-nums">
                         {a.totalIncreases > 0 && (
-                          <span className="text-green-600">
+                          <span className="text-state-success-ink">
                             +{a.totalIncreases}
                           </span>
                         )}
                         {a.totalIncreases > 0 && a.totalDecreases > 0 && " / "}
                         {a.totalDecreases > 0 && (
-                          <span className="text-red-600">
+                          <span className="text-state-danger-ink">
                             -{a.totalDecreases}
                           </span>
                         )}
@@ -246,7 +246,7 @@ export default async function AuditListPage({ searchParams }: SearchParams) {
                         {isDraft ? (
                           <Link
                             href={`/inventory/audit/${a.id}/edit`}
-                            className="inline-flex items-center gap-1 rounded-md border border-amber-300 px-2.5 py-1 text-xs font-semibold text-amber-700 hover:bg-amber-50"
+                            className="inline-flex items-center gap-1 rounded-md border border-state-warning px-2.5 py-1 text-xs font-semibold text-state-warning-ink hover:bg-state-warning-soft"
                           >
                             Tiếp tục →
                           </Link>

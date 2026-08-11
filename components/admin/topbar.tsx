@@ -46,7 +46,7 @@ export function Topbar({ userName, userRole, roles = [], activeRole = null }: To
             name="q"
             placeholder="Tìm leads, học viên, blog..."
             aria-label="Tìm leads, học viên, tin tức"
-            className="w-full pl-9 pr-4 py-2 text-sm rounded-lg border border-neutral-200 bg-neutral-50 focus:bg-white focus:border-orange-300 focus:outline-none transition-colors"
+            className="w-full pl-9 pr-4 py-2 text-sm rounded-lg border border-neutral-200 bg-neutral-50 focus:bg-white focus:border-primary focus:outline-none transition-colors"
           />
         </div>
       </form>
@@ -60,7 +60,7 @@ export function Topbar({ userName, userRole, roles = [], activeRole = null }: To
         <DropdownMenu>
           <DropdownMenuTrigger className="flex items-center gap-2 rounded-md px-2 py-1 hover:bg-neutral-50 outline-none transition-colors">
             <Avatar className="h-8 w-8">
-              <AvatarFallback className="bg-gradient-to-br from-orange-500 to-purple-700 text-white text-xs">
+              <AvatarFallback className="bg-primary text-white text-xs">
                 {initials}
               </AvatarFallback>
             </Avatar>
@@ -83,7 +83,7 @@ export function Topbar({ userName, userRole, roles = [], activeRole = null }: To
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem
-              className="text-red-600 focus:text-red-600"
+              className="text-state-danger-ink focus:text-state-danger-ink"
               onClick={() => logoutToGate()}
             >
               <LogOut className="mr-2 h-4 w-4" /> Đăng xuất

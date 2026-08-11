@@ -96,7 +96,7 @@ export default async function LessonChangeInboxPage({
     <div className="max-w-4xl space-y-4 p-6">
       <div>
         <h1 className="flex items-center gap-2 text-2xl font-bold text-gray-900">
-          <FileEdit className="h-6 w-6 text-[#7C3AED]" /> Đề xuất sửa giáo án
+          <FileEdit className="h-6 w-6 text-primary" /> Đề xuất sửa giáo án
         </h1>
         <p className="mt-1 text-sm text-gray-500">
           Đề xuất giáo viên gửi từ trang Lịch dạy — gom theo giáo trình.
@@ -108,11 +108,7 @@ export default async function LessonChangeInboxPage({
           <a
             key={t.key}
             href={`/de-xuat-giao-an?status=${t.key}`}
-            className={`rounded-lg px-3 py-1.5 text-sm font-semibold ${
-              statusFilter === t.key
-                ? "bg-[#7C3AED] text-white"
-                : "border border-neutral-200 bg-white text-neutral-600 hover:bg-neutral-50"
-            }`}
+            className={`rounded-lg px-3 py-1.5 text-sm font-semibold ${ statusFilter === t.key ? "bg-primary text-white" : "border border-neutral-200 bg-white text-neutral-600 hover:bg-neutral-50" }`}
           >
             {t.label}
           </a>
@@ -134,7 +130,7 @@ export default async function LessonChangeInboxPage({
                 {group.curriculumId !== "—" && (
                   <Link
                     href={`/curriculums/${group.curriculumId}/edit`}
-                    className="text-xs font-semibold text-[#7C3AED] hover:underline"
+                    className="text-xs font-semibold text-primary hover:underline"
                   >
                     Mở giáo trình →
                   </Link>

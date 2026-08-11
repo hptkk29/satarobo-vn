@@ -35,11 +35,7 @@ export function DeleteGroupButton({ id }: { id: string }) {
       onClick={onClick}
       onBlur={() => setConfirming(false)}
       disabled={isPending}
-      className={`inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs font-semibold disabled:opacity-50 ${
-        confirming
-          ? "border-red-500 bg-red-500 text-white"
-          : "border-red-300 text-red-600 hover:bg-red-50"
-      }`}
+      className={`inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs font-semibold disabled:opacity-50 ${ confirming ? "border-state-danger bg-state-danger text-white" : "border-state-danger text-state-danger-ink hover:bg-state-danger-soft" }`}
     >
       <Trash2 size={12} /> {confirming ? "Xác nhận" : "Xoá"}
     </button>

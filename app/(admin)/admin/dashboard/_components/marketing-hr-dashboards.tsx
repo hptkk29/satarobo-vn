@@ -71,14 +71,14 @@ export async function MarketingDashboard({ name, actor, embedded = false }: { na
               <li key={i} className="flex items-center gap-3 text-sm">
                 <span className="w-40 truncate text-gray-700" title={s.source ?? "—"}>{s.source ?? "(không nguồn)"}</span>
                 <div className="h-3 flex-1 overflow-hidden rounded-full bg-gray-100">
-                  <div className="h-full rounded-full bg-[#7C3AED]" style={{ width: `${(s.count / maxCount) * 100}%` }} />
+                  <div className="h-full rounded-full bg-primary" style={{ width: `${(s.count / maxCount) * 100}%` }} />
                 </div>
                 <span className="w-10 text-right font-semibold tabular-nums text-gray-700">{s.count}</span>
               </li>
             ))}
           </ul>
         )}
-        <Link href="/marketing" className="mt-3 inline-block text-sm font-semibold text-[#7C3AED] hover:underline">Xem Tracking chi tiết →</Link>
+        <Link href="/marketing" className="mt-3 inline-block text-sm font-semibold text-primary hover:underline">Xem Tracking chi tiết →</Link>
       </section>
     </div>
   );
@@ -130,7 +130,7 @@ function Stat({
 }: {
   label: string; value: number | string; href?: string; tone?: "neutral" | "ok" | "danger"; icon?: React.ReactNode;
 }) {
-  const toneCls = tone === "danger" ? "text-rose-600" : tone === "ok" ? "text-emerald-600" : "text-[#7C3AED]";
+  const toneCls = tone === "danger" ? "text-state-danger-ink" : tone === "ok" ? "text-state-success-ink" : "text-primary";
   const body = (
     <>
       <div className={`flex items-center gap-2 ${toneCls}`}>{icon}<span className="text-2xl font-bold tabular-nums">{value}</span></div>
@@ -138,7 +138,7 @@ function Stat({
     </>
   );
   return href ? (
-    <Link href={href} className="rounded-xl border border-gray-200 bg-white p-4 hover:border-[#7C3AED]">{body}</Link>
+    <Link href={href} className="rounded-xl border border-gray-200 bg-white p-4 hover:border-primary">{body}</Link>
   ) : (
     <div className="rounded-xl border border-gray-200 bg-white p-4">{body}</div>
   );

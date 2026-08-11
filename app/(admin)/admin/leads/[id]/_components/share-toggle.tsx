@@ -62,7 +62,7 @@ export function ShareToggle({
         aria-label="Dùng chung cho CSKH cùng cơ sở"
       />
       {isShared && (
-        <span className="whitespace-nowrap text-xs font-medium text-emerald-600">
+        <span className="whitespace-nowrap text-xs font-medium text-state-success-ink">
           Đang dùng chung{sharedAt ? ` từ ${fmtDate(sharedAt)}` : ""}
         </span>
       )}

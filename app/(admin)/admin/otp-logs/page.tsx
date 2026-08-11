@@ -110,9 +110,9 @@ export default async function OtpLogsPage({ searchParams }: Props) {
   }
 
   const stat = (label: string, value: string, warn = false) => (
-    <div className={`rounded-lg border px-4 py-2 ${warn ? "border-red-300 bg-red-50" : "border-gray-200 bg-white"}`}>
+    <div className={`rounded-lg border px-4 py-2 ${warn ? "border-state-danger bg-state-danger-soft" : "border-gray-200 bg-white"}`}>
       <div className="text-xs text-gray-500">{label}</div>
-      <div className={`text-lg font-bold ${warn ? "text-red-600" : "text-gray-900"}`}>{value}</div>
+      <div className={`text-lg font-bold ${warn ? "text-state-danger-ink" : "text-gray-900"}`}>{value}</div>
     </div>
   );
 
@@ -193,14 +193,12 @@ export default async function OtpLogsPage({ searchParams }: Props) {
                     {r.deliveries.map((d) => (
                       <li key={d.id} className="whitespace-nowrap">
                         <span
-                          className={`inline-block rounded px-1.5 py-0.5 text-xs font-semibold ${
-                            d.status === "SENT" ? "bg-green-100 text-green-700" : "bg-red-100 text-red-700"
-                          }`}
+                          className={`inline-block rounded px-1.5 py-0.5 text-xs font-semibold ${ d.status === "SENT" ? "bg-state-success-soft text-state-success-ink" : "bg-state-danger-soft text-state-danger-ink" }`}
                         >
                           {d.channel} · {d.status}
                         </span>{" "}
                         {d.status !== "SENT" && (
-                          <span className="text-xs text-red-500">{shortError(d.error)}</span>
+                          <span className="text-xs text-state-danger-ink">{shortError(d.error)}</span>
                         )}
                       </li>
                     ))}

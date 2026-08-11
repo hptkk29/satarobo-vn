@@ -439,8 +439,8 @@ export function OrderCreateForm({
       </section>
 
       {/* Item */}
-      <section className="space-y-4 rounded-xl border-l-4 border-blue-300 border-y border-r border-gray-200 bg-blue-50/20 p-5">
-        <h2 className="text-sm font-bold uppercase tracking-wider text-blue-700">
+      <section className="space-y-4 rounded-xl border-l-4 border-state-info border-y border-r border-gray-200 bg-state-info-soft/20 p-5">
+        <h2 className="text-sm font-bold uppercase tracking-wider text-state-info-ink">
           Sản phẩm
         </h2>
         <div className="space-y-1.5">
@@ -482,7 +482,7 @@ export function OrderCreateForm({
           </Select>
           {/* O4 hardening — cảnh báo giá khoá học rỗng → nhập đơn giá tay */}
           {coursePriceMissing && (
-            <div className="mt-2 rounded-lg border border-amber-300 bg-amber-50 p-2 text-sm text-amber-800">
+            <div className="mt-2 rounded-lg border border-state-warning bg-state-warning-soft p-2 text-sm text-state-warning-ink">
               ⚠️ Khoá học này chưa có giá niêm yết. Vui lòng nhập đơn giá thủ
               công bên dưới.
             </div>
@@ -498,8 +498,8 @@ export function OrderCreateForm({
                   className={
                     "mt-2 rounded-lg p-2 text-sm " +
                     (insufficient
-                      ? "border border-red-200 bg-red-50 text-red-700"
-                      : "border border-blue-200 bg-blue-50 text-blue-700")
+                      ? "border border-state-danger-soft bg-state-danger-soft text-state-danger-ink"
+                      : "border border-state-info-soft bg-state-info-soft text-state-info-ink")
                   }
                 >
                   {insufficient ? "⚠️" : "ℹ️"} Tồn kho hiện tại:{" "}
@@ -591,7 +591,7 @@ export function OrderCreateForm({
               maxLength={1000}
               placeholder="VD: HV cũ giới thiệu em ruột — ưu đãi theo chính sách anh chị em"
             />
-            <p className="text-xs text-amber-700">
+            <p className="text-xs text-state-warning-ink">
               Đơn có giảm giá sẽ ở trạng thái <strong>chờ Quản lý cơ sở duyệt</strong> — chỉ
               xác nhận được sau khi duyệt.
             </p>

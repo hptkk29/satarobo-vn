@@ -66,7 +66,7 @@ const MESSAGE_PLATFORMS = ["SMS", "Zalo", "Messenger"] as const;
 type MessagePlatform = (typeof MESSAGE_PLATFORMS)[number];
 
 const inputCls =
-  "w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-orange-500 focus:outline-none focus:ring-2 focus:ring-orange-200";
+  "w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary-soft";
 
 // LD4 — narrow JSON metadata an toàn (object thuần, không phải array/primitive).
 function asMetaObj(m: unknown): Record<string, unknown> | null {
@@ -284,11 +284,7 @@ export function LeadActivityPanel({
                 key={t}
                 type="button"
                 onClick={() => setActType(t)}
-                className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm ${
-                  actType === t
-                    ? "border-orange-400 bg-orange-50 text-orange-700"
-                    : "border-gray-200 text-gray-600 hover:bg-gray-50"
-                }`}
+                className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm ${ actType === t ? "border-primary bg-primary-soft text-primary" : "border-gray-200 text-gray-600 hover:bg-gray-50" }`}
               >
                 <Icon size={14} /> {ACTIVITY_LABEL[t]}
               </button>
@@ -390,7 +386,7 @@ export function LeadActivityPanel({
           type="button"
           onClick={submitActivity}
           disabled={isPending}
-          className="mt-2 rounded-lg bg-orange-500 px-4 py-2 text-sm font-bold text-white hover:bg-orange-600 disabled:opacity-60"
+          className="mt-2 rounded-lg bg-primary px-4 py-2 text-sm font-bold text-white hover:bg-primary-dark disabled:opacity-60"
         >
           Ghi hoạt động
         </button>

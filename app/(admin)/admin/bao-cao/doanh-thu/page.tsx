@@ -224,9 +224,9 @@ export default async function RevenueTargetReportPage({ searchParams }: SearchPa
                     {r.target === null ? (
                       <span className="text-neutral-400">Chưa đặt</span>
                     ) : r.reached ? (
-                      <span className="text-green-600">Đạt</span>
+                      <span className="text-state-success-ink">Đạt</span>
                     ) : (
-                      <span className="text-orange-600">Chưa đạt</span>
+                      <span className="text-primary">Chưa đạt</span>
                     )}
                   </td>
                 </tr>

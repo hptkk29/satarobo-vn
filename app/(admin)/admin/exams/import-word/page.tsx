@@ -40,7 +40,7 @@ export default async function ImportWordPage({ searchParams }: Props) {
           <ChevronLeft className="h-4 w-4" /> Quay lại danh sách
         </Link>
         <h1 className="flex items-center gap-2 text-2xl font-bold text-neutral-900">
-          <FileText className="h-6 w-6 text-[#7C3AED]" />
+          <FileText className="h-6 w-6 text-primary" />
           Import câu hỏi từ Word (.docx)
         </h1>
         <p className="mt-1 text-sm text-neutral-500">
@@ -50,11 +50,11 @@ export default async function ImportWordPage({ searchParams }: Props) {
         </p>
       </div>
 
-      <div className="flex flex-wrap items-center gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+      <div className="flex flex-wrap items-center gap-3 rounded-xl border border-state-warning-soft bg-state-warning-soft px-4 py-3 text-sm text-state-warning-ink">
         <a
           href="/templates/mau-de-thi-word-v2.docx"
           download
-          className="inline-flex items-center gap-1.5 rounded-lg bg-[#7C3AED] px-3 py-1.5 font-semibold text-white hover:opacity-90"
+          className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 font-semibold text-white hover:opacity-90"
         >
           <Download className="h-4 w-4" />
           Tải file mẫu (.docx)

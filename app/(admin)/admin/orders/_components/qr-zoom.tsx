@@ -44,7 +44,7 @@ export function QrZoom({
         type="button"
         onClick={() => setOpen(true)}
         title="Bấm để phóng to QR"
-        className="group relative block rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-purple-500 focus-visible:ring-offset-2"
+        className="group relative block rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
       >
         <img
           src={src}

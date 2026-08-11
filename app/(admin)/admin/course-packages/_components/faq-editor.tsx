@@ -61,7 +61,7 @@ export function FaqEditor({ value, onChange }: Props) {
             <button
               type="button"
               onClick={() => removeItem(idx)}
-              className="ml-auto rounded p-1 text-red-500 hover:bg-red-50"
+              className="ml-auto rounded p-1 text-state-danger-ink hover:bg-state-danger-soft"
               title="Xóa"
             >
               <Trash2 size={16} />

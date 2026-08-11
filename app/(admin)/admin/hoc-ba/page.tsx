@@ -80,7 +80,7 @@ export default async function AdminTranscriptPage({
       </form>
 
       {studentId && !t ? (
-        <p className="text-sm text-rose-600">Không tìm thấy học viên hoặc ngoài phạm vi cơ sở.</p>
+        <p className="text-sm text-state-danger-ink">Không tìm thấy học viên hoặc ngoài phạm vi cơ sở.</p>
       ) : null}
       {t ? <TranscriptView t={t} pdfHref={`/api/admin/reports/transcript?studentId=${studentId}`} /> : null}
     </div>

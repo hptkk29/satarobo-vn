@@ -20,19 +20,19 @@ interface Props {
 }
 
 const ACTION_COLORS: Record<string, string> = {
-  CREATE: "bg-green-100 text-green-700",
-  ADD: "bg-green-100 text-green-700",
-  ENABLE: "bg-green-100 text-green-700",
-  UPDATE: "bg-blue-100 text-blue-700",
-  STATUS_CHANGE: "bg-blue-100 text-blue-700",
-  ASSIGN: "bg-blue-100 text-blue-700",
-  DELETE: "bg-red-100 text-red-700",
-  REMOVE: "bg-red-100 text-red-700",
-  DISABLE: "bg-red-100 text-red-700",
-  EXPORT: "bg-purple-100 text-purple-700",
-  PASSWORD_RESET: "bg-orange-100 text-orange-700",
-  ROLE_CHANGE: "bg-purple-100 text-purple-700",
-  "audit.pii-unmasked": "bg-amber-100 text-amber-800",
+  CREATE: "bg-state-success-soft text-state-success-ink",
+  ADD: "bg-state-success-soft text-state-success-ink",
+  ENABLE: "bg-state-success-soft text-state-success-ink",
+  UPDATE: "bg-state-info-soft text-state-info-ink",
+  STATUS_CHANGE: "bg-state-info-soft text-state-info-ink",
+  ASSIGN: "bg-state-info-soft text-state-info-ink",
+  DELETE: "bg-state-danger-soft text-state-danger-ink",
+  REMOVE: "bg-state-danger-soft text-state-danger-ink",
+  DISABLE: "bg-state-danger-soft text-state-danger-ink",
+  EXPORT: "bg-primary-soft text-primary",
+  PASSWORD_RESET: "bg-primary-soft text-primary",
+  ROLE_CHANGE: "bg-primary-soft text-primary",
+  "audit.pii-unmasked": "bg-state-warning-soft text-state-warning-ink",
 };
 
 function formatDateTime(date: Date): string {
@@ -71,11 +71,7 @@ export function AuditLogDetailModal({ open, onClose, row, revealed }: Props) {
         <div className="space-y-4">
           {/* PII state banner */}
           <div
-            className={`flex items-center gap-2 rounded-lg border p-2.5 text-xs ${
-              revealed
-                ? "border-amber-200 bg-amber-50 text-amber-800"
-                : "border-gray-200 bg-gray-50 text-gray-500"
-            }`}
+            className={`flex items-center gap-2 rounded-lg border p-2.5 text-xs ${ revealed ? "border-state-warning-soft bg-state-warning-soft text-state-warning-ink" : "border-gray-200 bg-gray-50 text-gray-500" }`}
           >
             {revealed ? (
               <>
@@ -140,7 +136,7 @@ export function AuditLogDetailModal({ open, onClose, row, revealed }: Props) {
                 {row.changedFields.map((f) => (
                   <span
                     key={f}
-                    className="inline-flex rounded-full bg-blue-100 px-2 py-0.5 text-xs font-semibold text-blue-700"
+                    className="inline-flex rounded-full bg-state-info-soft px-2 py-0.5 text-xs font-semibold text-state-info-ink"
                   >
                     {f}
                   </span>
@@ -167,7 +163,7 @@ export function AuditLogDetailModal({ open, onClose, row, revealed }: Props) {
               <h4 className="text-xs font-bold uppercase tracking-wider text-gray-500">
                 Giá trị mới
               </h4>
-              <pre className="mt-1 overflow-x-auto rounded-lg bg-green-50 p-3 text-xs text-gray-800">
+              <pre className="mt-1 overflow-x-auto rounded-lg bg-state-success-soft p-3 text-xs text-gray-800">
                 {JSON.stringify(row.newValues, null, 2)}
               </pre>
             </div>

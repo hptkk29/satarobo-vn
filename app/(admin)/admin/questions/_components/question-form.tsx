@@ -246,7 +246,7 @@ export function QuestionForm({
   return (
     <form onSubmit={handleSubmit} className="max-w-4xl space-y-5">
       {error && (
-        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+        <div className="rounded-lg border border-state-danger-soft bg-state-danger-soft px-4 py-3 text-sm text-state-danger-ink">
           {error}
         </div>
       )}
@@ -446,7 +446,7 @@ export function QuestionForm({
                       ? "(cố định)"
                       : `Nội dung lựa chọn ${String.fromCharCode(64 + c.order)}`
                   }
-                  className="flex-1 resize-y rounded-md border border-neutral-200 bg-white px-2 py-1.5 text-sm outline-none focus:border-[#7C3AED] focus:ring-2 focus:ring-[#7C3AED]/20 disabled:bg-neutral-100"
+                  className="flex-1 resize-y rounded-md border border-neutral-200 bg-white px-2 py-1.5 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 disabled:bg-neutral-100"
                 />
                 <label className="flex items-center gap-1 self-center text-sm font-medium">
                   <input
@@ -463,7 +463,7 @@ export function QuestionForm({
                     type="button"
                     onClick={() => removeChoice(idx)}
                     disabled={pending}
-                    className="self-center rounded p-1.5 text-red-600 hover:bg-red-50 disabled:opacity-40"
+                    className="self-center rounded p-1.5 text-state-danger-ink hover:bg-state-danger-soft disabled:opacity-40"
                     aria-label="Xoá lựa chọn"
                     title="Xoá"
                   >
@@ -511,7 +511,7 @@ export function QuestionForm({
                   ? "Code mẫu"
                   : "Đáp án mẫu (gợi ý chấm)"}
               {type === "SHORT_ANSWER" && (
-                <span className="ml-1 text-red-500">*</span>
+                <span className="ml-1 text-state-danger-ink">*</span>
               )}
             </h2>
             <p className="mt-0.5 text-xs text-neutral-500">
@@ -537,7 +537,7 @@ export function QuestionForm({
             }
             className={
               type === "CODE"
-                ? "w-full resize-y rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm font-mono outline-none focus:border-[#7C3AED] focus:ring-2 focus:ring-[#7C3AED]/20"
+                ? "w-full resize-y rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm font-mono outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
                 : `${inputClass} resize-y`
             }
           />
@@ -575,7 +575,7 @@ export function QuestionForm({
         <button
           type="submit"
           disabled={pending}
-          className="rounded-xl bg-[#7C3AED] px-6 py-3 font-bold text-white shadow-md hover:opacity-90 disabled:opacity-60"
+          className="rounded-xl bg-primary px-6 py-3 font-bold text-white shadow-md hover:opacity-90 disabled:opacity-60"
         >
           {pending ? "Đang lưu..." : isEdit ? "Cập nhật" : "Tạo câu hỏi"}
         </button>
@@ -592,7 +592,7 @@ export function QuestionForm({
             type="button"
             onClick={handleDelete}
             disabled={pending}
-            className="ml-auto rounded-xl border-2 border-red-200 bg-white px-6 py-3 font-bold text-red-700 hover:bg-red-50"
+            className="ml-auto rounded-xl border-2 border-state-danger-soft bg-white px-6 py-3 font-bold text-state-danger-ink hover:bg-state-danger-soft"
           >
             Xoá
           </button>
@@ -603,7 +603,7 @@ export function QuestionForm({
 }
 
 const inputClass =
-  "w-full rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm outline-none focus:border-[#7C3AED] focus:ring-2 focus:ring-[#7C3AED]/20";
+  "w-full rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20";
 
 function Field({
   label,
@@ -618,7 +618,7 @@ function Field({
     <label className="block">
       <span className="mb-1 block text-sm font-semibold text-neutral-700">
         {label}
-        {required && <span className="ml-1 text-red-500">*</span>}
+        {required && <span className="ml-1 text-state-danger-ink">*</span>}
       </span>
       {children}
     </label>

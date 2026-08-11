@@ -329,7 +329,7 @@ export function DiscountSection({
                   </TableCell>
                   <TableCell>
                     {d.active ? (
-                      <Badge className="bg-green-100 text-green-700 hover:bg-green-100">
+                      <Badge className="bg-state-success-soft text-state-success-ink hover:bg-state-success-soft-hover">
                         Đang áp dụng
                       </Badge>
                     ) : (

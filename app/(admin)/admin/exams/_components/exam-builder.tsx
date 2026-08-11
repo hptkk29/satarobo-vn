@@ -61,10 +61,10 @@ const TYPE_LABEL: Record<QuestionType, string> = {
 };
 
 const TYPE_COLOR: Record<QuestionType, string> = {
-  MULTIPLE_CHOICE: "bg-blue-100 text-blue-700",
-  TRUE_FALSE: "bg-emerald-100 text-emerald-700",
-  SHORT_ANSWER: "bg-amber-100 text-amber-700",
-  ESSAY: "bg-purple-100 text-purple-700",
+  MULTIPLE_CHOICE: "bg-state-info-soft text-state-info-ink",
+  TRUE_FALSE: "bg-state-success-soft text-state-success-ink",
+  SHORT_ANSWER: "bg-state-warning-soft text-state-warning-ink",
+  ESSAY: "bg-primary-soft text-primary",
   CODE: "bg-neutral-100 text-neutral-800",
 };
 
@@ -216,7 +216,7 @@ export function ExamBuilder({
   return (
     <div className="space-y-3">
       {error && (
-        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+        <div className="rounded-lg border border-state-danger-soft bg-state-danger-soft px-4 py-3 text-sm text-state-danger-ink">
           {error}
         </div>
       )}
@@ -230,7 +230,7 @@ export function ExamBuilder({
           type="button"
           onClick={() => setAutoGenOpen(true)}
           disabled={pending}
-          className="inline-flex items-center gap-1.5 rounded-lg border border-purple-300 bg-white px-3 py-1.5 text-sm font-semibold text-purple-700 hover:bg-purple-50 disabled:opacity-60"
+          className="inline-flex items-center gap-1.5 rounded-lg border border-primary bg-white px-3 py-1.5 text-sm font-semibold text-primary hover:bg-primary-soft disabled:opacity-60"
         >
           <Sparkles className="h-4 w-4" />
           Auto-generate từ ngân hàng
@@ -250,12 +250,12 @@ export function ExamBuilder({
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder="Tìm nội dung..."
-                className="sm:col-span-3 rounded-md border border-neutral-200 px-2.5 py-1.5 text-sm outline-none focus:border-[#7C3AED] focus:ring-2 focus:ring-[#7C3AED]/20"
+                className="sm:col-span-3 rounded-md border border-neutral-200 px-2.5 py-1.5 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
               />
               <select
                 value={filterType}
                 onChange={(e) => setFilterType(e.target.value as QuestionType | "")}
-                className="rounded-md border border-neutral-200 px-2 py-1.5 text-sm focus:border-[#7C3AED] focus:outline-none"
+                className="rounded-md border border-neutral-200 px-2 py-1.5 text-sm focus:border-primary focus:outline-none"
               >
                 <option value="">Mọi loại</option>
                 {(Object.keys(TYPE_LABEL) as QuestionType[]).map((t) => (
@@ -269,7 +269,7 @@ export function ExamBuilder({
                 onChange={(e) =>
                   setFilterDifficulty(e.target.value as Difficulty | "")
                 }
-                className="rounded-md border border-neutral-200 px-2 py-1.5 text-sm focus:border-[#7C3AED] focus:outline-none"
+                className="rounded-md border border-neutral-200 px-2 py-1.5 text-sm focus:border-primary focus:outline-none"
               >
                 <option value="">Mọi độ khó</option>
                 {(Object.keys(DIFFICULTY_LABEL) as Difficulty[]).map((d) => (
@@ -320,7 +320,7 @@ export function ExamBuilder({
                     type="button"
                     onClick={() => handleAdd(b)}
                     disabled={pending}
-                    className="rounded-md bg-[#7C3AED] px-2.5 py-1 text-xs font-semibold text-white hover:opacity-90 disabled:opacity-50"
+                    className="rounded-md bg-primary px-2.5 py-1 text-xs font-semibold text-white hover:opacity-90 disabled:opacity-50"
                   >
                     <Plus className="h-3 w-3 inline" /> Thêm
                   </button>
@@ -404,7 +404,7 @@ export function ExamBuilder({
                         onClick={() => handleRemove(s.id, idx)}
                         disabled={pending}
                         aria-label="Xoá"
-                        className="rounded p-1 text-red-600 hover:bg-red-50 disabled:opacity-30"
+                        className="rounded p-1 text-state-danger-ink hover:bg-state-danger-soft disabled:opacity-30"
                       >
                         <Trash2 className="h-3.5 w-3.5" />
                       </button>
@@ -507,7 +507,7 @@ function AutoGenerateModal({
         </button>
 
         <h2 className="flex items-center gap-2 text-lg font-bold text-neutral-900">
-          <Sparkles className="h-5 w-5 text-purple-500" />
+          <Sparkles className="h-5 w-5 text-primary" />
           Auto-generate câu hỏi
         </h2>
         <p className="mt-1 text-xs text-neutral-500">
@@ -515,7 +515,7 @@ function AutoGenerateModal({
         </p>
 
         {localError && (
-          <div className="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+          <div className="mt-3 rounded-lg border border-state-danger-soft bg-state-danger-soft px-3 py-2 text-sm text-state-danger-ink">
             {localError}
           </div>
         )}
@@ -641,7 +641,7 @@ function AutoGenerateModal({
             type="button"
             onClick={handleSubmit}
             disabled={pending}
-            className="rounded-lg bg-purple-500 px-4 py-2 text-sm font-bold text-white hover:bg-purple-600 disabled:opacity-50"
+            className="rounded-lg bg-primary px-4 py-2 text-sm font-bold text-white hover:bg-primary-dark disabled:opacity-50"
           >
             {pending ? "Đang lấy..." : `Lấy ${count} câu`}
           </button>
@@ -652,4 +652,4 @@ function AutoGenerateModal({
 }
 
 const modalInputClass =
-  "w-full rounded-md border border-neutral-300 px-2 py-1.5 text-sm outline-none focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20";
+  "w-full rounded-md border border-neutral-300 px-2 py-1.5 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20";

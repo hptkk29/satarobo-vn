@@ -52,7 +52,7 @@ export default async function CoursePrerequisitesPage() {
     <div className="max-w-4xl">
       <div className="mb-6">
         <h1 className="flex items-center gap-2 text-2xl font-bold text-gray-900">
-          <Workflow className="h-6 w-6 text-[#7C3AED]" />
+          <Workflow className="h-6 w-6 text-primary" />
           Khoá tiên quyết
         </h1>
         <p className="mt-1 text-sm text-gray-500">

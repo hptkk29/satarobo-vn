@@ -46,7 +46,7 @@ export function ClassDeleteButton({
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="inline-flex items-center gap-1 rounded-md border border-gray-200 px-2.5 py-1 text-xs font-semibold text-red-600 transition-colors hover:bg-red-50"
+        className="inline-flex items-center gap-1 rounded-md border border-gray-200 px-2.5 py-1 text-xs font-semibold text-state-danger-ink transition-colors hover:bg-state-danger-soft"
         aria-label={`Xoá ${name}`}
       >
         <Trash2 className="h-3.5 w-3.5" />

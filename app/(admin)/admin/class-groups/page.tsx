@@ -17,8 +17,8 @@ const STATUS_LABEL: Record<string, string> = {
 };
 
 const STATUS_CLASS: Record<string, string> = {
-  ACTIVE: "bg-green-100 text-green-700",
-  GRADUATED: "bg-blue-100 text-blue-700",
+  ACTIVE: "bg-state-success-soft text-state-success-ink",
+  GRADUATED: "bg-state-info-soft text-state-info-ink",
   DISBANDED: "bg-gray-200 text-gray-600",
 };
 
@@ -57,7 +57,7 @@ export default async function ClassGroupsPage() {
         {canManage && (
           <Link
             href="/class-groups/new"
-            className="inline-flex items-center gap-2 rounded bg-blue-600 px-3 py-2 text-sm text-white hover:bg-blue-700"
+            className="inline-flex items-center gap-2 rounded bg-state-info-ink px-3 py-2 text-sm text-white hover:bg-state-info-ink-hover"
           >
             <Plus size={16} /> Thêm nhóm lớp
           </Link>
@@ -92,7 +92,7 @@ export default async function ClassGroupsPage() {
                 <td className="px-3 py-2 font-bold">
                   <Link
                     href={`/class-groups/${g.id}`}
-                    className="text-blue-600 hover:underline"
+                    className="text-state-info-ink hover:underline"
                   >
                     {g.displayCode}
                   </Link>

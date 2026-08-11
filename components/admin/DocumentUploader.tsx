@@ -205,7 +205,7 @@ export function DocumentUploader({
     return (
       <div className="rounded-lg border border-neutral-200 bg-neutral-50 p-3">
         <div className="flex items-start gap-3">
-          <Icon className="h-10 w-10 flex-shrink-0 text-blue-500" />
+          <Icon className="h-10 w-10 flex-shrink-0 text-state-info-ink" />
           <div className="flex-1 min-w-0">
             <p className="truncate text-sm font-medium text-neutral-900">
               {value.fileName}
@@ -217,7 +217,7 @@ export function DocumentUploader({
               href={value.url}
               target="_blank"
               rel="noopener noreferrer"
-              className="mt-1 inline-block text-xs font-semibold text-blue-600 hover:underline"
+              className="mt-1 inline-block text-xs font-semibold text-state-info-ink hover:underline"
             >
               Mở file ↗
             </a>
@@ -233,7 +233,7 @@ export function DocumentUploader({
           </button>
         </div>
         {state.status === "error" && (
-          <p className="mt-2 text-xs text-red-600">{state.message}</p>
+          <p className="mt-2 text-xs text-state-danger-ink">{state.message}</p>
         )}
         {helperText && (
           <p className="mt-2 text-xs text-neutral-500">{helperText}</p>
@@ -249,22 +249,22 @@ export function DocumentUploader({
         className={
           "cursor-pointer rounded-lg border-2 border-dashed p-6 text-center transition-colors " +
           (isDragActive
-            ? "border-[#7C3AED] bg-purple-50"
+            ? "border-primary bg-primary-soft"
             : state.status === "uploading"
               ? "border-neutral-300 bg-neutral-50"
-              : "border-neutral-300 hover:border-purple-400 hover:bg-purple-50/40")
+              : "border-neutral-300 hover:border-primary hover:bg-primary-soft/40")
         }
       >
         <input {...getInputProps()} />
         {state.status === "uploading" ? (
           <>
-            <Loader2 className="mx-auto h-8 w-8 animate-spin text-[#7C3AED]" />
+            <Loader2 className="mx-auto h-8 w-8 animate-spin text-primary" />
             <p className="mt-2 text-sm font-medium text-neutral-700">
               Đang tải lên {state.filename}... ({state.progress}%)
             </p>
             <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-neutral-200">
               <div
-                className="h-full bg-[#7C3AED] transition-all"
+                className="h-full bg-primary transition-all"
                 style={{ width: `${state.progress}%` }}
               />
             </div>
@@ -282,7 +282,7 @@ export function DocumentUploader({
         )}
       </div>
       {state.status === "error" && (
-        <p className="text-xs text-red-600">{state.message}</p>
+        <p className="text-xs text-state-danger-ink">{state.message}</p>
       )}
       {helperText && !disabled && state.status !== "error" && (
         <p className="text-xs text-neutral-500">{helperText}</p>

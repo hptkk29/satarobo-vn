@@ -64,7 +64,7 @@ export default async function UserOrgRolesPage({ params }: Props) {
       </Link>
       <div className="mb-6">
         <h1 className="flex items-center gap-2 text-3xl font-black text-neutral-900">
-          <KeyRound className="h-7 w-7 text-orange-500" />
+          <KeyRound className="h-7 w-7 text-primary" />
           Vai trò theo đơn vị
         </h1>
         <p className="mt-1 text-sm text-neutral-500">

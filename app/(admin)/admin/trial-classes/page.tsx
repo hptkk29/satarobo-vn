@@ -18,10 +18,10 @@ const STATUS_LABEL: Record<string, string> = {
   CANCELLED: "Đã huỷ",
 };
 const STATUS_BADGE: Record<string, string> = {
-  OPEN: "bg-emerald-100 text-emerald-700",
-  RUNNING: "bg-blue-100 text-blue-700",
+  OPEN: "bg-state-success-soft text-state-success-ink",
+  RUNNING: "bg-state-info-soft text-state-info-ink",
   COMPLETED: "bg-gray-100 text-gray-600",
-  CANCELLED: "bg-rose-100 text-rose-700",
+  CANCELLED: "bg-state-danger-soft text-state-danger-ink",
 };
 
 export default async function TrialClassesPage() {
@@ -56,7 +56,7 @@ export default async function TrialClassesPage() {
       <div className="mb-6 flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="flex items-center gap-2 text-2xl font-bold text-gray-900">
-            <FlaskConical className="h-6 w-6 text-orange-500" /> Lớp trải nghiệm
+            <FlaskConical className="h-6 w-6 text-primary" /> Lớp trải nghiệm
           </h1>
           <p className="mt-1 text-sm text-gray-500">
             Lớp học thử nhiều buổi (RoboSim/Robot). Xếp con từ lead vào lớp, điểm danh
@@ -66,7 +66,7 @@ export default async function TrialClassesPage() {
         {canManage && (
           <Link
             href="/trial-classes/new"
-            className="inline-flex items-center gap-1.5 rounded-lg bg-orange-500 px-3 py-2 text-sm font-semibold text-white hover:bg-orange-600"
+            className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-2 text-sm font-semibold text-white hover:bg-primary-dark"
           >
             <Plus className="h-4 w-4" /> Tạo lớp
           </Link>
@@ -108,7 +108,7 @@ export default async function TrialClassesPage() {
                   <td className="px-4 py-3">
                     <Link
                       href={`/trial-classes/${c.id}`}
-                      className="font-medium text-orange-600 hover:underline"
+                      className="font-medium text-primary hover:underline"
                     >
                       {c.name}
                     </Link>
@@ -123,7 +123,7 @@ export default async function TrialClassesPage() {
                   <td className="px-4 py-3">
                     <span
                       className={
-                        full ? "font-semibold text-rose-600" : "text-gray-700"
+                        full ? "font-semibold text-state-danger-ink" : "text-gray-700"
                       }
                     >
                       {used}/{c.capacity}
@@ -139,9 +139,7 @@ export default async function TrialClassesPage() {
                   </td>
                   <td className="px-4 py-3">
                     <span
-                      className={`rounded-full px-2 py-0.5 text-xs font-semibold ${
-                        STATUS_BADGE[c.status] ?? "bg-gray-100 text-gray-600"
-                      }`}
+                      className={`rounded-full px-2 py-0.5 text-xs font-semibold ${ STATUS_BADGE[c.status] ?? "bg-gray-100 text-gray-600" }`}
                     >
                       {STATUS_LABEL[c.status] ?? c.status}
                     </span>

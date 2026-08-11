@@ -45,7 +45,7 @@ export default async function AdminGuideDetailPage({ params }: PageProps) {
         {guide.pagePath ? (
           <Link
             href={guide.pagePath}
-            className="inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-orange-500 px-3 py-2 text-sm font-semibold text-white transition-colors hover:bg-orange-600"
+            className="inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-primary px-3 py-2 text-sm font-semibold text-white transition-colors hover:bg-primary-dark"
           >
             Mở trang này
             <ExternalLink className="h-4 w-4" aria-hidden />

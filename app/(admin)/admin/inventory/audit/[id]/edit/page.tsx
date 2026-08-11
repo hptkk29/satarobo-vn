@@ -82,7 +82,7 @@ export default async function EditAuditPage({ params }: Props) {
         </Link>
         <h1 className="text-2xl font-bold text-neutral-900">
           Kiểm kê:{" "}
-          <span className="font-bold text-orange-600">
+          <span className="font-bold text-primary">
             {audit.center.name}
           </span>
         </h1>
@@ -92,11 +92,11 @@ export default async function EditAuditPage({ params }: Props) {
       </div>
 
       {rows.length === 0 ? (
-        <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+        <div className="rounded-xl border border-state-warning-soft bg-state-warning-soft p-4 text-sm text-state-warning-ink">
           Chưa có mặt hàng active nào. Tạo / kích hoạt mặt hàng trước tại{" "}
           <Link
             href="/inventory/items"
-            className="font-semibold underline hover:text-amber-900"
+            className="font-semibold underline hover:text-state-warning-ink"
           >
             /admin/inventory/items
           </Link>

@@ -103,9 +103,9 @@ export function JobForm({ action, mode, initialData }: JobFormProps) {
   const errors = form.formState.errors
 
   const fieldClass =
-    'w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-[#7C3AED] focus:outline-none focus:ring-2 focus:ring-[#7C3AED]/20 disabled:bg-gray-50'
+    'w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 disabled:bg-gray-50'
   const labelClass = 'block text-sm font-semibold text-gray-700 mb-1'
-  const errorClass = 'mt-1 text-xs text-red-600'
+  const errorClass = 'mt-1 text-xs text-state-danger-ink'
 
   return (
     <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8 max-w-4xl">
@@ -372,7 +372,7 @@ export function JobForm({ action, mode, initialData }: JobFormProps) {
         <button
           type="submit"
           disabled={isPending}
-          className="inline-flex items-center gap-2 rounded-lg bg-[#7C3AED] px-5 py-2.5 text-sm font-bold text-white hover:opacity-90 disabled:opacity-60"
+          className="inline-flex items-center gap-2 rounded-lg bg-primary px-5 py-2.5 text-sm font-bold text-white hover:opacity-90 disabled:opacity-60"
         >
           {isPending && <Loader2 className="h-4 w-4 animate-spin" />}
           {isPending ? 'Đang lưu...' : mode === 'create' ? 'Tạo JD' : 'Cập nhật'}

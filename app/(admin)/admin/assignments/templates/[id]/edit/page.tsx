@@ -108,7 +108,7 @@ export default async function EditTemplatePage({ params }: Props) {
         </Link>
         <h1 className="text-2xl font-bold text-neutral-900">
           Sửa mẫu:{" "}
-          <span className="font-bold text-orange-600">{template.title}</span>
+          <span className="font-bold text-primary">{template.title}</span>
         </h1>
       </div>
 

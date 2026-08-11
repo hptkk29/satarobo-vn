@@ -232,18 +232,18 @@ export default async function EditClassPage({ params }: Props) {
     <div>
       <div className="mb-6 flex flex-wrap items-baseline justify-between gap-3">
         <h1 className="text-3xl font-black text-neutral-900">
-          Sửa lớp: <span className="font-bold text-orange-600">{cls.name}</span>
+          Sửa lớp: <span className="font-bold text-primary">{cls.name}</span>
         </h1>
         <div className="flex flex-wrap gap-2">
           <Link
             href={`/classes/${cls.id}/students`}
-            className="inline-flex items-center gap-1 rounded-lg border border-orange-200 bg-white px-3 py-1.5 text-sm font-semibold text-orange-700 hover:bg-orange-50"
+            className="inline-flex items-center gap-1 rounded-lg border border-primary-soft bg-white px-3 py-1.5 text-sm font-semibold text-primary hover:bg-primary-soft"
           >
             👥 Học sinh
           </Link>
           <Link
             href={`/classes/${cls.id}/progress`}
-            className="inline-flex items-center gap-1 rounded-lg border border-purple-200 bg-white px-3 py-1.5 text-sm font-semibold text-purple-700 hover:bg-purple-50"
+            className="inline-flex items-center gap-1 rounded-lg border border-primary-soft bg-white px-3 py-1.5 text-sm font-semibold text-primary hover:bg-primary-soft"
           >
             📊 Tiến độ lớp
           </Link>

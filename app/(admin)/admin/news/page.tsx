@@ -37,7 +37,7 @@ export default async function NewsAdminPage() {
         </div>
         <Link
           href="/news/new"
-          className="inline-flex items-center gap-2 rounded-xl bg-orange-500 px-4 py-2 font-bold text-white shadow-md hover:bg-orange-600"
+          className="inline-flex items-center gap-2 rounded-xl bg-primary px-4 py-2 font-bold text-white shadow-md hover:bg-primary-dark"
         >
           <Plus className="h-5 w-5" />
           Thêm bài viết
@@ -60,7 +60,7 @@ export default async function NewsAdminPage() {
               <tr>
                 <td colSpan={5} className="p-12 text-center text-neutral-500">
                   Chưa có bài viết nào.{" "}
-                  <Link href="/news/new" className="text-orange-600 hover:underline">
+                  <Link href="/news/new" className="text-primary hover:underline">
                     Tạo bài đầu tiên →
                   </Link>
                 </td>

@@ -57,7 +57,7 @@ export function ClassCurriculum({
         <h2 className="flex items-center gap-2 text-sm font-bold uppercase tracking-wider text-gray-500">
           <BookOpen className="h-4 w-4" /> Chương trình (kế hoạch buổi)
         </h2>
-        <span className="inline-flex items-center gap-1 rounded-full bg-purple-50 px-2.5 py-0.5 text-xs font-semibold text-purple-700">
+        <span className="inline-flex items-center gap-1 rounded-full bg-primary-soft px-2.5 py-0.5 text-xs font-semibold text-primary">
           <Layers className="h-3.5 w-3.5" />
           Version đang chốt: {pinnedVersion ?? "—"}
         </span>
@@ -136,12 +136,12 @@ function AdoptVersion({
   }
 
   return (
-    <div className="rounded-lg border border-dashed border-purple-200 bg-purple-50/40 p-3">
+    <div className="rounded-lg border border-dashed border-primary-soft bg-primary-soft/40 p-3">
       {!open ? (
         <button
           type="button"
           onClick={() => setOpen(true)}
-          className="text-sm font-semibold text-purple-700 hover:underline"
+          className="text-sm font-semibold text-primary hover:underline"
         >
           Áp dụng version mới…
         </button>
@@ -153,7 +153,7 @@ function AdoptVersion({
               onChange={(e) =>
                 setVersion(e.target.value ? Number(e.target.value) : "")
               }
-              className="rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-purple-500 focus:outline-none"
+              className="rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary focus:outline-none"
             >
               <option value="">— Chọn version —</option>
               {others.map((v) => (
@@ -166,10 +166,10 @@ function AdoptVersion({
               value={reason}
               onChange={(e) => setReason(e.target.value)}
               placeholder="Lý do áp dụng (bắt buộc)"
-              className="flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-purple-500 focus:outline-none"
+              className="flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary focus:outline-none"
             />
           </div>
-          <p className="text-xs text-amber-700">
+          <p className="text-xs text-state-warning-ink">
             Áp version mới sẽ sinh lại kế hoạch buổi theo giáo trình mới. Thao tác
             được ghi nhật ký kèm lý do.
           </p>
@@ -178,7 +178,7 @@ function AdoptVersion({
               type="button"
               onClick={submit}
               disabled={pending}
-              className="rounded-lg bg-[#7C3AED] px-4 py-2 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-50"
+              className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-50"
             >
               {pending ? "Đang áp dụng…" : "Áp dụng"}
             </button>
@@ -248,7 +248,7 @@ function PlanItem({
                 type="button"
                 onClick={() => onReorder(plan, -1)}
                 disabled={pending || isFirst}
-                className="text-gray-400 hover:text-purple-600 disabled:opacity-30"
+                className="text-gray-400 hover:text-primary disabled:opacity-30"
                 aria-label="Lên"
               >
                 <ChevronUp className="h-4 w-4" />
@@ -257,7 +257,7 @@ function PlanItem({
                 type="button"
                 onClick={() => onReorder(plan, 1)}
                 disabled={pending || isLast}
-                className="text-gray-400 hover:text-purple-600 disabled:opacity-30"
+                className="text-gray-400 hover:text-primary disabled:opacity-30"
                 aria-label="Xuống"
               >
                 <ChevronDown className="h-4 w-4" />
@@ -284,7 +284,7 @@ function PlanItem({
                 <button
                   type="button"
                   onClick={() => setEditing(true)}
-                  className="mt-1 text-xs font-semibold text-purple-700 hover:underline"
+                  className="mt-1 text-xs font-semibold text-primary hover:underline"
                 >
                   Sửa
                 </button>
@@ -296,21 +296,21 @@ function PlanItem({
                 value={customTitle}
                 onChange={(e) => setCustomTitle(e.target.value)}
                 placeholder={plan.lessonTitle ?? "Tiêu đề tuỳ biến"}
-                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-purple-500 focus:outline-none"
+                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary focus:outline-none"
               />
               <textarea
                 value={note}
                 onChange={(e) => setNote(e.target.value)}
                 rows={2}
                 placeholder="Ghi chú buổi"
-                className="w-full resize-y rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-purple-500 focus:outline-none"
+                className="w-full resize-y rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary focus:outline-none"
               />
               <div className="flex gap-2">
                 <button
                   type="button"
                   onClick={save}
                   disabled={savePending}
-                  className="inline-flex items-center gap-1 rounded-lg bg-[#7C3AED] px-3 py-1.5 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-50"
+                  className="inline-flex items-center gap-1 rounded-lg bg-primary px-3 py-1.5 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-50"
                 >
                   <Save className="h-3.5 w-3.5" />
                   {savePending ? "Đang lưu…" : "Lưu"}

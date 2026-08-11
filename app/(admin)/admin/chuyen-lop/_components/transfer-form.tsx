@@ -188,7 +188,7 @@ export function TransferForm({
             Tiến độ học viên: {studentCovered ?? 0} bài. Lớp đích không vượt quá mức này.
           </p>
           {eligible.length === 0 ? (
-            <p className="rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-700">
+            <p className="rounded-md bg-state-warning-soft px-3 py-2 text-sm text-state-warning-ink">
               Không có lớp phù hợp → tạo yêu cầu sẽ vào danh sách chờ.
             </p>
           ) : (
@@ -225,7 +225,7 @@ export function TransferForm({
           <button
             onClick={submit}
             disabled={pending}
-            className="rounded-md bg-purple-700 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
+            className="rounded-md bg-primary-dark px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
           >
             Tạo yêu cầu chuyển
           </button>

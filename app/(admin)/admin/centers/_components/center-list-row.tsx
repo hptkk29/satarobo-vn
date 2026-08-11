@@ -52,8 +52,8 @@ export function CenterListRow({ center }: { center: Row }) {
         <div className="space-y-1">
           {center.phone ? (
             <div className="inline-flex items-center gap-1 text-neutral-700">
-              <Phone className="h-3 w-3 text-orange-500" />
-              <a href={`tel:${center.phone}`} className="hover:text-orange-600">
+              <Phone className="h-3 w-3 text-primary" />
+              <a href={`tel:${center.phone}`} className="hover:text-primary">
                 {center.phone}
               </a>
             </div>
@@ -62,8 +62,8 @@ export function CenterListRow({ center }: { center: Row }) {
           )}
           {center.email && (
             <div className="inline-flex items-center gap-1 text-neutral-700">
-              <Mail className="h-3 w-3 text-purple-500" />
-              <a href={`mailto:${center.email}`} className="hover:text-orange-600 break-all">
+              <Mail className="h-3 w-3 text-primary" />
+              <a href={`mailto:${center.email}`} className="hover:text-primary break-all">
                 {center.email}
               </a>
             </div>
@@ -73,13 +73,13 @@ export function CenterListRow({ center }: { center: Row }) {
       <td className="p-4 text-center text-sm">
         <div className="flex flex-wrap items-center justify-center gap-1">
           <span
-            className="inline-block rounded bg-blue-100 px-1.5 py-0.5 text-xs font-medium text-blue-700"
+            className="inline-block rounded bg-state-info-soft px-1.5 py-0.5 text-xs font-medium text-state-info-ink"
             title="Lớp học"
           >
             {center.counts.classes} lớp
           </span>
           <span
-            className="inline-block rounded bg-purple-100 px-1.5 py-0.5 text-xs font-medium text-purple-700"
+            className="inline-block rounded bg-primary-soft px-1.5 py-0.5 text-xs font-medium text-primary"
             title="Học viên"
           >
             {center.counts.students} HV
@@ -97,11 +97,7 @@ export function CenterListRow({ center }: { center: Row }) {
           type="button"
           onClick={handleToggleActive}
           disabled={pending}
-          className={`inline-flex items-center gap-1 rounded-full px-2 py-1 text-xs font-medium transition disabled:opacity-50 ${
-            center.isActive
-              ? "bg-green-100 text-green-700 hover:bg-green-200"
-              : "bg-neutral-100 text-neutral-600 hover:bg-neutral-200"
-          }`}
+          className={`inline-flex items-center gap-1 rounded-full px-2 py-1 text-xs font-medium transition disabled:opacity-50 ${ center.isActive ? "bg-state-success-soft text-state-success-ink hover:bg-state-success-soft" : "bg-neutral-100 text-neutral-600 hover:bg-neutral-200" }`}
         >
           {center.isActive ? "Đang hoạt động" : "Đã đóng"}
         </button>
@@ -110,7 +106,7 @@ export function CenterListRow({ center }: { center: Row }) {
         <div className="inline-flex items-center gap-1">
           <Link
             href={`/centers/${center.id}/edit`}
-            className="rounded p-1.5 text-purple-600 hover:bg-purple-50"
+            className="rounded p-1.5 text-primary hover:bg-primary-soft"
             title="Sửa"
           >
             <Pencil className="h-4 w-4" />
@@ -119,7 +115,7 @@ export function CenterListRow({ center }: { center: Row }) {
             type="button"
             onClick={handleDelete}
             disabled={pending}
-            className="rounded p-1.5 text-red-600 hover:bg-red-50 disabled:opacity-50"
+            className="rounded p-1.5 text-state-danger-ink hover:bg-state-danger-soft disabled:opacity-50"
             title="Xoá"
           >
             <Trash2 className="h-4 w-4" />

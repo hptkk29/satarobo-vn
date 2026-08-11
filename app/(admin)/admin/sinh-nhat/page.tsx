@@ -15,10 +15,10 @@ export const dynamic = "force-dynamic";
 
 /** Nhãn cột ZNS. SIMULATED phải nói rõ "chưa gửi thật" — đọc nhầm là không ai chúc bé. */
 const ZNS_LABEL: Record<string, { text: string; cls: string }> = {
-  SENT: { text: "Đã gửi", cls: "bg-emerald-100 text-emerald-700" },
-  SIMULATED: { text: "Mô phỏng (chưa gửi thật)", cls: "bg-amber-100 text-amber-700" },
+  SENT: { text: "Đã gửi", cls: "bg-state-success-soft text-state-success-ink" },
+  SIMULATED: { text: "Mô phỏng (chưa gửi thật)", cls: "bg-state-warning-soft text-state-warning-ink" },
   SKIPPED: { text: "Bỏ qua (mẫu/SĐT chưa có)", cls: "bg-gray-100 text-gray-600" },
-  FAILED: { text: "Lỗi gửi", cls: "bg-rose-100 text-rose-700" },
+  FAILED: { text: "Lỗi gửi", cls: "bg-state-danger-soft text-state-danger-ink" },
 };
 
 export default async function BirthdayPage() {
@@ -61,7 +61,7 @@ export default async function BirthdayPage() {
       <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="flex items-center gap-2 text-2xl font-bold text-gray-900">
-            <Cake className="h-6 w-6 text-[#7C3AED]" /> Sinh nhật học viên
+            <Cake className="h-6 w-6 text-primary" /> Sinh nhật học viên
           </h1>
           <p className="mt-1 text-sm text-gray-500">
             Hôm sinh nhật không có lớp thì buổi chúc mừng được xếp vào{" "}
@@ -103,12 +103,12 @@ export default async function BirthdayPage() {
                     <td className="px-4 py-2 font-medium text-gray-900">
                       <Link
                         href={`/students/${r.student.id}/edit`}
-                        className="text-[#7C3AED] hover:underline"
+                        className="text-primary hover:underline"
                       >
                         {r.student.name}
                       </Link>
                       {isToday && (
-                        <span className="ml-2 rounded-full bg-purple-100 px-2 py-0.5 text-[10px] font-bold text-purple-700">
+                        <span className="ml-2 rounded-full bg-primary-soft px-2 py-0.5 text-[10px] font-bold text-primary">
                           HÔM NAY
                         </span>
                       )}
@@ -119,7 +119,7 @@ export default async function BirthdayPage() {
                         r.celebrationSessionId ? (
                           <Link
                             href={`/sessions/${r.celebrationSessionId}`}
-                            className="text-[#7C3AED] hover:underline"
+                            className="text-primary hover:underline"
                           >
                             {formatDayKeyDMY(celebrationKey)}
                           </Link>
@@ -133,7 +133,7 @@ export default async function BirthdayPage() {
                         <span className="block text-xs text-gray-400">tổ chức trước sinh nhật</span>
                       )}
                       {missed && (
-                        <span className="block text-xs font-semibold text-rose-600">
+                        <span className="block text-xs font-semibold text-state-danger-ink">
                           buổi đã qua, chưa chúc
                         </span>
                       )}
@@ -150,7 +150,7 @@ export default async function BirthdayPage() {
                     <td className="px-4 py-2 text-right">
                       <div className="flex items-center justify-end gap-2">
                         {r.celebratedAt && (
-                          <span className="text-xs font-medium text-emerald-700">đã chúc</span>
+                          <span className="text-xs font-medium text-state-success-ink">đã chúc</span>
                         )}
                         <CelebrateButton id={r.id} done={r.celebratedAt !== null} />
                       </div>

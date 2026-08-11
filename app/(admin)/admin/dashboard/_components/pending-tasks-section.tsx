@@ -16,22 +16,22 @@ export async function PendingTasksSection({ user }: { user: TaskUser }) {
     <section className="rounded-2xl border border-gray-200 bg-white p-5">
       <div className="mb-3 flex items-center justify-between gap-2">
         <h2 className="flex items-center gap-2 text-sm font-bold uppercase tracking-wider text-gray-600">
-          <ClipboardList className="h-4 w-4 text-[#7C3AED]" /> Cần xử lý
+          <ClipboardList className="h-4 w-4 text-primary" /> Cần xử lý
         </h2>
         <div className="flex items-center gap-2">
           {overdue > 0 && (
-            <span className="rounded-full bg-rose-100 px-2.5 py-0.5 text-xs font-bold text-rose-700">
+            <span className="rounded-full bg-state-danger-soft px-2.5 py-0.5 text-xs font-bold text-state-danger-ink">
               {overdue} quá hạn
             </span>
           )}
-          <span className="rounded-full bg-[#7C3AED] px-2.5 py-0.5 text-xs font-bold text-white">
+          <span className="rounded-full bg-primary px-2.5 py-0.5 text-xs font-bold text-white">
             {total} việc
           </span>
         </div>
       </div>
 
       {active.length === 0 ? (
-        <p className="flex items-center gap-2 rounded-xl bg-emerald-50 p-3 text-sm text-emerald-700">
+        <p className="flex items-center gap-2 rounded-xl bg-state-success-soft p-3 text-sm text-state-success-ink">
           <CheckCircle2 className="h-4 w-4" /> Đã sạch — không có việc nào cần xử lý.
         </p>
       ) : (
@@ -40,11 +40,7 @@ export async function PendingTasksSection({ user }: { user: TaskUser }) {
             <Link
               key={g.type}
               href={g.href}
-              className={`flex items-start justify-between gap-3 rounded-xl border p-3 transition-colors ${
-                g.overdueCount > 0
-                  ? "border-rose-200 bg-rose-50/50 hover:border-rose-300"
-                  : "border-gray-200 hover:border-[#7C3AED]"
-              }`}
+              className={`flex items-start justify-between gap-3 rounded-xl border p-3 transition-colors ${ g.overdueCount > 0 ? "border-state-danger-soft bg-state-danger-soft/50 hover:border-state-danger" : "border-gray-200 hover:border-primary" }`}
             >
               <div className="min-w-0">
                 <p className="font-semibold text-gray-900">{g.label}</p>
@@ -60,7 +56,7 @@ export async function PendingTasksSection({ user }: { user: TaskUser }) {
                   {g.count}
                 </span>
                 {g.overdueCount > 0 && (
-                  <span className="inline-flex items-center gap-0.5 text-[10px] font-bold text-rose-600">
+                  <span className="inline-flex items-center gap-0.5 text-[10px] font-bold text-state-danger-ink">
                     <AlertTriangle className="h-3 w-3" /> {g.overdueCount} quá hạn
                   </span>
                 )}

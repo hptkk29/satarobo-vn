@@ -151,7 +151,7 @@ function AggregateView({ aggregate }: { aggregate: RoundAggregate }) {
       {groupOrder.map((label, gi) => (
         <div key={gi} className="space-y-3">
           {label && (
-            <h3 className="text-xs font-bold uppercase tracking-wider text-[#7C3AED]">{label}</h3>
+            <h3 className="text-xs font-bold uppercase tracking-wider text-primary">{label}</h3>
           )}
           {(grouped.get(label) ?? []).map((q) => (
             <QuestionAggregateCard key={q.questionId} q={q} />
@@ -168,8 +168,8 @@ function QuestionAggregateCard({ q }: { q: RoundAggregate["questions"][number] }
           <p className="font-medium text-gray-900">{q.label}</p>
           {q.type === "STAR_RATING" && (
             <div className="mt-2 text-sm text-gray-700">
-              <span className="inline-flex items-center gap-1 text-lg font-bold text-amber-500">
-                <Star className="h-5 w-5 fill-amber-400" /> {q.avg ?? "—"}
+              <span className="inline-flex items-center gap-1 text-lg font-bold text-state-warning-ink">
+                <Star className="h-5 w-5 fill-state-warning-ink" /> {q.avg ?? "—"}
               </span>
               <span className="ml-2 text-xs text-gray-400">({q.count} lượt)</span>
               <div className="mt-1 space-y-0.5">
@@ -187,7 +187,7 @@ function QuestionAggregateCard({ q }: { q: RoundAggregate["questions"][number] }
               {q.optionCounts.map((o) => (
                 <li key={o.option} className="flex justify-between">
                   <span>{o.option}</span>
-                  <span className="font-semibold tabular-nums text-purple-600">{o.count}</span>
+                  <span className="font-semibold tabular-nums text-primary">{o.count}</span>
                 </li>
               ))}
             </ul>

@@ -145,7 +145,7 @@ export function BulkCompleteByClass({
       {navPending && <p className="text-sm text-neutral-400">Đang nạp học viên…</p>}
 
       {selectedClassId && !selectedClass && !navPending && (
-        <p className="text-sm text-red-600">Không tìm thấy lớp (hoặc ngoài phạm vi cơ sở của bạn).</p>
+        <p className="text-sm text-state-danger-ink">Không tìm thấy lớp (hoặc ngoài phạm vi cơ sở của bạn).</p>
       )}
 
       {/* Bước 2 + 3 — danh sách học viên với checkbox */}
@@ -190,7 +190,7 @@ export function BulkCompleteByClass({
                   <span className="font-medium text-neutral-800">{s.name}</span>
                   {s.studentCode && <span className="text-neutral-400">({s.studentCode})</span>}
                   {s.alreadyCompleted && (
-                    <span className="ml-auto rounded bg-amber-100 px-2 py-0.5 text-xs text-amber-700">
+                    <span className="ml-auto rounded bg-state-warning-soft px-2 py-0.5 text-xs text-state-warning-ink">
                       Đã có chứng chỉ — sẽ bỏ qua
                     </span>
                   )}
@@ -225,13 +225,13 @@ export function BulkCompleteByClass({
           {/* Tóm tắt trước khi xác nhận */}
           <div className="flex flex-wrap items-center justify-between gap-2 border-t pt-3">
             <p className="text-sm text-neutral-600">
-              Sẽ hoàn thành <span className="font-semibold text-purple-700">{eligibleSelected}</span> học viên.
+              Sẽ hoàn thành <span className="font-semibold text-primary">{eligibleSelected}</span> học viên.
             </p>
             <button
               type="button"
               onClick={submit}
               disabled={pending || eligibleSelected === 0}
-              className="rounded-md bg-purple-700 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
+              className="rounded-md bg-primary-dark px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
             >
               {pending ? "Đang xử lý…" : `Hoàn thành ${eligibleSelected} học viên & sinh chứng chỉ`}
             </button>

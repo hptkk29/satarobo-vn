@@ -69,12 +69,12 @@ export default async function ConvertConflictsPage() {
             return (
               <li key={c.id} className="rounded-xl border border-gray-200 bg-white p-4">
                 <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-                  <span className="rounded-full bg-red-100 px-2.5 py-0.5 text-xs font-semibold text-red-700">
+                  <span className="rounded-full bg-state-danger-soft px-2.5 py-0.5 text-xs font-semibold text-state-danger-ink">
                     OPEN
                   </span>
                   <Link
                     href={`/leads/${c.leadId}`}
-                    className="text-xs font-medium text-orange-600 hover:underline"
+                    className="text-xs font-medium text-primary hover:underline"
                   >
                     Mở lead →
                   </Link>

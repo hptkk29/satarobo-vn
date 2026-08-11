@@ -78,7 +78,7 @@ export function SchedulePhasesEditor({
         <>
           <h2 className="mb-1 flex items-center gap-2 text-sm font-bold uppercase tracking-wider text-gray-500">
             <CalendarRange className="h-4 w-4" /> Kế hoạch lịch học
-            <span className="text-red-600">*</span>
+            <span className="text-state-danger-ink">*</span>
           </h2>
           <p className="mb-3 text-xs text-gray-500">
             Một lớp có thể đổi nhịp học giữa khoá — ví dụ tháng 7 học 2 buổi/tuần, tháng 8 còn
@@ -89,7 +89,7 @@ export function SchedulePhasesEditor({
       )}
 
       {isDerived && (
-        <p className="mb-3 flex items-start gap-2 rounded-lg border border-blue-200 bg-blue-50 p-3 text-xs text-blue-800">
+        <p className="mb-3 flex items-start gap-2 rounded-lg border border-state-info-soft bg-state-info-soft p-3 text-xs text-state-info-ink">
           <Info className="mt-0.5 h-4 w-4 shrink-0" />
           <span>
             Lớp chưa có kế hoạch. Giai đoạn dưới đây được suy từ lịch hiện tại của lớp — kiểm
@@ -110,7 +110,7 @@ export function SchedulePhasesEditor({
                     type="button"
                     onClick={() => removePhase(i)}
                     disabled={disabled}
-                    className="inline-flex items-center gap-1 rounded-md border border-red-200 px-2 py-1 text-xs font-semibold text-red-700 hover:bg-red-50 disabled:opacity-50"
+                    className="inline-flex items-center gap-1 rounded-md border border-state-danger-soft px-2 py-1 text-xs font-semibold text-state-danger-ink hover:bg-state-danger-soft disabled:opacity-50"
                   >
                     <Trash2 className="h-3.5 w-3.5" /> Xoá
                   </button>
@@ -120,14 +120,14 @@ export function SchedulePhasesEditor({
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <label className="block">
                   <span className="mb-1 block text-xs font-semibold text-gray-700">
-                    Từ ngày <span className="text-red-600">*</span>
+                    Từ ngày <span className="text-state-danger-ink">*</span>
                   </span>
                   <input
                     type="date"
                     value={p.from}
                     onChange={(e) => patch(i, { from: e.target.value })}
                     disabled={disabled}
-                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-orange-500 disabled:opacity-50"
+                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary disabled:opacity-50"
                   />
                 </label>
                 <label className="block">
@@ -142,14 +142,14 @@ export function SchedulePhasesEditor({
                     value={p.to}
                     onChange={(e) => patch(i, { to: e.target.value })}
                     disabled={disabled}
-                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-orange-500 disabled:opacity-50"
+                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary disabled:opacity-50"
                   />
                 </label>
               </div>
 
               <div className="mt-3">
                 <span className="mb-1.5 block text-xs font-semibold text-gray-700">
-                  Học thứ mấy, mấy giờ <span className="text-red-600">*</span>
+                  Học thứ mấy, mấy giờ <span className="text-state-danger-ink">*</span>
                 </span>
                 <div className="flex flex-wrap gap-1.5">
                   {WEEK_ORDER.map((w) => {
@@ -162,11 +162,7 @@ export function SchedulePhasesEditor({
                         disabled={disabled}
                         aria-pressed={on}
                         aria-label={`Giai đoạn ${i + 1} — học ${WEEK_LABEL[w]}`}
-                        className={`rounded-md border px-3 py-1.5 text-xs font-bold transition disabled:opacity-50 ${
-                          on
-                            ? "border-orange-500 bg-orange-500 text-white"
-                            : "border-gray-300 bg-white text-gray-600 hover:bg-gray-100"
-                        }`}
+                        className={`rounded-md border px-3 py-1.5 text-xs font-bold transition disabled:opacity-50 ${ on ? "border-primary bg-primary text-white" : "border-gray-300 bg-white text-gray-600 hover:bg-gray-100" }`}
                       >
                         {WEEK_LABEL[w]}
                       </button>
@@ -185,7 +181,7 @@ export function SchedulePhasesEditor({
                           onChange={(e) => setDayTime(i, w, "start", e.target.value)}
                           disabled={disabled}
                           aria-label={`Giờ bắt đầu ${WEEK_LABEL[w]} — giai đoạn ${i + 1}`}
-                          className="rounded-lg border border-gray-300 px-2 py-1 text-sm outline-none focus:border-orange-500 disabled:opacity-50"
+                          className="rounded-lg border border-gray-300 px-2 py-1 text-sm outline-none focus:border-primary disabled:opacity-50"
                         />
                         <span className="text-gray-400">→</span>
                         <input
@@ -194,7 +190,7 @@ export function SchedulePhasesEditor({
                           onChange={(e) => setDayTime(i, w, "end", e.target.value)}
                           disabled={disabled}
                           aria-label={`Giờ kết thúc ${WEEK_LABEL[w]} — giai đoạn ${i + 1}`}
-                          className="rounded-lg border border-gray-300 px-2 py-1 text-sm outline-none focus:border-orange-500 disabled:opacity-50"
+                          className="rounded-lg border border-gray-300 px-2 py-1 text-sm outline-none focus:border-primary disabled:opacity-50"
                         />
                       </div>
                     ))}
@@ -210,7 +206,7 @@ export function SchedulePhasesEditor({
                   onChange={(e) => patch(i, { note: e.target.value })}
                   disabled={disabled}
                   placeholder="vd: nghỉ hè, chuyển sang 1 buổi/tuần"
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-orange-500 disabled:opacity-50"
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-primary disabled:opacity-50"
                 />
               </label>
             </div>

@@ -125,7 +125,7 @@ export default async function DashboardPage() {
         <section key={p.key} className="space-y-4">
           {multi && (
             <div className="flex items-center gap-2">
-              <span className="rounded-full bg-[#7C3AED] px-3 py-1 text-xs font-bold uppercase tracking-wide text-white">
+              <span className="rounded-full bg-primary px-3 py-1 text-xs font-bold uppercase tracking-wide text-white">
                 {p.label}
               </span>
               <span className="h-px flex-1 bg-neutral-200" />

@@ -101,7 +101,7 @@ export default async function CourseDetailPage({
         <div className="mt-2 flex flex-wrap items-center gap-3">
           <h1 className="text-2xl font-bold text-gray-900">{course.name}</h1>
           {course.isActive ? (
-            <Badge className="bg-green-100 text-green-700 hover:bg-green-100">Hoạt động</Badge>
+            <Badge className="bg-state-success-soft text-state-success-ink hover:bg-state-success-soft-hover">Hoạt động</Badge>
           ) : (
             <Badge className="bg-gray-200 text-gray-700 hover:bg-gray-200">Tắt</Badge>
           )}
@@ -148,7 +148,7 @@ export default async function CourseDetailPage({
           {canEditPackages && (
             <Link
               href={`/course-packages/new?courseId=${course.id}`}
-              className="inline-flex items-center gap-1 rounded-lg bg-[#7C3AED] px-3 py-1.5 text-sm font-semibold text-white hover:opacity-90"
+              className="inline-flex items-center gap-1 rounded-lg bg-primary px-3 py-1.5 text-sm font-semibold text-white hover:opacity-90"
             >
               + Thêm gói bán
             </Link>
@@ -170,7 +170,7 @@ export default async function CourseDetailPage({
                     : "—"}
                 </span>
                 {pkg.isPublished ? (
-                  <Badge className="bg-green-100 text-green-700 hover:bg-green-100">Đã đăng</Badge>
+                  <Badge className="bg-state-success-soft text-state-success-ink hover:bg-state-success-soft-hover">Đã đăng</Badge>
                 ) : (
                   <Badge className="bg-gray-200 text-gray-700 hover:bg-gray-200">Nháp</Badge>
                 )}

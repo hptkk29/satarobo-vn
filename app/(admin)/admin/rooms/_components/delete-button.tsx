@@ -27,7 +27,7 @@ export function DeleteRoomButton({ id, name }: { id: string; name: string }) {
       type="button"
       onClick={handle}
       disabled={pending}
-      className="inline-flex items-center gap-2 rounded-xl border-2 border-red-200 bg-white px-4 py-2 text-sm font-bold text-red-600 hover:bg-red-50 disabled:opacity-60"
+      className="inline-flex items-center gap-2 rounded-xl border-2 border-state-danger-soft bg-white px-4 py-2 text-sm font-bold text-state-danger-ink hover:bg-state-danger-soft disabled:opacity-60"
     >
       <Trash2 className="h-4 w-4" />
       {pending ? "Đang xoá..." : "Xoá phòng"}

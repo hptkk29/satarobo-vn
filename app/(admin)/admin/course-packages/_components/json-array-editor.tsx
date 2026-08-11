@@ -78,7 +78,7 @@ export function JsonArrayEditor({
                 type="text"
                 value={typeof item === "string" ? item : ""}
                 onChange={(event) => updateString(idx, event.target.value)}
-                className="min-h-9 flex-1 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-[#F7941D] focus:ring-2 focus:ring-[#F7941D]/20"
+                className="min-h-9 flex-1 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
               />
             ) : (
               <div className="grid flex-1 grid-cols-1 gap-2 md:grid-cols-3">
@@ -91,7 +91,7 @@ export function JsonArrayEditor({
                       placeholder={field}
                       value={String(objectItem[field] ?? "")}
                       onChange={(event) => updateObject(idx, field, event.target.value)}
-                      className="min-h-9 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-[#F7941D] focus:ring-2 focus:ring-[#F7941D]/20"
+                      className="min-h-9 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
                     />
                   );
                 })}
@@ -100,7 +100,7 @@ export function JsonArrayEditor({
             <button
               type="button"
               onClick={() => remove(idx)}
-              className="rounded-lg p-2 text-red-600 hover:bg-red-50"
+              className="rounded-lg p-2 text-state-danger-ink hover:bg-state-danger-soft"
               aria-label="Xoa item"
             >
               <X className="h-4 w-4" />
@@ -112,7 +112,7 @@ export function JsonArrayEditor({
       <button
         type="button"
         onClick={add}
-        className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1 text-sm font-semibold text-[#F7941D] hover:bg-orange-50"
+        className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1 text-sm font-semibold text-primary hover:bg-primary-soft"
       >
         <Plus className="h-4 w-4" />
         Them

@@ -209,14 +209,14 @@ export function FileUploader({
         className={cn(
           "border-2 border-dashed rounded-lg p-8 text-center cursor-pointer transition-colors",
           isDragging
-            ? "border-orange-500 bg-orange-50"
+            ? "border-primary bg-primary-soft"
             : "border-gray-300 hover:border-gray-400 hover:bg-gray-50",
         )}
       >
         <Upload className="w-10 h-10 mx-auto mb-3 text-gray-400" />
         <p className="text-sm font-medium">
           Kéo thả file vào đây, hoặc{" "}
-          <span className="text-orange-600">click để chọn</span>
+          <span className="text-primary">click để chọn</span>
         </p>
         <p className="text-xs text-gray-500 mt-2">
           {allowedCategories.map((cat) => UPLOAD_CONFIG[cat].description).join(" • ")}
@@ -262,14 +262,14 @@ export function FileUploader({
                     {upload.state === "uploading" && ` · ${upload.progress}%`}
                   </p>
                   {upload.state === "error" && (
-                    <p className="text-xs text-red-600 mt-1">{upload.error}</p>
+                    <p className="text-xs text-state-danger-ink mt-1">{upload.error}</p>
                   )}
                   {upload.state === "done" && upload.url && (
                     <a
                       href={upload.url}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="text-xs text-blue-600 truncate block hover:underline"
+                      className="text-xs text-state-info-ink truncate block hover:underline"
                     >
                       {upload.url}
                     </a>
@@ -277,10 +277,10 @@ export function FileUploader({
                 </div>
 
                 {(upload.state === "signing" || upload.state === "uploading") && (
-                  <Loader2 className="w-4 h-4 animate-spin text-orange-500" />
+                  <Loader2 className="w-4 h-4 animate-spin text-primary" />
                 )}
                 {upload.state === "done" && (
-                  <span className="text-xs text-green-600 font-medium">✓ Xong</span>
+                  <span className="text-xs text-state-success-ink font-medium">✓ Xong</span>
                 )}
                 <Button
                   type="button"

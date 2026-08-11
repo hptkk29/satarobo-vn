@@ -41,7 +41,7 @@ export default async function OperationalSettingsPage() {
       </div>
 
       {!canEditGlobal && (
-        <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+        <div className="rounded-lg border border-state-warning-soft bg-state-warning-soft px-4 py-3 text-sm text-state-warning-ink">
           Bạn chỉ có quyền <strong>xem</strong> cấu hình toàn hệ thống. Chỉ SUPER_ADMIN được sửa.
         </div>
       )}

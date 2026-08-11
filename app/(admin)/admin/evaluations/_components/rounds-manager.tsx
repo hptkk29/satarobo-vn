@@ -29,8 +29,8 @@ const SCOPE_TAG: Record<Scope, string> = {
 
 const STATUS_STYLE = {
   DRAFT: "bg-gray-100 text-gray-600",
-  OPEN: "bg-emerald-100 text-emerald-700",
-  CLOSED: "bg-rose-100 text-rose-700",
+  OPEN: "bg-state-success-soft text-state-success-ink",
+  CLOSED: "bg-state-danger-soft text-state-danger-ink",
 } as const;
 const STATUS_LABEL: Record<keyof typeof STATUS_STYLE, string> = {
   DRAFT: "Nháp",
@@ -103,7 +103,7 @@ export function RoundsManager({
         <button
           type="button"
           onClick={() => setCreating((c) => !c)}
-          className="inline-flex items-center gap-1.5 rounded-lg bg-purple-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-purple-700"
+          className="inline-flex items-center gap-1.5 rounded-lg bg-primary-dark px-3 py-1.5 text-sm font-semibold text-white hover:bg-primary-darker"
         >
           <CalendarPlus className="h-4 w-4" /> Tạo đợt
         </button>
@@ -182,7 +182,7 @@ export function RoundsManager({
               type="button"
               onClick={submit}
               disabled={pending}
-              className="rounded-lg bg-purple-600 px-4 py-2 text-sm font-semibold text-white hover:bg-purple-700 disabled:opacity-60"
+              className="rounded-lg bg-primary-dark px-4 py-2 text-sm font-semibold text-white hover:bg-primary-darker disabled:opacity-60"
             >
               {pending ? "Đang lưu…" : "Lưu đợt"}
             </button>
@@ -218,7 +218,7 @@ export function RoundsManager({
                     <button
                       type="button"
                       onClick={() => setStatus(r.id, "OPEN", "Đã mở đợt")}
-                      className="inline-flex items-center gap-1 rounded-md border border-emerald-200 px-2 py-1 text-xs font-medium text-emerald-700 hover:bg-emerald-50"
+                      className="inline-flex items-center gap-1 rounded-md border border-state-success-soft px-2 py-1 text-xs font-medium text-state-success-ink hover:bg-state-success-soft"
                     >
                       <Unlock className="h-3.5 w-3.5" /> Mở
                     </button>
@@ -227,7 +227,7 @@ export function RoundsManager({
                     <button
                       type="button"
                       onClick={() => setStatus(r.id, "CLOSED", "Đã đóng đợt")}
-                      className="inline-flex items-center gap-1 rounded-md border border-rose-200 px-2 py-1 text-xs font-medium text-rose-700 hover:bg-rose-50"
+                      className="inline-flex items-center gap-1 rounded-md border border-state-danger-soft px-2 py-1 text-xs font-medium text-state-danger-ink hover:bg-state-danger-soft"
                     >
                       <Lock className="h-3.5 w-3.5" /> Đóng
                     </button>

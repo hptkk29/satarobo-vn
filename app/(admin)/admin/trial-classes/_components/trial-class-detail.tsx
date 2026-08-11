@@ -49,10 +49,10 @@ type SessionData = {
 type Teacher = { id: string; name: string };
 
 const ENROLL_BADGE: Record<string, string> = {
-  ACTIVE: "bg-emerald-100 text-emerald-700",
-  COMPLETED: "bg-blue-100 text-blue-700",
-  WITHDRAWN: "bg-amber-100 text-amber-700",
-  CANCELLED: "bg-rose-100 text-rose-700",
+  ACTIVE: "bg-state-success-soft text-state-success-ink",
+  COMPLETED: "bg-state-info-soft text-state-info-ink",
+  WITHDRAWN: "bg-state-warning-soft text-state-warning-ink",
+  CANCELLED: "bg-state-danger-soft text-state-danger-ink",
 };
 const ENROLL_LABEL: Record<string, string> = {
   ACTIVE: "Đang học",
@@ -340,7 +340,7 @@ export function TrialClassDetail({
       {canManage && (
         <div className="rounded-xl border border-gray-200 bg-white p-4">
           <div className="mb-3 flex items-center gap-2">
-            <CalendarPlus className="h-4 w-4 text-orange-500" />
+            <CalendarPlus className="h-4 w-4 text-primary" />
             <h2 className="text-sm font-semibold text-gray-700">Thêm buổi học</h2>
           </div>
           <div className="flex flex-wrap items-end gap-2">
@@ -396,13 +396,13 @@ export function TrialClassDetail({
               type="button"
               onClick={onAddSession}
               disabled={pending || !sessionDate}
-              className="rounded-lg bg-orange-500 px-4 py-2 text-sm font-semibold text-white hover:bg-orange-600 disabled:opacity-50"
+              className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white hover:bg-primary-dark disabled:opacity-50"
             >
               Thêm buổi
             </button>
           </div>
           {sessions.length === 0 && (
-            <p className="mt-2 text-xs text-amber-600">
+            <p className="mt-2 text-xs text-state-warning-ink">
               Lớp chưa có buổi nào — phải thêm buổi thì mới xếp được học viên và giáo
               viên mới thấy lịch/danh sách Trial.
             </p>
@@ -418,7 +418,7 @@ export function TrialClassDetail({
             <button
               type="button"
               onClick={() => setShowAdd((v) => !v)}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-orange-500 px-3 py-1.5 text-xs font-semibold text-orange-700 hover:bg-orange-50"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-primary px-3 py-1.5 text-xs font-semibold text-primary hover:bg-primary-soft"
             >
               <UserPlus className="h-3.5 w-3.5" /> {showAdd ? "Đóng" : "Tìm & thêm học viên"}
             </button>
@@ -447,7 +447,7 @@ export function TrialClassDetail({
                   type="button"
                   onClick={runSearch}
                   disabled={pending}
-                  className="rounded-lg bg-orange-500 px-4 py-2 text-sm font-semibold text-white hover:bg-orange-600 disabled:opacity-50"
+                  className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white hover:bg-primary-dark disabled:opacity-50"
                 >
                   Tìm
                 </button>
@@ -489,7 +489,7 @@ export function TrialClassDetail({
                         type="button"
                         onClick={() => enrollCandidate(c.leadChildId, false)}
                         disabled={pending}
-                        className="rounded-lg bg-orange-500 px-3 py-1.5 text-xs font-semibold text-white hover:bg-orange-600 disabled:opacity-50"
+                        className="rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-white hover:bg-primary-dark disabled:opacity-50"
                       >
                         Thêm
                       </button>
@@ -518,9 +518,7 @@ export function TrialClassDetail({
               return (
                 <li
                   key={e.id}
-                  className={`flex flex-wrap items-center justify-between gap-2 py-2 ${
-                    inactive ? "opacity-60" : ""
-                  }`}
+                  className={`flex flex-wrap items-center justify-between gap-2 py-2 ${ inactive ? "opacity-60" : "" }`}
                 >
                   <div>
                     <span
@@ -537,9 +535,7 @@ export function TrialClassDetail({
                   </div>
                   <div className="flex items-center gap-2">
                     <span
-                      className={`rounded-full px-2 py-0.5 text-xs font-semibold ${
-                        ENROLL_BADGE[e.status] ?? "bg-gray-100 text-gray-600"
-                      }`}
+                      className={`rounded-full px-2 py-0.5 text-xs font-semibold ${ ENROLL_BADGE[e.status] ?? "bg-gray-100 text-gray-600" }`}
                     >
                       {ENROLL_LABEL[e.status] ?? e.status}
                     </span>
@@ -549,7 +545,7 @@ export function TrialClassDetail({
                         onClick={() => removeStudent(e.leadChildId, e.childName)}
                         disabled={pending}
                         title="Gỡ khỏi lớp"
-                        className="inline-flex items-center gap-1 rounded-md border border-rose-300 px-2 py-0.5 text-xs font-medium text-rose-600 hover:bg-rose-50 disabled:opacity-50"
+                        className="inline-flex items-center gap-1 rounded-md border border-state-danger px-2 py-0.5 text-xs font-medium text-state-danger-ink hover:bg-state-danger-soft disabled:opacity-50"
                       >
                         <X className="h-3 w-3" /> Gỡ
                       </button>
@@ -575,11 +571,7 @@ export function TrialClassDetail({
                   key={s.id}
                   type="button"
                   onClick={() => setSelectedSessionId(s.id)}
-                  className={`rounded-lg border px-3 py-1.5 text-xs font-medium ${
-                    s.id === selectedSessionId
-                      ? "border-orange-500 bg-orange-50 text-orange-700"
-                      : "border-gray-300 text-gray-600 hover:bg-gray-50"
-                  }`}
+                  className={`rounded-lg border px-3 py-1.5 text-xs font-medium ${ s.id === selectedSessionId ? "border-primary bg-primary-soft text-primary" : "border-gray-300 text-gray-600 hover:bg-gray-50" }`}
                 >
                   Buổi {s.seq}
                   <span className="ml-1 text-[10px] text-gray-400">
@@ -602,7 +594,7 @@ export function TrialClassDetail({
                       type="button"
                       onClick={onCompleteSession}
                       disabled={pending}
-                      className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-500 px-3 py-1.5 text-xs font-semibold text-emerald-700 hover:bg-emerald-50 disabled:opacity-50"
+                      className="inline-flex items-center gap-1.5 rounded-lg border border-state-success px-3 py-1.5 text-xs font-semibold text-state-success-ink hover:bg-state-success-soft disabled:opacity-50"
                     >
                       <CheckCircle2 className="h-3.5 w-3.5" /> Hoàn tất buổi
                     </button>
@@ -648,11 +640,7 @@ export function TrialClassDetail({
                               type="button"
                               onClick={() => toggleStatus(e.id, "PRESENT")}
                               disabled={pending}
-                              className={`rounded-md px-2.5 py-1 text-xs font-semibold ${
-                                row.status === "PRESENT"
-                                  ? "bg-emerald-500 text-white"
-                                  : "bg-white text-gray-600 ring-1 ring-gray-300"
-                              }`}
+                              className={`rounded-md px-2.5 py-1 text-xs font-semibold ${ row.status === "PRESENT" ? "bg-state-success text-white" : "bg-white text-gray-600 ring-1 ring-gray-300" }`}
                             >
                               Có mặt
                             </button>
@@ -660,11 +648,7 @@ export function TrialClassDetail({
                               type="button"
                               onClick={() => toggleStatus(e.id, "ABSENT")}
                               disabled={pending}
-                              className={`rounded-md px-2.5 py-1 text-xs font-semibold ${
-                                row.status === "ABSENT"
-                                  ? "bg-rose-500 text-white"
-                                  : "bg-white text-gray-600 ring-1 ring-gray-300"
-                              }`}
+                              className={`rounded-md px-2.5 py-1 text-xs font-semibold ${ row.status === "ABSENT" ? "bg-state-danger text-white" : "bg-white text-gray-600 ring-1 ring-gray-300" }`}
                             >
                               Vắng
                             </button>
@@ -684,7 +668,7 @@ export function TrialClassDetail({
                         type="button"
                         onClick={onSaveAttendance}
                         disabled={pending}
-                        className="rounded-lg bg-orange-500 px-4 py-2 text-sm font-semibold text-white hover:bg-orange-600 disabled:opacity-50"
+                        className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white hover:bg-primary-dark disabled:opacity-50"
                       >
                         {pending ? "Đang lưu…" : "Lưu điểm danh"}
                       </button>

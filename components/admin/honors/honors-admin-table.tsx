@@ -57,7 +57,7 @@ export function HonorsAdminTable({ honors, canDelete }: Props) {
     return (
       <div className="rounded-lg border border-dashed border-gray-300 p-12 text-center text-gray-500">
         <p>Chưa có nhân sự nào được vinh danh.</p>
-        <Link href="/honors/new" className="mt-2 inline-block text-orange-600 hover:underline">
+        <Link href="/honors/new" className="mt-2 inline-block text-primary hover:underline">
           Thêm nhân sự đầu tiên →
         </Link>
       </div>
@@ -106,11 +106,7 @@ export function HonorsAdminTable({ honors, canDelete }: Props) {
                     title={honor.isFeatured ? "Bỏ Featured" : "Đặt làm Person of the Month"}
                   >
                     <Star
-                      className={`h-5 w-5 ${
-                        honor.isFeatured
-                          ? "fill-orange-500 text-orange-500"
-                          : "text-gray-300"
-                      }`}
+                      className={`h-5 w-5 ${ honor.isFeatured ? "fill-primary text-primary" : "text-gray-300" }`}
                     />
                   </button>
                 </td>
@@ -122,7 +118,7 @@ export function HonorsAdminTable({ honors, canDelete }: Props) {
                     className="inline-flex items-center justify-center rounded p-1 hover:bg-gray-100 disabled:opacity-50"
                   >
                     {honor.isPublished ? (
-                      <Eye className="h-5 w-5 text-green-600" />
+                      <Eye className="h-5 w-5 text-state-success-ink" />
                     ) : (
                       <EyeOff className="h-5 w-5 text-gray-400" />
                     )}
@@ -140,7 +136,7 @@ export function HonorsAdminTable({ honors, canDelete }: Props) {
                     </Link>
                     <Link
                       href={`/honors/${honor.id}/edit`}
-                      className="rounded p-1.5 text-blue-600 hover:bg-blue-50"
+                      className="rounded p-1.5 text-state-info-ink hover:bg-state-info-soft"
                       title="Sửa"
                     >
                       <Edit className="h-4 w-4" />
@@ -153,11 +149,7 @@ export function HonorsAdminTable({ honors, canDelete }: Props) {
                           else setDeleteId(honor.id);
                         }}
                         disabled={isPending}
-                        className={`rounded p-1.5 ${
-                          deleteId === honor.id
-                            ? "bg-red-100 text-red-700"
-                            : "text-red-500 hover:bg-red-50"
-                        }`}
+                        className={`rounded p-1.5 ${ deleteId === honor.id ? "bg-state-danger-soft text-state-danger-ink" : "text-state-danger-ink hover:bg-state-danger-soft" }`}
                         title={deleteId === honor.id ? "Xác nhận xoá" : "Xoá"}
                       >
                         <Trash2 className="h-4 w-4" />

@@ -93,7 +93,7 @@ export function OrgUnitRowActions({
         size="sm"
         onClick={onDelete}
         disabled={pending}
-        className="text-red-700 hover:bg-red-50"
+        className="text-state-danger-ink hover:bg-state-danger-soft"
         title="Xoá mềm đơn vị"
       >
         <Trash2 className="h-4 w-4" />

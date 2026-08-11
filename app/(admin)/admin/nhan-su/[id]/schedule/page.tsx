@@ -155,13 +155,13 @@ export default async function EmployeeSchedulePage({ params, searchParams }: Pro
                 className="h-12 w-12 rounded-full object-cover ring-1 ring-neutral-200"
               />
             ) : (
-              <div className="h-12 w-12 rounded-full bg-gradient-to-br from-purple-600 to-orange-500 text-white font-bold text-lg flex items-center justify-center">
+              <div className="h-12 w-12 rounded-full bg-primary text-white font-bold text-lg flex items-center justify-center">
                 {employee.fullName.charAt(0)}
               </div>
             )}
             <div>
               <h1 className="text-xl font-bold text-neutral-900 flex items-center gap-2">
-                <CalendarDays className="h-5 w-5 text-orange-500" />
+                <CalendarDays className="h-5 w-5 text-primary" />
                 Lịch dạy — {employee.fullName}
               </h1>
               <p className="text-sm text-neutral-500">{employee.jobTitle}</p>
@@ -187,7 +187,7 @@ export default async function EmployeeSchedulePage({ params, searchParams }: Pro
           </div>
           <Link
             href={`/nhan-su/${id}/schedule`}
-            className="text-xs text-orange-600 hover:underline"
+            className="text-xs text-primary hover:underline"
           >
             Về tuần hiện tại
           </Link>
@@ -203,7 +203,7 @@ export default async function EmployeeSchedulePage({ params, searchParams }: Pro
       </div>
 
       {!userId && (
-        <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+        <div className="rounded-lg border border-state-warning-soft bg-state-warning-soft px-4 py-3 text-sm text-state-warning-ink">
           ⚠️ Nhân viên chưa có User account liên kết → không thể truy vấn lịch.
           Trang Class hiện gắn giáo viên qua bảng User (relation TeacherClasses).
           Cần tạo User cho Employee này trước.

@@ -69,7 +69,7 @@ export default async function MakeupPage() {
     <div className="max-w-4xl p-6">
       <div className="mb-4">
         <h1 className="flex items-center gap-2 text-2xl font-bold text-gray-900">
-          <RefreshCw className="h-6 w-6 text-[#7C3AED]" /> Học bù
+          <RefreshCw className="h-6 w-6 text-primary" /> Học bù
         </h1>
         <p className="mt-1 text-sm text-gray-500">
           Buổi vắng cần bù → gợi ý buổi bù cùng khoá/bài (không vượt tiến độ) → xếp → đánh dấu đã bù.

@@ -51,11 +51,11 @@ const WEEKDAY_LABEL: Record<number, string> = {
 
 const STATUS_BADGE: Record<string, { label: string; cls: string }> = {
   PLANNED: { label: "Đang lên KH", cls: "bg-neutral-100 text-neutral-700" },
-  RECRUITING: { label: "Tuyển sinh", cls: "bg-blue-100 text-blue-700" },
-  PENDING_APPROVAL: { label: "Chờ duyệt", cls: "bg-amber-100 text-amber-700" },
-  ACTIVE: { label: "Đang dạy", cls: "bg-green-100 text-green-700" },
-  COMPLETED: { label: "Hoàn thành", cls: "bg-purple-100 text-purple-700" },
-  CANCELLED: { label: "Huỷ", cls: "bg-red-100 text-red-700" },
+  RECRUITING: { label: "Tuyển sinh", cls: "bg-state-info-soft text-state-info-ink" },
+  PENDING_APPROVAL: { label: "Chờ duyệt", cls: "bg-state-warning-soft text-state-warning-ink" },
+  ACTIVE: { label: "Đang dạy", cls: "bg-state-success-soft text-state-success-ink" },
+  COMPLETED: { label: "Hoàn thành", cls: "bg-primary-soft text-primary" },
+  CANCELLED: { label: "Huỷ", cls: "bg-state-danger-soft text-state-danger-ink" },
 };
 
 /**
@@ -367,13 +367,13 @@ export default async function ClassDetailPage({ params }: Props) {
           <div className="flex flex-wrap gap-2">
             <Link
               href={`/classes/${cls.id}/students`}
-              className="inline-flex items-center gap-1 rounded-lg border border-orange-200 bg-white px-3 py-1.5 text-sm font-semibold text-orange-700 hover:bg-orange-50"
+              className="inline-flex items-center gap-1 rounded-lg border border-primary-soft bg-white px-3 py-1.5 text-sm font-semibold text-primary hover:bg-primary-soft"
             >
               👥 Học sinh
             </Link>
             <Link
               href={`/classes/${cls.id}/progress`}
-              className="inline-flex items-center gap-1 rounded-lg border border-purple-200 bg-white px-3 py-1.5 text-sm font-semibold text-purple-700 hover:bg-purple-50"
+              className="inline-flex items-center gap-1 rounded-lg border border-primary-soft bg-white px-3 py-1.5 text-sm font-semibold text-primary hover:bg-primary-soft"
             >
               📊 Tiến độ
             </Link>
@@ -385,7 +385,7 @@ export default async function ClassDetailPage({ params }: Props) {
             {chatConversationId && (
               <Link
                 href={`/admin/tin-nhan?c=${chatConversationId}`}
-                className="inline-flex items-center gap-1 rounded-lg border border-sky-200 bg-white px-3 py-1.5 text-sm font-semibold text-sky-700 hover:bg-sky-50"
+                className="inline-flex items-center gap-1 rounded-lg border border-state-info-soft bg-white px-3 py-1.5 text-sm font-semibold text-state-info-ink hover:bg-state-info-soft"
               >
                 💬 Nhắn nhóm lớp
               </Link>
@@ -551,7 +551,7 @@ export default async function ClassDetailPage({ params }: Props) {
                     {s.scorm ? (
                       <Link
                         href={`/scorm/play/${s.scorm.id}?sessionId=${s.sessionId}`}
-                        className="inline-flex items-center gap-1 rounded-lg bg-[#7C3AED] px-3 py-1.5 text-xs font-semibold text-white hover:opacity-90"
+                        className="inline-flex items-center gap-1 rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-white hover:opacity-90"
                       >
                         ▶ Mở giảng
                       </Link>

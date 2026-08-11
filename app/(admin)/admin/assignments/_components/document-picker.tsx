@@ -134,7 +134,7 @@ export function DocumentPicker({
       </header>
 
       {error && (
-        <div className="border-b border-red-100 bg-red-50 px-4 py-2 text-sm text-red-700">
+        <div className="border-b border-state-danger-soft bg-state-danger-soft px-4 py-2 text-sm text-state-danger-ink">
           {error}
         </div>
       )}
@@ -156,7 +156,7 @@ export function DocumentPicker({
                   key={a.id}
                   className="flex items-start gap-2 rounded-lg border border-neutral-200 bg-neutral-50 p-2.5"
                 >
-                  <FileText className="h-4 w-4 flex-shrink-0 text-blue-500 mt-1" />
+                  <FileText className="h-4 w-4 flex-shrink-0 text-state-info-ink mt-1" />
                   <div className="flex-1 min-w-0">
                     <div className="truncate text-sm font-medium text-neutral-900">
                       {a.title}
@@ -168,7 +168,7 @@ export function DocumentPicker({
                       href={a.fileUrl}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="mt-0.5 inline-block text-xs font-semibold text-blue-600 hover:underline"
+                      className="mt-0.5 inline-block text-xs font-semibold text-state-info-ink hover:underline"
                     >
                       Mở ↗
                     </a>
@@ -178,7 +178,7 @@ export function DocumentPicker({
                     onClick={() => handleDetach(a.id)}
                     disabled={pending}
                     aria-label="Gỡ đính kèm"
-                    className="rounded p-1 text-red-600 hover:bg-red-50 disabled:opacity-30"
+                    className="rounded p-1 text-state-danger-ink hover:bg-state-danger-soft disabled:opacity-30"
                   >
                     <X className="h-4 w-4" />
                   </button>
@@ -199,12 +199,12 @@ export function DocumentPicker({
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Tìm tiêu đề / tên file..."
-              className="flex-1 rounded-md border border-neutral-200 px-2.5 py-1.5 text-sm outline-none focus:border-[#7C3AED] focus:ring-2 focus:ring-[#7C3AED]/20"
+              className="flex-1 rounded-md border border-neutral-200 px-2.5 py-1.5 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
             />
             <select
               value={typeFilter}
               onChange={(e) => setTypeFilter(e.target.value)}
-              className="rounded-md border border-neutral-200 px-2 py-1.5 text-sm focus:border-[#7C3AED] focus:outline-none"
+              className="rounded-md border border-neutral-200 px-2 py-1.5 text-sm focus:border-primary focus:outline-none"
             >
               <option value="">Mọi loại</option>
               {Object.entries(TYPE_LABEL).map(([v, label]) => (
@@ -236,7 +236,7 @@ export function DocumentPicker({
                       type="button"
                       onClick={() => handleAttach(d)}
                       disabled={pending}
-                      className="rounded-md bg-[#7C3AED] px-2.5 py-1 text-xs font-semibold text-white hover:opacity-90 disabled:opacity-50"
+                      className="rounded-md bg-primary px-2.5 py-1 text-xs font-semibold text-white hover:opacity-90 disabled:opacity-50"
                     >
                       <Plus className="h-3 w-3 inline" /> Đính kèm
                     </button>

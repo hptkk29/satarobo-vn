@@ -26,8 +26,8 @@ const SCOPE_LABEL = {
 } as const;
 const STATUS_STYLE = {
   DRAFT: "bg-gray-100 text-gray-600",
-  ACTIVE: "bg-emerald-100 text-emerald-700",
-  ARCHIVED: "bg-amber-100 text-amber-700",
+  ACTIVE: "bg-state-success-soft text-state-success-ink",
+  ARCHIVED: "bg-state-warning-soft text-state-warning-ink",
 } as const;
 const STATUS_LABEL: Record<keyof typeof STATUS_STYLE, string> = {
   DRAFT: "Nháp",
@@ -73,7 +73,7 @@ export function FormsManager({ forms }: { forms: FormRow[] }) {
         <button
           type="button"
           onClick={() => setCreating((c) => !c)}
-          className="inline-flex items-center gap-1.5 rounded-lg bg-orange-500 px-3 py-1.5 text-sm font-semibold text-white hover:bg-orange-600"
+          className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-sm font-semibold text-white hover:bg-primary-dark"
         >
           <FilePlus2 className="h-4 w-4" /> Tạo form
         </button>
@@ -105,7 +105,7 @@ export function FormsManager({ forms }: { forms: FormRow[] }) {
               type="button"
               onClick={submitNew}
               disabled={pending}
-              className="rounded-lg bg-orange-500 px-4 py-2 text-sm font-semibold text-white hover:bg-orange-600 disabled:opacity-60"
+              className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white hover:bg-primary-dark disabled:opacity-60"
             >
               {pending ? "Đang lưu…" : "Lưu form"}
             </button>
@@ -128,7 +128,7 @@ export function FormsManager({ forms }: { forms: FormRow[] }) {
             {forms.map((f) => (
               <li key={f.id} className="flex flex-wrap items-center justify-between gap-2 p-3">
                 <div className="min-w-0">
-                  <Link href={`/evaluations/${f.id}`} className="font-medium text-gray-900 hover:text-orange-600">
+                  <Link href={`/evaluations/${f.id}`} className="font-medium text-gray-900 hover:text-primary">
                     {f.title}
                   </Link>
                   <div className="mt-0.5 flex items-center gap-2 text-xs text-gray-500">
@@ -143,7 +143,7 @@ export function FormsManager({ forms }: { forms: FormRow[] }) {
                     <button
                       type="button"
                       onClick={() => act(() => setFormStatusAction(f.id, "ACTIVE"), "Đã kích hoạt")}
-                      className="inline-flex items-center gap-1 rounded-md border border-emerald-200 px-2 py-1 text-xs font-medium text-emerald-700 hover:bg-emerald-50"
+                      className="inline-flex items-center gap-1 rounded-md border border-state-success-soft px-2 py-1 text-xs font-medium text-state-success-ink hover:bg-state-success-soft"
                     >
                       <CheckCircle2 className="h-3.5 w-3.5" /> Kích hoạt
                     </button>
@@ -152,7 +152,7 @@ export function FormsManager({ forms }: { forms: FormRow[] }) {
                     <button
                       type="button"
                       onClick={() => act(() => setFormStatusAction(f.id, "ARCHIVED"), "Đã lưu trữ")}
-                      className="inline-flex items-center gap-1 rounded-md border border-amber-200 px-2 py-1 text-xs font-medium text-amber-700 hover:bg-amber-50"
+                      className="inline-flex items-center gap-1 rounded-md border border-state-warning-soft px-2 py-1 text-xs font-medium text-state-warning-ink hover:bg-state-warning-soft"
                     >
                       <Archive className="h-3.5 w-3.5" /> Lưu trữ
                     </button>
@@ -161,7 +161,7 @@ export function FormsManager({ forms }: { forms: FormRow[] }) {
                     <button
                       type="button"
                       onClick={() => act(() => setFormStatusAction(f.id, "DRAFT"), "Đã kích hoạt lại")}
-                      className="inline-flex items-center gap-1 rounded-md border border-emerald-200 px-2 py-1 text-xs font-medium text-emerald-700 hover:bg-emerald-50"
+                      className="inline-flex items-center gap-1 rounded-md border border-state-success-soft px-2 py-1 text-xs font-medium text-state-success-ink hover:bg-state-success-soft"
                     >
                       <CheckCircle2 className="h-3.5 w-3.5" /> Kích hoạt lại
                     </button>

@@ -92,7 +92,7 @@ export function RevenueTargetForm({
       </div>
 
       {error ? (
-        <p className="md:col-span-5 text-sm text-red-600">{error}</p>
+        <p className="md:col-span-5 text-sm text-state-danger-ink">{error}</p>
       ) : null}
     </form>
   );

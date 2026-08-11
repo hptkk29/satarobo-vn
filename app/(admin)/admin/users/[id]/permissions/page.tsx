@@ -65,7 +65,7 @@ export default async function UserPermissionsPage({ params }: Props) {
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2">
-              <Shield className="h-5 w-5 text-orange-600 shrink-0" />
+              <Shield className="h-5 w-5 text-primary shrink-0" />
               <h1 className="truncate text-2xl font-bold text-gray-900">
                 Phân quyền nâng cao
               </h1>
@@ -96,7 +96,7 @@ export default async function UserPermissionsPage({ params }: Props) {
                 </Link>
               )}
               {user.permissionGrants.length > 0 && (
-                <span className="inline-flex items-center gap-1 rounded-full bg-orange-100 px-2.5 py-0.5 text-xs font-semibold text-orange-700">
+                <span className="inline-flex items-center gap-1 rounded-full bg-primary-soft px-2.5 py-0.5 text-xs font-semibold text-primary">
                   {user.permissionGrants.length} override
                 </span>
               )}
@@ -113,9 +113,9 @@ export default async function UserPermissionsPage({ params }: Props) {
 
       {/* Banner — SUPER_ADMIN cannot be overridden */}
       {isSuperAdmin && (
-        <div className="mb-6 flex items-start gap-3 rounded-xl border border-purple-200 bg-purple-50 p-4">
-          <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-purple-600" />
-          <div className="text-sm text-purple-900">
+        <div className="mb-6 flex items-start gap-3 rounded-xl border border-primary-soft bg-primary-soft p-4">
+          <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-primary" />
+          <div className="text-sm text-primary">
             <strong>SUPER_ADMIN</strong> có toàn quyền — overrides không có
             hiệu lực để chống self-lockout. Nếu cần hạn chế, đổi role trước
             khi thêm grants.
@@ -153,8 +153,8 @@ export default async function UserPermissionsPage({ params }: Props) {
         />
       </section>
 
-      <div className="mt-4 flex items-start gap-2 rounded-lg border border-blue-200 bg-blue-50 p-3 text-xs text-blue-900">
-        <Shield className="mt-0.5 h-4 w-4 shrink-0 text-blue-600" />
+      <div className="mt-4 flex items-start gap-2 rounded-lg border border-state-info-soft bg-state-info-soft p-3 text-xs text-state-info-ink">
+        <Shield className="mt-0.5 h-4 w-4 shrink-0 text-state-info-ink" />
         <div>
           <strong>Lưu ý bảo mật:</strong> Mỗi thao tác add/edit/delete grant
           sẽ tăng <code>tokenVersion</code> → user bị đăng xuất khỏi mọi thiết

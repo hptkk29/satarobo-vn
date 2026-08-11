@@ -27,7 +27,7 @@ export default function AdminGuidesPage() {
         {groups.map(({ category, guides }) => (
           <section key={category}>
             <h2 className="mb-3 flex items-center gap-2 text-xs font-semibold tracking-widest text-neutral-400 uppercase">
-              <BookOpenText className="h-4 w-4 text-orange-500" aria-hidden />
+              <BookOpenText className="h-4 w-4 text-primary" aria-hidden />
               {category}
             </h2>
             <div className="grid gap-3 sm:grid-cols-2">
@@ -35,9 +35,9 @@ export default function AdminGuidesPage() {
                 <Link
                   key={g.slug}
                   href={`/huong-dan/${g.slug}`}
-                  className="group flex items-start gap-3 rounded-xl border border-neutral-200 bg-white p-4 transition-colors hover:border-orange-300 hover:bg-orange-50/40"
+                  className="group flex items-start gap-3 rounded-xl border border-neutral-200 bg-white p-4 transition-colors hover:border-primary hover:bg-primary-soft/40"
                 >
-                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-orange-500 to-purple-700 text-xs font-bold text-white">
+                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-primary text-xs font-bold text-white">
                     {String(g.order).padStart(2, "0")}
                   </span>
                   <span className="min-w-0 flex-1">
@@ -49,7 +49,7 @@ export default function AdminGuidesPage() {
                     </span>
                   </span>
                   <ArrowRight
-                    className="mt-1 h-4 w-4 shrink-0 text-neutral-400 transition-transform group-hover:translate-x-0.5 group-hover:text-orange-500"
+                    className="mt-1 h-4 w-4 shrink-0 text-neutral-400 transition-transform group-hover:translate-x-0.5 group-hover:text-primary"
                     aria-hidden
                   />
                 </Link>

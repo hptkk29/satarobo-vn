@@ -78,7 +78,7 @@ const TRIAL_LABEL: Record<string, string> = {
 };
 
 const inputCls =
-  "w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-[#7C3AED] focus:outline-none";
+  "w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary focus:outline-none";
 
 /** Chuyển draft (string) → payload gửi server (bỏ field rỗng). */
 export function childDraftToPayload(d: ChildDraft): Record<string, unknown> {
@@ -337,7 +337,7 @@ export function LeadChildrenManager({
           <button
             type="button"
             onClick={() => startAdd()}
-            className="inline-flex items-center gap-1 rounded-lg border-2 border-violet-300 px-3 py-1.5 text-sm font-semibold text-violet-700 hover:bg-violet-50"
+            className="inline-flex items-center gap-1 rounded-lg border-2 border-primary px-3 py-1.5 text-sm font-semibold text-primary hover:bg-primary-soft"
           >
             <Plus size={14} /> Thêm con
           </button>
@@ -361,7 +361,7 @@ export function LeadChildrenManager({
                   ageYears: legacyChildAge != null ? String(legacyChildAge) : "",
                 })
               }
-              className="inline-flex items-center gap-1 rounded-md border border-violet-300 px-2.5 py-1 text-xs font-semibold text-violet-700 hover:bg-violet-50"
+              className="inline-flex items-center gap-1 rounded-md border border-primary px-2.5 py-1 text-xs font-semibold text-primary hover:bg-primary-soft"
             >
               <Plus size={12} /> Tạo LeadChild mới
             </button>
@@ -377,7 +377,7 @@ export function LeadChildrenManager({
       <ul className="space-y-2">
         {childrenList.map((c) =>
           editingId === c.id ? (
-            <li key={c.id} className="rounded-lg border border-violet-200 bg-violet-50/40 p-3">
+            <li key={c.id} className="rounded-lg border border-primary-soft bg-primary-soft/40 p-3">
               <ChildFields
                 value={form}
                 onChange={patch}
@@ -398,7 +398,7 @@ export function LeadChildrenManager({
                     <span className="text-xs text-gray-500">{c.ageYears} tuổi</span>
                   )}
                   {c.gender && <span className="text-xs text-gray-500">· {c.gender}</span>}
-                  <span className="rounded-full bg-violet-100 px-2 py-0.5 text-[11px] font-medium text-violet-700">
+                  <span className="rounded-full bg-primary-soft px-2 py-0.5 text-[11px] font-medium text-primary">
                     {TRIAL_LABEL[c.trialStatus] ?? c.trialStatus}
                   </span>
                 </div>
@@ -416,7 +416,7 @@ export function LeadChildrenManager({
                 {c.trialHistory && c.trialHistory.length > 0 && (
                   <div className="mt-1 space-y-0.5">
                     {c.trialHistory.map((h, i) => (
-                      <p key={i} className="text-[11px] font-medium text-violet-600">
+                      <p key={i} className="text-[11px] font-medium text-primary">
                         {formatTrialHistory(h)}
                       </p>
                     ))}
@@ -437,11 +437,7 @@ export function LeadChildrenManager({
                     type="button"
                     onClick={() => remove(c.id)}
                     disabled={isPending}
-                    className={`inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs disabled:opacity-50 ${
-                      deleteId === c.id
-                        ? "border-red-500 bg-red-500 text-white"
-                        : "border-red-300 text-red-600 hover:bg-red-50"
-                    }`}
+                    className={`inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs disabled:opacity-50 ${ deleteId === c.id ? "border-state-danger bg-state-danger text-white" : "border-state-danger text-state-danger-ink hover:bg-state-danger-soft" }`}
                   >
                     <Trash2 size={12} /> {deleteId === c.id ? "Xác nhận" : "Xoá"}
                   </button>
@@ -454,7 +450,7 @@ export function LeadChildrenManager({
 
       {/* Form thêm con */}
       {adding && (
-        <div className="mt-2 rounded-lg border border-violet-200 bg-violet-50/40 p-3">
+        <div className="mt-2 rounded-lg border border-primary-soft bg-primary-soft/40 p-3">
           <ChildFields
             value={form}
             onChange={patch}
@@ -483,7 +479,7 @@ function EditorButtons({
         type="button"
         onClick={onSave}
         disabled={isPending}
-        className="inline-flex items-center gap-1 rounded-lg bg-[#7C3AED] px-3 py-1.5 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-50"
+        className="inline-flex items-center gap-1 rounded-lg bg-primary px-3 py-1.5 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-50"
       >
         <Check size={14} /> {isPending ? "Đang lưu…" : "Lưu"}
       </button>

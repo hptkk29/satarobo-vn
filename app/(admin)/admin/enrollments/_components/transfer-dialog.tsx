@@ -100,7 +100,7 @@ export function TransferDialog({
       <button
         type="button"
         onClick={() => setIsOpen(true)}
-        className="inline-flex items-center gap-2 rounded-lg border-2 border-purple-300 bg-white px-4 py-2 text-sm font-bold text-purple-700 hover:bg-purple-50"
+        className="inline-flex items-center gap-2 rounded-lg border-2 border-primary bg-white px-4 py-2 text-sm font-bold text-primary hover:bg-primary-soft"
       >
         <ArrowRightLeft className="h-4 w-4" />
         Chuyển lớp
@@ -131,7 +131,7 @@ export function TransferDialog({
               id="transfer-title"
               className="flex items-center gap-2 text-lg font-bold text-neutral-900"
             >
-              <ArrowRightLeft className="h-5 w-5 text-purple-500" />
+              <ArrowRightLeft className="h-5 w-5 text-primary" />
               Chuyển lớp cho học viên
             </h2>
             <p className="mt-1 text-sm text-neutral-600">
@@ -143,7 +143,7 @@ export function TransferDialog({
             </p>
 
             {error && (
-              <div className="mt-4 rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-700">
+              <div className="mt-4 rounded-lg border border-state-danger bg-state-danger-soft px-3 py-2 text-sm text-state-danger-ink">
                 {error}
               </div>
             )}
@@ -157,7 +157,7 @@ export function TransferDialog({
                   value={targetId}
                   onChange={(e) => setTargetId(e.target.value)}
                   disabled={pending}
-                  className="w-full rounded-lg border border-neutral-300 px-3 py-2 text-sm focus:border-purple-500 focus:outline-none"
+                  className="w-full rounded-lg border border-neutral-300 px-3 py-2 text-sm focus:border-primary focus:outline-none"
                 >
                   <option value="">— Chọn lớp đích —</option>
                   {eligible.map((c) => {
@@ -185,8 +185,8 @@ export function TransferDialog({
                       className={
                         "inline-flex rounded-full px-2 py-0.5 font-semibold " +
                         (targetFull
-                          ? "bg-red-100 text-red-700"
-                          : "bg-green-100 text-green-700")
+                          ? "bg-state-danger-soft text-state-danger-ink"
+                          : "bg-state-success-soft text-state-success-ink")
                       }
                     >
                       Còn{" "}
@@ -218,7 +218,7 @@ export function TransferDialog({
                   rows={3}
                   disabled={pending}
                   required
-                  className="w-full resize-y rounded-lg border border-neutral-300 px-3 py-2 text-sm focus:border-purple-500 focus:outline-none"
+                  className="w-full resize-y rounded-lg border border-neutral-300 px-3 py-2 text-sm focus:border-primary focus:outline-none"
                 />
               </div>
             </div>
@@ -238,7 +238,7 @@ export function TransferDialog({
                 disabled={
                   pending || !targetId || targetFull || targetClosed
                 }
-                className="rounded-lg bg-purple-500 px-4 py-2 text-sm font-bold text-white hover:bg-purple-600 disabled:opacity-50"
+                className="rounded-lg bg-primary px-4 py-2 text-sm font-bold text-white hover:bg-primary-dark disabled:opacity-50"
               >
                 {pending ? "Đang chuyển..." : "Xác nhận chuyển lớp"}
               </button>

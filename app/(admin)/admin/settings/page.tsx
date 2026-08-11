@@ -56,7 +56,7 @@ export default async function SettingsPage() {
       {/* Hướng dẫn sử dụng — lối vào bộ tài liệu hướng dẫn theo khối chức năng */}
       <section className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
         <h2 className="mb-1 flex items-center gap-2 text-base font-bold text-gray-900">
-          <BookOpenText className="h-4 w-4 text-orange-500" aria-hidden /> Hướng dẫn sử dụng
+          <BookOpenText className="h-4 w-4 text-primary" aria-hidden /> Hướng dẫn sử dụng
         </h2>
         <div className="flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between">
           <p className="text-sm text-gray-500">
@@ -84,7 +84,7 @@ export default async function SettingsPage() {
                   <p className="mt-0.5 text-xs text-gray-500">{c.address}</p>
                   {c.phone && <p className="mt-0.5 text-xs text-gray-400">{c.phone}</p>}
                 </div>
-                <span className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold ${c.isActive ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
+                <span className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold ${c.isActive ? 'bg-state-success-soft text-state-success-ink' : 'bg-gray-100 text-gray-500'}`}>
                   {c.isActive ? 'Hoạt động' : 'Tắt'}
                 </span>
               </div>

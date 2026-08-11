@@ -117,7 +117,7 @@ export function SessionForm({
   return (
     <form action={action} className="max-w-3xl space-y-6">
       {error && (
-        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+        <div className="rounded-lg border border-state-danger-soft bg-state-danger-soft px-4 py-3 text-sm text-state-danger-ink">
           {error}
         </div>
       )}
@@ -125,14 +125,14 @@ export function SessionForm({
       <Section title="Thông tin buổi học">
         <label className="block">
           <span className="mb-1 block text-sm font-semibold text-neutral-700">
-            Lớp <span className="ml-1 text-red-500">*</span>
+            Lớp <span className="ml-1 text-state-danger-ink">*</span>
           </span>
           <select
             name="classId"
             value={classId}
             onChange={(e) => onClassChange(e.target.value)}
             required
-            className="w-full rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/20"
+            className="w-full rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
           >
             <option value="">— Chọn lớp —</option>
             {classes.map((c) => (
@@ -146,14 +146,14 @@ export function SessionForm({
 
         <label className="block">
           <span className="mb-1 block text-sm font-semibold text-neutral-700">
-            Thời gian (ngày + giờ) <span className="ml-1 text-red-500">*</span>
+            Thời gian (ngày + giờ) <span className="ml-1 text-state-danger-ink">*</span>
           </span>
           <input
             type="datetime-local"
             name="date"
             defaultValue={toDateTimeLocal(session?.date ?? null)}
             required
-            className="w-full rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/20"
+            className="w-full rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
           />
           <p className="mt-1 text-xs text-neutral-500">
             Chọn ngày + giờ bắt đầu buổi học. Giờ kết thúc tính theo khung giờ của lớp.
@@ -167,7 +167,7 @@ export function SessionForm({
             name="topic"
             defaultValue={session?.topic ?? ""}
             placeholder="Vd: Buổi 5 — Điều khiển động cơ servo"
-            className="w-full rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/20"
+            className="w-full rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
           />
         </label>
 
@@ -180,7 +180,7 @@ export function SessionForm({
             value={lessonId}
             onChange={(e) => setLessonId(e.target.value)}
             disabled={!classId}
-            className="w-full rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/20 disabled:bg-neutral-50"
+            className="w-full rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 disabled:bg-neutral-50"
           >
             <option value="">
               {classId
@@ -208,7 +208,7 @@ export function SessionForm({
             rows={2}
             defaultValue={session?.lessonNotes ?? ""}
             placeholder="VD: HS làm chậm phần motor — tuần sau ôn lại"
-            className="w-full resize-y rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/20"
+            className="w-full resize-y rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
           />
         </label>
 
@@ -219,7 +219,7 @@ export function SessionForm({
             rows={4}
             defaultValue={session?.notes ?? ""}
             placeholder="Mục tiêu, tài liệu, bài tập về nhà..."
-            className="w-full resize-y rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/20"
+            className="w-full resize-y rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
           />
         </label>
       </Section>
@@ -244,7 +244,7 @@ function SubmitButton({ isEdit }: { isEdit: boolean }) {
     <button
       type="submit"
       disabled={pending}
-      className="rounded-xl bg-orange-500 px-6 py-3 font-bold text-white shadow-md hover:bg-orange-600 disabled:opacity-60"
+      className="rounded-xl bg-primary px-6 py-3 font-bold text-white shadow-md hover:bg-primary-dark disabled:opacity-60"
     >
       {pending ? "Đang lưu..." : isEdit ? "Cập nhật" : "Tạo buổi học"}
     </button>

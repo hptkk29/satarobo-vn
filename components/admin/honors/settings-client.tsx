@@ -87,7 +87,7 @@ function FieldEditor({
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
           placeholder={field.placeholder}
-          className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-orange-500 focus:outline-none"
+          className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary focus:outline-none"
         />
       )}
 
@@ -97,7 +97,7 @@ function FieldEditor({
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
           placeholder={field.placeholder}
-          className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-orange-500 focus:outline-none"
+          className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary focus:outline-none"
         />
       )}
 
@@ -125,7 +125,7 @@ function FieldEditor({
           type="button"
           onClick={() => onSave(draft)}
           disabled={disabled || !dirty}
-          className="rounded bg-[#7C3AED] px-4 py-1.5 text-sm font-bold text-white hover:opacity-90 disabled:opacity-40"
+          className="rounded bg-primary px-4 py-1.5 text-sm font-bold text-white hover:opacity-90 disabled:opacity-40"
         >
           Lưu
         </button>

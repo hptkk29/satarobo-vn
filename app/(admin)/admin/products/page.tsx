@@ -119,8 +119,8 @@ export default async function ProductsPage({ searchParams }: Props) {
     <div>
       <div className="mb-6 flex flex-wrap items-start justify-between gap-3">
         <div className="flex items-start gap-3">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-orange-50">
-            <Package2 className="h-5 w-5 text-orange-600" />
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary-soft">
+            <Package2 className="h-5 w-5 text-primary" />
           </div>
           <div>
             <h1 className="text-2xl font-bold text-gray-900">Sản phẩm</h1>
@@ -133,7 +133,7 @@ export default async function ProductsPage({ searchParams }: Props) {
         {canManage && (
           <Link
             href="/products/new"
-            className="inline-flex items-center gap-1.5 rounded-lg bg-orange-500 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-orange-600"
+            className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-primary-dark"
           >
             <Plus className="h-4 w-4" />
             Thêm sản phẩm
@@ -152,7 +152,7 @@ export default async function ProductsPage({ searchParams }: Props) {
           className={
             "rounded-full px-3 py-1 " +
             (!lowStock
-              ? "bg-blue-100 text-blue-700"
+              ? "bg-state-info-soft text-state-info-ink"
               : "border border-gray-200 bg-white text-gray-600 hover:bg-gray-50")
           }
         >
@@ -168,7 +168,7 @@ export default async function ProductsPage({ searchParams }: Props) {
           className={
             "rounded-full px-3 py-1 " +
             (lowStock
-              ? "bg-orange-100 text-orange-700"
+              ? "bg-primary-soft text-primary"
               : "border border-gray-200 bg-white text-gray-600 hover:bg-gray-50")
           }
         >
@@ -185,12 +185,12 @@ export default async function ProductsPage({ searchParams }: Props) {
           name="q"
           defaultValue={q}
           placeholder="SKU hoặc tên..."
-          className="lg:col-span-2 rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-orange-500 focus:outline-none focus:ring-2 focus:ring-orange-500/20"
+          className="lg:col-span-2 rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
         />
         <select
           name="category"
           defaultValue={categoryParam ?? ""}
-          className="rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-orange-500 focus:outline-none"
+          className="rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:outline-none"
         >
           <option value="">Tất cả loại</option>
           {CATEGORIES.map((c) => (
@@ -202,7 +202,7 @@ export default async function ProductsPage({ searchParams }: Props) {
         <select
           name="status"
           defaultValue={statusParam ?? ""}
-          className="rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-orange-500 focus:outline-none"
+          className="rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:outline-none"
         >
           <option value="">Tất cả trạng thái</option>
           {STATUSES.map((s) => (
@@ -213,7 +213,7 @@ export default async function ProductsPage({ searchParams }: Props) {
         </select>
         <button
           type="submit"
-          className="rounded-lg bg-orange-500 px-4 py-2 text-sm font-semibold text-white hover:bg-orange-600"
+          className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white hover:bg-primary-dark"
         >
           Áp dụng
         </button>
@@ -294,7 +294,7 @@ export default async function ProductsPage({ searchParams }: Props) {
                       <td
                         className={
                           "px-4 py-3 text-right text-sm tabular-nums " +
-                          (isLow ? "font-bold text-orange-600" : "")
+                          (isLow ? "font-bold text-primary" : "")
                         }
                       >
                         {p.stockOnHand}

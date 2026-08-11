@@ -107,8 +107,8 @@ export default async function ClassProgressPage({ params }: Props) {
             <ChevronLeft className="h-4 w-4" /> Quay lại lớp
           </Link>
           <h1 className="flex items-center gap-2 text-2xl font-bold text-neutral-900">
-            <LineChart className="h-6 w-6 text-[#7C3AED]" />
-            Tiến độ lớp: <span className="text-orange-600">{cls.name}</span>
+            <LineChart className="h-6 w-6 text-primary" />
+            Tiến độ lớp: <span className="text-primary">{cls.name}</span>
           </h1>
           <p className="mt-1 text-sm text-neutral-500">
             {cls.course.name} · {cls.center?.name ?? "—"}
@@ -184,10 +184,10 @@ export default async function ClassProgressPage({ params }: Props) {
                     progress.totalSessions === 0
                       ? "text-neutral-400"
                       : progress.attendanceRate >= 80
-                        ? "text-green-600"
+                        ? "text-state-success-ink"
                         : progress.attendanceRate >= 60
-                          ? "text-amber-600"
-                          : "text-red-600";
+                          ? "text-state-warning-ink"
+                          : "text-state-danger-ink";
                   return (
                     <tr key={student.id} className="hover:bg-neutral-50/60">
                       <td className="px-4 py-3">
@@ -244,7 +244,7 @@ export default async function ClassProgressPage({ params }: Props) {
                       <td className="px-4 py-3 text-center text-sm tabular-nums text-neutral-700">
                         {progress.submittedAssignments}/{progress.totalAssignments}
                         {progress.gradedAssignments > 0 && (
-                          <span className="ml-1 text-xs text-green-600">
+                          <span className="ml-1 text-xs text-state-success-ink">
                             ({progress.gradedAssignments}✓)
                           </span>
                         )}
@@ -262,7 +262,7 @@ export default async function ClassProgressPage({ params }: Props) {
                       <td className="px-4 py-3 text-right">
                         <Link
                           href={`/students/${student.id}/edit`}
-                          className="text-xs font-semibold text-[#7C3AED] hover:underline"
+                          className="text-xs font-semibold text-primary hover:underline"
                         >
                           Chi tiết →
                         </Link>
@@ -300,11 +300,7 @@ export default async function ClassProgressPage({ params }: Props) {
                   className="flex items-center gap-3 rounded-lg px-2 py-1.5 text-sm"
                 >
                   <span
-                    className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-bold ${
-                      l.taught
-                        ? "bg-emerald-100 text-emerald-700"
-                        : "bg-neutral-100 text-neutral-400"
-                    }`}
+                    className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-bold ${ l.taught ? "bg-state-success-soft text-state-success-ink" : "bg-neutral-100 text-neutral-400" }`}
                   >
                     {l.order}
                   </span>
@@ -356,11 +352,7 @@ export default async function ClassProgressPage({ params }: Props) {
                     >
                       <div className="flex flex-col items-center gap-0.5">
                         <span
-                          className={`rounded px-1.5 py-0.5 text-[10px] font-bold ${
-                            c.kind === "exam"
-                              ? "bg-purple-100 text-purple-700"
-                              : "bg-orange-100 text-orange-700"
-                          }`}
+                          className={`rounded px-1.5 py-0.5 text-[10px] font-bold ${ c.kind === "exam" ? "bg-primary-soft text-primary" : "bg-primary-soft text-primary" }`}
                         >
                           {c.kind === "exam" ? "Đề" : "BT"}
                         </span>
@@ -399,11 +391,7 @@ export default async function ClassProgressPage({ params }: Props) {
                         >
                           {cell.score !== null ? (
                             <span
-                              className={`font-semibold ${
-                                cell.passed === false
-                                  ? "text-red-600"
-                                  : "text-neutral-800"
-                              }`}
+                              className={`font-semibold ${ cell.passed === false ? "text-state-danger-ink" : "text-neutral-800" }`}
                             >
                               {cell.score}
                             </span>

@@ -22,13 +22,13 @@ export default async function R2TestPage() {
         <p className="text-sm text-gray-600 mt-1">
           Trang này dùng để verify R2 storage hoạt động đúng. Upload file → URL phải
           hiển thị được qua{" "}
-          <code className="text-orange-600">https://cdn.satarobo.vn</code>.
+          <code className="text-primary">https://cdn.satarobo.vn</code>.
         </p>
       </div>
 
-      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
-        <p className="text-sm font-medium text-blue-900">📋 Test checklist:</p>
-        <ul className="text-sm text-blue-800 mt-2 space-y-1 list-disc list-inside">
+      <div className="bg-state-info-soft border border-state-info-soft rounded-lg p-4 mb-6">
+        <p className="text-sm font-medium text-state-info-ink">📋 Test checklist:</p>
+        <ul className="text-sm text-state-info-ink mt-2 space-y-1 list-disc list-inside">
           <li>Upload ảnh JPG/PNG/WEBP (max 5MB)</li>
           <li>Upload PDF (max 20MB)</li>
           <li>Upload Word/Excel (max 20MB)</li>

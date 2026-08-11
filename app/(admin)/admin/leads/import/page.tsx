@@ -26,7 +26,7 @@ export default function ImportLeadsPage() {
         </p>
         <p className="mt-2 text-sm">
           Có file <b>danh sách khách ĐÃ ĐĂNG KÝ</b> của Sale (nhiều sheet theo tháng)?{" "}
-          <Link href="/leads/import/registered" className="text-blue-600 hover:underline">
+          <Link href="/leads/import/registered" className="text-state-info-ink hover:underline">
             Import danh sách đã đăng ký →
           </Link>
         </p>

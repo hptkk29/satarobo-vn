@@ -65,7 +65,7 @@ export function TeacherProfileForm({
   }
 
   const fieldCls =
-    "w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-[#7C3AED] focus:outline-none disabled:bg-gray-50 disabled:text-gray-500";
+    "w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary focus:outline-none disabled:bg-gray-50 disabled:text-gray-500";
 
   return (
     <section className="rounded-xl border border-gray-200 bg-white p-5">
@@ -121,11 +121,7 @@ export function TeacherProfileForm({
                   type="button"
                   onClick={() => canEdit && toggleCourse(c.id)}
                   disabled={!canEdit || pending}
-                  className={`rounded-full border px-3 py-1 text-xs font-medium ${
-                    checked
-                      ? "border-[#7C3AED] bg-purple-50 text-[#7C3AED]"
-                      : "border-gray-200 bg-white text-gray-500"
-                  } ${canEdit ? "hover:border-[#7C3AED]" : "cursor-default"}`}
+                  className={`rounded-full border px-3 py-1 text-xs font-medium ${ checked ? "border-primary bg-primary-soft text-primary" : "border-gray-200 bg-white text-gray-500" } ${canEdit ? "hover:border-primary" : "cursor-default"}`}
                 >
                   {checked ? "✓ " : ""}
                   {c.label}
@@ -142,7 +138,7 @@ export function TeacherProfileForm({
             type="button"
             onClick={save}
             disabled={pending}
-            className="inline-flex items-center gap-1.5 rounded-lg bg-[#7C3AED] px-4 py-2 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-50"
+            className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-50"
           >
             <Save className="h-4 w-4" />
             {pending ? "Đang lưu…" : "Lưu hồ sơ"}

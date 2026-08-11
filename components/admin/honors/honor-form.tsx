@@ -128,7 +128,7 @@ export function HonorForm({ mode, initial, employees }: Props) {
       {/* ─── Step 1: Chọn nhân sự ─── */}
       <section className="rounded-xl border border-gray-200 bg-white p-6">
         <h2 className="mb-4 text-lg font-bold">
-          <span className="text-orange-500">1.</span> Chọn nhân sự được vinh danh
+          <span className="text-primary">1.</span> Chọn nhân sự được vinh danh
         </h2>
 
         <div>
@@ -137,7 +137,7 @@ export function HonorForm({ mode, initial, employees }: Props) {
             required
             value={employeeId}
             onChange={(e) => handleEmployeeChange(e.target.value)}
-            className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-orange-500 focus:outline-none"
+            className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary focus:outline-none"
           >
             <option value="">— Chọn nhân sự —</option>
             {employees.map((emp) => (
@@ -153,7 +153,7 @@ export function HonorForm({ mode, initial, employees }: Props) {
               href="/nhan-su/new"
               target="_blank"
               rel="noreferrer"
-              className="text-orange-600 hover:underline"
+              className="text-primary hover:underline"
             >
               Thêm nhân sự mới ↗
             </a>
@@ -161,7 +161,7 @@ export function HonorForm({ mode, initial, employees }: Props) {
         </div>
 
         {selectedEmployee && (
-          <div className="mt-4 flex items-center gap-3 rounded-lg border border-orange-200 bg-orange-50 p-3">
+          <div className="mt-4 flex items-center gap-3 rounded-lg border border-primary-soft bg-primary-soft p-3">
             {selectedEmployee.avatarUrl ? (
               <img
                 src={selectedEmployee.avatarUrl}
@@ -169,7 +169,7 @@ export function HonorForm({ mode, initial, employees }: Props) {
                 className="h-12 w-12 rounded-full object-cover"
               />
             ) : (
-              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-gradient-to-br from-purple-600 to-orange-500 text-lg font-bold text-white">
+              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary text-lg font-bold text-white">
                 {selectedEmployee.fullName.charAt(0)}
               </div>
             )}
@@ -186,7 +186,7 @@ export function HonorForm({ mode, initial, employees }: Props) {
       {/* ─── Step 2: Snapshot tại thời điểm trao giải ─── */}
       <section className="rounded-xl border border-gray-200 bg-white p-6">
         <h2 className="mb-4 text-lg font-bold">
-          <span className="text-orange-500">2.</span> Snapshot lúc trao giải
+          <span className="text-primary">2.</span> Snapshot lúc trao giải
         </h2>
         <p className="mb-4 text-xs text-gray-500">
           Lưu lại chức danh + số năm gắn bó tại thời điểm trao giải (giữ history nếu nhân sự đổi
@@ -200,7 +200,7 @@ export function HonorForm({ mode, initial, employees }: Props) {
               value={jobTitleAtTime}
               onChange={(e) => setJobTitleAtTime(e.target.value)}
               placeholder={selectedEmployee?.jobTitle || "Chức danh khi trao giải"}
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-orange-500 focus:outline-none"
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary focus:outline-none"
             />
             <p className="mt-1 text-xs text-gray-500">
               Để trống = dùng chức danh hiện tại của nhân sự
@@ -216,7 +216,7 @@ export function HonorForm({ mode, initial, employees }: Props) {
               onChange={(e) =>
                 setYearsAtTime(e.target.value === "" ? "" : Number(e.target.value))
               }
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-orange-500 focus:outline-none"
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary focus:outline-none"
             />
           </div>
         </div>
@@ -225,7 +225,7 @@ export function HonorForm({ mode, initial, employees }: Props) {
       {/* ─── Step 3: Danh hiệu ─── */}
       <section className="rounded-xl border border-gray-200 bg-white p-6">
         <h2 className="mb-4 text-lg font-bold">
-          <span className="text-orange-500">3.</span> Danh hiệu
+          <span className="text-primary">3.</span> Danh hiệu
         </h2>
 
         <div className="grid gap-4 sm:grid-cols-2">
@@ -235,7 +235,7 @@ export function HonorForm({ mode, initial, employees }: Props) {
               name="category"
               required
               defaultValue={initial?.category || "SPARK"}
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-orange-500 focus:outline-none"
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary focus:outline-none"
             >
               {CATEGORIES.map((cat) => (
                 <option key={cat.value} value={cat.value}>
@@ -253,7 +253,7 @@ export function HonorForm({ mode, initial, employees }: Props) {
               onChange={(e) => setSlug(e.target.value)}
               placeholder="ten-award-quy"
               pattern="[a-z0-9-]+"
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 font-mono text-sm focus:border-orange-500 focus:outline-none"
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 font-mono text-sm focus:border-primary focus:outline-none"
             />
             <p className="mt-1 text-xs text-gray-500">/vinh-danh/{slug || "..."}</p>
           </div>
@@ -265,7 +265,7 @@ export function HonorForm({ mode, initial, employees }: Props) {
               required
               defaultValue={initial?.awardName}
               placeholder="Grand Champion 2026 Q1"
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-orange-500 focus:outline-none"
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary focus:outline-none"
             />
           </div>
 
@@ -280,7 +280,7 @@ export function HonorForm({ mode, initial, employees }: Props) {
                   ? new Date(initial.awardedAt).toISOString().slice(0, 10)
                   : ""
               }
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-orange-500 focus:outline-none"
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary focus:outline-none"
             />
           </div>
 
@@ -290,7 +290,7 @@ export function HonorForm({ mode, initial, employees }: Props) {
               name="awardQuarter"
               defaultValue={initial?.awardQuarter ?? ""}
               placeholder="Q1/2026"
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-orange-500 focus:outline-none"
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary focus:outline-none"
             />
           </div>
 
@@ -300,7 +300,7 @@ export function HonorForm({ mode, initial, employees }: Props) {
               name="displayOrder"
               type="number"
               defaultValue={initial?.displayOrder ?? 0}
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-orange-500 focus:outline-none"
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary focus:outline-none"
             />
           </div>
         </div>
@@ -309,7 +309,7 @@ export function HonorForm({ mode, initial, employees }: Props) {
       {/* ─── Step 4: Nội dung ─── */}
       <section className="rounded-xl border border-gray-200 bg-white p-6">
         <h2 className="mb-4 text-lg font-bold">
-          <span className="text-orange-500">4.</span> Nội dung
+          <span className="text-primary">4.</span> Nội dung
         </h2>
 
         <div className="space-y-4">
@@ -321,7 +321,7 @@ export function HonorForm({ mode, initial, employees }: Props) {
               maxLength={280}
               defaultValue={initial?.shortBio ?? ""}
               placeholder="1-2 câu hiển thị trong card (tối đa 280 ký tự)"
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-orange-500 focus:outline-none"
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary focus:outline-none"
             />
           </div>
 
@@ -333,7 +333,7 @@ export function HonorForm({ mode, initial, employees }: Props) {
               maxLength={500}
               defaultValue={initial?.pullQuote ?? ""}
               placeholder="Câu trích dẫn nhân sự tự nói"
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-orange-500 focus:outline-none"
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary focus:outline-none"
             />
           </div>
 
@@ -347,7 +347,7 @@ export function HonorForm({ mode, initial, employees }: Props) {
               required
               defaultValue={initial?.story}
               placeholder="2-5 đoạn kể câu chuyện. Hỗ trợ Markdown."
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 font-mono text-sm focus:border-orange-500 focus:outline-none"
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 font-mono text-sm focus:border-primary focus:outline-none"
             />
           </div>
 
@@ -360,7 +360,7 @@ export function HonorForm({ mode, initial, employees }: Props) {
               rows={5}
               defaultValue={initial?.achievements ?? ""}
               placeholder={`- Thành tựu 1\n- Thành tựu 2`}
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 font-mono text-sm focus:border-orange-500 focus:outline-none"
+              className="w-full rounded-lg border border-gray-300 px-3 py-2 font-mono text-sm focus:border-primary focus:outline-none"
             />
           </div>
         </div>
@@ -369,7 +369,7 @@ export function HonorForm({ mode, initial, employees }: Props) {
       {/* ─── Step 5: Trạng thái ─── */}
       <section className="rounded-xl border border-gray-200 bg-white p-6">
         <h2 className="mb-4 text-lg font-bold">
-          <span className="text-orange-500">5.</span> Trạng thái
+          <span className="text-primary">5.</span> Trạng thái
         </h2>
 
         <div className="space-y-3">
@@ -378,7 +378,7 @@ export function HonorForm({ mode, initial, employees }: Props) {
               type="checkbox"
               name="isFeatured"
               defaultChecked={initial?.isFeatured ?? false}
-              className="h-4 w-4 rounded border-gray-300 text-orange-600 focus:ring-orange-500"
+              className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
             />
             <div>
               <span className="text-sm font-semibold">Person of the Month</span>
@@ -393,7 +393,7 @@ export function HonorForm({ mode, initial, employees }: Props) {
               type="checkbox"
               name="isPublished"
               defaultChecked={initial?.isPublished ?? true}
-              className="h-4 w-4 rounded border-gray-300 text-orange-600 focus:ring-orange-500"
+              className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
             />
             <div>
               <span className="text-sm font-semibold">Published</span>
@@ -407,7 +407,7 @@ export function HonorForm({ mode, initial, employees }: Props) {
         <button
           type="submit"
           disabled={isPending}
-          className="rounded-lg bg-[#7C3AED] px-6 py-2.5 text-sm font-bold text-white hover:opacity-90 disabled:opacity-50"
+          className="rounded-lg bg-primary px-6 py-2.5 text-sm font-bold text-white hover:opacity-90 disabled:opacity-50"
         >
           {isPending
             ? "Đang lưu..."

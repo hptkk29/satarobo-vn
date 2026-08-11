@@ -119,7 +119,7 @@ export function AffiliateManager({
   }
 
   const inputCls =
-    "w-full rounded-lg border border-neutral-200 px-3 py-2 text-sm outline-none focus:border-[#7C3AED]";
+    "w-full rounded-lg border border-neutral-200 px-3 py-2 text-sm outline-none focus:border-primary";
 
   return (
     <div className="space-y-4">
@@ -127,7 +127,7 @@ export function AffiliateManager({
         <button
           type="button"
           onClick={beginCreate}
-          className="inline-flex items-center gap-1.5 rounded-lg bg-[#7C3AED] px-3 py-2 text-sm font-semibold text-white hover:opacity-90"
+          className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-2 text-sm font-semibold text-white hover:opacity-90"
         >
           <Plus className="h-4 w-4" /> Thêm nguồn giới thiệu
         </button>
@@ -230,7 +230,7 @@ export function AffiliateManager({
               type="button"
               onClick={save}
               disabled={pending}
-              className="rounded-lg bg-[#7C3AED] px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
+              className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
             >
               {pending ? "Đang lưu…" : "Lưu"}
             </button>
@@ -286,7 +286,7 @@ export function AffiliateManager({
                     )}
                   </td>
                   <td className="px-4 py-2 text-center tabular-nums">{a.leadCount}</td>
-                  <td className="px-4 py-2 text-center tabular-nums font-semibold text-emerald-700">
+                  <td className="px-4 py-2 text-center tabular-nums font-semibold text-state-success-ink">
                     {a.convertedCount}
                   </td>
                   <td className="px-4 py-2 text-center tabular-nums">
@@ -297,7 +297,7 @@ export function AffiliateManager({
                       <button
                         type="button"
                         onClick={() => copyLink(a.code)}
-                        className="inline-flex items-center gap-1 text-xs font-semibold text-neutral-500 hover:text-[#7C3AED]"
+                        className="inline-flex items-center gap-1 text-xs font-semibold text-neutral-500 hover:text-primary"
                       >
                         <Copy className="h-3.5 w-3.5" /> Link
                       </button>
@@ -305,7 +305,7 @@ export function AffiliateManager({
                         <button
                           type="button"
                           onClick={() => beginEdit(a)}
-                          className="text-xs font-semibold text-[#7C3AED] hover:underline"
+                          className="text-xs font-semibold text-primary hover:underline"
                         >
                           Sửa
                         </button>

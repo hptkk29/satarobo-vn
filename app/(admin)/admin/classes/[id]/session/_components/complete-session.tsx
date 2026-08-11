@@ -68,7 +68,7 @@ export function CompleteSession({
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="inline-flex items-center gap-1 rounded-md border border-green-300 px-2 py-1 text-xs font-semibold text-green-700 hover:bg-green-50"
+        className="inline-flex items-center gap-1 rounded-md border border-state-success px-2 py-1 text-xs font-semibold text-state-success-ink hover:bg-state-success-soft"
       >
         <CheckCircle2 className="h-3.5 w-3.5" /> Hoàn tất buổi
       </button>
@@ -76,7 +76,7 @@ export function CompleteSession({
   }
 
   return (
-    <div className="mt-2 w-full space-y-2 rounded-lg bg-green-50 p-3">
+    <div className="mt-2 w-full space-y-2 rounded-lg bg-state-success-soft p-3">
       <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
         <label className="block">
           <span className="mb-1 block text-xs font-semibold text-gray-600">
@@ -85,7 +85,7 @@ export function CompleteSession({
           <select
             value={actualTeacherId}
             onChange={(e) => setActualTeacherId(e.target.value)}
-            className="w-full rounded-lg border border-gray-300 px-2 py-1.5 text-sm focus:border-green-500 focus:outline-none"
+            className="w-full rounded-lg border border-gray-300 px-2 py-1.5 text-sm focus:border-state-success focus:outline-none"
           >
             <option value="">— Theo GV lớp —</option>
             {teachers.map((t) => (
@@ -102,7 +102,7 @@ export function CompleteSession({
           <select
             value={actualRoomId}
             onChange={(e) => setActualRoomId(e.target.value)}
-            className="w-full rounded-lg border border-gray-300 px-2 py-1.5 text-sm focus:border-green-500 focus:outline-none"
+            className="w-full rounded-lg border border-gray-300 px-2 py-1.5 text-sm focus:border-state-success focus:outline-none"
           >
             <option value="">— Theo phòng lớp —</option>
             {rooms.map((r) => (
@@ -120,7 +120,7 @@ export function CompleteSession({
             type="datetime-local"
             value={actualStartAt}
             onChange={(e) => setActualStartAt(e.target.value)}
-            className="w-full rounded-lg border border-gray-300 px-2 py-1.5 text-sm focus:border-green-500 focus:outline-none"
+            className="w-full rounded-lg border border-gray-300 px-2 py-1.5 text-sm focus:border-state-success focus:outline-none"
           />
         </label>
         <label className="block">
@@ -131,7 +131,7 @@ export function CompleteSession({
             type="datetime-local"
             value={actualEndAt}
             onChange={(e) => setActualEndAt(e.target.value)}
-            className="w-full rounded-lg border border-gray-300 px-2 py-1.5 text-sm focus:border-green-500 focus:outline-none"
+            className="w-full rounded-lg border border-gray-300 px-2 py-1.5 text-sm focus:border-state-success focus:outline-none"
           />
         </label>
       </div>
@@ -144,12 +144,12 @@ export function CompleteSession({
           onChange={(e) => setClassComment(e.target.value)}
           rows={2}
           placeholder="Nhận xét chung cho cả lớp buổi này…"
-          className="w-full rounded-lg border border-gray-300 px-2 py-1.5 text-sm focus:border-green-500 focus:outline-none"
+          className="w-full rounded-lg border border-gray-300 px-2 py-1.5 text-sm focus:border-state-success focus:outline-none"
         />
       </label>
 
       {/* R7-14 — giao bài tự động (exam gắn lesson của buổi) cho HV đang học. */}
-      <div className="rounded-lg border border-green-200 bg-white p-2">
+      <div className="rounded-lg border border-state-success-soft bg-white p-2">
         <span className="mb-1 block text-xs font-semibold text-gray-600">
           Giao bài kiểm tra/bài tập của buổi
         </span>
@@ -187,7 +187,7 @@ export function CompleteSession({
             type="datetime-local"
             value={assignDueAt}
             onChange={(e) => setAssignDueAt(e.target.value)}
-            className="mt-2 w-full rounded-lg border border-gray-300 px-2 py-1.5 text-sm focus:border-green-500 focus:outline-none"
+            className="mt-2 w-full rounded-lg border border-gray-300 px-2 py-1.5 text-sm focus:border-state-success focus:outline-none"
           />
         )}
       </div>
@@ -196,7 +196,7 @@ export function CompleteSession({
           type="button"
           onClick={() => submit(false)}
           disabled={pending}
-          className="rounded-lg bg-green-600 px-4 py-2 text-sm font-semibold text-white hover:bg-green-700 disabled:opacity-50"
+          className="rounded-lg bg-state-success-ink px-4 py-2 text-sm font-semibold text-white hover:bg-state-success-ink-hover disabled:opacity-50"
         >
           {pending ? "Đang lưu…" : "Xác nhận hoàn tất"}
         </button>

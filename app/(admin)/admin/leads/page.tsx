@@ -377,21 +377,13 @@ function Header({
       <div className="inline-flex overflow-hidden rounded-lg border border-gray-200">
         <Link
           href={qs('table')}
-          className={`px-3 py-1.5 text-sm font-medium ${
-            view === 'table'
-              ? 'bg-orange-500 text-white'
-              : 'bg-white text-gray-600 hover:bg-gray-50'
-          }`}
+          className={`px-3 py-1.5 text-sm font-medium ${ view === 'table' ? 'bg-primary text-white' : 'bg-white text-gray-600 hover:bg-gray-50' }`}
         >
           Bảng
         </Link>
         <Link
           href={qs('kanban')}
-          className={`px-3 py-1.5 text-sm font-medium ${
-            view === 'kanban'
-              ? 'bg-orange-500 text-white'
-              : 'bg-white text-gray-600 hover:bg-gray-50'
-          }`}
+          className={`px-3 py-1.5 text-sm font-medium ${ view === 'kanban' ? 'bg-primary text-white' : 'bg-white text-gray-600 hover:bg-gray-50' }`}
         >
           Kanban
         </Link>
@@ -421,7 +413,7 @@ function Header({
           )}
           <Link
             href="/leads/new"
-            className="rounded-lg bg-[#7C3AED] px-3 py-1.5 text-sm font-semibold text-white hover:opacity-90"
+            className="rounded-lg bg-primary px-3 py-1.5 text-sm font-semibold text-white hover:opacity-90"
           >
             + Thêm lead
           </Link>
@@ -457,7 +449,10 @@ function StatusTabs({
   const isRegistered = view === 'table' && params.status === 'REGISTERED'
   const tabCls = (active: boolean) =>
     `rounded-lg px-3 py-1.5 text-sm font-medium ${
-      active ? 'bg-emerald-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'
+      // Tab ĐANG CHỌN là trạng thái điều hướng, không phải "thành công" — dùng màu
+      // thương hiệu. Trước đây nó xanh lục, tranh nghĩa với badge trạng thái ngay
+      // cạnh (DESIGN.md §1: màu ngữ nghĩa là thang RIÊNG, không mượn lẫn nhau).
+      active ? 'bg-primary text-primary-foreground' : 'bg-white text-gray-600 hover:bg-gray-50'
     } border border-gray-200`
 
   return (
@@ -468,9 +463,7 @@ function StatusTabs({
       <Link href={qs('REGISTERED')} className={tabCls(isRegistered)}>
         Đã đăng ký{' '}
         <span
-          className={`ml-1 rounded-full px-1.5 py-0.5 text-xs font-semibold ${
-            isRegistered ? 'bg-white/20' : 'bg-emerald-100 text-emerald-700'
-          }`}
+          className={`ml-1 rounded-full px-1.5 py-0.5 text-xs font-semibold ${ isRegistered ? 'bg-white/20' : 'bg-primary-soft text-primary' }`}
         >
           {registeredCount}
         </span>

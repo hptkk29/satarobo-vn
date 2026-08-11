@@ -177,7 +177,7 @@ export function ImageUploader({
       {label && (
         <label className="text-sm font-medium">
           {label}
-          {required && <span className="text-red-500 ml-1">*</span>}
+          {required && <span className="text-state-danger-ink ml-1">*</span>}
         </label>
       )}
 
@@ -238,10 +238,10 @@ export function ImageUploader({
       )}
 
       {state.status === "error" && (
-        <div className="border-2 border-red-300 bg-red-50 rounded-lg p-4 flex items-start gap-2">
-          <AlertCircle className="h-5 w-5 text-red-500 flex-shrink-0 mt-0.5" />
+        <div className="border-2 border-state-danger bg-state-danger-soft rounded-lg p-4 flex items-start gap-2">
+          <AlertCircle className="h-5 w-5 text-state-danger-ink flex-shrink-0 mt-0.5" />
           <div className="flex-1">
-            <p className="text-sm text-red-700">{state.message}</p>
+            <p className="text-sm text-state-danger-ink">{state.message}</p>
             <Button
               type="button"
               variant="outline"

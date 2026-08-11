@@ -123,7 +123,7 @@ export function TrialsList({
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder="Tìm theo tên phụ huynh, SĐT hoặc tên con…"
-          className="w-full rounded-lg border border-gray-300 py-2 pl-8 pr-2 text-sm focus:border-orange-500 focus:outline-none"
+          className="w-full rounded-lg border border-gray-300 py-2 pl-8 pr-2 text-sm focus:border-primary focus:outline-none"
         />
       </div>
 
@@ -167,11 +167,7 @@ function FilterChip({
   return (
     <Link
       href={href}
-      className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
-        active
-          ? "bg-orange-500 text-white"
-          : "bg-gray-100 text-gray-600 hover:bg-gray-200"
-      }`}
+      className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${ active ? "bg-primary text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200" }`}
     >
       {label}
     </Link>
@@ -379,7 +375,7 @@ function TrialCard({
                     type="button"
                     onClick={saveManage}
                     disabled={pending}
-                    className="rounded-lg bg-orange-500 px-4 py-2 text-sm font-medium text-white hover:bg-orange-600 disabled:opacity-50"
+                    className="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-primary-dark disabled:opacity-50"
                   >
                     Lưu lịch
                   </button>
@@ -388,11 +384,7 @@ function TrialCard({
                     onClick={handleDelete}
                     onBlur={() => setConfirmDelete(false)}
                     disabled={pending}
-                    className={`rounded-lg px-4 py-2 text-sm font-medium disabled:opacity-50 ${
-                      confirmDelete
-                        ? "bg-rose-600 text-white hover:bg-rose-700"
-                        : "border border-rose-300 text-rose-600 hover:bg-rose-50"
-                    }`}
+                    className={`rounded-lg px-4 py-2 text-sm font-medium disabled:opacity-50 ${ confirmDelete ? "bg-state-danger-ink text-white hover:bg-state-danger-ink" : "border border-state-danger text-state-danger-ink hover:bg-state-danger-soft" }`}
                   >
                     {confirmDelete ? "Bấm lần nữa để xoá" : "Xoá buổi học thử"}
                   </button>
@@ -411,7 +403,7 @@ function TrialCard({
               <strong>Phiếu đánh giá buổi học</strong> (theo từng buổi & học viên) tại{" "}
               <Link
                 href="/trial-classes"
-                className="font-medium text-orange-600 hover:underline"
+                className="font-medium text-primary hover:underline"
               >
                 Lớp trải nghiệm
               </Link>
@@ -478,9 +470,9 @@ function TrialEnrollSection({
   }
 
   return (
-    <div className="rounded-xl border border-orange-200 bg-orange-50/40 p-4">
+    <div className="rounded-xl border border-primary-soft bg-primary-soft/40 p-4">
       <div className="mb-3 flex items-center gap-2">
-        <FlaskConical className="h-4 w-4 text-orange-500" />
+        <FlaskConical className="h-4 w-4 text-primary" />
         <h3 className="text-sm font-semibold text-gray-700">
           Xếp vào lớp trải nghiệm
         </h3>
@@ -491,7 +483,7 @@ function TrialEnrollSection({
           Lead chưa có hồ sơ con (LeadChild).{" "}
           <Link
             href={`/leads/${leadId}`}
-            className="font-medium text-orange-600 hover:underline"
+            className="font-medium text-primary hover:underline"
           >
             Mở lead để thêm con
           </Link>{" "}
@@ -531,7 +523,7 @@ function TrialEnrollSection({
                 type="button"
                 onClick={() => enroll(c.id, false)}
                 disabled={pending}
-                className="rounded-lg bg-orange-500 px-3 py-1.5 text-sm font-semibold text-white hover:bg-orange-600 disabled:opacity-50"
+                className="rounded-lg bg-primary px-3 py-1.5 text-sm font-semibold text-white hover:bg-primary-dark disabled:opacity-50"
               >
                 Xếp vào lớp
               </button>
@@ -544,7 +536,7 @@ function TrialEnrollSection({
 }
 
 const inputCls =
-  "w-full rounded-lg border border-gray-300 px-3 py-1.5 text-sm focus:border-orange-400 focus:outline-none focus:ring-1 focus:ring-orange-400 disabled:bg-gray-50";
+  "w-full rounded-lg border border-gray-300 px-3 py-1.5 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary disabled:bg-gray-50";
 
 function Field({
   label,

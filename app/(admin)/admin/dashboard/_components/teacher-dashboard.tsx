@@ -96,7 +96,7 @@ export async function TeacherDashboard({ userId, name, embedded = false }: { use
                     {c.room?.code ? ` · P.${c.room.code}` : ""} · {c._count.enrollments} HV
                   </span>
                 </div>
-                <Link href="/attendance" className="inline-flex items-center gap-1 rounded-lg bg-[#7C3AED] px-3 py-1.5 text-xs font-semibold text-white hover:opacity-90">
+                <Link href="/attendance" className="inline-flex items-center gap-1 rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-white hover:opacity-90">
                   <ClipboardCheck className="h-3.5 w-3.5" /> Điểm danh
                 </Link>
               </li>
@@ -112,7 +112,7 @@ export async function TeacherDashboard({ userId, name, embedded = false }: { use
       </div>
 
       {conflicts.length > 0 && (
-        <section className="rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-700">
+        <section className="rounded-xl border border-state-danger-soft bg-state-danger-soft p-4 text-sm text-state-danger-ink">
           <p className="mb-1 font-semibold">Lịch dạy bị trùng giờ:</p>
           <ul className="space-y-0.5">
             {conflicts.map((c, i) => (
@@ -130,9 +130,9 @@ function DashStat({
 }: {
   label: string; value: number; href: string; tone: "ok" | "warn" | "danger"; icon: React.ReactNode;
 }) {
-  const toneCls = tone === "danger" ? "text-rose-600" : tone === "warn" ? "text-amber-600" : "text-emerald-600";
+  const toneCls = tone === "danger" ? "text-state-danger-ink" : tone === "warn" ? "text-state-warning-ink" : "text-state-success-ink";
   return (
-    <Link href={href} className="rounded-xl border border-gray-200 bg-white p-4 hover:border-[#7C3AED]">
+    <Link href={href} className="rounded-xl border border-gray-200 bg-white p-4 hover:border-primary">
       <div className={`flex items-center gap-2 ${toneCls}`}>{icon}<span className="text-2xl font-bold tabular-nums">{value}</span></div>
       <div className="mt-1 text-xs text-gray-500">{label}</div>
     </Link>

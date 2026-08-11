@@ -37,7 +37,7 @@ export default async function NewHonorPage() {
           Chọn nhân sự từ danh sách, điền giải thưởng + câu chuyện. Chưa có nhân sự?{" "}
           <Link
             href="/nhan-su/new"
-            className="text-orange-600 hover:underline"
+            className="text-primary hover:underline"
           >
             Thêm nhân sự mới
           </Link>

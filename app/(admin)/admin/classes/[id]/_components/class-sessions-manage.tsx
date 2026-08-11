@@ -21,9 +21,9 @@ export type Option = { id: string; label: string };
 
 const STATUS_LABEL: Record<SessionRow["status"], { label: string; cls: string }> = {
   SCHEDULED: { label: "Đã lên lịch", cls: "bg-gray-100 text-gray-600" },
-  IN_PROGRESS: { label: "Đang diễn ra", cls: "bg-amber-100 text-amber-700" },
-  COMPLETED: { label: "Hoàn thành", cls: "bg-green-100 text-green-700" },
-  CANCELLED: { label: "Đã hủy", cls: "bg-red-100 text-red-700" },
+  IN_PROGRESS: { label: "Đang diễn ra", cls: "bg-state-warning-soft text-state-warning-ink" },
+  COMPLETED: { label: "Hoàn thành", cls: "bg-state-success-soft text-state-success-ink" },
+  CANCELLED: { label: "Đã hủy", cls: "bg-state-danger-soft text-state-danger-ink" },
 };
 
 function fmt(iso: string): string {
@@ -140,9 +140,7 @@ function SessionItem({
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="min-w-0">
           <span
-            className={`text-sm font-semibold tabular-nums ${
-              cancelled ? "text-gray-400 line-through" : "text-gray-900"
-            }`}
+            className={`text-sm font-semibold tabular-nums ${ cancelled ? "text-gray-400 line-through" : "text-gray-900" }`}
           >
             {fmt(session.date)}
           </span>
@@ -168,7 +166,7 @@ function SessionItem({
               <button
                 type="button"
                 onClick={() => setMode(mode === "cancel" ? "none" : "cancel")}
-                className="inline-flex items-center gap-1 rounded-md border border-red-200 px-2 py-1 text-xs font-semibold text-red-700 hover:bg-red-50"
+                className="inline-flex items-center gap-1 rounded-md border border-state-danger-soft px-2 py-1 text-xs font-semibold text-state-danger-ink hover:bg-state-danger-soft"
               >
                 <Ban className="h-3.5 w-3.5" /> Huỷ
               </button>
@@ -207,7 +205,7 @@ function SessionItem({
                 type="date"
                 value={date}
                 onChange={(e) => setDate(e.target.value)}
-                className="w-full rounded-lg border border-gray-300 px-2 py-1.5 text-sm focus:border-purple-500 focus:outline-none"
+                className="w-full rounded-lg border border-gray-300 px-2 py-1.5 text-sm focus:border-primary focus:outline-none"
               />
             </label>
             <label className="block">
@@ -217,7 +215,7 @@ function SessionItem({
               <select
                 value={teacherId}
                 onChange={(e) => setTeacherId(e.target.value)}
-                className="w-full rounded-lg border border-gray-300 px-2 py-1.5 text-sm focus:border-purple-500 focus:outline-none"
+                className="w-full rounded-lg border border-gray-300 px-2 py-1.5 text-sm focus:border-primary focus:outline-none"
               >
                 <option value="">— Giữ nguyên —</option>
                 {teachers.map((t) => (
@@ -234,7 +232,7 @@ function SessionItem({
               <select
                 value={roomId}
                 onChange={(e) => setRoomId(e.target.value)}
-                className="w-full rounded-lg border border-gray-300 px-2 py-1.5 text-sm focus:border-purple-500 focus:outline-none"
+                className="w-full rounded-lg border border-gray-300 px-2 py-1.5 text-sm focus:border-primary focus:outline-none"
               >
                 <option value="">— Giữ nguyên —</option>
                 {rooms.map((r) => (
@@ -249,7 +247,7 @@ function SessionItem({
             type="button"
             onClick={doAdjust}
             disabled={pending}
-            className="rounded-lg bg-[#7C3AED] px-4 py-2 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-50"
+            className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-50"
           >
             {pending ? "Đang lưu…" : "Lưu điều chỉnh"}
           </button>
@@ -257,12 +255,12 @@ function SessionItem({
       )}
 
       {mode === "cancel" && (
-        <div className="mt-2 space-y-2 rounded-lg bg-red-50 p-3">
+        <div className="mt-2 space-y-2 rounded-lg bg-state-danger-soft p-3">
           <input
             value={reason}
             onChange={(e) => setReason(e.target.value)}
             placeholder="Lý do huỷ buổi (bắt buộc, ≥5 ký tự)"
-            className="w-full rounded-lg border border-red-200 px-3 py-2 text-sm focus:border-red-400 focus:outline-none"
+            className="w-full rounded-lg border border-state-danger-soft px-3 py-2 text-sm focus:border-state-danger focus:outline-none"
           />
           <p className="text-xs text-gray-500">
             Buổi sẽ chuyển trạng thái &quot;Đã hủy&quot; (không xoá). Buổi bù được
@@ -272,7 +270,7 @@ function SessionItem({
             type="button"
             onClick={doCancel}
             disabled={pending}
-            className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-50"
+            className="rounded-lg bg-state-danger-ink px-4 py-2 text-sm font-semibold text-white hover:bg-state-danger-ink-hover disabled:opacity-50"
           >
             {pending ? "Đang huỷ…" : "Xác nhận huỷ buổi"}
           </button>

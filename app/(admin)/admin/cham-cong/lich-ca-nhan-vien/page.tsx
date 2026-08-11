@@ -21,9 +21,9 @@ export const dynamic = "force-dynamic";
 const WEEKDAYS = ["T2", "T3", "T4", "T5", "T6", "T7", "CN"];
 
 const TAG_TONE: Record<AttendanceTag["tone"], string> = {
-  ok: "bg-emerald-100 text-emerald-700",
-  warn: "bg-amber-100 text-amber-700",
-  danger: "bg-rose-100 text-rose-700",
+  ok: "bg-state-success-soft text-state-success-ink",
+  warn: "bg-state-warning-soft text-state-warning-ink",
+  danger: "bg-state-danger-soft text-state-danger-ink",
 };
 
 function ymd(d: Date): string {
@@ -161,7 +161,7 @@ export default async function ManagerShiftsPage({ searchParams }: Props) {
     <div className="p-6">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <h1 className="flex items-center gap-2 text-2xl font-bold text-gray-900">
-          <Users className="h-6 w-6 text-[#7C3AED]" /> Tổng hợp công ca
+          <Users className="h-6 w-6 text-primary" /> Tổng hợp công ca
         </h1>
         <div className="flex items-center gap-2">
           {centers.length > 0 && (
@@ -193,7 +193,7 @@ export default async function ManagerShiftsPage({ searchParams }: Props) {
       </div>
 
       <p className="mb-3 text-xs text-gray-500">
-        Ca chính thức (APPROVED) · giờ vào/ra (GMT+7) · trạng thái · <MessageSquareWarning className="inline h-3.5 w-3.5 text-amber-600" /> = có giải trình/yêu cầu chỉnh công.
+        Ca chính thức (APPROVED) · giờ vào/ra (GMT+7) · trạng thái · <MessageSquareWarning className="inline h-3.5 w-3.5 text-state-warning-ink" /> = có giải trình/yêu cầu chỉnh công.
       </p>
 
       <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white">
@@ -249,7 +249,7 @@ export default async function ManagerShiftsPage({ searchParams }: Props) {
                                   {formatRegisteredShifts(shifts)}
                                 </span>
                               ) : (
-                                att.checkIn && <span className="text-[9px] text-amber-600">Chưa ĐK ca</span>
+                                att.checkIn && <span className="text-[9px] text-state-warning-ink">Chưa ĐK ca</span>
                               )}
                               {(att.checkIn || att.checkOut) && (
                                 <span className="text-[10px] tabular-nums text-gray-500">
@@ -264,7 +264,7 @@ export default async function ManagerShiftsPage({ searchParams }: Props) {
                               {adj && (
                                 <span
                                   title={`Giải trình (${adj.status}): ${adj.reason}`}
-                                  className="inline-flex items-center gap-0.5 rounded bg-amber-50 px-1 text-[9px] font-semibold text-amber-700"
+                                  className="inline-flex items-center gap-0.5 rounded bg-state-warning-soft px-1 text-[9px] font-semibold text-state-warning-ink"
                                 >
                                   <MessageSquareWarning className="h-3 w-3" /> giải trình
                                 </span>

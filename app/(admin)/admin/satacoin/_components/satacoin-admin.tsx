@@ -111,9 +111,9 @@ export function SataCoinAdmin({
               <li key={r.id} className="flex items-center justify-between py-2">
                 <span>
                   <span className="font-mono text-xs text-neutral-500">{r.code}</span> · {r.label} ·{" "}
-                  <span className="font-semibold text-emerald-700">+{r.amount}</span>
+                  <span className="font-semibold text-state-success-ink">+{r.amount}</span>
                 </span>
-                <button onClick={() => start(async () => void (await toggleRule(r.id)))} className={`rounded px-2 py-0.5 text-xs ${r.isActive ? "bg-emerald-100 text-emerald-700" : "bg-neutral-200 text-neutral-500"}`}>
+                <button onClick={() => start(async () => void (await toggleRule(r.id)))} className={`rounded px-2 py-0.5 text-xs ${r.isActive ? "bg-state-success-soft text-state-success-ink" : "bg-neutral-200 text-neutral-500"}`}>
                   {r.isActive ? "Đang bật" : "Đã tắt"}
                 </button>
               </li>
@@ -139,7 +139,7 @@ export function SataCoinAdmin({
           <input value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Lý do (mã/ghi chú ngắn)" className="rounded-md border border-neutral-300 px-3 py-2 text-sm" />
           <input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Ghi chú (tuỳ chọn)" className="rounded-md border border-neutral-300 px-3 py-2 text-sm" />
         </div>
-        <button onClick={grant} disabled={pending} className="mt-3 rounded-md bg-purple-700 px-4 py-2 text-sm font-medium text-white disabled:opacity-50">
+        <button onClick={grant} disabled={pending} className="mt-3 rounded-md bg-primary-dark px-4 py-2 text-sm font-medium text-white disabled:opacity-50">
           Ghi giao dịch
         </button>
       </section>
@@ -171,14 +171,14 @@ export function SataCoinAdmin({
                   <td className="px-4 py-2 font-medium">{t.studentName}</td>
                   <td className="px-4 py-2 text-xs text-neutral-500">{TX_TYPE_LABEL[t.type] ?? t.type}</td>
                   <td className="px-4 py-2 text-neutral-500">{TX_REASON_LABEL[t.reason] ?? t.reason}</td>
-                  <td className={`px-4 py-2 text-right font-semibold ${t.amount >= 0 ? "text-emerald-700" : "text-rose-600"}`}>
+                  <td className={`px-4 py-2 text-right font-semibold ${t.amount >= 0 ? "text-state-success-ink" : "text-state-danger-ink"}`}>
                     {t.amount >= 0 ? "+" : ""}
                     {t.amount}
                   </td>
                   <td className="px-4 py-2 text-neutral-500">{t.createdAt}</td>
                   <td className="px-4 py-2">
                     {!t.isReversal && !t.alreadyReversed ? (
-                      <button onClick={() => reverse(t)} disabled={pending} className="rounded bg-rose-50 px-2 py-0.5 text-xs text-rose-600 disabled:opacity-50">
+                      <button onClick={() => reverse(t)} disabled={pending} className="rounded bg-state-danger-soft px-2 py-0.5 text-xs text-state-danger-ink disabled:opacity-50">
                         Đảo
                       </button>
                     ) : (

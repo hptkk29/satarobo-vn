@@ -99,8 +99,8 @@ export function GroupMembers({
                 disabled={pending}
                 className={
                   confirmId === m.userId
-                    ? "inline-flex shrink-0 items-center gap-1 rounded-md bg-rose-600 px-2.5 py-1 text-xs font-semibold text-white disabled:opacity-50"
-                    : "inline-flex shrink-0 items-center gap-1 text-xs text-rose-600 hover:underline disabled:opacity-50"
+                    ? "inline-flex shrink-0 items-center gap-1 rounded-md bg-state-danger-ink px-2.5 py-1 text-xs font-semibold text-white disabled:opacity-50"
+                    : "inline-flex shrink-0 items-center gap-1 text-xs text-state-danger-ink hover:underline disabled:opacity-50"
                 }
               >
                 <X className="h-3.5 w-3.5" />
@@ -118,7 +118,7 @@ export function GroupMembers({
           value={selectedUserId}
           onChange={(e) => setSelectedUserId(e.target.value)}
           disabled={pending || candidates.length === 0}
-          className="h-9 min-w-64 flex-1 rounded-md border border-neutral-300 bg-white px-2 text-sm focus:border-orange-400 focus:outline-none sm:flex-none"
+          className="h-9 min-w-64 flex-1 rounded-md border border-neutral-300 bg-white px-2 text-sm focus:border-primary focus:outline-none sm:flex-none"
         >
           <option value="">
             {candidates.length === 0 ? "— Hết tài khoản để thêm —" : "— Chọn tài khoản —"}

@@ -60,7 +60,7 @@ export function CenterChecklistForm({
           onChange={(e) => setNote(e.target.value)}
           disabled={!canEdit || pending}
           rows={2}
-          className="w-full resize-y rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-[#7C3AED] focus:outline-none disabled:bg-gray-50"
+          className="w-full resize-y rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary focus:outline-none disabled:bg-gray-50"
         />
       </label>
 
@@ -70,7 +70,7 @@ export function CenterChecklistForm({
             type="button"
             onClick={save}
             disabled={pending}
-            className="inline-flex items-center gap-1.5 rounded-lg bg-[#7C3AED] px-4 py-2 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-50"
+            className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-50"
           >
             <Save className="h-4 w-4" /> {pending ? "Đang lưu…" : "Lưu checklist"}
           </button>
@@ -104,7 +104,7 @@ function Section({
                 disabled={disabled}
                 className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-sm hover:bg-gray-50 disabled:opacity-60"
               >
-                {on ? <CheckCircle2 className="h-5 w-5 shrink-0 text-emerald-500" /> : <Circle className="h-5 w-5 shrink-0 text-gray-300" />}
+                {on ? <CheckCircle2 className="h-5 w-5 shrink-0 text-state-success-ink" /> : <Circle className="h-5 w-5 shrink-0 text-gray-300" />}
                 <span className={on ? "text-gray-800" : "text-gray-600"}>{f.label}</span>
               </button>
             </li>

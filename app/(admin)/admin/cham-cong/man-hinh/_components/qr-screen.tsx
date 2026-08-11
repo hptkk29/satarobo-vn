@@ -36,7 +36,7 @@ export function QrScreen({ centerId, centerName }: { centerId: string; centerNam
 
       <div className="flex h-[360px] w-[360px] items-center justify-center rounded-xl border border-neutral-200">
         {error ? (
-          <p className="px-6 text-sm text-rose-600">{error}</p>
+          <p className="px-6 text-sm text-state-danger-ink">{error}</p>
         ) : qr ? (
           <img src={qr} alt="QR chấm công" className="h-[340px] w-[340px]" />
         ) : (
@@ -45,7 +45,7 @@ export function QrScreen({ centerId, centerName }: { centerId: string; centerNam
       </div>
 
       <div>
-        <p className="text-lg font-semibold text-orange-600">
+        <p className="text-lg font-semibold text-primary">
           Quét mã bằng điện thoại để chấm công
         </p>
         <p className="mt-1 text-sm text-neutral-400">

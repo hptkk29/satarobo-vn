@@ -61,7 +61,7 @@ export default async function AffiliatesPage() {
     <div className="max-w-5xl space-y-4 p-6">
       <div>
         <h1 className="flex items-center gap-2 text-2xl font-bold text-gray-900">
-          <Share2 className="h-6 w-6 text-[#7C3AED]" /> Nguồn giới thiệu (Affiliate)
+          <Share2 className="h-6 w-6 text-primary" /> Nguồn giới thiệu (Affiliate)
         </h1>
         <p className="mt-1 text-sm text-gray-500">
           Mỗi người giới thiệu có 1 mã; chia sẻ link kèm <code>?ref=MÃ</code> để lead tự

@@ -70,16 +70,12 @@ export function SiteContentClient({ pages, fields, initialContent }: Props) {
                 key={p.pageKey}
                 type="button"
                 onClick={() => setActivePage(p.pageKey)}
-                className={`w-full text-left px-4 py-3 text-sm border-b border-neutral-100 last:border-b-0 transition-colors ${
-                  isActive
-                    ? "bg-orange-50 text-orange-700 font-semibold border-l-2 border-orange-500"
-                    : "text-neutral-700 hover:bg-neutral-50"
-                }`}
+                className={`w-full text-left px-4 py-3 text-sm border-b border-neutral-100 last:border-b-0 transition-colors ${ isActive ? "bg-primary-soft text-primary font-semibold border-l-2 border-primary" : "text-neutral-700 hover:bg-neutral-50" }`}
               >
                 <div className="flex items-center justify-between gap-2">
                   <span className="truncate">{p.label}</span>
                   {hasOverride && (
-                    <span className="w-2 h-2 rounded-full bg-orange-500 shrink-0" />
+                    <span className="w-2 h-2 rounded-full bg-primary shrink-0" />
                   )}
                 </div>
                 <p className="text-xs text-neutral-500 font-normal mt-0.5">
@@ -113,7 +109,7 @@ export function SiteContentClient({ pages, fields, initialContent }: Props) {
                   value={value}
                   onChange={(e) => update(field.key, e.target.value)}
                   placeholder="Để trống = dùng mặc định"
-                  className="w-full rounded-lg border border-neutral-300 px-3 py-2 text-sm focus:border-orange-500 focus:outline-none"
+                  className="w-full rounded-lg border border-neutral-300 px-3 py-2 text-sm focus:border-primary focus:outline-none"
                 />
               )}
 
@@ -123,7 +119,7 @@ export function SiteContentClient({ pages, fields, initialContent }: Props) {
                   value={value}
                   onChange={(e) => update(field.key, e.target.value)}
                   placeholder="Để trống = dùng mặc định"
-                  className="w-full rounded-lg border border-neutral-300 px-3 py-2 text-sm focus:border-orange-500 focus:outline-none"
+                  className="w-full rounded-lg border border-neutral-300 px-3 py-2 text-sm focus:border-primary focus:outline-none"
                 />
               )}
 
@@ -141,7 +137,7 @@ export function SiteContentClient({ pages, fields, initialContent }: Props) {
                   type="button"
                   onClick={() => save(field.key)}
                   disabled={isPending}
-                  className="rounded bg-orange-500 hover:bg-orange-600 px-4 py-1.5 text-sm font-semibold text-white disabled:opacity-50 transition-colors"
+                  className="rounded bg-primary hover:bg-primary-dark px-4 py-1.5 text-sm font-semibold text-white disabled:opacity-50 transition-colors"
                 >
                   {isPending ? "Đang lưu..." : "Lưu"}
                 </button>
@@ -150,9 +146,9 @@ export function SiteContentClient({ pages, fields, initialContent }: Props) {
           );
         })}
 
-        <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 text-sm text-blue-900">
+        <div className="bg-state-info-soft border border-state-info-soft rounded-xl p-4 text-sm text-state-info-ink">
           <p className="font-semibold mb-1">💡 Lưu ý:</p>
-          <ul className="list-disc list-inside text-blue-800 space-y-1">
+          <ul className="list-disc list-inside text-state-info-ink space-y-1">
             <li>Để trống ô và bấm Lưu → reset về giá trị mặc định.</li>
             <li>Public page tự revalidate sau khi lưu.</li>
             <li>Ảnh upload qua R2 (max 10MB, JPG/PNG/WebP/GIF/SVG).</li>

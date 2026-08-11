@@ -68,7 +68,7 @@ function SettingRow({ row, canEdit }: { row: SettingRowView; canEdit: boolean })
           <p className="text-sm font-semibold text-gray-900">{row.label}</p>
           <code className="text-xs text-gray-400">{row.key}</code>
           {row.centerOverridable && (
-            <span className="ml-2 rounded bg-indigo-50 px-1.5 py-0.5 text-[10px] font-medium text-indigo-600">
+            <span className="ml-2 rounded bg-state-info-soft px-1.5 py-0.5 text-[10px] font-medium text-state-info-ink">
               cho phép override theo cơ sở
             </span>
           )}
@@ -86,14 +86,12 @@ function SettingRow({ row, canEdit }: { row: SettingRowView; canEdit: boolean })
             aria-label={row.label}
           />
           <span
-            className={`text-sm font-medium ${
-              text === "true" ? "text-emerald-700" : "text-neutral-500"
-            }`}
+            className={`text-sm font-medium ${ text === "true" ? "text-state-success-ink" : "text-neutral-500" }`}
           >
             {text === "true" ? "Đang BẬT" : "Đang TẮT"}
           </span>
           {text !== toText(row.value) && (
-            <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-800">
+            <span className="rounded-full bg-state-warning-soft px-2 py-0.5 text-xs font-semibold text-state-warning-ink">
               chưa lưu
             </span>
           )}

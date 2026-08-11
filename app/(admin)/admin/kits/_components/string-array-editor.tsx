@@ -39,12 +39,12 @@ export function StringArrayEditor({
               onChange={(e) => update(idx, e.target.value)}
               placeholder={placeholder}
               rows={2}
-              className="flex-1 resize-y rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/20"
+              className="flex-1 resize-y rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
             />
             <button
               type="button"
               onClick={() => remove(idx)}
-              className="rounded-lg p-2 text-red-600 hover:bg-red-50"
+              className="rounded-lg p-2 text-state-danger-ink hover:bg-state-danger-soft"
               aria-label="Xoá mục"
             >
               <X className="h-4 w-4" />
@@ -56,7 +56,7 @@ export function StringArrayEditor({
       <button
         type="button"
         onClick={add}
-        className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1 text-sm font-semibold text-orange-600 hover:bg-orange-50"
+        className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1 text-sm font-semibold text-primary hover:bg-primary-soft"
       >
         <Plus className="h-4 w-4" />
         Thêm mục

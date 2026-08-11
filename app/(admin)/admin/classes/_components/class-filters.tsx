@@ -58,7 +58,7 @@ export function ClassFilters({
   }
 
   const selectCls =
-    "rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-[#7C3AED] focus:outline-none";
+    "rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:outline-none";
 
   return (
     <form
@@ -70,7 +70,7 @@ export function ClassFilters({
         value={q}
         onChange={(e) => setQ(e.target.value)}
         placeholder="Tìm tên / mã lớp..."
-        className="lg:col-span-2 rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-[#7C3AED] focus:outline-none focus:ring-2 focus:ring-[#7C3AED]/20"
+        className="lg:col-span-2 rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
       />
       <select
         name="status"
@@ -131,7 +131,7 @@ export function ClassFilters({
       <button
         type="submit"
         disabled={pending}
-        className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-[#7C3AED] px-4 py-2 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-60 sm:col-span-2 lg:col-span-6"
+        className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-60 sm:col-span-2 lg:col-span-6"
       >
         {pending && <Loader2 className="h-4 w-4 animate-spin" />}
         {pending ? "Đang lọc…" : "Áp dụng bộ lọc"}

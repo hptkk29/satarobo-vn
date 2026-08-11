@@ -128,7 +128,7 @@ export default async function ScormPage() {
     <div className="max-w-4xl space-y-6 p-6">
       <div>
         <h1 className="flex items-center gap-2 text-2xl font-bold text-gray-900">
-          <Package className="h-6 w-6 text-orange-500" /> SCORM / Học liệu tương tác
+          <Package className="h-6 w-6 text-primary" /> SCORM / Học liệu tương tác
         </h1>
         <p className="mt-1 text-sm text-gray-500">
           Chọn khoá học → buổi học để xem hoặc đổi giáo án. Mỗi buổi chỉ giữ 1 giáo án (PDF slide

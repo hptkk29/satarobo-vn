@@ -107,7 +107,7 @@ export async function SalesDashboard({ userId, name, embedded = false }: { userI
       {nearingEndCount > 0 && (
         <Link
           href="/students/sap-het-khoa"
-          className="flex items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800 hover:border-amber-400"
+          className="flex items-center gap-2 rounded-xl border border-state-warning-soft bg-state-warning-soft p-3 text-sm text-state-warning-ink hover:border-state-warning"
         >
           <GraduationCap className="h-5 w-5 shrink-0" />
           <span>
@@ -155,8 +155,8 @@ export async function SalesDashboard({ userId, name, embedded = false }: { userI
             <ul className="space-y-1.5 text-sm">
               {[...overdue, ...dueToday].slice(0, 8).map((t) => (
                 <li key={t.id} className="flex items-center justify-between gap-2">
-                  <Link href={`/leads/${t.leadId}`} className="truncate font-medium text-gray-800 hover:text-[#7C3AED]">{t.title}</Link>
-                  <span className={`shrink-0 text-xs ${t.dueAt < now ? "font-semibold text-rose-600" : "text-gray-400"}`}>
+                  <Link href={`/leads/${t.leadId}`} className="truncate font-medium text-gray-800 hover:text-primary">{t.title}</Link>
+                  <span className={`shrink-0 text-xs ${t.dueAt < now ? "font-semibold text-state-danger-ink" : "text-gray-400"}`}>
                     {formatDateVN(t.dueAt)}
                   </span>
                 </li>
@@ -176,7 +176,7 @@ export async function SalesDashboard({ userId, name, embedded = false }: { userI
             <ul className="space-y-1.5 text-sm">
               {trials.map((t) => (
                 <li key={t.id} className="flex items-center justify-between gap-2">
-                  <Link href={`/leads/${t.lead.id}`} className="truncate font-medium text-gray-800 hover:text-[#7C3AED]">
+                  <Link href={`/leads/${t.lead.id}`} className="truncate font-medium text-gray-800 hover:text-primary">
                     {t.lead.childName ?? t.lead.parentName}
                   </Link>
                   <span className="shrink-0 text-xs text-gray-500">
@@ -197,9 +197,9 @@ function DashStat({
 }: {
   label: string; value: number | string; href: string; tone?: "neutral" | "ok" | "danger"; icon: React.ReactNode;
 }) {
-  const toneCls = tone === "danger" ? "text-rose-600" : tone === "ok" ? "text-emerald-600" : "text-[#7C3AED]";
+  const toneCls = tone === "danger" ? "text-state-danger-ink" : tone === "ok" ? "text-state-success-ink" : "text-primary";
   return (
-    <Link href={href} className="rounded-xl border border-gray-200 bg-white p-4 hover:border-[#7C3AED]">
+    <Link href={href} className="rounded-xl border border-gray-200 bg-white p-4 hover:border-primary">
       <div className={`flex items-center gap-2 ${toneCls}`}>{icon}<span className="text-2xl font-bold tabular-nums">{value}</span></div>
       <div className="mt-1 text-xs text-gray-500">{label}</div>
     </Link>

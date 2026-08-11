@@ -48,7 +48,7 @@ export default async function CareTaskPage() {
     <div className="max-w-4xl p-6">
       <div className="mb-4">
         <h1 className="flex items-center gap-2 text-2xl font-bold text-gray-900">
-          <HeartHandshake className="h-6 w-6 text-[#7C3AED]" /> Việc chăm sóc học viên
+          <HeartHandshake className="h-6 w-6 text-primary" /> Việc chăm sóc học viên
         </h1>
         <p className="mt-1 text-sm text-gray-500">Task chăm sóc phát sinh từ cảnh báo rủi ro / sau đăng ký.</p>
       </div>
@@ -64,9 +64,9 @@ export default async function CareTaskPage() {
               <div className="min-w-0">
                 <p className="font-medium text-gray-900">{t.title}</p>
                 <p className="text-xs text-gray-500">
-                  <Link href={`/students/${t.student.id}/edit`} className="text-[#7C3AED] hover:underline">{t.student.name}</Link>
+                  <Link href={`/students/${t.student.id}/edit`} className="text-primary hover:underline">{t.student.name}</Link>
                   {" · "}hạn {formatDateVN(t.dueAt)}
-                  {t.dueAt < now && <span className="ml-1 font-semibold text-rose-600">(quá hạn)</span>}
+                  {t.dueAt < now && <span className="ml-1 font-semibold text-state-danger-ink">(quá hạn)</span>}
                 </p>
               </div>
               <CompleteCareButton id={t.id} />

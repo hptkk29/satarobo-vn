@@ -149,8 +149,8 @@ export default async function TransferPage({ searchParams }: PageProps) {
                     <span
                       className={
                         r.status === "WAITLISTED"
-                          ? "rounded bg-amber-100 px-2 py-0.5 text-xs text-amber-700"
-                          : "rounded bg-blue-100 px-2 py-0.5 text-xs text-blue-700"
+                          ? "rounded bg-state-warning-soft px-2 py-0.5 text-xs text-state-warning-ink"
+                          : "rounded bg-state-info-soft px-2 py-0.5 text-xs text-state-info-ink"
                       }
                     >
                       {r.status === "WAITLISTED" ? "Chờ chỗ" : "Chờ duyệt"}

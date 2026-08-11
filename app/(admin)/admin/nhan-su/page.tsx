@@ -185,7 +185,7 @@ export default async function EmployeesAdminPage({ searchParams }: PageProps) {
             </Link>
             <Link
               href="/nhan-su/new"
-              className="inline-flex items-center gap-2 rounded-lg bg-[#7C3AED] px-4 py-2 text-sm font-bold text-white hover:opacity-90"
+              className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-bold text-white hover:opacity-90"
             >
               <Plus className="h-4 w-4" />
               Thêm nhân sự
@@ -206,13 +206,13 @@ export default async function EmployeesAdminPage({ searchParams }: PageProps) {
             name="q"
             defaultValue={q}
             placeholder="Tìm theo tên, SĐT, email, mã NV..."
-            className="w-full rounded-lg border border-gray-300 bg-white pl-9 pr-3 py-2 text-sm focus:border-[#7C3AED] focus:outline-none"
+            className="w-full rounded-lg border border-gray-300 bg-white pl-9 pr-3 py-2 text-sm focus:border-primary focus:outline-none"
           />
         </div>
         <select
           name="department"
           defaultValue={departmentParam ?? ""}
-          className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:border-[#7C3AED] focus:outline-none"
+          className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:border-primary focus:outline-none"
         >
           <option value="">Tất cả phòng ban</option>
           {DEPARTMENTS.map((d) => (
@@ -224,7 +224,7 @@ export default async function EmployeesAdminPage({ searchParams }: PageProps) {
         <select
           name="centerId"
           defaultValue={centerIdParam}
-          className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:border-[#7C3AED] focus:outline-none"
+          className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:border-primary focus:outline-none"
         >
           <option value="">Tất cả cơ sở</option>
           {centers.map((c) => (
@@ -236,7 +236,7 @@ export default async function EmployeesAdminPage({ searchParams }: PageProps) {
         <select
           name="status"
           defaultValue={rawStatus ?? "ACTIVE"}
-          className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:border-[#7C3AED] focus:outline-none"
+          className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:border-primary focus:outline-none"
         >
           <option value="ALL">Mọi trạng thái</option>
           {STATUSES.map((s) => (
@@ -247,7 +247,7 @@ export default async function EmployeesAdminPage({ searchParams }: PageProps) {
         </select>
         <button
           type="submit"
-          className="rounded-lg bg-[#7C3AED] px-4 py-2 text-sm font-bold text-white hover:opacity-90"
+          className="rounded-lg bg-primary px-4 py-2 text-sm font-bold text-white hover:opacity-90"
         >
           Lọc
         </button>
@@ -257,11 +257,7 @@ export default async function EmployeesAdminPage({ searchParams }: PageProps) {
       <div className="mb-4 flex flex-wrap gap-2">
         <Link
           href="/nhan-su"
-          className={`rounded-full px-3 py-1 text-xs font-semibold ${
-            !departmentParam
-              ? "bg-[#7C3AED] text-white"
-              : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-          }`}
+          className={`rounded-full px-3 py-1 text-xs font-semibold ${ !departmentParam ? "bg-primary text-white" : "bg-gray-100 text-gray-700 hover:bg-gray-200" }`}
         >
           Tất cả
         </Link>
@@ -269,11 +265,7 @@ export default async function EmployeesAdminPage({ searchParams }: PageProps) {
           <Link
             key={d.department}
             href={`/nhan-su?department=${d.department}`}
-            className={`rounded-full px-3 py-1 text-xs font-semibold ${
-              departmentParam === d.department
-                ? "bg-[#7C3AED] text-white"
-                : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-            }`}
+            className={`rounded-full px-3 py-1 text-xs font-semibold ${ departmentParam === d.department ? "bg-primary text-white" : "bg-gray-100 text-gray-700 hover:bg-gray-200" }`}
           >
             {deptLabel(d.department)} ({d._count.id})
           </Link>

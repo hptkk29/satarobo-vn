@@ -23,9 +23,9 @@ export const dynamic = "force-dynamic";
 // =============================================================================
 
 const SEVERITY_LABEL: Record<string, { text: string; cls: string }> = {
-  ANCHOR_WRONG: { text: "Neo sai ngày khai giảng", cls: "bg-red-100 text-red-800" },
-  NO_SESSIONS: { text: "Chưa có buổi nào", cls: "bg-red-100 text-red-800" },
-  DRIFT: { text: "Lệch giữa khoá", cls: "bg-amber-100 text-amber-800" },
+  ANCHOR_WRONG: { text: "Neo sai ngày khai giảng", cls: "bg-state-danger-soft text-state-danger-ink" },
+  NO_SESSIONS: { text: "Chưa có buổi nào", cls: "bg-state-danger-soft text-state-danger-ink" },
+  DRIFT: { text: "Lệch giữa khoá", cls: "bg-state-warning-soft text-state-warning-ink" },
   NO_SCHEDULE: { text: "Thiếu lịch/khai giảng", cls: "bg-gray-200 text-gray-700" },
 };
 
@@ -53,7 +53,7 @@ export default async function ClassScheduleAuditPage() {
           <ArrowLeft className="h-4 w-4" /> Lớp học
         </Link>
         <h1 className="flex items-center gap-2 text-2xl font-bold text-gray-900">
-          <CalendarCheck2 className="h-6 w-6 text-orange-500" />
+          <CalendarCheck2 className="h-6 w-6 text-primary" />
           Kiểm tra lịch buổi học
         </h1>
         <p className="mt-1 text-sm text-gray-500">
@@ -63,7 +63,7 @@ export default async function ClassScheduleAuditPage() {
       </div>
 
       {rows.length === 0 ? (
-        <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-6 text-center text-sm font-medium text-emerald-800">
+        <div className="rounded-xl border border-state-success-soft bg-state-success-soft p-6 text-center text-sm font-medium text-state-success-ink">
           Mọi lớp đang khớp lịch — không có buổi nào lệch ngày khai giảng.
         </div>
       ) : (
@@ -91,7 +91,7 @@ export default async function ClassScheduleAuditPage() {
                     <td className="px-4 py-3">
                       <Link
                         href={`/classes/${r.classId}`}
-                        className="font-semibold text-orange-600 hover:underline"
+                        className="font-semibold text-primary hover:underline"
                       >
                         {r.className}
                       </Link>

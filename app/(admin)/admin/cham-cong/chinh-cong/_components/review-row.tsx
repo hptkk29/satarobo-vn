@@ -57,7 +57,7 @@ export function ReviewRow({ item }: { item: ReviewItem }) {
       <p className="mt-1 whitespace-pre-wrap text-sm text-gray-600">{item.reason}</p>
 
       {item.locked ? (
-        <p className="mt-2 rounded-lg bg-rose-50 p-2 text-xs text-rose-700">
+        <p className="mt-2 rounded-lg bg-state-danger-soft p-2 text-xs text-state-danger-ink">
           {item.lockReason ?? "Quá hạn chỉnh — chỉ admin cấp cao xử lý được."}
         </p>
       ) : (
@@ -84,7 +84,7 @@ export function ReviewRow({ item }: { item: ReviewItem }) {
               type="button"
               onClick={() => decide("APPROVED")}
               disabled={pending}
-              className="inline-flex items-center gap-1.5 rounded-lg bg-green-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-green-700 disabled:opacity-50"
+              className="inline-flex items-center gap-1.5 rounded-lg bg-state-success-ink px-3 py-1.5 text-sm font-semibold text-white hover:bg-state-success-ink-hover disabled:opacity-50"
             >
               <Check className="h-4 w-4" /> Duyệt + áp giờ
             </button>
@@ -92,7 +92,7 @@ export function ReviewRow({ item }: { item: ReviewItem }) {
               type="button"
               onClick={() => decide("REJECTED")}
               disabled={pending}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-rose-300 bg-white px-3 py-1.5 text-sm font-semibold text-rose-700 hover:bg-rose-50 disabled:opacity-50"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-state-danger bg-white px-3 py-1.5 text-sm font-semibold text-state-danger-ink hover:bg-state-danger-soft disabled:opacity-50"
             >
               <X className="h-4 w-4" /> Từ chối
             </button>

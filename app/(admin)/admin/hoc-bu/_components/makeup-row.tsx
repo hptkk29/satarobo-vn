@@ -35,9 +35,9 @@ type Sugg = {
 };
 
 const STATUS_BADGE: Record<string, string> = {
-  PENDING: "bg-amber-100 text-amber-700",
-  SCHEDULED: "bg-blue-100 text-blue-700",
-  COMPLETED: "bg-green-100 text-green-700",
+  PENDING: "bg-state-warning-soft text-state-warning-ink",
+  SCHEDULED: "bg-state-info-soft text-state-info-ink",
+  COMPLETED: "bg-state-success-soft text-state-success-ink",
   CANCELLED: "bg-gray-100 text-gray-500",
 };
 const STATUS_LABEL: Record<string, string> = {
@@ -123,12 +123,12 @@ export function MakeupRow({ item }: { item: MakeupItem }) {
           )}
           {item.status === "SCHEDULED" && (
             <button type="button" onClick={complete} disabled={pending}
-              className="inline-flex items-center gap-1.5 rounded-lg bg-green-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-green-700 disabled:opacity-50">
+              className="inline-flex items-center gap-1.5 rounded-lg bg-state-success-ink px-3 py-1.5 text-sm font-semibold text-white hover:bg-state-success-ink-hover disabled:opacity-50">
               <CheckCircle2 className="h-4 w-4" /> Đánh dấu đã bù
             </button>
           )}
           <button type="button" onClick={() => setConfirmCancel(true)} disabled={pending}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-rose-200 px-3 py-1.5 text-sm font-semibold text-rose-600 hover:bg-rose-50 disabled:opacity-50">
+            className="inline-flex items-center gap-1.5 rounded-lg border border-state-danger-soft px-3 py-1.5 text-sm font-semibold text-state-danger-ink hover:bg-state-danger-soft disabled:opacity-50">
             <X className="h-4 w-4" /> Huỷ
           </button>
           <ConfirmDialog
@@ -152,7 +152,7 @@ export function MakeupRow({ item }: { item: MakeupItem }) {
 
       {/* QA 20/07 — trạng thái rỗng inline khi bấm "Gợi ý buổi bù" không có kết quả. */}
       {suggs && suggs.length === 0 && item.status === "PENDING" && (
-        <div className="mt-2 flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 p-2.5 text-sm text-amber-800">
+        <div className="mt-2 flex items-center gap-2 rounded-lg border border-state-warning-soft bg-state-warning-soft p-2.5 text-sm text-state-warning-ink">
           <SearchX className="h-4 w-4 shrink-0" />
           Chưa tìm được buổi bù phù hợp (cần cùng khoá/bài học, chưa vượt tiến độ, còn
           chỗ). Thử lại sau khi có lịch buổi mới.
@@ -167,7 +167,7 @@ export function MakeupRow({ item }: { item: MakeupItem }) {
               <span className="flex items-center gap-1.5">
                 {s.className}{s.lessonTitle ? ` · Bài ${s.lessonOrder}: ${s.lessonTitle}` : ""}
                 {s.isHomeCenter === false && (
-                  <span className="rounded-full bg-[#7C3AED]/10 px-1.5 py-0.5 text-[10px] font-semibold text-[#7C3AED]">
+                  <span className="rounded-full bg-primary-soft px-1.5 py-0.5 text-[10px] font-semibold text-primary">
                     Cơ sở khác
                   </span>
                 )}

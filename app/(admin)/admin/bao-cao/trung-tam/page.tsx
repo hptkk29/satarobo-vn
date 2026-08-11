@@ -45,11 +45,11 @@ function Stat({
 }) {
   const toneClass =
     tone === "good"
-      ? "text-emerald-700"
+      ? "text-state-success-ink"
       : tone === "warn"
-        ? "text-amber-700"
+        ? "text-state-warning-ink"
         : tone === "bad"
-          ? "text-rose-700"
+          ? "text-state-danger-ink"
           : "text-neutral-900";
   return (
     <div className="rounded-xl border border-neutral-200 bg-white p-4">
@@ -237,10 +237,10 @@ export default async function CenterReportPage({
                 byCenter.map((c) => (
                   <tr key={c.centerId} className="border-t">
                     <td className="px-4 py-2 font-medium">{labelCenter(c.centerId)}</td>
-                    <td className="px-4 py-2 text-right text-emerald-700">{vnd(c.confirmed)}</td>
-                    <td className="px-4 py-2 text-right text-amber-600">{vnd(c.pending)}</td>
+                    <td className="px-4 py-2 text-right text-state-success-ink">{vnd(c.confirmed)}</td>
+                    <td className="px-4 py-2 text-right text-state-warning-ink">{vnd(c.pending)}</td>
                     <td className="px-4 py-2 text-right">{vnd(c.receivable)}</td>
-                    <td className="px-4 py-2 text-right font-semibold text-rose-600">{vnd(c.debt)}</td>
+                    <td className="px-4 py-2 text-right font-semibold text-state-danger-ink">{vnd(c.debt)}</td>
                   </tr>
                 ))
               )}

@@ -268,7 +268,7 @@ export default async function SepayLogPage({
                     </td>
                     <td className="px-3 py-2 align-top text-xs">
                       {c.orderId ? (
-                        <Link href={`/orders/${c.orderId}`} className="font-medium text-blue-600 hover:underline">
+                        <Link href={`/orders/${c.orderId}`} className="font-medium text-state-info-ink hover:underline">
                           Mở đơn →
                         </Link>
                       ) : (
@@ -303,9 +303,7 @@ function FilterTab({ href, label, active }: { href: string; label: string; activ
   return (
     <Link
       href={href}
-      className={`rounded-lg px-3 py-1.5 font-medium ${
-        active ? "bg-orange-600 text-white" : "border border-gray-300 text-gray-700 hover:bg-gray-50"
-      }`}
+      className={`rounded-lg px-3 py-1.5 font-medium ${ active ? "bg-primary-dark text-white" : "border border-gray-300 text-gray-700 hover:bg-gray-50" }`}
     >
       {label}
     </Link>

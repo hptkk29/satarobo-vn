@@ -43,7 +43,7 @@ export function PrerequisitesManager({
         <button
           type="button"
           onClick={() => setEditing({ courseId: "", fixed: false })}
-          className="inline-flex items-center gap-1.5 rounded-lg bg-[#7C3AED] px-4 py-2 text-sm font-semibold text-white hover:opacity-90"
+          className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white hover:opacity-90"
         >
           <Plus className="h-4 w-4" /> Thêm điều kiện tiên quyết
         </button>
@@ -72,7 +72,7 @@ export function PrerequisitesManager({
                   <td className="px-4 py-3">
                     <div className="flex flex-wrap gap-1.5">
                       {r.prereqs.map((p) => (
-                        <span key={p.id} className="rounded-full bg-purple-50 px-2.5 py-0.5 text-xs font-medium text-[#7C3AED]">
+                        <span key={p.id} className="rounded-full bg-primary-soft px-2.5 py-0.5 text-xs font-medium text-primary">
                           {p.label}
                         </span>
                       ))}
@@ -83,7 +83,7 @@ export function PrerequisitesManager({
                       <button
                         type="button"
                         onClick={() => setEditing({ courseId: r.courseId, fixed: true })}
-                        className="rounded p-1.5 text-blue-600 hover:bg-blue-50"
+                        className="rounded p-1.5 text-state-info-ink hover:bg-state-info-soft"
                         title="Sửa"
                       >
                         <Pencil className="h-4 w-4" />
@@ -93,7 +93,7 @@ export function PrerequisitesManager({
                           type="button"
                           onClick={() => remove(r.courseId)}
                           disabled={pending}
-                          className="rounded bg-red-100 px-2 py-1 text-xs font-semibold text-red-700 hover:bg-red-200 disabled:opacity-50"
+                          className="rounded bg-state-danger-soft px-2 py-1 text-xs font-semibold text-state-danger-ink hover:bg-state-danger-soft-hover disabled:opacity-50"
                         >
                           Xác nhận xoá?
                         </button>
@@ -101,7 +101,7 @@ export function PrerequisitesManager({
                         <button
                           type="button"
                           onClick={() => setConfirmDelete(r.courseId)}
-                          className="rounded p-1.5 text-red-600 hover:bg-red-50"
+                          className="rounded p-1.5 text-state-danger-ink hover:bg-state-danger-soft"
                           title="Xoá toàn bộ tiên quyết của khoá này"
                         >
                           <Trash2 className="h-4 w-4" />
@@ -196,7 +196,7 @@ function PrereqDialog({
             value={courseId}
             onChange={(e) => setCourseId(e.target.value)}
             disabled={!!fixedCourseId || pending}
-            className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-[#7C3AED] focus:outline-none disabled:bg-gray-50"
+            className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary focus:outline-none disabled:bg-gray-50"
           >
             <option value="">— Chọn khoá —</option>
             {courseChoices.map((c) => (
@@ -222,9 +222,7 @@ function PrereqDialog({
                     type="button"
                     onClick={() => toggle(c.id)}
                     disabled={pending}
-                    className={`rounded-full border px-3 py-1 text-xs font-medium ${
-                      on ? "border-[#7C3AED] bg-purple-50 text-[#7C3AED]" : "border-gray-200 bg-white text-gray-500 hover:border-[#7C3AED]"
-                    }`}
+                    className={`rounded-full border px-3 py-1 text-xs font-medium ${ on ? "border-primary bg-primary-soft text-primary" : "border-gray-200 bg-white text-gray-500 hover:border-primary" }`}
                   >
                     {on ? "✓ " : ""}{c.label}
                   </button>
@@ -238,7 +236,7 @@ function PrereqDialog({
             type="button"
             onClick={save}
             disabled={pending}
-            className="rounded-lg bg-[#7C3AED] px-4 py-2 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-50"
+            className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-50"
           >
             {pending ? "Đang lưu…" : "Lưu"}
           </button>

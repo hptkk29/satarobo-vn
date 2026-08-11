@@ -152,7 +152,7 @@ export function SessionEvalEditor({
         type="button"
         onClick={open}
         disabled={loading}
-        className="inline-flex items-center gap-1.5 rounded-lg border border-purple-200 bg-purple-50 px-3 py-2 text-sm font-semibold text-purple-700 hover:bg-purple-100 disabled:opacity-60"
+        className="inline-flex items-center gap-1.5 rounded-lg border border-primary-soft bg-primary-soft px-3 py-2 text-sm font-semibold text-primary hover:bg-primary-soft-hover disabled:opacity-60"
       >
         <ClipboardCheck className="h-4 w-4" />
         {loading ? "Đang tải phiếu…" : "Phiếu đánh giá buổi học"}
@@ -177,7 +177,7 @@ export function SessionEvalEditor({
 
   return (
     <div className="space-y-4">
-      <div className="rounded-lg border border-purple-100 bg-purple-50/50 px-3 py-2 text-xs text-purple-700">
+      <div className="rounded-lg border border-primary-soft bg-primary-soft/50 px-3 py-2 text-xs text-primary">
         Phiếu: <strong>{round.title}</strong>
       </div>
 
@@ -190,13 +190,7 @@ export function SessionEvalEditor({
               key={s.studentId}
               type="button"
               onClick={() => setSel(i)}
-              className={`rounded-full px-3 py-1 text-xs font-medium ${
-                i === sel
-                  ? "bg-[#7C3AED] text-white"
-                  : done
-                    ? "bg-emerald-100 text-emerald-700"
-                    : "bg-gray-100 text-gray-600"
-              }`}
+              className={`rounded-full px-3 py-1 text-xs font-medium ${ i === sel ? "bg-primary text-white" : done ? "bg-state-success-soft text-state-success-ink" : "bg-gray-100 text-gray-600" }`}
             >
               {s.name}
               {done ? " ✓" : ""}
@@ -212,7 +206,7 @@ export function SessionEvalEditor({
           {groups.map((g, gi) => (
             <div key={gi} className="space-y-4">
               {g.label && (
-                <h4 className="border-b border-gray-100 pb-1 text-xs font-bold uppercase tracking-wider text-[#7C3AED]">
+                <h4 className="border-b border-gray-100 pb-1 text-xs font-bold uppercase tracking-wider text-primary">
                   {g.label}
                 </h4>
               )}
@@ -236,7 +230,7 @@ export function SessionEvalEditor({
           type="button"
           onClick={doSave}
           disabled={saving}
-          className="inline-flex items-center gap-1.5 rounded-lg bg-[#7C3AED] px-4 py-2 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-50"
+          className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-50"
         >
           <Save className="h-4 w-4" />
           {saving ? "Đang lưu…" : "Lưu phiếu đánh giá buổi"}
@@ -263,7 +257,7 @@ function QuestionField({
     <div className="space-y-1.5">
       <label className="block text-sm font-medium text-gray-700">
         {q.label}
-        {q.required && <span className="ml-1 text-rose-500">*</span>}
+        {q.required && <span className="ml-1 text-state-danger-ink">*</span>}
       </label>
 
       {q.type === "STAR_RATING" && (
@@ -338,7 +332,7 @@ function QuestionField({
           rows={2}
           onChange={(e) => onPatch({ valueText: e.target.value })}
           placeholder="Nhận xét…"
-          className="w-full resize-y rounded-lg border border-gray-300 px-3 py-1.5 text-sm focus:border-[#7C3AED] focus:outline-none disabled:bg-gray-50"
+          className="w-full resize-y rounded-lg border border-gray-300 px-3 py-1.5 text-sm focus:border-primary focus:outline-none disabled:bg-gray-50"
         />
       )}
 
@@ -349,7 +343,7 @@ function QuestionField({
           disabled={disabled}
           onChange={(e) => onPatch({ valueText: e.target.value })}
           placeholder="Ghi chú thêm (tuỳ chọn)…"
-          className="w-full rounded-lg border border-gray-200 px-3 py-1.5 text-sm focus:border-[#7C3AED] focus:outline-none disabled:bg-gray-50"
+          className="w-full rounded-lg border border-gray-200 px-3 py-1.5 text-sm focus:border-primary focus:outline-none disabled:bg-gray-50"
         />
       )}
     </div>

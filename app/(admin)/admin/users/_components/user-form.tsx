@@ -106,7 +106,7 @@ export function UserForm({
   return (
     <form onSubmit={onSubmit} className="space-y-4">
       {error && (
-        <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+        <div className="rounded-lg border border-state-danger-soft bg-state-danger-soft px-3 py-2 text-sm text-state-danger-ink">
           {error}
         </div>
       )}
@@ -201,13 +201,7 @@ export function UserForm({
                   type="button"
                   onClick={() => on && setPrimaryRole(opt.value)}
                   disabled={!on || pending}
-                  className={`rounded-full px-2 py-0.5 text-xs font-semibold ${
-                    primaryRole === opt.value
-                      ? "bg-orange-500 text-white"
-                      : on
-                        ? "bg-gray-100 text-gray-600 hover:bg-orange-100"
-                        : "bg-gray-50 text-gray-300"
-                  }`}
+                  className={`rounded-full px-2 py-0.5 text-xs font-semibold ${ primaryRole === opt.value ? "bg-primary text-white" : on ? "bg-gray-100 text-gray-600 hover:bg-primary-soft" : "bg-gray-50 text-gray-300" }`}
                 >
                   {primaryRole === opt.value ? "Vai trò chính" : "Đặt chính"}
                 </button>
@@ -224,7 +218,7 @@ export function UserForm({
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <div className="space-y-1.5">
           <Label htmlFor="orgUnitId">
-            Đơn vị <span className="text-red-600">*</span>
+            Đơn vị <span className="text-state-danger-ink">*</span>
           </Label>
           <select
             id="orgUnitId"

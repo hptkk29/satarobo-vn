@@ -21,11 +21,11 @@ export const dynamic = "force-dynamic";
 
 const STATUS_BADGE_CLASS: Record<OrderStatus, string> = {
   DRAFT: "bg-gray-100 text-gray-700 hover:bg-gray-100",
-  PENDING_PAYMENT: "bg-yellow-100 text-yellow-800 hover:bg-yellow-100",
-  CONFIRMED: "bg-blue-100 text-blue-800 hover:bg-blue-100",
-  COMPLETED: "bg-green-100 text-green-800 hover:bg-green-100",
-  CANCELLED: "bg-red-100 text-red-800 hover:bg-red-100",
-  REFUNDED: "bg-purple-100 text-purple-800 hover:bg-purple-100",
+  PENDING_PAYMENT: "bg-state-warning-soft text-state-warning-ink hover:bg-state-warning-soft",
+  CONFIRMED: "bg-state-info-soft text-state-info-ink hover:bg-state-info-soft",
+  COMPLETED: "bg-state-success-soft text-state-success-ink hover:bg-state-success-soft",
+  CANCELLED: "bg-state-danger-soft text-state-danger-ink hover:bg-state-danger-soft",
+  REFUNDED: "bg-primary-soft text-primary hover:bg-primary-soft",
 };
 
 interface Props {
@@ -187,8 +187,8 @@ export default async function OrderDetailPage({ params }: Props) {
                 <Badge
                   className={
                     b.color === "emerald"
-                      ? "bg-emerald-100 text-emerald-800 hover:bg-emerald-100"
-                      : "bg-amber-100 text-amber-800 hover:bg-amber-100"
+                      ? "bg-state-success-soft text-state-success-ink hover:bg-state-success-soft"
+                      : "bg-state-warning-soft text-state-warning-ink hover:bg-state-warning-soft"
                   }
                 >
                   {b.label}

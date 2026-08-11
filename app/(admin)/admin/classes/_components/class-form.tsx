@@ -298,7 +298,7 @@ export function ClassForm({
   return (
     <form onSubmit={handleSubmit} className="max-w-4xl space-y-6">
       {error && (
-        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+        <div className="rounded-lg border border-state-danger-soft bg-state-danger-soft px-4 py-3 text-sm text-state-danger-ink">
           {error}
         </div>
       )}
@@ -327,7 +327,7 @@ export function ClassForm({
                     setName(suggestedName);
                     setNameTouched(true);
                   }}
-                  className="mt-1 text-xs font-semibold text-[#7C3AED] hover:underline"
+                  className="mt-1 text-xs font-semibold text-primary hover:underline"
                 >
                   Dùng tên gợi ý: {suggestedName}
                 </button>
@@ -407,14 +407,14 @@ export function ClassForm({
               <label className="block">
                 <span className="mb-1 block text-sm font-semibold text-neutral-700">
                   Giáo trình áp dụng
-                  <span className="ml-1 text-red-500">*</span>
+                  <span className="ml-1 text-state-danger-ink">*</span>
                 </span>
                 <select
                   name="curriculumId"
                   value={curriculumId}
                   onChange={(e) => setCurriculumId(e.target.value)}
                   disabled={!courseId || courseCurricula.length === 0}
-                  className="w-full rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm outline-none focus:border-[#7C3AED] focus:ring-2 focus:ring-[#7C3AED]/20 disabled:bg-neutral-100"
+                  className="w-full rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 disabled:bg-neutral-100"
                 >
                   {courseCurricula.length === 0 ? (
                     <option value="">— Khoá chưa có giáo trình ACTIVE —</option>
@@ -428,7 +428,7 @@ export function ClassForm({
                 </select>
               </label>
               {courseId && courseCurricula.length === 0 ? (
-                <span className="mt-1 block text-xs text-red-600">
+                <span className="mt-1 block text-xs text-state-danger-ink">
                   Khoá học chưa có giáo trình đang áp dụng (ACTIVE) — không thể tạo
                   lớp. Hãy kích hoạt giáo trình trước.
                 </span>
@@ -596,7 +596,7 @@ function SubmitButton({ isEdit, pending }: { isEdit: boolean; pending: boolean }
     <button
       type="submit"
       disabled={pending}
-      className="rounded-xl bg-[#7C3AED] px-6 py-3 font-bold text-white shadow-md hover:opacity-90 disabled:opacity-60"
+      className="rounded-xl bg-primary px-6 py-3 font-bold text-white shadow-md hover:opacity-90 disabled:opacity-60"
     >
       {pending ? "Đang lưu..." : isEdit ? "Cập nhật" : "Tạo lớp"}
     </button>
@@ -654,12 +654,12 @@ function Field({
     ? { value, onChange: (e: { target: { value: string } }) => onChange?.(e.target.value) }
     : { defaultValue: defaultValue ?? "" };
   const baseClass =
-    "w-full rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm outline-none focus:border-[#7C3AED] focus:ring-2 focus:ring-[#7C3AED]/20";
+    "w-full rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20";
   return (
     <label className="block">
       <span className="mb-1 block text-sm font-semibold text-neutral-700">
         {label}
-        {required && <span className="ml-1 text-red-500">*</span>}
+        {required && <span className="ml-1 text-state-danger-ink">*</span>}
       </span>
       {type === "textarea" ? (
         <textarea
@@ -717,7 +717,7 @@ function SelectField({
     <label className="block">
       <span className="mb-1 block text-sm font-semibold text-neutral-700">
         {label}
-        {required && <span className="ml-1 text-red-500">*</span>}
+        {required && <span className="ml-1 text-state-danger-ink">*</span>}
       </span>
       <select
         name={name}
@@ -725,7 +725,7 @@ function SelectField({
           ? { value, onChange: (e) => onChange?.(e.target.value) }
           : { defaultValue: defaultValue ?? "" })}
         required={required}
-        className="w-full rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm outline-none focus:border-[#7C3AED] focus:ring-2 focus:ring-[#7C3AED]/20"
+        className="w-full rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
       >
         {options.map((opt) => (
           <option key={opt.value} value={opt.value}>

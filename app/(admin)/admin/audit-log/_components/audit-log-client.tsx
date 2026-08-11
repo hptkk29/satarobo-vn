@@ -63,11 +63,7 @@ export function AuditLogClient({
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div
-          className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium ${
-            revealed
-              ? "bg-amber-50 text-amber-700"
-              : "bg-gray-100 text-gray-600"
-          }`}
+          className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium ${ revealed ? "bg-state-warning-soft text-state-warning-ink" : "bg-gray-100 text-gray-600" }`}
         >
           {revealed ? (
             <>

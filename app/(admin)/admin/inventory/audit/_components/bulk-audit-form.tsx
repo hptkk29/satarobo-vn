@@ -153,7 +153,7 @@ export function BulkAuditForm({
 
   return (
     <div className="space-y-4">
-      <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+      <div className="rounded-lg border border-state-warning-soft bg-state-warning-soft px-4 py-3 text-sm text-state-warning-ink">
         <div>
           <strong>Cơ sở:</strong> {centerName}
           {auditCode && (
@@ -163,7 +163,7 @@ export function BulkAuditForm({
             </>
           )}
         </div>
-        <div className="mt-1 text-xs text-amber-700">
+        <div className="mt-1 text-xs text-state-warning-ink">
           Nhập số lượng thực tế đếm được. Mọi dòng có Δ ≠ 0 đều cần lý do ≥ 5
           ký tự. Submit sẽ ghi nhận movement ADJUSTMENT và cập nhật tồn kho
           atomic.
@@ -171,7 +171,7 @@ export function BulkAuditForm({
       </div>
 
       {error && (
-        <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+        <div className="rounded-lg border border-state-danger-soft bg-state-danger-soft px-3 py-2 text-sm text-state-danger-ink">
           {error}
         </div>
       )}
@@ -180,13 +180,13 @@ export function BulkAuditForm({
         <div className="text-sm text-neutral-700">
           <span className="font-bold">{stats.changedCount}</span> dòng thay đổi
           {stats.increases > 0 && (
-            <span className="ml-3 text-green-600">+{stats.increases} tăng</span>
+            <span className="ml-3 text-state-success-ink">+{stats.increases} tăng</span>
           )}
           {stats.decreases > 0 && (
-            <span className="ml-3 text-red-600">-{stats.decreases} giảm</span>
+            <span className="ml-3 text-state-danger-ink">-{stats.decreases} giảm</span>
           )}
           {stats.missingReason > 0 && (
-            <span className="ml-3 text-amber-700">
+            <span className="ml-3 text-state-warning-ink">
               · {stats.missingReason} thiếu lý do
             </span>
           )}
@@ -201,7 +201,7 @@ export function BulkAuditForm({
             type="button"
             onClick={handleCancel}
             disabled={pending}
-            className="inline-flex items-center gap-1 rounded-md border border-red-300 bg-white px-3 py-1.5 text-sm font-semibold text-red-700 hover:bg-red-50 disabled:opacity-50"
+            className="inline-flex items-center gap-1 rounded-md border border-state-danger bg-white px-3 py-1.5 text-sm font-semibold text-state-danger-ink hover:bg-state-danger-soft disabled:opacity-50"
           >
             <X className="h-4 w-4" />
             Huỷ phiếu
@@ -221,7 +221,7 @@ export function BulkAuditForm({
             disabled={
               pending || stats.changedCount === 0 || stats.missingReason > 0
             }
-            className="inline-flex items-center gap-1 rounded-md bg-green-600 px-3 py-1.5 text-sm font-bold text-white hover:bg-green-700 disabled:opacity-50"
+            className="inline-flex items-center gap-1 rounded-md bg-state-success-ink px-3 py-1.5 text-sm font-bold text-white hover:bg-state-success-ink-hover disabled:opacity-50"
           >
             <CheckCircle2 className="h-4 w-4" />
             {pending ? "Đang xử lý..." : "Submit kiểm kê"}
@@ -234,7 +234,7 @@ export function BulkAuditForm({
         value={search}
         onChange={(e) => setSearch(e.target.value)}
         placeholder="Tìm theo mã / tên hàng..."
-        className="w-full rounded-lg border border-neutral-200 px-3 py-2 text-sm focus:border-[#7C3AED] focus:outline-none focus:ring-2 focus:ring-[#7C3AED]/20"
+        className="w-full rounded-lg border border-neutral-200 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
       />
 
       <div className="overflow-hidden rounded-xl border border-neutral-200 bg-white shadow-sm">
@@ -285,12 +285,12 @@ export function BulkAuditForm({
                     : r.previousQty;
                   const delta = validActual - r.previousQty;
                   const rowBg =
-                    delta > 0 ? "bg-green-50/60" : delta < 0 ? "bg-red-50/60" : "";
+                    delta > 0 ? "bg-state-success-soft/60" : delta < 0 ? "bg-state-danger-soft/60" : "";
                   const deltaColor =
                     delta > 0
-                      ? "text-green-700"
+                      ? "text-state-success-ink"
                       : delta < 0
-                        ? "text-red-700"
+                        ? "text-state-danger-ink"
                         : "text-neutral-400";
                   const reasonMissing =
                     delta !== 0 && r.reason.trim().length < 5;
@@ -340,7 +340,7 @@ export function BulkAuditForm({
                             className={
                               "w-full rounded-md border px-2 py-1 text-xs " +
                               (reasonMissing
-                                ? "border-amber-400 bg-amber-50"
+                                ? "border-state-warning bg-state-warning-soft"
                                 : "border-neutral-300")
                             }
                           />

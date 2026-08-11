@@ -200,7 +200,7 @@ export function CreateTrialClassForm({
         <button
           type="submit"
           disabled={pending || centers.length === 0}
-          className="rounded-lg bg-orange-500 px-4 py-2 text-sm font-semibold text-white hover:bg-orange-600 disabled:opacity-50"
+          className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white hover:bg-primary-dark disabled:opacity-50"
         >
           {pending ? "Đang tạo…" : "Tạo lớp"}
         </button>

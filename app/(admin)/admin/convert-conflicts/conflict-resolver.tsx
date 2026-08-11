@@ -36,7 +36,7 @@ export function ConflictResolver({
           value={note}
           onChange={(e) => setNote(e.target.value)}
           placeholder="VD: cùng một phụ huynh, gộp hồ sơ"
-          className="w-full rounded-lg border border-gray-300 px-3 py-1.5 text-sm focus:border-orange-400 focus:outline-none focus:ring-1 focus:ring-orange-400"
+          className="w-full rounded-lg border border-gray-300 px-3 py-1.5 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
         />
       </label>
       <div className="mt-2 flex flex-wrap gap-2">
@@ -44,7 +44,7 @@ export function ConflictResolver({
           type="button"
           disabled={pending}
           onClick={() => run(mergeConflictIntoA, `Đã gộp học viên vào ${parentAName}`)}
-          className="rounded-lg bg-emerald-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
+          className="rounded-lg bg-state-success-ink px-3 py-1.5 text-sm font-semibold text-white hover:bg-state-success-ink-hover disabled:opacity-50"
         >
           Gộp hồ sơ B → A (giữ hồ sơ email)
         </button>

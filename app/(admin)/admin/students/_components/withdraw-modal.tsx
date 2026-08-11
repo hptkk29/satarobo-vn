@@ -51,12 +51,12 @@ export function WithdrawModal({
     <Dialog open onOpenChange={(o) => !isPending && !o && onClose()}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle className="text-red-700">
+          <DialogTitle className="text-state-danger-ink">
             Nghỉ học hẳn — {studentName}
           </DialogTitle>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4 py-2">
-          <div className="flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800">
+          <div className="flex items-start gap-2 rounded-lg border border-state-danger-soft bg-state-danger-soft p-3 text-sm text-state-danger-ink">
             <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
             <div>
               Học viên chuyển sang <strong>INACTIVE</strong>, tất cả đợt bảo

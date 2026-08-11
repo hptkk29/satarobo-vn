@@ -45,7 +45,7 @@ export default async function EditHolidayPage({ params }: Props) {
           </Link>
           <h1 className="text-3xl font-black text-neutral-900">
             Sửa ngày nghỉ:{" "}
-            <span className="font-bold text-orange-600">{holiday.name}</span>
+            <span className="font-bold text-primary">{holiday.name}</span>
           </h1>
         </div>
         <DeleteHolidayButton id={holiday.id} name={holiday.name} />

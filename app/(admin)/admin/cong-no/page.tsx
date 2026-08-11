@@ -30,9 +30,9 @@ const BUCKET_LABEL: Record<Bucket, string> = {
 };
 const BUCKET_BADGE: Record<Bucket, string> = {
   none: "bg-gray-100 text-gray-700 hover:bg-gray-100",
-  "1-7": "bg-yellow-100 text-yellow-800 hover:bg-yellow-100",
-  "8-30": "bg-orange-100 text-orange-800 hover:bg-orange-100",
-  ">30": "bg-red-100 text-red-800 hover:bg-red-100",
+  "1-7": "bg-state-warning-soft text-state-warning-ink hover:bg-state-warning-soft",
+  "8-30": "bg-primary-soft text-primary hover:bg-primary-soft",
+  ">30": "bg-state-danger-soft text-state-danger-ink hover:bg-state-danger-soft",
 };
 
 function vnd(n: number): string {
@@ -141,8 +141,8 @@ export default async function CongNoPage({
   return (
     <div>
       <div className="mb-6 flex items-start gap-3">
-        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-orange-50">
-          <Wallet className="h-5 w-5 text-orange-600" />
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary-soft">
+          <Wallet className="h-5 w-5 text-primary" />
         </div>
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Công nợ</h1>

@@ -27,7 +27,7 @@ export default async function NearingEndPage() {
     <div className="max-w-5xl p-6">
       <div className="mb-4">
         <h1 className="flex items-center gap-2 text-2xl font-bold text-gray-900">
-          <GraduationCap className="h-6 w-6 text-[#7C3AED]" /> Sắp hết khoá
+          <GraduationCap className="h-6 w-6 text-primary" /> Sắp hết khoá
         </h1>
         <p className="mt-1 text-sm text-gray-500">
           Học viên còn ≤ 5 buổi — liên hệ phụ huynh tái tục. Sắp xếp theo số buổi còn lại.
@@ -62,11 +62,7 @@ export default async function NearingEndPage() {
                   <td className="px-4 py-2 text-gray-600">{it.centerName ?? "—"}</td>
                   <td className="px-4 py-2 text-center">
                     <span
-                      className={`rounded-full px-2 py-0.5 text-xs font-bold ${
-                        it.remaining <= 2
-                          ? "bg-red-100 text-red-700"
-                          : "bg-amber-100 text-amber-700"
-                      }`}
+                      className={`rounded-full px-2 py-0.5 text-xs font-bold ${ it.remaining <= 2 ? "bg-state-danger-soft text-state-danger-ink" : "bg-state-warning-soft text-state-warning-ink" }`}
                     >
                       {it.remaining}/{it.total} buổi
                     </span>
@@ -81,13 +77,13 @@ export default async function NearingEndPage() {
                       {/* BGĐ 31/07 — TÁI TỤC: pre-fill form ghi danh + nối khoá trước. */}
                       <Link
                         href={`/enrollments/new?studentId=${it.studentId}&renewedFrom=${it.enrollmentId}`}
-                        className="rounded-lg bg-[#7C3AED] px-2.5 py-1 text-xs font-semibold text-white hover:opacity-90"
+                        className="rounded-lg bg-primary px-2.5 py-1 text-xs font-semibold text-white hover:opacity-90"
                       >
                         Tái tục
                       </Link>
                       <Link
                         href={`/students/${it.studentId}/edit`}
-                        className="text-xs font-semibold text-[#7C3AED] hover:underline"
+                        className="text-xs font-semibold text-primary hover:underline"
                       >
                         Hồ sơ →
                       </Link>

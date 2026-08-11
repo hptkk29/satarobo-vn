@@ -42,10 +42,10 @@ const STATUS_LABEL: Record<LessonStatus, string> = {
 
 const STATUS_CLASS: Record<LessonStatus, string> = {
   INCOMPLETE: "bg-neutral-100 text-neutral-600",
-  COMPLETE: "bg-emerald-100 text-emerald-700",
-  IN_USE: "bg-blue-100 text-blue-700",
-  NEEDS_UPDATE: "bg-amber-100 text-amber-700",
-  LOCKED: "bg-red-100 text-red-700",
+  COMPLETE: "bg-state-success-soft text-state-success-ink",
+  IN_USE: "bg-state-info-soft text-state-info-ink",
+  NEEDS_UPDATE: "bg-state-warning-soft text-state-warning-ink",
+  LOCKED: "bg-state-danger-soft text-state-danger-ink",
 };
 
 const SELECTABLE_STATUSES: LessonStatus[] = [
@@ -155,7 +155,7 @@ export function LessonList({
             <button
               type="button"
               onClick={open}
-              className="inline-flex items-center gap-1.5 rounded-lg bg-[#7C3AED] px-3 py-1.5 text-sm font-semibold text-white hover:opacity-90"
+              className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-sm font-semibold text-white hover:opacity-90"
             >
               <Plus className="h-4 w-4" />
               Thêm bài
@@ -165,7 +165,7 @@ export function LessonList({
       </header>
 
       {error && (
-        <div className="border-b border-red-100 bg-red-50 px-4 py-2 text-sm text-red-700">
+        <div className="border-b border-state-danger-soft bg-state-danger-soft px-4 py-2 text-sm text-state-danger-ink">
           {error}
         </div>
       )}
@@ -195,7 +195,7 @@ export function LessonList({
                         {STATUS_LABEL[lesson.status]}
                       </span>
                       {lesson.openChangeRequests > 0 && (
-                        <span className="rounded bg-purple-100 px-1.5 py-0.5 text-xs font-semibold text-purple-700">
+                        <span className="rounded bg-primary-soft px-1.5 py-0.5 text-xs font-semibold text-primary">
                           {lesson.openChangeRequests} đề xuất chờ
                         </span>
                       )}
@@ -213,7 +213,7 @@ export function LessonList({
                         }
                         disabled={pending || locked}
                         title={locked ? "Buổi đang khóa — dùng nút Mở khóa" : "Đổi trạng thái"}
-                        className="rounded-lg border border-neutral-200 bg-white px-2 py-1 text-xs outline-none focus:border-[#7C3AED] disabled:opacity-60"
+                        className="rounded-lg border border-neutral-200 bg-white px-2 py-1 text-xs outline-none focus:border-primary disabled:opacity-60"
                       >
                         {locked && <option value="LOCKED">Đã khóa</option>}
                         {SELECTABLE_STATUSES.map((s) => (
@@ -304,7 +304,7 @@ export function LessonList({
                           type="button"
                           onClick={open}
                           disabled={locked}
-                          className="rounded p-1.5 text-[#7C3AED] hover:bg-[#7C3AED]/10 disabled:opacity-30"
+                          className="rounded p-1.5 text-primary hover:bg-primary-soft disabled:opacity-30"
                           aria-label="Sửa"
                           title={locked ? "Buổi đang khóa" : "Sửa"}
                         >
@@ -316,7 +316,7 @@ export function LessonList({
                       type="button"
                       onClick={() => run(() => archiveLessonAction(lesson.id))}
                       disabled={pending}
-                      className="rounded p-1.5 text-amber-600 hover:bg-amber-50 disabled:opacity-30"
+                      className="rounded p-1.5 text-state-warning-ink hover:bg-state-warning-soft disabled:opacity-30"
                       aria-label="Lưu trữ"
                       title="Lưu trữ (soft, có thể khôi phục)"
                     >
@@ -326,7 +326,7 @@ export function LessonList({
                       type="button"
                       onClick={() => handleDelete(lesson)}
                       disabled={pending}
-                      className="rounded p-1.5 text-red-600 hover:bg-red-50 disabled:opacity-30"
+                      className="rounded p-1.5 text-state-danger-ink hover:bg-state-danger-soft disabled:opacity-30"
                       aria-label="Xoá"
                       title="Xoá vĩnh viễn"
                     >

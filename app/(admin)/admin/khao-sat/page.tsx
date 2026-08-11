@@ -59,7 +59,7 @@ export default async function SurveyPage() {
     <div className="max-w-4xl p-6">
       <div className="mb-4">
         <h1 className="flex items-center gap-2 text-2xl font-bold text-gray-900">
-          <Gauge className="h-6 w-6 text-[#7C3AED]" /> Khảo sát / NPS
+          <Gauge className="h-6 w-6 text-primary" /> Khảo sát / NPS
         </h1>
         <p className="mt-1 text-sm text-gray-500">Chỉ số NPS làm cơ sở KPI cho bộ phận CSKH.</p>
       </div>
@@ -70,10 +70,10 @@ export default async function SurveyPage() {
           cũ (deprecate 2-phase), vẫn xem được. */}
       <Link
         href="/evaluations"
-        className="mb-4 flex items-center justify-between gap-3 rounded-xl border border-orange-200 bg-orange-50 p-4 transition-colors hover:bg-orange-100"
+        className="mb-4 flex items-center justify-between gap-3 rounded-xl border border-primary-soft bg-primary-soft p-4 transition-colors hover:bg-primary-soft-hover"
       >
         <div className="flex items-start gap-3">
-          <ClipboardList className="mt-0.5 h-5 w-5 shrink-0 text-orange-500" />
+          <ClipboardList className="mt-0.5 h-5 w-5 shrink-0 text-primary" />
           <div>
             <p className="text-sm font-semibold text-gray-900">
               Khảo sát trung tâm 4 loại câu hỏi (mới)
@@ -85,7 +85,7 @@ export default async function SurveyPage() {
             </p>
           </div>
         </div>
-        <ArrowRight className="h-5 w-5 shrink-0 text-orange-500" />
+        <ArrowRight className="h-5 w-5 shrink-0 text-primary" />
       </Link>
 
       <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
@@ -104,7 +104,7 @@ export default async function SurveyPage() {
               return (
                 <li key={cid} className="flex items-center justify-between py-2 text-sm">
                   <span className="text-gray-700">{cid === "—" ? "Chưa gắn cơ sở" : centerName.get(cid) ?? cid}</span>
-                  <span className="font-bold tabular-nums text-[#7C3AED]">{r.nps} <span className="text-xs font-normal text-gray-400">({r.total} phản hồi)</span></span>
+                  <span className="font-bold tabular-nums text-primary">{r.nps} <span className="text-xs font-normal text-gray-400">({r.total} phản hồi)</span></span>
                 </li>
               );
             })}
@@ -128,7 +128,7 @@ export default async function SurveyPage() {
 }
 
 function Stat({ label, value, tone }: { label: string; value: number; tone?: "ok" | "warn" | "bad" }) {
-  const cls = tone === "ok" ? "text-emerald-600" : tone === "bad" ? "text-rose-600" : tone === "warn" ? "text-amber-600" : "text-[#7C3AED]";
+  const cls = tone === "ok" ? "text-state-success-ink" : tone === "bad" ? "text-state-danger-ink" : tone === "warn" ? "text-state-warning-ink" : "text-primary";
   return (
     <div className="rounded-xl border border-gray-200 bg-white p-3">
       <div className={`text-2xl font-bold tabular-nums ${cls}`}>{value}</div>

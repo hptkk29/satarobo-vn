@@ -96,9 +96,9 @@ const APPROVAL_LABEL: Record<InstallmentApprovalStatus, string> = {
   REJECTED: "Bị từ chối",
 };
 const APPROVAL_BADGE_CLASS: Record<InstallmentApprovalStatus, string> = {
-  PENDING_APPROVAL: "bg-amber-100 text-amber-800 hover:bg-amber-100",
-  APPROVED: "bg-green-100 text-green-800 hover:bg-green-100",
-  REJECTED: "bg-red-100 text-red-800 hover:bg-red-100",
+  PENDING_APPROVAL: "bg-state-warning-soft text-state-warning-ink hover:bg-state-warning-soft",
+  APPROVED: "bg-state-success-soft text-state-success-ink hover:bg-state-success-soft",
+  REJECTED: "bg-state-danger-soft text-state-danger-ink hover:bg-state-danger-soft",
 };
 
 function formatDateTime(date: Date): string {
@@ -389,7 +389,7 @@ export function OrderDetailClient({
                   {it.product && (
                     <Link
                       href={`/products/${it.product.id}`}
-                      className="font-mono text-xs text-blue-600 hover:underline"
+                      className="font-mono text-xs text-state-info-ink hover:underline"
                     >
                       → {it.product.sku}
                     </Link>
@@ -428,7 +428,7 @@ export function OrderDetailClient({
                   {order.voucherCode ? <> — mã {order.voucherCode}</> : null}
                   :
                 </td>
-                <td className="p-2 text-right text-red-600 tabular-nums">
+                <td className="p-2 text-right text-state-danger-ink tabular-nums">
                   -{order.discountAmount.toLocaleString("vi-VN")}
                 </td>
               </tr>
@@ -561,7 +561,7 @@ export function OrderDetailClient({
               </p>
             )}
             {discountStatus === "REJECTED" && order.discountRejectReason && (
-              <div className="rounded-lg bg-red-50 p-3 text-red-700">
+              <div className="rounded-lg bg-state-danger-soft p-3 text-state-danger-ink">
                 Lý do từ chối: {order.discountRejectReason}
               </div>
             )}
@@ -582,14 +582,14 @@ export function OrderDetailClient({
               </div>
             )}
             {discountStatus === "PENDING_APPROVAL" && !canApproveDiscount && (
-              <p className="text-xs text-amber-700">
+              <p className="text-xs text-state-warning-ink">
                 Đang chờ Quản lý cơ sở duyệt — đơn chưa thể xác nhận.
               </p>
             )}
           </div>
 
           {discountRejectOpen && (
-            <div className="mt-3 space-y-2 rounded-lg border border-red-200 bg-red-50 p-3">
+            <div className="mt-3 space-y-2 rounded-lg border border-state-danger-soft bg-state-danger-soft p-3">
               <label className="text-sm font-medium" htmlFor="discount-reject">
                 Lý do từ chối (bắt buộc):
               </label>
@@ -648,7 +648,7 @@ export function OrderDetailClient({
               </p>
             )}
             {approvalStatus === "REJECTED" && order.installmentRejectReason && (
-              <div className="rounded-lg bg-red-50 p-3 text-red-700">
+              <div className="rounded-lg bg-state-danger-soft p-3 text-state-danger-ink">
                 Lý do từ chối: {order.installmentRejectReason}
               </div>
             )}
@@ -704,7 +704,7 @@ export function OrderDetailClient({
           {order.customerNote && (
             <div className="text-sm">
               <div className="mb-1 text-gray-500">Ghi chú khách hàng:</div>
-              <div className="rounded-lg bg-yellow-50 p-3 text-gray-900">
+              <div className="rounded-lg bg-state-warning-soft p-3 text-gray-900">
                 {order.customerNote}
               </div>
             </div>
@@ -757,7 +757,7 @@ export function OrderDetailClient({
                 key={h.id}
                 className="flex items-start gap-3 rounded-lg bg-gray-50 p-3 text-sm"
               >
-                <div className="mt-1 h-2 w-2 shrink-0 rounded-full bg-blue-500" />
+                <div className="mt-1 h-2 w-2 shrink-0 rounded-full bg-state-info" />
                 <div className="flex-1">
                   <div className="flex flex-wrap items-center gap-1">
                     <Badge variant="outline">

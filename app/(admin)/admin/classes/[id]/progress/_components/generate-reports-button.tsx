@@ -32,9 +32,7 @@ export function GenerateReportsButton({ classId }: { classId: string }) {
       disabled={pending}
       onClick={() => (confirm ? run() : setConfirm(true))}
       onBlur={() => setConfirm(false)}
-      className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-semibold text-white disabled:opacity-60 ${
-        confirm ? "bg-emerald-700" : "bg-emerald-600 hover:bg-emerald-700"
-      }`}
+      className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-semibold text-white disabled:opacity-60 ${ confirm ? "bg-state-success-ink" : "bg-state-success-ink hover:bg-state-success-ink" }`}
     >
       <Mail className="h-4 w-4" />
       {pending

@@ -65,7 +65,7 @@ export function ParentChildrenManager({
   return (
     <div className="mt-3 rounded-xl border border-neutral-200 bg-white p-4">
       <div className="mb-2 flex items-center gap-2 text-sm font-semibold text-neutral-700">
-        <Users className="h-4 w-4 text-[#7C3AED]" />
+        <Users className="h-4 w-4 text-primary" />
         Con của phụ huynh ({children.length})
       </div>
       <ul className="mb-3 space-y-1.5">
@@ -76,14 +76,14 @@ export function ParentChildrenManager({
                 {c.name}
               </Link>
               {c.studentCode ? <span className="ml-1 text-xs text-neutral-400">({c.studentCode})</span> : null}
-              {c.id === currentStudentId ? <span className="ml-2 text-[10px] font-bold text-orange-600">đang xem</span> : null}
+              {c.id === currentStudentId ? <span className="ml-2 text-[10px] font-bold text-primary">đang xem</span> : null}
             </span>
             {c.id !== currentStudentId && (
               <button
                 type="button"
                 onClick={() => unlink(c.id)}
                 disabled={pending}
-                className="inline-flex items-center gap-1 text-xs text-rose-600 hover:underline disabled:opacity-50"
+                className="inline-flex items-center gap-1 text-xs text-state-danger-ink hover:underline disabled:opacity-50"
               >
                 <X className="h-3.5 w-3.5" /> Gỡ
               </button>
@@ -100,7 +100,7 @@ export function ParentChildrenManager({
             onChange={(e) => setQ(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), search())}
             placeholder="Tìm HV chưa có phụ huynh (tên/mã/SĐT)…"
-            className="w-full rounded-lg border border-neutral-300 py-2 pl-8 pr-3 text-sm focus:border-purple-400 focus:outline-none"
+            className="w-full rounded-lg border border-neutral-300 py-2 pl-8 pr-3 text-sm focus:border-primary focus:outline-none"
           />
         </div>
         <button
@@ -126,7 +126,7 @@ export function ParentChildrenManager({
                 type="button"
                 onClick={() => add(r.id)}
                 disabled={pending}
-                className="inline-flex items-center gap-1 rounded-md bg-emerald-600 px-2.5 py-1 text-xs font-semibold text-white disabled:opacity-50"
+                className="inline-flex items-center gap-1 rounded-md bg-state-success-ink px-2.5 py-1 text-xs font-semibold text-white disabled:opacity-50"
               >
                 <UserPlus className="h-3.5 w-3.5" /> Thêm con
               </button>

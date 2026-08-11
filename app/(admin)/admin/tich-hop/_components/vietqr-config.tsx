@@ -70,9 +70,7 @@ function VietQrRow({ canEdit, row }: { canEdit: boolean; row: VietQrCenterRow })
       <div className="flex items-center justify-between">
         <h3 className="text-sm font-semibold text-neutral-700">{row.centerName}</h3>
         <span
-          className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${
-            row.current ? "bg-emerald-100 text-emerald-700" : "bg-neutral-200 text-neutral-500"
-          }`}
+          className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${ row.current ? "bg-state-success-soft text-state-success-ink" : "bg-neutral-200 text-neutral-500" }`}
         >
           {row.current ? "Đã cấu hình" : "Chưa cấu hình"}
         </span>
@@ -102,7 +100,7 @@ function VietQrRow({ canEdit, row }: { canEdit: boolean; row: VietQrCenterRow })
             <button
               onClick={save}
               disabled={pending}
-              className="rounded-md bg-purple-700 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
+              className="rounded-md bg-primary-dark px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
             >
               {pending ? "Đang lưu…" : "Lưu tài khoản nhận tiền"}
             </button>

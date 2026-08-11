@@ -146,7 +146,7 @@ export function LessonFormDialog({
             </h2>
 
             {error && (
-              <div className="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+              <div className="mt-3 rounded-lg border border-state-danger-soft bg-state-danger-soft px-3 py-2 text-sm text-state-danger-ink">
                 {error}
               </div>
             )}
@@ -166,7 +166,7 @@ export function LessonFormDialog({
                     }
                     required
                     disabled={pending}
-                    className="w-full rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm outline-none focus:border-[#7C3AED] focus:ring-2 focus:ring-[#7C3AED]/20"
+                    className="w-full rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
                   />
                 </label>
 
@@ -181,7 +181,7 @@ export function LessonFormDialog({
                     placeholder="VD: Giới thiệu Robot và môi trường"
                     required
                     disabled={pending}
-                    className="w-full rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm outline-none focus:border-[#7C3AED] focus:ring-2 focus:ring-[#7C3AED]/20"
+                    className="w-full rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
                   />
                 </label>
 
@@ -198,7 +198,7 @@ export function LessonFormDialog({
                       setDuration(Math.max(15, parseInt(e.target.value, 10) || 90))
                     }
                     disabled={pending}
-                    className="w-full rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm outline-none focus:border-[#7C3AED] focus:ring-2 focus:ring-[#7C3AED]/20"
+                    className="w-full rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
                   />
                 </label>
               </div>
@@ -213,7 +213,7 @@ export function LessonFormDialog({
                   placeholder="Mô tả ngắn về buổi học (có thể hiển thị cho HS/PH)"
                   rows={2}
                   disabled={pending}
-                  className="w-full resize-y rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm outline-none focus:border-[#7C3AED] focus:ring-2 focus:ring-[#7C3AED]/20"
+                  className="w-full resize-y rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
                 />
               </label>
 
@@ -227,7 +227,7 @@ export function LessonFormDialog({
                   placeholder="Nội dung chi tiết (markdown OK)"
                   rows={5}
                   disabled={pending}
-                  className="w-full resize-y rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm outline-none focus:border-[#7C3AED] focus:ring-2 focus:ring-[#7C3AED]/20 font-mono"
+                  className="w-full resize-y rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 font-mono"
                 />
               </label>
 
@@ -263,7 +263,7 @@ export function LessonFormDialog({
                   placeholder="Các bước lên lớp, lưu ý sư phạm, phân bổ thời gian…"
                   rows={4}
                   disabled={pending}
-                  className="w-full resize-y rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm outline-none focus:border-[#7C3AED] focus:ring-2 focus:ring-[#7C3AED]/20"
+                  className="w-full resize-y rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
                 />
               </label>
 
@@ -278,7 +278,7 @@ export function LessonFormDialog({
                     placeholder="Sản phẩm/kỹ năng HS đạt được sau bài"
                     rows={3}
                     disabled={pending}
-                    className="w-full resize-y rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm outline-none focus:border-[#7C3AED] focus:ring-2 focus:ring-[#7C3AED]/20"
+                    className="w-full resize-y rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
                   />
                 </label>
                 <label className="block">
@@ -291,7 +291,7 @@ export function LessonFormDialog({
                     placeholder="Cách chấm/đánh giá mức đạt của HS"
                     rows={3}
                     disabled={pending}
-                    className="w-full resize-y rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm outline-none focus:border-[#7C3AED] focus:ring-2 focus:ring-[#7C3AED]/20"
+                    className="w-full resize-y rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
                   />
                 </label>
               </div>
@@ -306,7 +306,7 @@ export function LessonFormDialog({
                   placeholder="Bài tập về nhà gợi ý cho bài này"
                   rows={2}
                   disabled={pending}
-                  className="w-full resize-y rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm outline-none focus:border-[#7C3AED] focus:ring-2 focus:ring-[#7C3AED]/20"
+                  className="w-full resize-y rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
                 />
               </label>
 
@@ -320,7 +320,7 @@ export function LessonFormDialog({
                   placeholder="VD: Chuẩn bị 5 bộ kit Alpha, kiểm tra pin trước buổi học"
                   rows={2}
                   disabled={pending}
-                  className="w-full resize-y rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm outline-none focus:border-[#7C3AED] focus:ring-2 focus:ring-[#7C3AED]/20"
+                  className="w-full resize-y rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
                 />
               </label>
 
@@ -336,7 +336,7 @@ export function LessonFormDialog({
                 <button
                   type="submit"
                   disabled={pending}
-                  className="rounded-lg bg-[#7C3AED] px-4 py-2 text-sm font-bold text-white hover:opacity-90 disabled:opacity-50"
+                  className="rounded-lg bg-primary px-4 py-2 text-sm font-bold text-white hover:opacity-90 disabled:opacity-50"
                 >
                   {pending ? "Đang lưu..." : isEdit ? "Cập nhật" : "Tạo bài"}
                 </button>

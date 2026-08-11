@@ -66,7 +66,7 @@ export function AddGrantForm({
   return (
     <form onSubmit={onSubmit} className="space-y-4">
       {error && (
-        <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+        <div className="rounded-lg border border-state-danger-soft bg-state-danger-soft px-3 py-2 text-sm text-state-danger-ink">
           {error}
         </div>
       )}
@@ -101,7 +101,7 @@ export function AddGrantForm({
       <div className="space-y-2">
         <Label>Loại override *</Label>
         <div className="flex gap-2">
-          <label className="flex flex-1 cursor-pointer items-center justify-center gap-2 rounded-lg border-2 border-gray-200 p-3 text-sm transition-colors has-checked:border-green-500 has-checked:bg-green-50">
+          <label className="flex flex-1 cursor-pointer items-center justify-center gap-2 rounded-lg border-2 border-gray-200 p-3 text-sm transition-colors has-checked:border-state-success has-checked:bg-state-success-soft">
             <input
               type="radio"
               name="grant"
@@ -109,11 +109,11 @@ export function AddGrantForm({
               required
               className="peer sr-only"
             />
-            <Check className="h-4 w-4 text-green-600" />
-            <span className="font-semibold text-green-700">ALLOW</span>
+            <Check className="h-4 w-4 text-state-success-ink" />
+            <span className="font-semibold text-state-success-ink">ALLOW</span>
             <span className="text-xs text-gray-500">(cấp quyền)</span>
           </label>
-          <label className="flex flex-1 cursor-pointer items-center justify-center gap-2 rounded-lg border-2 border-gray-200 p-3 text-sm transition-colors has-checked:border-red-500 has-checked:bg-red-50">
+          <label className="flex flex-1 cursor-pointer items-center justify-center gap-2 rounded-lg border-2 border-gray-200 p-3 text-sm transition-colors has-checked:border-state-danger has-checked:bg-state-danger-soft">
             <input
               type="radio"
               name="grant"
@@ -121,8 +121,8 @@ export function AddGrantForm({
               required
               className="peer sr-only"
             />
-            <Ban className="h-4 w-4 text-red-600" />
-            <span className="font-semibold text-red-700">DENY</span>
+            <Ban className="h-4 w-4 text-state-danger-ink" />
+            <span className="font-semibold text-state-danger-ink">DENY</span>
             <span className="text-xs text-gray-500">(thu hồi)</span>
           </label>
         </div>

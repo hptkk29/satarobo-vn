@@ -42,7 +42,7 @@ export default async function ResetPasswordPage({ params }: Props) {
       </Link>
 
       <div className="mb-6 flex items-center gap-3">
-        <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-orange-100 text-orange-600">
+        <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary-soft text-primary">
           <KeyRound className="h-5 w-5" />
         </span>
         <div>

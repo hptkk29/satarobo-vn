@@ -88,18 +88,18 @@ export default async function ChecklistOverviewPage() {
       </Link>
       <div className="mb-4 flex flex-wrap items-end justify-between gap-2">
         <h1 className="flex items-center gap-2 text-2xl font-bold text-gray-900">
-          <ClipboardCheck className="h-6 w-6 text-[#7C3AED]" /> Tổng quan checklist cơ sở
+          <ClipboardCheck className="h-6 w-6 text-primary" /> Tổng quan checklist cơ sở
         </h1>
         <div className="rounded-xl border border-gray-200 bg-white px-4 py-2 text-center">
-          <p className="text-2xl font-bold text-[#7C3AED]">{pct}%</p>
+          <p className="text-2xl font-bold text-primary">{pct}%</p>
           <p className="text-xs text-gray-400">{fullCells}/{totalCells} ngày-cơ sở đủ mở+đóng · {DAYS} ngày</p>
         </div>
       </div>
 
       <p className="mb-3 text-xs text-gray-500">
-        Ô: <span className="font-semibold text-emerald-600">●</span> đủ mở+đóng ·
-        <span className="font-semibold text-amber-600"> ◐</span> thiếu 1 trong 2 ·
-        <span className="font-semibold text-rose-500"> ○</span> chưa làm. Di chuột để xem ngày.
+        Ô: <span className="font-semibold text-state-success-ink">●</span> đủ mở+đóng ·
+        <span className="font-semibold text-state-warning-ink"> ◐</span> thiếu 1 trong 2 ·
+        <span className="font-semibold text-state-danger-ink"> ○</span> chưa làm. Di chuột để xem ngày.
       </p>
 
       <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white">
@@ -123,7 +123,7 @@ export default async function ChecklistOverviewPage() {
                   const full = st.open && st.close;
                   const partial = st.open || st.close;
                   const sym = full ? "●" : partial ? "◐" : "○";
-                  const cls = full ? "text-emerald-600" : partial ? "text-amber-600" : "text-rose-400";
+                  const cls = full ? "text-state-success-ink" : partial ? "text-state-warning-ink" : "text-state-danger-ink";
                   const title = `${c.name} ${ymd(d)} — mở: ${st.open ? "đủ" : "thiếu"}, đóng: ${st.close ? "đủ" : "thiếu"}`;
                   return (
                     <td key={ymd(d)} className={`px-2 py-2 text-center text-lg ${cls}`} title={title}>
