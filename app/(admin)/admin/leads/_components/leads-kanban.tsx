@@ -136,7 +136,7 @@ export function LeadsKanban({
           return (
             <div
               key={col}
-              className={`flex w-72 flex-shrink-0 flex-col rounded-xl bg-muted ${ overCol === col ? "ring-2 ring-primary" : "" }`}
+              className={`flex w-72 flex-shrink-0 flex-col rounded-xl bg-muted ${overCol === col ? "ring-2 ring-primary" : ""}`}
               onDragOver={(e) => {
                 if (!canUpdate || !dragId) return;
                 e.preventDefault();
@@ -176,7 +176,7 @@ export function LeadsKanban({
                       setDragId(null);
                       setOverCol(null);
                     }}
-                    className={`rounded-lg border border-border bg-card p-3 shadow-sm transition ${ canUpdate ? "cursor-grab active:cursor-grabbing" : "" } ${dragId === lead.id ? "opacity-50" : ""} ${ lead.overdue ? "border-l-4 border-l-red-500" : "" }`}
+                    className={`rounded-lg border border-border bg-card p-3 shadow-sm transition ${canUpdate ? "cursor-grab active:cursor-grabbing" : ""} ${dragId === lead.id ? "opacity-50" : ""} ${lead.overdue ? "border-l-4 border-l-state-danger" : ""}`}
                   >
                     <div className="flex items-start justify-between gap-2">
                       <Link
@@ -186,7 +186,10 @@ export function LeadsKanban({
                         {lead.parentName}
                       </Link>
                       <div className="flex flex-shrink-0 items-center gap-1">
-                        <SharedBadge lead={lead} currentUserId={currentUserId} />
+                        <SharedBadge
+                          lead={lead}
+                          currentUserId={currentUserId}
+                        />
                         {lead.overdue && (
                           <span className="rounded bg-state-danger-soft px-1.5 py-0.5 text-[10px] font-bold text-state-danger-ink">
                             Quá hạn
@@ -204,7 +207,13 @@ export function LeadsKanban({
                       {lead.courseName && <div>Khoá: {lead.courseName}</div>}
                       {lead.source && <div>Nguồn: {lead.source}</div>}
                       <div className="flex flex-wrap items-center gap-1">
-                        <span className={lead.assignedToName ? "" : "font-medium text-state-warning-ink"}>
+                        <span
+                          className={
+                            lead.assignedToName
+                              ? ""
+                              : "font-medium text-state-warning-ink"
+                          }
+                        >
                           Sale: {lead.assignedToName ?? "Chưa phân công"}
                         </span>
                         {!lead.assignedToName && canAssign && (

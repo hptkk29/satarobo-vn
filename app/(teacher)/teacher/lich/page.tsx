@@ -918,7 +918,7 @@ function WeekView({
                         <div
                           key={it.s.id}
                           className={cn(
-                            "rounded-lg border border-border border-l-4 border-l-blue-500 bg-state-info-soft p-2 dark:bg-state-info-soft",
+                            "rounded-lg border border-border border-l-4 border-l-state-info bg-state-info-soft p-2",
                             it.s.status === "CANCELLED" && "opacity-60",
                           )}
                         >
@@ -955,7 +955,7 @@ function WeekView({
                       ) : (
                         <div
                           key={it.t.id}
-                          className="rounded-lg border border-border border-l-4 border-l-orange-500 bg-primary-soft p-2"
+                          className="rounded-lg border border-border border-l-4 border-l-primary bg-primary-soft p-2"
                         >
                           <div className="flex items-center justify-between gap-1">
                             <p className="flex items-center gap-1 text-[10px] font-bold text-muted-foreground">

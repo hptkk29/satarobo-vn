@@ -154,7 +154,7 @@ export function StudentEvalDialog({
               {/* ① Nhận xét của giáo viên */}
               <section>
                 <SectionTitle num={1} title="Nhận xét của giáo viên" />
-                <div className="space-y-2 rounded-xl border border-border border-l-4 border-l-orange-500 bg-muted/40 p-3.5">
+                <div className="space-y-2 rounded-xl border border-border border-l-4 border-l-primary bg-muted/40 p-3.5">
                   {EVAL_NOTE_FIELDS.map((f) => (
                     <div key={f.key}>
                       <label className="mb-0.5 block text-xs font-bold text-primary-ink">
