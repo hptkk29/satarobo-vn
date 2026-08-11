@@ -376,6 +376,7 @@ flowchart TD
 - Đánh giá năng lực HS mình dạy; điền phiếu đánh giá buổi; nhập học bạ rồi NỘP để duyệt; tạo báo cáo tiến độ lớp mình.
 - Xem học liệu + trình chiếu SCORM (khi flag ON) của lớp được phân công; xem kho câu hỏi/đề/curriculum ở chế độ ĐỌC (`questions:view`, `exams:view`, `curriculum:view` — :430,434,423).
 - Xem & tải ảnh lớp (`media:view`/`media:upload` :320-321); nhắn tin với phụ huynh lớp mình.
+  - ⚠️ **Delta 11/08/2026** — GV là người DUY NHẤT chọn ảnh trong **kho** của lớp gửi phụ huynh; Marketing + Giáo vụ chỉ góp ảnh vào kho (`media:upload-draft`). Xem [docs/kho-anh-lop.md](kho-anh-lop.md).
 - Xem nhân sự công khai, tin tức, kho/thiết bị (`inventory:view`/`movement` :468,470), chấm công bản thân.
 
 ### Hạn chế / KHÔNG làm được

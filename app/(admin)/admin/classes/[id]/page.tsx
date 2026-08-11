@@ -503,6 +503,7 @@ export default async function ClassDetailPage({ params }: Props) {
               items={mediaItems}
               classes={[{ id: cls.id, label: cls.classCode ? `${cls.classCode} · ${cls.name}` : cls.name }]}
               canApprove={canApproveMedia}
+              currentUserId={session.user.id}
             />
           </TabsContent>
         )}

@@ -24,6 +24,8 @@ export type DraftItem = {
   url: string;
   /** Nhãn nhóm (buổi/ngày chụp) — chỉ hiển thị, không dùng để quyết định gì. */
   label: string;
+  /** Ai đưa ảnh vào kho — kho có cả ảnh của Marketing/Giáo vụ (chốt 11/08). */
+  uploader: string | null;
 };
 
 export function DraftStorePanel({
@@ -145,7 +147,8 @@ export function DraftStorePanel({
           </h2>
           <p className="text-xs text-muted-foreground">
             Chọn ảnh, gắn học viên (hoặc đánh dấu ảnh chung cả lớp) rồi bấm “Gửi cho phụ
-            huynh”. Ảnh trong kho phụ huynh KHÔNG nhìn thấy.
+            huynh”. Ảnh trong kho phụ huynh KHÔNG nhìn thấy. Kho gồm ảnh bạn tải lên và
+            ảnh do marketing / giáo vụ góp cho lớp.
           </p>
         </div>
         <button
@@ -195,6 +198,11 @@ export function DraftStorePanel({
               <span className="block truncate bg-background/95 px-1.5 py-0.5 text-[10px] text-muted-foreground">
                 {d.label}
               </span>
+              {d.uploader && (
+                <span className="block truncate bg-background/95 px-1.5 pb-0.5 text-[10px] text-muted-foreground">
+                  {d.uploader}
+                </span>
+              )}
             </button>
           );
         })}
@@ -202,6 +210,20 @@ export function DraftStorePanel({
 
       {/* Panel hành động — chỉ có nghĩa khi đã chọn ảnh */}
       <div className="space-y-2 rounded-lg border border-border bg-muted/40 p-3">
+        {/* Cảnh báo consent hiện CẢ KHI "ảnh chung cả lớp" — nhánh đó KHÔNG gắn thẻ
+            HS nên server không kiểm consent được (C6.3 chỉ soi studentIds). Kho lại
+            có ảnh do marketing/giáo vụ góp (người không đứng lớp, không biết em nào
+            chưa đồng ý) ⇒ người duy nhất kiểm được khung hình là GV, ngay tại đây. */}
+        {noConsent.size > 0 && (
+          <p className="rounded-md border border-amber-300 bg-amber-50 p-2 text-[11px] text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/15 dark:text-amber-200">
+            <strong>Chưa đồng ý dùng hình ảnh:</strong>{" "}
+            {students
+              .filter((s) => noConsent.has(s.id))
+              .map((s) => s.name)
+              .join(", ")}
+            . Kiểm khung hình trước khi gửi — kể cả khi chọn “Ảnh chung cả lớp”.
+          </p>
+        )}
         {/* B3: select buổi học — gắn buổi cho ảnh ngay lúc gửi (ghi đè nếu ảnh đã gắn
             buổi khác; chọn "Không gắn buổi" thì giữ nguyên hiện trạng từng ảnh). */}
         {sessions.length > 0 && (

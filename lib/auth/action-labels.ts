@@ -41,6 +41,7 @@ const RESOURCE_LABELS: Record<string, string> = {
   // Phase 5.7 — Vouchers
   // Chat realtime (US-05)
   chat: "Tin nhắn (chat)",
+  media: "Ảnh lớp học",
 };
 
 const VERB_LABELS: Record<string, string> = {
@@ -64,7 +65,11 @@ const VERB_LABELS: Record<string, string> = {
   assign: "Phân công",
   transfer: "Chuyển lớp",
   cancel: "Huỷ",
-  upload: "Upload",
+  upload: "Đăng ảnh (tới phụ huynh)",
+  // 11/08 — tách khỏi `upload`: chỉ đưa ảnh vào KHO của lớp, giáo viên mới gửi PH.
+  // Không có nhãn thì màn cấp quyền per-user hiện "upload-draft" thô, rất dễ cấp
+  // nhầm sang `media:upload` (= đăng thẳng tới phụ huynh).
+  "upload-draft": "Đưa ảnh vào kho (chưa gửi phụ huynh)",
   movement: "Nhập/Xuất",
   audit: "Kiểm kho",
   mark: "Đánh dấu",

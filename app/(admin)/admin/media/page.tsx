@@ -72,6 +72,7 @@ export default async function AdminMediaPage() {
     status: m.status,
     className: classMap.get(m.classId)?.name ?? "(lớp đã xoá)",
     uploadedByName: m.uploadedByName,
+    uploadedById: m.uploadedById,
     tagNames: m.tags.map((t) => studentMap.get(t.studentId) ?? "?"),
     takenAt: m.takenAt?.toISOString() ?? null,
     hasSession: m.classSessionId != null,
@@ -84,7 +85,8 @@ export default async function AdminMediaPage() {
         <h1 className="text-2xl font-bold text-gray-900">Ảnh lớp học</h1>
         <p className="mt-1 text-sm text-gray-500">
           Giáo viên / Sale phụ trách đăng ảnh theo buổi → quản lý duyệt → phụ huynh
-          xem ảnh con được gắn thẻ.
+          xem ảnh con được gắn thẻ. Marketing / Giáo vụ góp ảnh vào <strong>kho</strong>{" "}
+          của lớp; giáo viên chọn ảnh trong kho rồi gửi phụ huynh.
         </p>
       </div>
       <MediaClient
@@ -94,6 +96,7 @@ export default async function AdminMediaPage() {
           label: c.classCode ? `${c.classCode} · ${c.name}` : c.name,
         }))}
         canApprove={canApprove}
+        currentUserId={session.user.id}
       />
     </div>
   );
