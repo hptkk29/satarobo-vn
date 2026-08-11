@@ -210,15 +210,15 @@ export function FileUploader({
           "border-2 border-dashed rounded-lg p-8 text-center cursor-pointer transition-colors",
           isDragging
             ? "border-primary bg-primary-soft"
-            : "border-gray-300 hover:border-gray-400 hover:bg-gray-50",
+            : "border-border hover:border-border hover:bg-muted",
         )}
       >
-        <Upload className="w-10 h-10 mx-auto mb-3 text-gray-400" />
+        <Upload className="w-10 h-10 mx-auto mb-3 text-muted-foreground" />
         <p className="text-sm font-medium">
           Kéo thả file vào đây, hoặc{" "}
           <span className="text-primary">click để chọn</span>
         </p>
-        <p className="text-xs text-gray-500 mt-2">
+        <p className="text-xs text-muted-foreground mt-2">
           {allowedCategories.map((cat) => UPLOAD_CONFIG[cat].description).join(" • ")}
         </p>
         <input
@@ -240,7 +240,7 @@ export function FileUploader({
             return (
               <div
                 key={upload.id}
-                className="border rounded-lg p-3 flex items-center gap-3 bg-white"
+                className="border rounded-lg p-3 flex items-center gap-3 bg-card"
               >
                 {showPreview &&
                 category === "image" &&
@@ -252,12 +252,12 @@ export function FileUploader({
                     className="w-12 h-12 object-cover rounded"
                   />
                 ) : (
-                  <Icon className="w-10 h-10 text-gray-400 shrink-0" />
+                  <Icon className="w-10 h-10 text-muted-foreground shrink-0" />
                 )}
 
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium truncate">{upload.file.name}</p>
-                  <p className="text-xs text-gray-500">
+                  <p className="text-xs text-muted-foreground">
                     {(upload.file.size / 1024 / 1024).toFixed(2)} MB
                     {upload.state === "uploading" && ` · ${upload.progress}%`}
                   </p>

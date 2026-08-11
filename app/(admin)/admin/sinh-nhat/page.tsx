@@ -17,7 +17,7 @@ export const dynamic = "force-dynamic";
 const ZNS_LABEL: Record<string, { text: string; cls: string }> = {
   SENT: { text: "Đã gửi", cls: "bg-state-success-soft text-state-success-ink" },
   SIMULATED: { text: "Mô phỏng (chưa gửi thật)", cls: "bg-state-warning-soft text-state-warning-ink" },
-  SKIPPED: { text: "Bỏ qua (mẫu/SĐT chưa có)", cls: "bg-gray-100 text-gray-600" },
+  SKIPPED: { text: "Bỏ qua (mẫu/SĐT chưa có)", cls: "bg-muted text-muted-foreground" },
   FAILED: { text: "Lỗi gửi", cls: "bg-state-danger-soft text-state-danger-ink" },
 };
 
@@ -60,10 +60,10 @@ export default async function BirthdayPage() {
     <div className="max-w-6xl p-6">
       <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="flex items-center gap-2 text-2xl font-bold text-gray-900">
+          <h1 className="flex items-center gap-2 text-2xl font-bold text-foreground">
             <Cake className="h-6 w-6 text-primary" /> Sinh nhật học viên
           </h1>
-          <p className="mt-1 text-sm text-gray-500">
+          <p className="mt-1 text-sm text-muted-foreground">
             Hôm sinh nhật không có lớp thì buổi chúc mừng được xếp vào{" "}
             <strong>buổi học gần nhất trước đó</strong>. Hệ thống báo trước {alertDays} ngày so với
             buổi tổ chức (đổi ở Cấu hình vận hành). Học viên chưa xếp lớp / lớp đã kết thúc không
@@ -74,14 +74,14 @@ export default async function BirthdayPage() {
       </div>
 
       {rows.length === 0 ? (
-        <p className="rounded-xl border border-dashed border-gray-300 p-8 text-center text-sm text-gray-400">
+        <p className="rounded-xl border border-dashed border-border p-8 text-center text-sm text-muted-foreground">
           Không có sinh nhật nào trong 30 ngày tới. Nếu vừa nhập ngày sinh, bấm “Chạy quét sinh
           nhật”.
         </p>
       ) : (
-        <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white">
+        <div className="overflow-x-auto rounded-xl border border-border bg-card">
           <table className="w-full text-sm">
-            <thead className="border-b border-gray-200 bg-gray-50 text-left text-xs uppercase tracking-wider text-gray-500">
+            <thead className="border-b border-border bg-muted text-left text-xs uppercase tracking-wider text-muted-foreground">
               <tr>
                 <th className="px-4 py-2">Học viên</th>
                 <th className="px-4 py-2">Ngày sinh nhật</th>
@@ -99,8 +99,8 @@ export default async function BirthdayPage() {
                 const zns = r.znsStatus ? ZNS_LABEL[r.znsStatus] : null;
 
                 return (
-                  <tr key={r.id} className="border-b border-gray-100 last:border-0">
-                    <td className="px-4 py-2 font-medium text-gray-900">
+                  <tr key={r.id} className="border-b border-border last:border-0">
+                    <td className="px-4 py-2 font-medium text-foreground">
                       <Link
                         href={`/students/${r.student.id}/edit`}
                         className="text-primary hover:underline"
@@ -113,8 +113,8 @@ export default async function BirthdayPage() {
                         </span>
                       )}
                     </td>
-                    <td className="px-4 py-2 text-gray-700">{formatDayKeyDMY(birthdayKey)}</td>
-                    <td className="px-4 py-2 text-gray-700">
+                    <td className="px-4 py-2 text-foreground">{formatDayKeyDMY(birthdayKey)}</td>
+                    <td className="px-4 py-2 text-foreground">
                       {celebrationKey ? (
                         r.celebrationSessionId ? (
                           <Link
@@ -130,7 +130,7 @@ export default async function BirthdayPage() {
                         "—"
                       )}
                       {celebrationKey !== null && celebrationKey !== birthdayKey && (
-                        <span className="block text-xs text-gray-400">tổ chức trước sinh nhật</span>
+                        <span className="block text-xs text-muted-foreground">tổ chức trước sinh nhật</span>
                       )}
                       {missed && (
                         <span className="block text-xs font-semibold text-state-danger-ink">
@@ -144,7 +144,7 @@ export default async function BirthdayPage() {
                           {zns.text}
                         </span>
                       ) : (
-                        <span className="text-xs text-gray-400">chưa tới ngày</span>
+                        <span className="text-xs text-muted-foreground">chưa tới ngày</span>
                       )}
                     </td>
                     <td className="px-4 py-2 text-right">

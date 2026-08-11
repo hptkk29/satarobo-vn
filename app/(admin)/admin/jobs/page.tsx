@@ -68,8 +68,8 @@ export default async function AdminJobsPage({ searchParams }: SearchParams) {
     <div>
       <div className="mb-6 flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Tuyển dụng</h1>
-          <p className="mt-1 text-sm text-gray-500">{jobs.length} tin đăng</p>
+          <h1 className="text-2xl font-bold text-foreground">Tuyển dụng</h1>
+          <p className="mt-1 text-sm text-muted-foreground">{jobs.length} tin đăng</p>
         </div>
         {canEdit && (
           <Link
@@ -88,7 +88,7 @@ export default async function AdminJobsPage({ searchParams }: SearchParams) {
           <Link
             key={tab.value}
             href={tab.value === 'all' ? '/jobs' : `/jobs?status=${tab.value}`}
-            className={`whitespace-nowrap rounded-lg px-3 py-1.5 text-sm font-semibold transition ${ activeTab === tab.value ? 'bg-primary text-white' : 'text-gray-600 hover:bg-gray-100' }`}
+            className={`whitespace-nowrap rounded-lg px-3 py-1.5 text-sm font-semibold transition ${ activeTab === tab.value ? 'bg-primary text-white' : 'text-muted-foreground hover:bg-muted' }`}
           >
             {tab.label}
           </Link>

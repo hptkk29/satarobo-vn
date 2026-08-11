@@ -127,7 +127,7 @@ export function TimelineAdminClient({ items, canDelete }: Props) {
 
       <div className="space-y-3">
         {items.length === 0 && editingId !== "new" && (
-          <p className="rounded-lg border border-dashed border-gray-300 p-8 text-center text-gray-500">
+          <p className="rounded-lg border border-dashed border-border p-8 text-center text-muted-foreground">
             Chưa có mốc nào. Bấm &ldquo;Thêm mốc mới&rdquo; để bắt đầu.
           </p>
         )}
@@ -145,7 +145,7 @@ export function TimelineAdminClient({ items, canDelete }: Props) {
           ) : (
             <div
               key={item.id}
-              className="rounded-lg border border-gray-200 bg-white p-4"
+              className="rounded-lg border border-border bg-card p-4"
             >
               <div className="flex items-start justify-between gap-3">
                 <div className="flex-1">
@@ -156,10 +156,10 @@ export function TimelineAdminClient({ items, canDelete }: Props) {
                     })}
                   </p>
                   <h3 className="mt-1 text-lg font-bold">{item.title}</h3>
-                  <p className="mt-2 whitespace-pre-wrap text-sm text-gray-700">
+                  <p className="mt-2 whitespace-pre-wrap text-sm text-foreground">
                     {item.description}
                   </p>
-                  <p className="mt-2 text-xs text-gray-400">Order: {item.displayOrder}</p>
+                  <p className="mt-2 text-xs text-muted-foreground">Order: {item.displayOrder}</p>
                 </div>
                 <div className="flex shrink-0 gap-1">
                   <button
@@ -214,7 +214,7 @@ function TimelineEditCard({
             type="date"
             value={form.occurredAt}
             onChange={(e) => setForm({ ...form, occurredAt: e.target.value })}
-            className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm"
+            className="w-full rounded border border-border px-2 py-1.5 text-sm"
           />
         </div>
         <div className="sm:col-span-2">
@@ -223,7 +223,7 @@ function TimelineEditCard({
             type="text"
             value={form.title}
             onChange={(e) => setForm({ ...form, title: e.target.value })}
-            className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm"
+            className="w-full rounded border border-border px-2 py-1.5 text-sm"
           />
         </div>
       </div>
@@ -234,7 +234,7 @@ function TimelineEditCard({
           rows={4}
           value={form.description}
           onChange={(e) => setForm({ ...form, description: e.target.value })}
-          className="w-full rounded border border-gray-300 px-2 py-1.5 text-sm"
+          className="w-full rounded border border-border px-2 py-1.5 text-sm"
         />
       </div>
 
@@ -247,7 +247,7 @@ function TimelineEditCard({
             onChange={(e) =>
               setForm({ ...form, displayOrder: Number(e.target.value || 0) })
             }
-            className="w-16 rounded border border-gray-300 px-2 py-1 text-sm"
+            className="w-16 rounded border border-border px-2 py-1 text-sm"
           />
         </div>
         <div className="flex gap-2">
@@ -255,7 +255,7 @@ function TimelineEditCard({
             type="button"
             onClick={onCancel}
             disabled={isPending}
-            className="inline-flex items-center gap-1 rounded border border-gray-300 px-3 py-1.5 text-sm font-semibold text-gray-700 hover:bg-white"
+            className="inline-flex items-center gap-1 rounded border border-border px-3 py-1.5 text-sm font-semibold text-foreground hover:bg-card"
           >
             <X className="h-3.5 w-3.5" /> Huỷ
           </button>

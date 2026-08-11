@@ -136,7 +136,7 @@ export function LeadsKanban({
           return (
             <div
               key={col}
-              className={`flex w-72 flex-shrink-0 flex-col rounded-xl bg-gray-50 ${ overCol === col ? "ring-2 ring-primary" : "" }`}
+              className={`flex w-72 flex-shrink-0 flex-col rounded-xl bg-muted ${ overCol === col ? "ring-2 ring-primary" : "" }`}
               onDragOver={(e) => {
                 if (!canUpdate || !dragId) return;
                 e.preventDefault();
@@ -151,19 +151,19 @@ export function LeadsKanban({
               }}
             >
               <div
-                className={`sticky top-0 flex items-center justify-between rounded-t-xl border-t-4 bg-white px-3 py-2 ${LEAD_STATUS_ACCENT[col]}`}
+                className={`sticky top-0 flex items-center justify-between rounded-t-xl border-t-4 bg-card px-3 py-2 ${LEAD_STATUS_ACCENT[col]}`}
               >
-                <span className="text-sm font-bold text-gray-800">
+                <span className="text-sm font-bold text-foreground">
                   {LEAD_STATUS_LABEL[col]}
                 </span>
-                <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs font-semibold text-gray-600">
+                <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-semibold text-muted-foreground">
                   {colLeads.length}
                 </span>
               </div>
 
               <div className="flex-1 space-y-2 p-2">
                 {colLeads.length === 0 && (
-                  <p className="px-2 py-4 text-center text-xs text-gray-400">
+                  <p className="px-2 py-4 text-center text-xs text-muted-foreground">
                     Trống
                   </p>
                 )}
@@ -176,12 +176,12 @@ export function LeadsKanban({
                       setDragId(null);
                       setOverCol(null);
                     }}
-                    className={`rounded-lg border border-gray-200 bg-white p-3 shadow-sm transition ${ canUpdate ? "cursor-grab active:cursor-grabbing" : "" } ${dragId === lead.id ? "opacity-50" : ""} ${ lead.overdue ? "border-l-4 border-l-red-500" : "" }`}
+                    className={`rounded-lg border border-border bg-card p-3 shadow-sm transition ${ canUpdate ? "cursor-grab active:cursor-grabbing" : "" } ${dragId === lead.id ? "opacity-50" : ""} ${ lead.overdue ? "border-l-4 border-l-red-500" : "" }`}
                   >
                     <div className="flex items-start justify-between gap-2">
                       <Link
                         href={`/leads/${lead.id}`}
-                        className="font-semibold text-gray-900 hover:text-primary hover:underline"
+                        className="font-semibold text-foreground hover:text-primary hover:underline"
                       >
                         {lead.parentName}
                       </Link>
@@ -200,7 +200,7 @@ export function LeadsKanban({
                     >
                       {lead.phone}
                     </a>
-                    <div className="mt-1 space-y-0.5 text-xs text-gray-500">
+                    <div className="mt-1 space-y-0.5 text-xs text-muted-foreground">
                       {lead.courseName && <div>Khoá: {lead.courseName}</div>}
                       {lead.source && <div>Nguồn: {lead.source}</div>}
                       <div className="flex flex-wrap items-center gap-1">
@@ -243,7 +243,7 @@ export function LeadsKanban({
                         onChange={(e) =>
                           requestMove(lead.id, e.target.value as LeadStatus)
                         }
-                        className="mt-2 w-full rounded border border-gray-200 bg-gray-50 px-1.5 py-1 text-xs text-gray-700 sm:hidden"
+                        className="mt-2 w-full rounded border border-border bg-muted px-1.5 py-1 text-xs text-foreground sm:hidden"
                         aria-label="Đổi trạng thái"
                       >
                         {KANBAN_COLUMNS.map((s) => (

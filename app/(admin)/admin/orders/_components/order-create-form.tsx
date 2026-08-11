@@ -266,8 +266,8 @@ export function OrderCreateForm({
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
       {/* Order header */}
-      <section className="space-y-4 rounded-xl border border-gray-200 bg-gray-50/50 p-5">
-        <h2 className="text-sm font-bold uppercase tracking-wider text-gray-500">
+      <section className="space-y-4 rounded-xl border border-border bg-muted/50 p-5">
+        <h2 className="text-sm font-bold uppercase tracking-wider text-muted-foreground">
           Thông tin đơn
         </h2>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
@@ -333,8 +333,8 @@ export function OrderCreateForm({
       </section>
 
       {/* Customer */}
-      <section className="space-y-4 rounded-xl border border-gray-200 bg-white p-5">
-        <h2 className="text-sm font-bold uppercase tracking-wider text-gray-500">
+      <section className="space-y-4 rounded-xl border border-border bg-card p-5">
+        <h2 className="text-sm font-bold uppercase tracking-wider text-muted-foreground">
           Khách hàng
         </h2>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -439,7 +439,7 @@ export function OrderCreateForm({
       </section>
 
       {/* Item */}
-      <section className="space-y-4 rounded-xl border-l-4 border-state-info border-y border-r border-gray-200 bg-state-info-soft/20 p-5">
+      <section className="space-y-4 rounded-xl border-l-4 border-state-info border-y border-r border-border bg-state-info-soft/20 p-5">
         <h2 className="text-sm font-bold uppercase tracking-wider text-state-info-ink">
           Sản phẩm
         </h2>
@@ -462,7 +462,7 @@ export function OrderCreateForm({
                   </SelectItem>
                 ))}
               {orderType === "PRODUCT" && products.length === 0 && (
-                <div className="p-2 text-xs text-gray-500">
+                <div className="p-2 text-xs text-muted-foreground">
                   Không có sản phẩm ACTIVE. Tạo sản phẩm tại /products/new
                 </div>
               )}
@@ -532,8 +532,8 @@ export function OrderCreateForm({
       </section>
 
       {/* Pricing */}
-      <section className="space-y-4 rounded-xl border border-gray-200 bg-gray-50/50 p-5">
-        <h2 className="text-sm font-bold uppercase tracking-wider text-gray-500">
+      <section className="space-y-4 rounded-xl border border-border bg-muted/50 p-5">
+        <h2 className="text-sm font-bold uppercase tracking-wider text-muted-foreground">
           Định giá
         </h2>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -599,7 +599,7 @@ export function OrderCreateForm({
         )}
 
         <div className="text-right">
-          <div className="text-sm text-gray-600">
+          <div className="text-sm text-muted-foreground">
             Tạm tính:{" "}
             <span className="tabular-nums">
               {subtotal.toLocaleString("vi-VN")}
@@ -607,7 +607,7 @@ export function OrderCreateForm({
             đ
           </div>
           {effectiveDiscount > 0 && (
-            <div className="text-sm text-gray-600">
+            <div className="text-sm text-muted-foreground">
               Giảm giá:{" "}
               <span className="tabular-nums">
                 −{effectiveDiscount.toLocaleString("vi-VN")}
@@ -618,7 +618,7 @@ export function OrderCreateForm({
                 : ""}
             </div>
           )}
-          <div className="text-2xl font-bold text-gray-900">
+          <div className="text-2xl font-bold text-foreground">
             Tổng:{" "}
             <span className="tabular-nums">
               {totalAmount.toLocaleString("vi-VN")}

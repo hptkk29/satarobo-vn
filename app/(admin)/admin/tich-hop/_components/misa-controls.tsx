@@ -37,7 +37,7 @@ export function MisaControls({ enabled, canEdit }: { enabled: boolean; canEdit: 
       <button
         onClick={test}
         disabled={pending}
-        className="rounded-md border border-neutral-300 px-3 py-1.5 text-xs font-medium text-neutral-700 disabled:opacity-50"
+        className="rounded-md border border-border px-3 py-1.5 text-xs font-medium text-foreground disabled:opacity-50"
       >
         Chạy thử
       </button>

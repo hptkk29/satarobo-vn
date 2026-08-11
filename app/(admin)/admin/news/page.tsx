@@ -30,8 +30,8 @@ export default async function NewsAdminPage() {
     <div>
       <div className="mb-6 flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-black text-neutral-900">Tin Tức</h1>
-          <p className="mt-1 text-neutral-600">
+          <h1 className="text-3xl font-black text-foreground">Tin Tức</h1>
+          <p className="mt-1 text-muted-foreground">
             Quản lý bài viết Markdown · {news.length} bài
           </p>
         </div>
@@ -44,21 +44,21 @@ export default async function NewsAdminPage() {
         </Link>
       </div>
 
-      <div className="overflow-hidden rounded-xl border border-neutral-200 bg-white">
+      <div className="overflow-hidden rounded-xl border border-border bg-card">
         <table className="w-full">
-          <thead className="border-b border-neutral-200 bg-neutral-50 text-left">
+          <thead className="border-b border-border bg-muted text-left">
             <tr>
-              <th className="p-4 text-xs font-bold uppercase tracking-wider text-neutral-700">Tiêu đề</th>
-              <th className="p-4 text-xs font-bold uppercase tracking-wider text-neutral-700">Danh mục</th>
-              <th className="p-4 text-center text-xs font-bold uppercase tracking-wider text-neutral-700">Trạng thái</th>
-              <th className="p-4 text-xs font-bold uppercase tracking-wider text-neutral-700">Ngày đăng</th>
-              <th className="p-4 text-right text-xs font-bold uppercase tracking-wider text-neutral-700">Thao tác</th>
+              <th className="p-4 text-xs font-bold uppercase tracking-wider text-foreground">Tiêu đề</th>
+              <th className="p-4 text-xs font-bold uppercase tracking-wider text-foreground">Danh mục</th>
+              <th className="p-4 text-center text-xs font-bold uppercase tracking-wider text-foreground">Trạng thái</th>
+              <th className="p-4 text-xs font-bold uppercase tracking-wider text-foreground">Ngày đăng</th>
+              <th className="p-4 text-right text-xs font-bold uppercase tracking-wider text-foreground">Thao tác</th>
             </tr>
           </thead>
           <tbody>
             {news.length === 0 ? (
               <tr>
-                <td colSpan={5} className="p-12 text-center text-neutral-500">
+                <td colSpan={5} className="p-12 text-center text-muted-foreground">
                   Chưa có bài viết nào.{" "}
                   <Link href="/news/new" className="text-primary hover:underline">
                     Tạo bài đầu tiên →

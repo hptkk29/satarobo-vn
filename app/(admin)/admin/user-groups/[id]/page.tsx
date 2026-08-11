@@ -89,18 +89,18 @@ export default async function UserGroupDetailPage({ params }: Props) {
     <div>
       <Link
         href="/user-groups"
-        className="mb-4 inline-flex items-center gap-1 text-sm text-neutral-500 hover:text-neutral-900"
+        className="mb-4 inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
       >
         <ChevronLeft className="h-4 w-4" /> Nhóm người dùng
       </Link>
 
       <div className="mb-6 flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="flex items-center gap-2 text-3xl font-black text-neutral-900">
+          <h1 className="flex items-center gap-2 text-3xl font-black text-foreground">
             <UsersRound className="h-7 w-7 text-primary" />
             {group.name}
           </h1>
-          <p className="mt-1 text-sm text-neutral-500">
+          <p className="mt-1 text-sm text-muted-foreground">
             Tạo lúc {fmtDateTime.format(group.createdAt)} · {group.members.length} thành viên ·{" "}
             {grants.length} grant
           </p>

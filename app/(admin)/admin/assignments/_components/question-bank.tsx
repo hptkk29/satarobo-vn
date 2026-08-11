@@ -44,7 +44,7 @@ const TYPE_LABEL: Record<QuestionType, string> = {
 };
 
 const inputClass =
-  "w-full rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20";
+  "w-full rounded-lg border border-border bg-card px-3 py-2 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20";
 
 function defaultChoices(type: QuestionType): ChoiceValue[] {
   if (type === "TRUE_FALSE") {
@@ -150,7 +150,7 @@ function QuestionEditor({
   }
 
   return (
-    <div className="space-y-3 rounded-lg border border-neutral-200 bg-neutral-50 p-4">
+    <div className="space-y-3 rounded-lg border border-border bg-muted p-4">
       {localError && (
         <div className="rounded-md border border-state-danger-soft bg-state-danger-soft px-3 py-2 text-sm text-state-danger-ink">
           {localError}
@@ -159,7 +159,7 @@ function QuestionEditor({
 
       <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
         <label className="block md:col-span-1">
-          <span className="mb-1 block text-xs font-semibold text-neutral-600">
+          <span className="mb-1 block text-xs font-semibold text-muted-foreground">
             Loại câu hỏi
           </span>
           <select
@@ -178,7 +178,7 @@ function QuestionEditor({
       </div>
 
       <label className="block">
-        <span className="mb-1 block text-xs font-semibold text-neutral-600">
+        <span className="mb-1 block text-xs font-semibold text-muted-foreground">
           Nội dung câu hỏi <span className="text-state-danger-ink">*</span>
         </span>
         <textarea
@@ -193,7 +193,7 @@ function QuestionEditor({
 
       {showChoices && (
         <div className="space-y-2">
-          <p className="text-xs text-neutral-500">
+          <p className="text-xs text-muted-foreground">
             Tick đáp án đúng.
             {type === "MULTIPLE_CHOICE"
               ? " Trắc nghiệm có thể chọn nhiều đáp án đúng."
@@ -202,9 +202,9 @@ function QuestionEditor({
           {choices.map((c, idx) => (
             <div
               key={idx}
-              className="flex items-start gap-2 rounded-lg border border-neutral-200 bg-white p-2.5"
+              className="flex items-start gap-2 rounded-lg border border-border bg-card p-2.5"
             >
-              <span className="w-6 pt-2 text-center font-bold text-neutral-400">
+              <span className="w-6 pt-2 text-center font-bold text-muted-foreground">
                 {String.fromCharCode(65 + idx)}.
               </span>
               <textarea
@@ -217,7 +217,7 @@ function QuestionEditor({
                     ? "(cố định)"
                     : `Lựa chọn ${String.fromCharCode(65 + idx)}`
                 }
-                className="flex-1 resize-y rounded-md border border-neutral-200 bg-white px-2 py-1.5 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 disabled:bg-neutral-100"
+                className="flex-1 resize-y rounded-md border border-border bg-card px-2 py-1.5 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 disabled:bg-muted"
               />
               <label className="flex items-center gap-1 self-center text-sm font-medium">
                 <input
@@ -225,9 +225,9 @@ function QuestionEditor({
                   checked={c.isCorrect}
                   onChange={(e) => toggleCorrect(idx, e.target.checked)}
                   disabled={pending}
-                  className="h-4 w-4 rounded border-neutral-300"
+                  className="h-4 w-4 rounded border-border"
                 />
-                <span className="text-neutral-700">Đúng</span>
+                <span className="text-foreground">Đúng</span>
               </label>
               {type === "MULTIPLE_CHOICE" && choices.length > 2 && (
                 <button
@@ -248,7 +248,7 @@ function QuestionEditor({
               type="button"
               onClick={addChoice}
               disabled={pending}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-neutral-300 bg-white px-3 py-1.5 text-sm font-semibold text-neutral-700 hover:bg-neutral-50"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-card px-3 py-1.5 text-sm font-semibold text-foreground hover:bg-muted"
             >
               <Plus className="h-4 w-4" />
               Thêm lựa chọn
@@ -259,7 +259,7 @@ function QuestionEditor({
 
       {showCorrectAnswer && (
         <label className="block">
-          <span className="mb-1 block text-xs font-semibold text-neutral-600">
+          <span className="mb-1 block text-xs font-semibold text-muted-foreground">
             {type === "SHORT_ANSWER"
               ? "Đáp án mong đợi"
               : type === "CODE"
@@ -279,7 +279,7 @@ function QuestionEditor({
             className={`${inputClass} resize-y`}
           />
           {type === "ESSAY" && (
-            <span className="mt-1 block text-xs text-neutral-500">
+            <span className="mt-1 block text-xs text-muted-foreground">
               Dạng &quot;Upload file&quot; dùng Tự luận — HS đính kèm file ở phần nộp bài.
             </span>
           )}
@@ -300,7 +300,7 @@ function QuestionEditor({
             type="button"
             onClick={onCancel}
             disabled={pending}
-            className="rounded-lg border border-neutral-300 bg-white px-4 py-2 text-sm font-semibold text-neutral-700 hover:bg-neutral-50"
+            className="rounded-lg border border-border bg-card px-4 py-2 text-sm font-semibold text-foreground hover:bg-muted"
           >
             Huỷ
           </button>
@@ -374,14 +374,14 @@ export function QuestionBank({
   }
 
   return (
-    <section className="rounded-xl border border-neutral-200 bg-white">
-      <header className="flex items-center justify-between gap-2 border-b border-neutral-100 p-4">
+    <section className="rounded-xl border border-border bg-card">
+      <header className="flex items-center justify-between gap-2 border-b border-border p-4">
         <div>
-          <h2 className="flex items-center gap-2 text-sm font-bold uppercase tracking-wider text-neutral-700">
+          <h2 className="flex items-center gap-2 text-sm font-bold uppercase tracking-wider text-foreground">
             <ListChecks className="h-4 w-4 text-primary" />
             Bộ câu hỏi trong bài tập ({questions.length})
           </h2>
-          <p className="mt-0.5 text-xs text-neutral-500">
+          <p className="mt-0.5 text-xs text-muted-foreground">
             Soạn các câu hỏi gắn riêng với bài tập này (tự luận, trắc nghiệm, đúng/sai...).
           </p>
         </div>
@@ -409,7 +409,7 @@ export function QuestionBank({
 
       <div className="space-y-3 p-4">
         {questions.length === 0 && !adding && (
-          <div className="rounded-lg border border-dashed border-neutral-200 p-6 text-center text-sm text-neutral-400">
+          <div className="rounded-lg border border-dashed border-border p-6 text-center text-sm text-muted-foreground">
             Chưa có câu hỏi nào. Bấm &quot;Thêm câu hỏi&quot; để bắt đầu.
           </div>
         )}
@@ -427,19 +427,19 @@ export function QuestionBank({
           ) : (
             <div
               key={q.id}
-              className="rounded-lg border border-neutral-200 bg-white p-3"
+              className="rounded-lg border border-border bg-card p-3"
             >
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0 flex-1">
                   <div className="mb-1 flex items-center gap-2">
-                    <span className="text-sm font-bold text-neutral-400">
+                    <span className="text-sm font-bold text-muted-foreground">
                       {idx + 1}.
                     </span>
                     <span className="inline-flex rounded-full bg-primary-soft px-2 py-0.5 text-[11px] font-semibold text-primary">
                       {TYPE_LABEL[q.type]}
                     </span>
                   </div>
-                  <p className="whitespace-pre-wrap text-sm text-neutral-800">
+                  <p className="whitespace-pre-wrap text-sm text-foreground">
                     {q.text}
                   </p>
 
@@ -449,9 +449,9 @@ export function QuestionBank({
                         {q.choices.map((c, ci) => (
                           <li
                             key={ci}
-                            className={`flex items-start gap-1.5 text-sm ${ c.isCorrect ? "font-semibold text-state-success-ink" : "text-neutral-600" }`}
+                            className={`flex items-start gap-1.5 text-sm ${ c.isCorrect ? "font-semibold text-state-success-ink" : "text-muted-foreground" }`}
                           >
-                            <span className="w-5 text-neutral-400">
+                            <span className="w-5 text-muted-foreground">
                               {String.fromCharCode(65 + ci)}.
                             </span>
                             <span className="flex-1">{c.text}</span>
@@ -466,7 +466,7 @@ export function QuestionBank({
                   {q.type !== "MULTIPLE_CHOICE" &&
                     q.type !== "TRUE_FALSE" &&
                     q.correctAnswer && (
-                      <div className="mt-2 rounded-md bg-neutral-50 px-2.5 py-1.5 text-xs text-neutral-600">
+                      <div className="mt-2 rounded-md bg-muted px-2.5 py-1.5 text-xs text-muted-foreground">
                         <span className="font-semibold">Đáp án/gợi ý: </span>
                         <span className="whitespace-pre-wrap">{q.correctAnswer}</span>
                       </div>

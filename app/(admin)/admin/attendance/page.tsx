@@ -221,11 +221,11 @@ export default async function AttendanceAdminPage({ searchParams }: SearchParams
   return (
     <div>
       <div className="mb-6">
-        <h1 className="flex items-center gap-2 text-3xl font-black text-neutral-900">
+        <h1 className="flex items-center gap-2 text-3xl font-black text-foreground">
           <ClipboardCheck className="h-7 w-7 text-primary" />
           Điểm danh
         </h1>
-        <p className="mt-1 text-neutral-600">
+        <p className="mt-1 text-muted-foreground">
           Chọn buổi học để điểm danh các học viên đăng ký
         </p>
       </div>
@@ -245,9 +245,9 @@ export default async function AttendanceAdminPage({ searchParams }: SearchParams
       />
 
       {!selectedSession && (
-        <div className="rounded-xl border-2 border-dashed border-neutral-300 bg-neutral-50 p-12 text-center">
-          <ClipboardCheck className="mx-auto mb-3 h-12 w-12 text-neutral-400" />
-          <p className="text-neutral-600">
+        <div className="rounded-xl border-2 border-dashed border-border bg-muted p-12 text-center">
+          <ClipboardCheck className="mx-auto mb-3 h-12 w-12 text-muted-foreground" />
+          <p className="text-muted-foreground">
             Chọn một buổi học từ dropdown phía trên để bắt đầu điểm danh.
           </p>
           {sessions.length === 0 && (
@@ -264,14 +264,14 @@ export default async function AttendanceAdminPage({ searchParams }: SearchParams
 
       {selectedSession && (
         <div className="space-y-4">
-          <div className="rounded-xl border border-neutral-200 bg-primary-soft p-5">
+          <div className="rounded-xl border border-border bg-primary-soft p-5">
             <div className="text-xs font-bold uppercase tracking-wider text-primary">
               Buổi học đang điểm danh
             </div>
-            <div className="mt-1 text-2xl font-black text-neutral-900">
+            <div className="mt-1 text-2xl font-black text-foreground">
               {selectedSession.className}
             </div>
-            <div className="mt-1 text-sm text-neutral-700">
+            <div className="mt-1 text-sm text-foreground">
               {formatDateTime(selectedSession.date)}
               {selectedSession.topic && <> · 📚 {selectedSession.topic}</>}
             </div>

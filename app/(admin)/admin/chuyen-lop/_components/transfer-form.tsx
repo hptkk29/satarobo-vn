@@ -88,14 +88,14 @@ export function TransferForm({
   }
 
   return (
-    <div className="grid gap-3 rounded-xl border border-neutral-200 bg-white p-4 sm:grid-cols-2">
+    <div className="grid gap-3 rounded-xl border border-border bg-card p-4 sm:grid-cols-2">
       <label className="text-sm">
-        <span className="mb-1 block text-neutral-600">Bước 1 — Cơ sở nguồn</span>
+        <span className="mb-1 block text-muted-foreground">Bước 1 — Cơ sở nguồn</span>
         <select
           value={fromCenterId}
           onChange={(e) => onPickFromCenter(e.target.value)}
           disabled={navPending}
-          className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm disabled:opacity-50"
+          className="w-full rounded-md border border-border px-3 py-2 text-sm disabled:opacity-50"
         >
           <option value="">— Chọn cơ sở —</option>
           {centers.map((c) => (
@@ -107,7 +107,7 @@ export function TransferForm({
       </label>
 
       <label className="text-sm">
-        <span className="mb-1 block text-neutral-600">Bước 2 — Học viên</span>
+        <span className="mb-1 block text-muted-foreground">Bước 2 — Học viên</span>
         <select
           value={studentId}
           onChange={(e) => {
@@ -116,7 +116,7 @@ export function TransferForm({
             setEligible(null);
           }}
           disabled={!fromCenterId || navPending}
-          className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm disabled:bg-neutral-50"
+          className="w-full rounded-md border border-border px-3 py-2 text-sm disabled:bg-muted"
         >
           <option value="">
             {!fromCenterId
@@ -137,7 +137,7 @@ export function TransferForm({
       </label>
 
       <label className="text-sm">
-        <span className="mb-1 block text-neutral-600">Bước 3 — Lớp hiện tại</span>
+        <span className="mb-1 block text-muted-foreground">Bước 3 — Lớp hiện tại</span>
         <select
           value={fromClassId}
           onChange={(e) => {
@@ -145,7 +145,7 @@ export function TransferForm({
             setEligible(null);
           }}
           disabled={!student}
-          className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm disabled:bg-neutral-50"
+          className="w-full rounded-md border border-border px-3 py-2 text-sm disabled:bg-muted"
         >
           <option value="">— Chọn —</option>
           {student?.classes.map((c) => (
@@ -157,11 +157,11 @@ export function TransferForm({
       </label>
 
       <label className="text-sm">
-        <span className="mb-1 block text-neutral-600">Bước 4 — Cơ sở đích (tuỳ chọn)</span>
+        <span className="mb-1 block text-muted-foreground">Bước 4 — Cơ sở đích (tuỳ chọn)</span>
         <select
           value={toCenterId}
           onChange={(e) => setToCenterId(e.target.value)}
-          className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm"
+          className="w-full rounded-md border border-border px-3 py-2 text-sm"
         >
           <option value="">— Mọi cơ sở —</option>
           {centers.map((c) => (
@@ -184,7 +184,7 @@ export function TransferForm({
 
       {eligible ? (
         <div className="sm:col-span-2">
-          <p className="mb-1 text-xs text-neutral-500">
+          <p className="mb-1 text-xs text-muted-foreground">
             Tiến độ học viên: {studentCovered ?? 0} bài. Lớp đích không vượt quá mức này.
           </p>
           {eligible.length === 0 ? (
@@ -195,7 +195,7 @@ export function TransferForm({
             <select
               value={toClassId}
               onChange={(e) => setToClassId(e.target.value)}
-              className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm"
+              className="w-full rounded-md border border-border px-3 py-2 text-sm"
             >
               <option value="">— Chọn lớp đích (để trống = waitlist) —</option>
               {eligible.map((c) => (
@@ -211,12 +211,12 @@ export function TransferForm({
       ) : null}
 
       <label className="text-sm sm:col-span-2">
-        <span className="mb-1 block text-neutral-600">Lý do chuyển</span>
+        <span className="mb-1 block text-muted-foreground">Lý do chuyển</span>
         <textarea
           value={reason}
           onChange={(e) => setReason(e.target.value)}
           rows={2}
-          className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm"
+          className="w-full rounded-md border border-border px-3 py-2 text-sm"
         />
       </label>
 

@@ -52,17 +52,17 @@ export function SkillEditor({
 
   return (
     <div className="space-y-2">
-      <ul className="divide-y divide-gray-100">
+      <ul className="divide-y divide-border">
         {SKILL_ORDER.map((skill) => (
           <li key={skill} className="flex flex-col gap-2 py-2 sm:flex-row sm:items-center">
-            <span className="w-full text-sm font-medium text-gray-800 sm:w-48">
+            <span className="w-full text-sm font-medium text-foreground sm:w-48">
               {SKILL_LABEL[skill as RoboticsSkill]}
             </span>
             <select
               value={rows[skill].level}
               onChange={(e) => set(skill, { level: e.target.value as SkillLevel | "" })}
               disabled={!canEdit || pending}
-              className="rounded-lg border border-gray-300 px-2 py-1.5 text-sm focus:border-primary focus:outline-none disabled:bg-gray-50"
+              className="rounded-lg border border-border px-2 py-1.5 text-sm focus:border-primary focus:outline-none disabled:bg-muted"
             >
               <option value="">— chưa chấm —</option>
               {LEVELS.map((l) => (
@@ -74,7 +74,7 @@ export function SkillEditor({
               onChange={(e) => set(skill, { note: e.target.value })}
               disabled={!canEdit || pending}
               placeholder="Ghi chú (tuỳ chọn)"
-              className="flex-1 rounded-lg border border-gray-300 px-2 py-1.5 text-sm focus:border-primary focus:outline-none disabled:bg-gray-50"
+              className="flex-1 rounded-lg border border-border px-2 py-1.5 text-sm focus:border-primary focus:outline-none disabled:bg-muted"
             />
           </li>
         ))}

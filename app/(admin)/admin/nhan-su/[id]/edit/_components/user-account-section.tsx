@@ -64,16 +64,16 @@ export function UserAccountSection({
 
   if (!existingUser) {
     return (
-      <section className="mt-8 rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
+      <section className="mt-8 rounded-xl border border-border bg-card p-6 shadow-sm">
         <div className="flex items-start gap-3">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-gray-100">
-            <KeyRound className="h-5 w-5 text-gray-500" />
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-muted">
+            <KeyRound className="h-5 w-5 text-muted-foreground" />
           </div>
           <div className="min-w-0 flex-1">
-            <h2 className="text-base font-semibold text-gray-900">
+            <h2 className="text-base font-semibold text-foreground">
               Tài khoản đăng nhập
             </h2>
-            <p className="mt-1 text-sm text-gray-500">
+            <p className="mt-1 text-sm text-muted-foreground">
               Nhân sự này chưa có tài khoản để đăng nhập vào hệ thống.
             </p>
             <div className="mt-4">
@@ -86,7 +86,7 @@ export function UserAccountSection({
                 <UserPlus className="h-4 w-4" />
                 Tạo tài khoản đăng nhập
               </Button>
-              <p className="mt-2 text-xs text-gray-500">
+              <p className="mt-2 text-xs text-muted-foreground">
                 Tên và email của <strong>{employeeName}</strong> sẽ được điền
                 sẵn vào form.
               </p>
@@ -105,17 +105,17 @@ export function UserAccountSection({
       : `${idleDays} ngày không hoạt động`;
 
   return (
-    <section className="mt-8 rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
+    <section className="mt-8 rounded-xl border border-border bg-card p-6 shadow-sm">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="flex items-start gap-3">
           <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary-soft">
             <KeyRound className="h-5 w-5 text-primary" />
           </div>
           <div>
-            <h2 className="text-base font-semibold text-gray-900">
+            <h2 className="text-base font-semibold text-foreground">
               Tài khoản đăng nhập
             </h2>
-            <p className="mt-0.5 text-sm text-gray-500">
+            <p className="mt-0.5 text-sm text-muted-foreground">
               Thông tin tài khoản hệ thống của <strong>{employeeName}</strong>.
             </p>
           </div>
@@ -126,16 +126,16 @@ export function UserAccountSection({
         {/* Left column */}
         <div className="space-y-3">
           <div>
-            <dt className="text-xs uppercase tracking-wider text-gray-500">
+            <dt className="text-xs uppercase tracking-wider text-muted-foreground">
               Email
             </dt>
-            <dd className="mt-0.5 font-mono text-sm text-gray-900 break-all">
+            <dd className="mt-0.5 font-mono text-sm text-foreground break-all">
               {existingUser.email}
             </dd>
           </div>
 
           <div>
-            <dt className="text-xs uppercase tracking-wider text-gray-500">
+            <dt className="text-xs uppercase tracking-wider text-muted-foreground">
               Vai trò
             </dt>
             <dd className="mt-1">
@@ -144,7 +144,7 @@ export function UserAccountSection({
           </div>
 
           <div>
-            <dt className="text-xs uppercase tracking-wider text-gray-500">
+            <dt className="text-xs uppercase tracking-wider text-muted-foreground">
               Trạng thái
             </dt>
             <dd className="mt-1">
@@ -154,7 +154,7 @@ export function UserAccountSection({
                   Hoạt động
                 </span>
               ) : (
-                <span className="inline-flex items-center gap-1 rounded-full bg-gray-200 px-2.5 py-0.5 text-xs font-semibold text-gray-600">
+                <span className="inline-flex items-center gap-1 rounded-full bg-muted px-2.5 py-0.5 text-xs font-semibold text-muted-foreground">
                   <XCircle className="h-3 w-3" />
                   Đã vô hiệu hoá
                 </span>
@@ -166,28 +166,28 @@ export function UserAccountSection({
         {/* Right column */}
         <div className="space-y-3">
           <div>
-            <dt className="text-xs uppercase tracking-wider text-gray-500">
+            <dt className="text-xs uppercase tracking-wider text-muted-foreground">
               Lần đăng nhập cuối
             </dt>
             <dd
-              className={`mt-0.5 text-sm tabular-nums ${ existingUser.lastLoginAt ? "text-gray-900" : "italic text-gray-400" }`}
+              className={`mt-0.5 text-sm tabular-nums ${ existingUser.lastLoginAt ? "text-foreground" : "italic text-muted-foreground" }`}
             >
               {formatDateTime(existingUser.lastLoginAt)}
             </dd>
           </div>
 
           <div>
-            <dt className="text-xs uppercase tracking-wider text-gray-500">
+            <dt className="text-xs uppercase tracking-wider text-muted-foreground">
               Ngày tạo
             </dt>
-            <dd className="mt-0.5 text-sm tabular-nums text-gray-700">
+            <dd className="mt-0.5 text-sm tabular-nums text-foreground">
               {formatDate(existingUser.createdAt)}
             </dd>
           </div>
 
           {existingUser._count.permissionGrants > 0 && (
             <div>
-              <dt className="text-xs uppercase tracking-wider text-gray-500">
+              <dt className="text-xs uppercase tracking-wider text-muted-foreground">
                 Quyền override
               </dt>
               <dd className="mt-1">
@@ -219,21 +219,21 @@ export function UserAccountSection({
       <div className="mt-5 flex flex-wrap gap-2">
         <Link
           href={`/users/${existingUser.id}/edit`}
-          className="inline-flex items-center gap-1.5 rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm font-semibold text-gray-700 hover:bg-gray-50"
+          className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-card px-3 py-1.5 text-sm font-semibold text-foreground hover:bg-muted"
         >
           <Pencil className="h-4 w-4" />
           Sửa tài khoản
         </Link>
         <Link
           href={`/users/${existingUser.id}/reset-password`}
-          className="inline-flex items-center gap-1.5 rounded-lg border border-primary bg-white px-3 py-1.5 text-sm font-semibold text-primary hover:bg-primary-soft"
+          className="inline-flex items-center gap-1.5 rounded-lg border border-primary bg-card px-3 py-1.5 text-sm font-semibold text-primary hover:bg-primary-soft"
         >
           <KeyRound className="h-4 w-4" />
           Đổi mật khẩu
         </Link>
         <Link
           href={`/users/${existingUser.id}/permissions`}
-          className="inline-flex items-center gap-1.5 rounded-lg border border-primary bg-white px-3 py-1.5 text-sm font-semibold text-primary hover:bg-primary-soft"
+          className="inline-flex items-center gap-1.5 rounded-lg border border-primary bg-card px-3 py-1.5 text-sm font-semibold text-primary hover:bg-primary-soft"
         >
           <Shield className="h-4 w-4" />
           Phân quyền

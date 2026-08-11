@@ -103,15 +103,15 @@ export function JobForm({ action, mode, initialData }: JobFormProps) {
   const errors = form.formState.errors
 
   const fieldClass =
-    'w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 disabled:bg-gray-50'
-  const labelClass = 'block text-sm font-semibold text-gray-700 mb-1'
+    'w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 disabled:bg-muted'
+  const labelClass = 'block text-sm font-semibold text-foreground mb-1'
   const errorClass = 'mt-1 text-xs text-state-danger-ink'
 
   return (
     <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8 max-w-4xl">
       {/* Section 1: Cơ bản */}
-      <section className="rounded-xl border border-gray-200 bg-white p-6">
-        <h2 className="mb-5 font-bold text-gray-900">Thông tin cơ bản</h2>
+      <section className="rounded-xl border border-border bg-card p-6">
+        <h2 className="mb-5 font-bold text-foreground">Thông tin cơ bản</h2>
         <div className="space-y-4">
           <div>
             <label className={labelClass}>Tiêu đề *</label>
@@ -131,7 +131,7 @@ export function JobForm({ action, mode, initialData }: JobFormProps) {
               placeholder="giao-vien-robotics-hai-chau"
             />
             {errors.slug && <p className={errorClass}>{errors.slug.message}</p>}
-            <p className="mt-1 text-xs text-gray-400">URL: /tuyen-dung/{form.watch('slug') || '...'}</p>
+            <p className="mt-1 text-xs text-muted-foreground">URL: /tuyen-dung/{form.watch('slug') || '...'}</p>
           </div>
 
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
@@ -199,8 +199,8 @@ export function JobForm({ action, mode, initialData }: JobFormProps) {
       </section>
 
       {/* Section 2: Mô tả + Bullets */}
-      <section className="rounded-xl border border-gray-200 bg-white p-6">
-        <h2 className="mb-5 font-bold text-gray-900">Nội dung tin tuyển</h2>
+      <section className="rounded-xl border border-border bg-card p-6">
+        <h2 className="mb-5 font-bold text-foreground">Nội dung tin tuyển</h2>
         <div className="space-y-5">
           <div>
             <label className={labelClass}>Mô tả tổng quan *</label>
@@ -211,7 +211,7 @@ export function JobForm({ action, mode, initialData }: JobFormProps) {
               {...form.register('description')}
             />
             {errors.description && <p className={errorClass}>{errors.description.message}</p>}
-            <p className="mt-1 text-xs text-gray-400">Tối thiểu 50 ký tự. Hỗ trợ xuống dòng.</p>
+            <p className="mt-1 text-xs text-muted-foreground">Tối thiểu 50 ký tự. Hỗ trợ xuống dòng.</p>
           </div>
 
           <div>
@@ -262,8 +262,8 @@ export function JobForm({ action, mode, initialData }: JobFormProps) {
       </section>
 
       {/* Section 3: Lương & Chỉ tiêu */}
-      <section className="rounded-xl border border-gray-200 bg-white p-6">
-        <h2 className="mb-5 font-bold text-gray-900">Lương & Chỉ tiêu</h2>
+      <section className="rounded-xl border border-border bg-card p-6">
+        <h2 className="mb-5 font-bold text-foreground">Lương & Chỉ tiêu</h2>
         <div className="space-y-4">
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
             <div>
@@ -294,7 +294,7 @@ export function JobForm({ action, mode, initialData }: JobFormProps) {
               />
             </div>
           </div>
-          <p className="text-xs text-gray-400">Nếu điền Ghi chú lương → hiển thị ghi chú thay vì dải lương.</p>
+          <p className="text-xs text-muted-foreground">Nếu điền Ghi chú lương → hiển thị ghi chú thay vì dải lương.</p>
 
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div>
@@ -320,9 +320,9 @@ export function JobForm({ action, mode, initialData }: JobFormProps) {
       </section>
 
       {/* Section 4: Liên hệ */}
-      <section className="rounded-xl border border-gray-200 bg-white p-6">
-        <h2 className="mb-5 font-bold text-gray-900">Thông tin liên hệ</h2>
-        <p className="mb-3 text-xs text-gray-500">
+      <section className="rounded-xl border border-border bg-card p-6">
+        <h2 className="mb-5 font-bold text-foreground">Thông tin liên hệ</h2>
+        <p className="mb-3 text-xs text-muted-foreground">
           Để trống = public page dùng email & SĐT mặc định của Sata Robo.
         </p>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -349,8 +349,8 @@ export function JobForm({ action, mode, initialData }: JobFormProps) {
       </section>
 
       {/* Section 5: Trạng thái */}
-      <section className="rounded-xl border border-gray-200 bg-white p-6">
-        <h2 className="mb-5 font-bold text-gray-900">Trạng thái</h2>
+      <section className="rounded-xl border border-border bg-card p-6">
+        <h2 className="mb-5 font-bold text-foreground">Trạng thái</h2>
         <div>
           <label className={labelClass}>Trạng thái hiển thị</label>
           <select className={`${fieldClass} max-w-xs`} {...form.register('status')}>
@@ -358,7 +358,7 @@ export function JobForm({ action, mode, initialData }: JobFormProps) {
               <option key={s.value} value={s.value}>{s.label}</option>
             ))}
           </select>
-          <ul className="mt-3 space-y-1 text-xs text-gray-500">
+          <ul className="mt-3 space-y-1 text-xs text-muted-foreground">
             <li><strong>DRAFT</strong>: chỉ admin thấy, không xuất hiện trên /tuyen-dung</li>
             <li><strong>OPEN</strong>: hiển thị public, Google Jobs có thể index</li>
             <li><strong>CLOSED</strong>: đã đóng tuyển, ẩn khỏi public</li>
@@ -380,7 +380,7 @@ export function JobForm({ action, mode, initialData }: JobFormProps) {
         <button
           type="button"
           onClick={() => router.back()}
-          className="rounded-lg border border-gray-200 px-5 py-2.5 text-sm font-semibold text-gray-600 hover:bg-gray-50"
+          className="rounded-lg border border-border px-5 py-2.5 text-sm font-semibold text-muted-foreground hover:bg-muted"
         >
           Huỷ
         </button>

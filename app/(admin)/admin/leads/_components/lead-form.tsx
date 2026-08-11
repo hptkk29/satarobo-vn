@@ -29,7 +29,7 @@ export interface LeadFormInitial {
 }
 
 const inputCls =
-  "w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary focus:outline-none";
+  "w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-primary focus:outline-none";
 
 export function LeadForm({
   orgUnits,
@@ -104,7 +104,7 @@ export function LeadForm({
   }
 
   return (
-    <div className="max-w-xl space-y-3 rounded-xl border border-gray-200 bg-white p-5">
+    <div className="max-w-xl space-y-3 rounded-xl border border-border bg-card p-5">
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <Field label="Tên phụ huynh *">
           <input value={parentName} onChange={(e) => setParentName(e.target.value)} className={inputCls} />
@@ -151,9 +151,9 @@ export function LeadForm({
 
       {/* R7-01 — khai báo con (chỉ ở chế độ tạo mới; sửa thì quản lý ở trang chi tiết) */}
       {!isEdit && (
-        <div className="rounded-lg border border-gray-200 bg-gray-50/60 p-3">
+        <div className="rounded-lg border border-border bg-muted/60 p-3">
           <div className="mb-2 flex items-center justify-between">
-            <span className="text-sm font-semibold text-gray-700">Con của phụ huynh</span>
+            <span className="text-sm font-semibold text-foreground">Con của phụ huynh</span>
             <button
               type="button"
               onClick={addKid}
@@ -163,11 +163,11 @@ export function LeadForm({
             </button>
           </div>
           {kids.length === 0 ? (
-            <p className="text-xs text-gray-400">Chưa khai báo con nào (có thể bổ sung sau khi tạo).</p>
+            <p className="text-xs text-muted-foreground">Chưa khai báo con nào (có thể bổ sung sau khi tạo).</p>
           ) : (
             <div className="space-y-3">
               {kids.map((kid, i) => (
-                <div key={i} className="rounded-lg border border-primary-soft bg-white p-3">
+                <div key={i} className="rounded-lg border border-primary-soft bg-card p-3">
                   <div className="mb-2 flex items-center justify-between">
                     <span className="text-xs font-semibold text-primary">Con #{i + 1}</span>
                     <button
@@ -206,7 +206,7 @@ export function LeadForm({
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <label className="block">
-      <span className="mb-1 block text-xs font-medium text-gray-500">{label}</span>
+      <span className="mb-1 block text-xs font-medium text-muted-foreground">{label}</span>
       {children}
     </label>
   );

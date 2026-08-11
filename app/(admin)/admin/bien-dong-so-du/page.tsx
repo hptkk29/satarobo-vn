@@ -192,10 +192,10 @@ export default async function SepayLogPage({
 
   return (
     <div className="p-6">
-      <div className="mb-4 flex flex-wrap items-end justify-between gap-3 border-b border-gray-200 pb-4">
+      <div className="mb-4 flex flex-wrap items-end justify-between gap-3 border-b border-border pb-4">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Biến động số dư</h1>
-          <p className="mt-1 max-w-3xl text-sm text-gray-600">
+          <h1 className="text-2xl font-bold text-foreground">Biến động số dư</h1>
+          <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
             Tiền về tài khoản → cổng báo về → hệ thống ghi giao dịch và <b>rót vào phiếu thu</b>{" "}
             của đơn. Trang này để kiểm tra tiền đã đi đúng chỗ chưa; dòng <b>Cần xử lý</b> là
             giao dịch chưa rót được vào phiếu nào (sai nội dung CK, không tra ra đơn) — mở đơn
@@ -219,37 +219,37 @@ export default async function SepayLogPage({
 
       <BankTxnClient items={txnItems} />
 
-      <p className="mt-3 text-xs text-gray-500">
+      <p className="mt-3 text-xs text-muted-foreground">
         Chỉ hiện 200 giao dịch gần nhất. Bảng trống nghĩa là chưa có tiền về qua cổng (webhook
         chưa bật) — không phải lỗi.
       </p>
 
       {/* ── Tiền thừa ─────────────────────────────────────────────────────── */}
       <section className="mt-10">
-        <div className="mb-3 flex flex-wrap items-end justify-between gap-2 border-b border-gray-200 pb-2">
+        <div className="mb-3 flex flex-wrap items-end justify-between gap-2 border-b border-border pb-2">
           <div>
-            <h2 className="text-lg font-semibold text-gray-900">Tiền thừa chưa xử lý</h2>
-            <p className="mt-0.5 max-w-3xl text-sm text-gray-600">
+            <h2 className="text-lg font-semibold text-foreground">Tiền thừa chưa xử lý</h2>
+            <p className="mt-0.5 max-w-3xl text-sm text-muted-foreground">
               Tiền còn dư sau khi đã rót hết các đợt của đơn. Hệ thống <b>không tự hoàn</b> và{" "}
               <b>không tự trừ sang đơn khác</b> — kế toán quyết rồi ghi nhận ở nơi xử lý tương
               ứng. Đây là danh sách chỉ để xem.
             </p>
           </div>
           {credits.length > 0 && (
-            <div className="text-sm text-gray-700">
+            <div className="text-sm text-foreground">
               Tổng: <b className="tabular-nums">{fmt(creditTotal)}đ</b> · {credits.length} khoản
             </div>
           )}
         </div>
 
         {credits.length === 0 ? (
-          <p className="rounded-lg border border-gray-200 px-3 py-6 text-center text-sm text-gray-500">
+          <p className="rounded-lg border border-border px-3 py-6 text-center text-sm text-muted-foreground">
             Không có khoản tiền thừa nào đang chờ xử lý.
           </p>
         ) : (
-          <div className="overflow-x-auto rounded-lg border border-gray-200">
+          <div className="overflow-x-auto rounded-lg border border-border">
             <table className="w-full min-w-[720px] text-sm">
-              <thead className="bg-gray-50 text-left text-xs font-medium uppercase text-gray-500">
+              <thead className="bg-muted text-left text-xs font-medium uppercase text-muted-foreground">
                 <tr>
                   <th className="w-36 px-3 py-2">Thời gian</th>
                   <th className="w-32 px-3 py-2 text-right">Số tiền</th>
@@ -257,10 +257,10 @@ export default async function SepayLogPage({
                   <th className="px-3 py-2">Ghi chú</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-100">
+              <tbody className="divide-y divide-border">
                 {credits.map((c) => (
                   <tr key={c.id}>
-                    <td className="px-3 py-2 align-top text-xs text-gray-600">
+                    <td className="px-3 py-2 align-top text-xs text-muted-foreground">
                       {c.createdAt.toISOString().slice(0, 16).replace("T", " ")}
                     </td>
                     <td className="px-3 py-2 align-top text-right font-semibold tabular-nums">
@@ -272,10 +272,10 @@ export default async function SepayLogPage({
                           Mở đơn →
                         </Link>
                       ) : (
-                        <span className="text-gray-500">(chưa gắn đơn)</span>
+                        <span className="text-muted-foreground">(chưa gắn đơn)</span>
                       )}
                     </td>
-                    <td className="px-3 py-2 align-top text-xs text-gray-600">{c.note ?? "—"}</td>
+                    <td className="px-3 py-2 align-top text-xs text-muted-foreground">{c.note ?? "—"}</td>
                   </tr>
                 ))}
               </tbody>
@@ -286,9 +286,9 @@ export default async function SepayLogPage({
 
       {/* ── Log webhook SePay cũ ──────────────────────────────────────────── */}
       <section className="mt-10">
-        <div className="mb-3 border-b border-gray-200 pb-2">
-          <h2 className="text-lg font-semibold text-gray-900">Nhật ký webhook SePay (lịch sử)</h2>
-          <p className="mt-0.5 max-w-3xl text-sm text-gray-600">
+        <div className="mb-3 border-b border-border pb-2">
+          <h2 className="text-lg font-semibold text-foreground">Nhật ký webhook SePay (lịch sử)</h2>
+          <p className="mt-0.5 max-w-3xl text-sm text-muted-foreground">
             Nhật ký kỹ thuật của webhook SePay — giữ lại để tra các đơn xử lý TRƯỚC khi chuyển
             sang sổ giao dịch ở trên. Không phải nguồn đối soát chính nữa; 100 dòng gần nhất.
           </p>
@@ -303,7 +303,7 @@ function FilterTab({ href, label, active }: { href: string; label: string; activ
   return (
     <Link
       href={href}
-      className={`rounded-lg px-3 py-1.5 font-medium ${ active ? "bg-primary-dark text-white" : "border border-gray-300 text-gray-700 hover:bg-gray-50" }`}
+      className={`rounded-lg px-3 py-1.5 font-medium ${ active ? "bg-primary-dark text-white" : "border border-border text-foreground hover:bg-muted" }`}
     >
       {label}
     </Link>

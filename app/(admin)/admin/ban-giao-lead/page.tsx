@@ -57,8 +57,8 @@ export default async function HandoverPage() {
   return (
     <div className="space-y-6 p-4">
       <div>
-        <h1 className="text-xl font-bold text-neutral-900">Bàn giao lead</h1>
-        <p className="text-sm text-neutral-500">
+        <h1 className="text-xl font-bold text-foreground">Bàn giao lead</h1>
+        <p className="text-sm text-muted-foreground">
           Chuyển hàng loạt lead của một sale (vd khi nghỉ việc) sang sale khác. Có thể lọc theo trạng thái,
           chiến dịch, chỉ lead chưa đóng. Task đang mở cũng được chuyển. Ghi lịch sử + nhật ký kiểm toán;
           KHÔNG sửa tài khoản sale cũ.

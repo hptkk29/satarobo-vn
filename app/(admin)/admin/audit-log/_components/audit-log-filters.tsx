@@ -21,7 +21,7 @@ export function AuditLogFilters({
   const [draft, setDraft] = useState<AuditFilters>(filters);
 
   const selectClass =
-    "h-9 w-full rounded-lg border border-input bg-white px-2.5 text-sm transition-colors outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/40";
+    "h-9 w-full rounded-lg border border-input bg-card px-2.5 text-sm transition-colors outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/40";
 
   function update<K extends keyof AuditFilters>(key: K, value: AuditFilters[K]) {
     setDraft((prev) => ({ ...prev, [key]: value || undefined }));
@@ -40,7 +40,7 @@ export function AuditLogFilters({
   return (
     <form
       onSubmit={apply}
-      className="rounded-xl border border-gray-200 bg-gray-50/50 p-3"
+      className="rounded-xl border border-border bg-muted/50 p-3"
     >
       <div className="grid grid-cols-1 gap-2 md:grid-cols-3 lg:grid-cols-4">
         <div className="space-y-1">

@@ -209,13 +209,13 @@ export function ImportWordClient({
       )}
 
       {/* Upload */}
-      <div className="rounded-xl border border-neutral-200 bg-white p-6">
-        <label className="flex cursor-pointer flex-col items-center gap-2 rounded-lg border-2 border-dashed border-neutral-300 p-8 text-center hover:border-primary">
-          <Upload className="h-8 w-8 text-neutral-400" />
-          <span className="text-sm font-medium text-neutral-700">
+      <div className="rounded-xl border border-border bg-card p-6">
+        <label className="flex cursor-pointer flex-col items-center gap-2 rounded-lg border-2 border-dashed border-border p-8 text-center hover:border-primary">
+          <Upload className="h-8 w-8 text-muted-foreground" />
+          <span className="text-sm font-medium text-foreground">
             {parsing ? "Đang đọc file..." : "Chọn file .docx để parse"}
           </span>
-          <span className="text-xs text-neutral-400">Chỉ chấp nhận .docx (≤ 10MB)</span>
+          <span className="text-xs text-muted-foreground">Chỉ chấp nhận .docx (≤ 10MB)</span>
           <input
             type="file"
             accept=".docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
@@ -232,8 +232,8 @@ export function ImportWordClient({
 
       {questions.length > 0 && (
         <>
-          <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-neutral-200 bg-white px-5 py-4">
-            <div className="text-sm text-neutral-700">
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-card px-5 py-4">
+            <div className="text-sm text-foreground">
               Tổng <strong>{questions.length}</strong> câu · hợp lệ{" "}
               <strong className="text-state-success-ink">{validCount}</strong> · lỗi{" "}
               <strong className="text-state-danger-ink">{questions.length - validCount}</strong>
@@ -247,7 +247,7 @@ export function ImportWordClient({
               <select
                 value={examId}
                 onChange={(e) => setExamId(e.target.value)}
-                className="rounded-lg border border-neutral-200 px-3 py-2 text-sm"
+                className="rounded-lg border border-border px-3 py-2 text-sm"
               >
                 <option value="">— Không gắn vào đề —</option>
                 {exams.map((e) => (
@@ -273,10 +273,10 @@ export function ImportWordClient({
             {questions.map((q, idx) => (
               <div
                 key={idx}
-                className={`rounded-xl border bg-white p-4 ${ q.valid ? "border-neutral-200" : "border-state-danger" }`}
+                className={`rounded-xl border bg-card p-4 ${ q.valid ? "border-border" : "border-state-danger" }`}
               >
                 <div className="mb-2 flex items-center gap-2">
-                  <span className="rounded bg-neutral-100 px-2 py-0.5 font-mono text-xs">
+                  <span className="rounded bg-muted px-2 py-0.5 font-mono text-xs">
                     {q.questionCode || "(thiếu code)"}
                   </span>
                   {q.dbExists && (
@@ -309,7 +309,7 @@ export function ImportWordClient({
                     onChange={(e) =>
                       patch(idx, { type: (e.target.value || null) as DocxType | null })
                     }
-                    className="rounded-md border border-neutral-200 px-2 py-1.5 text-sm"
+                    className="rounded-md border border-border px-2 py-1.5 text-sm"
                   >
                     <option value="">(loại?)</option>
                     <option value="SINGLE">SINGLE</option>
@@ -321,7 +321,7 @@ export function ImportWordClient({
                     onChange={(e) => patch(idx, { text: e.target.value })}
                     rows={2}
                     placeholder="Đề bài"
-                    className="resize-y rounded-md border border-neutral-200 px-2 py-1.5 text-sm"
+                    className="resize-y rounded-md border border-border px-2 py-1.5 text-sm"
                   />
                 </div>
 
@@ -329,7 +329,7 @@ export function ImportWordClient({
                   <img
                     src={media[q.questionImageRId]}
                     alt="ảnh đề"
-                    className="mt-2 max-h-40 rounded border border-neutral-200"
+                    className="mt-2 max-h-40 rounded border border-border"
                   />
                 )}
 
@@ -337,19 +337,19 @@ export function ImportWordClient({
                   <div className="mt-2 space-y-1">
                     {q.options.map((o, j) => (
                       <div key={j} className="flex items-center gap-2">
-                        <span className="w-6 text-center font-bold text-neutral-500">
+                        <span className="w-6 text-center font-bold text-muted-foreground">
                           {o.key}.
                         </span>
                         <input
                           value={o.text}
                           onChange={(e) => patchOption(idx, j, e.target.value)}
-                          className="flex-1 rounded-md border border-neutral-200 px-2 py-1 text-sm"
+                          className="flex-1 rounded-md border border-border px-2 py-1 text-sm"
                         />
                         {o.imageRId && media[o.imageRId] && (
                           <img
                             src={media[o.imageRId]}
                             alt={`ảnh ${o.key}`}
-                            className="h-10 w-10 rounded border border-neutral-200 object-cover"
+                            className="h-10 w-10 rounded border border-border object-cover"
                           />
                         )}
                       </div>
@@ -359,16 +359,16 @@ export function ImportWordClient({
 
                 <div className="mt-2 flex flex-wrap items-center gap-3 text-sm">
                   <label className="flex items-center gap-1">
-                    <span className="text-neutral-500">Đáp án đúng:</span>
+                    <span className="text-muted-foreground">Đáp án đúng:</span>
                     <input
                       value={q.correctRaw}
                       onChange={(e) => patch(idx, { correctRaw: e.target.value })}
                       placeholder="A hoặc A,C"
-                      className="w-24 rounded-md border border-neutral-200 px-2 py-1"
+                      className="w-24 rounded-md border border-border px-2 py-1"
                     />
                   </label>
                   <label className="flex items-center gap-1">
-                    <span className="text-neutral-500">Điểm:</span>
+                    <span className="text-muted-foreground">Điểm:</span>
                     <input
                       type="number"
                       min={0}
@@ -379,7 +379,7 @@ export function ImportWordClient({
                           score: e.target.value === "" ? null : Number(e.target.value),
                         })
                       }
-                      className="w-20 rounded-md border border-neutral-200 px-2 py-1"
+                      className="w-20 rounded-md border border-border px-2 py-1"
                     />
                   </label>
                 </div>

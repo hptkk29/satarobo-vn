@@ -90,15 +90,15 @@ export default async function EditUserPage({ params }: Props) {
     <div className="max-w-3xl">
       <Link
         href="/users"
-        className="mb-4 inline-flex items-center gap-1 text-sm text-gray-500 hover:text-gray-700"
+        className="mb-4 inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
       >
         <ChevronLeft className="h-4 w-4" />
         Quay lại danh sách
       </Link>
 
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">{user.email}</h1>
-        <p className="mt-1 text-sm text-gray-500">
+        <h1 className="text-2xl font-bold text-foreground">{user.email}</h1>
+        <p className="mt-1 text-sm text-muted-foreground">
           {user.name ?? "—"}
           {isSelf && (
             <span className="ml-2 inline-flex rounded-full bg-state-info-soft px-2 py-0.5 text-[10px] font-semibold text-state-info-ink">
@@ -109,7 +109,7 @@ export default async function EditUserPage({ params }: Props) {
       </div>
 
       {/* Form */}
-      <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
+      <div className="rounded-xl border border-border bg-card p-6 shadow-sm">
         <UserForm
           mode="edit"
           initialData={{
@@ -127,38 +127,38 @@ export default async function EditUserPage({ params }: Props) {
       </div>
 
       {/* Thông tin hệ thống — readonly */}
-      <div className="mt-6 rounded-xl border border-gray-200 bg-gray-50/50 p-5 text-sm">
-        <h2 className="mb-3 text-sm font-bold uppercase tracking-wider text-gray-500">
+      <div className="mt-6 rounded-xl border border-border bg-muted/50 p-5 text-sm">
+        <h2 className="mb-3 text-sm font-bold uppercase tracking-wider text-muted-foreground">
           Thông tin hệ thống
         </h2>
         <dl className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div>
-            <dt className="text-xs text-gray-500">Ngày tạo</dt>
-            <dd className="mt-0.5 tabular-nums text-gray-800">
+            <dt className="text-xs text-muted-foreground">Ngày tạo</dt>
+            <dd className="mt-0.5 tabular-nums text-foreground">
               {formatDate(user.createdAt)}
             </dd>
           </div>
           <div>
-            <dt className="text-xs text-gray-500">Lần đăng nhập cuối</dt>
-            <dd className="mt-0.5 tabular-nums text-gray-800">
+            <dt className="text-xs text-muted-foreground">Lần đăng nhập cuối</dt>
+            <dd className="mt-0.5 tabular-nums text-foreground">
               {formatDate(user.lastLoginAt)}
             </dd>
           </div>
           <div>
-            <dt className="text-xs text-gray-500">Token version</dt>
-            <dd className="mt-0.5 font-mono text-xs text-gray-700">
+            <dt className="text-xs text-muted-foreground">Token version</dt>
+            <dd className="mt-0.5 font-mono text-xs text-foreground">
               {user.tokenVersion}
             </dd>
           </div>
           <div>
-            <dt className="text-xs text-gray-500">Trạng thái</dt>
+            <dt className="text-xs text-muted-foreground">Trạng thái</dt>
             <dd className="mt-0.5">
               {user.isActive ? (
                 <span className="inline-flex rounded-full bg-state-success-soft px-2 py-0.5 text-xs font-semibold text-state-success-ink">
                   Hoạt động
                 </span>
               ) : (
-                <span className="inline-flex rounded-full bg-gray-200 px-2 py-0.5 text-xs font-semibold text-gray-600">
+                <span className="inline-flex rounded-full bg-muted px-2 py-0.5 text-xs font-semibold text-muted-foreground">
                   Đã disable
                 </span>
               )}
@@ -175,7 +175,7 @@ export default async function EditUserPage({ params }: Props) {
               <Shield className="h-4 w-4" />
               Phân quyền nâng cao
             </h2>
-            <p className="mt-2 text-sm text-gray-700">
+            <p className="mt-2 text-sm text-foreground">
               Cấp (ALLOW) hoặc thu hồi (DENY) một quyền cụ thể bất kể role.
               {user._count.permissionGrants > 0 ? (
                 <>
@@ -192,7 +192,7 @@ export default async function EditUserPage({ params }: Props) {
           </div>
           <Link
             href={`/users/${user.id}/permissions`}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-primary bg-white px-4 py-2 text-sm font-semibold text-primary hover:bg-primary-soft"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-primary bg-card px-4 py-2 text-sm font-semibold text-primary hover:bg-primary-soft"
           >
             Quản lý
             <ArrowRight className="h-4 w-4" />
@@ -209,7 +209,7 @@ export default async function EditUserPage({ params }: Props) {
                 <Building2 className="h-4 w-4" />
                 Vai trò theo đơn vị (RBAC v2)
               </h2>
-              <p className="mt-2 text-sm text-gray-700">
+              <p className="mt-2 text-sm text-foreground">
                 Gán vai trò (RoleDef) theo từng cơ sở/Hội sở — đây là nguồn quyền
                 chính khi hệ phân quyền v2 bật.
                 {activeOrgRoleCount > 0 ? (
@@ -230,7 +230,7 @@ export default async function EditUserPage({ params }: Props) {
             </div>
             <Link
               href={`/users/${user.id}/org-roles`}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-state-success bg-white px-4 py-2 text-sm font-semibold text-state-success-ink hover:bg-state-success-soft"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-state-success bg-card px-4 py-2 text-sm font-semibold text-state-success-ink hover:bg-state-success-soft"
             >
               Quản lý
               <ArrowRight className="h-4 w-4" />
@@ -247,7 +247,7 @@ export default async function EditUserPage({ params }: Props) {
         <div className="flex flex-col gap-2 sm:flex-row">
           <Link
             href={`/users/${user.id}/reset-password`}
-            className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-primary bg-white px-4 py-2 text-sm font-semibold text-primary hover:bg-primary-soft"
+            className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-primary bg-card px-4 py-2 text-sm font-semibold text-primary hover:bg-primary-soft"
           >
             <KeyRound className="h-4 w-4" />
             Đổi mật khẩu
@@ -269,7 +269,7 @@ export default async function EditUserPage({ params }: Props) {
                     ? "Không thể disable SUPER_ADMIN duy nhất"
                     : undefined
               }
-              className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-state-danger bg-white px-4 py-2 text-sm font-semibold text-state-danger-ink hover:bg-state-danger-soft disabled:cursor-not-allowed disabled:opacity-50"
+              className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-state-danger bg-card px-4 py-2 text-sm font-semibold text-state-danger-ink hover:bg-state-danger-soft disabled:cursor-not-allowed disabled:opacity-50"
             >
               <Power className="h-4 w-4" />
               {user.isActive ? "Disable tài khoản" : "Kích hoạt lại"}

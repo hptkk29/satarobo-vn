@@ -66,7 +66,7 @@ const MESSAGE_PLATFORMS = ["SMS", "Zalo", "Messenger"] as const;
 type MessagePlatform = (typeof MESSAGE_PLATFORMS)[number];
 
 const inputCls =
-  "w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary-soft";
+  "w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary-soft";
 
 // LD4 — narrow JSON metadata an toàn (object thuần, không phải array/primitive).
 function asMetaObj(m: unknown): Record<string, unknown> | null {
@@ -90,17 +90,17 @@ function ActivityBody({ activity }: { activity: Activity }) {
         dur != null && dur !== "" && `Thời lượng: ${metaStr(dur)} phút`,
       ].filter(Boolean);
       return (
-        <div className="mt-0.5 text-sm text-gray-800">
-          {head.length > 0 && <p className="text-xs text-gray-500">{head.join(" · ")}</p>}
+        <div className="mt-0.5 text-sm text-foreground">
+          {head.length > 0 && <p className="text-xs text-muted-foreground">{head.join(" · ")}</p>}
           <p className="whitespace-pre-line">{metaStr(meta.notes)}</p>
         </div>
       );
     }
     if (activity.type === "MESSAGE") {
       return (
-        <p className="mt-0.5 text-sm text-gray-800">
+        <p className="mt-0.5 text-sm text-foreground">
           {metaStr(meta.platform) && (
-            <span className="mr-1 rounded bg-gray-100 px-1.5 py-0.5 text-xs font-medium text-gray-600">
+            <span className="mr-1 rounded bg-muted px-1.5 py-0.5 text-xs font-medium text-muted-foreground">
               {metaStr(meta.platform)}
             </span>
           )}
@@ -112,9 +112,9 @@ function ActivityBody({ activity }: { activity: Activity }) {
       const recipient = metaStr(meta.recipient);
       const subject = metaStr(meta.subject);
       return (
-        <div className="mt-0.5 text-sm text-gray-800">
+        <div className="mt-0.5 text-sm text-foreground">
           {(recipient || subject) && (
-            <p className="text-xs text-gray-500">
+            <p className="text-xs text-muted-foreground">
               {recipient && <>Đến: {recipient}</>}
               {recipient && subject && " · "}
               {subject && <>Tiêu đề: {subject}</>}
@@ -126,13 +126,13 @@ function ActivityBody({ activity }: { activity: Activity }) {
     }
     if (activity.type === "NOTE" && metaStr(meta.text)) {
       return (
-        <p className="mt-0.5 whitespace-pre-line text-sm text-gray-800">{metaStr(meta.text)}</p>
+        <p className="mt-0.5 whitespace-pre-line text-sm text-foreground">{metaStr(meta.text)}</p>
       );
     }
   }
   // Fallback: hoạt động cũ / auto-gen → render chuỗi content.
   return (
-    <p className="mt-0.5 whitespace-pre-line text-sm text-gray-800">{activity.content}</p>
+    <p className="mt-0.5 whitespace-pre-line text-sm text-foreground">{activity.content}</p>
   );
 }
 
@@ -274,8 +274,8 @@ export function LeadActivityPanel({
     // LD6 — bỏ cột "Việc cần làm" → bố cục 1 cột (trước đây lg:grid-cols-3).
     <div className="space-y-4">
       {/* LD4 — Ghi nhanh hoạt động theo từng loại */}
-      <div className="rounded-xl border border-gray-200 bg-white p-4">
-        <h3 className="mb-3 text-sm font-bold text-gray-900">Ghi nhanh hoạt động</h3>
+      <div className="rounded-xl border border-border bg-card p-4">
+        <h3 className="mb-3 text-sm font-bold text-foreground">Ghi nhanh hoạt động</h3>
         <div className="flex flex-wrap gap-2">
           {QUICK_TYPES.map((t) => {
             const Icon = ACTIVITY_ICON[t];
@@ -284,7 +284,7 @@ export function LeadActivityPanel({
                 key={t}
                 type="button"
                 onClick={() => setActType(t)}
-                className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm ${ actType === t ? "border-primary bg-primary-soft text-primary" : "border-gray-200 text-gray-600 hover:bg-gray-50" }`}
+                className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm ${ actType === t ? "border-primary bg-primary-soft text-primary" : "border-border text-muted-foreground hover:bg-muted" }`}
               >
                 <Icon size={14} /> {ACTIVITY_LABEL[t]}
               </button>
@@ -393,39 +393,39 @@ export function LeadActivityPanel({
       </div>
 
       {/* LD5 — Lịch sử thành nút bấm mở/đóng (mặc định đóng) */}
-      <div className="rounded-xl border border-gray-200 bg-white p-4">
+      <div className="rounded-xl border border-border bg-card p-4">
         <button
           type="button"
           onClick={() => setHistoryOpen((v) => !v)}
           aria-expanded={historyOpen}
-          className="flex w-full items-center justify-between gap-2 text-left text-sm font-bold text-gray-900"
+          className="flex w-full items-center justify-between gap-2 text-left text-sm font-bold text-foreground"
         >
           <span>Lịch sử tương tác của Lead ({activities.length})</span>
           {historyOpen ? (
-            <ChevronDown size={16} className="flex-shrink-0 text-gray-500" />
+            <ChevronDown size={16} className="flex-shrink-0 text-muted-foreground" />
           ) : (
-            <ChevronRight size={16} className="flex-shrink-0 text-gray-500" />
+            <ChevronRight size={16} className="flex-shrink-0 text-muted-foreground" />
           )}
         </button>
 
         {historyOpen &&
           (activities.length === 0 ? (
-            <p className="py-6 text-center text-sm text-gray-400">Chưa có hoạt động nào.</p>
+            <p className="py-6 text-center text-sm text-muted-foreground">Chưa có hoạt động nào.</p>
           ) : (
             <ol className="mt-3 space-y-3">
               {activities.map((a) => {
                 const Icon = ACTIVITY_ICON[a.type] ?? StickyNote;
                 return (
                   <li key={a.id} className="flex gap-3">
-                    <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-gray-100 text-gray-600">
+                    <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground">
                       <Icon size={15} />
                     </div>
                     <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-baseline gap-x-2">
-                        <span className="text-xs font-bold text-gray-700">
+                        <span className="text-xs font-bold text-foreground">
                           {ACTIVITY_LABEL[a.type] ?? a.type}
                         </span>
-                        <span className="text-xs text-gray-400">
+                        <span className="text-xs text-muted-foreground">
                           {a.actorName} · {fmtDateTime(a.createdAt)}
                         </span>
                       </div>

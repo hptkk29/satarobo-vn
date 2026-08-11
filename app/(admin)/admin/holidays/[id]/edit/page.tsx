@@ -39,11 +39,11 @@ export default async function EditHolidayPage({ params }: Props) {
         <div>
           <Link
             href="/holidays"
-            className="mb-3 inline-flex items-center gap-1 text-sm text-neutral-500 hover:text-neutral-700"
+            className="mb-3 inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
           >
             <ChevronLeft className="h-4 w-4" /> Quay lại danh sách
           </Link>
-          <h1 className="text-3xl font-black text-neutral-900">
+          <h1 className="text-3xl font-black text-foreground">
             Sửa ngày nghỉ:{" "}
             <span className="font-bold text-primary">{holiday.name}</span>
           </h1>

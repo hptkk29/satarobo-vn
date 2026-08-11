@@ -47,14 +47,14 @@ export function ClassApprovalActions({
   }
 
   return (
-    <section className="rounded-xl border border-gray-200 bg-white p-5">
-      <h2 className="mb-3 text-sm font-bold uppercase tracking-wider text-gray-500">
+    <section className="rounded-xl border border-border bg-card p-5">
+      <h2 className="mb-3 text-sm font-bold uppercase tracking-wider text-muted-foreground">
         Phê duyệt lớp
       </h2>
 
       {(status === "PLANNED" || status === "RECRUITING") && (
         <div className="flex flex-wrap items-center gap-3">
-          <span className="text-sm text-gray-600">
+          <span className="text-sm text-muted-foreground">
             Lớp đang chuẩn bị. Gán đủ học sinh phù hợp giờ rồi gửi quản lý duyệt.
           </span>
           {canSubmit && (
@@ -95,7 +95,7 @@ export function ClassApprovalActions({
               </button>
             </div>
           ) : (
-            <p className="text-sm text-gray-500">Chờ quản lý cơ sở / SUPER_ADMIN duyệt.</p>
+            <p className="text-sm text-muted-foreground">Chờ quản lý cơ sở / SUPER_ADMIN duyệt.</p>
           )}
           {rejecting && canApprove && (
             <div className="flex flex-wrap items-end gap-2">
@@ -103,7 +103,7 @@ export function ClassApprovalActions({
                 value={reason}
                 onChange={(e) => setReason(e.target.value)}
                 placeholder="Lý do trả lại (≥5 ký tự)…"
-                className="min-w-[16rem] flex-1 rounded-lg border border-gray-300 px-3 py-1.5 text-sm focus:border-state-danger focus:outline-none"
+                className="min-w-[16rem] flex-1 rounded-lg border border-border px-3 py-1.5 text-sm focus:border-state-danger focus:outline-none"
               />
               <button
                 type="button"
@@ -126,7 +126,7 @@ export function ClassApprovalActions({
       )}
 
       {(status === "COMPLETED" || status === "CANCELLED") && (
-        <span className="text-sm text-gray-500">Lớp đã {status === "COMPLETED" ? "hoàn thành" : "huỷ"}.</span>
+        <span className="text-sm text-muted-foreground">Lớp đã {status === "COMPLETED" ? "hoàn thành" : "huỷ"}.</span>
       )}
     </section>
   );

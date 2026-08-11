@@ -122,8 +122,8 @@ export default async function ChamCongPage({ searchParams }: Props) {
     <div className="max-w-5xl p-6">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Chấm công nhân viên</h1>
-          <p className="mt-1 text-sm text-gray-500">
+          <h1 className="text-2xl font-bold text-foreground">Chấm công nhân viên</h1>
+          <p className="mt-1 text-sm text-muted-foreground">
             Tính công theo ca đăng ký (GMT+7):{" "}
             {SHIFT_ORDER.map((s) => `${SHIFT_DEFS[s].label} ${SHIFT_DEFS[s].start}–${SHIFT_DEFS[s].end}`).join(" · ")}.
           </p>
@@ -146,13 +146,13 @@ export default async function ChamCongPage({ searchParams }: Props) {
       </div>
 
       {list.length === 0 ? (
-        <p className="rounded-xl border border-dashed border-gray-300 p-8 text-center text-sm text-gray-400">
+        <p className="rounded-xl border border-dashed border-border p-8 text-center text-sm text-muted-foreground">
           Chưa có chấm công ngày {dateStr}.
         </p>
       ) : (
-        <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white">
-          <table className="min-w-full divide-y divide-gray-100 text-sm">
-            <thead className="bg-gray-50 text-left text-xs uppercase tracking-wide text-gray-500">
+        <div className="overflow-x-auto rounded-xl border border-border bg-card">
+          <table className="min-w-full divide-y divide-border text-sm">
+            <thead className="bg-muted text-left text-xs uppercase tracking-wide text-muted-foreground">
               <tr>
                 <th className="px-4 py-3 font-semibold">Nhân viên</th>
                 <th className="px-4 py-3 font-semibold">Cơ sở</th>
@@ -163,23 +163,23 @@ export default async function ChamCongPage({ searchParams }: Props) {
                 <th className="px-4 py-3 text-center font-semibold">Tình trạng</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-50">
+            <tbody className="divide-y divide-border">
               {list.map((a, i) => (
-                <tr key={i} className="hover:bg-gray-50/60">
-                  <td className="px-4 py-2.5 font-medium text-gray-900">{a.userName}</td>
-                  <td className="px-4 py-2.5 text-gray-600">
+                <tr key={i} className="hover:bg-muted/60">
+                  <td className="px-4 py-2.5 font-medium text-foreground">{a.userName}</td>
+                  <td className="px-4 py-2.5 text-muted-foreground">
                     {a.centerId ? centerName.get(a.centerId) ?? "—" : "—"}
                   </td>
-                  <td className="px-4 py-2.5 text-gray-700">
+                  <td className="px-4 py-2.5 text-foreground">
                     {formatRegisteredShifts(a.registeredShifts)}
                   </td>
-                  <td className="px-4 py-2.5 text-center tabular-nums text-gray-700">
+                  <td className="px-4 py-2.5 text-center tabular-nums text-foreground">
                     {formatVNTime(a.checkIn)}
                   </td>
-                  <td className="px-4 py-2.5 text-center tabular-nums text-gray-700">
+                  <td className="px-4 py-2.5 text-center tabular-nums text-foreground">
                     {formatVNTime(a.checkOut)}
                   </td>
-                  <td className="px-4 py-2.5 text-center tabular-nums font-medium text-gray-900">
+                  <td className="px-4 py-2.5 text-center tabular-nums font-medium text-foreground">
                     {a.checkIn && a.checkOut ? `${a.status.workedHours}h` : "—"}
                   </td>
                   <td className="px-4 py-2.5 text-center">

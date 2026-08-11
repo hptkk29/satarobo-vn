@@ -30,8 +30,8 @@ export function CreateGroupForm() {
   }
 
   return (
-    <div className="rounded-lg border bg-neutral-50 p-4">
-      <h2 className="mb-3 text-sm font-semibold text-neutral-700">Tạo nhóm mới</h2>
+    <div className="rounded-lg border bg-muted p-4">
+      <h2 className="mb-3 text-sm font-semibold text-foreground">Tạo nhóm mới</h2>
       <div className="grid gap-3 sm:grid-cols-3">
         <div>
           <Label htmlFor="group-name">Tên nhóm</Label>

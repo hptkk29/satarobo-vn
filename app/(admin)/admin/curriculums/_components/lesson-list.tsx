@@ -41,7 +41,7 @@ const STATUS_LABEL: Record<LessonStatus, string> = {
 };
 
 const STATUS_CLASS: Record<LessonStatus, string> = {
-  INCOMPLETE: "bg-neutral-100 text-neutral-600",
+  INCOMPLETE: "bg-muted text-muted-foreground",
   COMPLETE: "bg-state-success-soft text-state-success-ink",
   IN_USE: "bg-state-info-soft text-state-info-ink",
   NEEDS_UPDATE: "bg-state-warning-soft text-state-warning-ink",
@@ -138,13 +138,13 @@ export function LessonList({
   }
 
   return (
-    <section className="rounded-xl border border-neutral-200 bg-white">
-      <header className="flex items-center justify-between border-b border-neutral-100 p-4">
+    <section className="rounded-xl border border-border bg-card">
+      <header className="flex items-center justify-between border-b border-border p-4">
         <div>
-          <h2 className="text-sm font-bold uppercase tracking-wider text-neutral-700">
+          <h2 className="text-sm font-bold uppercase tracking-wider text-foreground">
             Bài học ({lessons.length})
           </h2>
-          <p className="text-xs text-neutral-500">
+          <p className="text-xs text-muted-foreground">
             Sắp xếp bằng nút ↑↓; đổi trạng thái / khóa / lưu trữ từng buổi.
           </p>
         </div>
@@ -171,22 +171,22 @@ export function LessonList({
       )}
 
       {lessons.length === 0 ? (
-        <div className="p-8 text-center text-sm text-neutral-400">
+        <div className="p-8 text-center text-sm text-muted-foreground">
           Chưa có bài học. Bấm “Thêm bài” hoặc dùng “Số buổi” để sinh nhanh.
         </div>
       ) : (
-        <ul className="divide-y divide-neutral-100">
+        <ul className="divide-y divide-border">
           {lessons.map((lesson, idx) => {
             const locked = lesson.status === "LOCKED";
             return (
-              <li key={lesson.id} className="p-3 hover:bg-neutral-50/60">
+              <li key={lesson.id} className="p-3 hover:bg-muted/60">
                 <div className="flex items-start gap-3">
-                  <div className="pt-1 font-bold tabular-nums text-neutral-700 w-16 shrink-0">
+                  <div className="pt-1 font-bold tabular-nums text-foreground w-16 shrink-0">
                     Bài {lesson.order}
                   </div>
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-2">
-                      <span className="font-medium text-neutral-900">
+                      <span className="font-medium text-foreground">
                         {lesson.title}
                       </span>
                       <span
@@ -201,7 +201,7 @@ export function LessonList({
                       )}
                     </div>
                     {lesson.description && (
-                      <div className="mt-0.5 text-xs text-neutral-500 line-clamp-1">
+                      <div className="mt-0.5 text-xs text-muted-foreground line-clamp-1">
                         {lesson.description}
                       </div>
                     )}
@@ -213,7 +213,7 @@ export function LessonList({
                         }
                         disabled={pending || locked}
                         title={locked ? "Buổi đang khóa — dùng nút Mở khóa" : "Đổi trạng thái"}
-                        className="rounded-lg border border-neutral-200 bg-white px-2 py-1 text-xs outline-none focus:border-primary disabled:opacity-60"
+                        className="rounded-lg border border-border bg-card px-2 py-1 text-xs outline-none focus:border-primary disabled:opacity-60"
                       >
                         {locked && <option value="LOCKED">Đã khóa</option>}
                         {SELECTABLE_STATUSES.map((s) => (
@@ -237,7 +237,7 @@ export function LessonList({
                               ? "Mở khóa (Đào tạo)"
                               : "Chỉ Đào tạo mới mở khóa được"
                           }
-                          className="inline-flex items-center gap-1 rounded-lg border border-neutral-200 px-2 py-1 text-xs font-semibold text-neutral-700 hover:bg-neutral-50 disabled:opacity-40"
+                          className="inline-flex items-center gap-1 rounded-lg border border-border px-2 py-1 text-xs font-semibold text-foreground hover:bg-muted disabled:opacity-40"
                         >
                           <Unlock className="h-3.5 w-3.5" /> Mở khóa
                         </button>
@@ -251,7 +251,7 @@ export function LessonList({
                           }
                           disabled={pending}
                           title="Khóa nội dung buổi"
-                          className="inline-flex items-center gap-1 rounded-lg border border-neutral-200 px-2 py-1 text-xs font-semibold text-neutral-700 hover:bg-neutral-50 disabled:opacity-40"
+                          className="inline-flex items-center gap-1 rounded-lg border border-border px-2 py-1 text-xs font-semibold text-foreground hover:bg-muted disabled:opacity-40"
                         >
                           <Lock className="h-3.5 w-3.5" /> Khóa
                         </button>
@@ -265,7 +265,7 @@ export function LessonList({
                             <button
                               type="button"
                               onClick={open}
-                              className="inline-flex items-center gap-1 rounded-lg border border-neutral-200 px-2 py-1 text-xs font-semibold text-neutral-700 hover:bg-neutral-50"
+                              className="inline-flex items-center gap-1 rounded-lg border border-border px-2 py-1 text-xs font-semibold text-foreground hover:bg-muted"
                             >
                               <MessageSquarePlus className="h-3.5 w-3.5" /> Đề xuất sửa
                             </button>
@@ -280,7 +280,7 @@ export function LessonList({
                       type="button"
                       onClick={() => move(idx, -1)}
                       disabled={pending || idx === 0}
-                      className="rounded p-1.5 text-neutral-600 hover:bg-neutral-100 disabled:opacity-30"
+                      className="rounded p-1.5 text-muted-foreground hover:bg-muted disabled:opacity-30"
                       aria-label="Lên"
                       title="Lên"
                     >
@@ -290,7 +290,7 @@ export function LessonList({
                       type="button"
                       onClick={() => move(idx, 1)}
                       disabled={pending || idx === lessons.length - 1}
-                      className="rounded p-1.5 text-neutral-600 hover:bg-neutral-100 disabled:opacity-30"
+                      className="rounded p-1.5 text-muted-foreground hover:bg-muted disabled:opacity-30"
                       aria-label="Xuống"
                       title="Xuống"
                     >
@@ -341,17 +341,17 @@ export function LessonList({
       )}
 
       {archived.length > 0 && (
-        <div className="border-t border-neutral-100 p-4">
-          <h3 className="text-xs font-bold uppercase tracking-wider text-neutral-500">
+        <div className="border-t border-border p-4">
+          <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
             Buổi đã lưu trữ ({archived.length}) — đọc-only
           </h3>
           <ul className="mt-2 space-y-1.5">
             {archived.map((lesson) => (
               <li
                 key={lesson.id}
-                className="flex items-center justify-between rounded-lg border border-neutral-200 bg-neutral-50 px-3 py-2 text-sm"
+                className="flex items-center justify-between rounded-lg border border-border bg-muted px-3 py-2 text-sm"
               >
-                <span className="text-neutral-500">
+                <span className="text-muted-foreground">
                   <span className="font-semibold">Bài {lesson.order}:</span>{" "}
                   {lesson.title}
                 </span>
@@ -359,7 +359,7 @@ export function LessonList({
                   type="button"
                   onClick={() => run(() => unarchiveLessonAction(lesson.id))}
                   disabled={pending}
-                  className="inline-flex items-center gap-1 rounded-lg border border-neutral-200 bg-white px-2 py-1 text-xs font-semibold text-neutral-700 hover:bg-neutral-50 disabled:opacity-40"
+                  className="inline-flex items-center gap-1 rounded-lg border border-border bg-card px-2 py-1 text-xs font-semibold text-foreground hover:bg-muted disabled:opacity-40"
                 >
                   <ArchiveRestore className="h-3.5 w-3.5" /> Khôi phục
                 </button>

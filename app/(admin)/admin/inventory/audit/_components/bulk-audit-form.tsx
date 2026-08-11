@@ -176,8 +176,8 @@ export function BulkAuditForm({
         </div>
       )}
 
-      <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-neutral-200 bg-white px-4 py-3">
-        <div className="text-sm text-neutral-700">
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border bg-card px-4 py-3">
+        <div className="text-sm text-foreground">
           <span className="font-bold">{stats.changedCount}</span> dòng thay đổi
           {stats.increases > 0 && (
             <span className="ml-3 text-state-success-ink">+{stats.increases} tăng</span>
@@ -191,7 +191,7 @@ export function BulkAuditForm({
             </span>
           )}
           {savedAt && (
-            <span className="ml-3 text-xs text-neutral-500">
+            <span className="ml-3 text-xs text-muted-foreground">
               Đã lưu nháp {savedAt.toLocaleTimeString("vi-VN")}
             </span>
           )}
@@ -201,7 +201,7 @@ export function BulkAuditForm({
             type="button"
             onClick={handleCancel}
             disabled={pending}
-            className="inline-flex items-center gap-1 rounded-md border border-state-danger bg-white px-3 py-1.5 text-sm font-semibold text-state-danger-ink hover:bg-state-danger-soft disabled:opacity-50"
+            className="inline-flex items-center gap-1 rounded-md border border-state-danger bg-card px-3 py-1.5 text-sm font-semibold text-state-danger-ink hover:bg-state-danger-soft disabled:opacity-50"
           >
             <X className="h-4 w-4" />
             Huỷ phiếu
@@ -210,7 +210,7 @@ export function BulkAuditForm({
             type="button"
             onClick={handleSaveDraft}
             disabled={pending}
-            className="inline-flex items-center gap-1 rounded-md border border-neutral-300 bg-white px-3 py-1.5 text-sm font-semibold text-neutral-700 hover:bg-neutral-50 disabled:opacity-50"
+            className="inline-flex items-center gap-1 rounded-md border border-border bg-card px-3 py-1.5 text-sm font-semibold text-foreground hover:bg-muted disabled:opacity-50"
           >
             <Save className="h-4 w-4" />
             Lưu nháp
@@ -234,43 +234,43 @@ export function BulkAuditForm({
         value={search}
         onChange={(e) => setSearch(e.target.value)}
         placeholder="Tìm theo mã / tên hàng..."
-        className="w-full rounded-lg border border-neutral-200 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+        className="w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
       />
 
-      <div className="overflow-hidden rounded-xl border border-neutral-200 bg-white shadow-sm">
+      <div className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
         <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-neutral-100 text-sm">
-            <thead className="bg-neutral-50">
+          <table className="min-w-full divide-y divide-border text-sm">
+            <thead className="bg-muted">
               <tr>
-                <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wider text-neutral-500">
+                <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                   Mã
                 </th>
-                <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wider text-neutral-500">
+                <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                   Tên hàng
                 </th>
-                <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wider text-neutral-500">
+                <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                   ĐV
                 </th>
-                <th className="px-3 py-2 text-right text-xs font-semibold uppercase tracking-wider text-neutral-500">
+                <th className="px-3 py-2 text-right text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                   Hệ thống
                 </th>
-                <th className="px-3 py-2 text-right text-xs font-semibold uppercase tracking-wider text-neutral-500">
+                <th className="px-3 py-2 text-right text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                   Thực tế *
                 </th>
-                <th className="px-3 py-2 text-right text-xs font-semibold uppercase tracking-wider text-neutral-500">
+                <th className="px-3 py-2 text-right text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                   Δ
                 </th>
-                <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wider text-neutral-500">
+                <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                   Lý do (Δ ≠ 0, ≥ 5 ký tự)
                 </th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-neutral-50">
+            <tbody className="divide-y divide-border">
               {filtered.length === 0 ? (
                 <tr>
                   <td
                     colSpan={7}
-                    className="px-4 py-8 text-center text-sm text-neutral-400"
+                    className="px-4 py-8 text-center text-sm text-muted-foreground"
                   >
                     {rows.length === 0
                       ? "Chưa có mặt hàng active nào trong hệ thống."
@@ -291,19 +291,19 @@ export function BulkAuditForm({
                       ? "text-state-success-ink"
                       : delta < 0
                         ? "text-state-danger-ink"
-                        : "text-neutral-400";
+                        : "text-muted-foreground";
                   const reasonMissing =
                     delta !== 0 && r.reason.trim().length < 5;
                   return (
                     <tr key={r.itemId} className={rowBg}>
-                      <td className="px-3 py-2 font-mono text-xs text-neutral-600">
+                      <td className="px-3 py-2 font-mono text-xs text-muted-foreground">
                         {r.itemCode}
                       </td>
-                      <td className="px-3 py-2 text-neutral-900">
+                      <td className="px-3 py-2 text-foreground">
                         {r.itemName}
                       </td>
-                      <td className="px-3 py-2 text-neutral-500">{r.unit}</td>
-                      <td className="px-3 py-2 text-right tabular-nums text-neutral-700">
+                      <td className="px-3 py-2 text-muted-foreground">{r.unit}</td>
+                      <td className="px-3 py-2 text-right tabular-nums text-foreground">
                         {r.previousQty}
                       </td>
                       <td className="px-3 py-2 text-right">
@@ -315,7 +315,7 @@ export function BulkAuditForm({
                             updateRow(r.itemId, "actualQty", e.target.value)
                           }
                           disabled={pending}
-                          className="w-24 rounded-md border border-neutral-300 px-2 py-1 text-right text-sm tabular-nums disabled:opacity-60"
+                          className="w-24 rounded-md border border-border px-2 py-1 text-right text-sm tabular-nums disabled:opacity-60"
                         />
                       </td>
                       <td
@@ -341,11 +341,11 @@ export function BulkAuditForm({
                               "w-full rounded-md border px-2 py-1 text-xs " +
                               (reasonMissing
                                 ? "border-state-warning bg-state-warning-soft"
-                                : "border-neutral-300")
+                                : "border-border")
                             }
                           />
                         ) : (
-                          <span className="text-xs text-neutral-300">—</span>
+                          <span className="text-xs text-muted-foreground">—</span>
                         )}
                       </td>
                     </tr>

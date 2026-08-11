@@ -61,12 +61,12 @@ export default function ImportClassesPage() {
       <div>
         <Link
           href="/classes"
-          className="mb-3 inline-flex items-center gap-1 text-sm text-neutral-500 hover:text-neutral-700"
+          className="mb-3 inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
         >
           <ChevronLeft className="h-4 w-4" /> Quay lại danh sách
         </Link>
         <h1 className="text-2xl font-bold">Import Lớp học từ Excel</h1>
-        <p className="text-sm text-neutral-500 mt-1">
+        <p className="text-sm text-muted-foreground mt-1">
           <code>classCode</code> = khoá upsert. <strong>5 references</strong> phải tồn
           tại trước: courseSlug, centerSlug, roomCode (theo center), teacherCode +
           assistantCode (Employee role TEACHER/CENTER_MANAGER + có User account).
@@ -186,8 +186,8 @@ export default function ImportClassesPage() {
         }}
       />
 
-      <div className="text-sm text-neutral-500 mt-4 space-y-1 rounded-xl border border-neutral-200 bg-neutral-50 p-4">
-        <p className="font-semibold text-neutral-700">Lưu ý:</p>
+      <div className="text-sm text-muted-foreground mt-4 space-y-1 rounded-xl border border-border bg-muted p-4">
+        <p className="font-semibold text-foreground">Lưu ý:</p>
         <ul className="list-disc list-inside space-y-0.5">
           <li>
             <code>scheduleDays</code> chấp nhận Vietnamese (vd <code>T2,T5</code>)

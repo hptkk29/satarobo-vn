@@ -44,14 +44,14 @@ export function GiveHomework({ sessionId }: { sessionId: string }) {
   return (
     <div className="mt-2 w-full space-y-2 rounded-lg bg-primary-soft p-3">
       <label className="block">
-        <span className="mb-1 block text-xs font-semibold text-gray-600">
+        <span className="mb-1 block text-xs font-semibold text-muted-foreground">
           Hạn nộp (để trống = hạn mặc định theo cấu hình bài)
         </span>
         <input
           type="datetime-local"
           value={dueAt}
           onChange={(e) => setDueAt(e.target.value)}
-          className="w-full rounded-lg border border-gray-300 px-2 py-1.5 text-sm focus:border-primary focus:outline-none"
+          className="w-full rounded-lg border border-border px-2 py-1.5 text-sm focus:border-primary focus:outline-none"
         />
       </label>
       <div className="flex gap-2">
@@ -66,7 +66,7 @@ export function GiveHomework({ sessionId }: { sessionId: string }) {
         <button
           type="button"
           onClick={() => setOpen(false)}
-          className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50"
+          className="rounded-lg border border-border px-4 py-2 text-sm font-semibold text-foreground hover:bg-muted"
         >
           Huỷ
         </button>

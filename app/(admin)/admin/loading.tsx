@@ -22,28 +22,28 @@ export default function AdminLoading() {
     >
       {/* Tiêu đề trang + mô tả */}
       <div className="space-y-2">
-        <div className="h-7 w-64 rounded-lg bg-neutral-200" />
-        <div className="h-4 w-44 rounded bg-neutral-200" />
+        <div className="h-7 w-64 rounded-lg bg-muted" />
+        <div className="h-4 w-44 rounded bg-muted" />
       </div>
 
       {/* Thanh công cụ: ô tìm kiếm + bộ lọc + nút thao tác */}
       <div className="flex flex-wrap items-center gap-3">
-        <div className="h-9 w-72 rounded-lg bg-neutral-200" />
-        <div className="h-9 w-36 rounded-lg bg-neutral-200" />
-        <div className="h-9 w-36 rounded-lg bg-neutral-200" />
-        <div className="ml-auto h-9 w-32 rounded-lg bg-neutral-200" />
+        <div className="h-9 w-72 rounded-lg bg-muted" />
+        <div className="h-9 w-36 rounded-lg bg-muted" />
+        <div className="h-9 w-36 rounded-lg bg-muted" />
+        <div className="ml-auto h-9 w-32 rounded-lg bg-muted" />
       </div>
 
       {/* Khối nội dung chính — đa số trang admin là bảng dữ liệu */}
-      <div className="overflow-hidden rounded-xl border border-neutral-200 bg-white">
-        <div className="h-11 border-b border-neutral-100 bg-neutral-50" />
-        <div className="divide-y divide-neutral-100">
+      <div className="overflow-hidden rounded-xl border border-border bg-card">
+        <div className="h-11 border-b border-border bg-muted" />
+        <div className="divide-y divide-border">
           {Array.from({ length: 8 }).map((_, i) => (
             <div key={i} className="flex items-center gap-4 px-4 py-3">
-              <div className="h-4 w-1/4 rounded bg-neutral-200" />
-              <div className="h-4 w-1/6 rounded bg-neutral-200" />
-              <div className="h-4 w-1/5 rounded bg-neutral-200" />
-              <div className="ml-auto h-4 w-16 rounded bg-neutral-200" />
+              <div className="h-4 w-1/4 rounded bg-muted" />
+              <div className="h-4 w-1/6 rounded bg-muted" />
+              <div className="h-4 w-1/5 rounded bg-muted" />
+              <div className="ml-auto h-4 w-16 rounded bg-muted" />
             </div>
           ))}
         </div>

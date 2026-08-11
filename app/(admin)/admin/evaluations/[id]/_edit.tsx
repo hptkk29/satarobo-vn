@@ -72,7 +72,7 @@ export function FormEditor({
           type="button"
           onClick={clone}
           disabled={pending}
-          className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50 disabled:opacity-60"
+          className="rounded-lg border border-border px-4 py-2 text-sm font-medium text-muted-foreground hover:bg-muted disabled:opacity-60"
         >
           Nhân bản form
         </button>

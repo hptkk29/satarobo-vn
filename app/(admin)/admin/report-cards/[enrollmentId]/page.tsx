@@ -108,11 +108,11 @@ export default async function ReportCardEditorPage({
         <Link href={`/report-cards?classId=${enr.classId}`} className="text-sm text-primary">
           ← {enr.className}
         </Link>
-        <h1 className="mt-1 text-xl font-bold text-neutral-900">
+        <h1 className="mt-1 text-xl font-bold text-foreground">
           Học bạ — {enr.studentName}
-          {enr.studentCode ? <span className="text-neutral-400"> ({enr.studentCode})</span> : null}
+          {enr.studentCode ? <span className="text-muted-foreground"> ({enr.studentCode})</span> : null}
         </h1>
-        <p className="text-sm text-neutral-500">
+        <p className="text-sm text-muted-foreground">
           {enr.courseName} · {enr.className}
         </p>
       </div>
@@ -131,7 +131,7 @@ export default async function ReportCardEditorPage({
           để form khoá im lặng (message khớp thực tế quyền: RECALLED cần quyền duyệt KÈM
           quyền nhập tại cơ sở — review-only như Đào tạo@HO cũng chỉ duyệt, không sửa). */}
       {isReportCardEditable(status) && !editable ? (
-        <div className="rounded-md border border-neutral-300 bg-neutral-50 px-4 py-3 text-sm text-neutral-600">
+        <div className="rounded-md border border-border bg-muted px-4 py-3 text-sm text-muted-foreground">
           {status === "RECALLED"
             ? "Học bạ đã phát hành và bị thu hồi — chỉ người có quyền duyệt học bạ (Quản lý cơ sở/Đào tạo) kèm quyền nhập tại cơ sở này mới sửa lại nội dung. Bạn chỉ xem."
             : "Bạn chỉ có quyền xem học bạ này — nội dung do giáo viên phụ trách lớp nhập."}

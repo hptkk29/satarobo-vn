@@ -51,11 +51,11 @@ export default async function CoursePrerequisitesPage() {
   return (
     <div className="max-w-4xl">
       <div className="mb-6">
-        <h1 className="flex items-center gap-2 text-2xl font-bold text-gray-900">
+        <h1 className="flex items-center gap-2 text-2xl font-bold text-foreground">
           <Workflow className="h-6 w-6 text-primary" />
           Khoá tiên quyết
         </h1>
-        <p className="mt-1 text-sm text-gray-500">
+        <p className="mt-1 text-sm text-muted-foreground">
           Khoá phải hoàn thành trước khi đăng ký. Khi đăng ký học viên vào lớp, hệ thống chặn
           nếu học viên chưa hoàn thành (trạng thái “Hoàn thành”) các khoá yêu cầu.
         </p>

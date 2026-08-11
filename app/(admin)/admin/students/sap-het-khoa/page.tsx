@@ -26,22 +26,22 @@ export default async function NearingEndPage() {
   return (
     <div className="max-w-5xl p-6">
       <div className="mb-4">
-        <h1 className="flex items-center gap-2 text-2xl font-bold text-gray-900">
+        <h1 className="flex items-center gap-2 text-2xl font-bold text-foreground">
           <GraduationCap className="h-6 w-6 text-primary" /> Sắp hết khoá
         </h1>
-        <p className="mt-1 text-sm text-gray-500">
+        <p className="mt-1 text-sm text-muted-foreground">
           Học viên còn ≤ 5 buổi — liên hệ phụ huynh tái tục. Sắp xếp theo số buổi còn lại.
         </p>
       </div>
 
       {items.length === 0 ? (
-        <p className="rounded-xl border border-dashed border-gray-300 p-8 text-center text-sm text-gray-400">
+        <p className="rounded-xl border border-dashed border-border p-8 text-center text-sm text-muted-foreground">
           Chưa có học viên nào sắp hết khoá.
         </p>
       ) : (
-        <div className="overflow-hidden rounded-xl border border-gray-200 bg-white">
+        <div className="overflow-hidden rounded-xl border border-border bg-card">
           <table className="w-full text-sm">
-            <thead className="border-b border-gray-200 bg-gray-50 text-left text-xs uppercase tracking-wider text-gray-500">
+            <thead className="border-b border-border bg-muted text-left text-xs uppercase tracking-wider text-muted-foreground">
               <tr>
                 <th className="px-4 py-2">Học viên</th>
                 <th className="px-4 py-2">Lớp / Khoá</th>
@@ -53,13 +53,13 @@ export default async function NearingEndPage() {
             </thead>
             <tbody>
               {items.map((it) => (
-                <tr key={it.enrollmentId} className="border-b border-gray-100 last:border-0">
-                  <td className="px-4 py-2 font-medium text-gray-900">{it.studentName}</td>
-                  <td className="px-4 py-2 text-gray-700">
+                <tr key={it.enrollmentId} className="border-b border-border last:border-0">
+                  <td className="px-4 py-2 font-medium text-foreground">{it.studentName}</td>
+                  <td className="px-4 py-2 text-foreground">
                     {it.className}
-                    <span className="block text-xs text-gray-400">{it.courseName}</span>
+                    <span className="block text-xs text-muted-foreground">{it.courseName}</span>
                   </td>
-                  <td className="px-4 py-2 text-gray-600">{it.centerName ?? "—"}</td>
+                  <td className="px-4 py-2 text-muted-foreground">{it.centerName ?? "—"}</td>
                   <td className="px-4 py-2 text-center">
                     <span
                       className={`rounded-full px-2 py-0.5 text-xs font-bold ${ it.remaining <= 2 ? "bg-state-danger-soft text-state-danger-ink" : "bg-state-warning-soft text-state-warning-ink" }`}
@@ -67,7 +67,7 @@ export default async function NearingEndPage() {
                       {it.remaining}/{it.total} buổi
                     </span>
                   </td>
-                  <td className="px-4 py-2 tabular-nums text-gray-700">
+                  <td className="px-4 py-2 tabular-nums text-foreground">
                     {it.expectedEndDate
                       ? formatDateVN(it.expectedEndDate)
                       : "—"}

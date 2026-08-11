@@ -55,7 +55,7 @@ export function HonorsAdminTable({ honors, canDelete }: Props) {
 
   if (honors.length === 0) {
     return (
-      <div className="rounded-lg border border-dashed border-gray-300 p-12 text-center text-gray-500">
+      <div className="rounded-lg border border-dashed border-border p-12 text-center text-muted-foreground">
         <p>Chưa có nhân sự nào được vinh danh.</p>
         <Link href="/honors/new" className="mt-2 inline-block text-primary hover:underline">
           Thêm nhân sự đầu tiên →
@@ -65,9 +65,9 @@ export function HonorsAdminTable({ honors, canDelete }: Props) {
   }
 
   return (
-    <div className="overflow-x-auto rounded-lg border border-gray-200 bg-white">
+    <div className="overflow-x-auto rounded-lg border border-border bg-card">
       <table className="w-full text-sm">
-        <thead className="bg-gray-50 text-left text-xs uppercase tracking-wider text-gray-500">
+        <thead className="bg-muted text-left text-xs uppercase tracking-wider text-muted-foreground">
           <tr>
             <th className="px-4 py-3">Họ tên / Chức danh</th>
             <th className="px-4 py-3">Danh hiệu</th>
@@ -78,14 +78,14 @@ export function HonorsAdminTable({ honors, canDelete }: Props) {
             <th className="px-4 py-3 text-right">Thao tác</th>
           </tr>
         </thead>
-        <tbody className="divide-y divide-gray-100">
+        <tbody className="divide-y divide-border">
           {honors.map((honor) => {
             const meta = CATEGORY_META[honor.category as HonorCategory];
             return (
-              <tr key={honor.id} className="hover:bg-gray-50">
+              <tr key={honor.id} className="hover:bg-muted">
                 <td className="px-4 py-3">
-                  <p className="font-semibold text-gray-900">{honor.fullName}</p>
-                  <p className="text-xs text-gray-500">{honor.jobTitle}</p>
+                  <p className="font-semibold text-foreground">{honor.fullName}</p>
+                  <p className="text-xs text-muted-foreground">{honor.jobTitle}</p>
                 </td>
                 <td className="px-4 py-3">
                   <span
@@ -95,18 +95,18 @@ export function HonorsAdminTable({ honors, canDelete }: Props) {
                     {meta.title}
                   </span>
                 </td>
-                <td className="px-4 py-3 text-gray-700">{honor.awardQuarter || "-"}</td>
-                <td className="px-4 py-3 text-gray-500">{honor.displayOrder}</td>
+                <td className="px-4 py-3 text-foreground">{honor.awardQuarter || "-"}</td>
+                <td className="px-4 py-3 text-muted-foreground">{honor.displayOrder}</td>
                 <td className="px-4 py-3 text-center">
                   <button
                     type="button"
                     onClick={() => handleToggleFeatured(honor.id)}
                     disabled={isPending}
-                    className="inline-flex items-center justify-center rounded p-1 hover:bg-gray-100 disabled:opacity-50"
+                    className="inline-flex items-center justify-center rounded p-1 hover:bg-muted disabled:opacity-50"
                     title={honor.isFeatured ? "Bỏ Featured" : "Đặt làm Person of the Month"}
                   >
                     <Star
-                      className={`h-5 w-5 ${ honor.isFeatured ? "fill-primary text-primary" : "text-gray-300" }`}
+                      className={`h-5 w-5 ${ honor.isFeatured ? "fill-primary text-primary" : "text-muted-foreground" }`}
                     />
                   </button>
                 </td>
@@ -115,12 +115,12 @@ export function HonorsAdminTable({ honors, canDelete }: Props) {
                     type="button"
                     onClick={() => handleTogglePublished(honor.id)}
                     disabled={isPending}
-                    className="inline-flex items-center justify-center rounded p-1 hover:bg-gray-100 disabled:opacity-50"
+                    className="inline-flex items-center justify-center rounded p-1 hover:bg-muted disabled:opacity-50"
                   >
                     {honor.isPublished ? (
                       <Eye className="h-5 w-5 text-state-success-ink" />
                     ) : (
-                      <EyeOff className="h-5 w-5 text-gray-400" />
+                      <EyeOff className="h-5 w-5 text-muted-foreground" />
                     )}
                   </button>
                 </td>
@@ -129,7 +129,7 @@ export function HonorsAdminTable({ honors, canDelete }: Props) {
                     <Link
                       href={`/vinh-danh/${honor.slug}`}
                       target="_blank"
-                      className="rounded p-1.5 text-gray-500 hover:bg-gray-100"
+                      className="rounded p-1.5 text-muted-foreground hover:bg-muted"
                       title="Xem public"
                     >
                       <Eye className="h-4 w-4" />

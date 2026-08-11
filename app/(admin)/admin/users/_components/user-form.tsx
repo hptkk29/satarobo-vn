@@ -147,7 +147,7 @@ export function UserForm({
             maxLength={20}
             placeholder="0901234567"
           />
-          <p className="text-xs text-gray-500">
+          <p className="text-xs text-muted-foreground">
             Nhân sự đăng nhập bằng SĐT (hoặc email). Thông tin tài khoản sẽ được
             gửi qua email + Zalo sau khi tạo.
           </p>
@@ -166,7 +166,7 @@ export function UserForm({
             maxLength={72}
             placeholder="Tối thiểu 8 ký tự"
           />
-          <p className="text-xs text-gray-500">
+          <p className="text-xs text-muted-foreground">
             User sẽ đổi mật khẩu sau khi đăng nhập lần đầu.
           </p>
         </div>
@@ -201,7 +201,7 @@ export function UserForm({
                   type="button"
                   onClick={() => on && setPrimaryRole(opt.value)}
                   disabled={!on || pending}
-                  className={`rounded-full px-2 py-0.5 text-xs font-semibold ${ primaryRole === opt.value ? "bg-primary text-white" : on ? "bg-gray-100 text-gray-600 hover:bg-primary-soft" : "bg-gray-50 text-gray-300" }`}
+                  className={`rounded-full px-2 py-0.5 text-xs font-semibold ${ primaryRole === opt.value ? "bg-primary text-white" : on ? "bg-muted text-muted-foreground hover:bg-primary-soft" : "bg-muted text-muted-foreground" }`}
                 >
                   {primaryRole === opt.value ? "Vai trò chính" : "Đặt chính"}
                 </button>
@@ -209,7 +209,7 @@ export function UserForm({
             );
           })}
         </div>
-        <p className="text-xs text-gray-500">
+        <p className="text-xs text-muted-foreground">
           Quyền = hợp của tất cả vai trò. Vai trò chính dùng cho dashboard mặc
           định. Hội sở (HO) không phải vai trò — chọn ở ô <strong>Đơn vị</strong>.
         </p>
@@ -233,7 +233,7 @@ export function UserForm({
               </option>
             ))}
           </select>
-          <p className="text-xs text-gray-500">
+          <p className="text-xs text-muted-foreground">
             Bắt buộc: quyền (RBAC) được gán tại đơn vị này. Chọn Hội sở = vai trò
             xuyên cơ sở.
           </p>

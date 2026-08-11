@@ -92,7 +92,7 @@ export function ScormPlayer({
       <iframe
         title={packageName}
         src={src}
-        className="absolute inset-0 h-full w-full bg-white"
+        className="absolute inset-0 h-full w-full bg-card"
         // KHÔNG allow-downloads → ẩn khả năng tải; allow-scripts/forms cho nội dung chạy.
         sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
         referrerPolicy="no-referrer"

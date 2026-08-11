@@ -205,7 +205,7 @@ export function PdfSlidePlayer({
         ) : error ? (
           <p className="px-4 text-center text-sm text-state-danger-ink">{error}</p>
         ) : (
-          <canvas ref={canvasRef} className="max-h-full max-w-full rounded bg-white shadow-lg" />
+          <canvas ref={canvasRef} className="max-h-full max-w-full rounded bg-card shadow-lg" />
         )}
       </div>
 

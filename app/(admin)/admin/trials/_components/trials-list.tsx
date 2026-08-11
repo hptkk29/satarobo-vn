@@ -118,21 +118,21 @@ export function TrialsList({
 
       {/* Search */}
       <div className="relative mb-4 max-w-sm">
-        <Search className="pointer-events-none absolute left-2.5 top-2.5 h-4 w-4 text-gray-400" />
+        <Search className="pointer-events-none absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
         <input
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder="Tìm theo tên phụ huynh, SĐT hoặc tên con…"
-          className="w-full rounded-lg border border-gray-300 py-2 pl-8 pr-2 text-sm focus:border-primary focus:outline-none"
+          className="w-full rounded-lg border border-border py-2 pl-8 pr-2 text-sm focus:border-primary focus:outline-none"
         />
       </div>
 
       {items.length === 0 ? (
-        <p className="rounded-xl border border-dashed border-gray-300 p-8 text-center text-sm text-gray-400">
+        <p className="rounded-xl border border-dashed border-border p-8 text-center text-sm text-muted-foreground">
           Chưa có buổi học thử nào.
         </p>
       ) : filtered.length === 0 ? (
-        <p className="rounded-xl border border-dashed border-gray-300 p-8 text-center text-sm text-gray-400">
+        <p className="rounded-xl border border-dashed border-border p-8 text-center text-sm text-muted-foreground">
           Không tìm thấy lead học thử khớp “{query.trim()}”.
         </p>
       ) : (
@@ -167,7 +167,7 @@ function FilterChip({
   return (
     <Link
       href={href}
-      className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${ active ? "bg-primary text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200" }`}
+      className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${ active ? "bg-primary text-white" : "bg-muted text-muted-foreground hover:bg-muted" }`}
     >
       {label}
     </Link>
@@ -254,7 +254,7 @@ function TrialCard({
   }
 
   return (
-    <div className="rounded-xl border border-gray-200 bg-white">
+    <div className="rounded-xl border border-border bg-card">
       {/* Header row */}
       <button
         type="button"
@@ -263,21 +263,21 @@ function TrialCard({
       >
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
-            <span className="font-semibold text-gray-900">{item.parentName}</span>
+            <span className="font-semibold text-foreground">{item.parentName}</span>
             <span
               className={`rounded-full px-2 py-0.5 text-xs font-semibold ${TRIAL_STATUS_BADGE[item.status]}`}
             >
               {statusLabels[item.status]}
             </span>
           </div>
-          <div className="mt-1 text-xs text-gray-500">
+          <div className="mt-1 text-xs text-muted-foreground">
             {item.childName ? `Con: ${item.childName} · ` : ""}
             {item.phone}
             {item.centerName ? ` · ${item.centerName}` : ""}
             {item.teacherName ? ` · GV: ${item.teacherName}` : ""}
           </div>
         </div>
-        <div className="text-right text-xs text-gray-500">
+        <div className="text-right text-xs text-muted-foreground">
           {new Date(item.scheduledAt).toLocaleString("vi-VN", {
             day: "2-digit",
             month: "2-digit",
@@ -290,7 +290,7 @@ function TrialCard({
       {open && (
         <>
         {canManage && (
-          <div className="border-t border-gray-100 p-4">
+          <div className="border-t border-border p-4">
             <TrialEnrollSection
               leadId={item.leadId}
               children={item.children}
@@ -300,10 +300,10 @@ function TrialCard({
             />
           </div>
         )}
-        <div className="grid gap-6 border-t border-gray-100 p-4 md:grid-cols-2">
+        <div className="grid gap-6 border-t border-border p-4 md:grid-cols-2">
           {/* Manage */}
           <div className={canManage ? "" : "opacity-60"}>
-            <h3 className="mb-3 text-sm font-semibold text-gray-700">
+            <h3 className="mb-3 text-sm font-semibold text-foreground">
               Xếp lịch & trạng thái
             </h3>
             <div className="space-y-3">
@@ -395,10 +395,10 @@ function TrialCard({
 
           {/* Nhận xét: chuyển sang Phiếu đánh giá buổi (SESSION_EVAL) ở Lớp trải nghiệm (TR-7) */}
           <div>
-            <h3 className="mb-3 text-sm font-semibold text-gray-700">
+            <h3 className="mb-3 text-sm font-semibold text-foreground">
               Nhận xét sau buổi học thử
             </h3>
-            <div className="rounded-lg border border-dashed border-gray-300 bg-gray-50 p-3 text-sm text-gray-600">
+            <div className="rounded-lg border border-dashed border-border bg-muted p-3 text-sm text-muted-foreground">
               Nhận xét buổi học thử nay dùng{" "}
               <strong>Phiếu đánh giá buổi học</strong> (theo từng buổi & học viên) tại{" "}
               <Link
@@ -473,13 +473,13 @@ function TrialEnrollSection({
     <div className="rounded-xl border border-primary-soft bg-primary-soft/40 p-4">
       <div className="mb-3 flex items-center gap-2">
         <FlaskConical className="h-4 w-4 text-primary" />
-        <h3 className="text-sm font-semibold text-gray-700">
+        <h3 className="text-sm font-semibold text-foreground">
           Xếp vào lớp trải nghiệm
         </h3>
       </div>
 
       {children.length === 0 ? (
-        <p className="text-sm text-gray-500">
+        <p className="text-sm text-muted-foreground">
           Lead chưa có hồ sơ con (LeadChild).{" "}
           <Link
             href={`/leads/${leadId}`}
@@ -490,7 +490,7 @@ function TrialEnrollSection({
           rồi xếp vào lớp trải nghiệm.
         </p>
       ) : classes.length === 0 ? (
-        <p className="text-sm text-gray-400">
+        <p className="text-sm text-muted-foreground">
           Chưa có lớp trải nghiệm đang mở cùng cơ sở. Tạo lớp ở mục &quot;Lớp trải
           nghiệm&quot;.
         </p>
@@ -499,9 +499,9 @@ function TrialEnrollSection({
           {children.map((c) => (
             <li
               key={c.id}
-              className="flex flex-wrap items-center gap-2 rounded-lg bg-white px-3 py-2"
+              className="flex flex-wrap items-center gap-2 rounded-lg bg-card px-3 py-2"
             >
-              <span className="min-w-[7rem] flex-1 text-sm font-medium text-gray-800">
+              <span className="min-w-[7rem] flex-1 text-sm font-medium text-foreground">
                 {c.fullName}
               </span>
               <select
@@ -510,7 +510,7 @@ function TrialEnrollSection({
                   setPicked((p) => ({ ...p, [c.id]: e.target.value }))
                 }
                 disabled={pending}
-                className="min-w-[12rem] flex-1 rounded-md border border-gray-300 px-2 py-1.5 text-sm disabled:opacity-50"
+                className="min-w-[12rem] flex-1 rounded-md border border-border px-2 py-1.5 text-sm disabled:opacity-50"
               >
                 <option value="">— chọn lớp trải nghiệm —</option>
                 {classes.map((cl) => (
@@ -536,7 +536,7 @@ function TrialEnrollSection({
 }
 
 const inputCls =
-  "w-full rounded-lg border border-gray-300 px-3 py-1.5 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary disabled:bg-gray-50";
+  "w-full rounded-lg border border-border px-3 py-1.5 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary disabled:bg-muted";
 
 function Field({
   label,
@@ -547,7 +547,7 @@ function Field({
 }) {
   return (
     <label className="block">
-      <span className="mb-1 block text-xs font-medium text-gray-500">
+      <span className="mb-1 block text-xs font-medium text-muted-foreground">
         {label}
       </span>
       {children}

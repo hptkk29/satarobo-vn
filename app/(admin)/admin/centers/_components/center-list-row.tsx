@@ -43,25 +43,25 @@ export function CenterListRow({ center }: { center: Row }) {
   }
 
   return (
-    <tr className="border-b border-neutral-200 hover:bg-neutral-50">
+    <tr className="border-b border-border hover:bg-muted">
       <td className="p-4">
-        <div className="font-bold text-neutral-900">{center.name}</div>
-        <div className="mt-0.5 text-xs text-neutral-500 line-clamp-1">{center.address}</div>
+        <div className="font-bold text-foreground">{center.name}</div>
+        <div className="mt-0.5 text-xs text-muted-foreground line-clamp-1">{center.address}</div>
       </td>
       <td className="p-4 text-sm">
         <div className="space-y-1">
           {center.phone ? (
-            <div className="inline-flex items-center gap-1 text-neutral-700">
+            <div className="inline-flex items-center gap-1 text-foreground">
               <Phone className="h-3 w-3 text-primary" />
               <a href={`tel:${center.phone}`} className="hover:text-primary">
                 {center.phone}
               </a>
             </div>
           ) : (
-            <span className="text-neutral-400">—</span>
+            <span className="text-muted-foreground">—</span>
           )}
           {center.email && (
-            <div className="inline-flex items-center gap-1 text-neutral-700">
+            <div className="inline-flex items-center gap-1 text-foreground">
               <Mail className="h-3 w-3 text-primary" />
               <a href={`mailto:${center.email}`} className="hover:text-primary break-all">
                 {center.email}
@@ -85,7 +85,7 @@ export function CenterListRow({ center }: { center: Row }) {
             {center.counts.students} HV
           </span>
           <span
-            className="inline-block rounded bg-neutral-100 px-1.5 py-0.5 text-xs font-medium text-neutral-700"
+            className="inline-block rounded bg-muted px-1.5 py-0.5 text-xs font-medium text-foreground"
             title="Nhân sự"
           >
             {center.counts.employees} NS
@@ -97,7 +97,7 @@ export function CenterListRow({ center }: { center: Row }) {
           type="button"
           onClick={handleToggleActive}
           disabled={pending}
-          className={`inline-flex items-center gap-1 rounded-full px-2 py-1 text-xs font-medium transition disabled:opacity-50 ${ center.isActive ? "bg-state-success-soft text-state-success-ink hover:bg-state-success-soft" : "bg-neutral-100 text-neutral-600 hover:bg-neutral-200" }`}
+          className={`inline-flex items-center gap-1 rounded-full px-2 py-1 text-xs font-medium transition disabled:opacity-50 ${ center.isActive ? "bg-state-success-soft text-state-success-ink hover:bg-state-success-soft" : "bg-muted text-muted-foreground hover:bg-muted" }`}
         >
           {center.isActive ? "Đang hoạt động" : "Đã đóng"}
         </button>

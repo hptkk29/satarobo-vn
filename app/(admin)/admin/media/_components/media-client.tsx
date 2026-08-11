@@ -58,7 +58,7 @@ type MediaItem = {
 };
 
 const inputCls =
-  "w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary focus:outline-none";
+  "w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-primary focus:outline-none";
 
 export function MediaClient({
   items,
@@ -211,8 +211,8 @@ export function MediaClient({
 
   return (
     <div className="grid gap-6 lg:grid-cols-2">
-      <section className="rounded-xl border border-gray-200 bg-white p-4">
-        <h2 className="mb-3 text-sm font-bold uppercase tracking-wider text-gray-700">
+      <section className="rounded-xl border border-border bg-card p-4">
+        <h2 className="mb-3 text-sm font-bold uppercase tracking-wider text-foreground">
           Đăng ảnh lớp
         </h2>
         <div className="space-y-3">
@@ -277,7 +277,7 @@ export function MediaClient({
               className="h-40 w-full rounded-lg object-cover"
             />
           ) : (
-            <label className="flex cursor-pointer items-center justify-center gap-2 rounded-lg border-2 border-dashed border-gray-300 p-6 text-sm text-gray-500 hover:bg-gray-50">
+            <label className="flex cursor-pointer items-center justify-center gap-2 rounded-lg border-2 border-dashed border-border p-6 text-sm text-muted-foreground hover:bg-muted">
               {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
               {uploading ? "Đang tải…" : "Chọn ảnh"}
               <input type="file" accept="image/*" onChange={onFile} className="hidden" />
@@ -294,7 +294,7 @@ export function MediaClient({
 
           {students.length > 0 && (
             <div className="space-y-2">
-              <label className="flex cursor-pointer items-center gap-2 text-xs font-medium text-gray-700">
+              <label className="flex cursor-pointer items-center gap-2 text-xs font-medium text-foreground">
                 <input
                   type="checkbox"
                   checked={wholeClass}
@@ -302,14 +302,14 @@ export function MediaClient({
                     setWholeClass(e.target.checked);
                     if (e.target.checked) setTagged([]);
                   }}
-                  className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
+                  className="h-4 w-4 rounded border-border text-primary focus:ring-primary"
                 />
                 Ảnh chung cả lớp (mọi phụ huynh trong lớp đều xem được)
               </label>
 
               {!wholeClass && (
                 <div>
-                  <p className="mb-1 text-xs font-medium text-gray-500">
+                  <p className="mb-1 text-xs font-medium text-muted-foreground">
                     Gắn thẻ học sinh (chỉ phụ huynh được gắn thẻ mới thấy ảnh)
                   </p>
                   <div className="flex flex-wrap gap-1.5">
@@ -325,7 +325,7 @@ export function MediaClient({
                           onClick={() =>
                             setTagged((p) => (on ? p.filter((x) => x !== s.id) : [...p, s.id]))
                           }
-                          className={`rounded-full px-2.5 py-1 text-xs font-medium ${ noConsent ? "cursor-not-allowed bg-gray-100 text-gray-300 line-through" : on ? "bg-primary text-white" : "bg-gray-100 text-gray-600" }`}
+                          className={`rounded-full px-2.5 py-1 text-xs font-medium ${ noConsent ? "cursor-not-allowed bg-muted text-muted-foreground line-through" : on ? "bg-primary text-white" : "bg-muted text-muted-foreground" }`}
                         >
                           {s.name}
                         </button>
@@ -348,15 +348,15 @@ export function MediaClient({
         </div>
       </section>
 
-      <section className="rounded-xl border border-gray-200 bg-white p-4">
+      <section className="rounded-xl border border-border bg-card p-4">
         <div className="mb-3 flex items-center justify-between gap-2">
-          <h2 className="text-sm font-bold uppercase tracking-wider text-gray-700">
+          <h2 className="text-sm font-bold uppercase tracking-wider text-foreground">
             Thư viện ({visible.length})
           </h2>
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value as "ACTIVE" | "DRAFT")}
-            className="rounded-lg border border-gray-300 px-2 py-1 text-xs focus:border-primary focus:outline-none"
+            className="rounded-lg border border-border px-2 py-1 text-xs focus:border-primary focus:outline-none"
             aria-label="Lọc trạng thái ảnh"
           >
             <option value="ACTIVE">Chờ duyệt / Đã duyệt / Từ chối</option>
@@ -370,13 +370,13 @@ export function MediaClient({
           </p>
         )}
         {visible.length === 0 ? (
-          <p className="py-6 text-center text-sm text-gray-400">
+          <p className="py-6 text-center text-sm text-muted-foreground">
             {statusFilter === "DRAFT" ? "Kho trống." : "Chưa có ảnh."}
           </p>
         ) : (
           <div className="grid grid-cols-2 gap-3">
             {visible.map((m) => (
-              <div key={m.id} className="overflow-hidden rounded-lg border border-gray-100">
+              <div key={m.id} className="overflow-hidden rounded-lg border border-border">
                 <MediaImg
                   src={m.fileUrl}
                   alt={m.caption ?? ""}
@@ -384,7 +384,7 @@ export function MediaClient({
                 />
                 <div className="p-2">
                   <div className="flex items-center justify-between">
-                    <span className="text-[10px] text-gray-400">{m.className}</span>
+                    <span className="text-[10px] text-muted-foreground">{m.className}</span>
                     <span
                       className={`rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${ m.status === "APPROVED" ? "bg-state-success-soft text-state-success-ink" : m.status === "REJECTED" ? "bg-state-danger-soft text-state-danger-ink" : m.status === "DRAFT" ? "bg-state-info-soft text-state-info-ink" : "bg-state-warning-soft text-state-warning-ink" }`}
                     >
@@ -398,13 +398,13 @@ export function MediaClient({
                     </span>
                   </div>
                   {m.takenAt && (
-                    <p className="mt-0.5 text-[10px] text-gray-400">
+                    <p className="mt-0.5 text-[10px] text-muted-foreground">
                       Buổi {formatDateVN(m.takenAt)}
                     </p>
                   )}
-                  {m.caption && <p className="mt-1 line-clamp-2 text-xs text-gray-600">{m.caption}</p>}
+                  {m.caption && <p className="mt-1 line-clamp-2 text-xs text-muted-foreground">{m.caption}</p>}
                   {m.tagNames.length > 0 && (
-                    <p className="mt-0.5 text-[10px] text-gray-400">Tag: {m.tagNames.join(", ")}</p>
+                    <p className="mt-0.5 text-[10px] text-muted-foreground">Tag: {m.tagNames.join(", ")}</p>
                   )}
                   {/* DRAFT = view-only với QL: không duyệt/từ chối/xoá (server cũng chặn reviewMedia DRAFT) */}
                   {canApprove && m.status !== "DRAFT" && (

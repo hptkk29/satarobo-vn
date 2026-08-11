@@ -50,12 +50,12 @@ function Stat({
         ? "text-state-warning-ink"
         : tone === "bad"
           ? "text-state-danger-ink"
-          : "text-neutral-900";
+          : "text-foreground";
   return (
-    <div className="rounded-xl border border-neutral-200 bg-white p-4">
-      <p className="text-xs font-medium text-neutral-500">{label}</p>
+    <div className="rounded-xl border border-border bg-card p-4">
+      <p className="text-xs font-medium text-muted-foreground">{label}</p>
       <p className={`mt-1 text-2xl font-bold ${toneClass}`}>{value}</p>
-      {hint ? <p className="mt-0.5 text-xs text-neutral-400">{hint}</p> : null}
+      {hint ? <p className="mt-0.5 text-xs text-muted-foreground">{hint}</p> : null}
     </div>
   );
 }
@@ -105,8 +105,8 @@ export default async function CenterReportPage({
   return (
     <div className="space-y-5 p-4">
       <div>
-        <h1 className="text-xl font-bold text-neutral-900">Báo cáo trung tâm</h1>
-        <p className="text-sm text-neutral-500">
+        <h1 className="text-xl font-bold text-foreground">Báo cáo trung tâm</h1>
+        <p className="text-sm text-muted-foreground">
           Tài chính (doanh thu xác nhận, công nợ), mức độ hài lòng và tỷ lệ tái tục — theo phạm vi cơ sở của bạn.
         </p>
       </div>
@@ -173,8 +173,8 @@ export default async function CenterReportPage({
       </section>
 
       {/* Xu hướng doanh thu */}
-      <section className="rounded-xl border border-neutral-200 bg-white p-4">
-        <h2 className="mb-3 text-sm font-semibold text-neutral-700">Xu hướng doanh thu theo tháng</h2>
+      <section className="rounded-xl border border-border bg-card p-4">
+        <h2 className="mb-3 text-sm font-semibold text-foreground">Xu hướng doanh thu theo tháng</h2>
         {trendData.length > 0 ? (
           <LineChart
             data={trendData}
@@ -187,13 +187,13 @@ export default async function CenterReportPage({
             yFormat="vnd-compact"
           />
         ) : (
-          <p className="py-8 text-center text-sm text-neutral-400">Chưa có khoản thanh toán trong kỳ.</p>
+          <p className="py-8 text-center text-sm text-muted-foreground">Chưa có khoản thanh toán trong kỳ.</p>
         )}
       </section>
 
       {/* Doanh thu / công nợ theo cơ sở */}
-      <section className="rounded-xl border border-neutral-200 bg-white p-4">
-        <h2 className="mb-3 text-sm font-semibold text-neutral-700">Doanh thu & công nợ theo cơ sở</h2>
+      <section className="rounded-xl border border-border bg-card p-4">
+        <h2 className="mb-3 text-sm font-semibold text-foreground">Doanh thu & công nợ theo cơ sở</h2>
         {centerChartData.length > 0 ? (
           <BarChart
             data={centerChartData}
@@ -206,18 +206,18 @@ export default async function CenterReportPage({
             yFormat="vnd-compact"
           />
         ) : (
-          <p className="py-8 text-center text-sm text-neutral-400">Chưa có dữ liệu cơ sở trong kỳ.</p>
+          <p className="py-8 text-center text-sm text-muted-foreground">Chưa có dữ liệu cơ sở trong kỳ.</p>
         )}
       </section>
 
       {/* Bảng chi tiết theo cơ sở */}
-      <section className="rounded-xl border border-neutral-200 bg-white">
-        <div className="border-b border-neutral-100 px-4 py-3">
-          <h2 className="text-sm font-semibold text-neutral-700">Chi tiết theo cơ sở</h2>
+      <section className="rounded-xl border border-border bg-card">
+        <div className="border-b border-border px-4 py-3">
+          <h2 className="text-sm font-semibold text-foreground">Chi tiết theo cơ sở</h2>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full min-w-[560px] text-sm">
-            <thead className="text-left text-xs text-neutral-400">
+            <thead className="text-left text-xs text-muted-foreground">
               <tr>
                 <th className="px-4 py-2">Cơ sở</th>
                 <th className="px-4 py-2 text-right">Đã xác nhận</th>
@@ -229,7 +229,7 @@ export default async function CenterReportPage({
             <tbody>
               {byCenter.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="px-4 py-6 text-center text-neutral-400">
+                  <td colSpan={5} className="px-4 py-6 text-center text-muted-foreground">
                     Không có dữ liệu trong phạm vi cơ sở.
                   </td>
                 </tr>

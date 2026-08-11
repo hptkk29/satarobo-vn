@@ -67,13 +67,13 @@ export function FeedbackReply({
         onChange={(e) => setText(e.target.value)}
         rows={2}
         placeholder="Nội dung phản hồi gửi phụ huynh…"
-        className="w-full rounded-lg border border-neutral-300 px-3 py-2 text-sm focus:border-primary focus:outline-none"
+        className="w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-primary focus:outline-none"
       />
       <div className="flex gap-2">
         <button onClick={save} disabled={pending} className="rounded-md bg-primary-dark px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-50">
           {pending ? "Đang lưu…" : "Lưu phản hồi"}
         </button>
-        <button onClick={() => setOpen(false)} className="rounded-md border border-neutral-300 px-3 py-1.5 text-xs text-neutral-600">
+        <button onClick={() => setOpen(false)} className="rounded-md border border-border px-3 py-1.5 text-xs text-muted-foreground">
           Huỷ
         </button>
       </div>

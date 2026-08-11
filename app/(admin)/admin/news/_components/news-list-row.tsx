@@ -35,10 +35,10 @@ export function NewsListRow({ news }: { news: Row }) {
   }
 
   return (
-    <tr className="border-b border-neutral-200 hover:bg-neutral-50">
+    <tr className="border-b border-border hover:bg-muted">
       <td className="p-4">
-        <div className="font-bold text-neutral-900">{news.title}</div>
-        <div className="mt-0.5 font-mono text-xs text-neutral-500">/tin-tuc/{news.slug}</div>
+        <div className="font-bold text-foreground">{news.title}</div>
+        <div className="mt-0.5 font-mono text-xs text-muted-foreground">/tin-tuc/{news.slug}</div>
       </td>
       <td className="p-4">
         {news.category ? (
@@ -46,7 +46,7 @@ export function NewsListRow({ news }: { news: Row }) {
             {news.category}
           </span>
         ) : (
-          <span className="text-xs text-neutral-400">—</span>
+          <span className="text-xs text-muted-foreground">—</span>
         )}
       </td>
       <td className="p-4 text-center">
@@ -54,7 +54,7 @@ export function NewsListRow({ news }: { news: Row }) {
           type="button"
           onClick={handleTogglePublish}
           disabled={pending}
-          className={`inline-flex items-center gap-1 rounded-full px-2 py-1 text-xs font-medium transition disabled:opacity-50 ${ news.isPublished ? "bg-state-success-soft text-state-success-ink hover:bg-state-success-soft" : "bg-neutral-100 text-neutral-600 hover:bg-neutral-200" }`}
+          className={`inline-flex items-center gap-1 rounded-full px-2 py-1 text-xs font-medium transition disabled:opacity-50 ${ news.isPublished ? "bg-state-success-soft text-state-success-ink hover:bg-state-success-soft" : "bg-muted text-muted-foreground hover:bg-muted" }`}
         >
           {news.isPublished ? "Đã đăng" : "Nháp"}
         </button>
@@ -64,7 +64,7 @@ export function NewsListRow({ news }: { news: Row }) {
           </span>
         )}
       </td>
-      <td className="p-4 text-sm text-neutral-600">
+      <td className="p-4 text-sm text-muted-foreground">
         {news.publishedAt ? formatDateVN(news.publishedAt) : "—"}
       </td>
       <td className="p-4 text-right">

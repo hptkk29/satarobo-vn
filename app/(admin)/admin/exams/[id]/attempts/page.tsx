@@ -96,12 +96,12 @@ export default async function ExamAttemptsPage({ params }: Props) {
       <div>
         <Link
           href="/exams"
-          className="mb-3 inline-flex items-center gap-1 text-sm text-neutral-500 hover:text-neutral-700"
+          className="mb-3 inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
         >
           <ChevronLeft className="h-4 w-4" /> Quay lại danh sách
         </Link>
         <div className="flex flex-wrap items-baseline justify-between gap-3">
-          <h1 className="flex items-center gap-2 text-2xl font-bold text-neutral-900">
+          <h1 className="flex items-center gap-2 text-2xl font-bold text-foreground">
             <ClipboardList className="h-6 w-6 text-primary" />
             Bài làm: <span className="text-primary">{exam.title}</span>
           </h1>
@@ -112,49 +112,49 @@ export default async function ExamAttemptsPage({ params }: Props) {
             ← Builder
           </Link>
         </div>
-        <p className="mt-1 text-sm text-neutral-500">
+        <p className="mt-1 text-sm text-muted-foreground">
           {exam._count.examQuestions} câu · Tổng điểm {exam.totalPoints} · Đạt ≥{" "}
           {exam.passingScore} · Thời lượng {exam.durationMinutes}′
         </p>
       </div>
 
-      <div className="overflow-hidden rounded-xl border border-neutral-200 bg-white shadow-sm">
+      <div className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
         <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-neutral-100">
-            <thead className="bg-neutral-50">
+          <table className="min-w-full divide-y divide-border">
+            <thead className="bg-muted">
               <tr>
-                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-neutral-500">
+                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                   Học viên
                 </th>
-                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-neutral-500">
+                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                   Trạng thái
                 </th>
-                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-neutral-500">
+                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                   Bắt đầu
                 </th>
-                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-neutral-500">
+                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                   Nộp
                 </th>
-                <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-neutral-500">
+                <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                   Điểm
                 </th>
-                <th className="px-4 py-3 text-center text-xs font-semibold uppercase tracking-wider text-neutral-500">
+                <th className="px-4 py-3 text-center text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                   Đạt?
                 </th>
-                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-neutral-500">
+                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                   GV chấm
                 </th>
-                <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-neutral-500">
+                <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                   Hành động
                 </th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-neutral-50">
+            <tbody className="divide-y divide-border">
               {exam.attempts.length === 0 ? (
                 <tr>
                   <td
                     colSpan={8}
-                    className="px-4 py-12 text-center text-sm text-neutral-400"
+                    className="px-4 py-12 text-center text-sm text-muted-foreground"
                   >
                     Chưa có học viên nào làm bài.
                   </td>
@@ -163,26 +163,26 @@ export default async function ExamAttemptsPage({ params }: Props) {
                 exam.attempts.map((a) => {
                   const statusInfo = ATTEMPT_STATUS_INFO[a.status];
                   return (
-                    <tr key={a.id} className="hover:bg-neutral-50/60">
+                    <tr key={a.id} className="hover:bg-muted/60">
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-2">
                           {a.student.avatarUrl ? (
                             <img
                               src={a.student.avatarUrl}
                               alt={a.student.name}
-                              className="h-8 w-8 rounded-full border border-neutral-200 object-cover"
+                              className="h-8 w-8 rounded-full border border-border object-cover"
                             />
                           ) : (
-                            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-neutral-100 text-xs font-bold text-neutral-500">
+                            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-muted text-xs font-bold text-muted-foreground">
                               {a.student.name.charAt(0).toUpperCase()}
                             </div>
                           )}
                           <div>
-                            <div className="font-medium text-neutral-900">
+                            <div className="font-medium text-foreground">
                               {a.student.name}
                             </div>
                             {a.student.studentCode && (
-                              <div className="text-xs text-neutral-400 tabular-nums">
+                              <div className="text-xs text-muted-foreground tabular-nums">
                                 {a.student.studentCode}
                               </div>
                             )}
@@ -196,13 +196,13 @@ export default async function ExamAttemptsPage({ params }: Props) {
                           {statusInfo.label}
                         </span>
                       </td>
-                      <td className="px-4 py-3 text-sm tabular-nums text-neutral-500">
+                      <td className="px-4 py-3 text-sm tabular-nums text-muted-foreground">
                         {fmtDateTime(a.startedAt)}
                       </td>
-                      <td className="px-4 py-3 text-sm tabular-nums text-neutral-500">
+                      <td className="px-4 py-3 text-sm tabular-nums text-muted-foreground">
                         {fmtDateTime(a.submittedAt)}
                       </td>
-                      <td className="px-4 py-3 text-right text-sm tabular-nums font-semibold text-neutral-700">
+                      <td className="px-4 py-3 text-right text-sm tabular-nums font-semibold text-foreground">
                         {a.totalScore !== null && a.totalScore !== undefined
                           ? `${a.totalScore}/${exam.totalPoints}`
                           : "—"}
@@ -217,10 +217,10 @@ export default async function ExamAttemptsPage({ params }: Props) {
                             Không đạt
                           </span>
                         ) : (
-                          <span className="text-neutral-300">—</span>
+                          <span className="text-muted-foreground">—</span>
                         )}
                       </td>
-                      <td className="px-4 py-3 text-xs text-neutral-500">
+                      <td className="px-4 py-3 text-xs text-muted-foreground">
                         {a.gradedBy?.fullName ?? "—"}
                       </td>
                       <td className="px-4 py-3 text-right">
@@ -238,7 +238,7 @@ export default async function ExamAttemptsPage({ params }: Props) {
         </div>
       </div>
 
-      <div className="rounded-lg border border-neutral-200 bg-neutral-50 p-3 text-xs text-neutral-600">
+      <div className="rounded-lg border border-border bg-muted p-3 text-xs text-muted-foreground">
         <strong>Auto-chấm:</strong> chỉ chấm các câu MC/TF/SA. ESSAY/CODE giữ
         điểm thủ công (set qua Prisma Studio hoặc dialog manual grade tương
         lai). Public take-exam UI sẽ tạo ra ExamAttempt qua flow riêng (E4+).

@@ -76,22 +76,22 @@ export async function TeacherDashboard({ userId, name, embedded = false }: { use
 
   return (
     <div className="space-y-6">
-      {!embedded && <h1 className="text-2xl font-bold text-gray-900">Chào {name || "thầy/cô"} 👋</h1>}
+      {!embedded && <h1 className="text-2xl font-bold text-foreground">Chào {name || "thầy/cô"} 👋</h1>}
 
       {/* Lớp hôm nay */}
-      <section className="rounded-xl border border-gray-200 bg-white p-5">
-        <h2 className="mb-3 flex items-center gap-2 text-sm font-bold uppercase tracking-wider text-gray-500">
+      <section className="rounded-xl border border-border bg-card p-5">
+        <h2 className="mb-3 flex items-center gap-2 text-sm font-bold uppercase tracking-wider text-muted-foreground">
           <CalendarDays className="h-4 w-4" /> Lớp dạy hôm nay ({todayClasses.length})
         </h2>
         {todayClasses.length === 0 ? (
-          <p className="text-sm text-gray-400">Hôm nay không có lớp.</p>
+          <p className="text-sm text-muted-foreground">Hôm nay không có lớp.</p>
         ) : (
-          <ul className="divide-y divide-gray-100">
+          <ul className="divide-y divide-border">
             {todayClasses.map((c) => (
               <li key={c.id} className="flex flex-wrap items-center justify-between gap-2 py-2">
                 <div>
-                  <span className="font-medium text-gray-900">{c.classCode ? `${c.classCode} · ` : ""}{c.name}</span>
-                  <span className="ml-2 text-xs text-gray-500">
+                  <span className="font-medium text-foreground">{c.classCode ? `${c.classCode} · ` : ""}{c.name}</span>
+                  <span className="ml-2 text-xs text-muted-foreground">
                     {c.startTime && c.endTime ? `${c.startTime}–${c.endTime}` : ""}
                     {c.room?.code ? ` · P.${c.room.code}` : ""} · {c._count.enrollments} HV
                   </span>
@@ -132,9 +132,9 @@ function DashStat({
 }) {
   const toneCls = tone === "danger" ? "text-state-danger-ink" : tone === "warn" ? "text-state-warning-ink" : "text-state-success-ink";
   return (
-    <Link href={href} className="rounded-xl border border-gray-200 bg-white p-4 hover:border-primary">
+    <Link href={href} className="rounded-xl border border-border bg-card p-4 hover:border-primary">
       <div className={`flex items-center gap-2 ${toneCls}`}>{icon}<span className="text-2xl font-bold tabular-nums">{value}</span></div>
-      <div className="mt-1 text-xs text-gray-500">{label}</div>
+      <div className="mt-1 text-xs text-muted-foreground">{label}</div>
     </Link>
   );
 }

@@ -203,13 +203,13 @@ export default async function TeacherProfilePage({ params, searchParams }: Props
   return (
     <div className="max-w-4xl space-y-6">
       <div>
-        <Link href="/teachers" className="mb-3 inline-flex items-center gap-1 text-sm text-gray-500 hover:text-gray-700">
+        <Link href="/teachers" className="mb-3 inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
           <ChevronLeft className="h-4 w-4" /> Danh sách giáo viên
         </Link>
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <h1 className="text-2xl font-bold text-gray-900">{teacher.name ?? teacher.email}</h1>
+          <h1 className="text-2xl font-bold text-foreground">{teacher.name ?? teacher.email}</h1>
           {!canEdit && (
-            <span className="rounded-full bg-gray-100 px-3 py-1 text-xs font-medium text-gray-500">
+            <span className="rounded-full bg-muted px-3 py-1 text-xs font-medium text-muted-foreground">
               Chỉ xem
             </span>
           )}
@@ -217,8 +217,8 @@ export default async function TeacherProfilePage({ params, searchParams }: Props
       </div>
 
       {/* Thông tin cơ bản */}
-      <section className="rounded-xl border border-gray-200 bg-white p-5">
-        <h2 className="mb-3 text-sm font-bold uppercase tracking-wider text-gray-500">
+      <section className="rounded-xl border border-border bg-card p-5">
+        <h2 className="mb-3 text-sm font-bold uppercase tracking-wider text-muted-foreground">
           Thông tin cơ bản
         </h2>
         <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm sm:grid-cols-4">
@@ -273,9 +273,9 @@ export default async function TeacherProfilePage({ params, searchParams }: Props
           overloadHours,
         );
         return (
-          <section className="rounded-xl border border-gray-200 bg-white p-5">
+          <section className="rounded-xl border border-border bg-card p-5">
             <div className="mb-3 flex items-center justify-between gap-2">
-              <h2 className="text-sm font-bold uppercase tracking-wider text-gray-500">
+              <h2 className="text-sm font-bold uppercase tracking-wider text-muted-foreground">
                 Tải giảng dạy / tuần
               </h2>
               {load.overloaded && (
@@ -294,9 +294,9 @@ export default async function TeacherProfilePage({ params, searchParams }: Props
       })()}
 
       {/* PHẦN 5 — Số buổi đã dạy trong tháng */}
-      <section className="rounded-xl border border-gray-200 bg-white p-5">
+      <section className="rounded-xl border border-border bg-card p-5">
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-          <h2 className="text-sm font-bold uppercase tracking-wider text-gray-500">
+          <h2 className="text-sm font-bold uppercase tracking-wider text-muted-foreground">
             Số buổi đã dạy trong tháng
           </h2>
           <form method="GET" className="flex items-center gap-2">
@@ -304,30 +304,30 @@ export default async function TeacherProfilePage({ params, searchParams }: Props
               type="month"
               name="month"
               defaultValue={monthValue}
-              className="rounded-lg border border-gray-300 px-2 py-1 text-sm focus:border-primary focus:outline-none"
+              className="rounded-lg border border-border px-2 py-1 text-sm focus:border-primary focus:outline-none"
             />
             <button type="submit" className="rounded-lg bg-gray-800 px-3 py-1 text-sm font-medium text-white">
               Xem
             </button>
           </form>
         </div>
-        <p className="mb-3 text-sm text-gray-600">
-          Đã dạy <strong className="text-gray-900">{taughtSessions.length}</strong> buổi trong{" "}
+        <p className="mb-3 text-sm text-muted-foreground">
+          Đã dạy <strong className="text-foreground">{taughtSessions.length}</strong> buổi trong{" "}
           {monthValue} (chỉ tính buổi đã diễn ra).
         </p>
         {taughtSessions.length === 0 ? (
-          <p className="text-sm text-gray-400">Chưa có buổi nào.</p>
+          <p className="text-sm text-muted-foreground">Chưa có buổi nào.</p>
         ) : (
-          <ul className="divide-y divide-gray-100 text-sm">
+          <ul className="divide-y divide-border text-sm">
             {taughtSessions.map((s) => (
               <li key={s.id} className="flex flex-wrap items-center justify-between gap-2 py-2">
-                <span className="tabular-nums text-gray-700">
+                <span className="tabular-nums text-foreground">
                   {new Date(s.date).toLocaleDateString("vi-VN", { weekday: "short", day: "2-digit", month: "2-digit" })}
                 </span>
-                <span className="font-medium text-gray-900">
+                <span className="font-medium text-foreground">
                   {s.class.classCode ? `${s.class.classCode} · ` : ""}{s.class.name}
                 </span>
-                <span className="flex-1 truncate text-right text-xs text-gray-400">{s.topic ?? ""}</span>
+                <span className="flex-1 truncate text-right text-xs text-muted-foreground">{s.topic ?? ""}</span>
               </li>
             ))}
           </ul>
@@ -358,9 +358,9 @@ export default async function TeacherProfilePage({ params, searchParams }: Props
 
 function Stat({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-lg bg-gray-50 p-3">
-      <div className="text-2xl font-bold text-gray-900 tabular-nums">{value}</div>
-      <div className="mt-0.5 text-xs text-gray-500">{label}</div>
+    <div className="rounded-lg bg-muted p-3">
+      <div className="text-2xl font-bold text-foreground tabular-nums">{value}</div>
+      <div className="mt-0.5 text-xs text-muted-foreground">{label}</div>
     </div>
   );
 }
@@ -368,8 +368,8 @@ function Stat({ label, value }: { label: string; value: string }) {
 function Info({ label, value }: { label: string; value: string }) {
   return (
     <div>
-      <dt className="text-xs font-semibold uppercase tracking-wide text-gray-400">{label}</dt>
-      <dd className="mt-0.5 break-words text-gray-800">{value}</dd>
+      <dt className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{label}</dt>
+      <dd className="mt-0.5 break-words text-foreground">{value}</dd>
     </div>
   );
 }

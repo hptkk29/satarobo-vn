@@ -70,7 +70,7 @@ export function SessionFeedbackEditor({
   }
 
   if (students.length === 0) {
-    return <p className="text-sm text-gray-400">Lớp chưa có học sinh đăng ký.</p>;
+    return <p className="text-sm text-muted-foreground">Lớp chưa có học sinh đăng ký.</p>;
   }
 
   return (
@@ -84,18 +84,18 @@ export function SessionFeedbackEditor({
 
       {/* Đường cũ comment+rating (StudentSessionFeedback) — GIỮ song song (2-phase),
           thu gọn dưới mục phụ; portal /portal/nhan-xet vẫn đọc đường cũ này. */}
-      <details className="rounded-lg border border-gray-200 bg-gray-50/60">
-        <summary className="cursor-pointer px-3 py-2 text-xs font-medium text-gray-500">
+      <details className="rounded-lg border border-border bg-muted/60">
+        <summary className="cursor-pointer px-3 py-2 text-xs font-medium text-muted-foreground">
           Nhận xét nhanh (cũ) — nhận xét + chấm sao từng học sinh
         </summary>
         <div className="space-y-3 px-3 pb-3">
-          <ul className="divide-y divide-gray-100">
+          <ul className="divide-y divide-border">
             {rows.map((r) => (
               <li key={r.studentId} className="py-3">
                 <div className="mb-1.5 flex items-center gap-2">
-                  <span className="font-medium text-gray-900">{r.name}</span>
+                  <span className="font-medium text-foreground">{r.name}</span>
                   {!r.present && (
-                    <span className="rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-medium text-gray-400">
+                    <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
                       Vắng
                     </span>
                   )}
@@ -107,7 +107,7 @@ export function SessionFeedbackEditor({
                     disabled={!canEdit || pending}
                     rows={2}
                     placeholder="Nhận xét cho học sinh này trong buổi…"
-                    className="flex-1 resize-y rounded-lg border border-gray-300 px-3 py-1.5 text-sm focus:border-primary focus:outline-none disabled:bg-gray-50"
+                    className="flex-1 resize-y rounded-lg border border-border px-3 py-1.5 text-sm focus:border-primary focus:outline-none disabled:bg-muted"
                   />
                   <select
                     value={r.rating ?? ""}
@@ -115,7 +115,7 @@ export function SessionFeedbackEditor({
                       update(r.studentId, { rating: e.target.value ? Number(e.target.value) : null })
                     }
                     disabled={!canEdit || pending}
-                    className="h-9 rounded-lg border border-gray-300 px-2 text-sm focus:border-primary focus:outline-none disabled:bg-gray-50"
+                    className="h-9 rounded-lg border border-border px-2 text-sm focus:border-primary focus:outline-none disabled:bg-muted"
                     aria-label={`Điểm ${r.name}`}
                   >
                     <option value="">— sao —</option>

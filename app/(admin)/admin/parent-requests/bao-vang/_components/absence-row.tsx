@@ -42,12 +42,12 @@ export function AbsenceRow({ item }: { item: AbsenceItem }) {
   }
 
   return (
-    <li className="rounded-xl border border-neutral-200 bg-white p-4">
+    <li className="rounded-xl border border-border bg-card p-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2">
-          <span className="font-semibold text-neutral-900">{item.studentName}</span>
+          <span className="font-semibold text-foreground">{item.studentName}</span>
           {item.studentCode && (
-            <span className="text-xs text-neutral-400">{item.studentCode}</span>
+            <span className="text-xs text-muted-foreground">{item.studentCode}</span>
           )}
           {item.urgency === "URGENT" ? (
             <span className="rounded-full bg-state-danger-soft px-2 py-0.5 text-xs font-bold text-state-danger-ink">
@@ -59,17 +59,17 @@ export function AbsenceRow({ item }: { item: AbsenceItem }) {
             </span>
           )}
         </div>
-        <span className="text-xs text-neutral-400">
+        <span className="text-xs text-muted-foreground">
           {formatDateVN(item.createdAt)}
         </span>
       </div>
 
-      <p className="mt-1 text-sm text-neutral-600">
+      <p className="mt-1 text-sm text-muted-foreground">
         {item.className ?? "—"}
         {item.sessionDate && (
           <>
             {" · "}
-            <span className="inline-flex items-center gap-1 text-neutral-700">
+            <span className="inline-flex items-center gap-1 text-foreground">
               <CalendarClock className="h-3.5 w-3.5" />
               {new Date(item.sessionDate).toLocaleDateString("vi-VN", {
                 weekday: "short",
@@ -80,7 +80,7 @@ export function AbsenceRow({ item }: { item: AbsenceItem }) {
           </>
         )}
       </p>
-      <p className="mt-1 whitespace-pre-wrap text-sm text-neutral-700">{item.reason}</p>
+      <p className="mt-1 whitespace-pre-wrap text-sm text-foreground">{item.reason}</p>
 
       {!item.hasSession ? (
         <p className="mt-2 rounded-lg bg-state-warning-soft p-2 text-xs text-state-warning-ink">
@@ -94,7 +94,7 @@ export function AbsenceRow({ item }: { item: AbsenceItem }) {
             onChange={(e) => setResponse(e.target.value)}
             placeholder="Phản hồi cho phụ huynh (tuỳ chọn)"
             disabled={pending}
-            className="w-full rounded-lg border border-neutral-200 px-3 py-1.5 text-sm outline-none focus:border-primary disabled:opacity-50"
+            className="w-full rounded-lg border border-border px-3 py-1.5 text-sm outline-none focus:border-primary disabled:opacity-50"
           />
           <div className="flex flex-wrap gap-2">
             <button
@@ -109,7 +109,7 @@ export function AbsenceRow({ item }: { item: AbsenceItem }) {
               type="button"
               onClick={() => handle("ABSENT", true)}
               disabled={pending}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-neutral-300 bg-white px-3 py-1.5 text-sm font-semibold text-neutral-700 hover:bg-neutral-50 disabled:opacity-50"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-card px-3 py-1.5 text-sm font-semibold text-foreground hover:bg-muted disabled:opacity-50"
             >
               <X className="h-4 w-4" /> Đánh vắng (có phép)
             </button>
@@ -117,7 +117,7 @@ export function AbsenceRow({ item }: { item: AbsenceItem }) {
               type="button"
               onClick={() => handle("ABSENT", false)}
               disabled={pending}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-state-danger bg-white px-3 py-1.5 text-sm font-semibold text-state-danger-ink hover:bg-state-danger-soft disabled:opacity-50"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-state-danger bg-card px-3 py-1.5 text-sm font-semibold text-state-danger-ink hover:bg-state-danger-soft disabled:opacity-50"
             >
               <X className="h-4 w-4" /> Đánh vắng (không phép)
             </button>

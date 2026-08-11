@@ -63,8 +63,8 @@ export default async function AdminNotificationsPage() {
   return (
     <div className="max-w-6xl p-6">
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">Thông báo phụ huynh</h1>
-        <p className="mt-1 text-sm text-gray-500">
+        <h1 className="text-2xl font-bold text-foreground">Thông báo phụ huynh</h1>
+        <p className="mt-1 text-sm text-muted-foreground">
           Đăng thông báo hiển thị trên portal hocvien.satarobo.vn.
         </p>
       </div>

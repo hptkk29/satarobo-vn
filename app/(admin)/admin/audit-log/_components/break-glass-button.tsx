@@ -104,7 +104,7 @@ export function BreakGlassButton({
               rows={3}
               disabled={pending}
             />
-            <p className="text-xs text-gray-400">{reason.trim().length}/{MIN_REASON}</p>
+            <p className="text-xs text-muted-foreground">{reason.trim().length}/{MIN_REASON}</p>
           </div>
 
           <DialogFooter>

@@ -253,7 +253,7 @@ export default async function EditStudentPage({ params }: Props) {
   return (
     <div className="space-y-8">
       <div>
-        <h1 className="mb-6 text-3xl font-black text-neutral-900">
+        <h1 className="mb-6 text-3xl font-black text-foreground">
           Sửa học viên:{" "}
           <span className="font-bold text-primary">{student.name}</span>
         </h1>
@@ -294,7 +294,7 @@ export default async function EditStudentPage({ params }: Props) {
 
       {progressByClass.length > 0 && (
         <section>
-          <h2 className="mb-3 flex items-center gap-2 text-lg font-bold text-neutral-900">
+          <h2 className="mb-3 flex items-center gap-2 text-lg font-bold text-foreground">
             <LineChart className="h-5 w-5 text-primary" />
             Tiến độ học tập
           </h2>
@@ -302,25 +302,25 @@ export default async function EditStudentPage({ params }: Props) {
             {progressByClass.map(({ enrollment, progress, sessions }) => (
               <div
                 key={enrollment.id}
-                className="rounded-xl border border-neutral-200 bg-white p-4"
+                className="rounded-xl border border-border bg-card p-4"
               >
                 <div className="mb-3 flex flex-wrap items-center gap-x-4 gap-y-1 rounded-lg bg-primary-soft px-3 py-2 text-sm">
                   <span className="font-bold text-primary">
                     Buổi {sessions.currentSession}/{sessions.total || "—"}
                   </span>
-                  <span className="text-neutral-600">
-                    Đã học <b className="text-neutral-900">{sessions.attended}</b>
+                  <span className="text-muted-foreground">
+                    Đã học <b className="text-foreground">{sessions.attended}</b>
                   </span>
-                  <span className="text-neutral-600">
-                    Còn lại <b className="text-neutral-900">{sessions.remaining}</b>
+                  <span className="text-muted-foreground">
+                    Còn lại <b className="text-foreground">{sessions.remaining}</b>
                   </span>
                 </div>
                 <div className="mb-3 flex items-start justify-between gap-2">
                   <div className="min-w-0">
-                    <h3 className="font-bold text-neutral-900">
+                    <h3 className="font-bold text-foreground">
                       {enrollment.class.name}
                     </h3>
-                    <p className="text-xs text-neutral-500">
+                    <p className="text-xs text-muted-foreground">
                       {enrollment.class.classCode &&
                         `${enrollment.class.classCode} · `}
                       {enrollment.class.course.name}
@@ -372,12 +372,12 @@ export default async function EditStudentPage({ params }: Props) {
 
       {absences.length > 0 && (
         <section>
-          <h2 className="mb-3 text-lg font-bold text-neutral-900">
+          <h2 className="mb-3 text-lg font-bold text-foreground">
             Chi tiết buổi vắng ({absences.length})
           </h2>
-          <div className="overflow-hidden rounded-xl border border-neutral-200 bg-white">
+          <div className="overflow-hidden rounded-xl border border-border bg-card">
             <table className="w-full text-sm">
-              <thead className="border-b border-neutral-200 bg-neutral-50 text-left text-xs uppercase tracking-wider text-neutral-500">
+              <thead className="border-b border-border bg-muted text-left text-xs uppercase tracking-wider text-muted-foreground">
                 <tr>
                   <th className="px-4 py-2">Ngày</th>
                   <th className="px-4 py-2">Lớp</th>
@@ -387,12 +387,12 @@ export default async function EditStudentPage({ params }: Props) {
               </thead>
               <tbody>
                 {absences.map((a, i) => (
-                  <tr key={i} className="border-b border-neutral-100 last:border-0">
-                    <td className="px-4 py-2 tabular-nums text-neutral-700">
+                  <tr key={i} className="border-b border-border last:border-0">
+                    <td className="px-4 py-2 tabular-nums text-foreground">
                       {formatDateVN(a.date)}
                     </td>
-                    <td className="px-4 py-2 text-neutral-700">{a.className}</td>
-                    <td className="px-4 py-2 text-neutral-600">{a.absenceReason ?? "—"}</td>
+                    <td className="px-4 py-2 text-foreground">{a.className}</td>
+                    <td className="px-4 py-2 text-muted-foreground">{a.absenceReason ?? "—"}</td>
                     <td className="px-4 py-2">
                       {a.makeupStatus === "MADE_UP" ? (
                         <span className="rounded bg-state-success-soft px-2 py-0.5 text-xs font-semibold text-state-success-ink">
@@ -403,7 +403,7 @@ export default async function EditStudentPage({ params }: Props) {
                           Cần bù
                         </span>
                       ) : (
-                        <span className="rounded bg-neutral-100 px-2 py-0.5 text-xs font-semibold text-neutral-500">
+                        <span className="rounded bg-muted px-2 py-0.5 text-xs font-semibold text-muted-foreground">
                           Không bù
                         </span>
                       )}
@@ -419,12 +419,12 @@ export default async function EditStudentPage({ params }: Props) {
       {/* #14 — Lịch sử học tập */}
       {learningHistory.length > 0 && (
         <section>
-          <h2 className="mb-3 flex items-center gap-2 text-lg font-bold text-neutral-900">
+          <h2 className="mb-3 flex items-center gap-2 text-lg font-bold text-foreground">
             <LineChart className="h-5 w-5 text-primary" /> Lịch sử học tập
           </h2>
-          <div className="overflow-x-auto rounded-xl border border-neutral-200 bg-white">
+          <div className="overflow-x-auto rounded-xl border border-border bg-card">
             <table className="w-full text-sm">
-              <thead className="border-b border-neutral-200 bg-neutral-50 text-left text-xs uppercase tracking-wider text-neutral-500">
+              <thead className="border-b border-border bg-muted text-left text-xs uppercase tracking-wider text-muted-foreground">
                 <tr>
                   <th className="px-4 py-2">Lớp / Khoá</th>
                   <th className="px-4 py-2 text-center">Buổi (đã học/tổng)</th>
@@ -435,28 +435,28 @@ export default async function EditStudentPage({ params }: Props) {
               </thead>
               <tbody>
                 {learningHistory.map((h) => (
-                  <tr key={h.id} className="border-b border-neutral-100 last:border-0">
+                  <tr key={h.id} className="border-b border-border last:border-0">
                     <td className="px-4 py-2">
                       <Link href={`/classes/${h.classId}/progress`} className="font-medium text-primary hover:underline">
                         {h.class.classCode ? `${h.class.classCode} · ` : ""}{h.class.name}
                       </Link>
-                      <span className="block text-xs text-neutral-400">{h.class.course.name}</span>
+                      <span className="block text-xs text-muted-foreground">{h.class.course.name}</span>
                     </td>
-                    <td className="px-4 py-2 text-center tabular-nums text-neutral-700">
+                    <td className="px-4 py-2 text-center tabular-nums text-foreground">
                       {h.sessions.attended}/{h.sessions.total || "—"}
                       {h.sessions.absentNoMakeup > 0 && (
                         <span className="ml-1 text-xs text-state-danger-ink">(vắng {h.sessions.absentNoMakeup})</span>
                       )}
                     </td>
                     <td className="px-4 py-2 text-center">
-                      <span className="rounded-full bg-neutral-100 px-2 py-0.5 text-xs font-semibold text-neutral-600">
+                      <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-semibold text-muted-foreground">
                         {h.status}
                       </span>
                     </td>
-                    <td className="px-4 py-2 tabular-nums text-neutral-600">
+                    <td className="px-4 py-2 tabular-nums text-muted-foreground">
                       {h.enrolledAt ? formatDateVN(h.enrolledAt) : "—"}
                     </td>
-                    <td className="px-4 py-2 tabular-nums text-neutral-600">
+                    <td className="px-4 py-2 tabular-nums text-muted-foreground">
                       {h.endedAt ? formatDateVN(h.endedAt) : "—"}
                     </td>
                   </tr>
@@ -469,10 +469,10 @@ export default async function EditStudentPage({ params }: Props) {
 
       {/* LMS-5 — hồ sơ năng lực robotics */}
       <section>
-        <h2 className="mb-3 text-lg font-bold text-neutral-900">
+        <h2 className="mb-3 text-lg font-bold text-foreground">
           Hồ sơ năng lực robotics
         </h2>
-        <div className="rounded-xl border border-neutral-200 bg-white p-4">
+        <div className="rounded-xl border border-border bg-card p-4">
           <SkillEditor
             studentId={student.id}
             canEdit={canAssessSkills}
@@ -495,12 +495,12 @@ function MiniStat({
 }) {
   return (
     <div>
-      <p className="text-[10px] uppercase tracking-wider text-neutral-500">
+      <p className="text-[10px] uppercase tracking-wider text-muted-foreground">
         {label}
       </p>
-      <p className="text-sm font-bold text-neutral-900 tabular-nums">{value}</p>
+      <p className="text-sm font-bold text-foreground tabular-nums">{value}</p>
       {sub && (
-        <p className="text-[10px] text-neutral-500 tabular-nums">{sub}</p>
+        <p className="text-[10px] text-muted-foreground tabular-nums">{sub}</p>
       )}
     </div>
   );

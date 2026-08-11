@@ -148,8 +148,8 @@ export default async function CompletionPage({ searchParams }: PageProps) {
   return (
     <div className="space-y-6 p-4">
       <div>
-        <h1 className="text-xl font-bold text-neutral-900">Hoàn thành khoá &amp; chứng chỉ</h1>
-        <p className="text-sm text-neutral-500">
+        <h1 className="text-xl font-bold text-foreground">Hoàn thành khoá &amp; chứng chỉ</h1>
+        <p className="text-sm text-muted-foreground">
           Đánh dấu học viên hoàn thành khoá, nhập đánh giá cuối khoá của GV → sinh chứng chỉ, gợi ý khoá tiếp
           theo, tạo việc chăm sóc tái tục và đẩy email chúc mừng.
         </p>
@@ -169,10 +169,10 @@ export default async function CompletionPage({ searchParams }: PageProps) {
         selectedClass={selectedClass}
       />
 
-      <div className="rounded-xl border border-neutral-200 bg-white">
-        <div className="border-b px-4 py-2 text-sm font-semibold text-neutral-700">Đã hoàn thành gần đây</div>
+      <div className="rounded-xl border border-border bg-card">
+        <div className="border-b px-4 py-2 text-sm font-semibold text-foreground">Đã hoàn thành gần đây</div>
         <table className="w-full text-sm">
-          <thead className="text-left text-xs text-neutral-400">
+          <thead className="text-left text-xs text-muted-foreground">
             <tr>
               <th className="px-4 py-2">Học viên</th>
               <th className="px-4 py-2">Khoá</th>
@@ -185,7 +185,7 @@ export default async function CompletionPage({ searchParams }: PageProps) {
           <tbody>
             {completions.length === 0 ? (
               <tr>
-                <td colSpan={6} className="px-4 py-6 text-center text-neutral-400">
+                <td colSpan={6} className="px-4 py-6 text-center text-muted-foreground">
                   Chưa có dữ liệu.
                 </td>
               </tr>
@@ -195,10 +195,10 @@ export default async function CompletionPage({ searchParams }: PageProps) {
                   <td className="px-4 py-2 font-medium">{c.student.name}</td>
                   <td className="px-4 py-2">{c.course.name}</td>
                   <td className="px-4 py-2">{c.finalGrade ?? "—"}</td>
-                  <td className="px-4 py-2 text-neutral-500">
+                  <td className="px-4 py-2 text-muted-foreground">
                     {c.nextCourseId ? courseName.get(c.nextCourseId) ?? "—" : "—"}
                   </td>
-                  <td className="px-4 py-2 text-neutral-500">{c.completedAt.toISOString().slice(0, 10)}</td>
+                  <td className="px-4 py-2 text-muted-foreground">{c.completedAt.toISOString().slice(0, 10)}</td>
                   <td className="px-4 py-2">
                     <a
                       href={`/api/admin/reports/certificate?code=${encodeURIComponent(c.certificateCode)}`}

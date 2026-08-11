@@ -52,8 +52,8 @@ export default async function NewEmployeePage() {
   return (
     <div className="max-w-4xl">
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">Thêm nhân sự mới</h1>
-        <p className="mt-1 text-sm text-gray-500">
+        <h1 className="text-2xl font-bold text-foreground">Thêm nhân sự mới</h1>
+        <p className="mt-1 text-sm text-muted-foreground">
           Mã NV tự động đề xuất: <code className="font-mono">{nextCode}</code>
         </p>
       </div>

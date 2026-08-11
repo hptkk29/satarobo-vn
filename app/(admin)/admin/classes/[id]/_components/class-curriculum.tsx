@@ -52,9 +52,9 @@ export function ClassCurriculum({
   }
 
   return (
-    <section className="rounded-xl border border-gray-200 bg-white p-5">
+    <section className="rounded-xl border border-border bg-card p-5">
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-        <h2 className="flex items-center gap-2 text-sm font-bold uppercase tracking-wider text-gray-500">
+        <h2 className="flex items-center gap-2 text-sm font-bold uppercase tracking-wider text-muted-foreground">
           <BookOpen className="h-4 w-4" /> Chương trình (kế hoạch buổi)
         </h2>
         <span className="inline-flex items-center gap-1 rounded-full bg-primary-soft px-2.5 py-0.5 text-xs font-semibold text-primary">
@@ -72,11 +72,11 @@ export function ClassCurriculum({
       )}
 
       {sorted.length === 0 ? (
-        <p className="mt-3 text-sm text-gray-400">
+        <p className="mt-3 text-sm text-muted-foreground">
           Chưa có kế hoạch buổi. Lớp tạo mới sẽ tự sinh từ giáo trình đã chốt.
         </p>
       ) : (
-        <ul className="mt-3 divide-y divide-gray-100">
+        <ul className="mt-3 divide-y divide-border">
           {sorted.map((p, i) => (
             <PlanItem
               key={p.id}
@@ -153,7 +153,7 @@ function AdoptVersion({
               onChange={(e) =>
                 setVersion(e.target.value ? Number(e.target.value) : "")
               }
-              className="rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary focus:outline-none"
+              className="rounded-lg border border-border px-3 py-2 text-sm focus:border-primary focus:outline-none"
             >
               <option value="">— Chọn version —</option>
               {others.map((v) => (
@@ -166,7 +166,7 @@ function AdoptVersion({
               value={reason}
               onChange={(e) => setReason(e.target.value)}
               placeholder="Lý do áp dụng (bắt buộc)"
-              className="flex-1 rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary focus:outline-none"
+              className="flex-1 rounded-lg border border-border px-3 py-2 text-sm focus:border-primary focus:outline-none"
             />
           </div>
           <p className="text-xs text-state-warning-ink">
@@ -185,7 +185,7 @@ function AdoptVersion({
             <button
               type="button"
               onClick={() => setOpen(false)}
-              className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50"
+              className="rounded-lg border border-border px-4 py-2 text-sm font-semibold text-foreground hover:bg-muted"
             >
               Huỷ
             </button>
@@ -239,7 +239,7 @@ function PlanItem({
     <li className="py-3">
       <div className="flex items-start gap-2">
         <div className="flex flex-col items-center pt-0.5">
-          <span className="inline-flex h-6 min-w-6 items-center justify-center rounded-full bg-gray-100 px-1.5 text-xs font-bold text-gray-600 tabular-nums">
+          <span className="inline-flex h-6 min-w-6 items-center justify-center rounded-full bg-muted px-1.5 text-xs font-bold text-muted-foreground tabular-nums">
             {plan.seq}
           </span>
           {canEdit && (
@@ -248,7 +248,7 @@ function PlanItem({
                 type="button"
                 onClick={() => onReorder(plan, -1)}
                 disabled={pending || isFirst}
-                className="text-gray-400 hover:text-primary disabled:opacity-30"
+                className="text-muted-foreground hover:text-primary disabled:opacity-30"
                 aria-label="Lên"
               >
                 <ChevronUp className="h-4 w-4" />
@@ -257,7 +257,7 @@ function PlanItem({
                 type="button"
                 onClick={() => onReorder(plan, 1)}
                 disabled={pending || isLast}
-                className="text-gray-400 hover:text-primary disabled:opacity-30"
+                className="text-muted-foreground hover:text-primary disabled:opacity-30"
                 aria-label="Xuống"
               >
                 <ChevronDown className="h-4 w-4" />
@@ -269,14 +269,14 @@ function PlanItem({
         <div className="min-w-0 flex-1">
           {!editing ? (
             <>
-              <div className="font-medium text-gray-900">{title}</div>
+              <div className="font-medium text-foreground">{title}</div>
               {plan.lessonTitle && plan.customTitle && (
-                <div className="text-xs text-gray-400">
+                <div className="text-xs text-muted-foreground">
                   Bài gốc: {plan.lessonTitle}
                 </div>
               )}
               {plan.note && (
-                <p className="mt-1 whitespace-pre-wrap text-sm text-gray-600">
+                <p className="mt-1 whitespace-pre-wrap text-sm text-muted-foreground">
                   {plan.note}
                 </p>
               )}
@@ -296,14 +296,14 @@ function PlanItem({
                 value={customTitle}
                 onChange={(e) => setCustomTitle(e.target.value)}
                 placeholder={plan.lessonTitle ?? "Tiêu đề tuỳ biến"}
-                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary focus:outline-none"
+                className="w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-primary focus:outline-none"
               />
               <textarea
                 value={note}
                 onChange={(e) => setNote(e.target.value)}
                 rows={2}
                 placeholder="Ghi chú buổi"
-                className="w-full resize-y rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary focus:outline-none"
+                className="w-full resize-y rounded-lg border border-border px-3 py-2 text-sm focus:border-primary focus:outline-none"
               />
               <div className="flex gap-2">
                 <button
@@ -322,7 +322,7 @@ function PlanItem({
                     setCustomTitle(plan.customTitle ?? "");
                     setNote(plan.note ?? "");
                   }}
-                  className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm font-semibold text-gray-700 hover:bg-gray-50"
+                  className="rounded-lg border border-border px-3 py-1.5 text-sm font-semibold text-foreground hover:bg-muted"
                 >
                   Huỷ
                 </button>

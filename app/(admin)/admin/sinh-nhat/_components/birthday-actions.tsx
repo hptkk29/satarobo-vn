@@ -23,7 +23,7 @@ export function CelebrateButton({ id, done }: { id: string; done: boolean }) {
             } else toast.error(r.error ?? "Lỗi");
           })
         }
-        className="rounded-lg border border-gray-300 px-3 py-1.5 text-xs font-semibold text-gray-600 hover:bg-gray-50 disabled:opacity-50"
+        className="rounded-lg border border-border px-3 py-1.5 text-xs font-semibold text-muted-foreground hover:bg-muted disabled:opacity-50"
       >
         Bỏ đánh dấu
       </button>

@@ -8,7 +8,7 @@ import { JOB_STATUS, DEPARTMENTS } from '@/lib/data/job-options'
 import type { JobStatus } from '@prisma/client'
 
 const STATUS_COLORS: Record<JobStatus, string> = {
-  DRAFT: 'bg-gray-100 text-gray-600',
+  DRAFT: 'bg-muted text-muted-foreground',
   OPEN: 'bg-state-success-soft text-state-success-ink',
   CLOSED: 'bg-state-danger-soft text-state-danger-ink',
   ON_HOLD: 'bg-state-warning-soft text-state-warning-ink',
@@ -43,7 +43,7 @@ function JobActions({ job, canEdit }: { job: JobRow; canEdit: boolean }) {
       <Link
         href={`/tuyen-dung/${job.slug}`}
         target="_blank"
-        className="rounded p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
+        className="rounded p-1.5 text-muted-foreground hover:bg-muted hover:text-muted-foreground"
         title="Xem public"
       >
         <ExternalLink className="h-4 w-4" />
@@ -53,7 +53,7 @@ function JobActions({ job, canEdit }: { job: JobRow; canEdit: boolean }) {
         <>
           <Link
             href={`/jobs/${job.id}/edit`}
-            className="rounded p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
+            className="rounded p-1.5 text-muted-foreground hover:bg-muted hover:text-muted-foreground"
             title="Sửa"
           >
             <Pencil className="h-4 w-4" />
@@ -69,7 +69,7 @@ function JobActions({ job, canEdit }: { job: JobRow; canEdit: boolean }) {
                 if (r.ok && r.id) window.location.href = `/jobs/${r.id}/edit`
               })
             }
-            className="rounded p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600 disabled:opacity-40"
+            className="rounded p-1.5 text-muted-foreground hover:bg-muted hover:text-muted-foreground disabled:opacity-40"
           >
             {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Copy className="h-4 w-4" />}
           </button>
@@ -84,7 +84,7 @@ function JobActions({ job, canEdit }: { job: JobRow; canEdit: boolean }) {
                 await deleteJobAction(job.id)
               })
             }}
-            className="rounded p-1.5 text-gray-400 hover:bg-state-danger-soft hover:text-state-danger-ink disabled:opacity-40"
+            className="rounded p-1.5 text-muted-foreground hover:bg-state-danger-soft hover:text-state-danger-ink disabled:opacity-40"
           >
             <Trash2 className="h-4 w-4" />
           </button>
@@ -107,7 +107,7 @@ function StatusSelect({ job, canEdit }: { job: JobRow; canEdit: boolean }) {
 
   return (
     <div className="flex items-center gap-1.5">
-      {pending && <Loader2 className="h-3.5 w-3.5 animate-spin text-gray-400" />}
+      {pending && <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />}
       <select
         defaultValue={job.status}
         disabled={pending}
@@ -128,25 +128,25 @@ function StatusSelect({ job, canEdit }: { job: JobRow; canEdit: boolean }) {
 
 export function JobsAdminTable({ jobs, canEdit }: { jobs: JobRow[]; canEdit: boolean }) {
   return (
-    <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
+    <div className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
       <div className="overflow-x-auto">
-        <table className="min-w-full divide-y divide-gray-100">
-          <thead className="bg-gray-50">
+        <table className="min-w-full divide-y divide-border">
+          <thead className="bg-muted">
             <tr>
-              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">Tiêu đề</th>
-              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">Phòng ban</th>
-              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">Trạng thái</th>
-              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">Chỉ tiêu</th>
-              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">Hạn nộp</th>
-              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">Người tạo</th>
-              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">Cập nhật</th>
+              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">Tiêu đề</th>
+              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">Phòng ban</th>
+              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">Trạng thái</th>
+              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">Chỉ tiêu</th>
+              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">Hạn nộp</th>
+              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">Người tạo</th>
+              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">Cập nhật</th>
               <th className="px-4 py-3" />
             </tr>
           </thead>
-          <tbody className="divide-y divide-gray-50">
+          <tbody className="divide-y divide-border">
             {jobs.length === 0 ? (
               <tr>
-                <td colSpan={8} className="px-4 py-12 text-center text-sm text-gray-400">
+                <td colSpan={8} className="px-4 py-12 text-center text-sm text-muted-foreground">
                   Chưa có tin tuyển dụng nào
                 </td>
               </tr>
@@ -154,21 +154,21 @@ export function JobsAdminTable({ jobs, canEdit }: { jobs: JobRow[]; canEdit: boo
               jobs.map((job) => {
                 const deptLabel = DEPARTMENTS.find((d) => d.value === job.department)?.label ?? job.department ?? '—'
                 return (
-                  <tr key={job.id} className="hover:bg-gray-50/60">
+                  <tr key={job.id} className="hover:bg-muted/60">
                     <td className="px-4 py-3">
-                      <div className="max-w-[260px] font-medium text-gray-900 line-clamp-2">{job.title}</div>
-                      <div className="text-xs text-gray-400">/tuyen-dung/{job.slug}</div>
+                      <div className="max-w-[260px] font-medium text-foreground line-clamp-2">{job.title}</div>
+                      <div className="text-xs text-muted-foreground">/tuyen-dung/{job.slug}</div>
                     </td>
-                    <td className="px-4 py-3 text-sm text-gray-600">{deptLabel}</td>
+                    <td className="px-4 py-3 text-sm text-muted-foreground">{deptLabel}</td>
                     <td className="px-4 py-3">
                       <StatusSelect job={job} canEdit={canEdit} />
                     </td>
-                    <td className="px-4 py-3 text-sm text-gray-600">{job.openings}</td>
-                    <td className="px-4 py-3 text-sm text-gray-500">
+                    <td className="px-4 py-3 text-sm text-muted-foreground">{job.openings}</td>
+                    <td className="px-4 py-3 text-sm text-muted-foreground">
                       {job.closesAt ? new Date(job.closesAt).toLocaleDateString('vi-VN') : '—'}
                     </td>
-                    <td className="px-4 py-3 text-sm text-gray-500">{job.author?.name ?? job.author?.email ?? '—'}</td>
-                    <td className="px-4 py-3 text-sm tabular-nums text-gray-400">
+                    <td className="px-4 py-3 text-sm text-muted-foreground">{job.author?.name ?? job.author?.email ?? '—'}</td>
+                    <td className="px-4 py-3 text-sm tabular-nums text-muted-foreground">
                       {new Date(job.updatedAt).toLocaleDateString('vi-VN')}
                     </td>
                     <td className="px-4 py-3">

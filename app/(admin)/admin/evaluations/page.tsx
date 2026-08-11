@@ -38,10 +38,10 @@ export default async function EvaluationsPage() {
   return (
     <div className="max-w-4xl space-y-6 p-6">
       <div>
-        <h1 className="flex items-center gap-2 text-2xl font-bold text-gray-900">
+        <h1 className="flex items-center gap-2 text-2xl font-bold text-foreground">
           <ClipboardList className="h-6 w-6 text-primary" /> Đánh giá & Khảo sát
         </h1>
-        <p className="mt-1 text-sm text-gray-500">
+        <p className="mt-1 text-sm text-muted-foreground">
           Form builder (4 loại câu hỏi) cho đánh giá GV của học viên và khảo sát cơ sở của phụ huynh.
         </p>
       </div>

@@ -15,7 +15,7 @@ const TYPE_INFO: Record<QuestionType, { label: string; color: string }> = {
   TRUE_FALSE: { label: "Đúng/Sai", color: "bg-state-success-soft text-state-success-ink" },
   SHORT_ANSWER: { label: "Trả lời ngắn", color: "bg-state-warning-soft text-state-warning-ink" },
   ESSAY: { label: "Tự luận", color: "bg-primary-soft text-primary" },
-  CODE: { label: "Lập trình", color: "bg-neutral-100 text-neutral-800" },
+  CODE: { label: "Lập trình", color: "bg-muted text-foreground" },
 };
 
 const DIFFICULTY_INFO: Record<QuestionDifficulty, { label: string; color: string }> = {
@@ -111,11 +111,11 @@ export default async function QuestionsPage({ searchParams }: SearchParams) {
     <div>
       <div className="mb-6 flex items-start justify-between gap-4">
         <div>
-          <h1 className="flex items-center gap-2 text-2xl font-bold text-gray-900">
+          <h1 className="flex items-center gap-2 text-2xl font-bold text-foreground">
             <HelpCircle className="h-6 w-6 text-primary" />
             Ngân hàng câu hỏi
           </h1>
-          <p className="mt-1 text-sm text-gray-500">
+          <p className="mt-1 text-sm text-muted-foreground">
             {questions.length > 0
               ? `${questions.length} câu hỏi`
               : "Chưa có câu hỏi nào"}
@@ -131,7 +131,7 @@ export default async function QuestionsPage({ searchParams }: SearchParams) {
           </Link>
           <Link
             href="/questions/import"
-            className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-card px-4 py-2 text-sm font-semibold text-foreground hover:bg-muted"
           >
             <FileSpreadsheet className="h-4 w-4" />
             Thêm bằng template
@@ -147,12 +147,12 @@ export default async function QuestionsPage({ searchParams }: SearchParams) {
           name="q"
           defaultValue={q}
           placeholder="Tìm nội dung / mã câu hỏi..."
-          className="lg:col-span-2 rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+          className="lg:col-span-2 rounded-lg border border-border px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
         />
         <select
           name="type"
           defaultValue={typeFilter ?? ""}
-          className="rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:outline-none"
+          className="rounded-lg border border-border px-3 py-2 text-sm focus:border-primary focus:outline-none"
         >
           <option value="">Mọi loại</option>
           {Object.entries(TYPE_INFO).map(([v, { label }]) => (
@@ -164,7 +164,7 @@ export default async function QuestionsPage({ searchParams }: SearchParams) {
         <select
           name="difficulty"
           defaultValue={difficultyFilter ?? ""}
-          className="rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:outline-none"
+          className="rounded-lg border border-border px-3 py-2 text-sm focus:border-primary focus:outline-none"
         >
           <option value="">Mọi độ khó</option>
           {Object.entries(DIFFICULTY_INFO).map(([v, { label }]) => (
@@ -176,7 +176,7 @@ export default async function QuestionsPage({ searchParams }: SearchParams) {
         <select
           name="curriculumId"
           defaultValue={curriculumFilter ?? ""}
-          className="rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:outline-none"
+          className="rounded-lg border border-border px-3 py-2 text-sm focus:border-primary focus:outline-none"
         >
           <option value="">Mọi khung CT</option>
           {curriculums.map((c) => (
@@ -188,7 +188,7 @@ export default async function QuestionsPage({ searchParams }: SearchParams) {
         <select
           name="lessonId"
           defaultValue={lessonFilter ?? ""}
-          className="rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:outline-none"
+          className="rounded-lg border border-border px-3 py-2 text-sm focus:border-primary focus:outline-none"
         >
           <option value="">Mọi bài học</option>
           {lessons.map((l) => (
@@ -201,7 +201,7 @@ export default async function QuestionsPage({ searchParams }: SearchParams) {
           name="tag"
           defaultValue={tagFilter}
           placeholder="Tag (vd: loop)"
-          className="rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:outline-none"
+          className="rounded-lg border border-border px-3 py-2 text-sm focus:border-primary focus:outline-none"
         />
         <button
           type="submit"
@@ -211,40 +211,40 @@ export default async function QuestionsPage({ searchParams }: SearchParams) {
         </button>
       </form>
 
-      <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
+      <div className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
         <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-gray-100">
-            <thead className="bg-gray-50">
+          <table className="min-w-full divide-y divide-border">
+            <thead className="bg-muted">
               <tr>
-                <th className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">
+                <th className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                   Loại
                 </th>
-                <th className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">
+                <th className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                   Độ khó
                 </th>
-                <th className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">
+                <th className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                   Câu hỏi
                 </th>
-                <th className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">
+                <th className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                   Bài học
                 </th>
-                <th className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">
+                <th className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                   Tags
                 </th>
-                <th className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">
+                <th className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                   Soạn
                 </th>
-                <th className="px-3 py-3 text-right text-xs font-semibold uppercase tracking-wider text-gray-500">
+                <th className="px-3 py-3 text-right text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                   Hành động
                 </th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-50">
+            <tbody className="divide-y divide-border">
               {questions.length === 0 ? (
                 <tr>
                   <td
                     colSpan={7}
-                    className="px-4 py-12 text-center text-sm text-gray-400"
+                    className="px-4 py-12 text-center text-sm text-muted-foreground"
                   >
                     Chưa có câu hỏi nào khớp bộ lọc.{" "}
                     <Link
@@ -260,7 +260,7 @@ export default async function QuestionsPage({ searchParams }: SearchParams) {
                   const typeInfo = TYPE_INFO[q.type];
                   const diffInfo = DIFFICULTY_INFO[q.difficulty];
                   return (
-                    <tr key={q.id} className="hover:bg-gray-50/60">
+                    <tr key={q.id} className="hover:bg-muted/60">
                       <td className="px-3 py-3">
                         <span
                           className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold ${typeInfo.color}`}
@@ -276,22 +276,22 @@ export default async function QuestionsPage({ searchParams }: SearchParams) {
                         </span>
                       </td>
                       <td className="px-3 py-3 max-w-md">
-                        <div className="text-sm text-gray-900 line-clamp-2">
+                        <div className="text-sm text-foreground line-clamp-2">
                           {q.text}
                         </div>
                         {q.questionCode && (
-                          <div className="text-xs text-gray-400 tabular-nums">
+                          <div className="text-xs text-muted-foreground tabular-nums">
                             {q.questionCode}
                           </div>
                         )}
                       </td>
-                      <td className="px-3 py-3 text-xs text-gray-600 max-w-[180px]">
+                      <td className="px-3 py-3 text-xs text-muted-foreground max-w-[180px]">
                         {q.lesson ? (
                           <>
                             <div className="font-medium">
                               {q.lesson.curriculum.name}
                             </div>
-                            <div className="text-gray-400">
+                            <div className="text-muted-foreground">
                               Bài {q.lesson.order}: {q.lesson.title}
                             </div>
                           </>
@@ -300,12 +300,12 @@ export default async function QuestionsPage({ searchParams }: SearchParams) {
                             <div className="font-medium">
                               {q.curriculum.course.name}
                             </div>
-                            <div className="text-gray-400">
+                            <div className="text-muted-foreground">
                               {q.curriculum.name}
                             </div>
                           </>
                         ) : (
-                          <span className="text-gray-300">—</span>
+                          <span className="text-muted-foreground">—</span>
                         )}
                       </td>
                       <td className="px-3 py-3">
@@ -313,25 +313,25 @@ export default async function QuestionsPage({ searchParams }: SearchParams) {
                           {q.tags.slice(0, 4).map((t) => (
                             <span
                               key={t}
-                              className="inline-flex rounded bg-neutral-100 px-1.5 py-0.5 text-xs text-neutral-600"
+                              className="inline-flex rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground"
                             >
                               {t}
                             </span>
                           ))}
                           {q.tags.length > 4 && (
-                            <span className="text-xs text-neutral-400">
+                            <span className="text-xs text-muted-foreground">
                               +{q.tags.length - 4}
                             </span>
                           )}
                         </div>
                       </td>
-                      <td className="px-3 py-3 text-xs text-gray-500">
+                      <td className="px-3 py-3 text-xs text-muted-foreground">
                         {q.author?.fullName ?? "—"}
                       </td>
                       <td className="px-3 py-3 text-right">
                         <Link
                           href={`/questions/${q.id}/edit`}
-                          className="inline-flex items-center gap-1 rounded-md border border-gray-200 px-2.5 py-1 text-xs font-semibold text-gray-700 hover:bg-gray-50"
+                          className="inline-flex items-center gap-1 rounded-md border border-border px-2.5 py-1 text-xs font-semibold text-foreground hover:bg-muted"
                         >
                           Sửa
                         </Link>

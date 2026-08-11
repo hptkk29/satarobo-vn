@@ -52,28 +52,28 @@ export async function MarketingDashboard({ name, actor, embedded = false }: { na
 
   return (
     <div className="space-y-6">
-      {!embedded && <h1 className="text-2xl font-bold text-gray-900">Chào {name || "bạn"} 👋 · Marketing</h1>}
+      {!embedded && <h1 className="text-2xl font-bold text-foreground">Chào {name || "bạn"} 👋 · Marketing</h1>}
       <div className="grid grid-cols-3 gap-4">
         <Stat label="Lead mới tuần này" value={newThisWeek} />
         <Stat label="Tổng lead" value={total} />
         <Stat label="Tỷ lệ chuyển đổi" value={`${convRate}%`} />
       </div>
 
-      <section className="rounded-xl border border-gray-200 bg-white p-5">
-        <h2 className="mb-3 flex items-center gap-2 text-sm font-bold uppercase tracking-wider text-gray-500">
+      <section className="rounded-xl border border-border bg-card p-5">
+        <h2 className="mb-3 flex items-center gap-2 text-sm font-bold uppercase tracking-wider text-muted-foreground">
           <BarChart3 className="h-4 w-4" /> Nguồn lead theo kênh
         </h2>
         {bySource.length === 0 ? (
-          <p className="text-sm text-gray-400">Chưa có lead.</p>
+          <p className="text-sm text-muted-foreground">Chưa có lead.</p>
         ) : (
           <ul className="space-y-2">
             {bySource.map((s, i) => (
               <li key={i} className="flex items-center gap-3 text-sm">
-                <span className="w-40 truncate text-gray-700" title={s.source ?? "—"}>{s.source ?? "(không nguồn)"}</span>
-                <div className="h-3 flex-1 overflow-hidden rounded-full bg-gray-100">
+                <span className="w-40 truncate text-foreground" title={s.source ?? "—"}>{s.source ?? "(không nguồn)"}</span>
+                <div className="h-3 flex-1 overflow-hidden rounded-full bg-muted">
                   <div className="h-full rounded-full bg-primary" style={{ width: `${(s.count / maxCount) * 100}%` }} />
                 </div>
-                <span className="w-10 text-right font-semibold tabular-nums text-gray-700">{s.count}</span>
+                <span className="w-10 text-right font-semibold tabular-nums text-foreground">{s.count}</span>
               </li>
             ))}
           </ul>
@@ -114,7 +114,7 @@ export async function HrDashboard({ name, actor, embedded = false }: { name: str
 
   return (
     <div className="space-y-6">
-      {!embedded && <h1 className="text-2xl font-bold text-gray-900">Chào {name || "bạn"} 👋 · Nhân sự</h1>}
+      {!embedded && <h1 className="text-2xl font-bold text-foreground">Chào {name || "bạn"} 👋 · Nhân sự</h1>}
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
         <Stat label="Nhân viên đang làm" value={activeStaff} href="/nhan-su" icon={<Users className="h-5 w-5" />} />
         <Stat label="Tuyển dụng đang mở" value={openJobs} href="/jobs" icon={<Briefcase className="h-5 w-5" />} />
@@ -134,12 +134,12 @@ function Stat({
   const body = (
     <>
       <div className={`flex items-center gap-2 ${toneCls}`}>{icon}<span className="text-2xl font-bold tabular-nums">{value}</span></div>
-      <div className="mt-1 text-xs text-gray-500">{label}</div>
+      <div className="mt-1 text-xs text-muted-foreground">{label}</div>
     </>
   );
   return href ? (
-    <Link href={href} className="rounded-xl border border-gray-200 bg-white p-4 hover:border-primary">{body}</Link>
+    <Link href={href} className="rounded-xl border border-border bg-card p-4 hover:border-primary">{body}</Link>
   ) : (
-    <div className="rounded-xl border border-gray-200 bg-white p-4">{body}</div>
+    <div className="rounded-xl border border-border bg-card p-4">{body}</div>
   );
 }

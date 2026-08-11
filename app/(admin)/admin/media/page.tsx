@@ -81,8 +81,8 @@ export default async function AdminMediaPage() {
   return (
     <div className="max-w-6xl p-6">
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">Ảnh lớp học</h1>
-        <p className="mt-1 text-sm text-gray-500">
+        <h1 className="text-2xl font-bold text-foreground">Ảnh lớp học</h1>
+        <p className="mt-1 text-sm text-muted-foreground">
           Giáo viên / Sale phụ trách đăng ảnh theo buổi → quản lý duyệt → phụ huynh
           xem ảnh con được gắn thẻ.
         </p>

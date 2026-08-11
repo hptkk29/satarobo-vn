@@ -162,8 +162,8 @@ export function ExamForm({
         </div>
       )}
 
-      <section className="rounded-xl border border-neutral-200 bg-white p-6 space-y-4">
-        <h2 className="text-sm font-bold uppercase tracking-wider text-neutral-700">
+      <section className="rounded-xl border border-border bg-card p-6 space-y-4">
+        <h2 className="text-sm font-bold uppercase tracking-wider text-foreground">
           Thông tin đề thi
         </h2>
 
@@ -266,8 +266,8 @@ export function ExamForm({
         </div>
       </section>
 
-      <section className="rounded-xl border border-neutral-200 bg-white p-6 space-y-4">
-        <h2 className="text-sm font-bold uppercase tracking-wider text-neutral-700">
+      <section className="rounded-xl border border-border bg-card p-6 space-y-4">
+        <h2 className="text-sm font-bold uppercase tracking-wider text-foreground">
           Cấu hình thang điểm
         </h2>
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
@@ -307,9 +307,9 @@ export function ExamForm({
               checked={shuffleQuestions}
               onChange={(e) => setShuffleQuestions(e.target.checked)}
               disabled={pending}
-              className="h-4 w-4 rounded border-neutral-300"
+              className="h-4 w-4 rounded border-border"
             />
-            <span className="font-medium text-neutral-700">Trộn thứ tự câu hỏi</span>
+            <span className="font-medium text-foreground">Trộn thứ tự câu hỏi</span>
           </label>
           <label className="flex items-center gap-2 text-sm">
             <input
@@ -317,17 +317,17 @@ export function ExamForm({
               checked={shuffleChoices}
               onChange={(e) => setShuffleChoices(e.target.checked)}
               disabled={pending}
-              className="h-4 w-4 rounded border-neutral-300"
+              className="h-4 w-4 rounded border-border"
             />
-            <span className="font-medium text-neutral-700">
+            <span className="font-medium text-foreground">
               Trộn lựa chọn (MC/TF)
             </span>
           </label>
         </div>
       </section>
 
-      <section className="rounded-xl border border-neutral-200 bg-white p-6 space-y-4">
-        <h2 className="text-sm font-bold uppercase tracking-wider text-neutral-700">
+      <section className="rounded-xl border border-border bg-card p-6 space-y-4">
+        <h2 className="text-sm font-bold uppercase tracking-wider text-foreground">
           Cấu hình làm bài (R7-13)
         </h2>
         <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
@@ -375,16 +375,16 @@ export function ExamForm({
             checked={showResultAfterSubmit}
             onChange={(e) => setShowResultAfterSubmit(e.target.checked)}
             disabled={pending}
-            className="h-4 w-4 rounded border-neutral-300"
+            className="h-4 w-4 rounded border-border"
           />
-          <span className="font-medium text-neutral-700">
+          <span className="font-medium text-foreground">
             Hiển thị kết quả ngay sau khi nộp bài
           </span>
         </label>
       </section>
 
-      <section className="rounded-xl border border-neutral-200 bg-white p-6 space-y-4">
-        <h2 className="text-sm font-bold uppercase tracking-wider text-neutral-700">
+      <section className="rounded-xl border border-border bg-card p-6 space-y-4">
+        <h2 className="text-sm font-bold uppercase tracking-wider text-foreground">
           Thời gian mở đề (tuỳ chọn)
         </h2>
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
@@ -409,7 +409,7 @@ export function ExamForm({
         </div>
       </section>
 
-      <div className="flex flex-wrap gap-3 border-t border-neutral-200 pt-5">
+      <div className="flex flex-wrap gap-3 border-t border-border pt-5">
         <button
           type="submit"
           disabled={pending}
@@ -421,7 +421,7 @@ export function ExamForm({
           type="button"
           onClick={() => router.push("/exams")}
           disabled={pending}
-          className="rounded-xl border-2 border-neutral-200 bg-white px-6 py-3 font-bold text-neutral-700 hover:bg-neutral-50"
+          className="rounded-xl border-2 border-border bg-card px-6 py-3 font-bold text-foreground hover:bg-muted"
         >
           Huỷ
         </button>
@@ -430,7 +430,7 @@ export function ExamForm({
             type="button"
             onClick={handleDelete}
             disabled={pending}
-            className="ml-auto rounded-xl border-2 border-state-danger-soft bg-white px-6 py-3 font-bold text-state-danger-ink hover:bg-state-danger-soft"
+            className="ml-auto rounded-xl border-2 border-state-danger-soft bg-card px-6 py-3 font-bold text-state-danger-ink hover:bg-state-danger-soft"
           >
             Xoá
           </button>
@@ -441,7 +441,7 @@ export function ExamForm({
 }
 
 const inputClass =
-  "w-full rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20";
+  "w-full rounded-lg border border-border bg-card px-3 py-2 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20";
 
 function Field({
   label,
@@ -454,7 +454,7 @@ function Field({
 }) {
   return (
     <label className="block">
-      <span className="mb-1 block text-sm font-semibold text-neutral-700">
+      <span className="mb-1 block text-sm font-semibold text-foreground">
         {label}
         {required && <span className="ml-1 text-state-danger-ink">*</span>}
       </span>

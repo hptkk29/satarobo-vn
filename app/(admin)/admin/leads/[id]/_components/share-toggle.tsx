@@ -46,11 +46,11 @@ export function ShareToggle({
   }
 
   return (
-    <div className="inline-flex items-center gap-2 rounded-lg border border-gray-300 px-3 py-2">
-      <Users size={14} className="flex-shrink-0 text-gray-500" />
+    <div className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2">
+      <Users size={14} className="flex-shrink-0 text-muted-foreground" />
       <label
         htmlFor="lead-share-toggle"
-        className="cursor-pointer text-sm font-medium text-gray-700"
+        className="cursor-pointer text-sm font-medium text-foreground"
       >
         Dùng chung cho CSKH cùng cơ sở
       </label>

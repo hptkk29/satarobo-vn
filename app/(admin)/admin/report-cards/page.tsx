@@ -13,7 +13,7 @@ export const metadata = { title: "Học bạ năng lực | Admin" };
 export const dynamic = "force-dynamic";
 
 const STATUS_CLASS: Record<ReportCardStatusValue, string> = {
-  DRAFT: "bg-neutral-100 text-neutral-600",
+  DRAFT: "bg-muted text-muted-foreground",
   PENDING_REVIEW: "bg-state-warning-soft text-state-warning-ink",
   PUBLISHED: "bg-state-success-soft text-state-success-ink",
   RECALLED: "bg-state-danger-soft text-state-danger-ink",
@@ -90,15 +90,15 @@ export default async function ReportCardsPage({
     <div className="space-y-5 p-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
-          <h1 className="text-xl font-bold text-neutral-900">Học bạ năng lực</h1>
-          <p className="text-sm text-neutral-500">
+          <h1 className="text-xl font-bold text-foreground">Học bạ năng lực</h1>
+          <p className="text-sm text-muted-foreground">
             Chọn lớp → nhập học bạ từng học viên → nộp duyệt → phát hành.
           </p>
         </div>
         {canReviewReportCards ? (
           <Link
             href="/report-cards/criteria"
-            className="rounded-md border border-neutral-300 px-4 py-2 text-sm font-medium text-neutral-700 hover:bg-neutral-50"
+            className="rounded-md border border-border px-4 py-2 text-sm font-medium text-foreground hover:bg-muted"
           >
             Cấu hình tiêu chí
           </Link>
@@ -109,7 +109,7 @@ export default async function ReportCardsPage({
         <select
           name="classId"
           defaultValue={classId ?? ""}
-          className="rounded-md border border-neutral-300 px-3 py-2 text-sm"
+          className="rounded-md border border-border px-3 py-2 text-sm"
         >
           <option value="">— Chọn lớp —</option>
           {classes.map((c) => (
@@ -125,13 +125,13 @@ export default async function ReportCardsPage({
       </form>
 
       {classId && rows.length === 0 ? (
-        <p className="text-sm text-neutral-500">Lớp không có học viên hoặc ngoài phạm vi cơ sở.</p>
+        <p className="text-sm text-muted-foreground">Lớp không có học viên hoặc ngoài phạm vi cơ sở.</p>
       ) : null}
 
       {rows.length > 0 ? (
-        <section className="rounded-xl border border-neutral-200 bg-white">
+        <section className="rounded-xl border border-border bg-card">
           <table className="w-full text-sm">
-            <thead className="text-left text-xs text-neutral-400">
+            <thead className="text-left text-xs text-muted-foreground">
               <tr>
                 <th className="px-4 py-2">Học viên</th>
                 <th className="px-4 py-2">Trạng thái học bạ</th>
@@ -143,11 +143,11 @@ export default async function ReportCardsPage({
                 <tr key={r.enrollmentId} className="border-t">
                   <td className="px-4 py-2 font-medium">
                     {r.studentName}
-                    {r.studentCode ? <span className="text-neutral-400"> ({r.studentCode})</span> : null}
+                    {r.studentCode ? <span className="text-muted-foreground"> ({r.studentCode})</span> : null}
                   </td>
                   <td className="px-4 py-2">
                     {r.status ? <StatusBadge status={r.status} /> : (
-                      <span className="text-xs text-neutral-400">Chưa có</span>
+                      <span className="text-xs text-muted-foreground">Chưa có</span>
                     )}
                   </td>
                   <td className="px-4 py-2 text-right">

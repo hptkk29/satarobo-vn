@@ -363,8 +363,8 @@ function Header({
   return (
     <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
       <div>
-        <h1 className="text-2xl font-bold text-gray-900">Danh sách Lead</h1>
-        <p className="mt-1 text-sm text-gray-500">
+        <h1 className="text-2xl font-bold text-foreground">Danh sách Lead</h1>
+        <p className="mt-1 text-sm text-muted-foreground">
           {total > 0
             ? `Tổng ${total} lead${
                 view === 'kanban' && shown != null && shown < total
@@ -374,16 +374,16 @@ function Header({
             : 'Chưa có lead nào'}
         </p>
       </div>
-      <div className="inline-flex overflow-hidden rounded-lg border border-gray-200">
+      <div className="inline-flex overflow-hidden rounded-lg border border-border">
         <Link
           href={qs('table')}
-          className={`px-3 py-1.5 text-sm font-medium ${ view === 'table' ? 'bg-primary text-white' : 'bg-white text-gray-600 hover:bg-gray-50' }`}
+          className={`px-3 py-1.5 text-sm font-medium ${ view === 'table' ? 'bg-primary text-white' : 'bg-card text-muted-foreground hover:bg-muted' }`}
         >
           Bảng
         </Link>
         <Link
           href={qs('kanban')}
-          className={`px-3 py-1.5 text-sm font-medium ${ view === 'kanban' ? 'bg-primary text-white' : 'bg-white text-gray-600 hover:bg-gray-50' }`}
+          className={`px-3 py-1.5 text-sm font-medium ${ view === 'kanban' ? 'bg-primary text-white' : 'bg-card text-muted-foreground hover:bg-muted' }`}
         >
           Kanban
         </Link>
@@ -393,20 +393,20 @@ function Header({
           <a
             href="/api/admin/templates/leads"
             download="mau-lead.xlsx"
-            className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
+            className="rounded-lg border border-border bg-card px-3 py-1.5 text-sm font-medium text-foreground hover:bg-muted"
           >
             Tải file mẫu
           </a>
           <Link
             href="/leads/import"
-            className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
+            className="rounded-lg border border-border bg-card px-3 py-1.5 text-sm font-medium text-foreground hover:bg-muted"
           >
             Import Excel
           </Link>
           {canBulkConvert && (
             <Link
               href="/leads/bulk-convert"
-              className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
+              className="rounded-lg border border-border bg-card px-3 py-1.5 text-sm font-medium text-foreground hover:bg-muted"
             >
               Chốt hàng loạt
             </Link>
@@ -452,8 +452,8 @@ function StatusTabs({
       // Tab ĐANG CHỌN là trạng thái điều hướng, không phải "thành công" — dùng màu
       // thương hiệu. Trước đây nó xanh lục, tranh nghĩa với badge trạng thái ngay
       // cạnh (DESIGN.md §1: màu ngữ nghĩa là thang RIÊNG, không mượn lẫn nhau).
-      active ? 'bg-primary text-primary-foreground' : 'bg-white text-gray-600 hover:bg-gray-50'
-    } border border-gray-200`
+      active ? 'bg-primary text-primary-foreground' : 'bg-card text-muted-foreground hover:bg-muted'
+    } border border-border`
 
   return (
     <div className="mb-3 flex flex-wrap gap-2">
@@ -503,11 +503,11 @@ function FilterBar({
     <form
       key={filterKey}
       method="GET"
-      className="mb-4 flex flex-wrap items-end gap-2 rounded-lg bg-gray-50 p-3"
+      className="mb-4 flex flex-wrap items-end gap-2 rounded-lg bg-muted p-3"
     >
       <input type="hidden" name="view" value={view} />
       <div>
-        <label className="mb-1 block text-xs text-gray-600">Tìm</label>
+        <label className="mb-1 block text-xs text-muted-foreground">Tìm</label>
         <input
           name="q"
           defaultValue={params.q ?? ''}
@@ -518,7 +518,7 @@ function FilterBar({
       {canViewAll && (
         <>
           <div>
-            <label className="mb-1 block text-xs text-gray-600">Cơ sở</label>
+            <label className="mb-1 block text-xs text-muted-foreground">Cơ sở</label>
             <select
               name="centerId"
               defaultValue={params.centerId ?? ''}
@@ -533,7 +533,7 @@ function FilterBar({
             </select>
           </div>
           <div>
-            <label className="mb-1 block text-xs text-gray-600">Sale</label>
+            <label className="mb-1 block text-xs text-muted-foreground">Sale</label>
             <select
               name="assignedToId"
               defaultValue={params.assignedToId ?? ''}
@@ -550,7 +550,7 @@ function FilterBar({
         </>
       )}
       <div>
-        <label className="mb-1 block text-xs text-gray-600">Nguồn</label>
+        <label className="mb-1 block text-xs text-muted-foreground">Nguồn</label>
         <input
           name="source"
           defaultValue={params.source ?? ''}
@@ -559,7 +559,7 @@ function FilterBar({
         />
       </div>
       <div>
-        <label className="mb-1 block text-xs text-gray-600">Từ ngày</label>
+        <label className="mb-1 block text-xs text-muted-foreground">Từ ngày</label>
         <input
           type="date"
           name="dateFrom"
@@ -568,7 +568,7 @@ function FilterBar({
         />
       </div>
       <div>
-        <label className="mb-1 block text-xs text-gray-600">Đến ngày</label>
+        <label className="mb-1 block text-xs text-muted-foreground">Đến ngày</label>
         <input
           type="date"
           name="dateTo"
@@ -581,7 +581,7 @@ function FilterBar({
       </button>
       <Link
         href={`/leads?view=${view}`}
-        className="rounded border border-gray-300 bg-white px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-50"
+        className="rounded border border-border bg-card px-3 py-1.5 text-sm text-muted-foreground hover:bg-muted"
       >
         Xoá lọc
       </Link>

@@ -95,7 +95,7 @@ export async function SalesDashboard({ userId, name, embedded = false }: { userI
 
   return (
     <div className="space-y-6">
-      {!embedded && <h1 className="text-2xl font-bold text-gray-900">Chào {name || "bạn"} 👋</h1>}
+      {!embedded && <h1 className="text-2xl font-bold text-foreground">Chào {name || "bạn"} 👋</h1>}
 
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
         <DashStat label="Lead của tôi" value={totalMine} href="/leads" icon={<Users className="h-5 w-5" />} />
@@ -117,8 +117,8 @@ export async function SalesDashboard({ userId, name, embedded = false }: { userI
       )}
 
       {/* Pipeline của tôi */}
-      <section className="rounded-xl border border-gray-200 bg-white p-5">
-        <h2 className="mb-3 text-sm font-bold uppercase tracking-wider text-gray-500">Lead của tôi theo giai đoạn</h2>
+      <section className="rounded-xl border border-border bg-card p-5">
+        <h2 className="mb-3 text-sm font-bold uppercase tracking-wider text-muted-foreground">Lead của tôi theo giai đoạn</h2>
         <div className="flex flex-wrap gap-2">
           {KANBAN_COLUMNS.map((s) => (
             <Link key={s} href={`/leads?status=${s}`} className={`rounded-lg px-3 py-1.5 text-sm font-medium ${LEAD_STATUS_BADGE[s]}`}>
@@ -129,9 +129,9 @@ export async function SalesDashboard({ userId, name, embedded = false }: { userI
       </section>
 
       {/* Phễu lead theo TUẦN — lead của tôi: mới vs chuyển đổi (8 tuần gần nhất). */}
-      <section className="rounded-xl border border-gray-200 bg-white p-5">
-        <h2 className="mb-1 text-sm font-bold uppercase tracking-wider text-gray-500">Phễu lead theo tuần</h2>
-        <p className="mb-4 text-xs text-gray-400">Lead mới vs đã chuyển đổi mỗi tuần (8 tuần gần nhất)</p>
+      <section className="rounded-xl border border-border bg-card p-5">
+        <h2 className="mb-1 text-sm font-bold uppercase tracking-wider text-muted-foreground">Phễu lead theo tuần</h2>
+        <p className="mb-4 text-xs text-muted-foreground">Lead mới vs đã chuyển đổi mỗi tuần (8 tuần gần nhất)</p>
         <BarChart
           data={weeklyBars}
           xKey="week"
@@ -145,18 +145,18 @@ export async function SalesDashboard({ userId, name, embedded = false }: { userI
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         {/* Việc cần làm */}
-        <section className="rounded-xl border border-gray-200 bg-white p-5">
-          <h2 className="mb-3 text-sm font-bold uppercase tracking-wider text-gray-500">
+        <section className="rounded-xl border border-border bg-card p-5">
+          <h2 className="mb-3 text-sm font-bold uppercase tracking-wider text-muted-foreground">
             Việc cần làm ({overdue.length} quá hạn · {dueToday.length} hôm nay)
           </h2>
           {overdue.length + dueToday.length === 0 ? (
-            <p className="text-sm text-gray-400">Không có việc đến hạn.</p>
+            <p className="text-sm text-muted-foreground">Không có việc đến hạn.</p>
           ) : (
             <ul className="space-y-1.5 text-sm">
               {[...overdue, ...dueToday].slice(0, 8).map((t) => (
                 <li key={t.id} className="flex items-center justify-between gap-2">
-                  <Link href={`/leads/${t.leadId}`} className="truncate font-medium text-gray-800 hover:text-primary">{t.title}</Link>
-                  <span className={`shrink-0 text-xs ${t.dueAt < now ? "font-semibold text-state-danger-ink" : "text-gray-400"}`}>
+                  <Link href={`/leads/${t.leadId}`} className="truncate font-medium text-foreground hover:text-primary">{t.title}</Link>
+                  <span className={`shrink-0 text-xs ${t.dueAt < now ? "font-semibold text-state-danger-ink" : "text-muted-foreground"}`}>
                     {formatDateVN(t.dueAt)}
                   </span>
                 </li>
@@ -166,20 +166,20 @@ export async function SalesDashboard({ userId, name, embedded = false }: { userI
         </section>
 
         {/* Học thử sắp tới */}
-        <section className="rounded-xl border border-gray-200 bg-white p-5">
-          <h2 className="mb-3 flex items-center gap-2 text-sm font-bold uppercase tracking-wider text-gray-500">
+        <section className="rounded-xl border border-border bg-card p-5">
+          <h2 className="mb-3 flex items-center gap-2 text-sm font-bold uppercase tracking-wider text-muted-foreground">
             <FlaskConical className="h-4 w-4" /> Học thử sắp tới
           </h2>
           {trials.length === 0 ? (
-            <p className="text-sm text-gray-400">Chưa có buổi học thử nào.</p>
+            <p className="text-sm text-muted-foreground">Chưa có buổi học thử nào.</p>
           ) : (
             <ul className="space-y-1.5 text-sm">
               {trials.map((t) => (
                 <li key={t.id} className="flex items-center justify-between gap-2">
-                  <Link href={`/leads/${t.lead.id}`} className="truncate font-medium text-gray-800 hover:text-primary">
+                  <Link href={`/leads/${t.lead.id}`} className="truncate font-medium text-foreground hover:text-primary">
                     {t.lead.childName ?? t.lead.parentName}
                   </Link>
-                  <span className="shrink-0 text-xs text-gray-500">
+                  <span className="shrink-0 text-xs text-muted-foreground">
                     {new Date(t.scheduledAt).toLocaleString("vi-VN", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}
                   </span>
                 </li>
@@ -199,9 +199,9 @@ function DashStat({
 }) {
   const toneCls = tone === "danger" ? "text-state-danger-ink" : tone === "ok" ? "text-state-success-ink" : "text-primary";
   return (
-    <Link href={href} className="rounded-xl border border-gray-200 bg-white p-4 hover:border-primary">
+    <Link href={href} className="rounded-xl border border-border bg-card p-4 hover:border-primary">
       <div className={`flex items-center gap-2 ${toneCls}`}>{icon}<span className="text-2xl font-bold tabular-nums">{value}</span></div>
-      <div className="mt-1 text-xs text-gray-500">{label}</div>
+      <div className="mt-1 text-xs text-muted-foreground">{label}</div>
     </Link>
   );
 }

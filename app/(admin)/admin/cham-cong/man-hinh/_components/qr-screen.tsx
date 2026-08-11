@@ -28,19 +28,19 @@ export function QrScreen({ centerId, centerName }: { centerId: string; centerNam
   }, [fetchToken]);
 
   return (
-    <div className="flex flex-col items-center justify-center gap-6 rounded-2xl bg-white p-10 text-center shadow-sm">
+    <div className="flex flex-col items-center justify-center gap-6 rounded-2xl bg-card p-10 text-center shadow-sm">
       <div>
-        <h2 className="text-2xl font-bold text-neutral-900">Chấm công Sata Robo</h2>
-        <p className="mt-1 text-neutral-500">{centerName}</p>
+        <h2 className="text-2xl font-bold text-foreground">Chấm công Sata Robo</h2>
+        <p className="mt-1 text-muted-foreground">{centerName}</p>
       </div>
 
-      <div className="flex h-[360px] w-[360px] items-center justify-center rounded-xl border border-neutral-200">
+      <div className="flex h-[360px] w-[360px] items-center justify-center rounded-xl border border-border">
         {error ? (
           <p className="px-6 text-sm text-state-danger-ink">{error}</p>
         ) : qr ? (
           <img src={qr} alt="QR chấm công" className="h-[340px] w-[340px]" />
         ) : (
-          <Loader2 className="h-10 w-10 animate-spin text-neutral-300" />
+          <Loader2 className="h-10 w-10 animate-spin text-muted-foreground" />
         )}
       </div>
 
@@ -48,7 +48,7 @@ export function QrScreen({ centerId, centerName }: { centerId: string; centerNam
         <p className="text-lg font-semibold text-primary">
           Quét mã bằng điện thoại để chấm công
         </p>
-        <p className="mt-1 text-sm text-neutral-400">
+        <p className="mt-1 text-sm text-muted-foreground">
           Mã cố định của cơ sở · cần bật định vị (GPS) trong bán kính 100m
         </p>
       </div>

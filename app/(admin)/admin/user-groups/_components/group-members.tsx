@@ -66,13 +66,13 @@ export function GroupMembers({
   }
 
   return (
-    <section className="rounded-lg border bg-white p-5">
-      <h2 className="mb-3 flex items-center gap-2 text-lg font-bold text-neutral-900">
-        <Users className="h-5 w-5 text-neutral-400" /> Thành viên ({members.length})
+    <section className="rounded-lg border bg-card p-5">
+      <h2 className="mb-3 flex items-center gap-2 text-lg font-bold text-foreground">
+        <Users className="h-5 w-5 text-muted-foreground" /> Thành viên ({members.length})
       </h2>
 
       {members.length === 0 ? (
-        <p className="mb-3 text-sm text-neutral-400">
+        <p className="mb-3 text-sm text-muted-foreground">
           Chưa có thành viên. Một người có thể thuộc nhiều nhóm — quyền là hợp của các nguồn,
           DENY thắng.
         </p>
@@ -81,16 +81,16 @@ export function GroupMembers({
           {members.map((m) => (
             <li key={m.userId} className="flex items-center justify-between gap-3 px-3 py-2 text-sm">
               <div className="min-w-0">
-                <span className="font-medium text-neutral-800">{m.name}</span>
+                <span className="font-medium text-foreground">{m.name}</span>
                 {m.email && m.email !== m.name && (
-                  <span className="ml-2 text-xs text-neutral-400">{m.email}</span>
+                  <span className="ml-2 text-xs text-muted-foreground">{m.email}</span>
                 )}
                 {!m.isActive && (
                   <Badge variant="outline" className="ml-2">
                     Đã khoá
                   </Badge>
                 )}
-                <span className="ml-2 hidden text-xs text-neutral-400 sm:inline">
+                <span className="ml-2 hidden text-xs text-muted-foreground sm:inline">
                   vào nhóm {m.addedAt}
                 </span>
               </div>
@@ -118,7 +118,7 @@ export function GroupMembers({
           value={selectedUserId}
           onChange={(e) => setSelectedUserId(e.target.value)}
           disabled={pending || candidates.length === 0}
-          className="h-9 min-w-64 flex-1 rounded-md border border-neutral-300 bg-white px-2 text-sm focus:border-primary focus:outline-none sm:flex-none"
+          className="h-9 min-w-64 flex-1 rounded-md border border-border bg-card px-2 text-sm focus:border-primary focus:outline-none sm:flex-none"
         >
           <option value="">
             {candidates.length === 0 ? "— Hết tài khoản để thêm —" : "— Chọn tài khoản —"}

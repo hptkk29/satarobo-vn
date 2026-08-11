@@ -20,7 +20,7 @@ const STATUS_LABEL: Record<string, string> = {
 const STATUS_BADGE: Record<string, string> = {
   OPEN: "bg-state-success-soft text-state-success-ink",
   RUNNING: "bg-state-info-soft text-state-info-ink",
-  COMPLETED: "bg-gray-100 text-gray-600",
+  COMPLETED: "bg-muted text-muted-foreground",
   CANCELLED: "bg-state-danger-soft text-state-danger-ink",
 };
 
@@ -55,10 +55,10 @@ export default async function TrialClassesPage() {
     <div className="max-w-6xl p-6">
       <div className="mb-6 flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="flex items-center gap-2 text-2xl font-bold text-gray-900">
+          <h1 className="flex items-center gap-2 text-2xl font-bold text-foreground">
             <FlaskConical className="h-6 w-6 text-primary" /> Lớp trải nghiệm
           </h1>
-          <p className="mt-1 text-sm text-gray-500">
+          <p className="mt-1 text-sm text-muted-foreground">
             Lớp học thử nhiều buổi (RoboSim/Robot). Xếp con từ lead vào lớp, điểm danh
             từng buổi, theo dõi sĩ số.
           </p>
@@ -80,9 +80,9 @@ export default async function TrialClassesPage() {
       />
 
       {/* Danh sách lớp */}
-      <div className="overflow-hidden rounded-xl border border-gray-200 bg-white">
+      <div className="overflow-hidden rounded-xl border border-border bg-card">
         <table className="w-full text-sm">
-          <thead className="bg-gray-50 text-left text-xs uppercase tracking-wide text-gray-500">
+          <thead className="bg-muted text-left text-xs uppercase tracking-wide text-muted-foreground">
             <tr>
               <th className="px-4 py-3 font-semibold">Lớp</th>
               <th className="px-4 py-3 font-semibold">Ngày BĐ</th>
@@ -92,10 +92,10 @@ export default async function TrialClassesPage() {
               <th className="px-4 py-3 font-semibold">Trạng thái</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-gray-100">
+          <tbody className="divide-y divide-border">
             {classes.length === 0 && (
               <tr>
-                <td colSpan={6} className="px-4 py-8 text-center text-gray-400">
+                <td colSpan={6} className="px-4 py-8 text-center text-muted-foreground">
                   Chưa có lớp trải nghiệm nào.
                 </td>
               </tr>
@@ -104,7 +104,7 @@ export default async function TrialClassesPage() {
               const used = c.enrollments.length;
               const full = used >= c.capacity;
               return (
-                <tr key={c.id} className="hover:bg-gray-50">
+                <tr key={c.id} className="hover:bg-muted">
                   <td className="px-4 py-3">
                     <Link
                       href={`/trial-classes/${c.id}`}
@@ -112,34 +112,34 @@ export default async function TrialClassesPage() {
                     >
                       {c.name}
                     </Link>
-                    <div className="text-xs text-gray-400">{c.code}</div>
+                    <div className="text-xs text-muted-foreground">{c.code}</div>
                   </td>
-                  <td className="px-4 py-3 text-gray-700">
+                  <td className="px-4 py-3 text-foreground">
                     {c.startDate ? formatDateVN(c.startDate) : "Theo lịch hẹn"}
                   </td>
-                  <td className="px-4 py-3 text-gray-700">
+                  <td className="px-4 py-3 text-foreground">
                     {c.startTime}–{c.endTime}
                   </td>
                   <td className="px-4 py-3">
                     <span
                       className={
-                        full ? "font-semibold text-state-danger-ink" : "text-gray-700"
+                        full ? "font-semibold text-state-danger-ink" : "text-foreground"
                       }
                     >
                       {used}/{c.capacity}
                     </span>
                   </td>
-                  <td className="px-4 py-3 text-gray-700">
+                  <td className="px-4 py-3 text-foreground">
                     {c.sessionCount}
                     {c.config?.name ? (
-                      <span className="ml-1 text-xs text-gray-400">
+                      <span className="ml-1 text-xs text-muted-foreground">
                         ({c.config.name})
                       </span>
                     ) : null}
                   </td>
                   <td className="px-4 py-3">
                     <span
-                      className={`rounded-full px-2 py-0.5 text-xs font-semibold ${ STATUS_BADGE[c.status] ?? "bg-gray-100 text-gray-600" }`}
+                      className={`rounded-full px-2 py-0.5 text-xs font-semibold ${ STATUS_BADGE[c.status] ?? "bg-muted text-muted-foreground" }`}
                     >
                       {STATUS_LABEL[c.status] ?? c.status}
                     </span>

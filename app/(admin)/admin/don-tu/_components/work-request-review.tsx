@@ -43,7 +43,7 @@ export function WorkRequestReview({
   }
 
   return (
-    <div className="mt-3 space-y-2 border-t border-neutral-100 pt-3">
+    <div className="mt-3 space-y-2 border-t border-border pt-3">
       {appliesToSchedule && (
         <p className="text-xs text-state-warning-ink">
           Duyệt đơn này sẽ cập nhật buổi học tương ứng (huỷ buổi hoặc gán GV dạy thay).
@@ -54,7 +54,7 @@ export function WorkRequestReview({
         onChange={(e) => setNote(e.target.value)}
         maxLength={1000}
         placeholder="Ghi chú duyệt (bắt buộc khi từ chối)"
-        className="w-full rounded-lg border border-neutral-200 px-3 py-1.5 text-sm outline-none focus:border-primary"
+        className="w-full rounded-lg border border-border px-3 py-1.5 text-sm outline-none focus:border-primary"
       />
       <div className="flex gap-2">
         <button
@@ -69,7 +69,7 @@ export function WorkRequestReview({
           type="button"
           onClick={() => (rejecting ? decide("REJECTED") : setRejecting(true))}
           disabled={pending}
-          className="rounded-lg border border-neutral-200 px-3 py-1.5 text-sm font-semibold text-neutral-700 hover:bg-neutral-50 disabled:opacity-50"
+          className="rounded-lg border border-border px-3 py-1.5 text-sm font-semibold text-foreground hover:bg-muted disabled:opacity-50"
         >
           {rejecting ? "Xác nhận từ chối" : "Từ chối"}
         </button>
@@ -78,7 +78,7 @@ export function WorkRequestReview({
             type="button"
             onClick={() => setRejecting(false)}
             disabled={pending}
-            className="text-sm text-neutral-500 hover:text-neutral-700"
+            className="text-sm text-muted-foreground hover:text-foreground"
           >
             Huỷ
           </button>

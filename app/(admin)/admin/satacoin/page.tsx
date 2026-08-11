@@ -59,8 +59,8 @@ export default async function SataCoinPage() {
   return (
     <div className="space-y-6 p-4">
       <div>
-        <h1 className="text-xl font-bold text-neutral-900">SataCoin — điểm thưởng nội bộ</h1>
-        <p className="text-sm text-neutral-500">
+        <h1 className="text-xl font-bold text-foreground">SataCoin — điểm thưởng nội bộ</h1>
+        <p className="text-sm text-muted-foreground">
           Sổ cái bất biến: không sửa/xoá giao dịch. Điều chỉnh = ghi giao dịch đảo. Số dư = tổng giao dịch.
         </p>
       </div>

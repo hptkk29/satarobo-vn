@@ -17,7 +17,7 @@ export function StatusBadge({ variant, children, className }: Props) {
     warning: "bg-state-warning-soft text-state-warning-ink",
     error: "bg-state-danger-soft text-state-danger-ink",
     info: "bg-state-info-soft text-state-info-ink",
-    neutral: "bg-neutral-100 text-neutral-700",
+    neutral: "bg-muted text-foreground",
   };
 
   return (

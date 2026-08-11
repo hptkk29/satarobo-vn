@@ -110,7 +110,7 @@ const TREATMENT: Record<FeeTreatment, { label: string; cls: string }> = {
   DISCOUNT_NOTED: { label: "Giảm giá (ghi chú nêu rõ)", cls: "bg-state-info-soft text-state-info-ink" },
   DISCOUNT_INFERRED: { label: "Giảm giá (máy suy)", cls: "bg-state-info-soft text-state-info-ink" },
   DEBT: { label: "Còn nợ", cls: "bg-state-warning-soft text-state-warning-ink" },
-  REFUND: { label: "Hoàn phí — KHÔNG nhập", cls: "bg-neutral-200 text-neutral-700" },
+  REFUND: { label: "Hoàn phí — KHÔNG nhập", cls: "bg-muted text-foreground" },
   REVIEW: { label: "Bạn quyết", cls: "bg-state-danger-soft text-state-danger-ink" },
 };
 
@@ -211,12 +211,12 @@ export default function ImportRegisteredLeadsPage() {
       <div>
         <Link
           href="/leads/import"
-          className="mb-3 inline-flex items-center gap-1 text-sm text-neutral-500 hover:text-neutral-700"
+          className="mb-3 inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
         >
           <ChevronLeft className="h-4 w-4" /> Import lead (sự kiện)
         </Link>
         <h1 className="text-2xl font-bold">Import danh sách ĐÃ ĐĂNG KÝ</h1>
-        <p className="mt-1 text-sm text-neutral-500">
+        <p className="mt-1 text-sm text-muted-foreground">
           File Excel của Sale (nhiều sheet theo tháng). Mỗi SĐT = 1 lead trạng thái{" "}
           <b>Đã đăng ký</b>, mỗi dòng học viên = 1 con. Trùng SĐT (trong file hoặc với CRM) →{" "}
           <b>gộp</b>: giữ record cũ, bổ sung field trống, thêm ghi chú. Phải <b>xem thử</b> trước
@@ -224,12 +224,12 @@ export default function ImportRegisteredLeadsPage() {
         </p>
       </div>
 
-      <div className="rounded-xl border border-neutral-200 p-4 space-y-3">
-        <label className="flex cursor-pointer items-center gap-3 rounded-lg border-2 border-dashed border-neutral-300 p-6 hover:border-neutral-400">
-          <FileSpreadsheet className="h-8 w-8 text-neutral-400" />
+      <div className="rounded-xl border border-border p-4 space-y-3">
+        <label className="flex cursor-pointer items-center gap-3 rounded-lg border-2 border-dashed border-border p-6 hover:border-border">
+          <FileSpreadsheet className="h-8 w-8 text-muted-foreground" />
           <div>
             <p className="font-medium">{file ? file.name : "Chọn file Excel (.xlsx)"}</p>
-            <p className="text-xs text-neutral-500">Tối đa 15MB — giữ nguyên file gốc của Sale</p>
+            <p className="text-xs text-muted-foreground">Tối đa 15MB — giữ nguyên file gốc của Sale</p>
           </div>
           <input
             type="file"
@@ -366,31 +366,31 @@ export default function ImportRegisteredLeadsPage() {
           )}
 
           {preview.doiChung && (
-            <div className="rounded-lg border-2 border-neutral-800 bg-white p-3">
-              <p className="text-sm font-semibold text-neutral-900">
+            <div className="rounded-lg border-2 border-neutral-800 bg-card p-3">
+              <p className="text-sm font-semibold text-foreground">
                 Đối chứng trước khi ghi
               </p>
-              <p className="mb-2 text-xs text-neutral-600">
+              <p className="mb-2 text-xs text-muted-foreground">
                 Bạn không kiểm nổi từng dòng, nhưng kiểm được <b>một con số</b>: đối chiếu
                 “Tổng đã thu” với sao kê / sổ quỹ. Khớp thì phần tiền đã đúng — phần chia
                 giảm giá ↔ công nợ nếu sai thì sẽ lộ ra khi Sale đi đòi, không mất im lặng.
               </p>
               <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-                <div className="rounded-md border-2 border-neutral-900 bg-neutral-50 p-2">
-                  <p className="text-xs text-neutral-600">Tổng đã thu ← đối chiếu sao kê</p>
-                  <p className="text-lg font-bold text-neutral-900">{vnd(preview.doiChung.daThu)}</p>
+                <div className="rounded-md border-2 border-neutral-900 bg-muted p-2">
+                  <p className="text-xs text-muted-foreground">Tổng đã thu ← đối chiếu sao kê</p>
+                  <p className="text-lg font-bold text-foreground">{vnd(preview.doiChung.daThu)}</p>
                 </div>
                 <div className="rounded-md border border-state-info bg-state-info-soft p-2">
-                  <p className="text-xs text-neutral-600">Tổng giảm giá</p>
+                  <p className="text-xs text-muted-foreground">Tổng giảm giá</p>
                   <p className="text-lg font-bold text-state-info-ink">{vnd(preview.doiChung.giam)}</p>
                 </div>
                 <div className="rounded-md border border-state-warning bg-state-warning-soft p-2">
-                  <p className="text-xs text-neutral-600">Tổng còn nợ</p>
+                  <p className="text-xs text-muted-foreground">Tổng còn nợ</p>
                   <p className="text-lg font-bold text-state-warning-ink">{vnd(preview.doiChung.no)}</p>
                 </div>
-                <div className="rounded-md border border-neutral-300 bg-neutral-50 p-2">
-                  <p className="text-xs text-neutral-600">Bỏ qua (hoàn phí)</p>
-                  <p className="text-lg font-bold text-neutral-700">
+                <div className="rounded-md border border-border bg-muted p-2">
+                  <p className="text-xs text-muted-foreground">Bỏ qua (hoàn phí)</p>
+                  <p className="text-lg font-bold text-foreground">
                     {preview.doiChung.boQuaHoanPhi} dòng
                   </p>
                 </div>
@@ -404,23 +404,23 @@ export default function ImportRegisteredLeadsPage() {
                 <p className="text-sm font-semibold text-state-danger-ink">
                   Nghi một học viên bị tách thành nhiều dòng ({preview.nghiTrung!.length})
                 </p>
-                <p className="text-xs text-neutral-700">
+                <p className="text-xs text-foreground">
                   Cùng phụ huynh + cùng khoá mà có nhiều dòng. Nếu là <b>một em trả nhiều đợt</b>{" "}
                   mà cứ để nguyên thì hệ thống tạo <b>2 học viên và 2 đơn hàng</b>. Muốn gộp thì
                   sửa trong Excel cho hai dòng <b>trùng tên học viên</b>, rồi tải lại.
                 </p>
                 {preview.nghiTrung!.map((r, i) => (
-                  <div key={`${r.sdt}-${i}`} className="rounded-md border border-state-danger-soft bg-white p-2 text-xs">
+                  <div key={`${r.sdt}-${i}`} className="rounded-md border border-state-danger-soft bg-card p-2 text-xs">
                     <span
                       className={`mr-2 rounded-full px-2 py-0.5 font-semibold ${ r.ketLuan === "SAME_STUDENT" ? "bg-state-danger-soft text-state-danger-ink" : "bg-state-warning-soft text-state-warning-ink" }`}
                     >
                       {r.ketLuan === "SAME_STUDENT" ? "Gần chắc MỘT em" : "Chưa chắc"}
                     </span>
                     <b>{r.hocVien.join("  +  ")}</b>
-                    <span className="ml-2 text-neutral-500">
+                    <span className="ml-2 text-muted-foreground">
                       {r.tenPH ?? "?"} · {r.sdt} · {r.khoa ?? "—"}
                     </span>
-                    <p className="mt-0.5 text-neutral-600">{r.canCu}</p>
+                    <p className="mt-0.5 text-muted-foreground">{r.canCu}</p>
                   </div>
                 ))}
               </AlertDescription>
@@ -443,7 +443,7 @@ export default function ImportRegisteredLeadsPage() {
                   type="button"
                   onClick={() => run("dry-run")}
                   disabled={busy !== null || editedCount === 0}
-                  className="rounded-md border border-neutral-300 px-2.5 py-1 text-sm hover:bg-neutral-50 disabled:opacity-50"
+                  className="rounded-md border border-border px-2.5 py-1 text-sm hover:bg-muted disabled:opacity-50"
                 >
                   {busy === "dry-run" ? "Đang tính lại…" : "Xem thử lại"}
                 </button>
@@ -452,13 +452,13 @@ export default function ImportRegisteredLeadsPage() {
                     type="button"
                     onClick={() => setOverrides({})}
                     disabled={busy !== null}
-                    className="rounded-md border border-neutral-300 px-2.5 py-1 text-sm hover:bg-neutral-50 disabled:opacity-50"
+                    className="rounded-md border border-border px-2.5 py-1 text-sm hover:bg-muted disabled:opacity-50"
                   >
                     Bỏ hết sửa
                   </button>
                 )}
               </div>
-              <p className="text-xs text-neutral-500">
+              <p className="text-xs text-muted-foreground">
                 Sửa ở đây chỉ áp cho lượt import này, KHÔNG đụng file Excel gốc. Tuổi và số
                 tiền được tính lại theo giá trị mới sau khi bấm Xem thử lại. Muốn đổi SĐT hoặc
                 tên học viên thì sửa trong Excel rồi tải lại — hai trường đó quyết định gộp
@@ -480,12 +480,12 @@ export default function ImportRegisteredLeadsPage() {
                       className={`rounded-lg border p-3 ${ w.phaiXem ? "border-state-danger bg-state-danger-soft/40" : "border-state-warning-soft bg-state-warning-soft/40" }`}
                     >
                       <div className="mb-2 flex flex-wrap items-baseline gap-x-3 gap-y-1 text-sm">
-                        <b className="text-neutral-900">{w.hocVien}</b>
-                        <span className="text-neutral-500">{w.sdt}</span>
-                        <span className="text-xs text-neutral-400">
+                        <b className="text-foreground">{w.hocVien}</b>
+                        <span className="text-muted-foreground">{w.sdt}</span>
+                        <span className="text-xs text-muted-foreground">
                           {w.sheet} · dòng {w.dong}
                         </span>
-                        <span className="text-xs text-neutral-600">
+                        <span className="text-xs text-muted-foreground">
                           tuổi: <b>{w.tuoi ?? "—"}</b> · đã đóng:{" "}
                           <b>
                             {w.daDong === null ? "—" : `${w.daDong.toLocaleString("vi-VN")}đ`}
@@ -497,19 +497,19 @@ export default function ImportRegisteredLeadsPage() {
                         <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${tt.cls}`}>
                           {tt.label}
                         </span>
-                        <span className="text-xs text-neutral-600">{w.canCu}</span>
+                        <span className="text-xs text-muted-foreground">{w.canCu}</span>
                       </div>
                       {w.thieu.length > 0 && (
                         <p className="mb-2 text-xs text-state-warning-ink">{w.thieu.join(" · ")}</p>
                       )}
                       <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
                         {EXCEL_COLS.map((c) => (
-                          <label key={c} className="text-xs text-neutral-600">
+                          <label key={c} className="text-xs text-muted-foreground">
                             {COL_LABEL[c]}
                             <input
                               value={val(c)}
                               onChange={(e) => setCell(w.sheet, w.dong, c, e.target.value)}
-                              className={`mt-0.5 w-full rounded border px-2 py-1 text-sm ${ edited[c] !== undefined ? "border-state-warning bg-state-warning-soft" : "border-neutral-300" }`}
+                              className={`mt-0.5 w-full rounded border px-2 py-1 text-sm ${ edited[c] !== undefined ? "border-state-warning bg-state-warning-soft" : "border-border" }`}
                             />
                           </label>
                         ))}
@@ -519,16 +519,16 @@ export default function ImportRegisteredLeadsPage() {
                           nhãn nói "không nhập" mà bên dưới vẫn có "còn lại X đồng" thì đọc như
                           một khoản phải đòi có thật. */}
                       {w.xuLy === "REFUND" ? (
-                        <div className="mt-3 rounded-md border border-neutral-300 bg-neutral-100 p-2 text-xs text-neutral-600">
+                        <div className="mt-3 rounded-md border border-border bg-muted p-2 text-xs text-muted-foreground">
                           Dòng này <b>sẽ không được nhập</b> — ghi chú cho thấy đây là ca hoàn phí.
                           Không tạo đơn hàng, không ghi công nợ. Nếu vẫn muốn nhập, sửa ô{" "}
                           <b>Ghi chú</b> ở trên rồi bấm <b>Xem thử lại</b>.
                         </div>
                       ) : (
                       /* Khối TIỀN — giá niêm yết lấy theo khoá đang chọn ở ô "Khoá" trên. */
-                      <div className="mt-3 rounded-md border border-neutral-200 bg-white p-2">
+                      <div className="mt-3 rounded-md border border-border bg-card p-2">
                         <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs">
-                          <label className="inline-flex items-center gap-1.5 font-medium text-neutral-800">
+                          <label className="inline-flex items-center gap-1.5 font-medium text-foreground">
                             <input
                               type="checkbox"
                               checked={
@@ -537,14 +537,14 @@ export default function ImportRegisteredLeadsPage() {
                               onChange={(e) =>
                                 setCell(w.sheet, w.dong, "payIn2", e.target.checked ? "1" : "0")
                               }
-                              className="h-4 w-4 rounded border-neutral-300"
+                              className="h-4 w-4 rounded border-border"
                             />
                             Đóng 2 đợt
                           </label>
                           {(edited.payIn2 !== undefined
                             ? edited.payIn2 === "1"
                             : w.tra2Dot) && (
-                            <label className="inline-flex items-center gap-1.5 text-neutral-700">
+                            <label className="inline-flex items-center gap-1.5 text-foreground">
                               {COL_LABEL.dueDate2}
                               <input
                                 type="date"
@@ -552,21 +552,21 @@ export default function ImportRegisteredLeadsPage() {
                                 onChange={(e) =>
                                   setCell(w.sheet, w.dong, "dueDate2", e.target.value)
                                 }
-                                className={`rounded border px-2 py-0.5 text-xs ${ (edited.dueDate2 ?? w.hanDot2) ? "border-neutral-300" : "border-state-danger bg-state-danger-soft" }`}
+                                className={`rounded border px-2 py-0.5 text-xs ${ (edited.dueDate2 ?? w.hanDot2) ? "border-border" : "border-state-danger bg-state-danger-soft" }`}
                               />
                             </label>
                           )}
-                          <span className="text-neutral-600">
+                          <span className="text-muted-foreground">
                             Giá niêm yết: <b>{w.giaNiemYet.toLocaleString("vi-VN")}đ</b>
                             {w.giaNiemYet === 0 && (
                               <span className="ml-1 text-state-danger-ink">(chưa khớp khoá)</span>
                             )}
                           </span>
-                          <span className="text-neutral-600">
+                          <span className="text-muted-foreground">
                             Tổng phải nộp: <b>{w.tongPhaiNop.toLocaleString("vi-VN")}đ</b>
                             {w.giamTinhRa > 0 && ` (giảm ${w.giamTinhRa.toLocaleString("vi-VN")}đ)`}
                           </span>
-                          <span className="text-neutral-600">
+                          <span className="text-muted-foreground">
                             Đã nộp: <b>{(w.daDong ?? 0).toLocaleString("vi-VN")}đ</b>
                           </span>
                           <span className={w.conLai > 0 ? "font-semibold text-state-warning-ink" : "text-state-success-ink"}>
@@ -574,21 +574,21 @@ export default function ImportRegisteredLeadsPage() {
                           </span>
                         </div>
                         <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-4">
-                          <label className="text-xs text-neutral-600">
+                          <label className="text-xs text-muted-foreground">
                             {COL_LABEL.discountKind}
                             <select
                               value={edited.discountKind ?? w.giamKieu ?? ""}
                               onChange={(e) =>
                                 setCell(w.sheet, w.dong, "discountKind", e.target.value)
                               }
-                              className="mt-0.5 w-full rounded border border-neutral-300 px-2 py-1 text-sm"
+                              className="mt-0.5 w-full rounded border border-border px-2 py-1 text-sm"
                             >
                               <option value="">— không giảm —</option>
                               <option value="AMOUNT">Theo số tiền</option>
                               <option value="PERCENT">Theo %</option>
                             </select>
                           </label>
-                          <label className="text-xs text-neutral-600">
+                          <label className="text-xs text-muted-foreground">
                             {COL_LABEL.discountValue}
                             <input
                               value={edited.discountValue ?? (w.giamGiaTri?.toString() ?? "")}
@@ -596,10 +596,10 @@ export default function ImportRegisteredLeadsPage() {
                                 setCell(w.sheet, w.dong, "discountValue", e.target.value)
                               }
                               placeholder="vd 500000 hoặc 10"
-                              className="mt-0.5 w-full rounded border border-neutral-300 px-2 py-1 text-sm"
+                              className="mt-0.5 w-full rounded border border-border px-2 py-1 text-sm"
                             />
                           </label>
-                          <label className="col-span-2 text-xs text-neutral-600">
+                          <label className="col-span-2 text-xs text-muted-foreground">
                             {COL_LABEL.discountReason}
                             <input
                               value={edited.discountReason ?? (w.giamLyDo ?? "")}
@@ -607,7 +607,7 @@ export default function ImportRegisteredLeadsPage() {
                                 setCell(w.sheet, w.dong, "discountReason", e.target.value)
                               }
                               placeholder="bắt buộc khi có giảm giá"
-                              className="mt-0.5 w-full rounded border border-neutral-300 px-2 py-1 text-sm"
+                              className="mt-0.5 w-full rounded border border-border px-2 py-1 text-sm"
                             />
                           </label>
                         </div>
@@ -617,7 +617,7 @@ export default function ImportRegisteredLeadsPage() {
                   );
                 })}
                 {preview.canKiemTra!.length > 200 && (
-                  <p className="text-xs text-neutral-500">
+                  <p className="text-xs text-muted-foreground">
                     Hiển thị 200/{preview.canKiemTra!.length} dòng.
                   </p>
                 )}
@@ -662,8 +662,8 @@ function Stat({
   tone?: "red" | "amber";
 }) {
   return (
-    <div className="rounded-lg border border-neutral-200 p-3">
-      <p className="text-xs text-neutral-500">{label}</p>
+    <div className="rounded-lg border border-border p-3">
+      <p className="text-xs text-muted-foreground">{label}</p>
       <p
         className={`text-xl font-bold ${ tone === "red" ? "text-state-danger-ink" : tone === "amber" ? "text-state-warning-ink" : "" }`}
       >
@@ -677,9 +677,9 @@ function PreviewTable({ title, head, rows }: { title: string; head: string[]; ro
   return (
     <div className="space-y-1">
       <p className="text-sm font-semibold">{title}</p>
-      <div className="max-h-[320px] overflow-auto rounded-lg border border-neutral-200">
+      <div className="max-h-[320px] overflow-auto rounded-lg border border-border">
         <table className="w-full text-sm">
-          <thead className="sticky top-0 bg-neutral-50">
+          <thead className="sticky top-0 bg-muted">
             <tr>
               {head.map((h) => (
                 <th key={h} className="px-2 py-1 text-left font-medium">
@@ -701,7 +701,7 @@ function PreviewTable({ title, head, rows }: { title: string; head: string[]; ro
           </tbody>
         </table>
         {rows.length > 200 && (
-          <p className="bg-neutral-50 p-2 text-center text-xs text-neutral-500">
+          <p className="bg-muted p-2 text-center text-xs text-muted-foreground">
             Hiển thị 200/{rows.length} dòng.
           </p>
         )}

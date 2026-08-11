@@ -113,10 +113,10 @@ export function BulkCompleteByClass({
     : 0;
 
   return (
-    <div className="space-y-4 rounded-xl border border-neutral-200 bg-white p-4">
+    <div className="space-y-4 rounded-xl border border-border bg-card p-4">
       <div>
-        <h2 className="text-base font-semibold text-neutral-900">Hoàn thành khoá hàng loạt theo lớp</h2>
-        <p className="text-sm text-neutral-500">
+        <h2 className="text-base font-semibold text-foreground">Hoàn thành khoá hàng loạt theo lớp</h2>
+        <p className="text-sm text-muted-foreground">
           Chọn lớp → hệ thống nạp học viên đang theo học và khoá của lớp. Bỏ tick những học viên muốn loại,
           rồi xác nhận để sinh chứng chỉ đồng loạt. Học viên đã có chứng chỉ khoá này sẽ được bỏ qua.
         </p>
@@ -124,12 +124,12 @@ export function BulkCompleteByClass({
 
       {/* Bước 1 — chọn lớp */}
       <label className="block text-sm">
-        <span className="mb-1 block text-neutral-600">Bước 1 — Chọn lớp</span>
+        <span className="mb-1 block text-muted-foreground">Bước 1 — Chọn lớp</span>
         <select
           value={selectedClassId}
           onChange={(e) => onPickClass(e.target.value)}
           disabled={navPending}
-          className="w-full max-w-xl rounded-md border border-neutral-300 px-3 py-2 text-sm disabled:opacity-50"
+          className="w-full max-w-xl rounded-md border border-border px-3 py-2 text-sm disabled:opacity-50"
         >
           <option value="">— Chọn lớp —</option>
           {classes.map((c) => (
@@ -142,7 +142,7 @@ export function BulkCompleteByClass({
         </select>
       </label>
 
-      {navPending && <p className="text-sm text-neutral-400">Đang nạp học viên…</p>}
+      {navPending && <p className="text-sm text-muted-foreground">Đang nạp học viên…</p>}
 
       {selectedClassId && !selectedClass && !navPending && (
         <p className="text-sm text-state-danger-ink">Không tìm thấy lớp (hoặc ngoài phạm vi cơ sở của bạn).</p>
@@ -152,7 +152,7 @@ export function BulkCompleteByClass({
       {selectedClass && (
         <div className="space-y-3">
           <div className="flex flex-wrap items-center justify-between gap-2 border-t pt-3">
-            <div className="text-sm text-neutral-700">
+            <div className="text-sm text-foreground">
               <span className="font-medium">{selectedClass.name}</span> · Khoá{" "}
               <span className="font-medium">{selectedClass.courseName}</span> ·{" "}
               {selectedClass.students.length} học viên
@@ -161,14 +161,14 @@ export function BulkCompleteByClass({
               <button
                 type="button"
                 onClick={selectAllEligible}
-                className="rounded border border-neutral-300 px-2 py-1 text-neutral-600 hover:bg-neutral-50"
+                className="rounded border border-border px-2 py-1 text-muted-foreground hover:bg-muted"
               >
                 Chọn tất cả (chưa hoàn thành)
               </button>
               <button
                 type="button"
                 onClick={clearAll}
-                className="rounded border border-neutral-300 px-2 py-1 text-neutral-600 hover:bg-neutral-50"
+                className="rounded border border-border px-2 py-1 text-muted-foreground hover:bg-muted"
               >
                 Bỏ chọn hết
               </button>
@@ -176,9 +176,9 @@ export function BulkCompleteByClass({
           </div>
 
           {selectedClass.students.length === 0 ? (
-            <p className="text-sm text-neutral-400">Lớp chưa có học viên đang theo học.</p>
+            <p className="text-sm text-muted-foreground">Lớp chưa có học viên đang theo học.</p>
           ) : (
-            <ul className="divide-y rounded-md border border-neutral-200">
+            <ul className="divide-y rounded-md border border-border">
               {selectedClass.students.map((s) => (
                 <li key={s.id} className="flex items-center gap-3 px-3 py-2 text-sm">
                   <input
@@ -187,8 +187,8 @@ export function BulkCompleteByClass({
                     onChange={() => toggle(s.id)}
                     className="h-4 w-4"
                   />
-                  <span className="font-medium text-neutral-800">{s.name}</span>
-                  {s.studentCode && <span className="text-neutral-400">({s.studentCode})</span>}
+                  <span className="font-medium text-foreground">{s.name}</span>
+                  {s.studentCode && <span className="text-muted-foreground">({s.studentCode})</span>}
                   {s.alreadyCompleted && (
                     <span className="ml-auto rounded bg-state-warning-soft px-2 py-0.5 text-xs text-state-warning-ink">
                       Đã có chứng chỉ — sẽ bỏ qua
@@ -202,29 +202,29 @@ export function BulkCompleteByClass({
           {/* Đánh giá/xếp loại áp dụng chung cho cả đợt (tuỳ chọn) */}
           <div className="grid gap-3 sm:grid-cols-2">
             <label className="text-sm">
-              <span className="mb-1 block text-neutral-600">Xếp loại cuối khoá (áp dụng chung)</span>
+              <span className="mb-1 block text-muted-foreground">Xếp loại cuối khoá (áp dụng chung)</span>
               <input
                 value={finalGrade}
                 onChange={(e) => setFinalGrade(e.target.value)}
                 placeholder="Giỏi / Khá / Xuất sắc…"
-                className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm"
+                className="w-full rounded-md border border-border px-3 py-2 text-sm"
               />
             </label>
             <label className="text-sm sm:col-span-2">
-              <span className="mb-1 block text-neutral-600">Đánh giá cuối khoá (áp dụng chung — tuỳ chọn)</span>
+              <span className="mb-1 block text-muted-foreground">Đánh giá cuối khoá (áp dụng chung — tuỳ chọn)</span>
               <textarea
                 value={finalAssessment}
                 onChange={(e) => setFinalAssessment(e.target.value)}
                 rows={2}
                 placeholder="Nhận xét chung cho cả lớp (có thể để trống)…"
-                className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm"
+                className="w-full rounded-md border border-border px-3 py-2 text-sm"
               />
             </label>
           </div>
 
           {/* Tóm tắt trước khi xác nhận */}
           <div className="flex flex-wrap items-center justify-between gap-2 border-t pt-3">
-            <p className="text-sm text-neutral-600">
+            <p className="text-sm text-muted-foreground">
               Sẽ hoàn thành <span className="font-semibold text-primary">{eligibleSelected}</span> học viên.
             </p>
             <button

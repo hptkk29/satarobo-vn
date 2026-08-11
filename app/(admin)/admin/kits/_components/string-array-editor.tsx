@@ -24,14 +24,14 @@ export function StringArrayEditor({
   return (
     <div className="space-y-2">
       {value.length === 0 ? (
-        <p className="text-sm italic text-neutral-400">Chưa có mục. Bấm "Thêm mục" để bắt đầu.</p>
+        <p className="text-sm italic text-muted-foreground">Chưa có mục. Bấm "Thêm mục" để bắt đầu.</p>
       ) : (
         value.map((item, idx) => (
           <div
             key={idx}
-            className="flex items-start gap-2 rounded-lg border border-neutral-200 bg-neutral-50 p-2"
+            className="flex items-start gap-2 rounded-lg border border-border bg-muted p-2"
           >
-            <span className="mt-2 text-neutral-400">
+            <span className="mt-2 text-muted-foreground">
               <GripVertical className="h-4 w-4" />
             </span>
             <textarea
@@ -39,7 +39,7 @@ export function StringArrayEditor({
               onChange={(e) => update(idx, e.target.value)}
               placeholder={placeholder}
               rows={2}
-              className="flex-1 resize-y rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
+              className="flex-1 resize-y rounded-lg border border-border bg-card px-3 py-2 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
             />
             <button
               type="button"

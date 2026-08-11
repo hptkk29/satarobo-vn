@@ -52,9 +52,9 @@ export function LifecycleActions({
   );
 
   return (
-    <section className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+    <section className="rounded-xl border border-border bg-card p-5 shadow-sm">
       <div className="mb-3 flex items-center justify-between">
-        <h3 className="text-sm font-bold uppercase tracking-wider text-gray-500">
+        <h3 className="text-sm font-bold uppercase tracking-wider text-muted-foreground">
           Lifecycle học viên
         </h3>
         <Badge variant="outline">{STATUS_LABEL[studentStatus]}</Badge>

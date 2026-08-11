@@ -51,8 +51,8 @@ export default async function ReportCardCriteriaPage() {
         <Link href="/report-cards" className="text-sm text-primary">
           ← Học bạ năng lực
         </Link>
-        <h1 className="mt-1 text-xl font-bold text-neutral-900">Cấu hình tiêu chí năng lực</h1>
-        <p className="text-sm text-neutral-500">
+        <h1 className="mt-1 text-xl font-bold text-foreground">Cấu hình tiêu chí năng lực</h1>
+        <p className="text-sm text-muted-foreground">
           Đào tạo cấu hình tiêu chí theo từng khoá học. GV chấm thang 1–4 cho mỗi tiêu chí khi nhập học bạ.
         </p>
       </div>

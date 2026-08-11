@@ -49,50 +49,50 @@ export default async function AdminParentFeedbackPage() {
     <div className="max-w-4xl p-6">
       <div className="mb-4 flex flex-wrap items-end justify-between gap-2">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Đánh giá phụ huynh</h1>
-          <p className="mt-1 text-sm text-gray-500">
+          <h1 className="text-2xl font-bold text-foreground">Đánh giá phụ huynh</h1>
+          <p className="mt-1 text-sm text-muted-foreground">
             Phản hồi gửi từ portal hocvien.satarobo.vn.
           </p>
           {!isGlobal && (
-            <p className="mt-1 text-xs text-gray-400">
+            <p className="mt-1 text-xs text-muted-foreground">
               Chỉ hiển thị đánh giá của học viên thuộc cơ sở bạn quản lý. Góp ý chung
               (không gắn học viên) chỉ hiển thị cho Hội sở.
             </p>
           )}
         </div>
-        <div className="rounded-xl border border-gray-200 bg-white px-4 py-2 text-center">
-          <p className="flex items-center gap-1 text-2xl font-bold text-gray-900">
+        <div className="rounded-xl border border-border bg-card px-4 py-2 text-center">
+          <p className="flex items-center gap-1 text-2xl font-bold text-foreground">
             <Star className="h-5 w-5 fill-state-warning-ink text-state-warning-ink" /> {avg}
           </p>
-          <p className="text-xs text-gray-400">{agg._count} đánh giá</p>
+          <p className="text-xs text-muted-foreground">{agg._count} đánh giá</p>
         </div>
       </div>
 
       {rows.length === 0 ? (
-        <p className="rounded-xl border border-dashed border-gray-300 p-8 text-center text-sm text-gray-400">
+        <p className="rounded-xl border border-dashed border-border p-8 text-center text-sm text-muted-foreground">
           Chưa có đánh giá nào.
         </p>
       ) : (
         <ul className="space-y-2">
           {rows.map((f) => (
-            <li key={f.id} className="rounded-xl border border-gray-200 bg-white p-4">
+            <li key={f.id} className="rounded-xl border border-border bg-card p-4">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <div className="flex items-center gap-0.5">
                   {Array.from({ length: 5 }).map((_, i) => (
                     <Star
                       key={i}
-                      className={`h-4 w-4 ${ i < f.rating ? "fill-state-warning-ink text-state-warning-ink" : "text-gray-300" }`}
+                      className={`h-4 w-4 ${ i < f.rating ? "fill-state-warning-ink text-state-warning-ink" : "text-muted-foreground" }`}
                     />
                   ))}
                 </div>
-                <span className="text-xs text-gray-400">
+                <span className="text-xs text-muted-foreground">
                   {formatDateVN(f.createdAt)}
                 </span>
               </div>
-              <p className="mt-1 whitespace-pre-wrap text-sm text-gray-700">
+              <p className="mt-1 whitespace-pre-wrap text-sm text-foreground">
                 {f.content}
               </p>
-              <p className="mt-1 text-xs text-gray-400">
+              <p className="mt-1 text-xs text-muted-foreground">
                 {f.parentName ?? "Phụ huynh"}
                 {f.studentName
                   ? ` · HV: ${f.studentName}`

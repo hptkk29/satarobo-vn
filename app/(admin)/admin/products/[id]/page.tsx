@@ -60,23 +60,23 @@ export default async function ProductDetailPage({ params }: Props) {
     <div className="max-w-5xl space-y-6">
       <Link
         href="/products"
-        className="inline-flex items-center gap-1 text-sm text-gray-500 hover:text-gray-700"
+        className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
       >
         <ChevronLeft className="h-4 w-4" />
         Quay lại danh sách
       </Link>
 
-      <div className="flex flex-wrap items-start justify-between gap-3 border-b border-gray-200 pb-4">
+      <div className="flex flex-wrap items-start justify-between gap-3 border-b border-border pb-4">
         <div>
           <div className="flex flex-wrap items-center gap-3">
-            <h1 className="text-2xl font-bold text-gray-900">{product.name}</h1>
+            <h1 className="text-2xl font-bold text-foreground">{product.name}</h1>
             <span
               className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold ${PRODUCT_STATUS_COLOR[product.status]}`}
             >
               {PRODUCT_STATUS_LABEL[product.status]}
             </span>
           </div>
-          <div className="mt-1 text-sm text-gray-600">
+          <div className="mt-1 text-sm text-muted-foreground">
             SKU: <span className="font-mono">{product.sku}</span> ·{" "}
             {PRODUCT_CATEGORY_LABEL[product.category]}
           </div>
@@ -104,43 +104,43 @@ export default async function ProductDetailPage({ params }: Props) {
             "rounded-xl border p-4 " +
             (isLowStock
               ? "border-primary-soft bg-primary-soft"
-              : "border-gray-200 bg-gray-50")
+              : "border-border bg-muted")
           }
         >
-          <div className="text-xs uppercase tracking-wider text-gray-600">
+          <div className="text-xs uppercase tracking-wider text-muted-foreground">
             Tồn kho
           </div>
           <div className="mt-1 text-2xl font-bold tabular-nums">
             {product.stockOnHand}
             {isLowStock && " ⚠️"}
           </div>
-          <div className="text-xs text-gray-500">
+          <div className="text-xs text-muted-foreground">
             Ngưỡng cảnh báo: {product.minThreshold}
           </div>
         </div>
-        <div className="rounded-xl border border-gray-200 bg-state-info-soft p-4">
-          <div className="text-xs uppercase tracking-wider text-gray-600">
+        <div className="rounded-xl border border-border bg-state-info-soft p-4">
+          <div className="text-xs uppercase tracking-wider text-muted-foreground">
             Giá bán
           </div>
           <div className="mt-1 text-2xl font-bold tabular-nums">
             {product.salePrice.toLocaleString("vi-VN")}
           </div>
-          <div className="text-xs text-gray-500">VND</div>
+          <div className="text-xs text-muted-foreground">VND</div>
         </div>
         {product.rentalPricePerMonth != null && (
-          <div className="rounded-xl border border-gray-200 bg-primary-soft p-4">
-            <div className="text-xs uppercase tracking-wider text-gray-600">
+          <div className="rounded-xl border border-border bg-primary-soft p-4">
+            <div className="text-xs uppercase tracking-wider text-muted-foreground">
               Giá thuê/tháng
             </div>
             <div className="mt-1 text-2xl font-bold tabular-nums">
               {product.rentalPricePerMonth.toLocaleString("vi-VN")}
             </div>
-            <div className="text-xs text-gray-500">VND</div>
+            <div className="text-xs text-muted-foreground">VND</div>
           </div>
         )}
         {product.costPrice != null && canManage && (
-          <div className="rounded-xl border border-gray-200 bg-gray-100 p-4">
-            <div className="text-xs uppercase tracking-wider text-gray-600">
+          <div className="rounded-xl border border-border bg-muted p-4">
+            <div className="text-xs uppercase tracking-wider text-muted-foreground">
               Giá vốn (nội bộ)
             </div>
             <div className="mt-1 text-lg font-bold tabular-nums">
@@ -151,18 +151,18 @@ export default async function ProductDetailPage({ params }: Props) {
       </div>
 
       {product.description && (
-        <section className="rounded-xl border border-gray-200 bg-white p-5">
-          <h2 className="mb-2 text-sm font-bold uppercase tracking-wider text-gray-500">
+        <section className="rounded-xl border border-border bg-card p-5">
+          <h2 className="mb-2 text-sm font-bold uppercase tracking-wider text-muted-foreground">
             Mô tả
           </h2>
-          <p className="whitespace-pre-wrap text-sm text-gray-800">
+          <p className="whitespace-pre-wrap text-sm text-foreground">
             {product.description}
           </p>
         </section>
       )}
 
       {product.zmroboKit && (
-        <section className="rounded-xl border border-gray-200 bg-white p-5 text-sm">
+        <section className="rounded-xl border border-border bg-card p-5 text-sm">
           🔗 Liên kết catalog kit:{" "}
           <Link
             href={`/kits/${product.zmroboKit.id}/edit`}
@@ -180,43 +180,43 @@ export default async function ProductDetailPage({ params }: Props) {
       )}
 
       <section>
-        <h2 className="mb-3 text-sm font-bold uppercase tracking-wider text-gray-500">
+        <h2 className="mb-3 text-sm font-bold uppercase tracking-wider text-muted-foreground">
           Lịch sử nhập / xuất ({product.movements.length})
         </h2>
         {product.movements.length === 0 ? (
-          <div className="rounded-xl border border-dashed border-gray-300 bg-gray-50/50 p-8 text-center">
-            <p className="text-sm text-gray-500">Chưa có biến động kho</p>
+          <div className="rounded-xl border border-dashed border-border bg-muted/50 p-8 text-center">
+            <p className="text-sm text-muted-foreground">Chưa có biến động kho</p>
           </div>
         ) : (
-          <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
+          <div className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
             <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-100 text-sm">
-                <thead className="bg-gray-50">
+              <table className="min-w-full divide-y divide-border text-sm">
+                <thead className="bg-muted">
                   <tr>
-                    <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">
+                    <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                       Thời gian
                     </th>
-                    <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">
+                    <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                       Loại
                     </th>
-                    <th className="px-3 py-2 text-right text-xs font-semibold uppercase tracking-wider text-gray-500">
+                    <th className="px-3 py-2 text-right text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                       Số lượng
                     </th>
-                    <th className="px-3 py-2 text-right text-xs font-semibold uppercase tracking-wider text-gray-500">
+                    <th className="px-3 py-2 text-right text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                       Trước → Sau
                     </th>
-                    <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">
+                    <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                       Lý do
                     </th>
-                    <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">
+                    <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                       Người
                     </th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-50">
+                <tbody className="divide-y divide-border">
                   {product.movements.map((m) => (
-                    <tr key={m.id} className="hover:bg-gray-50/60">
-                      <td className="px-3 py-2 text-xs tabular-nums text-gray-600">
+                    <tr key={m.id} className="hover:bg-muted/60">
+                      <td className="px-3 py-2 text-xs tabular-nums text-muted-foreground">
                         {formatDateTime(m.createdAt)}
                       </td>
                       <td className="px-3 py-2 text-xs">
@@ -231,13 +231,13 @@ export default async function ProductDetailPage({ params }: Props) {
                         {m.quantity > 0 ? "+" : ""}
                         {m.quantity}
                       </td>
-                      <td className="px-3 py-2 text-right text-xs tabular-nums text-gray-600">
+                      <td className="px-3 py-2 text-right text-xs tabular-nums text-muted-foreground">
                         {m.stockBeforeMovement} → {m.stockAfterMovement}
                       </td>
-                      <td className="px-3 py-2 text-xs text-gray-700">
+                      <td className="px-3 py-2 text-xs text-foreground">
                         {m.reason ?? "—"}
                       </td>
-                      <td className="px-3 py-2 text-xs text-gray-700">
+                      <td className="px-3 py-2 text-xs text-foreground">
                         {m.createdByName}
                       </td>
                     </tr>

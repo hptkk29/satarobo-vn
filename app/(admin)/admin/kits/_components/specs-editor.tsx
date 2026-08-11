@@ -50,14 +50,14 @@ export function SpecsEditor({ value, onChange, name }: SpecsEditorProps) {
   return (
     <div className="space-y-2">
       {rows.length === 0 ? (
-        <p className="text-sm italic text-neutral-400">
+        <p className="text-sm italic text-muted-foreground">
           Chưa có spec. Bấm "Thêm spec" hoặc dùng key gợi ý bên dưới.
         </p>
       ) : (
         rows.map((row, idx) => (
           <div
             key={idx}
-            className="flex items-center gap-2 rounded-lg border border-neutral-200 bg-neutral-50 p-2"
+            className="flex items-center gap-2 rounded-lg border border-border bg-muted p-2"
           >
             <input
               type="text"
@@ -65,7 +65,7 @@ export function SpecsEditor({ value, onChange, name }: SpecsEditorProps) {
               onChange={(e) => updateKey(idx, e.target.value)}
               placeholder="key (vd: pieces)"
               list={`spec-keys-${idx}`}
-              className="w-32 min-w-0 rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm font-mono outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
+              className="w-32 min-w-0 rounded-lg border border-border bg-card px-3 py-2 text-sm font-mono outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
             />
             <datalist id={`spec-keys-${idx}`}>
               {COMMON_KEYS.map((k) => (
@@ -77,7 +77,7 @@ export function SpecsEditor({ value, onChange, name }: SpecsEditorProps) {
               value={row.value}
               onChange={(e) => updateValue(idx, e.target.value)}
               placeholder="value (vd: 320-378 PCS)"
-              className="flex-1 rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
+              className="flex-1 rounded-lg border border-border bg-card px-3 py-2 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
             />
             <button
               type="button"
@@ -100,13 +100,13 @@ export function SpecsEditor({ value, onChange, name }: SpecsEditorProps) {
           <Plus className="h-4 w-4" />
           Thêm spec
         </button>
-        <span className="text-xs text-neutral-400">| Gợi ý:</span>
+        <span className="text-xs text-muted-foreground">| Gợi ý:</span>
         {COMMON_KEYS.filter((k) => !(k in value)).map((k) => (
           <button
             key={k}
             type="button"
             onClick={() => add(k)}
-            className="rounded-full bg-neutral-100 px-2 py-0.5 text-xs font-mono text-neutral-700 hover:bg-primary-soft hover:text-primary"
+            className="rounded-full bg-muted px-2 py-0.5 text-xs font-mono text-foreground hover:bg-primary-soft hover:text-primary"
           >
             +{k}
           </button>

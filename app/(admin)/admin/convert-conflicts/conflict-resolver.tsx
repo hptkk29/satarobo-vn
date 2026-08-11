@@ -29,14 +29,14 @@ export function ConflictResolver({
   }
 
   return (
-    <div className="mt-3 border-t border-gray-200 pt-3">
+    <div className="mt-3 border-t border-border pt-3">
       <label className="block">
-        <span className="mb-1 block text-xs font-medium text-gray-500">Ghi chú / lý do xử lý</span>
+        <span className="mb-1 block text-xs font-medium text-muted-foreground">Ghi chú / lý do xử lý</span>
         <input
           value={note}
           onChange={(e) => setNote(e.target.value)}
           placeholder="VD: cùng một phụ huynh, gộp hồ sơ"
-          className="w-full rounded-lg border border-gray-300 px-3 py-1.5 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+          className="w-full rounded-lg border border-border px-3 py-1.5 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
         />
       </label>
       <div className="mt-2 flex flex-wrap gap-2">
@@ -52,7 +52,7 @@ export function ConflictResolver({
           type="button"
           disabled={pending}
           onClick={() => run(dismissConflict, 'Đã đánh dấu xử lý')}
-          className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+          className="rounded-lg border border-border px-3 py-1.5 text-sm font-medium text-foreground hover:bg-muted disabled:opacity-50"
         >
           Đánh dấu đã xử lý (ghi lý do)
         </button>

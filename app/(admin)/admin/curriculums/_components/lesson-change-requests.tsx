@@ -62,18 +62,18 @@ export function LessonChangeRequests({
 
   if (requests.length === 0) {
     return (
-      <section className="rounded-xl border border-neutral-200 bg-white p-4">
-        <h2 className="text-sm font-bold uppercase tracking-wider text-neutral-700">
+      <section className="rounded-xl border border-border bg-card p-4">
+        <h2 className="text-sm font-bold uppercase tracking-wider text-foreground">
           Đề xuất chỉnh sửa (GV)
         </h2>
-        <p className="mt-2 text-sm text-neutral-400">Chưa có đề xuất nào.</p>
+        <p className="mt-2 text-sm text-muted-foreground">Chưa có đề xuất nào.</p>
       </section>
     );
   }
 
   return (
-    <section className="rounded-xl border border-neutral-200 bg-white p-4">
-      <h2 className="text-sm font-bold uppercase tracking-wider text-neutral-700">
+    <section className="rounded-xl border border-border bg-card p-4">
+      <h2 className="text-sm font-bold uppercase tracking-wider text-foreground">
         Đề xuất chỉnh sửa (GV) ({requests.length})
       </h2>
 
@@ -87,10 +87,10 @@ export function LessonChangeRequests({
         {requests.map((r) => (
           <li
             key={r.id}
-            className="rounded-lg border border-neutral-200 bg-neutral-50 p-3"
+            className="rounded-lg border border-border bg-muted p-3"
           >
             <div className="flex flex-wrap items-center gap-2">
-              <span className="text-sm font-semibold text-neutral-800">
+              <span className="text-sm font-semibold text-foreground">
                 Bài {r.lessonOrder}: {r.lessonTitle}
               </span>
               <span
@@ -98,17 +98,17 @@ export function LessonChangeRequests({
               >
                 {STATUS_LABEL[r.status]}
               </span>
-              <span className="ml-auto text-xs text-neutral-400">
+              <span className="ml-auto text-xs text-muted-foreground">
                 {r.requestedByName} · {r.createdAt}
               </span>
             </div>
-            <p className="mt-2 whitespace-pre-wrap text-sm text-neutral-700">
+            <p className="mt-2 whitespace-pre-wrap text-sm text-foreground">
               {r.content}
             </p>
 
             {r.response && (
-              <div className="mt-2 rounded-md border border-neutral-200 bg-white px-3 py-2 text-sm text-neutral-600">
-                <span className="font-semibold text-neutral-500">Phản hồi: </span>
+              <div className="mt-2 rounded-md border border-border bg-card px-3 py-2 text-sm text-muted-foreground">
+                <span className="font-semibold text-muted-foreground">Phản hồi: </span>
                 {r.response}
               </div>
             )}
@@ -123,7 +123,7 @@ export function LessonChangeRequests({
                   placeholder="Phản hồi cho GV (tuỳ chọn)…"
                   rows={2}
                   disabled={pending}
-                  className="w-full resize-y rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm outline-none focus:border-primary"
+                  className="w-full resize-y rounded-lg border border-border bg-card px-3 py-2 text-sm outline-none focus:border-primary"
                 />
                 <div className="flex gap-2">
                   <button

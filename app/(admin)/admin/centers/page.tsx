@@ -55,18 +55,18 @@ export default async function CentersAdminPage() {
     <div>
       <div className="mb-6 flex items-center justify-between">
         <div>
-          <h1 className="flex items-center gap-2 text-3xl font-black text-neutral-900">
+          <h1 className="flex items-center gap-2 text-3xl font-black text-foreground">
             <MapPin className="h-7 w-7 text-primary" />
             Cơ sở
           </h1>
-          <p className="mt-1 text-neutral-600">
+          <p className="mt-1 text-muted-foreground">
             Quản lý cơ sở Sata Robo · {activeCount}/{centers.length} đang hoạt động
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <Link
             href="/centers/import"
-            className="inline-flex items-center gap-2 rounded-xl border-2 border-neutral-200 bg-white px-4 py-2 text-sm font-bold text-neutral-700 hover:bg-neutral-50"
+            className="inline-flex items-center gap-2 rounded-xl border-2 border-border bg-card px-4 py-2 text-sm font-bold text-foreground hover:bg-muted"
           >
             <FileSpreadsheet className="h-4 w-4" />
             Import Excel
@@ -81,21 +81,21 @@ export default async function CentersAdminPage() {
         </div>
       </div>
 
-      <div className="overflow-hidden rounded-xl border border-neutral-200 bg-white">
+      <div className="overflow-hidden rounded-xl border border-border bg-card">
         <table className="w-full">
-          <thead className="border-b border-neutral-200 bg-neutral-50 text-left">
+          <thead className="border-b border-border bg-muted text-left">
             <tr>
-              <th className="p-4 text-xs font-bold uppercase tracking-wider text-neutral-700">Cơ sở</th>
-              <th className="p-4 text-xs font-bold uppercase tracking-wider text-neutral-700">Liên hệ</th>
-              <th className="p-4 text-center text-xs font-bold uppercase tracking-wider text-neutral-700">Liên kết</th>
-              <th className="p-4 text-center text-xs font-bold uppercase tracking-wider text-neutral-700">Trạng thái</th>
-              <th className="p-4 text-right text-xs font-bold uppercase tracking-wider text-neutral-700">Thao tác</th>
+              <th className="p-4 text-xs font-bold uppercase tracking-wider text-foreground">Cơ sở</th>
+              <th className="p-4 text-xs font-bold uppercase tracking-wider text-foreground">Liên hệ</th>
+              <th className="p-4 text-center text-xs font-bold uppercase tracking-wider text-foreground">Liên kết</th>
+              <th className="p-4 text-center text-xs font-bold uppercase tracking-wider text-foreground">Trạng thái</th>
+              <th className="p-4 text-right text-xs font-bold uppercase tracking-wider text-foreground">Thao tác</th>
             </tr>
           </thead>
           <tbody>
             {centers.length === 0 ? (
               <tr>
-                <td colSpan={5} className="p-12 text-center text-neutral-500">
+                <td colSpan={5} className="p-12 text-center text-muted-foreground">
                   Chưa có cơ sở nào.{" "}
                   <Link href="/centers/new" className="text-primary hover:underline">
                     Thêm cơ sở đầu tiên →

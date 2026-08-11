@@ -104,12 +104,12 @@ export default async function EditEmployeePage({ params }: Props) {
     <div className="max-w-4xl">
       <div className="mb-6 flex items-start justify-between gap-3 flex-wrap">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Sửa: {employee.fullName}</h1>
-          <p className="mt-1 text-sm text-gray-500 font-mono">{employee.employeeCode}</p>
+          <h1 className="text-2xl font-bold text-foreground">Sửa: {employee.fullName}</h1>
+          <p className="mt-1 text-sm text-muted-foreground font-mono">{employee.employeeCode}</p>
           {employee.userAccount && (
-            <p className="mt-1 text-xs text-gray-500">
+            <p className="mt-1 text-xs text-muted-foreground">
               User: {employee.userAccount.email} · Vai trò hiện tại:{" "}
-              <strong className="text-gray-700">
+              <strong className="text-foreground">
                 {ROLE_LABEL[employee.userAccount.role as Role] ?? employee.userAccount.role}
               </strong>
             </p>
@@ -127,7 +127,7 @@ export default async function EditEmployeePage({ params }: Props) {
           {showScheduleLink && (
             <Link
               href={`/nhan-su/${id}/schedule`}
-              className="inline-flex items-center gap-2 rounded-lg border-2 border-primary-soft bg-white px-4 py-2 text-sm font-bold text-primary hover:bg-primary-soft"
+              className="inline-flex items-center gap-2 rounded-lg border-2 border-primary-soft bg-card px-4 py-2 text-sm font-bold text-primary hover:bg-primary-soft"
             >
               <CalendarDays className="h-4 w-4" />
               Xem lịch dạy
@@ -161,7 +161,7 @@ export default async function EditEmployeePage({ params }: Props) {
 
       {canViewAudit && auditLogs.length > 0 && (
         <section className="mt-8 border-t pt-6">
-          <h2 className="text-lg font-semibold mb-4 text-gray-900">
+          <h2 className="text-lg font-semibold mb-4 text-foreground">
             Lịch sử thay đổi vai trò
           </h2>
           <div className="space-y-2">
@@ -171,22 +171,22 @@ export default async function EditEmployeePage({ params }: Props) {
                 className="border-l-2 border-state-warning pl-3 py-2 bg-state-warning-soft/50 rounded-r"
               >
                 <div className="flex flex-wrap items-baseline gap-2 text-sm">
-                  <span className="font-medium text-gray-700">
+                  <span className="font-medium text-foreground">
                     {ROLE_LABEL[log.fromRole as Role] ?? log.fromRole}
                   </span>
-                  <span className="text-gray-400">→</span>
+                  <span className="text-muted-foreground">→</span>
                   <span className="font-semibold text-state-warning-ink">
                     {ROLE_LABEL[log.toRole as Role] ?? log.toRole}
                   </span>
-                  <span className="text-xs text-gray-500 ml-auto">
+                  <span className="text-xs text-muted-foreground ml-auto">
                     {new Date(log.createdAt).toLocaleString("vi-VN")}
                   </span>
                 </div>
-                <div className="text-xs text-gray-600 mt-1">
+                <div className="text-xs text-muted-foreground mt-1">
                   Bởi: <strong>{log.changedByName}</strong>
                 </div>
                 {log.reason && (
-                  <div className="text-xs text-gray-700 mt-1 italic">
+                  <div className="text-xs text-foreground mt-1 italic">
                     &ldquo;{log.reason}&rdquo;
                   </div>
                 )}
@@ -194,7 +194,7 @@ export default async function EditEmployeePage({ params }: Props) {
             ))}
           </div>
           {auditLogs.length === 20 && (
-            <p className="text-xs text-gray-500 mt-2">
+            <p className="text-xs text-muted-foreground mt-2">
               Hiển thị 20 thay đổi gần nhất.
             </p>
           )}

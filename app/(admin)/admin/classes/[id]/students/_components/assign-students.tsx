@@ -169,9 +169,9 @@ export function AssignStudents({
   return (
     <div className="space-y-6">
       {/* Sĩ số hiện tại */}
-      <section className="rounded-xl border border-gray-200 bg-white p-5">
+      <section className="rounded-xl border border-border bg-card p-5">
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-          <h2 className="flex items-center gap-2 text-sm font-bold uppercase tracking-wider text-gray-500">
+          <h2 className="flex items-center gap-2 text-sm font-bold uppercase tracking-wider text-muted-foreground">
             <Users className="h-4 w-4" /> Học sinh trong lớp ({activeCount}/{maxStudents})
           </h2>
           {/* (a) PA-B — nút gộp: chỉ hiện khi lớp còn em "Đã xếp" */}
@@ -190,15 +190,15 @@ export function AssignStudents({
           )}
         </div>
         {current.length === 0 ? (
-          <p className="text-sm text-gray-400">Lớp chưa có học sinh.</p>
+          <p className="text-sm text-muted-foreground">Lớp chưa có học sinh.</p>
         ) : (
-          <ul className="divide-y divide-gray-100">
+          <ul className="divide-y divide-border">
             {current.map((s) => (
               <li
                 key={s.id}
                 className="flex items-center justify-between gap-3 py-2 text-sm"
               >
-                <span className="flex items-center gap-3 font-medium text-gray-900">
+                <span className="flex items-center gap-3 font-medium text-foreground">
                   {/* tick chọn chỉ cho em "Đã xếp" — em khác giữ nguyên hàng tĩnh */}
                   {s.status === "CONFIRMED" ? (
                     <input
@@ -206,28 +206,28 @@ export function AssignStudents({
                       checked={!promoteOff.has(s.id)}
                       onChange={() => togglePromote(s.id)}
                       aria-label={`Chọn ${s.name} để chuyển sang Đang học`}
-                      className="h-4 w-4 rounded border-gray-300 text-state-success-ink focus:ring-state-success-ink"
+                      className="h-4 w-4 rounded border-border text-state-success-ink focus:ring-state-success-ink"
                     />
                   ) : (
                     <span className="h-4 w-4" aria-hidden />
                   )}
                   {s.name}
                   {s.studentCode ? (
-                    <span className="text-xs font-normal text-gray-400">
+                    <span className="text-xs font-normal text-muted-foreground">
                       {s.studentCode}
                     </span>
                   ) : null}
                 </span>
                 <span className="flex items-center gap-3">
                   {/* T3.2 — Sale phụ trách (vị trí như cột CSKH). */}
-                  <label className="flex items-center gap-1.5 text-xs text-gray-500">
+                  <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
                     <span className="hidden sm:inline">Sale phụ trách</span>
                     <select
                       value={saleDraft[s.id] ?? s.saleId ?? ""}
                       onChange={(e) => changeSale(s.id, e.target.value)}
                       disabled={pending || sales.length === 0}
                       aria-label={`Sale phụ trách của ${s.name}`}
-                      className="max-w-[11rem] rounded-md border border-gray-200 bg-white px-2 py-1 text-xs text-gray-700 outline-none focus:border-primary disabled:bg-gray-50 disabled:text-gray-400"
+                      className="max-w-[11rem] rounded-md border border-border bg-card px-2 py-1 text-xs text-foreground outline-none focus:border-primary disabled:bg-muted disabled:text-muted-foreground"
                     >
                       <option value="">
                         {sales.length === 0 ? "— Cơ sở chưa có sale —" : "— Chưa gán —"}
@@ -244,7 +244,7 @@ export function AssignStudents({
                       "rounded-full px-2.5 py-0.5 text-xs font-semibold " +
                       (s.status === "CONFIRMED"
                         ? "bg-state-warning-soft text-state-warning-ink"
-                        : "bg-gray-100 text-gray-600")
+                        : "bg-muted text-muted-foreground")
                     }
                   >
                     {s.statusLabel}
@@ -257,9 +257,9 @@ export function AssignStudents({
       </section>
 
       {/* Gán học viên đủ điều kiện */}
-      <section className="rounded-xl border border-gray-200 bg-white p-5">
+      <section className="rounded-xl border border-border bg-card p-5">
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-          <h2 className="flex items-center gap-2 text-sm font-bold uppercase tracking-wider text-gray-500">
+          <h2 className="flex items-center gap-2 text-sm font-bold uppercase tracking-wider text-muted-foreground">
             <UserPlus className="h-4 w-4" /> Học viên đủ điều kiện ({assignable.length})
           </h2>
           <div className="flex items-center gap-2">
@@ -300,7 +300,7 @@ export function AssignStudents({
               <button
                 type="button"
                 onClick={() => setPendingOverride(null)}
-                className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm font-semibold text-gray-700 hover:bg-gray-50"
+                className="rounded-lg border border-border px-3 py-1.5 text-sm font-semibold text-foreground hover:bg-muted"
               >
                 Huỷ
               </button>
@@ -309,12 +309,12 @@ export function AssignStudents({
         )}
 
         {assignable.length === 0 ? (
-          <p className="text-sm text-gray-400">
+          <p className="text-sm text-muted-foreground">
             Không có học viên nào đủ điều kiện (đúng khóa + đúng cơ sở + chưa xếp
             lớp active).
           </p>
         ) : (
-          <ul className="divide-y divide-gray-100">
+          <ul className="divide-y divide-border">
             {assignable.map((s) => (
               <li key={s.id} className="py-2">
                 <label className="flex cursor-pointer items-center gap-3 text-sm">
@@ -322,17 +322,17 @@ export function AssignStudents({
                     type="checkbox"
                     checked={selected.has(s.id)}
                     onChange={() => toggle(s.id)}
-                    className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
+                    className="h-4 w-4 rounded border-border text-primary focus:ring-primary"
                   />
-                  <span className="font-medium text-gray-900">
+                  <span className="font-medium text-foreground">
                     {s.name}
                     {s.studentCode ? (
-                      <span className="ml-2 text-xs text-gray-400">
+                      <span className="ml-2 text-xs text-muted-foreground">
                         {s.studentCode}
                       </span>
                     ) : null}
                   </span>
-                  <span className="ml-auto rounded-full bg-gray-100 px-2.5 py-0.5 text-xs font-semibold text-gray-600">
+                  <span className="ml-auto rounded-full bg-muted px-2.5 py-0.5 text-xs font-semibold text-muted-foreground">
                     {s.statusLabel}
                   </span>
                 </label>

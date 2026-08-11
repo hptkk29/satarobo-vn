@@ -63,19 +63,19 @@ export function ParentChildrenManager({
   }
 
   return (
-    <div className="mt-3 rounded-xl border border-neutral-200 bg-white p-4">
-      <div className="mb-2 flex items-center gap-2 text-sm font-semibold text-neutral-700">
+    <div className="mt-3 rounded-xl border border-border bg-card p-4">
+      <div className="mb-2 flex items-center gap-2 text-sm font-semibold text-foreground">
         <Users className="h-4 w-4 text-primary" />
         Con của phụ huynh ({children.length})
       </div>
       <ul className="mb-3 space-y-1.5">
         {children.map((c) => (
-          <li key={c.id} className="flex items-center justify-between rounded-lg bg-neutral-50 px-3 py-2 text-sm">
+          <li key={c.id} className="flex items-center justify-between rounded-lg bg-muted px-3 py-2 text-sm">
             <span>
-              <Link href={`/students/${c.id}/edit`} className="font-medium text-neutral-800 hover:underline">
+              <Link href={`/students/${c.id}/edit`} className="font-medium text-foreground hover:underline">
                 {c.name}
               </Link>
-              {c.studentCode ? <span className="ml-1 text-xs text-neutral-400">({c.studentCode})</span> : null}
+              {c.studentCode ? <span className="ml-1 text-xs text-muted-foreground">({c.studentCode})</span> : null}
               {c.id === currentStudentId ? <span className="ml-2 text-[10px] font-bold text-primary">đang xem</span> : null}
             </span>
             {c.id !== currentStudentId && (
@@ -94,13 +94,13 @@ export function ParentChildrenManager({
 
       <div className="flex gap-2">
         <div className="relative flex-1">
-          <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-neutral-400" />
+          <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <input
             value={q}
             onChange={(e) => setQ(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), search())}
             placeholder="Tìm HV chưa có phụ huynh (tên/mã/SĐT)…"
-            className="w-full rounded-lg border border-neutral-300 py-2 pl-8 pr-3 text-sm focus:border-primary focus:outline-none"
+            className="w-full rounded-lg border border-border py-2 pl-8 pr-3 text-sm focus:border-primary focus:outline-none"
           />
         </div>
         <button
@@ -113,14 +113,14 @@ export function ParentChildrenManager({
         </button>
       </div>
 
-      {searching && <p className="mt-2 text-xs text-neutral-400">Đang tìm…</p>}
+      {searching && <p className="mt-2 text-xs text-muted-foreground">Đang tìm…</p>}
       {results.length > 0 && (
         <ul className="mt-2 space-y-1">
           {results.map((r) => (
-            <li key={r.id} className="flex items-center justify-between rounded-lg border border-neutral-100 px-3 py-2 text-sm">
+            <li key={r.id} className="flex items-center justify-between rounded-lg border border-border px-3 py-2 text-sm">
               <span>
                 {r.name}
-                {r.studentCode ? <span className="ml-1 text-xs text-neutral-400">({r.studentCode})</span> : null}
+                {r.studentCode ? <span className="ml-1 text-xs text-muted-foreground">({r.studentCode})</span> : null}
               </span>
               <button
                 type="button"

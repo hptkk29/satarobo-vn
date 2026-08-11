@@ -53,7 +53,7 @@ export function AttendanceSelector({
         }}
         disabled={pending}
         aria-label="Lọc theo lớp"
-        className="rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm outline-none focus:border-primary disabled:opacity-60"
+        className="rounded-lg border border-border bg-card px-3 py-2 text-sm outline-none focus:border-primary disabled:opacity-60"
       >
         <option value="">Tất cả lớp</option>
         {classes.map((c) => (
@@ -67,7 +67,7 @@ export function AttendanceSelector({
         onChange={(e) => setSelSession(e.target.value)}
         disabled={pending}
         aria-label="Chọn buổi học"
-        className="flex-1 rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm outline-none focus:border-primary disabled:opacity-60 sm:max-w-md"
+        className="flex-1 rounded-lg border border-border bg-card px-3 py-2 text-sm outline-none focus:border-primary disabled:opacity-60 sm:max-w-md"
       >
         <option value="">— Chọn buổi học —</option>
         {sessions.map((s) => (

@@ -34,12 +34,12 @@ export default async function NewPackagePage({
       <div className="mb-6">
         <Link
           href="/course-packages"
-          className="inline-flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-900"
+          className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"
         >
           <ChevronLeft className="h-4 w-4" />
           Quay lai
         </Link>
-        <h1 className="mt-2 text-2xl font-bold text-gray-900">Thêm gói khoá học</h1>
+        <h1 className="mt-2 text-2xl font-bold text-foreground">Thêm gói khoá học</h1>
       </div>
 
       <PackageForm courses={courses} defaultCourseId={defaultCourseId ?? null} />

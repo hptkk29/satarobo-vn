@@ -42,7 +42,7 @@ export function DeleteHolidayButton({
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="inline-flex items-center gap-2 rounded-xl border-2 border-state-danger-soft bg-white px-4 py-2 text-sm font-bold text-state-danger-ink hover:bg-state-danger-soft"
+        className="inline-flex items-center gap-2 rounded-xl border-2 border-state-danger-soft bg-card px-4 py-2 text-sm font-bold text-state-danger-ink hover:bg-state-danger-soft"
       >
         <Trash2 className="h-4 w-4" />
         Xoá

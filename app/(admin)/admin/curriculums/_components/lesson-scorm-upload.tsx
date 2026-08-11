@@ -79,7 +79,7 @@ export function LessonScormUpload({ lessonId }: { lessonId: string }) {
   }
 
   return (
-    <div className="mt-2 space-y-2 rounded-md border border-dashed border-neutral-300 bg-white p-2.5">
+    <div className="mt-2 space-y-2 rounded-md border border-dashed border-border bg-card p-2.5">
       <div className="flex flex-wrap items-center gap-2">
         <input
           ref={fileRef}
@@ -87,7 +87,7 @@ export function LessonScormUpload({ lessonId }: { lessonId: string }) {
           accept=".zip,application/zip,application/x-zip-compressed"
           disabled={uploading}
           onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-          className="min-w-0 flex-1 text-xs text-neutral-600 file:mr-2 file:rounded file:border-0 file:bg-primary-soft file:px-2 file:py-1 file:text-xs file:font-medium file:text-primary"
+          className="min-w-0 flex-1 text-xs text-muted-foreground file:mr-2 file:rounded file:border-0 file:bg-primary-soft file:px-2 file:py-1 file:text-xs file:font-medium file:text-primary"
         />
         <button
           type="button"
@@ -99,7 +99,7 @@ export function LessonScormUpload({ lessonId }: { lessonId: string }) {
         </button>
       </div>
       {uploading && (
-        <div className="h-1.5 overflow-hidden rounded-full bg-neutral-100">
+        <div className="h-1.5 overflow-hidden rounded-full bg-muted">
           <div className="h-full rounded-full bg-primary transition-all" style={{ width: `${progress}%` }} />
         </div>
       )}

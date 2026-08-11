@@ -55,8 +55,8 @@ export function ClassAttendancePanel({
 
   if (sessions.length === 0) {
     return (
-      <div className="rounded-xl border-2 border-dashed border-neutral-300 bg-neutral-50 p-8 text-center text-sm text-neutral-600">
-        <ClipboardCheck className="mx-auto mb-2 h-8 w-8 text-neutral-400" />
+      <div className="rounded-xl border-2 border-dashed border-border bg-muted p-8 text-center text-sm text-muted-foreground">
+        <ClipboardCheck className="mx-auto mb-2 h-8 w-8 text-muted-foreground" />
         Lớp chưa có buổi học để điểm danh. Sinh buổi ở tab “Buổi học”.
       </div>
     );
@@ -65,11 +65,11 @@ export function ClassAttendancePanel({
   return (
     <div className="space-y-4">
       <label className="block max-w-md">
-        <span className="mb-1 block text-sm font-semibold text-neutral-700">Chọn buổi điểm danh</span>
+        <span className="mb-1 block text-sm font-semibold text-foreground">Chọn buổi điểm danh</span>
         <select
           value={selectedId}
           onChange={(e) => onSelect(e.target.value)}
-          className="w-full rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm outline-none focus:border-primary"
+          className="w-full rounded-lg border border-border bg-card px-3 py-2 text-sm outline-none focus:border-primary"
         >
           <option value="">— Chọn buổi học —</option>
           {sessions.map((s) => (
@@ -96,7 +96,7 @@ export function ClassAttendancePanel({
           <AttendanceGrid key={selectedId} sessionId={selectedId} rows={rows} />
         </div>
       ) : !error ? (
-        <p className="text-sm text-neutral-500">Chọn một buổi học để điểm danh.</p>
+        <p className="text-sm text-muted-foreground">Chọn một buổi học để điểm danh.</p>
       ) : null}
     </div>
   );

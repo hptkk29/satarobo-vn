@@ -33,10 +33,10 @@ export default async function PaymentMethodsPage() {
             <CreditCard className="h-5 w-5 text-primary" />
           </div>
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">
+            <h1 className="text-2xl font-bold text-foreground">
               Phương thức thanh toán
             </h1>
-            <p className="mt-1 text-sm text-gray-500">
+            <p className="mt-1 text-sm text-muted-foreground">
               Quản lý các phương thức thanh toán: tiền mặt, chuyển khoản,
               gateway online
             </p>

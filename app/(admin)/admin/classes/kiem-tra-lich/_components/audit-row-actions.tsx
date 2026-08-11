@@ -18,7 +18,7 @@ export function AuditRowActions({ classId, canEdit }: { classId: string; canEdit
   const [pending, startTransition] = useTransition();
   const [armed, setArmed] = useState(false);
 
-  if (!canEdit) return <span className="text-xs text-gray-400">Không có quyền</span>;
+  if (!canEdit) return <span className="text-xs text-muted-foreground">Không có quyền</span>;
 
   function run() {
     if (!armed) {

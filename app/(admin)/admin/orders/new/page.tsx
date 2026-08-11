@@ -42,16 +42,16 @@ export default async function NewOrderPage({
     <div className="max-w-4xl">
       <Link
         href={lead ? `/leads/${lead.id}/convert` : "/orders"}
-        className="mb-4 inline-flex items-center gap-1 text-sm text-gray-500 hover:text-gray-700"
+        className="mb-4 inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
       >
         <ChevronLeft className="h-4 w-4" />
         {lead ? "Quay lại chốt lead" : "Quay lại danh sách"}
       </Link>
 
-      <h1 className="mb-1 text-2xl font-bold text-gray-900">
+      <h1 className="mb-1 text-2xl font-bold text-foreground">
         Tạo đơn hàng thủ công
       </h1>
-      <p className="mb-6 text-sm text-gray-500">
+      <p className="mb-6 text-sm text-muted-foreground">
         {lead
           ? `Đơn gắn với lead "${lead.parentName}" — sau khi ghi nhận thanh toán sẽ đủ điều kiện chốt (convert).`
           : "Dùng cho khách walk-in tại trung tâm hoặc nhập tay đơn đã thoả thuận offline."}

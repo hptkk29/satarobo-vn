@@ -60,7 +60,7 @@ export function MyShiftsCalendar({
 
   return (
     <>
-      <div className="grid grid-cols-7 gap-1 text-center text-xs font-semibold text-gray-400">
+      <div className="grid grid-cols-7 gap-1 text-center text-xs font-semibold text-muted-foreground">
         {WEEKDAYS.map((w) => (
           <div key={w} className="py-1">{w}</div>
         ))}
@@ -76,10 +76,10 @@ export function MyShiftsCalendar({
               key={i}
               type="button"
               onClick={() => openDay(c.dateStr!)}
-              className={`min-h-[64px] rounded-lg border p-1 text-left transition-colors hover:border-primary ${ isToday ? "border-primary bg-primary-soft/40" : "border-gray-200 bg-white" }`}
+              className={`min-h-[64px] rounded-lg border p-1 text-left transition-colors hover:border-primary ${ isToday ? "border-primary bg-primary-soft/40" : "border-border bg-card" }`}
             >
               <div className="flex items-center justify-between">
-                <span className="text-xs font-semibold text-gray-700">{c.day}</span>
+                <span className="text-xs font-semibold text-foreground">{c.day}</span>
                 {teach.length > 0 && (
                   <span
                     title={`${teach.length} tiết dạy`}
@@ -107,8 +107,8 @@ export function MyShiftsCalendar({
       {selected && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <button type="button" aria-label="Đóng" className="absolute inset-0 bg-black/40" onClick={() => setSelected(null)} />
-          <div className="relative z-10 w-full max-w-sm rounded-2xl border border-gray-200 bg-white p-5 shadow-xl">
-            <h3 className="mb-1 text-sm font-bold text-gray-900">Đăng ký ca · {selected}</h3>
+          <div className="relative z-10 w-full max-w-sm rounded-2xl border border-border bg-card p-5 shadow-xl">
+            <h3 className="mb-1 text-sm font-bold text-foreground">Đăng ký ca · {selected}</h3>
             {sel?.status === "LEAVE_REQUESTED" && (
               <p className="mb-2 text-xs font-medium text-state-danger-ink">Đang ở trạng thái xin nghỉ khẩn.</p>
             )}
@@ -142,7 +142,7 @@ export function MyShiftsCalendar({
                     type="button"
                     onClick={() => toggle(s)}
                     disabled={pending}
-                    className={`flex w-full items-center justify-between rounded-lg border px-3 py-2 text-sm ${ on ? "border-primary bg-primary-soft text-primary" : "border-gray-200 text-gray-600" }`}
+                    className={`flex w-full items-center justify-between rounded-lg border px-3 py-2 text-sm ${ on ? "border-primary bg-primary-soft text-primary" : "border-border text-muted-foreground" }`}
                   >
                     <span className="font-medium">{SHIFT_DEFS[s].label}</span>
                     <span className="text-xs">{SHIFT_DEFS[s].start}–{SHIFT_DEFS[s].end}{on ? " ✓" : ""}</span>
@@ -156,12 +156,12 @@ export function MyShiftsCalendar({
               disabled={pending}
               rows={2}
               placeholder="Ghi chú (vd: lý do xin nghỉ)…"
-              className="mt-3 w-full resize-y rounded-lg border border-gray-300 px-3 py-1.5 text-sm focus:border-primary focus:outline-none"
+              className="mt-3 w-full resize-y rounded-lg border border-border px-3 py-1.5 text-sm focus:border-primary focus:outline-none"
             />
             {warning && (
               <p className="mt-2 rounded-lg bg-state-warning-soft px-2 py-1.5 text-xs text-state-warning-ink">{warning}</p>
             )}
-            <p className="mt-2 text-xs text-gray-400">Bỏ chọn hết = xin nghỉ cả ngày.</p>
+            <p className="mt-2 text-xs text-muted-foreground">Bỏ chọn hết = xin nghỉ cả ngày.</p>
             <div className="mt-4 flex gap-2">
               <button
                 type="button"
@@ -174,7 +174,7 @@ export function MyShiftsCalendar({
               <button
                 type="button"
                 onClick={() => setSelected(null)}
-                className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                className="rounded-lg border border-border px-4 py-2 text-sm font-medium text-foreground hover:bg-muted"
               >
                 Hủy
               </button>

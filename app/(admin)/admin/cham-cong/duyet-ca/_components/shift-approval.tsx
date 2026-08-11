@@ -49,21 +49,21 @@ export function ShiftApproval({
 
   return (
     <div className="space-y-5">
-      <div className="flex flex-wrap items-end gap-3 rounded-xl border border-gray-200 bg-white p-4">
+      <div className="flex flex-wrap items-end gap-3 rounded-xl border border-border bg-card p-4">
         {fixedCenterId ? (
           <div className="text-sm">
-            <span className="mb-1 block text-xs text-gray-500">Cơ sở</span>
-            <span className="font-semibold text-gray-900">
+            <span className="mb-1 block text-xs text-muted-foreground">Cơ sở</span>
+            <span className="font-semibold text-foreground">
               {centers.find((c) => c.id === centerId)?.name ?? "—"}
             </span>
           </div>
         ) : (
           <label className="block">
-            <span className="mb-1 block text-xs text-gray-500">Cơ sở</span>
+            <span className="mb-1 block text-xs text-muted-foreground">Cơ sở</span>
             <select
               value={centerId}
               onChange={(e) => setCenterId(e.target.value)}
-              className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm"
+              className="rounded-lg border border-border px-3 py-1.5 text-sm"
             >
               {centers.map((c) => (
                 <option key={c.id} value={c.id}>{c.name}</option>
@@ -72,24 +72,24 @@ export function ShiftApproval({
           </label>
         )}
         <label className="block">
-          <span className="mb-1 block text-xs text-gray-500">Tháng</span>
+          <span className="mb-1 block text-xs text-muted-foreground">Tháng</span>
           <input
             type="month"
             value={month}
             onChange={(e) => setMonth(e.target.value)}
-            className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm"
+            className="rounded-lg border border-border px-3 py-1.5 text-sm"
           />
         </label>
         <a
           href={ready ? exportUrl : undefined}
           aria-disabled={!ready}
-          className={`inline-flex items-center gap-1.5 rounded-lg px-4 py-2 text-sm font-semibold ${ ready ? "bg-primary text-white hover:opacity-90" : "pointer-events-none bg-gray-200 text-gray-400" }`}
+          className={`inline-flex items-center gap-1.5 rounded-lg px-4 py-2 text-sm font-semibold ${ ready ? "bg-primary text-white hover:opacity-90" : "pointer-events-none bg-muted text-muted-foreground" }`}
         >
           <Download className="h-4 w-4" /> Export lịch đề xuất
         </a>
       </div>
 
-      <div className="rounded-xl border border-gray-200 bg-white p-4">
+      <div className="rounded-xl border border-border bg-card p-4">
         <ExcelImporter<ShiftImportRow>
           title="Import lịch ca chính thức (đè tháng)"
           templateUrl={exportUrl}

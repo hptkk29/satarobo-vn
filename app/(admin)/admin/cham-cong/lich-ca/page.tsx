@@ -98,15 +98,15 @@ export default async function MyShiftsPage({ searchParams }: Props) {
   return (
     <div className="max-w-4xl p-6">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-        <h1 className="flex items-center gap-2 text-2xl font-bold text-gray-900">
+        <h1 className="flex items-center gap-2 text-2xl font-bold text-foreground">
           <CalendarDays className="h-6 w-6 text-primary" /> Lịch ca của tôi
         </h1>
         <div className="flex items-center gap-2">
-          <Link href={`/cham-cong/lich-ca?month=${ymd(prev).slice(0, 7)}`} className="rounded-lg border border-gray-300 p-1.5 hover:bg-gray-50">
+          <Link href={`/cham-cong/lich-ca?month=${ymd(prev).slice(0, 7)}`} className="rounded-lg border border-border p-1.5 hover:bg-muted">
             <ChevronLeft className="h-4 w-4" />
           </Link>
-          <span className="text-sm font-semibold text-gray-700">{monthLabel}</span>
-          <Link href={`/cham-cong/lich-ca?month=${ymd(next).slice(0, 7)}`} className="rounded-lg border border-gray-300 p-1.5 hover:bg-gray-50">
+          <span className="text-sm font-semibold text-foreground">{monthLabel}</span>
+          <Link href={`/cham-cong/lich-ca?month=${ymd(next).slice(0, 7)}`} className="rounded-lg border border-border p-1.5 hover:bg-muted">
             <ChevronRight className="h-4 w-4" />
           </Link>
         </div>
@@ -114,7 +114,7 @@ export default async function MyShiftsPage({ searchParams }: Props) {
 
       <p className="mb-2 rounded-lg bg-state-info-soft px-3 py-2 text-xs text-state-info-ink">{windowHint}</p>
       <p
-        className={`mb-4 rounded-lg px-3 py-2 text-xs ${ emergencyUsed >= EMERGENCY_MONTHLY_LIMIT ? "bg-state-danger-soft text-state-danger-ink" : "bg-gray-50 text-gray-600" }`}
+        className={`mb-4 rounded-lg px-3 py-2 text-xs ${ emergencyUsed >= EMERGENCY_MONTHLY_LIMIT ? "bg-state-danger-soft text-state-danger-ink" : "bg-muted text-muted-foreground" }`}
       >
         Khẩn cấp (đổi/nghỉ gấp) tháng này: <b>{emergencyUsed}/{EMERGENCY_MONTHLY_LIMIT}</b>
         {emergencyUsed >= EMERGENCY_MONTHLY_LIMIT && " — đã hết lượt, liên hệ quản lý."}

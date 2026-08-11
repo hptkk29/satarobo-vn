@@ -31,10 +31,10 @@ export default async function NewLeadPage() {
 
   return (
     <div className="p-6">
-      <Link href="/leads" className="mb-3 inline-flex items-center gap-1 text-sm text-gray-500 hover:text-gray-700">
+      <Link href="/leads" className="mb-3 inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
         <ChevronLeft className="h-4 w-4" /> Danh sách lead
       </Link>
-      <h1 className="mb-4 text-2xl font-bold text-gray-900">Thêm lead thủ công</h1>
+      <h1 className="mb-4 text-2xl font-bold text-foreground">Thêm lead thủ công</h1>
       <LeadForm orgUnits={orgUnits.map((o) => ({ id: o.orgUnitId, name: o.name }))} courses={courses} />
     </div>
   );

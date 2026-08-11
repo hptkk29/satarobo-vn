@@ -19,7 +19,7 @@ export function RequestActions({
   // P1-c: chỉ người có quyền DUYỆT (CENTER_MANAGER/SUPER_ADMIN) thấy nút. Người
   // tạo (sale) chỉ xem trạng thái chờ duyệt.
   if (!canManage) {
-    return <span className="text-xs text-neutral-400">Chờ quản lý duyệt</span>;
+    return <span className="text-xs text-muted-foreground">Chờ quản lý duyệt</span>;
   }
 
   function approve() {

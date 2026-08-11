@@ -63,24 +63,24 @@ export default async function CenterChecklistPage({ searchParams }: Props) {
   return (
     <div className="max-w-3xl p-6">
       <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
-        <h1 className="flex items-center gap-2 text-2xl font-bold text-gray-900">
+        <h1 className="flex items-center gap-2 text-2xl font-bold text-foreground">
           <ClipboardCheck className="h-6 w-6 text-primary" /> Checklist mở/đóng cơ sở
         </h1>
-        <Link href="/cham-cong/checklist-co-so/tong-quan" className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm font-semibold text-gray-700 hover:bg-gray-50">
+        <Link href="/cham-cong/checklist-co-so/tong-quan" className="rounded-lg border border-border px-3 py-1.5 text-sm font-semibold text-foreground hover:bg-muted">
           Tổng quan →
         </Link>
       </div>
-      <p className="mb-4 text-sm text-gray-500">Tick đầu ngày khi mở cơ sở và cuối ngày khi đóng.</p>
+      <p className="mb-4 text-sm text-muted-foreground">Tick đầu ngày khi mở cơ sở và cuối ngày khi đóng.</p>
 
       <form method="GET" className="mb-4 flex flex-wrap items-end gap-2">
         <label className="block">
-          <span className="mb-1 block text-xs text-gray-500">Ngày</span>
-          <input type="date" name="date" defaultValue={dateStr} className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm" />
+          <span className="mb-1 block text-xs text-muted-foreground">Ngày</span>
+          <input type="date" name="date" defaultValue={dateStr} className="rounded-lg border border-border px-3 py-1.5 text-sm" />
         </label>
         {!isCM && centers.length > 1 && (
           <label className="block">
-            <span className="mb-1 block text-xs text-gray-500">Cơ sở</span>
-            <select name="centerId" defaultValue={centerId} className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm">
+            <span className="mb-1 block text-xs text-muted-foreground">Cơ sở</span>
+            <select name="centerId" defaultValue={centerId} className="rounded-lg border border-border px-3 py-1.5 text-sm">
               {centers.map((c) => (
                 <option key={c.id} value={c.id}>{c.name}</option>
               ))}
@@ -88,7 +88,7 @@ export default async function CenterChecklistPage({ searchParams }: Props) {
           </label>
         )}
         <button type="submit" className="rounded-lg bg-gray-800 px-3 py-1.5 text-sm font-medium text-white">Xem</button>
-        <span className="ml-auto text-sm text-gray-500">
+        <span className="ml-auto text-sm text-muted-foreground">
           {centers.find((c) => c.id === centerId)?.name ?? "—"}
         </span>
       </form>
@@ -102,7 +102,7 @@ export default async function CenterChecklistPage({ searchParams }: Props) {
           canEdit={canEdit}
         />
       ) : (
-        <p className="rounded-xl border border-dashed border-gray-300 p-8 text-center text-sm text-gray-400">Chưa có cơ sở.</p>
+        <p className="rounded-xl border border-dashed border-border p-8 text-center text-sm text-muted-foreground">Chưa có cơ sở.</p>
       )}
     </div>
   );

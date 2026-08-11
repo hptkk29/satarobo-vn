@@ -23,7 +23,7 @@ export default async function NewStudentPage() {
 
   return (
     <div>
-      <h1 className="mb-6 text-3xl font-black text-neutral-900">Thêm học viên mới</h1>
+      <h1 className="mb-6 text-3xl font-black text-foreground">Thêm học viên mới</h1>
       <StudentForm
         orgUnits={orgUnits.map((o) => ({ id: o.orgUnitId, name: o.name }))}
         canViewParentCccd={canViewParentCccd}

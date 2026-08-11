@@ -193,7 +193,7 @@ export function SlideStage({
           <div className="absolute inset-0 flex items-center justify-center">
             <span
               aria-hidden
-              className="select-none whitespace-nowrap font-bold uppercase tracking-[0.15em] text-neutral-400"
+              className="select-none whitespace-nowrap font-bold uppercase tracking-[0.15em] text-muted-foreground"
               style={{ opacity: 0.07, fontSize: "clamp(2.5rem, 11vw, 9rem)" }}
             >
               SataRobo
@@ -203,7 +203,7 @@ export function SlideStage({
           {watermark ? (
             <span
               aria-hidden
-              className="absolute bottom-1.5 right-2.5 whitespace-nowrap text-[11px] font-medium text-neutral-400"
+              className="absolute bottom-1.5 right-2.5 whitespace-nowrap text-[11px] font-medium text-muted-foreground"
               style={{ opacity: 0.35 }}
             >
               {watermark}

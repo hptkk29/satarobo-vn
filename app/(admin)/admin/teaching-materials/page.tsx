@@ -231,10 +231,10 @@ export default async function TeachingMaterialsPage({ searchParams }: PageProps)
   return (
     <div className="max-w-5xl space-y-6 p-6">
       <div>
-        <h1 className="flex items-center gap-2 text-2xl font-bold text-gray-900">
+        <h1 className="flex items-center gap-2 text-2xl font-bold text-foreground">
           <Presentation className="h-6 w-6 text-primary" /> Tài liệu lớp tôi
         </h1>
-        <p className="mt-1 text-sm text-gray-500">
+        <p className="mt-1 text-sm text-muted-foreground">
           Chọn lớp bạn dạy → xem từng buổi: slide bài học (PDF hoặc SCORM) trình chiếu dạng slider,
           bài tập và thống kê học viên đã nộp. Chỉ xem &amp; trình chiếu — không chỉnh sửa.
         </p>
@@ -245,7 +245,7 @@ export default async function TeachingMaterialsPage({ searchParams }: PageProps)
         <select
           name="classId"
           defaultValue={selectedClassId ?? ""}
-          className="flex-1 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm outline-none focus:border-primary sm:max-w-md"
+          className="flex-1 rounded-lg border border-border bg-card px-3 py-2 text-sm outline-none focus:border-primary sm:max-w-md"
         >
           <option value="">— Chọn lớp bạn dạy —</option>
           {classes.map((c) => (
@@ -278,15 +278,15 @@ export default async function TeachingMaterialsPage({ searchParams }: PageProps)
 
       {selectedClass && (
         <div className="space-y-4">
-          <div className="rounded-xl border border-gray-200 bg-primary-soft p-4">
+          <div className="rounded-xl border border-border bg-primary-soft p-4">
             <div className="text-xs font-bold uppercase tracking-wider text-primary">
               Khung chương trình
             </div>
-            <div className="mt-1 flex items-center gap-2 text-lg font-bold text-gray-900">
+            <div className="mt-1 flex items-center gap-2 text-lg font-bold text-foreground">
               <BookOpen className="h-5 w-5 text-primary" />
               {curriculumName ?? "Chưa gán khung chương trình"}
             </div>
-            <div className="mt-0.5 text-sm text-gray-600">
+            <div className="mt-0.5 text-sm text-muted-foreground">
               {selectedClass.name}
               {selectedClass.classCode ? ` · ${selectedClass.classCode}` : ""} ·{" "}
               {lessonViews.length} buổi
@@ -294,14 +294,14 @@ export default async function TeachingMaterialsPage({ searchParams }: PageProps)
           </div>
 
           {!scormOn && (
-            <p className="rounded-lg border border-gray-200 bg-gray-50 p-3 text-xs text-gray-500">
+            <p className="rounded-lg border border-border bg-muted p-3 text-xs text-muted-foreground">
               Tài liệu giảng dạy tương tác (SCORM) đang tắt trên hệ thống — phần trình chiếu
               tạm ẩn. Bài tập &amp; thống kê vẫn xem được.
             </p>
           )}
 
           {lessonViews.length === 0 ? (
-            <p className="rounded-xl border border-gray-200 bg-white p-6 text-center text-sm text-gray-400">
+            <p className="rounded-xl border border-border bg-card p-6 text-center text-sm text-muted-foreground">
               Khung chương trình chưa có buổi học nào.
             </p>
           ) : (
@@ -309,15 +309,15 @@ export default async function TeachingMaterialsPage({ searchParams }: PageProps)
               {lessonViews.map((l) => (
                 <li
                   key={l.id}
-                  className="space-y-3 rounded-xl border border-gray-200 bg-white p-4"
+                  className="space-y-3 rounded-xl border border-border bg-card p-4"
                 >
                   <div className="flex flex-wrap items-start justify-between gap-2">
                     <div className="min-w-0">
-                      <div className="font-semibold text-gray-900">
+                      <div className="font-semibold text-foreground">
                         Buổi {l.order}: {l.title}
                       </div>
                       {l.objectives.length > 0 && (
-                        <p className="mt-0.5 line-clamp-2 text-xs text-gray-500">
+                        <p className="mt-0.5 line-clamp-2 text-xs text-muted-foreground">
                           {l.objectives.join(" · ")}
                         </p>
                       )}
@@ -337,20 +337,20 @@ export default async function TeachingMaterialsPage({ searchParams }: PageProps)
                           <Play className="h-3.5 w-3.5" /> Xem slide
                         </Link>
                       ) : (
-                        <span className="inline-flex shrink-0 items-center gap-1 rounded-md border border-gray-200 px-2.5 py-1.5 text-xs text-gray-400">
+                        <span className="inline-flex shrink-0 items-center gap-1 rounded-md border border-border px-2.5 py-1.5 text-xs text-muted-foreground">
                           <Play className="h-3.5 w-3.5" /> {l.scorm.name}
                         </span>
                       )
                     ) : scormOn ? (
-                      <span className="shrink-0 text-xs text-gray-400">Chưa có slide bài học</span>
+                      <span className="shrink-0 text-xs text-muted-foreground">Chưa có slide bài học</span>
                     ) : null}
                   </div>
 
                   {/* Bài tập của buổi + thống kê nộp */}
                   {l.assignments.length > 0 ? (
-                    <div className="overflow-hidden rounded-lg border border-gray-100">
+                    <div className="overflow-hidden rounded-lg border border-border">
                       <table className="w-full text-sm">
-                        <thead className="bg-gray-50 text-xs text-gray-500">
+                        <thead className="bg-muted text-xs text-muted-foreground">
                           <tr>
                             <th className="px-3 py-2 text-left font-medium">
                               <NotebookPen className="mr-1 inline h-3.5 w-3.5" />
@@ -361,12 +361,12 @@ export default async function TeachingMaterialsPage({ searchParams }: PageProps)
                             <th className="px-3 py-2 text-right font-medium">Chưa nộp</th>
                           </tr>
                         </thead>
-                        <tbody className="divide-y divide-gray-100">
+                        <tbody className="divide-y divide-border">
                           {l.assignments.map((a) => (
                             <tr key={a.id}>
                               <td className="px-3 py-2">
-                                <div className="font-medium text-gray-800">{a.title}</div>
-                                <div className="text-xs text-gray-400">
+                                <div className="font-medium text-foreground">{a.title}</div>
+                                <div className="text-xs text-muted-foreground">
                                   {a.totalPoints} điểm
                                   {a.dueAt
                                     ? ` · hạn ${new Intl.DateTimeFormat("vi-VN", {
@@ -375,7 +375,7 @@ export default async function TeachingMaterialsPage({ searchParams }: PageProps)
                                     : ""}
                                 </div>
                               </td>
-                              <td className="px-3 py-2 text-right tabular-nums text-gray-700">
+                              <td className="px-3 py-2 text-right tabular-nums text-foreground">
                                 {a.stats.submitted}/{a.stats.total}
                                 {a.stats.late > 0 && (
                                   <span className="ml-1 text-xs text-state-warning-ink">
@@ -386,7 +386,7 @@ export default async function TeachingMaterialsPage({ searchParams }: PageProps)
                               <td className="px-3 py-2 text-right tabular-nums text-state-success-ink">
                                 {a.stats.graded}
                               </td>
-                              <td className="px-3 py-2 text-right tabular-nums text-gray-400">
+                              <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">
                                 {a.stats.notSubmitted}
                               </td>
                             </tr>
@@ -395,7 +395,7 @@ export default async function TeachingMaterialsPage({ searchParams }: PageProps)
                       </table>
                     </div>
                   ) : (
-                    <p className="text-xs text-gray-400">Buổi này chưa có bài tập.</p>
+                    <p className="text-xs text-muted-foreground">Buổi này chưa có bài tập.</p>
                   )}
                 </li>
               ))}

@@ -129,8 +129,8 @@ export function DocumentForm({
         </div>
       )}
 
-      <section className="rounded-xl border border-neutral-200 bg-white p-6 space-y-4">
-        <h2 className="text-sm font-bold uppercase tracking-wider text-neutral-700">
+      <section className="rounded-xl border border-border bg-card p-6 space-y-4">
+        <h2 className="text-sm font-bold uppercase tracking-wider text-foreground">
           File
         </h2>
         <DocumentUploader
@@ -141,14 +141,14 @@ export function DocumentForm({
         />
       </section>
 
-      <section className="rounded-xl border border-neutral-200 bg-white p-6 space-y-4">
-        <h2 className="text-sm font-bold uppercase tracking-wider text-neutral-700">
+      <section className="rounded-xl border border-border bg-card p-6 space-y-4">
+        <h2 className="text-sm font-bold uppercase tracking-wider text-foreground">
           Thông tin tài liệu
         </h2>
 
         <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
           <label className="block md:col-span-2">
-            <span className="mb-1 block text-sm font-semibold text-neutral-700">
+            <span className="mb-1 block text-sm font-semibold text-foreground">
               Tiêu đề <span className="text-state-danger-ink">*</span>
             </span>
             <input
@@ -165,7 +165,7 @@ export function DocumentForm({
             />
           </label>
           <label className="block">
-            <span className="mb-1 block text-sm font-semibold text-neutral-700">
+            <span className="mb-1 block text-sm font-semibold text-foreground">
               Mã tài liệu
             </span>
             <input
@@ -180,7 +180,7 @@ export function DocumentForm({
         </div>
 
         <label className="block">
-          <span className="mb-1 block text-sm font-semibold text-neutral-700">
+          <span className="mb-1 block text-sm font-semibold text-foreground">
             Mô tả
           </span>
           <textarea
@@ -195,7 +195,7 @@ export function DocumentForm({
 
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
           <label className="block">
-            <span className="mb-1 block text-sm font-semibold text-neutral-700">
+            <span className="mb-1 block text-sm font-semibold text-foreground">
               Bài học (tuỳ chọn)
             </span>
             <select
@@ -218,16 +218,16 @@ export function DocumentForm({
               checked={isPublic}
               onChange={(e) => setIsPublic(e.target.checked)}
               disabled={pending}
-              className="h-4 w-4 rounded border-neutral-300"
+              className="h-4 w-4 rounded border-border"
             />
-            <span className="text-sm font-medium text-neutral-700">
+            <span className="text-sm font-medium text-foreground">
               Public (HS/PH xem được)
             </span>
           </label>
         </div>
 
         <div>
-          <span className="mb-1 block text-sm font-semibold text-neutral-700">
+          <span className="mb-1 block text-sm font-semibold text-foreground">
             Tags
           </span>
           <StringArrayEditor
@@ -238,7 +238,7 @@ export function DocumentForm({
         </div>
 
         <label className="block">
-          <span className="mb-1 block text-sm font-semibold text-neutral-700">
+          <span className="mb-1 block text-sm font-semibold text-foreground">
             Ghi chú nội bộ
           </span>
           <textarea
@@ -252,7 +252,7 @@ export function DocumentForm({
         </label>
       </section>
 
-      <div className="flex flex-wrap gap-3 border-t border-neutral-200 pt-5">
+      <div className="flex flex-wrap gap-3 border-t border-border pt-5">
         <button
           type="submit"
           disabled={pending || !file}
@@ -264,7 +264,7 @@ export function DocumentForm({
           type="button"
           onClick={() => router.push("/documents")}
           disabled={pending}
-          className="rounded-xl border-2 border-neutral-200 bg-white px-6 py-3 font-bold text-neutral-700 hover:bg-neutral-50"
+          className="rounded-xl border-2 border-border bg-card px-6 py-3 font-bold text-foreground hover:bg-muted"
         >
           Huỷ
         </button>
@@ -273,7 +273,7 @@ export function DocumentForm({
             type="button"
             onClick={handleDelete}
             disabled={pending}
-            className="ml-auto rounded-xl border-2 border-state-danger-soft bg-white px-6 py-3 font-bold text-state-danger-ink hover:bg-state-danger-soft"
+            className="ml-auto rounded-xl border-2 border-state-danger-soft bg-card px-6 py-3 font-bold text-state-danger-ink hover:bg-state-danger-soft"
           >
             Xoá
           </button>
@@ -284,4 +284,4 @@ export function DocumentForm({
 }
 
 const inputClass =
-  "w-full rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20";
+  "w-full rounded-lg border border-border bg-card px-3 py-2 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20";

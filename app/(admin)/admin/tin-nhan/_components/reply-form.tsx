@@ -35,7 +35,7 @@ export function ReplyForm({ enrollmentId }: { enrollmentId: string }) {
         rows={2}
         maxLength={2000}
         placeholder="Trả lời phụ huynh…"
-        className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+        className="w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
         onKeyDown={(e) => {
           if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) submit();
         }}

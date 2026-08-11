@@ -40,18 +40,18 @@ export default async function AssignmentTemplatesPage() {
     <div>
       <Link
         href="/assignments"
-        className="mb-3 inline-flex items-center gap-1 text-sm text-neutral-500 hover:text-neutral-700"
+        className="mb-3 inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
       >
         <ChevronLeft className="h-4 w-4" /> Quay lại bài tập
       </Link>
 
       <div className="mb-6 flex items-start justify-between gap-4">
         <div>
-          <h1 className="flex items-center gap-2 text-2xl font-bold text-gray-900">
+          <h1 className="flex items-center gap-2 text-2xl font-bold text-foreground">
             <FileStack className="h-6 w-6 text-primary" />
             Mẫu bài tập (theo khung chương trình)
           </h1>
-          <p className="mt-1 max-w-2xl text-sm text-gray-500">
+          <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
             Kho mẫu bài tập gắn khung chương trình / buổi học — KHÔNG gắn lớp.
             Từ một mẫu, sinh ra bài giao cho từng lớp (giữ truy vết về mẫu nguồn).
           </p>
@@ -65,37 +65,37 @@ export default async function AssignmentTemplatesPage() {
         </Link>
       </div>
 
-      <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
+      <div className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
         <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-gray-100">
-            <thead className="bg-gray-50">
+          <table className="min-w-full divide-y divide-border">
+            <thead className="bg-muted">
               <tr>
-                <th className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">
+                <th className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                   Tiêu đề
                 </th>
-                <th className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">
+                <th className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                   Khung CT
                 </th>
-                <th className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">
+                <th className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                   Loại
                 </th>
-                <th className="px-3 py-3 text-right text-xs font-semibold uppercase tracking-wider text-gray-500">
+                <th className="px-3 py-3 text-right text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                   Điểm
                 </th>
-                <th className="px-3 py-3 text-center text-xs font-semibold uppercase tracking-wider text-gray-500">
+                <th className="px-3 py-3 text-center text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                   Đã sinh
                 </th>
-                <th className="px-3 py-3 text-right text-xs font-semibold uppercase tracking-wider text-gray-500">
+                <th className="px-3 py-3 text-right text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                   Hành động
                 </th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-50">
+            <tbody className="divide-y divide-border">
               {templates.length === 0 ? (
                 <tr>
                   <td
                     colSpan={6}
-                    className="px-4 py-12 text-center text-sm text-gray-400"
+                    className="px-4 py-12 text-center text-sm text-muted-foreground"
                   >
                     Chưa có mẫu bài tập nào.{" "}
                     <Link
@@ -108,29 +108,29 @@ export default async function AssignmentTemplatesPage() {
                 </tr>
               ) : (
                 templates.map((t) => (
-                  <tr key={t.id} className="hover:bg-gray-50/60">
+                  <tr key={t.id} className="hover:bg-muted/60">
                     <td className="px-3 py-3">
-                      <div className="font-medium text-gray-900 line-clamp-1">
+                      <div className="font-medium text-foreground line-clamp-1">
                         {t.title}
                       </div>
                       {t.lesson && (
-                        <div className="text-xs text-gray-400">
+                        <div className="text-xs text-muted-foreground">
                           Bài {t.lesson.order}: {t.lesson.title}
                         </div>
                       )}
                     </td>
-                    <td className="px-3 py-3 text-xs text-gray-600">
+                    <td className="px-3 py-3 text-xs text-muted-foreground">
                       {t.curriculum
                         ? `${t.curriculum.name} (v${t.curriculum.version})`
                         : "—"}
                     </td>
-                    <td className="px-3 py-3 text-xs text-gray-600">
+                    <td className="px-3 py-3 text-xs text-muted-foreground">
                       {KIND_LABEL[t.kind]}
                     </td>
-                    <td className="px-3 py-3 text-right text-sm tabular-nums text-gray-700">
+                    <td className="px-3 py-3 text-right text-sm tabular-nums text-foreground">
                       {t.totalPoints}
                     </td>
-                    <td className="px-3 py-3 text-center text-sm tabular-nums text-gray-700">
+                    <td className="px-3 py-3 text-center text-sm tabular-nums text-foreground">
                       {t._count.instances}
                     </td>
                     <td className="px-3 py-3 text-right">

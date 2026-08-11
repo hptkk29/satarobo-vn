@@ -55,8 +55,8 @@ export function AddGrantForm({
 
   if (disabled) {
     return (
-      <div className="rounded-xl border border-dashed border-gray-300 bg-gray-50/50 p-6 text-center">
-        <p className="text-sm text-gray-600">
+      <div className="rounded-xl border border-dashed border-border bg-muted/50 p-6 text-center">
+        <p className="text-sm text-muted-foreground">
           {disabledReason ?? "Không thể thêm grant cho user này."}
         </p>
       </div>
@@ -101,7 +101,7 @@ export function AddGrantForm({
       <div className="space-y-2">
         <Label>Loại override *</Label>
         <div className="flex gap-2">
-          <label className="flex flex-1 cursor-pointer items-center justify-center gap-2 rounded-lg border-2 border-gray-200 p-3 text-sm transition-colors has-checked:border-state-success has-checked:bg-state-success-soft">
+          <label className="flex flex-1 cursor-pointer items-center justify-center gap-2 rounded-lg border-2 border-border p-3 text-sm transition-colors has-checked:border-state-success has-checked:bg-state-success-soft">
             <input
               type="radio"
               name="grant"
@@ -111,9 +111,9 @@ export function AddGrantForm({
             />
             <Check className="h-4 w-4 text-state-success-ink" />
             <span className="font-semibold text-state-success-ink">ALLOW</span>
-            <span className="text-xs text-gray-500">(cấp quyền)</span>
+            <span className="text-xs text-muted-foreground">(cấp quyền)</span>
           </label>
-          <label className="flex flex-1 cursor-pointer items-center justify-center gap-2 rounded-lg border-2 border-gray-200 p-3 text-sm transition-colors has-checked:border-state-danger has-checked:bg-state-danger-soft">
+          <label className="flex flex-1 cursor-pointer items-center justify-center gap-2 rounded-lg border-2 border-border p-3 text-sm transition-colors has-checked:border-state-danger has-checked:bg-state-danger-soft">
             <input
               type="radio"
               name="grant"
@@ -123,7 +123,7 @@ export function AddGrantForm({
             />
             <Ban className="h-4 w-4 text-state-danger-ink" />
             <span className="font-semibold text-state-danger-ink">DENY</span>
-            <span className="text-xs text-gray-500">(thu hồi)</span>
+            <span className="text-xs text-muted-foreground">(thu hồi)</span>
           </label>
         </div>
       </div>
@@ -137,7 +137,7 @@ export function AddGrantForm({
           rows={3}
           placeholder="Ví dụ: Cấp tạm thời cho dự án X · Thu hồi sau audit Q4..."
         />
-        <p className="text-xs text-gray-500">Lưu lại để audit trail.</p>
+        <p className="text-xs text-muted-foreground">Lưu lại để audit trail.</p>
       </div>
 
       <Button type="submit" disabled={pending}>

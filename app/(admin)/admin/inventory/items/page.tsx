@@ -21,12 +21,12 @@ const CATEGORY_INFO: Record<InventoryCategory, { label: string; color: string }>
   SENSOR: { label: "Cảm biến", color: "bg-state-info-soft text-state-info-ink" },
   MOTOR: { label: "Động cơ", color: "bg-primary-soft text-primary" },
   BATTERY: { label: "Pin", color: "bg-state-warning-soft text-state-warning-ink" },
-  MECHANICAL: { label: "Cơ khí", color: "bg-neutral-100 text-neutral-700" },
+  MECHANICAL: { label: "Cơ khí", color: "bg-muted text-foreground" },
   WIRE: { label: "Dây", color: "bg-state-warning-soft text-state-warning-ink" },
   TOOL: { label: "Dụng cụ", color: "bg-primary-soft text-primary" },
   CONSUMABLE: { label: "Vật tư", color: "bg-primary-soft text-primary" },
   ROBOSIM: { label: "Robosim", color: "bg-state-success-soft text-state-success-ink" },
-  OTHER: { label: "Khác", color: "bg-neutral-100 text-neutral-500" },
+  OTHER: { label: "Khác", color: "bg-muted text-muted-foreground" },
 };
 
 const VALID_CATEGORIES = Object.values(InventoryCategory);
@@ -112,11 +112,11 @@ export default async function InventoryItemsPage({ searchParams }: SearchParams)
     <div>
       <div className="mb-6 flex items-start justify-between gap-4">
         <div>
-          <h1 className="flex items-center gap-2 text-2xl font-bold text-gray-900">
+          <h1 className="flex items-center gap-2 text-2xl font-bold text-foreground">
             <Boxes className="h-6 w-6 text-primary" />
             Kho — Học cụ
           </h1>
-          <p className="mt-1 text-sm text-gray-500">
+          <p className="mt-1 text-sm text-muted-foreground">
             {itemsView.length > 0 ? `${itemsView.length} mặt hàng` : "Chưa có mặt hàng nào"}
           </p>
         </div>
@@ -130,28 +130,28 @@ export default async function InventoryItemsPage({ searchParams }: SearchParams)
           </Link>
           <Link
             href="/inventory/items/import"
-            className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-card px-4 py-2 text-sm font-semibold text-foreground hover:bg-muted"
           >
             <FileSpreadsheet className="h-4 w-4" />
             Import Excel
           </Link>
           <Link
             href="/inventory/movements"
-            className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-card px-4 py-2 text-sm font-semibold text-foreground hover:bg-muted"
           >
             <History className="h-4 w-4" />
             Lịch sử
           </Link>
           <Link
             href="/inventory/audit"
-            className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-card px-4 py-2 text-sm font-semibold text-foreground hover:bg-muted"
           >
             <ClipboardCheck className="h-4 w-4" />
             Kiểm kê
           </Link>
           <Link
             href="/inventory/dashboard"
-            className="inline-flex items-center gap-1.5 rounded-lg border border-primary-soft bg-white px-4 py-2 text-sm font-semibold text-primary hover:bg-primary-soft"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-primary-soft bg-card px-4 py-2 text-sm font-semibold text-primary hover:bg-primary-soft"
           >
             <LayoutDashboard className="h-4 w-4" />
             Tổng quan
@@ -167,12 +167,12 @@ export default async function InventoryItemsPage({ searchParams }: SearchParams)
           name="q"
           defaultValue={q}
           placeholder="Tìm mã hàng / tên..."
-          className="lg:col-span-2 rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+          className="lg:col-span-2 rounded-lg border border-border px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
         />
         <select
           name="category"
           defaultValue={categoryFilter ?? ""}
-          className="rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:outline-none"
+          className="rounded-lg border border-border px-3 py-2 text-sm focus:border-primary focus:outline-none"
         >
           <option value="">Mọi danh mục</option>
           {Object.entries(CATEGORY_INFO).map(([v, { label }]) => (
@@ -184,7 +184,7 @@ export default async function InventoryItemsPage({ searchParams }: SearchParams)
         <select
           name="isActive"
           defaultValue={sp.isActive ?? ""}
-          className="rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:outline-none"
+          className="rounded-lg border border-border px-3 py-2 text-sm focus:border-primary focus:outline-none"
         >
           <option value="">Đang sử dụng (mặc định)</option>
           <option value="false">Không sử dụng</option>
@@ -198,43 +198,43 @@ export default async function InventoryItemsPage({ searchParams }: SearchParams)
         </button>
       </form>
 
-      <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
+      <div className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
         <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-gray-100">
-            <thead className="bg-gray-50">
+          <table className="min-w-full divide-y divide-border">
+            <thead className="bg-muted">
               <tr>
-                <th className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">
+                <th className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                   Ảnh
                 </th>
-                <th className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">
+                <th className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                   Mã / Tên
                 </th>
-                <th className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">
+                <th className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                   Danh mục
                 </th>
-                <th className="px-3 py-3 text-center text-xs font-semibold uppercase tracking-wider text-gray-500">
+                <th className="px-3 py-3 text-center text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                   Đơn vị
                 </th>
-                <th className="px-3 py-3 text-right text-xs font-semibold uppercase tracking-wider text-gray-500">
+                <th className="px-3 py-3 text-right text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                   Tổng tồn
                 </th>
-                <th className="px-3 py-3 text-right text-xs font-semibold uppercase tracking-wider text-gray-500">
+                <th className="px-3 py-3 text-right text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                   Đã đặt
                 </th>
-                <th className="px-3 py-3 text-center text-xs font-semibold uppercase tracking-wider text-gray-500">
+                <th className="px-3 py-3 text-center text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                   Cảnh báo
                 </th>
-                <th className="px-3 py-3 text-right text-xs font-semibold uppercase tracking-wider text-gray-500">
+                <th className="px-3 py-3 text-right text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                   Hành động
                 </th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-50">
+            <tbody className="divide-y divide-border">
               {itemsView.length === 0 ? (
                 <tr>
                   <td
                     colSpan={8}
-                    className="px-4 py-12 text-center text-sm text-gray-400"
+                    className="px-4 py-12 text-center text-sm text-muted-foreground"
                   >
                     Chưa có mặt hàng nào khớp bộ lọc.{" "}
                     <Link
@@ -249,23 +249,23 @@ export default async function InventoryItemsPage({ searchParams }: SearchParams)
                 itemsView.map((item) => {
                   const catInfo = CATEGORY_INFO[item.category];
                   return (
-                    <tr key={item.id} className="hover:bg-gray-50/60">
+                    <tr key={item.id} className="hover:bg-muted/60">
                       <td className="px-3 py-3">
                         {item.imageUrl ? (
                           <img
                             src={item.imageUrl}
                             alt={item.name}
-                            className="h-10 w-10 rounded border border-gray-200 object-cover"
+                            className="h-10 w-10 rounded border border-border object-cover"
                           />
                         ) : (
-                          <div className="flex h-10 w-10 items-center justify-center rounded border border-dashed border-gray-200 text-[10px] text-gray-400">
+                          <div className="flex h-10 w-10 items-center justify-center rounded border border-dashed border-border text-[10px] text-muted-foreground">
                             no img
                           </div>
                         )}
                       </td>
                       <td className="px-3 py-3">
-                        <div className="font-medium text-gray-900">{item.name}</div>
-                        <div className="text-xs text-gray-400 tabular-nums">
+                        <div className="font-medium text-foreground">{item.name}</div>
+                        <div className="text-xs text-muted-foreground tabular-nums">
                           {item.itemCode}
                         </div>
                       </td>
@@ -276,13 +276,13 @@ export default async function InventoryItemsPage({ searchParams }: SearchParams)
                           {catInfo.label}
                         </span>
                       </td>
-                      <td className="px-3 py-3 text-center text-sm text-gray-600">
+                      <td className="px-3 py-3 text-center text-sm text-muted-foreground">
                         {item.unit}
                       </td>
-                      <td className="px-3 py-3 text-right text-sm tabular-nums font-semibold text-gray-700">
+                      <td className="px-3 py-3 text-right text-sm tabular-nums font-semibold text-foreground">
                         {item.totalStock}
                       </td>
-                      <td className="px-3 py-3 text-right text-sm tabular-nums text-gray-500">
+                      <td className="px-3 py-3 text-right text-sm tabular-nums text-muted-foreground">
                         {item.totalReserved}
                       </td>
                       <td className="px-3 py-3 text-center">
@@ -291,7 +291,7 @@ export default async function InventoryItemsPage({ searchParams }: SearchParams)
                             {item.lowStockCount} cơ sở
                           </span>
                         ) : (
-                          <span className="text-gray-300 text-xs">—</span>
+                          <span className="text-muted-foreground text-xs">—</span>
                         )}
                       </td>
                       <td className="px-3 py-3 text-right">

@@ -49,16 +49,16 @@ export default async function ConvertConflictsPage() {
 
   return (
     <div className="max-w-5xl p-6">
-      <div className="mb-6 border-b border-gray-200 pb-4">
-        <h1 className="text-2xl font-bold text-gray-900">Xung đột chuyển đổi (dedupe phụ huynh)</h1>
-        <p className="mt-1 text-sm text-gray-600">
+      <div className="mb-6 border-b border-border pb-4">
+        <h1 className="text-2xl font-bold text-foreground">Xung đột chuyển đổi (dedupe phụ huynh)</h1>
+        <p className="mt-1 text-sm text-muted-foreground">
           Email khớp một hồ sơ, SĐT khớp hồ sơ khác → convert bị khoá. Gộp hoặc đánh dấu đã xử lý để
           mở khoá.
         </p>
       </div>
 
       {conflicts.length === 0 ? (
-        <p className="rounded-xl border border-gray-200 bg-white p-6 text-sm text-gray-500">
+        <p className="rounded-xl border border-border bg-card p-6 text-sm text-muted-foreground">
           Không có xung đột nào đang mở.
         </p>
       ) : (
@@ -67,7 +67,7 @@ export default async function ConvertConflictsPage() {
             const a = userMap.get(c.parentAId)
             const b = userMap.get(c.parentBId)
             return (
-              <li key={c.id} className="rounded-xl border border-gray-200 bg-white p-4">
+              <li key={c.id} className="rounded-xl border border-border bg-card p-4">
                 <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
                   <span className="rounded-full bg-state-danger-soft px-2.5 py-0.5 text-xs font-semibold text-state-danger-ink">
                     OPEN
@@ -87,7 +87,7 @@ export default async function ConvertConflictsPage() {
                   conflictId={c.id}
                   parentAName={a?.name ?? a?.email ?? c.parentAId}
                 />
-                <p className="mt-2 text-xs text-gray-400">
+                <p className="mt-2 text-xs text-muted-foreground">
                   Tạo lúc {c.createdAt.toLocaleString('vi-VN')}
                 </p>
               </li>
@@ -117,19 +117,19 @@ function ParentCard({
   id: string
 }) {
   return (
-    <div className="rounded-lg border border-gray-200 bg-gray-50 p-3">
-      <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">{title}</p>
+    <div className="rounded-lg border border-border bg-muted p-3">
+      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{title}</p>
       {user ? (
-        <div className="mt-1 text-sm text-gray-800">
+        <div className="mt-1 text-sm text-foreground">
           <p className="font-medium">{user.name || '(chưa có tên)'}</p>
-          <p className="text-gray-600">{user.email ?? "(chưa có email)"}</p>
-          <p className="mt-1 text-xs text-gray-500">
+          <p className="text-muted-foreground">{user.email ?? "(chưa có email)"}</p>
+          <p className="mt-1 text-xs text-muted-foreground">
             Vai trò: {roleLabel(user.role)} · Trạng thái: {user.accountStatus} ·{' '}
             {user._count.children} học viên
           </p>
         </div>
       ) : (
-        <p className="mt-1 text-sm text-gray-400">Không tìm thấy ({id})</p>
+        <p className="mt-1 text-sm text-muted-foreground">Không tìm thấy ({id})</p>
       )}
     </div>
   )

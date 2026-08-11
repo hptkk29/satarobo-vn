@@ -40,11 +40,11 @@ export default async function KitsAdminPage() {
     <div>
       <div className="mb-6 flex items-center justify-between">
         <div>
-          <h1 className="flex items-center gap-2 text-3xl font-black text-neutral-900">
+          <h1 className="flex items-center gap-2 text-3xl font-black text-foreground">
             <Package className="h-7 w-7 text-primary" />
             Học Cụ (ZMRobo Kits)
           </h1>
-          <p className="mt-1 text-neutral-600">
+          <p className="mt-1 text-muted-foreground">
             Quản lý catalog kit · {publishedCount}/{kits.length} published
             {unavailableCount > 0 && (
               <span className="ml-2 text-state-danger-ink">· {unavailableCount} hết hàng</span>
@@ -60,22 +60,22 @@ export default async function KitsAdminPage() {
         </Link>
       </div>
 
-      <div className="overflow-hidden rounded-xl border border-neutral-200 bg-white">
+      <div className="overflow-hidden rounded-xl border border-border bg-card">
         <table className="w-full">
-          <thead className="border-b border-neutral-200 bg-neutral-50 text-left">
+          <thead className="border-b border-border bg-muted text-left">
             <tr>
-              <th className="p-4 text-xs font-bold uppercase tracking-wider text-neutral-700">Sản phẩm</th>
-              <th className="p-4 text-xs font-bold uppercase tracking-wider text-neutral-700">Brand / Series</th>
-              <th className="p-4 text-center text-xs font-bold uppercase tracking-wider text-neutral-700">Thư viện ảnh</th>
-              <th className="p-4 text-xs font-bold uppercase tracking-wider text-neutral-700">Giá</th>
-              <th className="p-4 text-center text-xs font-bold uppercase tracking-wider text-neutral-700">Trạng thái</th>
-              <th className="p-4 text-right text-xs font-bold uppercase tracking-wider text-neutral-700">Thao tác</th>
+              <th className="p-4 text-xs font-bold uppercase tracking-wider text-foreground">Sản phẩm</th>
+              <th className="p-4 text-xs font-bold uppercase tracking-wider text-foreground">Brand / Series</th>
+              <th className="p-4 text-center text-xs font-bold uppercase tracking-wider text-foreground">Thư viện ảnh</th>
+              <th className="p-4 text-xs font-bold uppercase tracking-wider text-foreground">Giá</th>
+              <th className="p-4 text-center text-xs font-bold uppercase tracking-wider text-foreground">Trạng thái</th>
+              <th className="p-4 text-right text-xs font-bold uppercase tracking-wider text-foreground">Thao tác</th>
             </tr>
           </thead>
           <tbody>
             {kits.length === 0 ? (
               <tr>
-                <td colSpan={6} className="p-12 text-center text-neutral-500">
+                <td colSpan={6} className="p-12 text-center text-muted-foreground">
                   Chưa có kit nào.{" "}
                   <Link href="/kits/new" className="text-primary hover:underline">
                     Thêm kit đầu tiên →

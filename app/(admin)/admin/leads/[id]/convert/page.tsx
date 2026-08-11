@@ -114,14 +114,14 @@ export default async function ConvertV2Page({ params }: Props) {
     <div className="max-w-4xl p-6">
       <Link
         href={`/leads/${lead.id}`}
-        className="mb-4 inline-flex items-center gap-1 text-sm text-gray-500 hover:text-gray-700"
+        className="mb-4 inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
       >
         <ChevronLeft className="h-4 w-4" /> Quay lại lead
       </Link>
 
-      <div className="mb-6 border-b border-gray-200 pb-4">
-        <h1 className="text-2xl font-bold text-gray-900">Chuyển đổi</h1>
-        <p className="mt-1 text-sm text-gray-600">
+      <div className="mb-6 border-b border-border pb-4">
+        <h1 className="text-2xl font-bold text-foreground">Chuyển đổi</h1>
+        <p className="mt-1 text-sm text-muted-foreground">
           {lead.parentName} · {lead.phone}
           {lead.email ? ` · ${lead.email}` : ''} · Trạng thái:{' '}
           <span className="font-medium">{LEAD_STATUS_LABEL[lead.status] ?? lead.status}</span>

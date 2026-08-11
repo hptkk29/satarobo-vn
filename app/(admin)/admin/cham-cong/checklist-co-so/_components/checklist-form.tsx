@@ -54,13 +54,13 @@ export function CenterChecklistForm({
       </div>
 
       <label className="block">
-        <span className="mb-1 block text-xs font-medium text-gray-500">Ghi chú / bất thường</span>
+        <span className="mb-1 block text-xs font-medium text-muted-foreground">Ghi chú / bất thường</span>
         <textarea
           value={note}
           onChange={(e) => setNote(e.target.value)}
           disabled={!canEdit || pending}
           rows={2}
-          className="w-full resize-y rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary focus:outline-none disabled:bg-gray-50"
+          className="w-full resize-y rounded-lg border border-border px-3 py-2 text-sm focus:border-primary focus:outline-none disabled:bg-muted"
         />
       </label>
 
@@ -75,7 +75,7 @@ export function CenterChecklistForm({
             <Save className="h-4 w-4" /> {pending ? "Đang lưu…" : "Lưu checklist"}
           </button>
         )}
-        <span className="text-sm text-gray-500">{doneCount}/{ALL_CHECKLIST_KEYS.length} mục hoàn tất</span>
+        <span className="text-sm text-muted-foreground">{doneCount}/{ALL_CHECKLIST_KEYS.length} mục hoàn tất</span>
       </div>
     </div>
   );
@@ -91,8 +91,8 @@ function Section({
   disabled: boolean;
 }) {
   return (
-    <section className="rounded-xl border border-gray-200 bg-white p-4">
-      <h2 className="mb-2 text-sm font-bold uppercase tracking-wider text-gray-500">{title}</h2>
+    <section className="rounded-xl border border-border bg-card p-4">
+      <h2 className="mb-2 text-sm font-bold uppercase tracking-wider text-muted-foreground">{title}</h2>
       <ul className="space-y-1.5">
         {fields.map((f) => {
           const on = flags[f.key];
@@ -102,10 +102,10 @@ function Section({
                 type="button"
                 onClick={() => toggle(f.key as ChecklistKey)}
                 disabled={disabled}
-                className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-sm hover:bg-gray-50 disabled:opacity-60"
+                className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-sm hover:bg-muted disabled:opacity-60"
               >
-                {on ? <CheckCircle2 className="h-5 w-5 shrink-0 text-state-success-ink" /> : <Circle className="h-5 w-5 shrink-0 text-gray-300" />}
-                <span className={on ? "text-gray-800" : "text-gray-600"}>{f.label}</span>
+                {on ? <CheckCircle2 className="h-5 w-5 shrink-0 text-state-success-ink" /> : <Circle className="h-5 w-5 shrink-0 text-muted-foreground" />}
+                <span className={on ? "text-foreground" : "text-muted-foreground"}>{f.label}</span>
               </button>
             </li>
           );

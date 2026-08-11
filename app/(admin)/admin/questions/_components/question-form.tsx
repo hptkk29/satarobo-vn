@@ -252,8 +252,8 @@ export function QuestionForm({
       )}
 
       {/* Section 1: Identity */}
-      <section className="rounded-xl border border-neutral-200 bg-white p-6 space-y-4">
-        <h2 className="text-sm font-bold uppercase tracking-wider text-neutral-700">
+      <section className="rounded-xl border border-border bg-card p-6 space-y-4">
+        <h2 className="text-sm font-bold uppercase tracking-wider text-foreground">
           Thông tin câu hỏi
         </h2>
 
@@ -395,9 +395,9 @@ export function QuestionForm({
               checked={isPublic}
               onChange={(e) => setIsPublic(e.target.checked)}
               disabled={pending}
-              className="h-4 w-4 rounded border-neutral-300"
+              className="h-4 w-4 rounded border-border"
             />
-            <span className="text-sm font-medium text-neutral-700">
+            <span className="text-sm font-medium text-foreground">
               Public (chia sẻ với GV khác)
             </span>
           </label>
@@ -414,12 +414,12 @@ export function QuestionForm({
 
       {/* Section 2: Choices (MC/TF) */}
       {showChoices && (
-        <section className="rounded-xl border border-neutral-200 bg-white p-6 space-y-3">
+        <section className="rounded-xl border border-border bg-card p-6 space-y-3">
           <div>
-            <h2 className="text-sm font-bold uppercase tracking-wider text-neutral-700">
+            <h2 className="text-sm font-bold uppercase tracking-wider text-foreground">
               Các lựa chọn
             </h2>
-            <p className="mt-0.5 text-xs text-neutral-500">
+            <p className="mt-0.5 text-xs text-muted-foreground">
               Tick đáp án đúng.
               {type === "MULTIPLE_CHOICE"
                 ? " Có thể chọn nhiều (đa đáp án OK)."
@@ -430,10 +430,10 @@ export function QuestionForm({
           {choices.map((c, idx) => (
             <div
               key={idx}
-              className="rounded-lg border border-neutral-200 bg-neutral-50 p-3"
+              className="rounded-lg border border-border bg-muted p-3"
             >
               <div className="flex items-start gap-2">
-                <span className="w-8 pt-2 text-center font-bold text-neutral-500">
+                <span className="w-8 pt-2 text-center font-bold text-muted-foreground">
                   {String.fromCharCode(64 + c.order)}.
                 </span>
                 <textarea
@@ -446,7 +446,7 @@ export function QuestionForm({
                       ? "(cố định)"
                       : `Nội dung lựa chọn ${String.fromCharCode(64 + c.order)}`
                   }
-                  className="flex-1 resize-y rounded-md border border-neutral-200 bg-white px-2 py-1.5 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 disabled:bg-neutral-100"
+                  className="flex-1 resize-y rounded-md border border-border bg-card px-2 py-1.5 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 disabled:bg-muted"
                 />
                 <label className="flex items-center gap-1 self-center text-sm font-medium">
                   <input
@@ -454,9 +454,9 @@ export function QuestionForm({
                     checked={c.isCorrect}
                     onChange={(e) => toggleChoiceCorrect(idx, e.target.checked)}
                     disabled={pending}
-                    className="h-4 w-4 rounded border-neutral-300"
+                    className="h-4 w-4 rounded border-border"
                   />
-                  <span className="text-neutral-700">Đúng</span>
+                  <span className="text-foreground">Đúng</span>
                 </label>
                 {type === "MULTIPLE_CHOICE" && choices.length > 2 && (
                   <button
@@ -491,7 +491,7 @@ export function QuestionForm({
               type="button"
               onClick={addChoice}
               disabled={pending}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-neutral-300 bg-white px-3 py-1.5 text-sm font-semibold text-neutral-700 hover:bg-neutral-50"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-card px-3 py-1.5 text-sm font-semibold text-foreground hover:bg-muted"
             >
               <Plus className="h-4 w-4" />
               Thêm lựa chọn
@@ -502,9 +502,9 @@ export function QuestionForm({
 
       {/* Section 2-alt: correctAnswer */}
       {showCorrectAnswer && (
-        <section className="rounded-xl border border-neutral-200 bg-white p-6 space-y-3">
+        <section className="rounded-xl border border-border bg-card p-6 space-y-3">
           <div>
-            <h2 className="text-sm font-bold uppercase tracking-wider text-neutral-700">
+            <h2 className="text-sm font-bold uppercase tracking-wider text-foreground">
               {type === "SHORT_ANSWER"
                 ? "Đáp án mong đợi"
                 : type === "CODE"
@@ -514,7 +514,7 @@ export function QuestionForm({
                 <span className="ml-1 text-state-danger-ink">*</span>
               )}
             </h2>
-            <p className="mt-0.5 text-xs text-neutral-500">
+            <p className="mt-0.5 text-xs text-muted-foreground">
               {type === "SHORT_ANSWER"
                 ? "Hệ thống sẽ so khớp chuỗi để chấm tự động."
                 : type === "CODE"
@@ -537,7 +537,7 @@ export function QuestionForm({
             }
             className={
               type === "CODE"
-                ? "w-full resize-y rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm font-mono outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
+                ? "w-full resize-y rounded-lg border border-border bg-card px-3 py-2 text-sm font-mono outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
                 : `${inputClass} resize-y`
             }
           />
@@ -545,8 +545,8 @@ export function QuestionForm({
       )}
 
       {/* Section 3: Explanation + notes */}
-      <section className="rounded-xl border border-neutral-200 bg-white p-6 space-y-4">
-        <h2 className="text-sm font-bold uppercase tracking-wider text-neutral-700">
+      <section className="rounded-xl border border-border bg-card p-6 space-y-4">
+        <h2 className="text-sm font-bold uppercase tracking-wider text-foreground">
           Giải thích & Ghi chú
         </h2>
         <Field label="Giải thích đáp án (hiển thị sau khi nộp bài)">
@@ -571,7 +571,7 @@ export function QuestionForm({
         </Field>
       </section>
 
-      <div className="flex flex-wrap gap-3 border-t border-neutral-200 pt-5">
+      <div className="flex flex-wrap gap-3 border-t border-border pt-5">
         <button
           type="submit"
           disabled={pending}
@@ -583,7 +583,7 @@ export function QuestionForm({
           type="button"
           onClick={() => router.push("/questions")}
           disabled={pending}
-          className="rounded-xl border-2 border-neutral-200 bg-white px-6 py-3 font-bold text-neutral-700 hover:bg-neutral-50"
+          className="rounded-xl border-2 border-border bg-card px-6 py-3 font-bold text-foreground hover:bg-muted"
         >
           Huỷ
         </button>
@@ -592,7 +592,7 @@ export function QuestionForm({
             type="button"
             onClick={handleDelete}
             disabled={pending}
-            className="ml-auto rounded-xl border-2 border-state-danger-soft bg-white px-6 py-3 font-bold text-state-danger-ink hover:bg-state-danger-soft"
+            className="ml-auto rounded-xl border-2 border-state-danger-soft bg-card px-6 py-3 font-bold text-state-danger-ink hover:bg-state-danger-soft"
           >
             Xoá
           </button>
@@ -603,7 +603,7 @@ export function QuestionForm({
 }
 
 const inputClass =
-  "w-full rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20";
+  "w-full rounded-lg border border-border bg-card px-3 py-2 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20";
 
 function Field({
   label,
@@ -616,7 +616,7 @@ function Field({
 }) {
   return (
     <label className="block">
-      <span className="mb-1 block text-sm font-semibold text-neutral-700">
+      <span className="mb-1 block text-sm font-semibold text-foreground">
         {label}
         {required && <span className="ml-1 text-state-danger-ink">*</span>}
       </span>
@@ -626,5 +626,5 @@ function Field({
 }
 
 function Hint({ children }: { children: React.ReactNode }) {
-  return <span className="mt-1 block text-xs text-neutral-500">{children}</span>;
+  return <span className="mt-1 block text-xs text-muted-foreground">{children}</span>;
 }

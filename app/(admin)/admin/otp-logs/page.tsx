@@ -110,9 +110,9 @@ export default async function OtpLogsPage({ searchParams }: Props) {
   }
 
   const stat = (label: string, value: string, warn = false) => (
-    <div className={`rounded-lg border px-4 py-2 ${warn ? "border-state-danger bg-state-danger-soft" : "border-gray-200 bg-white"}`}>
-      <div className="text-xs text-gray-500">{label}</div>
-      <div className={`text-lg font-bold ${warn ? "text-state-danger-ink" : "text-gray-900"}`}>{value}</div>
+    <div className={`rounded-lg border px-4 py-2 ${warn ? "border-state-danger bg-state-danger-soft" : "border-border bg-card"}`}>
+      <div className="text-xs text-muted-foreground">{label}</div>
+      <div className={`text-lg font-bold ${warn ? "text-state-danger-ink" : "text-foreground"}`}>{value}</div>
     </div>
   );
 
@@ -120,7 +120,7 @@ export default async function OtpLogsPage({ searchParams }: Props) {
     <div className="p-6 space-y-4">
       <div>
         <h1 className="text-2xl font-bold">OTP Logs</h1>
-        <p className="text-sm text-gray-600 mt-1">
+        <p className="text-sm text-muted-foreground mt-1">
           Tra cứu &quot;phụ huynh báo không nhận được mã&quot; — mỗi yêu cầu OTP kèm các lần gửi
           (Zalo ZNS / email dự phòng).
         </p>
@@ -133,9 +133,9 @@ export default async function OtpLogsPage({ searchParams }: Props) {
         {stat("ZNS lỗi người nhận hôm nay", String(znsUserErrToday), znsUserErrToday > 30)}
       </div>
 
-      <form className="flex flex-wrap gap-2 items-end p-3 bg-gray-50 rounded">
+      <form className="flex flex-wrap gap-2 items-end p-3 bg-muted rounded">
         <div>
-          <label className="block text-xs text-gray-600 mb-1">Tìm theo SĐT/email</label>
+          <label className="block text-xs text-muted-foreground mb-1">Tìm theo SĐT/email</label>
           <input
             name="q"
             defaultValue={q}
@@ -144,7 +144,7 @@ export default async function OtpLogsPage({ searchParams }: Props) {
           />
         </div>
         <div>
-          <label className="block text-xs text-gray-600 mb-1">Mục đích</label>
+          <label className="block text-xs text-muted-foreground mb-1">Mục đích</label>
           <select name="purpose" defaultValue={purpose ?? ""} className="px-3 py-1.5 border rounded text-sm">
             <option value="">Tất cả</option>
             {PURPOSES.map((p) => (
@@ -159,9 +159,9 @@ export default async function OtpLogsPage({ searchParams }: Props) {
         </button>
       </form>
 
-      <div className="overflow-x-auto rounded-lg border border-gray-200 bg-white">
+      <div className="overflow-x-auto rounded-lg border border-border bg-card">
         <table className="w-full text-sm">
-          <thead className="bg-gray-50 text-left text-xs uppercase tracking-wider text-gray-500">
+          <thead className="bg-muted text-left text-xs uppercase tracking-wider text-muted-foreground">
             <tr>
               <th className="px-4 py-3">Lúc</th>
               <th className="px-4 py-3">Người nhận</th>
@@ -170,24 +170,24 @@ export default async function OtpLogsPage({ searchParams }: Props) {
               <th className="px-4 py-3">Trạng thái mã</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-gray-100">
+          <tbody className="divide-y divide-border">
             {rows.length === 0 && (
               <tr>
-                <td colSpan={5} className="px-4 py-8 text-center text-gray-400">
+                <td colSpan={5} className="px-4 py-8 text-center text-muted-foreground">
                   Không có yêu cầu OTP nào khớp bộ lọc.
                 </td>
               </tr>
             )}
             {rows.map((r) => (
-              <tr key={r.id} className="align-top hover:bg-gray-50/60">
-                <td className="px-4 py-3 whitespace-nowrap text-gray-500">
+              <tr key={r.id} className="align-top hover:bg-muted/60">
+                <td className="px-4 py-3 whitespace-nowrap text-muted-foreground">
                   {r.createdAt.toLocaleString("vi-VN", { hour12: false })}
                 </td>
                 <td className="px-4 py-3 font-medium">{maskTarget(r.target, canViewPii)}</td>
                 <td className="px-4 py-3">{PURPOSE_LABEL[r.purpose] ?? r.purpose}</td>
                 <td className="px-4 py-3">
                   {r.deliveries.length === 0 && (
-                    <span className="text-gray-400">— chưa gửi được lần nào</span>
+                    <span className="text-muted-foreground">— chưa gửi được lần nào</span>
                   )}
                   <ul className="space-y-0.5">
                     {r.deliveries.map((d) => (
@@ -204,7 +204,7 @@ export default async function OtpLogsPage({ searchParams }: Props) {
                     ))}
                   </ul>
                 </td>
-                <td className="px-4 py-3 whitespace-nowrap text-xs text-gray-600">
+                <td className="px-4 py-3 whitespace-nowrap text-xs text-muted-foreground">
                   {r.consumedAt
                     ? `✅ đã dùng ${r.consumedAt.toLocaleTimeString("vi-VN", { hour12: false })}`
                     : r.expiresAt.getTime() < Date.now()
@@ -224,7 +224,7 @@ export default async function OtpLogsPage({ searchParams }: Props) {
               ← Trước
             </a>
           )}
-          <span className="text-gray-500">
+          <span className="text-muted-foreground">
             Trang {page}/{totalPages} · {totalCount} yêu cầu
           </span>
           {page < totalPages && (

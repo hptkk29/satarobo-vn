@@ -56,27 +56,27 @@ export function GroupEnrollPanel({
   if (members.length === 0 || classes.length === 0) return null;
 
   return (
-    <section className="mb-6 rounded-xl border border-gray-200 bg-white p-5">
-      <h2 className="mb-3 flex items-center gap-2 text-lg font-bold text-gray-900">
+    <section className="mb-6 rounded-xl border border-border bg-card p-5">
+      <h2 className="mb-3 flex items-center gap-2 text-lg font-bold text-foreground">
         <GraduationCap className="h-5 w-5 text-primary" /> Gán cả nhóm vào lớp
       </h2>
       <label className="mb-3 block text-sm">
-        <span className="mb-1 block text-xs text-gray-500">Lớp của nhóm (chọn khoá để cả nhóm vào)</span>
-        <select value={classId} onChange={(e) => setClassId(e.target.value)} className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm">
+        <span className="mb-1 block text-xs text-muted-foreground">Lớp của nhóm (chọn khoá để cả nhóm vào)</span>
+        <select value={classId} onChange={(e) => setClassId(e.target.value)} className="w-full rounded-lg border border-border px-3 py-2 text-sm">
           {classes.map((c) => (
             <option key={c.id} value={c.id}>{c.name}</option>
           ))}
         </select>
       </label>
 
-      <p className="mb-1 text-xs text-gray-500">Tick bỏ HV không vào lớp này:</p>
+      <p className="mb-1 text-xs text-muted-foreground">Tick bỏ HV không vào lớp này:</p>
       <ul className="mb-3 grid gap-1 sm:grid-cols-2">
         {members.map((m) => (
           <li key={m.id}>
-            <label className="flex items-center gap-2 rounded-lg bg-gray-50 px-3 py-1.5 text-sm">
+            <label className="flex items-center gap-2 rounded-lg bg-muted px-3 py-1.5 text-sm">
               <input type="checkbox" checked={selected.has(m.id)} onChange={() => toggle(m.id)} />
               {m.name}
-              {m.studentCode ? <span className="text-xs text-gray-400">({m.studentCode})</span> : null}
+              {m.studentCode ? <span className="text-xs text-muted-foreground">({m.studentCode})</span> : null}
             </label>
           </li>
         ))}

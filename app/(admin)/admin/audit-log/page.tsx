@@ -44,8 +44,8 @@ export default async function AuditLogPage() {
           <ScrollText className="h-5 w-5 text-primary" />
         </div>
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Audit Log</h1>
-          <p className="mt-1 text-sm text-gray-500">
+          <h1 className="text-2xl font-bold text-foreground">Audit Log</h1>
+          <p className="mt-1 text-sm text-muted-foreground">
             Nhật ký thay đổi hợp nhất toàn hệ thống. Quản lý cơ sở chỉ thấy log
             cơ sở mình; PII (SĐT/email) che mặc định, xem đầy đủ có kiểm soát.
           </p>
@@ -64,7 +64,7 @@ export default async function AuditLogPage() {
 
       <Suspense
         fallback={
-          <div className="h-40 animate-pulse rounded-xl bg-gray-100" />
+          <div className="h-40 animate-pulse rounded-xl bg-muted" />
         }
       >
         <AuditLogClient

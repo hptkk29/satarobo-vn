@@ -51,7 +51,7 @@ export default async function CommissionPage() {
 
   return (
     <div>
-      <h1 className="mb-6 flex items-center gap-2 text-3xl font-black text-neutral-900">
+      <h1 className="mb-6 flex items-center gap-2 text-3xl font-black text-foreground">
         <Coins className="h-7 w-7 text-primary" />
         Bảng hoa hồng theo kỳ
       </h1>
@@ -69,7 +69,7 @@ export default async function CommissionPage() {
           <TableBody>
             {statements.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={5} className="text-center text-sm text-neutral-500">
+                <TableCell colSpan={5} className="text-center text-sm text-muted-foreground">
                   Chưa có bảng hoa hồng nào.
                 </TableCell>
               </TableRow>

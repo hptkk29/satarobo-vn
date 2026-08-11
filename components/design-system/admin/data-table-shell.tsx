@@ -17,20 +17,20 @@ export function DataTableShell({ header, footer, children, className }: Props) {
   return (
     <div
       className={cn(
-        "bg-white overflow-hidden",
+        "bg-card overflow-hidden",
         tokens.radius.card,
         tokens.borders.subtle,
         className,
       )}
     >
       {header && (
-        <div className="border-b border-neutral-200 px-4 py-3 md:px-6 md:py-4 bg-neutral-50">
+        <div className="border-b border-border px-4 py-3 md:px-6 md:py-4 bg-muted">
           {header}
         </div>
       )}
       <div className="overflow-x-auto">{children}</div>
       {footer && (
-        <div className="border-t border-neutral-200 px-4 py-3 md:px-6 md:py-4 bg-neutral-50">
+        <div className="border-t border-border px-4 py-3 md:px-6 md:py-4 bg-muted">
           {footer}
         </div>
       )}

@@ -17,22 +17,22 @@ export function LeadPaymentCard({
   const { paid, total, remaining, hasOrder, scholarshipFull, eligible } = summary;
 
   return (
-    <div className="rounded-xl border border-gray-200 bg-white p-4">
-      <h2 className="text-sm font-semibold text-gray-700">Thanh toán</h2>
+    <div className="rounded-xl border border-border bg-card p-4">
+      <h2 className="text-sm font-semibold text-foreground">Thanh toán</h2>
 
       <div className="mt-2 grid grid-cols-3 gap-3 text-sm">
         <div>
-          <div className="text-gray-500">Đã nộp</div>
+          <div className="text-muted-foreground">Đã nộp</div>
           <div className="font-semibold text-state-success-ink">{fmt(paid)}</div>
         </div>
         <div>
-          <div className="text-gray-500">Tổng phải thu</div>
-          <div className="font-semibold text-gray-900">
-            {hasOrder ? fmt(total) : <span className="text-gray-400">Chưa có đơn hàng</span>}
+          <div className="text-muted-foreground">Tổng phải thu</div>
+          <div className="font-semibold text-foreground">
+            {hasOrder ? fmt(total) : <span className="text-muted-foreground">Chưa có đơn hàng</span>}
           </div>
         </div>
         <div>
-          <div className="text-gray-500">Còn thiếu</div>
+          <div className="text-muted-foreground">Còn thiếu</div>
           <div className="font-semibold text-state-warning-ink">{hasOrder ? fmt(remaining) : "—"}</div>
         </div>
       </div>
@@ -51,7 +51,7 @@ export function LeadPaymentCard({
 
       <Link
         href={`/orders/new?leadId=${leadId}`}
-        className="mt-3 inline-flex items-center gap-1 rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
+        className="mt-3 inline-flex items-center gap-1 rounded-lg border border-border bg-card px-3 py-1.5 text-sm font-medium text-foreground hover:bg-muted"
       >
         + Tạo đơn hàng cho lead này
       </Link>

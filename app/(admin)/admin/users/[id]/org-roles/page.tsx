@@ -57,17 +57,17 @@ export default async function UserOrgRolesPage({ params }: Props) {
     <div>
       <Link
         href={`/users/${user.id}/edit`}
-        className="mb-4 inline-flex items-center gap-1 text-sm font-semibold text-gray-500 hover:text-gray-800"
+        className="mb-4 inline-flex items-center gap-1 text-sm font-semibold text-muted-foreground hover:text-foreground"
       >
         <ChevronLeft className="h-4 w-4" />
         Về hồ sơ tài khoản
       </Link>
       <div className="mb-6">
-        <h1 className="flex items-center gap-2 text-3xl font-black text-neutral-900">
+        <h1 className="flex items-center gap-2 text-3xl font-black text-foreground">
           <KeyRound className="h-7 w-7 text-primary" />
           Vai trò theo đơn vị
         </h1>
-        <p className="mt-1 text-sm text-neutral-500">
+        <p className="mt-1 text-sm text-muted-foreground">
           {user.name ?? user.email} — gán vai trò (RoleDef) theo từng OrgUnit. Mọi
           thay đổi yêu cầu lý do và được ghi nhật ký.
         </p>

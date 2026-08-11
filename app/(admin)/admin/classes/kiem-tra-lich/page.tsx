@@ -26,7 +26,7 @@ const SEVERITY_LABEL: Record<string, { text: string; cls: string }> = {
   ANCHOR_WRONG: { text: "Neo sai ngày khai giảng", cls: "bg-state-danger-soft text-state-danger-ink" },
   NO_SESSIONS: { text: "Chưa có buổi nào", cls: "bg-state-danger-soft text-state-danger-ink" },
   DRIFT: { text: "Lệch giữa khoá", cls: "bg-state-warning-soft text-state-warning-ink" },
-  NO_SCHEDULE: { text: "Thiếu lịch/khai giảng", cls: "bg-gray-200 text-gray-700" },
+  NO_SCHEDULE: { text: "Thiếu lịch/khai giảng", cls: "bg-muted text-foreground" },
 };
 
 const fmt = (d: Date | null) => (d ? `${vnYmd(d)} ${vnHm(d)}` : "—");
@@ -48,15 +48,15 @@ export default async function ClassScheduleAuditPage() {
       <div className="mb-6">
         <Link
           href="/classes"
-          className="mb-2 inline-flex items-center gap-1 text-sm text-gray-500 hover:text-gray-700"
+          className="mb-2 inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
         >
           <ArrowLeft className="h-4 w-4" /> Lớp học
         </Link>
-        <h1 className="flex items-center gap-2 text-2xl font-bold text-gray-900">
+        <h1 className="flex items-center gap-2 text-2xl font-bold text-foreground">
           <CalendarCheck2 className="h-6 w-6 text-primary" />
           Kiểm tra lịch buổi học
         </h1>
-        <p className="mt-1 text-sm text-gray-500">
+        <p className="mt-1 text-sm text-muted-foreground">
           Đối chiếu dãy buổi đã sinh với <strong>ngày khai giảng + lịch học</strong> của từng lớp
           (đã trừ ngày nghỉ). Chỉ liệt kê lớp có vấn đề — danh sách rỗng nghĩa là mọi lớp đều khớp.
         </p>
@@ -67,9 +67,9 @@ export default async function ClassScheduleAuditPage() {
           Mọi lớp đang khớp lịch — không có buổi nào lệch ngày khai giảng.
         </div>
       ) : (
-        <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white">
+        <div className="overflow-x-auto rounded-xl border border-border bg-card">
           <table className="w-full text-sm">
-            <thead className="border-b border-gray-200 bg-gray-50 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">
+            <thead className="border-b border-border bg-muted text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
               <tr>
                 <th className="px-4 py-3">Lớp</th>
                 <th className="px-4 py-3">Vấn đề</th>
@@ -80,11 +80,11 @@ export default async function ClassScheduleAuditPage() {
                 <th className="px-4 py-3 text-right">Xử lý</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-100">
+            <tbody className="divide-y divide-border">
               {rows.map((r) => {
                 const sev = SEVERITY_LABEL[r.severity] ?? {
                   text: r.severity,
-                  cls: "bg-gray-100 text-gray-700",
+                  cls: "bg-muted text-foreground",
                 };
                 return (
                   <tr key={r.classId} className="align-top">
@@ -95,7 +95,7 @@ export default async function ClassScheduleAuditPage() {
                       >
                         {r.className}
                       </Link>
-                      <p className="text-xs text-gray-500">
+                      <p className="text-xs text-muted-foreground">
                         {r.classStatus} · {r.sessionCount} buổi
                       </p>
                     </td>
@@ -105,16 +105,16 @@ export default async function ClassScheduleAuditPage() {
                       >
                         {sev.text}
                       </span>
-                      {r.message && <p className="mt-1 max-w-md text-xs text-gray-600">{r.message}</p>}
+                      {r.message && <p className="mt-1 max-w-md text-xs text-muted-foreground">{r.message}</p>}
                     </td>
-                    <td className="px-4 py-3 tabular-nums text-gray-700">
+                    <td className="px-4 py-3 tabular-nums text-foreground">
                       {r.startDate ? vnYmd(r.startDate) : "—"}
                     </td>
-                    <td className="px-4 py-3 tabular-nums text-gray-700">{fmt(r.actualFirst)}</td>
-                    <td className="px-4 py-3 tabular-nums font-semibold text-gray-900">
+                    <td className="px-4 py-3 tabular-nums text-foreground">{fmt(r.actualFirst)}</td>
+                    <td className="px-4 py-3 tabular-nums font-semibold text-foreground">
                       {fmt(r.expectedFirst)}
                     </td>
-                    <td className="px-4 py-3 text-right tabular-nums text-gray-700">
+                    <td className="px-4 py-3 text-right tabular-nums text-foreground">
                       {r.wrongDateCount}
                     </td>
                     <td className="px-4 py-3 text-right">
@@ -128,7 +128,7 @@ export default async function ClassScheduleAuditPage() {
         </div>
       )}
 
-      <p className="mt-4 text-xs text-gray-500">
+      <p className="mt-4 text-xs text-muted-foreground">
         &quot;Xếp lại&quot; neo lại cả dãy buổi từ ngày khai giảng theo lịch hiện tại. Chỉ đổi ngày —
         không tạo, không xoá buổi; buổi đã điểm danh / có nhận xét / đã giao bài / có ảnh / đã hoàn
         tất giữ nguyên ngày và chiếm chỗ ngày đó.

@@ -10,9 +10,9 @@ export function WeeklySchedule({ slots }: { slots: TeacherClassSlot[] }) {
   const { days, conflicts } = buildWeeklySchedule(slots);
 
   return (
-    <section className="rounded-xl border border-gray-200 bg-white p-5">
+    <section className="rounded-xl border border-border bg-card p-5">
       <div className="mb-4 flex items-center justify-between gap-2">
-        <h2 className="text-sm font-bold uppercase tracking-wider text-gray-500">
+        <h2 className="text-sm font-bold uppercase tracking-wider text-muted-foreground">
           Lịch dạy trong tuần
         </h2>
         {conflicts.length > 0 && (
@@ -24,13 +24,13 @@ export function WeeklySchedule({ slots }: { slots: TeacherClassSlot[] }) {
 
       <div className="grid grid-cols-1 gap-2 sm:grid-cols-7">
         {days.map((entries, d) => (
-          <div key={d} className="rounded-lg bg-gray-50 p-2">
-            <p className="mb-1.5 text-center text-xs font-bold text-gray-500">
+          <div key={d} className="rounded-lg bg-muted p-2">
+            <p className="mb-1.5 text-center text-xs font-bold text-muted-foreground">
               {WEEKDAY_LABELS[d]}
             </p>
             <div className="space-y-1.5">
               {entries.length === 0 ? (
-                <p className="text-center text-[11px] text-gray-300">—</p>
+                <p className="text-center text-[11px] text-muted-foreground">—</p>
               ) : (
                 entries.map((e, i) => (
                   <div

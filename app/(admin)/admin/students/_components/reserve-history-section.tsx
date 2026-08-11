@@ -31,11 +31,11 @@ export async function ReserveHistorySection({
 
   if (reserves.length === 0) {
     return (
-      <section className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-        <h3 className="text-sm font-bold uppercase tracking-wider text-gray-500">
+      <section className="rounded-xl border border-border bg-card p-5 shadow-sm">
+        <h3 className="text-sm font-bold uppercase tracking-wider text-muted-foreground">
           Lịch sử bảo lưu
         </h3>
-        <p className="mt-3 text-sm text-gray-500">
+        <p className="mt-3 text-sm text-muted-foreground">
           Chưa có lần bảo lưu nào.
         </p>
       </section>
@@ -43,8 +43,8 @@ export async function ReserveHistorySection({
   }
 
   return (
-    <section className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-      <h3 className="mb-3 text-sm font-bold uppercase tracking-wider text-gray-500">
+    <section className="rounded-xl border border-border bg-card p-5 shadow-sm">
+      <h3 className="mb-3 text-sm font-bold uppercase tracking-wider text-muted-foreground">
         Lịch sử bảo lưu ({reserves.length})
       </h3>
       <div className="space-y-2">
@@ -59,17 +59,17 @@ export async function ReserveHistorySection({
                   Đang bảo lưu
                 </span>
               ) : (
-                <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs font-semibold text-gray-600">
+                <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-semibold text-muted-foreground">
                   Đã kết thúc
                 </span>
               )}
-              <span className="text-xs text-gray-700">
+              <span className="text-xs text-foreground">
                 {r.enrollment
                   ? `Lớp ${r.enrollment.class.name}`
                   : "Toàn bộ lớp đang học"}
               </span>
             </div>
-            <div className="mt-1 text-xs text-gray-700">
+            <div className="mt-1 text-xs text-foreground">
               Từ <strong>{formatDate(r.startedAt)}</strong>
               {r.expectedEndAt && (
                 <> → dự kiến {formatDate(r.expectedEndAt)}</>
@@ -78,15 +78,15 @@ export async function ReserveHistorySection({
                 <> → kết thúc thực tế {formatDate(r.endedAt)}</>
               )}
             </div>
-            <div className="mt-1 text-xs italic text-gray-700">
+            <div className="mt-1 text-xs italic text-foreground">
               Lý do: {r.reason}
             </div>
             {r.endReason && (
-              <div className="mt-0.5 text-xs italic text-gray-600">
+              <div className="mt-0.5 text-xs italic text-muted-foreground">
                 Ghi chú kết thúc: {r.endReason}
               </div>
             )}
-            <div className="mt-1 text-xs text-gray-500">
+            <div className="mt-1 text-xs text-muted-foreground">
               Bởi {r.createdByName}
               {r.endedByName && ` · Kết thúc bởi ${r.endedByName}`}
             </div>

@@ -203,14 +203,14 @@ export function DocumentUploader({
   if (value && state.status !== "uploading") {
     const Icon = getIcon(value.mimeType);
     return (
-      <div className="rounded-lg border border-neutral-200 bg-neutral-50 p-3">
+      <div className="rounded-lg border border-border bg-muted p-3">
         <div className="flex items-start gap-3">
           <Icon className="h-10 w-10 flex-shrink-0 text-state-info-ink" />
           <div className="flex-1 min-w-0">
-            <p className="truncate text-sm font-medium text-neutral-900">
+            <p className="truncate text-sm font-medium text-foreground">
               {value.fileName}
             </p>
-            <p className="mt-0.5 text-xs text-neutral-500">
+            <p className="mt-0.5 text-xs text-muted-foreground">
               {formatBytes(value.fileSize)} · {value.mimeType || "—"}
             </p>
             <a
@@ -227,7 +227,7 @@ export function DocumentUploader({
             onClick={handleRemove}
             disabled={disabled}
             aria-label="Bỏ file"
-            className="rounded-md p-1 text-neutral-500 hover:bg-neutral-200 disabled:opacity-40"
+            className="rounded-md p-1 text-muted-foreground hover:bg-muted disabled:opacity-40"
           >
             <X className="h-4 w-4" />
           </button>
@@ -236,7 +236,7 @@ export function DocumentUploader({
           <p className="mt-2 text-xs text-state-danger-ink">{state.message}</p>
         )}
         {helperText && (
-          <p className="mt-2 text-xs text-neutral-500">{helperText}</p>
+          <p className="mt-2 text-xs text-muted-foreground">{helperText}</p>
         )}
       </div>
     );
@@ -251,18 +251,18 @@ export function DocumentUploader({
           (isDragActive
             ? "border-primary bg-primary-soft"
             : state.status === "uploading"
-              ? "border-neutral-300 bg-neutral-50"
-              : "border-neutral-300 hover:border-primary hover:bg-primary-soft/40")
+              ? "border-border bg-muted"
+              : "border-border hover:border-primary hover:bg-primary-soft/40")
         }
       >
         <input {...getInputProps()} />
         {state.status === "uploading" ? (
           <>
             <Loader2 className="mx-auto h-8 w-8 animate-spin text-primary" />
-            <p className="mt-2 text-sm font-medium text-neutral-700">
+            <p className="mt-2 text-sm font-medium text-foreground">
               Đang tải lên {state.filename}... ({state.progress}%)
             </p>
-            <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-neutral-200">
+            <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-muted">
               <div
                 className="h-full bg-primary transition-all"
                 style={{ width: `${state.progress}%` }}
@@ -271,11 +271,11 @@ export function DocumentUploader({
           </>
         ) : (
           <>
-            <Upload className="mx-auto h-8 w-8 text-neutral-400" />
-            <p className="mt-2 text-sm font-medium text-neutral-700">
+            <Upload className="mx-auto h-8 w-8 text-muted-foreground" />
+            <p className="mt-2 text-sm font-medium text-foreground">
               {isDragActive ? "Thả file vào đây" : "Click hoặc kéo file vào đây"}
             </p>
-            <p className="mt-1 text-xs text-neutral-500">
+            <p className="mt-1 text-xs text-muted-foreground">
               PDF / Office / Video / Audio / Image — giới hạn theo loại file.
             </p>
           </>
@@ -285,7 +285,7 @@ export function DocumentUploader({
         <p className="text-xs text-state-danger-ink">{state.message}</p>
       )}
       {helperText && !disabled && state.status !== "error" && (
-        <p className="text-xs text-neutral-500">{helperText}</p>
+        <p className="text-xs text-muted-foreground">{helperText}</p>
       )}
     </div>
   );

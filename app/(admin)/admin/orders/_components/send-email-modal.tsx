@@ -103,14 +103,14 @@ export function SendEmailModal({
                 </SelectTrigger>
                 <SelectContent>
                   {templates.length === 0 && (
-                    <div className="p-2 text-xs text-gray-500">
+                    <div className="p-2 text-xs text-muted-foreground">
                       Không có template phù hợp
                     </div>
                   )}
                   {templates.map((t) => (
                     <SelectItem key={t.id} value={t.id}>
                       {t.name}{" "}
-                      <span className="text-xs text-gray-500">
+                      <span className="text-xs text-muted-foreground">
                         ({t.trigger})
                       </span>
                     </SelectItem>

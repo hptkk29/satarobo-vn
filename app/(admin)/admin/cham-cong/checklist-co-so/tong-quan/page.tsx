@@ -83,28 +83,28 @@ export default async function ChecklistOverviewPage() {
 
   return (
     <div className="p-6">
-      <Link href="/cham-cong/checklist-co-so" className="mb-3 inline-flex items-center gap-1 text-sm text-gray-500 hover:text-gray-700">
+      <Link href="/cham-cong/checklist-co-so" className="mb-3 inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
         <ChevronLeft className="h-4 w-4" /> Nhập checklist
       </Link>
       <div className="mb-4 flex flex-wrap items-end justify-between gap-2">
-        <h1 className="flex items-center gap-2 text-2xl font-bold text-gray-900">
+        <h1 className="flex items-center gap-2 text-2xl font-bold text-foreground">
           <ClipboardCheck className="h-6 w-6 text-primary" /> Tổng quan checklist cơ sở
         </h1>
-        <div className="rounded-xl border border-gray-200 bg-white px-4 py-2 text-center">
+        <div className="rounded-xl border border-border bg-card px-4 py-2 text-center">
           <p className="text-2xl font-bold text-primary">{pct}%</p>
-          <p className="text-xs text-gray-400">{fullCells}/{totalCells} ngày-cơ sở đủ mở+đóng · {DAYS} ngày</p>
+          <p className="text-xs text-muted-foreground">{fullCells}/{totalCells} ngày-cơ sở đủ mở+đóng · {DAYS} ngày</p>
         </div>
       </div>
 
-      <p className="mb-3 text-xs text-gray-500">
+      <p className="mb-3 text-xs text-muted-foreground">
         Ô: <span className="font-semibold text-state-success-ink">●</span> đủ mở+đóng ·
         <span className="font-semibold text-state-warning-ink"> ◐</span> thiếu 1 trong 2 ·
         <span className="font-semibold text-state-danger-ink"> ○</span> chưa làm. Di chuột để xem ngày.
       </p>
 
-      <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white">
+      <div className="overflow-x-auto rounded-xl border border-border bg-card">
         <table className="min-w-full text-sm">
-          <thead className="bg-gray-50 text-left text-xs text-gray-500">
+          <thead className="bg-muted text-left text-xs text-muted-foreground">
             <tr>
               <th className="px-3 py-2">Cơ sở</th>
               {dates.map((d) => (
@@ -117,7 +117,7 @@ export default async function ChecklistOverviewPage() {
           <tbody>
             {centers.map((c) => (
               <tr key={c.id} className="border-t">
-                <td className="px-3 py-2 font-medium text-gray-800">{c.name}</td>
+                <td className="px-3 py-2 font-medium text-foreground">{c.name}</td>
                 {dates.map((d) => {
                   const st = status(byKey.get(`${c.id}|${ymd(d)}`));
                   const full = st.open && st.close;
@@ -135,7 +135,7 @@ export default async function ChecklistOverviewPage() {
             ))}
             {centers.length === 0 && (
               <tr>
-                <td colSpan={DAYS + 1} className="px-3 py-8 text-center text-gray-400">Không có cơ sở.</td>
+                <td colSpan={DAYS + 1} className="px-3 py-8 text-center text-muted-foreground">Không có cơ sở.</td>
               </tr>
             )}
           </tbody>

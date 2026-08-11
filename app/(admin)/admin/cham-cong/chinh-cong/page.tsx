@@ -63,17 +63,17 @@ export default async function ChinhCongPage() {
   return (
     <div className="max-w-3xl p-6">
       <div className="mb-4">
-        <h1 className="flex items-center gap-2 text-2xl font-bold text-gray-900">
+        <h1 className="flex items-center gap-2 text-2xl font-bold text-foreground">
           <ClipboardEdit className="h-6 w-6 text-primary" /> Duyệt chỉnh công
         </h1>
-        <p className="mt-1 text-sm text-gray-500">
+        <p className="mt-1 text-sm text-muted-foreground">
           Quản lý cơ sở duyệt trong vòng 2 ngày kể từ ngày công; admin cấp cao duyệt mọi lúc. Duyệt
           có nhập giờ → áp chỉnh + ghi log.
         </p>
       </div>
 
       {items.length === 0 ? (
-        <p className="rounded-xl border border-dashed border-gray-300 p-8 text-center text-sm text-gray-400">
+        <p className="rounded-xl border border-dashed border-border p-8 text-center text-sm text-muted-foreground">
           Không có yêu cầu chỉnh công nào chờ duyệt.
         </p>
       ) : (

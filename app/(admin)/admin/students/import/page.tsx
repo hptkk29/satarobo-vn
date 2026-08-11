@@ -74,12 +74,12 @@ export default function ImportStudentsPage() {
       <div>
         <Link
           href="/students"
-          className="mb-3 inline-flex items-center gap-1 text-sm text-neutral-500 hover:text-neutral-700"
+          className="mb-3 inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
         >
           <ChevronLeft className="h-4 w-4" /> Quay lại danh sách
         </Link>
         <h1 className="text-2xl font-bold">Import Học viên từ Excel</h1>
-        <p className="text-sm text-neutral-500 mt-1">
+        <p className="text-sm text-muted-foreground mt-1">
           <code>studentCode</code> là khoá upsert — trùng mã sẽ UPDATE, mới sẽ CREATE.
           Để trống → luôn CREATE (có thể tạo bản ghi trùng).
         </p>
@@ -220,8 +220,8 @@ export default function ImportStudentsPage() {
         }}
       />
 
-      <div className="text-sm text-neutral-500 mt-4 space-y-1 rounded-xl border border-neutral-200 bg-neutral-50 p-4">
-        <p className="font-semibold text-neutral-700">Lưu ý:</p>
+      <div className="text-sm text-muted-foreground mt-4 space-y-1 rounded-xl border border-border bg-muted p-4">
+        <p className="font-semibold text-foreground">Lưu ý:</p>
         <ul className="list-disc list-inside space-y-0.5">
           <li>
             <code>studentCode</code> là khoá upsert. Trùng = UPDATE; mới = CREATE.

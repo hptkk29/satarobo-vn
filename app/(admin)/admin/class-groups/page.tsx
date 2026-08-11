@@ -19,7 +19,7 @@ const STATUS_LABEL: Record<string, string> = {
 const STATUS_CLASS: Record<string, string> = {
   ACTIVE: "bg-state-success-soft text-state-success-ink",
   GRADUATED: "bg-state-info-soft text-state-info-ink",
-  DISBANDED: "bg-gray-200 text-gray-600",
+  DISBANDED: "bg-muted text-muted-foreground",
 };
 
 export default async function ClassGroupsPage() {
@@ -50,25 +50,25 @@ export default async function ClassGroupsPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold">Nhóm lớp (lớp cố định)</h1>
-          <p className="mt-1 text-sm text-gray-600">
+          <p className="mt-1 text-sm text-muted-foreground">
             Nhóm học sinh đi cùng nhau qua nhiều khoá/năm (tăng khoá Sata3 → 4 → 5…).
           </p>
         </div>
         {canManage && (
           <Link
             href="/class-groups/new"
-            className="inline-flex items-center gap-2 rounded bg-state-info-ink px-3 py-2 text-sm text-white hover:bg-state-info-ink-hover"
+            className="inline-flex items-center gap-2 rounded bg-primary px-3 py-2 text-sm text-primary-foreground hover:bg-primary-dark"
           >
             <Plus size={16} /> Thêm nhóm lớp
           </Link>
         )}
       </div>
 
-      <div className="text-sm text-gray-600">{groups.length} nhóm lớp</div>
+      <div className="text-sm text-muted-foreground">{groups.length} nhóm lớp</div>
 
       <div className="overflow-hidden rounded border">
         <table className="w-full text-sm">
-          <thead className="border-b bg-gray-50">
+          <thead className="border-b bg-muted">
             <tr>
               <th className="px-3 py-2 text-left">Mã hiển thị</th>
               <th className="px-3 py-2 text-left">Tên nhóm</th>
@@ -82,13 +82,13 @@ export default async function ClassGroupsPage() {
           <tbody>
             {groups.length === 0 && (
               <tr>
-                <td colSpan={canDelete ? 7 : 6} className="py-8 text-center text-gray-500">
+                <td colSpan={canDelete ? 7 : 6} className="py-8 text-center text-muted-foreground">
                   Chưa có nhóm lớp nào.
                 </td>
               </tr>
             )}
             {groups.map((g) => (
-              <tr key={g.id} className="border-b hover:bg-gray-50">
+              <tr key={g.id} className="border-b hover:bg-muted">
                 <td className="px-3 py-2 font-bold">
                   <Link
                     href={`/class-groups/${g.id}`}
@@ -100,7 +100,7 @@ export default async function ClassGroupsPage() {
                 <td className="px-3 py-2">{g.name ?? "—"}</td>
                 <td className="px-3 py-2">{g.center.name}</td>
                 <td className="px-3 py-2 text-right">{g._count.classes}</td>
-                <td className="px-3 py-2 font-mono text-xs text-gray-500">
+                <td className="px-3 py-2 font-mono text-xs text-muted-foreground">
                   {g.code}
                 </td>
                 <td className="px-3 py-2">

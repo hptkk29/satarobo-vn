@@ -37,25 +37,25 @@ export function FaqEditor({ value, onChange }: Props) {
   return (
     <div className="space-y-3">
       {value.length === 0 && (
-        <p className="text-sm italic text-gray-500">Chưa có FAQ nào.</p>
+        <p className="text-sm italic text-muted-foreground">Chưa có FAQ nào.</p>
       )}
 
       {value.map((item, idx) => (
         <div
           key={idx}
-          className="space-y-2 rounded-lg border border-gray-200 bg-gray-50 p-3"
+          className="space-y-2 rounded-lg border border-border bg-muted p-3"
         >
           <div className="flex items-center gap-2">
             <button
               type="button"
               onClick={() => moveUp(idx)}
               disabled={idx === 0}
-              className="p-1 text-gray-400 hover:text-gray-700 disabled:opacity-30"
+              className="p-1 text-muted-foreground hover:text-foreground disabled:opacity-30"
               title="Move up"
             >
               <GripVertical size={16} />
             </button>
-            <span className="text-xs font-bold text-gray-500">
+            <span className="text-xs font-bold text-muted-foreground">
               FAQ #{idx + 1}
             </span>
             <button

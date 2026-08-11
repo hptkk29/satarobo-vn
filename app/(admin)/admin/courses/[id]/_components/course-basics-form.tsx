@@ -48,8 +48,8 @@ export function CourseBasicsForm({ course }: { course: CourseBasics }) {
   }
 
   return (
-    <div className="space-y-4 rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
-      <h2 className="text-lg font-semibold text-gray-900">Thông tin khoá học</h2>
+    <div className="space-y-4 rounded-xl border border-border bg-card p-4 shadow-sm">
+      <h2 className="text-lg font-semibold text-foreground">Thông tin khoá học</h2>
 
       <div className="space-y-1.5">
         <Label htmlFor="c-name">Tên khoá</Label>

@@ -20,7 +20,7 @@ export type SessionRow = {
 export type Option = { id: string; label: string };
 
 const STATUS_LABEL: Record<SessionRow["status"], { label: string; cls: string }> = {
-  SCHEDULED: { label: "Đã lên lịch", cls: "bg-gray-100 text-gray-600" },
+  SCHEDULED: { label: "Đã lên lịch", cls: "bg-muted text-muted-foreground" },
   IN_PROGRESS: { label: "Đang diễn ra", cls: "bg-state-warning-soft text-state-warning-ink" },
   COMPLETED: { label: "Hoàn thành", cls: "bg-state-success-soft text-state-success-ink" },
   CANCELLED: { label: "Đã hủy", cls: "bg-state-danger-soft text-state-danger-ink" },
@@ -50,16 +50,16 @@ export function ClassSessionsManage({
   lifecycleV2?: boolean;
 }) {
   return (
-    <section className="rounded-xl border border-gray-200 bg-white p-5">
-      <h2 className="mb-3 flex items-center gap-2 text-sm font-bold uppercase tracking-wider text-gray-500">
+    <section className="rounded-xl border border-border bg-card p-5">
+      <h2 className="mb-3 flex items-center gap-2 text-sm font-bold uppercase tracking-wider text-muted-foreground">
         <CalendarRange className="h-4 w-4" /> Quản lý buổi học
       </h2>
       {sessions.length === 0 ? (
-        <p className="text-sm text-gray-400">
+        <p className="text-sm text-muted-foreground">
           Chưa có buổi học nào. Dùng &quot;Sinh buổi học&quot; ở mục lịch phía trên.
         </p>
       ) : (
-        <ul className="divide-y divide-gray-100">
+        <ul className="divide-y divide-border">
           {sessions.map((s) => (
             <SessionItem
               key={s.id}
@@ -140,11 +140,11 @@ function SessionItem({
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="min-w-0">
           <span
-            className={`text-sm font-semibold tabular-nums ${ cancelled ? "text-gray-400 line-through" : "text-gray-900" }`}
+            className={`text-sm font-semibold tabular-nums ${ cancelled ? "text-muted-foreground line-through" : "text-foreground" }`}
           >
             {fmt(session.date)}
           </span>
-          <span className="ml-2 text-sm text-gray-500">
+          <span className="ml-2 text-sm text-muted-foreground">
             {session.topic ?? "Buổi học"}
           </span>
         </div>
@@ -159,7 +159,7 @@ function SessionItem({
               <button
                 type="button"
                 onClick={() => setMode(mode === "adjust" ? "none" : "adjust")}
-                className="inline-flex items-center gap-1 rounded-md border border-gray-200 px-2 py-1 text-xs font-semibold text-gray-700 hover:bg-gray-50"
+                className="inline-flex items-center gap-1 rounded-md border border-border px-2 py-1 text-xs font-semibold text-foreground hover:bg-muted"
               >
                 <Pencil className="h-3.5 w-3.5" /> Điều chỉnh
               </button>
@@ -195,27 +195,27 @@ function SessionItem({
       )}
 
       {mode === "adjust" && (
-        <div className="mt-2 space-y-2 rounded-lg bg-gray-50 p-3">
+        <div className="mt-2 space-y-2 rounded-lg bg-muted p-3">
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
             <label className="block">
-              <span className="mb-1 block text-xs font-semibold text-gray-600">
+              <span className="mb-1 block text-xs font-semibold text-muted-foreground">
                 Ngày
               </span>
               <input
                 type="date"
                 value={date}
                 onChange={(e) => setDate(e.target.value)}
-                className="w-full rounded-lg border border-gray-300 px-2 py-1.5 text-sm focus:border-primary focus:outline-none"
+                className="w-full rounded-lg border border-border px-2 py-1.5 text-sm focus:border-primary focus:outline-none"
               />
             </label>
             <label className="block">
-              <span className="mb-1 block text-xs font-semibold text-gray-600">
+              <span className="mb-1 block text-xs font-semibold text-muted-foreground">
                 GV chính
               </span>
               <select
                 value={teacherId}
                 onChange={(e) => setTeacherId(e.target.value)}
-                className="w-full rounded-lg border border-gray-300 px-2 py-1.5 text-sm focus:border-primary focus:outline-none"
+                className="w-full rounded-lg border border-border px-2 py-1.5 text-sm focus:border-primary focus:outline-none"
               >
                 <option value="">— Giữ nguyên —</option>
                 {teachers.map((t) => (
@@ -226,13 +226,13 @@ function SessionItem({
               </select>
             </label>
             <label className="block">
-              <span className="mb-1 block text-xs font-semibold text-gray-600">
+              <span className="mb-1 block text-xs font-semibold text-muted-foreground">
                 Phòng
               </span>
               <select
                 value={roomId}
                 onChange={(e) => setRoomId(e.target.value)}
-                className="w-full rounded-lg border border-gray-300 px-2 py-1.5 text-sm focus:border-primary focus:outline-none"
+                className="w-full rounded-lg border border-border px-2 py-1.5 text-sm focus:border-primary focus:outline-none"
               >
                 <option value="">— Giữ nguyên —</option>
                 {rooms.map((r) => (
@@ -262,7 +262,7 @@ function SessionItem({
             placeholder="Lý do huỷ buổi (bắt buộc, ≥5 ký tự)"
             className="w-full rounded-lg border border-state-danger-soft px-3 py-2 text-sm focus:border-state-danger focus:outline-none"
           />
-          <p className="text-xs text-gray-500">
+          <p className="text-xs text-muted-foreground">
             Buổi sẽ chuyển trạng thái &quot;Đã hủy&quot; (không xoá). Buổi bù được
             xử lý theo lịch.
           </p>

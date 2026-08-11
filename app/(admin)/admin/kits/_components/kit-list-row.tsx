@@ -47,10 +47,10 @@ export function KitListRow({ kit }: { kit: Row }) {
   }
 
   return (
-    <tr className="border-b border-neutral-200 hover:bg-neutral-50">
+    <tr className="border-b border-border hover:bg-muted">
       <td className="p-4">
         <div className="flex items-center gap-3">
-          <div className="relative h-12 w-16 shrink-0 overflow-hidden rounded-lg bg-neutral-100">
+          <div className="relative h-12 w-16 shrink-0 overflow-hidden rounded-lg bg-muted">
             {kit.mainImage ? (
               <Image
                 src={kit.mainImage}
@@ -60,39 +60,39 @@ export function KitListRow({ kit }: { kit: Row }) {
                 className="object-contain"
               />
             ) : (
-              <div className="flex h-full w-full items-center justify-center text-neutral-300">
+              <div className="flex h-full w-full items-center justify-center text-muted-foreground">
                 <ImageOff className="h-5 w-5" />
               </div>
             )}
           </div>
           <div className="min-w-0">
-            <div className="font-bold text-neutral-900 truncate">{kit.title}</div>
-            <div className="mt-0.5 text-xs text-neutral-500 truncate">{kit.subtitle}</div>
-            <div className="mt-0.5 font-mono text-[10px] text-neutral-400">/hoc-cu#{kit.slug}</div>
+            <div className="font-bold text-foreground truncate">{kit.title}</div>
+            <div className="mt-0.5 text-xs text-muted-foreground truncate">{kit.subtitle}</div>
+            <div className="mt-0.5 font-mono text-[10px] text-muted-foreground">/hoc-cu#{kit.slug}</div>
           </div>
         </div>
       </td>
-      <td className="p-4 text-sm text-neutral-700">
+      <td className="p-4 text-sm text-foreground">
         <div className="font-semibold">{kit.brand}</div>
-        <div className="text-xs text-neutral-500">{kit.series}</div>
+        <div className="text-xs text-muted-foreground">{kit.series}</div>
         {kit.code && (
-          <div className="mt-1 inline-block rounded bg-neutral-100 px-1.5 py-0.5 font-mono text-[10px] text-neutral-700">
+          <div className="mt-1 inline-block rounded bg-muted px-1.5 py-0.5 font-mono text-[10px] text-foreground">
             {kit.code}
           </div>
         )}
       </td>
-      <td className="p-4 text-center text-xs text-neutral-600">
+      <td className="p-4 text-center text-xs text-muted-foreground">
         {kit.galleryImages.length}{" "}
-        <span className="text-neutral-400">ảnh phụ</span>
+        <span className="text-muted-foreground">ảnh phụ</span>
       </td>
-      <td className="p-4 text-sm text-neutral-700">{kit.priceDisplay}</td>
+      <td className="p-4 text-sm text-foreground">{kit.priceDisplay}</td>
       <td className="p-4 text-center">
         <div className="flex flex-col items-center gap-1.5">
           <button
             type="button"
             onClick={handleTogglePublish}
             disabled={pending}
-            className={`inline-flex items-center gap-1 rounded-full px-2 py-1 text-xs font-medium transition disabled:opacity-50 ${ kit.isPublished ? "bg-state-success-soft text-state-success-ink hover:bg-state-success-soft" : "bg-neutral-100 text-neutral-600 hover:bg-neutral-200" }`}
+            className={`inline-flex items-center gap-1 rounded-full px-2 py-1 text-xs font-medium transition disabled:opacity-50 ${ kit.isPublished ? "bg-state-success-soft text-state-success-ink hover:bg-state-success-soft" : "bg-muted text-muted-foreground hover:bg-muted" }`}
           >
             {kit.isPublished ? "Đã đăng" : "Nháp"}
           </button>

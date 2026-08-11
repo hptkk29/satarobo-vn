@@ -123,8 +123,8 @@ export default async function ProductsPage({ searchParams }: Props) {
             <Package2 className="h-5 w-5 text-primary" />
           </div>
           <div>
-            <h1 className="text-2xl font-bold text-gray-900">Sản phẩm</h1>
-            <p className="mt-1 text-sm text-gray-500">
+            <h1 className="text-2xl font-bold text-foreground">Sản phẩm</h1>
+            <p className="mt-1 text-sm text-muted-foreground">
               Catalog sản phẩm bán/cho thuê (kits, sensors, mission blocks,
               accessories)
             </p>
@@ -153,7 +153,7 @@ export default async function ProductsPage({ searchParams }: Props) {
             "rounded-full px-3 py-1 " +
             (!lowStock
               ? "bg-state-info-soft text-state-info-ink"
-              : "border border-gray-200 bg-white text-gray-600 hover:bg-gray-50")
+              : "border border-border bg-card text-muted-foreground hover:bg-muted")
           }
         >
           Tất cả
@@ -169,7 +169,7 @@ export default async function ProductsPage({ searchParams }: Props) {
             "rounded-full px-3 py-1 " +
             (lowStock
               ? "bg-primary-soft text-primary"
-              : "border border-gray-200 bg-white text-gray-600 hover:bg-gray-50")
+              : "border border-border bg-card text-muted-foreground hover:bg-muted")
           }
         >
           ⚠️ Sắp hết hàng
@@ -185,12 +185,12 @@ export default async function ProductsPage({ searchParams }: Props) {
           name="q"
           defaultValue={q}
           placeholder="SKU hoặc tên..."
-          className="lg:col-span-2 rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+          className="lg:col-span-2 rounded-lg border border-border px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
         />
         <select
           name="category"
           defaultValue={categoryParam ?? ""}
-          className="rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:outline-none"
+          className="rounded-lg border border-border px-3 py-2 text-sm focus:border-primary focus:outline-none"
         >
           <option value="">Tất cả loại</option>
           {CATEGORIES.map((c) => (
@@ -202,7 +202,7 @@ export default async function ProductsPage({ searchParams }: Props) {
         <select
           name="status"
           defaultValue={statusParam ?? ""}
-          className="rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:outline-none"
+          className="rounded-lg border border-border px-3 py-2 text-sm focus:border-primary focus:outline-none"
         >
           <option value="">Tất cả trạng thái</option>
           {STATUSES.map((s) => (
@@ -219,47 +219,47 @@ export default async function ProductsPage({ searchParams }: Props) {
         </button>
       </form>
 
-      <div className="mb-2 text-sm text-gray-600">
+      <div className="mb-2 text-sm text-muted-foreground">
         {totalCount.toLocaleString("vi-VN")} sản phẩm
       </div>
 
-      <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
+      <div className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
         <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-gray-100">
-            <thead className="bg-gray-50">
+          <table className="min-w-full divide-y divide-border">
+            <thead className="bg-muted">
               <tr>
-                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">
+                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                   SKU
                 </th>
-                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">
+                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                   Tên
                 </th>
-                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">
+                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                   Loại
                 </th>
-                <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-gray-500">
+                <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                   Giá bán
                 </th>
-                <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-gray-500">
+                <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                   Thuê/tháng
                 </th>
-                <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-gray-500">
+                <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                   Tồn kho
                 </th>
-                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">
+                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                   Trạng thái
                 </th>
-                <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-gray-500">
+                <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                   Thao tác
                 </th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-50">
+            <tbody className="divide-y divide-border">
               {products.length === 0 ? (
                 <tr>
                   <td
                     colSpan={8}
-                    className="px-4 py-12 text-center text-sm text-gray-400"
+                    className="px-4 py-12 text-center text-sm text-muted-foreground"
                   >
                     Không có sản phẩm nào
                   </td>
@@ -268,11 +268,11 @@ export default async function ProductsPage({ searchParams }: Props) {
                 products.map((p) => {
                   const isLow = p.stockOnHand <= p.minThreshold;
                   return (
-                    <tr key={p.id} className="hover:bg-gray-50/60">
-                      <td className="px-4 py-3 font-mono text-xs text-gray-700">
+                    <tr key={p.id} className="hover:bg-muted/60">
+                      <td className="px-4 py-3 font-mono text-xs text-foreground">
                         {p.sku}
                       </td>
-                      <td className="px-4 py-3 font-medium text-gray-900">
+                      <td className="px-4 py-3 font-medium text-foreground">
                         <Link
                           href={`/products/${p.id}`}
                           className="hover:underline"
@@ -280,13 +280,13 @@ export default async function ProductsPage({ searchParams }: Props) {
                           {p.name}
                         </Link>
                       </td>
-                      <td className="px-4 py-3 text-xs text-gray-600">
+                      <td className="px-4 py-3 text-xs text-muted-foreground">
                         {PRODUCT_CATEGORY_LABEL[p.category]}
                       </td>
                       <td className="px-4 py-3 text-right text-sm tabular-nums">
                         {p.salePrice.toLocaleString("vi-VN")}
                       </td>
-                      <td className="px-4 py-3 text-right text-sm tabular-nums text-gray-600">
+                      <td className="px-4 py-3 text-right text-sm tabular-nums text-muted-foreground">
                         {p.rentalPricePerMonth != null
                           ? p.rentalPricePerMonth.toLocaleString("vi-VN")
                           : "—"}
@@ -311,7 +311,7 @@ export default async function ProductsPage({ searchParams }: Props) {
                         {canManage && (
                           <Link
                             href={`/products/${p.id}/edit`}
-                            className="rounded-md border border-gray-200 px-2.5 py-1 text-xs font-semibold text-gray-700 hover:bg-gray-50"
+                            className="rounded-md border border-border px-2.5 py-1 text-xs font-semibold text-foreground hover:bg-muted"
                           >
                             Sửa
                           </Link>
@@ -327,7 +327,7 @@ export default async function ProductsPage({ searchParams }: Props) {
       </div>
 
       {totalPages > 1 && (
-        <div className="mt-4 flex items-center justify-between text-sm text-gray-500">
+        <div className="mt-4 flex items-center justify-between text-sm text-muted-foreground">
           <span>
             Trang {page}/{totalPages} ·{" "}
             {totalCount.toLocaleString("vi-VN")} sản phẩm
@@ -342,7 +342,7 @@ export default async function ProductsPage({ searchParams }: Props) {
                   lowStock: lowStock ? "1" : undefined,
                   page: page - 1,
                 })}
-                className="rounded-lg border border-gray-200 px-3 py-1.5 text-sm hover:bg-gray-50"
+                className="rounded-lg border border-border px-3 py-1.5 text-sm hover:bg-muted"
               >
                 ← Trước
               </Link>
@@ -356,7 +356,7 @@ export default async function ProductsPage({ searchParams }: Props) {
                   lowStock: lowStock ? "1" : undefined,
                   page: page + 1,
                 })}
-                className="rounded-lg border border-gray-200 px-3 py-1.5 text-sm hover:bg-gray-50"
+                className="rounded-lg border border-border px-3 py-1.5 text-sm hover:bg-muted"
               >
                 Sau →
               </Link>

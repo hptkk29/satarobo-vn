@@ -38,7 +38,7 @@ const STATUS_BADGE: Record<string, string> = {
   PENDING: "bg-state-warning-soft text-state-warning-ink",
   SCHEDULED: "bg-state-info-soft text-state-info-ink",
   COMPLETED: "bg-state-success-soft text-state-success-ink",
-  CANCELLED: "bg-gray-100 text-gray-500",
+  CANCELLED: "bg-muted text-muted-foreground",
 };
 const STATUS_LABEL: Record<string, string> = {
   PENDING: "Chờ xếp bù",
@@ -97,17 +97,17 @@ export function MakeupRow({ item }: { item: MakeupItem }) {
   }
 
   return (
-    <li className="rounded-xl border border-gray-200 bg-white p-4">
+    <li className="rounded-xl border border-border bg-card p-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
-          <span className="font-semibold text-gray-900">{item.studentName}</span>
-          <span className="ml-2 text-sm text-gray-500">{item.className}</span>
+          <span className="font-semibold text-foreground">{item.studentName}</span>
+          <span className="ml-2 text-sm text-muted-foreground">{item.className}</span>
         </div>
         <span className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${STATUS_BADGE[item.status]}`}>
           {STATUS_LABEL[item.status] ?? item.status}
         </span>
       </div>
-      <p className="mt-1 text-sm text-gray-600">
+      <p className="mt-1 text-sm text-muted-foreground">
         Buổi lỡ: {item.missedDate ? formatDateVN(item.missedDate) : "—"}
         {item.missedLesson ? ` · ${item.missedLesson}` : ""}
         {item.makeupDate && ` → bù: ${formatDateVN(item.makeupDate)}`}
@@ -117,7 +117,7 @@ export function MakeupRow({ item }: { item: MakeupItem }) {
         <div className="mt-3 flex flex-wrap gap-2">
           {item.status === "PENDING" && (
             <button type="button" onClick={loadSuggestions} disabled={pending}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-gray-300 px-3 py-1.5 text-sm font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-50">
+              className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-sm font-semibold text-foreground hover:bg-muted disabled:opacity-50">
               <CalendarPlus className="h-4 w-4" /> Gợi ý buổi bù
             </button>
           )}
@@ -160,10 +160,10 @@ export function MakeupRow({ item }: { item: MakeupItem }) {
       )}
 
       {suggs && suggs.length > 0 && item.status === "PENDING" && (
-        <div className="mt-2 space-y-1 rounded-lg border border-gray-100 bg-gray-50 p-2">
+        <div className="mt-2 space-y-1 rounded-lg border border-border bg-muted p-2">
           {suggs.map((s) => (
             <button key={s.sessionId} type="button" onClick={() => schedule(s.sessionId)} disabled={pending}
-              className="flex w-full items-center justify-between rounded px-2 py-1 text-left text-sm hover:bg-white">
+              className="flex w-full items-center justify-between rounded px-2 py-1 text-left text-sm hover:bg-card">
               <span className="flex items-center gap-1.5">
                 {s.className}{s.lessonTitle ? ` · Bài ${s.lessonOrder}: ${s.lessonTitle}` : ""}
                 {s.isHomeCenter === false && (
@@ -172,7 +172,7 @@ export function MakeupRow({ item }: { item: MakeupItem }) {
                   </span>
                 )}
               </span>
-              <span className="text-xs text-gray-500">
+              <span className="text-xs text-muted-foreground">
                 {formatDateVN(s.date)}
                 {typeof s.capacityLeft === "number" ? ` · còn ${s.capacityLeft} chỗ` : ""}
               </span>

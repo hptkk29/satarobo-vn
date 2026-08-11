@@ -34,7 +34,7 @@ import { DataTableShell } from "@/components/design-system/admin/data-table-shel
 
 export function DesignSystemDemo() {
   return (
-    <div className="min-h-screen bg-white -m-6">
+    <div className="min-h-screen bg-card -m-6">
       {/* === HERO PARTICLES === */}
       <HeroParticles
         eyebrow="ROBOTICS & STEM K-12"
@@ -120,7 +120,7 @@ export function DesignSystemDemo() {
       <SectionAlternate eyebrow="NỘI DUNG" title="Blog & Tuyển dụng">
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
           <div>
-            <h3 className="text-xl font-bold mb-4 text-neutral-900">Blog Cards</h3>
+            <h3 className="text-xl font-bold mb-4 text-foreground">Blog Cards</h3>
             <div className="space-y-4">
               <BlogCard
                 title="Tại sao trẻ em cần học lập trình Robot từ sớm?"
@@ -134,7 +134,7 @@ export function DesignSystemDemo() {
             </div>
           </div>
           <div>
-            <h3 className="text-xl font-bold mb-4 text-neutral-900">Job Cards</h3>
+            <h3 className="text-xl font-bold mb-4 text-foreground">Job Cards</h3>
             <div className="space-y-4">
               <JobCard
                 title="Giảng viên Robotics & Lập trình"
@@ -188,11 +188,11 @@ export function DesignSystemDemo() {
         eyebrow="ĐỐI TÁC"
         title="Tin tưởng bởi 8 trường K-12 tại Đà Nẵng"
         items={[
-          <span key="1" className="text-2xl font-bold text-neutral-400">Trường Tiểu học Lê Văn Tám</span>,
-          <span key="2" className="text-2xl font-bold text-neutral-400">THCS Nguyễn Khuyến</span>,
-          <span key="3" className="text-2xl font-bold text-neutral-400">Trường Quốc tế Sky-Line</span>,
-          <span key="4" className="text-2xl font-bold text-neutral-400">FPT School Đà Nẵng</span>,
-          <span key="5" className="text-2xl font-bold text-neutral-400">SOS Children&apos;s Village</span>,
+          <span key="1" className="text-2xl font-bold text-muted-foreground">Trường Tiểu học Lê Văn Tám</span>,
+          <span key="2" className="text-2xl font-bold text-muted-foreground">THCS Nguyễn Khuyến</span>,
+          <span key="3" className="text-2xl font-bold text-muted-foreground">Trường Quốc tế Sky-Line</span>,
+          <span key="4" className="text-2xl font-bold text-muted-foreground">FPT School Đà Nẵng</span>,
+          <span key="5" className="text-2xl font-bold text-muted-foreground">SOS Children&apos;s Village</span>,
         ]}
       />
 
@@ -220,15 +220,15 @@ export function DesignSystemDemo() {
       {/* === DECORATIONS DEMO === */}
       <SectionBase eyebrow="DECORATIONS" title="Subtle decoration components">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div className="relative h-48 rounded-xl border border-neutral-200 bg-white overflow-hidden">
+          <div className="relative h-48 rounded-xl border border-border bg-card overflow-hidden">
             <Sparkles className="absolute inset-0 w-full h-full text-primary" />
-            <div className="absolute inset-0 flex items-center justify-center text-neutral-700 font-semibold">
+            <div className="absolute inset-0 flex items-center justify-center text-foreground font-semibold">
               &lt;Sparkles /&gt;
             </div>
           </div>
-          <div className="relative h-48 rounded-xl border border-neutral-200 bg-white overflow-hidden">
+          <div className="relative h-48 rounded-xl border border-border bg-card overflow-hidden">
             <DotGrid className="absolute inset-0 w-full h-full text-primary" />
-            <div className="absolute inset-0 flex items-center justify-center text-neutral-700 font-semibold">
+            <div className="absolute inset-0 flex items-center justify-center text-foreground font-semibold">
               &lt;DotGrid /&gt;
             </div>
           </div>
@@ -286,18 +286,18 @@ export function DesignSystemDemo() {
             action={<CTAPrimary size="sm" href="#">Tạo lead thủ công</CTAPrimary>}
           />
           <DataTableShell
-            header={<div className="flex justify-between items-center text-sm font-semibold">Honors <span className="text-xs text-neutral-500">5 records</span></div>}
-            footer={<div className="text-xs text-neutral-500 text-right">Page 1/1</div>}
+            header={<div className="flex justify-between items-center text-sm font-semibold">Honors <span className="text-xs text-muted-foreground">5 records</span></div>}
+            footer={<div className="text-xs text-muted-foreground text-right">Page 1/1</div>}
           >
             <table className="w-full text-sm">
-              <thead className="bg-neutral-50 text-left text-xs text-neutral-500 uppercase tracking-wider">
+              <thead className="bg-muted text-left text-xs text-muted-foreground uppercase tracking-wider">
                 <tr>
                   <th className="px-4 py-3">Tên</th>
                   <th className="px-4 py-3">Hạng mục</th>
                   <th className="px-4 py-3 text-right">Status</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-neutral-100">
+              <tbody className="divide-y divide-border">
                 <tr><td className="px-4 py-3 font-medium">Lê Minh Tâm</td><td className="px-4 py-3">GRAND_CHAMPION</td><td className="px-4 py-3 text-right"><StatusBadge variant="success">Published</StatusBadge></td></tr>
                 <tr><td className="px-4 py-3 font-medium">Nguyễn Thị Mai</td><td className="px-4 py-3">IMPACT</td><td className="px-4 py-3 text-right"><StatusBadge variant="success">Published</StatusBadge></td></tr>
                 <tr><td className="px-4 py-3 font-medium">Phạm Quốc Anh</td><td className="px-4 py-3">SPARK</td><td className="px-4 py-3 text-right"><StatusBadge variant="warning">Draft</StatusBadge></td></tr>
@@ -315,14 +315,14 @@ export function DesignSystemDemo() {
           <CTAGhost>Ghost Link</CTAGhost>
           <CTAGradient>Premium Gradient</CTAGradient>
         </div>
-        <p className="text-center text-sm text-neutral-500">
+        <p className="text-center text-sm text-muted-foreground">
           &lt;CTAFloating&gt; chỉ hiện trên mobile (bottom-right) — kiểm tra DevTools
           responsive 375px.
         </p>
       </SectionBase>
 
       {/* End spacer */}
-      <div className="py-12 bg-white text-center text-xs text-neutral-400">
+      <div className="py-12 bg-card text-center text-xs text-muted-foreground">
         End of design system preview · Phase 4.UI.1
       </div>
     </div>

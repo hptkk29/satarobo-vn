@@ -36,7 +36,7 @@ export function UserStatusToggle({
           }
         });
       }}
-      className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${ isActive ? "bg-state-success-soft text-state-success-ink hover:bg-state-success-soft" : "bg-gray-200 text-gray-600 hover:bg-gray-300" }`}
+      className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${ isActive ? "bg-state-success-soft text-state-success-ink hover:bg-state-success-soft" : "bg-muted text-muted-foreground hover:bg-gray-300" }`}
     >
       {pending ? (
         <Loader2 className="h-3 w-3 animate-spin" />
@@ -90,7 +90,7 @@ function UserDeleteButton({ userId }: { userId: string }) {
       type="button"
       title="Xóa tài khoản (dọn dữ liệu test)"
       onClick={() => setConfirming(true)}
-      className="inline-flex h-8 w-8 items-center justify-center rounded-md text-gray-500 hover:bg-state-danger-soft hover:text-state-danger-ink"
+      className="inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-state-danger-soft hover:text-state-danger-ink"
     >
       <Trash2 className="h-4 w-4" />
     </button>
@@ -114,7 +114,7 @@ export function UserRowActions({
       <Link
         href={`/users/${userId}/edit`}
         title="Sửa"
-        className="inline-flex h-8 w-8 items-center justify-center rounded-md text-gray-500 hover:bg-gray-100 hover:text-gray-700"
+        className="inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
       >
         <Pencil className="h-4 w-4" />
       </Link>
@@ -122,7 +122,7 @@ export function UserRowActions({
         <Link
           href={`/users/${userId}/org-roles`}
           title="Vai trò theo đơn vị (RBAC v2)"
-          className="inline-flex h-8 w-8 items-center justify-center rounded-md text-gray-500 hover:bg-state-success-soft hover:text-state-success-ink"
+          className="inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-state-success-soft hover:text-state-success-ink"
         >
           <Building2 className="h-4 w-4" />
         </Link>
@@ -130,14 +130,14 @@ export function UserRowActions({
       <Link
         href={`/users/${userId}/permissions`}
         title="Phân quyền nâng cao"
-        className="inline-flex h-8 w-8 items-center justify-center rounded-md text-gray-500 hover:bg-primary-soft hover:text-primary"
+        className="inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-primary-soft hover:text-primary"
       >
         <Shield className="h-4 w-4" />
       </Link>
       <Link
         href={`/users/${userId}/reset-password`}
         title="Đổi mật khẩu"
-        className="inline-flex h-8 w-8 items-center justify-center rounded-md text-gray-500 hover:bg-primary-soft hover:text-primary"
+        className="inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-primary-soft hover:text-primary"
       >
         <KeyRound className="h-4 w-4" />
       </Link>

@@ -32,9 +32,9 @@ export function ZnsTest({ canEdit }: { canEdit: boolean }) {
   }
 
   return (
-    <div className="mt-3 rounded-lg border border-neutral-200 bg-neutral-50 p-3">
-      <div className="text-xs font-semibold text-neutral-700">Gửi thử ZNS (mẫu Xác thực)</div>
-      <p className="mt-0.5 text-xs text-neutral-500">
+    <div className="mt-3 rounded-lg border border-border bg-muted p-3">
+      <div className="text-xs font-semibold text-foreground">Gửi thử ZNS (mẫu Xác thực)</div>
+      <p className="mt-0.5 text-xs text-muted-foreground">
         Gửi 1 mã ngẫu nhiên tới số bên dưới để đối chiếu nội dung tin. Khi OA còn ở chế độ
         development, chỉ SĐT quản trị viên OA nhận được (số khác trả <code>-127</code>). Mỗi tin
         gửi thành công tốn ~300đ · tối đa 5 lần/giờ.
@@ -45,7 +45,7 @@ export function ZnsTest({ canEdit }: { canEdit: boolean }) {
           onChange={(e) => setPhone(e.target.value)}
           placeholder="0905123456"
           inputMode="tel"
-          className="w-44 rounded-md border border-neutral-300 px-2.5 py-1.5 text-sm"
+          className="w-44 rounded-md border border-border px-2.5 py-1.5 text-sm"
         />
         <button
           onClick={submit}

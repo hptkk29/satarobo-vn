@@ -30,10 +30,10 @@ export default async function ManHinhPage({ searchParams }: Props) {
   const active = centers.find((c) => c.id === centerId);
 
   return (
-    <div className="min-h-screen bg-neutral-100 p-6">
+    <div className="min-h-screen bg-muted p-6">
       <div className="mx-auto max-w-xl">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
-          <Link href="/cham-cong" className="text-sm text-neutral-500 hover:text-neutral-700">
+          <Link href="/cham-cong" className="text-sm text-muted-foreground hover:text-foreground">
             ← Bảng chấm công
           </Link>
           <div className="flex flex-wrap gap-2">
@@ -41,7 +41,7 @@ export default async function ManHinhPage({ searchParams }: Props) {
               <Link
                 key={c.id}
                 href={`/cham-cong/man-hinh?centerId=${c.id}`}
-                className={`rounded-full px-3 py-1 text-xs font-medium ${ active?.id === c.id ? "bg-primary text-white" : "bg-white text-neutral-600 hover:bg-neutral-200" }`}
+                className={`rounded-full px-3 py-1 text-xs font-medium ${ active?.id === c.id ? "bg-primary text-white" : "bg-card text-muted-foreground hover:bg-muted" }`}
               >
                 {c.name}
               </Link>
@@ -52,7 +52,7 @@ export default async function ManHinhPage({ searchParams }: Props) {
         {active ? (
           <QrScreen centerId={active.id} centerName={active.name} />
         ) : (
-          <p className="rounded-2xl bg-white p-10 text-center text-sm text-neutral-400">
+          <p className="rounded-2xl bg-card p-10 text-center text-sm text-muted-foreground">
             Chọn cơ sở để hiển thị mã QR chấm công.
           </p>
         )}

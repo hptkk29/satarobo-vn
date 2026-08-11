@@ -67,14 +67,14 @@ export function CreateTrialClassForm({
     });
   }
 
-  const field = "rounded-lg border border-gray-300 px-3 py-2 text-sm disabled:opacity-50";
+  const field = "rounded-lg border border-border px-3 py-2 text-sm disabled:opacity-50";
   const labelCls = "flex flex-col gap-1";
-  const labelText = "text-xs font-medium text-gray-500";
+  const labelText = "text-xs font-medium text-muted-foreground";
 
   return (
     <form
       onSubmit={onSubmit}
-      className="grid grid-cols-1 gap-4 rounded-xl border border-gray-200 bg-white p-5 sm:grid-cols-2"
+      className="grid grid-cols-1 gap-4 rounded-xl border border-border bg-card p-5 sm:grid-cols-2"
     >
       <label className={`${labelCls} sm:col-span-2`}>
         <span className={labelText}>Tên lớp *</span>

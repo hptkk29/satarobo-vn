@@ -114,13 +114,13 @@ export default async function ClassStudentsPage({ params }: Props) {
   return (
     <div>
       <div className="mb-6 flex flex-wrap items-baseline justify-between gap-3">
-        <h1 className="text-3xl font-black text-neutral-900">
+        <h1 className="text-3xl font-black text-foreground">
           Học sinh lớp:{" "}
           <span className="font-bold text-primary">{cls.name}</span>
         </h1>
         <Link
           href={`/classes/${cls.id}/edit`}
-          className="inline-flex items-center gap-1 rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-sm font-semibold text-gray-700 hover:bg-gray-50"
+          className="inline-flex items-center gap-1 rounded-lg border border-border bg-card px-3 py-1.5 text-sm font-semibold text-foreground hover:bg-muted"
         >
           <ArrowLeft className="h-4 w-4" /> Về sửa lớp
         </Link>

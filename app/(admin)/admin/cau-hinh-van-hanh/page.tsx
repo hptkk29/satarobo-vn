@@ -33,8 +33,8 @@ export default async function OperationalSettingsPage() {
   return (
     <div className="max-w-4xl space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-gray-900">Cấu hình vận hành</h1>
-        <p className="mt-1 text-sm text-gray-500">
+        <h1 className="text-2xl font-bold text-foreground">Cấu hình vận hành</h1>
+        <p className="mt-1 text-sm text-muted-foreground">
           Tham số vận hành toàn hệ thống (GLOBAL). Đổi giá trị có hiệu lực ngay, không cần deploy.
           Mỗi thay đổi yêu cầu lý do và được ghi nhật ký kiểm toán.
         </p>

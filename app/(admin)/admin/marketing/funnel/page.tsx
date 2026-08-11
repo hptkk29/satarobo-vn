@@ -40,7 +40,7 @@ export default async function MarketingFunnelPage() {
 
   return (
     <div>
-      <h1 className="mb-6 flex items-center gap-2 text-3xl font-black text-neutral-900">
+      <h1 className="mb-6 flex items-center gap-2 text-3xl font-black text-foreground">
         <TrendingUp className="h-7 w-7 text-primary" />
         Funnel Marketing
       </h1>
@@ -48,15 +48,15 @@ export default async function MarketingFunnelPage() {
         {cards.map((c) => (
           <Card key={c.label}>
             <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-neutral-500">{c.label}</CardTitle>
+              <CardTitle className="text-sm font-medium text-muted-foreground">{c.label}</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-black text-neutral-900">{c.value}</div>
+              <div className="text-2xl font-black text-foreground">{c.value}</div>
             </CardContent>
           </Card>
         ))}
       </div>
-      <p className="mt-4 text-xs text-neutral-400">
+      <p className="mt-4 text-xs text-muted-foreground">
         ROAS = doanh thu (đơn CONFIRMED/COMPLETED) / chi phí QC.
       </p>
     </div>

@@ -103,8 +103,8 @@ export function ProductForm({
   return (
     <form onSubmit={handleSubmit} className="max-w-3xl space-y-6">
       {/* Basic info */}
-      <section className="space-y-4 rounded-xl border border-gray-200 bg-white p-5">
-        <h2 className="text-sm font-bold uppercase tracking-wider text-gray-500">
+      <section className="space-y-4 rounded-xl border border-border bg-card p-5">
+        <h2 className="text-sm font-bold uppercase tracking-wider text-muted-foreground">
           Thông tin cơ bản
         </h2>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -118,7 +118,7 @@ export function ProductForm({
               required
             />
             {isEdit && (
-              <p className="text-xs text-gray-500">
+              <p className="text-xs text-muted-foreground">
                 Mã SKU không sửa được sau khi tạo
               </p>
             )}
@@ -185,8 +185,8 @@ export function ProductForm({
       </section>
 
       {/* Pricing */}
-      <section className="space-y-4 rounded-xl border border-gray-200 bg-gray-50/50 p-5">
-        <h2 className="text-sm font-bold uppercase tracking-wider text-gray-500">
+      <section className="space-y-4 rounded-xl border border-border bg-muted/50 p-5">
+        <h2 className="text-sm font-bold uppercase tracking-wider text-muted-foreground">
           Giá (VND)
         </h2>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
@@ -234,8 +234,8 @@ export function ProductForm({
       </section>
 
       {/* Stock */}
-      <section className="space-y-4 rounded-xl border border-gray-200 bg-white p-5">
-        <h2 className="text-sm font-bold uppercase tracking-wider text-gray-500">
+      <section className="space-y-4 rounded-xl border border-border bg-card p-5">
+        <h2 className="text-sm font-bold uppercase tracking-wider text-muted-foreground">
           Tồn kho
         </h2>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -251,7 +251,7 @@ export function ProductForm({
               disabled={isEdit}
             />
             {isEdit && (
-              <p className="text-xs text-gray-500">
+              <p className="text-xs text-muted-foreground">
                 Dùng &ldquo;Điều chỉnh tồn kho&rdquo; trên trang detail để
                 thay đổi
               </p>
@@ -267,15 +267,15 @@ export function ProductForm({
                 update("minThreshold", Number(e.target.value) || 0)
               }
             />
-            <p className="text-xs text-gray-500">Cảnh báo khi tồn ≤ ngưỡng</p>
+            <p className="text-xs text-muted-foreground">Cảnh báo khi tồn ≤ ngưỡng</p>
           </div>
         </div>
       </section>
 
       {/* Optional ZMRoboKit link */}
       {zmroboKits.length > 0 && (
-        <section className="space-y-4 rounded-xl border border-gray-200 bg-white p-5">
-          <h2 className="text-sm font-bold uppercase tracking-wider text-gray-500">
+        <section className="space-y-4 rounded-xl border border-border bg-card p-5">
+          <h2 className="text-sm font-bold uppercase tracking-wider text-muted-foreground">
             Liên kết catalog kit (tuỳ chọn)
           </h2>
           <div className="space-y-1.5">
@@ -304,8 +304,8 @@ export function ProductForm({
       )}
 
       {/* Notes */}
-      <section className="space-y-4 rounded-xl border border-gray-200 bg-white p-5">
-        <h2 className="text-sm font-bold uppercase tracking-wider text-gray-500">
+      <section className="space-y-4 rounded-xl border border-border bg-card p-5">
+        <h2 className="text-sm font-bold uppercase tracking-wider text-muted-foreground">
           Ghi chú
         </h2>
         <Textarea
@@ -316,8 +316,8 @@ export function ProductForm({
       </section>
 
       {/* Image URLs (one per line, R2 uploader deferred) */}
-      <section className="space-y-2 rounded-xl border border-gray-200 bg-white p-5">
-        <h2 className="text-sm font-bold uppercase tracking-wider text-gray-500">
+      <section className="space-y-2 rounded-xl border border-border bg-card p-5">
+        <h2 className="text-sm font-bold uppercase tracking-wider text-muted-foreground">
           Ảnh sản phẩm
         </h2>
         <Label>URL ảnh (mỗi dòng 1 URL, tối đa 10)</Label>
@@ -335,7 +335,7 @@ export function ProductForm({
           rows={4}
           placeholder="https://..."
         />
-        <p className="text-xs text-gray-500">
+        <p className="text-xs text-muted-foreground">
           R2 uploader component sẽ thêm sau (Phase 5.10.x). Tạm paste URL.
         </p>
       </section>

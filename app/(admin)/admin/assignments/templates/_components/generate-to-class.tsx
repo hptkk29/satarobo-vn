@@ -12,7 +12,7 @@ interface ClassOption {
 }
 
 const inputClass =
-  "w-full rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20";
+  "w-full rounded-lg border border-border bg-card px-3 py-2 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20";
 
 /**
  * FL1-06 — Sinh BÀI GIAO (Assignment, có classId) từ mẫu hiện tại.
@@ -56,12 +56,12 @@ export function GenerateToClass({
   }
 
   return (
-    <section className="space-y-4 rounded-xl border border-neutral-200 bg-white p-6">
+    <section className="space-y-4 rounded-xl border border-border bg-card p-6">
       <div>
-        <h2 className="text-sm font-bold uppercase tracking-wider text-neutral-700">
+        <h2 className="text-sm font-bold uppercase tracking-wider text-foreground">
           Sinh bài giao cho lớp
         </h2>
-        <p className="mt-0.5 text-xs text-neutral-500">
+        <p className="mt-0.5 text-xs text-muted-foreground">
           Tạo một bài tập (gắn lớp, trạng thái DRAFT) sao chép nội dung từ mẫu này.
           Bài giao giữ liên kết về mẫu nguồn để truy vết.
         </p>
@@ -80,7 +80,7 @@ export function GenerateToClass({
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
         <label className="block">
-          <span className="mb-1 block text-sm font-semibold text-neutral-700">
+          <span className="mb-1 block text-sm font-semibold text-foreground">
             Lớp học <span className="text-state-danger-ink">*</span>
           </span>
           <select
@@ -99,7 +99,7 @@ export function GenerateToClass({
           </select>
         </label>
         <label className="block">
-          <span className="mb-1 block text-sm font-semibold text-neutral-700">
+          <span className="mb-1 block text-sm font-semibold text-foreground">
             Hạn nộp (tuỳ chọn)
           </span>
           <input

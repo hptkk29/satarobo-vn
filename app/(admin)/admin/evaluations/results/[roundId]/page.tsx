@@ -67,18 +67,18 @@ export default async function RoundResultsPage({ params }: { params: Promise<{ r
 
   return (
     <div className="max-w-3xl space-y-5 p-6">
-      <Link href="/evaluations" className="inline-flex items-center gap-1 text-sm text-gray-500 hover:text-gray-700">
+      <Link href="/evaluations" className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
         <ArrowLeft className="h-4 w-4" /> Về danh sách
       </Link>
 
       <div>
-        <h1 className="text-xl font-bold text-gray-900">{round.name}</h1>
-        <p className="mt-0.5 text-sm text-gray-500">
+        <h1 className="text-xl font-bold text-foreground">{round.name}</h1>
+        <p className="mt-0.5 text-sm text-muted-foreground">
           {round.form.title} · {round.scope === "TEACHER_EVAL" ? "Đánh giá GV" : "Khảo sát cơ sở"} ·{" "}
           {aggregate.responseCount} phản hồi
         </p>
         {!canDetail && (
-          <p className="mt-1 inline-flex items-center gap-1 text-xs text-gray-400">
+          <p className="mt-1 inline-flex items-center gap-1 text-xs text-muted-foreground">
             <EyeOff className="h-3.5 w-3.5" /> Chế độ tổng hợp ẩn danh (không hiển thị danh tính học viên)
           </p>
         )}
@@ -88,17 +88,17 @@ export default async function RoundResultsPage({ params }: { params: Promise<{ r
 
       {canDetail && detail.length > 0 && (
         <section>
-          <h2 className="mb-2 text-sm font-bold uppercase tracking-wider text-gray-500">Chi tiết phản hồi</h2>
+          <h2 className="mb-2 text-sm font-bold uppercase tracking-wider text-muted-foreground">Chi tiết phản hồi</h2>
           <div className="space-y-2">
             {detail.map((d) => (
-              <div key={d.id} className="rounded-lg border border-gray-200 bg-white p-3 text-sm">
-                <p className="text-xs text-gray-400">
+              <div key={d.id} className="rounded-lg border border-border bg-card p-3 text-sm">
+                <p className="text-xs text-muted-foreground">
                   {new Date(d.submittedAt).toLocaleString("vi-VN")}
                   {d.teacherId && ` · GV: ${nameMap.get(d.teacherId) ?? "—"}`}
                   {d.studentId && ` · HV: ${nameMap.get(d.studentId) ?? "—"}`}
                   {d.parentUserId && ` · PH: ${nameMap.get(d.parentUserId) ?? "—"}`}
                 </p>
-                <ul className="mt-1 space-y-0.5 text-gray-700">
+                <ul className="mt-1 space-y-0.5 text-foreground">
                   {d.answers.map((a, i) => {
                     const isPhoto = qTypeMap.get(a.questionId) === "PHOTO";
                     const opts = parseOptions(a.valueOptions);
@@ -110,7 +110,7 @@ export default async function RoundResultsPage({ params }: { params: Promise<{ r
                             <span className="mt-1 flex flex-wrap gap-1.5">
                               {opts.map((u) => (
                                 <a key={u} href={u} target="_blank" rel="noopener noreferrer">
-                                  <img src={u} alt="Ảnh" className="h-14 w-14 rounded border border-gray-200 object-cover" />
+                                  <img src={u} alt="Ảnh" className="h-14 w-14 rounded border border-border object-cover" />
                                 </a>
                               ))}
                             </span>
@@ -133,7 +133,7 @@ export default async function RoundResultsPage({ params }: { params: Promise<{ r
 
 function AggregateView({ aggregate }: { aggregate: RoundAggregate }) {
   if (aggregate.responseCount === 0) {
-    return <p className="rounded-xl border border-dashed border-gray-300 bg-white p-6 text-center text-sm text-gray-400">Chưa có phản hồi.</p>;
+    return <p className="rounded-xl border border-dashed border-border bg-card p-6 text-center text-sm text-muted-foreground">Chưa có phản hồi.</p>;
   }
   // Gom câu hỏi theo nhóm tiêu chí (groupLabel) như phiếu mẫu; null = không nhóm.
   const groupOrder: (string | null)[] = [];
@@ -164,26 +164,26 @@ function AggregateView({ aggregate }: { aggregate: RoundAggregate }) {
 
 function QuestionAggregateCard({ q }: { q: RoundAggregate["questions"][number] }) {
   return (
-    <div className="rounded-xl border border-gray-200 bg-white p-4">
-          <p className="font-medium text-gray-900">{q.label}</p>
+    <div className="rounded-xl border border-border bg-card p-4">
+          <p className="font-medium text-foreground">{q.label}</p>
           {q.type === "STAR_RATING" && (
-            <div className="mt-2 text-sm text-gray-700">
+            <div className="mt-2 text-sm text-foreground">
               <span className="inline-flex items-center gap-1 text-lg font-bold text-state-warning-ink">
                 <Star className="h-5 w-5 fill-state-warning-ink" /> {q.avg ?? "—"}
               </span>
-              <span className="ml-2 text-xs text-gray-400">({q.count} lượt)</span>
+              <span className="ml-2 text-xs text-muted-foreground">({q.count} lượt)</span>
               <div className="mt-1 space-y-0.5">
                 {([5, 4, 3, 2, 1] as const).map((s) => (
                   <div key={s} className="flex items-center gap-2 text-xs">
-                    <span className="w-6 text-gray-500">{s}★</span>
-                    <span className="tabular-nums text-gray-600">{q.distribution[s]}</span>
+                    <span className="w-6 text-muted-foreground">{s}★</span>
+                    <span className="tabular-nums text-muted-foreground">{q.distribution[s]}</span>
                   </div>
                 ))}
               </div>
             </div>
           )}
           {(q.type === "RADIO" || q.type === "CHECKBOX") && (
-            <ul className="mt-2 space-y-1 text-sm text-gray-700">
+            <ul className="mt-2 space-y-1 text-sm text-foreground">
               {q.optionCounts.map((o) => (
                 <li key={o.option} className="flex justify-between">
                   <span>{o.option}</span>
@@ -193,22 +193,22 @@ function QuestionAggregateCard({ q }: { q: RoundAggregate["questions"][number] }
             </ul>
           )}
           {q.type === "TEXTBOX" && (
-            <ul className="mt-2 space-y-1 text-sm text-gray-600">
+            <ul className="mt-2 space-y-1 text-sm text-muted-foreground">
               {q.texts.length === 0 ? (
-                <li className="text-gray-400">Chưa có ý kiến.</li>
+                <li className="text-muted-foreground">Chưa có ý kiến.</li>
               ) : (
-                q.texts.map((t, i) => <li key={i} className="rounded bg-gray-50 px-2 py-1">“{t}”</li>)
+                q.texts.map((t, i) => <li key={i} className="rounded bg-muted px-2 py-1">“{t}”</li>)
               )}
             </ul>
           )}
           {q.type === "PHOTO" && (
             q.photos.length === 0 ? (
-              <p className="mt-2 text-sm text-gray-400">Chưa có ảnh.</p>
+              <p className="mt-2 text-sm text-muted-foreground">Chưa có ảnh.</p>
             ) : (
               <div className="mt-2 flex flex-wrap gap-2">
                 {q.photos.map((u) => (
                   <a key={u} href={u} target="_blank" rel="noopener noreferrer">
-                    <img src={u} alt="Ảnh" className="h-16 w-16 rounded border border-gray-200 object-cover" />
+                    <img src={u} alt="Ảnh" className="h-16 w-16 rounded border border-border object-cover" />
                   </a>
                 ))}
               </div>

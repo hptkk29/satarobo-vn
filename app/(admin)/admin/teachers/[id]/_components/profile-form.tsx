@@ -65,17 +65,17 @@ export function TeacherProfileForm({
   }
 
   const fieldCls =
-    "w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary focus:outline-none disabled:bg-gray-50 disabled:text-gray-500";
+    "w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-primary focus:outline-none disabled:bg-muted disabled:text-muted-foreground";
 
   return (
-    <section className="rounded-xl border border-gray-200 bg-white p-5">
-      <h2 className="mb-4 text-sm font-bold uppercase tracking-wider text-gray-500">
+    <section className="rounded-xl border border-border bg-card p-5">
+      <h2 className="mb-4 text-sm font-bold uppercase tracking-wider text-muted-foreground">
         Hồ sơ chuyên môn
       </h2>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <label className="block">
-          <span className="mb-1 block text-xs font-medium text-gray-500">Ngạch</span>
+          <span className="mb-1 block text-xs font-medium text-muted-foreground">Ngạch</span>
           <select value={rank} onChange={(e) => setRank(e.target.value as TeacherRank)} disabled={!canEdit || pending} className={fieldCls}>
             {(Object.keys(RANK_LABEL) as TeacherRank[]).map((r) => (
               <option key={r} value={r}>{RANK_LABEL[r]}</option>
@@ -83,7 +83,7 @@ export function TeacherProfileForm({
           </select>
         </label>
         <label className="block">
-          <span className="mb-1 block text-xs font-medium text-gray-500">Loại hợp đồng</span>
+          <span className="mb-1 block text-xs font-medium text-muted-foreground">Loại hợp đồng</span>
           <select value={employmentType} onChange={(e) => setEmploymentType(e.target.value as EmploymentType)} disabled={!canEdit || pending} className={fieldCls}>
             {(Object.keys(EMPLOYMENT_LABEL) as EmploymentType[]).map((t) => (
               <option key={t} value={t}>{EMPLOYMENT_LABEL[t]}</option>
@@ -91,7 +91,7 @@ export function TeacherProfileForm({
           </select>
         </label>
         <label className="block">
-          <span className="mb-1 block text-xs font-medium text-gray-500">Trạng thái</span>
+          <span className="mb-1 block text-xs font-medium text-muted-foreground">Trạng thái</span>
           <select value={status} onChange={(e) => setStatus(e.target.value as TeacherStatus)} disabled={!canEdit || pending} className={fieldCls}>
             {(Object.keys(TEACHER_STATUS_LABEL) as TeacherStatus[]).map((s) => (
               <option key={s} value={s}>{TEACHER_STATUS_LABEL[s]}</option>
@@ -101,16 +101,16 @@ export function TeacherProfileForm({
       </div>
 
       <label className="mt-4 block">
-        <span className="mb-1 block text-xs font-medium text-gray-500">Giới thiệu / ghi chú chuyên môn</span>
+        <span className="mb-1 block text-xs font-medium text-muted-foreground">Giới thiệu / ghi chú chuyên môn</span>
         <textarea value={bio} onChange={(e) => setBio(e.target.value)} disabled={!canEdit || pending} rows={3} className={fieldCls} placeholder="VD: thế mạnh, kinh nghiệm thi đấu…" />
       </label>
 
       <div className="mt-4">
-        <span className="mb-2 block text-xs font-medium text-gray-500">
+        <span className="mb-2 block text-xs font-medium text-muted-foreground">
           Khoá dạy được ({courseIds.length})
         </span>
         {courses.length === 0 ? (
-          <p className="text-sm text-gray-400">Chưa có khoá học nào trong hệ thống.</p>
+          <p className="text-sm text-muted-foreground">Chưa có khoá học nào trong hệ thống.</p>
         ) : (
           <div className="flex flex-wrap gap-2">
             {courses.map((c) => {
@@ -121,7 +121,7 @@ export function TeacherProfileForm({
                   type="button"
                   onClick={() => canEdit && toggleCourse(c.id)}
                   disabled={!canEdit || pending}
-                  className={`rounded-full border px-3 py-1 text-xs font-medium ${ checked ? "border-primary bg-primary-soft text-primary" : "border-gray-200 bg-white text-gray-500" } ${canEdit ? "hover:border-primary" : "cursor-default"}`}
+                  className={`rounded-full border px-3 py-1 text-xs font-medium ${ checked ? "border-primary bg-primary-soft text-primary" : "border-border bg-card text-muted-foreground" } ${canEdit ? "hover:border-primary" : "cursor-default"}`}
                 >
                   {checked ? "✓ " : ""}
                   {c.label}

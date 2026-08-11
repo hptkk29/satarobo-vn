@@ -173,12 +173,12 @@ export function MarkdownEditor({
   }
 
   return (
-    <div className="overflow-hidden rounded-xl border border-neutral-200 bg-white">
-      <div className="flex flex-wrap items-center border-b border-neutral-200 bg-neutral-50">
+    <div className="overflow-hidden rounded-xl border border-border bg-card">
+      <div className="flex flex-wrap items-center border-b border-border bg-muted">
         <button
           type="button"
           onClick={() => setTab("edit")}
-          className={`inline-flex items-center gap-1.5 px-4 py-2 text-sm font-semibold transition ${ tab === "edit" ? "bg-white text-primary border-b-2 border-primary -mb-px" : "text-neutral-600 hover:text-neutral-900" }`}
+          className={`inline-flex items-center gap-1.5 px-4 py-2 text-sm font-semibold transition ${ tab === "edit" ? "bg-card text-primary border-b-2 border-primary -mb-px" : "text-muted-foreground hover:text-foreground" }`}
         >
           <Edit3 className="h-4 w-4" />
           Edit
@@ -186,7 +186,7 @@ export function MarkdownEditor({
         <button
           type="button"
           onClick={() => setTab("preview")}
-          className={`inline-flex items-center gap-1.5 px-4 py-2 text-sm font-semibold transition ${ tab === "preview" ? "bg-white text-primary border-b-2 border-primary -mb-px" : "text-neutral-600 hover:text-neutral-900" }`}
+          className={`inline-flex items-center gap-1.5 px-4 py-2 text-sm font-semibold transition ${ tab === "preview" ? "bg-card text-primary border-b-2 border-primary -mb-px" : "text-muted-foreground hover:text-foreground" }`}
         >
           <Eye className="h-4 w-4" />
           Preview
@@ -195,7 +195,7 @@ export function MarkdownEditor({
           type="button"
           onClick={() => fileInputRef.current?.click()}
           disabled={isUploading}
-          className="ml-2 inline-flex items-center gap-1.5 rounded-lg border border-neutral-200 bg-white px-3 py-1.5 text-sm font-semibold text-neutral-700 transition hover:bg-neutral-100 disabled:cursor-not-allowed disabled:opacity-60"
+          className="ml-2 inline-flex items-center gap-1.5 rounded-lg border border-border bg-card px-3 py-1.5 text-sm font-semibold text-foreground transition hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
         >
           {isUploading ? (
             <Loader2 className="h-4 w-4 animate-spin" />
@@ -212,7 +212,7 @@ export function MarkdownEditor({
           className="hidden"
           onChange={handleFileSelect}
         />
-        <span className="ml-auto px-4 py-2 text-xs text-neutral-500">
+        <span className="ml-auto px-4 py-2 text-xs text-muted-foreground">
           Có thể nhập Markdown, paste/kéo-thả hoặc bấm Chèn ảnh (chọn nhiều ảnh cùng lúc).
         </span>
       </div>
@@ -228,14 +228,14 @@ export function MarkdownEditor({
             onDragOver={(event) => event.preventDefault()}
             rows={rows}
             placeholder={placeholder}
-            className="w-full resize-y rounded-lg border border-neutral-200 bg-white p-3 font-mono text-sm leading-relaxed outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
+            className="w-full resize-y rounded-lg border border-border bg-card p-3 font-mono text-sm leading-relaxed outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
           />
         ) : (
-          <div className="prose prose-sm min-h-[20rem] max-w-none rounded-lg border border-neutral-200 bg-neutral-50 p-4 prose-img:mx-auto prose-img:my-4 prose-img:h-auto prose-img:max-w-full prose-img:rounded-xl">
+          <div className="prose prose-sm min-h-[20rem] max-w-none rounded-lg border border-border bg-muted p-4 prose-img:mx-auto prose-img:my-4 prose-img:h-auto prose-img:max-w-full prose-img:rounded-xl">
             {value.trim() ? (
               <ReactMarkdown remarkPlugins={[remarkGfm]}>{value}</ReactMarkdown>
             ) : (
-              <p className="italic text-neutral-400">
+              <p className="italic text-muted-foreground">
                 Preview sẽ hiện ở đây - viết Markdown ở tab Edit.
               </p>
             )}

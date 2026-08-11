@@ -55,8 +55,8 @@ export default async function SiteContentPage() {
   return (
     <div className="max-w-5xl">
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-neutral-900">Hình ảnh & nội dung trang</h1>
-        <p className="mt-1 text-sm text-neutral-500">
+        <h1 className="text-2xl font-bold text-foreground">Hình ảnh & nội dung trang</h1>
+        <p className="mt-1 text-sm text-muted-foreground">
           Override hero image + title + subtitle cho từng public page. Để trống ô = fallback về Unsplash mặc định (
           <code className="text-xs">lib/page-images.ts</code>).
         </p>

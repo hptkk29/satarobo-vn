@@ -74,7 +74,7 @@ export function ClassCancel({
         <button
           type="button"
           onClick={() => setOpen(true)}
-          className="rounded-lg border border-state-danger bg-white px-4 py-2 text-sm font-semibold text-state-danger-ink hover:bg-state-danger-soft"
+          className="rounded-lg border border-state-danger bg-card px-4 py-2 text-sm font-semibold text-state-danger-ink hover:bg-state-danger-soft"
         >
           Hủy lớp…
         </button>
@@ -100,7 +100,7 @@ export function ClassCancel({
             </DialogDescription>
           </DialogHeader>
           <label className="block">
-            <span className="mb-1 block text-xs font-semibold text-neutral-600">
+            <span className="mb-1 block text-xs font-semibold text-muted-foreground">
               Lý do hủy lớp <span className="text-state-danger-ink">*</span> (≥5 ký tự)
             </span>
             <textarea
@@ -109,7 +109,7 @@ export function ClassCancel({
               rows={2}
               disabled={pending}
               placeholder="VD: không đủ sĩ số khai giảng"
-              className="w-full rounded-lg border border-neutral-200 px-3 py-2 text-sm outline-none focus:border-state-danger"
+              className="w-full rounded-lg border border-border px-3 py-2 text-sm outline-none focus:border-state-danger"
             />
           </label>
           <DialogFooter>
@@ -117,7 +117,7 @@ export function ClassCancel({
               type="button"
               onClick={() => setOpen(false)}
               disabled={pending}
-              className="rounded-lg border border-neutral-200 bg-white px-4 py-2 text-sm font-semibold text-neutral-700 hover:bg-neutral-50 disabled:opacity-50"
+              className="rounded-lg border border-border bg-card px-4 py-2 text-sm font-semibold text-foreground hover:bg-muted disabled:opacity-50"
             >
               Đóng
             </button>

@@ -60,25 +60,25 @@ const STATUS_META: Record<
     label: "Có mặt",
     Icon: Check,
     activeStyle: "bg-state-success-ink text-white border-state-success-ink shadow",
-    idleStyle: "bg-white text-neutral-600 border-neutral-200 hover:bg-state-success-soft hover:border-state-success",
+    idleStyle: "bg-card text-muted-foreground border-border hover:bg-state-success-soft hover:border-state-success",
   },
   ABSENT: {
     label: "Vắng",
     Icon: X,
     activeStyle: "bg-state-danger-ink text-white border-state-danger-ink shadow",
-    idleStyle: "bg-white text-neutral-600 border-neutral-200 hover:bg-state-danger-soft hover:border-state-danger",
+    idleStyle: "bg-card text-muted-foreground border-border hover:bg-state-danger-soft hover:border-state-danger",
   },
   LATE: {
     label: "Muộn",
     Icon: Clock,
     activeStyle: "bg-state-warning text-white border-state-warning shadow",
-    idleStyle: "bg-white text-neutral-600 border-neutral-200 hover:bg-state-warning-soft hover:border-state-warning",
+    idleStyle: "bg-card text-muted-foreground border-border hover:bg-state-warning-soft hover:border-state-warning",
   },
   EXCUSED: {
     label: "Phép",
     Icon: FileText,
     activeStyle: "bg-state-info-ink text-white border-state-info-ink shadow",
-    idleStyle: "bg-white text-neutral-600 border-neutral-200 hover:bg-state-info-soft hover:border-state-info",
+    idleStyle: "bg-card text-muted-foreground border-border hover:bg-state-info-soft hover:border-state-info",
   },
 };
 
@@ -238,7 +238,7 @@ export function AttendanceGrid({ sessionId, rows }: Props) {
 
   if (rows.length === 0) {
     return (
-      <div className="rounded-xl border-2 border-dashed border-neutral-300 bg-neutral-50 p-12 text-center text-neutral-500">
+      <div className="rounded-xl border-2 border-dashed border-border bg-muted p-12 text-center text-muted-foreground">
         Lớp này chưa có học viên đang học.
         <br />
         <a href="/enrollments" className="text-primary hover:underline">
@@ -250,21 +250,21 @@ export function AttendanceGrid({ sessionId, rows }: Props) {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-neutral-200 bg-white p-4">
-        <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5 text-sm text-neutral-600">
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-border bg-card p-4">
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5 text-sm text-muted-foreground">
           <span>
-            <strong className="text-neutral-900">{rows.length} HV</strong> ·{" "}
+            <strong className="text-foreground">{rows.length} HV</strong> ·{" "}
             {dirtyCount > 0 ? (
               <span className="text-primary">{dirtyCount} thay đổi chưa lưu</span>
             ) : (
-              <span className="text-neutral-400">Không có thay đổi</span>
+              <span className="text-muted-foreground">Không có thay đổi</span>
             )}
           </span>
           {unmarked > 0 && (
-            <span className="inline-flex items-center gap-1.5 rounded-md border border-dashed border-neutral-300 bg-neutral-50 px-2 py-1 text-xs">
-              <span className="h-2 w-2 rounded-full border border-neutral-400" />
-              <span className="text-neutral-500">Chưa điểm danh</span>
-              <span className="font-bold text-neutral-900">{unmarked}</span>
+            <span className="inline-flex items-center gap-1.5 rounded-md border border-dashed border-border bg-muted px-2 py-1 text-xs">
+              <span className="h-2 w-2 rounded-full border border-border" />
+              <span className="text-muted-foreground">Chưa điểm danh</span>
+              <span className="font-bold text-foreground">{unmarked}</span>
             </span>
           )}
         </div>
@@ -273,7 +273,7 @@ export function AttendanceGrid({ sessionId, rows }: Props) {
             type="button"
             onClick={markAllPresent}
             disabled={pending}
-            className="rounded-lg border border-state-success bg-white px-3 py-1.5 text-sm font-semibold text-state-success-ink hover:bg-state-success-soft disabled:opacity-50"
+            className="rounded-lg border border-state-success bg-card px-3 py-1.5 text-sm font-semibold text-state-success-ink hover:bg-state-success-soft disabled:opacity-50"
           >
             Đánh dấu tất cả Có mặt
           </button>
@@ -297,17 +297,17 @@ export function AttendanceGrid({ sessionId, rows }: Props) {
         </div>
       )}
 
-      <div className="overflow-hidden rounded-xl border border-neutral-200 bg-white">
+      <div className="overflow-hidden rounded-xl border border-border bg-card">
         <table className="w-full">
-          <thead className="border-b border-neutral-200 bg-neutral-50 text-left">
+          <thead className="border-b border-border bg-muted text-left">
             <tr>
-              <th className="p-4 text-xs font-bold uppercase tracking-wider text-neutral-700">
+              <th className="p-4 text-xs font-bold uppercase tracking-wider text-foreground">
                 Học viên
               </th>
-              <th className="p-4 text-center text-xs font-bold uppercase tracking-wider text-neutral-700">
+              <th className="p-4 text-center text-xs font-bold uppercase tracking-wider text-foreground">
                 Trạng thái
               </th>
-              <th className="p-4 text-xs font-bold uppercase tracking-wider text-neutral-700">
+              <th className="p-4 text-xs font-bold uppercase tracking-wider text-foreground">
                 Ghi chú
               </th>
             </tr>
@@ -319,10 +319,10 @@ export function AttendanceGrid({ sessionId, rows }: Props) {
               return (
                 <tr
                   key={r.studentId}
-                  className={`border-b border-neutral-200 ${dirty ? "bg-primary-soft/40" : "hover:bg-neutral-50"}`}
+                  className={`border-b border-border ${dirty ? "bg-primary-soft/40" : "hover:bg-muted"}`}
                 >
                   <td className="p-4">
-                    <div className="flex items-center gap-2 font-bold text-neutral-900">
+                    <div className="flex items-center gap-2 font-bold text-foreground">
                       {r.studentName}
                       {r.makeupFromCenter && (
                         <span className="rounded-full bg-primary-soft px-2 py-0.5 text-[11px] font-semibold text-primary">
@@ -330,7 +330,7 @@ export function AttendanceGrid({ sessionId, rows }: Props) {
                         </span>
                       )}
                     </div>
-                    <div className="mt-0.5 flex items-center gap-2 text-xs text-neutral-500">
+                    <div className="mt-0.5 flex items-center gap-2 text-xs text-muted-foreground">
                       {r.studentPhone && <span className="font-mono">{r.studentPhone}</span>}
                       {!r.makeupFromCenter && r.enrollmentStatus !== "ACTIVE" && (
                         <span className="rounded bg-state-warning-soft px-1.5 py-0.5 font-medium text-state-warning-ink">
@@ -367,7 +367,7 @@ export function AttendanceGrid({ sessionId, rows }: Props) {
                       onChange={(e) => setNote(r.studentId, e.target.value)}
                       placeholder="Ghi chú (tuỳ chọn)"
                       disabled={pending}
-                      className="w-full rounded-lg border border-neutral-200 bg-white px-3 py-1.5 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 disabled:opacity-50"
+                      className="w-full rounded-lg border border-border bg-card px-3 py-1.5 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 disabled:opacity-50"
                     />
                     {s && isAbsent(s.status) && (
                       <div className="mt-2 space-y-2 rounded-lg border border-state-danger-soft bg-state-danger-soft/60 p-2">
@@ -377,7 +377,7 @@ export function AttendanceGrid({ sessionId, rows }: Props) {
                           onChange={(e) => setAbsenceReason(r.studentId, e.target.value)}
                           placeholder="Lý do phụ huynh xin vắng"
                           disabled={pending}
-                          className="w-full rounded-lg border border-neutral-200 bg-white px-3 py-1.5 text-sm outline-none focus:border-state-danger disabled:opacity-50"
+                          className="w-full rounded-lg border border-border bg-card px-3 py-1.5 text-sm outline-none focus:border-state-danger disabled:opacity-50"
                         />
                         <div className="flex flex-wrap items-center gap-1.5">
                           {(
@@ -394,7 +394,7 @@ export function AttendanceGrid({ sessionId, rows }: Props) {
                                 type="button"
                                 onClick={() => setMakeupStatus(r.studentId, value)}
                                 disabled={pending}
-                                className={`rounded-md border px-2.5 py-1 text-xs font-semibold transition disabled:opacity-50 ${ active ? "border-primary bg-primary text-white" : "border-neutral-200 bg-white text-neutral-600 hover:border-primary" }`}
+                                className={`rounded-md border px-2.5 py-1 text-xs font-semibold transition disabled:opacity-50 ${ active ? "border-primary bg-primary text-white" : "border-border bg-card text-muted-foreground hover:border-primary" }`}
                               >
                                 {label}
                               </button>

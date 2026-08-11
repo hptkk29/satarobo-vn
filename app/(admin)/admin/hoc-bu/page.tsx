@@ -68,16 +68,16 @@ export default async function MakeupPage() {
   return (
     <div className="max-w-4xl p-6">
       <div className="mb-4">
-        <h1 className="flex items-center gap-2 text-2xl font-bold text-gray-900">
+        <h1 className="flex items-center gap-2 text-2xl font-bold text-foreground">
           <RefreshCw className="h-6 w-6 text-primary" /> Học bù
         </h1>
-        <p className="mt-1 text-sm text-gray-500">
+        <p className="mt-1 text-sm text-muted-foreground">
           Buổi vắng cần bù → gợi ý buổi bù cùng khoá/bài (không vượt tiến độ) → xếp → đánh dấu đã bù.
         </p>
       </div>
 
       {items.length === 0 ? (
-        <p className="rounded-xl border border-dashed border-gray-300 p-8 text-center text-sm text-gray-400">
+        <p className="rounded-xl border border-dashed border-border p-8 text-center text-sm text-muted-foreground">
           Không có nhu cầu học bù nào đang chờ.
         </p>
       ) : (

@@ -19,7 +19,7 @@ export default async function R2TestPage() {
     <div className="container max-w-3xl py-8">
       <div className="mb-6">
         <h1 className="text-2xl font-bold">Test R2 Storage</h1>
-        <p className="text-sm text-gray-600 mt-1">
+        <p className="text-sm text-muted-foreground mt-1">
           Trang này dùng để verify R2 storage hoạt động đúng. Upload file → URL phải
           hiển thị được qua{" "}
           <code className="text-primary">https://cdn.satarobo.vn</code>.

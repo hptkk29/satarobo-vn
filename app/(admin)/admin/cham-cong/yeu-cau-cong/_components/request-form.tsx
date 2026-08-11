@@ -6,7 +6,7 @@ import { toast } from "sonner";
 import { createAdjustmentRequest } from "../../chinh-cong/_actions";
 
 const inputCls =
-  "w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary focus:outline-none";
+  "w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-primary focus:outline-none";
 
 export function AdjustRequestForm() {
   const router = useRouter();
@@ -33,17 +33,17 @@ export function AdjustRequestForm() {
   }
 
   return (
-    <section className="rounded-xl border border-gray-200 bg-white p-4">
-      <h2 className="mb-3 text-sm font-bold uppercase tracking-wider text-gray-500">
+    <section className="rounded-xl border border-border bg-card p-4">
+      <h2 className="mb-3 text-sm font-bold uppercase tracking-wider text-muted-foreground">
         Gửi yêu cầu chỉnh công
       </h2>
       <div className="space-y-3">
         <label className="block">
-          <span className="mb-1 block text-xs text-gray-500">Ngày công cần chỉnh</span>
+          <span className="mb-1 block text-xs text-muted-foreground">Ngày công cần chỉnh</span>
           <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className={inputCls} />
         </label>
         <label className="block">
-          <span className="mb-1 block text-xs text-gray-500">Đề nghị (vd: giờ vào 07:30, giờ ra 17:30)</span>
+          <span className="mb-1 block text-xs text-muted-foreground">Đề nghị (vd: giờ vào 07:30, giờ ra 17:30)</span>
           <input
             type="text"
             value={requested}
@@ -53,7 +53,7 @@ export function AdjustRequestForm() {
           />
         </label>
         <label className="block">
-          <span className="mb-1 block text-xs text-gray-500">Lý do / giải trình</span>
+          <span className="mb-1 block text-xs text-muted-foreground">Lý do / giải trình</span>
           <textarea
             value={reason}
             onChange={(e) => setReason(e.target.value)}

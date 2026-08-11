@@ -110,8 +110,8 @@ export default async function TransferPage({ searchParams }: PageProps) {
   return (
     <div className="space-y-6 p-4">
       <div>
-        <h1 className="text-xl font-bold text-neutral-900">Chuyển lớp / chuyển cơ sở</h1>
-        <p className="text-sm text-neutral-500">
+        <h1 className="text-xl font-bold text-foreground">Chuyển lớp / chuyển cơ sở</h1>
+        <p className="text-sm text-muted-foreground">
           Lớp đích cùng khoá, không vượt tiến độ học viên. Hết chỗ → tự đưa vào danh sách chờ (waitlist).
           Giữ lịch sử cơ sở cũ.
         </p>
@@ -119,10 +119,10 @@ export default async function TransferPage({ searchParams }: PageProps) {
 
       <TransferForm students={studentOptions} centers={centers} fromCenterId={fromCenterId} />
 
-      <div className="rounded-xl border border-neutral-200 bg-white">
-        <div className="border-b px-4 py-2 text-sm font-semibold text-neutral-700">Yêu cầu đang chờ</div>
+      <div className="rounded-xl border border-border bg-card">
+        <div className="border-b px-4 py-2 text-sm font-semibold text-foreground">Yêu cầu đang chờ</div>
         <table className="w-full text-sm">
-          <thead className="text-left text-xs text-neutral-400">
+          <thead className="text-left text-xs text-muted-foreground">
             <tr>
               <th className="px-4 py-2">Học viên</th>
               <th className="px-4 py-2">Trạng thái</th>
@@ -134,7 +134,7 @@ export default async function TransferPage({ searchParams }: PageProps) {
           <tbody>
             {requests.length === 0 ? (
               <tr>
-                <td colSpan={5} className="px-4 py-6 text-center text-neutral-400">
+                <td colSpan={5} className="px-4 py-6 text-center text-muted-foreground">
                   Không có yêu cầu.
                 </td>
               </tr>
@@ -156,8 +156,8 @@ export default async function TransferPage({ searchParams }: PageProps) {
                       {r.status === "WAITLISTED" ? "Chờ chỗ" : "Chờ duyệt"}
                     </span>
                   </td>
-                  <td className="px-4 py-2 text-neutral-500">{r.reason ?? "—"}</td>
-                  <td className="px-4 py-2 text-neutral-500">{r.createdAt.toISOString().slice(0, 10)}</td>
+                  <td className="px-4 py-2 text-muted-foreground">{r.reason ?? "—"}</td>
+                  <td className="px-4 py-2 text-muted-foreground">{r.createdAt.toISOString().slice(0, 10)}</td>
                   <td className="px-4 py-2">
                     <RequestActions id={r.id} hasTarget={!!r.toClassId} canManage={canApprove} />
                   </td>

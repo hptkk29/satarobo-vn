@@ -37,8 +37,8 @@ const num = (n: number) => n.toLocaleString("vi-VN");
 
 function Card({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <section className="rounded-xl border border-neutral-200 bg-white p-4">
-      <h2 className="mb-3 text-sm font-semibold text-neutral-800">{title}</h2>
+    <section className="rounded-xl border border-border bg-card p-4">
+      <h2 className="mb-3 text-sm font-semibold text-foreground">{title}</h2>
       {children}
     </section>
   );
@@ -75,8 +75,8 @@ export default async function TeacherPerformanceReportPage({
   return (
     <div className="space-y-5 p-4">
       <div>
-        <h1 className="text-xl font-bold text-neutral-900">Báo cáo hiệu suất giáo viên</h1>
-        <p className="text-sm text-neutral-500">
+        <h1 className="text-xl font-bold text-foreground">Báo cáo hiệu suất giáo viên</h1>
+        <p className="text-sm text-muted-foreground">
           Số buổi đã dạy, chuyên cần lớp phụ trách, số học viên và điểm học bạ trung bình — theo phạm vi cơ sở của bạn.
         </p>
       </div>
@@ -99,19 +99,19 @@ export default async function TeacherPerformanceReportPage({
             height={300}
           />
         ) : (
-          <p className="py-8 text-center text-sm text-neutral-400">
+          <p className="py-8 text-center text-sm text-muted-foreground">
             Chưa có buổi học hoàn tất trong phạm vi.
           </p>
         )}
       </Card>
 
-      <section className="rounded-xl border border-neutral-200 bg-white">
-        <div className="border-b border-neutral-100 px-4 py-3">
-          <h2 className="text-sm font-semibold text-neutral-700">Chi tiết theo giáo viên</h2>
+      <section className="rounded-xl border border-border bg-card">
+        <div className="border-b border-border px-4 py-3">
+          <h2 className="text-sm font-semibold text-foreground">Chi tiết theo giáo viên</h2>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full min-w-[640px] text-sm">
-            <thead className="text-left text-xs text-neutral-400">
+            <thead className="text-left text-xs text-muted-foreground">
               <tr>
                 <th className="px-4 py-2">Giáo viên</th>
                 <th className="px-4 py-2 text-right">Buổi đã dạy</th>
@@ -123,7 +123,7 @@ export default async function TeacherPerformanceReportPage({
             <tbody>
               {report.rows.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="px-4 py-6 text-center text-neutral-400">
+                  <td colSpan={5} className="px-4 py-6 text-center text-muted-foreground">
                     Không có giáo viên phụ trách lớp trong phạm vi cơ sở.
                   </td>
                 </tr>

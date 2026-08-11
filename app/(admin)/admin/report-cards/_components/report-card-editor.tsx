@@ -100,11 +100,11 @@ export function ReportCardEditor(props: {
     <div className="space-y-5">
       {/* Status + số liệu động */}
       <div className="flex flex-wrap items-center gap-3">
-        <span className="rounded-full bg-neutral-100 px-3 py-1 text-sm font-medium text-neutral-700">
+        <span className="rounded-full bg-muted px-3 py-1 text-sm font-medium text-foreground">
           {REPORT_CARD_STATUS_LABEL[status]}
         </span>
         {props.publishedAt ? (
-          <span className="text-xs text-neutral-400">
+          <span className="text-xs text-muted-foreground">
             {/* Ghim timeZone VN: client component SSR trên server (UTC) rồi hydrate ở
                 trình duyệt (+7) — không ghim sẽ lệch HTML → lỗi hydration (trang trắng). */}
             Phát hành:{" "}
@@ -115,8 +115,8 @@ export function ReportCardEditor(props: {
         ) : null}
       </div>
 
-      <section className="rounded-xl border border-neutral-200 bg-white p-4">
-        <h2 className="mb-3 text-sm font-semibold text-neutral-700">Số liệu (tự đổ, live)</h2>
+      <section className="rounded-xl border border-border bg-card p-4">
+        <h2 className="mb-3 text-sm font-semibold text-foreground">Số liệu (tự đổ, live)</h2>
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
           {[
             { label: "Chuyên cần", value: `${att.attended}/${att.total} (${att.rate}%)` },
@@ -137,20 +137,20 @@ export function ReportCardEditor(props: {
                 ]
               : []),
           ].map((s) => (
-            <div key={s.label} className="rounded-lg border border-neutral-200 p-3">
-              <div className="text-xs text-neutral-400">{s.label}</div>
-              <div className="text-lg font-bold text-neutral-900">{s.value}</div>
+            <div key={s.label} className="rounded-lg border border-border p-3">
+              <div className="text-xs text-muted-foreground">{s.label}</div>
+              <div className="text-lg font-bold text-foreground">{s.value}</div>
             </div>
           ))}
         </div>
         {metrics.skills && metrics.skills.length > 0 ? (
           <div className="mt-3">
-            <h3 className="mb-1 text-xs font-semibold text-neutral-500">Kỹ năng robot (mới nhất)</h3>
+            <h3 className="mb-1 text-xs font-semibold text-muted-foreground">Kỹ năng robot (mới nhất)</h3>
             <ul className="flex flex-wrap gap-2">
               {metrics.skills.map((sk) => (
                 <li
                   key={sk.skill}
-                  className="rounded-full border border-neutral-200 px-3 py-1 text-xs text-neutral-700"
+                  className="rounded-full border border-border px-3 py-1 text-xs text-foreground"
                 >
                   {SKILL_LABEL[sk.skill as RoboticsSkill] ?? sk.skill}:{" "}
                   <span className="font-medium">
@@ -161,15 +161,15 @@ export function ReportCardEditor(props: {
             </ul>
           </div>
         ) : null}
-        <p className="mt-2 text-xs text-neutral-400">
+        <p className="mt-2 text-xs text-muted-foreground">
           Số liệu được đóng băng vào bản phát hành tại thời điểm phát hành.
         </p>
       </section>
 
       {/* Nhận xét theo giai đoạn */}
-      <section className="rounded-xl border border-neutral-200 bg-white p-4">
+      <section className="rounded-xl border border-border bg-card p-4">
         <div className="mb-3 flex items-center justify-between">
-          <h2 className="text-sm font-semibold text-neutral-700">Nhận xét theo giai đoạn</h2>
+          <h2 className="text-sm font-semibold text-foreground">Nhận xét theo giai đoạn</h2>
           {editable ? (
             <button
               type="button"
@@ -181,7 +181,7 @@ export function ReportCardEditor(props: {
           ) : null}
         </div>
         {periods.length === 0 ? (
-          <p className="text-sm text-neutral-400">Chưa có nhận xét giai đoạn.</p>
+          <p className="text-sm text-muted-foreground">Chưa có nhận xét giai đoạn.</p>
         ) : (
           <div className="space-y-2">
             {periods.map((p, i) => (
@@ -200,7 +200,7 @@ export function ReportCardEditor(props: {
                     onChange={(e) =>
                       setPeriods((prev) => prev.map((x, j) => (j === i ? { ...x, period: e.target.value } : x)))
                     }
-                    className="rounded-md border border-neutral-300 px-3 py-2 text-sm sm:w-48"
+                    className="rounded-md border border-border px-3 py-2 text-sm sm:w-48"
                   />
                 )}
                 <input
@@ -210,7 +210,7 @@ export function ReportCardEditor(props: {
                   onChange={(e) =>
                     setPeriods((prev) => prev.map((x, j) => (j === i ? { ...x, comment: e.target.value } : x)))
                   }
-                  className="flex-1 rounded-md border border-neutral-300 px-3 py-2 text-sm"
+                  className="flex-1 rounded-md border border-border px-3 py-2 text-sm"
                 />
                 {editable && !isMilestonePeriod(p.period) ? (
                   <button
@@ -228,22 +228,22 @@ export function ReportCardEditor(props: {
       </section>
 
       {/* Chấm năng lực theo tiêu chí */}
-      <section className="rounded-xl border border-neutral-200 bg-white p-4">
-        <h2 className="mb-3 text-sm font-semibold text-neutral-700">Đánh giá năng lực (thang 1–4)</h2>
+      <section className="rounded-xl border border-border bg-card p-4">
+        <h2 className="mb-3 text-sm font-semibold text-foreground">Đánh giá năng lực (thang 1–4)</h2>
         {props.criteria.length === 0 ? (
-          <p className="text-sm text-neutral-400">Khoá chưa có tiêu chí.</p>
+          <p className="text-sm text-muted-foreground">Khoá chưa có tiêu chí.</p>
         ) : (
           <div className="space-y-2">
             {props.criteria.map((c) => {
               const sc = scores.find((s) => s.criterionId === c.id);
               return (
                 <div key={c.id} className="flex flex-col gap-2 sm:flex-row sm:items-center">
-                  <div className="sm:w-56 text-sm font-medium text-neutral-700">{c.name}</div>
+                  <div className="sm:w-56 text-sm font-medium text-foreground">{c.name}</div>
                   <select
                     value={sc?.level ?? 0}
                     disabled={!editable}
                     onChange={(e) => setScore(c.id, { level: Number(e.target.value) })}
-                    className="rounded-md border border-neutral-300 px-3 py-2 text-sm sm:w-44"
+                    className="rounded-md border border-border px-3 py-2 text-sm sm:w-44"
                   >
                     <option value={0}>— Chưa chấm —</option>
                     {[1, 2, 3, 4].map((lv) => (
@@ -257,7 +257,7 @@ export function ReportCardEditor(props: {
                     disabled={!editable}
                     placeholder="Ghi chú (tuỳ chọn)"
                     onChange={(e) => setScore(c.id, { note: e.target.value })}
-                    className="flex-1 rounded-md border border-neutral-300 px-3 py-2 text-sm"
+                    className="flex-1 rounded-md border border-border px-3 py-2 text-sm"
                   />
                 </div>
               );
@@ -267,34 +267,34 @@ export function ReportCardEditor(props: {
       </section>
 
       {/* Nhận xét tổng kết */}
-      <section className="rounded-xl border border-neutral-200 bg-white p-4">
-        <h2 className="mb-3 text-sm font-semibold text-neutral-700">Tổng kết</h2>
-        <label className="mb-1 block text-xs text-neutral-500">Kết quả hoàn thành</label>
+      <section className="rounded-xl border border-border bg-card p-4">
+        <h2 className="mb-3 text-sm font-semibold text-foreground">Tổng kết</h2>
+        <label className="mb-1 block text-xs text-muted-foreground">Kết quả hoàn thành</label>
         <input
           value={completionStatus}
           disabled={!editable}
           placeholder="vd Hoàn thành tốt"
           onChange={(e) => setCompletionStatus(e.target.value)}
-          className="mb-3 w-full rounded-md border border-neutral-300 px-3 py-2 text-sm sm:w-72"
+          className="mb-3 w-full rounded-md border border-border px-3 py-2 text-sm sm:w-72"
         />
-        <label className="mb-1 block text-xs text-neutral-500">Nhận xét tổng kết</label>
+        <label className="mb-1 block text-xs text-muted-foreground">Nhận xét tổng kết</label>
         <textarea
           value={finalComment}
           disabled={!editable}
           rows={4}
           onChange={(e) => setFinalComment(e.target.value)}
-          className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm"
+          className="w-full rounded-md border border-border px-3 py-2 text-sm"
         />
       </section>
 
       {/* Lý do (cho trả lại / thu hồi) */}
       {canReview && (status === "PENDING_REVIEW" || status === "PUBLISHED") ? (
         <div>
-          <label className="mb-1 block text-xs text-neutral-500">Lý do (bắt buộc khi trả lại / thu hồi)</label>
+          <label className="mb-1 block text-xs text-muted-foreground">Lý do (bắt buộc khi trả lại / thu hồi)</label>
           <input
             value={reason}
             onChange={(e) => setReason(e.target.value)}
-            className="w-full rounded-md border border-neutral-300 px-3 py-2 text-sm"
+            className="w-full rounded-md border border-border px-3 py-2 text-sm"
           />
         </div>
       ) : null}
@@ -322,7 +322,7 @@ export function ReportCardEditor(props: {
             type="button"
             disabled={pending || !hasCriteria}
             onClick={() => transition("PENDING_REVIEW", false)}
-            className="rounded-md bg-state-warning-ink px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
+            className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary-dark disabled:opacity-50"
           >
             {status === "RECALLED" ? "Nộp lại để duyệt" : "Nộp duyệt"}
           </button>
@@ -342,7 +342,7 @@ export function ReportCardEditor(props: {
               type="button"
               disabled={pending}
               onClick={() => transition("DRAFT", true)}
-              className="rounded-md border border-neutral-300 px-4 py-2 text-sm font-medium text-neutral-700 disabled:opacity-50"
+              className="rounded-md border border-border px-4 py-2 text-sm font-medium text-foreground disabled:opacity-50"
             >
               Trả lại (nháp)
             </button>

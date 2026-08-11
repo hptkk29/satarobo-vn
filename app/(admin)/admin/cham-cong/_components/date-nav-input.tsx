@@ -16,7 +16,7 @@ export function DateNavInput({ value }: { value: string }) {
       onChange={(e) => {
         if (e.target.value) router.push(`/cham-cong?date=${e.target.value}`);
       }}
-      className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm"
+      className="rounded-lg border border-border px-3 py-1.5 text-sm"
     />
   );
 }

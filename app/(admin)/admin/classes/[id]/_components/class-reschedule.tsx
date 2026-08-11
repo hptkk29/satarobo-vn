@@ -111,9 +111,9 @@ export function ClassReschedule({
   }
 
   return (
-    <section className="rounded-xl border border-gray-200 bg-white p-5">
+    <section className="rounded-xl border border-border bg-card p-5">
       <div className="mb-3 flex items-center justify-between gap-2">
-        <h2 className="flex items-center gap-2 text-sm font-bold uppercase tracking-wider text-gray-500">
+        <h2 className="flex items-center gap-2 text-sm font-bold uppercase tracking-wider text-muted-foreground">
           <CalendarClock className="h-4 w-4" /> Buổi học theo lịch
         </h2>
         <div className="flex gap-2">
@@ -129,7 +129,7 @@ export function ClassReschedule({
             type="button"
             onClick={resync}
             disabled={pending}
-            className={`inline-flex items-center gap-1 rounded-lg px-3 py-1.5 text-sm font-semibold disabled:opacity-50 ${ severe ? "bg-state-danger-ink text-white hover:bg-state-danger-ink" : "border border-gray-300 text-gray-700 hover:bg-gray-50" }`}
+            className={`inline-flex items-center gap-1 rounded-lg px-3 py-1.5 text-sm font-semibold disabled:opacity-50 ${ severe ? "bg-state-danger-ink text-white hover:bg-state-danger-ink" : "border border-border text-foreground hover:bg-muted" }`}
           >
             <CalendarSync className="h-4 w-4" /> Xếp lại buổi theo lịch
           </button>
@@ -137,7 +137,7 @@ export function ClassReschedule({
             type="button"
             onClick={preview}
             disabled={pending}
-            className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+            className="rounded-lg border border-border px-3 py-1.5 text-sm font-semibold text-foreground hover:bg-muted disabled:opacity-50"
           >
             Xem trước dời
           </button>
@@ -157,22 +157,22 @@ export function ClassReschedule({
         </div>
       )}
 
-      <p className="mb-2 text-xs text-gray-500">
+      <p className="mb-2 text-xs text-muted-foreground">
         &quot;Sinh buổi học&quot; tạo buổi theo lịch lớp + số buổi chuẩn của khoá, bỏ qua ngày nghỉ (chỉ khi lớp CHƯA có buổi). Lớp duyệt ACTIVE tự sinh.
       </p>
-      <p className="mb-2 text-xs text-gray-500">
+      <p className="mb-2 text-xs text-muted-foreground">
         &quot;Xếp lại buổi theo lịch&quot; neo lại CẢ DÃY buổi từ ngày khai giảng theo lịch hiện tại
         (trừ ngày nghỉ). Chỉ đổi ngày — không tạo, không xoá buổi; buổi đã điểm danh / có nhận xét /
         đã giao bài / có ảnh / đã hoàn tất giữ nguyên ngày.
       </p>
-      <p className="text-xs text-gray-500">
+      <p className="text-xs text-muted-foreground">
         &quot;Xem trước dời&quot; chỉ áp lịch cho các buổi CHƯA diễn ra; buổi trùng lịch nghỉ cơ sở sẽ dời sang buổi kế (giữ đủ tổng buổi). Buổi đã diễn ra giữ nguyên.
       </p>
 
       {items && (
         <div className="mt-3">
           {items.length === 0 ? (
-            <p className="text-sm text-gray-400">Không có buổi tương lai.</p>
+            <p className="text-sm text-muted-foreground">Không có buổi tương lai.</p>
           ) : (
             <>
               <ul className="max-h-56 space-y-1 overflow-y-auto text-sm">
@@ -180,15 +180,15 @@ export function ClassReschedule({
                   const moved = fmt(it.oldDate) !== fmt(it.newDate);
                   return (
                     <li key={it.id} className="flex items-center justify-between gap-2">
-                      <span className="truncate text-gray-600">{it.topic ?? "Buổi học"}</span>
-                      <span className={`tabular-nums ${moved ? "font-semibold text-state-warning-ink" : "text-gray-400"}`}>
+                      <span className="truncate text-muted-foreground">{it.topic ?? "Buổi học"}</span>
+                      <span className={`tabular-nums ${moved ? "font-semibold text-state-warning-ink" : "text-muted-foreground"}`}>
                         {fmt(it.oldDate)}{moved ? ` → ${fmt(it.newDate)}` : ""}
                       </span>
                     </li>
                   );
                 })}
               </ul>
-              <p className="mt-2 text-xs text-gray-500">{changed.length} buổi sẽ đổi ngày.</p>
+              <p className="mt-2 text-xs text-muted-foreground">{changed.length} buổi sẽ đổi ngày.</p>
 
               {/* T4.1 — trùng phòng/GV là lỗi CHẶN: nêu rõ ngày để đổi phòng/GV/lịch. */}
               {conflicts.length > 0 && (

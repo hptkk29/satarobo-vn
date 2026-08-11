@@ -53,11 +53,11 @@ export default async function UserGroupsPage() {
   return (
     <div>
       <div className="mb-6">
-        <h1 className="flex items-center gap-2 text-3xl font-black text-neutral-900">
+        <h1 className="flex items-center gap-2 text-3xl font-black text-foreground">
           <UsersRound className="h-7 w-7 text-primary" />
           Nhóm người dùng
         </h1>
-        <p className="mt-1 text-sm text-neutral-500">
+        <p className="mt-1 text-sm text-muted-foreground">
           Cấp quyền ad-hoc cho ít người mà không sửa vai trò chuẩn. DENY của nhóm thắng
           ALLOW của vai trò; gỡ khỏi nhóm là quyền mất ngay request kế tiếp.
         </p>
@@ -78,7 +78,7 @@ export default async function UserGroupsPage() {
           <TableBody>
             {groups.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={4} className="py-8 text-center text-sm text-neutral-400">
+                <TableCell colSpan={4} className="py-8 text-center text-sm text-muted-foreground">
                   Chưa có nhóm nào. Tạo nhóm đầu tiên bằng form phía trên.
                 </TableCell>
               </TableRow>
@@ -88,12 +88,12 @@ export default async function UserGroupsPage() {
                   <TableCell>
                     <Link
                       href={`/user-groups/${g.id}`}
-                      className="font-semibold text-neutral-900 hover:underline"
+                      className="font-semibold text-foreground hover:underline"
                     >
                       {g.name}
                     </Link>
                   </TableCell>
-                  <TableCell className="max-w-md truncate text-neutral-500">
+                  <TableCell className="max-w-md truncate text-muted-foreground">
                     {g.description ?? "—"}
                   </TableCell>
                   <TableCell className="text-right">{g._count.members}</TableCell>
@@ -101,7 +101,7 @@ export default async function UserGroupsPage() {
                     {(grantCountByGroup.get(g.id) ?? 0) > 0 ? (
                       <Badge variant="secondary">{grantCountByGroup.get(g.id)}</Badge>
                     ) : (
-                      <span className="text-neutral-400">0</span>
+                      <span className="text-muted-foreground">0</span>
                     )}
                   </TableCell>
                 </TableRow>

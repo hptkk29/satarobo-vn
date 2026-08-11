@@ -48,12 +48,12 @@ export function CheckinClient({
 
   if (done) {
     return (
-      <div className="rounded-2xl bg-white p-8 text-center shadow-sm">
+      <div className="rounded-2xl bg-card p-8 text-center shadow-sm">
         <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-full bg-state-success-soft text-state-success-ink">
           ✓
         </div>
-        <p className="text-lg font-bold text-neutral-900">{done} thành công</p>
-        <p className="mt-1 text-sm text-neutral-500">
+        <p className="text-lg font-bold text-foreground">{done} thành công</p>
+        <p className="mt-1 text-sm text-muted-foreground">
           {new Date().toLocaleString("vi-VN")}
         </p>
       </div>
@@ -61,11 +61,11 @@ export function CheckinClient({
   }
 
   return (
-    <div className="rounded-2xl bg-white p-6 text-center shadow-sm">
-      <p className="mb-1 flex items-center justify-center gap-1.5 text-sm text-neutral-500">
+    <div className="rounded-2xl bg-card p-6 text-center shadow-sm">
+      <p className="mb-1 flex items-center justify-center gap-1.5 text-sm text-muted-foreground">
         <MapPin className="h-4 w-4" /> Cần bật định vị (GPS) khi chấm công
       </p>
-      <p className="mb-5 text-xs text-neutral-400">
+      <p className="mb-5 text-xs text-muted-foreground">
         Quét lại mã trên màn hình nếu báo hết hạn.
       </p>
       <div className="grid grid-cols-2 gap-3">

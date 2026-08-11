@@ -123,12 +123,12 @@ export function DocumentPicker({
   }
 
   return (
-    <section className="rounded-xl border border-neutral-200 bg-white">
-      <header className="border-b border-neutral-100 p-4">
-        <h2 className="text-sm font-bold uppercase tracking-wider text-neutral-700">
+    <section className="rounded-xl border border-border bg-card">
+      <header className="border-b border-border p-4">
+        <h2 className="text-sm font-bold uppercase tracking-wider text-foreground">
           Tài liệu tham khảo ({attached.length})
         </h2>
-        <p className="mt-0.5 text-xs text-neutral-500">
+        <p className="mt-0.5 text-xs text-muted-foreground">
           Đính kèm tài liệu từ ngân hàng (E4) để HS xem khi làm bài.
         </p>
       </header>
@@ -142,11 +142,11 @@ export function DocumentPicker({
       <div className="grid grid-cols-1 gap-4 p-4 lg:grid-cols-2">
         {/* Attached list */}
         <div>
-          <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-neutral-500">
+          <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
             Đã đính kèm
           </h3>
           {attached.length === 0 ? (
-            <div className="rounded-lg border border-dashed border-neutral-200 p-4 text-center text-sm text-neutral-400">
+            <div className="rounded-lg border border-dashed border-border p-4 text-center text-sm text-muted-foreground">
               Chưa có tài liệu nào.
             </div>
           ) : (
@@ -154,14 +154,14 @@ export function DocumentPicker({
               {attached.map((a) => (
                 <li
                   key={a.id}
-                  className="flex items-start gap-2 rounded-lg border border-neutral-200 bg-neutral-50 p-2.5"
+                  className="flex items-start gap-2 rounded-lg border border-border bg-muted p-2.5"
                 >
                   <FileText className="h-4 w-4 flex-shrink-0 text-state-info-ink mt-1" />
                   <div className="flex-1 min-w-0">
-                    <div className="truncate text-sm font-medium text-neutral-900">
+                    <div className="truncate text-sm font-medium text-foreground">
                       {a.title}
                     </div>
-                    <div className="text-xs text-neutral-500">
+                    <div className="text-xs text-muted-foreground">
                       {TYPE_LABEL[a.type] ?? a.type} · {formatBytes(a.fileSize)}
                     </div>
                     <a
@@ -190,7 +190,7 @@ export function DocumentPicker({
 
         {/* Bank picker */}
         <div>
-          <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-neutral-500">
+          <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
             Ngân hàng tài liệu ({filteredBank.length})
           </h3>
           <div className="mb-2 flex gap-2">
@@ -199,12 +199,12 @@ export function DocumentPicker({
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Tìm tiêu đề / tên file..."
-              className="flex-1 rounded-md border border-neutral-200 px-2.5 py-1.5 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
+              className="flex-1 rounded-md border border-border px-2.5 py-1.5 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
             />
             <select
               value={typeFilter}
               onChange={(e) => setTypeFilter(e.target.value)}
-              className="rounded-md border border-neutral-200 px-2 py-1.5 text-sm focus:border-primary focus:outline-none"
+              className="rounded-md border border-border px-2 py-1.5 text-sm focus:border-primary focus:outline-none"
             >
               <option value="">Mọi loại</option>
               {Object.entries(TYPE_LABEL).map(([v, label]) => (
@@ -214,21 +214,21 @@ export function DocumentPicker({
               ))}
             </select>
           </div>
-          <div className="max-h-[360px] overflow-y-auto rounded-lg border border-neutral-200">
+          <div className="max-h-[360px] overflow-y-auto rounded-lg border border-border">
             {filteredBank.length === 0 ? (
-              <div className="p-6 text-center text-sm text-neutral-400">
+              <div className="p-6 text-center text-sm text-muted-foreground">
                 Không có tài liệu phù hợp.
               </div>
             ) : (
-              <ul className="divide-y divide-neutral-100">
+              <ul className="divide-y divide-border">
                 {filteredBank.map((d) => (
                   <li key={d.id} className="flex items-start gap-2 p-2.5">
-                    <Paperclip className="h-4 w-4 flex-shrink-0 text-neutral-400 mt-1" />
+                    <Paperclip className="h-4 w-4 flex-shrink-0 text-muted-foreground mt-1" />
                     <div className="flex-1 min-w-0">
-                      <div className="truncate text-sm font-medium text-neutral-900">
+                      <div className="truncate text-sm font-medium text-foreground">
                         {d.title}
                       </div>
-                      <div className="text-xs text-neutral-500">
+                      <div className="text-xs text-muted-foreground">
                         {TYPE_LABEL[d.type] ?? d.type} · {formatBytes(d.fileSize)}
                       </div>
                     </div>

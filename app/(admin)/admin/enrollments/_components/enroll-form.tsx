@@ -102,9 +102,9 @@ export function EnrollForm({
         </div>
       )}
 
-      <section className="rounded-xl border border-neutral-200 bg-white p-6 space-y-4">
+      <section className="rounded-xl border border-border bg-card p-6 space-y-4">
         <label className="block">
-          <span className="mb-1 block text-sm font-semibold text-neutral-700">
+          <span className="mb-1 block text-sm font-semibold text-foreground">
             Học viên <span className="text-state-danger-ink">*</span>
           </span>
           <select
@@ -112,7 +112,7 @@ export function EnrollForm({
             onChange={(e) => setStudentId(e.target.value)}
             disabled={pending}
             required
-            className="w-full rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
+            className="w-full rounded-lg border border-border bg-card px-3 py-2 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
           >
             <option value="">— Chọn học viên —</option>
             {students.map((s) => (
@@ -126,7 +126,7 @@ export function EnrollForm({
         </label>
 
         <label className="block">
-          <span className="mb-1 block text-sm font-semibold text-neutral-700">
+          <span className="mb-1 block text-sm font-semibold text-foreground">
             Lớp học <span className="text-state-danger-ink">*</span>
           </span>
           <select
@@ -134,7 +134,7 @@ export function EnrollForm({
             onChange={(e) => setClassId(e.target.value)}
             disabled={pending}
             required
-            className="w-full rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
+            className="w-full rounded-lg border border-border bg-card px-3 py-2 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
           >
             <option value="">— Chọn lớp —</option>
             {classes.map((c) => {
@@ -166,7 +166,7 @@ export function EnrollForm({
                 Còn {Math.max(0, selectedClass.maxStudents - selectedClass.enrolledCount)}/
                 {selectedClass.maxStudents} chỗ
               </span>
-              <span className="text-neutral-500">
+              <span className="text-muted-foreground">
                 Trạng thái lớp:{" "}
                 <strong>
                   {STATUS_LABEL[selectedClass.status] ?? selectedClass.status}
@@ -183,14 +183,14 @@ export function EnrollForm({
 
         {showRenewal && (
           <label className="block">
-            <span className="mb-1 block text-sm font-semibold text-neutral-700">
+            <span className="mb-1 block text-sm font-semibold text-foreground">
               Khoá trước (tái tục)
             </span>
             <select
               value={renewedFrom}
               onChange={(e) => setRenewedFrom(e.target.value)}
               disabled={pending}
-              className="w-full rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
+              className="w-full rounded-lg border border-border bg-card px-3 py-2 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
             >
               <option value="">— Không phải tái tục —</option>
               {previousEnrollments.map((p) => (
@@ -199,7 +199,7 @@ export function EnrollForm({
                 </option>
               ))}
             </select>
-            <p className="mt-1 text-xs text-neutral-500">
+            <p className="mt-1 text-xs text-muted-foreground">
               Ghi danh tái tục sẽ nối về khoá trước của học viên (hoa hồng tái tục
               không tính 4 tầng theo SR.QD.217).
             </p>
@@ -207,7 +207,7 @@ export function EnrollForm({
         )}
 
         <label className="block">
-          <span className="mb-1 block text-sm font-semibold text-neutral-700">
+          <span className="mb-1 block text-sm font-semibold text-foreground">
             Ghi chú
           </span>
           <textarea
@@ -216,7 +216,7 @@ export function EnrollForm({
             placeholder="VD: Đăng ký qua campaign 24 suất miễn phí…"
             rows={3}
             disabled={pending}
-            className="w-full resize-y rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
+            className="w-full resize-y rounded-lg border border-border bg-card px-3 py-2 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
           />
         </label>
       </section>
@@ -233,7 +233,7 @@ export function EnrollForm({
           type="button"
           onClick={() => router.push("/enrollments")}
           disabled={pending}
-          className="rounded-xl border-2 border-neutral-200 bg-white px-6 py-3 font-bold text-neutral-700 hover:bg-neutral-50"
+          className="rounded-xl border-2 border-border bg-card px-6 py-3 font-bold text-foreground hover:bg-muted"
         >
           Huỷ
         </button>

@@ -90,7 +90,7 @@ export function RefundTable({
 
   return (
     <>
-      <div className="overflow-x-auto rounded-lg border border-neutral-200">
+      <div className="overflow-x-auto rounded-lg border border-border">
         <Table>
           <TableHeader>
             <TableRow>
@@ -108,7 +108,7 @@ export function RefundTable({
               <TableRow>
                 <TableCell
                   colSpan={7}
-                  className="py-8 text-center text-sm text-neutral-500"
+                  className="py-8 text-center text-sm text-muted-foreground"
                 >
                   Không có yêu cầu hoàn tiền
                 </TableCell>
@@ -117,16 +117,16 @@ export function RefundTable({
             {rows.map((r) => (
               <TableRow key={r.id}>
                 <TableCell>
-                  <div className="font-medium text-gray-900">
+                  <div className="font-medium text-foreground">
                     {r.studentName ?? "(Không rõ HV)"}
                   </div>
-                  <div className="text-xs text-neutral-500">
+                  <div className="text-xs text-muted-foreground">
                     {r.className ?? r.enrollmentId.slice(0, 8)}
                   </div>
                 </TableCell>
                 <TableCell>
                   <Badge variant="secondary">{TRIGGER_LABEL[r.trigger]}</Badge>
-                  <div className="mt-1 max-w-[16rem] truncate text-xs text-neutral-500">
+                  <div className="mt-1 max-w-[16rem] truncate text-xs text-muted-foreground">
                     {r.reason}
                   </div>
                 </TableCell>
@@ -168,7 +168,7 @@ export function RefundTable({
                       </Button>
                     </div>
                   ) : (
-                    <span className="text-xs text-neutral-400">—</span>
+                    <span className="text-xs text-muted-foreground">—</span>
                   )}
                 </TableCell>
               </TableRow>

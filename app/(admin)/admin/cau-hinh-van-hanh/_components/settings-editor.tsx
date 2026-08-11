@@ -62,11 +62,11 @@ function SettingRow({ row, canEdit }: { row: SettingRowView; canEdit: boolean })
   };
 
   return (
-    <div className="rounded-lg border border-gray-200 bg-white p-4">
+    <div className="rounded-lg border border-border bg-card p-4">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <p className="text-sm font-semibold text-gray-900">{row.label}</p>
-          <code className="text-xs text-gray-400">{row.key}</code>
+          <p className="text-sm font-semibold text-foreground">{row.label}</p>
+          <code className="text-xs text-muted-foreground">{row.key}</code>
           {row.centerOverridable && (
             <span className="ml-2 rounded bg-state-info-soft px-1.5 py-0.5 text-[10px] font-medium text-state-info-ink">
               cho phép override theo cơ sở
@@ -86,7 +86,7 @@ function SettingRow({ row, canEdit }: { row: SettingRowView; canEdit: boolean })
             aria-label={row.label}
           />
           <span
-            className={`text-sm font-medium ${ text === "true" ? "text-state-success-ink" : "text-neutral-500" }`}
+            className={`text-sm font-medium ${ text === "true" ? "text-state-success-ink" : "text-muted-foreground" }`}
           >
             {text === "true" ? "Đang BẬT" : "Đang TẮT"}
           </span>
@@ -128,7 +128,7 @@ export function SettingsEditor({ rows, canEdit }: { rows: SettingRowView[]; canE
     <div className="space-y-6">
       {groups.map((g) => (
         <section key={g}>
-          <h2 className="mb-2 text-sm font-bold uppercase tracking-wide text-gray-500">
+          <h2 className="mb-2 text-sm font-bold uppercase tracking-wide text-muted-foreground">
             {GROUP_LABEL[g] ?? g}
           </h2>
           <div className="space-y-3">

@@ -90,7 +90,7 @@ export function ParentAccountSection({
 
   return (
     <section>
-      <h2 className="mb-3 flex items-center gap-2 text-lg font-bold text-neutral-900">
+      <h2 className="mb-3 flex items-center gap-2 text-lg font-bold text-foreground">
         <KeyRound className="h-5 w-5 text-primary" />
         Tài khoản phụ huynh (Portal)
       </h2>
@@ -124,7 +124,7 @@ export function ParentAccountSection({
                   type="button"
                   onClick={resend}
                   disabled={pending}
-                  className="inline-flex items-center gap-1.5 rounded-lg border border-state-warning bg-white px-3 py-1.5 text-xs font-semibold text-state-warning-ink hover:bg-state-warning-soft disabled:opacity-50"
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-state-warning bg-card px-3 py-1.5 text-xs font-semibold text-state-warning-ink hover:bg-state-warning-soft disabled:opacity-50"
                 >
                   <Send className="h-3.5 w-3.5" />
                   {pending ? "Đang gửi…" : "Gửi lại mã kích hoạt"}
@@ -132,7 +132,7 @@ export function ParentAccountSection({
                 <button
                   type="button"
                   onClick={() => setOfflineOpen((v) => !v)}
-                  className="inline-flex items-center gap-1.5 rounded-lg border border-state-warning bg-white px-3 py-1.5 text-xs font-semibold text-state-warning-ink hover:bg-state-warning-soft"
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-state-warning bg-card px-3 py-1.5 text-xs font-semibold text-state-warning-ink hover:bg-state-warning-soft"
                 >
                   <KeyRound className="h-3.5 w-3.5" />
                   Cấp mã tại quầy
@@ -140,7 +140,7 @@ export function ParentAccountSection({
               </div>
 
               {offlineOpen && (
-                <div className="rounded-lg border border-state-warning bg-white p-3">
+                <div className="rounded-lg border border-state-warning bg-card p-3">
                   <p className="mb-2 text-xs leading-relaxed text-state-warning-ink">
                     Dùng khi <b>Zalo không gửi được</b> và phụ huynh đang ở quầy. Mã hiện{" "}
                     <b>một lần trên màn hình</b> để đọc trực tiếp — hệ thống không gửi đi đâu và
@@ -151,7 +151,7 @@ export function ParentAccountSection({
                     onChange={(e) => setOfflineReason(e.target.value)}
                     rows={2}
                     placeholder="Lý do cấp mã tay (bắt buộc, ≥ 10 ký tự) — vd: phụ huynh không dùng Zalo, đang ở quầy CS1"
-                    className="w-full rounded-lg border border-neutral-300 px-3 py-1.5 text-xs focus:border-state-warning focus:outline-none"
+                    className="w-full rounded-lg border border-border px-3 py-1.5 text-xs focus:border-state-warning focus:outline-none"
                   />
                   <button
                     type="button"
@@ -185,8 +185,8 @@ export function ParentAccountSection({
           )}
         </div>
       ) : (
-        <div className="rounded-xl border border-neutral-200 bg-white p-4">
-          <p className="mb-3 text-sm text-neutral-500">
+        <div className="rounded-xl border border-border bg-card p-4">
+          <p className="mb-3 text-sm text-muted-foreground">
             Tạo tài khoản đăng nhập portal cho phụ huynh. Tài khoản là{" "}
             <b>số điện thoại</b>; hệ thống gửi mã kích hoạt qua <b>Zalo</b> để phụ huynh tự đặt
             mật khẩu (không đặt mật khẩu tạm). Các con cùng số điện thoại phụ huynh sẽ được
@@ -194,7 +194,7 @@ export function ParentAccountSection({
           </p>
           <div className="grid gap-3 sm:grid-cols-2">
             <label className="block">
-              <span className="mb-1 block text-xs font-medium text-neutral-500">
+              <span className="mb-1 block text-xs font-medium text-muted-foreground">
                 Số điện thoại đăng nhập (nhận mã kích hoạt) *
               </span>
               <input
@@ -207,8 +207,8 @@ export function ParentAccountSection({
               />
             </label>
             <label className="block">
-              <span className="mb-1 block text-xs font-medium text-neutral-500">
-                Email <span className="font-normal text-neutral-400">(không bắt buộc)</span>
+              <span className="mb-1 block text-xs font-medium text-muted-foreground">
+                Email <span className="font-normal text-muted-foreground">(không bắt buộc)</span>
               </span>
               <input
                 type="email"
@@ -219,7 +219,7 @@ export function ParentAccountSection({
               />
             </label>
             <label className="block">
-              <span className="mb-1 block text-xs font-medium text-neutral-500">
+              <span className="mb-1 block text-xs font-medium text-muted-foreground">
                 Tên phụ huynh
               </span>
               <input
@@ -245,4 +245,4 @@ export function ParentAccountSection({
 }
 
 const inputCls =
-  "w-full rounded-lg border border-neutral-300 px-3 py-1.5 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary";
+  "w-full rounded-lg border border-border px-3 py-1.5 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary";

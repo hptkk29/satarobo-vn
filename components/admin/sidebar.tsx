@@ -367,8 +367,8 @@ export function Sidebar({
   }
 
   return (
-    <aside className="flex h-full w-64 flex-col border-r border-neutral-200 bg-white">
-      <div className="flex h-16 items-center border-b border-neutral-200 px-6">
+    <aside className="flex h-full w-64 flex-col border-r border-border bg-card">
+      <div className="flex h-16 items-center border-b border-border px-6">
         <Link
           href="/dashboard"
           className="group text-xl font-bold transition-opacity hover:opacity-90"
@@ -392,7 +392,7 @@ export function Sidebar({
               <button
                 type="button"
                 onClick={() => toggleGroup(group.label)}
-                className="flex w-full items-center justify-between px-6 py-1 text-[10px] uppercase tracking-widest font-semibold text-neutral-400 hover:text-neutral-600"
+                className="flex w-full items-center justify-between px-6 py-1 text-[10px] uppercase tracking-widest font-semibold text-muted-foreground hover:text-muted-foreground"
                 aria-expanded={!isCollapsed}
               >
                 <span>{group.label}</span>
@@ -413,7 +413,7 @@ export function Sidebar({
                   return (
                     <Fragment key={item.href}>
                       {showCluster && (
-                        <div className="px-6 pb-0.5 pt-2 text-[10px] font-medium uppercase tracking-wider text-neutral-300">
+                        <div className="px-6 pb-0.5 pt-2 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
                           {item.cluster}
                         </div>
                       )}
@@ -423,7 +423,7 @@ export function Sidebar({
                           "flex items-center gap-3 px-6 py-2 text-sm font-medium transition-colors",
                           active
                             ? "bg-primary-soft text-primary border-l-2 border-primary"
-                            : "text-neutral-600 hover:bg-neutral-50 hover:text-neutral-900",
+                            : "text-muted-foreground hover:bg-muted hover:text-foreground",
                         )}
                       >
                         <Icon className="h-4 w-4 shrink-0" />
@@ -445,7 +445,7 @@ export function Sidebar({
         })}
       </nav>
 
-      <div className="border-t border-neutral-200 p-4 text-xs text-neutral-400">
+      <div className="border-t border-border p-4 text-xs text-muted-foreground">
         <p className="font-medium">Sata Robo Admin</p>
         <p>v4.UI.FINAL · 2026</p>
       </div>

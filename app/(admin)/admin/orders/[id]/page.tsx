@@ -20,7 +20,7 @@ export const metadata = { title: "Chi tiết đơn hàng | Admin" };
 export const dynamic = "force-dynamic";
 
 const STATUS_BADGE_CLASS: Record<OrderStatus, string> = {
-  DRAFT: "bg-gray-100 text-gray-700 hover:bg-gray-100",
+  DRAFT: "bg-muted text-foreground hover:bg-muted",
   PENDING_PAYMENT: "bg-state-warning-soft text-state-warning-ink hover:bg-state-warning-soft",
   CONFIRMED: "bg-state-info-soft text-state-info-ink hover:bg-state-info-soft",
   COMPLETED: "bg-state-success-soft text-state-success-ink hover:bg-state-success-soft",
@@ -163,16 +163,16 @@ export default async function OrderDetailPage({ params }: Props) {
     <div className="max-w-5xl">
       <Link
         href="/orders"
-        className="mb-4 inline-flex items-center gap-1 text-sm text-gray-500 hover:text-gray-700"
+        className="mb-4 inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
       >
         <ChevronLeft className="h-4 w-4" />
         Quay lại danh sách
       </Link>
 
-      <div className="mb-6 flex flex-wrap items-start justify-between gap-3 border-b border-gray-200 pb-4">
+      <div className="mb-6 flex flex-wrap items-start justify-between gap-3 border-b border-border pb-4">
         <div>
           <div className="flex flex-wrap items-center gap-2">
-            <h1 className="font-mono text-2xl font-bold text-gray-900">
+            <h1 className="font-mono text-2xl font-bold text-foreground">
               {order.code}
             </h1>
             <Badge variant="outline">{ORDER_TYPE_LABEL[order.type]}</Badge>
@@ -196,7 +196,7 @@ export default async function OrderDetailPage({ params }: Props) {
               );
             })()}
           </div>
-          <p className="mt-1 text-sm text-gray-600">
+          <p className="mt-1 text-sm text-muted-foreground">
             Tạo:{" "}
             {new Intl.DateTimeFormat("vi-VN", {
               day: "2-digit",
@@ -208,7 +208,7 @@ export default async function OrderDetailPage({ params }: Props) {
           </p>
         </div>
         <div className="text-right space-y-2">
-          <div className="text-3xl font-bold text-gray-900 tabular-nums">
+          <div className="text-3xl font-bold text-foreground tabular-nums">
             {order.totalAmount.toLocaleString("vi-VN")} đ
           </div>
           {canManage && (

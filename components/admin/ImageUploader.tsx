@@ -210,16 +210,16 @@ export function ImageUploader({
           {...getRootProps()}
           className={cn(
             "border-2 border-dashed rounded-lg p-8 text-center cursor-pointer transition-colors",
-            isDragActive ? "border-primary bg-primary/5" : "border-gray-300 hover:border-gray-400",
+            isDragActive ? "border-primary bg-primary/5" : "border-border hover:border-border",
             disabled && "opacity-50 cursor-not-allowed",
           )}
         >
           <input {...getInputProps()} />
-          <ImageIcon className="h-10 w-10 mx-auto text-gray-400 mb-2" />
+          <ImageIcon className="h-10 w-10 mx-auto text-muted-foreground mb-2" />
           <p className="text-sm font-medium">
             {isDragActive ? "Thả ảnh vào đây..." : "Kéo thả ảnh hoặc click để chọn"}
           </p>
-          <p className="text-xs text-gray-500 mt-1">JPG, PNG, WebP, GIF — tối đa 10MB</p>
+          <p className="text-xs text-muted-foreground mt-1">JPG, PNG, WebP, GIF — tối đa 10MB</p>
         </div>
       )}
 
@@ -233,7 +233,7 @@ export function ImageUploader({
             </Button>
           </div>
           <Progress value={state.progress} />
-          <p className="text-xs text-gray-500 text-right">{state.progress}%</p>
+          <p className="text-xs text-muted-foreground text-right">{state.progress}%</p>
         </div>
       )}
 
@@ -256,7 +256,7 @@ export function ImageUploader({
       )}
 
       {helperText && state.status === "idle" && (
-        <p className="text-xs text-gray-500">{helperText}</p>
+        <p className="text-xs text-muted-foreground">{helperText}</p>
       )}
     </div>
   );

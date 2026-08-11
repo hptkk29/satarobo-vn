@@ -68,7 +68,7 @@ const SALE_LABEL: Record<string, string> = {
   COLLECT_CONFIRMED: "Đã xác nhận thu",
 };
 const SALE_BADGE: Record<string, string> = {
-  RECORDED: "bg-gray-100 text-gray-700 hover:bg-gray-100",
+  RECORDED: "bg-muted text-foreground hover:bg-muted",
   COLLECT_CONFIRMED: "bg-state-info-soft text-state-info-ink hover:bg-state-info-soft",
 };
 
@@ -176,7 +176,7 @@ export function PaymentsClient({
         </div>
       )}
 
-      <div className="overflow-x-auto rounded-lg border border-neutral-200">
+      <div className="overflow-x-auto rounded-lg border border-border">
         <Table>
           <TableHeader>
             <TableRow>
@@ -202,7 +202,7 @@ export function PaymentsClient({
               <TableRow>
                 <TableCell
                   colSpan={colCount}
-                  className="py-8 text-center text-sm text-neutral-500"
+                  className="py-8 text-center text-sm text-muted-foreground"
                 >
                   Chưa có khoản thanh toán nào
                 </TableCell>
@@ -212,7 +212,7 @@ export function PaymentsClient({
               <TableRow key={p.id}>
                 <TableCell className="font-medium">
                   <div>{p.orderCode ?? "—"}</div>
-                  <div className="text-xs text-neutral-500">
+                  <div className="text-xs text-muted-foreground">
                     {p.customerName ?? ""}
                   </div>
                 </TableCell>
@@ -229,7 +229,7 @@ export function PaymentsClient({
                 <TableCell
                   className={
                     "font-mono text-xs " +
-                    (p.piiMasked ? "text-neutral-400" : "text-neutral-800")
+                    (p.piiMasked ? "text-muted-foreground" : "text-foreground")
                   }
                 >
                   {p.parentNationalId ?? "—"}
@@ -237,7 +237,7 @@ export function PaymentsClient({
                 <TableCell
                   className={
                     "max-w-[180px] truncate text-xs " +
-                    (p.piiMasked ? "text-neutral-400" : "text-neutral-800")
+                    (p.piiMasked ? "text-muted-foreground" : "text-foreground")
                   }
                   title={p.address ?? undefined}
                 >
@@ -277,14 +277,14 @@ export function PaymentsClient({
                       ) : (
                         // Đơn chưa convert → chưa gắn ghi danh → confirm sẽ lỗi. Chờ convert.
                         <span
-                          className="text-xs text-neutral-400"
+                          className="text-xs text-muted-foreground"
                           title="Khoản chưa gắn ghi danh — xác nhận được sau khi convert lead thành học viên"
                         >
                           Chờ convert
                         </span>
                       )
                     ) : (
-                      <span className="text-xs text-neutral-400">—</span>
+                      <span className="text-xs text-muted-foreground">—</span>
                     )}
                   </TableCell>
                 )}
@@ -386,7 +386,7 @@ function PiiRevealControl({
               rows={3}
               disabled={pending}
             />
-            <p className="text-xs text-neutral-400">
+            <p className="text-xs text-muted-foreground">
               {reason.trim().length}/{MIN_PII_REASON}
             </p>
           </div>

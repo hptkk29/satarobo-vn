@@ -39,17 +39,17 @@ export default async function AssignConfigPage() {
   return (
     <div className="max-w-3xl p-6">
       <div className="mb-4">
-        <h1 className="flex items-center gap-2 text-2xl font-bold text-gray-900">
+        <h1 className="flex items-center gap-2 text-2xl font-bold text-foreground">
           <Settings2 className="h-6 w-6 text-primary" /> Cấu hình chia lead
         </h1>
-        <p className="mt-1 text-sm text-gray-500">
+        <p className="mt-1 text-sm text-muted-foreground">
           Chọn cách chia lead trong cơ sở. Lead chưa chọn cơ sở được chia đều giữa các cơ sở vận hành trước. Lead đã
           có tương tác (gọi/nhắn/ghi chú) sẽ không bị tự động chia lại.
         </p>
       </div>
 
       {centers.length === 0 ? (
-        <p className="rounded-xl border border-dashed border-gray-300 p-8 text-center text-sm text-gray-400">
+        <p className="rounded-xl border border-dashed border-border p-8 text-center text-sm text-muted-foreground">
           Không có cơ sở trong phạm vi.
         </p>
       ) : (

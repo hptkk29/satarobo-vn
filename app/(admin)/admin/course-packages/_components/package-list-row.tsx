@@ -45,18 +45,18 @@ export function PackageListRow({ pkg }: { pkg: CoursePackageListItem }) {
   };
 
   return (
-    <tr className="border-b border-gray-100 transition-colors hover:bg-gray-50/70">
+    <tr className="border-b border-border transition-colors hover:bg-muted/70">
       <td className="px-4 py-3">
-        <span className="rounded-md bg-gray-100 px-2 py-1 font-mono text-xs text-gray-700">
+        <span className="rounded-md bg-muted px-2 py-1 font-mono text-xs text-foreground">
           {pkg.code}
         </span>
       </td>
       <td className="px-4 py-3">
-        <div className="font-semibold text-gray-900">{pkg.name}</div>
-        <div className="mt-0.5 text-xs text-gray-400">/{pkg.slug}</div>
+        <div className="font-semibold text-foreground">{pkg.name}</div>
+        <div className="mt-0.5 text-xs text-muted-foreground">/{pkg.slug}</div>
         {error ? <div className="mt-1 text-xs font-medium text-state-danger-ink">{error}</div> : null}
       </td>
-      <td className="px-4 py-3 text-sm text-gray-600">{pkg.level ?? "--"}</td>
+      <td className="px-4 py-3 text-sm text-muted-foreground">{pkg.level ?? "--"}</td>
       <td className="px-4 py-3 text-sm">
         {pkg.course ? (
           <span className="inline-flex items-center rounded-md bg-state-info-soft px-2 py-1 text-xs font-medium text-state-info-ink">
@@ -64,13 +64,13 @@ export function PackageListRow({ pkg }: { pkg: CoursePackageListItem }) {
             {pkg.course.code ? ` (${pkg.course.code})` : ""}
           </span>
         ) : (
-          <span className="text-xs text-gray-400">Chưa gắn</span>
+          <span className="text-xs text-muted-foreground">Chưa gắn</span>
         )}
       </td>
-      <td className="px-4 py-3 text-right text-sm font-medium tabular-nums text-gray-700">
+      <td className="px-4 py-3 text-right text-sm font-medium tabular-nums text-foreground">
         {formatCurrency(pkg.priceOriginal)}
       </td>
-      <td className="px-4 py-3 text-center text-sm tabular-nums text-gray-600">
+      <td className="px-4 py-3 text-center text-sm tabular-nums text-muted-foreground">
         {pkg.lessons ?? "--"}
       </td>
       <td className="px-4 py-3">
@@ -80,7 +80,7 @@ export function PackageListRow({ pkg }: { pkg: CoursePackageListItem }) {
               Đã đăng
             </span>
           ) : (
-            <span className="rounded-full bg-gray-100 px-2.5 py-0.5 text-xs font-semibold text-gray-500">
+            <span className="rounded-full bg-muted px-2.5 py-0.5 text-xs font-semibold text-muted-foreground">
               Nháp
             </span>
           )}

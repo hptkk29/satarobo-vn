@@ -50,7 +50,7 @@ export function ReplyBox({ conversationId }: { conversationId: string }) {
             type="button"
             disabled={pending}
             onClick={() => send(q)}
-            className="rounded border px-2 py-1 text-left text-xs text-neutral-600 hover:bg-neutral-50"
+            className="rounded border px-2 py-1 text-left text-xs text-muted-foreground hover:bg-muted"
           >
             {q.slice(0, 28)}…
           </button>

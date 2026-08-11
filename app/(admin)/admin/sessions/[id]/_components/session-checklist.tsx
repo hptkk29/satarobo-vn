@@ -15,7 +15,7 @@ const STATUS_LABEL: Record<SessionStatus, string> = {
   CANCELLED: "Đã hủy",
 };
 const STATUS_COLOR: Record<SessionStatus, string> = {
-  SCHEDULED: "bg-gray-100 text-gray-600",
+  SCHEDULED: "bg-muted text-muted-foreground",
   IN_PROGRESS: "bg-state-warning-soft text-state-warning-ink",
   COMPLETED: "bg-state-success-soft text-state-success-ink",
   CANCELLED: "bg-state-danger-soft text-state-danger-ink",
@@ -104,9 +104,9 @@ export function SessionChecklist({
     canCompleteSession(status) && derived.ckAttendance && ckLessonConfirmed && derived.ckFeedback;
 
   return (
-    <section className="rounded-xl border border-gray-200 bg-white p-5">
+    <section className="rounded-xl border border-border bg-card p-5">
       <div className="mb-4 flex items-center justify-between gap-2">
-        <h2 className="text-sm font-bold uppercase tracking-wider text-gray-500">
+        <h2 className="text-sm font-bold uppercase tracking-wider text-muted-foreground">
           Quy trình sau buổi (checklist)
         </h2>
         <span className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${STATUS_COLOR[status]}`}>
@@ -114,13 +114,13 @@ export function SessionChecklist({
         </span>
       </div>
 
-      <p className="mb-1 text-xs font-bold uppercase tracking-wide text-gray-400">Chuẩn bị</p>
+      <p className="mb-1 text-xs font-bold uppercase tracking-wide text-muted-foreground">Chuẩn bị</p>
       <ul className="mb-3 space-y-2">
         <ToggleStep n={1} checked={ckClean} onChange={setClean} disabled={!canEdit || pending} label="Vệ sinh phòng học" hint="Phòng sạch trước buổi" />
         <ToggleStep n={2} checked={ckEquipment} onChange={setEquipment} disabled={!canEdit || pending} label="Thiết bị dạy học OK" hint="Máy chiếu/màn/điện" />
         <ToggleStep n={3} checked={ckKit} onChange={setKit} disabled={!canEdit || pending} label="Học cụ / kit đủ cho buổi" hint="Đủ bộ kit cho HS" />
       </ul>
-      <p className="mb-1 text-xs font-bold uppercase tracking-wide text-gray-400">Trong / sau buổi</p>
+      <p className="mb-1 text-xs font-bold uppercase tracking-wide text-muted-foreground">Trong / sau buổi</p>
       <ul className="space-y-2">
         <AutoStep n={4} done={derived.ckAttendance} label="Điểm danh xong" hint="Tự động khi có điểm danh" required />
         <ToggleStep
@@ -151,13 +151,13 @@ export function SessionChecklist({
           disabled={!canEdit || pending}
           rows={2}
           placeholder="Mô tả sự cố trong buổi (nếu có)…"
-          className="mt-3 w-full resize-y rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary focus:outline-none disabled:bg-gray-50"
+          className="mt-3 w-full resize-y rounded-lg border border-border px-3 py-2 text-sm focus:border-primary focus:outline-none disabled:bg-muted"
         />
       )}
 
       {/* #15 — ghi chú buổi học của GV (lưu trước khi Hoàn tất) */}
       <div className="mt-4">
-        <label className="mb-1 block text-sm font-semibold text-gray-700">
+        <label className="mb-1 block text-sm font-semibold text-foreground">
           Ghi chú buổi học (GV)
         </label>
         <textarea
@@ -166,18 +166,18 @@ export function SessionChecklist({
           disabled={!canEdit || pending}
           rows={3}
           placeholder="Tóm tắt nội dung đã dạy, tình hình lớp, lưu ý cho buổi sau…"
-          className="w-full resize-y rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary focus:outline-none disabled:bg-gray-50"
+          className="w-full resize-y rounded-lg border border-border px-3 py-2 text-sm focus:border-primary focus:outline-none disabled:bg-muted"
         />
-        <p className="mt-1 text-xs text-gray-400">Nhớ bấm “Lưu tiến trình” trước khi “Hoàn tất buổi”.</p>
+        <p className="mt-1 text-xs text-muted-foreground">Nhớ bấm “Lưu tiến trình” trước khi “Hoàn tất buổi”.</p>
       </div>
 
       {canEdit && (
-        <div className="mt-5 flex flex-wrap gap-2 border-t border-gray-100 pt-4">
+        <div className="mt-5 flex flex-wrap gap-2 border-t border-border pt-4">
           <button
             type="button"
             onClick={saveProgress}
             disabled={pending}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-gray-300 px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-border px-4 py-2 text-sm font-semibold text-foreground hover:bg-muted disabled:opacity-50"
           >
             <Save className="h-4 w-4" /> Lưu tiến trình
           </button>
@@ -214,13 +214,13 @@ function AutoStep({ n, done, label, hint, required }: { n: number; done: boolean
       {done ? (
         <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-state-success-ink" />
       ) : (
-        <Circle className={`mt-0.5 h-5 w-5 shrink-0 ${required ? "text-state-danger-ink" : "text-gray-300"}`} />
+        <Circle className={`mt-0.5 h-5 w-5 shrink-0 ${required ? "text-state-danger-ink" : "text-muted-foreground"}`} />
       )}
       <div>
-        <div className="text-sm font-medium text-gray-800">
+        <div className="text-sm font-medium text-foreground">
           {n}. {label} {required && <span className="text-state-danger-ink">*</span>}
         </div>
-        <div className="text-xs text-gray-400">{hint}</div>
+        <div className="text-xs text-muted-foreground">{hint}</div>
       </div>
     </li>
   );
@@ -256,14 +256,14 @@ function ToggleStep({
         {checked ? (
           <CheckCircle2 className="h-5 w-5 text-state-success-ink" />
         ) : (
-          <Circle className={`h-5 w-5 ${required ? "text-state-danger-ink" : "text-gray-300"}`} />
+          <Circle className={`h-5 w-5 ${required ? "text-state-danger-ink" : "text-muted-foreground"}`} />
         )}
       </button>
       <div>
-        <div className="text-sm font-medium text-gray-800">
+        <div className="text-sm font-medium text-foreground">
           {n}. {label} {required && <span className="text-state-danger-ink">*</span>}
         </div>
-        <div className="text-xs text-gray-400">{hint}</div>
+        <div className="text-xs text-muted-foreground">{hint}</div>
       </div>
     </li>
   );

@@ -85,7 +85,7 @@ export function CurriculumForm({
   return (
     <form
       onSubmit={handleSubmit}
-      className="space-y-4 rounded-xl border border-neutral-200 bg-white p-6"
+      className="space-y-4 rounded-xl border border-border bg-card p-6"
     >
       {error && (
         <div className="rounded-lg border border-state-danger-soft bg-state-danger-soft px-3 py-2 text-sm text-state-danger-ink">
@@ -95,7 +95,7 @@ export function CurriculumForm({
 
       {/* T5.2 — ô "Version" đã bỏ: hệ thống tự đánh bản (ẩn) cho từng khoá. */}
       <label className="block">
-        <span className="mb-1 block text-sm font-semibold text-neutral-700">
+        <span className="mb-1 block text-sm font-semibold text-foreground">
           Khoá học <span className="text-state-danger-ink">*</span>
         </span>
         <select
@@ -103,7 +103,7 @@ export function CurriculumForm({
           onChange={(e) => setCourseId(e.target.value)}
           required
           disabled={pending}
-          className="w-full rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
+          className="w-full rounded-lg border border-border bg-card px-3 py-2 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
         >
           <option value="">— Chọn khoá học —</option>
           {courses.map((c) => (
@@ -115,7 +115,7 @@ export function CurriculumForm({
       </label>
 
       <label className="block">
-        <span className="mb-1 block text-sm font-semibold text-neutral-700">
+        <span className="mb-1 block text-sm font-semibold text-foreground">
           Tên giáo trình <span className="text-state-danger-ink">*</span>
         </span>
         <input
@@ -125,12 +125,12 @@ export function CurriculumForm({
           placeholder="VD: Lập trình Robot K1 v1.0"
           required
           disabled={pending}
-          className="w-full rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
+          className="w-full rounded-lg border border-border bg-card px-3 py-2 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
         />
       </label>
 
       <label className="block">
-        <span className="mb-1 block text-sm font-semibold text-neutral-700">
+        <span className="mb-1 block text-sm font-semibold text-foreground">
           Mô tả
         </span>
         <textarea
@@ -139,19 +139,19 @@ export function CurriculumForm({
           placeholder="Mô tả ngắn về giáo trình, mục tiêu tổng thể, đối tượng..."
           rows={3}
           disabled={pending}
-          className="w-full resize-y rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
+          className="w-full resize-y rounded-lg border border-border bg-card px-3 py-2 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
         />
       </label>
 
       <label className="block sm:max-w-xs">
-        <span className="mb-1 block text-sm font-semibold text-neutral-700">
+        <span className="mb-1 block text-sm font-semibold text-foreground">
           Trạng thái giáo trình
         </span>
         <select
           value={status}
           onChange={(e) => setStatus(e.target.value as CurriculumStatus)}
           disabled={pending}
-          className="w-full rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
+          className="w-full rounded-lg border border-border bg-card px-3 py-2 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
         >
           {(Object.keys(STATUS_LABEL) as CurriculumStatus[]).map((s) => (
             <option key={s} value={s}>{STATUS_LABEL[s]}</option>
@@ -165,14 +165,14 @@ export function CurriculumForm({
           checked={isActive}
           onChange={(e) => setIsActive(e.target.checked)}
           disabled={pending}
-          className="h-4 w-4 rounded border-neutral-300"
+          className="h-4 w-4 rounded border-border"
         />
-        <span className="font-medium text-neutral-700">
+        <span className="font-medium text-foreground">
           Đang sử dụng (lớp mới sẽ dùng giáo trình này)
         </span>
       </label>
 
-      <div className="flex flex-wrap gap-3 border-t border-neutral-100 pt-4">
+      <div className="flex flex-wrap gap-3 border-t border-border pt-4">
         <button
           type="submit"
           disabled={pending}
@@ -184,7 +184,7 @@ export function CurriculumForm({
           type="button"
           onClick={() => router.push("/curriculums")}
           disabled={pending}
-          className="rounded-xl border-2 border-neutral-200 bg-white px-6 py-2.5 font-bold text-neutral-700 hover:bg-neutral-50"
+          className="rounded-xl border-2 border-border bg-card px-6 py-2.5 font-bold text-foreground hover:bg-muted"
         >
           Huỷ
         </button>
@@ -193,7 +193,7 @@ export function CurriculumForm({
             type="button"
             onClick={handleDelete}
             disabled={pending}
-            className="ml-auto rounded-xl border-2 border-state-danger-soft bg-white px-6 py-2.5 font-bold text-state-danger-ink hover:bg-state-danger-soft"
+            className="ml-auto rounded-xl border-2 border-state-danger-soft bg-card px-6 py-2.5 font-bold text-state-danger-ink hover:bg-state-danger-soft"
           >
             Xoá
           </button>

@@ -54,27 +54,27 @@ export default async function UserPermissionsPage({ params }: Props) {
     <div className="max-w-5xl">
       <Link
         href={`/users/${user.id}/edit`}
-        className="mb-4 inline-flex items-center gap-1 text-sm text-gray-500 hover:text-gray-700"
+        className="mb-4 inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
       >
         <ChevronLeft className="h-4 w-4" />
         Quay lại sửa tài khoản
       </Link>
 
       {/* Section A — User header */}
-      <div className="mb-6 rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+      <div className="mb-6 rounded-xl border border-border bg-card p-5 shadow-sm">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2">
               <Shield className="h-5 w-5 text-primary shrink-0" />
-              <h1 className="truncate text-2xl font-bold text-gray-900">
+              <h1 className="truncate text-2xl font-bold text-foreground">
                 Phân quyền nâng cao
               </h1>
             </div>
-            <p className="mt-1 text-sm text-gray-600">
-              <span className="font-medium text-gray-900">{user.email}</span>
+            <p className="mt-1 text-sm text-muted-foreground">
+              <span className="font-medium text-foreground">{user.email}</span>
               {user.name && (
                 <>
-                  <span className="mx-1.5 text-gray-300">·</span>
+                  <span className="mx-1.5 text-muted-foreground">·</span>
                   {user.name}
                 </>
               )}
@@ -84,12 +84,12 @@ export default async function UserPermissionsPage({ params }: Props) {
               {user.employee && (
                 <Link
                   href={`/nhan-su/${user.employee.id}`}
-                  className="inline-flex items-center gap-1 rounded-full bg-gray-100 px-2.5 py-0.5 text-xs font-semibold text-gray-700 hover:bg-gray-200"
+                  className="inline-flex items-center gap-1 rounded-full bg-muted px-2.5 py-0.5 text-xs font-semibold text-foreground hover:bg-muted"
                 >
                   <BadgeCheck className="h-3 w-3" />
                   {user.employee.fullName}
                   {user.employee.employeeCode && (
-                    <span className="text-gray-500">
+                    <span className="text-muted-foreground">
                       · {user.employee.employeeCode}
                     </span>
                   )}
@@ -104,7 +104,7 @@ export default async function UserPermissionsPage({ params }: Props) {
           </div>
         </div>
 
-        <p className="mt-4 text-sm text-gray-600">
+        <p className="mt-4 text-sm text-muted-foreground">
           Per-user overrides cho phép cấp (ALLOW) hoặc thu hồi (DENY) một quyền
           cụ thể bất kể role. Thứ tự ưu tiên:{" "}
           <strong>DENY &gt; ALLOW &gt; role matrix</strong>.
@@ -125,15 +125,15 @@ export default async function UserPermissionsPage({ params }: Props) {
 
       {/* Section B — Current grants table */}
       <section className="mb-6">
-        <h2 className="mb-3 text-sm font-bold uppercase tracking-wider text-gray-500">
+        <h2 className="mb-3 text-sm font-bold uppercase tracking-wider text-muted-foreground">
           Quyền override hiện tại
         </h2>
         <GrantsTable grants={user.permissionGrants} />
       </section>
 
       {/* Section C — Add grant form */}
-      <section className="mb-6 rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-        <h2 className="mb-4 text-sm font-bold uppercase tracking-wider text-gray-500">
+      <section className="mb-6 rounded-xl border border-border bg-card p-5 shadow-sm">
+        <h2 className="mb-4 text-sm font-bold uppercase tracking-wider text-muted-foreground">
           Thêm quyền override
         </h2>
         <AddGrantForm

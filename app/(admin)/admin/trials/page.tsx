@@ -145,8 +145,8 @@ export default async function TrialsPage({ searchParams }: Props) {
   return (
     <div className="max-w-6xl p-6">
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">Học thử</h1>
-        <p className="mt-1 text-sm text-gray-500">
+        <h1 className="text-2xl font-bold text-foreground">Học thử</h1>
+        <p className="mt-1 text-sm text-muted-foreground">
           Lịch học thử tự sinh khi lead chuyển sang &quot;Đã hẹn học thử&quot;. Giáo
           viên nhập nhận xét sau buổi.
         </p>

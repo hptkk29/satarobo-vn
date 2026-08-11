@@ -188,8 +188,8 @@ export default async function ParentRequestsPage({ searchParams }: Props) {
   return (
     <div className="max-w-4xl p-6">
       <div className="mb-4">
-        <h1 className="text-2xl font-bold text-gray-900">Yêu cầu phụ huynh</h1>
-        <p className="mt-1 text-sm text-gray-500">
+        <h1 className="text-2xl font-bold text-foreground">Yêu cầu phụ huynh</h1>
+        <p className="mt-1 text-sm text-muted-foreground">
           Báo vắng · học bù · chuyển lớp/cơ sở · bảo lưu — lọc theo loại &amp;
           trạng thái rồi xử lý nghiệp vụ.
         </p>
@@ -201,7 +201,7 @@ export default async function ParentRequestsPage({ searchParams }: Props) {
           <Link
             key={f.key}
             href={buildHref(f.key, activeStatus.key)}
-            className={`rounded-full px-3 py-1 text-xs font-medium ${ activeType.key === f.key ? "bg-primary text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200" }`}
+            className={`rounded-full px-3 py-1 text-xs font-medium ${ activeType.key === f.key ? "bg-primary text-white" : "bg-muted text-muted-foreground hover:bg-muted" }`}
           >
             {f.label}
           </Link>
@@ -214,7 +214,7 @@ export default async function ParentRequestsPage({ searchParams }: Props) {
           <Link
             key={f.key}
             href={buildHref(activeType.key, f.key)}
-            className={`rounded-full px-3 py-1 text-xs font-medium ${ activeStatus.key === f.key ? "bg-primary text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200" }`}
+            className={`rounded-full px-3 py-1 text-xs font-medium ${ activeStatus.key === f.key ? "bg-primary text-white" : "bg-muted text-muted-foreground hover:bg-muted" }`}
           >
             {f.label}
           </Link>
@@ -222,7 +222,7 @@ export default async function ParentRequestsPage({ searchParams }: Props) {
       </div>
 
       {items.length === 0 ? (
-        <p className="rounded-xl border border-dashed border-gray-300 p-8 text-center text-sm text-gray-400">
+        <p className="rounded-xl border border-dashed border-border p-8 text-center text-sm text-muted-foreground">
           Không có yêu cầu nào.
         </p>
       ) : (

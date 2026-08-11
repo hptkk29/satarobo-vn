@@ -319,28 +319,28 @@ export function OrderDetailClient({
   return (
     <div className="space-y-6">
       {/* Customer info */}
-      <section className="rounded-xl border border-gray-200 bg-white p-5">
-        <h2 className="mb-3 text-sm font-bold uppercase tracking-wider text-gray-500">
+      <section className="rounded-xl border border-border bg-card p-5">
+        <h2 className="mb-3 text-sm font-bold uppercase tracking-wider text-muted-foreground">
           Thông tin khách hàng
         </h2>
         <div className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
           <div>
-            <span className="text-gray-500">Tên: </span>
-            <span className="font-medium text-gray-900">
+            <span className="text-muted-foreground">Tên: </span>
+            <span className="font-medium text-foreground">
               {order.customerName}
             </span>
           </div>
           <div>
-            <span className="text-gray-500">SĐT: </span>
-            <span className="text-gray-900">{order.customerPhone}</span>
+            <span className="text-muted-foreground">SĐT: </span>
+            <span className="text-foreground">{order.customerPhone}</span>
           </div>
           <div>
-            <span className="text-gray-500">Email: </span>
-            <span className="text-gray-900">{order.customerEmail ?? "—"}</span>
+            <span className="text-muted-foreground">Email: </span>
+            <span className="text-foreground">{order.customerEmail ?? "—"}</span>
           </div>
           <div>
-            <span className="text-gray-500">Địa chỉ: </span>
-            <span className="text-gray-900">
+            <span className="text-muted-foreground">Địa chỉ: </span>
+            <span className="text-foreground">
               {[order.customerAddress, order.customerWard, order.customerCity]
                 .filter(Boolean)
                 .join(", ") || "—"}
@@ -348,33 +348,33 @@ export function OrderDetailClient({
           </div>
           {order.student && (
             <div>
-              <span className="text-gray-500">Học sinh: </span>
-              <span className="text-gray-900">{order.student.name}</span>
+              <span className="text-muted-foreground">Học sinh: </span>
+              <span className="text-foreground">{order.student.name}</span>
             </div>
           )}
           {order.lead && (
             <div>
-              <span className="text-gray-500">Lead: </span>
-              <span className="text-gray-900">{order.lead.parentName}</span>
+              <span className="text-muted-foreground">Lead: </span>
+              <span className="text-foreground">{order.lead.parentName}</span>
             </div>
           )}
           {order.center && (
             <div>
-              <span className="text-gray-500">Trung tâm: </span>
-              <span className="text-gray-900">{order.center.name}</span>
+              <span className="text-muted-foreground">Trung tâm: </span>
+              <span className="text-foreground">{order.center.name}</span>
             </div>
           )}
         </div>
       </section>
 
       {/* Items */}
-      <section className="rounded-xl border border-gray-200 bg-white p-5">
-        <h2 className="mb-3 text-sm font-bold uppercase tracking-wider text-gray-500">
+      <section className="rounded-xl border border-border bg-card p-5">
+        <h2 className="mb-3 text-sm font-bold uppercase tracking-wider text-muted-foreground">
           Sản phẩm ({order.items.length})
         </h2>
         <table className="w-full border-collapse text-sm">
           <thead>
-            <tr className="border-b border-gray-200 bg-gray-50">
+            <tr className="border-b border-border bg-muted">
               <th className="p-2 text-left">Tên</th>
               <th className="p-2 text-right">SL</th>
               <th className="p-2 text-right">Đơn giá</th>
@@ -383,9 +383,9 @@ export function OrderDetailClient({
           </thead>
           <tbody>
             {order.items.map((it) => (
-              <tr key={it.id} className="border-b border-gray-100">
+              <tr key={it.id} className="border-b border-border">
                 <td className="p-2">
-                  <div className="font-medium text-gray-900">{it.itemName}</div>
+                  <div className="font-medium text-foreground">{it.itemName}</div>
                   {it.product && (
                     <Link
                       href={`/products/${it.product.id}`}
@@ -395,7 +395,7 @@ export function OrderDetailClient({
                     </Link>
                   )}
                   {it.itemDescription && (
-                    <div className="text-xs text-gray-500">
+                    <div className="text-xs text-muted-foreground">
                       {it.itemDescription}
                     </div>
                   )}
@@ -412,7 +412,7 @@ export function OrderDetailClient({
           </tbody>
           <tfoot className="text-sm">
             <tr>
-              <td colSpan={3} className="p-2 text-right text-gray-600">
+              <td colSpan={3} className="p-2 text-right text-muted-foreground">
                 Tạm tính:
               </td>
               <td className="p-2 text-right tabular-nums">
@@ -421,7 +421,7 @@ export function OrderDetailClient({
             </tr>
             {order.discountAmount > 0 && (
               <tr>
-                <td colSpan={3} className="p-2 text-right text-gray-600">
+                <td colSpan={3} className="p-2 text-right text-muted-foreground">
                   Giảm giá
                   {/* Đơn CŨ tạo bằng mã khuyến mãi (hệ đã gỡ 03/08) vẫn hiện mã đã
                       dùng để đối soát lịch sử — không còn link tới màn voucher. */}
@@ -435,7 +435,7 @@ export function OrderDetailClient({
             )}
             {order.shippingFee > 0 && (
               <tr>
-                <td colSpan={3} className="p-2 text-right text-gray-600">
+                <td colSpan={3} className="p-2 text-right text-muted-foreground">
                   Phí vận chuyển:
                 </td>
                 <td className="p-2 text-right tabular-nums">
@@ -456,9 +456,9 @@ export function OrderDetailClient({
       </section>
 
       {/* Payment method (G4 — có nút "Sửa" khi đơn chưa xác nhận thanh toán) */}
-      <section className="rounded-xl border border-gray-200 bg-white p-5">
+      <section className="rounded-xl border border-border bg-card p-5">
         <div className="mb-3 flex items-center justify-between gap-2">
-          <h2 className="text-sm font-bold uppercase tracking-wider text-gray-500">
+          <h2 className="text-sm font-bold uppercase tracking-wider text-muted-foreground">
             Phương thức thanh toán
           </h2>
           {canEditPaymentMethod && !pmEditing && (
@@ -477,7 +477,7 @@ export function OrderDetailClient({
         </div>
         <div className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
           <div className="sm:col-span-2">
-            <span className="text-gray-500">Phương thức: </span>
+            <span className="text-muted-foreground">Phương thức: </span>
             {pmEditing ? (
               <div className="mt-1 flex flex-wrap items-center gap-2">
                 <Select value={pmValue} onValueChange={(v) => setPmValue(v ?? "")}>
@@ -510,22 +510,22 @@ export function OrderDetailClient({
                 </Button>
               </div>
             ) : (
-              <span className="text-gray-900">
+              <span className="text-foreground">
                 {order.paymentMethod?.name ?? "—"}
               </span>
             )}
           </div>
           <div>
-            <span className="text-gray-500">Mã GD ngân hàng: </span>
-            <span className="text-gray-900">{order.bankReference ?? "—"}</span>
+            <span className="text-muted-foreground">Mã GD ngân hàng: </span>
+            <span className="text-foreground">{order.bankReference ?? "—"}</span>
           </div>
           <div>
-            <span className="text-gray-500">Gateway txn ID: </span>
-            <span className="text-gray-900">{order.gatewayTxnId ?? "—"}</span>
+            <span className="text-muted-foreground">Gateway txn ID: </span>
+            <span className="text-foreground">{order.gatewayTxnId ?? "—"}</span>
           </div>
           <div>
-            <span className="text-gray-500">Thanh toán lúc: </span>
-            <span className="text-gray-900">
+            <span className="text-muted-foreground">Thanh toán lúc: </span>
+            <span className="text-foreground">
               {order.paidAt ? formatDateTime(order.paidAt) : "—"}
             </span>
           </div>
@@ -534,29 +534,29 @@ export function OrderDetailClient({
 
       {/* BGĐ 31/07 — Duyệt giảm giá (chỉ hiện khi đơn có giảm giá nhập tay) */}
       {discountStatus && (
-        <section className="rounded-xl border border-gray-200 bg-white p-5">
-          <h2 className="mb-3 text-sm font-bold uppercase tracking-wider text-gray-500">
+        <section className="rounded-xl border border-border bg-card p-5">
+          <h2 className="mb-3 text-sm font-bold uppercase tracking-wider text-muted-foreground">
             Duyệt giảm giá
           </h2>
           <div className="space-y-3 text-sm">
             <div className="flex flex-wrap items-center gap-2">
-              <span className="text-gray-500">Trạng thái:</span>
+              <span className="text-muted-foreground">Trạng thái:</span>
               <Badge className={APPROVAL_BADGE_CLASS[discountStatus]}>
                 {APPROVAL_LABEL[discountStatus]}
               </Badge>
-              <span className="text-gray-500">
+              <span className="text-muted-foreground">
                 Giảm {order.discountAmount.toLocaleString("vi-VN")} đ
                 {order.discountPercent ? ` (${order.discountPercent}%)` : ""}
               </span>
             </div>
             {order.discountReason && (
-              <div className="rounded-lg bg-gray-50 p-3 text-gray-700">
+              <div className="rounded-lg bg-muted p-3 text-foreground">
                 <span className="font-semibold">Giải trình: </span>
                 {order.discountReason}
               </div>
             )}
             {discountStatus === "APPROVED" && order.discountApprovedAt && (
-              <p className="text-xs text-gray-500">
+              <p className="text-xs text-muted-foreground">
                 Duyệt lúc {formatDateTime(order.discountApprovedAt)}
               </p>
             )}
@@ -631,19 +631,19 @@ export function OrderDetailClient({
 
       {/* OD1b — Duyệt kế hoạch trả góp 2 đợt (chỉ hiện khi có kế hoạch cần duyệt) */}
       {approvalStatus && (
-        <section className="rounded-xl border border-gray-200 bg-white p-5">
-          <h2 className="mb-3 text-sm font-bold uppercase tracking-wider text-gray-500">
+        <section className="rounded-xl border border-border bg-card p-5">
+          <h2 className="mb-3 text-sm font-bold uppercase tracking-wider text-muted-foreground">
             Duyệt kế hoạch trả góp 2 đợt
           </h2>
           <div className="space-y-3 text-sm">
             <div className="flex flex-wrap items-center gap-2">
-              <span className="text-gray-500">Trạng thái:</span>
+              <span className="text-muted-foreground">Trạng thái:</span>
               <Badge className={APPROVAL_BADGE_CLASS[approvalStatus]}>
                 {APPROVAL_LABEL[approvalStatus]}
               </Badge>
             </div>
             {approvalStatus === "APPROVED" && order.installmentApprovedAt && (
-              <p className="text-xs text-gray-500">
+              <p className="text-xs text-muted-foreground">
                 Duyệt lúc {formatDateTime(order.installmentApprovedAt)}
               </p>
             )}
@@ -696,21 +696,21 @@ export function OrderDetailClient({
       )}
 
       {/* Notes */}
-      <section className="rounded-xl border border-gray-200 bg-white p-5">
-        <h2 className="mb-3 text-sm font-bold uppercase tracking-wider text-gray-500">
+      <section className="rounded-xl border border-border bg-card p-5">
+        <h2 className="mb-3 text-sm font-bold uppercase tracking-wider text-muted-foreground">
           Ghi chú
         </h2>
         <div className="space-y-3">
           {order.customerNote && (
             <div className="text-sm">
-              <div className="mb-1 text-gray-500">Ghi chú khách hàng:</div>
-              <div className="rounded-lg bg-state-warning-soft p-3 text-gray-900">
+              <div className="mb-1 text-muted-foreground">Ghi chú khách hàng:</div>
+              <div className="rounded-lg bg-state-warning-soft p-3 text-foreground">
                 {order.customerNote}
               </div>
             </div>
           )}
           <div className="space-y-2">
-            <div className="text-sm text-gray-500">Ghi chú nội bộ:</div>
+            <div className="text-sm text-muted-foreground">Ghi chú nội bộ:</div>
             <Textarea
               value={internalNote}
               onChange={(e) => setInternalNote(e.target.value)}
@@ -733,29 +733,29 @@ export function OrderDetailClient({
       </section>
 
       {/* Status history */}
-      <section className="rounded-xl border border-gray-200 bg-white p-5">
+      <section className="rounded-xl border border-border bg-card p-5">
         <button
           type="button"
           onClick={() => setHistoryOpen((v) => !v)}
           className="flex w-full items-center justify-between gap-2 text-left"
           aria-expanded={historyOpen}
         >
-          <h2 className="text-sm font-bold uppercase tracking-wider text-gray-500">
+          <h2 className="text-sm font-bold uppercase tracking-wider text-muted-foreground">
             Lịch sử trạng thái ({order.history.length})
           </h2>
           <ChevronDown
-            className={`h-4 w-4 text-gray-400 transition-transform ${historyOpen ? "rotate-180" : ""}`}
+            className={`h-4 w-4 text-muted-foreground transition-transform ${historyOpen ? "rotate-180" : ""}`}
           />
         </button>
         {historyOpen &&
           (order.history.length === 0 ? (
-            <p className="mt-3 text-sm text-gray-500">Chưa có thay đổi trạng thái</p>
+            <p className="mt-3 text-sm text-muted-foreground">Chưa có thay đổi trạng thái</p>
           ) : (
             <div className="mt-3 space-y-2">
             {order.history.map((h) => (
               <div
                 key={h.id}
-                className="flex items-start gap-3 rounded-lg bg-gray-50 p-3 text-sm"
+                className="flex items-start gap-3 rounded-lg bg-muted p-3 text-sm"
               >
                 <div className="mt-1 h-2 w-2 shrink-0 rounded-full bg-state-info" />
                 <div className="flex-1">
@@ -763,14 +763,14 @@ export function OrderDetailClient({
                     <Badge variant="outline">
                       {ORDER_STATUS_LABEL[h.fromStatus]}
                     </Badge>
-                    <span className="mx-1 text-gray-400">→</span>
+                    <span className="mx-1 text-muted-foreground">→</span>
                     <Badge>{ORDER_STATUS_LABEL[h.toStatus]}</Badge>
                   </div>
-                  <div className="mt-1 text-xs text-gray-500">
+                  <div className="mt-1 text-xs text-muted-foreground">
                     {h.changedByName} · {formatDateTime(h.createdAt)}
                   </div>
                   {h.reason && (
-                    <div className="mt-1 text-sm italic text-gray-700">
+                    <div className="mt-1 text-sm italic text-foreground">
                       &ldquo;{h.reason}&rdquo;
                     </div>
                   )}

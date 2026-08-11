@@ -29,8 +29,8 @@ const num = (n: number) => n.toLocaleString("vi-VN");
 
 function Card({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <section className="rounded-xl border border-neutral-200 bg-white p-4">
-      <h2 className="mb-3 text-sm font-semibold text-neutral-800">{title}</h2>
+    <section className="rounded-xl border border-border bg-card p-4">
+      <h2 className="mb-3 text-sm font-semibold text-foreground">{title}</h2>
       {children}
     </section>
   );
@@ -143,8 +143,8 @@ export default async function CohortReportPage({ searchParams }: SearchParams) {
   return (
     <div className="space-y-5 p-4">
       <div>
-        <h1 className="text-xl font-bold text-neutral-900">Báo cáo cohort</h1>
-        <p className="text-sm text-neutral-500">
+        <h1 className="text-xl font-bold text-foreground">Báo cáo cohort</h1>
+        <p className="text-sm text-muted-foreground">
           Nhóm ghi danh theo kỳ bắt đầu — tiến độ trung bình và tỷ lệ hoàn thành / đang học / rút, theo phạm vi cơ sở của bạn.
         </p>
       </div>
@@ -159,7 +159,7 @@ export default async function CohortReportPage({ searchParams }: SearchParams) {
       />
 
       {report.totalEnrollments === 0 ? (
-        <p className="rounded-xl border border-dashed border-neutral-300 bg-white p-6 text-center text-sm text-neutral-500">
+        <p className="rounded-xl border border-dashed border-border bg-card p-6 text-center text-sm text-muted-foreground">
           Chưa có ghi danh trong phạm vi của bạn.
         </p>
       ) : null}
@@ -173,7 +173,7 @@ export default async function CohortReportPage({ searchParams }: SearchParams) {
             height={300}
           />
         ) : (
-          <p className="py-8 text-center text-sm text-neutral-400">Chưa có dữ liệu.</p>
+          <p className="py-8 text-center text-sm text-muted-foreground">Chưa có dữ liệu.</p>
         )}
       </Card>
 
@@ -190,17 +190,17 @@ export default async function CohortReportPage({ searchParams }: SearchParams) {
             height={300}
           />
         ) : (
-          <p className="py-8 text-center text-sm text-neutral-400">Chưa có dữ liệu.</p>
+          <p className="py-8 text-center text-sm text-muted-foreground">Chưa có dữ liệu.</p>
         )}
       </Card>
 
-      <section className="rounded-xl border border-neutral-200 bg-white">
-        <div className="border-b border-neutral-100 px-4 py-3">
-          <h2 className="text-sm font-semibold text-neutral-700">Chi tiết theo cohort</h2>
+      <section className="rounded-xl border border-border bg-card">
+        <div className="border-b border-border px-4 py-3">
+          <h2 className="text-sm font-semibold text-foreground">Chi tiết theo cohort</h2>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full min-w-[640px] text-sm">
-            <thead className="text-left text-xs text-neutral-400">
+            <thead className="text-left text-xs text-muted-foreground">
               <tr>
                 <th className="px-4 py-2">Kỳ bắt đầu</th>
                 <th className="px-4 py-2 text-right">Ghi danh</th>
@@ -213,7 +213,7 @@ export default async function CohortReportPage({ searchParams }: SearchParams) {
             <tbody>
               {report.rows.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-4 py-6 text-center text-neutral-400">
+                  <td colSpan={6} className="px-4 py-6 text-center text-muted-foreground">
                     Không có ghi danh trong phạm vi cơ sở.
                   </td>
                 </tr>
@@ -225,15 +225,15 @@ export default async function CohortReportPage({ searchParams }: SearchParams) {
                     <td className="px-4 py-2 text-right font-semibold">{r.avgProgress}%</td>
                     <td className="px-4 py-2 text-right text-state-success-ink">
                       {num(r.completed)}{" "}
-                      <span className="text-xs text-neutral-400">({r.completionRate}%)</span>
+                      <span className="text-xs text-muted-foreground">({r.completionRate}%)</span>
                     </td>
                     <td className="px-4 py-2 text-right text-primary">
                       {num(r.studying)}{" "}
-                      <span className="text-xs text-neutral-400">({r.studyingRate}%)</span>
+                      <span className="text-xs text-muted-foreground">({r.studyingRate}%)</span>
                     </td>
                     <td className="px-4 py-2 text-right text-state-danger-ink">
                       {num(r.withdrew)}{" "}
-                      <span className="text-xs text-neutral-400">({r.withdrewRate}%)</span>
+                      <span className="text-xs text-muted-foreground">({r.withdrewRate}%)</span>
                     </td>
                   </tr>
                 ))

@@ -85,8 +85,8 @@ export function OrgRolesManager({
 
   return (
     <div className="space-y-6">
-      <div className="rounded-lg border bg-neutral-50 p-4">
-        <h2 className="mb-3 text-sm font-semibold text-neutral-700">Gán vai trò</h2>
+      <div className="rounded-lg border bg-muted p-4">
+        <h2 className="mb-3 text-sm font-semibold text-foreground">Gán vai trò</h2>
         <div className="grid gap-3 sm:grid-cols-4">
           <div>
             <Label htmlFor="org">Đơn vị</Label>
@@ -153,7 +153,7 @@ export function OrgRolesManager({
           <TableBody>
             {assignments.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={5} className="text-center text-sm text-neutral-500">
+                <TableCell colSpan={5} className="text-center text-sm text-muted-foreground">
                   Chưa có phân quyền nào.
                 </TableCell>
               </TableRow>
@@ -173,7 +173,7 @@ export function OrgRolesManager({
                       <Badge variant="outline">{ASSIGN_STATUS_LABELS[a.status] ?? a.status}</Badge>
                     )}
                   </TableCell>
-                  <TableCell className="text-sm text-neutral-500">
+                  <TableCell className="text-sm text-muted-foreground">
                     {a.effectiveFrom.slice(0, 10)}
                     {a.effectiveTo ? ` → ${a.effectiveTo.slice(0, 10)}` : ""}
                   </TableCell>

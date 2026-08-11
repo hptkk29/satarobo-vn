@@ -178,7 +178,7 @@ export function DesignSystemV2Demo() {
           <h2 className={`${tokens.typography.display.h2} mb-4`}>
             Sẵn sàng bắt đầu?
           </h2>
-          <p className={`${tokens.typography.body.lg} text-neutral-600 mb-8 max-w-2xl mx-auto`}>
+          <p className={`${tokens.typography.body.lg} text-muted-foreground mb-8 max-w-2xl mx-auto`}>
             Đăng ký tư vấn miễn phí 1-1 với chuyên gia Sata Robo
           </p>
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
@@ -189,7 +189,7 @@ export function DesignSystemV2Demo() {
               Gọi điện ngay
             </CTASecondary>
           </div>
-          <p className="text-sm text-neutral-500 mt-6">
+          <p className="text-sm text-muted-foreground mt-6">
             ✓ Không cam kết · ✓ 1-1 với chuyên gia · ✓ Phản hồi trong 24h
           </p>
         </div>
@@ -201,58 +201,58 @@ export function DesignSystemV2Demo() {
       <SectionBase theme="white" eyebrow="DEBUG" title="Effects showcase">
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {/* GlowOrb only */}
-          <div className="relative h-64 rounded-2xl border border-neutral-200 bg-white overflow-hidden">
+          <div className="relative h-64 rounded-2xl border border-border bg-card overflow-hidden">
             <GlowOrb color="orange" position="center" size="md" />
-            <div className="absolute inset-0 flex items-center justify-center text-neutral-700 font-semibold">
+            <div className="absolute inset-0 flex items-center justify-center text-foreground font-semibold">
               &lt;GlowOrb color=&quot;orange&quot; /&gt;
             </div>
           </div>
-          <div className="relative h-64 rounded-2xl border border-neutral-200 bg-white overflow-hidden">
+          <div className="relative h-64 rounded-2xl border border-border bg-card overflow-hidden">
             <GlowOrb color="purple" position="center" size="md" />
-            <div className="absolute inset-0 flex items-center justify-center text-neutral-700 font-semibold">
+            <div className="absolute inset-0 flex items-center justify-center text-foreground font-semibold">
               &lt;GlowOrb color=&quot;purple&quot; /&gt;
             </div>
           </div>
-          <div className="relative h-64 rounded-2xl border border-neutral-200 bg-white overflow-hidden">
+          <div className="relative h-64 rounded-2xl border border-border bg-card overflow-hidden">
             <GlowOrb color="mixed" position="center" size="md" />
-            <div className="absolute inset-0 flex items-center justify-center text-neutral-700 font-semibold">
+            <div className="absolute inset-0 flex items-center justify-center text-foreground font-semibold">
               &lt;GlowOrb color=&quot;mixed&quot; /&gt;
             </div>
           </div>
 
           {/* AnimatedGridLines */}
-          <div className="relative h-64 rounded-2xl border border-neutral-200 bg-white overflow-hidden">
+          <div className="relative h-64 rounded-2xl border border-border bg-card overflow-hidden">
             <AnimatedGridLines color="orange" opacity={0.2} />
-            <div className="absolute inset-0 flex items-center justify-center text-neutral-700 font-semibold">
+            <div className="absolute inset-0 flex items-center justify-center text-foreground font-semibold">
               GridLines orange
             </div>
           </div>
-          <div className="relative h-64 rounded-2xl border border-neutral-200 bg-white overflow-hidden">
+          <div className="relative h-64 rounded-2xl border border-border bg-card overflow-hidden">
             <AnimatedGridLines color="mixed" opacity={0.2} />
-            <div className="absolute inset-0 flex items-center justify-center text-neutral-700 font-semibold">
+            <div className="absolute inset-0 flex items-center justify-center text-foreground font-semibold">
               GridLines mixed
             </div>
           </div>
-          <div className="relative h-64 rounded-2xl border border-neutral-200 bg-white overflow-hidden">
+          <div className="relative h-64 rounded-2xl border border-border bg-card overflow-hidden">
             <Sparkles density="high" colors={["orange", "purple"]} />
-            <div className="absolute inset-0 flex items-center justify-center text-neutral-700 font-semibold">
+            <div className="absolute inset-0 flex items-center justify-center text-foreground font-semibold">
               Sparkles high density
             </div>
           </div>
 
           {/* HoverLiftCard demo */}
           <HoverLiftCard glowColor="orange">
-            <div className="h-32 rounded-2xl border border-neutral-200 bg-white p-6 flex items-center justify-center text-neutral-700 font-semibold">
+            <div className="h-32 rounded-2xl border border-border bg-card p-6 flex items-center justify-center text-foreground font-semibold">
               HoverLift orange
             </div>
           </HoverLiftCard>
           <HoverLiftCard glowColor="purple">
-            <div className="h-32 rounded-2xl border border-neutral-200 bg-white p-6 flex items-center justify-center text-neutral-700 font-semibold">
+            <div className="h-32 rounded-2xl border border-border bg-card p-6 flex items-center justify-center text-foreground font-semibold">
               HoverLift purple
             </div>
           </HoverLiftCard>
           <HoverLiftCard glowColor="none">
-            <div className="h-32 rounded-2xl border border-neutral-200 bg-white p-6 flex items-center justify-center text-neutral-700 font-semibold">
+            <div className="h-32 rounded-2xl border border-border bg-card p-6 flex items-center justify-center text-foreground font-semibold">
               HoverLift no glow
             </div>
           </HoverLiftCard>
@@ -267,13 +267,13 @@ export function DesignSystemV2Demo() {
           <CTASecondary>Secondary</CTASecondary>
           <CTAGhost>Ghost Link</CTAGhost>
         </div>
-        <p className="text-center text-sm text-neutral-500 mt-6">
+        <p className="text-center text-sm text-muted-foreground mt-6">
           Hover Magnetic Primary để thấy cursor-following effect (desktop only).
         </p>
       </SectionBase>
 
       {/* End spacer */}
-      <div className="py-12 bg-white text-center text-xs text-neutral-400">
+      <div className="py-12 bg-card text-center text-xs text-muted-foreground">
         Phase 4.UI.1.1 Design System v2 · Strategic color + Vibrant effects
       </div>
     </div>

@@ -37,7 +37,7 @@ const STATUS_INFO: Record<StudentStatus, { label: string; color: string }> = {
   ACTIVE: { label: "Đang học", color: "bg-state-success-soft text-state-success-ink" },
   PAUSED: { label: "Bảo lưu", color: "bg-state-warning-soft text-state-warning-ink" },
   GRADUATED: { label: "Hoàn thành", color: "bg-state-info-soft text-state-info-ink" },
-  INACTIVE: { label: "Nghỉ học", color: "bg-gray-100 text-gray-500" },
+  INACTIVE: { label: "Nghỉ học", color: "bg-muted text-muted-foreground" },
 };
 
 function formatDate(date: Date): string {
@@ -272,8 +272,8 @@ export default async function StudentsPage({ searchParams }: SearchParams) {
     <div>
       <div className="mb-6 flex items-start justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Học viên</h1>
-          <p className="mt-1 text-sm text-gray-500">
+          <h1 className="text-2xl font-bold text-foreground">Học viên</h1>
+          <p className="mt-1 text-sm text-muted-foreground">
             {LIFECYCLE_VIEW_DESCRIPTION[view]}
           </p>
         </div>
@@ -281,7 +281,7 @@ export default async function StudentsPage({ searchParams }: SearchParams) {
           <div className="flex gap-2">
             <Link
               href="/students/tai-khoan"
-              className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-card px-4 py-2 text-sm font-semibold text-foreground hover:bg-muted"
             >
               Tài khoản PH
             </Link>
@@ -294,7 +294,7 @@ export default async function StudentsPage({ searchParams }: SearchParams) {
             </Link>
             <Link
               href="/students/import"
-              className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-card px-4 py-2 text-sm font-semibold text-foreground hover:bg-muted"
             >
               <FileSpreadsheet className="h-4 w-4" />
               Import Excel
@@ -304,7 +304,7 @@ export default async function StudentsPage({ searchParams }: SearchParams) {
       </div>
 
       {/* Lifecycle tabs */}
-      <div className="mb-4 border-b border-gray-200">
+      <div className="mb-4 border-b border-border">
         <nav className="-mb-px flex gap-1 overflow-x-auto">
           {LIFECYCLE_VIEWS.map((v) => {
             const active = v === view;
@@ -321,7 +321,7 @@ export default async function StudentsPage({ searchParams }: SearchParams) {
                   "whitespace-nowrap border-b-2 px-4 py-2 text-sm font-medium " +
                   (active
                     ? "border-[color:var(--primary)] text-[color:var(--primary)]"
-                    : "border-transparent text-gray-600 hover:border-gray-300 hover:text-gray-900")
+                    : "border-transparent text-muted-foreground hover:border-border hover:text-foreground")
                 }
               >
                 {LIFECYCLE_VIEW_LABEL[v]}
@@ -389,7 +389,7 @@ export default async function StudentsPage({ searchParams }: SearchParams) {
         </button>
       </form>
 
-      <div className="mb-2 text-sm text-gray-600">
+      <div className="mb-2 text-sm text-muted-foreground">
         {totalCount.toLocaleString("vi-VN")} học viên
         {view === "frequent-absent" &&
           totalCount === FREQUENT_ABSENT_FETCH_LIMIT && (
@@ -399,10 +399,10 @@ export default async function StudentsPage({ searchParams }: SearchParams) {
           )}
       </div>
 
-      <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
+      <div className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
         <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-gray-100">
-            <thead className="bg-gray-50">
+          <table className="min-w-full divide-y divide-border">
+            <thead className="bg-muted">
               <tr>
                 <th className="whitespace-nowrap px-5 py-3 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                   Ảnh
@@ -435,12 +435,12 @@ export default async function StudentsPage({ searchParams }: SearchParams) {
                 )}
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-50">
+            <tbody className="divide-y divide-border">
               {students.length === 0 ? (
                 <tr>
                   <td
                     colSpan={showActions ? 9 : 8}
-                    className="px-4 py-12 text-center text-sm text-gray-400"
+                    className="px-4 py-12 text-center text-sm text-muted-foreground"
                   >
                     Không có học viên trong view này
                   </td>
@@ -449,30 +449,30 @@ export default async function StudentsPage({ searchParams }: SearchParams) {
                 students.map((s) => {
                   const statusInfo = STATUS_INFO[s.status] ?? {
                     label: s.status,
-                    color: "bg-gray-100 text-gray-500",
+                    color: "bg-muted text-muted-foreground",
                   };
                   const reserve = s.reserves[0];
                   return (
-                    <tr key={s.id} className="hover:bg-gray-50/60">
+                    <tr key={s.id} className="hover:bg-muted/60">
                       <td className="whitespace-nowrap px-5 py-3.5">
                         {s.avatarUrl ? (
                           <img
                             src={s.avatarUrl}
                             alt={s.name}
-                            className="h-9 w-9 rounded-full border border-gray-200 object-cover"
+                            className="h-9 w-9 rounded-full border border-border object-cover"
                           />
                         ) : (
-                          <div className="flex h-9 w-9 items-center justify-center rounded-full bg-gray-100 text-xs font-bold text-gray-500">
+                          <div className="flex h-9 w-9 items-center justify-center rounded-full bg-muted text-xs font-bold text-muted-foreground">
                             {s.name.charAt(0).toUpperCase()}
                           </div>
                         )}
                       </td>
                       <td className="whitespace-nowrap px-5 py-3.5">
-                        <div className="font-medium text-gray-900">
+                        <div className="font-medium text-foreground">
                           {s.name}
                         </div>
                         {s.studentCode && (
-                          <div className="text-xs tabular-nums text-gray-400">
+                          <div className="text-xs tabular-nums text-muted-foreground">
                             {s.studentCode}
                           </div>
                         )}
@@ -487,7 +487,7 @@ export default async function StudentsPage({ searchParams }: SearchParams) {
                           </div>
                         )}
                       </td>
-                      <td className="whitespace-nowrap px-5 py-3.5 text-sm tabular-nums text-gray-600">
+                      <td className="whitespace-nowrap px-5 py-3.5 text-sm tabular-nums text-muted-foreground">
                         {s.currentGrade ? `Lớp ${s.currentGrade}` : "—"}
                       </td>
                       {/* max-w + truncate: `whitespace-nowrap` làm bảng rộng hơn khung nên
@@ -495,17 +495,17 @@ export default async function StudentsPage({ searchParams }: SearchParams) {
                           dài nhất (phụ huynh, cơ sở) thay vì để trình duyệt tự vỡ dòng —
                           xem ghi chú luật ở components/admin/ui/table.tsx. `title` để tên
                           bị cắt vẫn đọc được đầy đủ khi rê chuột. */}
-                      <td className="whitespace-nowrap px-5 py-3.5 text-sm text-gray-600">
+                      <td className="whitespace-nowrap px-5 py-3.5 text-sm text-muted-foreground">
                         <div className="max-w-[15rem] truncate" title={s.parentName ?? undefined}>
                           {s.parentName ?? "—"}
                         </div>
                         {s.parentPhone && (
-                          <div className="text-xs tabular-nums text-gray-400">
+                          <div className="text-xs tabular-nums text-muted-foreground">
                             {s.parentPhone}
                           </div>
                         )}
                       </td>
-                      <td className="whitespace-nowrap px-5 py-3.5 text-sm text-gray-500">
+                      <td className="whitespace-nowrap px-5 py-3.5 text-sm text-muted-foreground">
                         <div
                           className="max-w-[12rem] truncate"
                           title={s.preferredCenter?.name ?? s.center?.name ?? undefined}
@@ -513,7 +513,7 @@ export default async function StudentsPage({ searchParams }: SearchParams) {
                           {s.preferredCenter?.name ?? s.center?.name ?? "—"}
                         </div>
                       </td>
-                      <td className="whitespace-nowrap px-5 py-3.5 text-right text-sm tabular-nums text-gray-600">
+                      <td className="whitespace-nowrap px-5 py-3.5 text-right text-sm tabular-nums text-muted-foreground">
                         {s._count.enrollments}
                       </td>
                       <td className="whitespace-nowrap px-5 py-3.5">
@@ -523,7 +523,7 @@ export default async function StudentsPage({ searchParams }: SearchParams) {
                           {statusInfo.label}
                         </span>
                       </td>
-                      <td className="whitespace-nowrap px-5 py-3.5 text-sm tabular-nums text-gray-500">
+                      <td className="whitespace-nowrap px-5 py-3.5 text-sm tabular-nums text-muted-foreground">
                         {formatDate(s.createdAt)}
                       </td>
                       {showActions && (
@@ -532,7 +532,7 @@ export default async function StudentsPage({ searchParams }: SearchParams) {
                             {canUpdate && (
                               <Link
                                 href={`/students/${s.id}/edit`}
-                                className="rounded-md border border-gray-200 px-2.5 py-1 text-xs font-semibold text-gray-700 hover:bg-gray-50"
+                                className="rounded-md border border-border px-2.5 py-1 text-xs font-semibold text-foreground hover:bg-muted"
                               >
                                 Sửa
                               </Link>
@@ -556,7 +556,7 @@ export default async function StudentsPage({ searchParams }: SearchParams) {
       </div>
 
       {totalPages > 1 && (
-        <div className="mt-4 flex items-center justify-between text-sm text-gray-500">
+        <div className="mt-4 flex items-center justify-between text-sm text-muted-foreground">
           <span>
             Trang {page}/{totalPages} ·{" "}
             {totalCount.toLocaleString("vi-VN")} học viên
@@ -572,7 +572,7 @@ export default async function StudentsPage({ searchParams }: SearchParams) {
                   grade: grade != null ? String(grade) : "",
                   status: statusParam,
                 })}
-                className="rounded-lg border border-gray-200 px-3 py-1.5 text-sm hover:bg-gray-50"
+                className="rounded-lg border border-border px-3 py-1.5 text-sm hover:bg-muted"
               >
                 ← Trước
               </Link>
@@ -587,7 +587,7 @@ export default async function StudentsPage({ searchParams }: SearchParams) {
                   grade: grade != null ? String(grade) : "",
                   status: statusParam,
                 })}
-                className="rounded-lg border border-gray-200 px-3 py-1.5 text-sm hover:bg-gray-50"
+                className="rounded-lg border border-border px-3 py-1.5 text-sm hover:bg-muted"
               >
                 Sau →
               </Link>

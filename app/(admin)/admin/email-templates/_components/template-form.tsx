@@ -108,7 +108,7 @@ export function TemplateForm({
 
   return (
     <form onSubmit={handleSubmit} className="space-y-6 max-w-4xl">
-      <section className="bg-white border rounded p-4 space-y-3">
+      <section className="bg-card border rounded p-4 space-y-3">
         <h2 className="font-semibold">Thông tin chung</h2>
         <div className="grid grid-cols-2 gap-3">
           <div>
@@ -120,7 +120,7 @@ export function TemplateForm({
               required
               disabled={isEdit}
             />
-            <div className="text-xs text-gray-500 mt-1">
+            <div className="text-xs text-muted-foreground mt-1">
               CHỮ HOA + _ + số. Không sửa được sau tạo.
             </div>
           </div>
@@ -181,20 +181,20 @@ export function TemplateForm({
             {availableVars.map((vn) => (
               <code
                 key={vn}
-                className="px-2 py-0.5 bg-white border rounded text-xs font-mono"
+                className="px-2 py-0.5 bg-card border rounded text-xs font-mono"
               >
                 {`{{${vn}}}`}
               </code>
             ))}
           </div>
-          <div className="text-xs text-gray-600 mt-2">
+          <div className="text-xs text-muted-foreground mt-2">
             Render engine đầy đủ trong Sprint 5.13.1. Hiện tại chỉ basic
             substitution.
           </div>
         </section>
       )}
 
-      <section className="bg-white border rounded p-4 space-y-3">
+      <section className="bg-card border rounded p-4 space-y-3">
         <h2 className="font-semibold">Tiêu đề + nội dung</h2>
         <div>
           <Label>Tiêu đề email *</Label>
@@ -211,7 +211,7 @@ export function TemplateForm({
                   key={vn}
                   type="button"
                   onClick={() => insertVar(vn, "subject")}
-                  className="text-xs px-1.5 py-0.5 border rounded hover:bg-gray-50"
+                  className="text-xs px-1.5 py-0.5 border rounded hover:bg-muted"
                 >
                   +{vn}
                 </button>
@@ -247,14 +247,14 @@ export function TemplateForm({
             }
             className="font-mono text-sm"
           />
-          <div className="text-xs text-gray-500 mt-1">
+          <div className="text-xs text-muted-foreground mt-1">
             HTML cần inline CSS. Email client (Gmail/Outlook) không hỗ trợ
             external CSS.
           </div>
         </div>
       </section>
 
-      <section className="bg-white border rounded p-4 space-y-3">
+      <section className="bg-card border rounded p-4 space-y-3">
         <h2 className="font-semibold">Tuỳ chọn nâng cao</h2>
         <div className="grid grid-cols-2 gap-3">
           <div>

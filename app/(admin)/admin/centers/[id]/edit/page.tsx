@@ -22,7 +22,7 @@ export default async function EditCenterPage({ params }: Props) {
 
   return (
     <div>
-      <h1 className="mb-6 text-3xl font-black text-neutral-900">
+      <h1 className="mb-6 text-3xl font-black text-foreground">
         Sửa cơ sở: <span className="font-bold text-primary">{center.name}</span>
       </h1>
       <CenterForm

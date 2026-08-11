@@ -65,21 +65,21 @@ export function SessionListRow({
   }
 
   return (
-    <tr className="border-b border-neutral-200 hover:bg-neutral-50">
+    <tr className="border-b border-border hover:bg-muted">
       <td className="p-4 text-sm">
-        <div className="font-bold tabular-nums text-neutral-900">{formatDateTime(session.date)}</div>
+        <div className="font-bold tabular-nums text-foreground">{formatDateTime(session.date)}</div>
         <div className="mt-0.5 text-xs">
           {past ? (
-            <span className="text-neutral-400">Đã diễn ra</span>
+            <span className="text-muted-foreground">Đã diễn ra</span>
           ) : (
             <span className="text-state-success-ink">Sắp tới</span>
           )}
         </div>
       </td>
       <td className="p-4">
-        <div className="font-semibold text-neutral-900">{session.className}</div>
+        <div className="font-semibold text-foreground">{session.className}</div>
         {session.topic && (
-          <div className="mt-0.5 text-xs text-neutral-500 line-clamp-2">📚 {session.topic}</div>
+          <div className="mt-0.5 text-xs text-muted-foreground line-clamp-2">📚 {session.topic}</div>
         )}
       </td>
       <td className="p-4 text-center">
@@ -88,7 +88,7 @@ export function SessionListRow({
             {session.attendanceCount} điểm danh
           </span>
         ) : (
-          <span className="text-xs text-neutral-400">Chưa có</span>
+          <span className="text-xs text-muted-foreground">Chưa có</span>
         )}
       </td>
       <td className="p-4 text-right">

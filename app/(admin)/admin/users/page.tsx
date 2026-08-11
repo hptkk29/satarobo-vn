@@ -78,10 +78,10 @@ export default async function UsersAdminPage() {
     <div>
       <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">
+          <h1 className="text-2xl font-bold text-foreground">
             Tài khoản đăng nhập
           </h1>
-          <p className="mt-1 text-sm text-gray-500">
+          <p className="mt-1 text-sm text-muted-foreground">
             {users.length} tài khoản · chỉ SUPER_ADMIN có quyền quản lý
           </p>
         </div>
@@ -94,43 +94,43 @@ export default async function UsersAdminPage() {
         </Link>
       </div>
 
-      <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
+      <div className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
         <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-gray-100">
-            <thead className="bg-gray-50">
+          <table className="min-w-full divide-y divide-border">
+            <thead className="bg-muted">
               <tr>
-                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">
+                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                   Email
                 </th>
-                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">
+                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                   Tên
                 </th>
-                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">
+                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                   Role
                 </th>
-                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">
+                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                   Nhân sự
                 </th>
-                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">
+                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                   Cơ sở
                 </th>
-                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">
+                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                   Trạng thái
                 </th>
-                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">
+                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                   Đăng nhập cuối
                 </th>
-                <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-gray-500">
+                <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                   Hành động
                 </th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-50">
+            <tbody className="divide-y divide-border">
               {users.length === 0 ? (
                 <tr>
                   <td
                     colSpan={8}
-                    className="px-4 py-12 text-center text-sm text-gray-400"
+                    className="px-4 py-12 text-center text-sm text-muted-foreground"
                   >
                     Chưa có tài khoản nào
                   </td>
@@ -149,11 +149,11 @@ export default async function UsersAdminPage() {
                       ? "Không thể disable SUPER_ADMIN duy nhất"
                       : undefined;
                   return (
-                    <tr key={u.id} className="hover:bg-gray-50/60">
+                    <tr key={u.id} className="hover:bg-muted/60">
                       <td className="px-4 py-3">
                         <Link
                           href={`/users/${u.id}/edit`}
-                          className="font-medium text-gray-900 hover:text-primary"
+                          className="font-medium text-foreground hover:text-primary"
                         >
                           {u.email}
                         </Link>
@@ -163,7 +163,7 @@ export default async function UsersAdminPage() {
                           </span>
                         )}
                       </td>
-                      <td className="px-4 py-3 text-sm text-gray-700">
+                      <td className="px-4 py-3 text-sm text-foreground">
                         {u.name ?? "—"}
                       </td>
                       <td className="px-4 py-3">
@@ -189,16 +189,16 @@ export default async function UsersAdminPage() {
                           >
                             {u.employee.fullName}
                             {u.employee.employeeCode && (
-                              <span className="ml-1 text-xs text-gray-400">
+                              <span className="ml-1 text-xs text-muted-foreground">
                                 · {u.employee.employeeCode}
                               </span>
                             )}
                           </Link>
                         ) : (
-                          <span className="text-gray-400">—</span>
+                          <span className="text-muted-foreground">—</span>
                         )}
                       </td>
-                      <td className="px-4 py-3 text-sm text-gray-500">
+                      <td className="px-4 py-3 text-sm text-muted-foreground">
                         {u.center?.name ?? "—"}
                       </td>
                       <td className="px-4 py-3">
@@ -225,7 +225,7 @@ export default async function UsersAdminPage() {
                           if (idleDays > 30) {
                             return (
                               <div className="flex flex-col gap-0.5">
-                                <span className="text-gray-700">{text}</span>
+                                <span className="text-foreground">{text}</span>
                                 <span className="inline-flex w-fit items-center gap-1 rounded-full bg-state-warning-soft px-1.5 py-0.5 text-[10px] font-semibold text-state-warning-ink">
                                   <AlertCircle className="h-2.5 w-2.5" />
                                   Idle {idleDays}d
@@ -233,7 +233,7 @@ export default async function UsersAdminPage() {
                               </div>
                             );
                           }
-                          return <span className="text-gray-600">{text}</span>;
+                          return <span className="text-muted-foreground">{text}</span>;
                         })()}
                       </td>
                       <td className="px-4 py-3 text-right">

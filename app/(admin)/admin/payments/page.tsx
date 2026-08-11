@@ -47,8 +47,8 @@ export default async function PaymentsPage() {
           <CreditCard className="h-5 w-5 text-primary" />
         </div>
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Thanh toán</h1>
-          <p className="mt-1 text-sm text-gray-500">
+          <h1 className="text-2xl font-bold text-foreground">Thanh toán</h1>
+          <p className="mt-1 text-sm text-muted-foreground">
             Ghi nhận khoản thu (Sale) &amp; xác nhận / từ chối / điều chỉnh (Kế toán)
           </p>
         </div>

@@ -49,8 +49,8 @@ export default async function CoursesPage() {
           <BookOpen className="h-5 w-5 text-primary" />
         </div>
         <div className="flex-1">
-          <h1 className="text-2xl font-bold text-gray-900">Khoá dạy (chương trình giảng)</h1>
-          <p className="mt-1 text-sm text-gray-500">
+          <h1 className="text-2xl font-bold text-foreground">Khoá dạy (chương trình giảng)</h1>
+          <p className="mt-1 text-sm text-muted-foreground">
             Khoá dạy = đơn vị GIẢNG (chương trình, độ tuổi, trình độ, ưu đãi). Để BÁN/định giá,
             mở chi tiết khoá để quản lý <span className="font-medium">gói bán liên kết</span>.
           </p>
@@ -58,14 +58,14 @@ export default async function CoursesPage() {
         {canEditPackages && (
           <Link
             href="/course-packages"
-            className="shrink-0 rounded-lg border border-gray-200 px-3 py-1.5 text-sm font-semibold text-gray-700 hover:bg-gray-50"
+            className="shrink-0 rounded-lg border border-border px-3 py-1.5 text-sm font-semibold text-foreground hover:bg-muted"
           >
             Tất cả gói bán →
           </Link>
         )}
       </div>
 
-      <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white shadow-sm">
+      <div className="overflow-x-auto rounded-xl border border-border bg-card shadow-sm">
         <Table>
           <TableHeader>
             <TableRow>
@@ -80,18 +80,18 @@ export default async function CoursesPage() {
           <TableBody>
             {courses.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={6} className="py-8 text-center text-gray-500">
+                <TableCell colSpan={6} className="py-8 text-center text-muted-foreground">
                   Chưa có khoá học nào
                 </TableCell>
               </TableRow>
             ) : (
               courses.map((c) => (
-                <TableRow key={c.id} className="hover:bg-gray-50/60">
+                <TableRow key={c.id} className="hover:bg-muted/60">
                   <TableCell className="font-medium">
                     <Link href={`/courses/${c.id}`} className="text-state-info-ink hover:underline">
                       {c.name}
                     </Link>
-                    <div className="text-xs text-gray-400">/{c.slug}</div>
+                    <div className="text-xs text-muted-foreground">/{c.slug}</div>
                   </TableCell>
                   <TableCell className="text-sm">{c.ageRange || "—"}</TableCell>
                   <TableCell className="text-sm">{c.level || "—"}</TableCell>
@@ -107,7 +107,7 @@ export default async function CoursesPage() {
                         Hoạt động
                       </Badge>
                     ) : (
-                      <Badge className="bg-gray-200 text-gray-700 hover:bg-gray-200">Tắt</Badge>
+                      <Badge className="bg-muted text-foreground hover:bg-muted">Tắt</Badge>
                     )}
                   </TableCell>
                 </TableRow>

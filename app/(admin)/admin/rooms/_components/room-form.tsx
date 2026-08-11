@@ -103,7 +103,7 @@ export function RoomForm({
       </Section>
 
       <Section title="Thiết bị">
-        <p className="-mt-2 text-xs text-neutral-500">
+        <p className="-mt-2 text-xs text-muted-foreground">
           Mỗi mục là 1 thiết bị. VD: <em>Robot SR1</em>, <em>Laptop</em>, <em>Máy chiếu</em>.
         </p>
         <StringArrayEditor
@@ -124,12 +124,12 @@ export function RoomForm({
         />
       </Section>
 
-      <div className="flex gap-3 border-t border-neutral-200 pt-6">
+      <div className="flex gap-3 border-t border-border pt-6">
         <SubmitButton isEdit={isEdit} />
         <button
           type="button"
           onClick={() => router.push("/rooms")}
-          className="rounded-xl border-2 border-neutral-200 bg-white px-6 py-3 font-bold text-neutral-700 hover:bg-neutral-50"
+          className="rounded-xl border-2 border-border bg-card px-6 py-3 font-bold text-foreground hover:bg-muted"
         >
           Huỷ
         </button>
@@ -153,8 +153,8 @@ function SubmitButton({ isEdit }: { isEdit: boolean }) {
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <section className="rounded-xl border border-neutral-200 bg-white p-6">
-      <h2 className="mb-4 text-sm font-bold uppercase tracking-wider text-neutral-700">
+    <section className="rounded-xl border border-border bg-card p-6">
+      <h2 className="mb-4 text-sm font-bold uppercase tracking-wider text-foreground">
         {title}
       </h2>
       <div className="space-y-4">{children}</div>
@@ -192,10 +192,10 @@ function Field({
 }: FieldProps) {
   const value = defaultValue ?? "";
   const baseClass =
-    "w-full rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20";
+    "w-full rounded-lg border border-border bg-card px-3 py-2 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20";
   return (
     <label className="block">
-      <span className="mb-1 block text-sm font-semibold text-neutral-700">
+      <span className="mb-1 block text-sm font-semibold text-foreground">
         {label}
         {required && <span className="ml-1 text-state-danger-ink">*</span>}
       </span>
@@ -219,7 +219,7 @@ function Field({
           className={baseClass}
         />
       )}
-      {helper && <span className="mt-1 block text-xs text-neutral-500">{helper}</span>}
+      {helper && <span className="mt-1 block text-xs text-muted-foreground">{helper}</span>}
     </label>
   );
 }
@@ -239,7 +239,7 @@ function SelectField({
 }) {
   return (
     <label className="block">
-      <span className="mb-1 block text-sm font-semibold text-neutral-700">
+      <span className="mb-1 block text-sm font-semibold text-foreground">
         {label}
         {required && <span className="ml-1 text-state-danger-ink">*</span>}
       </span>
@@ -247,7 +247,7 @@ function SelectField({
         name={name}
         defaultValue={defaultValue ?? ""}
         required={required}
-        className="w-full rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
+        className="w-full rounded-lg border border-border bg-card px-3 py-2 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
       >
         {!required && <option value="">— Chọn —</option>}
         {options.map((opt) => (

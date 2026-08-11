@@ -47,12 +47,12 @@ export default function ImportInventoryItemsPage() {
       <div>
         <Link
           href="/inventory/items"
-          className="mb-3 inline-flex items-center gap-1 text-sm text-neutral-500 hover:text-neutral-700"
+          className="mb-3 inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
         >
           <ChevronLeft className="h-4 w-4" /> Quay lại kho
         </Link>
         <h1 className="text-2xl font-bold">Import Học cụ từ Excel</h1>
-        <p className="text-sm text-neutral-500 mt-1">
+        <p className="text-sm text-muted-foreground mt-1">
           <code>itemCode</code> = khoá upsert. Khi tạo mặt hàng mới, hệ thống
           tự khởi tạo tồn = 0 cho mọi cơ sở active. Re-import item cũ sẽ
           UPDATE metadata nhưng KHÔNG reset tồn (skipDuplicates).
@@ -157,8 +157,8 @@ export default function ImportInventoryItemsPage() {
         }}
       />
 
-      <div className="text-sm text-neutral-500 mt-4 space-y-1 rounded-xl border border-neutral-200 bg-neutral-50 p-4">
-        <p className="font-semibold text-neutral-700">Lưu ý:</p>
+      <div className="text-sm text-muted-foreground mt-4 space-y-1 rounded-xl border border-border bg-muted p-4">
+        <p className="font-semibold text-foreground">Lưu ý:</p>
         <ul className="list-disc list-inside space-y-0.5">
           <li>
             <code>category</code>: <code>MAINBOARD</code> / <code>SENSOR</code> /{" "}

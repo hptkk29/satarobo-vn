@@ -39,43 +39,43 @@ export function ChangePasswordForm() {
       )}
 
       <div>
-        <label className="mb-1.5 block text-sm font-semibold text-gray-700">Mật khẩu hiện tại</label>
+        <label className="mb-1.5 block text-sm font-semibold text-foreground">Mật khẩu hiện tại</label>
         <div className="relative">
           <input
             name="currentPassword"
             type={showCurrent ? 'text' : 'password'}
             required
-            className="w-full rounded-lg border border-gray-200 px-3 py-2.5 pr-10 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+            className="w-full rounded-lg border border-border px-3 py-2.5 pr-10 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
           />
-          <button type="button" onClick={() => setShowCurrent(v => !v)} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+          <button type="button" onClick={() => setShowCurrent(v => !v)} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-muted-foreground">
             {showCurrent ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
           </button>
         </div>
       </div>
 
       <div>
-        <label className="mb-1.5 block text-sm font-semibold text-gray-700">Mật khẩu mới</label>
+        <label className="mb-1.5 block text-sm font-semibold text-foreground">Mật khẩu mới</label>
         <div className="relative">
           <input
             name="newPassword"
             type={showNew ? 'text' : 'password'}
             required
             minLength={8}
-            className="w-full rounded-lg border border-gray-200 px-3 py-2.5 pr-10 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+            className="w-full rounded-lg border border-border px-3 py-2.5 pr-10 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
           />
-          <button type="button" onClick={() => setShowNew(v => !v)} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
+          <button type="button" onClick={() => setShowNew(v => !v)} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-muted-foreground">
             {showNew ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
           </button>
         </div>
       </div>
 
       <div>
-        <label className="mb-1.5 block text-sm font-semibold text-gray-700">Xác nhận mật khẩu mới</label>
+        <label className="mb-1.5 block text-sm font-semibold text-foreground">Xác nhận mật khẩu mới</label>
         <input
           name="confirmPassword"
           type="password"
           required
-          className="w-full rounded-lg border border-gray-200 px-3 py-2.5 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+          className="w-full rounded-lg border border-border px-3 py-2.5 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
         />
       </div>
 

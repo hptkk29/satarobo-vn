@@ -215,16 +215,16 @@ export default async function LeadDetailPage({ params }: Props) {
     <div className="max-w-6xl p-6">
       <Link
         href="/leads?view=kanban"
-        className="mb-4 inline-flex items-center gap-1 text-sm text-gray-500 hover:text-gray-700"
+        className="mb-4 inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
       >
         <ChevronLeft className="h-4 w-4" /> Quay lại danh sách
       </Link>
 
       {/* Header */}
-      <div className="mb-6 flex flex-wrap items-start justify-between gap-3 border-b border-gray-200 pb-4">
+      <div className="mb-6 flex flex-wrap items-start justify-between gap-3 border-b border-border pb-4">
         <div>
           <div className="flex flex-wrap items-center gap-2">
-            <h1 className="text-2xl font-bold text-gray-900">
+            <h1 className="text-2xl font-bold text-foreground">
               {piiLead.parentName}
             </h1>
             <span
@@ -233,7 +233,7 @@ export default async function LeadDetailPage({ params }: Props) {
               {LEAD_STATUS_LABEL[status]}
             </span>
           </div>
-          <div className="mt-1 text-sm text-gray-600">
+          <div className="mt-1 text-sm text-muted-foreground">
             {/* #11 T2 — non-holder: hiện SĐT mask + BỎ link tel: (href sẽ lộ số thật) */}
             {canViewPii ? (
               <a href={`tel:${lead.phone}`} className="font-medium text-primary">
@@ -259,7 +259,7 @@ export default async function LeadDetailPage({ params }: Props) {
           {canTransfer && !isSharedViewer && (
             <Link
               href={`/leads/${lead.id}/edit`}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-gray-300 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-2 text-sm font-medium text-foreground hover:bg-muted"
             >
               Sửa
             </Link>
@@ -296,7 +296,7 @@ export default async function LeadDetailPage({ params }: Props) {
       )}
 
       {/* Info grid */}
-      <dl className="mb-6 grid grid-cols-2 gap-4 rounded-xl border border-gray-200 bg-white p-4 sm:grid-cols-4">
+      <dl className="mb-6 grid grid-cols-2 gap-4 rounded-xl border border-border bg-card p-4 sm:grid-cols-4">
         <Info label="Tên con" value={piiLead.childName} />
         <Info label="Tuổi" value={lead.childAge?.toString() ?? null} />
         <Info label="Khoá quan tâm" value={lead.course?.name ?? lead.source} />
@@ -434,9 +434,9 @@ export default async function LeadDetailPage({ params }: Props) {
 
       {/* Học thử (Phase T1.4) */}
       {lead.trialClasses.length > 0 && (
-        <div className="mb-6 rounded-xl border border-gray-200 bg-white p-4">
+        <div className="mb-6 rounded-xl border border-border bg-card p-4">
           <div className="mb-3 flex items-center justify-between">
-            <h2 className="text-sm font-semibold text-gray-700">Buổi học thử</h2>
+            <h2 className="text-sm font-semibold text-foreground">Buổi học thử</h2>
             <Link href="/trials" className="text-xs font-medium text-primary hover:underline">
               Quản lý ở mục Học thử →
             </Link>
@@ -445,7 +445,7 @@ export default async function LeadDetailPage({ params }: Props) {
             {lead.trialClasses.map((t) => (
               <li
                 key={t.id}
-                className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-gray-50 px-3 py-2 text-sm"
+                className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-muted px-3 py-2 text-sm"
               >
                 <div className="flex flex-wrap items-center gap-2">
                   <span
@@ -453,7 +453,7 @@ export default async function LeadDetailPage({ params }: Props) {
                   >
                     {TRIAL_STATUS_LABEL[t.status]}
                   </span>
-                  <span className="text-gray-700">
+                  <span className="text-foreground">
                     {t.scheduledAt.toLocaleString("vi-VN", {
                       day: "2-digit",
                       month: "2-digit",
@@ -462,7 +462,7 @@ export default async function LeadDetailPage({ params }: Props) {
                     })}
                   </span>
                   {t.teacher?.name && (
-                    <span className="text-gray-500">· GV: {t.teacher.name}</span>
+                    <span className="text-muted-foreground">· GV: {t.teacher.name}</span>
                   )}
                 </div>
                 {t.feedback ? (
@@ -470,7 +470,7 @@ export default async function LeadDetailPage({ params }: Props) {
                     Đã có nhận xét
                   </span>
                 ) : (
-                  <span className="text-xs text-gray-400">Chưa nhận xét</span>
+                  <span className="text-xs text-muted-foreground">Chưa nhận xét</span>
                 )}
               </li>
             ))}
@@ -499,10 +499,10 @@ export default async function LeadDetailPage({ params }: Props) {
 function Info({ label, value }: { label: string; value: string | null }) {
   return (
     <div>
-      <dt className="text-xs font-semibold uppercase tracking-wide text-gray-400">
+      <dt className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
         {label}
       </dt>
-      <dd className="mt-1 break-words text-sm text-gray-800">{value || "—"}</dd>
+      <dd className="mt-1 break-words text-sm text-foreground">{value || "—"}</dd>
     </div>
   );
 }

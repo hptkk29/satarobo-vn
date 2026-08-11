@@ -58,7 +58,7 @@ export function ClassFilters({
   }
 
   const selectCls =
-    "rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:outline-none";
+    "rounded-lg border border-border px-3 py-2 text-sm focus:border-primary focus:outline-none";
 
   return (
     <form
@@ -70,7 +70,7 @@ export function ClassFilters({
         value={q}
         onChange={(e) => setQ(e.target.value)}
         placeholder="Tìm tên / mã lớp..."
-        className="lg:col-span-2 rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+        className="lg:col-span-2 rounded-lg border border-border px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
       />
       <select
         name="status"

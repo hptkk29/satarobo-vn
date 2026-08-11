@@ -61,7 +61,7 @@ export function SiteContentClient({ pages, fields, initialContent }: Props) {
     <div className="flex flex-col md:flex-row gap-6">
       {/* Sidebar: page list */}
       <aside className="md:w-64 shrink-0">
-        <div className="bg-white border border-neutral-200 rounded-xl overflow-hidden">
+        <div className="bg-card border border-border rounded-xl overflow-hidden">
           {pages.map((p) => {
             const isActive = activePage === p.pageKey;
             const hasOverride = Object.keys(content[p.pageKey] || {}).length > 0;
@@ -70,7 +70,7 @@ export function SiteContentClient({ pages, fields, initialContent }: Props) {
                 key={p.pageKey}
                 type="button"
                 onClick={() => setActivePage(p.pageKey)}
-                className={`w-full text-left px-4 py-3 text-sm border-b border-neutral-100 last:border-b-0 transition-colors ${ isActive ? "bg-primary-soft text-primary font-semibold border-l-2 border-primary" : "text-neutral-700 hover:bg-neutral-50" }`}
+                className={`w-full text-left px-4 py-3 text-sm border-b border-border last:border-b-0 transition-colors ${ isActive ? "bg-primary-soft text-primary font-semibold border-l-2 border-primary" : "text-foreground hover:bg-muted" }`}
               >
                 <div className="flex items-center justify-between gap-2">
                   <span className="truncate">{p.label}</span>
@@ -78,7 +78,7 @@ export function SiteContentClient({ pages, fields, initialContent }: Props) {
                     <span className="w-2 h-2 rounded-full bg-primary shrink-0" />
                   )}
                 </div>
-                <p className="text-xs text-neutral-500 font-normal mt-0.5">
+                <p className="text-xs text-muted-foreground font-normal mt-0.5">
                   /{p.pageKey === "home" ? "" : p.pageKey}
                 </p>
               </button>
@@ -94,11 +94,11 @@ export function SiteContentClient({ pages, fields, initialContent }: Props) {
           return (
             <div
               key={field.key}
-              className="bg-white border border-neutral-200 rounded-xl p-5"
+              className="bg-card border border-border rounded-xl p-5"
             >
-              <label className="block text-sm font-semibold text-neutral-900 mb-2">
+              <label className="block text-sm font-semibold text-foreground mb-2">
                 {field.label}
-                <span className="ml-2 text-xs font-normal text-neutral-400">
+                <span className="ml-2 text-xs font-normal text-muted-foreground">
                   ({field.key})
                 </span>
               </label>
@@ -109,7 +109,7 @@ export function SiteContentClient({ pages, fields, initialContent }: Props) {
                   value={value}
                   onChange={(e) => update(field.key, e.target.value)}
                   placeholder="Để trống = dùng mặc định"
-                  className="w-full rounded-lg border border-neutral-300 px-3 py-2 text-sm focus:border-primary focus:outline-none"
+                  className="w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-primary focus:outline-none"
                 />
               )}
 
@@ -119,7 +119,7 @@ export function SiteContentClient({ pages, fields, initialContent }: Props) {
                   value={value}
                   onChange={(e) => update(field.key, e.target.value)}
                   placeholder="Để trống = dùng mặc định"
-                  className="w-full rounded-lg border border-neutral-300 px-3 py-2 text-sm focus:border-primary focus:outline-none"
+                  className="w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-primary focus:outline-none"
                 />
               )}
 

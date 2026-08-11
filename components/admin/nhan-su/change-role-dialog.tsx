@@ -100,7 +100,7 @@ export function ChangeRoleDialog({ employeeId, employeeName, currentRole, curren
       <button
         type="button"
         onClick={() => setIsOpen(true)}
-        className="inline-flex items-center gap-2 rounded-lg border-2 border-state-warning bg-white px-4 py-2 text-sm font-bold text-state-warning-ink hover:bg-state-warning-soft"
+        className="inline-flex items-center gap-2 rounded-lg border-2 border-state-warning bg-card px-4 py-2 text-sm font-bold text-state-warning-ink hover:bg-state-warning-soft"
       >
         <ShieldAlert className="h-4 w-4" />
         Đổi vai trò
@@ -115,29 +115,29 @@ export function ChangeRoleDialog({ employeeId, employeeName, currentRole, curren
           onClick={close}
         >
           <div
-            className="relative w-full max-w-md rounded-xl bg-white p-6 shadow-xl"
+            className="relative w-full max-w-md rounded-xl bg-card p-6 shadow-xl"
             onClick={(e) => e.stopPropagation()}
           >
             <button
               type="button"
               onClick={close}
               aria-label="Đóng"
-              className="absolute right-3 top-3 rounded-md p-1 text-neutral-500 hover:bg-neutral-100"
+              className="absolute right-3 top-3 rounded-md p-1 text-muted-foreground hover:bg-muted"
             >
               <X className="h-4 w-4" />
             </button>
 
             <h2
               id="change-role-title"
-              className="flex items-center gap-2 text-lg font-bold text-neutral-900"
+              className="flex items-center gap-2 text-lg font-bold text-foreground"
             >
               <ShieldAlert className="h-5 w-5 text-state-warning-ink" />
               Thay đổi vai trò
             </h2>
-            <p className="mt-1 text-sm text-neutral-600">
+            <p className="mt-1 text-sm text-muted-foreground">
               Nhân viên: <strong>{employeeName}</strong>
             </p>
-            <p className="mt-0.5 text-xs text-neutral-400">
+            <p className="mt-0.5 text-xs text-muted-foreground">
               Hành động ghi vào audit log, không xoá được.
             </p>
 
@@ -156,14 +156,14 @@ export function ChangeRoleDialog({ employeeId, employeeName, currentRole, curren
                   {ROLE_OPTIONS.map((opt) => {
                     const on = selected.includes(opt.value);
                     return (
-                      <div key={opt.value} className="flex items-center justify-between gap-2 rounded-lg border border-neutral-200 px-3 py-1.5">
+                      <div key={opt.value} className="flex items-center justify-between gap-2 rounded-lg border border-border px-3 py-1.5">
                         <label className="flex items-center gap-2 text-sm">
                           <input
                             type="checkbox"
                             checked={on}
                             onChange={() => toggle(opt.value)}
                             disabled={pending}
-                            className="h-4 w-4 rounded border-neutral-300"
+                            className="h-4 w-4 rounded border-border"
                           />
                           {opt.label}
                         </label>
@@ -171,7 +171,7 @@ export function ChangeRoleDialog({ employeeId, employeeName, currentRole, curren
                           type="button"
                           onClick={() => on && setPrimary(opt.value)}
                           disabled={!on || pending}
-                          className={`rounded-full px-2 py-0.5 text-xs font-semibold ${ primary === opt.value ? "bg-state-warning text-white" : on ? "bg-neutral-100 text-neutral-600 hover:bg-state-warning-soft" : "bg-neutral-50 text-neutral-300" }`}
+                          className={`rounded-full px-2 py-0.5 text-xs font-semibold ${ primary === opt.value ? "bg-state-warning text-white" : on ? "bg-muted text-muted-foreground hover:bg-state-warning-soft" : "bg-muted text-muted-foreground" }`}
                         >
                           {primary === opt.value ? "Vai trò chính" : "Đặt chính"}
                         </button>
@@ -179,7 +179,7 @@ export function ChangeRoleDialog({ employeeId, employeeName, currentRole, curren
                     );
                   })}
                 </div>
-                <p className="mt-1 text-xs text-neutral-400">
+                <p className="mt-1 text-xs text-muted-foreground">
                   Quyền = hợp của tất cả vai trò. Vai trò chính dùng cho dashboard mặc định.
                 </p>
               </div>
@@ -187,7 +187,7 @@ export function ChangeRoleDialog({ employeeId, employeeName, currentRole, curren
               <div>
                 <label className="mb-1 block text-sm font-semibold">
                   Lý do thay đổi *{" "}
-                  <span className="text-xs font-normal text-neutral-500">
+                  <span className="text-xs font-normal text-muted-foreground">
                     (tối thiểu 5 ký tự)
                   </span>
                 </label>
@@ -198,7 +198,7 @@ export function ChangeRoleDialog({ employeeId, employeeName, currentRole, curren
                   rows={3}
                   disabled={pending}
                   required
-                  className="w-full resize-y rounded-lg border border-neutral-300 px-3 py-2 text-sm focus:border-state-warning focus:outline-none"
+                  className="w-full resize-y rounded-lg border border-border px-3 py-2 text-sm focus:border-state-warning focus:outline-none"
                 />
               </div>
             </div>
@@ -208,7 +208,7 @@ export function ChangeRoleDialog({ employeeId, employeeName, currentRole, curren
                 type="button"
                 onClick={close}
                 disabled={pending}
-                className="rounded-lg border border-neutral-300 px-4 py-2 text-sm font-semibold text-neutral-700 hover:bg-neutral-50 disabled:opacity-50"
+                className="rounded-lg border border-border px-4 py-2 text-sm font-semibold text-foreground hover:bg-muted disabled:opacity-50"
               >
                 Huỷ
               </button>

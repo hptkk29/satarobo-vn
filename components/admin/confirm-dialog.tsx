@@ -58,7 +58,7 @@ export function ConfirmDialog({
             type="button"
             onClick={() => onOpenChange(false)}
             disabled={pending}
-            className="rounded-lg border border-neutral-200 bg-white px-4 py-2 text-sm font-semibold text-neutral-700 hover:bg-neutral-50 disabled:opacity-50"
+            className="rounded-lg border border-border bg-card px-4 py-2 text-sm font-semibold text-foreground hover:bg-muted disabled:opacity-50"
           >
             Huỷ
           </button>

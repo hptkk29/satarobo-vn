@@ -29,7 +29,7 @@ export default async function AdminGuideDetailPage({ params }: PageProps) {
     <div className="mx-auto max-w-3xl">
       <Link
         href="/huong-dan"
-        className="mb-4 inline-flex items-center gap-1.5 text-sm text-neutral-500 transition-colors hover:text-neutral-900"
+        className="mb-4 inline-flex items-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
       >
         <ArrowLeft className="h-4 w-4" aria-hidden />
         Hướng dẫn sử dụng
@@ -37,8 +37,8 @@ export default async function AdminGuideDetailPage({ params }: PageProps) {
 
       <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="min-w-0">
-          <h1 className="text-2xl font-bold text-neutral-900">{guide.title}</h1>
-          <p className="mt-1 text-sm text-neutral-500">
+          <h1 className="text-2xl font-bold text-foreground">{guide.title}</h1>
+          <p className="mt-1 text-sm text-muted-foreground">
             {guide.category} · {guide.description}
           </p>
         </div>
@@ -53,7 +53,7 @@ export default async function AdminGuideDetailPage({ params }: PageProps) {
         ) : null}
       </div>
 
-      <div className="rounded-xl border border-neutral-200 bg-white p-5 sm:p-6">
+      <div className="rounded-xl border border-border bg-card p-5 sm:p-6">
         <GuideMarkdown content={guide.body} />
       </div>
 
@@ -61,9 +61,9 @@ export default async function AdminGuideDetailPage({ params }: PageProps) {
         {prev ? (
           <Link
             href={`/huong-dan/${prev.slug}`}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm text-neutral-700 transition-colors hover:bg-neutral-50"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-card px-3 py-2 text-sm text-foreground transition-colors hover:bg-muted"
           >
-            <ArrowLeft className="h-4 w-4 text-neutral-400" aria-hidden />
+            <ArrowLeft className="h-4 w-4 text-muted-foreground" aria-hidden />
             {prev.title}
           </Link>
         ) : (
@@ -72,10 +72,10 @@ export default async function AdminGuideDetailPage({ params }: PageProps) {
         {next ? (
           <Link
             href={`/huong-dan/${next.slug}`}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm text-neutral-700 transition-colors hover:bg-neutral-50 sm:ml-auto"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-card px-3 py-2 text-sm text-foreground transition-colors hover:bg-muted sm:ml-auto"
           >
             {next.title}
-            <ArrowRight className="h-4 w-4 text-neutral-400" aria-hidden />
+            <ArrowRight className="h-4 w-4 text-muted-foreground" aria-hidden />
           </Link>
         ) : null}
       </nav>

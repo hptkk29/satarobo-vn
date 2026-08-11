@@ -63,8 +63,8 @@ export function ClassAssignmentSection({
   }
 
   return (
-    <section className="rounded-xl border border-gray-200 bg-white p-5">
-      <h2 className="mb-4 text-sm font-bold uppercase tracking-wider text-gray-500">
+    <section className="rounded-xl border border-border bg-card p-5">
+      <h2 className="mb-4 text-sm font-bold uppercase tracking-wider text-muted-foreground">
         Lớp đang phụ trách
       </h2>
 
@@ -74,13 +74,13 @@ export function ClassAssignmentSection({
       </div>
 
       {canEdit && (
-        <div className="mt-5 border-t border-gray-100 pt-4">
+        <div className="mt-5 border-t border-border pt-4">
           <div className="flex flex-wrap items-center gap-2">
             <select
               value={pick}
               onChange={(e) => setPick(e.target.value)}
               disabled={pending}
-              className="min-w-[16rem] rounded-lg border border-gray-300 px-3 py-1.5 text-sm focus:border-primary focus:outline-none"
+              className="min-w-[16rem] rounded-lg border border-border px-3 py-1.5 text-sm focus:border-primary focus:outline-none"
             >
               <option value="">— Chọn lớp để gán —</option>
               {assignable.map((c) => (
@@ -91,7 +91,7 @@ export function ClassAssignmentSection({
               value={as}
               onChange={(e) => setAs(e.target.value as "teacher" | "assistant")}
               disabled={pending}
-              className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm focus:border-primary focus:outline-none"
+              className="rounded-lg border border-border px-3 py-1.5 text-sm focus:border-primary focus:outline-none"
             >
               <option value="teacher">GV chính</option>
               <option value="assistant">Trợ giảng</option>
@@ -112,7 +112,7 @@ export function ClassAssignmentSection({
             </p>
           )}
           {assignable.length === 0 && (
-            <p className="mt-2 text-xs text-gray-400">Không còn lớp nào để gán (cùng cơ sở).</p>
+            <p className="mt-2 text-xs text-muted-foreground">Không còn lớp nào để gán (cùng cơ sở).</p>
           )}
         </div>
       )}
@@ -137,24 +137,24 @@ function ClassList({
 }) {
   return (
     <div>
-      <p className="mb-1.5 text-xs font-semibold text-gray-400">{title} ({rows.length})</p>
+      <p className="mb-1.5 text-xs font-semibold text-muted-foreground">{title} ({rows.length})</p>
       {rows.length === 0 ? (
-        <p className="text-sm text-gray-400">—</p>
+        <p className="text-sm text-muted-foreground">—</p>
       ) : (
         <ul className="flex flex-wrap gap-2">
           {rows.map((c) => (
             <li
               key={c.id}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-gray-50 px-3 py-1.5 text-sm"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-muted px-3 py-1.5 text-sm"
             >
-              <span className="font-medium text-gray-800">{c.label}</span>
-              <span className="text-xs text-gray-400">· {c.courseName}</span>
+              <span className="font-medium text-foreground">{c.label}</span>
+              <span className="text-xs text-muted-foreground">· {c.courseName}</span>
               {canEdit && (
                 <button
                   type="button"
                   onClick={() => onRemove(c.id, role)}
                   disabled={pending}
-                  className="ml-1 rounded p-0.5 text-gray-400 hover:bg-gray-200 hover:text-gray-700 disabled:opacity-50"
+                  className="ml-1 rounded p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-50"
                   aria-label={`Gỡ ${c.label}`}
                 >
                   <X className="h-3.5 w-3.5" />

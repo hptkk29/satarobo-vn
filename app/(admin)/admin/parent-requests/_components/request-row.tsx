@@ -70,10 +70,10 @@ export function RequestRow({ item }: { item: RequestItem }) {
   }
 
   return (
-    <li className="rounded-xl border border-gray-200 bg-white p-4">
+    <li className="rounded-xl border border-border bg-card p-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex flex-wrap items-center gap-2">
-          <span className="font-semibold text-gray-900">
+          <span className="font-semibold text-foreground">
             {REQUEST_TYPE_LABEL[item.type]}
           </span>
           {isAbsence && item.urgency === "URGENT" && (
@@ -81,7 +81,7 @@ export function RequestRow({ item }: { item: RequestItem }) {
               GẤP
             </span>
           )}
-          <span className="text-sm text-gray-500">
+          <span className="text-sm text-muted-foreground">
             {item.studentName}
             {item.studentCode ? ` (${item.studentCode})` : ""}
             {item.className ? ` · ${item.className}` : ""}
@@ -95,31 +95,31 @@ export function RequestRow({ item }: { item: RequestItem }) {
       </div>
 
       {item.parentName && (
-        <p className="mt-1 text-xs text-gray-500">PH: {item.parentName}</p>
+        <p className="mt-1 text-xs text-muted-foreground">PH: {item.parentName}</p>
       )}
 
-      <p className="mt-1 whitespace-pre-wrap text-sm text-gray-600">{item.content}</p>
+      <p className="mt-1 whitespace-pre-wrap text-sm text-muted-foreground">{item.content}</p>
 
       {item.sessionDate && (
-        <p className="mt-1 inline-flex items-center gap-1 text-xs text-gray-500">
+        <p className="mt-1 inline-flex items-center gap-1 text-xs text-muted-foreground">
           <CalendarClock className="h-3.5 w-3.5" />
           Buổi/ngày: {formatDateVN(item.sessionDate)}
         </p>
       )}
       {!item.sessionDate && item.preferredDate && (
-        <p className="mt-1 text-xs text-gray-400">
+        <p className="mt-1 text-xs text-muted-foreground">
           Ngày: {formatDateVN(item.preferredDate)}
         </p>
       )}
 
       {item.response && (
-        <p className="mt-2 rounded-lg bg-gray-50 p-2 text-sm text-gray-600">
+        <p className="mt-2 rounded-lg bg-muted p-2 text-sm text-muted-foreground">
           Ghi chú xử lý: {item.response}
           {item.handledByName ? ` — ${item.handledByName}` : ""}
         </p>
       )}
 
-      <p className="mt-1 text-xs text-gray-400">
+      <p className="mt-1 text-xs text-muted-foreground">
         Gửi: {new Date(item.createdAt).toLocaleString("vi-VN")}
       </p>
 
@@ -132,7 +132,7 @@ export function RequestRow({ item }: { item: RequestItem }) {
                 onChange={(e) => setResponse(e.target.value)}
                 rows={2}
                 placeholder="Phản hồi / ghi chú xử lý cho phụ huynh (tuỳ chọn)…"
-                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-primary focus:outline-none"
+                className="w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-primary focus:outline-none"
               />
               {useAbsenceFlow ? (
                 <div className="flex flex-wrap gap-2">
@@ -148,7 +148,7 @@ export function RequestRow({ item }: { item: RequestItem }) {
                     type="button"
                     onClick={() => resolve("ABSENT", true)}
                     disabled={pending}
-                    className="inline-flex items-center gap-1.5 rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-60"
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-card px-3 py-1.5 text-sm font-semibold text-foreground hover:bg-muted disabled:opacity-60"
                   >
                     <X className="h-4 w-4" /> Đánh vắng (có phép)
                   </button>
@@ -156,14 +156,14 @@ export function RequestRow({ item }: { item: RequestItem }) {
                     type="button"
                     onClick={() => resolve("ABSENT", false)}
                     disabled={pending}
-                    className="inline-flex items-center gap-1.5 rounded-lg border border-state-danger bg-white px-3 py-1.5 text-sm font-semibold text-state-danger-ink hover:bg-state-danger-soft disabled:opacity-60"
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-state-danger bg-card px-3 py-1.5 text-sm font-semibold text-state-danger-ink hover:bg-state-danger-soft disabled:opacity-60"
                   >
                     <X className="h-4 w-4" /> Đánh vắng (không phép)
                   </button>
                   <button
                     type="button"
                     onClick={() => setOpen(false)}
-                    className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm text-gray-600"
+                    className="rounded-lg border border-border px-3 py-1.5 text-sm text-muted-foreground"
                   >
                     Đóng
                   </button>
@@ -189,7 +189,7 @@ export function RequestRow({ item }: { item: RequestItem }) {
                   <button
                     type="button"
                     onClick={() => setOpen(false)}
-                    className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm text-gray-600"
+                    className="rounded-lg border border-border px-3 py-1.5 text-sm text-muted-foreground"
                   >
                     Đóng
                   </button>
