@@ -85,7 +85,8 @@ const MEDIA_STATUS: Record<MediaStatus, { label: string; cls: string }> = {
 };
 
 // Cover gradient album (port visual mock media/page.tsx `album.cover`) — xoay vòng theo
-// lớp. Chỉ dùng hue được phép ở site GV (bỏ tím/violet) — cam/sky/emerald/amber/cyan.
+// lớp. Đây là dải màu PHÂN LOẠI (mỗi lớp một sắc để nhận ra nhanh), cố ý tách khỏi
+// token thương hiệu — thêm/bớt ở đây không ảnh hưởng nhận diện.
 const COVERS = [
   "from-orange-400 to-orange-600",
   "from-sky-400 to-blue-600",

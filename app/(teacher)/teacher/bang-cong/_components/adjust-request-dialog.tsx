@@ -68,7 +68,8 @@ export function AdjustRequestDialog({ defaultDate }: { defaultDate: string }) {
           <DialogHeader>
             <DialogTitle>Yêu cầu chỉnh công</DialogTitle>
             <DialogDescription>
-              Bạn không tự sửa công — gửi yêu cầu kèm lý do, quản lý cơ sở sẽ duyệt.
+              Bạn không tự sửa công — gửi yêu cầu kèm lý do, quản lý cơ sở sẽ
+              duyệt.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-3">

@@ -14,10 +14,14 @@ export function PageHeader({
         <h1 className="text-xl font-extrabold tracking-tight text-foreground sm:text-2xl">
           {title}
         </h1>
-        {subtitle && <p className="mt-1 text-sm text-muted-foreground">{subtitle}</p>}
+        {subtitle && (
+          <p className="mt-1 text-sm text-muted-foreground">{subtitle}</p>
+        )}
       </div>
       {actions && (
-        <div className="flex flex-wrap items-center gap-2 sm:shrink-0">{actions}</div>
+        <div className="flex flex-wrap items-center gap-2 sm:shrink-0">
+          {actions}
+        </div>
       )}
     </div>
   );

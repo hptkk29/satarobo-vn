@@ -3,7 +3,7 @@
 // Trình soạn đề GV tự tạo — FULL PAGE (không popup). Nhiều câu; mỗi câu: Trắc nghiệm
 // (N lựa chọn + đánh dấu đáp án đúng) hoặc Tự luận (đáp án mẫu tuỳ chọn). Lưu →
 // createOwnTemplateAction → điều hướng về `back` (mặc định /teacher/kho-bai-tap; nếu
-// vào từ trang Giao bài thì quay lại đúng trang đó). Cam-only.
+// vào từ trang Giao bài thì quay lại đúng trang đó).
 import { useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";

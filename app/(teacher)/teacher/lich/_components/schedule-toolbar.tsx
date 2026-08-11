@@ -31,7 +31,10 @@ const STATUS_OPTIONS = [
   { value: "CANCELLED", label: "Đã hủy" },
 ];
 
-function labelOf(opts: { value: string; label: string }[], v: string | null): string {
+function labelOf(
+  opts: { value: string; label: string }[],
+  v: string | null,
+): string {
   return opts.find((o) => o.value === v)?.label ?? "";
 }
 
@@ -74,9 +77,14 @@ export function ScheduleToolbar({
         />
       </form>
       <div className="flex flex-wrap items-center gap-2">
-        <Select value={type} onValueChange={(v) => v !== null && push({ type: v })}>
+        <Select
+          value={type}
+          onValueChange={(v) => v !== null && push({ type: v })}
+        >
           <SelectTrigger className="h-10 w-auto min-w-[9rem] rounded-xl font-medium">
-            <SelectValue>{(v: string | null) => labelOf(TYPE_OPTIONS, v)}</SelectValue>
+            <SelectValue>
+              {(v: string | null) => labelOf(TYPE_OPTIONS, v)}
+            </SelectValue>
           </SelectTrigger>
           <SelectContent>
             {TYPE_OPTIONS.map((o) => (
@@ -86,9 +94,14 @@ export function ScheduleToolbar({
             ))}
           </SelectContent>
         </Select>
-        <Select value={status} onValueChange={(v) => v !== null && push({ status: v })}>
+        <Select
+          value={status}
+          onValueChange={(v) => v !== null && push({ status: v })}
+        >
           <SelectTrigger className="h-10 w-auto min-w-[9rem] rounded-xl font-medium">
-            <SelectValue>{(v: string | null) => labelOf(STATUS_OPTIONS, v)}</SelectValue>
+            <SelectValue>
+              {(v: string | null) => labelOf(STATUS_OPTIONS, v)}
+            </SelectValue>
           </SelectTrigger>
           <SelectContent>
             {STATUS_OPTIONS.map((o) => (

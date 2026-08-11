@@ -15,14 +15,7 @@ import { ENROLLMENT_ACTIVE_STATUS_LIST } from "@/lib/enrollment-status";
 import { ENROLLMENT_STATUS } from "@/lib/labels/registry";
 import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "../../_components/ui/empty-state";
-
-const initials = (name: string) =>
-  name
-    .split(" ")
-    .slice(-2)
-    .map((w) => w[0] ?? "")
-    .join("")
-    .toUpperCase();
+import { initialsOf } from "@/lib/ui/initials";
 
 export async function HubStudentsTab({
   actor,
@@ -109,7 +102,7 @@ export async function HubStudentsTab({
                           />
                         ) : (
                           <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary-soft text-xs font-semibold text-primary-ink">
-                            {initials(st.name)}
+                            {initialsOf(st.name)}
                           </span>
                         )}
                         <div className="min-w-0">

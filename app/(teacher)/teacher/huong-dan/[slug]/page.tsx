@@ -29,7 +29,11 @@ export default async function TeacherGuideDetailPage({ params }: PageProps) {
 
   return (
     <div className="mx-auto max-w-3xl">
-      <BackLink href="/teacher/huong-dan" label="Hướng dẫn sử dụng" className="mb-4" />
+      <BackLink
+        href="/teacher/huong-dan"
+        label="Hướng dẫn sử dụng"
+        className="mb-4"
+      />
 
       <PageHeader
         title={guide.title}

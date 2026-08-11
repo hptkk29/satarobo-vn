@@ -6,7 +6,7 @@
 //   - "SCORM"         → chỉ buổi có bài giảng SCORM (l.scorm != null).
 //   - "PDF (tài liệu)"→ chỉ buổi có Document đính kèm (l.documents.length > 0).
 //
-// Cam-only (KHÔNG tím). Segmented control theo mẫu ToggleLink ở /teacher/lich.
+// Segmented control theo mẫu ToggleLink ở /teacher/lich.
 // Ghi chú: khi SCORM tắt (scormOn=false) mọi buổi có l.scorm=null → nút "SCORM"
 // sẽ luôn lọc ra rỗng, nên ta ẨN nút SCORM lúc đó (UX gọn, tránh filter chết).
 // Giữ nguyên markup: SCORM viewer link + tài liệu đính kèm + "Bài tập về nhà".

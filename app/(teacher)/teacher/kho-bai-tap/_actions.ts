@@ -67,19 +67,29 @@ const createSchema = z.object({
   title: z.string().trim().min(1, "Tiêu đề bắt buộc").max(200),
   description: z.string().trim().min(1, "Mô tả bắt buộc"),
   kind: z.enum(["HOMEWORK", "CLASSWORK"]).default("HOMEWORK"),
-  totalPoints: z.coerce.number().min(0.1, "Tổng điểm phải lớn hơn 0").default(10),
+  totalPoints: z.coerce
+    .number()
+    .min(0.1, "Tổng điểm phải lớn hơn 0")
+    .default(10),
   questions: z.array(questionSchema).min(1, "Cần ít nhất 1 câu hỏi"),
-  attachments: z.array(attachmentSchema).max(10, "Tối đa 10 tệp đính kèm").default([]),
+  attachments: z
+    .array(attachmentSchema)
+    .max(10, "Tối đa 10 tệp đính kèm")
+    .default([]),
 });
 
-type CreateResult = { ok: true; templateId: string } | { ok: false; error: string };
+type CreateResult =
+  | { ok: true; templateId: string }
+  | { ok: false; error: string };
 type DeleteResult = { ok: true } | { ok: false; error: string };
 
 /**
  * Tạo 1 AssignmentTemplate do GV tự soạn + các Question (+ Choice cho trắc nghiệm)
  * + link AssignmentTemplateQuestion theo thứ tự — TẤT CẢ trong 1 transaction.
  */
-export async function createOwnTemplateAction(input: unknown): Promise<CreateResult> {
+export async function createOwnTemplateAction(
+  input: unknown,
+): Promise<CreateResult> {
   const session = await auth();
   if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
 
@@ -89,13 +99,19 @@ export async function createOwnTemplateAction(input: unknown): Promise<CreateRes
 
   const parsed = createSchema.safeParse(input);
   if (!parsed.success) {
-    return { ok: false, error: parsed.error.issues[0]?.message ?? "Dữ liệu không hợp lệ" };
+    return {
+      ok: false,
+      error: parsed.error.issues[0]?.message ?? "Dữ liệu không hợp lệ",
+    };
   }
   const data = parsed.data;
 
   const actor = await resolveActor(session.user.id);
   const sdb = scopedDb(actor);
-  const { ownerId, employeeId } = await resolveTemplateOwnerId(sdb, session.user.id);
+  const { ownerId, employeeId } = await resolveTemplateOwnerId(
+    sdb,
+    session.user.id,
+  );
 
   let templateId: string;
   try {
@@ -135,7 +151,7 @@ export async function createOwnTemplateAction(input: unknown): Promise<CreateRes
             type: q.type,
             text: q.text,
             // Tự luận: đáp án mẫu (tuỳ chọn). Trắc nghiệm: đáp án nằm ở Choice.isCorrect.
-            correctAnswer: !isMcq ? (q.correctAnswer?.trim() || null) : null,
+            correctAnswer: !isMcq ? q.correctAnswer?.trim() || null : null,
             isPublic: false,
             authorId: employeeId, // FK Employee — null nếu GV chưa gắn hồ sơ nhân sự
             ...(isMcq
@@ -172,7 +188,11 @@ export async function createOwnTemplateAction(input: unknown): Promise<CreateRes
       entityType: "AssignmentTemplate",
       entityId: templateId,
       action: "assignment-template.authored-by-teacher",
-      newValues: { title: data.title, kind: data.kind, questions: data.questions.length },
+      newValues: {
+        title: data.title,
+        kind: data.kind,
+        questions: data.questions.length,
+      },
     });
   } catch (err) {
     console.error("[createOwnTemplateAction] audit:", err);
@@ -191,7 +211,9 @@ export async function createOwnTemplateAction(input: unknown): Promise<CreateRes
  * Bài ĐÃ GIAO cho lớp (Assignment) không ảnh hưởng: câu hỏi đã được CLONE sang bản
  * riêng (assignmentId set) + Assignment.templateId onDelete=SetNull.
  */
-export async function deleteOwnTemplateAction(templateId: string): Promise<DeleteResult> {
+export async function deleteOwnTemplateAction(
+  templateId: string,
+): Promise<DeleteResult> {
   const session = await auth();
   if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
   if (!templateId) return { ok: false, error: "Thiếu mã đề" };
@@ -224,7 +246,9 @@ export async function deleteOwnTemplateAction(templateId: string): Promise<Delet
       const qids = links.map((l) => l.questionId);
       if (qids.length > 0) {
         // Chỉ dọn câu hỏi mồ côi của template (chưa gắn Assignment nào) — cascade Choice.
-        await tx.question.deleteMany({ where: { id: { in: qids }, assignmentId: null } });
+        await tx.question.deleteMany({
+          where: { id: { in: qids }, assignmentId: null },
+        });
       }
     });
   } catch (err) {

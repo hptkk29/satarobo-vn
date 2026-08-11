@@ -43,11 +43,15 @@ const submitFmt = new Intl.DateTimeFormat("vi-VN", {
   minute: "2-digit",
   timeZone: "Asia/Ho_Chi_Minh",
 });
-/** "YYYY-MM-DD" (giờ VN) cho cột Hạn nộp. */
-const dueFmt = new Intl.DateTimeFormat("en-CA", {
-  year: "numeric",
-  month: "2-digit",
+/** Ngày cho cột Hạn nộp — dd/mm/yyyy giờ VN.
+ *
+ * Trước đây để "en-CA" ra ISO "2026-08-12", trong khi CHÍNH màn này đã dùng
+ * `submitFmt` kiểu vi-VN cho cột Đã nộp ⇒ một màn hai quy ước ngày. Chuỗi này
+ * chỉ để HIỂN THỊ (không dùng sắp xếp — đã kiểm), nên đổi được an toàn. */
+const dueFmt = new Intl.DateTimeFormat("vi-VN", {
   day: "2-digit",
+  month: "2-digit",
+  year: "numeric",
   timeZone: "Asia/Ho_Chi_Minh",
 });
 

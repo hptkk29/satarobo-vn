@@ -11,7 +11,7 @@
 // Nhận `rows` PLAIN từ server (page.tsx đã scopedDb + gác IDOR + precompute mốc buổi,
 // cột tổng quan VÀ dữ liệu năng lực + xếp loại) → chỉ lọc/hiển thị. KHÔNG đọc DB,
 // KHÔNG contact PH (câu 46: chỉ tên + mã HV). Câu 55: KHÔNG nút "Duyệt (Quản lý)".
-// Cam-only orange, shadcn/base-ui. Dùng ListToolbar chung của site GV.
+// Màu đi qua token (xem teacher.css), shadcn/base-ui. Dùng ListToolbar chung.
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { ClipboardList, FileDown, FileText } from "lucide-react";
@@ -19,6 +19,7 @@ import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { ListToolbar } from "../../_components/ui/list-toolbar";
 import { EmptyState } from "../../_components/ui/empty-state";
+import { initialsOf } from "@/lib/ui/initials";
 
 export type ReportCardStatus =
   | "DRAFT"
@@ -84,8 +85,8 @@ const MILESTONE_CLASS: Record<MilestoneChip["state"], string> = {
   done: "bg-state-success-soft text-state-success-ink",
 };
 
-// Pill xếp loại — cam-forward (thương hiệu), bậc dưới về trung tính/hổ phách, KHÔNG thêm
-// màu trang trí mới (tím/xanh) ngoài bảng màu cam của site GV.
+// Pill xếp loại — bậc cao nhất dùng màu THƯƠNG HIỆU, các bậc dưới lùi về trung tính /
+// hổ phách. KHÔNG thêm sắc trang trí mới: xếp loại là thang bậc, không phải danh mục.
 const RANK_CLASS: Record<CompetencyRank, string> = {
   "Xuất sắc": "bg-primary text-white",
   Giỏi: "bg-primary-soft text-primary-ink",
@@ -117,14 +118,6 @@ const RANK_FILTER_OPTIONS = [
   { value: "Khá", label: "Khá" },
   { value: "Cần cố gắng", label: "Cần cố gắng" },
 ];
-
-const initials = (name: string) =>
-  name
-    .split(" ")
-    .slice(-2)
-    .map((w) => w[0] ?? "")
-    .join("")
-    .toUpperCase();
 
 type TabKey = "hocba" | "nangluc";
 
@@ -271,7 +264,7 @@ function HocBaTab({ rows }: { rows: ReportCardRow[] }) {
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-3">
                         <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary-soft text-xs font-semibold text-primary-ink">
-                          {initials(r.studentName)}
+                          {initialsOf(r.studentName)}
                         </span>
                         <div className="min-w-0">
                           <p className="font-medium text-foreground">
@@ -508,7 +501,7 @@ function NangLucTab({ rows }: { rows: ReportCardRow[] }) {
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-3">
                           <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary-soft text-xs font-semibold text-primary-ink">
-                            {initials(r.studentName)}
+                            {initialsOf(r.studentName)}
                           </span>
                           <div className="min-w-0">
                             <p className="font-medium text-foreground">

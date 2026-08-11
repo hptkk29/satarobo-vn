@@ -33,6 +33,7 @@ import { EmptyState } from "../../_components/ui/empty-state";
 import { SESSION_STATUS_LABEL } from "../../_components/ui/session-status-pill";
 import { UploadPhotoDialog } from "../../anh-lop/_components/upload-photo-dialog";
 import { StudentEvalDialog } from "./student-eval-dialog";
+import { initialsOf } from "@/lib/ui/initials";
 
 const dayFmt = new Intl.DateTimeFormat("vi-VN", {
   weekday: "short",
@@ -75,14 +76,6 @@ const ATT_BADGE: Record<AttendanceStatus, { label: string; cls: string }> = {
     cls: "bg-state-danger-soft text-state-danger-ink",
   },
 };
-
-const initials = (name: string) =>
-  name
-    .split(" ")
-    .slice(-2)
-    .map((w) => w[0] ?? "")
-    .join("")
-    .toUpperCase();
 
 const VN_OFFSET_MS = 7 * 60 * 60 * 1000; // Asia/Ho_Chi_Minh (UTC+7)
 /** Mốc hết hôm nay (giờ VN) dạng ms — buổi ≤ mốc này = đã diễn ra. */
@@ -282,7 +275,7 @@ export async function HubReviewsTab({
                               />
                             ) : (
                               <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary-soft text-xs font-semibold text-primary-ink">
-                                {initials(st.name)}
+                                {initialsOf(st.name)}
                               </span>
                             )}
                             <div className="min-w-0">

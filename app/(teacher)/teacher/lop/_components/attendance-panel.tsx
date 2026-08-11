@@ -32,6 +32,7 @@ import {
 } from "@/components/ui/table";
 import { EmptyState } from "../../_components/ui/empty-state";
 import { saveClassAttendanceAction } from "../_actions";
+import { initialsOf } from "@/lib/ui/initials";
 
 // 4 status GV được đánh (2 makeup còn lại NEEDS_MAKEUP/MADE_UP là hệ suy) → 6 nhãn SRS.
 const MARKABLE = [
@@ -61,14 +62,6 @@ const TONE_DOT: Record<AttendanceLabelTone, string> = {
   purple: "bg-primary",
   neutral: "bg-muted-foreground",
 };
-
-const initials = (name: string) =>
-  name
-    .split(" ")
-    .slice(-2)
-    .map((w) => w[0] ?? "")
-    .join("")
-    .toUpperCase();
 
 export type AttendancePanelRow = {
   studentId: string;
@@ -274,7 +267,7 @@ export function AttendancePanel({
                 <TableCell>
                   <div className="flex items-center gap-3">
                     <span className="brand-gradient flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-bold text-white">
-                      {initials(r.studentName)}
+                      {initialsOf(r.studentName)}
                     </span>
                     <div className="min-w-0">
                       <Link

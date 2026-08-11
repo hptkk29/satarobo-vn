@@ -8,7 +8,10 @@ import { auth } from "@/lib/auth";
 import { resolveActor } from "@/lib/auth/actor";
 import { scopedDb } from "@/lib/db-scope";
 import { canManageSessionRecord } from "@/app/(admin)/admin/sessions/[id]/_feedback-core";
-import { normalizeEvalNotes, normalizeEvalRatings } from "@/lib/lms/session-eval-rubric";
+import {
+  normalizeEvalNotes,
+  normalizeEvalRatings,
+} from "@/lib/lms/session-eval-rubric";
 import { withFreshFonts } from "@/lib/pdf/brand";
 import { SessionEvalPdf } from "@/lib/pdf/session-eval";
 
@@ -53,22 +56,42 @@ export async function GET(
       },
     },
   });
-  if (!sess) return NextResponse.json({ error: "Không tìm thấy buổi học" }, { status: 404 });
+  if (!sess)
+    return NextResponse.json(
+      { error: "Không tìm thấy buổi học" },
+      { status: 404 },
+    );
 
   // FIX #3 — ownership theo BUỔI (lớp phân công ∪ dạy thay ∪ thực dạy), khớp gate
   // của saveSessionFeedback/saveSessionEval — GV dạy thay xuất được PDF phiếu mình lưu.
   const allowed = await canManageSessionRecord(
-    { id: session.user.id, role: session.user.role, centerId: session.user.centerId },
+    {
+      id: session.user.id,
+      role: session.user.role,
+      centerId: session.user.centerId,
+    },
     sess,
   );
-  if (!allowed) return NextResponse.json({ error: "Không có quyền" }, { status: 403 });
+  if (!allowed)
+    return NextResponse.json({ error: "Không có quyền" }, { status: 403 });
 
   const [fb, student] = await Promise.all([
     sdb.studentSessionFeedback.findUnique({
-      where: { classSessionId_studentId: { classSessionId: sessionId, studentId } },
-      select: { projectName: true, notes: true, rubric: true, updatedAt: true, createdById: true },
+      where: {
+        classSessionId_studentId: { classSessionId: sessionId, studentId },
+      },
+      select: {
+        projectName: true,
+        notes: true,
+        rubric: true,
+        updatedAt: true,
+        createdById: true,
+      },
     }),
-    sdb.student.findUnique({ where: { id: studentId }, select: { name: true } }),
+    sdb.student.findUnique({
+      where: { id: studentId },
+      select: { name: true },
+    }),
   ]);
   if (!fb || (fb.rubric == null && fb.notes == null)) {
     return NextResponse.json(
@@ -76,10 +99,17 @@ export async function GET(
       { status: 404 },
     );
   }
-  if (!student) return NextResponse.json({ error: "Không tìm thấy học viên" }, { status: 404 });
+  if (!student)
+    return NextResponse.json(
+      { error: "Không tìm thấy học viên" },
+      { status: 404 },
+    );
 
   const gv = fb.createdById
-    ? await sdb.user.findUnique({ where: { id: fb.createdById }, select: { name: true } })
+    ? await sdb.user.findUnique({
+        where: { id: fb.createdById },
+        select: { name: true },
+      })
     : null;
 
   const dateLabel = sess.date.toLocaleDateString("vi-VN", {
@@ -110,7 +140,9 @@ export async function GET(
     );
   } catch (err) {
     return NextResponse.json(
-      { error: `Lỗi tạo PDF: ${err instanceof Error ? err.message : "Unknown"}` },
+      {
+        error: `Lỗi tạo PDF: ${err instanceof Error ? err.message : "Unknown"}`,
+      },
       { status: 500 },
     );
   }

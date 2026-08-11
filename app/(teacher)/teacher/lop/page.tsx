@@ -19,7 +19,10 @@ import { ENROLLMENT_ACTIVE_STATUS_LIST } from "@/lib/enrollment-status";
 import { EmptyState } from "../_components/ui/empty-state";
 import { PageHeader } from "../_components/ui/page-header";
 import { SessionStatusPill } from "../_components/ui/session-status-pill";
-import { AttendancePanel, type AttendancePanelRow } from "./_components/attendance-panel";
+import {
+  AttendancePanel,
+  type AttendancePanelRow,
+} from "./_components/attendance-panel";
 import {
   ClassList,
   ClassListEmpty,
@@ -52,7 +55,8 @@ const VN_OFFSET_MS = 7 * 60 * 60 * 1000; // Asia/Ho_Chi_Minh (UTC+7, không DST)
 function vnTodayEnd(now = new Date()): Date {
   const vn = new Date(now.getTime() + VN_OFFSET_MS);
   const startUtc =
-    Date.UTC(vn.getUTCFullYear(), vn.getUTCMonth(), vn.getUTCDate()) - VN_OFFSET_MS;
+    Date.UTC(vn.getUTCFullYear(), vn.getUTCMonth(), vn.getUTCDate()) -
+    VN_OFFSET_MS;
   return new Date(startUtc + 24 * 60 * 60 * 1000);
 }
 
@@ -60,7 +64,11 @@ function vnTodayEnd(now = new Date()): Date {
 const DAY_LABELS = ["CN", "T2", "T3", "T4", "T5", "T6", "T7"];
 
 /** "T7 · 08:00-10:00" từ scheduleDays + giờ lớp. */
-function scheduleText(days: number[], start: string | null, end: string | null): string {
+function scheduleText(
+  days: number[],
+  start: string | null,
+  end: string | null,
+): string {
   const d = days
     .map((x) => DAY_LABELS[x])
     .filter((x): x is string => Boolean(x))
@@ -84,7 +92,8 @@ export default async function TeacherClassesPage({
   const session = await auth();
   if (!session?.user) return null; // layout đã gate
 
-  const { classId, sessionId, tab, rvSession, asgId, subId } = await searchParams;
+  const { classId, sessionId, tab, rvSession, asgId, subId } =
+    await searchParams;
   const actor = await resolveActor(session.user.id);
   const xdb = withMakeupException(actor);
   const classIds = [...actor.assignedClassIds];
@@ -141,7 +150,11 @@ export default async function TeacherClassesPage({
 
     return (
       <div>
-        <BackLink className="mb-4" href={`?classId=${classId}&tab=diem-danh`} label="Điểm danh của lớp" />
+        <BackLink
+          className="mb-4"
+          href={`?classId=${classId}&tab=diem-danh`}
+          label="Điểm danh của lớp"
+        />
         <PageHeader
           title={`Điểm danh — ${sess.topic ?? sess.class.name}`}
           subtitle={[
@@ -163,7 +176,8 @@ export default async function TeacherClassesPage({
           // Cùng gate với hub-sessions-tab (vnTodayEnd) + server (saveClassAttendanceAction):
           // buổi TƯƠNG LAI không mở điểm danh — chặn ghi trước + notify PH buổi chưa diễn ra.
           editable={
-            sess.status !== "CANCELLED" && sess.date.getTime() <= vnTodayEnd().getTime()
+            sess.status !== "CANCELLED" &&
+            sess.date.getTime() <= vnTodayEnd().getTime()
           }
         />
       </div>
@@ -184,7 +198,10 @@ export default async function TeacherClassesPage({
     const coveredHere = await xdb.classSession.findFirst({
       where: {
         classId,
-        OR: [{ substituteTeacherId: session.user.id }, { actualTeacherId: session.user.id }],
+        OR: [
+          { substituteTeacherId: session.user.id },
+          { actualTeacherId: session.user.id },
+        ],
       },
       select: { id: true },
     });
@@ -222,7 +239,11 @@ export default async function TeacherClassesPage({
     const todayEnd = vnTodayEnd();
     const pendFrom = new Date(todayEnd.getTime() - 60 * 24 * 60 * 60 * 1000);
     const pendSessions = await xdb.classSession.findMany({
-      where: { classId, status: { not: "CANCELLED" }, date: { gte: pendFrom, lte: todayEnd } },
+      where: {
+        classId,
+        status: { not: "CANCELLED" },
+        date: { gte: pendFrom, lte: todayEnd },
+      },
       select: { id: true },
     });
     const attendedSet = new Set(
@@ -235,7 +256,9 @@ export default async function TeacherClassesPage({
           ).map((a) => a.sessionId)
         : [],
     );
-    const attendancePending = pendSessions.filter((s) => !attendedSet.has(s.id)).length;
+    const attendancePending = pendSessions.filter(
+      (s) => !attendedSet.has(s.id),
+    ).length;
 
     const timeLabel =
       cls.startTime && cls.endTime ? `${cls.startTime}-${cls.endTime}` : "";
@@ -255,20 +278,38 @@ export default async function TeacherClassesPage({
         {/* Header lớp — tên + trạng thái + mã/khoá/lịch/cơ sở (khớp reference) */}
         <div className="mb-6">
           <div className="flex flex-wrap items-center gap-3">
-            <h1 className="text-2xl font-extrabold tracking-tight text-foreground">{cls.name}</h1>
+            <h1 className="text-2xl font-extrabold tracking-tight text-foreground">
+              {cls.name}
+            </h1>
             <ClassStatusPill status={cls.status} />
           </div>
-          {subtitle && <p className="mt-1 text-sm text-muted-foreground">{subtitle}</p>}
+          {subtitle && (
+            <p className="mt-1 text-sm text-muted-foreground">{subtitle}</p>
+          )}
         </div>
 
-        <HubTabBar classId={classId} active={activeTab} attendancePending={attendancePending} />
+        <HubTabBar
+          classId={classId}
+          active={activeTab}
+          attendancePending={attendancePending}
+        />
 
-        {activeTab === "hoc-vien" && <HubStudentsTab actor={actor} classId={classId} />}
+        {activeTab === "hoc-vien" && (
+          <HubStudentsTab actor={actor} classId={classId} />
+        )}
         {activeTab === "diem-danh" && (
-          <HubSessionsTab actor={actor} classId={classId} timeLabel={timeLabel} />
+          <HubSessionsTab
+            actor={actor}
+            classId={classId}
+            timeLabel={timeLabel}
+          />
         )}
         {activeTab === "nhan-xet" && (
-          <HubReviewsTab actor={actor} classId={classId} reviewSessionId={rvSession} />
+          <HubReviewsTab
+            actor={actor}
+            classId={classId}
+            reviewSessionId={rvSession}
+          />
         )}
         {activeTab === "bai-tap" && (
           <HubAssignmentsTab
@@ -279,8 +320,12 @@ export default async function TeacherClassesPage({
             submissionId={subId}
           />
         )}
-        {activeTab === "tai-lieu" && <HubMaterialsTab actor={actor} classId={classId} />}
-        {activeTab === "anh-lop" && <HubGalleryTab actor={actor} classId={classId} />}
+        {activeTab === "tai-lieu" && (
+          <HubMaterialsTab actor={actor} classId={classId} />
+        )}
+        {activeTab === "anh-lop" && (
+          <HubGalleryTab actor={actor} classId={classId} />
+        )}
       </div>
     );
   }
@@ -302,7 +347,9 @@ export default async function TeacherClassesPage({
           center: { select: { name: true } },
           _count: {
             select: {
-              enrollments: { where: { status: { in: ENROLLMENT_ACTIVE_STATUS_LIST } } },
+              enrollments: {
+                where: { status: { in: ENROLLMENT_ACTIVE_STATUS_LIST } },
+              },
             },
           },
         },
@@ -369,7 +416,10 @@ function NotYours() {
   return (
     <div>
       <BackLink className="mb-4" href="?" label="Lớp của tôi" />
-      <EmptyState icon={CalendarX2} title="Buổi học không thuộc lớp bạn phụ trách." />
+      <EmptyState
+        icon={CalendarX2}
+        title="Buổi học không thuộc lớp bạn phụ trách."
+      />
     </div>
   );
 }

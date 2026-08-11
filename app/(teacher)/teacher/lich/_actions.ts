@@ -79,7 +79,12 @@ async function loadOwnedSession(sessionId: string): Promise<LoadResult> {
 
   // null = buổi không tồn tại HOẶC ngoài cơ sở GV (scopedDb ẩn) → không lộ khác biệt.
   if (!s) return { ok: false, error: "Buổi không thuộc bạn" };
-  if (!isSessionOwnedByTeacher(s, { userId, assignedClassIds: actor.assignedClassIds })) {
+  if (
+    !isSessionOwnedByTeacher(s, {
+      userId,
+      assignedClassIds: actor.assignedClassIds,
+    })
+  ) {
     return { ok: false, error: "Buổi không thuộc bạn" };
   }
 
@@ -89,7 +94,11 @@ async function loadOwnedSession(sessionId: string): Promise<LoadResult> {
 
 // ─── (A) Hoàn tất buổi (lifecycle v2) ────────────────────────────────────────
 const completeInputSchema = z.object({
-  classComment: z.string().trim().max(2000, "Nhận xét tối đa 2000 ký tự").optional(),
+  classComment: z
+    .string()
+    .trim()
+    .max(2000, "Nhận xét tối đa 2000 ký tự")
+    .optional(),
   confirmNoAttendance: z.boolean().optional(),
 });
 
@@ -108,7 +117,10 @@ export async function completeSessionAction(
 
   const parsed = completeInputSchema.safeParse(input);
   if (!parsed.success) {
-    return { ok: false, error: parsed.error.issues[0]?.message ?? "Dữ liệu không hợp lệ" };
+    return {
+      ok: false,
+      error: parsed.error.issues[0]?.message ?? "Dữ liệu không hợp lệ",
+    };
   }
 
   const loaded = await loadOwnedSession(sessionId);
@@ -151,14 +163,18 @@ export async function requestLessonChangeAction(
 ): Promise<{ ok: true } | { ok: false; error: string }> {
   const parsed = lessonChangeSchema.safeParse({ content });
   if (!parsed.success) {
-    return { ok: false, error: parsed.error.issues[0]?.message ?? "Dữ liệu không hợp lệ" };
+    return {
+      ok: false,
+      error: parsed.error.issues[0]?.message ?? "Dữ liệu không hợp lệ",
+    };
   }
 
   const loaded = await loadOwnedSession(sessionId);
   if (!loaded.ok) return { ok: false, error: loaded.error };
 
   // Fallback plan.lessonId — cùng pattern lib/lms/assignment.ts (buổi sinh từ kế hoạch).
-  const lessonId = loaded.session.lessonId ?? loaded.session.plan?.lessonId ?? null;
+  const lessonId =
+    loaded.session.lessonId ?? loaded.session.plan?.lessonId ?? null;
   if (lessonId == null) return { ok: false, error: "Buổi chưa gắn bài giảng" };
 
   // create KHÔNG bị scopedDb chặn (extension chỉ can thiệp read) — dùng sdb để tuân

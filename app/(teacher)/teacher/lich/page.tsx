@@ -404,7 +404,10 @@ export default async function TeacherSchedulePage({
       ? `Các buổi trong ngày ${isoKey(mocUtc).split("-").reverse().join("/")}.`
       : view === "ds"
         ? `Buổi dạy của bạn từ ${DAYS_BACK} ngày trước đến ${DAYS_FORWARD} ngày tới — gồm cả buổi dạy thay và dạy bù, kể cả ở cơ sở khác.`
-        : "Lịch dạy lớp, Trial và ca làm việc. Ngày có ca làm được tô cam nhạt; ô vàng là ngày nghỉ.";
+        : // KHÔNG mô tả bằng tên màu ("tô cam nhạt", "ô vàng"): câu này đã sai một
+          // lần khi đổi nhận diện, và người mù màu vốn không đọc được theo màu.
+          // Chú giải ngay dưới đây có ô mẫu + nhãn — đó mới là chỗ giải nghĩa.
+          "Lịch dạy lớp, Trial và ca làm việc.";
 
   return (
     <div className="space-y-6">
@@ -1073,11 +1076,16 @@ function Legend() {
         <span className="h-3 w-3 rounded border border-primary-soft bg-primary-soft dark:border-primary" />{" "}
         Ngày có ca làm
       </span>
+      {/* Ô mẫu phải khớp thứ người dùng THẤY trên lịch: ngày nghỉ vừa được tô nền
+          vừa có biểu tượng. Chú giải cũ chỉ có biểu tượng nên nền vàng không được
+          giải nghĩa ở đâu cả. */}
       <span className="inline-flex items-center gap-1.5">
-        <CalendarOff
-          className="h-3.5 w-3.5 text-state-warning-ink"
-          aria-hidden
-        />{" "}
+        <span className="inline-flex h-3.5 w-3.5 items-center justify-center rounded border border-state-warning-soft bg-state-warning-soft">
+          <CalendarOff
+            className="h-2.5 w-2.5 text-state-warning-ink"
+            aria-hidden
+          />
+        </span>{" "}
         Ngày nghỉ
       </span>
     </div>

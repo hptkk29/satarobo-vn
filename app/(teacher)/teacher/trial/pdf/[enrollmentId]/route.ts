@@ -31,7 +31,10 @@ export async function GET(
 
   const ctx = await getTeacherTrialRubricContext(session.user.id, enrollmentId);
   if (!ctx) {
-    return NextResponse.json({ error: "Không tìm thấy học viên trải nghiệm" }, { status: 404 });
+    return NextResponse.json(
+      { error: "Không tìm thấy học viên trải nghiệm" },
+      { status: 404 },
+    );
   }
   // Gán ra biến riêng: TS mất narrowing của `ctx.existing` khi dùng trong callback.
   const existing = ctx.existing;
@@ -71,7 +74,9 @@ export async function GET(
     );
   } catch (err) {
     return NextResponse.json(
-      { error: `Lỗi tạo PDF: ${err instanceof Error ? err.message : "Unknown"}` },
+      {
+        error: `Lỗi tạo PDF: ${err instanceof Error ? err.message : "Unknown"}`,
+      },
       { status: 500 },
     );
   }

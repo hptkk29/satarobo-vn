@@ -35,17 +35,9 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { EmptyState } from "../_components/ui/empty-state";
 import { PageHeader } from "../_components/ui/page-header";
 import { ChangePasswordDialog } from "./_components/change-password-dialog";
+import { initialsOf } from "@/lib/ui/initials";
 
 export const metadata = { title: "Hồ sơ cá nhân | Giáo viên Sata Robo" };
-
-// Avatar initials — cùng helper với attendance-panel (2 chữ cái cuối của tên).
-const initials = (name: string) =>
-  name
-    .split(" ")
-    .slice(-2)
-    .map((w) => w[0] ?? "")
-    .join("")
-    .toUpperCase();
 
 // Nhãn trạng thái lớp — đồng bộ STATUS_INFO của /admin/classes.
 const CLASS_STATUS: Record<ClassStatus, { label: string; cls: string }> = {
@@ -172,7 +164,7 @@ export default async function TeacherProfilePage() {
         <Card>
           <CardContent className="flex flex-col gap-4 py-5 sm:flex-row sm:items-center">
             <span className="brand-gradient flex h-16 w-16 shrink-0 items-center justify-center rounded-full text-xl font-bold text-white">
-              {initials(displayName)}
+              {initialsOf(displayName)}
             </span>
             <div className="min-w-0 flex-1">
               <div className="flex flex-wrap items-center gap-2">

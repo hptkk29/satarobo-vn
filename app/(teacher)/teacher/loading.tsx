@@ -4,7 +4,11 @@
  */
 export default function TeacherLoading() {
   return (
-    <div className="animate-pulse space-y-6" aria-busy="true" aria-label="Đang tải…">
+    <div
+      className="animate-pulse space-y-6"
+      aria-busy="true"
+      aria-label="Đang tải…"
+    >
       {/* Header */}
       <div className="space-y-2">
         <div className="h-7 w-48 rounded-lg bg-neutral-200" />

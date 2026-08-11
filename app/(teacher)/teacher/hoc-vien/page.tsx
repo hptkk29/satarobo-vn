@@ -42,6 +42,7 @@ import { EmptyState } from "../_components/ui/empty-state";
 import { PageHeader } from "../_components/ui/page-header";
 import { StudentList, type StudentRow } from "./_components/student-list";
 import { BackLink } from "../_components/ui/back-link";
+import { initialsOf } from "@/lib/ui/initials";
 
 export const metadata = { title: "Hồ sơ học viên | Giáo viên Sata Robo" };
 
@@ -106,14 +107,6 @@ const ATT_BADGE: Record<AttendanceStatus, { label: string; cls: string }> = {
     cls: "bg-state-danger-soft text-state-danger-ink dark:bg-state-danger-soft dark:text-state-danger-ink",
   },
 };
-
-const initials = (name: string) =>
-  name
-    .split(" ")
-    .slice(-2)
-    .map((w) => w[0] ?? "")
-    .join("")
-    .toUpperCase();
 
 type ProfileTab = "diem-danh" | "nhan-xet" | "bai-tap" | "hoc-ba";
 const PROFILE_TABS: { key: ProfileTab; label: string; icon: LucideIcon }[] = [
@@ -210,7 +203,7 @@ export default async function TeacherStudentProfilePage({
             />
           ) : (
             <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-primary-soft text-lg font-semibold text-primary-ink">
-              {initials(student.name)}
+              {initialsOf(student.name)}
             </span>
           )}
           <div className="min-w-0">

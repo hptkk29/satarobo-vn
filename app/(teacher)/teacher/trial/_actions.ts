@@ -30,7 +30,9 @@ const schema = z.object({
   orientation: z.string().trim().max(4000).optional().nullable(),
 });
 
-type SaveResult = { ok: true; totalScore: number; rank: string } | { ok: false; error: string };
+type SaveResult =
+  | { ok: true; totalScore: number; rank: string }
+  | { ok: false; error: string };
 
 export async function saveTrialRubricAction(input: {
   enrollmentId: string;
@@ -43,7 +45,10 @@ export async function saveTrialRubricAction(input: {
 
   const parsed = schema.safeParse(input);
   if (!parsed.success) {
-    return { ok: false, error: parsed.error.issues[0]?.message ?? "Dữ liệu không hợp lệ" };
+    return {
+      ok: false,
+      error: parsed.error.issues[0]?.message ?? "Dữ liệu không hợp lệ",
+    };
   }
   const { enrollmentId, scores } = parsed.data;
 
@@ -53,7 +58,11 @@ export async function saveTrialRubricAction(input: {
 
   // Guard sở hữu + lấy buổi được xếp (null nếu không phải HV của GV).
   const ctx = await getTeacherTrialRubricContext(session.user.id, enrollmentId);
-  if (!ctx) return { ok: false, error: "Học viên trải nghiệm không thuộc bạn phụ trách" };
+  if (!ctx)
+    return {
+      ok: false,
+      error: "Học viên trải nghiệm không thuộc bạn phụ trách",
+    };
 
   // Chuẩn hoá + validate điểm: mỗi tiêu chí lấy đúng 1 mức hợp lệ (thiếu = 0).
   const clean: Record<string, number> = {};

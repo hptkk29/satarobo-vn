@@ -106,10 +106,19 @@ const dayKeyFmt = new Intl.DateTimeFormat("en-CA", {
 function isoKey(d: Date): string {
   return d.toISOString().slice(0, 10);
 }
-const dateFmt = new Intl.DateTimeFormat("en-CA", {
-  year: "numeric",
-  month: "2-digit",
+
+/** "2026-08-03" → "03/08/2026". Đảo chuỗi thuần, không đụng múi giờ. */
+function viDate(iso: string): string {
+  const [y, m, d] = iso.split("-");
+  return d && m && y ? `${d}/${m}/${y}` : iso;
+}
+/* Ngày HIỂN THỊ trong bảng công — dd/mm/yyyy. (`isoKey`/`dayKeyFmt` ở trên vẫn
+   giữ ISO vì chúng là KHOÁ tra bản đồ, không phải chữ cho người đọc.)
+   timeZone UTC là cố ý: cột `date` kiểu @db.Date, đổi múi giờ sẽ lệch một ngày. */
+const dateFmt = new Intl.DateTimeFormat("vi-VN", {
   day: "2-digit",
+  month: "2-digit",
+  year: "numeric",
   timeZone: "UTC",
 });
 
@@ -141,7 +150,10 @@ type CaRow = {
   name: string;
   subtitle: string | null;
   type: CaType;
-  dateLabel: string; // "YYYY-MM-DD"
+  /** Khoá ISO "YYYY-MM-DD" — dùng để GOM NHÓM và SẮP XẾP (so sánh chuỗi ISO là
+      đúng thứ tự thời gian). ĐỪNG đổi sang dd/mm ở đây, hiển thị thì đi qua
+      `viDate()`. */
+  dateLabel: string;
   timeLabel: string;
   hours: number | null; // null → "—" (không cộng tổng)
   done: boolean; // Đã làm vs Sắp tới
@@ -418,7 +430,7 @@ export default async function TeacherTimesheetPage({
                           </span>
                         </td>
                         <td className="px-4 py-3 whitespace-nowrap text-muted-foreground">
-                          {r.dateLabel}
+                          {viDate(r.dateLabel)}
                         </td>
                         <td className="px-4 py-3 whitespace-nowrap text-foreground">
                           {r.timeLabel}

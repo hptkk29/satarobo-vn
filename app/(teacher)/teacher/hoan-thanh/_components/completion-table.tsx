@@ -14,6 +14,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ListToolbar } from "../../_components/ui/list-toolbar";
 import { proposeCourseCompletion } from "../_actions";
+import { initialsOf } from "@/lib/ui/initials";
 
 export type CompletionTableRow = {
   /** enrollment id — key ổn định + tham số đề xuất. */
@@ -33,14 +34,6 @@ export type CompletionTableRow = {
   /** đang có đề xuất hoàn thành chờ duyệt. */
   requestPending: boolean;
 };
-
-const initials = (name: string) =>
-  name
-    .split(" ")
-    .slice(-2)
-    .map((w) => w[0] ?? "")
-    .join("")
-    .toUpperCase();
 
 export function CompletionTable({
   rows,
@@ -126,7 +119,7 @@ export function CompletionTable({
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-3">
                         <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary-soft text-xs font-semibold text-primary-ink">
-                          {initials(r.name)}
+                          {initialsOf(r.name)}
                         </span>
                         <span className="font-medium text-foreground">
                           {r.name}

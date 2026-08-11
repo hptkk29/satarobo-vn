@@ -45,11 +45,11 @@ const SUB_STATUS: Record<SubmissionStatus, { label: string; cls: string }> = {
   },
 };
 
-/** "YYYY-MM-DD" (giờ VN) cho cột Hạn nộp. */
-const dueFmt = new Intl.DateTimeFormat("en-CA", {
-  year: "numeric",
-  month: "2-digit",
+/** Ngày cho cột Hạn nộp — dd/mm/yyyy giờ VN (khớp các màn còn lại của site GV). */
+const dueFmt = new Intl.DateTimeFormat("vi-VN", {
   day: "2-digit",
+  month: "2-digit",
+  year: "numeric",
   timeZone: "Asia/Ho_Chi_Minh",
 });
 const submitFmt = new Intl.DateTimeFormat("vi-VN", {

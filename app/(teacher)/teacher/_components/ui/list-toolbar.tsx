@@ -58,7 +58,9 @@ export function ListToolbar({
             }}
           >
             <SelectTrigger
-              className={f.className ?? "h-10 w-auto min-w-[9rem] rounded-xl font-medium"}
+              className={
+                f.className ?? "h-10 w-auto min-w-[9rem] rounded-xl font-medium"
+              }
             >
               <SelectValue>
                 {(v: string | null) =>
