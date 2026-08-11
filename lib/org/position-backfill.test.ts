@@ -29,6 +29,7 @@ function ns(over: Partial<HoSoNhanSu> & { employeeCode: string }): HoSoNhanSu {
     centerId: null,
     joinedAt: new Date("2025-03-01T00:00:00.000Z"),
     userId: `u-${over.employeeCode}`,
+    taiKhoanOrgUnitId: null,
     ...over,
   };
 }
@@ -220,5 +221,53 @@ describe("[US-11] tiện ích", () => {
 
   it("khoaViTri không phân biệt hoa/thường", () => {
     expect(khoaViTri("cs1", "Giáo Viên")).toBe(khoaViTri("cs1", "giáo viên"));
+  });
+});
+
+describe("[US-11] hồ sơ ≠ tài khoản — nói ra chỗ lệch, không tự chọn hộ", () => {
+  it("thiếu đơn vị ở hồ sơ nhưng TÀI KHOẢN có ⇒ vẫn chờ tay, và CHỈ ĐƯỜNG tới chỗ sửa", () => {
+    // Ca thật đo 11/08/2026: người vận hành gán cơ sở ở màn TÀI KHOẢN, còn script đọc
+    // HỒ SƠ NHÂN SỰ ⇒ tưởng script hỏng. Bản đối chiếu phải nói thẳng ra.
+    const kh = lap([
+      ns({ employeeCode: "A1", orgUnitId: null, centerId: null, taiKhoanOrgUnitId: "cs2" }),
+    ]);
+    expect(kh.choXuLyTay[0].lyDo).toBe("THIEU_DON_VI");
+    expect(kh.choXuLyTay[0].chiTiet).toContain("TÀI KHOẢN");
+    expect(kh.choXuLyTay[0].chiTiet).toContain("cs2");
+    // và KHÔNG tự lấy đơn vị của tài khoản làm vị trí.
+    expect(kh.viTri).toEqual([]);
+  });
+
+  it("hồ sơ và tài khoản trỏ HAI đơn vị khác nhau ⇒ vẫn backfill theo hồ sơ, nhưng báo lệch", () => {
+    const kh = lap([ns({ employeeCode: "A1", orgUnitId: "cs1", taiKhoanOrgUnitId: "cs2" })]);
+    expect(kh.viTri[0].orgUnitId).toBe("cs1");
+    expect(kh.lechDonVi).toEqual([
+      { employeeCode: "A1", fullName: "Người A1", donViHoSo: "cs1", donViTaiKhoan: "cs2" },
+    ]);
+  });
+
+  it("hai bên KHỚP nhau ⇒ không báo lệch (đừng kêu sói)", () => {
+    const kh = lap([ns({ employeeCode: "A1", orgUnitId: "cs1", taiKhoanOrgUnitId: "cs1" })]);
+    expect(kh.lechDonVi).toEqual([]);
+  });
+
+  it("bản đối chiếu có mục 4 và đổi id đơn vị thành tên đọc được", () => {
+    const kh = lap([
+      ns({ employeeCode: "A1", orgUnitId: "cs1", taiKhoanOrgUnitId: "cs2" }),
+      ns({ employeeCode: "A2", orgUnitId: null, centerId: null, taiKhoanOrgUnitId: "cs2" }),
+    ]);
+    const md = inBanDoiChieu(kh, {
+      tenDonVi: new Map([
+        ["cs1", "CS1 · Cơ sở 1"],
+        ["cs2", "CS2 · Cơ sở 2"],
+      ]),
+      ganVai: false,
+    });
+    expect(md).toContain("## 4.");
+    expect(md).toContain("| A1 | Người A1 | CS1 · Cơ sở 1 | CS2 · Cơ sở 2 |");
+    // Dòng chờ tay cũng phải hiện TÊN, không hiện id thô.
+    const dongChoTay = md.split("\n").find((l) => l.startsWith("| A2 "));
+    expect(dongChoTay).toContain("CS2 · Cơ sở 2");
+    expect(dongChoTay).not.toContain('"cs2"');
   });
 });

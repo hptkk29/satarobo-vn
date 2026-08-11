@@ -63,7 +63,7 @@ async function main() {
         orgUnitId: true,
         centerId: true,
         joinedAt: true,
-        userAccount: { select: { id: true } },
+        userAccount: { select: { id: true, orgUnitId: true, centerId: true } },
       },
     }),
     db.orgUnit.findMany({
@@ -89,6 +89,7 @@ async function main() {
     centerId: e.centerId,
     joinedAt: e.joinedAt,
     userId: e.userAccount?.id ?? null,
+    taiKhoanOrgUnitId: null, // điền ở dưới, sau khi có cầu Center → OrgUnit
   }));
   const vaiDangGiu: VaiDangGiu[] = uorRaw.map((r) => ({
     userId: r.userId,
@@ -101,6 +102,13 @@ async function main() {
   // theo tên/địa chỉ — xem lib/org/center-bridge.ts.
   const centerToOrg = new Map<string, string>();
   for (const o of orgUnits) if (o.centerId) centerToOrg.set(o.centerId, o.id);
+
+  // Đơn vị ghi trên TÀI KHOẢN — chỉ để BÁO CÁO chỗ lệch, không dùng để suy vị trí.
+  for (const [i, e] of nhanSuRaw.entries()) {
+    const u = e.userAccount;
+    nhanSu[i].taiKhoanOrgUnitId =
+      u?.orgUnitId ?? (u?.centerId ? (centerToOrg.get(u.centerId) ?? null) : null);
+  }
 
   const keHoach = lapKeHoach({
     nhanSu,

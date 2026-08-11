@@ -28,6 +28,17 @@ export type HoSoNhanSu = {
   joinedAt: Date | null;
   /** User.id của tài khoản gắn với hồ sơ (null = nhân sự chưa có tài khoản). */
   userId: string | null;
+  /**
+   * Đơn vị ghi trên TÀI KHOẢN (`User.orgUnitId`, hoặc bắc cầu từ `User.centerId`).
+   *
+   * ⚠️ KHÔNG dùng để suy ra vị trí — đây chỉ là DỮ LIỆU CHO NGƯỜI ĐỌC bản đối chiếu.
+   * Đơn vị của một người đang nằm ở HAI bảng (`Employee` và `User`) và chúng lệch nhau
+   * thật: đo 11/08/2026 thấy có người `Employee.centerId = NULL` trong khi tài khoản của
+   * họ đã gán cơ sở, và có người hai bên trỏ hai đơn vị khác nhau. Script đọc `Employee`
+   * (đúng AC1 "đọc bảng nhân sự"), nhưng phải NÓI RA chỗ lệch, nếu không người vận hành
+   * sẽ sửa nhầm bảng rồi tưởng script hỏng.
+   */
+  taiKhoanOrgUnitId?: string | null;
 };
 
 /** Vai người đó đang giữ, theo `UserOrgRole` còn hiệu lực. */
@@ -68,10 +79,19 @@ export type PhanCongSeTao = {
   ngayVaoLamKhongDungDuoc: boolean;
 };
 
+/** Hồ sơ và tài khoản trỏ hai đơn vị khác nhau — không chặn backfill, nhưng phải soát. */
+export type DongLechDonVi = {
+  employeeCode: string;
+  fullName: string;
+  donViHoSo: string;
+  donViTaiKhoan: string;
+};
+
 export type KeHoach = {
   viTri: ViTriSeTao[];
   phanCong: PhanCongSeTao[];
   choXuLyTay: DongChoTay[];
+  lechDonVi: DongLechDonVi[];
 };
 
 /**
@@ -121,6 +141,7 @@ export function lapKeHoach(input: {
   const viTriTheoKhoa = new Map<string, ViTriSeTao>();
   const phanCong: PhanCongSeTao[] = [];
   const choXuLyTay: DongChoTay[] = [];
+  const lechDonVi: DongLechDonVi[] = [];
 
   // Sắp theo mã nhân sự: bản đối chiếu phải ổn định giữa hai lần chạy, nếu không người
   // duyệt không so được hai bản với nhau.
@@ -134,15 +155,29 @@ export function lapKeHoach(input: {
     const orgUnitId = ns.orgUnitId ?? (ns.centerId ? centerToOrg.get(ns.centerId) : undefined);
 
     if (!orgUnitId) {
+      // Gợi ý CHỖ SỬA, không tự sửa: nếu tài khoản của họ đã có đơn vị thì gần như chắc
+      // chắn người vận hành đã điền nhầm bảng.
+      const goiY = ns.taiKhoanOrgUnitId
+        ? ` — nhưng TÀI KHOẢN của họ đang ở "${ns.taiKhoanOrgUnitId}"; nếu đúng thì điền vào HỒ SƠ NHÂN SỰ (Employee), script không tự lấy`
+        : "";
       choXuLyTay.push({
         employeeCode: ns.employeeCode,
         fullName: ns.fullName,
         lyDo: "THIEU_DON_VI",
-        chiTiet: ns.centerId
-          ? `centerId "${ns.centerId}" không ánh xạ được sang OrgUnit nào`
-          : "hồ sơ không có cơ sở lẫn đơn vị",
+        chiTiet:
+          (ns.centerId
+            ? `centerId "${ns.centerId}" không ánh xạ được sang OrgUnit nào`
+            : "hồ sơ không có cơ sở lẫn đơn vị") + goiY,
       });
       continue;
+    }
+    if (ns.taiKhoanOrgUnitId && ns.taiKhoanOrgUnitId !== orgUnitId) {
+      lechDonVi.push({
+        employeeCode: ns.employeeCode,
+        fullName: ns.fullName,
+        donViHoSo: orgUnitId,
+        donViTaiKhoan: ns.taiKhoanOrgUnitId,
+      });
     }
     if (!orgUnitIds.has(orgUnitId)) {
       choXuLyTay.push({
@@ -209,6 +244,7 @@ export function lapKeHoach(input: {
     viTri: [...viTriTheoKhoa.values()].sort((a, b) => a.khoa.localeCompare(b.khoa)),
     phanCong,
     choXuLyTay: choXuLyTay.sort((a, b) => a.employeeCode.localeCompare(b.employeeCode)),
+    lechDonVi: lechDonVi.sort((a, b) => a.employeeCode.localeCompare(b.employeeCode)),
   };
 }
 
@@ -230,6 +266,12 @@ export function inBanDoiChieu(
   ctx: { tenDonVi: Map<string, string>; tenVai?: Map<string, string>; ganVai: boolean },
 ): string {
   const donVi = (id: string) => ctx.tenDonVi.get(id) ?? id;
+  /** Đổi mọi id đơn vị lọt trong câu chữ thành tên người đọc được — `cmqg0s4…` vô nghĩa. */
+  const deDoc = (s: string) => {
+    let r = s;
+    for (const [id, ten] of ctx.tenDonVi) r = r.split(id).join(ten);
+    return r;
+  };
   const d = <T,>(xs: T[]) => xs.length;
   const out: string[] = [];
 
@@ -278,7 +320,26 @@ export function inBanDoiChieu(
     out.push("| Mã NS | Họ tên | Lý do | Chi tiết |");
     out.push("|---|---|---|---|");
     for (const c of keHoach.choXuLyTay) {
-      out.push(`| ${c.employeeCode} | ${c.fullName} | ${NHAN_LY_DO[c.lyDo]} | ${c.chiTiet} |`);
+      out.push(`| ${c.employeeCode} | ${c.fullName} | ${NHAN_LY_DO[c.lyDo]} | ${deDoc(c.chiTiet)} |`);
+    }
+  }
+  out.push("");
+
+  out.push("## 4. Hồ sơ ≠ tài khoản — soát trước khi tin số ở trên");
+  out.push("");
+  if (keHoach.lechDonVi.length === 0) {
+    out.push("_Không có._");
+  } else {
+    out.push(
+      "Đơn vị của một người nằm ở **hai bảng**. Script lấy theo **hồ sơ nhân sự**; các dòng dưới đây tài khoản đang trỏ nơi khác — sai chỗ nào thì sửa chỗ đó, đừng sửa script.",
+    );
+    out.push("");
+    out.push("| Mã NS | Họ tên | Hồ sơ nhân sự | Tài khoản |");
+    out.push("|---|---|---|---|");
+    for (const l of keHoach.lechDonVi) {
+      out.push(
+        `| ${l.employeeCode} | ${l.fullName} | ${donVi(l.donViHoSo)} | ${donVi(l.donViTaiKhoan)} |`,
+      );
     }
   }
   out.push("");

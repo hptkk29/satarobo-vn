@@ -110,6 +110,9 @@ const NAV_GROUPS: NavGroup[] = [
       { label: "Chuyển lead liên CS", href: "/leads/bao-cao-chuyen", icon: Workflow, perm: ["leads:assign"] },
       // BGĐ 31/07 — nguồn giới thiệu (affiliate): mã + link ?ref= + đối soát.
       { label: "Nguồn giới thiệu", href: "/affiliates", icon: Share2, perm: ["leads:view-all"] },
+      // R1-01 — hội thoại Messenger của Page. Trang có thật từ lâu nhưng CHƯA BAO GIỜ
+      // có lối vào: chỉ gõ URL mới tới (rà 11/08).
+      { label: "Messenger CRM", href: "/crm/messenger", icon: MessagesSquare, perm: ["leads:view-all", "leads:view-own"] },
       { label: "Học thử", href: "/trials", icon: FlaskConical, perm: ["trials:view"] },
       { label: "Lớp trải nghiệm", href: "/trial-classes", icon: FlaskConical, perm: ["trials:view"] },
     ],
@@ -137,6 +140,7 @@ const NAV_GROUPS: NavGroup[] = [
       { label: "Lớp học", href: "/classes", icon: BookOpen, perm: ["classes:view-all", "classes:view-own"] },
       { label: "Nhóm lớp", href: "/class-groups", icon: Boxes, perm: ["class_group:view-all"] },
       { label: "Buổi học", href: "/sessions", icon: CalendarDays, perm: ["sessions:view"] },
+      { label: "Lịch tổng", href: "/lich", icon: CalendarCheck, perm: ["sessions:view", "classes:view-all", "classes:view-own"] },
       // attendance:edit đi kèm vì CSKH (Sale) chỉ có quyền SỬA hồi tố (Task #16),
       // không có attendance:view — thiếu nó thì họ dùng được trang mà không thấy link.
       { label: "Điểm danh", href: "/attendance", icon: ClipboardCheck, perm: ["attendance:view", "attendance:edit"] },
@@ -194,9 +198,12 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       { label: "Giáo viên", href: "/teachers", icon: UserCog, perm: ["employees:view-all"] },
       { label: "Nhân sự", href: "/nhan-su", icon: IdCard, perm: ["employees:view-all"] },
-      // P2 · US-08 — vị trí mang bộ vai trò nên cùng cổng với cấu hình role (SUPER_ADMIN).
-      { label: "Vị trí công việc", href: "/nhan-su/vi-tri", icon: IdCard, perm: ["roles:manage"] },
+      // P2 · US-08/09/10 — vị trí + phân công + điều động. Vị trí mang bộ vai trò nên
+      // cùng cổng với cấu hình role (SUPER_ADMIN). Đặt ở nhóm Nhân sự vì đó là luồng
+      // công việc thật: xem nhân sự → xếp vị trí → phân công.
+      { label: "Vị trí công việc", href: "/nhan-su/vi-tri", icon: Briefcase, perm: [...PAGE_GATES["/nhan-su/vi-tri"]] },
       { label: "Chấm công", href: "/cham-cong", icon: Clock, perm: ["hr_attendance:view"] },
+      { label: "Điểm danh vào ca", href: "/cham-cong/checkin", icon: Clock, perm: ["hr_attendance:checkin"] },
       { label: "Lịch ca của tôi", href: "/cham-cong/lich-ca", icon: CalendarDays, perm: ["hr_attendance:checkin"] },
       { label: "Yêu cầu chỉnh công", href: "/cham-cong/yeu-cau-cong", icon: ClipboardEdit, perm: ["hr_attendance:checkin"] },
       { label: "Duyệt chỉnh công", href: "/cham-cong/chinh-cong", icon: ClipboardEdit, perm: ["hr_attendance:adjust"] },
@@ -233,6 +240,7 @@ const NAV_GROUPS: NavGroup[] = [
       { label: "Biến động số dư", href: "/bien-dong-so-du", icon: Wallet, perm: ["payments:manage", "payments:view"] },
       { label: "Hoàn tiền", href: "/hoan-tien", icon: Undo2, perm: ["payments:manage"] },
       { label: "Phương thức TT", href: "/payment-methods", icon: CreditCard, perm: ["payments:manage"] },
+      { label: "Hoa hồng", href: "/crm/commission", icon: Coins, perm: ["payments:manage"] },
     ],
   },
   {
@@ -241,6 +249,7 @@ const NAV_GROUPS: NavGroup[] = [
       { label: "Tin tức", href: "/news", icon: Newspaper, perm: ["news:view"] },
       { label: "Nội dung website", href: "/site-content", icon: ImageIcon, perm: [...PAGE_GATES["/site-content"]] },
       { label: "Tracking", href: "/marketing", icon: BarChart3, perm: [...PAGE_GATES["/marketing"]] },
+      { label: "Funnel Marketing", href: "/marketing/funnel", icon: Workflow, perm: ["leads:view-all"] },
     ],
   },
   {
@@ -268,11 +277,17 @@ const NAV_GROUPS: NavGroup[] = [
       { label: "Tài khoản", href: "/users", icon: KeyRound, perm: ["users:manage"] },
       // US-03 — nhóm người dùng: grant ad-hoc (ALLOW/DENY) không sửa vai chuẩn.
       { label: "Nhóm người dùng", href: "/user-groups", icon: UsersRound, perm: ["user-groups:manage"] },
+      // Màn cấu hình VAI TRÒ (RoleDef + RolePermission) — trung tâm của RBAC v2 mà từ
+      // trước tới nay chỉ vào được bằng URL.
+      { label: "Vai trò & quyền", href: "/roles", icon: KeyRound, perm: ["roles:manage"] },
       // P1 · US-05 AC4 — cây tổ chức (HO → vùng → cơ sở).
       { label: "Cây tổ chức", href: "/to-chuc", icon: Network, perm: [...PAGE_GATES["/to-chuc"]] },
-      // P2 · US-08/09 — vị trí công việc + phân công người vào vị trí.
-      { label: "Vị trí công việc", href: "/nhan-su/vi-tri", icon: Briefcase, perm: [...PAGE_GATES["/nhan-su/vi-tri"]] },
       { label: "Audit Log", href: "/audit-log", icon: ScrollText, perm: ["audit-logs:view"] },
+      // C6/NĐ13 — HV quá hạn lưu trữ + xoá ẩn danh / xuất dữ liệu. Trang tự gác bằng
+      // `isSuperAdmin`; `settings:view` ở đây chỉ là cổng HIỆN MỤC và cũng chỉ
+      // SUPER_ADMIN có, nên hai tầng không lệch nhau.
+      { label: "Tuân thủ dữ liệu", href: "/compliance", icon: AlertTriangle, perm: ["settings:view"] },
+      { label: "Chạy lại webhook", href: "/crm/webhook-replay", icon: RefreshCw, perm: ["settings:edit"] },
       { label: "Tích hợp", href: "/tich-hop", icon: Plug, perm: ["settings:view"] },
       { label: "Cấu hình vận hành", href: "/cau-hinh-van-hanh", icon: SlidersHorizontal, perm: ["settings:view"] },
       { label: "Cài đặt", href: "/settings", icon: Settings, perm: ["settings:view"] },
