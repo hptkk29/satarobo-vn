@@ -14,7 +14,18 @@
 // ⚠️ Câu 46: KHÔNG SĐT/email/tên phụ huynh — reference header có parentName/phone,
 // KHÔNG port. Student CHỈ {id, name, studentCode, avatarUrl, dateOfBirth, currentGrade, school}.
 import Link from "next/link";
-import { CalendarCheck, ChevronRight, ClipboardList, ClipboardPen, CircleCheck, FileDown, GraduationCap, Lock, NotebookPen, type LucideIcon } from "lucide-react";
+import {
+  CalendarCheck,
+  ChevronRight,
+  ClipboardList,
+  ClipboardPen,
+  CircleCheck,
+  FileDown,
+  GraduationCap,
+  Lock,
+  NotebookPen,
+  type LucideIcon,
+} from "lucide-react";
 import type { AttendanceStatus } from "@prisma/client";
 import { auth } from "@/lib/auth";
 import { resolveActor } from "@/lib/auth/actor";
@@ -57,29 +68,52 @@ const REPORT_STATUS: Record<string, { label: string; cls: string }> = {
   DRAFT: { label: "Học bạ nháp", cls: "bg-muted text-muted-foreground" },
   PENDING_REVIEW: {
     label: "Chờ duyệt",
-    cls: "bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300",
+    cls: "bg-state-warning-soft text-state-warning-ink",
   },
   PUBLISHED: {
     label: "Đã duyệt",
-    cls: "bg-emerald-100 text-emerald-700 dark:bg-emerald-600/20 dark:text-emerald-200",
+    cls: "bg-state-success-soft text-state-success-ink",
   },
   RECALLED: {
     label: "Thu hồi",
-    cls: "bg-rose-100 text-rose-700 dark:bg-rose-500/15 dark:text-rose-300",
+    cls: "bg-state-danger-soft text-state-danger-ink",
   },
 };
 
 const ATT_BADGE: Record<AttendanceStatus, { label: string; cls: string }> = {
-  PRESENT: { label: "Có mặt", cls: "bg-emerald-100 text-emerald-700 dark:bg-emerald-600/20 dark:text-emerald-200" },
-  LATE: { label: "Đi muộn", cls: "bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300" },
-  ABSENT: { label: "Vắng", cls: "bg-red-100 text-red-700 dark:bg-red-500/15 dark:text-red-300" },
-  EXCUSED: { label: "Có phép", cls: "bg-blue-100 text-blue-700 dark:bg-blue-500/15 dark:text-blue-300" },
-  ABSENT_EXCUSED: { label: "Vắng có phép", cls: "bg-blue-100 text-blue-700 dark:bg-blue-500/15 dark:text-blue-300" },
-  ABSENT_UNEXCUSED: { label: "Vắng", cls: "bg-red-100 text-red-700 dark:bg-red-500/15 dark:text-red-300" },
+  PRESENT: {
+    label: "Có mặt",
+    cls: "bg-state-success-soft text-state-success-ink dark:bg-state-success-soft dark:text-state-success-ink",
+  },
+  LATE: {
+    label: "Đi muộn",
+    cls: "bg-state-warning-soft text-state-warning-ink dark:bg-state-warning-soft dark:text-state-warning-ink",
+  },
+  ABSENT: {
+    label: "Vắng",
+    cls: "bg-state-danger-soft text-state-danger-ink dark:bg-state-danger-soft dark:text-state-danger-ink",
+  },
+  EXCUSED: {
+    label: "Có phép",
+    cls: "bg-state-info-soft text-state-info-ink dark:bg-state-info-soft dark:text-state-info-ink",
+  },
+  ABSENT_EXCUSED: {
+    label: "Vắng có phép",
+    cls: "bg-state-info-soft text-state-info-ink dark:bg-state-info-soft dark:text-state-info-ink",
+  },
+  ABSENT_UNEXCUSED: {
+    label: "Vắng",
+    cls: "bg-state-danger-soft text-state-danger-ink dark:bg-state-danger-soft dark:text-state-danger-ink",
+  },
 };
 
 const initials = (name: string) =>
-  name.split(" ").slice(-2).map((w) => w[0] ?? "").join("").toUpperCase();
+  name
+    .split(" ")
+    .slice(-2)
+    .map((w) => w[0] ?? "")
+    .join("")
+    .toUpperCase();
 
 type ProfileTab = "diem-danh" | "nhan-xet" | "bai-tap" | "hoc-ba";
 const PROFILE_TABS: { key: ProfileTab; label: string; icon: LucideIcon }[] = [
@@ -158,7 +192,9 @@ export default async function TeacherStudentProfilePage({
     const enrolledClassIds = [...new Set(enrollments.map((e) => e.classId))];
     const multiClass = enrolledClassIds.length > 1;
     const activeTab = parseProfileTab(ptab);
-    const birthYear = student.dateOfBirth ? student.dateOfBirth.getUTCFullYear() : null;
+    const birthYear = student.dateOfBirth
+      ? student.dateOfBirth.getUTCFullYear()
+      : null;
 
     return (
       <div className="space-y-5">
@@ -173,14 +209,18 @@ export default async function TeacherStudentProfilePage({
               className="h-14 w-14 shrink-0 rounded-full border border-border object-cover"
             />
           ) : (
-            <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-orange-100 text-lg font-semibold text-orange-700 dark:bg-orange-500/15 dark:text-orange-300">
+            <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-primary-soft text-lg font-semibold text-primary-ink">
               {initials(student.name)}
             </span>
           )}
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
-              <h1 className="text-2xl font-bold text-foreground">{student.name}</h1>
-              <Badge variant="outline">{ENROLLMENT_STATUS.label(enrollments[0].status)}</Badge>
+              <h1 className="text-2xl font-bold text-foreground">
+                {student.name}
+              </h1>
+              <Badge variant="outline">
+                {ENROLLMENT_STATUS.label(enrollments[0].status)}
+              </Badge>
             </div>
             <p className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground">
               <span>
@@ -191,12 +231,16 @@ export default async function TeacherStudentProfilePage({
                 <Link
                   key={e.id}
                   href={`/teacher/lop?classId=${e.classId}`}
-                  className="font-medium text-orange-700 hover:text-orange-800 dark:text-orange-400"
+                  className="font-medium text-primary-ink hover:text-primary-ink-hover"
                 >
                   {e.class.name}
                 </Link>
               ))}
-              <span>{[...new Set(enrollments.map((e) => e.course.name))].join(" · ")}</span>
+              <span>
+                {[...new Set(enrollments.map((e) => e.course.name))].join(
+                  " · ",
+                )}
+              </span>
             </p>
           </div>
         </div>
@@ -204,13 +248,27 @@ export default async function TeacherStudentProfilePage({
         <ProfileTabBar studentId={studentId} active={activeTab} />
 
         {activeTab === "diem-danh" && (
-          <AttendanceTab sdb={sdb} studentId={studentId} classIds={enrolledClassIds} multiClass={multiClass} />
+          <AttendanceTab
+            sdb={sdb}
+            studentId={studentId}
+            classIds={enrolledClassIds}
+            multiClass={multiClass}
+          />
         )}
         {activeTab === "nhan-xet" && (
-          <ReviewsTab sdb={sdb} studentId={studentId} classIds={enrolledClassIds} multiClass={multiClass} />
+          <ReviewsTab
+            sdb={sdb}
+            studentId={studentId}
+            classIds={enrolledClassIds}
+            multiClass={multiClass}
+          />
         )}
         {activeTab === "bai-tap" && (
-          <AssignmentsTab sdb={sdb} studentId={studentId} classIds={enrolledClassIds} />
+          <AssignmentsTab
+            sdb={sdb}
+            studentId={studentId}
+            classIds={enrolledClassIds}
+          />
         )}
         {activeTab === "hoc-ba" && (
           <HocBaTab
@@ -238,14 +296,21 @@ export default async function TeacherStudentProfilePage({
           enrollments: {
             where: { deletedAt: null },
             // Câu 46: CHỈ tên + mã HV — KHÔNG contact PH.
-            select: { status: true, student: { select: { id: true, name: true, studentCode: true } } },
+            select: {
+              status: true,
+              student: { select: { id: true, name: true, studentCode: true } },
+            },
             orderBy: { student: { name: "asc" } },
           },
         },
       })
     : [];
   const enrRows = gridClasses.flatMap((c) =>
-    c.enrollments.map((e) => ({ status: e.status, student: e.student, className: c.name })),
+    c.enrollments.map((e) => ({
+      status: e.status,
+      student: e.student,
+      className: c.name,
+    })),
   );
 
   // HV học 2 lớp mình → gộp 1 dòng, liệt kê các lớp (giữ trạng thái "cao nhất").
@@ -285,10 +350,19 @@ export default async function TeacherStudentProfilePage({
 type Sdb = ReturnType<typeof scopedDb>;
 
 /* ── Tab bar (server, searchParams) ─────────────────────────────────────────── */
-function ProfileTabBar({ studentId, active }: { studentId: string; active: ProfileTab }) {
+function ProfileTabBar({
+  studentId,
+  active,
+}: {
+  studentId: string;
+  active: ProfileTab;
+}) {
   return (
     <div className="overflow-x-auto">
-      <nav className="flex min-w-max gap-1 border-b border-border" aria-label="Hồ sơ học viên">
+      <nav
+        className="flex min-w-max gap-1 border-b border-border"
+        aria-label="Hồ sơ học viên"
+      >
         {PROFILE_TABS.map((t) => {
           const Icon = t.icon;
           const on = t.key === active;
@@ -300,7 +374,7 @@ function ProfileTabBar({ studentId, active }: { studentId: string; active: Profi
               className={cn(
                 "inline-flex shrink-0 items-center gap-2 border-b-2 px-4 py-2.5 text-sm font-medium outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring",
                 on
-                  ? "border-orange-500 text-orange-700 dark:border-orange-400 dark:text-orange-300"
+                  ? "border-primary text-primary-ink dark:border-primary dark:text-primary-ink"
                   : "border-transparent text-muted-foreground hover:text-foreground",
               )}
             >
@@ -339,7 +413,9 @@ async function AttendanceTab({
     orderBy: { date: "asc" },
   });
   if (sessions.length === 0) {
-    return <EmptyState icon={CalendarCheck} title="Lớp chưa có buổi học nào." />;
+    return (
+      <EmptyState icon={CalendarCheck} title="Lớp chưa có buổi học nào." />
+    );
   }
   return (
     <div className="t-card overflow-hidden">
@@ -352,11 +428,22 @@ async function AttendanceTab({
                 {dayFmt.format(s.date)}
               </div>
               <div className="min-w-0 flex-1">
-                <p className="truncate font-medium text-foreground">{s.topic ?? "Buổi học"}</p>
-                {multiClass && <p className="truncate text-xs text-muted-foreground">{s.class.name}</p>}
+                <p className="truncate font-medium text-foreground">
+                  {s.topic ?? "Buổi học"}
+                </p>
+                {multiClass && (
+                  <p className="truncate text-xs text-muted-foreground">
+                    {s.class.name}
+                  </p>
+                )}
               </div>
               {att ? (
-                <span className={cn("inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold", ATT_BADGE[att].cls)}>
+                <span
+                  className={cn(
+                    "inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold",
+                    ATT_BADGE[att].cls,
+                  )}
+                >
                   {ATT_BADGE[att].label}
                 </span>
               ) : s.status === "CANCELLED" ? (
@@ -397,7 +484,12 @@ async function ReviewsTab({
       comment: true,
       rating: true,
       classSession: {
-        select: { id: true, date: true, topic: true, class: { select: { name: true } } },
+        select: {
+          id: true,
+          date: true,
+          topic: true,
+          class: { select: { name: true } },
+        },
       },
     },
     orderBy: { createdAt: "desc" },
@@ -435,7 +527,7 @@ async function ReviewsTab({
                 href={`/teacher/nhan-xet/pdf/${f.classSession.id}/${studentId}`}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="inline-flex items-center gap-1 text-sm font-semibold text-orange-700 hover:text-orange-800 dark:text-orange-400"
+                className="inline-flex items-center gap-1 text-sm font-semibold text-primary-ink hover:text-primary-ink-hover"
               >
                 Xem phiếu <FileDown className="h-4 w-4" aria-hidden />
               </a>
@@ -462,7 +554,7 @@ async function ReviewsTab({
 function NoteItem({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-lg bg-muted/50 px-3.5 py-2.5">
-      <p className="text-xs font-bold uppercase tracking-wide text-orange-700 dark:text-orange-300">
+      <p className="text-xs font-bold uppercase tracking-wide text-primary-ink">
         {label}
       </p>
       <p className="mt-0.5 text-sm text-foreground">{value || "—"}</p>
@@ -508,14 +600,24 @@ async function AssignmentsTab({
   return (
     <div className="t-card overflow-hidden">
       <div className="overflow-x-auto">
-        <table className="w-full border-collapse text-left text-sm">
+        <table className="min-w-[660px] w-full border-collapse text-left text-sm">
           <thead>
             <tr className="border-b border-border bg-muted/50 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
-              <th scope="col" className="px-5 py-3">Nội dung</th>
-              <th scope="col" className="px-5 py-3">Hình thức</th>
-              <th scope="col" className="px-5 py-3">Hạn nộp</th>
-              <th scope="col" className="px-5 py-3">Tình trạng</th>
-              <th scope="col" className="px-5 py-3">Điểm</th>
+              <th scope="col" className="px-5 py-3">
+                Nội dung
+              </th>
+              <th scope="col" className="px-5 py-3">
+                Hình thức
+              </th>
+              <th scope="col" className="px-5 py-3">
+                Hạn nộp
+              </th>
+              <th scope="col" className="px-5 py-3">
+                Tình trạng
+              </th>
+              <th scope="col" className="px-5 py-3">
+                Điểm
+              </th>
             </tr>
           </thead>
           <tbody>
@@ -527,32 +629,41 @@ async function AssignmentsTab({
                   ? dueFmt.format(s.assignment.dueAt)
                   : "—";
               return (
-                <tr key={i} className="border-b border-border/60 transition-colors last:border-0 hover:bg-muted/50">
-                  <td className="px-5 py-3.5 font-semibold text-foreground">{s.assignment.title}</td>
+                <tr
+                  key={i}
+                  className="border-b border-border/60 transition-colors last:border-0 hover:bg-muted/50"
+                >
+                  <td className="px-5 py-3.5 font-semibold text-foreground">
+                    {s.assignment.title}
+                  </td>
                   <td className="px-5 py-3.5">
                     <Badge
                       variant="outline"
                       className={
                         isTest
-                          ? "border-orange-300 bg-orange-50 text-orange-700 dark:border-orange-500/40 dark:bg-orange-500/15 dark:text-orange-300"
-                          : "border-blue-300 bg-blue-50 text-blue-700 dark:border-blue-500/40 dark:bg-blue-500/15 dark:text-blue-300"
+                          ? "border-primary-soft bg-primary-soft text-primary-ink dark:border-primary dark:bg-primary-soft dark:text-primary-ink"
+                          : "border-state-info-soft bg-state-info-soft text-state-info-ink dark:border-state-info"
                       }
                     >
                       {isTest ? "Kiểm tra" : "Bài tập"}
                     </Badge>
                   </td>
-                  <td className="px-5 py-3.5 whitespace-nowrap text-foreground">{due}</td>
+                  <td className="px-5 py-3.5 whitespace-nowrap text-foreground">
+                    {due}
+                  </td>
                   <td className="px-5 py-3.5 whitespace-nowrap">
                     {submitted ? (
-                      <span className="inline-flex items-center gap-1.5 font-medium text-emerald-700 dark:text-emerald-400">
+                      <span className="inline-flex items-center gap-1.5 font-medium text-state-success-ink">
                         <CircleCheck className="h-4 w-4" aria-hidden /> Đã nộp
                       </span>
                     ) : (
-                      <span className="text-amber-600 dark:text-amber-400">Chưa nộp</span>
+                      <span className="text-state-warning-ink">Chưa nộp</span>
                     )}
                   </td>
                   <td className="px-5 py-3.5 whitespace-nowrap font-semibold text-foreground">
-                    {s.score != null ? `${s.score}/${s.assignment.totalPoints}` : "—"}
+                    {s.score != null
+                      ? `${s.score}/${s.assignment.totalPoints}`
+                      : "—"}
                   </td>
                 </tr>
               );
@@ -570,7 +681,13 @@ async function HocBaTab({
   enrollments,
 }: {
   sdb: Sdb;
-  enrollments: { id: string; courseId: string; status: string; className: string; courseName: string }[];
+  enrollments: {
+    id: string;
+    courseId: string;
+    status: string;
+    className: string;
+    courseName: string;
+  }[];
 }) {
   const enrollmentIds = enrollments.map((e) => e.id);
   const [summaries, criteriaLists, cards] = await Promise.all([
@@ -593,8 +710,11 @@ async function HocBaTab({
         const sum = summaries[i];
         const criteria = criteriaLists[i];
         const card = cardByEnrollment.get(e.id);
-        const levelByCriterion = new Map((card?.scores ?? []).map((sc) => [sc.criterionId, sc.level]));
-        const rate = sum.total > 0 ? Math.round((sum.attended / sum.total) * 100) : null;
+        const levelByCriterion = new Map(
+          (card?.scores ?? []).map((sc) => [sc.criterionId, sc.level]),
+        );
+        const rate =
+          sum.total > 0 ? Math.round((sum.attended / sum.total) * 100) : null;
         const rs = card ? REPORT_STATUS[card.status] : null;
         return (
           <Card key={e.id}>
@@ -605,13 +725,18 @@ async function HocBaTab({
                 </CardTitle>
                 <div className="flex items-center gap-2">
                   {rs && (
-                    <span className={cn("inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold", rs.cls)}>
+                    <span
+                      className={cn(
+                        "inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold",
+                        rs.cls,
+                      )}
+                    >
                       {rs.label}
                     </span>
                   )}
                   <Link
                     href={`/teacher/hoc-ba?enrollmentId=${e.id}`}
-                    className="inline-flex items-center gap-1 rounded-sm text-sm font-semibold text-orange-600 outline-none hover:text-orange-700 focus-visible:ring-2 focus-visible:ring-ring dark:text-orange-400"
+                    className="inline-flex items-center gap-1 rounded-sm text-sm font-semibold text-primary-ink outline-none hover:text-primary-ink-hover focus-visible:ring-2 focus-visible:ring-ring"
                   >
                     Mở học bạ <ChevronRight className="h-4 w-4" aria-hidden />
                   </Link>
@@ -620,11 +745,29 @@ async function HocBaTab({
             </CardHeader>
             <CardContent className="space-y-5">
               <section>
-                <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Chuyên cần</h3>
+                <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  Chuyên cần
+                </h3>
                 <div className="grid grid-cols-3 gap-3">
-                  <StatBox value={rate != null ? `${rate}%` : "—"} label="Tỉ lệ chuyên cần" tone="emerald" />
-                  <StatBox value={sum.total > 0 ? `${sum.attended}/${sum.total}` : String(sum.attended)} label="Đã học (buổi)" tone="blue" />
-                  <StatBox value={String(sum.absent + sum.needMakeup)} label="Vắng (buổi)" tone="red" />
+                  <StatBox
+                    value={rate != null ? `${rate}%` : "—"}
+                    label="Tỉ lệ chuyên cần"
+                    tone="emerald"
+                  />
+                  <StatBox
+                    value={
+                      sum.total > 0
+                        ? `${sum.attended}/${sum.total}`
+                        : String(sum.attended)
+                    }
+                    label="Đã học (buổi)"
+                    tone="blue"
+                  />
+                  <StatBox
+                    value={String(sum.absent + sum.needMakeup)}
+                    label="Vắng (buổi)"
+                    tone="red"
+                  />
                 </div>
               </section>
               <section>
@@ -632,13 +775,21 @@ async function HocBaTab({
                   Năng lực (học bạ, thang 1-4)
                 </h3>
                 {criteria.length === 0 ? (
-                  <p className="text-sm text-muted-foreground">Khoá học chưa cấu hình tiêu chí năng lực.</p>
+                  <p className="text-sm text-muted-foreground">
+                    Khoá học chưa cấu hình tiêu chí năng lực.
+                  </p>
                 ) : levelByCriterion.size === 0 ? (
-                  <p className="text-sm text-muted-foreground">Học bạ chưa chấm tiêu chí nào — vào mục Học bạ để nhập.</p>
+                  <p className="text-sm text-muted-foreground">
+                    Học bạ chưa chấm tiêu chí nào — vào mục Học bạ để nhập.
+                  </p>
                 ) : (
                   <div className="space-y-3">
                     {criteria.map((c) => (
-                      <CompetencyBar key={c.id} label={c.name} level={levelByCriterion.get(c.id) ?? null} />
+                      <CompetencyBar
+                        key={c.id}
+                        label={c.name}
+                        level={levelByCriterion.get(c.id) ?? null}
+                      />
                     ))}
                   </div>
                 )}
@@ -653,13 +804,21 @@ async function HocBaTab({
 
 /* ── helpers dùng lại ───────────────────────────────────────────────────────── */
 const STAT_TONE = {
-  emerald: "bg-emerald-50 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300",
-  blue: "bg-blue-50 text-blue-700 dark:bg-blue-500/15 dark:text-blue-300",
-  red: "bg-red-50 text-red-700 dark:bg-red-500/15 dark:text-red-300",
-  amber: "bg-amber-50 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300",
+  emerald: "bg-state-success-soft text-state-success-ink",
+  blue: "bg-state-info-soft text-state-info-ink",
+  red: "bg-state-danger-soft text-state-danger-ink",
+  amber: "bg-state-warning-soft text-state-warning-ink",
 } as const;
 
-function StatBox({ value, label, tone }: { value: string; label: string; tone: keyof typeof STAT_TONE }) {
+function StatBox({
+  value,
+  label,
+  tone,
+}: {
+  value: string;
+  label: string;
+  tone: keyof typeof STAT_TONE;
+}) {
   return (
     <div className={`rounded-lg px-3 py-2.5 ${STAT_TONE[tone]}`}>
       <p className="text-lg font-bold">{value}</p>
@@ -668,18 +827,30 @@ function StatBox({ value, label, tone }: { value: string; label: string; tone: k
   );
 }
 
-function CompetencyBar({ label, level }: { label: string; level: number | null }) {
-  const pct = level != null ? Math.round((Math.min(4, Math.max(0, level)) / 4) * 100) : 0;
+function CompetencyBar({
+  label,
+  level,
+}: {
+  label: string;
+  level: number | null;
+}) {
+  const pct =
+    level != null ? Math.round((Math.min(4, Math.max(0, level)) / 4) * 100) : 0;
   return (
     <div>
       <div className="mb-1 flex items-center justify-between gap-2 text-sm">
-        <span className="min-w-0 truncate font-medium text-foreground">{label}</span>
+        <span className="min-w-0 truncate font-medium text-foreground">
+          {label}
+        </span>
         <span className="shrink-0 text-xs font-semibold text-muted-foreground">
           {level != null ? (LEVEL_LABEL[level] ?? String(level)) : "Chưa chấm"}
         </span>
       </div>
       <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
-        <div className="h-full rounded-full bg-orange-500" style={{ width: `${pct}%` }} />
+        <div
+          className="h-full rounded-full bg-primary"
+          style={{ width: `${pct}%` }}
+        />
       </div>
     </div>
   );

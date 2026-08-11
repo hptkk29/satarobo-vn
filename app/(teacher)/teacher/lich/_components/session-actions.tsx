@@ -26,7 +26,12 @@ type Props = {
 /** Buổi cho phép "Hoàn tất" — khớp canCompleteSession (SCHEDULED/IN_PROGRESS). */
 const COMPLETABLE = new Set(["SCHEDULED", "IN_PROGRESS"]);
 
-export function SessionActions({ sessionId, status, hasLesson, lifecycleV2 }: Props) {
+export function SessionActions({
+  sessionId,
+  status,
+  hasLesson,
+  lifecycleV2,
+}: Props) {
   const [pending, startTransition] = useTransition();
 
   const canComplete = lifecycleV2 && COMPLETABLE.has(status);
@@ -46,11 +51,17 @@ export function SessionActions({ sessionId, status, hasLesson, lifecycleV2 }: Pr
         confirmNoAttendance,
       });
       if (res.needsConfirm) {
-        setConfirmWarning(res.warning ?? "Chưa lưu điểm danh cho buổi này. Vẫn hoàn tất?");
+        setConfirmWarning(
+          res.warning ?? "Chưa lưu điểm danh cho buổi này. Vẫn hoàn tất?",
+        );
         return;
       }
       if (res.ok) {
-        toast.success(res.warning ? `Đã hoàn tất buổi — ${res.warning}` : "Đã hoàn tất buổi.");
+        toast.success(
+          res.warning
+            ? `Đã hoàn tất buổi — ${res.warning}`
+            : "Đã hoàn tất buổi.",
+        );
         setCompleteOpen(false);
         setClassComment("");
         setConfirmWarning(null);
@@ -91,7 +102,12 @@ export function SessionActions({ sessionId, status, hasLesson, lifecycleV2 }: Pr
       )}
 
       {hasLesson && (
-        <Button type="button" size="sm" variant="outline" onClick={() => setChangeOpen(true)}>
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          onClick={() => setChangeOpen(true)}
+        >
           Đề xuất sửa giáo án
         </Button>
       )}
@@ -111,13 +127,16 @@ export function SessionActions({ sessionId, status, hasLesson, lifecycleV2 }: Pr
           <DialogHeader>
             <DialogTitle>Hoàn tất buổi dạy</DialogTitle>
             <DialogDescription>
-              Nhận xét chung cho cả lớp (tuỳ chọn). Sau khi hoàn tất, buổi chuyển sang trạng
-              thái “Đã dạy”.
+              Nhận xét chung cho cả lớp (tuỳ chọn). Sau khi hoàn tất, buổi
+              chuyển sang trạng thái “Đã dạy”.
             </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-2">
-            <label htmlFor="class-comment" className="text-sm font-medium text-foreground">
+            <label
+              htmlFor="class-comment"
+              className="text-sm font-medium text-foreground"
+            >
               Nhận xét lớp (tuỳ chọn)
             </label>
             <Textarea
@@ -129,7 +148,7 @@ export function SessionActions({ sessionId, status, hasLesson, lifecycleV2 }: Pr
               placeholder="Ví dụ: Cả lớp hoàn thành mục tiêu buổi…"
             />
             {confirmWarning && (
-              <p className="rounded-md border border-amber-300 bg-amber-50 p-2 text-sm text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/15 dark:text-amber-200">
+              <p className="rounded-md border border-state-warning-soft bg-state-warning-soft p-2 text-sm text-state-warning-ink dark:border-state-warning">
                 {confirmWarning}
               </p>
             )}
@@ -137,11 +156,19 @@ export function SessionActions({ sessionId, status, hasLesson, lifecycleV2 }: Pr
 
           <DialogFooter>
             {confirmWarning ? (
-              <Button type="button" disabled={pending} onClick={() => runComplete(true)}>
+              <Button
+                type="button"
+                disabled={pending}
+                onClick={() => runComplete(true)}
+              >
                 Vẫn hoàn tất
               </Button>
             ) : (
-              <Button type="button" disabled={pending} onClick={() => runComplete(false)}>
+              <Button
+                type="button"
+                disabled={pending}
+                onClick={() => runComplete(false)}
+              >
                 Xác nhận hoàn tất
               </Button>
             )}
@@ -161,8 +188,8 @@ export function SessionActions({ sessionId, status, hasLesson, lifecycleV2 }: Pr
           <DialogHeader>
             <DialogTitle>Đề xuất sửa giáo án</DialogTitle>
             <DialogDescription>
-              Mô tả nội dung cần chỉnh trong bài giảng của buổi. Đề xuất được gửi tới bộ phận
-              Đào tạo để duyệt.
+              Mô tả nội dung cần chỉnh trong bài giảng của buổi. Đề xuất được
+              gửi tới bộ phận Đào tạo để duyệt.
             </DialogDescription>
           </DialogHeader>
 

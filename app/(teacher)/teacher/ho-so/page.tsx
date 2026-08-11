@@ -52,23 +52,23 @@ const CLASS_STATUS: Record<ClassStatus, { label: string; cls: string }> = {
   PLANNED: { label: "Đang lên KH", cls: "bg-muted text-muted-foreground" },
   RECRUITING: {
     label: "Tuyển sinh",
-    cls: "bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300",
+    cls: "bg-state-warning-soft text-state-warning-ink",
   },
   PENDING_APPROVAL: {
     label: "Chờ duyệt",
-    cls: "bg-orange-100 text-orange-700 dark:bg-orange-500/15 dark:text-orange-300",
+    cls: "bg-primary-soft text-primary-ink",
   },
   ACTIVE: {
     label: "Đang dạy",
-    cls: "bg-emerald-100 text-emerald-700 dark:bg-emerald-600/20 dark:text-emerald-200",
+    cls: "bg-state-success-soft text-state-success-ink",
   },
   COMPLETED: {
     label: "Hoàn thành",
-    cls: "bg-blue-100 text-blue-700 dark:bg-blue-500/15 dark:text-blue-300",
+    cls: "bg-state-info-soft text-state-info-ink",
   },
   CANCELLED: {
     label: "Huỷ",
-    cls: "bg-red-100 text-red-700 dark:bg-red-500/15 dark:text-red-300",
+    cls: "bg-state-danger-soft text-state-danger-ink",
   },
 };
 
@@ -176,11 +176,13 @@ export default async function TeacherProfilePage() {
             </span>
             <div className="min-w-0 flex-1">
               <div className="flex flex-wrap items-center gap-2">
-                <h2 className="text-xl font-extrabold text-foreground">{displayName}</h2>
+                <h2 className="text-xl font-extrabold text-foreground">
+                  {displayName}
+                </h2>
                 {roleCodes.map((code) => (
                   <span
                     key={code}
-                    className="rounded-full bg-orange-100 px-2.5 py-0.5 text-xs font-semibold text-orange-700 dark:bg-orange-500/15 dark:text-orange-300"
+                    className="rounded-full bg-primary-soft px-2.5 py-0.5 text-xs font-semibold text-primary-ink"
                   >
                     {roleLabel(code)}
                   </span>
@@ -210,7 +212,7 @@ export default async function TeacherProfilePage() {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-3">
             <CardTitle className="flex items-center gap-2 text-base">
-              <BookOpen className="h-4 w-4 text-orange-600 dark:text-orange-400" aria-hidden />
+              <BookOpen className="h-4 w-4 text-primary-ink" aria-hidden />
               Lớp đang phụ trách
             </CardTitle>
             <span className="rounded-full bg-muted px-2.5 py-0.5 text-xs font-semibold text-muted-foreground">
@@ -219,7 +221,10 @@ export default async function TeacherProfilePage() {
           </CardHeader>
           <CardContent className="space-y-3">
             {classes.length === 0 ? (
-              <EmptyState icon={BookOpen} title="Bạn chưa được phân công lớp nào." />
+              <EmptyState
+                icon={BookOpen}
+                title="Bạn chưa được phân công lớp nào."
+              />
             ) : (
               classes.map((c) => (
                 <Link
@@ -229,7 +234,9 @@ export default async function TeacherProfilePage() {
                   title="Mở buổi học của lớp"
                 >
                   <div className="min-w-0">
-                    <p className="truncate font-semibold text-foreground">{c.name}</p>
+                    <p className="truncate font-semibold text-foreground">
+                      {c.name}
+                    </p>
                     <p className="truncate text-sm text-muted-foreground">
                       {c.course.name}
                       {c.center?.name ? ` · ${c.center.name}` : ""}
@@ -265,10 +272,16 @@ export default async function TeacherProfilePage() {
           </CardHeader>
           <CardContent className="grid grid-cols-1 gap-x-8 gap-y-4 sm:grid-cols-2">
             <Field label="Họ và tên" value={displayName} />
-            <Field label="Vai trò" value={roleCodes.map(roleLabel).join(", ")} />
+            <Field
+              label="Vai trò"
+              value={roleCodes.map(roleLabel).join(", ")}
+            />
             <Field label="Email" value={user.email ?? "—"} />
             <Field label="Số điện thoại" value={phone ?? "Chưa cập nhật"} />
-            <Field label="Cơ sở" value={user.center?.name ?? "Chưa gán cơ sở"} />
+            <Field
+              label="Cơ sở"
+              value={user.center?.name ?? "Chưa gán cơ sở"}
+            />
             <Field label={joinLabel} value={joinValue} />
             <Field label="Lớp đang phụ trách" value={`${classes.length} lớp`} />
           </CardContent>
@@ -278,7 +291,7 @@ export default async function TeacherProfilePage() {
         <Card>
           <CardHeader className="pb-3">
             <CardTitle className="flex items-center gap-2 text-base">
-              <Lock className="h-4 w-4 text-orange-600 dark:text-orange-400" aria-hidden />
+              <Lock className="h-4 w-4 text-primary-ink" aria-hidden />
               Bảo mật
             </CardTitle>
           </CardHeader>
@@ -297,7 +310,7 @@ export default async function TeacherProfilePage() {
         <Card>
           <CardHeader className="pb-3">
             <CardTitle className="flex items-center gap-2 text-base">
-              <BookOpenText className="h-4 w-4 text-orange-600 dark:text-orange-400" aria-hidden />
+              <BookOpenText className="h-4 w-4 text-primary-ink" aria-hidden />
               Hướng dẫn sử dụng
             </CardTitle>
           </CardHeader>
@@ -307,8 +320,8 @@ export default async function TeacherProfilePage() {
                 Tài liệu hướng dẫn từng trang của site giáo viên
               </p>
               <p className="text-xs text-muted-foreground">
-                Chia theo nhóm chức năng — mỗi bài có các bước thao tác chi tiết và
-                đường dẫn mở thẳng trang tương ứng.
+                Chia theo nhóm chức năng — mỗi bài có các bước thao tác chi tiết
+                và đường dẫn mở thẳng trang tương ứng.
               </p>
             </div>
             <Link
@@ -316,7 +329,10 @@ export default async function TeacherProfilePage() {
               className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-card px-3 py-2 text-sm font-semibold text-foreground transition-colors hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring outline-none"
             >
               Mở hướng dẫn
-              <ArrowRight className="h-4 w-4 text-muted-foreground" aria-hidden />
+              <ArrowRight
+                className="h-4 w-4 text-muted-foreground"
+                aria-hidden
+              />
             </Link>
           </CardContent>
         </Card>
@@ -328,7 +344,9 @@ export default async function TeacherProfilePage() {
 function Field({ label, value }: { label: string; value: string }) {
   return (
     <div>
-      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{label}</p>
+      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+        {label}
+      </p>
       <p className="mt-1 text-sm font-medium text-foreground">{value}</p>
     </div>
   );

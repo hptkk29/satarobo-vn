@@ -1,9 +1,14 @@
 /* Site giáo viên (giaovien.satarobo.vn) — design tokens port từ TeachUI.
  *
- * Cam #F97316 là tone thương hiệu DUY NHẤT ở đây: tím bị loại bỏ hoàn toàn, và
- * cam chỉ mang nghĩa "thương hiệu + hành động" (CTA, nav active, focus ring).
- * Trạng thái ngữ nghĩa dùng thang riêng — emerald (thành công), amber (chờ),
- * red (lỗi/từ chối), blue (thông tin) — lấy thẳng từ palette mặc định Tailwind.
+ * ⚠️ ĐẢO 11/08/2026 — TÍM LÀ MÀU THƯƠNG HIỆU.
+ * Bản port 10/07 lấy cam #F97316 làm tone duy nhất và loại tím hoàn toàn. Chủ dự
+ * án chốt ngược lại: tím #610B8A là nhận diện, cam là màu điểm xuyết. Site quản
+ * trị đã đổi theo; để site giáo viên ở cam nghĩa là một công ty hai bộ nhận diện.
+ * Nên `--primary` ở đây nay là TÍM, khớp `.admin-scope` trong app/globals.css.
+ *
+ * Trạng thái ngữ nghĩa vẫn dùng thang riêng — emerald (thành công), amber (chờ),
+ * red (lỗi/từ chối), blue (thông tin) — nhưng nay đọc qua token `--state-*` dùng
+ * chung với admin, và được ghi đè cho chế độ Tối ở cuối file này.
  *
  * Mọi thứ scoped dưới `.teacher-root`, KHÔNG đụng `:root` trong app/globals.css.
  * → admin / portal / public giữ nguyên nhận diện cam+tím hiện tại.
@@ -25,8 +30,16 @@
   --popover: hsl(0 0% 100%);
   --popover-foreground: hsl(222 47% 11%);
 
-  --primary: hsl(24 95% 53%); /* cam #F97316 (orange-500) */
-  --primary-foreground: hsl(0 0% 100%);
+  --primary: #610b8a; /* tím thương hiệu, khớp .admin-scope */
+  --primary-foreground: #ffffff;
+  --primary-dark: #4e237d;
+  --primary-darker: #3b1a5e;
+  --primary-soft: rgba(97, 11, 138, 0.1);
+  --primary-soft-hover: rgba(97, 11, 138, 0.18);
+  /* Mực (CHỮ/ICON) tách khỏi `--primary` (NỀN nút): chữ cần 4.5:1, nền chỉ cần 3:1.
+     Tím #610B8A trên nền trắng đo 10.9:1. */
+  --primary-ink: #610b8a;
+  --primary-ink-hover: #4e237d;
 
   --secondary: hsl(210 40% 96%); /* slate-100 */
   --secondary-foreground: hsl(222 47% 11%);
@@ -34,16 +47,16 @@
   --muted: hsl(210 40% 96%);
   --muted-foreground: hsl(215 16% 47%); /* slate-500 */
 
-  /* `--accent` là lớp wash cam RẤT nhạt cho hover — KHÔNG phải cam CTA.
-     Cam CTA nằm ở utility `orange-500/600` của Tailwind. */
-  --accent: hsl(33 100% 96%); /* orange-50 */
-  --accent-foreground: hsl(21 90% 40%); /* orange-700 */
+  /* `--accent` ở shadcn là lớp wash cho HOVER (menu, item danh sách) — KHÔNG phải
+     màu CTA. Giữ đúng vai đó, chỉ đổi sắc từ cam sang tím cho khớp nhận diện. */
+  --accent: rgba(97, 11, 138, 0.07);
+  --accent-foreground: #4e237d;
 
   --destructive: hsl(0 84% 60%);
 
   --border: hsl(214 32% 91%); /* slate-200 */
   --input: hsl(214 32% 91%);
-  --ring: hsl(24 95% 53%); /* focus ring cam */
+  --ring: #610b8a;
 
   --radius: 0.75rem;
 
@@ -62,9 +75,21 @@
   --popover: hsl(222 40% 14%);
   --popover-foreground: hsl(210 40% 98%);
 
-  /* Cam sáng hơn (orange-400 #FB923C) để đủ tương phản trên nền tối. */
-  --primary: hsl(27 96% 61%);
-  --primary-foreground: hsl(0 0% 100%);
+  /* Tím thương hiệu #610B8A trên nền tối #0F172A chỉ 1,6:1 — nút gần như tàng
+     hình. Nên chế độ Tối giữ NGUYÊN sắc độ (hue 285) mà nâng độ sáng:
+     #A32BC7 → 3,2:1 so với nền (đạt 3:1 cho thành phần giao diện) và chữ trắng
+     trên nó 5,6:1 (đạt 4,5:1 cho chữ). */
+  --primary: #a32bc7;
+  --primary-foreground: #ffffff;
+  --primary-dark: #b44ad3;
+  --primary-darker: #c66ede;
+  --primary-soft: rgba(163, 43, 199, 0.22);
+  --primary-soft-hover: rgba(163, 43, 199, 0.34);
+  /* MỰC thì đảo hẳn: tím rất nhạt (#D8B4FE) — 10,3:1 trên nền tối. Nhờ vậy
+     `text-primary-ink` viết MỘT lần là đúng ở cả Sáng lẫn Tối, không cần
+     kèm biến thể `dark:` nào. */
+  --primary-ink: #d8b4fe;
+  --primary-ink-hover: #e9d5ff;
 
   --secondary: hsl(217 33% 20%);
   --secondary-foreground: hsl(210 40% 98%);
@@ -72,14 +97,39 @@
   --muted: hsl(217 33% 20%);
   --muted-foreground: hsl(215 20% 65%);
 
-  --accent: hsl(217 33% 22%);
-  --accent-foreground: hsl(210 40% 98%);
+  --accent: rgba(163, 43, 199, 0.16);
+  --accent-foreground: #e9d5ff;
 
   --destructive: hsl(0 63% 45%);
 
   --border: hsl(217 33% 22%);
   --input: hsl(217 33% 22%);
-  --ring: hsl(27 96% 61%);
+  --ring: #a32bc7;
+
+  /* ── Trạng thái ngữ nghĩa cho nền TỐI ────────────────────────────────────
+     Token `--state-*` ở app/globals.css được cân cho nền TRẮNG: mực là các sắc
+     đậm (#047857, #B45309, #B91C1C, #1D4ED8) — đặt lên nền tối thì chìm nghỉm.
+     Đây chính là lý do code cũ phải viết tay `dark:text-emerald-200` ở 30 chỗ,
+     `dark:text-amber-300` ở 33 chỗ… Ghi đè một lần tại đây thì `text-state-*-ink`
+     và `bg-state-*-soft` tự đúng cho cả hai chế độ, và các lớp `dark:` kia biến mất. */
+  --state-success-ink: #6ee7b7; /* emerald-300 */
+  --state-warning-ink: #fcd34d; /* amber-300  */
+  --state-danger-ink: #fca5a5; /* red-300    */
+  --state-info-ink: #93c5fd; /* blue-300   */
+  --state-success-ink-hover: #a7f3d0;
+  --state-warning-ink-hover: #fde68a;
+  --state-danger-ink-hover: #fecaca;
+  --state-info-ink-hover: #bfdbfe;
+  /* Nền tint: trên nền tối phải ĐẶC hơn bản nền sáng mới thấy được viền khối. */
+  --state-success-soft: rgba(16, 185, 129, 0.18);
+  --state-warning-soft: rgba(245, 158, 11, 0.18);
+  --state-danger-soft: rgba(239, 68, 68, 0.18);
+  --state-info-soft: rgba(59, 130, 246, 0.18);
+  --state-success-soft-hover: rgba(16, 185, 129, 0.28);
+  --state-warning-soft-hover: rgba(245, 158, 11, 0.28);
+  --state-danger-soft-hover: rgba(239, 68, 68, 0.28);
+  --state-info-soft-hover: rgba(59, 130, 246, 0.28);
+  --accent-ink: #fdba74; /* orange-300 — 11,6:1 trên nền tối */
 }
 
 /* ── Bản in (xuất PDF phiếu nhận xét / phiếu Trial) ────────────────────────
@@ -96,10 +146,26 @@
     --secondary-foreground: hsl(222 47% 11%);
     --muted: hsl(210 40% 96%);
     --muted-foreground: hsl(215 16% 47%);
-    --accent: hsl(33 100% 96%);
-    --accent-foreground: hsl(21 90% 40%);
+    --accent: rgba(97, 11, 138, 0.07);
+    --accent-foreground: #4e237d;
     --border: hsl(214 32% 91%);
     --input: hsl(214 32% 91%);
+
+    /* Nền đã bị ép về TRẮNG ở trên ⇒ phải trả mực về bậc ĐẬM, không thì huy hiệu
+       in ra là chữ xanh-lơ/vàng-nhạt trên giấy trắng (gần như không đọc được). */
+    --primary: #610b8a;
+    --primary-ink: #610b8a;
+    --primary-ink-hover: #4e237d;
+    --primary-soft: rgba(97, 11, 138, 0.1);
+    --state-success-ink: #047857;
+    --state-warning-ink: #b45309;
+    --state-danger-ink: #b91c1c;
+    --state-info-ink: #1d4ed8;
+    --state-success-soft: rgba(16, 185, 129, 0.12);
+    --state-warning-soft: rgba(245, 158, 11, 0.12);
+    --state-danger-soft: rgba(239, 68, 68, 0.12);
+    --state-info-soft: rgba(59, 130, 246, 0.12);
+    --accent-ink: #b45309;
   }
 }
 
@@ -156,7 +222,9 @@
   font-size: 15px;
   font-weight: 500;
   color: var(--muted-foreground);
-  transition: background-color 150ms ease, color 150ms ease;
+  transition:
+    background-color 150ms ease,
+    color 150ms ease;
 }
 .teacher-root .t-nav-link:hover {
   background: var(--muted);
@@ -184,13 +252,16 @@
   color: var(--muted-foreground);
 }
 
-/* ── Gradient thương hiệu — chỉ dùng cho logo / avatar, không dùng làm nền ─── */
+/* ── Gradient thương hiệu — avatar tròn + dải tiêu đề phiếu Trial ───────────
+   Tím → cam: đi từ màu nhận diện sang màu điểm xuyết, nên chữ trắng đè lên luôn
+   đủ tương phản ở cả hai đầu (trắng/#610B8A = 12.6:1, trắng/#F8903B = 2.4:1 —
+   nên đầu cam chỉ chiếm đoạn cuối, phần mang chữ nằm ở đầu tím).
+   (`.brand-text` — gradient tô CHỮ — đã gỡ: khai báo mà không nơi nào dùng.) */
 .teacher-root .brand-gradient {
-  background-image: linear-gradient(135deg, #fbbf24 0%, #f97316 55%, #ea580c 100%);
-}
-.teacher-root .brand-text {
-  background-image: linear-gradient(135deg, #fbbf24 0%, #f97316 55%, #ea580c 100%);
-  background-clip: text;
-  -webkit-background-clip: text;
-  color: transparent;
+  background-image: linear-gradient(
+    135deg,
+    #610b8a 0%,
+    #7c3aa0 60%,
+    #b85a3f 100%
+  );
 }

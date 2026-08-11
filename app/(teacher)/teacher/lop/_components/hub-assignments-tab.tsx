@@ -33,15 +33,15 @@ const SUB_STATUS: Record<SubmissionStatus, { label: string; cls: string }> = {
   NOT_SUBMITTED: { label: "Chưa nộp", cls: "bg-muted text-muted-foreground" },
   SUBMITTED: {
     label: "Đã nộp",
-    cls: "bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300",
+    cls: "bg-state-warning-soft text-state-warning-ink",
   },
   LATE: {
     label: "Nộp muộn",
-    cls: "bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300",
+    cls: "bg-state-warning-soft text-state-warning-ink",
   },
   GRADED: {
     label: "Đã chấm",
-    cls: "bg-emerald-100 text-emerald-700 dark:bg-emerald-600/20 dark:text-emerald-200",
+    cls: "bg-state-success-soft text-state-success-ink",
   },
 };
 
@@ -105,8 +105,15 @@ export async function HubAssignmentsTab({
     if (!sub || sub.assignment.classId !== classId) {
       return (
         <div>
-          <BackLink className="mb-4" href={`?classId=${classId}&tab=bai-tap`} label="Bài tập & Kiểm tra" />
-          <EmptyState icon={Ban} title="Bài nộp không thuộc lớp bạn phụ trách." />
+          <BackLink
+            className="mb-4"
+            href={`?classId=${classId}&tab=bai-tap`}
+            label="Bài tập & Kiểm tra"
+          />
+          <EmptyState
+            icon={Ban}
+            title="Bài nộp không thuộc lớp bạn phụ trách."
+          />
         </div>
       );
     }
@@ -114,16 +121,29 @@ export async function HubAssignmentsTab({
     if (sub.status === "NOT_SUBMITTED") {
       return (
         <div>
-          <BackLink className="mb-4" href={backToDetail} label="Chi tiết bài tập" />
-          <EmptyState icon={FileX2} title="Học viên chưa nộp bài — chưa thể chấm." />
+          <BackLink
+            className="mb-4"
+            href={backToDetail}
+            label="Chi tiết bài tập"
+          />
+          <EmptyState
+            icon={FileX2}
+            title="Học viên chưa nộp bài — chưa thể chấm."
+          />
         </div>
       );
     }
     return (
       <div>
-        <BackLink className="mb-4" href={backToDetail} label="Chi tiết bài tập" />
+        <BackLink
+          className="mb-4"
+          href={backToDetail}
+          label="Chi tiết bài tập"
+        />
         <div className="mb-4">
-          <h2 className="text-lg font-bold text-foreground">Chấm bài — {sub.student.name}</h2>
+          <h2 className="text-lg font-bold text-foreground">
+            Chấm bài — {sub.student.name}
+          </h2>
           <p className="text-sm text-muted-foreground">
             {sub.assignment.title} · Lớp {className}
           </p>
@@ -132,7 +152,9 @@ export async function HubAssignmentsTab({
           submissionId={sub.id}
           studentName={sub.student.name}
           totalPoints={sub.assignment.totalPoints}
-          submittedAtText={sub.submittedAt ? submitFmt.format(sub.submittedAt) : null}
+          submittedAtText={
+            sub.submittedAt ? submitFmt.format(sub.submittedAt) : null
+          }
           isLate={sub.status === "LATE"}
           graded={sub.status === "GRADED"}
           textAnswer={sub.textAnswer}
@@ -173,14 +195,23 @@ export async function HubAssignmentsTab({
             },
           },
         },
-        submissions: { select: { id: true, studentId: true, status: true, score: true } },
+        submissions: {
+          select: { id: true, studentId: true, status: true, score: true },
+        },
       },
     });
     if (!asg || asg.classId !== classId) {
       return (
         <div>
-          <BackLink className="mb-4" href={`?classId=${classId}&tab=bai-tap`} label="Bài tập & Kiểm tra" />
-          <EmptyState icon={Ban} title="Bài tập không thuộc lớp bạn phụ trách." />
+          <BackLink
+            className="mb-4"
+            href={`?classId=${classId}&tab=bai-tap`}
+            label="Bài tập & Kiểm tra"
+          />
+          <EmptyState
+            icon={Ban}
+            title="Bài tập không thuộc lớp bạn phụ trách."
+          />
         </div>
       );
     }
@@ -192,21 +223,32 @@ export async function HubAssignmentsTab({
 
     return (
       <div>
-        <BackLink className="mb-4" href={`?classId=${classId}&tab=bai-tap`} label="Bài tập & Kiểm tra" />
+        <BackLink
+          className="mb-4"
+          href={`?classId=${classId}&tab=bai-tap`}
+          label="Bài tập & Kiểm tra"
+        />
         <div className="mb-4">
           <h2 className="text-lg font-bold text-foreground">{asg.title}</h2>
           <p className="text-sm text-muted-foreground">
-            Thang điểm {asg.totalPoints} · Đã nộp {submittedCount}/{roster.length}
+            Thang điểm {asg.totalPoints} · Đã nộp {submittedCount}/
+            {roster.length}
           </p>
         </div>
         <div className="t-card overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="w-full border-collapse text-left text-sm">
+            <table className="min-w-[560px] w-full border-collapse text-left text-sm">
               <thead>
                 <tr className="border-b border-border bg-muted/50 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
-                  <th scope="col" className="px-5 py-3">Học viên</th>
-                  <th scope="col" className="px-5 py-3">Tình trạng</th>
-                  <th scope="col" className="px-5 py-3">Điểm</th>
+                  <th scope="col" className="px-5 py-3">
+                    Học viên
+                  </th>
+                  <th scope="col" className="px-5 py-3">
+                    Tình trạng
+                  </th>
+                  <th scope="col" className="px-5 py-3">
+                    Điểm
+                  </th>
                   <th scope="col" className="px-5 py-3 text-right">
                     <span className="sr-only">Chấm</span>
                   </th>
@@ -216,13 +258,16 @@ export async function HubAssignmentsTab({
                 {roster.map((e) => {
                   const sub = subByStudent.get(e.student.id);
                   const st = SUB_STATUS[sub?.status ?? "NOT_SUBMITTED"];
-                  const canGrade = sub != null && SUBMITTED_STATUSES.includes(sub.status);
+                  const canGrade =
+                    sub != null && SUBMITTED_STATUSES.includes(sub.status);
                   return (
                     <tr
                       key={e.student.id}
                       className="border-b border-border/60 transition-colors last:border-0 hover:bg-muted/50"
                     >
-                      <td className="px-5 py-3.5 font-medium text-foreground">{e.student.name}</td>
+                      <td className="px-5 py-3.5 font-medium text-foreground">
+                        {e.student.name}
+                      </td>
                       <td className="px-5 py-3.5 whitespace-nowrap">
                         <span
                           className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold ${st.cls}`}
@@ -231,18 +276,22 @@ export async function HubAssignmentsTab({
                         </span>
                       </td>
                       <td className="px-5 py-3.5 whitespace-nowrap text-foreground">
-                        {sub?.score != null ? `${sub.score}/${asg.totalPoints}` : "—"}
+                        {sub?.score != null
+                          ? `${sub.score}/${asg.totalPoints}`
+                          : "—"}
                       </td>
                       <td className="px-5 py-3.5 text-right whitespace-nowrap">
                         {canGrade && sub ? (
                           <Link
                             href={`?classId=${classId}&tab=bai-tap&asgId=${asg.id}&subId=${sub.id}`}
-                            className="rounded-sm text-sm font-semibold text-orange-600 outline-none hover:text-orange-700 focus-visible:ring-2 focus-visible:ring-ring dark:text-orange-400"
+                            className="rounded-sm text-sm font-semibold text-primary-ink outline-none hover:text-primary-ink-hover focus-visible:ring-2 focus-visible:ring-ring"
                           >
                             {sub.status === "GRADED" ? "Xem / sửa" : "Chấm"} →
                           </Link>
                         ) : (
-                          <span className="text-sm text-muted-foreground">—</span>
+                          <span className="text-sm text-muted-foreground">
+                            —
+                          </span>
                         )}
                       </td>
                     </tr>
@@ -280,7 +329,9 @@ export async function HubAssignmentsTab({
       select: {
         _count: {
           select: {
-            enrollments: { where: { status: { in: ENROLLMENT_ACTIVE_STATUS_LIST } } },
+            enrollments: {
+              where: { status: { in: ENROLLMENT_ACTIVE_STATUS_LIST } },
+            },
           },
         },
       },
@@ -296,7 +347,8 @@ export async function HubAssignmentsTab({
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="text-sm text-muted-foreground">
-          Bài tập &amp; kiểm tra đã giao cho lớp. Đầu bài lấy từ thư viện Đào tạo.
+          Bài tập &amp; kiểm tra đã giao cho lớp. Đầu bài lấy từ thư viện Đào
+          tạo.
         </p>
         <Button asChild className="shrink-0">
           <Link href={assignHref}>
@@ -307,15 +359,27 @@ export async function HubAssignmentsTab({
 
       <div className="t-card overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full border-collapse text-left text-sm">
+          <table className="min-w-[880px] w-full border-collapse text-left text-sm">
             <thead>
               <tr className="border-b border-border bg-muted/50 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
-                <th scope="col" className="px-5 py-3">Nội dung</th>
-                <th scope="col" className="px-5 py-3">Hình thức</th>
-                <th scope="col" className="px-5 py-3">Nguồn</th>
-                <th scope="col" className="px-5 py-3">Hạn nộp</th>
-                <th scope="col" className="px-5 py-3">Đã nộp</th>
-                <th scope="col" className="px-5 py-3">Trạng thái</th>
+                <th scope="col" className="px-5 py-3">
+                  Nội dung
+                </th>
+                <th scope="col" className="px-5 py-3">
+                  Hình thức
+                </th>
+                <th scope="col" className="px-5 py-3">
+                  Nguồn
+                </th>
+                <th scope="col" className="px-5 py-3">
+                  Hạn nộp
+                </th>
+                <th scope="col" className="px-5 py-3">
+                  Đã nộp
+                </th>
+                <th scope="col" className="px-5 py-3">
+                  Trạng thái
+                </th>
                 <th scope="col" className="px-5 py-3 text-right">
                   <span className="sr-only">Chi tiết</span>
                 </th>
@@ -324,8 +388,12 @@ export async function HubAssignmentsTab({
             <tbody>
               {assignments.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="px-5 py-10 text-center text-sm text-muted-foreground">
-                    Chưa giao bài nào cho lớp — bấm “Giao bài” để chọn đầu bài từ thư viện.
+                  <td
+                    colSpan={7}
+                    className="px-5 py-10 text-center text-sm text-muted-foreground"
+                  >
+                    Chưa giao bài nào cho lớp — bấm “Giao bài” để chọn đầu bài
+                    từ thư viện.
                   </td>
                 </tr>
               ) : (
@@ -333,25 +401,29 @@ export async function HubAssignmentsTab({
                   const isTest = a._count.questions > 0;
                   const fromAdmin = a.templateId != null;
                   const due =
-                    a.dueAt && a.dueAt.getFullYear() >= 2000 ? dueFmt.format(a.dueAt) : "—";
+                    a.dueAt && a.dueAt.getFullYear() >= 2000
+                      ? dueFmt.format(a.dueAt)
+                      : "—";
                   return (
                     <tr
                       key={a.id}
                       className="border-b border-border/60 transition-colors last:border-0 hover:bg-muted/50"
                     >
-                      <td className="px-5 py-3.5 font-semibold text-foreground">{a.title}</td>
+                      <td className="px-5 py-3.5 font-semibold text-foreground">
+                        {a.title}
+                      </td>
                       <td className="px-5 py-3.5">
                         {isTest ? (
                           <Badge
                             variant="outline"
-                            className="border-orange-300 bg-orange-50 text-orange-700 dark:border-orange-500/40 dark:bg-orange-500/15 dark:text-orange-300"
+                            className="border-primary-soft bg-primary-soft text-primary-ink dark:border-primary"
                           >
                             Kiểm tra
                           </Badge>
                         ) : (
                           <Badge
                             variant="outline"
-                            className="border-blue-300 bg-blue-50 text-blue-700 dark:border-blue-500/40 dark:bg-blue-500/15 dark:text-blue-300"
+                            className="border-state-info-soft bg-state-info-soft text-state-info-ink dark:border-state-info"
                           >
                             Bài tập
                           </Badge>
@@ -361,16 +433,20 @@ export async function HubAssignmentsTab({
                         <span className="inline-flex items-center gap-1.5 text-muted-foreground">
                           {fromAdmin ? (
                             <>
-                              <Library className="h-3.5 w-3.5" aria-hidden /> Đào tạo
+                              <Library className="h-3.5 w-3.5" aria-hidden />{" "}
+                              Đào tạo
                             </>
                           ) : (
                             <>
-                              <PencilLine className="h-3.5 w-3.5" aria-hidden /> Tự tạo
+                              <PencilLine className="h-3.5 w-3.5" aria-hidden />{" "}
+                              Tự tạo
                             </>
                           )}
                         </span>
                       </td>
-                      <td className="px-5 py-3.5 whitespace-nowrap text-foreground">{due}</td>
+                      <td className="px-5 py-3.5 whitespace-nowrap text-foreground">
+                        {due}
+                      </td>
                       <td className="px-5 py-3.5 whitespace-nowrap font-semibold text-foreground">
                         {a._count.submissions}/{rosterCount}
                       </td>
@@ -382,7 +458,7 @@ export async function HubAssignmentsTab({
                       <td className="px-5 py-3.5 text-right whitespace-nowrap">
                         <Link
                           href={`?classId=${classId}&tab=bai-tap&asgId=${a.id}`}
-                          className="inline-flex items-center gap-1 rounded-sm text-sm font-semibold text-orange-600 outline-none hover:text-orange-700 focus-visible:ring-2 focus-visible:ring-ring dark:text-orange-400"
+                          className="inline-flex items-center gap-1 rounded-sm text-sm font-semibold text-primary-ink outline-none hover:text-primary-ink-hover focus-visible:ring-2 focus-visible:ring-ring"
                         >
                           <Eye className="h-4 w-4" aria-hidden />
                           {isTest ? "Chấm điểm" : "Chi tiết"}

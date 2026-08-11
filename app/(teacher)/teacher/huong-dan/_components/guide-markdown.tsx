@@ -20,7 +20,9 @@ const mdComponents: Components = {
     <h3 className="mt-6 text-base font-bold text-foreground">{children}</h3>
   ),
   p: ({ children }) => (
-    <p className="my-3 text-sm leading-relaxed text-foreground/90">{children}</p>
+    <p className="my-3 text-sm leading-relaxed text-foreground/90">
+      {children}
+    </p>
   ),
   ul: ({ children }) => (
     <ul className="my-3 list-disc space-y-1.5 pl-5 text-sm leading-relaxed text-foreground/90">
@@ -75,7 +77,7 @@ const mdComponents: Components = {
   ),
   table: ({ children }) => (
     <div className="my-4 overflow-x-auto rounded-xl border border-border">
-      <table className="w-full text-sm">{children}</table>
+      <table className="min-w-[560px] w-full text-sm">{children}</table>
     </div>
   ),
   thead: ({ children }) => <thead className="bg-muted/60">{children}</thead>,

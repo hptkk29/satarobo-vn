@@ -57,7 +57,9 @@ export function DraftStorePanel({
 
   function toggle(id: string) {
     setConfirmDelete(false);
-    setSelected((p) => (p.includes(id) ? p.filter((x) => x !== id) : [...p, id]));
+    setSelected((p) =>
+      p.includes(id) ? p.filter((x) => x !== id) : [...p, id],
+    );
   }
 
   function publish() {
@@ -118,7 +120,9 @@ export function DraftStorePanel({
       // Chia lô 60 như publish — cùng trần server.
       let deletedCount = 0;
       for (let i = 0; i < selected.length; i += 60) {
-        const res = await deleteDraftMediaAction({ mediaIds: selected.slice(i, i + 60) });
+        const res = await deleteDraftMediaAction({
+          mediaIds: selected.slice(i, i + 60),
+        });
         if (!res.ok) {
           toast.error(
             `${res.error ?? "Lỗi xoá ảnh"}${deletedCount > 0 ? ` (đã xoá ${deletedCount} ảnh trước đó)` : ""}`,
@@ -144,8 +148,8 @@ export function DraftStorePanel({
             Kho ảnh — chưa gửi phụ huynh ({drafts.length})
           </h2>
           <p className="text-xs text-muted-foreground">
-            Chọn ảnh, gắn học viên (hoặc đánh dấu ảnh chung cả lớp) rồi bấm “Gửi cho phụ
-            huynh”. Ảnh trong kho phụ huynh KHÔNG nhìn thấy.
+            Chọn ảnh, gắn học viên (hoặc đánh dấu ảnh chung cả lớp) rồi bấm “Gửi
+            cho phụ huynh”. Ảnh trong kho phụ huynh KHÔNG nhìn thấy.
           </p>
         </div>
         <button
@@ -155,7 +159,7 @@ export function DraftStorePanel({
             setConfirmDelete(false);
             setSelected(allSelected ? [] : drafts.map((d) => d.id));
           }}
-          className="inline-flex items-center gap-1.5 text-xs font-semibold text-orange-600 hover:text-orange-700 dark:text-orange-400"
+          className="inline-flex items-center gap-1.5 text-xs font-semibold text-primary-ink hover:text-primary-ink-hover"
         >
           {allSelected ? (
             <CheckSquare className="h-3.5 w-3.5" aria-hidden />
@@ -179,14 +183,22 @@ export function DraftStorePanel({
               onClick={() => toggle(d.id)}
               className={cn(
                 "relative overflow-hidden rounded-lg border-2 text-left transition-colors",
-                on ? "border-orange-500" : "border-transparent hover:border-border",
+                on
+                  ? "border-primary"
+                  : "border-transparent hover:border-border",
               )}
             >
-              <img src={d.url} alt="Ảnh trong kho" className="aspect-square w-full object-cover" />
+              <img
+                src={d.url}
+                alt="Ảnh trong kho"
+                className="aspect-square w-full object-cover"
+              />
               <span
                 className={cn(
                   "absolute left-1 top-1 flex h-5 w-5 items-center justify-center rounded border bg-background/90",
-                  on ? "border-orange-500 text-orange-600" : "border-border text-transparent",
+                  on
+                    ? "border-primary text-primary-ink"
+                    : "border-border text-transparent",
                 )}
                 aria-hidden
               >
@@ -241,7 +253,7 @@ export function DraftStorePanel({
               setWholeClass(e.target.checked);
               if (e.target.checked) setTagged([]);
             }}
-            className="h-4 w-4 rounded border-input text-orange-600 focus:ring-orange-400"
+            className="h-4 w-4 rounded border-input text-primary-ink focus:ring-primary"
           />
           Ảnh chung cả lớp (mọi phụ huynh trong lớp đều xem được)
         </label>
@@ -262,14 +274,16 @@ export function DraftStorePanel({
                     disabled={disabled || pending}
                     title={disabled ? "Chưa đồng ý dùng hình ảnh" : undefined}
                     onClick={() =>
-                      setTagged((p) => (on ? p.filter((x) => x !== s.id) : [...p, s.id]))
+                      setTagged((p) =>
+                        on ? p.filter((x) => x !== s.id) : [...p, s.id],
+                      )
                     }
                     className={cn(
                       "rounded-full px-2.5 py-1 text-xs font-medium",
                       disabled
                         ? "cursor-not-allowed bg-muted text-muted-foreground/50 line-through"
                         : on
-                          ? "bg-orange-600 text-white"
+                          ? "bg-primary text-white"
                           : "bg-muted text-muted-foreground hover:bg-muted/70",
                     )}
                   >
@@ -282,13 +296,21 @@ export function DraftStorePanel({
         )}
 
         <div className="flex flex-wrap items-center gap-2 pt-1">
-          <Button size="sm" onClick={publish} disabled={pending || selected.length === 0}>
+          <Button
+            size="sm"
+            onClick={publish}
+            disabled={pending || selected.length === 0}
+          >
             {pending ? (
-              <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" aria-hidden />
+              <Loader2
+                className="mr-1.5 h-3.5 w-3.5 animate-spin"
+                aria-hidden
+              />
             ) : (
               <Send className="mr-1.5 h-3.5 w-3.5" aria-hidden />
             )}
-            Gửi cho phụ huynh{selected.length > 0 ? ` (${selected.length})` : ""}
+            Gửi cho phụ huynh
+            {selected.length > 0 ? ` (${selected.length})` : ""}
           </Button>
           <Button
             size="sm"
@@ -297,7 +319,9 @@ export function DraftStorePanel({
             disabled={pending || selected.length === 0}
           >
             <Trash2 className="mr-1.5 h-3.5 w-3.5" aria-hidden />
-            {confirmDelete ? `Chắc chắn xoá ${selected.length} ảnh?` : "Xoá khỏi kho"}
+            {confirmDelete
+              ? `Chắc chắn xoá ${selected.length} ảnh?`
+              : "Xoá khỏi kho"}
           </Button>
           {confirmDelete && (
             <button

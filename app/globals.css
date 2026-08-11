@@ -107,6 +107,12 @@
   --color-state-info-soft-hover: var(--state-info-soft-hover);
   --color-primary-darker: var(--primary-darker);
   --color-primary-soft-hover: var(--primary-soft-hover);
+  /* Mực thương hiệu — dùng cho CHỮ/ICON, khác `--primary` vốn là màu NỀN nút.
+     Cần tách vì hai mặt nạ khác nhau: nền nút chỉ cần 3:1 so với canvas, còn chữ
+     cần 4.5:1. Ở site giáo viên (có chế độ Tối) token này còn tự đảo tím-đậm ⇄
+     tím-nhạt, nên `text-primary-ink` đọc được ở CẢ hai chế độ với MỘT class. */
+  --color-primary-ink: var(--primary-ink);
+  --color-primary-ink-hover: var(--primary-ink-hover);
   --color-popover-foreground: var(--popover-foreground);
   --color-popover: var(--popover);
   --color-card-foreground: var(--card-foreground);
@@ -208,6 +214,12 @@
   --state-danger-ink: #B91C1C;  /* 6.1:1 */
   --state-info-ink: #1D4ED8;    /* 6.3:1 */
   --accent-ink: #B45309;
+  /* Mực thương hiệu. Ở :root (site công khai) brand là CAM, mà cam đặc làm chữ chỉ
+     ~2.1:1 nên mực lấy bậc đậm — trùng `--accent-ink`, đúng chủ ý. `.admin-scope` và
+     site giáo viên ghi đè bằng tím. Token này ADDITIVE: chưa utility nào của trang
+     công khai dùng, nên thêm vào đây không đổi hành vi sẵn có. */
+  --primary-ink: #B45309;
+  --primary-ink-hover: #92400E;
 
   /* Bậc HOVER. Vì sao cần: bản gốc dùng cặp `bg-X-600 hover:bg-X-700`; khi cả 600 lẫn
      700 cùng ánh xạ về `-ink` thì hover TRÙNG nền, và 49 nút mất sạch phản hồi rê chuột.
@@ -661,5 +673,8 @@
   --primary-soft-hover: rgba(97, 11, 138, 0.18);
   /* Bậc sâu hơn `--primary-dark`, cho nút vốn viết `bg-purple-700 hover:bg-purple-800`. */
   --primary-darker: #3B1A5E;
+  /* Tím thương hiệu làm CHỮ trên nền trắng đo được 10.9:1 — thoải mái AA. */
+  --primary-ink: #610B8A;
+  --primary-ink-hover: #4E237D;
 
 }

@@ -14,7 +14,10 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { AttachmentUpload, type UploadedFile } from "@/components/assignments/attachment-upload";
+import {
+  AttachmentUpload,
+  type UploadedFile,
+} from "@/components/assignments/attachment-upload";
 import { createOwnTemplateAction } from "../_actions";
 
 type QType = "MULTIPLE_CHOICE" | "ESSAY";
@@ -70,14 +73,20 @@ export function CreateAssignmentForm() {
 
   // ── mutators (immutable) ──────────────────────────────────────────────────
   function patchQuestion(i: number, patch: Partial<DraftQuestion>) {
-    setQuestions((qs) => qs.map((q, idx) => (idx === i ? { ...q, ...patch } : q)));
+    setQuestions((qs) =>
+      qs.map((q, idx) => (idx === i ? { ...q, ...patch } : q)),
+    );
   }
   function setType(i: number, type: QType) {
     setQuestions((qs) =>
       qs.map((q, idx) => {
         if (idx !== i) return q;
         if (type === "MULTIPLE_CHOICE") {
-          return { ...q, type, choices: q.choices.length >= 2 ? q.choices : makeMcq().choices };
+          return {
+            ...q,
+            type,
+            choices: q.choices.length >= 2 ? q.choices : makeMcq().choices,
+          };
         }
         return { ...q, type };
       }),
@@ -87,7 +96,12 @@ export function CreateAssignmentForm() {
     setQuestions((qs) =>
       qs.map((q, idx) =>
         idx === qi
-          ? { ...q, choices: q.choices.map((c, cIdx) => (cIdx === ci ? { ...c, ...patch } : c)) }
+          ? {
+              ...q,
+              choices: q.choices.map((c, cIdx) =>
+                cIdx === ci ? { ...c, ...patch } : c,
+              ),
+            }
           : q,
       ),
     );
@@ -95,14 +109,18 @@ export function CreateAssignmentForm() {
   function addChoice(qi: number) {
     setQuestions((qs) =>
       qs.map((q, idx) =>
-        idx === qi ? { ...q, choices: [...q.choices, { text: "", isCorrect: false }] } : q,
+        idx === qi
+          ? { ...q, choices: [...q.choices, { text: "", isCorrect: false }] }
+          : q,
       ),
     );
   }
   function removeChoice(qi: number, ci: number) {
     setQuestions((qs) =>
       qs.map((q, idx) =>
-        idx === qi ? { ...q, choices: q.choices.filter((_, cIdx) => cIdx !== ci) } : q,
+        idx === qi
+          ? { ...q, choices: q.choices.filter((_, cIdx) => cIdx !== ci) }
+          : q,
       ),
     );
   }
@@ -188,10 +206,16 @@ export function CreateAssignmentForm() {
       <div className="space-y-1.5">
         <Label>Hình thức</Label>
         <div className="flex gap-2">
-          <SegBtn active={kind === "HOMEWORK"} onClick={() => setKind("HOMEWORK")}>
+          <SegBtn
+            active={kind === "HOMEWORK"}
+            onClick={() => setKind("HOMEWORK")}
+          >
             Bài tập
           </SegBtn>
-          <SegBtn active={kind === "CLASSWORK"} onClick={() => setKind("CLASSWORK")}>
+          <SegBtn
+            active={kind === "CLASSWORK"}
+            onClick={() => setKind("CLASSWORK")}
+          >
             Kiểm tra
           </SegBtn>
         </div>
@@ -224,7 +248,11 @@ export function CreateAssignmentForm() {
       {/* Đính kèm file+ảnh đề bài (BGĐ 31/07) */}
       <div className="space-y-1.5">
         <Label>Tệp đính kèm đề bài (không bắt buộc)</Label>
-        <AttachmentUpload value={attachments} onChange={setAttachments} disabled={pending} />
+        <AttachmentUpload
+          value={attachments}
+          onChange={setAttachments}
+          disabled={pending}
+        />
       </div>
 
       {/* Danh sách câu hỏi */}
@@ -234,9 +262,14 @@ export function CreateAssignmentForm() {
         </div>
 
         {questions.map((q, qi) => (
-          <div key={qi} className="rounded-xl border border-border bg-muted/30 p-3.5">
+          <div
+            key={qi}
+            className="rounded-xl border border-border bg-muted/30 p-3.5"
+          >
             <div className="mb-2.5 flex items-center justify-between gap-2">
-              <span className="text-sm font-semibold text-foreground">Câu {qi + 1}</span>
+              <span className="text-sm font-semibold text-foreground">
+                Câu {qi + 1}
+              </span>
               <div className="flex items-center gap-2">
                 <div className="flex gap-1.5">
                   <SegBtn
@@ -246,7 +279,11 @@ export function CreateAssignmentForm() {
                   >
                     Trắc nghiệm
                   </SegBtn>
-                  <SegBtn size="sm" active={q.type === "ESSAY"} onClick={() => setType(qi, "ESSAY")}>
+                  <SegBtn
+                    size="sm"
+                    active={q.type === "ESSAY"}
+                    onClick={() => setType(qi, "ESSAY")}
+                  >
                     Tự luận
                   </SegBtn>
                 </div>
@@ -256,7 +293,9 @@ export function CreateAssignmentForm() {
                   size="icon-sm"
                   className="text-muted-foreground hover:text-destructive"
                   disabled={questions.length <= 1}
-                  onClick={() => setQuestions((qs) => qs.filter((_, idx) => idx !== qi))}
+                  onClick={() =>
+                    setQuestions((qs) => qs.filter((_, idx) => idx !== qi))
+                  }
                   aria-label={`Xoá câu ${qi + 1}`}
                 >
                   <Trash2 />
@@ -278,21 +317,27 @@ export function CreateAssignmentForm() {
                   <div key={ci} className="flex items-center gap-2">
                     <button
                       type="button"
-                      onClick={() => patchChoice(qi, ci, { isCorrect: !c.isCorrect })}
+                      onClick={() =>
+                        patchChoice(qi, ci, { isCorrect: !c.isCorrect })
+                      }
                       aria-pressed={c.isCorrect}
-                      aria-label={c.isCorrect ? "Đáp án đúng" : "Đánh dấu đáp án đúng"}
+                      aria-label={
+                        c.isCorrect ? "Đáp án đúng" : "Đánh dấu đáp án đúng"
+                      }
                       className={cn(
                         "flex h-6 w-6 shrink-0 items-center justify-center rounded-full border transition-colors",
                         c.isCorrect
-                          ? "border-orange-500 bg-orange-500 text-white"
-                          : "border-input bg-background text-transparent hover:border-orange-400",
+                          ? "border-primary bg-primary text-white"
+                          : "border-input bg-background text-transparent hover:border-primary-dark",
                       )}
                     >
                       <Check className="h-3.5 w-3.5" aria-hidden />
                     </button>
                     <Input
                       value={c.text}
-                      onChange={(e) => patchChoice(qi, ci, { text: e.target.value })}
+                      onChange={(e) =>
+                        patchChoice(qi, ci, { text: e.target.value })
+                      }
                       placeholder={`Lựa chọn ${ci + 1}`}
                       className="bg-background"
                     />
@@ -312,7 +357,7 @@ export function CreateAssignmentForm() {
                 <button
                   type="button"
                   onClick={() => addChoice(qi)}
-                  className="inline-flex items-center gap-1.5 rounded-md px-1 py-0.5 text-sm font-medium text-orange-600 outline-none hover:text-orange-700 focus-visible:ring-2 focus-visible:ring-ring dark:text-orange-400"
+                  className="inline-flex items-center gap-1.5 rounded-md px-1 py-0.5 text-sm font-medium text-primary-ink outline-none hover:text-primary-ink-hover focus-visible:ring-2 focus-visible:ring-ring"
                 >
                   <Plus className="h-4 w-4" aria-hidden /> Thêm lựa chọn
                 </button>
@@ -322,10 +367,14 @@ export function CreateAssignmentForm() {
               </div>
             ) : (
               <div className="mt-3 space-y-1.5">
-                <Label className="text-xs text-muted-foreground">Đáp án mẫu (không bắt buộc)</Label>
+                <Label className="text-xs text-muted-foreground">
+                  Đáp án mẫu (không bắt buộc)
+                </Label>
                 <Textarea
                   value={q.correctAnswer}
-                  onChange={(e) => patchQuestion(qi, { correctAnswer: e.target.value })}
+                  onChange={(e) =>
+                    patchQuestion(qi, { correctAnswer: e.target.value })
+                  }
                   placeholder="Gợi ý đáp án / barem để chấm nhanh."
                   rows={2}
                   className="bg-background"
@@ -367,7 +416,7 @@ export function CreateAssignmentForm() {
   );
 }
 
-/** Nút segmented cam-only (chọn hình thức / loại câu). */
+/** Nút segmented (chọn hình thức / loại câu), màu theo token thương hiệu. */
 function SegBtn({
   active,
   onClick,
@@ -388,8 +437,8 @@ function SegBtn({
         "rounded-lg border font-medium transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring",
         size === "sm" ? "px-2.5 py-1 text-xs" : "px-3.5 py-1.5 text-sm",
         active
-          ? "border-orange-500 bg-orange-500 text-white"
-          : "border-input bg-background text-muted-foreground hover:border-orange-400 hover:text-foreground",
+          ? "border-primary bg-primary text-white"
+          : "border-input bg-background text-muted-foreground hover:border-primary-dark hover:text-foreground",
       )}
     >
       {children}

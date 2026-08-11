@@ -37,7 +37,7 @@ import {
 } from "@/app/(admin)/admin/media/actions";
 
 const selectCls =
-  "h-9 w-full rounded-md border border-input bg-background px-2 text-sm focus:border-orange-400 focus:outline-none disabled:opacity-50";
+  "h-9 w-full rounded-md border border-input bg-background px-2 text-sm focus:border-primary focus:outline-none disabled:opacity-50";
 
 // Trần 1 lô — khớp DRAFT_BATCH_MAX server (lib/lms/media-publish.ts); không import
 // từ file "use server" (chỉ async function được export qua ranh giới đó).
@@ -62,7 +62,11 @@ async function presignAndPut(f: File): Promise<UploadedFile> {
     uploadUrl: string;
     publicUrl: string;
   };
-  const put = await fetch(uploadUrl, { method: "PUT", headers: { "Content-Type": f.type }, body: f });
+  const put = await fetch(uploadUrl, {
+    method: "PUT",
+    headers: { "Content-Type": f.type },
+    body: f,
+  });
   if (!put.ok) throw new Error("Tải ảnh thất bại");
   return { fileUrl: publicUrl, fileName: f.name };
 }
@@ -103,7 +107,10 @@ export function UploadPhotoDialog({
   const [wholeClass, setWholeClass] = useState(false);
   // Batch (kho): danh sách file đã PUT xong + tiến độ đang tải.
   const [batchFiles, setBatchFiles] = useState<UploadedFile[]>([]);
-  const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
+  const [progress, setProgress] = useState<{
+    done: number;
+    total: number;
+  } | null>(null);
   const uploading = progress !== null;
 
   const nonConsentIds = new Set((ctx?.nonConsent ?? []).map((s) => s.id));
@@ -162,7 +169,9 @@ export function UploadPhotoDialog({
         setFileName(up.fileName);
         toast.success("Đã tải ảnh");
       } catch (err) {
-        toast.error(err instanceof Error ? `${f.name}: ${err.message}` : "Lỗi tải ảnh");
+        toast.error(
+          err instanceof Error ? `${f.name}: ${err.message}` : "Lỗi tải ảnh",
+        );
       } finally {
         setProgress(null);
       }
@@ -171,7 +180,9 @@ export function UploadPhotoDialog({
 
     const room = BATCH_MAX - batchFiles.length;
     if (room <= 0) {
-      toast.error(`Tối đa ${BATCH_MAX} ảnh mỗi lô — gửi lô này trước rồi tải tiếp`);
+      toast.error(
+        `Tối đa ${BATCH_MAX} ảnh mỗi lô — gửi lô này trước rồi tải tiếp`,
+      );
       return;
     }
     const queue = images.slice(0, room);
@@ -196,7 +207,9 @@ export function UploadPhotoDialog({
         }
       }
     };
-    await Promise.all(Array.from({ length: Math.min(3, queue.length) }, () => worker()));
+    await Promise.all(
+      Array.from({ length: Math.min(3, queue.length) }, () => worker()),
+    );
     setProgress(null);
     if (okFiles.length > 0) setBatchFiles((prev) => [...prev, ...okFiles]);
     if (failed.length > 0) {
@@ -283,7 +296,10 @@ export function UploadPhotoDialog({
         size={compact ? "sm" : "default"}
         variant={compact ? "outline" : "default"}
       >
-        <ImagePlus className={compact ? "mr-1 h-3.5 w-3.5" : "mr-1.5 h-4 w-4"} aria-hidden />
+        <ImagePlus
+          className={compact ? "mr-1 h-3.5 w-3.5" : "mr-1.5 h-4 w-4"}
+          aria-hidden
+        />
         {compact ? "Tải ảnh" : "Đăng ảnh lớp"}
       </Button>
       <Dialog open={open} onOpenChange={onOpenChange}>
@@ -299,16 +315,20 @@ export function UploadPhotoDialog({
 
           {loadingCtx || ctx === null ? (
             <div className="flex items-center justify-center gap-2 py-8 text-sm text-muted-foreground">
-              <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> Đang tải thông tin lớp…
+              <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> Đang tải
+              thông tin lớp…
             </div>
           ) : blocked ? (
-            <div className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700 dark:border-rose-500/30 dark:bg-rose-500/15 dark:text-rose-300">
+            <div className="rounded-lg border border-state-danger-soft bg-state-danger-soft p-3 text-sm text-state-danger-ink dark:border-state-danger">
               Bạn không phụ trách lớp này nên không thể đăng ảnh.
             </div>
           ) : (
             <div className="space-y-3">
               {/* Chọn chế độ: kho nhiều ảnh (mặc định) / đăng ngay 1 ảnh (flow cũ) */}
-              <div className="grid grid-cols-2 gap-1 rounded-lg bg-muted p-1" role="tablist">
+              <div
+                className="grid grid-cols-2 gap-1 rounded-lg bg-muted p-1"
+                role="tablist"
+              >
                 {(
                   [
                     ["batch", "Đưa vào kho (nhiều ảnh)"],
@@ -322,11 +342,7 @@ export function UploadPhotoDialog({
                     aria-selected={mode === m}
                     disabled={pending || uploading}
                     onClick={() => setMode(m)}
-                    className={`rounded-md px-2 py-1.5 text-xs font-semibold transition-colors ${
-                      mode === m
-                        ? "bg-background text-foreground shadow-sm"
-                        : "text-muted-foreground hover:text-foreground"
-                    }`}
+                    className={`rounded-md px-2 py-1.5 text-xs font-semibold transition-colors ${mode === m ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
                   >
                     {label}
                   </button>
@@ -335,14 +351,21 @@ export function UploadPhotoDialog({
 
               {/* Banner HS CHƯA đồng ý dùng hình ảnh (consent) — mirror admin media-client */}
               {ctx.nonConsent.length > 0 && (
-                <div className="flex gap-2 rounded-lg border border-amber-200 bg-amber-50 p-2.5 text-xs text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/15 dark:text-amber-200">
-                  <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
+                <div className="flex gap-2 rounded-lg border border-state-warning-soft bg-state-warning-soft p-2.5 text-xs text-state-warning-ink dark:border-state-warning">
+                  <AlertTriangle
+                    className="mt-0.5 h-4 w-4 shrink-0"
+                    aria-hidden
+                  />
                   <div>
-                    <p className="font-semibold">Học viên CHƯA đồng ý dùng hình ảnh:</p>
-                    <p className="mt-0.5">{ctx.nonConsent.map((s) => s.name).join(", ")}</p>
-                    <p className="mt-1 text-amber-700 dark:text-amber-300">
-                      Vui lòng làm mờ thủ công hoặc loại các em này khỏi khung hình.
-                      Không thể gắn thẻ các em này.
+                    <p className="font-semibold">
+                      Học viên CHƯA đồng ý dùng hình ảnh:
+                    </p>
+                    <p className="mt-0.5">
+                      {ctx.nonConsent.map((s) => s.name).join(", ")}
+                    </p>
+                    <p className="mt-1 text-state-warning-ink">
+                      Vui lòng làm mờ thủ công hoặc loại các em này khỏi khung
+                      hình. Không thể gắn thẻ các em này.
                     </p>
                   </div>
                 </div>
@@ -352,7 +375,9 @@ export function UploadPhotoDialog({
               <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                 <div className="space-y-1.5">
                   <Label htmlFor="media-session">
-                    {mode === "batch" ? "Buổi học (cả lô — tuỳ chọn)" : "Buổi học (tuỳ chọn)"}
+                    {mode === "batch"
+                      ? "Buổi học (cả lô — tuỳ chọn)"
+                      : "Buổi học (tuỳ chọn)"}
                   </Label>
                   <select
                     id="media-session"
@@ -387,7 +412,10 @@ export function UploadPhotoDialog({
                   {batchFiles.length > 0 && (
                     <div className="grid grid-cols-4 gap-1.5">
                       {batchFiles.map((f, i) => (
-                        <div key={`${f.fileUrl}-${i}`} className="group relative">
+                        <div
+                          key={`${f.fileUrl}-${i}`}
+                          className="group relative"
+                        >
                           <img
                             src={f.fileUrl}
                             alt={f.fileName}
@@ -398,7 +426,9 @@ export function UploadPhotoDialog({
                             aria-label={`Bỏ ảnh ${f.fileName} khỏi lô`}
                             disabled={pending}
                             onClick={() =>
-                              setBatchFiles((prev) => prev.filter((_, j) => j !== i))
+                              setBatchFiles((prev) =>
+                                prev.filter((_, j) => j !== i),
+                              )
                             }
                             className="absolute right-0.5 top-0.5 rounded-full bg-black/60 p-0.5 text-white opacity-0 transition-opacity focus:opacity-100 group-hover:opacity-100"
                           >
@@ -446,7 +476,13 @@ export function UploadPhotoDialog({
                         <Upload className="h-4 w-4" aria-hidden />
                       )}
                       {uploading ? "Đang tải…" : "Chọn ảnh"}
-                      <input type="file" accept="image/*" onChange={onFiles} disabled={uploading} className="hidden" />
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={onFiles}
+                        disabled={uploading}
+                        className="hidden"
+                      />
                     </label>
                   )}
 
@@ -474,7 +510,7 @@ export function UploadPhotoDialog({
                             setWholeClass(e.target.checked);
                             if (e.target.checked) setTagged([]);
                           }}
-                          className="h-4 w-4 rounded border-input text-orange-600 focus:ring-orange-400"
+                          className="h-4 w-4 rounded border-input text-primary-ink focus:ring-primary"
                         />
                         Ảnh chung cả lớp (mọi phụ huynh trong lớp đều xem được)
                       </label>
@@ -482,7 +518,8 @@ export function UploadPhotoDialog({
                       {!wholeClass && (
                         <div>
                           <p className="mb-1 text-xs font-medium text-muted-foreground">
-                            Gắn thẻ học viên (chỉ phụ huynh được gắn thẻ mới thấy ảnh)
+                            Gắn thẻ học viên (chỉ phụ huynh được gắn thẻ mới
+                            thấy ảnh)
                           </p>
                           <div className="flex flex-wrap gap-1.5">
                             {ctx.students.map((s) => {
@@ -493,19 +530,19 @@ export function UploadPhotoDialog({
                                   key={s.id}
                                   type="button"
                                   disabled={noConsent || pending}
-                                  title={noConsent ? "Chưa đồng ý dùng hình ảnh" : undefined}
+                                  title={
+                                    noConsent
+                                      ? "Chưa đồng ý dùng hình ảnh"
+                                      : undefined
+                                  }
                                   onClick={() =>
                                     setTagged((p) =>
-                                      on ? p.filter((x) => x !== s.id) : [...p, s.id],
+                                      on
+                                        ? p.filter((x) => x !== s.id)
+                                        : [...p, s.id],
                                     )
                                   }
-                                  className={`rounded-full px-2.5 py-1 text-xs font-medium ${
-                                    noConsent
-                                      ? "cursor-not-allowed bg-muted text-muted-foreground/50 line-through"
-                                      : on
-                                        ? "bg-orange-600 text-white"
-                                        : "bg-muted text-muted-foreground hover:bg-muted/70"
-                                  }`}
+                                  className={`rounded-full px-2.5 py-1 text-xs font-medium ${noConsent ? "cursor-not-allowed bg-muted text-muted-foreground/50 line-through" : on ? "bg-primary text-white" : "bg-muted text-muted-foreground hover:bg-muted/70"}`}
                                 >
                                   {s.name}
                                 </button>
@@ -524,7 +561,9 @@ export function UploadPhotoDialog({
           <DialogFooter>
             <Button
               onClick={mode === "batch" ? submitBatch : submitSingle}
-              disabled={pending || uploading || loadingCtx || ctx === null || blocked}
+              disabled={
+                pending || uploading || loadingCtx || ctx === null || blocked
+              }
             >
               {pending
                 ? "Đang gửi…"

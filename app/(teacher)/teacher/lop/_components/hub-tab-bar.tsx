@@ -51,11 +51,17 @@ export function HubTabBar({
 }) {
   return (
     <div className="mb-6 overflow-x-auto">
-      <nav className="flex min-w-max gap-1 border-b border-border" aria-label="Khu vực quản lý lớp">
+      <nav
+        className="flex min-w-max gap-1 border-b border-border"
+        aria-label="Khu vực quản lý lớp"
+      >
         {TABS.map((t) => {
           const Icon = t.icon;
           const isActive = t.key === active;
-          const badge = t.key === "diem-danh" && attendancePending > 0 ? attendancePending : null;
+          const badge =
+            t.key === "diem-danh" && attendancePending > 0
+              ? attendancePending
+              : null;
           return (
             <Link
               key={t.key}
@@ -64,14 +70,14 @@ export function HubTabBar({
               className={cn(
                 "inline-flex shrink-0 items-center gap-2 border-b-2 px-4 py-2.5 text-sm font-medium outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring",
                 isActive
-                  ? "border-orange-500 text-orange-700 dark:border-orange-400 dark:text-orange-300"
+                  ? "border-primary text-primary-ink dark:border-primary dark:text-primary-ink"
                   : "border-transparent text-muted-foreground hover:text-foreground",
               )}
             >
               <Icon className="h-4 w-4" aria-hidden />
               {t.label}
               {badge && (
-                <span className="ml-0.5 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-orange-100 px-1.5 text-xs font-bold text-orange-700 dark:bg-orange-500/20 dark:text-orange-300">
+                <span className="ml-0.5 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-primary-soft px-1.5 text-xs font-bold text-primary-ink">
                   {badge}
                 </span>
               )}

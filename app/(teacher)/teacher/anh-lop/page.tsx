@@ -33,7 +33,10 @@ import { Badge } from "@/components/ui/badge";
 import { PageHeader } from "../_components/ui/page-header";
 import { EmptyState } from "../_components/ui/empty-state";
 import { UploadPhotoDialog } from "./_components/upload-photo-dialog";
-import { DraftStorePanel, type DraftItem } from "./_components/draft-store-panel";
+import {
+  DraftStorePanel,
+  type DraftItem,
+} from "./_components/draft-store-panel";
 import { BackLink } from "../_components/ui/back-link";
 
 export const metadata = { title: "Ảnh lớp | Giáo viên Sata Robo" };
@@ -64,20 +67,20 @@ const dayKeyFmt = new Intl.DateTimeFormat("en-CA", {
 const MEDIA_STATUS: Record<MediaStatus, { label: string; cls: string }> = {
   PENDING: {
     label: "Chờ duyệt",
-    cls: "bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300",
+    cls: "bg-state-warning-soft text-state-warning-ink",
   },
   APPROVED: {
     label: "Đã duyệt",
-    cls: "bg-emerald-100 text-emerald-700 dark:bg-emerald-600/20 dark:text-emerald-200",
+    cls: "bg-state-success-soft text-state-success-ink",
   },
   REJECTED: {
     label: "Từ chối",
-    cls: "bg-rose-100 text-rose-700 dark:bg-rose-500/15 dark:text-rose-300",
+    cls: "bg-state-danger-soft text-state-danger-ink",
   },
   // Kho ảnh — GV upload cả loạt, CHƯA chọn gửi PH (không hiện portal, không vào hàng duyệt).
   DRAFT: {
     label: "Trong kho",
-    cls: "bg-sky-100 text-sky-700 dark:bg-sky-500/15 dark:text-sky-300",
+    cls: "bg-state-info-soft text-state-info-ink",
   },
 };
 
@@ -101,7 +104,12 @@ type MediaView = {
   tagNames: string[];
 };
 /** 1 nhóm album: theo buổi / theo ngày chụp / mức lớp (chưa gắn buổi). */
-type AlbumGroup = { key: string; label: string; sortKey: number; items: MediaView[] };
+type AlbumGroup = {
+  key: string;
+  label: string;
+  sortKey: number;
+  items: MediaView[];
+};
 
 export default async function TeacherClassPhotosPage({
   searchParams,
@@ -146,7 +154,9 @@ export default async function TeacherClassPhotosPage({
 
     // Buổi được ảnh tham chiếu (nhãn nhóm) — ClassSession ∈ MAKEUP_EXCEPTION_MODELS.
     const sessionIds = [
-      ...new Set(media.map((m) => m.classSessionId).filter((x): x is string => !!x)),
+      ...new Set(
+        media.map((m) => m.classSessionId).filter((x): x is string => !!x),
+      ),
     ];
     const sessions = sessionIds.length
       ? await xdb.classSession.findMany({
@@ -158,7 +168,9 @@ export default async function TeacherClassPhotosPage({
 
     // Tên HS được tag — câu 46: CHỈ name. Student vẫn scoped (không nới) → ngoài
     // tầm nhìn (hiếm, ảnh cũ HV chuyển cơ sở) hiện "?" như admin media page.
-    const studentIds = [...new Set(media.flatMap((m) => m.tags.map((t) => t.studentId)))];
+    const studentIds = [
+      ...new Set(media.flatMap((m) => m.tags.map((t) => t.studentId))),
+    ];
     const students = studentIds.length
       ? await xdb.student.findMany({
           where: { id: { in: studentIds } },
@@ -175,7 +187,9 @@ export default async function TeacherClassPhotosPage({
     const groups = new Map<string, AlbumGroup>();
     const draftItems: DraftItem[] = [];
     media.forEach((m, i) => {
-      const ses = m.classSessionId ? sessionMap.get(m.classSessionId) : undefined;
+      const ses = m.classSessionId
+        ? sessionMap.get(m.classSessionId)
+        : undefined;
       let key: string;
       let label: string;
       let sortKey: number;
@@ -271,8 +285,10 @@ export default async function TeacherClassPhotosPage({
             {ordered.map((g) => (
               <section key={g.key}>
                 <div className="mb-2 flex items-center gap-2">
-                  <Images className="h-4 w-4 text-orange-600 dark:text-orange-400" aria-hidden />
-                  <h2 className="text-sm font-bold capitalize text-foreground">{g.label}</h2>
+                  <Images className="h-4 w-4 text-primary-ink" aria-hidden />
+                  <h2 className="text-sm font-bold capitalize text-foreground">
+                    {g.label}
+                  </h2>
                   <Badge variant="outline">{g.items.length} ảnh</Badge>
                 </div>
                 <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
@@ -295,13 +311,15 @@ export default async function TeacherClassPhotosPage({
                             {MEDIA_STATUS[m.status].label}
                           </span>
                           {m.isClassWide && (
-                            <span className="rounded-full bg-blue-100 px-2 py-0.5 text-[11px] font-semibold text-blue-700 dark:bg-blue-500/15 dark:text-blue-300">
+                            <span className="rounded-full bg-state-info-soft px-2 py-0.5 text-[11px] font-semibold text-state-info-ink">
                               Ảnh chung lớp
                             </span>
                           )}
                         </div>
                         {m.caption && (
-                          <p className="line-clamp-2 text-xs text-muted-foreground">{m.caption}</p>
+                          <p className="line-clamp-2 text-xs text-muted-foreground">
+                            {m.caption}
+                          </p>
                         )}
                         {m.tagNames.length > 0 && (
                           <p className="truncate text-[11px] text-muted-foreground">
@@ -342,8 +360,12 @@ export default async function TeacherClassPhotosPage({
     { total: number; pending: number; draft: number; latest: Date | null }
   >();
   for (const s of stats) {
-    const cur =
-      statByClass.get(s.classId) ?? { total: 0, pending: 0, draft: 0, latest: null };
+    const cur = statByClass.get(s.classId) ?? {
+      total: 0,
+      pending: 0,
+      draft: 0,
+      latest: null,
+    };
     cur.total += s._count._all;
     if (s.status === "PENDING") cur.pending += s._count._all;
     if (s.status === "DRAFT") cur.draft += s._count._all;
@@ -363,18 +385,32 @@ export default async function TeacherClassPhotosPage({
       ) : (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {classes.map((c, i) => {
-            const st =
-              statByClass.get(c.id) ?? { total: 0, pending: 0, draft: 0, latest: null };
+            const st = statByClass.get(c.id) ?? {
+              total: 0,
+              pending: 0,
+              draft: 0,
+              latest: null,
+            };
             return (
               // href CHỈ-query (giữ path hiện tại): chạy đúng cả trên host giaovien
               // (clean URL /anh-lop) LẪN localhost/preview (path thật /teacher/anh-lop).
               <Link key={c.id} href={`?classId=${c.id}`} className="block">
                 <div className="t-card t-card-hover h-full overflow-hidden">
-                  <div className={cn("h-28 bg-gradient-to-br", COVERS[i % COVERS.length])} />
+                  <div
+                    className={cn(
+                      "h-28 bg-gradient-to-br",
+                      COVERS[i % COVERS.length],
+                    )}
+                  />
                   <div className="p-4">
                     <div className="flex items-center justify-between">
-                      <h2 className="font-semibold text-foreground">{c.name}</h2>
-                      <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
+                      <h2 className="font-semibold text-foreground">
+                        {c.name}
+                      </h2>
+                      <ChevronRight
+                        className="h-4 w-4 shrink-0 text-muted-foreground"
+                        aria-hidden
+                      />
                     </div>
                     <div className="mt-2 flex items-center justify-between text-sm text-muted-foreground">
                       <span className="flex items-center gap-1.5">
@@ -391,12 +427,12 @@ export default async function TeacherClassPhotosPage({
                     {(st.pending > 0 || st.draft > 0) && (
                       <div className="mt-2 flex flex-wrap gap-1.5">
                         {st.pending > 0 && (
-                          <span className="inline-block rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-700 dark:bg-amber-500/15 dark:text-amber-300">
+                          <span className="inline-block rounded-full bg-state-warning-soft px-2 py-0.5 text-[11px] font-semibold text-state-warning-ink">
                             {st.pending} chờ duyệt
                           </span>
                         )}
                         {st.draft > 0 && (
-                          <span className="inline-block rounded-full bg-sky-100 px-2 py-0.5 text-[11px] font-semibold text-sky-700 dark:bg-sky-500/15 dark:text-sky-300">
+                          <span className="inline-block rounded-full bg-state-info-soft px-2 py-0.5 text-[11px] font-semibold text-state-info-ink">
                             {st.draft} trong kho
                           </span>
                         )}

@@ -42,13 +42,15 @@ export function PreviewDialog({
           )}
 
           {template && template.questions.length === 0 && (
-            <p className="text-sm text-muted-foreground">Đề này chưa có câu hỏi nào.</p>
+            <p className="text-sm text-muted-foreground">
+              Đề này chưa có câu hỏi nào.
+            </p>
           )}
 
           {template?.questions.map((q, qi) => (
             <div key={q.id} className="rounded-xl border border-border p-4">
               <div className="mb-2 flex items-start gap-2">
-                <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-orange-100 text-xs font-bold text-orange-700 dark:bg-orange-500/15 dark:text-orange-300">
+                <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary-soft text-xs font-bold text-primary-ink">
                   {qi + 1}
                 </span>
                 <p className="whitespace-pre-wrap text-sm font-medium text-foreground">
@@ -64,7 +66,7 @@ export function PreviewDialog({
                       className={cn(
                         "flex items-center gap-2 rounded-lg border px-3 py-1.5 text-sm",
                         c.isCorrect
-                          ? "border-emerald-300 bg-emerald-50 text-emerald-800 dark:border-emerald-600/40 dark:bg-emerald-600/15 dark:text-emerald-200"
+                          ? "border-state-success-soft bg-state-success-soft text-state-success-ink dark:border-state-success dark:bg-state-success-soft dark:text-state-success-ink"
                           : "border-border text-foreground",
                       )}
                     >
@@ -73,8 +75,9 @@ export function PreviewDialog({
                       </span>
                       <span className="flex-1">{c.text}</span>
                       {c.isCorrect && (
-                        <span className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-600 dark:text-emerald-400">
-                          <Check className="h-3.5 w-3.5" aria-hidden /> Đáp án đúng
+                        <span className="inline-flex items-center gap-1 text-xs font-semibold text-state-success-ink">
+                          <Check className="h-3.5 w-3.5" aria-hidden /> Đáp án
+                          đúng
                         </span>
                       )}
                     </li>
@@ -82,11 +85,11 @@ export function PreviewDialog({
                 </ul>
               ) : (
                 <div className="mt-2 pl-8">
-                  <span className="inline-flex items-center rounded-full bg-orange-50 px-2.5 py-0.5 text-xs font-medium text-orange-700 dark:bg-orange-500/15 dark:text-orange-300">
+                  <span className="inline-flex items-center rounded-full bg-primary-soft px-2.5 py-0.5 text-xs font-medium text-primary-ink">
                     Tự luận
                   </span>
                   {q.correctAnswer ? (
-                    <div className="mt-2 rounded-lg border border-emerald-300 bg-emerald-50 px-3.5 py-2.5 text-sm text-emerald-800 dark:border-emerald-600/40 dark:bg-emerald-600/15 dark:text-emerald-200">
+                    <div className="mt-2 rounded-lg border border-state-success-soft bg-state-success-soft px-3.5 py-2.5 text-sm text-state-success-ink dark:border-state-success">
                       <p className="mb-0.5 text-xs font-semibold uppercase tracking-wide">
                         Đáp án mẫu
                       </p>

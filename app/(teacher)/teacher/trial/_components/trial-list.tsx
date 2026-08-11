@@ -4,7 +4,10 @@ import { useMemo, useState } from "react";
 import Link from "next/link";
 import { ClipboardPen, Clock, FileDown, Sparkles, Users } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { ListToolbar, type SelectFilter } from "../../_components/ui/list-toolbar";
+import {
+  ListToolbar,
+  type SelectFilter,
+} from "../../_components/ui/list-toolbar";
 import { EmptyState } from "../../_components/ui/empty-state";
 
 /** Học viên Trial (plain — câu 46: KHÔNG có phụ huynh). */
@@ -32,11 +35,11 @@ export interface TrialSlotView {
 const SESSION_STATUS: Record<string, { label: string; cls: string }> = {
   SCHEDULED: {
     label: "Đã hẹn",
-    cls: "bg-blue-100 text-blue-700 dark:bg-blue-500/15 dark:text-blue-300",
+    cls: "bg-state-info-soft text-state-info-ink",
   },
   COMPLETED: {
     label: "Đã dạy",
-    cls: "bg-emerald-100 text-emerald-700 dark:bg-emerald-600/20 dark:text-emerald-200",
+    cls: "bg-state-success-soft text-state-success-ink",
   },
 };
 
@@ -50,7 +53,10 @@ export function TrialList({ slots }: { slots: TrialSlotView[] }) {
 
   const slotOptions = useMemo<SelectFilter["options"]>(() => {
     const times = [...new Set(slots.map((s) => s.timeLabel))].sort();
-    return [{ value: ALL, label: "Tất cả khung giờ" }, ...times.map((t) => ({ value: t, label: t }))];
+    return [
+      { value: ALL, label: "Tất cả khung giờ" },
+      ...times.map((t) => ({ value: t, label: t })),
+    ];
   }, [slots]);
 
   const statusOptions: SelectFilter["options"] = [
@@ -71,13 +77,18 @@ export function TrialList({ slots }: { slots: TrialSlotView[] }) {
     const q = query.trim().toLowerCase();
     const filterStudents = q !== "" || evaluated !== ALL;
     return slots
-      .filter((s) => (slot === ALL || s.timeLabel === slot) && (status === ALL || s.status === status))
+      .filter(
+        (s) =>
+          (slot === ALL || s.timeLabel === slot) &&
+          (status === ALL || s.status === status),
+      )
       .map((s) => ({
         ...s,
         students: s.students.filter(
           (st) =>
             (!q || st.studentName.toLowerCase().includes(q)) &&
-            (evaluated === ALL || (evaluated === "da" ? st.evaluated : !st.evaluated)),
+            (evaluated === ALL ||
+              (evaluated === "da" ? st.evaluated : !st.evaluated)),
         ),
       }))
       .filter((s) => !filterStudents || s.students.length > 0);
@@ -103,12 +114,19 @@ export function TrialList({ slots }: { slots: TrialSlotView[] }) {
         filters={[
           { value: slot, onChange: setSlot, options: slotOptions },
           { value: status, onChange: setStatus, options: statusOptions },
-          { value: evaluated, onChange: setEvaluated, options: evaluatedOptions },
+          {
+            value: evaluated,
+            onChange: setEvaluated,
+            options: evaluatedOptions,
+          },
         ]}
       />
 
       {slots.length === 0 ? (
-        <EmptyState icon={Sparkles} title="Bạn chưa phụ trách buổi Trial nào." />
+        <EmptyState
+          icon={Sparkles}
+          title="Bạn chưa phụ trách buổi Trial nào."
+        />
       ) : byDate.length === 0 ? (
         <EmptyState
           icon={Sparkles}
@@ -124,7 +142,8 @@ export function TrialList({ slots }: { slots: TrialSlotView[] }) {
                   {day.dateLabel}
                 </h2>
                 <span className="text-xs text-muted-foreground">
-                  {day.slots.reduce((n, s) => n + s.students.length, 0)} học viên
+                  {day.slots.reduce((n, s) => n + s.students.length, 0)} học
+                  viên
                 </span>
               </div>
 
@@ -136,9 +155,13 @@ export function TrialList({ slots }: { slots: TrialSlotView[] }) {
                 return (
                   <div key={s.sessionId} className="t-card overflow-hidden">
                     <header className="flex flex-wrap items-center gap-2 border-b border-border bg-muted/40 px-5 py-3">
-                      <Clock className="h-4 w-4 text-orange-500" aria-hidden />
-                      <span className="text-sm font-bold text-foreground">{s.timeLabel}</span>
-                      <span className="text-sm text-muted-foreground">· {s.trialClassName}</span>
+                      <Clock className="h-4 w-4 text-primary-ink" aria-hidden />
+                      <span className="text-sm font-bold text-foreground">
+                        {s.timeLabel}
+                      </span>
+                      <span className="text-sm text-muted-foreground">
+                        · {s.trialClassName}
+                      </span>
                       <span className="flex items-center gap-1 text-xs text-muted-foreground">
                         <Users className="h-3.5 w-3.5" aria-hidden />
                         {s.students.length} học viên
@@ -159,12 +182,21 @@ export function TrialList({ slots }: { slots: TrialSlotView[] }) {
                       </p>
                     ) : (
                       <div className="overflow-x-auto">
-                        <table className="w-full border-collapse text-left text-sm">
+                        <table className="min-w-[560px] w-full border-collapse text-left text-sm">
                           <thead>
                             <tr className="border-b border-border text-xs font-semibold tracking-wide text-muted-foreground uppercase">
-                              <th scope="col" className="px-5 py-2.5">Học viên</th>
-                              <th scope="col" className="px-5 py-2.5">Khóa học</th>
-                              <th scope="col" className="px-5 py-2.5 text-right">Đánh giá</th>
+                              <th scope="col" className="px-5 py-2.5">
+                                Học viên
+                              </th>
+                              <th scope="col" className="px-5 py-2.5">
+                                Khóa học
+                              </th>
+                              <th
+                                scope="col"
+                                className="px-5 py-2.5 text-right"
+                              >
+                                Đánh giá
+                              </th>
                             </tr>
                           </thead>
                           <tbody>
@@ -174,9 +206,13 @@ export function TrialList({ slots }: { slots: TrialSlotView[] }) {
                                 className="border-b border-border/60 last:border-0"
                               >
                                 <td className="px-5 py-3">
-                                  <p className="font-medium text-foreground">{st2.studentName}</p>
+                                  <p className="font-medium text-foreground">
+                                    {st2.studentName}
+                                  </p>
                                   {st2.birthYear && (
-                                    <p className="text-xs text-muted-foreground">{st2.birthYear}</p>
+                                    <p className="text-xs text-muted-foreground">
+                                      {st2.birthYear}
+                                    </p>
                                   )}
                                 </td>
                                 <td className="px-5 py-3 whitespace-nowrap text-muted-foreground">
@@ -190,11 +226,16 @@ export function TrialList({ slots }: { slots: TrialSlotView[] }) {
                                         "inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring",
                                         st2.evaluated
                                           ? "border border-border text-foreground hover:bg-muted"
-                                          : "bg-orange-600 text-white hover:bg-orange-700",
+                                          : "bg-primary text-white hover:bg-primary-darker",
                                       )}
                                     >
-                                      <ClipboardPen className="h-3.5 w-3.5" aria-hidden />
-                                      {st2.evaluated ? "Xem phiếu" : "Nhập phiếu"}
+                                      <ClipboardPen
+                                        className="h-3.5 w-3.5"
+                                        aria-hidden
+                                      />
+                                      {st2.evaluated
+                                        ? "Xem phiếu"
+                                        : "Nhập phiếu"}
                                     </Link>
                                     {st2.evaluated && (
                                       <a
@@ -203,7 +244,11 @@ export function TrialList({ slots }: { slots: TrialSlotView[] }) {
                                         rel="noopener noreferrer"
                                         className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs font-semibold text-foreground outline-none transition-colors hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring"
                                       >
-                                        <FileDown className="h-3.5 w-3.5" aria-hidden /> Xuất PDF
+                                        <FileDown
+                                          className="h-3.5 w-3.5"
+                                          aria-hidden
+                                        />{" "}
+                                        Xuất PDF
                                       </a>
                                     )}
                                   </div>

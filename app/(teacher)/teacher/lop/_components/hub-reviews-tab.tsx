@@ -11,13 +11,22 @@
 // classId. Roster đọc QUA quan hệ class (enrollment dev centerId=null bị scopedDb lọc).
 // ⚠️ Câu 46: payload client CHỈ tên HV — không SĐT/email/tên PH.
 import Link from "next/link";
-import { ArrowLeft, Ban, CalendarX2, ClipboardCheck, ClipboardPen } from "lucide-react";
+import {
+  ArrowLeft,
+  Ban,
+  CalendarX2,
+  ClipboardCheck,
+  ClipboardPen,
+} from "lucide-react";
 import type { AttendanceStatus } from "@prisma/client";
 import type { Actor } from "@/lib/auth/actor";
 import { scopedDb } from "@/lib/db-scope";
 import { ENROLLMENT_ACTIVE_STATUS_LIST } from "@/lib/enrollment-status";
 import { summarizeSessionFeedback } from "@/lib/lms/session-feedback-roster";
-import { normalizeEvalNotes, normalizeEvalRatings } from "@/lib/lms/session-eval-rubric";
+import {
+  normalizeEvalNotes,
+  normalizeEvalRatings,
+} from "@/lib/lms/session-eval-rubric";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "../../_components/ui/empty-state";
@@ -43,24 +52,27 @@ const ATTENDED: AttendanceStatus[] = ["PRESENT", "LATE"];
 const ATT_BADGE: Record<AttendanceStatus, { label: string; cls: string }> = {
   PRESENT: {
     label: "Có mặt",
-    cls: "bg-emerald-100 text-emerald-700 dark:bg-emerald-600/20 dark:text-emerald-200",
+    cls: "bg-state-success-soft text-state-success-ink",
   },
   LATE: {
     label: "Đi muộn",
-    cls: "bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300",
+    cls: "bg-state-warning-soft text-state-warning-ink",
   },
-  ABSENT: { label: "Vắng", cls: "bg-red-100 text-red-700 dark:bg-red-500/15 dark:text-red-300" },
+  ABSENT: {
+    label: "Vắng",
+    cls: "bg-state-danger-soft text-state-danger-ink dark:bg-state-danger-soft dark:text-state-danger-ink",
+  },
   EXCUSED: {
     label: "Có phép",
-    cls: "bg-blue-100 text-blue-700 dark:bg-blue-500/15 dark:text-blue-300",
+    cls: "bg-state-info-soft text-state-info-ink",
   },
   ABSENT_EXCUSED: {
     label: "Vắng có phép",
-    cls: "bg-blue-100 text-blue-700 dark:bg-blue-500/15 dark:text-blue-300",
+    cls: "bg-state-info-soft text-state-info-ink",
   },
   ABSENT_UNEXCUSED: {
     label: "Vắng",
-    cls: "bg-red-100 text-red-700 dark:bg-red-500/15 dark:text-red-300",
+    cls: "bg-state-danger-soft text-state-danger-ink",
   },
 };
 
@@ -76,7 +88,9 @@ const VN_OFFSET_MS = 7 * 60 * 60 * 1000; // Asia/Ho_Chi_Minh (UTC+7)
 /** Mốc hết hôm nay (giờ VN) dạng ms — buổi ≤ mốc này = đã diễn ra. */
 function vnTodayEndMs(now = new Date()): number {
   const vn = new Date(now.getTime() + VN_OFFSET_MS);
-  const startUtc = Date.UTC(vn.getUTCFullYear(), vn.getUTCMonth(), vn.getUTCDate()) - VN_OFFSET_MS;
+  const startUtc =
+    Date.UTC(vn.getUTCFullYear(), vn.getUTCMonth(), vn.getUTCDate()) -
+    VN_OFFSET_MS;
   return startUtc + 24 * 60 * 60 * 1000;
 }
 
@@ -120,7 +134,10 @@ export async function HubReviewsTab({
       return (
         <div>
           <BackToList classId={classId} />
-          <EmptyState icon={Ban} title="Buổi học không thuộc lớp bạn phụ trách." />
+          <EmptyState
+            icon={Ban}
+            title="Buổi học không thuộc lớp bạn phụ trách."
+          />
         </div>
       );
     }
@@ -132,7 +149,13 @@ export async function HubReviewsTab({
       }),
       sdb.studentSessionFeedback.findMany({
         where: { classSessionId: reviewSessionId },
-        select: { studentId: true, projectName: true, notes: true, rubric: true, comment: true },
+        select: {
+          studentId: true,
+          projectName: true,
+          notes: true,
+          rubric: true,
+          comment: true,
+        },
       }),
       sdb.class.findUnique({
         where: { id: classId },
@@ -140,7 +163,14 @@ export async function HubReviewsTab({
           enrollments: {
             where: { status: { in: ENROLLMENT_ACTIVE_STATUS_LIST } },
             select: {
-              student: { select: { id: true, name: true, studentCode: true, avatarUrl: true } },
+              student: {
+                select: {
+                  id: true,
+                  name: true,
+                  studentCode: true,
+                  avatarUrl: true,
+                },
+              },
             },
             orderBy: { student: { name: "asc" } },
           },
@@ -154,7 +184,10 @@ export async function HubReviewsTab({
     const fbMap = new Map(fbRows.map((f) => [f.studentId, f]));
 
     const canEval = (studentId: string) =>
-      !attendanceTaken || ATTENDED.includes((attMap.get(studentId) ?? "ABSENT") as AttendanceStatus);
+      !attendanceTaken ||
+      ATTENDED.includes(
+        (attMap.get(studentId) ?? "ABSENT") as AttendanceStatus,
+      );
     const evaluable = roster.filter((s) => canEval(s.id));
     const reviewed = evaluable.filter((s) => {
       const fb = fbMap.get(s.id);
@@ -177,18 +210,18 @@ export async function HubReviewsTab({
           </div>
           <Badge
             variant="outline"
-            className="border-orange-300 bg-orange-50 text-orange-700 dark:border-orange-500/40 dark:bg-orange-500/15 dark:text-orange-300"
+            className="border-primary-soft bg-primary-soft text-primary-ink dark:border-primary"
           >
             Nhận xét {reviewed}/{evaluable.length}
           </Badge>
         </div>
 
         {!attendanceTaken && (
-          <div className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200">
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-state-warning-soft bg-state-warning-soft px-3 py-2 text-sm text-state-warning-ink dark:border-state-warning">
             <span>Buổi chưa điểm danh — đang hiện toàn bộ lớp.</span>
             <Link
               href={`?classId=${classId}&sessionId=${reviewSessionId}`}
-              className="inline-flex shrink-0 items-center gap-1 rounded-lg border border-amber-300 bg-white px-2.5 py-1 text-xs font-semibold text-amber-800 transition-colors hover:bg-amber-100 dark:border-amber-500/40 dark:bg-transparent dark:text-amber-200 dark:hover:bg-amber-500/10"
+              className="inline-flex shrink-0 items-center gap-1 rounded-lg border border-state-warning-soft bg-white px-2.5 py-1 text-xs font-semibold text-state-warning-ink transition-colors hover:bg-state-warning-soft-hover dark:border-state-warning dark:bg-transparent"
             >
               <ClipboardCheck className="h-3.5 w-3.5" aria-hidden />
               Điểm danh buổi này
@@ -197,25 +230,40 @@ export async function HubReviewsTab({
         )}
 
         {roster.length === 0 ? (
-          <EmptyState icon={CalendarX2} title="Lớp chưa có học viên đang học." />
+          <EmptyState
+            icon={CalendarX2}
+            title="Lớp chưa có học viên đang học."
+          />
         ) : (
           <div className="t-card overflow-hidden">
             <div className="overflow-x-auto">
-              <table className="w-full border-collapse text-left text-sm">
+              <table className="min-w-[560px] w-full border-collapse text-left text-sm">
                 <thead>
                   <tr className="border-b border-border bg-muted/50 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
-                    <th scope="col" className="px-5 py-3">Học viên</th>
-                    <th scope="col" className="px-5 py-3">Điểm danh</th>
-                    <th scope="col" className="px-5 py-3">Ảnh buổi học</th>
-                    <th scope="col" className="px-5 py-3 text-right">Nhận xét</th>
+                    <th scope="col" className="px-5 py-3">
+                      Học viên
+                    </th>
+                    <th scope="col" className="px-5 py-3">
+                      Điểm danh
+                    </th>
+                    <th scope="col" className="px-5 py-3">
+                      Ảnh buổi học
+                    </th>
+                    <th scope="col" className="px-5 py-3 text-right">
+                      Nhận xét
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
                   {roster.map((st) => {
-                    const status = attMap.get(st.id) as AttendanceStatus | undefined;
+                    const status = attMap.get(st.id) as
+                      | AttendanceStatus
+                      | undefined;
                     const evalOk = canEval(st.id);
                     const fb = fbMap.get(st.id);
-                    const done = Boolean(fb && (fb.rubric != null || fb.notes != null));
+                    const done = Boolean(
+                      fb && (fb.rubric != null || fb.notes != null),
+                    );
                     return (
                       <tr
                         key={st.id}
@@ -233,12 +281,14 @@ export async function HubReviewsTab({
                                 className="h-10 w-10 shrink-0 rounded-full border border-border object-cover"
                               />
                             ) : (
-                              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-orange-100 text-xs font-semibold text-orange-700 dark:bg-orange-500/15 dark:text-orange-300">
+                              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary-soft text-xs font-semibold text-primary-ink">
                                 {initials(st.name)}
                               </span>
                             )}
                             <div className="min-w-0">
-                              <p className="truncate font-semibold text-foreground">{st.name}</p>
+                              <p className="truncate font-semibold text-foreground">
+                                {st.name}
+                              </p>
                               {st.studentCode && (
                                 <p className="truncate text-xs text-muted-foreground">
                                   {st.studentCode}
@@ -270,7 +320,9 @@ export async function HubReviewsTab({
                               compact
                             />
                           ) : (
-                            <span className="text-xs text-muted-foreground">—</span>
+                            <span className="text-xs text-muted-foreground">
+                              —
+                            </span>
                           )}
                         </td>
                         <td className="px-5 py-3.5 text-right">
@@ -319,15 +371,24 @@ export async function HubReviewsTab({
       startTime: true,
       endTime: true,
       _count: {
-        select: { enrollments: { where: { status: { in: ENROLLMENT_ACTIVE_STATUS_LIST } } } },
+        select: {
+          enrollments: {
+            where: { status: { in: ENROLLMENT_ACTIVE_STATUS_LIST } },
+          },
+        },
       },
     },
   });
   const rosterCount = cls?._count.enrollments ?? 0;
-  const timeLabel = cls?.startTime && cls?.endTime ? `${cls.startTime}-${cls.endTime}` : "";
+  const timeLabel =
+    cls?.startTime && cls?.endTime ? `${cls.startTime}-${cls.endTime}` : "";
 
   const sessions = await sdb.classSession.findMany({
-    where: { classId, status: { not: "CANCELLED" }, date: { lte: new Date(vnTodayEndMs()) } },
+    where: {
+      classId,
+      status: { not: "CANCELLED" },
+      date: { lte: new Date(vnTodayEndMs()) },
+    },
     select: {
       id: true,
       date: true,
@@ -346,7 +407,9 @@ export async function HubReviewsTab({
           where: { sessionId: { in: ids } },
           select: { sessionId: true, studentId: true, status: true },
         })
-      : Promise.resolve([] as { sessionId: string; studentId: string; status: string }[]),
+      : Promise.resolve(
+          [] as { sessionId: string; studentId: string; status: string }[],
+        ),
     ids.length
       ? sdb.studentSessionFeedback.findMany({
           where: { classSessionId: { in: ids } },
@@ -354,7 +417,10 @@ export async function HubReviewsTab({
         })
       : Promise.resolve([] as { classSessionId: string; studentId: string }[]),
   ]);
-  const attBySession = new Map<string, { studentId: string; status: string }[]>();
+  const attBySession = new Map<
+    string,
+    { studentId: string; status: string }[]
+  >();
   for (const a of attRows) {
     const list = attBySession.get(a.sessionId) ?? [];
     list.push({ studentId: a.studentId, status: a.status });
@@ -368,19 +434,32 @@ export async function HubReviewsTab({
   }
 
   if (sessions.length === 0) {
-    return <EmptyState icon={CalendarX2} title="Lớp chưa có buổi học nào đã diễn ra." />;
+    return (
+      <EmptyState
+        icon={CalendarX2}
+        title="Lớp chưa có buổi học nào đã diễn ra."
+      />
+    );
   }
 
   return (
     <div className="t-card overflow-hidden">
       <div className="overflow-x-auto">
-        <table className="w-full border-collapse text-left text-sm">
+        <table className="min-w-[660px] w-full border-collapse text-left text-sm">
           <thead>
             <tr className="border-b border-border bg-muted/50 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
-              <th scope="col" className="px-5 py-3">Buổi học</th>
-              <th scope="col" className="px-5 py-3">Ngày · Giờ</th>
-              <th scope="col" className="px-5 py-3">Đi học</th>
-              <th scope="col" className="px-5 py-3">Nhận xét</th>
+              <th scope="col" className="px-5 py-3">
+                Buổi học
+              </th>
+              <th scope="col" className="px-5 py-3">
+                Ngày · Giờ
+              </th>
+              <th scope="col" className="px-5 py-3">
+                Đi học
+              </th>
+              <th scope="col" className="px-5 py-3">
+                Nhận xét
+              </th>
               <th scope="col" className="px-5 py-3 text-right">
                 <span className="sr-only">Thao tác</span>
               </th>
@@ -399,32 +478,47 @@ export async function HubReviewsTab({
                   className="border-b border-border/60 transition-colors last:border-0 hover:bg-muted/50"
                 >
                   <td className="px-5 py-3.5">
-                    <p className="font-semibold text-foreground">{s.topic ?? "Buổi học"}</p>
-                    {roomLabel && <p className="text-xs text-muted-foreground">Phòng {roomLabel}</p>}
+                    <p className="font-semibold text-foreground">
+                      {s.topic ?? "Buổi học"}
+                    </p>
+                    {roomLabel && (
+                      <p className="text-xs text-muted-foreground">
+                        Phòng {roomLabel}
+                      </p>
+                    )}
                   </td>
                   <td className="px-5 py-3.5 whitespace-nowrap">
                     <p className="text-foreground">{dayFmt.format(s.date)}</p>
-                    {timeLabel && <p className="text-xs text-muted-foreground">{timeLabel}</p>}
+                    {timeLabel && (
+                      <p className="text-xs text-muted-foreground">
+                        {timeLabel}
+                      </p>
+                    )}
                   </td>
                   <td className="px-5 py-3.5 whitespace-nowrap font-semibold text-foreground">
-                    {stat.attendanceTaken ? `${stat.attended}/${rosterCount}` : "—"}
+                    {stat.attendanceTaken
+                      ? `${stat.attended}/${rosterCount}`
+                      : "—"}
                   </td>
                   <td className="px-5 py-3.5 whitespace-nowrap">
                     {!stat.attendanceTaken ? (
-                      <Badge variant="outline" className="text-muted-foreground">
+                      <Badge
+                        variant="outline"
+                        className="text-muted-foreground"
+                      >
                         Chưa điểm danh
                       </Badge>
                     ) : stat.complete ? (
                       <Badge
                         variant="outline"
-                        className="border-emerald-300 bg-emerald-50 text-emerald-700 dark:border-emerald-500/40 dark:bg-emerald-600/15 dark:text-emerald-200"
+                        className="border-state-success-soft bg-state-success-soft text-state-success-ink dark:border-state-success"
                       >
                         Đã nhận xét
                       </Badge>
                     ) : (
                       <Badge
                         variant="outline"
-                        className="border-amber-300 bg-amber-50 text-amber-700 dark:border-amber-500/40 dark:bg-amber-500/15 dark:text-amber-300"
+                        className="border-state-warning-soft bg-state-warning-soft text-state-warning-ink dark:border-state-warning"
                       >
                         {stat.reviewed}/{stat.attended} HV
                       </Badge>
@@ -436,7 +530,7 @@ export async function HubReviewsTab({
                       className={
                         stat.complete
                           ? "inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs font-semibold text-foreground outline-none transition-colors hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring"
-                          : "inline-flex items-center gap-1.5 rounded-lg bg-orange-600 px-3 py-1.5 text-xs font-semibold text-white outline-none transition-colors hover:bg-orange-700 focus-visible:ring-2 focus-visible:ring-ring"
+                          : "inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-white outline-none transition-colors hover:bg-primary-darker focus-visible:ring-2 focus-visible:ring-ring"
                       }
                     >
                       <ClipboardPen className="h-3.5 w-3.5" aria-hidden />

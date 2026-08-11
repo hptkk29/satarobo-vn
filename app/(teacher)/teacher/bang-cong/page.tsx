@@ -48,7 +48,9 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 
 function vnTodayUtc(now = new Date()): Date {
   const vn = new Date(now.getTime() + VN_OFFSET_MS);
-  return new Date(Date.UTC(vn.getUTCFullYear(), vn.getUTCMonth(), vn.getUTCDate()));
+  return new Date(
+    Date.UTC(vn.getUTCFullYear(), vn.getUTCMonth(), vn.getUTCDate()),
+  );
 }
 function startOfMonthUtc(d: Date): Date {
   return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 1));
@@ -83,7 +85,8 @@ function hoursBetween(start: string | null, end: string | null): number {
   if (a === null || b === null || b <= a) return 0;
   return (b - a) / 60;
 }
-const fmtHours = (h: number) => h.toLocaleString("vi-VN", { maximumFractionDigits: 1 });
+const fmtHours = (h: number) =>
+  h.toLocaleString("vi-VN", { maximumFractionDigits: 1 });
 /** "sáng" (<12) · "chiều" (12–17) · "tối" (≥17) từ giờ bắt đầu — đặt tên "Ca dạy …". */
 function shiftOfDay(start: string | null): string {
   const m = parseHHmm(start);
@@ -113,22 +116,22 @@ const dateFmt = new Intl.DateTimeFormat("en-CA", {
 const ADJUST_STATUS: Record<AdjustStatus, { label: string; cls: string }> = {
   PENDING: {
     label: "Chờ duyệt",
-    cls: "bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300",
+    cls: "bg-state-warning-soft text-state-warning-ink",
   },
   APPROVED: {
     label: "Đã duyệt",
-    cls: "bg-emerald-100 text-emerald-700 dark:bg-emerald-600/20 dark:text-emerald-200",
+    cls: "bg-state-success-soft text-state-success-ink",
   },
   REJECTED: {
     label: "Từ chối",
-    cls: "bg-red-100 text-red-700 dark:bg-red-500/15 dark:text-red-300",
+    cls: "bg-state-danger-soft text-state-danger-ink",
   },
 };
 
 type CaType = "Dạy" | "Trải nghiệm" | "Ca làm";
 const TYPE_TONE: Record<CaType, string> = {
-  Dạy: "bg-blue-100 text-blue-700 dark:bg-blue-500/15 dark:text-blue-300",
-  "Trải nghiệm": "bg-orange-100 text-orange-700 dark:bg-orange-500/15 dark:text-orange-300",
+  Dạy: "bg-state-info-soft text-state-info-ink",
+  "Trải nghiệm": "bg-primary-soft text-primary-ink",
   "Ca làm": "bg-muted text-muted-foreground",
 };
 
@@ -168,31 +171,40 @@ export default async function TeacherTimesheetPage({
     centerId: session.user.centerId,
   });
 
-  const [sessions, trials, shiftRows, holidays, adjustRequests] = await Promise.all([
-    // Buổi lớp trong tháng (mọi trạng thái trừ hủy) — lớp mình / thực dạy.
-    xdb.classSession.findMany({
-      where: {
-        status: { not: "CANCELLED" },
-        date: { gte: toVnInstant(monthStart), lt: toVnInstant(nextMonth) },
-        OR: [{ classId: { in: classIds } }, { actualTeacherId: session.user.id }],
-      },
-      select: {
-        id: true,
-        date: true,
-        status: true,
-        class: {
-          select: { name: true, startTime: true, endTime: true, center: { select: { name: true } } },
+  const [sessions, trials, shiftRows, holidays, adjustRequests] =
+    await Promise.all([
+      // Buổi lớp trong tháng (mọi trạng thái trừ hủy) — lớp mình / thực dạy.
+      xdb.classSession.findMany({
+        where: {
+          status: { not: "CANCELLED" },
+          date: { gte: toVnInstant(monthStart), lt: toVnInstant(nextMonth) },
+          OR: [
+            { classId: { in: classIds } },
+            { actualTeacherId: session.user.id },
+          ],
         },
-      },
-      orderBy: { date: "asc" },
-      take: 500,
-    }),
-    getTeacherTrialSessions(session.user.id, monthStart, nextMonth),
-    getOwnShiftRegistrations(session.user.id, monthStart, nextMonth),
-    // Vá 24/07 — getVisibleHolidays nhận actor, tự tính per-model scope Holiday.
-    getVisibleHolidays(actor, monthStart, nextMonth),
-    getOwnAdjustmentRequests(session.user.id, monthStart, nextMonth),
-  ]);
+        select: {
+          id: true,
+          date: true,
+          status: true,
+          class: {
+            select: {
+              name: true,
+              startTime: true,
+              endTime: true,
+              center: { select: { name: true } },
+            },
+          },
+        },
+        orderBy: { date: "asc" },
+        take: 500,
+      }),
+      getTeacherTrialSessions(session.user.id, monthStart, nextMonth),
+      getOwnShiftRegistrations(session.user.id, monthStart, nextMonth),
+      // Vá 24/07 — getVisibleHolidays nhận actor, tự tính per-model scope Holiday.
+      getVisibleHolidays(actor, monthStart, nextMonth),
+      getOwnAdjustmentRequests(session.user.id, monthStart, nextMonth),
+    ]);
 
   // ── Chuẩn hoá về CA rows ──────────────────────────────────────────────────────
   const rows: CaRow[] = [];
@@ -203,11 +215,15 @@ export default async function TeacherTimesheetPage({
     rows.push({
       key: `d-${s.id}`,
       name: `Ca dạy ${shiftOfDay(s.class.startTime)}`.trim(),
-      subtitle: [s.class.name, s.class.center?.name].filter(Boolean).join(" · ") || null,
+      subtitle:
+        [s.class.name, s.class.center?.name].filter(Boolean).join(" · ") ||
+        null,
       type: "Dạy",
       dateLabel: dk,
       timeLabel:
-        s.class.startTime && s.class.endTime ? `${s.class.startTime}–${s.class.endTime}` : "—",
+        s.class.startTime && s.class.endTime
+          ? `${s.class.startTime}–${s.class.endTime}`
+          : "—",
       hours: hrs > 0 ? hrs : null,
       done: (s.status as SessionStatus) === "COMPLETED" || dk < todayKey,
     });
@@ -246,7 +262,11 @@ export default async function TeacherTimesheetPage({
     }
   }
 
-  rows.sort((a, b) => a.dateLabel.localeCompare(b.dateLabel) || a.timeLabel.localeCompare(b.timeLabel));
+  rows.sort(
+    (a, b) =>
+      a.dateLabel.localeCompare(b.dateLabel) ||
+      a.timeLabel.localeCompare(b.timeLabel),
+  );
 
   // ── Tổng hợp (4 stat) ─────────────────────────────────────────────────────────
   const teachingCount = rows.filter((r) => r.type === "Dạy").length;
@@ -255,8 +275,12 @@ export default async function TeacherTimesheetPage({
   const holidayDays = new Set<string>();
   for (const h of holidays) {
     const start = Math.max(h.date.getTime(), monthStart.getTime());
-    const end = Math.min((h.endDate ?? h.date).getTime(), nextMonth.getTime() - DAY_MS);
-    for (let t = start; t <= end; t += DAY_MS) holidayDays.add(isoKey(new Date(t)));
+    const end = Math.min(
+      (h.endDate ?? h.date).getTime(),
+      nextMonth.getTime() - DAY_MS,
+    );
+    for (let t = start; t <= end; t += DAY_MS)
+      holidayDays.add(isoKey(new Date(t)));
   }
 
   const monthLabel = `Tháng ${monthStart.getUTCMonth() + 1}/${monthStart.getUTCFullYear()}`;
@@ -268,7 +292,9 @@ export default async function TeacherTimesheetPage({
         subtitle="Số ca và giờ công theo tháng — giờ dạy/trải nghiệm ước tính từ khung giờ, không phải công chính thức."
         actions={
           canRequestAdjust ? (
-            <AdjustRequestDialog defaultDate={todayUtc.toISOString().slice(0, 10)} />
+            <AdjustRequestDialog
+              defaultDate={todayUtc.toISOString().slice(0, 10)}
+            />
           ) : null
         }
       />
@@ -276,7 +302,10 @@ export default async function TeacherTimesheetPage({
       <div className="space-y-6">
         {/* Chọn tháng */}
         <div className="flex flex-wrap items-center gap-2">
-          <NavLink href={`?thang=${monthKey(addMonthsUtc(monthStart, -1))}`} aria="Tháng trước">
+          <NavLink
+            href={`?thang=${monthKey(addMonthsUtc(monthStart, -1))}`}
+            aria="Tháng trước"
+          >
             <ChevronLeft className="h-4 w-4" />
           </NavLink>
           <NavLink href={`?thang=${monthKey(nextMonth)}`} aria="Tháng sau">
@@ -288,7 +317,9 @@ export default async function TeacherTimesheetPage({
           >
             Tháng này
           </Link>
-          <p className="ml-2 text-base font-bold text-foreground">{monthLabel}</p>
+          <p className="ml-2 text-base font-bold text-foreground">
+            {monthLabel}
+          </p>
           {isCurrentMonth && (
             <span className="rounded bg-muted px-2 py-0.5 text-xs text-muted-foreground">
               tạm tính đến hôm nay
@@ -298,10 +329,30 @@ export default async function TeacherTimesheetPage({
 
         {/* 4 stat (ẩn OT/Đi muộn/Chuyên cần — không có dữ liệu thật) */}
         <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-          <StatCard icon={Layers} value={rows.length} label="Số ca" tone="brand" />
-          <StatCard icon={GraduationCap} value={teachingCount} label="Buổi dạy" tone="green" />
-          <StatCard icon={Clock} value={`${fmtHours(totalHours)}h`} label="Tổng giờ công" tone="blue" />
-          <StatCard icon={CalendarOff} value={holidayDays.size} label="Ngày nghỉ" tone="amber" />
+          <StatCard
+            icon={Layers}
+            value={rows.length}
+            label="Số ca"
+            tone="brand"
+          />
+          <StatCard
+            icon={GraduationCap}
+            value={teachingCount}
+            label="Buổi dạy"
+            tone="green"
+          />
+          <StatCard
+            icon={Clock}
+            value={`${fmtHours(totalHours)}h`}
+            label="Tổng giờ công"
+            tone="blue"
+          />
+          <StatCard
+            icon={CalendarOff}
+            value={holidayDays.size}
+            label="Ngày nghỉ"
+            tone="amber"
+          />
         </div>
 
         {/* Chi tiết ca */}
@@ -317,15 +368,27 @@ export default async function TeacherTimesheetPage({
           ) : (
             <div className="t-card overflow-hidden">
               <div className="overflow-x-auto">
-                <table className="w-full border-collapse text-left text-sm">
+                <table className="min-w-[770px] w-full border-collapse text-left text-sm">
                   <thead>
                     <tr className="border-b border-border bg-muted/50 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
-                      <th scope="col" className="px-4 py-3">Ca</th>
-                      <th scope="col" className="px-4 py-3">Loại</th>
-                      <th scope="col" className="px-4 py-3">Ngày</th>
-                      <th scope="col" className="px-4 py-3">Giờ</th>
-                      <th scope="col" className="px-4 py-3">Giờ công</th>
-                      <th scope="col" className="px-4 py-3">Trạng thái</th>
+                      <th scope="col" className="px-4 py-3">
+                        Ca
+                      </th>
+                      <th scope="col" className="px-4 py-3">
+                        Loại
+                      </th>
+                      <th scope="col" className="px-4 py-3">
+                        Ngày
+                      </th>
+                      <th scope="col" className="px-4 py-3">
+                        Giờ
+                      </th>
+                      <th scope="col" className="px-4 py-3">
+                        Giờ công
+                      </th>
+                      <th scope="col" className="px-4 py-3">
+                        Trạng thái
+                      </th>
                     </tr>
                   </thead>
                   <tbody>
@@ -335,9 +398,13 @@ export default async function TeacherTimesheetPage({
                         className="border-b border-border/60 transition-colors last:border-0 hover:bg-muted/50"
                       >
                         <td className="px-4 py-3">
-                          <p className="font-semibold text-foreground">{r.name}</p>
+                          <p className="font-semibold text-foreground">
+                            {r.name}
+                          </p>
                           {r.subtitle && (
-                            <p className="text-xs text-muted-foreground">{r.subtitle}</p>
+                            <p className="text-xs text-muted-foreground">
+                              {r.subtitle}
+                            </p>
                           )}
                         </td>
                         <td className="px-4 py-3 whitespace-nowrap">
@@ -353,10 +420,16 @@ export default async function TeacherTimesheetPage({
                         <td className="px-4 py-3 whitespace-nowrap text-muted-foreground">
                           {r.dateLabel}
                         </td>
-                        <td className="px-4 py-3 whitespace-nowrap text-foreground">{r.timeLabel}</td>
+                        <td className="px-4 py-3 whitespace-nowrap text-foreground">
+                          {r.timeLabel}
+                        </td>
                         <td className="px-4 py-3 whitespace-nowrap font-semibold text-foreground">
-                          {r.hours != null ? `${fmtHours(r.hours)}h` : (
-                            <span className="font-normal text-muted-foreground">—</span>
+                          {r.hours != null ? (
+                            `${fmtHours(r.hours)}h`
+                          ) : (
+                            <span className="font-normal text-muted-foreground">
+                              —
+                            </span>
                           )}
                         </td>
                         <td className="px-4 py-3 whitespace-nowrap">
@@ -364,8 +437,8 @@ export default async function TeacherTimesheetPage({
                             className={cn(
                               "inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold",
                               r.done
-                                ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-600/20 dark:text-emerald-200"
-                                : "bg-blue-100 text-blue-700 dark:bg-blue-500/15 dark:text-blue-300",
+                                ? "bg-state-success-soft text-state-success-ink dark:bg-state-success-soft dark:text-state-success-ink"
+                                : "bg-state-info-soft text-state-info-ink",
                             )}
                           >
                             {r.done ? "Đã làm" : "Sắp tới"}
@@ -386,13 +459,18 @@ export default async function TeacherTimesheetPage({
             Yêu cầu chỉnh công trong tháng ({adjustRequests.length})
           </h2>
           {adjustRequests.length === 0 ? (
-            <EmptyState icon={ClipboardList} title="Chưa có yêu cầu chỉnh công nào cho tháng này." />
+            <EmptyState
+              icon={ClipboardList}
+              title="Chưa có yêu cầu chỉnh công nào cho tháng này."
+            />
           ) : (
             <ul className="space-y-2">
               {adjustRequests.map((r) => (
                 <li key={r.id} className="t-card p-4">
                   <div className="flex flex-wrap items-center justify-between gap-2">
-                    <span className="font-semibold text-foreground">{dateFmt.format(r.date)}</span>
+                    <span className="font-semibold text-foreground">
+                      {dateFmt.format(r.date)}
+                    </span>
                     <span
                       className={cn(
                         "rounded-full px-2.5 py-0.5 text-xs font-semibold",
@@ -403,9 +481,13 @@ export default async function TeacherTimesheetPage({
                     </span>
                   </div>
                   {r.requested && (
-                    <p className="mt-1 text-sm text-foreground">Đề nghị: {r.requested}</p>
+                    <p className="mt-1 text-sm text-foreground">
+                      Đề nghị: {r.requested}
+                    </p>
                   )}
-                  <p className="mt-1 text-sm whitespace-pre-wrap text-muted-foreground">{r.reason}</p>
+                  <p className="mt-1 text-sm whitespace-pre-wrap text-muted-foreground">
+                    {r.reason}
+                  </p>
                   {r.reviewNote && (
                     <p className="mt-2 rounded-lg bg-muted/50 p-2 text-sm text-muted-foreground">
                       Phản hồi: {r.reviewNote}

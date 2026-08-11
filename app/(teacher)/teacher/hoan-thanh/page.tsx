@@ -38,7 +38,10 @@ import type {
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { EmptyState } from "../_components/ui/empty-state";
 import { PageHeader } from "../_components/ui/page-header";
-import { CompletionTable, type CompletionTableRow } from "./_components/completion-table";
+import {
+  CompletionTable,
+  type CompletionTableRow,
+} from "./_components/completion-table";
 import { BackLink } from "../_components/ui/back-link";
 
 export const metadata = { title: "Hoàn thành khoá | Giáo viên Sata Robo" };
@@ -59,7 +62,11 @@ function tallySessions(rows: { status: string; _count: { _all: number } }[]) {
     total += r._count._all;
     if (r.status === "COMPLETED") completed += r._count._all;
   }
-  return { total, completed, pct: total > 0 ? Math.round((completed / total) * 100) : 0 };
+  return {
+    total,
+    completed,
+    pct: total > 0 ? Math.round((completed / total) * 100) : 0,
+  };
 }
 
 export default async function TeacherCompletionsPage({
@@ -86,7 +93,9 @@ export default async function TeacherCompletionsPage({
         id: true,
         name: true,
         courseId: true,
-        course: { select: { name: true, nextCourse: { select: { name: true } } } },
+        course: {
+          select: { name: true, nextCourse: { select: { name: true } } },
+        },
       },
     });
     if (!cls) return <NotYours />; // ngoài scope cơ sở / đã xoá
@@ -104,7 +113,10 @@ export default async function TeacherCompletionsPage({
           where: { id: classId },
           select: {
             enrollments: {
-              where: { deletedAt: null, status: { in: ENROLLMENT_ACTIVE_STATUS_LIST } },
+              where: {
+                deletedAt: null,
+                status: { in: ENROLLMENT_ACTIVE_STATUS_LIST },
+              },
               select: {
                 id: true,
                 studentId: true,
@@ -136,13 +148,28 @@ export default async function TeacherCompletionsPage({
       studentIds.length
         ? sdb.courseCompletion.findMany({
             where: { courseId: cls.courseId, studentId: { in: studentIds } },
-            select: { studentId: true, certificateCode: true, completedAt: true, finalGrade: true },
+            select: {
+              studentId: true,
+              certificateCode: true,
+              completedAt: true,
+              finalGrade: true,
+            },
           })
-        : Promise.resolve([] as { studentId: string; certificateCode: string; completedAt: Date; finalGrade: string | null }[]),
+        : Promise.resolve(
+            [] as {
+              studentId: string;
+              certificateCode: string;
+              completedAt: Date;
+              finalGrade: string | null;
+            }[],
+          ),
       // Đề xuất hoàn thành đang CHỜ DUYỆT của các ghi danh này (trạng thái "Chờ duyệt").
       enrollments.length
         ? sdb.courseCompletionRequest.findMany({
-            where: { enrollmentId: { in: enrollments.map((e) => e.id) }, status: "PENDING" },
+            where: {
+              enrollmentId: { in: enrollments.map((e) => e.id) },
+              status: "PENDING",
+            },
             select: { enrollmentId: true },
           })
         : Promise.resolve([] as { enrollmentId: string }[]),
@@ -159,7 +186,9 @@ export default async function TeacherCompletionsPage({
       });
       attByStudent.set(a.studentId, list);
     }
-    const completionByStudent = new Map(completions.map((c) => [c.studentId, c]));
+    const completionByStudent = new Map(
+      completions.map((c) => [c.studentId, c]),
+    );
 
     // Rows PLAIN cho client table (search + cột Kết quả). Câu 46: chỉ tên HV.
     const rows: CompletionTableRow[] = enrollments.map((e) => {
@@ -239,20 +268,30 @@ export default async function TeacherCompletionsPage({
           id: true,
           _count: {
             select: {
-              enrollments: { where: { deletedAt: null, status: { in: ENROLLMENT_ACTIVE_STATUS_LIST } } },
+              enrollments: {
+                where: {
+                  deletedAt: null,
+                  status: { in: ENROLLMENT_ACTIVE_STATUS_LIST },
+                },
+              },
             },
           },
         },
       })
     : [];
 
-  const sessionsByClass = new Map<string, { status: string; _count: { _all: number } }[]>();
+  const sessionsByClass = new Map<
+    string,
+    { status: string; _count: { _all: number } }[]
+  >();
   for (const r of sessionRows) {
     const list = sessionsByClass.get(r.classId) ?? [];
     list.push(r);
     sessionsByClass.set(r.classId, list);
   }
-  const studentCountByClass = new Map(enrollCounts.map((c) => [c.id, c._count.enrollments]));
+  const studentCountByClass = new Map(
+    enrollCounts.map((c) => [c.id, c._count.enrollments]),
+  );
 
   return (
     <div>
@@ -262,7 +301,10 @@ export default async function TeacherCompletionsPage({
       />
 
       {classes.length === 0 ? (
-        <EmptyState icon={GraduationCap} title="Bạn chưa được phân công lớp nào." />
+        <EmptyState
+          icon={GraduationCap}
+          title="Bạn chưa được phân công lớp nào."
+        />
       ) : (
         <div className="grid gap-3 sm:grid-cols-2">
           {classes.map((c) => {
@@ -274,14 +316,19 @@ export default async function TeacherCompletionsPage({
                 <Card className="t-card-hover h-full">
                   <CardHeader className="pb-2">
                     <CardTitle className="text-base">{c.name}</CardTitle>
-                    <p className="text-xs text-muted-foreground">{c.course.name}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {c.course.name}
+                    </p>
                   </CardHeader>
                   <CardContent className="space-y-2 pt-0">
                     <div className="flex items-center justify-between text-xs text-muted-foreground">
                       <span>
-                        {p.completed}/{p.total} buổi · {studentCountByClass.get(c.id) ?? 0} học viên
+                        {p.completed}/{p.total} buổi ·{" "}
+                        {studentCountByClass.get(c.id) ?? 0} học viên
                       </span>
-                      <span className="font-medium text-foreground">{p.pct}%</span>
+                      <span className="font-medium text-foreground">
+                        {p.pct}%
+                      </span>
                     </div>
                     <ProgressBar pct={p.pct} />
                   </CardContent>
@@ -301,7 +348,7 @@ function ProgressBar({ pct }: { pct: number }) {
   return (
     <div className="h-2 w-full overflow-hidden rounded-full bg-muted">
       <div
-        className="h-full rounded-full bg-orange-500"
+        className="h-full rounded-full bg-primary"
         style={{ width: `${width}%` }}
       />
     </div>
@@ -312,7 +359,10 @@ function NotYours() {
   return (
     <div className="space-y-4">
       <BackLink href="?" label="Hoàn thành khoá" />
-      <EmptyState icon={Lock} title="Lớp không thuộc danh sách bạn phụ trách." />
+      <EmptyState
+        icon={Lock}
+        title="Lớp không thuộc danh sách bạn phụ trách."
+      />
     </div>
   );
 }

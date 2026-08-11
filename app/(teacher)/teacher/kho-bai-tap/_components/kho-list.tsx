@@ -35,14 +35,24 @@ export function KhoList({ rows }: { rows: KhoTemplate[] }) {
     <>
       <div className="t-card overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full border-collapse text-left text-sm">
+          <table className="min-w-[770px] w-full border-collapse text-left text-sm">
             <thead>
               <tr className="border-b border-border bg-muted/50 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
-                <th scope="col" className="px-5 py-3">Nội dung</th>
-                <th scope="col" className="px-5 py-3">Hình thức</th>
-                <th scope="col" className="px-5 py-3">Số câu</th>
-                <th scope="col" className="px-5 py-3">Thang điểm</th>
-                <th scope="col" className="px-5 py-3">Ngày tạo</th>
+                <th scope="col" className="px-5 py-3">
+                  Nội dung
+                </th>
+                <th scope="col" className="px-5 py-3">
+                  Hình thức
+                </th>
+                <th scope="col" className="px-5 py-3">
+                  Số câu
+                </th>
+                <th scope="col" className="px-5 py-3">
+                  Thang điểm
+                </th>
+                <th scope="col" className="px-5 py-3">
+                  Ngày tạo
+                </th>
                 <th scope="col" className="px-5 py-3 text-right">
                   <span className="sr-only">Thao tác</span>
                 </th>
@@ -79,7 +89,7 @@ export function KhoList({ rows }: { rows: KhoTemplate[] }) {
                       <Button
                         variant="ghost"
                         size="sm"
-                        className="text-orange-600 hover:text-orange-700 dark:text-orange-400"
+                        className="text-primary-ink hover:text-primary-ink-hover"
                         onClick={() => setPreview(t)}
                       >
                         <Eye /> Xem trước
@@ -131,7 +141,7 @@ export function KhoList({ rows }: { rows: KhoTemplate[] }) {
   );
 }
 
-/** Nhãn hình thức cam-only. HOMEWORK = "Bài tập" (nhạt) · CLASSWORK = "Kiểm tra" (đậm). */
+/** Nhãn hình thức. HOMEWORK = "Bài tập" (nhạt) · CLASSWORK = "Kiểm tra" (đậm). */
 function KindBadge({ kind }: { kind: KhoTemplate["kind"] }) {
   const isTest = kind === "CLASSWORK";
   return (
@@ -139,8 +149,8 @@ function KindBadge({ kind }: { kind: KhoTemplate["kind"] }) {
       className={cn(
         "inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold",
         isTest
-          ? "bg-orange-100 text-orange-800 dark:bg-orange-500/20 dark:text-orange-200"
-          : "border border-orange-200 bg-orange-50 text-orange-700 dark:border-orange-500/30 dark:bg-orange-500/10 dark:text-orange-300",
+          ? "bg-primary-soft text-primary-ink dark:bg-primary-soft dark:text-primary-ink"
+          : "border border-primary-soft bg-primary-soft text-primary-ink dark:border-primary",
       )}
     >
       {isTest ? "Kiểm tra" : "Bài tập"}

@@ -20,7 +20,11 @@ import { Badge } from "@/components/ui/badge";
 import { ListToolbar } from "../../_components/ui/list-toolbar";
 import { EmptyState } from "../../_components/ui/empty-state";
 
-export type ReportCardStatus = "DRAFT" | "PENDING_REVIEW" | "PUBLISHED" | "RECALLED";
+export type ReportCardStatus =
+  | "DRAFT"
+  | "PENDING_REVIEW"
+  | "PUBLISHED"
+  | "RECALLED";
 
 export type MilestoneChip = {
   milestone: number;
@@ -69,24 +73,24 @@ export interface ReportCardRow {
 // Tối để không chìm trên nền tối của site GV.
 const STATUS_CLASS: Record<ReportCardStatus, string> = {
   DRAFT: "bg-muted text-muted-foreground",
-  PENDING_REVIEW: "bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300",
-  PUBLISHED: "bg-emerald-100 text-emerald-700 dark:bg-emerald-600/20 dark:text-emerald-200",
-  RECALLED: "bg-red-100 text-red-700 dark:bg-red-500/15 dark:text-red-300",
+  PENDING_REVIEW: "bg-state-warning-soft text-state-warning-ink",
+  PUBLISHED: "bg-state-success-soft text-state-success-ink",
+  RECALLED: "bg-state-danger-soft text-state-danger-ink",
 };
 
 const MILESTONE_CLASS: Record<MilestoneChip["state"], string> = {
   pending: "border border-border text-muted-foreground",
-  missing: "bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300",
-  done: "bg-emerald-100 text-emerald-700 dark:bg-emerald-600/20 dark:text-emerald-200",
+  missing: "bg-state-warning-soft text-state-warning-ink",
+  done: "bg-state-success-soft text-state-success-ink",
 };
 
 // Pill xếp loại — cam-forward (thương hiệu), bậc dưới về trung tính/hổ phách, KHÔNG thêm
 // màu trang trí mới (tím/xanh) ngoài bảng màu cam của site GV.
 const RANK_CLASS: Record<CompetencyRank, string> = {
-  "Xuất sắc": "bg-orange-600 text-white dark:bg-orange-500 dark:text-white",
-  "Giỏi": "bg-orange-100 text-orange-700 dark:bg-orange-500/15 dark:text-orange-300",
-  "Khá": "bg-muted text-muted-foreground",
-  "Cần cố gắng": "bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300",
+  "Xuất sắc": "bg-primary text-white",
+  Giỏi: "bg-primary-soft text-primary-ink",
+  Khá: "bg-muted text-muted-foreground",
+  "Cần cố gắng": "bg-state-warning-soft text-state-warning-ink",
 };
 
 /** Nhãn mức năng lực (thang 1–4) — hiện ở tooltip ô điểm tiêu chí. */
@@ -134,7 +138,10 @@ export function ReportCardsList({ rows }: { rows: ReportCardRow[] }) {
   return (
     <div>
       <div className="mb-6 overflow-x-auto">
-        <nav className="flex min-w-max gap-1 border-b border-border" aria-label="Chế độ xem học bạ">
+        <nav
+          className="flex min-w-max gap-1 border-b border-border"
+          aria-label="Chế độ xem học bạ"
+        >
           {TABS.map((t) => {
             const Icon = t.icon;
             const isActive = t.key === tab;
@@ -147,7 +154,7 @@ export function ReportCardsList({ rows }: { rows: ReportCardRow[] }) {
                 className={cn(
                   "inline-flex shrink-0 items-center gap-2 border-b-2 px-4 py-2.5 text-sm font-medium outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring",
                   isActive
-                    ? "border-orange-500 text-orange-700 dark:border-orange-400 dark:text-orange-300"
+                    ? "border-primary text-primary-ink dark:border-primary dark:text-primary-ink"
                     : "border-transparent text-muted-foreground hover:text-foreground",
                 )}
               >
@@ -172,7 +179,10 @@ function HocBaTab({ rows }: { rows: ReportCardRow[] }) {
   const [status, setStatus] = useState("all");
 
   const courses = useMemo(
-    () => Array.from(new Set(rows.map((r) => r.courseName))).sort((a, b) => a.localeCompare(b, "vi")),
+    () =>
+      Array.from(new Set(rows.map((r) => r.courseName))).sort((a, b) =>
+        a.localeCompare(b, "vi"),
+      ),
     [rows],
   );
 
@@ -223,17 +233,33 @@ function HocBaTab({ rows }: { rows: ReportCardRow[] }) {
       ) : (
         <section className="t-card overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm">
+            <table className="min-w-[990px] w-full text-left text-sm">
               <thead>
                 <tr className="border-b border-border bg-muted/50 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                  <th scope="col" className="px-4 py-3">Học viên</th>
-                  <th scope="col" className="px-4 py-3">Khoá học</th>
-                  <th scope="col" className="px-4 py-3">Chuyên cần</th>
-                  <th scope="col" className="px-4 py-3">Điểm TB</th>
-                  <th scope="col" className="px-4 py-3">Trạng thái học bạ</th>
-                  <th scope="col" className="px-4 py-3">Mốc buổi</th>
-                  <th scope="col" className="px-4 py-3">Cập nhật</th>
-                  <th scope="col" className="px-4 py-3 text-right">Thao tác</th>
+                  <th scope="col" className="px-4 py-3">
+                    Học viên
+                  </th>
+                  <th scope="col" className="px-4 py-3">
+                    Khoá học
+                  </th>
+                  <th scope="col" className="px-4 py-3">
+                    Chuyên cần
+                  </th>
+                  <th scope="col" className="px-4 py-3">
+                    Điểm TB
+                  </th>
+                  <th scope="col" className="px-4 py-3">
+                    Trạng thái học bạ
+                  </th>
+                  <th scope="col" className="px-4 py-3">
+                    Mốc buổi
+                  </th>
+                  <th scope="col" className="px-4 py-3">
+                    Cập nhật
+                  </th>
+                  <th scope="col" className="px-4 py-3 text-right">
+                    Thao tác
+                  </th>
                 </tr>
               </thead>
               <tbody>
@@ -244,20 +270,26 @@ function HocBaTab({ rows }: { rows: ReportCardRow[] }) {
                   >
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-3">
-                        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-orange-100 text-xs font-semibold text-orange-700 dark:bg-orange-500/15 dark:text-orange-300">
+                        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary-soft text-xs font-semibold text-primary-ink">
                           {initials(r.studentName)}
                         </span>
                         <div className="min-w-0">
-                          <p className="font-medium text-foreground">{r.studentName}</p>
+                          <p className="font-medium text-foreground">
+                            {r.studentName}
+                          </p>
                           {r.studentCode ? (
-                            <p className="text-xs text-muted-foreground">{r.studentCode}</p>
+                            <p className="text-xs text-muted-foreground">
+                              {r.studentCode}
+                            </p>
                           ) : null}
                         </div>
                       </div>
                     </td>
                     <td className="px-4 py-3">
                       <p className="text-foreground">{r.courseName}</p>
-                      <p className="text-xs text-muted-foreground">{r.className}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {r.className}
+                      </p>
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap">
                       {r.totalSessions > 0 ? (
@@ -265,7 +297,10 @@ function HocBaTab({ rows }: { rows: ReportCardRow[] }) {
                           <span className="font-semibold text-foreground">
                             {r.attendedSessions}/{r.totalSessions}
                           </span>
-                          <span className="text-xs text-muted-foreground"> buổi</span>
+                          <span className="text-xs text-muted-foreground">
+                            {" "}
+                            buổi
+                          </span>
                         </>
                       ) : (
                         <span className="text-muted-foreground">—</span>
@@ -273,7 +308,7 @@ function HocBaTab({ rows }: { rows: ReportCardRow[] }) {
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap">
                       {r.avgScore != null ? (
-                        <span className="font-bold text-orange-600 dark:text-orange-400">
+                        <span className="font-bold text-primary-ink">
                           {r.avgScore}
                         </span>
                       ) : (
@@ -286,7 +321,7 @@ function HocBaTab({ rows }: { rows: ReportCardRow[] }) {
                         {r.editableByTeacher ? (
                           <Badge
                             variant="outline"
-                            className="border-emerald-300 text-emerald-700 dark:border-emerald-500/40 dark:text-emerald-300"
+                            className="border-state-success-soft text-state-success-ink dark:border-state-success"
                           >
                             GV sửa được
                           </Badge>
@@ -318,14 +353,20 @@ function HocBaTab({ rows }: { rows: ReportCardRow[] }) {
                             rel="noopener noreferrer"
                             className="inline-flex items-center gap-1 rounded-md border border-border px-2.5 py-1.5 text-xs font-semibold text-foreground transition-colors hover:bg-muted"
                           >
-                            <FileDown className="h-3.5 w-3.5" aria-hidden /> Xuất học bạ
+                            <FileDown className="h-3.5 w-3.5" aria-hidden />{" "}
+                            Xuất học bạ
                           </a>
                         )}
                         {/* href CHỈ-query (giữ path hiện tại): chạy đúng cả trên host
                             giaovien (clean URL /hoc-ba) LẪN localhost (/teacher/hoc-ba). */}
+                        {/* Nền TINT chứ không tô đặc: bảng này thường 47+ hàng, mỗi
+                            hàng một nút tím đặc thì cả cột thành một mảng tím hét lên
+                            như nhau — không còn hàng nào nổi hơn hàng nào. Tint vẫn
+                            giữ nguyên tính "đây là việc chính của hàng" mà không đè
+                            át các dấu hiệu trạng thái bên trái. */}
                         <Link
                           href={`?enrollmentId=${r.enrollmentId}`}
-                          className="rounded-md bg-orange-600 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:bg-orange-700"
+                          className="rounded-md bg-primary-soft px-3 py-1.5 text-xs font-semibold text-primary-ink transition-colors hover:bg-primary-soft-hover"
                         >
                           {r.hasCard ? "Mở học bạ" : "Nhập học bạ"}
                         </Link>
@@ -350,7 +391,10 @@ function NangLucTab({ rows }: { rows: ReportCardRow[] }) {
   const [rank, setRank] = useState("all");
 
   const courses = useMemo(
-    () => Array.from(new Set(rows.map((r) => r.courseName))).sort((a, b) => a.localeCompare(b, "vi")),
+    () =>
+      Array.from(new Set(rows.map((r) => r.courseName))).sort((a, b) =>
+        a.localeCompare(b, "vi"),
+      ),
     [rows],
   );
 
@@ -375,7 +419,8 @@ function NangLucTab({ rows }: { rows: ReportCardRow[] }) {
     for (const r of scopeRows) {
       for (const c of r.competency.cells) {
         const prev = orderByName.get(c.name);
-        if (prev === undefined || c.order < prev) orderByName.set(c.name, c.order);
+        if (prev === undefined || c.order < prev)
+          orderByName.set(c.name, c.order);
       }
     }
     return [...orderByName.entries()]
@@ -420,25 +465,41 @@ function NangLucTab({ rows }: { rows: ReportCardRow[] }) {
       ) : (
         <section className="t-card overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm">
+            <table className="min-w-[660px] w-full text-left text-sm">
               <thead>
                 <tr className="border-b border-border bg-muted/50 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                  <th scope="col" className="px-4 py-3">Học viên</th>
-                  <th scope="col" className="px-4 py-3">Khoá học</th>
+                  <th scope="col" className="px-4 py-3">
+                    Học viên
+                  </th>
+                  <th scope="col" className="px-4 py-3">
+                    Khoá học
+                  </th>
                   {columns.map((name) => (
-                    <th key={name} scope="col" className="px-4 py-3 text-center whitespace-nowrap">
+                    <th
+                      key={name}
+                      scope="col"
+                      className="px-4 py-3 text-center whitespace-nowrap"
+                    >
                       {name}
                     </th>
                   ))}
-                  <th scope="col" className="px-4 py-3 whitespace-nowrap" title="Điểm trung bình các tiêu chí năng lực (thang 1–4)">
+                  <th
+                    scope="col"
+                    className="px-4 py-3 whitespace-nowrap"
+                    title="Điểm trung bình các tiêu chí năng lực (thang 1–4)"
+                  >
                     TB
                   </th>
-                  <th scope="col" className="px-4 py-3">Xếp loại</th>
+                  <th scope="col" className="px-4 py-3">
+                    Xếp loại
+                  </th>
                 </tr>
               </thead>
               <tbody>
                 {filtered.map((r) => {
-                  const levelByName = new Map(r.competency.cells.map((c) => [c.name, c.level]));
+                  const levelByName = new Map(
+                    r.competency.cells.map((c) => [c.name, c.level]),
+                  );
                   return (
                     <tr
                       key={r.enrollmentId}
@@ -446,27 +507,39 @@ function NangLucTab({ rows }: { rows: ReportCardRow[] }) {
                     >
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-3">
-                          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-orange-100 text-xs font-semibold text-orange-700 dark:bg-orange-500/15 dark:text-orange-300">
+                          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary-soft text-xs font-semibold text-primary-ink">
                             {initials(r.studentName)}
                           </span>
                           <div className="min-w-0">
-                            <p className="font-medium text-foreground">{r.studentName}</p>
+                            <p className="font-medium text-foreground">
+                              {r.studentName}
+                            </p>
                             {r.studentCode ? (
-                              <p className="text-xs text-muted-foreground">{r.studentCode}</p>
+                              <p className="text-xs text-muted-foreground">
+                                {r.studentCode}
+                              </p>
                             ) : null}
                           </div>
                         </div>
                       </td>
                       <td className="px-4 py-3">
                         <p className="text-foreground">{r.courseName}</p>
-                        <p className="text-xs text-muted-foreground">{r.className}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {r.className}
+                        </p>
                       </td>
                       {columns.map((name) => {
                         const lv = levelByName.get(name) ?? 0;
                         return (
-                          <td key={name} className="px-4 py-3 text-center whitespace-nowrap">
+                          <td
+                            key={name}
+                            className="px-4 py-3 text-center whitespace-nowrap"
+                          >
                             {lv >= 1 ? (
-                              <span title={LEVEL_LABEL[lv] ?? String(lv)} className="font-semibold text-foreground">
+                              <span
+                                title={LEVEL_LABEL[lv] ?? String(lv)}
+                                className="font-semibold text-foreground"
+                              >
                                 {lv}
                               </span>
                             ) : (
@@ -499,19 +572,31 @@ function NangLucTab({ rows }: { rows: ReportCardRow[] }) {
   );
 }
 
-function StatusPill({ status, label }: { status: ReportCardStatus | null; label: string | null }) {
-  if (!status || !label) return <span className="text-xs text-muted-foreground">Chưa có</span>;
+function StatusPill({
+  status,
+  label,
+}: {
+  status: ReportCardStatus | null;
+  label: string | null;
+}) {
+  if (!status || !label)
+    return <span className="text-xs text-muted-foreground">Chưa có</span>;
   return (
-    <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_CLASS[status]}`}>
+    <span
+      className={`rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_CLASS[status]}`}
+    >
       {label}
     </span>
   );
 }
 
 function RankPill({ rank }: { rank: CompetencyRank | null }) {
-  if (!rank) return <span className="text-xs text-muted-foreground">Chưa chấm</span>;
+  if (!rank)
+    return <span className="text-xs text-muted-foreground">Chưa chấm</span>;
   return (
-    <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${RANK_CLASS[rank]}`}>
+    <span
+      className={`rounded-full px-2 py-0.5 text-xs font-medium ${RANK_CLASS[rank]}`}
+    >
       {rank}
     </span>
   );
