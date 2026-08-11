@@ -178,6 +178,11 @@ jobs:
         # = `pnpm test:chat-db` chạy tay được y hệt (vitest run tests/chat).
         run: pnpm test:chat-db
 
+      # P2 · US-08 — TS-08 (quyền theo Position) cũng cần Postgres thật. Dùng chung job
+      # này thay vì dựng job mới: cùng service, cùng seed RoleDef, chạy thêm ~10 giây.
+      - name: Run nền-hệ-thống DB tests
+        run: pnpm test:nen-db
+
   e2e:
     name: E2E smoke (Playwright)
     runs-on: ubuntu-latest
