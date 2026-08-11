@@ -8,12 +8,18 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import type { Prisma } from "@prisma/client";
 import { hasRole, type Action } from "@/lib/auth/permissions";
-import { checkPermission } from "@/lib/auth/check-permission";
+import {
+  canViewLeadPii,
+  checkPermission,
+  checkPermissionDetail,
+} from "@/lib/auth/check-permission";
 import { centerIdForOrgUnit } from "@/lib/org/org-service";
 import { rejectHeadOffice } from "@/lib/enrollment-flow";
 import {
   studentCreateSchema,
   studentUpdateSchema,
+  PHONE_MASK_RE,
+  PHONE_MASK_MSG,
 } from "@/lib/validators/student";
 import {
   logStudentAudit,
@@ -64,6 +70,17 @@ async function studentInScope(
   const sdb = scopedDb(actor);
   const s = await sdb.student.findUnique({ where: { id: studentId }, select: { centerId: true } });
   return !!s && passesScope("Student", s, actor);
+}
+
+/**
+ * NỢ-2 (US-03 write-path, 09/08): actor có đang bị DENY cấp trường che
+ * `parentPhone` không (grant nhóm, key as-built `students:view-all` — cùng key
+ * màn edit dùng để mask prefill)? Actor bị che thấy form prefill "090xxxx678";
+ * nếu để chuỗi đó đi tiếp vào payload ghi thì số thật trong DB bị phá.
+ */
+async function isParentPhoneMasked(): Promise<boolean> {
+  const { fieldMask } = await checkPermissionDetail("students:view-all");
+  return fieldMask.includes("parentPhone");
 }
 
 async function requireStudentWrite(action: "create" | "update" | "delete") {
@@ -220,7 +237,14 @@ export async function createStudent(formData: FormData): Promise<ActionResult> {
 export async function updateStudent(id: string, formData: FormData): Promise<ActionResult> {
   const session = await requireStudentWrite("update");
 
-  const raw = readForm(formData);
+  const raw: Partial<ReturnType<typeof readForm>> = readForm(formData);
+  // NỢ-2 — actor bị DENY cấp trường parentPhone: form prefill là chuỗi MASK, bấm
+  // lưu sẽ ghi chuỗi mask đè số thật. BỎ field khỏi payload TRƯỚC validate (validator
+  // giờ từ chối chuỗi mask) → giữ nguyên giá trị DB hiện có, các field khác vẫn lưu.
+  // Actor KHÔNG bị mask: không đổi hành vi.
+  if (await isParentPhoneMasked()) {
+    delete raw.parentPhone;
+  }
   const parsed = studentUpdateSchema.safeParse(raw);
   if (!parsed.success) {
     return { error: parsed.error.issues[0]?.message ?? "Dữ liệu không hợp lệ" };
@@ -1003,7 +1027,13 @@ const parentAccountSchema = z.object({
   studentId: z.string().min(1),
   // AUTH-SĐT P5 — SĐT là định danh (bắt buộc), email hạ xuống tuỳ chọn. Bỏ trống
   // SĐT thì lấy `Student.parentPhone` làm mặc định (xử lý dưới thân hàm).
-  phone: z.string().trim().optional().or(z.literal("")),
+  // NỢ-2: chuỗi mask không phải SĐT — chặn ghi làm khoá đăng nhập của phụ huynh.
+  phone: z
+    .string()
+    .trim()
+    .optional()
+    .or(z.literal(""))
+    .refine((v) => !v || !PHONE_MASK_RE.test(v), PHONE_MASK_MSG),
   email: z
     .string()
     .trim()
@@ -1029,7 +1059,14 @@ export async function createParentAccount(input: {
     return { ok: false, error: "Không có quyền cấp tài khoản phụ huynh" };
   }
 
-  const parsed = parentAccountSchema.safeParse(input);
+  // NỢ-2 — actor bị che parentPhone: ô SĐT màn này prefill chuỗi MASK; không được
+  // tin bất kỳ SĐT nào actor gửi lên (họ không thấy số thật để kiểm). Bỏ qua ô
+  // nhập, dùng thẳng SĐT trên hồ sơ học viên (server đọc từ DB, không qua client).
+  const phoneHidden = await isParentPhoneMasked();
+
+  const parsed = parentAccountSchema.safeParse(
+    phoneHidden ? { ...input, phone: undefined } : input,
+  );
   if (!parsed.success) {
     return { ok: false, error: parsed.error.issues[0]?.message ?? "Dữ liệu không hợp lệ" };
   }
@@ -1044,12 +1081,14 @@ export async function createParentAccount(input: {
   if (!student) return { ok: false, error: "Không tìm thấy học viên" };
 
   // Định danh = SĐT ô nhập, không có thì lấy SĐT phụ huynh trên hồ sơ học viên.
+  // (Actor bị che parentPhone: parsed.data.phone đã bị bỏ ở trên → luôn dùng hồ sơ.)
   const phone = canonicalPhone(parsed.data.phone || student.parentPhone);
   if (!phone) {
     return {
       ok: false,
-      error:
-        "Cần số điện thoại di động hợp lệ của phụ huynh — đây là tài khoản đăng nhập và là nơi nhận mã kích hoạt.",
+      error: phoneHidden
+        ? "Bạn không có quyền xem SĐT phụ huynh nên hệ thống chỉ dùng được SĐT trên hồ sơ học viên — nhưng hồ sơ chưa có SĐT di động hợp lệ. Nhờ người có quyền cập nhật SĐT phụ huynh trước khi cấp tài khoản."
+        : "Cần số điện thoại di động hợp lệ của phụ huynh — đây là tài khoản đăng nhập và là nơi nhận mã kích hoạt.",
     };
   }
   // Cách ly cơ sở: chỉ cấp tài khoản PH cho HV trong tầm nhìn actor.
@@ -1217,6 +1256,11 @@ export async function searchLinkableStudents(
   const actor = await resolveActor(session.user.id);
   const sdb = scopedDb(actor);
 
+  // NỢ #11 (search-oracle): chỉ cho tìm theo SĐT khi actor thấy được SĐT thật —
+  // cùng gate với trang danh sách HV (canViewPii VÀ không bị DENY cấp trường TS-02).
+  // Thiếu quyền mà vẫn filter theo SĐT = dò được số qua kết quả trả về.
+  const canSearchPhone = (await canViewLeadPii()) && !(await isParentPhoneMasked());
+
   // CENTER_MANAGER (không super) chỉ thấy HV cơ sở mình.
   const centerScope =
     hasRole(session.user, "CENTER_MANAGER") && !hasRole(session.user, "SUPER_ADMIN")
@@ -1231,7 +1275,7 @@ export async function searchLinkableStudents(
       OR: [
         { name: { contains: q, mode: "insensitive" } },
         { studentCode: { contains: q, mode: "insensitive" } },
-        { parentPhone: { contains: qPhone } },
+        ...(canSearchPhone ? [{ parentPhone: { contains: qPhone } }] : []),
       ],
     },
     orderBy: { name: "asc" },

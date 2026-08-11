@@ -6,6 +6,10 @@ import { db } from "@/lib/db";
 import { ACTION_REGISTRY } from "@/lib/auth/action-registry";
 import { getSubtreeCenterIds, getSubtreeOrgUnitIds } from "@/lib/org/org-tree";
 import type { OrgUnitNode } from "@/lib/org/types";
+// US-02 — type-only (erased khi compile, không tạo cycle runtime với lib/permissions/can.ts).
+// GrantRow lấy từ module type-lá (KHÔNG phải lib/permissions/can) — tránh vòng
+// actor→can→actor bị dependency-cruiser no-circular chặn ở CI.
+import type { GrantRow } from "@/lib/permissions/grant-types";
 
 // REQ-02 (REVERTED) — cây OrgUnit đọc TRẦN mỗi request. Trước đây bọc unstable_cache
 // (TTL 300s) nhưng: (a) bảng OrgUnit RẤT NHỎ (HO+CS1+CS2…) → full-scan không đáng kể,
@@ -65,6 +69,16 @@ export type Actor = {
   visibleOrgUnitIds: string[];
   grantsAllow: Set<string>;
   assignedClassIds: Set<string>;
+  // ── US-02 (Nền Hệ thống P0) — ADDITIVE OPTIONAL: nạp sẵn cho engine lib/permissions/can.ts.
+  // Optional có chủ đích: ~35 file dựng Actor literal (system-actor, test cũ) không vỡ.
+  /** RoleDef.id của các role ĐANG hiệu lực (đối chiếu PermissionGrant subjectType=ROLE). */
+  roleIds?: string[];
+  /** US-03 — UserGroup.id các nhóm actor là thành viên (chỉ nhóm CHƯA xoá mềm). */
+  groupIds?: string[];
+  /** Grant từ bảng PermissionGrant MỚI (KHÔNG phải UserPermissionGrant cũ). */
+  permissionGrants?: GrantRow[];
+  /** Tầm nhìn cơ sở per RoleDef.id cho dataScope UNIT_ONLY — cùng công thức PermEntry.centerScope. */
+  roleCenterScope?: Record<string, "ALL" | string[]>;
 };
 
 /** Đối tượng bị kiểm tra quyền (tùy action mà cần field nào). */
@@ -111,6 +125,8 @@ export type RelationshipRole = {
 
 export type UserOrgRoleRow = {
   orgUnitId: string;
+  /** US-02 — RoleDef.id (optional additive: test/caller cũ không truyền vẫn compile). */
+  roleId?: string;
   status: string; // AssignStatus
   effectiveFrom: Date;
   effectiveTo: Date | null;
@@ -144,6 +160,10 @@ export function buildActor(input: {
   assignedClassIds?: string[];
   now?: Date;
   validActions?: Set<string>;
+  /** US-02 — grant bảng MỚI (PermissionGrant) đã query theo roleIds/groupIds của actor. */
+  permissionGrants?: GrantRow[];
+  /** US-03 — UserGroup.id của các nhóm actor đang là thành viên (nhóm CHƯA xoá mềm). */
+  groupIds?: string[];
   /** Vai KHÔNG gắn đơn vị (xem {@link RELATIONSHIP_ROLE_CODES}). */
   relationshipRoles?: RelationshipRole[];
 }): Actor {
@@ -173,6 +193,9 @@ export function buildActor(input: {
   const permissions: PermEntry[] = [];
   const visible = new Set<string>();
   const visibleOrg = new Set<string>();
+  // US-02 — RoleDef.id đang hiệu lực + tầm nhìn cơ sở per role (cho dataScope UNIT_ONLY).
+  const roleIdSet = new Set<string>();
+  const roleCenterScope: Record<string, "ALL" | string[]> = {};
 
   for (const r of liveRows) {
     const node = orgById.get(r.orgUnitId);
@@ -187,6 +210,18 @@ export function buildActor(input: {
       ? everyOrgUnit
       : getSubtreeOrgUnitIds(input.orgNodes, r.orgUnitId);
     rowOrgUnits.forEach((o) => visibleOrg.add(o));
+
+    // US-02 — roleCenterScope: CÙNG công thức PermEntry.centerScope (hoRoot → "ALL",
+    // ngược lại subtree centerIds); role gán ở nhiều orgUnit → "ALL" thắng, else union.
+    if (r.roleId) {
+      roleIdSet.add(r.roleId);
+      const prev = roleCenterScope[r.roleId];
+      if (hoRoot || prev === "ALL") {
+        roleCenterScope[r.roleId] = "ALL";
+      } else {
+        roleCenterScope[r.roleId] = [...new Set([...(prev ?? []), ...rowCenters])];
+      }
+    }
 
     for (const p of r.role.permissions) {
       permissions.push({
@@ -231,6 +266,11 @@ export function buildActor(input: {
     visibleOrgUnitIds: [...visibleOrg],
     grantsAllow,
     assignedClassIds: new Set(input.assignedClassIds ?? []),
+    // US-02 — additive: engine mới (lib/permissions/can.ts) đọc các field này.
+    roleIds: [...roleIdSet],
+    groupIds: input.groupIds ?? [], // US-03 — membership nhóm (caller đã lọc nhóm sống)
+    permissionGrants: input.permissionGrants ?? [],
+    roleCenterScope,
   };
 }
 
@@ -265,7 +305,8 @@ async function loadRelationshipRoles(userId: string): Promise<RelationshipRole[]
 
 export async function resolveActorUncached(userId: string): Promise<Actor> {
   const now = new Date();
-  const [rows, orgNodes, grants, classes, relationshipRoles] = await Promise.all([
+  const [rows, orgNodes, grants, classes, groupMemberships, relationshipRoles] =
+    await Promise.all([
     db.userOrgRole.findMany({
       where: {
         userId,
@@ -286,16 +327,54 @@ export async function resolveActorUncached(userId: string): Promise<Actor> {
       where: { deletedAt: null, OR: [{ teacherId: userId }, { assistantId: userId }] },
       select: { id: true },
     }),
-    loadRelationshipRoles(userId),
-  ]);
+    // US-03 — membership nhóm, CHỈ nhóm còn sống (group.deletedAt null): nhóm xoá mềm
+    // → grant GROUP của nó vô hiệu ngay lần resolve kế, không cần dọn PermissionGrant.
+    db.userGroupMember.findMany({
+      where: { userId, group: { deletedAt: null } },
+      select: { groupId: true },
+    }),
+      loadRelationshipRoles(userId),
+    ]);
+
+  // US-02/US-03 — query grant (phụ thuộc roleIds/groupIds nên nằm SAU Promise.all):
+  // grant bảng MỚI PermissionGrant theo ROLE ∪ GROUP; cả hai rỗng → skip (PARENT
+  // không tốn query).
+  const roleIds = [...new Set(rows.map((r) => r.roleId))];
+  const groupIds = groupMemberships.map((m) => m.groupId);
+  const permissionGrants =
+    roleIds.length === 0 && groupIds.length === 0
+      ? []
+      : await db.permissionGrant.findMany({
+          where: {
+            OR: [
+              ...(roleIds.length > 0
+                ? [{ subjectType: "ROLE" as const, subjectId: { in: roleIds } }]
+                : []),
+              ...(groupIds.length > 0
+                ? [{ subjectType: "GROUP" as const, subjectId: { in: groupIds } }]
+                : []),
+            ],
+          },
+          select: {
+            subjectType: true,
+            subjectId: true,
+            permissionKey: true,
+            effect: true,
+            dataScope: true,
+            fieldMask: true,
+          },
+        });
 
   return buildActor({
     userId,
     now,
     orgNodes,
+    permissionGrants,
+    groupIds,
     relationshipRoles,
     rows: rows.map((r) => ({
       orgUnitId: r.orgUnitId,
+      roleId: r.roleId,
       status: r.status,
       effectiveFrom: r.effectiveFrom,
       effectiveTo: r.effectiveTo,

@@ -192,6 +192,73 @@ describe("Menu hỏi 'CÓ GIỮ action không', KHÔNG hỏi 'dùng được nga
     expect(grantedMenuActions({ sessionUser: { role: "TEACHER", roles: ["TEACHER"] }, actor: a, flagOn: true })).toContain("leads:export");
   });
 
+  it("[US-03 · VIẾT TRƯỚC — ĐỎ tới khi menu DENY-aware] grant GROUP DENY toàn-action ⇒ action biến khỏi menu", () => {
+    // Nợ ghi ở permissions.md AS-BUILT US-02: "helper aggregate (menu-permissions…) chưa
+    // biết grant DENY — cập nhật khi grant có dữ liệu thật (US-03)". Đây là test đòi nợ:
+    // actor GIỮ attendance:view qua RolePermission, nhưng nhóm của actor bị DENY toàn-action
+    // (fieldMask rỗng, dataScope ALL) ⇒ cổng trang sẽ chặn (engine lib/permissions/can) ⇒
+    // menu vẫn vẽ lối vào là tái sinh đúng lớp dead-link mà page-gates.ts diệt.
+    const giaoVu = actorOf(
+      [
+        { action: "attendance:view", roleCode: "CENTER_CLASS_MANAGER", scopeType: "CENTER" },
+        { action: "students:view-all", roleCode: "CENTER_CLASS_MANAGER", scopeType: "CENTER" },
+      ],
+      ["CENTER_CLASS_MANAGER"],
+    );
+    const actor: Actor = {
+      ...giaoVu,
+      groupIds: ["group-cam-diem-danh"],
+      permissionGrants: [
+        {
+          subjectType: "GROUP",
+          subjectId: "group-cam-diem-danh",
+          permissionKey: "attendance:view",
+          effect: "DENY",
+          dataScope: "ALL",
+          fieldMask: [],
+        },
+      ],
+    };
+    const g = grantedMenuActions({
+      sessionUser: { role: "SALES_CSM", roles: ["SALES_CSM"] },
+      actor,
+      flagOn: true,
+    });
+    expect(g).not.toContain("attendance:view");
+    // DENY chỉ nhắm 1 action — action khác actor đang giữ KHÔNG bị vạ lây.
+    expect(g).toContain("students:view-all");
+  });
+
+  it("[US-03 · ĐỐI XỨNG] grant GROUP ALLOW dataScope ALL ⇒ action XUẤT HIỆN trong menu (cả 2 nhánh cờ)", () => {
+    // Chiều ngược của ca DENY trên: grant ALLOW target-trần mở CỔNG trang
+    // (decidePermissionWithGrant cắm TRƯỚC đường cũ, bất kể cờ) ⇒ menu chỉ TRỪ mà
+    // không CỘNG là "ẩn oan" — trang mở được nhưng không có lối vào (review 09/08).
+    // Actor KHÔNG giữ students:view-all qua RolePermission, v1 TEACHER cũng không có.
+    const base = actorOf([], ["TEACHER"]);
+    const actor: Actor = {
+      ...base,
+      groupIds: ["group-mo-xem-hv"],
+      permissionGrants: [
+        {
+          subjectType: "GROUP",
+          subjectId: "group-mo-xem-hv",
+          permissionKey: "students:view-all",
+          effect: "ALLOW",
+          dataScope: "ALL",
+          fieldMask: [],
+        },
+      ],
+    };
+    const user = { role: "TEACHER", roles: ["TEACHER"] };
+    expect(can(user, "students:view-all" as Action)).toBe(false); // tiền đề: v1 không cho
+    for (const flagOn of [true, false]) {
+      const g = grantedMenuActions({ sessionUser: user, actor, flagOn });
+      expect(g, `flagOn=${flagOn}`).toContain("students:view-all");
+      // ALLOW chỉ nhắm 1 action — không nới menu thành "thấy hết".
+      expect(g, `flagOn=${flagOn}`).not.toContain("payments:manage");
+    }
+  });
+
   it("action gác trang TRẦN (PAGE_GATES) buộc GLOBAL ⇒ menu ≡ cổng cho nhóm đó", () => {
     // rbac-scope.test.ts đã ép mọi action trong PAGE_GATES phải GLOBAL trên mọi role.
     // Nhờ vậy "có giữ action" và "dùng được ngay" trùng nhau đúng ở những route đó.

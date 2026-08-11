@@ -2,7 +2,8 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { ArrowRightLeft, ChevronLeft, ClipboardList, History } from "lucide-react";
 import { auth } from "@/lib/auth";
-import { checkPermission } from "@/lib/auth/check-permission";
+import { checkPermission, checkPermissionDetail } from "@/lib/auth/check-permission";
+import { maskPhone } from "@/lib/utils";
 import { scopedDb, getModelVisibleCenterIds } from "@/lib/db-scope";
 import { resolveActor } from "@/lib/auth/actor";
 import { ChangeStatusDialog } from "../../_components/change-status-dialog";
@@ -60,6 +61,10 @@ export default async function EditEnrollmentPage({ params }: Props) {
 
   const { id } = await params;
   const canViewAudit = await checkPermission("audit-logs:view");
+  // US-03 (TS-02): DENY cấp trường từ grant nhóm — che parentPhone ở card học viên
+  // (đồng nhất với trang /students và list /enrollments).
+  const { fieldMask } = await checkPermissionDetail("students:view-all");
+  const phoneMasked = fieldMask.includes("parentPhone");
 
   // Cách ly cơ sở: Enrollment NAY ∈ SCOPED_MODELS (FL3-02) → sdb.findUnique tự
   // IDOR-filter theo centerId denormalized; check thủ công qua class.centerId
@@ -235,7 +240,11 @@ export default async function EditEnrollmentPage({ params }: Props) {
                 <div className="mt-1 text-sm text-neutral-700">
                   PH: {enrollment.student.parentName}
                   {enrollment.student.parentPhone &&
-                    ` · ${enrollment.student.parentPhone}`}
+                    ` · ${
+                      phoneMasked
+                        ? maskPhone(enrollment.student.parentPhone)
+                        : enrollment.student.parentPhone
+                    }`}
                 </div>
               )}
               <Link

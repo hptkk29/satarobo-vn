@@ -34,6 +34,8 @@ export const ROLE_SEED: RoleSeed[] = [
     perms: [
       { action: "roles:manage", scopeType: "GLOBAL" },
       { action: "roles:assign", scopeType: "GLOBAL" },
+      // US-03 — quản nhóm người dùng + grant nhóm (chỉ SUPER_ADMIN, như roles:manage).
+      { action: "user-groups:manage", scopeType: "GLOBAL" },
       // #17 (câu 55): học bạ. SUPER_ADMIN đã bypass toàn bộ quyền trong can() v2
       // (lib/auth/can.ts) → 2 dòng này KHÔNG đổi hành vi, thêm cho khớp v1 + rõ ý.
       { action: "report-cards:manage", scopeType: "GLOBAL" },

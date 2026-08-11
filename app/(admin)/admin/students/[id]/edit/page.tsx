@@ -4,7 +4,8 @@ import { auth } from "@/lib/auth";
 import { redirect, notFound } from "next/navigation";
 import { scopedDb } from "@/lib/db-scope";
 import { hasRole } from "@/lib/auth/permissions";
-import { checkPermission } from "@/lib/auth/check-permission";
+import { checkPermission, checkPermissionDetail } from "@/lib/auth/check-permission";
+import { maskPhone } from "@/lib/utils";
 import { resolveActor } from "@/lib/auth/actor";
 import { getSelectableOrgUnits } from "@/lib/org/org-service";
 import { getStudentProgressForClasses } from "@/lib/progress";
@@ -35,6 +36,11 @@ export default async function EditStudentPage({ params }: Props) {
   // #15 — CCCD PH là PII: chỉ actor có payments:view-pii (kế toán/admin) mới thấy +
   // sửa. Sale/CM có students:edit nhưng KHÔNG có view-pii → ẩn ô + không prefill raw.
   const canViewParentCccd = await checkPermission("payments:view-pii");
+
+  // US-03 (TS-02): DENY cấp trường từ grant nhóm — che parentPhone kể cả khi actor
+  // có students:edit (mask độc lập với quyết định action — đồng nhất trang list).
+  const { fieldMask } = await checkPermissionDetail("students:view-all");
+  const phoneMasked = fieldMask.includes("parentPhone");
 
   const { id } = await params;
 
@@ -135,7 +141,11 @@ export default async function EditStudentPage({ params }: Props) {
     currentGrade: student.currentGrade,
     school: student.school,
     parentName: student.parentName,
-    parentPhone: student.parentPhone,
+    // Che SĐT PH ở SERVER khi bị DENY cấp trường (chống leak qua RSC payload).
+    parentPhone:
+      phoneMasked && student.parentPhone
+        ? maskPhone(student.parentPhone)
+        : student.parentPhone,
     parentEmail: student.parentEmail,
     parentRelation: student.parentRelation,
     // Không gửi raw CCCD xuống client khi actor không có quyền xem đầy đủ.
@@ -235,6 +245,11 @@ export default async function EditStudentPage({ params }: Props) {
     })),
   );
 
+  // SĐT prefill khối "Tài khoản phụ huynh" — cùng luật che như form phía trên.
+  const rawAccountPhone = student.parentUser?.phone ?? student.parentPhone;
+  const displayAccountPhone =
+    phoneMasked && rawAccountPhone ? maskPhone(rawAccountPhone) : rawAccountPhone;
+
   return (
     <div className="space-y-8">
       <div>
@@ -263,7 +278,7 @@ export default async function EditStudentPage({ params }: Props) {
         parentEmail={student.parentUser?.email ?? null}
         parentName={student.parentUser?.name ?? student.parentName}
         defaultEmail={student.parentEmail}
-        defaultPhone={student.parentUser?.phone ?? student.parentPhone}
+        defaultPhone={displayAccountPhone}
         pendingActivation={student.parentUser?.accountStatus === "PENDING_ACTIVATION"}
       />
 

@@ -6,6 +6,7 @@ import { Fragment, useEffect, useMemo, useState } from "react";
 import {
   LayoutDashboard,
   Users,
+  UsersRound,
   GraduationCap,
   Award,
   ArrowLeftRight,
@@ -243,6 +244,8 @@ const NAV_GROUPS: NavGroup[] = [
     label: "Hệ thống & Cấu hình",
     items: [
       { label: "Tài khoản", href: "/users", icon: KeyRound, perm: ["users:manage"] },
+      // US-03 — nhóm người dùng: grant ad-hoc (ALLOW/DENY) không sửa vai chuẩn.
+      { label: "Nhóm người dùng", href: "/user-groups", icon: UsersRound, perm: ["user-groups:manage"] },
       { label: "Email Templates", href: "/email-templates", icon: Mail, perm: ["emails:view"] },
       { label: "Email Logs", href: "/email-logs", icon: Send, perm: ["emails:view"] },
       // AUTH-SĐT P4 dựng /otp-logs nhưng quên link — màn trả lời "phụ huynh báo

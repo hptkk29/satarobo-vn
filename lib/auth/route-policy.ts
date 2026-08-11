@@ -171,6 +171,9 @@ export const ADMIN_ROUTE_SEGMENTS: ReadonlySet<string> = new Set<string>([
   "tin-nhan",
   "trial-classes",
   "trials",
+  // US-03 (Nền Hệ thống P0) — nhóm người dùng; thiếu segment ở đây thì link
+  // /user-groups trên admin host bounce 308 về public → 404 dù page tồn tại.
+  "user-groups",
   "users",
 ]);
 

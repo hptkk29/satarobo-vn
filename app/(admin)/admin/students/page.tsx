@@ -5,7 +5,11 @@ import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { scopedDb } from "@/lib/db-scope";
 import { resolveActor } from "@/lib/auth/actor";
-import { checkAnyPermission, checkPermission } from "@/lib/auth/check-permission";
+import {
+  checkAnyPermission,
+  checkPermission,
+  checkPermissionDetail,
+} from "@/lib/auth/check-permission";
 import { PAGE_GATES } from "@/lib/auth/page-gates";
 import { getSetting } from "@/lib/settings/service";
 import { canViewLeadPii } from "@/lib/auth/check-permission";
@@ -119,6 +123,10 @@ export default async function StudentsPage({ searchParams }: SearchParams) {
   // #11 — che SĐT phụ huynh mặc định (đồng nhất với leads/payments); chỉ role có
   // quyền xem PII liên hệ (leads:view-pii) mới thấy đầy đủ.
   const canViewPii = await canViewLeadPii();
+  // US-03 (TS-02): DENY cấp trường từ grant nhóm — che parentPhone kể cả khi
+  // đường cũ vẫn cho xem PII (mask độc lập với quyết định action).
+  const { fieldMask } = await checkPermissionDetail("students:view-all");
+  const phoneMasked = fieldMask.includes("parentPhone");
 
   // Cách ly cơ sở: Student ∈ SCOPED_MODELS (có centerId) → scopedDb tự inject
   // `centerId IN visibleCenters`. Mọi đọc Student đi qua sdb. SUPER_ADMIN/HO bypass.
@@ -147,12 +155,19 @@ export default async function StudentsPage({ searchParams }: SearchParams) {
   // on before lifecycle tabs were added.
   const baseFilters: Prisma.StudentWhereInput = {};
   if (q) {
+    // NỢ #11 (search-oracle): chỉ cho tìm theo SĐT khi actor thấy được SĐT thật —
+    // cùng điều kiện với hiển thị (canViewPii VÀ không bị DENY cấp trường TS-02).
+    // Thiếu quyền mà vẫn filter theo SĐT = dò được số qua kết quả trả về.
     baseFilters.OR = [
       { name: { contains: q, mode: "insensitive" } },
       { studentCode: { contains: q, mode: "insensitive" } },
       { parentName: { contains: q, mode: "insensitive" } },
-      { parentPhone: { contains: qPhone } },
-      { phone: { contains: qPhone } },
+      ...(canViewPii && !phoneMasked
+        ? [
+            { parentPhone: { contains: qPhone } },
+            { phone: { contains: qPhone } },
+          ]
+        : []),
     ];
   }
   if (centerId) baseFilters.preferredCenterId = centerId;
@@ -211,7 +226,8 @@ export default async function StudentsPage({ searchParams }: SearchParams) {
   }
 
   // Che SĐT phụ huynh ở SERVER cho actor thiếu quyền (chống leak qua RSC payload).
-  if (!canViewPii) {
+  // Hiện đầy đủ = có quyền PII VÀ không bị DENY cấp trường (TS-02).
+  if (!canViewPii || phoneMasked) {
     students = students.map((s) => ({
       ...s,
       parentPhone: s.parentPhone ? maskPhone(s.parentPhone) : s.parentPhone,

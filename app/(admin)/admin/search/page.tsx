@@ -4,7 +4,7 @@ import { Search as SearchIcon, Users, GraduationCap, Newspaper } from "lucide-re
 import { auth } from "@/lib/auth";
 import { scopedDb } from "@/lib/db-scope";
 import { resolveActor } from "@/lib/auth/actor";
-import { checkPermission } from "@/lib/auth/check-permission";
+import { checkPermission, checkPermissionDetail } from "@/lib/auth/check-permission";
 import { canViewLeadPii } from "@/lib/auth/check-permission";
 import { maskLeadPiiFields } from "@/lib/lead/pii";
 import { LEAD_STATUS_LABEL } from "@/lib/leads/status";
@@ -47,6 +47,14 @@ export default async function GlobalSearchPage({
   const canLeads = canLeadsAll || canLeadsOwn;
   const scopeToSelf = !canLeadsAll && canLeadsOwn;
   const canViewPii = await canViewLeadPii();
+  // NỢ #11 (search-oracle): chỉ cho tìm theo SĐT PH khi actor thấy được SĐT thật —
+  // cùng điều kiện với hiển thị (canViewPii VÀ không bị DENY cấp trường TS-02).
+  // Mỗi nhóm kết quả gate theo ĐÚNG trục PII của nó: học viên = mask "parentPhone"
+  // của students:view-all; lead = mask "phone" của leads:view-pii (Q7 cai PII lead).
+  const { fieldMask: studentMask } = await checkPermissionDetail("students:view-all");
+  const canSearchStudentPhone = canViewPii && !studentMask.includes("parentPhone");
+  const { fieldMask: leadMask } = await checkPermissionDetail("leads:view-pii");
+  const canSearchLeadPhone = canViewPii && !leadMask.includes("phone");
 
   const [leads, students, news] = doSearch
     ? await Promise.all([
@@ -70,7 +78,8 @@ export default async function GlobalSearchPage({
                   : {}),
                 OR: [
                   { parentName: { contains: q, mode: "insensitive" } },
-                  { phone: { contains: qPhone } },
+                  // Lead.phone = SĐT PH — chỉ tìm được khi thấy SĐT thật (NỢ #11).
+                  ...(canSearchLeadPhone ? [{ phone: { contains: qPhone } }] : []),
                   { childName: { contains: q, mode: "insensitive" } },
                 ],
               },
@@ -92,8 +101,13 @@ export default async function GlobalSearchPage({
                   { name: { contains: q, mode: "insensitive" } },
                   { studentCode: { contains: q, mode: "insensitive" } },
                   { parentName: { contains: q, mode: "insensitive" } },
-                  { parentPhone: { contains: qPhone } },
-                  { phone: { contains: qPhone } },
+                  // SĐT PH/HV — chỉ tìm được khi thấy SĐT thật (NỢ #11).
+                  ...(canSearchStudentPhone
+                    ? [
+                        { parentPhone: { contains: qPhone } },
+                        { phone: { contains: qPhone } },
+                      ]
+                    : []),
                 ],
               },
               select: { id: true, name: true, studentCode: true, parentName: true },

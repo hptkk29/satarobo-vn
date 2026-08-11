@@ -101,6 +101,9 @@ export function MessageComposer({
           onClick={submit}
           disabled={!canSubmit}
           // ≥44px cho vùng chạm mobile 375px.
+          // aria-label: mobile ẩn chữ "Gửi" (hidden sm:inline) → nút icon-only phải
+          // có tên truy cập (a11y + selector getByRole của smoke chạy được cả 2 viewport).
+          aria-label="Gửi"
           className="h-11 shrink-0 px-4"
         >
           <Send className="size-4" />

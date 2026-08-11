@@ -62,3 +62,15 @@ jobs:
         env:
           DATABASE_URL: ${{ secrets.PROD_DATABASE_URL }}
           DIRECT_URL: ${{ secrets.PROD_DIRECT_URL }}
+
+      # Nền Hệ thống P0 · US-01 — nạp registry quyền vào bảng PermissionDescriptor.
+      # Key trùng giữa 2 module → step ĐỎ + DB nguyên trạng (throw trước transaction).
+      # Lưu ý: workflow này KHÔNG gate Vercel — code vẫn lên prod khi step đỏ; cổng
+      # chặn chính là unit test TS-01 ở PR (ci.yml). Auto-seed: user duyệt 09/08/2026.
+      # DATABASE_URL trỏ SESSION pooler (DIRECT) như seed-prod-roles.yml — tránh quirk
+      # prepared-statement của transaction pooler khi chạy PrismaClient trần từ CI.
+      - name: Sync permission registry
+        run: pnpm db:seed:permissions
+        env:
+          DATABASE_URL: ${{ secrets.PROD_DIRECT_URL }}
+          DIRECT_URL: ${{ secrets.PROD_DIRECT_URL }}

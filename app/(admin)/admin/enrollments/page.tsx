@@ -2,7 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Plus, ClipboardList, Pencil } from "lucide-react";
 import { auth } from "@/lib/auth";
-import { checkPermission } from "@/lib/auth/check-permission";
+import { checkPermission, checkPermissionDetail } from "@/lib/auth/check-permission";
 import { scopedDb } from "@/lib/db-scope";
 import { resolveActor } from "@/lib/auth/actor";
 import { EnrollmentStatus, type Prisma } from "@prisma/client";
@@ -60,6 +60,10 @@ export default async function EnrollmentsAdminPage({ searchParams }: SearchParam
   if (!(await checkPermission("enrollments:view-all"))) redirect("/dashboard");
   const canDelete = await checkPermission("enrollments:delete");
   const canViewPii = await canViewLeadPii(); // che SĐT PH nếu thiếu quyền
+  // US-03 (TS-02): DENY cấp trường từ grant nhóm — che parentPhone kể cả khi
+  // đường cũ vẫn cho xem PII (đồng nhất với trang /students).
+  const { fieldMask } = await checkPermissionDetail("students:view-all");
+  const phoneMasked = fieldMask.includes("parentPhone");
 
   // Cách ly cơ sở (FL3-02): Enrollment giờ ∈ SCOPED_MODELS → scopedDb tự inject
   // `Enrollment.centerId IN visibleCenters`. KHÔNG còn scope tay qua class.centerId.
@@ -96,10 +100,16 @@ export default async function EnrollmentsAdminPage({ searchParams }: SearchParam
   if (centerFilter) where.centerId = centerFilter;
 
   if (q) {
+    // NỢ #11 (search-oracle): chỉ cho tìm theo SĐT khi actor thấy được SĐT thật —
+    // cùng điều kiện với hiển thị (canViewPii VÀ không bị DENY cấp trường TS-02).
     where.OR = [
       { student: { name: { contains: q, mode: "insensitive" } } },
-      { student: { parentPhone: { contains: qPhone } } },
-      { student: { phone: { contains: qPhone } } },
+      ...(canViewPii && !phoneMasked
+        ? [
+            { student: { parentPhone: { contains: qPhone } } },
+            { student: { phone: { contains: qPhone } } },
+          ]
+        : []),
       { class: { name: { contains: q, mode: "insensitive" } } },
       { class: { classCode: { contains: q, mode: "insensitive" } } },
     ];
@@ -272,8 +282,11 @@ export default async function EnrollmentsAdminPage({ searchParams }: SearchParam
                       color: "bg-gray-100 text-gray-500",
                     };
                   const rawPhone = e.student.parentPhone ?? e.student.phone;
+                  // Hiện đầy đủ = có quyền PII VÀ không bị DENY cấp trường (TS-02).
                   const parentPhone =
-                    rawPhone && !canViewPii ? maskPhone(rawPhone) : rawPhone;
+                    rawPhone && (!canViewPii || phoneMasked)
+                      ? maskPhone(rawPhone)
+                      : rawPhone;
                   return (
                     <tr key={e.id} className="hover:bg-gray-50/60">
                       <td className="px-4 py-3">

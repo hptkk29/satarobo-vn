@@ -352,6 +352,103 @@ model RolePermission {
   @@index([roleId])
 }
 
+// ─── Nền Hệ thống P0 · US-01 — Registry quyền tập trung (TS-01) ───
+// Nguồn khai báo: lib/permissions/registry (mỗi module 1 ModuleDecl). Seed nạp lúc
+// deploy qua prisma/seed-permission-registry.ts (pnpm db:seed:permissions).
+// Key vắng khỏi khai báo → isActive=false, KHÔNG DELETE (giữ vết audit/rollback).
+model PermissionDescriptor {
+  key             String   @id // vd "leads:view-all" (format v1) — format mới chuẩn hoá ở pha sau
+  module          String // module nghiệp vụ sở hữu quyền, vd "crm", "lms"
+  action          String // verb thô sau dấu ":"
+  scopable        Boolean  @default(true) // quyền có cần data scope không (BA §2.5)
+  sensitiveFields String[] @default([])
+  description     String?
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt       DateTime @updatedAt @db.Timestamptz(6)
+
+  grants PermissionGrant[] // US-02 — grant trỏ về key registry (Restrict: không xoá key còn grant)
+
+  @@index([module])
+}
+
+// ─── Nền Hệ thống P0 · US-02 — PermissionGrant (TS-02) ───
+// Bảng grant MỚI cho engine can() hợp nhất (lib/permissions/can.ts). Ship RỖNG:
+// không grant khớp → fallback NGUYÊN TRẠNG đường cũ (v1/v2/shadow/flag).
+// KHÔNG liên quan UserPermissionGrant cũ — engine mới TUYỆT ĐỐI không đọc bảng cũ
+// (test ghim [A0-03-T6-02] "grant DENY không làm mất quyền role" phải xanh nguyên trạng).
+
+/// US-02 — chủ thể nhận grant: RoleDef (subjectId = RoleDef.id) hoặc UserGroup (US-03).
+enum GrantSubjectType {
+  ROLE
+  GROUP
+}
+
+/// US-02 — phạm vi dữ liệu của grant (BA §2.5). Trước P1 fallback theo centerId (AC3).
+enum DataScope {
+  ALL
+  UNIT_AND_BELOW
+  UNIT_ONLY
+  OWN
+}
+
+model PermissionGrant {
+  id          String           @id @default(cuid())
+  subjectType GrantSubjectType
+  subjectId   String // polymorphic theo subjectType (RoleDef.id | UserGroup.id US-03) — KHÔNG FK có chủ đích
+  // FK về registry (Restrict): không cho grant trỏ key chưa khai báo, không xoá key còn grant.
+  permissionKey String
+  descriptor    PermissionDescriptor @relation(fields: [permissionKey], references: [key], onDelete: Restrict)
+  effect        GrantType // ALLOW | DENY — DENY fieldMask rỗng chặn action, KHÁC rỗng chỉ che trường
+  dataScope     DataScope
+  fieldMask     String[]             @default([]) // rỗng = toàn action; khác rỗng (DENY) = che các trường này
+  derivedFrom   String? // vd hợp đồng franchise sinh grant (BA §6 "chừa cột trước" — engine chưa dùng)
+  reason        String?              @db.Text // lý do cấp/chặn (audit)
+  createdById   String?
+  createdAt     DateTime             @default(now()) @db.Timestamptz(6)
+  updatedAt     DateTime             @updatedAt @db.Timestamptz(6)
+
+  @@unique([subjectType, subjectId, permissionKey, effect])
+  @@index([subjectType, subjectId])
+  @@index([permissionKey])
+}
+
+// ─── Nền Hệ thống P0 · US-03 — UserGroup (nhóm người dùng, TS-02) ───
+// Nhóm cấp quyền ad-hoc cho ít người mà không sửa vai trò chuẩn: PermissionGrant
+// subjectType=GROUP trỏ subjectId = UserGroup.id (polymorphic, không FK — như ROLE).
+// SOFT DELETE (deletedAt): nhóm đã xoá → resolveActor bỏ membership → grant của nhóm
+// VÔ HIỆU ngay lần resolve kế, KHÔNG cần dọn grant. Grant GROUP ở P0 chỉ nhận
+// dataScope ALL|OWN (validator chặn UNIT_* — GROUP không có mapping roleCenterScope
+// tới P1, xem [PIN] trong lib/permissions/can.test.ts).
+model UserGroup {
+  id          String    @id @default(cuid())
+  // Unique theo tên CHỈ giữa nhóm còn sống: partial unique index
+  // "UserGroup_name_active_key" ON (name) WHERE deletedAt IS NULL — Prisma chưa
+  // biểu diễn được partial index nên viết trong SQL migration (20260809160000).
+  name        String
+  description String?   @db.Text
+  deletedAt   DateTime? @db.Timestamptz(6) // SOFT DELETE — nhóm xoá vẫn giữ vết audit
+  createdById String?
+  createdAt   DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt   DateTime  @updatedAt @db.Timestamptz(6)
+
+  members UserGroupMember[]
+}
+
+// Thành viên nhóm — HARD DELETE (gỡ là mất ngay ở lần resolve kế; audit ở RbacAuditLog).
+model UserGroupMember {
+  userId    String
+  groupId   String
+  addedById String? // ai thêm (audit nhẹ tại chỗ; vết đầy đủ ở RbacAuditLog)
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+
+  user  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  group UserGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  @@id([userId, groupId])
+  @@index([groupId])
+}
+
 model UserOrgRole {
   userId        String
   orgUnitId     String
@@ -771,6 +868,9 @@ model User {
 
   permissionGrants   UserPermissionGrant[] @relation("UserPermissionGrants")
   permissionsGranted UserPermissionGrant[] @relation("UserPermissionGrantor")
+
+  // Nền Hệ thống P0 · US-03 — nhóm người dùng (một người thuộc nhiều nhóm).
+  groupMemberships UserGroupMember[]
 
   // Phase 5.4.0 — Audit log relations
   auditLogs      UserAuditLog[]            @relation("UserAuditLogs")
