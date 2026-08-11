@@ -4,7 +4,11 @@
 import { cache } from "react";
 import { db } from "@/lib/db";
 import { ACTION_REGISTRY } from "@/lib/auth/action-registry";
-import { getSubtreeCenterIds, getSubtreeOrgUnitIds } from "@/lib/org/org-tree";
+import {
+  centerScopeForOrgUnit,
+  getSubtreeCenterIds,
+  getSubtreeOrgUnitIds,
+} from "@/lib/org/org-tree";
 import type { OrgUnitNode } from "@/lib/org/types";
 // US-02 — type-only (erased khi compile, không tạo cycle runtime với lib/permissions/can.ts).
 // GrantRow lấy từ module type-lá (KHÔNG phải lib/permissions/can) — tránh vòng
@@ -77,9 +81,19 @@ export type Actor = {
   groupIds?: string[];
   /** Grant từ bảng PermissionGrant MỚI (KHÔNG phải UserPermissionGrant cũ). */
   permissionGrants?: GrantRow[];
-  /** Tầm nhìn cơ sở per RoleDef.id cho dataScope UNIT_ONLY — cùng công thức PermEntry.centerScope. */
-  roleCenterScope?: Record<string, "ALL" | string[]>;
+  /**
+   * Tầm nhìn cơ sở per RoleDef.id cho dataScope UNIT_* — cùng công thức PermEntry.centerScope.
+   *
+   * P1 · US-05 ĐỔI SHAPE: trước đây là MỘT danh sách nên `can()` không phân biệt nổi
+   * UNIT_ONLY với UNIT_AND_BELOW (nợ đã ghi ở documentation/permissions.md). Nay mang cả
+   * hai mức, `lib/permissions/can.ts` chọn theo `grant.dataScope`.
+   * "ALL" giữ nguyên nghĩa: role đặt tại HO/ROOT → cross-center theo chức năng.
+   */
+  roleCenterScope?: Record<string, RoleCenterScope>;
 };
+
+/** Phạm vi cơ sở của MỘT role, tách 2 mức (BA §2.5). Xem lib/org/org-tree.ts. */
+export type RoleCenterScope = "ALL" | { unitOnly: string[]; unitAndBelow: string[] };
 
 /** Đối tượng bị kiểm tra quyền (tùy action mà cần field nào). */
 export type Target = {
@@ -193,9 +207,9 @@ export function buildActor(input: {
   const permissions: PermEntry[] = [];
   const visible = new Set<string>();
   const visibleOrg = new Set<string>();
-  // US-02 — RoleDef.id đang hiệu lực + tầm nhìn cơ sở per role (cho dataScope UNIT_ONLY).
+  // US-02 — RoleDef.id đang hiệu lực + tầm nhìn cơ sở per role (cho dataScope UNIT_*).
   const roleIdSet = new Set<string>();
-  const roleCenterScope: Record<string, "ALL" | string[]> = {};
+  const roleCenterScope: Record<string, RoleCenterScope> = {};
 
   for (const r of liveRows) {
     const node = orgById.get(r.orgUnitId);
@@ -211,15 +225,22 @@ export function buildActor(input: {
       : getSubtreeOrgUnitIds(input.orgNodes, r.orgUnitId);
     rowOrgUnits.forEach((o) => visibleOrg.add(o));
 
-    // US-02 — roleCenterScope: CÙNG công thức PermEntry.centerScope (hoRoot → "ALL",
-    // ngược lại subtree centerIds); role gán ở nhiều orgUnit → "ALL" thắng, else union.
+    // US-02/US-05 — roleCenterScope: CÙNG công thức PermEntry.centerScope (hoRoot → "ALL");
+    // ngược lại tách 2 mức qua centerScopeForOrgUnit (P1). Role gán ở nhiều orgUnit →
+    // "ALL" thắng, còn lại hợp (union) TỪNG MỨC — không trộn hai mức vào nhau, vì trộn là
+    // đúng cái làm UNIT_ONLY nở ra bằng UNIT_AND_BELOW.
     if (r.roleId) {
       roleIdSet.add(r.roleId);
       const prev = roleCenterScope[r.roleId];
       if (hoRoot || prev === "ALL") {
         roleCenterScope[r.roleId] = "ALL";
       } else {
-        roleCenterScope[r.roleId] = [...new Set([...(prev ?? []), ...rowCenters])];
+        const scope = centerScopeForOrgUnit(input.orgNodes, r.orgUnitId);
+        const prevObj = prev ?? { unitOnly: [], unitAndBelow: [] };
+        roleCenterScope[r.roleId] = {
+          unitOnly: [...new Set([...prevObj.unitOnly, ...scope.unitOnly])],
+          unitAndBelow: [...new Set([...prevObj.unitAndBelow, ...scope.unitAndBelow])],
+        };
       }
     }
 

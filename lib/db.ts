@@ -1,5 +1,6 @@
 import { PrismaClient } from "@prisma/client";
 import { SOFT_DELETE_MODELS, injectSoftDelete } from "@/lib/soft-delete";
+import { dualWriteExtension, setDualWriteClient } from "@/lib/org/dual-write";
 
 const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient | undefined;
@@ -92,4 +93,13 @@ export const db = basePrisma.$extends({
       },
     },
   },
-}) as unknown as PrismaClient;
+})
+  // P1 · US-07 AC2 — ghi kép centerId → orgUnitId ở TẦNG CLIENT, một chỗ cho mọi model.
+  // Đặt SAU soft-delete nên `scopedDb` (vốn là `db.$extends`) cũng thừa hưởng: không
+  // đường ghi nào của app đi vòng qua được. Chỉ điền khi thiếu, không đè giá trị người
+  // gọi tự set, không suy ngược orgUnitId → centerId (chiều đó là P4).
+  .$extends(dualWriteExtension()) as unknown as PrismaClient;
+
+// Client TRẦN cho extension tra cứu Center → OrgUnit. Bắt buộc phải là base, không phải
+// `db`: dùng `db` thì `orgUnit.findFirst` bên trong hook lại đi qua chính hook đó → đệ quy.
+setDualWriteClient(basePrisma);

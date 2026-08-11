@@ -25,14 +25,20 @@ export type GrantDecision =
   | { hit: false };
 
 /**
- * dataScope khớp target? — AC3: trước P1 fallback theo centerId hiện hành.
+ * dataScope khớp target? — đơn vị đo vẫn là `centerId` (luật cứng #2: trước P4 không đổi
+ * hành vi đường cũ; `Target` cố ý CHƯA mang orgUnitId, đó là việc của P3/P4).
  * - ALL: không lọc (target null vẫn true).
- * - UNIT_AND_BELOW / UNIT_ONLY: target.centerId ∈ roleCenterScope[grant.subjectId] —
- *   PER-ROLE cả hai (review 09/08: neo UNIT_AND_BELOW vào union visibleCenterIds toàn
- *   actor làm grant của role CS1 vươn NGANG sang CS2 qua role kiêm nhiệm không liên
- *   quan). "ALL" = mọi centerId nhưng target null vẫn false; thiếu mapping (vd GROUP
- *   trước US-03) → false. Pre-P1 roleCenterScope đã là subtree-centers nên hai mức
- *   trùng nhau khi role gán tại CENTER; khác biệt thật xuất hiện ở P1 (OrgUnit.path).
+ * - UNIT_AND_BELOW / UNIT_ONLY: target.centerId ∈ mức TƯƠNG ỨNG của
+ *   roleCenterScope[grant.subjectId] — PER-ROLE cả hai (review 09/08: neo UNIT_AND_BELOW
+ *   vào union visibleCenterIds toàn actor làm grant của role CS1 vươn NGANG sang CS2 qua
+ *   role kiêm nhiệm không liên quan). "ALL" = mọi centerId nhưng target null vẫn false;
+ *   thiếu mapping → false (fail-closed).
+ *
+ *   P1 · US-05 — HAI MỨC NAY KHÁC NHAU THẬT. Trước P1 chúng dùng chung một danh sách
+ *   (nợ ghi ở documentation/permissions.md). Hệ quả cụ thể: role gán tại một REGION có
+ *   grant UNIT_ONLY nay KHÔNG còn với tới cơ sở nào — `unitOnly` của REGION là rỗng vì
+ *   vùng không phải cơ sở. Đây là SIẾT quyền, không phải nới, và đúng bảng chân trị
+ *   TS-04 mà P0 đã ký.
  * - OWN: target.createdById === actor.userId (target null → false).
  */
 function scopeSatisfied(grant: GrantRow, actor: Actor, target?: Target): boolean {
@@ -44,7 +50,9 @@ function scopeSatisfied(grant: GrantRow, actor: Actor, target?: Target): boolean
       if (!target?.centerId) return false;
       const scope = actor.roleCenterScope?.[grant.subjectId];
       if (scope == null) return false; // thiếu mapping → an toàn = false
-      return scope === "ALL" || scope.includes(target.centerId);
+      if (scope === "ALL") return true;
+      const centers = grant.dataScope === "UNIT_ONLY" ? scope.unitOnly : scope.unitAndBelow;
+      return centers.includes(target.centerId);
     }
     case "OWN":
       return !!target?.createdById && target.createdById === actor.userId;

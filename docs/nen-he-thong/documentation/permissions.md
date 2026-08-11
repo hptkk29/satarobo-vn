@@ -88,3 +88,18 @@ Vai trò tuỳ biến: đơn vị tự tạo trong phạm vi mình (LOCAL_ONLY),
 | DB constraint | Chống vòng lặp cây (OrgUnit, reportsToPositionId), unique PRIMARY assignment, máy trạng thái FC |
 
 Quy tắc bất biến: **không Server Action nào kiểm quyền ngoài `can()`** — thực thi bằng lint (TS-03).
+
+## AS-BUILT — P1 · US-05/US-06 (11/08/2026) — TRẢ NỢ "hai mức UNIT_* trùng nhau"
+
+Nợ ghi ở mục US-02 phía trên (*"pre-P1 hai mức UNIT_ONLY/UNIT_AND_BELOW trùng nhau… phân biệt thật ở P1 bằng `OrgUnit.path`"*) **đã trả**.
+
+- **`Actor.roleCenterScope` đổi shape:** `"ALL" | string[]` → `"ALL" | { unitOnly: string[]; unitAndBelow: string[] }`. Trước P1 chỉ chở được MỘT danh sách nên `scopeSatisfied()` dùng chung một thân cho cả hai mức; nay `lib/permissions/can.ts:42-50` chọn danh sách theo `grant.dataScope`.
+- **Nguồn của hai mức:** `centerScopeForOrgUnit()` (`lib/org/org-tree.ts`). `unitOnly` = cơ sở của CHÍNH node (REGION/HO → `[]` vì vùng không phải cơ sở); `unitAndBelow` = mọi cơ sở trong nhánh, ưu tiên so `path` prefix, rơi về duyệt `parentId` khi còn dòng chưa backfill. Test `[US-05-U-18]` khẳng định hai đường cho cùng kết quả.
+- **Đây là SIẾT quyền, không phải nới:** role gán tại một REGION mang grant `UNIT_ONLY` nay KHÔNG với tới cơ sở nào — đúng bảng chân trị TS-04 mà P0 đã ký (`resolveRoleCenterScope` của fixture vốn đã trả `[]` cho ca đó).
+- **Role kiêm nhiệm nhiều đơn vị:** hợp (union) TỪNG MỨC riêng, không trộn — trộn là đúng cái làm `unitOnly` nở ra bằng `unitAndBelow`.
+- **Đơn vị đo VẪN là `centerId`.** `Target` cố ý chưa mang `orgUnitId` (luật cứng #2: trước P4 không đổi hành vi đường cũ). Đổi `Target` sang `orgUnitId` là việc P3 (shadow) → P4 (cutover); làm sớm ở P1 sẽ lật 6 ô DENY từ `false` sang `true`, tức MỞ quyền.
+- **Grant `GROUP` không có mặt trong `roleCenterScope`** (map đánh theo `RoleDef.id`). Hành vi giữ NGUYÊN như P0: `scope == null` → `false` (fail-closed). Đây cũng là lý do US-03 siết grant GROUP chỉ còn `dataScope ALL`.
+
+**V7 nới cho HO mang `centerId`** — xem `lib/org/orgunit-rules.ts`. Bịt Center `hoi-so` mồ côi; KHÔNG kéo theo việc HO thành "một cơ sở" vì `getSubtreeCenterIds`/`allCenterIds` vẫn lọc `type === "CENTER"`.
+
+**Nợ còn lại của P1:** US-07 (backfill `orgUnitId` cho 21 bảng còn thiếu + ghi kép + đối soát đêm). Cho tới khi nó xong, `visibleOrgUnitIds` vẫn chỉ là cột song song chưa ai enforce.

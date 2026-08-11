@@ -63,3 +63,39 @@ Actor: Kế toán HO · Kết quả: file bảng công + doanh thu tháng đẩy
 2. Xuất file theo kỳ; số liệu franchise chỉ gồm khoản HO được thấy (tổng hợp + căn cứ phí).
 3. Một chiều: satarobo → người → MISA import. MISA không có credential gọi vào satarobo.
 Định dạng file: CHƯA CHỐT (E1 pre-mortem) — chặn P5, không chặn P0–P4.
+
+## AS-BUILT — P1 · US-07: ghi kép `centerId` → `orgUnitId` (11/08/2026)
+
+**Vì sao là một cơ chế chứ không phải 60 lần sửa tay.** PR-A (15/06) thêm `orgUnitId` cho 28 bảng rồi backfill MỘT LẦN, và để việc ghi kép cho từng call-site tự nhớ. Đo lại hôm nay: >60 call-site production vẫn chỉ ghi `centerId`. Bằng chứng đanh nhất là migration `20260624010000` backfill `Enrollment.centerId` hồi 24/06, vậy mà 05/08 vẫn phải viết `scripts/backfill-enrollment-center.ts` vá tay — vì đường ghi mới tiếp tục đẻ dòng thiếu. Nợ không đứng yên.
+
+⇒ Ghi kép làm ở **tầng client** (`lib/org/dual-write.ts`), cắm vào `lib/db.ts` ngay sau extension soft-delete nên `scopedDb` cũng thừa hưởng.
+
+**Luật của cơ chế — cố ý hẹp:**
+
+| Tình huống | Hành vi | Vì sao |
+|---|---|---|
+| có `centerId`, thiếu `orgUnitId` | điền | đúng việc của AC2 |
+| người gọi tự set `orgUnitId` | **không đè** | 50 call-site đang gọi `orgUnitIdForCenter()` tay vẫn đúng; không đẻ nguồn ghi thứ hai |
+| `centerId: null` tường minh | **không đoán** | ở nhiều bảng null nghĩa là "toàn hệ thống" / "chưa đối khớp" |
+| không ánh xạ được | để null, **không ném lỗi** | ném ở tầng này là biến một cột phụ thành thứ chặn cả nghiệp vụ |
+| `updateMany` | **không hook** | một khối `data` áp cho nhiều dòng nhiều cơ sở; suy một giá trị chung là gán sai hàng loạt |
+| SQL thô / migration / script | **không đi qua** | đây chính là lý do phải có đối soát đêm — ghim ở `[US-07-IT-10]` |
+
+**Cầu ánh xạ hai nhánh.** `OrgUnit.centerId = Center.id`, HOẶC `OrgUnit.code = Center.code`. Nhánh hai là cầu cho **Center mồ côi**: `Center("hoi-so")` (code "HO") không được OrgUnit nào trỏ tới vì luật V7 cấm đơn vị HO mang `centerId`. US-05 đã thử nới luật đó và phải **gỡ** — nới ra là màn nhân sự neo vai người Hội sở tại HO ⇒ `isHoLevel` ⇒ thấy mọi cơ sở. Cầu theo `code` giải đúng bài toán ánh xạ mà không nạp thêm nghĩa cho cột `centerId`, và **không đường quyền nào đọc nó**.
+
+**Cache.** Chỉ cache kết quả CÓ; tra hụt luôn hỏi lại DB. Khác biệt cố ý với lần cache cây OrgUnit đã phải gỡ (REQ-02): lần đó cache cả kết quả rỗng nên actor thấy cây cũ và phạm vi về rỗng. Ở đây sai lầm tệ nhất là một dòng thiếu `orgUnitId` — đối soát đêm nhặt được, và không ai mất quyền vì nó.
+
+**Ba nhóm, không phải hai** (`lib/org/center-bridge.ts` — nguồn sự thật dùng chung cho migration, ghi kép và đối soát):
+
+- `BAT_BUOC` (16 bảng) — `centerId` luôn phải có; thiếu `orgUnitId` là lỗi thật.
+- `NULL_TOAN_HE_THONG` (6) — Affiliate, EvaluationRound, RevenueTarget, SataCoinRule, WorkShiftConfig, FacebookPageMapping. Điền vào là khoá dữ liệu dùng chung về một cơ sở.
+- `NULL_CHUA_KHOP` (2) — BankTransaction (tiền về chưa đối khớp), WorkRequest. Điền vào là giấu mất việc đang tồn đọng.
+- `CHUA_RA_SOAT` (28 bảng PR-A) — chưa ai rà nghĩa của NULL. Đếm và hiện, **không** báo động; chỉ "sai ánh xạ" mới báo. Rà xong thì chuyển nhóm kèm bằng chứng.
+
+⚠️ **Đừng dùng `NULL_IS_GLOBAL_MODELS` của `lib/db-scope.ts` làm định nghĩa nhóm.** Tập đó gộp `BankTransaction` chung rổ với `Survey` dù ngữ nghĩa hoàn toàn khác.
+
+**Đối soát đêm** (`/api/cron/orgunit-drift`, 03:00 VN) — chỉ đọc, ghi `OrgUnitDriftRun` + `OrgUnitDriftItem`, tự dọn log quá 30 ngày. Có bản ghi *run* riêng để "đêm sạch" không trông giống "job không chạy". **Không tự sửa dữ liệu**: sửa mù trên 52 bảng lúc 3h sáng là cách nhanh nhất biến lỗi nhỏ thành sự cố lớn.
+
+Luật cứng #8 ("không cron nào GHI thay đổi quyền") không bị chạm: job không đụng `UserOrgRole`/`PermissionGrant`/`RoleDef`, và tới hết P4 phạm vi quyền vẫn resolve theo `centerId`.
+
+Cách chạy trên DB thật: `docs/nen-he-thong/RUNBOOK-P1.md`.

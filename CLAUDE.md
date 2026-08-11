@@ -91,7 +91,17 @@ prisma/
 - Pattern: `can(session.user, 'employees:edit')` → boolean; `assertCan(...)` throw trong Server Actions/API.
 
 **Target (Doc 15 §2 — A0, đã chốt §11 Open Items) — dùng cho việc xây MỚI:**
-- **Tổ chức = OrgUnit tree:** ROOT(SataRobo) → **HO, CS1, CS2 độc lập ngang hàng**. HO (Hội sở) KHÔNG thuộc CS2 dù trùng địa chỉ. Mở CS mới = thêm data, không sửa code. KHÔNG dùng `address` để suy quan hệ quản lý.
+- ⚠️ **HÌNH CÂY ĐÃ ĐỔI 11/08/2026 (Nền Hệ thống P1 · US-05).** Chủ dự án chốt lấy **BA 08/08 §1.1** làm chuẩn (README bàn giao §1: "xung đột ở đâu → BA thắng"):
+  ```
+  HO (gốc, depth 0)  →  REGION (khối tỉnh/TP)  →  CENTER (cơ sở)
+  path: "/ho/danang/cs1/"
+  ```
+  ~~ROOT(SataRobo) → HO, CS1, CS2 độc lập ngang hàng~~ **[ĐẢO — chốt 11/08]** Doc 15 OI-1 và QĐ-A 28/07 đều bị bản BA thắng. Hệ quả: `getSubtreeCenterIds(HO)` nay trả **đủ danh sách cơ sở** (trước là `[]` — hành vi cố ý cũ). Đây KHÔNG phải nới quyền: `buildActor()` vốn đã cấp cross-center cho role tại HO/ROOT qua nhánh `isHoLevel` riêng.
+  Cây mặc định không còn node `ROOT`; node SATAROBO trên DB đang chạy được đóng bằng `scripts/nen-p1-reshape-org-tree.ts` (dry-run mặc định, **người vận hành chạy tay** — luật cứng #4). Runbook: `docs/nen-he-thong/RUNBOOK-P1.md`.
+- ⚠️ **`Center("hoi-so")` là bản ghi MỒ CÔI đã biết** — không OrgUnit nào trỏ tới, vì V7 cấm đơn vị HO mang `centerId`. **ĐỪNG nới V7 để "vá" nó**: đã thử ở US-05 và phải gỡ — màn nhân sự suy đơn vị neo RBAC v2 từ Center của nhân sự, nên nới ra là người Hội sở được neo vai TẠI HO ⇒ `isHoLevel` ⇒ **thấy mọi cơ sở** (trước đó đường này bị chặn cứng bằng `OrgRoleSyncError`). Ánh xạ đúng nằm ở `lib/org/center-bridge.ts`: khớp theo `OrgUnit.code = Center.code`.
+- **Mở CS mới = thêm data, không sửa code.** KHÔNG dùng `address` để suy quan hệ quản lý.
+- **Ghi kép `centerId` → `orgUnitId`** (P1 · US-07) làm ở **một chỗ**: `lib/org/dual-write.ts`, cắm trong `lib/db.ts`. Code mới **không** phải tự gọi `orgUnitIdForCenter()`. Cơ chế cố ý không đè giá trị bạn tự set, không đoán khi `centerId: null`, và không hook `updateMany`. Đường ghi bằng SQL thô không qua nó — đó là việc của cron đối soát đêm `/api/cron/orgunit-drift`.
+- **Ý nghĩa `centerId = NULL` KHÁC NHAU theo bảng** — bảng phân loại là `lib/org/center-bridge.ts` (`BACKFILL_SPECS`). Thêm cột `orgUnitId` cho bảng mới mà quên khai vào đó → test `[US-07-IT-08b]` đỏ.
 - **RBAC động trong DB:** `RoleDef` + `RolePermission(action, scopeType GLOBAL/CENTER/CLASS/OWN/CHILDREN/ASSIGNED)` + `UserOrgRole(user × orgUnit × role, có effectiveFrom/To/status)`. Chỉ SUPER_ADMIN tạo/sửa role + **audit + reason bắt buộc**. **KHÔNG có role `HO_MANAGER`.** Role HO = cross-center theo chức năng (HO_ACCOUNTANT/HO_HR/HO_MARKETING xem+sửa toàn hệ thống theo module; HO_SALE xem lead scope A&B, **không sửa**).
 - **Conflict: ALLOW thắng nếu ≥1 role cho phép — KHÔNG dùng DENY override** ở giai đoạn này.
 - **`EmployeeOrgAssignment`** (nhân sự/kiêm nhiệm/lương — 5 assignmentType + allocationPercent) **KHÔNG tự sinh quyền**; quyền chỉ từ `UserOrgRole`.
