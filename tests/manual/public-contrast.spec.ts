@@ -9,6 +9,25 @@
  * ⚠️ Máy đo BỎ QUA phần tử có nền ảnh/gradient (không đọc được bằng
  * backgroundColor). Trang công khai dùng nhiều hero ảnh, nên KHÔNG kết luận
  * "sạch" từ con số này — nó chỉ phủ phần nền màu đặc.
+ *
+ * ══════════════════════════════════════════════════════════════════════════
+ * ⚠️ SPEC NÀY CÒN BÁO ~121 CHỖ — LÀ CÓ CHỦ Ý, ĐỪNG VÁ.
+ *
+ * Chủ dự án chốt 11/08/2026: KHÔNG đụng màu site công khai. Gần như toàn bộ số
+ * còn lại là màu THƯƠNG HIỆU dùng làm chữ hoặc làm nền nút chữ trắng:
+ *   · 18× chữ trắng trên nút cam #FF6900        = 2,89:1
+ *   · 19× chữ cam #F97316 trên nền trắng        = 3,58:1
+ *   · 13× chữ trắng trên nút tím #8E51FF        = 4,40:1
+ *   · 13× nút "Chấp nhận tất cả" của dải cookie = 3,02:1
+ *   · 20× landing cũ, cùng cặp cam/trắng        = 2,80:1
+ * Vá được về mặt kỹ thuật, nhưng vá nghĩa là cam thương hiệu trên trang
+ * marketing SẬM ĐI THẤY RÕ (so sánh: site giáo viên phải hạ #F97316 → #C2410C
+ * mới đạt 5,18:1 với chữ trắng). Đó là quyết định nhận diện, đã được chốt là
+ * GIỮ NGUYÊN.
+ *
+ * ⇒ Con số cần theo dõi là số chỗ trượt thuộc nhóm KHÁC (chữ xám, chữ trên nền
+ *   trung tính). Nhóm đó đã về 0 ngày 11/08 — nếu nó mọc lại thì mới là hồi quy.
+ * ══════════════════════════════════════════════════════════════════════════
  */
 import { test } from "@playwright/test";
 import { AUDIT, type ChoTruot } from "./_contrast";
