@@ -23,7 +23,11 @@ import {
   listConversationsForUser,
 } from "@/lib/chat/queries";
 import { getAnnouncementReadStats, listAnnouncements } from "@/lib/chat/announcements";
-import { dmWitnessClassId } from "@/lib/chat/dm";
+import {
+  dmWitnessClassId,
+  isTeacherOfClass,
+  listAssignableParentsForSale,
+} from "@/lib/chat/dm";
 import { listChatAttachments } from "@/lib/chat/messages";
 import { ChatListRefresher } from "../chat-list-refresher";
 import { OpenDmButton } from "../open-dm-button";
@@ -145,6 +149,7 @@ export async function StaffChatWorkspace({
               conversationId={selected.conversationId}
               title={selected.displayName}
               type={selected.type}
+              classId={selected.type === "CLASS_GROUP" ? selected.subjectId : null}
             />
           ) : tab === "thong-bao" ? (
             <AnnouncementsPanel
@@ -296,14 +301,35 @@ async function MembersPanel({
   conversationId,
   title,
   type,
+  classId,
 }: {
   userId: string;
   basePath: string;
   conversationId: string;
   title: string;
   type: string;
+  classId: string | null;
 }) {
-  const members = await getConversationMembers(conversationId, userId);
+  // Nút "Nhắn riêng" phải mở ĐÚNG LOẠI kênh theo TƯ CÁCH của người đang xem, chứ không
+  // phải luôn luôn là kênh dạy học:
+  //   • GV/trợ giảng CỦA CHÍNH LỚP NÀY → kênh giáo viên ↔ phụ huynh;
+  //   • SALE ĐANG PHỤ TRÁCH phụ huynh đó → kênh tư vấn (F5);
+  //   • còn lại (QLCS, giáo vụ, sale không phụ trách) → KHÔNG hiện nút.
+  //
+  // Trước bản này nút hiện cho MỌI người xem nhóm và luôn gửi `kind` mặc định, nên QLCS/
+  // giáo vụ/sale bấm vào là chắc chắn `PERMISSION_DENIED` kèm câu "Chỉ nhắn riêng được
+  // giữa giáo viên và phụ huynh của lớp đang học" — sai hẳn hướng, rất tốn thời gian truy.
+  // Chủ dự án chốt 10/08: KHÔNG ẩn nút với sale, mà cho sale phụ trách bấm được thật.
+  //
+  // Hai truy vấn phụ đều rẻ và chỉ chạy ở tab Thành viên: một `findFirst` khoá chính, và
+  // một truy vấn "phụ huynh tôi phụ trách" trả rỗng ngay với người không phải sale.
+  const [members, laGvCuaLop, phMinhPhuTrach] = await Promise.all([
+    getConversationMembers(conversationId, userId),
+    isTeacherOfClass(classId, userId),
+    listAssignableParentsForSale(userId).then(
+      (ds) => new Set(ds.map((p) => p.parentUserId)),
+    ),
+  ]);
   const isClassGroup = type === "CLASS_GROUP";
 
   return (
@@ -349,12 +375,17 @@ async function MembersPanel({
                   TRONG nhóm). Quan hệ dạy học vẫn được server kiểm lại — nút chỉ là lối vào. */}
               {isClassGroup &&
                 m.derivedFrom === "CLASS_STUDENT_PARENT" &&
-                m.userId !== userId && (
+                m.userId !== userId &&
+                (laGvCuaLop ? (
+                  <OpenDmButton peerUserId={m.userId} hrefTemplate={`${basePath}?c=:id`} />
+                ) : phMinhPhuTrach.has(m.userId) ? (
                   <OpenDmButton
                     peerUserId={m.userId}
+                    kind="SALE_PARENT"
                     hrefTemplate={`${basePath}?c=:id`}
+                    label="Nhắn riêng"
                   />
-                )}
+                ) : null)}
             </li>
           ))}
         </ul>

@@ -311,6 +311,30 @@ export async function listSalesForParent(
   return [...byId.values()];
 }
 
+/**
+ * Người này có phải GV/trợ giảng CỦA CHÍNH LỚP NÀY không — dùng để quyết định nút
+ * "Nhắn riêng" trong danh sách thành viên nhóm lớp mở loại kênh nào.
+ *
+ * Cố ý KHÔNG dùng `actor.assignedClassIds`: tập đó nạp theo request và đã lọc `deletedAt`,
+ * nhưng ở đây ta chỉ cần một câu trả lời đúng-sai cho MỘT lớp, và đặt cạnh
+ * `findTeachingClassIds` để định nghĩa "GV của lớp" chỉ có một chỗ.
+ */
+export async function isTeacherOfClass(
+  classId: string | null,
+  userId: string,
+  client: Db = db,
+): Promise<boolean> {
+  if (!classId || !userId) return false;
+  const rows = await client.$queryRaw<{ id: string }[]>`
+    SELECT cl."id" FROM "Class" cl
+    WHERE cl."id" = ${classId}
+      AND cl."deletedAt" IS NULL
+      AND (cl."teacherId" = ${userId} OR cl."assistantId" = ${userId})
+    LIMIT 1
+  `;
+  return rows.length > 0;
+}
+
 /** Một phụ huynh mà sale được gán — dữ liệu cho ô tìm kiếm ở màn Tin nhắn. */
 export type AssignableParent = {
   parentUserId: string;
