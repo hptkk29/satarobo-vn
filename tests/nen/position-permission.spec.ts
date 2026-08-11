@@ -1,0 +1,181 @@
+// @vitest-environment node
+/**
+ * TS-08 — QUYỀN THEO VỊ TRÍ, KHÔNG THEO NGƯỜI (US-08 AC2/AC3) trên Postgres thật.
+ *
+ * Đây là AC không thể chứng minh bằng test thuần: nó nói về chuỗi
+ * `PositionAssignment → PositionRole → RoleDef → RolePermission → can()`, tức mấy phép
+ * JOIN và bộ lọc hiệu lực trong `loadPositionRoleRows`. Bản mock chỉ chứng minh được hình
+ * dạng dữ liệu.
+ *
+ * ⚠️ AN TOÀN DB: không `resetDb()`, không TRUNCATE. `assertTestDb()` chặn chạy ngoài
+ * Postgres local; dọn theo tiền tố `CI_POS_` ở beforeAll VÀ afterAll.
+ */
+import { describe, it, expect, beforeAll, afterAll, vi } from "vitest";
+
+vi.mock("@/lib/auth", () => ({ auth: async () => null }));
+
+import { db } from "../../lib/db";
+import { assertTestDb, disconnectDb, seedOrg, seedRoles, seedUser } from "../e2e/_helpers/seed";
+import { resolveActorUncached } from "../../lib/auth/actor";
+import { can } from "../../lib/auth/can";
+
+const DB_URL = process.env.TEST_DATABASE_URL ?? process.env.DATABASE_URL ?? "";
+const HAS_LOCAL_DB =
+  /(@|\/\/)(localhost|127\.0\.0\.1)[:/]/.test(DB_URL) || /satarobo_test|ci_test/.test(DB_URL);
+const ALLOW_REMOTE = DB_URL !== "" && process.env.CHAT_DB_TEST_ALLOW_REMOTE === "1";
+const RUN = HAS_LOCAL_DB || ALLOW_REMOTE;
+
+const CASE_TIMEOUT = 60_000;
+const HOOK_TIMEOUT = 180_000;
+const P = "CI_POS_";
+
+if (!RUN) {
+  console.warn("[position-permission] SKIP: DATABASE_URL không trỏ Postgres local.");
+}
+
+let W: { orgUnitId: string; roleId: string; positionId: string; u1: string; u2: string };
+
+async function cleanup() {
+  const users = await db.user.findMany({
+    where: { email: { startsWith: P } },
+    select: { id: true },
+  });
+  const ids = users.map((u) => u.id);
+  if (ids.length > 0) {
+    await db.positionAssignment.deleteMany({ where: { userId: { in: ids } } });
+  }
+  const positions = await db.position.findMany({
+    where: { title: { startsWith: P } },
+    select: { id: true },
+  });
+  const pIds = positions.map((p) => p.id);
+  if (pIds.length > 0) {
+    await db.positionAssignment.deleteMany({ where: { positionId: { in: pIds } } });
+    await db.positionRole.deleteMany({ where: { positionId: { in: pIds } } });
+    await db.position.deleteMany({ where: { id: { in: pIds } } });
+  }
+  if (ids.length > 0) {
+    await db.userOrgRole.deleteMany({ where: { userId: { in: ids } } });
+    await db.user.deleteMany({ where: { id: { in: ids } } });
+  }
+}
+
+describe.skipIf(!RUN)("TS-08 · quyền theo Position (Postgres thật)", () => {
+  beforeAll(async () => {
+    assertTestDb();
+    await cleanup();
+    await seedOrg(["HO", "CS1", "CS2"]);
+    await seedRoles();
+
+    const org = await db.orgUnit.findUniqueOrThrow({
+      where: { code: "CS1" },
+      select: { id: true },
+    });
+    // Vai có sẵn trong seed, quyền của nó là thứ ta đi kiểm ở đầu kia.
+    const role = await db.roleDef.findUniqueOrThrow({
+      where: { code: "CENTER_MANAGER" },
+      select: { id: true },
+    });
+    const u1 = await seedUser({ email: `${P}u1@ci.test`, name: `${P}U1`, role: "TEACHER" });
+    const u2 = await seedUser({ email: `${P}u2@ci.test`, name: `${P}U2`, role: "TEACHER" });
+
+    const position = await db.position.create({
+      data: {
+        title: `${P}Quản lý CS1`,
+        orgUnitId: org.id,
+        isManagerial: true,
+        roles: { create: [{ roleId: role.id }] },
+      },
+      select: { id: true },
+    });
+
+    W = { orgUnitId: org.id, roleId: role.id, positionId: position.id, u1: u1.id, u2: u2.id };
+  }, HOOK_TIMEOUT);
+
+  afterAll(async () => {
+    try {
+      await cleanup();
+    } finally {
+      await disconnectDb();
+    }
+  }, HOOK_TIMEOUT);
+
+  it(
+    "chưa có phân công ⇒ KHÔNG có quyền nào của vị trí (đối chứng âm)",
+    async () => {
+      const actor = await resolveActorUncached(W.u1);
+      expect(actor.permissions.some((p) => p.roleCode === "CENTER_MANAGER")).toBe(false);
+      expect(can(actor, "classes:edit", { centerId: "bat-ky" })).toBe(false);
+    },
+    CASE_TIMEOUT,
+  );
+
+  it(
+    "[AC2] nhận phân công vào vị trí ⇒ hưởng ĐỦ bộ quyền của vị trí, không cấu hình thêm",
+    async () => {
+      await db.positionAssignment.create({
+        data: { positionId: W.positionId, userId: W.u1, kind: "PRIMARY" },
+      });
+      const actor = await resolveActorUncached(W.u1);
+      expect(actor.permissions.some((p) => p.roleCode === "CENTER_MANAGER")).toBe(true);
+      // Và scope đi theo ĐƠN VỊ CỦA VỊ TRÍ — bằng chứng vai vào đúng đường `buildActor`,
+      // không phải một đường quyền thứ hai.
+      expect(actor.visibleCenterIds.length).toBeGreaterThan(0);
+      expect(actor.orgRoles.some((r) => r.orgUnitId === W.orgUnitId)).toBe(true);
+    },
+    CASE_TIMEOUT,
+  );
+
+  it(
+    "[AC3] gỡ phân công ⇒ MẤT quyền ngay ở request kế tiếp",
+    async () => {
+      await db.positionAssignment.deleteMany({ where: { userId: W.u1 } });
+      const actor = await resolveActorUncached(W.u1);
+      expect(actor.permissions.some((p) => p.roleCode === "CENTER_MANAGER")).toBe(false);
+    },
+    CASE_TIMEOUT,
+  );
+
+  it(
+    "[AC3] người KẾ NHIỆM nhận cùng vị trí ⇒ có đúng bộ quyền đó, vị trí không phải cấu hình lại",
+    async () => {
+      await db.positionAssignment.create({
+        data: { positionId: W.positionId, userId: W.u2, kind: "PRIMARY" },
+      });
+      const actor = await resolveActorUncached(W.u2);
+      expect(actor.permissions.some((p) => p.roleCode === "CENTER_MANAGER")).toBe(true);
+    },
+    CASE_TIMEOUT,
+  );
+
+  it(
+    "[US-09 AC2 · nền] phân công HẾT HẠN ⇒ resolver tự bỏ, KHÔNG cần cron dọn",
+    async () => {
+      const homQua = new Date(Date.now() - 24 * 60 * 60 * 1000);
+      await db.positionAssignment.updateMany({
+        where: { userId: W.u2 },
+        data: { effectiveTo: homQua },
+      });
+      const actor = await resolveActorUncached(W.u2);
+      expect(actor.permissions.some((p) => p.roleCode === "CENTER_MANAGER")).toBe(false);
+      // Lịch sử KHÔNG bị xoá — chỉ đóng hiệu lực (US-09 AC3).
+      expect(await db.positionAssignment.count({ where: { userId: W.u2 } })).toBe(1);
+    },
+    CASE_TIMEOUT,
+  );
+
+  it(
+    "vị trí bị tắt / xoá mềm ⇒ quyền rụng theo, dù phân công còn hiệu lực",
+    async () => {
+      await db.positionAssignment.updateMany({
+        where: { userId: W.u2 },
+        data: { effectiveTo: null },
+      });
+      await db.position.update({ where: { id: W.positionId }, data: { isActive: false } });
+      const actor = await resolveActorUncached(W.u2);
+      expect(actor.permissions.some((p) => p.roleCode === "CENTER_MANAGER")).toBe(false);
+      await db.position.update({ where: { id: W.positionId }, data: { isActive: true } });
+    },
+    CASE_TIMEOUT,
+  );
+});

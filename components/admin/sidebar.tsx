@@ -194,6 +194,8 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       { label: "Giáo viên", href: "/teachers", icon: UserCog, perm: ["employees:view-all"] },
       { label: "Nhân sự", href: "/nhan-su", icon: IdCard, perm: ["employees:view-all"] },
+      // P2 · US-08 — vị trí mang bộ vai trò nên cùng cổng với cấu hình role (SUPER_ADMIN).
+      { label: "Vị trí công việc", href: "/nhan-su/vi-tri", icon: IdCard, perm: ["roles:manage"] },
       { label: "Chấm công", href: "/cham-cong", icon: Clock, perm: ["hr_attendance:view"] },
       { label: "Lịch ca của tôi", href: "/cham-cong/lich-ca", icon: CalendarDays, perm: ["hr_attendance:checkin"] },
       { label: "Yêu cầu chỉnh công", href: "/cham-cong/yeu-cau-cong", icon: ClipboardEdit, perm: ["hr_attendance:checkin"] },
