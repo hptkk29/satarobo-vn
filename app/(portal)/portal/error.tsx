@@ -29,11 +29,11 @@ export default function PortalError({
         </div>
         <h1 className="text-lg font-bold text-neutral-900">Có lỗi xảy ra</h1>
         <p className="mt-2 text-sm text-neutral-500">
-          Trang gặp sự cố khi tải dữ liệu. Quý phụ huynh vui lòng thử lại —
-          nếu vẫn lỗi, hãy liên hệ trung tâm để được hỗ trợ.
+          Trang gặp sự cố khi tải dữ liệu. Quý phụ huynh vui lòng thử lại — nếu
+          vẫn lỗi, hãy liên hệ trung tâm để được hỗ trợ.
         </p>
         {error.digest && (
-          <p className="mt-2 font-mono text-xs text-neutral-400">
+          <p className="mt-2 font-mono text-xs text-neutral-600">
             Mã lỗi: {error.digest}
           </p>
         )}

@@ -36,8 +36,18 @@ export default async function PortalCalendarPage({
     const calendar = (
       <div className="space-y-2">
         <div className="flex justify-end gap-1">
-          <Link href={`/portal/lich?y=${prev.year}&m=${prev.month0}`} className="grid size-7 place-items-center rounded-lg border border-border text-muted-foreground hover:bg-muted">‹</Link>
-          <Link href={`/portal/lich?y=${next.year}&m=${next.month0}`} className="grid size-7 place-items-center rounded-lg border border-border text-muted-foreground hover:bg-muted">›</Link>
+          <Link
+            href={`/portal/lich?y=${prev.year}&m=${prev.month0}`}
+            className="grid size-7 place-items-center rounded-lg border border-border text-muted-foreground hover:bg-muted"
+          >
+            ‹
+          </Link>
+          <Link
+            href={`/portal/lich?y=${next.year}&m=${next.month0}`}
+            className="grid size-7 place-items-center rounded-lg border border-border text-muted-foreground hover:bg-muted"
+          >
+            ›
+          </Link>
         </div>
         <MonthCalendar year={year} month0={month0} events={events} />
       </div>
@@ -54,8 +64,18 @@ export default async function PortalCalendarPage({
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-semibold">Lịch học</h1>
         <div className="flex gap-2 text-sm">
-          <Link href={`/portal/lich?y=${prev.year}&m=${prev.month0}`} className="rounded border px-2 py-1">←</Link>
-          <Link href={`/portal/lich?y=${next.year}&m=${next.month0}`} className="rounded border px-2 py-1">→</Link>
+          <Link
+            href={`/portal/lich?y=${prev.year}&m=${prev.month0}`}
+            className="rounded border px-2 py-1"
+          >
+            ←
+          </Link>
+          <Link
+            href={`/portal/lich?y=${next.year}&m=${next.month0}`}
+            className="rounded border px-2 py-1"
+          >
+            →
+          </Link>
         </div>
       </div>
       <MonthCalendar year={year} month0={month0} events={events} />

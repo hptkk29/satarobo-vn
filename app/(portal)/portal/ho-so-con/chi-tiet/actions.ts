@@ -19,12 +19,17 @@ const schema = z.object({
   notes: z.string().trim().max(1000).optional().default(""),
 });
 
-export async function updateChildProfile(input: unknown): Promise<{ ok: boolean; error?: string }> {
+export async function updateChildProfile(
+  input: unknown,
+): Promise<{ ok: boolean; error?: string }> {
   const { studentId } = await requireActiveStudent();
 
   const parsed = schema.safeParse(input);
   if (!parsed.success) {
-    return { ok: false, error: parsed.error.issues[0]?.message ?? "Dữ liệu không hợp lệ" };
+    return {
+      ok: false,
+      error: parsed.error.issues[0]?.message ?? "Dữ liệu không hợp lệ",
+    };
   }
   const d = parsed.data;
   const nz = (s: string) => (s.length ? s : null);
@@ -32,7 +37,8 @@ export async function updateChildProfile(input: unknown): Promise<{ ok: boolean;
   let dob: Date | null = null;
   if (d.dateOfBirth) {
     const t = new Date(d.dateOfBirth);
-    if (Number.isNaN(t.getTime())) return { ok: false, error: "Ngày sinh không hợp lệ" };
+    if (Number.isNaN(t.getTime()))
+      return { ok: false, error: "Ngày sinh không hợp lệ" };
     dob = t;
   }
 
@@ -69,7 +75,10 @@ export async function setMediaConsentAction(
 
   const parsed = consentSchema.safeParse(input);
   if (!parsed.success) {
-    return { ok: false, error: parsed.error.issues[0]?.message ?? "Dữ liệu không hợp lệ" };
+    return {
+      ok: false,
+      error: parsed.error.issues[0]?.message ?? "Dữ liệu không hợp lệ",
+    };
   }
   const { studentId, grant } = parsed.data;
 

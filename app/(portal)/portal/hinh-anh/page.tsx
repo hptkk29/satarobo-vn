@@ -9,13 +9,19 @@ import { HinhAnhPageV2 } from "@/components/portal/hinh-anh-page";
 import { formatDateVN } from "@/lib/format/date";
 
 export const dynamic = "force-dynamic";
-export const metadata = { title: "Hình ảnh | Sata Robo", robots: { index: false } };
+export const metadata = {
+  title: "Hình ảnh | Sata Robo",
+  robots: { index: false },
+};
 
 const ACTIVE_ENROLLMENT = ["CONFIRMED", "STUDYING", "ACTIVE"] as const;
 
 export default async function HinhAnhPage() {
   const { ctx, studentId } = await requireActiveStudent();
-  const pdb = portalDb({ parentUserId: ctx.parentUserId, childIds: ctx.children.map((c) => c.id) });
+  const pdb = portalDb({
+    parentUserId: ctx.parentUserId,
+    childIds: ctx.children.map((c) => c.id),
+  });
 
   // Portal v2 — trang Hình ảnh lớp giống SataUI.
   if (isPortalV2Enabled()) {
@@ -38,7 +44,11 @@ export default async function HinhAnhPage() {
   // Ảnh gắn thẻ HS khác → KHÔNG hiện. Ảnh không tag & KHÔNG class-wide cũng ẩn
   // (bất biến C6.2). Vẫn yêu cầu consent của con.
   const enr = await pdb.enrollment.findMany({
-    where: { studentId, status: { in: [...ACTIVE_ENROLLMENT] }, deletedAt: null }, // FIX-C3
+    where: {
+      studentId,
+      status: { in: [...ACTIVE_ENROLLMENT] },
+      deletedAt: null,
+    }, // FIX-C3
     select: { classId: true },
   });
   const classIds = enr.map((e) => e.classId);
@@ -75,7 +85,9 @@ export default async function HinhAnhPage() {
   );
 
   // Signed URL khi bật flag MEDIA_SIGNED_URL (OFF → fileUrl trần).
-  const displayUrls = await Promise.all(sorted.map((m) => resolveMediaUrl(m.fileUrl)));
+  const displayUrls = await Promise.all(
+    sorted.map((m) => resolveMediaUrl(m.fileUrl)),
+  );
 
   const media = sorted.map((m, i) => ({
     id: m.id,
@@ -96,18 +108,20 @@ export default async function HinhAnhPage() {
         // Chưa đồng ý dùng hình ảnh → giải thích + lối tới trang bật đồng ý (C6.4/L7).
         <div className="space-y-3 rounded-xl border border-dashed border-neutral-300 bg-white p-8 text-center">
           <p className="text-sm text-neutral-600">
-            Bạn cần bật <span className="font-semibold">đồng ý dùng hình ảnh</span> cho con thì
-            trung tâm mới hiển thị ảnh hoạt động tại lớp. Bạn có thể thu hồi bất cứ lúc nào.
+            Bạn cần bật{" "}
+            <span className="font-semibold">đồng ý dùng hình ảnh</span> cho con
+            thì trung tâm mới hiển thị ảnh hoạt động tại lớp. Bạn có thể thu hồi
+            bất cứ lúc nào.
           </p>
           <Link
             href="/portal/ho-so-con/chi-tiet"
-            className="inline-flex items-center rounded-lg bg-orange-500 px-4 py-2 text-sm font-semibold text-white hover:bg-orange-600"
+            className="inline-flex items-center rounded-lg bg-orange-700 px-4 py-2 text-sm font-semibold text-white hover:bg-orange-800"
           >
             Bật đồng ý trong Hồ sơ con
           </Link>
         </div>
       ) : media.length === 0 ? (
-        <p className="rounded-xl border border-dashed border-neutral-300 bg-white p-8 text-center text-sm text-neutral-400">
+        <p className="rounded-xl border border-dashed border-neutral-300 bg-white p-8 text-center text-sm text-neutral-500">
           Chưa có hình ảnh nào.
         </p>
       ) : (
@@ -126,11 +140,13 @@ export default async function HinhAnhPage() {
               </a>
               <figcaption className="space-y-0.5 p-2">
                 {m.takenAt && (
-                  <p className="text-[11px] text-neutral-400">
+                  <p className="text-[11px] text-neutral-500">
                     {formatDateVN(m.takenAt)}
                   </p>
                 )}
-                {m.caption && <p className="text-xs text-neutral-600">{m.caption}</p>}
+                {m.caption && (
+                  <p className="text-xs text-neutral-600">{m.caption}</p>
+                )}
               </figcaption>
             </figure>
           ))}

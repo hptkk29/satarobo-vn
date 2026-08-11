@@ -38,11 +38,17 @@ export function PageHero({
           )}
           <div className="min-w-0">
             {overline && (
-              <p className="text-xs font-bold uppercase tracking-wider opacity-70">{overline}</p>
+              <p className="text-xs font-bold uppercase tracking-wider opacity-70">
+                {overline}
+              </p>
             )}
-            <h1 className="text-balance text-xl font-bold tracking-tight sm:text-2xl">{title}</h1>
+            <h1 className="text-balance text-xl font-bold tracking-tight sm:text-2xl">
+              {title}
+            </h1>
             {subtitle && (
-              <p className="mt-0.5 line-clamp-2 text-xs font-medium opacity-80 sm:text-sm">{subtitle}</p>
+              <p className="mt-0.5 line-clamp-2 text-xs font-medium opacity-80 sm:text-sm">
+                {subtitle}
+              </p>
             )}
           </div>
         </div>
@@ -52,7 +58,13 @@ export function PageHero({
   );
 }
 
-export function HeroMetric({ label, value }: { label: React.ReactNode; value: string }) {
+export function HeroMetric({
+  label,
+  value,
+}: {
+  label: React.ReactNode;
+  value: string;
+}) {
   return (
     <div className="flex w-full items-center justify-between gap-3 rounded-2xl bg-white/15 px-4 py-2.5 backdrop-blur-sm sm:w-auto sm:justify-start">
       <p className="text-xs font-bold opacity-80">{label}</p>

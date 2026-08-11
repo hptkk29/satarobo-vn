@@ -5,7 +5,10 @@ import { studentCanAccessExam } from "@/lib/lms/exam-access";
 import { ExamTaking } from "./_components/exam-taking";
 
 export const dynamic = "force-dynamic";
-export const metadata = { title: "Làm bài thi | Sata Robo", robots: { index: false } };
+export const metadata = {
+  title: "Làm bài thi | Sata Robo",
+  robots: { index: false },
+};
 
 // Deterministic shuffle seeded bằng chuỗi (giữ thứ tự ổn định qua reload).
 function seededShuffle<T>(arr: T[], seed: string): T[] {
@@ -73,7 +76,13 @@ export default async function ExamTakingPage({ params }: Props) {
   // Access: đề gắn lớp → con đang học lớp đó; đề DÙNG CHUNG (classId=null) → phải
   // có HomeworkAssignment giao cho con (trước đây chặn cứng → bài về nhà gắn exam
   // dùng chung thành ngõ cụt). Cùng luật với startAttempt (lib/lms/exam-access).
-  if (!(await studentCanAccessExam({ studentId, examId: exam.id, classId: exam.classId }))) {
+  if (
+    !(await studentCanAccessExam({
+      studentId,
+      examId: exam.id,
+      classId: exam.classId,
+    }))
+  ) {
     redirect("/portal/bai-thi");
   }
 
@@ -99,7 +108,8 @@ export default async function ExamTakingPage({ params }: Props) {
   const answerMap = new Map(answers.map((a) => [a.examQuestionId, a]));
 
   // Hạn nộp = min(startedAt + duration, closeAt).
-  const byDuration = attempt.startedAt.getTime() + exam.durationMinutes * 60_000;
+  const byDuration =
+    attempt.startedAt.getTime() + exam.durationMinutes * 60_000;
   const deadlineMs =
     exam.closeAt && exam.closeAt.getTime() < byDuration
       ? exam.closeAt.getTime()
@@ -108,7 +118,8 @@ export default async function ExamTakingPage({ params }: Props) {
   let questions = exam.examQuestions.map((eq) => {
     const a = answerMap.get(eq.id);
     let choices = [...eq.question.choices].sort((x, y) => x.order - y.order);
-    if (exam.shuffleChoices) choices = seededShuffle(choices, attempt.id + eq.id);
+    if (exam.shuffleChoices)
+      choices = seededShuffle(choices, attempt.id + eq.id);
     return {
       eqId: eq.id,
       type: eq.question.type,

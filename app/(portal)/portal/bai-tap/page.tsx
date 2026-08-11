@@ -50,7 +50,9 @@ async function ParentView({ studentId }: { studentId: string }) {
     getParentHomeworkSummary(studentId),
     getStudentAssignments(studentId),
   ]);
-  const btDaNop = assignments.filter((a) => a.status !== "NOT_SUBMITTED").length;
+  const btDaNop = assignments.filter(
+    (a) => a.status !== "NOT_SUBMITTED",
+  ).length;
   const btDaCham = assignments.filter((a) => a.status === "GRADED").length;
   const tongGiao = hw.assigned + assignments.length;
 
@@ -77,12 +79,14 @@ async function ParentView({ studentId }: { studentId: string }) {
                 >
                   <div className="min-w-0">
                     <p className="font-medium text-neutral-900">{a.title}</p>
-                    <p className="text-xs text-neutral-500">
+                    <p className="text-xs text-neutral-600">
                       {a.className}
                       {a.dueAt && ` · Hạn ${formatDateVN(a.dueAt)}`}
                     </p>
                   </div>
-                  <span className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${st.cls}`}>
+                  <span
+                    className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${st.cls}`}
+                  >
                     {st.label}
                   </span>
                 </li>
@@ -96,7 +100,7 @@ async function ParentView({ studentId }: { studentId: string }) {
         Bài kiểm tra ({hw.items.length})
       </h2>
       {hw.items.length === 0 ? (
-        <p className="rounded-xl border border-dashed border-neutral-300 bg-white p-8 text-center text-sm text-neutral-400">
+        <p className="rounded-xl border border-dashed border-neutral-300 bg-white p-8 text-center text-sm text-neutral-500">
           Con chưa được giao bài kiểm tra nào.
         </p>
       ) : (
@@ -110,7 +114,7 @@ async function ParentView({ studentId }: { studentId: string }) {
               >
                 <div className="min-w-0">
                   <p className="font-medium text-neutral-900">{it.examTitle}</p>
-                  <p className="text-xs text-neutral-500">
+                  <p className="text-xs text-neutral-600">
                     {it.className}
                     {it.dueAt && ` · Hạn ${formatDateVN(it.dueAt)}`}
                   </p>
@@ -122,7 +126,9 @@ async function ParentView({ studentId }: { studentId: string }) {
                       {it.totalPoints !== null && `/${it.totalPoints}`}
                     </span>
                   )}
-                  <span className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${st.cls}`}>
+                  <span
+                    className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${st.cls}`}
+                  >
                     {st.label}
                   </span>
                 </div>
@@ -131,9 +137,9 @@ async function ParentView({ studentId }: { studentId: string }) {
           })}
         </ul>
       )}
-      <p className="text-xs text-neutral-400">
-        Phụ huynh chỉ xem tiến độ và trạng thái. Để con làm bài, chuyển sang chế độ
-        &quot;Học viên&quot;.
+      <p className="text-xs text-neutral-600">
+        Phụ huynh chỉ xem tiến độ và trạng thái. Để con làm bài, chuyển sang chế
+        độ &quot;Học viên&quot;.
       </p>
     </div>
   );
@@ -152,7 +158,7 @@ async function StudentView({ studentId }: { studentId: string }) {
           Bài kiểm tra được giao
         </h2>
         {hw.items.length === 0 ? (
-          <p className="rounded-xl border border-dashed border-neutral-300 bg-white p-6 text-center text-sm text-neutral-400">
+          <p className="rounded-xl border border-dashed border-neutral-300 bg-white p-6 text-center text-sm text-neutral-500">
             Chưa có bài kiểm tra nào được giao.
           </p>
         ) : (
@@ -166,15 +172,18 @@ async function StudentView({ studentId }: { studentId: string }) {
                     className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-neutral-200 bg-white p-4 transition-shadow hover:shadow-sm"
                   >
                     <div className="min-w-0">
-                      <p className="font-medium text-neutral-900">{it.examTitle}</p>
-                      <p className="text-xs text-neutral-500">
+                      <p className="font-medium text-neutral-900">
+                        {it.examTitle}
+                      </p>
+                      <p className="text-xs text-neutral-600">
                         {it.className}
-                        {it.dueAt &&
-                          ` · Hạn ${formatDateVN(it.dueAt)}`}
+                        {it.dueAt && ` · Hạn ${formatDateVN(it.dueAt)}`}
                       </p>
                     </div>
                     <div className="flex items-center gap-2">
-                      <span className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${st.cls}`}>
+                      <span
+                        className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${st.cls}`}
+                      >
                         {st.label}
                       </span>
                       <ChevronRight className="h-4 w-4 text-neutral-300" />
@@ -192,7 +201,7 @@ async function StudentView({ studentId }: { studentId: string }) {
           Bài tập trên lớp / về nhà
         </h2>
         {assignments.length === 0 ? (
-          <p className="rounded-xl border border-dashed border-neutral-300 bg-white p-6 text-center text-sm text-neutral-400">
+          <p className="rounded-xl border border-dashed border-neutral-300 bg-white p-6 text-center text-sm text-neutral-500">
             Chưa có bài tập nào được giao.
           </p>
         ) : (
@@ -214,10 +223,9 @@ async function StudentView({ studentId }: { studentId: string }) {
                           </span>
                         )}
                       </p>
-                      <p className="text-xs text-neutral-500">
+                      <p className="text-xs text-neutral-600">
                         {a.className}
-                        {a.dueAt &&
-                          ` · Hạn ${formatDateVN(a.dueAt)}`}
+                        {a.dueAt && ` · Hạn ${formatDateVN(a.dueAt)}`}
                       </p>
                     </div>
                     <div className="flex items-center gap-2">
@@ -226,7 +234,9 @@ async function StudentView({ studentId }: { studentId: string }) {
                           {a.score}/{a.totalPoints}
                         </span>
                       )}
-                      <span className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${st.cls}`}>
+                      <span
+                        className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${st.cls}`}
+                      >
                         {st.label}
                       </span>
                       <ChevronRight className="h-4 w-4 text-neutral-300" />
@@ -246,7 +256,7 @@ function Stat({ label, value }: { label: string; value: number | string }) {
   return (
     <div className="rounded-xl border border-neutral-200 bg-white p-4 text-center">
       <p className="text-2xl font-bold text-neutral-900">{value}</p>
-      <p className="text-xs text-neutral-500">{label}</p>
+      <p className="text-xs text-neutral-600">{label}</p>
     </div>
   );
 }

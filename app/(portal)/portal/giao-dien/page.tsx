@@ -4,7 +4,10 @@ import { isPortalV2Enabled } from "@/lib/flags";
 import { GiaoDienPage } from "@/components/portal/giao-dien-page";
 
 export const dynamic = "force-dynamic";
-export const metadata = { title: "Giao diện | Sata Robo", robots: { index: false } };
+export const metadata = {
+  title: "Giao diện | Sata Robo",
+  robots: { index: false },
+};
 
 export default async function Page() {
   const session = await auth();

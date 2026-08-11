@@ -3,12 +3,19 @@ import { notFound } from "next/navigation";
 import { ChevronLeft, FileText } from "lucide-react";
 import { requireActiveStudent } from "@/lib/portal/session";
 import { getAssignmentDetail } from "@/lib/portal/learning";
-import { RUBRIC_CRITERIA, RUBRIC_LEVELS, criterionLabel } from "@/lib/rubric/criteria";
+import {
+  RUBRIC_CRITERIA,
+  RUBRIC_LEVELS,
+  criterionLabel,
+} from "@/lib/rubric/criteria";
 import { resolveMediaUrl } from "@/lib/storage/signed-url";
 import { SubmitForm } from "./_components/submit-form";
 
 export const dynamic = "force-dynamic";
-export const metadata = { title: "Bài tập | Sata Robo", robots: { index: false } };
+export const metadata = {
+  title: "Bài tập | Sata Robo",
+  robots: { index: false },
+};
 
 const STATUS: Record<string, { label: string; cls: string }> = {
   NOT_SUBMITTED: { label: "Chưa nộp", cls: "bg-neutral-100 text-neutral-600" },
@@ -34,18 +41,36 @@ export default async function AssignmentDetailPage({ params }: Props) {
   // L8.3 — tài liệu đính kèm + file bài nộp (GV/PH xem lại) đi qua signed URL TTL
   // ngắn (flag MEDIA_SIGNED_URL; OFF → resolveMediaUrl trả nguyên fileUrl cũ).
   const documents = await Promise.all(
-    a.documents.map(async (d) => ({ ...d, fileUrl: await resolveMediaUrl(d.fileUrl) })),
+    a.documents.map(async (d) => ({
+      ...d,
+      fileUrl: await resolveMediaUrl(d.fileUrl),
+    })),
   );
   // BGĐ 31/07 — file GV upload trực tiếp khi giao bài.
   const attachments = await Promise.all(
-    a.attachments.map(async (f) => ({ ...f, fileUrl: await resolveMediaUrl(f.fileUrl) })),
+    a.attachments.map(async (f) => ({
+      ...f,
+      fileUrl: await resolveMediaUrl(f.fileUrl),
+    })),
   );
   // BGĐ 31/07 — bài nộp nhiều file; fallback cột đơn cũ khi chưa có bản ghi files.
   const subFiles =
     sub && sub.files.length > 0
-      ? sub.files.map((f) => ({ url: f.fileUrl, name: f.fileName, size: f.fileSize ?? 0, mime: f.mimeType ?? "" }))
+      ? sub.files.map((f) => ({
+          url: f.fileUrl,
+          name: f.fileName,
+          size: f.fileSize ?? 0,
+          mime: f.mimeType ?? "",
+        }))
       : sub?.fileUrl
-        ? [{ url: sub.fileUrl, name: sub.fileName ?? "Tệp đã nộp", size: 0, mime: "" }]
+        ? [
+            {
+              url: sub.fileUrl,
+              name: sub.fileName ?? "Tệp đã nộp",
+              size: 0,
+              mime: "",
+            },
+          ]
         : [];
   const initialFiles = await Promise.all(
     subFiles.map(async (f) => ({ ...f, url: await resolveMediaUrl(f.url) })),
@@ -63,11 +88,13 @@ export default async function AssignmentDetailPage({ params }: Props) {
       <div>
         <div className="flex flex-wrap items-center gap-2">
           <h1 className="text-xl font-bold text-neutral-900">{a.title}</h1>
-          <span className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${st.cls}`}>
+          <span
+            className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${st.cls}`}
+          >
             {st.label}
           </span>
         </div>
-        <p className="mt-1 text-xs text-neutral-500">
+        <p className="mt-1 text-xs text-neutral-600">
           {a.totalPoints} điểm
           {a.dueAt && ` · Hạn ${new Date(a.dueAt).toLocaleString("vi-VN")}`}
         </p>
@@ -75,7 +102,9 @@ export default async function AssignmentDetailPage({ params }: Props) {
 
       <div className="rounded-xl border border-neutral-200 bg-white p-4">
         {a.description && (
-          <p className="whitespace-pre-wrap text-sm text-neutral-700">{a.description}</p>
+          <p className="whitespace-pre-wrap text-sm text-neutral-700">
+            {a.description}
+          </p>
         )}
         {a.instructions && (
           <div className="mt-3 rounded-lg bg-neutral-50 p-3 text-sm text-neutral-600">
@@ -117,7 +146,9 @@ export default async function AssignmentDetailPage({ params }: Props) {
             Điểm: {sub?.score ?? 0}/{a.totalPoints}
           </p>
           {sub?.feedback && (
-            <p className="mt-1 text-sm text-emerald-700">Nhận xét: {sub.feedback}</p>
+            <p className="mt-1 text-sm text-emerald-700">
+              Nhận xét: {sub.feedback}
+            </p>
           )}
         </div>
       )}
@@ -129,19 +160,30 @@ export default async function AssignmentDetailPage({ params }: Props) {
           </h2>
           <ul className="space-y-2">
             {(() => {
-              const byCrit = new Map(sub.rubricScores.map((r) => [r.criterion, r.level]));
-              return RUBRIC_CRITERIA.filter((c) => byCrit.has(c.key)).map((c) => {
-                const lvl = byCrit.get(c.key);
-                const meta = RUBRIC_LEVELS.find((l) => l.key === lvl);
-                return (
-                  <li key={c.key} className="flex items-center justify-between border-b border-neutral-100 pb-2 text-sm last:border-0">
-                    <span className="text-neutral-700">{criterionLabel(c.key)}</span>
-                    <span className={`font-semibold ${meta?.color ?? "text-neutral-600"}`}>
-                      {meta?.label ?? lvl} ({meta?.points ?? "—"}/4)
-                    </span>
-                  </li>
-                );
-              });
+              const byCrit = new Map(
+                sub.rubricScores.map((r) => [r.criterion, r.level]),
+              );
+              return RUBRIC_CRITERIA.filter((c) => byCrit.has(c.key)).map(
+                (c) => {
+                  const lvl = byCrit.get(c.key);
+                  const meta = RUBRIC_LEVELS.find((l) => l.key === lvl);
+                  return (
+                    <li
+                      key={c.key}
+                      className="flex items-center justify-between border-b border-neutral-100 pb-2 text-sm last:border-0"
+                    >
+                      <span className="text-neutral-700">
+                        {criterionLabel(c.key)}
+                      </span>
+                      <span
+                        className={`font-semibold ${meta?.color ?? "text-neutral-600"}`}
+                      >
+                        {meta?.label ?? lvl} ({meta?.points ?? "—"}/4)
+                      </span>
+                    </li>
+                  );
+                },
+              );
             })()}
           </ul>
         </div>

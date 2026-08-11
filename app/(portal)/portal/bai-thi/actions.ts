@@ -3,7 +3,10 @@
 import { revalidatePath } from "next/cache";
 import { portalDb, portalTx } from "@/lib/portal/db";
 import { requireActiveStudent } from "@/lib/portal/session";
-import { studentCanAccessExam, markHomeworkAfterAttempt } from "@/lib/lms/exam-access";
+import {
+  studentCanAccessExam,
+  markHomeworkAfterAttempt,
+} from "@/lib/lms/exam-access";
 
 // =============================================================================
 // PORTAL EXAM ACTIONS — Phase T2.3
@@ -55,9 +58,16 @@ export async function startAttempt(
   });
   if (!exam) return { ok: false, error: "Không tìm thấy đề thi" };
   if (
-    !(await studentCanAccessExam({ studentId, examId: exam.id, classId: exam.classId }))
+    !(await studentCanAccessExam({
+      studentId,
+      examId: exam.id,
+      classId: exam.classId,
+    }))
   ) {
-    return { ok: false, error: "Đề thi không thuộc lớp hoặc chưa được giao cho con" };
+    return {
+      ok: false,
+      error: "Đề thi không thuộc lớp hoặc chưa được giao cho con",
+    };
   }
   if (exam.status !== "PUBLISHED") {
     return { ok: false, error: "Đề thi chưa mở" };
@@ -157,7 +167,11 @@ export async function saveAnswer(input: {
         examQuestionId: input.examQuestionId,
       },
     },
-    create: { attemptId: input.attemptId, examQuestionId: input.examQuestionId, ...data },
+    create: {
+      attemptId: input.attemptId,
+      examQuestionId: input.examQuestionId,
+      ...data,
+    },
     update: data,
   });
   return { ok: true };
@@ -165,7 +179,9 @@ export async function saveAnswer(input: {
 
 export async function submitAttempt(
   attemptId: string,
-): Promise<ActionResult<{ graded: boolean; late?: boolean; message?: string }>> {
+): Promise<
+  ActionResult<{ graded: boolean; late?: boolean; message?: string }>
+> {
   const { ctx, studentId } = await requireActiveStudent();
   const pdb = portalDb({
     parentUserId: ctx.parentUserId,

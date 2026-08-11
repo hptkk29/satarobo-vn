@@ -26,7 +26,10 @@ import { AnnouncementReadMarker } from "@/components/chat/portal/announcement-re
 import { formatChatTimestamp } from "@/components/chat/portal/format";
 
 export const dynamic = "force-dynamic";
-export const metadata = { title: "Tin nhắn | Sata Robo", robots: { index: false } };
+export const metadata = {
+  title: "Tin nhắn | Sata Robo",
+  robots: { index: false },
+};
 
 /**
  * US-09 AC3 — ô nhập vô hiệu kèm ĐÚNG lý do, không gộp thành một câu chung chung.
@@ -72,7 +75,9 @@ export default async function PortalConversationPage({
   if (!(await hasAcceptedChatPolicy(userId))) return <ChatPolicyGate />;
 
   const conversations = await listConversationsForUser(userId);
-  const conversation = conversations.find((c) => c.conversationId === conversationId);
+  const conversation = conversations.find(
+    (c) => c.conversationId === conversationId,
+  );
   if (!conversation) notFound();
 
   const [page, members, announcements] = await Promise.all([

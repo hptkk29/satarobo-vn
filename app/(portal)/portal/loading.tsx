@@ -4,7 +4,11 @@
  */
 export default function PortalLoading() {
   return (
-    <div className="mx-auto w-full max-w-6xl animate-pulse space-y-6" aria-busy="true" aria-label="Đang tải...">
+    <div
+      className="mx-auto w-full max-w-6xl animate-pulse space-y-6"
+      aria-busy="true"
+      aria-label="Đang tải..."
+    >
       <div className="h-8 w-48 rounded-lg bg-neutral-200" />
       <div className="h-28 rounded-2xl bg-neutral-200" />
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">

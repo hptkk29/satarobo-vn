@@ -3,7 +3,10 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { ALL_REQUEST_TYPES, REQUEST_TYPE_LABEL } from "@/lib/portal/request-labels";
+import {
+  ALL_REQUEST_TYPES,
+  REQUEST_TYPE_LABEL,
+} from "@/lib/portal/request-labels";
 import { createParentRequest } from "../actions";
 
 const inputCls =
@@ -57,7 +60,11 @@ export function RequestForm({
         Gửi yêu cầu mới
       </h2>
       <div className="space-y-3">
-        <select value={type} onChange={(e) => setType(e.target.value)} className={inputCls}>
+        <select
+          value={type}
+          onChange={(e) => setType(e.target.value)}
+          className={inputCls}
+        >
           {ALL_REQUEST_TYPES.map((t) => (
             <option key={t} value={t}>
               {REQUEST_TYPE_LABEL[t]}
@@ -107,7 +114,7 @@ export function RequestForm({
           type="button"
           onClick={submit}
           disabled={pending}
-          className="rounded-lg bg-orange-500 px-4 py-2 text-sm font-semibold text-white hover:bg-orange-600 disabled:opacity-60"
+          className="rounded-lg bg-orange-700 px-4 py-2 text-sm font-semibold text-white hover:bg-orange-800 disabled:opacity-60"
         >
           {pending ? "Đang gửi…" : "Gửi yêu cầu"}
         </button>

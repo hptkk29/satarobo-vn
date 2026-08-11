@@ -5,7 +5,11 @@ import { revalidatePath } from "next/cache";
 import { auth } from "@/lib/auth";
 import { portalDb, portalTx } from "@/lib/portal/db";
 import { rateLimit } from "@/lib/rate-limit";
-import { requireActiveStudent, assertOwnsStudent, getChildren } from "@/lib/portal/session";
+import {
+  requireActiveStudent,
+  assertOwnsStudent,
+  getChildren,
+} from "@/lib/portal/session";
 import { publishEvent } from "@/lib/events/publish";
 
 // Chống spam: trần số yêu cầu ĐANG PENDING / tài khoản phụ huynh (CANCELLED/
@@ -18,7 +22,14 @@ const MAX_PENDING_REQUESTS = 10;
 // =============================================================================
 
 const createSchema = z.object({
-  type: z.enum(["ABSENCE", "MAKEUP", "TRANSFER_CLASS", "TRANSFER_CENTER", "RESERVE", "OTHER"]),
+  type: z.enum([
+    "ABSENCE",
+    "MAKEUP",
+    "TRANSFER_CLASS",
+    "TRANSFER_CENTER",
+    "RESERVE",
+    "OTHER",
+  ]),
   content: z.string().trim().min(5, "Vui lòng mô tả chi tiết hơn").max(2000),
   preferredDate: z.string().optional().nullable(),
   sessionId: z.string().optional().nullable(),
@@ -31,11 +42,17 @@ export async function createParentRequest(input: {
   sessionId?: string | null;
 }): Promise<{ ok: boolean; error?: string }> {
   const { ctx, studentId } = await requireActiveStudent();
-  const pdb = portalDb({ parentUserId: ctx.parentUserId, childIds: ctx.children.map((c) => c.id) });
+  const pdb = portalDb({
+    parentUserId: ctx.parentUserId,
+    childIds: ctx.children.map((c) => c.id),
+  });
 
   const parsed = createSchema.safeParse(input);
   if (!parsed.success) {
-    return { ok: false, error: parsed.error.issues[0]?.message ?? "Dữ liệu không hợp lệ" };
+    return {
+      ok: false,
+      error: parsed.error.issues[0]?.message ?? "Dữ liệu không hợp lệ",
+    };
   }
   const d = parsed.data;
 
@@ -150,7 +167,10 @@ export async function cancelParentRequest(
   // (belt); assertOwnsStudent bên dưới vẫn là guard chính. Record của nhà khác → null
   // → gộp vào nhánh "Không tìm thấy yêu cầu" (an toàn hơn, không lộ tồn tại).
   const children = await getChildren(session.user.id);
-  const pdb = portalDb({ parentUserId: session.user.id, childIds: children.map((c) => c.id) });
+  const pdb = portalDb({
+    parentUserId: session.user.id,
+    childIds: children.map((c) => c.id),
+  });
   const req = await pdb.parentRequest.findUnique({
     where: { id: requestId },
     select: { studentId: true },

@@ -37,7 +37,10 @@ export default async function PortalLayout({
   // hiệu hoá tài khoản) hoàn toàn không đá được phụ huynh nào — JWT sống tới 30
   // ngày. Mà phụ huynh CHÍNH LÀ đối tượng của luồng quên mật khẩu, nên thiếu
   // đoạn này thì "đổi mật khẩu để đuổi kẻ đang chiếm tài khoản" là lời hứa suông.
-  const liveness = await checkSessionLiveness(session.user.id, session.user.tokenVersion);
+  const liveness = await checkSessionLiveness(
+    session.user.id,
+    session.user.tokenVersion,
+  );
   if (!liveness.live) redirect(`/dang-xuat?reason=${liveness.reason}`);
 
   const ctx = await getPortalContext();
@@ -53,7 +56,10 @@ export default async function PortalLayout({
     const [notifCount, msgCount, switcherChildren] = await Promise.all([
       getParentNotificationBadge(session.user.id).catch(() => 0),
       countChatUnreadForUser(session.user.id).catch(() => 0),
-      getSwitcherChildren(session.user.id, ctx?.activeStudent?.id ?? null).catch(() => []),
+      getSwitcherChildren(
+        session.user.id,
+        ctx?.activeStudent?.id ?? null,
+      ).catch(() => []),
     ]);
     return (
       <PortalV2Shell
@@ -91,14 +97,14 @@ export default async function PortalLayout({
     <div className="flex min-h-screen flex-col bg-neutral-50">
       <header className="sticky top-0 z-20 border-b border-neutral-200 bg-white">
         <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 py-3">
-          <Link href="/portal" className="text-lg font-bold">
+          <Link href="/portal" className="shrink-0 text-lg font-bold">
             <span className="bg-gradient-to-r from-orange-500 to-purple-700 bg-clip-text text-transparent">
               Sata
             </span>
             <span className="bg-gradient-to-r from-purple-700 to-orange-500 bg-clip-text text-transparent">
               Robo
             </span>
-            <span className="ml-1 text-xs font-normal text-neutral-400">
+            <span className="ml-1 text-xs font-normal text-neutral-500">
               Học viên
             </span>
           </Link>
