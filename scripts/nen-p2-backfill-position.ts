@@ -160,19 +160,26 @@ async function main() {
   let phanCongMoi = 0;
   let phanCongBoQua = 0;
 
-  await db.$transaction(async (tx) => {
+  // Nạp TRƯỚC toàn bộ vị trí đang có của các đơn vị liên quan: trong transaction mà bắn
+  // một truy vấn cho mỗi vị trí thì với DB ở xa (pooler) là ~24 vòng round-trip, đủ để
+  // vượt trần thời gian transaction — đã ăn đúng lỗi đó ở lần chạy thật đầu tiên.
+  const viTriDangCo = await db.position.findMany({
+    where: { orgUnitId: { in: [...new Set(keHoach.viTri.map((v) => v.orgUnitId))] }, deletedAt: null },
+    select: { id: true, orgUnitId: true, title: true },
+  });
+  const idTheoKhoaCu = new Map(
+    viTriDangCo.map((p) => [khoaViTri(p.orgUnitId, p.title), p.id] as const),
+  );
+
+  await db.$transaction(
+    async (tx) => {
     const idTheoKhoa = new Map<string, string>();
 
     for (const v of keHoach.viTri) {
-      // Idempotent theo (đơn vị, chức danh). `findFirst` + so khoá chuẩn hoá thay vì
-      // `upsert`: bảng không có unique trên cặp này, và thêm unique là migration ghi trên
-      // dữ liệu prod (luật cứng #4) — không thuộc story này.
-      const daCo = (
-        await tx.position.findMany({
-          where: { orgUnitId: v.orgUnitId, deletedAt: null },
-          select: { id: true, title: true },
-        })
-      ).find((p) => khoaViTri(v.orgUnitId, p.title) === v.khoa);
+      // Idempotent theo (đơn vị, chức danh) — so khoá đã chuẩn hoá. Không dùng `upsert`
+      // vì bảng không có unique trên cặp này, và thêm unique là migration ghi trên dữ
+      // liệu prod (luật cứng #4) — không thuộc story này.
+      const daCo = idTheoKhoaCu.get(v.khoa) ? { id: idTheoKhoaCu.get(v.khoa) as string } : undefined;
 
       if (daCo) {
         idTheoKhoa.set(v.khoa, daCo.id);
@@ -227,7 +234,10 @@ async function main() {
       });
       phanCongMoi++;
     }
-  });
+    },
+    // Trần mặc định 5s là quá ngắn cho ~60 truy vấn qua pooler ở Tokyo.
+    { maxWait: 30_000, timeout: 180_000 },
+  );
 
   console.log(
     `✅ GHI XONG — vị trí: ${viTriMoi} mới / ${viTriDungLai} dùng lại · phân công: ${phanCongMoi} mới / ${phanCongBoQua} bỏ qua (đã có PRIMARY còn hiệu lực)`,
