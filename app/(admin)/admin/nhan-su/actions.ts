@@ -21,6 +21,7 @@ import { scopedDb, passesScope } from "@/lib/db-scope";
 import { reconcileUserOrgRoles, OrgRoleSyncError } from "@/lib/auth/org-role-sync";
 import { syncCenterClassConversations } from "@/lib/chat/sync-membership";
 import { orgUnitIdForCenter } from "@/lib/org/org-service";
+import { keoTaiKhoanTheoHoSo } from "@/lib/hr/sync-employee-unit";
 
 type ActionResult<T = unknown> =
   | { ok: true; data?: T }
@@ -356,6 +357,25 @@ export async function updateEmployeeAction(
     where: { id },
     select: EMPLOYEE_AUDIT_SELECT,
   });
+
+  // ĐƠN VỊ NẰM Ở HAI BẢNG — sửa hồ sơ thì kéo tài khoản theo (xem lib/hr/sync-employee-unit.ts).
+  // Đọc LẠI sau khi ghi, không lấy từ `data`: `orgUnitId` do cơ chế ghi kép trong
+  // `lib/db.ts` điền, `data` chỉ có `centerId`.
+  if (data.centerId !== undefined) {
+    const sauKhiGhi = await sdb.employee.findUnique({
+      where: { id },
+      select: { centerId: true, orgUnitId: true },
+    });
+    if (sauKhiGhi) {
+      await sdb.$transaction(async (tx) => {
+        await keoTaiKhoanTheoHoSo(tx as never, {
+          employeeId: id,
+          donVi: { centerId: sauKhiGhi.centerId, orgUnitId: sauKhiGhi.orgUnitId },
+          actor: auditActorOf(session),
+        });
+      });
+    }
+  }
   await writeAudit({
     actor: auditActorOf(session),
     module: "employees",

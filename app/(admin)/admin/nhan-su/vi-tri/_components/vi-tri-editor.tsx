@@ -50,7 +50,9 @@ export function ViTriEditor({
     [orgUnits],
   );
   const tenViTri = useMemo(() => new Map(positions.map((p) => [p.id, p.title])), [positions]);
-  const tenVai = useMemo(() => new Map(roles.map((r) => [r.id, r.code])), [roles]);
+  // Hiện TÊN TIẾNG VIỆT của vai, không hiện mã. Mã (`CENTER_MANAGER`) là thứ dành cho
+  // code; người xếp tổ chức đọc "Quản lý cơ sở". Mã vẫn giữ ở tooltip cho ai cần đối chiếu.
+  const tenVai = useMemo(() => new Map(roles.map((r) => [r.id, r.name || r.code])), [roles]);
 
   function sua(p: ViTri) {
     setForm({ ...p });
@@ -159,9 +161,12 @@ export function ViTriEditor({
                         : [...form.roleIds, r.id],
                     })
                   }
+                  // Nhãn hiện tên tiếng Việt; mã (`CENTER_MANAGER`) để ở tooltip cho ai
+                  // cần đối chiếu với `prisma/seed-roles.ts`.
+                  title={r.code}
                   className={`rounded-full border px-3 py-1 text-xs font-medium transition-colors ${ chon ? "border-primary bg-primary text-primary-foreground" : "border-border bg-background text-muted-foreground hover:border-primary/40" }`}
                 >
-                  {r.code}
+                  {r.name || r.code}
                 </button>
               );
             })}
