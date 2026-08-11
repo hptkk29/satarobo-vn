@@ -1,11 +1,15 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
-import { checkAnyPermission, checkPermission } from "@/lib/auth/check-permission";
+import {
+  checkAnyPermission,
+  checkPermission,
+} from "@/lib/auth/check-permission";
 import { PAGE_GATES } from "@/lib/auth/page-gates";
 import { resolveActor } from "@/lib/auth/actor";
 import { scopedDb } from "@/lib/db-scope";
 import { resolveMediaUrl } from "@/lib/storage/signed-url";
 import { MediaClient } from "./_components/media-client";
+import { PageHelp } from "@/components/admin/ui/page-help";
 
 export const metadata = { title: "Ảnh lớp học | Admin" };
 export const dynamic = "force-dynamic";
@@ -53,7 +57,9 @@ export default async function AdminMediaPage() {
 
   // Resolve class + tagged student names.
   const classMap = new Map(classes.map((c) => [c.id, c]));
-  const studentIds = [...new Set(rows.flatMap((r) => r.tags.map((t) => t.studentId)))];
+  const studentIds = [
+    ...new Set(rows.flatMap((r) => r.tags.map((t) => t.studentId))),
+  ];
   const students = studentIds.length
     ? await sdb.student.findMany({
         where: { id: { in: studentIds } },
@@ -63,7 +69,9 @@ export default async function AdminMediaPage() {
   const studentMap = new Map(students.map((s) => [s.id, s.name]));
 
   // Signed URL khi bật flag MEDIA_SIGNED_URL (OFF → fileUrl trần).
-  const displayUrls = await Promise.all(rows.map((m) => resolveMediaUrl(m.fileUrl)));
+  const displayUrls = await Promise.all(
+    rows.map((m) => resolveMediaUrl(m.fileUrl)),
+  );
 
   const items = rows.map((m, i) => ({
     id: m.id,
@@ -83,10 +91,16 @@ export default async function AdminMediaPage() {
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-foreground">Ảnh lớp học</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Giáo viên / Sale phụ trách đăng ảnh theo buổi → quản lý duyệt → phụ huynh
-          xem ảnh con được gắn thẻ.
+          Duyệt ảnh lớp học trước khi phụ huynh xem
         </p>
       </div>
+
+      <PageHelp>
+        <p>
+          Giáo viên / Sale phụ trách đăng ảnh theo buổi → quản lý duyệt → phụ
+          huynh xem ảnh con được gắn thẻ.
+        </p>
+      </PageHelp>
       <MediaClient
         items={items}
         classes={classes.map((c) => ({

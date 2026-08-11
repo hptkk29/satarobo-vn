@@ -4,7 +4,11 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { ChevronLeft } from "lucide-react";
 import { precheckUpsert } from "@/components/admin/import-precheck";
-import { ExcelImporter, type ImportResult } from "@/components/admin/ExcelImporter";
+import {
+  ExcelImporter,
+  type ImportResult,
+} from "@/components/admin/ExcelImporter";
+import { PageHelp } from "@/components/admin/ui/page-help";
 
 interface CenterImportRow {
   name: string;
@@ -42,21 +46,34 @@ export default function ImportCentersPage() {
           <ChevronLeft className="h-4 w-4" /> Quay lại danh sách
         </Link>
         <h1 className="text-2xl font-bold">Import Cơ sở từ Excel</h1>
-        <p className="text-sm text-muted-foreground mt-1">
-          Tải template, điền thông tin, upload lại. Slug trùng sẽ UPDATE (upsert), slug mới sẽ CREATE.
-        </p>
       </div>
+
+      <PageHelp>
+        <p>
+          Tải template, điền thông tin, upload lại. Slug trùng sẽ UPDATE
+          (upsert), slug mới sẽ CREATE.
+        </p>
+      </PageHelp>
 
       <ExcelImporter<CenterImportRow>
         title="Import Cơ sở"
         templateUrl="/templates/mau-co-so-v2.xlsx"
         templateFilename="mau-co-so-v2.xlsx"
         duplicateLabel="slug"
-        duplicateKey={(raw) => String(raw.slug ?? "").trim().toLowerCase() || null}
+        duplicateKey={(raw) =>
+          String(raw.slug ?? "")
+            .trim()
+            .toLowerCase() || null
+        }
         checkExisting={(raws, nos) =>
           precheckUpsert(
             "centers",
-            raws.map((r) => String(r.slug ?? "").trim().toLowerCase() || null),
+            raws.map(
+              (r) =>
+                String(r.slug ?? "")
+                  .trim()
+                  .toLowerCase() || null,
+            ),
             nos,
             "Slug cơ sở",
           )
@@ -84,7 +101,8 @@ export default function ImportCentersPage() {
           const city = asString(row.city);
           if (!name) return { error: "Thiếu tên chi nhánh" };
           if (!slug) return { error: "Thiếu slug" };
-          if (!/^[a-z0-9-]+$/.test(slug)) return { error: "Slug chỉ chứa a-z, 0-9, dấu -" };
+          if (!/^[a-z0-9-]+$/.test(slug))
+            return { error: "Slug chỉ chứa a-z, 0-9, dấu -" };
           if (!address) return { error: "Thiếu địa chỉ" };
           if (!city) return { error: "Thiếu tỉnh/TP" };
 
@@ -119,7 +137,9 @@ export default function ImportCentersPage() {
             body: JSON.stringify({ rows }),
           });
           if (!res.ok) {
-            const err = (await res.json().catch(() => ({ error: "Unknown" }))) as {
+            const err = (await res
+              .json()
+              .catch(() => ({ error: "Unknown" }))) as {
               error?: string;
             };
             throw new Error(err.error || "Import thất bại");
@@ -134,11 +154,12 @@ export default function ImportCentersPage() {
         <p className="font-semibold text-foreground">Lưu ý:</p>
         <ul className="list-disc list-inside space-y-0.5">
           <li>
-            Slug là unique key — trùng slug sẽ <strong>UPDATE</strong> record có sẵn (upsert).
+            Slug là unique key — trùng slug sẽ <strong>UPDATE</strong> record có
+            sẵn (upsert).
           </li>
           <li>
-            Slug chỉ chứa chữ thường, số, và dấu gạch ngang (vd: <code>danang</code>,{" "}
-            <code>ho-chi-minh</code>).
+            Slug chỉ chứa chữ thường, số, và dấu gạch ngang (vd:{" "}
+            <code>danang</code>, <code>ho-chi-minh</code>).
           </li>
           <li>
             <code>isActive</code>: 1 = true, 0 = false. Mặc định 1.

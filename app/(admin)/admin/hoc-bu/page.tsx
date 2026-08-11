@@ -5,6 +5,7 @@ import { checkPermission } from "@/lib/auth/check-permission";
 import { scopedDb } from "@/lib/db-scope";
 import { resolveActor } from "@/lib/auth/actor";
 import { MakeupRow, type MakeupItem } from "./_components/makeup-row";
+import { PageHelp } from "@/components/admin/ui/page-help";
 
 export const metadata = { title: "Học bù | Admin" };
 export const dynamic = "force-dynamic";
@@ -12,7 +13,8 @@ export const dynamic = "force-dynamic";
 export default async function MakeupPage() {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  if (!(await checkPermission("parent-requests:manage"))) redirect("/dashboard");
+  if (!(await checkPermission("parent-requests:manage")))
+    redirect("/dashboard");
 
   // Cách ly cơ sở: MakeupNeed ∈ SCOPED_MODELS (có centerId) → scopedDb tự inject
   // `centerId IN <tầm nhìn>`. SUPER_ADMIN/HO bypass (ALL). Thay pattern auth cũ
@@ -42,12 +44,30 @@ export default async function MakeupPage() {
 
   // Lấy ngày buổi lỡ + bù + tên lesson (batch).
   const sessionIds = [
-    ...new Set(needs.flatMap((n) => [n.missedSessionId, n.makeupSessionId].filter((x): x is string => !!x))),
+    ...new Set(
+      needs.flatMap((n) =>
+        [n.missedSessionId, n.makeupSessionId].filter((x): x is string => !!x),
+      ),
+    ),
   ];
-  const lessonIds = [...new Set(needs.map((n) => n.missedLessonId).filter((x): x is string => !!x))];
+  const lessonIds = [
+    ...new Set(
+      needs.map((n) => n.missedLessonId).filter((x): x is string => !!x),
+    ),
+  ];
   const [sessions, lessons] = await Promise.all([
-    sessionIds.length ? sdb.classSession.findMany({ where: { id: { in: sessionIds } }, select: { id: true, date: true } }) : Promise.resolve([]),
-    lessonIds.length ? sdb.lesson.findMany({ where: { id: { in: lessonIds } }, select: { id: true, order: true, title: true } }) : Promise.resolve([]),
+    sessionIds.length
+      ? sdb.classSession.findMany({
+          where: { id: { in: sessionIds } },
+          select: { id: true, date: true },
+        })
+      : Promise.resolve([]),
+    lessonIds.length
+      ? sdb.lesson.findMany({
+          where: { id: { in: lessonIds } },
+          select: { id: true, order: true, title: true },
+        })
+      : Promise.resolve([]),
   ]);
   const sessDate = new Map(sessions.map((s) => [s.id, s.date]));
   const lessonMap = new Map(lessons.map((l) => [l.id, l]));
@@ -61,7 +81,9 @@ export default async function MakeupPage() {
       missedDate: sessDate.get(n.missedSessionId)?.toISOString() ?? null,
       missedLesson: l ? `Bài ${l.order}: ${l.title}` : null,
       status: n.status,
-      makeupDate: n.makeupSessionId ? sessDate.get(n.makeupSessionId)?.toISOString() ?? null : null,
+      makeupDate: n.makeupSessionId
+        ? (sessDate.get(n.makeupSessionId)?.toISOString() ?? null)
+        : null,
     };
   });
 
@@ -72,9 +94,16 @@ export default async function MakeupPage() {
           <RefreshCw className="h-6 w-6 text-primary" /> Học bù
         </h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Buổi vắng cần bù → gợi ý buổi bù cùng khoá/bài (không vượt tiến độ) → xếp → đánh dấu đã bù.
+          Xếp buổi học bù cho học viên vắng
         </p>
       </div>
+
+      <PageHelp>
+        <p>
+          Buổi vắng cần bù → gợi ý buổi bù cùng khoá/bài (không vượt tiến độ) →
+          xếp → đánh dấu đã bù.
+        </p>
+      </PageHelp>
 
       {items.length === 0 ? (
         <p className="rounded-xl border border-dashed border-border p-8 text-center text-sm text-muted-foreground">

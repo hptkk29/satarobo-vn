@@ -7,6 +7,7 @@ import { checkPermission } from "@/lib/auth/check-permission";
 import { isScormEnabled } from "@/lib/flags";
 import { isScormProcessingStale, SCORM_STALE_ERROR } from "@/lib/scorm/stale";
 import { ScormManager, type CourseNode } from "./_components/scorm-manager";
+import { PageHelp } from "@/components/admin/ui/page-help";
 
 export const metadata = { title: "SCORM / Học liệu tương tác | Admin" };
 export const dynamic = "force-dynamic";
@@ -45,7 +46,9 @@ export default async function ScormPage() {
     },
   });
 
-  const lessonIds = courses.flatMap((c) => c.curriculums[0]?.lessons.map((l) => l.id) ?? []);
+  const lessonIds = courses.flatMap(
+    (c) => c.curriculums[0]?.lessons.map((l) => l.id) ?? [],
+  );
 
   // Gói/giáo án của tất cả buổi đang hiển thị — gộp theo buổi ở dưới.
   const packages = lessonIds.length
@@ -88,7 +91,9 @@ export default async function ScormPage() {
       curriculumName: cur?.name ?? null,
       lessons: (cur?.lessons ?? []).map((l) => {
         const pkgs = byLesson.get(l.id) ?? [];
-        const active = pkgs.find((p) => p.isActiveForLesson && p.status === "PUBLISHED") ?? null;
+        const active =
+          pkgs.find((p) => p.isActiveForLesson && p.status === "PUBLISHED") ??
+          null;
         // QA 20/07 — bản UPLOADING/PROCESSING quá 15 phút = KẸT (upload đứt/process
         // treo): không hiện "Đang xử lý…" vĩnh viễn nữa mà đưa sang khối bản lỗi
         // để admin bấm "Dọn" và đẩy lại.
@@ -96,12 +101,19 @@ export default async function ScormPage() {
           (p) => p.status === "UPLOADING" || p.status === "PROCESSING",
         );
         const pending =
-          processing.find((p) => !isScormProcessingStale(p.status, p.createdAt)) ?? null;
+          processing.find(
+            (p) => !isScormProcessingStale(p.status, p.createdAt),
+          ) ?? null;
         const stale =
-          processing.find((p) => isScormProcessingStale(p.status, p.createdAt)) ?? null;
+          processing.find((p) =>
+            isScormProcessingStale(p.status, p.createdAt),
+          ) ?? null;
         const failedPkg = pkgs.find((p) => p.status === "FAILED") ?? null;
         const failed =
-          failedPkg ?? (stale ? { id: stale.id, name: stale.name, error: SCORM_STALE_ERROR } : null);
+          failedPkg ??
+          (stale
+            ? { id: stale.id, name: stale.name, error: SCORM_STALE_ERROR }
+            : null);
         return {
           lessonId: l.id,
           order: l.order,
@@ -117,8 +129,12 @@ export default async function ScormPage() {
                 scormVersion: active.scormVersion,
               }
             : null,
-          pending: pending ? { id: pending.id, name: pending.name, status: pending.status } : null,
-          failed: failed ? { id: failed.id, name: failed.name, error: failed.error } : null,
+          pending: pending
+            ? { id: pending.id, name: pending.name, status: pending.status }
+            : null,
+          failed: failed
+            ? { id: failed.id, name: failed.name, error: failed.error }
+            : null,
         };
       }),
     };
@@ -128,13 +144,21 @@ export default async function ScormPage() {
     <div className="max-w-4xl space-y-6 p-6">
       <div>
         <h1 className="flex items-center gap-2 text-2xl font-bold text-foreground">
-          <Package className="h-6 w-6 text-primary" /> SCORM / Học liệu tương tác
+          <Package className="h-6 w-6 text-primary" /> SCORM / Học liệu tương
+          tác
         </h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Chọn khoá học → buổi học để xem hoặc đổi giáo án. Mỗi buổi chỉ giữ 1 giáo án (PDF slide
-          hoặc gói SCORM) — đẩy bản mới sẽ thay (xoá) bản cũ sau khi xử lý xong.
+          Giáo án của từng buổi học
         </p>
       </div>
+
+      <PageHelp>
+        <p>
+          Chọn khoá học → buổi học để xem hoặc đổi giáo án. Mỗi buổi chỉ giữ 1
+          giáo án (PDF slide hoặc gói SCORM) — đẩy bản mới sẽ thay (xoá) bản cũ
+          sau khi xử lý xong.
+        </p>
+      </PageHelp>
 
       <ScormManager courses={courseNodes} />
     </div>

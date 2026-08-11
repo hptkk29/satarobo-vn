@@ -9,10 +9,14 @@ import type {
   ParentRequestStatus,
   ParentRequestType,
 } from "@prisma/client";
-import { REQUEST_TYPE_LABEL, REQUEST_STATUS_LABEL } from "@/lib/portal/request-labels";
+import {
+  REQUEST_TYPE_LABEL,
+  REQUEST_STATUS_LABEL,
+} from "@/lib/portal/request-labels";
 import { classifyAbsenceUrgency } from "@/lib/students/absence";
 import { getSetting } from "@/lib/settings/service";
 import { RequestRow } from "./_components/request-row";
+import { PageHelp } from "@/components/admin/ui/page-help";
 
 export const metadata = { title: "Yêu cầu phụ huynh | Admin" };
 export const dynamic = "force-dynamic";
@@ -29,7 +33,11 @@ const STATUS_FILTERS: {
   { key: "PENDING", label: REQUEST_STATUS_LABEL.PENDING, status: "PENDING" },
   { key: "APPROVED", label: REQUEST_STATUS_LABEL.APPROVED, status: "APPROVED" },
   { key: "REJECTED", label: REQUEST_STATUS_LABEL.REJECTED, status: "REJECTED" },
-  { key: "CANCELLED", label: REQUEST_STATUS_LABEL.CANCELLED, status: "CANCELLED" },
+  {
+    key: "CANCELLED",
+    label: REQUEST_STATUS_LABEL.CANCELLED,
+    status: "CANCELLED",
+  },
 ];
 
 // Lọc theo LOẠI — mỗi tab là 1 giá trị enum ParentRequestType thật.
@@ -72,7 +80,8 @@ function buildHref(type: string, status: string): string {
 export default async function ParentRequestsPage({ searchParams }: Props) {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  if (!(await checkPermission("parent-requests:manage"))) redirect("/dashboard");
+  if (!(await checkPermission("parent-requests:manage")))
+    redirect("/dashboard");
 
   const { type, status } = await searchParams;
   const activeType =
@@ -144,9 +153,7 @@ export default async function ParentRequestsPage({ searchParams }: Props) {
 
   // Tên phụ huynh (cột "Phụ huynh") — map parentUserId → User.name.
   const parentIds = Array.from(
-    new Set(
-      rows.map((r) => r.parentUserId).filter((x): x is string => !!x),
-    ),
+    new Set(rows.map((r) => r.parentUserId).filter((x): x is string => !!x)),
   );
   const parents = parentIds.length
     ? await sdb.user.findMany({
@@ -188,12 +195,20 @@ export default async function ParentRequestsPage({ searchParams }: Props) {
   return (
     <div className="max-w-4xl p-6">
       <div className="mb-4">
-        <h1 className="text-2xl font-bold text-foreground">Yêu cầu phụ huynh</h1>
+        <h1 className="text-2xl font-bold text-foreground">
+          Yêu cầu phụ huynh
+        </h1>
         <p className="mt-1 text-sm text-muted-foreground">
+          Yêu cầu phụ huynh gửi từ cổng thông tin
+        </p>
+      </div>
+
+      <PageHelp>
+        <p>
           Báo vắng · học bù · chuyển lớp/cơ sở · bảo lưu — lọc theo loại &amp;
           trạng thái rồi xử lý nghiệp vụ.
         </p>
-      </div>
+      </PageHelp>
 
       {/* Lọc theo LOẠI yêu cầu */}
       <div className="mb-2 flex flex-wrap gap-2">
@@ -201,7 +216,7 @@ export default async function ParentRequestsPage({ searchParams }: Props) {
           <Link
             key={f.key}
             href={buildHref(f.key, activeStatus.key)}
-            className={`rounded-full px-3 py-1 text-xs font-medium ${ activeType.key === f.key ? "bg-primary text-white" : "bg-muted text-muted-foreground hover:bg-muted" }`}
+            className={`rounded-full px-3 py-1 text-xs font-medium ${activeType.key === f.key ? "bg-primary text-white" : "bg-muted text-muted-foreground hover:bg-muted"}`}
           >
             {f.label}
           </Link>
@@ -214,7 +229,7 @@ export default async function ParentRequestsPage({ searchParams }: Props) {
           <Link
             key={f.key}
             href={buildHref(activeType.key, f.key)}
-            className={`rounded-full px-3 py-1 text-xs font-medium ${ activeStatus.key === f.key ? "bg-primary text-white" : "bg-muted text-muted-foreground hover:bg-muted" }`}
+            className={`rounded-full px-3 py-1 text-xs font-medium ${activeStatus.key === f.key ? "bg-primary text-white" : "bg-muted text-muted-foreground hover:bg-muted"}`}
           >
             {f.label}
           </Link>

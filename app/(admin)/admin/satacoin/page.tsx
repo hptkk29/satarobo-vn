@@ -5,6 +5,7 @@ import { checkPermission } from "@/lib/auth/check-permission";
 import { scopedDb, getModelVisibleCenterIds } from "@/lib/db-scope";
 import { resolveActor } from "@/lib/auth/actor";
 import { SataCoinAdmin } from "./_components/satacoin-admin";
+import { PageHelp } from "@/components/admin/ui/page-help";
 
 export const metadata = { title: "SataCoin | Admin" };
 export const dynamic = "force-dynamic";
@@ -29,7 +30,13 @@ export default async function SataCoinPage() {
     sdb.sataCoinRule.findMany({
       where: ruleWhere,
       orderBy: { createdAt: "desc" },
-      select: { id: true, code: true, label: true, amount: true, isActive: true },
+      select: {
+        id: true,
+        code: true,
+        label: true,
+        amount: true,
+        isActive: true,
+      },
     }),
     sdb.student.findMany({
       where: { deletedAt: null },
@@ -54,16 +61,29 @@ export default async function SataCoinPage() {
   ]);
 
   // Đánh dấu các giao dịch đã bị đảo (để ẩn nút đảo).
-  const reversedIds = new Set(recentTxns.filter((t) => t.reversedTxId).map((t) => t.reversedTxId as string));
+  const reversedIds = new Set(
+    recentTxns
+      .filter((t) => t.reversedTxId)
+      .map((t) => t.reversedTxId as string),
+  );
 
   return (
     <div className="space-y-6 p-4">
       <div>
-        <h1 className="text-xl font-bold text-foreground">SataCoin — điểm thưởng nội bộ</h1>
-        <p className="text-sm text-muted-foreground">
-          Sổ cái bất biến: không sửa/xoá giao dịch. Điều chỉnh = ghi giao dịch đảo. Số dư = tổng giao dịch.
+        <h1 className="text-xl font-bold text-foreground">
+          SataCoin — điểm thưởng nội bộ
+        </h1>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Sổ cái điểm thưởng của học viên
         </p>
       </div>
+
+      <PageHelp>
+        <p>
+          Sổ cái bất biến: không sửa/xoá giao dịch. Điều chỉnh = ghi giao dịch
+          đảo. Số dư = tổng giao dịch.
+        </p>
+      </PageHelp>
 
       <SataCoinAdmin
         rules={rules}

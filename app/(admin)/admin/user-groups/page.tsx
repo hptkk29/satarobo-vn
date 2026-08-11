@@ -19,6 +19,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { CreateGroupForm } from "./_components/create-group-form";
+import { PageHelp } from "@/components/admin/ui/page-help";
 
 export const metadata = { title: "Nhóm người dùng | Admin" };
 export const dynamic = "force-dynamic";
@@ -45,10 +46,15 @@ export default async function UserGroupsPage() {
       ? []
       : await sdb.permissionGrant.groupBy({
           by: ["subjectId"],
-          where: { subjectType: "GROUP", subjectId: { in: groups.map((g) => g.id) } },
+          where: {
+            subjectType: "GROUP",
+            subjectId: { in: groups.map((g) => g.id) },
+          },
           _count: { _all: true },
         });
-  const grantCountByGroup = new Map(grantRows.map((r) => [r.subjectId, r._count._all]));
+  const grantCountByGroup = new Map(
+    grantRows.map((r) => [r.subjectId, r._count._all]),
+  );
 
   return (
     <div>
@@ -58,10 +64,17 @@ export default async function UserGroupsPage() {
           Nhóm người dùng
         </h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Cấp quyền ad-hoc cho ít người mà không sửa vai trò chuẩn. DENY của nhóm thắng
-          ALLOW của vai trò; gỡ khỏi nhóm là quyền mất ngay request kế tiếp.
+          Cấp quyền cho một nhóm người mà không sửa vai trò
         </p>
       </div>
+
+      <PageHelp>
+        <p>
+          Cấp quyền ad-hoc cho ít người mà không sửa vai trò chuẩn. DENY của
+          nhóm thắng ALLOW của vai trò; gỡ khỏi nhóm là quyền mất ngay request
+          kế tiếp.
+        </p>
+      </PageHelp>
 
       <CreateGroupForm />
 
@@ -78,7 +91,10 @@ export default async function UserGroupsPage() {
           <TableBody>
             {groups.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={4} className="py-8 text-center text-sm text-muted-foreground">
+                <TableCell
+                  colSpan={4}
+                  className="py-8 text-center text-sm text-muted-foreground"
+                >
                   Chưa có nhóm nào. Tạo nhóm đầu tiên bằng form phía trên.
                 </TableCell>
               </TableRow>
@@ -96,10 +112,14 @@ export default async function UserGroupsPage() {
                   <TableCell className="max-w-md truncate text-muted-foreground">
                     {g.description ?? "—"}
                   </TableCell>
-                  <TableCell className="text-right">{g._count.members}</TableCell>
+                  <TableCell className="text-right">
+                    {g._count.members}
+                  </TableCell>
                   <TableCell className="text-right">
                     {(grantCountByGroup.get(g.id) ?? 0) > 0 ? (
-                      <Badge variant="secondary">{grantCountByGroup.get(g.id)}</Badge>
+                      <Badge variant="secondary">
+                        {grantCountByGroup.get(g.id)}
+                      </Badge>
                     ) : (
                       <span className="text-muted-foreground">0</span>
                     )}

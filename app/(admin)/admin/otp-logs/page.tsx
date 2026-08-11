@@ -7,6 +7,7 @@ import { maskEmail, maskPhone } from "@/lib/utils";
 import { getSetting } from "@/lib/settings/service";
 import { formatPhoneVN } from "@/lib/phone";
 import type { Prisma, OtpPurpose } from "@prisma/client";
+import { PageHelp } from "@/components/admin/ui/page-help";
 
 // AUTH-SĐT P4 — màn trả lời câu "phụ huynh báo không nhận được mã": trước đây
 // 0 UI nào đọc OtpRequest/OtpDeliveryLog, nhân viên phải mò Email logs (sắp
@@ -37,7 +38,9 @@ function startOfToday(): Date {
 
 function maskTarget(target: string, canViewPii: boolean): string {
   if (canViewPii) return target.includes("@") ? target : formatPhoneVN(target);
-  return target.includes("@") ? maskEmail(target) : maskPhone(formatPhoneVN(target));
+  return target.includes("@")
+    ? maskEmail(target)
+    : maskPhone(formatPhoneVN(target));
 }
 
 /** Delivery FAILED có key lỗi người-nhận (không phải lỗi hệ thống). */
@@ -49,7 +52,8 @@ function shortError(error: string | null): string {
 export default async function OtpLogsPage({ searchParams }: Props) {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  if (!(await checkPermission("emails:view"))) redirect("/dashboard?error=unauthorized");
+  if (!(await checkPermission("emails:view")))
+    redirect("/dashboard?error=unauthorized");
   const canViewPii = await canViewLeadPii();
 
   // OtpRequest/OtpDeliveryLog là model global (∉ SCOPED_MODELS) → sdb pass-through.
@@ -67,37 +71,48 @@ export default async function OtpLogsPage({ searchParams }: Props) {
   if (q) where.target = { contains: q };
   if (purpose) where.purpose = purpose;
 
-  const [totalCount, rows, sentToday, znsSentToday, znsUserErrToday, dailyCap, killSwitch] =
-    await Promise.all([
-      sdb.otpRequest.count({ where }),
-      sdb.otpRequest.findMany({
-        where,
-        include: { deliveries: { orderBy: { createdAt: "asc" } } },
-        orderBy: { createdAt: "desc" },
-        skip: (page - 1) * PAGE_SIZE,
-        take: PAGE_SIZE,
-      }),
-      sdb.otpDeliveryLog.count({
-        where: { status: "SENT", createdAt: { gte: startOfToday() } },
-      }),
-      sdb.otpDeliveryLog.count({
-        where: { status: "SENT", channel: "ZALO", createdAt: { gte: startOfToday() } },
-      }),
-      sdb.otpDeliveryLog.count({
-        where: {
-          status: "FAILED",
-          channel: "ZALO",
-          createdAt: { gte: startOfToday() },
-          OR: [
-            { error: { startsWith: "ZNS_NO_ZALO_ACCOUNT" } },
-            { error: { startsWith: "ZNS_USER_REFUSED" } },
-            { error: { startsWith: "ZNS_USER_UNREACHABLE" } },
-          ],
-        },
-      }),
-      getSetting("otp.globalDailyCap"),
-      getSetting("otp.globalKillSwitch"),
-    ]);
+  const [
+    totalCount,
+    rows,
+    sentToday,
+    znsSentToday,
+    znsUserErrToday,
+    dailyCap,
+    killSwitch,
+  ] = await Promise.all([
+    sdb.otpRequest.count({ where }),
+    sdb.otpRequest.findMany({
+      where,
+      include: { deliveries: { orderBy: { createdAt: "asc" } } },
+      orderBy: { createdAt: "desc" },
+      skip: (page - 1) * PAGE_SIZE,
+      take: PAGE_SIZE,
+    }),
+    sdb.otpDeliveryLog.count({
+      where: { status: "SENT", createdAt: { gte: startOfToday() } },
+    }),
+    sdb.otpDeliveryLog.count({
+      where: {
+        status: "SENT",
+        channel: "ZALO",
+        createdAt: { gte: startOfToday() },
+      },
+    }),
+    sdb.otpDeliveryLog.count({
+      where: {
+        status: "FAILED",
+        channel: "ZALO",
+        createdAt: { gte: startOfToday() },
+        OR: [
+          { error: { startsWith: "ZNS_NO_ZALO_ACCOUNT" } },
+          { error: { startsWith: "ZNS_USER_REFUSED" } },
+          { error: { startsWith: "ZNS_USER_UNREACHABLE" } },
+        ],
+      },
+    }),
+    getSetting("otp.globalDailyCap"),
+    getSetting("otp.globalKillSwitch"),
+  ]);
 
   const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
 
@@ -110,9 +125,15 @@ export default async function OtpLogsPage({ searchParams }: Props) {
   }
 
   const stat = (label: string, value: string, warn = false) => (
-    <div className={`rounded-lg border px-4 py-2 ${warn ? "border-state-danger bg-state-danger-soft" : "border-border bg-card"}`}>
+    <div
+      className={`rounded-lg border px-4 py-2 ${warn ? "border-state-danger bg-state-danger-soft" : "border-border bg-card"}`}
+    >
       <div className="text-xs text-muted-foreground">{label}</div>
-      <div className={`text-lg font-bold ${warn ? "text-state-danger-ink" : "text-foreground"}`}>{value}</div>
+      <div
+        className={`text-lg font-bold ${warn ? "text-state-danger-ink" : "text-foreground"}`}
+      >
+        {value}
+      </div>
     </div>
   );
 
@@ -120,22 +141,41 @@ export default async function OtpLogsPage({ searchParams }: Props) {
     <div className="p-6 space-y-4">
       <div>
         <h1 className="text-2xl font-bold">OTP Logs</h1>
-        <p className="text-sm text-muted-foreground mt-1">
-          Tra cứu &quot;phụ huynh báo không nhận được mã&quot; — mỗi yêu cầu OTP kèm các lần gửi
-          (Zalo ZNS / email dự phòng).
+        <p className="mt-1 text-sm text-muted-foreground">
+          Tra cứu mã OTP đã gửi cho phụ huynh
         </p>
       </div>
 
+      <PageHelp>
+        <p>
+          Tra cứu &quot;phụ huynh báo không nhận được mã&quot; — mỗi yêu cầu OTP
+          kèm các lần gửi (Zalo ZNS / email dự phòng).
+        </p>
+      </PageHelp>
+
       <div className="flex flex-wrap gap-3">
-        {stat("Tin đã gửi hôm nay", `${sentToday}/${dailyCap}`, sentToday >= dailyCap)}
+        {stat(
+          "Tin đã gửi hôm nay",
+          `${sentToday}/${dailyCap}`,
+          sentToday >= dailyCap,
+        )}
         {stat("Ngưỡng tự ngắt", String(killSwitch), sentToday >= killSwitch)}
-        {stat("Chi phí ZNS hôm nay (ước)", `${(znsSentToday * ZNS_COST_VND).toLocaleString("vi-VN")}đ`)}
-        {stat("ZNS lỗi người nhận hôm nay", String(znsUserErrToday), znsUserErrToday > 30)}
+        {stat(
+          "Chi phí ZNS hôm nay (ước)",
+          `${(znsSentToday * ZNS_COST_VND).toLocaleString("vi-VN")}đ`,
+        )}
+        {stat(
+          "ZNS lỗi người nhận hôm nay",
+          String(znsUserErrToday),
+          znsUserErrToday > 30,
+        )}
       </div>
 
       <form className="flex flex-wrap gap-2 items-end p-3 bg-muted rounded">
         <div>
-          <label className="block text-xs text-muted-foreground mb-1">Tìm theo SĐT/email</label>
+          <label className="block text-xs text-muted-foreground mb-1">
+            Tìm theo SĐT/email
+          </label>
           <input
             name="q"
             defaultValue={q}
@@ -144,8 +184,14 @@ export default async function OtpLogsPage({ searchParams }: Props) {
           />
         </div>
         <div>
-          <label className="block text-xs text-muted-foreground mb-1">Mục đích</label>
-          <select name="purpose" defaultValue={purpose ?? ""} className="px-3 py-1.5 border rounded text-sm">
+          <label className="block text-xs text-muted-foreground mb-1">
+            Mục đích
+          </label>
+          <select
+            name="purpose"
+            defaultValue={purpose ?? ""}
+            className="px-3 py-1.5 border rounded text-sm"
+          >
             <option value="">Tất cả</option>
             {PURPOSES.map((p) => (
               <option key={p} value={p}>
@@ -154,7 +200,10 @@ export default async function OtpLogsPage({ searchParams }: Props) {
             ))}
           </select>
         </div>
-        <button type="submit" className="px-4 py-1.5 bg-gray-900 text-white rounded text-sm">
+        <button
+          type="submit"
+          className="px-4 py-1.5 bg-gray-900 text-white rounded text-sm"
+        >
           Lọc
         </button>
       </form>
@@ -173,7 +222,10 @@ export default async function OtpLogsPage({ searchParams }: Props) {
           <tbody className="divide-y divide-border">
             {rows.length === 0 && (
               <tr>
-                <td colSpan={5} className="px-4 py-8 text-center text-muted-foreground">
+                <td
+                  colSpan={5}
+                  className="px-4 py-8 text-center text-muted-foreground"
+                >
                   Không có yêu cầu OTP nào khớp bộ lọc.
                 </td>
               </tr>
@@ -183,22 +235,30 @@ export default async function OtpLogsPage({ searchParams }: Props) {
                 <td className="px-4 py-3 whitespace-nowrap text-muted-foreground">
                   {r.createdAt.toLocaleString("vi-VN", { hour12: false })}
                 </td>
-                <td className="px-4 py-3 font-medium">{maskTarget(r.target, canViewPii)}</td>
-                <td className="px-4 py-3">{PURPOSE_LABEL[r.purpose] ?? r.purpose}</td>
+                <td className="px-4 py-3 font-medium">
+                  {maskTarget(r.target, canViewPii)}
+                </td>
+                <td className="px-4 py-3">
+                  {PURPOSE_LABEL[r.purpose] ?? r.purpose}
+                </td>
                 <td className="px-4 py-3">
                   {r.deliveries.length === 0 && (
-                    <span className="text-muted-foreground">— chưa gửi được lần nào</span>
+                    <span className="text-muted-foreground">
+                      — chưa gửi được lần nào
+                    </span>
                   )}
                   <ul className="space-y-0.5">
                     {r.deliveries.map((d) => (
                       <li key={d.id} className="whitespace-nowrap">
                         <span
-                          className={`inline-block rounded px-1.5 py-0.5 text-xs font-semibold ${ d.status === "SENT" ? "bg-state-success-soft text-state-success-ink" : "bg-state-danger-soft text-state-danger-ink" }`}
+                          className={`inline-block rounded px-1.5 py-0.5 text-xs font-semibold ${d.status === "SENT" ? "bg-state-success-soft text-state-success-ink" : "bg-state-danger-soft text-state-danger-ink"}`}
                         >
                           {d.channel} · {d.status}
                         </span>{" "}
                         {d.status !== "SENT" && (
-                          <span className="text-xs text-state-danger-ink">{shortError(d.error)}</span>
+                          <span className="text-xs text-state-danger-ink">
+                            {shortError(d.error)}
+                          </span>
                         )}
                       </li>
                     ))}
@@ -220,7 +280,10 @@ export default async function OtpLogsPage({ searchParams }: Props) {
       {totalPages > 1 && (
         <div className="flex items-center gap-2 text-sm">
           {page > 1 && (
-            <a href={urlFor({ q, purpose, page: page - 1 })} className="px-3 py-1 border rounded">
+            <a
+              href={urlFor({ q, purpose, page: page - 1 })}
+              className="px-3 py-1 border rounded"
+            >
               ← Trước
             </a>
           )}
@@ -228,7 +291,10 @@ export default async function OtpLogsPage({ searchParams }: Props) {
             Trang {page}/{totalPages} · {totalCount} yêu cầu
           </span>
           {page < totalPages && (
-            <a href={urlFor({ q, purpose, page: page + 1 })} className="px-3 py-1 border rounded">
+            <a
+              href={urlFor({ q, purpose, page: page + 1 })}
+              className="px-3 py-1 border rounded"
+            >
               Sau →
             </a>
           )}

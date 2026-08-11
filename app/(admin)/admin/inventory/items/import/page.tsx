@@ -4,7 +4,11 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { ChevronLeft } from "lucide-react";
 import { precheckUpsert } from "@/components/admin/import-precheck";
-import { ExcelImporter, type ImportResult } from "@/components/admin/ExcelImporter";
+import {
+  ExcelImporter,
+  type ImportResult,
+} from "@/components/admin/ExcelImporter";
+import { PageHelp } from "@/components/admin/ui/page-help";
 
 const VALID_CATEGORIES = new Set([
   "MAINBOARD",
@@ -52,12 +56,15 @@ export default function ImportInventoryItemsPage() {
           <ChevronLeft className="h-4 w-4" /> Quay lại kho
         </Link>
         <h1 className="text-2xl font-bold">Import Học cụ từ Excel</h1>
-        <p className="text-sm text-muted-foreground mt-1">
-          <code>itemCode</code> = khoá upsert. Khi tạo mặt hàng mới, hệ thống
-          tự khởi tạo tồn = 0 cho mọi cơ sở active. Re-import item cũ sẽ
-          UPDATE metadata nhưng KHÔNG reset tồn (skipDuplicates).
-        </p>
       </div>
+
+      <PageHelp>
+        <p>
+          <code>itemCode</code> = khoá upsert. Khi tạo mặt hàng mới, hệ thống tự
+          khởi tạo tồn = 0 cho mọi cơ sở active. Re-import item cũ sẽ UPDATE
+          metadata nhưng KHÔNG reset tồn (skipDuplicates).
+        </p>
+      </PageHelp>
 
       <ExcelImporter<ItemRow>
         title="Import Học cụ"
@@ -110,7 +117,10 @@ export default function ImportInventoryItemsPage() {
                 ? priceRaw
                 : parseFloat(String(priceRaw));
             if (!Number.isFinite(n) || n < 0) {
-              return { error: "Giá phải là số >= 0 (raw number, không dùng dấu phẩy ngàn)" };
+              return {
+                error:
+                  "Giá phải là số >= 0 (raw number, không dùng dấu phẩy ngàn)",
+              };
             }
           }
           const thRaw = row.defaultMinThreshold;
@@ -146,7 +156,9 @@ export default function ImportInventoryItemsPage() {
             body: JSON.stringify({ rows }),
           });
           if (!res.ok) {
-            const err = (await res.json().catch(() => ({ error: "Unknown" }))) as {
+            const err = (await res
+              .json()
+              .catch(() => ({ error: "Unknown" }))) as {
               error?: string;
             };
             throw new Error(err.error || "Import thất bại");
@@ -161,15 +173,15 @@ export default function ImportInventoryItemsPage() {
         <p className="font-semibold text-foreground">Lưu ý:</p>
         <ul className="list-disc list-inside space-y-0.5">
           <li>
-            <code>category</code>: <code>MAINBOARD</code> / <code>SENSOR</code> /{" "}
-            <code>MOTOR</code> / <code>BATTERY</code> / <code>MECHANICAL</code> /{" "}
-            <code>WIRE</code> / <code>TOOL</code> / <code>CONSUMABLE</code> /{" "}
-            <code>ROBOSIM</code> / <code>OTHER</code>.
+            <code>category</code>: <code>MAINBOARD</code> / <code>SENSOR</code>{" "}
+            / <code>MOTOR</code> / <code>BATTERY</code> /{" "}
+            <code>MECHANICAL</code> / <code>WIRE</code> / <code>TOOL</code> /{" "}
+            <code>CONSUMABLE</code> / <code>ROBOSIM</code> / <code>OTHER</code>.
           </li>
           <li>
             <code>isActive</code>: <code>TRUE</code> / <code>FALSE</code> /{" "}
-            <code>1</code> / <code>0</code> / <code>YES</code> /{" "}
-            <code>NO</code> / <code>ĐÚNG</code> · mặc định <code>TRUE</code>.
+            <code>1</code> / <code>0</code> / <code>YES</code> / <code>NO</code>{" "}
+            / <code>ĐÚNG</code> · mặc định <code>TRUE</code>.
           </li>
           <li>
             <code>tags</code>: cách nhau bằng dấu phẩy (vd:{" "}
@@ -183,7 +195,9 @@ export default function ImportInventoryItemsPage() {
             Re-import item đã có tồn &gt; 0 → metadata UPDATE, balance giữ
             nguyên.
           </li>
-          <li>Ảnh sản phẩm KHÔNG import qua Excel — upload sau qua admin form.</li>
+          <li>
+            Ảnh sản phẩm KHÔNG import qua Excel — upload sau qua admin form.
+          </li>
         </ul>
       </div>
     </div>

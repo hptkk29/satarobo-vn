@@ -25,6 +25,7 @@ import {
   type ReportFilters,
 } from "@/lib/reports/filters";
 import { ReportFilterBar } from "@/components/admin/report-filter-bar";
+import { PageHelp } from "@/components/admin/ui/page-help";
 
 export const metadata = { title: "Báo cáo trung tâm | Admin" };
 export const dynamic = "force-dynamic";
@@ -55,7 +56,9 @@ function Stat({
     <div className="rounded-xl border border-border bg-card p-4">
       <p className="text-xs font-medium text-muted-foreground">{label}</p>
       <p className={`mt-1 text-2xl font-bold ${toneClass}`}>{value}</p>
-      {hint ? <p className="mt-0.5 text-xs text-muted-foreground">{hint}</p> : null}
+      {hint ? (
+        <p className="mt-0.5 text-xs text-muted-foreground">{hint}</p>
+      ) : null}
     </div>
   );
 }
@@ -63,7 +66,11 @@ function Stat({
 export default async function CenterReportPage({
   searchParams,
 }: {
-  searchParams: Promise<{ center?: string; dateFrom?: string; dateTo?: string }>;
+  searchParams: Promise<{
+    center?: string;
+    dateFrom?: string;
+    dateTo?: string;
+  }>;
 }) {
   const session = await auth();
   if (!session?.user) redirect("/login");
@@ -80,7 +87,11 @@ export default async function CenterReportPage({
   // TTL 120s. Tất cả PRIMITIVE nên serialize an toàn.
   const { finance, trend, byCenter, satisfaction, retention } = await safeCache(
     () => computeTrungTamReport(actor, fc.filters),
-    ["trung-tam-report", actorScopeKey(actor), reportFilterCacheKey(fc.filters)],
+    [
+      "trung-tam-report",
+      actorScopeKey(actor),
+      reportFilterCacheKey(fc.filters),
+    ],
     { tags: [CACHE_TAGS.report], revalidate: 120 },
   )();
 
@@ -89,7 +100,8 @@ export default async function CenterReportPage({
     select: { id: true, name: true, code: true },
   });
   const centerName = new Map(centerRows.map((c) => [c.id, c.code ?? c.name]));
-  const labelCenter = (id: string) => (id === "—" ? "Chưa gán cơ sở" : centerName.get(id) ?? id);
+  const labelCenter = (id: string) =>
+    id === "—" ? "Chưa gán cơ sở" : (centerName.get(id) ?? id);
 
   const trendData = trend.map((t) => ({
     month: t.month,
@@ -106,10 +118,17 @@ export default async function CenterReportPage({
     <div className="space-y-5 p-4">
       <div>
         <h1 className="text-xl font-bold text-foreground">Báo cáo trung tâm</h1>
-        <p className="text-sm text-muted-foreground">
-          Tài chính (doanh thu xác nhận, công nợ), mức độ hài lòng và tỷ lệ tái tục — theo phạm vi cơ sở của bạn.
+        <p className="mt-1 text-sm text-muted-foreground">
+          Tài chính, hài lòng và tái tục theo cơ sở
         </p>
       </div>
+
+      <PageHelp>
+        <p>
+          Tài chính (doanh thu xác nhận, công nợ), mức độ hài lòng và tỷ lệ tái
+          tục — theo phạm vi cơ sở của bạn.
+        </p>
+      </PageHelp>
 
       <ReportFilterBar
         basePath="/bao-cao/trung-tam"
@@ -150,20 +169,42 @@ export default async function CenterReportPage({
       <section className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <Stat
           label="Hài lòng trung bình"
-          value={satisfaction.count ? `${(Math.round(satisfaction.average * 10) / 10).toFixed(1)} / 5` : "—"}
+          value={
+            satisfaction.count
+              ? `${(Math.round(satisfaction.average * 10) / 10).toFixed(1)} / 5`
+              : "—"
+          }
           hint={`${satisfaction.count} lượt đánh giá`}
-          tone={satisfaction.average >= 4 ? "good" : satisfaction.count ? "warn" : "neutral"}
+          tone={
+            satisfaction.average >= 4
+              ? "good"
+              : satisfaction.count
+                ? "warn"
+                : "neutral"
+          }
         />
         <Stat
           label="Tỷ lệ hài lòng (4-5★)"
           value={satisfaction.count ? pct(satisfaction.positiveRate) : "—"}
-          tone={satisfaction.positiveRate >= 0.8 ? "good" : satisfaction.count ? "warn" : "neutral"}
+          tone={
+            satisfaction.positiveRate >= 0.8
+              ? "good"
+              : satisfaction.count
+                ? "warn"
+                : "neutral"
+          }
         />
         <Stat
           label="Tái tục"
           value={retention.totalStudents ? pct(retention.retentionRate) : "—"}
           hint={`${retention.returningStudents}/${retention.totalStudents} học viên tái tục`}
-          tone={retention.retentionRate >= 0.5 ? "good" : retention.totalStudents ? "warn" : "neutral"}
+          tone={
+            retention.retentionRate >= 0.5
+              ? "good"
+              : retention.totalStudents
+                ? "warn"
+                : "neutral"
+          }
         />
         <Stat
           label="Tổng lượt ghi danh"
@@ -174,7 +215,9 @@ export default async function CenterReportPage({
 
       {/* Xu hướng doanh thu */}
       <section className="rounded-xl border border-border bg-card p-4">
-        <h2 className="mb-3 text-sm font-semibold text-foreground">Xu hướng doanh thu theo tháng</h2>
+        <h2 className="mb-3 text-sm font-semibold text-foreground">
+          Xu hướng doanh thu theo tháng
+        </h2>
         {trendData.length > 0 ? (
           <LineChart
             data={trendData}
@@ -187,13 +230,17 @@ export default async function CenterReportPage({
             yFormat="vnd-compact"
           />
         ) : (
-          <p className="py-8 text-center text-sm text-muted-foreground">Chưa có khoản thanh toán trong kỳ.</p>
+          <p className="py-8 text-center text-sm text-muted-foreground">
+            Chưa có khoản thanh toán trong kỳ.
+          </p>
         )}
       </section>
 
       {/* Doanh thu / công nợ theo cơ sở */}
       <section className="rounded-xl border border-border bg-card p-4">
-        <h2 className="mb-3 text-sm font-semibold text-foreground">Doanh thu & công nợ theo cơ sở</h2>
+        <h2 className="mb-3 text-sm font-semibold text-foreground">
+          Doanh thu & công nợ theo cơ sở
+        </h2>
         {centerChartData.length > 0 ? (
           <BarChart
             data={centerChartData}
@@ -206,14 +253,18 @@ export default async function CenterReportPage({
             yFormat="vnd-compact"
           />
         ) : (
-          <p className="py-8 text-center text-sm text-muted-foreground">Chưa có dữ liệu cơ sở trong kỳ.</p>
+          <p className="py-8 text-center text-sm text-muted-foreground">
+            Chưa có dữ liệu cơ sở trong kỳ.
+          </p>
         )}
       </section>
 
       {/* Bảng chi tiết theo cơ sở */}
       <section className="rounded-xl border border-border bg-card">
         <div className="border-b border-border px-4 py-3">
-          <h2 className="text-sm font-semibold text-foreground">Chi tiết theo cơ sở</h2>
+          <h2 className="text-sm font-semibold text-foreground">
+            Chi tiết theo cơ sở
+          </h2>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full min-w-[560px] text-sm">
@@ -229,18 +280,31 @@ export default async function CenterReportPage({
             <tbody>
               {byCenter.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="px-4 py-6 text-center text-muted-foreground">
+                  <td
+                    colSpan={5}
+                    className="px-4 py-6 text-center text-muted-foreground"
+                  >
                     Không có dữ liệu trong phạm vi cơ sở.
                   </td>
                 </tr>
               ) : (
                 byCenter.map((c) => (
                   <tr key={c.centerId} className="border-t">
-                    <td className="px-4 py-2 font-medium">{labelCenter(c.centerId)}</td>
-                    <td className="px-4 py-2 text-right text-state-success-ink">{vnd(c.confirmed)}</td>
-                    <td className="px-4 py-2 text-right text-state-warning-ink">{vnd(c.pending)}</td>
-                    <td className="px-4 py-2 text-right">{vnd(c.receivable)}</td>
-                    <td className="px-4 py-2 text-right font-semibold text-state-danger-ink">{vnd(c.debt)}</td>
+                    <td className="px-4 py-2 font-medium">
+                      {labelCenter(c.centerId)}
+                    </td>
+                    <td className="px-4 py-2 text-right text-state-success-ink">
+                      {vnd(c.confirmed)}
+                    </td>
+                    <td className="px-4 py-2 text-right text-state-warning-ink">
+                      {vnd(c.pending)}
+                    </td>
+                    <td className="px-4 py-2 text-right">
+                      {vnd(c.receivable)}
+                    </td>
+                    <td className="px-4 py-2 text-right font-semibold text-state-danger-ink">
+                      {vnd(c.debt)}
+                    </td>
                   </tr>
                 ))
               )}
@@ -266,7 +330,12 @@ async function computeTrungTamReport(actor: Actor, filters: ReportFilters) {
       ...(filters.centerId ? { centerId: filters.centerId } : {}),
       ...(dateWhere ? { paidDate: dateWhere } : {}),
     },
-    select: { centerId: true, amount: true, accountantStatus: true, paidDate: true },
+    select: {
+      centerId: true,
+      amount: true,
+      accountantStatus: true,
+      paidDate: true,
+    },
     take: 5000,
   });
   const payments: PaymentRecord[] = paymentRows.map((p) => ({
@@ -294,7 +363,13 @@ async function computeTrungTamReport(actor: Actor, filters: ReportFilters) {
           classId: { in: classIds },
           ...(dateWhere ? { enrolledAt: dateWhere } : {}),
         },
-        select: { studentId: true, classId: true, finalPrice: true, tuition: true, enrolledAt: true },
+        select: {
+          studentId: true,
+          classId: true,
+          finalPrice: true,
+          tuition: true,
+          enrolledAt: true,
+        },
         take: 10000,
       })
     : [];
@@ -321,12 +396,17 @@ async function computeTrungTamReport(actor: Actor, filters: ReportFilters) {
   const roundIds = roundRows.map((r) => r.id);
   const ratingRows = roundIds.length
     ? await sdb.evalAnswer.findMany({
-        where: { response: { roundId: { in: roundIds } }, valueNumber: { not: null } },
+        where: {
+          response: { roundId: { in: roundIds } },
+          valueNumber: { not: null },
+        },
         select: { valueNumber: true },
         take: 20000,
       })
     : [];
-  const ratings: RatingRecord[] = ratingRows.map((a) => ({ valueNumber: a.valueNumber }));
+  const ratings: RatingRecord[] = ratingRows.map((a) => ({
+    valueNumber: a.valueNumber,
+  }));
 
   // === Tính toán (hàm THUẦN) ===
   const finance = summarizeFinance(payments, enrollments);

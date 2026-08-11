@@ -6,6 +6,7 @@ import { checkPermission } from "@/lib/auth/check-permission";
 import { resolveActor } from "@/lib/auth/actor";
 import { scopedDb } from "@/lib/db-scope";
 import { ModeSelector } from "./_components/mode-selector";
+import { PageHelp } from "@/components/admin/ui/page-help";
 
 export const metadata = { title: "Cấu hình chia lead | Admin" };
 export const dynamic = "force-dynamic";
@@ -26,7 +27,10 @@ export default async function AssignConfigPage() {
   const sdb = scopedDb(actor);
 
   const centers = await sdb.center.findMany({
-    where: { isActive: true, ...(isCM && session.user.centerId ? { id: session.user.centerId } : {}) },
+    where: {
+      isActive: true,
+      ...(isCM && session.user.centerId ? { id: session.user.centerId } : {}),
+    },
     orderBy: { displayOrder: "asc" },
     select: { id: true, name: true },
   });
@@ -43,10 +47,17 @@ export default async function AssignConfigPage() {
           <Settings2 className="h-6 w-6 text-primary" /> Cấu hình chia lead
         </h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Chọn cách chia lead trong cơ sở. Lead chưa chọn cơ sở được chia đều giữa các cơ sở vận hành trước. Lead đã
-          có tương tác (gọi/nhắn/ghi chú) sẽ không bị tự động chia lại.
+          Cách chia lead cho sale trong cơ sở
         </p>
       </div>
+
+      <PageHelp>
+        <p>
+          Chọn cách chia lead trong cơ sở. Lead chưa chọn cơ sở được chia đều
+          giữa các cơ sở vận hành trước. Lead đã có tương tác (gọi/nhắn/ghi chú)
+          sẽ không bị tự động chia lại.
+        </p>
+      </PageHelp>
 
       {centers.length === 0 ? (
         <p className="rounded-xl border border-dashed border-border p-8 text-center text-sm text-muted-foreground">

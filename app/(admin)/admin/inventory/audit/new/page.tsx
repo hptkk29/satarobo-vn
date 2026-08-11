@@ -6,6 +6,7 @@ import { redirect } from "next/navigation";
 import { resolveActor } from "@/lib/auth/actor";
 import { getSelectableOrgUnits } from "@/lib/org/org-service";
 import { StartAuditForm } from "../_components/start-audit-form";
+import { PageHelp } from "@/components/admin/ui/page-help";
 
 export const dynamic = "force-dynamic";
 
@@ -34,11 +35,14 @@ export default async function NewAuditPage() {
         <h1 className="text-2xl font-bold text-foreground">
           Tạo phiếu kiểm kê
         </h1>
-        <p className="mt-1 text-sm text-muted-foreground">
+      </div>
+
+      <PageHelp>
+        <p>
           Phiếu mới ở trạng thái DRAFT. Sau khi tạo, hệ thống mở form kiểm kê
           bulk cho toàn bộ mặt hàng active của cơ sở.
         </p>
-      </div>
+      </PageHelp>
 
       {orgUnits.length === 0 ? (
         <div className="rounded-xl border border-state-warning-soft bg-state-warning-soft p-4 text-sm text-state-warning-ink">

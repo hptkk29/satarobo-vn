@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { scopedDb } from "@/lib/db-scope";
 import { resolveActor } from "@/lib/auth/actor";
 import { checkPermission } from "@/lib/auth/check-permission";
+import { PageHelp } from "@/components/admin/ui/page-help";
 
 export const dynamic = "force-dynamic";
 
@@ -51,9 +52,8 @@ export default async function AssignmentTemplatesPage() {
             <FileStack className="h-6 w-6 text-primary" />
             Mẫu bài tập (theo khung chương trình)
           </h1>
-          <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
-            Kho mẫu bài tập gắn khung chương trình / buổi học — KHÔNG gắn lớp.
-            Từ một mẫu, sinh ra bài giao cho từng lớp (giữ truy vết về mẫu nguồn).
+          <p className="mt-1 text-sm text-muted-foreground">
+            Kho mẫu bài tập dùng chung cho nhiều lớp
           </p>
         </div>
         <Link
@@ -64,6 +64,13 @@ export default async function AssignmentTemplatesPage() {
           Tạo mẫu mới
         </Link>
       </div>
+
+      <PageHelp>
+        <p>
+          Kho mẫu bài tập gắn khung chương trình / buổi học — KHÔNG gắn lớp. Từ
+          một mẫu, sinh ra bài giao cho từng lớp (giữ truy vết về mẫu nguồn).
+        </p>
+      </PageHelp>
 
       <div className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
         <div className="overflow-x-auto">

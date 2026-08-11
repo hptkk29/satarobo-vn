@@ -8,6 +8,7 @@ import { scopedDb } from "@/lib/db-scope";
 import { canAdjustTimesheet } from "@/lib/attendance/adjust";
 import { getSetting } from "@/lib/settings/service";
 import { ReviewRow, type ReviewItem } from "./_components/review-row";
+import { PageHelp } from "@/components/admin/ui/page-help";
 
 export const metadata = { title: "Duyệt chỉnh công | Admin" };
 export const dynamic = "force-dynamic";
@@ -20,7 +21,11 @@ export default async function ChinhCongPage() {
   const isCM = hasRole(session.user, "CENTER_MANAGER");
   const centerScope = isCM && !isSuper ? session.user.centerId : null;
 
-  if (!(await checkPermission("hr_attendance:adjust", { centerId: centerScope ?? session.user.centerId ?? null }))) {
+  if (
+    !(await checkPermission("hr_attendance:adjust", {
+      centerId: centerScope ?? session.user.centerId ?? null,
+    }))
+  ) {
     redirect("/dashboard");
   }
 
@@ -28,7 +33,10 @@ export default async function ChinhCongPage() {
   const sdb = scopedDb(await resolveActor(session.user.id));
 
   const rows = await sdb.timesheetAdjustmentRequest.findMany({
-    where: { status: "PENDING", ...(centerScope ? { centerId: centerScope } : {}) },
+    where: {
+      status: "PENDING",
+      ...(centerScope ? { centerId: centerScope } : {}),
+    },
     orderBy: { createdAt: "asc" },
     take: 200,
   });
@@ -37,7 +45,12 @@ export default async function ChinhCongPage() {
   const users = userIds.length
     ? await sdb.user.findMany({
         where: { id: { in: userIds } },
-        select: { id: true, name: true, email: true, center: { select: { name: true } } },
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          center: { select: { name: true } },
+        },
       })
     : [];
   const userMap = new Map(users.map((u) => [u.id, u]));
@@ -46,7 +59,10 @@ export default async function ChinhCongPage() {
   const editWindowDays = await getSetting("shift.managerEditWindowDays");
   const items: ReviewItem[] = rows.map((r) => {
     const u = userMap.get(r.userId);
-    const gate = canAdjustTimesheet({ isSuperAdmin: isSuper, isCenterManager: isCM, workDate: r.date, now }, editWindowDays);
+    const gate = canAdjustTimesheet(
+      { isSuperAdmin: isSuper, isCenterManager: isCM, workDate: r.date, now },
+      editWindowDays,
+    );
     return {
       id: r.id,
       userName: u?.name ?? u?.email ?? "(không tên)",
@@ -67,10 +83,16 @@ export default async function ChinhCongPage() {
           <ClipboardEdit className="h-6 w-6 text-primary" /> Duyệt chỉnh công
         </h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Quản lý cơ sở duyệt trong vòng 2 ngày kể từ ngày công; admin cấp cao duyệt mọi lúc. Duyệt
-          có nhập giờ → áp chỉnh + ghi log.
+          Duyệt đề nghị chỉnh giờ công
         </p>
       </div>
+
+      <PageHelp>
+        <p>
+          Quản lý cơ sở duyệt trong vòng 2 ngày kể từ ngày công; admin cấp cao
+          duyệt mọi lúc. Duyệt có nhập giờ → áp chỉnh + ghi log.
+        </p>
+      </PageHelp>
 
       {items.length === 0 ? (
         <p className="rounded-xl border border-dashed border-border p-8 text-center text-sm text-muted-foreground">

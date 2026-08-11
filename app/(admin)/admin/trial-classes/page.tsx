@@ -7,6 +7,7 @@ import { resolveActor } from "@/lib/auth/actor";
 import { scopedDb } from "@/lib/db-scope";
 import { TrialConfigSection } from "./_components/config-section";
 import { formatDateVN } from "@/lib/format/date";
+import { PageHelp } from "@/components/admin/ui/page-help";
 
 export const metadata = { title: "Lớp trải nghiệm | Admin" };
 export const dynamic = "force-dynamic";
@@ -32,8 +33,8 @@ export default async function TrialClassesPage() {
   const actor = await resolveActor(session.user.id);
   const sdb = scopedDb(actor);
 
-  const canManage = (await checkPermission("trials:manage"));
-  const canConfig = (await checkPermission("trials:config"));
+  const canManage = await checkPermission("trials:manage");
+  const canConfig = await checkPermission("trials:config");
 
   const [classes, activeConfig] = await Promise.all([
     sdb.trialClassV2.findMany({
@@ -59,8 +60,7 @@ export default async function TrialClassesPage() {
             <FlaskConical className="h-6 w-6 text-primary" /> Lớp trải nghiệm
           </h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            Lớp học thử nhiều buổi (RoboSim/Robot). Xếp con từ lead vào lớp, điểm danh
-            từng buổi, theo dõi sĩ số.
+            Lớp học thử nhiều buổi
           </p>
         </div>
         {canManage && (
@@ -73,11 +73,15 @@ export default async function TrialClassesPage() {
         )}
       </div>
 
+      <PageHelp>
+        <p>
+          Lớp học thử nhiều buổi (RoboSim/Robot). Xếp con từ lead vào lớp, điểm
+          danh từng buổi, theo dõi sĩ số.
+        </p>
+      </PageHelp>
+
       {/* Cấu hình số buổi (trials:config — QĐ-T3b: CM giữ qua action riêng) */}
-      <TrialConfigSection
-        canConfig={canConfig}
-        config={activeConfig ?? null}
-      />
+      <TrialConfigSection canConfig={canConfig} config={activeConfig ?? null} />
 
       {/* Danh sách lớp */}
       <div className="overflow-hidden rounded-xl border border-border bg-card">
@@ -95,7 +99,10 @@ export default async function TrialClassesPage() {
           <tbody className="divide-y divide-border">
             {classes.length === 0 && (
               <tr>
-                <td colSpan={6} className="px-4 py-8 text-center text-muted-foreground">
+                <td
+                  colSpan={6}
+                  className="px-4 py-8 text-center text-muted-foreground"
+                >
                   Chưa có lớp trải nghiệm nào.
                 </td>
               </tr>
@@ -112,7 +119,9 @@ export default async function TrialClassesPage() {
                     >
                       {c.name}
                     </Link>
-                    <div className="text-xs text-muted-foreground">{c.code}</div>
+                    <div className="text-xs text-muted-foreground">
+                      {c.code}
+                    </div>
                   </td>
                   <td className="px-4 py-3 text-foreground">
                     {c.startDate ? formatDateVN(c.startDate) : "Theo lịch hẹn"}
@@ -123,7 +132,9 @@ export default async function TrialClassesPage() {
                   <td className="px-4 py-3">
                     <span
                       className={
-                        full ? "font-semibold text-state-danger-ink" : "text-foreground"
+                        full
+                          ? "font-semibold text-state-danger-ink"
+                          : "text-foreground"
                       }
                     >
                       {used}/{c.capacity}
@@ -139,7 +150,7 @@ export default async function TrialClassesPage() {
                   </td>
                   <td className="px-4 py-3">
                     <span
-                      className={`rounded-full px-2 py-0.5 text-xs font-semibold ${ STATUS_BADGE[c.status] ?? "bg-muted text-muted-foreground" }`}
+                      className={`rounded-full px-2 py-0.5 text-xs font-semibold ${STATUS_BADGE[c.status] ?? "bg-muted text-muted-foreground"}`}
                     >
                       {STATUS_LABEL[c.status] ?? c.status}
                     </span>

@@ -14,6 +14,7 @@
 // Cây dựng từ `parentId` trong bộ nhớ: dữ liệu < 50 node, đừng tối ưu sớm.
 import { redirect } from "next/navigation";
 import { ChevronRight, Network } from "lucide-react";
+import { PageHelp } from "@/components/admin/ui/page-help";
 import { auth } from "@/lib/auth";
 import { checkPermission } from "@/lib/auth/check-permission";
 import { resolveActor } from "@/lib/auth/actor";
@@ -60,11 +61,16 @@ type UnitRow = {
  * cộng toàn bộ đường tổ tiên của những node đó (không có đường này thì cây gãy đoạn
  * và React không có gốc để render).
  */
-function keepVisibleBranches(rows: UnitRow[], allowedCenterIds: string[]): UnitRow[] {
+function keepVisibleBranches(
+  rows: UnitRow[],
+  allowedCenterIds: string[],
+): UnitRow[] {
   const allowed = new Set(allowedCenterIds);
   const byId = new Map(rows.map((r) => [r.id, r]));
   const matched = new Set(
-    rows.filter((r) => r.centerId != null && allowed.has(r.centerId)).map((r) => r.id),
+    rows
+      .filter((r) => r.centerId != null && allowed.has(r.centerId))
+      .map((r) => r.id),
   );
   if (matched.size === 0) return [];
 
@@ -78,7 +84,8 @@ function keepVisibleBranches(rows: UnitRow[], allowedCenterIds: string[]): UnitR
       chain.push(cur.id);
       cur = cur.parentId ? byId.get(cur.parentId) : undefined;
     }
-    if (chain.some((id) => matched.has(id))) for (const id of chain) keep.add(id);
+    if (chain.some((id) => matched.has(id)))
+      for (const id of chain) keep.add(id);
   }
   return rows.filter((r) => keep.has(r.id));
 }
@@ -114,10 +121,16 @@ function OrgTreeNode({
           )}
         />
         <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-1">
-          <span className="font-mono text-xs font-bold text-foreground">{node.code}</span>
-          <span className="truncate font-semibold text-foreground">{node.name}</span>
+          <span className="font-mono text-xs font-bold text-foreground">
+            {node.code}
+          </span>
+          <span className="truncate font-semibold text-foreground">
+            {node.name}
+          </span>
           <Badge variant="outline">{ORG_UNIT_TYPE_LABEL[node.type]}</Badge>
-          <Badge variant={node.relationshipType === "OWNED" ? "outline" : "default"}>
+          <Badge
+            variant={node.relationshipType === "OWNED" ? "outline" : "default"}
+          >
             {ORG_RELATIONSHIP_LABEL[node.relationshipType]}
           </Badge>
           <Badge variant={statusBadgeVariant(node.status)}>
@@ -128,7 +141,8 @@ function OrgTreeNode({
           </span>
           {node.legalEntity && (
             <span className="text-xs text-muted-foreground">
-              Pháp nhân: {node.legalEntity.legalName} · MST {node.legalEntity.taxCode}
+              Pháp nhân: {node.legalEntity.legalName} · MST{" "}
+              {node.legalEntity.taxCode}
             </span>
           )}
         </div>
@@ -174,7 +188,9 @@ export default async function ToChucPage() {
   const session = await auth();
   if (!session?.user) redirect("/login");
   if (
-    !(await checkPermission("centers:view", { centerId: session.user.centerId ?? null }))
+    !(await checkPermission("centers:view", {
+      centerId: session.user.centerId ?? null,
+    }))
   ) {
     redirect("/dashboard?error=unauthorized");
   }
@@ -231,7 +247,9 @@ export default async function ToChucPage() {
     else childrenOf.set(u.parentId, [u]);
   }
   // Gốc = node không cha, HOẶC node có cha nằm ngoài tầm nhìn (đừng nuốt cả nhánh).
-  const roots = units.filter((u) => u.parentId == null || !byId.has(u.parentId));
+  const roots = units.filter(
+    (u) => u.parentId == null || !byId.has(u.parentId),
+  );
 
   const parentOptions: ParentOption[] = units.map((u) => ({
     id: u.id,
@@ -251,17 +269,36 @@ export default async function ToChucPage() {
             <Network className="h-7 w-7 text-primary" />
             Cây tổ chức
           </h1>
-          <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
-            Hội sở → Khối vùng → Cơ sở. Mở cơ sở mới là thêm dữ liệu ở đây, không sửa
-            code. Đường dẫn (path) của mỗi node là thứ dùng để tính phạm vi quyền — đổi
-            đơn vị cha sẽ tính lại cả nhánh con. · {activeCount}/{units.length} đơn vị
-            đang hoạt động
+          {/* Dòng phụ chỉ nói TRẠNG THÁI, không giải thích cách dùng — phần hướng dẫn
+              nằm ở <PageHelp> bên dưới, đóng sẵn. Người vận hành mở trang này mỗi ngày
+              và cần nhìn thấy cây ngay, không phải đọc lại một đoạn văn. */}
+          <p className="mt-1 text-sm text-muted-foreground">
+            {activeCount}/{units.length} đơn vị đang hoạt động
           </p>
         </div>
         {canEdit && (
-          <CreateOrgUnitButton parents={parentOptions} legalEntities={legalEntities} />
+          <CreateOrgUnitButton
+            parents={parentOptions}
+            legalEntities={legalEntities}
+          />
         )}
       </div>
+
+      <PageHelp>
+        <p>
+          Cây tổ chức xếp theo ba tầng:{" "}
+          <strong>Hội sở → Khối vùng → Cơ sở</strong>.
+        </p>
+        <ul className="mt-2 list-disc space-y-1 pl-5">
+          <li>Mở cơ sở mới là thêm đơn vị ở đây — không cần lập trình viên.</li>
+          <li>
+            Đổi đơn vị cha sẽ tính lại đường dẫn của{" "}
+            <strong>cả nhánh con</strong>, và đường dẫn đó quyết định ai nhìn
+            thấy dữ liệu của cơ sở nào.
+          </li>
+          <li>Đơn vị còn đơn vị con đang hoạt động thì không xoá được.</li>
+        </ul>
+      </PageHelp>
 
       <div className="rounded-xl border border-border bg-card p-3">
         {roots.length === 0 ? (
@@ -284,8 +321,8 @@ export default async function ToChucPage() {
 
       {!canEdit && (
         <p className="mt-3 text-xs text-muted-foreground">
-          Bạn đang xem ở chế độ chỉ đọc — tạo/sửa đơn vị cần quyền quản trị cơ sở
-          (centers:edit).
+          Bạn đang xem ở chế độ chỉ đọc — tạo/sửa đơn vị cần quyền quản trị cơ
+          sở (centers:edit).
         </p>
       )}
     </div>

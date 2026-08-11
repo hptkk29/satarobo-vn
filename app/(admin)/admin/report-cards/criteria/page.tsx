@@ -5,6 +5,7 @@ import { checkPermission } from "@/lib/auth/check-permission";
 import { resolveActor } from "@/lib/auth/actor";
 import { scopedDb } from "@/lib/db-scope";
 import { CriteriaManager } from "../_components/criteria-manager";
+import { PageHelp } from "@/components/admin/ui/page-help";
 
 export const metadata = { title: "Tiêu chí học bạ | Admin" };
 export const dynamic = "force-dynamic";
@@ -14,7 +15,8 @@ export default async function ReportCardCriteriaPage() {
   if (!session?.user) redirect("/login");
   // Cấu hình tiêu chí = quyền duyệt (Đào tạo/Quản lý). report-cards:review đã có ở v2,
   // scope GLOBAL (#09) — gate không truyền target, đúng R1.
-  if (!(await checkPermission("report-cards:review"))) redirect("/report-cards");
+  if (!(await checkPermission("report-cards:review")))
+    redirect("/report-cards");
 
   // Course/ReportCardCriterion không center-scope → sdb pass-through. Dùng sdb để file
   // không phải import db trần (ESLint db-import-allowlist).
@@ -22,7 +24,11 @@ export default async function ReportCardCriteriaPage() {
 
   const courses = await sdb.course.findMany({
     where: { isActive: true },
-    orderBy: [{ isTeachable: "desc" }, { displayOrder: "asc" }, { name: "asc" }],
+    orderBy: [
+      { isTeachable: "desc" },
+      { displayOrder: "asc" },
+      { name: "asc" },
+    ],
     take: 300,
     select: {
       id: true,
@@ -51,11 +57,20 @@ export default async function ReportCardCriteriaPage() {
         <Link href="/report-cards" className="text-sm text-primary">
           ← Học bạ năng lực
         </Link>
-        <h1 className="mt-1 text-xl font-bold text-foreground">Cấu hình tiêu chí năng lực</h1>
-        <p className="text-sm text-muted-foreground">
-          Đào tạo cấu hình tiêu chí theo từng khoá học. GV chấm thang 1–4 cho mỗi tiêu chí khi nhập học bạ.
+        <h1 className="mt-1 text-xl font-bold text-foreground">
+          Cấu hình tiêu chí năng lực
+        </h1>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Tiêu chí chấm học bạ theo từng khoá
         </p>
       </div>
+
+      <PageHelp>
+        <p>
+          Đào tạo cấu hình tiêu chí theo từng khoá học. GV chấm thang 1–4 cho
+          mỗi tiêu chí khi nhập học bạ.
+        </p>
+      </PageHelp>
 
       <CriteriaManager
         courses={courses.map((c) => ({

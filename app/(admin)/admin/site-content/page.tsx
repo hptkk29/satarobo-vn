@@ -5,6 +5,7 @@ import { scopedDb } from "@/lib/db-scope";
 import { checkAnyPermission } from "@/lib/auth/check-permission";
 import { PAGE_GATES } from "@/lib/auth/page-gates";
 import { SiteContentClient } from "./client";
+import { PageHelp } from "@/components/admin/ui/page-help";
 
 export const metadata = { title: "Hình ảnh & nội dung trang | Admin" };
 
@@ -55,14 +56,27 @@ export default async function SiteContentPage() {
   return (
     <div className="max-w-5xl">
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-foreground">Hình ảnh & nội dung trang</h1>
+        <h1 className="text-2xl font-bold text-foreground">
+          Hình ảnh & nội dung trang
+        </h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Override hero image + title + subtitle cho từng public page. Để trống ô = fallback về Unsplash mặc định (
-          <code className="text-xs">lib/page-images.ts</code>).
+          Ảnh bìa và tiêu đề của các trang công khai
         </p>
       </div>
 
-      <SiteContentClient pages={PAGES} fields={FIELDS} initialContent={contentMap} />
+      <PageHelp>
+        <p>
+          Override hero image + title + subtitle cho từng public page. Để trống
+          ô = fallback về Unsplash mặc định (
+          <code className="text-xs">lib/page-images.ts</code>).
+        </p>
+      </PageHelp>
+
+      <SiteContentClient
+        pages={PAGES}
+        fields={FIELDS}
+        initialContent={contentMap}
+      />
     </div>
   );
 }

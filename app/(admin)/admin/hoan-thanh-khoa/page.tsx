@@ -5,9 +5,13 @@ import { checkPermission } from "@/lib/auth/check-permission";
 import { scopedDb, getModelVisibleCenterIds } from "@/lib/db-scope";
 import { resolveActor } from "@/lib/auth/actor";
 import { ENROLLMENT_ACTIVE_STATUS_LIST } from "@/lib/enrollment-status";
-import { getNonEnrollableCenterIds, notHeadOfficeWhere } from "@/lib/enrollment-flow";
+import {
+  getNonEnrollableCenterIds,
+  notHeadOfficeWhere,
+} from "@/lib/enrollment-flow";
 import { CompletionForm } from "./_components/completion-form";
 import { BulkCompleteByClass } from "./_components/bulk-complete-by-class";
+import { PageHelp } from "@/components/admin/ui/page-help";
 
 export const metadata = { title: "Hoàn thành khoá | Admin" };
 export const dynamic = "force-dynamic";
@@ -85,14 +89,17 @@ export default async function CompletionPage({ searchParams }: PageProps) {
 
   // Khi đã chọn lớp: nạp học viên đang theo học (enrollment active) + đánh dấu
   // ai đã hoàn thành khoá của lớp này (đã có chứng chỉ → bỏ chọn sẵn).
-  let selectedClass:
-    | {
-        id: string;
-        name: string;
-        courseName: string;
-        students: { id: string; name: string; studentCode: string | null; alreadyCompleted: boolean }[];
-      }
-    | null = null;
+  let selectedClass: {
+    id: string;
+    name: string;
+    courseName: string;
+    students: {
+      id: string;
+      name: string;
+      studentCode: string | null;
+      alreadyCompleted: boolean;
+    }[];
+  } | null = null;
 
   if (selectedClassId) {
     const klass = await sdb.class.findFirst({
@@ -116,7 +123,10 @@ export default async function CompletionPage({ searchParams }: PageProps) {
 
     if (klass) {
       // Loại trùng học viên (1 HV có thể có nhiều enrollment active hiếm gặp).
-      const byId = new Map<string, { id: string; name: string; studentCode: string | null }>();
+      const byId = new Map<
+        string,
+        { id: string; name: string; studentCode: string | null }
+      >();
       for (const e of klass.enrollments) byId.set(e.student.id, e.student);
       const studentList = Array.from(byId.values());
 
@@ -148,12 +158,21 @@ export default async function CompletionPage({ searchParams }: PageProps) {
   return (
     <div className="space-y-6 p-4">
       <div>
-        <h1 className="text-xl font-bold text-foreground">Hoàn thành khoá &amp; chứng chỉ</h1>
-        <p className="text-sm text-muted-foreground">
-          Đánh dấu học viên hoàn thành khoá, nhập đánh giá cuối khoá của GV → sinh chứng chỉ, gợi ý khoá tiếp
-          theo, tạo việc chăm sóc tái tục và đẩy email chúc mừng.
+        <h1 className="text-xl font-bold text-foreground">
+          Hoàn thành khoá &amp; chứng chỉ
+        </h1>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Chốt kết quả cuối khoá và cấp chứng chỉ
         </p>
       </div>
+
+      <PageHelp>
+        <p>
+          Đánh dấu học viên hoàn thành khoá, nhập đánh giá cuối khoá của GV →
+          sinh chứng chỉ, gợi ý khoá tiếp theo, tạo việc chăm sóc tái tục và đẩy
+          email chúc mừng.
+        </p>
+      </PageHelp>
 
       <CompletionForm students={students} />
 
@@ -170,7 +189,9 @@ export default async function CompletionPage({ searchParams }: PageProps) {
       />
 
       <div className="rounded-xl border border-border bg-card">
-        <div className="border-b px-4 py-2 text-sm font-semibold text-foreground">Đã hoàn thành gần đây</div>
+        <div className="border-b px-4 py-2 text-sm font-semibold text-foreground">
+          Đã hoàn thành gần đây
+        </div>
         <table className="w-full text-sm">
           <thead className="text-left text-xs text-muted-foreground">
             <tr>
@@ -185,7 +206,10 @@ export default async function CompletionPage({ searchParams }: PageProps) {
           <tbody>
             {completions.length === 0 ? (
               <tr>
-                <td colSpan={6} className="px-4 py-6 text-center text-muted-foreground">
+                <td
+                  colSpan={6}
+                  className="px-4 py-6 text-center text-muted-foreground"
+                >
                   Chưa có dữ liệu.
                 </td>
               </tr>
@@ -196,9 +220,13 @@ export default async function CompletionPage({ searchParams }: PageProps) {
                   <td className="px-4 py-2">{c.course.name}</td>
                   <td className="px-4 py-2">{c.finalGrade ?? "—"}</td>
                   <td className="px-4 py-2 text-muted-foreground">
-                    {c.nextCourseId ? courseName.get(c.nextCourseId) ?? "—" : "—"}
+                    {c.nextCourseId
+                      ? (courseName.get(c.nextCourseId) ?? "—")
+                      : "—"}
                   </td>
-                  <td className="px-4 py-2 text-muted-foreground">{c.completedAt.toISOString().slice(0, 10)}</td>
+                  <td className="px-4 py-2 text-muted-foreground">
+                    {c.completedAt.toISOString().slice(0, 10)}
+                  </td>
                   <td className="px-4 py-2">
                     <a
                       href={`/api/admin/reports/certificate?code=${encodeURIComponent(c.certificateCode)}`}

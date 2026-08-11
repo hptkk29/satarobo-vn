@@ -9,6 +9,7 @@ import { auditAllClassSessions } from "@/lib/classes/session-sync";
 import { vnYmd } from "@/lib/time/vn";
 import { vnHm } from "@/lib/classes/slots";
 import { AuditRowActions } from "./_components/audit-row-actions";
+import { PageHelp } from "@/components/admin/ui/page-help";
 
 export const metadata = { title: "Kiểm tra lịch buổi học | Admin" };
 export const dynamic = "force-dynamic";
@@ -23,10 +24,22 @@ export const dynamic = "force-dynamic";
 // =============================================================================
 
 const SEVERITY_LABEL: Record<string, { text: string; cls: string }> = {
-  ANCHOR_WRONG: { text: "Neo sai ngày khai giảng", cls: "bg-state-danger-soft text-state-danger-ink" },
-  NO_SESSIONS: { text: "Chưa có buổi nào", cls: "bg-state-danger-soft text-state-danger-ink" },
-  DRIFT: { text: "Lệch giữa khoá", cls: "bg-state-warning-soft text-state-warning-ink" },
-  NO_SCHEDULE: { text: "Thiếu lịch/khai giảng", cls: "bg-muted text-foreground" },
+  ANCHOR_WRONG: {
+    text: "Neo sai ngày khai giảng",
+    cls: "bg-state-danger-soft text-state-danger-ink",
+  },
+  NO_SESSIONS: {
+    text: "Chưa có buổi nào",
+    cls: "bg-state-danger-soft text-state-danger-ink",
+  },
+  DRIFT: {
+    text: "Lệch giữa khoá",
+    cls: "bg-state-warning-soft text-state-warning-ink",
+  },
+  NO_SCHEDULE: {
+    text: "Thiếu lịch/khai giảng",
+    cls: "bg-muted text-foreground",
+  },
 };
 
 const fmt = (d: Date | null) => (d ? `${vnYmd(d)} ${vnHm(d)}` : "—");
@@ -34,14 +47,17 @@ const fmt = (d: Date | null) => (d ? `${vnYmd(d)} ${vnHm(d)}` : "—");
 export default async function ClassScheduleAuditPage() {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  if (!(await checkPermission("classes:view-all"))) redirect("/dashboard?error=unauthorized");
+  if (!(await checkPermission("classes:view-all")))
+    redirect("/dashboard?error=unauthorized");
 
   const actor = await resolveActor(session.user.id);
   const canEdit = await checkPermission("classes:edit");
   // `auditAllClassSessions` đọc bằng `db` trần (cần gom 4 truy vấn, không n+1) nên phải
   // tự lọc cách ly cơ sở ở đây — đúng luật `scopedDb` chỉ che READ khi đi qua nó.
   const all = await auditAllClassSessions();
-  const rows = all.filter((r) => passesScope("Class", { centerId: r.centerId }, actor));
+  const rows = all.filter((r) =>
+    passesScope("Class", { centerId: r.centerId }, actor),
+  );
 
   return (
     <div>
@@ -57,10 +73,18 @@ export default async function ClassScheduleAuditPage() {
           Kiểm tra lịch buổi học
         </h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Đối chiếu dãy buổi đã sinh với <strong>ngày khai giảng + lịch học</strong> của từng lớp
-          (đã trừ ngày nghỉ). Chỉ liệt kê lớp có vấn đề — danh sách rỗng nghĩa là mọi lớp đều khớp.
+          Lớp có lịch học lệch so với khai giảng
         </p>
       </div>
+
+      <PageHelp>
+        <p>
+          Đối chiếu dãy buổi đã sinh với{" "}
+          <strong>ngày khai giảng + lịch học</strong> của từng lớp (đã trừ ngày
+          nghỉ). Chỉ liệt kê lớp có vấn đề — danh sách rỗng nghĩa là mọi lớp đều
+          khớp.
+        </p>
+      </PageHelp>
 
       {rows.length === 0 ? (
         <div className="rounded-xl border border-state-success-soft bg-state-success-soft p-6 text-center text-sm font-medium text-state-success-ink">
@@ -105,12 +129,18 @@ export default async function ClassScheduleAuditPage() {
                       >
                         {sev.text}
                       </span>
-                      {r.message && <p className="mt-1 max-w-md text-xs text-muted-foreground">{r.message}</p>}
+                      {r.message && (
+                        <p className="mt-1 max-w-md text-xs text-muted-foreground">
+                          {r.message}
+                        </p>
+                      )}
                     </td>
                     <td className="px-4 py-3 tabular-nums text-foreground">
                       {r.startDate ? vnYmd(r.startDate) : "—"}
                     </td>
-                    <td className="px-4 py-3 tabular-nums text-foreground">{fmt(r.actualFirst)}</td>
+                    <td className="px-4 py-3 tabular-nums text-foreground">
+                      {fmt(r.actualFirst)}
+                    </td>
                     <td className="px-4 py-3 tabular-nums font-semibold text-foreground">
                       {fmt(r.expectedFirst)}
                     </td>
@@ -129,9 +159,10 @@ export default async function ClassScheduleAuditPage() {
       )}
 
       <p className="mt-4 text-xs text-muted-foreground">
-        &quot;Xếp lại&quot; neo lại cả dãy buổi từ ngày khai giảng theo lịch hiện tại. Chỉ đổi ngày —
-        không tạo, không xoá buổi; buổi đã điểm danh / có nhận xét / đã giao bài / có ảnh / đã hoàn
-        tất giữ nguyên ngày và chiếm chỗ ngày đó.
+        &quot;Xếp lại&quot; neo lại cả dãy buổi từ ngày khai giảng theo lịch
+        hiện tại. Chỉ đổi ngày — không tạo, không xoá buổi; buổi đã điểm danh /
+        có nhận xét / đã giao bài / có ảnh / đã hoàn tất giữ nguyên ngày và
+        chiếm chỗ ngày đó.
       </p>
     </div>
   );
