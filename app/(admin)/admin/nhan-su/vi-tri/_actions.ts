@@ -271,3 +271,129 @@ export async function ketThucPhanCong(id: string): Promise<ActionResult> {
   revalidatePath("/admin/nhan-su/vi-tri");
   return { ok: true, id };
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// P2 · US-10 — ĐIỀU ĐỘNG TÁC NGHIỆP (WorkScope).
+//
+// ⚠️ Cùng cổng `roles:manage` với vị trí, CÓ CHỦ ĐÍCH: điều động MỞ PHẠM VI DỮ LIỆU của
+// một người sang cơ sở khác. Nó không phát thêm quyền, nhưng "ai thấy dữ liệu cơ sở nào"
+// là quyết định cùng hạng với gán vai. Muốn hạ xuống HR/QLCS thì đó là một quyết định
+// riêng, có người ký — đừng hạ cho tiện.
+//
+// ⚠️ AC3 giống US-09: kết thúc điều động = ĐÓNG `effectiveTo`, không xoá bản ghi.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const dieuDongSchema = z
+  .object({
+    id: z.string().trim().max(64).optional(),
+    assignmentId: z.string().trim().min(1, "Chưa chọn phân công"),
+    orgUnitId: z.string().trim().min(1, "Chưa chọn nơi tác nghiệp"),
+    reason: z.enum(["TEACHING", "MAKEUP", "TRIAL", "SUPPORT"]),
+    effectiveFrom: z.string().trim().min(1, "Chưa chọn ngày bắt đầu"),
+    effectiveTo: z.string().trim().optional().nullable(),
+    note: z.string().trim().max(500).optional().nullable(),
+  })
+  .superRefine((d, ctx) => {
+    const tu = parseVnYmd(d.effectiveFrom) ?? new Date(NaN);
+    if (Number.isNaN(tu.getTime())) {
+      ctx.addIssue({ code: "custom", message: "Ngày bắt đầu không hợp lệ", path: ["effectiveFrom"] });
+      return;
+    }
+    if (d.effectiveTo) {
+      const den = parseVnYmd(d.effectiveTo) ?? new Date(NaN);
+      if (Number.isNaN(den.getTime())) {
+        ctx.addIssue({ code: "custom", message: "Ngày kết thúc không hợp lệ", path: ["effectiveTo"] });
+      } else if (den < tu) {
+        ctx.addIssue({ code: "custom", message: "Ngày kết thúc trước ngày bắt đầu", path: ["effectiveTo"] });
+      }
+    }
+  });
+
+export async function luuDieuDong(input: unknown): Promise<ActionResult> {
+  const { loi, session } = await guard();
+  if (loi || !session) return { ok: false, error: loi ?? "Không có quyền" };
+
+  const parsed = dieuDongSchema.safeParse(input);
+  if (!parsed.success) {
+    return { ok: false, error: parsed.error.issues[0]?.message ?? "Dữ liệu không hợp lệ" };
+  }
+  const d = parsed.data;
+  const effectiveFrom = parseVnYmd(d.effectiveFrom);
+  const effectiveTo = d.effectiveTo ? vnEndOfDay(parseVnYmd(d.effectiveTo) ?? new Date(NaN)) : null;
+  if (!effectiveFrom || Number.isNaN(effectiveFrom.getTime())) {
+    return { ok: false, error: "Ngày bắt đầu không hợp lệ" };
+  }
+  if (effectiveTo && Number.isNaN(effectiveTo.getTime())) {
+    return { ok: false, error: "Ngày kết thúc không hợp lệ" };
+  }
+
+  try {
+    const sdb = scopedDb(await resolveActor(session.user.id));
+    const id = d.id
+      ? (
+          await sdb.workScope.update({
+            where: { id: d.id },
+            data: { orgUnitId: d.orgUnitId, reason: d.reason, effectiveFrom, effectiveTo, note: d.note ?? null },
+            select: { id: true },
+          })
+        ).id
+      : (
+          await sdb.workScope.create({
+            data: {
+              assignmentId: d.assignmentId,
+              orgUnitId: d.orgUnitId,
+              reason: d.reason,
+              effectiveFrom,
+              effectiveTo,
+              note: d.note ?? null,
+              createdById: session.user.id,
+            },
+            select: { id: true },
+          })
+        ).id;
+
+    await writeAudit({
+      actor: { id: session.user.id, name: session.user.name ?? session.user.email ?? "" },
+      module: "rbac",
+      entityType: "WorkScope",
+      entityId: id,
+      action: d.id ? "UPDATE" : "CREATE",
+      newValues: {
+        assignmentId: d.assignmentId,
+        orgUnitId: d.orgUnitId,
+        reason: d.reason,
+        effectiveFrom: d.effectiveFrom,
+        effectiveTo: d.effectiveTo ?? null,
+      },
+      orgUnitId: d.orgUnitId,
+    }).catch(() => null);
+
+    revalidatePath("/admin/nhan-su/vi-tri");
+    return { ok: true, id };
+  } catch (e) {
+    console.error("[vi-tri] luuDieuDong lỗi:", e);
+    return { ok: false, error: "Không lưu được điều động — vui lòng thử lại." };
+  }
+}
+
+/** Kết thúc điều động — đóng hiệu lực, KHÔNG xoá (giữ dấu vết ai từng tác nghiệp ở đâu). */
+export async function ketThucDieuDong(id: string): Promise<ActionResult> {
+  const { loi, session } = await guard();
+  if (loi || !session) return { ok: false, error: loi ?? "Không có quyền" };
+
+  const bayGio = new Date();
+  const sdb = scopedDb(await resolveActor(session.user.id));
+  await sdb.workScope.update({ where: { id }, data: { effectiveTo: bayGio } });
+
+  await writeAudit({
+    actor: { id: session.user.id, name: session.user.name ?? session.user.email ?? "" },
+    module: "rbac",
+    entityType: "WorkScope",
+    entityId: id,
+    action: "UPDATE",
+    newValues: { effectiveTo: bayGio.toISOString() },
+  }).catch(() => null);
+
+  revalidatePath("/admin/nhan-su/vi-tri");
+  return { ok: true, id };
+}

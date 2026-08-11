@@ -10,6 +10,7 @@ import { scopedDb } from "@/lib/db-scope";
 import { resolveActor } from "@/lib/auth/actor";
 import { ViTriEditor } from "./_components/vi-tri-editor";
 import { PhanCongEditor } from "./_components/phan-cong-editor";
+import { DieuDongEditor } from "./_components/dieu-dong-editor";
 import { vnYmd } from "@/lib/time/vn";
 
 export const dynamic = "force-dynamic";
@@ -67,6 +68,19 @@ export default async function ViTriPage() {
         status: true,
         note: true,
         user: { select: { name: true, email: true } },
+        // US-10 — điều động treo trên phân công. Lấy CẢ bản ghi đã hết hạn (lịch sử
+        // "ai từng tác nghiệp ở đâu" là thứ phải tra được).
+        workScopes: {
+          orderBy: { effectiveFrom: "desc" },
+          select: {
+            id: true,
+            orgUnitId: true,
+            reason: true,
+            effectiveFrom: true,
+            effectiveTo: true,
+            note: true,
+          },
+        },
       },
     }),
     // Chỉ nhân sự: phụ huynh không giữ vị trí công việc (vai quan hệ, xem CLAUDE.md).
@@ -76,6 +90,9 @@ export default async function ViTriPage() {
       select: { id: true, name: true, email: true },
     }),
   ]);
+
+  const bayGio = new Date();
+  const tenViTri = new Map(positions.map((p) => [p.id, p.title]));
 
   return (
     <div className="space-y-5">
@@ -126,6 +143,35 @@ export default async function ViTriPage() {
           status: a.status,
           note: a.note,
         }))}
+      />
+
+      <DieuDongEditor
+        phanCongs={assignments
+          .filter(
+            (a) =>
+              a.status === "ACTIVE" &&
+              a.effectiveFrom <= bayGio &&
+              (a.effectiveTo === null || a.effectiveTo >= bayGio),
+          )
+          .map((a) => ({
+            id: a.id,
+            nhan: `${a.user.name ?? a.user.email ?? a.userId} — ${tenViTri.get(a.positionId) ?? "?"}`,
+          }))}
+        donVis={orgUnits}
+        dieuDongs={assignments.flatMap((a) =>
+          a.workScopes.map((w) => ({
+            id: w.id,
+            assignmentId: a.id,
+            nhanPhanCong: `${a.user.name ?? a.user.email ?? a.userId} — ${tenViTri.get(a.positionId) ?? "?"}`,
+            orgUnitId: w.orgUnitId,
+            reason: w.reason,
+            effectiveFrom: w.effectiveFrom.toISOString(),
+            effectiveTo: w.effectiveTo?.toISOString() ?? null,
+            tuNgay: vnYmd(w.effectiveFrom),
+            denNgay: w.effectiveTo ? vnYmd(w.effectiveTo) : null,
+            note: w.note,
+          })),
+        )}
       />
     </div>
   );

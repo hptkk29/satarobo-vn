@@ -142,3 +142,38 @@ action mà 7 RoleDef giữ do nó là chìa khoá bộ lọc cơ sở ở hàng 
 KHÔNG gỡ `centers:view` khỏi các vai. Ba màn Email/OTP tách sang nhóm riêng để Marketing
 Hội sở giữ nguyên `emails:view` đang dùng. `lib/auth/menu-permissions.test.ts` quét tĩnh
 sidebar và bắt mọi mục thêm sau này mượn action mà vai khác cũng giữ.
+
+## AS-BUILT — P2 · US-10 WorkScope (11/08/2026)
+
+**Nơi TÁC NGHIỆP tách khỏi nơi TRỰC THUỘC.** `WorkScope(assignmentId, orgUnitId, reason,
+effectiveFrom/To)` treo trên PHÂN CÔNG, không treo trên người: một người có thể vừa giữ vị
+trí chính vừa kiêm nhiệm, và điều động thuộc về đúng một trong hai.
+
+**WorkScope KHÔNG cấp quyền — chỉ nới PHẠM VI DỮ LIỆU** của những vai người đó đã có qua
+chính phân công ấy. Ráp ở đúng MỘT chỗ: `buildActor` cộng đơn vị WorkScope vào `scopeUnits`
+của hàng đó, rồi mọi thứ (`visibleCenterIds`, `visibleOrgUnitIds`, `PermEntry.centerScope`,
+`roleCenterScope`) tính bằng công thức cũ. Không có đường quyền thứ hai để trôi lệch.
+
+**Cộng vào CẢ HAI mức `unitOnly` và `unitAndBelow`** — học viên/lớp mặc định `UNIT_ONLY`
+(BA §4), nên chỉ nới `unitAndBelow` thì điều động vô tác dụng đúng nghiệp vụ sinh ra nó.
+
+⚠️ **"GV-HO" trong US-10/TS-11 là người biên chế PHÒNG BAN của Hội sở, không phải người neo
+vai tại chính node HO.** Vai neo tại HO/ROOT là cross-center theo thiết kế (`isHoLevel` →
+thấy mọi cơ sở), nên với người đó điều động là không-op — và sửa điều đó chính là lỗ rò
+quyền đã phải gỡ ở US-05 (CLAUDE.md, mục "ĐỪNG nới V7 cho HO mang centerId"). Ca thật:
+phòng Đào tạo là `DEPARTMENT` dưới HO, dưới nó không có cơ sở nào ⇒ không thấy dữ liệu cơ
+sở nào cho tới khi có điều động. Test `[US-10]` trong `lib/auth/actor.test.ts` ghim cả hai
+chiều, gồm ca "neo tại HO thì điều động không nới thêm gì".
+
+**Hết hạn vẫn là thuộc tính của resolver** (luật cứng #8): `loadPositionRoleRows` lọc
+WorkScope theo mốc thời gian ngay trong truy vấn, nên hết hạn là đơn vị đó biến mất khỏi
+`workScopeOrgUnitIds` ⇒ mất truy cập ở request kế tiếp. Không cron nào ghi. Bảng KHÔNG có
+cột `status` — "còn hiệu lực" ở đây là một khoảng thời gian, thêm cờ song song là đẻ nguồn
+sự thật thứ hai (bài học US-09).
+
+**Đóng phân công thì điều động tắt theo** — WorkScope nằm trong `select` của phân công còn
+hiệu lực, nên không có đường nào để một điều động "mồ côi" tiếp tục mở cửa.
+
+**Cổng màn điều động:** `roles:manage` (chỉ SUPER_ADMIN), cùng cổng với vị trí. Điều động
+quyết định "ai thấy dữ liệu cơ sở nào" — cùng hạng với gán vai. Hạ xuống HR/QLCS là một
+quyết định riêng, cần người ký.

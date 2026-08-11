@@ -200,15 +200,21 @@ export function buildActor(input: {
   for (const r of liveRows) {
     const node = orgById.get(r.orgUnitId);
     const hoRoot = isHoRoot(node);
+    // P2 · US-10 — NƠI TÁC NGHIỆP cộng vào NƠI TRỰC THUỘC (AC2: phạm vi = đơn vị trực
+    // thuộc ∪ WorkScope còn hiệu lực). Caller đã lọc theo mốc thời gian, nên hết hạn là
+    // đơn vị đó BIẾN MẤT khỏi mảng này ⇒ mất truy cập ngay ở request kế tiếp (AC3),
+    // không cron nào phải dọn. WorkScope CHỈ nới phạm vi của CHÍNH hàng này — không đổi
+    // `isHoLevel`, không thêm vai, không thêm permission.
+    const scopeUnits = [r.orgUnitId, ...(r.workScopeOrgUnitIds ?? [])];
     // visibleCenterIds: HO/ROOT → mọi center (cross-center theo chức năng); CENTER → subtree.
     const rowCenters = hoRoot
       ? everyCenter
-      : getSubtreeCenterIds(input.orgNodes, r.orgUnitId);
+      : [...new Set(scopeUnits.flatMap((u) => getSubtreeCenterIds(input.orgNodes, u)))];
     rowCenters.forEach((c) => visible.add(c));
     // visibleOrgUnitIds (song song): HO/ROOT → mọi đơn vị; còn lại → subtree orgUnitId.
     const rowOrgUnits = hoRoot
       ? everyOrgUnit
-      : getSubtreeOrgUnitIds(input.orgNodes, r.orgUnitId);
+      : [...new Set(scopeUnits.flatMap((u) => getSubtreeOrgUnitIds(input.orgNodes, u)))];
     rowOrgUnits.forEach((o) => visibleOrg.add(o));
 
     // US-02/US-05 — roleCenterScope: CÙNG công thức PermEntry.centerScope (hoRoot → "ALL");
@@ -221,11 +227,17 @@ export function buildActor(input: {
       if (hoRoot || prev === "ALL") {
         roleCenterScope[r.roleId] = "ALL";
       } else {
-        const scope = centerScopeForOrgUnit(input.orgNodes, r.orgUnitId);
+        // US-10: điều động cộng vào CẢ HAI mức. `unitOnly` phải có, nếu không thì vai
+        // mang dataScope UNIT_ONLY (mặc định của học viên/lớp — BA §4) vẫn không với tới
+        // cơ sở được điều đến, tức điều động không có tác dụng gì cho đúng nghiệp vụ
+        // sinh ra nó.
+        const scopes = scopeUnits.map((u) => centerScopeForOrgUnit(input.orgNodes, u));
         const prevObj = prev ?? { unitOnly: [], unitAndBelow: [] };
         roleCenterScope[r.roleId] = {
-          unitOnly: [...new Set([...prevObj.unitOnly, ...scope.unitOnly])],
-          unitAndBelow: [...new Set([...prevObj.unitAndBelow, ...scope.unitAndBelow])],
+          unitOnly: [...new Set([...prevObj.unitOnly, ...scopes.flatMap((x) => x.unitOnly)])],
+          unitAndBelow: [
+            ...new Set([...prevObj.unitAndBelow, ...scopes.flatMap((x) => x.unitAndBelow)]),
+          ],
         };
       }
     }

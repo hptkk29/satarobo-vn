@@ -344,11 +344,13 @@ model OrgUnit {
   // Cố ý KHÔNG có FK: bảng đích chưa tồn tại.
   templateId String?
 
-  centerId  String?   @unique // Phase A: trỏ Center cũ. P1 nới cho cả HO (Center 'hoi-so').
-  isActive  Boolean   @default(true)
-  deletedAt DateTime? @db.Timestamptz(6)
-  createdAt DateTime  @default(now()) @db.Timestamptz(6)
-  updatedAt DateTime  @updatedAt @db.Timestamptz(6)
+  centerId   String?     @unique // Phase A: trỏ Center cũ. P1 nới cho cả HO (Center 'hoi-so').
+  isActive   Boolean     @default(true)
+  deletedAt  DateTime?   @db.Timestamptz(6)
+  createdAt  DateTime    @default(now()) @db.Timestamptz(6)
+  updatedAt  DateTime    @updatedAt @db.Timestamptz(6)
+  positions  Position[]  @relation("PositionOrgUnit")
+  workScopes WorkScope[] @relation("WorkScopeOrgUnit")
 
   @@index([type])
   @@index([parentId])
@@ -360,7 +362,6 @@ model OrgUnit {
   @@index([path(ops: raw("text_pattern_ops"))])
   @@index([legalEntityId])
   @@index([status])
-  positions          Position[]           @relation("PositionOrgUnit")
 }
 
 // [Nền Hệ thống P1 · US-06] Pháp nhân — TÁCH khỏi đơn vị vận hành (BA §2.3).
@@ -402,16 +403,16 @@ enum AssignStatus {
 }
 
 model RoleDef {
-  id          String           @id @default(cuid())
-  code        String           @unique // HO_ACCOUNTANT, CENTER_MANAGER...
-  name        String
-  isSystem    Boolean          @default(false) // SUPER_ADMIN, PARENT — không xóa/đổi code
-  isActive    Boolean          @default(true)
-  permissions RolePermission[]
-  userRoles   UserOrgRole[]
-  createdAt   DateTime         @default(now()) @db.Timestamptz(6)
-  updatedAt   DateTime         @updatedAt @db.Timestamptz(6)
-  positionRoles      PositionRole[]
+  id            String           @id @default(cuid())
+  code          String           @unique // HO_ACCOUNTANT, CENTER_MANAGER...
+  name          String
+  isSystem      Boolean          @default(false) // SUPER_ADMIN, PARENT — không xóa/đổi code
+  isActive      Boolean          @default(true)
+  permissions   RolePermission[]
+  userRoles     UserOrgRole[]
+  createdAt     DateTime         @default(now()) @db.Timestamptz(6)
+  updatedAt     DateTime         @updatedAt @db.Timestamptz(6)
+  positionRoles PositionRole[]
 }
 
 model RolePermission {
@@ -465,9 +466,9 @@ enum DataScope {
 }
 
 model PermissionGrant {
-  id          String           @id @default(cuid())
-  subjectType GrantSubjectType
-  subjectId   String // polymorphic theo subjectType (RoleDef.id | UserGroup.id US-03) — KHÔNG FK có chủ đích
+  id            String               @id @default(cuid())
+  subjectType   GrantSubjectType
+  subjectId     String // polymorphic theo subjectType (RoleDef.id | UserGroup.id US-03) — KHÔNG FK có chủ đích
   // FK về registry (Restrict): không cho grant trỏ key chưa khai báo, không xoá key còn grant.
   permissionKey String
   descriptor    PermissionDescriptor @relation(fields: [permissionKey], references: [key], onDelete: Restrict)
@@ -607,6 +608,15 @@ model DomainEvent {
 /// P2 · US-08 — KIỂU PHÂN CÔNG VỊ TRÍ (BA §2.4). KHÁC hẳn `AssignmentType` ngay bên
 /// dưới: cái đó là phân bổ nhân sự/lương của `EmployeeOrgAssignment` và CỐ Ý KHÔNG sinh
 /// quyền; cái này quyết định người đó hưởng bộ quyền của Position nào.
+/// Lý do điều động (BA §2.4). Là DỮ LIỆU VẬN HÀNH, không tham gia tính quyền — engine
+/// chỉ hỏi "đơn vị nào, trong khoảng nào"; lý do để người duyệt và người tra soát đọc.
+enum WorkScopeReason {
+  TEACHING
+  MAKEUP
+  TRIAL
+  SUPPORT
+}
+
 enum PositionAssignmentKind {
   PRIMARY
   CONCURRENT
@@ -678,8 +688,41 @@ model PositionAssignment {
   position Position @relation(fields: [positionId], references: [id], onDelete: Restrict)
   user     User     @relation("UserPositionAssignments", fields: [userId], references: [id], onDelete: Cascade)
 
+  workScopes WorkScope[]
+
   @@index([userId, status])
   @@index([positionId, status])
+}
+
+/// P2 · US-10 — NƠI TÁC NGHIỆP, tách khỏi NƠI TRỰC THUỘC (BA §2.4).
+///
+/// Giáo viên biên chế phòng Đào tạo (Hội sở) được điều xuống CS1 dạy: `Position.orgUnitId`
+/// giữ nguyên (biên chế không đổi), `WorkScope` mở đúng CS1 trong đúng khoảng thời gian.
+/// Đổi cơ sở dạy = sửa WorkScope, KHÔNG đụng vai trò hay quyền.
+///
+/// ⚠️ WorkScope KHÔNG cấp quyền — nó chỉ NỚI PHẠM VI DỮ LIỆU của những vai người đó ĐÃ có
+/// qua phân công này. Giáo viên được điều sang CS1 vẫn chỉ là giáo viên ở CS1, và vẫn chỉ
+/// thấy lớp mình được phân công (quyền lớp của họ vốn scope ASSIGNED).
+///
+/// ⚠️ KHÔNG có cột `status`: "còn hiệu lực" ở đây là một KHOẢNG THỜI GIAN. Thêm cờ song
+/// song là đẻ nguồn sự thật thứ hai — bài học US-09. Kết thúc điều động = đóng `effectiveTo`.
+model WorkScope {
+  id            String          @id @default(cuid())
+  assignmentId  String
+  orgUnitId     String
+  reason        WorkScopeReason
+  effectiveFrom DateTime        @default(now()) @db.Timestamptz(6)
+  effectiveTo   DateTime?       @db.Timestamptz(6)
+  note          String?
+  createdById   String?
+  createdAt     DateTime        @default(now()) @db.Timestamptz(6)
+  updatedAt     DateTime        @updatedAt @db.Timestamptz(6)
+
+  assignment PositionAssignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  orgUnit    OrgUnit            @relation("WorkScopeOrgUnit", fields: [orgUnitId], references: [id], onDelete: Restrict)
+
+  @@index([assignmentId])
+  @@index([orgUnitId])
 }
 
 enum AssignmentType {
@@ -720,8 +763,8 @@ model FacebookPageMapping {
   // từng bảng: xem BACKFILL_SPECS trong lib/org/center-bridge.ts.
   orgUnitId String?
 
-  isActive  Boolean     @default(true)
-  createdAt DateTime    @default(now()) @db.Timestamptz(6)
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
 
   @@index([scopeType])
   @@index([orgUnitId])
@@ -1029,8 +1072,9 @@ model User {
   groupMemberships UserGroupMember[]
 
   // Phase 5.4.0 — Audit log relations
-  auditLogs      UserAuditLog[]            @relation("UserAuditLogs")
-  grantAuditLogs PermissionGrantAuditLog[] @relation("UserGrantAudits")
+  auditLogs           UserAuditLog[]            @relation("UserAuditLogs")
+  grantAuditLogs      PermissionGrantAuditLog[] @relation("UserGrantAudits")
+  positionAssignments PositionAssignment[]      @relation("UserPositionAssignments")
 
   @@index([email])
   @@index([phone])
@@ -1038,7 +1082,6 @@ model User {
   @@index([role])
   @@index([deletedAt])
   @@index([orgUnitId])
-  positionAssignments PositionAssignment[] @relation("UserPositionAssignments")
 }
 
 model UserPermissionGrant {
@@ -1344,17 +1387,17 @@ model Lead {
 // ⚠️ Hoa hồng affiliate: mức % + thời điểm chốt trả CHƯA có quy chế (chờ BGĐ) —
 // model này chỉ ghi NGUỒN + tỉ lệ tham chiếu; KHÔNG tự sinh phiếu chi.
 model Affiliate {
-  id                String  @id @default(cuid())
+  id        String  @id @default(cuid())
   /// Mã giới thiệu dùng trong link `?ref=` — chữ HOA + số, không dấu.
-  code              String  @unique
-  name              String
+  code      String  @unique
+  name      String
   /// Liên hệ để đối soát (không bắt buộc).
-  phone             String?
-  email             String?
+  phone     String?
+  email     String?
   /// Phụ huynh/HV giới thiệu có thể gắn về tài khoản User (không bắt buộc).
-  userId            String?
+  userId    String?
   /// Cơ sở phụ trách theo dõi (null = toàn hệ thống).
-  centerId          String?
+  centerId  String?
   // P1 · US-07 — cột SONG SONG với centerId (ghi kép tới hết P4).
   // Cột TRẦN, không FK — giống 28 bảng của PR-A. Ý nghĩa của NULL theo
   // từng bảng: xem BACKFILL_SPECS trong lib/org/center-bridge.ts.
@@ -1514,7 +1557,7 @@ model Student {
   // LMS-15 — thread nhắn tin 2 chiều
 
   // Phase NHÓM 3 — yêu cầu phụ huynh
-  parentRequests    ParentRequest[]          @relation("StudentParentRequests")
+  parentRequests    ParentRequest[]           @relation("StudentParentRequests")
   makeupNeeds       MakeupNeed[]
   riskAlerts        StudentRiskAlert[]
   careTasks         StudentCareTask[]
@@ -1525,7 +1568,7 @@ model Student {
   birthdayGreetings StudentBirthdayGreeting[]
   // P2 — nhóm lớp (cohort): 1 HV thuộc TỐI ĐA 1 nhóm.
   classGroupId      String?
-  classGroup        ClassGroup?              @relation("ClassGroupStudents", fields: [classGroupId], references: [id], onDelete: SetNull)
+  classGroup        ClassGroup?               @relation("ClassGroupStudents", fields: [classGroupId], references: [id], onDelete: SetNull)
 
   @@index([phone])
   @@index([centerId])
@@ -1631,12 +1674,12 @@ model Class {
   curriculumId      String?
   curriculumVersion Int?
 
-  course          Course              @relation(fields: [courseId], references: [id])
-  center          Center?             @relation(fields: [centerId], references: [id])
-  classGroup      ClassGroup?         @relation(fields: [classGroupId], references: [id], onDelete: SetNull)
-  teacher         User?               @relation("TeacherClasses", fields: [teacherId], references: [id])
-  assistant       User?               @relation("AssistantClasses", fields: [assistantId], references: [id])
-  room            Room?               @relation(fields: [roomId], references: [id], onDelete: SetNull)
+  course          Course               @relation(fields: [courseId], references: [id])
+  center          Center?              @relation(fields: [centerId], references: [id])
+  classGroup      ClassGroup?          @relation(fields: [classGroupId], references: [id], onDelete: SetNull)
+  teacher         User?                @relation("TeacherClasses", fields: [teacherId], references: [id])
+  assistant       User?                @relation("AssistantClasses", fields: [assistantId], references: [id])
+  room            Room?                @relation(fields: [roomId], references: [id], onDelete: SetNull)
   enrollments     Enrollment[]
   sessions        ClassSession[]
   sessionPlans    ClassSessionPlan[] // R7-06
@@ -1735,14 +1778,14 @@ model ClassSchedulePhaseSlot {
 }
 
 model Enrollment {
-  id          String           @id @default(cuid())
-  studentId   String
-  classId     String
-  courseId    String
-  status      EnrollmentStatus @default(ACTIVE)
+  id        String           @id @default(cuid())
+  studentId String
+  classId   String
+  courseId  String
+  status    EnrollmentStatus @default(ACTIVE)
   // FL3-02 — centerId denormalized từ class. ĐÃ flip vào SCOPED_MODELS (db-scope.ts);
   // mọi write set centerId + backfill migration 20260624010000. scopedDb cách ly theo cơ sở.
-  centerId    String?
+  centerId  String?
   // P1 · US-07 — cột SONG SONG với centerId (ghi kép tới hết P4).
   // Cột TRẦN, không FK — giống 28 bảng của PR-A. Ý nghĩa của NULL theo
   // từng bảng: xem BACKFILL_SPECS trong lib/org/center-bridge.ts.
@@ -1871,8 +1914,7 @@ model ClassSession {
   // P1 · US-07 — cột SONG SONG với centerId (ghi kép tới hết P4).
   // Cột TRẦN, không FK — giống 28 bảng của PR-A. Ý nghĩa của NULL theo
   // từng bảng: xem BACKFILL_SPECS trong lib/org/center-bridge.ts.
-  orgUnitId String?
-
+  orgUnitId   String?
 
   // LMS-3 — quy trình sau buổi + checklist
   status            SessionStatus @default(SCHEDULED)
@@ -2012,7 +2054,6 @@ model Attendance {
   // Cột TRẦN, không FK — giống 28 bảng của PR-A. Ý nghĩa của NULL theo
   // từng bảng: xem BACKFILL_SPECS trong lib/org/center-bridge.ts.
   orgUnitId String?
-
 
   // Module QL học viên PHẦN 2 — vắng có cấu trúc.
   makeupStatus    MakeupStatus @default(NONE)
@@ -3383,8 +3424,8 @@ enum LeadAssignMode {
 }
 
 model LeadAssignmentConfig {
-  id        String         @id @default(cuid())
-  centerId  String         @unique
+  id        String  @id @default(cuid())
+  centerId  String  @unique
   // P1 · US-07 — cột SONG SONG với centerId (ghi kép tới hết P4).
   // Cột TRẦN, không FK — giống 28 bảng của PR-A. Ý nghĩa của NULL theo
   // từng bảng: xem BACKFILL_SPECS trong lib/org/center-bridge.ts.
@@ -4400,8 +4441,8 @@ enum WorkShift {
 // R6-B2 — Ca làm việc cấu hình trong DB (per-center giờ/dung sai). 2-phase: enum WorkShift
 // giữ nguyên để back-compat; check-in đọc giờ/tolerance từ đây. code khớp enum cũ (T12).
 model WorkShiftConfig {
-  id               String   @id @default(cuid())
-  centerId         String? // null = mặc định toàn hệ thống
+  id        String  @id @default(cuid())
+  centerId  String? // null = mặc định toàn hệ thống
   // P1 · US-07 — cột SONG SONG với centerId (ghi kép tới hết P4).
   // Cột TRẦN, không FK — giống 28 bảng của PR-A. Ý nghĩa của NULL theo
   // từng bảng: xem BACKFILL_SPECS trong lib/org/center-bridge.ts.
@@ -4516,13 +4557,13 @@ enum WorkRequestStatus {
 }
 
 model WorkRequest {
-  id             String            @id @default(cuid())
-  requesterId    String // User (GV gửi đơn)
-  centerId       String? // cơ sở của GV (scope duyệt CENTER_MANAGER)
+  id          String  @id @default(cuid())
+  requesterId String // User (GV gửi đơn)
+  centerId    String? // cơ sở của GV (scope duyệt CENTER_MANAGER)
   // P1 · US-07 — cột SONG SONG với centerId (ghi kép tới hết P4).
   // Cột TRẦN, không FK — giống 28 bảng của PR-A. Ý nghĩa của NULL theo
   // từng bảng: xem BACKFILL_SPECS trong lib/org/center-bridge.ts.
-  orgUnitId String?
+  orgUnitId   String?
 
   kind           WorkRequestKind
   status         WorkRequestStatus @default(PENDING)
@@ -4822,10 +4863,10 @@ model StudentCareTask {
 /// ⚠️ CHỈ tạo dòng cho học viên ĐANG HỌC và TÌM ĐƯỢC buổi tổ chức. HV chưa xếp lớp /
 /// lớp đã kết thúc → bỏ qua hoàn toàn (chủ dự án chốt 06/08/2026): không việc, không tin.
 model StudentBirthdayGreeting {
-  id        String @id @default(cuid())
-  studentId String
+  id           String   @id @default(cuid())
+  studentId    String
   /// Năm dương lịch của lần sinh nhật này — nửa còn lại của khoá chống trùng.
-  year      Int
+  year         Int
   /// Ngày sinh nhật quy về năm `year`, lưu UTC-midnight — CÙNG quy ước với
   /// Student.dateOfBirth (mọi đường ghi đều ép Date.UTC), nên so ngày không lệch múi giờ.
   birthdayDate DateTime @db.Timestamptz(6)
@@ -4833,8 +4874,7 @@ model StudentBirthdayGreeting {
   // P1 · US-07 — cột SONG SONG với centerId (ghi kép tới hết P4).
   // Cột TRẦN, không FK — giống 28 bảng của PR-A. Ý nghĩa của NULL theo
   // từng bảng: xem BACKFILL_SPECS trong lib/org/center-bridge.ts.
-  orgUnitId String?
-
+  orgUnitId    String?
 
   /// Buổi học được chọn để tổ chức (buổi đúng hôm sinh nhật, hoặc buổi liền trước).
   celebrationSessionId String?
@@ -4974,15 +5014,15 @@ enum CourseCompletionRequestStatus {
 }
 
 model CourseCompletionRequest {
-  id             String                        @id @default(cuid())
-  enrollmentId   String
-  studentId      String
-  courseId       String
-  centerId       String?
+  id           String  @id @default(cuid())
+  enrollmentId String
+  studentId    String
+  courseId     String
+  centerId     String?
   // P1 · US-07 — cột SONG SONG với centerId (ghi kép tới hết P4).
   // Cột TRẦN, không FK — giống 28 bảng của PR-A. Ý nghĩa của NULL theo
   // từng bảng: xem BACKFILL_SPECS trong lib/org/center-bridge.ts.
-  orgUnitId String?
+  orgUnitId    String?
 
   requesterId    String // GV đề xuất
   status         CourseCompletionRequestStatus @default(PENDING)
@@ -5140,11 +5180,11 @@ model SataCoinTransaction {
 }
 
 model SataCoinRule {
-  id        String   @id @default(cuid())
-  code      String   @unique // ATTENDANCE, ASSIGNMENT_GOOD, ...
+  id        String  @id @default(cuid())
+  code      String  @unique // ATTENDANCE, ASSIGNMENT_GOOD, ...
   label     String
   amount    Int // coin cộng khi áp rule
-  isActive  Boolean  @default(true)
+  isActive  Boolean @default(true)
   centerId  String? // null = áp mọi cơ sở
   // P1 · US-07 — cột SONG SONG với centerId (ghi kép tới hết P4).
   // Cột TRẦN, không FK — giống 28 bảng của PR-A. Ý nghĩa của NULL theo
@@ -5526,7 +5566,7 @@ model Payment {
   adjustmentOf   Payment?  @relation("PaymentAdjustment", fields: [adjustmentOfId], references: [id], onDelete: SetNull)
   adjustments    Payment[] @relation("PaymentAdjustment")
 
-  centerId  String? // cách ly cơ sở (scopedDb)
+  centerId String? // cách ly cơ sở (scopedDb)
 
   // P1 · US-07 — cột SONG SONG với centerId (ghi kép tới hết P4).
 
@@ -5545,7 +5585,6 @@ model Payment {
   @@index([enrollmentId])
   @@index([centerId])
   @@index([accountantStatus])
-
   @@index([orgUnitId])
 }
 
@@ -5580,10 +5619,10 @@ enum PaymentRequestStatus {
 /// (đơn không trả góp / kế hoạch chưa duyệt). Phiếu theo đợt (1,2,…) CHỈ được
 /// sinh bởi đường duyệt kế hoạch trả góp — xem lib/payments/payment-request.ts.
 model PaymentRequest {
-  id            String               @id @default(cuid())
-  orderId       String
-  order         Order                @relation(fields: [orderId], references: [id], onDelete: Restrict)
-  centerId      String? // cách ly cơ sở (scopedDb)
+  id        String  @id @default(cuid())
+  orderId   String
+  order     Order   @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  centerId  String? // cách ly cơ sở (scopedDb)
   // P1 · US-07 — cột SONG SONG với centerId (ghi kép tới hết P4).
   // Cột TRẦN, không FK — giống 28 bảng của PR-A. Ý nghĩa của NULL theo
   // từng bảng: xem BACKFILL_SPECS trong lib/org/center-bridge.ts.
@@ -5621,14 +5660,14 @@ enum QrSessionStatus {
 /// Một lần sale bấm "Xuất QR". Nhiều session/1 phiếu thu là chuyện THƯỜNG
 /// (QR sống 5–10 phút, quá hạn thì bấm lại) — tất cả trỏ về cùng phiếu thu.
 model QrSession {
-  id                String          @id @default(cuid())
-  paymentRequestId  String
-  paymentRequest    PaymentRequest  @relation(fields: [paymentRequestId], references: [id], onDelete: Cascade)
-  centerId          String?
+  id               String         @id @default(cuid())
+  paymentRequestId String
+  paymentRequest   PaymentRequest @relation(fields: [paymentRequestId], references: [id], onDelete: Cascade)
+  centerId         String?
   // P1 · US-07 — cột SONG SONG với centerId (ghi kép tới hết P4).
   // Cột TRẦN, không FK — giống 28 bảng của PR-A. Ý nghĩa của NULL theo
   // từng bảng: xem BACKFILL_SPECS trong lib/org/center-bridge.ts.
-  orgUnitId String?
+  orgUnitId        String?
 
   /// Mã cổng trả về (payOS `orderCode`). Đường tra dự phòng khi cổng không cấp
   /// VA tĩnh: webhook → QrSession → PaymentRequest.
@@ -5672,9 +5711,9 @@ model BankTransaction {
   // P1 · US-07 — cột SONG SONG với centerId (ghi kép tới hết P4).
   // Cột TRẦN, không FK — giống 28 bảng của PR-A. Ý nghĩa của NULL theo
   // từng bảng: xem BACKFILL_SPECS trong lib/org/center-bridge.ts.
-  orgUnitId String?
+  orgUnitId     String?
 
-  createdAt     DateTime              @default(now()) @db.Timestamptz(6)
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
 
   allocations PaymentAllocation[]
 
@@ -5696,15 +5735,15 @@ model PaymentAllocation {
   // P1 · US-07 — cột SONG SONG với centerId (ghi kép tới hết P4).
   // Cột TRẦN, không FK — giống 28 bảng của PR-A. Ý nghĩa của NULL theo
   // từng bảng: xem BACKFILL_SPECS trong lib/org/center-bridge.ts.
-  orgUnitId String?
+  orgUnitId         String?
 
-  amount            Int
+  amount         Int
   /// Phần THIẾU được tha theo dung sai làm tròn (payment.roundingToleranceVnd).
   /// Bắt buộc lưu: `deriveStatus` cần nó để coi phiếu là PAID — không có cột này
   /// thì mỗi lần tính lại trạng thái sẽ ghi đè PAID về PARTIAL, tức dung sai chỉ
   /// đúng đúng một lần rồi tự huỷ. Cũng là số kế toán cần thấy khi đối soát.
-  roundingWaived    Int             @default(0)
-  createdAt         DateTime        @default(now()) @db.Timestamptz(6)
+  roundingWaived Int      @default(0)
+  createdAt      DateTime @default(now()) @db.Timestamptz(6)
 
   @@unique([bankTransactionId, paymentRequestId])
   @@index([paymentRequestId])
@@ -5715,7 +5754,7 @@ model PaymentAllocation {
 /// Tiền thừa sau khi đã rót hết các đợt của đơn. CHỈ ghi nhận + hiện cho kế toán
 /// quyết — không tự hoàn, không tự trừ sang đơn khác.
 model CreditBalance {
-  id                String    @id @default(cuid())
+  id                String  @id @default(cuid())
   /// Gắn phụ huynh (User) và/hoặc học viên — đơn có thể chưa convert nên cả hai nullable.
   parentUserId      String?
   studentId         String?
@@ -5725,14 +5764,14 @@ model CreditBalance {
   // P1 · US-07 — cột SONG SONG với centerId (ghi kép tới hết P4).
   // Cột TRẦN, không FK — giống 28 bảng của PR-A. Ý nghĩa của NULL theo
   // từng bảng: xem BACKFILL_SPECS trong lib/org/center-bridge.ts.
-  orgUnitId String?
+  orgUnitId         String?
 
-  amount            Int
-  note              String?   @db.Text
+  amount      Int
+  note        String?   @db.Text
   /// Kế toán đã xử lý (hoàn/trừ đơn khác) chưa — xử lý TAY, hệ thống không tự động.
-  settledAt         DateTime? @db.Timestamptz(6)
-  settledById       String?
-  createdAt         DateTime  @default(now()) @db.Timestamptz(6)
+  settledAt   DateTime? @db.Timestamptz(6)
+  settledById String?
+  createdAt   DateTime  @default(now()) @db.Timestamptz(6)
 
   @@index([parentUserId, settledAt])
   @@index([studentId])
@@ -5774,14 +5813,14 @@ enum RefundStatus {
 }
 
 model RefundRequest {
-  id              String        @id @default(cuid())
-  enrollmentId    String
-  enrollment      Enrollment    @relation(fields: [enrollmentId], references: [id], onDelete: Restrict)
-  centerId        String?
+  id           String     @id @default(cuid())
+  enrollmentId String
+  enrollment   Enrollment @relation(fields: [enrollmentId], references: [id], onDelete: Restrict)
+  centerId     String?
   // P1 · US-07 — cột SONG SONG với centerId (ghi kép tới hết P4).
   // Cột TRẦN, không FK — giống 28 bảng của PR-A. Ý nghĩa của NULL theo
   // từng bảng: xem BACKFILL_SPECS trong lib/org/center-bridge.ts.
-  orgUnitId String?
+  orgUnitId    String?
 
   trigger         RefundTrigger
   reason          String        @db.Text
@@ -5830,8 +5869,7 @@ model ConversationMessage {
   // P1 · US-07 — cột SONG SONG với centerId (ghi kép tới hết P4).
   // Cột TRẦN, không FK — giống 28 bảng của PR-A. Ý nghĩa của NULL theo
   // từng bảng: xem BACKFILL_SPECS trong lib/org/center-bridge.ts.
-  orgUnitId String?
-
+  orgUnitId      String?
 
   @@index([enrollmentId, createdAt])
   @@index([centerId])
@@ -5841,8 +5879,8 @@ model ConversationMessage {
 // LMS-16 — Mục tiêu doanh thu theo kỳ (cho báo cáo doanh-thu-vs-mục-tiêu).
 // centerId null = mục tiêu toàn hệ thống. period = "YYYY-MM".
 model RevenueTarget {
-  id           String   @id @default(cuid())
-  centerId     String?
+  id        String  @id @default(cuid())
+  centerId  String?
   // P1 · US-07 — cột SONG SONG với centerId (ghi kép tới hết P4).
   // Cột TRẦN, không FK — giống 28 bảng của PR-A. Ý nghĩa của NULL theo
   // từng bảng: xem BACKFILL_SPECS trong lib/org/center-bridge.ts.
@@ -5899,11 +5937,11 @@ model TrialProgramConfig {
 
 /// R7-02 — lớp trải nghiệm (mới; TrialClass cũ giữ đọc-only 2-phase). Center-scoped.
 model TrialClassV2 {
-  id           String              @id @default(cuid())
-  code         String              @unique
-  name         String
-  type         String              @default("TRIAL_ROBOSIM")
-  centerId     String // cách ly cơ sở (scopedDb)
+  id        String  @id @default(cuid())
+  code      String  @unique
+  name      String
+  type      String  @default("TRIAL_ROBOSIM")
+  centerId  String // cách ly cơ sở (scopedDb)
   // P1 · US-07 — cột SONG SONG với centerId (ghi kép tới hết P4).
   // Cột TRẦN, không FK — giống 28 bảng của PR-A. Ý nghĩa của NULL theo
   // từng bảng: xem BACKFILL_SPECS trong lib/org/center-bridge.ts.
@@ -5936,24 +5974,24 @@ model TrialClassV2 {
 /// FL-R2 (E2-TRIAL / item 6) — lịch sử "đã từng học thử" của 1 con. Giữ lại kể cả khi
 /// lead rời pipeline (đăng ký/mất) để nếu quay lại không mất thông tin cũ. 1 dòng / con×lớp.
 model LeadTrialHistory {
-  id              String       @id @default(cuid())
-  leadChildId     String
-  leadChild       LeadChild    @relation(fields: [leadChildId], references: [id], onDelete: Cascade)
-  trialClassId    String
-  trialClass      TrialClassV2 @relation(fields: [trialClassId], references: [id], onDelete: Cascade)
-  centerId        String // cách ly cơ sở (scopedDb)
+  id           String       @id @default(cuid())
+  leadChildId  String
+  leadChild    LeadChild    @relation(fields: [leadChildId], references: [id], onDelete: Cascade)
+  trialClassId String
+  trialClass   TrialClassV2 @relation(fields: [trialClassId], references: [id], onDelete: Cascade)
+  centerId     String // cách ly cơ sở (scopedDb)
   // P1 · US-07 — cột SONG SONG với centerId (ghi kép tới hết P4).
   // Cột TRẦN, không FK — giống 28 bảng của PR-A. Ý nghĩa của NULL theo
   // từng bảng: xem BACKFILL_SPECS trong lib/org/center-bridge.ts.
-  orgUnitId String?
+  orgUnitId    String?
 
-  attendedCount   Int          @default(0)
+  attendedCount   Int       @default(0)
   totalSessions   Int
-  firstAttendedAt DateTime?    @db.Timestamptz(6)
-  lastAttendedAt  DateTime?    @db.Timestamptz(6)
+  firstAttendedAt DateTime? @db.Timestamptz(6)
+  lastAttendedAt  DateTime? @db.Timestamptz(6)
   outcome         String? // ENROLLED | LOST | PENDING
-  createdAt       DateTime     @default(now()) @db.Timestamptz(6)
-  updatedAt       DateTime     @updatedAt @db.Timestamptz(6)
+  createdAt       DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt       DateTime  @updatedAt @db.Timestamptz(6)
 
   @@unique([leadChildId, trialClassId])
   @@index([leadChildId])
@@ -6102,10 +6140,10 @@ model ReportCard {
   // P1 · US-07 — cột SONG SONG với centerId (ghi kép tới hết P4).
   // Cột TRẦN, không FK — giống 28 bảng của PR-A. Ý nghĩa của NULL theo
   // từng bảng: xem BACKFILL_SPECS trong lib/org/center-bridge.ts.
-  orgUnitId String?
+  orgUnitId         String?
 
-  createdAt         DateTime         @default(now())
-  updatedAt         DateTime         @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   scores ReportCardScore[]
 
@@ -6201,9 +6239,9 @@ model EvalQuestion {
 }
 
 model EvaluationRound {
-  id        String                @id @default(cuid())
+  id        String    @id @default(cuid())
   formId    String
-  form      EvalForm              @relation(fields: [formId], references: [id], onDelete: Restrict)
+  form      EvalForm  @relation(fields: [formId], references: [id], onDelete: Restrict)
   scope     EvalScope
   name      String
   centerId  String?
@@ -6442,17 +6480,17 @@ model ConversationMembershipDrift {
 // Mỗi lần cron chạy = 1 record — phân biệt "đêm sạch" (removeCount=addCount=0)
 // với "job không chạy" (không có record) — US-04 AC4 / cron.md mục 4.
 model ConversationReconcileRun {
-  id             String   @id @default(uuid())
-  ranAt          DateTime @default(now())
-  classesChecked Int
-  removeCount    Int
-  addCount       Int
-  durationMs     Int
+  id                   String   @id @default(uuid())
+  ranAt                DateTime @default(now())
+  classesChecked       Int
+  removeCount          Int
+  addCount             Int
+  durationMs           Int
   /// Lớp ACTIVE CHƯA có nhóm chat tại thời điểm chạy — job KHÔNG tự tạo (luật "job không
   /// tự thêm người/nhóm"), chỉ báo động. >0 = có lớp lọt lưới BR-01 (vd lớp đã ACTIVE từ
   /// trước khi module chat ra đời) ⇒ chạy scripts/backfill-nhom-lop-chat.ts.
   /// Default 0 để dòng cũ (trước 09/08/2026) đọc được, KHÔNG phải "0 lớp thiếu" đã đo.
-  missingConversations Int @default(0)
+  missingConversations Int      @default(0)
 }
 
 // ── US-14: sổ gửi ZNS "có tin nhắn mới" (cron chat-zns-notify) ───────────────
@@ -6472,7 +6510,7 @@ enum ChatZnsStatus {
 }
 
 model ChatZnsNotification {
-  id             String @id @default(uuid())
+  id             String        @id @default(uuid())
   conversationId String
   /// Phụ huynh nhận tin (User.id cuid) — không relation, đồng bộ ConversationParticipant.
   userId         String
@@ -6485,7 +6523,7 @@ model ChatZnsNotification {
   /// (ZaloMessageLog không có cột userId/entityId).
   znsLogId       String?
   errorMessage   String?
-  createdAt      DateTime  @default(now())
+  createdAt      DateTime      @default(now())
   sentAt         DateTime?
 
   @@unique([conversationId, userId, messageId])
@@ -6507,7 +6545,7 @@ model ChatZnsNotification {
 // phải đồng ý lại — bản ghi CŨ giữ nguyên (bằng chứng "lúc đó họ đồng ý với bản nào").
 // UNIQUE (userId, version) làm luôn nhiệm vụ chống ghi đôi khi bấm 2 lần / 2 tab.
 model ChatPolicyAcceptance {
-  id String @id @default(uuid())
+  id         String   @id @default(uuid())
   /// User.id (cuid) — không relation, đồng bộ với ConversationParticipant/Message.
   userId     String
   /// CHAT_POLICY_VERSION tại thời điểm bấm đồng ý (lib/chat/policy.ts).
@@ -6538,19 +6576,19 @@ model OrgUnitDriftRun {
 }
 
 model OrgUnitDriftItem {
-  id    String          @id @default(cuid())
-  runId String
-  run   OrgUnitDriftRun @relation(fields: [runId], references: [id], onDelete: Cascade)
-  model String
+  id             String          @id @default(cuid())
+  runId          String
+  run            OrgUnitDriftRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+  model          String
   /// BAT_BUOC | NULL_TOAN_HE_THONG | NULL_CHUA_KHOP — xem lib/org/center-bridge.ts
   nullMeaning    String
   /// MẪU SỐ bắt buộc: prod đã dọn sạch dữ liệu 01/08 nên "0 lệch" rất dễ là XANH GIẢ.
-  totalRows      BigInt   @default(0)
-  withCenter     BigInt   @default(0)
-  withOrgUnit    BigInt   @default(0)
-  missingOrgUnit BigInt   @default(0)
-  mismatched     BigInt   @default(0)
-  createdAt      DateTime @default(now()) @db.Timestamptz(6)
+  totalRows      BigInt          @default(0)
+  withCenter     BigInt          @default(0)
+  withOrgUnit    BigInt          @default(0)
+  missingOrgUnit BigInt          @default(0)
+  mismatched     BigInt          @default(0)
+  createdAt      DateTime        @default(now()) @db.Timestamptz(6)
 
   @@index([runId])
   @@index([model])

@@ -170,6 +170,17 @@ export async function loadPositionRoleRows(
     select: {
       effectiveFrom: true,
       effectiveTo: true,
+      // US-10 — nơi TÁC NGHIỆP. Lọc hiệu lực NGAY TRONG truy vấn, cùng lý do với phân
+      // công: hết hạn thì đơn vị đó không có mặt trong kết quả, quyền rụng ở request kế
+      // tiếp mà không ai phải đi dọn (luật cứng #8).
+      workScopes: {
+        where: {
+          effectiveFrom: { lte: now },
+          OR: [{ effectiveTo: null }, { effectiveTo: { gte: now } }],
+          orgUnit: { isActive: true, deletedAt: null },
+        },
+        select: { orgUnitId: true },
+      },
       position: {
         select: {
           orgUnitId: true,
@@ -192,9 +203,11 @@ export async function loadPositionRoleRows(
 
   const rows: UserOrgRoleRow[] = [];
   for (const a of assignments) {
+    const workScopeOrgUnitIds = [...new Set(a.workScopes.map((w) => w.orgUnitId))];
     for (const pr of a.position.roles) {
       rows.push({
         orgUnitId: a.position.orgUnitId,
+        workScopeOrgUnitIds,
         roleId: pr.role.id,
         status: "ACTIVE",
         effectiveFrom: a.effectiveFrom,

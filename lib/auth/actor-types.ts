@@ -23,4 +23,10 @@ export type UserOrgRoleRow = {
     isActive: boolean;
     permissions: { action: string; scopeType: ScopeType }[];
   };
+  /**
+   * P2 · US-10 — đơn vị NƠI TÁC NGHIỆP (WorkScope) còn hiệu lực của phân công sinh ra
+   * hàng này. Chỉ NỚI PHẠM VI DỮ LIỆU của chính hàng đó; KHÔNG thêm permission, KHÔNG
+   * đụng `isHoLevel`/`orgRoles` — người được điều đi vẫn giữ nguyên vai và biên chế.
+   */
+  workScopeOrgUnitIds?: string[];
 };
