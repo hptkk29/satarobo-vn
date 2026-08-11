@@ -553,3 +553,51 @@
   --accent-soft: var(--student-soft);
   --accent-foreground: #241a2e;
 }
+
+/* ─────────────────────────────────────────────────────────────────────────────
+   ADMIN — token có PHẠM VI (chốt 11/08/2026, xem DESIGN.md §1)
+
+   Vì sao khai ở `.admin-scope` chứ không đổi `:root`: `--primary` toàn cục đang
+   là CAM và site public dùng nó. Đổi ở :root là lật màu nút của cả trang public —
+   ngoài phạm vi đợt này. `.portal-v2` ngay trên đây là tiền lệ của cách làm này.
+
+   Bốn mã do chủ dự án chốt. KHÔNG đề xuất bảng khác (DESIGN.md §1). Chúng gần
+   như trùng `--parent`/`--student` đã có từ đợt merge SataUI — đợt này thống nhất
+   về đúng bốn mã dưới.
+
+   ⚠️ TƯƠNG PHẢN, đã đo và là lý do primary/accent KHÔNG đối xứng:
+     · tím #610B8A + chữ trắng  → ~11:1  ⇒ nút primary nền đặc, chữ trắng: ĐƯỢC.
+     · cam #FF8F2D + chữ trắng  → ~2.3:1 ⇒ TRƯỢT WCAG AA (cùng bài học đã ghi cho
+       #FD8F2D ở khối .portal-v2[data-mode="student"] ngay dưới).
+   ⇒ Cam KHÔNG được làm nền nút chữ trắng. Cam dùng cho: viền, icon, nền nhạt
+     (accent-soft), và nút đặc thì phải mực tối `--accent-foreground`. */
+/* ⚠️ KHỐI NÀY PHẢI Ở CUỐI FILE. Đặt nó xen giữa hai rule `.portal-v2` phía trên thì
+   nó KHÔNG tới được trình duyệt (đo ngày 11/08: `.admin-scope{` vắng mặt trong CSS
+   server trả về, `--primary` vẫn rơi về cam của `:root`). Ngoài ra, `:root` và
+   `.admin-scope` cùng độ đặc hiệu 0,1,0 — rule đứng SAU thắng, nên cuối file cũng là
+   chỗ đúng về mặt tầng bậc. Đừng dời lên. */
+.admin-scope {
+  --primary: #610B8A;
+  --primary-foreground: #ffffff;
+  --primary-dark: #4E237D;
+  --ring: #610B8A;
+
+  --accent: #FF8F2D;
+  --accent-dark: #F8903B;
+  /* Mực tối, KHÔNG phải trắng — xem ghi chú tương phản ở trên. */
+  --accent-foreground: #241a2e;
+  --accent-soft: rgba(255, 143, 45, 0.12);
+  --primary-soft: rgba(97, 11, 138, 0.10);
+
+  /* Thang NGỮ NGHĨA — tách hẳn khỏi màu thương hiệu (DESIGN.md §1).
+     Trước đây "Đang học/Đã duyệt" mượn tone brand, làm cam vừa nghĩa "thương
+     hiệu" vừa nghĩa "ổn" — người dùng không đọc được trạng thái qua màu nữa. */
+  --state-success: #10B981;
+  --state-success-soft: rgba(16, 185, 129, 0.12);
+  --state-warning: #F59E0B;
+  --state-warning-soft: rgba(245, 158, 11, 0.12);
+  --state-danger: #EF4444;
+  --state-danger-soft: rgba(239, 68, 68, 0.12);
+  --state-info: #3B82F6;
+  --state-info-soft: rgba(59, 130, 246, 0.12);
+}

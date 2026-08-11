@@ -373,13 +373,14 @@ export function Sidebar({
           href="/dashboard"
           className="group text-xl font-bold transition-opacity hover:opacity-90"
         >
-          <span className="bg-gradient-to-r from-orange-500 to-purple-700 bg-clip-text text-transparent">
-            Sata
-          </span>
-          <span className="bg-gradient-to-r from-purple-700 to-orange-500 bg-clip-text text-transparent">
-            Robo
-          </span>
-          <span className="ml-1 text-xs font-normal text-neutral-400">Admin</span>
+          {/* DESIGN.md §7 — KHÔNG gradient trong admin. Bản cũ tô "Sata" bằng gradient
+              cam→tím và "Robo" bằng tím→cam, tức hai chữ chạy NGƯỢC CHIỀU nhau: chỗ nối
+              đổi màu đột ngột, và ở cỡ 20px chữ mảnh bị bệt. Gradient chữ thuộc site
+              public. Ở đây dùng hai màu ĐẶC của thương hiệu — vẫn nhận ra lockup mà đọc
+              rõ ở mọi cỡ. */}
+          <span className="text-[color:var(--accent)]">Sata</span>
+          <span className="text-[color:var(--primary)]">Robo</span>
+          <span className="ml-1.5 text-xs font-normal text-muted-foreground">Admin</span>
         </Link>
       </div>
 

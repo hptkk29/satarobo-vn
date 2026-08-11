@@ -28,6 +28,11 @@ import {
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Học viên | Admin" };
 
+/** Ô lọc dùng chung — cao 36px cho khớp nút, màu lấy từ token `.admin-scope`. */
+const FILTER_FIELD =
+  "h-9 rounded-lg border border-border bg-background px-3 text-sm text-foreground " +
+  "focus:border-[color:var(--primary)] focus:outline-none focus:ring-2 focus:ring-[color:var(--primary-soft)]";
+
 const STATUS_INFO: Record<StudentStatus, { label: string; color: string }> = {
   ACTIVE: { label: "Đang học", color: "bg-green-100 text-green-700" },
   PAUSED: { label: "Bảo lưu", color: "bg-yellow-100 text-yellow-700" },
@@ -282,7 +287,7 @@ export default async function StudentsPage({ searchParams }: SearchParams) {
             </Link>
             <Link
               href="/students/new"
-              className="inline-flex items-center gap-1.5 rounded-lg bg-[#7C3AED] px-4 py-2 text-sm font-semibold text-white shadow-sm hover:opacity-90"
+              className="inline-flex items-center gap-1.5 rounded-lg bg-[color:var(--primary)] px-4 py-2 text-sm font-semibold text-[color:var(--primary-foreground)] shadow-sm transition-colors hover:bg-[color:var(--primary-dark)]"
             >
               <Plus className="h-4 w-4" />
               Thêm học viên
@@ -315,7 +320,7 @@ export default async function StudentsPage({ searchParams }: SearchParams) {
                 className={
                   "whitespace-nowrap border-b-2 px-4 py-2 text-sm font-medium " +
                   (active
-                    ? "border-[#7C3AED] text-[#7C3AED]"
+                    ? "border-[color:var(--primary)] text-[color:var(--primary)]"
                     : "border-transparent text-gray-600 hover:border-gray-300 hover:text-gray-900")
                 }
               >
@@ -329,20 +334,20 @@ export default async function StudentsPage({ searchParams }: SearchParams) {
       {/* Filters */}
       <form
         method="GET"
-        className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5"
+        className="mb-4 flex flex-wrap items-center gap-2"
       >
         {view !== "all" && <input type="hidden" name="view" value={view} />}
         <input
           name="q"
           defaultValue={q}
           placeholder="Tên / mã / phụ huynh / SĐT phụ huynh..."
-          className="lg:col-span-2 rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-[#7C3AED] focus:outline-none focus:ring-2 focus:ring-[#7C3AED]/20"
+          className={`${FILTER_FIELD} min-w-0 flex-1 sm:max-w-xs`}
         />
         {view === "all" && (
           <select
             name="status"
             defaultValue={statusParam ?? ""}
-            className="rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-[#7C3AED] focus:outline-none"
+            className={FILTER_FIELD}
           >
             <option value="">Tất cả trạng thái</option>
             {VALID_STATUSES.map((s) => (
@@ -355,7 +360,7 @@ export default async function StudentsPage({ searchParams }: SearchParams) {
         <select
           name="centerId"
           defaultValue={centerId}
-          className="rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-[#7C3AED] focus:outline-none"
+          className={FILTER_FIELD}
         >
           <option value="">Tất cả cơ sở</option>
           {centers.map((c) => (
@@ -367,7 +372,7 @@ export default async function StudentsPage({ searchParams }: SearchParams) {
         <select
           name="grade"
           defaultValue={grade != null ? String(grade) : ""}
-          className="rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-[#7C3AED] focus:outline-none"
+          className={FILTER_FIELD}
         >
           <option value="">Tất cả lớp</option>
           {Array.from({ length: 12 }, (_, i) => i + 1).map((g) => (
@@ -378,7 +383,7 @@ export default async function StudentsPage({ searchParams }: SearchParams) {
         </select>
         <button
           type="submit"
-          className="rounded-lg bg-[#7C3AED] px-4 py-2 text-sm font-semibold text-white hover:opacity-90 sm:col-span-2 lg:col-span-1"
+          className="h-9 shrink-0 rounded-lg bg-[color:var(--primary)] px-4 text-sm font-semibold text-[color:var(--primary-foreground)] transition-colors hover:bg-[color:var(--primary-dark)]"
         >
           Áp dụng
         </button>
@@ -399,32 +404,32 @@ export default async function StudentsPage({ searchParams }: SearchParams) {
           <table className="min-w-full divide-y divide-gray-100">
             <thead className="bg-gray-50">
               <tr>
-                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">
+                <th className="whitespace-nowrap px-5 py-3 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                   Ảnh
                 </th>
-                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">
+                <th className="whitespace-nowrap px-5 py-3 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                   Học viên
                 </th>
-                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">
+                <th className="whitespace-nowrap px-5 py-3 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                   Lớp
                 </th>
-                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">
+                <th className="whitespace-nowrap px-5 py-3 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                   Phụ huynh
                 </th>
-                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">
+                <th className="whitespace-nowrap px-5 py-3 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                   Cơ sở
                 </th>
-                <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-gray-500">
+                <th className="whitespace-nowrap px-5 py-3 text-right text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                   Khoá
                 </th>
-                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">
+                <th className="whitespace-nowrap px-5 py-3 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                   Trạng thái
                 </th>
-                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">
+                <th className="whitespace-nowrap px-5 py-3 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                   Ngày tạo
                 </th>
                 {showActions && (
-                  <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-gray-500">
+                  <th className="whitespace-nowrap px-5 py-3 text-right text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                     Hành động
                   </th>
                 )}
@@ -449,7 +454,7 @@ export default async function StudentsPage({ searchParams }: SearchParams) {
                   const reserve = s.reserves[0];
                   return (
                     <tr key={s.id} className="hover:bg-gray-50/60">
-                      <td className="px-4 py-3">
+                      <td className="whitespace-nowrap px-5 py-3.5">
                         {s.avatarUrl ? (
                           <img
                             src={s.avatarUrl}
@@ -462,7 +467,7 @@ export default async function StudentsPage({ searchParams }: SearchParams) {
                           </div>
                         )}
                       </td>
-                      <td className="px-4 py-3">
+                      <td className="whitespace-nowrap px-5 py-3.5">
                         <div className="font-medium text-gray-900">
                           {s.name}
                         </div>
@@ -482,35 +487,47 @@ export default async function StudentsPage({ searchParams }: SearchParams) {
                           </div>
                         )}
                       </td>
-                      <td className="px-4 py-3 text-sm tabular-nums text-gray-600">
+                      <td className="whitespace-nowrap px-5 py-3.5 text-sm tabular-nums text-gray-600">
                         {s.currentGrade ? `Lớp ${s.currentGrade}` : "—"}
                       </td>
-                      <td className="px-4 py-3 text-sm text-gray-600">
-                        <div>{s.parentName ?? "—"}</div>
+                      {/* max-w + truncate: `whitespace-nowrap` làm bảng rộng hơn khung nên
+                          cột "Hành động" phải cuộn mới thấy. Cắt CÓ KIỂM SOÁT đúng hai ô
+                          dài nhất (phụ huynh, cơ sở) thay vì để trình duyệt tự vỡ dòng —
+                          xem ghi chú luật ở components/admin/ui/table.tsx. `title` để tên
+                          bị cắt vẫn đọc được đầy đủ khi rê chuột. */}
+                      <td className="whitespace-nowrap px-5 py-3.5 text-sm text-gray-600">
+                        <div className="max-w-[15rem] truncate" title={s.parentName ?? undefined}>
+                          {s.parentName ?? "—"}
+                        </div>
                         {s.parentPhone && (
                           <div className="text-xs tabular-nums text-gray-400">
                             {s.parentPhone}
                           </div>
                         )}
                       </td>
-                      <td className="px-4 py-3 text-sm text-gray-500">
-                        {s.preferredCenter?.name ?? s.center?.name ?? "—"}
+                      <td className="whitespace-nowrap px-5 py-3.5 text-sm text-gray-500">
+                        <div
+                          className="max-w-[12rem] truncate"
+                          title={s.preferredCenter?.name ?? s.center?.name ?? undefined}
+                        >
+                          {s.preferredCenter?.name ?? s.center?.name ?? "—"}
+                        </div>
                       </td>
-                      <td className="px-4 py-3 text-right text-sm tabular-nums text-gray-600">
+                      <td className="whitespace-nowrap px-5 py-3.5 text-right text-sm tabular-nums text-gray-600">
                         {s._count.enrollments}
                       </td>
-                      <td className="px-4 py-3">
+                      <td className="whitespace-nowrap px-5 py-3.5">
                         <span
-                          className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold ${statusInfo.color}`}
+                          className={`inline-flex shrink-0 items-center whitespace-nowrap rounded-full px-2.5 py-0.5 text-xs font-semibold ${statusInfo.color}`}
                         >
                           {statusInfo.label}
                         </span>
                       </td>
-                      <td className="px-4 py-3 text-sm tabular-nums text-gray-500">
+                      <td className="whitespace-nowrap px-5 py-3.5 text-sm tabular-nums text-gray-500">
                         {formatDate(s.createdAt)}
                       </td>
                       {showActions && (
-                        <td className="px-4 py-3 text-right">
+                        <td className="whitespace-nowrap px-5 py-3.5 text-right">
                           <div className="flex justify-end gap-2">
                             {canUpdate && (
                               <Link
