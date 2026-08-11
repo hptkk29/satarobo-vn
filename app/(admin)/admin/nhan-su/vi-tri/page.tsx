@@ -4,17 +4,21 @@
 // quyền của mọi người đang giữ nó. Cùng hạng nguy hiểm với sửa RoleDef.
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
-import { checkPermission } from "@/lib/auth/check-permission";
+import { checkAnyPermission } from "@/lib/auth/check-permission";
+import { PAGE_GATES } from "@/lib/auth/page-gates";
 import { scopedDb } from "@/lib/db-scope";
 import { resolveActor } from "@/lib/auth/actor";
 import { ViTriEditor } from "./_components/vi-tri-editor";
+import { PhanCongEditor } from "./_components/phan-cong-editor";
 
 export const dynamic = "force-dynamic";
 
 export default async function ViTriPage() {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  if (!(await checkPermission("roles:manage"))) redirect("/dashboard?error=unauthorized");
+  if (!(await checkAnyPermission([...PAGE_GATES["/nhan-su/vi-tri"]]))) {
+    redirect("/dashboard?error=unauthorized");
+  }
 
   // `scopedDb` chứ không `db` trần (luật R6-F1). Ba model mới KHÔNG nằm trong
   // SCOPED_MODELS nên đi qua đây không bị lọc — vị trí là dữ liệu tổ chức mức hệ thống.
@@ -46,6 +50,32 @@ export default async function ViTriPage() {
     }),
   ]);
 
+  // US-09 — phân công + danh sách người có thể phân công.
+  // Lấy CẢ phân công đã hết hiệu lực: AC3 nói lịch sử không xoá, nên nó phải NHÌN THẤY
+  // được ở đâu đó, nếu không thì "không xoá" chỉ là chuyện của bảng.
+  const [assignments, nhanSu] = await Promise.all([
+    sdb.positionAssignment.findMany({
+      orderBy: [{ effectiveFrom: "desc" }],
+      select: {
+        id: true,
+        positionId: true,
+        userId: true,
+        kind: true,
+        effectiveFrom: true,
+        effectiveTo: true,
+        status: true,
+        note: true,
+        user: { select: { name: true, email: true } },
+      },
+    }),
+    // Chỉ nhân sự: phụ huynh không giữ vị trí công việc (vai quan hệ, xem CLAUDE.md).
+    sdb.user.findMany({
+      where: { isActive: true, deletedAt: null, role: { not: "PARENT" } },
+      orderBy: { name: "asc" },
+      select: { id: true, name: true, email: true },
+    }),
+  ]);
+
   return (
     <div className="space-y-5">
       <div>
@@ -71,6 +101,25 @@ export default async function ViTriPage() {
         }))}
         orgUnits={orgUnits}
         roles={roles}
+      />
+
+      <PhanCongEditor
+        positions={positions.map((p) => ({ id: p.id, title: p.title, isActive: p.isActive }))}
+        nhanSu={nhanSu.map((u) => ({
+          id: u.id,
+          ten: u.name ?? u.email ?? u.id,
+        }))}
+        assignments={assignments.map((a) => ({
+          id: a.id,
+          positionId: a.positionId,
+          userId: a.userId,
+          hoTen: a.user.name ?? a.user.email ?? a.userId,
+          kind: a.kind,
+          effectiveFrom: a.effectiveFrom.toISOString(),
+          effectiveTo: a.effectiveTo?.toISOString() ?? null,
+          status: a.status,
+          note: a.note,
+        }))}
       />
     </div>
   );

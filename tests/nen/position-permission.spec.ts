@@ -17,6 +17,10 @@ vi.mock("@/lib/auth", () => ({ auth: async () => null }));
 import { db } from "../../lib/db";
 import { assertTestDb, disconnectDb, seedOrg, seedRoles, seedUser } from "../e2e/_helpers/seed";
 import { resolveActorUncached } from "../../lib/auth/actor";
+import {
+  PrimaryAssignmentConflictError,
+  assertSinglePrimary,
+} from "../../lib/org/positions";
 import { can } from "../../lib/auth/can";
 
 const DB_URL = process.env.TEST_DATABASE_URL ?? process.env.DATABASE_URL ?? "";
@@ -175,6 +179,87 @@ describe.skipIf(!RUN)("TS-08 · quyền theo Position (Postgres thật)", () => 
       const actor = await resolveActorUncached(W.u2);
       expect(actor.permissions.some((p) => p.roleCode === "CENTER_MANAGER")).toBe(false);
       await db.position.update({ where: { id: W.positionId }, data: { isActive: true } });
+    },
+    CASE_TIMEOUT,
+  );
+
+  it(
+    "[US-09 AC1] đã có PRIMARY còn hiệu lực ⇒ PRIMARY thứ hai bị chặn; CONCURRENT thì không",
+    async () => {
+      // u2 đang giữ một PRIMARY mở (không thời hạn) từ ca trước.
+      const dangGiu = await db.positionAssignment.findFirstOrThrow({
+        where: { userId: W.u2, kind: "PRIMARY" },
+        select: { id: true },
+      });
+
+      await expect(
+        assertSinglePrimary({
+          userId: W.u2,
+          kind: "PRIMARY",
+          effectiveFrom: new Date(),
+          effectiveTo: null,
+        }),
+      ).rejects.toBeInstanceOf(PrimaryAssignmentConflictError);
+
+      // Cùng dữ liệu đó nhưng kiểu KIÊM NHIỆM ⇒ cho qua (AC1: không giới hạn).
+      await expect(
+        assertSinglePrimary({
+          userId: W.u2,
+          kind: "CONCURRENT",
+          effectiveFrom: new Date(),
+          effectiveTo: null,
+        }),
+      ).resolves.toBeUndefined();
+
+      // Sửa CHÍNH bản ghi đang giữ ⇒ không tự va vào mình.
+      await expect(
+        assertSinglePrimary({
+          userId: W.u2,
+          kind: "PRIMARY",
+          effectiveFrom: new Date(),
+          effectiveTo: null,
+          ignoreAssignmentId: dangGiu.id,
+        }),
+      ).resolves.toBeUndefined();
+    },
+    CASE_TIMEOUT,
+  );
+
+  it(
+    "[TS-10] CONCURRENT hết hạn hôm qua ⇒ can() KHÔNG tính, lịch sử vẫn đọc được",
+    async () => {
+      const homQua = new Date(Date.now() - 24 * 60 * 60 * 1000);
+      const hetHan = await db.positionAssignment.create({
+        data: {
+          positionId: W.positionId,
+          userId: W.u1,
+          kind: "CONCURRENT",
+          effectiveFrom: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000),
+          effectiveTo: homQua,
+        },
+        select: { id: true },
+      });
+
+      const actor = await resolveActorUncached(W.u1);
+      expect(actor.permissions.some((p) => p.roleCode === "CENTER_MANAGER")).toBe(false);
+      expect(can(actor, "classes:edit", { centerId: W.orgUnitId })).toBe(false);
+
+      // Không job nào dọn: bản ghi còn nguyên, status vẫn ACTIVE — hết hạn là thuộc tính
+      // của resolver (luật cứng #8).
+      const con = await db.positionAssignment.findUniqueOrThrow({
+        where: { id: hetHan.id },
+        select: { status: true, effectiveTo: true },
+      });
+      expect(con.status).toBe("ACTIVE");
+      expect(con.effectiveTo).not.toBeNull();
+
+      // Còn hiệu lực trở lại ⇒ quyền quay về ngay, không cần thao tác nào khác.
+      await db.positionAssignment.update({
+        where: { id: hetHan.id },
+        data: { effectiveTo: null },
+      });
+      const actor2 = await resolveActorUncached(W.u1);
+      expect(actor2.permissions.some((p) => p.roleCode === "CENTER_MANAGER")).toBe(true);
     },
     CASE_TIMEOUT,
   );

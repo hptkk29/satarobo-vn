@@ -71,3 +71,97 @@ describe("[TS-09] assertNoReportingCycle", () => {
     await expect(assertNoReportingCycle("moi", "p0", c)).rejects.toThrow(/quá 64 cấp/);
   });
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// TS-10 · US-09 AC1 — đúng MỘT phân công PRIMARY còn hiệu lực.
+//
+// So GIAO KHOẢNG chứ không so "đang hiệu lực lúc này": tạo trước một PRIMARY cho tháng
+// sau trong khi PRIMARY hiện tại chưa đóng vẫn là hai chính chồng nhau — và đó đúng là
+// cách người ta vô tình tạo ra hai chính (làm quyết định điều động trước ngày hiệu lực).
+// ─────────────────────────────────────────────────────────────────────────────
+import { PrimaryAssignmentConflictError, assertSinglePrimary } from "@/lib/org/positions";
+
+const NGAY = (s: string) => new Date(`${s}T00:00:00.000Z`);
+
+function fakeAssignments(
+  rows: { effectiveFrom: Date; effectiveTo: Date | null; title: string; id?: string }[],
+) {
+  return {
+    positionAssignment: {
+      findMany: vi.fn(async ({ where }: { where: { id?: { not: string } } }) =>
+        rows
+          .filter((r) => !where.id?.not || r.id !== where.id.not)
+          .map((r) => ({
+            effectiveFrom: r.effectiveFrom,
+            effectiveTo: r.effectiveTo,
+            position: { title: r.title },
+          })),
+      ),
+    },
+  } as never;
+}
+
+describe("[TS-10] assertSinglePrimary — US-09 AC1", () => {
+  const base = {
+    userId: "u1",
+    kind: "PRIMARY" as const,
+    effectiveFrom: NGAY("2026-03-01"),
+    effectiveTo: null,
+  };
+
+  it("chưa có PRIMARY nào → cho qua", async () => {
+    await expect(
+      assertSinglePrimary({ ...base, client: fakeAssignments([]) }),
+    ).resolves.toBeUndefined();
+  });
+
+  it("đã có PRIMARY vô thời hạn → CHẶN, và nêu tên vị trí đang giữ", async () => {
+    const c = fakeAssignments([
+      { effectiveFrom: NGAY("2026-01-01"), effectiveTo: null, title: "Quản lý CS1" },
+    ]);
+    await expect(assertSinglePrimary({ ...base, client: c })).rejects.toThrow(/Quản lý CS1/);
+  });
+
+  it("PRIMARY cũ ĐÃ đóng trước ngày bắt đầu mới → cho qua (bàn giao đúng cách)", async () => {
+    const c = fakeAssignments([
+      { effectiveFrom: NGAY("2026-01-01"), effectiveTo: NGAY("2026-02-01"), title: "Cũ" },
+    ]);
+    await expect(assertSinglePrimary({ ...base, client: c })).resolves.toBeUndefined();
+  });
+
+  it("PRIMARY tương lai chồng lấn PRIMARY hiện tại → CHẶN", async () => {
+    // Đây là ca người ta hay vô tình tạo: ký quyết định điều động trước ngày hiệu lực
+    // mà quên đóng phân công cũ.
+    const c = fakeAssignments([
+      { effectiveFrom: NGAY("2026-01-01"), effectiveTo: null, title: "Đang giữ" },
+    ]);
+    await expect(
+      assertSinglePrimary({
+        ...base,
+        effectiveFrom: NGAY("2026-09-01"),
+        effectiveTo: NGAY("2026-12-31"),
+        client: c,
+      }),
+    ).rejects.toBeInstanceOf(PrimaryAssignmentConflictError);
+  });
+
+  it("CONCURRENT / DELEGATED → KHÔNG giới hạn, không truy vấn gì", async () => {
+    const c = fakeAssignments([
+      { effectiveFrom: NGAY("2026-01-01"), effectiveTo: null, title: "Đang giữ" },
+    ]);
+    for (const kind of ["CONCURRENT", "DELEGATED"] as const) {
+      await expect(
+        assertSinglePrimary({ ...base, kind, client: c }),
+      ).resolves.toBeUndefined();
+    }
+  });
+
+  it("sửa CHÍNH bản ghi đó → không tự va vào mình", async () => {
+    const c = fakeAssignments([
+      { id: "a1", effectiveFrom: NGAY("2026-01-01"), effectiveTo: null, title: "Của mình" },
+    ]);
+    await expect(
+      assertSinglePrimary({ ...base, ignoreAssignmentId: "a1", client: c }),
+    ).resolves.toBeUndefined();
+  });
+});

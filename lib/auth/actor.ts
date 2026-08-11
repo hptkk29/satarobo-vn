@@ -34,13 +34,10 @@ async function getOrgTree(): Promise<OrgUnitNode[]> {
   }));
 }
 
-export type ScopeType =
-  | "GLOBAL"
-  | "CENTER"
-  | "CLASS"
-  | "OWN"
-  | "CHILDREN"
-  | "ASSIGNED";
+// Hai kiểu này ở module lá `actor-types` để cắt vòng import với `lib/org/positions.ts`;
+// re-export tại đây nên mọi caller cũ không phải sửa gì.
+export type { ScopeType, UserOrgRoleRow } from "./actor-types";
+import type { ScopeType, UserOrgRoleRow } from "./actor-types";
 
 /** 1 permission đã "nở" theo role + orgUnit của actor. */
 export type PermEntry = {
@@ -138,19 +135,7 @@ export type RelationshipRole = {
   permissions: { action: string; scopeType: ScopeType }[];
 };
 
-export type UserOrgRoleRow = {
-  orgUnitId: string;
-  /** US-02 — RoleDef.id (optional additive: test/caller cũ không truyền vẫn compile). */
-  roleId?: string;
-  status: string; // AssignStatus
-  effectiveFrom: Date;
-  effectiveTo: Date | null;
-  role: {
-    code: string;
-    isActive: boolean;
-    permissions: { action: string; scopeType: ScopeType }[];
-  };
-};
+
 
 const isLiveNode = (n: OrgUnitNode): boolean =>
   n.deletedAt == null && n.isActive !== false;

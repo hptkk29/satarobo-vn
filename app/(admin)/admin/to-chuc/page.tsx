@@ -15,7 +15,8 @@
 import { redirect } from "next/navigation";
 import { ChevronRight, Network } from "lucide-react";
 import { auth } from "@/lib/auth";
-import { checkPermission } from "@/lib/auth/check-permission";
+import { checkAnyPermission, checkPermission } from "@/lib/auth/check-permission";
+import { PAGE_GATES } from "@/lib/auth/page-gates";
 import { resolveActor } from "@/lib/auth/actor";
 import { scopedDb } from "@/lib/db-scope";
 import { cn } from "@/lib/utils";
@@ -173,9 +174,7 @@ function OrgTreeNode({
 export default async function ToChucPage() {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  if (
-    !(await checkPermission("centers:view", { centerId: session.user.centerId ?? null }))
-  ) {
+  if (!(await checkAnyPermission([...PAGE_GATES["/to-chuc"]]))) {
     redirect("/dashboard?error=unauthorized");
   }
   const canEdit = await checkPermission("centers:edit");

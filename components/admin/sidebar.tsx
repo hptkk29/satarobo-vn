@@ -244,20 +244,34 @@ const NAV_GROUPS: NavGroup[] = [
     ],
   },
   {
+    // Email/OTP TÁCH khỏi "Hệ thống & Cấu hình" (11/08/2026): chủ dự án chốt nhóm hệ
+    // thống chỉ SUPER_ADMIN thấy, nhưng `emails:view` là quyền THẬT của Marketing Hội sở
+    // (seed-roles.ts) — nhét chung nhóm thì hoặc lộ nhóm hệ thống cho Marketing, hoặc
+    // phải cắt quyền họ đang dùng. Tách nhóm giữ đúng cả hai.
+    label: "Email & OTP",
+    items: [
+      { label: "Email Templates", href: "/email-templates", icon: Mail, perm: ["emails:view"] },
+      { label: "Email Logs", href: "/email-logs", icon: Send, perm: ["emails:view"] },
+      // AUTH-SĐT P4 dựng /otp-logs nhưng quên link — màn trả lời "phụ huynh báo
+      // không nhận được mã" mà nhân viên trực phải gõ tay URL thì coi như không có.
+      { label: "OTP Logs", href: "/otp-logs", icon: MessageCircle, perm: ["emails:view"] },
+    ],
+  },
+  {
+    // ⚠️ CHỈ SUPER_ADMIN (chốt 11/08/2026). Mọi mục ở đây phải gác bằng action mà KHÔNG
+    // RoleDef nào giữ (users:manage · user-groups:manage · roles:manage · centers:edit ·
+    // audit-logs:view · settings:view) ⇒ vai khác vào chỉ qua bypass SUPER_ADMIN.
+    // Thêm mục mới vào nhóm này = kiểm lại danh sách vai giữ action đó TRƯỚC, đừng mượn
+    // action rộng như `centers:view` (7 vai giữ — đúng lỗi vừa vá).
     label: "Hệ thống & Cấu hình",
     items: [
       { label: "Tài khoản", href: "/users", icon: KeyRound, perm: ["users:manage"] },
       // US-03 — nhóm người dùng: grant ad-hoc (ALLOW/DENY) không sửa vai chuẩn.
       { label: "Nhóm người dùng", href: "/user-groups", icon: UsersRound, perm: ["user-groups:manage"] },
-      // P1 · US-05 AC4 — cây tổ chức (HO → vùng → cơ sở). Dùng key có sẵn centers:view
-      // (đọc) / centers:edit (ghi); KHÔNG chế key mới vì registry là 1 nguồn sự thật.
-      { label: "Cây tổ chức", href: "/to-chuc", icon: Network, perm: ["centers:view"] },
-      { label: "Email Templates", href: "/email-templates", icon: Mail, perm: ["emails:view"] },
-      { label: "Email Logs", href: "/email-logs", icon: Send, perm: ["emails:view"] },
-      // AUTH-SĐT P4 dựng /otp-logs nhưng quên link — màn trả lời "phụ huynh báo
-      // không nhận được mã" mà nhân viên trực phải gõ tay URL thì coi như không có.
-      // Cùng quyền `emails:view` với Email Logs (chủ ý của P4: không đẻ action RBAC mới).
-      { label: "OTP Logs", href: "/otp-logs", icon: MessageCircle, perm: ["emails:view"] },
+      // P1 · US-05 AC4 — cây tổ chức (HO → vùng → cơ sở).
+      { label: "Cây tổ chức", href: "/to-chuc", icon: Network, perm: [...PAGE_GATES["/to-chuc"]] },
+      // P2 · US-08/09 — vị trí công việc + phân công người vào vị trí.
+      { label: "Vị trí công việc", href: "/nhan-su/vi-tri", icon: Briefcase, perm: [...PAGE_GATES["/nhan-su/vi-tri"]] },
       { label: "Audit Log", href: "/audit-log", icon: ScrollText, perm: ["audit-logs:view"] },
       { label: "Tích hợp", href: "/tich-hop", icon: Plug, perm: ["settings:view"] },
       { label: "Cấu hình vận hành", href: "/cau-hinh-van-hanh", icon: SlidersHorizontal, perm: ["settings:view"] },

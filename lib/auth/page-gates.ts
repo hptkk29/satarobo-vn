@@ -71,6 +71,24 @@ export const PAGE_GATES = {
    */
   "/tin-nhan": ["students:view-own-class", "classes:view-own", "parent-requests:manage"],
 
+  /**
+   * Cây tổ chức (P1 · US-05 AC4) — MÀN QUẢN TRỊ, không phải màn tra cứu.
+   *
+   * Trước 11/08/2026 gác bằng `centers:view`, mà action đó 7 RoleDef giữ (kể cả TEACHER,
+   * Sale, HR, Kế toán) vì nó là chìa khoá cho dropdown/bộ lọc cơ sở ở khắp nơi. Hệ quả:
+   * gần như MỌI vai đều thấy nhóm "Hệ thống & Cấu hình" hiện lên chỉ vì mục này — trong
+   * khi chủ dự án chốt (11/08/2026) nhóm đó CHỈ dành cho SUPER_ADMIN.
+   *
+   * `centers:edit` giữ đúng ngữ nghĩa (đây là màn sửa cây) và chỉ SUPER_ADMIN có
+   * (v1: permissions.ts:544; v2: không RoleDef nào khai ⇒ chỉ qua bypass). KHÔNG gỡ
+   * `centers:view` khỏi các vai — làm thế là gãy bộ lọc cơ sở ở hàng chục màn khác.
+   */
+  "/to-chuc": ["centers:edit"],
+
+  /** P2 · US-08 — vị trí công việc mang bộ vai trò ⇒ cùng hạng nguy hiểm với sửa
+   *  RoleDef, cùng một cổng `roles:manage` (chỉ SUPER_ADMIN). */
+  "/nhan-su/vi-tri": ["roles:manage"],
+
   /** Cảnh báo rủi ro HV. GV KHÔNG vào: trang không có lọc theo lớp, cho GV vào là
    *  mở toàn cơ sở — đúng thứ câu 19 cấm. */
   "/canh-bao-rui-ro": ["parent-requests:manage"],
