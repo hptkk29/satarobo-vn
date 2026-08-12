@@ -217,6 +217,16 @@ và `finance` (93). Hậu quả: đường đọc lọc `orgUnitId IN visibleOrg
   bị xoá / bản thân nó cũng chưa có cơ sở (vd lead chưa phân cơ sở). **Không đoán** —
   bịa đơn vị vào nhật ký còn tệ hơn để trống.
 
+  ### Cách chạy trên PROD — dùng workflow, khỏi dán SQL
+
+  > **Nền P1 — dọn AuditLog.orgUnitId (prod)**
+  > (`.github/workflows/nen-p1-sua-audit.yml`, `workflow_dispatch`)
+
+  Chạy `scripts/nen-p1-sua-audit-orgunit.ts` (cả hai giai đoạn: đổi `Center.id` sai
+  loại + điền dòng `NULL` suy được). Mặc định `dry-run`; `apply` phải gõ
+  `GHI THAT VAO PROD`. Sau khi ghi, workflow tự chạy lại một lượt để chứng minh
+  idempotent. Khối SQL ở trên vẫn giữ làm phương án tay khi cần.
+
   ### ⏳ PHẢI CHẠY LẠI BƯỚC 3 SAU KHI P1 LÊN PROD
 
   Kết quả chạy trên PROD ngày 12/08/2026: chỉ **6 dòng** được điền (`employees` 2,
