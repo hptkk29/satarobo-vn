@@ -12,6 +12,7 @@ import {
   KANBAN_COLUMNS,
 } from '@/lib/leads/status'
 import { Badge } from '@/components/ui/badge'
+import { ChonSoDong } from '@/components/ui/chon-so-dong'
 
 export type LeadRow = {
   id: string
@@ -506,11 +507,14 @@ export function LeadsTable({
       </div>
 
       {/* Pagination */}
-      {totalPages > 1 && (
-        <div className="flex items-center justify-between text-sm text-muted-foreground">
-          <span>
-            Trang {page}/{totalPages} · {total} lead
-          </span>
+      {total > 0 && (
+        <div className="flex flex-col gap-2 text-sm text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex flex-wrap items-center gap-3">
+            <ChonSoDong soDong={pageSize} tong={total} tenDonVi="lead" />
+            <span>
+              Trang {page}/{totalPages}
+            </span>
+          </div>
           <div className="flex gap-1">
             <button
               type="button"

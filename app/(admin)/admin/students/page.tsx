@@ -3,6 +3,7 @@ import { FileSpreadsheet, Plus } from "lucide-react";
 import { DeleteStudentButton } from "./_components/delete-student-button";
 import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
+import { ChonSoDong, docSoDong } from "@/components/ui/chon-so-dong";
 import { scopedDb } from "@/lib/db-scope";
 import { resolveActor } from "@/lib/auth/actor";
 import {
@@ -56,9 +57,11 @@ interface SearchParams {
     grade?: string;
     page?: string;
     view?: string;
+    size?: string;
   }>;
 }
 
+/** Số dòng/trang MẶC ĐỊNH. Người dùng đổi được qua `?size=` — xem `ChonSoDong`. */
 const PAGE_SIZE = 20;
 const VALID_STATUSES = Object.values(StudentStatus);
 const FREQUENT_ABSENT_FETCH_LIMIT = 500;
@@ -154,6 +157,7 @@ export default async function StudentsPage({ searchParams }: SearchParams) {
       ? (sp.status as StudentStatus)
       : undefined;
   const page = Math.max(1, Number(sp.page) || 1);
+  const soDong = docSoDong(sp.size);
 
   // Build base filters (search, center, grade). Note: centerId param maps
   // to Student.preferredCenterId — same field that the existing list filtered
@@ -205,7 +209,7 @@ export default async function StudentsPage({ searchParams }: SearchParams) {
     );
     const filteredArr = Array.from(filteredIds);
     totalCount = filteredArr.length;
-    const pageIds = filteredArr.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+    const pageIds = filteredArr.slice((page - 1) * soDong, page * soDong);
 
     if (pageIds.length > 0) {
       const rows = await sdb.student.findMany({
@@ -222,8 +226,8 @@ export default async function StudentsPage({ searchParams }: SearchParams) {
         where,
         select: STUDENT_LIST_SELECT,
         orderBy: [{ createdAt: "desc" }],
-        skip: (page - 1) * PAGE_SIZE,
-        take: PAGE_SIZE,
+        skip: (page - 1) * soDong,
+        take: soDong,
       }),
     ]);
     totalCount = count;
@@ -239,7 +243,7 @@ export default async function StudentsPage({ searchParams }: SearchParams) {
     }));
   }
 
-  const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
+  const totalPages = Math.max(1, Math.ceil(totalCount / soDong));
 
   const centers = await sdb.center.findMany({
     where: { isActive: true },
@@ -259,6 +263,8 @@ export default async function StudentsPage({ searchParams }: SearchParams) {
     }>,
   ): string {
     const u = new URLSearchParams();
+    // Giữ lựa chọn số dòng khi qua trang — mất nó là mỗi lần bấm Sau lại về 20.
+    if (soDong !== PAGE_SIZE) u.set("size", String(soDong));
     if (params.view && params.view !== "all") u.set("view", params.view);
     if (params.page && params.page > 1) u.set("page", String(params.page));
     if (params.q) u.set("q", params.q);
@@ -555,12 +561,14 @@ export default async function StudentsPage({ searchParams }: SearchParams) {
         </div>
       </div>
 
-      {totalPages > 1 && (
-        <div className="mt-4 flex items-center justify-between text-sm text-muted-foreground">
-          <span>
-            Trang {page}/{totalPages} ·{" "}
-            {totalCount.toLocaleString("vi-VN")} học viên
-          </span>
+      {totalCount > 0 && (
+        <div className="mt-4 flex flex-col gap-2 text-sm text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex flex-wrap items-center gap-3">
+            <ChonSoDong soDong={soDong} tong={totalCount} tenDonVi="học viên" />
+            <span>
+              Trang {page}/{totalPages}
+            </span>
+          </div>
           <div className="flex gap-2">
             {page > 1 && (
               <Link

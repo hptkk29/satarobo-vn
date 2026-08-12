@@ -11,6 +11,7 @@ import {
   EMAIL_LOG_STATUS_LABEL,
   EMAIL_LOG_STATUS_COLOR,
 } from "@/lib/validators/email-template";
+import { ChonSoDong, docSoDong } from "@/components/ui/chon-so-dong";
 
 export const metadata = { title: "Email Logs | Admin" };
 export const dynamic = "force-dynamic";
@@ -21,10 +22,10 @@ interface Props {
     status?: string;
     templateId?: string;
     page?: string;
+    size?: string;
   }>;
 }
 
-const PAGE_SIZE = 30;
 const STATUS_VALUES = Object.values(EmailLogStatus) as EmailLogStatus[];
 
 export default async function EmailLogsPage({ searchParams }: Props) {
@@ -47,6 +48,7 @@ export default async function EmailLogsPage({ searchParams }: Props) {
       : undefined;
   const templateId = sp.templateId || "";
   const page = Math.max(1, Number(sp.page) || 1);
+  const soDong = docSoDong(sp.size);
 
   const where: Prisma.EmailLogWhereInput = {};
   if (q) {
@@ -66,8 +68,8 @@ export default async function EmailLogsPage({ searchParams }: Props) {
         template: { select: { id: true, name: true, code: true } },
       },
       orderBy: { createdAt: "desc" },
-      skip: (page - 1) * PAGE_SIZE,
-      take: PAGE_SIZE,
+      skip: (page - 1) * soDong,
+      take: soDong,
     }),
     sdb.emailTemplate.findMany({
       select: { id: true, name: true },
@@ -75,7 +77,7 @@ export default async function EmailLogsPage({ searchParams }: Props) {
     }),
   ]);
 
-  const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
+  const totalPages = Math.max(1, Math.ceil(totalCount / soDong));
 
   function urlFor(
     p: Partial<{
@@ -224,10 +226,13 @@ export default async function EmailLogsPage({ searchParams }: Props) {
         </table>
       </div>
 
-      {totalPages > 1 && (
-        <div className="flex items-center justify-between text-sm">
-          <div className="text-muted-foreground">
-            Trang {page} / {totalPages}
+      {totalCount > 0 && (
+        <div className="flex flex-col gap-2 text-sm sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex flex-wrap items-center gap-3 text-muted-foreground">
+            <ChonSoDong soDong={soDong} tong={totalCount} tenDonVi="email" />
+            <span>
+              Trang {page} / {totalPages}
+            </span>
           </div>
           <div className="flex gap-1">
             {page > 1 && (
