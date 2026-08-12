@@ -13,6 +13,7 @@ import {
 } from "@/lib/validators/email-template";
 import { ChonSoDong } from "@/components/ui/chon-so-dong";
 import { docSoDong } from "@/lib/ui/phan-trang";
+import { DieuHuongTrang } from "@/components/ui/dieu-huong-trang";
 
 export const metadata = { title: "Email Logs | Admin" };
 export const dynamic = "force-dynamic";
@@ -235,24 +236,11 @@ export default async function EmailLogsPage({ searchParams }: Props) {
               Trang {page} / {totalPages}
             </span>
           </div>
-          <div className="flex gap-1">
-            {page > 1 && (
-              <Link
-                href={urlFor({ q, status: statusParam, templateId, page: page - 1 })}
-                className="px-3 py-1 border rounded hover:bg-muted"
-              >
-                ← Trước
-              </Link>
-            )}
-            {page < totalPages && (
-              <Link
-                href={urlFor({ q, status: statusParam, templateId, page: page + 1 })}
-                className="px-3 py-1 border rounded hover:bg-muted"
-              >
-                Sau →
-              </Link>
-            )}
-          </div>
+          <DieuHuongTrang
+            trang={page}
+            soTrang={totalPages}
+            hrefCua={(n) => urlFor({ q, status: statusParam, templateId, page: n })}
+          />
         </div>
       )}
     </div>

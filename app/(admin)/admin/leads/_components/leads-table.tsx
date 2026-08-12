@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useTransition, useState, useEffect } from 'react'
-import { ChevronLeft, ChevronRight, Loader2, X, Download, Trash2, CheckCircle2 } from 'lucide-react'
+import { Loader2, X, Download, Trash2, CheckCircle2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { updateLeadNote, updateLeadStatus, deleteLead } from '../actions'
 import {
@@ -13,6 +13,7 @@ import {
 } from '@/lib/leads/status'
 import { Badge } from '@/components/ui/badge'
 import { ChonSoDong } from '@/components/ui/chon-so-dong'
+import { DieuHuongTrang } from '@/components/ui/dieu-huong-trang'
 
 export type LeadRow = {
   id: string
@@ -515,26 +516,7 @@ export function LeadsTable({
               Trang {page}/{totalPages}
             </span>
           </div>
-          <div className="flex gap-1">
-            <button
-              type="button"
-              onClick={() => goPage(page - 1)}
-              disabled={page <= 1}
-              className="flex h-8 w-8 items-center justify-center rounded-lg border border-border hover:bg-muted disabled:cursor-not-allowed disabled:opacity-40"
-              aria-label="Trang trước"
-            >
-              <ChevronLeft className="h-4 w-4" />
-            </button>
-            <button
-              type="button"
-              onClick={() => goPage(page + 1)}
-              disabled={page >= totalPages}
-              className="flex h-8 w-8 items-center justify-center rounded-lg border border-border hover:bg-muted disabled:cursor-not-allowed disabled:opacity-40"
-              aria-label="Trang sau"
-            >
-              <ChevronRight className="h-4 w-4" />
-            </button>
-          </div>
+          <DieuHuongTrang trang={page} soTrang={totalPages} onDoi={goPage} />
         </div>
       )}
 

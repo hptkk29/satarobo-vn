@@ -4,6 +4,7 @@ import { DeleteStudentButton } from "./_components/delete-student-button";
 import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { ChonSoDong } from "@/components/ui/chon-so-dong";
+import { DieuHuongTrang } from "@/components/ui/dieu-huong-trang";
 import { docSoDong } from "@/lib/ui/phan-trang";
 import { scopedDb } from "@/lib/db-scope";
 import { resolveActor } from "@/lib/auth/actor";
@@ -570,38 +571,20 @@ export default async function StudentsPage({ searchParams }: SearchParams) {
               Trang {page}/{totalPages}
             </span>
           </div>
-          <div className="flex gap-2">
-            {page > 1 && (
-              <Link
-                href={urlFor({
-                  view,
-                  page: page - 1,
-                  q,
-                  centerId,
-                  grade: grade != null ? String(grade) : "",
-                  status: statusParam,
-                })}
-                className="rounded-lg border border-border px-3 py-1.5 text-sm hover:bg-muted"
-              >
-                ← Trước
-              </Link>
-            )}
-            {page < totalPages && (
-              <Link
-                href={urlFor({
-                  view,
-                  page: page + 1,
-                  q,
-                  centerId,
-                  grade: grade != null ? String(grade) : "",
-                  status: statusParam,
-                })}
-                className="rounded-lg border border-border px-3 py-1.5 text-sm hover:bg-muted"
-              >
-                Sau →
-              </Link>
-            )}
-          </div>
+          <DieuHuongTrang
+            trang={page}
+            soTrang={totalPages}
+            hrefCua={(n) =>
+              urlFor({
+                view,
+                page: n,
+                q,
+                centerId,
+                grade: grade != null ? String(grade) : "",
+                status: statusParam,
+              })
+            }
+          />
         </div>
       )}
     </div>

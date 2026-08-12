@@ -27,7 +27,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { DieuHuongTrang } from "@/components/ui/dieu-huong-trang";
 import { cn } from "@/lib/utils";
 
 // Hằng số ở module LÁ (không "use client") để Server Component dùng được — xem
@@ -148,7 +148,7 @@ export function BangPhanTrang({
               id={idSelect}
               value={soDong}
               onChange={(e) => doiSoDong(Number(e.target.value))}
-              className="h-8 rounded-lg border border-border bg-background px-2 text-sm text-foreground outline-none focus:border-primary"
+              className="h-8 rounded-lg border border-border bg-background py-0 pl-2 pr-7 text-sm text-foreground outline-none focus:border-primary"
             >
               {MUC_SO_DONG.map((n) => (
                 <option key={n} value={n}>
@@ -165,26 +165,7 @@ export function BangPhanTrang({
             <span className="whitespace-nowrap tabular-nums">
               {tu}–{den} · trang {Math.min(trang, soTrang)}/{soTrang}
             </span>
-            <div className="flex gap-1">
-              <button
-                type="button"
-                onClick={() => setTrang((p) => Math.max(1, p - 1))}
-                disabled={trang <= 1}
-                aria-label="Trang trước"
-                className="flex h-8 w-8 items-center justify-center rounded-lg border border-border transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-40"
-              >
-                <ChevronLeft className="h-4 w-4" />
-              </button>
-              <button
-                type="button"
-                onClick={() => setTrang((p) => Math.min(soTrang, p + 1))}
-                disabled={trang >= soTrang}
-                aria-label="Trang sau"
-                className="flex h-8 w-8 items-center justify-center rounded-lg border border-border transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-40"
-              >
-                <ChevronRight className="h-4 w-4" />
-              </button>
-            </div>
+            <DieuHuongTrang trang={Math.min(trang, soTrang)} soTrang={soTrang} onDoi={setTrang} />
           </div>
         </div>
       )}

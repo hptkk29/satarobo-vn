@@ -10,6 +10,7 @@ import type { Prisma, OtpPurpose } from "@prisma/client";
 import { PageHelp } from "@/components/admin/ui/page-help";
 import { ChonSoDong } from "@/components/ui/chon-so-dong";
 import { docSoDong } from "@/lib/ui/phan-trang";
+import { DieuHuongTrang } from "@/components/ui/dieu-huong-trang";
 
 // AUTH-SĐT P4 — màn trả lời câu "phụ huynh báo không nhận được mã": trước đây
 // 0 UI nào đọc OtpRequest/OtpDeliveryLog, nhân viên phải mò Email logs (sắp
@@ -282,25 +283,14 @@ export default async function OtpLogsPage({ searchParams }: Props) {
       {totalCount > 0 && (
         <div className="flex flex-wrap items-center gap-3 text-sm">
           <ChonSoDong soDong={soDong} tong={totalCount} tenDonVi="yêu cầu" />
-          {page > 1 && (
-            <a
-              href={urlFor({ q, purpose, page: page - 1 })}
-              className="px-3 py-1 border rounded"
-            >
-              ← Trước
-            </a>
-          )}
           <span className="text-muted-foreground">
-            Trang {page}/{totalPages} · {totalCount} yêu cầu
+            Trang {page}/{totalPages}
           </span>
-          {page < totalPages && (
-            <a
-              href={urlFor({ q, purpose, page: page + 1 })}
-              className="px-3 py-1 border rounded"
-            >
-              Sau →
-            </a>
-          )}
+          <DieuHuongTrang
+            trang={page}
+            soTrang={totalPages}
+            hrefCua={(n) => urlFor({ q, purpose, page: n })}
+          />
         </div>
       )}
     </div>

@@ -58,7 +58,7 @@ export function ChonSoDong({
         value={soDong}
         disabled={pending}
         onChange={(e) => doi(Number(e.target.value))}
-        className="h-8 rounded-lg border border-border bg-background px-2 text-sm text-foreground outline-none focus:border-primary disabled:opacity-60"
+        className="h-8 rounded-lg border border-border bg-background py-0 pl-2 pr-7 text-sm text-foreground outline-none focus:border-primary disabled:opacity-60"
       >
         {MUC_SO_DONG.map((n) => (
           <option key={n} value={n}>

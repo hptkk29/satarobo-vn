@@ -18,6 +18,7 @@ import {
 } from "@/lib/validators/product";
 import { ChonSoDong } from "@/components/ui/chon-so-dong";
 import { docSoDong } from "@/lib/ui/phan-trang";
+import { DieuHuongTrang } from "@/components/ui/dieu-huong-trang";
 
 export const metadata = { title: "Sản phẩm | Admin" };
 export const dynamic = "force-dynamic";
@@ -337,36 +338,19 @@ export default async function ProductsPage({ searchParams }: Props) {
               Trang {page}/{totalPages}
             </span>
           </div>
-          <div className="flex gap-2">
-            {page > 1 && (
-              <Link
-                href={urlFor({
-                  q,
-                  category: categoryParam,
-                  status: statusParam,
-                  lowStock: lowStock ? "1" : undefined,
-                  page: page - 1,
-                })}
-                className="rounded-lg border border-border px-3 py-1.5 text-sm hover:bg-muted"
-              >
-                ← Trước
-              </Link>
-            )}
-            {page < totalPages && (
-              <Link
-                href={urlFor({
-                  q,
-                  category: categoryParam,
-                  status: statusParam,
-                  lowStock: lowStock ? "1" : undefined,
-                  page: page + 1,
-                })}
-                className="rounded-lg border border-border px-3 py-1.5 text-sm hover:bg-muted"
-              >
-                Sau →
-              </Link>
-            )}
-          </div>
+          <DieuHuongTrang
+            trang={page}
+            soTrang={totalPages}
+            hrefCua={(n) =>
+              urlFor({
+                q,
+                category: categoryParam,
+                status: statusParam,
+                lowStock: lowStock ? "1" : undefined,
+                page: n,
+              })
+            }
+          />
         </div>
       )}
     </div>

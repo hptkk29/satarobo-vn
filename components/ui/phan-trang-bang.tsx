@@ -31,8 +31,8 @@ import {
   type ReactElement,
   type ReactNode,
 } from "react";
-import { ChevronLeft, ChevronRight } from "lucide-react";
 import { MUC_SO_DONG, SO_DONG_MAC_DINH } from "@/components/ui/bang-phan-trang";
+import { DieuHuongTrang } from "@/components/ui/dieu-huong-trang";
 import { cn } from "@/lib/utils";
 
 const KHOA_LUU = "satarobo:bang:soDong";
@@ -144,7 +144,7 @@ export function PhanTrangBang({
               id={idSelect}
               value={soDong}
               onChange={(e) => doiSoDong(Number(e.target.value))}
-              className="h-8 rounded-lg border border-border bg-background px-2 text-sm text-foreground outline-none focus:border-primary"
+              className="h-8 rounded-lg border border-border bg-background py-0 pl-2 pr-7 text-sm text-foreground outline-none focus:border-primary"
             >
               {MUC_SO_DONG.map((n) => (
                 <option key={n} value={n}>
@@ -160,26 +160,7 @@ export function PhanTrangBang({
             <span className="whitespace-nowrap tabular-nums">
               {tu}–{den} · trang {trangHt}/{soTrang}
             </span>
-            <div className="flex gap-1">
-              <button
-                type="button"
-                onClick={() => setTrang((p) => Math.max(1, p - 1))}
-                disabled={trangHt <= 1}
-                aria-label="Trang trước"
-                className="flex h-8 w-8 items-center justify-center rounded-lg border border-border transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-40"
-              >
-                <ChevronLeft className="h-4 w-4" />
-              </button>
-              <button
-                type="button"
-                onClick={() => setTrang((p) => Math.min(soTrang, p + 1))}
-                disabled={trangHt >= soTrang}
-                aria-label="Trang sau"
-                className="flex h-8 w-8 items-center justify-center rounded-lg border border-border transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-40"
-              >
-                <ChevronRight className="h-4 w-4" />
-              </button>
-            </div>
+            <DieuHuongTrang trang={trangHt} soTrang={soTrang} onDoi={setTrang} />
           </div>
         </div>
       )}
