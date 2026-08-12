@@ -1,5 +1,6 @@
 import * as React from "react";
 import { cn } from "@/lib/utils";
+import { PhanTrangBang } from "@/components/ui/phan-trang-bang";
 
 /**
  * Mật độ bảng admin — DESIGN.md §2. Port từ `nhhatvy/TeachUI` (`src/components/ui/table.tsx`).
@@ -54,38 +55,40 @@ export function DataTable<T extends Record<string, unknown>>({
   return (
     <div className={cn("overflow-hidden rounded-xl border border-border bg-card", className)}>
       <div className="overflow-x-auto">
-        <table className="w-full border-collapse text-left">
-          <thead>
-            <tr className="border-b border-border bg-muted/40">
-              {columns.map((col) => (
-                <th key={col.key} scope="col" className={cn(adminTh, col.className)}>
-                  {col.header}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {data.length === 0 ? (
-              <tr>
-                <td colSpan={columns.length} className="px-5 py-10 text-center">
-                  {empty ?? (
-                    <span className="text-sm text-muted-foreground">Chưa có dữ liệu.</span>
-                  )}
-                </td>
+        <PhanTrangBang>
+          <table className="w-full border-collapse text-left">
+            <thead>
+              <tr className="border-b border-border bg-muted/40">
+                {columns.map((col) => (
+                  <th key={col.key} scope="col" className={cn(adminTh, col.className)}>
+                    {col.header}
+                  </th>
+                ))}
               </tr>
-            ) : (
-              data.map((row, i) => (
-                <tr key={rowKey?.(row, i) ?? String(row.id ?? i)} className={adminTr}>
-                  {columns.map((col) => (
-                    <td key={col.key} className={cn(adminTd, col.className)}>
-                      {col.render ? col.render(row, i) : String(row[col.key] ?? "")}
-                    </td>
-                  ))}
+            </thead>
+            <tbody>
+              {data.length === 0 ? (
+                <tr>
+                  <td colSpan={columns.length} className="px-5 py-10 text-center">
+                    {empty ?? (
+                      <span className="text-sm text-muted-foreground">Chưa có dữ liệu.</span>
+                    )}
+                  </td>
                 </tr>
-              ))
-            )}
-          </tbody>
-        </table>
+              ) : (
+                data.map((row, i) => (
+                  <tr key={rowKey?.(row, i) ?? String(row.id ?? i)} className={adminTr}>
+                    {columns.map((col) => (
+                      <td key={col.key} className={cn(adminTd, col.className)}>
+                        {col.render ? col.render(row, i) : String(row[col.key] ?? "")}
+                      </td>
+                    ))}
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </PhanTrangBang>
       </div>
     </div>
   );

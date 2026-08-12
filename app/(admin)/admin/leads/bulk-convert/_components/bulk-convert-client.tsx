@@ -8,6 +8,7 @@ import { useMemo, useState } from 'react'
 import Link from 'next/link'
 import { toast } from 'sonner'
 import { bulkConvertLeadsAction } from '../_actions'
+import { PhanTrangBang } from "@/components/ui/phan-trang-bang";
 
 type ChildInfo = {
   id: string
@@ -379,165 +380,167 @@ export function BulkConvertClient({
 
       {/* Bảng */}
       <div className="overflow-x-auto rounded-lg border border-border">
-        <table className="w-full min-w-[1080px] text-sm">
-          <thead className="bg-muted text-left text-xs font-medium uppercase text-muted-foreground">
-            <tr>
-              <th className="w-10 px-3 py-2"></th>
-              <th className="px-3 py-2">Phụ huynh</th>
-              <th className="px-3 py-2">Học viên</th>
-              <th className="w-64 px-3 py-2">Lớp</th>
-              <th className="w-24 px-3 py-2">Ảnh: đồng ý</th>
-              <th className="w-56 px-3 py-2">Đã đóng (đ) · ngày</th>
-              <th className="w-64 px-3 py-2">Kết quả</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-border">
-            {visibleLeads.length === 0 && (
+        <PhanTrangBang>
+          <table className="w-full min-w-[1080px] text-sm">
+            <thead className="bg-muted text-left text-xs font-medium uppercase text-muted-foreground">
               <tr>
-                <td colSpan={7} className="px-3 py-8 text-center text-muted-foreground">
-                  {leads.length === 0
-                    ? 'Chưa có lead "Đã đăng ký" nào — import file Excel ở màn Import khách đã đăng ký trước.'
-                    : 'Không có lead khớp bộ lọc.'}
-                </td>
+                <th className="w-10 px-3 py-2"></th>
+                <th className="px-3 py-2">Phụ huynh</th>
+                <th className="px-3 py-2">Học viên</th>
+                <th className="w-64 px-3 py-2">Lớp</th>
+                <th className="w-24 px-3 py-2">Ảnh: đồng ý</th>
+                <th className="w-56 px-3 py-2">Đã đóng (đ) · ngày</th>
+                <th className="w-64 px-3 py-2">Kết quả</th>
               </tr>
-            )}
-            {visibleLeads.map((lead) => {
-              const res = results[lead.id]
-              const rowSpan = Math.max(1, lead.children.length)
-              const noChildren = lead.children.length === 0
-              const disabled = running || Boolean(res?.ok) || noChildren
-              return lead.children.length === 0 ? (
-                <tr key={lead.id} className="bg-state-warning-soft/40">
-                  <td className="px-3 py-2"></td>
-                  <td className="px-3 py-2">
-                    <LeadCell lead={lead} centerLabel={(lead.centerId && centerName.get(lead.centerId)) || '—'} />
-                  </td>
-                  <td colSpan={5} className="px-3 py-2 text-xs text-state-warning-ink">
-                    Lead không có học viên đính kèm — chốt riêng tại{' '}
-                    <Link href={`/leads/${lead.id}/convert`} className="underline">
-                      màn chuyển đổi
-                    </Link>
-                    .
+            </thead>
+            <tbody className="divide-y divide-border">
+              {visibleLeads.length === 0 && (
+                <tr>
+                  <td colSpan={7} className="px-3 py-8 text-center text-muted-foreground">
+                    {leads.length === 0
+                      ? 'Chưa có lead "Đã đăng ký" nào — import file Excel ở màn Import khách đã đăng ký trước.'
+                      : 'Không có lead khớp bộ lọc.'}
                   </td>
                 </tr>
-              ) : (
-                lead.children.map((ch, idx) => {
-                  const options = classesFor(lead, ch)
-                  return (
-                    <tr key={ch.id} className={res?.ok ? 'bg-state-success-soft/50' : res ? 'bg-state-danger-soft/40' : undefined}>
-                      {idx === 0 && (
-                        <td className="px-3 py-2 align-top" rowSpan={rowSpan}>
+              )}
+              {visibleLeads.map((lead) => {
+                const res = results[lead.id]
+                const rowSpan = Math.max(1, lead.children.length)
+                const noChildren = lead.children.length === 0
+                const disabled = running || Boolean(res?.ok) || noChildren
+                return lead.children.length === 0 ? (
+                  <tr key={lead.id} className="bg-state-warning-soft/40">
+                    <td className="px-3 py-2"></td>
+                    <td className="px-3 py-2">
+                      <LeadCell lead={lead} centerLabel={(lead.centerId && centerName.get(lead.centerId)) || '—'} />
+                    </td>
+                    <td colSpan={5} className="px-3 py-2 text-xs text-state-warning-ink">
+                      Lead không có học viên đính kèm — chốt riêng tại{' '}
+                      <Link href={`/leads/${lead.id}/convert`} className="underline">
+                        màn chuyển đổi
+                      </Link>
+                      .
+                    </td>
+                  </tr>
+                ) : (
+                  lead.children.map((ch, idx) => {
+                    const options = classesFor(lead, ch)
+                    return (
+                      <tr key={ch.id} className={res?.ok ? 'bg-state-success-soft/50' : res ? 'bg-state-danger-soft/40' : undefined}>
+                        {idx === 0 && (
+                          <td className="px-3 py-2 align-top" rowSpan={rowSpan}>
+                            <input
+                              type="checkbox"
+                              checked={selected.has(lead.id)}
+                              onChange={(e) => toggleLead(lead.id, e.target.checked)}
+                              disabled={disabled}
+                              className="mt-1 h-4 w-4 rounded border-border"
+                            />
+                          </td>
+                        )}
+                        {idx === 0 && (
+                          <td className="px-3 py-2 align-top" rowSpan={rowSpan}>
+                            <LeadCell lead={lead} centerLabel={(lead.centerId && centerName.get(lead.centerId)) || '—'} />
+                          </td>
+                        )}
+                        <td className="px-3 py-2 align-top">
+                          <div className="font-medium text-foreground">{ch.fullName}</div>
+                          <div className="text-xs text-muted-foreground">
+                            {[ch.gradeLevel, ch.dob].filter(Boolean).join(' · ')}
+                          </div>
+                          {ch.note && (
+                            <div className="mt-0.5 max-w-[220px] truncate text-xs text-muted-foreground" title={ch.note}>
+                              {ch.note}
+                            </div>
+                          )}
+                        </td>
+                        <td className="px-3 py-2 align-top">
+                          <select
+                            value={childClass[ch.id] ?? ''}
+                            onChange={(e) => setChildClass((prev) => ({ ...prev, [ch.id]: e.target.value }))}
+                            disabled={disabled}
+                            className={inputCls}
+                          >
+                            <option value="">— Chọn lớp —</option>
+                            {options.map((c) => (
+                              <option key={c.id} value={c.id}>
+                                {c.label} · {c.courseName} · {fmtVnd(c.listPrice)}
+                              </option>
+                            ))}
+                          </select>
+                          {options.length === 0 && (
+                            <div className="mt-0.5 text-xs text-state-danger-ink">
+                              Chưa có lớp mở cùng khoá tại cơ sở này — tạo lớp trước.
+                            </div>
+                          )}
+                        </td>
+                        <td className="px-3 py-2 text-center align-top">
                           <input
                             type="checkbox"
-                            checked={selected.has(lead.id)}
-                            onChange={(e) => toggleLead(lead.id, e.target.checked)}
+                            checked={childConsent[ch.id] === true}
+                            onChange={(e) => setChildConsent((prev) => ({ ...prev, [ch.id]: e.target.checked }))}
                             disabled={disabled}
                             className="mt-1 h-4 w-4 rounded border-border"
                           />
                         </td>
-                      )}
-                      {idx === 0 && (
-                        <td className="px-3 py-2 align-top" rowSpan={rowSpan}>
-                          <LeadCell lead={lead} centerLabel={(lead.centerId && centerName.get(lead.centerId)) || '—'} />
-                        </td>
-                      )}
-                      <td className="px-3 py-2 align-top">
-                        <div className="font-medium text-foreground">{ch.fullName}</div>
-                        <div className="text-xs text-muted-foreground">
-                          {[ch.gradeLevel, ch.dob].filter(Boolean).join(' · ')}
-                        </div>
-                        {ch.note && (
-                          <div className="mt-0.5 max-w-[220px] truncate text-xs text-muted-foreground" title={ch.note}>
-                            {ch.note}
-                          </div>
+                        {idx === 0 && (
+                          <td className="px-3 py-2 align-top" rowSpan={rowSpan}>
+                            {hasPayment.has(lead.id) ? (
+                              <span className="inline-flex rounded-full bg-state-info-soft px-2 py-0.5 text-xs font-medium text-state-info-ink">
+                                Đã có khoản ghi nhận
+                              </span>
+                            ) : (
+                              <div className="space-y-1">
+                                <input
+                                  type="number"
+                                  min={0}
+                                  step={1000}
+                                  value={paidAmount[lead.id] ?? ''}
+                                  onChange={(e) => setPaidAmount((prev) => ({ ...prev, [lead.id]: e.target.value }))}
+                                  disabled={disabled}
+                                  placeholder="Bỏ trống nếu chưa rõ"
+                                  className={inputCls}
+                                />
+                                <input
+                                  type="date"
+                                  value={paidDate[lead.id] ?? today}
+                                  max={today}
+                                  onChange={(e) => setPaidDate((prev) => ({ ...prev, [lead.id]: e.target.value }))}
+                                  disabled={disabled}
+                                  className={inputCls}
+                                />
+                                {Number(paidAmount[lead.id] ?? '') > 0 && leadTotal(lead) > 0 && (
+                                  <div className="text-xs text-muted-foreground">
+                                    Niêm yết: {fmtVnd(leadTotal(lead))}
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                          </td>
                         )}
-                      </td>
-                      <td className="px-3 py-2 align-top">
-                        <select
-                          value={childClass[ch.id] ?? ''}
-                          onChange={(e) => setChildClass((prev) => ({ ...prev, [ch.id]: e.target.value }))}
-                          disabled={disabled}
-                          className={inputCls}
-                        >
-                          <option value="">— Chọn lớp —</option>
-                          {options.map((c) => (
-                            <option key={c.id} value={c.id}>
-                              {c.label} · {c.courseName} · {fmtVnd(c.listPrice)}
-                            </option>
-                          ))}
-                        </select>
-                        {options.length === 0 && (
-                          <div className="mt-0.5 text-xs text-state-danger-ink">
-                            Chưa có lớp mở cùng khoá tại cơ sở này — tạo lớp trước.
-                          </div>
+                        {idx === 0 && (
+                          <td className="px-3 py-2 align-top text-xs" rowSpan={rowSpan}>
+                            {res?.ok && (
+                              <div className="text-state-success-ink">
+                                ✓ Đã chốt{res.warning ? ` — ${res.warning}` : ''}
+                              </div>
+                            )}
+                            {res && !res.ok && <div className="text-state-danger-ink">✗ {res.message}</div>}
+                            {!res && lead.note && (
+                              <div className="max-w-[240px] truncate text-muted-foreground" title={lead.note}>
+                                {lead.note}
+                              </div>
+                            )}
+                          </td>
                         )}
-                      </td>
-                      <td className="px-3 py-2 text-center align-top">
-                        <input
-                          type="checkbox"
-                          checked={childConsent[ch.id] === true}
-                          onChange={(e) => setChildConsent((prev) => ({ ...prev, [ch.id]: e.target.checked }))}
-                          disabled={disabled}
-                          className="mt-1 h-4 w-4 rounded border-border"
-                        />
-                      </td>
-                      {idx === 0 && (
-                        <td className="px-3 py-2 align-top" rowSpan={rowSpan}>
-                          {hasPayment.has(lead.id) ? (
-                            <span className="inline-flex rounded-full bg-state-info-soft px-2 py-0.5 text-xs font-medium text-state-info-ink">
-                              Đã có khoản ghi nhận
-                            </span>
-                          ) : (
-                            <div className="space-y-1">
-                              <input
-                                type="number"
-                                min={0}
-                                step={1000}
-                                value={paidAmount[lead.id] ?? ''}
-                                onChange={(e) => setPaidAmount((prev) => ({ ...prev, [lead.id]: e.target.value }))}
-                                disabled={disabled}
-                                placeholder="Bỏ trống nếu chưa rõ"
-                                className={inputCls}
-                              />
-                              <input
-                                type="date"
-                                value={paidDate[lead.id] ?? today}
-                                max={today}
-                                onChange={(e) => setPaidDate((prev) => ({ ...prev, [lead.id]: e.target.value }))}
-                                disabled={disabled}
-                                className={inputCls}
-                              />
-                              {Number(paidAmount[lead.id] ?? '') > 0 && leadTotal(lead) > 0 && (
-                                <div className="text-xs text-muted-foreground">
-                                  Niêm yết: {fmtVnd(leadTotal(lead))}
-                                </div>
-                              )}
-                            </div>
-                          )}
-                        </td>
-                      )}
-                      {idx === 0 && (
-                        <td className="px-3 py-2 align-top text-xs" rowSpan={rowSpan}>
-                          {res?.ok && (
-                            <div className="text-state-success-ink">
-                              ✓ Đã chốt{res.warning ? ` — ${res.warning}` : ''}
-                            </div>
-                          )}
-                          {res && !res.ok && <div className="text-state-danger-ink">✗ {res.message}</div>}
-                          {!res && lead.note && (
-                            <div className="max-w-[240px] truncate text-muted-foreground" title={lead.note}>
-                              {lead.note}
-                            </div>
-                          )}
-                        </td>
-                      )}
-                    </tr>
-                  )
-                })
-              )
-            })}
-          </tbody>
-        </table>
+                      </tr>
+                    )
+                  })
+                )
+              })}
+            </tbody>
+          </table>
+        </PhanTrangBang>
       </div>
 
       {/* Thanh hành động */}
