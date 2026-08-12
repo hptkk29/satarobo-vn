@@ -193,6 +193,27 @@ và `finance` (93). Hậu quả: đường đọc lọc `orgUnitId IN visibleOrg
   bị xoá / bản thân nó cũng chưa có cơ sở (vd lead chưa phân cơ sở). **Không đoán** —
   bịa đơn vị vào nhật ký còn tệ hơn để trống.
 
+  ### ⏳ PHẢI CHẠY LẠI BƯỚC 3 SAU KHI P1 LÊN PROD
+
+  Kết quả chạy trên PROD ngày 12/08/2026: chỉ **6 dòng** được điền (`employees` 2,
+  `students` 2, `users` 2). `classes` (138) và `attendance` (49) **không nhúc nhích**
+  — và đó KHÔNG phải lỗi:
+
+  | entityType | cột `orgUnitId` thêm ở | Trên prod 12/08 |
+  |---|---|---|
+  | `Class` · `Employee` · `Student` · `User` | PR-A (15/06) | có → điền được |
+  | `ClassSession` · `Attendance` | migration **P1** | **chưa có** → bị bỏ qua |
+
+  Module `classes` phần lớn ghi theo `entityType: "ClassSession"` (adjust.ts,
+  snapshot.ts, session-lifecycle.ts), `attendance` ghi theo `Attendance`. Câu SQL
+  lọc bảng qua `information_schema` nên tự bỏ qua bảng thiếu cột — đúng thiết kế,
+  không lỗi.
+
+  ⇒ **Sau khi `test` → `main` (P1 chạy migration trên prod), CHẠY LẠI BƯỚC 3.** Lúc
+  đó 187 dòng kia mới điền được. Trạng thái prod hiện tại (đã đối chiếu):
+  `tổng 538 · hợp lệ 254 · null 284 · sai 0`, trong đó 81 dòng null là ĐÚNG (dữ liệu
+  toàn hệ thống) và 16 dòng thực thể tự nó chưa có cơ sở.
+
 **28 bảng `CHUA_RA_SOAT` → còn 20.**
 Rà bằng số đo trực tiếp trên DB, tiêu chí chuyển gồm cả bốn: bảng CÓ dữ liệu · 0 dòng
 `centerId IS NULL` · 0 dòng thiếu `orgUnitId` · 0 dòng lệch ánh xạ.
