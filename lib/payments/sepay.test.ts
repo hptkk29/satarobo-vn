@@ -1,5 +1,12 @@
-import { describe, it, expect } from "vitest";
-import { extractOrderCode, decideSepayAction, normalizeContent } from "./sepay";
+import { describe, it, expect, afterEach } from "vitest";
+import {
+  extractOrderCode,
+  decideSepayAction,
+  normalizeContent,
+  checkSepayAuth,
+  isValidSepayAuth,
+  normalizeSepayKey,
+} from "./sepay";
 
 // BGĐ 31/07 — khớp giao dịch ngân hàng (SePay) với đơn hàng.
 
@@ -117,5 +124,126 @@ describe("decideSepayAction", () => {
       order: baseOrder,
     });
     expect(r.action).toBe("MANUAL");
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// XÁC THỰC WEBHOOK — 12/08: 19 lần SePay gọi về prod đều 401, 4 giao dịch thật
+// (06→08/08, tổng ~26,8tr) rơi mất. Env `SEPAY_WEBHOOK_API_KEY` CÓ trên Vercel
+// Production từ 03/08 ⇒ hỏng ở khâu SO KHỚP chứ không phải thiếu cấu hình, mà
+// route lại không ghi lại gì khi từ chối nên không ai biết hỏng ở đâu.
+// Hai việc test này khoá: (1) tha những sai lệch định dạng vô hại; (2) lý do
+// từ chối phải nói rõ hỏng ở đâu mà KHÔNG lộ key.
+// ═══════════════════════════════════════════════════════════════════════════
+const KEY = "sk_sepay_9f2b7c1d4e6a8b3c";
+const headersOf = (h: Record<string, string>) => new Headers(h);
+
+describe("normalizeSepayKey", () => {
+  it("bỏ khoảng trắng, nháy bao ngoài và tiền tố scheme dán nhầm", () => {
+    expect(normalizeSepayKey(` ${KEY} `)).toBe(KEY);
+    expect(normalizeSepayKey(`"${KEY}"`)).toBe(KEY);
+    expect(normalizeSepayKey(`'${KEY}'`)).toBe(KEY);
+    expect(normalizeSepayKey(`Apikey ${KEY}`)).toBe(KEY);
+    expect(normalizeSepayKey(`Bearer ${KEY}`)).toBe(KEY);
+    expect(normalizeSepayKey(`"Apikey ${KEY}"`)).toBe(KEY);
+  });
+
+  it("KHÔNG cắt nhầm khi key chỉ tình cờ bắt đầu bằng chữ 'token'", () => {
+    expect(normalizeSepayKey("tokenABC123")).toBe("tokenABC123");
+  });
+});
+
+describe("checkSepayAuth", () => {
+  const prev = process.env.SEPAY_WEBHOOK_API_KEY;
+  afterEach(() => {
+    if (prev === undefined) delete process.env.SEPAY_WEBHOOK_API_KEY;
+    else process.env.SEPAY_WEBHOOK_API_KEY = prev;
+  });
+
+  it("thiếu env → NO_ENV (đóng cửa, không mở toang khi chưa cấu hình)", () => {
+    delete process.env.SEPAY_WEBHOOK_API_KEY;
+    const r = checkSepayAuth(headersOf({ authorization: `Apikey ${KEY}` }));
+    expect(r).toEqual({ ok: false, code: "NO_ENV", detail: expect.any(String) });
+  });
+
+  it("đúng định dạng SePay `Authorization: Apikey <key>` → qua", () => {
+    process.env.SEPAY_WEBHOOK_API_KEY = KEY;
+    expect(checkSepayAuth(headersOf({ authorization: `Apikey ${KEY}` }))).toEqual({
+      ok: true,
+      via: "authorization/Apikey",
+    });
+  });
+
+  it("tha các biến thể vô hại: hoa/thường của scheme, thừa khoảng trắng, xuống dòng", () => {
+    process.env.SEPAY_WEBHOOK_API_KEY = KEY;
+    for (const h of [`APIKEY ${KEY}`, `apikey  ${KEY} `, `Apikey\t${KEY}\n`]) {
+      expect(checkSepayAuth(headersOf({ authorization: h })).ok).toBe(true);
+    }
+  });
+
+  it("tha các kiểu gửi khác: Bearer, Token, không scheme, X-Api-Key", () => {
+    process.env.SEPAY_WEBHOOK_API_KEY = KEY;
+    expect(checkSepayAuth(headersOf({ authorization: `Bearer ${KEY}` })).ok).toBe(true);
+    expect(checkSepayAuth(headersOf({ authorization: `Token ${KEY}` })).ok).toBe(true);
+    expect(checkSepayAuth(headersOf({ authorization: KEY })).ok).toBe(true);
+    expect(checkSepayAuth(headersOf({ "x-api-key": KEY })).ok).toBe(true);
+    expect(checkSepayAuth(headersOf({ apikey: KEY })).ok).toBe(true);
+  });
+
+  it("env bị dán kèm nháy hoặc kèm chữ 'Apikey' → vẫn khớp (lỗi cấu hình hay gặp)", () => {
+    for (const envValue of [`"${KEY}"`, `Apikey ${KEY}`, ` ${KEY}\n`]) {
+      process.env.SEPAY_WEBHOOK_API_KEY = envValue;
+      expect(checkSepayAuth(headersOf({ authorization: `Apikey ${KEY}` })).ok).toBe(true);
+    }
+  });
+
+  it("người cấu hình dán cả 'Apikey' vào ô key bên SePay → vẫn khớp", () => {
+    process.env.SEPAY_WEBHOOK_API_KEY = KEY;
+    expect(checkSepayAuth(headersOf({ authorization: `Apikey Apikey ${KEY}` })).ok).toBe(true);
+  });
+
+  it("không gửi header nào → NO_HEADER (bên SePay chưa bật xác thực)", () => {
+    process.env.SEPAY_WEBHOOK_API_KEY = KEY;
+    const r = checkSepayAuth(headersOf({ "content-type": "application/json" }));
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.code).toBe("NO_HEADER");
+  });
+
+  it("sai key → MISMATCH, lý do đủ để chẩn đoán nhưng KHÔNG chứa key", () => {
+    process.env.SEPAY_WEBHOOK_API_KEY = KEY;
+    const wrong = "sk_sepay_KHAC_HOAN_TOAN";
+    const r = checkSepayAuth(headersOf({ authorization: `Apikey ${wrong}` }));
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.code).toBe("MISMATCH");
+    expect(r.detail).toContain(String(wrong.length));
+    expect(r.detail).toContain(String(KEY.length));
+    expect(r.detail).not.toContain(KEY);
+    expect(r.detail).not.toContain(wrong);
+  });
+
+  it("khác nhau CHỈ hoa/thường → vẫn từ chối nhưng nói rõ để người vá đúng chỗ", () => {
+    process.env.SEPAY_WEBHOOK_API_KEY = KEY;
+    const r = checkSepayAuth(headersOf({ authorization: `Apikey ${KEY.toUpperCase()}` }));
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.code).toBe("MISMATCH");
+    expect(r.detail).toMatch(/hoa\/thường/i);
+  });
+
+  it("key bị cắt cụt → lý do chỉ ra số ký tự trùng ở đầu", () => {
+    process.env.SEPAY_WEBHOOK_API_KEY = KEY;
+    const r = checkSepayAuth(headersOf({ authorization: `Apikey ${KEY.slice(0, 10)}` }));
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.detail).toMatch(/trùng 10 ký tự đầu/);
+  });
+
+  it("isValidSepayAuth (đường cũ) giữ nguyên hợp đồng boolean", () => {
+    process.env.SEPAY_WEBHOOK_API_KEY = KEY;
+    expect(isValidSepayAuth(`Apikey ${KEY}`)).toBe(true);
+    expect(isValidSepayAuth("Apikey sai")).toBe(false);
+    expect(isValidSepayAuth(null)).toBe(false);
   });
 });

@@ -11,7 +11,7 @@
 | NEXT_PUBLIC_SUPABASE_URL / ANON_KEY | Client | client (công khai theo thiết kế) | Vercel env | Không cần | Thấp — RLS chặn |
 | CRON_SECRET | Job đối soát, header xác thực | server | Vercel env | 6 tháng | Trung bình — kích hoạt job giả |
 | CUTOVER_RESOLVER_FLAG | `can()` (P3–P4) | server (env hoặc bảng config) | Vercel env / DB | — | **Cao về vận hành** — đổi hành vi quyền toàn hệ; chỉ ADMIN_HO+Dev, mọi lần đổi ghi audit |
-| SEPAY_WEBHOOK_SECRET | Module thanh toán (ngoài nền, liệt kê vì cùng repo) | server | Vercel env | 6 tháng | Cao — giả giao dịch |
+| SEPAY_WEBHOOK_API_KEY | Module thanh toán (ngoài nền, liệt kê vì cùng repo) — tên đúng như code đọc ở `lib/payments/sepay.ts`; **phải trùng tuyệt đối ô API Key bên my.sepay.vn**, lệch 1 ký tự là 401 và SePay bỏ luôn giao dịch sau 5 lần thử | server | Vercel env | 6 tháng | Cao — giả giao dịch |
 
 ## Xác nhận bắt buộc trước go-live
 

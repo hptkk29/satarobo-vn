@@ -9,9 +9,9 @@ import { ingestPayosWebhook } from "@/lib/payments/payos-ingest";
 import { markInstallmentPaid } from "@/lib/orders/installments";
 import { notifyOrderByZnsIfNoEmail } from "@/lib/notify/order";
 import {
+  checkSepayAuth,
   decideSepayAction,
   extractOrderCode,
-  isValidSepayAuth,
   type SepayWebhookPayload,
 } from "@/lib/payments/sepay";
 
@@ -35,6 +35,39 @@ export const dynamic = "force-dynamic";
 
 const SYSTEM_ACTOR = { id: null, name: "SePay webhook" };
 
+/**
+ * Tóm tắt payload để ghi kèm log TỪ CHỐI. Request chưa xác thực nên nội dung là
+ * của người lạ: cắt ngắn từng trường và chỉ giữ đúng mấy trường SePay thật sự
+ * gửi — không nuốt nguyên body vào DB.
+ */
+function peekSepayPayload(raw: string): Record<string, unknown> | null {
+  try {
+    const obj: unknown = JSON.parse(raw.slice(0, 8_000));
+    if (!obj || typeof obj !== "object") return null;
+    const src = obj as Record<string, unknown>;
+    const str = (k: string, max: number) =>
+      typeof src[k] === "string" ? (src[k] as string).slice(0, max) : null;
+    const num = (k: string) =>
+      typeof src[k] === "number" ? (src[k] as number) : typeof src[k] === "string" ? str(k, 32) : null;
+    return {
+      id: num("id"),
+      gateway: str("gateway", 64),
+      transactionDate: str("transactionDate", 32),
+      accountNumber: str("accountNumber", 32),
+      transferType: str("transferType", 16),
+      transferAmount: num("transferAmount"),
+      referenceCode: str("referenceCode", 64),
+      content: str("content", 400),
+    };
+  } catch {
+    return null;
+  }
+}
+
+/** Chống ngập log từ máy quét dạo: body không phải payload SePay thì 10 phút mới ghi 1 dòng. */
+let lastJunkAuthLogAt = 0;
+const JUNK_AUTH_LOG_INTERVAL_MS = 10 * 60_000;
+
 async function logIntegration(params: {
   action: string;
   status: "SUCCESS" | "SKIPPED" | "FAILED";
@@ -56,9 +89,33 @@ async function logIntegration(params: {
 }
 
 export async function POST(req: NextRequest) {
-  if (!isValidSepayAuth(req.headers.get("authorization"))) {
-    // Không ghi log payload khi chưa xác thực (chống spam/log injection).
-    return NextResponse.json({ success: false, message: "Unauthorized" }, { status: 401 });
+  const auth = checkSepayAuth(req.headers);
+  if (!auth.ok) {
+    // 12/08 — TRƯỚC ĐÂY nhánh này im lặng tuyệt đối ("không ghi log khi chưa xác
+    // thực"). Hậu quả: 19 lần SePay bị chặn, 4 giao dịch thật rơi mất, và không
+    // có một dòng nào ở đâu để biết là hỏng — mãi tới khi kế toán tự đối chiếu.
+    // Nay vẫn KHÔNG nuốt body của người lạ vào DB, nhưng LUÔN để lại vết đủ để
+    // chẩn đoán: hỏng vì thiếu env, vì không có header, hay vì lệch key.
+    const raw = await req.text().catch(() => "");
+    const peek = peekSepayPayload(raw);
+    const looksLikeSepay = peek != null && peek.transferAmount != null;
+    const now = Date.now();
+    if (looksLikeSepay || now - lastJunkAuthLogAt > JUNK_AUTH_LOG_INTERVAL_MS) {
+      if (!looksLikeSepay) lastJunkAuthLogAt = now;
+      await logIntegration({
+        action: "AUTH_FAILED",
+        status: "FAILED",
+        payload: peek ?? { note: "body không phải JSON hợp lệ", bytes: raw.length },
+        error: `[${auth.code}] ${auth.detail}`,
+      });
+    }
+    // `reason` hiện thẳng ở cột "Response Body" trong nhật ký webhook của SePay —
+    // người cấu hình đọc được nguyên nhân mà không cần vào DB. Chỉ trả MÃ, không
+    // trả độ dài/so khớp (đó là thông tin cho admin, không cho người lạ).
+    return NextResponse.json(
+      { success: false, message: "Unauthorized", reason: auth.code },
+      { status: 401 },
+    );
   }
 
   let payload: SepayWebhookPayload;
@@ -105,8 +162,37 @@ export async function POST(req: NextRequest) {
     : null;
 
   const decision = decideSepayAction({ payload, order, dueNow: dueNow ?? undefined });
+  const txnId = payload.id != null ? String(payload.id) : null;
 
   if (decision.action !== "CONFIRM") {
+    // 12/08 — Tiền VÀO mà không tra ra đơn nào thì vẫn phải nằm trong SỔ giao
+    // dịch (`BankTransaction` trạng thái UNMATCHED). Đó chính là hàng chờ xử lý
+    // tay mà /admin/bien-dong-so-du được dựng ra để hiển thị và đếm ở tab "Cần
+    // xử lý". Trước bản vá, nhánh này chỉ ghi IntegrationLog ⇒ tiền chỉ hiện ở
+    // mục "nhật ký kỹ thuật" cuối trang, bảng chính vẫn trống trơn.
+    // Cả 4 giao dịch thật của phụ huynh 06→08/08 đều rơi vào đúng nhánh này
+    // (nội dung CK do khách tự gõ, không có mã đơn).
+    // CHỈ làm cho ca KHÔNG CÓ ĐƠN: các ca còn lại (trả thiếu, giảm giá chưa
+    // duyệt, đơn đã xử lý) đã có đơn rõ ràng và do người quyết định — giữ nguyên.
+    if (decision.action === "MANUAL" && !order) {
+      await ingestPayosWebhook(
+        {
+          orderCode: payload.referenceCode ?? undefined,
+          reference: payload.referenceCode ?? undefined,
+          description: payload.content ?? payload.description ?? undefined,
+          amount: Number(payload.transferAmount ?? 0),
+          transactionDateTime: payload.transactionDate ?? undefined,
+          accountNumber: payload.accountNumber ?? undefined,
+          virtualAccountNumber: undefined,
+          paymentLinkId: txnId ?? undefined,
+        },
+        "SEPAY",
+      ).catch((err) => {
+        console.error("[sepay] ghi sổ giao dịch chưa khớp lỗi:", err);
+        return null;
+      });
+    }
+
     await logIntegration({
       action: decision.action === "SKIP" ? "SKIP_TXN" : "MANUAL_REVIEW",
       status: decision.action === "SKIP" ? "SKIPPED" : "FAILED",
@@ -117,8 +203,6 @@ export async function POST(req: NextRequest) {
     // phải lỗi hệ thống mà là việc của người đối soát.
     return NextResponse.json({ success: true, handled: false, reason: decision.reason });
   }
-
-  const txnId = payload.id != null ? String(payload.id) : null;
 
   // ── SỔ MỚI trước ────────────────────────────────────────────────────────────
   // payOS còn chờ xác thực doanh nghiệp (TGĐ ký), nên SePay là cổng ĐANG CHẠY
