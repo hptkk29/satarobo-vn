@@ -4,7 +4,7 @@
 import { cache } from "react";
 import { db } from "@/lib/db";
 import { ACTION_REGISTRY } from "@/lib/auth/action-registry";
-import { getSetting } from "@/lib/settings/service";
+import { getGlobalSetting } from "@/lib/settings/read-global";
 import {
   centerScopeForOrgUnit,
   getSubtreeCenterIds,
@@ -496,7 +496,7 @@ export async function resolveActorUncached(userId: string): Promise<Actor> {
           select: { id: true },
         })
       : Promise.resolve([] as { id: string }[]),
-    getSetting("orgScope.cutoverEnabled").catch(() => false),
+    getGlobalSetting("orgScope.cutoverEnabled").catch(() => false),
   ]);
 
   return buildActor({
