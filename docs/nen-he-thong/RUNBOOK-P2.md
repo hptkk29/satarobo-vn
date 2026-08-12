@@ -56,6 +56,18 @@ pnpm tsx scripts/nen-p2-backfill-position.ts --apply
 
 ## 2. Đọc bản đối chiếu
 
+> **Đơn vị của một người lấy từ đâu** (thứ tự ưu tiên, dừng ở nguồn đầu tiên có):
+> `Employee.orgUnitId` → bắc cầu `Employee.centerId` → **`EmployeeOrgAssignment` PRIMARY**.
+>
+> Nguồn thứ ba thêm 12/08/2026 sau khi dry-run trên prod cho 8/14 nhân sự vào "chờ xử
+> lý tay" — gồm TGĐ và 3 trưởng phòng. Hoá ra dữ liệu KHÔNG thiếu: luật V7 cấm đơn vị
+> HO mang `centerId`, nên form nhân sự cố ý set `Employee.centerId = null` cho người
+> Hội sở rồi tạo dòng assignment neo vào OrgUnit HO. Script cũ không đọc bảng đó.
+>
+> `User.orgUnitId` (đơn vị trên TÀI KHOẢN) **vẫn không** phải nguồn — nó chỉ hiện ở
+> mục 4 để soát. Assignment là khai báo tường minh qua form; tài khoản thì không.
+
+
 | Mục | Nghĩa | Phải làm gì |
 |---|---|---|
 | **1. Vị trí** | mỗi dòng = một chỗ ngồi sẽ có trong sơ đồ (đơn vị × chức danh) | soát tên vị trí: nó lấy nguyên văn `Employee.jobTitle`, nên `jobTitle` ghi kiểu phòng ban (`"Phòng Đào Tạo"`) sẽ thành tên vị trí y như vậy. Muốn đẹp thì **sửa hồ sơ nhân sự rồi chạy lại**, đừng sửa script |

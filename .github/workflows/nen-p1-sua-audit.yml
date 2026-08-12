@@ -1,0 +1,100 @@
+name: Nền P1 — dọn AuditLog.orgUnitId (prod)
+
+# =============================================================================
+# Chạy `scripts/nen-p1-sua-audit-orgunit.ts` lên Supabase PROD.
+#
+# VIỆC NÀY LÀM GÌ. Cột `AuditLog.orgUnitId` từng nhận hai loại giá trị sai:
+#   ① `Center.id` thay vì `OrgUnit.id` — 47 chỗ ghi truyền nhầm loại ID.
+#   ② bỏ trống — 20 chỗ ghi không truyền gì cả.
+# Đường ĐỌC lọc `orgUnitId IN visibleOrgUnitIds` (toàn OrgUnit.id), nên cả hai
+# kiểu đều khiến dòng nhật ký VÔ HÌNH với quản lý cơ sở — im lặng, không lỗi.
+# Đo trên prod 12/08 trước khi vá: 246/538 dòng kiểu ①, 290 dòng kiểu ②.
+#
+# Đường GHI đã vá ở `lib/audit/audit-log.ts` (hai tầng: chuẩn hoá thứ chỗ gọi đưa
+# vào, rồi suy từ chính thực thể). Script này chỉ lo DỮ LIỆU CŨ.
+#
+# ⚠️ PHẢI CHẠY LẠI SAU KHI P1 LÊN PROD. Lần chạy 12/08 chỉ điền được 6 dòng vì
+# `ClassSession` và `Attendance` khi đó CHƯA có cột `orgUnitId` (cột do migration
+# P1 tạo). Hai bảng đó ôm 187 dòng — `classes` 138 + `attendance` 49.
+#
+# MẶC ĐỊNH DRY-RUN. Muốn ghi phải chọn mode=apply VÀ gõ đúng chuỗi xác nhận.
+# Idempotent: chạy lại là "0 dòng cần đổi".
+#
+# AN TOÀN: script KHÔNG đoán. Dòng `orgUnitId = null` mà thực thể cũng không có
+# cơ sở (dữ liệu toàn hệ thống như curriculum/settings, hoặc lead chưa phân cơ
+# sở) thì để nguyên — bịa đơn vị vào nhật ký còn tệ hơn để trống.
+#
+# SECRETS: PROD_DATABASE_URL / PROD_DIRECT_URL (dùng chung deploy.yml).
+# =============================================================================
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "dry-run = chỉ đếm · apply = ghi thật vào PROD"
+        required: true
+        type: choice
+        default: dry-run
+        options: [dry-run, apply]
+      confirm:
+        description: 'Khi mode=apply: gõ đúng "GHI THAT VAO PROD"'
+        required: false
+        default: ""
+
+concurrency:
+  group: nen-p1-sua-audit
+  cancel-in-progress: false
+
+jobs:
+  chay:
+    name: dọn AuditLog.orgUnitId (${{ inputs.mode }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Kiểm tra secrets + chuỗi xác nhận
+        run: |
+          missing=0
+          [ -n "${{ secrets.PROD_DATABASE_URL }}" ] || { echo "::error::Thiếu secret PROD_DATABASE_URL"; missing=1; }
+          [ -n "${{ secrets.PROD_DIRECT_URL }}" ]   || { echo "::error::Thiếu secret PROD_DIRECT_URL"; missing=1; }
+          if [ "${{ inputs.mode }}" = "apply" ] && [ "${{ inputs.confirm }}" != "GHI THAT VAO PROD" ]; then
+            echo "::error::mode=apply nhưng chuỗi xác nhận sai — dừng, không ghi gì."
+            missing=1
+          fi
+          exit $missing
+
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v3
+        with: { version: 11 }
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Generate Prisma client
+        run: pnpm exec prisma generate
+
+      - name: Dọn AuditLog.orgUnitId
+        run: |
+          set -euo pipefail
+          if [ "${{ inputs.mode }}" = "apply" ]; then
+            pnpm exec tsx scripts/nen-p1-sua-audit-orgunit.ts --apply | tee -a "$GITHUB_STEP_SUMMARY"
+          else
+            pnpm exec tsx scripts/nen-p1-sua-audit-orgunit.ts | tee -a "$GITHUB_STEP_SUMMARY"
+          fi
+        env:
+          # session pooler (:5432) — transaction pooler làm rơi prepared statement.
+          DATABASE_URL: ${{ secrets.PROD_DIRECT_URL }}
+          DIRECT_URL: ${{ secrets.PROD_DIRECT_URL }}
+
+      # Chạy lại để chứng minh idempotent — đừng bắt người vận hành tin lời hứa
+      # trong tài liệu. Lượt này phải ra "0 cần đổi / 0 điền được".
+      - name: Đối chiếu lại — phải là 0 thay đổi
+        if: ${{ inputs.mode == 'apply' }}
+        run: pnpm exec tsx scripts/nen-p1-sua-audit-orgunit.ts | tee -a "$GITHUB_STEP_SUMMARY"
+        env:
+          DATABASE_URL: ${{ secrets.PROD_DIRECT_URL }}
+          DIRECT_URL: ${{ secrets.PROD_DIRECT_URL }}

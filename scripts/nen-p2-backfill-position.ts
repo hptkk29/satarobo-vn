@@ -48,11 +48,15 @@ async function main() {
   const db = scriptDb();
   const ngayChay = new Date();
 
-  console.log(`\n=== BACKFILL NHÂN SỰ → VỊ TRÍ — ${APPLY ? "GHI THẬT (--apply)" : "DRY-RUN (chỉ in)"} ===`);
+  console.log(
+    `\n=== BACKFILL NHÂN SỰ → VỊ TRÍ — ${APPLY ? "GHI THẬT (--apply)" : "DRY-RUN (chỉ in)"} ===`,
+  );
   console.log(`DB: ${currentDbHost()}`);
-  console.log(`Bộ vai: ${GAN_VAI ? "CÓ gắn (--gan-vai)" : "KHÔNG gắn (mặc định)"}\n`);
+  console.log(
+    `Bộ vai: ${GAN_VAI ? "CÓ gắn (--gan-vai)" : "KHÔNG gắn (mặc định)"}\n`,
+  );
 
-  const [nhanSuRaw, orgUnits, uorRaw] = await Promise.all([
+  const [nhanSuRaw, orgUnits, uorRaw, phanCongRaw] = await Promise.all([
     db.employee.findMany({
       where: { status: "ACTIVE" },
       select: {
@@ -76,9 +80,38 @@ async function main() {
         effectiveFrom: { lte: ngayChay },
         OR: [{ effectiveTo: null }, { effectiveTo: { gte: ngayChay } }],
       },
-      select: { userId: true, orgUnitId: true, roleId: true, role: { select: { code: true } } },
+      select: {
+        userId: true,
+        orgUnitId: true,
+        roleId: true,
+        role: { select: { code: true } },
+      },
+    }),
+    // Phân công tổ chức đang hiệu lực — nguồn đơn vị của NHÂN SỰ HỘI SỞ.
+    // V7 cấm đơn vị HO mang `centerId`, nên form nhân sự set `Employee.centerId = null`
+    // cho người Hội sở rồi tạo dòng này (`syncHoAssignment`). Không đọc nó thì cả Hội sở
+    // rơi vào "chờ xử lý tay" — đo trên prod 12/08: 8/14 người, gồm TGĐ và 3 trưởng phòng.
+    db.employeeOrgAssignment.findMany({
+      where: {
+        status: "ACTIVE",
+        assignmentType: "PRIMARY",
+        effectiveFrom: { lte: ngayChay },
+        OR: [{ effectiveTo: null }, { effectiveTo: { gte: ngayChay } }],
+      },
+      select: { employeeId: true, orgUnitId: true },
+      orderBy: { effectiveFrom: "asc" },
     }),
   ]);
+
+  // Một người về lý thuyết chỉ có MỘT phân công PRIMARY còn hiệu lực (US-09
+  // `assertSinglePrimary`). Nếu dữ liệu cũ lỡ có hai, lấy dòng hiệu lực SỚM NHẤT —
+  // ổn định giữa các lần chạy, thay vì phụ thuộc thứ tự trả về của DB.
+  const donViTheoPhanCong = new Map<string, string>();
+  for (const pc of phanCongRaw) {
+    if (!donViTheoPhanCong.has(pc.employeeId)) {
+      donViTheoPhanCong.set(pc.employeeId, pc.orgUnitId);
+    }
+  }
 
   const nhanSu: HoSoNhanSu[] = nhanSuRaw.map((e) => ({
     id: e.id,
@@ -90,6 +123,7 @@ async function main() {
     joinedAt: e.joinedAt,
     userId: e.userAccount?.id ?? null,
     taiKhoanOrgUnitId: null, // điền ở dưới, sau khi có cầu Center → OrgUnit
+    donViPhanCong: donViTheoPhanCong.get(e.id) ?? null,
   }));
   const vaiDangGiu: VaiDangGiu[] = uorRaw.map((r) => ({
     userId: r.userId,
@@ -107,7 +141,8 @@ async function main() {
   for (const [i, e] of nhanSuRaw.entries()) {
     const u = e.userAccount;
     nhanSu[i].taiKhoanOrgUnitId =
-      u?.orgUnitId ?? (u?.centerId ? (centerToOrg.get(u.centerId) ?? null) : null);
+      u?.orgUnitId ??
+      (u?.centerId ? (centerToOrg.get(u.centerId) ?? null) : null);
   }
 
   const keHoach = lapKeHoach({
@@ -135,7 +170,9 @@ async function main() {
   // còn dòng nào null nghĩa là cây chưa ở hình P1, và vị trí sinh ra sẽ neo vào hình cũ.
   // Chặn ở đây rẻ hơn nhiều so với đi gỡ vị trí đã tạo — `Position` cố ý không có đường
   // xoá cứng.
-  const thieuPath = await db.orgUnit.count({ where: { deletedAt: null, path: null } });
+  const thieuPath = await db.orgUnit.count({
+    where: { deletedAt: null, path: null },
+  });
   if (thieuPath > 0) {
     console.log(
       `⛔ ${thieuPath} đơn vị chưa có \`path\` ⇒ chuỗi P1 chưa chạy xong trên DB này.\n` +
@@ -164,7 +201,10 @@ async function main() {
   // một truy vấn cho mỗi vị trí thì với DB ở xa (pooler) là ~24 vòng round-trip, đủ để
   // vượt trần thời gian transaction — đã ăn đúng lỗi đó ở lần chạy thật đầu tiên.
   const viTriDangCo = await db.position.findMany({
-    where: { orgUnitId: { in: [...new Set(keHoach.viTri.map((v) => v.orgUnitId))] }, deletedAt: null },
+    where: {
+      orgUnitId: { in: [...new Set(keHoach.viTri.map((v) => v.orgUnitId))] },
+      deletedAt: null,
+    },
     select: { id: true, orgUnitId: true, title: true },
   });
   const idTheoKhoaCu = new Map(
@@ -173,67 +213,69 @@ async function main() {
 
   await db.$transaction(
     async (tx) => {
-    const idTheoKhoa = new Map<string, string>();
+      const idTheoKhoa = new Map<string, string>();
 
-    for (const v of keHoach.viTri) {
-      // Idempotent theo (đơn vị, chức danh) — so khoá đã chuẩn hoá. Không dùng `upsert`
-      // vì bảng không có unique trên cặp này, và thêm unique là migration ghi trên dữ
-      // liệu prod (luật cứng #4) — không thuộc story này.
-      const daCo = idTheoKhoaCu.get(v.khoa) ? { id: idTheoKhoaCu.get(v.khoa) as string } : undefined;
+      for (const v of keHoach.viTri) {
+        // Idempotent theo (đơn vị, chức danh) — so khoá đã chuẩn hoá. Không dùng `upsert`
+        // vì bảng không có unique trên cặp này, và thêm unique là migration ghi trên dữ
+        // liệu prod (luật cứng #4) — không thuộc story này.
+        const daCo = idTheoKhoaCu.get(v.khoa)
+          ? { id: idTheoKhoaCu.get(v.khoa) as string }
+          : undefined;
 
-      if (daCo) {
-        idTheoKhoa.set(v.khoa, daCo.id);
-        viTriDungLai++;
-      } else {
-        const tao = await tx.position.create({
-          data: { orgUnitId: v.orgUnitId, title: v.title },
-          select: { id: true },
-        });
-        idTheoKhoa.set(v.khoa, tao.id);
-        viTriMoi++;
+        if (daCo) {
+          idTheoKhoa.set(v.khoa, daCo.id);
+          viTriDungLai++;
+        } else {
+          const tao = await tx.position.create({
+            data: { orgUnitId: v.orgUnitId, title: v.title },
+            select: { id: true },
+          });
+          idTheoKhoa.set(v.khoa, tao.id);
+          viTriMoi++;
+        }
+
+        if (v.roleIds.length > 0) {
+          await tx.positionRole.createMany({
+            data: v.roleIds.map((roleId) => ({
+              positionId: idTheoKhoa.get(v.khoa) as string,
+              roleId,
+            })),
+            skipDuplicates: true,
+          });
+        }
       }
 
-      if (v.roleIds.length > 0) {
-        await tx.positionRole.createMany({
-          data: v.roleIds.map((roleId) => ({
-            positionId: idTheoKhoa.get(v.khoa) as string,
-            roleId,
-          })),
-          skipDuplicates: true,
+      for (const p of keHoach.phanCong) {
+        const positionId = idTheoKhoa.get(p.viTriKhoa);
+        if (!positionId) continue;
+
+        // Đã có PRIMARY còn hiệu lực (chạy lần hai, hoặc người đã được gán tay) → bỏ qua.
+        // Dùng CHÍNH hàm chặn của US-09 để không có hai luật song song.
+        try {
+          await assertSinglePrimary({
+            userId: p.userId,
+            kind: "PRIMARY",
+            effectiveFrom: p.effectiveFrom,
+            effectiveTo: null,
+            client: tx as never,
+          });
+        } catch {
+          phanCongBoQua++;
+          continue;
+        }
+
+        await tx.positionAssignment.create({
+          data: {
+            positionId,
+            userId: p.userId,
+            kind: "PRIMARY",
+            effectiveFrom: p.effectiveFrom,
+            note: `US-11 backfill từ hồ sơ ${p.employeeCode}`,
+          },
         });
+        phanCongMoi++;
       }
-    }
-
-    for (const p of keHoach.phanCong) {
-      const positionId = idTheoKhoa.get(p.viTriKhoa);
-      if (!positionId) continue;
-
-      // Đã có PRIMARY còn hiệu lực (chạy lần hai, hoặc người đã được gán tay) → bỏ qua.
-      // Dùng CHÍNH hàm chặn của US-09 để không có hai luật song song.
-      try {
-        await assertSinglePrimary({
-          userId: p.userId,
-          kind: "PRIMARY",
-          effectiveFrom: p.effectiveFrom,
-          effectiveTo: null,
-          client: tx as never,
-        });
-      } catch {
-        phanCongBoQua++;
-        continue;
-      }
-
-      await tx.positionAssignment.create({
-        data: {
-          positionId,
-          userId: p.userId,
-          kind: "PRIMARY",
-          effectiveFrom: p.effectiveFrom,
-          note: `US-11 backfill từ hồ sơ ${p.employeeCode}`,
-        },
-      });
-      phanCongMoi++;
-    }
     },
     // Trần mặc định 5s là quá ngắn cho ~60 truy vấn qua pooler ở Tokyo.
     { maxWait: 30_000, timeout: 180_000 },
