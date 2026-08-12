@@ -14,7 +14,7 @@
  */
 import { test, expect } from "@playwright/test";
 import { db } from "../../../lib/db";
-import { resetDb, seedUser } from "../_helpers/seed";
+import { resetDb, seedOrg, seedUser } from "../_helpers/seed";
 import {
   getParentDashboard,
   getStudentDashboard,
@@ -39,6 +39,11 @@ async function seedCenter(): Promise<void> {
     create: { id: CENTER, name: CENTER, code: CENTER, slug: CENTER.toLowerCase(), address: "test" },
     update: {},
   });
+  // Cây tổ chức đi kèm: ngoài đời mọi CENTER đều có một OrgUnit trỏ tới, và cơ chế
+  // ghi kép `centerId → orgUnitId` dựa vào đúng cặp đó. Fixture cũ chỉ tạo Center
+  // nên `resolveAuditOrgUnitId` không tra được đơn vị — audit ra null, khác hẳn
+  // trạng thái thật. (HO không mang centerId theo luật V7 nên không cần Center "HO".)
+  await seedOrg(["HO", CENTER]);
 }
 
 /** Tạo course (totalSessions tuỳ chọn) + lớp + HV (+ parentUserId) + enrollment STUDYING. */
