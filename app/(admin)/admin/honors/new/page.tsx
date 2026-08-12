@@ -32,12 +32,12 @@ export default async function NewHonorPage() {
   return (
     <div className="max-w-4xl">
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">Thêm vinh danh</h1>
-        <p className="mt-1 text-sm text-gray-500">
+        <h1 className="text-2xl font-bold text-foreground">Thêm vinh danh</h1>
+        <p className="mt-1 text-sm text-muted-foreground">
           Chọn nhân sự từ danh sách, điền giải thưởng + câu chuyện. Chưa có nhân sự?{" "}
           <Link
             href="/nhan-su/new"
-            className="text-orange-600 hover:underline"
+            className="text-primary hover:underline"
           >
             Thêm nhân sự mới
           </Link>

@@ -26,7 +26,7 @@ export function StatementActions({ period, status }: { period: string; status: s
     <div className="flex justify-end gap-2">
       <a
         href={`/api/admin/crm/commission-export?period=${period}`}
-        className="rounded-md border px-3 py-1.5 text-sm hover:bg-neutral-50"
+        className="rounded-md border px-3 py-1.5 text-sm hover:bg-muted"
       >
         Export Excel
       </a>

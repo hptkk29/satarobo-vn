@@ -23,10 +23,10 @@ export interface TrialEvalExisting {
 }
 
 const RANK_TONE: Record<string, string> = {
-  green: "bg-emerald-500/90 text-white",
-  blue: "bg-blue-500/90 text-white",
-  amber: "bg-amber-500/90 text-white",
-  red: "bg-red-500/90 text-white",
+  green: "bg-state-success-soft text-white",
+  blue: "bg-state-info-soft text-white",
+  amber: "bg-state-warning-soft text-white",
+  red: "bg-state-danger-soft text-white",
 };
 
 export function TrialEvalForm({
@@ -48,11 +48,16 @@ export function TrialEvalForm({
   const [scores, setScores] = useState<Record<string, number>>(() => {
     if (existing) return { ...existing.scores };
     const s: Record<string, number> = {};
-    for (const sec of RUBRIC) for (const c of sec.criteria) s[c.id] = c.levels[0]!.points;
+    for (const sec of RUBRIC)
+      for (const c of sec.criteria) s[c.id] = c.levels[0]!.points;
     return s;
   });
-  const [comment, setComment] = useState(existing?.generalComment ?? DEFAULT_GENERAL_COMMENT);
-  const [orientation, setOrientation] = useState(existing?.orientation ?? DEFAULT_ORIENTATION);
+  const [comment, setComment] = useState(
+    existing?.generalComment ?? DEFAULT_GENERAL_COMMENT,
+  );
+  const [orientation, setOrientation] = useState(
+    existing?.orientation ?? DEFAULT_ORIENTATION,
+  );
   const [saved, setSaved] = useState(existing != null);
 
   const total = useMemo(() => computeTotal(scores), [scores]);
@@ -67,7 +72,9 @@ export function TrialEvalForm({
         orientation,
       });
       if (res.ok) {
-        toast.success(`Đã lưu phiếu — ${fmtScore(res.totalScore)}/8.0 · ${res.rank}`);
+        toast.success(
+          `Đã lưu phiếu — ${fmtScore(res.totalScore)}/8.0 · ${res.rank}`,
+        );
         setSaved(true);
         router.refresh();
       } else {
@@ -88,7 +95,10 @@ export function TrialEvalForm({
         </div>
         <div className="text-right">
           <p className="text-3xl leading-none font-extrabold">
-            {fmtScore(total)} <span className="text-lg font-semibold text-white/80">/ {RUBRIC_MAX}.0</span>
+            {fmtScore(total)}{" "}
+            <span className="text-lg font-semibold text-white/80">
+              / {RUBRIC_MAX}.0
+            </span>
           </p>
           <p className="text-[11px] font-semibold tracking-wider text-white/80 uppercase">
             Tổng điểm đánh giá
@@ -108,7 +118,7 @@ export function TrialEvalForm({
       {RUBRIC.map((sec) => (
         <section key={sec.num} className="space-y-4">
           <h3 className="flex items-center gap-2 text-sm font-bold tracking-wide text-foreground uppercase">
-            <span className="flex h-6 w-6 items-center justify-center rounded-full bg-orange-600 text-xs font-bold text-white">
+            <span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary text-xs font-bold text-white">
               {sec.num}
             </span>
             {sec.title}
@@ -119,7 +129,9 @@ export function TrialEvalForm({
             return (
               <div key={c.id} className="space-y-2">
                 <div className="flex flex-wrap items-baseline justify-between gap-2">
-                  <p className="text-sm font-semibold text-foreground">{c.label}</p>
+                  <p className="text-sm font-semibold text-foreground">
+                    {c.label}
+                  </p>
                   <p className="text-xs text-muted-foreground">
                     {c.levels.map((l) => fmtScore(l.points)).join(" – ")}
                   </p>
@@ -131,11 +143,13 @@ export function TrialEvalForm({
                       <button
                         key={l.points}
                         type="button"
-                        onClick={() => setScores((s) => ({ ...s, [c.id]: l.points }))}
+                        onClick={() =>
+                          setScores((s) => ({ ...s, [c.id]: l.points }))
+                        }
                         className={cn(
                           "rounded-lg border p-3 text-left transition-colors outline-none focus-visible:ring-2 focus-visible:ring-ring",
                           active
-                            ? "border-orange-500 bg-orange-50 dark:border-orange-500/60 dark:bg-orange-500/15"
+                            ? "border-primary bg-primary-soft dark:border-primary dark:bg-primary-soft"
                             : "border-border bg-card hover:bg-muted/50",
                         )}
                       >
@@ -143,7 +157,7 @@ export function TrialEvalForm({
                           className={cn(
                             "block text-lg font-extrabold",
                             active
-                              ? "text-orange-600 dark:text-orange-300"
+                              ? "text-primary-ink dark:text-primary-ink"
                               : "text-muted-foreground",
                           )}
                         >
@@ -153,7 +167,9 @@ export function TrialEvalForm({
                           {l.title}
                         </span>
                         {l.desc && (
-                          <span className="mt-0.5 block text-xs text-muted-foreground">{l.desc}</span>
+                          <span className="mt-0.5 block text-xs text-muted-foreground">
+                            {l.desc}
+                          </span>
                         )}
                       </button>
                     );
@@ -168,13 +184,16 @@ export function TrialEvalForm({
       {/* Định hướng */}
       <section className="space-y-4">
         <h3 className="flex items-center gap-2 text-sm font-bold tracking-wide text-foreground uppercase">
-          <span className="flex h-6 w-6 items-center justify-center rounded-full bg-orange-600 text-xs font-bold text-white">
+          <span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary text-xs font-bold text-white">
             4
           </span>
           Định hướng của SataRobo
         </h3>
         <div className="space-y-1.5">
-          <label htmlFor="tr-comment" className="text-sm font-semibold text-foreground">
+          <label
+            htmlFor="tr-comment"
+            className="text-sm font-semibold text-foreground"
+          >
             Nhận xét chung
           </label>
           <textarea
@@ -188,7 +207,10 @@ export function TrialEvalForm({
           />
         </div>
         <div className="space-y-1.5">
-          <label htmlFor="tr-orient" className="text-sm font-semibold text-foreground">
+          <label
+            htmlFor="tr-orient"
+            className="text-sm font-semibold text-foreground"
+          >
             Định hướng
           </label>
           <textarea
@@ -219,9 +241,10 @@ export function TrialEvalForm({
           type="button"
           onClick={submit}
           disabled={pending}
-          className="inline-flex items-center gap-1.5 rounded-lg bg-orange-600 px-4 py-2 text-sm font-semibold text-white outline-none transition-colors hover:bg-orange-700 focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60"
+          className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white outline-none transition-colors hover:bg-primary-darker focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-60"
         >
-          <Save className="h-4 w-4" aria-hidden /> {pending ? "Đang lưu…" : "Lưu đánh giá"}
+          <Save className="h-4 w-4" aria-hidden />{" "}
+          {pending ? "Đang lưu…" : "Lưu đánh giá"}
         </button>
       </div>
     </div>

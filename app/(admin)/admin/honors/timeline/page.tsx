@@ -25,8 +25,8 @@ export default async function TimelineAdminPage() {
   return (
     <div className="max-w-4xl">
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">Timeline công ty</h1>
-        <p className="mt-1 text-sm text-gray-500">
+        <h1 className="text-2xl font-bold text-foreground">Timeline công ty</h1>
+        <p className="mt-1 text-sm text-muted-foreground">
           Các mốc thời gian quan trọng của Sata Robo — hiển thị ở cuối trang /vinh-danh.
         </p>
       </div>

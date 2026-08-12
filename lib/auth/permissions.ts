@@ -98,6 +98,11 @@ export type Action =
   // --- Media / ảnh lớp (Phase NHÓM 3) ---
   | "media:view"
   | "media:upload"
+  // Đưa ảnh vào KHO của lớp (status DRAFT) — KHÔNG được gửi phụ huynh. Tách khỏi
+  // `media:upload` (11/08, chủ dự án chốt): Marketing + Giáo vụ góp ảnh vào thư
+  // viện lớp, giáo viên mới là người chọn ảnh gửi PH. Xem canStageToClass /
+  // canPublishToClass trong app/(admin)/admin/media/actions.ts.
+  | "media:upload-draft"
   | "media:approve"
 
   // --- HR attendance / chấm công QR (Phase NHÓM 4) ---
@@ -248,6 +253,7 @@ export type Action =
   | "users:manage" // CRUD User accounts (different from Employee records)
   | "roles:assign"
   | "roles:manage" // A0-02 — CRUD RoleDef + gán RolePermission (chỉ SUPER_ADMIN)
+  | "user-groups:manage" // US-03 — CRUD UserGroup + thành viên + grant nhóm (chỉ SUPER_ADMIN)
 
   // --- Phase 5.6 — Financial (Payment + Order) ---
   | "payments:manage"
@@ -362,8 +368,17 @@ export const PERMISSIONS: Record<Action, Role[]> = {
   "parent-feedback:view": ["SUPER_ADMIN", "CENTER_MANAGER", "MARKETING"],
 
   // --- Media / ảnh lớp (Phase NHÓM 3) ---
-  "media:view": ["SUPER_ADMIN", "CENTER_MANAGER", "TEACHER"],
+  // MARKETING thêm 11/08 (chủ dự án chốt): góp ảnh vào KHO của lớp để GV chọn gửi
+  // PH — chỉ `media:view` + `media:upload-draft`, KHÔNG `media:upload` (đăng thẳng
+  // tới PH) và KHÔNG `media:approve`.
+  "media:view": ["SUPER_ADMIN", "CENTER_MANAGER", "TEACHER", "MARKETING"],
   "media:upload": ["SUPER_ADMIN", "CENTER_MANAGER", "TEACHER"],
+  // ⚠️ CỐ Ý CHỈ có vai "chỉ góp ảnh". KHÔNG thêm TEACHER (GV đã vào kho được qua
+  // đường phụ trách lớp — cấp thêm sẽ nới GV ra MỌI lớp trong cơ sở) và KHÔNG thêm
+  // CENTER_MANAGER (đã có media:approve nên qua canPublishToClass; khai thừa ở v1
+  // còn làm rbac-parity đỏ vì RoleDef v2 của vai này không giữ action này).
+  // Vai chỉ-góp-ảnh của v2 (`CENTER_CLASS_MANAGER` — Giáo vụ) không có ở enum v1.
+  "media:upload-draft": ["SUPER_ADMIN", "MARKETING"],
   "media:approve": ["SUPER_ADMIN", "CENTER_MANAGER"],
 
   // --- HR attendance / chấm công QR (Phase NHÓM 4) ---
@@ -565,6 +580,7 @@ export const PERMISSIONS: Record<Action, Role[]> = {
   "users:manage": ["SUPER_ADMIN"], // create/disable User accounts
   "roles:assign": ["SUPER_ADMIN"],
   "roles:manage": ["SUPER_ADMIN"], // A0-02 — chỉ SUPER_ADMIN cấu hình role/permission
+  "user-groups:manage": ["SUPER_ADMIN"], // US-03 — chỉ SUPER_ADMIN quản nhóm + grant nhóm
 
   // --- Phase 5.6 — Financial ---
   "payments:manage": ["SUPER_ADMIN", "ACCOUNTANT"],

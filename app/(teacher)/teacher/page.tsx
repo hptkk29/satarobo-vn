@@ -46,8 +46,12 @@ const TZ = "Asia/Ho_Chi_Minh";
 function vnTodayRange(now: Date): { from: Date; to: Date } {
   const vn = new Date(now.getTime() + VN_OFFSET_MS);
   const startUtc =
-    Date.UTC(vn.getUTCFullYear(), vn.getUTCMonth(), vn.getUTCDate()) - VN_OFFSET_MS;
-  return { from: new Date(startUtc), to: new Date(startUtc + 24 * 60 * 60 * 1000) };
+    Date.UTC(vn.getUTCFullYear(), vn.getUTCMonth(), vn.getUTCDate()) -
+    VN_OFFSET_MS;
+  return {
+    from: new Date(startUtc),
+    to: new Date(startUtc + 24 * 60 * 60 * 1000),
+  };
 }
 
 const dayFmt = new Intl.DateTimeFormat("vi-VN", {
@@ -59,7 +63,10 @@ const dayFmt = new Intl.DateTimeFormat("vi-VN", {
 
 /** "Thứ Bảy, 27 tháng 6 năm 2026" theo giờ VN. */
 function greetingDate(now: Date): string {
-  const wd = new Intl.DateTimeFormat("vi-VN", { weekday: "long", timeZone: TZ }).format(now);
+  const wd = new Intl.DateTimeFormat("vi-VN", {
+    weekday: "long",
+    timeZone: TZ,
+  }).format(now);
   const num = (opt: Intl.DateTimeFormatOptions) =>
     Number(new Intl.DateTimeFormat("en", { ...opt, timeZone: TZ }).format(now));
   const cap = wd.charAt(0).toUpperCase() + wd.slice(1);
@@ -68,12 +75,19 @@ function greetingDate(now: Date): string {
 
 /** Tên gọi (từ cuối bắt đầu bằng chữ cái) — "Hoàng Phan Tuấn Kiệt" → "Kiệt". */
 function firstName(full: string): string {
-  const parts = full.trim().split(/\s+/).filter((p) => /^\p{L}/u.test(p));
+  const parts = full
+    .trim()
+    .split(/\s+/)
+    .filter((p) => /^\p{L}/u.test(p));
   return parts.length ? parts[parts.length - 1]! : full;
 }
 
 /** Số phút từ NOW đến lúc buổi (theo startTime "HH:mm" của lớp) bắt đầu hôm nay. */
-function minutesUntil(startTime: string, vnMidnightMs: number, nowMs: number): number | null {
+function minutesUntil(
+  startTime: string,
+  vnMidnightMs: number,
+  nowMs: number,
+): number | null {
   const [h, m] = startTime.split(":").map(Number);
   if (h == null || m == null || Number.isNaN(h) || Number.isNaN(m)) return null;
   const startUtc = vnMidnightMs + h * 3_600_000 + m * 60_000;
@@ -128,7 +142,10 @@ export default async function TeacherHomePage() {
         where: { id: { in: classIds } },
         select: {
           enrollments: {
-            where: { deletedAt: null, status: { in: ENROLLMENT_ACTIVE_STATUS_LIST } },
+            where: {
+              deletedAt: null,
+              status: { in: ENROLLMENT_ACTIVE_STATUS_LIST },
+            },
             select: { studentId: true },
           },
         },
@@ -155,11 +172,16 @@ export default async function TeacherHomePage() {
         })
       : Promise.resolve([]),
     classIds.length
-      ? sdb.assignment.count({ where: { classId: { in: classIds }, status: "PUBLISHED" } })
+      ? sdb.assignment.count({
+          where: { classId: { in: classIds }, status: "PUBLISHED" },
+        })
       : Promise.resolve(0),
   ]);
 
-  const attBySession = new Map<string, { studentId: string; status: string }[]>();
+  const attBySession = new Map<
+    string,
+    { studentId: string; status: string }[]
+  >();
   for (const a of attRows) {
     const list = attBySession.get(a.sessionId) ?? [];
     list.push({ studentId: a.studentId, status: a.status });
@@ -174,9 +196,14 @@ export default async function TeacherHomePage() {
 
   type Sess = (typeof sessions)[number];
   const statOf = (s: Sess) =>
-    summarizeSessionFeedback(attBySession.get(s.id) ?? [], fbBySession.get(s.id) ?? []);
+    summarizeSessionFeedback(
+      attBySession.get(s.id) ?? [],
+      fbBySession.get(s.id) ?? [],
+    );
 
-  const todaySessions = sessions.filter((s) => s.date >= todayStart && s.date < todayEnd);
+  const todaySessions = sessions.filter(
+    (s) => s.date >= todayStart && s.date < todayEnd,
+  );
   // "Chưa điểm danh" = buổi (trong cửa sổ, đã tới ngày) chưa có bản ghi điểm danh.
   const needAttendance = sessions.filter((s) => !statOf(s).attendanceTaken);
   // "Chưa nhận xét" = buổi đã điểm danh, có HV đi học, nhận xét chưa đủ.
@@ -191,13 +218,21 @@ export default async function TeacherHomePage() {
   const nowMs = now.getTime();
   const reminder = todaySessions
     .filter((s) => !statOf(s).attendanceTaken && s.class.startTime)
-    .map((s) => ({ s, minutes: minutesUntil(s.class.startTime!, vnMidnightMs, nowMs) }))
-    .filter((x): x is { s: Sess; minutes: number } => x.minutes != null && x.minutes >= -30)
+    .map((s) => ({
+      s,
+      minutes: minutesUntil(s.class.startTime!, vnMidnightMs, nowMs),
+    }))
+    .filter(
+      (x): x is { s: Sess; minutes: number } =>
+        x.minutes != null && x.minutes >= -30,
+    )
     .sort((a, b) => a.minutes - b.minutes)[0];
   const reminderUrgent = reminder != null && reminder.minutes <= 15;
 
-  const attHref = (s: Sess) => `/teacher/lop?classId=${s.classId}&sessionId=${s.id}`;
-  const evalHref = (s: Sess) => `/teacher/nhan-xet?classId=${s.classId}&sessionId=${s.id}`;
+  const attHref = (s: Sess) =>
+    `/teacher/lop?classId=${s.classId}&sessionId=${s.id}`;
+  const evalHref = (s: Sess) =>
+    `/teacher/nhan-xet?classId=${s.classId}&sessionId=${s.id}`;
   const timeRange = (s: Sess) =>
     s.class.startTime && s.class.endTime
       ? `${s.class.startTime}–${s.class.endTime}`
@@ -207,9 +242,12 @@ export default async function TeacherHomePage() {
     <div>
       <div className="mb-6">
         <h1 className="text-xl font-extrabold tracking-tight text-foreground sm:text-2xl">
-          Xin chào, {firstName(session.user.name ?? "thầy/cô")} <span aria-hidden>👋</span>
+          Xin chào, {firstName(session.user.name ?? "thầy/cô")}{" "}
+          <span aria-hidden>👋</span>
         </h1>
-        <p className="mt-1 text-sm text-muted-foreground">{greetingDate(now)}</p>
+        <p className="mt-1 text-sm text-muted-foreground">
+          {greetingDate(now)}
+        </p>
       </div>
 
       {/* Nhắc điểm danh trước giờ học */}
@@ -219,14 +257,14 @@ export default async function TeacherHomePage() {
           className={cn(
             "mb-6 flex items-center gap-4 rounded-xl border px-5 py-4 transition-colors focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none",
             reminderUrgent
-              ? "border-orange-200 bg-orange-50 hover:bg-orange-100 dark:border-orange-600/30 dark:bg-orange-600/15 dark:hover:bg-orange-600/25"
-              : "border-blue-100 bg-blue-50 hover:bg-blue-100 dark:border-blue-600/30 dark:bg-blue-600/15 dark:hover:bg-blue-600/25",
+              ? "border-primary-soft bg-primary-soft hover:bg-primary-soft-hover dark:border-primary dark:bg-primary-soft dark:hover:bg-primary-soft-hover"
+              : "border-state-info-soft bg-state-info-soft hover:bg-state-info-soft-hover dark:border-state-info",
           )}
         >
           <span
             className={cn(
               "flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-white",
-              reminderUrgent ? "bg-orange-600" : "bg-blue-600",
+              reminderUrgent ? "bg-primary" : "bg-state-info",
             )}
           >
             <AlarmClock className="h-5 w-5" aria-hidden />
@@ -236,8 +274,8 @@ export default async function TeacherHomePage() {
               className={cn(
                 "font-bold",
                 reminderUrgent
-                  ? "text-orange-800 dark:text-orange-200"
-                  : "text-blue-800 dark:text-blue-200",
+                  ? "text-primary-ink dark:text-primary-ink"
+                  : "text-state-info-ink",
               )}
             >
               {reminder.minutes > 0
@@ -246,7 +284,11 @@ export default async function TeacherHomePage() {
               {reminderUrgent ? " — điểm danh ngay" : ""}
             </p>
             <p className="mt-0.5 truncate text-sm text-muted-foreground">
-              {[timeRange(reminder.s), reminder.s.class.room?.name, reminder.s.topic]
+              {[
+                timeRange(reminder.s),
+                reminder.s.class.room?.name,
+                reminder.s.topic,
+              ]
                 .filter(Boolean)
                 .join(" · ")}
             </p>
@@ -254,7 +296,7 @@ export default async function TeacherHomePage() {
           <span
             className={cn(
               "hidden shrink-0 items-center gap-1 rounded-lg px-3.5 py-2 text-sm font-semibold text-white sm:inline-flex",
-              reminderUrgent ? "bg-orange-600" : "bg-blue-600",
+              reminderUrgent ? "bg-primary" : "bg-state-info",
             )}
           >
             <ClipboardCheck className="h-4 w-4" aria-hidden /> Điểm danh
@@ -264,8 +306,18 @@ export default async function TeacherHomePage() {
 
       {/* Stat tổng quan */}
       <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <StatCard icon={School} value={classIds.length} label="Lớp tôi phụ trách" tone="brand" />
-        <StatCard icon={Users} value={totalStudents} label="Tổng học viên" tone="blue" />
+        <StatCard
+          icon={School}
+          value={classIds.length}
+          label="Lớp tôi phụ trách"
+          tone="brand"
+        />
+        <StatCard
+          icon={Users}
+          value={totalStudents}
+          label="Tổng học viên"
+          tone="blue"
+        />
         <StatCard
           icon={ClipboardCheck}
           value={needAttendance.length}
@@ -284,7 +336,7 @@ export default async function TeacherHomePage() {
       <section className="t-card mb-6 overflow-hidden">
         <header className="flex items-center justify-between gap-2 border-b border-border px-5 py-3.5">
           <h2 className="flex items-center gap-2 text-sm font-bold text-foreground">
-            <CalendarDays className="h-4 w-4 text-orange-600 dark:text-orange-400" aria-hidden />
+            <CalendarDays className="h-4 w-4 text-primary-ink" aria-hidden />
             Lớp dạy hôm nay ({todaySessions.length})
           </h2>
           <Badge variant="secondary">{dayFmt.format(now)}</Badge>
@@ -303,32 +355,40 @@ export default async function TeacherHomePage() {
                     href={attHref(s)}
                     className="flex items-center gap-4 px-5 py-4 transition-colors hover:bg-muted/50 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset focus-visible:outline-none"
                   >
-                    <div className="flex w-16 shrink-0 flex-col items-center rounded-lg bg-orange-50 py-2 text-orange-700 dark:bg-orange-600/15 dark:text-orange-200">
+                    <div className="flex w-16 shrink-0 flex-col items-center rounded-lg bg-primary-soft py-2 text-primary-ink">
                       <span className="text-base leading-none font-extrabold">
                         {s.class.startTime ?? "—"}
                       </span>
                       {s.class.room?.name && (
-                        <span className="mt-1 text-[11px] font-medium text-orange-500 dark:text-orange-300">
+                        <span className="mt-1 text-[11px] font-medium text-primary-ink">
                           {s.class.room.name}
                         </span>
                       )}
                     </div>
                     <div className="min-w-0 flex-1">
-                      <p className="font-semibold text-foreground">{s.class.name}</p>
+                      <p className="font-semibold text-foreground">
+                        {s.class.name}
+                      </p>
                       {s.topic && (
-                        <p className="truncate text-sm text-muted-foreground">{s.topic}</p>
+                        <p className="truncate text-sm text-muted-foreground">
+                          {s.topic}
+                        </p>
                       )}
                     </div>
                     {done ? (
-                      <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-semibold text-emerald-700 dark:bg-emerald-600/20 dark:text-emerald-200">
-                        <CircleCheck className="h-3.5 w-3.5" aria-hidden /> Đã điểm danh
+                      <span className="inline-flex items-center gap-1 rounded-full bg-state-success-soft px-2.5 py-1 text-xs font-semibold text-state-success-ink">
+                        <CircleCheck className="h-3.5 w-3.5" aria-hidden /> Đã
+                        điểm danh
                       </span>
                     ) : (
-                      <span className="inline-flex items-center rounded-full bg-amber-100 px-2.5 py-1 text-xs font-semibold text-amber-700 dark:bg-amber-500/15 dark:text-amber-300">
+                      <span className="inline-flex items-center rounded-full bg-state-warning-soft px-2.5 py-1 text-xs font-semibold text-state-warning-ink">
                         Chưa điểm danh
                       </span>
                     )}
-                    <ChevronRight className="h-5 w-5 shrink-0 text-muted-foreground/50" aria-hidden />
+                    <ChevronRight
+                      className="h-5 w-5 shrink-0 text-muted-foreground/50"
+                      aria-hidden
+                    />
                   </Link>
                 </li>
               );
@@ -346,6 +406,7 @@ export default async function TeacherHomePage() {
           emptyText="Đã điểm danh đầy đủ các buổi."
           href={attHref}
           renderMeta={(s) => `${dayFmt.format(s.date)} · ${timeRange(s)}`}
+          seeAllHref="/teacher/diem-danh"
         />
         <PendingList
           title="Buổi chưa nhận xét"
@@ -357,6 +418,7 @@ export default async function TeacherHomePage() {
             const st = statOf(s);
             return `${dayFmt.format(s.date)} · đã nhận xét ${st.reviewed}/${st.attended} HV`;
           }}
+          seeAllHref="/teacher/nhan-xet"
         />
       </div>
 
@@ -364,24 +426,28 @@ export default async function TeacherHomePage() {
       <section className="t-card mt-6 overflow-hidden">
         <header className="flex items-center justify-between gap-2 border-b border-border px-5 py-3.5">
           <h2 className="flex items-center gap-2 text-sm font-bold text-foreground">
-            <NotebookPen className="h-4 w-4 text-orange-600 dark:text-orange-400" aria-hidden />
+            <NotebookPen className="h-4 w-4 text-primary-ink" aria-hidden />
             Bài tập &amp; kiểm tra đang mở
           </h2>
           <Link
             href="/teacher/cham-bai"
-            className="rounded-sm text-sm font-semibold text-orange-600 outline-none hover:text-orange-700 focus-visible:ring-2 focus-visible:ring-ring dark:text-orange-400"
+            className="rounded-sm text-sm font-semibold text-primary-ink outline-none hover:text-primary-ink-hover focus-visible:ring-2 focus-visible:ring-ring"
           >
             Xem tất cả
           </Link>
         </header>
         <div className="px-5 py-4">
           {openAssignments === 0 ? (
-            <SuccessBanner icon={CircleCheck}>Không có bài tập nào đang chờ.</SuccessBanner>
+            <SuccessBanner icon={CircleCheck}>
+              Không có bài tập nào đang chờ.
+            </SuccessBanner>
           ) : (
             <p className="text-sm text-muted-foreground">
               Bạn đang có{" "}
-              <span className="font-bold text-foreground">{openAssignments}</span> bài tập /
-              kiểm tra đang mở ở các lớp.
+              <span className="font-bold text-foreground">
+                {openAssignments}
+              </span>{" "}
+              bài tập / kiểm tra đang mở ở các lớp.
             </p>
           )}
         </div>
@@ -403,6 +469,7 @@ function PendingList<
   emptyText,
   href,
   renderMeta,
+  seeAllHref,
 }: {
   title: string;
   icon: typeof CalendarCheck;
@@ -410,47 +477,75 @@ function PendingList<
   emptyText: string;
   href: (s: T) => string;
   renderMeta: (s: T) => string;
+  /** Trang liệt kê đầy đủ — hiện ở chân thẻ khi danh sách bị cắt bớt. */
+  seeAllHref: string;
 }) {
+  // Đây là màn "việc hôm nay", không phải trang danh sách. Đổ hết 39 buổi vào đây
+  // thì thẻ này cao gấp mười lần thẻ bên cạnh và đẩy phần bài tập xuống dưới màn —
+  // giáo viên phải cuộn qua một cột dài mới thấy được thứ khác. Cắt còn 8 dòng;
+  // con số đầy đủ vẫn nằm ở huy hiệu bên phải tiêu đề, và có lối sang trang đủ.
+  const LIMIT = 8;
+  const shown = sessions.slice(0, LIMIT);
+  const rest = sessions.length - shown.length;
+
   return (
     <section className="t-card overflow-hidden">
       <header className="flex items-center justify-between gap-2 border-b border-border px-5 py-3.5">
         <h2 className="flex items-center gap-2 text-sm font-bold text-foreground">
-          <Icon className="h-4 w-4 text-orange-600 dark:text-orange-400" aria-hidden />
+          <Icon className="h-4 w-4 text-primary-ink" aria-hidden />
           {title}
         </h2>
         <span
           className={cn(
             "inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold",
             sessions.length
-              ? "bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300"
-              : "bg-emerald-100 text-emerald-700 dark:bg-emerald-600/20 dark:text-emerald-200",
+              ? "bg-state-warning-soft text-state-warning-ink"
+              : "bg-state-success-soft text-state-success-ink",
           )}
         >
           {sessions.length} buổi
         </span>
       </header>
       {sessions.length === 0 ? (
-        <div className="px-5 py-8 text-center text-sm text-muted-foreground">{emptyText}</div>
+        <div className="px-5 py-8 text-center text-sm text-muted-foreground">
+          {emptyText}
+        </div>
       ) : (
         <ul className="divide-y divide-border">
-          {sessions.map((s) => (
+          {shown.map((s) => (
             <li key={s.id}>
               <Link
                 href={href(s)}
                 className="flex items-center gap-3 px-5 py-3.5 transition-colors hover:bg-muted/50 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset focus-visible:outline-none"
               >
                 <div className="min-w-0 flex-1">
-                  <p className="font-semibold text-foreground">{s.class.name}</p>
+                  <p className="font-semibold text-foreground">
+                    {s.class.name}
+                  </p>
                   <p className="mt-0.5 flex items-center gap-1.5 text-xs text-muted-foreground">
                     <Clock className="h-3.5 w-3.5" aria-hidden />
                     {renderMeta(s)}
                   </p>
                 </div>
                 <SessionStatusPill status={s.status} />
-                <ChevronRight className="h-5 w-5 shrink-0 text-muted-foreground/50" aria-hidden />
+                <ChevronRight
+                  className="h-5 w-5 shrink-0 text-muted-foreground/50"
+                  aria-hidden
+                />
               </Link>
             </li>
           ))}
+          {rest > 0 && (
+            <li>
+              <Link
+                href={seeAllHref}
+                className="flex items-center justify-center gap-1 px-5 py-3 text-sm font-semibold text-primary-ink transition-colors hover:bg-muted/50 hover:text-primary-ink-hover focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset focus-visible:outline-none"
+              >
+                Xem tất cả {sessions.length} buổi
+                <ChevronRight className="h-4 w-4" aria-hidden />
+              </Link>
+            </li>
+          )}
         </ul>
       )}
     </section>

@@ -22,7 +22,7 @@ const TYPE_LABEL: Record<string, string> = {
 
 function TypeBadge({ type }: { type: string }) {
   return (
-    <span className="mt-0.5 inline-flex shrink-0 rounded-full bg-purple-50 px-2 py-0.5 text-[11px] font-semibold text-purple-700">
+    <span className="mt-0.5 inline-flex shrink-0 rounded-full bg-primary-soft px-2 py-0.5 text-[11px] font-semibold text-primary">
       {TYPE_LABEL[type] ?? type}
     </span>
   );
@@ -97,14 +97,14 @@ export function TemplateQuestionPicker({
   }
 
   return (
-    <section className="rounded-xl border border-neutral-200 bg-white">
-      <header className="flex flex-wrap items-center justify-between gap-3 border-b border-neutral-100 p-4">
+    <section className="rounded-xl border border-border bg-card">
+      <header className="flex flex-wrap items-center justify-between gap-3 border-b border-border p-4">
         <div>
-          <h2 className="flex items-center gap-2 text-sm font-bold uppercase tracking-wider text-neutral-700">
-            <ListChecks className="h-4 w-4 text-[#7C3AED]" />
+          <h2 className="flex items-center gap-2 text-sm font-bold uppercase tracking-wider text-foreground">
+            <ListChecks className="h-4 w-4 text-primary" />
             Câu hỏi của mẫu ({selected.length})
           </h2>
-          <p className="mt-0.5 text-xs text-neutral-500">
+          <p className="mt-0.5 text-xs text-muted-foreground">
             {hasCurriculum
               ? "Chọn câu hỏi từ ngân hàng (lọc theo khung CT của mẫu, chỉ public). Khi sinh bài giao cho lớp, các câu này được sao chép vào bài."
               : "Gắn khung chương trình cho mẫu để chọn câu hỏi từ ngân hàng."}
@@ -114,7 +114,7 @@ export function TemplateQuestionPicker({
           type="button"
           onClick={save}
           disabled={pending}
-          className="inline-flex items-center gap-2 rounded-xl bg-[#7C3AED] px-5 py-2.5 text-sm font-bold text-white shadow-md hover:opacity-90 disabled:opacity-60"
+          className="inline-flex items-center gap-2 rounded-xl bg-primary px-5 py-2.5 text-sm font-bold text-white shadow-md hover:opacity-90 disabled:opacity-60"
         >
           <Save className="h-4 w-4" />
           {pending ? "Đang lưu..." : "Lưu câu hỏi"}
@@ -124,12 +124,12 @@ export function TemplateQuestionPicker({
       {(error || info) && (
         <div className="px-4 pt-4">
           {error && (
-            <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+            <div className="rounded-lg border border-state-danger-soft bg-state-danger-soft px-4 py-3 text-sm text-state-danger-ink">
               {error}
             </div>
           )}
           {info && (
-            <div className="rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-700">
+            <div className="rounded-lg border border-state-success-soft bg-state-success-soft px-4 py-3 text-sm text-state-success-ink">
               {info}
             </div>
           )}
@@ -138,30 +138,30 @@ export function TemplateQuestionPicker({
 
       <div className="grid grid-cols-1 gap-4 p-4 lg:grid-cols-2">
         {/* Đã chọn (có thứ tự) */}
-        <div className="rounded-lg border border-neutral-200">
-          <div className="border-b border-neutral-100 px-3 py-2 text-xs font-semibold uppercase tracking-wider text-neutral-600">
+        <div className="rounded-lg border border-border">
+          <div className="border-b border-border px-3 py-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
             Đã chọn — theo thứ tự
           </div>
           {selected.length === 0 ? (
-            <div className="p-6 text-center text-sm text-neutral-400">
+            <div className="p-6 text-center text-sm text-muted-foreground">
               Chưa chọn câu hỏi nào.
             </div>
           ) : (
-            <ul className="divide-y divide-neutral-50">
+            <ul className="divide-y divide-border">
               {selected.map((id, i) => {
                 const q = byId.get(id);
                 return (
                   <li key={id} className="flex items-start gap-2 px-3 py-2.5">
-                    <span className="mt-0.5 w-5 shrink-0 text-right text-xs font-semibold tabular-nums text-neutral-400">
+                    <span className="mt-0.5 w-5 shrink-0 text-right text-xs font-semibold tabular-nums text-muted-foreground">
                       {i + 1}.
                     </span>
                     {q ? <TypeBadge type={q.type} /> : null}
                     <div className="min-w-0 flex-1">
-                      <div className="line-clamp-2 text-sm text-neutral-800">
-                        {q?.text ?? <span className="italic text-neutral-400">Câu hỏi #{id}</span>}
+                      <div className="line-clamp-2 text-sm text-foreground">
+                        {q?.text ?? <span className="italic text-muted-foreground">Câu hỏi #{id}</span>}
                       </div>
                       {q?.questionCode && (
-                        <div className="text-xs tabular-nums text-neutral-400">
+                        <div className="text-xs tabular-nums text-muted-foreground">
                           {q.questionCode}
                         </div>
                       )}
@@ -172,7 +172,7 @@ export function TemplateQuestionPicker({
                         onClick={() => move(i, -1)}
                         disabled={pending || i === 0}
                         title="Lên"
-                        className="rounded-md p-1 text-neutral-400 hover:bg-neutral-100 hover:text-neutral-700 disabled:opacity-30"
+                        className="rounded-md p-1 text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-30"
                       >
                         <ArrowUp className="h-4 w-4" />
                       </button>
@@ -181,7 +181,7 @@ export function TemplateQuestionPicker({
                         onClick={() => move(i, 1)}
                         disabled={pending || i === selected.length - 1}
                         title="Xuống"
-                        className="rounded-md p-1 text-neutral-400 hover:bg-neutral-100 hover:text-neutral-700 disabled:opacity-30"
+                        className="rounded-md p-1 text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-30"
                       >
                         <ArrowDown className="h-4 w-4" />
                       </button>
@@ -190,7 +190,7 @@ export function TemplateQuestionPicker({
                         onClick={() => remove(id)}
                         disabled={pending}
                         title="Bỏ"
-                        className="rounded-md p-1 text-red-400 hover:bg-red-50 hover:text-red-600 disabled:opacity-30"
+                        className="rounded-md p-1 text-state-danger-ink hover:bg-state-danger-soft hover:text-state-danger-ink disabled:opacity-30"
                       >
                         <X className="h-4 w-4" />
                       </button>
@@ -203,29 +203,29 @@ export function TemplateQuestionPicker({
         </div>
 
         {/* Ngân hàng (chưa chọn) */}
-        <div className="rounded-lg border border-neutral-200">
-          <div className="border-b border-neutral-100 px-3 py-2 text-xs font-semibold uppercase tracking-wider text-neutral-600">
+        <div className="rounded-lg border border-border">
+          <div className="border-b border-border px-3 py-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
             Ngân hàng câu hỏi ({available.length})
           </div>
           {!hasCurriculum ? (
-            <div className="p-6 text-center text-sm text-neutral-400">
+            <div className="p-6 text-center text-sm text-muted-foreground">
               Gắn khung chương trình để xem câu hỏi.
             </div>
           ) : available.length === 0 ? (
-            <div className="p-6 text-center text-sm text-neutral-400">
+            <div className="p-6 text-center text-sm text-muted-foreground">
               {bank.length === 0
                 ? "Chưa có câu hỏi public nào trong khung chương trình này."
                 : "Đã chọn hết câu hỏi khả dụng."}
             </div>
           ) : (
-            <ul className="divide-y divide-neutral-50">
+            <ul className="divide-y divide-border">
               {available.map((q) => (
                 <li key={q.id} className="flex items-start gap-2 px-3 py-2.5">
                   <TypeBadge type={q.type} />
                   <div className="min-w-0 flex-1">
-                    <div className="line-clamp-2 text-sm text-neutral-800">{q.text}</div>
+                    <div className="line-clamp-2 text-sm text-foreground">{q.text}</div>
                     {q.questionCode && (
-                      <div className="text-xs tabular-nums text-neutral-400">
+                      <div className="text-xs tabular-nums text-muted-foreground">
                         {q.questionCode}
                       </div>
                     )}
@@ -235,7 +235,7 @@ export function TemplateQuestionPicker({
                     onClick={() => add(q.id)}
                     disabled={pending}
                     title="Thêm vào mẫu"
-                    className="shrink-0 rounded-md p-1 text-[#7C3AED] hover:bg-purple-50 disabled:opacity-30"
+                    className="shrink-0 rounded-md p-1 text-primary hover:bg-primary-soft disabled:opacity-30"
                   >
                     <Plus className="h-4 w-4" />
                   </button>

@@ -14,6 +14,7 @@ import { groupByWeek, monthKeyVN, type LeadReportRecord } from "@/lib/reports/le
 import { buildRevenueTargetReport, computeAchievement } from "@/lib/reports/revenue-target";
 import { getRevenueTargets } from "@/lib/reports/revenue-target-data";
 import { getDebtRows } from "@/lib/finance/debt";
+import { PhanTrangBang } from "@/components/ui/phan-trang-bang";
 
 const vnd = (n: number) => `${n.toLocaleString("vi-VN")}đ`;
 const TRIAL_ACTIVE_STATUSES = ["SCHEDULED", "CONFIRMED", "POSTPONED"] as const;
@@ -200,8 +201,8 @@ export async function ManagerDashboard({
     <div className="space-y-6">
       {!embedded && (
         <div>
-          <h1 className="text-2xl font-bold text-neutral-900">Xin chào, {name.split(" ").slice(-1)[0] || "Admin"}</h1>
-          <p className="text-sm text-neutral-500 mt-1">
+          <h1 className="text-2xl font-bold text-foreground">Xin chào, {name.split(" ").slice(-1)[0] || "Admin"}</h1>
+          <p className="text-sm text-muted-foreground mt-1">
             Tổng quan hệ thống · {now.toLocaleDateString("vi-VN", { weekday: "long", day: "numeric", month: "long" })}
           </p>
         </div>
@@ -210,22 +211,22 @@ export async function ManagerDashboard({
       {/* Việc CÁ NHÂN hôm nay (lead task của chính mình) — khác với khu "Cần xử lý"
           tổng hợp ở trên; giữ vì có giờ hẹn + thao tác nhanh. */}
       {myTasksToday.length > 0 && (
-        <div className="rounded-xl border border-orange-200 bg-orange-50 p-4">
+        <div className="rounded-xl border border-primary-soft bg-primary-soft p-4">
           <div className="mb-3 flex items-center justify-between">
-            <h2 className="text-sm font-bold text-orange-800">Việc của tôi hôm nay ({myTasksToday.length})</h2>
-            <Link href="/leads?view=kanban" className="text-xs text-orange-700 hover:underline">Xem pipeline →</Link>
+            <h2 className="text-sm font-bold text-primary">Việc của tôi hôm nay ({myTasksToday.length})</h2>
+            <Link href="/leads?view=kanban" className="text-xs text-primary hover:underline">Xem pipeline →</Link>
           </div>
           <ul className="space-y-2">
             {myTasksToday.map((t) => {
               const overdue = t.dueAt.getTime() < now.getTime();
               return (
                 <li key={t.id}>
-                  <Link href={`/leads/${t.lead.id}`} className="flex items-center justify-between gap-3 rounded-lg bg-white px-3 py-2 text-sm hover:bg-orange-100/40">
+                  <Link href={`/leads/${t.lead.id}`} className="flex items-center justify-between gap-3 rounded-lg bg-card px-3 py-2 text-sm hover:bg-primary-soft/40">
                     <span className="min-w-0 flex-1 truncate">
-                      <strong className="text-gray-900">{t.title}</strong>
-                      <span className="text-gray-500"> · {t.lead.parentName}</span>
+                      <strong className="text-foreground">{t.title}</strong>
+                      <span className="text-muted-foreground"> · {t.lead.parentName}</span>
                     </span>
-                    <span className={`flex-shrink-0 text-xs ${overdue ? "font-bold text-red-600" : "text-gray-500"}`}>
+                    <span className={`flex-shrink-0 text-xs ${overdue ? "font-bold text-state-danger-ink" : "text-muted-foreground"}`}>
                       {t.dueAt.toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit" })}{overdue ? " · Quá hạn" : ""}
                     </span>
                   </Link>
@@ -278,30 +279,30 @@ export async function ManagerDashboard({
 
       {/* (2) Biểu đồ */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <div className="bg-white border border-neutral-200 rounded-xl p-6">
-          <h2 className="font-semibold text-neutral-900 mb-1">Leads 14 ngày qua</h2>
-          <p className="text-xs text-neutral-500 mb-4">Số lead mới mỗi ngày</p>
+        <div className="bg-card border border-border rounded-xl p-6">
+          <h2 className="font-semibold text-foreground mb-1">Leads 14 ngày qua</h2>
+          <p className="text-xs text-muted-foreground mb-4">Số lead mới mỗi ngày</p>
           {dailyLeadsChart.length > 0 ? (
             <LineChart data={dailyLeadsChart} xKey="date" lines={[{ key: "leads", name: "Leads", color: "#F97316" }]} showLegend={false} height={260} />
           ) : (
-            <div className="h-[260px] flex items-center justify-center text-sm text-neutral-400">Chưa có dữ liệu</div>
+            <div className="h-[260px] flex items-center justify-center text-sm text-muted-foreground">Chưa có dữ liệu</div>
           )}
         </div>
-        <div className="bg-white border border-neutral-200 rounded-xl p-6">
-          <h2 className="font-semibold text-neutral-900 mb-1">Phân bố theo trạng thái</h2>
-          <p className="text-xs text-neutral-500 mb-4">Tất cả leads</p>
+        <div className="bg-card border border-border rounded-xl p-6">
+          <h2 className="font-semibold text-foreground mb-1">Phân bố theo trạng thái</h2>
+          <p className="text-xs text-muted-foreground mb-4">Tất cả leads</p>
           {statusBars.length > 0 ? (
             <BarChart data={statusBars} xKey="status" bars={[{ key: "count", name: "Số lượng", color: "#F97316" }]} height={260} />
           ) : (
-            <div className="h-[260px] flex items-center justify-center text-sm text-neutral-400">Chưa có dữ liệu</div>
+            <div className="h-[260px] flex items-center justify-center text-sm text-muted-foreground">Chưa có dữ liệu</div>
           )}
         </div>
       </div>
 
       {/* (2b) Phễu lead theo TUẦN — tổng vs chuyển đổi (REGISTERED/ENROLLED), 8 tuần gần nhất. */}
-      <div className="bg-white border border-neutral-200 rounded-xl p-6">
-        <h2 className="font-semibold text-neutral-900 mb-1">Phễu lead theo tuần</h2>
-        <p className="text-xs text-neutral-500 mb-4">Lead mới vs đã chuyển đổi mỗi tuần (8 tuần gần nhất)</p>
+      <div className="bg-card border border-border rounded-xl p-6">
+        <h2 className="font-semibold text-foreground mb-1">Phễu lead theo tuần</h2>
+        <p className="text-xs text-muted-foreground mb-4">Lead mới vs đã chuyển đổi mỗi tuần (8 tuần gần nhất)</p>
         <BarChart
           data={weeklyBars}
           xKey="week"
@@ -316,48 +317,50 @@ export async function ManagerDashboard({
       {/* (3) Hoạt động gần đây */}
       <div>
         <div className="flex items-center justify-between mb-3">
-          <h2 className="font-semibold text-neutral-900">Leads mới nhất</h2>
-          <Link href="/leads" className="text-sm font-semibold text-orange-600 hover:underline">Xem tất cả →</Link>
+          <h2 className="font-semibold text-foreground">Leads mới nhất</h2>
+          <Link href="/leads" className="text-sm font-semibold text-primary hover:underline">Xem tất cả →</Link>
         </div>
         <DataTableShell>
-          <table className="w-full text-sm">
-            <thead className="bg-neutral-50 text-left text-xs uppercase tracking-wider text-neutral-500">
-              <tr>
-                <th className="px-4 py-3">Phụ huynh</th>
-                <th className="px-4 py-3">Phone</th>
-                <th className="px-4 py-3">Status</th>
-                <th className="px-4 py-3 text-right">Thời gian</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-neutral-100">
-              {recentLeads.map((lead) => (
-                <tr key={lead.id} className="hover:bg-neutral-50 transition-colors">
-                  <td className="px-4 py-3 font-medium text-neutral-900">{lead.parentName}</td>
-                  <td className="px-4 py-3 font-mono text-xs text-neutral-700">{lead.phone.replace(/(\d{4})(\d{3})(\d+)/, "$1xxx$3")}</td>
-                  <td className="px-4 py-3">
-                    <StatusBadge variant={STATUS_VARIANT[lead.status] ?? "neutral"}>{STATUS_LABELS[lead.status] ?? lead.status}</StatusBadge>
-                  </td>
-                  <td className="px-4 py-3 text-right text-xs text-neutral-500">
-                    {new Date(lead.createdAt).toLocaleString("vi-VN", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}
-                  </td>
+          <PhanTrangBang>
+            <table className="w-full text-sm">
+              <thead className="bg-muted text-left text-xs uppercase tracking-wider text-muted-foreground">
+                <tr>
+                  <th className="px-4 py-3">Phụ huynh</th>
+                  <th className="px-4 py-3">Phone</th>
+                  <th className="px-4 py-3">Status</th>
+                  <th className="px-4 py-3 text-right">Thời gian</th>
                 </tr>
-              ))}
-              {recentLeads.length === 0 && (
-                <tr><td colSpan={4} className="px-4 py-12 text-center text-neutral-500">Chưa có lead nào</td></tr>
-              )}
-            </tbody>
-          </table>
+              </thead>
+              <tbody className="divide-y divide-border">
+                {recentLeads.map((lead) => (
+                  <tr key={lead.id} className="hover:bg-muted transition-colors">
+                    <td className="px-4 py-3 font-medium text-foreground">{lead.parentName}</td>
+                    <td className="px-4 py-3 font-mono text-xs text-foreground">{lead.phone.replace(/(\d{4})(\d{3})(\d+)/, "$1xxx$3")}</td>
+                    <td className="px-4 py-3">
+                      <StatusBadge variant={STATUS_VARIANT[lead.status] ?? "neutral"}>{STATUS_LABELS[lead.status] ?? lead.status}</StatusBadge>
+                    </td>
+                    <td className="px-4 py-3 text-right text-xs text-muted-foreground">
+                      {new Date(lead.createdAt).toLocaleString("vi-VN", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}
+                    </td>
+                  </tr>
+                ))}
+                {recentLeads.length === 0 && (
+                  <tr><td colSpan={4} className="px-4 py-12 text-center text-muted-foreground">Chưa có lead nào</td></tr>
+                )}
+              </tbody>
+            </table>
+          </PhanTrangBang>
         </DataTableShell>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-        <div className="bg-white border border-neutral-200 rounded-xl p-4 flex items-center gap-3">
-          <FileText className="w-5 h-5 text-orange-500 shrink-0" />
-          <div><p className="text-neutral-600">Tin tức đang publish</p><p className="font-semibold text-neutral-900">{totalPosts} bài</p></div>
+        <div className="bg-card border border-border rounded-xl p-4 flex items-center gap-3">
+          <FileText className="w-5 h-5 text-primary shrink-0" />
+          <div><p className="text-muted-foreground">Tin tức đang publish</p><p className="font-semibold text-foreground">{totalPosts} bài</p></div>
         </div>
-        <div className="bg-white border border-neutral-200 rounded-xl p-4 flex items-center gap-3">
-          <Users className="w-5 h-5 text-purple-700 shrink-0" />
-          <div><p className="text-neutral-600">Leads ENROLLED tất cả</p><p className="font-semibold text-neutral-900">{enrolledLeads} người</p></div>
+        <div className="bg-card border border-border rounded-xl p-4 flex items-center gap-3">
+          <Users className="w-5 h-5 text-primary shrink-0" />
+          <div><p className="text-muted-foreground">Leads ENROLLED tất cả</p><p className="font-semibold text-foreground">{enrolledLeads} người</p></div>
         </div>
       </div>
     </div>

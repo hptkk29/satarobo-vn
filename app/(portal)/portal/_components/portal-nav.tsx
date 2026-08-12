@@ -40,7 +40,12 @@ const ITEMS = [
   { label: "Yêu cầu", href: "/portal/yeu-cau", icon: MessageSquarePlus },
   { label: "Học phí", href: "/portal/hoc-phi", icon: CreditCard },
   { label: "Đánh giá", href: "/portal/danh-gia", icon: Star },
-  { label: "Đánh giá GV", href: "/portal/danh-gia-gv", icon: Star, flag: "eval" as const },
+  {
+    label: "Đánh giá GV",
+    href: "/portal/danh-gia-gv",
+    icon: Star,
+    flag: "eval" as const,
+  },
   { label: "Khảo sát", href: "/portal/khao-sat", icon: ClipboardList },
   { label: "Học bạ", href: "/portal/hoc-ba", icon: ScrollText },
   { label: "SataCoin", href: "/portal/satacoin", icon: Coins },
@@ -71,7 +76,9 @@ export function PortalNav({
   const liveMsgCount = useChatUnread(userId, msgCount);
 
   // Mục gắn flag "eval" chỉ hiện khi EVAL_V2_ENABLED (R7-16).
-  const items = ITEMS.filter((it) => !("flag" in it) || (it.flag === "eval" && evalV2Enabled));
+  const items = ITEMS.filter(
+    (it) => !("flag" in it) || (it.flag === "eval" && evalV2Enabled),
+  );
 
   function List({ onNavigate }: { onNavigate?: () => void }) {
     return (
@@ -95,7 +102,10 @@ export function PortalNav({
               onClick={onNavigate}
               className={`relative flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-medium transition-colors ${
                 active
-                  ? "bg-orange-500 text-white"
+                  ? // Mực TỐI, không phải trắng: cam #FF6900 là màu SÁNG — chữ trắng
+                    // trên nó chỉ 2,89:1, mực neutral-900 được 6,21:1. Cùng cách
+                    // xử lý mà globals.css đã dùng cho `[data-mode="student"]`.
+                    "bg-orange-500 text-neutral-900"
                   : "text-neutral-600 hover:bg-neutral-100"
               }`}
             >

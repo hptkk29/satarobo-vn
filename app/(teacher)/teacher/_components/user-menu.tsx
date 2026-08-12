@@ -2,7 +2,14 @@
 
 import Link from "next/link";
 import { logoutToGate } from "@/lib/auth/logout-client";
-import { BookOpenText, ChevronDown, LayoutGrid, LogOut, User } from "lucide-react";
+import {
+  BookOpenText,
+  ChevronDown,
+  LayoutGrid,
+  LogOut,
+  User,
+} from "lucide-react";
+import { initialsOf } from "@/lib/ui/initials";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -12,24 +19,6 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-
-/**
- * Chữ cái đầu để dựng avatar khi không có ảnh — tối đa 2 ký tự.
- *
- * Bỏ qua các từ không bắt đầu bằng chữ cái, nếu không tên kiểu "Thầy Nam (Test)"
- * sẽ ra "T(" vì từ cuối là "(Test)".
- */
-function initialsOf(name: string): string {
-  const parts = name
-    .trim()
-    .split(/\s+/)
-    .filter((p) => /^\p{L}/u.test(p));
-  if (parts.length === 0) return "GV";
-  const first = parts[0]!;
-  if (parts.length === 1) return first.slice(0, 2).toUpperCase();
-  const last = parts[parts.length - 1]!;
-  return (first[0]! + last[0]!).toUpperCase();
-}
 
 export function UserMenu({
   name,
@@ -43,7 +32,7 @@ export function UserMenu({
     <DropdownMenu>
       <DropdownMenuTrigger className="flex items-center gap-2.5 rounded-xl px-1.5 py-1 outline-none transition-colors hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring">
         <span className="brand-gradient flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-bold text-white">
-          {initialsOf(name)}
+          {initialsOf(name, "GV")}
         </span>
         <span className="hidden text-left leading-tight sm:block">
           <span className="block max-w-[10rem] truncate text-sm font-bold text-foreground">
@@ -59,8 +48,12 @@ export function UserMenu({
             <Menu.Group> bọc ngoài là mở dropdown crash cả tab (như RoleSwitcher 10/07). */}
         <DropdownMenuGroup className="sm:hidden">
           <DropdownMenuLabel>
-            <span className="block truncate text-sm font-bold text-foreground">{name}</span>
-            <span className="block text-xs font-normal text-muted-foreground">Giáo viên</span>
+            <span className="block truncate text-sm font-bold text-foreground">
+              {name}
+            </span>
+            <span className="block text-xs font-normal text-muted-foreground">
+              Giáo viên
+            </span>
           </DropdownMenuLabel>
           <DropdownMenuSeparator />
         </DropdownMenuGroup>
@@ -76,7 +69,9 @@ export function UserMenu({
         </DropdownMenuItem>
 
         {adminReturnUrl ? (
-          <DropdownMenuItem onClick={() => window.location.assign(adminReturnUrl)}>
+          <DropdownMenuItem
+            onClick={() => window.location.assign(adminReturnUrl)}
+          >
             <LayoutGrid className="h-4 w-4" aria-hidden />
             Về trang quản trị
           </DropdownMenuItem>
@@ -84,10 +79,7 @@ export function UserMenu({
 
         <DropdownMenuSeparator />
 
-        <DropdownMenuItem
-          variant="destructive"
-          onClick={() => logoutToGate()}
-        >
+        <DropdownMenuItem variant="destructive" onClick={() => logoutToGate()}>
           <LogOut className="h-4 w-4" aria-hidden />
           Đăng xuất
         </DropdownMenuItem>

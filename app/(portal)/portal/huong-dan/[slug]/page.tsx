@@ -47,7 +47,7 @@ export default async function PortalGuideDetailPage({ params }: PageProps) {
         {guide.pagePath ? (
           <Link
             href={guide.pagePath}
-            className="inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-accent px-3 py-2 text-sm font-bold text-white transition-opacity hover:opacity-90 focus-visible:ring-2 focus-visible:ring-ring outline-none"
+            className="inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-accent px-3 py-2 text-sm font-bold text-accent-foreground transition-opacity hover:opacity-90 focus-visible:ring-2 focus-visible:ring-ring outline-none"
           >
             Mở trang này
             <ExternalLink className="size-4" aria-hidden />

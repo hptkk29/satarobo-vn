@@ -54,7 +54,7 @@ export function MovementActions({
         <button
           type="button"
           onClick={() => setOpen("receipt")}
-          className="inline-flex items-center gap-1 rounded-md border border-green-300 bg-white px-2 py-1 text-xs font-semibold text-green-700 hover:bg-green-50"
+          className="inline-flex items-center gap-1 rounded-md border border-state-success bg-card px-2 py-1 text-xs font-semibold text-state-success-ink hover:bg-state-success-soft"
           title="Nhập kho"
         >
           <Plus className="h-3 w-3" />
@@ -64,7 +64,7 @@ export function MovementActions({
           type="button"
           onClick={() => setOpen("issue")}
           disabled={currentQty <= 0}
-          className="inline-flex items-center gap-1 rounded-md border border-red-300 bg-white px-2 py-1 text-xs font-semibold text-red-700 hover:bg-red-50 disabled:opacity-40"
+          className="inline-flex items-center gap-1 rounded-md border border-state-danger bg-card px-2 py-1 text-xs font-semibold text-state-danger-ink hover:bg-state-danger-soft disabled:opacity-40"
           title="Xuất kho"
         >
           <Minus className="h-3 w-3" />
@@ -74,7 +74,7 @@ export function MovementActions({
           type="button"
           onClick={() => setOpen("transfer")}
           disabled={currentQty <= 0 || allCenters.length < 2}
-          className="inline-flex items-center gap-1 rounded-md border border-blue-300 bg-white px-2 py-1 text-xs font-semibold text-blue-700 hover:bg-blue-50 disabled:opacity-40"
+          className="inline-flex items-center gap-1 rounded-md border border-state-info bg-card px-2 py-1 text-xs font-semibold text-state-info-ink hover:bg-state-info-soft disabled:opacity-40"
           title="Chuyển kho"
         >
           <ArrowRightLeft className="h-3 w-3" />
@@ -83,7 +83,7 @@ export function MovementActions({
         <button
           type="button"
           onClick={() => setOpen("adjustment")}
-          className="inline-flex items-center gap-1 rounded-md border border-purple-300 bg-white px-2 py-1 text-xs font-semibold text-purple-700 hover:bg-purple-50"
+          className="inline-flex items-center gap-1 rounded-md border border-primary bg-card px-2 py-1 text-xs font-semibold text-primary hover:bg-primary-soft"
           title="Kiểm kê"
         >
           <ClipboardCheck className="h-3 w-3" />
@@ -249,10 +249,10 @@ function MovementModal({
   };
 
   const COLOR: Record<typeof type, string> = {
-    receipt: "bg-green-500 hover:bg-green-600",
-    issue: "bg-red-500 hover:bg-red-600",
-    transfer: "bg-blue-500 hover:bg-blue-600",
-    adjustment: "bg-purple-500 hover:bg-purple-600",
+    receipt: "bg-state-success hover:bg-state-success-ink",
+    issue: "bg-state-danger hover:bg-state-danger-ink",
+    transfer: "bg-state-info hover:bg-state-info-ink",
+    adjustment: "bg-primary hover:bg-primary-dark",
   };
 
   return (
@@ -263,25 +263,25 @@ function MovementModal({
       onClick={close}
     >
       <div
-        className="relative w-full max-w-md rounded-xl bg-white p-6 shadow-xl"
+        className="relative w-full max-w-md rounded-xl bg-card p-6 shadow-xl"
         onClick={(e) => e.stopPropagation()}
       >
         <button
           type="button"
           onClick={close}
           aria-label="Đóng"
-          className="absolute right-3 top-3 rounded-md p-1 text-neutral-500 hover:bg-neutral-100"
+          className="absolute right-3 top-3 rounded-md p-1 text-muted-foreground hover:bg-muted"
         >
           <X className="h-4 w-4" />
         </button>
 
-        <h2 className="text-lg font-bold text-neutral-900">{TITLE[type]}</h2>
-        <p className="mt-1 text-xs text-neutral-500">
+        <h2 className="text-lg font-bold text-foreground">{TITLE[type]}</h2>
+        <p className="mt-1 text-xs text-muted-foreground">
           Tồn hiện tại: <strong>{currentQty}</strong> {itemUnit}
         </p>
 
         {error && (
-          <div className="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+          <div className="mt-3 rounded-lg border border-state-danger-soft bg-state-danger-soft px-3 py-2 text-sm text-state-danger-ink">
             {error}
           </div>
         )}
@@ -289,8 +289,8 @@ function MovementModal({
         <div className="mt-4 space-y-3">
           {type !== "adjustment" && (
             <label className="block">
-              <span className="mb-1 block text-xs font-semibold text-neutral-700">
-                Số lượng <span className="text-red-500">*</span>
+              <span className="mb-1 block text-xs font-semibold text-foreground">
+                Số lượng <span className="text-state-danger-ink">*</span>
               </span>
               <input
                 type="number"
@@ -305,7 +305,7 @@ function MovementModal({
                   setQuantity(Math.max(1, parseInt(e.target.value, 10) || 1))
                 }
                 disabled={pending}
-                className="w-full rounded-md border border-neutral-300 px-2.5 py-1.5 text-sm outline-none focus:border-[#7C3AED] focus:ring-2 focus:ring-[#7C3AED]/20"
+                className="w-full rounded-md border border-border px-2.5 py-1.5 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
               />
             </label>
           )}
@@ -313,8 +313,8 @@ function MovementModal({
           {type === "adjustment" && (
             <>
               <label className="block">
-                <span className="mb-1 block text-xs font-semibold text-neutral-700">
-                  Số lượng thực tế <span className="text-red-500">*</span>
+                <span className="mb-1 block text-xs font-semibold text-foreground">
+                  Số lượng thực tế <span className="text-state-danger-ink">*</span>
                 </span>
                 <input
                   type="number"
@@ -326,15 +326,15 @@ function MovementModal({
                     )
                   }
                   disabled={pending}
-                  className="w-full rounded-md border border-neutral-300 px-2.5 py-1.5 text-sm outline-none focus:border-[#7C3AED] focus:ring-2 focus:ring-[#7C3AED]/20"
+                  className="w-full rounded-md border border-border px-2.5 py-1.5 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
                 />
                 {adjustmentDelta !== 0 && (
                   <span
                     className={
                       "mt-1 inline-flex rounded-full px-2 py-0.5 text-xs font-semibold " +
                       (adjustmentDelta > 0
-                        ? "bg-green-100 text-green-700"
-                        : "bg-red-100 text-red-700")
+                        ? "bg-state-success-soft text-state-success-ink"
+                        : "bg-state-danger-soft text-state-danger-ink")
                     }
                   >
                     {adjustmentDelta > 0 ? "Thừa" : "Thiếu"}:{" "}
@@ -344,9 +344,9 @@ function MovementModal({
               </label>
 
               <label className="block">
-                <span className="mb-1 block text-xs font-semibold text-neutral-700">
-                  Lý do <span className="text-red-500">*</span>{" "}
-                  <span className="font-normal text-neutral-500">
+                <span className="mb-1 block text-xs font-semibold text-foreground">
+                  Lý do <span className="text-state-danger-ink">*</span>{" "}
+                  <span className="font-normal text-muted-foreground">
                     (≥ 5 ký tự)
                   </span>
                 </span>
@@ -356,7 +356,7 @@ function MovementModal({
                   rows={3}
                   disabled={pending}
                   placeholder="VD: Phát hiện 2 cái bị hỏng khi kiểm tra cuối tháng, đã loại ra"
-                  className="w-full resize-y rounded-md border border-neutral-300 px-2.5 py-1.5 text-sm outline-none focus:border-[#7C3AED] focus:ring-2 focus:ring-[#7C3AED]/20"
+                  className="w-full resize-y rounded-md border border-border px-2.5 py-1.5 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
                 />
               </label>
             </>
@@ -364,7 +364,7 @@ function MovementModal({
 
           {type === "receipt" && (
             <label className="block">
-              <span className="mb-1 block text-xs font-semibold text-neutral-700">
+              <span className="mb-1 block text-xs font-semibold text-foreground">
                 Giá / đơn vị (VND, tuỳ chọn)
               </span>
               <input
@@ -375,9 +375,9 @@ function MovementModal({
                 onChange={(e) => setUnitPrice(e.target.value)}
                 disabled={pending}
                 placeholder="850000"
-                className="w-full rounded-md border border-neutral-300 px-2.5 py-1.5 text-sm outline-none focus:border-[#7C3AED] focus:ring-2 focus:ring-[#7C3AED]/20"
+                className="w-full rounded-md border border-border px-2.5 py-1.5 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
               />
-              <span className="mt-0.5 block text-[10px] text-neutral-500">
+              <span className="mt-0.5 block text-[10px] text-muted-foreground">
                 Total cost tự tính = SL × giá. Để trống nếu chưa có giá.
               </span>
             </label>
@@ -385,14 +385,14 @@ function MovementModal({
 
           {type === "transfer" && (
             <label className="block">
-              <span className="mb-1 block text-xs font-semibold text-neutral-700">
-                Cơ sở đích <span className="text-red-500">*</span>
+              <span className="mb-1 block text-xs font-semibold text-foreground">
+                Cơ sở đích <span className="text-state-danger-ink">*</span>
               </span>
               <select
                 value={toCenterId}
                 onChange={(e) => setToCenterId(e.target.value)}
                 disabled={pending}
-                className="w-full rounded-md border border-neutral-300 px-2.5 py-1.5 text-sm outline-none focus:border-[#7C3AED] focus:ring-2 focus:ring-[#7C3AED]/20"
+                className="w-full rounded-md border border-border px-2.5 py-1.5 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
               >
                 <option value="">— Chọn —</option>
                 {allCenters
@@ -408,7 +408,7 @@ function MovementModal({
 
           {(type === "receipt" || type === "issue") && (
             <label className="block">
-              <span className="mb-1 block text-xs font-semibold text-neutral-700">
+              <span className="mb-1 block text-xs font-semibold text-foreground">
                 {type === "receipt" ? "Tham chiếu / NCC" : "Lý do xuất / tham chiếu"}
               </span>
               <input
@@ -421,14 +421,14 @@ function MovementModal({
                     ? "VD: NK từ ZMROBO ngày 15/05"
                     : "VD: Lớp K1 Đà Nẵng, sự kiện khai trương..."
                 }
-                className="w-full rounded-md border border-neutral-300 px-2.5 py-1.5 text-sm outline-none focus:border-[#7C3AED] focus:ring-2 focus:ring-[#7C3AED]/20"
+                className="w-full rounded-md border border-border px-2.5 py-1.5 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
               />
             </label>
           )}
 
           {type !== "adjustment" && (
             <label className="block">
-              <span className="mb-1 block text-xs font-semibold text-neutral-700">
+              <span className="mb-1 block text-xs font-semibold text-foreground">
                 Ghi chú
               </span>
               <textarea
@@ -437,7 +437,7 @@ function MovementModal({
                 rows={2}
                 disabled={pending}
                 placeholder="Ghi chú thêm cho phiếu..."
-                className="w-full resize-y rounded-md border border-neutral-300 px-2.5 py-1.5 text-sm outline-none focus:border-[#7C3AED] focus:ring-2 focus:ring-[#7C3AED]/20"
+                className="w-full resize-y rounded-md border border-border px-2.5 py-1.5 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
               />
             </label>
           )}
@@ -448,7 +448,7 @@ function MovementModal({
             type="button"
             onClick={close}
             disabled={pending}
-            className="rounded-lg border border-neutral-300 px-4 py-2 text-sm font-semibold text-neutral-700 hover:bg-neutral-50 disabled:opacity-50"
+            className="rounded-lg border border-border px-4 py-2 text-sm font-semibold text-foreground hover:bg-muted disabled:opacity-50"
           >
             Huỷ
           </button>

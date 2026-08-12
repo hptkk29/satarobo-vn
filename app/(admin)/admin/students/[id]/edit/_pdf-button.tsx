@@ -60,7 +60,7 @@ export function GeneratePdfButton({
         type="button"
         onClick={handleGenerate}
         disabled={loading}
-        className="inline-flex items-center gap-1 rounded-md border border-orange-300 bg-white px-2.5 py-1 text-xs font-semibold text-orange-700 hover:bg-orange-50 disabled:opacity-50"
+        className="inline-flex items-center gap-1 rounded-md border border-primary bg-card px-2.5 py-1 text-xs font-semibold text-primary hover:bg-primary-soft disabled:opacity-50"
       >
         {loading ? (
           <>
@@ -74,7 +74,7 @@ export function GeneratePdfButton({
           </>
         )}
       </button>
-      {error && <span className="text-[10px] text-red-600">{error}</span>}
+      {error && <span className="text-[10px] text-state-danger-ink">{error}</span>}
     </div>
   );
 }

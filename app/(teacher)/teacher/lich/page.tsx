@@ -48,12 +48,7 @@ import {
 } from "@/lib/lms/teacher-schedule";
 import { cn } from "@/lib/utils";
 import { Badge, badgeVariants } from "@/components/ui/badge";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { EmptyState } from "../_components/ui/empty-state";
 import { PageHeader } from "../_components/ui/page-header";
 import { ScheduleToolbar } from "./_components/schedule-toolbar";
@@ -73,7 +68,9 @@ const DAYS_FORWARD = 28; // ~4 tuần tới
 /** dayUtc của NGÀY HÔM NAY theo giờ tường VN. */
 function vnTodayUtc(now = new Date()): Date {
   const vn = new Date(now.getTime() + VN_OFFSET_MS);
-  return new Date(Date.UTC(vn.getUTCFullYear(), vn.getUTCMonth(), vn.getUTCDate()));
+  return new Date(
+    Date.UTC(vn.getUTCFullYear(), vn.getUTCMonth(), vn.getUTCDate()),
+  );
 }
 /** "YYYY-MM-DD" của một dayUtc — khóa nhóm + giá trị ?moc=. */
 function isoKey(dayUtc: Date): string {
@@ -126,7 +123,10 @@ const dayKeyFmt = new Intl.DateTimeFormat("en-CA", {
 
 type BadgeVariant = NonNullable<VariantProps<typeof badgeVariants>["variant"]>;
 
-const SESSION_STATUS: Record<SessionStatus, { label: string; variant: BadgeVariant }> = {
+const SESSION_STATUS: Record<
+  SessionStatus,
+  { label: string; variant: BadgeVariant }
+> = {
   SCHEDULED: { label: "Đã lên lịch", variant: "secondary" },
   IN_PROGRESS: { label: "Đang diễn ra", variant: "default" },
   COMPLETED: { label: "Đã dạy", variant: "outline" },
@@ -140,7 +140,15 @@ const HOLIDAY_TYPE_LABEL: Record<HolidayType, string> = {
   OTHER: "Ngày nghỉ",
 };
 
-const WEEKDAYS = ["Thứ 2", "Thứ 3", "Thứ 4", "Thứ 5", "Thứ 6", "Thứ 7", "Chủ nhật"];
+const WEEKDAYS = [
+  "Thứ 2",
+  "Thứ 3",
+  "Thứ 4",
+  "Thứ 5",
+  "Thứ 6",
+  "Thứ 7",
+  "Chủ nhật",
+];
 const DOW_SHORT = ["T2", "T3", "T4", "T5", "T6", "T7", "CN"];
 
 /* ─────────────────────────────── Kiểu dữ liệu view ─────────────────────────────── */
@@ -159,7 +167,11 @@ type ClassSessionRow = {
 };
 
 /** Gom theo ngày: buổi lớp + buổi Trial (labelDate để format tiêu đề nhóm). */
-type DayAgg = { labelDate: Date; classes: ClassSessionRow[]; trials: TeacherTrialSessionRow[] };
+type DayAgg = {
+  labelDate: Date;
+  classes: ClassSessionRow[];
+  trials: TeacherTrialSessionRow[];
+};
 /** Ca làm trong ngày: nhãn VI đã sort theo SHIFT_ORDER + cờ xin nghỉ khẩn. */
 type DayShift = { labels: string[]; leave: boolean };
 type DayHoliday = { name: string; typeLabel: string };
@@ -193,13 +205,22 @@ function mergeDayItems(agg: DayAgg | undefined) {
       sort: sessionStart(s),
       s,
     })),
-    ...agg.trials.map((t) => ({ kind: "trial" as const, sort: t.startTime, t })),
+    ...agg.trials.map((t) => ({
+      kind: "trial" as const,
+      sort: t.startTime,
+      t,
+    })),
   ].sort((a, b) => a.sort.localeCompare(b.sort));
 }
 
 /* ──────────────────────────────────── Page ──────────────────────────────────── */
 
-const VALID_STATUS = new Set<string>(["SCHEDULED", "IN_PROGRESS", "COMPLETED", "CANCELLED"]);
+const VALID_STATUS = new Set<string>([
+  "SCHEDULED",
+  "IN_PROGRESS",
+  "COMPLETED",
+  "CANCELLED",
+]);
 
 export default async function TeacherSchedulePage({
   searchParams,
@@ -218,11 +239,13 @@ export default async function TeacherSchedulePage({
   const sp = await searchParams;
   // Mặc định LỊCH THÁNG (07/08/2026 — yêu cầu chủ dự án). "ds"/"tuan" vẫn vào được
   // qua nút chuyển view; ô ngày trong lịch tháng vẫn nhảy sang ?view=ds&moc=<ngày>.
-  const view: ViewMode = sp.view === "ds" || sp.view === "tuan" ? sp.view : "thang";
+  const view: ViewMode =
+    sp.view === "ds" || sp.view === "tuan" ? sp.view : "thang";
   // Bộ lọc toolbar (giữ trong searchParams — server lọc trước khi gom theo ngày).
   const q = (sp.q ?? "").trim().toLowerCase();
   const typeFilter = sp.type === "lop" || sp.type === "trial" ? sp.type : "all";
-  const statusFilter = sp.status && VALID_STATUS.has(sp.status) ? sp.status : "all";
+  const statusFilter =
+    sp.status && VALID_STATUS.has(sp.status) ? sp.status : "all";
   const todayUtc = vnTodayUtc();
   const todayKey = isoKey(todayUtc);
   const mocUtc = parseMoc(sp.moc);
@@ -239,7 +262,9 @@ export default async function TeacherSchedulePage({
       Date.UTC(monthStart.getUTCFullYear(), monthStart.getUTCMonth() + 1, 0),
     ).getUTCDate();
     const gridStart = startOfWeekUtc(monthStart);
-    const leading = Math.round((monthStart.getTime() - gridStart.getTime()) / DAY_MS);
+    const leading = Math.round(
+      (monthStart.getTime() - gridStart.getTime()) / DAY_MS,
+    );
     const totalCells = Math.ceil((leading + daysInMonth) / 7) * 7;
     fromDay = gridStart;
     toDay = addDaysUtc(gridStart, totalCells);
@@ -303,7 +328,13 @@ export default async function TeacherSchedulePage({
   const fSessions = sessions.filter((s) => {
     if (typeFilter === "trial") return false;
     if (statusFilter !== "all" && s.status !== statusFilter) return false;
-    if (q && !(s.class.name.toLowerCase().includes(q) || (s.topic ?? "").toLowerCase().includes(q)))
+    if (
+      q &&
+      !(
+        s.class.name.toLowerCase().includes(q) ||
+        (s.topic ?? "").toLowerCase().includes(q)
+      )
+    )
       return false;
     return true;
   });
@@ -325,7 +356,8 @@ export default async function TeacherSchedulePage({
     }
     return g;
   };
-  for (const s of fSessions) dayAgg(dayKeyFmt.format(s.date), s.date).classes.push(s);
+  for (const s of fSessions)
+    dayAgg(dayKeyFmt.format(s.date), s.date).classes.push(s);
   // @db.Date trả UTC 00:00 = 07:00 VN cùng ngày lịch → isoKey khớp khóa VN.
   for (const t of fTrials) dayAgg(isoKey(t.date), t.date).trials.push(t);
 
@@ -341,11 +373,17 @@ export default async function TeacherSchedulePage({
   const holidayByDay = new Map<string, DayHoliday>();
   for (const h of holidayRows) {
     const start = Math.max(h.date.getTime(), fromDay.getTime());
-    const end = Math.min((h.endDate ?? h.date).getTime(), toDay.getTime() - DAY_MS);
+    const end = Math.min(
+      (h.endDate ?? h.date).getTime(),
+      toDay.getTime() - DAY_MS,
+    );
     for (let t = start; t <= end; t += DAY_MS) {
       const key = isoKey(new Date(t));
       if (!holidayByDay.has(key)) {
-        holidayByDay.set(key, { name: h.name, typeLabel: HOLIDAY_TYPE_LABEL[h.type] });
+        holidayByDay.set(key, {
+          name: h.name,
+          typeLabel: HOLIDAY_TYPE_LABEL[h.type],
+        });
       }
     }
   }
@@ -366,7 +404,10 @@ export default async function TeacherSchedulePage({
       ? `Các buổi trong ngày ${isoKey(mocUtc).split("-").reverse().join("/")}.`
       : view === "ds"
         ? `Buổi dạy của bạn từ ${DAYS_BACK} ngày trước đến ${DAYS_FORWARD} ngày tới — gồm cả buổi dạy thay và dạy bù, kể cả ở cơ sở khác.`
-        : "Lịch dạy lớp, Trial và ca làm việc. Ngày có ca làm được tô cam nhạt; ô vàng là ngày nghỉ.";
+        : // KHÔNG mô tả bằng tên màu ("tô cam nhạt", "ô vàng"): câu này đã sai một
+          // lần khi đổi nhận diện, và người mù màu vốn không đọc được theo màu.
+          // Chú giải ngay dưới đây có ô mẫu + nhãn — đó mới là chỗ giải nghĩa.
+          "Lịch dạy lớp, Trial và ca làm việc.";
 
   return (
     <div className="space-y-6">
@@ -376,9 +417,24 @@ export default async function TeacherSchedulePage({
         actions={
           /* Chuyển view — Link CHỈ-query, giữ mốc + bộ lọc đang xem. */
           <div className="inline-flex rounded-lg border border-border bg-muted/50 p-1">
-            <ToggleLink active={view === "thang"} href={`?view=thang${mocQS}${filterQS}`} label="Tháng" icon={CalendarDays} />
-            <ToggleLink active={view === "tuan"} href={`?view=tuan${mocQS}${filterQS}`} label="Tuần" icon={CalendarRange} />
-            <ToggleLink active={view === "ds"} href={`?view=ds${filterQS}`} label="Danh sách" icon={List} />
+            <ToggleLink
+              active={view === "thang"}
+              href={`?view=thang${mocQS}${filterQS}`}
+              label="Tháng"
+              icon={CalendarDays}
+            />
+            <ToggleLink
+              active={view === "tuan"}
+              href={`?view=tuan${mocQS}${filterQS}`}
+              label="Tuần"
+              icon={CalendarRange}
+            />
+            <ToggleLink
+              active={view === "ds"}
+              href={`?view=ds${filterQS}`}
+              label="Danh sách"
+              icon={List}
+            />
           </div>
         }
       />
@@ -475,12 +531,12 @@ function ListView({
               <h2 className="flex flex-wrap items-center gap-2 text-sm font-semibold capitalize text-foreground">
                 {dayFmt.format(agg.labelDate)}
                 {holiday && (
-                  <span className="rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold normal-case text-amber-700 dark:bg-amber-500/15 dark:text-amber-300">
+                  <span className="rounded bg-state-warning-soft px-1.5 py-0.5 text-[10px] font-semibold normal-case text-state-warning-ink">
                     {holiday.typeLabel} · {holiday.name}
                   </span>
                 )}
                 {shift && (
-                  <span className="rounded bg-orange-100 px-1.5 py-0.5 text-[10px] font-semibold normal-case text-orange-700 dark:bg-orange-500/15 dark:text-orange-300">
+                  <span className="rounded bg-primary-soft px-1.5 py-0.5 text-[10px] font-semibold normal-case text-primary-ink">
                     {shift.labels.join(" · ")}
                     {shift.leave ? " · xin nghỉ" : ""}
                   </span>
@@ -532,11 +588,13 @@ function ClassSessionCard({
       </CardHeader>
       <CardContent className="pt-0">
         <p className="text-sm text-muted-foreground">{classTime(s)}</p>
-        {s.topic && <p className="mt-0.5 text-sm text-muted-foreground">{s.topic}</p>}
+        {s.topic && (
+          <p className="mt-0.5 text-sm text-muted-foreground">{s.topic}</p>
+        )}
         {s.status !== "CANCELLED" && (
           <Link
             href={`/teacher/lop?classId=${s.classId}&sessionId=${s.id}`}
-            className="mt-2 inline-flex items-center gap-1 rounded-sm text-sm font-semibold text-orange-600 outline-none hover:text-orange-700 focus-visible:ring-2 focus-visible:ring-ring dark:text-orange-400"
+            className="mt-2 inline-flex items-center gap-1 rounded-sm text-sm font-semibold text-primary-ink outline-none hover:text-primary-ink-hover focus-visible:ring-2 focus-visible:ring-ring"
           >
             Mở điểm danh →
           </Link>
@@ -560,7 +618,7 @@ function TrialCard({ t }: { t: TeacherTrialSessionRow }) {
         <div className="flex items-center justify-between gap-2">
           <CardTitle className="text-base">{t.trialClassName}</CardTitle>
           <div className="flex shrink-0 items-center gap-1.5">
-            <Badge className="border-transparent bg-orange-100 text-orange-700 dark:bg-orange-500/20 dark:text-orange-200">
+            <Badge className="border-transparent bg-primary-soft text-primary-ink">
               Trial
             </Badge>
             <Badge variant={t.status === "COMPLETED" ? "outline" : "secondary"}>
@@ -576,7 +634,7 @@ function TrialCard({ t }: { t: TeacherTrialSessionRow }) {
         <p className="mt-0.5 text-sm text-muted-foreground">Lớp trải nghiệm</p>
         <Link
           href="/teacher/trial"
-          className="mt-2 inline-flex items-center gap-1 text-sm font-semibold text-orange-700 hover:underline dark:text-orange-300"
+          className="mt-2 inline-flex items-center gap-1 text-sm font-semibold text-primary-ink hover:underline"
         >
           Phiếu đánh giá Trial
           <ArrowRight className="h-3.5 w-3.5" aria-hidden />
@@ -612,14 +670,19 @@ function MonthView({
   const cellCount = Math.round((toDay.getTime() - fromDay.getTime()) / DAY_MS);
   const cells = Array.from({ length: cellCount }, (_, i) => {
     const dayUtc = addDaysUtc(fromDay, i);
-    return { key: isoKey(dayUtc), dayNum: dayUtc.getUTCDate(), inMonth: dayUtc.getUTCMonth() === month0 };
+    return {
+      key: isoKey(dayUtc),
+      dayNum: dayUtc.getUTCDate(),
+      inMonth: dayUtc.getUTCMonth() === month0,
+    };
   });
 
   // Đếm buổi (lớp + Trial) TRONG tháng đang xem (bỏ ngày tràn từ tháng kề).
   const monthPrefix = isoKey(monthStart).slice(0, 7);
   let monthCount = 0;
   for (const [key, agg] of byDay) {
-    if (key.startsWith(monthPrefix)) monthCount += agg.classes.length + agg.trials.length;
+    if (key.startsWith(monthPrefix))
+      monthCount += agg.classes.length + agg.trials.length;
   }
 
   return (
@@ -658,13 +721,15 @@ function MonthView({
                 <Link
                   key={c.key}
                   href={`?view=ds&moc=${c.key}`}
-                  title={shift ? `Ca làm: ${shift.labels.join(" · ")}` : undefined}
+                  title={
+                    shift ? `Ca làm: ${shift.labels.join(" · ")}` : undefined
+                  }
                   className={cn(
                     "t-card-hover block min-h-[92px] rounded-lg border p-1 transition-colors",
                     holiday
-                      ? "border-amber-200 bg-amber-50/70 dark:border-amber-500/30 dark:bg-amber-500/10" // nền nhạt: ngày nghỉ
+                      ? "border-state-warning-soft bg-state-warning-soft dark:border-state-warning dark:bg-state-warning-soft" // nền nhạt: ngày nghỉ
                       : shift
-                        ? "border-orange-200 bg-orange-50/60 dark:border-orange-500/30 dark:bg-orange-500/10" // viền: ngày có ca làm
+                        ? "border-primary-soft bg-primary-soft dark:border-primary dark:bg-primary-soft" // viền: ngày có ca làm
                         : "border-border bg-card",
                     !c.inMonth && "opacity-40",
                   )}
@@ -673,20 +738,27 @@ function MonthView({
                     <span
                       className={cn(
                         "flex h-5 w-5 items-center justify-center rounded-full text-[11px] font-bold",
-                        isToday ? "bg-orange-500 text-white" : "text-muted-foreground",
+                        isToday
+                          ? "bg-primary text-white"
+                          : "text-muted-foreground",
                       )}
                     >
                       {c.dayNum}
                     </span>
                     {holiday ? (
-                      <CalendarOff className="h-3 w-3 text-amber-500" aria-hidden />
+                      <CalendarOff
+                        className="h-3 w-3 text-state-warning-ink"
+                        aria-hidden
+                      />
                     ) : (
-                      shift && <span className="h-1.5 w-1.5 rounded-full bg-orange-500" />
+                      shift && (
+                        <span className="h-1.5 w-1.5 rounded-full bg-primary" />
+                      )
                     )}
                   </div>
                   {holiday && (
                     <p
-                      className="mb-1 truncate rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700 dark:bg-amber-500/15 dark:text-amber-300"
+                      className="mb-1 truncate rounded bg-state-warning-soft px-1.5 py-0.5 text-[10px] font-semibold text-state-warning-ink"
                       title={`${holiday.name} · ${holiday.typeLabel}`}
                     >
                       {holiday.name}
@@ -698,7 +770,7 @@ function MonthView({
                         <p
                           key={it.s.id}
                           title={`${classTime(it.s)} · ${it.s.class.name}`}
-                          className="truncate rounded border-l-2 border-blue-400 bg-blue-50 px-1.5 py-0.5 text-[10px] font-semibold text-blue-700 dark:bg-blue-500/15 dark:text-blue-300"
+                          className="truncate rounded border-l-2 border-state-info bg-state-info-soft px-1.5 py-0.5 text-[10px] font-semibold text-state-info-ink"
                         >
                           {sessionStart(it.s)} {it.s.class.name}
                         </p>
@@ -706,7 +778,7 @@ function MonthView({
                         <p
                           key={it.t.id}
                           title={`${it.t.startTime} · ${it.t.trialClassName}`}
-                          className="truncate rounded border-l-2 border-orange-400 bg-orange-50 px-1.5 py-0.5 text-[10px] font-semibold text-orange-700 dark:bg-orange-500/15 dark:text-orange-300"
+                          className="truncate rounded border-l-2 border-primary bg-primary-soft px-1.5 py-0.5 text-[10px] font-semibold text-primary-ink"
                         >
                           {it.t.startTime} {it.t.trialClassName}
                         </p>
@@ -756,7 +828,8 @@ function WeekView({
     weekEnd.getUTCDate(),
   )}/${two(weekEnd.getUTCMonth() + 1)}/${weekEnd.getUTCFullYear()}`;
   let weekCount = 0;
-  for (const agg of byDay.values()) weekCount += agg.classes.length + agg.trials.length;
+  for (const agg of byDay.values())
+    weekCount += agg.classes.length + agg.trials.length;
 
   return (
     <div>
@@ -780,7 +853,7 @@ function WeekView({
                 key={d.key}
                 className={cn(
                   "flex flex-col rounded-lg p-1",
-                  shift && !holiday && "bg-orange-50/60 dark:bg-orange-500/10", // nền nhẹ: ngày có ca làm
+                  shift && !holiday && "bg-primary-soft dark:bg-primary-soft", // nền nhẹ: ngày có ca làm
                 )}
               >
                 <Link
@@ -788,16 +861,18 @@ function WeekView({
                   className={cn(
                     "mb-1.5 rounded-lg px-2 py-1.5 text-center transition-opacity hover:opacity-80",
                     isToday
-                      ? "bg-orange-500 text-white"
+                      ? "bg-primary text-white"
                       : holiday
-                        ? "bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300"
+                        ? "bg-state-warning-soft text-state-warning-ink dark:bg-state-warning-soft dark:text-state-warning-ink"
                         : "bg-muted/50 text-muted-foreground",
                   )}
                 >
                   <p className="text-[10px] font-semibold uppercase tracking-wide opacity-90">
                     {WEEKDAYS[i]}
                   </p>
-                  <p className="text-base font-extrabold leading-tight">{d.dayNum}</p>
+                  <p className="text-base font-extrabold leading-tight">
+                    {d.dayNum}
+                  </p>
                 </Link>
                 <div className="flex flex-1 flex-col gap-1.5">
                   {shift && (
@@ -805,24 +880,31 @@ function WeekView({
                       {shift.labels.map((l) => (
                         <span
                           key={l}
-                          className="rounded bg-orange-100 px-1.5 py-0.5 text-[10px] font-semibold text-orange-700 dark:bg-orange-500/15 dark:text-orange-300"
+                          className="rounded bg-primary-soft px-1.5 py-0.5 text-[10px] font-semibold text-primary-ink"
                         >
                           {l}
                         </span>
                       ))}
                       {shift.leave && (
-                        <span className="rounded bg-red-100 px-1.5 py-0.5 text-[10px] font-semibold text-red-700 dark:bg-red-500/15 dark:text-red-300">
+                        <span className="rounded bg-state-danger-soft px-1.5 py-0.5 text-[10px] font-semibold text-state-danger-ink">
                           Xin nghỉ
                         </span>
                       )}
                     </div>
                   )}
                   {holiday && (
-                    <div className="flex items-start gap-1.5 rounded-lg border border-amber-200 bg-amber-50 px-2 py-1.5 text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200">
-                      <CalendarOff className="mt-0.5 h-3.5 w-3.5 shrink-0 text-amber-500" aria-hidden />
+                    <div className="flex items-start gap-1.5 rounded-lg border border-state-warning-soft bg-state-warning-soft px-2 py-1.5 text-state-warning-ink dark:border-state-warning">
+                      <CalendarOff
+                        className="mt-0.5 h-3.5 w-3.5 shrink-0 text-state-warning-ink"
+                        aria-hidden
+                      />
                       <div className="min-w-0">
-                        <p className="truncate text-[11px] font-bold leading-tight">{holiday.name}</p>
-                        <p className="text-[10px] opacity-80">{holiday.typeLabel}</p>
+                        <p className="truncate text-[11px] font-bold leading-tight">
+                          {holiday.name}
+                        </p>
+                        <p className="text-[10px] opacity-80">
+                          {holiday.typeLabel}
+                        </p>
                       </div>
                     </div>
                   )}
@@ -836,7 +918,7 @@ function WeekView({
                         <div
                           key={it.s.id}
                           className={cn(
-                            "rounded-lg border border-border border-l-4 border-l-blue-500 bg-blue-50/50 p-2 dark:bg-blue-500/10",
+                            "rounded-lg border border-border border-l-4 border-l-state-info bg-state-info-soft p-2",
                             it.s.status === "CANCELLED" && "opacity-60",
                           )}
                         >
@@ -846,7 +928,7 @@ function WeekView({
                               {classTime(it.s)}
                             </p>
                             {!assigned.has(it.s.classId) && (
-                              <span className="rounded bg-blue-100 px-1 text-[10px] font-bold text-blue-700 dark:bg-blue-500/15 dark:text-blue-300">
+                              <span className="rounded bg-state-info-soft px-1 text-[10px] font-bold text-state-info-ink">
                                 Thay
                               </span>
                             )}
@@ -860,30 +942,36 @@ function WeekView({
                             {it.s.class.name}
                           </p>
                           {it.s.topic && (
-                            <p className="mt-0.5 line-clamp-1 text-[11px] text-muted-foreground">{it.s.topic}</p>
+                            <p className="mt-0.5 line-clamp-1 text-[11px] text-muted-foreground">
+                              {it.s.topic}
+                            </p>
                           )}
                           {it.s.status === "CANCELLED" && (
-                            <p className="mt-0.5 text-[10px] font-semibold text-red-600 dark:text-red-400">Đã hủy</p>
+                            <p className="mt-0.5 text-[10px] font-semibold text-state-danger-ink">
+                              Đã hủy
+                            </p>
                           )}
                         </div>
                       ) : (
                         <div
                           key={it.t.id}
-                          className="rounded-lg border border-border border-l-4 border-l-orange-500 bg-orange-50/60 p-2 dark:bg-orange-500/10"
+                          className="rounded-lg border border-border border-l-4 border-l-primary bg-primary-soft p-2"
                         >
                           <div className="flex items-center justify-between gap-1">
                             <p className="flex items-center gap-1 text-[10px] font-bold text-muted-foreground">
                               <Clock className="h-3 w-3" aria-hidden />
                               {it.t.startTime}–{it.t.endTime}
                             </p>
-                            <span className="rounded bg-orange-100 px-1 text-[10px] font-bold text-orange-700 dark:bg-orange-500/20 dark:text-orange-200">
+                            <span className="rounded bg-primary-soft px-1 text-[10px] font-bold text-primary-ink">
                               Thử
                             </span>
                           </div>
                           <p className="mt-0.5 text-[13px] font-bold leading-tight text-foreground">
                             {it.t.trialClassName}
                           </p>
-                          <p className="mt-0.5 text-[11px] text-muted-foreground">Lớp trải nghiệm</p>
+                          <p className="mt-0.5 text-[11px] text-muted-foreground">
+                            Lớp trải nghiệm
+                          </p>
                         </div>
                       ),
                     )
@@ -918,7 +1006,7 @@ function ToggleLink({
       className={cn(
         "inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-semibold transition-colors",
         active
-          ? "bg-card text-orange-700 shadow-sm dark:text-orange-300"
+          ? "bg-card text-primary-ink shadow-sm dark:text-primary-ink"
           : "text-muted-foreground hover:text-foreground",
       )}
     >
@@ -979,16 +1067,26 @@ function Legend() {
   return (
     <div className="flex flex-wrap gap-x-4 gap-y-2 text-xs text-muted-foreground">
       <span className="inline-flex items-center gap-1.5">
-        <span className="h-2.5 w-2.5 rounded-full bg-blue-500" /> Buổi lớp
+        <span className="h-2.5 w-2.5 rounded-full bg-state-info" /> Buổi lớp
       </span>
       <span className="inline-flex items-center gap-1.5">
-        <span className="h-2.5 w-2.5 rounded-full bg-orange-500" /> Trial
+        <span className="h-2.5 w-2.5 rounded-full bg-primary" /> Trial
       </span>
       <span className="inline-flex items-center gap-1.5">
-        <span className="h-3 w-3 rounded border border-orange-300 bg-orange-50 dark:border-orange-500/40 dark:bg-orange-500/20" /> Ngày có ca làm
+        <span className="h-3 w-3 rounded border border-primary-soft bg-primary-soft dark:border-primary" />{" "}
+        Ngày có ca làm
       </span>
+      {/* Ô mẫu phải khớp thứ người dùng THẤY trên lịch: ngày nghỉ vừa được tô nền
+          vừa có biểu tượng. Chú giải cũ chỉ có biểu tượng nên nền vàng không được
+          giải nghĩa ở đâu cả. */}
       <span className="inline-flex items-center gap-1.5">
-        <CalendarOff className="h-3.5 w-3.5 text-amber-500" aria-hidden /> Ngày nghỉ
+        <span className="inline-flex h-3.5 w-3.5 items-center justify-center rounded border border-state-warning-soft bg-state-warning-soft">
+          <CalendarOff
+            className="h-2.5 w-2.5 text-state-warning-ink"
+            aria-hidden
+          />
+        </span>{" "}
+        Ngày nghỉ
       </span>
     </div>
   );

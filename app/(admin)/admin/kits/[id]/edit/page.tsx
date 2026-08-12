@@ -38,8 +38,8 @@ export default async function EditKitPage({ params }: Props) {
 
   return (
     <div>
-      <h1 className="mb-6 text-3xl font-black text-neutral-900">
-        Sửa Kit: <span className="font-bold text-orange-600">{kit.title}</span>
+      <h1 className="mb-6 text-3xl font-black text-foreground">
+        Sửa Kit: <span className="font-bold text-primary">{kit.title}</span>
       </h1>
       <KitForm
         kit={{

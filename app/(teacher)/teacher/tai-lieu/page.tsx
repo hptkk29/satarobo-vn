@@ -25,7 +25,10 @@ import {
   CourseMaterialsList,
   type CourseMaterialRow,
 } from "./_components/course-materials-list";
-import { LessonFilterList, type LessonView } from "./_components/lesson-filter-list";
+import {
+  LessonFilterList,
+  type LessonView,
+} from "./_components/lesson-filter-list";
 import { BackLink } from "../_components/ui/back-link";
 
 export const metadata = { title: "Thư viện tài liệu | Giáo viên Sata Robo" };
@@ -64,7 +67,8 @@ export default async function TeacherMaterialsPage({
   const session = await auth();
   if (!session?.user) return null; // layout đã gate login + role TEACHER
 
-  if (!(await checkPermission("teaching-materials:view-own-class"))) redirect("/");
+  if (!(await checkPermission("teaching-materials:view-own-class")))
+    redirect("/");
 
   const sp = await searchParams;
   const courseId = sp.courseId?.trim() || null;
@@ -107,12 +111,20 @@ export default async function TeacherMaterialsPage({
     let lessonViews: LessonView[] = [];
     if (lessonIds.length > 0) {
       // Lớp GV dạy khoá này → lấy buổi gắn lesson để cấp sessionId cho viewer SCORM.
-      const myCourseClassIds = myClasses.filter((c) => c.courseId === courseId).map((c) => c.id);
+      const myCourseClassIds = myClasses
+        .filter((c) => c.courseId === courseId)
+        .map((c) => c.id);
       const [docs, scormPkgs, sessions] = await Promise.all([
         sdb.document.findMany({
           where: { lessonId: { in: lessonIds } },
           orderBy: { title: "asc" },
-          select: { id: true, title: true, fileUrl: true, type: true, lessonId: true },
+          select: {
+            id: true,
+            title: true,
+            fileUrl: true,
+            type: true,
+            lessonId: true,
+          },
         }),
         scormOn
           ? sdb.scormPackage.findMany({
@@ -123,10 +135,15 @@ export default async function TeacherMaterialsPage({
               },
               select: { id: true, name: true, lessonId: true },
             })
-          : Promise.resolve([] as { id: string; name: string; lessonId: string }[]),
+          : Promise.resolve(
+              [] as { id: string; name: string; lessonId: string }[],
+            ),
         scormOn && myCourseClassIds.length
           ? sdb.classSession.findMany({
-              where: { classId: { in: myCourseClassIds }, lessonId: { in: lessonIds } },
+              where: {
+                classId: { in: myCourseClassIds },
+                lessonId: { in: lessonIds },
+              },
               orderBy: { date: "desc" },
               select: { id: true, lessonId: true },
             })
@@ -162,7 +179,11 @@ export default async function TeacherMaterialsPage({
           objectives: l.objectives,
           homework: (l.homeworkDefault ?? "").trim() || null,
           scorm: pkg
-            ? { id: pkg.id, name: pkg.name, sessionId: sessionByLesson.get(l.id) ?? null }
+            ? {
+                id: pkg.id,
+                name: pkg.name,
+                sessionId: sessionByLesson.get(l.id) ?? null,
+              }
             : null,
           documents: docsByLesson.get(l.id) ?? [],
         };
@@ -177,12 +198,12 @@ export default async function TeacherMaterialsPage({
           subtitle="Bài giảng theo khung chương trình — chỉ xem & trình chiếu, không chỉnh sửa."
         />
 
-        <div className="rounded-xl border border-border bg-orange-50 p-4 dark:bg-orange-500/10">
-          <div className="text-xs font-bold tracking-wider text-orange-600 uppercase dark:text-orange-400">
+        <div className="rounded-xl border border-border bg-primary-soft p-4">
+          <div className="text-xs font-bold tracking-wider text-primary-ink uppercase">
             Khung chương trình
           </div>
           <div className="mt-1 flex items-center gap-2 text-lg font-bold text-foreground">
-            <BookOpen className="h-5 w-5 text-orange-500 dark:text-orange-400" aria-hidden />
+            <BookOpen className="h-5 w-5 text-primary-ink" aria-hidden />
             {curriculumName ?? "Chưa gán khung chương trình"}
           </div>
           <div className="mt-0.5 text-sm text-muted-foreground">
@@ -192,8 +213,8 @@ export default async function TeacherMaterialsPage({
 
         {!scormOn && (
           <p className="rounded-lg border border-border bg-muted/40 p-3 text-xs text-muted-foreground">
-            Bài giảng tương tác (SCORM) đang tắt trên hệ thống — phần trình chiếu tạm ẩn.
-            Tài liệu đính kèm vẫn xem được.
+            Bài giảng tương tác (SCORM) đang tắt trên hệ thống — phần trình
+            chiếu tạm ẩn. Tài liệu đính kèm vẫn xem được.
           </p>
         )}
 
@@ -240,7 +261,9 @@ export default async function TeacherMaterialsPage({
     : [];
 
   // GIÁO ÁN = số tài liệu (Document) đính kèm các buổi — đếm gộp 1 lượt.
-  const allLessonIds = courses.flatMap((c) => c.curriculums[0]?.lessons.map((l) => l.id) ?? []);
+  const allLessonIds = courses.flatMap(
+    (c) => c.curriculums[0]?.lessons.map((l) => l.id) ?? [],
+  );
   const docCounts = allLessonIds.length
     ? await sdb.document.groupBy({
         by: ["lessonId"],
@@ -248,12 +271,16 @@ export default async function TeacherMaterialsPage({
         _count: { _all: true },
       })
     : [];
-  const docByLesson = new Map(docCounts.map((d) => [d.lessonId, d._count._all]));
+  const docByLesson = new Map(
+    docCounts.map((d) => [d.lessonId, d._count._all]),
+  );
 
   const rows: CourseMaterialRow[] = courses.map((c) => {
     const lessons = c.curriculums[0]?.lessons ?? [];
     const plans = lessons.reduce((n, l) => n + (docByLesson.get(l.id) ?? 0), 0);
-    const homeworks = lessons.filter((l) => (l.homeworkDefault ?? "").trim().length > 0).length;
+    const homeworks = lessons.filter(
+      (l) => (l.homeworkDefault ?? "").trim().length > 0,
+    ).length;
     return {
       id: c.id,
       name: c.name,
@@ -285,7 +312,10 @@ function NotYours() {
   return (
     <div className="space-y-4">
       <BackLink href="?" label="Thư viện tài liệu" />
-      <EmptyState icon={FileText} title="Khoá không thuộc danh sách khoá bạn dạy." />
+      <EmptyState
+        icon={FileText}
+        title="Khoá không thuộc danh sách khoá bạn dạy."
+      />
     </div>
   );
 }

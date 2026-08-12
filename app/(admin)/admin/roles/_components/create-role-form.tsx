@@ -31,8 +31,8 @@ export function CreateRoleForm() {
   }
 
   return (
-    <div className="rounded-lg border bg-neutral-50 p-4">
-      <h2 className="mb-3 text-sm font-semibold text-neutral-700">Tạo role mới</h2>
+    <div className="rounded-lg border bg-muted p-4">
+      <h2 className="mb-3 text-sm font-semibold text-foreground">Tạo role mới</h2>
       <div className="grid gap-3 sm:grid-cols-4">
         <div>
           <Label htmlFor="role-code">Mã (IN HOA)</Label>

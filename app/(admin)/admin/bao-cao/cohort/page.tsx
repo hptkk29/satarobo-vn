@@ -21,16 +21,24 @@ import {
   type CohortEnrollmentRecord,
   type EnrollmentStatusValue,
 } from "@/lib/reports/cohort";
+import { PageHelp } from "@/components/admin/ui/page-help";
+import { PhanTrangBang } from "@/components/ui/phan-trang-bang";
 
 export const metadata = { title: "Báo cáo cohort | Admin" };
 export const dynamic = "force-dynamic";
 
 const num = (n: number) => n.toLocaleString("vi-VN");
 
-function Card({ title, children }: { title: string; children: React.ReactNode }) {
+function Card({
+  title,
+  children,
+}: {
+  title: string;
+  children: React.ReactNode;
+}) {
   return (
-    <section className="rounded-xl border border-neutral-200 bg-white p-4">
-      <h2 className="mb-3 text-sm font-semibold text-neutral-800">{title}</h2>
+    <section className="rounded-xl border border-border bg-card p-4">
+      <h2 className="mb-3 text-sm font-semibold text-foreground">{title}</h2>
       {children}
     </section>
   );
@@ -88,7 +96,12 @@ async function computeCohortReport(actor: Actor, filters: ReportFilters) {
               }
             : {}),
         },
-        select: { classId: true, status: true, enrolledAt: true, startedAt: true },
+        select: {
+          classId: true,
+          status: true,
+          enrolledAt: true,
+          startedAt: true,
+        },
         take: 50_000,
       })
     : [];
@@ -107,7 +120,11 @@ async function computeCohortReport(actor: Actor, filters: ReportFilters) {
 }
 
 type SearchParams = {
-  searchParams: Promise<{ center?: string; dateFrom?: string; dateTo?: string }>;
+  searchParams: Promise<{
+    center?: string;
+    dateFrom?: string;
+    dateTo?: string;
+  }>;
 };
 
 export default async function CohortReportPage({ searchParams }: SearchParams) {
@@ -137,17 +154,24 @@ export default async function CohortReportPage({ searchParams }: SearchParams) {
     name: r.cohort,
     "Hoàn thành": r.completed,
     "Đang học": r.studying,
-    "Rút": r.withdrew,
+    Rút: r.withdrew,
   }));
 
   return (
     <div className="space-y-5 p-4">
       <div>
-        <h1 className="text-xl font-bold text-neutral-900">Báo cáo cohort</h1>
-        <p className="text-sm text-neutral-500">
-          Nhóm ghi danh theo kỳ bắt đầu — tiến độ trung bình và tỷ lệ hoàn thành / đang học / rút, theo phạm vi cơ sở của bạn.
+        <h1 className="text-xl font-bold text-foreground">Báo cáo cohort</h1>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Tiến độ và tỷ lệ hoàn thành theo kỳ nhập học
         </p>
       </div>
+
+      <PageHelp>
+        <p>
+          Nhóm ghi danh theo kỳ bắt đầu — tiến độ trung bình và tỷ lệ hoàn thành
+          / đang học / rút, theo phạm vi cơ sở của bạn.
+        </p>
+      </PageHelp>
 
       <ReportFilterBar
         basePath="/bao-cao/cohort"
@@ -159,7 +183,7 @@ export default async function CohortReportPage({ searchParams }: SearchParams) {
       />
 
       {report.totalEnrollments === 0 ? (
-        <p className="rounded-xl border border-dashed border-neutral-300 bg-white p-6 text-center text-sm text-neutral-500">
+        <p className="rounded-xl border border-dashed border-border bg-card p-6 text-center text-sm text-muted-foreground">
           Chưa có ghi danh trong phạm vi của bạn.
         </p>
       ) : null}
@@ -169,11 +193,19 @@ export default async function CohortReportPage({ searchParams }: SearchParams) {
           <LineChart
             data={progressData}
             xKey="name"
-            lines={[{ key: "Tiến độ TB (%)", name: "Tiến độ TB (%)", color: "#7C3AED" }]}
+            lines={[
+              {
+                key: "Tiến độ TB (%)",
+                name: "Tiến độ TB (%)",
+                color: "#7C3AED",
+              },
+            ]}
             height={300}
           />
         ) : (
-          <p className="py-8 text-center text-sm text-neutral-400">Chưa có dữ liệu.</p>
+          <p className="py-8 text-center text-sm text-muted-foreground">
+            Chưa có dữ liệu.
+          </p>
         )}
       </Card>
 
@@ -190,56 +222,73 @@ export default async function CohortReportPage({ searchParams }: SearchParams) {
             height={300}
           />
         ) : (
-          <p className="py-8 text-center text-sm text-neutral-400">Chưa có dữ liệu.</p>
+          <p className="py-8 text-center text-sm text-muted-foreground">
+            Chưa có dữ liệu.
+          </p>
         )}
       </Card>
 
-      <section className="rounded-xl border border-neutral-200 bg-white">
-        <div className="border-b border-neutral-100 px-4 py-3">
-          <h2 className="text-sm font-semibold text-neutral-700">Chi tiết theo cohort</h2>
+      <section className="rounded-xl border border-border bg-card">
+        <div className="border-b border-border px-4 py-3">
+          <h2 className="text-sm font-semibold text-foreground">
+            Chi tiết theo cohort
+          </h2>
         </div>
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[640px] text-sm">
-            <thead className="text-left text-xs text-neutral-400">
-              <tr>
-                <th className="px-4 py-2">Kỳ bắt đầu</th>
-                <th className="px-4 py-2 text-right">Ghi danh</th>
-                <th className="px-4 py-2 text-right">Tiến độ TB</th>
-                <th className="px-4 py-2 text-right">Hoàn thành</th>
-                <th className="px-4 py-2 text-right">Đang học</th>
-                <th className="px-4 py-2 text-right">Rút</th>
-              </tr>
-            </thead>
-            <tbody>
-              {report.rows.length === 0 ? (
+          <PhanTrangBang>
+            <table className="w-full min-w-[640px] text-sm">
+              <thead className="text-left text-xs text-muted-foreground">
                 <tr>
-                  <td colSpan={6} className="px-4 py-6 text-center text-neutral-400">
-                    Không có ghi danh trong phạm vi cơ sở.
-                  </td>
+                  <th className="px-4 py-2">Kỳ bắt đầu</th>
+                  <th className="px-4 py-2 text-right">Ghi danh</th>
+                  <th className="px-4 py-2 text-right">Tiến độ TB</th>
+                  <th className="px-4 py-2 text-right">Hoàn thành</th>
+                  <th className="px-4 py-2 text-right">Đang học</th>
+                  <th className="px-4 py-2 text-right">Rút</th>
                 </tr>
-              ) : (
-                report.rows.map((r) => (
-                  <tr key={r.cohort} className="border-t">
-                    <td className="px-4 py-2 font-medium">{r.cohort}</td>
-                    <td className="px-4 py-2 text-right">{num(r.total)}</td>
-                    <td className="px-4 py-2 text-right font-semibold">{r.avgProgress}%</td>
-                    <td className="px-4 py-2 text-right text-emerald-700">
-                      {num(r.completed)}{" "}
-                      <span className="text-xs text-neutral-400">({r.completionRate}%)</span>
-                    </td>
-                    <td className="px-4 py-2 text-right text-orange-600">
-                      {num(r.studying)}{" "}
-                      <span className="text-xs text-neutral-400">({r.studyingRate}%)</span>
-                    </td>
-                    <td className="px-4 py-2 text-right text-rose-600">
-                      {num(r.withdrew)}{" "}
-                      <span className="text-xs text-neutral-400">({r.withdrewRate}%)</span>
+              </thead>
+              <tbody>
+                {report.rows.length === 0 ? (
+                  <tr>
+                    <td
+                      colSpan={6}
+                      className="px-4 py-6 text-center text-muted-foreground"
+                    >
+                      Không có ghi danh trong phạm vi cơ sở.
                     </td>
                   </tr>
-                ))
-              )}
-            </tbody>
-          </table>
+                ) : (
+                  report.rows.map((r) => (
+                    <tr key={r.cohort} className="border-t">
+                      <td className="px-4 py-2 font-medium">{r.cohort}</td>
+                      <td className="px-4 py-2 text-right">{num(r.total)}</td>
+                      <td className="px-4 py-2 text-right font-semibold">
+                        {r.avgProgress}%
+                      </td>
+                      <td className="px-4 py-2 text-right text-state-success-ink">
+                        {num(r.completed)}{" "}
+                        <span className="text-xs text-muted-foreground">
+                          ({r.completionRate}%)
+                        </span>
+                      </td>
+                      <td className="px-4 py-2 text-right text-primary">
+                        {num(r.studying)}{" "}
+                        <span className="text-xs text-muted-foreground">
+                          ({r.studyingRate}%)
+                        </span>
+                      </td>
+                      <td className="px-4 py-2 text-right text-state-danger-ink">
+                        {num(r.withdrew)}{" "}
+                        <span className="text-xs text-muted-foreground">
+                          ({r.withdrewRate}%)
+                        </span>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </PhanTrangBang>
         </div>
       </section>
     </div>

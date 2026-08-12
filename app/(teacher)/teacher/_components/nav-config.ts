@@ -70,12 +70,19 @@ export const navGroups: NavGroup[] = [
       // ⚠️ href PHẢI giữ tiền tố `/teacher`: clean URL `/tin-nhan` trên host giaovien
       // trùng segment admin (`ADMIN_ROUTE_SEGMENTS` có "tin-nhan") nên bị decideRoute
       // đá về trang chủ GV — cùng vết với `hoc-ba`/`don-tu` đã có.
-      { label: "Tin nhắn", href: "/teacher/tin-nhan", icon: MessageCircle, badge: "chat" },
+      {
+        label: "Tin nhắn",
+        href: "/teacher/tin-nhan",
+        icon: MessageCircle,
+        badge: "chat",
+      },
     ],
   },
   {
     label: "Trial",
-    items: [{ label: "Danh sách Trial", href: "/teacher/trial", icon: Sparkles }],
+    items: [
+      { label: "Danh sách Trial", href: "/teacher/trial", icon: Sparkles },
+    ],
   },
   {
     label: "Học viên & Học bạ",

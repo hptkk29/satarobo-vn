@@ -36,17 +36,17 @@ export function Topbar({ userName, userRole, roles = [], activeRole = null }: To
     : "?";
 
   return (
-    <header className="flex h-16 items-center justify-between border-b border-neutral-200 bg-white px-6">
+    <header className="flex h-16 items-center justify-between border-b border-border bg-card px-6">
       {/* Search bar — Enter → trang kết quả /search?q= (tìm gộp lead/học viên/tin tức). */}
       <form action="/search" method="GET" className="hidden md:flex flex-1 max-w-md">
         <div className="relative w-full">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-neutral-400" />
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <input
             type="search"
             name="q"
             placeholder="Tìm leads, học viên, blog..."
             aria-label="Tìm leads, học viên, tin tức"
-            className="w-full pl-9 pr-4 py-2 text-sm rounded-lg border border-neutral-200 bg-neutral-50 focus:bg-white focus:border-orange-300 focus:outline-none transition-colors"
+            className="w-full pl-9 pr-4 py-2 text-sm rounded-lg border border-border bg-muted focus:bg-card focus:border-primary focus:outline-none transition-colors"
           />
         </div>
       </form>
@@ -58,19 +58,19 @@ export function Topbar({ userName, userRole, roles = [], activeRole = null }: To
 
         {/* User dropdown */}
         <DropdownMenu>
-          <DropdownMenuTrigger className="flex items-center gap-2 rounded-md px-2 py-1 hover:bg-neutral-50 outline-none transition-colors">
+          <DropdownMenuTrigger className="flex items-center gap-2 rounded-md px-2 py-1 hover:bg-muted outline-none transition-colors">
             <Avatar className="h-8 w-8">
-              <AvatarFallback className="bg-gradient-to-br from-orange-500 to-purple-700 text-white text-xs">
+              <AvatarFallback className="bg-primary text-white text-xs">
                 {initials}
               </AvatarFallback>
             </Avatar>
             <div className="hidden text-left md:block">
-              <p className="text-sm font-medium text-neutral-900">{userName ?? "Admin"}</p>
-              <p className="text-xs text-neutral-500">
+              <p className="text-sm font-medium text-foreground">{userName ?? "Admin"}</p>
+              <p className="text-xs text-muted-foreground">
                 {roleLabel(userRole)}
               </p>
             </div>
-            <ChevronDown className="h-4 w-4 text-neutral-400" />
+            <ChevronDown className="h-4 w-4 text-muted-foreground" />
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-48">
             {/* /settings/profile không tồn tại (link chết cũ) → trỏ trang Cài đặt
@@ -83,7 +83,7 @@ export function Topbar({ userName, userRole, roles = [], activeRole = null }: To
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem
-              className="text-red-600 focus:text-red-600"
+              className="text-state-danger-ink focus:text-state-danger-ink"
               onClick={() => logoutToGate()}
             >
               <LogOut className="mr-2 h-4 w-4" /> Đăng xuất

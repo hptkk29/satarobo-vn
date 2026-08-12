@@ -16,7 +16,7 @@ function Stars({ value }: { value: number }) {
       {[1, 2, 3, 4, 5].map((i) => (
         <Star
           key={i}
-          className={`h-4 w-4 ${i <= Math.round(value) ? "fill-amber-400 text-amber-400" : "text-gray-200"}`}
+          className={`h-4 w-4 ${i <= Math.round(value) ? "fill-state-warning-ink text-state-warning-ink" : "text-gray-200"}`}
         />
       ))}
     </span>
@@ -63,34 +63,34 @@ export function TeacherEvaluations({
   }
 
   return (
-    <section className="rounded-xl border border-gray-200 bg-white p-5">
-      <h2 className="mb-4 text-sm font-bold uppercase tracking-wider text-gray-500">
+    <section className="rounded-xl border border-border bg-card p-5">
+      <h2 className="mb-4 text-sm font-bold uppercase tracking-wider text-muted-foreground">
         Đánh giá giáo viên
       </h2>
 
       {/* Phụ huynh */}
-      <div className="mb-4 rounded-lg bg-gray-50 p-4">
+      <div className="mb-4 rounded-lg bg-muted p-4">
         <div className="flex items-center gap-3">
-          <div className="text-2xl font-bold tabular-nums text-gray-900">
+          <div className="text-2xl font-bold tabular-nums text-foreground">
             {parentAvg != null ? parentAvg.toFixed(1) : "—"}
           </div>
           {parentAvg != null && <Stars value={parentAvg} />}
-          <span className="text-xs text-gray-500">
+          <span className="text-xs text-muted-foreground">
             điểm phụ huynh trung bình ({parentCount} đánh giá, từ các lớp GV phụ trách)
           </span>
         </div>
         {parentRecent.length > 0 && (
           <ul className="mt-3 space-y-2">
             {parentRecent.map((f, i) => (
-              <li key={i} className="rounded-md border border-gray-100 bg-white p-2 text-sm">
+              <li key={i} className="rounded-md border border-border bg-card p-2 text-sm">
                 <div className="flex items-center gap-2">
                   <Stars value={f.rating} />
-                  <span className="text-xs text-gray-400">
+                  <span className="text-xs text-muted-foreground">
                     {f.studentName ?? "PH"} ·{" "}
                     {formatDateVN(f.createdAt)}
                   </span>
                 </div>
-                <p className="mt-1 text-gray-700">{f.content}</p>
+                <p className="mt-1 text-foreground">{f.content}</p>
               </li>
             ))}
           </ul>
@@ -99,20 +99,20 @@ export function TeacherEvaluations({
 
       {/* Nội bộ / dự giờ */}
       <div>
-        <p className="mb-2 text-xs font-semibold text-gray-400">Đánh giá nội bộ / dự giờ ({reviews.length})</p>
+        <p className="mb-2 text-xs font-semibold text-muted-foreground">Đánh giá nội bộ / dự giờ ({reviews.length})</p>
         {reviews.length === 0 ? (
-          <p className="text-sm text-gray-400">Chưa có đánh giá nội bộ.</p>
+          <p className="text-sm text-muted-foreground">Chưa có đánh giá nội bộ.</p>
         ) : (
           <ul className="space-y-2">
             {reviews.map((r, i) => (
-              <li key={i} className="rounded-md border border-gray-100 p-2 text-sm">
+              <li key={i} className="rounded-md border border-border p-2 text-sm">
                 <div className="flex items-center gap-2">
                   <Stars value={r.score} />
-                  <span className="text-xs text-gray-400">
+                  <span className="text-xs text-muted-foreground">
                     {r.reviewerName} · {formatDateVN(r.createdAt)}
                   </span>
                 </div>
-                {r.note && <p className="mt-1 text-gray-700">{r.note}</p>}
+                {r.note && <p className="mt-1 text-foreground">{r.note}</p>}
               </li>
             ))}
           </ul>
@@ -120,16 +120,16 @@ export function TeacherEvaluations({
       </div>
 
       {canEdit && (
-        <div className="mt-4 border-t border-gray-100 pt-4">
-          <p className="mb-2 text-xs font-semibold text-gray-500">Thêm đánh giá nội bộ</p>
+        <div className="mt-4 border-t border-border pt-4">
+          <p className="mb-2 text-xs font-semibold text-muted-foreground">Thêm đánh giá nội bộ</p>
           <div className="flex flex-wrap items-end gap-2">
             <label className="block">
-              <span className="mb-1 block text-xs text-gray-500">Điểm</span>
+              <span className="mb-1 block text-xs text-muted-foreground">Điểm</span>
               <select
                 value={score}
                 onChange={(e) => setScore(Number(e.target.value))}
                 disabled={pending}
-                className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm focus:border-[#7C3AED] focus:outline-none"
+                className="rounded-lg border border-border px-3 py-1.5 text-sm focus:border-primary focus:outline-none"
               >
                 {[5, 4, 3, 2, 1].map((s) => (
                   <option key={s} value={s}>{s} sao</option>
@@ -141,13 +141,13 @@ export function TeacherEvaluations({
               onChange={(e) => setNote(e.target.value)}
               disabled={pending}
               placeholder="Nhận xét dự giờ (bắt buộc)…"
-              className="min-w-[16rem] flex-1 rounded-lg border border-gray-300 px-3 py-1.5 text-sm focus:border-[#7C3AED] focus:outline-none"
+              className="min-w-[16rem] flex-1 rounded-lg border border-border px-3 py-1.5 text-sm focus:border-primary focus:outline-none"
             />
             <button
               type="button"
               onClick={submit}
               disabled={pending}
-              className="rounded-lg bg-[#7C3AED] px-4 py-1.5 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-50"
+              className="rounded-lg bg-primary px-4 py-1.5 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-50"
             >
               {pending ? "Đang lưu…" : "Ghi đánh giá"}
             </button>

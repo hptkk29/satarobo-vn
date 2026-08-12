@@ -8,15 +8,16 @@ import {
   REPORT_CARD_STATUS_LABEL,
   type ReportCardStatusValue,
 } from "@/lib/lms/report-card";
+import { PhanTrangBang } from "@/components/ui/phan-trang-bang";
 
 export const metadata = { title: "Học bạ năng lực | Admin" };
 export const dynamic = "force-dynamic";
 
 const STATUS_CLASS: Record<ReportCardStatusValue, string> = {
-  DRAFT: "bg-neutral-100 text-neutral-600",
-  PENDING_REVIEW: "bg-amber-100 text-amber-700",
-  PUBLISHED: "bg-emerald-100 text-emerald-700",
-  RECALLED: "bg-rose-100 text-rose-700",
+  DRAFT: "bg-muted text-muted-foreground",
+  PENDING_REVIEW: "bg-state-warning-soft text-state-warning-ink",
+  PUBLISHED: "bg-state-success-soft text-state-success-ink",
+  RECALLED: "bg-state-danger-soft text-state-danger-ink",
 };
 
 function StatusBadge({ status }: { status: ReportCardStatusValue }) {
@@ -90,15 +91,15 @@ export default async function ReportCardsPage({
     <div className="space-y-5 p-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
-          <h1 className="text-xl font-bold text-neutral-900">Học bạ năng lực</h1>
-          <p className="text-sm text-neutral-500">
+          <h1 className="text-xl font-bold text-foreground">Học bạ năng lực</h1>
+          <p className="text-sm text-muted-foreground">
             Chọn lớp → nhập học bạ từng học viên → nộp duyệt → phát hành.
           </p>
         </div>
         {canReviewReportCards ? (
           <Link
             href="/report-cards/criteria"
-            className="rounded-md border border-neutral-300 px-4 py-2 text-sm font-medium text-neutral-700 hover:bg-neutral-50"
+            className="rounded-md border border-border px-4 py-2 text-sm font-medium text-foreground hover:bg-muted"
           >
             Cấu hình tiêu chí
           </Link>
@@ -109,7 +110,7 @@ export default async function ReportCardsPage({
         <select
           name="classId"
           defaultValue={classId ?? ""}
-          className="rounded-md border border-neutral-300 px-3 py-2 text-sm"
+          className="rounded-md border border-border px-3 py-2 text-sm"
         >
           <option value="">— Chọn lớp —</option>
           {classes.map((c) => (
@@ -125,43 +126,45 @@ export default async function ReportCardsPage({
       </form>
 
       {classId && rows.length === 0 ? (
-        <p className="text-sm text-neutral-500">Lớp không có học viên hoặc ngoài phạm vi cơ sở.</p>
+        <p className="text-sm text-muted-foreground">Lớp không có học viên hoặc ngoài phạm vi cơ sở.</p>
       ) : null}
 
       {rows.length > 0 ? (
-        <section className="rounded-xl border border-neutral-200 bg-white">
-          <table className="w-full text-sm">
-            <thead className="text-left text-xs text-neutral-400">
-              <tr>
-                <th className="px-4 py-2">Học viên</th>
-                <th className="px-4 py-2">Trạng thái học bạ</th>
-                <th className="px-4 py-2 text-right">Thao tác</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((r) => (
-                <tr key={r.enrollmentId} className="border-t">
-                  <td className="px-4 py-2 font-medium">
-                    {r.studentName}
-                    {r.studentCode ? <span className="text-neutral-400"> ({r.studentCode})</span> : null}
-                  </td>
-                  <td className="px-4 py-2">
-                    {r.status ? <StatusBadge status={r.status} /> : (
-                      <span className="text-xs text-neutral-400">Chưa có</span>
-                    )}
-                  </td>
-                  <td className="px-4 py-2 text-right">
-                    <Link
-                      href={`/report-cards/${r.enrollmentId}`}
-                      className="rounded-md bg-purple-700 px-3 py-1.5 text-xs font-medium text-white"
-                    >
-                      {r.status ? "Mở học bạ" : "Nhập học bạ"}
-                    </Link>
-                  </td>
+        <section className="rounded-xl border border-border bg-card">
+          <PhanTrangBang>
+            <table className="w-full text-sm">
+              <thead className="text-left text-xs text-muted-foreground">
+                <tr>
+                  <th className="px-4 py-2">Học viên</th>
+                  <th className="px-4 py-2">Trạng thái học bạ</th>
+                  <th className="px-4 py-2 text-right">Thao tác</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {rows.map((r) => (
+                  <tr key={r.enrollmentId} className="border-t">
+                    <td className="px-4 py-2 font-medium">
+                      {r.studentName}
+                      {r.studentCode ? <span className="text-muted-foreground"> ({r.studentCode})</span> : null}
+                    </td>
+                    <td className="px-4 py-2">
+                      {r.status ? <StatusBadge status={r.status} /> : (
+                        <span className="text-xs text-muted-foreground">Chưa có</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-2 text-right">
+                      <Link
+                        href={`/report-cards/${r.enrollmentId}`}
+                        className="rounded-md bg-primary-dark px-3 py-1.5 text-xs font-medium text-white"
+                      >
+                        {r.status ? "Mở học bạ" : "Nhập học bạ"}
+                      </Link>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </PhanTrangBang>
         </section>
       ) : null}
     </div>

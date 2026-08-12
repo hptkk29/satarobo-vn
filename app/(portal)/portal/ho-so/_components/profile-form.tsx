@@ -49,7 +49,10 @@ export function ProfileForm({
 
   function confirmPhone() {
     startPhone(async () => {
-      const res = await confirmParentPhoneChangeAction({ newPhone, code: phoneCode });
+      const res = await confirmParentPhoneChangeAction({
+        newPhone,
+        code: phoneCode,
+      });
       if (res.ok) {
         toast.success("Đã đổi số điện thoại đăng nhập.");
         setPhoneStep("idle");
@@ -107,7 +110,10 @@ export function ProfileForm({
         </label>
         <label className="mt-3 block">
           <span className="mb-1 block text-xs font-medium text-neutral-500">
-            Email <span className="font-normal text-neutral-400">(kênh dự phòng)</span>
+            Email{" "}
+            <span className="font-normal text-neutral-500">
+              (kênh dự phòng)
+            </span>
           </span>
           <input
             value={email || "— chưa có —"}
@@ -119,13 +125,17 @@ export function ProfileForm({
           <span className="mb-1 block text-xs font-medium text-neutral-500">
             Tên hiển thị
           </span>
-          <input value={name} onChange={(e) => setName(e.target.value)} className={inputCls} />
+          <input
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            className={inputCls}
+          />
         </label>
         <button
           type="button"
           onClick={saveName}
           disabled={savingName}
-          className="mt-3 rounded-lg bg-orange-500 px-4 py-2 text-sm font-semibold text-white hover:bg-orange-600 disabled:opacity-60"
+          className="mt-3 rounded-lg bg-orange-700 px-4 py-2 text-sm font-semibold text-white hover:bg-orange-800 disabled:opacity-60"
         >
           Lưu
         </button>
@@ -136,8 +146,8 @@ export function ProfileForm({
           Đổi số điện thoại đăng nhập
         </h2>
         <p className="mb-3 text-xs leading-relaxed text-neutral-500">
-          Mã xác thực gửi tới <strong className="font-medium">số mới</strong> — quý phụ huynh
-          cần đang giữ số đó. Sau khi đổi, đăng nhập bằng số mới.
+          Mã xác thực gửi tới <strong className="font-medium">số mới</strong> —
+          quý phụ huynh cần đang giữ số đó. Sau khi đổi, đăng nhập bằng số mới.
         </p>
         <div className="space-y-3">
           <input
@@ -153,7 +163,9 @@ export function ProfileForm({
             <input
               inputMode="numeric"
               value={phoneCode}
-              onChange={(e) => setPhoneCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+              onChange={(e) =>
+                setPhoneCode(e.target.value.replace(/\D/g, "").slice(0, 6))
+              }
               placeholder="Mã 6 số vừa nhận"
               className={`${inputCls} tracking-[0.3em]`}
             />
@@ -164,7 +176,7 @@ export function ProfileForm({
             type="button"
             onClick={sendPhoneOtp}
             disabled={savingPhone || !newPhone.trim()}
-            className="mt-3 rounded-lg bg-orange-500 px-4 py-2 text-sm font-semibold text-white hover:bg-orange-600 disabled:opacity-60"
+            className="mt-3 rounded-lg bg-orange-700 px-4 py-2 text-sm font-semibold text-white hover:bg-orange-800 disabled:opacity-60"
           >
             {savingPhone ? "Đang gửi…" : "Gửi mã tới số mới"}
           </button>
@@ -174,7 +186,7 @@ export function ProfileForm({
               type="button"
               onClick={confirmPhone}
               disabled={savingPhone || phoneCode.length !== 6}
-              className="rounded-lg bg-orange-500 px-4 py-2 text-sm font-semibold text-white hover:bg-orange-600 disabled:opacity-60"
+              className="rounded-lg bg-orange-700 px-4 py-2 text-sm font-semibold text-white hover:bg-orange-800 disabled:opacity-60"
             >
               {savingPhone ? "Đang đổi…" : "Xác nhận đổi số"}
             </button>

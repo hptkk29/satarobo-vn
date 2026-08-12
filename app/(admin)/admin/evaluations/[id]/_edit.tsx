@@ -46,7 +46,7 @@ export function FormEditor({
   return (
     <div className="space-y-3">
       {locked && (
-        <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+        <div className="flex items-start gap-2 rounded-lg border border-state-warning-soft bg-state-warning-soft p-3 text-sm text-state-warning-ink">
           <Lock className="mt-0.5 h-4 w-4 shrink-0" />
           <p>
             Form đã có phản hồi nên <strong>không thể sửa câu hỏi/lựa chọn</strong>. Hãy lưu trữ form này và
@@ -63,7 +63,7 @@ export function FormEditor({
             type="button"
             onClick={save}
             disabled={pending}
-            className="rounded-lg bg-orange-500 px-4 py-2 text-sm font-semibold text-white hover:bg-orange-600 disabled:opacity-60"
+            className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white hover:bg-primary-dark disabled:opacity-60"
           >
             {pending ? "Đang lưu…" : "Lưu câu hỏi"}
           </button>
@@ -72,7 +72,7 @@ export function FormEditor({
           type="button"
           onClick={clone}
           disabled={pending}
-          className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-50 disabled:opacity-60"
+          className="rounded-lg border border-border px-4 py-2 text-sm font-medium text-muted-foreground hover:bg-muted disabled:opacity-60"
         >
           Nhân bản form
         </button>

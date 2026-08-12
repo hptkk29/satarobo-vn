@@ -3,7 +3,7 @@ import { auth } from '@/lib/auth'
 import { redirect } from 'next/navigation'
 import { scopedDb } from '@/lib/db-scope'
 import { resolveActor } from '@/lib/auth/actor'
-import { checkPermission } from '@/lib/auth/check-permission'
+import { checkPermission, checkPermissionDetail } from '@/lib/auth/check-permission'
 import { maskLeadPiiFields } from '@/lib/lead/pii'
 import { canViewLeadPii } from '@/lib/auth/check-permission'
 import { LeadsTable } from './_components/leads-table'
@@ -13,12 +13,13 @@ import { ALL_LEAD_STATUSES } from '@/lib/leads/status'
 import type { LeadStatus, Prisma } from '@prisma/client'
 import { phoneSearchTerm } from '@/lib/phone'
 import { getNonEnrollableCenterIds } from '@/lib/enrollment-flow'
+import { docSoDong } from '@/lib/ui/phan-trang'
 
-const PAGE_SIZE = 20
 const KANBAN_LIMIT = 500
 
 type SP = {
   page?: string
+  size?: string
   status?: string
   q?: string
   view?: string
@@ -56,6 +57,7 @@ export default async function LeadsPage({
   const params = await searchParams
   const view = params.view === 'kanban' ? 'kanban' : 'table'
   const page = Math.max(1, Number(params.page ?? 1))
+  const soDong = docSoDong(params.size)
   const statusParam = params.status as LeadStatus | undefined
   const q = params.q?.trim()
   // SĐT lưu 2 dạng (0… cũ / 84… mới) — tìm theo phần lõi để không sót. Xem lib/phone.ts.
@@ -78,6 +80,18 @@ export default async function LeadsPage({
           ...(dateTo ? { lte: new Date(`${dateTo}T23:59:59`) } : {}),
         }
       : undefined
+
+  // #11 T2 — mask PII lead (SĐT/email/tên PH-HS/note) ở SERVER cho actor không có
+  // quyền leads:view-pii — chặn leak qua RSC payload, không chỉ che UI.
+  // ⚠️ Không lấy MARKETING làm ví dụ nữa: từ 21/07 MARKETING CÓ leads:view-pii.
+  // Hiện mọi vai vào được trang này đều có quyền, nên nhánh mask chỉ chạy khi
+  // admin thu quyền của một người cụ thể qua UserPermissionGrant (DENY).
+  const canViewPii = await canViewLeadPii()
+  // NỢ #11 (search-oracle): chỉ cho tìm theo SĐT khi actor thấy được SĐT thật —
+  // PII lead do leads:view-pii cai quản (canViewPii VÀ không bị DENY cấp trường
+  // "phone" TS-02). Thiếu quyền mà vẫn filter theo SĐT = dò được số qua kết quả.
+  const { fieldMask: leadPiiMask } = await checkPermissionDetail('leads:view-pii')
+  const canSearchPhone = canViewPii && !leadPiiMask.includes('phone')
 
   // Base filter (không kèm status) — dùng cho query chính (thêm status tuỳ view)
   // + đếm badge tab "Đã đăng ký" (luôn đếm trên scope hiện tại, bất kể view/status filter).
@@ -108,7 +122,8 @@ export default async function LeadsPage({
       ? {
           OR: [
             { parentName: { contains: q, mode: 'insensitive' as const } },
-            { phone: { contains: qPhone } },
+            // Lead.phone = SĐT PH — chỉ tìm được khi thấy SĐT thật (NỢ #11).
+            ...(canSearchPhone ? [{ phone: { contains: qPhone } }] : []),
             { childName: { contains: q, mode: 'insensitive' as const } },
           ],
         }
@@ -126,12 +141,6 @@ export default async function LeadsPage({
     where: { ...baseWhere, status: 'REGISTERED' },
   })
 
-  // #11 T2 — mask PII lead (SĐT/email/tên PH-HS/note) ở SERVER cho actor không có
-  // quyền leads:view-pii — chặn leak qua RSC payload, không chỉ che UI.
-  // ⚠️ Không lấy MARKETING làm ví dụ nữa: từ 21/07 MARKETING CÓ leads:view-pii.
-  // Hiện mọi vai vào được trang này đều có quyền, nên nhánh mask chỉ chạy khi
-  // admin thu quyền của một người cụ thể qua UserPermissionGrant (DENY).
-  const canViewPii = await canViewLeadPii()
   const canCloseDeal =
     (await checkPermission('students:create')) && (await checkPermission('enrollments:create'))
   const canAssign = (await checkPermission('leads:assign'))
@@ -257,8 +266,8 @@ export default async function LeadsPage({
         assignedTo: { select: { name: true } },
       },
       orderBy: { createdAt: 'desc' },
-      skip: (page - 1) * PAGE_SIZE,
-      take: PAGE_SIZE,
+      skip: (page - 1) * soDong,
+      take: soDong,
     }),
     sdb.lead.count({ where }),
   ])
@@ -313,7 +322,7 @@ export default async function LeadsPage({
         leads={leads}
         total={total}
         page={page}
-        pageSize={PAGE_SIZE}
+        pageSize={soDong}
         canUpdate={canUpdate}
         canDelete={canDelete}
         currentStatus={statusFilter}
@@ -356,8 +365,8 @@ function Header({
   return (
     <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
       <div>
-        <h1 className="text-2xl font-bold text-gray-900">Danh sách Lead</h1>
-        <p className="mt-1 text-sm text-gray-500">
+        <h1 className="text-2xl font-bold text-foreground">Danh sách Lead</h1>
+        <p className="mt-1 text-sm text-muted-foreground">
           {total > 0
             ? `Tổng ${total} lead${
                 view === 'kanban' && shown != null && shown < total
@@ -367,24 +376,16 @@ function Header({
             : 'Chưa có lead nào'}
         </p>
       </div>
-      <div className="inline-flex overflow-hidden rounded-lg border border-gray-200">
+      <div className="inline-flex overflow-hidden rounded-lg border border-border">
         <Link
           href={qs('table')}
-          className={`px-3 py-1.5 text-sm font-medium ${
-            view === 'table'
-              ? 'bg-orange-500 text-white'
-              : 'bg-white text-gray-600 hover:bg-gray-50'
-          }`}
+          className={`px-3 py-1.5 text-sm font-medium ${ view === 'table' ? 'bg-primary text-white' : 'bg-card text-muted-foreground hover:bg-muted' }`}
         >
           Bảng
         </Link>
         <Link
           href={qs('kanban')}
-          className={`px-3 py-1.5 text-sm font-medium ${
-            view === 'kanban'
-              ? 'bg-orange-500 text-white'
-              : 'bg-white text-gray-600 hover:bg-gray-50'
-          }`}
+          className={`px-3 py-1.5 text-sm font-medium ${ view === 'kanban' ? 'bg-primary text-white' : 'bg-card text-muted-foreground hover:bg-muted' }`}
         >
           Kanban
         </Link>
@@ -394,27 +395,27 @@ function Header({
           <a
             href="/api/admin/templates/leads"
             download="mau-lead.xlsx"
-            className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
+            className="rounded-lg border border-border bg-card px-3 py-1.5 text-sm font-medium text-foreground hover:bg-muted"
           >
             Tải file mẫu
           </a>
           <Link
             href="/leads/import"
-            className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
+            className="rounded-lg border border-border bg-card px-3 py-1.5 text-sm font-medium text-foreground hover:bg-muted"
           >
             Import Excel
           </Link>
           {canBulkConvert && (
             <Link
               href="/leads/bulk-convert"
-              className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
+              className="rounded-lg border border-border bg-card px-3 py-1.5 text-sm font-medium text-foreground hover:bg-muted"
             >
               Chốt hàng loạt
             </Link>
           )}
           <Link
             href="/leads/new"
-            className="rounded-lg bg-[#7C3AED] px-3 py-1.5 text-sm font-semibold text-white hover:opacity-90"
+            className="rounded-lg bg-primary px-3 py-1.5 text-sm font-semibold text-white hover:opacity-90"
           >
             + Thêm lead
           </Link>
@@ -450,8 +451,11 @@ function StatusTabs({
   const isRegistered = view === 'table' && params.status === 'REGISTERED'
   const tabCls = (active: boolean) =>
     `rounded-lg px-3 py-1.5 text-sm font-medium ${
-      active ? 'bg-emerald-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'
-    } border border-gray-200`
+      // Tab ĐANG CHỌN là trạng thái điều hướng, không phải "thành công" — dùng màu
+      // thương hiệu. Trước đây nó xanh lục, tranh nghĩa với badge trạng thái ngay
+      // cạnh (DESIGN.md §1: màu ngữ nghĩa là thang RIÊNG, không mượn lẫn nhau).
+      active ? 'bg-primary text-primary-foreground' : 'bg-card text-muted-foreground hover:bg-muted'
+    } border border-border`
 
   return (
     <div className="mb-3 flex flex-wrap gap-2">
@@ -461,9 +465,7 @@ function StatusTabs({
       <Link href={qs('REGISTERED')} className={tabCls(isRegistered)}>
         Đã đăng ký{' '}
         <span
-          className={`ml-1 rounded-full px-1.5 py-0.5 text-xs font-semibold ${
-            isRegistered ? 'bg-white/20' : 'bg-emerald-100 text-emerald-700'
-          }`}
+          className={`ml-1 rounded-full px-1.5 py-0.5 text-xs font-semibold ${ isRegistered ? 'bg-white/20' : 'bg-primary-soft text-primary' }`}
         >
           {registeredCount}
         </span>
@@ -503,11 +505,11 @@ function FilterBar({
     <form
       key={filterKey}
       method="GET"
-      className="mb-4 flex flex-wrap items-end gap-2 rounded-lg bg-gray-50 p-3"
+      className="mb-4 flex flex-wrap items-end gap-2 rounded-lg bg-muted p-3"
     >
       <input type="hidden" name="view" value={view} />
       <div>
-        <label className="mb-1 block text-xs text-gray-600">Tìm</label>
+        <label className="mb-1 block text-xs text-muted-foreground">Tìm</label>
         <input
           name="q"
           defaultValue={params.q ?? ''}
@@ -518,7 +520,7 @@ function FilterBar({
       {canViewAll && (
         <>
           <div>
-            <label className="mb-1 block text-xs text-gray-600">Cơ sở</label>
+            <label className="mb-1 block text-xs text-muted-foreground">Cơ sở</label>
             <select
               name="centerId"
               defaultValue={params.centerId ?? ''}
@@ -533,7 +535,7 @@ function FilterBar({
             </select>
           </div>
           <div>
-            <label className="mb-1 block text-xs text-gray-600">Sale</label>
+            <label className="mb-1 block text-xs text-muted-foreground">Sale</label>
             <select
               name="assignedToId"
               defaultValue={params.assignedToId ?? ''}
@@ -550,7 +552,7 @@ function FilterBar({
         </>
       )}
       <div>
-        <label className="mb-1 block text-xs text-gray-600">Nguồn</label>
+        <label className="mb-1 block text-xs text-muted-foreground">Nguồn</label>
         <input
           name="source"
           defaultValue={params.source ?? ''}
@@ -559,7 +561,7 @@ function FilterBar({
         />
       </div>
       <div>
-        <label className="mb-1 block text-xs text-gray-600">Từ ngày</label>
+        <label className="mb-1 block text-xs text-muted-foreground">Từ ngày</label>
         <input
           type="date"
           name="dateFrom"
@@ -568,7 +570,7 @@ function FilterBar({
         />
       </div>
       <div>
-        <label className="mb-1 block text-xs text-gray-600">Đến ngày</label>
+        <label className="mb-1 block text-xs text-muted-foreground">Đến ngày</label>
         <input
           type="date"
           name="dateTo"
@@ -581,7 +583,7 @@ function FilterBar({
       </button>
       <Link
         href={`/leads?view=${view}`}
-        className="rounded border border-gray-300 bg-white px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-50"
+        className="rounded border border-border bg-card px-3 py-1.5 text-sm text-muted-foreground hover:bg-muted"
       >
         Xoá lọc
       </Link>

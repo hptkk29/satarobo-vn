@@ -45,47 +45,47 @@ export function PackageListRow({ pkg }: { pkg: CoursePackageListItem }) {
   };
 
   return (
-    <tr className="border-b border-gray-100 transition-colors hover:bg-gray-50/70">
+    <tr className="border-b border-border transition-colors hover:bg-muted/70">
       <td className="px-4 py-3">
-        <span className="rounded-md bg-gray-100 px-2 py-1 font-mono text-xs text-gray-700">
+        <span className="rounded-md bg-muted px-2 py-1 font-mono text-xs text-foreground">
           {pkg.code}
         </span>
       </td>
       <td className="px-4 py-3">
-        <div className="font-semibold text-gray-900">{pkg.name}</div>
-        <div className="mt-0.5 text-xs text-gray-400">/{pkg.slug}</div>
-        {error ? <div className="mt-1 text-xs font-medium text-red-600">{error}</div> : null}
+        <div className="font-semibold text-foreground">{pkg.name}</div>
+        <div className="mt-0.5 text-xs text-muted-foreground">/{pkg.slug}</div>
+        {error ? <div className="mt-1 text-xs font-medium text-state-danger-ink">{error}</div> : null}
       </td>
-      <td className="px-4 py-3 text-sm text-gray-600">{pkg.level ?? "--"}</td>
+      <td className="px-4 py-3 text-sm text-muted-foreground">{pkg.level ?? "--"}</td>
       <td className="px-4 py-3 text-sm">
         {pkg.course ? (
-          <span className="inline-flex items-center rounded-md bg-blue-50 px-2 py-1 text-xs font-medium text-blue-700">
+          <span className="inline-flex items-center rounded-md bg-state-info-soft px-2 py-1 text-xs font-medium text-state-info-ink">
             {pkg.course.name}
             {pkg.course.code ? ` (${pkg.course.code})` : ""}
           </span>
         ) : (
-          <span className="text-xs text-gray-400">Chưa gắn</span>
+          <span className="text-xs text-muted-foreground">Chưa gắn</span>
         )}
       </td>
-      <td className="px-4 py-3 text-right text-sm font-medium tabular-nums text-gray-700">
+      <td className="px-4 py-3 text-right text-sm font-medium tabular-nums text-foreground">
         {formatCurrency(pkg.priceOriginal)}
       </td>
-      <td className="px-4 py-3 text-center text-sm tabular-nums text-gray-600">
+      <td className="px-4 py-3 text-center text-sm tabular-nums text-muted-foreground">
         {pkg.lessons ?? "--"}
       </td>
       <td className="px-4 py-3">
         <div className="flex items-center justify-center gap-1.5">
           {pkg.isPublished ? (
-            <span className="rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-semibold text-green-700">
+            <span className="rounded-full bg-state-success-soft px-2.5 py-0.5 text-xs font-semibold text-state-success-ink">
               Đã đăng
             </span>
           ) : (
-            <span className="rounded-full bg-gray-100 px-2.5 py-0.5 text-xs font-semibold text-gray-500">
+            <span className="rounded-full bg-muted px-2.5 py-0.5 text-xs font-semibold text-muted-foreground">
               Nháp
             </span>
           )}
           {pkg.isFeatured ? (
-            <span className="rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-semibold text-amber-700">
+            <span className="rounded-full bg-state-warning-soft px-2.5 py-0.5 text-xs font-semibold text-state-warning-ink">
               Nổi bật
             </span>
           ) : null}
@@ -95,7 +95,7 @@ export function PackageListRow({ pkg }: { pkg: CoursePackageListItem }) {
         <div className="inline-flex items-center gap-1.5">
           <Link
             href={`/course-packages/${pkg.id}/edit`}
-            className="rounded-lg p-2 text-[#7C3AED] hover:bg-purple-50"
+            className="rounded-lg p-2 text-primary hover:bg-primary-soft"
             aria-label={`Sua ${pkg.code}`}
           >
             <Pencil className="h-4 w-4" />
@@ -104,9 +104,7 @@ export function PackageListRow({ pkg }: { pkg: CoursePackageListItem }) {
             type="button"
             onClick={handleDelete}
             disabled={isPending}
-            className={`rounded-lg p-2 hover:bg-red-50 ${
-              confirmDelete ? "text-red-700" : "text-red-600"
-            } disabled:cursor-not-allowed disabled:opacity-60`}
+            className={`rounded-lg p-2 hover:bg-state-danger-soft ${ confirmDelete ? "text-state-danger-ink" : "text-state-danger-ink" } disabled:cursor-not-allowed disabled:opacity-60`}
             aria-label={confirmDelete ? `Xac nhan xoa ${pkg.code}` : `Xoa ${pkg.code}`}
             title={confirmDelete ? "Click lan nua de xoa" : "Xoa"}
           >

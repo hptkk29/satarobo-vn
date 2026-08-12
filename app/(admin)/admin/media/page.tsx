@@ -1,11 +1,15 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
-import { checkAnyPermission, checkPermission } from "@/lib/auth/check-permission";
+import {
+  checkAnyPermission,
+  checkPermission,
+} from "@/lib/auth/check-permission";
 import { PAGE_GATES } from "@/lib/auth/page-gates";
 import { resolveActor } from "@/lib/auth/actor";
 import { scopedDb } from "@/lib/db-scope";
 import { resolveMediaUrl } from "@/lib/storage/signed-url";
 import { MediaClient } from "./_components/media-client";
+import { PageHelp } from "@/components/admin/ui/page-help";
 
 export const metadata = { title: "Ảnh lớp học | Admin" };
 export const dynamic = "force-dynamic";
@@ -53,7 +57,9 @@ export default async function AdminMediaPage() {
 
   // Resolve class + tagged student names.
   const classMap = new Map(classes.map((c) => [c.id, c]));
-  const studentIds = [...new Set(rows.flatMap((r) => r.tags.map((t) => t.studentId)))];
+  const studentIds = [
+    ...new Set(rows.flatMap((r) => r.tags.map((t) => t.studentId))),
+  ];
   const students = studentIds.length
     ? await sdb.student.findMany({
         where: { id: { in: studentIds } },
@@ -63,7 +69,9 @@ export default async function AdminMediaPage() {
   const studentMap = new Map(students.map((s) => [s.id, s.name]));
 
   // Signed URL khi bật flag MEDIA_SIGNED_URL (OFF → fileUrl trần).
-  const displayUrls = await Promise.all(rows.map((m) => resolveMediaUrl(m.fileUrl)));
+  const displayUrls = await Promise.all(
+    rows.map((m) => resolveMediaUrl(m.fileUrl)),
+  );
 
   const items = rows.map((m, i) => ({
     id: m.id,
@@ -72,6 +80,7 @@ export default async function AdminMediaPage() {
     status: m.status,
     className: classMap.get(m.classId)?.name ?? "(lớp đã xoá)",
     uploadedByName: m.uploadedByName,
+    uploadedById: m.uploadedById,
     tagNames: m.tags.map((t) => studentMap.get(t.studentId) ?? "?"),
     takenAt: m.takenAt?.toISOString() ?? null,
     hasSession: m.classSessionId != null,
@@ -81,12 +90,20 @@ export default async function AdminMediaPage() {
   return (
     <div className="max-w-6xl p-6">
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">Ảnh lớp học</h1>
-        <p className="mt-1 text-sm text-gray-500">
-          Giáo viên / Sale phụ trách đăng ảnh theo buổi → quản lý duyệt → phụ huynh
-          xem ảnh con được gắn thẻ.
+        <h1 className="text-2xl font-bold text-foreground">Ảnh lớp học</h1>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Duyệt ảnh lớp học trước khi phụ huynh xem
         </p>
       </div>
+
+      <PageHelp>
+        <p>
+          Giáo viên / Sale phụ trách đăng ảnh theo buổi → quản lý duyệt → phụ
+          huynh xem ảnh con được gắn thẻ. Marketing / Giáo vụ góp ảnh vào{" "}
+          <strong>kho</strong> của lớp; giáo viên chọn ảnh trong kho rồi gửi phụ
+          huynh.
+        </p>
+      </PageHelp>
       <MediaClient
         items={items}
         classes={classes.map((c) => ({
@@ -94,6 +111,7 @@ export default async function AdminMediaPage() {
           label: c.classCode ? `${c.classCode} · ${c.name}` : c.name,
         }))}
         canApprove={canApprove}
+        currentUserId={session.user.id}
       />
     </div>
   );

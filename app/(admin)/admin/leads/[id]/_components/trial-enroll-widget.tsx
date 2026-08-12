@@ -97,16 +97,16 @@ export function TrialEnrollWidget({
   if (children.length === 0) return null;
 
   return (
-    <div className="rounded-xl border border-gray-200 bg-white p-4">
+    <div className="rounded-xl border border-border bg-card p-4">
       <div className="mb-3 flex items-center gap-2">
-        <FlaskConical className="h-4 w-4 text-orange-500" />
-        <h2 className="text-sm font-semibold text-gray-700">
+        <FlaskConical className="h-4 w-4 text-primary" />
+        <h2 className="text-sm font-semibold text-foreground">
           Xếp con vào lớp trải nghiệm
         </h2>
       </div>
 
       {openClasses.length === 0 ? (
-        <p className="text-sm text-gray-400">
+        <p className="text-sm text-muted-foreground">
           Chưa có lớp trải nghiệm đang mở (cùng cơ sở). Tạo lớp ở mục &quot;Lớp trải
           nghiệm&quot;.
         </p>
@@ -118,28 +118,28 @@ export function TrialEnrollWidget({
             return (
               <li
                 key={c.id}
-                className="rounded-lg bg-gray-50 px-3 py-2"
+                className="rounded-lg bg-muted px-3 py-2"
               >
                 {/* LD3(a) — banner lớp hiện tại của con */}
                 <div className="mb-2 text-xs">
                   {c.currentTrial ? (
-                    <span className="font-medium text-indigo-600">
+                    <span className="font-medium text-state-info-ink">
                       {c.fullName} đang học thử lớp {c.currentTrial.className}
                       {c.currentTrial.session && (
-                        <span className="font-normal text-gray-500">
+                        <span className="font-normal text-muted-foreground">
                           {" "}
                           · buổi đã chọn: {fmtSession(c.currentTrial.session)}
                         </span>
                       )}
                     </span>
                   ) : (
-                    <span className="text-gray-400">
+                    <span className="text-muted-foreground">
                       {c.fullName}: Chưa xếp lớp
                     </span>
                   )}
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
-                  <span className="min-w-[7rem] flex-1 text-sm font-medium text-gray-800">
+                  <span className="min-w-[7rem] flex-1 text-sm font-medium text-foreground">
                     {c.fullName}
                   </span>
                   <select
@@ -151,7 +151,7 @@ export function TrialEnrollWidget({
                       setPickedSession((p) => ({ ...p, [c.id]: "" }));
                     }}
                     disabled={pending}
-                    className="min-w-[12rem] flex-1 rounded-md border border-gray-300 px-2 py-1.5 text-sm disabled:opacity-50"
+                    className="min-w-[12rem] flex-1 rounded-md border border-border px-2 py-1.5 text-sm disabled:opacity-50"
                   >
                     <option value="">— chọn lớp —</option>
                     {openClasses.map((cl) => (
@@ -167,7 +167,7 @@ export function TrialEnrollWidget({
                       setPickedSession((p) => ({ ...p, [c.id]: e.target.value }))
                     }
                     disabled={pending || !picked[c.id] || classSessions.length === 0}
-                    className="min-w-[12rem] flex-1 rounded-md border border-gray-300 px-2 py-1.5 text-sm disabled:opacity-50"
+                    className="min-w-[12rem] flex-1 rounded-md border border-border px-2 py-1.5 text-sm disabled:opacity-50"
                   >
                     <option value="">
                       {picked[c.id] && classSessions.length === 0
@@ -184,7 +184,7 @@ export function TrialEnrollWidget({
                     type="button"
                     onClick={() => enroll(c.id, false)}
                     disabled={pending}
-                    className="rounded-lg bg-orange-500 px-3 py-1.5 text-sm font-semibold text-white hover:bg-orange-600 disabled:opacity-50"
+                    className="rounded-lg bg-primary px-3 py-1.5 text-sm font-semibold text-white hover:bg-primary-dark disabled:opacity-50"
                   >
                     Xếp vào lớp
                   </button>

@@ -11,9 +11,7 @@ export function RoleBadge({
   return (
     <span
       title={primary ? "Vai trò chính" : undefined}
-      className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold ${roleColor(role)} ${
-        primary ? "ring-2 ring-orange-400 ring-offset-1" : ""
-      }`}
+      className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold ${roleColor(role)} ${ primary ? "ring-2 ring-primary ring-offset-1" : "" }`}
     >
       {ROLE_LABELS[role]}
     </span>

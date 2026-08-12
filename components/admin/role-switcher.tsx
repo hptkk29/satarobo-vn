@@ -45,9 +45,9 @@ export function RoleSwitcher({ roles, activeRole }: { roles: string[]; activeRol
     <DropdownMenu>
       <DropdownMenuTrigger
         disabled={pending}
-        className="flex items-center gap-1.5 rounded-lg border border-neutral-200 px-2.5 py-1.5 text-xs font-medium text-neutral-700 transition-colors hover:bg-neutral-50 disabled:opacity-50"
+        className="flex items-center gap-1.5 rounded-lg border border-border px-2.5 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-muted disabled:opacity-50"
       >
-        <UserCog className="h-4 w-4 text-neutral-500" />
+        <UserCog className="h-4 w-4 text-muted-foreground" />
         <span className="hidden sm:inline">{activeRole ? roleCodeLabel(activeRole) : "Mọi vai trò"}</span>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-56">
@@ -56,7 +56,7 @@ export function RoleSwitcher({ roles, activeRole }: { roles: string[]; activeRol
             Thiếu Group ⇒ mở dropdown là crash cả tab (prod chỉ hiện "This page couldn't
             load" vì lỗi đã minify). Gặp thật khi smoke prod 10/07 trên tài khoản Toại. */}
         <DropdownMenuGroup>
-          <DropdownMenuLabel className="text-xs font-normal text-neutral-500">
+          <DropdownMenuLabel className="text-xs font-normal text-muted-foreground">
             Chuyển vai trò — chỉ đổi menu hiển thị, không đổi quyền của bạn.
           </DropdownMenuLabel>
           <DropdownMenuSeparator />

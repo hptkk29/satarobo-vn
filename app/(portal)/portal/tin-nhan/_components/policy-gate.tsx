@@ -31,7 +31,9 @@ export function ChatPolicyGate() {
         // (có thể là một hội thoại cụ thể) — dựng lại cây RSC là nội dung hiện ra tại chỗ.
         router.refresh();
       } else {
-        toast.error(res.error ?? "Không ghi nhận được đồng ý, vui lòng thử lại");
+        toast.error(
+          res.error ?? "Không ghi nhận được đồng ý, vui lòng thử lại",
+        );
       }
     });
   }
@@ -46,7 +48,9 @@ export function ChatPolicyGate() {
           <ShieldCheck className="size-5" />
         </span>
         <div className="min-w-0">
-          <h1 className="text-lg font-bold text-foreground">{CHAT_POLICY_TITLE}</h1>
+          <h1 className="text-lg font-bold text-foreground">
+            {CHAT_POLICY_TITLE}
+          </h1>
           <p className="mt-0.5 text-sm text-muted-foreground">
             Vui lòng đọc trước khi vào nhóm lớp của con.
           </p>
@@ -55,9 +59,16 @@ export function ChatPolicyGate() {
 
       <ul className="space-y-2.5">
         {CHAT_POLICY.map((item) => (
-          <li key={item.heading} className="rounded-xl border border-border bg-card p-3">
-            <p className="text-sm font-semibold text-foreground">{item.heading}</p>
-            <p className="mt-1 text-xs leading-relaxed text-muted-foreground">{item.body}</p>
+          <li
+            key={item.heading}
+            className="rounded-xl border border-border bg-card p-3"
+          >
+            <p className="text-sm font-semibold text-foreground">
+              {item.heading}
+            </p>
+            <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+              {item.body}
+            </p>
           </li>
         ))}
       </ul>

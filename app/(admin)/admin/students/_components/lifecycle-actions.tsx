@@ -52,23 +52,23 @@ export function LifecycleActions({
   );
 
   return (
-    <section className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+    <section className="rounded-xl border border-border bg-card p-5 shadow-sm">
       <div className="mb-3 flex items-center justify-between">
-        <h3 className="text-sm font-bold uppercase tracking-wider text-gray-500">
+        <h3 className="text-sm font-bold uppercase tracking-wider text-muted-foreground">
           Lifecycle học viên
         </h3>
         <Badge variant="outline">{STATUS_LABEL[studentStatus]}</Badge>
       </div>
 
       {activeReserve && (
-        <div className="mb-4 rounded-lg border border-yellow-200 bg-yellow-50 p-3 text-sm">
-          <div className="font-medium text-yellow-900">🟡 Đang bảo lưu</div>
-          <div className="mt-1 text-xs text-yellow-800">
+        <div className="mb-4 rounded-lg border border-state-warning-soft bg-state-warning-soft p-3 text-sm">
+          <div className="font-medium text-state-warning-ink">🟡 Đang bảo lưu</div>
+          <div className="mt-1 text-xs text-state-warning-ink">
             Từ {formatDateVN(activeReserve.startedAt)}
             {activeReserve.expectedEndAt &&
               ` → dự kiến trở lại ${formatDateVN(activeReserve.expectedEndAt)}`}
           </div>
-          <div className="mt-1 text-xs italic text-yellow-900">
+          <div className="mt-1 text-xs italic text-state-warning-ink">
             Lý do: {activeReserve.reason}
           </div>
         </div>
@@ -99,7 +99,7 @@ export function LifecycleActions({
           <Button
             variant="outline"
             size="sm"
-            className="border-red-300 text-red-700 hover:bg-red-50"
+            className="border-state-danger text-state-danger-ink hover:bg-state-danger-soft"
             onClick={() => setOpen("withdraw")}
           >
             ❌ Nghỉ học hẳn
@@ -109,7 +109,7 @@ export function LifecycleActions({
           <Button
             variant="outline"
             size="sm"
-            className="border-green-300 text-green-700 hover:bg-green-50"
+            className="border-state-success text-state-success-ink hover:bg-state-success-soft"
             onClick={() => setOpen("reactivate")}
           >
             🔄 Kích hoạt lại

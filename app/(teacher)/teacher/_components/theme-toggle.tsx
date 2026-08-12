@@ -39,7 +39,7 @@ export function ThemeToggle() {
             <DropdownMenuItem
               key={o.value}
               onClick={() => setTheme(o.value)}
-              className={cn(active && "text-orange-700 dark:text-orange-300")}
+              className={cn(active && "text-primary-ink dark:text-primary-ink")}
             >
               <Icon className="h-4 w-4" aria-hidden />
               {o.label}

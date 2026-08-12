@@ -15,7 +15,7 @@ export default async function BaiThiPage() {
       <h1 className="text-xl font-bold text-neutral-900">Bài thi</h1>
 
       {exams.length === 0 ? (
-        <p className="rounded-xl border border-dashed border-neutral-300 bg-white p-8 text-center text-sm text-neutral-400">
+        <p className="rounded-xl border border-dashed border-neutral-300 bg-white p-8 text-center text-sm text-neutral-500">
           Chưa có bài thi nào được mở.
         </p>
       ) : (
@@ -32,17 +32,18 @@ export default async function BaiThiPage() {
               >
                 <div className="min-w-0">
                   <p className="font-medium text-neutral-900">{e.title}</p>
-                  <p className="text-xs text-neutral-500">
+                  <p className="text-xs text-neutral-600">
                     {e.className ? `${e.className} · ` : ""}
                     {e.durationMinutes} phút
-                    {e.closeAt &&
-                      ` · Đóng ${formatDateVN(e.closeAt)}`}
+                    {e.closeAt && ` · Đóng ${formatDateVN(e.closeAt)}`}
                   </p>
                 </div>
                 {done ? (
                   <div className="flex items-center gap-2">
                     <span className="rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-semibold text-emerald-700">
-                      {e.totalScore !== null ? `Điểm: ${e.totalScore}` : "Chờ chấm"}
+                      {e.totalScore !== null
+                        ? `Điểm: ${e.totalScore}`
+                        : "Chờ chấm"}
                     </span>
                     {e.isOpen && e.attemptsUsed < e.maxAttempts ? (
                       <StartExamButton

@@ -53,7 +53,7 @@ export function AttendanceSelector({
         }}
         disabled={pending}
         aria-label="Lọc theo lớp"
-        className="rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm outline-none focus:border-orange-500 disabled:opacity-60"
+        className="rounded-lg border border-border bg-card px-3 py-2 text-sm outline-none focus:border-primary disabled:opacity-60"
       >
         <option value="">Tất cả lớp</option>
         {classes.map((c) => (
@@ -67,7 +67,7 @@ export function AttendanceSelector({
         onChange={(e) => setSelSession(e.target.value)}
         disabled={pending}
         aria-label="Chọn buổi học"
-        className="flex-1 rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm outline-none focus:border-orange-500 disabled:opacity-60 sm:max-w-md"
+        className="flex-1 rounded-lg border border-border bg-card px-3 py-2 text-sm outline-none focus:border-primary disabled:opacity-60 sm:max-w-md"
       >
         <option value="">— Chọn buổi học —</option>
         {sessions.map((s) => (
@@ -80,7 +80,7 @@ export function AttendanceSelector({
         type="button"
         onClick={() => push(classId, selSession)}
         disabled={pending || !selSession}
-        className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-orange-500 px-4 py-2 text-sm font-bold text-white hover:bg-orange-600 disabled:opacity-60"
+        className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-sm font-bold text-white hover:bg-primary-dark disabled:opacity-60"
       >
         {pending && <Loader2 className="h-4 w-4 animate-spin" />}
         {pending ? "Đang mở…" : "Mở"}

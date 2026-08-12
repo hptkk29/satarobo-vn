@@ -16,6 +16,7 @@ import {
 import { ReportFilterBar } from "@/components/admin/report-filter-bar";
 import { BarChart } from "@/components/charts/bar-chart";
 import { FunnelChart } from "@/components/charts/funnel-chart";
+import { PhanTrangBang } from "@/components/ui/phan-trang-bang";
 
 export const metadata = { title: "Báo cáo lớp trải nghiệm | Admin" };
 export const dynamic = "force-dynamic";
@@ -30,10 +31,10 @@ function Stat({
   sub?: string;
 }) {
   return (
-    <div className="rounded-xl border border-neutral-200 bg-white p-4">
-      <div className="text-xs text-neutral-500">{label}</div>
-      <div className="mt-1 text-2xl font-bold text-neutral-900">{value}</div>
-      {sub ? <div className="mt-0.5 text-xs text-neutral-400">{sub}</div> : null}
+    <div className="rounded-xl border border-border bg-card p-4">
+      <div className="text-xs text-muted-foreground">{label}</div>
+      <div className="mt-1 text-2xl font-bold text-foreground">{value}</div>
+      {sub ? <div className="mt-0.5 text-xs text-muted-foreground">{sub}</div> : null}
     </div>
   );
 }
@@ -143,8 +144,8 @@ export default async function TrialReportPage({
   return (
     <div className="space-y-6 p-4">
       <div>
-        <h1 className="text-xl font-bold text-neutral-900">Báo cáo lớp trải nghiệm</h1>
-        <p className="text-sm text-neutral-500">
+        <h1 className="text-xl font-bold text-foreground">Báo cáo lớp trải nghiệm</h1>
+        <p className="text-sm text-muted-foreground">
           Sĩ số lấp đầy, tỷ lệ dự đủ buổi, chuyển đổi học thử → đăng ký, theo cơ sở.
         </p>
       </div>
@@ -183,20 +184,20 @@ export default async function TrialReportPage({
       </section>
 
       {/* Phễu chuyển đổi */}
-      <section className="rounded-xl border border-neutral-200 bg-white p-4">
-        <h2 className="mb-2 text-sm font-semibold text-neutral-700">
+      <section className="rounded-xl border border-border bg-card p-4">
+        <h2 className="mb-2 text-sm font-semibold text-foreground">
           Phễu học thử → đăng ký
         </h2>
         {funnelData[0].value > 0 ? (
           <FunnelChart data={funnelData} height={320} />
         ) : (
-          <p className="py-8 text-center text-sm text-neutral-400">Chưa có dữ liệu học thử.</p>
+          <p className="py-8 text-center text-sm text-muted-foreground">Chưa có dữ liệu học thử.</p>
         )}
       </section>
 
       {/* So sánh theo cơ sở */}
-      <section className="rounded-xl border border-neutral-200 bg-white p-4">
-        <h2 className="mb-2 text-sm font-semibold text-neutral-700">Theo cơ sở (%)</h2>
+      <section className="rounded-xl border border-border bg-card p-4">
+        <h2 className="mb-2 text-sm font-semibold text-foreground">Theo cơ sở (%)</h2>
         {centerChart.length > 0 ? (
           <BarChart
             data={centerChart}
@@ -209,52 +210,54 @@ export default async function TrialReportPage({
             ]}
           />
         ) : (
-          <p className="py-8 text-center text-sm text-neutral-400">Chưa có lớp trải nghiệm.</p>
+          <p className="py-8 text-center text-sm text-muted-foreground">Chưa có lớp trải nghiệm.</p>
         )}
       </section>
 
       {/* Bảng chi tiết theo cơ sở */}
-      <section className="overflow-x-auto rounded-xl border border-neutral-200 bg-white">
-        <table className="w-full text-sm">
-          <thead className="text-left text-xs text-neutral-400">
-            <tr>
-              <th className="px-4 py-2">Cơ sở</th>
-              <th className="px-4 py-2 text-right">Lớp</th>
-              <th className="px-4 py-2 text-right">Lấp đầy</th>
-              <th className="px-4 py-2 text-right">Dự đủ buổi</th>
-              <th className="px-4 py-2 text-right">Đã dự / Đăng ký</th>
-              <th className="px-4 py-2 text-right">Chuyển đổi</th>
-            </tr>
-          </thead>
-          <tbody>
-            {report.byCenter.map((c) => (
-              <tr key={c.centerId} className="border-t">
-                <td className="px-4 py-2 font-medium">
-                  {centerName.get(c.centerId) ?? c.centerId}
-                </td>
-                <td className="px-4 py-2 text-right">{c.classes}</td>
-                <td className="px-4 py-2 text-right">
-                  {c.fillRate}%
-                  <span className="text-neutral-400"> ({c.filled}/{c.capacity})</span>
-                </td>
-                <td className="px-4 py-2 text-right">
-                  {c.fullAttendanceRate}% ({c.fullAttendance})
-                </td>
-                <td className="px-4 py-2 text-right">
-                  {c.attended} / {c.registered}
-                </td>
-                <td className="px-4 py-2 text-right">{c.conversionRate}%</td>
-              </tr>
-            ))}
-            {report.byCenter.length === 0 ? (
+      <section className="overflow-x-auto rounded-xl border border-border bg-card">
+        <PhanTrangBang>
+          <table className="w-full text-sm">
+            <thead className="text-left text-xs text-muted-foreground">
               <tr>
-                <td colSpan={6} className="px-4 py-6 text-center text-neutral-400">
-                  Chưa có lớp trải nghiệm trong phạm vi.
-                </td>
+                <th className="px-4 py-2">Cơ sở</th>
+                <th className="px-4 py-2 text-right">Lớp</th>
+                <th className="px-4 py-2 text-right">Lấp đầy</th>
+                <th className="px-4 py-2 text-right">Dự đủ buổi</th>
+                <th className="px-4 py-2 text-right">Đã dự / Đăng ký</th>
+                <th className="px-4 py-2 text-right">Chuyển đổi</th>
               </tr>
-            ) : null}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {report.byCenter.map((c) => (
+                <tr key={c.centerId} className="border-t">
+                  <td className="px-4 py-2 font-medium">
+                    {centerName.get(c.centerId) ?? c.centerId}
+                  </td>
+                  <td className="px-4 py-2 text-right">{c.classes}</td>
+                  <td className="px-4 py-2 text-right">
+                    {c.fillRate}%
+                    <span className="text-muted-foreground"> ({c.filled}/{c.capacity})</span>
+                  </td>
+                  <td className="px-4 py-2 text-right">
+                    {c.fullAttendanceRate}% ({c.fullAttendance})
+                  </td>
+                  <td className="px-4 py-2 text-right">
+                    {c.attended} / {c.registered}
+                  </td>
+                  <td className="px-4 py-2 text-right">{c.conversionRate}%</td>
+                </tr>
+              ))}
+              {report.byCenter.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="px-4 py-6 text-center text-muted-foreground">
+                    Chưa có lớp trải nghiệm trong phạm vi.
+                  </td>
+                </tr>
+              ) : null}
+            </tbody>
+          </table>
+        </PhanTrangBang>
       </section>
     </div>
   );

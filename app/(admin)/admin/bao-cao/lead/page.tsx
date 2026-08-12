@@ -17,6 +17,7 @@ import { ReportFilterBar } from "@/components/admin/report-filter-bar";
 import { FunnelChart } from "@/components/charts/funnel-chart";
 import { BarChart } from "@/components/charts/bar-chart";
 import { LineChart } from "@/components/charts/line-chart";
+import { PhanTrangBang } from "@/components/ui/phan-trang-bang";
 
 export const metadata = { title: "Báo cáo Lead | Admin" };
 export const dynamic = "force-dynamic";
@@ -26,18 +27,18 @@ const num = (n: number) => n.toLocaleString("vi-VN");
 
 function Stat({ label, value, hint }: { label: string; value: string; hint?: string }) {
   return (
-    <div className="rounded-xl border border-neutral-200 bg-white p-4">
-      <p className="text-xs font-medium text-neutral-500">{label}</p>
-      <p className="mt-1 text-2xl font-bold text-neutral-900">{value}</p>
-      {hint ? <p className="mt-0.5 text-xs text-neutral-400">{hint}</p> : null}
+    <div className="rounded-xl border border-border bg-card p-4">
+      <p className="text-xs font-medium text-muted-foreground">{label}</p>
+      <p className="mt-1 text-2xl font-bold text-foreground">{value}</p>
+      {hint ? <p className="mt-0.5 text-xs text-muted-foreground">{hint}</p> : null}
     </div>
   );
 }
 
 function Card({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <section className="rounded-xl border border-neutral-200 bg-white p-4">
-      <h2 className="mb-3 text-sm font-semibold text-neutral-800">{title}</h2>
+    <section className="rounded-xl border border-border bg-card p-4">
+      <h2 className="mb-3 text-sm font-semibold text-foreground">{title}</h2>
       {children}
     </section>
   );
@@ -109,8 +110,8 @@ export default async function LeadReportPage({
   return (
     <div className="space-y-5 p-4">
       <div>
-        <h1 className="text-xl font-bold text-neutral-900">Báo cáo Lead</h1>
-        <p className="text-sm text-neutral-500">
+        <h1 className="text-xl font-bold text-foreground">Báo cáo Lead</h1>
+        <p className="text-sm text-muted-foreground">
           Phễu SR.QD.217 mở rộng — phân tích chuyển đổi theo bước, nguồn, cơ sở và tháng.
         </p>
       </div>
@@ -137,7 +138,7 @@ export default async function LeadReportPage({
       </div>
 
       {report.summary.total === 0 ? (
-        <p className="rounded-xl border border-dashed border-neutral-300 bg-white p-6 text-center text-sm text-neutral-500">
+        <p className="rounded-xl border border-dashed border-border bg-card p-6 text-center text-sm text-muted-foreground">
           Chưa có lead trong phạm vi của bạn.
         </p>
       ) : null}
@@ -153,24 +154,26 @@ export default async function LeadReportPage({
       {/* Tỷ lệ chuyển từng bước */}
       <Card title="Tỷ lệ chuyển từng bước">
         <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead className="text-left text-xs text-neutral-400">
-              <tr>
-                <th className="px-3 py-2">Bước</th>
-                <th className="px-3 py-2 text-right">Tỷ lệ chuyển</th>
-              </tr>
-            </thead>
-            <tbody>
-              {report.funnelConversion.map((c) => (
-                <tr key={`${c.fromLabel}-${c.toLabel}`} className="border-t">
-                  <td className="px-3 py-2">
-                    {c.fromLabel} → {c.toLabel}
-                  </td>
-                  <td className="px-3 py-2 text-right font-medium">{pct(c.rate)}</td>
+          <PhanTrangBang>
+            <table className="w-full text-sm">
+              <thead className="text-left text-xs text-muted-foreground">
+                <tr>
+                  <th className="px-3 py-2">Bước</th>
+                  <th className="px-3 py-2 text-right">Tỷ lệ chuyển</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {report.funnelConversion.map((c) => (
+                  <tr key={`${c.fromLabel}-${c.toLabel}`} className="border-t">
+                    <td className="px-3 py-2">
+                      {c.fromLabel} → {c.toLabel}
+                    </td>
+                    <td className="px-3 py-2 text-right font-medium">{pct(c.rate)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </PhanTrangBang>
         </div>
       </Card>
 
@@ -228,26 +231,28 @@ export default async function LeadReportPage({
       {/* Theo nguồn hoa hồng */}
       <Card title="Lead theo nguồn hoa hồng">
         <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead className="text-left text-xs text-neutral-400">
-              <tr>
-                <th className="px-3 py-2">Nguồn hoa hồng</th>
-                <th className="px-3 py-2 text-right">Tổng</th>
-                <th className="px-3 py-2 text-right">Đã chốt</th>
-                <th className="px-3 py-2 text-right">Tỷ lệ</th>
-              </tr>
-            </thead>
-            <tbody>
-              {report.byCommissionSource.map((s) => (
-                <tr key={s.key} className="border-t">
-                  <td className="px-3 py-2">{s.label}</td>
-                  <td className="px-3 py-2 text-right">{num(s.total)}</td>
-                  <td className="px-3 py-2 text-right">{num(s.converted)}</td>
-                  <td className="px-3 py-2 text-right font-medium">{pct(s.conversionRate)}</td>
+          <PhanTrangBang>
+            <table className="w-full text-sm">
+              <thead className="text-left text-xs text-muted-foreground">
+                <tr>
+                  <th className="px-3 py-2">Nguồn hoa hồng</th>
+                  <th className="px-3 py-2 text-right">Tổng</th>
+                  <th className="px-3 py-2 text-right">Đã chốt</th>
+                  <th className="px-3 py-2 text-right">Tỷ lệ</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {report.byCommissionSource.map((s) => (
+                  <tr key={s.key} className="border-t">
+                    <td className="px-3 py-2">{s.label}</td>
+                    <td className="px-3 py-2 text-right">{num(s.total)}</td>
+                    <td className="px-3 py-2 text-right">{num(s.converted)}</td>
+                    <td className="px-3 py-2 text-right font-medium">{pct(s.conversionRate)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </PhanTrangBang>
         </div>
       </Card>
     </div>

@@ -16,6 +16,7 @@
 // ghi shadow ở đây sẽ bơm ~120 dòng RbacShadowDiff mỗi lần mở trang, dìm chết tín hiệu thật.
 import { PERMISSIONS, can as canMatrix, type Action } from "@/lib/auth/permissions";
 import type { Actor } from "@/lib/auth/actor";
+import { resolveGrant } from "@/lib/permissions/can";
 
 type MenuUser = Parameters<typeof canMatrix>[0];
 
@@ -59,6 +60,23 @@ export function grantedMenuActions(params: {
 }): string[] {
   const out: string[] = [];
   for (const action of Object.keys(PERMISSIONS) as Action[]) {
+    // US-03: bảng PermissionGrant MỚI cắm TRƯỚC đường cũ ở cổng trang
+    // (`decidePermissionWithGrant` — BẤT KỂ cờ), nên menu phải hỏi cùng câu,
+    // ĐỐI XỨNG cả hai chiều (vá review 09/08 — trước đây chỉ TRỪ, không CỘNG):
+    //   · grant DENY toàn-action khớp (hit && !allowed) ⇒ cổng sẽ chặn ⇒ vẽ lối
+    //     vào là tái sinh dead-link → ẨN.
+    //   · grant ALLOW khớp target-trần (hit && allowed) ⇒ cổng MỞ trang dù
+    //     v1/v2 nói không ⇒ giấu menu là "ẩn oan" — đúng lớp lỗi page-gates.ts
+    //     sinh ra để diệt → VẪN VẼ.
+    // resolveGrant PURE/SYNC trên actor đã nạp — 0 query. Menu không có target:
+    // grant dataScope ALL khớp luôn; scope hẹp (UNIT_*/OWN) không khớp
+    // target-trần → không đổi quyết định (đúng triết lý "có giữ action" ở trên).
+    const d = params.actor ? resolveGrant(params.actor, action) : null;
+    if (d?.hit) {
+      // Grant đã nói về action này thì grant là nguồn sự thật — không hỏi v1/v2.
+      if (d.allowed) out.push(action);
+      continue;
+    }
     const ok = params.flagOn
       ? v2HoldsAction(params.actor, action)
       : canMatrix(params.sessionUser, action);

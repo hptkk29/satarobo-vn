@@ -20,10 +20,10 @@ const STATUS_LABEL: Record<string, string> = {
   CANCELLED: "Đã huỷ",
 };
 const STATUS_BADGE: Record<string, string> = {
-  OPEN: "bg-emerald-100 text-emerald-700",
-  RUNNING: "bg-blue-100 text-blue-700",
-  COMPLETED: "bg-gray-100 text-gray-600",
-  CANCELLED: "bg-rose-100 text-rose-700",
+  OPEN: "bg-state-success-soft text-state-success-ink",
+  RUNNING: "bg-state-info-soft text-state-info-ink",
+  COMPLETED: "bg-muted text-muted-foreground",
+  CANCELLED: "bg-state-danger-soft text-state-danger-ink",
 };
 
 interface Props {
@@ -140,36 +140,34 @@ export default async function TrialClassDetailPage({ params }: Props) {
     <div className="max-w-5xl p-6">
       <Link
         href="/trial-classes"
-        className="mb-4 inline-flex items-center gap-1 text-sm text-gray-500 hover:text-gray-700"
+        className="mb-4 inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
       >
         <ChevronLeft className="h-4 w-4" /> Quay lại danh sách
       </Link>
 
-      <div className="mb-6 flex flex-wrap items-start justify-between gap-3 border-b border-gray-200 pb-4">
+      <div className="mb-6 flex flex-wrap items-start justify-between gap-3 border-b border-border pb-4">
         <div>
           <div className="flex flex-wrap items-center gap-2">
-            <h1 className="text-2xl font-bold text-gray-900">{cls.name}</h1>
+            <h1 className="text-2xl font-bold text-foreground">{cls.name}</h1>
             <span
-              className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${
-                STATUS_BADGE[cls.status] ?? "bg-gray-100 text-gray-600"
-              }`}
+              className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${ STATUS_BADGE[cls.status] ?? "bg-muted text-muted-foreground" }`}
             >
               {STATUS_LABEL[cls.status] ?? cls.status}
             </span>
           </div>
-          <div className="mt-1 text-sm text-gray-600">
+          <div className="mt-1 text-sm text-muted-foreground">
             {cls.code}
             {cls.startDate ? ` · ${formatDateVN(cls.startDate)}` : ""} ·{" "}
             {cls.startTime}–{cls.endTime} · {cls.sessionCount} buổi
           </div>
-          <div className="mt-1 text-sm text-gray-500">
+          <div className="mt-1 text-sm text-muted-foreground">
             GV phụ trách: {teacherName ?? "Chưa phân công"}
           </div>
         </div>
         <div className="text-right">
-          <div className="text-xs uppercase tracking-wide text-gray-400">Sĩ số</div>
+          <div className="text-xs uppercase tracking-wide text-muted-foreground">Sĩ số</div>
           <div
-            className={`text-lg font-bold ${full ? "text-rose-600" : "text-gray-900"}`}
+            className={`text-lg font-bold ${full ? "text-state-danger-ink" : "text-foreground"}`}
           >
             {activeUsed}/{cls.capacity}
           </div>
@@ -177,7 +175,7 @@ export default async function TrialClassDetailPage({ params }: Props) {
       </div>
 
       {full && (
-        <div className="mb-6 flex items-center gap-2 rounded-xl border border-rose-300 bg-rose-50 p-3 text-sm text-rose-700">
+        <div className="mb-6 flex items-center gap-2 rounded-xl border border-state-danger bg-state-danger-soft p-3 text-sm text-state-danger-ink">
           <AlertTriangle className="h-4 w-4 shrink-0" />
           Lớp đã đủ/vượt sĩ số. Cần quyền &quot;vượt sĩ số&quot; (QL) để xếp thêm.
         </div>
@@ -202,8 +200,8 @@ export default async function TrialClassDetailPage({ params }: Props) {
       />
 
       {evalSessions.length > 0 && evalStudents.length > 0 && (
-        <section className="mt-6 rounded-xl border border-gray-200 bg-white p-4">
-          <h2 className="mb-3 text-sm font-semibold text-gray-700">Phiếu đánh giá buổi học</h2>
+        <section className="mt-6 rounded-xl border border-border bg-card p-4">
+          <h2 className="mb-3 text-sm font-semibold text-foreground">Phiếu đánh giá buổi học</h2>
           <TrialSessionEvalFill
             trialSessions={evalSessions}
             students={evalStudents}

@@ -100,7 +100,7 @@ export function TransferDialog({
       <button
         type="button"
         onClick={() => setIsOpen(true)}
-        className="inline-flex items-center gap-2 rounded-lg border-2 border-purple-300 bg-white px-4 py-2 text-sm font-bold text-purple-700 hover:bg-purple-50"
+        className="inline-flex items-center gap-2 rounded-lg border-2 border-primary bg-card px-4 py-2 text-sm font-bold text-primary hover:bg-primary-soft"
       >
         <ArrowRightLeft className="h-4 w-4" />
         Chuyển lớp
@@ -115,35 +115,35 @@ export function TransferDialog({
           onClick={close}
         >
           <div
-            className="relative w-full max-w-md rounded-xl bg-white p-6 shadow-xl"
+            className="relative w-full max-w-md rounded-xl bg-card p-6 shadow-xl"
             onClick={(e) => e.stopPropagation()}
           >
             <button
               type="button"
               onClick={close}
               aria-label="Đóng"
-              className="absolute right-3 top-3 rounded-md p-1 text-neutral-500 hover:bg-neutral-100"
+              className="absolute right-3 top-3 rounded-md p-1 text-muted-foreground hover:bg-muted"
             >
               <X className="h-4 w-4" />
             </button>
 
             <h2
               id="transfer-title"
-              className="flex items-center gap-2 text-lg font-bold text-neutral-900"
+              className="flex items-center gap-2 text-lg font-bold text-foreground"
             >
-              <ArrowRightLeft className="h-5 w-5 text-purple-500" />
+              <ArrowRightLeft className="h-5 w-5 text-primary" />
               Chuyển lớp cho học viên
             </h2>
-            <p className="mt-1 text-sm text-neutral-600">
+            <p className="mt-1 text-sm text-muted-foreground">
               Học viên: <strong>{studentName}</strong>
             </p>
-            <p className="mt-0.5 text-xs text-neutral-400">
+            <p className="mt-0.5 text-xs text-muted-foreground">
               Tạo enrollment mới ở lớp đích; enrollment hiện tại chuyển sang
               TRANSFERRED. Audit log lưu cả 2 bên.
             </p>
 
             {error && (
-              <div className="mt-4 rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-700">
+              <div className="mt-4 rounded-lg border border-state-danger bg-state-danger-soft px-3 py-2 text-sm text-state-danger-ink">
                 {error}
               </div>
             )}
@@ -157,7 +157,7 @@ export function TransferDialog({
                   value={targetId}
                   onChange={(e) => setTargetId(e.target.value)}
                   disabled={pending}
-                  className="w-full rounded-lg border border-neutral-300 px-3 py-2 text-sm focus:border-purple-500 focus:outline-none"
+                  className="w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-primary focus:outline-none"
                 >
                   <option value="">— Chọn lớp đích —</option>
                   {eligible.map((c) => {
@@ -185,8 +185,8 @@ export function TransferDialog({
                       className={
                         "inline-flex rounded-full px-2 py-0.5 font-semibold " +
                         (targetFull
-                          ? "bg-red-100 text-red-700"
-                          : "bg-green-100 text-green-700")
+                          ? "bg-state-danger-soft text-state-danger-ink"
+                          : "bg-state-success-soft text-state-success-ink")
                       }
                     >
                       Còn{" "}
@@ -196,7 +196,7 @@ export function TransferDialog({
                       )}
                       /{selectedTarget.maxStudents} chỗ
                     </span>
-                    <span className="text-neutral-500">
+                    <span className="text-muted-foreground">
                       {CLASS_STATUS_LABEL[selectedTarget.status] ??
                         selectedTarget.status}
                     </span>
@@ -207,7 +207,7 @@ export function TransferDialog({
               <div>
                 <label className="mb-1 block text-sm font-semibold">
                   Lý do chuyển *{" "}
-                  <span className="text-xs font-normal text-neutral-500">
+                  <span className="text-xs font-normal text-muted-foreground">
                     (tối thiểu 5 ký tự)
                   </span>
                 </label>
@@ -218,7 +218,7 @@ export function TransferDialog({
                   rows={3}
                   disabled={pending}
                   required
-                  className="w-full resize-y rounded-lg border border-neutral-300 px-3 py-2 text-sm focus:border-purple-500 focus:outline-none"
+                  className="w-full resize-y rounded-lg border border-border px-3 py-2 text-sm focus:border-primary focus:outline-none"
                 />
               </div>
             </div>
@@ -228,7 +228,7 @@ export function TransferDialog({
                 type="button"
                 onClick={close}
                 disabled={pending}
-                className="rounded-lg border border-neutral-300 px-4 py-2 text-sm font-semibold text-neutral-700 hover:bg-neutral-50 disabled:opacity-50"
+                className="rounded-lg border border-border px-4 py-2 text-sm font-semibold text-foreground hover:bg-muted disabled:opacity-50"
               >
                 Huỷ
               </button>
@@ -238,7 +238,7 @@ export function TransferDialog({
                 disabled={
                   pending || !targetId || targetFull || targetClosed
                 }
-                className="rounded-lg bg-purple-500 px-4 py-2 text-sm font-bold text-white hover:bg-purple-600 disabled:opacity-50"
+                className="rounded-lg bg-primary px-4 py-2 text-sm font-bold text-white hover:bg-primary-dark disabled:opacity-50"
               >
                 {pending ? "Đang chuyển..." : "Xác nhận chuyển lớp"}
               </button>

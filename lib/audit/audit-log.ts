@@ -5,11 +5,99 @@ import type { Prisma, PrismaClient, AuditLog } from "@prisma/client";
 import { db } from "@/lib/db";
 import { detectChangedFields } from "@/lib/audit/diff";
 import type { Actor } from "@/lib/auth/actor";
+import { DUAL_WRITE_MODELS } from "@/lib/org/center-bridge";
 
 type TxClient = Prisma.TransactionClient;
 
 /** Actor tối thiểu cho audit (id+name); System → actorId null. */
 export type AuditActor = { id: string | null; name: string };
+
+/**
+ * Chuẩn hoá `orgUnitId` của audit — nhận CẢ `OrgUnit.id` LẪN `Center.id`.
+ *
+ * VÌ SAO CẦN. Đường ĐỌC lọc `orgUnitId IN visibleOrgUnitIds`, mà danh sách đó
+ * toàn `OrgUnit.id` thật. Dòng nào lỡ mang `Center.id` sẽ KHÔNG BAO GIỜ khớp ⇒
+ * vô hình với actor cấp cơ sở, im lặng, không lỗi. Đo trên DB dev ngày 12/08:
+ * 246/369 dòng (67%) đang như vậy — tập trung ở enrollment (145) và finance (93),
+ * đúng hai module mà nhật ký là thứ đáng tin cậy nhất phải có.
+ *
+ * VÌ SAO VÁ Ở ĐÂY, KHÔNG PHẢI Ở 47 CHỖ GỌI. Sửa từng chỗ thì chỗ thứ 48 lại sai và
+ * không có gì chặn — hai ID đều là chuỗi cuid, nhìn không phân biệt được. Chặn ở
+ * biên thì mọi đường ghi audit đều đúng, kể cả đường viết sau này.
+ *
+ * MỘT truy vấn cho cả hai khả năng: `OrgUnit.centerId` là @unique nên `id = x OR
+ * centerId = x` không thể khớp nhầm nhau.
+ *
+ * Không tìm thấy thì trả `null` chứ KHÔNG ném: audit là việc phụ, không được phép
+ * làm hỏng nghiệp vụ đang chạy.
+ */
+export async function resolveAuditOrgUnitId(
+  client: PrismaClient | TxClient,
+  id: string | null | undefined,
+): Promise<string | null> {
+  if (!id) return null;
+  try {
+    const ou = await client.orgUnit.findFirst({
+      where: { OR: [{ id }, { centerId: id }], deletedAt: null },
+      select: { id: true },
+    });
+    return ou?.id ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Suy `orgUnitId` từ CHÍNH thực thể đang được ghi nhật ký.
+ *
+ * VÌ SAO CẦN. Vá ở `resolveAuditOrgUnitId` mới lo được các chỗ TRUYỀN NHẦM loại ID.
+ * Còn một nửa nữa: nhiều chỗ ghi KHÔNG truyền gì cả. Đo trên prod sau khi vá phần
+ * một: 290/538 dòng vẫn `orgUnitId = null` ⇒ vẫn vô hình với quản lý cơ sở.
+ *
+ * Bóc ra thì KHÔNG phải tất cả đều sai — 81 dòng đúng là null vì `curriculum` /
+ * `course-package` / `scorm` / `settings` là dữ liệu TOÀN HỆ THỐNG (thực thể của
+ * chúng không có cột `centerId` nào). 209 dòng còn lại thì sai: classes (138),
+ * attendance (49), employees (15)… đều suy được mà bỏ trống.
+ *
+ * `writeAudit` vốn đã nhận `entityType` + `entityId`, nên biên tự tra được — không
+ * cần sửa 20 chỗ gọi, và chỗ gọi mới sau này cũng tự đúng.
+ *
+ * `DUAL_WRITE_MODELS` là cổng chặn: chỉ tra những model THẬT SỰ có cặp cột
+ * centerId/orgUnitId. Nhờ vậy dữ liệu toàn hệ thống không bị tra bừa, và `null` ở
+ * đó giữ đúng nghĩa "không thuộc cơ sở nào" thay vì "quên điền".
+ *
+ * Nuốt mọi lỗi → `null`: audit là việc phụ, không được phép làm hỏng nghiệp vụ.
+ */
+export async function resolveAuditOrgUnitIdFromEntity(
+  client: PrismaClient | TxClient,
+  entityType: string,
+  entityId: string,
+): Promise<string | null> {
+  if (!entityType || !entityId) return null;
+  if (!DUAL_WRITE_MODELS.has(entityType)) return null;
+  // Tên model → accessor của Prisma Client: chỉ khác chữ cái đầu.
+  const key = entityType.charAt(0).toLowerCase() + entityType.slice(1);
+  try {
+    const model = (client as unknown as Record<string, unknown>)[key] as
+      | { findUnique: (a: unknown) => Promise<Record<string, unknown> | null> }
+      | undefined;
+    if (!model?.findUnique) return null;
+    const row = await model.findUnique({
+      where: { id: entityId },
+      select: { orgUnitId: true, centerId: true },
+    });
+    if (!row) return null;
+    const direct = row.orgUnitId;
+    if (typeof direct === "string" && direct) return direct;
+    // Chưa kịp ghi kép (đường SQL thô) → bắc cầu từ centerId.
+    const center = row.centerId;
+    return typeof center === "string" && center
+      ? await resolveAuditOrgUnitId(client, center)
+      : null;
+  } catch {
+    return null;
+  }
+}
 
 export async function writeAudit(params: {
   actor: AuditActor;
@@ -43,11 +131,23 @@ export async function writeAudit(params: {
       entityType: params.entityType,
       entityId: params.entityId,
       action: params.action,
-      oldValues: (params.oldValues ?? undefined) as Prisma.InputJsonValue | undefined,
-      newValues: (params.newValues ?? undefined) as Prisma.InputJsonValue | undefined,
+      oldValues: (params.oldValues ?? undefined) as
+        | Prisma.InputJsonValue
+        | undefined,
+      newValues: (params.newValues ?? undefined) as
+        | Prisma.InputJsonValue
+        | undefined,
       changedFields,
       reason: params.reason ?? null,
-      orgUnitId: params.orgUnitId ?? null,
+      // Hai tầng: (1) chuẩn hoá thứ chỗ gọi đưa vào — có thể là Center.id;
+      // (2) chỗ gọi không đưa gì thì tự suy từ chính thực thể.
+      orgUnitId:
+        (await resolveAuditOrgUnitId(client, params.orgUnitId)) ??
+        (await resolveAuditOrgUnitIdFromEntity(
+          client,
+          params.entityType,
+          params.entityId,
+        )),
       ip: params.ip ?? null,
       userAgent: params.userAgent ?? null,
     },
@@ -59,7 +159,8 @@ export async function writeAudit(params: {
 // đăng nhập, PII bắt đầu đi qua những tên field này (`identifier` ở loginSchema,
 // `target` ở OtpRequest/OtpDeliveryLog) mà regex cũ không khớp — tức lọt nguyên
 // văn vào oldValues/newValues của audit.
-const PII_KEY_RE = /(phone|sdt|mobile|email|tel|identifier|target|username|otp)/i;
+const PII_KEY_RE =
+  /(phone|sdt|mobile|email|tel|identifier|target|username|otp)/i;
 
 function maskValue(v: unknown): unknown {
   if (typeof v !== "string" || v.length === 0) return v;
@@ -169,7 +270,9 @@ function encodeAuditCursor(createdAt: Date, id: string): string {
   ).toString("base64");
 }
 
-function decodeAuditCursor(cursor: string): { createdAt: Date; id: string } | null {
+function decodeAuditCursor(
+  cursor: string,
+): { createdAt: Date; id: string } | null {
   try {
     const d = JSON.parse(Buffer.from(cursor, "base64").toString()) as {
       c: string;
@@ -187,7 +290,8 @@ function buildUnifiedAuditWhere(
 ): Prisma.AuditLogWhereInput {
   const AND: Prisma.AuditLogWhereInput[] = [];
   if (scope !== "ALL") AND.push({ orgUnitId: { in: scope } });
-  if (filters.dateFrom) AND.push({ createdAt: { gte: new Date(filters.dateFrom) } });
+  if (filters.dateFrom)
+    AND.push({ createdAt: { gte: new Date(filters.dateFrom) } });
   if (filters.dateTo) {
     const to = new Date(filters.dateTo);
     to.setHours(23, 59, 59, 999);
@@ -224,7 +328,8 @@ export async function queryUnifiedAuditLogs(
 ): Promise<{ items: UnifiedAuditRow[]; nextCursor: string | null }> {
   const scope = visibleOrgUnitIds(actor);
   // Actor center-level nhưng không có org nào nhìn thấy → rỗng (an toàn, không lộ).
-  if (scope !== "ALL" && scope.length === 0) return { items: [], nextCursor: null };
+  if (scope !== "ALL" && scope.length === 0)
+    return { items: [], nextCursor: null };
 
   const take = opts.take ?? UNIFIED_AUDIT_PAGE_SIZE;
   const baseWhere = buildUnifiedAuditWhere(scope, filters);
@@ -236,7 +341,12 @@ export async function queryUnifiedAuditLogs(
           {
             OR: [
               { createdAt: { lt: decoded.createdAt } },
-              { AND: [{ createdAt: decoded.createdAt }, { id: { lt: decoded.id } }] },
+              {
+                AND: [
+                  { createdAt: decoded.createdAt },
+                  { id: { lt: decoded.id } },
+                ],
+              },
             ],
           },
         ],
@@ -252,7 +362,8 @@ export async function queryUnifiedAuditLogs(
   const hasMore = rows.length > take;
   const page = hasMore ? rows.slice(0, take) : rows;
   const last = page[page.length - 1];
-  const nextCursor = hasMore && last ? encodeAuditCursor(last.createdAt, last.id) : null;
+  const nextCursor =
+    hasMore && last ? encodeAuditCursor(last.createdAt, last.id) : null;
 
   const unmask = opts.unmask ?? false;
   const items: UnifiedAuditRow[] = page.map((r) => ({
@@ -270,8 +381,14 @@ export async function queryUnifiedAuditLogs(
     ip: r.ip,
     userAgent: r.userAgent,
     // maskAuditValues(values, canViewPii): unmask=true → giữ nguyên; false → che.
-    oldValues: maskAuditValues(r.oldValues as Record<string, unknown> | null, unmask),
-    newValues: maskAuditValues(r.newValues as Record<string, unknown> | null, unmask),
+    oldValues: maskAuditValues(
+      r.oldValues as Record<string, unknown> | null,
+      unmask,
+    ),
+    newValues: maskAuditValues(
+      r.newValues as Record<string, unknown> | null,
+      unmask,
+    ),
     piiMasked: !unmask,
   }));
 

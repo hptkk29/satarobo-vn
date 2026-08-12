@@ -4,8 +4,8 @@ import { cn } from "@/lib/utils";
 
 /**
  * Logo thương hiệu SATA ROBO (asset thật `/brand/logo-satarobo.png`, 644×380,
- * nền trong suốt → hợp cả Sáng lẫn Tối). Đây là LOGO nên vẫn giữ cả tông tím —
- * quy tắc "site GV cam-only" áp cho accent UI, không áp cho logo thương hiệu.
+ * nền trong suốt → hợp cả Sáng lẫn Tối). Dùng asset thật nên không cần đồng bộ
+ * tay với token màu — logo đổi thì thay file, không sửa code.
  */
 export function Logo({ className }: { className?: string }) {
   return (

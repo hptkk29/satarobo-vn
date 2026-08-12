@@ -14,6 +14,8 @@ export type ClassMediaItem = {
   status: string;
   className: string;
   uploadedByName: string | null;
+  /** Ai đưa ảnh lên — MediaClient dùng để cho xoá ảnh CỦA MÌNH khỏi kho. */
+  uploadedById: string | null;
   tagNames: string[];
   takenAt: string | null;
   hasSession: boolean;
@@ -59,6 +61,7 @@ export async function loadClassMediaItems(
     status: m.status,
     className,
     uploadedByName: m.uploadedByName,
+    uploadedById: m.uploadedById,
     tagNames: m.tags.map((t) => nameById.get(t.studentId) ?? "?"),
     takenAt: m.takenAt?.toISOString() ?? null,
     hasSession: m.classSessionId != null,

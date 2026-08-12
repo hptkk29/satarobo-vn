@@ -21,10 +21,31 @@ function Ring({ value }: { value: number }) {
   return (
     <div className="relative grid size-24 shrink-0 place-items-center">
       <svg viewBox="0 0 80 80" className="size-24 -rotate-90">
-        <circle cx="40" cy="40" r={r} fill="none" stroke="currentColor" strokeWidth="8" className="text-muted" />
-        <circle cx="40" cy="40" r={r} fill="none" stroke="currentColor" strokeWidth="8" strokeLinecap="round" strokeDasharray={c} strokeDashoffset={off} className="text-success" />
+        <circle
+          cx="40"
+          cy="40"
+          r={r}
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="8"
+          className="text-muted"
+        />
+        <circle
+          cx="40"
+          cy="40"
+          r={r}
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="8"
+          strokeLinecap="round"
+          strokeDasharray={c}
+          strokeDashoffset={off}
+          className="text-success"
+        />
       </svg>
-      <span className="absolute text-xl font-bold text-foreground">{value}%</span>
+      <span className="absolute text-xl font-bold text-foreground">
+        {value}%
+      </span>
     </div>
   );
 }
@@ -74,14 +95,20 @@ export function HocBaPageV2({
         <>
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="flex gap-2">
-              <span className="rounded-lg bg-primary px-3 py-1.5 text-sm font-bold text-primary-foreground">{data.periodLabel}</span>
+              <span className="rounded-lg bg-primary px-3 py-1.5 text-sm font-bold text-primary-foreground">
+                {data.periodLabel}
+              </span>
             </div>
             <div className="flex gap-2">
               <HocBaPrintButton />
               {/* PDF: bản chính thức → snapshot đã phát hành; bản tạm tính → transcript live.
                   Cả 2 endpoint đều ownership-check qua requireActiveStudent. */}
               <a
-                href={data.reportCardId ? `/api/portal/report-card/${data.reportCardId}` : "/api/portal/transcript"}
+                href={
+                  data.reportCardId
+                    ? `/api/portal/report-card/${data.reportCardId}`
+                    : "/api/portal/transcript"
+                }
                 target="_blank"
                 rel="noopener noreferrer"
                 className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-card px-3 py-1.5 text-sm font-semibold text-foreground transition-colors hover:bg-muted"
@@ -95,15 +122,21 @@ export function HocBaPageV2({
             <div className="flex items-center justify-between gap-3 bg-neutral-900 px-6 py-5 text-white">
               <div>
                 <p className="text-xs font-bold uppercase tracking-widest text-white/60">
-                  {data.isOfficial ? "Học bạ chính thức" : "Bản tổng hợp tạm tính"}
+                  {data.isOfficial
+                    ? "Học bạ chính thức"
+                    : "Bản tổng hợp tạm tính"}
                 </p>
-                <p className="mt-1 text-lg font-bold">Học bạ định kỳ {data.periodLabel.toLowerCase()}</p>
+                <p className="mt-1 text-lg font-bold">
+                  Học bạ định kỳ {data.periodLabel.toLowerCase()}
+                </p>
               </div>
               <GraduationCap className="size-10 shrink-0 text-primary" />
             </div>
 
             <div className="p-6">
-              <h3 className="mb-3 text-xs font-bold uppercase tracking-wider text-muted-foreground">Thông tin chung</h3>
+              <h3 className="mb-3 text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                Thông tin chung
+              </h3>
               <dl className="grid grid-cols-1 gap-x-8 gap-y-3 sm:grid-cols-2">
                 <Row label="Học viên" value={data.studentName} />
                 <Row label="Mã học viên" value={data.studentCode ?? "—"} />
@@ -111,7 +144,9 @@ export function HocBaPageV2({
                 <Row label="Khóa học" value={data.courseName ?? "—"} />
                 <Row label="Giáo viên" value={data.teacher ?? "—"} />
                 {/* Chỉ bản ĐÃ PHÁT HÀNH mới có ngày phát hành (bản tạm tính không có). */}
-                {data.publishedDate ? <Row label="Ngày phát hành" value={dmy(data.publishedDate)} /> : null}
+                {data.publishedDate ? (
+                  <Row label="Ngày phát hành" value={dmy(data.publishedDate)} />
+                ) : null}
               </dl>
 
               <div className="my-6 h-px bg-border" />
@@ -121,8 +156,8 @@ export function HocBaPageV2({
               </h3>
               {noAttendanceData ? (
                 <p className="rounded-2xl bg-muted/40 p-5 text-sm leading-relaxed text-muted-foreground">
-                  Lớp chưa bắt đầu / chưa có dữ liệu chuyên cần — số liệu sẽ cập nhật sau buổi
-                  học đầu tiên.
+                  Lớp chưa bắt đầu / chưa có dữ liệu chuyên cần — số liệu sẽ cập
+                  nhật sau buổi học đầu tiên.
                 </p>
               ) : (
                 <div className="flex items-center gap-6 rounded-2xl bg-muted/40 p-5">
@@ -130,7 +165,11 @@ export function HocBaPageV2({
                   <div className="grid flex-1 grid-cols-3 gap-4 text-center">
                     <Metric value={data.total} label="Tổng buổi" />
                     {/* Bản chính thức: done = buổi CÓ MẶT (snapshot); bản tạm tính: buổi đã diễn ra. */}
-                    <Metric value={data.done} label={data.isOfficial ? "Có mặt" : "Đã học"} tone="success" />
+                    <Metric
+                      value={data.done}
+                      label={data.isOfficial ? "Có mặt" : "Đã học"}
+                      tone="success"
+                    />
                     {/* Bản chính thức: Vắng = absent THẬT trong snapshot (không lấy total-done —
                         total gồm cả buổi CHƯA diễn ra + buổi chờ bù). Bản tạm tính: Còn lại. */}
                     <Metric
@@ -169,7 +208,10 @@ export function HocBaPageV2({
               </h3>
               <ul className="divide-y divide-border">
                 {data.olderPublished.map((r) => (
-                  <li key={r.id} className="flex flex-wrap items-center justify-between gap-3 py-2.5">
+                  <li
+                    key={r.id}
+                    className="flex flex-wrap items-center justify-between gap-3 py-2.5"
+                  >
                     <div className="min-w-0">
                       <p className="truncate text-sm font-bold text-foreground">
                         {r.courseName ?? "Khóa học"}
@@ -209,12 +251,27 @@ function Row({ label, value }: { label: string; value: string }) {
   );
 }
 
-function Metric({ value, label, tone }: { value: number; label: string; tone?: "success" | "muted" }) {
-  const c = tone === "success" ? "text-success" : tone === "muted" ? "text-muted-foreground" : "text-foreground";
+function Metric({
+  value,
+  label,
+  tone,
+}: {
+  value: number;
+  label: string;
+  tone?: "success" | "muted";
+}) {
+  const c =
+    tone === "success"
+      ? "text-success"
+      : tone === "muted"
+        ? "text-muted-foreground"
+        : "text-foreground";
   return (
     <div>
       <p className={`text-2xl font-bold tabular-nums ${c}`}>{value}</p>
-      <p className="mt-0.5 text-xs font-medium text-muted-foreground">{label}</p>
+      <p className="mt-0.5 text-xs font-medium text-muted-foreground">
+        {label}
+      </p>
     </div>
   );
 }

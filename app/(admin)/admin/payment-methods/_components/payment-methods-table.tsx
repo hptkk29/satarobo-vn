@@ -24,6 +24,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { togglePaymentMethodActiveAction } from "../_actions";
+import { PhanTrangBang } from "@/components/ui/phan-trang-bang";
 
 const TYPE_LABEL: Record<PaymentMethodType, string> = {
   CASH: "Tiền mặt",
@@ -57,93 +58,95 @@ export function PaymentMethodsTable({ methods }: { methods: PaymentMethod[] }) {
 
   return (
     <>
-      <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead className="w-16">Thứ tự</TableHead>
-              <TableHead>Mã</TableHead>
-              <TableHead>Tên</TableHead>
-              <TableHead>Loại</TableHead>
-              <TableHead>Cho phép</TableHead>
-              <TableHead>Trạng thái</TableHead>
-              <TableHead className="text-right">Thao tác</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {methods.length === 0 ? (
+      <div className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
+        <PhanTrangBang>
+          <Table>
+            <TableHeader>
               <TableRow>
-                <TableCell
-                  colSpan={7}
-                  className="py-8 text-center text-gray-500"
-                >
-                  Chưa có phương thức nào
-                </TableCell>
+                <TableHead className="w-16">Thứ tự</TableHead>
+                <TableHead>Mã</TableHead>
+                <TableHead>Tên</TableHead>
+                <TableHead>Loại</TableHead>
+                <TableHead>Cho phép</TableHead>
+                <TableHead>Trạng thái</TableHead>
+                <TableHead className="text-right">Thao tác</TableHead>
               </TableRow>
-            ) : (
-              methods.map((pm) => {
-                const flags = [
-                  pm.canBuyCourse && "Khoá",
-                  pm.canBuyPackage && "Gói",
-                  pm.canBuyExam && "Thi",
-                  pm.canBuyProduct && "Sản phẩm",
-                  pm.canDeposit && "Nạp",
-                ]
-                  .filter(Boolean)
-                  .join(", ");
-
-                return (
-                  <TableRow key={pm.id}>
-                    <TableCell className="tabular-nums">
-                      {pm.displayOrder}
-                    </TableCell>
-                    <TableCell className="font-mono text-sm">
-                      {pm.code}
-                    </TableCell>
-                    <TableCell className="font-medium">{pm.name}</TableCell>
-                    <TableCell>
-                      <Badge variant="outline">
-                        {TYPE_LABEL[pm.type] ?? pm.type}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-xs text-gray-600">
-                      {flags || "—"}
-                    </TableCell>
-                    <TableCell>
-                      {pm.isActive ? (
-                        <Badge className="bg-green-100 text-green-700 hover:bg-green-100">
-                          Hoạt động
+            </TableHeader>
+            <TableBody>
+              {methods.length === 0 ? (
+                <TableRow>
+                  <TableCell
+                    colSpan={7}
+                    className="py-8 text-center text-muted-foreground"
+                  >
+                    Chưa có phương thức nào
+                  </TableCell>
+                </TableRow>
+              ) : (
+                methods.map((pm) => {
+                  const flags = [
+                    pm.canBuyCourse && "Khoá",
+                    pm.canBuyPackage && "Gói",
+                    pm.canBuyExam && "Thi",
+                    pm.canBuyProduct && "Sản phẩm",
+                    pm.canDeposit && "Nạp",
+                  ]
+                    .filter(Boolean)
+                    .join(", ");
+  
+                  return (
+                    <TableRow key={pm.id}>
+                      <TableCell className="tabular-nums">
+                        {pm.displayOrder}
+                      </TableCell>
+                      <TableCell className="font-mono text-sm">
+                        {pm.code}
+                      </TableCell>
+                      <TableCell className="font-medium">{pm.name}</TableCell>
+                      <TableCell>
+                        <Badge variant="outline">
+                          {TYPE_LABEL[pm.type] ?? pm.type}
                         </Badge>
-                      ) : (
-                        <Badge className="bg-gray-200 text-gray-700 hover:bg-gray-200">
-                          Tắt
-                        </Badge>
-                      )}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <div className="flex items-center justify-end gap-2">
-                        <Link href={`/payment-methods/${pm.id}/edit`}>
-                          <Button variant="outline" size="sm">
-                            <Pencil className="h-3.5 w-3.5" />
-                            Sửa
+                      </TableCell>
+                      <TableCell className="text-xs text-muted-foreground">
+                        {flags || "—"}
+                      </TableCell>
+                      <TableCell>
+                        {pm.isActive ? (
+                          <Badge className="bg-state-success-soft text-state-success-ink hover:bg-state-success-soft-hover">
+                            Hoạt động
+                          </Badge>
+                        ) : (
+                          <Badge className="bg-muted text-foreground hover:bg-muted">
+                            Tắt
+                          </Badge>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <div className="flex items-center justify-end gap-2">
+                          <Link href={`/payment-methods/${pm.id}/edit`}>
+                            <Button variant="outline" size="sm">
+                              <Pencil className="h-3.5 w-3.5" />
+                              Sửa
+                            </Button>
+                          </Link>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            disabled={isPending}
+                            onClick={() => setConfirmTarget(pm)}
+                          >
+                            {pm.isActive ? "Tắt" : "Bật"}
                           </Button>
-                        </Link>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          disabled={isPending}
-                          onClick={() => setConfirmTarget(pm)}
-                        >
-                          {pm.isActive ? "Tắt" : "Bật"}
-                        </Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                );
-              })
-            )}
-          </TableBody>
-        </Table>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  );
+                })
+              )}
+            </TableBody>
+          </Table>
+        </PhanTrangBang>
       </div>
 
       <Dialog

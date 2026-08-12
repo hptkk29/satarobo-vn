@@ -7,6 +7,7 @@ import { useMemo, useState, useTransition } from 'react'
 import Link from 'next/link'
 import { toast } from 'sonner'
 import { resendActivationOtpByUser, sendAccountZns, sendAccountZnsBulk } from '../_actions'
+import { PhanTrangBang } from "@/components/ui/phan-trang-bang";
 
 type ZnsInfo = { status: string; simulated: boolean; error: string | null; at: string } | null
 
@@ -119,14 +120,14 @@ export function ParentAccountsClient({
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder="Tìm theo tên PH / SĐT / tên học viên…"
-          className="w-72 rounded-md border border-gray-300 px-3 py-1.5 text-sm focus:border-orange-500 focus:outline-none focus:ring-1 focus:ring-orange-500"
+          className="w-72 rounded-md border border-border px-3 py-1.5 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
         />
-        <span className="text-sm text-gray-500">{rows.length} tài khoản</span>
+        <span className="text-sm text-muted-foreground">{rows.length} tài khoản</span>
         <div className="ml-auto flex gap-2">
           <button
             type="button"
             onClick={exportCsv}
-            className="rounded-lg border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
+            className="rounded-lg border border-border bg-card px-3 py-1.5 text-sm font-medium text-foreground hover:bg-muted"
           >
             Xuất CSV
           </button>
@@ -139,148 +140,150 @@ export function ParentAccountsClient({
                 ? 'Gửi ZNS báo cấp TK cho mọi tài khoản chờ kích hoạt CHƯA từng nhận (tối đa 100/lượt)'
                 : 'Chưa cấu hình mẫu ZNS (chờ 616899 duyệt)'
             }
-            className="rounded-lg bg-orange-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-orange-700 disabled:opacity-50"
+            className="rounded-lg bg-primary-dark px-3 py-1.5 text-sm font-semibold text-white hover:bg-primary-darker disabled:opacity-50"
           >
             Gửi ZNS tất cả chưa nhận
           </button>
         </div>
       </div>
 
-      <div className="overflow-x-auto rounded-lg border border-gray-200">
-        <table className="w-full min-w-[980px] text-sm">
-          <thead className="bg-gray-50 text-left text-xs font-medium uppercase text-gray-500">
-            <tr>
-              <th className="px-3 py-2">Phụ huynh</th>
-              <th className="px-3 py-2">Học viên</th>
-              <th className="w-20 px-3 py-2">Cơ sở</th>
-              <th className="w-28 px-3 py-2">Trạng thái</th>
-              <th className="w-44 px-3 py-2">ZNS báo cấp TK</th>
-              <th className="w-64 px-3 py-2">Hành động</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-100">
-            {rows.length === 0 && (
+      <div className="overflow-x-auto rounded-lg border border-border">
+        <PhanTrangBang>
+          <table className="w-full min-w-[980px] text-sm">
+            <thead className="bg-muted text-left text-xs font-medium uppercase text-muted-foreground">
               <tr>
-                <td colSpan={6} className="px-3 py-8 text-center text-gray-500">
-                  Không có tài khoản nào.
-                </td>
+                <th className="px-3 py-2">Phụ huynh</th>
+                <th className="px-3 py-2">Học viên</th>
+                <th className="w-20 px-3 py-2">Cơ sở</th>
+                <th className="w-28 px-3 py-2">Trạng thái</th>
+                <th className="w-44 px-3 py-2">ZNS báo cấp TK</th>
+                <th className="w-64 px-3 py-2">Hành động</th>
               </tr>
-            )}
-            {rows.map((p) => (
-              <tr key={p.id}>
-                <td className="px-3 py-2 align-top">
-                  <div className="font-medium text-gray-900">{p.name ?? '(chưa có tên)'}</div>
-                  <div className="text-xs text-gray-500">
-                    {p.phone ?? 'không SĐT'}
-                    {p.email ? ` · ${p.email}` : ''}
-                  </div>
-                  <div className="text-xs text-gray-400">Tạo: {p.createdAt}</div>
-                </td>
-                <td className="px-3 py-2 align-top">
-                  {p.students.length === 0 ? (
-                    <span className="inline-flex rounded-full bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-700">
-                      Chưa gắn học viên
-                    </span>
-                  ) : (
-                    <div className="flex flex-wrap gap-1">
-                      {p.students.map((s) => (
-                        <Link
-                          key={s.id}
-                          href={`/students/${s.id}/edit`}
-                          className="inline-flex rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-700 hover:bg-gray-200"
-                        >
-                          {s.name}
-                          {s.code ? ` · ${s.code}` : ''}
-                        </Link>
-                      ))}
+            </thead>
+            <tbody className="divide-y divide-border">
+              {rows.length === 0 && (
+                <tr>
+                  <td colSpan={6} className="px-3 py-8 text-center text-muted-foreground">
+                    Không có tài khoản nào.
+                  </td>
+                </tr>
+              )}
+              {rows.map((p) => (
+                <tr key={p.id}>
+                  <td className="px-3 py-2 align-top">
+                    <div className="font-medium text-foreground">{p.name ?? '(chưa có tên)'}</div>
+                    <div className="text-xs text-muted-foreground">
+                      {p.phone ?? 'không SĐT'}
+                      {p.email ? ` · ${p.email}` : ''}
                     </div>
-                  )}
-                </td>
-                <td className="px-3 py-2 align-top text-xs text-gray-600">{p.center}</td>
-                <td className="px-3 py-2 align-top">
-                  {p.status === 'PENDING_ACTIVATION' ? (
-                    <span className="inline-flex rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800">
-                      Chờ kích hoạt
-                    </span>
-                  ) : (
-                    <span className="inline-flex rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-800">
-                      Đã kích hoạt
-                    </span>
-                  )}
-                </td>
-                <td className="px-3 py-2 align-top text-xs">
-                  <ZnsBadge zns={p.zns} configured={znsConfigured} />
-                </td>
-                <td className="px-3 py-2 align-top">
-                  {p.status === 'PENDING_ACTIVATION' && (
-                    <div className="flex flex-wrap gap-1.5">
-                      {/* Khoá TẤT CẢ nút khi đang có transition (không chỉ dòng busy):
-                          busyId reset sớm hơn transition → double-click/bấm dòng khác
-                          khi đang gửi sẽ bắn trùng OTP/ZNS cho phụ huynh (review 02/08). */}
-                      <button
-                        type="button"
-                        onClick={() => resendOtp(p.id)}
-                        disabled={pending}
-                        className="rounded-md border border-gray-300 px-2 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
-                      >
-                        {pending && busyId === p.id ? 'Đang gửi…' : 'Gửi lại OTP'}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => sendZns(p.id)}
-                        disabled={!znsConfigured || !p.phone || pending}
-                        title={znsConfigured ? undefined : 'Chưa cấu hình mẫu ZNS (chờ 616899 duyệt)'}
-                        className="rounded-md border border-gray-300 px-2 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
-                      >
-                        Gửi ZNS báo cấp TK
-                      </button>
-                      {p.students[0] && (
-                        <Link
-                          href={`/students/${p.students[0].id}/edit`}
-                          className="rounded-md border border-gray-300 px-2 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50"
-                          title="Cấp mã kích hoạt đọc qua điện thoại (khi ZNS không tới được)"
+                    <div className="text-xs text-muted-foreground">Tạo: {p.createdAt}</div>
+                  </td>
+                  <td className="px-3 py-2 align-top">
+                    {p.students.length === 0 ? (
+                      <span className="inline-flex rounded-full bg-state-warning-soft px-2 py-0.5 text-xs font-medium text-state-warning-ink">
+                        Chưa gắn học viên
+                      </span>
+                    ) : (
+                      <div className="flex flex-wrap gap-1">
+                        {p.students.map((s) => (
+                          <Link
+                            key={s.id}
+                            href={`/students/${s.id}/edit`}
+                            className="inline-flex rounded-full bg-muted px-2 py-0.5 text-xs text-foreground hover:bg-muted"
+                          >
+                            {s.name}
+                            {s.code ? ` · ${s.code}` : ''}
+                          </Link>
+                        ))}
+                      </div>
+                    )}
+                  </td>
+                  <td className="px-3 py-2 align-top text-xs text-muted-foreground">{p.center}</td>
+                  <td className="px-3 py-2 align-top">
+                    {p.status === 'PENDING_ACTIVATION' ? (
+                      <span className="inline-flex rounded-full bg-state-warning-soft px-2 py-0.5 text-xs font-medium text-state-warning-ink">
+                        Chờ kích hoạt
+                      </span>
+                    ) : (
+                      <span className="inline-flex rounded-full bg-state-success-soft px-2 py-0.5 text-xs font-medium text-state-success-ink">
+                        Đã kích hoạt
+                      </span>
+                    )}
+                  </td>
+                  <td className="px-3 py-2 align-top text-xs">
+                    <ZnsBadge zns={p.zns} configured={znsConfigured} />
+                  </td>
+                  <td className="px-3 py-2 align-top">
+                    {p.status === 'PENDING_ACTIVATION' && (
+                      <div className="flex flex-wrap gap-1.5">
+                        {/* Khoá TẤT CẢ nút khi đang có transition (không chỉ dòng busy):
+                            busyId reset sớm hơn transition → double-click/bấm dòng khác
+                            khi đang gửi sẽ bắn trùng OTP/ZNS cho phụ huynh (review 02/08). */}
+                        <button
+                          type="button"
+                          onClick={() => resendOtp(p.id)}
+                          disabled={pending}
+                          className="rounded-md border border-border px-2 py-1 text-xs font-medium text-foreground hover:bg-muted disabled:opacity-50"
                         >
-                          Cấp mã tại quầy
-                        </Link>
-                      )}
-                    </div>
-                  )}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+                          {pending && busyId === p.id ? 'Đang gửi…' : 'Gửi lại OTP'}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => sendZns(p.id)}
+                          disabled={!znsConfigured || !p.phone || pending}
+                          title={znsConfigured ? undefined : 'Chưa cấu hình mẫu ZNS (chờ 616899 duyệt)'}
+                          className="rounded-md border border-border px-2 py-1 text-xs font-medium text-foreground hover:bg-muted disabled:opacity-50"
+                        >
+                          Gửi ZNS báo cấp TK
+                        </button>
+                        {p.students[0] && (
+                          <Link
+                            href={`/students/${p.students[0].id}/edit`}
+                            className="rounded-md border border-border px-2 py-1 text-xs font-medium text-foreground hover:bg-muted"
+                            title="Cấp mã kích hoạt đọc qua điện thoại (khi ZNS không tới được)"
+                          >
+                            Cấp mã tại quầy
+                          </Link>
+                        )}
+                      </div>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </PhanTrangBang>
       </div>
     </div>
   )
 }
 
 function ZnsBadge({ zns, configured }: { zns: ZnsInfo; configured: boolean }) {
-  if (!configured) return <span className="text-gray-400">Mẫu chưa cấu hình</span>
-  if (!zns) return <span className="text-gray-400">Chưa gửi</span>
+  if (!configured) return <span className="text-muted-foreground">Mẫu chưa cấu hình</span>
+  if (!zns) return <span className="text-muted-foreground">Chưa gửi</span>
   if (zns.status === 'SENT' && zns.simulated)
     return (
-      <span className="inline-flex rounded-full bg-blue-50 px-2 py-0.5 font-medium text-blue-700" title={zns.at}>
+      <span className="inline-flex rounded-full bg-state-info-soft px-2 py-0.5 font-medium text-state-info-ink" title={zns.at}>
         Mô phỏng (chưa live)
       </span>
     )
   if (zns.status === 'SENT')
     return (
-      <span className="inline-flex rounded-full bg-green-50 px-2 py-0.5 font-medium text-green-700" title={zns.at}>
+      <span className="inline-flex rounded-full bg-state-success-soft px-2 py-0.5 font-medium text-state-success-ink" title={zns.at}>
         Đã gửi {zns.at}
       </span>
     )
   if (zns.status === 'FAILED')
     return (
       <span
-        className="inline-flex rounded-full bg-red-50 px-2 py-0.5 font-medium text-red-700"
+        className="inline-flex rounded-full bg-state-danger-soft px-2 py-0.5 font-medium text-state-danger-ink"
         title={zns.error ?? undefined}
       >
         Lỗi gửi — rê chuột xem
       </span>
     )
   return (
-    <span className="inline-flex rounded-full bg-gray-100 px-2 py-0.5 text-gray-600" title={zns.error ?? undefined}>
+    <span className="inline-flex rounded-full bg-muted px-2 py-0.5 text-muted-foreground" title={zns.error ?? undefined}>
       {zns.status}
     </span>
   )

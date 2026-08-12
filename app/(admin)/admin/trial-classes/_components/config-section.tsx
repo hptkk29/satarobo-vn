@@ -36,16 +36,16 @@ export function TrialConfigSection({
   }
 
   return (
-    <div className="mb-6 rounded-xl border border-gray-200 bg-white p-4">
+    <div className="mb-6 rounded-xl border border-border bg-card p-4">
       <div className="mb-3 flex items-center gap-2">
-        <Settings2 className="h-4 w-4 text-gray-500" />
-        <h2 className="text-sm font-semibold text-gray-700">
+        <Settings2 className="h-4 w-4 text-muted-foreground" />
+        <h2 className="text-sm font-semibold text-foreground">
           Cấu hình số buổi (mặc định)
         </h2>
       </div>
 
       {!canConfig ? (
-        <p className="text-sm text-gray-600">
+        <p className="text-sm text-muted-foreground">
           {config
             ? `Cấu hình hiện tại: ${config.name} — ${config.sessionCount} buổi.`
             : "Chưa có cấu hình số buổi."}
@@ -53,17 +53,17 @@ export function TrialConfigSection({
       ) : (
         <div className="flex flex-wrap items-end gap-3">
           <label className="flex flex-col gap-1">
-            <span className="text-xs font-medium text-gray-500">Tên cấu hình</span>
+            <span className="text-xs font-medium text-muted-foreground">Tên cấu hình</span>
             <input
               value={name}
               onChange={(e) => setName(e.target.value)}
               disabled={pending}
-              className="w-56 rounded-lg border border-gray-300 px-2 py-2 text-sm disabled:opacity-50"
+              className="w-56 rounded-lg border border-border px-2 py-2 text-sm disabled:opacity-50"
               placeholder="VD: Trải nghiệm RoboSim"
             />
           </label>
           <label className="flex flex-col gap-1">
-            <span className="text-xs font-medium text-gray-500">Số buổi</span>
+            <span className="text-xs font-medium text-muted-foreground">Số buổi</span>
             <input
               type="number"
               min={1}
@@ -71,7 +71,7 @@ export function TrialConfigSection({
               value={sessionCount}
               onChange={(e) => setSessionCount(e.target.value)}
               disabled={pending}
-              className="w-24 rounded-lg border border-gray-300 px-2 py-2 text-sm disabled:opacity-50"
+              className="w-24 rounded-lg border border-border px-2 py-2 text-sm disabled:opacity-50"
             />
           </label>
           <button

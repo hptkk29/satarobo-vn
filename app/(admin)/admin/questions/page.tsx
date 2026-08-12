@@ -7,22 +7,23 @@ import { scopedDb } from "@/lib/db-scope";
 import { checkPermission } from "@/lib/auth/check-permission";
 import { QuestionType, QuestionDifficulty } from "@prisma/client";
 import { buildQuestionWhere } from "@/lib/questions/filter";
+import { PhanTrangBang } from "@/components/ui/phan-trang-bang";
 
 export const dynamic = "force-dynamic";
 
 const TYPE_INFO: Record<QuestionType, { label: string; color: string }> = {
-  MULTIPLE_CHOICE: { label: "Trắc nghiệm", color: "bg-blue-100 text-blue-700" },
-  TRUE_FALSE: { label: "Đúng/Sai", color: "bg-emerald-100 text-emerald-700" },
-  SHORT_ANSWER: { label: "Trả lời ngắn", color: "bg-amber-100 text-amber-700" },
-  ESSAY: { label: "Tự luận", color: "bg-purple-100 text-purple-700" },
-  CODE: { label: "Lập trình", color: "bg-neutral-100 text-neutral-800" },
+  MULTIPLE_CHOICE: { label: "Trắc nghiệm", color: "bg-state-info-soft text-state-info-ink" },
+  TRUE_FALSE: { label: "Đúng/Sai", color: "bg-state-success-soft text-state-success-ink" },
+  SHORT_ANSWER: { label: "Trả lời ngắn", color: "bg-state-warning-soft text-state-warning-ink" },
+  ESSAY: { label: "Tự luận", color: "bg-primary-soft text-primary" },
+  CODE: { label: "Lập trình", color: "bg-muted text-foreground" },
 };
 
 const DIFFICULTY_INFO: Record<QuestionDifficulty, { label: string; color: string }> = {
-  EASY: { label: "Dễ", color: "bg-green-100 text-green-700" },
-  MEDIUM: { label: "TB", color: "bg-yellow-100 text-yellow-700" },
-  HARD: { label: "Khó", color: "bg-orange-100 text-orange-700" },
-  EXPERT: { label: "Chuyên gia", color: "bg-red-100 text-red-700" },
+  EASY: { label: "Dễ", color: "bg-state-success-soft text-state-success-ink" },
+  MEDIUM: { label: "TB", color: "bg-state-warning-soft text-state-warning-ink" },
+  HARD: { label: "Khó", color: "bg-primary-soft text-primary" },
+  EXPERT: { label: "Chuyên gia", color: "bg-state-danger-soft text-state-danger-ink" },
 };
 
 const VALID_TYPES = Object.values(QuestionType);
@@ -111,11 +112,11 @@ export default async function QuestionsPage({ searchParams }: SearchParams) {
     <div>
       <div className="mb-6 flex items-start justify-between gap-4">
         <div>
-          <h1 className="flex items-center gap-2 text-2xl font-bold text-gray-900">
-            <HelpCircle className="h-6 w-6 text-[#7C3AED]" />
+          <h1 className="flex items-center gap-2 text-2xl font-bold text-foreground">
+            <HelpCircle className="h-6 w-6 text-primary" />
             Ngân hàng câu hỏi
           </h1>
-          <p className="mt-1 text-sm text-gray-500">
+          <p className="mt-1 text-sm text-muted-foreground">
             {questions.length > 0
               ? `${questions.length} câu hỏi`
               : "Chưa có câu hỏi nào"}
@@ -124,14 +125,14 @@ export default async function QuestionsPage({ searchParams }: SearchParams) {
         <div className="flex gap-2">
           <Link
             href="/questions/new"
-            className="inline-flex items-center gap-1.5 rounded-lg bg-[#7C3AED] px-4 py-2 text-sm font-semibold text-white shadow-sm hover:opacity-90"
+            className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white shadow-sm hover:opacity-90"
           >
             <Plus className="h-4 w-4" />
             Thêm câu hỏi
           </Link>
           <Link
             href="/questions/import"
-            className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-card px-4 py-2 text-sm font-semibold text-foreground hover:bg-muted"
           >
             <FileSpreadsheet className="h-4 w-4" />
             Thêm bằng template
@@ -147,12 +148,12 @@ export default async function QuestionsPage({ searchParams }: SearchParams) {
           name="q"
           defaultValue={q}
           placeholder="Tìm nội dung / mã câu hỏi..."
-          className="lg:col-span-2 rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-[#7C3AED] focus:outline-none focus:ring-2 focus:ring-[#7C3AED]/20"
+          className="lg:col-span-2 rounded-lg border border-border px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
         />
         <select
           name="type"
           defaultValue={typeFilter ?? ""}
-          className="rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-[#7C3AED] focus:outline-none"
+          className="rounded-lg border border-border px-3 py-2 text-sm focus:border-primary focus:outline-none"
         >
           <option value="">Mọi loại</option>
           {Object.entries(TYPE_INFO).map(([v, { label }]) => (
@@ -164,7 +165,7 @@ export default async function QuestionsPage({ searchParams }: SearchParams) {
         <select
           name="difficulty"
           defaultValue={difficultyFilter ?? ""}
-          className="rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-[#7C3AED] focus:outline-none"
+          className="rounded-lg border border-border px-3 py-2 text-sm focus:border-primary focus:outline-none"
         >
           <option value="">Mọi độ khó</option>
           {Object.entries(DIFFICULTY_INFO).map(([v, { label }]) => (
@@ -176,7 +177,7 @@ export default async function QuestionsPage({ searchParams }: SearchParams) {
         <select
           name="curriculumId"
           defaultValue={curriculumFilter ?? ""}
-          className="rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-[#7C3AED] focus:outline-none"
+          className="rounded-lg border border-border px-3 py-2 text-sm focus:border-primary focus:outline-none"
         >
           <option value="">Mọi khung CT</option>
           {curriculums.map((c) => (
@@ -188,7 +189,7 @@ export default async function QuestionsPage({ searchParams }: SearchParams) {
         <select
           name="lessonId"
           defaultValue={lessonFilter ?? ""}
-          className="rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-[#7C3AED] focus:outline-none"
+          className="rounded-lg border border-border px-3 py-2 text-sm focus:border-primary focus:outline-none"
         >
           <option value="">Mọi bài học</option>
           {lessons.map((l) => (
@@ -201,147 +202,149 @@ export default async function QuestionsPage({ searchParams }: SearchParams) {
           name="tag"
           defaultValue={tagFilter}
           placeholder="Tag (vd: loop)"
-          className="rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-[#7C3AED] focus:outline-none"
+          className="rounded-lg border border-border px-3 py-2 text-sm focus:border-primary focus:outline-none"
         />
         <button
           type="submit"
-          className="rounded-lg bg-[#7C3AED] px-4 py-2 text-sm font-semibold text-white hover:opacity-90 sm:col-span-2 lg:col-span-4"
+          className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white hover:opacity-90 sm:col-span-2 lg:col-span-4"
         >
           Áp dụng bộ lọc
         </button>
       </form>
 
-      <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
+      <div className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
         <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-gray-100">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">
-                  Loại
-                </th>
-                <th className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">
-                  Độ khó
-                </th>
-                <th className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">
-                  Câu hỏi
-                </th>
-                <th className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">
-                  Bài học
-                </th>
-                <th className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">
-                  Tags
-                </th>
-                <th className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">
-                  Soạn
-                </th>
-                <th className="px-3 py-3 text-right text-xs font-semibold uppercase tracking-wider text-gray-500">
-                  Hành động
-                </th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-50">
-              {questions.length === 0 ? (
+          <PhanTrangBang>
+            <table className="min-w-full divide-y divide-border">
+              <thead className="bg-muted">
                 <tr>
-                  <td
-                    colSpan={7}
-                    className="px-4 py-12 text-center text-sm text-gray-400"
-                  >
-                    Chưa có câu hỏi nào khớp bộ lọc.{" "}
-                    <Link
-                      href="/questions/new"
-                      className="text-[#7C3AED] hover:underline"
-                    >
-                      Tạo mới →
-                    </Link>
-                  </td>
+                  <th className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                    Loại
+                  </th>
+                  <th className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                    Độ khó
+                  </th>
+                  <th className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                    Câu hỏi
+                  </th>
+                  <th className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                    Bài học
+                  </th>
+                  <th className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                    Tags
+                  </th>
+                  <th className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                    Soạn
+                  </th>
+                  <th className="px-3 py-3 text-right text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                    Hành động
+                  </th>
                 </tr>
-              ) : (
-                questions.map((q) => {
-                  const typeInfo = TYPE_INFO[q.type];
-                  const diffInfo = DIFFICULTY_INFO[q.difficulty];
-                  return (
-                    <tr key={q.id} className="hover:bg-gray-50/60">
-                      <td className="px-3 py-3">
-                        <span
-                          className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold ${typeInfo.color}`}
-                        >
-                          {typeInfo.label}
-                        </span>
-                      </td>
-                      <td className="px-3 py-3">
-                        <span
-                          className={`inline-flex rounded-full px-2 py-0.5 text-xs font-semibold ${diffInfo.color}`}
-                        >
-                          {diffInfo.label}
-                        </span>
-                      </td>
-                      <td className="px-3 py-3 max-w-md">
-                        <div className="text-sm text-gray-900 line-clamp-2">
-                          {q.text}
-                        </div>
-                        {q.questionCode && (
-                          <div className="text-xs text-gray-400 tabular-nums">
-                            {q.questionCode}
+              </thead>
+              <tbody className="divide-y divide-border">
+                {questions.length === 0 ? (
+                  <tr>
+                    <td
+                      colSpan={7}
+                      className="px-4 py-12 text-center text-sm text-muted-foreground"
+                    >
+                      Chưa có câu hỏi nào khớp bộ lọc.{" "}
+                      <Link
+                        href="/questions/new"
+                        className="text-primary hover:underline"
+                      >
+                        Tạo mới →
+                      </Link>
+                    </td>
+                  </tr>
+                ) : (
+                  questions.map((q) => {
+                    const typeInfo = TYPE_INFO[q.type];
+                    const diffInfo = DIFFICULTY_INFO[q.difficulty];
+                    return (
+                      <tr key={q.id} className="hover:bg-muted/60">
+                        <td className="px-3 py-3">
+                          <span
+                            className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold ${typeInfo.color}`}
+                          >
+                            {typeInfo.label}
+                          </span>
+                        </td>
+                        <td className="px-3 py-3">
+                          <span
+                            className={`inline-flex rounded-full px-2 py-0.5 text-xs font-semibold ${diffInfo.color}`}
+                          >
+                            {diffInfo.label}
+                          </span>
+                        </td>
+                        <td className="px-3 py-3 max-w-md">
+                          <div className="text-sm text-foreground line-clamp-2">
+                            {q.text}
                           </div>
-                        )}
-                      </td>
-                      <td className="px-3 py-3 text-xs text-gray-600 max-w-[180px]">
-                        {q.lesson ? (
-                          <>
-                            <div className="font-medium">
-                              {q.lesson.curriculum.name}
+                          {q.questionCode && (
+                            <div className="text-xs text-muted-foreground tabular-nums">
+                              {q.questionCode}
                             </div>
-                            <div className="text-gray-400">
-                              Bài {q.lesson.order}: {q.lesson.title}
-                            </div>
-                          </>
-                        ) : q.curriculum ? (
-                          <>
-                            <div className="font-medium">
-                              {q.curriculum.course.name}
-                            </div>
-                            <div className="text-gray-400">
-                              {q.curriculum.name}
-                            </div>
-                          </>
-                        ) : (
-                          <span className="text-gray-300">—</span>
-                        )}
-                      </td>
-                      <td className="px-3 py-3">
-                        <div className="flex flex-wrap gap-1">
-                          {q.tags.slice(0, 4).map((t) => (
-                            <span
-                              key={t}
-                              className="inline-flex rounded bg-neutral-100 px-1.5 py-0.5 text-xs text-neutral-600"
-                            >
-                              {t}
-                            </span>
-                          ))}
-                          {q.tags.length > 4 && (
-                            <span className="text-xs text-neutral-400">
-                              +{q.tags.length - 4}
-                            </span>
                           )}
-                        </div>
-                      </td>
-                      <td className="px-3 py-3 text-xs text-gray-500">
-                        {q.author?.fullName ?? "—"}
-                      </td>
-                      <td className="px-3 py-3 text-right">
-                        <Link
-                          href={`/questions/${q.id}/edit`}
-                          className="inline-flex items-center gap-1 rounded-md border border-gray-200 px-2.5 py-1 text-xs font-semibold text-gray-700 hover:bg-gray-50"
-                        >
-                          Sửa
-                        </Link>
-                      </td>
-                    </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
+                        </td>
+                        <td className="px-3 py-3 text-xs text-muted-foreground max-w-[180px]">
+                          {q.lesson ? (
+                            <>
+                              <div className="font-medium">
+                                {q.lesson.curriculum.name}
+                              </div>
+                              <div className="text-muted-foreground">
+                                Bài {q.lesson.order}: {q.lesson.title}
+                              </div>
+                            </>
+                          ) : q.curriculum ? (
+                            <>
+                              <div className="font-medium">
+                                {q.curriculum.course.name}
+                              </div>
+                              <div className="text-muted-foreground">
+                                {q.curriculum.name}
+                              </div>
+                            </>
+                          ) : (
+                            <span className="text-muted-foreground">—</span>
+                          )}
+                        </td>
+                        <td className="px-3 py-3">
+                          <div className="flex flex-wrap gap-1">
+                            {q.tags.slice(0, 4).map((t) => (
+                              <span
+                                key={t}
+                                className="inline-flex rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground"
+                              >
+                                {t}
+                              </span>
+                            ))}
+                            {q.tags.length > 4 && (
+                              <span className="text-xs text-muted-foreground">
+                                +{q.tags.length - 4}
+                              </span>
+                            )}
+                          </div>
+                        </td>
+                        <td className="px-3 py-3 text-xs text-muted-foreground">
+                          {q.author?.fullName ?? "—"}
+                        </td>
+                        <td className="px-3 py-3 text-right">
+                          <Link
+                            href={`/questions/${q.id}/edit`}
+                            className="inline-flex items-center gap-1 rounded-md border border-border px-2.5 py-1 text-xs font-semibold text-foreground hover:bg-muted"
+                          >
+                            Sửa
+                          </Link>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </PhanTrangBang>
         </div>
       </div>
     </div>

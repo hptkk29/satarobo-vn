@@ -63,8 +63,8 @@ export default async function EditSessionPage({ params, searchParams }: Props) {
 
   return (
     <div>
-      <h1 className="mb-6 text-3xl font-black text-neutral-900">
-        Sửa buổi học: <span className="font-bold text-orange-600">{session.class.name}</span>
+      <h1 className="mb-6 text-3xl font-black text-foreground">
+        Sửa buổi học: <span className="font-bold text-primary">{session.class.name}</span>
       </h1>
       <SessionForm
         returnTo={returnTo}

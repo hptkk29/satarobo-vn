@@ -39,16 +39,16 @@ export function ResetPasswordForm({
 
   return (
     <form onSubmit={onSubmit} className="space-y-4">
-      <div className="flex items-start gap-2 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm">
-        <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
-        <div className="text-amber-900">
+      <div className="flex items-start gap-2 rounded-lg border border-state-warning bg-state-warning-soft p-3 text-sm">
+        <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-state-warning-ink" />
+        <div className="text-state-warning-ink">
           <strong>Lưu ý:</strong> User <code>{userEmail}</code> sẽ bị đăng xuất
           khỏi <strong>tất cả thiết bị</strong> sau khi đổi mật khẩu.
         </div>
       </div>
 
       {error && (
-        <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+        <div className="rounded-lg border border-state-danger-soft bg-state-danger-soft px-3 py-2 text-sm text-state-danger-ink">
           {error}
         </div>
       )}

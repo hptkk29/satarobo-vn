@@ -79,15 +79,15 @@ export default async function EditInventoryItemPage({ params }: Props) {
       <div>
         <Link
           href="/inventory/items"
-          className="mb-3 inline-flex items-center gap-1 text-sm text-neutral-500 hover:text-neutral-700"
+          className="mb-3 inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
         >
           <ChevronLeft className="h-4 w-4" /> Quay lại kho
         </Link>
-        <h1 className="text-2xl font-bold text-neutral-900">
+        <h1 className="text-2xl font-bold text-foreground">
           Sửa mặt hàng:{" "}
-          <span className="font-bold text-orange-600">{item.name}</span>
+          <span className="font-bold text-primary">{item.name}</span>
         </h1>
-        <p className="mt-1 text-sm text-neutral-500 tabular-nums">{item.itemCode}</p>
+        <p className="mt-1 text-sm text-muted-foreground tabular-nums">{item.itemCode}</p>
       </div>
 
       <ItemForm

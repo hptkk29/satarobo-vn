@@ -14,7 +14,7 @@
  */
 import { test, expect } from "@playwright/test";
 import { db } from "../../../lib/db";
-import { resetDb, seedUser } from "../_helpers/seed";
+import { resetDb, seedOrg, seedUser } from "../_helpers/seed";
 import {
   getParentDashboard,
   getStudentDashboard,
@@ -39,6 +39,11 @@ async function seedCenter(): Promise<void> {
     create: { id: CENTER, name: CENTER, code: CENTER, slug: CENTER.toLowerCase(), address: "test" },
     update: {},
   });
+  // Cây tổ chức đi kèm: ngoài đời mọi CENTER đều có một OrgUnit trỏ tới, và cơ chế
+  // ghi kép `centerId → orgUnitId` dựa vào đúng cặp đó. Fixture cũ chỉ tạo Center
+  // nên `resolveAuditOrgUnitId` không tra được đơn vị — audit ra null, khác hẳn
+  // trạng thái thật. (HO không mang centerId theo luật V7 nên không cần Center "HO".)
+  await seedOrg(["HO", CENTER]);
 }
 
 /** Tạo course (totalSessions tuỳ chọn) + lớp + HV (+ parentUserId) + enrollment STUDYING. */
@@ -311,8 +316,20 @@ test.describe("R7-09 portal dashboard + media", () => {
       select: { action: true, orgUnitId: true, newValues: true },
     });
     expect(logs.map((l) => l.action)).toEqual(["CONSENT_GRANTED", "CONSENT_REVOKED"]);
-    // orgUnitId tự suy từ Student.centerId (CS1) khi không truyền tường minh.
-    expect(logs.every((l) => l.orgUnitId === CENTER)).toBe(true);
+    // orgUnitId suy từ Student.centerId (CS1) khi không truyền tường minh — nhưng
+    // lưu vào cột là OrgUnit.id, KHÔNG phải Center.id.
+    //
+    // ⚠️ 12/08: khẳng định cũ là `l.orgUnitId === CENTER`, tức test đang chốt đúng
+    // CÁI LỖI: cột `orgUnitId` nhận Center.id. Đường đọc nhật ký lọc theo
+    // `visibleOrgUnitIds` (toàn OrgUnit.id) nên những dòng ấy vô hình với quản lý
+    // cơ sở — đo được 246/369 dòng trên DB dev. `resolveAuditOrgUnitId` nay chuẩn
+    // hoá ở biên, nên test phải kỳ vọng OrgUnit.id.
+    const ouCS1 = await db.orgUnit.findFirst({
+      where: { centerId: CENTER, deletedAt: null },
+      select: { id: true },
+    });
+    expect(ouCS1?.id).toBeTruthy();
+    expect(logs.every((l) => l.orgUnitId === ouCS1!.id)).toBe(true);
   });
 
   // ── AC5 — signed URL: tách key đúng; hết hạn/đổi id → 403 (R2) ──

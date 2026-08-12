@@ -3,7 +3,11 @@ import { auth } from "@/lib/auth";
 import { checkPermission } from "@/lib/auth/check-permission";
 import { SETTINGS, SETTING_KEYS } from "@/lib/settings/registry";
 import { getResolvedSettings } from "@/lib/settings/service";
-import { SettingsEditor, type SettingRowView } from "./_components/settings-editor";
+import {
+  SettingsEditor,
+  type SettingRowView,
+} from "./_components/settings-editor";
+import { PageHelp } from "@/components/admin/ui/page-help";
 
 export const dynamic = "force-dynamic";
 
@@ -33,16 +37,26 @@ export default async function OperationalSettingsPage() {
   return (
     <div className="max-w-4xl space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-gray-900">Cấu hình vận hành</h1>
-        <p className="mt-1 text-sm text-gray-500">
-          Tham số vận hành toàn hệ thống (GLOBAL). Đổi giá trị có hiệu lực ngay, không cần deploy.
-          Mỗi thay đổi yêu cầu lý do và được ghi nhật ký kiểm toán.
+        <h1 className="text-2xl font-bold text-foreground">
+          Cấu hình vận hành
+        </h1>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Tham số vận hành toàn hệ thống
         </p>
       </div>
 
+      <PageHelp>
+        <p>
+          Tham số vận hành toàn hệ thống (GLOBAL). Đổi giá trị có hiệu lực ngay,
+          không cần deploy. Mỗi thay đổi yêu cầu lý do và được ghi nhật ký kiểm
+          toán.
+        </p>
+      </PageHelp>
+
       {!canEditGlobal && (
-        <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-          Bạn chỉ có quyền <strong>xem</strong> cấu hình toàn hệ thống. Chỉ SUPER_ADMIN được sửa.
+        <div className="rounded-lg border border-state-warning-soft bg-state-warning-soft px-4 py-3 text-sm text-state-warning-ink">
+          Bạn chỉ có quyền <strong>xem</strong> cấu hình toàn hệ thống. Chỉ
+          SUPER_ADMIN được sửa.
         </div>
       )}
 

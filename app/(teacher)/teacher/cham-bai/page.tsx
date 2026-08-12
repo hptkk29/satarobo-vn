@@ -21,11 +21,15 @@ import { Button } from "@/components/ui/button";
 import { PageHeader } from "../_components/ui/page-header";
 import { EmptyState } from "../_components/ui/empty-state";
 import { GradeForm } from "./_components/grade-form";
-import { AssignmentList, type AssignmentRow } from "./_components/assignment-list";
+import {
+  AssignmentList,
+  type AssignmentRow,
+} from "./_components/assignment-list";
 import { AssignForm } from "./_components/assign-form";
 import { BatchGrade } from "./_components/batch-grade";
 import { resolveTemplateOwnerId } from "../kho-bai-tap/_owner";
 import { BackLink } from "../_components/ui/back-link";
+import { PhanTrangBang } from "@/components/ui/phan-trang-bang";
 
 export const metadata = { title: "Bài tập & kiểm tra | Giáo viên Sata Robo" };
 
@@ -40,11 +44,15 @@ const submitFmt = new Intl.DateTimeFormat("vi-VN", {
   minute: "2-digit",
   timeZone: "Asia/Ho_Chi_Minh",
 });
-/** "YYYY-MM-DD" (giờ VN) cho cột Hạn nộp. */
-const dueFmt = new Intl.DateTimeFormat("en-CA", {
-  year: "numeric",
-  month: "2-digit",
+/** Ngày cho cột Hạn nộp — dd/mm/yyyy giờ VN.
+ *
+ * Trước đây để "en-CA" ra ISO "2026-08-12", trong khi CHÍNH màn này đã dùng
+ * `submitFmt` kiểu vi-VN cho cột Đã nộp ⇒ một màn hai quy ước ngày. Chuỗi này
+ * chỉ để HIỂN THỊ (không dùng sắp xếp — đã kiểm), nên đổi được an toàn. */
+const dueFmt = new Intl.DateTimeFormat("vi-VN", {
   day: "2-digit",
+  month: "2-digit",
+  year: "numeric",
   timeZone: "Asia/Ho_Chi_Minh",
 });
 
@@ -52,15 +60,15 @@ const SUB_STATUS: Record<SubmissionStatus, { label: string; cls: string }> = {
   NOT_SUBMITTED: { label: "Chưa nộp", cls: "bg-muted text-muted-foreground" },
   SUBMITTED: {
     label: "Đã nộp",
-    cls: "bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300",
+    cls: "bg-state-warning-soft text-state-warning-ink",
   },
   LATE: {
     label: "Nộp muộn",
-    cls: "bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300",
+    cls: "bg-state-warning-soft text-state-warning-ink",
   },
   GRADED: {
     label: "Đã chấm",
-    cls: "bg-emerald-100 text-emerald-700 dark:bg-emerald-600/20 dark:text-emerald-200",
+    cls: "bg-state-success-soft text-state-success-ink",
   },
 };
 
@@ -78,7 +86,8 @@ export default async function TeacherAssignmentsPage({
   const session = await auth();
   if (!session?.user) return null; // layout đã gate
 
-  const { assignmentId, submissionId, compose, lockClassId, back } = await searchParams;
+  const { assignmentId, submissionId, compose, lockClassId, back } =
+    await searchParams;
   const actor = await resolveActor(session.user.id);
   const sdb = scopedDb(actor);
   const classIds = [...actor.assignedClassIds];
@@ -124,15 +133,26 @@ export default async function TeacherAssignmentsPage({
     if (sub.status === "NOT_SUBMITTED") {
       return (
         <div>
-          <BackLink className="mb-4" href={`?assignmentId=${sub.assignment.id}`} label="Chi tiết bài tập" />
-          <EmptyState icon={FileX2} title="Học viên chưa nộp bài — chưa thể chấm." />
+          <BackLink
+            className="mb-4"
+            href={`?assignmentId=${sub.assignment.id}`}
+            label="Chi tiết bài tập"
+          />
+          <EmptyState
+            icon={FileX2}
+            title="Học viên chưa nộp bài — chưa thể chấm."
+          />
         </div>
       );
     }
 
     return (
       <div>
-        <BackLink className="mb-4" href={`?assignmentId=${sub.assignment.id}`} label="Chi tiết bài tập" />
+        <BackLink
+          className="mb-4"
+          href={`?assignmentId=${sub.assignment.id}`}
+          label="Chi tiết bài tập"
+        />
         <PageHeader
           title={`Chấm bài — ${sub.student.name}`}
           subtitle={`${sub.assignment.title} · Lớp ${sub.assignment.class.name}`}
@@ -141,7 +161,9 @@ export default async function TeacherAssignmentsPage({
           submissionId={sub.id}
           studentName={sub.student.name}
           totalPoints={sub.assignment.totalPoints}
-          submittedAtText={sub.submittedAt ? submitFmt.format(sub.submittedAt) : null}
+          submittedAtText={
+            sub.submittedAt ? submitFmt.format(sub.submittedAt) : null
+          }
           isLate={sub.status === "LATE"}
           graded={sub.status === "GRADED"}
           textAnswer={sub.textAnswer}
@@ -231,55 +253,70 @@ export default async function TeacherAssignmentsPage({
         />
         <div className="t-card overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="w-full border-collapse text-left text-sm">
-              <thead>
-                <tr className="border-b border-border bg-muted/50 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
-                  <th scope="col" className="px-5 py-3">Học viên</th>
-                  <th scope="col" className="px-5 py-3">Tình trạng</th>
-                  <th scope="col" className="px-5 py-3">Điểm</th>
-                  <th scope="col" className="px-5 py-3 text-right">
-                    <span className="sr-only">Chấm</span>
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {roster.map((e) => {
-                  const sub = subByStudent.get(e.student.id);
-                  const st = SUB_STATUS[sub?.status ?? "NOT_SUBMITTED"];
-                  const canGrade = sub != null && SUBMITTED_STATUSES.includes(sub.status);
-                  return (
-                    <tr
-                      key={e.student.id}
-                      className="border-b border-border/60 transition-colors last:border-0 hover:bg-muted/50"
-                    >
-                      <td className="px-5 py-3.5 font-medium text-foreground">{e.student.name}</td>
-                      <td className="px-5 py-3.5 whitespace-nowrap">
-                        <span
-                          className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold ${st.cls}`}
-                        >
-                          {st.label}
-                        </span>
-                      </td>
-                      <td className="px-5 py-3.5 whitespace-nowrap text-foreground">
-                        {sub?.score != null ? `${sub.score}/${asg.totalPoints}` : "—"}
-                      </td>
-                      <td className="px-5 py-3.5 text-right whitespace-nowrap">
-                        {canGrade && sub ? (
-                          <Link
-                            href={`?submissionId=${sub.id}`}
-                            className="rounded-sm text-sm font-semibold text-orange-600 outline-none hover:text-orange-700 focus-visible:ring-2 focus-visible:ring-ring dark:text-orange-400"
+            <PhanTrangBang>
+              <table className="min-w-[560px] w-full border-collapse text-left text-sm">
+                <thead>
+                  <tr className="border-b border-border bg-muted/50 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+                    <th scope="col" className="px-5 py-3">
+                      Học viên
+                    </th>
+                    <th scope="col" className="px-5 py-3">
+                      Tình trạng
+                    </th>
+                    <th scope="col" className="px-5 py-3">
+                      Điểm
+                    </th>
+                    <th scope="col" className="px-5 py-3 text-right">
+                      <span className="sr-only">Chấm</span>
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {roster.map((e) => {
+                    const sub = subByStudent.get(e.student.id);
+                    const st = SUB_STATUS[sub?.status ?? "NOT_SUBMITTED"];
+                    const canGrade =
+                      sub != null && SUBMITTED_STATUSES.includes(sub.status);
+                    return (
+                      <tr
+                        key={e.student.id}
+                        className="border-b border-border/60 transition-colors last:border-0 hover:bg-muted/50"
+                      >
+                        <td className="px-5 py-3.5 font-medium text-foreground">
+                          {e.student.name}
+                        </td>
+                        <td className="px-5 py-3.5 whitespace-nowrap">
+                          <span
+                            className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold ${st.cls}`}
                           >
-                            {sub.status === "GRADED" ? "Xem / sửa" : "Chấm"} →
-                          </Link>
-                        ) : (
-                          <span className="text-sm text-muted-foreground">—</span>
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+                            {st.label}
+                          </span>
+                        </td>
+                        <td className="px-5 py-3.5 whitespace-nowrap text-foreground">
+                          {sub?.score != null
+                            ? `${sub.score}/${asg.totalPoints}`
+                            : "—"}
+                        </td>
+                        <td className="px-5 py-3.5 text-right whitespace-nowrap">
+                          {canGrade && sub ? (
+                            <Link
+                              href={`?submissionId=${sub.id}`}
+                              className="rounded-sm text-sm font-semibold text-primary-ink outline-none hover:text-primary-ink-hover focus-visible:ring-2 focus-visible:ring-ring"
+                            >
+                              {sub.status === "GRADED" ? "Xem / sửa" : "Chấm"} →
+                            </Link>
+                          ) : (
+                            <span className="text-sm text-muted-foreground">
+                              —
+                            </span>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </PhanTrangBang>
           </div>
         </div>
       </div>
@@ -290,18 +327,29 @@ export default async function TeacherAssignmentsPage({
   // Vào từ nút "Giao bài" (?compose=giao) hoặc từ Class Hub (?compose=giao&lockClassId
   // &back=<hub url>). lockClassId khoá 1 lớp; back = nơi quay về sau khi giao/huỷ.
   if (compose === "giao") {
-    const backHref = back && back.startsWith("/teacher/") ? back : "/teacher/cham-bai";
+    const backHref =
+      back && back.startsWith("/teacher/") ? back : "/teacher/cham-bai";
     if (classIds.length === 0) {
       return (
         <div>
-          <BackLink className="mb-4" href={backHref} label="Bài tập & kiểm tra" />
-          <EmptyState icon={ClipboardCheck} title="Bạn chưa được phân công lớp nào." />
+          <BackLink
+            className="mb-4"
+            href={backHref}
+            label="Bài tập & kiểm tra"
+          />
+          <EmptyState
+            icon={ClipboardCheck}
+            title="Bạn chưa được phân công lớp nào."
+          />
         </div>
       );
     }
 
     // Lớp có thể giao: khoá 1 lớp nếu lockClassId hợp lệ (từ Class Hub), else tất cả.
-    const lockOne = lockClassId && actor.assignedClassIds.has(lockClassId) ? lockClassId : null;
+    const lockOne =
+      lockClassId && actor.assignedClassIds.has(lockClassId)
+        ? lockClassId
+        : null;
     const [composeClasses, composeTemplates, composeOwner] = await Promise.all([
       sdb.class.findMany({
         where: { id: { in: lockOne ? [lockOne] : classIds } },
@@ -353,7 +401,10 @@ export default async function TeacherAssignmentsPage({
   // ── (a) Bảng bài tập đã giao ─────────────────────────────────────────────────
   const assignments = classIds.length
     ? await sdb.assignment.findMany({
-        where: { classId: { in: classIds }, status: { in: ["PUBLISHED", "CLOSED"] } },
+        where: {
+          classId: { in: classIds },
+          status: { in: ["PUBLISHED", "CLOSED"] },
+        },
         select: {
           id: true,
           title: true,
@@ -382,14 +433,18 @@ export default async function TeacherAssignmentsPage({
           name: true,
           _count: {
             select: {
-              enrollments: { where: { status: { in: ENROLLMENT_ACTIVE_STATUS_LIST } } },
+              enrollments: {
+                where: { status: { in: ENROLLMENT_ACTIVE_STATUS_LIST } },
+              },
             },
           },
         },
         orderBy: { name: "asc" },
       })
     : [];
-  const enrollBy = new Map(classCounts.map((c) => [c.id, c._count.enrollments]));
+  const enrollBy = new Map(
+    classCounts.map((c) => [c.id, c._count.enrollments]),
+  );
 
   const rows: AssignmentRow[] = assignments.map((a) => ({
     id: a.id,
@@ -399,7 +454,8 @@ export default async function TeacherAssignmentsPage({
     isTest: a._count.questions > 0,
     fromAdmin: a.templateId != null,
     // Guard năm < 2000: một số bài seed để dueAt = epoch (1970) → coi như không có hạn.
-    due: a.dueAt && a.dueAt.getFullYear() >= 2000 ? dueFmt.format(a.dueAt) : null,
+    due:
+      a.dueAt && a.dueAt.getFullYear() >= 2000 ? dueFmt.format(a.dueAt) : null,
     submitted: a._count.submissions,
     total: enrollBy.get(a.classId) ?? 0,
     status: a.status,
@@ -421,7 +477,10 @@ export default async function TeacherAssignmentsPage({
         }
       />
       {classIds.length === 0 ? (
-        <EmptyState icon={ClipboardCheck} title="Bạn chưa được phân công lớp nào." />
+        <EmptyState
+          icon={ClipboardCheck}
+          title="Bạn chưa được phân công lớp nào."
+        />
       ) : (
         <AssignmentList rows={rows} />
       )}

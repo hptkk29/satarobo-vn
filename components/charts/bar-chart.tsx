@@ -70,7 +70,19 @@ export function BarChart({
             fontSize: 13,
           }}
         />
-        <Legend wrapperStyle={{ fontSize: 13 }} />
+        {/* Ô màu vẫn nhận diện chuỗi dữ liệu; CHỮ thì trả về màu nội dung —
+            Recharts mặc định tô chữ chú giải theo màu chuỗi, mà cam #F97316
+            làm chữ trên nền trắng chỉ đo được 2,8:1. */}
+        <Legend
+          wrapperStyle={{ fontSize: 13 }}
+          // `wrapperStyle.color` KHÔNG thắng: Recharts đặt `color` INLINE lên
+          // từng mục theo màu chuỗi dữ liệu. Phải tự dựng nhãn thì chữ mới
+          // theo màu nội dung — cam #F97316 làm chữ chỉ đo được 2,8:1.
+          // Ô màu bên cạnh vẫn giữ nguyên vai nhận diện chuỗi.
+          formatter={(value) => (
+            <span className="text-foreground">{value}</span>
+          )}
+        />
         {bars.map((bar) => (
           <Bar
             key={bar.key}

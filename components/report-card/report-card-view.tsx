@@ -1,5 +1,11 @@
-import { reportCardPeriodDisplay, type PublishedReportCardView } from "@/lib/lms/report-card";
-import { SKILL_LABEL, LEVEL_LABEL as SKILL_LEVEL_LABEL } from "@/lib/lms/skills";
+import {
+  reportCardPeriodDisplay,
+  type PublishedReportCardView,
+} from "@/lib/lms/report-card";
+import {
+  SKILL_LABEL,
+  LEVEL_LABEL as SKILL_LEVEL_LABEL,
+} from "@/lib/lms/skills";
 import type { RoboticsSkill, SkillLevel } from "@prisma/client";
 
 const LEVEL_LABEL: Record<number, string> = {
@@ -23,7 +29,9 @@ export function ReportCardView({ card }: { card: PublishedReportCardView }) {
           </h2>
           <p className="text-sm text-neutral-500">
             {card.className}
-            {card.publishedAt ? ` · Phát hành ${card.publishedAt.slice(0, 10)}` : ""}
+            {card.publishedAt
+              ? ` · Phát hành ${card.publishedAt.slice(0, 10)}`
+              : ""}
           </p>
         </div>
         <a
@@ -38,19 +46,37 @@ export function ReportCardView({ card }: { card: PublishedReportCardView }) {
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         {[
-          { label: "Chuyên cần", value: `${att.attended}/${att.total} (${att.rate}%)` },
+          {
+            label: "Chuyên cần",
+            value: `${att.attended}/${att.total} (${att.rate}%)`,
+          },
           { label: "Đã học bù", value: att.madeUp },
-          { label: "Bài kiểm tra", value: `${card.metrics.exams.passed}/${card.metrics.exams.count}` },
-          { label: "Điểm TB KT", value: card.metrics.exams.averageScore ?? "—" },
+          {
+            label: "Bài kiểm tra",
+            value: `${card.metrics.exams.passed}/${card.metrics.exams.count}`,
+          },
+          {
+            label: "Điểm TB KT",
+            value: card.metrics.exams.averageScore ?? "—",
+          },
           ...(assignments
             ? [
-                { label: "Bài tập (nộp/giao)", value: `${assignments.submitted}/${assignments.total}` },
-                { label: "Điểm TB bài tập", value: assignments.averageScore ?? "—" },
+                {
+                  label: "Bài tập (nộp/giao)",
+                  value: `${assignments.submitted}/${assignments.total}`,
+                },
+                {
+                  label: "Điểm TB bài tập",
+                  value: assignments.averageScore ?? "—",
+                },
               ]
             : []),
         ].map((s) => (
-          <div key={s.label} className="rounded-lg border border-neutral-200 p-3">
-            <div className="text-xs text-neutral-400">{s.label}</div>
+          <div
+            key={s.label}
+            className="rounded-lg border border-neutral-200 p-3"
+          >
+            <div className="text-xs text-neutral-500">{s.label}</div>
             <div className="text-lg font-bold text-neutral-900">{s.value}</div>
           </div>
         ))}
@@ -58,7 +84,9 @@ export function ReportCardView({ card }: { card: PublishedReportCardView }) {
 
       {skills && skills.length > 0 ? (
         <div>
-          <h3 className="mb-1 text-sm font-semibold text-neutral-700">Kỹ năng robot</h3>
+          <h3 className="mb-1 text-sm font-semibold text-neutral-700">
+            Kỹ năng robot
+          </h3>
           <ul className="flex flex-wrap gap-2">
             {skills.map((sk) => (
               <li
@@ -77,10 +105,15 @@ export function ReportCardView({ card }: { card: PublishedReportCardView }) {
 
       {card.scores.length > 0 ? (
         <div>
-          <h3 className="mb-1 text-sm font-semibold text-neutral-700">Đánh giá năng lực</h3>
+          <h3 className="mb-1 text-sm font-semibold text-neutral-700">
+            Đánh giá năng lực
+          </h3>
           <ul className="divide-y text-sm">
             {card.scores.map((s) => (
-              <li key={s.criterionId} className="flex items-center justify-between py-1.5">
+              <li
+                key={s.criterionId}
+                className="flex items-center justify-between py-1.5"
+              >
                 <span>{s.name}</span>
                 <span className="text-neutral-500">
                   {LEVEL_LABEL[s.level] ?? s.level}
@@ -94,12 +127,16 @@ export function ReportCardView({ card }: { card: PublishedReportCardView }) {
 
       {card.periodComments.length > 0 ? (
         <div>
-          <h3 className="mb-1 text-sm font-semibold text-neutral-700">Nhận xét theo giai đoạn</h3>
+          <h3 className="mb-1 text-sm font-semibold text-neutral-700">
+            Nhận xét theo giai đoạn
+          </h3>
           <ul className="space-y-1 text-sm">
             {card.periodComments.map((p, i) => (
               <li key={i}>
                 {/* A1: PH không được thấy mã kỹ thuật SESSION_5/SESSION_12 — map ra nhãn VN. */}
-                <span className="font-medium">{reportCardPeriodDisplay(p.period)}: </span>
+                <span className="font-medium">
+                  {reportCardPeriodDisplay(p.period)}:{" "}
+                </span>
                 <span className="text-neutral-600">{p.comment}</span>
               </li>
             ))}
@@ -116,7 +153,9 @@ export function ReportCardView({ card }: { card: PublishedReportCardView }) {
 
       {card.finalComment ? (
         <div>
-          <h3 className="mb-1 text-sm font-semibold text-neutral-700">Nhận xét tổng kết</h3>
+          <h3 className="mb-1 text-sm font-semibold text-neutral-700">
+            Nhận xét tổng kết
+          </h3>
           <p className="text-sm text-neutral-600">{card.finalComment}</p>
         </div>
       ) : null}

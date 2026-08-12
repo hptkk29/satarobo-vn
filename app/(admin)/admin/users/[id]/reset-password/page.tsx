@@ -35,25 +35,25 @@ export default async function ResetPasswordPage({ params }: Props) {
     <div className="max-w-xl">
       <Link
         href={`/users/${user.id}/edit`}
-        className="mb-4 inline-flex items-center gap-1 text-sm text-gray-500 hover:text-gray-700"
+        className="mb-4 inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
       >
         <ChevronLeft className="h-4 w-4" />
         Quay lại sửa tài khoản
       </Link>
 
       <div className="mb-6 flex items-center gap-3">
-        <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-orange-100 text-orange-600">
+        <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary-soft text-primary">
           <KeyRound className="h-5 w-5" />
         </span>
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Đổi mật khẩu</h1>
-          <p className="mt-0.5 text-sm text-gray-500">
+          <h1 className="text-2xl font-bold text-foreground">Đổi mật khẩu</h1>
+          <p className="mt-0.5 text-sm text-muted-foreground">
             {user.name ?? "—"} · <code>{user.email}</code>
           </p>
         </div>
       </div>
 
-      <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
+      <div className="rounded-xl border border-border bg-card p-6 shadow-sm">
         <ResetPasswordForm userId={user.id} userEmail={user.email ?? user.id} />
       </div>
     </div>

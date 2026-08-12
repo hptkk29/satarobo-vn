@@ -74,9 +74,14 @@ const updatedFmt = new Intl.DateTimeFormat("vi-VN", {
  * chưa đạt buổi N (pending) · đạt nhưng THIẾU nhận xét (missing — việc GV cần làm) ·
  * đã viết nhận xét (done). Server precompute → client chỉ render (không import lib mốc).
  */
-function buildMilestones(completedSessions: number, periods: PeriodComment[]): MilestoneChip[] {
+function buildMilestones(
+  completedSessions: number,
+  periods: PeriodComment[],
+): MilestoneChip[] {
   const reached = new Set<number>(reachedMilestones(completedSessions));
-  const missing = new Set<number>(missingMilestoneComments(completedSessions, periods));
+  const missing = new Set<number>(
+    missingMilestoneComments(completedSessions, periods),
+  );
   return REPORT_CARD_MILESTONES.map((m): MilestoneChip => {
     const state: MilestoneChip["state"] = !reached.has(m)
       ? "pending"
@@ -145,7 +150,10 @@ export default async function TeacherReportCardsPage({
           <h1 className="text-2xl font-bold text-foreground">
             Học bạ — {enr.studentName}
             {enr.studentCode ? (
-              <span className="text-muted-foreground"> ({enr.studentCode})</span>
+              <span className="text-muted-foreground">
+                {" "}
+                ({enr.studentCode})
+              </span>
             ) : null}
           </h1>
           <p className="mt-1 text-sm text-muted-foreground">
@@ -154,9 +162,9 @@ export default async function TeacherReportCardsPage({
         </div>
 
         {criteria.length === 0 ? (
-          <div className="rounded-md border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200">
-            Khoá học <b>{enr.courseName}</b> chưa có tiêu chí năng lực — liên hệ Đào tạo
-            cấu hình tiêu chí trước khi nhập học bạ.
+          <div className="rounded-md border border-state-warning-soft bg-state-warning-soft px-4 py-3 text-sm text-state-warning-ink dark:border-state-warning">
+            Khoá học <b>{enr.courseName}</b> chưa có tiêu chí năng lực — liên hệ
+            Đào tạo cấu hình tiêu chí trước khi nhập học bạ.
           </div>
         ) : null}
 
@@ -179,7 +187,11 @@ export default async function TeacherReportCardsPage({
           )}
           scores={criteria.map((c) => {
             const s = scoreMap.get(c.id);
-            return { criterionId: c.id, level: s?.level ?? 0, note: s?.note ?? "" };
+            return {
+              criterionId: c.id,
+              level: s?.level ?? 0,
+              note: s?.note ?? "",
+            };
           })}
         />
       </div>
@@ -232,75 +244,94 @@ export default async function TeacherReportCardsPage({
   // qua lib getCourseCriteria (app/(teacher) không import @/lib/db trần). Dedupe courseId
   // để mỗi khoá chỉ 1 query.
   const courseIds = [...new Set(enrollments.map((e) => e.courseId))];
-  const [cards, completedRows, summaries, gradedSubs, criteriaLists] = await Promise.all([
-    enrollmentIds.length
-      ? sdb.reportCard.findMany({
-          where: { enrollmentId: { in: enrollmentIds } },
-          select: {
-            enrollmentId: true,
-            status: true,
-            periodComments: true,
-            updatedAt: true,
-            // Mức năng lực đã chấm (thang 1–4) cho bảng so sánh chéo + xếp loại.
-            scores: { select: { criterionId: true, level: true } },
-          },
-        })
-      : Promise.resolve([]),
-    // Số buổi COMPLETED mỗi lớp — xác định mốc 5/12 đã đạt (#17 Gap 1, câu 55).
-    classIds.length
-      ? sdb.classSession.groupBy({
-          by: ["classId"],
-          where: { classId: { in: classIds }, status: "COMPLETED" },
-          _count: { _all: true },
-        })
-      : Promise.resolve([]),
-    // Chuyên cần từng ghi danh — dùng lib R7-08 (attended gồm buổi bù, total = số buổi chuẩn).
-    Promise.all(enrollments.map((e) => attendanceSummary(e.id))),
-    // Điểm TB bài tập (thang 10): 1 query gộp cho mọi lớp; AssignmentSubmission ∉ SCOPED
-    // → guard qua assignment.classId ∈ classIds (pattern AssignmentsTab hoc-vien).
-    classIds.length
-      ? sdb.assignmentSubmission.findMany({
-          where: {
-            status: "GRADED",
-            score: { not: null },
-            assignment: { classId: { in: classIds } },
-          },
-          select: {
-            studentId: true,
-            score: true,
-            assignment: { select: { classId: true, totalPoints: true } },
-          },
-        })
-      : Promise.resolve([]),
-    // Tiêu chí ACTIVE mỗi khoá (song song thứ tự courseIds).
-    Promise.all(courseIds.map((id) => getCourseCriteria(id))),
-  ]);
+  const [cards, completedRows, summaries, gradedSubs, criteriaLists] =
+    await Promise.all([
+      enrollmentIds.length
+        ? sdb.reportCard.findMany({
+            where: { enrollmentId: { in: enrollmentIds } },
+            select: {
+              enrollmentId: true,
+              status: true,
+              periodComments: true,
+              updatedAt: true,
+              // Mức năng lực đã chấm (thang 1–4) cho bảng so sánh chéo + xếp loại.
+              scores: { select: { criterionId: true, level: true } },
+            },
+          })
+        : Promise.resolve([]),
+      // Số buổi COMPLETED mỗi lớp — xác định mốc 5/12 đã đạt (#17 Gap 1, câu 55).
+      classIds.length
+        ? sdb.classSession.groupBy({
+            by: ["classId"],
+            where: { classId: { in: classIds }, status: "COMPLETED" },
+            _count: { _all: true },
+          })
+        : Promise.resolve([]),
+      // Chuyên cần từng ghi danh — dùng lib R7-08 (attended gồm buổi bù, total = số buổi chuẩn).
+      Promise.all(enrollments.map((e) => attendanceSummary(e.id))),
+      // Điểm TB bài tập (thang 10): 1 query gộp cho mọi lớp; AssignmentSubmission ∉ SCOPED
+      // → guard qua assignment.classId ∈ classIds (pattern AssignmentsTab hoc-vien).
+      classIds.length
+        ? sdb.assignmentSubmission.findMany({
+            where: {
+              status: "GRADED",
+              score: { not: null },
+              assignment: { classId: { in: classIds } },
+            },
+            select: {
+              studentId: true,
+              score: true,
+              assignment: { select: { classId: true, totalPoints: true } },
+            },
+          })
+        : Promise.resolve([]),
+      // Tiêu chí ACTIVE mỗi khoá (song song thứ tự courseIds).
+      Promise.all(courseIds.map((id) => getCourseCriteria(id))),
+    ]);
 
   const cardByEnrollment = new Map(cards.map((c) => [c.enrollmentId, c]));
-  const completedByClass = new Map(completedRows.map((r) => [r.classId, r._count._all]));
-  const summaryByEnrollment = new Map(enrollments.map((e, i) => [e.id, summaries[i]]));
-  const criteriaByCourse = new Map(courseIds.map((id, i) => [id, criteriaLists[i]]));
+  const completedByClass = new Map(
+    completedRows.map((r) => [r.classId, r._count._all]),
+  );
+  const summaryByEnrollment = new Map(
+    enrollments.map((e, i) => [e.id, summaries[i]]),
+  );
+  const criteriaByCourse = new Map(
+    courseIds.map((id, i) => [id, criteriaLists[i]]),
+  );
 
   // Gom bài đã chấm theo (studentId × classId) → điểm TB qua computeAssignmentSummary.
   const gradedByKey = new Map<string, AssignmentSubmissionLite[]>();
   for (const s of gradedSubs) {
     const key = `${s.studentId}::${s.assignment.classId}`;
     const arr = gradedByKey.get(key) ?? [];
-    arr.push({ status: "GRADED", score: s.score, totalPoints: s.assignment.totalPoints });
+    arr.push({
+      status: "GRADED",
+      score: s.score,
+      totalPoints: s.assignment.totalPoints,
+    });
     gradedByKey.set(key, arr);
   }
 
   const rows: ReportCardRow[] = enrollments.map((e) => {
     const card = cardByEnrollment.get(e.id);
     const status = (card?.status ?? null) as ReportCardStatusValue | null;
-    const sum = summaryByEnrollment.get(e.id) ?? { total: 0, attended: 0, absent: 0, needMakeup: 0, madeUp: 0 };
+    const sum = summaryByEnrollment.get(e.id) ?? {
+      total: 0,
+      attended: 0,
+      absent: 0,
+      needMakeup: 0,
+      madeUp: 0,
+    };
     const avgScore = computeAssignmentSummary(
       gradedByKey.get(`${e.studentId}::${e.classId}`) ?? [],
     ).averageScore;
 
     // ── Năng lực (tab "Năng lực", câu 55): mức 1–4 mỗi tiêu chí của khoá + TB + xếp loại.
     // level 0 = chưa chấm. Chỉ tính TB trên tiêu chí ĐÃ CHẤM (level≥1).
-    const levelByCriterion = new Map((card?.scores ?? []).map((s) => [s.criterionId, s.level]));
+    const levelByCriterion = new Map(
+      (card?.scores ?? []).map((s) => [s.criterionId, s.level]),
+    );
     const cells = (criteriaByCourse.get(e.courseId) ?? []).map((c) => ({
       name: c.name,
       order: c.order,
@@ -308,7 +339,9 @@ export default async function TeacherReportCardsPage({
     }));
     const scoredLevels = cells.filter((c) => c.level >= 1).map((c) => c.level);
     const avgLevel = scoredLevels.length
-      ? Math.round((scoredLevels.reduce((a, b) => a + b, 0) / scoredLevels.length) * 10) / 10
+      ? Math.round(
+          (scoredLevels.reduce((a, b) => a + b, 0) / scoredLevels.length) * 10,
+        ) / 10
       : null;
 
     return {
@@ -320,11 +353,15 @@ export default async function TeacherReportCardsPage({
       status,
       statusLabel: status ? REPORT_CARD_STATUS_LABEL[status] : null,
       // Chưa có học bạ = lưu lần đầu sẽ tạo DRAFT → xét quyền sửa như DRAFT.
-      editableByTeacher: canEditReportCardContent(status ?? "DRAFT", ["manage"]),
+      editableByTeacher: canEditReportCardContent(status ?? "DRAFT", [
+        "manage",
+      ]),
       attendedSessions: sum.attended,
       totalSessions: sum.total,
       avgScore,
-      updatedAtLabel: card?.updatedAt ? updatedFmt.format(card.updatedAt) : null,
+      updatedAtLabel: card?.updatedAt
+        ? updatedFmt.format(card.updatedAt)
+        : null,
       hasCard: !!card,
       milestones: buildMilestones(
         completedByClass.get(e.classId) ?? 0,

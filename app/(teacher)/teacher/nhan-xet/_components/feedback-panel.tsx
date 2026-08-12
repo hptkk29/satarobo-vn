@@ -22,15 +22,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { EmptyState } from "../../_components/ui/empty-state";
 import { saveSessionFeedback } from "@/app/(admin)/admin/sessions/[id]/_actions";
-
-// Avatar initials — copy helper từ lop/_components/attendance-panel (2 chữ cái cuối tên).
-const initials = (name: string) =>
-  name
-    .split(" ")
-    .slice(-2)
-    .map((w) => w[0] ?? "")
-    .join("")
-    .toUpperCase();
+import { initialsOf } from "@/lib/ui/initials";
 
 const STARS = [1, 2, 3, 4, 5] as const;
 const MAX_COMMENT = 3000; // khớp feedbackSchema của action (comment ≤ 3000)
@@ -52,11 +44,15 @@ export function FeedbackPanel({
   editable: boolean;
 }) {
   const router = useRouter();
-  const [state, setState] = useState<Record<string, { comment: string; rating: number | null }>>(
-    () =>
-      Object.fromEntries(
-        rows.map((r) => [r.studentId, { comment: r.existingComment, rating: r.existingRating }]),
-      ),
+  const [state, setState] = useState<
+    Record<string, { comment: string; rating: number | null }>
+  >(() =>
+    Object.fromEntries(
+      rows.map((r) => [
+        r.studentId,
+        { comment: r.existingComment, rating: r.existingRating },
+      ]),
+    ),
   );
   const [pending, startTransition] = useTransition();
 
@@ -67,7 +63,10 @@ export function FeedbackPanel({
     // Bấm lại đúng sao đang chọn = bỏ chấm (rating về null).
     setState((s) => ({
       ...s,
-      [studentId]: { ...s[studentId], rating: s[studentId]?.rating === rating ? null : rating },
+      [studentId]: {
+        ...s[studentId],
+        rating: s[studentId]?.rating === rating ? null : rating,
+      },
     }));
   }
 
@@ -76,7 +75,10 @@ export function FeedbackPanel({
     // chạm KHÔNG gửi → server không nhầm phiếu rubric-only (comment rỗng) thành lệnh xoá.
     const items = rows
       .filter((r) => {
-        const cur = state[r.studentId] ?? { comment: r.existingComment, rating: r.existingRating };
+        const cur = state[r.studentId] ?? {
+          comment: r.existingComment,
+          rating: r.existingRating,
+        };
         return (
           cur.comment.trim() !== r.existingComment.trim() ||
           (cur.rating ?? null) !== (r.existingRating ?? null)
@@ -103,7 +105,9 @@ export function FeedbackPanel({
   }
 
   if (rows.length === 0) {
-    return <EmptyState icon={Users} title="Không có học viên đi học để nhận xét." />;
+    return (
+      <EmptyState icon={Users} title="Không có học viên đi học để nhận xét." />
+    );
   }
 
   return (
@@ -115,9 +119,11 @@ export function FeedbackPanel({
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <div className="flex min-w-0 items-center gap-3">
                 <span className="brand-gradient flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-bold text-white">
-                  {initials(r.studentName)}
+                  {initialsOf(r.studentName)}
                 </span>
-                <p className="truncate text-sm font-semibold text-foreground">{r.studentName}</p>
+                <p className="truncate text-sm font-semibold text-foreground">
+                  {r.studentName}
+                </p>
               </div>
               <div className="flex shrink-0 items-center gap-0.5">
                 {STARS.map((star) => {
@@ -136,7 +142,9 @@ export function FeedbackPanel({
                         aria-hidden
                         className={cn(
                           "h-5 w-5",
-                          active ? "fill-amber-400 text-amber-400" : "text-muted-foreground/40",
+                          active
+                            ? "fill-amber-400 text-amber-400"
+                            : "text-muted-foreground/40",
                         )}
                       />
                     </button>
@@ -165,8 +173,9 @@ export function FeedbackPanel({
             {pending ? "Đang lưu…" : "Lưu tất cả"}
           </Button>
           <p className="text-xs text-muted-foreground">
-            Xoá nội dung ô nhận xét rồi lưu = gỡ nhận xét nhanh của học viên đó (sao chỉ được
-            lưu kèm nhận xét; phiếu rubric đã chấm ở hub lớp vẫn được giữ nguyên).
+            Xoá nội dung ô nhận xét rồi lưu = gỡ nhận xét nhanh của học viên đó
+            (sao chỉ được lưu kèm nhận xét; phiếu rubric đã chấm ở hub lớp vẫn
+            được giữ nguyên).
           </p>
         </div>
       )}

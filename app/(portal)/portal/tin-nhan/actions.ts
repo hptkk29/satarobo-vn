@@ -14,7 +14,10 @@ import { revalidatePath } from "next/cache";
 import { auth } from "@/lib/auth";
 import { recordChatPolicyAcceptance } from "@/lib/chat/policy";
 
-export async function acceptChatPolicyAction(): Promise<{ ok: boolean; error?: string }> {
+export async function acceptChatPolicyAction(): Promise<{
+  ok: boolean;
+  error?: string;
+}> {
   const session = await auth();
   if (!session?.user?.id) return { ok: false, error: "Chưa đăng nhập" };
 

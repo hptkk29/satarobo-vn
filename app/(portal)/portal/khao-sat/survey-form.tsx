@@ -5,7 +5,11 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { submitSurveyResponse } from "./_actions";
 
-type SurveyQuestion = { id: string; text: string; type: "NPS" | "RATING" | "TEXT" };
+type SurveyQuestion = {
+  id: string;
+  text: string;
+  type: "NPS" | "RATING" | "TEXT";
+};
 
 // @deprecated FL4-03 — form Survey/NPS (bản cũ). Khảo sát cơ sở nhiều loại câu hỏi
 // dùng <CenterSurveyForm> (CENTER_SURVEY). Giữ song song 2-phase, không xoá.
@@ -35,7 +39,9 @@ export function SurveyForm({
 
   function submit() {
     if (hasQuestions) {
-      const missing = questions.find((q) => q.type !== "TEXT" && typeof answers[q.id] !== "number");
+      const missing = questions.find(
+        (q) => q.type !== "TEXT" && typeof answers[q.id] !== "number",
+      );
       if (missing) {
         toast.error(`Vui lòng trả lời: ${missing.text}`);
         return;
@@ -51,13 +57,20 @@ export function SurveyForm({
               surveyId,
               comment,
               answers: questions
-                .filter((q) => answers[q.id] !== undefined && answers[q.id] !== "")
-                .map((q) => ({ questionId: q.id, value: answers[q.id] as number | string })),
+                .filter(
+                  (q) => answers[q.id] !== undefined && answers[q.id] !== "",
+                )
+                .map((q) => ({
+                  questionId: q.id,
+                  value: answers[q.id] as number | string,
+                })),
             }
           : { surveyId, npsScore: score, comment },
       );
-      if (res.ok) { toast.success("Cảm ơn đánh giá của quý phụ huynh!"); router.refresh(); }
-      else toast.error(res.error ?? "Lỗi gửi khảo sát");
+      if (res.ok) {
+        toast.success("Cảm ơn đánh giá của quý phụ huynh!");
+        router.refresh();
+      } else toast.error(res.error ?? "Lỗi gửi khảo sát");
     });
   }
 
@@ -71,13 +84,19 @@ export function SurveyForm({
             <div key={q.id}>
               <p className="text-sm font-medium text-neutral-800">
                 {i + 1}. {q.text}
-                {q.type !== "TEXT" && <span className="ml-1 text-rose-500">*</span>}
+                {q.type !== "TEXT" && (
+                  <span className="ml-1 text-rose-500">*</span>
+                )}
               </p>
               {q.type === "NPS" && (
                 <ScaleButtons
                   min={0}
                   max={10}
-                  value={typeof answers[q.id] === "number" ? (answers[q.id] as number) : null}
+                  value={
+                    typeof answers[q.id] === "number"
+                      ? (answers[q.id] as number)
+                      : null
+                  }
                   onSelect={(n) => setAnswers((a) => ({ ...a, [q.id]: n }))}
                 />
               )}
@@ -85,14 +104,24 @@ export function SurveyForm({
                 <ScaleButtons
                   min={1}
                   max={5}
-                  value={typeof answers[q.id] === "number" ? (answers[q.id] as number) : null}
+                  value={
+                    typeof answers[q.id] === "number"
+                      ? (answers[q.id] as number)
+                      : null
+                  }
                   onSelect={(n) => setAnswers((a) => ({ ...a, [q.id]: n }))}
                 />
               )}
               {q.type === "TEXT" && (
                 <textarea
-                  value={typeof answers[q.id] === "string" ? (answers[q.id] as string) : ""}
-                  onChange={(e) => setAnswers((a) => ({ ...a, [q.id]: e.target.value }))}
+                  value={
+                    typeof answers[q.id] === "string"
+                      ? (answers[q.id] as string)
+                      : ""
+                  }
+                  onChange={(e) =>
+                    setAnswers((a) => ({ ...a, [q.id]: e.target.value }))
+                  }
                   rows={2}
                   maxLength={2000}
                   placeholder="Nhập ý kiến…"
@@ -105,7 +134,8 @@ export function SurveyForm({
       ) : (
         <>
           <p className="mt-1 text-sm text-neutral-600">
-            Anh/chị có sẵn sàng giới thiệu Sata Robo cho phụ huynh khác? (0 = không, 10 = rất sẵn sàng)
+            Anh/chị có sẵn sàng giới thiệu Sata Robo cho phụ huynh khác? (0 =
+            không, 10 = rất sẵn sàng)
           </p>
           <div className="mt-3 flex flex-wrap gap-1.5">
             {Array.from({ length: 11 }).map((_, n) => (
@@ -115,7 +145,7 @@ export function SurveyForm({
                 onClick={() => setScore(n)}
                 className={`h-9 w-9 rounded-lg border text-sm font-bold ${
                   score === n
-                    ? "border-orange-500 bg-orange-500 text-white"
+                    ? "border-orange-500 bg-orange-700 text-white"
                     : "border-neutral-200 text-neutral-600 hover:border-orange-300"
                 }`}
               >
@@ -137,7 +167,7 @@ export function SurveyForm({
         type="button"
         onClick={submit}
         disabled={pending}
-        className="mt-3 rounded-lg bg-orange-500 px-4 py-2 text-sm font-semibold text-white hover:bg-orange-600 disabled:opacity-60"
+        className="mt-3 rounded-lg bg-orange-700 px-4 py-2 text-sm font-semibold text-white hover:bg-orange-800 disabled:opacity-60"
       >
         {pending ? "Đang gửi…" : "Gửi khảo sát"}
       </button>
@@ -168,7 +198,7 @@ function ScaleButtons({
             onClick={() => onSelect(n)}
             className={`h-9 w-9 rounded-lg border text-sm font-bold ${
               value === n
-                ? "border-orange-500 bg-orange-500 text-white"
+                ? "border-orange-500 bg-orange-700 text-white"
                 : "border-neutral-200 text-neutral-600 hover:border-orange-300"
             }`}
           >
@@ -179,4 +209,3 @@ function ScaleButtons({
     </div>
   );
 }
-

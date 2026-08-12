@@ -51,7 +51,7 @@ export function ReactivateModal({
     <Dialog open onOpenChange={(o) => !isPending && !o && onClose()}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle className="text-green-700">
+          <DialogTitle className="text-state-success-ink">
             Kích hoạt lại — {studentName}
           </DialogTitle>
           <DialogDescription>

@@ -27,7 +27,9 @@ import type { ScormSeed } from "@/components/admin/scorm-api";
 
 export const dynamic = "force-dynamic";
 
-export const metadata = { title: "Trình chiếu bài giảng | Giáo viên Sata Robo" };
+export const metadata = {
+  title: "Trình chiếu bài giảng | Giáo viên Sata Robo",
+};
 
 /** Enum ScormCompletion → cmi.core.lesson_status (SCORM 1.2) cho seed resume. */
 const COMPLETION_TO_SCORM: Record<string, string> = {
@@ -54,7 +56,10 @@ interface PageProps {
   searchParams: Promise<{ sessionId?: string }>;
 }
 
-export default async function TeacherScormPlayPage({ params, searchParams }: PageProps) {
+export default async function TeacherScormPlayPage({
+  params,
+  searchParams,
+}: PageProps) {
   // Fail-gate về home GV: "/teacher" chạy đúng cả trên host giaovien (isTeacherPath
   // pass-through) LẪN localhost/preview — cùng quy ước prefix /teacher như nav.
   if (!isScormEnabled()) redirect("/teacher");
@@ -102,18 +107,26 @@ export default async function TeacherScormPlayPage({ params, searchParams }: Pag
   if (!canView) {
     const lessonInfo = await sdb.lesson.findUnique({
       where: { id: pkg.lessonId },
-      select: { curriculumId: true, curriculum: { select: { courseId: true } } },
+      select: {
+        curriculumId: true,
+        curriculum: { select: { courseId: true } },
+      },
     });
     if (lessonInfo) {
       const teaches = await sdb.class.findFirst({
         where: {
           deletedAt: null,
           AND: [
-            { OR: [{ teacherId: actor.userId }, { assistantId: actor.userId }] },
+            {
+              OR: [{ teacherId: actor.userId }, { assistantId: actor.userId }],
+            },
             {
               OR: [
                 { curriculumId: lessonInfo.curriculumId },
-                { curriculumId: null, courseId: lessonInfo.curriculum.courseId },
+                {
+                  curriculumId: null,
+                  courseId: lessonInfo.curriculum.courseId,
+                },
               ],
             },
           ],
@@ -128,7 +141,8 @@ export default async function TeacherScormPlayPage({ params, searchParams }: Pag
   // GV chỉ mở gói đã PUBLISHED; người quản lý đào tạo xem thử TESTING/PUBLISHED.
   const canManage = canManageTraining(actor);
   if (pkg.status !== "PUBLISHED" && !canManage) redirect("/teacher");
-  if (pkg.status !== "PUBLISHED" && pkg.status !== "TESTING") redirect("/teacher");
+  if (pkg.status !== "PUBLISHED" && pkg.status !== "TESTING")
+    redirect("/teacher");
 
   // Ghi nhật ký mở (truy vết — không chặn dạy học). GIỮ NGUYÊN như admin (#3).
   const hdrs = await headers();
@@ -175,7 +189,11 @@ export default async function TeacherScormPlayPage({ params, searchParams }: Pag
 
   // Tiến độ giảng của GV (resume) — theo (gói, GV, buổi). KHÔNG đụng HV/học bạ.
   const attempt = await sdb.scormAttempt.findFirst({
-    where: { packageId: pkg.id, userId: session.user.id, classSessionId: sessionId },
+    where: {
+      packageId: pkg.id,
+      userId: session.user.id,
+      classSessionId: sessionId,
+    },
     select: {
       completion: true,
       lessonLocation: true,
@@ -187,14 +205,14 @@ export default async function TeacherScormPlayPage({ params, searchParams }: Pag
 
   const seed: ScormSeed = {
     lessonStatus: attempt
-      ? COMPLETION_TO_SCORM[attempt.completion] ?? "not attempted"
+      ? (COMPLETION_TO_SCORM[attempt.completion] ?? "not attempted")
       : "not attempted",
     lessonLocation: attempt?.lessonLocation ?? "",
     suspendData: attempt?.suspendData ?? "",
     scoreRaw: attempt?.scoreRaw != null ? String(attempt.scoreRaw) : "",
   };
   const statusLabel = attempt
-    ? COMPLETION_VI[attempt.completion] ?? attempt.completion
+    ? (COMPLETION_VI[attempt.completion] ?? attempt.completion)
     : undefined;
   const lastAccessedLabel = attempt
     ? new Intl.DateTimeFormat("vi-VN", {

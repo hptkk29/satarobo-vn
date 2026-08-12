@@ -5,6 +5,7 @@
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
+import { PhanTrangBang } from "@/components/ui/phan-trang-bang";
 
 type Item = {
   id: string;
@@ -21,10 +22,10 @@ type Item = {
 };
 
 const STATUS_UI: Record<string, { label: string; cls: string }> = {
-  SUCCESS: { label: "Đã tự xác nhận", cls: "bg-green-100 text-green-800" },
-  SKIPPED: { label: "Bỏ qua", cls: "bg-gray-100 text-gray-600" },
-  FAILED: { label: "Cần xử lý", cls: "bg-amber-100 text-amber-800" },
-  PENDING: { label: "Đang xử lý", cls: "bg-blue-100 text-blue-700" },
+  SUCCESS: { label: "Đã tự xác nhận", cls: "bg-state-success-soft text-state-success-ink" },
+  SKIPPED: { label: "Bỏ qua", cls: "bg-muted text-muted-foreground" },
+  FAILED: { label: "Cần xử lý", cls: "bg-state-warning-soft text-state-warning-ink" },
+  PENDING: { label: "Đang xử lý", cls: "bg-state-info-soft text-state-info-ink" },
 };
 
 const fmt = (n: number) => new Intl.NumberFormat("vi-VN").format(n);
@@ -51,91 +52,93 @@ export function SepayLogClient({ items }: { items: Item[] }) {
         value={q}
         onChange={(e) => setQ(e.target.value)}
         placeholder="Tìm theo mã đơn / nội dung CK / mã tham chiếu / số tiền / tên khách…"
-        className="w-full max-w-md rounded-md border border-gray-300 px-3 py-1.5 text-sm focus:border-orange-500 focus:outline-none focus:ring-1 focus:ring-orange-500"
+        className="w-full max-w-md rounded-md border border-border px-3 py-1.5 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
       />
 
-      <div className="overflow-x-auto rounded-lg border border-gray-200">
-        <table className="w-full min-w-[980px] text-sm">
-          <thead className="bg-gray-50 text-left text-xs font-medium uppercase text-gray-500">
-            <tr>
-              <th className="w-36 px-3 py-2">Thời gian</th>
-              <th className="w-32 px-3 py-2 text-right">Số tiền</th>
-              <th className="px-3 py-2">Nội dung CK</th>
-              <th className="w-40 px-3 py-2">Đơn khớp</th>
-              <th className="w-36 px-3 py-2">Kết quả</th>
-              <th className="px-3 py-2">Ghi chú</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-100">
-            {rows.length === 0 && (
+      <div className="overflow-x-auto rounded-lg border border-border">
+        <PhanTrangBang>
+          <table className="w-full min-w-[980px] text-sm">
+            <thead className="bg-muted text-left text-xs font-medium uppercase text-muted-foreground">
               <tr>
-                <td colSpan={6} className="px-3 py-8 text-center text-gray-500">
-                  {items.length === 0
-                    ? "Chưa có giao dịch nào — chưa bật webhook SePay hoặc chưa có tiền về."
-                    : "Không có giao dịch khớp bộ lọc."}
-                </td>
+                <th className="w-36 px-3 py-2">Thời gian</th>
+                <th className="w-32 px-3 py-2 text-right">Số tiền</th>
+                <th className="px-3 py-2">Nội dung CK</th>
+                <th className="w-40 px-3 py-2">Đơn khớp</th>
+                <th className="w-36 px-3 py-2">Kết quả</th>
+                <th className="px-3 py-2">Ghi chú</th>
               </tr>
-            )}
-            {rows.map((i) => {
-              const ui = STATUS_UI[i.status] ?? { label: i.status, cls: "bg-gray-100 text-gray-600" };
-              return (
-                <tr key={i.id} className={i.status === "FAILED" ? "bg-amber-50/40" : undefined}>
-                  <td className="px-3 py-2 align-top text-xs text-gray-600">
-                    {i.at.slice(0, 16).replace("T", " ")}
-                    {i.gateway && <div className="text-gray-400">{i.gateway}</div>}
-                  </td>
-                  <td className="px-3 py-2 align-top text-right font-semibold tabular-nums">
-                    {i.amount > 0 ? `${fmt(i.amount)}đ` : "—"}
-                  </td>
-                  <td className="px-3 py-2 align-top">
-                    <div className="max-w-[320px] truncate font-mono text-xs text-gray-700" title={i.content ?? ""}>
-                      {i.content ?? "—"}
-                    </div>
-                    {i.referenceCode && (
-                      <div className="text-xs text-gray-400">ref {i.referenceCode}</div>
-                    )}
-                  </td>
-                  <td className="px-3 py-2 align-top">
-                    {i.order ? (
-                      <>
-                        <Link href={`/orders/${i.order.id}`} className="font-medium text-blue-600 hover:underline">
-                          {i.orderCode}
-                        </Link>
-                        <div className="text-xs text-gray-500">{i.order.customerName}</div>
-                        <div className="text-xs text-gray-400">
-                          Tổng {fmt(i.order.totalAmount)}đ · {i.order.status}
-                        </div>
-                      </>
-                    ) : i.orderCode ? (
-                      <span className="text-xs text-gray-500">
-                        {i.orderCode}
-                        <br />
-                        <span className="text-amber-700">(không tìm thấy đơn)</span>
-                      </span>
-                    ) : (
-                      <span className="text-xs text-amber-700">Nội dung CK không có mã đơn</span>
-                    )}
-                  </td>
-                  <td className="px-3 py-2 align-top">
-                    <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${ui.cls}`}>
-                      {ui.label}
-                    </span>
-                  </td>
-                  <td className="px-3 py-2 align-top text-xs text-gray-600">
-                    {i.error ?? (i.status === "SUCCESS" ? "Đơn đã xác nhận + cấp TK phụ huynh" : "—")}
-                    {i.status === "FAILED" && i.order && (
-                      <div className="mt-1">
-                        <Link href={`/orders/${i.order.id}`} className="font-semibold text-orange-700 hover:underline">
-                          Mở đơn để xử lý →
-                        </Link>
-                      </div>
-                    )}
+            </thead>
+            <tbody className="divide-y divide-border">
+              {rows.length === 0 && (
+                <tr>
+                  <td colSpan={6} className="px-3 py-8 text-center text-muted-foreground">
+                    {items.length === 0
+                      ? "Chưa có giao dịch nào — chưa bật webhook SePay hoặc chưa có tiền về."
+                      : "Không có giao dịch khớp bộ lọc."}
                   </td>
                 </tr>
-              );
-            })}
-          </tbody>
-        </table>
+              )}
+              {rows.map((i) => {
+                const ui = STATUS_UI[i.status] ?? { label: i.status, cls: "bg-muted text-muted-foreground" };
+                return (
+                  <tr key={i.id} className={i.status === "FAILED" ? "bg-state-warning-soft/40" : undefined}>
+                    <td className="px-3 py-2 align-top text-xs text-muted-foreground">
+                      {i.at.slice(0, 16).replace("T", " ")}
+                      {i.gateway && <div className="text-muted-foreground">{i.gateway}</div>}
+                    </td>
+                    <td className="px-3 py-2 align-top text-right font-semibold tabular-nums">
+                      {i.amount > 0 ? `${fmt(i.amount)}đ` : "—"}
+                    </td>
+                    <td className="px-3 py-2 align-top">
+                      <div className="max-w-[320px] truncate font-mono text-xs text-foreground" title={i.content ?? ""}>
+                        {i.content ?? "—"}
+                      </div>
+                      {i.referenceCode && (
+                        <div className="text-xs text-muted-foreground">ref {i.referenceCode}</div>
+                      )}
+                    </td>
+                    <td className="px-3 py-2 align-top">
+                      {i.order ? (
+                        <>
+                          <Link href={`/orders/${i.order.id}`} className="font-medium text-state-info-ink hover:underline">
+                            {i.orderCode}
+                          </Link>
+                          <div className="text-xs text-muted-foreground">{i.order.customerName}</div>
+                          <div className="text-xs text-muted-foreground">
+                            Tổng {fmt(i.order.totalAmount)}đ · {i.order.status}
+                          </div>
+                        </>
+                      ) : i.orderCode ? (
+                        <span className="text-xs text-muted-foreground">
+                          {i.orderCode}
+                          <br />
+                          <span className="text-state-warning-ink">(không tìm thấy đơn)</span>
+                        </span>
+                      ) : (
+                        <span className="text-xs text-state-warning-ink">Nội dung CK không có mã đơn</span>
+                      )}
+                    </td>
+                    <td className="px-3 py-2 align-top">
+                      <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${ui.cls}`}>
+                        {ui.label}
+                      </span>
+                    </td>
+                    <td className="px-3 py-2 align-top text-xs text-muted-foreground">
+                      {i.error ?? (i.status === "SUCCESS" ? "Đơn đã xác nhận + cấp TK phụ huynh" : "—")}
+                      {i.status === "FAILED" && i.order && (
+                        <div className="mt-1">
+                          <Link href={`/orders/${i.order.id}`} className="font-semibold text-primary hover:underline">
+                            Mở đơn để xử lý →
+                          </Link>
+                        </div>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </PhanTrangBang>
       </div>
     </div>
   );

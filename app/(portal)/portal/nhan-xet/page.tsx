@@ -23,7 +23,10 @@ import { NhanXetPageV2 } from "@/components/portal/nhan-xet-page";
 const RUBRIC_GROUPS = groupedEvalCriteria();
 
 export const dynamic = "force-dynamic";
-export const metadata = { title: "Nhận xét | Sata Robo", robots: { index: false } };
+export const metadata = {
+  title: "Nhận xét | Sata Robo",
+  robots: { index: false },
+};
 
 function fmtDate(d: Date | string): string {
   return new Date(d).toLocaleDateString("vi-VN", {
@@ -78,7 +81,11 @@ export default async function NhanXetPage() {
           select: {
             date: true,
             class: {
-              select: { name: true, classCode: true, teacher: { select: { name: true } } },
+              select: {
+                name: true,
+                classCode: true,
+                teacher: { select: { name: true } },
+              },
             },
           },
         },
@@ -97,10 +104,12 @@ export default async function NhanXetPage() {
 
   return (
     <div className="space-y-8">
-      <h1 className="text-xl font-bold text-neutral-900">Nhận xét của giáo viên</h1>
+      <h1 className="text-xl font-bold text-neutral-900">
+        Nhận xét của giáo viên
+      </h1>
 
       {!hasAny && (
-        <p className="rounded-xl border border-dashed border-neutral-300 bg-white p-8 text-center text-sm text-neutral-400">
+        <p className="rounded-xl border border-dashed border-neutral-300 bg-white p-8 text-center text-sm text-neutral-500">
           Chưa có nhận xét nào cho con.
         </p>
       )}
@@ -115,23 +124,30 @@ export default async function NhanXetPage() {
             {evals.map((ev) => {
               const media = mediaBySession.get(ev.classSessionId) ?? [];
               return (
-                <li key={ev.responseId} className="rounded-xl border border-neutral-200 bg-white p-4">
+                <li
+                  key={ev.responseId}
+                  className="rounded-xl border border-neutral-200 bg-white p-4"
+                >
                   <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
                     <span className="text-sm font-semibold text-neutral-900">
                       {ev.classCode ? `${ev.classCode} · ` : ""}
                       {ev.className ?? ev.roundName}
                     </span>
                     {ev.sessionDate && (
-                      <span className="text-xs tabular-nums text-neutral-400">{fmtDate(ev.sessionDate)}</span>
+                      <span className="text-xs tabular-nums text-neutral-500">
+                        {fmtDate(ev.sessionDate)}
+                      </span>
                     )}
                   </div>
-                  <div className="mb-2 flex flex-wrap items-center gap-2 text-xs text-neutral-500">
+                  <div className="mb-2 flex flex-wrap items-center gap-2 text-xs text-neutral-600">
                     <span>GV: {ev.teacherName ?? "—"}</span>
                     {ev.sessionTopic && <span>· {ev.sessionTopic}</span>}
                   </div>
 
                   {ev.answers.length === 0 ? (
-                    <p className="text-sm text-neutral-400">Phiếu chưa có nội dung.</p>
+                    <p className="text-sm text-neutral-500">
+                      Phiếu chưa có nội dung.
+                    </p>
                   ) : (
                     <dl className="space-y-2">
                       {ev.answers.map((a) => (
@@ -142,7 +158,9 @@ export default async function NhanXetPage() {
 
                   {media.length > 0 && (
                     <div className="mt-3 border-t border-neutral-100 pt-3">
-                      <p className="mb-1.5 text-xs font-medium text-neutral-500">Hình ảnh buổi học</p>
+                      <p className="mb-1.5 text-xs font-medium text-neutral-500">
+                        Hình ảnh buổi học
+                      </p>
                       <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
                         {media.map((m) => (
                           <a
@@ -183,17 +201,22 @@ export default async function NhanXetPage() {
               const notes = parseFeedbackNotes(f.notes);
               const rubric = parseFeedbackRubric(f.rubric);
               return (
-                <li key={f.id} className="rounded-xl border border-neutral-200 bg-white p-4">
+                <li
+                  key={f.id}
+                  className="rounded-xl border border-neutral-200 bg-white p-4"
+                >
                   <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
                     <span className="text-sm font-semibold text-neutral-900">
-                      {f.classSession.class.classCode ? `${f.classSession.class.classCode} · ` : ""}
+                      {f.classSession.class.classCode
+                        ? `${f.classSession.class.classCode} · `
+                        : ""}
                       {f.classSession.class.name}
                     </span>
-                    <span className="text-xs tabular-nums text-neutral-400">
+                    <span className="text-xs tabular-nums text-neutral-500">
                       {fmtDate(f.classSession.date)}
                     </span>
                   </div>
-                  <div className="mb-1.5 flex items-center gap-2 text-xs text-neutral-500">
+                  <div className="mb-1.5 flex items-center gap-2 text-xs text-neutral-600">
                     <span>GV: {f.classSession.class.teacher?.name ?? "—"}</span>
                     {f.rating != null && (
                       <span className="text-amber-500">
@@ -205,7 +228,9 @@ export default async function NhanXetPage() {
 
                   {f.projectName && (
                     <p className="mb-1.5 text-sm text-neutral-700">
-                      <span className="font-semibold text-neutral-900">Dự án:</span>{" "}
+                      <span className="font-semibold text-neutral-900">
+                        Dự án:
+                      </span>{" "}
                       {f.projectName}
                     </p>
                   )}
@@ -216,17 +241,24 @@ export default async function NhanXetPage() {
                         const text = notes[fld.key].trim();
                         if (!text) return null;
                         return (
-                          <p key={fld.key} className="whitespace-pre-wrap text-sm text-neutral-700">
-                            <span className="font-semibold text-neutral-900">{fld.label}:</span>{" "}
+                          <p
+                            key={fld.key}
+                            className="whitespace-pre-wrap text-sm text-neutral-700"
+                          >
+                            <span className="font-semibold text-neutral-900">
+                              {fld.label}:
+                            </span>{" "}
                             {text}
                           </p>
                         );
                       })}
                     </div>
                   ) : f.comment?.trim() ? (
-                    <p className="whitespace-pre-wrap text-sm text-neutral-700">{f.comment}</p>
+                    <p className="whitespace-pre-wrap text-sm text-neutral-700">
+                      {f.comment}
+                    </p>
                   ) : (
-                    <p className="text-sm text-neutral-400">
+                    <p className="text-sm text-neutral-500">
                       {rubric
                         ? "Buổi này giáo viên đánh giá qua bảng năng lực bên dưới."
                         : "Chưa có nội dung nhận xét chi tiết cho buổi này."}
@@ -240,15 +272,18 @@ export default async function NhanXetPage() {
                         if (rows.length === 0) return null;
                         return (
                           <div key={group}>
-                            <p className="text-xs font-semibold uppercase tracking-wide text-neutral-400">
+                            <p className="text-xs font-semibold uppercase tracking-wide text-neutral-500">
                               {group}
                             </p>
                             <div className="mt-1 space-y-1.5">
                               {rows.map((c) => (
                                 <div key={c.id}>
-                                  <p className="text-sm font-medium text-neutral-900">{c.name}</p>
+                                  <p className="text-sm font-medium text-neutral-900">
+                                    {c.name}
+                                  </p>
                                   <p className="text-sm leading-relaxed text-neutral-600">
-                                    {evalLevelText(c.id, rubric[c.id]) || `Mức ${rubric[c.id]}/5`}
+                                    {evalLevelText(c.id, rubric[c.id]) ||
+                                      `Mức ${rubric[c.id]}/5`}
                                   </p>
                                 </div>
                               ))}
@@ -279,24 +314,29 @@ function AnswerRow({ answer }: { answer: RenderedAnswer }) {
             {"☆".repeat(5 - answer.stars)}
           </span>
         )}
-        {(answer.type === "RADIO" || answer.type === "CHECKBOX") && answer.options && (
-          <span>{answer.options.join(", ")}</span>
-        )}
-        {answer.type === "PHOTO" && answer.photos && answer.photos.length > 0 && (
-          <div className="mt-1 grid grid-cols-3 gap-2 sm:grid-cols-4">
-            {answer.photos.map((u) => (
-              <a
-                key={u}
-                href={u}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="overflow-hidden rounded-lg border border-neutral-200"
-              >
-                <img src={u} alt="Ảnh dự án" className="h-20 w-full object-cover sm:h-24" />
-              </a>
-            ))}
-          </div>
-        )}
+        {(answer.type === "RADIO" || answer.type === "CHECKBOX") &&
+          answer.options && <span>{answer.options.join(", ")}</span>}
+        {answer.type === "PHOTO" &&
+          answer.photos &&
+          answer.photos.length > 0 && (
+            <div className="mt-1 grid grid-cols-3 gap-2 sm:grid-cols-4">
+              {answer.photos.map((u) => (
+                <a
+                  key={u}
+                  href={u}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="overflow-hidden rounded-lg border border-neutral-200"
+                >
+                  <img
+                    src={u}
+                    alt="Ảnh dự án"
+                    className="h-20 w-full object-cover sm:h-24"
+                  />
+                </a>
+              ))}
+            </div>
+          )}
         {answer.type !== "PHOTO" && answer.text && (
           <span className="whitespace-pre-wrap">{answer.text}</span>
         )}

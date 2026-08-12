@@ -11,6 +11,9 @@ import {
   EMAIL_LOG_STATUS_LABEL,
   EMAIL_LOG_STATUS_COLOR,
 } from "@/lib/validators/email-template";
+import { ChonSoDong } from "@/components/ui/chon-so-dong";
+import { docSoDong } from "@/lib/ui/phan-trang";
+import { DieuHuongTrangLink } from "@/components/ui/dieu-huong-trang-link";
 
 export const metadata = { title: "Email Logs | Admin" };
 export const dynamic = "force-dynamic";
@@ -21,10 +24,10 @@ interface Props {
     status?: string;
     templateId?: string;
     page?: string;
+    size?: string;
   }>;
 }
 
-const PAGE_SIZE = 30;
 const STATUS_VALUES = Object.values(EmailLogStatus) as EmailLogStatus[];
 
 export default async function EmailLogsPage({ searchParams }: Props) {
@@ -47,6 +50,7 @@ export default async function EmailLogsPage({ searchParams }: Props) {
       : undefined;
   const templateId = sp.templateId || "";
   const page = Math.max(1, Number(sp.page) || 1);
+  const soDong = docSoDong(sp.size);
 
   const where: Prisma.EmailLogWhereInput = {};
   if (q) {
@@ -66,8 +70,8 @@ export default async function EmailLogsPage({ searchParams }: Props) {
         template: { select: { id: true, name: true, code: true } },
       },
       orderBy: { createdAt: "desc" },
-      skip: (page - 1) * PAGE_SIZE,
-      take: PAGE_SIZE,
+      skip: (page - 1) * soDong,
+      take: soDong,
     }),
     sdb.emailTemplate.findMany({
       select: { id: true, name: true },
@@ -75,7 +79,7 @@ export default async function EmailLogsPage({ searchParams }: Props) {
     }),
   ]);
 
-  const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
+  const totalPages = Math.max(1, Math.ceil(totalCount / soDong));
 
   function urlFor(
     p: Partial<{
@@ -97,14 +101,14 @@ export default async function EmailLogsPage({ searchParams }: Props) {
     <div className="p-6 space-y-4">
       <div>
         <h1 className="text-2xl font-bold">Email Logs</h1>
-        <p className="text-sm text-gray-600 mt-1">
+        <p className="text-sm text-muted-foreground mt-1">
           Lịch sử email đã gửi qua hệ thống
         </p>
       </div>
 
-      <form className="flex flex-wrap gap-2 items-end p-3 bg-gray-50 rounded">
+      <form className="flex flex-wrap gap-2 items-end p-3 bg-muted rounded">
         <div>
-          <label className="block text-xs text-gray-600 mb-1">Tìm</label>
+          <label className="block text-xs text-muted-foreground mb-1">Tìm</label>
           <input
             name="q"
             defaultValue={q}
@@ -113,7 +117,7 @@ export default async function EmailLogsPage({ searchParams }: Props) {
           />
         </div>
         <div>
-          <label className="block text-xs text-gray-600 mb-1">Status</label>
+          <label className="block text-xs text-muted-foreground mb-1">Status</label>
           <select
             name="status"
             defaultValue={statusParam ?? ""}
@@ -128,7 +132,7 @@ export default async function EmailLogsPage({ searchParams }: Props) {
           </select>
         </div>
         <div>
-          <label className="block text-xs text-gray-600 mb-1">Template</label>
+          <label className="block text-xs text-muted-foreground mb-1">Template</label>
           <select
             name="templateId"
             defaultValue={templateId}
@@ -147,13 +151,13 @@ export default async function EmailLogsPage({ searchParams }: Props) {
         </button>
       </form>
 
-      <div className="text-sm text-gray-600">
+      <div className="text-sm text-muted-foreground">
         {totalCount.toLocaleString("vi-VN")} email logs
       </div>
 
       <div className="border rounded overflow-hidden">
         <table className="w-full text-sm">
-          <thead className="bg-gray-50 border-b">
+          <thead className="bg-muted border-b">
             <tr>
               <th className="text-left px-3 py-2">Thời gian</th>
               <th className="text-left px-3 py-2">Đến</th>
@@ -167,19 +171,19 @@ export default async function EmailLogsPage({ searchParams }: Props) {
           <tbody>
             {logs.length === 0 && (
               <tr>
-                <td colSpan={7} className="text-center py-8 text-gray-500">
+                <td colSpan={7} className="text-center py-8 text-muted-foreground">
                   Chưa có email log
                 </td>
               </tr>
             )}
             {logs.map((log) => (
-              <tr key={log.id} className="border-b hover:bg-gray-50">
-                <td className="px-3 py-2 text-xs text-gray-600">
+              <tr key={log.id} className="border-b hover:bg-muted">
+                <td className="px-3 py-2 text-xs text-muted-foreground">
                   {log.createdAt.toLocaleString("vi-VN")}
                 </td>
                 <td className="px-3 py-2">
                   <div className="text-sm">{log.toName ?? "—"}</div>
-                  <div className="text-xs text-gray-500 font-mono">
+                  <div className="text-xs text-muted-foreground font-mono">
                     {canViewPii ? log.toEmail : maskEmail(log.toEmail)}
                   </div>
                 </td>
@@ -188,7 +192,7 @@ export default async function EmailLogsPage({ searchParams }: Props) {
                   {log.template ? (
                     <Link
                       href={`/email-templates/${log.template.id}/edit`}
-                      className="text-blue-600 hover:underline"
+                      className="text-state-info-ink hover:underline"
                     >
                       {log.template.name}
                     </Link>
@@ -208,7 +212,7 @@ export default async function EmailLogsPage({ searchParams }: Props) {
                   </span>
                   {log.failureReason && (
                     <div
-                      className="text-xs text-red-600 mt-1 max-w-xs truncate"
+                      className="text-xs text-state-danger-ink mt-1 max-w-xs truncate"
                       title={log.failureReason}
                     >
                       ⚠ {log.failureReason}
@@ -224,29 +228,19 @@ export default async function EmailLogsPage({ searchParams }: Props) {
         </table>
       </div>
 
-      {totalPages > 1 && (
-        <div className="flex items-center justify-between text-sm">
-          <div className="text-gray-600">
-            Trang {page} / {totalPages}
+      {totalCount > 0 && (
+        <div className="flex flex-col gap-2 text-sm sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex flex-wrap items-center gap-3 text-muted-foreground">
+            <ChonSoDong soDong={soDong} tong={totalCount} tenDonVi="email" />
+            <span>
+              Trang {page} / {totalPages}
+            </span>
           </div>
-          <div className="flex gap-1">
-            {page > 1 && (
-              <Link
-                href={urlFor({ q, status: statusParam, templateId, page: page - 1 })}
-                className="px-3 py-1 border rounded hover:bg-gray-50"
-              >
-                ← Trước
-              </Link>
-            )}
-            {page < totalPages && (
-              <Link
-                href={urlFor({ q, status: statusParam, templateId, page: page + 1 })}
-                className="px-3 py-1 border rounded hover:bg-gray-50"
-              >
-                Sau →
-              </Link>
-            )}
-          </div>
+          <DieuHuongTrangLink
+            trang={page}
+            soTrang={totalPages}
+            hrefCua={(n: number) => urlFor({ q, status: statusParam, templateId, page: n })}
+          />
         </div>
       )}
     </div>

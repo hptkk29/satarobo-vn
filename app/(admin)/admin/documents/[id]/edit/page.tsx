@@ -61,13 +61,13 @@ export default async function EditDocumentPage({ params }: Props) {
       <div>
         <Link
           href="/documents"
-          className="mb-3 inline-flex items-center gap-1 text-sm text-neutral-500 hover:text-neutral-700"
+          className="mb-3 inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
         >
           <ChevronLeft className="h-4 w-4" /> Quay lại danh sách
         </Link>
-        <h1 className="text-2xl font-bold text-neutral-900">
+        <h1 className="text-2xl font-bold text-foreground">
           Sửa tài liệu giảng dạy:{" "}
-          <span className="font-bold text-orange-600">{document.title}</span>
+          <span className="font-bold text-primary">{document.title}</span>
         </h1>
       </div>
 

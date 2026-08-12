@@ -16,6 +16,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { cn } from "@/lib/utils";
+import { PhanTrangBang } from "@/components/ui/phan-trang-bang";
 
 export interface ImportResult {
   success: number;
@@ -293,7 +294,7 @@ export function ExcelImporter<T>({
         <a
           href={templateUrl}
           download={templateFilename}
-          className="inline-flex items-center gap-1 text-sm text-blue-600 hover:underline"
+          className="inline-flex items-center gap-1 text-sm text-state-info-ink hover:underline"
         >
           <Download className="h-4 w-4" />
           Tải Template
@@ -307,13 +308,13 @@ export function ExcelImporter<T>({
             "border-2 border-dashed rounded-lg p-8 text-center cursor-pointer transition-colors",
             isDragActive
               ? "border-primary bg-primary/5"
-              : "border-gray-300 hover:border-gray-400",
+              : "border-border hover:border-border",
           )}
         >
           <input {...getInputProps()} />
-          <FileSpreadsheet className="h-12 w-12 mx-auto text-gray-400 mb-3" />
+          <FileSpreadsheet className="h-12 w-12 mx-auto text-muted-foreground mb-3" />
           <p className="font-medium">Kéo thả file Excel hoặc click để chọn</p>
-          <p className="text-xs text-gray-500 mt-1">
+          <p className="text-xs text-muted-foreground mt-1">
             .xlsx / .xls — tối đa 10MB / 5000 rows
           </p>
         </div>
@@ -325,124 +326,126 @@ export function ExcelImporter<T>({
             <CheckCircle2 className="h-4 w-4" />
             <AlertDescription>
               File: <strong>{filename}</strong> — {rawRows.length} rows | ✅ Hợp lệ:{" "}
-              <strong className="text-green-600">{validRows.length}</strong> | ❌ Lỗi:{" "}
-              <strong className="text-red-600">{errorCount}</strong>
+              <strong className="text-state-success-ink">{validRows.length}</strong> | ❌ Lỗi:{" "}
+              <strong className="text-state-danger-ink">{errorCount}</strong>
               {warnCount > 0 && (
                 <>
                   {" "}| ⚠️ Ghi đè:{" "}
-                  <strong className="text-amber-600">{warnCount}</strong>
+                  <strong className="text-state-warning-ink">{warnCount}</strong>
                 </>
               )}
               {confirmedCount > 0 && (
                 <>
                   {" "}| 🔀 {mergeDuplicates ? "Sẽ gộp" : "Đã xác nhận gộp"}:{" "}
-                  <strong className="text-amber-600">{confirmedCount}</strong>
+                  <strong className="text-state-warning-ink">{confirmedCount}</strong>
                 </>
               )}
               {checkingDb && (
-                <span className="ml-2 inline-flex items-center gap-1 text-xs text-gray-500">
+                <span className="ml-2 inline-flex items-center gap-1 text-xs text-muted-foreground">
                   <Loader2 className="h-3 w-3 animate-spin" /> đang đối chiếu dữ liệu có sẵn…
                 </span>
               )}
             </AlertDescription>
           </Alert>
           <div className="border rounded-lg overflow-x-auto max-h-[400px]">
-            <table className="w-full text-sm">
-              <thead className="bg-gray-50 sticky top-0">
-                <tr>
-                  <th className="px-2 py-1 text-left">#</th>
-                  {columnHints.map((c) => (
-                    <th key={c.key} className="px-2 py-1 text-left">
-                      {c.label}
-                      {c.required && <span className="text-red-500">*</span>}
-                    </th>
-                  ))}
-                  <th className="px-2 py-1 text-left">Status</th>
-                  <th className="px-2 py-1 w-8" aria-label="Xoá dòng"></th>
-                </tr>
-              </thead>
-              <tbody>
-                {parsedRows.slice(0, 100).map((row, idx) => {
-                  const dupError =
-                    dupErrors.get(idx) ?? dbDup.get(excelRows[idx] ?? -1);
-                  const willMerge = dupError !== undefined && mergeDuplicates !== undefined;
-                  const confirmed =
-                    dupError !== undefined &&
-                    confirmDuplicates !== undefined &&
-                    isConfirmedRow(idx);
-                  const errored =
-                    isErrorRow(row) ||
-                    (dupError !== undefined && !confirmed && !willMerge);
-                  const warn = errored ? undefined : dbWarn.get(excelRows[idx] ?? -1);
-                  return (
-                    <tr
-                      key={`${excelRows[idx] ?? idx}`}
-                      className={cn(
-                        "border-t",
-                        errored && "bg-red-50",
-                        (warn || confirmed || willMerge) && "bg-amber-50",
-                      )}
-                    >
-                      <td className="px-2 py-1">{excelRows[idx] ?? idx + 2}</td>
-                      {columnHints.map((c) => (
-                        <td key={c.key} className="px-2 py-1 truncate max-w-[200px]">
-                          {String(rawRows[idx]?.[c.key] ?? "—")}
-                        </td>
-                      ))}
-                      <td className="px-2 py-1">
-                        {isErrorRow(row) ? (
-                          <span className="text-red-600 text-xs">{row.error}</span>
-                        ) : willMerge ? (
-                          <span className="text-amber-700 text-xs">
-                            🔀 {mergeDuplicates!.label} — {dupError}
-                          </span>
-                        ) : confirmed ? (
-                          <span className="text-amber-700 text-xs">
-                            🔀 Đã xác nhận gộp — sẽ xử lý khi Import.{" "}
-                            <button
-                              type="button"
-                              onClick={() => toggleConfirm(excelRows[idx] ?? -1)}
-                              className="underline hover:text-amber-900"
-                            >
-                              Hoàn tác
-                            </button>
-                          </span>
-                        ) : dupError ? (
-                          <span className="text-red-600 text-xs">
-                            {dupError}
-                            {confirmDuplicates && (
+            <PhanTrangBang>
+              <table className="w-full text-sm">
+                <thead className="bg-muted sticky top-0">
+                  <tr>
+                    <th className="px-2 py-1 text-left">#</th>
+                    {columnHints.map((c) => (
+                      <th key={c.key} className="px-2 py-1 text-left">
+                        {c.label}
+                        {c.required && <span className="text-state-danger-ink">*</span>}
+                      </th>
+                    ))}
+                    <th className="px-2 py-1 text-left">Status</th>
+                    <th className="px-2 py-1 w-8" aria-label="Xoá dòng"></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {parsedRows.slice(0, 100).map((row, idx) => {
+                    const dupError =
+                      dupErrors.get(idx) ?? dbDup.get(excelRows[idx] ?? -1);
+                    const willMerge = dupError !== undefined && mergeDuplicates !== undefined;
+                    const confirmed =
+                      dupError !== undefined &&
+                      confirmDuplicates !== undefined &&
+                      isConfirmedRow(idx);
+                    const errored =
+                      isErrorRow(row) ||
+                      (dupError !== undefined && !confirmed && !willMerge);
+                    const warn = errored ? undefined : dbWarn.get(excelRows[idx] ?? -1);
+                    return (
+                      <tr
+                        key={`${excelRows[idx] ?? idx}`}
+                        className={cn(
+                          "border-t",
+                          errored && "bg-state-danger-soft",
+                          (warn || confirmed || willMerge) && "bg-state-warning-soft",
+                        )}
+                      >
+                        <td className="px-2 py-1">{excelRows[idx] ?? idx + 2}</td>
+                        {columnHints.map((c) => (
+                          <td key={c.key} className="px-2 py-1 truncate max-w-[200px]">
+                            {String(rawRows[idx]?.[c.key] ?? "—")}
+                          </td>
+                        ))}
+                        <td className="px-2 py-1">
+                          {isErrorRow(row) ? (
+                            <span className="text-state-danger-ink text-xs">{row.error}</span>
+                          ) : willMerge ? (
+                            <span className="text-state-warning-ink text-xs">
+                              🔀 {mergeDuplicates!.label} — {dupError}
+                            </span>
+                          ) : confirmed ? (
+                            <span className="text-state-warning-ink text-xs">
+                              🔀 Đã xác nhận gộp — sẽ xử lý khi Import.{" "}
                               <button
                                 type="button"
                                 onClick={() => toggleConfirm(excelRows[idx] ?? -1)}
-                                className="ml-1.5 rounded border border-amber-400 bg-amber-50 px-1.5 py-0.5 text-[11px] font-semibold text-amber-700 hover:bg-amber-100"
+                                className="underline hover:text-state-warning-ink"
                               >
-                                {confirmDuplicates.label}
+                                Hoàn tác
                               </button>
-                            )}
-                          </span>
-                        ) : warn ? (
-                          <span className="text-amber-600 text-xs">⚠️ {warn}</span>
-                        ) : (
-                          <span className="text-green-600">✓</span>
-                        )}
-                      </td>
-                      <td className="px-2 py-1 text-center">
-                        <button
-                          type="button"
-                          title={`Xoá dòng ${excelRows[idx] ?? idx + 2} khỏi danh sách import`}
-                          onClick={() => removeRows(new Set([idx]))}
-                          className="inline-flex h-6 w-6 items-center justify-center rounded text-gray-400 hover:bg-red-100 hover:text-red-600"
-                        >
-                          <X className="h-3.5 w-3.5" />
-                        </button>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+                            </span>
+                          ) : dupError ? (
+                            <span className="text-state-danger-ink text-xs">
+                              {dupError}
+                              {confirmDuplicates && (
+                                <button
+                                  type="button"
+                                  onClick={() => toggleConfirm(excelRows[idx] ?? -1)}
+                                  className="ml-1.5 rounded border border-state-warning bg-state-warning-soft px-1.5 py-0.5 text-[11px] font-semibold text-state-warning-ink hover:bg-state-warning-soft-hover"
+                                >
+                                  {confirmDuplicates.label}
+                                </button>
+                              )}
+                            </span>
+                          ) : warn ? (
+                            <span className="text-state-warning-ink text-xs">⚠️ {warn}</span>
+                          ) : (
+                            <span className="text-state-success-ink">✓</span>
+                          )}
+                        </td>
+                        <td className="px-2 py-1 text-center">
+                          <button
+                            type="button"
+                            title={`Xoá dòng ${excelRows[idx] ?? idx + 2} khỏi danh sách import`}
+                            onClick={() => removeRows(new Set([idx]))}
+                            className="inline-flex h-6 w-6 items-center justify-center rounded text-muted-foreground hover:bg-state-danger-soft hover:text-state-danger-ink"
+                          >
+                            <X className="h-3.5 w-3.5" />
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </PhanTrangBang>
             {parsedRows.length > 100 && (
-              <p className="p-2 text-xs text-center text-gray-500 bg-gray-50">
+              <p className="p-2 text-xs text-center text-muted-foreground bg-muted">
                 Hiển thị 100/{parsedRows.length} rows. Toàn bộ sẽ được import nếu hợp lệ.
                 Nút ✕ chỉ hiện cho 100 dòng đầu — dùng &quot;Xoá dòng lỗi&quot; để dọn mọi dòng lỗi.
               </p>
@@ -457,7 +460,7 @@ export function ExcelImporter<T>({
               <Button
                 variant="outline"
                 onClick={removeErrorRows}
-                className="border-red-300 text-red-600 hover:bg-red-50 hover:text-red-700"
+                className="border-state-danger text-state-danger-ink hover:bg-state-danger-soft hover:text-state-danger-ink"
               >
                 <Trash2 className="h-4 w-4 mr-1" />
                 Xoá {errorCount} dòng lỗi
@@ -505,11 +508,11 @@ export function ImportOutcome({
 
   return (
     <div className="space-y-3">
-      <Alert className={failures.length === 0 ? "border-green-500" : "border-yellow-500"}>
+      <Alert className={failures.length === 0 ? "border-state-success" : "border-state-warning"}>
         {failures.length === 0 ? (
-          <CheckCircle2 className="h-4 w-4 text-green-600" />
+          <CheckCircle2 className="h-4 w-4 text-state-success-ink" />
         ) : (
-          <AlertCircle className="h-4 w-4 text-yellow-600" />
+          <AlertCircle className="h-4 w-4 text-state-warning-ink" />
         )}
         <AlertDescription>
           ✅ Thành công: <strong>{result.success}</strong>
@@ -526,47 +529,51 @@ export function ImportOutcome({
             </>
           )}
           {failures.length === 0 && notices.length > 0 && (
-            <span className="ml-1 text-neutral-600">— không có dòng nào lỗi.</span>
+            <span className="ml-1 text-muted-foreground">— không có dòng nào lỗi.</span>
           )}
         </AlertDescription>
       </Alert>
 
       {failures.length > 0 && (
         <div className="max-h-[300px] overflow-y-auto rounded-lg border">
-          <table className="w-full text-sm">
-            <thead className="sticky top-0 bg-gray-50">
-              <tr>
-                <th className="px-2 py-1 text-left">Row</th>
-                <th className="px-2 py-1 text-left">Lỗi — dòng KHÔNG được ghi</th>
-              </tr>
-            </thead>
-            <tbody>
-              {failures.map((e, i) => (
-                <tr key={i} className="border-t">
-                  <td className="px-2 py-1">{e.row}</td>
-                  <td className="px-2 py-1 text-red-600">{e.error}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-
-      {notices.length > 0 && (
-        <details className="rounded-lg border bg-neutral-50">
-          <summary className="cursor-pointer px-3 py-2 text-sm text-neutral-700">
-            Ghi chú ({notices.length}) — dòng trùng đã gộp / đã có sẵn, không cần xử lý
-          </summary>
-          <div className="max-h-[240px] overflow-y-auto border-t bg-white">
+          <PhanTrangBang>
             <table className="w-full text-sm">
+              <thead className="sticky top-0 bg-muted">
+                <tr>
+                  <th className="px-2 py-1 text-left">Row</th>
+                  <th className="px-2 py-1 text-left">Lỗi — dòng KHÔNG được ghi</th>
+                </tr>
+              </thead>
               <tbody>
-                {notices.map((e, i) => (
-                  <tr key={i} className="border-t first:border-t-0">
-                    <td className="px-2 py-1 text-neutral-600">{e.error}</td>
+                {failures.map((e, i) => (
+                  <tr key={i} className="border-t">
+                    <td className="px-2 py-1">{e.row}</td>
+                    <td className="px-2 py-1 text-state-danger-ink">{e.error}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
+          </PhanTrangBang>
+        </div>
+      )}
+
+      {notices.length > 0 && (
+        <details className="rounded-lg border bg-muted">
+          <summary className="cursor-pointer px-3 py-2 text-sm text-foreground">
+            Ghi chú ({notices.length}) — dòng trùng đã gộp / đã có sẵn, không cần xử lý
+          </summary>
+          <div className="max-h-[240px] overflow-y-auto border-t bg-card">
+            <PhanTrangBang>
+              <table className="w-full text-sm">
+                <tbody>
+                  {notices.map((e, i) => (
+                    <tr key={i} className="border-t first:border-t-0">
+                      <td className="px-2 py-1 text-muted-foreground">{e.error}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </PhanTrangBang>
           </div>
         </details>
       )}

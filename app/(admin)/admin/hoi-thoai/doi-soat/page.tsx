@@ -13,6 +13,8 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { PageHelp } from "@/components/admin/ui/page-help";
+import { PhanTrangBang } from "@/components/ui/phan-trang-bang";
 
 // US-04 AC3 — trang xem log job đối soát thành viên nhóm chat (cron 02:00 VN).
 // Gate `chat:admin` (chỉ SUPER_ADMIN — US-15 AC5 chặn QLCS) qua checkPermission
@@ -37,7 +39,8 @@ const fmtVN = new Intl.DateTimeFormat("vi-VN", {
 export default async function ChatReconcileLogPage({ searchParams }: Props) {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  if (!(await checkPermission("chat:admin"))) redirect("/dashboard?error=unauthorized");
+  if (!(await checkPermission("chat:admin")))
+    redirect("/dashboard?error=unauthorized");
 
   const sp = await searchParams;
   const typeFilter =
@@ -84,13 +87,19 @@ export default async function ChatReconcileLogPage({ searchParams }: Props) {
   return (
     <div className="space-y-8 p-6">
       <div>
-        <h1 className="text-2xl font-semibold">Đối soát thành viên nhóm chat</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Cron chạy hằng đêm 02:00 (giờ VN): lệch REMOVE được tự gỡ ngay (autoEnforced),
-          lệch ADD chỉ ghi log chờ người xử lý. Không có dòng chạy nào 2 đêm liên tiếp
-          là tín hiệu cần điều tra (job không chạy ≠ đêm sạch).
-        </p>
+        <h1 className="text-2xl font-semibold">
+          Đối soát thành viên nhóm chat
+        </h1>
       </div>
+
+      <PageHelp>
+        <p>
+          Cron chạy hằng đêm 02:00 (giờ VN): lệch REMOVE được tự gỡ ngay
+          (autoEnforced), lệch ADD chỉ ghi log chờ người xử lý. Không có dòng
+          chạy nào 2 đêm liên tiếp là tín hiệu cần điều tra (job không chạy ≠
+          đêm sạch).
+        </p>
+      </PageHelp>
 
       {/* Cảnh báo lớp ACTIVE chưa có nhóm (09/08/2026). Job CỐ Ý không tự tạo nhóm —
           nó chỉ đếm; tạo là việc chạy tay có dry-run. Không gộp vào badge "0 drift" ở
@@ -99,16 +108,20 @@ export default async function ChatReconcileLogPage({ searchParams }: Props) {
       {lastRun && lastRun.missingConversations > 0 ? (
         <div className="rounded-md border border-destructive/40 bg-destructive/5 p-4">
           <p className="font-medium text-destructive">
-            ⚠️ {lastRun.missingConversations} lớp đang hoạt động CHƯA có nhóm chat
+            ⚠️ {lastRun.missingConversations} lớp đang hoạt động CHƯA có nhóm
+            chat
           </p>
           <p className="mt-1 text-sm text-muted-foreground">
-            Giáo viên và phụ huynh của những lớp này mở màn tin nhắn ra sẽ thấy trống.
-            Job đối soát cố ý KHÔNG tự tạo nhóm — chạy{" "}
+            Giáo viên và phụ huynh của những lớp này mở màn tin nhắn ra sẽ thấy
+            trống. Job đối soát cố ý KHÔNG tự tạo nhóm — chạy{" "}
             <code className="rounded bg-muted px-1 py-0.5 text-xs">
               pnpm exec tsx scripts/backfill-nhom-lop-chat.ts
             </code>{" "}
             (mặc định dry-run, soi kỹ danh sách rồi thêm{" "}
-            <code className="rounded bg-muted px-1 py-0.5 text-xs">--apply</code>).
+            <code className="rounded bg-muted px-1 py-0.5 text-xs">
+              --apply
+            </code>
+            ).
           </p>
         </div>
       ) : null}
@@ -128,46 +141,52 @@ export default async function ChatReconcileLogPage({ searchParams }: Props) {
             <Badge variant="outline">chưa từng chạy</Badge>
           )}
         </h2>
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Chạy lúc (VN)</TableHead>
-              <TableHead className="text-right">Lớp kiểm</TableHead>
-              <TableHead className="text-right">REMOVE (tự gỡ)</TableHead>
-              <TableHead className="text-right">ADD (chờ người)</TableHead>
-              <TableHead className="text-right">Thiếu nhóm</TableHead>
-              <TableHead className="text-right">Thời lượng</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {runs.length === 0 ? (
+        <PhanTrangBang>
+          <Table>
+            <TableHeader>
               <TableRow>
-                <TableCell colSpan={6} className="text-muted-foreground">
-                  Chưa có lần chạy nào.
-                </TableCell>
+                <TableHead>Chạy lúc (VN)</TableHead>
+                <TableHead className="text-right">Lớp kiểm</TableHead>
+                <TableHead className="text-right">REMOVE (tự gỡ)</TableHead>
+                <TableHead className="text-right">ADD (chờ người)</TableHead>
+                <TableHead className="text-right">Thiếu nhóm</TableHead>
+                <TableHead className="text-right">Thời lượng</TableHead>
               </TableRow>
-            ) : (
-              runs.map((r) => (
-                <TableRow key={r.id}>
-                  <TableCell>{fmtVN.format(r.ranAt)}</TableCell>
-                  <TableCell className="text-right">{r.classesChecked}</TableCell>
-                  <TableCell className="text-right">{r.removeCount}</TableCell>
-                  <TableCell className="text-right">{r.addCount}</TableCell>
-                  <TableCell
-                    className={
-                      r.missingConversations > 0
-                        ? "text-right font-medium text-destructive"
-                        : "text-right"
-                    }
-                  >
-                    {r.missingConversations}
+            </TableHeader>
+            <TableBody>
+              {runs.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={6} className="text-muted-foreground">
+                    Chưa có lần chạy nào.
                   </TableCell>
-                  <TableCell className="text-right">{r.durationMs} ms</TableCell>
                 </TableRow>
-              ))
-            )}
-          </TableBody>
-        </Table>
+              ) : (
+                runs.map((r) => (
+                  <TableRow key={r.id}>
+                    <TableCell>{fmtVN.format(r.ranAt)}</TableCell>
+                    <TableCell className="text-right">
+                      {r.classesChecked}
+                    </TableCell>
+                    <TableCell className="text-right">{r.removeCount}</TableCell>
+                    <TableCell className="text-right">{r.addCount}</TableCell>
+                    <TableCell
+                      className={
+                        r.missingConversations > 0
+                          ? "text-right font-medium text-destructive"
+                          : "text-right"
+                      }
+                    >
+                      {r.missingConversations}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {r.durationMs} ms
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
+            </TableBody>
+          </Table>
+        </PhanTrangBang>
       </section>
 
       <section className="space-y-3">
@@ -175,7 +194,11 @@ export default async function ChatReconcileLogPage({ searchParams }: Props) {
           <h2 className="text-lg font-medium">Drift mới nhất</h2>
           <nav className="flex gap-2 text-sm">
             {[
-              { href: "/hoi-thoai/doi-soat", label: "Tất cả", active: !typeFilter },
+              {
+                href: "/hoi-thoai/doi-soat",
+                label: "Tất cả",
+                active: !typeFilter,
+              },
               {
                 href: "/hoi-thoai/doi-soat?type=REMOVE",
                 label: "REMOVE",
@@ -201,48 +224,50 @@ export default async function ChatReconcileLogPage({ searchParams }: Props) {
             ))}
           </nav>
         </div>
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Lúc (VN)</TableHead>
-              <TableHead>Loại</TableHead>
-              <TableHead>Lớp</TableHead>
-              <TableHead>User</TableHead>
-              <TableHead>Ngữ cảnh / luồng nghi vấn</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {drifts.length === 0 ? (
+        <PhanTrangBang>
+          <Table>
+            <TableHeader>
               <TableRow>
-                <TableCell colSpan={5} className="text-muted-foreground">
-                  Không có drift nào{typeFilter ? ` loại ${typeFilter}` : ""}.
-                </TableCell>
+                <TableHead>Lúc (VN)</TableHead>
+                <TableHead>Loại</TableHead>
+                <TableHead>Lớp</TableHead>
+                <TableHead>User</TableHead>
+                <TableHead>Ngữ cảnh / luồng nghi vấn</TableHead>
               </TableRow>
-            ) : (
-              drifts.map((x) => (
-                <TableRow key={x.id}>
-                  <TableCell className="whitespace-nowrap">
-                    {fmtVN.format(x.createdAt)}
-                  </TableCell>
-                  <TableCell>
-                    {x.driftType === "REMOVE" ? (
-                      <Badge variant="destructive">
-                        REMOVE{x.autoEnforced ? " · đã tự gỡ" : ""}
-                      </Badge>
-                    ) : (
-                      <Badge variant="secondary">ADD · chờ người</Badge>
-                    )}
-                  </TableCell>
-                  <TableCell>{classById.get(x.classId) ?? x.classId}</TableCell>
-                  <TableCell>{userById.get(x.userId) ?? x.userId}</TableCell>
-                  <TableCell className="max-w-xl text-sm text-muted-foreground">
-                    {x.detail}
+            </TableHeader>
+            <TableBody>
+              {drifts.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={5} className="text-muted-foreground">
+                    Không có drift nào{typeFilter ? ` loại ${typeFilter}` : ""}.
                   </TableCell>
                 </TableRow>
-              ))
-            )}
-          </TableBody>
-        </Table>
+              ) : (
+                drifts.map((x) => (
+                  <TableRow key={x.id}>
+                    <TableCell className="whitespace-nowrap">
+                      {fmtVN.format(x.createdAt)}
+                    </TableCell>
+                    <TableCell>
+                      {x.driftType === "REMOVE" ? (
+                        <Badge variant="destructive">
+                          REMOVE{x.autoEnforced ? " · đã tự gỡ" : ""}
+                        </Badge>
+                      ) : (
+                        <Badge variant="secondary">ADD · chờ người</Badge>
+                      )}
+                    </TableCell>
+                    <TableCell>{classById.get(x.classId) ?? x.classId}</TableCell>
+                    <TableCell>{userById.get(x.userId) ?? x.userId}</TableCell>
+                    <TableCell className="max-w-xl text-sm text-muted-foreground">
+                      {x.detail}
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
+            </TableBody>
+          </Table>
+        </PhanTrangBang>
       </section>
     </div>
   );

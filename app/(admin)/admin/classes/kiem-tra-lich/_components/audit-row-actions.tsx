@@ -18,7 +18,7 @@ export function AuditRowActions({ classId, canEdit }: { classId: string; canEdit
   const [pending, startTransition] = useTransition();
   const [armed, setArmed] = useState(false);
 
-  if (!canEdit) return <span className="text-xs text-gray-400">Không có quyền</span>;
+  if (!canEdit) return <span className="text-xs text-muted-foreground">Không có quyền</span>;
 
   function run() {
     if (!armed) {
@@ -48,9 +48,7 @@ export function AuditRowActions({ classId, canEdit }: { classId: string; canEdit
       onClick={run}
       onBlur={() => setArmed(false)}
       disabled={pending}
-      className={`inline-flex items-center gap-1 rounded-lg px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-50 ${
-        armed ? "bg-red-600 hover:bg-red-700" : "bg-orange-500 hover:bg-orange-600"
-      }`}
+      className={`inline-flex items-center gap-1 rounded-lg px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-50 ${ armed ? "bg-state-danger-ink hover:bg-state-danger-ink" : "bg-primary hover:bg-primary-dark" }`}
     >
       <CalendarSync className="h-3.5 w-3.5" />
       {pending ? "Đang xếp…" : armed ? "Bấm lần nữa để xếp lại" : "Xếp lại"}

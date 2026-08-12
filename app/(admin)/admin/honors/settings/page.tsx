@@ -66,8 +66,8 @@ export default async function HonorsSettingsPage() {
   return (
     <div className="max-w-3xl">
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">Cài đặt trang Vinh Danh</h1>
-        <p className="mt-1 text-sm text-gray-500">
+        <h1 className="text-2xl font-bold text-foreground">Cài đặt trang Vinh Danh</h1>
+        <p className="mt-1 text-sm text-muted-foreground">
           Sửa Hero text, CEO Quote, avatar CEO. Thay đổi sẽ tự revalidate trang public.
         </p>
       </div>

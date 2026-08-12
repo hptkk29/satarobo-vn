@@ -31,6 +31,7 @@ import {
   updateCourseDiscount,
   deleteCourseDiscount,
 } from "../_actions";
+import { PhanTrangBang } from "@/components/ui/phan-trang-bang";
 
 export type DiscountRow = {
   id: string;
@@ -174,11 +175,11 @@ export function DiscountSection({
   }
 
   return (
-    <div className="rounded-xl border border-gray-200 bg-white shadow-sm">
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-gray-100 p-4">
+    <div className="rounded-xl border border-border bg-card shadow-sm">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border p-4">
         <div>
-          <h2 className="text-lg font-semibold text-gray-900">Ưu đãi</h2>
-          <p className="mt-0.5 text-sm text-gray-500">
+          <h2 className="text-lg font-semibold text-foreground">Ưu đãi</h2>
+          <p className="mt-0.5 text-sm text-muted-foreground">
             Cấu hình giảm giá / học bổng áp dụng toàn hệ thống cho khoá này.
           </p>
         </div>
@@ -192,7 +193,7 @@ export function DiscountSection({
 
       {/* Form thêm/sửa */}
       {canEdit && editingId !== null && (
-        <div className="space-y-4 border-b border-gray-100 bg-gray-50/60 p-4">
+        <div className="space-y-4 border-b border-border bg-muted/60 p-4">
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div className="space-y-1.5">
               <Label htmlFor="d-type">Loại ưu đãi</Label>
@@ -215,7 +216,7 @@ export function DiscountSection({
             <div className="space-y-1.5">
               <Label htmlFor="d-value">
                 Giá trị{" "}
-                <span className="text-xs font-normal text-gray-500">
+                <span className="text-xs font-normal text-muted-foreground">
                   {form.type === "AMOUNT" ? "(VND)" : form.type === "PROGRAM" ? "" : "(%)"}
                 </span>
               </Label>
@@ -296,75 +297,77 @@ export function DiscountSection({
 
       {/* Danh sách */}
       <div className="overflow-x-auto">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Loại</TableHead>
-              <TableHead>Giá trị</TableHead>
-              <TableHead>Ghi chú</TableHead>
-              <TableHead>Hiệu lực</TableHead>
-              <TableHead>Trạng thái</TableHead>
-              {canEdit && <TableHead className="text-right">Thao tác</TableHead>}
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {discounts.length === 0 ? (
+        <PhanTrangBang>
+          <Table>
+            <TableHeader>
               <TableRow>
-                <TableCell colSpan={canEdit ? 6 : 5} className="py-8 text-center text-gray-500">
-                  Chưa có ưu đãi nào
-                </TableCell>
+                <TableHead>Loại</TableHead>
+                <TableHead>Giá trị</TableHead>
+                <TableHead>Ghi chú</TableHead>
+                <TableHead>Hiệu lực</TableHead>
+                <TableHead>Trạng thái</TableHead>
+                {canEdit && <TableHead className="text-right">Thao tác</TableHead>}
               </TableRow>
-            ) : (
-              discounts.map((d) => (
-                <TableRow key={d.id} className="hover:bg-gray-50/60">
-                  <TableCell>
-                    <Badge variant="outline">{TYPE_LABEL[d.type]}</Badge>
+            </TableHeader>
+            <TableBody>
+              {discounts.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={canEdit ? 6 : 5} className="py-8 text-center text-muted-foreground">
+                    Chưa có ưu đãi nào
                   </TableCell>
-                  <TableCell className="font-medium tabular-nums">{formatValue(d)}</TableCell>
-                  <TableCell className="max-w-[16rem] text-sm text-gray-600">
-                    {d.note || "—"}
-                  </TableCell>
-                  <TableCell className="text-xs text-gray-500">
-                    {formatDate(d.validFrom)} → {formatDate(d.validTo)}
-                  </TableCell>
-                  <TableCell>
-                    {d.active ? (
-                      <Badge className="bg-green-100 text-green-700 hover:bg-green-100">
-                        Đang áp dụng
-                      </Badge>
-                    ) : (
-                      <Badge className="bg-gray-200 text-gray-700 hover:bg-gray-200">Tắt</Badge>
-                    )}
-                  </TableCell>
-                  {canEdit && (
-                    <TableCell className="text-right">
-                      <div className="flex items-center justify-end gap-2">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => openEdit(d)}
-                          disabled={isPending}
-                        >
-                          <Pencil className="h-3.5 w-3.5" />
-                          Sửa
-                        </Button>
-                        <Button
-                          variant={confirmDeleteId === d.id ? "destructive" : "outline"}
-                          size="sm"
-                          onClick={() => onDelete(d.id)}
-                          disabled={isPending}
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                          {confirmDeleteId === d.id ? "Xác nhận xoá?" : "Xoá"}
-                        </Button>
-                      </div>
-                    </TableCell>
-                  )}
                 </TableRow>
-              ))
-            )}
-          </TableBody>
-        </Table>
+              ) : (
+                discounts.map((d) => (
+                  <TableRow key={d.id} className="hover:bg-muted/60">
+                    <TableCell>
+                      <Badge variant="outline">{TYPE_LABEL[d.type]}</Badge>
+                    </TableCell>
+                    <TableCell className="font-medium tabular-nums">{formatValue(d)}</TableCell>
+                    <TableCell className="max-w-[16rem] text-sm text-muted-foreground">
+                      {d.note || "—"}
+                    </TableCell>
+                    <TableCell className="text-xs text-muted-foreground">
+                      {formatDate(d.validFrom)} → {formatDate(d.validTo)}
+                    </TableCell>
+                    <TableCell>
+                      {d.active ? (
+                        <Badge className="bg-state-success-soft text-state-success-ink hover:bg-state-success-soft-hover">
+                          Đang áp dụng
+                        </Badge>
+                      ) : (
+                        <Badge className="bg-muted text-foreground hover:bg-muted">Tắt</Badge>
+                      )}
+                    </TableCell>
+                    {canEdit && (
+                      <TableCell className="text-right">
+                        <div className="flex items-center justify-end gap-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => openEdit(d)}
+                            disabled={isPending}
+                          >
+                            <Pencil className="h-3.5 w-3.5" />
+                            Sửa
+                          </Button>
+                          <Button
+                            variant={confirmDeleteId === d.id ? "destructive" : "outline"}
+                            size="sm"
+                            onClick={() => onDelete(d.id)}
+                            disabled={isPending}
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                            {confirmDeleteId === d.id ? "Xác nhận xoá?" : "Xoá"}
+                          </Button>
+                        </div>
+                      </TableCell>
+                    )}
+                  </TableRow>
+                ))
+              )}
+            </TableBody>
+          </Table>
+        </PhanTrangBang>
       </div>
     </div>
   );

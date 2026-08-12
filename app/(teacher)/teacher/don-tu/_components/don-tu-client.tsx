@@ -21,7 +21,10 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
-import { ListToolbar, type SelectFilter } from "../../_components/ui/list-toolbar";
+import {
+  ListToolbar,
+  type SelectFilter,
+} from "../../_components/ui/list-toolbar";
 import { EmptyState } from "../../_components/ui/empty-state";
 import {
   WORK_REQUEST_KINDS,
@@ -36,6 +39,7 @@ import {
   type WorkRequestStatusV,
 } from "@/lib/work-request";
 import { submitWorkRequest } from "../_actions";
+import { PhanTrangBang } from "@/components/ui/phan-trang-bang";
 
 export interface WorkRequestRow {
   id: string;
@@ -53,7 +57,7 @@ export interface WorkRequestRow {
   createdAtLabel: string;
 }
 
-// Icon + badge cam-only (bỏ tím reference) theo loại đơn.
+// Icon + badge theo loại đơn, màu lấy từ token trạng thái.
 const KIND_ICON: Record<WorkRequestKindV, LucideIcon> = {
   CLASS_CHANGE: ArrowLeftRight,
   SUB_TEACH: Users,
@@ -67,19 +71,22 @@ const KIND_ICON: Record<WorkRequestKindV, LucideIcon> = {
   BUSINESS_TRIP: Briefcase,
 };
 const CAT_BADGE: Record<string, string> = {
-  class: "bg-orange-100 text-orange-700 dark:bg-orange-500/15 dark:text-orange-300",
-  shift: "bg-blue-100 text-blue-700 dark:bg-blue-500/15 dark:text-blue-300",
-  leave: "bg-emerald-100 text-emerald-700 dark:bg-emerald-600/20 dark:text-emerald-200",
+  class: "bg-primary-soft text-primary-ink",
+  shift: "bg-state-info-soft text-state-info-ink",
+  leave: "bg-state-success-soft text-state-success-ink",
 };
 const STATUS_CLS: Record<WorkRequestStatusV, string> = {
-  PENDING: "border-amber-300 bg-amber-50 text-amber-700 dark:border-amber-500/40 dark:bg-amber-500/15 dark:text-amber-300",
-  APPROVED: "border-emerald-300 bg-emerald-50 text-emerald-700 dark:border-emerald-500/40 dark:bg-emerald-600/15 dark:text-emerald-200",
-  REJECTED: "border-rose-300 bg-rose-50 text-rose-700 dark:border-rose-500/40 dark:bg-rose-500/15 dark:text-rose-300",
+  PENDING:
+    "border-state-warning-soft bg-state-warning-soft text-state-warning-ink dark:border-state-warning",
+  APPROVED:
+    "border-state-success-soft bg-state-success-soft text-state-success-ink dark:border-state-success",
+  REJECTED:
+    "border-state-danger-soft bg-state-danger-soft text-state-danger-ink dark:border-state-danger",
 };
 
 const ALL = "ALL";
 const inputCls =
-  "w-full rounded-lg border border-border bg-card px-3.5 py-2.5 text-sm text-foreground outline-none focus:border-orange-300 focus:ring-2 focus:ring-orange-100 dark:focus:ring-orange-500/20";
+  "w-full rounded-lg border border-border bg-card px-3.5 py-2.5 text-sm text-foreground outline-none focus:border-primary-soft focus:ring-2 focus:ring-primary-soft dark:focus:ring-primary";
 
 export function DonTuClient({
   rows,
@@ -96,7 +103,9 @@ export function DonTuClient({
   presetKind: string | null;
   presetSwap: string | null;
 }) {
-  const preset = (WORK_REQUEST_KINDS as readonly string[]).includes(presetKind ?? "")
+  const preset = (WORK_REQUEST_KINDS as readonly string[]).includes(
+    presetKind ?? "",
+  )
     ? (presetKind as WorkRequestKindV)
     : presetSwap
       ? "SHIFT_SWAP"
@@ -137,8 +146,8 @@ export function DonTuClient({
         <div>
           <h1 className="text-2xl font-bold text-foreground">Đơn từ</h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            Gửi và theo dõi đơn theo nhóm: lớp học (đổi lớp dạy, dạy thay…), ca làm (đổi ca,
-            OT…), nghỉ phép &amp; khác. Quản lý cơ sở duyệt đơn.
+            Gửi và theo dõi đơn theo nhóm: lớp học (đổi lớp dạy, dạy thay…), ca
+            làm (đổi ca, OT…), nghỉ phép &amp; khác. Quản lý cơ sở duyệt đơn.
           </p>
         </div>
         <Button className="shrink-0" onClick={() => setOpen((v) => !v)}>
@@ -163,32 +172,54 @@ export function DonTuClient({
         placeholder="Tìm theo lý do, loại đơn, lớp..."
         filters={[
           { value: kindFilter, onChange: setKindFilter, options: kindOptions },
-          { value: statusFilter, onChange: setStatusFilter, options: statusOptions },
+          {
+            value: statusFilter,
+            onChange: setStatusFilter,
+            options: statusOptions,
+          },
         ]}
       />
 
       {filtered.length === 0 ? (
-        <EmptyState icon={Inbox} title="Chưa có đơn nào" description="Bấm “Tạo đơn” để gửi đơn mới." />
+        <EmptyState
+          icon={Inbox}
+          title="Chưa có đơn nào"
+          description="Bấm “Tạo đơn” để gửi đơn mới."
+        />
       ) : (
         <div className="t-card overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="w-full border-collapse text-left text-sm">
-              <thead>
-                <tr className="border-b border-border bg-muted/50 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
-                  <th scope="col" className="px-5 py-3">Loại đơn</th>
-                  <th scope="col" className="px-5 py-3">Nhóm</th>
-                  <th scope="col" className="px-5 py-3">Thời gian</th>
-                  <th scope="col" className="px-5 py-3">Nội dung</th>
-                  <th scope="col" className="px-5 py-3">Trạng thái</th>
-                  <th scope="col" className="px-5 py-3">Ngày gửi</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filtered.map((r) => (
-                  <RequestRow key={r.id} r={r} />
-                ))}
-              </tbody>
-            </table>
+            <PhanTrangBang>
+              <table className="min-w-[770px] w-full border-collapse text-left text-sm">
+                <thead>
+                  <tr className="border-b border-border bg-muted/50 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+                    <th scope="col" className="px-5 py-3">
+                      Loại đơn
+                    </th>
+                    <th scope="col" className="px-5 py-3">
+                      Nhóm
+                    </th>
+                    <th scope="col" className="px-5 py-3">
+                      Thời gian
+                    </th>
+                    <th scope="col" className="px-5 py-3">
+                      Nội dung
+                    </th>
+                    <th scope="col" className="px-5 py-3">
+                      Trạng thái
+                    </th>
+                    <th scope="col" className="px-5 py-3">
+                      Ngày gửi
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filtered.map((r) => (
+                    <RequestRow key={r.id} r={r} />
+                  ))}
+                </tbody>
+              </table>
+            </PhanTrangBang>
           </div>
         </div>
       )}
@@ -204,22 +235,37 @@ function RequestRow({ r }: { r: WorkRequestRow }) {
       ? `${r.fromLabel} → ${r.toLabel}`
       : (r.fromLabel ?? r.toLabel ?? "—");
   const time =
-    r.startTime && r.endTime ? `${r.startTime}-${r.endTime}` : r.startTime ? r.startTime : null;
+    r.startTime && r.endTime
+      ? `${r.startTime}-${r.endTime}`
+      : r.startTime
+        ? r.startTime
+        : null;
   return (
     <tr className="border-b border-border/60 transition-colors last:border-0 hover:bg-muted/40">
       <td className="px-5 py-3.5">
         <div className="flex items-center gap-2.5">
-          <span className={cn("flex h-8 w-8 shrink-0 items-center justify-center rounded-lg", CAT_BADGE[cat.key])}>
+          <span
+            className={cn(
+              "flex h-8 w-8 shrink-0 items-center justify-center rounded-lg",
+              CAT_BADGE[cat.key],
+            )}
+          >
             <Icon className="h-4 w-4" aria-hidden />
           </span>
           <div className="min-w-0">
-            <p className="font-semibold text-foreground">{WR_KIND_LABEL[r.kind]}</p>
-            {r.className && <p className="text-xs text-muted-foreground">Lớp {r.className}</p>}
+            <p className="font-semibold text-foreground">
+              {WR_KIND_LABEL[r.kind]}
+            </p>
+            {r.className && (
+              <p className="text-xs text-muted-foreground">Lớp {r.className}</p>
+            )}
           </div>
         </div>
       </td>
       <td className="px-5 py-3.5">
-        <span className="text-xs font-medium text-muted-foreground">{cat.label}</span>
+        <span className="text-xs font-medium text-muted-foreground">
+          {cat.label}
+        </span>
       </td>
       <td className="px-5 py-3.5 whitespace-nowrap text-foreground">
         <p>{period}</p>
@@ -232,9 +278,13 @@ function RequestRow({ r }: { r: WorkRequestRow }) {
       </td>
       <td className="max-w-xs px-5 py-3.5">
         <p className="text-foreground">{r.reason}</p>
-        {r.detail && <p className="text-xs text-muted-foreground">{r.detail}</p>}
+        {r.detail && (
+          <p className="text-xs text-muted-foreground">{r.detail}</p>
+        )}
         {r.status === "REJECTED" && r.reviewNote && (
-          <p className="text-xs text-rose-600 dark:text-rose-400">Lý do từ chối: {r.reviewNote}</p>
+          <p className="text-xs text-state-danger-ink">
+            Lý do từ chối: {r.reviewNote}
+          </p>
         )}
       </td>
       <td className="px-5 py-3.5">
@@ -242,7 +292,9 @@ function RequestRow({ r }: { r: WorkRequestRow }) {
           {WR_STATUS_LABEL[r.status]}
         </Badge>
       </td>
-      <td className="px-5 py-3.5 whitespace-nowrap text-muted-foreground">{r.createdAtLabel}</td>
+      <td className="px-5 py-3.5 whitespace-nowrap text-muted-foreground">
+        {r.createdAtLabel}
+      </td>
     </tr>
   );
 }
@@ -283,13 +335,17 @@ function RequestForm({
 
   function submit() {
     if (!reason.trim()) return toast.error("Nhập lý do");
-    if (isClass && (!classId || !fromDate)) return toast.error("Chọn lớp và ngày buổi dạy");
+    if (isClass && (!classId || !fromDate))
+      return toast.error("Chọn lớp và ngày buổi dạy");
     if (single && !fromDate) return toast.error("Chọn ngày");
     if (range && !fromDate) return toast.error("Chọn từ ngày");
 
-    const className = isClass ? (myClasses.find((c) => c.id === classId)?.name ?? null) : null;
+    const className = isClass
+      ? (myClasses.find((c) => c.id === classId)?.name ?? null)
+      : null;
     let detail: string | null = null;
-    if (kind === "BUSINESS_TRIP" && destination) detail = `Nơi đến: ${destination}`;
+    if (kind === "BUSINESS_TRIP" && destination)
+      detail = `Nơi đến: ${destination}`;
     if (kind === "LATE_EARLY") detail = lateType;
     if (kind === "SUB_TEACH") {
       const who = otherTeachers.find((t) => t.id === targetUserId)?.name;
@@ -298,7 +354,9 @@ function RequestForm({
     if (kind === "SHIFT_SWAP") {
       const sh = myShifts.find((s) => s.id === targetShiftId)?.label;
       const who = otherTeachers.find((t) => t.id === targetUserId)?.name;
-      detail = [sh, who ? `Người nhận: ${who}` : ""].filter(Boolean).join(" · ") || null;
+      detail =
+        [sh, who ? `Người nhận: ${who}` : ""].filter(Boolean).join(" · ") ||
+        null;
     }
 
     start(async () => {
@@ -311,7 +369,10 @@ function RequestForm({
         hours: kind === "TIMESHEET_FIX" && hours ? Number(hours) : null,
         className,
         classId: isClass ? classId || null : null,
-        targetUserId: kind === "SUB_TEACH" || kind === "SHIFT_SWAP" ? targetUserId || null : null,
+        targetUserId:
+          kind === "SUB_TEACH" || kind === "SHIFT_SWAP"
+            ? targetUserId || null
+            : null,
         targetShiftId: kind === "SHIFT_SWAP" ? targetShiftId || null : null,
         detail,
         reason: reason.trim(),
@@ -329,7 +390,9 @@ function RequestForm({
   return (
     <div className="t-card mb-5 p-5">
       <div className="mb-4 flex items-center justify-between">
-        <h3 className="text-sm font-bold uppercase tracking-wide text-foreground">Tạo đơn mới</h3>
+        <h3 className="text-sm font-bold uppercase tracking-wide text-foreground">
+          Tạo đơn mới
+        </h3>
         <button
           type="button"
           onClick={onClose}
@@ -359,7 +422,7 @@ function RequestForm({
                     className={cn(
                       "flex items-center gap-2 rounded-lg border px-3 py-2 text-sm font-semibold transition-colors",
                       active
-                        ? "border-orange-300 bg-orange-50 text-orange-700 dark:bg-orange-500/15 dark:text-orange-200"
+                        ? "border-primary-soft bg-primary-soft text-primary-ink dark:bg-primary-soft dark:text-primary-ink"
                         : "border-border bg-card text-muted-foreground hover:bg-muted/50",
                     )}
                   >
@@ -377,22 +440,39 @@ function RequestForm({
         {isClass ? (
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <Field label="Lớp">
-              <select value={classId} onChange={(e) => setClassId(e.target.value)} className={inputCls}>
+              <select
+                value={classId}
+                onChange={(e) => setClassId(e.target.value)}
+                className={inputCls}
+              >
                 <option value="">- Chọn lớp -</option>
                 {myClasses.map((c) => (
-                  <option key={c.id} value={c.id}>{c.name}</option>
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
                 ))}
               </select>
             </Field>
             <Field label="Ngày buổi dạy">
-              <input type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} className={inputCls} />
+              <input
+                type="date"
+                value={fromDate}
+                onChange={(e) => setFromDate(e.target.value)}
+                className={inputCls}
+              />
             </Field>
             {kind === "SUB_TEACH" && (
               <Field label="Người dạy thay (tuỳ chọn)">
-                <select value={targetUserId} onChange={(e) => setTargetUserId(e.target.value)} className={inputCls}>
+                <select
+                  value={targetUserId}
+                  onChange={(e) => setTargetUserId(e.target.value)}
+                  className={inputCls}
+                >
                   <option value="">- Chưa chỉ định -</option>
                   {otherTeachers.map((t) => (
-                    <option key={t.id} value={t.id}>{t.name}</option>
+                    <option key={t.id} value={t.id}>
+                      {t.name}
+                    </option>
                   ))}
                 </select>
               </Field>
@@ -401,18 +481,30 @@ function RequestForm({
         ) : kind === "SHIFT_SWAP" ? (
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <Field label="Ca muốn đổi">
-              <select value={targetShiftId} onChange={(e) => setTargetShiftId(e.target.value)} className={inputCls}>
+              <select
+                value={targetShiftId}
+                onChange={(e) => setTargetShiftId(e.target.value)}
+                className={inputCls}
+              >
                 <option value="">- Chọn ca -</option>
                 {myShifts.map((s) => (
-                  <option key={s.id} value={s.id}>{s.label}</option>
+                  <option key={s.id} value={s.id}>
+                    {s.label}
+                  </option>
                 ))}
               </select>
             </Field>
             <Field label="Người nhận ca (tuỳ chọn)">
-              <select value={targetUserId} onChange={(e) => setTargetUserId(e.target.value)} className={inputCls}>
+              <select
+                value={targetUserId}
+                onChange={(e) => setTargetUserId(e.target.value)}
+                className={inputCls}
+              >
                 <option value="">- Chưa chỉ định -</option>
                 {otherTeachers.map((t) => (
-                  <option key={t.id} value={t.id}>{t.name}</option>
+                  <option key={t.id} value={t.id}>
+                    {t.name}
+                  </option>
                 ))}
               </select>
             </Field>
@@ -420,11 +512,20 @@ function RequestForm({
         ) : single ? (
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <Field label="Ngày">
-              <input type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} className={inputCls} />
+              <input
+                type="date"
+                value={fromDate}
+                onChange={(e) => setFromDate(e.target.value)}
+                className={inputCls}
+              />
             </Field>
             {kind === "LATE_EARLY" && (
               <Field label="Hình thức">
-                <select value={lateType} onChange={(e) => setLateType(e.target.value)} className={inputCls}>
+                <select
+                  value={lateType}
+                  onChange={(e) => setLateType(e.target.value)}
+                  className={inputCls}
+                >
                   <option>Đi muộn</option>
                   <option>Về sớm</option>
                 </select>
@@ -433,34 +534,73 @@ function RequestForm({
             {kind === "OT" && (
               <Field label="Từ giờ - Đến giờ">
                 <div className="flex items-center gap-2">
-                  <input type="time" value={startTime} onChange={(e) => setStartTime(e.target.value)} className={inputCls} />
+                  <input
+                    type="time"
+                    value={startTime}
+                    onChange={(e) => setStartTime(e.target.value)}
+                    className={inputCls}
+                  />
                   <span className="text-muted-foreground">-</span>
-                  <input type="time" value={endTime} onChange={(e) => setEndTime(e.target.value)} className={inputCls} />
+                  <input
+                    type="time"
+                    value={endTime}
+                    onChange={(e) => setEndTime(e.target.value)}
+                    className={inputCls}
+                  />
                 </div>
               </Field>
             )}
             {kind === "LATE_EARLY" && (
               <Field label="Giờ">
-                <input type="time" value={startTime} onChange={(e) => setStartTime(e.target.value)} className={inputCls} />
+                <input
+                  type="time"
+                  value={startTime}
+                  onChange={(e) => setStartTime(e.target.value)}
+                  className={inputCls}
+                />
               </Field>
             )}
             {kind === "TIMESHEET_FIX" && (
               <Field label="Số giờ chỉnh">
-                <input type="number" min={0} max={24} step={0.5} value={hours} onChange={(e) => setHours(e.target.value)} placeholder="VD: 2" className={inputCls} />
+                <input
+                  type="number"
+                  min={0}
+                  max={24}
+                  step={0.5}
+                  value={hours}
+                  onChange={(e) => setHours(e.target.value)}
+                  placeholder="VD: 2"
+                  className={inputCls}
+                />
               </Field>
             )}
           </div>
         ) : (
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <Field label="Từ ngày">
-              <input type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} className={inputCls} />
+              <input
+                type="date"
+                value={fromDate}
+                onChange={(e) => setFromDate(e.target.value)}
+                className={inputCls}
+              />
             </Field>
             <Field label="Đến ngày">
-              <input type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} className={inputCls} />
+              <input
+                type="date"
+                value={toDate}
+                onChange={(e) => setToDate(e.target.value)}
+                className={inputCls}
+              />
             </Field>
             {kind === "BUSINESS_TRIP" && (
               <Field label="Nơi đến">
-                <input value={destination} onChange={(e) => setDestination(e.target.value)} placeholder="VD: Cơ sở Thủ Đức" className={inputCls} />
+                <input
+                  value={destination}
+                  onChange={(e) => setDestination(e.target.value)}
+                  placeholder="VD: Cơ sở Thủ Đức"
+                  className={inputCls}
+                />
               </Field>
             )}
           </div>
@@ -477,9 +617,12 @@ function RequestForm({
         </Field>
 
         <div className="flex justify-end gap-2 pt-1">
-          <Button variant="outline" disabled={pending} onClick={onClose}>Huỷ</Button>
+          <Button variant="outline" disabled={pending} onClick={onClose}>
+            Huỷ
+          </Button>
           <Button onClick={submit} disabled={pending}>
-            <Plus className="mr-1.5 h-4 w-4" aria-hidden /> {pending ? "Đang gửi…" : "Gửi đơn"}
+            <Plus className="mr-1.5 h-4 w-4" aria-hidden />{" "}
+            {pending ? "Đang gửi…" : "Gửi đơn"}
           </Button>
         </div>
       </div>
@@ -487,10 +630,18 @@ function RequestForm({
   );
 }
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
+function Field({
+  label,
+  children,
+}: {
+  label: string;
+  children: React.ReactNode;
+}) {
   return (
     <div>
-      <label className="mb-1.5 block text-sm font-semibold text-foreground">{label}</label>
+      <label className="mb-1.5 block text-sm font-semibold text-foreground">
+        {label}
+      </label>
       {children}
     </div>
   );

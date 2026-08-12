@@ -73,21 +73,21 @@ export default async function EmployeeSchedulePage({ params, searchParams }: Pro
       <div className="p-6 max-w-3xl">
         <Link
           href={`/nhan-su/${id}/edit`}
-          className="mb-3 inline-flex items-center gap-1 text-sm text-neutral-500 hover:text-neutral-700"
+          className="mb-3 inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
         >
           <ArrowLeft className="h-4 w-4" /> Quay lại
         </Link>
         <h1 className="text-2xl font-bold mb-2">Lịch dạy</h1>
-        <div className="rounded-xl border-2 border-dashed border-neutral-300 bg-neutral-50 p-8 text-center">
-          <p className="font-semibold text-neutral-900">
+        <div className="rounded-xl border-2 border-dashed border-border bg-muted p-8 text-center">
+          <p className="font-semibold text-foreground">
             Nhân viên này không thuộc Phòng Giảng dạy / Đào tạo
           </p>
-          <p className="mt-1 text-sm text-neutral-600">
+          <p className="mt-1 text-sm text-muted-foreground">
             Trang lịch dạy chỉ hiển thị cho nhân viên thuộc phòng{" "}
-            <code className="rounded bg-neutral-100 px-1.5">GIANG_DAY</code> hoặc{" "}
-            <code className="rounded bg-neutral-100 px-1.5">DAO_TAO</code>.
+            <code className="rounded bg-muted px-1.5">GIANG_DAY</code> hoặc{" "}
+            <code className="rounded bg-muted px-1.5">DAO_TAO</code>.
           </p>
-          <p className="mt-1 text-xs text-neutral-500">
+          <p className="mt-1 text-xs text-muted-foreground">
             Phòng hiện tại: {employee.department.replace(/_/g, " ")}.
           </p>
         </div>
@@ -143,7 +143,7 @@ export default async function EmployeeSchedulePage({ params, searchParams }: Pro
         <div>
           <Link
             href={`/nhan-su/${id}/edit`}
-            className="mb-2 inline-flex items-center gap-1 text-sm text-neutral-500 hover:text-neutral-700"
+            className="mb-2 inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
           >
             <ArrowLeft className="h-4 w-4" /> Quay lại
           </Link>
@@ -152,42 +152,42 @@ export default async function EmployeeSchedulePage({ params, searchParams }: Pro
               <img
                 src={employee.avatarUrl}
                 alt={employee.fullName}
-                className="h-12 w-12 rounded-full object-cover ring-1 ring-neutral-200"
+                className="h-12 w-12 rounded-full object-cover ring-1 ring-border"
               />
             ) : (
-              <div className="h-12 w-12 rounded-full bg-gradient-to-br from-purple-600 to-orange-500 text-white font-bold text-lg flex items-center justify-center">
+              <div className="h-12 w-12 rounded-full bg-primary text-white font-bold text-lg flex items-center justify-center">
                 {employee.fullName.charAt(0)}
               </div>
             )}
             <div>
-              <h1 className="text-xl font-bold text-neutral-900 flex items-center gap-2">
-                <CalendarDays className="h-5 w-5 text-orange-500" />
+              <h1 className="text-xl font-bold text-foreground flex items-center gap-2">
+                <CalendarDays className="h-5 w-5 text-primary" />
                 Lịch dạy — {employee.fullName}
               </h1>
-              <p className="text-sm text-neutral-500">{employee.jobTitle}</p>
+              <p className="text-sm text-muted-foreground">{employee.jobTitle}</p>
             </div>
           </div>
         </div>
       </div>
 
       {/* Week navigation */}
-      <div className="flex flex-wrap items-center justify-between gap-2 bg-neutral-50 rounded-xl px-4 py-3">
+      <div className="flex flex-wrap items-center justify-between gap-2 bg-muted rounded-xl px-4 py-3">
         <Link
           href={`/nhan-su/${id}/schedule?week=${format(prevWeek, "yyyy-MM-dd")}`}
-          className="inline-flex items-center gap-1 rounded-lg border border-neutral-200 bg-white px-3 py-1.5 text-sm font-semibold hover:bg-neutral-50"
+          className="inline-flex items-center gap-1 rounded-lg border border-border bg-card px-3 py-1.5 text-sm font-semibold hover:bg-muted"
         >
           <ChevronLeft className="h-4 w-4" />
           Tuần trước
         </Link>
 
         <div className="text-center">
-          <div className="font-semibold text-neutral-900">
+          <div className="font-semibold text-foreground">
             Tuần {format(weekStart, "dd/MM", { locale: vi })} →{" "}
             {format(weekEnd, "dd/MM/yyyy", { locale: vi })}
           </div>
           <Link
             href={`/nhan-su/${id}/schedule`}
-            className="text-xs text-orange-600 hover:underline"
+            className="text-xs text-primary hover:underline"
           >
             Về tuần hiện tại
           </Link>
@@ -195,7 +195,7 @@ export default async function EmployeeSchedulePage({ params, searchParams }: Pro
 
         <Link
           href={`/nhan-su/${id}/schedule?week=${format(nextWeek, "yyyy-MM-dd")}`}
-          className="inline-flex items-center gap-1 rounded-lg border border-neutral-200 bg-white px-3 py-1.5 text-sm font-semibold hover:bg-neutral-50"
+          className="inline-flex items-center gap-1 rounded-lg border border-border bg-card px-3 py-1.5 text-sm font-semibold hover:bg-muted"
         >
           Tuần sau
           <ChevronRight className="h-4 w-4" />
@@ -203,7 +203,7 @@ export default async function EmployeeSchedulePage({ params, searchParams }: Pro
       </div>
 
       {!userId && (
-        <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+        <div className="rounded-lg border border-state-warning-soft bg-state-warning-soft px-4 py-3 text-sm text-state-warning-ink">
           ⚠️ Nhân viên chưa có User account liên kết → không thể truy vấn lịch.
           Trang Class hiện gắn giáo viên qua bảng User (relation TeacherClasses).
           Cần tạo User cho Employee này trước.
@@ -212,7 +212,7 @@ export default async function EmployeeSchedulePage({ params, searchParams }: Pro
 
       {/* Calendar */}
       {sessions.length === 0 ? (
-        <div className="text-center py-16 text-neutral-400 italic">
+        <div className="text-center py-16 text-muted-foreground italic">
           Không có buổi học nào trong tuần này
         </div>
       ) : (
@@ -220,7 +220,7 @@ export default async function EmployeeSchedulePage({ params, searchParams }: Pro
       )}
 
       {/* Summary */}
-      <div className="border-t pt-3 text-sm text-neutral-500">
+      <div className="border-t pt-3 text-sm text-muted-foreground">
         Tổng cộng <strong>{sessions.length}</strong> buổi trong tuần
         {sessions.length > 0 && (
           <>

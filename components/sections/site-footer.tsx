@@ -140,7 +140,7 @@ export function SiteFooter() {
             <div className="space-y-3 text-sm">
               {operationalLocations().map((c) => (
                 <div key={c.code} className="space-y-1">
-                  <p className="text-xs font-bold uppercase tracking-wide text-gray-500">
+                  <p className="text-xs font-bold uppercase tracking-wide text-gray-400">
                     {c.code} — {c.name}
                   </p>
                   <a
@@ -239,7 +239,7 @@ export function SiteFooter() {
               </a>
             ))}
           </div>
-          <div className="text-xs text-gray-500">
+          <div className="text-xs text-gray-400">
             {SATA_ROBO_CONTACT.companyName} · MST: {SATA_ROBO_CONTACT.taxCode}
           </div>
         </div>
@@ -247,7 +247,7 @@ export function SiteFooter() {
 
       {/* Copyright bar */}
       <div className="border-t border-gray-800 bg-zinc-900">
-        <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-2 px-4 py-4 text-xs text-gray-500 sm:flex-row sm:px-6 lg:px-8">
+        <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-2 px-4 py-4 text-xs text-gray-400 sm:flex-row sm:px-6 lg:px-8">
           <p>
             © {new Date().getFullYear()} {SATA_ROBO_CONTACT.shortName}. Bảo lưu
             mọi quyền.

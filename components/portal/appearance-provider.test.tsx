@@ -2,7 +2,10 @@
 // wrapper `.portal-v2` (không rò ra <html> → admin/public không bị ảnh hưởng).
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
-import { PortalAppearanceProvider, usePortalAppearance } from "@/components/portal/appearance-provider";
+import {
+  PortalAppearanceProvider,
+  usePortalAppearance,
+} from "@/components/portal/appearance-provider";
 import { GiaoDienPage } from "@/components/portal/giao-dien-page";
 import { ROLE_DEFAULT_ACCENT } from "@/lib/portal/appearance";
 
@@ -43,7 +46,9 @@ function Probe() {
       <span data-testid="theme">{a.theme}</span>
       <span data-testid="dirty">{String(a.dirty)}</span>
       <button onClick={() => a.setTheme("dark")}>set-dark</button>
-      <button onClick={() => a.setAccent("parent", "#123456")}>set-accent</button>
+      <button onClick={() => a.setAccent("parent", "#123456")}>
+        set-accent
+      </button>
       <button onClick={() => a.saveAccents()}>save</button>
       <button onClick={() => a.discardAccents()}>discard</button>
     </div>
@@ -66,7 +71,9 @@ describe("PortalAppearanceProvider", () => {
     expect(wrapper.classList.contains("portal-v2")).toBe(true);
     expect(wrapper.classList.contains("dark")).toBe(false);
     expect(wrapper.dataset.mode).toBe("parent");
-    expect(wrapper.style.getPropertyValue("--primary")).toBe(ROLE_DEFAULT_ACCENT.parent);
+    expect(wrapper.style.getPropertyValue("--primary")).toBe(
+      ROLE_DEFAULT_ACCENT.parent,
+    );
   });
 
   it("đổi sang Tối: class `dark` lên wrapper (KHÔNG lên <html>) và lưu ngay", () => {
@@ -102,15 +109,21 @@ describe("PortalAppearanceProvider", () => {
     fireEvent.click(screen.getByText("set-accent"));
     fireEvent.click(screen.getByText("discard"));
 
-    expect(wrapper.style.getPropertyValue("--primary")).toBe(ROLE_DEFAULT_ACCENT.parent);
+    expect(wrapper.style.getPropertyValue("--primary")).toBe(
+      ROLE_DEFAULT_ACCENT.parent,
+    );
     expect(screen.getByTestId("dirty").textContent).toBe("false");
   });
 
   it("role=student: data-mode, màu cam, và mực TỐI (cam là màu sáng)", () => {
     const { wrapper } = renderProvider("student");
     expect(wrapper.dataset.mode).toBe("student");
-    expect(wrapper.style.getPropertyValue("--primary")).toBe(ROLE_DEFAULT_ACCENT.student);
-    expect(wrapper.style.getPropertyValue("--primary-foreground")).toBe("#241A2E");
+    expect(wrapper.style.getPropertyValue("--primary")).toBe(
+      ROLE_DEFAULT_ACCENT.student,
+    );
+    expect(wrapper.style.getPropertyValue("--primary-foreground")).toBe(
+      "#241A2E",
+    );
   });
 
   it("nhận lại chế độ Tối đã lưu ở shell v2 cũ (key `portal-theme`)", () => {
@@ -123,7 +136,9 @@ describe("PortalAppearanceProvider", () => {
   it("màu nhấn tương phản: nền tối → chữ trắng, nền sáng → mực tối", () => {
     const { wrapper } = renderProvider();
     fireEvent.click(screen.getByText("set-accent")); // #123456 — tối
-    expect(wrapper.style.getPropertyValue("--primary-foreground")).toBe("#FFFFFF");
+    expect(wrapper.style.getPropertyValue("--primary-foreground")).toBe(
+      "#FFFFFF",
+    );
   });
 });
 
@@ -176,7 +191,9 @@ describe("Trang /portal/giao-dien", () => {
     const hex = screen.getByLabelText("Mã màu HEX");
 
     fireEvent.change(hex, { target: { value: "ff0" } });
-    expect(wrapper.style.getPropertyValue("--primary")).toBe(ROLE_DEFAULT_ACCENT.parent);
+    expect(wrapper.style.getPropertyValue("--primary")).toBe(
+      ROLE_DEFAULT_ACCENT.parent,
+    );
 
     fireEvent.change(hex, { target: { value: "ff0000" } });
     expect(wrapper.style.getPropertyValue("--primary")).toBe("#FF0000");

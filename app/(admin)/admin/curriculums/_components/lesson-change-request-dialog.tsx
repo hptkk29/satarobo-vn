@@ -50,22 +50,22 @@ export function LessonChangeRequestDialog({
           onClick={() => !pending && setIsOpen(false)}
         >
           <div
-            className="relative w-full max-w-lg rounded-xl bg-white p-6 shadow-xl"
+            className="relative w-full max-w-lg rounded-xl bg-card p-6 shadow-xl"
             onClick={(e) => e.stopPropagation()}
           >
             <button
               type="button"
               onClick={() => !pending && setIsOpen(false)}
               aria-label="Đóng"
-              className="absolute right-3 top-3 rounded-md p-1 text-neutral-500 hover:bg-neutral-100"
+              className="absolute right-3 top-3 rounded-md p-1 text-muted-foreground hover:bg-muted"
             >
               <X className="h-4 w-4" />
             </button>
-            <h3 className="text-lg font-bold text-neutral-900">Đề xuất chỉnh sửa</h3>
-            <p className="mt-1 text-sm text-neutral-500">{lessonTitle}</p>
+            <h3 className="text-lg font-bold text-foreground">Đề xuất chỉnh sửa</h3>
+            <p className="mt-1 text-sm text-muted-foreground">{lessonTitle}</p>
 
             {error && (
-              <div className="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+              <div className="mt-3 rounded-lg border border-state-danger-soft bg-state-danger-soft px-3 py-2 text-sm text-state-danger-ink">
                 {error}
               </div>
             )}
@@ -78,21 +78,21 @@ export function LessonChangeRequestDialog({
                 rows={5}
                 required
                 disabled={pending}
-                className="w-full resize-y rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm outline-none focus:border-[#7C3AED] focus:ring-2 focus:ring-[#7C3AED]/20"
+                className="w-full resize-y rounded-lg border border-border bg-card px-3 py-2 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
               />
               <div className="flex justify-end gap-2">
                 <button
                   type="button"
                   onClick={() => setIsOpen(false)}
                   disabled={pending}
-                  className="rounded-lg border border-neutral-300 px-4 py-2 text-sm font-semibold text-neutral-700 hover:bg-neutral-50 disabled:opacity-50"
+                  className="rounded-lg border border-border px-4 py-2 text-sm font-semibold text-foreground hover:bg-muted disabled:opacity-50"
                 >
                   Huỷ
                 </button>
                 <button
                   type="submit"
                   disabled={pending}
-                  className="rounded-lg bg-[#7C3AED] px-4 py-2 text-sm font-bold text-white hover:opacity-90 disabled:opacity-50"
+                  className="rounded-lg bg-primary px-4 py-2 text-sm font-bold text-white hover:opacity-90 disabled:opacity-50"
                 >
                   {pending ? "Đang gửi..." : "Gửi đề xuất"}
                 </button>

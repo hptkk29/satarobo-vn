@@ -2,7 +2,8 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import { ArrowRightLeft, ChevronLeft, ClipboardList, History } from "lucide-react";
 import { auth } from "@/lib/auth";
-import { checkPermission } from "@/lib/auth/check-permission";
+import { checkPermission, checkPermissionDetail } from "@/lib/auth/check-permission";
+import { maskPhone } from "@/lib/utils";
 import { scopedDb, getModelVisibleCenterIds } from "@/lib/db-scope";
 import { resolveActor } from "@/lib/auth/actor";
 import { ChangeStatusDialog } from "../../_components/change-status-dialog";
@@ -20,15 +21,15 @@ const TERMINAL_STATUSES = new Set([
 const CAPACITY_COUNT_STATUSES = ["PENDING", "CONFIRMED", "STUDYING", "ACTIVE"];
 
 const STATUS_INFO: Record<string, { label: string; color: string }> = {
-  PENDING: { label: "Chờ xếp", color: "bg-gray-100 text-gray-700" },
-  CONFIRMED: { label: "Đã xếp", color: "bg-amber-100 text-amber-700" },
-  STUDYING: { label: "Đang học", color: "bg-green-100 text-green-700" },
-  PAUSED: { label: "Bảo lưu", color: "bg-yellow-100 text-yellow-700" },
-  COMPLETED: { label: "Hoàn thành", color: "bg-blue-100 text-blue-700" },
-  WITHDREW: { label: "Đã rút", color: "bg-red-100 text-red-700" },
-  TRANSFERRED: { label: "Đã chuyển", color: "bg-purple-100 text-purple-700" },
-  ACTIVE: { label: "Đang học (legacy)", color: "bg-green-100 text-green-700" },
-  CANCELLED: { label: "Đã huỷ", color: "bg-red-100 text-red-700" },
+  PENDING: { label: "Chờ xếp", color: "bg-muted text-foreground" },
+  CONFIRMED: { label: "Đã xếp", color: "bg-state-warning-soft text-state-warning-ink" },
+  STUDYING: { label: "Đang học", color: "bg-state-success-soft text-state-success-ink" },
+  PAUSED: { label: "Bảo lưu", color: "bg-state-warning-soft text-state-warning-ink" },
+  COMPLETED: { label: "Hoàn thành", color: "bg-state-info-soft text-state-info-ink" },
+  WITHDREW: { label: "Đã rút", color: "bg-state-danger-soft text-state-danger-ink" },
+  TRANSFERRED: { label: "Đã chuyển", color: "bg-primary-soft text-primary" },
+  ACTIVE: { label: "Đang học (legacy)", color: "bg-state-success-soft text-state-success-ink" },
+  CANCELLED: { label: "Đã huỷ", color: "bg-state-danger-soft text-state-danger-ink" },
 };
 
 function fmtDateTime(d: Date | null) {
@@ -60,6 +61,10 @@ export default async function EditEnrollmentPage({ params }: Props) {
 
   const { id } = await params;
   const canViewAudit = await checkPermission("audit-logs:view");
+  // US-03 (TS-02): DENY cấp trường từ grant nhóm — che parentPhone ở card học viên
+  // (đồng nhất với trang /students và list /enrollments).
+  const { fieldMask } = await checkPermissionDetail("students:view-all");
+  const phoneMasked = fieldMask.includes("parentPhone");
 
   // Cách ly cơ sở: Enrollment NAY ∈ SCOPED_MODELS (FL3-02) → sdb.findUnique tự
   // IDOR-filter theo centerId denormalized; check thủ công qua class.centerId
@@ -128,7 +133,7 @@ export default async function EditEnrollmentPage({ params }: Props) {
   const statusInfo =
     STATUS_INFO[enrollment.status] ?? {
       label: enrollment.status,
-      color: "bg-gray-100 text-gray-500",
+      color: "bg-muted text-muted-foreground",
     };
 
   const [targetClasses, auditLogs] = await Promise.all([
@@ -187,13 +192,13 @@ export default async function EditEnrollmentPage({ params }: Props) {
       <div>
         <Link
           href="/enrollments"
-          className="mb-3 inline-flex items-center gap-1 text-sm text-neutral-500 hover:text-neutral-700"
+          className="mb-3 inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
         >
           <ChevronLeft className="h-4 w-4" /> Quay lại danh sách
         </Link>
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <h1 className="flex items-center gap-2 text-2xl font-bold text-neutral-900">
-            <ClipboardList className="h-6 w-6 text-[#7C3AED]" />
+          <h1 className="flex items-center gap-2 text-2xl font-bold text-foreground">
+            <ClipboardList className="h-6 w-6 text-primary" />
             Đăng ký: {enrollment.student.name}
           </h1>
           <span
@@ -206,8 +211,8 @@ export default async function EditEnrollmentPage({ params }: Props) {
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
         {/* Student card */}
-        <section className="rounded-xl border border-neutral-200 bg-white p-5">
-          <h2 className="mb-3 text-xs font-bold uppercase tracking-wider text-neutral-500">
+        <section className="rounded-xl border border-border bg-card p-5">
+          <h2 className="mb-3 text-xs font-bold uppercase tracking-wider text-muted-foreground">
             Học viên
           </h2>
           <div className="flex items-start gap-3">
@@ -215,32 +220,36 @@ export default async function EditEnrollmentPage({ params }: Props) {
               <img
                 src={enrollment.student.avatarUrl}
                 alt={enrollment.student.name}
-                className="h-14 w-14 rounded-full border border-neutral-200 object-cover"
+                className="h-14 w-14 rounded-full border border-border object-cover"
               />
             ) : (
-              <div className="flex h-14 w-14 items-center justify-center rounded-full bg-neutral-100 text-lg font-bold text-neutral-500">
+              <div className="flex h-14 w-14 items-center justify-center rounded-full bg-muted text-lg font-bold text-muted-foreground">
                 {enrollment.student.name.charAt(0).toUpperCase()}
               </div>
             )}
             <div className="flex-1">
-              <div className="text-lg font-bold text-neutral-900">
+              <div className="text-lg font-bold text-foreground">
                 {enrollment.student.name}
               </div>
               {enrollment.student.studentCode && (
-                <div className="text-xs text-neutral-400 tabular-nums">
+                <div className="text-xs text-muted-foreground tabular-nums">
                   {enrollment.student.studentCode}
                 </div>
               )}
               {enrollment.student.parentName && (
-                <div className="mt-1 text-sm text-neutral-700">
+                <div className="mt-1 text-sm text-foreground">
                   PH: {enrollment.student.parentName}
                   {enrollment.student.parentPhone &&
-                    ` · ${enrollment.student.parentPhone}`}
+                    ` · ${
+                      phoneMasked
+                        ? maskPhone(enrollment.student.parentPhone)
+                        : enrollment.student.parentPhone
+                    }`}
                 </div>
               )}
               <Link
                 href={`/students/${enrollment.student.id}/edit`}
-                className="mt-2 inline-block text-xs font-semibold text-[#7C3AED] hover:underline"
+                className="mt-2 inline-block text-xs font-semibold text-primary hover:underline"
               >
                 Mở hồ sơ học viên →
               </Link>
@@ -249,44 +258,44 @@ export default async function EditEnrollmentPage({ params }: Props) {
         </section>
 
         {/* Class card */}
-        <section className="rounded-xl border border-neutral-200 bg-white p-5">
-          <h2 className="mb-3 text-xs font-bold uppercase tracking-wider text-neutral-500">
+        <section className="rounded-xl border border-border bg-card p-5">
+          <h2 className="mb-3 text-xs font-bold uppercase tracking-wider text-muted-foreground">
             Lớp học
           </h2>
-          <div className="text-lg font-bold text-neutral-900">
+          <div className="text-lg font-bold text-foreground">
             {enrollment.class.name}
           </div>
           {enrollment.class.classCode && (
-            <div className="text-xs text-neutral-400 tabular-nums">
+            <div className="text-xs text-muted-foreground tabular-nums">
               {enrollment.class.classCode}
             </div>
           )}
           <dl className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 text-sm">
-            <dt className="text-neutral-500">Khoá</dt>
-            <dd className="text-neutral-900">{enrollment.class.course.name}</dd>
-            <dt className="text-neutral-500">Cơ sở</dt>
-            <dd className="text-neutral-900">
+            <dt className="text-muted-foreground">Khoá</dt>
+            <dd className="text-foreground">{enrollment.class.course.name}</dd>
+            <dt className="text-muted-foreground">Cơ sở</dt>
+            <dd className="text-foreground">
               {enrollment.class.center?.name ?? "—"}
               {enrollment.class.room?.code &&
                 ` · P. ${enrollment.class.room.code}`}
             </dd>
-            <dt className="text-neutral-500">GV chính</dt>
-            <dd className="text-neutral-900">
+            <dt className="text-muted-foreground">GV chính</dt>
+            <dd className="text-foreground">
               {enrollment.class.teacher?.name ?? "—"}
             </dd>
-            <dt className="text-neutral-500">Lịch</dt>
-            <dd className="text-neutral-900">
+            <dt className="text-muted-foreground">Lịch</dt>
+            <dd className="text-foreground">
               {scheduleDaysText}
               {enrollment.class.startTime && enrollment.class.endTime
                 ? ` · ${enrollment.class.startTime}–${enrollment.class.endTime}`
                 : ""}
             </dd>
-            <dt className="text-neutral-500">Khai giảng</dt>
-            <dd className="text-neutral-900">{fmtDate(enrollment.class.startDate)}</dd>
+            <dt className="text-muted-foreground">Khai giảng</dt>
+            <dd className="text-foreground">{fmtDate(enrollment.class.startDate)}</dd>
           </dl>
           <Link
             href={`/classes/${enrollment.class.id}/edit`}
-            className="mt-3 inline-block text-xs font-semibold text-[#7C3AED] hover:underline"
+            className="mt-3 inline-block text-xs font-semibold text-primary hover:underline"
           >
             Mở chi tiết lớp →
           </Link>
@@ -294,40 +303,40 @@ export default async function EditEnrollmentPage({ params }: Props) {
       </div>
 
       {/* Timeline */}
-      <section className="rounded-xl border border-neutral-200 bg-white p-5">
-        <h2 className="mb-3 text-xs font-bold uppercase tracking-wider text-neutral-500">
+      <section className="rounded-xl border border-border bg-card p-5">
+        <h2 className="mb-3 text-xs font-bold uppercase tracking-wider text-muted-foreground">
           Mốc thời gian
         </h2>
         <dl className="grid grid-cols-1 gap-x-6 gap-y-2 sm:grid-cols-2 text-sm">
-          <dt className="text-neutral-500">Ngày đăng ký</dt>
-          <dd className="text-neutral-900 tabular-nums">
+          <dt className="text-muted-foreground">Ngày đăng ký</dt>
+          <dd className="text-foreground tabular-nums">
             {fmtDateTime(enrollment.enrolledAt)}
           </dd>
-          <dt className="text-neutral-500">Xác nhận xếp lớp</dt>
-          <dd className="text-neutral-900 tabular-nums">
+          <dt className="text-muted-foreground">Xác nhận xếp lớp</dt>
+          <dd className="text-foreground tabular-nums">
             {fmtDateTime(enrollment.confirmedAt)}
           </dd>
-          <dt className="text-neutral-500">Bắt đầu học</dt>
-          <dd className="text-neutral-900 tabular-nums">
+          <dt className="text-muted-foreground">Bắt đầu học</dt>
+          <dd className="text-foreground tabular-nums">
             {fmtDateTime(enrollment.startedAt)}
           </dd>
-          <dt className="text-neutral-500">Kết thúc</dt>
-          <dd className="text-neutral-900 tabular-nums">
+          <dt className="text-muted-foreground">Kết thúc</dt>
+          <dd className="text-foreground tabular-nums">
             {fmtDateTime(enrollment.endedAt)}
           </dd>
         </dl>
         {enrollment.transferReason && (
-          <div className="mt-3 rounded-lg border border-purple-200 bg-purple-50 p-3 text-sm">
-            <div className="flex items-center gap-1 font-semibold text-purple-800">
+          <div className="mt-3 rounded-lg border border-primary-soft bg-primary-soft p-3 text-sm">
+            <div className="flex items-center gap-1 font-semibold text-primary">
               <ArrowRightLeft className="h-4 w-4" /> Đã chuyển lớp
             </div>
-            <div className="mt-1 text-purple-700">
+            <div className="mt-1 text-primary">
               Lý do: {enrollment.transferReason}
             </div>
             {enrollment.transferredToId && (
               <Link
                 href={`/enrollments/${enrollment.transferredToId}/edit`}
-                className="mt-1 inline-block text-xs font-semibold text-purple-800 hover:underline"
+                className="mt-1 inline-block text-xs font-semibold text-primary hover:underline"
               >
                 Mở enrollment mới →
               </Link>
@@ -335,8 +344,8 @@ export default async function EditEnrollmentPage({ params }: Props) {
           </div>
         )}
         {enrollment.notes && (
-          <div className="mt-3 rounded-lg border border-neutral-200 bg-neutral-50 p-3 text-sm text-neutral-700">
-            <strong className="text-neutral-900">Ghi chú:</strong> {enrollment.notes}
+          <div className="mt-3 rounded-lg border border-border bg-muted p-3 text-sm text-foreground">
+            <strong className="text-foreground">Ghi chú:</strong> {enrollment.notes}
           </div>
         )}
       </section>
@@ -365,7 +374,7 @@ export default async function EditEnrollmentPage({ params }: Props) {
           />
         </section>
       ) : (
-        <section className="rounded-lg border border-neutral-200 bg-neutral-50 p-4 text-sm text-neutral-600">
+        <section className="rounded-lg border border-border bg-muted p-4 text-sm text-muted-foreground">
           Enrollment đã ở trạng thái cuối ({statusInfo.label}) — không thể đổi
           trạng thái hoặc chuyển lớp.
         </section>
@@ -373,15 +382,15 @@ export default async function EditEnrollmentPage({ params }: Props) {
 
       {/* Audit log */}
       {canViewAudit && (
-        <section className="rounded-xl border border-neutral-200 bg-white p-5">
-          <h2 className="mb-3 flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-neutral-500">
+        <section className="rounded-xl border border-border bg-card p-5">
+          <h2 className="mb-3 flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-muted-foreground">
             <History className="h-4 w-4" />
             Audit log ({auditLogs.length})
           </h2>
           {auditLogs.length === 0 ? (
-            <p className="text-sm text-neutral-400">Chưa có thay đổi nào được log.</p>
+            <p className="text-sm text-muted-foreground">Chưa có thay đổi nào được log.</p>
           ) : (
-            <ul className="divide-y divide-neutral-100">
+            <ul className="divide-y divide-border">
               {auditLogs.map((log) => {
                 const fromLabel =
                   STATUS_INFO[log.fromStatus]?.label ?? log.fromStatus;
@@ -391,29 +400,29 @@ export default async function EditEnrollmentPage({ params }: Props) {
                 return (
                   <li key={log.id} className="py-3 text-sm">
                     <div className="flex flex-wrap items-baseline gap-2">
-                      <span className="font-semibold text-neutral-900">
+                      <span className="font-semibold text-foreground">
                         {fromLabel} → {toLabel}
                       </span>
-                      <span className="text-xs text-neutral-400 tabular-nums">
+                      <span className="text-xs text-muted-foreground tabular-nums">
                         {fmtDateTime(log.createdAt)}
                       </span>
                     </div>
-                    <div className="mt-0.5 text-xs text-neutral-500">
+                    <div className="mt-0.5 text-xs text-muted-foreground">
                       bởi <strong>{log.changedByName}</strong>
                     </div>
                     {log.reason && (
-                      <div className="mt-1 text-sm text-neutral-700">
+                      <div className="mt-1 text-sm text-foreground">
                         “{log.reason}”
                       </div>
                     )}
                     {extra && typeof extra === "object" && (
-                      <div className="mt-1 text-xs text-neutral-500">
+                      <div className="mt-1 text-xs text-muted-foreground">
                         {typeof extra.transferredToId === "string" && (
                           <>
                             → Enrollment đích:{" "}
                             <Link
                               href={`/enrollments/${extra.transferredToId}/edit`}
-                              className="font-mono text-[#7C3AED] hover:underline"
+                              className="font-mono text-primary hover:underline"
                             >
                               {String(extra.transferredToId).slice(0, 12)}…
                             </Link>
@@ -424,7 +433,7 @@ export default async function EditEnrollmentPage({ params }: Props) {
                             ← Enrollment gốc:{" "}
                             <Link
                               href={`/enrollments/${extra.transferredFromId}/edit`}
-                              className="font-mono text-[#7C3AED] hover:underline"
+                              className="font-mono text-primary hover:underline"
                             >
                               {String(extra.transferredFromId).slice(0, 12)}…
                             </Link>

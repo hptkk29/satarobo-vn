@@ -7,6 +7,7 @@ import { checkPermission } from "@/lib/auth/check-permission";
 import { resolveActor } from "@/lib/auth/actor";
 import { scopedDb } from "@/lib/db-scope";
 import { OPEN_FIELDS, CLOSE_FIELDS, type ChecklistKey } from "@/lib/center-checklist";
+import { PhanTrangBang } from "@/components/ui/phan-trang-bang";
 
 export const metadata = { title: "Tổng quan checklist cơ sở | Admin" };
 export const dynamic = "force-dynamic";
@@ -83,63 +84,65 @@ export default async function ChecklistOverviewPage() {
 
   return (
     <div className="p-6">
-      <Link href="/cham-cong/checklist-co-so" className="mb-3 inline-flex items-center gap-1 text-sm text-gray-500 hover:text-gray-700">
+      <Link href="/cham-cong/checklist-co-so" className="mb-3 inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
         <ChevronLeft className="h-4 w-4" /> Nhập checklist
       </Link>
       <div className="mb-4 flex flex-wrap items-end justify-between gap-2">
-        <h1 className="flex items-center gap-2 text-2xl font-bold text-gray-900">
-          <ClipboardCheck className="h-6 w-6 text-[#7C3AED]" /> Tổng quan checklist cơ sở
+        <h1 className="flex items-center gap-2 text-2xl font-bold text-foreground">
+          <ClipboardCheck className="h-6 w-6 text-primary" /> Tổng quan checklist cơ sở
         </h1>
-        <div className="rounded-xl border border-gray-200 bg-white px-4 py-2 text-center">
-          <p className="text-2xl font-bold text-[#7C3AED]">{pct}%</p>
-          <p className="text-xs text-gray-400">{fullCells}/{totalCells} ngày-cơ sở đủ mở+đóng · {DAYS} ngày</p>
+        <div className="rounded-xl border border-border bg-card px-4 py-2 text-center">
+          <p className="text-2xl font-bold text-primary">{pct}%</p>
+          <p className="text-xs text-muted-foreground">{fullCells}/{totalCells} ngày-cơ sở đủ mở+đóng · {DAYS} ngày</p>
         </div>
       </div>
 
-      <p className="mb-3 text-xs text-gray-500">
-        Ô: <span className="font-semibold text-emerald-600">●</span> đủ mở+đóng ·
-        <span className="font-semibold text-amber-600"> ◐</span> thiếu 1 trong 2 ·
-        <span className="font-semibold text-rose-500"> ○</span> chưa làm. Di chuột để xem ngày.
+      <p className="mb-3 text-xs text-muted-foreground">
+        Ô: <span className="font-semibold text-state-success-ink">●</span> đủ mở+đóng ·
+        <span className="font-semibold text-state-warning-ink"> ◐</span> thiếu 1 trong 2 ·
+        <span className="font-semibold text-state-danger-ink"> ○</span> chưa làm. Di chuột để xem ngày.
       </p>
 
-      <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white">
-        <table className="min-w-full text-sm">
-          <thead className="bg-gray-50 text-left text-xs text-gray-500">
-            <tr>
-              <th className="px-3 py-2">Cơ sở</th>
-              {dates.map((d) => (
-                <th key={ymd(d)} className="px-2 py-2 text-center">
-                  {String(d.getDate()).padStart(2, "0")}/{String(d.getMonth() + 1).padStart(2, "0")}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {centers.map((c) => (
-              <tr key={c.id} className="border-t">
-                <td className="px-3 py-2 font-medium text-gray-800">{c.name}</td>
-                {dates.map((d) => {
-                  const st = status(byKey.get(`${c.id}|${ymd(d)}`));
-                  const full = st.open && st.close;
-                  const partial = st.open || st.close;
-                  const sym = full ? "●" : partial ? "◐" : "○";
-                  const cls = full ? "text-emerald-600" : partial ? "text-amber-600" : "text-rose-400";
-                  const title = `${c.name} ${ymd(d)} — mở: ${st.open ? "đủ" : "thiếu"}, đóng: ${st.close ? "đủ" : "thiếu"}`;
-                  return (
-                    <td key={ymd(d)} className={`px-2 py-2 text-center text-lg ${cls}`} title={title}>
-                      {sym}
-                    </td>
-                  );
-                })}
-              </tr>
-            ))}
-            {centers.length === 0 && (
+      <div className="overflow-x-auto rounded-xl border border-border bg-card">
+        <PhanTrangBang>
+          <table className="min-w-full text-sm">
+            <thead className="bg-muted text-left text-xs text-muted-foreground">
               <tr>
-                <td colSpan={DAYS + 1} className="px-3 py-8 text-center text-gray-400">Không có cơ sở.</td>
+                <th className="px-3 py-2">Cơ sở</th>
+                {dates.map((d) => (
+                  <th key={ymd(d)} className="px-2 py-2 text-center">
+                    {String(d.getDate()).padStart(2, "0")}/{String(d.getMonth() + 1).padStart(2, "0")}
+                  </th>
+                ))}
               </tr>
-            )}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {centers.map((c) => (
+                <tr key={c.id} className="border-t">
+                  <td className="px-3 py-2 font-medium text-foreground">{c.name}</td>
+                  {dates.map((d) => {
+                    const st = status(byKey.get(`${c.id}|${ymd(d)}`));
+                    const full = st.open && st.close;
+                    const partial = st.open || st.close;
+                    const sym = full ? "●" : partial ? "◐" : "○";
+                    const cls = full ? "text-state-success-ink" : partial ? "text-state-warning-ink" : "text-state-danger-ink";
+                    const title = `${c.name} ${ymd(d)} — mở: ${st.open ? "đủ" : "thiếu"}, đóng: ${st.close ? "đủ" : "thiếu"}`;
+                    return (
+                      <td key={ymd(d)} className={`px-2 py-2 text-center text-lg ${cls}`} title={title}>
+                        {sym}
+                      </td>
+                    );
+                  })}
+                </tr>
+              ))}
+              {centers.length === 0 && (
+                <tr>
+                  <td colSpan={DAYS + 1} className="px-3 py-8 text-center text-muted-foreground">Không có cơ sở.</td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </PhanTrangBang>
       </div>
     </div>
   );

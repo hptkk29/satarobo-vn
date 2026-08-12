@@ -6,7 +6,10 @@ import { getStudentHomeworkDetail } from "@/lib/portal/learning";
 import { StartExamButton } from "../../../bai-thi/_components/start-exam-button";
 
 export const dynamic = "force-dynamic";
-export const metadata = { title: "Làm bài | Sata Robo", robots: { index: false } };
+export const metadata = {
+  title: "Làm bài | Sata Robo",
+  robots: { index: false },
+};
 
 interface Props {
   params: Promise<{ homeworkId: string }>;
@@ -32,12 +35,14 @@ export default async function LamBaiPage({ params }: Props) {
 
       <div>
         <h1 className="text-xl font-bold text-neutral-900">{hw.examTitle}</h1>
-        <p className="mt-1 flex flex-wrap items-center gap-3 text-xs text-neutral-500">
+        <p className="mt-1 flex flex-wrap items-center gap-3 text-xs text-neutral-600">
           <span>{hw.totalPoints} điểm</span>
           <span className="inline-flex items-center gap-1">
             <Clock className="h-3.5 w-3.5" /> {hw.durationMinutes} phút
           </span>
-          {hw.dueAt && <span>Hạn {new Date(hw.dueAt).toLocaleString("vi-VN")}</span>}
+          {hw.dueAt && (
+            <span>Hạn {new Date(hw.dueAt).toLocaleString("vi-VN")}</span>
+          )}
         </p>
       </div>
 
@@ -46,16 +51,25 @@ export default async function LamBaiPage({ params }: Props) {
           /portal/bai-thi/[examId] — cùng luồng với danh sách "Bài kiểm tra". */}
       {hw.questions.length > 0 && (
         <div>
-          <StartExamButton examId={hw.examId} resume={false} label="Vào làm bài" />
+          <StartExamButton
+            examId={hw.examId}
+            resume={false}
+            label="Vào làm bài"
+          />
         </div>
       )}
 
       <ol className="space-y-3">
         {hw.questions.map((q, i) => (
-          <li key={q.id} className="rounded-xl border border-neutral-200 bg-white p-4">
+          <li
+            key={q.id}
+            className="rounded-xl border border-neutral-200 bg-white p-4"
+          >
             <p className="font-medium text-neutral-900">
               Câu {i + 1}. {q.text}{" "}
-              <span className="text-xs font-normal text-neutral-400">({q.points} điểm)</span>
+              <span className="text-xs font-normal text-neutral-500">
+                ({q.points} điểm)
+              </span>
             </p>
             {q.choices.length > 0 && (
               <ul className="mt-2 space-y-1.5">
@@ -73,7 +87,7 @@ export default async function LamBaiPage({ params }: Props) {
         ))}
       </ol>
       {hw.questions.length === 0 && (
-        <p className="rounded-xl border border-dashed border-neutral-300 bg-white p-6 text-center text-sm text-neutral-400">
+        <p className="rounded-xl border border-dashed border-neutral-300 bg-white p-6 text-center text-sm text-neutral-500">
           Bài chưa có câu hỏi.
         </p>
       )}

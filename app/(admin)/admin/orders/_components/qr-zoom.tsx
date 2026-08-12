@@ -44,12 +44,12 @@ export function QrZoom({
         type="button"
         onClick={() => setOpen(true)}
         title="Bấm để phóng to QR"
-        className="group relative block rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-purple-500 focus-visible:ring-offset-2"
+        className="group relative block rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
       >
         <img
           src={src}
           alt={alt}
-          className={`${className} rounded-lg border border-neutral-200 bg-white object-contain transition-opacity ${dimmed ? "opacity-40" : ""} group-hover:opacity-80`}
+          className={`${className} rounded-lg border border-border bg-card object-contain transition-opacity ${dimmed ? "opacity-40" : ""} group-hover:opacity-80`}
         />
         <span className="pointer-events-none absolute bottom-1.5 right-1.5 flex items-center gap-1 rounded bg-neutral-900/75 px-1.5 py-0.5 text-[10px] font-medium text-white">
           <Maximize2 className="h-3 w-3" />
@@ -68,15 +68,15 @@ export function QrZoom({
             <img
               src={src}
               alt={alt}
-              className="h-auto w-full max-w-[min(80vw,26rem)] rounded-lg border border-neutral-200 bg-white object-contain"
+              className="h-auto w-full max-w-[min(80vw,26rem)] rounded-lg border border-border bg-card object-contain"
             />
             {matchKey && (
-              <p className="break-all text-center text-sm text-neutral-600">
+              <p className="break-all text-center text-sm text-muted-foreground">
                 Nội dung CK:{" "}
-                <span className="font-mono font-semibold text-neutral-900">{matchKey}</span>
+                <span className="font-mono font-semibold text-foreground">{matchKey}</span>
               </p>
             )}
-            <p className="text-center text-xs text-neutral-500">
+            <p className="text-center text-xs text-muted-foreground">
               Phụ huynh quét bằng app ngân hàng. Giữ nguyên nội dung chuyển khoản để hệ
               thống tự đối khớp đúng đợt.
             </p>

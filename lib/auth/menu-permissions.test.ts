@@ -19,6 +19,8 @@ import {
 import type { Actor } from "@/lib/auth/actor";
 import { PAGE_GATES } from "@/lib/auth/page-gates";
 import { ROLE_SEED } from "../../prisma/seed-roles";
+import { readFileSync } from "node:fs";
+import { join as joinPath } from "node:path";
 
 const ALL = Object.keys(PERMISSIONS) as Action[];
 
@@ -192,6 +194,73 @@ describe("Menu hỏi 'CÓ GIỮ action không', KHÔNG hỏi 'dùng được nga
     expect(grantedMenuActions({ sessionUser: { role: "TEACHER", roles: ["TEACHER"] }, actor: a, flagOn: true })).toContain("leads:export");
   });
 
+  it("[US-03 · VIẾT TRƯỚC — ĐỎ tới khi menu DENY-aware] grant GROUP DENY toàn-action ⇒ action biến khỏi menu", () => {
+    // Nợ ghi ở permissions.md AS-BUILT US-02: "helper aggregate (menu-permissions…) chưa
+    // biết grant DENY — cập nhật khi grant có dữ liệu thật (US-03)". Đây là test đòi nợ:
+    // actor GIỮ attendance:view qua RolePermission, nhưng nhóm của actor bị DENY toàn-action
+    // (fieldMask rỗng, dataScope ALL) ⇒ cổng trang sẽ chặn (engine lib/permissions/can) ⇒
+    // menu vẫn vẽ lối vào là tái sinh đúng lớp dead-link mà page-gates.ts diệt.
+    const giaoVu = actorOf(
+      [
+        { action: "attendance:view", roleCode: "CENTER_CLASS_MANAGER", scopeType: "CENTER" },
+        { action: "students:view-all", roleCode: "CENTER_CLASS_MANAGER", scopeType: "CENTER" },
+      ],
+      ["CENTER_CLASS_MANAGER"],
+    );
+    const actor: Actor = {
+      ...giaoVu,
+      groupIds: ["group-cam-diem-danh"],
+      permissionGrants: [
+        {
+          subjectType: "GROUP",
+          subjectId: "group-cam-diem-danh",
+          permissionKey: "attendance:view",
+          effect: "DENY",
+          dataScope: "ALL",
+          fieldMask: [],
+        },
+      ],
+    };
+    const g = grantedMenuActions({
+      sessionUser: { role: "SALES_CSM", roles: ["SALES_CSM"] },
+      actor,
+      flagOn: true,
+    });
+    expect(g).not.toContain("attendance:view");
+    // DENY chỉ nhắm 1 action — action khác actor đang giữ KHÔNG bị vạ lây.
+    expect(g).toContain("students:view-all");
+  });
+
+  it("[US-03 · ĐỐI XỨNG] grant GROUP ALLOW dataScope ALL ⇒ action XUẤT HIỆN trong menu (cả 2 nhánh cờ)", () => {
+    // Chiều ngược của ca DENY trên: grant ALLOW target-trần mở CỔNG trang
+    // (decidePermissionWithGrant cắm TRƯỚC đường cũ, bất kể cờ) ⇒ menu chỉ TRỪ mà
+    // không CỘNG là "ẩn oan" — trang mở được nhưng không có lối vào (review 09/08).
+    // Actor KHÔNG giữ students:view-all qua RolePermission, v1 TEACHER cũng không có.
+    const base = actorOf([], ["TEACHER"]);
+    const actor: Actor = {
+      ...base,
+      groupIds: ["group-mo-xem-hv"],
+      permissionGrants: [
+        {
+          subjectType: "GROUP",
+          subjectId: "group-mo-xem-hv",
+          permissionKey: "students:view-all",
+          effect: "ALLOW",
+          dataScope: "ALL",
+          fieldMask: [],
+        },
+      ],
+    };
+    const user = { role: "TEACHER", roles: ["TEACHER"] };
+    expect(can(user, "students:view-all" as Action)).toBe(false); // tiền đề: v1 không cho
+    for (const flagOn of [true, false]) {
+      const g = grantedMenuActions({ sessionUser: user, actor, flagOn });
+      expect(g, `flagOn=${flagOn}`).toContain("students:view-all");
+      // ALLOW chỉ nhắm 1 action — không nới menu thành "thấy hết".
+      expect(g, `flagOn=${flagOn}`).not.toContain("payments:manage");
+    }
+  });
+
   it("action gác trang TRẦN (PAGE_GATES) buộc GLOBAL ⇒ menu ≡ cổng cho nhóm đó", () => {
     // rbac-scope.test.ts đã ép mọi action trong PAGE_GATES phải GLOBAL trên mọi role.
     // Nhờ vậy "có giữ action" và "dùng được ngay" trùng nhau đúng ở những route đó.
@@ -203,5 +272,70 @@ describe("Menu hỏi 'CÓ GIỮ action không', KHÔNG hỏi 'dùng được nga
         }
       }
     }
+  });
+});
+
+/**
+ * NHÓM "HỆ THỐNG & CẤU HÌNH" CHỈ SUPER_ADMIN THẤY (chốt chủ dự án 11/08/2026).
+ *
+ * Vì sao phải khoá bằng test chứ không bằng một dòng comment: cái sai vừa vá KHÔNG phải
+ * lỗi logic, mà là chọn nhầm action làm cổng — "Cây tổ chức" gác bằng `centers:view`,
+ * action mà 7 RoleDef giữ vì nó là chìa khoá cho bộ lọc cơ sở ở khắp nơi. Chỉ cần một
+ * mục mới mượn nhầm một action rộng như thế là cả nhóm hiện ra cho vai khác — mà nhóm
+ * rỗng thì tự ẩn, nên không ai nhận ra cho tới khi mở tài khoản vai đó ra xem.
+ *
+ * Quét TĨNH sidebar.tsx nên mục thêm sau này cũng bị soi.
+ */
+describe("Sidebar — nhóm Hệ thống & Cấu hình chỉ SUPER_ADMIN", () => {
+  const SIDEBAR_SRC = readFileSync(
+    joinPath(process.cwd(), "components/admin/sidebar.tsx"),
+    "utf8",
+  );
+
+  /** Các action làm cổng cho mọi mục trong nhóm (giải cả dạng `...PAGE_GATES["/x"]`). */
+  function actionsCuaNhomHeThong(): { label: string; actions: string[] }[] {
+    const i = SIDEBAR_SRC.indexOf('label: "Hệ thống & Cấu hình"');
+    expect(i, "không tìm thấy nhóm Hệ thống & Cấu hình trong sidebar").toBeGreaterThan(-1);
+    const doan = SIDEBAR_SRC.slice(i, SIDEBAR_SRC.indexOf("\n  },", i));
+    const out: { label: string; actions: string[] }[] = [];
+    for (const m of doan.matchAll(/label:\s*"([^"]+)",\s*href:[^}]*?perm:\s*\[([^\]]*)\]/g)) {
+      const raw = m[2];
+      const actions: string[] = [];
+      for (const g of raw.matchAll(/PAGE_GATES\[\s*"([^"]+)"\s*\]/g)) {
+        actions.push(...(PAGE_GATES[g[1] as keyof typeof PAGE_GATES] ?? []));
+      }
+      for (const q of raw.matchAll(/"([a-z0-9-]+:[a-z-]+)"/g)) actions.push(q[1]);
+      out.push({ label: m[1], actions });
+    }
+    expect(out.length, "không đọc được mục nào — regex sidebar đã lệch").toBeGreaterThan(3);
+    return out;
+  }
+
+  it("mọi mục đều gác bằng action mà KHÔNG RoleDef nào (v2) giữ", () => {
+    const viPham: string[] = [];
+    for (const { label, actions } of actionsCuaNhomHeThong()) {
+      for (const a of actions) {
+        const giu = ROLE_SEED.filter(
+          (r) => r.code !== "SUPER_ADMIN" && r.perms.some((p) => p.action === a),
+        ).map((r) => r.code);
+        if (giu.length > 0) viPham.push(`${label} · ${a} → ${giu.join(", ")}`);
+      }
+    }
+    expect(
+      viPham,
+      `Mục trong nhóm hệ thống gác bằng action vai khác cũng giữ (vai đó sẽ THẤY nhóm này):\n  - ${viPham.join("\n  - ")}\n`,
+    ).toEqual([]);
+  });
+
+  it("và cũng chỉ SUPER_ADMIN có ở ma trận v1 (local/dev chạy v1 — đừng để lệch prod)", () => {
+    const viPham: string[] = [];
+    for (const { label, actions } of actionsCuaNhomHeThong()) {
+      for (const a of actions) {
+        const giu = (PERMISSIONS[a as Action] as readonly string[] | undefined) ?? [];
+        const khac = giu.filter((r) => r !== "SUPER_ADMIN");
+        if (khac.length > 0) viPham.push(`${label} · ${a} → ${khac.join(", ")}`);
+      }
+    }
+    expect(viPham, `v1 còn vai khác giữ:\n  - ${viPham.join("\n  - ")}\n`).toEqual([]);
   });
 });

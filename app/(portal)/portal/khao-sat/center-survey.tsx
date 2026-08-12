@@ -28,7 +28,10 @@ export function CenterSurveyForm({
 
   function submit() {
     startTransition(async () => {
-      const res = await submitCenterSurvey({ roundId, answers: toSubmitAnswers(questions, state) });
+      const res = await submitCenterSurvey({
+        roundId,
+        answers: toSubmitAnswers(questions, state),
+      });
       if (res.ok) {
         toast.success("Cảm ơn quý phụ huynh đã tham gia khảo sát!");
         setDone(true);
@@ -62,7 +65,7 @@ export function CenterSurveyForm({
         type="button"
         onClick={submit}
         disabled={pending}
-        className="mt-4 rounded-lg bg-orange-500 px-4 py-2 text-sm font-semibold text-white hover:bg-orange-600 disabled:opacity-60"
+        className="mt-4 rounded-lg bg-orange-700 px-4 py-2 text-sm font-semibold text-white hover:bg-orange-800 disabled:opacity-60"
       >
         {pending ? "Đang gửi…" : "Gửi khảo sát"}
       </button>

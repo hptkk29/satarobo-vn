@@ -42,14 +42,21 @@ export async function submitWorkRequest(input: unknown): Promise<Result> {
   if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
   const parsed = submitSchema.safeParse(input);
   if (!parsed.success) {
-    return { ok: false, error: parsed.error.issues[0]?.message ?? "Dữ liệu không hợp lệ" };
+    return {
+      ok: false,
+      error: parsed.error.issues[0]?.message ?? "Dữ liệu không hợp lệ",
+    };
   }
   const d = parsed.data;
   const actor = await resolveActor(session.user.id);
   const sdb = scopedDb(actor);
 
   const from = d.fromDate ? new Date(d.fromDate) : null;
-  const to = isRangeKind(d.kind) ? (d.toDate ? new Date(d.toDate) : from) : from;
+  const to = isRangeKind(d.kind)
+    ? d.toDate
+      ? new Date(d.toDate)
+      : from
+    : from;
   const hours =
     d.kind === "OT"
       ? diffHours(d.startTime, d.endTime)
@@ -71,14 +78,19 @@ export async function submitWorkRequest(input: unknown): Promise<Result> {
         className: isClassKind(d.kind) ? d.className || null : null,
         classId: isClassKind(d.kind) ? d.classId || null : null,
         targetUserId:
-          d.kind === "SUB_TEACH" || d.kind === "SHIFT_SWAP" ? d.targetUserId || null : null,
+          d.kind === "SUB_TEACH" || d.kind === "SHIFT_SWAP"
+            ? d.targetUserId || null
+            : null,
         targetShiftId: d.kind === "SHIFT_SWAP" ? d.targetShiftId || null : null,
         detail: d.detail || null,
         reason: d.reason,
       },
     });
   } catch (err) {
-    return { ok: false, error: `Lỗi gửi đơn: ${err instanceof Error ? err.message : "Unknown"}` };
+    return {
+      ok: false,
+      error: `Lỗi gửi đơn: ${err instanceof Error ? err.message : "Unknown"}`,
+    };
   }
   revalidatePath("/teacher/don-tu");
   return { ok: true };
@@ -101,11 +113,15 @@ export async function reviewWorkRequest(input: unknown): Promise<ReviewResult> {
   if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
   const isManager = hasRole(session.user, "CENTER_MANAGER");
   const isSuper = hasRole(session.user, "SUPER_ADMIN");
-  if (!isManager && !isSuper) return { ok: false, error: "Không có quyền duyệt đơn" };
+  if (!isManager && !isSuper)
+    return { ok: false, error: "Không có quyền duyệt đơn" };
 
   const parsed = reviewSchema.safeParse(input);
   if (!parsed.success) {
-    return { ok: false, error: parsed.error.issues[0]?.message ?? "Dữ liệu không hợp lệ" };
+    return {
+      ok: false,
+      error: parsed.error.issues[0]?.message ?? "Dữ liệu không hợp lệ",
+    };
   }
   const { id, decision, note } = parsed.data;
   const actor = await resolveActor(session.user.id);
@@ -129,7 +145,8 @@ export async function reviewWorkRequest(input: unknown): Promise<ReviewResult> {
   if (!isSuper && req.centerId !== (session.user.centerId ?? null)) {
     return { ok: false, error: "Đơn thuộc cơ sở khác" };
   }
-  if (req.status !== "PENDING") return { ok: false, error: "Đơn đã được xử lý" };
+  if (req.status !== "PENDING")
+    return { ok: false, error: "Đơn đã được xử lý" };
 
   try {
     await sdb.workRequest.update({
@@ -143,7 +160,10 @@ export async function reviewWorkRequest(input: unknown): Promise<ReviewResult> {
       },
     });
   } catch (err) {
-    return { ok: false, error: `Lỗi duyệt đơn: ${err instanceof Error ? err.message : "Unknown"}` };
+    return {
+      ok: false,
+      error: `Lỗi duyệt đơn: ${err instanceof Error ? err.message : "Unknown"}`,
+    };
   }
 
   // BGĐ 31/07 — duyệt xong thì ÁP LÊN LỊCH THẬT (huỷ buổi / gán GV dạy thay).
@@ -167,7 +187,8 @@ export async function reviewWorkRequest(input: unknown): Promise<ReviewResult> {
       applyNote = res.message;
     } catch (err) {
       console.error("[reviewWorkRequest] apply:", err);
-      applyNote = "Đã duyệt đơn nhưng CHƯA cập nhật được lịch — vui lòng chỉnh buổi học thủ công.";
+      applyNote =
+        "Đã duyệt đơn nhưng CHƯA cập nhật được lịch — vui lòng chỉnh buổi học thủ công.";
     }
   }
 

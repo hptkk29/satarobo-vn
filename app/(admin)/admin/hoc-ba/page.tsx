@@ -58,14 +58,14 @@ export default async function AdminTranscriptPage({
   return (
     <div className="space-y-5 p-4">
       <div>
-        <h1 className="text-xl font-bold text-neutral-900">Học bạ học viên</h1>
-        <p className="text-sm text-neutral-500">Chọn học viên để xem quá trình học tổng hợp + xuất PDF.</p>
+        <h1 className="text-xl font-bold text-foreground">Học bạ học viên</h1>
+        <p className="text-sm text-muted-foreground">Chọn học viên để xem quá trình học tổng hợp + xuất PDF.</p>
       </div>
 
       {/* KHÔNG đặt action tuyệt đối — submit về CHÍNH trang (đúng cả khi admin
           chạy ở host admin.satarobo.vn nơi route ở gốc /hoc-ba). */}
       <form className="flex gap-2" method="get">
-        <select name="studentId" defaultValue={studentId ?? ""} className="rounded-md border border-neutral-300 px-3 py-2 text-sm">
+        <select name="studentId" defaultValue={studentId ?? ""} className="rounded-md border border-border px-3 py-2 text-sm">
           <option value="">— Chọn học viên —</option>
           {students.map((s) => (
             <option key={s.id} value={s.id}>
@@ -80,7 +80,7 @@ export default async function AdminTranscriptPage({
       </form>
 
       {studentId && !t ? (
-        <p className="text-sm text-rose-600">Không tìm thấy học viên hoặc ngoài phạm vi cơ sở.</p>
+        <p className="text-sm text-state-danger-ink">Không tìm thấy học viên hoặc ngoài phạm vi cơ sở.</p>
       ) : null}
       {t ? <TranscriptView t={t} pdfHref={`/api/admin/reports/transcript?studentId=${studentId}`} /> : null}
     </div>

@@ -40,6 +40,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { PhanTrangBang } from "@/components/ui/phan-trang-bang";
 
 export const metadata = { title: "Đo pilot chat | Admin" };
 export const dynamic = "force-dynamic";
@@ -66,10 +67,10 @@ function ratio(numerator: number, denominator: number) {
 
 function Stat({ label, value, hint }: { label: string; value: string; hint?: string }) {
   return (
-    <div className="rounded-xl border border-neutral-200 bg-white p-4">
-      <p className="text-xs font-medium text-neutral-500">{label}</p>
-      <p className="mt-1 text-2xl font-bold tabular-nums text-neutral-900">{value}</p>
-      {hint ? <p className="mt-0.5 text-xs text-neutral-400">{hint}</p> : null}
+    <div className="rounded-xl border border-border bg-card p-4">
+      <p className="text-xs font-medium text-muted-foreground">{label}</p>
+      <p className="mt-1 text-2xl font-bold tabular-nums text-foreground">{value}</p>
+      {hint ? <p className="mt-0.5 text-xs text-muted-foreground">{hint}</p> : null}
     </div>
   );
 }
@@ -105,14 +106,14 @@ export default async function ChatPilotReportPage({
     <div className="space-y-6">
       <div className="flex items-start gap-3">
         <span
-          className="grid size-10 shrink-0 place-items-center rounded-full bg-neutral-100 text-neutral-600"
+          className="grid size-10 shrink-0 place-items-center rounded-full bg-muted text-muted-foreground"
           aria-hidden
         >
           <BarChart3 className="size-5" />
         </span>
         <div>
-          <h1 className="text-xl font-bold text-neutral-900">Đo pilot chat theo lớp</h1>
-          <p className="mt-0.5 text-sm text-neutral-500">
+          <h1 className="text-xl font-bold text-foreground">Đo pilot chat theo lớp</h1>
+          <p className="mt-0.5 text-sm text-muted-foreground">
             Mỗi dòng là một nhóm lớp đang có trên hệ thống. Mẫu số là{" "}
             <strong>phụ huynh đang là thành viên nhóm</strong> — giáo viên, trợ giảng và
             quản lý cơ sở không tính vào.
@@ -170,81 +171,83 @@ export default async function ChatPilotReportPage({
         />
       </div>
 
-      <div className="overflow-x-auto rounded-xl border border-neutral-200 bg-white">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Lớp</TableHead>
-              <TableHead>Cơ sở</TableHead>
-              <TableHead className="text-right">PH trong nhóm</TableHead>
-              <TableHead className="text-right">Đã kích hoạt</TableHead>
-              <TableHead className="text-right">Đã đăng nhập</TableHead>
-              <TableHead className="text-right">Đồng ý quy định</TableHead>
-              <TableHead>Thông báo đầu</TableHead>
-              <TableHead className="text-right">Đọc ≤ {PILOT_READ_WINDOW_HOURS}h</TableHead>
-              <TableHead className="text-right">Đã đọc (mọi lúc)</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {rows.length === 0 ? (
+      <div className="overflow-x-auto rounded-xl border border-border bg-card">
+        <PhanTrangBang>
+          <Table>
+            <TableHeader>
               <TableRow>
-                <TableCell colSpan={9} className="py-8 text-center text-sm text-neutral-500">
-                  Chưa có nhóm lớp nào. Nhóm sinh ra khi lớp chuyển sang hoạt động — lớp đã
-                  ACTIVE từ trước ngày phát hành chat thì phải chạy{" "}
-                  <code>scripts/backfill-nhom-lop-chat.ts</code>.
-                </TableCell>
+                <TableHead>Lớp</TableHead>
+                <TableHead>Cơ sở</TableHead>
+                <TableHead className="text-right">PH trong nhóm</TableHead>
+                <TableHead className="text-right">Đã kích hoạt</TableHead>
+                <TableHead className="text-right">Đã đăng nhập</TableHead>
+                <TableHead className="text-right">Đồng ý quy định</TableHead>
+                <TableHead>Thông báo đầu</TableHead>
+                <TableHead className="text-right">Đọc ≤ {PILOT_READ_WINDOW_HOURS}h</TableHead>
+                <TableHead className="text-right">Đã đọc (mọi lúc)</TableHead>
               </TableRow>
-            ) : (
-              rows.map((r) => (
-                <TableRow key={r.conversationId}>
-                  <TableCell className="font-medium">
-                    {r.className}
-                    {r.conversationStatus !== "ACTIVE" && (
-                      <Badge variant="secondary" className="ml-2">
-                        {r.conversationStatus === "ARCHIVED" ? "Đã lưu trữ" : "Đang khoá"}
-                      </Badge>
-                    )}
-                  </TableCell>
-                  <TableCell className="text-neutral-500">{r.centerName ?? "—"}</TableCell>
-                  <TableCell className="text-right tabular-nums">{r.parentCount}</TableCell>
-                  <TableCell className="text-right">
-                    {ratio(r.activatedCount, r.parentCount)}
-                  </TableCell>
-                  <TableCell className="text-right">
-                    {ratio(r.loggedInCount, r.parentCount)}
-                  </TableCell>
-                  <TableCell className="text-right">
-                    {ratio(r.policyAcceptedCount, r.parentCount)}
-                  </TableCell>
-                  <TableCell className="whitespace-nowrap text-neutral-500">
-                    {r.firstAnnouncementAt ? (
-                      <>
-                        {fmtVN.format(r.firstAnnouncementAt)}
-                        {!r.windowClosed && (
-                          <Badge variant="outline" className="ml-2">
-                            đang trong {PILOT_READ_WINDOW_HOURS}h
-                          </Badge>
-                        )}
-                      </>
-                    ) : (
-                      <span className="text-amber-700">chưa có thông báo</span>
-                    )}
-                  </TableCell>
-                  <TableCell className="text-right">
-                    {r.firstAnnouncementAt ? ratio(r.readWithinWindowCount, r.parentCount) : "—"}
-                  </TableCell>
-                  <TableCell className="text-right">
-                    {r.firstAnnouncementAt ? ratio(r.readTotalCount, r.parentCount) : "—"}
+            </TableHeader>
+            <TableBody>
+              {rows.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={9} className="py-8 text-center text-sm text-muted-foreground">
+                    Chưa có nhóm lớp nào. Nhóm sinh ra khi lớp chuyển sang hoạt động — lớp đã
+                    ACTIVE từ trước ngày phát hành chat thì phải chạy{" "}
+                    <code>scripts/backfill-nhom-lop-chat.ts</code>.
                   </TableCell>
                 </TableRow>
-              ))
-            )}
-          </TableBody>
-        </Table>
+              ) : (
+                rows.map((r) => (
+                  <TableRow key={r.conversationId}>
+                    <TableCell className="font-medium">
+                      {r.className}
+                      {r.conversationStatus !== "ACTIVE" && (
+                        <Badge variant="secondary" className="ml-2">
+                          {r.conversationStatus === "ARCHIVED" ? "Đã lưu trữ" : "Đang khoá"}
+                        </Badge>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">{r.centerName ?? "—"}</TableCell>
+                    <TableCell className="text-right tabular-nums">{r.parentCount}</TableCell>
+                    <TableCell className="text-right">
+                      {ratio(r.activatedCount, r.parentCount)}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {ratio(r.loggedInCount, r.parentCount)}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {ratio(r.policyAcceptedCount, r.parentCount)}
+                    </TableCell>
+                    <TableCell className="whitespace-nowrap text-muted-foreground">
+                      {r.firstAnnouncementAt ? (
+                        <>
+                          {fmtVN.format(r.firstAnnouncementAt)}
+                          {!r.windowClosed && (
+                            <Badge variant="outline" className="ml-2">
+                              đang trong {PILOT_READ_WINDOW_HOURS}h
+                            </Badge>
+                          )}
+                        </>
+                      ) : (
+                        <span className="text-state-warning-ink">chưa có thông báo</span>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {r.firstAnnouncementAt ? ratio(r.readWithinWindowCount, r.parentCount) : "—"}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {r.firstAnnouncementAt ? ratio(r.readTotalCount, r.parentCount) : "—"}
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
+            </TableBody>
+          </Table>
+        </PhanTrangBang>
       </div>
 
-      <div className="space-y-1.5 rounded-xl border border-neutral-200 bg-neutral-50 p-4 text-xs leading-relaxed text-neutral-600">
-        <p className="font-semibold text-neutral-700">Đọc con số cho đúng</p>
+      <div className="space-y-1.5 rounded-xl border border-border bg-muted p-4 text-xs leading-relaxed text-muted-foreground">
+        <p className="font-semibold text-foreground">Đọc con số cho đúng</p>
         <p>
           • <strong>Đã kích hoạt</strong> = tài khoản ở trạng thái ACTIVE. Tài khoản tạo
           trước cụm cấp tài khoản qua OTP vốn đã ACTIVE sẵn, nên cột này CÓ THỂ cao hơn

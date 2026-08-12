@@ -28,7 +28,10 @@ export async function proposeCourseCompletion(input: unknown): Promise<Result> {
   }
   const parsed = proposeSchema.safeParse(input);
   if (!parsed.success) {
-    return { ok: false, error: parsed.error.issues[0]?.message ?? "Dữ liệu không hợp lệ" };
+    return {
+      ok: false,
+      error: parsed.error.issues[0]?.message ?? "Dữ liệu không hợp lệ",
+    };
   }
   const { enrollmentId, note } = parsed.data;
 
@@ -55,7 +58,8 @@ export async function proposeCourseCompletion(input: unknown): Promise<Result> {
       })
     : [];
   const hit = clsMatch.find((c) => c.enrollments.length > 0);
-  if (!hit) return { ok: false, error: "Ghi danh không thuộc lớp bạn phụ trách" };
+  if (!hit)
+    return { ok: false, error: "Ghi danh không thuộc lớp bạn phụ trách" };
   const enr = hit.enrollments[0];
 
   const [existingCompletion, existingReq] = await Promise.all([
@@ -68,7 +72,8 @@ export async function proposeCourseCompletion(input: unknown): Promise<Result> {
       select: { id: true },
     }),
   ]);
-  if (existingCompletion) return { ok: false, error: "Học viên đã hoàn thành khoá này" };
+  if (existingCompletion)
+    return { ok: false, error: "Học viên đã hoàn thành khoá này" };
   if (existingReq) return { ok: false, error: "Đã có đề xuất đang chờ duyệt" };
 
   try {
@@ -84,7 +89,10 @@ export async function proposeCourseCompletion(input: unknown): Promise<Result> {
       },
     });
   } catch (err) {
-    return { ok: false, error: `Lỗi gửi đề xuất: ${err instanceof Error ? err.message : "Unknown"}` };
+    return {
+      ok: false,
+      error: `Lỗi gửi đề xuất: ${err instanceof Error ? err.message : "Unknown"}`,
+    };
   }
   revalidatePath("/teacher/hoan-thanh");
   return { ok: true };
@@ -106,7 +114,10 @@ export async function reviewCourseCompletion(input: unknown): Promise<Result> {
   }
   const parsed = reviewSchema.safeParse(input);
   if (!parsed.success) {
-    return { ok: false, error: parsed.error.issues[0]?.message ?? "Dữ liệu không hợp lệ" };
+    return {
+      ok: false,
+      error: parsed.error.issues[0]?.message ?? "Dữ liệu không hợp lệ",
+    };
   }
   const { id, decision, note } = parsed.data;
 
@@ -120,7 +131,8 @@ export async function reviewCourseCompletion(input: unknown): Promise<Result> {
   if (!isSuper && req.centerId !== (session.user.centerId ?? null)) {
     return { ok: false, error: "Đề xuất thuộc cơ sở khác" };
   }
-  if (req.status !== "PENDING") return { ok: false, error: "Đề xuất đã được xử lý" };
+  if (req.status !== "PENDING")
+    return { ok: false, error: "Đề xuất đã được xử lý" };
 
   if (decision === "APPROVED") {
     const res = await completeCourse({
@@ -128,7 +140,8 @@ export async function reviewCourseCompletion(input: unknown): Promise<Result> {
       courseId: req.courseId,
       createdById: session.user.id,
     });
-    if (!res.ok) return { ok: false, error: res.error ?? "Lỗi xác nhận hoàn thành" };
+    if (!res.ok)
+      return { ok: false, error: res.error ?? "Lỗi xác nhận hoàn thành" };
   }
 
   try {
@@ -143,7 +156,10 @@ export async function reviewCourseCompletion(input: unknown): Promise<Result> {
       },
     });
   } catch (err) {
-    return { ok: false, error: `Lỗi duyệt: ${err instanceof Error ? err.message : "Unknown"}` };
+    return {
+      ok: false,
+      error: `Lỗi duyệt: ${err instanceof Error ? err.message : "Unknown"}`,
+    };
   }
   revalidatePath("/teacher/hoan-thanh");
   return { ok: true };

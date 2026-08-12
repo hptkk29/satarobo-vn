@@ -230,7 +230,7 @@ export function AdminConversationViewer(props: AdminConversationViewerProps) {
       {/* Nội dung — chỉ hiện sau khi server chấp nhận lý do */}
       {messages === null ? (
         <div className="rounded-xl border border-dashed border-border bg-card p-8 text-center">
-          <ShieldAlert className="mx-auto h-8 w-8 text-amber-600" aria-hidden />
+          <ShieldAlert className="mx-auto h-8 w-8 text-state-warning-ink" aria-hidden />
           <p className="mt-3 text-sm font-medium text-foreground">
             Nội dung hội thoại đang đóng
           </p>
@@ -274,7 +274,7 @@ export function AdminConversationViewer(props: AdminConversationViewerProps) {
                 <li key={m.id} className="px-4 py-3">
                   <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
                     {m.kind === "ANNOUNCEMENT" ? (
-                      <Megaphone className="h-3.5 w-3.5 text-orange-600" aria-hidden />
+                      <Megaphone className="h-3.5 w-3.5 text-primary" aria-hidden />
                     ) : (
                       <MessageSquare className="h-3.5 w-3.5" aria-hidden />
                     )}
@@ -335,7 +335,7 @@ export function AdminConversationViewer(props: AdminConversationViewerProps) {
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <ShieldAlert className="h-5 w-5 text-amber-600" aria-hidden />
+              <ShieldAlert className="h-5 w-5 text-state-warning-ink" aria-hidden />
               Lý do xem nội dung
             </DialogTitle>
             <DialogDescription>
@@ -388,7 +388,7 @@ export function AdminConversationViewer(props: AdminConversationViewerProps) {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               {locked ? (
-                <LockOpen className="h-5 w-5 text-emerald-600" aria-hidden />
+                <LockOpen className="h-5 w-5 text-state-success-ink" aria-hidden />
               ) : (
                 <Lock className="h-5 w-5 text-destructive" aria-hidden />
               )}

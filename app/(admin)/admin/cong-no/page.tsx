@@ -16,6 +16,7 @@ import {
 import { DebtFilterBar } from "./_components/debt-filter-bar";
 // lib/finance/debt.ts — parallel agent owns. Combined typecheck resolves.
 import { getDebtRows, overdueBucket, type DebtRow } from "@/lib/finance/debt";
+import { PhanTrangBang } from "@/components/ui/phan-trang-bang";
 
 export const metadata = { title: "Công nợ | Admin" };
 export const dynamic = "force-dynamic";
@@ -29,10 +30,10 @@ const BUCKET_LABEL: Record<Bucket, string> = {
   ">30": "Quá hạn > 30 ngày",
 };
 const BUCKET_BADGE: Record<Bucket, string> = {
-  none: "bg-gray-100 text-gray-700 hover:bg-gray-100",
-  "1-7": "bg-yellow-100 text-yellow-800 hover:bg-yellow-100",
-  "8-30": "bg-orange-100 text-orange-800 hover:bg-orange-100",
-  ">30": "bg-red-100 text-red-800 hover:bg-red-100",
+  none: "bg-muted text-foreground hover:bg-muted",
+  "1-7": "bg-state-warning-soft text-state-warning-ink hover:bg-state-warning-soft",
+  "8-30": "bg-primary-soft text-primary hover:bg-primary-soft",
+  ">30": "bg-state-danger-soft text-state-danger-ink hover:bg-state-danger-soft",
 };
 
 function vnd(n: number): string {
@@ -141,12 +142,12 @@ export default async function CongNoPage({
   return (
     <div>
       <div className="mb-6 flex items-start gap-3">
-        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-orange-50">
-          <Wallet className="h-5 w-5 text-orange-600" />
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary-soft">
+          <Wallet className="h-5 w-5 text-primary" />
         </div>
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Công nợ</h1>
-          <p className="mt-1 text-sm text-gray-500">
+          <h1 className="text-2xl font-bold text-foreground">Công nợ</h1>
+          <p className="mt-1 text-sm text-muted-foreground">
             Nợ học phí (đã xác nhận thu) &amp; phân nhóm tuổi nợ quá hạn
           </p>
         </div>
@@ -154,26 +155,26 @@ export default async function CongNoPage({
 
       {/* Aging summary từ installment quá hạn */}
       <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-5">
-        <div className="rounded-lg border border-neutral-200 bg-white p-3">
-          <div className="text-xs text-neutral-500">Tổng nợ (đăng ký)</div>
-          <div className="mt-1 text-lg font-bold text-gray-900">
+        <div className="rounded-lg border border-border bg-card p-3">
+          <div className="text-xs text-muted-foreground">Tổng nợ (đăng ký)</div>
+          <div className="mt-1 text-lg font-bold text-foreground">
             {vnd(totalDebt)}
           </div>
         </div>
         {BUCKETS.map((b) => (
           <div
             key={b}
-            className="rounded-lg border border-neutral-200 bg-white p-3"
+            className="rounded-lg border border-border bg-card p-3"
           >
-            <div className="text-xs text-neutral-500">{BUCKET_LABEL[b]}</div>
-            <div className="mt-1 text-lg font-bold text-gray-900">
+            <div className="text-xs text-muted-foreground">{BUCKET_LABEL[b]}</div>
+            <div className="mt-1 text-lg font-bold text-foreground">
               {vnd(bucketTotals[b])}
             </div>
           </div>
         ))}
       </div>
       {/* Hai cách đo KHÁC phạm vi — không phải lỗi khi tổng lệch nhau: */}
-      <p className="mb-6 -mt-3 text-xs text-neutral-400">
+      <p className="mb-6 -mt-3 text-xs text-muted-foreground">
         “Tổng nợ (đăng ký)” tính theo <b>ghi danh</b> = học phí − khoản kế toán ĐÃ xác
         nhận. Các ô tuổi nợ tính theo <b>đợt thanh toán đơn hàng có hạn</b> (chỉ đơn có
         lịch trả góp) — hai phạm vi khác nhau nên có thể không bằng nhau.
@@ -181,40 +182,42 @@ export default async function CongNoPage({
 
       <DebtFilterBar groupBy={groupBy} search={search} />
 
-      <div className="overflow-x-auto rounded-lg border border-neutral-200">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Nhóm</TableHead>
-              <TableHead className="text-right">Số đăng ký</TableHead>
-              <TableHead className="text-right">Tổng nợ</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {groupList.length === 0 && (
+      <div className="overflow-x-auto rounded-lg border border-border">
+        <PhanTrangBang>
+          <Table>
+            <TableHeader>
               <TableRow>
-                <TableCell
-                  colSpan={3}
-                  className="py-8 text-center text-sm text-neutral-500"
-                >
-                  Không có công nợ phù hợp bộ lọc
-                </TableCell>
+                <TableHead>Nhóm</TableHead>
+                <TableHead className="text-right">Số đăng ký</TableHead>
+                <TableHead className="text-right">Tổng nợ</TableHead>
               </TableRow>
-            )}
-            {groupList.map((g) => (
-              <TableRow key={g.label}>
-                <TableCell className="font-medium">{g.label}</TableCell>
-                <TableCell className="text-right">{g.count}</TableCell>
-                <TableCell className="text-right font-semibold">
-                  {vnd(g.debt)}
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
+            </TableHeader>
+            <TableBody>
+              {groupList.length === 0 && (
+                <TableRow>
+                  <TableCell
+                    colSpan={3}
+                    className="py-8 text-center text-sm text-muted-foreground"
+                  >
+                    Không có công nợ phù hợp bộ lọc
+                  </TableCell>
+                </TableRow>
+              )}
+              {groupList.map((g) => (
+                <TableRow key={g.label}>
+                  <TableCell className="font-medium">{g.label}</TableCell>
+                  <TableCell className="text-right">{g.count}</TableCell>
+                  <TableCell className="text-right font-semibold">
+                    {vnd(g.debt)}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </PhanTrangBang>
       </div>
 
-      <p className="mt-3 text-xs text-neutral-400">
+      <p className="mt-3 text-xs text-muted-foreground">
         Ô tuổi nợ tổng hợp từ các đợt thanh toán còn hạn/quá hạn (
         <Badge className={BUCKET_BADGE[">30"]}>{BUCKET_LABEL[">30"]}</Badge> ưu
         tiên xử lý trước).

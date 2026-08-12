@@ -3,7 +3,12 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { QuestionField, toSubmitAnswers, type PortalQuestion, type AnswerState } from "./_fields";
+import {
+  QuestionField,
+  toSubmitAnswers,
+  type PortalQuestion,
+  type AnswerState,
+} from "./_fields";
 import { submitTeacherEval } from "./_actions";
 
 export function TeacherEvalForm({
@@ -55,8 +60,10 @@ export function TeacherEvalForm({
   return (
     <div className="rounded-2xl border border-neutral-200 bg-white p-4">
       <div className="mb-3">
-        <p className="text-base font-bold text-neutral-900">Thầy/cô {teacherName}</p>
-        <p className="text-xs text-neutral-500">
+        <p className="text-base font-bold text-neutral-900">
+          Thầy/cô {teacherName}
+        </p>
+        <p className="text-xs text-neutral-600">
           {role} · {className}
         </p>
       </div>
@@ -75,7 +82,7 @@ export function TeacherEvalForm({
         type="button"
         onClick={submit}
         disabled={pending}
-        className="mt-4 w-full rounded-xl bg-orange-500 px-4 py-3 text-sm font-bold text-white hover:bg-orange-600 disabled:opacity-60"
+        className="mt-4 w-full rounded-xl bg-orange-700 px-4 py-3 text-sm font-bold text-white hover:bg-orange-800 disabled:opacity-60"
       >
         {pending ? "Đang gửi…" : "Gửi đánh giá"}
       </button>

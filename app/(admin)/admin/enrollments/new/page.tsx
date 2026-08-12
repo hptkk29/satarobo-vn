@@ -1,6 +1,7 @@
 import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
-import { checkPermission } from "@/lib/auth/check-permission";
+import { checkPermission, checkPermissionDetail } from "@/lib/auth/check-permission";
+import { maskPhone } from "@/lib/utils";
 import { scopedDb } from "@/lib/db-scope";
 import { resolveActor } from "@/lib/auth/actor";
 import { getNonEnrollableCenterIds, notHeadOfficeWhere } from "@/lib/enrollment-flow";
@@ -23,6 +24,11 @@ export default async function NewEnrollmentPage({
     redirect("/dashboard?error=unauthorized");
   }
   const { studentId: prefillStudentId, renewedFrom } = await searchParams;
+
+  // US-03 (TS-02): DENY cấp trường từ grant nhóm — che parentPhone TRƯỚC khi đưa
+  // danh sách HV xuống client component (EnrollForm nhận prop = vào RSC payload).
+  const { fieldMask } = await checkPermissionDetail("students:view-all");
+  const phoneMasked = fieldMask.includes("parentPhone");
 
   // Cách ly cơ sở: Student + Class ∈ SCOPED_MODELS → sdb auto inject centerId,
   // CENTER_MANAGER@CS1 không thấy/đăng ký HS hay lớp của CS2.
@@ -89,11 +95,18 @@ export default async function NewEnrollmentPage({
 
   return (
     <div>
-      <h1 className="mb-6 text-3xl font-black text-neutral-900">
+      <h1 className="mb-6 text-3xl font-black text-foreground">
         Đăng ký lớp cho học viên
       </h1>
       <EnrollForm
-        students={students}
+        students={
+          phoneMasked
+            ? students.map((s) => ({
+                ...s,
+                parentPhone: s.parentPhone ? maskPhone(s.parentPhone) : s.parentPhone,
+              }))
+            : students
+        }
         initialStudentId={prefillStudentId ?? null}
         initialRenewedFrom={renewedFrom ?? null}
         previousEnrollments={previousEnrollments.map((p) => ({

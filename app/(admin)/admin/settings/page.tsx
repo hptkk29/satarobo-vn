@@ -23,68 +23,68 @@ export default async function SettingsPage() {
   return (
     <div className="max-w-3xl space-y-8">
       <div>
-        <h1 className="text-2xl font-bold text-gray-900">Cài đặt</h1>
-        <p className="mt-1 text-sm text-gray-500">Quản lý tài khoản và cấu hình hệ thống</p>
+        <h1 className="text-2xl font-bold text-foreground">Cài đặt</h1>
+        <p className="mt-1 text-sm text-muted-foreground">Quản lý tài khoản và cấu hình hệ thống</p>
       </div>
 
       {/* Profile */}
-      <section className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
-        <h2 className="mb-4 text-base font-bold text-gray-900">Thông tin tài khoản</h2>
+      <section className="rounded-xl border border-border bg-card p-6 shadow-sm">
+        <h2 className="mb-4 text-base font-bold text-foreground">Thông tin tài khoản</h2>
         <dl className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div>
-            <dt className="text-xs font-semibold uppercase tracking-wide text-gray-400">Tên</dt>
-            <dd className="mt-1 text-sm font-medium text-gray-800">{session.user.name ?? '—'}</dd>
+            <dt className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Tên</dt>
+            <dd className="mt-1 text-sm font-medium text-foreground">{session.user.name ?? '—'}</dd>
           </div>
           <div>
-            <dt className="text-xs font-semibold uppercase tracking-wide text-gray-400">Email</dt>
-            <dd className="mt-1 text-sm font-medium text-gray-800">{session.user.email}</dd>
+            <dt className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Email</dt>
+            <dd className="mt-1 text-sm font-medium text-foreground">{session.user.email}</dd>
           </div>
           <div>
-            <dt className="text-xs font-semibold uppercase tracking-wide text-gray-400">Vai trò</dt>
-            <dd className="mt-1 text-sm font-medium text-gray-800">{roleLabel(session.user.role)}</dd>
+            <dt className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Vai trò</dt>
+            <dd className="mt-1 text-sm font-medium text-foreground">{roleLabel(session.user.role)}</dd>
           </div>
         </dl>
       </section>
 
       {/* Change password */}
-      <section className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
-        <h2 className="mb-1 text-base font-bold text-gray-900">Đổi mật khẩu</h2>
-        <p className="mb-5 text-sm text-gray-500">Mật khẩu tối thiểu 8 ký tự, bao gồm chữ hoa và số</p>
+      <section className="rounded-xl border border-border bg-card p-6 shadow-sm">
+        <h2 className="mb-1 text-base font-bold text-foreground">Đổi mật khẩu</h2>
+        <p className="mb-5 text-sm text-muted-foreground">Mật khẩu tối thiểu 8 ký tự, bao gồm chữ hoa và số</p>
         <ChangePasswordForm />
       </section>
 
       {/* Hướng dẫn sử dụng — lối vào bộ tài liệu hướng dẫn theo khối chức năng */}
-      <section className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
-        <h2 className="mb-1 flex items-center gap-2 text-base font-bold text-gray-900">
-          <BookOpenText className="h-4 w-4 text-orange-500" aria-hidden /> Hướng dẫn sử dụng
+      <section className="rounded-xl border border-border bg-card p-6 shadow-sm">
+        <h2 className="mb-1 flex items-center gap-2 text-base font-bold text-foreground">
+          <BookOpenText className="h-4 w-4 text-primary" aria-hidden /> Hướng dẫn sử dụng
         </h2>
         <div className="flex flex-col items-start gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <p className="text-sm text-gray-500">
+          <p className="text-sm text-muted-foreground">
             Tài liệu hướng dẫn trang quản trị theo từng khối chức năng — kèm các bước
             thao tác và đường dẫn mở thẳng trang.
           </p>
           <Link
             href="/huong-dan"
-            className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-semibold text-gray-700 transition-colors hover:bg-gray-50"
+            className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-border bg-card px-4 py-2 text-sm font-semibold text-foreground transition-colors hover:bg-muted"
           >
-            Mở hướng dẫn <ArrowRight className="h-4 w-4 text-gray-400" aria-hidden />
+            Mở hướng dẫn <ArrowRight className="h-4 w-4 text-muted-foreground" aria-hidden />
           </Link>
         </div>
       </section>
 
       {/* Centers — super admin only */}
       {superAdmin && (
-        <section className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
-          <h2 className="mb-4 text-base font-bold text-gray-900">Danh sách cơ sở</h2>
+        <section className="rounded-xl border border-border bg-card p-6 shadow-sm">
+          <h2 className="mb-4 text-base font-bold text-foreground">Danh sách cơ sở</h2>
           <div className="space-y-3">
             {centers.map((c) => (
-              <div key={c.id} className="flex items-start justify-between rounded-lg border border-gray-100 bg-gray-50 px-4 py-3">
+              <div key={c.id} className="flex items-start justify-between rounded-lg border border-border bg-muted px-4 py-3">
                 <div>
-                  <p className="text-sm font-semibold text-gray-800">{c.name}</p>
-                  <p className="mt-0.5 text-xs text-gray-500">{c.address}</p>
-                  {c.phone && <p className="mt-0.5 text-xs text-gray-400">{c.phone}</p>}
+                  <p className="text-sm font-semibold text-foreground">{c.name}</p>
+                  <p className="mt-0.5 text-xs text-muted-foreground">{c.address}</p>
+                  {c.phone && <p className="mt-0.5 text-xs text-muted-foreground">{c.phone}</p>}
                 </div>
-                <span className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold ${c.isActive ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}>
+                <span className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold ${c.isActive ? 'bg-state-success-soft text-state-success-ink' : 'bg-muted text-muted-foreground'}`}>
                   {c.isActive ? 'Hoạt động' : 'Tắt'}
                 </span>
               </div>
@@ -95,9 +95,9 @@ export default async function SettingsPage() {
 
       {/* Env info — super admin */}
       {superAdmin && (
-        <section className="rounded-xl border border-dashed border-gray-200 bg-gray-50/50 p-6">
-          <h2 className="mb-3 text-base font-bold text-gray-700">Thông tin môi trường</h2>
-          <ul className="space-y-1.5 font-mono text-xs text-gray-500">
+        <section className="rounded-xl border border-dashed border-border bg-muted/50 p-6">
+          <h2 className="mb-3 text-base font-bold text-foreground">Thông tin môi trường</h2>
+          <ul className="space-y-1.5 font-mono text-xs text-muted-foreground">
             <li>NODE_ENV: {process.env.NODE_ENV}</li>
             <li>NEXT_PUBLIC_APP_URL: {process.env.NEXT_PUBLIC_APP_URL}</li>
             <li>Meta Pixel ID: {process.env.NEXT_PUBLIC_META_PIXEL_ID ?? '(chưa set)'}</li>

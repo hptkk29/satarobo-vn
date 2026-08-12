@@ -25,7 +25,7 @@ export function EmptyStateAdmin({
     <div
       className={cn(
         "flex flex-col items-center justify-center text-center py-16 px-4",
-        "bg-white border border-dashed border-neutral-300",
+        "bg-card border border-dashed border-border",
         tokens.radius.card,
         className,
       )}
@@ -35,7 +35,7 @@ export function EmptyStateAdmin({
       )}
       <h3 className={cn(tokens.typography.heading.h5, "mb-2")}>{title}</h3>
       {description && (
-        <p className="text-sm text-neutral-600 max-w-md mb-4 leading-relaxed">
+        <p className="text-sm text-muted-foreground max-w-md mb-4 leading-relaxed">
           {description}
         </p>
       )}

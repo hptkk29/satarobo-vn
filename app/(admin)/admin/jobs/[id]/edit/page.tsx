@@ -27,15 +27,15 @@ export default async function EditJobPage({
   return (
     <div>
       <div className="mb-6">
-        <Link href="/jobs" className="mb-3 inline-flex items-center gap-1 text-sm text-gray-500 hover:text-gray-700">
+        <Link href="/jobs" className="mb-3 inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
           <ChevronLeft className="h-4 w-4" /> Quay lại danh sách
         </Link>
         <div className="flex items-center gap-3">
-          <h1 className="text-2xl font-bold text-gray-900">Sửa: {job.title}</h1>
+          <h1 className="text-2xl font-bold text-foreground">Sửa: {job.title}</h1>
           <Link
             href={`/tuyen-dung/${job.slug}`}
             target="_blank"
-            className="inline-flex items-center gap-1 rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-semibold text-gray-600 hover:bg-gray-50"
+            className="inline-flex items-center gap-1 rounded-lg border border-border px-3 py-1.5 text-xs font-semibold text-muted-foreground hover:bg-muted"
           >
             <ExternalLink className="h-3.5 w-3.5" /> Xem public
           </Link>

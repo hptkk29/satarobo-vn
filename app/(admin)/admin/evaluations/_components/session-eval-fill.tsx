@@ -152,7 +152,7 @@ export function SessionEvalEditor({
         type="button"
         onClick={open}
         disabled={loading}
-        className="inline-flex items-center gap-1.5 rounded-lg border border-purple-200 bg-purple-50 px-3 py-2 text-sm font-semibold text-purple-700 hover:bg-purple-100 disabled:opacity-60"
+        className="inline-flex items-center gap-1.5 rounded-lg border border-primary-soft bg-primary-soft px-3 py-2 text-sm font-semibold text-primary hover:bg-primary-soft-hover disabled:opacity-60"
       >
         <ClipboardCheck className="h-4 w-4" />
         {loading ? "Đang tải phiếu…" : "Phiếu đánh giá buổi học"}
@@ -162,14 +162,14 @@ export function SessionEvalEditor({
 
   if (noForm || !round) {
     return (
-      <p className="text-sm text-gray-400">
+      <p className="text-sm text-muted-foreground">
         Hiện chưa có phiếu đánh giá buổi nào đang mở áp cho lớp này.
       </p>
     );
   }
 
   if (students.length === 0) {
-    return <p className="text-sm text-gray-400">Buổi chưa có học sinh để đánh giá.</p>;
+    return <p className="text-sm text-muted-foreground">Buổi chưa có học sinh để đánh giá.</p>;
   }
 
   const current = students[sel];
@@ -177,7 +177,7 @@ export function SessionEvalEditor({
 
   return (
     <div className="space-y-4">
-      <div className="rounded-lg border border-purple-100 bg-purple-50/50 px-3 py-2 text-xs text-purple-700">
+      <div className="rounded-lg border border-primary-soft bg-primary-soft/50 px-3 py-2 text-xs text-primary">
         Phiếu: <strong>{round.title}</strong>
       </div>
 
@@ -190,13 +190,7 @@ export function SessionEvalEditor({
               key={s.studentId}
               type="button"
               onClick={() => setSel(i)}
-              className={`rounded-full px-3 py-1 text-xs font-medium ${
-                i === sel
-                  ? "bg-[#7C3AED] text-white"
-                  : done
-                    ? "bg-emerald-100 text-emerald-700"
-                    : "bg-gray-100 text-gray-600"
-              }`}
+              className={`rounded-full px-3 py-1 text-xs font-medium ${ i === sel ? "bg-primary text-white" : done ? "bg-state-success-soft text-state-success-ink" : "bg-muted text-muted-foreground" }`}
             >
               {s.name}
               {done ? " ✓" : ""}
@@ -207,12 +201,12 @@ export function SessionEvalEditor({
       </div>
 
       {current && (
-        <div className="space-y-5 rounded-xl border border-gray-200 bg-white p-4">
-          <p className="text-sm font-semibold text-gray-900">{current.name}</p>
+        <div className="space-y-5 rounded-xl border border-border bg-card p-4">
+          <p className="text-sm font-semibold text-foreground">{current.name}</p>
           {groups.map((g, gi) => (
             <div key={gi} className="space-y-4">
               {g.label && (
-                <h4 className="border-b border-gray-100 pb-1 text-xs font-bold uppercase tracking-wider text-[#7C3AED]">
+                <h4 className="border-b border-border pb-1 text-xs font-bold uppercase tracking-wider text-primary">
                   {g.label}
                 </h4>
               )}
@@ -236,7 +230,7 @@ export function SessionEvalEditor({
           type="button"
           onClick={doSave}
           disabled={saving}
-          className="inline-flex items-center gap-1.5 rounded-lg bg-[#7C3AED] px-4 py-2 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-50"
+          className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-50"
         >
           <Save className="h-4 w-4" />
           {saving ? "Đang lưu…" : "Lưu phiếu đánh giá buổi"}
@@ -261,9 +255,9 @@ function QuestionField({
 }) {
   return (
     <div className="space-y-1.5">
-      <label className="block text-sm font-medium text-gray-700">
+      <label className="block text-sm font-medium text-foreground">
         {q.label}
-        {q.required && <span className="ml-1 text-rose-500">*</span>}
+        {q.required && <span className="ml-1 text-state-danger-ink">*</span>}
       </label>
 
       {q.type === "STAR_RATING" && (
@@ -271,7 +265,7 @@ function QuestionField({
           value={a.valueNumber ?? ""}
           disabled={disabled}
           onChange={(e) => onPatch({ valueNumber: e.target.value ? Number(e.target.value) : null })}
-          className="h-9 rounded-lg border border-gray-300 px-2 text-sm disabled:bg-gray-50"
+          className="h-9 rounded-lg border border-border px-2 text-sm disabled:bg-muted"
           aria-label={q.label}
         >
           <option value="">— sao —</option>
@@ -286,7 +280,7 @@ function QuestionField({
       {q.type === "RADIO" && (
         <div className="space-y-1">
           {(q.options ?? []).map((opt) => (
-            <label key={opt} className="flex items-start gap-2 text-sm text-gray-700">
+            <label key={opt} className="flex items-start gap-2 text-sm text-foreground">
               <input
                 type="radio"
                 name={`${studentId}-${q.id}`}
@@ -306,7 +300,7 @@ function QuestionField({
           {(q.options ?? []).map((opt) => {
             const checked = a.valueOptions.includes(opt);
             return (
-              <label key={opt} className="flex items-start gap-2 text-sm text-gray-700">
+              <label key={opt} className="flex items-start gap-2 text-sm text-foreground">
                 <input
                   type="checkbox"
                   checked={checked}
@@ -338,7 +332,7 @@ function QuestionField({
           rows={2}
           onChange={(e) => onPatch({ valueText: e.target.value })}
           placeholder="Nhận xét…"
-          className="w-full resize-y rounded-lg border border-gray-300 px-3 py-1.5 text-sm focus:border-[#7C3AED] focus:outline-none disabled:bg-gray-50"
+          className="w-full resize-y rounded-lg border border-border px-3 py-1.5 text-sm focus:border-primary focus:outline-none disabled:bg-muted"
         />
       )}
 
@@ -349,7 +343,7 @@ function QuestionField({
           disabled={disabled}
           onChange={(e) => onPatch({ valueText: e.target.value })}
           placeholder="Ghi chú thêm (tuỳ chọn)…"
-          className="w-full rounded-lg border border-gray-200 px-3 py-1.5 text-sm focus:border-[#7C3AED] focus:outline-none disabled:bg-gray-50"
+          className="w-full rounded-lg border border-border px-3 py-1.5 text-sm focus:border-primary focus:outline-none disabled:bg-muted"
         />
       )}
     </div>
@@ -370,7 +364,7 @@ function PhotoField({
       {urls.length > 0 && (
         <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
           {urls.map((u) => (
-            <div key={u} className="relative overflow-hidden rounded-lg border border-gray-200">
+            <div key={u} className="relative overflow-hidden rounded-lg border border-border">
               <img src={u} alt="Ảnh" className="h-20 w-full object-cover" />
               {!disabled && (
                 <button

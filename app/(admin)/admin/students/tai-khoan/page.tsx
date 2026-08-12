@@ -117,15 +117,15 @@ export default async function ParentAccountsPage({
     <div className="p-6">
       <Link
         href="/students"
-        className="mb-4 inline-flex items-center gap-1 text-sm text-gray-500 hover:text-gray-700"
+        className="mb-4 inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
       >
         <ChevronLeft className="h-4 w-4" /> Học viên
       </Link>
 
-      <div className="mb-4 flex flex-wrap items-end justify-between gap-3 border-b border-gray-200 pb-4">
+      <div className="mb-4 flex flex-wrap items-end justify-between gap-3 border-b border-border pb-4">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Tài khoản phụ huynh</h1>
-          <p className="mt-1 text-sm text-gray-600">
+          <h1 className="text-2xl font-bold text-foreground">Tài khoản phụ huynh</h1>
+          <p className="mt-1 text-sm text-muted-foreground">
             Theo dõi tài khoản chờ kích hoạt · gửi lại mã OTP · báo cấp tài khoản qua Zalo · xuất
             danh sách gọi điện. Phụ huynh tự kích hoạt tại{' '}
             <span className="font-mono">satarobo.vn/kich-hoat</span> (nhập SĐT → nhận OTP
@@ -135,13 +135,13 @@ export default async function ParentAccountsPage({
         <div className="flex gap-2 text-sm">
           <Link
             href="/students/tai-khoan"
-            className={`rounded-lg px-3 py-1.5 font-medium ${!showAll ? 'bg-orange-600 text-white' : 'border border-gray-300 text-gray-700 hover:bg-gray-50'}`}
+            className={`rounded-lg px-3 py-1.5 font-medium ${!showAll ? 'bg-primary-dark text-white' : 'border border-border text-foreground hover:bg-muted'}`}
           >
             Chờ kích hoạt ({pendingCount})
           </Link>
           <Link
             href="/students/tai-khoan?status=all"
-            className={`rounded-lg px-3 py-1.5 font-medium ${showAll ? 'bg-orange-600 text-white' : 'border border-gray-300 text-gray-700 hover:bg-gray-50'}`}
+            className={`rounded-lg px-3 py-1.5 font-medium ${showAll ? 'bg-primary-dark text-white' : 'border border-border text-foreground hover:bg-muted'}`}
           >
             Tất cả ({pendingCount + activeCount})
           </Link>
@@ -149,7 +149,7 @@ export default async function ParentAccountsPage({
       </div>
 
       {!znsTemplate && (
-        <div className="mb-4 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-800">
+        <div className="mb-4 rounded-lg border border-state-warning bg-state-warning-soft p-3 text-sm text-state-warning-ink">
           <b>Mẫu ZNS &quot;báo cấp tài khoản&quot; chưa cấu hình</b> (env{' '}
           <span className="font-mono">ZALO_ZNS_TEMPLATE_ACCOUNT</span> — mẫu 616899 đang chờ Zalo
           duyệt). Trong lúc chờ: dùng nút <b>Xuất CSV</b> để gọi điện/nhắn Zalo OA thủ công hướng

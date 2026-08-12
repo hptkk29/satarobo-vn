@@ -210,7 +210,7 @@ export default async function ContactPage() {
                   className="flex items-center gap-2 text-neutral-700 hover:text-orange-600"
                 >
                   <Phone className="w-4 h-4" />
-                  <span className="text-neutral-400">{loc.code}</span>
+                  <span className="text-neutral-500">{loc.code}</span>
                   {loc.hotline}
                 </a>
                 <div className="flex items-center gap-2 text-neutral-600">

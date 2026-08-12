@@ -14,6 +14,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ListToolbar } from "../../_components/ui/list-toolbar";
 import { proposeCourseCompletion } from "../_actions";
+import { initialsOf } from "@/lib/ui/initials";
+import { PhanTrangBang } from "@/components/ui/phan-trang-bang";
 
 export type CompletionTableRow = {
   /** enrollment id — key ổn định + tham số đề xuất. */
@@ -34,9 +36,6 @@ export type CompletionTableRow = {
   requestPending: boolean;
 };
 
-const initials = (name: string) =>
-  name.split(" ").slice(-2).map((w) => w[0] ?? "").join("").toUpperCase();
-
 export function CompletionTable({
   rows,
   completedSessions,
@@ -45,7 +44,9 @@ export function CompletionTable({
   completedSessions: number;
 }) {
   const [query, setQuery] = useState("");
-  const [status, setStatus] = useState<"all" | "pending" | "done" | "open">("all");
+  const [status, setStatus] = useState<"all" | "pending" | "done" | "open">(
+    "all",
+  );
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     return rows.filter((r) => {
@@ -80,79 +81,104 @@ export function CompletionTable({
 
       <section className="t-card overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm">
-            <thead>
-              <tr className="border-b border-border bg-muted/50 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                <th scope="col" className="px-4 py-3">Học viên</th>
-                <th scope="col" className="px-4 py-3">Chuyên cần</th>
-                <th scope="col" className="px-4 py-3">Chuyển sang</th>
-                <th scope="col" className="px-4 py-3">Kết quả</th>
-                <th scope="col" className="px-4 py-3">Hoàn thành khoá</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filtered.length === 0 ? (
-                <tr>
-                  <td colSpan={5} className="px-4 py-8 text-center text-sm text-muted-foreground">
-                    Không tìm thấy học viên phù hợp.
-                  </td>
+          <PhanTrangBang>
+            <table className="min-w-[660px] w-full text-left text-sm">
+              <thead>
+                <tr className="border-b border-border bg-muted/50 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  <th scope="col" className="px-4 py-3">
+                    Học viên
+                  </th>
+                  <th scope="col" className="px-4 py-3">
+                    Chuyên cần
+                  </th>
+                  <th scope="col" className="px-4 py-3">
+                    Chuyển sang
+                  </th>
+                  <th scope="col" className="px-4 py-3">
+                    Kết quả
+                  </th>
+                  <th scope="col" className="px-4 py-3">
+                    Hoàn thành khoá
+                  </th>
                 </tr>
-              ) : (
-                filtered.map((r) => (
-                  <tr
-                    key={r.id}
-                    className="border-b border-border/60 transition-colors last:border-0 hover:bg-muted/50"
-                  >
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-3">
-                        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-orange-100 text-xs font-semibold text-orange-700 dark:bg-orange-500/15 dark:text-orange-300">
-                          {initials(r.name)}
-                        </span>
-                        <span className="font-medium text-foreground">{r.name}</span>
-                      </div>
-                    </td>
-                    <td className="px-4 py-3">
-                      {completedSessions === 0 ? (
-                        <span className="text-xs text-muted-foreground">Chưa có buổi nào</span>
-                      ) : (
-                        <div>
-                          <p className="font-medium text-foreground">
-                            {r.attended}/{completedSessions} buổi
-                          </p>
-                          {r.absent > 0 || r.needMakeup > 0 ? (
-                            <p className="text-xs text-muted-foreground">
-                              Vắng {r.absent}
-                              {r.needMakeup > 0 ? ` · chờ bù ${r.needMakeup}` : ""}
-                            </p>
-                          ) : null}
-                        </div>
-                      )}
-                    </td>
-                    <td className="px-4 py-3 whitespace-nowrap text-foreground">
-                      {r.nextCourseName ?? <span className="text-muted-foreground">—</span>}
-                    </td>
-                    <td className="px-4 py-3 whitespace-nowrap">
-                      {r.finalGrade ? (
-                        <span className="font-semibold text-foreground">{r.finalGrade}</span>
-                      ) : r.passed ? (
-                        <Badge
-                          variant="outline"
-                          className="w-fit border-emerald-300 bg-emerald-50 text-emerald-700 dark:border-emerald-500/40 dark:bg-emerald-500/15 dark:text-emerald-300"
-                        >
-                          Đạt
-                        </Badge>
-                      ) : (
-                        <span className="text-muted-foreground">—</span>
-                      )}
-                    </td>
-                    <td className="px-4 py-3">
-                      <CompletionCell row={r} />
+              </thead>
+              <tbody>
+                {filtered.length === 0 ? (
+                  <tr>
+                    <td
+                      colSpan={5}
+                      className="px-4 py-8 text-center text-sm text-muted-foreground"
+                    >
+                      Không tìm thấy học viên phù hợp.
                     </td>
                   </tr>
-                ))
-              )}
-            </tbody>
-          </table>
+                ) : (
+                  filtered.map((r) => (
+                    <tr
+                      key={r.id}
+                      className="border-b border-border/60 transition-colors last:border-0 hover:bg-muted/50"
+                    >
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-3">
+                          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary-soft text-xs font-semibold text-primary-ink">
+                            {initialsOf(r.name)}
+                          </span>
+                          <span className="font-medium text-foreground">
+                            {r.name}
+                          </span>
+                        </div>
+                      </td>
+                      <td className="px-4 py-3">
+                        {completedSessions === 0 ? (
+                          <span className="text-xs text-muted-foreground">
+                            Chưa có buổi nào
+                          </span>
+                        ) : (
+                          <div>
+                            <p className="font-medium text-foreground">
+                              {r.attended}/{completedSessions} buổi
+                            </p>
+                            {r.absent > 0 || r.needMakeup > 0 ? (
+                              <p className="text-xs text-muted-foreground">
+                                Vắng {r.absent}
+                                {r.needMakeup > 0
+                                  ? ` · chờ bù ${r.needMakeup}`
+                                  : ""}
+                              </p>
+                            ) : null}
+                          </div>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap text-foreground">
+                        {r.nextCourseName ?? (
+                          <span className="text-muted-foreground">—</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap">
+                        {r.finalGrade ? (
+                          <span className="font-semibold text-foreground">
+                            {r.finalGrade}
+                          </span>
+                        ) : r.passed ? (
+                          <Badge
+                            variant="outline"
+                            className="w-fit border-state-success-soft bg-state-success-soft text-state-success-ink dark:border-state-success"
+                          >
+                            Đạt
+                          </Badge>
+                        ) : (
+                          <span className="text-muted-foreground">—</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3">
+                        <CompletionCell row={r} />
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </PhanTrangBang>
         </div>
       </section>
     </>
@@ -168,12 +194,15 @@ function CompletionCell({ row: r }: { row: CompletionTableRow }) {
       <div className="flex flex-col gap-0.5">
         <Badge
           variant="outline"
-          className="w-fit border-emerald-300 bg-emerald-50 text-emerald-700 dark:border-emerald-500/40 dark:bg-emerald-500/15 dark:text-emerald-300"
+          className="w-fit border-state-success-soft bg-state-success-soft text-state-success-ink dark:border-state-success"
         >
-          <CheckCircle2 className="h-3.5 w-3.5" aria-hidden /> Đã hoàn thành · {r.certificateCode}
+          <CheckCircle2 className="h-3.5 w-3.5" aria-hidden /> Đã hoàn thành ·{" "}
+          {r.certificateCode}
         </Badge>
         {r.completedAtLabel && (
-          <span className="text-xs text-muted-foreground">{r.completedAtLabel}</span>
+          <span className="text-xs text-muted-foreground">
+            {r.completedAtLabel}
+          </span>
         )}
       </div>
     );
@@ -182,7 +211,7 @@ function CompletionCell({ row: r }: { row: CompletionTableRow }) {
     return (
       <Badge
         variant="outline"
-        className="w-fit border-amber-300 bg-amber-50 text-amber-700 dark:border-amber-500/40 dark:bg-amber-500/15 dark:text-amber-300"
+        className="w-fit border-state-warning-soft bg-state-warning-soft text-state-warning-ink dark:border-state-warning"
       >
         Chờ duyệt
       </Badge>

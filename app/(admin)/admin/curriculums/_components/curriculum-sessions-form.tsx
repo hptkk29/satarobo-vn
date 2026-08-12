@@ -104,29 +104,29 @@ export function CurriculumSessionsForm({
   const hasBlocked = (plan?.blocked.length ?? 0) > 0;
 
   return (
-    <section className="rounded-xl border border-neutral-200 bg-white p-4">
-      <h2 className="text-sm font-bold uppercase tracking-wider text-neutral-700">
+    <section className="rounded-xl border border-border bg-card p-4">
+      <h2 className="text-sm font-bold uppercase tracking-wider text-foreground">
         Số buổi
       </h2>
-      <p className="mt-1 text-xs text-neutral-500">
+      <p className="mt-1 text-xs text-muted-foreground">
         Nhập tổng số buổi. Tăng → thêm buổi mới ở cuối (giữ nguyên buổi cũ); giảm →
         lưu trữ buổi cuối (có cảnh báo nếu gắn bài tập/đề thi/tài liệu, không xóa).
       </p>
 
       {error && (
-        <div className="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+        <div className="mt-3 rounded-lg border border-state-danger-soft bg-state-danger-soft px-3 py-2 text-sm text-state-danger-ink">
           {error}
         </div>
       )}
       {notice && !error && (
-        <div className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700">
+        <div className="mt-3 rounded-lg border border-state-success-soft bg-state-success-soft px-3 py-2 text-sm text-state-success-ink">
           {notice}
         </div>
       )}
 
       <form onSubmit={handlePreview} className="mt-3 flex items-end gap-3">
         <label className="block">
-          <span className="mb-1 block text-xs font-semibold text-neutral-600">
+          <span className="mb-1 block text-xs font-semibold text-muted-foreground">
             Tổng số buổi (hiện tại: {currentCount})
           </span>
           <input
@@ -135,13 +135,13 @@ export function CurriculumSessionsForm({
             value={target}
             onChange={(e) => setTarget(Math.max(1, parseInt(e.target.value, 10) || 1))}
             disabled={pending}
-            className="w-32 rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm outline-none focus:border-[#7C3AED] focus:ring-2 focus:ring-[#7C3AED]/20"
+            className="w-32 rounded-lg border border-border bg-card px-3 py-2 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
           />
         </label>
         <button
           type="submit"
           disabled={pending}
-          className="rounded-lg bg-[#7C3AED] px-4 py-2 text-sm font-bold text-white hover:opacity-90 disabled:opacity-50"
+          className="rounded-lg bg-primary px-4 py-2 text-sm font-bold text-white hover:opacity-90 disabled:opacity-50"
         >
           {pending ? "Đang xử lý..." : "Áp dụng"}
         </button>
@@ -155,22 +155,22 @@ export function CurriculumSessionsForm({
           onClick={() => !pending && setPlan(null)}
         >
           <div
-            className="relative w-full max-w-lg rounded-xl bg-white p-6 shadow-xl"
+            className="relative w-full max-w-lg rounded-xl bg-card p-6 shadow-xl"
             onClick={(e) => e.stopPropagation()}
           >
             <button
               type="button"
               onClick={() => !pending && setPlan(null)}
               aria-label="Đóng"
-              className="absolute right-3 top-3 rounded-md p-1 text-neutral-500 hover:bg-neutral-100"
+              className="absolute right-3 top-3 rounded-md p-1 text-muted-foreground hover:bg-muted"
             >
               <X className="h-4 w-4" />
             </button>
-            <h3 className="flex items-center gap-2 text-lg font-bold text-neutral-900">
-              <AlertTriangle className="h-5 w-5 text-amber-500" />
+            <h3 className="flex items-center gap-2 text-lg font-bold text-foreground">
+              <AlertTriangle className="h-5 w-5 text-state-warning-ink" />
               Xác nhận giảm còn {plan.target} buổi
             </h3>
-            <p className="mt-1 text-sm text-neutral-600">
+            <p className="mt-1 text-sm text-muted-foreground">
               {plan.toArchive.length} buổi sẽ được <strong>lưu trữ</strong> (đọc-only,
               không xóa — có thể khôi phục sau):
             </p>
@@ -179,18 +179,18 @@ export function CurriculumSessionsForm({
               {plan.toArchive.map((l) => (
                 <li
                   key={l.id}
-                  className="rounded-lg border border-neutral-200 bg-neutral-50 px-3 py-2 text-sm"
+                  className="rounded-lg border border-border bg-muted px-3 py-2 text-sm"
                 >
-                  <span className="font-semibold text-neutral-800">
+                  <span className="font-semibold text-foreground">
                     Bài {l.order}: {l.title}
                   </span>
                   {l.isInUse && (
-                    <span className="ml-2 rounded bg-red-100 px-1.5 py-0.5 text-xs font-semibold text-red-700">
+                    <span className="ml-2 rounded bg-state-danger-soft px-1.5 py-0.5 text-xs font-semibold text-state-danger-ink">
                       Đang sử dụng — không thể loại
                     </span>
                   )}
                   {l.hasLinks && (
-                    <span className="ml-2 text-xs text-amber-700">
+                    <span className="ml-2 text-xs text-state-warning-ink">
                       ⚠ {l.examCount} đề thi · {l.assignmentCount} bài tập ·{" "}
                       {l.documentCount} tài liệu (giữ nguyên link)
                     </span>
@@ -200,7 +200,7 @@ export function CurriculumSessionsForm({
             </ul>
 
             {hasBlocked && (
-              <div className="mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+              <div className="mt-3 rounded-lg border border-state-danger-soft bg-state-danger-soft px-3 py-2 text-sm text-state-danger-ink">
                 Có buổi đang được sử dụng (IN_USE). Hãy đổi trạng thái khỏi “Đang sử
                 dụng” trước khi loại.
               </div>
@@ -211,7 +211,7 @@ export function CurriculumSessionsForm({
                 type="button"
                 onClick={() => setPlan(null)}
                 disabled={pending}
-                className="rounded-lg border border-neutral-300 px-4 py-2 text-sm font-semibold text-neutral-700 hover:bg-neutral-50 disabled:opacity-50"
+                className="rounded-lg border border-border px-4 py-2 text-sm font-semibold text-foreground hover:bg-muted disabled:opacity-50"
               >
                 Huỷ
               </button>
@@ -219,7 +219,7 @@ export function CurriculumSessionsForm({
                 type="button"
                 onClick={confirmDecrease}
                 disabled={pending || hasBlocked}
-                className="rounded-lg bg-red-600 px-4 py-2 text-sm font-bold text-white hover:opacity-90 disabled:opacity-50"
+                className="rounded-lg bg-state-danger-ink px-4 py-2 text-sm font-bold text-white hover:opacity-90 disabled:opacity-50"
               >
                 {pending ? "Đang lưu..." : "Xác nhận lưu trữ"}
               </button>

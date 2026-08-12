@@ -40,7 +40,7 @@ export function AssignSelect({
       value={value}
       onChange={(e) => onChange(e.target.value)}
       disabled={pending}
-      className="rounded-lg border border-gray-300 px-2 py-2 text-sm disabled:opacity-50"
+      className="rounded-lg border border-border px-2 py-2 text-sm disabled:opacity-50"
       title="Gán tay cho sale"
     >
       <option value="">Gán cho…</option>

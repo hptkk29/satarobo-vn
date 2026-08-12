@@ -103,14 +103,14 @@ export function SendEmailModal({
                 </SelectTrigger>
                 <SelectContent>
                   {templates.length === 0 && (
-                    <div className="p-2 text-xs text-gray-500">
+                    <div className="p-2 text-xs text-muted-foreground">
                       Không có template phù hợp
                     </div>
                   )}
                   {templates.map((t) => (
                     <SelectItem key={t.id} value={t.id}>
                       {t.name}{" "}
-                      <span className="text-xs text-gray-500">
+                      <span className="text-xs text-muted-foreground">
                         ({t.trigger})
                       </span>
                     </SelectItem>
@@ -134,7 +134,7 @@ export function SendEmailModal({
                 onChange={(e) => setToName(e.target.value)}
               />
             </div>
-            <div className="p-2 bg-blue-50 text-xs text-blue-700 rounded">
+            <div className="p-2 bg-state-info-soft text-xs text-state-info-ink rounded">
               Email sẽ render variables từ thông tin đơn hàng này. Preview tại{" "}
               <a
                 href="/email-templates"

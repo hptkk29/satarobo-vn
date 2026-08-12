@@ -39,20 +39,20 @@ const dayKeyFmt = new Intl.DateTimeFormat("en-CA", {
 const MEDIA_STATUS: Record<MediaStatus, { label: string; cls: string }> = {
   PENDING: {
     label: "Chờ duyệt",
-    cls: "bg-amber-100 text-amber-700 dark:bg-amber-500/15 dark:text-amber-300",
+    cls: "bg-state-warning-soft text-state-warning-ink",
   },
   APPROVED: {
     label: "Đã duyệt",
-    cls: "bg-emerald-100 text-emerald-700 dark:bg-emerald-600/20 dark:text-emerald-200",
+    cls: "bg-state-success-soft text-state-success-ink",
   },
   REJECTED: {
     label: "Từ chối",
-    cls: "bg-rose-100 text-rose-700 dark:bg-rose-500/15 dark:text-rose-300",
+    cls: "bg-state-danger-soft text-state-danger-ink",
   },
   // Kho ảnh (chưa gửi PH) — tab hub chỉ HIỆN badge; thao tác gửi/xoá ở trang Ảnh lớp.
   DRAFT: {
     label: "Trong kho",
-    cls: "bg-sky-100 text-sky-700 dark:bg-sky-500/15 dark:text-sky-300",
+    cls: "bg-state-info-soft text-state-info-ink",
   },
 };
 
@@ -64,7 +64,12 @@ type MediaView = {
   isClassWide: boolean;
   tagNames: string[];
 };
-type AlbumGroup = { key: string; label: string; sortKey: number; items: MediaView[] };
+type AlbumGroup = {
+  key: string;
+  label: string;
+  sortKey: number;
+  items: MediaView[];
+};
 
 export async function HubGalleryTab({
   actor,
@@ -93,7 +98,9 @@ export async function HubGalleryTab({
   });
 
   const sessionIds = [
-    ...new Set(media.map((m) => m.classSessionId).filter((x): x is string => !!x)),
+    ...new Set(
+      media.map((m) => m.classSessionId).filter((x): x is string => !!x),
+    ),
   ];
   const sessions = sessionIds.length
     ? await xdb.classSession.findMany({
@@ -103,7 +110,9 @@ export async function HubGalleryTab({
     : [];
   const sessionMap = new Map(sessions.map((s) => [s.id, s]));
 
-  const studentIds = [...new Set(media.flatMap((m) => m.tags.map((t) => t.studentId)))];
+  const studentIds = [
+    ...new Set(media.flatMap((m) => m.tags.map((t) => t.studentId))),
+  ];
   const students = studentIds.length
     ? await xdb.student.findMany({
         where: { id: { in: studentIds } },
@@ -151,8 +160,8 @@ export async function HubGalleryTab({
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="text-sm text-muted-foreground">
-          Ảnh các buổi học của lớp. Bạn đăng ảnh → quản lý duyệt → phụ huynh xem ảnh con được
-          gắn thẻ (hoặc ảnh chung lớp).
+          Ảnh các buổi học của lớp. Bạn đăng ảnh → quản lý duyệt → phụ huynh xem
+          ảnh con được gắn thẻ (hoặc ảnh chung lớp).
         </p>
         <div className="flex flex-wrap items-center gap-3">
           {/* B2: tab hub chỉ HIỆN badge "Trong kho" — thao tác gửi/xoá ảnh kho nằm ở trang
@@ -160,7 +169,7 @@ export async function HubGalleryTab({
               /teacher/* là pattern chuẩn của nav-config (proxy lo host giaovien). */}
           <Link
             href={`/teacher/anh-lop?classId=${classId}`}
-            className="inline-flex items-center gap-1 text-xs font-semibold text-orange-600 hover:text-orange-700 dark:text-orange-400"
+            className="inline-flex items-center gap-1 text-xs font-semibold text-primary-ink hover:text-primary-ink-hover"
           >
             Trang Ảnh lớp (gửi/xoá ảnh trong kho)
             <ArrowRight className="h-3.5 w-3.5" aria-hidden />
@@ -180,11 +189,16 @@ export async function HubGalleryTab({
             <section key={g.key}>
               <div className="mb-2 flex items-center gap-2">
                 {g.key.startsWith("s:") ? (
-                  <Images className="h-4 w-4 text-orange-600 dark:text-orange-400" aria-hidden />
+                  <Images className="h-4 w-4 text-primary-ink" aria-hidden />
                 ) : (
-                  <Calendar className="h-4 w-4 text-muted-foreground" aria-hidden />
+                  <Calendar
+                    className="h-4 w-4 text-muted-foreground"
+                    aria-hidden
+                  />
                 )}
-                <h3 className="text-sm font-bold capitalize text-foreground">{g.label}</h3>
+                <h3 className="text-sm font-bold capitalize text-foreground">
+                  {g.label}
+                </h3>
                 <Badge variant="outline">{g.items.length} ảnh</Badge>
               </div>
               <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
@@ -207,13 +221,15 @@ export async function HubGalleryTab({
                           {MEDIA_STATUS[m.status].label}
                         </span>
                         {m.isClassWide && (
-                          <span className="rounded-full bg-blue-100 px-2 py-0.5 text-[11px] font-semibold text-blue-700 dark:bg-blue-500/15 dark:text-blue-300">
+                          <span className="rounded-full bg-state-info-soft px-2 py-0.5 text-[11px] font-semibold text-state-info-ink">
                             Ảnh chung lớp
                           </span>
                         )}
                       </div>
                       {m.caption && (
-                        <p className="line-clamp-2 text-xs text-muted-foreground">{m.caption}</p>
+                        <p className="line-clamp-2 text-xs text-muted-foreground">
+                          {m.caption}
+                        </p>
                       )}
                       {m.tagNames.length > 0 && (
                         <p className="truncate text-[11px] text-muted-foreground">

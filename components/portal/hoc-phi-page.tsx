@@ -1,4 +1,11 @@
-import { Wallet, CircleCheck, CalendarClock, Info, Phone, Receipt } from "lucide-react";
+import {
+  Wallet,
+  CircleCheck,
+  CalendarClock,
+  Info,
+  Phone,
+  Receipt,
+} from "lucide-react";
 import type { StudentBilling } from "@/lib/portal/billing-student";
 import { PAYMENT_METHOD_LABEL } from "@/lib/portal/billing";
 import { PageHero, HeroMetric } from "@/components/portal/page-header";
@@ -23,7 +30,10 @@ function dmy(iso: string | null): string {
 }
 /** Số thứ tự ngày (epoch days) của `d` theo lịch Asia/Ho_Chi_Minh. */
 function vnDayNumber(d: Date): number {
-  const [y, m, day] = new Intl.DateTimeFormat("en-CA", { timeZone: VN_TZ }).format(d).split("-").map(Number);
+  const [y, m, day] = new Intl.DateTimeFormat("en-CA", { timeZone: VN_TZ })
+    .format(d)
+    .split("-")
+    .map(Number);
   return Date.UTC(y ?? 1970, (m ?? 1) - 1, day ?? 1) / 86_400_000;
 }
 function daysLeft(iso: string | null): number | null {
@@ -57,45 +67,91 @@ export function HocPhiPageV2({
 
       <div className="flex items-start gap-3 rounded-2xl border border-primary/20 bg-primary/5 p-4 text-sm text-muted-foreground">
         <Info className="mt-0.5 size-5 shrink-0 text-primary" />
-        <p>Phụ huynh chỉ thấy các khoản <b className="text-foreground">kế toán đã xác nhận thực thu</b>. Công nợ = giá phải đóng − số đã xác nhận. Phiếu thu tách riêng theo từng con/khóa học.</p>
+        <p>
+          Phụ huynh chỉ thấy các khoản{" "}
+          <b className="text-foreground">kế toán đã xác nhận thực thu</b>. Công
+          nợ = giá phải đóng − số đã xác nhận. Phiếu thu tách riêng theo từng
+          con/khóa học.
+        </p>
       </div>
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-        <Stat icon={CircleCheck} tone="success" value={vnd(data.paid)} label="Đã thanh toán (đã xác nhận)" />
-        <Stat icon={Wallet} tone="caution" value={vnd(data.outstanding)} label="Công nợ còn lại" />
-        <Stat icon={CalendarClock} tone="destructive" value={dmy(data.nextDueDate)} label="Kỳ đến hạn" />
+        <Stat
+          icon={CircleCheck}
+          tone="success"
+          value={vnd(data.paid)}
+          label="Đã thanh toán (đã xác nhận)"
+        />
+        <Stat
+          icon={Wallet}
+          tone="caution"
+          value={vnd(data.outstanding)}
+          label="Công nợ còn lại"
+        />
+        <Stat
+          icon={CalendarClock}
+          tone="destructive"
+          value={dmy(data.nextDueDate)}
+          label="Kỳ đến hạn"
+        />
       </div>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_18rem]">
         <div className="space-y-3">
-          <h2 className="text-sm font-bold uppercase tracking-wider text-foreground">Khoản cần thanh toán</h2>
+          <h2 className="text-sm font-bold uppercase tracking-wider text-foreground">
+            Khoản cần thanh toán
+          </h2>
           {data.outstanding > 0 ? (
             <div className="space-y-3">
-              {data.rows.filter((r) => r.outstanding > 0).map((r) => (
-                <div key={r.enrollmentId} className="rounded-2xl border border-border bg-card p-4">
-                  <div className="flex items-start justify-between gap-2">
-                    <div>
-                      <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Học phí</p>
-                      <p className="text-sm font-bold text-foreground">{r.courseName ?? "Học phí khóa học"}{r.className ? ` · ${r.className}` : ""}</p>
+              {data.rows
+                .filter((r) => r.outstanding > 0)
+                .map((r) => (
+                  <div
+                    key={r.enrollmentId}
+                    className="rounded-2xl border border-border bg-card p-4"
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                          Học phí
+                        </p>
+                        <p className="text-sm font-bold text-foreground">
+                          {r.courseName ?? "Học phí khóa học"}
+                          {r.className ? ` · ${r.className}` : ""}
+                        </p>
+                      </div>
+                      <span className="shrink-0 rounded-md bg-destructive px-2 py-0.5 text-xs font-bold text-white">
+                        Chưa thanh toán
+                      </span>
                     </div>
-                    <span className="shrink-0 rounded-md bg-destructive px-2 py-0.5 text-xs font-bold text-white">Chưa thanh toán</span>
+                    <p className="mt-2 text-2xl font-bold text-primary">
+                      {vnd(r.outstanding)}
+                    </p>
                   </div>
-                  <p className="mt-2 text-2xl font-bold text-primary">{vnd(r.outstanding)}</p>
-                </div>
-              ))}
+                ))}
               {data.nextDueDate && (
                 <div className="inline-flex items-center gap-1.5 rounded-lg bg-muted px-3 py-1.5 text-xs font-medium text-muted-foreground">
-                  <CalendarClock className="size-4" /> Hạn đóng: <b className="text-foreground">{dmy(data.nextDueDate)}</b>{dleft != null ? (dleft >= 0 ? ` (còn ${dleft} ngày)` : ` (quá hạn ${-dleft} ngày)`) : ""}
+                  <CalendarClock className="size-4" /> Hạn đóng:{" "}
+                  <b className="text-foreground">{dmy(data.nextDueDate)}</b>
+                  {dleft != null
+                    ? dleft >= 0
+                      ? ` (còn ${dleft} ngày)`
+                      : ` (quá hạn ${-dleft} ngày)`
+                    : ""}
                 </div>
               )}
               <div className="flex items-start gap-2 rounded-xl border border-border bg-muted/50 p-3 text-xs font-medium text-muted-foreground">
                 <Phone className="mt-0.5 size-4 shrink-0 text-primary" />
-                <p>Vui lòng liên hệ trung tâm ({hotlinesInline()}) để được hướng dẫn thanh toán khoản còn lại.</p>
+                <p>
+                  Vui lòng liên hệ trung tâm ({hotlinesInline()}) để được hướng
+                  dẫn thanh toán khoản còn lại.
+                </p>
               </div>
             </div>
           ) : (
             <div className="flex items-center gap-3 rounded-2xl border border-success/30 bg-success/5 p-4 text-sm font-semibold text-success">
-              <CircleCheck className="size-5 shrink-0" /> Đã thanh toán đủ — không có khoản nào cần đóng.
+              <CircleCheck className="size-5 shrink-0" /> Đã thanh toán đủ —
+              không có khoản nào cần đóng.
             </div>
           )}
 
@@ -106,12 +162,16 @@ export function HocPhiPageV2({
               <div className="space-y-1">
                 {data.pendingCount > 0 && (
                   <p>
-                    Có <b className="text-foreground">{data.pendingCount}</b> khoản đang chờ kế toán xác nhận. Số tiền sẽ được cập nhật vào mục “Đã thanh toán” sau khi được xác nhận.
+                    Có <b className="text-foreground">{data.pendingCount}</b>{" "}
+                    khoản đang chờ kế toán xác nhận. Số tiền sẽ được cập nhật
+                    vào mục “Đã thanh toán” sau khi được xác nhận.
                   </p>
                 )}
                 {data.rejectedCount > 0 && (
                   <p>
-                    Có <b className="text-foreground">{data.rejectedCount}</b> khoản bị từ chối — vui lòng liên hệ trung tâm ({hotlinesInline()}) để được hỗ trợ.
+                    Có <b className="text-foreground">{data.rejectedCount}</b>{" "}
+                    khoản bị từ chối — vui lòng liên hệ trung tâm (
+                    {hotlinesInline()}) để được hỗ trợ.
                   </p>
                 )}
               </div>
@@ -120,9 +180,14 @@ export function HocPhiPageV2({
         </div>
 
         <div className="space-y-2 rounded-2xl border border-border bg-card p-4">
-          <p className="flex items-center gap-2 text-sm font-bold text-foreground"><Info className="size-4 text-primary" /> Lưu ý về học phí</p>
+          <p className="flex items-center gap-2 text-sm font-bold text-foreground">
+            <Info className="size-4 text-primary" /> Lưu ý về học phí
+          </p>
           <ul className="space-y-1.5 text-xs font-medium text-muted-foreground">
-            <li>• Chỉ hiển thị các khoản <b className="text-foreground">kế toán đã xác nhận thực thu</b>.</li>
+            <li>
+              • Chỉ hiển thị các khoản{" "}
+              <b className="text-foreground">kế toán đã xác nhận thực thu</b>.
+            </li>
             <li>• Phiếu thu tách riêng theo từng con / khóa học.</li>
             <li>• Công nợ = giá phải đóng − số đã xác nhận.</li>
           </ul>
@@ -130,19 +195,32 @@ export function HocPhiPageV2({
       </div>
 
       <section className="space-y-3">
-        <h2 className="flex items-center gap-2 text-sm font-bold uppercase tracking-wider text-foreground"><Receipt className="size-4 text-primary" /> Phiếu thu đã xác nhận</h2>
+        <h2 className="flex items-center gap-2 text-sm font-bold uppercase tracking-wider text-foreground">
+          <Receipt className="size-4 text-primary" /> Phiếu thu đã xác nhận
+        </h2>
         <div className="rounded-2xl border border-border bg-card divide-y divide-border">
           {data.receipts.length === 0 ? (
-            <p className="p-6 text-center text-sm text-muted-foreground">Chưa có phiếu thu nào được xác nhận.</p>
+            <p className="p-6 text-center text-sm text-muted-foreground">
+              Chưa có phiếu thu nào được xác nhận.
+            </p>
           ) : (
             data.receipts.map((r) => (
               <div key={r.id} className="flex items-center gap-3 p-4">
                 <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-bold text-foreground">Học phí{r.orderCode ? ` · ${r.orderCode}` : ""}</p>
-                  <p className="mt-0.5 text-xs font-medium text-muted-foreground">{dmy(r.paidDate)} · {PAYMENT_METHOD_LABEL[r.method] ?? r.method}</p>
+                  <p className="truncate text-sm font-bold text-foreground">
+                    Học phí{r.orderCode ? ` · ${r.orderCode}` : ""}
+                  </p>
+                  <p className="mt-0.5 text-xs font-medium text-muted-foreground">
+                    {dmy(r.paidDate)} ·{" "}
+                    {PAYMENT_METHOD_LABEL[r.method] ?? r.method}
+                  </p>
                 </div>
-                <p className="shrink-0 text-sm font-bold text-foreground">{vnd(r.amount)}</p>
-                <span className="shrink-0 rounded-md bg-success/10 px-2 py-0.5 text-xs font-bold text-success">Đã xác nhận</span>
+                <p className="shrink-0 text-sm font-bold text-foreground">
+                  {vnd(r.amount)}
+                </p>
+                <span className="shrink-0 rounded-md bg-success/10 px-2 py-0.5 text-xs font-bold text-success">
+                  Đã xác nhận
+                </span>
               </div>
             ))
           )}
@@ -152,15 +230,43 @@ export function HocPhiPageV2({
   );
 }
 
-function Stat({ icon: Icon, tone, value, label }: { icon: typeof Wallet; tone: "success" | "caution" | "destructive"; value: string; label: string }) {
-  const box = tone === "success" ? "bg-success/10 text-success" : tone === "caution" ? "bg-caution/10 text-caution" : "bg-destructive/10 text-destructive";
-  const val = tone === "success" ? "text-success" : tone === "caution" ? "text-caution" : "text-destructive";
+function Stat({
+  icon: Icon,
+  tone,
+  value,
+  label,
+}: {
+  icon: typeof Wallet;
+  tone: "success" | "caution" | "destructive";
+  value: string;
+  label: string;
+}) {
+  const box =
+    tone === "success"
+      ? "bg-success/10 text-success"
+      : tone === "caution"
+        ? "bg-caution/10 text-caution"
+        : "bg-destructive/10 text-destructive";
+  const val =
+    tone === "success"
+      ? "text-success"
+      : tone === "caution"
+        ? "text-caution"
+        : "text-destructive";
   return (
     <div className="flex items-center gap-3 rounded-2xl border border-border bg-card p-4">
-      <span className={`grid size-10 shrink-0 place-items-center rounded-xl ${box}`}><Icon className="size-5" /></span>
+      <span
+        className={`grid size-10 shrink-0 place-items-center rounded-xl ${box}`}
+      >
+        <Icon className="size-5" />
+      </span>
       <div className="min-w-0">
-        <p className={`truncate text-lg font-bold tabular-nums ${val}`}>{value}</p>
-        <p className="truncate text-xs font-medium text-muted-foreground">{label}</p>
+        <p className={`truncate text-lg font-bold tabular-nums ${val}`}>
+          {value}
+        </p>
+        <p className="truncate text-xs font-medium text-muted-foreground">
+          {label}
+        </p>
       </div>
     </div>
   );

@@ -58,7 +58,7 @@ export function FeedbackForm() {
         type="button"
         onClick={submit}
         disabled={pending}
-        className="mt-3 rounded-lg bg-orange-500 px-4 py-2 text-sm font-semibold text-white hover:bg-orange-600 disabled:opacity-60"
+        className="mt-3 rounded-lg bg-orange-700 px-4 py-2 text-sm font-semibold text-white hover:bg-orange-800 disabled:opacity-60"
       >
         {pending ? "Đang gửi…" : "Gửi đánh giá"}
       </button>

@@ -7,7 +7,10 @@ import { getStudentSchedule } from "@/lib/portal/schedule";
 import { SchedulePageV2 } from "@/components/portal/schedule-page";
 
 export const dynamic = "force-dynamic";
-export const metadata = { title: "Lịch học | Sata Robo", robots: { index: false } };
+export const metadata = {
+  title: "Lịch học | Sata Robo",
+  robots: { index: false },
+};
 
 function parseInt10(v: string | undefined, fallback: number): number {
   const n = v ? Number(v) : NaN;
@@ -36,8 +39,18 @@ export default async function StudentCalendarPage({
   const calendar = (
     <div className="space-y-2">
       <div className="flex justify-end gap-1">
-        <Link href={`/portal/hoc-sinh/lich?y=${prev.year}&m=${prev.month0}`} className="grid size-7 place-items-center rounded-lg border border-border text-muted-foreground hover:bg-muted">‹</Link>
-        <Link href={`/portal/hoc-sinh/lich?y=${next.year}&m=${next.month0}`} className="grid size-7 place-items-center rounded-lg border border-border text-muted-foreground hover:bg-muted">›</Link>
+        <Link
+          href={`/portal/hoc-sinh/lich?y=${prev.year}&m=${prev.month0}`}
+          className="grid size-7 place-items-center rounded-lg border border-border text-muted-foreground hover:bg-muted"
+        >
+          ‹
+        </Link>
+        <Link
+          href={`/portal/hoc-sinh/lich?y=${next.year}&m=${next.month0}`}
+          className="grid size-7 place-items-center rounded-lg border border-border text-muted-foreground hover:bg-muted"
+        >
+          ›
+        </Link>
       </div>
       <MonthCalendar year={year} month0={month0} events={events} />
     </div>

@@ -6,6 +6,7 @@ import { redirect } from "next/navigation";
 import { resolveActor } from "@/lib/auth/actor";
 import { scopedDb } from "@/lib/db-scope";
 import { StockMovementType, type Prisma } from "@prisma/client";
+import { PhanTrangBang } from "@/components/ui/phan-trang-bang";
 
 export const dynamic = "force-dynamic";
 
@@ -13,26 +14,26 @@ const TYPE_INFO: Record<
   StockMovementType,
   { label: string; color: string; sign: "+" | "-" }
 > = {
-  RECEIPT: { label: "Nhập", color: "bg-green-100 text-green-700", sign: "+" },
-  ISSUE: { label: "Xuất", color: "bg-red-100 text-red-700", sign: "-" },
+  RECEIPT: { label: "Nhập", color: "bg-state-success-soft text-state-success-ink", sign: "+" },
+  ISSUE: { label: "Xuất", color: "bg-state-danger-soft text-state-danger-ink", sign: "-" },
   TRANSFER_OUT: {
     label: "Chuyển đi",
-    color: "bg-amber-100 text-amber-700",
+    color: "bg-state-warning-soft text-state-warning-ink",
     sign: "-",
   },
   TRANSFER_IN: {
     label: "Nhận về",
-    color: "bg-blue-100 text-blue-700",
+    color: "bg-state-info-soft text-state-info-ink",
     sign: "+",
   },
   ADJUSTMENT_INCREASE: {
     label: "Kiểm kê thừa",
-    color: "bg-purple-100 text-purple-700",
+    color: "bg-primary-soft text-primary",
     sign: "+",
   },
   ADJUSTMENT_DECREASE: {
     label: "Kiểm kê thiếu",
-    color: "bg-purple-100 text-purple-700",
+    color: "bg-primary-soft text-primary",
     sign: "-",
   },
 };
@@ -145,15 +146,15 @@ export default async function MovementsPage({ searchParams }: SearchParams) {
       <div className="mb-6">
         <Link
           href="/inventory/items"
-          className="mb-3 inline-flex items-center gap-1 text-sm text-neutral-500 hover:text-neutral-700"
+          className="mb-3 inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
         >
           <ChevronLeft className="h-4 w-4" /> Quay lại kho
         </Link>
-        <h1 className="flex items-center gap-2 text-2xl font-bold text-gray-900">
-          <History className="h-6 w-6 text-[#7C3AED]" />
+        <h1 className="flex items-center gap-2 text-2xl font-bold text-foreground">
+          <History className="h-6 w-6 text-primary" />
           Lịch sử giao dịch kho
         </h1>
-        <p className="mt-1 text-sm text-gray-500">
+        <p className="mt-1 text-sm text-muted-foreground">
           {movements.length > 0
             ? `${movements.length} phiếu (tối đa 200 gần nhất)`
             : "Chưa có giao dịch nào khớp bộ lọc"}
@@ -167,7 +168,7 @@ export default async function MovementsPage({ searchParams }: SearchParams) {
         <select
           name="type"
           defaultValue={typeFilter ?? ""}
-          className="rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-[#7C3AED] focus:outline-none"
+          className="rounded-lg border border-border px-3 py-2 text-sm focus:border-primary focus:outline-none"
         >
           <option value="">Mọi loại</option>
           {Object.entries(TYPE_INFO).map(([v, { label }]) => (
@@ -179,7 +180,7 @@ export default async function MovementsPage({ searchParams }: SearchParams) {
         <select
           name="itemId"
           defaultValue={itemFilter ?? ""}
-          className="lg:col-span-2 rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-[#7C3AED] focus:outline-none"
+          className="lg:col-span-2 rounded-lg border border-border px-3 py-2 text-sm focus:border-primary focus:outline-none"
         >
           <option value="">Mọi mặt hàng</option>
           {items.map((i) => (
@@ -191,7 +192,7 @@ export default async function MovementsPage({ searchParams }: SearchParams) {
         <select
           name="centerId"
           defaultValue={centerFilter ?? ""}
-          className="rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-[#7C3AED] focus:outline-none"
+          className="rounded-lg border border-border px-3 py-2 text-sm focus:border-primary focus:outline-none"
         >
           <option value="">Mọi cơ sở</option>
           {centers.map((c) => (
@@ -205,129 +206,129 @@ export default async function MovementsPage({ searchParams }: SearchParams) {
           name="from"
           defaultValue={sp.from ?? ""}
           placeholder="Từ"
-          className="rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-[#7C3AED] focus:outline-none"
+          className="rounded-lg border border-border px-3 py-2 text-sm focus:border-primary focus:outline-none"
         />
         <input
           type="date"
           name="to"
           defaultValue={sp.to ?? ""}
           placeholder="Đến"
-          className="rounded-lg border border-gray-200 px-3 py-2 text-sm focus:border-[#7C3AED] focus:outline-none"
+          className="rounded-lg border border-border px-3 py-2 text-sm focus:border-primary focus:outline-none"
         />
         <button
           type="submit"
-          className="rounded-lg bg-[#7C3AED] px-4 py-2 text-sm font-semibold text-white hover:opacity-90 sm:col-span-2 lg:col-span-6"
+          className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white hover:opacity-90 sm:col-span-2 lg:col-span-6"
         >
           Áp dụng bộ lọc
         </button>
       </form>
 
-      <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
+      <div className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
         <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-gray-100">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">
-                  Thời gian
-                </th>
-                <th className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">
-                  Loại
-                </th>
-                <th className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">
-                  Mặt hàng
-                </th>
-                <th className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">
-                  Cơ sở
-                </th>
-                <th className="px-3 py-3 text-right text-xs font-semibold uppercase tracking-wider text-gray-500">
-                  SL
-                </th>
-                <th className="px-3 py-3 text-right text-xs font-semibold uppercase tracking-wider text-gray-500">
-                  Tiền
-                </th>
-                <th className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">
-                  Tham chiếu
-                </th>
-                <th className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">
-                  Người làm
-                </th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-50">
-              {movements.length === 0 ? (
+          <PhanTrangBang>
+            <table className="min-w-full divide-y divide-border">
+              <thead className="bg-muted">
                 <tr>
-                  <td
-                    colSpan={8}
-                    className="px-4 py-12 text-center text-sm text-gray-400"
-                  >
-                    Chưa có giao dịch kho nào khớp bộ lọc.
-                  </td>
+                  <th className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                    Thời gian
+                  </th>
+                  <th className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                    Loại
+                  </th>
+                  <th className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                    Mặt hàng
+                  </th>
+                  <th className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                    Cơ sở
+                  </th>
+                  <th className="px-3 py-3 text-right text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                    SL
+                  </th>
+                  <th className="px-3 py-3 text-right text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                    Tiền
+                  </th>
+                  <th className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                    Tham chiếu
+                  </th>
+                  <th className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                    Người làm
+                  </th>
                 </tr>
-              ) : (
-                movements.map((m) => {
-                  const info = TYPE_INFO[m.type];
-                  const pairCenterName = m.transferPair?.center?.name;
-                  const referenceText =
-                    (m.type === "TRANSFER_OUT" && pairCenterName
-                      ? `→ ${pairCenterName}`
-                      : m.type === "TRANSFER_IN" && pairCenterName
-                        ? `← ${pairCenterName}`
-                        : m.referenceNote) || "—";
-                  return (
-                    <tr key={m.id} className="hover:bg-gray-50/60">
-                      <td className="px-3 py-3 text-xs tabular-nums text-gray-500">
-                        {fmtDateTime(m.performedAt)}
-                      </td>
-                      <td className="px-3 py-3">
-                        <span
-                          className={`inline-flex rounded-full px-2 py-0.5 text-xs font-semibold ${info.color}`}
-                        >
-                          {info.label}
-                        </span>
-                      </td>
-                      <td className="px-3 py-3">
-                        <div className="font-medium text-gray-900 text-sm">
-                          {m.item.name}
-                        </div>
-                        <div className="text-xs text-gray-400 tabular-nums">
-                          {m.item.itemCode}
-                        </div>
-                      </td>
-                      <td className="px-3 py-3 text-sm text-gray-600">
-                        {m.center.name}
-                      </td>
-                      <td
-                        className={`px-3 py-3 text-right text-sm tabular-nums font-bold ${
-                          info.sign === "+" ? "text-green-700" : "text-red-700"
-                        }`}
-                      >
-                        {info.sign}
-                        {m.quantity} {m.item.unit}
-                      </td>
-                      <td className="px-3 py-3 text-right text-xs tabular-nums text-gray-600">
-                        {m.totalCost !== null
-                          ? fmtVnd(m.totalCost)
-                          : m.unitPrice !== null
-                            ? fmtVnd(m.unitPrice)
-                            : "—"}
-                      </td>
-                      <td className="px-3 py-3 text-xs text-gray-600 max-w-[200px]">
-                        <div className="line-clamp-2">{referenceText}</div>
-                        {m.notes && (
-                          <div className="text-[10px] text-gray-400 line-clamp-1 mt-0.5">
-                            {m.notes}
+              </thead>
+              <tbody className="divide-y divide-border">
+                {movements.length === 0 ? (
+                  <tr>
+                    <td
+                      colSpan={8}
+                      className="px-4 py-12 text-center text-sm text-muted-foreground"
+                    >
+                      Chưa có giao dịch kho nào khớp bộ lọc.
+                    </td>
+                  </tr>
+                ) : (
+                  movements.map((m) => {
+                    const info = TYPE_INFO[m.type];
+                    const pairCenterName = m.transferPair?.center?.name;
+                    const referenceText =
+                      (m.type === "TRANSFER_OUT" && pairCenterName
+                        ? `→ ${pairCenterName}`
+                        : m.type === "TRANSFER_IN" && pairCenterName
+                          ? `← ${pairCenterName}`
+                          : m.referenceNote) || "—";
+                    return (
+                      <tr key={m.id} className="hover:bg-muted/60">
+                        <td className="px-3 py-3 text-xs tabular-nums text-muted-foreground">
+                          {fmtDateTime(m.performedAt)}
+                        </td>
+                        <td className="px-3 py-3">
+                          <span
+                            className={`inline-flex rounded-full px-2 py-0.5 text-xs font-semibold ${info.color}`}
+                          >
+                            {info.label}
+                          </span>
+                        </td>
+                        <td className="px-3 py-3">
+                          <div className="font-medium text-foreground text-sm">
+                            {m.item.name}
                           </div>
-                        )}
-                      </td>
-                      <td className="px-3 py-3 text-xs text-gray-500">
-                        {m.performedBy?.fullName ?? "—"}
-                      </td>
-                    </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
+                          <div className="text-xs text-muted-foreground tabular-nums">
+                            {m.item.itemCode}
+                          </div>
+                        </td>
+                        <td className="px-3 py-3 text-sm text-muted-foreground">
+                          {m.center.name}
+                        </td>
+                        <td
+                          className={`px-3 py-3 text-right text-sm tabular-nums font-bold ${ info.sign === "+" ? "text-state-success-ink" : "text-state-danger-ink" }`}
+                        >
+                          {info.sign}
+                          {m.quantity} {m.item.unit}
+                        </td>
+                        <td className="px-3 py-3 text-right text-xs tabular-nums text-muted-foreground">
+                          {m.totalCost !== null
+                            ? fmtVnd(m.totalCost)
+                            : m.unitPrice !== null
+                              ? fmtVnd(m.unitPrice)
+                              : "—"}
+                        </td>
+                        <td className="px-3 py-3 text-xs text-muted-foreground max-w-[200px]">
+                          <div className="line-clamp-2">{referenceText}</div>
+                          {m.notes && (
+                            <div className="text-[10px] text-muted-foreground line-clamp-1 mt-0.5">
+                              {m.notes}
+                            </div>
+                          )}
+                        </td>
+                        <td className="px-3 py-3 text-xs text-muted-foreground">
+                          {m.performedBy?.fullName ?? "—"}
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </PhanTrangBang>
         </div>
       </div>
     </div>

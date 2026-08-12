@@ -17,6 +17,7 @@ import {
 import { reassignOpenLeads } from "@/lib/lead/assign";
 import { notifyStaffAccountGranted } from "@/lib/email/staff-account";
 import { centerIdForOrgUnit } from "@/lib/org/org-service";
+import { keoHoSoTheoTaiKhoan } from "@/lib/hr/sync-employee-unit";
 import { reconcileUserOrgRoles, OrgRoleSyncError } from "@/lib/auth/org-role-sync";
 import { syncCenterClassConversations } from "@/lib/chat/sync-membership";
 import {
@@ -169,6 +170,14 @@ export async function createUserAction(formData: FormData) {
     if (parsed.data.roles.includes("CENTER_MANAGER")) {
       await syncCenterClassConversations(tx, centerId);
     }
+
+    // Tạo tài khoản CHO một hồ sơ có sẵn: đơn vị chọn ở đây là đơn vị của người đó ⇒
+    // hồ sơ phải theo ngay, đừng để hai bảng lệch từ lúc sinh ra.
+    await keoHoSoTheoTaiKhoan(tx, {
+      employeeId: created.employeeId,
+      donVi: { centerId, orgUnitId },
+      actor: { id: actorId, name: actorName },
+    });
 
     return created;
     // timeout 30s: syncCenterClassConversations chạm mọi lớp ACTIVE của cơ sở
@@ -347,6 +356,14 @@ export async function updateUserAction(id: string, formData: FormData) {
       newValues,
       changedFields: detectChangedFields(oldValues, newValues),
       tx,
+    });
+
+    // ĐƠN VỊ NẰM Ở HAI BẢNG — sửa tài khoản thì kéo hồ sơ nhân sự theo, cùng transaction
+    // (xem lib/hr/sync-employee-unit.ts). Tài khoản không gắn hồ sơ (phụ huynh) → no-op.
+    await keoHoSoTheoTaiKhoan(tx, {
+      employeeId: updated.employeeId,
+      donVi: { centerId, orgUnitId },
+      actor: { id: actorId, name: actorName },
     });
 
     // RBAC v2 đi kèm: gán vai còn thiếu (chữa cả tài khoản tạo trước 07/08/2026) và

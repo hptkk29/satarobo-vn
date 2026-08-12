@@ -10,16 +10,17 @@ import { getPaymentConfigExact } from "@/lib/payments/vietqr";
 import { MisaControls } from "./_components/misa-controls";
 import { VietQrConfig, type VietQrCenterRow } from "./_components/vietqr-config";
 import { ZnsTest } from "./_components/zns-test";
+import { PhanTrangBang } from "@/components/ui/phan-trang-bang";
 
 export const metadata = { title: "Tích hợp | Admin" };
 export const dynamic = "force-dynamic";
 
 const STATUS_CLS: Record<string, string> = {
-  SENT: "bg-emerald-100 text-emerald-700",
-  SUCCESS: "bg-emerald-100 text-emerald-700",
-  SKIPPED: "bg-amber-100 text-amber-700",
-  FAILED: "bg-rose-100 text-rose-700",
-  PENDING: "bg-blue-100 text-blue-700",
+  SENT: "bg-state-success-soft text-state-success-ink",
+  SUCCESS: "bg-state-success-soft text-state-success-ink",
+  SKIPPED: "bg-state-warning-soft text-state-warning-ink",
+  FAILED: "bg-state-danger-soft text-state-danger-ink",
+  PENDING: "bg-state-info-soft text-state-info-ink",
 };
 
 export default async function IntegrationsPage() {
@@ -71,26 +72,22 @@ export default async function IntegrationsPage() {
   return (
     <div className="space-y-6 p-4">
       <div>
-        <h1 className="text-xl font-bold text-neutral-900">Tích hợp ngoài</h1>
-        <p className="text-sm text-neutral-500">Trạng thái các adapter. Khi thiếu credential, hệ thống tự fallback an toàn.</p>
+        <h1 className="text-xl font-bold text-foreground">Tích hợp ngoài</h1>
+        <p className="text-sm text-muted-foreground">Trạng thái các adapter. Khi thiếu credential, hệ thống tự fallback an toàn.</p>
       </div>
 
       {/* AUTH-SĐT P4 — soi nhanh backend rate-limit (P0-d): memory = bộ đếm reset
           theo instance serverless, không chặn được brute-force trải đều instance. */}
-      <section className="rounded-xl border border-neutral-200 bg-white p-4">
+      <section className="rounded-xl border border-border bg-card p-4">
         <div className="flex items-center justify-between">
-          <h2 className="text-sm font-bold text-neutral-800">Rate limit (Upstash Redis)</h2>
+          <h2 className="text-sm font-bold text-foreground">Rate limit (Upstash Redis)</h2>
           <span
-            className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${
-              getRateLimitBackend() === "upstash"
-                ? "bg-emerald-100 text-emerald-700"
-                : "bg-red-100 text-red-700"
-            }`}
+            className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${ getRateLimitBackend() === "upstash" ? "bg-state-success-soft text-state-success-ink" : "bg-state-danger-soft text-state-danger-ink" }`}
           >
             {getRateLimitBackend() === "upstash" ? "Redis (bền vững)" : "Memory (per-instance!)"}
           </span>
         </div>
-        <p className="mt-1 text-xs text-neutral-500">
+        <p className="mt-1 text-xs text-muted-foreground">
           {getRateLimitBackend() === "upstash"
             ? "Env Upstash đã nạp. Lưu ý: lỗi runtime (URL sai, DB đã xoá) vẫn tự rơi về memory từng request — thấy log [rate-limit] Upstash error thì kiểm console.upstash.com."
             : "Chưa nạp env UPSTASH_REDIS_REST_URL/TOKEN (hoặc chưa redeploy sau khi thêm) → bộ đếm chống brute-force reset theo instance."}
@@ -100,18 +97,16 @@ export default async function IntegrationsPage() {
       {/* BGĐ 31/07 — tài khoản nhận tiền theo TỪNG CƠ SỞ (fallback cấu hình chung). */}
       <VietQrConfig canEdit={canEdit} rows={vietqrRows} />
 
-      <section className="rounded-xl border border-neutral-200 bg-white p-4">
+      <section className="rounded-xl border border-border bg-card p-4">
         <div className="flex items-center justify-between">
-          <h2 className="text-sm font-bold text-neutral-800">Zalo OA / ZNS</h2>
+          <h2 className="text-sm font-bold text-foreground">Zalo OA / ZNS</h2>
           <span
-            className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${
-              zaloLive ? "bg-emerald-100 text-emerald-700" : zaloConfigured ? "bg-amber-100 text-amber-700" : "bg-neutral-200 text-neutral-500"
-            }`}
+            className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${ zaloLive ? "bg-state-success-soft text-state-success-ink" : zaloConfigured ? "bg-state-warning-soft text-state-warning-ink" : "bg-muted text-muted-foreground" }`}
           >
             {zaloLive ? "Đang bật (live)" : zaloConfigured ? "Có credential (mô phỏng)" : "Chưa cấu hình"}
           </span>
         </div>
-        <p className="mt-1 text-xs text-neutral-500">
+        <p className="mt-1 text-xs text-muted-foreground">
           {zaloConfigured
             ? "Có ZALO_APP_ID + ZALO_OA_ACCESS_TOKEN. Bật ZALO_LIVE=true để gửi thật."
             : "Chưa có credential → tin nhắn Zalo bị bỏ qua, tự gửi email dự phòng."}
@@ -120,61 +115,57 @@ export default async function IntegrationsPage() {
         <ZnsTest canEdit={canEdit} />
 
         <div className="mt-3 overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead className="text-left text-xs text-neutral-400">
-              <tr>
-                <th className="px-3 py-2">SĐT</th>
-                <th className="px-3 py-2">Template</th>
-                <th className="px-3 py-2">Trạng thái</th>
-                <th className="px-3 py-2">Fallback email</th>
-                <th className="px-3 py-2">Ghi chú</th>
-                <th className="px-3 py-2">Thời gian</th>
-              </tr>
-            </thead>
-            <tbody>
-              {zaloLogs.length === 0 ? (
+          <PhanTrangBang>
+            <table className="w-full text-sm">
+              <thead className="text-left text-xs text-muted-foreground">
                 <tr>
-                  <td colSpan={6} className="px-3 py-6 text-center text-neutral-400">
-                    Chưa có log.
-                  </td>
+                  <th className="px-3 py-2">SĐT</th>
+                  <th className="px-3 py-2">Template</th>
+                  <th className="px-3 py-2">Trạng thái</th>
+                  <th className="px-3 py-2">Fallback email</th>
+                  <th className="px-3 py-2">Ghi chú</th>
+                  <th className="px-3 py-2">Thời gian</th>
                 </tr>
-              ) : (
-                zaloLogs.map((l) => (
-                  <tr key={l.id} className="border-t">
-                    <td className="px-3 py-2">{l.toPhone ?? "—"}</td>
-                    <td className="px-3 py-2 text-neutral-500">{l.templateKey ?? "—"}</td>
-                    <td className="px-3 py-2">
-                      {/* SENT + providerMessageId "SIMULATED-…" = ZALO_LIVE chưa bật: log xanh
-                          nhưng KHÔNG tin nào rời hệ thống — phải phân biệt kẻo tưởng đã gửi. */}
-                      {l.status === "SENT" && l.providerMessageId?.startsWith("SIMULATED-") ? (
-                        <span className="rounded-full bg-blue-100 px-2 py-0.5 text-xs text-blue-700">SENT (mô phỏng)</span>
-                      ) : (
-                        <span className={`rounded-full px-2 py-0.5 text-xs ${STATUS_CLS[l.status] ?? ""}`}>{l.status}</span>
-                      )}
+              </thead>
+              <tbody>
+                {zaloLogs.length === 0 ? (
+                  <tr>
+                    <td colSpan={6} className="px-3 py-6 text-center text-muted-foreground">
+                      Chưa có log.
                     </td>
-                    <td className="px-3 py-2 text-neutral-500">{l.fallbackEmailed ? "có" : "—"}</td>
-                    <td className="px-3 py-2 text-xs text-neutral-400">{l.errorMessage ?? "—"}</td>
-                    <td className="px-3 py-2 text-neutral-500">{l.createdAt.toISOString().slice(0, 16).replace("T", " ")}</td>
                   </tr>
-                ))
-              )}
-            </tbody>
-          </table>
+                ) : (
+                  zaloLogs.map((l) => (
+                    <tr key={l.id} className="border-t">
+                      <td className="px-3 py-2">{l.toPhone ?? "—"}</td>
+                      <td className="px-3 py-2 text-muted-foreground">{l.templateKey ?? "—"}</td>
+                      <td className="px-3 py-2">
+                        {/* SENT + providerMessageId "SIMULATED-…" = ZALO_LIVE chưa bật: log xanh
+                            nhưng KHÔNG tin nào rời hệ thống — phải phân biệt kẻo tưởng đã gửi. */}
+                        {l.status === "SENT" && l.providerMessageId?.startsWith("SIMULATED-") ? (
+                          <span className="rounded-full bg-state-info-soft px-2 py-0.5 text-xs text-state-info-ink">SENT (mô phỏng)</span>
+                        ) : (
+                          <span className={`rounded-full px-2 py-0.5 text-xs ${STATUS_CLS[l.status] ?? ""}`}>{l.status}</span>
+                        )}
+                      </td>
+                      <td className="px-3 py-2 text-muted-foreground">{l.fallbackEmailed ? "có" : "—"}</td>
+                      <td className="px-3 py-2 text-xs text-muted-foreground">{l.errorMessage ?? "—"}</td>
+                      <td className="px-3 py-2 text-muted-foreground">{l.createdAt.toISOString().slice(0, 16).replace("T", " ")}</td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </PhanTrangBang>
         </div>
       </section>
 
-      <section className="rounded-xl border border-neutral-200 bg-white p-4">
+      <section className="rounded-xl border border-border bg-card p-4">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <h2 className="text-sm font-bold text-neutral-800">MISA AMIS (kế toán)</h2>
+          <h2 className="text-sm font-bold text-foreground">MISA AMIS (kế toán)</h2>
           <div className="flex items-center gap-2">
             <span
-              className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${
-                misaCfg.isEnabled && misaLive
-                  ? "bg-emerald-100 text-emerald-700"
-                  : misaCfg.isEnabled && misaConfigured
-                    ? "bg-amber-100 text-amber-700"
-                    : "bg-neutral-200 text-neutral-500"
-              }`}
+              className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${ misaCfg.isEnabled && misaLive ? "bg-state-success-soft text-state-success-ink" : misaCfg.isEnabled && misaConfigured ? "bg-state-warning-soft text-state-warning-ink" : "bg-muted text-muted-foreground" }`}
             >
               {misaCfg.isEnabled
                 ? misaLive
@@ -187,43 +178,45 @@ export default async function IntegrationsPage() {
             <MisaControls enabled={misaCfg.isEnabled} canEdit={canEdit} />
           </div>
         </div>
-        <p className="mt-1 text-xs text-neutral-500">
+        <p className="mt-1 text-xs text-muted-foreground">
           {misaConfigured
             ? "Có credential MISA. Bật MISA_LIVE=true để push thật."
             : "Chưa có credential (MISA_CLIENT_ID/SECRET/API_URL) → sync bị bỏ qua, không push."}
         </p>
 
         <div className="mt-3 overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead className="text-left text-xs text-neutral-400">
-              <tr>
-                <th className="px-3 py-2">Hành động</th>
-                <th className="px-3 py-2">Trạng thái</th>
-                <th className="px-3 py-2">Ghi chú</th>
-                <th className="px-3 py-2">Thời gian</th>
-              </tr>
-            </thead>
-            <tbody>
-              {misaLogs.length === 0 ? (
+          <PhanTrangBang>
+            <table className="w-full text-sm">
+              <thead className="text-left text-xs text-muted-foreground">
                 <tr>
-                  <td colSpan={4} className="px-3 py-6 text-center text-neutral-400">
-                    Chưa có log.
-                  </td>
+                  <th className="px-3 py-2">Hành động</th>
+                  <th className="px-3 py-2">Trạng thái</th>
+                  <th className="px-3 py-2">Ghi chú</th>
+                  <th className="px-3 py-2">Thời gian</th>
                 </tr>
-              ) : (
-                misaLogs.map((l) => (
-                  <tr key={l.id} className="border-t">
-                    <td className="px-3 py-2">{l.action}</td>
-                    <td className="px-3 py-2">
-                      <span className={`rounded-full px-2 py-0.5 text-xs ${STATUS_CLS[l.status] ?? ""}`}>{l.status}</span>
+              </thead>
+              <tbody>
+                {misaLogs.length === 0 ? (
+                  <tr>
+                    <td colSpan={4} className="px-3 py-6 text-center text-muted-foreground">
+                      Chưa có log.
                     </td>
-                    <td className="px-3 py-2 text-xs text-neutral-400">{l.errorMessage ?? "—"}</td>
-                    <td className="px-3 py-2 text-neutral-500">{l.createdAt.toISOString().slice(0, 16).replace("T", " ")}</td>
                   </tr>
-                ))
-              )}
-            </tbody>
-          </table>
+                ) : (
+                  misaLogs.map((l) => (
+                    <tr key={l.id} className="border-t">
+                      <td className="px-3 py-2">{l.action}</td>
+                      <td className="px-3 py-2">
+                        <span className={`rounded-full px-2 py-0.5 text-xs ${STATUS_CLS[l.status] ?? ""}`}>{l.status}</span>
+                      </td>
+                      <td className="px-3 py-2 text-xs text-muted-foreground">{l.errorMessage ?? "—"}</td>
+                      <td className="px-3 py-2 text-muted-foreground">{l.createdAt.toISOString().slice(0, 16).replace("T", " ")}</td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </PhanTrangBang>
         </div>
       </section>
     </div>

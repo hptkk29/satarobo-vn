@@ -12,18 +12,33 @@ const COLORS = [
 ];
 function ini(name: string): string {
   const w = name.trim().split(/\s+/);
-  return (w.slice(-2).map((x) => x[0]).join("") || w[0]?.[0] || "?").toUpperCase();
+  return (
+    w
+      .slice(-2)
+      .map((x) => x[0])
+      .join("") ||
+    w[0]?.[0] ||
+    "?"
+  ).toUpperCase();
 }
 function short(name: string): string {
   return name.trim().split(/\s+/).slice(-2).join(" ");
 }
 
-export function ChildSwitcher({ kids, activeId }: { kids: { id: string; name: string }[]; activeId: string | null }) {
+export function ChildSwitcher({
+  kids,
+  activeId,
+}: {
+  kids: { id: string; name: string }[];
+  activeId: string | null;
+}) {
   const { pending, switchTo } = useSetActiveSite();
   if (kids.length <= 1) return null;
   return (
     <div className="flex flex-wrap items-center gap-2">
-      <span className="text-sm font-semibold text-muted-foreground">Đang xem con:</span>
+      <span className="text-sm font-semibold text-muted-foreground">
+        Đang xem con:
+      </span>
       {kids.map((k, i) => {
         const active = k.id === activeId;
         return (
@@ -33,10 +48,15 @@ export function ChildSwitcher({ kids, activeId }: { kids: { id: string; name: st
             onClick={() => switchTo(k.id)}
             className={cn(
               "flex items-center gap-2 rounded-full px-3 py-1.5 text-sm font-bold transition-colors disabled:opacity-60",
-              active ? "bg-accent text-white" : "border border-border bg-card text-foreground hover:bg-muted",
+              active
+                ? "bg-accent text-accent-foreground"
+                : "border border-border bg-card text-foreground hover:bg-muted",
             )}
           >
-            <span className="grid size-6 shrink-0 place-items-center rounded-full text-[11px] font-bold text-white" style={{ backgroundColor: COLORS[i % COLORS.length] }}>
+            <span
+              className="grid size-6 shrink-0 place-items-center rounded-full text-[11px] font-bold text-white"
+              style={{ backgroundColor: COLORS[i % COLORS.length] }}
+            >
               {ini(k.name)}
             </span>
             {short(k.name)}

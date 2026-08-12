@@ -29,7 +29,12 @@ type LessonView = {
   title: string;
   objectives: string[];
   scorm: { id: string; name: string; sessionId: string | null } | null;
-  documents: { id: string; title: string; fileUrl: string; typeLabel: string }[];
+  documents: {
+    id: string;
+    title: string;
+    fileUrl: string;
+    typeLabel: string;
+  }[];
 };
 
 export async function HubMaterialsTab({
@@ -71,14 +76,26 @@ export async function HubMaterialsTab({
       sdb.document.findMany({
         where: { lessonId: { in: lessonIds } },
         orderBy: { title: "asc" },
-        select: { id: true, title: true, fileUrl: true, type: true, lessonId: true },
+        select: {
+          id: true,
+          title: true,
+          fileUrl: true,
+          type: true,
+          lessonId: true,
+        },
       }),
       scormOn
         ? sdb.scormPackage.findMany({
-            where: { lessonId: { in: lessonIds }, isActiveForLesson: true, status: "PUBLISHED" },
+            where: {
+              lessonId: { in: lessonIds },
+              isActiveForLesson: true,
+              status: "PUBLISHED",
+            },
             select: { id: true, name: true, lessonId: true },
           })
-        : Promise.resolve([] as { id: string; name: string; lessonId: string }[]),
+        : Promise.resolve(
+            [] as { id: string; name: string; lessonId: string }[],
+          ),
       scormOn
         ? sdb.classSession.findMany({
             where: { classId, lessonId: { in: lessonIds } },
@@ -103,7 +120,8 @@ export async function HubMaterialsTab({
     const scormByLesson = new Map(scormPkgs.map((p) => [p.lessonId, p]));
     const sessionByLesson = new Map<string, string>();
     for (const s of sessions) {
-      if (s.lessonId && !sessionByLesson.has(s.lessonId)) sessionByLesson.set(s.lessonId, s.id);
+      if (s.lessonId && !sessionByLesson.has(s.lessonId))
+        sessionByLesson.set(s.lessonId, s.id);
     }
 
     lessonViews = lessons.map((l) => {
@@ -114,7 +132,11 @@ export async function HubMaterialsTab({
         title: l.title,
         objectives: l.objectives,
         scorm: pkg
-          ? { id: pkg.id, name: pkg.name, sessionId: sessionByLesson.get(l.id) ?? null }
+          ? {
+              id: pkg.id,
+              name: pkg.name,
+              sessionId: sessionByLesson.get(l.id) ?? null,
+            }
           : null,
         documents: docsByLesson.get(l.id) ?? [],
       };
@@ -123,21 +145,26 @@ export async function HubMaterialsTab({
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-border bg-orange-50 p-4 dark:bg-orange-500/10">
+      <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-border bg-primary-soft p-4">
         <div className="min-w-0">
-          <div className="text-xs font-bold tracking-wider text-orange-600 uppercase dark:text-orange-400">
+          <div className="text-xs font-bold tracking-wider text-primary-ink uppercase">
             Khung chương trình
           </div>
           <div className="mt-1 flex items-center gap-2 text-base font-bold text-foreground">
-            <BookOpen className="h-5 w-5 shrink-0 text-orange-500 dark:text-orange-400" aria-hidden />
+            <BookOpen
+              className="h-5 w-5 shrink-0 text-primary-ink"
+              aria-hidden
+            />
             {curriculum?.name ?? "Chưa gán khung chương trình"}
           </div>
-          <div className="mt-0.5 text-sm text-muted-foreground">{lessonViews.length} buổi</div>
+          <div className="mt-0.5 text-sm text-muted-foreground">
+            {lessonViews.length} buổi
+          </div>
         </div>
         {courseId && (
           <Link
             href={`/teacher/tai-lieu?courseId=${courseId}`}
-            className="shrink-0 text-xs font-semibold text-orange-700 outline-none hover:text-orange-800 focus-visible:ring-2 focus-visible:ring-ring dark:text-orange-400"
+            className="shrink-0 text-xs font-semibold text-primary-ink outline-none hover:text-primary-ink-hover focus-visible:ring-2 focus-visible:ring-ring"
           >
             Mở trong Thư viện tài liệu →
           </Link>
@@ -146,8 +173,8 @@ export async function HubMaterialsTab({
 
       {!scormOn && (
         <p className="rounded-lg border border-border bg-muted/40 p-3 text-xs text-muted-foreground">
-          Bài giảng tương tác (SCORM) đang tắt trên hệ thống — phần trình chiếu tạm ẩn. Tài liệu
-          đính kèm vẫn xem được.
+          Bài giảng tương tác (SCORM) đang tắt trên hệ thống — phần trình chiếu
+          tạm ẩn. Tài liệu đính kèm vẫn xem được.
         </p>
       )}
 
@@ -164,15 +191,17 @@ export async function HubMaterialsTab({
         <ul className="space-y-3">
           {lessonViews.map((l) => (
             <li key={l.id} className="t-card relative overflow-hidden p-4">
-              <div className="absolute inset-y-0 left-0 w-1 bg-gradient-to-b from-orange-400 to-orange-600" />
+              <div className="absolute inset-y-0 left-0 w-1 bg-primary" />
               <div className="space-y-3 pl-2">
                 <div className="flex flex-wrap items-start justify-between gap-2">
                   <div className="min-w-0">
                     <div className="flex items-center gap-2">
-                      <span className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-orange-100 text-xs font-bold text-orange-600 dark:bg-orange-500/15 dark:text-orange-300">
+                      <span className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary-soft text-xs font-bold text-primary-ink">
                         {l.order}
                       </span>
-                      <h3 className="text-base font-semibold text-foreground">{l.title}</h3>
+                      <h3 className="text-base font-semibold text-foreground">
+                        {l.title}
+                      </h3>
                     </div>
                     {l.objectives.length > 0 && (
                       <p className="mt-0.5 line-clamp-2 pl-8 text-xs text-muted-foreground">
@@ -185,7 +214,7 @@ export async function HubMaterialsTab({
                     <div className="flex shrink-0 items-center gap-2">
                       <Badge
                         variant="outline"
-                        className="border-orange-200 bg-orange-50 text-orange-700 dark:border-orange-500/30 dark:bg-orange-500/15 dark:text-orange-300"
+                        className="border-primary-soft bg-primary-soft text-primary-ink dark:border-primary"
                       >
                         Bài giảng SCORM
                       </Badge>
@@ -198,9 +227,10 @@ export async function HubMaterialsTab({
                         target="_blank"
                         rel="noopener noreferrer"
                         title={l.scorm.name}
-                        className="inline-flex items-center gap-1 rounded-md border border-orange-200 px-2.5 py-1.5 text-xs font-medium text-orange-700 hover:bg-orange-50 dark:border-orange-500/30 dark:text-orange-300 dark:hover:bg-orange-500/10"
+                        className="inline-flex items-center gap-1 rounded-md border border-primary-soft px-2.5 py-1.5 text-xs font-medium text-primary-ink hover:bg-primary-soft-hover dark:border-primary"
                       >
-                        <Play className="h-3.5 w-3.5" aria-hidden /> Mở trình chiếu
+                        <Play className="h-3.5 w-3.5" aria-hidden /> Mở trình
+                        chiếu
                       </a>
                     </div>
                   )}
@@ -214,14 +244,25 @@ export async function HubMaterialsTab({
                           href={d.fileUrl}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="group inline-flex max-w-full items-center gap-2 text-sm text-foreground hover:text-orange-700 dark:hover:text-orange-300"
+                          className="group inline-flex max-w-full items-center gap-2 text-sm text-foreground hover:text-primary-ink-hover"
                         >
-                          <FileText className="h-4 w-4 shrink-0 text-muted-foreground group-hover:text-orange-500" aria-hidden />
-                          <span className="truncate font-medium">{d.title}</span>
-                          <Badge variant="outline" className="shrink-0 text-[10px]">
+                          <FileText
+                            className="h-4 w-4 shrink-0 text-muted-foreground group-hover:text-primary-ink-hover"
+                            aria-hidden
+                          />
+                          <span className="truncate font-medium">
+                            {d.title}
+                          </span>
+                          <Badge
+                            variant="outline"
+                            className="shrink-0 text-[10px]"
+                          >
                             {d.typeLabel}
                           </Badge>
-                          <ExternalLink className="h-3 w-3 shrink-0 text-muted-foreground" aria-hidden />
+                          <ExternalLink
+                            className="h-3 w-3 shrink-0 text-muted-foreground"
+                            aria-hidden
+                          />
                         </a>
                       </li>
                     ))}

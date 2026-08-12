@@ -129,8 +129,10 @@ export function ExamTaking({
     <div className="space-y-5">
       <div className="sticky top-[112px] z-10 -mx-4 flex items-center justify-between gap-2 border-b border-neutral-200 bg-neutral-50/95 px-4 py-2 backdrop-blur">
         <div className="min-w-0">
-          <h1 className="truncate text-base font-bold text-neutral-900">{title}</h1>
-          <p className="text-xs text-neutral-500">
+          <h1 className="truncate text-base font-bold text-neutral-900">
+            {title}
+          </h1>
+          <p className="text-xs text-neutral-600">
             {questions.length} câu · {totalPoints} điểm
           </p>
         </div>
@@ -161,7 +163,7 @@ export function ExamTaking({
                 </span>
                 <p className="whitespace-pre-wrap text-sm font-medium text-neutral-900">
                   {q.text}
-                  <span className="ml-2 text-xs font-normal text-neutral-400">
+                  <span className="ml-2 text-xs font-normal text-neutral-500">
                     ({q.points} điểm)
                   </span>
                 </p>
@@ -217,15 +219,15 @@ export function ExamTaking({
       </ol>
 
       <div className="flex items-center justify-between gap-3 border-t border-neutral-200 pt-4">
-        <span className="flex items-center gap-1.5 text-xs text-neutral-400">
+        <span className="flex items-center gap-1.5 text-xs text-neutral-600">
           {savingCount > 0 ? (
             <>
               <Loader2 className="h-3.5 w-3.5 animate-spin" /> Đang lưu…
             </>
           ) : (
             <>
-              <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" /> Đã lưu tự
-              động
+              <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" /> Đã lưu
+              tự động
             </>
           )}
         </span>
@@ -233,7 +235,7 @@ export function ExamTaking({
           type="button"
           onClick={() => doSubmit(false)}
           disabled={submitting}
-          className="rounded-lg bg-orange-500 px-5 py-2.5 text-sm font-semibold text-white hover:bg-orange-600 disabled:opacity-60"
+          className="rounded-lg bg-orange-700 px-5 py-2.5 text-sm font-semibold text-white hover:bg-orange-800 disabled:opacity-60"
         >
           {submitting ? "Đang nộp…" : "Nộp bài"}
         </button>

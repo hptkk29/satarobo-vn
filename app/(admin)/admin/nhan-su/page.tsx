@@ -165,8 +165,8 @@ export default async function EmployeesAdminPage({ searchParams }: PageProps) {
     <div>
       <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Quản lý nhân sự</h1>
-          <p className="mt-1 text-sm text-gray-500">
+          <h1 className="text-2xl font-bold text-foreground">Quản lý nhân sự</h1>
+          <p className="mt-1 text-sm text-muted-foreground">
             {employees.length} nhân sự
             {departmentParam && ` · ${deptLabel(departmentParam)}`}
             {statusParam && ` · ${STATUS_LABEL[statusParam]}`}
@@ -178,14 +178,14 @@ export default async function EmployeesAdminPage({ searchParams }: PageProps) {
           <div className="flex flex-wrap items-center gap-2">
             <Link
               href="/nhan-su/import"
-              className="inline-flex items-center gap-2 rounded-lg border-2 border-neutral-200 bg-white px-4 py-2 text-sm font-bold text-neutral-700 hover:bg-neutral-50"
+              className="inline-flex items-center gap-2 rounded-lg border-2 border-border bg-card px-4 py-2 text-sm font-bold text-foreground hover:bg-muted"
             >
               <FileSpreadsheet className="h-4 w-4" />
               Import Excel
             </Link>
             <Link
               href="/nhan-su/new"
-              className="inline-flex items-center gap-2 rounded-lg bg-[#7C3AED] px-4 py-2 text-sm font-bold text-white hover:opacity-90"
+              className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-bold text-white hover:opacity-90"
             >
               <Plus className="h-4 w-4" />
               Thêm nhân sự
@@ -200,19 +200,19 @@ export default async function EmployeesAdminPage({ searchParams }: PageProps) {
         className="mb-4 grid grid-cols-1 gap-2 sm:grid-cols-[1fr_auto_auto_auto_auto]"
       >
         <div className="relative">
-          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <input
             type="text"
             name="q"
             defaultValue={q}
             placeholder="Tìm theo tên, SĐT, email, mã NV..."
-            className="w-full rounded-lg border border-gray-300 bg-white pl-9 pr-3 py-2 text-sm focus:border-[#7C3AED] focus:outline-none"
+            className="w-full rounded-lg border border-border bg-card pl-9 pr-3 py-2 text-sm focus:border-primary focus:outline-none"
           />
         </div>
         <select
           name="department"
           defaultValue={departmentParam ?? ""}
-          className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:border-[#7C3AED] focus:outline-none"
+          className="rounded-lg border border-border bg-card px-3 py-2 text-sm focus:border-primary focus:outline-none"
         >
           <option value="">Tất cả phòng ban</option>
           {DEPARTMENTS.map((d) => (
@@ -224,7 +224,7 @@ export default async function EmployeesAdminPage({ searchParams }: PageProps) {
         <select
           name="centerId"
           defaultValue={centerIdParam}
-          className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:border-[#7C3AED] focus:outline-none"
+          className="rounded-lg border border-border bg-card px-3 py-2 text-sm focus:border-primary focus:outline-none"
         >
           <option value="">Tất cả cơ sở</option>
           {centers.map((c) => (
@@ -236,7 +236,7 @@ export default async function EmployeesAdminPage({ searchParams }: PageProps) {
         <select
           name="status"
           defaultValue={rawStatus ?? "ACTIVE"}
-          className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:border-[#7C3AED] focus:outline-none"
+          className="rounded-lg border border-border bg-card px-3 py-2 text-sm focus:border-primary focus:outline-none"
         >
           <option value="ALL">Mọi trạng thái</option>
           {STATUSES.map((s) => (
@@ -247,7 +247,7 @@ export default async function EmployeesAdminPage({ searchParams }: PageProps) {
         </select>
         <button
           type="submit"
-          className="rounded-lg bg-[#7C3AED] px-4 py-2 text-sm font-bold text-white hover:opacity-90"
+          className="rounded-lg bg-primary px-4 py-2 text-sm font-bold text-white hover:opacity-90"
         >
           Lọc
         </button>
@@ -257,11 +257,7 @@ export default async function EmployeesAdminPage({ searchParams }: PageProps) {
       <div className="mb-4 flex flex-wrap gap-2">
         <Link
           href="/nhan-su"
-          className={`rounded-full px-3 py-1 text-xs font-semibold ${
-            !departmentParam
-              ? "bg-[#7C3AED] text-white"
-              : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-          }`}
+          className={`rounded-full px-3 py-1 text-xs font-semibold ${ !departmentParam ? "bg-primary text-white" : "bg-muted text-foreground hover:bg-muted" }`}
         >
           Tất cả
         </Link>
@@ -269,11 +265,7 @@ export default async function EmployeesAdminPage({ searchParams }: PageProps) {
           <Link
             key={d.department}
             href={`/nhan-su?department=${d.department}`}
-            className={`rounded-full px-3 py-1 text-xs font-semibold ${
-              departmentParam === d.department
-                ? "bg-[#7C3AED] text-white"
-                : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-            }`}
+            className={`rounded-full px-3 py-1 text-xs font-semibold ${ departmentParam === d.department ? "bg-primary text-white" : "bg-muted text-foreground hover:bg-muted" }`}
           >
             {deptLabel(d.department)} ({d._count.id})
           </Link>

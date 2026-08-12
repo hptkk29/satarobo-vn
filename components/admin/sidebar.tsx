@@ -4,62 +4,64 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Fragment, useEffect, useMemo, useState } from "react";
 import {
-  LayoutDashboard,
-  Users,
-  GraduationCap,
-  Award,
-  ArrowLeftRight,
-  Coins,
-  Plug,
-  BookOpen,
-  UserCog,
-  BarChart3,
-  Settings,
-  SlidersHorizontal,
-  Briefcase,
   // Trophy, // tạm ẩn cùng mục "Vinh danh" trong NAV_GROUPS (bật lại: bỏ comment)
-  IdCard,
-  Image as ImageIcon,
-  Newspaper,
-  Package,
+  AlertTriangle,
+  ArrowLeftRight,
+  Award,
+  BarChart3,
+  Bell,
+  BookMarked,
+  BookOpen,
   Boxes,
-  MapPin,
-  DoorOpen,
-  CalendarOff,
-  ClipboardList,
+  Briefcase,
+  Cake,
+  CalendarCheck,
   CalendarDays,
+  CalendarOff,
+  ChevronDown,
   ClipboardCheck,
   ClipboardEdit,
-  CalendarCheck,
-  KeyRound,
-  ScrollText,
-  CreditCard,
-  ShoppingBag,
-  Package2,
-  Mail,
-  Send,
-  FlaskConical,
-  Bell,
-  MessageSquarePlus,
-  MessageCircle,
-  MessagesSquare,
-  RefreshCw,
-  FileText,
-  Presentation,
-  BookMarked,
-  NotebookPen,
-  AlertTriangle,
-  HeartHandshake,
-  Cake,
-  Gauge,
-  Star,
+  ClipboardList,
   Clock,
-  ChevronDown,
+  Coins,
+  CreditCard,
+  DoorOpen,
+  FileText,
+  FlaskConical,
+  Gauge,
+  GraduationCap,
+  HeartHandshake,
+  IdCard,
+  Image as ImageIcon,
+  KeyRound,
+  LayoutDashboard,
+  Mail,
+  MapPin,
+  MessageCircle,
+  MessageSquarePlus,
+  MessagesSquare,
+  Network,
+  Newspaper,
+  NotebookPen,
+  Package,
+  Package2,
+  Plug,
+  Presentation,
+  RefreshCw,
+  ScrollText,
+  Send,
+  Settings,
   Share2,
-  Workflow,
-  Wallet,
-  Undo2,
+  ShoppingBag,
+  SlidersHorizontal,
+  Star,
   type LucideIcon,
+  Undo2,
+  UserCog,
+  Users,
+  UsersRound,
+  Wallet,
+  Workflow,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useChatUnread } from "@/components/chat/use-chat-unread";
@@ -108,6 +110,9 @@ const NAV_GROUPS: NavGroup[] = [
       { label: "Chuyển lead liên CS", href: "/leads/bao-cao-chuyen", icon: Workflow, perm: ["leads:assign"] },
       // BGĐ 31/07 — nguồn giới thiệu (affiliate): mã + link ?ref= + đối soát.
       { label: "Nguồn giới thiệu", href: "/affiliates", icon: Share2, perm: ["leads:view-all"] },
+      // R1-01 — hội thoại Messenger của Page. Trang có thật từ lâu nhưng CHƯA BAO GIỜ
+      // có lối vào: chỉ gõ URL mới tới (rà 11/08).
+      { label: "Messenger CRM", href: "/crm/messenger", icon: MessagesSquare, perm: ["leads:view-all", "leads:view-own"] },
       { label: "Học thử", href: "/trials", icon: FlaskConical, perm: ["trials:view"] },
       { label: "Lớp trải nghiệm", href: "/trial-classes", icon: FlaskConical, perm: ["trials:view"] },
     ],
@@ -135,6 +140,7 @@ const NAV_GROUPS: NavGroup[] = [
       { label: "Lớp học", href: "/classes", icon: BookOpen, perm: ["classes:view-all", "classes:view-own"] },
       { label: "Nhóm lớp", href: "/class-groups", icon: Boxes, perm: ["class_group:view-all"] },
       { label: "Buổi học", href: "/sessions", icon: CalendarDays, perm: ["sessions:view"] },
+      { label: "Lịch tổng", href: "/lich", icon: CalendarCheck, perm: ["sessions:view", "classes:view-all", "classes:view-own"] },
       // attendance:edit đi kèm vì CSKH (Sale) chỉ có quyền SỬA hồi tố (Task #16),
       // không có attendance:view — thiếu nó thì họ dùng được trang mà không thấy link.
       { label: "Điểm danh", href: "/attendance", icon: ClipboardCheck, perm: ["attendance:view", "attendance:edit"] },
@@ -192,7 +198,12 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       { label: "Giáo viên", href: "/teachers", icon: UserCog, perm: ["employees:view-all"] },
       { label: "Nhân sự", href: "/nhan-su", icon: IdCard, perm: ["employees:view-all"] },
+      // P2 · US-08/09/10 — vị trí + phân công + điều động. Vị trí mang bộ vai trò nên
+      // cùng cổng với cấu hình role (SUPER_ADMIN). Đặt ở nhóm Nhân sự vì đó là luồng
+      // công việc thật: xem nhân sự → xếp vị trí → phân công.
+      { label: "Vị trí công việc", href: "/nhan-su/vi-tri", icon: Briefcase, perm: [...PAGE_GATES["/nhan-su/vi-tri"]] },
       { label: "Chấm công", href: "/cham-cong", icon: Clock, perm: ["hr_attendance:view"] },
+      { label: "Điểm danh vào ca", href: "/cham-cong/checkin", icon: Clock, perm: ["hr_attendance:checkin"] },
       { label: "Lịch ca của tôi", href: "/cham-cong/lich-ca", icon: CalendarDays, perm: ["hr_attendance:checkin"] },
       { label: "Yêu cầu chỉnh công", href: "/cham-cong/yeu-cau-cong", icon: ClipboardEdit, perm: ["hr_attendance:checkin"] },
       { label: "Duyệt chỉnh công", href: "/cham-cong/chinh-cong", icon: ClipboardEdit, perm: ["hr_attendance:adjust"] },
@@ -229,6 +240,7 @@ const NAV_GROUPS: NavGroup[] = [
       { label: "Biến động số dư", href: "/bien-dong-so-du", icon: Wallet, perm: ["payments:manage", "payments:view"] },
       { label: "Hoàn tiền", href: "/hoan-tien", icon: Undo2, perm: ["payments:manage"] },
       { label: "Phương thức TT", href: "/payment-methods", icon: CreditCard, perm: ["payments:manage"] },
+      { label: "Hoa hồng", href: "/crm/commission", icon: Coins, perm: ["payments:manage"] },
     ],
   },
   {
@@ -237,19 +249,45 @@ const NAV_GROUPS: NavGroup[] = [
       { label: "Tin tức", href: "/news", icon: Newspaper, perm: ["news:view"] },
       { label: "Nội dung website", href: "/site-content", icon: ImageIcon, perm: [...PAGE_GATES["/site-content"]] },
       { label: "Tracking", href: "/marketing", icon: BarChart3, perm: [...PAGE_GATES["/marketing"]] },
+      { label: "Funnel Marketing", href: "/marketing/funnel", icon: Workflow, perm: ["leads:view-all"] },
     ],
   },
   {
-    label: "Hệ thống & Cấu hình",
+    // Email/OTP TÁCH khỏi "Hệ thống & Cấu hình" (11/08/2026): chủ dự án chốt nhóm hệ
+    // thống chỉ SUPER_ADMIN thấy, nhưng `emails:view` là quyền THẬT của Marketing Hội sở
+    // (seed-roles.ts) — nhét chung nhóm thì hoặc lộ nhóm hệ thống cho Marketing, hoặc
+    // phải cắt quyền họ đang dùng. Tách nhóm giữ đúng cả hai.
+    label: "Email & OTP",
     items: [
-      { label: "Tài khoản", href: "/users", icon: KeyRound, perm: ["users:manage"] },
       { label: "Email Templates", href: "/email-templates", icon: Mail, perm: ["emails:view"] },
       { label: "Email Logs", href: "/email-logs", icon: Send, perm: ["emails:view"] },
       // AUTH-SĐT P4 dựng /otp-logs nhưng quên link — màn trả lời "phụ huynh báo
       // không nhận được mã" mà nhân viên trực phải gõ tay URL thì coi như không có.
-      // Cùng quyền `emails:view` với Email Logs (chủ ý của P4: không đẻ action RBAC mới).
       { label: "OTP Logs", href: "/otp-logs", icon: MessageCircle, perm: ["emails:view"] },
+    ],
+  },
+  {
+    // ⚠️ CHỈ SUPER_ADMIN (chốt 11/08/2026). Mọi mục ở đây phải gác bằng action mà KHÔNG
+    // RoleDef nào giữ (users:manage · user-groups:manage · roles:manage · centers:edit ·
+    // audit-logs:view · settings:view) ⇒ vai khác vào chỉ qua bypass SUPER_ADMIN.
+    // Thêm mục mới vào nhóm này = kiểm lại danh sách vai giữ action đó TRƯỚC, đừng mượn
+    // action rộng như `centers:view` (7 vai giữ — đúng lỗi vừa vá).
+    label: "Hệ thống & Cấu hình",
+    items: [
+      { label: "Tài khoản", href: "/users", icon: KeyRound, perm: ["users:manage"] },
+      // US-03 — nhóm người dùng: grant ad-hoc (ALLOW/DENY) không sửa vai chuẩn.
+      { label: "Nhóm người dùng", href: "/user-groups", icon: UsersRound, perm: ["user-groups:manage"] },
+      // Màn cấu hình VAI TRÒ (RoleDef + RolePermission) — trung tâm của RBAC v2 mà từ
+      // trước tới nay chỉ vào được bằng URL.
+      { label: "Vai trò & quyền", href: "/roles", icon: KeyRound, perm: ["roles:manage"] },
+      // P1 · US-05 AC4 — cây tổ chức (HO → vùng → cơ sở).
+      { label: "Cây tổ chức", href: "/to-chuc", icon: Network, perm: [...PAGE_GATES["/to-chuc"]] },
       { label: "Audit Log", href: "/audit-log", icon: ScrollText, perm: ["audit-logs:view"] },
+      // C6/NĐ13 — HV quá hạn lưu trữ + xoá ẩn danh / xuất dữ liệu. Trang tự gác bằng
+      // `isSuperAdmin`; `settings:view` ở đây chỉ là cổng HIỆN MỤC và cũng chỉ
+      // SUPER_ADMIN có, nên hai tầng không lệch nhau.
+      { label: "Tuân thủ dữ liệu", href: "/compliance", icon: AlertTriangle, perm: ["settings:view"] },
+      { label: "Chạy lại webhook", href: "/crm/webhook-replay", icon: RefreshCw, perm: ["settings:edit"] },
       { label: "Tích hợp", href: "/tich-hop", icon: Plug, perm: ["settings:view"] },
       { label: "Cấu hình vận hành", href: "/cau-hinh-van-hanh", icon: SlidersHorizontal, perm: ["settings:view"] },
       { label: "Cài đặt", href: "/settings", icon: Settings, perm: ["settings:view"] },
@@ -360,19 +398,20 @@ export function Sidebar({
   }
 
   return (
-    <aside className="flex h-full w-64 flex-col border-r border-neutral-200 bg-white">
-      <div className="flex h-16 items-center border-b border-neutral-200 px-6">
+    <aside className="flex h-full w-64 flex-col border-r border-border bg-card">
+      <div className="flex h-16 items-center border-b border-border px-6">
         <Link
           href="/dashboard"
           className="group text-xl font-bold transition-opacity hover:opacity-90"
         >
-          <span className="bg-gradient-to-r from-orange-500 to-purple-700 bg-clip-text text-transparent">
-            Sata
-          </span>
-          <span className="bg-gradient-to-r from-purple-700 to-orange-500 bg-clip-text text-transparent">
-            Robo
-          </span>
-          <span className="ml-1 text-xs font-normal text-neutral-400">Admin</span>
+          {/* DESIGN.md §7 — KHÔNG gradient trong admin. Bản cũ tô "Sata" bằng gradient
+              cam→tím và "Robo" bằng tím→cam, tức hai chữ chạy NGƯỢC CHIỀU nhau: chỗ nối
+              đổi màu đột ngột, và ở cỡ 20px chữ mảnh bị bệt. Gradient chữ thuộc site
+              public. Ở đây dùng hai màu ĐẶC của thương hiệu — vẫn nhận ra lockup mà đọc
+              rõ ở mọi cỡ. */}
+          <span className="text-[color:var(--accent)]">Sata</span>
+          <span className="text-[color:var(--primary)]">Robo</span>
+          <span className="ml-1.5 text-xs font-normal text-muted-foreground">Admin</span>
         </Link>
       </div>
 
@@ -384,7 +423,7 @@ export function Sidebar({
               <button
                 type="button"
                 onClick={() => toggleGroup(group.label)}
-                className="flex w-full items-center justify-between px-6 py-1 text-[10px] uppercase tracking-widest font-semibold text-neutral-400 hover:text-neutral-600"
+                className="flex w-full items-center justify-between px-6 py-1 text-[10px] uppercase tracking-widest font-semibold text-muted-foreground hover:text-muted-foreground"
                 aria-expanded={!isCollapsed}
               >
                 <span>{group.label}</span>
@@ -405,7 +444,7 @@ export function Sidebar({
                   return (
                     <Fragment key={item.href}>
                       {showCluster && (
-                        <div className="px-6 pb-0.5 pt-2 text-[10px] font-medium uppercase tracking-wider text-neutral-300">
+                        <div className="px-6 pb-0.5 pt-2 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
                           {item.cluster}
                         </div>
                       )}
@@ -414,15 +453,15 @@ export function Sidebar({
                         className={cn(
                           "flex items-center gap-3 px-6 py-2 text-sm font-medium transition-colors",
                           active
-                            ? "bg-orange-50 text-orange-700 border-l-2 border-orange-500"
-                            : "text-neutral-600 hover:bg-neutral-50 hover:text-neutral-900",
+                            ? "bg-primary-soft text-primary border-l-2 border-primary"
+                            : "text-muted-foreground hover:bg-muted hover:text-foreground",
                         )}
                       >
                         <Icon className="h-4 w-4 shrink-0" />
                         <span className="min-w-0 flex-1 truncate">{item.label}</span>
                         {item.badge === "chat" && chatCount > 0 && (
                           <span
-                            className="inline-flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-rose-500 px-1 text-[10px] font-bold text-white"
+                            className="inline-flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-state-danger px-1 text-[10px] font-bold text-white"
                             aria-label={`${chatCount} tin chưa đọc`}
                           >
                             {chatCount > 9 ? "9+" : chatCount}
@@ -437,7 +476,7 @@ export function Sidebar({
         })}
       </nav>
 
-      <div className="border-t border-neutral-200 p-4 text-xs text-neutral-400">
+      <div className="border-t border-border p-4 text-xs text-muted-foreground">
         <p className="font-medium">Sata Robo Admin</p>
         <p>v4.UI.FINAL · 2026</p>
       </div>

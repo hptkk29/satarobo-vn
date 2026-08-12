@@ -28,7 +28,8 @@ export async function GET(
   { params }: { params: Promise<{ enrollmentId: string }> },
 ) {
   const session = await auth();
-  if (!session?.user) return NextResponse.json({ error: "Chưa đăng nhập" }, { status: 401 });
+  if (!session?.user)
+    return NextResponse.json({ error: "Chưa đăng nhập" }, { status: 401 });
   const { enrollmentId } = await params;
 
   const actor = await resolveActor(session.user.id);
@@ -40,12 +41,21 @@ export async function GET(
   const clsWithEnr = classIds.length
     ? await sdb.class.findMany({
         where: { id: { in: classIds } },
-        select: { enrollments: { where: { id: enrollmentId }, select: { studentId: true } } },
+        select: {
+          enrollments: {
+            where: { id: enrollmentId },
+            select: { studentId: true },
+          },
+        },
       })
     : [];
-  const studentId = clsWithEnr.flatMap((c) => c.enrollments)[0]?.studentId ?? null;
+  const studentId =
+    clsWithEnr.flatMap((c) => c.enrollments)[0]?.studentId ?? null;
   if (!studentId) {
-    return NextResponse.json({ error: "Học bạ không thuộc lớp bạn phụ trách" }, { status: 404 });
+    return NextResponse.json(
+      { error: "Học bạ không thuộc lớp bạn phụ trách" },
+      { status: 404 },
+    );
   }
 
   const rc = await sdb.reportCard.findFirst({
@@ -61,19 +71,26 @@ export async function GET(
 
   const card = await getPublishedReportCardForStudent(rc.id, studentId);
   if (!card) {
-    return NextResponse.json({ error: "Không dựng được học bạ" }, { status: 404 });
+    return NextResponse.json(
+      { error: "Không dựng được học bạ" },
+      { status: 404 },
+    );
   }
 
   let pdf: Buffer;
   try {
     pdf = await withFreshFonts(() =>
       renderToBuffer(
-        createElement(ReportCardPdf, { card }) as unknown as ReactElement<DocumentProps>,
+        createElement(ReportCardPdf, {
+          card,
+        }) as unknown as ReactElement<DocumentProps>,
       ),
     );
   } catch (err) {
     return NextResponse.json(
-      { error: `Lỗi tạo PDF: ${err instanceof Error ? err.message : "Unknown"}` },
+      {
+        error: `Lỗi tạo PDF: ${err instanceof Error ? err.message : "Unknown"}`,
+      },
       { status: 500 },
     );
   }

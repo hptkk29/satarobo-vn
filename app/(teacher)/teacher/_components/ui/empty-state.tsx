@@ -20,7 +20,7 @@ export function EmptyState({
       className={cn(
         "flex flex-col items-center justify-center rounded-xl px-6 py-10 text-center",
         tone === "green"
-          ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-600/15 dark:text-emerald-200"
+          ? "bg-state-success-soft text-state-success-ink dark:bg-state-success-soft dark:text-state-success-ink"
           : "bg-muted/50 text-muted-foreground",
         className,
       )}
@@ -29,7 +29,9 @@ export function EmptyState({
         <Icon
           className={cn(
             "mb-3 h-8 w-8",
-            tone === "green" ? "text-emerald-500" : "text-muted-foreground",
+            tone === "green"
+              ? "text-state-success-ink"
+              : "text-muted-foreground",
           )}
           aria-hidden
         />
@@ -49,12 +51,9 @@ export function SuccessBanner({
   children: React.ReactNode;
 }) {
   return (
-    <div className="flex items-center gap-3 rounded-xl bg-emerald-50 px-4 py-3.5 text-sm font-medium text-emerald-700 dark:bg-emerald-600/15 dark:text-emerald-200">
+    <div className="flex items-center gap-3 rounded-xl bg-state-success-soft px-4 py-3.5 text-sm font-medium text-state-success-ink">
       {Icon && (
-        <Icon
-          className="h-5 w-5 shrink-0 text-emerald-500 dark:text-emerald-300"
-          aria-hidden
-        />
+        <Icon className="h-5 w-5 shrink-0 text-state-success-ink" aria-hidden />
       )}
       <span>{children}</span>
     </div>

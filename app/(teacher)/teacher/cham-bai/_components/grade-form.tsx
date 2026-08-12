@@ -20,7 +20,11 @@ import type { RubricCriterion, RubricLevel } from "@prisma/client";
 import { ExternalLink, Save } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
-import { RUBRIC_CRITERIA, RUBRIC_LEVELS, rubricToScore } from "@/lib/rubric/criteria";
+import {
+  RUBRIC_CRITERIA,
+  RUBRIC_LEVELS,
+  rubricToScore,
+} from "@/lib/rubric/criteria";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -34,10 +38,10 @@ import {
 // Màu chip active theo mức rubric — bám tone màu chữ của RUBRIC_LEVELS
 // (rose/amber/blue/emerald trong lib/rubric/criteria).
 const LEVEL_ACTIVE: Record<RubricLevel, string> = {
-  NEED_SUPPORT: "border-rose-500 bg-rose-500 text-white",
-  BASIC: "border-amber-500 bg-amber-500 text-white",
-  GOOD: "border-blue-500 bg-blue-500 text-white",
-  EXCELLENT: "border-emerald-600 bg-emerald-600 text-white",
+  NEED_SUPPORT: "border-state-danger bg-state-danger text-white",
+  BASIC: "border-state-warning bg-state-warning text-white",
+  GOOD: "border-state-info bg-state-info text-white",
+  EXCELLENT: "border-state-success bg-state-success text-white",
 };
 
 /** Kích thước file dễ đọc cho link tài liệu nộp. */
@@ -92,11 +96,15 @@ export function GradeForm({
   const [pending, startTransition] = useTransition();
 
   const [mode, setMode] = useState<"quick" | "rubric">("quick");
-  const [score, setScore] = useState(initialScore != null ? String(initialScore) : "");
+  const [score, setScore] = useState(
+    initialScore != null ? String(initialScore) : "",
+  );
   // Nhận xét dùng CHUNG 2 chế độ (đổi chế độ không mất chữ đã gõ);
   // chấm nhanh = tuỳ chọn, rubric = bắt buộc ≥5 ký tự (khớp RubricGradeSchema).
   const [feedback, setFeedback] = useState(initialFeedback ?? "");
-  const [levels, setLevels] = useState<Partial<Record<RubricCriterion, RubricLevel>>>({});
+  const [levels, setLevels] = useState<
+    Partial<Record<RubricCriterion, RubricLevel>>
+  >({});
   const [sendEmail, setSendEmail] = useState(false);
 
   // Điểm quy đổi xem trước — cùng công thức rubricToScore action dùng khi lưu.
@@ -179,7 +187,7 @@ export function GradeForm({
               {isLate && (
                 <Badge
                   variant="outline"
-                  className="border-amber-300 text-amber-700 dark:border-amber-500/40 dark:text-amber-300"
+                  className="border-state-warning-soft text-state-warning-ink dark:border-state-warning"
                 >
                   Nộp muộn
                 </Badge>
@@ -187,21 +195,28 @@ export function GradeForm({
               {graded && (
                 <Badge
                   variant="outline"
-                  className="border-emerald-300 text-emerald-700 dark:border-emerald-500/40 dark:text-emerald-300"
+                  className="border-state-success-soft text-state-success-ink dark:border-state-success"
                 >
-                  Đã chấm{initialScore != null ? ` — ${initialScore}/${totalPoints}` : ""}
+                  Đã chấm
+                  {initialScore != null
+                    ? ` — ${initialScore}/${totalPoints}`
+                    : ""}
                 </Badge>
               )}
             </div>
           </div>
           {submittedAtText && (
-            <p className="text-sm text-muted-foreground">Nộp lúc: {submittedAtText}</p>
+            <p className="text-sm text-muted-foreground">
+              Nộp lúc: {submittedAtText}
+            </p>
           )}
         </CardHeader>
         <CardContent className="space-y-3">
           {textAnswer && (
             <div className="rounded-md border border-border bg-muted/40 p-3">
-              <p className="whitespace-pre-wrap text-sm text-foreground">{textAnswer}</p>
+              <p className="whitespace-pre-wrap text-sm text-foreground">
+                {textAnswer}
+              </p>
             </div>
           )}
           {files && files.length > 0 ? (
@@ -213,12 +228,14 @@ export function GradeForm({
                     href={f.url}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1.5 text-sm font-semibold text-orange-600 hover:text-orange-700 dark:text-orange-400 dark:hover:text-orange-300"
+                    className="inline-flex items-center gap-1.5 text-sm font-semibold text-primary-ink hover:text-primary-ink-hover"
                   >
                     <ExternalLink className="h-4 w-4" aria-hidden />
                     {f.name}
                     {formatSize(f.size) && (
-                      <span className="font-normal text-muted-foreground">({formatSize(f.size)})</span>
+                      <span className="font-normal text-muted-foreground">
+                        ({formatSize(f.size)})
+                      </span>
                     )}
                   </a>
                 </li>
@@ -230,18 +247,22 @@ export function GradeForm({
                 href={fileUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="inline-flex items-center gap-1.5 text-sm font-semibold text-orange-600 hover:text-orange-700 dark:text-orange-400 dark:hover:text-orange-300"
+                className="inline-flex items-center gap-1.5 text-sm font-semibold text-primary-ink hover:text-primary-ink-hover"
               >
                 <ExternalLink className="h-4 w-4" aria-hidden />
                 {fileName ?? "Tệp đính kèm"}
                 {formatSize(fileSize) && (
-                  <span className="font-normal text-muted-foreground">({formatSize(fileSize)})</span>
+                  <span className="font-normal text-muted-foreground">
+                    ({formatSize(fileSize)})
+                  </span>
                 )}
               </a>
             )
           )}
           {!textAnswer && !fileUrl && (!files || files.length === 0) && (
-            <p className="text-sm text-muted-foreground">Không có nội dung đính kèm.</p>
+            <p className="text-sm text-muted-foreground">
+              Không có nội dung đính kèm.
+            </p>
           )}
         </CardContent>
       </Card>
@@ -268,7 +289,7 @@ export function GradeForm({
                   className={cn(
                     "rounded-md border px-2.5 py-1 text-[13px] font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50",
                     mode === m.key
-                      ? "border-orange-500 bg-orange-500 text-white"
+                      ? "border-primary bg-primary text-white"
                       : "border-border bg-card text-muted-foreground hover:bg-muted",
                   )}
                 >
@@ -300,9 +321,14 @@ export function GradeForm({
           ) : (
             <div className="space-y-3">
               {RUBRIC_CRITERIA.map((c) => (
-                <div key={c.key} className="rounded-lg border border-border p-3">
+                <div
+                  key={c.key}
+                  className="rounded-lg border border-border p-3"
+                >
                   <div className="mb-2">
-                    <p className="text-sm font-semibold text-foreground">{c.label}</p>
+                    <p className="text-sm font-semibold text-foreground">
+                      {c.label}
+                    </p>
                     <p className="text-xs text-muted-foreground">{c.desc}</p>
                   </div>
                   <div className="flex flex-wrap gap-1.5">
@@ -335,7 +361,9 @@ export function GradeForm({
               <p className="text-sm text-muted-foreground">
                 Điểm quy đổi:{" "}
                 <span className="font-semibold text-foreground">
-                  {previewScore != null ? `${previewScore}/10` : "— (chấm đủ 6 tiêu chí)"}
+                  {previewScore != null
+                    ? `${previewScore}/10`
+                    : "— (chấm đủ 6 tiêu chí)"}
                 </span>
               </p>
             </div>

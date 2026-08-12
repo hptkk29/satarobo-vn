@@ -8,6 +8,7 @@ import {
   setCoursePrerequisites,
   clearCoursePrerequisites,
 } from "../_actions";
+import { PhanTrangBang } from "@/components/ui/phan-trang-bang";
 
 type CourseOpt = { id: string; label: string };
 type Row = { courseId: string; courseLabel: string; prereqs: CourseOpt[] };
@@ -43,77 +44,79 @@ export function PrerequisitesManager({
         <button
           type="button"
           onClick={() => setEditing({ courseId: "", fixed: false })}
-          className="inline-flex items-center gap-1.5 rounded-lg bg-[#7C3AED] px-4 py-2 text-sm font-semibold text-white hover:opacity-90"
+          className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white hover:opacity-90"
         >
           <Plus className="h-4 w-4" /> Thêm điều kiện tiên quyết
         </button>
       </div>
 
-      <div className="overflow-hidden rounded-xl border border-gray-200 bg-white">
-        <table className="min-w-full divide-y divide-gray-100">
-          <thead className="bg-gray-50">
-            <tr>
-              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">Khoá</th>
-              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">Phải hoàn thành trước</th>
-              <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-gray-500">Thao tác</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-50">
-            {rows.length === 0 ? (
+      <div className="overflow-hidden rounded-xl border border-border bg-card">
+        <PhanTrangBang>
+          <table className="min-w-full divide-y divide-border">
+            <thead className="bg-muted">
               <tr>
-                <td colSpan={3} className="px-4 py-12 text-center text-sm text-gray-400">
-                  Chưa có khoá nào cấu hình tiên quyết. Bấm “Thêm điều kiện tiên quyết”.
-                </td>
+                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">Khoá</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">Phải hoàn thành trước</th>
+                <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-muted-foreground">Thao tác</th>
               </tr>
-            ) : (
-              rows.map((r) => (
-                <tr key={r.courseId} className="hover:bg-gray-50/60">
-                  <td className="px-4 py-3 font-medium text-gray-900">{r.courseLabel}</td>
-                  <td className="px-4 py-3">
-                    <div className="flex flex-wrap gap-1.5">
-                      {r.prereqs.map((p) => (
-                        <span key={p.id} className="rounded-full bg-purple-50 px-2.5 py-0.5 text-xs font-medium text-[#7C3AED]">
-                          {p.label}
-                        </span>
-                      ))}
-                    </div>
-                  </td>
-                  <td className="px-4 py-3 text-right">
-                    <div className="inline-flex items-center gap-1">
-                      <button
-                        type="button"
-                        onClick={() => setEditing({ courseId: r.courseId, fixed: true })}
-                        className="rounded p-1.5 text-blue-600 hover:bg-blue-50"
-                        title="Sửa"
-                      >
-                        <Pencil className="h-4 w-4" />
-                      </button>
-                      {confirmDelete === r.courseId ? (
-                        <button
-                          type="button"
-                          onClick={() => remove(r.courseId)}
-                          disabled={pending}
-                          className="rounded bg-red-100 px-2 py-1 text-xs font-semibold text-red-700 hover:bg-red-200 disabled:opacity-50"
-                        >
-                          Xác nhận xoá?
-                        </button>
-                      ) : (
-                        <button
-                          type="button"
-                          onClick={() => setConfirmDelete(r.courseId)}
-                          className="rounded p-1.5 text-red-600 hover:bg-red-50"
-                          title="Xoá toàn bộ tiên quyết của khoá này"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </button>
-                      )}
-                    </div>
+            </thead>
+            <tbody className="divide-y divide-border">
+              {rows.length === 0 ? (
+                <tr>
+                  <td colSpan={3} className="px-4 py-12 text-center text-sm text-muted-foreground">
+                    Chưa có khoá nào cấu hình tiên quyết. Bấm “Thêm điều kiện tiên quyết”.
                   </td>
                 </tr>
-              ))
-            )}
-          </tbody>
-        </table>
+              ) : (
+                rows.map((r) => (
+                  <tr key={r.courseId} className="hover:bg-muted/60">
+                    <td className="px-4 py-3 font-medium text-foreground">{r.courseLabel}</td>
+                    <td className="px-4 py-3">
+                      <div className="flex flex-wrap gap-1.5">
+                        {r.prereqs.map((p) => (
+                          <span key={p.id} className="rounded-full bg-primary-soft px-2.5 py-0.5 text-xs font-medium text-primary">
+                            {p.label}
+                          </span>
+                        ))}
+                      </div>
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      <div className="inline-flex items-center gap-1">
+                        <button
+                          type="button"
+                          onClick={() => setEditing({ courseId: r.courseId, fixed: true })}
+                          className="rounded p-1.5 text-state-info-ink hover:bg-state-info-soft"
+                          title="Sửa"
+                        >
+                          <Pencil className="h-4 w-4" />
+                        </button>
+                        {confirmDelete === r.courseId ? (
+                          <button
+                            type="button"
+                            onClick={() => remove(r.courseId)}
+                            disabled={pending}
+                            className="rounded bg-state-danger-soft px-2 py-1 text-xs font-semibold text-state-danger-ink hover:bg-state-danger-soft-hover disabled:opacity-50"
+                          >
+                            Xác nhận xoá?
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => setConfirmDelete(r.courseId)}
+                            className="rounded p-1.5 text-state-danger-ink hover:bg-state-danger-soft"
+                            title="Xoá toàn bộ tiên quyết của khoá này"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </PhanTrangBang>
       </div>
 
       {editing && (
@@ -180,23 +183,23 @@ function PrereqDialog({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <button type="button" aria-label="Đóng" className="absolute inset-0 bg-black/40" onClick={onClose} />
-      <div className="relative z-10 w-full max-w-lg rounded-2xl border border-gray-200 bg-white p-5 shadow-xl">
+      <div className="relative z-10 w-full max-w-lg rounded-2xl border border-border bg-card p-5 shadow-xl">
         <div className="mb-4 flex items-center justify-between">
-          <h3 className="text-sm font-bold text-gray-900">
+          <h3 className="text-sm font-bold text-foreground">
             {fixedCourseId ? "Sửa điều kiện tiên quyết" : "Thêm điều kiện tiên quyết"}
           </h3>
-          <button type="button" onClick={onClose} className="text-gray-400 hover:text-gray-600">
+          <button type="button" onClick={onClose} className="text-muted-foreground hover:text-muted-foreground">
             <X className="h-4 w-4" />
           </button>
         </div>
 
         <label className="block">
-          <span className="mb-1 block text-xs font-medium text-gray-500">Khoá học</span>
+          <span className="mb-1 block text-xs font-medium text-muted-foreground">Khoá học</span>
           <select
             value={courseId}
             onChange={(e) => setCourseId(e.target.value)}
             disabled={!!fixedCourseId || pending}
-            className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-[#7C3AED] focus:outline-none disabled:bg-gray-50"
+            className="w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-primary focus:outline-none disabled:bg-muted"
           >
             <option value="">— Chọn khoá —</option>
             {courseChoices.map((c) => (
@@ -208,7 +211,7 @@ function PrereqDialog({
         </label>
 
         <div className="mt-4">
-          <span className="mb-2 block text-xs font-medium text-gray-500">
+          <span className="mb-2 block text-xs font-medium text-muted-foreground">
             Phải hoàn thành trước ({picked.length})
           </span>
           <div className="flex max-h-56 flex-wrap gap-2 overflow-y-auto">
@@ -222,9 +225,7 @@ function PrereqDialog({
                     type="button"
                     onClick={() => toggle(c.id)}
                     disabled={pending}
-                    className={`rounded-full border px-3 py-1 text-xs font-medium ${
-                      on ? "border-[#7C3AED] bg-purple-50 text-[#7C3AED]" : "border-gray-200 bg-white text-gray-500 hover:border-[#7C3AED]"
-                    }`}
+                    className={`rounded-full border px-3 py-1 text-xs font-medium ${ on ? "border-primary bg-primary-soft text-primary" : "border-border bg-card text-muted-foreground hover:border-primary" }`}
                   >
                     {on ? "✓ " : ""}{c.label}
                   </button>
@@ -238,14 +239,14 @@ function PrereqDialog({
             type="button"
             onClick={save}
             disabled={pending}
-            className="rounded-lg bg-[#7C3AED] px-4 py-2 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-50"
+            className="rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-50"
           >
             {pending ? "Đang lưu…" : "Lưu"}
           </button>
           <button
             type="button"
             onClick={onClose}
-            className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+            className="rounded-lg border border-border px-4 py-2 text-sm font-medium text-foreground hover:bg-muted"
           >
             Hủy
           </button>

@@ -10,14 +10,15 @@ import { ENROLLMENT_ACTIVE_STATUS_LIST } from '@/lib/enrollment-status'
 import { getAssignableTeachers } from '@/lib/teachers/assignable'
 import { ClassDeleteButton } from './_components/class-delete-button'
 import { ClassFilters } from './_components/class-filters'
+import { PhanTrangBang } from "@/components/ui/phan-trang-bang";
 
 const STATUS_INFO: Record<ClassStatus, { label: string; color: string }> = {
-  PLANNED: { label: 'Đang lên KH', color: 'bg-gray-100 text-gray-700' },
-  RECRUITING: { label: 'Tuyển sinh', color: 'bg-amber-100 text-amber-700' },
-  PENDING_APPROVAL: { label: 'Chờ duyệt', color: 'bg-orange-100 text-orange-700' },
-  ACTIVE: { label: 'Đang dạy', color: 'bg-green-100 text-green-700' },
-  COMPLETED: { label: 'Hoàn thành', color: 'bg-blue-100 text-blue-700' },
-  CANCELLED: { label: 'Huỷ', color: 'bg-red-100 text-red-700' },
+  PLANNED: { label: 'Đang lên KH', color: 'bg-muted text-foreground' },
+  RECRUITING: { label: 'Tuyển sinh', color: 'bg-state-warning-soft text-state-warning-ink' },
+  PENDING_APPROVAL: { label: 'Chờ duyệt', color: 'bg-primary-soft text-primary' },
+  ACTIVE: { label: 'Đang dạy', color: 'bg-state-success-soft text-state-success-ink' },
+  COMPLETED: { label: 'Hoàn thành', color: 'bg-state-info-soft text-state-info-ink' },
+  CANCELLED: { label: 'Huỷ', color: 'bg-state-danger-soft text-state-danger-ink' },
 }
 
 const DAY_LABELS = ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7']
@@ -40,7 +41,7 @@ function ScheduleBadge({
   startTime: string | null
   endTime: string | null
 }) {
-  if (!days || days.length === 0) return <span className="text-gray-400">—</span>
+  if (!days || days.length === 0) return <span className="text-muted-foreground">—</span>
   const daysText = [...days]
     .sort((a, b) => a - b)
     .map((d) => DAY_LABELS[d] ?? '')
@@ -50,7 +51,7 @@ function ScheduleBadge({
   return (
     <span className="text-xs">
       <span className="font-medium">{daysText}</span>
-      {time && <span className="ml-1 text-gray-500">{time}</span>}
+      {time && <span className="ml-1 text-muted-foreground">{time}</span>}
     </span>
   )
 }
@@ -174,8 +175,8 @@ export default async function ClassesPage({ searchParams }: SearchParams) {
     <div>
       <div className="mb-6 flex items-start justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Lớp học</h1>
-          <p className="mt-1 text-sm text-gray-500">
+          <h1 className="text-2xl font-bold text-foreground">Lớp học</h1>
+          <p className="mt-1 text-sm text-muted-foreground">
             {classes.length > 0 ? `${classes.length} lớp` : 'Chưa có lớp nào'}
           </p>
         </div>
@@ -183,14 +184,14 @@ export default async function ClassesPage({ searchParams }: SearchParams) {
           <div className="flex gap-2">
             <Link
               href="/classes/new"
-              className="inline-flex items-center gap-1.5 rounded-lg bg-[#7C3AED] px-4 py-2 text-sm font-semibold text-white shadow-sm hover:opacity-90"
+              className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white shadow-sm hover:opacity-90"
             >
               <Plus className="h-4 w-4" />
               Thêm lớp
             </Link>
             <Link
               href="/classes/import"
-              className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-card px-4 py-2 text-sm font-semibold text-foreground hover:bg-muted"
             >
               <FileSpreadsheet className="h-4 w-4" />
               Import Excel
@@ -198,7 +199,7 @@ export default async function ClassesPage({ searchParams }: SearchParams) {
             {/* 08/08 — rà soát buổi lệch ngày khai giảng (lỗi im lặng, phải chủ động soi). */}
             <Link
               href="/classes/kiem-tra-lich"
-              className="inline-flex items-center gap-1.5 rounded-lg border border-gray-200 bg-white px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-card px-4 py-2 text-sm font-semibold text-foreground hover:bg-muted"
             >
               <CalendarCheck2 className="h-4 w-4" />
               Kiểm tra lịch buổi
@@ -228,135 +229,137 @@ export default async function ClassesPage({ searchParams }: SearchParams) {
         }))}
       />
 
-      <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
+      <div className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
         <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-gray-100">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">
-                  Tên lớp
-                </th>
-                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">
-                  Khoá học
-                </th>
-                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">
-                  Cơ sở / Phòng
-                </th>
-                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">
-                  Lịch
-                </th>
-                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">
-                  GV chính
-                </th>
-                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">
-                  Sức chứa
-                </th>
-                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">
-                  Khai giảng
-                </th>
-                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">
-                  Trạng thái
-                </th>
-                {canManage && (
-                  <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-gray-500">
-                    Hành động
-                  </th>
-                )}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-50">
-              {classes.length === 0 ? (
+          <PhanTrangBang>
+            <table className="min-w-full divide-y divide-border">
+              <thead className="bg-muted">
                 <tr>
-                  <td
-                    colSpan={canManage ? 9 : 8}
-                    className="px-4 py-12 text-center text-sm text-gray-400"
-                  >
-                    Chưa có lớp nào
-                  </td>
+                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                    Tên lớp
+                  </th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                    Khoá học
+                  </th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                    Cơ sở / Phòng
+                  </th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                    Lịch
+                  </th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                    GV chính
+                  </th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                    Sức chứa
+                  </th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                    Khai giảng
+                  </th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                    Trạng thái
+                  </th>
+                  {canManage && (
+                    <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                      Hành động
+                    </th>
+                  )}
                 </tr>
-              ) : (
-                classes.map((cls) => {
-                  const statusInfo =
-                    STATUS_INFO[cls.status] ?? {
-                      label: cls.status,
-                      color: 'bg-gray-100 text-gray-500',
-                    }
-                  return (
-                    <tr key={cls.id} className="hover:bg-gray-50/60">
-                      <td className="px-4 py-3">
-                        <div className="font-medium text-gray-900">{cls.name}</div>
-                        {cls.classCode && (
-                          <div className="text-xs text-gray-400 tabular-nums">
-                            {cls.classCode}
-                          </div>
-                        )}
-                      </td>
-                      <td className="px-4 py-3 text-sm text-gray-600 max-w-[160px] truncate">
-                        {cls.course?.name ?? '—'}
-                      </td>
-                      <td className="px-4 py-3 text-sm text-gray-500">
-                        <div>{cls.center?.name ?? '—'}</div>
-                        {cls.room?.code && (
-                          <div className="text-xs text-gray-400">P. {cls.room.code}</div>
-                        )}
-                      </td>
-                      <td className="px-4 py-3">
-                        <ScheduleBadge
-                          days={cls.scheduleDays ?? []}
-                          startTime={cls.startTime}
-                          endTime={cls.endTime}
-                        />
-                      </td>
-                      <td className="px-4 py-3 text-sm text-gray-600">
-                        {cls.teacher?.name ?? '—'}
-                      </td>
-                      <td className="px-4 py-3 text-sm tabular-nums text-gray-700 font-semibold">
-                        {cls._count.enrollments}/{cls.maxStudents}
-                      </td>
-                      <td className="px-4 py-3 text-sm tabular-nums text-gray-500">
-                        {formatDate(cls.startDate)}
-                      </td>
-                      <td className="px-4 py-3">
-                        <span
-                          className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold ${statusInfo.color}`}
-                        >
-                          {statusInfo.label}
-                        </span>
-                      </td>
-                      {canManage && (
-                        <td className="px-4 py-3 text-right">
-                          <div className="flex items-center justify-end gap-2">
-                            <Link
-                              href={`/classes/${cls.id}`}
-                              className="rounded-md border border-orange-200 px-2.5 py-1 text-xs font-semibold text-orange-700 hover:bg-orange-50"
-                            >
-                              Chi tiết
-                            </Link>
-                            {canUpdate && (
-                              <Link
-                                href={`/classes/${cls.id}/edit`}
-                                className="rounded-md border border-gray-200 px-2.5 py-1 text-xs font-semibold text-gray-700 hover:bg-gray-50"
-                              >
-                                Sửa
-                              </Link>
-                            )}
-                            {canDelete && (
-                              <ClassDeleteButton
-                                classId={cls.id}
-                                name={cls.name}
-                                enrollmentCount={cls._count.enrollments}
-                                sessionCount={cls._count.sessions}
-                              />
-                            )}
-                          </div>
+              </thead>
+              <tbody className="divide-y divide-border">
+                {classes.length === 0 ? (
+                  <tr>
+                    <td
+                      colSpan={canManage ? 9 : 8}
+                      className="px-4 py-12 text-center text-sm text-muted-foreground"
+                    >
+                      Chưa có lớp nào
+                    </td>
+                  </tr>
+                ) : (
+                  classes.map((cls) => {
+                    const statusInfo =
+                      STATUS_INFO[cls.status] ?? {
+                        label: cls.status,
+                        color: 'bg-muted text-muted-foreground',
+                      }
+                    return (
+                      <tr key={cls.id} className="hover:bg-muted/60">
+                        <td className="px-4 py-3">
+                          <div className="font-medium text-foreground">{cls.name}</div>
+                          {cls.classCode && (
+                            <div className="text-xs text-muted-foreground tabular-nums">
+                              {cls.classCode}
+                            </div>
+                          )}
                         </td>
-                      )}
-                    </tr>
-                  )
-                })
-              )}
-            </tbody>
-          </table>
+                        <td className="px-4 py-3 text-sm text-muted-foreground max-w-[160px] truncate">
+                          {cls.course?.name ?? '—'}
+                        </td>
+                        <td className="px-4 py-3 text-sm text-muted-foreground">
+                          <div>{cls.center?.name ?? '—'}</div>
+                          {cls.room?.code && (
+                            <div className="text-xs text-muted-foreground">P. {cls.room.code}</div>
+                          )}
+                        </td>
+                        <td className="px-4 py-3">
+                          <ScheduleBadge
+                            days={cls.scheduleDays ?? []}
+                            startTime={cls.startTime}
+                            endTime={cls.endTime}
+                          />
+                        </td>
+                        <td className="px-4 py-3 text-sm text-muted-foreground">
+                          {cls.teacher?.name ?? '—'}
+                        </td>
+                        <td className="px-4 py-3 text-sm tabular-nums text-foreground font-semibold">
+                          {cls._count.enrollments}/{cls.maxStudents}
+                        </td>
+                        <td className="px-4 py-3 text-sm tabular-nums text-muted-foreground">
+                          {formatDate(cls.startDate)}
+                        </td>
+                        <td className="px-4 py-3">
+                          <span
+                            className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold ${statusInfo.color}`}
+                          >
+                            {statusInfo.label}
+                          </span>
+                        </td>
+                        {canManage && (
+                          <td className="px-4 py-3 text-right">
+                            <div className="flex items-center justify-end gap-2">
+                              <Link
+                                href={`/classes/${cls.id}`}
+                                className="rounded-md border border-primary-soft px-2.5 py-1 text-xs font-semibold text-primary hover:bg-primary-soft"
+                              >
+                                Chi tiết
+                              </Link>
+                              {canUpdate && (
+                                <Link
+                                  href={`/classes/${cls.id}/edit`}
+                                  className="rounded-md border border-border px-2.5 py-1 text-xs font-semibold text-foreground hover:bg-muted"
+                                >
+                                  Sửa
+                                </Link>
+                              )}
+                              {canDelete && (
+                                <ClassDeleteButton
+                                  classId={cls.id}
+                                  name={cls.name}
+                                  enrollmentCount={cls._count.enrollments}
+                                  sessionCount={cls._count.sessions}
+                                />
+                              )}
+                            </div>
+                          </td>
+                        )}
+                      </tr>
+                    )
+                  })
+                )}
+              </tbody>
+            </table>
+          </PhanTrangBang>
         </div>
       </div>
     </div>

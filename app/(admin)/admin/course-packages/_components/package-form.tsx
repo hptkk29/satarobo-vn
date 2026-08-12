@@ -200,7 +200,7 @@ export function PackageForm({ pkg, courses = [], defaultCourseId }: PackageFormP
   return (
     <form action={action} className="max-w-4xl space-y-6">
       {error ? (
-        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
+        <div className="rounded-lg border border-state-danger-soft bg-state-danger-soft px-4 py-3 text-sm font-medium text-state-danger-ink">
           {error}
         </div>
       ) : null}
@@ -306,7 +306,7 @@ export function PackageForm({ pkg, courses = [], defaultCourseId }: PackageFormP
 
       <Section title="Giáo trình">
         {linkedCourse ? (
-          <div className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800">
+          <div className="rounded-lg border border-state-info-soft bg-state-info-soft px-4 py-3 text-sm text-state-info-ink">
             Giáo trình hiển thị lấy từ khoá dạy liên kết:{" "}
             <strong>{linkedCourse.name}</strong>
             {linkedCourse.code ? ` (${linkedCourse.code})` : ""}. JSON dưới đây giữ làm
@@ -363,14 +363,14 @@ export function PackageForm({ pkg, courses = [], defaultCourseId }: PackageFormP
       {/* FL1-05 — gắn gói BÁN với khoá DẠY (Course) để gỡ "trùng" gói/khoá. */}
       <Section title="Khoá dạy liên kết (chương trình giảng)">
         <label className="block space-y-1.5">
-          <span className="text-sm font-medium text-gray-700">
+          <span className="text-sm font-medium text-foreground">
             Khoá dạy (Course) cung cấp giáo trình cho gói này
           </span>
           <select
             name="courseId"
             value={courseId}
             onChange={(e) => setCourseId(e.target.value)}
-            className="h-10 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-[#F7941D] focus:ring-2 focus:ring-[#F7941D]/20"
+            className="h-10 w-full rounded-lg border border-border bg-card px-3 py-2 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
           >
             <option value="">-- Không liên kết (dùng giáo trình JSON) --</option>
             {courses.map((c) => (
@@ -381,7 +381,7 @@ export function PackageForm({ pkg, courses = [], defaultCourseId }: PackageFormP
             ))}
           </select>
         </label>
-        <p className="text-xs text-gray-500">
+        <p className="text-xs text-muted-foreground">
           Gói = đơn vị BÁN (giá, marketing). Khoá dạy = đơn vị GIẢNG (chương trình).
           Liên kết để mỗi gói trỏ đúng khoá dạy, tránh trùng lặp. Giá vẫn lấy từ gói —
           không đổi.
@@ -423,7 +423,7 @@ export function PackageForm({ pkg, courses = [], defaultCourseId }: PackageFormP
         />
 
         <div>
-          <label className="mb-1.5 block text-sm font-semibold text-gray-700">
+          <label className="mb-1.5 block text-sm font-semibold text-foreground">
             Kết quả đạt được sau khi hoàn thành
           </label>
           <JsonArrayEditor
@@ -436,7 +436,7 @@ export function PackageForm({ pkg, courses = [], defaultCourseId }: PackageFormP
         </div>
 
         <div>
-          <label className="mb-1.5 block text-sm font-semibold text-gray-700">
+          <label className="mb-1.5 block text-sm font-semibold text-foreground">
             Phương pháp đào tạo (tuỳ chọn — cho khóa luyện thi)
           </label>
           <JsonArrayEditor
@@ -449,7 +449,7 @@ export function PackageForm({ pkg, courses = [], defaultCourseId }: PackageFormP
         </div>
 
         <div>
-          <label className="mb-1.5 block text-sm font-semibold text-gray-700">
+          <label className="mb-1.5 block text-sm font-semibold text-foreground">
             Điều kiện đặc biệt (tuỳ chọn — VD Sata8 cam kết hoàn tiền)
           </label>
           <JsonArrayEditor
@@ -471,23 +471,23 @@ export function PackageForm({ pkg, courses = [], defaultCourseId }: PackageFormP
         />
 
         <div>
-          <label className="mb-1.5 block text-sm font-semibold text-gray-700">
+          <label className="mb-1.5 block text-sm font-semibold text-foreground">
             FAQ riêng cho khóa này
           </label>
           <FaqEditor value={faqs} onChange={setFaqs} />
-          <p className="mt-1 text-xs text-gray-500">
+          <p className="mt-1 text-xs text-muted-foreground">
             Mỗi FAQ là 1 cặp question/answer. Sẽ render trong section "Câu hỏi
             thường gặp" trên trang chi tiết.
           </p>
         </div>
       </Section>
 
-      <div className="flex gap-3 border-t border-gray-200 pt-6">
+      <div className="flex gap-3 border-t border-border pt-6">
         <SubmitButton isEdit={isEdit} />
         <button
           type="button"
           onClick={() => router.push("/course-packages")}
-          className="rounded-lg border border-gray-200 bg-white px-5 py-2.5 text-sm font-semibold text-gray-700 hover:bg-gray-50"
+          className="rounded-lg border border-border bg-card px-5 py-2.5 text-sm font-semibold text-foreground hover:bg-muted"
         >
           Huy
         </button>
@@ -498,8 +498,8 @@ export function PackageForm({ pkg, courses = [], defaultCourseId }: PackageFormP
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <section className="space-y-4 rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-      <h2 className="border-b border-gray-100 pb-3 text-base font-bold text-gray-900">{title}</h2>
+    <section className="space-y-4 rounded-xl border border-border bg-card p-5 shadow-sm">
+      <h2 className="border-b border-border pb-3 text-base font-bold text-foreground">{title}</h2>
       {children}
     </section>
   );
@@ -519,11 +519,11 @@ function Field({
   ...props
 }: FieldProps) {
   const inputClasses =
-    "w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-[#F7941D] focus:ring-2 focus:ring-[#F7941D]/20 disabled:bg-gray-50";
+    "w-full rounded-lg border border-border bg-card px-3 py-2 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 disabled:bg-muted";
 
   return (
     <label className="block space-y-1.5">
-      <span className="text-sm font-medium text-gray-700">{label}</span>
+      <span className="text-sm font-medium text-foreground">{label}</span>
       {type === "textarea" ? (
         <textarea
           name={name}
@@ -558,11 +558,11 @@ function SelectField({
 }) {
   return (
     <label className="block space-y-1.5">
-      <span className="text-sm font-medium text-gray-700">{label}</span>
+      <span className="text-sm font-medium text-foreground">{label}</span>
       <select
         name={name}
         defaultValue={defaultValue ?? ""}
-        className="h-10 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-[#F7941D] focus:ring-2 focus:ring-[#F7941D]/20"
+        className="h-10 w-full rounded-lg border border-border bg-card px-3 py-2 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
       >
         <option value="">-- Chon --</option>
         {options.map((option) => (
@@ -590,9 +590,9 @@ function CheckboxField({
         type="checkbox"
         name={name}
         defaultChecked={defaultChecked}
-        className="h-5 w-5 rounded border-gray-300 text-[#F7941D] focus:ring-[#F7941D]"
+        className="h-5 w-5 rounded border-border text-primary focus:ring-primary"
       />
-      <span className="text-sm font-medium text-gray-700">{label}</span>
+      <span className="text-sm font-medium text-foreground">{label}</span>
     </label>
   );
 }
@@ -604,7 +604,7 @@ function SubmitButton({ isEdit }: { isEdit: boolean }) {
     <button
       type="submit"
       disabled={pending}
-      className="rounded-lg bg-[#F7941D] px-5 py-2.5 text-sm font-bold text-white shadow-sm hover:bg-[#e58510] disabled:cursor-not-allowed disabled:opacity-70"
+      className="rounded-lg bg-primary px-5 py-2.5 text-sm font-bold text-white shadow-sm hover:bg-primary-dark disabled:cursor-not-allowed disabled:opacity-70"
     >
       {pending ? "Đang lưu..." : isEdit ? "Cập nhật" : "Tạo mới"}
     </button>

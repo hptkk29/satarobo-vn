@@ -25,6 +25,7 @@ import { toast } from "sonner";
 import { queryOrders, type OrderFilters, type OrderRow } from "../_actions";
 import { ORDER_STATUS_LABEL, ORDER_TYPE_LABEL, deriveInstallmentBadge } from "@/lib/orders/status";
 import type { OrderStatus, OrderType } from "@prisma/client";
+import { PhanTrangBang } from "@/components/ui/phan-trang-bang";
 
 const ALL_STATUSES: OrderStatus[] = [
   "DRAFT",
@@ -37,12 +38,12 @@ const ALL_STATUSES: OrderStatus[] = [
 const ALL_TYPES: OrderType[] = ["COURSE", "PACKAGE", "EXAM", "PRODUCT", "COMBO"];
 
 const STATUS_BADGE_CLASS: Record<OrderStatus, string> = {
-  DRAFT: "bg-gray-100 text-gray-700 hover:bg-gray-100",
-  PENDING_PAYMENT: "bg-yellow-100 text-yellow-800 hover:bg-yellow-100",
-  CONFIRMED: "bg-blue-100 text-blue-800 hover:bg-blue-100",
-  COMPLETED: "bg-green-100 text-green-800 hover:bg-green-100",
-  CANCELLED: "bg-red-100 text-red-800 hover:bg-red-100",
-  REFUNDED: "bg-purple-100 text-purple-800 hover:bg-purple-100",
+  DRAFT: "bg-muted text-foreground hover:bg-muted",
+  PENDING_PAYMENT: "bg-state-warning-soft text-state-warning-ink hover:bg-state-warning-soft",
+  CONFIRMED: "bg-state-info-soft text-state-info-ink hover:bg-state-info-soft",
+  COMPLETED: "bg-state-success-soft text-state-success-ink hover:bg-state-success-soft",
+  CANCELLED: "bg-state-danger-soft text-state-danger-ink hover:bg-state-danger-soft",
+  REFUNDED: "bg-primary-soft text-primary hover:bg-primary-soft",
 };
 
 function formatDateTime(date: Date): string {
@@ -100,7 +101,7 @@ export function OrdersListClient() {
 
   return (
     <div className="space-y-4">
-      <div className="rounded-xl border border-gray-200 bg-gray-50/50 p-3">
+      <div className="rounded-xl border border-border bg-muted/50 p-3">
         <div className="grid grid-cols-1 gap-2 md:grid-cols-3 lg:grid-cols-5">
           <Input
             type="date"
@@ -190,95 +191,97 @@ export function OrdersListClient() {
         </div>
       </div>
 
-      <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Mã đơn</TableHead>
-              <TableHead>Khách hàng</TableHead>
-              <TableHead>Loại</TableHead>
-              <TableHead className="text-right">Số tiền (VND)</TableHead>
-              <TableHead>Phương thức</TableHead>
-              <TableHead>Trạng thái</TableHead>
-              <TableHead>Tạo lúc</TableHead>
-              <TableHead className="text-right">Chi tiết</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {items.length === 0 && !isPending ? (
+      <div className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
+        <PhanTrangBang>
+          <Table>
+            <TableHeader>
               <TableRow>
-                <TableCell
-                  colSpan={8}
-                  className="py-8 text-center text-gray-500"
-                >
-                  Chưa có đơn hàng
-                </TableCell>
+                <TableHead>Mã đơn</TableHead>
+                <TableHead>Khách hàng</TableHead>
+                <TableHead>Loại</TableHead>
+                <TableHead className="text-right">Số tiền (VND)</TableHead>
+                <TableHead>Phương thức</TableHead>
+                <TableHead>Trạng thái</TableHead>
+                <TableHead>Tạo lúc</TableHead>
+                <TableHead className="text-right">Chi tiết</TableHead>
               </TableRow>
-            ) : (
-              items.map((o) => (
-                <TableRow key={o.id} className="hover:bg-gray-50/60">
-                  <TableCell className="font-mono text-sm">{o.code}</TableCell>
-                  <TableCell>
-                    <div className="font-medium text-gray-900">
-                      {o.customerName}
-                    </div>
-                    <div className="text-xs text-gray-500">
-                      {o.customerPhone}
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant="outline">
-                      {ORDER_TYPE_LABEL[o.type]}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="text-right font-medium tabular-nums">
-                    {o.totalAmount.toLocaleString("vi-VN")}
-                  </TableCell>
-                  <TableCell className="text-sm text-gray-700">
-                    {o.paymentMethod?.name ?? "—"}
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex flex-wrap items-center gap-1">
-                      <Badge className={STATUS_BADGE_CLASS[o.status]}>
-                        {ORDER_STATUS_LABEL[o.status]}
-                      </Badge>
-                      {(() => {
-                        const b = deriveInstallmentBadge(o.installments);
-                        if (!b) return null;
-                        return (
-                          <Badge
-                            className={
-                              b.color === "emerald"
-                                ? "bg-emerald-100 text-emerald-800 hover:bg-emerald-100"
-                                : "bg-amber-100 text-amber-800 hover:bg-amber-100"
-                            }
-                          >
-                            {b.label}
-                          </Badge>
-                        );
-                      })()}
-                    </div>
-                  </TableCell>
-                  <TableCell className="text-xs tabular-nums text-gray-600">
-                    {formatDateTime(o.createdAt)}
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <Link href={`/orders/${o.id}`}>
-                      <Button variant="outline" size="sm">
-                        <Eye className="h-3.5 w-3.5" />
-                        Xem
-                      </Button>
-                    </Link>
+            </TableHeader>
+            <TableBody>
+              {items.length === 0 && !isPending ? (
+                <TableRow>
+                  <TableCell
+                    colSpan={8}
+                    className="py-8 text-center text-muted-foreground"
+                  >
+                    Chưa có đơn hàng
                   </TableCell>
                 </TableRow>
-              ))
-            )}
-          </TableBody>
-        </Table>
+              ) : (
+                items.map((o) => (
+                  <TableRow key={o.id} className="hover:bg-muted/60">
+                    <TableCell className="font-mono text-sm">{o.code}</TableCell>
+                    <TableCell>
+                      <div className="font-medium text-foreground">
+                        {o.customerName}
+                      </div>
+                      <div className="text-xs text-muted-foreground">
+                        {o.customerPhone}
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant="outline">
+                        {ORDER_TYPE_LABEL[o.type]}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-right font-medium tabular-nums">
+                      {o.totalAmount.toLocaleString("vi-VN")}
+                    </TableCell>
+                    <TableCell className="text-sm text-foreground">
+                      {o.paymentMethod?.name ?? "—"}
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex flex-wrap items-center gap-1">
+                        <Badge className={STATUS_BADGE_CLASS[o.status]}>
+                          {ORDER_STATUS_LABEL[o.status]}
+                        </Badge>
+                        {(() => {
+                          const b = deriveInstallmentBadge(o.installments);
+                          if (!b) return null;
+                          return (
+                            <Badge
+                              className={
+                                b.color === "emerald"
+                                  ? "bg-state-success-soft text-state-success-ink hover:bg-state-success-soft"
+                                  : "bg-state-warning-soft text-state-warning-ink hover:bg-state-warning-soft"
+                              }
+                            >
+                              {b.label}
+                            </Badge>
+                          );
+                        })()}
+                      </div>
+                    </TableCell>
+                    <TableCell className="text-xs tabular-nums text-muted-foreground">
+                      {formatDateTime(o.createdAt)}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <Link href={`/orders/${o.id}`}>
+                        <Button variant="outline" size="sm">
+                          <Eye className="h-3.5 w-3.5" />
+                          Xem
+                        </Button>
+                      </Link>
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
+            </TableBody>
+          </Table>
+        </PhanTrangBang>
         {(hasMore || isPending) && (
-          <div className="flex justify-center border-t border-gray-100 p-3">
+          <div className="flex justify-center border-t border-border p-3">
             {isPending ? (
-              <div className="flex items-center gap-2 text-sm text-gray-500">
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
                 <Loader2 className="h-4 w-4 animate-spin" />
                 Đang tải...
               </div>

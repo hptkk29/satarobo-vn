@@ -5,7 +5,7 @@
 // (không đụng bản nộp cũ). Chỉ hiện ở mức (b) khi bài là "Kiểm tra".
 //
 // Dialog CONTROLLED (open/onOpenChange) + Button onClick — KHÔNG DialogTrigger
-// (pattern dialog controlled dùng chung ở site GV). shadcn thuần, cam-only.
+// (pattern dialog controlled dùng chung ở site GV). shadcn thuần, màu đi qua token (xem teacher.css).
 // Câu 46: props CHỈ tên học viên — KHÔNG SĐT/email/tên PH.
 "use client";
 
@@ -24,6 +24,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { gradeBatchAction } from "../_actions";
+import { PhanTrangBang } from "@/components/ui/phan-trang-bang";
 
 export interface BatchRosterItem {
   studentId: string;
@@ -87,7 +88,11 @@ export function BatchGrade({
   return (
     <>
       {/* Dialog controlled — không DialogTrigger (pattern site GV). */}
-      <Button variant="outline" className="shrink-0" onClick={() => setOpen(true)}>
+      <Button
+        variant="outline"
+        className="shrink-0"
+        onClick={() => setOpen(true)}
+      >
         <ClipboardList className="mr-1.5 h-4 w-4" aria-hidden /> Chấm cả lớp
       </Button>
       <Dialog open={open} onOpenChange={setOpen}>
@@ -95,48 +100,65 @@ export function BatchGrade({
           <DialogHeader>
             <DialogTitle>Chấm điểm cả lớp</DialogTitle>
             <DialogDescription>
-              Nhập điểm (0–{totalPoints}) cho từng học viên. Ô để trống sẽ được bỏ qua.
+              Nhập điểm (0–{totalPoints}) cho từng học viên. Ô để trống sẽ được
+              bỏ qua.
             </DialogDescription>
           </DialogHeader>
 
-          <div className="max-h-[55vh] overflow-y-auto rounded-lg border border-border">
-            <table className="w-full border-collapse text-left text-sm">
-              <thead>
-                <tr className="border-b border-border bg-muted/50 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
-                  <th scope="col" className="px-4 py-2.5">Học viên</th>
-                  <th scope="col" className="px-4 py-2.5 text-right">Điểm (0–{totalPoints})</th>
-                </tr>
-              </thead>
-              <tbody>
-                {roster.map((r) => (
-                  <tr
-                    key={r.studentId}
-                    className="border-b border-border/60 last:border-0"
-                  >
-                    <td className="px-4 py-2 font-medium text-foreground">{r.name}</td>
-                    <td className="px-4 py-2 text-right">
-                      <Input
-                        type="number"
-                        inputMode="decimal"
-                        min={0}
-                        max={totalPoints}
-                        step={0.5}
-                        value={scores[r.studentId] ?? ""}
-                        disabled={pending}
-                        onChange={(e) => setScore(r.studentId, e.target.value)}
-                        placeholder="—"
-                        aria-label={`Điểm của ${r.name}`}
-                        className="ml-auto w-24"
-                      />
-                    </td>
+          {/* `overflow-y-auto` một mình sẽ CẮT bề ngang khi hộp thoại hẹp hơn bảng;
+              phải mở cả trục ngang thì bảng mới cuộn được thay vì bị xén. */}
+          <div className="max-h-[55vh] overflow-auto rounded-lg border border-border">
+            {/* KHÔNG đặt min-w ở đây: bảng chỉ 2 cột (tên + ô điểm) và hộp thoại
+                rộng 512px — ép bề rộng tối thiểu là tự sinh thanh cuộn thừa. */}
+            <PhanTrangBang>
+              <table className="w-full border-collapse text-left text-sm">
+                <thead>
+                  <tr className="border-b border-border bg-muted/50 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+                    <th scope="col" className="px-4 py-2.5">
+                      Học viên
+                    </th>
+                    <th scope="col" className="px-4 py-2.5 text-right">
+                      Điểm (0–{totalPoints})
+                    </th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {roster.map((r) => (
+                    <tr
+                      key={r.studentId}
+                      className="border-b border-border/60 last:border-0"
+                    >
+                      <td className="px-4 py-2 font-medium text-foreground">
+                        {r.name}
+                      </td>
+                      <td className="px-4 py-2 text-right">
+                        <Input
+                          type="number"
+                          inputMode="decimal"
+                          min={0}
+                          max={totalPoints}
+                          step={0.5}
+                          value={scores[r.studentId] ?? ""}
+                          disabled={pending}
+                          onChange={(e) => setScore(r.studentId, e.target.value)}
+                          placeholder="—"
+                          aria-label={`Điểm của ${r.name}`}
+                          className="ml-auto w-24"
+                        />
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </PhanTrangBang>
           </div>
 
           <DialogFooter>
-            <Button variant="outline" disabled={pending} onClick={() => setOpen(false)}>
+            <Button
+              variant="outline"
+              disabled={pending}
+              onClick={() => setOpen(false)}
+            >
               Huỷ
             </Button>
             <Button onClick={save} disabled={pending}>

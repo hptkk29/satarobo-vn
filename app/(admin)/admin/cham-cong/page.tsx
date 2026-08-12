@@ -17,6 +17,7 @@ import {
 } from "@/lib/work-schedule";
 import { SHIFT_DEFS, SHIFT_ORDER } from "@/lib/shifts";
 import { getSetting } from "@/lib/settings/service";
+import { PhanTrangBang } from "@/components/ui/phan-trang-bang";
 
 export const metadata = { title: "Chấm công | Admin" };
 export const dynamic = "force-dynamic";
@@ -26,9 +27,9 @@ interface Props {
 }
 
 const TAG_TONE: Record<AttendanceTag["tone"], string> = {
-  ok: "bg-emerald-100 text-emerald-700",
-  warn: "bg-amber-100 text-amber-700",
-  danger: "bg-rose-100 text-rose-700",
+  ok: "bg-state-success-soft text-state-success-ink",
+  warn: "bg-state-warning-soft text-state-warning-ink",
+  danger: "bg-state-danger-soft text-state-danger-ink",
 };
 
 export default async function ChamCongPage({ searchParams }: Props) {
@@ -122,15 +123,15 @@ export default async function ChamCongPage({ searchParams }: Props) {
     <div className="max-w-5xl p-6">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Chấm công nhân viên</h1>
-          <p className="mt-1 text-sm text-gray-500">
+          <h1 className="text-2xl font-bold text-foreground">Chấm công nhân viên</h1>
+          <p className="mt-1 text-sm text-muted-foreground">
             Tính công theo ca đăng ký (GMT+7):{" "}
             {SHIFT_ORDER.map((s) => `${SHIFT_DEFS[s].label} ${SHIFT_DEFS[s].start}–${SHIFT_DEFS[s].end}`).join(" · ")}.
           </p>
         </div>
         <Link
           href="/cham-cong/man-hinh"
-          className="inline-flex items-center gap-1.5 rounded-lg bg-[#7C3AED] px-4 py-2 text-sm font-semibold text-white hover:bg-purple-800"
+          className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white hover:bg-primary-dark"
         >
           <Monitor className="h-4 w-4" /> Mở màn hình QR
         </Link>
@@ -139,66 +140,68 @@ export default async function ChamCongPage({ searchParams }: Props) {
       <div className="mb-4 flex items-center gap-3">
         <DateNavInput value={dateStr} />
         {missingOut > 0 && (
-          <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-700">
+          <span className="inline-flex items-center gap-1 rounded-full bg-state-warning-soft px-3 py-1 text-xs font-semibold text-state-warning-ink">
             <AlertTriangle className="h-3.5 w-3.5" /> {missingOut} người chưa check-out
           </span>
         )}
       </div>
 
       {list.length === 0 ? (
-        <p className="rounded-xl border border-dashed border-gray-300 p-8 text-center text-sm text-gray-400">
+        <p className="rounded-xl border border-dashed border-border p-8 text-center text-sm text-muted-foreground">
           Chưa có chấm công ngày {dateStr}.
         </p>
       ) : (
-        <div className="overflow-x-auto rounded-xl border border-gray-200 bg-white">
-          <table className="min-w-full divide-y divide-gray-100 text-sm">
-            <thead className="bg-gray-50 text-left text-xs uppercase tracking-wide text-gray-500">
-              <tr>
-                <th className="px-4 py-3 font-semibold">Nhân viên</th>
-                <th className="px-4 py-3 font-semibold">Cơ sở</th>
-                <th className="px-4 py-3 font-semibold">Ca đăng ký</th>
-                <th className="px-4 py-3 text-center font-semibold">Check-in</th>
-                <th className="px-4 py-3 text-center font-semibold">Check-out</th>
-                <th className="px-4 py-3 text-center font-semibold">Giờ công</th>
-                <th className="px-4 py-3 text-center font-semibold">Tình trạng</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-50">
-              {list.map((a, i) => (
-                <tr key={i} className="hover:bg-gray-50/60">
-                  <td className="px-4 py-2.5 font-medium text-gray-900">{a.userName}</td>
-                  <td className="px-4 py-2.5 text-gray-600">
-                    {a.centerId ? centerName.get(a.centerId) ?? "—" : "—"}
-                  </td>
-                  <td className="px-4 py-2.5 text-gray-700">
-                    {formatRegisteredShifts(a.registeredShifts)}
-                  </td>
-                  <td className="px-4 py-2.5 text-center tabular-nums text-gray-700">
-                    {formatVNTime(a.checkIn)}
-                  </td>
-                  <td className="px-4 py-2.5 text-center tabular-nums text-gray-700">
-                    {formatVNTime(a.checkOut)}
-                  </td>
-                  <td className="px-4 py-2.5 text-center tabular-nums font-medium text-gray-900">
-                    {a.checkIn && a.checkOut ? `${a.status.workedHours}h` : "—"}
-                  </td>
-                  <td className="px-4 py-2.5 text-center">
-                    <div className="flex flex-wrap items-center justify-center gap-1">
-                      {a.status.tags.map((t, j) => (
-                        <span
-                          key={j}
-                          className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium ${TAG_TONE[t.tone]}`}
-                        >
-                          {t.label === "Ngoài vùng" && <MapPinOff className="h-3 w-3" />}
-                          {t.label}
-                        </span>
-                      ))}
-                    </div>
-                  </td>
+        <div className="overflow-x-auto rounded-xl border border-border bg-card">
+          <PhanTrangBang>
+            <table className="min-w-full divide-y divide-border text-sm">
+              <thead className="bg-muted text-left text-xs uppercase tracking-wide text-muted-foreground">
+                <tr>
+                  <th className="px-4 py-3 font-semibold">Nhân viên</th>
+                  <th className="px-4 py-3 font-semibold">Cơ sở</th>
+                  <th className="px-4 py-3 font-semibold">Ca đăng ký</th>
+                  <th className="px-4 py-3 text-center font-semibold">Check-in</th>
+                  <th className="px-4 py-3 text-center font-semibold">Check-out</th>
+                  <th className="px-4 py-3 text-center font-semibold">Giờ công</th>
+                  <th className="px-4 py-3 text-center font-semibold">Tình trạng</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody className="divide-y divide-border">
+                {list.map((a, i) => (
+                  <tr key={i} className="hover:bg-muted/60">
+                    <td className="px-4 py-2.5 font-medium text-foreground">{a.userName}</td>
+                    <td className="px-4 py-2.5 text-muted-foreground">
+                      {a.centerId ? centerName.get(a.centerId) ?? "—" : "—"}
+                    </td>
+                    <td className="px-4 py-2.5 text-foreground">
+                      {formatRegisteredShifts(a.registeredShifts)}
+                    </td>
+                    <td className="px-4 py-2.5 text-center tabular-nums text-foreground">
+                      {formatVNTime(a.checkIn)}
+                    </td>
+                    <td className="px-4 py-2.5 text-center tabular-nums text-foreground">
+                      {formatVNTime(a.checkOut)}
+                    </td>
+                    <td className="px-4 py-2.5 text-center tabular-nums font-medium text-foreground">
+                      {a.checkIn && a.checkOut ? `${a.status.workedHours}h` : "—"}
+                    </td>
+                    <td className="px-4 py-2.5 text-center">
+                      <div className="flex flex-wrap items-center justify-center gap-1">
+                        {a.status.tags.map((t, j) => (
+                          <span
+                            key={j}
+                            className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium ${TAG_TONE[t.tone]}`}
+                          >
+                            {t.label === "Ngoài vùng" && <MapPinOff className="h-3 w-3" />}
+                            {t.label}
+                          </span>
+                        ))}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </PhanTrangBang>
         </div>
       )}
     </div>

@@ -178,13 +178,22 @@ jobs:
         # = `pnpm test:chat-db` chạy tay được y hệt (vitest run tests/chat).
         run: pnpm test:chat-db
 
+      # P2 · US-08 — TS-08 (quyền theo Position) cũng cần Postgres thật. Dùng chung job
+      # này thay vì dựng job mới: cùng service, cùng seed RoleDef, chạy thêm ~10 giây.
+      - name: Run nền-hệ-thống DB tests
+        run: pnpm test:nen-db
+
   e2e:
     name: E2E smoke (Playwright)
     runs-on: ubuntu-latest
     timeout-minutes: 20
     needs: quality
-    # Only run on PR + main (skip develop to save CI minutes)
-    if: github.event_name == 'pull_request' || github.ref == 'refs/heads/main'
+    # PR + main + `test`. Trước 11/08 job này skip trên `test`, mà `test` là nhánh
+    # TIỀN-PROD (chốt 01/08) — hệ quả: spec smoke mục nát dần suốt các đợt chat mà
+    # không ai thấy, rồi nổ ở PR đầu tiên nhắm vào `test` (PR #106: 4 test đỏ vì màn
+    # admin bỏ tiêu đề "Tin nhắn" và portal thêm cổng chính sách US-16).
+    # Chỉ `develop` còn được bỏ qua để tiết kiệm CI.
+    if: github.event_name == 'pull_request' || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/test'
 
     services:
       postgres:

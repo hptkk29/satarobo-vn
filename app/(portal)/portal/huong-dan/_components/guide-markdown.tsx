@@ -19,7 +19,9 @@ const mdComponents: Components = {
     <h3 className="mt-6 text-base font-bold text-foreground">{children}</h3>
   ),
   p: ({ children }) => (
-    <p className="my-3 text-sm leading-relaxed text-foreground/90">{children}</p>
+    <p className="my-3 text-sm leading-relaxed text-foreground/90">
+      {children}
+    </p>
   ),
   ul: ({ children }) => (
     <ul className="my-3 list-disc space-y-1.5 pl-5 text-sm leading-relaxed text-foreground/90">

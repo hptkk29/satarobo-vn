@@ -49,14 +49,22 @@ export default async function KhoBaiTapPage({
     if (!canAuthor) {
       return (
         <div>
-          <BackLink className="mb-4" href="/teacher/kho-bai-tap" label="Kho bài tập của tôi" />
+          <BackLink
+            className="mb-4"
+            href="/teacher/kho-bai-tap"
+            label="Kho bài tập của tôi"
+          />
           <EmptyState icon={NotebookPen} title="Bạn không có quyền soạn bài." />
         </div>
       );
     }
     return (
       <div>
-        <BackLink className="mb-4" href={safeBack(back)} label="Kho bài tập của tôi" />
+        <BackLink
+          className="mb-4"
+          href={safeBack(back)}
+          label="Kho bài tập của tôi"
+        />
         <PageHeader
           title="Tạo bài tập mới"
           subtitle="Soạn đề trắc nghiệm hoặc tự luận. Bài lưu vào Kho của bạn, giao lại cho lớp mình phụ trách ở trang Bài tập."
@@ -162,4 +170,3 @@ export default async function KhoBaiTapPage({
     </div>
   );
 }
-

@@ -4,7 +4,8 @@ import { auth } from "@/lib/auth";
 import { redirect, notFound } from "next/navigation";
 import { scopedDb } from "@/lib/db-scope";
 import { hasRole } from "@/lib/auth/permissions";
-import { checkPermission } from "@/lib/auth/check-permission";
+import { checkPermission, checkPermissionDetail } from "@/lib/auth/check-permission";
+import { maskPhone } from "@/lib/utils";
 import { resolveActor } from "@/lib/auth/actor";
 import { getSelectableOrgUnits } from "@/lib/org/org-service";
 import { getStudentProgressForClasses } from "@/lib/progress";
@@ -18,6 +19,7 @@ import { ParentChildrenManager } from "../../_components/parent-children-manager
 import { SkillEditor } from "../_components/skill-editor";
 import type { RoboticsSkill, SkillLevel } from "@prisma/client";
 import { formatDateVN } from "@/lib/format/date";
+import { PhanTrangBang } from "@/components/ui/phan-trang-bang";
 
 interface Props {
   params: Promise<{ id: string }>;
@@ -35,6 +37,11 @@ export default async function EditStudentPage({ params }: Props) {
   // #15 — CCCD PH là PII: chỉ actor có payments:view-pii (kế toán/admin) mới thấy +
   // sửa. Sale/CM có students:edit nhưng KHÔNG có view-pii → ẩn ô + không prefill raw.
   const canViewParentCccd = await checkPermission("payments:view-pii");
+
+  // US-03 (TS-02): DENY cấp trường từ grant nhóm — che parentPhone kể cả khi actor
+  // có students:edit (mask độc lập với quyết định action — đồng nhất trang list).
+  const { fieldMask } = await checkPermissionDetail("students:view-all");
+  const phoneMasked = fieldMask.includes("parentPhone");
 
   const { id } = await params;
 
@@ -135,7 +142,11 @@ export default async function EditStudentPage({ params }: Props) {
     currentGrade: student.currentGrade,
     school: student.school,
     parentName: student.parentName,
-    parentPhone: student.parentPhone,
+    // Che SĐT PH ở SERVER khi bị DENY cấp trường (chống leak qua RSC payload).
+    parentPhone:
+      phoneMasked && student.parentPhone
+        ? maskPhone(student.parentPhone)
+        : student.parentPhone,
     parentEmail: student.parentEmail,
     parentRelation: student.parentRelation,
     // Không gửi raw CCCD xuống client khi actor không có quyền xem đầy đủ.
@@ -235,12 +246,17 @@ export default async function EditStudentPage({ params }: Props) {
     })),
   );
 
+  // SĐT prefill khối "Tài khoản phụ huynh" — cùng luật che như form phía trên.
+  const rawAccountPhone = student.parentUser?.phone ?? student.parentPhone;
+  const displayAccountPhone =
+    phoneMasked && rawAccountPhone ? maskPhone(rawAccountPhone) : rawAccountPhone;
+
   return (
     <div className="space-y-8">
       <div>
-        <h1 className="mb-6 text-3xl font-black text-neutral-900">
+        <h1 className="mb-6 text-3xl font-black text-foreground">
           Sửa học viên:{" "}
-          <span className="font-bold text-orange-600">{student.name}</span>
+          <span className="font-bold text-primary">{student.name}</span>
         </h1>
         <StudentForm
           student={formValue}
@@ -263,7 +279,7 @@ export default async function EditStudentPage({ params }: Props) {
         parentEmail={student.parentUser?.email ?? null}
         parentName={student.parentUser?.name ?? student.parentName}
         defaultEmail={student.parentEmail}
-        defaultPhone={student.parentUser?.phone ?? student.parentPhone}
+        defaultPhone={displayAccountPhone}
         pendingActivation={student.parentUser?.accountStatus === "PENDING_ACTIVATION"}
       />
 
@@ -279,33 +295,33 @@ export default async function EditStudentPage({ params }: Props) {
 
       {progressByClass.length > 0 && (
         <section>
-          <h2 className="mb-3 flex items-center gap-2 text-lg font-bold text-neutral-900">
-            <LineChart className="h-5 w-5 text-[#7C3AED]" />
+          <h2 className="mb-3 flex items-center gap-2 text-lg font-bold text-foreground">
+            <LineChart className="h-5 w-5 text-primary" />
             Tiến độ học tập
           </h2>
           <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
             {progressByClass.map(({ enrollment, progress, sessions }) => (
               <div
                 key={enrollment.id}
-                className="rounded-xl border border-neutral-200 bg-white p-4"
+                className="rounded-xl border border-border bg-card p-4"
               >
-                <div className="mb-3 flex flex-wrap items-center gap-x-4 gap-y-1 rounded-lg bg-purple-50 px-3 py-2 text-sm">
-                  <span className="font-bold text-[#7C3AED]">
+                <div className="mb-3 flex flex-wrap items-center gap-x-4 gap-y-1 rounded-lg bg-primary-soft px-3 py-2 text-sm">
+                  <span className="font-bold text-primary">
                     Buổi {sessions.currentSession}/{sessions.total || "—"}
                   </span>
-                  <span className="text-neutral-600">
-                    Đã học <b className="text-neutral-900">{sessions.attended}</b>
+                  <span className="text-muted-foreground">
+                    Đã học <b className="text-foreground">{sessions.attended}</b>
                   </span>
-                  <span className="text-neutral-600">
-                    Còn lại <b className="text-neutral-900">{sessions.remaining}</b>
+                  <span className="text-muted-foreground">
+                    Còn lại <b className="text-foreground">{sessions.remaining}</b>
                   </span>
                 </div>
                 <div className="mb-3 flex items-start justify-between gap-2">
                   <div className="min-w-0">
-                    <h3 className="font-bold text-neutral-900">
+                    <h3 className="font-bold text-foreground">
                       {enrollment.class.name}
                     </h3>
-                    <p className="text-xs text-neutral-500">
+                    <p className="text-xs text-muted-foreground">
                       {enrollment.class.classCode &&
                         `${enrollment.class.classCode} · `}
                       {enrollment.class.course.name}
@@ -314,7 +330,7 @@ export default async function EditStudentPage({ params }: Props) {
                     </p>
                     <Link
                       href={`/classes/${enrollment.class.id}/progress`}
-                      className="mt-0.5 inline-block text-xs font-semibold text-[#7C3AED] hover:underline"
+                      className="mt-0.5 inline-block text-xs font-semibold text-primary hover:underline"
                     >
                       Xem lớp →
                     </Link>
@@ -357,46 +373,48 @@ export default async function EditStudentPage({ params }: Props) {
 
       {absences.length > 0 && (
         <section>
-          <h2 className="mb-3 text-lg font-bold text-neutral-900">
+          <h2 className="mb-3 text-lg font-bold text-foreground">
             Chi tiết buổi vắng ({absences.length})
           </h2>
-          <div className="overflow-hidden rounded-xl border border-neutral-200 bg-white">
-            <table className="w-full text-sm">
-              <thead className="border-b border-neutral-200 bg-neutral-50 text-left text-xs uppercase tracking-wider text-neutral-500">
-                <tr>
-                  <th className="px-4 py-2">Ngày</th>
-                  <th className="px-4 py-2">Lớp</th>
-                  <th className="px-4 py-2">Lý do</th>
-                  <th className="px-4 py-2">Học bù</th>
-                </tr>
-              </thead>
-              <tbody>
-                {absences.map((a, i) => (
-                  <tr key={i} className="border-b border-neutral-100 last:border-0">
-                    <td className="px-4 py-2 tabular-nums text-neutral-700">
-                      {formatDateVN(a.date)}
-                    </td>
-                    <td className="px-4 py-2 text-neutral-700">{a.className}</td>
-                    <td className="px-4 py-2 text-neutral-600">{a.absenceReason ?? "—"}</td>
-                    <td className="px-4 py-2">
-                      {a.makeupStatus === "MADE_UP" ? (
-                        <span className="rounded bg-green-100 px-2 py-0.5 text-xs font-semibold text-green-700">
-                          Đã bù
-                        </span>
-                      ) : a.makeupStatus === "NEEDS_MAKEUP" ? (
-                        <span className="rounded bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-700">
-                          Cần bù
-                        </span>
-                      ) : (
-                        <span className="rounded bg-neutral-100 px-2 py-0.5 text-xs font-semibold text-neutral-500">
-                          Không bù
-                        </span>
-                      )}
-                    </td>
+          <div className="overflow-hidden rounded-xl border border-border bg-card">
+            <PhanTrangBang>
+              <table className="w-full text-sm">
+                <thead className="border-b border-border bg-muted text-left text-xs uppercase tracking-wider text-muted-foreground">
+                  <tr>
+                    <th className="px-4 py-2">Ngày</th>
+                    <th className="px-4 py-2">Lớp</th>
+                    <th className="px-4 py-2">Lý do</th>
+                    <th className="px-4 py-2">Học bù</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {absences.map((a, i) => (
+                    <tr key={i} className="border-b border-border last:border-0">
+                      <td className="px-4 py-2 tabular-nums text-foreground">
+                        {formatDateVN(a.date)}
+                      </td>
+                      <td className="px-4 py-2 text-foreground">{a.className}</td>
+                      <td className="px-4 py-2 text-muted-foreground">{a.absenceReason ?? "—"}</td>
+                      <td className="px-4 py-2">
+                        {a.makeupStatus === "MADE_UP" ? (
+                          <span className="rounded bg-state-success-soft px-2 py-0.5 text-xs font-semibold text-state-success-ink">
+                            Đã bù
+                          </span>
+                        ) : a.makeupStatus === "NEEDS_MAKEUP" ? (
+                          <span className="rounded bg-state-warning-soft px-2 py-0.5 text-xs font-semibold text-state-warning-ink">
+                            Cần bù
+                          </span>
+                        ) : (
+                          <span className="rounded bg-muted px-2 py-0.5 text-xs font-semibold text-muted-foreground">
+                            Không bù
+                          </span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </PhanTrangBang>
           </div>
         </section>
       )}
@@ -404,60 +422,62 @@ export default async function EditStudentPage({ params }: Props) {
       {/* #14 — Lịch sử học tập */}
       {learningHistory.length > 0 && (
         <section>
-          <h2 className="mb-3 flex items-center gap-2 text-lg font-bold text-neutral-900">
-            <LineChart className="h-5 w-5 text-[#7C3AED]" /> Lịch sử học tập
+          <h2 className="mb-3 flex items-center gap-2 text-lg font-bold text-foreground">
+            <LineChart className="h-5 w-5 text-primary" /> Lịch sử học tập
           </h2>
-          <div className="overflow-x-auto rounded-xl border border-neutral-200 bg-white">
-            <table className="w-full text-sm">
-              <thead className="border-b border-neutral-200 bg-neutral-50 text-left text-xs uppercase tracking-wider text-neutral-500">
-                <tr>
-                  <th className="px-4 py-2">Lớp / Khoá</th>
-                  <th className="px-4 py-2 text-center">Buổi (đã học/tổng)</th>
-                  <th className="px-4 py-2 text-center">Trạng thái</th>
-                  <th className="px-4 py-2">Bắt đầu</th>
-                  <th className="px-4 py-2">Kết thúc</th>
-                </tr>
-              </thead>
-              <tbody>
-                {learningHistory.map((h) => (
-                  <tr key={h.id} className="border-b border-neutral-100 last:border-0">
-                    <td className="px-4 py-2">
-                      <Link href={`/classes/${h.classId}/progress`} className="font-medium text-[#7C3AED] hover:underline">
-                        {h.class.classCode ? `${h.class.classCode} · ` : ""}{h.class.name}
-                      </Link>
-                      <span className="block text-xs text-neutral-400">{h.class.course.name}</span>
-                    </td>
-                    <td className="px-4 py-2 text-center tabular-nums text-neutral-700">
-                      {h.sessions.attended}/{h.sessions.total || "—"}
-                      {h.sessions.absentNoMakeup > 0 && (
-                        <span className="ml-1 text-xs text-rose-500">(vắng {h.sessions.absentNoMakeup})</span>
-                      )}
-                    </td>
-                    <td className="px-4 py-2 text-center">
-                      <span className="rounded-full bg-neutral-100 px-2 py-0.5 text-xs font-semibold text-neutral-600">
-                        {h.status}
-                      </span>
-                    </td>
-                    <td className="px-4 py-2 tabular-nums text-neutral-600">
-                      {h.enrolledAt ? formatDateVN(h.enrolledAt) : "—"}
-                    </td>
-                    <td className="px-4 py-2 tabular-nums text-neutral-600">
-                      {h.endedAt ? formatDateVN(h.endedAt) : "—"}
-                    </td>
+          <div className="overflow-x-auto rounded-xl border border-border bg-card">
+            <PhanTrangBang>
+              <table className="w-full text-sm">
+                <thead className="border-b border-border bg-muted text-left text-xs uppercase tracking-wider text-muted-foreground">
+                  <tr>
+                    <th className="px-4 py-2">Lớp / Khoá</th>
+                    <th className="px-4 py-2 text-center">Buổi (đã học/tổng)</th>
+                    <th className="px-4 py-2 text-center">Trạng thái</th>
+                    <th className="px-4 py-2">Bắt đầu</th>
+                    <th className="px-4 py-2">Kết thúc</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {learningHistory.map((h) => (
+                    <tr key={h.id} className="border-b border-border last:border-0">
+                      <td className="px-4 py-2">
+                        <Link href={`/classes/${h.classId}/progress`} className="font-medium text-primary hover:underline">
+                          {h.class.classCode ? `${h.class.classCode} · ` : ""}{h.class.name}
+                        </Link>
+                        <span className="block text-xs text-muted-foreground">{h.class.course.name}</span>
+                      </td>
+                      <td className="px-4 py-2 text-center tabular-nums text-foreground">
+                        {h.sessions.attended}/{h.sessions.total || "—"}
+                        {h.sessions.absentNoMakeup > 0 && (
+                          <span className="ml-1 text-xs text-state-danger-ink">(vắng {h.sessions.absentNoMakeup})</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-2 text-center">
+                        <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-semibold text-muted-foreground">
+                          {h.status}
+                        </span>
+                      </td>
+                      <td className="px-4 py-2 tabular-nums text-muted-foreground">
+                        {h.enrolledAt ? formatDateVN(h.enrolledAt) : "—"}
+                      </td>
+                      <td className="px-4 py-2 tabular-nums text-muted-foreground">
+                        {h.endedAt ? formatDateVN(h.endedAt) : "—"}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </PhanTrangBang>
           </div>
         </section>
       )}
 
       {/* LMS-5 — hồ sơ năng lực robotics */}
       <section>
-        <h2 className="mb-3 text-lg font-bold text-neutral-900">
+        <h2 className="mb-3 text-lg font-bold text-foreground">
           Hồ sơ năng lực robotics
         </h2>
-        <div className="rounded-xl border border-neutral-200 bg-white p-4">
+        <div className="rounded-xl border border-border bg-card p-4">
           <SkillEditor
             studentId={student.id}
             canEdit={canAssessSkills}
@@ -480,12 +500,12 @@ function MiniStat({
 }) {
   return (
     <div>
-      <p className="text-[10px] uppercase tracking-wider text-neutral-500">
+      <p className="text-[10px] uppercase tracking-wider text-muted-foreground">
         {label}
       </p>
-      <p className="text-sm font-bold text-neutral-900 tabular-nums">{value}</p>
+      <p className="text-sm font-bold text-foreground tabular-nums">{value}</p>
       {sub && (
-        <p className="text-[10px] text-neutral-500 tabular-nums">{sub}</p>
+        <p className="text-[10px] text-muted-foreground tabular-nums">{sub}</p>
       )}
     </div>
   );

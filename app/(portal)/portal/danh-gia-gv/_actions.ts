@@ -9,7 +9,12 @@ import { requireActiveStudent } from "@/lib/portal/session";
 import { isEvalV2Enabled } from "@/lib/flags";
 import { isRoundOpen } from "@/lib/eval/rounds";
 import { getEligibleTeacherEvals } from "@/lib/eval/eligibility";
-import { validateAnswers, parseOptions, type QuestionDef, type QuestionType } from "@/lib/eval/forms";
+import {
+  validateAnswers,
+  parseOptions,
+  type QuestionDef,
+  type QuestionType,
+} from "@/lib/eval/forms";
 
 const submitSchema = z.object({
   roundId: z.string().min(1),
@@ -33,7 +38,10 @@ export async function submitTeacherEval(input: unknown): Promise<Res> {
   const session = await auth();
   if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
   const { ctx, studentId } = await requireActiveStudent();
-  const pdb = portalDb({ parentUserId: ctx.parentUserId, childIds: ctx.children.map((c) => c.id) });
+  const pdb = portalDb({
+    parentUserId: ctx.parentUserId,
+    childIds: ctx.children.map((c) => c.id),
+  });
 
   const parsed = submitSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: "Dữ liệu không hợp lệ" };
@@ -52,8 +60,10 @@ export async function submitTeacherEval(input: unknown): Promise<Res> {
       form: { select: { questions: { orderBy: { order: "asc" } } } },
     },
   });
-  if (!round || round.scope !== "TEACHER_EVAL") return { ok: false, error: "Đợt không hợp lệ" };
-  if (!isRoundOpen(round)) return { ok: false, error: "Đợt đánh giá đã đóng hoặc chưa mở" };
+  if (!round || round.scope !== "TEACHER_EVAL")
+    return { ok: false, error: "Đợt không hợp lệ" };
+  if (!isRoundOpen(round))
+    return { ok: false, error: "Đợt đánh giá đã đóng hoặc chưa mở" };
 
   // Eligibility tính tại thời điểm submit (AC3) — phải thuộc danh sách GV đủ điều kiện.
   const eligible = await getEligibleTeacherEvals(studentId, {
@@ -61,8 +71,14 @@ export async function submitTeacherEval(input: unknown): Promise<Res> {
     centerId: round.centerId,
     courseId: round.courseId,
   });
-  const ok = eligible.some((e) => e.enrollmentId === d.enrollmentId && e.teacherId === d.teacherId);
-  if (!ok) return { ok: false, error: "Em không thể đánh giá giáo viên này trong đợt này" };
+  const ok = eligible.some(
+    (e) => e.enrollmentId === d.enrollmentId && e.teacherId === d.teacherId,
+  );
+  if (!ok)
+    return {
+      ok: false,
+      error: "Em không thể đánh giá giáo viên này trong đợt này",
+    };
 
   // Validate đáp án (required / sao 1–5 / checkbox-min / text ≤ 2000).
   const questions: QuestionDef[] = round.form.questions.map((q) => ({
@@ -94,8 +110,14 @@ export async function submitTeacherEval(input: unknown): Promise<Res> {
       },
     });
   } catch (e) {
-    if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
-      return { ok: false, error: "Em đã đánh giá giáo viên này trong đợt này rồi" };
+    if (
+      e instanceof Prisma.PrismaClientKnownRequestError &&
+      e.code === "P2002"
+    ) {
+      return {
+        ok: false,
+        error: "Em đã đánh giá giáo viên này trong đợt này rồi",
+      };
     }
     throw e;
   }

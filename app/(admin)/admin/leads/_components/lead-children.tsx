@@ -78,7 +78,7 @@ const TRIAL_LABEL: Record<string, string> = {
 };
 
 const inputCls =
-  "w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-[#7C3AED] focus:outline-none";
+  "w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-primary focus:outline-none";
 
 /** Chuyển draft (string) → payload gửi server (bỏ field rỗng). */
 export function childDraftToPayload(d: ChildDraft): Record<string, unknown> {
@@ -124,7 +124,7 @@ export function ChildFields({
   return (
     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
       <label className="block sm:col-span-2">
-        <span className="mb-1 block text-xs font-medium text-gray-500">Họ tên con *</span>
+        <span className="mb-1 block text-xs font-medium text-muted-foreground">Họ tên con *</span>
         <input
           value={value.fullName}
           onChange={(e) => onChange({ fullName: e.target.value })}
@@ -132,7 +132,7 @@ export function ChildFields({
         />
       </label>
       <label className="block">
-        <span className="mb-1 block text-xs font-medium text-gray-500">Ngày sinh</span>
+        <span className="mb-1 block text-xs font-medium text-muted-foreground">Ngày sinh</span>
         <input
           type="date"
           value={value.dob}
@@ -141,7 +141,7 @@ export function ChildFields({
         />
       </label>
       <label className="block">
-        <span className="mb-1 block text-xs font-medium text-gray-500">Tuổi</span>
+        <span className="mb-1 block text-xs font-medium text-muted-foreground">Tuổi</span>
         <input
           type="number"
           min={3}
@@ -152,7 +152,7 @@ export function ChildFields({
         />
       </label>
       <label className="block">
-        <span className="mb-1 block text-xs font-medium text-gray-500">Giới tính</span>
+        <span className="mb-1 block text-xs font-medium text-muted-foreground">Giới tính</span>
         <select
           value={value.gender}
           onChange={(e) => onChange({ gender: e.target.value })}
@@ -167,7 +167,7 @@ export function ChildFields({
         </select>
       </label>
       <label className="block">
-        <span className="mb-1 block text-xs font-medium text-gray-500">Lớp/Khối</span>
+        <span className="mb-1 block text-xs font-medium text-muted-foreground">Lớp/Khối</span>
         <input
           value={value.gradeLevel}
           onChange={(e) => onChange({ gradeLevel: e.target.value })}
@@ -176,7 +176,7 @@ export function ChildFields({
         />
       </label>
       <label className="block sm:col-span-2">
-        <span className="mb-1 block text-xs font-medium text-gray-500">Trường</span>
+        <span className="mb-1 block text-xs font-medium text-muted-foreground">Trường</span>
         <input
           value={value.schoolName}
           onChange={(e) => onChange({ schoolName: e.target.value })}
@@ -184,7 +184,7 @@ export function ChildFields({
         />
       </label>
       <label className="block">
-        <span className="mb-1 block text-xs font-medium text-gray-500">Khoá quan tâm</span>
+        <span className="mb-1 block text-xs font-medium text-muted-foreground">Khoá quan tâm</span>
         <select
           value={value.interestedCourseId}
           onChange={(e) => onChange({ interestedCourseId: e.target.value })}
@@ -203,7 +203,7 @@ export function ChildFields({
         </select>
       </label>
       <label className="block">
-        <span className="mb-1 block text-xs font-medium text-gray-500">Cơ sở quan tâm</span>
+        <span className="mb-1 block text-xs font-medium text-muted-foreground">Cơ sở quan tâm</span>
         <select
           value={value.interestedCenterId}
           onChange={(e) => onChange({ interestedCenterId: e.target.value })}
@@ -218,7 +218,7 @@ export function ChildFields({
         </select>
       </label>
       <label className="block sm:col-span-2">
-        <span className="mb-1 block text-xs font-medium text-gray-500">Ghi chú</span>
+        <span className="mb-1 block text-xs font-medium text-muted-foreground">Ghi chú</span>
         <textarea
           value={value.note}
           onChange={(e) => onChange({ note: e.target.value })}
@@ -328,16 +328,16 @@ export function LeadChildrenManager({
   const showLegacy = !!legacyChildName || legacyChildAge != null;
 
   return (
-    <div className="rounded-xl border border-gray-200 bg-white p-4">
+    <div className="rounded-xl border border-border bg-card p-4">
       <div className="mb-3 flex items-center justify-between gap-2">
-        <h2 className="flex items-center gap-1.5 text-sm font-bold text-gray-900">
+        <h2 className="flex items-center gap-1.5 text-sm font-bold text-foreground">
           <Baby size={16} /> Con của phụ huynh ({childrenList.length})
         </h2>
         {!readOnly && !adding && editingId === null && (
           <button
             type="button"
             onClick={() => startAdd()}
-            className="inline-flex items-center gap-1 rounded-lg border-2 border-violet-300 px-3 py-1.5 text-sm font-semibold text-violet-700 hover:bg-violet-50"
+            className="inline-flex items-center gap-1 rounded-lg border-2 border-primary px-3 py-1.5 text-sm font-semibold text-primary hover:bg-primary-soft"
           >
             <Plus size={14} /> Thêm con
           </button>
@@ -346,9 +346,9 @@ export function LeadChildrenManager({
 
       {/* Field phẳng cũ (read-only) + nút tạo LeadChild từ dữ liệu cũ */}
       {showLegacy && (
-        <div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-dashed border-gray-300 bg-gray-50 px-3 py-2">
-          <p className="text-xs text-gray-600">
-            <span className="font-semibold text-gray-700">Thông tin con (cũ):</span>{" "}
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-dashed border-border bg-muted px-3 py-2">
+          <p className="text-xs text-muted-foreground">
+            <span className="font-semibold text-foreground">Thông tin con (cũ):</span>{" "}
             {legacyChildName || "—"}
             {legacyChildAge != null && <span> · {legacyChildAge} tuổi</span>}
           </p>
@@ -361,7 +361,7 @@ export function LeadChildrenManager({
                   ageYears: legacyChildAge != null ? String(legacyChildAge) : "",
                 })
               }
-              className="inline-flex items-center gap-1 rounded-md border border-violet-300 px-2.5 py-1 text-xs font-semibold text-violet-700 hover:bg-violet-50"
+              className="inline-flex items-center gap-1 rounded-md border border-primary px-2.5 py-1 text-xs font-semibold text-primary hover:bg-primary-soft"
             >
               <Plus size={12} /> Tạo LeadChild mới
             </button>
@@ -371,13 +371,13 @@ export function LeadChildrenManager({
 
       {/* Danh sách con đã lưu */}
       {childrenList.length === 0 && !adding && (
-        <p className="py-4 text-center text-sm text-gray-400">Chưa có con nào.</p>
+        <p className="py-4 text-center text-sm text-muted-foreground">Chưa có con nào.</p>
       )}
 
       <ul className="space-y-2">
         {childrenList.map((c) =>
           editingId === c.id ? (
-            <li key={c.id} className="rounded-lg border border-violet-200 bg-violet-50/40 p-3">
+            <li key={c.id} className="rounded-lg border border-primary-soft bg-primary-soft/40 p-3">
               <ChildFields
                 value={form}
                 onChange={patch}
@@ -389,20 +389,20 @@ export function LeadChildrenManager({
           ) : (
             <li
               key={c.id}
-              className="flex flex-wrap items-start justify-between gap-2 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2"
+              className="flex flex-wrap items-start justify-between gap-2 rounded-lg border border-border bg-muted px-3 py-2"
             >
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-2">
-                  <span className="text-sm font-semibold text-gray-900">{c.fullName}</span>
+                  <span className="text-sm font-semibold text-foreground">{c.fullName}</span>
                   {c.ageYears != null && (
-                    <span className="text-xs text-gray-500">{c.ageYears} tuổi</span>
+                    <span className="text-xs text-muted-foreground">{c.ageYears} tuổi</span>
                   )}
-                  {c.gender && <span className="text-xs text-gray-500">· {c.gender}</span>}
-                  <span className="rounded-full bg-violet-100 px-2 py-0.5 text-[11px] font-medium text-violet-700">
+                  {c.gender && <span className="text-xs text-muted-foreground">· {c.gender}</span>}
+                  <span className="rounded-full bg-primary-soft px-2 py-0.5 text-[11px] font-medium text-primary">
                     {TRIAL_LABEL[c.trialStatus] ?? c.trialStatus}
                   </span>
                 </div>
-                <div className="mt-0.5 text-xs text-gray-500">
+                <div className="mt-0.5 text-xs text-muted-foreground">
                   {[
                     c.gradeLevel,
                     c.schoolName,
@@ -412,11 +412,11 @@ export function LeadChildrenManager({
                     .filter(Boolean)
                     .join(" · ") || "—"}
                 </div>
-                {c.note && <p className="mt-1 text-xs text-gray-600">{c.note}</p>}
+                {c.note && <p className="mt-1 text-xs text-muted-foreground">{c.note}</p>}
                 {c.trialHistory && c.trialHistory.length > 0 && (
                   <div className="mt-1 space-y-0.5">
                     {c.trialHistory.map((h, i) => (
-                      <p key={i} className="text-[11px] font-medium text-violet-600">
+                      <p key={i} className="text-[11px] font-medium text-primary">
                         {formatTrialHistory(h)}
                       </p>
                     ))}
@@ -429,7 +429,7 @@ export function LeadChildrenManager({
                     type="button"
                     onClick={() => startEdit(c)}
                     disabled={isPending}
-                    className="inline-flex items-center gap-1 rounded-md border border-gray-300 px-2 py-1 text-xs text-gray-600 hover:bg-white disabled:opacity-50"
+                    className="inline-flex items-center gap-1 rounded-md border border-border px-2 py-1 text-xs text-muted-foreground hover:bg-card disabled:opacity-50"
                   >
                     <Pencil size={12} /> Sửa
                   </button>
@@ -437,11 +437,7 @@ export function LeadChildrenManager({
                     type="button"
                     onClick={() => remove(c.id)}
                     disabled={isPending}
-                    className={`inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs disabled:opacity-50 ${
-                      deleteId === c.id
-                        ? "border-red-500 bg-red-500 text-white"
-                        : "border-red-300 text-red-600 hover:bg-red-50"
-                    }`}
+                    className={`inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs disabled:opacity-50 ${ deleteId === c.id ? "border-state-danger bg-state-danger text-white" : "border-state-danger text-state-danger-ink hover:bg-state-danger-soft" }`}
                   >
                     <Trash2 size={12} /> {deleteId === c.id ? "Xác nhận" : "Xoá"}
                   </button>
@@ -454,7 +450,7 @@ export function LeadChildrenManager({
 
       {/* Form thêm con */}
       {adding && (
-        <div className="mt-2 rounded-lg border border-violet-200 bg-violet-50/40 p-3">
+        <div className="mt-2 rounded-lg border border-primary-soft bg-primary-soft/40 p-3">
           <ChildFields
             value={form}
             onChange={patch}
@@ -483,7 +479,7 @@ function EditorButtons({
         type="button"
         onClick={onSave}
         disabled={isPending}
-        className="inline-flex items-center gap-1 rounded-lg bg-[#7C3AED] px-3 py-1.5 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-50"
+        className="inline-flex items-center gap-1 rounded-lg bg-primary px-3 py-1.5 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-50"
       >
         <Check size={14} /> {isPending ? "Đang lưu…" : "Lưu"}
       </button>
@@ -491,7 +487,7 @@ function EditorButtons({
         type="button"
         onClick={onCancel}
         disabled={isPending}
-        className="inline-flex items-center gap-1 rounded-lg border border-gray-300 px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-50 disabled:opacity-50"
+        className="inline-flex items-center gap-1 rounded-lg border border-border px-3 py-1.5 text-sm text-muted-foreground hover:bg-muted disabled:opacity-50"
       >
         <X size={14} /> Huỷ
       </button>

@@ -29,25 +29,25 @@ export default async function HonorsAdminPage() {
     <div>
       <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Vinh danh</h1>
-          <p className="mt-1 text-sm text-gray-500">{honors.length} nhân sự được vinh danh</p>
+          <h1 className="text-2xl font-bold text-foreground">Vinh danh</h1>
+          <p className="mt-1 text-sm text-muted-foreground">{honors.length} nhân sự được vinh danh</p>
         </div>
         <div className="flex flex-wrap gap-2">
           <Link
             href="/honors/timeline"
-            className="inline-flex items-center gap-2 rounded-lg border border-gray-300 px-3 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50"
+            className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-semibold text-foreground hover:bg-muted"
           >
             Timeline
           </Link>
           <Link
             href="/honors/settings"
-            className="inline-flex items-center gap-2 rounded-lg border border-gray-300 px-3 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50"
+            className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-semibold text-foreground hover:bg-muted"
           >
             Cài đặt trang
           </Link>
           <Link
             href="/honors/new"
-            className="inline-flex items-center gap-2 rounded-lg bg-[#7C3AED] px-4 py-2 text-sm font-bold text-white hover:opacity-90"
+            className="inline-flex items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-bold text-white hover:opacity-90"
           >
             <Plus className="h-4 w-4" />
             Thêm nhân sự

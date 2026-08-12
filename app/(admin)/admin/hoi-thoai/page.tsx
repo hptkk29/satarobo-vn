@@ -32,6 +32,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { PhanTrangBang } from "@/components/ui/phan-trang-bang";
 
 export const metadata = { title: "Quản trị hội thoại | Admin" };
 export const dynamic = "force-dynamic";
@@ -93,8 +94,8 @@ export default async function AdminConversationsPage({
     <div className="space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="flex items-start gap-3">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-orange-50">
-            <MessagesSquare className="h-5 w-5 text-orange-600" />
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary-soft">
+            <MessagesSquare className="h-5 w-5 text-primary" />
           </div>
           <div>
             <h1 className="text-2xl font-bold text-foreground">Quản trị hội thoại</h1>
@@ -108,13 +109,13 @@ export default async function AdminConversationsPage({
         <div className="flex flex-wrap gap-2">
           <Link
             href="/audit-log"
-            className="inline-flex items-center gap-1.5 text-sm font-medium text-orange-600 hover:underline"
+            className="inline-flex items-center gap-1.5 text-sm font-medium text-primary hover:underline"
           >
             <ScrollText className="h-4 w-4" /> Nhật ký (lọc module &quot;chat&quot;)
           </Link>
           <Link
             href="/hoi-thoai/doi-soat"
-            className="inline-flex items-center gap-1.5 text-sm font-medium text-orange-600 hover:underline"
+            className="inline-flex items-center gap-1.5 text-sm font-medium text-primary hover:underline"
           >
             Đối soát thành viên
           </Link>
@@ -188,57 +189,59 @@ export default async function AdminConversationsPage({
       {/* ⚠️ Lọc theo cơ sở KHÔNG bao giờ ra hội thoại 1-1: DM có `centerId = null` theo
           thiết kế (delta E.3) — nó không thuộc cơ sở nào. Tìm 1-1 thì để trống ô cơ sở. */}
       <div className="rounded-xl border border-border bg-card">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Hội thoại</TableHead>
-              <TableHead>Loại</TableHead>
-              <TableHead>Cơ sở</TableHead>
-              <TableHead>Trạng thái</TableHead>
-              <TableHead className="text-right">Thành viên</TableHead>
-              <TableHead className="text-right">Số tin</TableHead>
-              <TableHead>Hoạt động cuối</TableHead>
-              <TableHead />
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {rows.length === 0 ? (
+        <PhanTrangBang>
+          <Table>
+            <TableHeader>
               <TableRow>
-                <TableCell colSpan={8} className="text-muted-foreground">
-                  Không có hội thoại nào khớp bộ lọc.
-                </TableCell>
+                <TableHead>Hội thoại</TableHead>
+                <TableHead>Loại</TableHead>
+                <TableHead>Cơ sở</TableHead>
+                <TableHead>Trạng thái</TableHead>
+                <TableHead className="text-right">Thành viên</TableHead>
+                <TableHead className="text-right">Số tin</TableHead>
+                <TableHead>Hoạt động cuối</TableHead>
+                <TableHead />
               </TableRow>
-            ) : (
-              rows.map((r) => (
-                <TableRow key={r.conversationId}>
-                  <TableCell className="font-medium">{r.displayName}</TableCell>
-                  <TableCell className="text-sm text-muted-foreground">
-                    {TYPE_LABEL[r.type] ?? r.type}
-                  </TableCell>
-                  <TableCell className="text-sm text-muted-foreground">
-                    {r.centerName ?? "—"}
-                  </TableCell>
-                  <TableCell>
-                    <StatusBadge status={r.status} />
-                  </TableCell>
-                  <TableCell className="text-right">{r.participantCount}</TableCell>
-                  <TableCell className="text-right">{r.messageCount}</TableCell>
-                  <TableCell className="whitespace-nowrap text-sm text-muted-foreground">
-                    {r.lastMessageAt ? fmtVN.format(r.lastMessageAt) : "—"}
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <Link
-                      href={`/hoi-thoai/${r.conversationId}`}
-                      className="text-sm font-medium text-orange-600 hover:underline"
-                    >
-                      Mở hồ sơ →
-                    </Link>
+            </TableHeader>
+            <TableBody>
+              {rows.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={8} className="text-muted-foreground">
+                    Không có hội thoại nào khớp bộ lọc.
                   </TableCell>
                 </TableRow>
-              ))
-            )}
-          </TableBody>
-        </Table>
+              ) : (
+                rows.map((r) => (
+                  <TableRow key={r.conversationId}>
+                    <TableCell className="font-medium">{r.displayName}</TableCell>
+                    <TableCell className="text-sm text-muted-foreground">
+                      {TYPE_LABEL[r.type] ?? r.type}
+                    </TableCell>
+                    <TableCell className="text-sm text-muted-foreground">
+                      {r.centerName ?? "—"}
+                    </TableCell>
+                    <TableCell>
+                      <StatusBadge status={r.status} />
+                    </TableCell>
+                    <TableCell className="text-right">{r.participantCount}</TableCell>
+                    <TableCell className="text-right">{r.messageCount}</TableCell>
+                    <TableCell className="whitespace-nowrap text-sm text-muted-foreground">
+                      {r.lastMessageAt ? fmtVN.format(r.lastMessageAt) : "—"}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <Link
+                        href={`/hoi-thoai/${r.conversationId}`}
+                        className="text-sm font-medium text-primary hover:underline"
+                      >
+                        Mở hồ sơ →
+                      </Link>
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
+            </TableBody>
+          </Table>
+        </PhanTrangBang>
       </div>
     </div>
   );

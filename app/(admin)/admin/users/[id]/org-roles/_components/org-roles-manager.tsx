@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/table";
 import { assignUserOrgRoleAction, revokeUserOrgRoleAction } from "../actions";
 import { roleCodeLabel } from "@/lib/labels";
+import { PhanTrangBang } from "@/components/ui/phan-trang-bang";
 
 type Opt = { id: string; code: string; name: string };
 
@@ -85,8 +86,8 @@ export function OrgRolesManager({
 
   return (
     <div className="space-y-6">
-      <div className="rounded-lg border bg-neutral-50 p-4">
-        <h2 className="mb-3 text-sm font-semibold text-neutral-700">Gán vai trò</h2>
+      <div className="rounded-lg border bg-muted p-4">
+        <h2 className="mb-3 text-sm font-semibold text-foreground">Gán vai trò</h2>
         <div className="grid gap-3 sm:grid-cols-4">
           <div>
             <Label htmlFor="org">Đơn vị</Label>
@@ -140,60 +141,62 @@ export function OrgRolesManager({
       </div>
 
       <div className="rounded-lg border">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Đơn vị</TableHead>
-              <TableHead>Vai trò</TableHead>
-              <TableHead>Trạng thái</TableHead>
-              <TableHead>Hiệu lực</TableHead>
-              <TableHead className="text-right">Hành động</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {assignments.length === 0 ? (
+        <PhanTrangBang>
+          <Table>
+            <TableHeader>
               <TableRow>
-                <TableCell colSpan={5} className="text-center text-sm text-neutral-500">
-                  Chưa có phân quyền nào.
-                </TableCell>
+                <TableHead>Đơn vị</TableHead>
+                <TableHead>Vai trò</TableHead>
+                <TableHead>Trạng thái</TableHead>
+                <TableHead>Hiệu lực</TableHead>
+                <TableHead className="text-right">Hành động</TableHead>
               </TableRow>
-            ) : (
-              assignments.map((a) => (
-                <TableRow key={`${a.orgUnitId}:${a.roleId}`}>
-                  <TableCell>
-                    {orgUnits.find((o) => o.id === a.orgUnitId)?.name ?? a.orgCode}
-                  </TableCell>
-                  <TableCell>
-                    {roles.find((r) => r.id === a.roleId)?.name ?? roleCodeLabel(a.roleCode)}
-                  </TableCell>
-                  <TableCell>
-                    {a.status === "ACTIVE" ? (
-                      <Badge>Hiệu lực</Badge>
-                    ) : (
-                      <Badge variant="outline">{ASSIGN_STATUS_LABELS[a.status] ?? a.status}</Badge>
-                    )}
-                  </TableCell>
-                  <TableCell className="text-sm text-neutral-500">
-                    {a.effectiveFrom.slice(0, 10)}
-                    {a.effectiveTo ? ` → ${a.effectiveTo.slice(0, 10)}` : ""}
-                  </TableCell>
-                  <TableCell className="text-right">
-                    {a.status === "ACTIVE" && (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        disabled={pending}
-                        onClick={() => revoke(a)}
-                      >
-                        Thu hồi
-                      </Button>
-                    )}
+            </TableHeader>
+            <TableBody>
+              {assignments.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={5} className="text-center text-sm text-muted-foreground">
+                    Chưa có phân quyền nào.
                   </TableCell>
                 </TableRow>
-              ))
-            )}
-          </TableBody>
-        </Table>
+              ) : (
+                assignments.map((a) => (
+                  <TableRow key={`${a.orgUnitId}:${a.roleId}`}>
+                    <TableCell>
+                      {orgUnits.find((o) => o.id === a.orgUnitId)?.name ?? a.orgCode}
+                    </TableCell>
+                    <TableCell>
+                      {roles.find((r) => r.id === a.roleId)?.name ?? roleCodeLabel(a.roleCode)}
+                    </TableCell>
+                    <TableCell>
+                      {a.status === "ACTIVE" ? (
+                        <Badge>Hiệu lực</Badge>
+                      ) : (
+                        <Badge variant="outline">{ASSIGN_STATUS_LABELS[a.status] ?? a.status}</Badge>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-sm text-muted-foreground">
+                      {a.effectiveFrom.slice(0, 10)}
+                      {a.effectiveTo ? ` → ${a.effectiveTo.slice(0, 10)}` : ""}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {a.status === "ACTIVE" && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          disabled={pending}
+                          onClick={() => revoke(a)}
+                        >
+                          Thu hồi
+                        </Button>
+                      )}
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
+            </TableBody>
+          </Table>
+        </PhanTrangBang>
       </div>
     </div>
   );

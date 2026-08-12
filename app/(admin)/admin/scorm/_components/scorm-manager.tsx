@@ -182,7 +182,7 @@ export function ScormManager({ courses }: { courses: CourseNode[] }) {
 
   if (courses.length === 0) {
     return (
-      <p className="rounded-xl border border-amber-200 bg-amber-50 p-6 text-center text-sm text-amber-700">
+      <p className="rounded-xl border border-state-warning-soft bg-state-warning-soft p-6 text-center text-sm text-state-warning-ink">
         <AlertCircle className="mr-1 inline h-4 w-4" />
         Chưa có khoá học nào bật chế độ dạy (isTeachable). Tạo/cấu hình khoá ở Quản lý khoá học
         trước.
@@ -193,9 +193,9 @@ export function ScormManager({ courses }: { courses: CourseNode[] }) {
   return (
     <div className="space-y-5">
       {/* Bước 1+2: chọn khoá học → buổi học */}
-      <section className="grid gap-3 rounded-xl border border-gray-200 bg-white p-4 sm:grid-cols-2">
+      <section className="grid gap-3 rounded-xl border border-border bg-card p-4 sm:grid-cols-2">
         <label className="space-y-1">
-          <span className="text-xs font-bold uppercase tracking-wider text-gray-500">
+          <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
             Khoá học
           </span>
           <select
@@ -205,7 +205,7 @@ export function ScormManager({ courses }: { courses: CourseNode[] }) {
               setLessonId("");
               setConfirmDelete(null);
             }}
-            className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-orange-500"
+            className="w-full rounded-md border border-border px-3 py-2 text-sm outline-none focus:border-primary"
           >
             <option value="">— Chọn khoá học —</option>
             {courses.map((c) => (
@@ -218,7 +218,7 @@ export function ScormManager({ courses }: { courses: CourseNode[] }) {
         </label>
 
         <label className="space-y-1">
-          <span className="text-xs font-bold uppercase tracking-wider text-gray-500">
+          <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
             Buổi học
           </span>
           <select
@@ -228,7 +228,7 @@ export function ScormManager({ courses }: { courses: CourseNode[] }) {
               setConfirmDelete(null);
             }}
             disabled={!course}
-            className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm outline-none focus:border-orange-500 disabled:bg-gray-50 disabled:text-gray-400"
+            className="w-full rounded-md border border-border px-3 py-2 text-sm outline-none focus:border-primary disabled:bg-muted disabled:text-muted-foreground"
           >
             <option value="">
               {!course
@@ -246,13 +246,13 @@ export function ScormManager({ courses }: { courses: CourseNode[] }) {
         </label>
 
         {course && !course.curriculumName && (
-          <p className="sm:col-span-2 text-xs text-amber-600">
+          <p className="sm:col-span-2 text-xs text-state-warning-ink">
             <AlertCircle className="mr-1 inline h-3.5 w-3.5" />
             Khoá này chưa có khung chương trình đang dùng (ACTIVE) — chưa có buổi để gắn giáo án.
           </p>
         )}
         {course?.curriculumName && (
-          <p className="sm:col-span-2 inline-flex items-center gap-1 text-xs text-gray-400">
+          <p className="sm:col-span-2 inline-flex items-center gap-1 text-xs text-muted-foreground">
             <BookOpen className="h-3.5 w-3.5" /> Khung chương trình: {course.curriculumName}
           </p>
         )}
@@ -260,19 +260,19 @@ export function ScormManager({ courses }: { courses: CourseNode[] }) {
 
       {/* Bước 3: giáo án của buổi */}
       {!lesson ? (
-        <p className="rounded-xl border border-dashed border-gray-200 bg-white p-8 text-center text-sm text-gray-400">
+        <p className="rounded-xl border border-dashed border-border bg-card p-8 text-center text-sm text-muted-foreground">
           Chọn khoá học và buổi học để xem giáo án.
         </p>
       ) : (
-        <section className="space-y-4 rounded-xl border border-gray-200 bg-white p-4">
+        <section className="space-y-4 rounded-xl border border-border bg-card p-4">
           <div className="flex items-center justify-between">
-            <h2 className="text-sm font-bold text-gray-800">
+            <h2 className="text-sm font-bold text-foreground">
               Giáo án — Buổi {lesson.order}: {lesson.title}
             </h2>
             <button
               type="button"
               onClick={() => router.refresh()}
-              className="inline-flex items-center gap-1 rounded-md border border-gray-200 px-2 py-1 text-xs font-medium text-gray-500 hover:bg-gray-50"
+              className="inline-flex items-center gap-1 rounded-md border border-border px-2 py-1 text-xs font-medium text-muted-foreground hover:bg-muted"
             >
               <RefreshCw className="h-3.5 w-3.5" /> Làm mới
             </button>
@@ -280,25 +280,21 @@ export function ScormManager({ courses }: { courses: CourseNode[] }) {
 
           {/* Giáo án đang dùng */}
           {lesson.giaoAn ? (
-            <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-emerald-200 bg-emerald-50/60 p-3">
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-state-success-soft bg-state-success-soft/60 p-3">
               <div className="min-w-0">
                 <div className="flex items-center gap-2">
-                  <FileBox className="h-4 w-4 shrink-0 text-emerald-600" />
-                  <span className="truncate font-semibold text-gray-900">{lesson.giaoAn.name}</span>
+                  <FileBox className="h-4 w-4 shrink-0 text-state-success-ink" />
+                  <span className="truncate font-semibold text-foreground">{lesson.giaoAn.name}</span>
                   <span
-                    className={`rounded px-1.5 py-0.5 text-xs font-semibold ${
-                      lesson.giaoAn.kind === "PDF"
-                        ? "bg-rose-100 text-rose-700"
-                        : "bg-indigo-100 text-indigo-700"
-                    }`}
+                    className={`rounded px-1.5 py-0.5 text-xs font-semibold ${ lesson.giaoAn.kind === "PDF" ? "bg-state-danger-soft text-state-danger-ink" : "bg-state-info-soft text-state-info-ink" }`}
                   >
                     {lesson.giaoAn.kind}
                   </span>
-                  <span className="rounded bg-emerald-100 px-1.5 py-0.5 text-xs font-medium text-emerald-700">
+                  <span className="rounded bg-state-success-soft px-1.5 py-0.5 text-xs font-medium text-state-success-ink">
                     Đang dùng
                   </span>
                 </div>
-                <div className="mt-0.5 flex flex-wrap items-center gap-2 pl-6 text-xs text-gray-500">
+                <div className="mt-0.5 flex flex-wrap items-center gap-2 pl-6 text-xs text-muted-foreground">
                   {lesson.giaoAn.kind === "SCORM" && lesson.giaoAn.scormVersion && (
                     <span>{lesson.giaoAn.scormVersion.replace("_", " ")}</span>
                   )}
@@ -312,7 +308,7 @@ export function ScormManager({ courses }: { courses: CourseNode[] }) {
               <div className="flex items-center gap-1.5">
                 <Link
                   href={`/scorm/play/${lesson.giaoAn.id}`}
-                  className="inline-flex items-center gap-1 rounded-md border border-orange-200 px-2.5 py-1.5 text-xs font-medium text-orange-700 hover:bg-orange-50"
+                  className="inline-flex items-center gap-1 rounded-md border border-primary-soft px-2.5 py-1.5 text-xs font-medium text-primary hover:bg-primary-soft"
                 >
                   <Play className="h-3.5 w-3.5" /> Xem thử
                 </Link>
@@ -321,7 +317,7 @@ export function ScormManager({ courses }: { courses: CourseNode[] }) {
                     type="button"
                     disabled={pending}
                     onClick={() => handleDelete(lesson.giaoAn!.id)}
-                    className="inline-flex items-center gap-1 rounded-md bg-rose-600 px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-rose-700 disabled:opacity-60"
+                    className="inline-flex items-center gap-1 rounded-md bg-state-danger-ink px-2.5 py-1.5 text-xs font-semibold text-white hover:bg-state-danger-ink-hover disabled:opacity-60"
                   >
                     <Trash2 className="h-3.5 w-3.5" /> Xác nhận gỡ
                   </button>
@@ -330,7 +326,7 @@ export function ScormManager({ courses }: { courses: CourseNode[] }) {
                     type="button"
                     disabled={pending}
                     onClick={() => setConfirmDelete(lesson.giaoAn!.id)}
-                    className="inline-flex items-center gap-1 rounded-md border border-rose-200 px-2.5 py-1.5 text-xs font-medium text-rose-600 hover:bg-rose-50 disabled:opacity-60"
+                    className="inline-flex items-center gap-1 rounded-md border border-state-danger-soft px-2.5 py-1.5 text-xs font-medium text-state-danger-ink hover:bg-state-danger-soft disabled:opacity-60"
                   >
                     <Trash2 className="h-3.5 w-3.5" /> Gỡ
                   </button>
@@ -338,14 +334,14 @@ export function ScormManager({ courses }: { courses: CourseNode[] }) {
               </div>
             </div>
           ) : lesson.pending ? null : (
-            <p className="rounded-lg border border-dashed border-gray-300 bg-gray-50 p-4 text-center text-sm text-gray-400">
+            <p className="rounded-lg border border-dashed border-border bg-muted p-4 text-center text-sm text-muted-foreground">
               Chưa có giáo án cho buổi này. Đẩy tệp .zip SCORM bên dưới.
             </p>
           )}
 
           {/* Bản đang xử lý */}
           {lesson.pending && (
-            <div className="flex items-center gap-2 rounded-lg border border-sky-200 bg-sky-50/60 p-3 text-sm text-sky-700">
+            <div className="flex items-center gap-2 rounded-lg border border-state-info-soft bg-state-info-soft/60 p-3 text-sm text-state-info-ink">
               <Loader2 className="h-4 w-4 animate-spin" />
               <span>
                 Đang xử lý <span className="font-medium">{lesson.pending.name}</span> — giáo án sẽ
@@ -356,8 +352,8 @@ export function ScormManager({ courses }: { courses: CourseNode[] }) {
 
           {/* Bản lỗi cần dọn */}
           {lesson.failed && (
-            <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-rose-200 bg-rose-50/60 p-3 text-sm">
-              <span className="min-w-0 text-rose-700">
+            <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-state-danger-soft bg-state-danger-soft/60 p-3 text-sm">
+              <span className="min-w-0 text-state-danger-ink">
                 <AlertCircle className="mr-1 inline h-4 w-4" />
                 Bản <span className="font-medium">{lesson.failed.name}</span> xử lý lỗi
                 {lesson.failed.error ? `: ${lesson.failed.error}` : ""}.
@@ -366,7 +362,7 @@ export function ScormManager({ courses }: { courses: CourseNode[] }) {
                 type="button"
                 disabled={pending}
                 onClick={() => handleDelete(lesson.failed!.id)}
-                className="inline-flex items-center gap-1 rounded-md border border-rose-200 px-2 py-1 text-xs font-medium text-rose-600 hover:bg-rose-100 disabled:opacity-60"
+                className="inline-flex items-center gap-1 rounded-md border border-state-danger-soft px-2 py-1 text-xs font-medium text-state-danger-ink hover:bg-state-danger-soft disabled:opacity-60"
               >
                 <Trash2 className="h-3.5 w-3.5" /> Dọn bản lỗi
               </button>
@@ -374,17 +370,17 @@ export function ScormManager({ courses }: { courses: CourseNode[] }) {
           )}
 
           {/* Đẩy / thay giáo án */}
-          <div className="space-y-2 rounded-lg border border-dashed border-gray-300 bg-white p-3">
-            <h3 className="text-xs font-bold uppercase tracking-wide text-gray-500">
+          <div className="space-y-2 rounded-lg border border-dashed border-border bg-card p-3">
+            <h3 className="text-xs font-bold uppercase tracking-wide text-muted-foreground">
               {lesson.giaoAn ? "Thay giáo án (đẩy bản mới)" : "Đẩy giáo án lên"}
             </h3>
-            <p className="text-xs text-gray-500">
+            <p className="text-xs text-muted-foreground">
               Nhận <span className="font-medium">.pdf</span> (slide) hoặc{" "}
               <span className="font-medium">.zip</span> (gói SCORM) — cả hai trình chiếu cùng một
               khung slider.
             </p>
             {lesson.giaoAn && (
-              <p className="text-xs text-amber-600">
+              <p className="text-xs text-state-warning-ink">
                 Đẩy bản mới sẽ tự thay &amp; xoá giáo án hiện tại sau khi xử lý xong.
               </p>
             )}
@@ -394,24 +390,24 @@ export function ScormManager({ courses }: { courses: CourseNode[] }) {
               accept=".zip,.pdf,application/zip,application/x-zip-compressed,application/pdf"
               disabled={uploading}
               onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-              className="block w-full text-sm text-gray-600 file:mr-3 file:rounded-md file:border-0 file:bg-orange-50 file:px-3 file:py-2 file:text-sm file:font-medium file:text-orange-600"
+              className="block w-full text-sm text-muted-foreground file:mr-3 file:rounded-md file:border-0 file:bg-primary-soft file:px-3 file:py-2 file:text-sm file:font-medium file:text-primary"
             />
             {uploading && (
               <div>
-                <div className="h-2 overflow-hidden rounded-full bg-gray-100">
+                <div className="h-2 overflow-hidden rounded-full bg-muted">
                   <div
-                    className="h-full rounded-full bg-orange-500 transition-all"
+                    className="h-full rounded-full bg-primary transition-all"
                     style={{ width: `${progress}%` }}
                   />
                 </div>
-                <p className="mt-1 text-xs text-gray-500">Đang tải lên… {progress}%</p>
+                <p className="mt-1 text-xs text-muted-foreground">Đang tải lên… {progress}%</p>
               </div>
             )}
             <button
               type="button"
               onClick={handleUpload}
               disabled={uploading}
-              className="inline-flex items-center gap-1.5 rounded-lg bg-orange-500 px-4 py-2 text-sm font-semibold text-white hover:bg-orange-600 disabled:opacity-60"
+              className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white hover:bg-primary-dark disabled:opacity-60"
             >
               <UploadCloud className="h-4 w-4" />
               {uploading ? "Đang xử lý…" : lesson.giaoAn ? "Đẩy & thay giáo án" : "Đẩy giáo án"}

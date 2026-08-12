@@ -55,6 +55,7 @@ import {
   revealPaymentsPii,
   type PaymentRow,
 } from "../_actions";
+import { PhanTrangBang } from "@/components/ui/phan-trang-bang";
 
 type OrderOption = {
   id: string;
@@ -68,8 +69,8 @@ const SALE_LABEL: Record<string, string> = {
   COLLECT_CONFIRMED: "Đã xác nhận thu",
 };
 const SALE_BADGE: Record<string, string> = {
-  RECORDED: "bg-gray-100 text-gray-700 hover:bg-gray-100",
-  COLLECT_CONFIRMED: "bg-blue-100 text-blue-800 hover:bg-blue-100",
+  RECORDED: "bg-muted text-foreground hover:bg-muted",
+  COLLECT_CONFIRMED: "bg-state-info-soft text-state-info-ink hover:bg-state-info-soft",
 };
 
 const ACC_LABEL: Record<string, string> = {
@@ -80,11 +81,11 @@ const ACC_LABEL: Record<string, string> = {
   ADJUSTED: "Điều chỉnh",
 };
 const ACC_BADGE: Record<string, string> = {
-  PENDING: "bg-yellow-100 text-yellow-800 hover:bg-yellow-100",
-  CONFIRMED: "bg-green-100 text-green-800 hover:bg-green-100",
-  REJECTED: "bg-red-100 text-red-800 hover:bg-red-100",
-  REFUNDED: "bg-purple-100 text-purple-800 hover:bg-purple-100",
-  ADJUSTED: "bg-orange-100 text-orange-800 hover:bg-orange-100",
+  PENDING: "bg-state-warning-soft text-state-warning-ink hover:bg-state-warning-soft",
+  CONFIRMED: "bg-state-success-soft text-state-success-ink hover:bg-state-success-soft",
+  REJECTED: "bg-state-danger-soft text-state-danger-ink hover:bg-state-danger-soft",
+  REFUNDED: "bg-primary-soft text-primary hover:bg-primary-soft",
+  ADJUSTED: "bg-primary-soft text-primary hover:bg-primary-soft",
 };
 
 const METHOD_OPTIONS = [
@@ -161,8 +162,8 @@ export function PaymentsClient({
       )}
 
       {canViewPii && (
-        <div className="flex items-center justify-between rounded-lg border border-amber-200 bg-amber-50/60 px-4 py-2.5">
-          <p className="text-xs text-amber-800">
+        <div className="flex items-center justify-between rounded-lg border border-state-warning-soft bg-state-warning-soft/60 px-4 py-2.5">
+          <p className="text-xs text-state-warning-ink">
             CCCD phụ huynh &amp; địa chỉ được che mặc định (thông tin nhạy cảm).
             {revealed
               ? " Đang xem đầy đủ — hành động đã được ghi log."
@@ -176,122 +177,124 @@ export function PaymentsClient({
         </div>
       )}
 
-      <div className="overflow-x-auto rounded-lg border border-neutral-200">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Đơn hàng</TableHead>
-              <TableHead>Tên bé</TableHead>
-              <TableHead>Lớp</TableHead>
-              <TableHead className="text-right">Số tiền</TableHead>
-              <TableHead>Hình thức</TableHead>
-              <TableHead>Ngày thu</TableHead>
-              <TableHead>Người thu</TableHead>
-              <TableHead>Nguồn HV</TableHead>
-              <TableHead>Tên PH</TableHead>
-              <TableHead>CCCD PH</TableHead>
-              <TableHead>Địa chỉ</TableHead>
-              <TableHead>Sale</TableHead>
-              <TableHead>Kế toán</TableHead>
-              <TableHead>Phiếu thu</TableHead>
-              {canConfirm && <TableHead className="text-right">Thao tác</TableHead>}
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {rows.length === 0 && (
+      <div className="overflow-x-auto rounded-lg border border-border">
+        <PhanTrangBang>
+          <Table>
+            <TableHeader>
               <TableRow>
-                <TableCell
-                  colSpan={colCount}
-                  className="py-8 text-center text-sm text-neutral-500"
-                >
-                  Chưa có khoản thanh toán nào
-                </TableCell>
+                <TableHead>Đơn hàng</TableHead>
+                <TableHead>Tên bé</TableHead>
+                <TableHead>Lớp</TableHead>
+                <TableHead className="text-right">Số tiền</TableHead>
+                <TableHead>Hình thức</TableHead>
+                <TableHead>Ngày thu</TableHead>
+                <TableHead>Người thu</TableHead>
+                <TableHead>Nguồn HV</TableHead>
+                <TableHead>Tên PH</TableHead>
+                <TableHead>CCCD PH</TableHead>
+                <TableHead>Địa chỉ</TableHead>
+                <TableHead>Sale</TableHead>
+                <TableHead>Kế toán</TableHead>
+                <TableHead>Phiếu thu</TableHead>
+                {canConfirm && <TableHead className="text-right">Thao tác</TableHead>}
               </TableRow>
-            )}
-            {rows.map((p) => (
-              <TableRow key={p.id}>
-                <TableCell className="font-medium">
-                  <div>{p.orderCode ?? "—"}</div>
-                  <div className="text-xs text-neutral-500">
-                    {p.customerName ?? ""}
-                  </div>
-                </TableCell>
-                <TableCell className="text-sm">{p.studentName ?? "—"}</TableCell>
-                <TableCell className="text-xs">{p.className ?? "—"}</TableCell>
-                <TableCell className="text-right font-semibold">
-                  {vnd(p.amount)}
-                </TableCell>
-                <TableCell className="text-xs">{METHOD_LABEL[p.method] ?? p.method}</TableCell>
-                <TableCell className="text-xs">{fmtDate(p.paidDate)}</TableCell>
-                <TableCell className="text-xs">{p.collectedByName ?? "—"}</TableCell>
-                <TableCell className="text-xs">{p.leadSource ?? "—"}</TableCell>
-                <TableCell className="text-sm">{p.parentName ?? "—"}</TableCell>
-                <TableCell
-                  className={
-                    "font-mono text-xs " +
-                    (p.piiMasked ? "text-neutral-400" : "text-neutral-800")
-                  }
-                >
-                  {p.parentNationalId ?? "—"}
-                </TableCell>
-                <TableCell
-                  className={
-                    "max-w-[180px] truncate text-xs " +
-                    (p.piiMasked ? "text-neutral-400" : "text-neutral-800")
-                  }
-                  title={p.address ?? undefined}
-                >
-                  {p.address ?? "—"}
-                </TableCell>
-                <TableCell>
-                  <Badge className={SALE_BADGE[p.saleStatus] ?? ""}>
-                    {SALE_LABEL[p.saleStatus] ?? p.saleStatus}
-                  </Badge>
-                </TableCell>
-                <TableCell>
-                  <Badge className={ACC_BADGE[p.accountantStatus] ?? ""}>
-                    {ACC_LABEL[p.accountantStatus] ?? p.accountantStatus}
-                  </Badge>
-                </TableCell>
-                <TableCell className="text-xs font-mono">
-                  {p.hasActiveReceipt ? (
-                    <a
-                      href={`/payments/${p.id}/phieu-thu`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1 text-[#7C3AED] hover:underline"
-                      title="In phiếu thu (PDF)"
-                    >
-                      <Printer className="h-3.5 w-3.5" />
-                      {p.receiptCode}
-                    </a>
-                  ) : (
-                    "—"
-                  )}
-                </TableCell>
-                {canConfirm && (
-                  <TableCell className="text-right">
-                    {p.accountantStatus === "PENDING" ? (
-                      p.enrollmentId ? (
-                        <RowActions paymentId={p.id} updatedAt={p.updatedAt} />
-                      ) : (
-                        // Đơn chưa convert → chưa gắn ghi danh → confirm sẽ lỗi. Chờ convert.
-                        <span
-                          className="text-xs text-neutral-400"
-                          title="Khoản chưa gắn ghi danh — xác nhận được sau khi convert lead thành học viên"
-                        >
-                          Chờ convert
-                        </span>
-                      )
+            </TableHeader>
+            <TableBody>
+              {rows.length === 0 && (
+                <TableRow>
+                  <TableCell
+                    colSpan={colCount}
+                    className="py-8 text-center text-sm text-muted-foreground"
+                  >
+                    Chưa có khoản thanh toán nào
+                  </TableCell>
+                </TableRow>
+              )}
+              {rows.map((p) => (
+                <TableRow key={p.id}>
+                  <TableCell className="font-medium">
+                    <div>{p.orderCode ?? "—"}</div>
+                    <div className="text-xs text-muted-foreground">
+                      {p.customerName ?? ""}
+                    </div>
+                  </TableCell>
+                  <TableCell className="text-sm">{p.studentName ?? "—"}</TableCell>
+                  <TableCell className="text-xs">{p.className ?? "—"}</TableCell>
+                  <TableCell className="text-right font-semibold">
+                    {vnd(p.amount)}
+                  </TableCell>
+                  <TableCell className="text-xs">{METHOD_LABEL[p.method] ?? p.method}</TableCell>
+                  <TableCell className="text-xs">{fmtDate(p.paidDate)}</TableCell>
+                  <TableCell className="text-xs">{p.collectedByName ?? "—"}</TableCell>
+                  <TableCell className="text-xs">{p.leadSource ?? "—"}</TableCell>
+                  <TableCell className="text-sm">{p.parentName ?? "—"}</TableCell>
+                  <TableCell
+                    className={
+                      "font-mono text-xs " +
+                      (p.piiMasked ? "text-muted-foreground" : "text-foreground")
+                    }
+                  >
+                    {p.parentNationalId ?? "—"}
+                  </TableCell>
+                  <TableCell
+                    className={
+                      "max-w-[180px] truncate text-xs " +
+                      (p.piiMasked ? "text-muted-foreground" : "text-foreground")
+                    }
+                    title={p.address ?? undefined}
+                  >
+                    {p.address ?? "—"}
+                  </TableCell>
+                  <TableCell>
+                    <Badge className={SALE_BADGE[p.saleStatus] ?? ""}>
+                      {SALE_LABEL[p.saleStatus] ?? p.saleStatus}
+                    </Badge>
+                  </TableCell>
+                  <TableCell>
+                    <Badge className={ACC_BADGE[p.accountantStatus] ?? ""}>
+                      {ACC_LABEL[p.accountantStatus] ?? p.accountantStatus}
+                    </Badge>
+                  </TableCell>
+                  <TableCell className="text-xs font-mono">
+                    {p.hasActiveReceipt ? (
+                      <a
+                        href={`/payments/${p.id}/phieu-thu`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1 text-primary hover:underline"
+                        title="In phiếu thu (PDF)"
+                      >
+                        <Printer className="h-3.5 w-3.5" />
+                        {p.receiptCode}
+                      </a>
                     ) : (
-                      <span className="text-xs text-neutral-400">—</span>
+                      "—"
                     )}
                   </TableCell>
-                )}
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
+                  {canConfirm && (
+                    <TableCell className="text-right">
+                      {p.accountantStatus === "PENDING" ? (
+                        p.enrollmentId ? (
+                          <RowActions paymentId={p.id} updatedAt={p.updatedAt} />
+                        ) : (
+                          // Đơn chưa convert → chưa gắn ghi danh → confirm sẽ lỗi. Chờ convert.
+                          <span
+                            className="text-xs text-muted-foreground"
+                            title="Khoản chưa gắn ghi danh — xác nhận được sau khi convert lead thành học viên"
+                          >
+                            Chờ convert
+                          </span>
+                        )
+                      ) : (
+                        <span className="text-xs text-muted-foreground">—</span>
+                      )}
+                    </TableCell>
+                  )}
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </PhanTrangBang>
       </div>
     </div>
   );
@@ -320,7 +323,7 @@ function PiiRevealControl({
         variant="outline"
         size="sm"
         onClick={onHide}
-        className="border-amber-300 text-amber-700 hover:bg-amber-50"
+        className="border-state-warning text-state-warning-ink hover:bg-state-warning-soft"
       >
         <EyeOff className="h-4 w-4" />
         Ẩn lại
@@ -354,7 +357,7 @@ function PiiRevealControl({
         variant="outline"
         size="sm"
         onClick={() => setOpen(true)}
-        className="border-amber-300 text-amber-700 hover:bg-amber-50"
+        className="border-state-warning text-state-warning-ink hover:bg-state-warning-soft"
       >
         <Eye className="h-4 w-4" />
         Xem đầy đủ
@@ -364,7 +367,7 @@ function PiiRevealControl({
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <ShieldAlert className="h-5 w-5 text-amber-600" />
+              <ShieldAlert className="h-5 w-5 text-state-warning-ink" />
               Xem đầy đủ CCCD phụ huynh &amp; địa chỉ
             </DialogTitle>
             <DialogDescription>
@@ -386,7 +389,7 @@ function PiiRevealControl({
               rows={3}
               disabled={pending}
             />
-            <p className="text-xs text-neutral-400">
+            <p className="text-xs text-muted-foreground">
               {reason.trim().length}/{MIN_PII_REASON}
             </p>
           </div>

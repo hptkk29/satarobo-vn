@@ -41,18 +41,14 @@ export function SessionFilters({
 
   return (
     <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center">
-      <div className="inline-flex rounded-lg border border-neutral-200 bg-white p-0.5">
+      <div className="inline-flex rounded-lg border border-border bg-card p-0.5">
         {SCOPES.map((s) => (
           <button
             key={s.key}
             type="button"
             onClick={() => apply({ scope: s.key })}
             disabled={pending}
-            className={`rounded-md px-3 py-1.5 text-xs font-semibold transition-colors ${
-              scope === s.key
-                ? "bg-orange-500 text-white"
-                : "text-neutral-600 hover:bg-neutral-100"
-            }`}
+            className={`rounded-md px-3 py-1.5 text-xs font-semibold transition-colors ${ scope === s.key ? "bg-primary text-white" : "text-muted-foreground hover:bg-muted" }`}
           >
             {s.label}
           </button>
@@ -62,7 +58,7 @@ export function SessionFilters({
         value={classId}
         onChange={(e) => apply({ classId: e.target.value })}
         disabled={pending}
-        className="rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm outline-none focus:border-orange-500"
+        className="rounded-lg border border-border bg-card px-3 py-2 text-sm outline-none focus:border-primary"
       >
         <option value="">Tất cả lớp</option>
         {classes.map((c) => (
@@ -71,7 +67,7 @@ export function SessionFilters({
           </option>
         ))}
       </select>
-      {pending && <span className="text-xs text-neutral-400">Đang lọc…</span>}
+      {pending && <span className="text-xs text-muted-foreground">Đang lọc…</span>}
     </div>
   );
 }

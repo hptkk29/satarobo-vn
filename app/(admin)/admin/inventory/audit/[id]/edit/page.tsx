@@ -76,27 +76,27 @@ export default async function EditAuditPage({ params }: Props) {
       <div>
         <Link
           href="/inventory/audit"
-          className="mb-3 inline-flex items-center gap-1 text-sm text-neutral-500 hover:text-neutral-700"
+          className="mb-3 inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
         >
           <ChevronLeft className="h-4 w-4" /> Quay lại danh sách
         </Link>
-        <h1 className="text-2xl font-bold text-neutral-900">
+        <h1 className="text-2xl font-bold text-foreground">
           Kiểm kê:{" "}
-          <span className="font-bold text-orange-600">
+          <span className="font-bold text-primary">
             {audit.center.name}
           </span>
         </h1>
         {audit.notes && (
-          <p className="mt-1 text-sm text-neutral-500">{audit.notes}</p>
+          <p className="mt-1 text-sm text-muted-foreground">{audit.notes}</p>
         )}
       </div>
 
       {rows.length === 0 ? (
-        <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+        <div className="rounded-xl border border-state-warning-soft bg-state-warning-soft p-4 text-sm text-state-warning-ink">
           Chưa có mặt hàng active nào. Tạo / kích hoạt mặt hàng trước tại{" "}
           <Link
             href="/inventory/items"
-            className="font-semibold underline hover:text-amber-900"
+            className="font-semibold underline hover:text-state-warning-ink"
           >
             /admin/inventory/items
           </Link>

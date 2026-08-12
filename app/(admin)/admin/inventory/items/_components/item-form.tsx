@@ -11,6 +11,7 @@ import {
   updateMinThreshold,
 } from "../_actions";
 import { MovementActions } from "./movement-actions";
+import { PhanTrangBang } from "@/components/ui/phan-trang-bang";
 
 type Category =
   | "MAINBOARD"
@@ -149,14 +150,14 @@ export function ItemForm({
   return (
     <form onSubmit={handleSubmit} className="max-w-4xl space-y-5">
       {error && (
-        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+        <div className="rounded-lg border border-state-danger-soft bg-state-danger-soft px-4 py-3 text-sm text-state-danger-ink">
           {error}
         </div>
       )}
 
       {/* Section 1: Identity */}
-      <section className="rounded-xl border border-neutral-200 bg-white p-6 space-y-4">
-        <h2 className="text-sm font-bold uppercase tracking-wider text-neutral-700">
+      <section className="rounded-xl border border-border bg-card p-6 space-y-4">
+        <h2 className="text-sm font-bold uppercase tracking-wider text-foreground">
           Thông tin chung
         </h2>
 
@@ -239,8 +240,8 @@ export function ItemForm({
       </section>
 
       {/* Section 2: Pricing */}
-      <section className="rounded-xl border border-neutral-200 bg-white p-6 space-y-4">
-        <h2 className="text-sm font-bold uppercase tracking-wider text-neutral-700">
+      <section className="rounded-xl border border-border bg-card p-6 space-y-4">
+        <h2 className="text-sm font-bold uppercase tracking-wider text-foreground">
           Giá & Nhà cung cấp
         </h2>
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
@@ -272,8 +273,8 @@ export function ItemForm({
       </section>
 
       {/* Section 3: Threshold + Tags */}
-      <section className="rounded-xl border border-neutral-200 bg-white p-6 space-y-4">
-        <h2 className="text-sm font-bold uppercase tracking-wider text-neutral-700">
+      <section className="rounded-xl border border-border bg-card p-6 space-y-4">
+        <h2 className="text-sm font-bold uppercase tracking-wider text-foreground">
           Ngưỡng cảnh báo & Phân loại
         </h2>
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
@@ -288,7 +289,7 @@ export function ItemForm({
               disabled={pending}
               className={inputClass}
             />
-            <span className="mt-1 block text-xs text-neutral-500">
+            <span className="mt-1 block text-xs text-muted-foreground">
               Tồn dưới ngưỡng này sẽ hiển thị cảnh báo. Override per-center ở
               section dưới.
             </span>
@@ -299,16 +300,16 @@ export function ItemForm({
               checked={isActive}
               onChange={(e) => setIsActive(e.target.checked)}
               disabled={pending}
-              className="h-4 w-4 rounded border-neutral-300"
+              className="h-4 w-4 rounded border-border"
             />
-            <span className="text-sm font-medium text-neutral-700">
+            <span className="text-sm font-medium text-foreground">
               Đang sử dụng (hiện ra trong list mặc định)
             </span>
           </label>
         </div>
 
         <div>
-          <span className="mb-1 block text-sm font-semibold text-neutral-700">
+          <span className="mb-1 block text-sm font-semibold text-foreground">
             Tags
           </span>
           <StringArrayEditor
@@ -332,60 +333,62 @@ export function ItemForm({
 
       {/* Section 4: Balance per center (edit mode only) */}
       {isEdit && balances && balances.length > 0 && (
-        <section className="rounded-xl border border-neutral-200 bg-white">
-          <header className="border-b border-neutral-100 p-4">
-            <h2 className="text-sm font-bold uppercase tracking-wider text-neutral-700">
+        <section className="rounded-xl border border-border bg-card">
+          <header className="border-b border-border p-4">
+            <h2 className="text-sm font-bold uppercase tracking-wider text-foreground">
               Tồn kho từng cơ sở
             </h2>
-            <p className="mt-0.5 text-xs text-neutral-500">
+            <p className="mt-0.5 text-xs text-muted-foreground">
               Số lượng cập nhật qua phiếu Nhập/Xuất (F2). Có thể override ngưỡng
               cảnh báo riêng cho mỗi cơ sở; để trống để dùng ngưỡng mặc định{" "}
               <strong>{defaultMinThreshold}</strong>.
             </p>
           </header>
           <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-neutral-100 text-sm">
-              <thead className="bg-neutral-50">
-                <tr>
-                  <th className="px-3 py-2 text-left font-semibold text-neutral-600">
-                    Cơ sở
-                  </th>
-                  <th className="px-3 py-2 text-right font-semibold text-neutral-600">
-                    Tồn
-                  </th>
-                  <th className="px-3 py-2 text-right font-semibold text-neutral-600">
-                    Đã đặt
-                  </th>
-                  <th className="px-3 py-2 text-right font-semibold text-neutral-600">
-                    Ngưỡng (override)
-                  </th>
-                  <th className="px-3 py-2 text-right font-semibold text-neutral-600">
-                    Thao tác
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-neutral-50">
-                {balances.map((b) => (
-                  <BalanceRowEditor
-                    key={b.id}
-                    row={b}
-                    itemId={item!.id}
-                    itemUnit={unit}
-                    fallbackThreshold={defaultMinThreshold}
-                    allCenters={allCenters}
-                  />
-                ))}
-              </tbody>
-            </table>
+            <PhanTrangBang>
+              <table className="min-w-full divide-y divide-border text-sm">
+                <thead className="bg-muted">
+                  <tr>
+                    <th className="px-3 py-2 text-left font-semibold text-muted-foreground">
+                      Cơ sở
+                    </th>
+                    <th className="px-3 py-2 text-right font-semibold text-muted-foreground">
+                      Tồn
+                    </th>
+                    <th className="px-3 py-2 text-right font-semibold text-muted-foreground">
+                      Đã đặt
+                    </th>
+                    <th className="px-3 py-2 text-right font-semibold text-muted-foreground">
+                      Ngưỡng (override)
+                    </th>
+                    <th className="px-3 py-2 text-right font-semibold text-muted-foreground">
+                      Thao tác
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border">
+                  {balances.map((b) => (
+                    <BalanceRowEditor
+                      key={b.id}
+                      row={b}
+                      itemId={item!.id}
+                      itemUnit={unit}
+                      fallbackThreshold={defaultMinThreshold}
+                      allCenters={allCenters}
+                    />
+                  ))}
+                </tbody>
+              </table>
+            </PhanTrangBang>
           </div>
         </section>
       )}
 
-      <div className="flex flex-wrap gap-3 border-t border-neutral-200 pt-5">
+      <div className="flex flex-wrap gap-3 border-t border-border pt-5">
         <button
           type="submit"
           disabled={pending}
-          className="rounded-xl bg-[#7C3AED] px-6 py-3 font-bold text-white shadow-md hover:opacity-90 disabled:opacity-60"
+          className="rounded-xl bg-primary px-6 py-3 font-bold text-white shadow-md hover:opacity-90 disabled:opacity-60"
         >
           {pending ? "Đang lưu..." : isEdit ? "Cập nhật" : "Tạo hàng"}
         </button>
@@ -393,7 +396,7 @@ export function ItemForm({
           type="button"
           onClick={() => router.push("/inventory/items")}
           disabled={pending}
-          className="rounded-xl border-2 border-neutral-200 bg-white px-6 py-3 font-bold text-neutral-700 hover:bg-neutral-50"
+          className="rounded-xl border-2 border-border bg-card px-6 py-3 font-bold text-foreground hover:bg-muted"
         >
           Huỷ
         </button>
@@ -402,7 +405,7 @@ export function ItemForm({
             type="button"
             onClick={handleDelete}
             disabled={pending}
-            className="ml-auto rounded-xl border-2 border-red-200 bg-white px-6 py-3 font-bold text-red-700 hover:bg-red-50"
+            className="ml-auto rounded-xl border-2 border-state-danger-soft bg-card px-6 py-3 font-bold text-state-danger-ink hover:bg-state-danger-soft"
           >
             Xoá
           </button>
@@ -459,16 +462,14 @@ function BalanceRowEditor({
   }
 
   return (
-    <tr className={isLow ? "bg-red-50/40" : undefined}>
-      <td className="px-3 py-2 font-medium text-neutral-900">{row.centerName}</td>
+    <tr className={isLow ? "bg-state-danger-soft/40" : undefined}>
+      <td className="px-3 py-2 font-medium text-foreground">{row.centerName}</td>
       <td
-        className={`px-3 py-2 text-right tabular-nums font-semibold ${
-          isLow ? "text-red-600" : "text-neutral-700"
-        }`}
+        className={`px-3 py-2 text-right tabular-nums font-semibold ${ isLow ? "text-state-danger-ink" : "text-foreground" }`}
       >
         {row.quantity}
       </td>
-      <td className="px-3 py-2 text-right tabular-nums text-neutral-500">
+      <td className="px-3 py-2 text-right tabular-nums text-muted-foreground">
         {row.reserved}
       </td>
       <td className="px-3 py-2 text-right">
@@ -480,9 +481,9 @@ function BalanceRowEditor({
           onBlur={save}
           disabled={pending}
           placeholder={`${fallbackThreshold}`}
-          className="w-24 rounded-md border border-neutral-200 px-2 py-1 text-right text-sm tabular-nums disabled:opacity-60"
+          className="w-24 rounded-md border border-border px-2 py-1 text-right text-sm tabular-nums disabled:opacity-60"
         />
-        {error && <div className="mt-0.5 text-xs text-red-600">{error}</div>}
+        {error && <div className="mt-0.5 text-xs text-state-danger-ink">{error}</div>}
       </td>
       <td className="px-3 py-2 text-right whitespace-nowrap">
         <MovementActions
@@ -499,7 +500,7 @@ function BalanceRowEditor({
 }
 
 const inputClass =
-  "w-full rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm outline-none focus:border-[#7C3AED] focus:ring-2 focus:ring-[#7C3AED]/20";
+  "w-full rounded-lg border border-border bg-card px-3 py-2 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20";
 
 function Field({
   label,
@@ -512,9 +513,9 @@ function Field({
 }) {
   return (
     <label className="block">
-      <span className="mb-1 block text-sm font-semibold text-neutral-700">
+      <span className="mb-1 block text-sm font-semibold text-foreground">
         {label}
-        {required && <span className="ml-1 text-red-500">*</span>}
+        {required && <span className="ml-1 text-state-danger-ink">*</span>}
       </span>
       {children}
     </label>

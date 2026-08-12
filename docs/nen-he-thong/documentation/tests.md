@@ -1,0 +1,77 @@
+# tests.md — Bản đồ kiểm chứng (INTENDED STATE, thời điểm 08/08)
+
+> Ba mục tách bạch để bản đồ không "xanh giả". Trạng thái hôm nay: nền CHƯA có dòng code nào — nên mục "Đang có" gần trống là trung thực, không phải thiếu sót.
+
+## 1. Đang có trong repo hôm nay
+
+| Test | Ghim luật nào |
+|---|---|
+| Bộ test RBAC v2 (shadow-compare, từ đợt go-live 26/07) | Hành vi quyền theo `centerId` hiện hành — chính là ĐƯỜNG CŨ mà F6 so sánh; giữ nguyên, không xoá trước P4 |
+| (Đợt chat, đang viết) US-05 khung test ma trận quyền chat | Quyền Participant của module chat qua adapter `can()` |
+| **[AS-BUILT US-01]** `lib/permissions/registry.test.ts` (unit, 7 test) | TS-01: key trùng → throw nêu key + 2 module; parity 2 chiều registry ↔ `ALL_ACTIONS` + exception khai-trước tự hết hạn (assert c) — CI job unit-tests chặn merge |
+| **[AS-BUILT US-01]** `tests/e2e/a0/permission-registry.spec.ts` (integration, 4 case) | TS-01: sync đủ N row · idempotent · key trùng → DB nguyên trạng (snapshot trước/sau) · key vắng khai báo → isActive=false không DELETE — chạy CI job e2e-a0 (Postgres service) |
+| **[AS-BUILT US-02]** `lib/permissions/can.test.ts` (unit, 15) + `lib/auth/permission-decision.test.ts` (unit, 3) | TS-02 phần ROLE: DENY>ALLOW · DENY cấp trường · bảng chân trị 4 dataScope · chống rò ngang đa-role · ALLOW+mask invalid · parity fallback canV2 · mask vô điều kiện qua detail |
+| **[AS-BUILT US-02]** `lib/eslint/inline-authz.test.ts` (unit, 22) | TS-03: 2 rule chặn inline-authz + bắt action ghi thiếu can() (AST-based, chống bypass export{}/comment) + allowlist 71 file + freshness — CI job unit-tests + quality (pnpm lint) chặn merge |
+| **[AS-BUILT US-02]** `tests/e2e/a0/permission-grant.spec.ts` (integration, 4 case) | resolveActor nạp grant thật · DENY ROLE-grant chặn end-to-end · xoá grant → request kế mất hiệu lực (không cache phiên) · bảng rỗng → parity tuyệt đối đường cũ |
+| **[AS-BUILT US-04]** `lib/permissions/matrix.test.ts` (26 test: 22 thật + 4 `it.fails` `[US-04→P5]`) | TS-04: ma trận 4 dataScope × 3 relationshipType × 2 effect; DENY>ALLOW cả 12 case; tripwire chống gỡ lặng lẽ; case biên UNIT_ONLY@REGION |
+| **[AS-BUILT US-04]** `lib/permissions/session-content-gate.test.ts` (8 test: 1 tripwire + 7 `it.fails`) | TS-18 pin HỢP ĐỒNG chuỗi 4 điều kiện (4 case DENY thiếu từng đk · CONTENT · LIST_ONLY · franchise ACTIVE vẫn xem) — US-16 hiện thực làm tripwire đỏ → gỡ .fails cùng commit |
+| **[AS-BUILT US-03]** `tests/e2e/a0/user-group-ts02.spec.ts` (integration, 4 case) | TS-02 đủ 2 vế trên DB thật: DENY fieldMask nhóm che parentPhone khi ALLOW từ vai · gỡ member → resolve mới hết mask (AC3) · DENY toàn-action nhóm thắng ALLOW vai (AC2) · soft-delete nhóm vô hiệu grant |
+| **[AS-BUILT US-03]** `lib/validators/user-group.test.ts` + can.test.ts (6 GHIM GROUP) + menu-permissions.test.ts (DENY-aware + ALLOW-đối-xứng) + route-policy.test.ts (segment user-groups) | Validator chặn: UNIT_*/OWN cho GROUP (P0 chỉ ALL) · ALLOW+fieldMask · 7 khoá quản trị · PARENT vào nhóm — mỗi luật 1 case pin |
+
+**CỔNG P0 (README bàn giao §4): TS-01..04 xanh CI + lint no-inline-authz bật — ĐẠT 09/08/2026** (TS-02 full-flow tại US-03; TS-04 20/24 chạy thật + 4 ô `[US-04→P5]` expected-fail có kỷ luật flip).
+
+Ngoài các nhóm trên: chưa có test nào cho các luật còn lại của nền. Các dòng dưới đây là PROPOSED (TS-01 đã chuyển lên mục 1).
+
+> ⚠️ Đính chính wording TS-01 "deploy fail": thực tế = **workflow migrate/seed ĐỎ + registry DB nguyên trạng**; Vercel vẫn ship code độc lập (deploy.yml không gate được Vercel Git integration). Cổng chặn chính là unit test TS-01 ở PR. Kẽ hở semantic-conflict 2 PR cùng khai 1 key (CI từng nhánh xanh, merge union mới trùng) → phát hiện ở vitest trên push `test`/`main` + step sync đỏ; chấp nhận ở P0 vì registry chưa có consumer runtime — xem lại khi US-02 cho `can()` đọc registry.
+
+## 2. Đề xuất (chưa viết) — nguồn: 04-TestScenarios
+
+| Use case → Luật | Hành vi kỳ vọng (kèm DENY) | Nguồn bằng chứng | Loại | CI chặn merge |
+|---|---|---|---|---|
+| Registry duy nhất (TS-01) | Key trùng → deploy fail | BA §2.5 · US-01 | unit | ✔ |
+| DENY > ALLOW, hợp nhất ROLE∪GROUP (TS-02) | Nhóm DENY che trường dù role ALLOW | BA §2.5 · US-02/03 | integration | ✔ |
+| Không kiểm quyền ngoài can() (TS-03) | Server Action thiếu can() → build fail | KR3 · US-02 | lint/CI | ✔ |
+| Ma trận 24 case (TS-04) | 4 scope × 3 relationship × 2 effect | BA §2.2, §2.5 · US-04 | integration | ✔ |
+| Path nguyên tử khi dời node (TS-05) | Cây con đổi path 1 transaction; chống vòng | BA §2.2 · US-05 | integration | ✔ |
+| Pháp nhân bị chặn xoá (TS-06) | Còn unit ACTIVE → từ chối | BA §2.3 · US-06 | unit | ✔ |
+| Đối soát backfill (TS-07) | Lệch → alert; idempotent | Pre-mortem T2 · US-07 | integration + **TAY** (7 ngày PROD) | ✔ (phần auto) |
+| Quyền theo Position (TS-08) | Gỡ assignment → 403 tức thì | BA §2.4 · US-08 | integration | ✔ |
+| Chống vòng cây báo cáo (TS-09) | Chuỗi vòng → chặn ghi | Q2 · US-08 | unit | ✔ |
+| Hết hạn tự tắt, không cron (TS-10) | effectiveTo qua → grant không tính | US-09 · cron.md nguyên tắc | unit | ✔ |
+| WorkScope 2 chiều (TS-11) | Thêm → thấy đúng lớp; hết hạn → 403 | B2 · US-10 | integration | ✔ |
+| Dry-run nhân sự (TS-12) | Không đoán đơn vị thiếu | US-11 | **TAY** | — |
+| Shadow không chặn (TS-13) | DENY mới + ALLOW cũ → vẫn 200 + log | F6 · US-12 | integration | ✔ |
+| Rollback 1 thao tác (TS-14) | Tắt flag < 1 phút, không deploy | F6 · US-13 | **TAY** (staging, có runbook) | — |
+| OWN phụ huynh (TS-15) | Đổi ID con khác → 403 | E3 · US-13 | integration | ✔ |
+| Cắt hợp đồng 1 thao tác (TS-16) | TERMINATED → 403 chương trình, GRACE đọc học viên | KR2 · F3 · US-14 | integration | ✔ |
+| 3 chính sách ghi đè (TS-17) | LOCKED chặn / BOUNDED biên / OVERRIDABLE giữ gốc | BA §3.1 · US-15 | integration | ✔ |
+| Chuỗi 4 điều kiện, 4 case DENY (TS-18) | Thiếu 1 → 403; QL chỉ danh sách; IDOR chặn | BA §3.2 · F4 · US-16 | integration | ✔ |
+| Wizard nguyên tử (TS-19) | Lỗi giữa chừng → 0 rác; KR1 ≤ 30 phút | F1 · US-17 | integration + **TAY** (bấm giờ) | ✔ (phần auto) |
+| Audit bất biến + log việc xem (TS-20) | Không sửa/xoá; xem cũng bị log | US-18 | integration | ✔ |
+
+## 3. Lỗ hổng — luật đã ghi nhưng CHƯA có gì kiểm, xếp theo mức lộ
+
+| Luật không ai kiểm | Lộ gì nếu sai | Hướng |
+|---|---|---|
+| Hiệu năng `can()` dưới tải (T4) | PROD chậm toàn cục sau P4 | Benchmark ở P3, ngưỡng p95 cho resolver; chưa nằm trong TS nào |
+| Ranh giới tài chính franchise ở TỪNG câu query báo cáo (BA §4) | Vi phạm pháp lý nhìn số chi tiết bên nhận | Khi viết module báo cáo: mỗi query qua ma trận TS-04 mở rộng; hiện chỉ có luật, chưa có bề mặt code |
+| Định dạng seam MISA (F7 / E1) | Kế toán nhập sai kỳ lương | Khảo sát import AMIS trước P5 — chưa test được vì chưa có spec |
+| Che trường `fieldMask` trên MỌI đường trả dữ liệu (không riêng TS-02) | Rò trường nhạy cảm qua endpoint quên áp mask | Đưa mask vào tầng serialize chung + test hợp đồng cho từng DTO — bổ sung khi có DTO thật |
+
+## AS-BUILT test — P1 · US-05 + US-06 (11/08/2026)
+
+| Bộ | Chỗ | Số case | Ghi chú |
+|---|---|---|---|
+| Thuần (vitest, job `unit-tests`) | `lib/org/path.test.ts` | 22 | slug/path/depth · recomputeSubtree (dời node, đổi code, vòng lặp) · V9 loại cha/con · hai mức phạm vi · trạng thái |
+| DB (playwright, job `e2e-a0`) | `tests/e2e/a0/orgunit-path.spec.ts` | 12 | TS-05 (dời node + hậu duệ trong 1 transaction) · TS-06 (pháp nhân) |
+| DB — viết lại theo hình cây mới | `tests/e2e/a0/orgunit.spec.ts` | 11 (9 sửa + 2 mới) | 3 khẳng định ĐỔI CHIỀU: `getSubtreeCenterIds(HO)` không còn `[]`, tổ tiên CS1 có thêm DANANG, cây mặc định không còn node ROOT |
+
+**Ba test đáng giữ nhất, đừng gỡ:**
+
+- `[US-05-U-04]` — `/cs1/` KHÔNG khớp `/cs10/`. Đây là lý do duy nhất path phải có `/` cuối; mất nó là rò quyền im lặng giữa hai cơ sở có mã tiền tố trùng.
+- `[US-05-U-05]` — slug của TS phải trùng `replace(lower(code),'_','-')` của SQL. Hai chỗ lệch nhau = path do DB sinh khác path do app sinh.
+- `[US-05-U-18]` — đường `path` và đường `parentId` cho **cùng** kết quả phạm vi. Lệch nghĩa là path hỏng, và path hỏng nghĩa là **quyền sai**, không phải hiển thị sai.
+
+**Ca biên đã ghim có chủ đích:** `[US-05-IT-04b]` — khi vừa sai loại cha vừa tạo vòng, V9 báo trước V5. Thứ tự này là lựa chọn (V9 rẻ hơn và nói đúng cái người dùng làm sai); ghim lại kẻo ai đó đảo thứ tự mà không biết có test phụ thuộc.
+
+**Chưa kiểm (nợ sang US-07):** đối soát `centerId` ↔ `orgUnitId` từng bảng; đường ghi mới có set `orgUnitId` không; hiệu năng `path LIKE prefix` (PT1 pre-mortem nói cây < 50 node nên hoãn đo tới khi > 500 node).

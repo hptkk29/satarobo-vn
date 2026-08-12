@@ -80,10 +80,10 @@ export default async function EditLeadPage({ params }: { params: Promise<{ id: s
 
   return (
     <div className="p-6">
-      <Link href={`/leads/${id}`} className="mb-3 inline-flex items-center gap-1 text-sm text-gray-500 hover:text-gray-700">
+      <Link href={`/leads/${id}`} className="mb-3 inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground">
         <ChevronLeft className="h-4 w-4" /> Chi tiết lead
       </Link>
-      <h1 className="mb-4 text-2xl font-bold text-gray-900">Sửa thông tin lead</h1>
+      <h1 className="mb-4 text-2xl font-bold text-foreground">Sửa thông tin lead</h1>
       <LeadForm
         orgUnits={orgUnits.map((o) => ({ id: o.orgUnitId, name: o.name }))}
         courses={courses}

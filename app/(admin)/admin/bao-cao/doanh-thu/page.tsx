@@ -23,6 +23,7 @@ import {
 import { LineChart } from "@/components/charts/line-chart";
 import { BarChart } from "@/components/charts/bar-chart";
 import { RevenueTargetForm } from "./_components/revenue-target-form";
+import { PhanTrangBang } from "@/components/ui/phan-trang-bang";
 
 export const metadata = { title: "Báo cáo doanh thu vs mục tiêu | Admin" };
 export const dynamic = "force-dynamic";
@@ -32,18 +33,18 @@ const vnd = (n: number) => `${n.toLocaleString("vi-VN")} ₫`;
 
 function Stat({ label, value, hint }: { label: string; value: string; hint?: string }) {
   return (
-    <div className="rounded-xl border border-neutral-200 bg-white p-4">
-      <p className="text-xs font-medium text-neutral-500">{label}</p>
-      <p className="mt-1 text-2xl font-bold text-neutral-900">{value}</p>
-      {hint ? <p className="mt-0.5 text-xs text-neutral-400">{hint}</p> : null}
+    <div className="rounded-xl border border-border bg-card p-4">
+      <p className="text-xs font-medium text-muted-foreground">{label}</p>
+      <p className="mt-1 text-2xl font-bold text-foreground">{value}</p>
+      {hint ? <p className="mt-0.5 text-xs text-muted-foreground">{hint}</p> : null}
     </div>
   );
 }
 
 function Card({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <section className="rounded-xl border border-neutral-200 bg-white p-4">
-      <h2 className="mb-3 text-sm font-semibold text-neutral-800">{title}</h2>
+    <section className="rounded-xl border border-border bg-card p-4">
+      <h2 className="mb-3 text-sm font-semibold text-foreground">{title}</h2>
       {children}
     </section>
   );
@@ -122,8 +123,8 @@ export default async function RevenueTargetReportPage({ searchParams }: SearchPa
   return (
     <div className="space-y-5 p-4">
       <div>
-        <h1 className="text-xl font-bold text-neutral-900">Doanh thu vs mục tiêu</h1>
-        <p className="text-sm text-neutral-500">
+        <h1 className="text-xl font-bold text-foreground">Doanh thu vs mục tiêu</h1>
+        <p className="text-sm text-muted-foreground">
           Doanh thu thực (khoản đã được kế toán xác nhận) so với mục tiêu theo kỳ —
           phạm vi: <span className="font-medium">{scopeLabel}</span>.
         </p>
@@ -159,7 +160,7 @@ export default async function RevenueTargetReportPage({ searchParams }: SearchPa
           defaultCenterId={fc.selection}
           defaultPeriod={currentPeriod}
         />
-        <p className="mt-2 text-xs text-neutral-400">
+        <p className="mt-2 text-xs text-muted-foreground">
           Mục tiêu lưu theo (cơ sở, kỳ). Đặt lại cùng cơ sở + kỳ sẽ ghi đè giá trị cũ.
         </p>
       </Card>
@@ -197,49 +198,51 @@ export default async function RevenueTargetReportPage({ searchParams }: SearchPa
       {/* Bảng chi tiết */}
       <Card title="Chi tiết theo kỳ">
         <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead className="text-left text-xs text-neutral-400">
-              <tr>
-                <th className="px-3 py-2">Kỳ</th>
-                <th className="px-3 py-2 text-right">Doanh thu thực</th>
-                <th className="px-3 py-2 text-right">Mục tiêu</th>
-                <th className="px-3 py-2 text-right">Chênh lệch</th>
-                <th className="px-3 py-2 text-right">% đạt</th>
-                <th className="px-3 py-2 text-center">Trạng thái</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((r) => (
-                <tr key={r.period} className="border-t">
-                  <td className="px-3 py-2">{r.period}</td>
-                  <td className="px-3 py-2 text-right">{vnd(r.actual)}</td>
-                  <td className="px-3 py-2 text-right">
-                    {r.target === null ? "—" : vnd(r.target)}
-                  </td>
-                  <td className="px-3 py-2 text-right">
-                    {r.variance === null ? "—" : vnd(r.variance)}
-                  </td>
-                  <td className="px-3 py-2 text-right font-medium">{pct(r.achievedRate)}</td>
-                  <td className="px-3 py-2 text-center">
-                    {r.target === null ? (
-                      <span className="text-neutral-400">Chưa đặt</span>
-                    ) : r.reached ? (
-                      <span className="text-green-600">Đạt</span>
-                    ) : (
-                      <span className="text-orange-600">Chưa đạt</span>
-                    )}
-                  </td>
-                </tr>
-              ))}
-              {rows.length === 0 ? (
+          <PhanTrangBang>
+            <table className="w-full text-sm">
+              <thead className="text-left text-xs text-muted-foreground">
                 <tr>
-                  <td className="px-3 py-4 text-center text-neutral-400" colSpan={6}>
-                    Chưa có doanh thu hay mục tiêu trong phạm vi này.
-                  </td>
+                  <th className="px-3 py-2">Kỳ</th>
+                  <th className="px-3 py-2 text-right">Doanh thu thực</th>
+                  <th className="px-3 py-2 text-right">Mục tiêu</th>
+                  <th className="px-3 py-2 text-right">Chênh lệch</th>
+                  <th className="px-3 py-2 text-right">% đạt</th>
+                  <th className="px-3 py-2 text-center">Trạng thái</th>
                 </tr>
-              ) : null}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {rows.map((r) => (
+                  <tr key={r.period} className="border-t">
+                    <td className="px-3 py-2">{r.period}</td>
+                    <td className="px-3 py-2 text-right">{vnd(r.actual)}</td>
+                    <td className="px-3 py-2 text-right">
+                      {r.target === null ? "—" : vnd(r.target)}
+                    </td>
+                    <td className="px-3 py-2 text-right">
+                      {r.variance === null ? "—" : vnd(r.variance)}
+                    </td>
+                    <td className="px-3 py-2 text-right font-medium">{pct(r.achievedRate)}</td>
+                    <td className="px-3 py-2 text-center">
+                      {r.target === null ? (
+                        <span className="text-muted-foreground">Chưa đặt</span>
+                      ) : r.reached ? (
+                        <span className="text-state-success-ink">Đạt</span>
+                      ) : (
+                        <span className="text-primary">Chưa đạt</span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+                {rows.length === 0 ? (
+                  <tr>
+                    <td className="px-3 py-4 text-center text-muted-foreground" colSpan={6}>
+                      Chưa có doanh thu hay mục tiêu trong phạm vi này.
+                    </td>
+                  </tr>
+                ) : null}
+              </tbody>
+            </table>
+          </PhanTrangBang>
         </div>
       </Card>
     </div>

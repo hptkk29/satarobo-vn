@@ -10,6 +10,7 @@ import { StatCardAdmin } from "@/components/design-system/admin/stat-card-admin"
 import { FunnelChart } from "@/components/charts/funnel-chart";
 import { BarChart } from "@/components/charts/bar-chart";
 import { LEAD_STATUS_LABEL } from "@/lib/leads/status";
+import { PhanTrangBang } from "@/components/ui/phan-trang-bang";
 
 export const metadata = { title: "CRM Dashboard | Admin" };
 export const dynamic = "force-dynamic";
@@ -129,14 +130,14 @@ export default async function CrmDashboardPage() {
     <div className="max-w-6xl p-6">
       <div className="mb-6 flex flex-wrap items-center justify-between gap-2">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">CRM Dashboard</h1>
-          <p className="mt-1 text-sm text-gray-500">
+          <h1 className="text-2xl font-bold text-foreground">CRM Dashboard</h1>
+          <p className="mt-1 text-sm text-muted-foreground">
             Phễu chuyển đổi lead & hiệu suất đội sale.
           </p>
         </div>
         <Link
           href="/leads?view=kanban"
-          className="rounded-lg border border-gray-300 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+          className="rounded-lg border border-border px-3 py-2 text-sm font-medium text-foreground hover:bg-muted"
         >
           Mở Kanban Leads →
         </Link>
@@ -171,8 +172,8 @@ export default async function CrmDashboardPage() {
 
       <div className="grid gap-6 lg:grid-cols-2">
         {/* Funnel */}
-        <div className="rounded-xl border border-gray-200 bg-white p-4">
-          <h2 className="mb-2 text-sm font-semibold text-gray-700">
+        <div className="rounded-xl border border-border bg-card p-4">
+          <h2 className="mb-2 text-sm font-semibold text-foreground">
             Phễu chuyển đổi
           </h2>
           {total === 0 ? (
@@ -183,8 +184,8 @@ export default async function CrmDashboardPage() {
         </div>
 
         {/* Source */}
-        <div className="rounded-xl border border-gray-200 bg-white p-4">
-          <h2 className="mb-2 text-sm font-semibold text-gray-700">
+        <div className="rounded-xl border border-border bg-card p-4">
+          <h2 className="mb-2 text-sm font-semibold text-foreground">
             Lead theo nguồn
           </h2>
           {sourceData.length === 0 ? (
@@ -201,45 +202,47 @@ export default async function CrmDashboardPage() {
       </div>
 
       {/* Sale performance */}
-      <div className="mt-6 rounded-xl border border-gray-200 bg-white p-4">
-        <h2 className="mb-3 text-sm font-semibold text-gray-700">
+      <div className="mt-6 rounded-xl border border-border bg-card p-4">
+        <h2 className="mb-3 text-sm font-semibold text-foreground">
           Hiệu suất đội sale
         </h2>
         {salesRows.length === 0 ? (
-          <p className="py-6 text-center text-sm text-gray-400">
+          <p className="py-6 text-center text-sm text-muted-foreground">
             Chưa có nhân viên SALES_CSM.
           </p>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-gray-200 text-left text-xs uppercase tracking-wide text-gray-400">
-                  <th className="py-2 pr-4 font-semibold">Nhân viên</th>
-                  <th className="py-2 pr-4 font-semibold">Lead được giao</th>
-                  <th className="py-2 pr-4 font-semibold">Đã chốt</th>
-                  <th className="py-2 font-semibold">Tỉ lệ chốt</th>
-                </tr>
-              </thead>
-              <tbody>
-                {salesRows.map((r) => (
-                  <tr key={r.id} className="border-b border-gray-50">
-                    <td className="py-2 pr-4 font-medium text-gray-800">
-                      {r.name}
-                    </td>
-                    <td className="py-2 pr-4 text-gray-700">{r.assigned}</td>
-                    <td className="py-2 pr-4 text-gray-700">{r.enrolled}</td>
-                    <td className="py-2 text-gray-700">{r.rate.toFixed(1)}%</td>
+            <PhanTrangBang>
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-border text-left text-xs uppercase tracking-wide text-muted-foreground">
+                    <th className="py-2 pr-4 font-semibold">Nhân viên</th>
+                    <th className="py-2 pr-4 font-semibold">Lead được giao</th>
+                    <th className="py-2 pr-4 font-semibold">Đã chốt</th>
+                    <th className="py-2 font-semibold">Tỉ lệ chốt</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {salesRows.map((r) => (
+                    <tr key={r.id} className="border-b border-border">
+                      <td className="py-2 pr-4 font-medium text-foreground">
+                        {r.name}
+                      </td>
+                      <td className="py-2 pr-4 text-foreground">{r.assigned}</td>
+                      <td className="py-2 pr-4 text-foreground">{r.enrolled}</td>
+                      <td className="py-2 text-foreground">{r.rate.toFixed(1)}%</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </PhanTrangBang>
           </div>
         )}
       </div>
 
       {/* Status breakdown chips */}
-      <div className="mt-6 rounded-xl border border-gray-200 bg-white p-4">
-        <h2 className="mb-3 text-sm font-semibold text-gray-700">
+      <div className="mt-6 rounded-xl border border-border bg-card p-4">
+        <h2 className="mb-3 text-sm font-semibold text-foreground">
           Chi tiết theo trạng thái
         </h2>
         <div className="flex flex-wrap gap-2">
@@ -248,7 +251,7 @@ export default async function CrmDashboardPage() {
             .map(([status, count]) => (
               <span
                 key={status}
-                className="rounded-full bg-gray-100 px-3 py-1 text-xs font-medium text-gray-700"
+                className="rounded-full bg-muted px-3 py-1 text-xs font-medium text-foreground"
               >
                 {LEAD_STATUS_LABEL[status as LeadStatus] ?? status}: {count}
               </span>
@@ -261,7 +264,7 @@ export default async function CrmDashboardPage() {
 
 function EmptyChart() {
   return (
-    <div className="flex h-[300px] items-center justify-center text-sm text-gray-400">
+    <div className="flex h-[300px] items-center justify-center text-sm text-muted-foreground">
       Chưa có dữ liệu.
     </div>
   );

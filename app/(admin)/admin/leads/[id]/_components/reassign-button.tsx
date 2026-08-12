@@ -25,7 +25,7 @@ export function ReassignButton({ leadId }: { leadId: string }) {
           }
         })
       }
-      className="inline-flex items-center gap-1.5 rounded-lg border border-gray-300 px-3 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-60"
+      className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-2 text-sm font-semibold text-foreground hover:bg-muted disabled:opacity-60"
     >
       <RefreshCw size={14} className={isPending ? "animate-spin" : ""} />
       Chia lại lead

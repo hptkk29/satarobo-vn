@@ -12,6 +12,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { CreateRoleForm } from "./_components/create-role-form";
+import { PhanTrangBang } from "@/components/ui/phan-trang-bang";
 
 export const dynamic = "force-dynamic";
 
@@ -26,11 +27,11 @@ export default async function RolesAdminPage() {
   return (
     <div>
       <div className="mb-6">
-        <h1 className="flex items-center gap-2 text-3xl font-black text-neutral-900">
-          <ShieldCheck className="h-7 w-7 text-orange-500" />
+        <h1 className="flex items-center gap-2 text-3xl font-black text-foreground">
+          <ShieldCheck className="h-7 w-7 text-primary" />
           Vai trò & quyền (RBAC)
         </h1>
-        <p className="mt-1 text-sm text-neutral-500">
+        <p className="mt-1 text-sm text-muted-foreground">
           Cấu hình role động. Mọi thay đổi yêu cầu lý do và được ghi nhật ký.
         </p>
       </div>
@@ -38,36 +39,38 @@ export default async function RolesAdminPage() {
       <CreateRoleForm />
 
       <div className="mt-8 rounded-lg border">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Mã</TableHead>
-              <TableHead>Tên</TableHead>
-              <TableHead>Loại</TableHead>
-              <TableHead className="text-right">Số quyền</TableHead>
-              <TableHead className="text-right">Người dùng</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {roles.map((r) => (
-              <TableRow key={r.id}>
-                <TableCell className="font-mono font-semibold">{r.code}</TableCell>
-                <TableCell>{r.name}</TableCell>
-                <TableCell>
-                  {r.isSystem ? (
-                    <Badge variant="secondary">Hệ thống</Badge>
-                  ) : r.isActive ? (
-                    <Badge>Hoạt động</Badge>
-                  ) : (
-                    <Badge variant="outline">Tắt</Badge>
-                  )}
-                </TableCell>
-                <TableCell className="text-right">{r.permissions.length}</TableCell>
-                <TableCell className="text-right">{r._count.userRoles}</TableCell>
+        <PhanTrangBang>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Mã</TableHead>
+                <TableHead>Tên</TableHead>
+                <TableHead>Loại</TableHead>
+                <TableHead className="text-right">Số quyền</TableHead>
+                <TableHead className="text-right">Người dùng</TableHead>
               </TableRow>
-            ))}
-          </TableBody>
-        </Table>
+            </TableHeader>
+            <TableBody>
+              {roles.map((r) => (
+                <TableRow key={r.id}>
+                  <TableCell className="font-mono font-semibold">{r.code}</TableCell>
+                  <TableCell>{r.name}</TableCell>
+                  <TableCell>
+                    {r.isSystem ? (
+                      <Badge variant="secondary">Hệ thống</Badge>
+                    ) : r.isActive ? (
+                      <Badge>Hoạt động</Badge>
+                    ) : (
+                      <Badge variant="outline">Tắt</Badge>
+                    )}
+                  </TableCell>
+                  <TableCell className="text-right">{r.permissions.length}</TableCell>
+                  <TableCell className="text-right">{r._count.userRoles}</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </PhanTrangBang>
       </div>
     </div>
   );

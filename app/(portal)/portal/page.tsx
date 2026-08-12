@@ -65,7 +65,7 @@ export default async function PortalHome() {
         </h1>
         <p className="mt-1 text-sm text-neutral-500">
           Đang xem học viên:{" "}
-          <span className="font-semibold text-orange-600">
+          <span className="font-semibold text-orange-700">
             {ctx.activeStudent?.name}
           </span>
         </p>
@@ -80,7 +80,9 @@ export default async function PortalHome() {
           <Card
             icon={<Wallet className="h-4 w-4" />}
             label="Công nợ còn lại"
-            value={parent.totalDebt > 0 ? vnd(parent.totalDebt) : "Đã thanh toán đủ"}
+            value={
+              parent.totalDebt > 0 ? vnd(parent.totalDebt) : "Đã thanh toán đủ"
+            }
             tone={parent.totalDebt > 0 ? "amber" : "green"}
             href="/portal/hoc-phi"
             sub={
@@ -88,7 +90,11 @@ export default async function PortalHome() {
                 ? `Đến hạn: ${formatDateVN(parent.nearestDueDate)}`
                 : undefined
             }
-            subIcon={parent.nearestDueDate ? <CalendarClock className="h-3 w-3" /> : undefined}
+            subIcon={
+              parent.nearestDueDate ? (
+                <CalendarClock className="h-3 w-3" />
+              ) : undefined
+            }
           />
           <Card
             icon={<RefreshCw className="h-4 w-4" />}
@@ -122,7 +128,7 @@ export default async function PortalHome() {
                 ["Tổng buổi", attendance.total, "text-neutral-900"],
                 ["Đã học", attendance.attended, "text-green-700"],
                 ["Vắng", attendance.absent, "text-red-600"],
-                ["Chờ học bù", attendance.needMakeup, "text-amber-600"],
+                ["Chờ học bù", attendance.needMakeup, "text-amber-700"],
                 ["Đã học bù", attendance.madeUp, "text-[#7C3AED]"],
               ] as [string, number, string][]
             ).map(([label, value, tone]) => (
@@ -142,7 +148,8 @@ export default async function PortalHome() {
           className="mt-3 flex items-center justify-between rounded-xl border border-neutral-200 bg-white p-4 transition-shadow hover:shadow-sm"
         >
           <span className="flex items-center gap-2 text-sm font-medium text-neutral-700">
-            <ClipboardList className="h-4 w-4 text-neutral-400" /> Bài tập về nhà
+            <ClipboardList className="h-4 w-4 text-neutral-500" /> Bài tập về
+            nhà
           </span>
           <span className="text-sm font-bold text-neutral-900">
             {student.homeworkDone}/{student.homeworkTotal}
@@ -156,9 +163,21 @@ export default async function PortalHome() {
           Truy cập nhanh
         </h2>
         <div className="grid grid-cols-3 gap-3">
-          <QuickLink href="/portal/hoc-ba" icon={<GraduationCap className="h-5 w-5" />} label="Học bạ" />
-          <QuickLink href="/portal/hinh-anh" icon={<Images className="h-5 w-5" />} label="Hình ảnh" />
-          <QuickLink href="/portal/danh-gia" icon={<Star className="h-5 w-5" />} label="Đánh giá" />
+          <QuickLink
+            href="/portal/hoc-ba"
+            icon={<GraduationCap className="h-5 w-5" />}
+            label="Học bạ"
+          />
+          <QuickLink
+            href="/portal/hinh-anh"
+            icon={<Images className="h-5 w-5" />}
+            label="Hình ảnh"
+          />
+          <QuickLink
+            href="/portal/danh-gia"
+            icon={<Star className="h-5 w-5" />}
+            label="Đánh giá"
+          />
         </div>
       </section>
 
@@ -168,7 +187,7 @@ export default async function PortalHome() {
           <BookOpen className="h-4 w-4 text-[#7C3AED]" /> Lớp đang học
         </h2>
         {classes.length === 0 ? (
-          <p className="rounded-xl border border-dashed border-neutral-300 bg-white p-6 text-center text-sm text-neutral-400">
+          <p className="rounded-xl border border-dashed border-neutral-300 bg-white p-6 text-center text-sm text-neutral-500">
             Học viên chưa được xếp lớp.
           </p>
         ) : (
@@ -179,7 +198,7 @@ export default async function PortalHome() {
                 className="rounded-xl border border-neutral-200 bg-white p-4"
               >
                 <p className="font-semibold text-neutral-900">{c.name}</p>
-                <p className="text-xs text-neutral-500">
+                <p className="text-xs text-neutral-600">
                   {c.classCode ? `${c.classCode} · ` : ""}
                   {c.courseName}
                   {c.centerName ? ` · ${c.centerName}` : ""}
@@ -194,10 +213,10 @@ export default async function PortalHome() {
 }
 
 const TONE: Record<string, string> = {
-  amber: "text-amber-600",
+  amber: "text-amber-700",
   green: "text-green-700",
   violet: "text-[#7C3AED]",
-  orange: "text-orange-600",
+  orange: "text-orange-700",
   neutral: "text-neutral-900",
 };
 
@@ -223,9 +242,9 @@ function Card({
       href={href}
       className="rounded-xl border border-neutral-200 bg-white p-4 transition-shadow hover:shadow-sm"
     >
-      <div className="flex items-center gap-1.5 text-neutral-400">
+      <div className="flex items-center gap-1.5 text-neutral-500">
         {icon}
-        <span className="text-xs text-neutral-500">{label}</span>
+        <span className="text-xs text-neutral-600">{label}</span>
       </div>
       <p className={`mt-1 text-lg font-bold ${TONE[tone]}`}>{value}</p>
       {sub && (

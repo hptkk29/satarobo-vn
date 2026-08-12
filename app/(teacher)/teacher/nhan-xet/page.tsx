@@ -29,7 +29,10 @@ import { Badge } from "@/components/ui/badge";
 import { PageHeader } from "../_components/ui/page-header";
 import { EmptyState } from "../_components/ui/empty-state";
 import { SESSION_STATUS_LABEL } from "../_components/ui/session-status-pill";
-import { FeedbackPanel, type FeedbackPanelRow } from "./_components/feedback-panel";
+import {
+  FeedbackPanel,
+  type FeedbackPanelRow,
+} from "./_components/feedback-panel";
 import { BackLink } from "../_components/ui/back-link";
 
 export const metadata = { title: "Nhận xét buổi học | Giáo viên Sata Robo" };
@@ -87,7 +90,10 @@ export default async function TeacherFeedbackPage({
     if (
       !sess ||
       sess.classId !== classId ||
-      !isSessionOwnedByTeacher(sess, { userId, assignedClassIds: actor.assignedClassIds })
+      !isSessionOwnedByTeacher(sess, {
+        userId,
+        assignedClassIds: actor.assignedClassIds,
+      })
     ) {
       return <NotYours />;
     }
@@ -95,7 +101,11 @@ export default async function TeacherFeedbackPage({
     const [attRows, enrRows, fbRows] = await Promise.all([
       sdb.attendance.findMany({
         where: { sessionId },
-        select: { studentId: true, status: true, student: { select: { name: true } } },
+        select: {
+          studentId: true,
+          status: true,
+          student: { select: { name: true } },
+        },
         orderBy: { student: { name: "asc" } },
       }),
       // Fallback khi buổi chưa điểm danh: toàn bộ roster active của lớp.
@@ -111,8 +121,15 @@ export default async function TeacherFeedbackPage({
     ]);
 
     const { attendanceTaken, students } = deriveFeedbackRoster(
-      attRows.map((a) => ({ studentId: a.studentId, studentName: a.student.name, status: a.status })),
-      enrRows.map((e) => ({ studentId: e.student.id, studentName: e.student.name })),
+      attRows.map((a) => ({
+        studentId: a.studentId,
+        studentName: a.student.name,
+        status: a.status,
+      })),
+      enrRows.map((e) => ({
+        studentId: e.student.id,
+        studentName: e.student.name,
+      })),
     );
     const fbByStudent = new Map(fbRows.map((f) => [f.studentId, f]));
     // Câu 46: CHỈ tên HV vào payload client — không SĐT/email/tên PH.
@@ -125,13 +142,17 @@ export default async function TeacherFeedbackPage({
 
     return (
       <div>
-        <BackLink className="mb-4" href={`?classId=${classId}`} label="Buổi học của lớp" />
+        <BackLink
+          className="mb-4"
+          href={`?classId=${classId}`}
+          label="Buổi học của lớp"
+        />
         <PageHeader
           title={`Nhận xét — ${sess.class.name}`}
           subtitle={`${dayFmt.format(sess.date)}${sess.topic ? ` · ${sess.topic}` : ""} · ${SESSION_STATUS_LABEL[sess.status] ?? sess.status}`}
         />
         {!attendanceTaken && (
-          <p className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-200">
+          <p className="mb-4 rounded-lg border border-state-warning-soft bg-state-warning-soft px-3 py-2 text-sm text-state-warning-ink dark:border-state-warning">
             Buổi chưa điểm danh — đang hiện toàn bộ lớp.
           </p>
         )}
@@ -156,7 +177,12 @@ export default async function TeacherFeedbackPage({
           status: { not: "CANCELLED" },
           ...(classAssigned
             ? {}
-            : { OR: [{ substituteTeacherId: userId }, { actualTeacherId: userId }] }),
+            : {
+                OR: [
+                  { substituteTeacherId: userId },
+                  { actualTeacherId: userId },
+                ],
+              }),
         },
         select: { id: true, date: true, topic: true, status: true },
         orderBy: { date: "desc" },
@@ -164,7 +190,10 @@ export default async function TeacherFeedbackPage({
     : [];
 
   if (classId && (classAssigned || classSessions.length > 0)) {
-    const cls = await sdb.class.findUnique({ where: { id: classId }, select: { name: true } });
+    const cls = await sdb.class.findUnique({
+      where: { id: classId },
+      select: { name: true },
+    });
     const sessions = classSessions;
 
     // Badge "đã nhận xét x/y HV": gom Attendance + feedback của các buổi trong 1 lượt.
@@ -181,7 +210,10 @@ export default async function TeacherFeedbackPage({
           select: { classSessionId: true, studentId: true },
         })
       : [];
-    const attBySession = new Map<string, { studentId: string; status: string }[]>();
+    const attBySession = new Map<
+      string,
+      { studentId: string; status: string }[]
+    >();
     for (const a of attRows) {
       const list = attBySession.get(a.sessionId) ?? [];
       list.push({ studentId: a.studentId, status: a.status });
@@ -222,8 +254,14 @@ export default async function TeacherFeedbackPage({
                   className="t-card t-card-hover flex items-center justify-between gap-3 px-4 py-3 outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 >
                   <div className="min-w-0">
-                    <p className="text-sm font-medium text-foreground">{dayFmt.format(s.date)}</p>
-                    {s.topic && <p className="truncate text-xs text-muted-foreground">{s.topic}</p>}
+                    <p className="text-sm font-medium text-foreground">
+                      {dayFmt.format(s.date)}
+                    </p>
+                    {s.topic && (
+                      <p className="truncate text-xs text-muted-foreground">
+                        {s.topic}
+                      </p>
+                    )}
                   </div>
                   <div className="flex shrink-0 flex-wrap items-center justify-end gap-1.5">
                     {stat.attendanceTaken ? (
@@ -231,18 +269,23 @@ export default async function TeacherFeedbackPage({
                         variant="outline"
                         className={cn(
                           stat.complete
-                            ? "border-emerald-300 bg-emerald-50 text-emerald-700 dark:border-emerald-500/40 dark:bg-emerald-600/15 dark:text-emerald-200"
-                            : "border-amber-300 bg-amber-50 text-amber-700 dark:border-amber-500/40 dark:bg-amber-500/15 dark:text-amber-300",
+                            ? "border-state-success-soft bg-state-success-soft text-state-success-ink dark:border-state-success dark:bg-state-success-soft dark:text-state-success-ink"
+                            : "border-state-warning-soft bg-state-warning-soft text-state-warning-ink dark:border-state-warning",
                         )}
                       >
                         Đã nhận xét {stat.reviewed}/{stat.attended} HV
                       </Badge>
                     ) : (
-                      <Badge variant="outline" className="text-muted-foreground">
+                      <Badge
+                        variant="outline"
+                        className="text-muted-foreground"
+                      >
                         Chưa điểm danh
                       </Badge>
                     )}
-                    <Badge variant="outline">{SESSION_STATUS_LABEL[s.status] ?? s.status}</Badge>
+                    <Badge variant="outline">
+                      {SESSION_STATUS_LABEL[s.status] ?? s.status}
+                    </Badge>
                   </div>
                 </Link>
               );
@@ -278,7 +321,12 @@ export default async function TeacherFeedbackPage({
           name: true,
           _count: {
             select: {
-              sessions: { where: { date: { gte: from, lte: to }, status: { not: "CANCELLED" } } },
+              sessions: {
+                where: {
+                  date: { gte: from, lte: to },
+                  status: { not: "CANCELLED" },
+                },
+              },
             },
           },
         },
@@ -305,9 +353,9 @@ export default async function TeacherFeedbackPage({
             >
               <div className="flex items-start justify-between gap-2">
                 <p className="text-base font-bold text-foreground">{c.name}</p>
-                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-orange-50 dark:bg-orange-500/15">
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary-soft">
                   <MessageSquare
-                    className="h-[18px] w-[18px] text-orange-600 dark:text-orange-400"
+                    className="h-[18px] w-[18px] text-primary-ink"
                     aria-hidden
                   />
                 </span>
@@ -317,7 +365,7 @@ export default async function TeacherFeedbackPage({
                   ? `${subCount.get(c.id)} buổi dạy thay trong 14 ngày gần đây`
                   : `${c._count.sessions} buổi trong 14 ngày gần đây`}
               </p>
-              <p className="mt-auto text-sm font-semibold text-orange-600 dark:text-orange-400">
+              <p className="mt-auto text-sm font-semibold text-primary-ink">
                 Nhận xét →
               </p>
             </Link>
