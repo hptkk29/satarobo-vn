@@ -3,6 +3,7 @@ import { describe, it, expect } from "vitest";
 import {
   maskAuditValues,
   resolveAuditOrgUnitId,
+  resolveAuditOrgUnitIdFromEntity,
   visibleOrgUnitIds,
 } from "@/lib/audit/audit-log";
 import { canReadLegacyAudit, canViewLegacyPii } from "@/lib/audit/legacy-log";
@@ -232,5 +233,55 @@ describe("[vá 12/08] resolveAuditOrgUnitId — nhận cả OrgUnit.id lẫn Cen
     expect(
       await resolveAuditOrgUnitId(fakeClient as never, "khong-ton-tai"),
     ).toBeNull();
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// [vá 12/08 — phần 2] `orgUnitId` BỎ TRỐNG ở nhiều chỗ ghi
+//
+// Đo trên PROD sau khi vá phần 1: 290/538 dòng còn `orgUnitId = null` ⇒ vẫn vô
+// hình với quản lý cơ sở. Bóc ra thì KHÔNG phải tất cả đều sai:
+//   · 81 dòng ĐÚNG là null — curriculum / course-package / scorm / settings là dữ
+//     liệu TOÀN HỆ THỐNG, thực thể của chúng không có cột `centerId` nào cả.
+//   · 209 dòng SAI — classes (138), attendance (49), employees (15)… đều là thực
+//     thể CÓ cơ sở, suy được mà chỗ ghi bỏ trống.
+//
+// `writeAudit` vốn đã nhận `entityType` + `entityId`, nên biên tự tra được. Vá ở
+// đây thay vì 20 chỗ gọi, cùng lý do như phần 1.
+describe("[vá 12/08] resolveAuditOrgUnitIdFromEntity — suy đơn vị từ chính thực thể", () => {
+  const client = {
+    class: {
+      findUnique: async () => ({ orgUnitId: "ou-cs1", centerId: "c-cs1" }),
+    },
+    classSession: {
+      // Bảng đã có centerId nhưng CHƯA kịp ghi kép orgUnitId (đường SQL thô).
+      findUnique: async () => ({ orgUnitId: null, centerId: "c-cs2" }),
+    },
+    curriculum: {
+      findUnique: async () => ({ orgUnitId: null, centerId: null }),
+    },
+    orgUnit: {
+      findFirst: async ({ where }: { where: { OR: Array<Record<string, string>> } }) => {
+        const byCenter = where.OR[1]?.centerId;
+        return byCenter === "c-cs2" ? { id: "ou-cs2" } : null;
+      },
+    },
+  };
+
+  it("lấy orgUnitId có sẵn trên thực thể", async () => {
+    expect(await resolveAuditOrgUnitIdFromEntity(client as never, "Class", "x")).toBe("ou-cs1");
+  });
+
+  it("thực thể mới có centerId thì bắc cầu sang OrgUnit", async () => {
+    expect(await resolveAuditOrgUnitIdFromEntity(client as never, "ClassSession", "x")).toBe("ou-cs2");
+  });
+
+  it("model KHÔNG nằm trong sổ ghi kép → null, KHÔNG truy vấn bừa", async () => {
+    // Curriculum là dữ liệu toàn hệ thống — null ở đây là ĐÚNG, không phải thiếu sót.
+    expect(await resolveAuditOrgUnitIdFromEntity(client as never, "Curriculum", "x")).toBeNull();
+  });
+
+  it("entityType lạ → null, không ném", async () => {
+    expect(await resolveAuditOrgUnitIdFromEntity(client as never, "KhongCoThat", "x")).toBeNull();
   });
 });

@@ -26,11 +26,103 @@
  */
 import { PrismaClient } from "@prisma/client";
 import { scriptDatabaseUrl } from "./_script-db";
+import { DUAL_WRITE_MODELS } from "../lib/org/center-bridge";
 
 const APPLY = process.argv.includes("--apply");
 const db = new PrismaClient({
   datasources: { db: { url: scriptDatabaseUrl() } },
 });
+
+/**
+ * GIAI ĐOẠN 2 — dòng `orgUnitId = null` mà SUY ĐƯỢC từ chính thực thể.
+ *
+ * Đo trên prod sau giai đoạn 1: 290/538 dòng còn null. KHÔNG phải tất cả đều sai —
+ * 81 dòng đúng là null vì curriculum / course-package / scorm / settings là dữ liệu
+ * TOÀN HỆ THỐNG (thực thể không có cột centerId). 209 dòng còn lại thì suy được:
+ * classes 138, attendance 49, employees 15…
+ *
+ * `DUAL_WRITE_MODELS` là cổng chặn — chỉ tra model thật sự có cặp cột
+ * centerId/orgUnitId, nên dữ liệu toàn hệ thống không bị điền bừa.
+ */
+async function giaiDoan2(orgIds: Set<string>): Promise<void> {
+  const rows = await db.auditLog.findMany({
+    where: { orgUnitId: null },
+    select: { id: true, entityType: true, entityId: true },
+  });
+  const theoLoai = new Map<string, { id: string; entityId: string }[]>();
+  let boQua = 0;
+  for (const r of rows) {
+    if (!DUAL_WRITE_MODELS.has(r.entityType)) {
+      boQua++;
+      continue;
+    }
+    const arr = theoLoai.get(r.entityType) ?? [];
+    arr.push({ id: r.id, entityId: r.entityId });
+    theoLoai.set(r.entityType, arr);
+  }
+
+  console.log("");
+  console.log("── GIAI ĐOẠN 2: dòng orgUnitId = null ──");
+  console.log("  tổng null                    :", rows.length);
+  console.log("  bỏ qua (toàn hệ thống, đúng) :", boQua);
+
+  const dienDuoc: { id: string; sang: string }[] = [];
+  for (const [loai, list] of theoLoai) {
+    const key = loai.charAt(0).toLowerCase() + loai.slice(1);
+    const model = (db as unknown as Record<string, unknown>)[key] as
+      | { findMany: (a: unknown) => Promise<Record<string, unknown>[]> }
+      | undefined;
+    if (!model?.findMany) {
+      console.log(`    ${loai}: BỎ QUA (không có model)`);
+      continue;
+    }
+    const ids = [...new Set(list.map((x) => x.entityId))];
+    const ents = await model.findMany({
+      where: { id: { in: ids } },
+      select: { id: true, orgUnitId: true, centerId: true },
+    });
+    const theoId = new Map(ents.map((e) => [e.id as string, e]));
+    let dien = 0;
+    for (const x of list) {
+      const e = theoId.get(x.entityId);
+      if (!e) continue; // thực thể đã xoá — không suy được, để null
+      let ou = typeof e.orgUnitId === "string" ? e.orgUnitId : null;
+      if (!ou && typeof e.centerId === "string") {
+        const found = await db.orgUnit.findFirst({
+          where: { centerId: e.centerId, deletedAt: null },
+          select: { id: true },
+        });
+        ou = found?.id ?? null;
+      }
+      if (ou && orgIds.has(ou)) {
+        dienDuoc.push({ id: x.id, sang: ou });
+        dien++;
+      }
+    }
+    console.log(`    ${loai}: ${dien}/${list.length} điền được`);
+  }
+  console.log("  ĐIỀN ĐƯỢC                    :", dienDuoc.length);
+
+  if (!APPLY) return;
+
+  const theoDich = new Map<string, string[]>();
+  for (const d of dienDuoc) {
+    const arr = theoDich.get(d.sang) ?? [];
+    arr.push(d.id);
+    theoDich.set(d.sang, arr);
+  }
+  let daGhi = 0;
+  for (const [sang, ids] of theoDich) {
+    for (let i = 0; i < ids.length; i += 500) {
+      const res = await db.auditLog.updateMany({
+        where: { id: { in: ids.slice(i, i + 500) } },
+        data: { orgUnitId: sang },
+      });
+      daGhi += res.count;
+    }
+  }
+  console.log("  ĐÃ GHI (giai đoạn 2)         :", daGhi);
+}
 
 async function main() {
   const orgUnits = await db.orgUnit.findMany({
@@ -92,6 +184,8 @@ async function main() {
     if (mocoi.length > 10)
       console.log(`    … và ${mocoi.length - 10} dòng nữa`);
   }
+
+  await giaiDoan2(orgIds);
 
   if (!APPLY) {
     console.log("\nCHẾ ĐỘ: DRY-RUN — chưa ghi gì. Thêm --apply để ghi thật.");

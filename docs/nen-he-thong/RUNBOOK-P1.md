@@ -141,6 +141,58 @@ và `finance` (93). Hậu quả: đường đọc lọc `orgUnitId IN visibleOrg
   bước 2 là ăn ngay, không có `ROLLBACK`. Chạy lại bước 1 để đối chiếu: `doi_duoc`
   phải về 0, `mo_coi` giữ nguyên.
 
+  **Bước 3 — điền các dòng `orgUnitId = NULL` suy được từ chính thực thể.**
+  Sau bước 2, đo trên prod còn **290/538 dòng null** ⇒ vẫn vô hình với quản lý cơ
+  sở. Nhưng KHÔNG phải tất cả đều sai:
+  | nhóm | số dòng | kết luận |
+  |---|---|---|
+  | `curriculum` · `course-package` · `scorm` · `settings` | 81 | **null ĐÚNG** — thực thể của chúng không có cột `centerId`; đây là dữ liệu toàn hệ thống |
+  | `classes` (138) · `attendance` (49) · `employees` (15) · … | 209 | **bỏ sót** — suy được từ thực thể mà chỗ ghi để trống |
+
+  Đường GHI đã vá ở `resolveAuditOrgUnitIdFromEntity` (lib/audit/audit-log.ts):
+  `writeAudit` vốn nhận `entityType` + `entityId` nên biên tự tra được, không phải
+  sửa 20 chỗ gọi. Cổng chặn là `DUAL_WRITE_MODELS` — chỉ tra model thật sự có cặp
+  cột `centerId`/`orgUnitId`, nên dữ liệu toàn hệ thống KHÔNG bị điền bừa.
+
+  Dữ liệu cũ, chạy trong SQL Editor (đã chạy đối chiếu trên dev: điền đúng 24 dòng,
+  khớp y hệt con số script dự đoán; danh sách bảng lấy từ `information_schema` nên
+  không sợ lệch với sổ đăng ký trong code):
+  ```sql
+  DO $do$
+  DECLARE t text; n int; tot int := 0;
+  BEGIN
+    FOR t IN
+      SELECT c1.table_name
+        FROM information_schema.columns c1
+        JOIN information_schema.columns c2
+          ON c2.table_schema = c1.table_schema AND c2.table_name = c1.table_name
+       WHERE c1.table_schema = 'public'
+         AND c1.column_name  = 'orgUnitId'
+         AND c2.column_name  = 'centerId'
+    LOOP
+      EXECUTE format($f$
+        UPDATE "AuditLog" a
+           SET "orgUnitId" = COALESCE(e."orgUnitId",
+                 (SELECT o.id FROM "OrgUnit" o
+                   WHERE o."centerId" = e."centerId" AND o."deletedAt" IS NULL LIMIT 1))
+          FROM %I e
+         WHERE a."orgUnitId" IS NULL
+           AND a."entityType" = %L
+           AND e.id = a."entityId"
+           AND COALESCE(e."orgUnitId",
+                 (SELECT o.id FROM "OrgUnit" o
+                   WHERE o."centerId" = e."centerId" AND o."deletedAt" IS NULL LIMIT 1)) IS NOT NULL
+      $f$, t, t);
+      GET DIAGNOSTICS n = ROW_COUNT;
+      tot := tot + n; IF n > 0 THEN RAISE NOTICE '  % : % dong', t, n; END IF;
+    END LOOP;
+    RAISE NOTICE 'TONG DIEN DUOC: % dong', tot;
+  END $do$;
+  ```
+  Dòng còn null sau bước này là ĐÚNG: hoặc thực thể toàn hệ thống, hoặc thực thể đã
+  bị xoá / bản thân nó cũng chưa có cơ sở (vd lead chưa phân cơ sở). **Không đoán** —
+  bịa đơn vị vào nhật ký còn tệ hơn để trống.
+
 **28 bảng `CHUA_RA_SOAT` → còn 20.**
 Rà bằng số đo trực tiếp trên DB, tiêu chí chuyển gồm cả bốn: bảng CÓ dữ liệu · 0 dòng
 `centerId IS NULL` · 0 dòng thiếu `orgUnitId` · 0 dòng lệch ánh xạ.

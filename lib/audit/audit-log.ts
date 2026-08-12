@@ -5,6 +5,7 @@ import type { Prisma, PrismaClient, AuditLog } from "@prisma/client";
 import { db } from "@/lib/db";
 import { detectChangedFields } from "@/lib/audit/diff";
 import type { Actor } from "@/lib/auth/actor";
+import { DUAL_WRITE_MODELS } from "@/lib/org/center-bridge";
 
 type TxClient = Prisma.TransactionClient;
 
@@ -41,6 +42,58 @@ export async function resolveAuditOrgUnitId(
       select: { id: true },
     });
     return ou?.id ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Suy `orgUnitId` từ CHÍNH thực thể đang được ghi nhật ký.
+ *
+ * VÌ SAO CẦN. Vá ở `resolveAuditOrgUnitId` mới lo được các chỗ TRUYỀN NHẦM loại ID.
+ * Còn một nửa nữa: nhiều chỗ ghi KHÔNG truyền gì cả. Đo trên prod sau khi vá phần
+ * một: 290/538 dòng vẫn `orgUnitId = null` ⇒ vẫn vô hình với quản lý cơ sở.
+ *
+ * Bóc ra thì KHÔNG phải tất cả đều sai — 81 dòng đúng là null vì `curriculum` /
+ * `course-package` / `scorm` / `settings` là dữ liệu TOÀN HỆ THỐNG (thực thể của
+ * chúng không có cột `centerId` nào). 209 dòng còn lại thì sai: classes (138),
+ * attendance (49), employees (15)… đều suy được mà bỏ trống.
+ *
+ * `writeAudit` vốn đã nhận `entityType` + `entityId`, nên biên tự tra được — không
+ * cần sửa 20 chỗ gọi, và chỗ gọi mới sau này cũng tự đúng.
+ *
+ * `DUAL_WRITE_MODELS` là cổng chặn: chỉ tra những model THẬT SỰ có cặp cột
+ * centerId/orgUnitId. Nhờ vậy dữ liệu toàn hệ thống không bị tra bừa, và `null` ở
+ * đó giữ đúng nghĩa "không thuộc cơ sở nào" thay vì "quên điền".
+ *
+ * Nuốt mọi lỗi → `null`: audit là việc phụ, không được phép làm hỏng nghiệp vụ.
+ */
+export async function resolveAuditOrgUnitIdFromEntity(
+  client: PrismaClient | TxClient,
+  entityType: string,
+  entityId: string,
+): Promise<string | null> {
+  if (!entityType || !entityId) return null;
+  if (!DUAL_WRITE_MODELS.has(entityType)) return null;
+  // Tên model → accessor của Prisma Client: chỉ khác chữ cái đầu.
+  const key = entityType.charAt(0).toLowerCase() + entityType.slice(1);
+  try {
+    const model = (client as unknown as Record<string, unknown>)[key] as
+      | { findUnique: (a: unknown) => Promise<Record<string, unknown> | null> }
+      | undefined;
+    if (!model?.findUnique) return null;
+    const row = await model.findUnique({
+      where: { id: entityId },
+      select: { orgUnitId: true, centerId: true },
+    });
+    if (!row) return null;
+    const direct = row.orgUnitId;
+    if (typeof direct === "string" && direct) return direct;
+    // Chưa kịp ghi kép (đường SQL thô) → bắc cầu từ centerId.
+    const center = row.centerId;
+    return typeof center === "string" && center
+      ? await resolveAuditOrgUnitId(client, center)
+      : null;
   } catch {
     return null;
   }
@@ -86,8 +139,15 @@ export async function writeAudit(params: {
         | undefined,
       changedFields,
       reason: params.reason ?? null,
-      // Chuẩn hoá: chỗ gọi có thể đưa Center.id (xem resolveAuditOrgUnitId).
-      orgUnitId: await resolveAuditOrgUnitId(client, params.orgUnitId),
+      // Hai tầng: (1) chuẩn hoá thứ chỗ gọi đưa vào — có thể là Center.id;
+      // (2) chỗ gọi không đưa gì thì tự suy từ chính thực thể.
+      orgUnitId:
+        (await resolveAuditOrgUnitId(client, params.orgUnitId)) ??
+        (await resolveAuditOrgUnitIdFromEntity(
+          client,
+          params.entityType,
+          params.entityId,
+        )),
       ip: params.ip ?? null,
       userAgent: params.userAgent ?? null,
     },
