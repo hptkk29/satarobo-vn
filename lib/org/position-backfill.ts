@@ -39,10 +39,30 @@ export type HoSoNhanSu = {
    * sẽ sửa nhầm bảng rồi tưởng script hỏng.
    */
   taiKhoanOrgUnitId?: string | null;
+  /**
+   * OrgUnit.id lấy từ `EmployeeOrgAssignment` PRIMARY còn hiệu lực — nguồn ĐƯỢC PHÉP
+   * dùng để suy đơn vị, khác hẳn `taiKhoanOrgUnitId` ở trên (chỉ để hiển thị).
+   *
+   * VÌ SAO CẦN. Nhân sự HỘI SỞ không có `Employee.centerId`: luật V7 cấm đơn vị HO
+   * mang `centerId`, nên form nhân sự cố ý set null rồi tạo dòng assignment neo vào
+   * OrgUnit HO (`syncHoAssignment`, app/(admin)/admin/nhan-su/actions.ts:63). Bỏ qua
+   * nguồn này thì TOÀN BỘ Hội sở rơi vào "chờ xử lý tay" — đo trên prod 12/08: 8/14
+   * nhân sự, gồm cả TGĐ và trưởng phòng.
+   *
+   * ⚠️ KHÔNG vi phạm luật "không đoán" (AC3): đây là khai báo TƯỜNG MINH người dùng
+   * tạo qua form, không phải suy diễn. Ưu tiên vẫn sau `Employee` (AC1 đọc bảng nhân
+   * sự) — assignment chỉ lấp chỗ trống.
+   */
+  donViPhanCong?: string | null;
 };
 
 /** Vai người đó đang giữ, theo `UserOrgRole` còn hiệu lực. */
-export type VaiDangGiu = { userId: string; orgUnitId: string; roleId: string; roleCode: string };
+export type VaiDangGiu = {
+  userId: string;
+  orgUnitId: string;
+  roleId: string;
+  roleCode: string;
+};
 
 export type LyDoChoTay =
   | "THIEU_DON_VI"
@@ -130,11 +150,15 @@ export function lapKeHoach(input: {
   ngayChay: Date;
 }): KeHoach {
   const { nhanSu, orgUnitIds, centerToOrg, ngayChay } = input;
-  const vaiTheoNguoiVaDonVi = new Map<string, { roleId: string; roleCode: string }[]>();
+  const vaiTheoNguoiVaDonVi = new Map<
+    string,
+    { roleId: string; roleCode: string }[]
+  >();
   for (const v of input.vaiDangGiu ?? []) {
     const k = `${v.userId}::${v.orgUnitId}`;
     const ds = vaiTheoNguoiVaDonVi.get(k) ?? [];
-    if (!ds.some((x) => x.roleId === v.roleId)) ds.push({ roleId: v.roleId, roleCode: v.roleCode });
+    if (!ds.some((x) => x.roleId === v.roleId))
+      ds.push({ roleId: v.roleId, roleCode: v.roleCode });
     vaiTheoNguoiVaDonVi.set(k, ds);
   }
 
@@ -145,14 +169,22 @@ export function lapKeHoach(input: {
 
   // Sắp theo mã nhân sự: bản đối chiếu phải ổn định giữa hai lần chạy, nếu không người
   // duyệt không so được hai bản với nhau.
-  const theoThuTu = [...nhanSu].sort((a, b) => a.employeeCode.localeCompare(b.employeeCode));
+  const theoThuTu = [...nhanSu].sort((a, b) =>
+    a.employeeCode.localeCompare(b.employeeCode),
+  );
 
   for (const ns of theoThuTu) {
     const title = chuanHoaChucDanh(ns.jobTitle);
 
-    // Đơn vị: ưu tiên orgUnitId (P1 ghi kép), rồi mới bắc cầu qua centerId. KHÔNG suy từ
-    // `department` — phòng ban là chiều khác, không phải đơn vị trong cây tổ chức.
-    const orgUnitId = ns.orgUnitId ?? (ns.centerId ? centerToOrg.get(ns.centerId) : undefined);
+    // Đơn vị: ưu tiên orgUnitId (P1 ghi kép) → bắc cầu qua centerId → cuối cùng mới
+    // tới assignment PRIMARY (nguồn của nhân sự Hội sở, xem `donViPhanCong`).
+    // KHÔNG suy từ `department` — phòng ban là chiều khác, không phải đơn vị trong cây.
+    // Thứ tự này giữ `Employee` làm nguồn chính (AC1); assignment chỉ lấp chỗ trống.
+    const orgUnitId =
+      ns.orgUnitId ??
+      (ns.centerId ? centerToOrg.get(ns.centerId) : undefined) ??
+      ns.donViPhanCong ??
+      undefined;
 
     if (!orgUnitId) {
       // Gợi ý CHỖ SỬA, không tự sửa: nếu tài khoản của họ đã có đơn vị thì gần như chắc
@@ -223,13 +255,16 @@ export function lapKeHoach(input: {
     }
 
     if (input.ganVai) {
-      for (const v of vaiTheoNguoiVaDonVi.get(`${ns.userId}::${orgUnitId}`) ?? []) {
+      for (const v of vaiTheoNguoiVaDonVi.get(`${ns.userId}::${orgUnitId}`) ??
+        []) {
         if (!viTri.roleIds.includes(v.roleId)) viTri.roleIds.push(v.roleId);
       }
     }
 
     const ngayVaoLamKhongDungDuoc =
-      ns.joinedAt == null || ns.joinedAt < MOC_NGAY_VAO_LAM_HOP_LE || ns.joinedAt > ngayChay;
+      ns.joinedAt == null ||
+      ns.joinedAt < MOC_NGAY_VAO_LAM_HOP_LE ||
+      ns.joinedAt > ngayChay;
     phanCong.push({
       employeeCode: ns.employeeCode,
       fullName: ns.fullName,
@@ -241,10 +276,16 @@ export function lapKeHoach(input: {
   }
 
   return {
-    viTri: [...viTriTheoKhoa.values()].sort((a, b) => a.khoa.localeCompare(b.khoa)),
+    viTri: [...viTriTheoKhoa.values()].sort((a, b) =>
+      a.khoa.localeCompare(b.khoa),
+    ),
     phanCong,
-    choXuLyTay: choXuLyTay.sort((a, b) => a.employeeCode.localeCompare(b.employeeCode)),
-    lechDonVi: lechDonVi.sort((a, b) => a.employeeCode.localeCompare(b.employeeCode)),
+    choXuLyTay: choXuLyTay.sort((a, b) =>
+      a.employeeCode.localeCompare(b.employeeCode),
+    ),
+    lechDonVi: lechDonVi.sort((a, b) =>
+      a.employeeCode.localeCompare(b.employeeCode),
+    ),
   };
 }
 
@@ -263,7 +304,11 @@ const NHAN_LY_DO: Record<LyDoChoTay, string> = {
  */
 export function inBanDoiChieu(
   keHoach: KeHoach,
-  ctx: { tenDonVi: Map<string, string>; tenVai?: Map<string, string>; ganVai: boolean },
+  ctx: {
+    tenDonVi: Map<string, string>;
+    tenVai?: Map<string, string>;
+    ganVai: boolean;
+  },
 ): string {
   const donVi = (id: string) => ctx.tenDonVi.get(id) ?? id;
   /** Đổi mọi id đơn vị lọt trong câu chữ thành tên người đọc được — `cmqg0s4…` vô nghĩa. */
@@ -272,7 +317,7 @@ export function inBanDoiChieu(
     for (const [id, ten] of ctx.tenDonVi) r = r.split(id).join(ten);
     return r;
   };
-  const d = <T,>(xs: T[]) => xs.length;
+  const d = <T>(xs: T[]) => xs.length;
   const out: string[] = [];
 
   out.push("# Đối chiếu backfill nhân sự → Vị trí + Phân công (US-11)");
@@ -296,7 +341,9 @@ export function inBanDoiChieu(
       v.roleIds.length === 0
         ? "—"
         : v.roleIds.map((id) => ctx.tenVai?.get(id) ?? id).join(", ");
-    out.push(`| ${donVi(v.orgUnitId)} | ${v.title} | ${vai} | ${v.nguoiGiu.join(", ")} |`);
+    out.push(
+      `| ${donVi(v.orgUnitId)} | ${v.title} | ${vai} | ${v.nguoiGiu.join(", ")} |`,
+    );
   }
   out.push("");
 
@@ -320,7 +367,9 @@ export function inBanDoiChieu(
     out.push("| Mã NS | Họ tên | Lý do | Chi tiết |");
     out.push("|---|---|---|---|");
     for (const c of keHoach.choXuLyTay) {
-      out.push(`| ${c.employeeCode} | ${c.fullName} | ${NHAN_LY_DO[c.lyDo]} | ${deDoc(c.chiTiet)} |`);
+      out.push(
+        `| ${c.employeeCode} | ${c.fullName} | ${NHAN_LY_DO[c.lyDo]} | ${deDoc(c.chiTiet)} |`,
+      );
     }
   }
   out.push("");
