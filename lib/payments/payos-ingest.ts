@@ -76,7 +76,14 @@ export type IngestOutcome =
   | { status: "ERROR"; reason: string };
 
 // ── Log ─────────────────────────────────────────────────────────────────────
+/**
+ * ⚠️ `provider` PHẢI truyền theo cổng thật đang chạy. Hàm này dùng chung cho cả
+ * payOS lẫn SePay; đóng cứng `PAYOS_PROVIDER` thì nhật ký của SePay bị gắn nhãn
+ * payOS ⇒ biến mất khỏi khối lịch sử SePay ở /admin/bien-dong-so-du (lọc
+ * `provider: "SEPAY"`) và hiện sai tên ở /admin/tich-hop.
+ */
 export async function logPayos(params: {
+  provider?: string;
   action: string;
   status: "SUCCESS" | "SKIPPED" | "FAILED";
   payload: unknown;
@@ -86,7 +93,7 @@ export async function logPayos(params: {
   await db.integrationLog
     .create({
       data: {
-        provider: PAYOS_PROVIDER,
+        provider: params.provider ?? PAYOS_PROVIDER,
         direction: "PULL",
         action: params.action,
         status: params.status,
@@ -260,6 +267,7 @@ export async function ingestPayosWebhook(
   const amount = Math.round(Number(data.amount ?? 0));
   if (!Number.isFinite(amount) || amount <= 0) {
     await logPayos({
+      provider,
       action: "INGEST_TXN",
       status: "SKIPPED",
       payload: data,
@@ -271,6 +279,7 @@ export async function ingestPayosWebhook(
   const providerTxnId = resolveProviderTxnId(data);
   if (!providerTxnId) {
     await logPayos({
+      provider,
       action: "INGEST_TXN",
       status: "FAILED",
       payload: data,
@@ -285,7 +294,7 @@ export async function ingestPayosWebhook(
   let txn = await db.bankTransaction.findUnique({ where });
   if (txn && txn.status !== "UNMATCHED") {
     // Đã xử lý xong rồi → trả ngay, KHÔNG phân bổ lần 2.
-    await logPayos({ action: "INGEST_TXN", status: "SKIPPED", payload: data, error: "Đã ghi nhận" });
+    await logPayos({ provider, action: "INGEST_TXN", status: "SKIPPED", payload: data, error: "Đã ghi nhận" });
     return { status: "DUPLICATE", bankTransactionId: txn.id };
   }
   if (!txn) {
@@ -306,7 +315,7 @@ export async function ingestPayosWebhook(
     } catch (err) {
       if (!isUniqueViolation(err)) {
         const message = err instanceof Error ? err.message : "Unknown";
-        await logPayos({ action: "INGEST_TXN", status: "FAILED", payload: data, error: message });
+        await logPayos({ provider, action: "INGEST_TXN", status: "FAILED", payload: data, error: message });
         return { status: "ERROR", reason: message };
       }
       // Hai webhook cùng giao dịch chạy song song → cái thua đọc lại bản của cái thắng.
@@ -330,7 +339,7 @@ export async function ingestPayosWebhook(
       where: { id: bankTransactionId },
       data: { status: "UNMATCHED", unmatchedNote: note },
     });
-    await logPayos({ action: "MATCH_TXN", status: "FAILED", payload: data, error: note });
+    await logPayos({ provider, action: "MATCH_TXN", status: "FAILED", payload: data, error: note });
     return { status: "UNMATCHED", bankTransactionId, reason: note };
   }
 
@@ -352,7 +361,7 @@ export async function ingestPayosWebhook(
       where: { id: bankTransactionId },
       data: { status: "UNMATCHED", unmatchedNote: note },
     });
-    await logPayos({ action: "MATCH_TXN", status: "FAILED", payload: data, error: note });
+    await logPayos({ provider, action: "MATCH_TXN", status: "FAILED", payload: data, error: note });
     return { status: "UNMATCHED", bankTransactionId, reason: note };
   }
 
@@ -537,11 +546,11 @@ export async function ingestPayosWebhook(
           data: { status: "UNMATCHED", unmatchedNote: note },
         })
         .catch(() => {});
-      await logPayos({ action: "MATCH_TXN", status: "FAILED", payload: data, error: note });
+      await logPayos({ provider, action: "MATCH_TXN", status: "FAILED", payload: data, error: note });
       return { status: "UNMATCHED", bankTransactionId, reason: note };
     }
     const message = err instanceof Error ? err.message : "Unknown";
-    await logPayos({ action: "ALLOCATE_TXN", status: "FAILED", payload: data, error: message });
+    await logPayos({ provider, action: "ALLOCATE_TXN", status: "FAILED", payload: data, error: message });
     return { status: "ERROR", reason: message };
   }
 
@@ -563,6 +572,7 @@ export async function ingestPayosWebhook(
 
   if (result.waived > 0) {
     await logPayos({
+      provider,
       action: "ROUNDING_WAIVED",
       status: "SUCCESS",
       payload: data,
@@ -577,6 +587,7 @@ export async function ingestPayosWebhook(
   }
 
   await logPayos({
+    provider,
     action: "MATCH_TXN",
     status: "SUCCESS",
     payload: data,

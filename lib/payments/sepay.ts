@@ -116,15 +116,130 @@ export function decideSepayAction(input: SepayMatchInput): SepayMatchResult {
   return { action: "CONFIRM", orderId: order.id, amount, soDot: input.dueNow?.soDot ?? null };
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+// XÁC THỰC WEBHOOK
+//
+// 12/08 — SỰ CỐ: 19 lần SePay gọi về prod đều 401, 4 giao dịch thật của phụ
+// huynh (06→08/08, ~26,8tr) không vào được hệ thống. Env `SEPAY_WEBHOOK_API_KEY`
+// CÓ trên Vercel Production từ 03/08 và đã qua nhiều lần deploy ⇒ hỏng ở khâu SO
+// KHỚP chuỗi, không phải thiếu cấu hình. Đúng rủi ro đã ghi trong
+// docs/checklist-nghiem-thu-0308.md:359 ("chưa đối chứng thì chưa biết key có
+// đúng cái SePay đang gửi hay không") — và vì đường từ chối KHÔNG ghi lại gì nên
+// 6 ngày trôi qua không ai biết.
+//
+// Hai nguyên tắc của bản vá:
+//  1. THA sai lệch định dạng vô hại (nháy bao ngoài, tiền tố scheme dán nhầm,
+//     hoa/thường của scheme, header tên khác) — những thứ này KHÔNG làm giảm an
+//     toàn vì vẫn phải khớp đúng key.
+//  2. Từ chối phải NÓI ĐƯỢC hỏng ở đâu (thiếu env / không gửi header / sai key,
+//     lệch bao nhiêu ký tự) mà TUYỆT ĐỐI không lộ key ra log.
+// ═══════════════════════════════════════════════════════════════════════════
+
+/** Các header có thể mang key — SePay dùng `Authorization`, các cổng khác hay dùng phần còn lại. */
+const AUTH_HEADER_NAMES = ["authorization", "x-api-key", "apikey", "api-key", "x-apikey"] as const;
+
+/** Tiền tố scheme cần bóc. PHẢI có dấu phân cách nên key kiểu "tokenABC" không bị cắt oan. */
+const SCHEME_PREFIX = /^(apikey|api-key|bearer|token)[\s:]+/i;
+
 /**
- * Xác thực webhook: SePay gửi header `Authorization: Apikey <key>`.
- * Thiếu env → từ chối TẤT CẢ (không mở cửa khi chưa cấu hình).
+ * Đưa một chuỗi key về dạng so khớp: bỏ khoảng trắng/xuống dòng, bỏ nháy bao
+ * ngoài (dán từ file .env vào ô giá trị trên dashboard rất hay dính), bỏ tiền tố
+ * scheme (`Apikey `/`Bearer `) — lặp tối đa 2 lần cho ca dán chồng "Apikey Apikey x".
+ *
+ * KHÔNG đụng tới chữ hoa/thường: key vẫn so khớp phân biệt hoa thường.
+ */
+export function normalizeSepayKey(raw: string | null | undefined): string {
+  let s = (raw ?? "").trim();
+  for (let i = 0; i < 2; i++) {
+    const quoted = s.match(/^(["'])([\s\S]*)\1$/);
+    if (!quoted) break;
+    s = (quoted[2] ?? "").trim();
+  }
+  for (let i = 0; i < 2 && SCHEME_PREFIX.test(s); i++) {
+    s = s.replace(SCHEME_PREFIX, "").trim();
+  }
+  return s;
+}
+
+export type SepayAuthCheck =
+  /** `via` = nguồn đọc được key, để log biết SePay đang gửi kiểu nào. */
+  | { ok: true; via: string }
+  | { ok: false; code: "NO_ENV" | "NO_HEADER" | "MISMATCH"; detail: string };
+
+/** So sánh thời gian hằng — không rò độ dài tiền tố trùng qua thời gian phản hồi. */
+function timingSafeEquals(a: string, b: string): boolean {
+  if (a.length !== b.length) return false;
+  let diff = 0;
+  for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  return diff === 0;
+}
+
+/** Số ký tự trùng nhau tính từ đầu — chỉ dùng để mô tả độ lệch trong log. */
+function commonPrefixLength(a: string, b: string): number {
+  const n = Math.min(a.length, b.length);
+  let i = 0;
+  while (i < n && a[i] === b[i]) i++;
+  return i;
+}
+
+type HeaderBag = { get(name: string): string | null };
+
+/**
+ * Xác thực webhook SePay. Thiếu env → từ chối TẤT CẢ (không mở cửa khi chưa
+ * cấu hình). Trả về lý do CHẨN ĐOÁN ĐƯỢC, không chỉ true/false.
+ *
+ * ⚠️ `detail` sẽ được ghi vào IntegrationLog (admin đọc được) và KHÔNG bao giờ
+ * được chứa key — chỉ độ dài, số ký tự trùng đầu, và nhận xét hoa/thường.
+ */
+export function checkSepayAuth(headers: HeaderBag): SepayAuthCheck {
+  const expected = normalizeSepayKey(process.env.SEPAY_WEBHOOK_API_KEY);
+  if (!expected) {
+    return {
+      ok: false,
+      code: "NO_ENV",
+      detail: "Chưa cấu hình SEPAY_WEBHOOK_API_KEY trên môi trường này",
+    };
+  }
+
+  const seen: { name: string; scheme: string; key: string }[] = [];
+  for (const name of AUTH_HEADER_NAMES) {
+    const raw = headers.get(name);
+    if (!raw || !raw.trim()) continue;
+    const scheme = raw.trim().match(SCHEME_PREFIX)?.[1] ?? "(không scheme)";
+    const key = normalizeSepayKey(raw);
+    if (!key) continue;
+    seen.push({ name, scheme, key });
+    if (timingSafeEquals(key, expected)) return { ok: true, via: `${name}/${scheme}` };
+  }
+
+  if (seen.length === 0) {
+    return {
+      ok: false,
+      code: "NO_HEADER",
+      detail:
+        "Request không mang key ở bất kỳ header nào (đã dò: " +
+        AUTH_HEADER_NAMES.join(", ") +
+        "). Bên SePay nhiều khả năng chưa bật kiểu xác thực API Key cho webhook này.",
+    };
+  }
+
+  const best = seen[0]!;
+  const sameIgnoringCase = best.key.toLowerCase() === expected.toLowerCase();
+  const detail =
+    `Key gửi lên không khớp. nguồn=${best.name} scheme=${best.scheme} ` +
+    `độ dài nhận=${best.key.length} độ dài cấu hình=${expected.length} ` +
+    `trùng ${commonPrefixLength(best.key, expected)} ký tự đầu` +
+    (sameIgnoringCase ? " — CHỈ khác hoa/thường" : "") +
+    (best.key.length === expected.length && !sameIgnoringCase
+      ? " — cùng độ dài nhưng khác nội dung (nhiều khả năng là hai key khác nhau)"
+      : "");
+  return { ok: false, code: "MISMATCH", detail };
+}
+
+/**
+ * Bản boolean giữ cho đường gọi cũ / test cũ. Code mới dùng `checkSepayAuth` để
+ * có lý do từ chối.
  */
 export function isValidSepayAuth(authHeader: string | null): boolean {
-  const expected = process.env.SEPAY_WEBHOOK_API_KEY?.trim();
-  if (!expected) return false;
-  const got = (authHeader ?? "").trim();
-  const prefix = /^apikey\s+/i;
-  if (!prefix.test(got)) return false;
-  return got.replace(prefix, "").trim() === expected;
+  return checkSepayAuth({ get: (n) => (n === "authorization" ? authHeader : null) }).ok;
 }
