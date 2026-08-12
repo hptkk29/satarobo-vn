@@ -1,0 +1,143 @@
+name: Nền P2 — backfill nhân sự → Vị trí + Phân công (prod)
+
+# =============================================================================
+# Chạy `docs/nen-he-thong/RUNBOOK-P2.md` lên Supabase PROD (US-11).
+#
+# VÌ SAO LÀ WORKFLOW: giống `nen-p1-orgunit.yml` — chuỗi kết nối prod nằm trong
+# secret, không ai phải cầm mật khẩu DB, và bản đối chiếu nằm lại trong log +
+# artifact của đúng lần chạy để đối chiếu về sau.
+#
+# MẶC ĐỊNH DRY-RUN. Muốn ghi phải chọn mode=apply VÀ gõ đúng chuỗi xác nhận.
+#
+# ── HAI CHỐT RIÊNG CỦA P2 (khác P1) ─────────────────────────────────────────
+#
+# ① THỨ TỰ BẮT BUỘC — P1 phải xong TRƯỚC trên chính DB này.
+#    Vị trí neo vào `orgUnitId`; chạy trước khi dời cây là neo vào hình cây CŨ.
+#    Mà `Position` cố ý KHÔNG có đường xoá cứng (nó là lịch sử tổ chức), nên sửa
+#    sai rất đắt. Script tự từ chối `--apply` nếu còn đơn vị thiếu `path`, và
+#    workflow này kiểm THÊM một lần trước đó để hỏng thì hỏng sớm, chưa đụng gì.
+#
+# ② `--gan-vai` KHÔNG bật mặc định, và cố ý tách thành input riêng.
+#    Không gắn vai thì backfill **không đổi quyền của bất kỳ ai**: vị trí không
+#    vai vẫn đúng nghiệp vụ, `loadPositionRoleRows` duyệt `position.roles` rỗng
+#    nên không sinh hàng quyền nào. Bật cờ này là bước CHUYỂN QUYỀN sang mô hình
+#    mới — việc khác hẳn, phải duyệt bộ vai trong bản đối chiếu trước.
+#    (Kể cả khi bật, vai chỉ lấy GIAO của "vai người đó đang giữ" × "tại chính
+#    đơn vị đó" ⇒ không ai được thêm quyền so với trước khi chạy.)
+#
+# SECRETS: PROD_DATABASE_URL / PROD_DIRECT_URL (dùng chung deploy.yml).
+# =============================================================================
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "dry-run = chỉ in bản đối chiếu · apply = ghi thật vào PROD"
+        required: true
+        type: choice
+        default: dry-run
+        options: [dry-run, apply]
+      gan_vai:
+        description: "Gắn bộ vai cho vị trí sinh ra (MẶC ĐỊNH KHÔNG — xem ghi chú ② đầu file)"
+        required: true
+        type: boolean
+        default: false
+      confirm:
+        description: 'Khi mode=apply: gõ đúng "GHI THAT VAO PROD"'
+        required: false
+        default: ""
+
+concurrency:
+  group: nen-p2-position
+  cancel-in-progress: false
+
+jobs:
+  chay:
+    name: nen-p2 backfill (${{ inputs.mode }}${{ inputs.gan_vai && ' + gắn vai' || '' }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Kiểm tra secrets + chuỗi xác nhận
+        run: |
+          missing=0
+          [ -n "${{ secrets.PROD_DATABASE_URL }}" ] || { echo "::error::Thiếu secret PROD_DATABASE_URL"; missing=1; }
+          [ -n "${{ secrets.PROD_DIRECT_URL }}" ]   || { echo "::error::Thiếu secret PROD_DIRECT_URL"; missing=1; }
+          if [ "${{ inputs.mode }}" = "apply" ] && [ "${{ inputs.confirm }}" != "GHI THAT VAO PROD" ]; then
+            echo "::error::mode=apply nhưng chuỗi xác nhận sai — dừng, không ghi gì."
+            missing=1
+          fi
+          if [ "${{ inputs.mode }}" != "apply" ] && [ "${{ inputs.gan_vai }}" = "true" ]; then
+            echo "::notice::gan_vai chỉ có tác dụng khi mode=apply. Lần chạy này vẫn chỉ in bản đối chiếu."
+          fi
+          exit $missing
+
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v3
+        with: { version: 11 }
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Generate Prisma client
+        run: pnpm exec prisma generate
+
+      # ── (0) Điều kiện tiên quyết — hỏng thì hỏng SỚM ───────────────────────
+      # Script cũng tự kiểm, nhưng kiểm ở đây thì log nói thẳng lý do thay vì để
+      # người đọc phải suy từ một dòng "từ chối --apply".
+      - name: (0) Kiểm điều kiện tiên quyết (P1 đã xong chưa)
+        run: pnpm exec tsx scripts/nen-p2-kiem-tien-quyet.ts | tee -a "$GITHUB_STEP_SUMMARY"
+        env:
+          # session pooler (:5432) — transaction pooler làm rơi prepared statement,
+          # đã ăn thật ở dry-run backfill P1 trên DB dev 11/08 (xem scripts/_script-db.ts).
+          DATABASE_URL: ${{ secrets.PROD_DIRECT_URL }}
+          DIRECT_URL: ${{ secrets.PROD_DIRECT_URL }}
+
+      # ── (1) Bản đối chiếu ──────────────────────────────────────────────────
+      # Chạy ở CẢ hai chế độ: dry-run thì đây là sản phẩm chính; apply thì đây là
+      # ảnh chụp "trước khi ghi" để đối chiếu về sau (P2 không có nút lùi tự động —
+      # gỡ phân công là đóng `effectiveTo`, vị trí tạo nhầm thì tắt, không xoá).
+      - name: (1) Bản đối chiếu nhân sự → vị trí
+        run: |
+          set -euo pipefail
+          pnpm exec tsx scripts/nen-p2-backfill-position.ts --out doi-chieu-nhan-su.md \
+            | tee -a "$GITHUB_STEP_SUMMARY"
+        env:
+          DATABASE_URL: ${{ secrets.PROD_DIRECT_URL }}
+          DIRECT_URL: ${{ secrets.PROD_DIRECT_URL }}
+
+      - name: (1b) Lưu bản đối chiếu làm hiện vật
+        uses: actions/upload-artifact@v4
+        with:
+          name: doi-chieu-nhan-su-${{ github.run_id }}
+          path: doi-chieu-nhan-su.md
+          if-no-files-found: warn
+          retention-days: 90
+
+      # ── (2) Ghi thật ───────────────────────────────────────────────────────
+      - name: (2) Backfill vị trí + phân công
+        if: ${{ inputs.mode == 'apply' }}
+        run: |
+          set -euo pipefail
+          if [ "${{ inputs.gan_vai }}" = "true" ]; then
+            pnpm exec tsx scripts/nen-p2-backfill-position.ts --apply --gan-vai | tee -a "$GITHUB_STEP_SUMMARY"
+          else
+            pnpm exec tsx scripts/nen-p2-backfill-position.ts --apply | tee -a "$GITHUB_STEP_SUMMARY"
+          fi
+        env:
+          DATABASE_URL: ${{ secrets.PROD_DIRECT_URL }}
+          DIRECT_URL: ${{ secrets.PROD_DIRECT_URL }}
+
+      # ── (3) Chạy lại để chứng minh idempotent ──────────────────────────────
+      # AC ở RUNBOOK-P2 §4 nói "chạy lần hai là 0 thay đổi". Chứng minh ngay tại
+      # đây, đừng bắt người vận hành tự tin vào lời hứa trong tài liệu.
+      - name: (3) Đối chiếu lại — phải là 0 thay đổi
+        if: ${{ inputs.mode == 'apply' }}
+        run: pnpm exec tsx scripts/nen-p2-backfill-position.ts | tee -a "$GITHUB_STEP_SUMMARY"
+        env:
+          DATABASE_URL: ${{ secrets.PROD_DIRECT_URL }}
+          DIRECT_URL: ${{ secrets.PROD_DIRECT_URL }}
