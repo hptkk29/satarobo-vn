@@ -84,6 +84,30 @@ Ba loại số:
 | (3) backfill | Lùi bằng `UPDATE <bảng> SET "orgUnitId" = NULL` — cột `centerId` không bị đụng nên nghiệp vụ không đổi. |
 | Cơ chế ghi kép | Gỡ `.$extends(dualWriteExtension())` trong `lib/db.ts`. Hệ chạy tiếp, chỉ mất việc tự điền. |
 
+## 4b. ✅ ĐÃ CHẠY THẬT TRÊN PROD — 12/08/2026 12:4x VN
+
+Bốn bước §1 đã chạy xong trên Supabase PROD, **qua GitHub Actions** chứ không từ máy dev:
+`.github/workflows/nen-p1-orgunit.yml` (`workflow_dispatch`, mặc định dry-run, apply phải gõ
+đúng chuỗi xác nhận). Lý do dùng workflow: chuỗi kết nối prod nằm trong secret
+`PROD_DATABASE_URL`/`PROD_DIRECT_URL`, còn trên Vercel biến đó là *Sensitive* nên không ai đọc
+lại được — chạy ở đây thì không người nào phải cầm mật khẩu DB prod, và log dry-run nằm lại
+để đối chiếu. Ảnh chụp cây trước khi ghi do `scripts/nen-p1-anh-chup-org-tree.ts` in vào log
+lần chạy (thay cho câu SQL gõ tay ở §4 — trên CI thì không ai chụp bằng tay được).
+
+| Bước | Kết quả đo trên PROD |
+|---|---|
+| (1) dời cây | 5 việc: HO lên gốc · tạo DANANG (REGION) · CS1+CS2 xuống DANANG · SATAROBO đóng (`CLOSED` + `deletedAt`, **không xoá**). Không có dòng `UserOrgRole` nào neo ROOT nên không phải chuyển ai. |
+| (2) backfill | Điền **147 dòng / 4 bảng**: `Student` 73 · `User` 72 · `Order` 1 · `Notification` 1. |
+| (3) seed pháp nhân | 1 pháp nhân gốc (MST 0402301783); cả 4 đơn vị sống đã neo. |
+| (4) đối soát | 52 bảng · **1.768 dòng** · không bảng nào lệch. |
+
+Hình cây sau khi chạy: `/ho/` → `/ho/danang/` → `/ho/danang/cs1/` · `/ho/danang/cs2/`.
+
+⚠️ Bước (1) **cảnh báo rồi vẫn chạy tiếp** khi chưa có pháp nhân gốc: vùng DANANG sinh ra với
+`legalEntityId = null`, phải tới bước (3) mới được vá. Chạy lẻ bước (1) mà quên (3) thì không
+có gì báo đỏ — đó là lý do ảnh chụp nay in thẳng cột `legalEntityId` và kết luận "đơn vị nào
+chưa neo pháp nhân".
+
 ## 5. Việc CÒN LẠI của P1
 
 ### ✅ Đã xử lý 12/08/2026
