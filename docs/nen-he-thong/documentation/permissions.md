@@ -177,3 +177,62 @@ hiệu lực, nên không có đường nào để một điều động "mồ c
 **Cổng màn điều động:** `roles:manage` (chỉ SUPER_ADMIN), cùng cổng với vị trí. Điều động
 quyết định "ai thấy dữ liệu cơ sở nào" — cùng hạng với gán vai. Hạ xuống HR/QLCS là một
 quyết định riêng, cần người ký.
+
+
+---
+
+## P3 · US-12 — resolver `dataScope` chạy shadow
+
+Cách đo phạm vi dữ liệu đang là **`centerId`**. Đích là **`orgUnitId`**. P3 chạy cách đo
+mới **song song** cách cũ, so, ghi lệch. Không đổi quyết định nào (AC3).
+
+**Ba trạng thái, không phải hai** (`lib/permissions/scope-shadow.ts`):
+
+| Trạng thái | Nghĩa |
+|---|---|
+| `giong` | hai cách đo cùng kết quả |
+| `lech` | khác nhau ⇒ lật cờ sẽ ĐỔI quyền của ai đó |
+| `chua-phu` | chỗ gọi chưa truyền `orgUnitId` ⇒ **chưa so được** |
+
+`chua-phu` tách riêng vì nếu tính nó là lệch thì shadow đỏ rực ngày đầu vì lý do chẳng
+liên quan tới đúng/sai của resolver, và cổng 7 ngày thành vô nghĩa — đúng vết xe *"kêu sói
+mỗi đêm là cách nhanh nhất khiến cả đội thôi đọc alert"*. Nó là thước đo **ĐỘ PHỦ**.
+
+**So ở mức QUYẾT ĐỊNH, không phải từng dòng grant.** `can()` là ALLOW-wins trên nhiều
+dòng: một dòng đo lệch mà dòng khác vẫn cho phép thì người dùng không thấy gì khác. Đếm
+theo dòng làm số "lệch" phồng lên bằng nhiễu vô hại. Một phép so cho một lượt `can()`.
+
+**Shadow phủ CẢ HAI nhánh resolver** — `PermissionGrant.dataScope` (bảng P0) *và*
+`PermEntry.scopeType = "CENTER"` (đường prod đang thật sự enforce). Chỉ đo nhánh đầu là
+đo ~0 lượt: cả repo có **một** chỗ ghi vào `PermissionGrant`, và chỉ ghi grant cấp nhóm.
+
+**Mẫu thưa 1/500 ca `giong`.** Không ghi ca giống thì khi hệ sạch bảng RỖNG, và "0 lệch
+trong 7 ngày" không phân biệt được với "shadow không chạy ngày nào". Mẫu thưa là mẫu số.
+
+## P4 · US-13 — cutover
+
+**Cờ `SystemSetting("orgScope.cutoverEnabled")`, KHÔNG phải env.** AC2 đòi rollback một
+thao tác không cần deploy; đổi env trên Vercel là phải redeploy. Đọc lúc dựng Actor mỗi
+request (`actor.orgScopeCutover`) nên `can()` vẫn thuần + đồng bộ.
+
+Cờ TẮT ⇒ mọi nhánh cũ **y nguyên byte**. Mọi nhánh mới nằm sau `if (actor.orgScopeCutover)`.
+Rollback là quay về đúng mã đang chạy hôm nay, không phải một đường thứ ba.
+
+**Cờ BẬT mà target thiếu `orgUnitId` ⇒ TỪ CHỐI**, không rơi ngược về `centerId`. Rơi ngược
+sẽ biến cutover thành nửa vời và giấu đúng những chỗ chưa vá — chính là thứ mà điều kiện
+"0 CHƯA PHỦ" của cổng bắt phải dọn trước.
+
+**Cổng 3 điều kiện** (`scripts/nen-p4-kiem-cong.ts`): 0 lệch · 0 chưa phủ · có dữ liệu đủ
+7 ngày riêng biệt. Điều kiện thứ ba chống xanh giả.
+
+### `OWN` của phụ huynh (AC4) — không phụ thuộc cờ cutover
+
+`can(actor, key, { studentId })` khớp `OWN` khi actor giám hộ học viên đó
+(`Student.parentUserId` → `actor.guardedStudentIds`). Trước đó quyền phụ huynh kiểm bằng
+`assertOwnsStudent` gọi tay **ngoài** `can()` — vi phạm luật cứng #1, quên một chỗ gọi là
+IDOR. Đây là **sửa lỗi**, nên không buộc vào cờ: buộc vào nghĩa là phụ huynh phải chờ hết
+pha shadow mới hết bị 403.
+
+`OWN` theo người tạo vẫn chạy — mở rộng chứ không thay thế.
+
+Runbook: [`RUNBOOK-P3-P4.md`](../RUNBOOK-P3-P4.md).

@@ -15,12 +15,25 @@ function scopeMatches(p: PermEntry, actor: Actor, target?: Target): boolean {
     case "GLOBAL":
       return true;
     case "CENTER":
+      // P4 · US-13 · AC2 — cutover: đổi đơn vị đo sang orgUnitId. Cờ TẮT ⇒ nhánh dưới
+      // y nguyên như trước khi có cờ (rollback chỉ đáng tin nếu đường tắt không bị đụng).
+      if (actor.orgScopeCutover) {
+        if (!target?.orgUnitId) return false;
+        const os = p.orgUnitScope;
+        if (os == null) return false; // vai quan hệ: cố ý không bao giờ khớp CENTER
+        return os === "ALL" || os.includes(target.orgUnitId);
+      }
       if (!target?.centerId) return false; // target thiếu scope → an toàn = false
       return (
         p.centerScope === "ALL" ||
         (Array.isArray(p.centerScope) && p.centerScope.includes(target.centerId))
       );
     case "OWN":
+      // P4 · US-13 · AC4 — "của mình" có HAI nghĩa: mình tạo ra, hoặc mình là người
+      // giám hộ. Nghĩa thứ hai là của phụ huynh, và trước đây nằm ngoài `can()` trong
+      // `assertOwnsStudent` — tức mỗi chỗ gọi tự nhớ kiểm, quên một chỗ là IDOR.
+      // KHÔNG buộc vào cờ cutover: đây là sửa lỗi, không phải đổi đơn vị đo.
+      if (target?.studentId && actor.guardedStudentIds?.has(target.studentId)) return true;
       return !!target?.createdById && target.createdById === actor.userId;
     case "CHILDREN":
       return !!target?.parentUserId && target.parentUserId === actor.userId;

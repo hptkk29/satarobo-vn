@@ -34,7 +34,8 @@ export type SettingGroup =
   | "cron"
   | "dashboard"
   | "makeup"
-  | "chat";
+  | "chat"
+  | "system";
 
 export interface SettingDef<T = unknown> {
   key: string;
@@ -292,6 +293,26 @@ export const SETTINGS = {
     schema: z.number().int().min(0).max(30),
     default: 7,
     centerOverridable: true,
+  }),
+  // ── Nền Hệ thống P4 · US-13 · AC2 ──────────────────────────────────────────
+  // Cutover đơn vị đo của phạm vi dữ liệu: `centerId` → `orgUnitId`.
+  //
+  // Ở ĐÂY chứ không ở env vì AC2 đòi rollback MỘT thao tác, KHÔNG cần deploy: đổi env
+  // trên Vercel là phải redeploy, và suốt lúc chờ thì quyền vẫn sai. Sửa ở màn Cấu hình
+  // là có audit + lý do bắt buộc sẵn.
+  //
+  // ⚠️ CHỈ BẬT khi `scripts/nen-p4-kiem-cong.ts` báo ĐẠT. Bật sớm = người dùng mất
+  // quyền ở đúng những chỗ mà pha shadow chưa kịp đo (target chưa mang `orgUnitId` thì
+  // resolver mới TỪ CHỐI — cố ý fail-closed, không rơi ngược về centerId).
+  //
+  // Rollback: đặt lại `false` — có hiệu lực trong ≤5 phút (TTL cache cấu hình), không deploy.
+  "orgScope.cutoverEnabled": def({
+    key: "orgScope.cutoverEnabled",
+    group: "system",
+    label: "Cutover phạm vi dữ liệu sang cây đơn vị (orgUnitId)",
+    schema: z.boolean(),
+    default: false,
+    centerOverridable: false, // quyền không được lệch nhau giữa các cơ sở
   }),
   "student.birthdayZnsEnabled": def({
     key: "student.birthdayZnsEnabled",

@@ -15,6 +15,7 @@
 import type { Actor, Target } from "@/lib/auth/actor";
 import { can as canV2, PermissionError } from "@/lib/auth/can";
 import type { GrantRow } from "@/lib/permissions/grant-types";
+import { phatScopeShadow } from "@/lib/permissions/scope-shadow-sink";
 
 // Re-export giữ nguyên API public (test + consumer import GrantRow từ đây);
 // định nghĩa thật nằm ở grant-types.ts (type-lá, phá vòng actor→can→actor).
@@ -47,6 +48,16 @@ function scopeSatisfied(grant: GrantRow, actor: Actor, target?: Target): boolean
       return true;
     case "UNIT_AND_BELOW":
     case "UNIT_ONLY": {
+      // P4 · US-13 · AC2 — cutover đổi đơn vị đo. Cờ TẮT ⇒ nhánh dưới y nguyên.
+      if (actor.orgScopeCutover) {
+        if (!target?.orgUnitId) return false;
+        const os = actor.roleOrgScope?.[grant.subjectId];
+        if (os == null) return false;
+        if (os === "ALL") return true;
+        return (grant.dataScope === "UNIT_ONLY" ? os.unitOnly : os.unitAndBelow).includes(
+          target.orgUnitId,
+        );
+      }
       if (!target?.centerId) return false;
       const scope = actor.roleCenterScope?.[grant.subjectId];
       if (scope == null) return false; // thiếu mapping → an toàn = false
@@ -55,6 +66,8 @@ function scopeSatisfied(grant: GrantRow, actor: Actor, target?: Target): boolean
       return centers.includes(target.centerId);
     }
     case "OWN":
+      // US-13 · AC4 — xem lib/auth/can.ts: "của mình" gồm cả quan hệ giám hộ.
+      if (target?.studentId && actor.guardedStudentIds?.has(target.studentId)) return true;
       return !!target?.createdById && target.createdById === actor.userId;
     default:
       return false;
@@ -130,8 +143,17 @@ export function resolveGrant(actor: Actor, permissionKey: string, target?: Targe
  */
 export function can(actor: Actor, permissionKey: string, target?: Target): boolean {
   const decision = resolveGrant(actor, permissionKey, target);
-  if (decision.hit) return decision.allowed;
-  return canV2(actor, permissionKey, target);
+  const ketQua = decision.hit ? decision.allowed : canV2(actor, permissionKey, target);
+
+  // P3 · US-12 — báo cho pha shadow SAU KHI đã có kết quả, đúng MỘT lần mỗi lượt gọi.
+  //
+  // Sau chứ không trước: thứ tự này làm rõ shadow không tham gia vào quyết định. Hàm
+  // trả void và tự nuốt lỗi (AC3) — dòng dưới không thể đổi `ketQua`.
+  // Một lần mỗi lượt chứ không mỗi dòng grant: `can()` là ALLOW-wins trên nhiều dòng,
+  // lệch một dòng mà kết quả cuối không đổi thì người dùng không thấy gì khác.
+  phatScopeShadow(actor, permissionKey, target);
+
+  return ketQua;
 }
 
 /**

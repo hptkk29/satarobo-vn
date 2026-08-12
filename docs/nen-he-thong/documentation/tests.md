@@ -75,3 +75,21 @@ Ngoài các nhóm trên: chưa có test nào cho các luật còn lại của n�
 **Ca biên đã ghim có chủ đích:** `[US-05-IT-04b]` — khi vừa sai loại cha vừa tạo vòng, V9 báo trước V5. Thứ tự này là lựa chọn (V9 rẻ hơn và nói đúng cái người dùng làm sai); ghim lại kẻo ai đó đảo thứ tự mà không biết có test phụ thuộc.
 
 **Chưa kiểm (nợ sang US-07):** đối soát `centerId` ↔ `orgUnitId` từng bảng; đường ghi mới có set `orgUnitId` không; hiệu năng `path LIKE prefix` (PT1 pre-mortem nói cây < 50 node nên hoãn đo tới khi > 500 node).
+
+
+## P3/P4 — shadow + cutover (US-12, US-13)
+
+| File | Ghim điều gì |
+|---|---|
+| `lib/permissions/scope-shadow.test.ts` | 4 mức đo bằng đơn vị; `chua-phu` ≠ `lech` |
+| `lib/permissions/scope-shadow-perm.test.ts` | bản song song cho `PermEntry`; vai quan hệ giữ fail-closed |
+| `lib/permissions/scope-shadow-quyetdinh.test.ts` | so ở mức QUYẾT ĐỊNH — ca "một dòng lệch, dòng khác vẫn cho ⇒ GIỐNG" |
+| `lib/permissions/scope-shadow-report.test.ts` | cổng từ chối XANH GIẢ (bảng rỗng, thiếu ngày) |
+| `lib/permissions/can-scope-shadow.test.ts` | AC3 — sink ném lỗi vẫn không đổi quyết định |
+| `lib/permissions/cutover.test.ts` | AC2 cờ lật đơn vị đo; AC4 `OWN` qua giám hộ (TS-15) |
+
+Hai ca đáng đọc trước khi sửa gì trong nhóm này:
+
+- **"BẢNG RỖNG ⇒ KHÔNG đạt"** — cổng ngây thơ (`lech === 0`) báo ĐẠT sai ở đúng ca này.
+- **"MỘT dòng lệch nhưng dòng KHÁC vẫn cho ⇒ GIỐNG"** — biện minh cho việc so ở mức
+  quyết định thay vì từng dòng.

@@ -4,6 +4,7 @@
 import { cache } from "react";
 import { db } from "@/lib/db";
 import { ACTION_REGISTRY } from "@/lib/auth/action-registry";
+import { getSetting } from "@/lib/settings/service";
 import {
   centerScopeForOrgUnit,
   getSubtreeCenterIds,
@@ -53,6 +54,16 @@ export type PermEntry = {
    * thấy học viên/lớp cả 2 cơ sở nhưng chỉ thấy lead/doanh thu CS1.
    */
   centerScope: "ALL" | string[] | null;
+  /**
+   * P3 · US-12 — bản SONG SONG của `centerScope`, đo bằng `orgUnitId`. Cùng công thức,
+   * cùng ý nghĩa `null` (vai quan hệ → không bao giờ khớp scope CENTER, fail-closed).
+   *
+   * OPTIONAL có chủ đích: ~35 chỗ dựng `Actor` literal (system-actor, test cũ) không
+   * mang field này. Thiếu ⇒ shadow đếm là "chưa phủ", KHÔNG phải lệch — xem
+   * `soSanhPermEntry`. Chỉ dùng cho pha shadow; đường enforce vẫn đọc `centerScope`
+   * cho tới P4 (luật cứng #2).
+   */
+  orgUnitScope?: "ALL" | string[] | null;
 };
 
 export type Actor = {
@@ -71,6 +82,27 @@ export type Actor = {
   visibleOrgUnitIds: string[];
   grantsAllow: Set<string>;
   assignedClassIds: Set<string>;
+  /**
+   * P4 · US-13 · AC4 — học viên mà actor là NGƯỜI GIÁM HỘ (liên kết Guardian–Student,
+   * hiện là `Student.parentUserId`). Nền của scope `OWN` cho phụ huynh.
+   *
+   * Vì sao không dùng `CHILDREN`: `CHILDREN` so `target.parentUserId` — tức chỗ gọi
+   * phải tự nạp học viên rồi truyền cha/mẹ vào, và mỗi chỗ gọi tự nhớ. Đó đúng là hình
+   * dạng đã đẻ ra `assertOwnsStudent` nằm NGOÀI `can()` (vi phạm luật cứng #1). Giữ
+   * danh sách trên Actor thì `can(actor, key, { studentId })` là đủ.
+   *
+   * OPTIONAL: ~35 chỗ dựng Actor literal không có field này (⇒ tập rỗng ⇒ fail-closed).
+   */
+  guardedStudentIds?: Set<string>;
+  /**
+   * P4 · US-13 · AC2 — cutover đơn vị đo của scope: `centerId` → `orgUnitId`.
+   *
+   * Nguồn là `SystemSetting("orgScope.cutoverEnabled")` chứ KHÔNG phải env, vì AC2 đòi
+   * rollback 1 thao tác KHÔNG cần deploy (đổi env trên Vercel là phải redeploy, và
+   * trong lúc chờ thì quyền vẫn sai). Đọc lúc dựng Actor mỗi request nên `can()` vẫn
+   * thuần + đồng bộ.
+   */
+  orgScopeCutover?: boolean;
   // ── US-02 (Nền Hệ thống P0) — ADDITIVE OPTIONAL: nạp sẵn cho engine lib/permissions/can.ts.
   // Optional có chủ đích: ~35 file dựng Actor literal (system-actor, test cũ) không vỡ.
   /** RoleDef.id của các role ĐANG hiệu lực (đối chiếu PermissionGrant subjectType=ROLE). */
@@ -88,17 +120,47 @@ export type Actor = {
    * "ALL" giữ nguyên nghĩa: role đặt tại HO/ROOT → cross-center theo chức năng.
    */
   roleCenterScope?: Record<string, RoleCenterScope>;
+  /**
+   * P3 · US-12 — bản SONG SONG của `roleCenterScope`, đo bằng `orgUnitId` thay vì
+   * `centerId`. Dùng cho resolver mới chạy shadow (lib/permissions/scope-shadow.ts).
+   *
+   * Hai mức tính từ CÂY: `unitOnly` = chính đơn vị neo vai; `unitAndBelow` = cả cây
+   * con (`getSubtreeOrgUnitIds`, tức resolve bằng path — BA §2.5). Tính sẵn ở đây để
+   * lúc chạy chỉ còn một phép `includes`, cùng hình dạng với `roleCenterScope` nên
+   * hai vế shadow so được công bằng.
+   *
+   * KHÁC `roleCenterScope` ở một điểm đáng nhớ: vai neo tại REGION có `unitOnly` là
+   * CHÍNH REGION đó (khác rỗng), trong khi bản centerId thì rỗng vì vùng không phải
+   * cơ sở. Đây là chênh lệch THẬT giữa hai mô hình, và là thứ shadow sinh ra để đo.
+   */
+  roleOrgScope?: Record<string, RoleOrgScope>;
 };
 
 /** Phạm vi cơ sở của MỘT role, tách 2 mức (BA §2.5). Xem lib/org/org-tree.ts. */
 export type RoleCenterScope = "ALL" | { unitOnly: string[]; unitAndBelow: string[] };
 
+/** Phạm vi ĐƠN VỊ của MỘT role — bản song song, đo bằng orgUnitId (P3 · US-12). */
+export type RoleOrgScope = "ALL" | { unitOnly: string[]; unitAndBelow: string[] };
+
 /** Đối tượng bị kiểm tra quyền (tùy action mà cần field nào). */
 export type Target = {
   centerId?: string | null;
+  /**
+   * P3 · US-12 — đơn vị của đối tượng. Chỗ gọi truyền được thì resolver mới so được;
+   * chưa truyền thì shadow đếm vào `chua-phu` (KHÔNG phải lệch).
+   *
+   * Khi cờ `orgScopeCutover` TẮT (mặc định), field này KHÔNG ảnh hưởng quyết định —
+   * đường cũ đo bằng `centerId`. Khi BẬT, nó là thứ quyết định, và THIẾU nó = TỪ CHỐI.
+   */
+  orgUnitId?: string | null;
   createdById?: string | null;
   parentUserId?: string | null;
   classId?: string | null;
+  /**
+   * P4 · US-13 · AC4 — học viên mà đối tượng này thuộc về. Cho scope `OWN` của phụ
+   * huynh: `can(actor, key, { studentId })` thay cho `assertOwnsStudent` gọi tay.
+   */
+  studentId?: string | null;
 } | null;
 
 /**
@@ -166,6 +228,10 @@ export function buildActor(input: {
   groupIds?: string[];
   /** Vai KHÔNG gắn đơn vị (xem {@link RELATIONSHIP_ROLE_CODES}). */
   relationshipRoles?: RelationshipRole[];
+  /** US-13 · AC4 — học viên actor giám hộ (Guardian–Student). */
+  guardedStudentIds?: string[];
+  /** US-13 · AC2 — cờ cutover đơn vị đo (nguồn: SystemSetting, đọc mỗi request). */
+  orgScopeCutover?: boolean;
 }): Actor {
   const now = input.now ?? new Date();
   const orgById = new Map(input.orgNodes.map((n) => [n.id, n]));
@@ -196,6 +262,8 @@ export function buildActor(input: {
   // US-02 — RoleDef.id đang hiệu lực + tầm nhìn cơ sở per role (cho dataScope UNIT_*).
   const roleIdSet = new Set<string>();
   const roleCenterScope: Record<string, RoleCenterScope> = {};
+  // P3 · US-12 — bản song song đo bằng orgUnitId, cho resolver shadow.
+  const roleOrgScope: Record<string, RoleOrgScope> = {};
 
   for (const r of liveRows) {
     const node = orgById.get(r.orgUnitId);
@@ -240,6 +308,26 @@ export function buildActor(input: {
           ],
         };
       }
+
+      // P3 · US-12 — CÙNG công thức, đổi đơn vị đo sang orgUnitId.
+      // `unitOnly` = chính đơn vị neo vai (kể cả REGION — khác bản centerId, nơi vùng
+      // cho ra rỗng vì không phải cơ sở). `unitAndBelow` = cả cây con, tính từ path.
+      // Điều động tác nghiệp (US-10) cộng vào cả hai mức, y như bản centerId.
+      const prevOrg = roleOrgScope[r.roleId];
+      if (hoRoot || prevOrg === "ALL") {
+        roleOrgScope[r.roleId] = "ALL";
+      } else {
+        const prevOrgObj = prevOrg ?? { unitOnly: [], unitAndBelow: [] };
+        roleOrgScope[r.roleId] = {
+          unitOnly: [...new Set([...prevOrgObj.unitOnly, ...scopeUnits])],
+          unitAndBelow: [
+            ...new Set([
+              ...prevOrgObj.unitAndBelow,
+              ...scopeUnits.flatMap((u) => getSubtreeOrgUnitIds(input.orgNodes, u)),
+            ]),
+          ],
+        };
+      }
     }
 
     for (const p of r.role.permissions) {
@@ -249,6 +337,10 @@ export function buildActor(input: {
         orgUnitId: r.orgUnitId,
         roleCode: r.role.code,
         centerScope: hoRoot ? "ALL" : rowCenters,
+        // P3 · US-12 — bản song song đo bằng đơn vị. CÙNG công thức, cùng nguồn
+        // (`rowOrgUnits` đã tính ở trên cho visibleOrgUnitIds). Chỉ pha shadow đọc;
+        // đường enforce vẫn dùng `centerScope` cho tới P4 (luật cứng #2).
+        orgUnitScope: hoRoot ? "ALL" : rowOrgUnits,
       });
     }
   }
@@ -265,6 +357,9 @@ export function buildActor(input: {
         orgUnitId: "",
         roleCode: role.code,
         centerScope: null,
+        // `null` KHÔNG phải "chưa tính" — là "cố ý không bao giờ khớp scope CENTER".
+        // Bản đo bằng đơn vị phải giữ y hệt, nếu không P4 nới quyền phụ huynh im lặng.
+        orgUnitScope: null,
       });
     }
   }
@@ -283,8 +378,11 @@ export function buildActor(input: {
     permissions,
     visibleCenterIds: [...visible],
     visibleOrgUnitIds: [...visibleOrg],
+    roleOrgScope,
     grantsAllow,
     assignedClassIds: new Set(input.assignedClassIds ?? []),
+    guardedStudentIds: new Set(input.guardedStudentIds ?? []),
+    orgScopeCutover: input.orgScopeCutover === true,
     // US-02 — additive: engine mới (lib/permissions/can.ts) đọc các field này.
     roleIds: [...roleIdSet],
     groupIds: input.groupIds ?? [], // US-03 — membership nhóm (caller đã lọc nhóm sống)
@@ -388,6 +486,19 @@ export async function resolveActorUncached(userId: string): Promise<Actor> {
           },
         });
 
+  // US-13 · AC4 — học viên actor đang giám hộ. CHỈ hỏi khi actor thực sự có vai quan hệ:
+  // nhân sự không giám hộ ai, bắt họ trả thêm một query mỗi request là phí thuần tuý.
+  // AC2 — cờ cutover đọc từ SystemSetting (không phải env) để rollback không cần deploy.
+  const [guardedStudents, cutover] = await Promise.all([
+    relationshipRoles.length > 0
+      ? db.student.findMany({
+          where: { parentUserId: userId, deletedAt: null },
+          select: { id: true },
+        })
+      : Promise.resolve([] as { id: string }[]),
+    getSetting("orgScope.cutoverEnabled").catch(() => false),
+  ]);
+
   return buildActor({
     userId,
     now,
@@ -395,6 +506,8 @@ export async function resolveActorUncached(userId: string): Promise<Actor> {
     permissionGrants,
     groupIds,
     relationshipRoles,
+    guardedStudentIds: guardedStudents.map((s) => s.id),
+    orgScopeCutover: cutover === true,
     rows: [
       ...rows.map((r) => ({
         orgUnitId: r.orgUnitId,
