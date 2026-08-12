@@ -29,7 +29,15 @@ async function main() {
       isActive: true,
       centerId: true,
       deletedAt: true,
+      // US-06 AC2: mọi đơn vị phải neo vào pháp nhân. Đơn vị REGION do script dời
+      // cây tạo ra khi CHƯA có pháp nhân gốc sẽ mang null ở đây cho tới khi chạy
+      // `prisma/seed-orgunit.ts` — nên phải nhìn thấy cột này mới biết đã xong hay chưa.
+      legalEntityId: true,
     },
+  });
+  const legalEntities = await db.legalEntity.findMany({
+    select: { id: true, taxCode: true, legalName: true, isPrimary: true, isActive: true },
+    orderBy: { taxCode: "asc" },
   });
   const roles = await db.userOrgRole.groupBy({
     by: ["orgUnitId"],
@@ -38,6 +46,17 @@ async function main() {
 
   console.log(`=== ẢNH CHỤP OrgUnit — ${rows.length} đơn vị (kể cả đã xoá mềm) ===`);
   console.log(JSON.stringify(rows, null, 2));
+  console.log(`\n=== Pháp nhân (${legalEntities.length}) ===`);
+  console.log(JSON.stringify(legalEntities, null, 2));
+  const thieuPhapNhan = rows.filter((r) => r.deletedAt === null && r.legalEntityId === null);
+  console.log(
+    thieuPhapNhan.length === 0
+      ? "✅ Mọi đơn vị đang sống đều đã neo pháp nhân."
+      : `⚠️  ${thieuPhapNhan.length} đơn vị đang sống CHƯA neo pháp nhân: ${thieuPhapNhan
+          .map((r) => r.code)
+          .join(", ")} — chạy prisma/seed-orgunit.ts.`,
+  );
+
   console.log(`\n=== Số dòng UserOrgRole đang neo theo từng đơn vị ===`);
   console.log(
     JSON.stringify(
