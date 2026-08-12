@@ -44,6 +44,7 @@ import {
 } from "./payment-requests-section";
 import type { QrSessionView } from "../_qr-core";
 import { ORDER_STATUS_LABEL } from "@/lib/orders/status";
+import { PhanTrangBang } from "@/components/ui/phan-trang-bang";
 
 // G4 — phương thức thanh toán có thể sửa (chỉ khi đơn chưa xác nhận); cần khả năng theo loại đơn.
 type PaymentMethodOption = {
@@ -372,87 +373,89 @@ export function OrderDetailClient({
         <h2 className="mb-3 text-sm font-bold uppercase tracking-wider text-muted-foreground">
           Sản phẩm ({order.items.length})
         </h2>
-        <table className="w-full border-collapse text-sm">
-          <thead>
-            <tr className="border-b border-border bg-muted">
-              <th className="p-2 text-left">Tên</th>
-              <th className="p-2 text-right">SL</th>
-              <th className="p-2 text-right">Đơn giá</th>
-              <th className="p-2 text-right">Thành tiền</th>
-            </tr>
-          </thead>
-          <tbody>
-            {order.items.map((it) => (
-              <tr key={it.id} className="border-b border-border">
-                <td className="p-2">
-                  <div className="font-medium text-foreground">{it.itemName}</div>
-                  {it.product && (
-                    <Link
-                      href={`/products/${it.product.id}`}
-                      className="font-mono text-xs text-state-info-ink hover:underline"
-                    >
-                      → {it.product.sku}
-                    </Link>
-                  )}
-                  {it.itemDescription && (
-                    <div className="text-xs text-muted-foreground">
-                      {it.itemDescription}
-                    </div>
-                  )}
-                </td>
-                <td className="p-2 text-right tabular-nums">{it.quantity}</td>
-                <td className="p-2 text-right tabular-nums">
-                  {it.unitPrice.toLocaleString("vi-VN")}
-                </td>
-                <td className="p-2 text-right font-medium tabular-nums">
-                  {it.totalPrice.toLocaleString("vi-VN")}
-                </td>
+        <PhanTrangBang>
+          <table className="w-full border-collapse text-sm">
+            <thead>
+              <tr className="border-b border-border bg-muted">
+                <th className="p-2 text-left">Tên</th>
+                <th className="p-2 text-right">SL</th>
+                <th className="p-2 text-right">Đơn giá</th>
+                <th className="p-2 text-right">Thành tiền</th>
               </tr>
-            ))}
-          </tbody>
-          <tfoot className="text-sm">
-            <tr>
-              <td colSpan={3} className="p-2 text-right text-muted-foreground">
-                Tạm tính:
-              </td>
-              <td className="p-2 text-right tabular-nums">
-                {order.subtotal.toLocaleString("vi-VN")}
-              </td>
-            </tr>
-            {order.discountAmount > 0 && (
+            </thead>
+            <tbody>
+              {order.items.map((it) => (
+                <tr key={it.id} className="border-b border-border">
+                  <td className="p-2">
+                    <div className="font-medium text-foreground">{it.itemName}</div>
+                    {it.product && (
+                      <Link
+                        href={`/products/${it.product.id}`}
+                        className="font-mono text-xs text-state-info-ink hover:underline"
+                      >
+                        → {it.product.sku}
+                      </Link>
+                    )}
+                    {it.itemDescription && (
+                      <div className="text-xs text-muted-foreground">
+                        {it.itemDescription}
+                      </div>
+                    )}
+                  </td>
+                  <td className="p-2 text-right tabular-nums">{it.quantity}</td>
+                  <td className="p-2 text-right tabular-nums">
+                    {it.unitPrice.toLocaleString("vi-VN")}
+                  </td>
+                  <td className="p-2 text-right font-medium tabular-nums">
+                    {it.totalPrice.toLocaleString("vi-VN")}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+            <tfoot className="text-sm">
               <tr>
                 <td colSpan={3} className="p-2 text-right text-muted-foreground">
-                  Giảm giá
-                  {/* Đơn CŨ tạo bằng mã khuyến mãi (hệ đã gỡ 03/08) vẫn hiện mã đã
-                      dùng để đối soát lịch sử — không còn link tới màn voucher. */}
-                  {order.voucherCode ? <> — mã {order.voucherCode}</> : null}
-                  :
-                </td>
-                <td className="p-2 text-right text-state-danger-ink tabular-nums">
-                  -{order.discountAmount.toLocaleString("vi-VN")}
-                </td>
-              </tr>
-            )}
-            {order.shippingFee > 0 && (
-              <tr>
-                <td colSpan={3} className="p-2 text-right text-muted-foreground">
-                  Phí vận chuyển:
+                  Tạm tính:
                 </td>
                 <td className="p-2 text-right tabular-nums">
-                  {order.shippingFee.toLocaleString("vi-VN")}
+                  {order.subtotal.toLocaleString("vi-VN")}
                 </td>
               </tr>
-            )}
-            <tr className="font-bold">
-              <td colSpan={3} className="p-2 text-right">
-                Tổng:
-              </td>
-              <td className="p-2 text-right tabular-nums">
-                {order.totalAmount.toLocaleString("vi-VN")} đ
-              </td>
-            </tr>
-          </tfoot>
-        </table>
+              {order.discountAmount > 0 && (
+                <tr>
+                  <td colSpan={3} className="p-2 text-right text-muted-foreground">
+                    Giảm giá
+                    {/* Đơn CŨ tạo bằng mã khuyến mãi (hệ đã gỡ 03/08) vẫn hiện mã đã
+                        dùng để đối soát lịch sử — không còn link tới màn voucher. */}
+                    {order.voucherCode ? <> — mã {order.voucherCode}</> : null}
+                    :
+                  </td>
+                  <td className="p-2 text-right text-state-danger-ink tabular-nums">
+                    -{order.discountAmount.toLocaleString("vi-VN")}
+                  </td>
+                </tr>
+              )}
+              {order.shippingFee > 0 && (
+                <tr>
+                  <td colSpan={3} className="p-2 text-right text-muted-foreground">
+                    Phí vận chuyển:
+                  </td>
+                  <td className="p-2 text-right tabular-nums">
+                    {order.shippingFee.toLocaleString("vi-VN")}
+                  </td>
+                </tr>
+              )}
+              <tr className="font-bold">
+                <td colSpan={3} className="p-2 text-right">
+                  Tổng:
+                </td>
+                <td className="p-2 text-right tabular-nums">
+                  {order.totalAmount.toLocaleString("vi-VN")} đ
+                </td>
+              </tr>
+            </tfoot>
+          </table>
+        </PhanTrangBang>
       </section>
 
       {/* Payment method (G4 — có nút "Sửa" khi đơn chưa xác nhận thanh toán) */}

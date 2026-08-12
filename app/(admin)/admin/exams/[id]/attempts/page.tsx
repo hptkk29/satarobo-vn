@@ -7,6 +7,7 @@ import { getModelVisibleCenterIds, scopedDb } from "@/lib/db-scope";
 import { AttemptStatus } from "@prisma/client";
 import { GradeButton } from "../../_components/grade-button";
 import { checkPermission } from "@/lib/auth/check-permission";
+import { PhanTrangBang } from "@/components/ui/phan-trang-bang";
 
 export const dynamic = "force-dynamic";
 
@@ -120,121 +121,123 @@ export default async function ExamAttemptsPage({ params }: Props) {
 
       <div className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
         <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-border">
-            <thead className="bg-muted">
-              <tr>
-                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  Học viên
-                </th>
-                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  Trạng thái
-                </th>
-                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  Bắt đầu
-                </th>
-                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  Nộp
-                </th>
-                <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  Điểm
-                </th>
-                <th className="px-4 py-3 text-center text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  Đạt?
-                </th>
-                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  GV chấm
-                </th>
-                <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  Hành động
-                </th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border">
-              {exam.attempts.length === 0 ? (
+          <PhanTrangBang>
+            <table className="min-w-full divide-y divide-border">
+              <thead className="bg-muted">
                 <tr>
-                  <td
-                    colSpan={8}
-                    className="px-4 py-12 text-center text-sm text-muted-foreground"
-                  >
-                    Chưa có học viên nào làm bài.
-                  </td>
+                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                    Học viên
+                  </th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                    Trạng thái
+                  </th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                    Bắt đầu
+                  </th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                    Nộp
+                  </th>
+                  <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                    Điểm
+                  </th>
+                  <th className="px-4 py-3 text-center text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                    Đạt?
+                  </th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                    GV chấm
+                  </th>
+                  <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                    Hành động
+                  </th>
                 </tr>
-              ) : (
-                exam.attempts.map((a) => {
-                  const statusInfo = ATTEMPT_STATUS_INFO[a.status];
-                  return (
-                    <tr key={a.id} className="hover:bg-muted/60">
-                      <td className="px-4 py-3">
-                        <div className="flex items-center gap-2">
-                          {a.student.avatarUrl ? (
-                            <img
-                              src={a.student.avatarUrl}
-                              alt={a.student.name}
-                              className="h-8 w-8 rounded-full border border-border object-cover"
-                            />
-                          ) : (
-                            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-muted text-xs font-bold text-muted-foreground">
-                              {a.student.name.charAt(0).toUpperCase()}
-                            </div>
-                          )}
-                          <div>
-                            <div className="font-medium text-foreground">
-                              {a.student.name}
-                            </div>
-                            {a.student.studentCode && (
-                              <div className="text-xs text-muted-foreground tabular-nums">
-                                {a.student.studentCode}
+              </thead>
+              <tbody className="divide-y divide-border">
+                {exam.attempts.length === 0 ? (
+                  <tr>
+                    <td
+                      colSpan={8}
+                      className="px-4 py-12 text-center text-sm text-muted-foreground"
+                    >
+                      Chưa có học viên nào làm bài.
+                    </td>
+                  </tr>
+                ) : (
+                  exam.attempts.map((a) => {
+                    const statusInfo = ATTEMPT_STATUS_INFO[a.status];
+                    return (
+                      <tr key={a.id} className="hover:bg-muted/60">
+                        <td className="px-4 py-3">
+                          <div className="flex items-center gap-2">
+                            {a.student.avatarUrl ? (
+                              <img
+                                src={a.student.avatarUrl}
+                                alt={a.student.name}
+                                className="h-8 w-8 rounded-full border border-border object-cover"
+                              />
+                            ) : (
+                              <div className="flex h-8 w-8 items-center justify-center rounded-full bg-muted text-xs font-bold text-muted-foreground">
+                                {a.student.name.charAt(0).toUpperCase()}
                               </div>
                             )}
+                            <div>
+                              <div className="font-medium text-foreground">
+                                {a.student.name}
+                              </div>
+                              {a.student.studentCode && (
+                                <div className="text-xs text-muted-foreground tabular-nums">
+                                  {a.student.studentCode}
+                                </div>
+                              )}
+                            </div>
                           </div>
-                        </div>
-                      </td>
-                      <td className="px-4 py-3">
-                        <span
-                          className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold ${statusInfo.color}`}
-                        >
-                          {statusInfo.label}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 text-sm tabular-nums text-muted-foreground">
-                        {fmtDateTime(a.startedAt)}
-                      </td>
-                      <td className="px-4 py-3 text-sm tabular-nums text-muted-foreground">
-                        {fmtDateTime(a.submittedAt)}
-                      </td>
-                      <td className="px-4 py-3 text-right text-sm tabular-nums font-semibold text-foreground">
-                        {a.totalScore !== null && a.totalScore !== undefined
-                          ? `${a.totalScore}/${exam.totalPoints}`
-                          : "—"}
-                      </td>
-                      <td className="px-4 py-3 text-center">
-                        {a.passed === true ? (
-                          <span className="inline-flex rounded-full bg-state-success-soft px-2 py-0.5 text-xs font-semibold text-state-success-ink">
-                            Đạt
+                        </td>
+                        <td className="px-4 py-3">
+                          <span
+                            className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold ${statusInfo.color}`}
+                          >
+                            {statusInfo.label}
                           </span>
-                        ) : a.passed === false ? (
-                          <span className="inline-flex rounded-full bg-state-danger-soft px-2 py-0.5 text-xs font-semibold text-state-danger-ink">
-                            Không đạt
-                          </span>
-                        ) : (
-                          <span className="text-muted-foreground">—</span>
-                        )}
-                      </td>
-                      <td className="px-4 py-3 text-xs text-muted-foreground">
-                        {a.gradedBy?.fullName ?? "—"}
-                      </td>
-                      <td className="px-4 py-3 text-right">
-                        <GradeButton
-                          attemptId={a.id}
-                          disabled={a.status === "IN_PROGRESS"}
-                        />
-                      </td>
-                    </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
+                        </td>
+                        <td className="px-4 py-3 text-sm tabular-nums text-muted-foreground">
+                          {fmtDateTime(a.startedAt)}
+                        </td>
+                        <td className="px-4 py-3 text-sm tabular-nums text-muted-foreground">
+                          {fmtDateTime(a.submittedAt)}
+                        </td>
+                        <td className="px-4 py-3 text-right text-sm tabular-nums font-semibold text-foreground">
+                          {a.totalScore !== null && a.totalScore !== undefined
+                            ? `${a.totalScore}/${exam.totalPoints}`
+                            : "—"}
+                        </td>
+                        <td className="px-4 py-3 text-center">
+                          {a.passed === true ? (
+                            <span className="inline-flex rounded-full bg-state-success-soft px-2 py-0.5 text-xs font-semibold text-state-success-ink">
+                              Đạt
+                            </span>
+                          ) : a.passed === false ? (
+                            <span className="inline-flex rounded-full bg-state-danger-soft px-2 py-0.5 text-xs font-semibold text-state-danger-ink">
+                              Không đạt
+                            </span>
+                          ) : (
+                            <span className="text-muted-foreground">—</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 text-xs text-muted-foreground">
+                          {a.gradedBy?.fullName ?? "—"}
+                        </td>
+                        <td className="px-4 py-3 text-right">
+                          <GradeButton
+                            attemptId={a.id}
+                            disabled={a.status === "IN_PROGRESS"}
+                          />
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </PhanTrangBang>
         </div>
       </div>
 

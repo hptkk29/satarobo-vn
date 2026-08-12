@@ -14,6 +14,7 @@ import { groupByWeek, monthKeyVN, type LeadReportRecord } from "@/lib/reports/le
 import { buildRevenueTargetReport, computeAchievement } from "@/lib/reports/revenue-target";
 import { getRevenueTargets } from "@/lib/reports/revenue-target-data";
 import { getDebtRows } from "@/lib/finance/debt";
+import { PhanTrangBang } from "@/components/ui/phan-trang-bang";
 
 const vnd = (n: number) => `${n.toLocaleString("vi-VN")}đ`;
 const TRIAL_ACTIVE_STATUSES = ["SCHEDULED", "CONFIRMED", "POSTPONED"] as const;
@@ -320,33 +321,35 @@ export async function ManagerDashboard({
           <Link href="/leads" className="text-sm font-semibold text-primary hover:underline">Xem tất cả →</Link>
         </div>
         <DataTableShell>
-          <table className="w-full text-sm">
-            <thead className="bg-muted text-left text-xs uppercase tracking-wider text-muted-foreground">
-              <tr>
-                <th className="px-4 py-3">Phụ huynh</th>
-                <th className="px-4 py-3">Phone</th>
-                <th className="px-4 py-3">Status</th>
-                <th className="px-4 py-3 text-right">Thời gian</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border">
-              {recentLeads.map((lead) => (
-                <tr key={lead.id} className="hover:bg-muted transition-colors">
-                  <td className="px-4 py-3 font-medium text-foreground">{lead.parentName}</td>
-                  <td className="px-4 py-3 font-mono text-xs text-foreground">{lead.phone.replace(/(\d{4})(\d{3})(\d+)/, "$1xxx$3")}</td>
-                  <td className="px-4 py-3">
-                    <StatusBadge variant={STATUS_VARIANT[lead.status] ?? "neutral"}>{STATUS_LABELS[lead.status] ?? lead.status}</StatusBadge>
-                  </td>
-                  <td className="px-4 py-3 text-right text-xs text-muted-foreground">
-                    {new Date(lead.createdAt).toLocaleString("vi-VN", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}
-                  </td>
+          <PhanTrangBang>
+            <table className="w-full text-sm">
+              <thead className="bg-muted text-left text-xs uppercase tracking-wider text-muted-foreground">
+                <tr>
+                  <th className="px-4 py-3">Phụ huynh</th>
+                  <th className="px-4 py-3">Phone</th>
+                  <th className="px-4 py-3">Status</th>
+                  <th className="px-4 py-3 text-right">Thời gian</th>
                 </tr>
-              ))}
-              {recentLeads.length === 0 && (
-                <tr><td colSpan={4} className="px-4 py-12 text-center text-muted-foreground">Chưa có lead nào</td></tr>
-              )}
-            </tbody>
-          </table>
+              </thead>
+              <tbody className="divide-y divide-border">
+                {recentLeads.map((lead) => (
+                  <tr key={lead.id} className="hover:bg-muted transition-colors">
+                    <td className="px-4 py-3 font-medium text-foreground">{lead.parentName}</td>
+                    <td className="px-4 py-3 font-mono text-xs text-foreground">{lead.phone.replace(/(\d{4})(\d{3})(\d+)/, "$1xxx$3")}</td>
+                    <td className="px-4 py-3">
+                      <StatusBadge variant={STATUS_VARIANT[lead.status] ?? "neutral"}>{STATUS_LABELS[lead.status] ?? lead.status}</StatusBadge>
+                    </td>
+                    <td className="px-4 py-3 text-right text-xs text-muted-foreground">
+                      {new Date(lead.createdAt).toLocaleString("vi-VN", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}
+                    </td>
+                  </tr>
+                ))}
+                {recentLeads.length === 0 && (
+                  <tr><td colSpan={4} className="px-4 py-12 text-center text-muted-foreground">Chưa có lead nào</td></tr>
+                )}
+              </tbody>
+            </table>
+          </PhanTrangBang>
         </DataTableShell>
       </div>
 

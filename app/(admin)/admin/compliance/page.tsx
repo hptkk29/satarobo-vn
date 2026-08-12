@@ -4,6 +4,7 @@ import { isSuperAdmin } from "@/lib/auth/permissions";
 import { findStudentsDueForRetention, RETENTION_DAYS } from "@/lib/compliance/retention";
 import { StudentComplianceActions } from "./_components/student-compliance-actions";
 import { formatDateVN } from "@/lib/format/date";
+import { PhanTrangBang } from "@/components/ui/phan-trang-bang";
 
 export const dynamic = "force-dynamic";
 
@@ -28,26 +29,28 @@ export default async function CompliancePage() {
       {due.length === 0 ? (
         <p className="text-sm text-muted-foreground">Không có học viên nào quá hạn lưu trữ.</p>
       ) : (
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b text-left text-muted-foreground">
-              <th className="py-2">Mã HV</th>
-              <th className="py-2">Cập nhật cuối</th>
-              <th className="py-2">Hành động</th>
-            </tr>
-          </thead>
-          <tbody>
-            {due.map((s) => (
-              <tr key={s.id} className="border-b">
-                <td className="py-2">{s.studentCode ?? s.id.slice(0, 8)}</td>
-                <td className="py-2">{formatDateVN(s.updatedAt)}</td>
-                <td className="py-2">
-                  <StudentComplianceActions studentId={s.id} />
-                </td>
+        <PhanTrangBang>
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b text-left text-muted-foreground">
+                <th className="py-2">Mã HV</th>
+                <th className="py-2">Cập nhật cuối</th>
+                <th className="py-2">Hành động</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {due.map((s) => (
+                <tr key={s.id} className="border-b">
+                  <td className="py-2">{s.studentCode ?? s.id.slice(0, 8)}</td>
+                  <td className="py-2">{formatDateVN(s.updatedAt)}</td>
+                  <td className="py-2">
+                    <StudentComplianceActions studentId={s.id} />
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </PhanTrangBang>
       )}
     </div>
   );

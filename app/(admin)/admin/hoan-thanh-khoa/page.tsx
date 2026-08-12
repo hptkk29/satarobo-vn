@@ -12,6 +12,7 @@ import {
 import { CompletionForm } from "./_components/completion-form";
 import { BulkCompleteByClass } from "./_components/bulk-complete-by-class";
 import { PageHelp } from "@/components/admin/ui/page-help";
+import { PhanTrangBang } from "@/components/ui/phan-trang-bang";
 
 export const metadata = { title: "Hoàn thành khoá | Admin" };
 export const dynamic = "force-dynamic";
@@ -192,56 +193,58 @@ export default async function CompletionPage({ searchParams }: PageProps) {
         <div className="border-b px-4 py-2 text-sm font-semibold text-foreground">
           Đã hoàn thành gần đây
         </div>
-        <table className="w-full text-sm">
-          <thead className="text-left text-xs text-muted-foreground">
-            <tr>
-              <th className="px-4 py-2">Học viên</th>
-              <th className="px-4 py-2">Khoá</th>
-              <th className="px-4 py-2">Xếp loại</th>
-              <th className="px-4 py-2">Khoá tiếp theo</th>
-              <th className="px-4 py-2">Ngày</th>
-              <th className="px-4 py-2">Chứng chỉ</th>
-            </tr>
-          </thead>
-          <tbody>
-            {completions.length === 0 ? (
+        <PhanTrangBang>
+          <table className="w-full text-sm">
+            <thead className="text-left text-xs text-muted-foreground">
               <tr>
-                <td
-                  colSpan={6}
-                  className="px-4 py-6 text-center text-muted-foreground"
-                >
-                  Chưa có dữ liệu.
-                </td>
+                <th className="px-4 py-2">Học viên</th>
+                <th className="px-4 py-2">Khoá</th>
+                <th className="px-4 py-2">Xếp loại</th>
+                <th className="px-4 py-2">Khoá tiếp theo</th>
+                <th className="px-4 py-2">Ngày</th>
+                <th className="px-4 py-2">Chứng chỉ</th>
               </tr>
-            ) : (
-              completions.map((c) => (
-                <tr key={c.id} className="border-t">
-                  <td className="px-4 py-2 font-medium">{c.student.name}</td>
-                  <td className="px-4 py-2">{c.course.name}</td>
-                  <td className="px-4 py-2">{c.finalGrade ?? "—"}</td>
-                  <td className="px-4 py-2 text-muted-foreground">
-                    {c.nextCourseId
-                      ? (courseName.get(c.nextCourseId) ?? "—")
-                      : "—"}
-                  </td>
-                  <td className="px-4 py-2 text-muted-foreground">
-                    {c.completedAt.toISOString().slice(0, 10)}
-                  </td>
-                  <td className="px-4 py-2">
-                    <a
-                      href={`/api/admin/reports/certificate?code=${encodeURIComponent(c.certificateCode)}`}
-                      target="_blank"
-                      rel="noopener"
-                      className="text-primary underline"
-                    >
-                      {c.certificateCode}
-                    </a>
+            </thead>
+            <tbody>
+              {completions.length === 0 ? (
+                <tr>
+                  <td
+                    colSpan={6}
+                    className="px-4 py-6 text-center text-muted-foreground"
+                  >
+                    Chưa có dữ liệu.
                   </td>
                 </tr>
-              ))
-            )}
-          </tbody>
-        </table>
+              ) : (
+                completions.map((c) => (
+                  <tr key={c.id} className="border-t">
+                    <td className="px-4 py-2 font-medium">{c.student.name}</td>
+                    <td className="px-4 py-2">{c.course.name}</td>
+                    <td className="px-4 py-2">{c.finalGrade ?? "—"}</td>
+                    <td className="px-4 py-2 text-muted-foreground">
+                      {c.nextCourseId
+                        ? (courseName.get(c.nextCourseId) ?? "—")
+                        : "—"}
+                    </td>
+                    <td className="px-4 py-2 text-muted-foreground">
+                      {c.completedAt.toISOString().slice(0, 10)}
+                    </td>
+                    <td className="px-4 py-2">
+                      <a
+                        href={`/api/admin/reports/certificate?code=${encodeURIComponent(c.certificateCode)}`}
+                        target="_blank"
+                        rel="noopener"
+                        className="text-primary underline"
+                      >
+                        {c.certificateCode}
+                      </a>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </PhanTrangBang>
       </div>
     </div>
   );

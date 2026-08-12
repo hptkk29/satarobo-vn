@@ -8,6 +8,7 @@ import { scopedDb } from "@/lib/db-scope";
 import { TrialConfigSection } from "./_components/config-section";
 import { formatDateVN } from "@/lib/format/date";
 import { PageHelp } from "@/components/admin/ui/page-help";
+import { PhanTrangBang } from "@/components/ui/phan-trang-bang";
 
 export const metadata = { title: "Lớp trải nghiệm | Admin" };
 export const dynamic = "force-dynamic";
@@ -85,81 +86,83 @@ export default async function TrialClassesPage() {
 
       {/* Danh sách lớp */}
       <div className="overflow-hidden rounded-xl border border-border bg-card">
-        <table className="w-full text-sm">
-          <thead className="bg-muted text-left text-xs uppercase tracking-wide text-muted-foreground">
-            <tr>
-              <th className="px-4 py-3 font-semibold">Lớp</th>
-              <th className="px-4 py-3 font-semibold">Ngày BĐ</th>
-              <th className="px-4 py-3 font-semibold">Giờ</th>
-              <th className="px-4 py-3 font-semibold">Sĩ số</th>
-              <th className="px-4 py-3 font-semibold">Số buổi</th>
-              <th className="px-4 py-3 font-semibold">Trạng thái</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-border">
-            {classes.length === 0 && (
+        <PhanTrangBang>
+          <table className="w-full text-sm">
+            <thead className="bg-muted text-left text-xs uppercase tracking-wide text-muted-foreground">
               <tr>
-                <td
-                  colSpan={6}
-                  className="px-4 py-8 text-center text-muted-foreground"
-                >
-                  Chưa có lớp trải nghiệm nào.
-                </td>
+                <th className="px-4 py-3 font-semibold">Lớp</th>
+                <th className="px-4 py-3 font-semibold">Ngày BĐ</th>
+                <th className="px-4 py-3 font-semibold">Giờ</th>
+                <th className="px-4 py-3 font-semibold">Sĩ số</th>
+                <th className="px-4 py-3 font-semibold">Số buổi</th>
+                <th className="px-4 py-3 font-semibold">Trạng thái</th>
               </tr>
-            )}
-            {classes.map((c) => {
-              const used = c.enrollments.length;
-              const full = used >= c.capacity;
-              return (
-                <tr key={c.id} className="hover:bg-muted">
-                  <td className="px-4 py-3">
-                    <Link
-                      href={`/trial-classes/${c.id}`}
-                      className="font-medium text-primary hover:underline"
-                    >
-                      {c.name}
-                    </Link>
-                    <div className="text-xs text-muted-foreground">
-                      {c.code}
-                    </div>
-                  </td>
-                  <td className="px-4 py-3 text-foreground">
-                    {c.startDate ? formatDateVN(c.startDate) : "Theo lịch hẹn"}
-                  </td>
-                  <td className="px-4 py-3 text-foreground">
-                    {c.startTime}–{c.endTime}
-                  </td>
-                  <td className="px-4 py-3">
-                    <span
-                      className={
-                        full
-                          ? "font-semibold text-state-danger-ink"
-                          : "text-foreground"
-                      }
-                    >
-                      {used}/{c.capacity}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3 text-foreground">
-                    {c.sessionCount}
-                    {c.config?.name ? (
-                      <span className="ml-1 text-xs text-muted-foreground">
-                        ({c.config.name})
-                      </span>
-                    ) : null}
-                  </td>
-                  <td className="px-4 py-3">
-                    <span
-                      className={`rounded-full px-2 py-0.5 text-xs font-semibold ${STATUS_BADGE[c.status] ?? "bg-muted text-muted-foreground"}`}
-                    >
-                      {STATUS_LABEL[c.status] ?? c.status}
-                    </span>
+            </thead>
+            <tbody className="divide-y divide-border">
+              {classes.length === 0 && (
+                <tr>
+                  <td
+                    colSpan={6}
+                    className="px-4 py-8 text-center text-muted-foreground"
+                  >
+                    Chưa có lớp trải nghiệm nào.
                   </td>
                 </tr>
-              );
-            })}
-          </tbody>
-        </table>
+              )}
+              {classes.map((c) => {
+                const used = c.enrollments.length;
+                const full = used >= c.capacity;
+                return (
+                  <tr key={c.id} className="hover:bg-muted">
+                    <td className="px-4 py-3">
+                      <Link
+                        href={`/trial-classes/${c.id}`}
+                        className="font-medium text-primary hover:underline"
+                      >
+                        {c.name}
+                      </Link>
+                      <div className="text-xs text-muted-foreground">
+                        {c.code}
+                      </div>
+                    </td>
+                    <td className="px-4 py-3 text-foreground">
+                      {c.startDate ? formatDateVN(c.startDate) : "Theo lịch hẹn"}
+                    </td>
+                    <td className="px-4 py-3 text-foreground">
+                      {c.startTime}–{c.endTime}
+                    </td>
+                    <td className="px-4 py-3">
+                      <span
+                        className={
+                          full
+                            ? "font-semibold text-state-danger-ink"
+                            : "text-foreground"
+                        }
+                      >
+                        {used}/{c.capacity}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-foreground">
+                      {c.sessionCount}
+                      {c.config?.name ? (
+                        <span className="ml-1 text-xs text-muted-foreground">
+                          ({c.config.name})
+                        </span>
+                      ) : null}
+                    </td>
+                    <td className="px-4 py-3">
+                      <span
+                        className={`rounded-full px-2 py-0.5 text-xs font-semibold ${STATUS_BADGE[c.status] ?? "bg-muted text-muted-foreground"}`}
+                      >
+                        {STATUS_LABEL[c.status] ?? c.status}
+                      </span>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </PhanTrangBang>
       </div>
     </div>
   );

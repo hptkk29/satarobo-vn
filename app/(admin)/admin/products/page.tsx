@@ -16,6 +16,9 @@ import {
   PRODUCT_STATUS_LABEL,
   PRODUCT_STATUS_COLOR,
 } from "@/lib/validators/product";
+import { ChonSoDong } from "@/components/ui/chon-so-dong";
+import { docSoDong } from "@/lib/ui/phan-trang";
+import { DieuHuongTrangLink } from "@/components/ui/dieu-huong-trang-link";
 
 export const metadata = { title: "Sản phẩm | Admin" };
 export const dynamic = "force-dynamic";
@@ -27,10 +30,10 @@ interface Props {
     status?: string;
     lowStock?: string;
     page?: string;
+    size?: string;
   }>;
 }
 
-const PAGE_SIZE = 20;
 const CATEGORIES = Object.values(ProductCategory) as ProductCategory[];
 const STATUSES = Object.values(ProductStatus) as ProductStatus[];
 
@@ -56,6 +59,7 @@ export default async function ProductsPage({ searchParams }: Props) {
     : undefined;
   const lowStock = sp.lowStock === "1";
   const page = Math.max(1, Number(sp.page) || 1);
+  const soDong = docSoDong(sp.size);
 
   const where: Prisma.ProductWhereInput = {};
   if (q) {
@@ -80,22 +84,22 @@ export default async function ProductsPage({ searchParams }: Props) {
     });
     const filtered = all.filter((p) => p.stockOnHand <= p.minThreshold);
     totalCount = filtered.length;
-    products = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+    products = filtered.slice((page - 1) * soDong, page * soDong);
   } else {
     const [count, rows] = await Promise.all([
       sdb.product.count({ where }),
       sdb.product.findMany({
         where,
         orderBy: [{ createdAt: "desc" }],
-        skip: (page - 1) * PAGE_SIZE,
-        take: PAGE_SIZE,
+        skip: (page - 1) * soDong,
+        take: soDong,
       }),
     ]);
     totalCount = count;
     products = rows;
   }
 
-  const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
+  const totalPages = Math.max(1, Math.ceil(totalCount / soDong));
 
   function urlFor(
     p: Partial<{
@@ -326,42 +330,27 @@ export default async function ProductsPage({ searchParams }: Props) {
         </div>
       </div>
 
-      {totalPages > 1 && (
-        <div className="mt-4 flex items-center justify-between text-sm text-muted-foreground">
-          <span>
-            Trang {page}/{totalPages} ·{" "}
-            {totalCount.toLocaleString("vi-VN")} sản phẩm
-          </span>
-          <div className="flex gap-2">
-            {page > 1 && (
-              <Link
-                href={urlFor({
-                  q,
-                  category: categoryParam,
-                  status: statusParam,
-                  lowStock: lowStock ? "1" : undefined,
-                  page: page - 1,
-                })}
-                className="rounded-lg border border-border px-3 py-1.5 text-sm hover:bg-muted"
-              >
-                ← Trước
-              </Link>
-            )}
-            {page < totalPages && (
-              <Link
-                href={urlFor({
-                  q,
-                  category: categoryParam,
-                  status: statusParam,
-                  lowStock: lowStock ? "1" : undefined,
-                  page: page + 1,
-                })}
-                className="rounded-lg border border-border px-3 py-1.5 text-sm hover:bg-muted"
-              >
-                Sau →
-              </Link>
-            )}
+      {totalCount > 0 && (
+        <div className="mt-4 flex flex-col gap-2 text-sm text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex flex-wrap items-center gap-3">
+            <ChonSoDong soDong={soDong} tong={totalCount} tenDonVi="sản phẩm" />
+            <span>
+              Trang {page}/{totalPages}
+            </span>
           </div>
+          <DieuHuongTrangLink
+            trang={page}
+            soTrang={totalPages}
+            hrefCua={(n: number) =>
+              urlFor({
+                q,
+                category: categoryParam,
+                status: statusParam,
+                lowStock: lowStock ? "1" : undefined,
+                page: n,
+              })
+            }
+          />
         </div>
       )}
     </div>

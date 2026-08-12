@@ -13,6 +13,7 @@ import { redirect } from "next/navigation";
 import { resolveActor } from "@/lib/auth/actor";
 import { scopedDb, getModelVisibleCenterIds } from "@/lib/db-scope";
 import { InventoryCategory, type Prisma } from "@prisma/client";
+import { PhanTrangBang } from "@/components/ui/phan-trang-bang";
 
 export const dynamic = "force-dynamic";
 
@@ -200,114 +201,116 @@ export default async function InventoryItemsPage({ searchParams }: SearchParams)
 
       <div className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
         <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-border">
-            <thead className="bg-muted">
-              <tr>
-                <th className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  Ảnh
-                </th>
-                <th className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  Mã / Tên
-                </th>
-                <th className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  Danh mục
-                </th>
-                <th className="px-3 py-3 text-center text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  Đơn vị
-                </th>
-                <th className="px-3 py-3 text-right text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  Tổng tồn
-                </th>
-                <th className="px-3 py-3 text-right text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  Đã đặt
-                </th>
-                <th className="px-3 py-3 text-center text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  Cảnh báo
-                </th>
-                <th className="px-3 py-3 text-right text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  Hành động
-                </th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border">
-              {itemsView.length === 0 ? (
+          <PhanTrangBang>
+            <table className="min-w-full divide-y divide-border">
+              <thead className="bg-muted">
                 <tr>
-                  <td
-                    colSpan={8}
-                    className="px-4 py-12 text-center text-sm text-muted-foreground"
-                  >
-                    Chưa có mặt hàng nào khớp bộ lọc.{" "}
-                    <Link
-                      href="/inventory/items/new"
-                      className="text-primary hover:underline"
-                    >
-                      Thêm hàng →
-                    </Link>
-                  </td>
+                  <th className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                    Ảnh
+                  </th>
+                  <th className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                    Mã / Tên
+                  </th>
+                  <th className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                    Danh mục
+                  </th>
+                  <th className="px-3 py-3 text-center text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                    Đơn vị
+                  </th>
+                  <th className="px-3 py-3 text-right text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                    Tổng tồn
+                  </th>
+                  <th className="px-3 py-3 text-right text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                    Đã đặt
+                  </th>
+                  <th className="px-3 py-3 text-center text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                    Cảnh báo
+                  </th>
+                  <th className="px-3 py-3 text-right text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                    Hành động
+                  </th>
                 </tr>
-              ) : (
-                itemsView.map((item) => {
-                  const catInfo = CATEGORY_INFO[item.category];
-                  return (
-                    <tr key={item.id} className="hover:bg-muted/60">
-                      <td className="px-3 py-3">
-                        {item.imageUrl ? (
-                          <img
-                            src={item.imageUrl}
-                            alt={item.name}
-                            className="h-10 w-10 rounded border border-border object-cover"
-                          />
-                        ) : (
-                          <div className="flex h-10 w-10 items-center justify-center rounded border border-dashed border-border text-[10px] text-muted-foreground">
-                            no img
+              </thead>
+              <tbody className="divide-y divide-border">
+                {itemsView.length === 0 ? (
+                  <tr>
+                    <td
+                      colSpan={8}
+                      className="px-4 py-12 text-center text-sm text-muted-foreground"
+                    >
+                      Chưa có mặt hàng nào khớp bộ lọc.{" "}
+                      <Link
+                        href="/inventory/items/new"
+                        className="text-primary hover:underline"
+                      >
+                        Thêm hàng →
+                      </Link>
+                    </td>
+                  </tr>
+                ) : (
+                  itemsView.map((item) => {
+                    const catInfo = CATEGORY_INFO[item.category];
+                    return (
+                      <tr key={item.id} className="hover:bg-muted/60">
+                        <td className="px-3 py-3">
+                          {item.imageUrl ? (
+                            <img
+                              src={item.imageUrl}
+                              alt={item.name}
+                              className="h-10 w-10 rounded border border-border object-cover"
+                            />
+                          ) : (
+                            <div className="flex h-10 w-10 items-center justify-center rounded border border-dashed border-border text-[10px] text-muted-foreground">
+                              no img
+                            </div>
+                          )}
+                        </td>
+                        <td className="px-3 py-3">
+                          <div className="font-medium text-foreground">{item.name}</div>
+                          <div className="text-xs text-muted-foreground tabular-nums">
+                            {item.itemCode}
                           </div>
-                        )}
-                      </td>
-                      <td className="px-3 py-3">
-                        <div className="font-medium text-foreground">{item.name}</div>
-                        <div className="text-xs text-muted-foreground tabular-nums">
-                          {item.itemCode}
-                        </div>
-                      </td>
-                      <td className="px-3 py-3">
-                        <span
-                          className={`inline-flex rounded-full px-2 py-0.5 text-xs font-semibold ${catInfo.color}`}
-                        >
-                          {catInfo.label}
-                        </span>
-                      </td>
-                      <td className="px-3 py-3 text-center text-sm text-muted-foreground">
-                        {item.unit}
-                      </td>
-                      <td className="px-3 py-3 text-right text-sm tabular-nums font-semibold text-foreground">
-                        {item.totalStock}
-                      </td>
-                      <td className="px-3 py-3 text-right text-sm tabular-nums text-muted-foreground">
-                        {item.totalReserved}
-                      </td>
-                      <td className="px-3 py-3 text-center">
-                        {item.lowStockCount > 0 ? (
-                          <span className="inline-flex rounded-full bg-state-danger-soft px-2 py-0.5 text-xs font-semibold text-state-danger-ink">
-                            {item.lowStockCount} cơ sở
+                        </td>
+                        <td className="px-3 py-3">
+                          <span
+                            className={`inline-flex rounded-full px-2 py-0.5 text-xs font-semibold ${catInfo.color}`}
+                          >
+                            {catInfo.label}
                           </span>
-                        ) : (
-                          <span className="text-muted-foreground text-xs">—</span>
-                        )}
-                      </td>
-                      <td className="px-3 py-3 text-right">
-                        <Link
-                          href={`/inventory/items/${item.id}/edit`}
-                          className="inline-flex items-center gap-1 rounded-md border border-primary-soft px-2.5 py-1 text-xs font-semibold text-primary hover:bg-primary-soft"
-                        >
-                          Sửa
-                        </Link>
-                      </td>
-                    </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
+                        </td>
+                        <td className="px-3 py-3 text-center text-sm text-muted-foreground">
+                          {item.unit}
+                        </td>
+                        <td className="px-3 py-3 text-right text-sm tabular-nums font-semibold text-foreground">
+                          {item.totalStock}
+                        </td>
+                        <td className="px-3 py-3 text-right text-sm tabular-nums text-muted-foreground">
+                          {item.totalReserved}
+                        </td>
+                        <td className="px-3 py-3 text-center">
+                          {item.lowStockCount > 0 ? (
+                            <span className="inline-flex rounded-full bg-state-danger-soft px-2 py-0.5 text-xs font-semibold text-state-danger-ink">
+                              {item.lowStockCount} cơ sở
+                            </span>
+                          ) : (
+                            <span className="text-muted-foreground text-xs">—</span>
+                          )}
+                        </td>
+                        <td className="px-3 py-3 text-right">
+                          <Link
+                            href={`/inventory/items/${item.id}/edit`}
+                            className="inline-flex items-center gap-1 rounded-md border border-primary-soft px-2.5 py-1 text-xs font-semibold text-primary hover:bg-primary-soft"
+                          >
+                            Sửa
+                          </Link>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </PhanTrangBang>
         </div>
       </div>
     </div>

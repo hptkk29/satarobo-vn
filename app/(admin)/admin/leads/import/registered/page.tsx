@@ -11,6 +11,7 @@ import Link from "next/link";
 import { ChevronLeft, FileSpreadsheet, Loader2, Upload, Eye } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { PhanTrangBang } from "@/components/ui/phan-trang-bang";
 
 interface DryRunData {
   mode: string;
@@ -678,28 +679,30 @@ function PreviewTable({ title, head, rows }: { title: string; head: string[]; ro
     <div className="space-y-1">
       <p className="text-sm font-semibold">{title}</p>
       <div className="max-h-[320px] overflow-auto rounded-lg border border-border">
-        <table className="w-full text-sm">
-          <thead className="sticky top-0 bg-muted">
-            <tr>
-              {head.map((h) => (
-                <th key={h} className="px-2 py-1 text-left font-medium">
-                  {h}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {rows.slice(0, 200).map((r, i) => (
-              <tr key={i} className="border-t">
-                {r.map((c, j) => (
-                  <td key={j} className="px-2 py-1">
-                    {c}
-                  </td>
+        <PhanTrangBang>
+          <table className="w-full text-sm">
+            <thead className="sticky top-0 bg-muted">
+              <tr>
+                {head.map((h) => (
+                  <th key={h} className="px-2 py-1 text-left font-medium">
+                    {h}
+                  </th>
                 ))}
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {rows.slice(0, 200).map((r, i) => (
+                <tr key={i} className="border-t">
+                  {r.map((c, j) => (
+                    <td key={j} className="px-2 py-1">
+                      {c}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </PhanTrangBang>
         {rows.length > 200 && (
           <p className="bg-muted p-2 text-center text-xs text-muted-foreground">
             Hiển thị 200/{rows.length} dòng.

@@ -16,6 +16,7 @@ import {
 import { ReportFilterBar } from "@/components/admin/report-filter-bar";
 import { BarChart } from "@/components/charts/bar-chart";
 import { FunnelChart } from "@/components/charts/funnel-chart";
+import { PhanTrangBang } from "@/components/ui/phan-trang-bang";
 
 export const metadata = { title: "Báo cáo lớp trải nghiệm | Admin" };
 export const dynamic = "force-dynamic";
@@ -215,46 +216,48 @@ export default async function TrialReportPage({
 
       {/* Bảng chi tiết theo cơ sở */}
       <section className="overflow-x-auto rounded-xl border border-border bg-card">
-        <table className="w-full text-sm">
-          <thead className="text-left text-xs text-muted-foreground">
-            <tr>
-              <th className="px-4 py-2">Cơ sở</th>
-              <th className="px-4 py-2 text-right">Lớp</th>
-              <th className="px-4 py-2 text-right">Lấp đầy</th>
-              <th className="px-4 py-2 text-right">Dự đủ buổi</th>
-              <th className="px-4 py-2 text-right">Đã dự / Đăng ký</th>
-              <th className="px-4 py-2 text-right">Chuyển đổi</th>
-            </tr>
-          </thead>
-          <tbody>
-            {report.byCenter.map((c) => (
-              <tr key={c.centerId} className="border-t">
-                <td className="px-4 py-2 font-medium">
-                  {centerName.get(c.centerId) ?? c.centerId}
-                </td>
-                <td className="px-4 py-2 text-right">{c.classes}</td>
-                <td className="px-4 py-2 text-right">
-                  {c.fillRate}%
-                  <span className="text-muted-foreground"> ({c.filled}/{c.capacity})</span>
-                </td>
-                <td className="px-4 py-2 text-right">
-                  {c.fullAttendanceRate}% ({c.fullAttendance})
-                </td>
-                <td className="px-4 py-2 text-right">
-                  {c.attended} / {c.registered}
-                </td>
-                <td className="px-4 py-2 text-right">{c.conversionRate}%</td>
-              </tr>
-            ))}
-            {report.byCenter.length === 0 ? (
+        <PhanTrangBang>
+          <table className="w-full text-sm">
+            <thead className="text-left text-xs text-muted-foreground">
               <tr>
-                <td colSpan={6} className="px-4 py-6 text-center text-muted-foreground">
-                  Chưa có lớp trải nghiệm trong phạm vi.
-                </td>
+                <th className="px-4 py-2">Cơ sở</th>
+                <th className="px-4 py-2 text-right">Lớp</th>
+                <th className="px-4 py-2 text-right">Lấp đầy</th>
+                <th className="px-4 py-2 text-right">Dự đủ buổi</th>
+                <th className="px-4 py-2 text-right">Đã dự / Đăng ký</th>
+                <th className="px-4 py-2 text-right">Chuyển đổi</th>
               </tr>
-            ) : null}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {report.byCenter.map((c) => (
+                <tr key={c.centerId} className="border-t">
+                  <td className="px-4 py-2 font-medium">
+                    {centerName.get(c.centerId) ?? c.centerId}
+                  </td>
+                  <td className="px-4 py-2 text-right">{c.classes}</td>
+                  <td className="px-4 py-2 text-right">
+                    {c.fillRate}%
+                    <span className="text-muted-foreground"> ({c.filled}/{c.capacity})</span>
+                  </td>
+                  <td className="px-4 py-2 text-right">
+                    {c.fullAttendanceRate}% ({c.fullAttendance})
+                  </td>
+                  <td className="px-4 py-2 text-right">
+                    {c.attended} / {c.registered}
+                  </td>
+                  <td className="px-4 py-2 text-right">{c.conversionRate}%</td>
+                </tr>
+              ))}
+              {report.byCenter.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="px-4 py-6 text-center text-muted-foreground">
+                    Chưa có lớp trải nghiệm trong phạm vi.
+                  </td>
+                </tr>
+              ) : null}
+            </tbody>
+          </table>
+        </PhanTrangBang>
       </section>
     </div>
   );

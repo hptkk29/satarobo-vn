@@ -9,6 +9,7 @@ import { resolveActor } from "@/lib/auth/actor";
 import { getClassProgress, getClassGradebook } from "@/lib/progress";
 import { GenerateReportsButton } from "./_components/generate-reports-button";
 import { formatDateVN } from "@/lib/format/date";
+import { PhanTrangBang } from "@/components/ui/phan-trang-bang";
 
 export const dynamic = "force-dynamic";
 
@@ -144,135 +145,137 @@ export default async function ClassProgressPage({ params }: Props) {
           </p>
         </header>
         <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-border">
-            <thead className="bg-muted">
-              <tr>
-                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  Học viên
-                </th>
-                <th className="px-4 py-3 text-center text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  Điểm danh
-                </th>
-                <th className="px-4 py-3 text-center text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  Bài học
-                </th>
-                <th className="px-4 py-3 text-center text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  Bài tập
-                </th>
-                <th className="px-4 py-3 text-center text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  Điểm TB
-                </th>
-                <th className="px-4 py-3 text-center text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  Đề thi đạt
-                </th>
-                <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-muted-foreground" />
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border">
-              {progresses.length === 0 ? (
+          <PhanTrangBang>
+            <table className="min-w-full divide-y divide-border">
+              <thead className="bg-muted">
                 <tr>
-                  <td
-                    colSpan={7}
-                    className="px-4 py-12 text-center text-sm text-muted-foreground"
-                  >
-                    Chưa có HS đang học trong lớp.
-                  </td>
+                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                    Học viên
+                  </th>
+                  <th className="px-4 py-3 text-center text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                    Điểm danh
+                  </th>
+                  <th className="px-4 py-3 text-center text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                    Bài học
+                  </th>
+                  <th className="px-4 py-3 text-center text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                    Bài tập
+                  </th>
+                  <th className="px-4 py-3 text-center text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                    Điểm TB
+                  </th>
+                  <th className="px-4 py-3 text-center text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                    Đề thi đạt
+                  </th>
+                  <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-muted-foreground" />
                 </tr>
-              ) : (
-                progresses.map(({ student, progress }) => {
-                  const attendanceColor =
-                    progress.totalSessions === 0
-                      ? "text-muted-foreground"
-                      : progress.attendanceRate >= 80
-                        ? "text-state-success-ink"
-                        : progress.attendanceRate >= 60
-                          ? "text-state-warning-ink"
-                          : "text-state-danger-ink";
-                  return (
-                    <tr key={student.id} className="hover:bg-muted/60">
-                      <td className="px-4 py-3">
-                        <div className="flex items-center gap-2">
-                          {student.avatarUrl ? (
-                            <img
-                              src={student.avatarUrl}
-                              alt={student.name}
-                              className="h-9 w-9 rounded-full border border-border object-cover"
-                            />
-                          ) : (
-                            <div className="flex h-9 w-9 items-center justify-center rounded-full bg-muted text-xs font-bold text-muted-foreground">
-                              {student.name.charAt(0).toUpperCase()}
-                            </div>
-                          )}
-                          <div>
-                            <div className="font-medium text-foreground">
-                              {student.name}
-                            </div>
-                            {student.studentCode && (
-                              <div className="text-[10px] text-muted-foreground tabular-nums">
-                                {student.studentCode}
+              </thead>
+              <tbody className="divide-y divide-border">
+                {progresses.length === 0 ? (
+                  <tr>
+                    <td
+                      colSpan={7}
+                      className="px-4 py-12 text-center text-sm text-muted-foreground"
+                    >
+                      Chưa có HS đang học trong lớp.
+                    </td>
+                  </tr>
+                ) : (
+                  progresses.map(({ student, progress }) => {
+                    const attendanceColor =
+                      progress.totalSessions === 0
+                        ? "text-muted-foreground"
+                        : progress.attendanceRate >= 80
+                          ? "text-state-success-ink"
+                          : progress.attendanceRate >= 60
+                            ? "text-state-warning-ink"
+                            : "text-state-danger-ink";
+                    return (
+                      <tr key={student.id} className="hover:bg-muted/60">
+                        <td className="px-4 py-3">
+                          <div className="flex items-center gap-2">
+                            {student.avatarUrl ? (
+                              <img
+                                src={student.avatarUrl}
+                                alt={student.name}
+                                className="h-9 w-9 rounded-full border border-border object-cover"
+                              />
+                            ) : (
+                              <div className="flex h-9 w-9 items-center justify-center rounded-full bg-muted text-xs font-bold text-muted-foreground">
+                                {student.name.charAt(0).toUpperCase()}
                               </div>
                             )}
-                            {student.parentPhone && (
-                              <div className="text-xs text-muted-foreground tabular-nums">
-                                PH: {student.parentPhone}
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      </td>
-                      <td
-                        className={`px-4 py-3 text-center font-semibold tabular-nums ${attendanceColor}`}
-                      >
-                        {progress.totalSessions === 0 ? (
-                          <div className="text-xs font-normal text-muted-foreground">
-                            Chưa diễn ra
-                          </div>
-                        ) : (
-                          <>
                             <div>
-                              {progress.attendedSessions}/{progress.totalSessions}
+                              <div className="font-medium text-foreground">
+                                {student.name}
+                              </div>
+                              {student.studentCode && (
+                                <div className="text-[10px] text-muted-foreground tabular-nums">
+                                  {student.studentCode}
+                                </div>
+                              )}
+                              {student.parentPhone && (
+                                <div className="text-xs text-muted-foreground tabular-nums">
+                                  PH: {student.parentPhone}
+                                </div>
+                              )}
                             </div>
-                            <div className="text-xs font-normal">
-                              ({progress.attendanceRate}%)
-                            </div>
-                          </>
-                        )}
-                      </td>
-                      <td className="px-4 py-3 text-center text-sm tabular-nums text-foreground">
-                        {progress.coveredLessons}/{progress.totalLessons}
-                      </td>
-                      <td className="px-4 py-3 text-center text-sm tabular-nums text-foreground">
-                        {progress.submittedAssignments}/{progress.totalAssignments}
-                        {progress.gradedAssignments > 0 && (
-                          <span className="ml-1 text-xs text-state-success-ink">
-                            ({progress.gradedAssignments}✓)
-                          </span>
-                        )}
-                      </td>
-                      <td className="px-4 py-3 text-center text-sm tabular-nums font-semibold text-foreground">
-                        {progress.averageScore !== null
-                          ? `${progress.averageScore}/10`
-                          : "—"}
-                      </td>
-                      <td className="px-4 py-3 text-center text-sm tabular-nums text-foreground">
-                        {progress.examAttempts > 0
-                          ? `${progress.passedExams}/${progress.examAttempts}`
-                          : "—"}
-                      </td>
-                      <td className="px-4 py-3 text-right">
-                        <Link
-                          href={`/students/${student.id}/edit`}
-                          className="text-xs font-semibold text-primary hover:underline"
+                          </div>
+                        </td>
+                        <td
+                          className={`px-4 py-3 text-center font-semibold tabular-nums ${attendanceColor}`}
                         >
-                          Chi tiết →
-                        </Link>
-                      </td>
-                    </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
+                          {progress.totalSessions === 0 ? (
+                            <div className="text-xs font-normal text-muted-foreground">
+                              Chưa diễn ra
+                            </div>
+                          ) : (
+                            <>
+                              <div>
+                                {progress.attendedSessions}/{progress.totalSessions}
+                              </div>
+                              <div className="text-xs font-normal">
+                                ({progress.attendanceRate}%)
+                              </div>
+                            </>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 text-center text-sm tabular-nums text-foreground">
+                          {progress.coveredLessons}/{progress.totalLessons}
+                        </td>
+                        <td className="px-4 py-3 text-center text-sm tabular-nums text-foreground">
+                          {progress.submittedAssignments}/{progress.totalAssignments}
+                          {progress.gradedAssignments > 0 && (
+                            <span className="ml-1 text-xs text-state-success-ink">
+                              ({progress.gradedAssignments}✓)
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 text-center text-sm tabular-nums font-semibold text-foreground">
+                          {progress.averageScore !== null
+                            ? `${progress.averageScore}/10`
+                            : "—"}
+                        </td>
+                        <td className="px-4 py-3 text-center text-sm tabular-nums text-foreground">
+                          {progress.examAttempts > 0
+                            ? `${progress.passedExams}/${progress.examAttempts}`
+                            : "—"}
+                        </td>
+                        <td className="px-4 py-3 text-right">
+                          <Link
+                            href={`/students/${student.id}/edit`}
+                            className="text-xs font-semibold text-primary hover:underline"
+                          >
+                            Chi tiết →
+                          </Link>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </PhanTrangBang>
         </div>
       </section>
 
@@ -339,74 +342,76 @@ export default async function ClassProgressPage({ params }: Props) {
               Lớp chưa có đề thi hoặc bài tập nào được giao (PUBLISHED).
             </p>
           ) : (
-            <table className="min-w-full divide-y divide-border text-sm">
-              <thead className="bg-muted">
-                <tr>
-                  <th className="sticky left-0 z-10 bg-muted px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                    Học viên
-                  </th>
-                  {gradebook.columns.map((c) => (
-                    <th
-                      key={c.id}
-                      className="px-3 py-3 text-center text-xs font-semibold text-muted-foreground"
-                    >
-                      <div className="flex flex-col items-center gap-0.5">
-                        <span
-                          className={`rounded px-1.5 py-0.5 text-[10px] font-bold ${ c.kind === "exam" ? "bg-primary-soft text-primary" : "bg-primary-soft text-primary" }`}
-                        >
-                          {c.kind === "exam" ? "Đề" : "BT"}
-                        </span>
-                        <span className="max-w-[120px] truncate font-medium normal-case text-foreground">
-                          {c.title}
-                        </span>
-                        <span className="text-[10px] font-normal text-muted-foreground">
-                          /{c.totalPoints}
-                        </span>
-                      </div>
+            <PhanTrangBang>
+              <table className="min-w-full divide-y divide-border text-sm">
+                <thead className="bg-muted">
+                  <tr>
+                    <th className="sticky left-0 z-10 bg-muted px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                      Học viên
                     </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border">
-                {gradebook.rows.map((r) => (
-                  <tr key={r.studentId} className="hover:bg-muted/60">
-                    <td className="sticky left-0 z-10 bg-card px-4 py-2 font-medium text-foreground">
-                      {r.name}
-                      {r.studentCode && (
-                        <span className="ml-1 text-[10px] text-muted-foreground tabular-nums">
-                          {r.studentCode}
-                        </span>
-                      )}
-                    </td>
-                    {gradebook.columns.map((c) => {
-                      const cell = r.cells[c.id];
-                      const label =
-                        c.kind === "exam"
-                          ? EXAM_STATUS_VI[cell.status] ?? cell.status
-                          : SUB_STATUS_VI[cell.status] ?? cell.status;
-                      return (
-                        <td
-                          key={c.id}
-                          className="px-3 py-2 text-center tabular-nums"
-                        >
-                          {cell.score !== null ? (
-                            <span
-                              className={`font-semibold ${ cell.passed === false ? "text-state-danger-ink" : "text-foreground" }`}
-                            >
-                              {cell.score}
-                            </span>
-                          ) : (
-                            <span className="text-xs text-muted-foreground">
-                              {label}
-                            </span>
-                          )}
-                        </td>
-                      );
-                    })}
+                    {gradebook.columns.map((c) => (
+                      <th
+                        key={c.id}
+                        className="px-3 py-3 text-center text-xs font-semibold text-muted-foreground"
+                      >
+                        <div className="flex flex-col items-center gap-0.5">
+                          <span
+                            className={`rounded px-1.5 py-0.5 text-[10px] font-bold ${ c.kind === "exam" ? "bg-primary-soft text-primary" : "bg-primary-soft text-primary" }`}
+                          >
+                            {c.kind === "exam" ? "Đề" : "BT"}
+                          </span>
+                          <span className="max-w-[120px] truncate font-medium normal-case text-foreground">
+                            {c.title}
+                          </span>
+                          <span className="text-[10px] font-normal text-muted-foreground">
+                            /{c.totalPoints}
+                          </span>
+                        </div>
+                      </th>
+                    ))}
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody className="divide-y divide-border">
+                  {gradebook.rows.map((r) => (
+                    <tr key={r.studentId} className="hover:bg-muted/60">
+                      <td className="sticky left-0 z-10 bg-card px-4 py-2 font-medium text-foreground">
+                        {r.name}
+                        {r.studentCode && (
+                          <span className="ml-1 text-[10px] text-muted-foreground tabular-nums">
+                            {r.studentCode}
+                          </span>
+                        )}
+                      </td>
+                      {gradebook.columns.map((c) => {
+                        const cell = r.cells[c.id];
+                        const label =
+                          c.kind === "exam"
+                            ? EXAM_STATUS_VI[cell.status] ?? cell.status
+                            : SUB_STATUS_VI[cell.status] ?? cell.status;
+                        return (
+                          <td
+                            key={c.id}
+                            className="px-3 py-2 text-center tabular-nums"
+                          >
+                            {cell.score !== null ? (
+                              <span
+                                className={`font-semibold ${ cell.passed === false ? "text-state-danger-ink" : "text-foreground" }`}
+                              >
+                                {cell.score}
+                              </span>
+                            ) : (
+                              <span className="text-xs text-muted-foreground">
+                                {label}
+                              </span>
+                            )}
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </PhanTrangBang>
           )}
         </div>
       </section>

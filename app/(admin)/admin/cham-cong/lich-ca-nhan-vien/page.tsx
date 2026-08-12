@@ -14,6 +14,7 @@ import {
   type AttendanceTag,
 } from "@/lib/work-schedule";
 import { getSetting } from "@/lib/settings/service";
+import { PhanTrangBang } from "@/components/ui/phan-trang-bang";
 
 export const metadata = { title: "Tổng hợp công ca | Admin" };
 export const dynamic = "force-dynamic";
@@ -197,89 +198,91 @@ export default async function ManagerShiftsPage({ searchParams }: Props) {
       </p>
 
       <div className="overflow-x-auto rounded-xl border border-border bg-card">
-        <table className="min-w-full divide-y divide-border text-sm">
-          <thead className="bg-muted">
-            <tr>
-              <th className="px-3 py-2 text-left text-xs font-semibold uppercase text-muted-foreground">Nhân viên</th>
-              {weekDates.map((ds, i) => (
-                <th key={ds} className="px-2 py-2 text-center text-xs font-semibold text-muted-foreground">
-                  {WEEKDAYS[i]}<br /><span className="font-normal text-muted-foreground">{ds.slice(5)}</span>
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-border">
-            {staff.length === 0 ? (
-              <tr><td colSpan={8} className="px-3 py-10 text-center text-muted-foreground">Không có nhân viên trong phạm vi.</td></tr>
-            ) : (
-              staff.map((u) => {
-                const uRegs = regMap.get(u.id);
-                const uAtt = attMap.get(u.id);
-                const uAdj = adjMap.get(u.id);
-                return (
-                  <tr key={u.id} className="align-top hover:bg-muted/60">
-                    <td className="px-3 py-2">
-                      <div className="font-medium text-foreground">{u.name ?? u.email}</div>
-                      {!filterCenter && u.center?.name && (
-                        <div className="text-xs text-muted-foreground">{u.center.name}</div>
-                      )}
-                    </td>
-                    {weekDates.map((ds) => {
-                      const shifts = uRegs?.get(ds) ?? [];
-                      const att = uAtt?.get(ds) ?? { checkIn: null, checkOut: null, geo: false };
-                      const adj = uAdj?.get(ds);
-                      const result = computeShiftAttendance(
-                        {
-                          checkIn: att.checkIn,
-                          checkOut: att.checkOut,
-                          geofenceFlag: att.geo,
-                          registeredShifts: shifts,
-                        },
-                        shiftTolerance,
-                      );
-                      const hasData = shifts.length > 0 || att.checkIn || att.checkOut || adj;
-                      return (
-                        <td key={ds} className="px-2 py-2 text-center">
-                          {!hasData ? (
-                            <span className="text-muted-foreground">—</span>
-                          ) : (
-                            <div className="flex flex-col items-center gap-0.5">
-                              {shifts.length > 0 ? (
-                                <span className="text-[10px] font-semibold text-foreground">
-                                  {formatRegisteredShifts(shifts)}
-                                </span>
-                              ) : (
-                                att.checkIn && <span className="text-[9px] text-state-warning-ink">Chưa ĐK ca</span>
-                              )}
-                              {(att.checkIn || att.checkOut) && (
-                                <span className="text-[10px] tabular-nums text-muted-foreground">
-                                  {formatVNTime(att.checkIn)}–{formatVNTime(att.checkOut)}
-                                </span>
-                              )}
-                              {result.tags.slice(0, 1).map((t, k) => (
-                                <span key={k} className={`rounded px-1 text-[9px] font-semibold ${TAG_TONE[t.tone]}`}>
-                                  {t.label}
-                                </span>
-                              ))}
-                              {adj && (
-                                <span
-                                  title={`Giải trình (${adj.status}): ${adj.reason}`}
-                                  className="inline-flex items-center gap-0.5 rounded bg-state-warning-soft px-1 text-[9px] font-semibold text-state-warning-ink"
-                                >
-                                  <MessageSquareWarning className="h-3 w-3" /> giải trình
-                                </span>
-                              )}
-                            </div>
-                          )}
-                        </td>
-                      );
-                    })}
-                  </tr>
-                );
-              })
-            )}
-          </tbody>
-        </table>
+        <PhanTrangBang>
+          <table className="min-w-full divide-y divide-border text-sm">
+            <thead className="bg-muted">
+              <tr>
+                <th className="px-3 py-2 text-left text-xs font-semibold uppercase text-muted-foreground">Nhân viên</th>
+                {weekDates.map((ds, i) => (
+                  <th key={ds} className="px-2 py-2 text-center text-xs font-semibold text-muted-foreground">
+                    {WEEKDAYS[i]}<br /><span className="font-normal text-muted-foreground">{ds.slice(5)}</span>
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-border">
+              {staff.length === 0 ? (
+                <tr><td colSpan={8} className="px-3 py-10 text-center text-muted-foreground">Không có nhân viên trong phạm vi.</td></tr>
+              ) : (
+                staff.map((u) => {
+                  const uRegs = regMap.get(u.id);
+                  const uAtt = attMap.get(u.id);
+                  const uAdj = adjMap.get(u.id);
+                  return (
+                    <tr key={u.id} className="align-top hover:bg-muted/60">
+                      <td className="px-3 py-2">
+                        <div className="font-medium text-foreground">{u.name ?? u.email}</div>
+                        {!filterCenter && u.center?.name && (
+                          <div className="text-xs text-muted-foreground">{u.center.name}</div>
+                        )}
+                      </td>
+                      {weekDates.map((ds) => {
+                        const shifts = uRegs?.get(ds) ?? [];
+                        const att = uAtt?.get(ds) ?? { checkIn: null, checkOut: null, geo: false };
+                        const adj = uAdj?.get(ds);
+                        const result = computeShiftAttendance(
+                          {
+                            checkIn: att.checkIn,
+                            checkOut: att.checkOut,
+                            geofenceFlag: att.geo,
+                            registeredShifts: shifts,
+                          },
+                          shiftTolerance,
+                        );
+                        const hasData = shifts.length > 0 || att.checkIn || att.checkOut || adj;
+                        return (
+                          <td key={ds} className="px-2 py-2 text-center">
+                            {!hasData ? (
+                              <span className="text-muted-foreground">—</span>
+                            ) : (
+                              <div className="flex flex-col items-center gap-0.5">
+                                {shifts.length > 0 ? (
+                                  <span className="text-[10px] font-semibold text-foreground">
+                                    {formatRegisteredShifts(shifts)}
+                                  </span>
+                                ) : (
+                                  att.checkIn && <span className="text-[9px] text-state-warning-ink">Chưa ĐK ca</span>
+                                )}
+                                {(att.checkIn || att.checkOut) && (
+                                  <span className="text-[10px] tabular-nums text-muted-foreground">
+                                    {formatVNTime(att.checkIn)}–{formatVNTime(att.checkOut)}
+                                  </span>
+                                )}
+                                {result.tags.slice(0, 1).map((t, k) => (
+                                  <span key={k} className={`rounded px-1 text-[9px] font-semibold ${TAG_TONE[t.tone]}`}>
+                                    {t.label}
+                                  </span>
+                                ))}
+                                {adj && (
+                                  <span
+                                    title={`Giải trình (${adj.status}): ${adj.reason}`}
+                                    className="inline-flex items-center gap-0.5 rounded bg-state-warning-soft px-1 text-[9px] font-semibold text-state-warning-ink"
+                                  >
+                                    <MessageSquareWarning className="h-3 w-3" /> giải trình
+                                  </span>
+                                )}
+                              </div>
+                            )}
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </PhanTrangBang>
       </div>
 
       {!selfOnly && (

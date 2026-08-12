@@ -10,6 +10,7 @@ import { vnYmd } from "@/lib/time/vn";
 import { vnHm } from "@/lib/classes/slots";
 import { AuditRowActions } from "./_components/audit-row-actions";
 import { PageHelp } from "@/components/admin/ui/page-help";
+import { PhanTrangBang } from "@/components/ui/phan-trang-bang";
 
 export const metadata = { title: "Kiểm tra lịch buổi học | Admin" };
 export const dynamic = "force-dynamic";
@@ -92,69 +93,71 @@ export default async function ClassScheduleAuditPage() {
         </div>
       ) : (
         <div className="overflow-x-auto rounded-xl border border-border bg-card">
-          <table className="w-full text-sm">
-            <thead className="border-b border-border bg-muted text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-              <tr>
-                <th className="px-4 py-3">Lớp</th>
-                <th className="px-4 py-3">Vấn đề</th>
-                <th className="px-4 py-3">Khai giảng</th>
-                <th className="px-4 py-3">Buổi 1 hiện tại</th>
-                <th className="px-4 py-3">Buổi 1 đúng lịch</th>
-                <th className="px-4 py-3 text-right">Buổi lệch</th>
-                <th className="px-4 py-3 text-right">Xử lý</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border">
-              {rows.map((r) => {
-                const sev = SEVERITY_LABEL[r.severity] ?? {
-                  text: r.severity,
-                  cls: "bg-muted text-foreground",
-                };
-                return (
-                  <tr key={r.classId} className="align-top">
-                    <td className="px-4 py-3">
-                      <Link
-                        href={`/classes/${r.classId}`}
-                        className="font-semibold text-primary hover:underline"
-                      >
-                        {r.className}
-                      </Link>
-                      <p className="text-xs text-muted-foreground">
-                        {r.classStatus} · {r.sessionCount} buổi
-                      </p>
-                    </td>
-                    <td className="px-4 py-3">
-                      <span
-                        className={`inline-block rounded-full px-2 py-0.5 text-xs font-semibold ${sev.cls}`}
-                      >
-                        {sev.text}
-                      </span>
-                      {r.message && (
-                        <p className="mt-1 max-w-md text-xs text-muted-foreground">
-                          {r.message}
+          <PhanTrangBang>
+            <table className="w-full text-sm">
+              <thead className="border-b border-border bg-muted text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                <tr>
+                  <th className="px-4 py-3">Lớp</th>
+                  <th className="px-4 py-3">Vấn đề</th>
+                  <th className="px-4 py-3">Khai giảng</th>
+                  <th className="px-4 py-3">Buổi 1 hiện tại</th>
+                  <th className="px-4 py-3">Buổi 1 đúng lịch</th>
+                  <th className="px-4 py-3 text-right">Buổi lệch</th>
+                  <th className="px-4 py-3 text-right">Xử lý</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border">
+                {rows.map((r) => {
+                  const sev = SEVERITY_LABEL[r.severity] ?? {
+                    text: r.severity,
+                    cls: "bg-muted text-foreground",
+                  };
+                  return (
+                    <tr key={r.classId} className="align-top">
+                      <td className="px-4 py-3">
+                        <Link
+                          href={`/classes/${r.classId}`}
+                          className="font-semibold text-primary hover:underline"
+                        >
+                          {r.className}
+                        </Link>
+                        <p className="text-xs text-muted-foreground">
+                          {r.classStatus} · {r.sessionCount} buổi
                         </p>
-                      )}
-                    </td>
-                    <td className="px-4 py-3 tabular-nums text-foreground">
-                      {r.startDate ? vnYmd(r.startDate) : "—"}
-                    </td>
-                    <td className="px-4 py-3 tabular-nums text-foreground">
-                      {fmt(r.actualFirst)}
-                    </td>
-                    <td className="px-4 py-3 tabular-nums font-semibold text-foreground">
-                      {fmt(r.expectedFirst)}
-                    </td>
-                    <td className="px-4 py-3 text-right tabular-nums text-foreground">
-                      {r.wrongDateCount}
-                    </td>
-                    <td className="px-4 py-3 text-right">
-                      <AuditRowActions classId={r.classId} canEdit={canEdit} />
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+                      </td>
+                      <td className="px-4 py-3">
+                        <span
+                          className={`inline-block rounded-full px-2 py-0.5 text-xs font-semibold ${sev.cls}`}
+                        >
+                          {sev.text}
+                        </span>
+                        {r.message && (
+                          <p className="mt-1 max-w-md text-xs text-muted-foreground">
+                            {r.message}
+                          </p>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 tabular-nums text-foreground">
+                        {r.startDate ? vnYmd(r.startDate) : "—"}
+                      </td>
+                      <td className="px-4 py-3 tabular-nums text-foreground">
+                        {fmt(r.actualFirst)}
+                      </td>
+                      <td className="px-4 py-3 tabular-nums font-semibold text-foreground">
+                        {fmt(r.expectedFirst)}
+                      </td>
+                      <td className="px-4 py-3 text-right tabular-nums text-foreground">
+                        {r.wrongDateCount}
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        <AuditRowActions classId={r.classId} canEdit={canEdit} />
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </PhanTrangBang>
         </div>
       )}
 

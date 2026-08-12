@@ -15,6 +15,7 @@ import { formatDateOrDash } from "@/lib/format/date";
 // khai báo bản cục bộ lệch chữ: "Quản lý" vs "Quản lý cơ sở", "Tư vấn" vs
 // "Tư vấn & Chăm sóc"). Đừng khai lại ở component — sửa chữ ở lib/labels.ts.
 import { roleLabel, roleColor } from "@/lib/labels";
+import { PhanTrangBang } from "@/components/ui/phan-trang-bang";
 
 interface EmployeeRow extends Employee {
   center: { name: string } | null;
@@ -109,155 +110,157 @@ export function EmployeesAdminTable({ employees, canDelete, hoEmployeeIds = [] }
 
   return (
     <div className="overflow-x-auto rounded-lg border border-border bg-card">
-      <table className="w-full text-sm">
-        <thead className="bg-muted text-left text-xs uppercase tracking-wider text-muted-foreground">
-          <tr>
-            <th className="px-4 py-3">Họ tên</th>
-            <th className="px-4 py-3">Email</th>
-            <th className="px-4 py-3">SĐT</th>
-            <th className="px-4 py-3">Cơ sở</th>
-            <th className="px-4 py-3">Bộ phận</th>
-            <th className="px-4 py-3">Vai trò</th>
-            <th className="px-4 py-3">Trạng thái</th>
-            <th className="px-4 py-3">Ngày vào làm</th>
-            <th className="px-4 py-3 text-right">Hành động</th>
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-border">
-          {employees.map((emp) => (
-            <tr key={emp.id} className="hover:bg-muted">
-              {/* Họ tên */}
-              <td className="px-4 py-3">
-                <p className="font-semibold text-foreground">
-                  {emp.fullName}
-                  {emp.isCEO && (
-                    <span title="CEO" className="ml-1 inline-block align-middle">
-                      <Crown className="inline h-3.5 w-3.5 text-state-warning-ink" />
-                    </span>
-                  )}
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  {emp.jobTitle}
-                  <span className="ml-1 font-mono text-muted-foreground">· {emp.employeeCode}</span>
-                </p>
-              </td>
-              {/* Email */}
-              <td className="px-4 py-3 text-xs text-foreground">{emp.email || "—"}</td>
-              {/* SĐT */}
-              <td className="px-4 py-3 text-xs text-foreground">{emp.phone || "—"}</td>
-              {/* Cơ sở (HO badge nếu là nhân viên Hội sở) */}
-              <td className="px-4 py-3 text-xs text-muted-foreground">
-                {hoSet.has(emp.id) ? (
-                  <span className="inline-flex items-center gap-1 rounded-full bg-state-info-soft px-2 py-0.5 text-xs font-semibold text-state-info-ink">
-                    <Building2 className="h-3 w-3" /> HO (Hội sở)
-                  </span>
-                ) : (
-                  emp.center?.name || "—"
-                )}
-                {emp.manager && (
-                  <p className="text-muted-foreground">↑ {emp.manager.fullName}</p>
-                )}
-              </td>
-              {/* Bộ phận */}
-              <td className="px-4 py-3 text-foreground">
-                {DEPARTMENT_LABELS[emp.department]}
-              </td>
-              {/* Vai trò (hiện đủ role, vai trò chính có viền nổi bật) */}
-              <td className="px-4 py-3">
-                {emp.userAccount ? (
-                  (() => {
-                    const acc = emp.userAccount;
-                    const effective =
-                      acc.roles.length > 0 ? acc.roles : [acc.role];
-                    const ordered = [
-                      ...effective.filter((r) => r === acc.role),
-                      ...effective.filter((r) => r !== acc.role),
-                    ];
-                    return (
-                      <div className="flex flex-wrap items-center gap-1">
-                        {ordered.map((r) => (
-                          <span
-                            key={r}
-                            className={`inline-flex rounded-full px-2 py-0.5 text-xs font-semibold ${roleColor(r)} ${ r === acc.role ? "ring-2 ring-state-warning ring-offset-1" : "" }`}
-                            title={
-                              r === acc.role
-                                ? "Vai trò chính · Đổi: Sửa → Đổi vai trò"
-                                : "Đổi vai trò: bấm Sửa → nút Đổi vai trò"
-                            }
-                          >
-                            {roleLabel(r)}
-                          </span>
-                        ))}
-                      </div>
-                    );
-                  })()
-                ) : (
-                  <span className="text-xs text-muted-foreground">Chưa có TK</span>
-                )}
-              </td>
+      <PhanTrangBang>
+        <table className="w-full text-sm">
+          <thead className="bg-muted text-left text-xs uppercase tracking-wider text-muted-foreground">
+            <tr>
+              <th className="px-4 py-3">Họ tên</th>
+              <th className="px-4 py-3">Email</th>
+              <th className="px-4 py-3">SĐT</th>
+              <th className="px-4 py-3">Cơ sở</th>
+              <th className="px-4 py-3">Bộ phận</th>
+              <th className="px-4 py-3">Vai trò</th>
+              <th className="px-4 py-3">Trạng thái</th>
+              <th className="px-4 py-3">Ngày vào làm</th>
+              <th className="px-4 py-3 text-right">Hành động</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-border">
+            {employees.map((emp) => (
+              <tr key={emp.id} className="hover:bg-muted">
+                {/* Họ tên */}
                 <td className="px-4 py-3">
-                  <span
-                    className={`inline-flex rounded-full px-2 py-0.5 text-xs font-semibold ${STATUS_COLOR[emp.status]}`}
-                  >
-                    {STATUS_LABEL[emp.status]}
-                  </span>
+                  <p className="font-semibold text-foreground">
+                    {emp.fullName}
+                    {emp.isCEO && (
+                      <span title="CEO" className="ml-1 inline-block align-middle">
+                        <Crown className="inline h-3.5 w-3.5 text-state-warning-ink" />
+                      </span>
+                    )}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    {emp.jobTitle}
+                    <span className="ml-1 font-mono text-muted-foreground">· {emp.employeeCode}</span>
+                  </p>
                 </td>
-                <td className="px-4 py-3 text-xs text-muted-foreground">{fmtDate(emp.joinedAt)}</td>
-                <td className="px-4 py-3 text-right">
-                  <div className="inline-flex items-center gap-1">
-                    <button
-                      type="button"
-                      onClick={() => handleToggleActive(emp.id)}
-                      disabled={isPending}
-                      className="rounded p-1.5 hover:bg-muted disabled:opacity-50"
-                      title={emp.isActive ? "Đang làm việc (legacy) — bấm để tắt" : "Bật đang làm việc"}
+                {/* Email */}
+                <td className="px-4 py-3 text-xs text-foreground">{emp.email || "—"}</td>
+                {/* SĐT */}
+                <td className="px-4 py-3 text-xs text-foreground">{emp.phone || "—"}</td>
+                {/* Cơ sở (HO badge nếu là nhân viên Hội sở) */}
+                <td className="px-4 py-3 text-xs text-muted-foreground">
+                  {hoSet.has(emp.id) ? (
+                    <span className="inline-flex items-center gap-1 rounded-full bg-state-info-soft px-2 py-0.5 text-xs font-semibold text-state-info-ink">
+                      <Building2 className="h-3 w-3" /> HO (Hội sở)
+                    </span>
+                  ) : (
+                    emp.center?.name || "—"
+                  )}
+                  {emp.manager && (
+                    <p className="text-muted-foreground">↑ {emp.manager.fullName}</p>
+                  )}
+                </td>
+                {/* Bộ phận */}
+                <td className="px-4 py-3 text-foreground">
+                  {DEPARTMENT_LABELS[emp.department]}
+                </td>
+                {/* Vai trò (hiện đủ role, vai trò chính có viền nổi bật) */}
+                <td className="px-4 py-3">
+                  {emp.userAccount ? (
+                    (() => {
+                      const acc = emp.userAccount;
+                      const effective =
+                        acc.roles.length > 0 ? acc.roles : [acc.role];
+                      const ordered = [
+                        ...effective.filter((r) => r === acc.role),
+                        ...effective.filter((r) => r !== acc.role),
+                      ];
+                      return (
+                        <div className="flex flex-wrap items-center gap-1">
+                          {ordered.map((r) => (
+                            <span
+                              key={r}
+                              className={`inline-flex rounded-full px-2 py-0.5 text-xs font-semibold ${roleColor(r)} ${ r === acc.role ? "ring-2 ring-state-warning ring-offset-1" : "" }`}
+                              title={
+                                r === acc.role
+                                  ? "Vai trò chính · Đổi: Sửa → Đổi vai trò"
+                                  : "Đổi vai trò: bấm Sửa → nút Đổi vai trò"
+                              }
+                            >
+                              {roleLabel(r)}
+                            </span>
+                          ))}
+                        </div>
+                      );
+                    })()
+                  ) : (
+                    <span className="text-xs text-muted-foreground">Chưa có TK</span>
+                  )}
+                </td>
+                  <td className="px-4 py-3">
+                    <span
+                      className={`inline-flex rounded-full px-2 py-0.5 text-xs font-semibold ${STATUS_COLOR[emp.status]}`}
                     >
-                      {emp.isActive ? (
-                        <UserCheck className="h-4 w-4 text-state-success-ink" />
-                      ) : (
-                        <UserX className="h-4 w-4 text-muted-foreground" />
-                      )}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleTogglePublic(emp.id)}
-                      disabled={isPending}
-                      className="rounded p-1.5 hover:bg-muted disabled:opacity-50"
-                      title={emp.isPublic ? "Đang hiển thị public — bấm để ẩn" : "Hiển thị public"}
-                    >
-                      {emp.isPublic ? (
-                        <Eye className="h-4 w-4 text-state-info-ink" />
-                      ) : (
-                        <EyeOff className="h-4 w-4 text-muted-foreground" />
-                      )}
-                    </button>
-                    <Link
-                      href={`/nhan-su/${emp.id}/edit`}
-                      className="rounded p-1.5 text-state-info-ink hover:bg-state-info-soft"
-                      title="Sửa"
-                    >
-                      <Edit className="h-4 w-4" />
-                    </Link>
-                    {canDelete && (
+                      {STATUS_LABEL[emp.status]}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3 text-xs text-muted-foreground">{fmtDate(emp.joinedAt)}</td>
+                  <td className="px-4 py-3 text-right">
+                    <div className="inline-flex items-center gap-1">
                       <button
                         type="button"
-                        onClick={() => {
-                          if (deleteId === emp.id) handleDelete(emp.id);
-                          else setDeleteId(emp.id);
-                        }}
+                        onClick={() => handleToggleActive(emp.id)}
                         disabled={isPending}
-                        className={`rounded p-1.5 ${ deleteId === emp.id ? "bg-state-danger-soft text-state-danger-ink" : "text-state-danger-ink hover:bg-state-danger-soft" }`}
-                        title={deleteId === emp.id ? "Xác nhận xoá" : "Xoá"}
+                        className="rounded p-1.5 hover:bg-muted disabled:opacity-50"
+                        title={emp.isActive ? "Đang làm việc (legacy) — bấm để tắt" : "Bật đang làm việc"}
                       >
-                        <Trash2 className="h-4 w-4" />
+                        {emp.isActive ? (
+                          <UserCheck className="h-4 w-4 text-state-success-ink" />
+                        ) : (
+                          <UserX className="h-4 w-4 text-muted-foreground" />
+                        )}
                       </button>
-                    )}
-                  </div>
-                </td>
-              </tr>
-          ))}
-        </tbody>
-      </table>
+                      <button
+                        type="button"
+                        onClick={() => handleTogglePublic(emp.id)}
+                        disabled={isPending}
+                        className="rounded p-1.5 hover:bg-muted disabled:opacity-50"
+                        title={emp.isPublic ? "Đang hiển thị public — bấm để ẩn" : "Hiển thị public"}
+                      >
+                        {emp.isPublic ? (
+                          <Eye className="h-4 w-4 text-state-info-ink" />
+                        ) : (
+                          <EyeOff className="h-4 w-4 text-muted-foreground" />
+                        )}
+                      </button>
+                      <Link
+                        href={`/nhan-su/${emp.id}/edit`}
+                        className="rounded p-1.5 text-state-info-ink hover:bg-state-info-soft"
+                        title="Sửa"
+                      >
+                        <Edit className="h-4 w-4" />
+                      </Link>
+                      {canDelete && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (deleteId === emp.id) handleDelete(emp.id);
+                            else setDeleteId(emp.id);
+                          }}
+                          disabled={isPending}
+                          className={`rounded p-1.5 ${ deleteId === emp.id ? "bg-state-danger-soft text-state-danger-ink" : "text-state-danger-ink hover:bg-state-danger-soft" }`}
+                          title={deleteId === emp.id ? "Xác nhận xoá" : "Xoá"}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+            ))}
+          </tbody>
+        </table>
+      </PhanTrangBang>
     </div>
   );
 }

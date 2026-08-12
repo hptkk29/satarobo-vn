@@ -7,6 +7,7 @@ import { scopedDb } from "@/lib/db-scope";
 import { extractOrderCode } from "@/lib/payments/sepay";
 import { SepayLogClient } from "./_components/sepay-log-client";
 import { BankTxnClient, type BankTxnItem } from "./_components/bank-txn-client";
+import { PhanTrangBang } from "@/components/ui/phan-trang-bang";
 
 export const metadata = { title: "Biến động số dư | Admin" };
 export const dynamic = "force-dynamic";
@@ -248,38 +249,40 @@ export default async function SepayLogPage({
           </p>
         ) : (
           <div className="overflow-x-auto rounded-lg border border-border">
-            <table className="w-full min-w-[720px] text-sm">
-              <thead className="bg-muted text-left text-xs font-medium uppercase text-muted-foreground">
-                <tr>
-                  <th className="w-36 px-3 py-2">Thời gian</th>
-                  <th className="w-32 px-3 py-2 text-right">Số tiền</th>
-                  <th className="w-40 px-3 py-2">Đơn liên quan</th>
-                  <th className="px-3 py-2">Ghi chú</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border">
-                {credits.map((c) => (
-                  <tr key={c.id}>
-                    <td className="px-3 py-2 align-top text-xs text-muted-foreground">
-                      {c.createdAt.toISOString().slice(0, 16).replace("T", " ")}
-                    </td>
-                    <td className="px-3 py-2 align-top text-right font-semibold tabular-nums">
-                      {fmt(c.amount)}đ
-                    </td>
-                    <td className="px-3 py-2 align-top text-xs">
-                      {c.orderId ? (
-                        <Link href={`/orders/${c.orderId}`} className="font-medium text-state-info-ink hover:underline">
-                          Mở đơn →
-                        </Link>
-                      ) : (
-                        <span className="text-muted-foreground">(chưa gắn đơn)</span>
-                      )}
-                    </td>
-                    <td className="px-3 py-2 align-top text-xs text-muted-foreground">{c.note ?? "—"}</td>
+            <PhanTrangBang>
+              <table className="w-full min-w-[720px] text-sm">
+                <thead className="bg-muted text-left text-xs font-medium uppercase text-muted-foreground">
+                  <tr>
+                    <th className="w-36 px-3 py-2">Thời gian</th>
+                    <th className="w-32 px-3 py-2 text-right">Số tiền</th>
+                    <th className="w-40 px-3 py-2">Đơn liên quan</th>
+                    <th className="px-3 py-2">Ghi chú</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody className="divide-y divide-border">
+                  {credits.map((c) => (
+                    <tr key={c.id}>
+                      <td className="px-3 py-2 align-top text-xs text-muted-foreground">
+                        {c.createdAt.toISOString().slice(0, 16).replace("T", " ")}
+                      </td>
+                      <td className="px-3 py-2 align-top text-right font-semibold tabular-nums">
+                        {fmt(c.amount)}đ
+                      </td>
+                      <td className="px-3 py-2 align-top text-xs">
+                        {c.orderId ? (
+                          <Link href={`/orders/${c.orderId}`} className="font-medium text-state-info-ink hover:underline">
+                            Mở đơn →
+                          </Link>
+                        ) : (
+                          <span className="text-muted-foreground">(chưa gắn đơn)</span>
+                        )}
+                      </td>
+                      <td className="px-3 py-2 align-top text-xs text-muted-foreground">{c.note ?? "—"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </PhanTrangBang>
           </div>
         )}
       </section>

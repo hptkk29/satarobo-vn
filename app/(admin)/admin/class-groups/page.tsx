@@ -6,6 +6,7 @@ import { checkPermission } from "@/lib/auth/check-permission";
 import { scopedDb } from "@/lib/db-scope";
 import { resolveActor } from "@/lib/auth/actor";
 import { DeleteGroupButton } from "./_components/delete-group-button";
+import { PhanTrangBang } from "@/components/ui/phan-trang-bang";
 
 export const metadata = { title: "Nhóm lớp | Admin" };
 export const dynamic = "force-dynamic";
@@ -67,58 +68,60 @@ export default async function ClassGroupsPage() {
       <div className="text-sm text-muted-foreground">{groups.length} nhóm lớp</div>
 
       <div className="overflow-hidden rounded border">
-        <table className="w-full text-sm">
-          <thead className="border-b bg-muted">
-            <tr>
-              <th className="px-3 py-2 text-left">Mã hiển thị</th>
-              <th className="px-3 py-2 text-left">Tên nhóm</th>
-              <th className="px-3 py-2 text-left">Cơ sở</th>
-              <th className="px-3 py-2 text-right">Số lớp/khoá</th>
-              <th className="px-3 py-2 text-left">Mã định danh</th>
-              <th className="px-3 py-2 text-left">Trạng thái</th>
-              {canDelete && <th className="px-3 py-2 text-right">Hành động</th>}
-            </tr>
-          </thead>
-          <tbody>
-            {groups.length === 0 && (
+        <PhanTrangBang>
+          <table className="w-full text-sm">
+            <thead className="border-b bg-muted">
               <tr>
-                <td colSpan={canDelete ? 7 : 6} className="py-8 text-center text-muted-foreground">
-                  Chưa có nhóm lớp nào.
-                </td>
+                <th className="px-3 py-2 text-left">Mã hiển thị</th>
+                <th className="px-3 py-2 text-left">Tên nhóm</th>
+                <th className="px-3 py-2 text-left">Cơ sở</th>
+                <th className="px-3 py-2 text-right">Số lớp/khoá</th>
+                <th className="px-3 py-2 text-left">Mã định danh</th>
+                <th className="px-3 py-2 text-left">Trạng thái</th>
+                {canDelete && <th className="px-3 py-2 text-right">Hành động</th>}
               </tr>
-            )}
-            {groups.map((g) => (
-              <tr key={g.id} className="border-b hover:bg-muted">
-                <td className="px-3 py-2 font-bold">
-                  <Link
-                    href={`/class-groups/${g.id}`}
-                    className="text-state-info-ink hover:underline"
-                  >
-                    {g.displayCode}
-                  </Link>
-                </td>
-                <td className="px-3 py-2">{g.name ?? "—"}</td>
-                <td className="px-3 py-2">{g.center.name}</td>
-                <td className="px-3 py-2 text-right">{g._count.classes}</td>
-                <td className="px-3 py-2 font-mono text-xs text-muted-foreground">
-                  {g.code}
-                </td>
-                <td className="px-3 py-2">
-                  <span
-                    className={`rounded px-2 py-0.5 text-xs ${STATUS_CLASS[g.status]}`}
-                  >
-                    {STATUS_LABEL[g.status]}
-                  </span>
-                </td>
-                {canDelete && (
-                  <td className="px-3 py-2 text-right">
-                    <DeleteGroupButton id={g.id} />
+            </thead>
+            <tbody>
+              {groups.length === 0 && (
+                <tr>
+                  <td colSpan={canDelete ? 7 : 6} className="py-8 text-center text-muted-foreground">
+                    Chưa có nhóm lớp nào.
                   </td>
-                )}
-              </tr>
-            ))}
-          </tbody>
-        </table>
+                </tr>
+              )}
+              {groups.map((g) => (
+                <tr key={g.id} className="border-b hover:bg-muted">
+                  <td className="px-3 py-2 font-bold">
+                    <Link
+                      href={`/class-groups/${g.id}`}
+                      className="text-state-info-ink hover:underline"
+                    >
+                      {g.displayCode}
+                    </Link>
+                  </td>
+                  <td className="px-3 py-2">{g.name ?? "—"}</td>
+                  <td className="px-3 py-2">{g.center.name}</td>
+                  <td className="px-3 py-2 text-right">{g._count.classes}</td>
+                  <td className="px-3 py-2 font-mono text-xs text-muted-foreground">
+                    {g.code}
+                  </td>
+                  <td className="px-3 py-2">
+                    <span
+                      className={`rounded px-2 py-0.5 text-xs ${STATUS_CLASS[g.status]}`}
+                    >
+                      {STATUS_LABEL[g.status]}
+                    </span>
+                  </td>
+                  {canDelete && (
+                    <td className="px-3 py-2 text-right">
+                      <DeleteGroupButton id={g.id} />
+                    </td>
+                  )}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </PhanTrangBang>
       </div>
     </div>
   );

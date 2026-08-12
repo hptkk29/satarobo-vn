@@ -12,6 +12,7 @@ import { useMemo, useState, useTransition } from "react";
 import { Check, X, Clock, FileText, Save } from "lucide-react";
 import { markAttendance } from "../_actions";
 import { ENROLLMENT_STATUS } from "@/lib/labels/registry";
+import { PhanTrangBang } from "@/components/ui/phan-trang-bang";
 
 type AttendanceStatus = "PRESENT" | "ABSENT" | "LATE" | "EXCUSED";
 type MakeupStatus = "NONE" | "NEEDS_MAKEUP" | "MADE_UP";
@@ -298,117 +299,119 @@ export function AttendanceGrid({ sessionId, rows }: Props) {
       )}
 
       <div className="overflow-hidden rounded-xl border border-border bg-card">
-        <table className="w-full">
-          <thead className="border-b border-border bg-muted text-left">
-            <tr>
-              <th className="p-4 text-xs font-bold uppercase tracking-wider text-foreground">
-                Học viên
-              </th>
-              <th className="p-4 text-center text-xs font-bold uppercase tracking-wider text-foreground">
-                Trạng thái
-              </th>
-              <th className="p-4 text-xs font-bold uppercase tracking-wider text-foreground">
-                Ghi chú
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((r) => {
-              const s = state[r.studentId];
-              const dirty = s?.dirty;
-              return (
-                <tr
-                  key={r.studentId}
-                  className={`border-b border-border ${dirty ? "bg-primary-soft/40" : "hover:bg-muted"}`}
-                >
-                  <td className="p-4">
-                    <div className="flex items-center gap-2 font-bold text-foreground">
-                      {r.studentName}
-                      {r.makeupFromCenter && (
-                        <span className="rounded-full bg-primary-soft px-2 py-0.5 text-[11px] font-semibold text-primary">
-                          Học bù từ {r.makeupFromCenter}
-                        </span>
-                      )}
-                    </div>
-                    <div className="mt-0.5 flex items-center gap-2 text-xs text-muted-foreground">
-                      {r.studentPhone && <span className="font-mono">{r.studentPhone}</span>}
-                      {!r.makeupFromCenter && r.enrollmentStatus !== "ACTIVE" && (
-                        <span className="rounded bg-state-warning-soft px-1.5 py-0.5 font-medium text-state-warning-ink">
-                          {ENROLLMENT_STATUS.label(r.enrollmentStatus)}
-                        </span>
-                      )}
-                    </div>
-                  </td>
-                  <td className="p-4">
-                    <div className="flex flex-wrap items-center justify-center gap-1.5">
-                      {STATUS_ORDER.map((status) => {
-                        const meta = STATUS_META[status];
-                        const active = s?.status === status;
-                        const Icon = meta.Icon;
-                        return (
-                          <button
-                            key={status}
-                            type="button"
-                            onClick={() => setStatus(r.studentId, status)}
-                            disabled={pending}
-                            className={`inline-flex items-center gap-1 rounded-lg border px-3 py-1.5 text-xs font-bold transition disabled:opacity-50 ${ active ? meta.activeStyle : meta.idleStyle }`}
-                          >
-                            <Icon className="h-3.5 w-3.5" />
-                            {meta.label}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </td>
-                  <td className="p-4">
-                    <input
-                      type="text"
-                      value={s?.note ?? ""}
-                      onChange={(e) => setNote(r.studentId, e.target.value)}
-                      placeholder="Ghi chú (tuỳ chọn)"
-                      disabled={pending}
-                      className="w-full rounded-lg border border-border bg-card px-3 py-1.5 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 disabled:opacity-50"
-                    />
-                    {s && isAbsent(s.status) && (
-                      <div className="mt-2 space-y-2 rounded-lg border border-state-danger-soft bg-state-danger-soft/60 p-2">
-                        <input
-                          type="text"
-                          value={s.absenceReason}
-                          onChange={(e) => setAbsenceReason(r.studentId, e.target.value)}
-                          placeholder="Lý do phụ huynh xin vắng"
-                          disabled={pending}
-                          className="w-full rounded-lg border border-border bg-card px-3 py-1.5 text-sm outline-none focus:border-state-danger disabled:opacity-50"
-                        />
-                        <div className="flex flex-wrap items-center gap-1.5">
-                          {(
-                            [
-                              ["NONE", "Không bù"],
-                              ["NEEDS_MAKEUP", "Cần học bù"],
-                              ["MADE_UP", "Đã học bù"],
-                            ] as [MakeupStatus, string][]
-                          ).map(([value, label]) => {
-                            const active = s.makeupStatus === value;
-                            return (
-                              <button
-                                key={value}
-                                type="button"
-                                onClick={() => setMakeupStatus(r.studentId, value)}
-                                disabled={pending}
-                                className={`rounded-md border px-2.5 py-1 text-xs font-semibold transition disabled:opacity-50 ${ active ? "border-primary bg-primary text-white" : "border-border bg-card text-muted-foreground hover:border-primary" }`}
-                              >
-                                {label}
-                              </button>
-                            );
-                          })}
-                        </div>
+        <PhanTrangBang>
+          <table className="w-full">
+            <thead className="border-b border-border bg-muted text-left">
+              <tr>
+                <th className="p-4 text-xs font-bold uppercase tracking-wider text-foreground">
+                  Học viên
+                </th>
+                <th className="p-4 text-center text-xs font-bold uppercase tracking-wider text-foreground">
+                  Trạng thái
+                </th>
+                <th className="p-4 text-xs font-bold uppercase tracking-wider text-foreground">
+                  Ghi chú
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((r) => {
+                const s = state[r.studentId];
+                const dirty = s?.dirty;
+                return (
+                  <tr
+                    key={r.studentId}
+                    className={`border-b border-border ${dirty ? "bg-primary-soft/40" : "hover:bg-muted"}`}
+                  >
+                    <td className="p-4">
+                      <div className="flex items-center gap-2 font-bold text-foreground">
+                        {r.studentName}
+                        {r.makeupFromCenter && (
+                          <span className="rounded-full bg-primary-soft px-2 py-0.5 text-[11px] font-semibold text-primary">
+                            Học bù từ {r.makeupFromCenter}
+                          </span>
+                        )}
                       </div>
-                    )}
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
+                      <div className="mt-0.5 flex items-center gap-2 text-xs text-muted-foreground">
+                        {r.studentPhone && <span className="font-mono">{r.studentPhone}</span>}
+                        {!r.makeupFromCenter && r.enrollmentStatus !== "ACTIVE" && (
+                          <span className="rounded bg-state-warning-soft px-1.5 py-0.5 font-medium text-state-warning-ink">
+                            {ENROLLMENT_STATUS.label(r.enrollmentStatus)}
+                          </span>
+                        )}
+                      </div>
+                    </td>
+                    <td className="p-4">
+                      <div className="flex flex-wrap items-center justify-center gap-1.5">
+                        {STATUS_ORDER.map((status) => {
+                          const meta = STATUS_META[status];
+                          const active = s?.status === status;
+                          const Icon = meta.Icon;
+                          return (
+                            <button
+                              key={status}
+                              type="button"
+                              onClick={() => setStatus(r.studentId, status)}
+                              disabled={pending}
+                              className={`inline-flex items-center gap-1 rounded-lg border px-3 py-1.5 text-xs font-bold transition disabled:opacity-50 ${ active ? meta.activeStyle : meta.idleStyle }`}
+                            >
+                              <Icon className="h-3.5 w-3.5" />
+                              {meta.label}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </td>
+                    <td className="p-4">
+                      <input
+                        type="text"
+                        value={s?.note ?? ""}
+                        onChange={(e) => setNote(r.studentId, e.target.value)}
+                        placeholder="Ghi chú (tuỳ chọn)"
+                        disabled={pending}
+                        className="w-full rounded-lg border border-border bg-card px-3 py-1.5 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 disabled:opacity-50"
+                      />
+                      {s && isAbsent(s.status) && (
+                        <div className="mt-2 space-y-2 rounded-lg border border-state-danger-soft bg-state-danger-soft/60 p-2">
+                          <input
+                            type="text"
+                            value={s.absenceReason}
+                            onChange={(e) => setAbsenceReason(r.studentId, e.target.value)}
+                            placeholder="Lý do phụ huynh xin vắng"
+                            disabled={pending}
+                            className="w-full rounded-lg border border-border bg-card px-3 py-1.5 text-sm outline-none focus:border-state-danger disabled:opacity-50"
+                          />
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            {(
+                              [
+                                ["NONE", "Không bù"],
+                                ["NEEDS_MAKEUP", "Cần học bù"],
+                                ["MADE_UP", "Đã học bù"],
+                              ] as [MakeupStatus, string][]
+                            ).map(([value, label]) => {
+                              const active = s.makeupStatus === value;
+                              return (
+                                <button
+                                  key={value}
+                                  type="button"
+                                  onClick={() => setMakeupStatus(r.studentId, value)}
+                                  disabled={pending}
+                                  className={`rounded-md border px-2.5 py-1 text-xs font-semibold transition disabled:opacity-50 ${ active ? "border-primary bg-primary text-white" : "border-border bg-card text-muted-foreground hover:border-primary" }`}
+                                >
+                                  {label}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </PhanTrangBang>
       </div>
     </div>
   );

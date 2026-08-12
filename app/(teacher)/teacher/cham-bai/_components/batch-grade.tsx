@@ -24,6 +24,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { gradeBatchAction } from "../_actions";
+import { PhanTrangBang } from "@/components/ui/phan-trang-bang";
 
 export interface BatchRosterItem {
   studentId: string;
@@ -109,45 +110,47 @@ export function BatchGrade({
           <div className="max-h-[55vh] overflow-auto rounded-lg border border-border">
             {/* KHÔNG đặt min-w ở đây: bảng chỉ 2 cột (tên + ô điểm) và hộp thoại
                 rộng 512px — ép bề rộng tối thiểu là tự sinh thanh cuộn thừa. */}
-            <table className="w-full border-collapse text-left text-sm">
-              <thead>
-                <tr className="border-b border-border bg-muted/50 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
-                  <th scope="col" className="px-4 py-2.5">
-                    Học viên
-                  </th>
-                  <th scope="col" className="px-4 py-2.5 text-right">
-                    Điểm (0–{totalPoints})
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {roster.map((r) => (
-                  <tr
-                    key={r.studentId}
-                    className="border-b border-border/60 last:border-0"
-                  >
-                    <td className="px-4 py-2 font-medium text-foreground">
-                      {r.name}
-                    </td>
-                    <td className="px-4 py-2 text-right">
-                      <Input
-                        type="number"
-                        inputMode="decimal"
-                        min={0}
-                        max={totalPoints}
-                        step={0.5}
-                        value={scores[r.studentId] ?? ""}
-                        disabled={pending}
-                        onChange={(e) => setScore(r.studentId, e.target.value)}
-                        placeholder="—"
-                        aria-label={`Điểm của ${r.name}`}
-                        className="ml-auto w-24"
-                      />
-                    </td>
+            <PhanTrangBang>
+              <table className="w-full border-collapse text-left text-sm">
+                <thead>
+                  <tr className="border-b border-border bg-muted/50 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+                    <th scope="col" className="px-4 py-2.5">
+                      Học viên
+                    </th>
+                    <th scope="col" className="px-4 py-2.5 text-right">
+                      Điểm (0–{totalPoints})
+                    </th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {roster.map((r) => (
+                    <tr
+                      key={r.studentId}
+                      className="border-b border-border/60 last:border-0"
+                    >
+                      <td className="px-4 py-2 font-medium text-foreground">
+                        {r.name}
+                      </td>
+                      <td className="px-4 py-2 text-right">
+                        <Input
+                          type="number"
+                          inputMode="decimal"
+                          min={0}
+                          max={totalPoints}
+                          step={0.5}
+                          value={scores[r.studentId] ?? ""}
+                          disabled={pending}
+                          onChange={(e) => setScore(r.studentId, e.target.value)}
+                          placeholder="—"
+                          aria-label={`Điểm của ${r.name}`}
+                          className="ml-auto w-24"
+                        />
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </PhanTrangBang>
           </div>
 
           <DialogFooter>

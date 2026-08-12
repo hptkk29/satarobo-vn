@@ -6,6 +6,7 @@ import { checkPermission } from "@/lib/auth/check-permission";
 import { resolveActor } from "@/lib/auth/actor";
 import { scopedDb } from "@/lib/db-scope";
 import { CenterListRow } from "./_components/center-list-row";
+import { PhanTrangBang } from "@/components/ui/phan-trang-bang";
 
 export const dynamic = "force-dynamic";
 
@@ -82,44 +83,46 @@ export default async function CentersAdminPage() {
       </div>
 
       <div className="overflow-hidden rounded-xl border border-border bg-card">
-        <table className="w-full">
-          <thead className="border-b border-border bg-muted text-left">
-            <tr>
-              <th className="p-4 text-xs font-bold uppercase tracking-wider text-foreground">Cơ sở</th>
-              <th className="p-4 text-xs font-bold uppercase tracking-wider text-foreground">Liên hệ</th>
-              <th className="p-4 text-center text-xs font-bold uppercase tracking-wider text-foreground">Liên kết</th>
-              <th className="p-4 text-center text-xs font-bold uppercase tracking-wider text-foreground">Trạng thái</th>
-              <th className="p-4 text-right text-xs font-bold uppercase tracking-wider text-foreground">Thao tác</th>
-            </tr>
-          </thead>
-          <tbody>
-            {centers.length === 0 ? (
+        <PhanTrangBang>
+          <table className="w-full">
+            <thead className="border-b border-border bg-muted text-left">
               <tr>
-                <td colSpan={5} className="p-12 text-center text-muted-foreground">
-                  Chưa có cơ sở nào.{" "}
-                  <Link href="/centers/new" className="text-primary hover:underline">
-                    Thêm cơ sở đầu tiên →
-                  </Link>
-                </td>
+                <th className="p-4 text-xs font-bold uppercase tracking-wider text-foreground">Cơ sở</th>
+                <th className="p-4 text-xs font-bold uppercase tracking-wider text-foreground">Liên hệ</th>
+                <th className="p-4 text-center text-xs font-bold uppercase tracking-wider text-foreground">Liên kết</th>
+                <th className="p-4 text-center text-xs font-bold uppercase tracking-wider text-foreground">Trạng thái</th>
+                <th className="p-4 text-right text-xs font-bold uppercase tracking-wider text-foreground">Thao tác</th>
               </tr>
-            ) : (
-              centers.map((c) => (
-                <CenterListRow
-                  key={c.id}
-                  center={{
-                    id: c.id,
-                    name: c.name,
-                    address: c.address,
-                    phone: c.phone,
-                    email: c.email,
-                    isActive: c.isActive,
-                    counts: c._count,
-                  }}
-                />
-              ))
-            )}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {centers.length === 0 ? (
+                <tr>
+                  <td colSpan={5} className="p-12 text-center text-muted-foreground">
+                    Chưa có cơ sở nào.{" "}
+                    <Link href="/centers/new" className="text-primary hover:underline">
+                      Thêm cơ sở đầu tiên →
+                    </Link>
+                  </td>
+                </tr>
+              ) : (
+                centers.map((c) => (
+                  <CenterListRow
+                    key={c.id}
+                    center={{
+                      id: c.id,
+                      name: c.name,
+                      address: c.address,
+                      phone: c.phone,
+                      email: c.email,
+                      isActive: c.isActive,
+                      counts: c._count,
+                    }}
+                  />
+                ))
+              )}
+            </tbody>
+          </table>
+        </PhanTrangBang>
       </div>
     </div>
   );

@@ -19,6 +19,7 @@ import { ParentChildrenManager } from "../../_components/parent-children-manager
 import { SkillEditor } from "../_components/skill-editor";
 import type { RoboticsSkill, SkillLevel } from "@prisma/client";
 import { formatDateVN } from "@/lib/format/date";
+import { PhanTrangBang } from "@/components/ui/phan-trang-bang";
 
 interface Props {
   params: Promise<{ id: string }>;
@@ -376,42 +377,44 @@ export default async function EditStudentPage({ params }: Props) {
             Chi tiết buổi vắng ({absences.length})
           </h2>
           <div className="overflow-hidden rounded-xl border border-border bg-card">
-            <table className="w-full text-sm">
-              <thead className="border-b border-border bg-muted text-left text-xs uppercase tracking-wider text-muted-foreground">
-                <tr>
-                  <th className="px-4 py-2">Ngày</th>
-                  <th className="px-4 py-2">Lớp</th>
-                  <th className="px-4 py-2">Lý do</th>
-                  <th className="px-4 py-2">Học bù</th>
-                </tr>
-              </thead>
-              <tbody>
-                {absences.map((a, i) => (
-                  <tr key={i} className="border-b border-border last:border-0">
-                    <td className="px-4 py-2 tabular-nums text-foreground">
-                      {formatDateVN(a.date)}
-                    </td>
-                    <td className="px-4 py-2 text-foreground">{a.className}</td>
-                    <td className="px-4 py-2 text-muted-foreground">{a.absenceReason ?? "—"}</td>
-                    <td className="px-4 py-2">
-                      {a.makeupStatus === "MADE_UP" ? (
-                        <span className="rounded bg-state-success-soft px-2 py-0.5 text-xs font-semibold text-state-success-ink">
-                          Đã bù
-                        </span>
-                      ) : a.makeupStatus === "NEEDS_MAKEUP" ? (
-                        <span className="rounded bg-state-warning-soft px-2 py-0.5 text-xs font-semibold text-state-warning-ink">
-                          Cần bù
-                        </span>
-                      ) : (
-                        <span className="rounded bg-muted px-2 py-0.5 text-xs font-semibold text-muted-foreground">
-                          Không bù
-                        </span>
-                      )}
-                    </td>
+            <PhanTrangBang>
+              <table className="w-full text-sm">
+                <thead className="border-b border-border bg-muted text-left text-xs uppercase tracking-wider text-muted-foreground">
+                  <tr>
+                    <th className="px-4 py-2">Ngày</th>
+                    <th className="px-4 py-2">Lớp</th>
+                    <th className="px-4 py-2">Lý do</th>
+                    <th className="px-4 py-2">Học bù</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {absences.map((a, i) => (
+                    <tr key={i} className="border-b border-border last:border-0">
+                      <td className="px-4 py-2 tabular-nums text-foreground">
+                        {formatDateVN(a.date)}
+                      </td>
+                      <td className="px-4 py-2 text-foreground">{a.className}</td>
+                      <td className="px-4 py-2 text-muted-foreground">{a.absenceReason ?? "—"}</td>
+                      <td className="px-4 py-2">
+                        {a.makeupStatus === "MADE_UP" ? (
+                          <span className="rounded bg-state-success-soft px-2 py-0.5 text-xs font-semibold text-state-success-ink">
+                            Đã bù
+                          </span>
+                        ) : a.makeupStatus === "NEEDS_MAKEUP" ? (
+                          <span className="rounded bg-state-warning-soft px-2 py-0.5 text-xs font-semibold text-state-warning-ink">
+                            Cần bù
+                          </span>
+                        ) : (
+                          <span className="rounded bg-muted px-2 py-0.5 text-xs font-semibold text-muted-foreground">
+                            Không bù
+                          </span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </PhanTrangBang>
           </div>
         </section>
       )}
@@ -423,46 +426,48 @@ export default async function EditStudentPage({ params }: Props) {
             <LineChart className="h-5 w-5 text-primary" /> Lịch sử học tập
           </h2>
           <div className="overflow-x-auto rounded-xl border border-border bg-card">
-            <table className="w-full text-sm">
-              <thead className="border-b border-border bg-muted text-left text-xs uppercase tracking-wider text-muted-foreground">
-                <tr>
-                  <th className="px-4 py-2">Lớp / Khoá</th>
-                  <th className="px-4 py-2 text-center">Buổi (đã học/tổng)</th>
-                  <th className="px-4 py-2 text-center">Trạng thái</th>
-                  <th className="px-4 py-2">Bắt đầu</th>
-                  <th className="px-4 py-2">Kết thúc</th>
-                </tr>
-              </thead>
-              <tbody>
-                {learningHistory.map((h) => (
-                  <tr key={h.id} className="border-b border-border last:border-0">
-                    <td className="px-4 py-2">
-                      <Link href={`/classes/${h.classId}/progress`} className="font-medium text-primary hover:underline">
-                        {h.class.classCode ? `${h.class.classCode} · ` : ""}{h.class.name}
-                      </Link>
-                      <span className="block text-xs text-muted-foreground">{h.class.course.name}</span>
-                    </td>
-                    <td className="px-4 py-2 text-center tabular-nums text-foreground">
-                      {h.sessions.attended}/{h.sessions.total || "—"}
-                      {h.sessions.absentNoMakeup > 0 && (
-                        <span className="ml-1 text-xs text-state-danger-ink">(vắng {h.sessions.absentNoMakeup})</span>
-                      )}
-                    </td>
-                    <td className="px-4 py-2 text-center">
-                      <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-semibold text-muted-foreground">
-                        {h.status}
-                      </span>
-                    </td>
-                    <td className="px-4 py-2 tabular-nums text-muted-foreground">
-                      {h.enrolledAt ? formatDateVN(h.enrolledAt) : "—"}
-                    </td>
-                    <td className="px-4 py-2 tabular-nums text-muted-foreground">
-                      {h.endedAt ? formatDateVN(h.endedAt) : "—"}
-                    </td>
+            <PhanTrangBang>
+              <table className="w-full text-sm">
+                <thead className="border-b border-border bg-muted text-left text-xs uppercase tracking-wider text-muted-foreground">
+                  <tr>
+                    <th className="px-4 py-2">Lớp / Khoá</th>
+                    <th className="px-4 py-2 text-center">Buổi (đã học/tổng)</th>
+                    <th className="px-4 py-2 text-center">Trạng thái</th>
+                    <th className="px-4 py-2">Bắt đầu</th>
+                    <th className="px-4 py-2">Kết thúc</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {learningHistory.map((h) => (
+                    <tr key={h.id} className="border-b border-border last:border-0">
+                      <td className="px-4 py-2">
+                        <Link href={`/classes/${h.classId}/progress`} className="font-medium text-primary hover:underline">
+                          {h.class.classCode ? `${h.class.classCode} · ` : ""}{h.class.name}
+                        </Link>
+                        <span className="block text-xs text-muted-foreground">{h.class.course.name}</span>
+                      </td>
+                      <td className="px-4 py-2 text-center tabular-nums text-foreground">
+                        {h.sessions.attended}/{h.sessions.total || "—"}
+                        {h.sessions.absentNoMakeup > 0 && (
+                          <span className="ml-1 text-xs text-state-danger-ink">(vắng {h.sessions.absentNoMakeup})</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-2 text-center">
+                        <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-semibold text-muted-foreground">
+                          {h.status}
+                        </span>
+                      </td>
+                      <td className="px-4 py-2 tabular-nums text-muted-foreground">
+                        {h.enrolledAt ? formatDateVN(h.enrolledAt) : "—"}
+                      </td>
+                      <td className="px-4 py-2 tabular-nums text-muted-foreground">
+                        {h.endedAt ? formatDateVN(h.endedAt) : "—"}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </PhanTrangBang>
           </div>
         </section>
       )}

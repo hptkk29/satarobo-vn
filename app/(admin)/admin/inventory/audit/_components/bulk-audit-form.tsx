@@ -8,6 +8,7 @@ import {
   saveAuditDraft,
   submitAuditAndRedirect,
 } from "../_actions";
+import { PhanTrangBang } from "@/components/ui/phan-trang-bang";
 
 export interface AuditRowInit {
   itemId: string;
@@ -239,121 +240,123 @@ export function BulkAuditForm({
 
       <div className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
         <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-border text-sm">
-            <thead className="bg-muted">
-              <tr>
-                <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  Mã
-                </th>
-                <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  Tên hàng
-                </th>
-                <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  ĐV
-                </th>
-                <th className="px-3 py-2 text-right text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  Hệ thống
-                </th>
-                <th className="px-3 py-2 text-right text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  Thực tế *
-                </th>
-                <th className="px-3 py-2 text-right text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  Δ
-                </th>
-                <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  Lý do (Δ ≠ 0, ≥ 5 ký tự)
-                </th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border">
-              {filtered.length === 0 ? (
+          <PhanTrangBang>
+            <table className="min-w-full divide-y divide-border text-sm">
+              <thead className="bg-muted">
                 <tr>
-                  <td
-                    colSpan={7}
-                    className="px-4 py-8 text-center text-sm text-muted-foreground"
-                  >
-                    {rows.length === 0
-                      ? "Chưa có mặt hàng active nào trong hệ thống."
-                      : "Không có dòng nào khớp với từ khoá tìm."}
-                  </td>
+                  <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                    Mã
+                  </th>
+                  <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                    Tên hàng
+                  </th>
+                  <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                    ĐV
+                  </th>
+                  <th className="px-3 py-2 text-right text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                    Hệ thống
+                  </th>
+                  <th className="px-3 py-2 text-right text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                    Thực tế *
+                  </th>
+                  <th className="px-3 py-2 text-right text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                    Δ
+                  </th>
+                  <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                    Lý do (Δ ≠ 0, ≥ 5 ký tự)
+                  </th>
                 </tr>
-              ) : (
-                filtered.map((r) => {
-                  const actualNum = Number.parseInt(r.actualQty, 10);
-                  const validActual = Number.isFinite(actualNum)
-                    ? actualNum
-                    : r.previousQty;
-                  const delta = validActual - r.previousQty;
-                  const rowBg =
-                    delta > 0 ? "bg-state-success-soft/60" : delta < 0 ? "bg-state-danger-soft/60" : "";
-                  const deltaColor =
-                    delta > 0
-                      ? "text-state-success-ink"
-                      : delta < 0
-                        ? "text-state-danger-ink"
-                        : "text-muted-foreground";
-                  const reasonMissing =
-                    delta !== 0 && r.reason.trim().length < 5;
-                  return (
-                    <tr key={r.itemId} className={rowBg}>
-                      <td className="px-3 py-2 font-mono text-xs text-muted-foreground">
-                        {r.itemCode}
-                      </td>
-                      <td className="px-3 py-2 text-foreground">
-                        {r.itemName}
-                      </td>
-                      <td className="px-3 py-2 text-muted-foreground">{r.unit}</td>
-                      <td className="px-3 py-2 text-right tabular-nums text-foreground">
-                        {r.previousQty}
-                      </td>
-                      <td className="px-3 py-2 text-right">
-                        <input
-                          type="number"
-                          min={0}
-                          value={r.actualQty}
-                          onChange={(e) =>
-                            updateRow(r.itemId, "actualQty", e.target.value)
-                          }
-                          disabled={pending}
-                          className="w-24 rounded-md border border-border px-2 py-1 text-right text-sm tabular-nums disabled:opacity-60"
-                        />
-                      </td>
-                      <td
-                        className={`px-3 py-2 text-right tabular-nums font-bold ${deltaColor}`}
-                      >
-                        {delta > 0 ? `+${delta}` : delta}
-                      </td>
-                      <td className="px-3 py-2">
-                        {delta !== 0 ? (
+              </thead>
+              <tbody className="divide-y divide-border">
+                {filtered.length === 0 ? (
+                  <tr>
+                    <td
+                      colSpan={7}
+                      className="px-4 py-8 text-center text-sm text-muted-foreground"
+                    >
+                      {rows.length === 0
+                        ? "Chưa có mặt hàng active nào trong hệ thống."
+                        : "Không có dòng nào khớp với từ khoá tìm."}
+                    </td>
+                  </tr>
+                ) : (
+                  filtered.map((r) => {
+                    const actualNum = Number.parseInt(r.actualQty, 10);
+                    const validActual = Number.isFinite(actualNum)
+                      ? actualNum
+                      : r.previousQty;
+                    const delta = validActual - r.previousQty;
+                    const rowBg =
+                      delta > 0 ? "bg-state-success-soft/60" : delta < 0 ? "bg-state-danger-soft/60" : "";
+                    const deltaColor =
+                      delta > 0
+                        ? "text-state-success-ink"
+                        : delta < 0
+                          ? "text-state-danger-ink"
+                          : "text-muted-foreground";
+                    const reasonMissing =
+                      delta !== 0 && r.reason.trim().length < 5;
+                    return (
+                      <tr key={r.itemId} className={rowBg}>
+                        <td className="px-3 py-2 font-mono text-xs text-muted-foreground">
+                          {r.itemCode}
+                        </td>
+                        <td className="px-3 py-2 text-foreground">
+                          {r.itemName}
+                        </td>
+                        <td className="px-3 py-2 text-muted-foreground">{r.unit}</td>
+                        <td className="px-3 py-2 text-right tabular-nums text-foreground">
+                          {r.previousQty}
+                        </td>
+                        <td className="px-3 py-2 text-right">
                           <input
-                            type="text"
-                            value={r.reason}
+                            type="number"
+                            min={0}
+                            value={r.actualQty}
                             onChange={(e) =>
-                              updateRow(r.itemId, "reason", e.target.value)
+                              updateRow(r.itemId, "actualQty", e.target.value)
                             }
                             disabled={pending}
-                            placeholder={
-                              delta > 0
-                                ? "VD: Tìm thêm trong kho phụ"
-                                : "VD: Mất 2 cái khi vận chuyển"
-                            }
-                            className={
-                              "w-full rounded-md border px-2 py-1 text-xs " +
-                              (reasonMissing
-                                ? "border-state-warning bg-state-warning-soft"
-                                : "border-border")
-                            }
+                            className="w-24 rounded-md border border-border px-2 py-1 text-right text-sm tabular-nums disabled:opacity-60"
                           />
-                        ) : (
-                          <span className="text-xs text-muted-foreground">—</span>
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
+                        </td>
+                        <td
+                          className={`px-3 py-2 text-right tabular-nums font-bold ${deltaColor}`}
+                        >
+                          {delta > 0 ? `+${delta}` : delta}
+                        </td>
+                        <td className="px-3 py-2">
+                          {delta !== 0 ? (
+                            <input
+                              type="text"
+                              value={r.reason}
+                              onChange={(e) =>
+                                updateRow(r.itemId, "reason", e.target.value)
+                              }
+                              disabled={pending}
+                              placeholder={
+                                delta > 0
+                                  ? "VD: Tìm thêm trong kho phụ"
+                                  : "VD: Mất 2 cái khi vận chuyển"
+                              }
+                              className={
+                                "w-full rounded-md border px-2 py-1 text-xs " +
+                                (reasonMissing
+                                  ? "border-state-warning bg-state-warning-soft"
+                                  : "border-border")
+                              }
+                            />
+                          ) : (
+                            <span className="text-xs text-muted-foreground">—</span>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </PhanTrangBang>
         </div>
       </div>
     </div>

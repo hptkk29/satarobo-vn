@@ -8,6 +8,9 @@ import { getSetting } from "@/lib/settings/service";
 import { formatPhoneVN } from "@/lib/phone";
 import type { Prisma, OtpPurpose } from "@prisma/client";
 import { PageHelp } from "@/components/admin/ui/page-help";
+import { ChonSoDong } from "@/components/ui/chon-so-dong";
+import { docSoDong } from "@/lib/ui/phan-trang";
+import { DieuHuongTrangLink } from "@/components/ui/dieu-huong-trang-link";
 
 // AUTH-SĐT P4 — màn trả lời câu "phụ huynh báo không nhận được mã": trước đây
 // 0 UI nào đọc OtpRequest/OtpDeliveryLog, nhân viên phải mò Email logs (sắp
@@ -18,10 +21,9 @@ export const metadata = { title: "OTP Logs | Admin" };
 export const dynamic = "force-dynamic";
 
 interface Props {
-  searchParams: Promise<{ q?: string; purpose?: string; page?: string }>;
+  searchParams: Promise<{ q?: string; purpose?: string; page?: string; size?: string }>;
 }
 
-const PAGE_SIZE = 30;
 const PURPOSES: OtpPurpose[] = ["ACTIVATION", "RESET", "CHANGE_CONTACT"];
 const PURPOSE_LABEL: Record<string, string> = {
   ACTIVATION: "Kích hoạt",
@@ -66,6 +68,7 @@ export default async function OtpLogsPage({ searchParams }: Props) {
     ? (sp.purpose as OtpPurpose)
     : undefined;
   const page = Math.max(1, Number(sp.page) || 1);
+  const soDong = docSoDong(sp.size);
 
   const where: Prisma.OtpRequestWhereInput = {};
   if (q) where.target = { contains: q };
@@ -85,8 +88,8 @@ export default async function OtpLogsPage({ searchParams }: Props) {
       where,
       include: { deliveries: { orderBy: { createdAt: "asc" } } },
       orderBy: { createdAt: "desc" },
-      skip: (page - 1) * PAGE_SIZE,
-      take: PAGE_SIZE,
+      skip: (page - 1) * soDong,
+      take: soDong,
     }),
     sdb.otpDeliveryLog.count({
       where: { status: "SENT", createdAt: { gte: startOfToday() } },
@@ -114,7 +117,7 @@ export default async function OtpLogsPage({ searchParams }: Props) {
     getSetting("otp.globalKillSwitch"),
   ]);
 
-  const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE));
+  const totalPages = Math.max(1, Math.ceil(totalCount / soDong));
 
   function urlFor(p: Partial<{ q: string; purpose: string; page: number }>) {
     const u = new URLSearchParams();
@@ -277,27 +280,17 @@ export default async function OtpLogsPage({ searchParams }: Props) {
         </table>
       </div>
 
-      {totalPages > 1 && (
-        <div className="flex items-center gap-2 text-sm">
-          {page > 1 && (
-            <a
-              href={urlFor({ q, purpose, page: page - 1 })}
-              className="px-3 py-1 border rounded"
-            >
-              ← Trước
-            </a>
-          )}
+      {totalCount > 0 && (
+        <div className="flex flex-wrap items-center gap-3 text-sm">
+          <ChonSoDong soDong={soDong} tong={totalCount} tenDonVi="yêu cầu" />
           <span className="text-muted-foreground">
-            Trang {page}/{totalPages} · {totalCount} yêu cầu
+            Trang {page}/{totalPages}
           </span>
-          {page < totalPages && (
-            <a
-              href={urlFor({ q, purpose, page: page + 1 })}
-              className="px-3 py-1 border rounded"
-            >
-              Sau →
-            </a>
-          )}
+          <DieuHuongTrangLink
+            trang={page}
+            soTrang={totalPages}
+            hrefCua={(n: number) => urlFor({ q, purpose, page: n })}
+          />
         </div>
       )}
     </div>

@@ -20,6 +20,7 @@ import { Button } from "@/components/ui/button";
 import { EmptyState } from "../../_components/ui/empty-state";
 import { GradeForm } from "../../cham-bai/_components/grade-form";
 import { BackLink } from "../../_components/ui/back-link";
+import { PhanTrangBang } from "@/components/ui/phan-trang-bang";
 
 const SUBMITTED_STATUSES: SubmissionStatus[] = ["SUBMITTED", "LATE", "GRADED"];
 
@@ -237,68 +238,70 @@ export async function HubAssignmentsTab({
         </div>
         <div className="t-card overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="min-w-[560px] w-full border-collapse text-left text-sm">
-              <thead>
-                <tr className="border-b border-border bg-muted/50 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
-                  <th scope="col" className="px-5 py-3">
-                    Học viên
-                  </th>
-                  <th scope="col" className="px-5 py-3">
-                    Tình trạng
-                  </th>
-                  <th scope="col" className="px-5 py-3">
-                    Điểm
-                  </th>
-                  <th scope="col" className="px-5 py-3 text-right">
-                    <span className="sr-only">Chấm</span>
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {roster.map((e) => {
-                  const sub = subByStudent.get(e.student.id);
-                  const st = SUB_STATUS[sub?.status ?? "NOT_SUBMITTED"];
-                  const canGrade =
-                    sub != null && SUBMITTED_STATUSES.includes(sub.status);
-                  return (
-                    <tr
-                      key={e.student.id}
-                      className="border-b border-border/60 transition-colors last:border-0 hover:bg-muted/50"
-                    >
-                      <td className="px-5 py-3.5 font-medium text-foreground">
-                        {e.student.name}
-                      </td>
-                      <td className="px-5 py-3.5 whitespace-nowrap">
-                        <span
-                          className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold ${st.cls}`}
-                        >
-                          {st.label}
-                        </span>
-                      </td>
-                      <td className="px-5 py-3.5 whitespace-nowrap text-foreground">
-                        {sub?.score != null
-                          ? `${sub.score}/${asg.totalPoints}`
-                          : "—"}
-                      </td>
-                      <td className="px-5 py-3.5 text-right whitespace-nowrap">
-                        {canGrade && sub ? (
-                          <Link
-                            href={`?classId=${classId}&tab=bai-tap&asgId=${asg.id}&subId=${sub.id}`}
-                            className="rounded-sm text-sm font-semibold text-primary-ink outline-none hover:text-primary-ink-hover focus-visible:ring-2 focus-visible:ring-ring"
+            <PhanTrangBang>
+              <table className="min-w-[560px] w-full border-collapse text-left text-sm">
+                <thead>
+                  <tr className="border-b border-border bg-muted/50 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+                    <th scope="col" className="px-5 py-3">
+                      Học viên
+                    </th>
+                    <th scope="col" className="px-5 py-3">
+                      Tình trạng
+                    </th>
+                    <th scope="col" className="px-5 py-3">
+                      Điểm
+                    </th>
+                    <th scope="col" className="px-5 py-3 text-right">
+                      <span className="sr-only">Chấm</span>
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {roster.map((e) => {
+                    const sub = subByStudent.get(e.student.id);
+                    const st = SUB_STATUS[sub?.status ?? "NOT_SUBMITTED"];
+                    const canGrade =
+                      sub != null && SUBMITTED_STATUSES.includes(sub.status);
+                    return (
+                      <tr
+                        key={e.student.id}
+                        className="border-b border-border/60 transition-colors last:border-0 hover:bg-muted/50"
+                      >
+                        <td className="px-5 py-3.5 font-medium text-foreground">
+                          {e.student.name}
+                        </td>
+                        <td className="px-5 py-3.5 whitespace-nowrap">
+                          <span
+                            className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold ${st.cls}`}
                           >
-                            {sub.status === "GRADED" ? "Xem / sửa" : "Chấm"} →
-                          </Link>
-                        ) : (
-                          <span className="text-sm text-muted-foreground">
-                            —
+                            {st.label}
                           </span>
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+                        </td>
+                        <td className="px-5 py-3.5 whitespace-nowrap text-foreground">
+                          {sub?.score != null
+                            ? `${sub.score}/${asg.totalPoints}`
+                            : "—"}
+                        </td>
+                        <td className="px-5 py-3.5 text-right whitespace-nowrap">
+                          {canGrade && sub ? (
+                            <Link
+                              href={`?classId=${classId}&tab=bai-tap&asgId=${asg.id}&subId=${sub.id}`}
+                              className="rounded-sm text-sm font-semibold text-primary-ink outline-none hover:text-primary-ink-hover focus-visible:ring-2 focus-visible:ring-ring"
+                            >
+                              {sub.status === "GRADED" ? "Xem / sửa" : "Chấm"} →
+                            </Link>
+                          ) : (
+                            <span className="text-sm text-muted-foreground">
+                              —
+                            </span>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </PhanTrangBang>
           </div>
         </div>
       </div>
@@ -359,117 +362,119 @@ export async function HubAssignmentsTab({
 
       <div className="t-card overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="min-w-[880px] w-full border-collapse text-left text-sm">
-            <thead>
-              <tr className="border-b border-border bg-muted/50 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
-                <th scope="col" className="px-5 py-3">
-                  Nội dung
-                </th>
-                <th scope="col" className="px-5 py-3">
-                  Hình thức
-                </th>
-                <th scope="col" className="px-5 py-3">
-                  Nguồn
-                </th>
-                <th scope="col" className="px-5 py-3">
-                  Hạn nộp
-                </th>
-                <th scope="col" className="px-5 py-3">
-                  Đã nộp
-                </th>
-                <th scope="col" className="px-5 py-3">
-                  Trạng thái
-                </th>
-                <th scope="col" className="px-5 py-3 text-right">
-                  <span className="sr-only">Chi tiết</span>
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {assignments.length === 0 ? (
-                <tr>
-                  <td
-                    colSpan={7}
-                    className="px-5 py-10 text-center text-sm text-muted-foreground"
-                  >
-                    Chưa giao bài nào cho lớp — bấm “Giao bài” để chọn đầu bài
-                    từ thư viện.
-                  </td>
+          <PhanTrangBang>
+            <table className="min-w-[880px] w-full border-collapse text-left text-sm">
+              <thead>
+                <tr className="border-b border-border bg-muted/50 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+                  <th scope="col" className="px-5 py-3">
+                    Nội dung
+                  </th>
+                  <th scope="col" className="px-5 py-3">
+                    Hình thức
+                  </th>
+                  <th scope="col" className="px-5 py-3">
+                    Nguồn
+                  </th>
+                  <th scope="col" className="px-5 py-3">
+                    Hạn nộp
+                  </th>
+                  <th scope="col" className="px-5 py-3">
+                    Đã nộp
+                  </th>
+                  <th scope="col" className="px-5 py-3">
+                    Trạng thái
+                  </th>
+                  <th scope="col" className="px-5 py-3 text-right">
+                    <span className="sr-only">Chi tiết</span>
+                  </th>
                 </tr>
-              ) : (
-                assignments.map((a) => {
-                  const isTest = a._count.questions > 0;
-                  const fromAdmin = a.templateId != null;
-                  const due =
-                    a.dueAt && a.dueAt.getFullYear() >= 2000
-                      ? dueFmt.format(a.dueAt)
-                      : "—";
-                  return (
-                    <tr
-                      key={a.id}
-                      className="border-b border-border/60 transition-colors last:border-0 hover:bg-muted/50"
+              </thead>
+              <tbody>
+                {assignments.length === 0 ? (
+                  <tr>
+                    <td
+                      colSpan={7}
+                      className="px-5 py-10 text-center text-sm text-muted-foreground"
                     >
-                      <td className="px-5 py-3.5 font-semibold text-foreground">
-                        {a.title}
-                      </td>
-                      <td className="px-5 py-3.5">
-                        {isTest ? (
-                          <Badge
-                            variant="outline"
-                            className="border-primary-soft bg-primary-soft text-primary-ink dark:border-primary"
-                          >
-                            Kiểm tra
-                          </Badge>
-                        ) : (
-                          <Badge
-                            variant="outline"
-                            className="border-state-info-soft bg-state-info-soft text-state-info-ink dark:border-state-info"
-                          >
-                            Bài tập
-                          </Badge>
-                        )}
-                      </td>
-                      <td className="px-5 py-3.5">
-                        <span className="inline-flex items-center gap-1.5 text-muted-foreground">
-                          {fromAdmin ? (
-                            <>
-                              <Library className="h-3.5 w-3.5" aria-hidden />{" "}
-                              Đào tạo
-                            </>
+                      Chưa giao bài nào cho lớp — bấm “Giao bài” để chọn đầu bài
+                      từ thư viện.
+                    </td>
+                  </tr>
+                ) : (
+                  assignments.map((a) => {
+                    const isTest = a._count.questions > 0;
+                    const fromAdmin = a.templateId != null;
+                    const due =
+                      a.dueAt && a.dueAt.getFullYear() >= 2000
+                        ? dueFmt.format(a.dueAt)
+                        : "—";
+                    return (
+                      <tr
+                        key={a.id}
+                        className="border-b border-border/60 transition-colors last:border-0 hover:bg-muted/50"
+                      >
+                        <td className="px-5 py-3.5 font-semibold text-foreground">
+                          {a.title}
+                        </td>
+                        <td className="px-5 py-3.5">
+                          {isTest ? (
+                            <Badge
+                              variant="outline"
+                              className="border-primary-soft bg-primary-soft text-primary-ink dark:border-primary"
+                            >
+                              Kiểm tra
+                            </Badge>
                           ) : (
-                            <>
-                              <PencilLine className="h-3.5 w-3.5" aria-hidden />{" "}
-                              Tự tạo
-                            </>
+                            <Badge
+                              variant="outline"
+                              className="border-state-info-soft bg-state-info-soft text-state-info-ink dark:border-state-info"
+                            >
+                              Bài tập
+                            </Badge>
                           )}
-                        </span>
-                      </td>
-                      <td className="px-5 py-3.5 whitespace-nowrap text-foreground">
-                        {due}
-                      </td>
-                      <td className="px-5 py-3.5 whitespace-nowrap font-semibold text-foreground">
-                        {a._count.submissions}/{rosterCount}
-                      </td>
-                      <td className="px-5 py-3.5 whitespace-nowrap">
-                        <Badge variant="outline">
-                          {ASSIGNMENT_STATUS_LABEL[a.status] ?? a.status}
-                        </Badge>
-                      </td>
-                      <td className="px-5 py-3.5 text-right whitespace-nowrap">
-                        <Link
-                          href={`?classId=${classId}&tab=bai-tap&asgId=${a.id}`}
-                          className="inline-flex items-center gap-1 rounded-sm text-sm font-semibold text-primary-ink outline-none hover:text-primary-ink-hover focus-visible:ring-2 focus-visible:ring-ring"
-                        >
-                          <Eye className="h-4 w-4" aria-hidden />
-                          {isTest ? "Chấm điểm" : "Chi tiết"}
-                        </Link>
-                      </td>
-                    </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
+                        </td>
+                        <td className="px-5 py-3.5">
+                          <span className="inline-flex items-center gap-1.5 text-muted-foreground">
+                            {fromAdmin ? (
+                              <>
+                                <Library className="h-3.5 w-3.5" aria-hidden />{" "}
+                                Đào tạo
+                              </>
+                            ) : (
+                              <>
+                                <PencilLine className="h-3.5 w-3.5" aria-hidden />{" "}
+                                Tự tạo
+                              </>
+                            )}
+                          </span>
+                        </td>
+                        <td className="px-5 py-3.5 whitespace-nowrap text-foreground">
+                          {due}
+                        </td>
+                        <td className="px-5 py-3.5 whitespace-nowrap font-semibold text-foreground">
+                          {a._count.submissions}/{rosterCount}
+                        </td>
+                        <td className="px-5 py-3.5 whitespace-nowrap">
+                          <Badge variant="outline">
+                            {ASSIGNMENT_STATUS_LABEL[a.status] ?? a.status}
+                          </Badge>
+                        </td>
+                        <td className="px-5 py-3.5 text-right whitespace-nowrap">
+                          <Link
+                            href={`?classId=${classId}&tab=bai-tap&asgId=${a.id}`}
+                            className="inline-flex items-center gap-1 rounded-sm text-sm font-semibold text-primary-ink outline-none hover:text-primary-ink-hover focus-visible:ring-2 focus-visible:ring-ring"
+                          >
+                            <Eye className="h-4 w-4" aria-hidden />
+                            {isTest ? "Chấm điểm" : "Chi tiết"}
+                          </Link>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </PhanTrangBang>
         </div>
       </div>
     </div>
