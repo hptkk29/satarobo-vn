@@ -10,7 +10,7 @@ import type { Prisma, OtpPurpose } from "@prisma/client";
 import { PageHelp } from "@/components/admin/ui/page-help";
 import { ChonSoDong } from "@/components/ui/chon-so-dong";
 import { docSoDong } from "@/lib/ui/phan-trang";
-import { DieuHuongTrang } from "@/components/ui/dieu-huong-trang";
+import { DieuHuongTrangLink } from "@/components/ui/dieu-huong-trang-link";
 
 // AUTH-SĐT P4 — màn trả lời câu "phụ huynh báo không nhận được mã": trước đây
 // 0 UI nào đọc OtpRequest/OtpDeliveryLog, nhân viên phải mò Email logs (sắp
@@ -286,10 +286,10 @@ export default async function OtpLogsPage({ searchParams }: Props) {
           <span className="text-muted-foreground">
             Trang {page}/{totalPages}
           </span>
-          <DieuHuongTrang
+          <DieuHuongTrangLink
             trang={page}
             soTrang={totalPages}
-            hrefCua={(n) => urlFor({ q, purpose, page: n })}
+            hrefCua={(n: number) => urlFor({ q, purpose, page: n })}
           />
         </div>
       )}

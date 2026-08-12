@@ -2,33 +2,30 @@
 
 // THANH ĐIỀU HƯỚNG TRANG — Đầu · Trước · 4 [5] 6 · Sau · Cuối.
 //
-// Dùng chung cho CẢ hai kiểu phân trang trong hệ:
-//   · cắt ở client (`PhanTrangBang`, `BangPhanTrang`) → truyền `onDoi`;
-//   · cắt ở DB, trang điều hướng bằng URL (`/admin/students`…) → truyền `hrefCua`, khi đó
-//     mỗi nút là một `<Link>` thật (bấm giữa chuột mở tab mới được, bot đọc được).
-// Truyền đúng MỘT trong hai.
+// BẢN CLIENT — cho bảng cắt trang ở client (`PhanTrangBang`, `BangPhanTrang`): truyền
+// `onDoi`, mỗi nút là `<button>`.
+//
+// Cắt ở DB, điều hướng bằng URL (`/admin/students`…) thì dùng `DieuHuongTrangLink` —
+// SERVER component, mỗi nút là `<Link>` thật. Xem ghi chú ở file đó về lý do phải tách.
 
-import Link from "next/link";
 import { ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from "lucide-react";
-import { NGAN, dayTrang } from "@/lib/ui/day-trang";
+import { LOP_NUT as NUT, LOP_NUT_DANG_XEM as NUT_DANG_XEM, NGAN, dayTrang } from "@/lib/ui/day-trang";
 import { cn } from "@/lib/utils";
-
-const NUT =
-  "inline-flex h-8 min-w-8 items-center justify-center rounded-lg border border-border px-2 text-sm transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-40";
-const NUT_DANG_XEM =
-  "inline-flex h-8 min-w-8 items-center justify-center rounded-lg border border-primary bg-primary px-2 text-sm font-semibold text-primary-foreground";
 
 export function DieuHuongTrang({
   trang,
   soTrang,
   onDoi,
-  hrefCua,
   className,
 }: {
   trang: number;
   soTrang: number;
-  onDoi?: (trang: number) => void;
-  hrefCua?: (trang: number) => string;
+  /**
+   * ⚠️ CỐ Ý KHÔNG có `hrefCua` ở bản client. Truyền hàm từ Server Component sang Client
+   * Component là Next ném lúc chạy (sự cố 12/08/2026, digest 28380953). Dùng URL thì gọi
+   * `DieuHuongTrangLink` — và vì prop này không tồn tại ở đây nữa, `tsc` bắt được ngay.
+   */
+  onDoi: (trang: number) => void;
   className?: string;
 }) {
   if (soTrang <= 1) return null;
@@ -47,29 +44,14 @@ export function DieuHuongTrang({
     con: React.ReactNode;
     dangXem?: boolean;
   }) {
-    const lop = dangXem ? NUT_DANG_XEM : NUT;
-    // Nút đã tắt phải là <button disabled>, KHÔNG phải <Link> mờ đi — Link mờ vẫn bấm được
-    // và vẫn điều hướng.
-    if (hrefCua && !tat) {
-      return (
-        <Link
-          href={hrefCua(den)}
-          aria-label={nhan}
-          aria-current={dangXem ? "page" : undefined}
-          className={lop}
-        >
-          {con}
-        </Link>
-      );
-    }
     return (
       <button
         type="button"
         disabled={tat}
         aria-label={nhan}
         aria-current={dangXem ? "page" : undefined}
-        onClick={() => !tat && onDoi?.(den)}
-        className={lop}
+        onClick={() => !tat && onDoi(den)}
+        className={dangXem ? NUT_DANG_XEM : NUT}
       >
         {con}
       </button>

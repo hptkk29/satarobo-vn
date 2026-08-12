@@ -39,3 +39,9 @@ export function dayTrang(trang: number, soTrang: number, canh = 1): (number | ty
   }
   return ra;
 }
+
+/** Class dùng chung cho cả bản client (`DieuHuongTrang`) lẫn bản server (`…Link`). */
+export const LOP_NUT =
+  "inline-flex h-8 min-w-8 items-center justify-center rounded-lg border border-border px-2 text-sm transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-40";
+export const LOP_NUT_DANG_XEM =
+  "inline-flex h-8 min-w-8 items-center justify-center rounded-lg border border-primary bg-primary px-2 text-sm font-semibold text-primary-foreground";

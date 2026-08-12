@@ -10,6 +10,7 @@ import { describe, it, expect, vi } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { NGAN, dayTrang } from "@/lib/ui/day-trang";
 import { DieuHuongTrang } from "@/components/ui/dieu-huong-trang";
+import { DieuHuongTrangLink } from "@/components/ui/dieu-huong-trang-link";
 
 describe("dayTrang", () => {
   it("ít trang → hiện hết, không có dấu ngăn", () => {
@@ -47,7 +48,7 @@ describe("dayTrang", () => {
 
 describe("DieuHuongTrang", () => {
   it("một trang → không vẽ gì (đừng bày thanh vô dụng)", () => {
-    const { container } = render(<DieuHuongTrang trang={1} soTrang={1} />);
+    const { container } = render(<DieuHuongTrang trang={1} soTrang={1} onDoi={vi.fn()} />);
     expect(container.innerHTML).toBe("");
   });
 
@@ -84,9 +85,15 @@ describe("DieuHuongTrang", () => {
     expect(onDoi).not.toHaveBeenCalled();
   });
 
-  it("kiểu URL: nút bấm được là <a> thật, nút ở biên là <button disabled>", () => {
+  it("bản LINK: nút bấm được là <a> thật, nút ở biên là <button disabled>", () => {
     // <Link> mờ đi vẫn điều hướng — biên phải là button disabled mới thật sự chặn.
-    render(<DieuHuongTrang trang={1} soTrang={10} hrefCua={(n) => `/students?page=${n}`} />);
+    //
+    // Bản này là SERVER component tách riêng: `hrefCua` là một HÀM, mà hàm thì không
+    // truyền được từ server sang client (sự cố 12/08/2026, digest 28380953). Bản client
+    // nay KHÔNG còn prop đó ⇒ truyền nhầm là `tsc` báo đỏ chứ không đợi người dùng gặp.
+    render(
+      <DieuHuongTrangLink trang={1} soTrang={10} hrefCua={(n: number) => `/students?page=${n}`} />,
+    );
     expect(screen.getByLabelText("Trang 2").tagName).toBe("A");
     expect(screen.getByLabelText("Trang 2").getAttribute("href")).toBe("/students?page=2");
     expect(screen.getByLabelText("Trang đầu").tagName).toBe("BUTTON");

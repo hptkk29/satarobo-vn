@@ -18,7 +18,7 @@ import {
 } from "@/lib/validators/product";
 import { ChonSoDong } from "@/components/ui/chon-so-dong";
 import { docSoDong } from "@/lib/ui/phan-trang";
-import { DieuHuongTrang } from "@/components/ui/dieu-huong-trang";
+import { DieuHuongTrangLink } from "@/components/ui/dieu-huong-trang-link";
 
 export const metadata = { title: "Sản phẩm | Admin" };
 export const dynamic = "force-dynamic";
@@ -338,10 +338,10 @@ export default async function ProductsPage({ searchParams }: Props) {
               Trang {page}/{totalPages}
             </span>
           </div>
-          <DieuHuongTrang
+          <DieuHuongTrangLink
             trang={page}
             soTrang={totalPages}
-            hrefCua={(n) =>
+            hrefCua={(n: number) =>
               urlFor({
                 q,
                 category: categoryParam,

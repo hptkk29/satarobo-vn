@@ -4,7 +4,7 @@ import { DeleteStudentButton } from "./_components/delete-student-button";
 import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { ChonSoDong } from "@/components/ui/chon-so-dong";
-import { DieuHuongTrang } from "@/components/ui/dieu-huong-trang";
+import { DieuHuongTrangLink } from "@/components/ui/dieu-huong-trang-link";
 import { docSoDong } from "@/lib/ui/phan-trang";
 import { scopedDb } from "@/lib/db-scope";
 import { resolveActor } from "@/lib/auth/actor";
@@ -571,10 +571,10 @@ export default async function StudentsPage({ searchParams }: SearchParams) {
               Trang {page}/{totalPages}
             </span>
           </div>
-          <DieuHuongTrang
+          <DieuHuongTrangLink
             trang={page}
             soTrang={totalPages}
-            hrefCua={(n) =>
+            hrefCua={(n: number) =>
               urlFor({
                 view,
                 page: n,
