@@ -16,6 +16,33 @@ mà `Position` **cố ý không có đường xoá cứng** (nó là lịch sử
 
 ## 1. Chạy
 
+### Trên PROD — qua workflow, KHÔNG chạy từ máy dev
+
+Chuỗi kết nối prod nằm trong secret `PROD_DIRECT_URL` (Sensitive trên Vercel, không
+ai đọc lại được), nên máy dev **không chạm tới prod**. Chạy qua Actions:
+
+> **Nền P2 — backfill nhân sự → Vị trí + Phân công (prod)**
+> (`.github/workflows/nen-p2-position.yml`, `workflow_dispatch`)
+
+| Input | Mặc định | Ghi chú |
+|---|---|---|
+| `mode` | `dry-run` | `apply` mới ghi |
+| `gan_vai` | `false` | **để nguyên** ở lần chạy đầu — xem §3 |
+| `confirm` | rỗng | khi `apply` phải gõ đúng `GHI THAT VAO PROD` |
+
+Workflow tự làm 4 việc: kiểm điều kiện tiên quyết (§0) → in bản đối chiếu **và lưu
+thành artifact 90 ngày** → ghi (nếu `apply`) → chạy lại để chứng minh idempotent.
+Bản đối chiếu chạy ở CẢ hai chế độ: ở `apply` nó là ảnh chụp "trước khi ghi", vì P2
+không có nút lùi tự động (xem §4).
+
+Muốn kiểm điều kiện riêng, không đụng gì:
+```bash
+pnpm tsx scripts/nen-p2-kiem-tien-quyet.ts   # chỉ đọc, thoát ≠ 0 nếu chưa đủ
+```
+
+### Trên DB dev / local
+
+
 ```bash
 # (1) XEM TRƯỚC — in bản đối chiếu ra màn hình, không ghi gì
 pnpm tsx scripts/nen-p2-backfill-position.ts
