@@ -17,14 +17,11 @@
 
 import { useRouter, useSearchParams } from "next/navigation";
 import { useId, useTransition } from "react";
-import { MUC_SO_DONG, SO_DONG_MAC_DINH } from "@/components/ui/bang-phan-trang";
+import { MUC_SO_DONG, SO_DONG_MAC_DINH } from "@/lib/ui/phan-trang";
 import { cn } from "@/lib/utils";
 
-/** Đọc `?size=` từ searchParams của Server Component. Giá trị lạ → mặc định. */
-export function docSoDong(raw: string | string[] | undefined): number {
-  const n = Number(Array.isArray(raw) ? raw[0] : raw);
-  return MUC_SO_DONG.includes(n as (typeof MUC_SO_DONG)[number]) ? n : SO_DONG_MAC_DINH;
-}
+// ⚠️ `docSoDong` KHÔNG ở file này: Server Component phải gọi được nó, mà file này là
+// `"use client"`. Xem lib/ui/phan-trang.ts (sự cố 12/08/2026).
 
 export function ChonSoDong({
   soDong,

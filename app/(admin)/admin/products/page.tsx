@@ -16,7 +16,8 @@ import {
   PRODUCT_STATUS_LABEL,
   PRODUCT_STATUS_COLOR,
 } from "@/lib/validators/product";
-import { ChonSoDong, docSoDong } from "@/components/ui/chon-so-dong";
+import { ChonSoDong } from "@/components/ui/chon-so-dong";
+import { docSoDong } from "@/lib/ui/phan-trang";
 
 export const metadata = { title: "Sản phẩm | Admin" };
 export const dynamic = "force-dynamic";

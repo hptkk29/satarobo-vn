@@ -30,9 +30,10 @@ import {
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-/** Các mức người dùng chọn được. Mặc định 20 (chủ dự án chốt 11/08/2026). */
-export const MUC_SO_DONG = [10, 20, 50, 100] as const;
-export const SO_DONG_MAC_DINH = 20;
+// Hằng số ở module LÁ (không "use client") để Server Component dùng được — xem
+// lib/ui/phan-trang.ts. Re-export ở đây cho caller cũ khỏi phải sửa.
+export { MUC_SO_DONG, SO_DONG_MAC_DINH } from "@/lib/ui/phan-trang";
+import { MUC_SO_DONG, SO_DONG_MAC_DINH } from "@/lib/ui/phan-trang";
 
 const KHOA_LUU = "satarobo:bang:soDong";
 

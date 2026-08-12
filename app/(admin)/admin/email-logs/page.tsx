@@ -11,7 +11,8 @@ import {
   EMAIL_LOG_STATUS_LABEL,
   EMAIL_LOG_STATUS_COLOR,
 } from "@/lib/validators/email-template";
-import { ChonSoDong, docSoDong } from "@/components/ui/chon-so-dong";
+import { ChonSoDong } from "@/components/ui/chon-so-dong";
+import { docSoDong } from "@/lib/ui/phan-trang";
 
 export const metadata = { title: "Email Logs | Admin" };
 export const dynamic = "force-dynamic";

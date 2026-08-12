@@ -13,7 +13,7 @@ import { ALL_LEAD_STATUSES } from '@/lib/leads/status'
 import type { LeadStatus, Prisma } from '@prisma/client'
 import { phoneSearchTerm } from '@/lib/phone'
 import { getNonEnrollableCenterIds } from '@/lib/enrollment-flow'
-import { docSoDong } from '@/components/ui/chon-so-dong'
+import { docSoDong } from '@/lib/ui/phan-trang'
 
 const KANBAN_LIMIT = 500
 

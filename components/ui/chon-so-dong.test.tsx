@@ -16,14 +16,28 @@ vi.mock("next/navigation", () => ({
   useSearchParams: () => searchParams,
 }));
 
-import { ChonSoDong, docSoDong } from "@/components/ui/chon-so-dong";
+import { ChonSoDong } from "@/components/ui/chon-so-dong";
+import { docSoDong } from "@/lib/ui/phan-trang";
 
 beforeEach(() => {
   replace.mockClear();
   searchParams = new URLSearchParams();
 });
 
-describe("docSoDong", () => {
+describe("docSoDong — PHẢI ở module dùng được cả hai phía", () => {
+  it("module chứa nó KHÔNG được đánh dấu \"use client\"", async () => {
+    // Sự cố 12/08/2026: `docSoDong` nằm trong file "use client", Server Component gọi thì
+    // Next ném lúc CHẠY ("Attempted to call docSoDong() from the server…") — tsc và
+    // next build đều xanh, người dùng thấy màn hình lỗi kèm mã digest. Test này là thứ
+    // duy nhất bắt được loại lỗi đó trước khi lên môi trường thật.
+    const fs = await import("node:fs");
+    const src = fs.readFileSync("lib/ui/phan-trang.ts", "utf8");
+    // Bỏ chú thích rồi mới soi: chính file đó GIẢI THÍCH về "use client" trong comment,
+    // nên tìm chuỗi thô là tự đá vào chân mình.
+    const code = src.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "").trim();
+    expect(code.startsWith('"use client"') || code.startsWith("'use client'")).toBe(false);
+  });
+
   it("nhận đúng 4 mức", () => {
     for (const n of [10, 20, 50, 100]) expect(docSoDong(String(n))).toBe(n);
   });

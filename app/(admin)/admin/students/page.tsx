@@ -3,7 +3,8 @@ import { FileSpreadsheet, Plus } from "lucide-react";
 import { DeleteStudentButton } from "./_components/delete-student-button";
 import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
-import { ChonSoDong, docSoDong } from "@/components/ui/chon-so-dong";
+import { ChonSoDong } from "@/components/ui/chon-so-dong";
+import { docSoDong } from "@/lib/ui/phan-trang";
 import { scopedDb } from "@/lib/db-scope";
 import { resolveActor } from "@/lib/auth/actor";
 import {

@@ -8,7 +8,8 @@ import { getSetting } from "@/lib/settings/service";
 import { formatPhoneVN } from "@/lib/phone";
 import type { Prisma, OtpPurpose } from "@prisma/client";
 import { PageHelp } from "@/components/admin/ui/page-help";
-import { ChonSoDong, docSoDong } from "@/components/ui/chon-so-dong";
+import { ChonSoDong } from "@/components/ui/chon-so-dong";
+import { docSoDong } from "@/lib/ui/phan-trang";
 
 // AUTH-SĐT P4 — màn trả lời câu "phụ huynh báo không nhận được mã": trước đây
 // 0 UI nào đọc OtpRequest/OtpDeliveryLog, nhân viên phải mò Email logs (sắp
