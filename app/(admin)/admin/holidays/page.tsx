@@ -7,6 +7,7 @@ import { resolveActor } from "@/lib/auth/actor";
 import { getTeachingCenterIds } from "@/lib/org/org-service";
 import type { Prisma, HolidayType } from "@prisma/client";
 import { TypeBadge, ScopeBadge, DateRange, TYPE_LABELS } from "./_components/helpers";
+import { PhanTrangBang } from "@/components/ui/phan-trang-bang";
 
 export const dynamic = "force-dynamic";
 
@@ -143,79 +144,81 @@ export default async function HolidaysAdminPage({ searchParams }: SearchParams) 
       </form>
 
       <div className="overflow-hidden rounded-xl border border-border bg-card">
-        <table className="w-full">
-          <thead className="border-b border-border bg-muted text-left">
-            <tr>
-              <th className="p-4 text-xs font-bold uppercase tracking-wider text-foreground">
-                Ngày
-              </th>
-              <th className="p-4 text-xs font-bold uppercase tracking-wider text-foreground">
-                Tên
-              </th>
-              <th className="p-4 text-xs font-bold uppercase tracking-wider text-foreground">
-                Phạm vi
-              </th>
-              <th className="p-4 text-center text-xs font-bold uppercase tracking-wider text-foreground">
-                Loại
-              </th>
-              <th className="p-4 text-xs font-bold uppercase tracking-wider text-foreground">
-                Ghi chú
-              </th>
-              <th className="p-4 text-right text-xs font-bold uppercase tracking-wider text-foreground">
-                Thao tác
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {holidays.length === 0 ? (
+        <PhanTrangBang>
+          <table className="w-full">
+            <thead className="border-b border-border bg-muted text-left">
               <tr>
-                <td colSpan={6} className="p-12 text-center text-muted-foreground">
-                  {centerFilter || typeFilter ? (
-                    <>Không có ngày nghỉ nào khớp bộ lọc cho năm {year}.</>
-                  ) : (
-                    <>
-                      Chưa có ngày nghỉ nào trong năm {year}.{" "}
-                      <Link href="/holidays/new" className="text-primary hover:underline">
-                        Thêm ngày nghỉ đầu tiên →
-                      </Link>
-                    </>
-                  )}
-                </td>
+                <th className="p-4 text-xs font-bold uppercase tracking-wider text-foreground">
+                  Ngày
+                </th>
+                <th className="p-4 text-xs font-bold uppercase tracking-wider text-foreground">
+                  Tên
+                </th>
+                <th className="p-4 text-xs font-bold uppercase tracking-wider text-foreground">
+                  Phạm vi
+                </th>
+                <th className="p-4 text-center text-xs font-bold uppercase tracking-wider text-foreground">
+                  Loại
+                </th>
+                <th className="p-4 text-xs font-bold uppercase tracking-wider text-foreground">
+                  Ghi chú
+                </th>
+                <th className="p-4 text-right text-xs font-bold uppercase tracking-wider text-foreground">
+                  Thao tác
+                </th>
               </tr>
-            ) : (
-              holidays.map((h) => (
-                <tr key={h.id} className="border-b border-border hover:bg-muted">
-                  <td className="p-4 text-sm">
-                    <DateRange date={h.date} endDate={h.endDate} />
-                  </td>
-                  <td className="p-4 text-sm font-semibold text-foreground">{h.name}</td>
-                  <td className="p-4">
-                    <ScopeBadge center={h.center} />
-                  </td>
-                  <td className="p-4 text-center">
-                    <TypeBadge type={h.type} />
-                  </td>
-                  <td className="p-4 text-xs text-muted-foreground">
-                    {h.note ? (
-                      <span className="line-clamp-2">{h.note}</span>
+            </thead>
+            <tbody>
+              {holidays.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="p-12 text-center text-muted-foreground">
+                    {centerFilter || typeFilter ? (
+                      <>Không có ngày nghỉ nào khớp bộ lọc cho năm {year}.</>
                     ) : (
-                      <span className="text-muted-foreground">—</span>
+                      <>
+                        Chưa có ngày nghỉ nào trong năm {year}.{" "}
+                        <Link href="/holidays/new" className="text-primary hover:underline">
+                          Thêm ngày nghỉ đầu tiên →
+                        </Link>
+                      </>
                     )}
                   </td>
-                  <td className="p-4 text-right">
-                    <Link
-                      href={`/holidays/${h.id}/edit`}
-                      className="inline-flex items-center gap-1 rounded p-1.5 text-primary hover:bg-primary-soft"
-                      title="Sửa"
-                    >
-                      <Pencil className="h-4 w-4" />
-                    </Link>
-                  </td>
                 </tr>
-              ))
-            )}
-          </tbody>
-        </table>
+              ) : (
+                holidays.map((h) => (
+                  <tr key={h.id} className="border-b border-border hover:bg-muted">
+                    <td className="p-4 text-sm">
+                      <DateRange date={h.date} endDate={h.endDate} />
+                    </td>
+                    <td className="p-4 text-sm font-semibold text-foreground">{h.name}</td>
+                    <td className="p-4">
+                      <ScopeBadge center={h.center} />
+                    </td>
+                    <td className="p-4 text-center">
+                      <TypeBadge type={h.type} />
+                    </td>
+                    <td className="p-4 text-xs text-muted-foreground">
+                      {h.note ? (
+                        <span className="line-clamp-2">{h.note}</span>
+                      ) : (
+                        <span className="text-muted-foreground">—</span>
+                      )}
+                    </td>
+                    <td className="p-4 text-right">
+                      <Link
+                        href={`/holidays/${h.id}/edit`}
+                        className="inline-flex items-center gap-1 rounded p-1.5 text-primary hover:bg-primary-soft"
+                        title="Sửa"
+                      >
+                        <Pencil className="h-4 w-4" />
+                      </Link>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </PhanTrangBang>
       </div>
     </div>
   );

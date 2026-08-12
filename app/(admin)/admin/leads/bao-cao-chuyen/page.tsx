@@ -7,6 +7,7 @@ import { getModelVisibleCenterIds, scopedDb, logScopeBypass } from "@/lib/db-sco
 import { resolveActor } from "@/lib/auth/actor";
 import type { Prisma } from "@prisma/client";
 import { formatDateVN } from "@/lib/format/date";
+import { PhanTrangBang } from "@/components/ui/phan-trang-bang";
 
 export const metadata = { title: "Báo cáo chuyển lead liên cơ sở | Admin" };
 export const dynamic = "force-dynamic";
@@ -157,45 +158,47 @@ export default async function TransferReportPage({ searchParams }: Props) {
         </p>
       ) : (
         <div className="overflow-x-auto rounded-xl border border-border bg-card">
-          <table className="min-w-full text-sm">
-            <thead className="border-b border-border bg-muted text-left text-xs uppercase tracking-wider text-muted-foreground">
-              <tr>
-                <th className="px-3 py-2">Lead</th>
-                <th className="px-3 py-2">Chuyển</th>
-                <th className="px-3 py-2">Người chuyển</th>
-                <th className="px-3 py-2">Lý do / bàn giao</th>
-                <th className="px-3 py-2">Kết quả</th>
-                <th className="px-3 py-2">Ngày</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((r) => (
-                <tr key={r.id} className="border-b border-border last:border-0">
-                  <td className="px-3 py-2">
-                    <Link href={`/leads/${r.leadId}`} className="font-medium text-primary hover:underline">
-                      {r.parentName}
-                    </Link>
-                    <span className="block text-xs text-muted-foreground">{r.phone}</span>
-                  </td>
-                  <td className="px-3 py-2 whitespace-nowrap font-semibold text-foreground">
-                    {r.from} → {r.to}
-                  </td>
-                  <td className="px-3 py-2 text-muted-foreground">{r.by}</td>
-                  <td className="px-3 py-2 max-w-xs truncate text-muted-foreground" title={r.reason}>{r.reason}</td>
-                  <td className="px-3 py-2">
-                    {r.closed ? (
-                      <span className="rounded bg-state-success-soft px-2 py-0.5 text-xs font-semibold text-state-success-ink">Đã chốt</span>
-                    ) : (
-                      <span className="rounded bg-muted px-2 py-0.5 text-xs font-semibold text-muted-foreground">Chưa</span>
-                    )}
-                  </td>
-                  <td className="px-3 py-2 tabular-nums text-muted-foreground">
-                    {formatDateVN(r.createdAt)}
-                  </td>
+          <PhanTrangBang>
+            <table className="min-w-full text-sm">
+              <thead className="border-b border-border bg-muted text-left text-xs uppercase tracking-wider text-muted-foreground">
+                <tr>
+                  <th className="px-3 py-2">Lead</th>
+                  <th className="px-3 py-2">Chuyển</th>
+                  <th className="px-3 py-2">Người chuyển</th>
+                  <th className="px-3 py-2">Lý do / bàn giao</th>
+                  <th className="px-3 py-2">Kết quả</th>
+                  <th className="px-3 py-2">Ngày</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {rows.map((r) => (
+                  <tr key={r.id} className="border-b border-border last:border-0">
+                    <td className="px-3 py-2">
+                      <Link href={`/leads/${r.leadId}`} className="font-medium text-primary hover:underline">
+                        {r.parentName}
+                      </Link>
+                      <span className="block text-xs text-muted-foreground">{r.phone}</span>
+                    </td>
+                    <td className="px-3 py-2 whitespace-nowrap font-semibold text-foreground">
+                      {r.from} → {r.to}
+                    </td>
+                    <td className="px-3 py-2 text-muted-foreground">{r.by}</td>
+                    <td className="px-3 py-2 max-w-xs truncate text-muted-foreground" title={r.reason}>{r.reason}</td>
+                    <td className="px-3 py-2">
+                      {r.closed ? (
+                        <span className="rounded bg-state-success-soft px-2 py-0.5 text-xs font-semibold text-state-success-ink">Đã chốt</span>
+                      ) : (
+                        <span className="rounded bg-muted px-2 py-0.5 text-xs font-semibold text-muted-foreground">Chưa</span>
+                      )}
+                    </td>
+                    <td className="px-3 py-2 tabular-nums text-muted-foreground">
+                      {formatDateVN(r.createdAt)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </PhanTrangBang>
         </div>
       )}
     </div>

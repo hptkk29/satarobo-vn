@@ -5,6 +5,7 @@ import { auth } from "@/lib/auth";
 import { resolveActor } from "@/lib/auth/actor";
 import { scopedDb } from "@/lib/db-scope";
 import { KitListRow } from "./_components/kit-list-row";
+import { PhanTrangBang } from "@/components/ui/phan-trang-bang";
 
 export const dynamic = "force-dynamic";
 
@@ -61,32 +62,34 @@ export default async function KitsAdminPage() {
       </div>
 
       <div className="overflow-hidden rounded-xl border border-border bg-card">
-        <table className="w-full">
-          <thead className="border-b border-border bg-muted text-left">
-            <tr>
-              <th className="p-4 text-xs font-bold uppercase tracking-wider text-foreground">Sản phẩm</th>
-              <th className="p-4 text-xs font-bold uppercase tracking-wider text-foreground">Brand / Series</th>
-              <th className="p-4 text-center text-xs font-bold uppercase tracking-wider text-foreground">Thư viện ảnh</th>
-              <th className="p-4 text-xs font-bold uppercase tracking-wider text-foreground">Giá</th>
-              <th className="p-4 text-center text-xs font-bold uppercase tracking-wider text-foreground">Trạng thái</th>
-              <th className="p-4 text-right text-xs font-bold uppercase tracking-wider text-foreground">Thao tác</th>
-            </tr>
-          </thead>
-          <tbody>
-            {kits.length === 0 ? (
+        <PhanTrangBang>
+          <table className="w-full">
+            <thead className="border-b border-border bg-muted text-left">
               <tr>
-                <td colSpan={6} className="p-12 text-center text-muted-foreground">
-                  Chưa có kit nào.{" "}
-                  <Link href="/kits/new" className="text-primary hover:underline">
-                    Thêm kit đầu tiên →
-                  </Link>
-                </td>
+                <th className="p-4 text-xs font-bold uppercase tracking-wider text-foreground">Sản phẩm</th>
+                <th className="p-4 text-xs font-bold uppercase tracking-wider text-foreground">Brand / Series</th>
+                <th className="p-4 text-center text-xs font-bold uppercase tracking-wider text-foreground">Thư viện ảnh</th>
+                <th className="p-4 text-xs font-bold uppercase tracking-wider text-foreground">Giá</th>
+                <th className="p-4 text-center text-xs font-bold uppercase tracking-wider text-foreground">Trạng thái</th>
+                <th className="p-4 text-right text-xs font-bold uppercase tracking-wider text-foreground">Thao tác</th>
               </tr>
-            ) : (
-              kits.map((k) => <KitListRow key={k.id} kit={k} />)
-            )}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {kits.length === 0 ? (
+                <tr>
+                  <td colSpan={6} className="p-12 text-center text-muted-foreground">
+                    Chưa có kit nào.{" "}
+                    <Link href="/kits/new" className="text-primary hover:underline">
+                      Thêm kit đầu tiên →
+                    </Link>
+                  </td>
+                </tr>
+              ) : (
+                kits.map((k) => <KitListRow key={k.id} kit={k} />)
+              )}
+            </tbody>
+          </table>
+        </PhanTrangBang>
       </div>
     </div>
   );

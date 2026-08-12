@@ -39,6 +39,7 @@ import {
   type WorkRequestStatusV,
 } from "@/lib/work-request";
 import { submitWorkRequest } from "../_actions";
+import { PhanTrangBang } from "@/components/ui/phan-trang-bang";
 
 export interface WorkRequestRow {
   id: string;
@@ -188,35 +189,37 @@ export function DonTuClient({
       ) : (
         <div className="t-card overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="min-w-[770px] w-full border-collapse text-left text-sm">
-              <thead>
-                <tr className="border-b border-border bg-muted/50 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
-                  <th scope="col" className="px-5 py-3">
-                    Loại đơn
-                  </th>
-                  <th scope="col" className="px-5 py-3">
-                    Nhóm
-                  </th>
-                  <th scope="col" className="px-5 py-3">
-                    Thời gian
-                  </th>
-                  <th scope="col" className="px-5 py-3">
-                    Nội dung
-                  </th>
-                  <th scope="col" className="px-5 py-3">
-                    Trạng thái
-                  </th>
-                  <th scope="col" className="px-5 py-3">
-                    Ngày gửi
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {filtered.map((r) => (
-                  <RequestRow key={r.id} r={r} />
-                ))}
-              </tbody>
-            </table>
+            <PhanTrangBang>
+              <table className="min-w-[770px] w-full border-collapse text-left text-sm">
+                <thead>
+                  <tr className="border-b border-border bg-muted/50 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+                    <th scope="col" className="px-5 py-3">
+                      Loại đơn
+                    </th>
+                    <th scope="col" className="px-5 py-3">
+                      Nhóm
+                    </th>
+                    <th scope="col" className="px-5 py-3">
+                      Thời gian
+                    </th>
+                    <th scope="col" className="px-5 py-3">
+                      Nội dung
+                    </th>
+                    <th scope="col" className="px-5 py-3">
+                      Trạng thái
+                    </th>
+                    <th scope="col" className="px-5 py-3">
+                      Ngày gửi
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filtered.map((r) => (
+                    <RequestRow key={r.id} r={r} />
+                  ))}
+                </tbody>
+              </table>
+            </PhanTrangBang>
           </div>
         </div>
       )}

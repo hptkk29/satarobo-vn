@@ -16,6 +16,7 @@ import {
 import { DebtFilterBar } from "./_components/debt-filter-bar";
 // lib/finance/debt.ts — parallel agent owns. Combined typecheck resolves.
 import { getDebtRows, overdueBucket, type DebtRow } from "@/lib/finance/debt";
+import { PhanTrangBang } from "@/components/ui/phan-trang-bang";
 
 export const metadata = { title: "Công nợ | Admin" };
 export const dynamic = "force-dynamic";
@@ -182,36 +183,38 @@ export default async function CongNoPage({
       <DebtFilterBar groupBy={groupBy} search={search} />
 
       <div className="overflow-x-auto rounded-lg border border-border">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Nhóm</TableHead>
-              <TableHead className="text-right">Số đăng ký</TableHead>
-              <TableHead className="text-right">Tổng nợ</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {groupList.length === 0 && (
+        <PhanTrangBang>
+          <Table>
+            <TableHeader>
               <TableRow>
-                <TableCell
-                  colSpan={3}
-                  className="py-8 text-center text-sm text-muted-foreground"
-                >
-                  Không có công nợ phù hợp bộ lọc
-                </TableCell>
+                <TableHead>Nhóm</TableHead>
+                <TableHead className="text-right">Số đăng ký</TableHead>
+                <TableHead className="text-right">Tổng nợ</TableHead>
               </TableRow>
-            )}
-            {groupList.map((g) => (
-              <TableRow key={g.label}>
-                <TableCell className="font-medium">{g.label}</TableCell>
-                <TableCell className="text-right">{g.count}</TableCell>
-                <TableCell className="text-right font-semibold">
-                  {vnd(g.debt)}
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
+            </TableHeader>
+            <TableBody>
+              {groupList.length === 0 && (
+                <TableRow>
+                  <TableCell
+                    colSpan={3}
+                    className="py-8 text-center text-sm text-muted-foreground"
+                  >
+                    Không có công nợ phù hợp bộ lọc
+                  </TableCell>
+                </TableRow>
+              )}
+              {groupList.map((g) => (
+                <TableRow key={g.label}>
+                  <TableCell className="font-medium">{g.label}</TableCell>
+                  <TableCell className="text-right">{g.count}</TableCell>
+                  <TableCell className="text-right font-semibold">
+                    {vnd(g.debt)}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </PhanTrangBang>
       </div>
 
       <p className="mt-3 text-xs text-muted-foreground">

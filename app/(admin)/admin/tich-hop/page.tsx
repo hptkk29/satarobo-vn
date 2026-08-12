@@ -10,6 +10,7 @@ import { getPaymentConfigExact } from "@/lib/payments/vietqr";
 import { MisaControls } from "./_components/misa-controls";
 import { VietQrConfig, type VietQrCenterRow } from "./_components/vietqr-config";
 import { ZnsTest } from "./_components/zns-test";
+import { PhanTrangBang } from "@/components/ui/phan-trang-bang";
 
 export const metadata = { title: "Tích hợp | Admin" };
 export const dynamic = "force-dynamic";
@@ -114,46 +115,48 @@ export default async function IntegrationsPage() {
         <ZnsTest canEdit={canEdit} />
 
         <div className="mt-3 overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead className="text-left text-xs text-muted-foreground">
-              <tr>
-                <th className="px-3 py-2">SĐT</th>
-                <th className="px-3 py-2">Template</th>
-                <th className="px-3 py-2">Trạng thái</th>
-                <th className="px-3 py-2">Fallback email</th>
-                <th className="px-3 py-2">Ghi chú</th>
-                <th className="px-3 py-2">Thời gian</th>
-              </tr>
-            </thead>
-            <tbody>
-              {zaloLogs.length === 0 ? (
+          <PhanTrangBang>
+            <table className="w-full text-sm">
+              <thead className="text-left text-xs text-muted-foreground">
                 <tr>
-                  <td colSpan={6} className="px-3 py-6 text-center text-muted-foreground">
-                    Chưa có log.
-                  </td>
+                  <th className="px-3 py-2">SĐT</th>
+                  <th className="px-3 py-2">Template</th>
+                  <th className="px-3 py-2">Trạng thái</th>
+                  <th className="px-3 py-2">Fallback email</th>
+                  <th className="px-3 py-2">Ghi chú</th>
+                  <th className="px-3 py-2">Thời gian</th>
                 </tr>
-              ) : (
-                zaloLogs.map((l) => (
-                  <tr key={l.id} className="border-t">
-                    <td className="px-3 py-2">{l.toPhone ?? "—"}</td>
-                    <td className="px-3 py-2 text-muted-foreground">{l.templateKey ?? "—"}</td>
-                    <td className="px-3 py-2">
-                      {/* SENT + providerMessageId "SIMULATED-…" = ZALO_LIVE chưa bật: log xanh
-                          nhưng KHÔNG tin nào rời hệ thống — phải phân biệt kẻo tưởng đã gửi. */}
-                      {l.status === "SENT" && l.providerMessageId?.startsWith("SIMULATED-") ? (
-                        <span className="rounded-full bg-state-info-soft px-2 py-0.5 text-xs text-state-info-ink">SENT (mô phỏng)</span>
-                      ) : (
-                        <span className={`rounded-full px-2 py-0.5 text-xs ${STATUS_CLS[l.status] ?? ""}`}>{l.status}</span>
-                      )}
+              </thead>
+              <tbody>
+                {zaloLogs.length === 0 ? (
+                  <tr>
+                    <td colSpan={6} className="px-3 py-6 text-center text-muted-foreground">
+                      Chưa có log.
                     </td>
-                    <td className="px-3 py-2 text-muted-foreground">{l.fallbackEmailed ? "có" : "—"}</td>
-                    <td className="px-3 py-2 text-xs text-muted-foreground">{l.errorMessage ?? "—"}</td>
-                    <td className="px-3 py-2 text-muted-foreground">{l.createdAt.toISOString().slice(0, 16).replace("T", " ")}</td>
                   </tr>
-                ))
-              )}
-            </tbody>
-          </table>
+                ) : (
+                  zaloLogs.map((l) => (
+                    <tr key={l.id} className="border-t">
+                      <td className="px-3 py-2">{l.toPhone ?? "—"}</td>
+                      <td className="px-3 py-2 text-muted-foreground">{l.templateKey ?? "—"}</td>
+                      <td className="px-3 py-2">
+                        {/* SENT + providerMessageId "SIMULATED-…" = ZALO_LIVE chưa bật: log xanh
+                            nhưng KHÔNG tin nào rời hệ thống — phải phân biệt kẻo tưởng đã gửi. */}
+                        {l.status === "SENT" && l.providerMessageId?.startsWith("SIMULATED-") ? (
+                          <span className="rounded-full bg-state-info-soft px-2 py-0.5 text-xs text-state-info-ink">SENT (mô phỏng)</span>
+                        ) : (
+                          <span className={`rounded-full px-2 py-0.5 text-xs ${STATUS_CLS[l.status] ?? ""}`}>{l.status}</span>
+                        )}
+                      </td>
+                      <td className="px-3 py-2 text-muted-foreground">{l.fallbackEmailed ? "có" : "—"}</td>
+                      <td className="px-3 py-2 text-xs text-muted-foreground">{l.errorMessage ?? "—"}</td>
+                      <td className="px-3 py-2 text-muted-foreground">{l.createdAt.toISOString().slice(0, 16).replace("T", " ")}</td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </PhanTrangBang>
         </div>
       </section>
 
@@ -182,36 +185,38 @@ export default async function IntegrationsPage() {
         </p>
 
         <div className="mt-3 overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead className="text-left text-xs text-muted-foreground">
-              <tr>
-                <th className="px-3 py-2">Hành động</th>
-                <th className="px-3 py-2">Trạng thái</th>
-                <th className="px-3 py-2">Ghi chú</th>
-                <th className="px-3 py-2">Thời gian</th>
-              </tr>
-            </thead>
-            <tbody>
-              {misaLogs.length === 0 ? (
+          <PhanTrangBang>
+            <table className="w-full text-sm">
+              <thead className="text-left text-xs text-muted-foreground">
                 <tr>
-                  <td colSpan={4} className="px-3 py-6 text-center text-muted-foreground">
-                    Chưa có log.
-                  </td>
+                  <th className="px-3 py-2">Hành động</th>
+                  <th className="px-3 py-2">Trạng thái</th>
+                  <th className="px-3 py-2">Ghi chú</th>
+                  <th className="px-3 py-2">Thời gian</th>
                 </tr>
-              ) : (
-                misaLogs.map((l) => (
-                  <tr key={l.id} className="border-t">
-                    <td className="px-3 py-2">{l.action}</td>
-                    <td className="px-3 py-2">
-                      <span className={`rounded-full px-2 py-0.5 text-xs ${STATUS_CLS[l.status] ?? ""}`}>{l.status}</span>
+              </thead>
+              <tbody>
+                {misaLogs.length === 0 ? (
+                  <tr>
+                    <td colSpan={4} className="px-3 py-6 text-center text-muted-foreground">
+                      Chưa có log.
                     </td>
-                    <td className="px-3 py-2 text-xs text-muted-foreground">{l.errorMessage ?? "—"}</td>
-                    <td className="px-3 py-2 text-muted-foreground">{l.createdAt.toISOString().slice(0, 16).replace("T", " ")}</td>
                   </tr>
-                ))
-              )}
-            </tbody>
-          </table>
+                ) : (
+                  misaLogs.map((l) => (
+                    <tr key={l.id} className="border-t">
+                      <td className="px-3 py-2">{l.action}</td>
+                      <td className="px-3 py-2">
+                        <span className={`rounded-full px-2 py-0.5 text-xs ${STATUS_CLS[l.status] ?? ""}`}>{l.status}</span>
+                      </td>
+                      <td className="px-3 py-2 text-xs text-muted-foreground">{l.errorMessage ?? "—"}</td>
+                      <td className="px-3 py-2 text-muted-foreground">{l.createdAt.toISOString().slice(0, 16).replace("T", " ")}</td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </PhanTrangBang>
         </div>
       </section>
     </div>

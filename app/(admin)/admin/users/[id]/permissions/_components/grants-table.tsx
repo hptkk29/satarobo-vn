@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/dialog";
 import { getActionMeta } from "@/lib/auth/action-labels";
 import { updateGrantAction, removeGrantAction } from "../_actions";
+import { PhanTrangBang } from "@/components/ui/phan-trang-bang";
 
 export interface GrantRow {
   id: string;
@@ -53,81 +54,83 @@ export function GrantsTable({ grants }: { grants: GrantRow[] }) {
     <>
       <div className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
         <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-border">
-            <thead className="bg-muted">
-              <tr>
-                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  Quyền
-                </th>
-                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  Loại
-                </th>
-                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  Lý do
-                </th>
-                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  Người grant
-                </th>
-                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  Ngày tạo
-                </th>
-                <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  Hành động
-                </th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border">
-              {grants.map((g) => {
-                const meta = getActionMeta(g.action);
-                return (
-                  <tr key={g.id} className="hover:bg-muted/60">
-                    <td className="px-4 py-3">
-                      <div className="text-xs text-muted-foreground">{meta.category}</div>
-                      <div className="font-medium text-foreground">{meta.label}</div>
-                      <code className="text-[10px] text-muted-foreground">{g.action}</code>
-                    </td>
-                    <td className="px-4 py-3">
-                      <GrantBadge grant={g.grant} />
-                    </td>
-                    <td className="px-4 py-3 max-w-[200px]">
-                      {g.reason ? (
-                        <p className="text-xs italic text-muted-foreground">{g.reason}</p>
-                      ) : (
-                        <span className="text-xs text-muted-foreground">—</span>
-                      )}
-                    </td>
-                    <td className="px-4 py-3 text-xs text-muted-foreground">
-                      <div>{g.grantor.name ?? "—"}</div>
-                      <div className="text-muted-foreground">{g.grantor.email ?? "—"}</div>
-                    </td>
-                    <td className="px-4 py-3 text-xs tabular-nums text-muted-foreground">
-                      {formatDate(g.createdAt)}
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="flex items-center justify-end gap-1">
-                        <button
-                          type="button"
-                          onClick={() => setEditing(g)}
-                          title="Sửa"
-                          className="inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
-                        >
-                          <Pencil className="h-3.5 w-3.5" />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setDeleting(g)}
-                          title="Xoá"
-                          className="inline-flex h-7 w-7 items-center justify-center rounded-md text-state-danger-ink hover:bg-state-danger-soft hover:text-state-danger-ink"
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+          <PhanTrangBang>
+            <table className="min-w-full divide-y divide-border">
+              <thead className="bg-muted">
+                <tr>
+                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                    Quyền
+                  </th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                    Loại
+                  </th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                    Lý do
+                  </th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                    Người grant
+                  </th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                    Ngày tạo
+                  </th>
+                  <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                    Hành động
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border">
+                {grants.map((g) => {
+                  const meta = getActionMeta(g.action);
+                  return (
+                    <tr key={g.id} className="hover:bg-muted/60">
+                      <td className="px-4 py-3">
+                        <div className="text-xs text-muted-foreground">{meta.category}</div>
+                        <div className="font-medium text-foreground">{meta.label}</div>
+                        <code className="text-[10px] text-muted-foreground">{g.action}</code>
+                      </td>
+                      <td className="px-4 py-3">
+                        <GrantBadge grant={g.grant} />
+                      </td>
+                      <td className="px-4 py-3 max-w-[200px]">
+                        {g.reason ? (
+                          <p className="text-xs italic text-muted-foreground">{g.reason}</p>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">—</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-xs text-muted-foreground">
+                        <div>{g.grantor.name ?? "—"}</div>
+                        <div className="text-muted-foreground">{g.grantor.email ?? "—"}</div>
+                      </td>
+                      <td className="px-4 py-3 text-xs tabular-nums text-muted-foreground">
+                        {formatDate(g.createdAt)}
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center justify-end gap-1">
+                          <button
+                            type="button"
+                            onClick={() => setEditing(g)}
+                            title="Sửa"
+                            className="inline-flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
+                          >
+                            <Pencil className="h-3.5 w-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setDeleting(g)}
+                            title="Xoá"
+                            className="inline-flex h-7 w-7 items-center justify-center rounded-md text-state-danger-ink hover:bg-state-danger-soft hover:text-state-danger-ink"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </PhanTrangBang>
         </div>
       </div>
 

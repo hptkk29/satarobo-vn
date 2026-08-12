@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { PreviewDialog } from "./preview-dialog";
 import { deleteOwnTemplateAction } from "../_actions";
 import type { KhoTemplate } from "../_types";
+import { PhanTrangBang } from "@/components/ui/phan-trang-bang";
 
 export function KhoList({ rows }: { rows: KhoTemplate[] }) {
   const router = useRouter();
@@ -35,100 +36,102 @@ export function KhoList({ rows }: { rows: KhoTemplate[] }) {
     <>
       <div className="t-card overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="min-w-[770px] w-full border-collapse text-left text-sm">
-            <thead>
-              <tr className="border-b border-border bg-muted/50 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
-                <th scope="col" className="px-5 py-3">
-                  Nội dung
-                </th>
-                <th scope="col" className="px-5 py-3">
-                  Hình thức
-                </th>
-                <th scope="col" className="px-5 py-3">
-                  Số câu
-                </th>
-                <th scope="col" className="px-5 py-3">
-                  Thang điểm
-                </th>
-                <th scope="col" className="px-5 py-3">
-                  Ngày tạo
-                </th>
-                <th scope="col" className="px-5 py-3 text-right">
-                  <span className="sr-only">Thao tác</span>
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((t) => (
-                <tr
-                  key={t.id}
-                  className="border-b border-border/60 transition-colors last:border-0 hover:bg-muted/50"
-                >
-                  <td className="px-5 py-3.5">
-                    <p className="font-medium text-foreground">{t.title}</p>
-                    {t.description && (
-                      <p className="mt-0.5 line-clamp-1 text-xs text-muted-foreground">
-                        {t.description}
-                      </p>
-                    )}
-                  </td>
-                  <td className="px-5 py-3.5 whitespace-nowrap">
-                    <KindBadge kind={t.kind} />
-                  </td>
-                  <td className="px-5 py-3.5 whitespace-nowrap text-foreground">
-                    {t.questionCount}
-                  </td>
-                  <td className="px-5 py-3.5 whitespace-nowrap text-foreground">
-                    {t.totalPoints}
-                  </td>
-                  <td className="px-5 py-3.5 whitespace-nowrap text-muted-foreground">
-                    {t.createdAt}
-                  </td>
-                  <td className="px-5 py-3.5 text-right whitespace-nowrap">
-                    <div className="inline-flex items-center gap-1">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="text-primary-ink hover:text-primary-ink-hover"
-                        onClick={() => setPreview(t)}
-                      >
-                        <Eye /> Xem trước
-                      </Button>
-                      {confirmId === t.id ? (
-                        <>
-                          <Button
-                            variant="destructive"
-                            size="sm"
-                            disabled={pending}
-                            onClick={() => del(t.id)}
-                          >
-                            {pending ? "Đang xoá…" : "Xác nhận xoá"}
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            disabled={pending}
-                            onClick={() => setConfirmId(null)}
-                          >
-                            Huỷ
-                          </Button>
-                        </>
-                      ) : (
+          <PhanTrangBang>
+            <table className="min-w-[770px] w-full border-collapse text-left text-sm">
+              <thead>
+                <tr className="border-b border-border bg-muted/50 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+                  <th scope="col" className="px-5 py-3">
+                    Nội dung
+                  </th>
+                  <th scope="col" className="px-5 py-3">
+                    Hình thức
+                  </th>
+                  <th scope="col" className="px-5 py-3">
+                    Số câu
+                  </th>
+                  <th scope="col" className="px-5 py-3">
+                    Thang điểm
+                  </th>
+                  <th scope="col" className="px-5 py-3">
+                    Ngày tạo
+                  </th>
+                  <th scope="col" className="px-5 py-3 text-right">
+                    <span className="sr-only">Thao tác</span>
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((t) => (
+                  <tr
+                    key={t.id}
+                    className="border-b border-border/60 transition-colors last:border-0 hover:bg-muted/50"
+                  >
+                    <td className="px-5 py-3.5">
+                      <p className="font-medium text-foreground">{t.title}</p>
+                      {t.description && (
+                        <p className="mt-0.5 line-clamp-1 text-xs text-muted-foreground">
+                          {t.description}
+                        </p>
+                      )}
+                    </td>
+                    <td className="px-5 py-3.5 whitespace-nowrap">
+                      <KindBadge kind={t.kind} />
+                    </td>
+                    <td className="px-5 py-3.5 whitespace-nowrap text-foreground">
+                      {t.questionCount}
+                    </td>
+                    <td className="px-5 py-3.5 whitespace-nowrap text-foreground">
+                      {t.totalPoints}
+                    </td>
+                    <td className="px-5 py-3.5 whitespace-nowrap text-muted-foreground">
+                      {t.createdAt}
+                    </td>
+                    <td className="px-5 py-3.5 text-right whitespace-nowrap">
+                      <div className="inline-flex items-center gap-1">
                         <Button
                           variant="ghost"
                           size="sm"
-                          className="text-muted-foreground hover:text-destructive"
-                          onClick={() => setConfirmId(t.id)}
+                          className="text-primary-ink hover:text-primary-ink-hover"
+                          onClick={() => setPreview(t)}
                         >
-                          <Trash2 /> Xoá
+                          <Eye /> Xem trước
                         </Button>
-                      )}
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+                        {confirmId === t.id ? (
+                          <>
+                            <Button
+                              variant="destructive"
+                              size="sm"
+                              disabled={pending}
+                              onClick={() => del(t.id)}
+                            >
+                              {pending ? "Đang xoá…" : "Xác nhận xoá"}
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              disabled={pending}
+                              onClick={() => setConfirmId(null)}
+                            >
+                              Huỷ
+                            </Button>
+                          </>
+                        ) : (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="text-muted-foreground hover:text-destructive"
+                            onClick={() => setConfirmId(t.id)}
+                          >
+                            <Trash2 /> Xoá
+                          </Button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </PhanTrangBang>
         </div>
       </div>
 

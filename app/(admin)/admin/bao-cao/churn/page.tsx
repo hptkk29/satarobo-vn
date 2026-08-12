@@ -16,6 +16,7 @@ import {
 import { ReportFilterBar } from "@/components/admin/report-filter-bar";
 import { BarChart } from "@/components/charts/bar-chart";
 import { LineChart } from "@/components/charts/line-chart";
+import { PhanTrangBang } from "@/components/ui/phan-trang-bang";
 
 export const metadata = { title: "Báo cáo churn / rời lớp | Admin" };
 export const dynamic = "force-dynamic";
@@ -171,37 +172,39 @@ export default async function ChurnReportPage({
       {/* Bảng tỉ lệ churn theo tháng */}
       <Card title="Tỉ lệ churn theo tháng">
         <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead className="text-left text-xs text-muted-foreground">
-              <tr>
-                <th className="px-3 py-2">Kỳ</th>
-                <th className="px-3 py-2 text-right">Đang học đầu kỳ</th>
-                <th className="px-3 py-2 text-right">Rời lớp</th>
-                <th className="px-3 py-2 text-right">Tỉ lệ churn</th>
-              </tr>
-            </thead>
-            <tbody>
-              {report.byMonth.map((m) => (
-                <tr key={m.period} className="border-t">
-                  <td className="px-3 py-2">{m.period}</td>
-                  <td className="px-3 py-2 text-right">{num(m.activeAtStart)}</td>
-                  <td className="px-3 py-2 text-right">{num(m.withdrew)}</td>
-                  {/* Không có ai "đang học đầu kỳ" → tỉ lệ không xác định, hiện "—"
-                      thay vì "0.0%" (chia cho 0) gây hiểu nhầm là không có ai rời. */}
-                  <td className="px-3 py-2 text-right font-medium">
-                    {m.activeAtStart > 0 ? pct(m.churnRate) : "—"}
-                  </td>
-                </tr>
-              ))}
-              {report.byMonth.length === 0 ? (
+          <PhanTrangBang>
+            <table className="w-full text-sm">
+              <thead className="text-left text-xs text-muted-foreground">
                 <tr>
-                  <td className="px-3 py-4 text-center text-muted-foreground" colSpan={4}>
-                    Chưa có dữ liệu.
-                  </td>
+                  <th className="px-3 py-2">Kỳ</th>
+                  <th className="px-3 py-2 text-right">Đang học đầu kỳ</th>
+                  <th className="px-3 py-2 text-right">Rời lớp</th>
+                  <th className="px-3 py-2 text-right">Tỉ lệ churn</th>
                 </tr>
-              ) : null}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {report.byMonth.map((m) => (
+                  <tr key={m.period} className="border-t">
+                    <td className="px-3 py-2">{m.period}</td>
+                    <td className="px-3 py-2 text-right">{num(m.activeAtStart)}</td>
+                    <td className="px-3 py-2 text-right">{num(m.withdrew)}</td>
+                    {/* Không có ai "đang học đầu kỳ" → tỉ lệ không xác định, hiện "—"
+                        thay vì "0.0%" (chia cho 0) gây hiểu nhầm là không có ai rời. */}
+                    <td className="px-3 py-2 text-right font-medium">
+                      {m.activeAtStart > 0 ? pct(m.churnRate) : "—"}
+                    </td>
+                  </tr>
+                ))}
+                {report.byMonth.length === 0 ? (
+                  <tr>
+                    <td className="px-3 py-4 text-center text-muted-foreground" colSpan={4}>
+                      Chưa có dữ liệu.
+                    </td>
+                  </tr>
+                ) : null}
+              </tbody>
+            </table>
+          </PhanTrangBang>
         </div>
       </Card>
 
@@ -221,26 +224,28 @@ export default async function ChurnReportPage({
           height={300}
         />
         <div className="mt-3 overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead className="text-left text-xs text-muted-foreground">
-              <tr>
-                <th className="px-3 py-2">Cơ sở</th>
-                <th className="px-3 py-2 text-right">Tổng</th>
-                <th className="px-3 py-2 text-right">Rời lớp</th>
-                <th className="px-3 py-2 text-right">Tỉ lệ rời</th>
-              </tr>
-            </thead>
-            <tbody>
-              {report.byCenter.map((c) => (
-                <tr key={c.key} className="border-t">
-                  <td className="px-3 py-2">{c.label}</td>
-                  <td className="px-3 py-2 text-right">{num(c.total)}</td>
-                  <td className="px-3 py-2 text-right">{num(c.withdrew)}</td>
-                  <td className="px-3 py-2 text-right font-medium">{pct(c.churnRate)}</td>
+          <PhanTrangBang>
+            <table className="w-full text-sm">
+              <thead className="text-left text-xs text-muted-foreground">
+                <tr>
+                  <th className="px-3 py-2">Cơ sở</th>
+                  <th className="px-3 py-2 text-right">Tổng</th>
+                  <th className="px-3 py-2 text-right">Rời lớp</th>
+                  <th className="px-3 py-2 text-right">Tỉ lệ rời</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {report.byCenter.map((c) => (
+                  <tr key={c.key} className="border-t">
+                    <td className="px-3 py-2">{c.label}</td>
+                    <td className="px-3 py-2 text-right">{num(c.total)}</td>
+                    <td className="px-3 py-2 text-right">{num(c.withdrew)}</td>
+                    <td className="px-3 py-2 text-right font-medium">{pct(c.churnRate)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </PhanTrangBang>
         </div>
       </Card>
     </div>

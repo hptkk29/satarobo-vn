@@ -18,6 +18,7 @@ import { QrZoom } from "./qr-zoom";
 import { issueQrForRequest, regenerateQr } from "../_qr-actions";
 import type { QrIssueResult, QrSessionView } from "../_qr-core";
 import { formatDateVN } from "@/lib/format/date";
+import { PhanTrangBang } from "@/components/ui/phan-trang-bang";
 
 export type PaymentRequestRow = {
   id: string;
@@ -232,77 +233,79 @@ export function PaymentRequestsSection({
       </h2>
 
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[560px] border-collapse text-sm">
-          <thead>
-            <tr className="border-b border-border bg-muted text-left">
-              <th className="p-2">Phiếu thu</th>
-              <th className="p-2 text-right">Phải thu</th>
-              <th className="p-2 text-right">Đã thu</th>
-              <th className="p-2 text-right">Còn thiếu</th>
-              <th className="p-2">Hạn</th>
-              <th className="p-2">Trạng thái</th>
-              <th className="p-2 text-right">QR</th>
-            </tr>
-          </thead>
-          <tbody>
-            {requests.map((r) => {
-              const label = requestLabel(r, totalDots);
-              const s = sessions[r.id];
-              const isOpen = openId === r.id && !!s;
-              const canIssue = canManage && r.status !== "PAID" && r.status !== "VOID";
-              return (
-                <tr key={r.id} className="border-b border-border align-top">
-                  <td className="p-2 font-semibold text-foreground">{label}</td>
-                  <td className="p-2 text-right tabular-nums">{vnd(r.amountDue)}</td>
-                  <td className="p-2 text-right tabular-nums text-state-success-ink">
-                    {vnd(r.allocated)}
-                  </td>
-                  <td className="p-2 text-right font-semibold tabular-nums text-foreground">
-                    {vnd(outstanding(r))}
-                  </td>
-                  <td className="p-2 text-muted-foreground">
-                    {r.dueDate ? formatDateVN(r.dueDate) : "—"}
-                  </td>
-                  <td className="p-2">
-                    <Badge className={STATUS_CLASS[r.status]}>{STATUS_LABEL[r.status]}</Badge>
-                  </td>
-                  <td className="p-2 text-right">
-                    {canIssue ? (
-                      <Button
-                        size="sm"
-                        variant={isOpen ? "outline" : "default"}
-                        disabled={pending && busyId === r.id}
-                        onClick={() => {
-                          if (s && !expired[r.id]) {
-                            setOpenId(isOpen ? null : r.id);
-                            return;
-                          }
-                          run(r.id, () => issueQrForRequest({ paymentRequestId: r.id }));
-                        }}
-                      >
-                        {pending && busyId === r.id ? (
-                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                        ) : (
-                          <QrCode className="h-3.5 w-3.5" />
-                        )}
-                        {s && !expired[r.id] ? (isOpen ? "Ẩn QR" : "Xem QR") : "Xuất QR"}
-                      </Button>
-                    ) : (
-                      <span className="text-xs text-muted-foreground">—</span>
-                    )}
+        <PhanTrangBang>
+          <table className="w-full min-w-[560px] border-collapse text-sm">
+            <thead>
+              <tr className="border-b border-border bg-muted text-left">
+                <th className="p-2">Phiếu thu</th>
+                <th className="p-2 text-right">Phải thu</th>
+                <th className="p-2 text-right">Đã thu</th>
+                <th className="p-2 text-right">Còn thiếu</th>
+                <th className="p-2">Hạn</th>
+                <th className="p-2">Trạng thái</th>
+                <th className="p-2 text-right">QR</th>
+              </tr>
+            </thead>
+            <tbody>
+              {requests.map((r) => {
+                const label = requestLabel(r, totalDots);
+                const s = sessions[r.id];
+                const isOpen = openId === r.id && !!s;
+                const canIssue = canManage && r.status !== "PAID" && r.status !== "VOID";
+                return (
+                  <tr key={r.id} className="border-b border-border align-top">
+                    <td className="p-2 font-semibold text-foreground">{label}</td>
+                    <td className="p-2 text-right tabular-nums">{vnd(r.amountDue)}</td>
+                    <td className="p-2 text-right tabular-nums text-state-success-ink">
+                      {vnd(r.allocated)}
+                    </td>
+                    <td className="p-2 text-right font-semibold tabular-nums text-foreground">
+                      {vnd(outstanding(r))}
+                    </td>
+                    <td className="p-2 text-muted-foreground">
+                      {r.dueDate ? formatDateVN(r.dueDate) : "—"}
+                    </td>
+                    <td className="p-2">
+                      <Badge className={STATUS_CLASS[r.status]}>{STATUS_LABEL[r.status]}</Badge>
+                    </td>
+                    <td className="p-2 text-right">
+                      {canIssue ? (
+                        <Button
+                          size="sm"
+                          variant={isOpen ? "outline" : "default"}
+                          disabled={pending && busyId === r.id}
+                          onClick={() => {
+                            if (s && !expired[r.id]) {
+                              setOpenId(isOpen ? null : r.id);
+                              return;
+                            }
+                            run(r.id, () => issueQrForRequest({ paymentRequestId: r.id }));
+                          }}
+                        >
+                          {pending && busyId === r.id ? (
+                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                          ) : (
+                            <QrCode className="h-3.5 w-3.5" />
+                          )}
+                          {s && !expired[r.id] ? (isOpen ? "Ẩn QR" : "Xem QR") : "Xuất QR"}
+                        </Button>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">—</span>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+              {requests.length === 0 && (
+                <tr>
+                  <td colSpan={7} className="p-3 text-sm text-muted-foreground">
+                    Chưa có phiếu thu nào cho đơn này.
                   </td>
                 </tr>
-              );
-            })}
-            {requests.length === 0 && (
-              <tr>
-                <td colSpan={7} className="p-3 text-sm text-muted-foreground">
-                  Chưa có phiếu thu nào cho đơn này.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
+              )}
+            </tbody>
+          </table>
+        </PhanTrangBang>
       </div>
 
       {/* Panel QR của phiếu đang mở — nhãn nói RÕ đang thu đợt nào, bao nhiêu. */}

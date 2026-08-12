@@ -29,6 +29,7 @@ import { AssignForm } from "./_components/assign-form";
 import { BatchGrade } from "./_components/batch-grade";
 import { resolveTemplateOwnerId } from "../kho-bai-tap/_owner";
 import { BackLink } from "../_components/ui/back-link";
+import { PhanTrangBang } from "@/components/ui/phan-trang-bang";
 
 export const metadata = { title: "Bài tập & kiểm tra | Giáo viên Sata Robo" };
 
@@ -252,68 +253,70 @@ export default async function TeacherAssignmentsPage({
         />
         <div className="t-card overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="min-w-[560px] w-full border-collapse text-left text-sm">
-              <thead>
-                <tr className="border-b border-border bg-muted/50 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
-                  <th scope="col" className="px-5 py-3">
-                    Học viên
-                  </th>
-                  <th scope="col" className="px-5 py-3">
-                    Tình trạng
-                  </th>
-                  <th scope="col" className="px-5 py-3">
-                    Điểm
-                  </th>
-                  <th scope="col" className="px-5 py-3 text-right">
-                    <span className="sr-only">Chấm</span>
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {roster.map((e) => {
-                  const sub = subByStudent.get(e.student.id);
-                  const st = SUB_STATUS[sub?.status ?? "NOT_SUBMITTED"];
-                  const canGrade =
-                    sub != null && SUBMITTED_STATUSES.includes(sub.status);
-                  return (
-                    <tr
-                      key={e.student.id}
-                      className="border-b border-border/60 transition-colors last:border-0 hover:bg-muted/50"
-                    >
-                      <td className="px-5 py-3.5 font-medium text-foreground">
-                        {e.student.name}
-                      </td>
-                      <td className="px-5 py-3.5 whitespace-nowrap">
-                        <span
-                          className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold ${st.cls}`}
-                        >
-                          {st.label}
-                        </span>
-                      </td>
-                      <td className="px-5 py-3.5 whitespace-nowrap text-foreground">
-                        {sub?.score != null
-                          ? `${sub.score}/${asg.totalPoints}`
-                          : "—"}
-                      </td>
-                      <td className="px-5 py-3.5 text-right whitespace-nowrap">
-                        {canGrade && sub ? (
-                          <Link
-                            href={`?submissionId=${sub.id}`}
-                            className="rounded-sm text-sm font-semibold text-primary-ink outline-none hover:text-primary-ink-hover focus-visible:ring-2 focus-visible:ring-ring"
+            <PhanTrangBang>
+              <table className="min-w-[560px] w-full border-collapse text-left text-sm">
+                <thead>
+                  <tr className="border-b border-border bg-muted/50 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+                    <th scope="col" className="px-5 py-3">
+                      Học viên
+                    </th>
+                    <th scope="col" className="px-5 py-3">
+                      Tình trạng
+                    </th>
+                    <th scope="col" className="px-5 py-3">
+                      Điểm
+                    </th>
+                    <th scope="col" className="px-5 py-3 text-right">
+                      <span className="sr-only">Chấm</span>
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {roster.map((e) => {
+                    const sub = subByStudent.get(e.student.id);
+                    const st = SUB_STATUS[sub?.status ?? "NOT_SUBMITTED"];
+                    const canGrade =
+                      sub != null && SUBMITTED_STATUSES.includes(sub.status);
+                    return (
+                      <tr
+                        key={e.student.id}
+                        className="border-b border-border/60 transition-colors last:border-0 hover:bg-muted/50"
+                      >
+                        <td className="px-5 py-3.5 font-medium text-foreground">
+                          {e.student.name}
+                        </td>
+                        <td className="px-5 py-3.5 whitespace-nowrap">
+                          <span
+                            className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold ${st.cls}`}
                           >
-                            {sub.status === "GRADED" ? "Xem / sửa" : "Chấm"} →
-                          </Link>
-                        ) : (
-                          <span className="text-sm text-muted-foreground">
-                            —
+                            {st.label}
                           </span>
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+                        </td>
+                        <td className="px-5 py-3.5 whitespace-nowrap text-foreground">
+                          {sub?.score != null
+                            ? `${sub.score}/${asg.totalPoints}`
+                            : "—"}
+                        </td>
+                        <td className="px-5 py-3.5 text-right whitespace-nowrap">
+                          {canGrade && sub ? (
+                            <Link
+                              href={`?submissionId=${sub.id}`}
+                              className="rounded-sm text-sm font-semibold text-primary-ink outline-none hover:text-primary-ink-hover focus-visible:ring-2 focus-visible:ring-ring"
+                            >
+                              {sub.status === "GRADED" ? "Xem / sửa" : "Chấm"} →
+                            </Link>
+                          ) : (
+                            <span className="text-sm text-muted-foreground">
+                              —
+                            </span>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </PhanTrangBang>
           </div>
         </div>
       </div>

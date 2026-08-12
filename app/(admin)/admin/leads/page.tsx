@@ -13,12 +13,13 @@ import { ALL_LEAD_STATUSES } from '@/lib/leads/status'
 import type { LeadStatus, Prisma } from '@prisma/client'
 import { phoneSearchTerm } from '@/lib/phone'
 import { getNonEnrollableCenterIds } from '@/lib/enrollment-flow'
+import { docSoDong } from '@/lib/ui/phan-trang'
 
-const PAGE_SIZE = 20
 const KANBAN_LIMIT = 500
 
 type SP = {
   page?: string
+  size?: string
   status?: string
   q?: string
   view?: string
@@ -56,6 +57,7 @@ export default async function LeadsPage({
   const params = await searchParams
   const view = params.view === 'kanban' ? 'kanban' : 'table'
   const page = Math.max(1, Number(params.page ?? 1))
+  const soDong = docSoDong(params.size)
   const statusParam = params.status as LeadStatus | undefined
   const q = params.q?.trim()
   // SĐT lưu 2 dạng (0… cũ / 84… mới) — tìm theo phần lõi để không sót. Xem lib/phone.ts.
@@ -264,8 +266,8 @@ export default async function LeadsPage({
         assignedTo: { select: { name: true } },
       },
       orderBy: { createdAt: 'desc' },
-      skip: (page - 1) * PAGE_SIZE,
-      take: PAGE_SIZE,
+      skip: (page - 1) * soDong,
+      take: soDong,
     }),
     sdb.lead.count({ where }),
   ])
@@ -320,7 +322,7 @@ export default async function LeadsPage({
         leads={leads}
         total={total}
         page={page}
-        pageSize={PAGE_SIZE}
+        pageSize={soDong}
         canUpdate={canUpdate}
         canDelete={canDelete}
         currentStatus={statusFilter}

@@ -20,6 +20,7 @@ import { Badge } from "@/components/ui/badge";
 import { ListToolbar } from "../../_components/ui/list-toolbar";
 import { EmptyState } from "../../_components/ui/empty-state";
 import { initialsOf } from "@/lib/ui/initials";
+import { PhanTrangBang } from "@/components/ui/phan-trang-bang";
 
 export type ReportCardStatus =
   | "DRAFT"
@@ -226,149 +227,151 @@ function HocBaTab({ rows }: { rows: ReportCardRow[] }) {
       ) : (
         <section className="t-card overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="min-w-[990px] w-full text-left text-sm">
-              <thead>
-                <tr className="border-b border-border bg-muted/50 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                  <th scope="col" className="px-4 py-3">
-                    Học viên
-                  </th>
-                  <th scope="col" className="px-4 py-3">
-                    Khoá học
-                  </th>
-                  <th scope="col" className="px-4 py-3">
-                    Chuyên cần
-                  </th>
-                  <th scope="col" className="px-4 py-3">
-                    Điểm TB
-                  </th>
-                  <th scope="col" className="px-4 py-3">
-                    Trạng thái học bạ
-                  </th>
-                  <th scope="col" className="px-4 py-3">
-                    Mốc buổi
-                  </th>
-                  <th scope="col" className="px-4 py-3">
-                    Cập nhật
-                  </th>
-                  <th scope="col" className="px-4 py-3 text-right">
-                    Thao tác
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {filtered.map((r) => (
-                  <tr
-                    key={r.enrollmentId}
-                    className="border-b border-border/60 transition-colors last:border-0 hover:bg-muted/50"
-                  >
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-3">
-                        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary-soft text-xs font-semibold text-primary-ink">
-                          {initialsOf(r.studentName)}
-                        </span>
-                        <div className="min-w-0">
-                          <p className="font-medium text-foreground">
-                            {r.studentName}
-                          </p>
-                          {r.studentCode ? (
-                            <p className="text-xs text-muted-foreground">
-                              {r.studentCode}
+            <PhanTrangBang>
+              <table className="min-w-[990px] w-full text-left text-sm">
+                <thead>
+                  <tr className="border-b border-border bg-muted/50 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    <th scope="col" className="px-4 py-3">
+                      Học viên
+                    </th>
+                    <th scope="col" className="px-4 py-3">
+                      Khoá học
+                    </th>
+                    <th scope="col" className="px-4 py-3">
+                      Chuyên cần
+                    </th>
+                    <th scope="col" className="px-4 py-3">
+                      Điểm TB
+                    </th>
+                    <th scope="col" className="px-4 py-3">
+                      Trạng thái học bạ
+                    </th>
+                    <th scope="col" className="px-4 py-3">
+                      Mốc buổi
+                    </th>
+                    <th scope="col" className="px-4 py-3">
+                      Cập nhật
+                    </th>
+                    <th scope="col" className="px-4 py-3 text-right">
+                      Thao tác
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filtered.map((r) => (
+                    <tr
+                      key={r.enrollmentId}
+                      className="border-b border-border/60 transition-colors last:border-0 hover:bg-muted/50"
+                    >
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-3">
+                          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary-soft text-xs font-semibold text-primary-ink">
+                            {initialsOf(r.studentName)}
+                          </span>
+                          <div className="min-w-0">
+                            <p className="font-medium text-foreground">
+                              {r.studentName}
                             </p>
+                            {r.studentCode ? (
+                              <p className="text-xs text-muted-foreground">
+                                {r.studentCode}
+                              </p>
+                            ) : null}
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-4 py-3">
+                        <p className="text-foreground">{r.courseName}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {r.className}
+                        </p>
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap">
+                        {r.totalSessions > 0 ? (
+                          <>
+                            <span className="font-semibold text-foreground">
+                              {r.attendedSessions}/{r.totalSessions}
+                            </span>
+                            <span className="text-xs text-muted-foreground">
+                              {" "}
+                              buổi
+                            </span>
+                          </>
+                        ) : (
+                          <span className="text-muted-foreground">—</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap">
+                        {r.avgScore != null ? (
+                          <span className="font-bold text-primary-ink">
+                            {r.avgScore}
+                          </span>
+                        ) : (
+                          <span className="text-muted-foreground">—</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <StatusPill status={r.status} label={r.statusLabel} />
+                          {r.editableByTeacher ? (
+                            <Badge
+                              variant="outline"
+                              className="border-state-success-soft text-state-success-ink dark:border-state-success"
+                            >
+                              GV sửa được
+                            </Badge>
                           ) : null}
                         </div>
-                      </div>
-                    </td>
-                    <td className="px-4 py-3">
-                      <p className="text-foreground">{r.courseName}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {r.className}
-                      </p>
-                    </td>
-                    <td className="px-4 py-3 whitespace-nowrap">
-                      {r.totalSessions > 0 ? (
-                        <>
-                          <span className="font-semibold text-foreground">
-                            {r.attendedSessions}/{r.totalSessions}
-                          </span>
-                          <span className="text-xs text-muted-foreground">
-                            {" "}
-                            buổi
-                          </span>
-                        </>
-                      ) : (
-                        <span className="text-muted-foreground">—</span>
-                      )}
-                    </td>
-                    <td className="px-4 py-3 whitespace-nowrap">
-                      {r.avgScore != null ? (
-                        <span className="font-bold text-primary-ink">
-                          {r.avgScore}
-                        </span>
-                      ) : (
-                        <span className="text-muted-foreground">—</span>
-                      )}
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="flex flex-wrap items-center gap-1.5">
-                        <StatusPill status={r.status} label={r.statusLabel} />
-                        {r.editableByTeacher ? (
-                          <Badge
-                            variant="outline"
-                            className="border-state-success-soft text-state-success-ink dark:border-state-success"
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex flex-wrap gap-1">
+                          {r.milestones.map((m) => (
+                            <span
+                              key={m.milestone}
+                              title={m.label}
+                              className={`whitespace-nowrap rounded-full px-2 py-0.5 text-xs font-medium ${MILESTONE_CLASS[m.state]}`}
+                            >
+                              {m.text}
+                            </span>
+                          ))}
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap text-muted-foreground">
+                        {r.updatedAtLabel ?? "—"}
+                      </td>
+                      <td className="px-4 py-3 text-right whitespace-nowrap">
+                        <div className="inline-flex items-center gap-1.5">
+                          {r.status === "PUBLISHED" && (
+                            <a
+                              href={`/teacher/hoc-ba/pdf/${r.enrollmentId}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-1 rounded-md border border-border px-2.5 py-1.5 text-xs font-semibold text-foreground transition-colors hover:bg-muted"
+                            >
+                              <FileDown className="h-3.5 w-3.5" aria-hidden />{" "}
+                              Xuất học bạ
+                            </a>
+                          )}
+                          {/* href CHỈ-query (giữ path hiện tại): chạy đúng cả trên host
+                              giaovien (clean URL /hoc-ba) LẪN localhost (/teacher/hoc-ba). */}
+                          {/* Nền TINT chứ không tô đặc: bảng này thường 47+ hàng, mỗi
+                              hàng một nút tím đặc thì cả cột thành một mảng tím hét lên
+                              như nhau — không còn hàng nào nổi hơn hàng nào. Tint vẫn
+                              giữ nguyên tính "đây là việc chính của hàng" mà không đè
+                              át các dấu hiệu trạng thái bên trái. */}
+                          <Link
+                            href={`?enrollmentId=${r.enrollmentId}`}
+                            className="rounded-md bg-primary-soft px-3 py-1.5 text-xs font-semibold text-primary-ink transition-colors hover:bg-primary-soft-hover"
                           >
-                            GV sửa được
-                          </Badge>
-                        ) : null}
-                      </div>
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="flex flex-wrap gap-1">
-                        {r.milestones.map((m) => (
-                          <span
-                            key={m.milestone}
-                            title={m.label}
-                            className={`whitespace-nowrap rounded-full px-2 py-0.5 text-xs font-medium ${MILESTONE_CLASS[m.state]}`}
-                          >
-                            {m.text}
-                          </span>
-                        ))}
-                      </div>
-                    </td>
-                    <td className="px-4 py-3 whitespace-nowrap text-muted-foreground">
-                      {r.updatedAtLabel ?? "—"}
-                    </td>
-                    <td className="px-4 py-3 text-right whitespace-nowrap">
-                      <div className="inline-flex items-center gap-1.5">
-                        {r.status === "PUBLISHED" && (
-                          <a
-                            href={`/teacher/hoc-ba/pdf/${r.enrollmentId}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="inline-flex items-center gap-1 rounded-md border border-border px-2.5 py-1.5 text-xs font-semibold text-foreground transition-colors hover:bg-muted"
-                          >
-                            <FileDown className="h-3.5 w-3.5" aria-hidden />{" "}
-                            Xuất học bạ
-                          </a>
-                        )}
-                        {/* href CHỈ-query (giữ path hiện tại): chạy đúng cả trên host
-                            giaovien (clean URL /hoc-ba) LẪN localhost (/teacher/hoc-ba). */}
-                        {/* Nền TINT chứ không tô đặc: bảng này thường 47+ hàng, mỗi
-                            hàng một nút tím đặc thì cả cột thành một mảng tím hét lên
-                            như nhau — không còn hàng nào nổi hơn hàng nào. Tint vẫn
-                            giữ nguyên tính "đây là việc chính của hàng" mà không đè
-                            át các dấu hiệu trạng thái bên trái. */}
-                        <Link
-                          href={`?enrollmentId=${r.enrollmentId}`}
-                          className="rounded-md bg-primary-soft px-3 py-1.5 text-xs font-semibold text-primary-ink transition-colors hover:bg-primary-soft-hover"
-                        >
-                          {r.hasCard ? "Mở học bạ" : "Nhập học bạ"}
-                        </Link>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+                            {r.hasCard ? "Mở học bạ" : "Nhập học bạ"}
+                          </Link>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </PhanTrangBang>
           </div>
         </section>
       )}
@@ -458,106 +461,108 @@ function NangLucTab({ rows }: { rows: ReportCardRow[] }) {
       ) : (
         <section className="t-card overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="min-w-[660px] w-full text-left text-sm">
-              <thead>
-                <tr className="border-b border-border bg-muted/50 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                  <th scope="col" className="px-4 py-3">
-                    Học viên
-                  </th>
-                  <th scope="col" className="px-4 py-3">
-                    Khoá học
-                  </th>
-                  {columns.map((name) => (
-                    <th
-                      key={name}
-                      scope="col"
-                      className="px-4 py-3 text-center whitespace-nowrap"
-                    >
-                      {name}
+            <PhanTrangBang>
+              <table className="min-w-[660px] w-full text-left text-sm">
+                <thead>
+                  <tr className="border-b border-border bg-muted/50 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    <th scope="col" className="px-4 py-3">
+                      Học viên
                     </th>
-                  ))}
-                  <th
-                    scope="col"
-                    className="px-4 py-3 whitespace-nowrap"
-                    title="Điểm trung bình các tiêu chí năng lực (thang 1–4)"
-                  >
-                    TB
-                  </th>
-                  <th scope="col" className="px-4 py-3">
-                    Xếp loại
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {filtered.map((r) => {
-                  const levelByName = new Map(
-                    r.competency.cells.map((c) => [c.name, c.level]),
-                  );
-                  return (
-                    <tr
-                      key={r.enrollmentId}
-                      className="border-b border-border/60 transition-colors last:border-0 hover:bg-muted/50"
+                    <th scope="col" className="px-4 py-3">
+                      Khoá học
+                    </th>
+                    {columns.map((name) => (
+                      <th
+                        key={name}
+                        scope="col"
+                        className="px-4 py-3 text-center whitespace-nowrap"
+                      >
+                        {name}
+                      </th>
+                    ))}
+                    <th
+                      scope="col"
+                      className="px-4 py-3 whitespace-nowrap"
+                      title="Điểm trung bình các tiêu chí năng lực (thang 1–4)"
                     >
-                      <td className="px-4 py-3">
-                        <div className="flex items-center gap-3">
-                          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary-soft text-xs font-semibold text-primary-ink">
-                            {initialsOf(r.studentName)}
-                          </span>
-                          <div className="min-w-0">
-                            <p className="font-medium text-foreground">
-                              {r.studentName}
-                            </p>
-                            {r.studentCode ? (
-                              <p className="text-xs text-muted-foreground">
-                                {r.studentCode}
+                      TB
+                    </th>
+                    <th scope="col" className="px-4 py-3">
+                      Xếp loại
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filtered.map((r) => {
+                    const levelByName = new Map(
+                      r.competency.cells.map((c) => [c.name, c.level]),
+                    );
+                    return (
+                      <tr
+                        key={r.enrollmentId}
+                        className="border-b border-border/60 transition-colors last:border-0 hover:bg-muted/50"
+                      >
+                        <td className="px-4 py-3">
+                          <div className="flex items-center gap-3">
+                            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary-soft text-xs font-semibold text-primary-ink">
+                              {initialsOf(r.studentName)}
+                            </span>
+                            <div className="min-w-0">
+                              <p className="font-medium text-foreground">
+                                {r.studentName}
                               </p>
-                            ) : null}
+                              {r.studentCode ? (
+                                <p className="text-xs text-muted-foreground">
+                                  {r.studentCode}
+                                </p>
+                              ) : null}
+                            </div>
                           </div>
-                        </div>
-                      </td>
-                      <td className="px-4 py-3">
-                        <p className="text-foreground">{r.courseName}</p>
-                        <p className="text-xs text-muted-foreground">
-                          {r.className}
-                        </p>
-                      </td>
-                      {columns.map((name) => {
-                        const lv = levelByName.get(name) ?? 0;
-                        return (
-                          <td
-                            key={name}
-                            className="px-4 py-3 text-center whitespace-nowrap"
-                          >
-                            {lv >= 1 ? (
-                              <span
-                                title={LEVEL_LABEL[lv] ?? String(lv)}
-                                className="font-semibold text-foreground"
-                              >
-                                {lv}
-                              </span>
-                            ) : (
-                              <span className="text-muted-foreground">—</span>
-                            )}
-                          </td>
-                        );
-                      })}
-                      <td className="px-4 py-3 whitespace-nowrap">
-                        {r.competency.avgLevel != null ? (
-                          <span className="font-semibold text-foreground">
-                            {r.competency.avgLevel.toFixed(1)}
-                          </span>
-                        ) : (
-                          <span className="text-muted-foreground">—</span>
-                        )}
-                      </td>
-                      <td className="px-4 py-3">
-                        <RankPill rank={r.competency.rank} />
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+                        </td>
+                        <td className="px-4 py-3">
+                          <p className="text-foreground">{r.courseName}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {r.className}
+                          </p>
+                        </td>
+                        {columns.map((name) => {
+                          const lv = levelByName.get(name) ?? 0;
+                          return (
+                            <td
+                              key={name}
+                              className="px-4 py-3 text-center whitespace-nowrap"
+                            >
+                              {lv >= 1 ? (
+                                <span
+                                  title={LEVEL_LABEL[lv] ?? String(lv)}
+                                  className="font-semibold text-foreground"
+                                >
+                                  {lv}
+                                </span>
+                              ) : (
+                                <span className="text-muted-foreground">—</span>
+                              )}
+                            </td>
+                          );
+                        })}
+                        <td className="px-4 py-3 whitespace-nowrap">
+                          {r.competency.avgLevel != null ? (
+                            <span className="font-semibold text-foreground">
+                              {r.competency.avgLevel.toFixed(1)}
+                            </span>
+                          ) : (
+                            <span className="text-muted-foreground">—</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3">
+                          <RankPill rank={r.competency.rank} />
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </PhanTrangBang>
           </div>
         </section>
       )}

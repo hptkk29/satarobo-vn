@@ -6,6 +6,7 @@ import { checkPermission } from "@/lib/auth/check-permission";
 import { scopedDb, getModelVisibleCenterIds } from "@/lib/db-scope";
 import { resolveActor } from "@/lib/auth/actor";
 import { ExamStatus, type Prisma } from "@prisma/client";
+import { PhanTrangBang } from "@/components/ui/phan-trang-bang";
 
 export const dynamic = "force-dynamic";
 
@@ -169,110 +170,112 @@ export default async function ExamsPage({ searchParams }: SearchParams) {
 
       <div className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
         <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-border">
-            <thead className="bg-muted">
-              <tr>
-                <th className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  Tiêu đề
-                </th>
-                <th className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  Lớp / Bài
-                </th>
-                <th className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  Trạng thái
-                </th>
-                <th className="px-3 py-3 text-center text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  Câu
-                </th>
-                <th className="px-3 py-3 text-center text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  Lượt
-                </th>
-                <th className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  Thời lượng
-                </th>
-                <th className="px-3 py-3 text-right text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  Hành động
-                </th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border">
-              {exams.length === 0 ? (
+          <PhanTrangBang>
+            <table className="min-w-full divide-y divide-border">
+              <thead className="bg-muted">
                 <tr>
-                  <td
-                    colSpan={7}
-                    className="px-4 py-12 text-center text-sm text-muted-foreground"
-                  >
-                    Chưa có đề thi nào khớp bộ lọc.{" "}
-                    <Link href="/exams/new" className="text-primary hover:underline">
-                      Tạo mới →
-                    </Link>
-                  </td>
+                  <th className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                    Tiêu đề
+                  </th>
+                  <th className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                    Lớp / Bài
+                  </th>
+                  <th className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                    Trạng thái
+                  </th>
+                  <th className="px-3 py-3 text-center text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                    Câu
+                  </th>
+                  <th className="px-3 py-3 text-center text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                    Lượt
+                  </th>
+                  <th className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                    Thời lượng
+                  </th>
+                  <th className="px-3 py-3 text-right text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                    Hành động
+                  </th>
                 </tr>
-              ) : (
-                exams.map((e) => {
-                  const statusInfo = STATUS_INFO[e.status];
-                  return (
-                    <tr key={e.id} className="hover:bg-muted/60">
-                      <td className="px-3 py-3">
-                        <div className="font-medium text-foreground">{e.title}</div>
-                        {e.examCode && (
-                          <div className="text-xs text-muted-foreground tabular-nums">
-                            {e.examCode}
-                          </div>
-                        )}
-                      </td>
-                      <td className="px-3 py-3 text-xs text-muted-foreground">
-                        {e.class && (
-                          <div className="font-medium">{e.class.name}</div>
-                        )}
-                        {e.lesson && (
-                          <div className="text-muted-foreground">
-                            {e.lesson.curriculum.name} — Bài {e.lesson.order}:{" "}
-                            {e.lesson.title}
-                          </div>
-                        )}
-                        {!e.class && !e.lesson && (
-                          <span className="text-muted-foreground">—</span>
-                        )}
-                      </td>
-                      <td className="px-3 py-3">
-                        <span
-                          className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold ${statusInfo.color}`}
-                        >
-                          {statusInfo.label}
-                        </span>
-                      </td>
-                      <td className="px-3 py-3 text-center text-sm tabular-nums text-foreground">
-                        {e._count.examQuestions}
-                      </td>
-                      <td className="px-3 py-3 text-center text-sm tabular-nums text-foreground">
-                        {e._count.attempts}
-                      </td>
-                      <td className="px-3 py-3 text-sm tabular-nums text-muted-foreground">
-                        {e.durationMinutes}′
-                      </td>
-                      <td className="px-3 py-3 text-right">
-                        <div className="inline-flex gap-1">
-                          <Link
-                            href={`/exams/${e.id}/builder`}
-                            className="rounded-md border border-border px-2.5 py-1 text-xs font-semibold text-foreground hover:bg-muted"
+              </thead>
+              <tbody className="divide-y divide-border">
+                {exams.length === 0 ? (
+                  <tr>
+                    <td
+                      colSpan={7}
+                      className="px-4 py-12 text-center text-sm text-muted-foreground"
+                    >
+                      Chưa có đề thi nào khớp bộ lọc.{" "}
+                      <Link href="/exams/new" className="text-primary hover:underline">
+                        Tạo mới →
+                      </Link>
+                    </td>
+                  </tr>
+                ) : (
+                  exams.map((e) => {
+                    const statusInfo = STATUS_INFO[e.status];
+                    return (
+                      <tr key={e.id} className="hover:bg-muted/60">
+                        <td className="px-3 py-3">
+                          <div className="font-medium text-foreground">{e.title}</div>
+                          {e.examCode && (
+                            <div className="text-xs text-muted-foreground tabular-nums">
+                              {e.examCode}
+                            </div>
+                          )}
+                        </td>
+                        <td className="px-3 py-3 text-xs text-muted-foreground">
+                          {e.class && (
+                            <div className="font-medium">{e.class.name}</div>
+                          )}
+                          {e.lesson && (
+                            <div className="text-muted-foreground">
+                              {e.lesson.curriculum.name} — Bài {e.lesson.order}:{" "}
+                              {e.lesson.title}
+                            </div>
+                          )}
+                          {!e.class && !e.lesson && (
+                            <span className="text-muted-foreground">—</span>
+                          )}
+                        </td>
+                        <td className="px-3 py-3">
+                          <span
+                            className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold ${statusInfo.color}`}
                           >
-                            Builder
-                          </Link>
-                          <Link
-                            href={`/exams/${e.id}/attempts`}
-                            className="rounded-md border border-primary-soft px-2.5 py-1 text-xs font-semibold text-primary hover:bg-primary-soft"
-                          >
-                            Bài làm
-                          </Link>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
+                            {statusInfo.label}
+                          </span>
+                        </td>
+                        <td className="px-3 py-3 text-center text-sm tabular-nums text-foreground">
+                          {e._count.examQuestions}
+                        </td>
+                        <td className="px-3 py-3 text-center text-sm tabular-nums text-foreground">
+                          {e._count.attempts}
+                        </td>
+                        <td className="px-3 py-3 text-sm tabular-nums text-muted-foreground">
+                          {e.durationMinutes}′
+                        </td>
+                        <td className="px-3 py-3 text-right">
+                          <div className="inline-flex gap-1">
+                            <Link
+                              href={`/exams/${e.id}/builder`}
+                              className="rounded-md border border-border px-2.5 py-1 text-xs font-semibold text-foreground hover:bg-muted"
+                            >
+                              Builder
+                            </Link>
+                            <Link
+                              href={`/exams/${e.id}/attempts`}
+                              className="rounded-md border border-primary-soft px-2.5 py-1 text-xs font-semibold text-primary hover:bg-primary-soft"
+                            >
+                              Bài làm
+                            </Link>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </PhanTrangBang>
         </div>
       </div>
     </div>

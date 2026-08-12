@@ -10,6 +10,7 @@ import { StatCardAdmin } from "@/components/design-system/admin/stat-card-admin"
 import { FunnelChart } from "@/components/charts/funnel-chart";
 import { BarChart } from "@/components/charts/bar-chart";
 import { LEAD_STATUS_LABEL } from "@/lib/leads/status";
+import { PhanTrangBang } from "@/components/ui/phan-trang-bang";
 
 export const metadata = { title: "CRM Dashboard | Admin" };
 export const dynamic = "force-dynamic";
@@ -211,28 +212,30 @@ export default async function CrmDashboardPage() {
           </p>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-border text-left text-xs uppercase tracking-wide text-muted-foreground">
-                  <th className="py-2 pr-4 font-semibold">Nhân viên</th>
-                  <th className="py-2 pr-4 font-semibold">Lead được giao</th>
-                  <th className="py-2 pr-4 font-semibold">Đã chốt</th>
-                  <th className="py-2 font-semibold">Tỉ lệ chốt</th>
-                </tr>
-              </thead>
-              <tbody>
-                {salesRows.map((r) => (
-                  <tr key={r.id} className="border-b border-border">
-                    <td className="py-2 pr-4 font-medium text-foreground">
-                      {r.name}
-                    </td>
-                    <td className="py-2 pr-4 text-foreground">{r.assigned}</td>
-                    <td className="py-2 pr-4 text-foreground">{r.enrolled}</td>
-                    <td className="py-2 text-foreground">{r.rate.toFixed(1)}%</td>
+            <PhanTrangBang>
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-border text-left text-xs uppercase tracking-wide text-muted-foreground">
+                    <th className="py-2 pr-4 font-semibold">Nhân viên</th>
+                    <th className="py-2 pr-4 font-semibold">Lead được giao</th>
+                    <th className="py-2 pr-4 font-semibold">Đã chốt</th>
+                    <th className="py-2 font-semibold">Tỉ lệ chốt</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {salesRows.map((r) => (
+                    <tr key={r.id} className="border-b border-border">
+                      <td className="py-2 pr-4 font-medium text-foreground">
+                        {r.name}
+                      </td>
+                      <td className="py-2 pr-4 text-foreground">{r.assigned}</td>
+                      <td className="py-2 pr-4 text-foreground">{r.enrolled}</td>
+                      <td className="py-2 text-foreground">{r.rate.toFixed(1)}%</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </PhanTrangBang>
           </div>
         )}
       </div>

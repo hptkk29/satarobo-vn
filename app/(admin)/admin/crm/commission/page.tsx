@@ -14,6 +14,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { StatementActions } from "./_components/statement-actions";
+import { PhanTrangBang } from "@/components/ui/phan-trang-bang";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Hoa hồng | Admin" };
@@ -56,43 +57,45 @@ export default async function CommissionPage() {
         Bảng hoa hồng theo kỳ
       </h1>
       <div className="rounded-lg border">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Kỳ</TableHead>
-              <TableHead>Trạng thái</TableHead>
-              <TableHead className="text-right">Số dòng</TableHead>
-              <TableHead className="text-right">Tổng (VND)</TableHead>
-              <TableHead className="text-right">Hành động</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {statements.length === 0 ? (
+        <PhanTrangBang>
+          <Table>
+            <TableHeader>
               <TableRow>
-                <TableCell colSpan={5} className="text-center text-sm text-muted-foreground">
-                  Chưa có bảng hoa hồng nào.
-                </TableCell>
+                <TableHead>Kỳ</TableHead>
+                <TableHead>Trạng thái</TableHead>
+                <TableHead className="text-right">Số dòng</TableHead>
+                <TableHead className="text-right">Tổng (VND)</TableHead>
+                <TableHead className="text-right">Hành động</TableHead>
               </TableRow>
-            ) : (
-              statements.map((s) => {
-                const total = s.lines.reduce((sum, l) => sum + l.amount, 0);
-                return (
-                  <TableRow key={s.id}>
-                    <TableCell className="font-mono font-semibold">{s.period}</TableCell>
-                    <TableCell>
-                      <Badge variant={s.status === "APPROVED" ? "default" : "secondary"}>{s.status}</Badge>
-                    </TableCell>
-                    <TableCell className="text-right">{s.lines.length}</TableCell>
-                    <TableCell className="text-right">{total.toLocaleString("vi-VN")}</TableCell>
-                    <TableCell>
-                      <StatementActions period={s.period} status={s.status} />
-                    </TableCell>
-                  </TableRow>
-                );
-              })
-            )}
-          </TableBody>
-        </Table>
+            </TableHeader>
+            <TableBody>
+              {statements.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={5} className="text-center text-sm text-muted-foreground">
+                    Chưa có bảng hoa hồng nào.
+                  </TableCell>
+                </TableRow>
+              ) : (
+                statements.map((s) => {
+                  const total = s.lines.reduce((sum, l) => sum + l.amount, 0);
+                  return (
+                    <TableRow key={s.id}>
+                      <TableCell className="font-mono font-semibold">{s.period}</TableCell>
+                      <TableCell>
+                        <Badge variant={s.status === "APPROVED" ? "default" : "secondary"}>{s.status}</Badge>
+                      </TableCell>
+                      <TableCell className="text-right">{s.lines.length}</TableCell>
+                      <TableCell className="text-right">{total.toLocaleString("vi-VN")}</TableCell>
+                      <TableCell>
+                        <StatementActions period={s.period} status={s.status} />
+                      </TableCell>
+                    </TableRow>
+                  );
+                })
+              )}
+            </TableBody>
+          </Table>
+        </PhanTrangBang>
       </div>
     </div>
   );

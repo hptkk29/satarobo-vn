@@ -17,6 +17,7 @@ import { ReportFilterBar } from "@/components/admin/report-filter-bar";
 import { FunnelChart } from "@/components/charts/funnel-chart";
 import { BarChart } from "@/components/charts/bar-chart";
 import { LineChart } from "@/components/charts/line-chart";
+import { PhanTrangBang } from "@/components/ui/phan-trang-bang";
 
 export const metadata = { title: "Báo cáo Lead | Admin" };
 export const dynamic = "force-dynamic";
@@ -153,24 +154,26 @@ export default async function LeadReportPage({
       {/* Tỷ lệ chuyển từng bước */}
       <Card title="Tỷ lệ chuyển từng bước">
         <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead className="text-left text-xs text-muted-foreground">
-              <tr>
-                <th className="px-3 py-2">Bước</th>
-                <th className="px-3 py-2 text-right">Tỷ lệ chuyển</th>
-              </tr>
-            </thead>
-            <tbody>
-              {report.funnelConversion.map((c) => (
-                <tr key={`${c.fromLabel}-${c.toLabel}`} className="border-t">
-                  <td className="px-3 py-2">
-                    {c.fromLabel} → {c.toLabel}
-                  </td>
-                  <td className="px-3 py-2 text-right font-medium">{pct(c.rate)}</td>
+          <PhanTrangBang>
+            <table className="w-full text-sm">
+              <thead className="text-left text-xs text-muted-foreground">
+                <tr>
+                  <th className="px-3 py-2">Bước</th>
+                  <th className="px-3 py-2 text-right">Tỷ lệ chuyển</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {report.funnelConversion.map((c) => (
+                  <tr key={`${c.fromLabel}-${c.toLabel}`} className="border-t">
+                    <td className="px-3 py-2">
+                      {c.fromLabel} → {c.toLabel}
+                    </td>
+                    <td className="px-3 py-2 text-right font-medium">{pct(c.rate)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </PhanTrangBang>
         </div>
       </Card>
 
@@ -228,26 +231,28 @@ export default async function LeadReportPage({
       {/* Theo nguồn hoa hồng */}
       <Card title="Lead theo nguồn hoa hồng">
         <div className="overflow-x-auto">
-          <table className="w-full text-sm">
-            <thead className="text-left text-xs text-muted-foreground">
-              <tr>
-                <th className="px-3 py-2">Nguồn hoa hồng</th>
-                <th className="px-3 py-2 text-right">Tổng</th>
-                <th className="px-3 py-2 text-right">Đã chốt</th>
-                <th className="px-3 py-2 text-right">Tỷ lệ</th>
-              </tr>
-            </thead>
-            <tbody>
-              {report.byCommissionSource.map((s) => (
-                <tr key={s.key} className="border-t">
-                  <td className="px-3 py-2">{s.label}</td>
-                  <td className="px-3 py-2 text-right">{num(s.total)}</td>
-                  <td className="px-3 py-2 text-right">{num(s.converted)}</td>
-                  <td className="px-3 py-2 text-right font-medium">{pct(s.conversionRate)}</td>
+          <PhanTrangBang>
+            <table className="w-full text-sm">
+              <thead className="text-left text-xs text-muted-foreground">
+                <tr>
+                  <th className="px-3 py-2">Nguồn hoa hồng</th>
+                  <th className="px-3 py-2 text-right">Tổng</th>
+                  <th className="px-3 py-2 text-right">Đã chốt</th>
+                  <th className="px-3 py-2 text-right">Tỷ lệ</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {report.byCommissionSource.map((s) => (
+                  <tr key={s.key} className="border-t">
+                    <td className="px-3 py-2">{s.label}</td>
+                    <td className="px-3 py-2 text-right">{num(s.total)}</td>
+                    <td className="px-3 py-2 text-right">{num(s.converted)}</td>
+                    <td className="px-3 py-2 text-right font-medium">{pct(s.conversionRate)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </PhanTrangBang>
         </div>
       </Card>
     </div>

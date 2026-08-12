@@ -34,6 +34,7 @@ import { SESSION_STATUS_LABEL } from "../../_components/ui/session-status-pill";
 import { UploadPhotoDialog } from "../../anh-lop/_components/upload-photo-dialog";
 import { StudentEvalDialog } from "./student-eval-dialog";
 import { initialsOf } from "@/lib/ui/initials";
+import { PhanTrangBang } from "@/components/ui/phan-trang-bang";
 
 const dayFmt = new Intl.DateTimeFormat("vi-VN", {
   weekday: "short",
@@ -230,126 +231,128 @@ export async function HubReviewsTab({
         ) : (
           <div className="t-card overflow-hidden">
             <div className="overflow-x-auto">
-              <table className="min-w-[560px] w-full border-collapse text-left text-sm">
-                <thead>
-                  <tr className="border-b border-border bg-muted/50 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
-                    <th scope="col" className="px-5 py-3">
-                      Học viên
-                    </th>
-                    <th scope="col" className="px-5 py-3">
-                      Điểm danh
-                    </th>
-                    <th scope="col" className="px-5 py-3">
-                      Ảnh buổi học
-                    </th>
-                    <th scope="col" className="px-5 py-3 text-right">
-                      Nhận xét
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {roster.map((st) => {
-                    const status = attMap.get(st.id) as
-                      | AttendanceStatus
-                      | undefined;
-                    const evalOk = canEval(st.id);
-                    const fb = fbMap.get(st.id);
-                    const done = Boolean(
-                      fb && (fb.rubric != null || fb.notes != null),
-                    );
-                    return (
-                      <tr
-                        key={st.id}
-                        className={cn(
-                          "border-b border-border/60 last:border-0",
-                          !evalOk && "opacity-60",
-                        )}
-                      >
-                        <td className="px-5 py-3.5">
-                          <div className="flex items-center gap-3">
-                            {st.avatarUrl ? (
-                              <img
-                                src={st.avatarUrl}
-                                alt={st.name}
-                                className="h-10 w-10 shrink-0 rounded-full border border-border object-cover"
+              <PhanTrangBang>
+                <table className="min-w-[560px] w-full border-collapse text-left text-sm">
+                  <thead>
+                    <tr className="border-b border-border bg-muted/50 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+                      <th scope="col" className="px-5 py-3">
+                        Học viên
+                      </th>
+                      <th scope="col" className="px-5 py-3">
+                        Điểm danh
+                      </th>
+                      <th scope="col" className="px-5 py-3">
+                        Ảnh buổi học
+                      </th>
+                      <th scope="col" className="px-5 py-3 text-right">
+                        Nhận xét
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {roster.map((st) => {
+                      const status = attMap.get(st.id) as
+                        | AttendanceStatus
+                        | undefined;
+                      const evalOk = canEval(st.id);
+                      const fb = fbMap.get(st.id);
+                      const done = Boolean(
+                        fb && (fb.rubric != null || fb.notes != null),
+                      );
+                      return (
+                        <tr
+                          key={st.id}
+                          className={cn(
+                            "border-b border-border/60 last:border-0",
+                            !evalOk && "opacity-60",
+                          )}
+                        >
+                          <td className="px-5 py-3.5">
+                            <div className="flex items-center gap-3">
+                              {st.avatarUrl ? (
+                                <img
+                                  src={st.avatarUrl}
+                                  alt={st.name}
+                                  className="h-10 w-10 shrink-0 rounded-full border border-border object-cover"
+                                />
+                              ) : (
+                                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary-soft text-xs font-semibold text-primary-ink">
+                                  {initialsOf(st.name)}
+                                </span>
+                              )}
+                              <div className="min-w-0">
+                                <p className="truncate font-semibold text-foreground">
+                                  {st.name}
+                                </p>
+                                {st.studentCode && (
+                                  <p className="truncate text-xs text-muted-foreground">
+                                    {st.studentCode}
+                                  </p>
+                                )}
+                              </div>
+                            </div>
+                          </td>
+                          <td className="px-5 py-3.5 whitespace-nowrap">
+                            {status ? (
+                              <span
+                                className={cn(
+                                  "inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold",
+                                  ATT_BADGE[status].cls,
+                                )}
+                              >
+                                {ATT_BADGE[status].label}
+                              </span>
+                            ) : (
+                              <span className="text-muted-foreground">—</span>
+                            )}
+                          </td>
+                          <td className="px-5 py-3.5">
+                            {evalOk ? (
+                              <UploadPhotoDialog
+                                classId={classId}
+                                initialSessionId={reviewSessionId}
+                                initialTagged={[st.id]}
+                                compact
                               />
                             ) : (
-                              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary-soft text-xs font-semibold text-primary-ink">
-                                {initialsOf(st.name)}
+                              <span className="text-xs text-muted-foreground">
+                                —
                               </span>
                             )}
-                            <div className="min-w-0">
-                              <p className="truncate font-semibold text-foreground">
-                                {st.name}
-                              </p>
-                              {st.studentCode && (
-                                <p className="truncate text-xs text-muted-foreground">
-                                  {st.studentCode}
-                                </p>
-                              )}
-                            </div>
-                          </div>
-                        </td>
-                        <td className="px-5 py-3.5 whitespace-nowrap">
-                          {status ? (
-                            <span
-                              className={cn(
-                                "inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold",
-                                ATT_BADGE[status].cls,
-                              )}
-                            >
-                              {ATT_BADGE[status].label}
-                            </span>
-                          ) : (
-                            <span className="text-muted-foreground">—</span>
-                          )}
-                        </td>
-                        <td className="px-5 py-3.5">
-                          {evalOk ? (
-                            <UploadPhotoDialog
-                              classId={classId}
-                              initialSessionId={reviewSessionId}
-                              initialTagged={[st.id]}
-                              compact
-                            />
-                          ) : (
-                            <span className="text-xs text-muted-foreground">
-                              —
-                            </span>
-                          )}
-                        </td>
-                        <td className="px-5 py-3.5 text-right">
-                          {evalOk ? (
-                            <StudentEvalDialog
-                              sessionId={reviewSessionId}
-                              studentId={st.id}
-                              studentName={st.name}
-                              courseName={courseName}
-                              sessionTopic={topic}
-                              sessionDate={dateIso}
-                              existing={
-                                done && fb
-                                  ? {
-                                      projectName: fb.projectName,
-                                      notes: normalizeEvalNotes(fb.notes),
-                                      rubric: normalizeEvalRatings(fb.rubric),
-                                    }
-                                  : null
-                              }
-                              done={done}
-                              pdfHref={`/teacher/nhan-xet/pdf/${reviewSessionId}/${st.id}`}
-                            />
-                          ) : (
-                            <span className="text-xs font-medium text-muted-foreground">
-                              Vắng — không nhận xét
-                            </span>
-                          )}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+                          </td>
+                          <td className="px-5 py-3.5 text-right">
+                            {evalOk ? (
+                              <StudentEvalDialog
+                                sessionId={reviewSessionId}
+                                studentId={st.id}
+                                studentName={st.name}
+                                courseName={courseName}
+                                sessionTopic={topic}
+                                sessionDate={dateIso}
+                                existing={
+                                  done && fb
+                                    ? {
+                                        projectName: fb.projectName,
+                                        notes: normalizeEvalNotes(fb.notes),
+                                        rubric: normalizeEvalRatings(fb.rubric),
+                                      }
+                                    : null
+                                }
+                                done={done}
+                                pdfHref={`/teacher/nhan-xet/pdf/${reviewSessionId}/${st.id}`}
+                              />
+                            ) : (
+                              <span className="text-xs font-medium text-muted-foreground">
+                                Vắng — không nhận xét
+                              </span>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </PhanTrangBang>
             </div>
           </div>
         )}
@@ -438,103 +441,105 @@ export async function HubReviewsTab({
   return (
     <div className="t-card overflow-hidden">
       <div className="overflow-x-auto">
-        <table className="min-w-[660px] w-full border-collapse text-left text-sm">
-          <thead>
-            <tr className="border-b border-border bg-muted/50 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
-              <th scope="col" className="px-5 py-3">
-                Buổi học
-              </th>
-              <th scope="col" className="px-5 py-3">
-                Ngày · Giờ
-              </th>
-              <th scope="col" className="px-5 py-3">
-                Đi học
-              </th>
-              <th scope="col" className="px-5 py-3">
-                Nhận xét
-              </th>
-              <th scope="col" className="px-5 py-3 text-right">
-                <span className="sr-only">Thao tác</span>
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {sessions.map((s) => {
-              const stat = summarizeSessionFeedback(
-                attBySession.get(s.id) ?? [],
-                fbBySession.get(s.id) ?? [],
-              );
-              const roomLabel = s.room?.code ?? s.room?.name ?? null;
-              return (
-                <tr
-                  key={s.id}
-                  className="border-b border-border/60 transition-colors last:border-0 hover:bg-muted/50"
-                >
-                  <td className="px-5 py-3.5">
-                    <p className="font-semibold text-foreground">
-                      {s.topic ?? "Buổi học"}
-                    </p>
-                    {roomLabel && (
-                      <p className="text-xs text-muted-foreground">
-                        Phòng {roomLabel}
+        <PhanTrangBang>
+          <table className="min-w-[660px] w-full border-collapse text-left text-sm">
+            <thead>
+              <tr className="border-b border-border bg-muted/50 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+                <th scope="col" className="px-5 py-3">
+                  Buổi học
+                </th>
+                <th scope="col" className="px-5 py-3">
+                  Ngày · Giờ
+                </th>
+                <th scope="col" className="px-5 py-3">
+                  Đi học
+                </th>
+                <th scope="col" className="px-5 py-3">
+                  Nhận xét
+                </th>
+                <th scope="col" className="px-5 py-3 text-right">
+                  <span className="sr-only">Thao tác</span>
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {sessions.map((s) => {
+                const stat = summarizeSessionFeedback(
+                  attBySession.get(s.id) ?? [],
+                  fbBySession.get(s.id) ?? [],
+                );
+                const roomLabel = s.room?.code ?? s.room?.name ?? null;
+                return (
+                  <tr
+                    key={s.id}
+                    className="border-b border-border/60 transition-colors last:border-0 hover:bg-muted/50"
+                  >
+                    <td className="px-5 py-3.5">
+                      <p className="font-semibold text-foreground">
+                        {s.topic ?? "Buổi học"}
                       </p>
-                    )}
-                  </td>
-                  <td className="px-5 py-3.5 whitespace-nowrap">
-                    <p className="text-foreground">{dayFmt.format(s.date)}</p>
-                    {timeLabel && (
-                      <p className="text-xs text-muted-foreground">
-                        {timeLabel}
-                      </p>
-                    )}
-                  </td>
-                  <td className="px-5 py-3.5 whitespace-nowrap font-semibold text-foreground">
-                    {stat.attendanceTaken
-                      ? `${stat.attended}/${rosterCount}`
-                      : "—"}
-                  </td>
-                  <td className="px-5 py-3.5 whitespace-nowrap">
-                    {!stat.attendanceTaken ? (
-                      <Badge
-                        variant="outline"
-                        className="text-muted-foreground"
+                      {roomLabel && (
+                        <p className="text-xs text-muted-foreground">
+                          Phòng {roomLabel}
+                        </p>
+                      )}
+                    </td>
+                    <td className="px-5 py-3.5 whitespace-nowrap">
+                      <p className="text-foreground">{dayFmt.format(s.date)}</p>
+                      {timeLabel && (
+                        <p className="text-xs text-muted-foreground">
+                          {timeLabel}
+                        </p>
+                      )}
+                    </td>
+                    <td className="px-5 py-3.5 whitespace-nowrap font-semibold text-foreground">
+                      {stat.attendanceTaken
+                        ? `${stat.attended}/${rosterCount}`
+                        : "—"}
+                    </td>
+                    <td className="px-5 py-3.5 whitespace-nowrap">
+                      {!stat.attendanceTaken ? (
+                        <Badge
+                          variant="outline"
+                          className="text-muted-foreground"
+                        >
+                          Chưa điểm danh
+                        </Badge>
+                      ) : stat.complete ? (
+                        <Badge
+                          variant="outline"
+                          className="border-state-success-soft bg-state-success-soft text-state-success-ink dark:border-state-success"
+                        >
+                          Đã nhận xét
+                        </Badge>
+                      ) : (
+                        <Badge
+                          variant="outline"
+                          className="border-state-warning-soft bg-state-warning-soft text-state-warning-ink dark:border-state-warning"
+                        >
+                          {stat.reviewed}/{stat.attended} HV
+                        </Badge>
+                      )}
+                    </td>
+                    <td className="px-5 py-3.5 text-right whitespace-nowrap">
+                      <Link
+                        href={`?classId=${classId}&tab=nhan-xet&rvSession=${s.id}`}
+                        className={
+                          stat.complete
+                            ? "inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs font-semibold text-foreground outline-none transition-colors hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring"
+                            : "inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-white outline-none transition-colors hover:bg-primary-darker focus-visible:ring-2 focus-visible:ring-ring"
+                        }
                       >
-                        Chưa điểm danh
-                      </Badge>
-                    ) : stat.complete ? (
-                      <Badge
-                        variant="outline"
-                        className="border-state-success-soft bg-state-success-soft text-state-success-ink dark:border-state-success"
-                      >
-                        Đã nhận xét
-                      </Badge>
-                    ) : (
-                      <Badge
-                        variant="outline"
-                        className="border-state-warning-soft bg-state-warning-soft text-state-warning-ink dark:border-state-warning"
-                      >
-                        {stat.reviewed}/{stat.attended} HV
-                      </Badge>
-                    )}
-                  </td>
-                  <td className="px-5 py-3.5 text-right whitespace-nowrap">
-                    <Link
-                      href={`?classId=${classId}&tab=nhan-xet&rvSession=${s.id}`}
-                      className={
-                        stat.complete
-                          ? "inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs font-semibold text-foreground outline-none transition-colors hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring"
-                          : "inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-white outline-none transition-colors hover:bg-primary-darker focus-visible:ring-2 focus-visible:ring-ring"
-                      }
-                    >
-                      <ClipboardPen className="h-3.5 w-3.5" aria-hidden />
-                      {stat.complete ? "Xem lại" : "Nhận xét"}
-                    </Link>
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
+                        <ClipboardPen className="h-3.5 w-3.5" aria-hidden />
+                        {stat.complete ? "Xem lại" : "Nhận xét"}
+                      </Link>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </PhanTrangBang>
       </div>
     </div>
   );

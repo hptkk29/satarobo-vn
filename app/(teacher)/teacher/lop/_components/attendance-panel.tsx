@@ -33,6 +33,7 @@ import {
 import { EmptyState } from "../../_components/ui/empty-state";
 import { saveClassAttendanceAction } from "../_actions";
 import { initialsOf } from "@/lib/ui/initials";
+import { PhanTrangBang } from "@/components/ui/phan-trang-bang";
 
 // 4 status GV được đánh (2 makeup còn lại NEEDS_MAKEUP/MADE_UP là hệ suy) → 6 nhãn SRS.
 const MARKABLE = [
@@ -253,78 +254,80 @@ export function AttendancePanel({
       </div>
 
       <div className="overflow-x-auto rounded-lg border border-border bg-card">
-        <Table>
-          <TableHeader>
-            <TableRow className="bg-muted/50 hover:bg-muted/50">
-              <TableHead>Học viên</TableHead>
-              <TableHead>Trạng thái điểm danh</TableHead>
-              <TableHead className="w-[220px]">Ghi chú</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {rows.map((r) => (
-              <TableRow key={r.studentId}>
-                <TableCell>
-                  <div className="flex items-center gap-3">
-                    <span className="brand-gradient flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-bold text-white">
-                      {initialsOf(r.studentName)}
-                    </span>
-                    <div className="min-w-0">
-                      <Link
-                        href={`/teacher/hoc-vien?s=${r.studentId}`}
-                        className="block truncate text-sm font-semibold text-foreground hover:text-primary-ink-hover hover:underline"
-                        title="Mở hồ sơ học viên"
-                      >
-                        {r.studentName}
-                      </Link>
-                      {r.makeupFromCenter && (
-                        <span className="mt-0.5 inline-block rounded bg-primary-soft px-1.5 py-0.5 text-[11px] text-primary-ink">
-                          Học bù từ {r.makeupFromCenter}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                </TableCell>
-                <TableCell>
-                  <div className="flex flex-wrap gap-1.5">
-                    {MARKABLE.map((k) => {
-                      const info = ATTENDANCE_LABELS[k];
-                      const active = state[r.studentId]?.status === k;
-                      return (
-                        <button
-                          key={k}
-                          type="button"
-                          disabled={!editable || pending}
-                          onClick={() => setStatus(r.studentId, k)}
-                          aria-pressed={active}
-                          aria-label={`${info.label} — ${r.studentName}`}
-                          className={cn(
-                            "rounded-md border px-2.5 py-1 text-[13px] font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50",
-                            active
-                              ? TONE_ACTIVE[info.tone]
-                              : "border-border bg-card text-muted-foreground hover:bg-muted",
-                          )}
-                        >
-                          {info.label}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </TableCell>
-                <TableCell>
-                  <input
-                    type="text"
-                    className="w-full rounded-md border border-input bg-background px-2 py-1 text-sm text-foreground disabled:opacity-50"
-                    placeholder="—"
-                    value={state[r.studentId]?.note ?? ""}
-                    disabled={!editable || pending}
-                    onChange={(e) => setNote(r.studentId, e.target.value)}
-                  />
-                </TableCell>
+        <PhanTrangBang tenDonVi="học viên">
+          <Table>
+            <TableHeader>
+              <TableRow className="bg-muted/50 hover:bg-muted/50">
+                <TableHead>Học viên</TableHead>
+                <TableHead>Trạng thái điểm danh</TableHead>
+                <TableHead className="w-[220px]">Ghi chú</TableHead>
               </TableRow>
-            ))}
-          </TableBody>
-        </Table>
+            </TableHeader>
+            <TableBody>
+              {rows.map((r) => (
+                <TableRow key={r.studentId}>
+                  <TableCell>
+                    <div className="flex items-center gap-3">
+                      <span className="brand-gradient flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-bold text-white">
+                        {initialsOf(r.studentName)}
+                      </span>
+                      <div className="min-w-0">
+                        <Link
+                          href={`/teacher/hoc-vien?s=${r.studentId}`}
+                          className="block truncate text-sm font-semibold text-foreground hover:text-primary-ink-hover hover:underline"
+                          title="Mở hồ sơ học viên"
+                        >
+                          {r.studentName}
+                        </Link>
+                        {r.makeupFromCenter && (
+                          <span className="mt-0.5 inline-block rounded bg-primary-soft px-1.5 py-0.5 text-[11px] text-primary-ink">
+                            Học bù từ {r.makeupFromCenter}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex flex-wrap gap-1.5">
+                      {MARKABLE.map((k) => {
+                        const info = ATTENDANCE_LABELS[k];
+                        const active = state[r.studentId]?.status === k;
+                        return (
+                          <button
+                            key={k}
+                            type="button"
+                            disabled={!editable || pending}
+                            onClick={() => setStatus(r.studentId, k)}
+                            aria-pressed={active}
+                            aria-label={`${info.label} — ${r.studentName}`}
+                            className={cn(
+                              "rounded-md border px-2.5 py-1 text-[13px] font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50",
+                              active
+                                ? TONE_ACTIVE[info.tone]
+                                : "border-border bg-card text-muted-foreground hover:bg-muted",
+                            )}
+                          >
+                            {info.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    <input
+                      type="text"
+                      className="w-full rounded-md border border-input bg-background px-2 py-1 text-sm text-foreground disabled:opacity-50"
+                      placeholder="—"
+                      value={state[r.studentId]?.note ?? ""}
+                      disabled={!editable || pending}
+                      onChange={(e) => setNote(r.studentId, e.target.value)}
+                    />
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </PhanTrangBang>
       </div>
 
       {editable && (

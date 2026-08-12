@@ -7,6 +7,7 @@ import { resolveActor } from "@/lib/auth/actor";
 import { getTeachingCenterIds } from "@/lib/org/org-service";
 import type { Prisma, RoomStatus } from "@prisma/client";
 import { StatusBadge } from "./_components/status-badge";
+import { PhanTrangBang } from "@/components/ui/phan-trang-bang";
 
 export const dynamic = "force-dynamic";
 
@@ -153,84 +154,86 @@ export default async function RoomsAdminPage({ searchParams }: SearchParams) {
       </form>
 
       <div className="overflow-hidden rounded-xl border border-border bg-card">
-        <table className="w-full">
-          <thead className="border-b border-border bg-muted text-left">
-            <tr>
-              <th className="p-4 text-xs font-bold uppercase tracking-wider text-foreground">
-                Mã / Tên
-              </th>
-              <th className="p-4 text-xs font-bold uppercase tracking-wider text-foreground">
-                Cơ sở
-              </th>
-              <th className="p-4 text-center text-xs font-bold uppercase tracking-wider text-foreground">
-                Sức chứa
-              </th>
-              <th className="p-4 text-xs font-bold uppercase tracking-wider text-foreground">
-                Thiết bị
-              </th>
-              <th className="p-4 text-center text-xs font-bold uppercase tracking-wider text-foreground">
-                Trạng thái
-              </th>
-              <th className="p-4 text-center text-xs font-bold uppercase tracking-wider text-foreground">
-                Order
-              </th>
-              <th className="p-4 text-right text-xs font-bold uppercase tracking-wider text-foreground">
-                Thao tác
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {rooms.length === 0 ? (
+        <PhanTrangBang>
+          <table className="w-full">
+            <thead className="border-b border-border bg-muted text-left">
               <tr>
-                <td colSpan={7} className="p-12 text-center text-muted-foreground">
-                  {q || centerFilter || statusFilter ? (
-                    <>Không có phòng nào khớp bộ lọc.</>
-                  ) : (
-                    <>
-                      Chưa có phòng nào.{" "}
-                      <Link href="/rooms/new" className="text-primary hover:underline">
-                        Thêm phòng đầu tiên →
-                      </Link>
-                    </>
-                  )}
-                </td>
+                <th className="p-4 text-xs font-bold uppercase tracking-wider text-foreground">
+                  Mã / Tên
+                </th>
+                <th className="p-4 text-xs font-bold uppercase tracking-wider text-foreground">
+                  Cơ sở
+                </th>
+                <th className="p-4 text-center text-xs font-bold uppercase tracking-wider text-foreground">
+                  Sức chứa
+                </th>
+                <th className="p-4 text-xs font-bold uppercase tracking-wider text-foreground">
+                  Thiết bị
+                </th>
+                <th className="p-4 text-center text-xs font-bold uppercase tracking-wider text-foreground">
+                  Trạng thái
+                </th>
+                <th className="p-4 text-center text-xs font-bold uppercase tracking-wider text-foreground">
+                  Order
+                </th>
+                <th className="p-4 text-right text-xs font-bold uppercase tracking-wider text-foreground">
+                  Thao tác
+                </th>
               </tr>
-            ) : (
-              rooms.map((r) => (
-                <tr key={r.id} className="border-b border-border hover:bg-muted">
-                  <td className="p-4">
-                    <div className="font-mono text-sm font-bold text-foreground">{r.code}</div>
-                    <div className="mt-0.5 text-sm text-muted-foreground">{r.name}</div>
-                  </td>
-                  <td className="p-4 text-sm text-foreground">{r.center.name}</td>
-                  <td className="p-4 text-center text-sm">{r.capacity}</td>
-                  <td className="p-4 text-xs text-muted-foreground">
-                    {r.equipment.length === 0 ? (
-                      <span className="text-muted-foreground">—</span>
-                    ) : r.equipment.length <= 3 ? (
-                      r.equipment.join(", ")
+            </thead>
+            <tbody>
+              {rooms.length === 0 ? (
+                <tr>
+                  <td colSpan={7} className="p-12 text-center text-muted-foreground">
+                    {q || centerFilter || statusFilter ? (
+                      <>Không có phòng nào khớp bộ lọc.</>
                     ) : (
-                      `${r.equipment.slice(0, 3).join(", ")} +${r.equipment.length - 3}`
+                      <>
+                        Chưa có phòng nào.{" "}
+                        <Link href="/rooms/new" className="text-primary hover:underline">
+                          Thêm phòng đầu tiên →
+                        </Link>
+                      </>
                     )}
                   </td>
-                  <td className="p-4 text-center">
-                    <StatusBadge status={r.status} />
-                  </td>
-                  <td className="p-4 text-center text-sm">{r.displayOrder}</td>
-                  <td className="p-4 text-right">
-                    <Link
-                      href={`/rooms/${r.id}/edit`}
-                      className="inline-flex items-center gap-1 rounded p-1.5 text-primary hover:bg-primary-soft"
-                      title="Sửa"
-                    >
-                      <Pencil className="h-4 w-4" />
-                    </Link>
-                  </td>
                 </tr>
-              ))
-            )}
-          </tbody>
-        </table>
+              ) : (
+                rooms.map((r) => (
+                  <tr key={r.id} className="border-b border-border hover:bg-muted">
+                    <td className="p-4">
+                      <div className="font-mono text-sm font-bold text-foreground">{r.code}</div>
+                      <div className="mt-0.5 text-sm text-muted-foreground">{r.name}</div>
+                    </td>
+                    <td className="p-4 text-sm text-foreground">{r.center.name}</td>
+                    <td className="p-4 text-center text-sm">{r.capacity}</td>
+                    <td className="p-4 text-xs text-muted-foreground">
+                      {r.equipment.length === 0 ? (
+                        <span className="text-muted-foreground">—</span>
+                      ) : r.equipment.length <= 3 ? (
+                        r.equipment.join(", ")
+                      ) : (
+                        `${r.equipment.slice(0, 3).join(", ")} +${r.equipment.length - 3}`
+                      )}
+                    </td>
+                    <td className="p-4 text-center">
+                      <StatusBadge status={r.status} />
+                    </td>
+                    <td className="p-4 text-center text-sm">{r.displayOrder}</td>
+                    <td className="p-4 text-right">
+                      <Link
+                        href={`/rooms/${r.id}/edit`}
+                        className="inline-flex items-center gap-1 rounded p-1.5 text-primary hover:bg-primary-soft"
+                        title="Sửa"
+                      >
+                        <Pencil className="h-4 w-4" />
+                      </Link>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </PhanTrangBang>
       </div>
     </div>
   );

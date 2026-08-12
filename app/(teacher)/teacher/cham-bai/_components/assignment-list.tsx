@@ -9,6 +9,7 @@ import {
   type SelectFilter,
 } from "../../_components/ui/list-toolbar";
 import { EmptyState } from "../../_components/ui/empty-state";
+import { PhanTrangBang } from "@/components/ui/phan-trang-bang";
 
 /** Một hàng bài tập đã giao — plain data từ server. */
 export interface AssignmentRow {
@@ -108,112 +109,114 @@ export function AssignmentList({ rows }: { rows: AssignmentRow[] }) {
       ) : (
         <div className="t-card overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="min-w-[880px] w-full border-collapse text-left text-sm">
-              <thead>
-                <tr className="border-b border-border bg-muted/50 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
-                  <th scope="col" className="px-5 py-3">
-                    Nội dung
-                  </th>
-                  <th scope="col" className="px-5 py-3">
-                    Lớp
-                  </th>
-                  <th scope="col" className="px-5 py-3">
-                    Hình thức
-                  </th>
-                  <th scope="col" className="px-5 py-3">
-                    Nguồn
-                  </th>
-                  <th scope="col" className="px-5 py-3">
-                    Hạn nộp
-                  </th>
-                  <th scope="col" className="px-5 py-3">
-                    Đã nộp
-                  </th>
-                  <th scope="col" className="px-5 py-3">
-                    Trạng thái
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {filtered.length === 0 ? (
-                  <tr>
-                    <td
-                      colSpan={7}
-                      className="px-5 py-10 text-center text-sm text-muted-foreground"
-                    >
-                      Không có bài tập khớp bộ lọc.
-                    </td>
+            <PhanTrangBang>
+              <table className="min-w-[880px] w-full border-collapse text-left text-sm">
+                <thead>
+                  <tr className="border-b border-border bg-muted/50 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+                    <th scope="col" className="px-5 py-3">
+                      Nội dung
+                    </th>
+                    <th scope="col" className="px-5 py-3">
+                      Lớp
+                    </th>
+                    <th scope="col" className="px-5 py-3">
+                      Hình thức
+                    </th>
+                    <th scope="col" className="px-5 py-3">
+                      Nguồn
+                    </th>
+                    <th scope="col" className="px-5 py-3">
+                      Hạn nộp
+                    </th>
+                    <th scope="col" className="px-5 py-3">
+                      Đã nộp
+                    </th>
+                    <th scope="col" className="px-5 py-3">
+                      Trạng thái
+                    </th>
                   </tr>
-                ) : (
-                  filtered.map((r) => (
-                    <tr
-                      key={r.id}
-                      className="border-b border-border/60 transition-colors last:border-0 hover:bg-muted/50"
-                    >
-                      <td className="px-5 py-3.5">
-                        <Link
-                          href={`?assignmentId=${r.id}`}
-                          className="rounded-sm font-medium text-foreground outline-none hover:text-primary-ink-hover focus-visible:ring-2 focus-visible:ring-ring"
-                        >
-                          {r.title}
-                        </Link>
-                      </td>
-                      <td className="px-5 py-3.5 whitespace-nowrap">
-                        <Link
-                          href={`/teacher/lop?classId=${r.classId}`}
-                          className="rounded-sm font-medium text-primary-ink outline-none hover:text-primary-ink-hover hover:underline focus-visible:ring-2 focus-visible:ring-ring"
-                        >
-                          {r.className}
-                        </Link>
-                      </td>
-                      <td className="px-5 py-3.5 whitespace-nowrap">
-                        {r.isTest ? (
-                          <span className="inline-flex items-center rounded-full bg-primary-soft px-2.5 py-1 text-xs font-semibold text-primary-ink">
-                            Kiểm tra
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center rounded-full bg-state-info-soft px-2.5 py-1 text-xs font-semibold text-state-info-ink">
-                            Bài tập
-                          </span>
-                        )}
-                      </td>
-                      <td className="px-5 py-3.5 whitespace-nowrap">
-                        <span className="inline-flex items-center gap-1.5 text-muted-foreground">
-                          {r.fromAdmin ? (
-                            <>
-                              <BookMarked className="h-4 w-4" aria-hidden />
-                              Admin
-                            </>
-                          ) : (
-                            <>
-                              <PencilLine className="h-4 w-4" aria-hidden />
-                              Tự tạo
-                            </>
-                          )}
-                        </span>
-                      </td>
-                      <td className="px-5 py-3.5 whitespace-nowrap text-muted-foreground">
-                        {r.due ?? "—"}
-                      </td>
-                      <td className="px-5 py-3.5 whitespace-nowrap text-foreground">
-                        {r.submitted}/{r.total}
-                      </td>
-                      <td className="px-5 py-3.5 whitespace-nowrap">
-                        <span
-                          className={cn(
-                            "inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold",
-                            STATUS_CLASS[r.status] ??
-                              "bg-muted text-muted-foreground",
-                          )}
-                        >
-                          {STATUS_LABEL[r.status] ?? r.status}
-                        </span>
+                </thead>
+                <tbody>
+                  {filtered.length === 0 ? (
+                    <tr>
+                      <td
+                        colSpan={7}
+                        className="px-5 py-10 text-center text-sm text-muted-foreground"
+                      >
+                        Không có bài tập khớp bộ lọc.
                       </td>
                     </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
+                  ) : (
+                    filtered.map((r) => (
+                      <tr
+                        key={r.id}
+                        className="border-b border-border/60 transition-colors last:border-0 hover:bg-muted/50"
+                      >
+                        <td className="px-5 py-3.5">
+                          <Link
+                            href={`?assignmentId=${r.id}`}
+                            className="rounded-sm font-medium text-foreground outline-none hover:text-primary-ink-hover focus-visible:ring-2 focus-visible:ring-ring"
+                          >
+                            {r.title}
+                          </Link>
+                        </td>
+                        <td className="px-5 py-3.5 whitespace-nowrap">
+                          <Link
+                            href={`/teacher/lop?classId=${r.classId}`}
+                            className="rounded-sm font-medium text-primary-ink outline-none hover:text-primary-ink-hover hover:underline focus-visible:ring-2 focus-visible:ring-ring"
+                          >
+                            {r.className}
+                          </Link>
+                        </td>
+                        <td className="px-5 py-3.5 whitespace-nowrap">
+                          {r.isTest ? (
+                            <span className="inline-flex items-center rounded-full bg-primary-soft px-2.5 py-1 text-xs font-semibold text-primary-ink">
+                              Kiểm tra
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center rounded-full bg-state-info-soft px-2.5 py-1 text-xs font-semibold text-state-info-ink">
+                              Bài tập
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-5 py-3.5 whitespace-nowrap">
+                          <span className="inline-flex items-center gap-1.5 text-muted-foreground">
+                            {r.fromAdmin ? (
+                              <>
+                                <BookMarked className="h-4 w-4" aria-hidden />
+                                Admin
+                              </>
+                            ) : (
+                              <>
+                                <PencilLine className="h-4 w-4" aria-hidden />
+                                Tự tạo
+                              </>
+                            )}
+                          </span>
+                        </td>
+                        <td className="px-5 py-3.5 whitespace-nowrap text-muted-foreground">
+                          {r.due ?? "—"}
+                        </td>
+                        <td className="px-5 py-3.5 whitespace-nowrap text-foreground">
+                          {r.submitted}/{r.total}
+                        </td>
+                        <td className="px-5 py-3.5 whitespace-nowrap">
+                          <span
+                            className={cn(
+                              "inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold",
+                              STATUS_CLASS[r.status] ??
+                                "bg-muted text-muted-foreground",
+                            )}
+                          >
+                            {STATUS_LABEL[r.status] ?? r.status}
+                          </span>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </PhanTrangBang>
           </div>
         </div>
       )}

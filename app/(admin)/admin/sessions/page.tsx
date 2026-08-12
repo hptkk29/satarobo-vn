@@ -9,6 +9,7 @@ import { type Prisma } from "@prisma/client";
 import { SessionListRow } from "./_components/session-list-row";
 import { SessionFilters } from "./_components/session-filters";
 import { formatDateVN } from "@/lib/format/date";
+import { PhanTrangBang } from "@/components/ui/phan-trang-bang";
 
 export const dynamic = "force-dynamic";
 
@@ -148,43 +149,45 @@ export default async function SessionsAdminPage({ searchParams }: SearchParams) 
       )}
 
       <div className="overflow-hidden rounded-xl border border-border bg-card">
-        <table className="w-full">
-          <thead className="border-b border-border bg-muted text-left">
-            <tr>
-              <th className="p-4 text-xs font-bold uppercase tracking-wider text-foreground">Thời gian</th>
-              <th className="p-4 text-xs font-bold uppercase tracking-wider text-foreground">Lớp / Chủ đề</th>
-              <th className="p-4 text-center text-xs font-bold uppercase tracking-wider text-foreground">Điểm danh</th>
-              <th className="p-4 text-right text-xs font-bold uppercase tracking-wider text-foreground">Thao tác</th>
-            </tr>
-          </thead>
-          <tbody>
-            {sessions.length === 0 ? (
+        <PhanTrangBang>
+          <table className="w-full">
+            <thead className="border-b border-border bg-muted text-left">
               <tr>
-                <td colSpan={4} className="p-12 text-center text-muted-foreground">
-                  Chưa có buổi học nào khớp bộ lọc.{" "}
-                  <Link href="/sessions/new" className="text-primary hover:underline">
-                    Tạo buổi học mới →
-                  </Link>
-                </td>
+                <th className="p-4 text-xs font-bold uppercase tracking-wider text-foreground">Thời gian</th>
+                <th className="p-4 text-xs font-bold uppercase tracking-wider text-foreground">Lớp / Chủ đề</th>
+                <th className="p-4 text-center text-xs font-bold uppercase tracking-wider text-foreground">Điểm danh</th>
+                <th className="p-4 text-right text-xs font-bold uppercase tracking-wider text-foreground">Thao tác</th>
               </tr>
-            ) : (
-              sessions.map((s) => (
-                <SessionListRow
-                  key={s.id}
-                  returnTo={returnTo}
-                  session={{
-                    id: s.id,
-                    date: s.date,
-                    topic: s.topic,
-                    className: s.class.name,
-                    classId: s.classId,
-                    attendanceCount: s._count.attendances,
-                  }}
-                />
-              ))
-            )}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {sessions.length === 0 ? (
+                <tr>
+                  <td colSpan={4} className="p-12 text-center text-muted-foreground">
+                    Chưa có buổi học nào khớp bộ lọc.{" "}
+                    <Link href="/sessions/new" className="text-primary hover:underline">
+                      Tạo buổi học mới →
+                    </Link>
+                  </td>
+                </tr>
+              ) : (
+                sessions.map((s) => (
+                  <SessionListRow
+                    key={s.id}
+                    returnTo={returnTo}
+                    session={{
+                      id: s.id,
+                      date: s.date,
+                      topic: s.topic,
+                      className: s.class.name,
+                      classId: s.classId,
+                      attendanceCount: s._count.attendances,
+                    }}
+                  />
+                ))
+              )}
+            </tbody>
+          </table>
+        </PhanTrangBang>
       </div>
     </div>
   );

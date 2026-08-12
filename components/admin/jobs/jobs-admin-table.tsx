@@ -6,6 +6,7 @@ import { Pencil, Trash2, Copy, ExternalLink, Loader2 } from 'lucide-react'
 import { deleteJobAction, duplicateJobAction, changeJobStatusAction } from '@/app/(admin)/admin/jobs/actions'
 import { JOB_STATUS, DEPARTMENTS } from '@/lib/data/job-options'
 import type { JobStatus } from '@prisma/client'
+import { PhanTrangBang } from "@/components/ui/phan-trang-bang";
 
 const STATUS_COLORS: Record<JobStatus, string> = {
   DRAFT: 'bg-muted text-muted-foreground',
@@ -130,56 +131,58 @@ export function JobsAdminTable({ jobs, canEdit }: { jobs: JobRow[]; canEdit: boo
   return (
     <div className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
       <div className="overflow-x-auto">
-        <table className="min-w-full divide-y divide-border">
-          <thead className="bg-muted">
-            <tr>
-              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">Tiêu đề</th>
-              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">Phòng ban</th>
-              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">Trạng thái</th>
-              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">Chỉ tiêu</th>
-              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">Hạn nộp</th>
-              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">Người tạo</th>
-              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">Cập nhật</th>
-              <th className="px-4 py-3" />
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-border">
-            {jobs.length === 0 ? (
+        <PhanTrangBang>
+          <table className="min-w-full divide-y divide-border">
+            <thead className="bg-muted">
               <tr>
-                <td colSpan={8} className="px-4 py-12 text-center text-sm text-muted-foreground">
-                  Chưa có tin tuyển dụng nào
-                </td>
+                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">Tiêu đề</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">Phòng ban</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">Trạng thái</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">Chỉ tiêu</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">Hạn nộp</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">Người tạo</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">Cập nhật</th>
+                <th className="px-4 py-3" />
               </tr>
-            ) : (
-              jobs.map((job) => {
-                const deptLabel = DEPARTMENTS.find((d) => d.value === job.department)?.label ?? job.department ?? '—'
-                return (
-                  <tr key={job.id} className="hover:bg-muted/60">
-                    <td className="px-4 py-3">
-                      <div className="max-w-[260px] font-medium text-foreground line-clamp-2">{job.title}</div>
-                      <div className="text-xs text-muted-foreground">/tuyen-dung/{job.slug}</div>
-                    </td>
-                    <td className="px-4 py-3 text-sm text-muted-foreground">{deptLabel}</td>
-                    <td className="px-4 py-3">
-                      <StatusSelect job={job} canEdit={canEdit} />
-                    </td>
-                    <td className="px-4 py-3 text-sm text-muted-foreground">{job.openings}</td>
-                    <td className="px-4 py-3 text-sm text-muted-foreground">
-                      {job.closesAt ? new Date(job.closesAt).toLocaleDateString('vi-VN') : '—'}
-                    </td>
-                    <td className="px-4 py-3 text-sm text-muted-foreground">{job.author?.name ?? job.author?.email ?? '—'}</td>
-                    <td className="px-4 py-3 text-sm tabular-nums text-muted-foreground">
-                      {new Date(job.updatedAt).toLocaleDateString('vi-VN')}
-                    </td>
-                    <td className="px-4 py-3">
-                      <JobActions job={job} canEdit={canEdit} />
-                    </td>
-                  </tr>
-                )
-              })
-            )}
-          </tbody>
-        </table>
+            </thead>
+            <tbody className="divide-y divide-border">
+              {jobs.length === 0 ? (
+                <tr>
+                  <td colSpan={8} className="px-4 py-12 text-center text-sm text-muted-foreground">
+                    Chưa có tin tuyển dụng nào
+                  </td>
+                </tr>
+              ) : (
+                jobs.map((job) => {
+                  const deptLabel = DEPARTMENTS.find((d) => d.value === job.department)?.label ?? job.department ?? '—'
+                  return (
+                    <tr key={job.id} className="hover:bg-muted/60">
+                      <td className="px-4 py-3">
+                        <div className="max-w-[260px] font-medium text-foreground line-clamp-2">{job.title}</div>
+                        <div className="text-xs text-muted-foreground">/tuyen-dung/{job.slug}</div>
+                      </td>
+                      <td className="px-4 py-3 text-sm text-muted-foreground">{deptLabel}</td>
+                      <td className="px-4 py-3">
+                        <StatusSelect job={job} canEdit={canEdit} />
+                      </td>
+                      <td className="px-4 py-3 text-sm text-muted-foreground">{job.openings}</td>
+                      <td className="px-4 py-3 text-sm text-muted-foreground">
+                        {job.closesAt ? new Date(job.closesAt).toLocaleDateString('vi-VN') : '—'}
+                      </td>
+                      <td className="px-4 py-3 text-sm text-muted-foreground">{job.author?.name ?? job.author?.email ?? '—'}</td>
+                      <td className="px-4 py-3 text-sm tabular-nums text-muted-foreground">
+                        {new Date(job.updatedAt).toLocaleDateString('vi-VN')}
+                      </td>
+                      <td className="px-4 py-3">
+                        <JobActions job={job} canEdit={canEdit} />
+                      </td>
+                    </tr>
+                  )
+                })
+              )}
+            </tbody>
+          </table>
+        </PhanTrangBang>
       </div>
     </div>
   )
