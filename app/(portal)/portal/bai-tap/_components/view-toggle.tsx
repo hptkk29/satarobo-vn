@@ -25,7 +25,9 @@ export function ViewToggle({ current }: { current: "parent" | "student" }) {
         disabled={pending}
         onClick={() => switchTo("parent")}
         className={`inline-flex items-center gap-1 rounded-md px-3 py-1.5 ${
-          current === "parent" ? "bg-purple-100 text-purple-700" : "text-neutral-500"
+          current === "parent"
+            ? "bg-purple-100 text-purple-700"
+            : "text-neutral-500"
         }`}
       >
         <Eye className="h-3.5 w-3.5" /> Phụ huynh
@@ -35,7 +37,9 @@ export function ViewToggle({ current }: { current: "parent" | "student" }) {
         disabled={pending}
         onClick={() => switchTo("student")}
         className={`inline-flex items-center gap-1 rounded-md px-3 py-1.5 ${
-          current === "student" ? "bg-orange-100 text-orange-700" : "text-neutral-500"
+          current === "student"
+            ? "bg-orange-100 text-orange-700"
+            : "text-neutral-500"
         }`}
       >
         <PencilLine className="h-3.5 w-3.5" /> Học viên (làm bài)

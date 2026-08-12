@@ -5,7 +5,9 @@ import Link from "next/link";
 import { ArrowRight, BookOpenText } from "lucide-react";
 import { guidesByCategory } from "./_content";
 
-export const metadata = { title: "Hướng dẫn sử dụng | Cổng học viên Sata Robo" };
+export const metadata = {
+  title: "Hướng dẫn sử dụng | Cổng học viên Sata Robo",
+};
 
 export default function PortalGuidesPage() {
   const groups = guidesByCategory();
@@ -17,8 +19,9 @@ export default function PortalGuidesPage() {
           Hướng dẫn sử dụng
         </h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Tài liệu hướng dẫn chi tiết từng trang của cổng phụ huynh — chia theo nhóm
-          chức năng, mỗi bài có các bước thao tác và đường dẫn mở thẳng trang tương ứng.
+          Tài liệu hướng dẫn chi tiết từng trang của cổng phụ huynh — chia theo
+          nhóm chức năng, mỗi bài có các bước thao tác và đường dẫn mở thẳng
+          trang tương ứng.
         </p>
       </div>
 
@@ -36,7 +39,7 @@ export default function PortalGuidesPage() {
                   href={`/portal/huong-dan/${g.slug}`}
                   className="group flex items-start gap-3 rounded-xl border border-border bg-card p-4 transition-colors hover:border-accent/40 hover:bg-muted/50 focus-visible:ring-2 focus-visible:ring-ring outline-none"
                 >
-                  <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-accent text-xs font-bold text-white">
+                  <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-accent text-xs font-bold text-accent-foreground">
                     {String(g.order).padStart(2, "0")}
                   </span>
                   <span className="min-w-0 flex-1">

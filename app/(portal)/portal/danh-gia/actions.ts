@@ -21,7 +21,10 @@ export async function createParentFeedback(input: {
 
   const parsed = schema.safeParse(input);
   if (!parsed.success) {
-    return { ok: false, error: parsed.error.issues[0]?.message ?? "Dữ liệu không hợp lệ" };
+    return {
+      ok: false,
+      error: parsed.error.issues[0]?.message ?? "Dữ liệu không hợp lệ",
+    };
   }
 
   // ParentFeedback KHÔNG thuộc SCOPED_MODELS → scopedDb pass-through (portal cách ly

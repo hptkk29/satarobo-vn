@@ -54,7 +54,8 @@ export function MediaConsentToggle({
                 disabled={pending}
                 className="inline-flex items-center gap-1.5 rounded-lg bg-destructive px-3 py-1.5 text-xs font-bold text-white disabled:opacity-60"
               >
-                {pending && <Loader2 className="size-3.5 animate-spin" />} Xác nhận thu hồi
+                {pending && <Loader2 className="size-3.5 animate-spin" />} Xác
+                nhận thu hồi
               </button>
               <button
                 type="button"
@@ -87,13 +88,14 @@ export function MediaConsentToggle({
             disabled={pending}
             className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-xs font-bold text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-60"
           >
-            {pending && <Loader2 className="size-3.5 animate-spin" />} Đồng ý dùng hình ảnh
+            {pending && <Loader2 className="size-3.5 animate-spin" />} Đồng ý
+            dùng hình ảnh
           </button>
         </>
       )}
       <p className="max-w-[16rem] text-right text-[11px] leading-snug text-muted-foreground">
-        Cho phép trung tâm dùng ảnh hoạt động của {studentName} tại lớp. Có thể thu hồi bất
-        cứ lúc nào — ảnh sẽ được ẩn ngay.
+        Cho phép trung tâm dùng ảnh hoạt động của {studentName} tại lớp. Có thể
+        thu hồi bất cứ lúc nào — ảnh sẽ được ẩn ngay.
       </p>
     </div>
   );

@@ -52,7 +52,9 @@ export function SubmitForm({
         })),
       });
       if (res.ok) {
-        toast.success(res.status === "LATE" ? "Đã nộp (trễ hạn)" : "Đã nộp bài");
+        toast.success(
+          res.status === "LATE" ? "Đã nộp (trễ hạn)" : "Đã nộp bài",
+        );
         router.refresh();
       } else {
         toast.error(res.error ?? "Nộp bài thất bại");
@@ -95,7 +97,7 @@ export function SubmitForm({
         type="button"
         onClick={submit}
         disabled={pending}
-        className="rounded-lg bg-orange-500 px-5 py-2.5 text-sm font-semibold text-white hover:bg-orange-600 disabled:opacity-60"
+        className="rounded-lg bg-orange-700 px-5 py-2.5 text-sm font-semibold text-white hover:bg-orange-800 disabled:opacity-60"
       >
         {pending ? "Đang nộp…" : "Nộp bài"}
       </button>

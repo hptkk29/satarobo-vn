@@ -16,7 +16,10 @@ import { AnnouncementReadMarker } from "@/components/chat/portal/announcement-re
 import { formatChatTimestamp } from "@/components/chat/portal/format";
 
 export const dynamic = "force-dynamic";
-export const metadata = { title: "Thông báo nhóm lớp | Sata Robo", robots: { index: false } };
+export const metadata = {
+  title: "Thông báo nhóm lớp | Sata Robo",
+  robots: { index: false },
+};
 
 export default async function PortalConversationAnnouncementsPage({
   params,
@@ -36,10 +39,14 @@ export default async function PortalConversationAnnouncementsPage({
   if (!(await hasAcceptedChatPolicy(userId))) return <ChatPolicyGate />;
 
   const conversations = await listConversationsForUser(userId);
-  const conversation = conversations.find((c) => c.conversationId === conversationId);
+  const conversation = conversations.find(
+    (c) => c.conversationId === conversationId,
+  );
   if (!conversation) notFound();
 
-  const page = await listAnnouncements(conversationId, userId, { cursor: cursor ?? null });
+  const page = await listAnnouncements(conversationId, userId, {
+    cursor: cursor ?? null,
+  });
 
   return (
     <div className="space-y-3">
@@ -52,8 +59,12 @@ export default async function PortalConversationAnnouncementsPage({
           <ArrowLeft className="size-5" />
         </Link>
         <div className="min-w-0 flex-1 py-1">
-          <h1 className="truncate text-lg font-bold text-foreground">Tất cả thông báo</h1>
-          <p className="truncate text-xs text-muted-foreground">{conversation.displayName}</p>
+          <h1 className="truncate text-lg font-bold text-foreground">
+            Tất cả thông báo
+          </h1>
+          <p className="truncate text-xs text-muted-foreground">
+            {conversation.displayName}
+          </p>
         </div>
       </div>
 

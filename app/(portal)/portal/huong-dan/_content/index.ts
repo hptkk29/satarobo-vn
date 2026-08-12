@@ -19,7 +19,10 @@ export function allGuides(): PortalGuide[] {
   return sorted;
 }
 
-export function guidesByCategory(): { category: string; guides: PortalGuide[] }[] {
+export function guidesByCategory(): {
+  category: string;
+  guides: PortalGuide[];
+}[] {
   return GUIDE_CATEGORIES.map((category) => ({
     category,
     guides: sorted.filter((g) => g.category === category),

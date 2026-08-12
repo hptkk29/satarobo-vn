@@ -11,6 +11,10 @@ name: cron-pump-test
 on:
   schedule:
     - cron: "*/5 * * * *" # GitHub cron tối thiểu ~5 phút, có thể trễ — đủ cho UAT
+    # 12/08/2026 — nhịp ĐÊM riêng cho đối soát OrgUnit (xem job `doi-soat-dem`).
+    # Cùng giờ với vercel.json (`0 20 * * *` UTC = 03:00 giờ VN) để hai môi trường
+    # so được với nhau.
+    - cron: "0 20 * * *"
   workflow_dispatch:
 jobs:
   pump:
@@ -39,3 +43,36 @@ jobs:
             fi
           done
           exit $fail
+
+  # ── Đối soát OrgUnit — MỖI ĐÊM MỘT LẦN, không đi chung nhịp 5 phút ───────────
+  # Cổng P1 đòi 7 đêm đối soát sạch liên tiếp. Đo ngày 12/08: bảng OrgUnitDriftRun
+  # RỖNG — cổng chưa hề bắt đầu đếm. Lý do: `/api/cron/orgunit-drift` có đăng ký
+  # trong vercel.json, nhưng Vercel Cron KHÔNG chạy trên environment `test`, còn
+  # workflow bơm ở trên chỉ bơm 3 endpoint khác. Tức không ai gọi nó trên môi
+  # trường mà DB đang nằm.
+  #
+  # Tách job riêng chứ không thêm vào vòng lặp trên: một lượt đối soát quét 52
+  # bảng và mất ~24 giây; chạy 288 lần/ngày là phí và làm nhiễu chính bảng log.
+  doi-soat-dem:
+    if: github.event.schedule == '0 20 * * *' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Đối soát OrgUnit trên test.satarobo.vn
+        run: |
+          set -e
+          [ -n "${{ secrets.TEST_CRON_SECRET }}" ] || { echo "::error::Thiếu secret TEST_CRON_SECRET"; exit 1; }
+          body=$(mktemp)
+          code=$(curl -s -m 300 -o "$body" -w "%{http_code}" \
+            -H "Authorization: Bearer ${{ secrets.TEST_CRON_SECRET }}" \
+            "https://test.satarobo.vn/api/cron/orgunit-drift")
+          body=$(cat "$body")
+          echo "orgunit-drift → HTTP $code"
+          echo "$body"
+          [ "$code" = "200" ] || { echo "::error::orgunit-drift trả HTTP $code"; exit 1; }
+          # `inconclusive` = quét được 0 dòng ⇒ "sạch" là giả, KHÔNG được tính vào
+          # 7 đêm. Báo đỏ để không ai vô tình đếm nhầm đêm rỗng thành đêm sạch.
+          case "$body" in
+            *'"inconclusive":true'*)
+              echo "::error::Đối soát trả inconclusive (quét được 0 dòng) — không tính là đêm sạch."
+              exit 1;;
+          esac

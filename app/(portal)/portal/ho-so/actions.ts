@@ -34,10 +34,16 @@ export async function updateParentName(
 
   const parsed = nameSchema.safeParse(name);
   if (!parsed.success) {
-    return { ok: false, error: parsed.error.issues[0]?.message ?? "Tên không hợp lệ" };
+    return {
+      ok: false,
+      error: parsed.error.issues[0]?.message ?? "Tên không hợp lệ",
+    };
   }
 
-  await pdb.user.update({ where: { id: user.id }, data: { name: parsed.data } });
+  await pdb.user.update({
+    where: { id: user.id },
+    data: { name: parsed.data },
+  });
   revalidatePath("/portal/ho-so");
   revalidatePath("/portal");
   return { ok: true };
@@ -65,7 +71,10 @@ export async function changeParentPassword(input: {
 
   const parsed = passwordSchema.safeParse(input);
   if (!parsed.success) {
-    return { ok: false, error: parsed.error.issues[0]?.message ?? "Dữ liệu không hợp lệ" };
+    return {
+      ok: false,
+      error: parsed.error.issues[0]?.message ?? "Dữ liệu không hợp lệ",
+    };
   }
 
   const row = await pdb.user.findUnique({
@@ -113,7 +122,10 @@ export async function updateParentProfile(input: {
 
   const parsed = profileSchema.safeParse(input);
   if (!parsed.success) {
-    return { ok: false, error: parsed.error.issues[0]?.message ?? "Dữ liệu không hợp lệ" };
+    return {
+      ok: false,
+      error: parsed.error.issues[0]?.message ?? "Dữ liệu không hợp lệ",
+    };
   }
   const d = parsed.data;
   const nz = (s: string) => (s.length ? s : null);
@@ -152,7 +164,6 @@ export async function updateParentProfile(input: {
   return { ok: true };
 }
 
-
 // ─── AUTH-SĐT P6 — đổi SĐT đăng nhập (2 bước, OTP gửi tới SỐ MỚI) ──────────
 // Phần chạm DB nằm ở lib/parents/phone-change.ts (portal không được import
 // @/lib/db trần, và việc này phải tra bảng User của người khác để kiểm trùng số).
@@ -163,7 +174,9 @@ export async function requestParentPhoneChangeOtp(
   const user = await requireParent();
   if (!user) return { ok: false, error: "Chưa đăng nhập" };
   const res = await requestParentPhoneChange(user.id, rawPhone);
-  return res.ok ? { ok: true, cooldownSec: res.cooldownSec } : { ok: false, error: res.error };
+  return res.ok
+    ? { ok: true, cooldownSec: res.cooldownSec }
+    : { ok: false, error: res.error };
 }
 
 export async function confirmParentPhoneChangeAction(input: {
@@ -172,7 +185,11 @@ export async function confirmParentPhoneChangeAction(input: {
 }): Promise<{ ok: boolean; error?: string }> {
   const user = await requireParent();
   if (!user) return { ok: false, error: "Chưa đăng nhập" };
-  const res = await confirmParentPhoneChange(user.id, input.newPhone, input.code);
+  const res = await confirmParentPhoneChange(
+    user.id,
+    input.newPhone,
+    input.code,
+  );
   if (!res.ok) return { ok: false, error: res.error };
   revalidatePath("/portal/ho-so");
   revalidatePath("/portal");

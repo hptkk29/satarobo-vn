@@ -84,15 +84,93 @@ Ba loại số:
 | (3) backfill | Lùi bằng `UPDATE <bảng> SET "orgUnitId" = NULL` — cột `centerId` không bị đụng nên nghiệp vụ không đổi. |
 | Cơ chế ghi kép | Gỡ `.$extends(dualWriteExtension())` trong `lib/db.ts`. Hệ chạy tiếp, chỉ mất việc tự điền. |
 
-## 5. Việc CÒN LẠI của P1 (chưa làm trong đợt này)
+## 5. Việc CÒN LẠI của P1
 
-- **28 bảng của PR-A mang nhãn `CHUA_RA_SOAT`** — chưa ai rà `centerId = NULL` ở đó nghĩa
-  là gì. Đối soát vẫn đếm và hiện, nhưng "thiếu orgUnitId" cố ý **không** báo động (kêu sói
-  mỗi đêm trên 28 bảng chưa duyệt là cách nhanh nhất khiến cả đội thôi đọc alert). Rà xong
-  bảng nào thì chuyển sang `BACKFILL_SPECS` kèm bằng chứng.
-- **`AuditLog.orgUnitId` đang trộn hai không gian khoá** — nhiều call-site nhét `Center.id`
-  vào cột vốn để chứa `OrgUnit.id`. Chuẩn hoá là migration GHI trên dữ liệu prod ⇒ phải là
-  story riêng có dry-run (luật cứng #4), cố ý **không** nhét vào US-07.
+### ✅ Đã xử lý 12/08/2026
+
+**`AuditLog.orgUnitId` trộn hai không gian khoá — XONG.**
+Đo trước khi vá: **246/369 dòng (67 %)** mang `Center.id`, tập trung ở `enrollment` (145)
+và `finance` (93). Hậu quả: đường đọc lọc `orgUnitId IN visibleOrgUnitIds` (toàn
+`OrgUnit.id`) nên **hai phần ba nhật ký vô hình với quản lý cơ sở** — im lặng, không lỗi.
+
+- Đường GHI vá ở **biên**: `resolveAuditOrgUnitId()` trong `lib/audit/audit-log.ts` nhận cả
+  hai loại ID và chuẩn hoá bằng MỘT truy vấn (`OrgUnit.centerId` là `@unique` nên không thể
+  khớp nhầm). Vá ở đây chứ không sửa 47 chỗ gọi: hai ID đều là chuỗi cuid, nhìn không phân
+  biệt được, nên chỗ thứ 48 chắc chắn lại sai.
+- Dữ liệu CŨ: `scripts/nen-p1-sua-audit-orgunit.ts` (dry-run mặc định).
+  ```bash
+  pnpm tsx scripts/nen-p1-sua-audit-orgunit.ts            # xem trước
+  pnpm tsx scripts/nen-p1-sua-audit-orgunit.ts --apply    # ghi thật
+  ```
+  Đã chạy trên DB dev: 246 dòng đổi, **0 mồ côi**, chạy lại lần hai ra 0 (idempotent).
+  ⚠️ **PROD chưa chạy** — luật cứng #4, người vận hành chạy tay sau khi xem dry-run.
+
+  ⚠️ **Script KHÔNG chạm được PROD từ máy dev**: `.env` local trỏ DB dev, còn
+  `DATABASE_URL` của prod bị Vercel đánh dấu Sensitive nên `vercel env pull` không
+  lấy ra được. Đường duy nhất tới DB prod là **Supabase SQL Editor**. Bản SQL dưới
+  đây tương đương script — đã chạy đối chiếu trên dev và cho ĐÚNG cùng con số.
+
+  **Bước 1 — xem trước (chỉ đọc):**
+  ```sql
+  SELECT
+    count(*) FILTER (WHERE a."orgUnitId" IS NULL)                             AS null_giu_nguyen,
+    count(*) FILTER (WHERE o_id.id IS NOT NULL)                               AS da_dung,
+    count(*) FILTER (WHERE o_id.id IS NULL AND o_ct.id IS NOT NULL)           AS doi_duoc,
+    count(*) FILTER (WHERE a."orgUnitId" IS NOT NULL
+                       AND o_id.id IS NULL AND o_ct.id IS NULL)               AS mo_coi
+  FROM "AuditLog" a
+  LEFT JOIN "OrgUnit" o_id ON o_id.id = a."orgUnitId"          AND o_id."deletedAt" IS NULL
+  LEFT JOIN "OrgUnit" o_ct ON o_ct."centerId" = a."orgUnitId"  AND o_ct."deletedAt" IS NULL;
+  ```
+  `mo_coi > 0` thì DỪNG, xem tay trước — đó là id không khớp cả OrgUnit lẫn Center
+  (đơn vị đã xoá), script cố ý không tự sửa.
+
+  **Bước 2 — ghi thật:**
+  ```sql
+  UPDATE "AuditLog" a
+     SET "orgUnitId" = o_ct.id
+    FROM "OrgUnit" o_ct
+   WHERE o_ct."centerId" = a."orgUnitId"
+     AND o_ct."deletedAt" IS NULL
+     AND NOT EXISTS (
+           SELECT 1 FROM "OrgUnit" o_id
+            WHERE o_id.id = a."orgUnitId" AND o_id."deletedAt" IS NULL
+         );
+  ```
+  ⚠️ **SQL Editor của Supabase KHÔNG giữ transaction giữa các lần bấm Run** — chạy
+  bước 2 là ăn ngay, không có `ROLLBACK`. Chạy lại bước 1 để đối chiếu: `doi_duoc`
+  phải về 0, `mo_coi` giữ nguyên.
+
+**28 bảng `CHUA_RA_SOAT` → còn 20.**
+Rà bằng số đo trực tiếp trên DB, tiêu chí chuyển gồm cả bốn: bảng CÓ dữ liệu · 0 dòng
+`centerId IS NULL` · 0 dòng thiếu `orgUnitId` · 0 dòng lệch ánh xạ.
+- **8 bảng đạt cả bốn** → đã chuyển sang `BACKFILL_SPECS` với số đo kèm theo: `Class`,
+  `Room`, `ClassGroup`, `EmployeeCheckin`, `CenterDayChecklist`, `MakeupNeed`,
+  `TimesheetAdjustmentRequest`, `SataCoinTransaction`.
+- **8 bảng RỖNG** — không có dòng nào thì không suy ra được gì, để nguyên.
+- **12 bảng CÓ dòng `centerId = NULL`** — đây mới là phần cần NGƯỜI trả lời: `NULL` nghĩa
+  là "toàn hệ thống" (như nghỉ lễ quốc gia) hay "chưa khớp được cơ sở" (như lead mới về)?
+  Hai nghĩa dẫn tới hai cách xử lý ngược nhau ở P4. Số NULL từng bảng ghi ngay trong
+  `lib/org/center-bridge.ts`.
+
+Tin tốt từ lần đo này: **0 dòng lệch ánh xạ và 0 dòng thiếu `orgUnitId` trên cả 28 bảng** —
+cơ chế ghi kép đang chạy đúng.
+
+**Cổng "7 đêm đối soát sạch" — trước 12/08 CHƯA HỀ BẮT ĐẦU ĐẾM.**
+Bảng `OrgUnitDriftRun` rỗng. Lý do: `/api/cron/orgunit-drift` có đăng ký trong
+`vercel.json`, nhưng **Vercel Cron không chạy trên environment `test`**, còn
+`cron-pump-test.yml` chỉ bơm `dispatch-events` + `email-queue` + `chat-zns-notify` — không
+ai gọi nó trên môi trường mà DB đang nằm.
+- Đã thêm job `doi-soat-dem` vào `cron-pump-test.yml`, nhịp riêng `0 20 * * *` UTC
+  (= 03:00 giờ VN, cùng giờ với `vercel.json` để hai môi trường so được với nhau). Tách job
+  chứ không nhét vào vòng lặp 5 phút: một lượt quét 52 bảng mất ~24 giây.
+- Job **báo đỏ khi `inconclusive: true`** (quét được 0 dòng) — "sạch" kiểu đó là giả, không
+  được tính vào 7 đêm.
+- Đêm sạch **thứ 1/7** đã ghi nhận (chạy tay 12/08): 52 bảng · 1.566 dòng · lệch 0.
+- ⚠️ **PROD chưa kiểm** — cần đo `OrgUnitDriftRun` trên DB prod để biết cron đêm ở đó có
+  thật sự chạy không. Nếu cũng rỗng thì cổng P1 trên prod cũng chưa bắt đầu đếm.
+
+### Còn lại
 - **4 cột tham chiếu cơ sở không mang tên `centerId`** nên lọt khỏi mọi lệnh quét theo tên:
   `LeadChild.interestedCenterId`, `LeadTransfer.fromCenterId/toCenterId`,
   `StudentTransferRequest.fromCenterId/toCenterId`.

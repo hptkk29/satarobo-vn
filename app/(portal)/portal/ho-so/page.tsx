@@ -7,7 +7,10 @@ import { HoSoPageV2 } from "@/components/portal/ho-so-page";
 import { ProfileForm } from "./_components/profile-form";
 
 export const dynamic = "force-dynamic";
-export const metadata = { title: "Hồ sơ | Sata Robo", robots: { index: false } };
+export const metadata = {
+  title: "Hồ sơ | Sata Robo",
+  robots: { index: false },
+};
 
 export default async function HoSoPage() {
   const session = await auth();
@@ -16,7 +19,10 @@ export default async function HoSoPage() {
 
   // Portal v2 — trang Hồ sơ gia đình giống SataUI.
   if (isPortalV2Enabled()) {
-    const profile = await getParentProfile(session.user.id, ctx?.activeStudent?.id ?? null);
+    const profile = await getParentProfile(
+      session.user.id,
+      ctx?.activeStudent?.id ?? null,
+    );
     return <HoSoPageV2 profile={profile} />;
   }
 
@@ -45,7 +51,9 @@ export default async function HoSoPage() {
               >
                 <span className="font-medium text-neutral-800">{c.name}</span>
                 {c.studentCode && (
-                  <span className="text-xs text-neutral-400">{c.studentCode}</span>
+                  <span className="text-xs text-neutral-600">
+                    {c.studentCode}
+                  </span>
                 )}
               </li>
             ))}

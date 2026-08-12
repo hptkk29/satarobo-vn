@@ -183,13 +183,18 @@ test.describe("[US-07][AC3][TS-07] đối soát centerId ↔ orgUnitId", () => {
     // "Sai ánh xạ" là mâu thuẫn nội tại của một dòng — không có cách đọc nào cho nó là
     // đúng, nên nó báo động ở MỌI nhóm, khác với "thiếu orgUnitId".
     await seedNen();
-    const course = await db.course.create({ data: { name: "K7", slug: "k7-dw" } });
-    const cls = await db.class.create({ data: { name: "L sai", courseId: course.id, centerId: "c-cs1" } });
+    // Bảng mẫu phải là một bảng CÒN trong PR_A_MODELS. Trước đây test dùng `Class`,
+    // nhưng 12/08 `Class` được rà xong và chuyển sang BACKFILL_SPECS ⇒ test đỏ vì
+    // TIẾN BỘ chứ không phải hồi quy. `Holiday` vẫn chưa rà (còn dòng centerId=NULL,
+    // chưa ai chốt "nghỉ lễ không gắn cơ sở" nghĩa là toàn hệ thống hay chưa khớp).
+    const hol = await db.holiday.create({
+      data: { name: "Nghỉ sai ánh xạ", date: new Date("2026-09-02"), centerId: "c-cs1" },
+    });
     const cs2 = await orgIdOf("CS2");
-    await db.$executeRawUnsafe(`UPDATE "Class" SET "orgUnitId" = $1 WHERE "id" = $2`, cs2, cls.id);
+    await db.$executeRawUnsafe(`UPDATE "Holiday" SET "orgUnitId" = $1 WHERE "id" = $2`, cs2, hol.id);
 
     const rep = await runDriftReport();
-    const row = rep.drift.find((d) => d.model === "Class");
+    const row = rep.drift.find((d) => d.model === "Holiday");
     expect(row?.mismatched).toBe(1);
     expect(row?.missingOrgUnit).toBe(0);
     expect(row?.nullMeaning).toBe("CHUA_RA_SOAT");

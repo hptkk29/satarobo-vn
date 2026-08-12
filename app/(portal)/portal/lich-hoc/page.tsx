@@ -40,21 +40,23 @@ export default async function LichHocPage() {
               key={p.classId}
               className="rounded-xl border border-orange-200 bg-orange-50 p-4"
             >
-              <p className="text-sm font-semibold text-neutral-900">{p.courseName}</p>
-              <p className="text-xs text-neutral-500">{p.className}</p>
+              <p className="text-sm font-semibold text-neutral-900">
+                {p.courseName}
+              </p>
+              <p className="text-xs text-neutral-600">{p.className}</p>
               <p className="mt-2 text-lg font-bold text-orange-700">
                 Đang học buổi {p.currentSession}
-                <span className="text-sm font-medium text-neutral-500">
-                  {" "}/ tổng {p.total || "—"}
+                <span className="text-sm font-medium text-neutral-600">
+                  {" "}
+                  / tổng {p.total || "—"}
                 </span>
               </p>
               <p className="text-xs text-neutral-600">
                 Đã học {p.attended} · Còn lại {p.remaining}
               </p>
               {p.expectedEndDate && (
-                <p className="mt-1 text-xs text-neutral-500">
-                  Dự kiến kết thúc:{" "}
-                  {formatDateVN(p.expectedEndDate)}
+                <p className="mt-1 text-xs text-neutral-600">
+                  Dự kiến kết thúc: {formatDateVN(p.expectedEndDate)}
                 </p>
               )}
               {p.nearingEnd && (
@@ -91,13 +93,13 @@ function AttendanceMetrics({ s }: { s: ClassAttendanceSummary }) {
     { label: "Tổng buổi", value: s.total, tone: "text-neutral-900" },
     { label: "Đã học", value: s.attended, tone: "text-green-700" },
     { label: "Vắng", value: s.absent, tone: "text-red-600" },
-    { label: "Chờ học bù", value: s.needMakeup, tone: "text-amber-600" },
+    { label: "Chờ học bù", value: s.needMakeup, tone: "text-amber-700" },
     { label: "Đã học bù", value: s.madeUp, tone: "text-[#7C3AED]" },
   ];
   return (
     <div className="rounded-xl border border-neutral-200 bg-white p-4">
       <p className="text-sm font-semibold text-neutral-900">{s.className}</p>
-      <p className="text-xs text-neutral-500">{s.courseName}</p>
+      <p className="text-xs text-neutral-600">{s.courseName}</p>
       <dl className="mt-3 grid grid-cols-3 gap-2 sm:grid-cols-5">
         {items.map((it) => (
           <div
@@ -166,7 +168,7 @@ function Row({
         <p className="font-medium text-neutral-900">
           {s.lessonTitle ?? s.topic ?? "Buổi học"}
         </p>
-        <p className="text-xs text-neutral-500">
+        <p className="text-xs text-neutral-600">
           {s.className} · {timeRange ? `${timeRange} · ` : ""}
           {weekday}, {dateStr}
         </p>
@@ -177,7 +179,7 @@ function Row({
 
 function Empty({ children }: { children: React.ReactNode }) {
   return (
-    <li className="rounded-xl border border-dashed border-neutral-300 bg-white p-6 text-center text-sm text-neutral-400">
+    <li className="rounded-xl border border-dashed border-neutral-300 bg-white p-6 text-center text-sm text-neutral-500">
       {children}
     </li>
   );

@@ -8,17 +8,25 @@ import type { PortalQuestion } from "./_fields";
 import { TeacherEvalForm } from "./eval-form";
 
 export const dynamic = "force-dynamic";
-export const metadata = { title: "Đánh giá giáo viên | Sata Robo", robots: { index: false } };
+export const metadata = {
+  title: "Đánh giá giáo viên | Sata Robo",
+  robots: { index: false },
+};
 
 export default async function DanhGiaGvPage() {
   const { ctx, studentId } = await requireActiveStudent();
-  const pdb = portalDb({ parentUserId: ctx.parentUserId, childIds: ctx.children.map((c) => c.id) });
+  const pdb = portalDb({
+    parentUserId: ctx.parentUserId,
+    childIds: ctx.children.map((c) => c.id),
+  });
 
   if (!isEvalV2Enabled()) {
     return (
       <div className="space-y-5">
-        <h1 className="text-xl font-bold text-neutral-900">Đánh giá giáo viên</h1>
-        <p className="rounded-xl border border-dashed border-neutral-300 bg-white p-6 text-center text-sm text-neutral-400">
+        <h1 className="text-xl font-bold text-neutral-900">
+          Đánh giá giáo viên
+        </h1>
+        <p className="rounded-xl border border-dashed border-neutral-300 bg-white p-6 text-center text-sm text-neutral-500">
           Tính năng đang được chuẩn bị. Vui lòng quay lại sau nhé!
         </p>
       </div>
@@ -44,7 +52,13 @@ export default async function DanhGiaGvPage() {
     roundId: string;
     name: string;
     questions: PortalQuestion[];
-    pairs: { enrollmentId: string; teacherId: string; teacherName: string; className: string; role: string }[];
+    pairs: {
+      enrollmentId: string;
+      teacherId: string;
+      teacherName: string;
+      className: string;
+      role: string;
+    }[];
   }[] = [];
 
   for (const r of rounds) {
@@ -61,8 +75,12 @@ export default async function DanhGiaGvPage() {
       where: { roundId: r.id, studentId },
       select: { enrollmentId: true, teacherId: true },
     });
-    const done = new Set(existing.map((e) => `${e.enrollmentId}|${e.teacherId}`));
-    const pairs = eligible.filter((e) => !done.has(`${e.enrollmentId}|${e.teacherId}`));
+    const done = new Set(
+      existing.map((e) => `${e.enrollmentId}|${e.teacherId}`),
+    );
+    const pairs = eligible.filter(
+      (e) => !done.has(`${e.enrollmentId}|${e.teacherId}`),
+    );
     if (pairs.length === 0) continue;
 
     const questions: PortalQuestion[] = r.form.questions.map((q) => ({
@@ -79,18 +97,24 @@ export default async function DanhGiaGvPage() {
   return (
     <div className="space-y-5">
       <div>
-        <h1 className="text-xl font-bold text-neutral-900">Đánh giá giáo viên</h1>
-        <p className="mt-1 text-sm text-neutral-500">Em hãy chấm sao và góp ý cho thầy/cô đang dạy mình nhé!</p>
+        <h1 className="text-xl font-bold text-neutral-900">
+          Đánh giá giáo viên
+        </h1>
+        <p className="mt-1 text-sm text-neutral-500">
+          Em hãy chấm sao và góp ý cho thầy/cô đang dạy mình nhé!
+        </p>
       </div>
 
       {blocks.length === 0 ? (
-        <p className="rounded-xl border border-dashed border-neutral-300 bg-white p-6 text-center text-sm text-neutral-400">
+        <p className="rounded-xl border border-dashed border-neutral-300 bg-white p-6 text-center text-sm text-neutral-500">
           Hiện không có đợt đánh giá nào cần làm. Cảm ơn em!
         </p>
       ) : (
         blocks.map((b) => (
           <section key={b.roundId} className="space-y-3">
-            <h2 className="text-sm font-bold uppercase tracking-wider text-neutral-400">{b.name}</h2>
+            <h2 className="text-sm font-bold uppercase tracking-wider text-neutral-500">
+              {b.name}
+            </h2>
             {b.pairs.map((p) => (
               <TeacherEvalForm
                 key={`${p.enrollmentId}|${p.teacherId}`}

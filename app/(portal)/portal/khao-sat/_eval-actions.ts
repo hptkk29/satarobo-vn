@@ -9,7 +9,12 @@ import { portalDb } from "@/lib/portal/db";
 import { isEvalV2Enabled } from "@/lib/flags";
 import { isRoundOpen } from "@/lib/eval/rounds";
 import { isParentEligibleForCenterDb } from "@/lib/eval/eligibility";
-import { validateAnswers, parseOptions, type QuestionDef, type QuestionType } from "@/lib/eval/forms";
+import {
+  validateAnswers,
+  parseOptions,
+  type QuestionDef,
+  type QuestionType,
+} from "@/lib/eval/forms";
 
 const submitSchema = z.object({
   roundId: z.string().min(1),
@@ -29,7 +34,10 @@ export async function submitCenterSurvey(input: unknown): Promise<Res> {
   if (!isEvalV2Enabled()) return { ok: false, error: "Tính năng chưa được mở" };
 
   const { ctx, studentId } = await requireActiveStudent();
-  const pdb = portalDb({ parentUserId: ctx.parentUserId, childIds: ctx.children.map((c) => c.id) });
+  const pdb = portalDb({
+    parentUserId: ctx.parentUserId,
+    childIds: ctx.children.map((c) => c.id),
+  });
   const parentUserId = ctx.parentUserId;
 
   const parsed = submitSchema.safeParse(input);
@@ -47,12 +55,18 @@ export async function submitCenterSurvey(input: unknown): Promise<Res> {
       form: { select: { questions: { orderBy: { order: "asc" } } } },
     },
   });
-  if (!round || round.scope !== "CENTER_SURVEY") return { ok: false, error: "Khảo sát không hợp lệ" };
-  if (!isRoundOpen(round)) return { ok: false, error: "Khảo sát đã đóng hoặc chưa mở" };
+  if (!round || round.scope !== "CENTER_SURVEY")
+    return { ok: false, error: "Khảo sát không hợp lệ" };
+  if (!isRoundOpen(round))
+    return { ok: false, error: "Khảo sát đã đóng hoặc chưa mở" };
 
   // Eligibility tại thời điểm submit (AC5) — PH phải có ≥1 con đang học cơ sở này.
-  const eligible = await isParentEligibleForCenterDb(parentUserId, round.centerId);
-  if (!eligible) return { ok: false, error: "Bạn không thuộc diện khảo sát của cơ sở này" };
+  const eligible = await isParentEligibleForCenterDb(
+    parentUserId,
+    round.centerId,
+  );
+  if (!eligible)
+    return { ok: false, error: "Bạn không thuộc diện khảo sát của cơ sở này" };
 
   // Loại câu PHOTO (form legacy) — khớp getEligibleCenterRounds: portal PH không
   // render input ảnh, giữ lại sẽ làm câu required chặn nộp (dead-end).
@@ -86,7 +100,10 @@ export async function submitCenterSurvey(input: unknown): Promise<Res> {
       },
     });
   } catch (e) {
-    if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {
+    if (
+      e instanceof Prisma.PrismaClientKnownRequestError &&
+      e.code === "P2002"
+    ) {
       return { ok: false, error: "Bạn đã hoàn thành khảo sát này rồi" };
     }
     throw e;

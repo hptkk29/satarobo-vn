@@ -18,11 +18,15 @@ import {
  */
 export async function setPortalViewAction(view: PortalView): Promise<void> {
   await requireActiveStudent();
-  (await cookies()).set(PORTAL_VIEW_COOKIE, view === "student" ? "student" : "parent", {
-    httpOnly: true,
-    sameSite: "lax",
-    path: "/portal",
-  });
+  (await cookies()).set(
+    PORTAL_VIEW_COOKIE,
+    view === "student" ? "student" : "parent",
+    {
+      httpOnly: true,
+      sameSite: "lax",
+      path: "/portal",
+    },
+  );
   revalidatePath("/portal/bai-tap");
 }
 
@@ -44,7 +48,9 @@ export async function submitAssignment(
     childIds: ctx.children.map((c) => c.id),
   });
 
-  const parsed = buildPortalSubmissionSchema(process.env.R2_PUBLIC_URL).safeParse(input);
+  const parsed = buildPortalSubmissionSchema(
+    process.env.R2_PUBLIC_URL,
+  ).safeParse(input);
   if (!parsed.success) {
     return {
       ok: false,
@@ -80,7 +86,9 @@ export async function submitAssignment(
   });
   if (!enrolled) return { ok: false, error: "Bài tập không thuộc lớp của con" };
 
-  const textAnswer = assignment.allowText ? parsed.data.textAnswer?.trim() || null : null;
+  const textAnswer = assignment.allowText
+    ? parsed.data.textAnswer?.trim() || null
+    : null;
   const files = assignment.allowFile
     ? (parsed.data.files ?? []).slice(0, PORTAL_SUBMISSION_MAX_FILES)
     : [];
@@ -131,7 +139,9 @@ export async function submitAssignment(
       update: data,
       select: { id: true },
     });
-    await tx.assignmentSubmissionFile.deleteMany({ where: { submissionId: sub.id } });
+    await tx.assignmentSubmissionFile.deleteMany({
+      where: { submissionId: sub.id },
+    });
     if (files.length > 0) {
       await tx.assignmentSubmissionFile.createMany({
         data: files.map((f) => ({

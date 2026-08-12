@@ -11,9 +11,12 @@ export default function ThongBaoError({
 }) {
   return (
     <div className="mx-auto w-full max-w-6xl rounded-2xl border border-border bg-card p-8 text-center">
-      <p className="text-sm font-semibold text-foreground">Không tải được thông báo.</p>
+      <p className="text-sm font-semibold text-foreground">
+        Không tải được thông báo.
+      </p>
       <p className="mt-1 text-sm text-muted-foreground">
-        Đã có lỗi khi tải dữ liệu. Vui lòng thử lại, nếu vẫn lỗi hãy liên hệ trung tâm.
+        Đã có lỗi khi tải dữ liệu. Vui lòng thử lại, nếu vẫn lỗi hãy liên hệ
+        trung tâm.
       </p>
       <button
         onClick={() => reset()}

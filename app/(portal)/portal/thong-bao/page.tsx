@@ -8,7 +8,10 @@ import { getParentNotificationFeed } from "@/lib/portal/notification-feed";
 import { ThongBaoPageV2 } from "@/components/portal/thong-bao-page";
 
 export const dynamic = "force-dynamic";
-export const metadata = { title: "Thông báo | Sata Robo", robots: { index: false } };
+export const metadata = {
+  title: "Thông báo | Sata Robo",
+  robots: { index: false },
+};
 
 export default async function ThongBaoPage() {
   // Portal v2 — feed thông báo tổng hợp giống SataUI.
@@ -35,7 +38,7 @@ export default async function ThongBaoPage() {
       </h1>
 
       {notifications.length === 0 ? (
-        <p className="rounded-xl border border-dashed border-neutral-300 bg-white p-8 text-center text-sm text-neutral-400">
+        <p className="rounded-xl border border-dashed border-neutral-300 bg-white p-8 text-center text-sm text-neutral-500">
           Chưa có thông báo nào.
         </p>
       ) : (
@@ -47,14 +50,14 @@ export default async function ThongBaoPage() {
             >
               <div className="flex items-start justify-between gap-2">
                 <h2 className="font-semibold text-neutral-900">{n.title}</h2>
-                <span className="shrink-0 rounded-full bg-neutral-100 px-2 py-0.5 text-[10px] font-medium text-neutral-500">
+                <span className="shrink-0 rounded-full bg-neutral-100 px-2 py-0.5 text-[10px] font-medium text-neutral-600">
                   {n.scope}
                 </span>
               </div>
               <p className="mt-1 whitespace-pre-wrap text-sm text-neutral-600">
                 {n.body}
               </p>
-              <p className="mt-2 text-xs text-neutral-400">
+              <p className="mt-2 text-xs text-neutral-600">
                 {new Date(n.publishedAt).toLocaleString("vi-VN", {
                   day: "2-digit",
                   month: "2-digit",

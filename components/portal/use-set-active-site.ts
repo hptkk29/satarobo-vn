@@ -15,7 +15,10 @@ export function useSetActiveSite() {
 
   function switchTo(
     id: string,
-    opts?: { onSuccess?: (router: AppRouterInstance) => void; errorMessage?: string },
+    opts?: {
+      onSuccess?: (router: AppRouterInstance) => void;
+      errorMessage?: string;
+    },
   ) {
     startTransition(async () => {
       const res = await setActiveSite(id);
@@ -23,7 +26,9 @@ export function useSetActiveSite() {
         if (opts?.onSuccess) opts.onSuccess(router);
         else router.refresh();
       } else {
-        toast.error(res.error ?? opts?.errorMessage ?? "Không đổi được học viên");
+        toast.error(
+          res.error ?? opts?.errorMessage ?? "Không đổi được học viên",
+        );
       }
     });
   }

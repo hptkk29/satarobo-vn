@@ -44,12 +44,15 @@ type PortalAppearanceContextValue = {
   dirty: boolean;
 };
 
-const PortalAppearanceContext = createContext<PortalAppearanceContextValue | null>(null);
+const PortalAppearanceContext =
+  createContext<PortalAppearanceContextValue | null>(null);
 
 export function usePortalAppearance(): PortalAppearanceContextValue {
   const ctx = useContext(PortalAppearanceContext);
   if (ctx === null) {
-    throw new Error("usePortalAppearance phải nằm trong <PortalAppearanceProvider>");
+    throw new Error(
+      "usePortalAppearance phải nằm trong <PortalAppearanceProvider>",
+    );
   }
   return ctx;
 }
@@ -67,7 +70,9 @@ export function PortalAppearanceProvider({
   const [systemDark, setSystemDark] = useState(false);
   // `saved` = bản đã ghi localStorage. `draft` = màu đang preview trên shell.
   const [saved, setSaved] = useState<PortalAppearance>(defaultAppearance);
-  const [draft, setDraft] = useState<Record<PortalRole, string>>(() => defaultAppearance().accents);
+  const [draft, setDraft] = useState<Record<PortalRole, string>>(
+    () => defaultAppearance().accents,
+  );
 
   useEffect(() => {
     const stored = loadAppearance();
@@ -105,7 +110,10 @@ export function PortalAppearanceProvider({
     });
   }, [draft]);
 
-  const discardAccents = useCallback(() => setDraft(saved.accents), [saved.accents]);
+  const discardAccents = useCallback(
+    () => setDraft(saved.accents),
+    [saved.accents],
+  );
 
   const isDark = resolveDark(saved.theme, systemDark);
   const dirty = !accentsEqual(draft, saved.accents);
@@ -130,12 +138,27 @@ export function PortalAppearanceProvider({
       discardAccents,
       dirty,
     }),
-    [mounted, role, saved.theme, isDark, setTheme, draft, setAccent, saveAccents, discardAccents, dirty],
+    [
+      mounted,
+      role,
+      saved.theme,
+      isDark,
+      setTheme,
+      draft,
+      setAccent,
+      saveAccents,
+      discardAccents,
+      dirty,
+    ],
   );
 
   return (
     <PortalAppearanceContext.Provider value={value}>
-      <div className={cn(className, isDark && "dark")} style={style} data-mode={role}>
+      <div
+        className={cn(className, isDark && "dark")}
+        style={style}
+        data-mode={role}
+      >
         {children}
       </div>
     </PortalAppearanceContext.Provider>

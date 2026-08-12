@@ -44,32 +44,142 @@ export type BackfillSpec = {
  */
 export const BACKFILL_SPECS: readonly BackfillSpec[] = [
   // ── Vận hành lõi: centerId suy từ lớp/học viên, luôn phải có ────────────────
-  { model: "Enrollment", nullMeaning: "BAT_BUOC", scoped: true, vi: "ghi danh — suy từ class.centerId" },
-  { model: "ClassSession", nullMeaning: "BAT_BUOC", scoped: true, vi: "buổi học — suy từ class.centerId" },
-  { model: "Attendance", nullMeaning: "BAT_BUOC", scoped: true, vi: "điểm danh — session→class.centerId" },
-  { model: "ReportCard", nullMeaning: "BAT_BUOC", scoped: true, vi: "học bạ — enrollment.centerId" },
-  { model: "CourseCompletionRequest", nullMeaning: "BAT_BUOC", scoped: false, vi: "hoàn thành khoá — enrollment→class.centerId" },
-  { model: "StudentBirthdayGreeting", nullMeaning: "BAT_BUOC", scoped: true, vi: "chúc sinh nhật — student.centerId" },
-  { model: "TrialClassV2", nullMeaning: "BAT_BUOC", scoped: true, vi: "lớp trải nghiệm V2 — có centerId trực tiếp" },
-  { model: "LeadTrialHistory", nullMeaning: "BAT_BUOC", scoped: true, vi: "lịch sử học thử — trialClass.centerId" },
-  { model: "ConversationMessage", nullMeaning: "BAT_BUOC", scoped: true, vi: "hệ chat CŨ — enrollment.centerId" },
-  { model: "LeadAssignmentConfig", nullMeaning: "BAT_BUOC", scoped: false, vi: "centerId là String @unique NOT NULL — comment ở db-scope.ts nói null=toàn hệ thống là SAI so với schema" },
+  {
+    model: "Enrollment",
+    nullMeaning: "BAT_BUOC",
+    scoped: true,
+    vi: "ghi danh — suy từ class.centerId",
+  },
+  {
+    model: "ClassSession",
+    nullMeaning: "BAT_BUOC",
+    scoped: true,
+    vi: "buổi học — suy từ class.centerId",
+  },
+  {
+    model: "Attendance",
+    nullMeaning: "BAT_BUOC",
+    scoped: true,
+    vi: "điểm danh — session→class.centerId",
+  },
+  {
+    model: "ReportCard",
+    nullMeaning: "BAT_BUOC",
+    scoped: true,
+    vi: "học bạ — enrollment.centerId",
+  },
+  {
+    model: "CourseCompletionRequest",
+    nullMeaning: "BAT_BUOC",
+    scoped: false,
+    vi: "hoàn thành khoá — enrollment→class.centerId",
+  },
+  {
+    model: "StudentBirthdayGreeting",
+    nullMeaning: "BAT_BUOC",
+    scoped: true,
+    vi: "chúc sinh nhật — student.centerId",
+  },
+  {
+    model: "TrialClassV2",
+    nullMeaning: "BAT_BUOC",
+    scoped: true,
+    vi: "lớp trải nghiệm V2 — có centerId trực tiếp",
+  },
+  {
+    model: "LeadTrialHistory",
+    nullMeaning: "BAT_BUOC",
+    scoped: true,
+    vi: "lịch sử học thử — trialClass.centerId",
+  },
+  {
+    model: "ConversationMessage",
+    nullMeaning: "BAT_BUOC",
+    scoped: true,
+    vi: "hệ chat CŨ — enrollment.centerId",
+  },
+  {
+    model: "LeadAssignmentConfig",
+    nullMeaning: "BAT_BUOC",
+    scoped: false,
+    vi: "centerId là String @unique NOT NULL — comment ở db-scope.ts nói null=toàn hệ thống là SAI so với schema",
+  },
 
   // ── Tiền: mọi dòng đều thuộc một cơ sở, và đây là nhóm sai một dòng là lệch sổ ─
-  { model: "Payment", nullMeaning: "BAT_BUOC", scoped: true, vi: "phiếu thu — order.centerId" },
-  { model: "PaymentRequest", nullMeaning: "BAT_BUOC", scoped: true, vi: "yêu cầu thu — order.centerId" },
-  { model: "PaymentAllocation", nullMeaning: "BAT_BUOC", scoped: true, vi: "phân bổ — paymentRequest→order.centerId" },
-  { model: "CreditBalance", nullMeaning: "BAT_BUOC", scoped: true, vi: "số dư — order.centerId" },
-  { model: "RefundRequest", nullMeaning: "BAT_BUOC", scoped: false, vi: "hoàn tiền — enrollment→class.centerId" },
-  { model: "QrSession", nullMeaning: "BAT_BUOC", scoped: true, vi: "phiên QR — paymentRequest.centerId" },
+  {
+    model: "Payment",
+    nullMeaning: "BAT_BUOC",
+    scoped: true,
+    vi: "phiếu thu — order.centerId",
+  },
+  {
+    model: "PaymentRequest",
+    nullMeaning: "BAT_BUOC",
+    scoped: true,
+    vi: "yêu cầu thu — order.centerId",
+  },
+  {
+    model: "PaymentAllocation",
+    nullMeaning: "BAT_BUOC",
+    scoped: true,
+    vi: "phân bổ — paymentRequest→order.centerId",
+  },
+  {
+    model: "CreditBalance",
+    nullMeaning: "BAT_BUOC",
+    scoped: true,
+    vi: "số dư — order.centerId",
+  },
+  {
+    model: "RefundRequest",
+    nullMeaning: "BAT_BUOC",
+    scoped: false,
+    vi: "hoàn tiền — enrollment→class.centerId",
+  },
+  {
+    model: "QrSession",
+    nullMeaning: "BAT_BUOC",
+    scoped: true,
+    vi: "phiên QR — paymentRequest.centerId",
+  },
 
   // ── null = TOÀN HỆ THỐNG: điền vào là HỎNG NGHĨA ───────────────────────────
-  { model: "Affiliate", nullMeaning: "NULL_TOAN_HE_THONG", scoped: false, vi: "mã ?ref= dùng chung — điền cơ sở là khoá mã về 1 cơ sở" },
-  { model: "EvaluationRound", nullMeaning: "NULL_TOAN_HE_THONG", scoped: true, vi: "vòng đánh giá SYSTEM/TEACHER_EVAL — điền vào thành vòng của 1 cơ sở" },
-  { model: "RevenueTarget", nullMeaning: "NULL_TOAN_HE_THONG", scoped: false, vi: "mục tiêu doanh thu cấp HO/toàn hệ thống" },
-  { model: "SataCoinRule", nullMeaning: "NULL_TOAN_HE_THONG", scoped: false, vi: "quy tắc điểm mặc định toàn hệ thống" },
-  { model: "WorkShiftConfig", nullMeaning: "NULL_TOAN_HE_THONG", scoped: false, vi: "ca làm mặc định toàn hệ thống" },
-  { model: "FacebookPageMapping", nullMeaning: "NULL_TOAN_HE_THONG", scoped: false, vi: "scopeType=HO thì centerId null có nghĩa" },
+  {
+    model: "Affiliate",
+    nullMeaning: "NULL_TOAN_HE_THONG",
+    scoped: false,
+    vi: "mã ?ref= dùng chung — điền cơ sở là khoá mã về 1 cơ sở",
+  },
+  {
+    model: "EvaluationRound",
+    nullMeaning: "NULL_TOAN_HE_THONG",
+    scoped: true,
+    vi: "vòng đánh giá SYSTEM/TEACHER_EVAL — điền vào thành vòng của 1 cơ sở",
+  },
+  {
+    model: "RevenueTarget",
+    nullMeaning: "NULL_TOAN_HE_THONG",
+    scoped: false,
+    vi: "mục tiêu doanh thu cấp HO/toàn hệ thống",
+  },
+  {
+    model: "SataCoinRule",
+    nullMeaning: "NULL_TOAN_HE_THONG",
+    scoped: false,
+    vi: "quy tắc điểm mặc định toàn hệ thống",
+  },
+  {
+    model: "WorkShiftConfig",
+    nullMeaning: "NULL_TOAN_HE_THONG",
+    scoped: false,
+    vi: "ca làm mặc định toàn hệ thống",
+  },
+  {
+    model: "FacebookPageMapping",
+    nullMeaning: "NULL_TOAN_HE_THONG",
+    scoped: false,
+    vi: "scopeType=HO thì centerId null có nghĩa",
+  },
 
   // ── null = CHƯA KHỚP: giữ null nhưng phải NHÌN THẤY tồn đọng ────────────────
   {
@@ -78,13 +188,75 @@ export const BACKFILL_SPECS: readonly BackfillSpec[] = [
     scoped: true,
     vi: "tiền về CHƯA đối khớp (payos-ingest tạo dòng không set centerId; khớp xong mới điền). Nếu P4 lật scope sang orgUnitId mà quên chép luật OR-null thì tiền vừa về TÀNG HÌNH.",
   },
-  { model: "WorkRequest", nullMeaning: "NULL_CHUA_KHOP", scoped: false, vi: "đơn từ chưa gắn cơ sở — suy được từ người gửi nhưng không đoán thay người dùng" },
+  {
+    model: "WorkRequest",
+    nullMeaning: "NULL_CHUA_KHOP",
+    scoped: false,
+    vi: "đơn từ chưa gắn cơ sở — suy được từ người gửi nhưng không đoán thay người dùng",
+  },
+
+  // ── Rà 12/08/2026: 8 bảng chuyển từ PR_A_MODELS sang đây, có BẰNG CHỨNG ĐO ─────
+  // Tiêu chí chuyển (cả bốn phải đạt, đo trên DB dev bằng SQL trực tiếp):
+  //   ① bảng CÓ dữ liệu (bảng rỗng thì chưa kết luận được gì)
+  //   ② 0 dòng `centerId IS NULL`  ⇒ cột này thực sự bắt buộc, không phải "chưa khớp"
+  //   ③ 0 dòng có centerId mà thiếu orgUnitId ⇒ backfill đã phủ hết
+  //   ④ 0 dòng ánh xạ lệch          ⇒ ghi kép đang chạy đúng
+  // Hai mươi bảng còn lại vẫn ở PR_A_MODELS: 8 bảng RỖNG và 12 bảng CÓ dòng
+  // `centerId = NULL` — cái sau cần người hiểu nghiệp vụ trả lời "NULL ở đây nghĩa
+  // là gì", đo không thay được. Xem số liệu trong docs/nen-he-thong/RUNBOOK-P1.md.
+  {
+    model: "Class",
+    nullMeaning: "BAT_BUOC",
+    scoped: true,
+    vi: "lớp học — 36 dòng, 0 NULL (đo 12/08)",
+  },
+  {
+    model: "Room",
+    nullMeaning: "BAT_BUOC",
+    scoped: true,
+    vi: "phòng học — 11 dòng, 0 NULL; phòng luôn thuộc một cơ sở",
+  },
+  {
+    model: "ClassGroup",
+    nullMeaning: "BAT_BUOC",
+    scoped: true,
+    vi: "nhóm lớp — 8 dòng, 0 NULL",
+  },
+  {
+    model: "EmployeeCheckin",
+    nullMeaning: "BAT_BUOC",
+    scoped: true,
+    vi: "chấm công — 10 dòng, 0 NULL; luôn chấm tại một cơ sở",
+  },
+  {
+    model: "CenterDayChecklist",
+    nullMeaning: "BAT_BUOC",
+    scoped: true,
+    vi: "checklist ngày của cơ sở — 2 dòng, 0 NULL; tên bảng đã nói rõ",
+  },
+  {
+    model: "MakeupNeed",
+    nullMeaning: "BAT_BUOC",
+    scoped: true,
+    vi: "nhu cầu học bù — 8 dòng, 0 NULL; suy từ buổi vắng",
+  },
+  {
+    model: "TimesheetAdjustmentRequest",
+    nullMeaning: "BAT_BUOC",
+    scoped: true,
+    vi: "đề nghị chỉnh công — 4 dòng, 0 NULL; gắn ca làm tại cơ sở",
+  },
+  {
+    model: "SataCoinTransaction",
+    nullMeaning: "BAT_BUOC",
+    scoped: true,
+    vi: "giao dịch SataCoin — 3 dòng, 0 NULL; gắn học viên của cơ sở",
+  },
 ] as const;
 
 /** Model → spec, tra nhanh. */
-export const BACKFILL_SPEC_BY_MODEL: ReadonlyMap<string, BackfillSpec> = new Map(
-  BACKFILL_SPECS.map((s) => [s.model, s]),
-);
+export const BACKFILL_SPEC_BY_MODEL: ReadonlyMap<string, BackfillSpec> =
+  new Map(BACKFILL_SPECS.map((s) => [s.model, s]));
 
 /**
  * 28 bảng ĐÃ có sẵn cả hai cột từ migration PR-A (15/06) — đo lại bằng `information_schema`
@@ -100,12 +272,31 @@ export const BACKFILL_SPEC_BY_MODEL: ReadonlyMap<string, BackfillSpec> = new Map
  * giảm dần thay vì nằm im.
  */
 export const PR_A_MODELS: readonly string[] = [
-  "CenterDayChecklist", "Class", "ClassGroup", "Conversation", "ConversationMembershipDrift",
-  "Employee", "EmployeeCheckin", "Holiday", "InventoryAudit", "Lead", "MakeupNeed",
-  "MessengerConversation", "Notification", "Order", "Room", "SataCoinTransaction",
-  "ShiftRegistration", "StockBalance", "StockMovement", "Student", "StudentCareTask",
-  "StudentCenterHistory", "StudentRiskAlert", "Survey", "SurveyResponse",
-  "TimesheetAdjustmentRequest", "TrialClass", "User",
+  // ── 8 bảng RỖNG: chưa có dòng nào nên không suy ra được `NULL` nghĩa là gì ────
+  "ConversationMembershipDrift",
+  "InventoryAudit",
+  "MessengerConversation",
+  "StockBalance",
+  "StockMovement",
+  "StudentCenterHistory",
+  "StudentRiskAlert",
+  "SurveyResponse",
+  // ── 12 bảng CÓ dòng `centerId = NULL` (số trong ngoặc, đo 12/08) ─────────────
+  //    Đây mới là phần cần NGƯỜI trả lời: NULL là "toàn hệ thống" (như ngày lễ
+  //    quốc gia) hay "chưa khớp được cơ sở" (như lead mới về)? Hai nghĩa đó dẫn
+  //    tới hai cách xử lý ngược nhau ở P4, nên không đoán.
+  "User", // 15 NULL — tài khoản không thuộc cơ sở nào (quản trị, phụ huynh)?
+  "Lead", // 20 NULL — lead chưa phân cơ sở?
+  "Student", //  6 NULL
+  "Holiday", //  6 NULL — nghỉ lễ toàn hệ thống?
+  "Order", //  3 NULL
+  "Employee", //  2 NULL — nhân sự Hội sở?
+  "TrialClass", //  2 NULL
+  "Survey", //  2 NULL
+  "StudentCareTask", //  2 NULL
+  "ShiftRegistration", //  1 NULL
+  "Conversation", //  1 NULL
+  "Notification", //  1 NULL
 ] as const;
 
 /**

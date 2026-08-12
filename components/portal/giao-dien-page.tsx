@@ -42,8 +42,17 @@ const ROLES: { id: PortalRole; label: string; icon: LucideIcon }[] = [
 ];
 
 export function GiaoDienPage() {
-  const { mounted, role, theme, setTheme, accents, setAccent, saveAccents, discardAccents, dirty } =
-    usePortalAppearance();
+  const {
+    mounted,
+    role,
+    theme,
+    setTheme,
+    accents,
+    setAccent,
+    saveAccents,
+    discardAccents,
+    dirty,
+  } = usePortalAppearance();
 
   // Vai trò ĐANG SỬA — mặc định là vai trò của route hiện tại. Khác với `role`
   // của context (vai trò đang hiển thị trên shell).
@@ -77,7 +86,8 @@ export function GiaoDienPage() {
   // Tương phản THỰC của chữ trên nền accent, sau khi đã chọn mực tốt nhất.
   const ratio = accentContrast(accent);
   const passesAA = ratio >= WCAG_AA;
-  const isDefault = accent.toUpperCase() === ROLE_DEFAULT_ACCENT[editRole].toUpperCase();
+  const isDefault =
+    accent.toUpperCase() === ROLE_DEFAULT_ACCENT[editRole].toUpperCase();
   const previewingShell = editRole === role;
 
   return (
@@ -92,7 +102,9 @@ export function GiaoDienPage() {
       {/* Vai trò đang sửa */}
       <Card className="mb-5 rounded-2xl border-border/60 py-0 shadow-none">
         <CardContent className="flex flex-wrap items-center gap-3 p-3.5">
-          <span className="text-sm font-semibold text-muted-foreground">Áp dụng cho:</span>
+          <span className="text-sm font-semibold text-muted-foreground">
+            Áp dụng cho:
+          </span>
           <div className="inline-flex gap-1 rounded-xl bg-muted p-1">
             {ROLES.map((r) => (
               <button
@@ -165,7 +177,9 @@ export function GiaoDienPage() {
                       <div
                         className={cn(
                           "flex h-12 flex-col justify-center gap-1.5 rounded-lg border p-2",
-                          dark ? "border-white/10 bg-[#0E0B12]" : "border-black/10 bg-white",
+                          dark
+                            ? "border-white/10 bg-[#0E0B12]"
+                            : "border-black/10 bg-white",
                         )}
                       >
                         <span className="h-1.5 w-[42%] rounded-full bg-primary/85" />
@@ -184,11 +198,17 @@ export function GiaoDienPage() {
 
             {/* 2. Màu nhấn gợi ý */}
             <section className="p-5 sm:p-6">
-              <SectionTitle num={2} title="Màu nhấn thương hiệu" desc="Chọn nhanh từ bộ màu gợi ý." />
+              <SectionTitle
+                num={2}
+                title="Màu nhấn thương hiệu"
+                desc="Chọn nhanh từ bộ màu gợi ý."
+              />
               <div className="flex flex-wrap gap-5 sm:ml-8">
                 {ACCENT_PRESETS.map((p) => {
                   const on = accent.toUpperCase() === p.hex.toUpperCase();
-                  const def = ROLE_DEFAULT_ACCENT[editRole].toUpperCase() === p.hex.toUpperCase();
+                  const def =
+                    ROLE_DEFAULT_ACCENT[editRole].toUpperCase() ===
+                    p.hex.toUpperCase();
                   return (
                     <button
                       key={p.id}
@@ -201,12 +221,16 @@ export function GiaoDienPage() {
                       <span
                         className={cn(
                           "grid size-11 place-items-center rounded-full transition-all",
-                          on ? "scale-110" : "opacity-70 group-hover:scale-105 group-hover:opacity-100",
+                          on
+                            ? "scale-110"
+                            : "opacity-70 group-hover:scale-105 group-hover:opacity-100",
                         )}
                         style={{
                           backgroundColor: p.hex,
                           color: inkOn(p.hex),
-                          boxShadow: on ? `0 0 0 3px var(--card), 0 0 0 5px ${p.hex}` : undefined,
+                          boxShadow: on
+                            ? `0 0 0 3px var(--card), 0 0 0 5px ${p.hex}`
+                            : undefined,
                         }}
                       >
                         {on && <Check className="size-5" />}
@@ -268,7 +292,9 @@ export function GiaoDienPage() {
                   {!isDefault && (
                     <button
                       type="button"
-                      onClick={() => setAccent(editRole, ROLE_DEFAULT_ACCENT[editRole])}
+                      onClick={() =>
+                        setAccent(editRole, ROLE_DEFAULT_ACCENT[editRole])
+                      }
                       className="inline-flex h-9 items-center gap-1.5 rounded-lg px-3 text-sm font-semibold text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
                     >
                       <RotateCcw className="size-3.5" /> Mặc định
@@ -306,7 +332,9 @@ export function GiaoDienPage() {
           <Card className="overflow-hidden rounded-2xl border-border/60 py-0 shadow-none">
             <CardContent className="p-0">
               <div className="flex items-center justify-between border-b border-border/60 px-4 py-3">
-                <span className="text-sm font-bold text-foreground">Xem trước</span>
+                <span className="text-sm font-bold text-foreground">
+                  Xem trước
+                </span>
                 <span
                   className="rounded-full px-2.5 py-1 text-xs font-bold uppercase tracking-wide"
                   style={{ backgroundColor: `${accent}26`, color: accent }}
@@ -325,9 +353,18 @@ export function GiaoDienPage() {
                     <span className="grid size-6 place-items-center rounded-lg bg-white/90 text-xs">
                       🤖
                     </span>
-                    <span className="h-1.5 w-8 rounded" style={{ backgroundColor: `${ink}59` }} />
-                    <span className="h-2 w-9 rounded" style={{ backgroundColor: ink }} />
-                    <span className="h-1.5 w-8 rounded" style={{ backgroundColor: `${ink}59` }} />
+                    <span
+                      className="h-1.5 w-8 rounded"
+                      style={{ backgroundColor: `${ink}59` }}
+                    />
+                    <span
+                      className="h-2 w-9 rounded"
+                      style={{ backgroundColor: ink }}
+                    />
+                    <span
+                      className="h-1.5 w-8 rounded"
+                      style={{ backgroundColor: `${ink}59` }}
+                    />
                   </div>
                   <div className="flex flex-1 flex-col gap-2.5 bg-card p-3.5">
                     <div className="flex items-center gap-2.5">
@@ -345,7 +382,10 @@ export function GiaoDienPage() {
                     <div className="flex gap-1.5">
                       <span
                         className="rounded-full px-2 py-0.5 text-xs font-bold"
-                        style={{ backgroundColor: `${accent}26`, color: accent }}
+                        style={{
+                          backgroundColor: `${accent}26`,
+                          color: accent,
+                        }}
                       >
                         Tiến độ
                       </span>
@@ -383,7 +423,11 @@ export function GiaoDienPage() {
       {/* Thanh lưu */}
       <div className="mt-6 flex flex-wrap items-center justify-between gap-4">
         <span className="text-sm font-medium text-muted-foreground">
-          {dirty ? "Có thay đổi chưa lưu" : justSaved ? "Đã lưu thay đổi" : "Đã đồng bộ"}
+          {dirty
+            ? "Có thay đổi chưa lưu"
+            : justSaved
+              ? "Đã lưu thay đổi"
+              : "Đã đồng bộ"}
         </span>
         <div className="flex items-center gap-2">
           {dirty && (
@@ -400,9 +444,16 @@ export function GiaoDienPage() {
             onClick={onSave}
             disabled={!dirty}
             className="inline-flex h-11 cursor-pointer items-center gap-2 rounded-xl px-6 text-sm font-bold transition-all disabled:cursor-not-allowed disabled:opacity-40"
-            style={{ backgroundColor: "var(--primary)", color: "var(--primary-foreground)" }}
+            style={{
+              backgroundColor: "var(--primary)",
+              color: "var(--primary-foreground)",
+            }}
           >
-            {justSaved ? <CheckCircle2 className="size-4" /> : <Save className="size-4" />}
+            {justSaved ? (
+              <CheckCircle2 className="size-4" />
+            ) : (
+              <Save className="size-4" />
+            )}
             {justSaved ? "Đã lưu" : "Lưu thay đổi"}
           </button>
         </div>
@@ -411,7 +462,15 @@ export function GiaoDienPage() {
   );
 }
 
-function SectionTitle({ num, title, desc }: { num: number; title: string; desc: string }) {
+function SectionTitle({
+  num,
+  title,
+  desc,
+}: {
+  num: number;
+  title: string;
+  desc: string;
+}) {
   return (
     <div className="mb-4">
       <h2 className="flex items-center gap-2.5 text-base font-bold text-foreground">

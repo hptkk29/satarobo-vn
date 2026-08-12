@@ -17,7 +17,10 @@ import { CancelButton } from "./_components/cancel-button";
 import { formatDateVN } from "@/lib/format/date";
 
 export const dynamic = "force-dynamic";
-export const metadata = { title: "Yêu cầu | Sata Robo", robots: { index: false } };
+export const metadata = {
+  title: "Yêu cầu | Sata Robo",
+  robots: { index: false },
+};
 
 // Báo vắng: chỉ chọn buổi SẮP TỚI (chưa diễn ra) và CHƯA bị huỷ (R7-06) —
 // đã lọc + LIMIT ngay ở query (getStudentUpcomingSessions).
@@ -49,7 +52,10 @@ export default async function YeuCauPage({
   searchParams: Promise<{ bu?: string }>;
 }) {
   const { ctx, studentId } = await requireActiveStudent();
-  const pdb = portalDb({ parentUserId: ctx.parentUserId, childIds: ctx.children.map((c) => c.id) });
+  const pdb = portalDb({
+    parentUserId: ctx.parentUserId,
+    childIds: ctx.children.map((c) => c.id),
+  });
 
   // Portal v2 — trang Yêu cầu học bù giống SataUI (per-child) + form gửi/huỷ yêu cầu.
   if (isPortalV2Enabled()) {
@@ -126,7 +132,10 @@ export default async function YeuCauPage({
           </h2>
           <ul className="space-y-2">
             {makeups.map((m) => (
-              <li key={m.id} className="flex items-center justify-between rounded-xl border border-neutral-200 bg-white p-3 text-sm">
+              <li
+                key={m.id}
+                className="flex items-center justify-between rounded-xl border border-neutral-200 bg-white p-3 text-sm"
+              >
                 <span className="text-neutral-700">{m.class.name}</span>
                 <span
                   className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${
@@ -150,7 +159,7 @@ export default async function YeuCauPage({
           Yêu cầu đã gửi
         </h2>
         {requests.length === 0 ? (
-          <p className="rounded-xl border border-dashed border-neutral-300 bg-white p-6 text-center text-sm text-neutral-400">
+          <p className="rounded-xl border border-dashed border-neutral-300 bg-white p-6 text-center text-sm text-neutral-500">
             Chưa có yêu cầu nào.
           </p>
         ) : (
@@ -174,7 +183,7 @@ export default async function YeuCauPage({
                   {r.content}
                 </p>
                 {r.preferredDate && (
-                  <p className="mt-1 text-xs text-neutral-400">
+                  <p className="mt-1 text-xs text-neutral-600">
                     {/* preferredDate = wall-clock TZ server (sessionDate) → KHÔNG ép VN. */}
                     Ngày: {formatDateVN(r.preferredDate)}
                   </p>
@@ -185,9 +194,11 @@ export default async function YeuCauPage({
                   </p>
                 )}
                 <div className="mt-2 flex items-center justify-between">
-                  <span className="text-xs text-neutral-400">
+                  <span className="text-xs text-neutral-600">
                     {/* createdAt là instant thật → ép giờ VN (Vercel = UTC, tránh lùi 1 ngày). */}
-                    {r.createdAt.toLocaleDateString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh" })}
+                    {r.createdAt.toLocaleDateString("vi-VN", {
+                      timeZone: "Asia/Ho_Chi_Minh",
+                    })}
                   </span>
                   {r.status === "PENDING" && <CancelButton id={r.id} />}
                 </div>

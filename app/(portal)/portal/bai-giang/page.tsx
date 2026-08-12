@@ -17,7 +17,10 @@ export default async function BaiGiangPage() {
     rawLessons.map(async (l) => ({
       ...l,
       documents: await Promise.all(
-        l.documents.map(async (d) => ({ ...d, fileUrl: await resolveMediaUrl(d.fileUrl) })),
+        l.documents.map(async (d) => ({
+          ...d,
+          fileUrl: await resolveMediaUrl(d.fileUrl),
+        })),
       ),
     })),
   );
@@ -30,7 +33,7 @@ export default async function BaiGiangPage() {
       </p>
 
       {lessons.length === 0 ? (
-        <p className="rounded-xl border border-dashed border-neutral-300 bg-white p-8 text-center text-sm text-neutral-400">
+        <p className="rounded-xl border border-dashed border-neutral-300 bg-white p-8 text-center text-sm text-neutral-500">
           Chưa có bài giảng nào (giáo viên chưa gắn bài học cho buổi đã dạy).
         </p>
       ) : (
@@ -43,7 +46,7 @@ export default async function BaiGiangPage() {
               <div className="flex items-start justify-between gap-2">
                 <h2 className="font-semibold text-neutral-900">{l.title}</h2>
                 {l.taughtAt && (
-                  <span className="shrink-0 text-xs text-neutral-400">
+                  <span className="shrink-0 text-xs text-neutral-600">
                     {formatDateVN(l.taughtAt)}
                   </span>
                 )}
@@ -53,7 +56,7 @@ export default async function BaiGiangPage() {
               )}
               {l.objectives.length > 0 && (
                 <div className="mt-2">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-neutral-400">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-neutral-500">
                     Mục tiêu
                   </p>
                   <ul className="mt-1 list-inside list-disc text-sm text-neutral-600">
@@ -70,7 +73,7 @@ export default async function BaiGiangPage() {
               )}
               {l.materials.length > 0 && (
                 <div className="mt-2">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-neutral-400">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-neutral-500">
                     Dụng cụ / vật liệu
                   </p>
                   <p className="mt-0.5 text-sm text-neutral-600">
@@ -90,7 +93,7 @@ export default async function BaiGiangPage() {
                     >
                       <FileText className="h-3.5 w-3.5" />
                       {d.title}
-                      <Download className="h-3 w-3 text-neutral-400" />
+                      <Download className="h-3 w-3 text-neutral-500" />
                     </a>
                   ))}
                 </div>

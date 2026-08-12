@@ -5,12 +5,20 @@ import { ENROLLMENT_STATUS } from "@/lib/labels/registry";
 import { PhanTrangBang } from "@/components/ui/phan-trang-bang";
 
 // Presentational học bạ (server component, dùng chung portal + admin).
-export function TranscriptView({ t, pdfHref }: { t: StudentTranscript; pdfHref: string }) {
+export function TranscriptView({
+  t,
+  pdfHref,
+}: {
+  t: StudentTranscript;
+  pdfHref: string;
+}) {
   return (
     <div className="space-y-5">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
-          <h1 className="text-xl font-bold text-neutral-900">Học bạ — {t.student.name}</h1>
+          <h1 className="text-xl font-bold text-neutral-900">
+            Học bạ — {t.student.name}
+          </h1>
           <p className="text-sm text-neutral-500">
             {t.student.studentCode ? `Mã ${t.student.studentCode}` : ""}
             {t.student.currentGrade ? ` · Lớp ${t.student.currentGrade}` : ""}
@@ -34,18 +42,25 @@ export function TranscriptView({ t, pdfHref }: { t: StudentTranscript; pdfHref: 
           { label: "Chuyên cần", value: `${t.summary.overallAttendanceRate}%` },
           { label: "Điểm TB", value: t.summary.overallAverageScore ?? "—" },
         ].map((s) => (
-          <div key={s.label} className="rounded-xl border border-neutral-200 bg-white p-3">
-            <div className="text-xs text-neutral-400">{s.label}</div>
+          <div
+            key={s.label}
+            className="rounded-xl border border-neutral-200 bg-white p-3"
+          >
+            <div className="text-xs text-neutral-500">{s.label}</div>
             <div className="text-lg font-bold text-neutral-900">{s.value}</div>
           </div>
         ))}
       </div>
 
       <section className="rounded-xl border border-neutral-200 bg-white">
-        <div className="border-b px-4 py-2 text-sm font-semibold text-neutral-700">Quá trình học theo lớp</div>
-        <PhanTrangBang>
+        <div className="border-b px-4 py-2 text-sm font-semibold text-neutral-700">
+          Quá trình học theo lớp
+        </div>
+        {/* Giữ phân trang của nhánh này + lấy màu neutral-500 của nhánh test (sửa tương
+            phản a11y) — hai thay đổi độc lập, không cái nào phải nhường cái nào. */}
+        <PhanTrangBang tenDonVi="lớp">
           <table className="w-full text-sm">
-            <thead className="text-left text-xs text-neutral-400">
+            <thead className="text-left text-xs text-neutral-500">
               <tr>
                 <th className="px-4 py-2">Lớp</th>
                 <th className="px-4 py-2">Khoá</th>
@@ -57,7 +72,7 @@ export function TranscriptView({ t, pdfHref }: { t: StudentTranscript; pdfHref: 
             <tbody>
               {t.classes.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="px-4 py-6 text-center text-neutral-400">
+                  <td colSpan={5} className="px-4 py-6 text-center text-neutral-500">
                     Chưa có lớp.
                   </td>
                 </tr>
@@ -85,14 +100,20 @@ export function TranscriptView({ t, pdfHref }: { t: StudentTranscript; pdfHref: 
 
       {t.completions.length > 0 ? (
         <section className="rounded-xl border border-neutral-200 bg-white">
-          <div className="border-b px-4 py-2 text-sm font-semibold text-neutral-700">Khoá đã hoàn thành</div>
+          <div className="border-b px-4 py-2 text-sm font-semibold text-neutral-700">
+            Khoá đã hoàn thành
+          </div>
           <ul className="divide-y text-sm">
             {t.completions.map((c, i) => (
-              <li key={i} className="flex items-center justify-between px-4 py-2">
+              <li
+                key={i}
+                className="flex items-center justify-between px-4 py-2"
+              >
                 <span className="font-medium">{c.courseName}</span>
                 <span className="text-neutral-500">
                   {c.completedAt.toISOString().slice(0, 10)}
-                  {c.finalGrade ? ` · ${c.finalGrade}` : ""} · {c.certificateCode}
+                  {c.finalGrade ? ` · ${c.finalGrade}` : ""} ·{" "}
+                  {c.certificateCode}
                 </span>
               </li>
             ))}
@@ -102,10 +123,15 @@ export function TranscriptView({ t, pdfHref }: { t: StudentTranscript; pdfHref: 
 
       {t.skills.length > 0 ? (
         <section className="rounded-xl border border-neutral-200 bg-white">
-          <div className="border-b px-4 py-2 text-sm font-semibold text-neutral-700">Đánh giá năng lực</div>
+          <div className="border-b px-4 py-2 text-sm font-semibold text-neutral-700">
+            Đánh giá năng lực
+          </div>
           <ul className="divide-y text-sm">
             {t.skills.map((s, i) => (
-              <li key={i} className="flex items-center justify-between px-4 py-2">
+              <li
+                key={i}
+                className="flex items-center justify-between px-4 py-2"
+              >
                 <span>{SKILL_LABEL[s.skill as RoboticsSkill] ?? s.skill}</span>
                 <span className="text-neutral-500">
                   {LEVEL_LABEL[s.level as SkillLevel] ?? s.level} ·{" "}

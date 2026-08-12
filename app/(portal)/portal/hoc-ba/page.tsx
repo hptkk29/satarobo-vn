@@ -8,7 +8,10 @@ import { getStudentReportCard } from "@/lib/portal/report-card-v2";
 import { HocBaPageV2 } from "@/components/portal/hoc-ba-page";
 
 export const dynamic = "force-dynamic";
-export const metadata = { title: "Học bạ | Sata Robo", robots: { index: false } };
+export const metadata = {
+  title: "Học bạ | Sata Robo",
+  robots: { index: false },
+};
 
 export default async function PortalTranscriptPage() {
   const { ctx, studentId } = await requireActiveStudent();
@@ -34,7 +37,9 @@ export default async function PortalTranscriptPage() {
       <div className="space-y-4">
         <div>
           <h1 className="text-xl font-bold text-neutral-900">Học bạ</h1>
-          <p className="text-sm text-neutral-500">Các học bạ đã được trung tâm phát hành.</p>
+          <p className="text-sm text-neutral-500">
+            Các học bạ đã được trung tâm phát hành.
+          </p>
         </div>
         {published.map((card) => (
           <ReportCardView key={card.id} card={card} />

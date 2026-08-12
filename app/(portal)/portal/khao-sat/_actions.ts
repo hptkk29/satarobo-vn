@@ -24,21 +24,33 @@ const schema = z.object({
     .array(
       z.object({
         questionId: z.string().min(1),
-        value: z.union([z.number().int().min(0).max(10), z.string().trim().max(2000)]),
+        value: z.union([
+          z.number().int().min(0).max(10),
+          z.string().trim().max(2000),
+        ]),
       }),
     )
     .max(200)
     .optional(),
 });
 
-export async function submitSurveyResponse(input: unknown): Promise<{ ok: boolean; error?: string }> {
+export async function submitSurveyResponse(
+  input: unknown,
+): Promise<{ ok: boolean; error?: string }> {
   const session = await auth();
   if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
   const { ctx, studentId } = await requireActiveStudent();
-  const pdb = portalDb({ parentUserId: ctx.parentUserId, childIds: ctx.children.map((c) => c.id) });
+  const pdb = portalDb({
+    parentUserId: ctx.parentUserId,
+    childIds: ctx.children.map((c) => c.id),
+  });
 
   const parsed = schema.safeParse(input);
-  if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? "Dữ liệu không hợp lệ" };
+  if (!parsed.success)
+    return {
+      ok: false,
+      error: parsed.error.issues[0]?.message ?? "Dữ liệu không hợp lệ",
+    };
   const d = parsed.data;
 
   // KHÔNG tin surveyId từ client: survey phải tồn tại, đang mở (isActive) và trong
@@ -47,19 +59,28 @@ export async function submitSurveyResponse(input: unknown): Promise<{ ok: boolea
     where: { id: studentId },
     select: { centerId: true, preferredCenterId: true },
   });
-  const centerIds = [student?.centerId, student?.preferredCenterId].filter((x): x is string => !!x);
+  const centerIds = [student?.centerId, student?.preferredCenterId].filter(
+    (x): x is string => !!x,
+  );
   const survey = await pdb.survey.findFirst({
     where: {
       id: d.surveyId,
       isActive: true,
-      OR: [{ centerId: null }, ...(centerIds.length ? [{ centerId: { in: centerIds } }] : [])],
+      OR: [
+        { centerId: null },
+        ...(centerIds.length ? [{ centerId: { in: centerIds } }] : []),
+      ],
     },
     select: {
       id: true,
-      questions: { orderBy: { order: "asc" }, select: { id: true, text: true, type: true } },
+      questions: {
+        orderBy: { order: "asc" },
+        select: { id: true, text: true, type: true },
+      },
     },
   });
-  if (!survey) return { ok: false, error: "Khảo sát không tồn tại hoặc đã đóng." };
+  if (!survey)
+    return { ok: false, error: "Khảo sát không tồn tại hoặc đã đóng." };
 
   // Survey CÓ câu hỏi → validate đáp án theo ĐÚNG SurveyQuestion (form render đủ
   // câu hỏi, không còn 1 câu NPS hardcode); ghi vào SurveyResponse.answers Json
@@ -71,7 +92,8 @@ export async function submitSurveyResponse(input: unknown): Promise<{ ok: boolea
     answersJson = {};
     for (const a of d.answers ?? []) {
       const q = byId.get(a.questionId);
-      if (!q) return { ok: false, error: "Câu trả lời không thuộc khảo sát này." };
+      if (!q)
+        return { ok: false, error: "Câu trả lời không thuộc khảo sát này." };
       if (q.type === "TEXT") {
         if (typeof a.value !== "string") {
           return { ok: false, error: `Đáp án không hợp lệ cho "${q.text}".` };
@@ -108,9 +130,15 @@ export async function submitSurveyResponse(input: unknown): Promise<{ ok: boolea
 
   // Gắn center/class/teacher/csm để làm cơ sở KPI.
   const enr = await pdb.enrollment.findFirst({
-    where: { studentId, status: { in: ["CONFIRMED", "STUDYING", "ACTIVE"] }, deletedAt: null }, // FIX-C3
+    where: {
+      studentId,
+      status: { in: ["CONFIRMED", "STUDYING", "ACTIVE"] },
+      deletedAt: null,
+    }, // FIX-C3
     orderBy: { createdAt: "desc" },
-    select: { class: { select: { id: true, centerId: true, teacherId: true } } },
+    select: {
+      class: { select: { id: true, centerId: true, teacherId: true } },
+    },
   });
   // CSM phụ trách: lấy từ care task gần nhất (nếu có).
   const care = await pdb.studentCareTask.findFirst({
@@ -138,7 +166,8 @@ export async function submitSurveyResponse(input: unknown): Promise<{ ok: boolea
     });
   } catch (e) {
     if (e instanceof Prisma.PrismaClientKnownRequestError) {
-      if (e.code === "P2002") return { ok: false, error: "Bạn đã trả lời khảo sát này rồi." };
+      if (e.code === "P2002")
+        return { ok: false, error: "Bạn đã trả lời khảo sát này rồi." };
       return { ok: false, error: "Không gửi được khảo sát, vui lòng thử lại." };
     }
     throw e;

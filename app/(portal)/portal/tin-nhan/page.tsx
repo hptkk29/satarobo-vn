@@ -11,7 +11,10 @@
 import Link from "next/link";
 import { MessagesSquare } from "lucide-react";
 import { auth } from "@/lib/auth";
-import { listConversationsForUser, type ConversationListItem } from "@/lib/chat/queries";
+import {
+  listConversationsForUser,
+  type ConversationListItem,
+} from "@/lib/chat/queries";
 import { hasAcceptedChatPolicy } from "@/lib/chat/policy";
 import { listSalesForParent } from "@/lib/chat/dm";
 import { OpenDmButton } from "@/components/chat/open-dm-button";
@@ -21,9 +24,18 @@ import { ChatPolicyGate } from "./_components/policy-gate";
 import { cn } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
-export const metadata = { title: "Tin nhắn | Sata Robo", robots: { index: false } };
+export const metadata = {
+  title: "Tin nhắn | Sata Robo",
+  robots: { index: false },
+};
 
-function ConversationRow({ item, now }: { item: ConversationListItem; now: Date }) {
+function ConversationRow({
+  item,
+  now,
+}: {
+  item: ConversationListItem;
+  now: Date;
+}) {
   const preview = item.lastMessage;
   return (
     <li>
@@ -36,7 +48,9 @@ function ConversationRow({ item, now }: { item: ConversationListItem; now: Date 
         <span
           className={cn(
             "grid size-10 shrink-0 place-items-center rounded-full",
-            item.isArchived ? "bg-muted text-muted-foreground" : "bg-primary/10 text-primary",
+            item.isArchived
+              ? "bg-muted text-muted-foreground"
+              : "bg-primary/10 text-primary",
           )}
           aria-hidden
         >
@@ -63,7 +77,9 @@ function ConversationRow({ item, now }: { item: ConversationListItem; now: Date 
             <span
               className={cn(
                 "min-w-0 flex-1 truncate text-xs",
-                preview?.deleted ? "italic text-muted-foreground" : "text-muted-foreground",
+                preview?.deleted
+                  ? "italic text-muted-foreground"
+                  : "text-muted-foreground",
               )}
             >
               {preview ? preview.text : "Chưa có tin nhắn nào"}
@@ -99,7 +115,8 @@ export default async function PortalMessagesPage() {
   // vào cây React nên page này không chạy); kiểm lại ở đây để bất biến "chưa đồng ý ⇒
   // server không truy vấn nội dung" không phụ thuộc vào quy ước render của framework.
   // Tốn 0 truy vấn thừa: `hasAcceptedChatPolicy` là `cache()` theo request.
-  if (!(await hasAcceptedChatPolicy(session.user.id))) return <ChatPolicyGate />;
+  if (!(await hasAcceptedChatPolicy(session.user.id)))
+    return <ChatPolicyGate />;
 
   const conversations = await listConversationsForUser(session.user.id);
   // F5 — tư vấn viên đang phụ trách phụ huynh này. Trả về DANH SÁCH: một PH nhiều con,
@@ -129,9 +146,12 @@ export default async function PortalMessagesPage() {
           khác là tạo được hội thoại TRƯỚC khi phụ huynh bấm đồng ý. */}
       {sales.length > 0 && (
         <section className="rounded-xl border border-border bg-card p-4">
-          <h2 className="text-sm font-semibold text-foreground">Tư vấn viên phụ trách</h2>
+          <h2 className="text-sm font-semibold text-foreground">
+            Tư vấn viên phụ trách
+          </h2>
           <p className="mt-0.5 text-xs text-muted-foreground">
-            Hỏi về học phí, lịch học thử, chuyển lớp — nhắn riêng, không hiện trong nhóm lớp.
+            Hỏi về học phí, lịch học thử, chuyển lớp — nhắn riêng, không hiện
+            trong nhóm lớp.
           </p>
           <ul className="mt-3 space-y-2">
             {sales.map((s) => (
@@ -163,7 +183,8 @@ export default async function PortalMessagesPage() {
 
       {conversations.length === 0 ? (
         <p className="rounded-xl border border-dashed border-border bg-card p-6 text-center text-sm text-muted-foreground">
-          Chưa có hội thoại nào. Nhóm lớp sẽ xuất hiện ở đây khi lớp của con bắt đầu hoạt động.
+          Chưa có hội thoại nào. Nhóm lớp sẽ xuất hiện ở đây khi lớp của con bắt
+          đầu hoạt động.
         </p>
       ) : (
         <div className="space-y-6">

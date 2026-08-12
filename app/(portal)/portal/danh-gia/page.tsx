@@ -7,7 +7,10 @@ import { FeedbackForm } from "./_components/feedback-form";
 import { formatDateVN } from "@/lib/format/date";
 
 export const dynamic = "force-dynamic";
-export const metadata = { title: "Đánh giá | Sata Robo", robots: { index: false } };
+export const metadata = {
+  title: "Đánh giá | Sata Robo",
+  robots: { index: false },
+};
 
 export default async function DanhGiaPage() {
   const session = await auth();
@@ -54,7 +57,7 @@ export default async function DanhGiaPage() {
                 <p className="mt-1 whitespace-pre-wrap text-sm text-neutral-600">
                   {f.content}
                 </p>
-                <p className="mt-1 text-xs text-neutral-400">
+                <p className="mt-1 text-xs text-neutral-600">
                   {formatDateVN(f.createdAt)}
                 </p>
               </li>

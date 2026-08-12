@@ -7,7 +7,10 @@ import {
 import { ThongBaoPageV2 } from "@/components/portal/thong-bao-page";
 
 export const dynamic = "force-dynamic";
-export const metadata = { title: "Thông báo | Sata Robo", robots: { index: false } };
+export const metadata = {
+  title: "Thông báo | Sata Robo",
+  robots: { index: false },
+};
 
 // Cổng học sinh — Thông báo LỌC theo con đang xem (+ thông báo chung childName=null).
 export default async function StudentThongBaoPage() {
@@ -15,9 +18,13 @@ export default async function StudentThongBaoPage() {
   const activeName = ctx.activeStudent?.name ?? null;
   const full = await getParentNotificationFeed(ctx.parentUserId);
 
-  const items = full.items.filter((i) => i.childName === null || i.childName === activeName);
+  const items = full.items.filter(
+    (i) => i.childName === null || i.childName === activeName,
+  );
   const unreadByCategory = { ...full.unreadByCategory };
-  (Object.keys(unreadByCategory) as FeedCategory[]).forEach((k) => (unreadByCategory[k] = 0));
+  (Object.keys(unreadByCategory) as FeedCategory[]).forEach(
+    (k) => (unreadByCategory[k] = 0),
+  );
   for (const it of items) if (!it.read) unreadByCategory[it.category]++;
   const feed: NotificationFeed = {
     items,

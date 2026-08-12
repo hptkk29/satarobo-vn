@@ -9,7 +9,12 @@ import { getStudentProgressForClasses } from "@/lib/progress";
 import { getStudentClassProgress } from "@/lib/students/progress";
 import { resolveActor } from "@/lib/auth/actor";
 import { scopedDb } from "@/lib/db-scope";
-import { SKILL_ORDER, SKILL_LABEL, LEVEL_LABEL, LEVEL_COLOR } from "@/lib/lms/skills";
+import {
+  SKILL_ORDER,
+  SKILL_LABEL,
+  LEVEL_LABEL,
+  LEVEL_COLOR,
+} from "@/lib/lms/skills";
 import type { RoboticsSkill, SkillLevel } from "@prisma/client";
 import { formatDateVN } from "@/lib/format/date";
 
@@ -54,7 +59,8 @@ export default async function KetQuaPage() {
     select: { skill: true, level: true },
   });
   const latestSkills: Partial<Record<RoboticsSkill, SkillLevel>> = {};
-  for (const r of skillRows) if (!latestSkills[r.skill]) latestSkills[r.skill] = r.level;
+  for (const r of skillRows)
+    if (!latestSkills[r.skill]) latestSkills[r.skill] = r.level;
   const hasSkills = Object.keys(latestSkills).length > 0;
 
   return (
@@ -70,9 +76,16 @@ export default async function KetQuaPage() {
             {SKILL_ORDER.filter((s) => latestSkills[s]).map((s) => {
               const lv = latestSkills[s] as SkillLevel;
               return (
-                <li key={s} className="flex items-center justify-between gap-2 rounded-lg bg-neutral-50 px-3 py-2">
-                  <span className="text-sm text-neutral-700">{SKILL_LABEL[s]}</span>
-                  <span className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${LEVEL_COLOR[lv]}`}>
+                <li
+                  key={s}
+                  className="flex items-center justify-between gap-2 rounded-lg bg-neutral-50 px-3 py-2"
+                >
+                  <span className="text-sm text-neutral-700">
+                    {SKILL_LABEL[s]}
+                  </span>
+                  <span
+                    className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${LEVEL_COLOR[lv]}`}
+                  >
                     {LEVEL_LABEL[lv]}
                   </span>
                 </li>
@@ -87,14 +100,13 @@ export default async function KetQuaPage() {
           <p className="font-semibold">{latestReport.reportTitle}</p>
           <p className="text-xs text-purple-600">
             {latestReport.className ? `${latestReport.className} · ` : ""}
-            Lập ngày{" "}
-            {formatDateVN(latestReport.generatedAt)}
+            Lập ngày {formatDateVN(latestReport.generatedAt)}
           </p>
         </div>
       )}
 
       {results.length === 0 ? (
-        <p className="rounded-xl border border-dashed border-neutral-300 bg-white p-8 text-center text-sm text-neutral-400">
+        <p className="rounded-xl border border-dashed border-neutral-300 bg-white p-8 text-center text-sm text-neutral-500">
           Chưa có dữ liệu kết quả.
         </p>
       ) : (
@@ -105,10 +117,11 @@ export default async function KetQuaPage() {
               className="rounded-xl border border-neutral-200 bg-white p-4"
             >
               <h2 className="font-semibold text-neutral-900">{cls.name}</h2>
-              <p className="mb-3 text-xs text-neutral-500">{cls.courseName}</p>
+              <p className="mb-3 text-xs text-neutral-600">{cls.courseName}</p>
               <div className="mb-3 rounded-lg bg-orange-50 px-3 py-2 text-sm">
                 <span className="font-bold text-orange-700">
-                  Đang học buổi {sessions.currentSession} / tổng {sessions.total || "—"}
+                  Đang học buổi {sessions.currentSession} / tổng{" "}
+                  {sessions.total || "—"}
                 </span>
                 <span className="ml-2 text-neutral-600">
                   · đã học {sessions.attended} · còn lại {sessions.remaining}
@@ -122,7 +135,9 @@ export default async function KetQuaPage() {
                       ? "Chưa diễn ra"
                       : `${p.attendedSessions}/${p.totalSessions}`
                   }
-                  sub={p.totalSessions === 0 ? undefined : `${p.attendanceRate}%`}
+                  sub={
+                    p.totalSessions === 0 ? undefined : `${p.attendanceRate}%`
+                  }
                 />
                 <Metric
                   label="Bài học"
@@ -245,9 +260,9 @@ function Metric({
 }) {
   return (
     <div className="rounded-lg bg-neutral-50 p-3">
-      <p className="text-xs text-neutral-500">{label}</p>
+      <p className="text-xs text-neutral-600">{label}</p>
       <p className="mt-0.5 text-lg font-bold text-neutral-900">{value}</p>
-      {sub && <p className="text-xs text-neutral-400">{sub}</p>}
+      {sub && <p className="text-xs text-neutral-600">{sub}</p>}
     </div>
   );
 }

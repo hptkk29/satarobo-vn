@@ -9,14 +9,20 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import { auth } from "@/lib/auth";
-import { getConversationMembers, listConversationsForUser } from "@/lib/chat/queries";
+import {
+  getConversationMembers,
+  listConversationsForUser,
+} from "@/lib/chat/queries";
 import { hasAcceptedChatPolicy } from "@/lib/chat/policy";
 import { ChatPolicyGate } from "../../_components/policy-gate";
 import { formatVnDate } from "@/components/chat/portal/format";
 import { OpenDmButton } from "@/components/chat/open-dm-button";
 
 export const dynamic = "force-dynamic";
-export const metadata = { title: "Thành viên nhóm | Sata Robo", robots: { index: false } };
+export const metadata = {
+  title: "Thành viên nhóm | Sata Robo",
+  robots: { index: false },
+};
 
 export default async function PortalConversationMembersPage({
   params,
@@ -32,7 +38,9 @@ export default async function PortalConversationMembersPage({
   if (!(await hasAcceptedChatPolicy(userId))) return <ChatPolicyGate />;
 
   const conversations = await listConversationsForUser(userId);
-  const conversation = conversations.find((c) => c.conversationId === conversationId);
+  const conversation = conversations.find(
+    (c) => c.conversationId === conversationId,
+  );
   if (!conversation) notFound();
 
   const members = await getConversationMembers(conversationId, userId);
@@ -48,8 +56,12 @@ export default async function PortalConversationMembersPage({
           <ArrowLeft className="size-5" />
         </Link>
         <div className="min-w-0 flex-1 py-1">
-          <h1 className="truncate text-lg font-bold text-foreground">Thành viên nhóm</h1>
-          <p className="truncate text-xs text-muted-foreground">{conversation.displayName}</p>
+          <h1 className="truncate text-lg font-bold text-foreground">
+            Thành viên nhóm
+          </h1>
+          <p className="truncate text-xs text-muted-foreground">
+            {conversation.displayName}
+          </p>
         </div>
       </div>
 
@@ -74,7 +86,9 @@ export default async function PortalConversationMembersPage({
                 <span className="block truncate text-sm font-semibold text-foreground">
                   {m.displayName}
                   {m.userId === userId && (
-                    <span className="ml-1 font-normal text-muted-foreground">(bạn)</span>
+                    <span className="ml-1 font-normal text-muted-foreground">
+                      (bạn)
+                    </span>
                   )}
                 </span>
                 <span className="block truncate text-xs text-muted-foreground">
@@ -83,14 +97,19 @@ export default async function PortalConversationMembersPage({
                 {/* `contact` chỉ tồn tại khi query quyết định người xem được thấy. */}
                 {m.contact && (m.contact.phone || m.contact.email) && (
                   <span className="block truncate text-xs text-muted-foreground">
-                    {[m.contact.phone, m.contact.email].filter(Boolean).join(" · ")}
+                    {[m.contact.phone, m.contact.email]
+                      .filter(Boolean)
+                      .join(" · ")}
                   </span>
                 )}
               </span>
               {/* US-13 AC1 — chỉ với GIÁO VIÊN của nhóm (`derivedFrom` là tư cách TRONG
                   nhóm, không phải vai hệ thống). Server vẫn kiểm quan hệ dạy học lần nữa. */}
               {m.derivedFrom === "CLASS_TEACHER" && m.userId !== userId && (
-                <OpenDmButton peerUserId={m.userId} hrefTemplate="/portal/tin-nhan/:id" />
+                <OpenDmButton
+                  peerUserId={m.userId}
+                  hrefTemplate="/portal/tin-nhan/:id"
+                />
               )}
             </li>
           ))}
