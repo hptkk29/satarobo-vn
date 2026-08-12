@@ -1,0 +1,144 @@
+name: Nền P1 — dời cây tổ chức + backfill orgUnitId (prod)
+
+# =============================================================================
+# Chạy 4 bước của `docs/nen-he-thong/RUNBOOK-P1.md` §1 lên Supabase PROD, theo
+# ĐÚNG THỨ TỰ BẮT BUỘC:
+#   (1) dời cây  SATAROBO(ROOT)→HO/CS1/CS2  ⇒  HO(gốc)→DANANG(REGION)→CS1/CS2
+#   (2) backfill orgUnitId cho 52 bảng (chỉ điền dòng đang NULL)
+#   (3) seed pháp nhân gốc + gắn 4 đơn vị (bước hay bị quên — RUNBOOK §1 ghi rõ)
+#   (4) đối soát centerId ↔ orgUnitId
+#
+# VÌ SAO LÀ WORKFLOW CHỨ KHÔNG CHẠY TỪ MÁY DEV: chuỗi kết nối prod nằm trong
+# secret `PROD_DATABASE_URL`/`PROD_DIRECT_URL` (Sensitive trên Vercel, không ai
+# đọc lại được). Chạy ở đây thì không người nào phải cầm mật khẩu DB prod, và
+# toàn bộ output dry-run nằm lại trong log lần chạy để đối chiếu về sau.
+#
+# MẶC ĐỊNH DRY-RUN — chỉ in, không ghi. Muốn ghi thật phải chọn mode=apply VÀ gõ
+# đúng chuỗi xác nhận. Cả (1) lẫn (2) đều idempotent: chạy lại là "không có gì
+# để làm". Bước (3) KHÔNG có dry-run (nó là seed) nên chỉ chạy khi mode=apply.
+#
+# Trước khi ghi, workflow tự CHỤP ẢNH cây OrgUnit vào log — bước dời cây không có
+# nút lùi tự động (RUNBOOK §4), muốn dựng lại tay thì mở đúng lần chạy này ra đọc.
+#
+# SECRETS: PROD_DATABASE_URL / PROD_DIRECT_URL (dùng chung deploy.yml).
+# =============================================================================
+
+on:
+  workflow_dispatch:
+    inputs:
+      buoc:
+        description: "Chạy bước nào"
+        required: true
+        type: choice
+        default: tat-ca
+        options:
+          - tat-ca
+          - 1-doi-cay
+          - 2-backfill
+          - 3-seed-phap-nhan
+          - 4-doi-soat
+      mode:
+        description: "dry-run = chỉ in · apply = ghi thật vào PROD"
+        required: true
+        type: choice
+        default: dry-run
+        options: [dry-run, apply]
+      confirm:
+        description: 'Khi mode=apply: gõ đúng "GHI THAT VAO PROD"'
+        required: false
+        default: ""
+
+concurrency:
+  group: nen-p1-orgunit
+  cancel-in-progress: false
+
+jobs:
+  chay:
+    name: nen-p1 ${{ inputs.buoc }} (${{ inputs.mode }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Kiểm tra secrets + chuỗi xác nhận
+        run: |
+          missing=0
+          [ -n "${{ secrets.PROD_DATABASE_URL }}" ] || { echo "::error::Thiếu secret PROD_DATABASE_URL"; missing=1; }
+          [ -n "${{ secrets.PROD_DIRECT_URL }}" ]   || { echo "::error::Thiếu secret PROD_DIRECT_URL"; missing=1; }
+          if [ "${{ inputs.mode }}" = "apply" ] && [ "${{ inputs.confirm }}" != "GHI THAT VAO PROD" ]; then
+            echo "::error::mode=apply nhưng chuỗi xác nhận sai — dừng, không ghi gì."
+            missing=1
+          fi
+          exit $missing
+
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v3
+        with: { version: 11 }
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Generate Prisma client
+        run: pnpm exec prisma generate
+
+      # ── Ảnh chụp để lùi tay ────────────────────────────────────────────────
+      - name: (0) Chụp ảnh cây OrgUnit TRƯỚC khi ghi
+        if: ${{ inputs.mode == 'apply' }}
+        run: pnpm exec tsx scripts/nen-p1-anh-chup-org-tree.ts | tee -a "$GITHUB_STEP_SUMMARY"
+        env:
+          DATABASE_URL: ${{ secrets.PROD_DIRECT_URL }}
+          DIRECT_URL: ${{ secrets.PROD_DIRECT_URL }}
+
+      # ── (1) Dời cây ────────────────────────────────────────────────────────
+      - name: (1) Dời cây tổ chức
+        if: ${{ inputs.buoc == 'tat-ca' || inputs.buoc == '1-doi-cay' }}
+        run: |
+          set -euo pipefail
+          if [ "${{ inputs.mode }}" = "apply" ]; then
+            pnpm exec tsx scripts/nen-p1-reshape-org-tree.ts --apply | tee -a "$GITHUB_STEP_SUMMARY"
+          else
+            pnpm exec tsx scripts/nen-p1-reshape-org-tree.ts | tee -a "$GITHUB_STEP_SUMMARY"
+          fi
+        env:
+          # session pooler (:5432) — tránh quirk prepared-statement của transaction pooler
+          # (đã ăn thật ở dry-run backfill đầu tiên trên DB dev 11/08, xem scripts/_script-db.ts)
+          DATABASE_URL: ${{ secrets.PROD_DIRECT_URL }}
+          DIRECT_URL: ${{ secrets.PROD_DIRECT_URL }}
+
+      # ── (2) Backfill orgUnitId ─────────────────────────────────────────────
+      - name: (2) Backfill orgUnitId
+        if: ${{ inputs.buoc == 'tat-ca' || inputs.buoc == '2-backfill' }}
+        run: |
+          set -euo pipefail
+          if [ "${{ inputs.mode }}" = "apply" ]; then
+            pnpm exec tsx scripts/nen-p1-backfill-orgunit.ts --apply | tee -a "$GITHUB_STEP_SUMMARY"
+          else
+            pnpm exec tsx scripts/nen-p1-backfill-orgunit.ts | tee -a "$GITHUB_STEP_SUMMARY"
+          fi
+        env:
+          DATABASE_URL: ${{ secrets.PROD_DIRECT_URL }}
+          DIRECT_URL: ${{ secrets.PROD_DIRECT_URL }}
+
+      # ── (3) Pháp nhân gốc ──────────────────────────────────────────────────
+      # KHÔNG có dry-run: file này là seed (upsert). Vì vậy chỉ chạy khi apply.
+      - name: (3) Seed pháp nhân gốc + gắn 4 đơn vị
+        if: ${{ (inputs.buoc == 'tat-ca' || inputs.buoc == '3-seed-phap-nhan') && inputs.mode == 'apply' }}
+        run: pnpm exec tsx prisma/seed-orgunit.ts | tee -a "$GITHUB_STEP_SUMMARY"
+        env:
+          DATABASE_URL: ${{ secrets.PROD_DIRECT_URL }}
+          DIRECT_URL: ${{ secrets.PROD_DIRECT_URL }}
+
+      - name: (3) Bỏ qua seed pháp nhân ở chế độ dry-run
+        if: ${{ (inputs.buoc == 'tat-ca' || inputs.buoc == '3-seed-phap-nhan') && inputs.mode != 'apply' }}
+        run: echo '::notice::Bước (3) seed pháp nhân KHÔNG có dry-run (là seed/upsert) nên bị bỏ qua. Nó sẽ chạy khi mode=apply.'
+
+      # ── (4) Đối soát ───────────────────────────────────────────────────────
+      - name: (4) Đối soát centerId ↔ orgUnitId
+        if: ${{ inputs.buoc == 'tat-ca' || inputs.buoc == '4-doi-soat' }}
+        run: pnpm exec tsx scripts/nen-p1-doi-soat-orgunit.ts | tee -a "$GITHUB_STEP_SUMMARY"
+        env:
+          DATABASE_URL: ${{ secrets.PROD_DIRECT_URL }}
+          DIRECT_URL: ${{ secrets.PROD_DIRECT_URL }}
