@@ -105,6 +105,42 @@ và `finance` (93). Hậu quả: đường đọc lọc `orgUnitId IN visibleOrg
   Đã chạy trên DB dev: 246 dòng đổi, **0 mồ côi**, chạy lại lần hai ra 0 (idempotent).
   ⚠️ **PROD chưa chạy** — luật cứng #4, người vận hành chạy tay sau khi xem dry-run.
 
+  ⚠️ **Script KHÔNG chạm được PROD từ máy dev**: `.env` local trỏ DB dev, còn
+  `DATABASE_URL` của prod bị Vercel đánh dấu Sensitive nên `vercel env pull` không
+  lấy ra được. Đường duy nhất tới DB prod là **Supabase SQL Editor**. Bản SQL dưới
+  đây tương đương script — đã chạy đối chiếu trên dev và cho ĐÚNG cùng con số.
+
+  **Bước 1 — xem trước (chỉ đọc):**
+  ```sql
+  SELECT
+    count(*) FILTER (WHERE a."orgUnitId" IS NULL)                             AS null_giu_nguyen,
+    count(*) FILTER (WHERE o_id.id IS NOT NULL)                               AS da_dung,
+    count(*) FILTER (WHERE o_id.id IS NULL AND o_ct.id IS NOT NULL)           AS doi_duoc,
+    count(*) FILTER (WHERE a."orgUnitId" IS NOT NULL
+                       AND o_id.id IS NULL AND o_ct.id IS NULL)               AS mo_coi
+  FROM "AuditLog" a
+  LEFT JOIN "OrgUnit" o_id ON o_id.id = a."orgUnitId"          AND o_id."deletedAt" IS NULL
+  LEFT JOIN "OrgUnit" o_ct ON o_ct."centerId" = a."orgUnitId"  AND o_ct."deletedAt" IS NULL;
+  ```
+  `mo_coi > 0` thì DỪNG, xem tay trước — đó là id không khớp cả OrgUnit lẫn Center
+  (đơn vị đã xoá), script cố ý không tự sửa.
+
+  **Bước 2 — ghi thật:**
+  ```sql
+  UPDATE "AuditLog" a
+     SET "orgUnitId" = o_ct.id
+    FROM "OrgUnit" o_ct
+   WHERE o_ct."centerId" = a."orgUnitId"
+     AND o_ct."deletedAt" IS NULL
+     AND NOT EXISTS (
+           SELECT 1 FROM "OrgUnit" o_id
+            WHERE o_id.id = a."orgUnitId" AND o_id."deletedAt" IS NULL
+         );
+  ```
+  ⚠️ **SQL Editor của Supabase KHÔNG giữ transaction giữa các lần bấm Run** — chạy
+  bước 2 là ăn ngay, không có `ROLLBACK`. Chạy lại bước 1 để đối chiếu: `doi_duoc`
+  phải về 0, `mo_coi` giữ nguyên.
+
 **28 bảng `CHUA_RA_SOAT` → còn 20.**
 Rà bằng số đo trực tiếp trên DB, tiêu chí chuyển gồm cả bốn: bảng CÓ dữ liệu · 0 dòng
 `centerId IS NULL` · 0 dòng thiếu `orgUnitId` · 0 dòng lệch ánh xạ.
