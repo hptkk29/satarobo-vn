@@ -82,6 +82,10 @@ _qa-reports/
 .pnpm-store/
 full.txt
 
+# Git worktree cục bộ (mỗi cái là một bản checkout ĐẦY ĐỦ kèm node_modules).
+# Không chặn thì `git add -A` nuốt trọn cả GB vào index — đã vấp 16/08.
+/.worktrees/
+
 # impeccable-ignore-start
 .impeccable/config.local.json
 .impeccable/hook.cache.json
