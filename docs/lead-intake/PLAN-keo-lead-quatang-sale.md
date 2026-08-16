@@ -4,8 +4,8 @@
 >
 > **Trạng thái 16/08/2026:** P0 ✅ · **P1 ✅** · **P2 ✅** · **P4 ✅** — đã đẩy lên nhánh `test`
 > (CI + Migrate TEST DB xanh), **chưa merge `main`** nên `sale.satarobo.vn` trên prod CHƯA đổi.
-> P3 ⏸ **chờ mã `doPost` của Apps Script** · P5 ⬜.
-> Chi tiết những gì đã dựng + cách kiểm lại: §8 · nhật ký review: §9 · P4: §10.
+> **P3 ✅ (code xong, chờ anh cấu hình Apps Script + secret)** · P5 ⬜.
+> Chi tiết: §8 (P1/P2) · §9 (nhật ký review) · §10 (P4) · §11 (P3 + bug Hội sở).
 
 ---
 
@@ -385,3 +385,70 @@ khoá dedupe đúng giờ VN (17:00 VN chứ không phải 10:00 UTC).
 - Chưa gửi email/ZNS — mới dừng ở chuông `StaffNotification` trong admin.
 - `quatang` đã nằm trong `MONITORED_SOURCES` nhưng chưa có lead nào, nên nhánh `silent`
   chỉ thực sự có ý nghĩa sau khi P3 chạy.
+
+---
+
+## 11. P3 quatang — ĐÃ DỰNG (16/08/2026)
+
+Anh gửi mã `doPost` v2.5, nên phần đoán mò biến mất. Ba điều đọc ra từ script:
+
+**a) MISA KHÔNG do Apps Script đẩy.** Trong script không có `UrlFetchApp` nào tới MISA — nó chỉ
+*ghi lại* giá trị `misa_status` mà **site** gửi lên. Cột U trống 100% ⇒ site đang gửi rỗng.
+
+**b) Cảnh báo email của chính script chưa từng chạy được.** Guard là
+`if (misaStatus && misaStatus !== 'OK')` — chuỗi rỗng là falsy ⇒ nhánh gửi mail không bao giờ vào.
+Cái lưới "không im lặng" (FR-E04) tự nó đang im lặng. Mapper của ta nay đẩy `misa_status ≠ OK`
+thành cảnh báo trên chính lead, để nó không chỉ nằm ở sheet.
+
+**c) IP trong payload là IP THẬT của phụ huynh.** Request tới ta xuất phát từ máy chủ Google
+(Apps Script) nên `x-forwarded-for` là IP của Google. `quatangClientMeta()` lấy `ip`/`user_agent`
+từ payload — không thì mọi lead quatang mang chung một IP và trường đó thành vô nghĩa.
+
+### File
+
+| File | Vai trò |
+|---|---|
+| `lib/lead/intake/map-quatang.ts` | JSON của `doPost` → `MappedLead` (thuần, 30 unit test) |
+| `app/api/public/webhook/quatang/route.ts` | Adapter cắm vào `processLeadWebhook` |
+| `lib/lead/webhook.ts` | Thêm `LeadWebhookAdapter` (tuỳ chọn) + `WEBHOOK_QUATANG_SECRET` |
+| `docs/lead-intake/apps-script-quatang-snippet.js` | **Đoạn dán vào `doPost`** + hàm gửi lại dòng lỗi |
+
+Hợp đồng trường: `ho_ten_con` · `ho_ten` · `sdt` · `email` · `truong` · `lop` · `co_so` · `tinh` ·
+`ip` · `user_agent` · `aff_ma_nv` · `aff_ten_nv` · `aff_ma_link_cuoi/dau` · `aff_click_id` ·
+`aff_utm` · `misa_status` · `event_id`.
+
+### 🐞 Bug bắt được lúc đối chiếu `prisma/seed.ts` — sẽ nổ trên prod
+
+`Center("hoi-so")` có **`address = "Đà Nẵng"`**, mà chuỗi cơ sở của quatang **luôn kết thúc bằng
+`", Đà Nẵng"`**. Bản `matchCenter` đầu tiên đòi "khớp đúng 1 cơ sở" ⇒ CS1 và Hội sở cùng khớp ⇒
+trả `null` ⇒ **toàn bộ lead quatang mất cơ sở**. DB test local không có Hội sở nên smoke không lộ;
+chỉ lộ khi đọc dữ liệu seed thật.
+
+Vá hai lớp:
+1. **Loại cơ sở không nhận ghi danh** trước khi khớp, dùng đúng `getNonEnrollableCenterIds()` mà
+   `autoAssignNewLead` đang dùng — hai đường không được lệch nhau.
+2. **Cụ thể nhất thắng**: địa chỉ khớp DÀI NHẤT ăn (`"211 Nguyễn Hữu Thọ"` > `"Đà Nẵng"`). Chỉ khi
+   hai địa chỉ dài BẰNG NHAU mới thật sự là mơ hồ ⇒ `null`.
+
+Hồi quy: 3 ca unit + 1 "Hội sở" giả lập thêm hẳn vào fixture DB.
+
+### Đã kiểm
+
+- 76 unit test (thêm 30 ca quatang) · 22 test tích hợp DB.
+- **Smoke HTTP thật** qua cổng secret: không secret → 401 · secret sai → 401 · secret đúng → 200
+  tạo lead · gửi lại y hệt → `duplicate: true`, KHÔNG đẻ lead thứ hai · SĐT 8 chữ số → `ok:false`
+  kèm `WebhookDelivery` FAILED (gửi lại được).
+- SĐT `935269128` (sheet nuốt số 0) → lưu `84935269128`; IP lấy đúng từ payload.
+
+### Việc của anh (theo thứ tự)
+
+1. Script Properties: `SATAROBO_WEBHOOK_URL` + `SATAROBO_WEBHOOK_SECRET`
+   (trỏ `test.satarobo.vn` trước).
+2. Đặt `WEBHOOK_QUATANG_SECRET` trên Vercel (env `test`, sau đó Production) — **trùng tuyệt đối**.
+3. Dán 3 khối trong `apps-script-quatang-snippet.js` → thêm `'SR status'` vào `HEADERS` →
+   chạy `setupHeaders()` → Deploy **New version**.
+4. Gửi 1 phiếu thật trên quatang → cột W phải ra `OK`, lead hiện ở `/admin/leads` (Nguồn `quatang`).
+5. Chạy ổn thì đổi URL sang `https://satarobo.vn/api/public/webhook/quatang`.
+
+⚠️ **Thiếu 2 Script Property ⇒ script BỎ QUA im lặng**, sheet vẫn ghi như cũ — cố ý, chưa cấu hình
+xong thì không được làm gãy luồng đang chạy.

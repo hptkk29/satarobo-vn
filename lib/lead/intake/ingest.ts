@@ -3,6 +3,7 @@ import { canonicalPhone } from "@/lib/phone";
 import { findRecentDuplicate, logDuplicateAttempt } from "../dedup";
 import { autoAssignNewLead, TERMINAL_LEAD_STATUSES } from "../auto-assign";
 import { autoAssignLead } from "../assign";
+import { getNonEnrollableCenterIds } from "@/lib/enrollment-flow";
 import { buildNote, isSameChildName, matchCenter } from "./normalize";
 import type { MappedLead } from "./types";
 
@@ -64,10 +65,18 @@ type CenterPick = { centerId: string | null; warning: string | null };
 async function resolveCenter(mapped: MappedLead): Promise<CenterPick> {
   if (!mapped.centerHint) return { centerId: null, warning: null };
 
-  const centers = await db.center.findMany({
-    where: { isActive: true },
-    select: { id: true, code: true, name: true, address: true },
-  });
+  // Loại cơ sở KHÔNG nhận ghi danh (Hội sở…) trước khi khớp — dùng đúng khái
+  // niệm mà `autoAssignNewLead` đã dùng để chia lead, để hai đường không lệch
+  // nhau. Gia đình không bao giờ học ở Hội sở, mà `Center("hoi-so")` lại có
+  // `address = "Đà Nẵng"` nên nó khớp lỏng với gần như mọi chuỗi cơ sở.
+  const [all, nonEnrollable] = await Promise.all([
+    db.center.findMany({
+      where: { isActive: true },
+      select: { id: true, code: true, name: true, address: true },
+    }),
+    getNonEnrollableCenterIds(),
+  ]);
+  const centers = all.filter((c) => !nonEnrollable.includes(c.id));
   const centerId = matchCenter(mapped.centerHint, centers);
   return centerId
     ? { centerId, warning: null }

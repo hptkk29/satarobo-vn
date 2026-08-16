@@ -73,8 +73,16 @@ export type CenterRow = {
  *      quatang: `"Cơ sở 2 - 114 Hoàng Diệu, Đà Nẵng"` chứa `"114 Hoàng Diệu"`.
  *      So bằng `===` sẽ trượt toàn bộ — dữ liệu thật đã đổi cách ghi 1 lần rồi.
  *
- * Khớp được ĐÚNG 1 cơ sở mới nhận; mơ hồ (≥2) ⇒ `null`, để lead rơi về
- * auto-chia thay vì đoán bừa rồi giao nhầm cơ sở.
+ * ⚠️ Ở bước 3, khớp được NHIỀU cơ sở là chuyện BÌNH THƯỜNG, không phải mơ hồ:
+ * `Center("hoi-so")` có `address = "Đà Nẵng"` (seed.ts), mà chuỗi quatang luôn
+ * kết thúc bằng ", Đà Nẵng" ⇒ Hội sở khớp CÙNG LÚC với cơ sở thật ở mọi phiếu.
+ * Bản đầu đòi "đúng 1 khớp" nên sẽ trả `null` cho TOÀN BỘ lead quatang trên
+ * prod (DB test local không có Hội sở nên không lộ). Luật đúng là **cụ thể
+ * nhất thắng**: địa chỉ khớp DÀI NHẤT ăn — `"211 Nguyễn Hữu Thọ"` thắng
+ * `"Đà Nẵng"`. Chỉ khi hai địa chỉ dài BẰNG NHAU mới thực sự là mơ hồ ⇒ `null`,
+ * để lead rơi về auto-chia thay vì giao nhầm cơ sở.
+ *
+ * Người gọi nên lọc bỏ cơ sở không nhận ghi danh TRƯỚC khi truyền vào đây.
  */
 export function matchCenter(
   hint: CenterHint | null | undefined,
@@ -95,11 +103,14 @@ export function matchCenter(
   const byName = centers.filter((c) => normalizeVi(c.name) === needle);
   if (byName.length === 1) return byName[0]!.id;
 
-  const byAddress = centers.filter((c) => {
-    const addr = normalizeVi(c.address);
-    return addr.length >= 5 && needle.includes(addr);
-  });
-  return byAddress.length === 1 ? byAddress[0]!.id : null;
+  const byAddress = centers
+    .map((c) => ({ id: c.id, addr: normalizeVi(c.address) }))
+    .filter((c) => c.addr.length >= 5 && needle.includes(c.addr));
+  if (byAddress.length === 0) return null;
+
+  const longest = Math.max(...byAddress.map((c) => c.addr.length));
+  const winners = byAddress.filter((c) => c.addr.length === longest);
+  return winners.length === 1 ? winners[0]!.id : null;
 }
 
 /**

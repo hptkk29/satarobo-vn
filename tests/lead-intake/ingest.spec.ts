@@ -2,6 +2,7 @@ import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import { PrismaClient } from "@prisma/client";
 import { ingestIntakeLead } from "../../lib/lead/intake/ingest";
 import { mapSaleForm, SALE_FORM_FIELDS } from "../../lib/lead/intake/map-sale-form";
+import { mapQuatang, quatangClientMeta } from "../../lib/lead/intake/map-quatang";
 import type { MappedLead } from "../../lib/lead/intake/types";
 
 // =============================================================================
@@ -53,6 +54,7 @@ const PHONE = {
   teacherCode: "0900000110",
   dupWarnings: "0900000111",
   closedLead: "0900000112",
+  quatang: "0900000113",
 } as const;
 const ALL_PHONES = Object.values(PHONE);
 /** Cùng SĐT nhưng ghi dạng canonical — dùng cho ca "nhận ra trùng dù khác dạng". */
@@ -125,6 +127,22 @@ describe.skipIf(!RUN)("Lead intake · tầng DB thật", () => {
       select: { id: true },
     });
     centerBId = centerB.id;
+
+    // "Hội sở" giả lập — ĐÚNG hình dạng prod: `address = "Đà Nẵng"` (prisma/seed.ts).
+    // Chuỗi cơ sở của quatang luôn kết thúc ", Đà Nẵng" nên nó khớp lỏng với MỌI
+    // phiếu. Bản matchCenter đầu tiên coi đó là "mơ hồ" và trả null ⇒ toàn bộ
+    // lead quatang mất cơ sở trên prod. Giữ dòng này để lỗi đó không quay lại.
+    await db.center.upsert({
+      where: { slug: `${P}hoi-so` },
+      update: { code: `${P}HO`, isActive: true },
+      create: {
+        code: `${P}HO`,
+        name: `${P}Hội sở`,
+        slug: `${P}hoi-so`,
+        address: "Đà Nẵng",
+        isActive: true,
+      },
+    });
 
     // Sale thuộc CƠ SỞ B — để dựng ca "phiếu ghi cơ sở A, người nhập ở cơ sở B".
     const employeeB = await db.employee.upsert({
@@ -489,6 +507,59 @@ describe.skipIf(!RUN)("Lead intake · tầng DB thật", () => {
     expect(
       await db.leadDuplicate.count({ where: { primaryLeadId: first.leadId! } }),
     ).toBeGreaterThan(0);
+  }, 60_000);
+
+  it("đi trọn đường quatang: JSON thô của doPost → Lead trong DB", async () => {
+    const mapped = mapQuatang({
+      ho_ten_con: "Bé Quà Tặng",
+      ho_ten: "Chị Quà Tặng",
+      sdt: "900000113", // sheet nuốt số 0 đầu
+      // Chuỗi cơ sở kiểu MỚI của quatang — phải khớp theo địa chỉ là chuỗi con.
+      co_so: `Cơ sở B - 922 Đường Kiểm Thử, Đà Nẵng`,
+      tinh: "Đà Nẵng",
+      truong: "TH Kiểm Thử",
+      lop: "Lớp 6",
+      ip: "14.241.120.150",
+      user_agent: "UA-của-phụ-huynh",
+      aff_ten_nv: "Chị Diệu",
+      aff_ma_link_cuoi: "LINK9",
+      event_id: "row-quatang-1",
+    });
+    expect(mapped.ok).toBe(true);
+    if (!mapped.ok) return;
+
+    const meta = quatangClientMeta({
+      ip: "14.241.120.150",
+      user_agent: "UA-của-phụ-huynh",
+    });
+    const r = await ingestIntakeLead(mapped.lead, {
+      source: "quatang",
+      ipAddress: meta.ipAddress,
+      userAgent: meta.userAgent,
+    });
+
+    const row = await db.lead.findUnique({
+      where: { id: r.leadId! },
+      select: {
+        phone: true,
+        centerId: true,
+        source: true,
+        eventId: true,
+        ipAddress: true,
+        userAgent: true,
+        note: true,
+        children: { select: { fullName: true, gradeLevel: true } },
+      },
+    });
+    expect(row?.phone).toBe("84900000113");
+    expect(row?.centerId).toBe(centerBId); // khớp bằng chuỗi con của địa chỉ
+    expect(row?.source).toBe("quatang");
+    expect(row?.eventId).toBe("quatang:row-quatang-1");
+    // IP phải là của PHỤ HUYNH (từ payload), không phải của máy chủ Google.
+    expect(row?.ipAddress).toBe("14.241.120.150");
+    expect(row?.userAgent).toBe("UA-của-phụ-huynh");
+    expect(row?.note).toContain("NV giới thiệu: Chị Diệu");
+    expect(row?.children).toEqual([{ fullName: "Bé Quà Tặng", gradeLevel: "Lớp 6" }]);
   }, 60_000);
 
   it("đi trọn đường form Sale: payload thô → Lead trong DB", async () => {

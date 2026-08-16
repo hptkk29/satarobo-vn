@@ -152,3 +152,42 @@ describe("buildNote", () => {
     expect(buildNote([], [])).toBeNull();
   });
 });
+
+// ── Hồi quy: bẫy Hội sở (phát hiện 16/08 khi đối chiếu prisma/seed.ts) ───────
+describe("matchCenter — cơ sở khớp lỏng CHỒNG NHAU", () => {
+  // Đúng hình dạng dữ liệu prod: Center("hoi-so").address = "Đà Nẵng", mà chuỗi
+  // quatang luôn kết thúc bằng ", Đà Nẵng" ⇒ Hội sở khớp cùng lúc với cơ sở thật.
+  const WITH_HO: CenterRow[] = [
+    ...CENTERS,
+    { id: "ho", code: "HO", name: "Hội sở", address: "Đà Nẵng" },
+  ];
+
+  it("địa chỉ CỤ THỂ HƠN thắng, không trả null vì tưởng mơ hồ", () => {
+    expect(
+      matchCenter(
+        { kind: "text", value: "Cơ sở 1 - 211 Nguyễn Hữu Thọ, Đà Nẵng" },
+        WITH_HO,
+      ),
+    ).toBe("c1");
+    expect(
+      matchCenter(
+        { kind: "text", value: "Cơ sở 2 - 114 Hoàng Diệu, Đà Nẵng" },
+        WITH_HO,
+      ),
+    ).toBe("c2");
+  });
+
+  it("chỉ nhắc tên tỉnh thì vẫn khớp Hội sở (không có ứng viên cụ thể hơn)", () => {
+    expect(matchCenter({ kind: "text", value: "Đà Nẵng" }, WITH_HO)).toBe("ho");
+  });
+
+  it("hai địa chỉ dài BẰNG NHAU cùng khớp ⇒ mới thật sự là mơ hồ", () => {
+    const tie: CenterRow[] = [
+      { id: "x", code: "X", name: "X", address: "12 Lê Lợi" },
+      { id: "y", code: "Y", name: "Y", address: "34 Lê Lai" },
+    ];
+    expect(
+      matchCenter({ kind: "text", value: "12 Lê Lợi và 34 Lê Lai" }, tie),
+    ).toBeNull();
+  });
+});

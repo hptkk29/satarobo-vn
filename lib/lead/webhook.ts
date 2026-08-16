@@ -20,6 +20,7 @@ const SECRET_ENV: Record<string, string> = {
   facebook: "WEBHOOK_FACEBOOK_SECRET",
   zalo: "WEBHOOK_ZALO_SECRET",
   "google-form": "WEBHOOK_GOOGLE_FORM_SECRET",
+  quatang: "WEBHOOK_QUATANG_SECRET",
 };
 
 function safeEqual(a: string, b: string): boolean {
@@ -231,13 +232,35 @@ export function extractLeadFields(payload: unknown): ExtractedLead | null {
 export type WebhookResult = { httpStatus: number; body: Record<string, unknown> };
 
 /**
+ * Bộ xử lý riêng của một nguồn, cắm vào thay cho `extractLeadFields` mặc định.
+ *
+ * Có mặt vì nguồn mới (quatang) mang nhiều trường hơn hẳn bộ chung: con + trường
+ * + lớp + cơ sở + mã NV giới thiệu. Nhét hết vào `extractLeadFields` sẽ làm phình
+ * hàm dùng chung của 3 nguồn đang chạy; tách adapter thì mỗi nguồn tự lo phần
+ * riêng mà đường ống (rate limit → secret → log → mark) vẫn dùng chung một chỗ.
+ */
+export type LeadWebhookAdapter = {
+  /** Khoá idempotency đọc từ payload — ghi vào `WebhookDelivery.externalId`. */
+  externalId?: (payload: unknown) => string | null;
+  handle: (payload: unknown) => Promise<{
+    ok: boolean;
+    leadId?: string;
+    duplicate?: boolean;
+    error?: string;
+  }>;
+};
+
+/**
  * Pipeline chung cho 1 POST webhook: verify secret → log delivery → extract →
  * ingestLead → cập nhật status delivery. Trả về 200 cho cả case parse-fail/
  * duplicate (tránh provider retry bão hoà); chỉ 401 khi sai secret.
+ *
+ * `adapter` bỏ trống ⇒ giữ nguyên đường cũ của 3 nguồn facebook/zalo/google-form.
  */
 export async function processLeadWebhook(
   source: string,
   req: Request,
+  adapter?: LeadWebhookAdapter,
 ): Promise<WebhookResult> {
   // SEC-M04: rate-limit theo source+IP TRƯỚC mọi xử lý (chống flood Lead/WebhookDelivery/
   // LeadActivity + consent forgery). fail-soft (Upstash→memory). 60 POST/phút/IP rất rộng
@@ -287,6 +310,31 @@ export async function processLeadWebhook(
     payload = raw ? JSON.parse(raw) : null;
   } catch {
     payload = null;
+  }
+
+  // ── Nguồn có adapter riêng (quatang…) ────────────────────────────────────
+  if (adapter) {
+    const deliveryId = await logWebhookDelivery({
+      source,
+      externalId: adapter.externalId?.(payload) ?? null,
+      payload: payload ?? {},
+    });
+    try {
+      const result = await adapter.handle(payload);
+      if (!result.ok) {
+        await markWebhookDelivery(deliveryId, "FAILED", result.error ?? "Xử lý lỗi");
+        return { httpStatus: 200, body: { ok: false, error: result.error } };
+      }
+      await markWebhookDelivery(deliveryId, result.duplicate ? "DUPLICATE" : "PROCESSED");
+      return {
+        httpStatus: 200,
+        body: { ok: true, leadId: result.leadId, duplicate: result.duplicate ?? false },
+      };
+    } catch (err) {
+      console.error(`[webhook:${source}] adapter error:`, err);
+      await markWebhookDelivery(deliveryId, "FAILED", "Lỗi hệ thống");
+      return { httpStatus: 200, body: { ok: false, error: "Lỗi hệ thống" } };
+    }
   }
 
   const fields = extractLeadFields(payload);
