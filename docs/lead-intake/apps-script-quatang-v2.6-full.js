@@ -29,8 +29,40 @@
  *
  * SAU KHI DÁN:
  *   1. Chạy `setupHeaders()` 1 lần (ghi tiêu đề cột W — không xoá dữ liệu cũ).
- *   2. Deploy > Manage deployments > Edit > Version: New version > Deploy.
+ *   2. ⚠️ **CẤP QUYỀN GỌI RA NGOÀI** — bước này KHÔNG BỎ ĐƯỢC và rất dễ quên.
+ *      Bản v2.5 chưa hề dùng `UrlFetchApp`, nên project chưa từng xin quyền
+ *      `script.external_request`. Deploy xong mà chưa cấp thì mọi phiếu đều ra
+ *      `FAIL_Exception: You do not have permission to call UrlFetchApp.fetch`.
+ *
+ *      ❗ **Chạy tay một hàm trong editor KHÔNG đủ** (đã thử 16/08): hàm vẫn chạy
+ *      bình thường, chỉ riêng lời gọi ra ngoài ném lỗi, nên Google không coi là
+ *      "thiếu quyền lúc khởi động" và KHÔNG bật hộp xin quyền.
+ *
+ *      Cách chắc chắn — khai thẳng trong tệp kê khai:
+ *        a. Cài đặt dự án (⚙) → bật "Hiển thị tệp kê khai appsscript.json".
+ *        b. Mở `appsscript.json`, THÊM khoá `oauthScopes` (giữ nguyên phần
+ *           `webapp` đang có, chỉ thêm khoá này):
+ *
+ *             "oauthScopes": [
+ *               "https://www.googleapis.com/auth/spreadsheets",
+ *               "https://www.googleapis.com/auth/script.external_request",
+ *               "https://www.googleapis.com/auth/script.send_mail"
+ *             ]
+ *
+ *           (`spreadsheets` cho `openById`, `external_request` cho `UrlFetchApp`,
+ *            `send_mail` cho `MailApp` ở nhánh cảnh báo MISA. Đã khai tay thì
+ *            phải khai ĐỦ — thiếu cái nào là hỏng đúng cái đó.)
+ *        c. Lưu → chạy lại `retrySataRoboFailed` → lúc này hộp xin quyền mới hiện
+ *           → *Xem lại quyền* → chọn tài khoản → *Nâng cao* → *Đi tới … (không
+ *           an toàn)* → **Cho phép**.
+ *
+ *      ⚠️ Tài khoản bấm Cho phép phải là tài khoản ở ô **"Thực thi bằng tên"**
+ *      của bản deploy (thường là chủ sở hữu sheet). Cấp quyền bằng tài khoản khác
+ *      thì editor hết lỗi nhưng web-app vẫn ném y nguyên.
+ *   3. Deploy > Manage deployments > Edit > Version: New version > Deploy.
  *      (Không tạo version mới thì web-app vẫn chạy mã CŨ.)
+ *   4. Chạy lại `retrySataRoboFailed()` để kéo về các dòng đã ghi FAIL_* lúc
+ *      chưa cấp quyền — không mất phiếu nào.
  *
  * BA ĐIỀU CỐ Ý, ĐỪNG "TỐI ƯU" ĐI:
  *   a. Gọi SAU appendRow. Sata Robo chết thì sheet vẫn giữ lead — không mất gì.
@@ -338,7 +370,10 @@ function pushToSataRobo_(sheet, rowIndex, data, sdtClean, maNV, tenNV, timestamp
     }
   } catch (err) {
     // Mạng chậm/timeout: sheet ĐÃ ghi xong nên lead không mất. Đánh dấu để gửi lại.
-    writeStatus('FAIL_' + String(err).slice(0, 60));
+    // Cắt 200 ký tự chứ không phải 60: thông báo quyền của Apps Script để phần
+    // QUAN TRỌNG NHẤT ("Required permissions: …script.external_request") ở cuối
+    // câu — cắt ngắn là mất đúng manh mối cần để vá.
+    writeStatus('FAIL_' + String(err).slice(0, 200));
     Logger.log('pushToSataRobo_ error (bỏ qua): ' + err);
   }
 }
@@ -496,7 +531,94 @@ function retrySataRoboFailed() {
   Logger.log('Đã gửi lại ' + retried + ' dòng FAIL.');
 }
 
+// ============ v2.6 — KÉO VỀ CÁC DÒNG BỊ BỎ QUA LÚC CHƯA CẤU HÌNH ============
+// `retrySataRoboFailed()` CHỈ nhặt dòng có W bắt đầu bằng 'FAIL'. Dòng bị bỏ qua
+// vì THIẾU Script Property (hoặc web-app còn chạy bản cũ) có W **TRỐNG**, nên nó
+// không nhặt — lead trong khoảng thời gian đó sẽ nằm lại sheet mãi mãi.
+//
+// Hàm này lấp đúng khoảng đó: đẩy các dòng có W TRỐNG kể từ một mốc ngày.
+//
+// Bắt buộc đặt Script Property `SATAROBO_PUSH_FROM` = 'yyyy-mm-dd' trước khi chạy.
+// Có chốt chặn này vì QĐ-2 đã chốt KHÔNG backfill lịch sử — quên mốc là bắn cả
+// trăm lead cũ từ tháng 5 sang Sale.
+function pushSataRoboMissing() {
+  const props = PropertiesService.getScriptProperties();
+  const fromRaw = props.getProperty('SATAROBO_PUSH_FROM');
+  if (!fromRaw) {
+    Logger.log(
+      'DỪNG: chưa đặt Script Property SATAROBO_PUSH_FROM (yyyy-mm-dd).\n' +
+      'Đặt đúng ngày bật đường quatang rồi chạy lại — cố ý bắt khai mốc để không ' +
+      'kéo nhầm lead cũ (QĐ-2: không backfill lịch sử).');
+    return;
+  }
+  const from = new Date(fromRaw + 'T00:00:00+07:00');
+  if (isNaN(from.getTime())) { Logger.log('SATAROBO_PUSH_FROM không phải ngày hợp lệ: ' + fromRaw); return; }
+
+  const sheet = getSpreadsheet_().getSheetByName(SHEET_NAME);
+  const last = sheet.getLastRow();
+  if (last < 2) { Logger.log('Không có dòng dữ liệu.'); return; }
+
+  const n = last - 1;
+  const rows = sheet.getRange(2, 1, n, 23).getValues();
+  let pushed = 0, skippedOld = 0;
+
+  for (let i = 0; i < n; i++) {
+    const r = rows[i];
+    if (String(r[22] || '').trim() !== '') continue;      // W đã có kết quả → bỏ qua
+    if (!r[3]) continue;                                   // không có SĐT → không phải dòng lead
+
+    const ts = r[0] instanceof Date ? r[0] : new Date(r[0]);
+    if (isNaN(ts.getTime()) || ts < from) { skippedOld++; continue; }
+
+    const data = {
+      ho_ten_con: r[1], ho_ten: r[2], sdt: String(r[3]), email: r[4],
+      truong: r[5], lop: r[6], co_so: r[7], tinh: r[8], source: r[9],
+      ip: r[10], user_agent: r[11],
+      aff_ma_link_cuoi: r[14], aff_ma_link_dau: r[15],
+      aff_click_id: r[17], aff_thoi_diem_click: r[18], aff_utm: r[19],
+      misa_status: r[20],
+    };
+    pushToSataRobo_(sheet, i + 2, data, String(r[3]), String(r[16] || ''), String(r[21] || ''), ts);
+    pushed++;
+    Utilities.sleep(300); // đừng bắn dồn
+  }
+
+  Logger.log('Đã đẩy ' + pushed + ' dòng còn trống cột W (bỏ qua ' + skippedOld +
+    ' dòng trước mốc ' + fromRaw + ').');
+}
+
 // ============ TEST ============
+
+/**
+ * Đo THẲNG quyền gọi ra ngoài. CỐ Ý KHÔNG bọc try/catch — try/catch của
+ * `pushToSataRobo_` nuốt lỗi quyền, nên Apps Script không coi đó là "thiếu quyền
+ * lúc khởi động" và KHÔNG bật hộp xin quyền. Hàm trần này thì ném thẳng.
+ *
+ * Đọc kết quả trong Nhật ký thực thi:
+ *   `HTTP 401 {"ok":false,"error":"Unauthorized"}`  → ✅ QUYỀN ĐÃ CÓ, đường ra
+ *      thông. (401 là đúng: request này cố tình không mang secret.)
+ *   `HTTP 503 {"ok":false,"error":"Webhook chưa cấu hình secret"}` → quyền OK
+ *      nhưng phía Vercel chưa đặt env cho môi trường đó.
+ *   `Exception: You do not have permission to call UrlFetchApp.fetch` → chưa
+ *      được cấp quyền. Nếu chạy hàm này mà VẪN không hiện hộp xin quyền thì phải
+ *      thu hồi uỷ quyền cũ: myaccount.google.com/permissions → tìm project →
+ *      Xoá quyền truy cập → chạy lại (lúc đó Google buộc phải hỏi lại từ đầu).
+ *
+ * Không ghi gì, không tạo lead: 401 bị chặn trước cả bước lưu phiếu webhook.
+ */
+function testQuyenGoiRaNgoai() {
+  const url = PropertiesService.getScriptProperties().getProperty('SATAROBO_WEBHOOK_URL')
+    || 'https://satarobo.vn/api/public/webhook/quatang';
+  const res = UrlFetchApp.fetch(url, {
+    method: 'post',
+    contentType: 'application/json',
+    payload: '{}',
+    muteHttpExceptions: true,
+    followRedirects: false,
+  });
+  Logger.log('HTTP ' + res.getResponseCode() + ' ' + res.getContentText().slice(0, 200));
+}
+
 function testAppendRow() {
   const sheet = ensureSheet_();
   sheet.appendRow([
