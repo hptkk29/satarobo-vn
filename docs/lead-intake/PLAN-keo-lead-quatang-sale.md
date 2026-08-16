@@ -2,12 +2,11 @@
 
 > Lập 16/08/2026. Nguồn quyết định: user chốt 3 điểm ngày 16/08 (mục §0).
 >
-> **Trạng thái 16/08/2026:** P0 ✅ · **P1 ✅** · **P2 ✅** · **P4 ✅** — đã đẩy lên nhánh `test`
-> (CI + Migrate TEST DB xanh), **chưa merge `main`** nên `sale.satarobo.vn` trên prod CHƯA đổi.
-> **P3 ✅ (code xong, chờ anh cấu hình Apps Script + secret)** · P5 ⬜.
-> **Nghiệm thu trên `test.satarobo.vn` 16/08: ĐẠT 7/7** (§12) — đường Sale chạy thật, đo cả trong DB.
-> Chốt chặn còn lại của P3: `WEBHOOK_QUATANG_SECRET` chưa đặt trên env `test` (endpoint đang trả 503).
-> Chi tiết: §8 (P1/P2) · §9 (nhật ký review) · §10 (P4) · §11 (P3 + bug Hội sở) · §12 (nghiệm thu).
+> **Trạng thái 16/08/2026:** P0 ✅ · **P1 ✅** · **P2 ✅** · **P3 ✅** · **P4 ✅** — **ĐÃ LÊN PROD**
+> (PR #114 + #115, `main` = `954e642b`, migration prod đã apply). P5 ⬜.
+> **Nghiệm thu trên `test.satarobo.vn`: ĐẠT 7/7** (§12) — đo HTTP thật + đọc ngược DB + xem trên màn admin.
+> **quatang CHƯA chạy**: còn chờ đặt `WEBHOOK_QUATANG_SECRET` + dán Apps Script v2.6 (§13).
+> Chi tiết: §8 (P1/P2) · §9 (review) · §10 (P4) · §11 (P3 + bug Hội sở) · §12 (nghiệm thu) · §13 (lên prod).
 
 ---
 
@@ -494,3 +493,43 @@ sang `401` thì đường quatang mới sẵn sàng nhận Apps Script.
 ⚠️ Cron `/api/cron/lead-intake-health` **không chạy trên `test`** (Vercel Cron chỉ chạy ở Production;
 `cron-pump-test.yml` chỉ bơm `dispatch-events`/`email-queue`/`chat-zns-notify`). Lưới "nguồn im lặng"
 chỉ thực sự sống sau khi merge `main`.
+
+---
+
+## 13. Lên prod 16/08/2026 — PR #114 + #115
+
+Merge `test` → `main` sau khi nghiệm thu §12 đạt. Prod nay có: đường lead từ site Sale,
+route quatang (nằm im tới khi có secret), cron canh im lặng, màn replay.
+
+### 🐞 Sự cố hạ tầng phải nhớ: GitHub trả 504 lúc merge ⇒ **mất hẳn sự kiện push**
+
+`gh pr merge 114 --merge` trả `504 Gateway Timeout`. **Commit vào `main` THÀNH CÔNG**
+(`199b4533`) nhưng sự kiện push bị rơi ⇒ **không workflow nào chạy và Vercel không build**.
+Nhìn `git log origin/main` thì mọi thứ có vẻ xong, còn prod thì vẫn chạy mã cũ — chế độ hỏng im lặng.
+
+Cách nhận ra (dùng lại được): `gh run list --branch main --event push` **rỗng** cho commit vừa merge,
+trong khi push sang `test` cùng lúc vẫn kích hoạt CI ngay ⇒ Actions khoẻ, chỉ sự kiện của `main` bị rơi.
+Đo prod trực tiếp: `data-dpl-id` trong HTML **không đổi** = Vercel chưa build lại.
+
+Cách vá đã dùng:
+1. `gh workflow run deploy.yml --ref main` → `prisma migrate deploy` chạy tay:
+   *202 migrations found · Applying `20260813000000_nen_p3_us12_scope_shadow` · All migrations have been successfully applied.*
+2. Merge tiếp PR #115 (1 file docs) để **sinh sự kiện push mới** → lần này `CI` + `Migrate Production DB`
+   + Vercel đều chạy. Lần migrate thứ hai báo *"No pending migrations to apply"* (idempotent, đúng như mong đợi).
+
+**Bài học:** merge xong đừng tin `git log`. Kiểm đủ 3 thứ: (a) `gh run list --branch main --event push`
+có run mới, (b) `Migrate Production DB` xanh, (c) `data-dpl-id` trên prod đã đổi.
+
+### Chốt chặn còn lại (việc của anh, quatang chưa chạy)
+
+1. Vercel → Environment Variables → thêm `WEBHOOK_QUATANG_SECRET` (Production, và cả `test`
+   nếu muốn nghiệm thu trước) → Redeploy.
+2. Apps Script → Project Settings → Script Properties:
+   `SATAROBO_WEBHOOK_URL` = `https://satarobo.vn/api/public/webhook/quatang` (hoặc test trước),
+   `SATAROBO_WEBHOOK_SECRET` = **đúng chuỗi vừa đặt ở bước 1**.
+3. Copy đè toàn bộ `docs/lead-intake/apps-script-quatang-v2.6-full.js` vào Apps Script →
+   chạy `setupHeaders()` → Deploy > Manage deployments > **New version**.
+4. Gửi 1 phiếu thật trên quatang → cột **W** phải ra `OK`, lead hiện ở `/admin/leads` (Nguồn `quatang`).
+
+**Cách tự đo bước 1 xong chưa, không cần đăng nhập:**
+`POST /api/public/webhook/quatang` → **`503`** = chưa đặt secret · **`401`** = đã đặt (cổng chặn đúng).
