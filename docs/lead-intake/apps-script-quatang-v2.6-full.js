@@ -588,6 +588,37 @@ function pushSataRoboMissing() {
 }
 
 // ============ TEST ============
+
+/**
+ * Đo THẲNG quyền gọi ra ngoài. CỐ Ý KHÔNG bọc try/catch — try/catch của
+ * `pushToSataRobo_` nuốt lỗi quyền, nên Apps Script không coi đó là "thiếu quyền
+ * lúc khởi động" và KHÔNG bật hộp xin quyền. Hàm trần này thì ném thẳng.
+ *
+ * Đọc kết quả trong Nhật ký thực thi:
+ *   `HTTP 401 {"ok":false,"error":"Unauthorized"}`  → ✅ QUYỀN ĐÃ CÓ, đường ra
+ *      thông. (401 là đúng: request này cố tình không mang secret.)
+ *   `HTTP 503 {"ok":false,"error":"Webhook chưa cấu hình secret"}` → quyền OK
+ *      nhưng phía Vercel chưa đặt env cho môi trường đó.
+ *   `Exception: You do not have permission to call UrlFetchApp.fetch` → chưa
+ *      được cấp quyền. Nếu chạy hàm này mà VẪN không hiện hộp xin quyền thì phải
+ *      thu hồi uỷ quyền cũ: myaccount.google.com/permissions → tìm project →
+ *      Xoá quyền truy cập → chạy lại (lúc đó Google buộc phải hỏi lại từ đầu).
+ *
+ * Không ghi gì, không tạo lead: 401 bị chặn trước cả bước lưu phiếu webhook.
+ */
+function testQuyenGoiRaNgoai() {
+  const url = PropertiesService.getScriptProperties().getProperty('SATAROBO_WEBHOOK_URL')
+    || 'https://satarobo.vn/api/public/webhook/quatang';
+  const res = UrlFetchApp.fetch(url, {
+    method: 'post',
+    contentType: 'application/json',
+    payload: '{}',
+    muteHttpExceptions: true,
+    followRedirects: false,
+  });
+  Logger.log('HTTP ' + res.getResponseCode() + ' ' + res.getContentText().slice(0, 200));
+}
+
 function testAppendRow() {
   const sheet = ensureSheet_();
   sheet.appendRow([
