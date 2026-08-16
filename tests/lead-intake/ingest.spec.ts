@@ -79,6 +79,12 @@ function lead(over: Partial<MappedLead> = {}): MappedLead {
 }
 
 async function purge() {
+  // ⚠️ Phải dọn cả OrgUnit test. `nonEnrollableCenterIds` có đường thoát "cây
+  // OrgUnit RỖNG ⇒ không lọc gì"; để sót OrgUnit của suite này là làm mất đường
+  // thoát đó cho suite khác chạy sau trên cùng DB `ci_test` — đúng cơ chế đã làm
+  // 3 ca ở đây đỏ, chỉ là theo chiều ngược lại.
+  await db.orgUnit.deleteMany({ where: { code: { startsWith: P } } });
+
   const leads = await db.lead.findMany({
     where: { phone: { in: [...ALL_PHONES, ...ALL_CANONICAL] } },
     select: { id: true },
@@ -128,7 +134,37 @@ describe.skipIf(!RUN)("Lead intake · tầng DB thật", () => {
     });
     centerBId = centerB.id;
 
+    // ⚠️ PHẢI có `OrgUnit type=CENTER` trỏ vào 2 cơ sở này.
+    //
+    // `resolveCenter` loại cơ sở không nhận ghi danh qua `getNonEnrollableCenterIds()`,
+    // mà hàm đó định nghĩa "nhận ghi danh" = CÓ một OrgUnit type=CENTER trỏ tới
+    // (lib/enrollment-flow.ts). Nó chỉ trả `[]` khi cây OrgUnit RỖNG HOÀN TOÀN.
+    //
+    // Hệ quả đã burn: máy dev không có OrgUnit nào ⇒ không lọc gì ⇒ xanh; còn CI
+    // dùng chung DB `ci_test` với bộ test `nen` (đã seed cây OrgUnit) ⇒ cơ sở test
+    // thành "mồ côi" ⇒ bị lọc ⇒ khớp cơ sở trượt ⇒ 3 ca đỏ CHỈ trên CI.
+    // Dựng OrgUnit ở đây để thế giới test giống prod, thay vì nới lỏng logic thật.
+    for (const [code, centerId] of [
+      [CODE_A, centerA.id],
+      [CODE_B, centerB.id],
+    ] as const) {
+      await db.orgUnit.upsert({
+        where: { code: `${P}${code}` },
+        update: { centerId, isActive: true, deletedAt: null },
+        create: {
+          type: "CENTER",
+          code: `${P}${code}`,
+          name: `${P}OrgUnit ${code}`,
+          centerId,
+          path: `/${P.toLowerCase()}${code.toLowerCase()}/`,
+          depth: 2,
+          isActive: true,
+        },
+      });
+    }
+
     // "Hội sở" giả lập — ĐÚNG hình dạng prod: `address = "Đà Nẵng"` (prisma/seed.ts).
+    // CỐ Ý KHÔNG tạo OrgUnit cho nó: `Center("hoi-so")` trên prod là bản ghi MỒ CÔI.
     // Chuỗi cơ sở của quatang luôn kết thúc ", Đà Nẵng" nên nó khớp lỏng với MỌI
     // phiếu. Bản matchCenter đầu tiên coi đó là "mơ hồ" và trả null ⇒ toàn bộ
     // lead quatang mất cơ sở trên prod. Giữ dòng này để lỗi đó không quay lại.
