@@ -275,9 +275,10 @@ cùng lõi ⇒ đúng một đường ghi cho mọi nguồn ngoài.
 
 ### Việc phải làm khi go-live P2
 
-1. Đặt 3 env trên Vercel Production: `MISA_WEBFORM_ID`, `MISA_WEBFORM_COMPANYCODE`,
-   `MISA_WEBFORM_KEY` (lấy từ input ẩn trong `public/sale/nhap-lieu.html`).
-   **Không đặt** ⇒ MISA ngừng nhận phiếu (có log lỗi, không im lặng).
+1. *(tuỳ chọn)* Đặt `MISA_WEBFORM_ID` / `MISA_WEBFORM_COMPANYCODE` / `MISA_WEBFORM_KEY`
+   trên Vercel Production nếu muốn **ghim cứng** tham số form. Bỏ trống cũng chạy: server
+   lấy chính 3 input ẩn mà form gửi lên (đúng thứ trình duyệt vẫn gửi sang MISA từ trước),
+   nên **không có bước ops nào có thể quên mà làm MISA tắt tiếng**.
 2. Nghiệm thu trên `test.satarobo.vn/sale/nhap-lieu.html` — đường dẫn tự đổi sang
    `/sale/thank-you.html` trên host không phải sale, nên chạy được đủ luồng.
 3. Sau khi lên prod: gửi 1 phiếu thật, kiểm lead hiện ở `/admin/leads` (lọc Nguồn = `sale-form`).
