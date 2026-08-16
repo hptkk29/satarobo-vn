@@ -1,0 +1,57 @@
+// =============================================================================
+// LEAD INTAKE — kiểu dữ liệu chung cho mọi nguồn nhập ngoài (form Sale, quatang…).
+//
+// Ranh giới cố ý: MAPPER là hàm THUẦN (không đụng DB) — nhận payload thô của
+// một nguồn, trả về `MappedLead`. Việc tra `centerId`/`assignedToId` trong DB
+// nằm ở tầng ingest. Nhờ vậy mapper test được bằng unit test thuần, không cần
+// Postgres, và thêm nguồn mới chỉ là thêm 1 file mapper.
+// =============================================================================
+
+/** Một người con trong phiếu đăng ký (map thẳng sang `LeadChild`). */
+export type IntakeChild = {
+  fullName: string;
+  schoolName?: string | null;
+  gradeLevel?: string | null;
+};
+
+/**
+ * Gợi ý cơ sở lấy từ payload. KHÔNG phải `centerId` — tầng ingest mới tra DB.
+ * - `code`  : nguồn gửi mã dạng "CS1" (form Sale gửi số 1/2 → quy ra CS1/CS2).
+ * - `text`  : nguồn gửi chuỗi tự do ("Cơ sở 2 - 114 Hoàng Diệu, Đà Nẵng").
+ */
+export type CenterHint =
+  | { kind: "code"; value: string }
+  | { kind: "text"; value: string };
+
+/** Kết quả map 1 payload → dữ liệu sẵn sàng ghi Lead. */
+export type MappedLead = {
+  parentName: string;
+  /** Đã chuẩn hoá canonical `84XXXXXXXXX` (qua `canonicalPhone`). */
+  phone: string;
+  email?: string | null;
+  centerHint?: CenterHint | null;
+  /** Con được tạo thành bản ghi `LeadChild` thật. */
+  child?: IntakeChild | null;
+  /**
+   * Tên con khi nguồn CHỈ có chuỗi tên, không đủ tin để đẻ `LeadChild`
+   * (3 webhook cũ moi tên từ text tự do). Chỉ set `Lead.childName`.
+   * Đặt `child` thì không cần trường này — tầng ingest tự lấy từ `child.fullName`.
+   */
+  childName?: string | null;
+  /** Mã nhân viên giới thiệu/nhập hộ → tầng ingest quy ra `assignedToId`. */
+  employeeCode?: string | null;
+  /** Các dòng ghép vào `Lead.note` (tỉnh/TP, địa chỉ, nguồn phụ…). */
+  noteLines: string[];
+  externalId?: string | null;
+  consentMarketing: boolean;
+  /**
+   * Chuyện bất thường nhưng KHÔNG đủ để từ chối (mã NV không khớp, thiếu tên
+   * PH, mã tỉnh lạ…). Tầng ingest ghép vào `note` để người xử lý lead thấy —
+   * nuốt im lặng là cách hỏng tệ nhất.
+   */
+  warnings: string[];
+};
+
+export type MapResult =
+  | { ok: true; lead: MappedLead }
+  | { ok: false; error: string };

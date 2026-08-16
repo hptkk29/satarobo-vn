@@ -628,6 +628,28 @@ export const SETTINGS = {
     default: 60_000,
     centerOverridable: false,
   }),
+  // ── Nhận lead từ nguồn ngoài (form Sale, quatang) ───────────────────────
+  // Đặt ở SystemSetting chứ KHÔNG ở env: theo QĐ-3 (16/08) MISA sẽ bị bỏ hẳn
+  // sau khi lead chảy về ổn định. Ngày đó chỉ cần tắt 1 nút, không phải deploy.
+  // Tắt = ngừng gửi bản sao sang MISA; Lead trong DB ta không đổi gì.
+  "intake.mirrorMisa": def({
+    key: "intake.mirrorMisa",
+    group: "crm",
+    label:
+      "Gửi kèm bản sao phiếu nhập của Sale sang MISA (giai đoạn chuyển tiếp — tắt khi bỏ MISA)",
+    schema: z.boolean(),
+    default: true, // app/api/public/lead-intake/sale-form/route.ts
+    centerOverridable: false,
+  }),
+  "intake.saleFormRateLimitMax": def({
+    key: "intake.saleFormRateLimitMax",
+    group: "crm",
+    label: "Số phiếu nhập tối đa / phút / IP trên form Sale",
+    schema: z.number().int().min(1).max(200),
+    // Rộng hơn form khách (5) vì đây là NHÂN VIÊN nhập liên tiếp tại quầy/sự kiện.
+    default: 30,
+    centerOverridable: false,
+  }),
   // ── Cron nhắc lịch (hardcode remediation): cửa sổ quét + idempotency ──
   "cron.renewalReminderMinDays": def({
     key: "cron.renewalReminderMinDays",

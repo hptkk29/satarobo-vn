@@ -20,6 +20,9 @@ export default defineConfig({
       // "No test files found" và job CI đỏ dù test viết đúng: `include` là bộ lọc CỨNG,
       // đường dẫn truyền ở dòng lệnh chỉ lọc TIẾP trong tập này chứ không mở rộng nó.
       "tests/nen/**/*.{test,spec}.ts",
+      // Nhận lead từ nguồn ngoài (form Sale / quatang) — tầng DB thật, tự skip
+      // khi không có Postgres local. Cùng lý do phải khai ở đây như 2 dòng trên.
+      "tests/lead-intake/**/*.{test,spec}.ts",
     ],
     coverage: {
       reporter: ["text", "json", "html"],

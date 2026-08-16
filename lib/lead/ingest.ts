@@ -1,10 +1,23 @@
-import { db } from "@/lib/db";
-import { findRecentDuplicate, logDuplicateAttempt } from "./dedup";
-import { autoAssignLead } from "./assign";
+import { ingestIntakeLead } from "./intake/ingest";
 
 // =============================================================================
-// LEAD INGEST — pipeline chung cho nguồn tự động (webhook). Phase T1.4
-// Chống trùng (T1.3) -> tạo Lead -> auto-assign round-robin.
+// LEAD INGEST — lớp bọc tương thích cho 3 nguồn webhook có từ Phase T1.4
+// (facebook / zalo / google-form).
+//
+// Lõi thật nằm ở `lib/lead/intake/ingest.ts` — một đường ghi duy nhất cho MỌI
+// nguồn ngoài. File này chỉ đổi hình dữ liệu vào cho khớp lời gọi cũ.
+//
+// HÀNH VI CỦA 3 NGUỒN NÀY GIỮ NGUYÊN 100% so với trước khi tách lõi:
+//  - `legacyWebhook: true` ⇒ vẫn `autoAssignLead` (bản cũ), và SĐT không chuẩn
+//    hoá được thì vẫn lưu chuỗi thô thay vì bị từ chối.
+//  - `child: null` ⇒ KHÔNG tạo bản ghi `LeadChild`, chỉ set `Lead.childName`
+//    y như cũ. `extractLeadFields` moi tên con từ text tự do nên độ tin thấp;
+//    đẻ `LeadChild` từ đó là bơm rác vào màn chuyển đổi. Kéo theo: luật QĐ-D1
+//    ("trùng SĐT khác con ⇒ gắn thêm con") KHÔNG áp cho 3 nguồn này — nó được
+//    chốt cho form Sale, nơi tên con là ô nhập riêng.
+//
+// Gộp nốt 3 nguồn cũ sang đường mới là việc NÊN làm, nhưng phải là đợt riêng
+// có nghiệm thu.
 // =============================================================================
 
 export type IngestLeadInput = {
@@ -28,62 +41,47 @@ export type IngestResult = {
   error?: string;
 };
 
-const ACTOR = { actorId: null, actorName: "Hệ thống (webhook)" };
-
 export async function ingestLead(input: IngestLeadInput): Promise<IngestResult> {
-  const phone = input.phone?.trim();
   const parentName = input.parentName?.trim();
-  if (!phone || !parentName) {
+  const phone = input.phone?.trim();
+  if (!parentName || !phone) {
     return { ok: false, error: "Thiếu parentName hoặc phone" };
   }
 
-  // Idempotency: nếu eventId đã tồn tại -> đã xử lý.
-  if (input.eventId) {
-    const existing = await db.lead.findUnique({
-      where: { eventId: input.eventId },
-      select: { id: true },
-    });
-    if (existing) return { ok: true, leadId: existing.id, duplicate: true };
-  }
+  const result = await ingestIntakeLead(
+    {
+      parentName,
+      phone,
+      email: input.email?.trim() || null,
+      centerHint: null,
+      // Cố ý null — xem docblock đầu file (giữ nguyên hành vi cũ, không đẻ LeadChild).
+      child: null,
+      childName: input.childName?.trim() || null,
+      employeeCode: null,
+      noteLines: input.note ? [input.note] : [],
+      // `eventId` của lời gọi cũ ĐÃ gắn sẵn tiền tố nguồn (`webhook.ts` dựng
+      // `"<source>:<externalId>"`). Truyền thẳng làm `externalId` sẽ thành
+      // `"facebook:facebook:123"` ⇒ mất tính idempotent với dữ liệu cũ.
+      externalId: null,
+      consentMarketing: true,
+      warnings: [],
+    },
+    {
+      source: input.source,
+      landingPage: input.landingPage ?? null,
+      actorName: "Hệ thống (webhook)",
+      centerId: input.centerId ?? null,
+      eventId: input.eventId ?? null,
+      utmSource: input.utmSource ?? null,
+      utmCampaign: input.utmCampaign ?? null,
+      legacyWebhook: true,
+    },
+  );
 
-  // Chống trùng SĐT 90 ngày (T1.3).
-  const dup = await findRecentDuplicate(phone);
-  if (dup) {
-    await logDuplicateAttempt(dup.id, phone, input.source);
-    return { ok: true, leadId: dup.id, duplicate: true };
-  }
-
-  try {
-    const lead = await db.lead.create({
-      data: {
-        parentName,
-        phone,
-        email: input.email?.trim() || undefined,
-        childName: input.childName?.trim() || undefined,
-        centerId: input.centerId ?? undefined,
-        source: input.source,
-        status: "NEW",
-        utmSource: input.utmSource ?? undefined,
-        utmCampaign: input.utmCampaign ?? undefined,
-        landingPage: input.landingPage ?? undefined,
-        eventId: input.eventId ?? undefined,
-        consentMarketing: true,
-        note: input.note ?? undefined,
-      },
-      select: { id: true },
-    });
-
-    await autoAssignLead(lead.id, ACTOR).catch((err) =>
-      console.error("[ingestLead] auto-assign error:", err),
-    );
-
-    return { ok: true, leadId: lead.id, duplicate: false };
-  } catch (err) {
-    // eventId unique conflict (race) -> coi như đã xử lý.
-    if (err instanceof Error && err.message.includes("Unique constraint")) {
-      return { ok: true, duplicate: true };
-    }
-    console.error("[ingestLead] create error:", err);
-    return { ok: false, error: "Lỗi tạo lead" };
-  }
+  return {
+    ok: result.ok,
+    leadId: result.leadId,
+    duplicate: result.duplicate,
+    error: result.error,
+  };
 }
