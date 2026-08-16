@@ -5,7 +5,9 @@
 > **Trạng thái 16/08/2026:** P0 ✅ · **P1 ✅** · **P2 ✅** · **P4 ✅** — đã đẩy lên nhánh `test`
 > (CI + Migrate TEST DB xanh), **chưa merge `main`** nên `sale.satarobo.vn` trên prod CHƯA đổi.
 > **P3 ✅ (code xong, chờ anh cấu hình Apps Script + secret)** · P5 ⬜.
-> Chi tiết: §8 (P1/P2) · §9 (nhật ký review) · §10 (P4) · §11 (P3 + bug Hội sở).
+> **Nghiệm thu trên `test.satarobo.vn` 16/08: ĐẠT 7/7** (§12) — đường Sale chạy thật, đo cả trong DB.
+> Chốt chặn còn lại của P3: `WEBHOOK_QUATANG_SECRET` chưa đặt trên env `test` (endpoint đang trả 503).
+> Chi tiết: §8 (P1/P2) · §9 (nhật ký review) · §10 (P4) · §11 (P3 + bug Hội sở) · §12 (nghiệm thu).
 
 ---
 
@@ -452,3 +454,43 @@ Hồi quy: 3 ca unit + 1 "Hội sở" giả lập thêm hẳn vào fixture DB.
 
 ⚠️ **Thiếu 2 Script Property ⇒ script BỎ QUA im lặng**, sheet vẫn ghi như cũ — cố ý, chưa cấu hình
 xong thì không được làm gãy luồng đang chạy.
+
+---
+
+## 12. Nghiệm thu THẬT trên `test.satarobo.vn` (16/08/2026, sau khi CI xanh)
+
+Bắn HTTP thật vào `test.satarobo.vn` rồi **đọc ngược trong DB** (DB của env `test` chính là DB dev
+nên `.env` local đọc thẳng được). Dữ liệu nghiệm thu đã dọn sạch sau khi đo (`lead=0 · child=0 ·
+activity=0 · duplicate=0 · webhookDelivery=0`).
+
+| # | Việc | Kết quả đo |
+|---|---|---|
+| 1 | `GET /sale/nhap-lieu.html` | `200`, `action="/api/public/lead-intake/sale-form"`, có ô bẫy `sr_website`, có option `— Chọn cơ sở —` |
+| 2 | Gửi 1 phiếu | `303 → /sale/thank-you.html?ok=1` · Lead tạo đúng |
+| 3 | Gửi lại y hệt | `303 → ?ok=1&dup=1` · **không** đẻ lead thứ hai |
+| 4 | Con thứ hai cùng SĐT (QĐ-D1) | `303 → ?ok=1&dup=1&child=1` · lead cũ có **2 `LeadChild`** |
+| 5 | Bot dính bẫy `sr_website` | `303 → ?ok=1` (giả thành công) · **0 lead** · có `WebhookDelivery` FAILED kèm IP |
+| 6 | Thiếu SĐT | `400` kèm thông báo tiếng Việt |
+| 7 | Cron mới `/api/cron/lead-intake-health` | `401` — **không phải 308**, không tái diễn sự cố canonical 10/08 |
+
+Đọc trong DB thấy đúng như thiết kế:
+
+- `parentName = "Chị Đặng Thị Ánh Nguyệt"` — **UTF-8 nguyên vẹn qua đường thật**.
+- `center = CS1`, `assignedTo = <tài khoản giữ vai SALES_CSM>`, `status = ASSIGNED`
+  ⇒ hai lỗi mức CAO ở §9 **không tái phát trên môi trường thật**.
+- Nhánh trùng SĐT có ghi `LeadActivity`: `[Trùng SĐT]` · `[Phiếu mới cùng SĐT]` · `[Thêm con]`
+  ⇒ cảnh báo không bị nuốt.
+- `WebhookDelivery(misa-mirror, FAILED)`: *"Thiếu env MISA_WEBFORM_ID/COMPANYCODE/KEY"*
+  ⇒ **lưới "MISA tắt tiếng" hoạt động**. (Phiếu nghiệm thu cố ý không mang 3 input ẩn nên
+  không có gì lọt sang CRM thật của MISA.)
+
+### Chốt chặn duy nhất còn lại của P3
+
+`POST /api/public/webhook/quatang` trên test trả **`503 {"ok":false,"error":"Webhook chưa cấu hình secret"}`**
+⇒ **`WEBHOOK_QUATANG_SECRET` CHƯA được đặt trên env `test`**. Đây là số đo, không phải suy đoán:
+`503` = server chưa có secret, `401` = đã có secret (và phía gọi gửi sai). Khi nào endpoint này đổi
+sang `401` thì đường quatang mới sẵn sàng nhận Apps Script.
+
+⚠️ Cron `/api/cron/lead-intake-health` **không chạy trên `test`** (Vercel Cron chỉ chạy ở Production;
+`cron-pump-test.yml` chỉ bơm `dispatch-events`/`email-queue`/`chat-zns-notify`). Lưới "nguồn im lặng"
+chỉ thực sự sống sau khi merge `main`.
