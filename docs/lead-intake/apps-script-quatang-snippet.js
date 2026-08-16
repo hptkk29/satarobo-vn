@@ -1,4 +1,8 @@
 /**
+ * ⚠️ ĐÃ CÓ BẢN FULL: `apps-script-quatang-v2.6-full.js` là **toàn bộ file** đã ráp
+ * sẵn 4 khối dưới đây vào đúng chỗ trong mã v2.5 của anh — copy đè một lần là xong.
+ * File này giữ lại để đối chiếu "đã thêm đúng những gì", đừng dán cả hai.
+ *
  * ĐOẠN THÊM VÀO `doPost` CỦA APPS SCRIPT QUATANG — P3 (16/08/2026)
  * Mục đích: sau khi ghi sheet, đẩy tiếp lead sang Sata Robo để admin/Sale xử lý.
  *
