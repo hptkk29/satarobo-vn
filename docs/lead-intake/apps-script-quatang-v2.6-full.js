@@ -29,8 +29,17 @@
  *
  * SAU KHI DÁN:
  *   1. Chạy `setupHeaders()` 1 lần (ghi tiêu đề cột W — không xoá dữ liệu cũ).
- *   2. Deploy > Manage deployments > Edit > Version: New version > Deploy.
+ *   2. ⚠️ **CẤP QUYỀN GỌI RA NGOÀI** — bước này KHÔNG BỎ ĐƯỢC và rất dễ quên.
+ *      Bản v2.5 chưa hề dùng `UrlFetchApp`, nên project chưa từng xin quyền
+ *      `script.external_request`. Deploy xong mà chưa cấp thì mọi phiếu đều ra
+ *      `FAIL_Exception: You do not have permission to call UrlFetchApp.fetch`.
+ *      Cách cấp: trong editor chọn hàm `retrySataRoboFailed` → **Chạy** → Google
+ *      hiện hộp xin quyền → *Xem lại quyền* → chọn tài khoản → *Nâng cao* →
+ *      *Đi tới … (không an toàn)* → **Cho phép**. Chỉ cần làm 1 lần.
+ *   3. Deploy > Manage deployments > Edit > Version: New version > Deploy.
  *      (Không tạo version mới thì web-app vẫn chạy mã CŨ.)
+ *   4. Chạy lại `retrySataRoboFailed()` để kéo về các dòng đã ghi FAIL_* lúc
+ *      chưa cấp quyền — không mất phiếu nào.
  *
  * BA ĐIỀU CỐ Ý, ĐỪNG "TỐI ƯU" ĐI:
  *   a. Gọi SAU appendRow. Sata Robo chết thì sheet vẫn giữ lead — không mất gì.
@@ -338,7 +347,10 @@ function pushToSataRobo_(sheet, rowIndex, data, sdtClean, maNV, tenNV, timestamp
     }
   } catch (err) {
     // Mạng chậm/timeout: sheet ĐÃ ghi xong nên lead không mất. Đánh dấu để gửi lại.
-    writeStatus('FAIL_' + String(err).slice(0, 60));
+    // Cắt 200 ký tự chứ không phải 60: thông báo quyền của Apps Script để phần
+    // QUAN TRỌNG NHẤT ("Required permissions: …script.external_request") ở cuối
+    // câu — cắt ngắn là mất đúng manh mối cần để vá.
+    writeStatus('FAIL_' + String(err).slice(0, 200));
     Logger.log('pushToSataRobo_ error (bỏ qua): ' + err);
   }
 }
