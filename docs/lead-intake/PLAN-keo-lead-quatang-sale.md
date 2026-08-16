@@ -5,7 +5,7 @@
 > **Trạng thái 16/08/2026:** P0 ✅ · **P1 ✅** · **P2 ✅** · **P3 ✅** · **P4 ✅** — **ĐÃ LÊN PROD**
 > (PR #114 + #115, `main` = `954e642b`, migration prod đã apply). P5 ⬜.
 > **Nghiệm thu trên `test.satarobo.vn`: ĐẠT 7/7** (§12) — đo HTTP thật + đọc ngược DB + xem trên màn admin.
-> **quatang CHƯA chạy**: còn chờ đặt `WEBHOOK_QUATANG_SECRET` + dán Apps Script v2.6 (§13).
+> **quatang ĐÃ THÔNG trên prod 16/08 ~23:20** — lead thật về `/admin/leads` đủ cơ sở + Sale (§14).
 > Chi tiết: §8 (P1/P2) · §9 (review) · §10 (P4) · §11 (P3 + bug Hội sở) · §12 (nghiệm thu) · §13 (lên prod).
 
 ---
@@ -533,3 +533,53 @@ có run mới, (b) `Migrate Production DB` xanh, (c) `data-dpl-id` trên prod đ
 
 **Cách tự đo bước 1 xong chưa, không cần đăng nhập:**
 `POST /api/public/webhook/quatang` → **`503`** = chưa đặt secret · **`401`** = đã đặt (cổng chặn đúng).
+
+---
+
+## 14. quatang THÔNG TRÊN PROD — 16/08/2026 ~23:20
+
+Gửi phiếu THẬT trên `quatang.edu.vn` (Cơ sở 2, chỉ điền 3 ô bắt buộc). Kết quả đo trên `admin.satarobo.vn`:
+
+| Trường | Giá trị | Chứng minh điều gì |
+|---|---|---|
+| Nguồn | `quatang` | cả chuỗi form → sheet → Apps Script → webhook chạy thật |
+| SĐT | `84999000186` | **khôi phục số 0 đầu** mà sheet đã nuốt (sheet lưu `999000186`) |
+| Cơ sở | **CS2 – 114 Hoàng Diệu** | luật "địa chỉ khớp DÀI NHẤT thắng" đúng — không dính bẫy Hội sở |
+| Sale phụ trách | Sale của **đúng CS2** | auto-chia không gán chéo cơ sở |
+| Tên PH | `PH của Bé Test Thông Đường` | `parentNameFallback` chạy (phiếu không có ô tên PH bắt buộc) |
+| Ghi chú | `Tỉnh/TP: Đà Nẵng ⚠️ Phiếu không có tên phụ huynh — cần hỏi lại khi gọi.` | cảnh báo tới được tay Sale |
+
+### 🐞 Bẫy tốn 4 vòng mới qua: `UrlFetchApp` thiếu scope
+
+v2.5 **chưa từng** gọi ra ngoài ⇒ project Apps Script chưa bao giờ xin
+`https://www.googleapis.com/auth/script.external_request`. Ba điều phản trực giác:
+
+1. **Dán code + Deploy New version KHÔNG tự cấp quyền.** Phiếu ra
+   `FAIL_Exception: You do not have permission to call UrlFetchApp.fetch`.
+2. **Chạy hàm trong editor cũng KHÔNG bật hộp xin quyền** — vì `try/catch` trong
+   `pushToSataRobo_` nuốt lỗi, Apps Script thấy "hàm chạy xong bình thường" nên không hỏi.
+   Log ra lỗi kèm dòng *"Đã gửi lại 1 dòng FAIL"* — nhìn như đã chạy được.
+3. **Khai `oauthScopes` trong `appsscript.json` là điều kiện CẦN, chưa ĐỦ.** Tệp này
+   **ẩn mặc định** (bật ở ⚙ Cài đặt dự án → "Hiển thị tệp kê khai").
+
+Đường ra: chạy **hàm TRẦN không try/catch** (`testQuyenGoiRaNgoai()` đã thêm vào file) để nó
+ném thẳng ⇒ Google buộc phải hỏi lại. Đọc log:
+`HTTP 401 {"ok":false,"error":"Unauthorized"}` = **quyền OK và cổng secret đúng**.
+Nếu vẫn không hỏi: thu hồi uỷ quyền cũ ở `myaccount.google.com/permissions` rồi chạy lại.
+
+⚠️ Tài khoản bấm *Cho phép* phải trùng `webapp.executeAs` của bản deploy.
+
+### Lưới an toàn đã được kiểm chứng bằng sự cố thật
+
+Suốt 3 vòng hỏng, **không mất phiếu nào**: sheet vẫn ghi đủ, MISA vẫn `OK`, phụ huynh vẫn
+thấy trang cảm ơn, lỗi hiện rõ ở cột W. Đúng như thiết kế "gọi SAU appendRow + bọc try/catch".
+
+Nhưng lộ ra một lỗ: `retrySataRoboFailed()` chỉ nhặt dòng `FAIL*`, còn dòng bị bỏ qua lúc
+**chưa cấu hình** có W **trống** nên không hàm nào nhặt ⇒ đã thêm `pushSataRoboMissing()`
+(đẩy dòng W trống kể từ mốc `SATAROBO_PUSH_FROM`).
+
+### Còn lại
+
+- Dọn phiếu thử: lead `PH của Bé Test Thông Đường` trên prod (nút Xoá bấm **2 lần**),
+  dòng sheet `Bé Test Deploy Lần 2` (đang `FAIL_…`), và bản ghi MISA tương ứng.
+- P5 bỏ MISA: chờ 7 ngày đối soát số bản ghi MISA vs `Lead` theo nguồn, lệch 0.
