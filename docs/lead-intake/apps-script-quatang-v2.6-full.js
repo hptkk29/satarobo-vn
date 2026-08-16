@@ -33,9 +33,32 @@
  *      Bản v2.5 chưa hề dùng `UrlFetchApp`, nên project chưa từng xin quyền
  *      `script.external_request`. Deploy xong mà chưa cấp thì mọi phiếu đều ra
  *      `FAIL_Exception: You do not have permission to call UrlFetchApp.fetch`.
- *      Cách cấp: trong editor chọn hàm `retrySataRoboFailed` → **Chạy** → Google
- *      hiện hộp xin quyền → *Xem lại quyền* → chọn tài khoản → *Nâng cao* →
- *      *Đi tới … (không an toàn)* → **Cho phép**. Chỉ cần làm 1 lần.
+ *
+ *      ❗ **Chạy tay một hàm trong editor KHÔNG đủ** (đã thử 16/08): hàm vẫn chạy
+ *      bình thường, chỉ riêng lời gọi ra ngoài ném lỗi, nên Google không coi là
+ *      "thiếu quyền lúc khởi động" và KHÔNG bật hộp xin quyền.
+ *
+ *      Cách chắc chắn — khai thẳng trong tệp kê khai:
+ *        a. Cài đặt dự án (⚙) → bật "Hiển thị tệp kê khai appsscript.json".
+ *        b. Mở `appsscript.json`, THÊM khoá `oauthScopes` (giữ nguyên phần
+ *           `webapp` đang có, chỉ thêm khoá này):
+ *
+ *             "oauthScopes": [
+ *               "https://www.googleapis.com/auth/spreadsheets",
+ *               "https://www.googleapis.com/auth/script.external_request",
+ *               "https://www.googleapis.com/auth/script.send_mail"
+ *             ]
+ *
+ *           (`spreadsheets` cho `openById`, `external_request` cho `UrlFetchApp`,
+ *            `send_mail` cho `MailApp` ở nhánh cảnh báo MISA. Đã khai tay thì
+ *            phải khai ĐỦ — thiếu cái nào là hỏng đúng cái đó.)
+ *        c. Lưu → chạy lại `retrySataRoboFailed` → lúc này hộp xin quyền mới hiện
+ *           → *Xem lại quyền* → chọn tài khoản → *Nâng cao* → *Đi tới … (không
+ *           an toàn)* → **Cho phép**.
+ *
+ *      ⚠️ Tài khoản bấm Cho phép phải là tài khoản ở ô **"Thực thi bằng tên"**
+ *      của bản deploy (thường là chủ sở hữu sheet). Cấp quyền bằng tài khoản khác
+ *      thì editor hết lỗi nhưng web-app vẫn ném y nguyên.
  *   3. Deploy > Manage deployments > Edit > Version: New version > Deploy.
  *      (Không tạo version mới thì web-app vẫn chạy mã CŨ.)
  *   4. Chạy lại `retrySataRoboFailed()` để kéo về các dòng đã ghi FAIL_* lúc
