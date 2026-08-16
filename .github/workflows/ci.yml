@@ -183,6 +183,14 @@ jobs:
       - name: Run nền-hệ-thống DB tests
         run: pnpm test:nen-db
 
+      # Nhận lead từ nguồn ngoài (form Sale / quatang) — cùng lý do như 2 bước trên:
+      # `tests/lead-intake` có `describe.skipIf(!RUN)` nên ở job `unit-tests` (không có
+      # Postgres) nó SKIP SẠCH. Thiếu bước này thì xoá trắng luật QĐ-D1 ("trùng SĐT
+      # khác con ⇒ gắn thêm LeadChild") vẫn cho CI xanh — đúng thứ job này sinh ra để
+      # chặn.
+      - name: Run lead-intake DB tests
+        run: pnpm test:lead-intake
+
   e2e:
     name: E2E smoke (Playwright)
     runs-on: ubuntu-latest

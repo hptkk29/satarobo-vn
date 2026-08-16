@@ -115,7 +115,7 @@ h1 .em{color:var(--orange)}
   </div>
   <div class="body">
     <h1>Cảm ơn bạn — <span class="em">đã ghi nhận!</span></h1>
-    <p class="lead">Thông tin khách hàng đã đẩy thành công về MISA AMIS CRM và sẽ sớm được phân bổ chăm sóc.</p>
+    <p class="lead" id="sr-lead">Thông tin khách hàng đã vào hệ thống Sata Robo và sẽ sớm được phân bổ chăm sóc.</p>
 
     <div class="thanks">
       <div class="from">💜 Lời cảm ơn từ Ban Lãnh Đạo</div>
@@ -137,9 +137,34 @@ h1 .em{color:var(--orange)}
 </div>
 
 <script>
+// ⚠️ Nút này TRƯỚC ĐÂY trỏ cứng `https://sale.satarobo.vn/`. Từ 16/08/2026 form
+// tạo Lead thật, nên trên host nghiệm thu (test.satarobo.vn) bấm nút là nhảy
+// thẳng sang PROD và phiếu thử tiếp theo đẻ lead THẬT. Ở lại đúng host đang đứng.
+(function () {
+  var btn = document.querySelector('.btn');
+  if (!btn) return;
+  var onSaleHost = location.hostname === 'sale.satarobo.vn';
+  btn.setAttribute('href', onSaleHost ? '/' : '/sale/nhap-lieu.html');
+})();
+
 document.querySelector('.btn').addEventListener('click',function(e){
-  var h=this.getAttribute('href');if(!h||h==='#'){e.preventDefault();window.location.href='https://sale.satarobo.vn/';}
+  var h=this.getAttribute('href');if(!h||h==='#'){e.preventDefault();window.location.href='/';}
 });
+
+// Server báo lại kết quả qua query param. Nói thẳng khi phiếu rơi vào SĐT đã có
+// — người nhập cần biết là mình KHÔNG tạo ra khách mới, thay vì tưởng đã xong.
+(function(){
+  var q = new URLSearchParams(location.search);
+  var lead = document.getElementById('sr-lead');
+  if (!lead) return;
+  if (q.get('child') === '1') {
+    lead.innerHTML = 'Số điện thoại này <strong>đã có trong hệ thống</strong> — đây là <strong>thêm một bé nữa</strong> của cùng phụ huynh. '
+      + 'Bé mới đã được gắn vào đúng hồ sơ cũ, không tạo khách trùng.';
+  } else if (q.get('dup') === '1') {
+    lead.innerHTML = 'Số điện thoại này <strong>đã có người phụ trách</strong> nên hệ thống không tạo khách mới. '
+      + 'Phiếu của bạn đã được ghi vào hồ sơ đang có — mở mục Lead để xem ai đang chăm.';
+  }
+})();
 </script>
 </body>
 </html>

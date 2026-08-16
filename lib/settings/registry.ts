@@ -34,7 +34,8 @@ export type SettingGroup =
   | "cron"
   | "dashboard"
   | "makeup"
-  | "chat";
+  | "chat"
+  | "system";
 
 export interface SettingDef<T = unknown> {
   key: string;
@@ -292,6 +293,26 @@ export const SETTINGS = {
     schema: z.number().int().min(0).max(30),
     default: 7,
     centerOverridable: true,
+  }),
+  // ── Nền Hệ thống P4 · US-13 · AC2 ──────────────────────────────────────────
+  // Cutover đơn vị đo của phạm vi dữ liệu: `centerId` → `orgUnitId`.
+  //
+  // Ở ĐÂY chứ không ở env vì AC2 đòi rollback MỘT thao tác, KHÔNG cần deploy: đổi env
+  // trên Vercel là phải redeploy, và suốt lúc chờ thì quyền vẫn sai. Sửa ở màn Cấu hình
+  // là có audit + lý do bắt buộc sẵn.
+  //
+  // ⚠️ CHỈ BẬT khi `scripts/nen-p4-kiem-cong.ts` báo ĐẠT. Bật sớm = người dùng mất
+  // quyền ở đúng những chỗ mà pha shadow chưa kịp đo (target chưa mang `orgUnitId` thì
+  // resolver mới TỪ CHỐI — cố ý fail-closed, không rơi ngược về centerId).
+  //
+  // Rollback: đặt lại `false` — có hiệu lực trong ≤5 phút (TTL cache cấu hình), không deploy.
+  "orgScope.cutoverEnabled": def({
+    key: "orgScope.cutoverEnabled",
+    group: "system",
+    label: "Cutover phạm vi dữ liệu sang cây đơn vị (orgUnitId)",
+    schema: z.boolean(),
+    default: false,
+    centerOverridable: false, // quyền không được lệch nhau giữa các cơ sở
   }),
   "student.birthdayZnsEnabled": def({
     key: "student.birthdayZnsEnabled",
@@ -605,6 +626,45 @@ export const SETTINGS = {
     label: "Cửa sổ rate-limit form lead (ms)",
     schema: z.number().int().min(1000).max(3_600_000),
     default: 60_000,
+    centerOverridable: false,
+  }),
+  // ── Nhận lead từ nguồn ngoài (form Sale, quatang) ───────────────────────
+  // Đặt ở SystemSetting chứ KHÔNG ở env: theo QĐ-3 (16/08) MISA sẽ bị bỏ hẳn
+  // sau khi lead chảy về ổn định. Ngày đó chỉ cần tắt 1 nút, không phải deploy.
+  // Tắt = ngừng gửi bản sao sang MISA; Lead trong DB ta không đổi gì.
+  "intake.mirrorMisa": def({
+    key: "intake.mirrorMisa",
+    group: "crm",
+    label:
+      "Gửi kèm bản sao phiếu nhập của Sale sang MISA (giai đoạn chuyển tiếp — tắt khi bỏ MISA)",
+    schema: z.boolean(),
+    default: true, // app/api/public/lead-intake/sale-form/route.ts
+    centerOverridable: false,
+  }),
+  "intake.saleFormRateLimitMax": def({
+    key: "intake.saleFormRateLimitMax",
+    group: "crm",
+    label: "Số phiếu nhập tối đa / phút / IP trên form Sale",
+    schema: z.number().int().min(1).max(200),
+    // Rộng hơn form khách (5) vì đây là NHÂN VIÊN nhập liên tiếp tại quầy/sự kiện.
+    default: 30,
+    centerOverridable: false,
+  }),
+  "intake.alertFailedPerHour": def({
+    key: "intake.alertFailedPerHour",
+    group: "crm",
+    label: "Cảnh báo khi 1 nguồn lead có từng này phiếu LỖI trong 1 giờ",
+    schema: z.number().int().min(1).max(1000),
+    default: 3, // lib/lead/intake/health.ts
+    centerOverridable: false,
+  }),
+  "intake.alertSilentHours": def({
+    key: "intake.alertSilentHours",
+    group: "crm",
+    label: "Cảnh báo khi nguồn lead (vốn chạy đều) im lặng quá số giờ này",
+    schema: z.number().int().min(1).max(168),
+    // 24h: lưu lượng thật chỉ ~2 lead/ngày nên ngưỡng ngắn hơn chỉ đẻ báo động giả.
+    default: 24,
     centerOverridable: false,
   }),
   // ── Cron nhắc lịch (hardcode remediation): cửa sổ quét + idempotency ──

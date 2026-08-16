@@ -9,6 +9,20 @@ export function isRbacV2Enabled(): boolean {
 }
 
 /**
+ * Nền Hệ thống P3 · US-12 — chạy SHADOW cho resolver dataScope đo bằng `orgUnitId`.
+ *
+ * Bật KHÔNG đổi hành vi quyền một chút nào: shadow chỉ so và ghi log (`ScopeShadowDiff`).
+ * Cái nó đổi là TẢI — thêm vài lượt ghi DB thưa. Mặc định OFF để môi trường nào chưa áp
+ * migration P3 cũng không sinh lỗi.
+ *
+ * Đây KHÔNG phải cờ cutover. Cờ cutover là `ORG_SCOPE_CUTOVER_ENABLED` (US-13) và chỉ
+ * được bật sau khi `congCutoverDat()` báo ĐẠT.
+ */
+export function isScopeShadowEnabled(): boolean {
+  return process.env.SCOPE_SHADOW_ENABLED === "true";
+}
+
+/**
  * AUTH-SĐT P4 — cờ break-glass khi ZBS/ZNS sự cố hàng loạt: OTP tới SĐT BỎ QUA
  * kênh Zalo, đi thẳng email dự phòng (chỉ user có email đã verify). Bật bằng env
  * `AUTH_ZNS_DEGRADED="true"` + redeploy; mặc định OFF. Phụ huynh không có email

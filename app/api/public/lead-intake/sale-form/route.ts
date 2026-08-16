@@ -1,0 +1,196 @@
+import { NextRequest, NextResponse } from "next/server";
+import { rateLimit } from "@/lib/rate-limit";
+import { getSetting } from "@/lib/settings/service";
+import { ingestIntakeLead } from "@/lib/lead/intake/ingest";
+import {
+  mapSaleForm,
+  SALE_FORM_HONEYPOT,
+} from "@/lib/lead/intake/map-sale-form";
+import { mirrorSaleFormToMisa } from "@/lib/lead/intake/misa-mirror";
+import { logWebhookDelivery } from "@/lib/lead/webhook";
+
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+
+// =============================================================================
+// NHẬN PHIẾU "Form nhập liên hệ từ Sale" — sale.satarobo.vn/nhap-lieu.html
+//
+// Trước 16/08/2026 form POST thẳng sang MISA và hệ thống ta KHÔNG có gì. Nay
+// nó POST về đây: tạo Lead thật (admin + site Sale xử lý được), rồi gửi bản sao
+// sang MISA trong giai đoạn chuyển tiếp (cờ `intake.mirrorMisa`).
+//
+// Đây là POST FORM CỦA TRÌNH DUYỆT, không phải fetch JSON:
+//  - body là `application/x-www-form-urlencoded`;
+//  - phải trả 303 + Location, KHÔNG trả JSON (người nhập sẽ thấy JSON thô);
+//  - lỗi thì trả 1 trang HTML nhỏ có nút quay lại, để người nhập không mất
+//    công gõ lại cả phiếu.
+//
+// Route nằm dưới `/api/*` nên đi thẳng qua cổng host `sale` mà không cần auth
+// (`isInfraPath` trong `lib/auth/route-policy.ts`).
+// =============================================================================
+
+const SALE_HOST = "sale.satarobo.vn";
+const MAX_BODY_BYTES = 100_000;
+
+/**
+ * Trên host sale, `/thank-you` được rewrite sang file tĩnh. Trên host khác
+ * (test.satarobo.vn, localhost) KHÔNG có rewrite đó, nên phải trỏ thẳng file —
+ * nếu không thì nghiệm thu trên test sẽ 404 ở đúng bước cuối.
+ */
+function pagePath(host: string, pretty: string, file: string): string {
+  return host.toLowerCase() === SALE_HOST ? pretty : file;
+}
+
+function redirect(req: NextRequest, path: string, params: Record<string, string>) {
+  const url = new URL(path, req.nextUrl.origin);
+  for (const [k, v] of Object.entries(params)) url.searchParams.set(k, v);
+  // 303: đổi POST thành GET khi đi tiếp — bấm F5 ở trang cảm ơn sẽ không gửi
+  // lại phiếu (nguồn kinh điển của lead trùng).
+  return NextResponse.redirect(url, 303);
+}
+
+function errorPage(message: string, status: number) {
+  const safe = message.replace(/[<>&]/g, (c) =>
+    c === "<" ? "&lt;" : c === ">" ? "&gt;" : "&amp;",
+  );
+  const html = `<!doctype html>
+<html lang="vi"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<title>Chưa lưu được phiếu</title>
+<style>
+  body{margin:0;min-height:100vh;display:grid;place-items:center;background:#f6f5fb;
+       font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;color:#1f2937;padding:24px}
+  .box{max-width:440px;background:#fff;border-radius:18px;padding:28px;
+       box-shadow:0 10px 30px rgba(107,33,168,.12);text-align:center}
+  h1{font-size:20px;margin:0 0 10px;color:#6B21A8}
+  p{margin:0 0 20px;line-height:1.6}
+  button{border:0;border-radius:12px;padding:12px 22px;font-size:15px;font-weight:600;
+         background:#6B21A8;color:#fff;cursor:pointer}
+</style></head>
+<body><div class="box">
+  <h1>Chưa lưu được phiếu</h1>
+  <p>${safe}</p>
+  <button onclick="history.back()">← Quay lại sửa phiếu</button>
+</div></body></html>`;
+  return new NextResponse(html, {
+    status,
+    headers: { "Content-Type": "text/html; charset=utf-8" },
+  });
+}
+
+/** Vào thẳng bằng trình duyệt (GET) → đưa về form, đừng trả 405 khó hiểu. */
+export async function GET(req: NextRequest) {
+  const host = req.headers.get("host") ?? "";
+  return NextResponse.redirect(
+    new URL(pagePath(host, "/", "/sale/nhap-lieu.html"), req.nextUrl.origin),
+    303,
+  );
+}
+
+export async function POST(req: NextRequest) {
+  const host = req.headers.get("host") ?? "";
+  const thankYou = pagePath(host, "/thank-you", "/sale/thank-you.html");
+
+  const ip =
+    req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
+    req.headers.get("x-real-ip") ||
+    "unknown";
+
+  try {
+    // Chốt kích thước 2 lớp. Header là đường nhanh nhưng KHÔNG tin được: HTTP/2
+    // và chunked thường không gửi `content-length`, và `Number(null ?? 0)` = 0
+    // lọt qua mọi so sánh. Nên phải đo lại chính chuỗi đã đọc.
+    const declared = Number(req.headers.get("content-length"));
+    if (Number.isFinite(declared) && declared > MAX_BODY_BYTES) {
+      return errorPage("Dữ liệu gửi lên quá lớn.", 413);
+    }
+
+    const raw = await req.text();
+    if (raw.length > MAX_BODY_BYTES) {
+      console.warn(`[sale-form] body ${raw.length} byte vượt trần, ip: ${ip}`);
+      return errorPage("Dữ liệu gửi lên quá lớn.", 413);
+    }
+    const payload = Object.fromEntries(new URLSearchParams(raw).entries());
+
+    // Bẫy bot: ô ẩn, người thật không thấy nên luôn rỗng. Trả về như thành công
+    // để bot không dò ra là đã bị chặn.
+    //
+    // ⚠️ Phiếu bị vứt HẲN ở đây. Nếu một ngày trình quản lý mật khẩu tự điền ô
+    // này thì đó là lead thật bị mất — nên GHI CẢ PAYLOAD vào WebhookDelivery
+    // để còn cứu được, thay vì chỉ log mỗi IP rồi mất trắng.
+    if ((payload[SALE_FORM_HONEYPOT] ?? "").length > 0) {
+      console.warn("[sale-form] honeypot dính, ip:", ip);
+      await logWebhookDelivery({
+        source: "sale-form",
+        payload,
+        status: "FAILED",
+        errorMessage: `Honeypot "${SALE_FORM_HONEYPOT}" có giá trị — nghi bot, không tạo lead. IP ${ip}.`,
+      }).catch((err) => console.error("[sale-form] không ghi được honeypot log:", err));
+      return redirect(req, thankYou, { ok: "1" });
+    }
+
+    const max = await getSetting("intake.saleFormRateLimitMax");
+    const limit = await rateLimit({
+      key: `sale-form:${ip}`,
+      max,
+      windowMs: 60_000,
+    });
+    if (!limit.success) {
+      return errorPage(
+        "Bạn gửi hơi nhanh. Đợi khoảng một phút rồi gửi lại giúp nhé.",
+        429,
+      );
+    }
+
+    const mapped = mapSaleForm(payload);
+    if (!mapped.ok) return errorPage(mapped.error, 400);
+
+    const result = await ingestIntakeLead(mapped.lead, {
+      source: "sale-form",
+      ipAddress: ip,
+      userAgent: req.headers.get("user-agent"),
+      landingPage: req.headers.get("referer"),
+      actorName: "Hệ thống (form Sale)",
+    });
+
+    if (!result.ok) {
+      return errorPage(
+        result.error ?? "Lỗi hệ thống, thử lại giúp nhé.",
+        500,
+      );
+    }
+
+    // Bản sao sang MISA — Postgres đã ghi xong nên hỏng ở đây KHÔNG ảnh hưởng
+    // lead. Await để serverless không giết tiến trình giữa chừng.
+    //
+    // Hỏng thì phải để lại VẾT GỬI LẠI ĐƯỢC, không chỉ một dòng console: trong
+    // giai đoạn chuyển tiếp MISA vẫn là chỗ Sale làm việc, mà `console.error`
+    // không tới Sentry và không ai đọc log Vercel. `WebhookDelivery` là cơ chế
+    // sẵn có của repo cho đúng việc này (có màn replay). Bài học SePay: 401 im
+    // lặng 6 ngày nuốt 4 giao dịch vì không có chỗ nào nhìn thấy.
+    const mirror = await mirrorSaleFormToMisa(payload);
+    if (mirror.status === "failed" || mirror.status === "misconfigured") {
+      console.error(`[sale-form] mirror MISA: ${mirror.status}`, mirror);
+      await logWebhookDelivery({
+        source: "misa-mirror",
+        externalId: result.leadId ?? null,
+        payload,
+        status: "FAILED",
+        errorMessage:
+          mirror.status === "misconfigured"
+            ? `Thiếu env: ${mirror.missing.join(", ")} — MISA không nhận được phiếu này.`
+            : `Gửi MISA thất bại (${mirror.reason}).`,
+      }).catch((err) => console.error("[sale-form] không ghi được mirror log:", err));
+    }
+
+    return redirect(req, thankYou, {
+      ok: "1",
+      ...(result.duplicate ? { dup: "1" } : {}),
+      ...(result.childAdded ? { child: "1" } : {}),
+    });
+  } catch (err) {
+    console.error("[POST /api/public/lead-intake/sale-form]", err);
+    return errorPage("Lỗi hệ thống, thử lại giúp nhé.", 500);
+  }
+}

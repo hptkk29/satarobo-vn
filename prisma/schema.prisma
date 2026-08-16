@@ -841,6 +841,43 @@ model CommissionLine {
 
 // R6-F2 — Bản ghi LỆCH giữa can() v1 (matrix) và v2 (DB actor) khi shadow-run.
 // Mục tiêu: report = 0 trong N ngày → an toàn bật RBAC_V2_ENABLED. Chỉ ghi khi LỆCH.
+/// P3 · US-12 — lệch giữa resolver dataScope CŨ (đo centerId) và MỚI (đo orgUnitId).
+///
+/// BẢNG RIÊNG, không dùng chung `RbacShadowDiff`: bảng kia so `can()` v1↔v2 và có một
+/// cổng đang đọc nó (`isSafeToEnableRbacV2`). Trộn hai phép so vào một bảng làm cả hai
+/// báo cáo mất nghĩa và cổng kia đếm nhầm.
+///
+/// `ketQua` có BA giá trị chứ không phải hai: ngoài `LECH` còn `CHUA_PHU` — chỗ gọi
+/// chưa truyền `orgUnitId` nên không so được. Đếm riêng vì đó là ĐỘ PHỦ, không phải
+/// lỗi; và vì coi nó là lệch thì cổng 7 ngày sẽ không bao giờ xanh vì lý do sai.
+model ScopeShadowDiff {
+  id              String   @id @default(cuid())
+  /// LECH | CHUA_PHU — `GIONG` KHÔNG ghi (ghi mọi request là tự DDoS chính mình).
+  ketQua          String
+  permissionKey   String
+  /// "grant" (bảng PermissionGrant P0) hay "perm" (đường cũ đang enforce) — biết
+  /// shadow phủ được nhánh nào.
+  nguon           String
+  userId          String
+  /// Kết quả đường CŨ (đang chạy thật). Đây là thứ người dùng thực sự nhận được.
+  cu              Boolean
+  /// Kết quả đường MỚI; null khi `CHUA_PHU`.
+  moi             Boolean?
+  /// Ngữ cảnh đủ để TÁI HIỆN (AC2) — không phải chỉ để đếm.
+  roleId          String?
+  targetCenterId  String?
+  targetOrgUnitId String?
+  /// Đơn vị của dòng log (luật cứng #3). = targetOrgUnitId khi có, để lọc theo đơn vị.
+  orgUnitId       String?
+  lyDo            String?
+  createdAt       DateTime @default(now()) @db.Timestamptz(6)
+
+  @@index([createdAt])
+  @@index([ketQua, createdAt])
+  @@index([permissionKey])
+  @@index([orgUnitId])
+}
+
 model RbacShadowDiff {
   id        String   @id @default(cuid())
   action    String

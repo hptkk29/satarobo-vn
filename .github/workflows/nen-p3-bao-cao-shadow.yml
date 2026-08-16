@@ -1,0 +1,71 @@
+name: Nền P3 — báo cáo shadow resolver dataScope
+
+# =============================================================================
+# US-12 · AC4 — báo cáo hằng ngày của pha shadow (resolver đo bằng `orgUnitId`
+# chạy song song resolver đang enforce, đo bằng `centerId`).
+#
+# CHỈ ĐỌC. Không ghi gì, không đổi quyền gì.
+#
+# ── ĐỌC CON SỐ NÀO TRƯỚC ────────────────────────────────────────────────────
+# Không phải "LỆCH". Là **CHƯA PHỦ**. `LỆCH = 0` trong khi `CHƯA PHỦ` còn cao
+# nghĩa là resolver mới hầu như CHƯA được thử — sạch trên mẫu rỗng. Vì vậy
+# workflow này KHÔNG bao giờ đỏ khi lệch = 0: nó chỉ in số. Việc chặn/cho qua
+# là của cổng cutover ở US-13.
+#
+# ── VÌ SAO ĐO TRÊN PROD ─────────────────────────────────────────────────────
+# `test` và máy local DÙNG CHUNG một DB, và lưu lượng ở đó là do dev tạo ra —
+# không đại diện cho cách người thật dùng hệ thống. "7 ngày sạch" đo trên lưu
+# lượng dev là con số tự lừa mình. Mặc định vì thế là PROD.
+#
+# SECRETS: PROD_DIRECT_URL (dùng chung deploy.yml).
+# =============================================================================
+
+on:
+  schedule:
+    # 20:00 UTC = 03:00 giờ VN — sau khi ngày làm việc đã đóng.
+    - cron: "0 20 * * *"
+  workflow_dispatch:
+    inputs:
+      ngay:
+        description: "Cửa sổ báo cáo (số ngày)"
+        required: false
+        default: "7"
+
+concurrency:
+  group: nen-p3-bao-cao-shadow
+  cancel-in-progress: false
+
+jobs:
+  bao-cao:
+    name: báo cáo shadow (${{ inputs.ngay || 7 }} ngày)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Kiểm secret
+        run: |
+          [ -n "${{ secrets.PROD_DIRECT_URL }}" ] || { echo "::error::Thiếu secret PROD_DIRECT_URL"; exit 1; }
+
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v3
+        with: { version: 11 }
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Generate Prisma client
+        run: pnpm exec prisma generate
+
+      - name: Báo cáo
+        run: |
+          set -euo pipefail
+          pnpm exec tsx scripts/nen-p3-bao-cao-shadow.ts --ngay "${{ inputs.ngay || 7 }}" \
+            | tee -a "$GITHUB_STEP_SUMMARY"
+        env:
+          # session pooler (:5432) — transaction pooler làm rơi prepared statement.
+          DATABASE_URL: ${{ secrets.PROD_DIRECT_URL }}
+          DIRECT_URL: ${{ secrets.PROD_DIRECT_URL }}

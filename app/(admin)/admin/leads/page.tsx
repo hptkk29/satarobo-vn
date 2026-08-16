@@ -556,7 +556,7 @@ function FilterBar({
         <input
           name="source"
           defaultValue={params.source ?? ''}
-          placeholder="vd: sata1, lien-he"
+          placeholder="vd: sata1, sale-form, quatang"
           className="w-36 rounded border px-2 py-1.5 text-sm"
         />
       </div>
