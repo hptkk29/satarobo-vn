@@ -496,6 +496,62 @@ function retrySataRoboFailed() {
   Logger.log('Đã gửi lại ' + retried + ' dòng FAIL.');
 }
 
+// ============ v2.6 — KÉO VỀ CÁC DÒNG BỊ BỎ QUA LÚC CHƯA CẤU HÌNH ============
+// `retrySataRoboFailed()` CHỈ nhặt dòng có W bắt đầu bằng 'FAIL'. Dòng bị bỏ qua
+// vì THIẾU Script Property (hoặc web-app còn chạy bản cũ) có W **TRỐNG**, nên nó
+// không nhặt — lead trong khoảng thời gian đó sẽ nằm lại sheet mãi mãi.
+//
+// Hàm này lấp đúng khoảng đó: đẩy các dòng có W TRỐNG kể từ một mốc ngày.
+//
+// Bắt buộc đặt Script Property `SATAROBO_PUSH_FROM` = 'yyyy-mm-dd' trước khi chạy.
+// Có chốt chặn này vì QĐ-2 đã chốt KHÔNG backfill lịch sử — quên mốc là bắn cả
+// trăm lead cũ từ tháng 5 sang Sale.
+function pushSataRoboMissing() {
+  const props = PropertiesService.getScriptProperties();
+  const fromRaw = props.getProperty('SATAROBO_PUSH_FROM');
+  if (!fromRaw) {
+    Logger.log(
+      'DỪNG: chưa đặt Script Property SATAROBO_PUSH_FROM (yyyy-mm-dd).\n' +
+      'Đặt đúng ngày bật đường quatang rồi chạy lại — cố ý bắt khai mốc để không ' +
+      'kéo nhầm lead cũ (QĐ-2: không backfill lịch sử).');
+    return;
+  }
+  const from = new Date(fromRaw + 'T00:00:00+07:00');
+  if (isNaN(from.getTime())) { Logger.log('SATAROBO_PUSH_FROM không phải ngày hợp lệ: ' + fromRaw); return; }
+
+  const sheet = getSpreadsheet_().getSheetByName(SHEET_NAME);
+  const last = sheet.getLastRow();
+  if (last < 2) { Logger.log('Không có dòng dữ liệu.'); return; }
+
+  const n = last - 1;
+  const rows = sheet.getRange(2, 1, n, 23).getValues();
+  let pushed = 0, skippedOld = 0;
+
+  for (let i = 0; i < n; i++) {
+    const r = rows[i];
+    if (String(r[22] || '').trim() !== '') continue;      // W đã có kết quả → bỏ qua
+    if (!r[3]) continue;                                   // không có SĐT → không phải dòng lead
+
+    const ts = r[0] instanceof Date ? r[0] : new Date(r[0]);
+    if (isNaN(ts.getTime()) || ts < from) { skippedOld++; continue; }
+
+    const data = {
+      ho_ten_con: r[1], ho_ten: r[2], sdt: String(r[3]), email: r[4],
+      truong: r[5], lop: r[6], co_so: r[7], tinh: r[8], source: r[9],
+      ip: r[10], user_agent: r[11],
+      aff_ma_link_cuoi: r[14], aff_ma_link_dau: r[15],
+      aff_click_id: r[17], aff_thoi_diem_click: r[18], aff_utm: r[19],
+      misa_status: r[20],
+    };
+    pushToSataRobo_(sheet, i + 2, data, String(r[3]), String(r[16] || ''), String(r[21] || ''), ts);
+    pushed++;
+    Utilities.sleep(300); // đừng bắn dồn
+  }
+
+  Logger.log('Đã đẩy ' + pushed + ' dòng còn trống cột W (bỏ qua ' + skippedOld +
+    ' dòng trước mốc ' + fromRaw + ').');
+}
+
 // ============ TEST ============
 function testAppendRow() {
   const sheet = ensureSheet_();
