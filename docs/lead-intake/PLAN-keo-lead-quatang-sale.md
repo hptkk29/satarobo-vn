@@ -2,9 +2,10 @@
 
 > Lập 16/08/2026. Nguồn quyết định: user chốt 3 điểm ngày 16/08 (mục §0).
 >
-> **Trạng thái 16/08/2026:** P0 ✅ · **P1 ✅** · **P2 ✅** (nhánh `feat/lead-intake-quatang-sale`,
-> chưa merge) · P3 ⏸ **chờ mã `doPost` của Apps Script** · P4 ⬜ · P5 ⬜.
-> Chi tiết những gì đã dựng + cách kiểm lại: §8.
+> **Trạng thái 16/08/2026:** P0 ✅ · **P1 ✅** · **P2 ✅** · **P4 ✅** — đã đẩy lên nhánh `test`
+> (CI + Migrate TEST DB xanh), **chưa merge `main`** nên `sale.satarobo.vn` trên prod CHƯA đổi.
+> P3 ⏸ **chờ mã `doPost` của Apps Script** · P5 ⬜.
+> Chi tiết những gì đã dựng + cách kiểm lại: §8 · nhật ký review: §9 · P4: §10.
 
 ---
 
@@ -328,3 +329,59 @@ Tất cả đã vá + có test hồi quy.
 
 `typecheck` · `lint` · `build` xanh · **48 unit test** · **13 test tích hợp DB** (thêm 4 ca hồi quy đúng cho
 2 lỗi CAO + cảnh báo bị nuốt + hồ sơ đóng) · smoke HTTP lại đủ 5 đường đã sửa · guard UI kiểm trên trình duyệt.
+
+---
+
+## 10. P4 — nhìn thấy được & không chết im (16/08/2026)
+
+Không có phần này thì cả đợt là một đường ống **không có đồng hồ**: form vẫn hiện, người nhập
+vẫn thấy trang cảm ơn, lead cứ thế không về mà chẳng ai biết. Đúng hình dạng sự cố webhook SePay
+(401 im lặng 6 ngày, nuốt 4 giao dịch ~26,8 triệu).
+
+### Đã có sẵn, không phải xây lại
+
+Trang `/admin/crm/webhook-replay` vốn liệt kê **mọi** `WebhookDelivery` FAILED, nên phiếu lỗi của
+đợt này (`sale-form` khi honeypot dính, `misa-mirror` khi MISA từ chối) **tự hiện ở đó**.
+
+### Việc thêm
+
+**1. Replay được cho 2 nguồn mới** (`lib/crm/webhook-replay.ts`) — trước chỉ `facebook-messenger`,
+nguồn khác ném `SOURCE_UNSUPPORTED`, tức nhìn thấy mà không cứu được.
+- `sale-form` → map lại + `ingestIntakeLead`. **Bỏ ô bẫy bot trước khi map**, không thì replay
+  rơi vào đúng cái bẫy cũ. Trùng SĐT ⇒ tính là xong, không phải lỗi.
+- `misa-mirror` → gửi lại sang MISA; cờ đang tắt / thiếu tham số / MISA vẫn từ chối đều báo
+  lý do RIÊNG chứ không gộp thành "thất bại".
+
+**2. Cron canh sức khoẻ** — `lib/lead/intake/health.ts` + `/api/cron/lead-intake-health`,
+chạy **mỗi giờ** (`35 * * * *`), đẩy `StaffNotification` cho SUPER_ADMIN (dedupe chống spam).
+
+Hai tín hiệu, **cố ý khác bản chất**:
+
+| Tín hiệu | Cách dò | Vì sao làm thế |
+|---|---|---|
+| `failing` | ≥ N phiếu FAILED của cùng 1 nguồn trong 1 giờ (`intake.alertFailedPerHour`, mặc định 3) | Tín hiệu TRỰC TIẾP, không cần biết lưu lượng bình thường |
+| `silent` | Nguồn có **≥7 lead trong 7 ngày trước** mà **0 lead trong 24 giờ qua** (`intake.alertSilentHours`) | So với **nền của chính nguồn đó**, KHÔNG đặt ngưỡng tuyệt đối |
+
+> Vì sao không đặt ngưỡng cứng kiểu "0 lead trong 6 giờ ⇒ kêu": lưu lượng thật chỉ **~2 lead/ngày**
+> (đo trên sheet quatang, §6-F9). Ngưỡng cứng ở mức đó kêu suốt ngày, bị phớt lờ, rồi **lần hỏng
+> thật cũng bị phớt lờ theo**. Một bộ dò hay báo động giả còn tệ hơn không có bộ dò nào.
+
+Khoá dedupe mang **ngày/giờ VN** (`lib/time/vn.ts`) chứ không phải UTC — cron chạy trên UTC còn
+người đọc thông báo sống ở +07; lệch múi giờ là cảnh báo bị gom nhầm ngày.
+
+### Test (8 ca, `tests/lead-intake/health.spec.ts`)
+
+Phần đáng test nhất **không phải "có kêu không" mà là "có kêu SAI không"**:
+dưới ngưỡng ⇒ im · lỗi cũ hơn 1 giờ ⇒ không kêu lại · **nguồn lưu lượng thấp im 1 ngày ⇒ KHÔNG kêu** ·
+nguồn vẫn đang về lead ⇒ không kêu dù nền dày · nguồn ngoài danh sách canh ⇒ bỏ qua ·
+khoá dedupe đúng giờ VN (17:00 VN chứ không phải 10:00 UTC).
+
+> Chính bộ test này bắt được một lỗi rò dữ liệu giữa các ca: các ca "im lặng" buộc phải dùng
+> tên nguồn THẬT (`sale-form`) vì bộ dò chỉ xét `MONITORED_SOURCES`, nên hàm dọn lọc theo tiền tố
+> nguồn đã bỏ sót chúng — lead ca trước đẩy nền ca sau vượt ngưỡng. Nay dọn theo `parentName`.
+
+### Còn thiếu (không chặn go-live)
+
+- Chưa gửi email/ZNS — mới dừng ở chuông `StaffNotification` trong admin.
+- `quatang` đã nằm trong `MONITORED_SOURCES` nhưng chưa có lead nào, nên nhánh `silent`
+  chỉ thực sự có ý nghĩa sau khi P3 chạy.

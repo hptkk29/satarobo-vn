@@ -650,6 +650,23 @@ export const SETTINGS = {
     default: 30,
     centerOverridable: false,
   }),
+  "intake.alertFailedPerHour": def({
+    key: "intake.alertFailedPerHour",
+    group: "crm",
+    label: "Cảnh báo khi 1 nguồn lead có từng này phiếu LỖI trong 1 giờ",
+    schema: z.number().int().min(1).max(1000),
+    default: 3, // lib/lead/intake/health.ts
+    centerOverridable: false,
+  }),
+  "intake.alertSilentHours": def({
+    key: "intake.alertSilentHours",
+    group: "crm",
+    label: "Cảnh báo khi nguồn lead (vốn chạy đều) im lặng quá số giờ này",
+    schema: z.number().int().min(1).max(168),
+    // 24h: lưu lượng thật chỉ ~2 lead/ngày nên ngưỡng ngắn hơn chỉ đẻ báo động giả.
+    default: 24,
+    centerOverridable: false,
+  }),
   // ── Cron nhắc lịch (hardcode remediation): cửa sổ quét + idempotency ──
   "cron.renewalReminderMinDays": def({
     key: "cron.renewalReminderMinDays",
