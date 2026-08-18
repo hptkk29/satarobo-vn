@@ -32,10 +32,11 @@ Dữ liệu test đã dọn sạch sau nghiệm thu (DB 0 record, R2 0 object, v
 
 1. 🔴→✅ **Bucket R2 của env test (`satarobo-test`) chưa từng được áp CORS** → trước 18/08 **mọi role** đều không upload được ảnh qua browser trên test.satarobo.vn (preflight OPTIONS 403, "chết câm" — server presign vẫn 200 nên không test tự động nào bắt được; y hệt sự cố bucket chat 10/08). **Đã vá 18/08** (áp CORS qua Cloudflare dashboard — token trong `.env.r2test` và `.env.local` đều không có quyền `PutBucketCors`). Bài học lặp: bucket mới nào cũng phải chạy `scripts/apply-r2-cors.ts --bucket=<tên>` một lần.
 2. ✅ **RBAC v2 đang ON trên env `test`** — xác minh thực nghiệm 18/08 (vai chỉ-có-ở-v2 hoạt động). Test = prod = v2; chỉ local/dev còn chạy v1.
-3. ⚠️ **Chưa kiểm CORS bucket PROD** cho luồng upload ảnh browser trên `admin.satarobo.vn`/`giaovien.satarobo.vn` — nếu bucket prod cũng chưa áp CORS thì upload ảnh trên prod chết câm y hệt. Nên smoke 1 lần trên prod.
+3. 🔴 **Bucket PROD `satarobo-assets` THIẾU origin `giaovien.satarobo.vn`** — đo 18/08 bằng preflight OPTIONS+PUT thật (không cần creds): `satarobo.vn`/`www`/`hocvien`/`admin`/`localhost:3000` đều 204 + ACAO, riêng **`giaovien.satarobo.vn` → 403** (CORS bucket này áp từ TRƯỚC khi site GV ra đời 07/2026, chưa refresh theo `scripts/r2-cors.json`). Hệ quả: **GV thuần trên PROD không upload được ảnh lớp** (site giaovien → presign OK nhưng PUT bị chặn, "chết câm" y hệt sự cố bucket test/chat). `satarobo-chat` và `satarobo-test` đã đủ origin (đo cùng lúc, 204 toàn bộ).
 
 **Việc còn treo của module:**
 
+- 🔴 **Áp lại CORS cho bucket PROD `satarobo-assets`** (thêm `giaovien.satarobo.vn` — dán rules `scripts/r2-cors.json` qua Cloudflare dashboard, vì token trong `.env.local`/`.env.r2test` đều không có quyền `PutBucketCors`). Xong thì smoke 1 lần upload ảnh từ site GV prod.
 - ⬜ **Gán vai Giáo vụ cho người thật** — DB test/dev hiện KHÔNG ai giữ `CENTER_CLASS_MANAGER` (ngoài `uat.sale@satarobo.vn`); gán qua `/admin/users/[id]/org-roles`. Prod: cần seed-prod-roles đã chạy sau 11/08 (RoleDef `media:upload-draft`) — dev/test đã seed, prod chưa xác minh từ phiên này.
 - ⬜ **Cờ `MEDIA_SIGNED_URL` vẫn OFF** (`lib/flags.ts:81`, mặc định OFF) — ảnh lớp đang render bằng URL R2 công khai (`pub-*.r2.dev`); bật dần để siết quyền truy cập ảnh (mục 🟡 từ bản 28/07, còn nguyên).
 - ⬜ Bug UX màn login (ảnh hưởng UAT tay, không riêng module này): form Waves **nuốt lần submit đầu** sau điều hướng (hydration wipe) — fix nằm ở branch `fix/teacher-e2e-login-hydration` CHƯA merge.
