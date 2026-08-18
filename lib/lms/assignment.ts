@@ -3,6 +3,7 @@
 // FL-R2 W5 (R2-LMS-4): + tự sinh Assignment từ AssignmentTemplate khi tạo lớp.
 import type {
   AssignmentSubmission,
+  Prisma,
   SubmissionStatus,
   QuestionType,
   QuestionDifficulty,
@@ -208,6 +209,8 @@ export type TemplateSourceQuestion = {
   timeLimitSec: number | null;
   lessonId: string | null;
   correctAnswer: string | null;
+  /** Parity 18/08 — payload soạn đề (FILL_BLANK/MATCHING/ORDERING/ui) PHẢI theo bản clone. */
+  meta: unknown;
   isPublic: boolean;
   notes: string | null;
   choices: { order: number; text: string; isCorrect: boolean; imageUrl: string | null }[];
@@ -232,6 +235,8 @@ export function cloneQuestionForAssignment(q: TemplateSourceQuestion) {
     timeLimitSec: q.timeLimitSec,
     lessonId: q.lessonId,
     correctAnswer: q.correctAnswer,
+    // Prisma JsonValue đọc ra là unknown; null DB → bỏ qua (cột nullable).
+    meta: (q.meta ?? undefined) as Prisma.InputJsonValue | undefined,
     isPublic: q.isPublic,
     notes: q.notes,
     choices: {
@@ -298,6 +303,7 @@ export async function generateAssignmentsFromTemplates(opts: {
               timeLimitSec: true,
               lessonId: true,
               correctAnswer: true,
+              meta: true, // Parity 18/08 — payload soạn đề theo bản clone
               isPublic: true,
               notes: true,
               choices: {

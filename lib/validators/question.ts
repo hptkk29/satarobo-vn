@@ -6,6 +6,12 @@ export const QuestionTypeEnum = z.enum([
   "SHORT_ANSWER",
   "ESSAY",
   "CODE",
+  // Parity site GV 18/08 — 3 loại soạn ở kho GV / thư viện mẫu (payload đặc thù nằm
+  // ở Question.meta; form ngân hàng admin không soạn mới nhưng SỬA hàng có sẵn
+  // không được đổi/ khoá kiểu). Không có rule choices/correctAnswer riêng.
+  "FILL_BLANK",
+  "MATCHING",
+  "ORDERING",
 ]);
 
 export const QuestionDifficultyEnum = z.enum([

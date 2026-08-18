@@ -17,6 +17,10 @@ const TYPE_INFO: Record<QuestionType, { label: string; color: string }> = {
   SHORT_ANSWER: { label: "Trả lời ngắn", color: "bg-state-warning-soft text-state-warning-ink" },
   ESSAY: { label: "Tự luận", color: "bg-primary-soft text-primary" },
   CODE: { label: "Lập trình", color: "bg-muted text-foreground" },
+  // Parity site GV 18/08 — 3 loại soạn ở kho GV / thư viện mẫu (payload ở Question.meta).
+  FILL_BLANK: { label: "Điền chỗ trống", color: "bg-state-info-soft text-state-info-ink" },
+  MATCHING: { label: "Ghép cặp", color: "bg-state-success-soft text-state-success-ink" },
+  ORDERING: { label: "Sắp xếp", color: "bg-state-warning-soft text-state-warning-ink" },
 };
 
 const DIFFICULTY_INFO: Record<QuestionDifficulty, { label: string; color: string }> = {

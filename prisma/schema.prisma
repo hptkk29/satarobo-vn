@@ -1990,6 +1990,7 @@ model ClassSession {
   attendances      Attendance[]
   studentFeedbacks StudentSessionFeedback[] // LMS-2
   skillAssessments StudentSkillAssessment[] // W4b — đánh giá kỹ năng gắn buổi
+  assignments      Assignment[] // Parity 18/08 — bài tập/kiểm tra gắn buổi
 
   @@index([classId])
   @@index([date])
@@ -2705,6 +2706,11 @@ enum QuestionType {
   SHORT_ANSWER
   ESSAY
   CODE
+  // Parity site GV 18/08 — 3 loại soạn đề mới (điền khuyết / ghép cặp / sắp xếp).
+  // Nội dung đặc thù nằm ở Question.meta; correctAnswer/choices không dùng.
+  FILL_BLANK
+  MATCHING
+  ORDERING
 }
 
 enum QuestionDifficulty {
@@ -2745,6 +2751,14 @@ model Question {
 
   // For SHORT_ANSWER / CODE / ESSAY
   correctAnswer String? @db.Text
+
+  // Parity site GV 18/08 — payload soạn đề theo loại (nguồn sự thật khi hiển thị/sửa):
+  //   MULTIPLE_CHOICE: { ui: "single" | "multiple" }  (radio 1 đáp án vs checkbox nhiều)
+  //   FILL_BLANK:      { answers: string[] }           (đáp án từng chỗ trống ______)
+  //   MATCHING:        { pairs: { left, right }[] }    (cặp đúng trái ↔ phải)
+  //   ORDERING:        { items: string[] }             (các mục theo ĐÚNG thứ tự)
+  // Null = câu hỏi cũ trước parity — suy ui từ số đáp án đúng.
+  meta Json?
 
   // For MULTIPLE_CHOICE / TRUE_FALSE
   choices Choice[]
@@ -2997,6 +3011,15 @@ model Assignment {
   assignedAt DateTime  @default(now()) @db.Timestamptz(6)
   dueAt      DateTime? @db.Timestamptz(6)
 
+  // Parity site GV 18/08 — bài KIỂM TRA có khung giờ làm bài; dueAt vẫn được set
+  // (= closeAt) để mọi màn cũ đọc dueAt không vỡ (2-phase).
+  openAt  DateTime? @db.Timestamptz(6)
+  closeAt DateTime? @db.Timestamptz(6)
+
+  // Parity site GV 18/08 — bài giao gắn với 1 buổi học cụ thể (không bắt buộc).
+  classSessionId String?
+  classSession   ClassSession? @relation(fields: [classSessionId], references: [id], onDelete: SetNull)
+
   allowText Boolean @default(true)
   allowFile Boolean @default(true)
 
@@ -3020,6 +3043,7 @@ model Assignment {
   @@index([dueAt])
   @@index([createdById])
   @@index([templateId])
+  @@index([classSessionId])
 }
 
 // FL W0 (FL1-06, QĐ-T2) — TEMPLATE bài tập (nguồn/bank theo KHUNG CHƯƠNG TRÌNH / buổi),

@@ -5,13 +5,10 @@ import { auth } from "@/lib/auth";
 import { checkPermission } from "@/lib/auth/check-permission";
 import { scopedDb } from "@/lib/db-scope";
 import { resolveActor } from "@/lib/auth/actor";
-import { buildQuestionWhere } from "@/lib/questions/filter";
+import { deserializeQuestionRow } from "@/lib/assignments/question-content-db";
 import { TemplateForm, type TemplateFormValue } from "../../_components/template-form";
 import { GenerateToClass } from "../../_components/generate-to-class";
-import {
-  TemplateQuestionPicker,
-  type QSummary,
-} from "../../_components/template-question-picker";
+import { TemplateQuestionsEditor } from "../../_components/template-questions-editor";
 
 export const dynamic = "force-dynamic";
 
@@ -58,31 +55,31 @@ export default async function EditTemplatePage({ params }: Props) {
     }),
   ]);
 
-  // Picker câu hỏi cho template: lọc ngân hàng câu hỏi theo KHUNG CT của template,
-  // chỉ câu hỏi public (chia sẻ giữa GV) — dùng helper chung buildQuestionWhere (FL1-03).
-  // Câu được chọn LƯU thành AssignmentTemplateQuestion; khi sinh bài giao sẽ CLONE.
-  const [bankQuestions, attachedLinks] = await Promise.all([
-    template.curriculumId
-      ? sdb.question.findMany({
-          where: buildQuestionWhere({
-            curriculumId: template.curriculumId,
-            publicOnly: true,
-          }),
-          select: { id: true, questionCode: true, type: true, text: true },
-          orderBy: { createdAt: "desc" },
-          take: 200,
-        })
-      : Promise.resolve([] as QSummary[]),
-    sdb.assignmentTemplateQuestion.findMany({
-      where: { templateId: id },
-      orderBy: { order: "asc" },
-      select: {
-        question: { select: { id: true, questionCode: true, type: true, text: true } },
+  // Parity 18/08 — câu hỏi của mẫu soạn TRỰC TIẾP bằng bộ soạn 8 loại (thay picker
+  // ngân hàng cũ): deserialize hàng Question (kể cả câu bank đã gắn trước đây) về
+  // shape ContentQuestion cho editor; lưu qua saveTemplateQuestionsAuthored.
+  const attachedLinks = await sdb.assignmentTemplateQuestion.findMany({
+    where: { templateId: id },
+    orderBy: { order: "asc" },
+    select: {
+      question: {
+        select: {
+          id: true,
+          type: true,
+          text: true,
+          correctAnswer: true,
+          meta: true,
+          choices: {
+            orderBy: { order: "asc" },
+            select: { order: true, text: true, isCorrect: true },
+          },
+        },
       },
-    }),
-  ]);
-
-  const attachedQuestions: QSummary[] = attachedLinks.map((l) => l.question);
+    },
+  });
+  const attachedQuestions = attachedLinks.map((l) =>
+    deserializeQuestionRow(l.question),
+  );
 
   const formValue: TemplateFormValue = {
     id: template.id,
@@ -124,11 +121,10 @@ export default async function EditTemplatePage({ params }: Props) {
         }))}
       />
 
-      <TemplateQuestionPicker
+      <TemplateQuestionsEditor
         templateId={template.id}
-        hasCurriculum={Boolean(template.curriculumId)}
-        bank={bankQuestions}
-        attached={attachedQuestions}
+        templateTitle={template.title}
+        initialQuestions={attachedQuestions}
       />
 
       <GenerateToClass templateId={template.id} classes={classes} />

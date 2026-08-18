@@ -31,11 +31,14 @@ export function ListToolbar({
   query,
   onQuery,
   placeholder = "Tìm kiếm...",
+  actions,
   filters = [],
 }: {
   query: string;
   onQuery: (v: string) => void;
   placeholder?: string;
+  /** Nút hành động bên phải thanh công cụ (vd "Giao bài", "Tạo bài tập") — parity TeachUI. */
+  actions?: React.ReactNode;
   filters?: SelectFilter[];
 }) {
   return (
@@ -78,6 +81,7 @@ export function ListToolbar({
           </Select>
         ))}
       </div>
+      {actions && <div className="sm:ml-auto">{actions}</div>}
     </div>
   );
 }

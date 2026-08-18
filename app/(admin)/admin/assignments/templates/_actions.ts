@@ -13,6 +13,7 @@ import {
   templateToAssignmentData,
   type AssignmentTemplateInput,
 } from "@/lib/assignments/template";
+import { prepareQuestionsForSave } from "@/lib/assignments/question-content-db";
 
 type Result<T = undefined> =
   | { ok: true; data?: T }
@@ -217,6 +218,107 @@ export async function setTemplateQuestions(
 }
 
 // ──────────────────────────────────────────────────────────────────────────
+// Parity site GV 18/08 — SOẠN câu hỏi TRỰC TIẾP trong mẫu (thay picker ngân hàng).
+//   Cùng bộ soạn 8 loại với "Tạo bài tập" của GV (QuestionListEditor +
+//   prepareQuestionsForSave). Câu hỏi lưu thành Question riêng của mẫu
+//   (isPublic=false) + link AssignmentTemplateQuestion theo thứ tự — khi giao/sinh
+//   bài cho lớp vẫn CLONE như cũ. Mẫu "chưa số hoá" hợp lệ (0 câu → chỉ gỡ link).
+// ──────────────────────────────────────────────────────────────────────────
+
+const SaveAuthoredSchema = z.object({
+  templateId: z.string().min(1, "Thiếu template"),
+  questions: z.unknown(),
+});
+
+export async function saveTemplateQuestionsAuthored(
+  input: z.infer<typeof SaveAuthoredSchema>,
+): Promise<Result> {
+  // Cùng cổng quyền với sửa mẫu (soạn nội dung mẫu = chỉnh sửa mẫu).
+  const gate = await requireEdit();
+  if (!gate.ok) return gate;
+
+  const parsed = SaveAuthoredSchema.safeParse(input);
+  if (!parsed.success) {
+    return { ok: false, error: parsed.error.issues[0]?.message ?? "Dữ liệu không hợp lệ" };
+  }
+  const { templateId } = parsed.data;
+
+  // 0 câu = mẫu mô tả thuần (chưa số hoá) — hợp lệ, chỉ dọn link cũ.
+  const isEmpty = Array.isArray(parsed.data.questions) && parsed.data.questions.length === 0;
+  const prepared = isEmpty
+    ? ({ ok: true, questions: [] } as const)
+    : prepareQuestionsForSave(parsed.data.questions);
+  if (!prepared.ok) return { ok: false, error: prepared.error };
+
+  const sdb = scopedDb(await resolveActor(gate.userId));
+
+  const template = await sdb.assignmentTemplate.findUnique({
+    where: { id: templateId },
+    select: { id: true },
+  });
+  if (!template) return { ok: false, error: "Không tìm thấy mẫu bài tập" };
+
+  const authorId = await resolveEmployeeId(sdb, gate.userId);
+
+  try {
+    await sdb.$transaction(async (tx) => {
+      // Gỡ toàn bộ link cũ; dọn Question RIÊNG của mẫu đã mồ côi (isPublic=false,
+      // chưa gắn bài giao). Câu hỏi NGÂN HÀNG (isPublic=true, từ picker cũ) chỉ bị
+      // gỡ link — KHÔNG xoá khỏi ngân hàng.
+      const links = await tx.assignmentTemplateQuestion.findMany({
+        where: { templateId },
+        select: { questionId: true },
+      });
+      await tx.assignmentTemplateQuestion.deleteMany({ where: { templateId } });
+      const qids = links.map((l) => l.questionId);
+      if (qids.length > 0) {
+        await tx.question.deleteMany({
+          where: { id: { in: qids }, isPublic: false, assignmentId: null },
+        });
+      }
+
+      for (let i = 0; i < prepared.questions.length; i++) {
+        const q = prepared.questions[i]!;
+        const created = await tx.question.create({
+          data: {
+            type: q.type,
+            text: q.text,
+            correctAnswer: q.correctAnswer,
+            meta: q.meta,
+            isPublic: false,
+            authorId,
+            ...(q.choices.length > 0
+              ? {
+                  choices: {
+                    create: q.choices.map((c) => ({
+                      order: c.order,
+                      text: c.text,
+                      isCorrect: c.isCorrect,
+                    })),
+                  },
+                }
+              : {}),
+          },
+          select: { id: true },
+        });
+        await tx.assignmentTemplateQuestion.create({
+          data: { templateId, questionId: created.id, order: i },
+        });
+      }
+    });
+  } catch (err) {
+    return {
+      ok: false,
+      error: `Lỗi cơ sở dữ liệu: ${err instanceof Error ? err.message : "Unknown"}`,
+    };
+  }
+
+  revalidatePath(`/assignments/templates/${templateId}/edit`);
+  revalidatePath("/assignments/templates");
+  return { ok: true };
+}
+
+// ──────────────────────────────────────────────────────────────────────────
 // Sinh bài giao cho lớp từ template (copy field + giữ templateId truy vết)
 // ──────────────────────────────────────────────────────────────────────────
 
@@ -305,6 +407,7 @@ export async function generateAssignmentFromTemplate(
           points: true,
           timeLimitSec: true,
           correctAnswer: true,
+          meta: true, // Parity 18/08 — payload soạn đề (điền khuyết/ghép cặp/sắp xếp)
           tags: true,
           curriculumId: true,
           courseId: true,
@@ -350,6 +453,7 @@ export async function generateAssignmentFromTemplate(
             points: q.points,
             timeLimitSec: q.timeLimitSec,
             correctAnswer: q.correctAnswer,
+            meta: (q.meta ?? undefined) as Prisma.InputJsonValue | undefined,
             tags: q.tags,
             curriculumId: q.curriculumId,
             courseId: q.courseId,
