@@ -73,7 +73,16 @@ export default async function ClassesPage({ searchParams }: SearchParams) {
   if (!session?.user) redirect('/login')
 
   const actor = await resolveActor(session.user.id)
-  if (!(await checkPermission('classes:view-all')) && !(await checkPermission('classes:view-own'))) {
+  // 18/08 — Đào tạo vào được DANH SÁCH lớp để đi tiếp vào tab "Đánh giá & Nhận xét"
+  // của từng lớp. Không có quyền này thì màn nhận xét có tồn tại cũng không ai tới được.
+  // Chỉ là lối đi: nút Thêm/Sửa/Xoá vẫn gác riêng bằng classes:create/edit/delete.
+  // Ba lời gọi để NGUYÊN trong điều kiện — bất biến menu≡gate (page-gates.test) đọc
+  // tĩnh chính chỗ này; gán ra biến trước là gate "tàng hình" với test.
+  if (
+    !(await checkPermission('classes:view-all')) &&
+    !(await checkPermission('classes:view-own')) &&
+    !(await checkPermission('session-feedback:view-all'))
+  ) {
     redirect('/dashboard')
   }
 

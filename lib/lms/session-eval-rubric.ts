@@ -183,3 +183,32 @@ export function normalizeEvalNotes(raw: unknown): EvalNotes {
     proposal: typeof obj.proposal === "string" ? obj.proposal : "",
   };
 }
+
+// ─── ĐỌC phiếu đã lưu (parse Json do GV ghi — có thể null/sai dạng, KHÔNG throw) ──
+// Trước 18/08 hai hàm này nằm trong lib/portal/feedback.ts, kéo theo `server-only` +
+// Prisma cho bất kỳ ai muốn render phiếu. Chuyển về đây (module thuần) để portal PH,
+// site GV và màn admin dùng CHUNG một cách hiểu dữ liệu. feedback.ts re-export lại.
+
+/** 4 mục nhận xét văn xuôi từ Json đã lưu → null nếu không có mục nào có nội dung. */
+export function parseFeedbackNotes(raw: unknown): EvalNotes | null {
+  const notes = normalizeEvalNotes(raw);
+  const hasAny = EVAL_NOTE_FIELDS.some((f) => notes[f.key].trim().length > 0);
+  return hasAny ? notes : null;
+}
+
+/**
+ * Rubric từ Json đã lưu → chỉ giữ tiêu chí ĐÃ BIẾT (EVAL_CRITERIA) có mức 1-5 hợp lệ;
+ * null nếu không còn gì (khác normalizeEvalRatings: KHÔNG chế mức mặc định — phiếu
+ * không chấm rubric thì người đọc không được thấy điểm 3 do máy bịa ra).
+ */
+export function parseFeedbackRubric(raw: unknown): Record<string, number> | null {
+  if (typeof raw !== "object" || raw === null || Array.isArray(raw)) return null;
+  const obj = raw as Record<string, unknown>;
+  const out: Record<string, number> = {};
+  for (const c of EVAL_CRITERIA) {
+    const v0 = obj[c.id];
+    const v = typeof v0 === "number" ? v0 : typeof v0 === "string" ? Number(v0) : NaN;
+    if (Number.isInteger(v) && v >= 1 && v <= 5) out[c.id] = v;
+  }
+  return Object.keys(out).length > 0 ? out : null;
+}

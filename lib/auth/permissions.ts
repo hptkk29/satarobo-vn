@@ -176,6 +176,10 @@ export type Action =
   | "sessions:view"
   | "sessions:create"
   | "sessions:edit"
+  // ĐỌC phiếu nhận xét buổi (StudentSessionFeedback) của cả lớp. Tách riêng khỏi
+  // `sessions:view` để mở cho Đào tạo mà KHÔNG mở luôn module Buổi học/lịch —
+  // đợt khoá chặt 24/07 cố ý gỡ classes/sessions khỏi TRAINING.
+  | "session-feedback:view-all"
   | "attendance:view"
   | "attendance:mark"
   | "attendance:edit"
@@ -470,6 +474,11 @@ export const PERMISSIONS: Record<Action, Role[]> = {
   "sessions:view": ["SUPER_ADMIN", "CENTER_MANAGER", "TEACHER"],
   "sessions:create": ["SUPER_ADMIN", "CENTER_MANAGER", "TEACHER"],
   "sessions:edit": ["SUPER_ADMIN", "CENTER_MANAGER", "TEACHER"],
+  // 18/08 (chủ dự án): "admin hoặc đào tạo xem được HẾT đánh giá/nhận xét các buổi
+  // học trong lớp, của từng học viên qua từng buổi". CHỈ ĐỌC. TRAINING có mặt ở đây
+  // là ngoại lệ hẹp của đợt khoá chặt 24/07 — Đào tạo cần đọc nội dung giảng dạy để
+  // giám sát chất lượng, nhưng vẫn KHÔNG có sessions:* (không sửa/không quản lịch).
+  "session-feedback:view-all": ["SUPER_ADMIN", "CENTER_MANAGER", "TRAINING", "TEACHER"],
   "attendance:view": ["SUPER_ADMIN", "CENTER_MANAGER", "TEACHER"],
   "attendance:mark": ["TEACHER", "SUPER_ADMIN", "CENTER_MANAGER"],
   // Task #16 (Kiệt duyệt 07/07/2026, Phương án A): CSKH (SALES_CSM) được SỬA/hồi tố

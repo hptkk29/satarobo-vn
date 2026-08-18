@@ -1,9 +1,8 @@
 import "server-only";
 import { db } from "@/lib/db";
 import {
-  EVAL_CRITERIA,
-  EVAL_NOTE_FIELDS,
-  normalizeEvalNotes,
+  parseFeedbackNotes,
+  parseFeedbackRubric,
   type EvalNotes,
 } from "@/lib/lms/session-eval-rubric";
 
@@ -28,31 +27,10 @@ export type FeedbackItem = {
 };
 
 // ─── PURE — parse Json phiếu mở rộng (test được, không DB) ───────────────────
-// Dữ liệu notes/rubric là Json nullable do GV ghi — có thể null/sai dạng, KHÔNG throw.
-
-/** 4 mục nhận xét văn xuôi từ Json đã lưu → null nếu không có mục nào có nội dung. */
-export function parseFeedbackNotes(raw: unknown): EvalNotes | null {
-  const notes = normalizeEvalNotes(raw);
-  const hasAny = EVAL_NOTE_FIELDS.some((f) => notes[f.key].trim().length > 0);
-  return hasAny ? notes : null;
-}
-
-/**
- * Rubric từ Json đã lưu → chỉ giữ tiêu chí ĐÃ BIẾT (EVAL_CRITERIA) có mức 1-5 hợp lệ;
- * null nếu không còn gì (khác normalizeEvalRatings: KHÔNG chế mức mặc định — phiếu
- * không chấm rubric thì portal không được bịa điểm 3 cho phụ huynh xem).
- */
-export function parseFeedbackRubric(raw: unknown): Record<string, number> | null {
-  if (typeof raw !== "object" || raw === null || Array.isArray(raw)) return null;
-  const obj = raw as Record<string, unknown>;
-  const out: Record<string, number> = {};
-  for (const c of EVAL_CRITERIA) {
-    const v0 = obj[c.id];
-    const v = typeof v0 === "number" ? v0 : typeof v0 === "string" ? Number(v0) : NaN;
-    if (Number.isInteger(v) && v >= 1 && v <= 5) out[c.id] = v;
-  }
-  return Object.keys(out).length > 0 ? out : null;
-}
+// Hai hàm này ĐÃ CHUYỂN sang lib/lms/session-eval-rubric.ts (module thuần, không
+// `server-only`/Prisma) để màn admin dùng lại mà không kéo Prisma vào. Re-export
+// giữ nguyên đường import cũ của portal + feedback.test.ts.
+export { parseFeedbackNotes, parseFeedbackRubric };
 
 /**
  * @param limit LIMIT đẩy xuống DB (mặc định 20 — đủ cho trang Nhận xét, học viên

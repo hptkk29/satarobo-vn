@@ -16,6 +16,12 @@ export const classesModule: ModuleDecl = {
     { key: "sessions:view", action: "view" },
     { key: "sessions:create", action: "create" },
     { key: "sessions:edit", action: "edit" },
+    {
+      key: "session-feedback:view-all",
+      action: "view-all",
+      description:
+        "Đọc phiếu nhận xét buổi học (StudentSessionFeedback) của mọi học viên trong lớp. CHỈ ĐỌC — tách khỏi sessions:view để mở cho Đào tạo mà không mở module Buổi học.",
+    },
 
     // --- Class groups (nhóm lớp) ---
     { key: "class_group:view-all", action: "view-all" },
