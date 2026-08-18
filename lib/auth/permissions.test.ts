@@ -52,6 +52,32 @@ describe("permissions matrix — FL W0 TRAINING role", () => {
     expect(can("TRAINING", "leads:view-all")).toBe(false);
     expect(can("TRAINING", "students:edit")).toBe(false);
   });
+
+  it("18/08 — Đào tạo ĐỌC được nhận xét buổi học, nhưng KHÔNG vì thế mà mở lại module Lớp/Buổi", () => {
+    // Ngoại lệ hẹp của đợt khoá 24/07: chủ dự án yêu cầu "admin hoặc đào tạo xem
+    // được hết đánh giá, nhận xét các buổi học trong lớp, của từng học viên".
+    expect(can("TRAINING", "session-feedback:view-all")).toBe(true);
+    // Ranh giới: nếu ai đó "tiện tay" cấp sessions:view/classes:* cho Đào tạo thì
+    // test này đỏ — quyền đọc nhận xét KHÔNG được biến thành quyền quản buổi/lớp.
+    expect(can("TRAINING", "sessions:view")).toBe(false);
+    expect(can("TRAINING", "sessions:edit")).toBe(false);
+    expect(can("TRAINING", "attendance:view")).toBe(false);
+    expect(can("TRAINING", "classes:edit")).toBe(false);
+  });
+});
+
+describe("permissions matrix — đọc nhận xét buổi học (session-feedback:view-all)", () => {
+  it("QLCS + GV + Admin đọc được; các vai ngoài chuyên môn thì không", () => {
+    expect(can("SUPER_ADMIN", "session-feedback:view-all")).toBe(true);
+    expect(can("CENTER_MANAGER", "session-feedback:view-all")).toBe(true);
+    expect(can("TEACHER", "session-feedback:view-all")).toBe(true);
+    // Nội dung nhận xét học viên không phải việc của Sale/Kế toán/HR/Marketing.
+    expect(can("SALES_CSM", "session-feedback:view-all")).toBe(false);
+    expect(can("ACCOUNTANT", "session-feedback:view-all")).toBe(false);
+    expect(can("HR", "session-feedback:view-all")).toBe(false);
+    expect(can("MARKETING", "session-feedback:view-all")).toBe(false);
+    expect(can("PARENT", "session-feedback:view-all")).toBe(false);
+  });
 });
 
 describe("permissions matrix — TEACHER mất quyền sửa LMS, giữ xem + chấm", () => {

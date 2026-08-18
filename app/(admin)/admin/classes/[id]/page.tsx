@@ -24,6 +24,8 @@ import { buildSessionAttendanceRows } from "@/lib/attendance/roster";
 import { MediaClient } from "../../media/_components/media-client";
 import { MakeupRow } from "../../hoc-bu/_components/makeup-row";
 import { ClassEvalPanel } from "./_components/class-eval-panel";
+import { ClassFeedbackPanel } from "./_components/class-feedback-panel";
+import { loadClassSessionFeedback } from "@/lib/classes/session-feedback-data";
 import {
   loadClassMediaItems,
   loadClassMakeupItems,
@@ -75,9 +77,14 @@ export default async function ClassDetailPage({ params }: Props) {
   const hasEdit = await checkPermission("classes:edit");
   const hasViewAll = await checkPermission("classes:view-all");
   const hasViewOwn = await checkPermission("classes:view-own");
-  if (!hasEdit && !hasViewAll && !hasViewOwn) {
+  // 18/08 — Đào tạo vào được trang lớp CHỈ để đọc nhận xét buổi (không có classes:*).
+  const hasFeedbackView = await checkPermission("session-feedback:view-all");
+  if (!hasEdit && !hasViewAll && !hasViewOwn && !hasFeedbackView) {
     redirect("/dashboard?error=unauthorized");
   }
+  // Ai chỉ có quyền đọc nhận xét thì KHÔNG thấy form sửa lớp / lịch / điểm danh —
+  // trang mở đúng một tab. Tách biến ở đây để mọi tab bên dưới dùng chung một luật.
+  const canSeeClassBasics = hasEdit || hasViewAll || hasViewOwn;
 
   const sdb = scopedDb(actor);
   const [cls, courses, orgUnits, classGroups, rooms] = await Promise.all([
@@ -213,9 +220,11 @@ export default async function ClassDetailPage({ params }: Props) {
     sessions.find((s) => s.status !== "CANCELLED" && s.date.getTime() >= nowMs) ??
     sessions[sessions.length - 1] ??
     null;
-  const initialRoster = defaultSession
-    ? await buildSessionAttendanceRows(actor, defaultSession.id)
-    : { rows: [] };
+  // Roster kèm SĐT học viên — chỉ dựng khi thực sự render tab Buổi & Điểm danh.
+  const initialRoster =
+    defaultSession && canSeeClassBasics
+      ? await buildSessionAttendanceRows(actor, defaultSession.id)
+      : { rows: [] };
 
   const teacherOptions = teachers.map((t) => ({
     id: t.id,
@@ -245,11 +254,17 @@ export default async function ClassDetailPage({ params }: Props) {
     cls.teacherId === session.user.id || cls.assistantId === session.user.id;
   const canViewScorm = isScormEnabled() && (canManageTraining(actor) || isOwnerTeacher);
   const canEval = canEdit || isOwnerTeacher;
+  // Nhận xét buổi (StudentSessionFeedback) — CHỈ ĐỌC. GV của lớp cũng xem được cả lớp
+  // ở đây (họ vốn là người viết); GV lớp khác đã bị chặn ở kiểm tra IDOR view-own trên.
+  const canViewFeedback = hasFeedbackView || canEdit || isOwnerTeacher;
 
-  const [mediaItems, makeupItems, scormSessions] = await Promise.all([
+  const [mediaItems, makeupItems, scormSessions, feedbackData] = await Promise.all([
     canViewMedia ? loadClassMediaItems(cls.id, cls.name) : Promise.resolve([]),
     canManageMakeup ? loadClassMakeupItems(cls.id) : Promise.resolve([]),
     canViewScorm ? loadClassScormSessions(cls.id) : Promise.resolve([]),
+    // Tải có điều kiện: <TabsContent> render server-side kể cả khi tab chưa mở, nên
+    // không gác thì mọi lượt mở trang lớp đều gánh toàn bộ phiếu nhận xét.
+    canViewFeedback ? loadClassSessionFeedback(cls.id) : Promise.resolve(null),
   ]);
 
   // Kế hoạch lịch học (nay nằm trong tab "Thông tin", chỗ cũ của "Lịch học trong tuần"):
@@ -365,24 +380,30 @@ export default async function ClassDetailPage({ params }: Props) {
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
-            <Link
-              href={`/classes/${cls.id}/students`}
-              className="inline-flex items-center gap-1 rounded-lg border border-primary-soft bg-card px-3 py-1.5 text-sm font-semibold text-primary hover:bg-primary-soft"
-            >
-              👥 Học sinh
-            </Link>
-            <Link
-              href={`/classes/${cls.id}/progress`}
-              className="inline-flex items-center gap-1 rounded-lg border border-primary-soft bg-card px-3 py-1.5 text-sm font-semibold text-primary hover:bg-primary-soft"
-            >
-              📊 Tiến độ
-            </Link>
+            {/* Hai màn con này gác bằng quyền lớp/học viên riêng — người chỉ đọc nhận
+                xét bấm vào sẽ bị đá về dashboard, nên đừng bày nút cho họ. */}
+            {canSeeClassBasics && (
+              <>
+                <Link
+                  href={`/classes/${cls.id}/students`}
+                  className="inline-flex items-center gap-1 rounded-lg border border-primary-soft bg-card px-3 py-1.5 text-sm font-semibold text-primary hover:bg-primary-soft"
+                >
+                  👥 Học sinh
+                </Link>
+                <Link
+                  href={`/classes/${cls.id}/progress`}
+                  className="inline-flex items-center gap-1 rounded-lg border border-primary-soft bg-card px-3 py-1.5 text-sm font-semibold text-primary hover:bg-primary-soft"
+                >
+                  📊 Tiến độ
+                </Link>
+              </>
+            )}
             {/* Lối tắt sang nhóm chat của lớp (yêu cầu chủ dự án 10/08): từ trang lớp
                 bấm thẳng sang chỗ nhắn tin / gửi thông báo cho phụ huynh, không phải đi
                 vòng qua màn Tin nhắn rồi dò tên lớp trong danh sách.
                 Nhóm chỉ tồn tại khi lớp đã ACTIVE (BR-01) nên nút chỉ hiện khi CÓ nhóm —
                 nút dẫn tới hư vô còn tệ hơn không có nút. */}
-            {chatConversationId && (
+            {chatConversationId && canSeeClassBasics && (
               <Link
                 href={`/admin/tin-nhan?c=${chatConversationId}`}
                 className="inline-flex items-center gap-1 rounded-lg border border-state-info-soft bg-card px-3 py-1.5 text-sm font-semibold text-state-info-ink hover:bg-state-info-soft"
@@ -409,19 +430,30 @@ export default async function ClassDetailPage({ params }: Props) {
         </dl>
       </div>
 
-      <Tabs defaultValue="info" className="w-full">
+      <Tabs defaultValue={canSeeClassBasics ? "info" : "eval"} className="w-full">
         <TabsList variant="line" className="flex-wrap">
-          <TabsTrigger value="info">Thông tin</TabsTrigger>
-          <TabsTrigger value="curriculum">Chương trình</TabsTrigger>
-          {/* 08/08 — tab "Kế hoạch lịch học" đã chuyển vào tab Thông tin, đúng chỗ cũ của
-              "Lịch học trong tuần" (một màn một việc: lịch lớp chỉ có MỘT nơi để sửa). */}
-          <TabsTrigger value="sessions">Buổi & Điểm danh</TabsTrigger>
+          {canSeeClassBasics && (
+            <>
+              <TabsTrigger value="info">Thông tin</TabsTrigger>
+              <TabsTrigger value="curriculum">Chương trình</TabsTrigger>
+              {/* 08/08 — tab "Kế hoạch lịch học" đã chuyển vào tab Thông tin, đúng chỗ cũ của
+                  "Lịch học trong tuần" (một màn một việc: lịch lớp chỉ có MỘT nơi để sửa). */}
+              <TabsTrigger value="sessions">Buổi & Điểm danh</TabsTrigger>
+            </>
+          )}
           {canViewMedia && <TabsTrigger value="media">Ảnh lớp</TabsTrigger>}
           {canManageMakeup && <TabsTrigger value="makeup">Học bù</TabsTrigger>}
           {canViewScorm && <TabsTrigger value="scorm">Tài liệu SCORM</TabsTrigger>}
-          {canEval && <TabsTrigger value="eval">Đánh giá</TabsTrigger>}
+          {/* Đổi tên từ "Đánh giá": tab này trước chỉ có phiếu KHẢO SÁT theo đợt, nên
+              người dùng mở ra tìm nhận xét buổi học thì gặp "chưa có phiếu nào đang mở"
+              và tưởng là mất dữ liệu (báo lỗi 18/08). Nay hai thứ nằm chung, có nhãn. */}
+          {(canViewFeedback || canEval) && (
+            <TabsTrigger value="eval">Đánh giá &amp; Nhận xét</TabsTrigger>
+          )}
         </TabsList>
 
+        {canSeeClassBasics && (
+          <>
         <TabsContent value="info" className="space-y-6 pt-4">
           <ClassApprovalActions
             classId={cls.id}
@@ -496,6 +528,8 @@ export default async function ClassDetailPage({ params }: Props) {
             />
           </section>
         </TabsContent>
+          </>
+        )}
 
         {canViewMedia && (
           <TabsContent value="media" className="pt-4">
@@ -566,14 +600,37 @@ export default async function ClassDetailPage({ params }: Props) {
           </TabsContent>
         )}
 
-        {canEval && (
-          <TabsContent value="eval" className="pt-4">
-            <ClassEvalPanel
-              sessions={sessionRows}
-              initialSessionId={defaultSession?.id ?? null}
-              initialStudents={initialEvalStudents}
-              canEdit={canEval}
-            />
+        {(canViewFeedback || canEval) && (
+          <TabsContent value="eval" className="space-y-8 pt-4">
+            {canViewFeedback && feedbackData && (
+              <section>
+                <h2 className="mb-1 text-sm font-bold uppercase tracking-wider text-foreground">
+                  Nhận xét buổi học (phiếu giáo viên)
+                </h2>
+                <p className="mb-3 text-sm text-muted-foreground">
+                  Toàn bộ phiếu nhận xét giáo viên đã viết cho từng học viên qua từng
+                  buổi — cùng nội dung phụ huynh đang xem ở cổng phụ huynh.
+                </p>
+                <ClassFeedbackPanel data={feedbackData} />
+              </section>
+            )}
+            {canEval && (
+              <section>
+                <h2 className="mb-1 text-sm font-bold uppercase tracking-wider text-foreground">
+                  Phiếu khảo sát theo đợt
+                </h2>
+                <p className="mb-3 text-sm text-muted-foreground">
+                  Phiếu SESSION_EVAL do quản trị mở theo đợt ở mục Đánh giá &amp; Khảo
+                  sát — khác với nhận xét buổi phía trên.
+                </p>
+                <ClassEvalPanel
+                  sessions={sessionRows}
+                  initialSessionId={defaultSession?.id ?? null}
+                  initialStudents={initialEvalStudents}
+                  canEdit={canEval}
+                />
+              </section>
+            )}
           </TabsContent>
         )}
       </Tabs>

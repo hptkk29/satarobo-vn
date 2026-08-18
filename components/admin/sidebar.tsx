@@ -137,7 +137,7 @@ const NAV_GROUPS: NavGroup[] = [
   {
     label: "Lớp học & Lịch học",
     items: [
-      { label: "Lớp học", href: "/classes", icon: BookOpen, perm: ["classes:view-all", "classes:view-own"] },
+      { label: "Lớp học", href: "/classes", icon: BookOpen, perm: ["classes:view-all", "classes:view-own", "session-feedback:view-all"] },
       { label: "Nhóm lớp", href: "/class-groups", icon: Boxes, perm: ["class_group:view-all"] },
       { label: "Buổi học", href: "/sessions", icon: CalendarDays, perm: ["sessions:view"] },
       { label: "Lịch tổng", href: "/lich", icon: CalendarCheck, perm: ["sessions:view", "classes:view-all", "classes:view-own"] },

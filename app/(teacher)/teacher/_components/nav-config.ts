@@ -9,7 +9,6 @@ import {
   GraduationCap,
   LayoutDashboard,
   MessageCircle,
-  NotebookPen,
   Sparkles,
   Users,
   type LucideIcon,
@@ -62,8 +61,9 @@ export const navGroups: NavGroup[] = [
       // "Điểm danh" (/teacher/diem-danh) + "Nhận xét" (/teacher/nhan-xet) ĐÃ BỎ khỏi
       // sidebar (07/08/2026) vì trùng tab trong hub "Lớp của tôi". Route + chức năng
       // GIỮ NGUYÊN — vẫn vào được từ hub lớp, dashboard và trang Hướng dẫn.
+      // "Kho bài tập" ĐÃ BỎ khỏi sidebar (parity 18/08) — kho nằm trong tab
+      // "Kho bài tập của tôi" của trang Bài tập; route /teacher/kho-bai-tap GIỮ NGUYÊN.
       { label: "Bài tập", href: "/teacher/cham-bai", icon: ClipboardCheck },
-      { label: "Kho bài tập", href: "/teacher/kho-bai-tap", icon: NotebookPen },
       { label: "Tài liệu", href: "/teacher/tai-lieu", icon: BookOpenText },
       // Sóng 3 Đợt 1 — chat với phụ huynh NGAY TRONG site GV (trước đây phải sang site
       // admin mới nhắn được). Đặt trong "Giảng dạy" vì nhóm lớp bám lớp mình dạy.

@@ -1,33 +1,36 @@
 // app/(teacher)/teacher/cham-bai/page.tsx — "Bài tập & kiểm tra" (route giữ /cham-bai).
 //
-// 3 mức điều hướng qua searchParams (pattern lop/page.tsx — không cần route động):
-//   (a) không tham số     → BẢNG bài tập đã giao ở lớp mình (7 cột như reference).
+// Parity site GV 18/08 — trang chính 3 TAB (port satarobo-ui-giaovien assignments/page):
+//   · Bài đã giao         — bảng bài ở lớp mình + popup "Giao bài" (AssignDialog).
+//   · Kho bài tập của tôi — AssignmentBankPanel (soạn 8 loại câu hỏi, sửa, xoá, preview).
+//   · Thư viện admin      — mẫu trung tâm cài sẵn (đọc-only + xem nhanh).
+// Mức sâu giữ nguyên qua searchParams:
 //   (b) ?assignmentId=…   → chi tiết 1 bài: roster + tình trạng nộp + link chấm.
 //   (c) ?submissionId=…   → nội dung bài nộp + GradeForm (chấm nhanh | chấm rubric).
+//   (d) ?compose=giao     → CŨ (full page) — nay redirect về trang chính (dialog).
 //
 // Data: Assignment (Loại B, không centerId) → cách ly qua classId ∈ assignedClassIds.
 // AssignmentSubmission tương tự (guard theo assignment.classId). Action chấm TÁI DÙNG
 // gradeSubmission/gradeSubmissionRubric của admin (gate bên trong: requireRole +
 // classCenterVisible + canGradeClassWork — GV chỉ chấm lớp mình phụ trách).
 // ⚠️ Câu 46: payload client CHỈ tên học viên — KHÔNG SĐT/email/tên PH.
+import { redirect } from "next/navigation";
 import Link from "next/link";
 import type { SubmissionStatus } from "@prisma/client";
-import { Ban, ClipboardCheck, FileX2, Plus } from "lucide-react";
+import { Ban, FileX2 } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { resolveActor } from "@/lib/auth/actor";
+import { checkPermission } from "@/lib/auth/check-permission";
 import { scopedDb } from "@/lib/db-scope";
 import { ENROLLMENT_ACTIVE_STATUS_LIST } from "@/lib/enrollment-status";
-import { Button } from "@/components/ui/button";
 import { PageHeader } from "../_components/ui/page-header";
 import { EmptyState } from "../_components/ui/empty-state";
 import { GradeForm } from "./_components/grade-form";
-import {
-  AssignmentList,
-  type AssignmentRow,
-} from "./_components/assignment-list";
-import { AssignForm } from "./_components/assign-form";
+import { type AssignmentRow } from "./_components/assignment-list";
+import { AssignmentsTabs } from "./_components/assignments-tabs";
 import { BatchGrade } from "./_components/batch-grade";
 import { resolveTemplateOwnerId } from "../kho-bai-tap/_owner";
+import { loadTeacherAssignData } from "./_data";
 import { BackLink } from "../_components/ui/back-link";
 import { PhanTrangBang } from "@/components/ui/phan-trang-bang";
 
@@ -323,136 +326,93 @@ export default async function TeacherAssignmentsPage({
     );
   }
 
-  // ── (d) Giao bài — FULL PAGE (thay popup) ────────────────────────────────────
-  // Vào từ nút "Giao bài" (?compose=giao) hoặc từ Class Hub (?compose=giao&lockClassId
-  // &back=<hub url>). lockClassId khoá 1 lớp; back = nơi quay về sau khi giao/huỷ.
+  // ── (d) ?compose=giao — luồng full-page CŨ, nay giao bài bằng popup ở trang chính.
+  // Giữ redirect để link cũ (bookmark, hub bản trước) không chết.
   if (compose === "giao") {
     const backHref =
       back && back.startsWith("/teacher/") ? back : "/teacher/cham-bai";
-    if (classIds.length === 0) {
-      return (
-        <div>
-          <BackLink
-            className="mb-4"
-            href={backHref}
-            label="Bài tập & kiểm tra"
-          />
-          <EmptyState
-            icon={ClipboardCheck}
-            title="Bạn chưa được phân công lớp nào."
-          />
-        </div>
-      );
-    }
-
-    // Lớp có thể giao: khoá 1 lớp nếu lockClassId hợp lệ (từ Class Hub), else tất cả.
-    const lockOne =
-      lockClassId && actor.assignedClassIds.has(lockClassId)
-        ? lockClassId
-        : null;
-    const [composeClasses, composeTemplates, composeOwner] = await Promise.all([
-      sdb.class.findMany({
-        where: { id: { in: lockOne ? [lockOne] : classIds } },
-        select: { id: true, name: true },
-        orderBy: { name: "asc" },
-      }),
-      sdb.assignmentTemplate.findMany({
-        select: {
-          id: true,
-          title: true,
-          createdById: true,
-          _count: { select: { templateQuestions: true } },
-        },
-        orderBy: { createdAt: "desc" },
-        take: 200,
-      }),
-      resolveTemplateOwnerId(sdb, session.user.id),
-    ]);
-    const composeOwnerId = composeOwner.ownerId;
-
-    // selfHref: URL trang giao hiện tại — để "Tạo bài tập mới" quay lại đúng chỗ.
-    const selfParams = new URLSearchParams({ compose: "giao" });
-    if (lockOne) selfParams.set("lockClassId", lockOne);
-    if (back) selfParams.set("back", back);
-    const selfHref = `/teacher/cham-bai?${selfParams.toString()}`;
-
-    return (
-      <div>
-        <BackLink className="mb-4" href={backHref} label="Bài tập & kiểm tra" />
-        <PageHeader
-          title="Giao bài cho lớp"
-          subtitle="Chọn nguồn đầu bài, lớp bạn phụ trách và hạn nộp. Bài giao xong sẽ mở ngay cho học viên."
-        />
-        <AssignForm
-          classes={composeClasses}
-          templates={composeTemplates.map((t) => ({
-            id: t.id,
-            title: t.title,
-            isTest: t._count.templateQuestions > 0,
-            isMine: t.createdById === composeOwnerId,
-          }))}
-          back={backHref}
-          selfHref={selfHref}
-        />
-      </div>
-    );
+    void lockClassId;
+    redirect(backHref);
   }
 
-  // ── (a) Bảng bài tập đã giao ─────────────────────────────────────────────────
-  const assignments = classIds.length
-    ? await sdb.assignment.findMany({
-        where: {
-          classId: { in: classIds },
-          status: { in: ["PUBLISHED", "CLOSED"] },
-        },
-        select: {
-          id: true,
-          title: true,
-          classId: true,
-          status: true,
-          dueAt: true,
-          templateId: true,
-          class: { select: { name: true } },
-          _count: {
-            select: {
-              questions: true, // >0 → hình thức "Kiểm tra"
-              submissions: { where: { status: { in: SUBMITTED_STATUSES } } },
-            },
-          },
-        },
-        orderBy: { assignedAt: "desc" },
-      })
-    : [];
+  // ── (a) Trang chính 3 tab (parity assignments/page.tsx của bản mock) ─────────
+  const [{ ownerId }, canAuthor, canAssign] = await Promise.all([
+    resolveTemplateOwnerId(sdb, session.user.id),
+    checkPermission("assignments:author-own"),
+    checkPermission("assignments:assign-own"),
+  ]);
 
-  // Sĩ số (mẫu số cột "Đã nộp") = số HV đang học của lớp. + tên lớp cho dialog Giao bài.
-  const classCounts = classIds.length
-    ? await sdb.class.findMany({
-        where: { id: { in: classIds } },
-        select: {
-          id: true,
-          name: true,
-          _count: {
-            select: {
-              enrollments: {
-                where: { status: { in: ENROLLMENT_ACTIVE_STATUS_LIST } },
+  const [assignments, classCounts, data] = await Promise.all([
+    classIds.length
+      ? sdb.assignment.findMany({
+          where: {
+            classId: { in: classIds },
+            status: { in: ["PUBLISHED", "CLOSED"] },
+          },
+          select: {
+            id: true,
+            title: true,
+            description: true,
+            classId: true,
+            status: true,
+            kind: true,
+            dueAt: true,
+            // Nguồn = AI SOẠN đề: template của người khác → "Admin"; của mình/không
+            // template → "Tự tạo" (templateId != null không đủ — kho GV cũng là template).
+            template: { select: { createdById: true } },
+            classSession: { select: { date: true, topic: true } },
+            class: { select: { name: true } },
+            _count: {
+              select: {
+                questions: true, // >0 → hình thức "Kiểm tra"
+                submissions: { where: { status: { in: SUBMITTED_STATUSES } } },
               },
             },
           },
-        },
-        orderBy: { name: "asc" },
-      })
-    : [];
+          orderBy: { assignedAt: "desc" },
+        })
+      : Promise.resolve([]),
+    // Sĩ số (mẫu số cột "Đã nộp") = số HV đang học của lớp.
+    classIds.length
+      ? sdb.class.findMany({
+          where: { id: { in: classIds } },
+          select: {
+            id: true,
+            _count: {
+              select: {
+                enrollments: {
+                  where: { status: { in: ENROLLMENT_ACTIVE_STATUS_LIST } },
+                },
+              },
+            },
+          },
+        })
+      : Promise.resolve([]),
+    loadTeacherAssignData(sdb, { ownerId, classIds }),
+  ]);
   const enrollBy = new Map(
     classCounts.map((c) => [c.id, c._count.enrollments]),
   );
+
+  const sessionFmt = new Intl.DateTimeFormat("vi-VN", {
+    day: "2-digit",
+    month: "2-digit",
+    timeZone: "Asia/Ho_Chi_Minh",
+  });
 
   const rows: AssignmentRow[] = assignments.map((a) => ({
     id: a.id,
     title: a.title,
     classId: a.classId,
     className: a.class.name,
-    isTest: a._count.questions > 0,
-    fromAdmin: a.templateId != null,
+    // Cột Hình thức theo KIND (khớp lựa chọn khi giao + tab kho); logic BatchGrade
+    // mức (b) vẫn tự cộng thêm điều-kiện-có-câu-hỏi, không đổi.
+    isTest: a.kind === "CLASSWORK",
+    fromAdmin: a.template != null && a.template.createdById !== ownerId,
+    sessionLabel: a.classSession
+      ? `${sessionFmt.format(a.classSession.date)} · ${a.classSession.topic?.trim() || "Buổi học"}`
+      : null,
+    description: a.description?.trim() || null,
     // Guard năm < 2000: một số bài seed để dueAt = epoch (1970) → coi như không có hạn.
     due:
       a.dueAt && a.dueAt.getFullYear() >= 2000 ? dueFmt.format(a.dueAt) : null,
@@ -465,25 +425,16 @@ export default async function TeacherAssignmentsPage({
     <div>
       <PageHeader
         title="Bài tập & kiểm tra"
-        subtitle="Bài đã giao ở các lớp bạn phụ trách. Đầu bài lấy từ thư viện admin."
-        actions={
-          classIds.length > 0 ? (
-            <Button asChild className="shrink-0">
-              <Link href="?compose=giao">
-                <Plus className="mr-1.5 h-4 w-4" aria-hidden /> Giao bài
-              </Link>
-            </Button>
-          ) : undefined
-        }
+        subtitle="Bài đã giao ở các lớp bạn phụ trách và kho đầu bài bạn tự soạn."
       />
-      {classIds.length === 0 ? (
-        <EmptyState
-          icon={ClipboardCheck}
-          title="Bạn chưa được phân công lớp nào."
-        />
-      ) : (
-        <AssignmentList rows={rows} />
-      )}
+      {/* GV chưa có lớp VẪN vào được tab "Kho bài tập của tôi" (soạn đề trước) —
+          tab Bài đã giao tự hiện trạng thái rỗng, nút Giao bài tự ẩn (0 lớp). */}
+      <AssignmentsTabs
+        rows={rows}
+        data={data}
+        canAuthor={canAuthor}
+        canAssign={canAssign}
+      />
     </div>
   );
 }

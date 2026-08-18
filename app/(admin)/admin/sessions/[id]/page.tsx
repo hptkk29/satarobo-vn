@@ -8,6 +8,9 @@ import { SessionFeedbackEditor } from "./_components/session-feedback-editor";
 import { SessionChecklist } from "./_components/session-checklist";
 import { canManageSessionClass } from "./_actions";
 import { hasRole } from "@/lib/auth/permissions";
+import { checkPermission } from "@/lib/auth/check-permission";
+import { SessionEvalCard } from "@/components/admin/session-eval-card";
+import { parseFeedbackNotes, parseFeedbackRubric } from "@/lib/lms/session-eval-rubric";
 import { getPreSessionInfo } from "@/lib/lms/pre-session";
 import { ENROLLMENT_ACTIVE_STATUS_LIST } from "@/lib/enrollment-status";
 import { BookOpen, Users, AlertTriangle, FileWarning } from "lucide-react";
@@ -69,7 +72,19 @@ export default async function SessionDetailPage({ params }: Props) {
         },
       },
       attendances: { select: { studentId: true, status: true } },
-      studentFeedbacks: { select: { studentId: true, comment: true, rating: true } },
+      // 18/08 — TRƯỚC ĐÂY chỉ lấy comment+rating nên phiếu rubric-only (comment = null)
+      // hiện ra ô trống ở admin, dù phụ huynh vẫn đọc được đủ. Lấy luôn phần mở rộng.
+      studentFeedbacks: {
+        select: {
+          studentId: true,
+          comment: true,
+          rating: true,
+          projectName: true,
+          notes: true,
+          rubric: true,
+          createdById: true,
+        },
+      },
     },
   });
   if (!sess) notFound();
@@ -78,7 +93,10 @@ export default async function SessionDetailPage({ params }: Props) {
     { id: session.user.id, role: session.user.role, centerId: session.user.centerId },
     sess.class,
   );
-  if (!canEdit && !hasRole(session.user, "HR")) {
+  // Đào tạo: CHỈ ĐỌC phiếu nhận xét (không quản buổi) — để link "Mở buổi" từ trang lớp
+  // không dẫn tới ngõ cụt.
+  const canViewFeedback = await checkPermission("session-feedback:view-all");
+  if (!canEdit && !canViewFeedback && !hasRole(session.user, "HR")) {
     // HR có employees:view-all nhưng buổi học không thuộc phạm vi → chặn hẳn nếu không quản lý được.
     redirect("/sessions");
   }
@@ -110,6 +128,31 @@ export default async function SessionDetailPage({ params }: Props) {
       rating: fb?.rating ?? null,
     };
   });
+
+  // Phiếu ĐẦY ĐỦ để đọc (dự án + 4 mục văn xuôi + rubric 9 tiêu chí). Editor bên dưới
+  // chỉ sửa được comment/sao nên bản thân nó không hiện hết nội dung phiếu.
+  // `User` ∈ SCOPE_EXEMPT → sdb.user là pass-through; một truy vấn gộp, không N+1.
+  const authorIds = [...new Set(sess.studentFeedbacks.map((f) => f.createdById))];
+  const authors = authorIds.length
+    ? await sdb.user.findMany({ where: { id: { in: authorIds } }, select: { id: true, name: true } })
+    : [];
+  const authorName = new Map(authors.map((u) => [u.id, u.name]));
+  const nameByStudent = new Map(enrollments.map((e) => [e.student.id, e.student.name]));
+  const feedbackCards = sess.studentFeedbacks
+    .map((f) => ({
+      studentId: f.studentId,
+      // Phiếu của HV học bù / đã rời lớp không có trong roster active — vẫn phải hiện.
+      studentName: nameByStudent.get(f.studentId) ?? "Học viên ngoài sĩ số",
+      data: {
+        projectName: f.projectName,
+        notes: parseFeedbackNotes(f.notes),
+        rubric: parseFeedbackRubric(f.rubric),
+        comment: f.comment ?? "",
+        rating: f.rating,
+        teacherName: authorName.get(f.createdById) ?? null,
+      },
+    }))
+    .sort((a, b) => a.studentName.localeCompare(b.studentName, "vi"));
 
   const dateStr = new Date(sess.date).toLocaleDateString("vi-VN", {
     weekday: "long",
@@ -247,13 +290,36 @@ export default async function SessionDetailPage({ params }: Props) {
         canEdit={canEdit}
       />
 
-      {/* LMS-2 — nhận xét từng học sinh */}
+      {/* Phiếu nhận xét ĐÃ LƯU của buổi — chỉ đọc, hiện đủ nội dung giáo viên đã viết. */}
       <section className="rounded-xl border border-border bg-card p-5">
-        <h2 className="mb-4 text-sm font-bold uppercase tracking-wider text-muted-foreground">
-          Nhận xét từng học sinh
+        <h2 className="mb-1 text-sm font-bold uppercase tracking-wider text-muted-foreground">
+          Phiếu nhận xét đã lưu ({feedbackCards.length})
         </h2>
-        <SessionFeedbackEditor sessionId={sess.id} students={studentRows} canEdit={canEdit} />
+        <p className="mb-4 text-sm text-muted-foreground">
+          Cùng nội dung phụ huynh đang xem ở cổng phụ huynh.
+        </p>
+        {feedbackCards.length === 0 ? (
+          <p className="rounded-lg border border-dashed border-border p-6 text-center text-sm text-muted-foreground">
+            Buổi này chưa có phiếu nhận xét nào.
+          </p>
+        ) : (
+          <div className="space-y-3">
+            {feedbackCards.map((c) => (
+              <SessionEvalCard key={c.studentId} title={c.studentName} data={c.data} />
+            ))}
+          </div>
+        )}
       </section>
+
+      {/* LMS-2 — nhận xét từng học sinh (nhập/sửa) */}
+      {canEdit && (
+        <section className="rounded-xl border border-border bg-card p-5">
+          <h2 className="mb-4 text-sm font-bold uppercase tracking-wider text-muted-foreground">
+            Nhận xét từng học sinh
+          </h2>
+          <SessionFeedbackEditor sessionId={sess.id} students={studentRows} canEdit={canEdit} />
+        </section>
+      )}
     </div>
   );
 }

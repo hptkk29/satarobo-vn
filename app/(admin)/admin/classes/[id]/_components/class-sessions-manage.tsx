@@ -3,9 +3,10 @@
 // R7-06 — Quản lý buổi học của lớp: huỷ buổi (lý do bắt buộc) + điều chỉnh
 // ngày/GV/phòng. Buổi CANCELLED hiển thị rõ (không ẩn) với nhãn "Đã hủy".
 import { useState, useTransition } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { CalendarRange, Ban, Pencil } from "lucide-react";
+import { CalendarRange, Ban, Pencil, ExternalLink } from "lucide-react";
 import { cancelSessionAction, adjustSessionAction } from "../_curriculum-actions";
 import { CompleteSession } from "../session/_components/complete-session";
 import { GiveHomework } from "../session/_components/give-homework";
@@ -154,6 +155,14 @@ function SessionItem({
           >
             {badge.label}
           </span>
+          {/* Trang lớp trước đây KHÔNG có lối bấm nào sang chi tiết buổi — muốn xem
+              checklist/nhận xét của buổi phải tự gõ URL. */}
+          <Link
+            href={`/sessions/${session.id}`}
+            className="inline-flex items-center gap-1 rounded-md border border-border px-2 py-1 text-xs font-semibold text-primary hover:bg-muted"
+          >
+            <ExternalLink className="h-3.5 w-3.5" /> Chi tiết
+          </Link>
           {canEdit && !cancelled && (
             <>
               <button

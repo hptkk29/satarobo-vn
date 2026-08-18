@@ -268,6 +268,11 @@ export const ROLE_SEED: RoleSeed[] = [
       // bạ đọc ghi danh cross-center qua checkEnrollmentScope (isHoLevel). Bỏ manage
       // (sửa/tạo học bạ) — Đào tạo chỉ duyệt (24/07).
       { action: "report-cards:review", scopeType: "GLOBAL" },
+      // 18/08 (chủ dự án) — Đào tạo ĐỌC được nhận xét/đánh giá từng buổi của từng HV
+      // trong lớp. Ngoại lệ HẸP của đợt khoá chặt 24/07: CHỈ đọc phiếu nhận xét buổi,
+      // KHÔNG kèm sessions:*/classes:* (không mở lại module Lớp/Buổi học cho Đào tạo).
+      // Trang /admin/classes/[id] mở ĐÚNG một tab "Đánh giá & Nhận xét" cho vai này.
+      { action: "session-feedback:view-all", scopeType: "GLOBAL" },
       // 03/08 — checkin là self-action của mọi nhân viên; sót từ khi thêm TRAINING
       // (FL W0) nên tài khoản chỉ-Đào-tạo không mở được trang chấm công nào.
       { action: "hr_attendance:checkin", scopeType: "GLOBAL" },
@@ -345,6 +350,7 @@ export const ROLE_SEED: RoleSeed[] = [
       { action: "sessions:view", scopeType: "GLOBAL" },
       { action: "sessions:create", scopeType: "GLOBAL" },
       { action: "sessions:edit", scopeType: "GLOBAL" },
+      { action: "session-feedback:view-all", scopeType: "GLOBAL" },
       { action: "rooms:view", scopeType: "GLOBAL" },
       { action: "rooms:edit", scopeType: "GLOBAL" },
       // ── Trải nghiệm · phụ huynh · media ──
@@ -564,6 +570,7 @@ export const ROLE_SEED: RoleSeed[] = [
       { action: "teaching-materials:view-own-class", scopeType: "GLOBAL" },
       { action: "sessions:view", scopeType: "GLOBAL" },
       { action: "sessions:edit", scopeType: "GLOBAL" },
+      { action: "session-feedback:view-all", scopeType: "GLOBAL" },
       { action: "attendance:view", scopeType: "GLOBAL" },
       { action: "assignments:view", scopeType: "GLOBAL" },
       { action: "assignments:grade", scopeType: "GLOBAL" },
