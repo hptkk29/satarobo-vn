@@ -25,6 +25,7 @@ import { templateToAssignmentData } from "@/lib/assignments/template";
 import { resolveTemplateDup, publishDraftAssignment } from "@/lib/assignments/publish-draft";
 import { getAuditActor } from "@/lib/audit/log";
 import { writeAudit } from "@/lib/audit/audit-log";
+import { resolveTemplateOwnerId } from "../kho-bai-tap/_owner";
 
 // BGĐ 31/07 — file+ảnh GV đính kèm thêm khi giao (đã PUT lên R2).
 const attachmentSchema = z.object({
@@ -131,6 +132,9 @@ export async function assignTemplateAction(input: {
       totalPoints: true,
       allowText: true,
       allowFile: true,
+      // Chống IDOR templateId: đề phải là CỦA MÌNH hoặc thư viện đúng khoá của lớp.
+      createdById: true,
+      curriculum: { select: { courseId: true } },
       // BGĐ 31/07 — file đề bài có sẵn: copy tham chiếu sang bài giao.
       attachments: {
         select: { fileUrl: true, fileName: true, fileSize: true, mimeType: true, uploadedById: true },
@@ -145,6 +149,7 @@ export async function assignTemplateAction(input: {
     select: {
       id: true,
       name: true,
+      courseId: true,
       enrollments: {
         where: { status: { in: ENROLLMENT_ACTIVE_STATUS_LIST } },
         select: { studentId: true },
@@ -152,6 +157,19 @@ export async function assignTemplateAction(input: {
     },
   });
   if (!cls) return { ok: false, error: "Không tìm thấy lớp" };
+
+  // Chống IDOR đổi templateId trên client: chỉ giao đề CỦA MÌNH, hoặc đề thư viện
+  // đúng khoá của lớp (đề không gắn khoá dùng chung mọi khoá) — khớp danh sách
+  // dialog Giao bài hiển thị.
+  const { ownerId } = await resolveTemplateOwnerId(sdb, session.user.id);
+  const tplCourseId = template.curriculum?.courseId ?? null;
+  if (
+    template.createdById !== ownerId &&
+    tplCourseId !== null &&
+    tplCourseId !== cls.courseId
+  ) {
+    return { ok: false, error: "Mẫu không thuộc khoá của lớp này" };
+  }
 
   // Buổi học (nếu gắn) phải thuộc ĐÚNG lớp đang giao (chống tiêm sessionId lớp khác).
   let classSessionId: string | null = null;

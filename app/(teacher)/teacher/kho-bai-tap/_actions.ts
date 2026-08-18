@@ -23,7 +23,11 @@ import { scopedDb } from "@/lib/db-scope";
 import { getAuditActor } from "@/lib/audit/log";
 import { writeAudit } from "@/lib/audit/audit-log";
 import {
+  RICH_QUESTION_SELECT,
+  choiceImageByOrder,
   prepareQuestionsForSave,
+  richQuestionData,
+  type RichQuestionRow,
   type SerializedQuestion,
 } from "@/lib/assignments/question-content-db";
 import { resolveTemplateOwnerId } from "./_owner";
@@ -92,15 +96,22 @@ async function assertCourseAllowed(
   return cls ? null : "Khoá học không thuộc lớp bạn phụ trách";
 }
 
-/** Tạo Question (+Choice) cho từng câu và link vào template theo thứ tự. */
+/**
+ * Tạo Question (+Choice) cho từng câu và link vào template theo thứ tự.
+ * `richById` (đường SỬA): hàng cũ theo id — chép lại field giàu (ảnh/điểm/giải
+ * thích/khung CT + ảnh đáp án) để round-trip editor không làm rụng dữ liệu.
+ */
 async function createTemplateQuestions(
   tx: Prisma.TransactionClient,
   templateId: string,
   questions: SerializedQuestion[],
   employeeId: string | null,
+  richById?: Map<string, RichQuestionRow>,
 ): Promise<void> {
   for (let i = 0; i < questions.length; i++) {
     const q = questions[i]!;
+    const old = richById?.get(q.sourceId);
+    const choiceImg = choiceImageByOrder(old);
     const created = await tx.question.create({
       data: {
         type: q.type,
@@ -109,6 +120,7 @@ async function createTemplateQuestions(
         meta: q.meta,
         isPublic: false,
         authorId: employeeId, // FK Employee — null nếu GV chưa gắn hồ sơ nhân sự
+        ...richQuestionData(old),
         ...(q.choices.length > 0
           ? {
               choices: {
@@ -116,6 +128,7 @@ async function createTemplateQuestions(
                   order: c.order,
                   text: c.text,
                   isCorrect: c.isCorrect,
+                  imageUrl: choiceImg.get(c.order) ?? null,
                 })),
               },
             }
@@ -257,16 +270,28 @@ export async function updateOwnTemplateAction(input: unknown): Promise<SaveResul
 
   const tpl = await sdb.assignmentTemplate.findUnique({
     where: { id: data.templateId },
-    select: { id: true, createdById: true, title: true },
+    select: {
+      id: true,
+      createdById: true,
+      title: true,
+      curriculum: { select: { id: true, courseId: true } },
+    },
   });
   if (!tpl) return { ok: false, error: "Không tìm thấy đề" };
   if (tpl.createdById !== ownerId) {
     return { ok: false, error: "Chỉ sửa được đề bạn tự soạn" };
   }
 
-  const courseErr = await assertCourseAllowed(sdb, actor.assignedClassIds, data.courseId);
-  if (courseErr) return { ok: false, error: courseErr };
-  const curriculumId = await resolveCurriculumId(sdb, data.courseId);
+  // GIỮ NGUYÊN khoá cũ khi không đổi — kể cả khi GV không còn dạy khoá đó (kỳ sau
+  // đổi lớp): sửa tiêu đề không được âm thầm biến đề thành "mọi khoá".
+  let curriculumId: string | null;
+  if (data.courseId && data.courseId === (tpl.curriculum?.courseId ?? null)) {
+    curriculumId = tpl.curriculum?.id ?? null;
+  } else {
+    const courseErr = await assertCourseAllowed(sdb, actor.assignedClassIds, data.courseId);
+    if (courseErr) return { ok: false, error: courseErr };
+    curriculumId = await resolveCurriculumId(sdb, data.courseId);
+  }
 
   try {
     await sdb.$transaction(async (tx) => {
@@ -286,12 +311,25 @@ export async function updateOwnTemplateAction(input: unknown): Promise<SaveResul
         where: { templateId: data.templateId },
         select: { questionId: true },
       });
+      const qids = links.map((l) => l.questionId);
+      // Hàng cũ → chép lại field giàu cho câu chỉ-bị-sửa (xem createTemplateQuestions).
+      const oldRich: RichQuestionRow[] = qids.length
+        ? await tx.question.findMany({
+            where: { id: { in: qids } },
+            select: RICH_QUESTION_SELECT,
+          })
+        : [];
+      const richById = new Map(oldRich.map((r) => [r.id, r]));
       await tx.assignmentTemplateQuestion.deleteMany({
         where: { templateId: data.templateId },
       });
-      const qids = links.map((l) => l.questionId);
       if (qids.length > 0) {
-        await tx.question.deleteMany({ where: { id: { in: qids }, assignmentId: null } });
+        await tx.question.deleteMany({
+          // CHỈ dọn câu RIÊNG của đề (isPublic=false) — câu NGÂN HÀNG (public, gắn qua
+          // picker admin cũ) chỉ bị gỡ link, KHÔNG xoá (tránh cascade mất khỏi mẫu khác
+          // + kẹt FK ExamQuestion Restrict làm GV không sửa/xoá được đề của mình).
+          where: { id: { in: qids }, isPublic: false, assignmentId: null },
+        });
       }
 
       await createTemplateQuestions(
@@ -299,6 +337,7 @@ export async function updateOwnTemplateAction(input: unknown): Promise<SaveResul
         data.templateId,
         prepared.questions,
         employeeId,
+        richById,
       );
 
       // BGĐ 31/07 — file mới (nếu có) APPEND vào đề; file cũ giữ nguyên.
@@ -377,7 +416,12 @@ export async function deleteOwnTemplateAction(templateId: string): Promise<Delet
       const qids = links.map((l) => l.questionId);
       if (qids.length > 0) {
         // Chỉ dọn câu hỏi mồ côi của template (chưa gắn Assignment nào) — cascade Choice.
-        await tx.question.deleteMany({ where: { id: { in: qids }, assignmentId: null } });
+        await tx.question.deleteMany({
+          // CHỈ dọn câu RIÊNG của đề (isPublic=false) — câu NGÂN HÀNG (public, gắn qua
+          // picker admin cũ) chỉ bị gỡ link, KHÔNG xoá (tránh cascade mất khỏi mẫu khác
+          // + kẹt FK ExamQuestion Restrict làm GV không sửa/xoá được đề của mình).
+          where: { id: { in: qids }, isPublic: false, assignmentId: null },
+        });
       }
     });
   } catch (err) {

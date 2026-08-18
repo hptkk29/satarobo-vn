@@ -32,6 +32,8 @@ import {
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import {
+  MAX_OPTIONS,
+  MAX_QUESTIONS,
   QUESTION_TYPE_META,
   QUESTION_TYPE_ORDER,
   blankQuestion,
@@ -90,7 +92,10 @@ export function QuestionListEditor({
       ),
     );
 
-  const addQuestion = () => onChange([...questions, blankQuestion("single", newQuestionId())]);
+  const addQuestion = () => {
+    if (questions.length >= MAX_QUESTIONS) return;
+    onChange([...questions, blankQuestion("single", newQuestionId())]);
+  };
 
   const removeQuestion = (idx: number) =>
     onChange(questions.length === 1 ? questions : questions.filter((_, i) => i !== idx));
@@ -116,7 +121,13 @@ export function QuestionListEditor({
             {autoCount} câu chấm tự động · {questions.length - autoCount} câu chấm tay
           </p>
         </div>
-        <Button type="button" size="sm" variant="outline" onClick={addQuestion}>
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          onClick={addQuestion}
+          disabled={questions.length >= MAX_QUESTIONS}
+        >
           <Plus className="h-4 w-4" aria-hidden /> Thêm câu hỏi
         </Button>
       </div>
@@ -173,7 +184,7 @@ function QuestionCard({
             if (v !== null) onChangeType(v as ContentQuestionType);
           }}
         >
-          <SelectTrigger className="h-9 w-auto min-w-[10rem] gap-2">
+          <SelectTrigger className="w-auto min-w-[10rem] gap-2">
             <SelectValue>
               {(v: string | null) => {
                 const t = (v ?? "single") as ContentQuestionType;
@@ -319,7 +330,7 @@ function SingleEditor({
           />
         ))}
       </div>
-      <AddOptionButton onClick={addOption} />
+      {q.options.length < MAX_OPTIONS && <AddOptionButton onClick={addOption} />}
     </div>
   );
 }
@@ -371,7 +382,7 @@ function MultipleEditor({
           />
         ))}
       </div>
-      <AddOptionButton onClick={addOption} />
+      {q.options.length < MAX_OPTIONS && <AddOptionButton onClick={addOption} />}
     </div>
   );
 }
@@ -546,7 +557,9 @@ function MatchingEditor({
           </div>
         ))}
       </div>
-      <AddOptionButton label="+ Thêm cặp" onClick={addPair} />
+      {q.pairs.length < MAX_OPTIONS && (
+        <AddOptionButton label="+ Thêm cặp" onClick={addPair} />
+      )}
     </div>
   );
 }
@@ -623,7 +636,9 @@ function OrderingEditor({
           </div>
         ))}
       </div>
-      <AddOptionButton label="+ Thêm mục" onClick={addItem} />
+      {q.items.length < MAX_OPTIONS && (
+        <AddOptionButton label="+ Thêm mục" onClick={addItem} />
+      )}
     </div>
   );
 }

@@ -17,7 +17,7 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import type { SubmissionStatus } from "@prisma/client";
-import { Ban, ClipboardCheck, FileX2 } from "lucide-react";
+import { Ban, FileX2 } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { resolveActor } from "@/lib/auth/actor";
 import { checkPermission } from "@/lib/auth/check-permission";
@@ -357,7 +357,9 @@ export default async function TeacherAssignmentsPage({
             status: true,
             kind: true,
             dueAt: true,
-            templateId: true,
+            // Nguồn = AI SOẠN đề: template của người khác → "Admin"; của mình/không
+            // template → "Tự tạo" (templateId != null không đủ — kho GV cũng là template).
+            template: { select: { createdById: true } },
             classSession: { select: { date: true, topic: true } },
             class: { select: { name: true } },
             _count: {
@@ -403,9 +405,10 @@ export default async function TeacherAssignmentsPage({
     title: a.title,
     classId: a.classId,
     className: a.class.name,
-    // "Kiểm tra" = có câu hỏi online HOẶC bài trên lớp (khớp logic BatchGrade mức b).
-    isTest: a._count.questions > 0 || a.kind === "CLASSWORK",
-    fromAdmin: a.templateId != null,
+    // Cột Hình thức theo KIND (khớp lựa chọn khi giao + tab kho); logic BatchGrade
+    // mức (b) vẫn tự cộng thêm điều-kiện-có-câu-hỏi, không đổi.
+    isTest: a.kind === "CLASSWORK",
+    fromAdmin: a.template != null && a.template.createdById !== ownerId,
     sessionLabel: a.classSession
       ? `${sessionFmt.format(a.classSession.date)} · ${a.classSession.topic?.trim() || "Buổi học"}`
       : null,
@@ -424,19 +427,14 @@ export default async function TeacherAssignmentsPage({
         title="Bài tập & kiểm tra"
         subtitle="Bài đã giao ở các lớp bạn phụ trách và kho đầu bài bạn tự soạn."
       />
-      {classIds.length === 0 ? (
-        <EmptyState
-          icon={ClipboardCheck}
-          title="Bạn chưa được phân công lớp nào."
-        />
-      ) : (
-        <AssignmentsTabs
-          rows={rows}
-          data={data}
-          canAuthor={canAuthor}
-          canAssign={canAssign}
-        />
-      )}
+      {/* GV chưa có lớp VẪN vào được tab "Kho bài tập của tôi" (soạn đề trước) —
+          tab Bài đã giao tự hiện trạng thái rỗng, nút Giao bài tự ẩn (0 lớp). */}
+      <AssignmentsTabs
+        rows={rows}
+        data={data}
+        canAuthor={canAuthor}
+        canAssign={canAssign}
+      />
     </div>
   );
 }

@@ -326,11 +326,13 @@ export async function HubAssignmentsTab({
         status: true,
         kind: true,
         dueAt: true,
-        templateId: true,
+        // Nguồn = AI SOẠN đề (template người khác → "Đào tạo"); templateId != null
+        // không đủ vì đề kho GV cũng là template.
+        template: { select: { createdById: true } },
         classSession: { select: { date: true, topic: true } },
         _count: {
           select: {
-            questions: true, // >0 → hình thức "Kiểm tra"
+            questions: true,
             submissions: { where: { status: { in: SUBMITTED_STATUSES } } },
           },
         },
@@ -425,9 +427,10 @@ export async function HubAssignmentsTab({
                   </tr>
                 ) : (
                   assignments.map((a) => {
-                    const isTest =
-                      a._count.questions > 0 || a.kind === "CLASSWORK";
-                    const fromAdmin = a.templateId != null;
+                    // Cột Hình thức theo KIND (khớp dialog giao + tab kho).
+                    const isTest = a.kind === "CLASSWORK";
+                    const fromAdmin =
+                      a.template != null && a.template.createdById !== ownerId;
                     const due =
                       a.dueAt && a.dueAt.getFullYear() >= 2000
                         ? dueFmt.format(a.dueAt)

@@ -13,7 +13,13 @@ import {
   templateToAssignmentData,
   type AssignmentTemplateInput,
 } from "@/lib/assignments/template";
-import { prepareQuestionsForSave } from "@/lib/assignments/question-content-db";
+import {
+  RICH_QUESTION_SELECT,
+  choiceImageByOrder,
+  prepareQuestionsForSave,
+  richQuestionData,
+  type RichQuestionRow,
+} from "@/lib/assignments/question-content-db";
 
 type Result<T = undefined> =
   | { ok: true; data?: T }
@@ -269,8 +275,19 @@ export async function saveTemplateQuestionsAuthored(
         where: { templateId },
         select: { questionId: true },
       });
-      await tx.assignmentTemplateQuestion.deleteMany({ where: { templateId } });
       const qids = links.map((l) => l.questionId);
+      // Hàng cũ để CHÉP LẠI field giàu (ảnh/điểm/giải thích/khung CT + ảnh đáp án)
+      // — editor 8-loại không quản lý các field này, thiếu bước chép là round-trip
+      // "Lưu bộ câu hỏi" tự rụng dữ liệu dù không sửa gì.
+      const oldRich: RichQuestionRow[] = qids.length
+        ? await tx.question.findMany({
+            where: { id: { in: qids } },
+            select: RICH_QUESTION_SELECT,
+          })
+        : [];
+      const richById = new Map(oldRich.map((r) => [r.id, r]));
+
+      await tx.assignmentTemplateQuestion.deleteMany({ where: { templateId } });
       if (qids.length > 0) {
         await tx.question.deleteMany({
           where: { id: { in: qids }, isPublic: false, assignmentId: null },
@@ -279,6 +296,8 @@ export async function saveTemplateQuestionsAuthored(
 
       for (let i = 0; i < prepared.questions.length; i++) {
         const q = prepared.questions[i]!;
+        const old = richById.get(q.sourceId);
+        const choiceImg = choiceImageByOrder(old);
         const created = await tx.question.create({
           data: {
             type: q.type,
@@ -287,6 +306,7 @@ export async function saveTemplateQuestionsAuthored(
             meta: q.meta,
             isPublic: false,
             authorId,
+            ...richQuestionData(old),
             ...(q.choices.length > 0
               ? {
                   choices: {
@@ -294,6 +314,7 @@ export async function saveTemplateQuestionsAuthored(
                       order: c.order,
                       text: c.text,
                       isCorrect: c.isCorrect,
+                      imageUrl: choiceImg.get(c.order) ?? null,
                     })),
                   },
                 }

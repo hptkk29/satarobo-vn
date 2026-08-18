@@ -78,7 +78,7 @@ export function AssignDialog({
         <Send className="h-4 w-4" aria-hidden /> {triggerLabel}
       </Button>
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="flex max-h-[92vh] w-[calc(100vw-2rem)] max-w-lg flex-col gap-0 p-0">
+        <DialogContent className="flex max-h-[92vh] w-[calc(100vw-2rem)] sm:max-w-lg flex-col gap-0 p-0">
           <DialogHeader className="border-b border-border px-5 py-4">
             <DialogTitle>
               {classes.length === 1

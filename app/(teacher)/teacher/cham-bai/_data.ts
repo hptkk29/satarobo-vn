@@ -120,7 +120,7 @@ export async function loadTeacherAssignData(
       : classIds;
 
   // GV chưa có lớp: vẫn thấy KHO CỦA MÌNH (soạn trước), chỉ trống lớp/buổi/thư viện.
-  const [classRows, sessionRows, templateRows] = await Promise.all([
+  const [classRows, sessionRows, mineRows, libraryRows] = await Promise.all([
     visibleClassIds.length
       ? sdb.class.findMany({
           where: { id: { in: visibleClassIds } },
@@ -153,10 +153,23 @@ export async function loadTeacherAssignData(
           take: 200,
         })
       : Promise.resolve([]),
+    // 2 truy vấn tách pool: kho CỦA MÌNH không bao giờ bị đề người khác chiếm chỗ
+    // trong giới hạn take (kho đầy vẫn hiện đủ đề của GV).
     sdb.assignmentTemplate.findMany({
+      where: { createdById: ownerId },
       select: TEMPLATE_SELECT,
       orderBy: { createdAt: "desc" },
-      take: 400,
+      take: 200,
+    }),
+    sdb.assignmentTemplate.findMany({
+      // createdById null (mẫu hệ thống/không dấu vết) vẫn thuộc thư viện —
+      // `not` của Prisma loại null nên phải OR tường minh.
+      where: {
+        OR: [{ createdById: null }, { createdById: { not: ownerId } }],
+      },
+      select: TEMPLATE_SELECT,
+      orderBy: { createdAt: "desc" },
+      take: 300,
     }),
   ]);
 
@@ -166,17 +179,11 @@ export async function loadTeacherAssignData(
     if (c.courseId && c.course) courseById.set(c.courseId, c.course.name);
   }
 
-  const mine: KhoTemplate[] = [];
-  const library: KhoTemplate[] = [];
-  for (const t of templateRows) {
-    const mapped = toKhoTemplate(t);
-    if (t.createdById === ownerId) {
-      mine.push(mapped);
-    } else if (mapped.courseId === null || courseById.has(mapped.courseId)) {
-      // Thư viện: chỉ mẫu thuộc khoá GV phụ trách (mẫu không gắn khoá hiện với mọi người).
-      library.push(mapped);
-    }
-  }
+  const mine: KhoTemplate[] = mineRows.map(toKhoTemplate);
+  // Thư viện: chỉ mẫu thuộc khoá GV phụ trách (mẫu không gắn khoá hiện với mọi người).
+  const library: KhoTemplate[] = libraryRows
+    .map(toKhoTemplate)
+    .filter((t) => t.courseId === null || courseById.has(t.courseId));
 
   return {
     classes: classRows.map((c) => ({

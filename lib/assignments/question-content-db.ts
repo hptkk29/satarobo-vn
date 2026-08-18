@@ -94,6 +94,13 @@ export const contentQuestionsSchema = z
 
 /** Dữ liệu tạo 1 hàng Question (+ choices) từ 1 ContentQuestion. */
 export interface SerializedQuestion {
+  /**
+   * Id của ContentQuestion đầu vào. Câu ĐANG SỬA giữ nguyên id hàng Question cũ
+   * (deserializeQuestionRow đặt id = row id) → caller dùng để CHÉP LẠI các field
+   * "giàu" (ảnh/điểm/giải thích/khung CT...) từ hàng cũ khi tạo hàng mới, tránh
+   * round-trip editor làm rụng dữ liệu. Câu mới soạn mang id cục bộ `q_...`.
+   */
+  sourceId: string;
   type: QuestionType;
   text: string;
   correctAnswer: string | null;
@@ -101,10 +108,72 @@ export interface SerializedQuestion {
   choices: { order: number; text: string; isCorrect: boolean }[];
 }
 
+/**
+ * Select các field "giàu" của Question mà editor 8-loại KHÔNG quản lý — caller
+ * load hàng cũ theo select này rồi đắp lại qua `richQuestionData` khi tạo hàng mới.
+ */
+export const RICH_QUESTION_SELECT = {
+  id: true,
+  explanation: true,
+  imageUrl: true,
+  difficulty: true,
+  points: true,
+  timeLimitSec: true,
+  tags: true,
+  curriculumId: true,
+  courseId: true,
+  lessonId: true,
+  notes: true,
+  choices: { select: { order: true, imageUrl: true } },
+} as const;
+
+export type RichQuestionRow = Prisma.QuestionGetPayload<{
+  select: typeof RICH_QUESTION_SELECT;
+}>;
+
+/**
+ * Phần data "giàu" đắp vào question.create khi câu hỏi là bản sửa của hàng cũ.
+ * Ảnh đáp án map theo `order` (đổi thứ tự đáp án có thể lệch ảnh — chấp nhận).
+ */
+export function richQuestionData(old: RichQuestionRow | undefined): {
+  explanation?: string | null;
+  imageUrl?: string | null;
+  difficulty?: RichQuestionRow["difficulty"];
+  points?: number | null;
+  timeLimitSec?: number | null;
+  tags?: string[];
+  curriculumId?: string | null;
+  courseId?: string | null;
+  lessonId?: string | null;
+  notes?: string | null;
+} {
+  if (!old) return {};
+  return {
+    explanation: old.explanation,
+    imageUrl: old.imageUrl,
+    difficulty: old.difficulty,
+    points: old.points,
+    timeLimitSec: old.timeLimitSec,
+    tags: old.tags,
+    curriculumId: old.curriculumId,
+    courseId: old.courseId,
+    lessonId: old.lessonId,
+    notes: old.notes,
+  };
+}
+
+/** Ảnh đáp án của hàng cũ theo `order` — đắp lại khi tạo Choice mới. */
+export function choiceImageByOrder(
+  old: RichQuestionRow | undefined,
+): Map<number, string | null> {
+  return new Map((old?.choices ?? []).map((c) => [c.order, c.imageUrl]));
+}
+
 export function serializeContentQuestion(q: ContentQuestion): SerializedQuestion {
   switch (q.type) {
     case "single":
       return {
+        sourceId: q.id,
         type: "MULTIPLE_CHOICE",
         text: q.question,
         correctAnswer: null,
@@ -117,6 +186,7 @@ export function serializeContentQuestion(q: ContentQuestion): SerializedQuestion
       };
     case "multiple":
       return {
+        sourceId: q.id,
         type: "MULTIPLE_CHOICE",
         text: q.question,
         correctAnswer: null,
@@ -129,6 +199,7 @@ export function serializeContentQuestion(q: ContentQuestion): SerializedQuestion
       };
     case "boolean":
       return {
+        sourceId: q.id,
         type: "TRUE_FALSE",
         text: q.question,
         correctAnswer: null,
@@ -140,6 +211,7 @@ export function serializeContentQuestion(q: ContentQuestion): SerializedQuestion
       };
     case "fill":
       return {
+        sourceId: q.id,
         type: "FILL_BLANK",
         text: q.question,
         correctAnswer: q.answers.join(" | "),
@@ -148,6 +220,7 @@ export function serializeContentQuestion(q: ContentQuestion): SerializedQuestion
       };
     case "short":
       return {
+        sourceId: q.id,
         type: "SHORT_ANSWER",
         text: q.question,
         correctAnswer: q.sampleAnswer?.trim() || null,
@@ -156,6 +229,7 @@ export function serializeContentQuestion(q: ContentQuestion): SerializedQuestion
       };
     case "essay":
       return {
+        sourceId: q.id,
         type: "ESSAY",
         text: q.question,
         correctAnswer: q.sampleAnswer?.trim() || null,
@@ -164,6 +238,7 @@ export function serializeContentQuestion(q: ContentQuestion): SerializedQuestion
       };
     case "matching":
       return {
+        sourceId: q.id,
         type: "MATCHING",
         text: q.question,
         correctAnswer: null,
@@ -172,6 +247,7 @@ export function serializeContentQuestion(q: ContentQuestion): SerializedQuestion
       };
     case "ordering":
       return {
+        sourceId: q.id,
         type: "ORDERING",
         text: q.question,
         correctAnswer: null,

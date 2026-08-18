@@ -80,7 +80,7 @@ export function CreateAssignmentDialog({
         </Button>
       )}
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="flex max-h-[92vh] w-[calc(100vw-2rem)] max-w-2xl flex-col gap-0 p-0">
+        <DialogContent className="flex max-h-[92vh] w-[calc(100vw-2rem)] sm:max-w-2xl flex-col gap-0 p-0">
           <DialogHeader className="border-b border-border px-5 py-4">
             <DialogTitle>{isEdit ? "Sửa bài tập" : "Tạo bài tập mới"}</DialogTitle>
             <DialogDescription>
@@ -124,8 +124,15 @@ function CreateForm({
   const router = useRouter();
   const isEdit = !!template;
 
+  // Đề đang SỬA có thể gắn khoá GV không còn dạy (kỳ sau đổi lớp) — vẫn phải giữ
+  // được lựa chọn đó, nên thêm option riêng thay vì âm thầm rơi về "mọi khoá".
+  const courseOptions =
+    template?.courseId && !courses.some((c) => c.id === template.courseId)
+      ? [...courses, { id: template.courseId, name: template.courseName ?? "Khoá cũ" }]
+      : courses;
+
   const validCourse = (id: string | null | undefined) =>
-    id && courses.some((c) => c.id === id) ? id : ANY_COURSE;
+    id && courseOptions.some((c) => c.id === id) ? id : ANY_COURSE;
 
   const [title, setTitle] = useState(template?.title ?? "");
   const [courseId, setCourseId] = useState<string>(
@@ -222,13 +229,13 @@ function CreateForm({
                 {(v: string | null) =>
                   v === ANY_COURSE
                     ? "Dùng chung mọi khoá"
-                    : (courses.find((c) => c.id === v)?.name ?? "")
+                    : (courseOptions.find((c) => c.id === v)?.name ?? "")
                 }
               </SelectValue>
             </SelectTrigger>
             <SelectContent>
               <SelectItem value={ANY_COURSE}>Dùng chung mọi khoá</SelectItem>
-              {courses.map((c) => (
+              {courseOptions.map((c) => (
                 <SelectItem key={c.id} value={c.id}>
                   {c.name}
                 </SelectItem>

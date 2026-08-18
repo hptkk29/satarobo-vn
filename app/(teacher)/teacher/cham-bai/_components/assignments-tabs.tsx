@@ -235,7 +235,7 @@ function LibraryPreviewDialog({
 }) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="flex max-h-[90vh] w-[calc(100vw-2rem)] max-w-xl flex-col gap-0 p-0">
+      <DialogContent className="flex max-h-[90vh] w-[calc(100vw-2rem)] sm:max-w-xl flex-col gap-0 p-0">
         <DialogHeader className="border-b border-border px-5 py-4">
           <DialogTitle>{t?.title ?? "Xem mẫu"}</DialogTitle>
           <DialogDescription>

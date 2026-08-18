@@ -217,6 +217,11 @@ export function cloneQuestion(q: ContentQuestion): ContentQuestion {
   }
 }
 
+/** Trần số đáp án/cặp/mục/chỗ trống mỗi câu — khớp zod server (question-content-db). */
+export const MAX_OPTIONS = 10;
+/** Trần số câu hỏi mỗi đầu bài — khớp zod server. */
+export const MAX_QUESTIONS = 50;
+
 /** Trả về thông báo lỗi nếu câu hỏi chưa hợp lệ, hoặc `null` nếu ổn. */
 export function validateQuestion(q: ContentQuestion, n: number): string | null {
   if (!q.question.trim()) return `Câu ${n}: chưa nhập nội dung câu hỏi`;
@@ -224,12 +229,14 @@ export function validateQuestion(q: ContentQuestion, n: number): string | null {
     case "single": {
       const filled = q.options.filter((o) => o.trim());
       if (filled.length < 2) return `Câu ${n}: cần ít nhất 2 đáp án`;
+      if (q.options.length > MAX_OPTIONS) return `Câu ${n}: tối đa ${MAX_OPTIONS} đáp án`;
       if (!q.options[q.correctIndex]?.trim()) return `Câu ${n}: đáp án đúng đang để trống`;
       return null;
     }
     case "multiple": {
       const filled = q.options.filter((o) => o.trim());
       if (filled.length < 2) return `Câu ${n}: cần ít nhất 2 đáp án`;
+      if (q.options.length > MAX_OPTIONS) return `Câu ${n}: tối đa ${MAX_OPTIONS} đáp án`;
       const valid = q.correctIndices.filter((i) => q.options[i]?.trim());
       if (valid.length === 0) return `Câu ${n}: hãy đánh dấu ít nhất 1 đáp án đúng`;
       return null;
@@ -238,6 +245,7 @@ export function validateQuestion(q: ContentQuestion, n: number): string | null {
       return null;
     case "fill": {
       const count = countBlanks(q.question);
+      if (count > MAX_OPTIONS) return `Câu ${n}: tối đa ${MAX_OPTIONS} chỗ trống`;
       for (let i = 0; i < count; i++) {
         if (!q.answers[i]?.trim()) return `Câu ${n}: chỗ trống ${i + 1} chưa có đáp án`;
       }
@@ -249,11 +257,13 @@ export function validateQuestion(q: ContentQuestion, n: number): string | null {
     case "matching": {
       const filled = q.pairs.filter((p) => p.left.trim() && p.right.trim());
       if (filled.length < 2) return `Câu ${n}: cần ít nhất 2 cặp ghép hoàn chỉnh`;
+      if (q.pairs.length > MAX_OPTIONS) return `Câu ${n}: tối đa ${MAX_OPTIONS} cặp ghép`;
       return null;
     }
     case "ordering": {
       const filled = q.items.filter((it) => it.trim());
       if (filled.length < 2) return `Câu ${n}: cần ít nhất 2 mục để sắp xếp`;
+      if (q.items.length > MAX_OPTIONS) return `Câu ${n}: tối đa ${MAX_OPTIONS} mục`;
       return null;
     }
   }
