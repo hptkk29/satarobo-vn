@@ -51,7 +51,7 @@ export const faqs: FAQ[] = [
       {
         type: "list",
         items: [
-          "Sata1: 16 buổi/khóa, tổng 24 giờ (5 buổi đầu là buổi học thử miễn phí).",
+          "Sata1: 16 buổi/khóa, tổng 24 giờ (chỉ tính học phí 11 buổi, tặng kèm 5 buổi luyện đề).",
           "Sata2: 16 buổi/khóa, tổng 24 giờ.",
           "Combo Sata1 + Sata2: 32 buổi, tổng 48 giờ.",
           "Sata8: 5 buổi chuyên sâu, tổng 7,5 giờ.",
@@ -89,7 +89,7 @@ export const faqs: FAQ[] = [
           "Thời gian hoàn tiền dự kiến trong 3 ngày làm việc.",
         ],
       },
-      "Mục tiêu của chính sách này là để phụ huynh được quan sát con trải nghiệm thật trước khi quyết định theo học lâu dài.",
+      "Ngoài ra, mọi học viên mới đều được tặng 1 buổi học thử 1-1 miễn phí trước khi quyết định đăng ký.",
     ],
   },
   {

@@ -34,9 +34,9 @@ export function FloatingCta() {
       {/* Primary CTA pill */}
       <Link
         href="/lien-he?free-trial=true"
-        className="pointer-events-auto inline-flex items-center gap-2 rounded-full bg-gradient-to-r from-orange-500 to-rose-500 px-5 py-3 text-sm font-bold text-white shadow-2xl shadow-orange-500/40 hover:shadow-orange-500/60 hover:-translate-y-0.5 active:translate-y-0 transition-all duration-200 focus-visible:ring-2 focus-visible:ring-orange-300 focus-visible:outline-none"
+        className="cta-pulse cta-shine pointer-events-auto inline-flex items-center gap-2 rounded-full bg-gradient-to-r from-orange-500 to-rose-500 px-5 py-3 text-sm font-bold text-white hover:-translate-y-0.5 active:translate-y-0 transition-all duration-200 focus-visible:ring-2 focus-visible:ring-orange-300 focus-visible:outline-none"
       >
-        Đăng ký miễn phí
+        Học thử 1-1 miễn phí
         <ArrowRight className="h-4 w-4" />
       </Link>
     </div>

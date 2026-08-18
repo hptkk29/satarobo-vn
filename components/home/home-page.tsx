@@ -11,12 +11,14 @@ import {
   Users,
   Target,
   GraduationCap,
+  Handshake,
   MapPin,
   Flag,
   CalendarClock,
   type LucideIcon,
 } from "lucide-react";
 import { SATA_ROBO_CONTACT_CENTERS } from "@/lib/locations";
+import { TRIAL_SESSION_MINUTES, TRIAL_TEST_MINUTES } from "@/lib/uu-dai";
 import { NumberTicker } from "@/components/magic/number-ticker";
 import { BorderBeam } from "@/components/magic/border-beam";
 import { ShimmerButton } from "@/components/magic/shimmer-button";
@@ -61,6 +63,8 @@ export function HomePage({
       <UuTheSection />
       <EarlyBirdCountdown />
       <CompetitionCountdown />
+      <NhaTaiTroSection />
+      <HocVienThiDauSection />
       <TravelPrizeBanner />
       <FAQSection />
       <FinalCTA />
@@ -101,7 +105,7 @@ function StatsBar() {
               <span>%</span>
             </span>
             <span className="text-xs md:text-sm opacity-90 font-medium">
-              Cam kết hoàn tiền văn bản
+              Cam kết hoàn tiền (gói Sata8)
             </span>
           </StatBlock>
         </div>
@@ -298,10 +302,10 @@ function TravelPrizeBanner() {
             Giải Thưởng Đặc Biệt
           </div>
           <h2 className="text-3xl md:text-4xl font-black mb-3">
-            Lễ Khai Trương 2 Chi Nhánh Mới — Tháng 5/2026
+            Lễ Khai Trương 2 Chi Nhánh Mới — Tháng 8/2026
           </h2>
           <p className="text-lg mb-10 opacity-90">
-            Giải thưởng sẽ được trao vào tháng 8
+            Giải thưởng được trao tại Lễ Khai trương tháng 8/2026
           </p>
         </FadeIn>
 
@@ -455,6 +459,143 @@ function CompetitionStage({
   );
 }
 
+// ============== 8b. ĐỒNG HÀNH & TÀI TRỢ CUỘC THI ==============
+// Nội dung dòng lead lấy nguyên văn phông sân khấu trong ảnh: Sata Robo là
+// đơn vị PHỐI HỢP tổ chức — đừng nâng cấp thành "đơn vị tổ chức".
+const NHA_TAI_TRO_ANH = [
+  {
+    src: "/image_publicsite/nhataitro.jpg",
+    alt: "Lễ trao giải Cuộc thi Sáng tạo Robotics TP Đà Nẵng lần thứ II 2026 — Sata Robo là đơn vị phối hợp tổ chức",
+    caption: "Lễ trao giải Cuộc thi Sáng tạo Robotics TP Đà Nẵng, lần thứ II — 2026",
+  },
+  {
+    src: "/image_publicsite/nhataitro1.jpg",
+    alt: "Vòng chung kết Cuộc thi Sáng tạo Robotics TP Đà Nẵng 2026 — Sata Robo đồng hành cùng ban tổ chức",
+    caption: "Vòng Chung kết — Sata Robo đồng hành cùng Ban tổ chức",
+  },
+];
+
+function NhaTaiTroSection() {
+  return (
+    <section className="bg-white py-16">
+      <div className="container mx-auto px-4 max-w-6xl">
+        <SectionEyebrow icon={Handshake} label="ĐỒNG HÀNH & TÀI TRỢ" tone="purple" />
+        <SectionHeading>
+          Sata Robo đồng hành &amp; tài trợ Cuộc thi Sáng tạo Robotics TP Đà Nẵng
+        </SectionHeading>
+        <SectionLead>
+          Đơn vị phối hợp tổ chức Cuộc thi Sáng tạo Robotics Thành phố Đà Nẵng lần thứ II —
+          năm 2026, cùng Thành Đoàn TP Đà Nẵng và Công ty CP Giáo dục Việt Robot.
+        </SectionLead>
+
+        <div className="mt-10 grid grid-cols-1 gap-6 md:grid-cols-2">
+          {NHA_TAI_TRO_ANH.map((anh, i) => (
+            <RevealOnScroll key={anh.src} direction="up" distance={24} delay={i * 0.08}>
+              <figure>
+                <div className="relative aspect-[3/2] overflow-hidden rounded-2xl bg-gradient-to-br from-orange-50 to-purple-50">
+                  <Image
+                    src={anh.src}
+                    alt={anh.alt}
+                    fill
+                    loading="lazy"
+                    className="object-cover"
+                    sizes="(max-width: 768px) 100vw, 50vw"
+                  />
+                </div>
+                <figcaption className="mt-2 text-center text-sm text-neutral-600">
+                  {anh.caption}
+                </figcaption>
+              </figure>
+            </RevealOnScroll>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+// ============== 8c. HỌC VIÊN TRÊN ĐẤU TRƯỜNG ==============
+interface ThiDauAnh {
+  src: string;
+  alt: string;
+  caption: string;
+}
+
+// Cả 3 ảnh gốc đều DỌC → aspect-[3/4]. Đừng đổi sang aspect-video: cắt mất người.
+const THI_DAU_ANH: ThiDauAnh[] = [
+  {
+    src: "/image_publicsite/hocviensatathamgiacuocthi2.jpg",
+    alt: "Học viên Sata Robo điều khiển robot trên sa bàn tại Cuộc thi Sáng tạo Robotics TP Đà Nẵng 2026",
+    caption: "Vào trận — điều khiển robot trên sa bàn thi đấu",
+  },
+  {
+    src: "/image_publicsite/hocviensatathamgiacuocthi.jpg",
+    alt: "Học viên Sata Robo chuẩn bị robot trước lượt thi tại Cuộc thi Sáng tạo Robotics TP Đà Nẵng 2026",
+    caption: "Kiểm tra robot trước lượt thi",
+  },
+  {
+    src: "/image_publicsite/hocviensatathamgiacuocthi1.jpg",
+    alt: "Học viên Sata Robo đạt Giải Ba bảng B2 vòng chung kết Cuộc thi Sáng tạo Robotics TP Đà Nẵng 2026",
+    caption: "Giải Ba bảng B2 — Vòng Chung kết",
+  },
+];
+
+function ThiDauCard({ anh }: { anh: ThiDauAnh }) {
+  return (
+    <figure className="h-full">
+      <div className="relative aspect-[3/4] overflow-hidden rounded-2xl bg-gradient-to-br from-orange-50 to-purple-50">
+        <Image
+          src={anh.src}
+          alt={anh.alt}
+          fill
+          loading="lazy"
+          className="object-cover"
+          sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
+        />
+      </div>
+      <figcaption className="mt-2 text-center text-sm text-neutral-600">{anh.caption}</figcaption>
+    </figure>
+  );
+}
+
+function HocVienThiDauSection() {
+  return (
+    <section className="bg-gradient-to-b from-orange-50 to-white py-16">
+      <div className="container mx-auto px-4 max-w-6xl">
+        <SectionEyebrow icon={Trophy} label="ĐẤU TRƯỜNG" tone="orange" />
+        <SectionHeading>Học viên Sata Robo trên đấu trường Robotics</SectionHeading>
+        <SectionLead>
+          Các con mang chính sản phẩm mình lập trình ra sân đấu cấp thành phố — và mang giấy
+          chứng nhận về nhà.
+        </SectionLead>
+
+        {/* Mobile: 1 ảnh / view — house pattern giống UuTheSection */}
+        <div className="mt-10 md:hidden">
+          <AutoCarousel
+            loop={false}
+            align="center"
+            slideClassName="flex-[0_0_100%]"
+            showArrows={false}
+          >
+            {THI_DAU_ANH.map((anh) => (
+              <ThiDauCard key={anh.src} anh={anh} />
+            ))}
+          </AutoCarousel>
+        </div>
+
+        {/* Desktop: grid 3 cột */}
+        <div className="mt-10 hidden gap-6 md:grid md:grid-cols-3">
+          {THI_DAU_ANH.map((anh, i) => (
+            <RevealOnScroll key={anh.src} direction="up" distance={24} delay={i * 0.08}>
+              <ThiDauCard anh={anh} />
+            </RevealOnScroll>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
 // ============== 9. FINAL CTA ==============
 function FinalCTA() {
   return (
@@ -472,9 +613,10 @@ function FinalCTA() {
             Con bạn xứng đáng được trải nghiệm tốt nhất
           </h2>
           <p className="text-lg md:text-xl mb-10 opacity-90">
-            Học trải nghiệm <strong>MIỄN PHÍ</strong> — không điều kiện.
+            Tặng <strong>buổi học thử 1-1 miễn phí</strong> — {TRIAL_TEST_MINUTES} phút test
+            năng lực + {TRIAL_SESSION_MINUTES} phút học 1 kèm 1.
             <br />
-            Cam kết hoàn tiền 100% nếu không hài lòng.
+            Hoàn 100% học phí nếu không hài lòng sau buổi học đầu tiên.
           </p>
 
           {/* Mobile: stack vertical, 2 nút h-14 + w-full → bằng nhau chính xác.
@@ -487,10 +629,10 @@ function FinalCTA() {
               <ShimmerButton
                 background="rgba(255,255,255,1)"
                 borderRadius="14px"
-                className="h-14 w-full px-8 font-bold text-orange-600 text-lg shadow-2xl sm:h-auto sm:w-auto sm:py-4"
+                className="cta-pulse-white h-14 w-full px-8 font-bold text-orange-600 text-lg sm:h-auto sm:w-auto sm:py-4"
               >
                 <Target className="w-5 h-5 mr-2" />
-                <span>Đăng ký học trải nghiệm ngay</span>
+                <span>Đặt buổi học thử 1-1 ngay</span>
                 <ArrowRight className="w-5 h-5 ml-2" />
               </ShimmerButton>
             </Link>

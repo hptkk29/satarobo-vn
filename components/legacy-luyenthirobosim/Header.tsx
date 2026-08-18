@@ -40,14 +40,14 @@ export default function Header() {
           <a href="#faq" className="lp-header__link">FAQ</a>
           <button
             onClick={() => trackAndRedirect("R1", "header_R1")}
-            className="btn btn-r1 btn-sm"
+            className="btn btn-r1 btn-sm cta-shine"
             aria-label="Đăng ký Khoá R1 cho Tiểu học"
           >
             Đăng Ký R1
           </button>
           <button
             onClick={() => trackAndRedirect("R2", "header_R2")}
-            className="btn btn-r2 btn-sm"
+            className="btn btn-r2 btn-sm cta-shine"
             aria-label="Đăng ký Khoá R2 cho THCS"
           >
             Đăng Ký R2
@@ -75,7 +75,7 @@ export default function Header() {
               trackAndRedirect("R1", "header_R1");
               setMenuOpen(false);
             }}
-            className="btn btn-r1"
+            className="btn btn-r1 cta-shine"
           >
             🟦 Đăng ký BẢNG R1 — 490k
           </button>
@@ -84,7 +84,7 @@ export default function Header() {
               trackAndRedirect("R2", "header_R2");
               setMenuOpen(false);
             }}
-            className="btn btn-r2"
+            className="btn btn-r2 cta-shine"
           >
             🟪 Đăng ký BẢNG R2 — 490k
           </button>

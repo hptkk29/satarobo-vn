@@ -32,7 +32,7 @@ export default function FinalCTA() {
         <div className="cta-btns">
           <button
             onClick={() => trackAndRedirect("R1", "section7_R1")}
-            className="btn btn-r1 btn-lg"
+            className="btn btn-r1 btn-lg cta-shine"
             aria-label="Đăng ký Bảng R1 cho con Tiểu học — 490.000đ, mở trong tab mới"
           >
             🟦 ĐĂNG KÝ BẢNG R1 — 490.000đ
@@ -40,7 +40,7 @@ export default function FinalCTA() {
           </button>
           <button
             onClick={() => trackAndRedirect("R2", "section7_R2")}
-            className="btn btn-r2 btn-lg"
+            className="btn btn-r2 btn-lg cta-shine"
             aria-label="Đăng ký Bảng R2 cho con THCS — 490.000đ, mở trong tab mới"
           >
             🟪 ĐĂNG KÝ BẢNG R2 — 490.000đ

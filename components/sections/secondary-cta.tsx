@@ -5,6 +5,7 @@ import { ArrowRight, Calendar, Phone } from "lucide-react";
 import { FadeIn } from "@/components/motion/fade-in";
 import { ShimmerButton } from "@/components/magic/shimmer-button";
 import { SATA_ROBO_CONTACT_CENTERS } from "@/lib/locations";
+import { TRIAL_LABEL, TRIAL_LABEL_TITLE } from "@/lib/uu-dai";
 
 // F-UI-3 — Final conversion section trước Footer. Dark zinc + purple
 // gradient với grid mask + 2 glow halos để focus vào CTA chính.
@@ -26,7 +27,7 @@ export function SecondaryCta() {
               <span className="relative inline-flex h-2 w-2 rounded-full bg-orange-500" />
             </span>
             <span className="text-xs font-medium text-orange-200 sm:text-sm">
-              🔥 Chỉ còn 24 suất Tháng 5/2026
+              🔥 {TRIAL_LABEL_TITLE} — đang nhận lịch
             </span>
           </div>
 
@@ -39,9 +40,9 @@ export function SecondaryCta() {
 
           <p className="mx-auto mt-6 max-w-2xl text-base leading-relaxed text-zinc-300 sm:text-lg">
             Đăng ký{" "}
-            <strong className="text-white">học trải nghiệm miễn phí 1 buổi</strong>{" "}
-            — không cần thẻ tín dụng, không ràng buộc. Cùng con khám phá thế
-            giới Robot ngay!
+            <strong className="text-white">{TRIAL_LABEL}</strong> — không cần
+            thẻ tín dụng, không ràng buộc. Cùng con khám phá thế giới Robot
+            ngay!
           </p>
         </FadeIn>
 
@@ -55,11 +56,11 @@ export function SecondaryCta() {
             >
               <ShimmerButton
                 background="linear-gradient(135deg, #F97316 0%, #EAB308 100%)"
-                className="h-14 w-full px-8 text-base font-semibold sm:h-auto sm:w-auto sm:py-3.5"
+                className="cta-pulse h-14 w-full px-8 text-base font-semibold sm:h-auto sm:w-auto sm:py-3.5"
               >
                 <span className="flex items-center gap-2 text-white">
                   <Calendar className="h-5 w-5" />
-                  Đăng ký học trải nghiệm miễn phí
+                  Đặt {TRIAL_LABEL}
                   <ArrowRight className="h-4 w-4" />
                 </span>
               </ShimmerButton>

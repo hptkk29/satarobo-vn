@@ -33,9 +33,9 @@ export default function TopCountdownBar() {
               <Flame className="w-4 h-4 sm:w-5 sm:h-5 flex-shrink-0 animate-pulse" />
               <div className="flex items-center justify-center gap-1.5 sm:gap-2 text-xs sm:text-sm font-bold min-w-0 text-center">
                 <span className="hidden sm:inline whitespace-nowrap">
-                  EARLY BIRD KHÓA OFFLINE KẾT THÚC SAU:
+                  KHAI GIẢNG LỚP OFFLINE MỚI SAU:
                 </span>
-                <span className="sm:hidden whitespace-nowrap">EARLY BIRD:</span>
+                <span className="sm:hidden whitespace-nowrap">KHAI GIẢNG:</span>
                 <span className="font-black text-yellow-200 whitespace-nowrap">
                   {pad(timeLeft.days)}d : {pad(timeLeft.hours)}h : {pad(timeLeft.minutes)}m : {pad(timeLeft.seconds)}s
                 </span>

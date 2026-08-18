@@ -9,7 +9,7 @@ import { SATA_ROBO_CONTACT_CENTERS } from "@/lib/locations";
 
 // F-UI-4 — Bottom-pinned bar (mobile only). Đối trọng với
 // <FloatingCta /> (bubble bottom-right, đã scope desktop only).
-// Ẩn trên admin/login/lien-he?free-trial (user đang ở flow đăng ký rồi).
+// Ẩn trên admin/login.
 const HIDDEN_PREFIXES = ["/admin", "/login"];
 
 export function StickyMobileCta() {
@@ -49,10 +49,10 @@ export function StickyMobileCta() {
             ))}
             <Link
               href="/lien-he?free-trial=true"
-              className="flex h-12 flex-1 items-center justify-center gap-2 rounded-full bg-gradient-sata-warm text-sm font-semibold text-white transition-opacity hover:opacity-90"
+              className="cta-pulse cta-shine flex h-12 flex-1 items-center justify-center gap-2 rounded-full bg-gradient-sata-warm text-sm font-semibold text-white transition-opacity hover:opacity-90"
             >
               <Calendar className="h-4 w-4" />
-              Đăng ký tư vấn miễn phí
+              Đặt buổi học thử 1-1 miễn phí
             </Link>
           </div>
         </motion.div>

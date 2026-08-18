@@ -23,7 +23,7 @@ export default function Courses() {
         </p>
 
         <div className="lp-courses__swap-badge" role="note">
-          💡 Lỡ chọn nhầm bảng? Sata Robo hỗ trợ đổi khoá miễn phí.
+          💡 Lỡ chọn nhầm bảng? Sata Robo hỗ trợ đổi khoá miễn phí trong 7 ngày đầu.
         </div>
 
         <div className="course-grid">
@@ -76,7 +76,7 @@ export default function Courses() {
 
               <button
                 onClick={() => trackAndRedirect(course.level as "R1" | "R2", `section4_${course.level}`)}
-                className={`btn btn-${course.colorKey} btn-lg lp-courses__cta`}
+                className={`btn btn-${course.colorKey} btn-lg lp-courses__cta cta-shine`}
                 aria-label={`${course.ctaText} — mở trong tab mới`}
               >
                 {course.ctaText}

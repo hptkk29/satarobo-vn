@@ -206,9 +206,9 @@ export function MobileNavDrawer() {
                 <Link
                   href="/lien-he?free-trial=true"
                   onClick={() => setIsOpen(false)}
-                  className="flex w-full items-center justify-center gap-2 rounded-full bg-gradient-sata-warm py-3 font-semibold text-white transition-opacity hover:opacity-90"
+                  className="cta-pulse cta-shine flex w-full items-center justify-center gap-2 rounded-full bg-gradient-sata-warm py-3 font-semibold text-white transition-opacity hover:opacity-90"
                 >
-                  Đăng ký tư vấn
+                  Đặt buổi học thử
                   <ArrowRight className="h-4 w-4" />
                 </Link>
                 {SATA_ROBO_CONTACT_CENTERS.map((c) => (

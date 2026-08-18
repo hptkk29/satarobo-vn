@@ -6,9 +6,16 @@ import { ArrowRight, Flame, CalendarClock } from "lucide-react";
 import { FadeIn } from "@/components/motion/fade-in";
 import {
   getNextOpeningDate,
-  getOpeningCountdownTarget,
   formatVietnameseDateLong,
 } from "@/lib/opening-date";
+import {
+  DISCOUNT_HEADLINE,
+  MAX_DISCOUNT_OFFLINE,
+  PROGRAM_END,
+  PROGRAM_END_LABEL,
+  PROGRAM_NAME,
+  TOTAL_GIFT_VALUE,
+} from "@/lib/uu-dai";
 
 interface TimeLeft {
   days: number;
@@ -21,12 +28,13 @@ interface TimeLeft {
 
 function getTimeLeft(): TimeLeft {
   const now = new Date();
-  const target = getOpeningCountdownTarget(now);
+  // Đếm ngược tới HẠN THẬT của chương trình ưu đãi (PROGRAM_END = 31/12/2026).
+  // KHÔNG dùng getOpeningCountdownTarget: mốc đó là 00:00 Chủ nhật và tự
+  // reset mỗi tuần → hạn giả tái sinh vô tận.
   const openingDate = getNextOpeningDate(now);
-  const diff = target.getTime() - now.getTime();
+  const diff = PROGRAM_END.getTime() - now.getTime();
   if (diff <= 0) {
-    // Edge case: ngay khi pass mốc Sun 00:00 — helper sẽ tự roll sang
-    // Sat tuần kế tiếp ở tick interval kế tiếp.
+    // Hết hạn chương trình → mọi ô về 0.
     return {
       days: 0,
       hours: 0,
@@ -79,12 +87,12 @@ export function EarlyBirdCountdown() {
                 </span>
               </div>
               <h2 className="text-2xl md:text-3xl font-black leading-tight mb-2">
-                Early Bird Khai Trương — Ưu Đãi Đến 30%
+                {PROGRAM_NAME} — Giảm đến {MAX_DISCOUNT_OFFLINE}% học phí
               </h2>
               <p className="text-sm md:text-base opacity-95 max-w-xl">
-                Đếm ngược đến lễ khai trương{" "}
-                <strong>Thứ 7, {openingDateLabel}</strong>. Sau ngày này,
-                tất cả các khoá trở về giá niêm yết.
+                {DISCOUNT_HEADLINE} + bộ quà tặng{" "}
+                <strong>{TOTAL_GIFT_VALUE}</strong>. Ưu đãi áp dụng đến hết{" "}
+                <strong>{PROGRAM_END_LABEL}</strong>.
               </p>
             </div>
 
@@ -106,7 +114,7 @@ export function EarlyBirdCountdown() {
             </Link>
             <div className="inline-flex items-center gap-2 text-xs sm:text-sm text-white/90">
               <CalendarClock className="w-4 h-4" />
-              <span>Khai trương Thứ 7, {openingDateLabel}</span>
+              <span>Khai giảng Thứ 7, {openingDateLabel}</span>
             </div>
           </div>
         </FadeIn>

@@ -13,11 +13,14 @@ type Props = {
   children?: React.ReactNode;
 };
 
+// Nhịp/vệt sáng đi kèm variant, KHÔNG rắc ở nơi gọi: nền nút quyết định màu
+// hiệu ứng (vệt trắng trên nút nền trắng là vô hình). Xem `.cta-*` trong globals.css.
 const VARIANTS = {
   primary:
-    "bg-gradient-to-r from-orange-500 to-orange-600 text-white shadow-lg shadow-orange-500/30 hover:from-orange-600 hover:to-orange-700",
-  white: "bg-white text-orange-600 shadow-xl hover:bg-orange-50",
-  outline: "border-2 border-white text-white hover:bg-white/10",
+    "cta-pulse cta-shine bg-gradient-to-r from-orange-500 to-orange-600 text-white hover:from-orange-600 hover:to-orange-700",
+  white:
+    "cta-pulse-white cta-shine cta-shine-warm bg-white text-orange-600 hover:bg-orange-50",
+  outline: "cta-shine border-2 border-white text-white hover:bg-white/10",
 };
 
 const SIZES = {
@@ -48,7 +51,7 @@ export function ConsultCtaButton({
           fullWidth ? "w-full" : "",
         ].join(" ")}
       >
-        {children ?? "Đăng ký tư vấn miễn phí"}
+        {children ?? "Đặt buổi học thử 1-1 miễn phí"}
       </button>
 
       <ConsultModal

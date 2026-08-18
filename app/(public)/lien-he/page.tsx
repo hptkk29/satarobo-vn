@@ -113,7 +113,7 @@ export default async function ContactPage() {
               Liên hệ Sata Robo
             </h1>
             <p className={`${tokens.typography.body.lg} text-neutral-600 mb-6`}>
-              Chúng tôi sẵn sàng tư vấn 1-1 miễn phí về lộ trình học Robotics phù hợp với con bạn — phản hồi trong 30 phút giờ hành chính
+              Chúng tôi tư vấn 1-1 miễn phí và xếp buổi học thử 1-1 cho con — phản hồi trong 30 phút giờ hành chính
             </p>
             <div className="flex flex-col sm:flex-row gap-3">
               {SATA_ROBO_CONTACT_CENTERS.map((c) => (
@@ -165,7 +165,7 @@ export default async function ContactPage() {
 
       {/* ─── Form section SOFT-WARM ───
           KHÔNG bọc SectionBase: ContactForm tự render <section id="dang-ky">
-          (đích nhảy của CTA "Đăng ký tư vấn"). Bọc thêm sẽ thành section lồng
+          (đích nhảy của CTA "Đặt buổi học thử 1-1"). Bọc thêm sẽ thành section lồng
           section + tiêu đề đúp. */}
       <ContactForm />
 

@@ -15,9 +15,9 @@ export interface InternalAwards {
 }
 
 export const internalAwards: InternalAwards = {
-  totalValue: "36.000.000đ",
+  totalValue: "37.200.000đ",
   perYear: 12,
-  perEvent: "3.000.000đ",
+  perEvent: "3.100.000đ",
   description:
     "12 kỳ thi hằng tháng dành riêng cho học viên tại các trung tâm Sata Robo.",
   prizes: [

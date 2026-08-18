@@ -30,10 +30,14 @@ export const promotions: Promotions = {
     {
       id: "early-bird",
       title: "Ưu đãi khai giảng",
-      highlight: "Giảm 15%",
+      highlight: "Giảm đến 25%",
       description:
-        "Dành cho phụ huynh đăng ký sớm cho lớp mới khai giảng. Áp dụng cho các khóa Sata1-Sata7, giúp gia đình giữ mức học phí tốt trước khi giá trở về niêm yết.",
-      details: ["Áp dụng theo từng đợt khai giảng lớp mới", "Áp dụng cho Sata1-Sata7", "Không áp dụng cho Sata8"],
+        "Dành cho phụ huynh đăng ký trong chương trình khai giảng: Sata1/Sata2 giảm 10%, Combo giảm 15%, Sata3-Sata7 giảm 25%. Sata8 giá cố định, không áp dụng giảm giá.",
+      details: [
+        "Áp dụng đến hết 31/12/2026",
+        "Sata1/Sata2 −10% · Combo −15% · Sata3-Sata7 −25%",
+        "Không áp dụng cho Sata8 (giá cố định)",
+      ],
       cta: "Đăng ký giữ ưu đãi",
       target: "registration-form",
       icon: "Sparkles",
@@ -69,7 +73,7 @@ export const promotions: Promotions = {
       highlight: "Giới thiệu bạn bè",
       description: "Người giới thiệu nhận thưởng tiền mặt. Người được giới thiệu được giảm thêm học phí.",
       condition: "Bạn được giới thiệu đóng tiền lần đầu. Không giới hạn số lượng bạn giới thiệu.",
-      note: "Không cộng dồn với gói đội thi 2 học viên nếu chính sách yêu cầu.",
+      note: "Chỉ áp dụng 1 trong 3 ưu đãi cộng thêm: Referral, Gói Anh/Chị/Em, Gói đội thi 2 HV.",
       icon: "Gift",
     },
     {
@@ -79,7 +83,7 @@ export const promotions: Promotions = {
       description:
         "Gia đình có 2 con đăng ký, con thứ 2 được giảm thêm 15%. Gia đình có 3 con trở lên, con thứ 3 trở đi giảm 15% và được tặng thêm khóa RoboSim Online.",
       condition: "Phù hợp cho gia đình muốn cho các con học cùng hệ sinh thái Robotics.",
-      note: "Gia đình 3 con có thể tiết kiệm thêm đáng kể tùy khóa học.",
+      note: "Chỉ áp dụng 1 trong 3 ưu đãi cộng thêm: Referral, Gói Anh/Chị/Em, Gói đội thi 2 HV.",
       icon: "Users",
     },
     {
@@ -89,7 +93,7 @@ export const promotions: Promotions = {
       description:
         "2 học viên cùng đăng ký để lập 1 đội thi theo đúng quy chế 2 thí sinh/đội sẽ được giảm thêm 10% trên mức giá đang áp dụng.",
       condition: "Áp dụng khi 2 học viên đăng ký cùng thời điểm.",
-      note: "Không áp dụng cộng dồn với Referral.",
+      note: "Chỉ áp dụng 1 trong 3 ưu đãi cộng thêm: Referral, Gói Anh/Chị/Em, Gói đội thi 2 HV.",
       icon: "Trophy",
     },
   ],

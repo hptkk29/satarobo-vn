@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import useCountdown from "./_hooks/useCountdown";
 import { formatDeadline } from "./_utils/deadlines";
+import { PROGRAM_END_LABEL } from "@/lib/uu-dai";
 import {
   promotions as staticPromotions,
   type PrimaryPromotion,
@@ -191,7 +192,7 @@ export default function SpecialOfferCountdown({
           <div className="mb-5 inline-flex items-center gap-2 rounded-full border border-primary-orange/25 bg-white px-4 py-2 text-primary-orange shadow-card">
             <Flame className="h-4 w-4 animate-pulse" />
             <span className="text-xs font-black uppercase tracking-wider sm:text-sm">
-              Ưu đãi lớp mới — áp dụng đến hết {formatDeadline(deadline)}
+              Ưu đãi khai giảng — áp dụng đến hết {PROGRAM_END_LABEL}
             </span>
           </div>
           <h2 className="heading-2 mb-4 text-text-dark">Ưu đãi khai giảng lớp mới</h2>
@@ -208,6 +209,10 @@ export default function SpecialOfferCountdown({
             </div>
           ))}
         </div>
+
+        <p className="mx-auto mb-7 max-w-xl text-center text-[11px] font-semibold text-text-muted sm:mb-9 sm:text-xs">
+          Đếm ngược đến buổi khai giảng gần nhất — {formatDeadline(deadline)}
+        </p>
 
         <div className="mb-7 md:hidden">
           <SlideCarousel items={allPromos} renderItem={renderCard} />
@@ -236,7 +241,7 @@ export default function SpecialOfferCountdown({
         </div>
 
         <div className="flex flex-col justify-center gap-3 sm:flex-row">
-          <button onClick={() => scrollTo("registration-form")} className="btn-primary w-full sm:w-auto">
+          <button onClick={() => scrollTo("registration-form")} className="btn-primary cta-pulse cta-shine w-full sm:w-auto">
             Đăng ký nhận ưu đãi
             <ArrowRight className="h-5 w-5" />
           </button>

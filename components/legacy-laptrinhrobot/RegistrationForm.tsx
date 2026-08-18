@@ -2,7 +2,8 @@
 
 // Bộ input lấy theo form đăng ký của quatang.edu.vn: chỉ 3 ô bắt buộc (tên con /
 // SĐT phụ huynh / cơ sở), 5 ô còn lại nằm trong panel "Thêm thông tin" mở khi cần.
-// Phần nội dung marketing "suất trải nghiệm 1-1" của trang đó KHÔNG lấy sang.
+// Chỉ lấy bộ input; phần copy marketing của trang đó KHÔNG lấy sang — lời hứa
+// trên trang này là "buổi học thử 1-1 miễn phí" theo lib/uu-dai.ts.
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import {
@@ -23,6 +24,7 @@ import {
 import { readStoredCourseSelection } from "./_utils/courseSelection";
 import { locations } from "./_data/locations";
 import { VN_PROVINCES, VN_PROVINCE_DEFAULT } from "@/lib/vn-provinces";
+import { TRIAL_TEST_MINUTES, TRIAL_SESSION_MINUTES } from "@/lib/uu-dai";
 import {
   handleLeadSubmission,
   validateVietnamPhone,
@@ -206,7 +208,7 @@ export default function RegistrationForm() {
               Học viện <strong>Sata Robo</strong> đã nhận được thông tin của bố mẹ.
               <br />
               Tư vấn viên sẽ gọi trong vòng{" "}
-              <strong className="text-primary-orange">24h</strong> để xếp lịch học trải nghiệm miễn phí.
+              <strong className="text-primary-orange">24h</strong> để xếp buổi học thử 1-1 miễn phí.
             </p>
 
             {shouldRedirectToZalo ? (
@@ -276,7 +278,7 @@ export default function RegistrationForm() {
         <div className="mb-8 text-center sm:mb-12">
           <div className="mb-4 inline-flex items-center gap-2 rounded-full bg-white/20 px-4 py-1.5 text-xs font-bold uppercase tracking-wider text-white backdrop-blur-sm sm:text-sm">
             <ClipboardList className="h-4 w-4" />
-            ĐĂNG KÝ BUỔI HỌC TRẢI NGHIỆM MIỄN PHÍ
+            ĐẶT BUỔI HỌC THỬ 1-1 MIỄN PHÍ
           </div>
           <h2 className="mb-4 text-3xl font-black leading-tight text-white sm:text-5xl">
             Bắt Đầu <span className="text-soft-yellow">Hành Trình</span>
@@ -285,7 +287,11 @@ export default function RegistrationForm() {
           </h2>
           <p className="mx-auto max-w-2xl text-base text-white/90 sm:text-lg">
             Bố mẹ vui lòng điền thông tin dưới đây - Sata Robo gọi tư vấn trong{" "}
-            <strong>24h</strong> để xếp lịch học trải nghiệm miễn phí cho con.
+            <strong>24h</strong> để xếp buổi học thử 1-1 miễn phí cho con.
+          </p>
+          <p className="mx-auto mt-3 max-w-2xl rounded-2xl bg-white/15 px-4 py-3 text-sm text-white backdrop-blur-sm sm:text-base">
+            {TRIAL_TEST_MINUTES} phút test năng lực đầu vào + {TRIAL_SESSION_MINUTES} phút học thử 1 kèm 1
+            trên phần mềm RoboSim cùng giáo viên — 0 đồng, không ràng buộc, áp dụng cả 2 cơ sở.
           </p>
         </div>
 
@@ -511,7 +517,7 @@ export default function RegistrationForm() {
             <button
               type="submit"
               disabled={isSubmitting}
-              className="w-full rounded-xl bg-gradient-orange-purple py-4 text-base font-black text-white shadow-lg transition hover:scale-[1.02] hover:shadow-xl active:scale-95 disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:scale-100 sm:text-lg"
+              className="cta-pulse cta-shine w-full rounded-xl bg-gradient-orange-purple py-4 text-base font-black text-white transition hover:scale-[1.02] active:scale-95 disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:scale-100 sm:text-lg"
             >
               {isSubmitting ? (
                 <span className="inline-flex items-center gap-2">
@@ -519,7 +525,7 @@ export default function RegistrationForm() {
                   Đang gửi thông tin...
                 </span>
               ) : (
-                "ĐĂNG KÝ NHẬN TƯ VẤN MIỄN PHÍ →"
+                "ĐẶT BUỔI HỌC THỬ 1-1 MIỄN PHÍ →"
               )}
             </button>
 

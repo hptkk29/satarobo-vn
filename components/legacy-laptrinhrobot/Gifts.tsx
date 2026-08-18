@@ -7,6 +7,7 @@ import {
   type Gift as GiftType,
 } from "./_data/gifts";
 import { Gift, Flame } from "lucide-react";
+import { PROGRAM_NAME, PROGRAM_END_LABEL } from "@/lib/uu-dai";
 
 export default function Gifts({
   gifts = staticGifts,
@@ -59,6 +60,9 @@ export default function Gifts({
           <h2 className="heading-2 mb-4">
             Bộ Quà Tặng <span className="text-gradient-orange-purple">Giá Trị</span> Kèm Theo
           </h2>
+          <p className="mb-3 text-sm font-semibold text-primary-purple sm:text-base">
+            Nằm trong {PROGRAM_NAME}
+          </p>
           <p className="text-base sm:text-lg text-text-muted max-w-2xl mx-auto">
             Mình tặng kèm <strong>4 món quà giá trị</strong> — không phải để &ldquo;câu&rdquo; bố mẹ,
             mà để con có khởi đầu thuận lợi nhất ngay từ ngày đầu.
@@ -122,7 +126,7 @@ export default function Gifts({
               <span className="text-xs sm:text-sm font-bold uppercase tracking-wide">Tổng giá trị quà tặng</span>
             </div>
             <div className="text-3xl sm:text-5xl font-black mb-2">{totalGiftValue}</div>
-            <p className="text-sm sm:text-base font-medium opacity-95">TẶNG MIỄN PHÍ khi bố mẹ đăng ký hôm nay</p>
+            <p className="text-sm sm:text-base font-medium opacity-95">TẶNG KÈM khi bố mẹ đăng ký trong chương trình</p>
           </div>
         </div>
 
@@ -133,12 +137,12 @@ export default function Gifts({
               e.preventDefault();
               document.getElementById("registration-form")?.scrollIntoView({ behavior: "smooth" });
             }}
-            className="btn-primary text-base sm:text-lg"
+            className="btn-primary cta-pulse cta-shine text-base sm:text-lg"
           >
             🎁 ĐĂNG KÝ NHẬN QUÀ NGAY →
           </a>
           <p className="mt-3 text-xs sm:text-sm text-text-muted">
-            ⏰ Quà tặng chỉ áp dụng cho phụ huynh đăng ký trong tháng này
+            ⏰ Quà tặng áp dụng cho phụ huynh đăng ký đến hết {PROGRAM_END_LABEL}
           </p>
         </div>
       </div>

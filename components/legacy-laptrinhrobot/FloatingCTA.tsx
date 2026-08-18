@@ -30,13 +30,13 @@ export default function FloatingCTA() {
     >
       <button
         onClick={handleScrollToForm}
-        className="group flex items-center gap-2 px-3.5 sm:px-5 py-2.5 sm:py-3 bg-gradient-orange-purple text-white font-bold text-xs sm:text-sm rounded-full
-          shadow-xl hover:scale-105 hover:shadow-2xl active:scale-95 transition-all"
-        aria-label="Đăng ký tư vấn"
+        className="cta-pulse cta-shine group flex items-center gap-2 px-3.5 sm:px-5 py-2.5 sm:py-3 bg-gradient-orange-purple text-white font-bold text-xs sm:text-sm rounded-full
+          hover:scale-105 active:scale-95 transition-all"
+        aria-label="Đặt buổi học thử 1-1 miễn phí"
       >
         <Target className="w-4 h-4 sm:w-5 sm:h-5 group-hover:rotate-90 transition" />
-        <span className="hidden sm:inline">Đăng Ký</span>
-        <span className="sm:hidden">Đăng ký</span>
+        <span className="hidden sm:inline">Học thử 1-1 miễn phí</span>
+        <span className="sm:hidden">Học thử</span>
       </button>
 
       {SATA_ROBO_CONTACT_CENTERS.map((c) => (

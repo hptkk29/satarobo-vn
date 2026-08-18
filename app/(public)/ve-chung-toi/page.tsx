@@ -503,8 +503,12 @@ export default function VeChungToiPage() {
             <CTAPrimary href="/khoa-hoc" size="lg" magnetic>
               Khám phá khoá học
             </CTAPrimary>
-            <CTASecondary href="/lien-he" size="lg">
-              Đặt lịch tư vấn miễn phí
+            <CTASecondary
+              href="/lien-he"
+              size="lg"
+              className="cta-shine cta-shine-purple"
+            >
+              Đặt buổi học thử 1-1 miễn phí
             </CTASecondary>
           </div>
         </div>

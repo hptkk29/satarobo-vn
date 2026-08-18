@@ -546,6 +546,9 @@
   .animate-marquee-vertical {
     animation: none;
   }
+  /* Các rule "giảm chuyển động" của .cta-pulse / .cta-shine KHÔNG nằm ở đây:
+     chúng phải đứng SAU phần định nghĩa (cuối khối CTA bên dưới), xem ghi chú
+     ở đó. */
 }
 
 /* ── Hero responsive helper (legacy laptrinhrobot) ─────────── */
@@ -613,6 +616,175 @@
 }
 .animate-glow {
   animation: glowOrange 2s ease-in-out infinite;
+}
+
+/* ── CTA chuyển đổi: nhấp nháy NHẸ ──────────────────────────
+   Dùng cho nút "Đặt buổi học thử" / "Đăng ký" trên site public.
+
+   Vì sao không dùng `.animate-glow` ở trên: nó thở box-shadow 20px↔40px
+   với alpha 0.4↔0.7 mỗi 2 giây — trên nút to là loé, ngồi đọc lâu thấy mệt,
+   và vầng sáng không có offset nên nút mất luôn cảm giác nổi khỏi mặt nền.
+
+   Cách ở đây tách làm 2 lớp bóng:
+     · lớp 1 = bóng đổ THẬT (có offset dọc + blur) — đứng yên, giữ chiều sâu;
+     · lớp 2 = một vòng sóng lan ra rồi tan (spread 0 → 12px, alpha → 0).
+   Sóng lan một chiều nên mắt đọc là "nhịp", không phải "đèn nháy". Chu kỳ 2.8s
+   đủ chậm để không giành sự chú ý với nội dung.
+
+   Hai biến thể vì nền khác nhau: mặc định (cam) cho nền sáng,
+   `--white` cho nút trắng nằm trên nền cam/tím đậm. */
+@keyframes ctaPulse {
+  0% {
+    box-shadow:
+      0 10px 24px -8px rgba(234, 88, 12, 0.5),
+      0 0 0 0 rgba(249, 115, 22, 0.42);
+  }
+  70% {
+    box-shadow:
+      0 10px 24px -8px rgba(234, 88, 12, 0.5),
+      0 0 0 12px rgba(249, 115, 22, 0);
+  }
+  100% {
+    box-shadow:
+      0 10px 24px -8px rgba(234, 88, 12, 0.5),
+      0 0 0 0 rgba(249, 115, 22, 0);
+  }
+}
+
+@keyframes ctaPulseWhite {
+  0% {
+    box-shadow:
+      0 10px 24px -8px rgba(0, 0, 0, 0.35),
+      0 0 0 0 rgba(255, 255, 255, 0.5);
+  }
+  70% {
+    box-shadow:
+      0 10px 24px -8px rgba(0, 0, 0, 0.35),
+      0 0 0 12px rgba(255, 255, 255, 0);
+  }
+  100% {
+    box-shadow:
+      0 10px 24px -8px rgba(0, 0, 0, 0.35),
+      0 0 0 0 rgba(255, 255, 255, 0);
+  }
+}
+
+.cta-pulse {
+  animation: ctaPulse 2.8s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+
+.cta-pulse-white {
+  animation: ctaPulseWhite 2.8s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+
+/* Trỏ chuột vào là dừng nhịp: lúc đó nút đã được chú ý rồi,
+   nháy tiếp chỉ làm nhiễu trạng thái hover. */
+.cta-pulse:hover,
+.cta-pulse-white:hover {
+  animation-play-state: paused;
+}
+
+/* Nút đang gửi form thì tắt nhịp: lúc đó nút không còn là lời mời bấm nữa,
+   nháy tiếp là hứa hẹn sai. */
+.cta-pulse:disabled,
+.cta-pulse-white:disabled {
+  animation: none;
+}
+
+/* ── CTA nổi bật: vệt sáng quét ngang ───────────────────────
+   Lớp thứ hai, ĐỘC LẬP với `.cta-pulse` ở trên và ghép được với nó:
+   pulse thở ở viền ngoài (box-shadow), shine chạy bên trong mặt nút
+   (một pseudo-element trượt qua). Hai thứ không tranh nhau thuộc tính nào.
+
+   Vì sao tách chứ không gộp vào `.cta-pulse`: nhiều nút CTA nằm trên nền
+   ảnh/gradient hoặc dùng inline style cho box-shadow (2 landing legacy) —
+   ở đó chỉ shine là an toàn, vì nó không đụng box-shadow của nút.
+
+   Chu kỳ 3.6s và vệt chỉ chiếm 60% đầu chu kỳ ⇒ có quãng NGHỈ thật giữa hai
+   lượt quét. Không nghỉ thì mắt đọc thành "băng chuyền", mất hẳn nghĩa "có gì
+   đó vừa loé lên ở đây".
+
+   Màu vệt lấy qua biến để đổi theo nền nút:
+     · mặc định  = trắng   → nút nền cam / gradient đậm;
+     · `--warm`  = cam nhạt → nút NỀN TRẮNG chữ cam (vệt trắng ở đó vô hình).
+
+   `overflow: hidden` chỉ cắt phần tử CON, không cắt box-shadow/ring focus của
+   chính nút, nên vẫn dùng chung được với `focus-visible:ring-*`. */
+@keyframes ctaShine {
+  0% {
+    transform: translateX(-140%) skewX(-18deg);
+  }
+  60%,
+  100% {
+    transform: translateX(340%) skewX(-18deg);
+  }
+}
+
+.cta-shine {
+  --cta-shine-color: rgba(255, 255, 255, 0.4);
+  position: relative;
+  overflow: hidden;
+}
+
+.cta-shine::after {
+  content: "";
+  position: absolute;
+  top: -40%;
+  bottom: -40%;
+  left: 0;
+  width: 38%;
+  /* Nằm TRÊN chữ là cố ý — vệt phải quét qua cả nhãn nút mới ra hiệu ứng.
+     Alpha giữ ≤ 0.4 + blur 2px để chữ không bị mất nét lúc vệt đi ngang. */
+  background: linear-gradient(
+    90deg,
+    transparent,
+    var(--cta-shine-color),
+    transparent
+  );
+  filter: blur(2px);
+  pointer-events: none;
+  animation: ctaShine 3.6s ease-in-out infinite;
+}
+
+.cta-shine-warm {
+  --cta-shine-color: rgba(249, 115, 22, 0.34);
+}
+
+/* Nút viền tím nền trắng (CTASecondary) — vệt cam ở đó lệch tông. */
+.cta-shine-purple {
+  --cta-shine-color: rgba(124, 58, 237, 0.28);
+}
+
+/* Cùng lý do như `.cta-pulse:hover`: đã trỏ chuột vào thì nút được chú ý rồi. */
+.cta-shine:hover::after,
+.cta-shine:disabled::after {
+  animation: none;
+  opacity: 0;
+}
+
+/* ⚠️ Khối này PHẢI đứng SAU mọi định nghĩa `.cta-*` ở trên, không được gộp lên
+   `@media (prefers-reduced-motion)` ở đầu file. `@media` KHÔNG cộng thêm độ đặc
+   hiệu: `.cta-pulse` trong media và `.cta-pulse` ngoài media cùng 0,1,0, nên rule
+   đứng SAU thắng. Đặt trên đầu file thì `animation` của `.cta-pulse` (khai báo
+   sau) đè ngược lại và người bật "giảm chuyển động" vẫn thấy nút nháy — đúng lỗi
+   đã có trong file trước ngày 18/08/2026.
+
+   Tắt nhịp nhưng PHẢI trả lại bóng đổ bằng tay: bóng của `.cta-pulse` do keyframe
+   cấp, `animation: none` là nút mất luôn chiều sâu, bẹt hơn hẳn các nút quanh nó. */
+@media (prefers-reduced-motion: reduce) {
+  .cta-pulse {
+    animation: none;
+    box-shadow: 0 10px 24px -8px rgba(234, 88, 12, 0.5);
+  }
+  .cta-pulse-white {
+    animation: none;
+    box-shadow: 0 10px 24px -8px rgba(0, 0, 0, 0.35);
+  }
+  /* Shine không cấp bóng cho nút nên gỡ hẳn được, không phải bù gì. */
+  .cta-shine::after {
+    animation: none;
+    display: none;
+  }
 }
 
 /* ── MobileCarousel Component Styles ───────────────────────── */

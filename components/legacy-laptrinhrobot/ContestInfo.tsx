@@ -14,7 +14,7 @@ const CARDS: CardData[] = [
   { icon: "🌍", title: "Sân chơi quốc tế", body: "Cơ hội đại diện Việt Nam tham dự WRC – World Robot Championship toàn cầu" },
   { icon: "🧠", title: "Kỹ năng thế kỷ 21", body: "Rèn tư duy logic, kỹ năng lập trình và giải quyết vấn đề – nền tảng STEM vững chắc" },
   { icon: "🤖", title: "Thi trực tuyến qua RoboSim", body: "Vòng loại thi qua phần mềm RoboSim – học sinh luyện bài bản sẽ có lợi thế vượt trội" },
-  { icon: "⏰", title: "Hạn đăng ký 19/07/2026", body: "Cần ít nhất 4–6 tuần chuẩn bị – bắt đầu học ngay hôm nay để không bị động" },
+  { icon: "⏰", title: "Chung kết Khu vực 13/09/2026", body: "Chung kết Khu vực Miền Trung tại Nghệ An – cần ít nhất 4–6 tuần luyện đề, bắt đầu sớm để không bị động" },
 ];
 
 const SLIDES = [CARDS.slice(0, 3), CARDS.slice(3, 6)];

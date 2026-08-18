@@ -47,10 +47,10 @@ export default function FinalCTA() {
               e.preventDefault();
               document.getElementById("registration-form")?.scrollIntoView({ behavior: "smooth" });
             }}
-            className="flex-1 px-6 py-4 bg-gradient-orange-purple text-white font-black text-base sm:text-lg rounded-xl
-              shadow-xl hover:shadow-2xl hover:scale-[1.03] active:scale-95 transition text-center"
+            className="cta-pulse cta-shine flex-1 px-6 py-4 bg-gradient-orange-purple text-white font-black text-base sm:text-lg rounded-xl
+              hover:scale-[1.03] active:scale-95 transition text-center"
           >
-            🎯 ĐĂNG KÝ TƯ VẤN MIỄN PHÍ →
+            🎯 ĐẶT BUỔI HỌC THỬ 1-1 MIỄN PHÍ →
           </a>
           {SATA_ROBO_CONTACT_CENTERS.map((c) => (
             <a
@@ -71,7 +71,7 @@ export default function FinalCTA() {
         <div className="max-w-5xl mx-auto bg-text-dark text-white rounded-3xl p-6 sm:p-8 shadow-xl">
           <div className="mb-6">
             <h3 className="font-black text-xl sm:text-2xl leading-tight">Liên hệ trực tiếp Học viện Sata Robo</h3>
-            <p className="text-sm text-white/70 mt-1">Và đặt lịch buổi học trải nghiệm miễn phí cho con.</p>
+            <p className="text-sm text-white/70 mt-1">Và đặt buổi học thử 1-1 miễn phí cho con.</p>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5">

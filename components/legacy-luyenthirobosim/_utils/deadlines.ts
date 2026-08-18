@@ -1,12 +1,15 @@
 /**
- * Rolling deadline đồng bộ với lễ khai trương — countdown đến hết Thứ 7
- * (mốc Sun 00:00). 00:00 Chủ nhật → tự nhảy sang Thứ 7 tuần kế tiếp.
- * Logic chung: lib/opening-date.ts.
+ * Hạn ưu đãi hiển thị trên landing = hạn của chương trình hợp nhất
+ * "Ưu đãi Khai giảng Sata Robo 2026" — nguồn duy nhất là lib/uu-dai.ts.
+ *
+ * Trước 18/08/2026 chỗ này đếm tới mốc tự reset mỗi Chủ nhật, nên thanh
+ * countdown và câu "ưu đãi kết thúc hết ngày ..." trong popup nói hai mốc
+ * khác nhau. Nay cả hai cùng trỏ về PROGRAM_END (31/12/2026).
  */
-import { getOpeningCountdownTarget } from "@/lib/opening-date";
+import { PROGRAM_END } from "@/lib/uu-dai";
 
 export function getNextDeadline(): Date {
-  return getOpeningCountdownTarget(new Date());
+  return PROGRAM_END;
 }
 
 /**

@@ -254,7 +254,7 @@ function ContactFormInner() {
     }
   }, [])
 
-  // Đang Ở TRÊN trang này mà bấm CTA "Đăng ký tư vấn" (header / nút nổi / thanh
+  // Đang Ở TRÊN trang này mà bấm CTA "Đặt buổi học thử 1-1" (header / nút nổi / thanh
   // dính mobile) thì URL không đổi ⇒ Next không điều hướng, effect không chạy lại,
   // nút thành nút chết. Bắt click ngay tại đây và trượt xuống form.
   useEffect(() => {
@@ -279,7 +279,7 @@ function ContactFormInner() {
     return () => document.removeEventListener('click', onClick, true)
   }, [])
 
-  // CTA "Đăng ký tư vấn" trỏ `/lien-he?free-trial=true` (CỐ Ý không kèm `#dang-ky`:
+  // CTA "Đặt buổi học thử 1-1" trỏ `/lien-he?free-trial=true` (CỐ Ý không kèm `#dang-ky`:
   // có hash thì trình duyệt nhảy tới nơi ngay lúc tải, cuộn mượt sau đó không còn
   // gì để trượt). Không hash ⇒ trang mở ở đầu rồi trượt xuống form cho khách thấy
   // đường đi. Chờ 80ms cho Suspense render xong mới cuộn.
@@ -340,7 +340,7 @@ function ContactFormInner() {
       values.tinh?.trim() ? `Tỉnh/TP: ${values.tinh.trim()}` : '',
       subject ? `Chủ đề: ${subject}` : '',
       product ? `Quan tâm: ${product}` : '',
-      isFreeTrial ? 'Đăng ký học thử miễn phí' : '',
+      isFreeTrial ? 'Đăng ký buổi học thử 1-1 miễn phí' : '',
     ]
       .filter(Boolean)
       .join(' | ')
@@ -660,7 +660,7 @@ function ContactFormInner() {
         <button
           type="submit"
           disabled={isSubmitting}
-          className="btn-primary h-14 w-full justify-center rounded-xl text-base font-black disabled:cursor-not-allowed disabled:opacity-60"
+          className="btn-primary cta-pulse cta-shine h-14 w-full justify-center rounded-xl text-base font-black disabled:cursor-not-allowed disabled:opacity-60"
         >
           {isSubmitting ? (
             <>
@@ -670,7 +670,7 @@ function ContactFormInner() {
           ) : (
             <>
               <Send className="w-4 h-4" />
-              ĐĂNG KÝ TƯ VẤN MIỄN PHÍ
+              ĐẶT BUỔI HỌC THỬ 1-1 MIỄN PHÍ
             </>
           )}
         </button>
@@ -688,7 +688,7 @@ function ContactFormInner() {
   )
 }
 
-// `id="dang-ky"` để ai gõ/bookmark `#dang-ky` vẫn tới đúng chỗ. CTA "Đăng ký tư vấn"
+// `id="dang-ky"` để ai gõ/bookmark `#dang-ky` vẫn tới đúng chỗ. CTA "Đặt buổi học thử 1-1"
 // thì dùng `?free-trial=true` KHÔNG kèm hash — xem lý do ở effect cuộn mượt bên trên.
 // `scroll-mt-24` chừa chỗ cho header dính — thiếu nó thì ô đầu bị header che.
 export function ContactForm() {
@@ -700,7 +700,7 @@ export function ContactForm() {
       <GlowOrb color="orange" position="top-left" size="lg" />
       <div className="container-site max-w-2xl mx-auto relative z-10">
         <div className="text-center mb-10">
-          <span className="badge-orange mb-3 inline-block">Đăng ký tư vấn</span>
+          <span className="badge-orange mb-3 inline-block">Đặt buổi học thử 1-1</span>
           <h2 className="heading-2 text-text-dark">
             Để lại thông tin,{' '}
             <span className="text-gradient-orange-purple">chúng tôi gọi lại</span>

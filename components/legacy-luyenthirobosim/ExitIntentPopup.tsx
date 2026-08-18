@@ -5,6 +5,7 @@ import useCountdown from "./_hooks/useCountdown";
 import CountdownTimer from "./CountdownTimer";
 import { getNextDeadline } from "./_utils/deadlines";
 import { trackAndRedirect } from "./_utils/tracking";
+import { PROGRAM_END_LABEL } from "@/lib/uu-dai";
 
 const INTERVAL_MS = 90_000;
 
@@ -54,7 +55,7 @@ export default function ExitIntentPopup() {
         </h2>
 
         <p className="xpop-sub">
-          Ưu đãi kết thúc hết ngày 10/05/2026. Sau đó giá trở về mức ban đầu.
+          Ưu đãi kết thúc hết ngày {PROGRAM_END_LABEL}. Sau đó giá trở về mức ban đầu.
           Đây là cơ hội tốt nhất để con bắt đầu luyện thi.
         </p>
 
@@ -79,7 +80,7 @@ export default function ExitIntentPopup() {
 
         <div className="xpop-actions">
           <button
-            className="btn btn-r1 xpop-btn"
+            className="btn btn-r1 xpop-btn cta-shine"
             onClick={() => {
               close();
               trackAndRedirect("R1", "popup_R1");
@@ -88,7 +89,7 @@ export default function ExitIntentPopup() {
             🟦 Đăng ký Bảng R1 ngay — 490.000đ →
           </button>
           <button
-            className="btn btn-r2 xpop-btn"
+            className="btn btn-r2 xpop-btn cta-shine"
             onClick={() => {
               close();
               trackAndRedirect("R2", "popup_R2");

@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { usePathname } from "next/navigation";
 import { X, Calendar, Clock, MapPin, Phone, Star } from "lucide-react";
 import { SATA_ROBO_CONTACT_CENTERS } from "@/lib/locations";
+import { PROGRAM_START, PROGRAM_END } from "@/lib/uu-dai";
 import {
   getNextOpeningDate,
   getNextMondayOpeningDate,
@@ -12,12 +13,11 @@ import {
 
 // sessionStorage key — prevents re-showing within the same browsing session
 // once the visitor dismisses the popup.
-const STORAGE_KEY = "satarobo-campaign-20-suat-dismissed";
+const STORAGE_KEY = "satarobo-popup-hoc-thu-1-1-dismissed";
 
-// Window in which this popup is allowed to show.
-const CAMPAIGN_START = new Date("2026-05-15T00:00:00+07:00");
-const CAMPAIGN_END = new Date("2026-12-31T23:59:59+07:00");
-
+// Cửa sổ hiển thị = cửa sổ chương trình "Ưu đãi Khai giảng Sata Robo 2026",
+// lấy thẳng từ @/lib/uu-dai — KHÔNG khai lại mốc riêng ở đây, vì popup từng
+// tự giữ 2 mốc ngày của mình nên lệch hạn với các bề mặt khác.
 const INITIAL_DELAY_MS = 15_000; // first show 15s after page load
 
 // Trang KHÔNG được bật popup. `/lien-he` CHÍNH LÀ form đăng ký — bật một overlay
@@ -34,9 +34,9 @@ interface BatchInfo {
   schedule: string;
 }
 
-// 2 ĐỢT KHAI GIẢNG — mỗi đợt áp dụng cho CẢ 2 cơ sở (211 NHT + 114 HD).
-// Ngày tự rolling theo logic ở lib/opening-date.ts: 00:00 Chủ nhật → sang
-// Thứ 7 tuần kế tiếp.
+// 2 KHUNG GIỜ xếp buổi học thử, bám đúng 2 khung khai giảng đang chạy — mỗi
+// khung áp dụng cho CẢ 2 cơ sở (211 NHT + 114 HD). Ngày tự rolling theo logic ở
+// lib/opening-date.ts: 00:00 Chủ nhật → sang Thứ 7 tuần kế tiếp.
 function computeBatches(now: Date): BatchInfo[] {
   const sat = getNextOpeningDate(now);
   const mon = getNextMondayOpeningDate(now);
@@ -72,7 +72,7 @@ function markDismissed() {
   }
 }
 
-export function CampaignPopup20Suat() {
+export function PopupHocThu11() {
   const [isOpen, setIsOpen] = useState(false);
   const [mountedAt, setMountedAt] = useState<Date | null>(null);
 
@@ -90,7 +90,7 @@ export function CampaignPopup20Suat() {
     }
 
     const now = new Date();
-    if (now < CAMPAIGN_START || now > CAMPAIGN_END) return;
+    if (now < PROGRAM_START || now > PROGRAM_END) return;
     if (hasBeenDismissed()) return;
 
     setMountedAt(now);
@@ -115,7 +115,7 @@ export function CampaignPopup20Suat() {
     <div
       role="dialog"
       aria-modal="true"
-      aria-labelledby="campaign-20-suat-title"
+      aria-labelledby="popup-hoc-thu-title"
       // Mobile: p-2 (8px) thay vì p-4 (16px) để khung popup rộng hơn.
       // KHÔNG dùng overflow-y-auto trên outer (gây tràn body khi content
       // dài) — thay vào đó, scroll riêng trên body section của modal.
@@ -145,16 +145,16 @@ export function CampaignPopup20Suat() {
             không gian dọc. */}
         <div className="shrink-0 bg-gradient-to-br from-orange-500 to-red-500 text-white px-4 sm:px-6 py-4 sm:py-6 pr-12 sm:pr-14">
           <div className="text-[11px] sm:text-xs uppercase tracking-wider opacity-90 mb-1">
-            🔥 Đặc quyền duy nhất
+            🎁 Dành riêng cho phụ huynh mới
           </div>
           <h2
-            id="campaign-20-suat-title"
+            id="popup-hoc-thu-title"
             className="text-xl sm:text-2xl md:text-3xl font-bold leading-tight"
           >
-            Tặng 24 suất khoá học Robotics MIỄN PHÍ
+            Tặng buổi học thử 1-1 miễn phí
           </h2>
           <p className="mt-2 text-xs sm:text-sm md:text-base opacity-95">
-            Chỉ 12 suất / cơ sở. Đăng ký đóng tự động khi đủ chỉ tiêu.
+            1 buổi 90 phút, học 1 kèm 1 cùng giáo viên. 0 đồng, không ràng buộc.
           </p>
         </div>
 
@@ -163,9 +163,9 @@ export function CampaignPopup20Suat() {
         <div className="flex-1 min-h-0 overflow-y-auto px-4 sm:px-6 py-4 sm:py-5 space-y-4">
           <div className="text-sm text-gray-700 space-y-2">
             <p>
-              <strong>🎁 Khoá học Đại cương Lập trình Robotics</strong> — tập trung
-              Tư duy hệ thống và Lập trình tự động trên phần mềm{" "}
-              <strong>RoboSim</strong> chuẩn quốc tế.
+              <strong>🤖 Buổi học thử 1-1</strong> — con làm quen Tư duy hệ thống
+              và Lập trình tự động trên phần mềm <strong>RoboSim</strong> chuẩn
+              quốc tế, có giáo viên kèm riêng suốt buổi.
             </p>
             <p className="text-xs text-gray-500">
               💻 Học sinh mang laptop cá nhân để cài đặt phần mềm và thực hành.
@@ -175,7 +175,7 @@ export function CampaignPopup20Suat() {
           <div className="border-t pt-4">
             <h3 className="text-sm font-semibold mb-3 flex items-center gap-1.5">
               <Calendar className="h-4 w-4" />
-              2 đợt khai giảng
+              2 khung giờ xếp buổi học thử
             </h3>
             <div className="space-y-2">
               {batches.map((b, i) => (
@@ -219,7 +219,7 @@ export function CampaignPopup20Suat() {
               ))}
             </div>
 
-            {/* Cả 2 đợt áp dụng cho cả 2 cơ sở */}
+            {/* Cả 2 khung áp dụng cho cả 2 cơ sở */}
             <div className="mt-3 rounded-lg border border-purple-200 bg-gradient-to-r from-purple-50 to-orange-50 px-3 py-2.5">
               <div className="flex items-start gap-2 text-xs sm:text-sm text-gray-700">
                 <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-purple-600" />
@@ -243,9 +243,9 @@ export function CampaignPopup20Suat() {
                   target="_blank"
                   rel="noopener noreferrer"
                   onClick={handleDismiss}
-                  className="flex-1 inline-flex items-center justify-center gap-2 rounded-lg bg-orange-500 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-orange-600 sm:py-3 sm:text-base"
+                  className="cta-shine flex-1 inline-flex items-center justify-center gap-2 rounded-lg bg-orange-500 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-orange-600 sm:py-3 sm:text-base"
                 >
-                  💬 Giữ suất qua Zalo {c.code}
+                  💬 Đặt buổi học thử qua Zalo {c.code}
                 </a>
                 <a
                   href={`tel:${c.hotlineRaw}`}
@@ -260,9 +260,9 @@ export function CampaignPopup20Suat() {
           </div>
 
           <p className="pt-1 text-center text-[11px] text-gray-500 sm:text-xs">
-            Cú pháp giữ suất:{" "}
+            Cú pháp đặt lịch:{" "}
             <code className="rounded bg-gray-100 px-1.5 py-0.5 text-[10px] sm:text-[11px]">
-              [ĐỒNG Ý – Tên Cơ Sở]
+              [HỌC THỬ – Tên Cơ Sở]
             </code>
           </p>
         </div>

@@ -23,12 +23,12 @@ export const courseDetails: Record<string, CourseDetail> = {
     metaTitle:
       "Sata1 — Robosim Master | Khóa luyện thi vòng loại Robotics 2026 | Sata Robo",
     metaDescription:
-      "Khóa Robosim Master 11 buổi tính phí (5 buổi đầu miễn phí) cho lớp 3-8. Làm chủ phần mềm Robosim bắt buộc trong cuộc thi Sáng tạo Robotics 2026. Ưu đãi học phí — liên hệ tư vấn.",
+      "Khóa Robosim Master 16 buổi, chỉ tính học phí 11 buổi, cho lớp 3-8. Làm chủ phần mềm Robosim bắt buộc trong cuộc thi Sáng tạo Robotics 2026. Ưu đãi học phí — liên hệ tư vấn.",
     audienceTag: "Học sinh Lớp 3-8",
     audienceDescription:
       "Dành cho học sinh chuẩn bị tham gia vòng loại Sáng tạo Robotics 2026 — cần làm quen phần mềm Robosim, đọc sa bàn và tối ưu chiến thuật.",
     mission:
-      "Robosim là phần mềm BẮT BUỘC trong cuộc thi Sáng tạo Robotics 2026 do Thành Đoàn Đà Nẵng tổ chức. Sata Robo là đơn vị duy nhất tại Đà Nẵng đào tạo bài bản phần mềm này. Khoá học gồm 5 buổi thử miễn phí + 11 buổi tính học phí, con được luyện trực tiếp trên các sa bàn đề thi vòng loại, rèn tư duy thuật toán cùng kỹ năng tối ưu chiến thuật bài thi.",
+      "Robosim là phần mềm BẮT BUỘC trong cuộc thi Sáng tạo Robotics 2026 do Thành Đoàn Đà Nẵng tổ chức. Sata Robo là đơn vị duy nhất tại Đà Nẵng đào tạo bài bản phần mềm này. Khoá học gồm 16 buổi — 5 buổi luyện đề tặng kèm + 11 buổi tính học phí, con được luyện trực tiếp trên các sa bàn đề thi vòng loại, rèn tư duy thuật toán cùng kỹ năng tối ưu chiến thuật bài thi.",
     outcomes: [
       "Làm chủ phần mềm Robosim — công cụ bắt buộc trong cuộc thi 2026",
       "Đọc và phân tích sa bàn thành thạo",
@@ -37,7 +37,7 @@ export const courseDetails: Record<string, CourseDetail> = {
     ],
     highlights: [
       "11 buổi tính phí × 90 phút = 16,5 giờ luyện thi tập trung",
-      "5 buổi đầu là buổi học thử miễn phí, không tính học phí",
+      "16 buổi học, chỉ tính học phí 11 buổi — tặng kèm 5 buổi luyện đề",
       "Học trên đề thi vòng loại thực tế của cuộc thi 2026",
       "Lớp tối đa 12 học sinh — thầy cô theo sát từng em",
     ],

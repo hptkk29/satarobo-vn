@@ -52,9 +52,9 @@ export default function Header() {
             ))}
             <button
               onClick={() => scrollTo("registration-form")}
-              className="px-4 py-2 bg-primary-orange text-white text-sm font-bold rounded-lg hover:bg-primary-orange-dark transition"
+              className="cta-pulse cta-shine px-4 py-2 bg-primary-orange text-white text-sm font-bold rounded-lg hover:bg-primary-orange-dark transition"
             >
-              Đăng ký miễn phí →
+              Học thử 1-1 miễn phí →
             </button>
           </div>
 
@@ -89,9 +89,9 @@ export default function Header() {
                 ))}
                 <button
                   onClick={() => scrollTo("registration-form")}
-                  className="px-4 py-3 bg-primary-orange text-white text-sm font-bold rounded-lg"
+                  className="cta-pulse cta-shine px-4 py-3 bg-primary-orange text-white text-sm font-bold rounded-lg"
                 >
-                  🎯 Đăng ký miễn phí →
+                  🎯 Học thử 1-1 miễn phí →
                 </button>
               </div>
             </nav>

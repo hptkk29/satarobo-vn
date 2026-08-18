@@ -88,7 +88,7 @@ export default function Results() {
               <div className="lp-results__score">{s.score}</div>
               <button
                 onClick={() => trackAndRedirect(s.level, s.event)}
-                className={`btn btn-${s.colorKey} btn-lg lp-results__cta`}
+                className={`btn btn-${s.colorKey} btn-lg lp-results__cta cta-shine`}
                 aria-label={`${s.ctaText} ${s.ctaSub} — mở trong tab mới`}
               >
                 {s.ctaText}

@@ -50,7 +50,7 @@ export const examRoadmap: ExamRoadmapItem[] = [
     device: "RoboSim phần mềm",
     format: "Trực tiếp, kết hợp E-learning",
     description:
-      "Dành cho học sinh cần luyện thi vòng loại, làm quen phần mềm RoboSim, đọc sa bàn và tối ưu chiến thuật bài thi. 5 buổi đầu là buổi học thử miễn phí, không tính học phí.",
+      "Dành cho học sinh cần luyện thi vòng loại, làm quen phần mềm RoboSim, đọc sa bàn và tối ưu chiến thuật bài thi. Khoá 16 buổi, chỉ tính học phí 11 buổi — 5 buổi luyện đề đầu khoá được tặng kèm.",
     goal:
       "Bồi dưỡng nền tảng lập trình và lắp ráp Robotics, phát triển tư duy thuật toán, năng lực giải quyết vấn đề và sáng tạo.",
     outcomes: [
@@ -60,7 +60,7 @@ export const examRoadmap: ExamRoadmapItem[] = [
       "Trình bày được quy trình lắp ráp, lập trình và vận hành robot.",
     ],
     methods: ["Blended Learning", "Flipped Classroom", "Luyện tập theo nhiệm vụ bài thi", "Tự học có hướng dẫn và kiểm soát"],
-    // Hiển thị trọn 16 buổi của lộ trình (5 buổi đầu là buổi học thử miễn phí, 11 buổi sau tính phí).
+    // Hiển thị trọn 16 buổi của lộ trình (5 buổi luyện đề tặng kèm, 11 buổi tính phí).
     lessons: contestLessons,
     ...examDuration,
   },

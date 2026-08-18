@@ -80,8 +80,8 @@ const COMPARISON = [
 
 const COMMITMENTS = [
   "Giáo trình WRO chuẩn quốc tế — 3 năm tinh chỉnh",
-  "Hoàn 100% học phí buổi 1-2 nếu con không phù hợp",
-  "Giáo viên 1:8 — đảm bảo từng học viên được chú ý",
+  "Hoàn 100% học phí sau buổi học đầu tiên nếu con không phù hợp",
+  "Lớp ≤12 học viên — giáo viên theo sát từng con",
   "Lab Robotics đầy đủ — robot Education vật lý, sensor, controller",
   "Cộng đồng phụ huynh 2,000+ chia sẻ kinh nghiệm",
   "2 cơ sở Đà Nẵng — thuận tiện đưa đón con đi học",
@@ -180,9 +180,9 @@ export default async function CoursesPage() {
               </div>
               <Link
                 href="/lien-he?free-trial=true"
-                className="inline-flex items-center gap-2 bg-orange-500 hover:bg-orange-600 text-white font-bold px-6 py-3 rounded-xl shadow-lg shadow-orange-500/30 hover:shadow-xl hover:shadow-orange-500/40 hover:-translate-y-0.5 transition-all duration-200 focus-visible:ring-2 focus-visible:ring-orange-500 focus-visible:outline-none"
+                className="cta-pulse cta-shine inline-flex items-center gap-2 bg-orange-500 hover:bg-orange-600 text-white font-bold px-6 py-3 rounded-xl hover:-translate-y-0.5 transition-all duration-200 focus-visible:ring-2 focus-visible:ring-orange-500 focus-visible:outline-none"
               >
-                Đăng ký tư vấn miễn phí
+                Đặt buổi học thử 1-1 miễn phí
                 <ArrowRight className="w-5 h-5" />
               </Link>
             </div>
@@ -356,15 +356,15 @@ export default async function CoursesPage() {
               Chưa biết chọn khoá nào?
             </h2>
             <p className="text-lg mb-8 opacity-95 max-w-2xl mx-auto">
-              Đăng ký tư vấn 1-1 miễn phí — chuyên gia Sata Robo sẽ giúp anh chị tìm lộ trình
+              Đặt buổi học thử 1-1 miễn phí — chuyên gia Sata Robo sẽ giúp anh chị tìm lộ trình
               phù hợp nhất cho con
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
               <Link
                 href="/lien-he?free-trial=true"
-                className="inline-flex items-center justify-center gap-2 bg-white text-orange-600 font-bold px-8 py-4 rounded-xl hover:bg-orange-50 shadow-2xl text-lg hover:-translate-y-0.5 transition-all duration-200 focus-visible:ring-2 focus-visible:ring-white focus-visible:outline-none"
+                className="cta-pulse-white cta-shine cta-shine-warm inline-flex items-center justify-center gap-2 bg-white text-orange-600 font-bold px-8 py-4 rounded-xl hover:bg-orange-50 text-lg hover:-translate-y-0.5 transition-all duration-200 focus-visible:ring-2 focus-visible:ring-white focus-visible:outline-none"
               >
-                Đăng ký tư vấn miễn phí
+                Đặt buổi học thử 1-1 miễn phí
                 <ArrowRight className="w-5 h-5" />
               </Link>
               {SATA_ROBO_CONTACT_CENTERS.map((c) => (

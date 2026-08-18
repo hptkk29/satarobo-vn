@@ -305,7 +305,7 @@ export default async function CoursePage({
             Sẵn sàng cho con bắt đầu?
           </h2>
           <p className="mb-6 text-lg text-orange-100">
-            Đăng ký tư vấn miễn phí — Sata Robo sẽ liên hệ trong 30 phút
+            Đặt buổi học thử 1-1 miễn phí — Sata Robo sẽ liên hệ trong 30 phút
           </p>
           <div className="flex flex-col items-center gap-3 sm:flex-row sm:justify-center">
             <ConsultCtaButton

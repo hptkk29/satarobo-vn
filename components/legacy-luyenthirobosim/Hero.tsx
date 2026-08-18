@@ -118,6 +118,7 @@ export default function Hero() {
           <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
             <button
               onClick={() => trackAndRedirect("R1", "hero_R1")}
+              className="cta-shine"
               aria-label="Đăng ký Bảng R1 cho con học Tiểu học — 490.000đ"
               style={{
                 flex: 1,
@@ -151,6 +152,7 @@ export default function Hero() {
             </button>
             <button
               onClick={() => trackAndRedirect("R2", "hero_R2")}
+              className="cta-shine"
               aria-label="Đăng ký Bảng R2 cho con học THCS — 490.000đ"
               style={{
                 flex: 1,

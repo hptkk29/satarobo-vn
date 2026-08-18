@@ -239,24 +239,24 @@ Quốc Anh — khi đó vừa nhận việc 6 tháng — đề xuất tự phát
       awardedAt: new Date("2025-04-15"),
       awardQuarter: "Q1/2025",
       shortBio:
-        "Đề xuất + triển khai chương trình 'Thử học miễn phí 1 buổi' giúp tỷ lệ chuyển đổi lead tăng từ 12% lên 31% trong 3 tháng.",
+        "Đề xuất + triển khai chương trình 'Buổi học thử 1-1 miễn phí' giúp tỷ lệ chuyển đổi lead tăng từ 12% lên 31% trong 3 tháng.",
       story: `Lan gia nhập Sata Robo tháng 4/2024 với vai trò Chuyên viên Tuyển sinh. Chỉ sau 6 tháng, Lan nhận ra một insight quan trọng:
 
 "Phụ huynh không cam kết đăng ký khoá học vì họ chưa thực sự thấy con mình làm được."
 
-Lan đề xuất chương trình "Thử học miễn phí 1 buổi" — phụ huynh đưa con đến cơ sở, học 1 buổi thật, sau đó quyết định đăng ký.
+Lan đề xuất chương trình "Buổi học thử 1-1 miễn phí" — phụ huynh đưa con đến cơ sở, học 1 buổi thật 1 kèm 1, sau đó quyết định đăng ký.
 
 Kết quả sau 3 tháng:
 - Tỷ lệ chuyển đổi từ lead → enrollment: 12% → 31%
 - 180+ phụ huynh đăng ký sau buổi thử
-- Mô hình được nhân rộng ra cả 4 cơ sở
+- Mô hình được áp dụng tại cả 2 cơ sở
 
 Đây là minh chứng cho tinh thần SPARK — không sợ thử nghiệm cái mới, không sợ thất bại, và luôn lắng nghe khách hàng.`,
       pullQuote:
         "Phụ huynh không nói 'không' với khoá học. Phụ huynh nói 'không' khi họ chưa thấy đủ. Việc của tôi là cho họ thấy.",
       achievements: `- Tỷ lệ chuyển đổi lead → enrollment: 12% → 31%
 - 180+ enrollment mới trong 3 tháng
-- Mô hình "Thử học miễn phí" nhân rộng ra 4 cơ sở
+- Mô hình "Học thử 1-1 miễn phí" áp dụng tại cả 2 cơ sở
 - Spark Award Q1/2025`,
       isFeatured: false,
       displayOrder: 5,

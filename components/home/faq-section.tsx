@@ -3,6 +3,15 @@
 import { useState } from "react";
 import { HelpCircle, Plus, Minus, MessageCircle, CheckCircle2 } from "lucide-react";
 import { SATA_ROBO_CONTACT_CENTERS } from "@/lib/locations";
+import {
+  MAX_DISCOUNT_OFFLINE,
+  MAX_DISCOUNT_ONLINE,
+  PROGRAM_NAME,
+  TOTAL_GIFT_VALUE,
+  TRIAL_LABEL,
+  TRIAL_SESSION_MINUTES,
+  TRIAL_TEST_MINUTES,
+} from "@/lib/uu-dai";
 
 // FAQ answer = mảng các block. Mỗi block là:
 // - string → 1 đoạn paragraph
@@ -46,7 +55,7 @@ const FAQS: FAQItem[] = [
           "Combo Sata1 + Sata2: trọn lộ trình luyện thi, ưu đãi hơn so với học riêng.",
         ],
       },
-      "Đang có ưu đãi Early Bird khai trương và hỗ trợ trả góp 0% qua VPBank / Sacombank / Home Credit cho khoá 48 buổi — liên hệ để được tư vấn chi tiết.",
+      `Đang có ${PROGRAM_NAME} (giảm đến ${MAX_DISCOUNT_OFFLINE}% khoá offline, đến ${MAX_DISCOUNT_ONLINE}% khoá luyện thi online, kèm bộ quà tặng ${TOTAL_GIFT_VALUE}) và hỗ trợ trả góp 0% qua VPBank / Sacombank / Home Credit cho khoá 48 buổi — liên hệ để được tư vấn chi tiết.`,
     ],
   },
   {
@@ -56,8 +65,8 @@ const FAQS: FAQItem[] = [
       {
         type: "list",
         items: [
-          "Hoàn 100% trong 2 buổi đầu nếu con không thích — không câu hỏi.",
-          "Với khoá Sata8 — Vé Vàng Chung Kết: hoàn 100% học phí trong 7 ngày làm việc nếu học viên hoàn thành đầy đủ cam kết chuyên cần nhưng không vượt vòng loại để thi chung kết Khu vực Miền Trung tại Nghệ An tháng 9/2026.",
+          "Hoàn 100% học phí nếu phụ huynh không hài lòng sau buổi học đầu tiên — không câu hỏi.",
+          "Với khoá Sata8 — Vé Vàng Chung Kết: hoàn 100% học phí trong 7 ngày làm việc nếu học viên hoàn thành đầy đủ cam kết chuyên cần nhưng không vượt vòng loại để thi chung kết Khu vực Miền Trung tại Nghệ An ngày 13/09/2026.",
         ],
       },
     ],
@@ -93,18 +102,18 @@ const FAQS: FAQItem[] = [
     ],
   },
   {
-    q: "Có học trải nghiệm miễn phí trước khi đăng ký không?",
+    q: "Con có được học thử 1-1 miễn phí trước khi đăng ký không?",
     a: [
-      "Có. Sata Robo tặng 5 buổi luyện thi cơ bản Robosim miễn phí trước thời điểm tháng 5/2026 — hướng đến Cuộc thi Sáng tạo Robotics 2026.",
-      "Sau thời điểm này, phụ huynh nhận:",
+      `Có. Sata Robo tặng mỗi học viên mới 1 ${TRIAL_LABEL} — con học 1 kèm 1 cùng giáo viên tại cơ sở, làm quen RoboSim và được tư vấn lộ trình phù hợp.`,
+      "Buổi học thử gồm:",
       {
         type: "list",
         items: [
-          "1 buổi test năng lực 45 phút.",
-          "1 buổi học trải nghiệm 90 phút.",
+          `${TRIAL_TEST_MINUTES} phút test năng lực đầu vào.`,
+          `${TRIAL_SESSION_MINUTES} phút học thử 1-1 trên RoboSim cùng giáo viên.`,
         ],
       },
-      "Hoàn toàn 0 đồng, không điều kiện.",
+      "Hoàn toàn 0 đồng, không ràng buộc đăng ký.",
     ],
   },
 ];

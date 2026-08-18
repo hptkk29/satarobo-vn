@@ -19,7 +19,7 @@ export default function InternalAwards({
           <h2 className="heading-2 mb-4">
             Sata Robo Championship
             <br className="hidden sm:block" />
-            <span className="text-gradient-orange-purple">36.000.000đ giải thưởng mỗi năm</span>
+            <span className="text-gradient-orange-purple">{internalAwards.totalValue} giải thưởng mỗi năm</span>
           </h2>
           <p className="mx-auto max-w-2xl text-base text-text-muted sm:text-lg">
             {internalAwards.description}
@@ -30,9 +30,9 @@ export default function InternalAwards({
           <div className="mb-1 text-xs font-bold uppercase tracking-wider opacity-90 sm:mb-2 sm:text-sm">
             Tổng giá trị giải thưởng / năm
           </div>
-          <div className="mb-1 text-3xl font-black drop-shadow sm:mb-2 sm:text-6xl">36.000.000 VNĐ</div>
+          <div className="mb-1 text-3xl font-black drop-shadow sm:mb-2 sm:text-6xl">{internalAwards.totalValue}</div>
           <div className="text-xs opacity-95 sm:text-base">
-            12 kỳ x 3.000.000đ / kỳ - dành riêng cho học viên Sata Robo
+            {internalAwards.perYear} kỳ x {internalAwards.perEvent} / kỳ - dành riêng cho học viên Sata Robo
           </div>
         </div>
 

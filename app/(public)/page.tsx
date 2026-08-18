@@ -3,17 +3,16 @@ import { db } from "@/lib/db";
 import { organizationJsonLd, websiteJsonLd, jsonLdScript } from '@/lib/seo/jsonld';
 import { HomePage, type MainCourseCard } from "@/components/home/home-page";
 import { getTestimonials } from "@/lib/testimonials";
+import { MAX_DISCOUNT_OFFLINE, TRIAL_LABEL } from "@/lib/uu-dai";
 
 const BASE_URL = "https://satarobo.vn";
 
 export const metadata: Metadata = {
   title: "Sata Robo — Học Viện Robotics & AI Đà Nẵng",
-  description:
-    "Sata Robo - 2 cơ sở Robotics tại Đà Nẵng. Robosim độc quyền - phần mềm bắt buộc Cuộc thi 2026. Lớp ≤12 HV. Cam kết hoàn 100%. EB đến 30%.",
+  description: `Sata Robo - 2 cơ sở Robotics tại Đà Nẵng. Robosim độc quyền - phần mềm bắt buộc Cuộc thi 2026. Lớp ≤12 HV. Tặng ${TRIAL_LABEL}. Ưu đãi khai giảng đến ${MAX_DISCOUNT_OFFLINE}%.`,
   openGraph: {
     title: "Sata Robo – Trung tâm đào tạo STEM – Lập trình Robotics & AI",
-    description:
-      "Robosim độc quyền · Cam kết hoàn 100% · 2 cơ sở Đà Nẵng",
+    description: `Robosim độc quyền · Tặng ${TRIAL_LABEL} · 2 cơ sở Đà Nẵng`,
     url: BASE_URL,
     siteName: "Sata Robo",
     images: [

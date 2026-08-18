@@ -15,14 +15,14 @@ export default function FloatingButtons() {
     >
       <button
         onClick={() => trackAndRedirect("R1", "floating_R1")}
-        className="lp-floating__btn lp-floating__btn--r1"
+        className="lp-floating__btn lp-floating__btn--r1 cta-shine"
         aria-label="Đăng ký Khoá R1 cho Tiểu học — 490.000đ"
       >
         🟦 Đăng ký R1
       </button>
       <button
         onClick={() => trackAndRedirect("R2", "floating_R2")}
-        className="lp-floating__btn lp-floating__btn--r2"
+        className="lp-floating__btn lp-floating__btn--r2 cta-shine"
         aria-label="Đăng ký Khoá R2 cho THCS — 490.000đ"
       >
         🟪 Đăng ký R2

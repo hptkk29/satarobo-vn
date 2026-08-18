@@ -42,15 +42,15 @@ Có cam kết bằng văn bản. Nếu học viên hoàn thành đầy đủ cam
 - Chung kết Khu vực Miền Trung: 13/09/2026 tại Nghệ An
 
 ═══════════════════════════════════════
-🎁 ƯU ĐÃI EARLY BIRD KHAI TRƯƠNG
+🎁 ƯU ĐÃI KHAI GIẢNG SATA ROBO 2026
 
-- HV Satamath: giảm 25%
-- HV ngoài: giảm 15%
-- Ưu đãi DUY NHẤT đến 31/05/2026
+- Bảng R1 (Tiểu học): giảm 38% — Bảng R2 (THCS): giảm 45%
+- Tặng 1 buổi học thử 1-1 miễn phí cho học viên mới: 45 phút test năng lực + 90 phút học thử 1 kèm 1 trên RoboSim cùng giáo viên
+- Áp dụng đến hết 31/12/2026
 - Sau ngày này: giá trở về niêm yết
 
 ═══════════════════════════════════════
-📞 ĐĂNG KÝ HỌC TRẢI NGHIỆM MIỄN PHÍ
+📞 ĐẶT BUỔI HỌC THỬ 1-1 MIỄN PHÍ
 
 Hotline: 0818.823.720
 Email: thongtin@satarobo.vn

@@ -76,8 +76,8 @@ export default function Hero() {
             </div>
 
             <div className="flex flex-col justify-center gap-3 sm:flex-row lg:justify-start">
-              <button onClick={() => scrollTo("registration-form")} className="btn-primary group w-full text-sm sm:w-auto sm:text-base">
-                Đăng ký học trải nghiệm miễn phí
+              <button onClick={() => scrollTo("registration-form")} className="btn-primary cta-pulse cta-shine group w-full text-sm sm:w-auto sm:text-base">
+                Đặt buổi học thử 1-1 miễn phí
                 <ArrowRight className="h-5 w-5 transition-transform group-hover:translate-x-1" />
               </button>
               <button onClick={() => scrollTo("roadmap")} className="btn-outline w-full text-sm sm:w-auto sm:text-base">

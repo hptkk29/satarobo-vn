@@ -65,7 +65,7 @@ Từ **Sata1 — Robosim Master** (luyện thi vòng loại) đến **Sata7 — 
 
 Trong tháng 5/2026, Sata Robo triển khai **Early Bird khai trương** với ưu đãi lên đến 30% cho học viên mới với các chương trình cam kết đầu ra chất lượng đào tạo.
 
-> 📞 Đăng ký học MIỄN PHÍ ngay hôm nay: **0818.823.720**`,
+> 📞 Đặt buổi học thử 1-1 miễn phí: **0818.823.720**`,
     category: "Tin công ty",
     tags: ["Khai trương", "Robotics", "Đà Nẵng"],
     publishedAt: new Date("2026-05-15"),
@@ -73,7 +73,7 @@ Trong tháng 5/2026, Sata Robo triển khai **Early Bird khai trương** với �
     displayOrder: 1,
     seoTitle: "Sata Robo Khai Trương | Trung Tâm Robotics Hàng Đầu Đà Nẵng",
     seoDescription:
-      "Sata Robo khai trương tại Đà Nẵng. 8 chương trình Robotics, lớp ≤12 HV, Robosim độc quyền, cam kết hoàn tiền 100%. Học miễn phí 5 buổi.",
+      "Sata Robo khai trương tại Đà Nẵng. 8 chương trình Robotics, lớp ≤12 HV, Robosim độc quyền, cam kết hoàn tiền 100%. Tặng buổi học thử 1-1 miễn phí.",
   },
   {
     slug: "sata8-ve-vang-chung-ket-cam-ket-hoan-100",
@@ -106,7 +106,7 @@ Lần đầu tiên tại Đà Nẵng, một trung tâm Robotics dám cam kết t
 Nếu học viên hoàn thành đầy đủ cam kết chuyên cần nhưng vẫn không vượt vòng loại để thi chung kết khu vực Miền Trung tại Nghệ An vào tháng 9/2026 → **Sata Robo hoàn trả 100% học phí trong vòng 7 ngày làm việc.** Không tranh luận.
 
 **Chung kết Khu vực Miền Trung dự kiến:** 13/09/2026 tại Nghệ An
-**Số lượng:** Tối đa 12 học viên/lớp — đăng ký sớm để giữ suất
+**Số lượng:** Tối đa 12 học viên/lớp — đăng ký sớm để chọn khung giờ phù hợp
 
 > 📞 Tư vấn ngay: **0818.823.720** | 📍 258 Lê Thanh Nghị, Hòa Cường, Đà Nẵng`,
     category: "Khoá học mới",
@@ -180,7 +180,7 @@ Từ 01/05 đến hết 31/05/2026, Sata Robo triển khai **Early Bird Khai Tr�
 
 ## Ưu đãi bổ sung
 
-- 👨‍👩‍👧‍👦 **Gói anh/chị/em:** 2 con giảm thêm 15%, 3 con miễn phí Khoá Robosim Online
+- 👨‍👩‍👧‍👦 **Gói anh/chị/em:** con thứ 2 giảm thêm 15%; từ con thứ 3 giảm 15% và được tặng khoá RoboSim Online
 - 👥 **Gói đội thi 2 HV:** Cùng đăng ký giảm thêm 10%
 - 🤝 **Referral:** Giới thiệu bạn nhận 300.000đ tiền mặt + bạn giảm thêm 300.000đ
 - 💳 **Trả góp 0%:** Áp dụng Sata3-Sata7, phối hợp VPBank/Sacombank/Home Credit

@@ -189,7 +189,7 @@ export function ConsultModal({
             <X size={20} />
           </button>
           <div className="mb-2 inline-flex items-center gap-2 rounded-full bg-white/20 px-3 py-1 text-xs font-bold">
-            <Phone size={12} /> MIỄN PHÍ
+            <Phone size={12} /> HỌC THỬ 1-1 MIỄN PHÍ
           </div>
           <h2 className="text-xl font-extrabold">Đăng ký tư vấn</h2>
           <p className="mt-1 text-sm text-orange-50">
@@ -311,14 +311,14 @@ export function ConsultModal({
           <button
             type="submit"
             disabled={submitting}
-            className="mt-2 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-orange-500 to-orange-600 px-6 py-3.5 text-base font-bold text-white shadow-lg shadow-orange-500/30 transition hover:from-orange-600 hover:to-orange-700 disabled:cursor-not-allowed disabled:opacity-60"
+            className="cta-pulse cta-shine mt-2 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-orange-500 to-orange-600 px-6 py-3.5 text-base font-bold text-white transition hover:from-orange-600 hover:to-orange-700 disabled:cursor-not-allowed disabled:opacity-60"
           >
             {submitting ? (
               <>
                 <Loader2 size={18} className="animate-spin" /> Đang gửi...
               </>
             ) : (
-              <>Đăng ký tư vấn miễn phí</>
+              <>Đặt buổi học thử 1-1 miễn phí</>
             )}
           </button>
 

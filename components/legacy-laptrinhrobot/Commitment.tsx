@@ -186,13 +186,13 @@ export default function Commitment({
           <div className="flex flex-col justify-center gap-3 sm:flex-row">
             <a
               href="#registration-form"
-              className="btn-primary"
+              className="btn-primary cta-pulse cta-shine"
               onClick={(event) => {
                 event.preventDefault();
                 document.getElementById("registration-form")?.scrollIntoView({ behavior: "smooth" });
               }}
             >
-              Đăng ký tư vấn miễn phí
+              Đặt buổi học thử 1-1 miễn phí
             </a>
             {SATA_ROBO_CONTACT_CENTERS.map((c) => (
               <a key={c.code} href={c.zalo} target="_blank" rel="noopener noreferrer" className="btn-outline">

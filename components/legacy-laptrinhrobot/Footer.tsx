@@ -67,7 +67,7 @@ export default function Footer() {
               <ul className="space-y-2 text-xs text-gray-300">
                 <li><a href="#roadmap" className="hover:text-primary-orange transition">Lộ Trình 5 Năm</a></li>
                 <li><a href="#awards" className="hover:text-primary-orange transition">Sata Robo Championship</a></li>
-                <li><a href="#gifts" className="hover:text-primary-orange transition">Học Bổng & Quà Tặng</a></li>
+                <li><a href="#gifts" className="hover:text-primary-orange transition">Ưu Đãi & Quà Tặng</a></li>
                 <li><a href="/khoa-hoc/luyenthirobosim" className="hover:text-primary-orange transition">Luyện Thi RoboSim →</a></li>
               </ul>
             </div>
@@ -151,8 +151,8 @@ export default function Footer() {
               <li><a href="#roadmap" className="hover:text-primary-orange transition">Lộ Trình 5 Năm</a></li>
               <li><a href="/khoa-hoc/luyenthirobosim" className="hover:text-primary-orange transition">Khoá Luyện Thi RoboSim →</a></li>
               <li><a href="#awards" className="hover:text-primary-orange transition">Sata Robo Championship</a></li>
-              <li><a href="#gifts" className="hover:text-primary-orange transition">Học Bổng & Quà Tặng</a></li>
-              <li><a href="#locations" className="hover:text-primary-orange transition">4 Cơ Sở Đà Nẵng</a></li>
+              <li><a href="#gifts" className="hover:text-primary-orange transition">Ưu Đãi & Quà Tặng</a></li>
+              <li><a href="#locations" className="hover:text-primary-orange transition">2 Cơ Sở Đà Nẵng</a></li>
             </ul>
           </div>
 
