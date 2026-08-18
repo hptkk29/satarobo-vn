@@ -14,6 +14,7 @@
 "use server";
 
 import { z } from "zod";
+import type { Prisma } from "@prisma/client";
 import { revalidatePath } from "next/cache";
 import { auth } from "@/lib/auth";
 import { resolveActor } from "@/lib/auth/actor";
@@ -21,12 +22,10 @@ import { checkPermission } from "@/lib/auth/check-permission";
 import { scopedDb } from "@/lib/db-scope";
 import { ENROLLMENT_ACTIVE_STATUS_LIST } from "@/lib/enrollment-status";
 import { templateToAssignmentData } from "@/lib/assignments/template";
-import {
-  resolveTemplateDup,
-  publishDraftAssignment,
-} from "@/lib/assignments/publish-draft";
+import { resolveTemplateDup, publishDraftAssignment } from "@/lib/assignments/publish-draft";
 import { getAuditActor } from "@/lib/audit/log";
 import { writeAudit } from "@/lib/audit/audit-log";
+import { resolveTemplateOwnerId } from "../kho-bai-tap/_owner";
 
 // BGĐ 31/07 — file+ảnh GV đính kèm thêm khi giao (đã PUT lên R2).
 const attachmentSchema = z.object({
@@ -39,29 +38,47 @@ const attachmentSchema = z.object({
 const schema = z.object({
   templateId: z.string().min(1, "Hãy chọn một đầu bài"),
   classId: z.string().min(1, "Hãy chọn lớp"),
-  // "YYYY-MM-DD" từ input date, hoặc rỗng = không hạn.
+  // Parity 18/08 — gắn bài vào 1 buổi học của lớp (không bắt buộc).
+  sessionId: z.string().trim().optional().nullable(),
+  // "YYYY-MM-DD" (input date cũ) hoặc "YYYY-MM-DDTHH:MM" (datetime-local) — rỗng = không hạn.
   due: z.string().trim().optional().nullable(),
-  attachments: z
-    .array(attachmentSchema)
-    .max(10, "Tối đa 10 tệp đính kèm")
-    .default([]),
+  // Parity 18/08 — bài KIỂM TRA: thời điểm mở/đóng làm bài ("YYYY-MM-DDTHH:MM").
+  openAt: z.string().trim().optional().nullable(),
+  closeAt: z.string().trim().optional().nullable(),
+  attachments: z.array(attachmentSchema).max(10, "Tối đa 10 tệp đính kèm").default([]),
 });
 
-type AssignResult =
-  | { ok: true; assignmentId: string }
-  | { ok: false; error: string };
+type AssignResult = { ok: true; assignmentId: string } | { ok: false; error: string };
 
-/** "YYYY-MM-DD" → cuối ngày đó theo giờ VN; rỗng/không hợp lệ → null. */
+/**
+ * "YYYY-MM-DD" → cuối ngày đó theo giờ VN; "YYYY-MM-DDTHH:MM" → đúng phút đó
+ * (giờ VN); rỗng/không hợp lệ → null.
+ */
 function parseDue(due?: string | null): Date | null {
-  if (!due || !/^\d{4}-\d{2}-\d{2}$/.test(due)) return null;
+  if (!due) return null;
+  if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(due)) {
+    const d = new Date(`${due}:00+07:00`);
+    return Number.isNaN(d.getTime()) ? null : d;
+  }
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(due)) return null;
   const d = new Date(`${due}T23:59:59+07:00`);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+/** "YYYY-MM-DDTHH:MM" (giờ VN) → Date; rỗng/không hợp lệ → null. */
+function parseDateTime(v?: string | null): Date | null {
+  if (!v || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(v)) return null;
+  const d = new Date(`${v}:00+07:00`);
   return Number.isNaN(d.getTime()) ? null : d;
 }
 
 export async function assignTemplateAction(input: {
   templateId: string;
   classId: string;
+  sessionId?: string | null;
   due?: string | null;
+  openAt?: string | null;
+  closeAt?: string | null;
   attachments?: {
     fileUrl: string;
     fileName: string;
@@ -74,13 +91,21 @@ export async function assignTemplateAction(input: {
 
   const parsed = schema.safeParse(input);
   if (!parsed.success) {
-    return {
-      ok: false,
-      error: parsed.error.issues[0]?.message ?? "Dữ liệu không hợp lệ",
-    };
+    return { ok: false, error: parsed.error.issues[0]?.message ?? "Dữ liệu không hợp lệ" };
   }
   const { templateId, classId } = parsed.data;
-  const dueAt = parseDue(parsed.data.due);
+
+  // Bài KIỂM TRA (CLASSWORK) có khung giờ mở/đóng; dueAt luôn = closeAt để mọi màn
+  // cũ đọc dueAt không vỡ. Bài tập về nhà chỉ có hạn nộp.
+  const openAt = parseDateTime(parsed.data.openAt);
+  const closeAt = parseDateTime(parsed.data.closeAt);
+  if ((openAt && !closeAt) || (!openAt && closeAt)) {
+    return { ok: false, error: "Hãy nhập đủ thời điểm mở và đóng bài kiểm tra" };
+  }
+  if (openAt && closeAt && openAt >= closeAt) {
+    return { ok: false, error: "Thời điểm đóng phải sau thời điểm mở" };
+  }
+  const dueAt = closeAt ?? parseDue(parsed.data.due);
 
   const actor = await resolveActor(session.user.id);
 
@@ -107,15 +132,12 @@ export async function assignTemplateAction(input: {
       totalPoints: true,
       allowText: true,
       allowFile: true,
+      // Chống IDOR templateId: đề phải là CỦA MÌNH hoặc thư viện đúng khoá của lớp.
+      createdById: true,
+      curriculum: { select: { courseId: true } },
       // BGĐ 31/07 — file đề bài có sẵn: copy tham chiếu sang bài giao.
       attachments: {
-        select: {
-          fileUrl: true,
-          fileName: true,
-          fileSize: true,
-          mimeType: true,
-          uploadedById: true,
-        },
+        select: { fileUrl: true, fileName: true, fileSize: true, mimeType: true, uploadedById: true },
       },
     },
   });
@@ -127,6 +149,7 @@ export async function assignTemplateAction(input: {
     select: {
       id: true,
       name: true,
+      courseId: true,
       enrollments: {
         where: { status: { in: ENROLLMENT_ACTIVE_STATUS_LIST } },
         select: { studentId: true },
@@ -134,6 +157,30 @@ export async function assignTemplateAction(input: {
     },
   });
   if (!cls) return { ok: false, error: "Không tìm thấy lớp" };
+
+  // Chống IDOR đổi templateId trên client: chỉ giao đề CỦA MÌNH, hoặc đề thư viện
+  // đúng khoá của lớp (đề không gắn khoá dùng chung mọi khoá) — khớp danh sách
+  // dialog Giao bài hiển thị.
+  const { ownerId } = await resolveTemplateOwnerId(sdb, session.user.id);
+  const tplCourseId = template.curriculum?.courseId ?? null;
+  if (
+    template.createdById !== ownerId &&
+    tplCourseId !== null &&
+    tplCourseId !== cls.courseId
+  ) {
+    return { ok: false, error: "Mẫu không thuộc khoá của lớp này" };
+  }
+
+  // Buổi học (nếu gắn) phải thuộc ĐÚNG lớp đang giao (chống tiêm sessionId lớp khác).
+  let classSessionId: string | null = null;
+  if (parsed.data.sessionId) {
+    const ses = await sdb.classSession.findFirst({
+      where: { id: parsed.data.sessionId, classId },
+      select: { id: true },
+    });
+    if (!ses) return { ok: false, error: "Buổi học không thuộc lớp này" };
+    classSessionId = ses.id;
+  }
 
   // 1 template → tối đa 1 bài/lớp (unique [classId, templateId]).
   // ⚠️ Deadlock đã vá: tạo lớp auto-sinh Assignment DRAFT cho mọi template gắn lesson
@@ -157,6 +204,9 @@ export async function assignTemplateAction(input: {
       await publishDraftAssignment({
         assignmentId: dup.id,
         dueAt,
+        openAt,
+        closeAt,
+        classSessionId,
         studentIds: cls.enrollments.map((e) => e.studentId),
         attachments: parsed.data.attachments,
         uploadedById: session.user.id,
@@ -205,18 +255,14 @@ export async function assignTemplateAction(input: {
           points: true,
           timeLimitSec: true,
           correctAnswer: true,
+          meta: true, // Parity 18/08 — payload soạn đề (điền khuyết/ghép cặp/sắp xếp)
           tags: true,
           curriculumId: true,
           courseId: true,
           lessonId: true,
           choices: {
             orderBy: { order: "asc" },
-            select: {
-              order: true,
-              text: true,
-              isCorrect: true,
-              imageUrl: true,
-            },
+            select: { order: true, text: true, isCorrect: true, imageUrl: true },
           },
         },
       },
@@ -235,15 +281,16 @@ export async function assignTemplateAction(input: {
       dueAt,
     }),
     status: "PUBLISHED" as const,
+    // Parity 18/08 — khung giờ kiểm tra + buổi học gắn kèm.
+    openAt,
+    closeAt,
+    classSessionId,
   };
 
   let assignmentId: string;
   try {
     assignmentId = await sdb.$transaction(async (tx) => {
-      const created = await tx.assignment.create({
-        data,
-        select: { id: true },
-      });
+      const created = await tx.assignment.create({ data, select: { id: true } });
 
       // BGĐ 31/07 — đính kèm: file có sẵn của đề (copy tham chiếu) + file GV thêm khi giao.
       const attachRows = [
@@ -280,6 +327,7 @@ export async function assignTemplateAction(input: {
             points: q.points,
             timeLimitSec: q.timeLimitSec,
             correctAnswer: q.correctAnswer,
+            meta: (q.meta ?? undefined) as Prisma.InputJsonValue | undefined,
             tags: q.tags,
             curriculumId: q.curriculumId,
             courseId: q.courseId,
@@ -363,9 +411,7 @@ const batchGradeSchema = z.object({
     .min(1, "Chưa nhập điểm cho học viên nào"),
 });
 
-type BatchGradeResult =
-  | { ok: true; graded: number }
-  | { ok: false; error: string };
+type BatchGradeResult = { ok: true; graded: number } | { ok: false; error: string };
 
 export async function gradeBatchAction(input: {
   assignmentId: string;
@@ -376,10 +422,7 @@ export async function gradeBatchAction(input: {
 
   const parsed = batchGradeSchema.safeParse(input);
   if (!parsed.success) {
-    return {
-      ok: false,
-      error: parsed.error.issues[0]?.message ?? "Dữ liệu không hợp lệ",
-    };
+    return { ok: false, error: parsed.error.issues[0]?.message ?? "Dữ liệu không hợp lệ" };
   }
   const { assignmentId, scores } = parsed.data;
 
@@ -409,9 +452,7 @@ export async function gradeBatchAction(input: {
     return { ok: false, error: "Bài không thuộc lớp bạn phụ trách" };
   }
   // (1) Role có capability chấm bài không.
-  const allowed = await checkPermission("assignments:grade", {
-    classId: asg.classId,
-  });
+  const allowed = await checkPermission("assignments:grade", { classId: asg.classId });
   if (!allowed) return { ok: false, error: "Không có quyền chấm bài" };
 
   // Chỉ chấm HV đang học của lớp + điểm trong thang.
@@ -421,10 +462,7 @@ export async function gradeBatchAction(input: {
       return { ok: false, error: "Có học viên không thuộc lớp" };
     }
     if (s.score < 0 || s.score > asg.totalPoints) {
-      return {
-        ok: false,
-        error: `Điểm phải trong khoảng 0–${asg.totalPoints}`,
-      };
+      return { ok: false, error: `Điểm phải trong khoảng 0–${asg.totalPoints}` };
     }
   }
 
@@ -439,15 +477,8 @@ export async function gradeBatchAction(input: {
     await sdb.$transaction(async (tx) => {
       for (const s of scores) {
         await tx.assignmentSubmission.upsert({
-          where: {
-            assignmentId_studentId: { assignmentId, studentId: s.studentId },
-          },
-          update: {
-            status: "GRADED",
-            score: s.score,
-            gradedAt: now,
-            gradedById,
-          },
+          where: { assignmentId_studentId: { assignmentId, studentId: s.studentId } },
+          update: { status: "GRADED", score: s.score, gradedAt: now, gradedById },
           create: {
             assignmentId,
             studentId: s.studentId,

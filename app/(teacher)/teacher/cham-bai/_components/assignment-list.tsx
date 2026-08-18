@@ -22,6 +22,10 @@ export interface AssignmentRow {
   isTest: boolean;
   /** true = giao từ template thư viện admin; false = GV tự tạo trực tiếp. */
   fromAdmin: boolean;
+  /** Parity 18/08 — buổi học bài được gắn vào ("dd/MM · chủ đề"); null = không gắn. */
+  sessionLabel: string | null;
+  /** Mô tả ngắn của đầu bài (hiện mờ dưới tiêu đề). */
+  description: string | null;
   due: string | null;
   submitted: number;
   total: number;
@@ -40,7 +44,14 @@ const STATUS_CLASS: Record<string, string> = {
 
 const ALL = "ALL";
 
-export function AssignmentList({ rows }: { rows: AssignmentRow[] }) {
+export function AssignmentList({
+  rows,
+  actions,
+}: {
+  rows: AssignmentRow[];
+  /** Nút "Giao bài" (AssignDialog) đặt trong thanh công cụ — parity 18/08. */
+  actions?: React.ReactNode;
+}) {
   const [query, setQuery] = useState("");
   const [cls, setCls] = useState(ALL);
   const [kind, setKind] = useState(ALL); // ALL | test | homework
@@ -94,6 +105,7 @@ export function AssignmentList({ rows }: { rows: AssignmentRow[] }) {
         query={query}
         onQuery={setQuery}
         placeholder="Tìm theo tên bài, lớp..."
+        actions={actions}
         filters={[
           { value: cls, onChange: setCls, options: classOptions },
           { value: kind, onChange: setKind, options: kindOptions },
@@ -152,13 +164,26 @@ export function AssignmentList({ rows }: { rows: AssignmentRow[] }) {
                         key={r.id}
                         className="border-b border-border/60 transition-colors last:border-0 hover:bg-muted/50"
                       >
-                        <td className="px-5 py-3.5">
+                        <td className="max-w-xs px-5 py-3.5">
                           <Link
                             href={`?assignmentId=${r.id}`}
                             className="rounded-sm font-medium text-foreground outline-none hover:text-primary-ink-hover focus-visible:ring-2 focus-visible:ring-ring"
                           >
                             {r.title}
                           </Link>
+                          {r.sessionLabel && (
+                            <p className="truncate text-xs text-primary-ink">
+                              Buổi: {r.sessionLabel}
+                            </p>
+                          )}
+                          {r.description && (
+                            <p
+                              className="truncate text-xs text-muted-foreground"
+                              title={r.description}
+                            >
+                              {r.description}
+                            </p>
+                          )}
                         </td>
                         <td className="px-5 py-3.5 whitespace-nowrap">
                           <Link

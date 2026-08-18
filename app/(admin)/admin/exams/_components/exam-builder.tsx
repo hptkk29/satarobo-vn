@@ -23,7 +23,11 @@ type QuestionType =
   | "TRUE_FALSE"
   | "SHORT_ANSWER"
   | "ESSAY"
-  | "CODE";
+  | "CODE"
+  // Parity site GV 18/08 — loại mới soạn ở kho GV/thư viện mẫu (hiển thị được trong bank).
+  | "FILL_BLANK"
+  | "MATCHING"
+  | "ORDERING";
 type Difficulty = "EASY" | "MEDIUM" | "HARD" | "EXPERT";
 
 export interface QuestionBankItem {
@@ -58,6 +62,9 @@ const TYPE_LABEL: Record<QuestionType, string> = {
   SHORT_ANSWER: "Trả lời ngắn",
   ESSAY: "Tự luận",
   CODE: "Code",
+  FILL_BLANK: "Điền khuyết",
+  MATCHING: "Ghép cặp",
+  ORDERING: "Sắp xếp",
 };
 
 const TYPE_COLOR: Record<QuestionType, string> = {
@@ -66,6 +73,9 @@ const TYPE_COLOR: Record<QuestionType, string> = {
   SHORT_ANSWER: "bg-state-warning-soft text-state-warning-ink",
   ESSAY: "bg-primary-soft text-primary",
   CODE: "bg-muted text-foreground",
+  FILL_BLANK: "bg-state-info-soft text-state-info-ink",
+  MATCHING: "bg-state-success-soft text-state-success-ink",
+  ORDERING: "bg-state-warning-soft text-state-warning-ink",
 };
 
 const DIFFICULTY_LABEL: Record<Difficulty, string> = {

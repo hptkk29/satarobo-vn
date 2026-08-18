@@ -37,6 +37,11 @@ export function resolveTemplateDup(
 export async function publishDraftAssignment(opts: {
   assignmentId: string;
   dueAt: Date | null;
+  /** Parity 18/08 — bài KIỂM TRA có khung giờ làm bài (openAt/closeAt). */
+  openAt?: Date | null;
+  closeAt?: Date | null;
+  /** Parity 18/08 — gắn bài vào 1 buổi học (caller đã kiểm buổi thuộc đúng lớp). */
+  classSessionId?: string | null;
   /** Roster HV active của lớp — caller đọc QUA quan hệ class đã guard. */
   studentIds: string[];
   attachments?: {
@@ -51,7 +56,13 @@ export async function publishDraftAssignment(opts: {
   await db.$transaction(async (tx) => {
     await tx.assignment.update({
       where: { id: opts.assignmentId },
-      data: { status: "PUBLISHED", dueAt: opts.dueAt },
+      data: {
+        status: "PUBLISHED",
+        dueAt: opts.dueAt,
+        openAt: opts.openAt ?? null,
+        closeAt: opts.closeAt ?? null,
+        classSessionId: opts.classSessionId ?? null,
+      },
     });
     if (attachments.length > 0) {
       await tx.assignmentAttachment.createMany({
