@@ -16,6 +16,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
+import { PhanTrangBang } from "@/components/ui/phan-trang-bang";
 import { QuestionView } from "@/components/assignments/question-view";
 import { EmptyState } from "../../_components/ui/empty-state";
 import { ListToolbar } from "../../_components/ui/list-toolbar";
@@ -163,7 +164,8 @@ function AdminLibraryTab({ templates }: { templates: KhoTemplate[] }) {
       ) : (
         <div className="t-card overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="w-full border-collapse text-left text-sm">
+            <PhanTrangBang tenDonVi="mẫu">
+            <table className="min-w-[820px] w-full border-collapse text-left text-sm">
               <thead>
                 <tr className="border-b border-border bg-muted/50 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
                   <th scope="col" className="px-5 py-3">Tiêu đề</th>
@@ -207,6 +209,7 @@ function AdminLibraryTab({ templates }: { templates: KhoTemplate[] }) {
                 ))}
               </tbody>
             </table>
+            </PhanTrangBang>
           </div>
         </div>
       )}

@@ -14,6 +14,7 @@ import {
   MonitorPlay,
   NotebookPen,
 } from "lucide-react";
+import { PhanTrangBang } from "@/components/ui/phan-trang-bang";
 import { EmptyState } from "../../_components/ui/empty-state";
 import { SearchInput } from "../../_components/ui/search-input";
 
@@ -73,7 +74,8 @@ export function LessonTable({
       ) : (
         <div className="t-card overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="w-full border-collapse text-left text-sm">
+            <PhanTrangBang tenDonVi="buổi">
+            <table className="min-w-[880px] w-full border-collapse text-left text-sm">
               <thead>
                 <tr className="border-b border-border bg-muted/40 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
                   <th scope="col" className="px-4 py-3 text-center">Buổi</th>
@@ -160,6 +162,7 @@ export function LessonTable({
                 ))}
               </tbody>
             </table>
+            </PhanTrangBang>
           </div>
         </div>
       )}

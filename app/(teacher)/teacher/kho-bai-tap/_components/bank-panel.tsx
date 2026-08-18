@@ -20,6 +20,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
+import { PhanTrangBang } from "@/components/ui/phan-trang-bang";
 import { QuestionView } from "@/components/assignments/question-view";
 import { isAutoGraded } from "@/lib/assignments/question-content";
 import { ListToolbar } from "../../_components/ui/list-toolbar";
@@ -117,7 +118,8 @@ export function AssignmentBankPanel({
       ) : (
         <div className="t-card overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="w-full border-collapse text-left text-sm">
+            <PhanTrangBang tenDonVi="đề">
+            <table className="min-w-[720px] w-full border-collapse text-left text-sm">
               <thead>
                 <tr className="border-b border-border bg-muted/50 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
                   <th scope="col" className="px-5 py-3">Tiêu đề</th>
@@ -219,6 +221,7 @@ export function AssignmentBankPanel({
                 ))}
               </tbody>
             </table>
+            </PhanTrangBang>
           </div>
         </div>
       )}
