@@ -119,7 +119,15 @@ export default async function EditClassPage({ params }: Props) {
     sdb.classSession.findMany({
       where: { classId: cls.id },
       orderBy: { date: "asc" },
-      select: { id: true, date: true, topic: true, status: true },
+      select: {
+        id: true,
+        date: true,
+        topic: true,
+        status: true,
+        // Cùng lý do với trang chi tiết lớp: `status` không phản ánh việc GV đã điểm
+        // danh/nhận xét hay chưa, phải đếm thật thì danh sách buổi mới nói được sự thật.
+        _count: { select: { attendances: true, studentFeedbacks: true } },
+      },
     }),
     sdb.curriculum.findMany({
       where: { courseId: cls.courseId, isActive: true, status: "ACTIVE" },
@@ -160,6 +168,8 @@ export default async function EditClassPage({ params }: Props) {
     date: s.date.toISOString(),
     topic: s.topic,
     status: s.status,
+    attendanceCount: s._count.attendances,
+    feedbackCount: s._count.studentFeedbacks,
   }));
 
   const teacherOptions = teachers.map((t) => ({

@@ -58,7 +58,12 @@ export function ClassFeedbackPanel({ data }: { data: ClassSessionFeedbackData })
           Cột &quot;Đã nhận xét&quot; đếm học viên ĐI HỌC đã có phiếu — khớp với tiến độ
           hiện trên site giáo viên.
           {totalSessions > sessions.length && (
-            <> Đang hiện {sessions.length} buổi gần nhất trong tổng số {totalSessions}.</>
+            <>
+              {" "}
+              Đang hiện {sessions.length} buổi đã diễn ra gần nhất trong tổng số{" "}
+              {totalSessions} buổi của lớp (buổi chưa dạy không có gì để nhận xét nên
+              không liệt kê).
+            </>
           )}
         </p>
         <div className="overflow-hidden rounded-xl border border-border bg-card">

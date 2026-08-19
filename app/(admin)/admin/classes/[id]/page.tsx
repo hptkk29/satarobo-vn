@@ -9,6 +9,7 @@ import { getSelectableOrgUnits } from "@/lib/org/org-service";
 import { getAssignableTeachers } from "@/lib/teachers/assignable";
 import { isSessionLifecycleV2Enabled } from "@/lib/flags";
 import { resolveClassSlots } from "@/lib/classes/slots";
+import { pickDefaultSession } from "@/lib/classes/default-session";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { ClassForm, type ClassFormValue } from "../_components/class-form";
 import { ClassApprovalActions } from "./_components/class-approval-actions";
@@ -17,7 +18,7 @@ import { ClassCurriculum } from "./_components/class-curriculum";
 import type { PhaseFormValue } from "@/lib/classes/phase-form";
 import { loadClassPhases, loadHolidayKeys } from "@/lib/classes/phases-service";
 import { auditSessionSeries } from "@/lib/classes/session-audit";
-import { vnAddDays, vnStartOfDay, vnYmd } from "@/lib/time/vn";
+import { vnAddDays, vnEndOfDay, vnStartOfDay, vnYmd } from "@/lib/time/vn";
 import { ClassSessionsManage } from "./_components/class-sessions-manage";
 import { ClassAttendancePanel } from "./_components/class-attendance-panel";
 import { buildSessionAttendanceRows } from "@/lib/attendance/roster";
@@ -172,7 +173,18 @@ export default async function ClassDetailPage({ params }: Props) {
     sdb.classSession.findMany({
       where: { classId: cls.id },
       orderBy: { date: "asc" },
-      select: { id: true, date: true, topic: true, status: true },
+      select: {
+        id: true,
+        date: true,
+        topic: true,
+        status: true,
+        // 19/08 — ĐẾM sẵn điểm danh + phiếu nhận xét theo buổi. Không có 2 con số này thì
+        // cả trang lớp không có MỘT chỗ nào cho biết buổi nào GV đã làm: danh sách buổi chỉ
+        // in `status` (mà status KHÔNG đổi khi điểm danh — chỉ completeSession mới đổi, và
+        // nó nằm sau cờ SESSION_LIFECYCLE_V2 đang OFF), dropdown chọn buổi chỉ in ngày.
+        // Đó là thứ đã làm quản lý kết luận "GV chưa điểm danh" trong khi dữ liệu vẫn còn.
+        _count: { select: { attendances: true, studentFeedbacks: true } },
+      },
     }),
     sdb.curriculum.findMany({
       where: { courseId: cls.courseId, isActive: true, status: "ACTIVE" },
@@ -211,15 +223,21 @@ export default async function ClassDetailPage({ params }: Props) {
     date: s.date.toISOString(),
     topic: s.topic,
     status: s.status,
+    attendanceCount: s._count.attendances,
+    feedbackCount: s._count.studentFeedbacks,
   }));
 
-  // Tab điểm danh: buổi mặc định = buổi sắp tới gần nhất (chưa huỷ), else buổi cuối.
+  // Tab điểm danh: buổi mặc định = buổi GẦN NHẤT ĐÃ DIỄN RA (tính cả hôm nay), chưa huỷ.
+  //
+  // ⚠️ ĐỪNG đổi lại thành "buổi sắp tới" — đó là bug 19/08 (quản lý báo "GV điểm danh rồi mà
+  // admin không thấy"). Điểm danh luôn NHÌN VỀ QUÁ KHỨ: buổi sắp tới theo định nghĩa chưa ai
+  // điểm danh (site GV còn chặn cứng điểm danh buổi tương lai — teacher/lop/_actions.ts), nên
+  // mở sẵn buổi đó là bày ra một lưới trắng và mọi người đọc thành "mất dữ liệu". Đo trên
+  // DB dev/test lúc phát hiện: 16/18 lớp có điểm danh thì buổi mặc định cũ có 0 dòng.
+  // Fallback cuối là buổi đầu tiên — lớp chưa khai giảng thì không có buổi quá khứ nào.
+  // Luật nằm ở lib/classes/default-session.ts (có test hồi quy) — sửa ở đó, không sửa ở đây.
   // Roster render server-side (RSC) để panel khỏi useEffect-fetch lúc mount.
-  const nowMs = Date.now();
-  const defaultSession =
-    sessions.find((s) => s.status !== "CANCELLED" && s.date.getTime() >= nowMs) ??
-    sessions[sessions.length - 1] ??
-    null;
+  const defaultSession = pickDefaultSession(sessions, vnEndOfDay(new Date()));
   // Roster kèm SĐT học viên — chỉ dựng khi thực sự render tab Buổi & Điểm danh.
   const initialRoster =
     defaultSession && canSeeClassBasics

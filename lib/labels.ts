@@ -136,6 +136,28 @@ export const ATTENDANCE_LABELS: Record<AttendanceLabelKey, AttendanceLabelInfo> 
   CANCELLED: { key: "CANCELLED", label: "Buổi học bị hủy", tone: "neutral", countsAttended: false, countsAbsent: false },
 };
 
+/**
+ * Nhãn tính là ĐI HỌC (chưa kể học bù — `makeupStatus === "MADE_UP"` xét riêng).
+ *
+ * ⚠️ Dùng HAI tập dưới đây thay vì tự viết mảng ở từng file. Enum `AttendanceStatus` có
+ * 6 giá trị: 2 nhãn ABSENT_EXCUSED/ABSENT_UNEXCUSED thêm ở R7-08 (2-phase, chưa drop
+ * ABSENT/EXCUSED cũ) và site giáo viên — đường điểm danh CHÍNH — chỉ ghi nhãn MỚI.
+ * File nào còn lọc `["ABSENT","EXCUSED"]` sẽ đếm 0 buổi vắng cho toàn bộ dữ liệu thật:
+ * đó đúng là lỗi tìm thấy ở lib/students/progress.ts ngày 19/08.
+ */
+export const PRESENT_STATUSES: ReadonlySet<AttendanceStatusValue> = new Set([
+  "PRESENT",
+  "LATE",
+]);
+
+/** Nhãn tính là VẮNG — đủ cả 6 giá trị enum (buổi CANCELLED xét riêng, không vắng). */
+export const ABSENT_STATUSES: ReadonlySet<AttendanceStatusValue> = new Set([
+  "ABSENT",
+  "EXCUSED",
+  "ABSENT_EXCUSED",
+  "ABSENT_UNEXCUSED",
+]);
+
 const EXCUSED_SET = new Set<AttendanceStatusValue>(["EXCUSED", "ABSENT_EXCUSED"]);
 
 /**

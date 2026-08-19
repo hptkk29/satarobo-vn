@@ -104,3 +104,98 @@ export async function attendanceSummary(enrollmentId: string): Promise<Attendanc
     })),
   });
 }
+
+/**
+ * Bản GỘP của `attendanceSummary` cho NHIỀU ghi danh — số truy vấn CỐ ĐỊNH (4), không
+ * phụ thuộc số ghi danh.
+ *
+ * ⚠️ Dùng hàm này ở mọi màn DANH SÁCH. `attendanceSummary(enrollmentId)` tốn ~6 truy vấn
+ * mỗi lần gọi (enrollment + getStudentClassProgress + attendance), nên
+ * `Promise.all(enrollments.map(attendanceSummary))` ở trang học bạ site GV bắn ~700 truy
+ * vấn ĐỒNG THỜI cho một giáo viên 6 lớp — đủ để nuốt sạch pool kết nối và làm mọi request
+ * khác của cả hệ thống xếp hàng. Giữ `attendanceSummary` cho màn chi tiết 1 ghi danh.
+ *
+ * Trả Map<enrollmentId, AttendanceSummary>; ghi danh không tìm thấy → không có khoá.
+ */
+export async function attendanceSummaryForEnrollments(
+  enrollmentIds: string[],
+): Promise<Map<string, AttendanceSummary>> {
+  const out = new Map<string, AttendanceSummary>();
+  if (enrollmentIds.length === 0) return out;
+
+  const enrollments = await db.enrollment.findMany({
+    where: { id: { in: enrollmentIds } },
+    select: { id: true, studentId: true, classId: true },
+  });
+  if (enrollments.length === 0) return out;
+
+  const classIds = [...new Set(enrollments.map((e) => e.classId))];
+  const studentIds = [...new Set(enrollments.map((e) => e.studentId))];
+
+  const [classes, attendances] = await Promise.all([
+    db.class.findMany({
+      where: { id: { in: classIds } },
+      select: { id: true, course: { select: { id: true, totalSessions: true } } },
+    }),
+    db.attendance.findMany({
+      where: { studentId: { in: studentIds }, session: { classId: { in: classIds } } },
+      select: {
+        studentId: true,
+        status: true,
+        makeupStatus: true,
+        session: { select: { classId: true, status: true } },
+      },
+    }),
+  ]);
+
+  // Tổng buổi chuẩn của khoá: ưu tiên Course.totalSessions, thiếu thì đếm lesson của
+  // curriculum ACTIVE version cao nhất — cùng luật với getTotalLessons (1 HV/1 lớp).
+  const courseNeedingCurriculum = classes
+    .map((c) => c.course)
+    .filter((c): c is { id: string; totalSessions: number | null } => !!c && c.totalSessions == null)
+    .map((c) => c.id);
+  const lessonCountByCourse = new Map<string, number>();
+  if (courseNeedingCurriculum.length > 0) {
+    const currs = await db.curriculum.findMany({
+      where: { courseId: { in: [...new Set(courseNeedingCurriculum)] }, isActive: true },
+      orderBy: { version: "desc" },
+      select: { courseId: true, _count: { select: { lessons: true } } },
+    });
+    for (const c of currs) {
+      // orderBy version desc → bản gặp đầu tiên mỗi course = version cao nhất.
+      if (!lessonCountByCourse.has(c.courseId)) {
+        lessonCountByCourse.set(c.courseId, c._count.lessons);
+      }
+    }
+  }
+  const totalByClass = new Map<string, number>();
+  for (const c of classes) {
+    const total =
+      c.course?.totalSessions ??
+      (c.course ? (lessonCountByCourse.get(c.course.id) ?? 0) : 0);
+    totalByClass.set(c.id, total);
+  }
+
+  const byPair = new Map<string, AttendanceSummaryItem[]>();
+  for (const a of attendances) {
+    const key = `${a.studentId}:${a.session.classId}`;
+    const arr = byPair.get(key) ?? [];
+    arr.push({
+      status: a.status as AttendanceStatusValue,
+      makeupStatus: a.makeupStatus as MakeupStatusValue,
+      sessionStatus: a.session.status as SessionStatusValue,
+    });
+    byPair.set(key, arr);
+  }
+
+  for (const e of enrollments) {
+    out.set(
+      e.id,
+      computeAttendanceSummary({
+        totalLessons: totalByClass.get(e.classId) ?? 0,
+        attendances: byPair.get(`${e.studentId}:${e.classId}`) ?? [],
+      }),
+    );
+  }
+  return out;
+}

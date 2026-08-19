@@ -16,6 +16,7 @@ import {
 import { writeAudit } from "@/lib/audit/audit-log";
 import { decideAttendanceWrite } from "@/lib/lms/attendance-edit-policy";
 import { canManageSessionClass } from "@/app/(admin)/admin/sessions/[id]/_actions";
+import { mapWithConcurrency } from "@/lib/util/concurrency";
 
 type ActionResult = { error?: string; saved?: number };
 
@@ -207,14 +208,30 @@ export async function markAttendance(
   // B1 — record "Cần học bù" (NEEDS_MAKEUP) → tạo MakeupNeed PENDING gắn buổi này.
   // Chiều ngược: sửa vắng → CÓ MẶT (PRESENT/LATE) → thu hồi MakeupNeed PENDING còn
   // treo của (HV, buổi này) — không để nhu cầu bù ma nằm ở /admin/hoc-bu.
+  //
+  // ⚠️ CHỈ thu hồi khi HV quay lại CÓ MẶT — xem ghi chú cùng chỗ ở teacher/lop/_actions.ts:
+  // mở rộng sang "mọi trạng thái không cần bù" sẽ xoá mất suất bù của HV vắng CÓ PHÉP
+  // (nhu cầu do phiếu xin nghỉ đã duyệt sinh ra).
+  // Song song CÓ TRẦN: mỗi học viên là một lượt độc lập, chạy nối đuôi thì cả lớp 20 em
+  // phải chờ 20 vòng truy vấn trước khi action trả về.
   try {
-    for (const r of data.records) {
-      if (r.makeupStatus === "NEEDS_MAKEUP") {
-        await createMakeupNeed({ studentId: r.studentId, missedSessionId: data.sessionId, note: r.absenceReason ?? null });
+    await mapWithConcurrency(data.records, 5, async (r) => {
+      const absent = r.status === "ABSENT" || r.status === "EXCUSED";
+      const makeupStatus: MakeupStatus = absent ? (r.makeupStatus ?? "NONE") : "NONE";
+      if (makeupStatus === "NEEDS_MAKEUP") {
+        await createMakeupNeed({
+          studentId: r.studentId,
+          missedSessionId: data.sessionId,
+          note: r.absenceReason ?? null,
+          // Xem ghi chú cùng chỗ ở teacher/lop/_actions.ts.
+          reviveCancelled:
+            beforeRows.find((b) => b.studentId === r.studentId)?.makeupStatus !==
+            "NEEDS_MAKEUP",
+        });
       } else if (r.status === "PRESENT" || r.status === "LATE") {
         await cancelPendingMakeupNeed({ studentId: r.studentId, missedSessionId: data.sessionId });
       }
-    }
+    });
   } catch (err) {
     console.error("[markAttendance] makeup error:", err);
   }

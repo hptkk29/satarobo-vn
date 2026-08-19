@@ -16,6 +16,16 @@ export type SessionRow = {
   date: string; // ISO
   topic: string | null;
   status: "SCHEDULED" | "IN_PROGRESS" | "COMPLETED" | "CANCELLED";
+  /**
+   * Số bản ghi điểm danh / phiếu nhận xét của buổi (đếm ở page.tsx).
+   *
+   * ⚠️ Đây là thứ DUY NHẤT trên trang lớp cho biết giáo viên đã làm gì cho buổi nào.
+   * `status` KHÔNG dùng được vào việc đó: điểm danh không đổi status, chỉ `completeSession`
+   * mới đổi mà nó nằm sau cờ SESSION_LIFECYCLE_V2 (mặc định OFF) ⇒ buổi đã dạy vẫn đeo
+   * nhãn "Đã lên lịch". Bỏ 2 số này đi là dựng lại đúng hiểu lầm "GV chưa điểm danh".
+   */
+  attendanceCount: number;
+  feedbackCount: number;
 };
 
 export type Option = { id: string; label: string };
@@ -26,6 +36,18 @@ const STATUS_LABEL: Record<SessionRow["status"], { label: string; cls: string }>
   COMPLETED: { label: "Hoàn thành", cls: "bg-state-success-soft text-state-success-ink" },
   CANCELLED: { label: "Đã hủy", cls: "bg-state-danger-soft text-state-danger-ink" },
 };
+
+/**
+ * Buổi đã diễn ra chưa (tính cả hôm nay, giờ VN).
+ * Chip "Chưa điểm danh" chỉ có nghĩa với buổi đã dạy — dán lên buổi của tháng sau thì cả
+ * danh sách đỏ rực vì những việc chưa đến hạn, và người đọc hết phân biệt được buổi nào
+ * đang thực sự thiếu.
+ */
+function daDienRa(iso: string): boolean {
+  const now = new Date();
+  const cuoiNgay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+  return new Date(iso).getTime() <= cuoiNgay.getTime();
+}
 
 function fmt(iso: string): string {
   return new Date(iso).toLocaleDateString("vi-VN", {
@@ -148,6 +170,22 @@ function SessionItem({
           <span className="ml-2 text-sm text-muted-foreground">
             {session.topic ?? "Buổi học"}
           </span>
+          {!cancelled && daDienRa(session.date) && (
+            <div className="mt-1 flex flex-wrap items-center gap-1.5">
+              <span
+                className={`inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-xs font-semibold ${ session.attendanceCount > 0 ? "bg-state-success-soft text-state-success-ink" : "border border-dashed border-border text-muted-foreground" }`}
+              >
+                {session.attendanceCount > 0
+                  ? `Đã điểm danh ${session.attendanceCount}`
+                  : "Chưa điểm danh"}
+              </span>
+              {session.feedbackCount > 0 && (
+                <span className="inline-flex items-center gap-1 rounded-md bg-primary-soft px-2 py-0.5 text-xs font-semibold text-primary">
+                  {session.feedbackCount} phiếu nhận xét
+                </span>
+              )}
+            </div>
+          )}
         </div>
         <div className="flex items-center gap-2">
           <span

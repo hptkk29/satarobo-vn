@@ -72,7 +72,11 @@ export default async function ClassProgressPage({ params }: Props) {
 
   const [progresses, heldSessionsCount, gradebook] = await Promise.all([
     getClassProgress(id, showParentContact),
-    sdb.classSession.count({ where: { classId: id, date: { lte: now } } }),
+    // Buổi ĐÃ HUỶ không tính là đã diễn ra — khớp lib/progress.ts + lib/students/progress.ts,
+    // nếu không thì con số ở thẻ đầu trang lệch với từng dòng học viên ngay bên dưới.
+    sdb.classSession.count({
+      where: { classId: id, date: { lte: now }, status: { not: "CANCELLED" } },
+    }),
     getClassGradebook(id),
   ]);
 

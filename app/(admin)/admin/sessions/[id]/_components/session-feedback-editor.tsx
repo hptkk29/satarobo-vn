@@ -26,15 +26,30 @@ export function SessionFeedbackEditor({
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
-  const [rows, setRows] = useState<StudentRow[]>(students);
-  // FIX #1 (client) — mốc so sánh dirty: dữ liệu đã lưu server đưa xuống qua props.
+
+  /**
+   * CHỈ giữ những gì NGƯỜI DÙNG GÕ, không chụp cả danh sách.
+   *
+   * ⚠️ 19/08 — bản cũ `useState<StudentRow[]>(students)` đóng băng danh sách lúc mount,
+   * trong khi mốc so-sánh-dirty (`initialById`) lại memo theo prop nên vẫn tươi. Hai thứ
+   * lệch nhau là ra lệnh XOÁ: giáo viên viết nhận xét ở site GV → payload RSC của trang
+   * này cập nhật → mốc có nội dung mới, còn `rows` vẫn rỗng như lúc mở màn ⇒ mọi dòng
+   * bị coi là "vừa bị xoá chữ" ⇒ bấm Lưu là gửi comment rỗng cho cả lớp, và
+   * saveSessionFeedbackCore hiểu dòng rỗng là lệnh xoá phiếu.
+   * Dựng giá trị hiển thị từ PROP + phần đã gõ thì hai bên không thể lệch nữa.
+   */
+  const [edits, setEdits] = useState<Record<string, Partial<StudentRow>>>({});
+  const rows = useMemo(
+    () => students.map((s) => ({ ...s, ...edits[s.studentId] })),
+    [students, edits],
+  );
   const initialById = useMemo(
     () => new Map(students.map((s) => [s.studentId, s])),
     [students],
   );
 
   function update(id: string, patch: Partial<StudentRow>) {
-    setRows((cur) => cur.map((r) => (r.studentId === id ? { ...r, ...patch } : r)));
+    setEdits((cur) => ({ ...cur, [id]: { ...cur[id], ...patch } }));
   }
 
   function save() {
@@ -62,6 +77,8 @@ export function SessionFeedbackEditor({
       const res = await saveSessionFeedback({ sessionId, items });
       if (res.ok) {
         toast.success("Đã lưu nhận xét từng học sinh");
+        // Bỏ phần đã gõ để màn hình quay về đúng dữ liệu server vừa trả.
+        setEdits({});
         router.refresh();
       } else {
         toast.error(res.error);

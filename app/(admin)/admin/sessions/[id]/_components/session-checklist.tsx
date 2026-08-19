@@ -100,8 +100,17 @@ export function SessionChecklist({
   }
 
   // FIX-H4 — chỉ hoàn tất khi đang IN_PROGRESS (state machine) VÀ đủ 3 bước bắt buộc.
+  //
+  // 19/08 — bước (5) xét theo giá trị ĐÃ LƯU (`stored`), không theo ô tick trên màn hình.
+  // Server `completeSession` đọc DB, nên bản cũ (dùng state cục bộ) bật nút ngay khi vừa
+  // tick ⇒ bấm vào là ăn "Chưa xác nhận bài đã dạy" mà không hiểu vì sao. Nay nút tắt cho
+  // tới khi bấm "Lưu tiến trình", kèm một dòng nhắc đúng việc cần làm.
+  const lessonConfirmPending = ckLessonConfirmed && !stored.ckLessonConfirmed;
   const canComplete =
-    canCompleteSession(status) && derived.ckAttendance && ckLessonConfirmed && derived.ckFeedback;
+    canCompleteSession(status) &&
+    derived.ckAttendance &&
+    stored.ckLessonConfirmed &&
+    derived.ckFeedback;
 
   return (
     <section className="rounded-xl border border-border bg-card p-5">
@@ -191,12 +200,23 @@ export function SessionChecklist({
               <Play className="h-4 w-4" /> Bắt đầu buổi
             </button>
           )}
+          {canCompleteSession(status) && lessonConfirmPending && (
+            <span className="self-center text-xs text-state-warning-ink">
+              Bấm “Lưu tiến trình” trước rồi mới hoàn tất được.
+            </span>
+          )}
           {canCompleteSession(status) && (
             <button
               type="button"
               onClick={doComplete}
               disabled={pending || !canComplete}
-              title={canComplete ? "" : "Cần xong bước (1)(2)(3)"}
+              title={
+                canComplete
+                  ? ""
+                  : lessonConfirmPending
+                    ? "Lưu tiến trình trước đã — server đọc giá trị đã lưu"
+                    : "Cần xong: điểm danh · xác nhận bài đã dạy · nhận xét học viên"
+              }
               className="inline-flex items-center gap-1.5 rounded-lg bg-state-success-ink px-4 py-2 text-sm font-semibold text-white hover:bg-state-success-ink-hover disabled:opacity-50"
             >
               <CheckCircle2 className="h-4 w-4" /> Hoàn tất buổi học

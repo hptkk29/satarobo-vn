@@ -123,7 +123,8 @@ export async function getStudentProgress(
   // QRY-01: 6 query tuần tự → 2 wave. Wave 1: các read độc lập.
   const [sessions, cls, submissions, attempts] = await Promise.all([
     db.classSession.findMany({
-      where: { classId, date: { lte: now } },
+      // Buổi ĐÃ HUỶ không tính là buổi đã diễn ra (xem lib/labels.ts).
+      where: { classId, date: { lte: now }, status: { not: "CANCELLED" } },
       select: { id: true, lessonId: true },
     }),
     db.class.findUnique({ where: { id: classId }, select: { courseId: true } }),
@@ -206,7 +207,8 @@ export async function getStudentProgressForClasses(
 
   const [sessions, classes, submissions, attempts] = await Promise.all([
     db.classSession.findMany({
-      where: { classId: { in: classIds }, date: { lte: now } },
+      // Buổi ĐÃ HUỶ không tính là buổi đã diễn ra (xem lib/labels.ts).
+      where: { classId: { in: classIds }, date: { lte: now }, status: { not: "CANCELLED" } },
       select: { id: true, classId: true, lessonId: true },
     }),
     db.class.findMany({
@@ -340,7 +342,8 @@ export async function getClassProgress(
       orderBy: { createdAt: "asc" },
     }),
     db.classSession.findMany({
-      where: { classId, date: { lte: now } },
+      // Buổi ĐÃ HUỶ không tính là buổi đã diễn ra (xem lib/labels.ts).
+      where: { classId, date: { lte: now }, status: { not: "CANCELLED" } },
       select: { id: true, lessonId: true },
     }),
     db.class.findUnique({ where: { id: classId }, select: { courseId: true } }),
@@ -491,7 +494,8 @@ export async function getClassGradebook(
   }
 
   const sessions = await db.classSession.findMany({
-    where: { classId, lessonId: { not: null }, date: { lte: now } },
+    // Buổi ĐÃ HUỶ không tính là buổi đã diễn ra (xem lib/labels.ts).
+    where: { classId, lessonId: { not: null }, date: { lte: now }, status: { not: "CANCELLED" } },
     select: { lessonId: true, date: true },
     orderBy: { date: "desc" },
   });
