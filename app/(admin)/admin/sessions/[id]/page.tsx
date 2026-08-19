@@ -104,8 +104,16 @@ export default async function SessionDetailPage({ params }: Props) {
     redirect("/sessions");
   }
 
+  // 19/08 — lọc xoá mềm cho KHỚP roster mà server dùng để kiểm khi lưu
+  // (getSessionRosterStudentIds). Thiếu 2 điều kiện này thì màn hình bày ra học viên đã
+  // xoá, và mọi lượt lưu có họ bị từ chối TRỌN LÔ với "Có học viên không thuộc danh sách".
   const enrollments = await sdb.enrollment.findMany({
-    where: { classId: sess.class.id, status: { in: ENROLLMENT_ACTIVE_STATUS_LIST } },
+    where: {
+      classId: sess.class.id,
+      status: { in: ENROLLMENT_ACTIVE_STATUS_LIST },
+      deletedAt: null,
+      student: { deletedAt: null },
+    },
     select: { student: { select: { id: true, name: true } } },
     orderBy: { student: { name: "asc" } },
   });

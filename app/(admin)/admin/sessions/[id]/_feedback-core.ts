@@ -27,6 +27,7 @@ import { getFreshGateUser } from "@/lib/auth/fresh-gate-user";
 import { publishEvent } from "@/lib/events/publish";
 import { isSessionOwnedByTeacher } from "@/lib/lms/session-ownership";
 import { isBlankFeedbackInput } from "@/lib/lms/feedback-content";
+import { parseFeedbackNotes } from "@/lib/lms/session-eval-rubric";
 
 export type FeedbackResult = { ok: true } | { ok: false; error: string };
 
@@ -355,8 +356,12 @@ export async function saveSessionEvalCore(
   // bấm Lưu là ghi `comment = null`, tức xoá trắng nội dung người khác vừa viết mà không
   // ai thấy. Chỉ giữ lại khi phiếu cũ đúng là loại "chỉ có comment" (không có 4 mục);
   // nếu phiếu cũ vốn có notes thì xoá hết 4 mục = có ý xoá văn xuôi, làm đúng như thế.
+  // ⚠️ KHÔNG suy loại phiếu từ `old.notes == null`: chính hàm này LUÔN ghi `notes` (schema
+  // bắt buộc đủ 4 khoá), nên sau lần lưu rubric ĐẦU TIÊN `notes` là một object 4 chuỗi
+  // rỗng — khác null. Lấy null làm dấu hiệu thì từ lần lưu thứ hai trở đi guard tắt và
+  // nhận xét nhanh bị xoá đúng như trước khi vá. Phải hỏi "4 mục có chữ nào không".
   const oldIsQuickCommentOnly =
-    old != null && old.notes == null && !!old.comment?.trim();
+    old != null && parseFeedbackNotes(old.notes) === null && !!old.comment?.trim();
   const commentPatch = comment !== null || !oldIsQuickCommentOnly ? { comment } : {};
 
   let saved: { id: string };

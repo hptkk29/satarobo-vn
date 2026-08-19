@@ -38,6 +38,15 @@ export async function createMakeupNeed(params: {
   missedSessionId: string;
   createdById?: string | null;
   note?: string | null;
+  /**
+   * Cho phép HỒI SINH nhu cầu đang ở CANCELLED. Chỉ bật khi đây là một CHUYỂN TRẠNG THÁI
+   * thật ("HV vừa được đánh vắng lại"), KHÔNG bật cho mỗi lần bấm Lưu.
+   *
+   * Lý do: MakeupNeed không ghi ai huỷ vì sao, nên bật vô điều kiện sẽ dựng dậy cả những
+   * nhu cầu mà quản lý CHỦ Ý huỷ ở /admin/hoc-bu — cứ mỗi lần giáo viên mở buổi cũ bấm
+   * Lưu là nó lại hiện về hàng chờ.
+   */
+  reviveCancelled?: boolean;
 }): Promise<{ ok: boolean; id?: string; error?: string }> {
   const sess = await db.classSession.findUnique({
     where: { id: params.missedSessionId },
@@ -70,9 +79,10 @@ export async function createMakeupNeed(params: {
   // MakeupNeed.status ∈ {PENDING, SCHEDULED} ⇒ học viên biến mất khỏi /admin/hoc-bu,
   // không lỗi, không log, và mất suất bù.
   //
-  // CHỈ hồi sinh từ CANCELLED. SCHEDULED/COMPLETED giữ nguyên — đã hẹn buổi bù với phụ
-  // huynh thì không được tự ý đặt lại sau lưng người xếp lịch.
-  const revived = need.status === "CANCELLED";
+  // CHỈ hồi sinh từ CANCELLED, và CHỈ khi chỗ gọi khẳng định đây là chuyển trạng thái thật
+  // (`reviveCancelled`). SCHEDULED/COMPLETED giữ nguyên — đã hẹn buổi bù với phụ huynh thì
+  // không được tự ý đặt lại sau lưng người xếp lịch.
+  const revived = need.status === "CANCELLED" && params.reviveCancelled === true;
   if (revived) {
     await db.makeupNeed.update({
       where: { id: need.id },

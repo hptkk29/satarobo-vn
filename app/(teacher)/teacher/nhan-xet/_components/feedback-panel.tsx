@@ -6,7 +6,7 @@
 // + textarea nhận xét. Nút "Lưu tất cả" gọi saveSessionFeedback (TÁI DÙNG action
 // admin, self-gated canManageSessionRecord) 1 LẦN — FIX #1: CHỈ gửi dòng THỰC SỰ ĐỔI
 // (so với dữ liệu đã lưu), không còn gửi cả lớp kèm dòng trống làm server đụng vào
-// phiếu rubric chưa ai chạm. Dòng bị XOÁ comment gửi comment rỗng = server gỡ nhận
+// phiếu rubric chưa ai chạm. Dòng bị xoá HẾT (không chữ, không sao) = server gỡ nhận
 // xét nhanh (phiếu rubric mở rộng được server GIỮ nguyên phần rubric). Action tự lo
 // notify PH (event comment.added + email khi comment đổi) — client không thêm gì.
 //
@@ -182,7 +182,8 @@ export function FeedbackPanel({
             {pending ? "Đang lưu…" : "Lưu tất cả"}
           </Button>
           <p className="text-xs text-muted-foreground">
-            Xoá nội dung ô nhận xét rồi lưu = gỡ nhận xét nhanh của học viên đó
+            Xoá hết chữ VÀ bỏ chấm sao rồi lưu = gỡ nhận xét nhanh của học viên đó
+            (còn sao thì phiếu vẫn giữ)
             (sao chỉ được lưu kèm nhận xét; phiếu rubric đã chấm ở hub lớp vẫn
             được giữ nguyên).
           </p>

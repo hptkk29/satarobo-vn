@@ -52,9 +52,13 @@ export function ClassEvalPanel({
   const [error, setError] = useState<string | null>(null);
   const [, startTransition] = useTransition();
 
-  // Nếu người dùng đang xem ĐÚNG buổi mà server trả về thì lấy bản của server (mới hơn):
-  // sau router.refresh() panel phải hiện dữ liệu vừa đổi, không giữ bản nạp lúc bấm chọn.
-  const loaded = picked && picked.sessionId !== server.sessionId ? picked : server;
+  // Lựa chọn của người dùng THẮNG bản server.
+  //
+  // ⚠️ ĐỪNG "tối ưu" thành `picked.sessionId === server.sessionId ? server : picked` —
+  // đã thử và đó là hồi quy: chọn LẠI đúng buổi mặc định (thao tác tự nhiên nhất để làm
+  // tươi dữ liệu) sẽ vứt roster vừa nạp và quay về ảnh chụp RSC lúc mở trang, tức tái
+  // hiện đúng triệu chứng gốc "GV điểm danh rồi mà admin không thấy".
+  const loaded = picked ?? server;
   const selectedId = pendingId ?? loaded.sessionId;
   const loading = pendingId !== null && pendingId !== loaded.sessionId;
 

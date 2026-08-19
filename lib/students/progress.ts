@@ -116,8 +116,10 @@ export async function getStudentClassProgress(
     db.classSession.count({
       where: { classId, date: { lte: todayEnd }, status: { not: "CANCELLED" } },
     }),
+    // Buổi ĐÃ HUỶ cũng phải loại khỏi TỬ SỐ, không chỉ mẫu số: lọc một bên thôi thì thẻ
+    // "đã học x/N" và "vắng N" đếm trên hai tập buổi khác nhau.
     db.attendance.findMany({
-      where: { studentId, session: { classId } },
+      where: { studentId, session: { classId, status: { not: "CANCELLED" } } },
       select: { status: true, makeupStatus: true },
     }),
   ]);
@@ -143,7 +145,12 @@ export interface StudentAbsence {
 /** Chi tiết buổi vắng (ABSENT/EXCUSED) của HS — ngày, lý do, trạng thái bù. */
 export async function getStudentAbsences(studentId: string): Promise<StudentAbsence[]> {
   const rows = await db.attendance.findMany({
-    where: { studentId, status: { in: [...ABSENT_STATUSES] } },
+    // Buổi huỷ không phải buổi vắng (lib/labels.ts) — đừng liệt kê vào "chi tiết buổi vắng".
+    where: {
+      studentId,
+      status: { in: [...ABSENT_STATUSES] },
+      session: { status: { not: "CANCELLED" } },
+    },
     select: {
       status: true,
       makeupStatus: true,

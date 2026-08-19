@@ -37,6 +37,18 @@ const STATUS_LABEL: Record<SessionRow["status"], { label: string; cls: string }>
   CANCELLED: { label: "Đã hủy", cls: "bg-state-danger-soft text-state-danger-ink" },
 };
 
+/**
+ * Buổi đã diễn ra chưa (tính cả hôm nay, giờ VN).
+ * Chip "Chưa điểm danh" chỉ có nghĩa với buổi đã dạy — dán lên buổi của tháng sau thì cả
+ * danh sách đỏ rực vì những việc chưa đến hạn, và người đọc hết phân biệt được buổi nào
+ * đang thực sự thiếu.
+ */
+function daDienRa(iso: string): boolean {
+  const now = new Date();
+  const cuoiNgay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999);
+  return new Date(iso).getTime() <= cuoiNgay.getTime();
+}
+
 function fmt(iso: string): string {
   return new Date(iso).toLocaleDateString("vi-VN", {
     weekday: "short",
@@ -158,7 +170,7 @@ function SessionItem({
           <span className="ml-2 text-sm text-muted-foreground">
             {session.topic ?? "Buổi học"}
           </span>
-          {!cancelled && (
+          {!cancelled && daDienRa(session.date) && (
             <div className="mt-1 flex flex-wrap items-center gap-1.5">
               <span
                 className={`inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-xs font-semibold ${ session.attendanceCount > 0 ? "bg-state-success-soft text-state-success-ink" : "border border-dashed border-border text-muted-foreground" }`}

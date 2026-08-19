@@ -19,7 +19,10 @@ import {
   decidePermissionWithGrant,
 } from "@/lib/auth/check-permission";
 import { withMakeupException } from "@/lib/db-scope";
-import { getSessionRosterStudentIds } from "@/lib/attendance/roster";
+import {
+  getExistingAttendanceByStudent,
+  getSessionRosterStudentIds,
+} from "@/lib/attendance/roster";
 import { isSessionOwnedByTeacher } from "@/lib/lms/session-ownership";
 import { getAuditActor } from "@/lib/audit/log";
 import { writeAudit } from "@/lib/audit/audit-log";
@@ -191,14 +194,14 @@ export async function saveClassAttendanceAction(
   //   • học viên đã HỌC BÙ XONG (MADE_UP) tụt về NEEDS_MAKEUP ⇒ hiện lại ở /admin/hoc-bu
   //     như chưa bù, và % chuyên cần / học bạ tính theo đó cũng sai;
   //   • lý do phụ huynh xin nghỉ bị xoá trắng.
-  const existingRows = await xdb.attendance.findMany({
-    where: {
-      sessionId: data.sessionId,
-      studentId: { in: data.records.map((r) => r.studentId) },
-    },
-    select: { studentId: true, makeupStatus: true, absenceReason: true },
-  });
-  const existingBy = new Map(existingRows.map((r) => [r.studentId, r]));
+  //
+  // ⚠️ Đọc bằng helper dùng `db` TRẦN, KHÔNG bằng `xdb`: Attendance là model SCOPED và
+  // KHÔNG nằm trong danh sách ngoại lệ học bù, nên `xdb` vẫn chèn lọc cơ sở — GV dạy thay
+  // ở cơ sở khác sẽ đọc ra rỗng và hai luật giữ dữ liệu bên dưới không bao giờ chạy.
+  const existingBy = await getExistingAttendanceByStudent(
+    data.sessionId,
+    data.records.map((r) => r.studentId),
+  );
 
   /**
    * Trạng thái bù HIỆU LỰC sau lần lưu này. Luật:
@@ -211,10 +214,13 @@ export async function saveClassAttendanceAction(
     const absent = isAbsent(r.status);
     const old = existingBy.get(r.studentId);
     const derived = absent ? deriveMakeup(r.status, r.makeupStatus) : "NONE";
+    // ĐÃ HỌC BÙ XONG thì giữ nguyên chừng nào HV VẪN LÀ VẮNG — không ràng thêm
+    // `derived === "NEEDS_MAKEUP"`: ràng vậy bỏ sót ca vắng CÓ PHÉP đã bù xong
+    // (deriveMakeup trả NONE) ⇒ MADE_UP bị hạ, HV mất một buổi "đã học".
     const makeupStatus: MakeupStatus =
       !absent || r.makeupStatus
         ? derived
-        : old?.makeupStatus === "MADE_UP" && derived === "NEEDS_MAKEUP"
+        : old?.makeupStatus === "MADE_UP"
           ? "MADE_UP"
           : derived;
     const absenceReason = !absent
@@ -267,11 +273,12 @@ export async function saveClassAttendanceAction(
   // Chiều ngược: sửa vắng → CÓ MẶT (PRESENT/LATE) → thu hồi MakeupNeed PENDING còn
   // treo của (HV, buổi này) — không để nhu cầu bù ma nằm ở /admin/hoc-bu.
   //
-  // 19/08 — đi theo makeupStatus HIỆU LỰC (plans) chứ không theo `isAbsent` như trước.
-  // Nhánh cũ chỉ thu hồi khi HV chuyển sang CÓ MẶT, nên thao tác rất thường gặp
-  // "vắng không phép → vắng CÓ PHÉP" rơi vào khe: không tạo (đúng), cũng không thu hồi
-  // (sai) ⇒ MakeupNeed PENDING nằm mồ côi ở /admin/hoc-bu trong khi buổi đó đã có phép.
-  // MADE_UP thì KHÔNG đụng gì — nhu cầu đã hoàn tất, không phải việc của màn điểm danh.
+  // ⚠️ CHỈ thu hồi khi HV quay lại CÓ MẶT. ĐỪNG mở rộng sang "mọi trạng thái không cần bù"
+  // — bản thử 19/08 làm thế và hoá ra huỷ luôn suất bù của HV vắng CÓ PHÉP: nhu cầu bù của
+  // họ do phiếu xin nghỉ đã duyệt (/admin/parent-requests) hoặc do quản lý tạo tay sinh ra,
+  // trong khi deriveMakeup("ABSENT_EXCUSED") = NONE ⇒ mỗi lần GV bấm Lưu là xoá mất quyền
+  // lợi của học viên. Nhu cầu mồ côi (đổi vắng-không-phép → vắng-có-phép) thà để người ở
+  // /admin/hoc-bu quyết định. MADE_UP: không đụng — nhu cầu đã hoàn tất.
   try {
     // Song song CÓ TRẦN — mỗi HV một lượt độc lập; nối đuôi thì GV bấm Lưu phải chờ hết
     // 20 vòng truy vấn mới thấy phản hồi.
@@ -282,8 +289,12 @@ export async function saveClassAttendanceAction(
           missedSessionId: data.sessionId,
           createdById: actorId,
           note: absenceReason,
+          // Chuyển trạng thái THẬT: trước lần lưu này HV chưa ở diện cần bù. Lưu lại một
+          // buổi vốn đã NEEDS_MAKEUP thì không dựng dậy nhu cầu mà quản lý vừa huỷ tay.
+          reviveCancelled:
+            existingBy.get(r.studentId)?.makeupStatus !== "NEEDS_MAKEUP",
         });
-      } else if (makeupStatus === "NONE") {
+      } else if (!isAbsent(r.status)) {
         await cancelPendingMakeupNeed({
           studentId: r.studentId,
           missedSessionId: data.sessionId,

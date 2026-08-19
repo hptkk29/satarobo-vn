@@ -209,10 +209,9 @@ export async function markAttendance(
   // Chiều ngược: sửa vắng → CÓ MẶT (PRESENT/LATE) → thu hồi MakeupNeed PENDING còn
   // treo của (HV, buổi này) — không để nhu cầu bù ma nằm ở /admin/hoc-bu.
   //
-  // 19/08 — thu hồi theo makeupStatus HIỆU LỰC, không theo "có mặt hay không". Nhánh cũ
-  // chỉ chạy khi HV chuyển sang PRESENT/LATE, nên thao tác "vắng cần bù → vắng KHÔNG cần
-  // bù (có phép)" rơi vào khe: không tạo, cũng không thu hồi ⇒ MakeupNeed PENDING nằm
-  // mồ côi ở /admin/hoc-bu. MADE_UP thì không đụng (nhu cầu đã hoàn tất).
+  // ⚠️ CHỈ thu hồi khi HV quay lại CÓ MẶT — xem ghi chú cùng chỗ ở teacher/lop/_actions.ts:
+  // mở rộng sang "mọi trạng thái không cần bù" sẽ xoá mất suất bù của HV vắng CÓ PHÉP
+  // (nhu cầu do phiếu xin nghỉ đã duyệt sinh ra).
   // Song song CÓ TRẦN: mỗi học viên là một lượt độc lập, chạy nối đuôi thì cả lớp 20 em
   // phải chờ 20 vòng truy vấn trước khi action trả về.
   try {
@@ -220,8 +219,16 @@ export async function markAttendance(
       const absent = r.status === "ABSENT" || r.status === "EXCUSED";
       const makeupStatus: MakeupStatus = absent ? (r.makeupStatus ?? "NONE") : "NONE";
       if (makeupStatus === "NEEDS_MAKEUP") {
-        await createMakeupNeed({ studentId: r.studentId, missedSessionId: data.sessionId, note: r.absenceReason ?? null });
-      } else if (makeupStatus === "NONE") {
+        await createMakeupNeed({
+          studentId: r.studentId,
+          missedSessionId: data.sessionId,
+          note: r.absenceReason ?? null,
+          // Xem ghi chú cùng chỗ ở teacher/lop/_actions.ts.
+          reviveCancelled:
+            beforeRows.find((b) => b.studentId === r.studentId)?.makeupStatus !==
+            "NEEDS_MAKEUP",
+        });
+      } else if (r.status === "PRESENT" || r.status === "LATE") {
         await cancelPendingMakeupNeed({ studentId: r.studentId, missedSessionId: data.sessionId });
       }
     });

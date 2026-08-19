@@ -54,6 +54,11 @@ export function ClassAttendancePanel({
   // panel bám thẳng vào nó ⇒ router.refresh() / RSC payload mới là màn hình cập nhật theo,
   // không còn đóng băng bản chụp lúc mount. Khi người dùng ĐÃ chọn thì lựa chọn của họ
   // thắng — không được phép cuốn trôi thao tác đang dở.
+  // ĐÁNH ĐỔI đã cân nhắc: khi người dùng CHƯA tự chọn buổi, panel bám theo bản server, nên
+  // một `router.refresh()` (vd huỷ/điều chỉnh buổi ở khối "Buổi học" ngay trên) mà làm ĐỔI
+  // buổi mặc định sẽ remount lưới và mất các ô vừa bấm chưa lưu. Đổi lại, đó chính là thứ
+  // làm panel hết đóng băng ở ảnh chụp lúc mở trang. Đã chọn buổi rồi thì lựa chọn của
+  // người dùng thắng và không có gì bị cuốn trôi.
   const server: Loaded = { sessionId: initialSessionId ?? "", rows: initialRows };
   const [picked, setPicked] = useState<Loaded | null>(null);
   /** Buổi vừa bấm nhưng roster chưa về — chỉ để <select> phản hồi ngay. */
@@ -61,9 +66,13 @@ export function ClassAttendancePanel({
   const [error, setError] = useState<string | null>(null);
   const [, startTransition] = useTransition();
 
-  // Nếu người dùng đang xem ĐÚNG buổi mà server trả về thì lấy bản của server (mới hơn):
-  // sau router.refresh() panel phải hiện dữ liệu vừa đổi, không giữ bản nạp lúc bấm chọn.
-  const loaded = picked && picked.sessionId !== server.sessionId ? picked : server;
+  // Lựa chọn của người dùng THẮNG bản server.
+  //
+  // ⚠️ ĐỪNG "tối ưu" thành `picked.sessionId === server.sessionId ? server : picked` —
+  // đã thử và đó là hồi quy: chọn LẠI đúng buổi mặc định (thao tác tự nhiên nhất để làm
+  // tươi dữ liệu) sẽ vứt roster vừa nạp và quay về ảnh chụp RSC lúc mở trang, tức tái
+  // hiện đúng triệu chứng gốc "GV điểm danh rồi mà admin không thấy".
+  const loaded = picked ?? server;
   const selectedId = pendingId ?? loaded.sessionId;
   const loading = pendingId !== null && pendingId !== loaded.sessionId;
 
