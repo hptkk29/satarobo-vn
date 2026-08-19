@@ -1,6 +1,7 @@
 import "server-only";
 import { cache } from "react";
 import { db } from "@/lib/db";
+import { migrateLegacyRole, migrateLegacyRoles } from "@/lib/auth/legacy-role";
 
 /**
  * Vai + cơ sở HIỆN TẠI của một user, đọc thẳng từ DB.
@@ -21,6 +22,14 @@ export const getFreshGateUser = cache(
       where: { id: userId },
       select: { role: true, roles: true, centerId: true },
     });
-    return row ? { role: row.role, roles: row.roles, centerId: row.centerId } : null;
+    if (!row) return null;
+    // ⚠️ PHẢI đổi tên vai cũ. JWT có shim này (lib/auth.ts) còn cột DB thì chưa chắc đã
+    // backfill: đọc thô sẽ ra "MANAGER" và hasRole(u,"CENTER_MANAGER") trả false ⇒ quản lý
+    // cơ sở đang dùng bình thường bỗng mất quyền ngay khi cổng chuyển sang đọc DB.
+    return {
+      role: migrateLegacyRole(row.role),
+      roles: migrateLegacyRoles(row.roles),
+      centerId: row.centerId,
+    };
   },
 );
