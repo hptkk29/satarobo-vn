@@ -1,5 +1,6 @@
 import "server-only";
 import { db } from "@/lib/db";
+import { notifyStaff } from "@/lib/notifications/notify";
 import {
   formatDayKeyDMY,
   shiftDayKey,
@@ -54,6 +55,9 @@ export async function notifyUpcomingBirthdays(
     },
     select: {
       id: true,
+      // studentId để gắn `entityId` cho thông báo — catalog xếp loại "birthday:" là đối
+      // tượng HỌC VIÊN, nên id lượt chúc mừng không phải thứ đúng để neo vào đó.
+      studentId: true,
       centerId: true,
       birthdayDate: true,
       celebrationDate: true,
@@ -135,21 +139,30 @@ export async function notifyUpcomingBirthdays(
           }${className ? ` lớp ${className}` : ""}.`;
 
     const dedupeKey = `birthday:${row.id}`;
+
+    // Gom người nhận THEO href rồi gọi một lần cho mỗi href: fan-out realtime tính chi phí
+    // theo từng người nhận, nên cả phòng Sale/QLCS phải đi chung một lô. Không gộp được
+    // thành MỘT lời gọi duy nhất vì GV đứng buổi có đích riêng (buổi học) — đó là khác biệt
+    // nghiệp vụ, không phải chi tiết kỹ thuật gộp bừa được.
+    const nguoiNhanTheoHref = new Map<string, string[]>();
     for (const [userId, href] of hrefByUser) {
-      await db.staffNotification.upsert({
-        where: { userId_dedupeKey: { userId, dedupeKey } },
-        create: {
-          userId,
-          category: "student_birthday",
-          title: "🎂 Sinh nhật học viên",
-          body,
-          // GV trên host giaovien: /sessions/* được teacherHref map sang /lich.
-          href,
-          dedupeKey,
-        },
-        update: {}, // đã có → giữ nguyên trạng thái đọc, không kéo lại chưa-đọc
+      const nhom = nguoiNhanTheoHref.get(href);
+      if (nhom) nhom.push(userId);
+      else nguoiNhanTheoHref.set(href, [userId]);
+    }
+
+    for (const [href, userIds] of nguoiNhanTheoHref) {
+      result.notified += await notifyStaff({
+        userIds,
+        dedupeKey,
+        category: "student_birthday",
+        title: "🎂 Sinh nhật học viên",
+        body,
+        // GV trên host giaovien: /sessions/* được teacherHref map sang /lich.
+        href,
+        entityId: row.studentId,
+        // Không `reopen`: đã báo rồi thì giữ nguyên trạng thái đọc, không kéo lại chưa-đọc.
       });
-      result.notified++;
     }
 
     await db.studentBirthdayGreeting.update({

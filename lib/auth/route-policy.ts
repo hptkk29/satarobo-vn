@@ -139,6 +139,11 @@ export const ADMIN_ROUTE_SEGMENTS: ReadonlySet<string> = new Set<string>([
   "khao-sat",
   "kits",
   "leads",
+  // "Lịch tổng" (app/(admin)/admin/lich): mục sidebar + thông báo dạy thay/nhắc chốt
+  // buổi đều trỏ tới. Thiếu segment ở đây thì admin host 308 sang public → 404.
+  // Site GV cũng có màn `/lich` riêng — không xung đột: nhánh teacher host hỏi
+  // `TEACHER_ROUTE_SEGMENTS` trước, xem chú thích ở đó.
+  "lich",
   "marketing",
   "media",
   "news",
@@ -165,6 +170,10 @@ export const ADMIN_ROUTE_SEGMENTS: ReadonlySet<string> = new Set<string>([
   "sinh-nhat",
   "site-content",
   "students",
+  // Trang "Tất cả thông báo" (chuông → Xem tất cả). CỐ Ý KHÔNG có trên sidebar — ràng buộc
+  // cốt lõi của PRD notification; nhưng route vẫn phải khai ở đây, nếu không admin host 308
+  // sang public rồi 404. Tên "/notifications" đã bị CMS thông báo phụ huynh chiếm.
+  "thong-bao",
   "teachers",
   "teaching-materials",
   "tich-hop",
@@ -240,6 +249,47 @@ export function isPortalPath(p: string): boolean {
 /** L5 — path site giáo viên (route group `app/(teacher)/teacher/*`). */
 export function isTeacherPath(p: string): boolean {
   return p === "/teacher" || p.startsWith("/teacher/");
+}
+
+/**
+ * Segment cấp 1 của site giáo viên (khớp thư mục `app/(teacher)/teacher/*`).
+ *
+ * VÌ SAO CẦN (sự cố đo 19/08/2026): trên host giaovien, clean URL được rewrite thành
+ * `/teacher/<path>` — NHƯNG nhánh "chuẩn hoá path lạc khu" chạy TRƯỚC và nó bounce mọi
+ * `isAdminRoute(pathname)` về trang chủ GV. Năm tên trùng segment admin từ trước:
+ * `don-tu`, `hoc-ba`, `huong-dan`, `scorm`, `tin-nhan` — nghĩa là giáo viên gõ/bấm clean
+ * URL `/hoc-ba` trên site của mình thì bị ném về trang chủ, im lặng, không lỗi. Thêm
+ * `lich` (để vá link chết "Lịch tổng" bên admin) là ca thứ sáu.
+ *
+ * Cách chữa: trên host GV, hỏi "site GV có màn này không" TRƯỚC khi hỏi "đây có phải
+ * đường admin không". Danh sách này vì thế phải bám sát thư mục — thêm màn GV mới thì
+ * thêm một dòng, không thì clean URL của màn đó tiếp tục bị bounce âm thầm.
+ */
+export const TEACHER_ROUTE_SEGMENTS: ReadonlySet<string> = new Set<string>([
+  "anh-lop",
+  "bang-cong",
+  "cham-bai",
+  "diem-danh",
+  "don-tu",
+  "hoan-thanh",
+  "ho-so",
+  "hoc-ba",
+  "hoc-vien",
+  "huong-dan",
+  "kho-bai-tap",
+  "lich",
+  "lop",
+  "nhan-xet",
+  "scorm",
+  "tai-lieu",
+  "thong-bao",
+  "tin-nhan",
+  "trial",
+]);
+
+/** Clean URL trên host giáo viên trỏ tới một màn GV có thật. */
+export function isTeacherCleanUrl(p: string): boolean {
+  return TEACHER_ROUTE_SEGMENTS.has(firstSegment(p));
 }
 
 export function isLegacyAdminPrefixed(p: string): boolean {
@@ -460,6 +510,15 @@ export function decideRoute(input: RouteInput): RouteDecision {
 
     // TEACHER: chuẩn hoá path lạc khu (vd callbackUrl mặc định /dashboard,
     // /portal/*, legacy /admin/*) về teacher home, rồi rewrite clean URL.
+    //
+    // ⚠️ THỨ TỰ HỎI LÀ CÓ CHỦ ĐÍCH, đừng đảo lại: hỏi "site GV có màn này không" TRƯỚC
+    // rồi mới hỏi "đây có phải đường admin không". Sáu tên trùng nhau ở hai site
+    // (`don-tu`, `hoc-ba`, `huong-dan`, `scorm`, `tin-nhan`, `lich`); hỏi ngược thì clean URL của
+    // đúng những màn đó bị ném về trang chủ GV — không lỗi, không dấu vết, người dùng chỉ
+    // thấy "bấm vào không đi đâu". `/admin/*` và `/portal/*` không trùng tên nên vẫn bounce.
+    if (isTeacherPath(pathname)) return { type: "next" };
+    if (pathname === "/") return { type: "rewrite", path: "/teacher" };
+    if (isTeacherCleanUrl(pathname)) return { type: "rewrite", path: "/teacher" + pathname };
     if (
       isAdminRoute(pathname) ||
       isPortalPath(pathname) ||
@@ -467,8 +526,6 @@ export function decideRoute(input: RouteInput): RouteDecision {
     ) {
       return { type: "redirectPath", path: TEACHER_HOME };
     }
-    if (isTeacherPath(pathname)) return { type: "next" };
-    if (pathname === "/") return { type: "rewrite", path: "/teacher" };
     return { type: "rewrite", path: "/teacher" + pathname };
   }
 

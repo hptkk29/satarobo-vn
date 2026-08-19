@@ -6,6 +6,7 @@
 // ⚠️ Câu 46: KHÔNG đưa contact PH — chỉ tên lớp + ngày buổi. Cron dùng db trần (hệ
 // thống, không actor) — hợp lệ (Loại C, ngoài scopedDb).
 import { db } from "@/lib/db";
+import { notifyStaff } from "@/lib/notifications/notify";
 import { isSessionLifecycleV2Enabled } from "@/lib/flags";
 
 const VN_OFFSET_MS = 7 * 60 * 60 * 1000; // Asia/Ho_Chi_Minh (UTC+7, không DST)
@@ -31,21 +32,21 @@ const dayVN = new Intl.DateTimeFormat("vi-VN", {
 /** Ghi StaffNotification 1 LẦN cho GV (idempotent theo dedupeKey — cron lặp không nhân đôi). */
 async function notifyOnce(params: {
   userId: string;
+  sessionId: string;
   dedupeKey: string;
   title: string;
   body: string;
 }): Promise<void> {
-  await db.staffNotification.upsert({
-    where: { userId_dedupeKey: { userId: params.userId, dedupeKey: params.dedupeKey } },
-    create: {
-      userId: params.userId,
-      category: "CLASS", // = PendingTaskType việc lớp/buổi (cùng #16 notifyTeacherAttendanceEdited)
-      title: params.title,
-      body: params.body,
-      href: "/lich", // site GV — Lịch dạy (clean URL rewrite → /teacher/lich)
-      dedupeKey: params.dedupeKey,
-    },
-    update: {}, // đã có → giữ nguyên (chỉ 1 lần)
+  await notifyStaff({
+    userIds: [params.userId],
+    dedupeKey: params.dedupeKey,
+    category: "CLASS", // = PendingTaskType việc lớp/buổi (cùng #16 notifyTeacherAttendanceEdited)
+    title: params.title,
+    body: params.body,
+    href: "/lich", // site GV — Lịch dạy (clean URL rewrite → /teacher/lich)
+    entityId: params.sessionId,
+    // Không `reopen`: cron chạy lặp lại trên cùng buổi cho tới khi GV chốt — kéo về
+    // chưa-đọc là nhắc lại mỗi lượt, đúng thứ dedupeKey sinh ra để chặn.
   });
 }
 
@@ -76,6 +77,7 @@ export async function runSubstituteTeacherNotify(
     if (!s.substituteTeacherId) continue;
     await notifyOnce({
       userId: s.substituteTeacherId,
+      sessionId: s.id,
       dedupeKey: `session.substitute:${s.id}`,
       title: "Bạn được phân dạy thay ngày mai",
       body: `Lớp ${s.class.name} — buổi ${dayVN.format(s.date)}. Xem chi tiết ở Lịch dạy.`,
@@ -119,6 +121,7 @@ export async function runSessionCloseReminder(
     if (!teacherId) continue;
     await notifyOnce({
       userId: teacherId,
+      sessionId: s.id,
       dedupeKey: `session.close-reminder:${s.id}`,
       title: "Nhắc: chốt buổi dạy",
       body: `Buổi lớp ${s.class.name} (${dayVN.format(s.date)}) chưa được hoàn tất. Vui lòng chốt buổi (điểm danh/nhận xét).`,

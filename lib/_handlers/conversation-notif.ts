@@ -5,8 +5,41 @@
 // theo đúng mẫu lib/_handlers/comment-notif.ts. Idempotent qua dedupeKey theo messageId.
 import { db } from "@/lib/db";
 import { on, type DomainEventLite } from "@/lib/events/registry";
+import { notifyStaff } from "@/lib/notifications/notify";
 
 const str = (v: unknown): string => (v == null ? "" : String(v));
+
+/**
+ * Deep-link chuông cho tin của phụ huynh: hội thoại NHÓM LỚP của lớp chứa enrollment.
+ *
+ * Vì sao là nhóm lớp chứ không phải luồng-theo-enrollment: màn `/tin-nhan` đã chuyển sang
+ * hệ chat mới và định danh hội thoại bằng `c=<conversationId>` — nó KHÔNG đọc param `e`.
+ * Hệ mới cũng không có hội thoại theo enrollment; ánh xạ chính thức của luồng PH↔GV cũ là
+ * `CLASS_GROUP` của `enrollment.classId` (luật ánh xạ ở `lib/chat/migrate-legacy.ts`).
+ * Giữ `?e=<enrollmentId>` nghĩa là bấm chuông rơi vào hộp thư rỗng — đúng thứ đang xảy ra.
+ *
+ * Lớp chưa/không còn ACTIVE thì chưa chắc có nhóm (BR-01 — `syncConversationMembership`
+ * chỉ dựng nhóm cho lớp ACTIVE). Khi đó trả `/tin-nhan` TRẦN: mở đúng hộp thư vẫn hơn là
+ * mang theo một param chết mà trang không hiểu.
+ */
+async function hoiThoaiNhomLop(
+  classId: string,
+): Promise<{ href: string; conversationId: string | null }> {
+  const conv = await db.conversation.findUnique({
+    where: {
+      type_subjectType_subjectId: {
+        type: "CLASS_GROUP",
+        subjectType: "CLASS",
+        subjectId: classId,
+      },
+    },
+    select: { id: true },
+  });
+  // Trả kèm id vì thông báo còn cần `entityId` (thu hồi khi hội thoại bị xoá), không chỉ href.
+  return conv
+    ? { href: `/tin-nhan?c=${conv.id}`, conversationId: conv.id }
+    : { href: "/tin-nhan", conversationId: null };
+}
 
 export async function onConversationMessagePosted(event: DomainEventLite): Promise<void> {
   const enrollmentId = str(event.payload.enrollmentId);
@@ -17,6 +50,8 @@ export async function onConversationMessagePosted(event: DomainEventLite): Promi
   const enr = await db.enrollment.findFirst({
     where: { id: enrollmentId, deletedAt: null },
     select: {
+      // classId để tra hội thoại nhóm lớp dựng deep-link — xem `hrefHoiThoaiNhomLop`.
+      classId: true,
       studentId: true,
       student: { select: { name: true, centerId: true } },
       class: { select: { name: true, teacherId: true, assistantId: true } },
@@ -35,20 +70,22 @@ export async function onConversationMessagePosted(event: DomainEventLite): Promi
         (x): x is string => !!x,
       ),
     )];
-    for (const userId of staffIds) {
-      await db.staffNotification.upsert({
-        where: { userId_dedupeKey: { userId, dedupeKey } },
-        create: {
-          userId,
-          category: "CLASS",
-          title: "Tin nhắn mới từ phụ huynh",
-          body: `Phụ huynh ${studentName} (lớp ${className}) vừa gửi một tin nhắn.`,
-          href: `/tin-nhan?e=${enrollmentId}`,
-          dedupeKey,
-        },
-        update: {},
-      });
-    }
+    // Không có người nhận thì đừng tốn một vòng tra hội thoại.
+    if (staffIds.length === 0) return;
+    const { href, conversationId } = await hoiThoaiNhomLop(enr.classId);
+    // MỘT lời gọi cho cả GV chính lẫn trợ giảng: fan-out realtime gộp thành một lô, thay vì
+    // một lượt phát cho mỗi người. Không `reopen` — event phát lại không phải tin nhắn mới,
+    // nên `readAt`/`seenAt` phải giữ nguyên. Ngược lại, href ĐƯỢC ghi lại ở nhánh update:
+    // đó là đường duy nhất chữa các dòng cũ trên prod còn mang href `?e=` chết.
+    await notifyStaff({
+      userIds: staffIds,
+      dedupeKey,
+      category: "CLASS",
+      title: "Tin nhắn mới từ phụ huynh",
+      body: `Phụ huynh ${studentName} (lớp ${className}) vừa gửi một tin nhắn.`,
+      href,
+      entityId: conversationId,
+    });
     return;
   }
 

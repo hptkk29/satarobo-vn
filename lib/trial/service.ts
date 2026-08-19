@@ -7,6 +7,7 @@
 // lead "Chờ quyết định" (AWAITING_DECISION) NGAY (TBD-2). TRIAL_ATTENDED để dành lead đã chốt.
 import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
+import { notifyStaff } from "@/lib/notifications/notify";
 import { teacherCenterAssignmentError } from "@/lib/teachers/center-filter";
 import { nextSeq, yy } from "@/lib/codegen";
 import { publishEvent } from "@/lib/events/publish";
@@ -256,20 +257,27 @@ export async function notifyTrialTeacherAssigned(params: {
   body: string;
   dedupeKey: string;
   href?: string;
+  /** Id buổi/lớp trải nghiệm mà thông báo nói tới — để sau này thu hồi khi nó bị xoá. */
+  entityId?: string;
 }): Promise<void> {
+  // `href` phải viết theo đường ADMIN clean-URL: chuông admin push thẳng, chuông site GV
+  // đổi qua `teacherHref()`. Mặc định cũ "/teacher/trial" sai cả hai đầu — trên host admin
+  // bị route-policy 308 sang public rồi 404, còn `teacherHref` không nhận diện được nên
+  // trả null (thông báo thành text chết). "/trials" là màn admin có thật và teacherHref
+  // map đúng sang "/trial" của site GV.
+  const href = params.href ?? "/trials";
   try {
-    await db.staffNotification.upsert({
-      where: { userId_dedupeKey: { userId: params.teacherId, dedupeKey: params.dedupeKey } },
-      create: {
-        userId: params.teacherId,
-        category: "CLASS",
-        title: params.title,
-        body: params.body,
-        href: params.href ?? "/teacher/trial",
-        dedupeKey: params.dedupeKey,
-      },
-      // Gán lại/đổi nội dung → làm mới + đưa về CHƯA đọc để GV thấy.
-      update: { body: params.body, readAt: null },
+    await notifyStaff({
+      userIds: [params.teacherId],
+      dedupeKey: params.dedupeKey,
+      category: "CLASS",
+      title: params.title,
+      body: params.body,
+      href,
+      entityId: params.entityId ?? null,
+      // `reopen` — gán lại/đổi nội dung là một lần phân công MỚI cho chính GV đó; đọc bản
+      // cũ rồi không có nghĩa là đã biết ca mới.
+      reopen: true,
     });
   } catch {
     // nuốt lỗi notify — không chặn luồng chính.
@@ -345,6 +353,7 @@ export async function addTrialSession(params: {
         title: "Bạn được phân công buổi trải nghiệm",
         body: `Buổi ${dateStr} ${params.startTime}–${params.endTime} · lớp ${cls.name}.`,
         dedupeKey: `trial-session.assigned:${sessionId}`,
+        entityId: sessionId,
       });
     }
     return { ok: true, sessionId };

@@ -4301,6 +4301,53 @@ enum NotificationAudience {
 
 // Module nhắc việc PHẦN 3 — thông báo CHUÔNG cho NHÂN VIÊN (per-user, có đọc/chưa).
 // Khác Notification (broadcast phụ huynh). dedupeKey chống tạo trùng cùng 1 việc.
+// ─── Giờ làm việc (Q-C, 19/08/2026) ─────────────────────────────────────────────
+// Chủ dự án chốt: giờ làm việc do QUẢN TRỊ KHAI TRÊN WEB, không sửa code — và "sau này các vai
+// sẽ có giờ khác nhau". Vì vậy bảng này có sẵn cả hai chiều: theo ĐƠN VỊ và theo VAI.
+//
+// Vì sao là bảng mới chứ không phải một key JSON trong SystemSetting:
+//  · Ma trận (đơn vị × vai × 7 thứ) nhét vào một ô JSON thì màn cấu hình hiện tại là Textarea
+//    JSON thô — người vận hành phải gõ tay JSON lồng nhau, sai một dấu phẩy là mất cả cấu hình.
+//  · Quyền `settings:edit` đang là SUPER_ADMIN-only + `scopable:false`, nên quản lý cơ sở không
+//    thể tự khai giờ cơ sở mình. Bảng riêng cho phép gắn một permission scopable riêng.
+//  · `WorkShiftConfig` sẵn có KHÔNG dùng lại được: nó không có chiều thứ-trong-tuần (mà Sata Robo
+//    nghỉ Thứ Hai, mở T3–CN), không có chiều vai, và bản thân nó đang mồ côi — không app code nào
+//    đọc, giờ ca thật vẫn hardcode ở lib/shifts.ts. Xây lên nó là dựng nguồn sự thật thứ ba.
+//
+// ⚠️ DÙNG SENTINEL "*" THAY CHO NULL cho `orgUnitId`/`roleCode`. Postgres coi mọi NULL là khác
+// nhau trong UNIQUE, nên để null thì "luật mặc định toàn hệ thống cho Thứ Ba" có thể tồn tại
+// nhiều bản trùng mà DB không hề chặn. Sentinel làm `@@unique` hoạt động đúng nghĩa.
+model WorkingHourRule {
+  id String @id @default(cuid())
+
+  // OrgUnit.id, hoặc "*" = luật mặc định toàn hệ thống. Luật Nền Hệ thống #3: bảng mới có dữ
+  // liệu theo đơn vị dùng orgUnitId, KHÔNG thêm centerId mới.
+  orgUnitId String @default("*")
+
+  // RoleDef.code, hoặc "*" = áp cho mọi vai. Chiều này CÓ SẴN từ đầu để lúc cần khai giờ riêng
+  // cho một vai thì chỉ thêm dữ liệu, không phải migrate lần nữa.
+  roleCode String @default("*")
+
+  // 0 = Chủ nhật … 6 = Thứ Bảy — khớp Date.getDay() để không phải quy đổi ở chỗ dùng.
+  weekday Int
+
+  // "HH:mm" giờ Việt Nam. null khi nghỉ cả ngày.
+  openTime  String?
+  closeTime String?
+
+  // Nghỉ cả ngày (Sata Robo nghỉ Thứ Hai).
+  isClosed Boolean @default(false)
+
+  note          String?
+  updatedById   String?
+  updatedByName String?
+  createdAt     DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt     DateTime @updatedAt @db.Timestamptz(6)
+
+  @@unique([orgUnitId, roleCode, weekday])
+  @@index([orgUnitId])
+}
+
 model StaffNotification {
   id        String    @id @default(cuid())
   userId    String
@@ -4313,9 +4360,42 @@ model StaffNotification {
   createdAt DateTime  @default(now()) @db.Timestamptz(6)
   updatedAt DateTime  @updatedAt @db.Timestamptz(6)
 
+  // ─── Notification v2 (kế hoạch docs/notification, 19/08/2026) ────────────────
+  // Bổ sung THUẦN THÊM CỘT, không đổi/bỏ cột nào (luật Nền Hệ thống #4). Giá trị do
+  // `lib/notifications/catalog.ts` quyết ở đường ghi — đừng set tay ở nơi gọi.
+
+  // 1 trong 5 nhóm: action_required | parent_message | new_task | due_date | system.
+  groupKey String @default("system")
+
+  // 1 = khẩn (P1) · 2 = thường (P2) · 3 = tham khảo (P3) — quyết thứ tự sắp xếp + viền đỏ badge.
+  priority Int @default(2)
+
+  // "Đã nhìn thấy" — set khi mục hiện trong panel. TÁCH BẠCH với `readAt` ("đã đọc"): mở
+  // panel KHÔNG được làm badge về 0 (rủi ro T4 của PRD). Chủ dự án chốt 19/08 rằng mốc đọc
+  // ĐƯỢC dùng cho đánh giá nhân sự ⇒ hai mốc này là dữ liệu có hệ quả, chỉ ghi một lần,
+  // không được đè lại.
+  seenAt DateTime? @db.Timestamptz(6)
+
+  // Đối tượng đích — dựng deep-link + thu hồi thông báo khi đối tượng bị xoá.
+  entityType String?
+  entityId   String?
+
+  // Số sự kiện đã gộp vào mục này ("5 tin nhắn mới").
+  aggregateCount Int @default(1)
+
+  // Quá mốc này thì không đếm vào badge nữa (nhắc quá hạn, thông báo hết thời sự).
+  expiresAt DateTime? @db.Timestamptz(6)
+
+  // ACTIVE | EXPIRED (hết hạn / đối tượng đã xoá) | REVOKED (mất quyền xem).
+  state String @default("ACTIVE")
+
   @@unique([userId, dedupeKey])
   @@index([userId, readAt])
   @@index([userId, createdAt])
+  // Đường đọc chính của chuông: đếm badge + liệt kê panel theo trạng thái.
+  @@index([userId, state, readAt, createdAt(sort: Desc)])
+  // Đếm chưa đọc theo từng nhóm cho hàng chip lọc.
+  @@index([userId, groupKey, readAt])
 }
 
 model Notification {

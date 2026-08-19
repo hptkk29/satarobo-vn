@@ -1,4 +1,5 @@
 import { db } from "@/lib/db";
+import { notifyStaff } from "@/lib/notifications/notify";
 import { withCron } from "@/lib/cron/handler";
 import { PERMISSIONS } from "@/lib/auth/permissions";
 
@@ -28,7 +29,20 @@ export const dynamic = "force-dynamic";
 // =============================================================================
 
 const CATEGORY = "PAYMENT_RECONCILE";
-const HREF = "/bien-dong-so-du";
+
+// Hai thông báo nói về hai thứ khác nhau nên phải mở hai màn khác nhau — trước đây
+// dùng CHUNG một href là đẩy người nhận tới màn không chứa dữ liệu họ cần xử lý.
+//
+//  • Tiền về chưa khớp → `/bien-dong-so-du` (màn liệt kê BankTransaction) kèm
+//    `?status=unmatched`: trang có ĐỌC param này (page.tsx đọc `searchParams.status`,
+//    chỉ nhận "unmatched"/"matched") ⇒ mở ra là đúng hàng chờ, không phải cả sổ.
+//  • Phiếu thu trả thiếu quá hạn → `/cong-no`. Đây là màn công nợ + tuổi nợ quá hạn,
+//    và cũng là đích đã KHAI sẵn cho tiền tố `payment-reconcile:overdue-partial:`
+//    trong lib/notifications/catalog.ts. KHÔNG có màn nào liệt kê `PaymentRequest`
+//    toàn hệ thống (phiếu thu chỉ hiện trong chi tiết đơn `/orders/<id>`), nên đây là
+//    màn gần đúng nhất — `/bien-dong-so-du` thì sai hẳn: nó chỉ có BankTransaction.
+const HREF_UNMATCHED = "/bien-dong-so-du?status=unmatched";
+const HREF_OVERDUE_PARTIAL = "/cong-no";
 
 /**
  * Người nhận = có quyền `payments:manage`.
@@ -74,23 +88,18 @@ async function getReconcileRecipients(now: Date): Promise<string[]> {
   return active.map((u) => u.id);
 }
 
-async function notifyAll(
+// Cả tổ kế toán đi trong MỘT lời gọi: fan-out realtime tính chi phí theo từng người nhận.
+// `notifyStaff` cập nhật số đếm + href ở nhánh update và GIỮ trạng thái đã đọc (không
+// `reopen`) — đúng hành vi cũ, và ghi href là cách duy nhất chữa bản ghi mà lần chạy trước
+// trong cùng ngày đã sinh với href cũ (dedupeKey khoá theo ngày ⇒ create không chạy lại).
+const notifyAll = (
   userIds: string[],
   dedupeKey: string,
   title: string,
   body: string,
-): Promise<number> {
-  let n = 0;
-  for (const userId of userIds) {
-    await db.staffNotification.upsert({
-      where: { userId_dedupeKey: { userId, dedupeKey } },
-      update: { body }, // cập nhật số đếm, GIỮ trạng thái đã đọc
-      create: { userId, category: CATEGORY, title, body, href: HREF, dedupeKey },
-    });
-    n++;
-  }
-  return n;
-}
+  href: string,
+): Promise<number> =>
+  notifyStaff({ userIds, dedupeKey, category: CATEGORY, title, body, href });
 
 const fmt = (n: number) => new Intl.NumberFormat("vi-VN").format(n);
 
@@ -145,6 +154,7 @@ async function runPaymentReconcile(now: Date = new Date()): Promise<ReconcileRes
       `payment-reconcile:unmatched:${day}`,
       "Tiền về chưa khớp đơn",
       `${unmatched.length} giao dịch (${fmt(unmatchedAmount)}đ) chưa rót được vào phiếu thu nào — cần đối soát tay.`,
+      HREF_UNMATCHED,
     );
   }
   if (partial.length > 0) {
@@ -153,6 +163,7 @@ async function runPaymentReconcile(now: Date = new Date()): Promise<ReconcileRes
       `payment-reconcile:overdue-partial:${day}`,
       "Phiếu thu trả thiếu đã quá hạn",
       `${partial.length} phiếu thu còn thiếu ${fmt(overdueOutstanding)}đ và đã qua ngày đến hạn.`,
+      HREF_OVERDUE_PARTIAL,
     );
   }
 

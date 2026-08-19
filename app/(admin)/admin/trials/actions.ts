@@ -155,6 +155,7 @@ export async function updateTrialAction(
       body: `Bạn phụ trách buổi học thử lúc ${newAt.toLocaleString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh" })}.`,
       dedupeKey: `trial-v1.assigned:${trialId}`,
       href: "/trials",
+      entityId: trialId,
     });
   }
 
