@@ -25,7 +25,7 @@ import { auth } from "@/lib/auth";
 import { resolveActor } from "@/lib/auth/actor";
 import { scopedDb } from "@/lib/db-scope";
 import { checkPermission } from "@/lib/auth/check-permission";
-import { attendanceSummary } from "@/lib/attendance/summary";
+import { attendanceSummaryForEnrollments } from "@/lib/attendance/summary";
 import {
   REPORT_CARD_STATUS_LABEL,
   canEditReportCardContent,
@@ -267,8 +267,10 @@ export default async function TeacherReportCardsPage({
             _count: { _all: true },
           })
         : Promise.resolve([]),
-      // Chuyên cần từng ghi danh — dùng lib R7-08 (attended gồm buổi bù, total = số buổi chuẩn).
-      Promise.all(enrollments.map((e) => attendanceSummary(e.id))),
+      // Chuyên cần từng ghi danh — dùng lib R7-08 (attended gồm buổi bù, total = số buổi
+      // chuẩn). Bản GỘP: 19/08 chỗ này còn gọi attendanceSummary theo từng ghi danh, mỗi
+      // lần ~6 truy vấn ⇒ giáo viên 6 lớp × 20 HV bắn ~700 truy vấn đồng thời vào pool.
+      attendanceSummaryForEnrollments(enrollments.map((e) => e.id)),
       // Điểm TB bài tập (thang 10): 1 query gộp cho mọi lớp; AssignmentSubmission ∉ SCOPED
       // → guard qua assignment.classId ∈ classIds (pattern AssignmentsTab hoc-vien).
       classIds.length
@@ -293,9 +295,7 @@ export default async function TeacherReportCardsPage({
   const completedByClass = new Map(
     completedRows.map((r) => [r.classId, r._count._all]),
   );
-  const summaryByEnrollment = new Map(
-    enrollments.map((e, i) => [e.id, summaries[i]]),
-  );
+  const summaryByEnrollment = summaries;
   const criteriaByCourse = new Map(
     courseIds.map((id, i) => [id, criteriaLists[i]]),
   );

@@ -30,7 +30,7 @@ import type { AttendanceStatus } from "@prisma/client";
 import { auth } from "@/lib/auth";
 import { resolveActor } from "@/lib/auth/actor";
 import { scopedDb } from "@/lib/db-scope";
-import { attendanceSummary } from "@/lib/attendance/summary";
+import { attendanceSummaryForEnrollments } from "@/lib/attendance/summary";
 import { getCourseCriteria } from "@/lib/lms/report-card";
 import { ENROLLMENT_ACTIVE_STATUS_LIST } from "@/lib/enrollment-status";
 import { ENROLLMENT_STATUS } from "@/lib/labels/registry";
@@ -695,7 +695,8 @@ async function HocBaTab({
 }) {
   const enrollmentIds = enrollments.map((e) => e.id);
   const [summaries, criteriaLists, cards] = await Promise.all([
-    Promise.all(enrollments.map((e) => attendanceSummary(e.id))),
+    // Gộp: mỗi lần gọi attendanceSummary tốn ~6 truy vấn (xem ghi chú ở summary.ts).
+    attendanceSummaryForEnrollments(enrollmentIds),
     Promise.all(enrollments.map((e) => getCourseCriteria(e.courseId))),
     sdb.reportCard.findMany({
       where: { enrollmentId: { in: enrollmentIds } },
@@ -711,7 +712,13 @@ async function HocBaTab({
   return (
     <div className="space-y-5">
       {enrollments.map((e, i) => {
-        const sum = summaries[i];
+        const sum = summaries.get(e.id) ?? {
+          total: 0,
+          attended: 0,
+          absent: 0,
+          needMakeup: 0,
+          madeUp: 0,
+        };
         const criteria = criteriaLists[i];
         const card = cardByEnrollment.get(e.id);
         const levelByCriterion = new Map(

@@ -29,6 +29,7 @@ import {
 } from "@/lib/makeup/service";
 import { notifyAttendanceForSession } from "@/lib/notify/attendance";
 import { evaluateAbsenceRisk } from "@/lib/risk/service";
+import { mapWithConcurrency } from "@/lib/util/concurrency";
 
 const MAKEUP_STATUSES = ["NONE", "NEEDS_MAKEUP", "MADE_UP"] as const;
 
@@ -272,7 +273,9 @@ export async function saveClassAttendanceAction(
   // (sai) ⇒ MakeupNeed PENDING nằm mồ côi ở /admin/hoc-bu trong khi buổi đó đã có phép.
   // MADE_UP thì KHÔNG đụng gì — nhu cầu đã hoàn tất, không phải việc của màn điểm danh.
   try {
-    for (const { r, makeupStatus, absenceReason } of plans) {
+    // Song song CÓ TRẦN — mỗi HV một lượt độc lập; nối đuôi thì GV bấm Lưu phải chờ hết
+    // 20 vòng truy vấn mới thấy phản hồi.
+    await mapWithConcurrency(plans, 5, async ({ r, makeupStatus, absenceReason }) => {
       if (makeupStatus === "NEEDS_MAKEUP") {
         await createMakeupNeed({
           studentId: r.studentId,
@@ -286,7 +289,7 @@ export async function saveClassAttendanceAction(
           missedSessionId: data.sessionId,
         });
       }
-    }
+    });
   } catch (err) {
     console.error("[saveClassAttendanceAction] makeup:", err);
   }
@@ -295,13 +298,14 @@ export async function saveClassAttendanceAction(
   // từ site GV (đường chính) không bao giờ tạo StudentRiskAlert/CareTask. Best-effort:
   // .catch để không chặn luồng lưu.
   try {
-    for (const r of data.records) {
-      if (isAbsent(r.status)) {
-        await evaluateAbsenceRisk(r.studentId, sess.classId).catch((err) =>
+    await mapWithConcurrency(
+      data.records.filter((r) => isAbsent(r.status)),
+      5,
+      (r) =>
+        evaluateAbsenceRisk(r.studentId, sess.classId).catch((err) =>
           console.error("[saveClassAttendanceAction] risk:", err),
-        );
-      }
-    }
+        ),
+    );
   } catch (err) {
     console.error("[saveClassAttendanceAction] risk:", err);
   }

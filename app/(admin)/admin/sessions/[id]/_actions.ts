@@ -6,6 +6,7 @@ import { scopedDb } from "@/lib/db-scope";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { hasRole } from "@/lib/auth/permissions";
+import { getFreshGateUser } from "@/lib/auth/fresh-gate-user";
 import { canStartSession, canCompleteSession } from "@/lib/sessions/status";
 import { saveSessionFeedbackCore, saveSessionEvalCore } from "./_feedback-core";
 
@@ -29,11 +30,16 @@ export async function canManageSessionClass(
   user: { id: string; role: string; centerId: string | null },
   cls: ClassGate,
 ): Promise<boolean> {
-  if (hasRole(user, "SUPER_ADMIN")) return true;
-  if (hasRole(user, "CENTER_MANAGER")) return !!cls.centerId && cls.centerId === user.centerId;
-  if (hasRole(user, "TEACHER")) return cls.teacherId === user.id || cls.assistantId === user.id;
+  // 19/08 — vai + cơ sở đọc TỪ DB, không lấy từ JWT: gỡ vai trong DB phải có tác dụng
+  // ngay, không đợi người dùng đăng xuất. Xem lib/auth/fresh-gate-user.ts.
+  const fresh = await getFreshGateUser(user.id);
+  const u = fresh ?? user;
+  if (hasRole(u, "SUPER_ADMIN")) return true;
+  if (hasRole(u, "CENTER_MANAGER")) return !!cls.centerId && cls.centerId === u.centerId;
+  if (hasRole(u, "TEACHER")) return cls.teacherId === user.id || cls.assistantId === user.id;
   return false;
 }
+
 
 /**
  * Site GV — lưu PHIẾU nhận xét buổi học của MỘT học viên. Wrapper auth() mỏng —

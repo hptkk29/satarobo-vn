@@ -16,6 +16,7 @@ import {
 import { writeAudit } from "@/lib/audit/audit-log";
 import { decideAttendanceWrite } from "@/lib/lms/attendance-edit-policy";
 import { canManageSessionClass } from "@/app/(admin)/admin/sessions/[id]/_actions";
+import { mapWithConcurrency } from "@/lib/util/concurrency";
 
 type ActionResult = { error?: string; saved?: number };
 
@@ -212,8 +213,10 @@ export async function markAttendance(
   // chỉ chạy khi HV chuyển sang PRESENT/LATE, nên thao tác "vắng cần bù → vắng KHÔNG cần
   // bù (có phép)" rơi vào khe: không tạo, cũng không thu hồi ⇒ MakeupNeed PENDING nằm
   // mồ côi ở /admin/hoc-bu. MADE_UP thì không đụng (nhu cầu đã hoàn tất).
+  // Song song CÓ TRẦN: mỗi học viên là một lượt độc lập, chạy nối đuôi thì cả lớp 20 em
+  // phải chờ 20 vòng truy vấn trước khi action trả về.
   try {
-    for (const r of data.records) {
+    await mapWithConcurrency(data.records, 5, async (r) => {
       const absent = r.status === "ABSENT" || r.status === "EXCUSED";
       const makeupStatus: MakeupStatus = absent ? (r.makeupStatus ?? "NONE") : "NONE";
       if (makeupStatus === "NEEDS_MAKEUP") {
@@ -221,7 +224,7 @@ export async function markAttendance(
       } else if (makeupStatus === "NONE") {
         await cancelPendingMakeupNeed({ studentId: r.studentId, missedSessionId: data.sessionId });
       }
-    }
+    });
   } catch (err) {
     console.error("[markAttendance] makeup error:", err);
   }

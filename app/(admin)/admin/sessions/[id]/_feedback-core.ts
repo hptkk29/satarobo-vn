@@ -23,6 +23,7 @@ import { scopedDb, withMakeupException } from "@/lib/db-scope";
 import { getSessionRosterStudentIds } from "@/lib/attendance/roster";
 import { enqueueNewFeedback } from "@/lib/email/triggers";
 import { hasRole } from "@/lib/auth/permissions";
+import { getFreshGateUser } from "@/lib/auth/fresh-gate-user";
 import { publishEvent } from "@/lib/events/publish";
 import { isSessionOwnedByTeacher } from "@/lib/lms/session-ownership";
 import { isBlankFeedbackInput } from "@/lib/lms/feedback-content";
@@ -50,11 +51,14 @@ export async function canManageSessionRecord(
   user: SessionGateUser,
   sess: SessionOwnershipGate,
 ): Promise<boolean> {
-  if (hasRole(user, "SUPER_ADMIN")) return true;
-  if (hasRole(user, "CENTER_MANAGER")) {
-    return !!sess.class.centerId && sess.class.centerId === user.centerId;
+  // Vai + cơ sở đọc TỪ DB, không từ JWT — gỡ vai phải có tác dụng ngay, không đợi người
+  // dùng đăng xuất. Xem lib/auth/fresh-gate-user.ts.
+  const u = (await getFreshGateUser(user.id)) ?? user;
+  if (hasRole(u, "SUPER_ADMIN")) return true;
+  if (hasRole(u, "CENTER_MANAGER")) {
+    return !!sess.class.centerId && sess.class.centerId === u.centerId;
   }
-  if (hasRole(user, "TEACHER")) {
+  if (hasRole(u, "TEACHER")) {
     const actor = await resolveActor(user.id);
     return isSessionOwnedByTeacher(
       {

@@ -10,6 +10,7 @@ import { z } from "zod";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { hasRole } from "@/lib/auth/permissions";
+import { getFreshGateUser } from "@/lib/auth/fresh-gate-user";
 import { resolveActor } from "@/lib/auth/actor";
 import { getSessionRosterStudentIds } from "@/lib/attendance/roster";
 import {
@@ -41,7 +42,8 @@ async function gateFill(
   });
   if (!sess) return { ok: false, error: "Buổi học không tồn tại" };
 
-  const u = session.user;
+  // Vai + cơ sở TỪ DB, không từ JWT (xem lib/auth/fresh-gate-user.ts).
+  const u = { id: session.user.id, ...((await getFreshGateUser(session.user.id)) ?? session.user) };
   const cls = sess.class;
   const allowed =
     hasRole(u, "SUPER_ADMIN") ||
@@ -150,7 +152,8 @@ async function gateTrialFill(
   });
   if (!sess) return { ok: false, error: "Buổi học trải nghiệm không tồn tại" };
 
-  const u = session.user;
+  // Vai + cơ sở TỪ DB, không từ JWT (xem lib/auth/fresh-gate-user.ts).
+  const u = { id: session.user.id, ...((await getFreshGateUser(session.user.id)) ?? session.user) };
   const cls = sess.trialClass;
   const allowed =
     hasRole(u, "SUPER_ADMIN") ||
