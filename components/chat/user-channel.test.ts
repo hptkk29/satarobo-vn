@@ -141,6 +141,43 @@ describe("createUserChannelHub", () => {
     off();
   });
 
+  // Chuông nhân sự đi nhờ ĐÚNG kênh này (không dựng SSE, không mở topic mới). Cửa chặn nằm
+  // ở `handleBroadcast`: nó lọc theo TÊN event, nên tên mới mà quên mở là bị nuốt CÂM —
+  // không log, không lỗi, badge chuông vẫn đứng chờ vòng poll 60s như chưa có gì xảy ra.
+  it("broadcast `notification.bumped` → event noti kèm mốc thời gian đã chuẩn hoá", async () => {
+    const { hub, fake } = setup();
+    const events: UserChannelEvent[] = [];
+    const off = hub.subscribe(ME, (e) => events.push(e));
+    await flush();
+
+    fake.handlers.onBroadcast("notification.bumped", { at: "2026-08-19T03:04:05.000Z" });
+
+    expect(events).toHaveLength(1);
+    expect(events[0]).toMatchObject({ type: "noti" });
+    if (events[0].type === "noti") {
+      expect(events[0].at.toISOString()).toBe("2026-08-19T03:04:05.000Z");
+    }
+    off();
+  });
+
+  // Cùng luật với bump: thà bỏ tín hiệu hỏng còn hơn giao `Invalid Date` cho người nghe.
+  it("payload `notification.bumped` dị dạng ⇒ KHÔNG gọi người nghe", async () => {
+    const { hub, fake } = setup();
+    const listener = vi.fn();
+    const off = hub.subscribe(ME, listener);
+    await flush();
+
+    fake.handlers.onBroadcast("notification.bumped", {});
+    fake.handlers.onBroadcast("notification.bumped", { at: "không-phải-ngày" });
+    fake.handlers.onBroadcast("notification.bumped", { at: null });
+    // Đúng loại bẫy BR-30 mà server phải chặn: kể cả có nội dung kèm theo, thiếu `at` hợp lệ
+    // thì vẫn là tín hiệu hỏng — không được "vớt" bằng cách lấy giờ máy client.
+    fake.handlers.onBroadcast("notification.bumped", { title: "Có nhận xét mới" });
+
+    expect(listener).not.toHaveBeenCalled();
+    off();
+  });
+
   it("payload dị dạng hoặc event lạ ⇒ KHÔNG gọi người nghe", async () => {
     const { hub, fake } = setup();
     const listener = vi.fn();
@@ -149,6 +186,9 @@ describe("createUserChannelHub", () => {
 
     fake.handlers.onBroadcast("conversation.bumped", bumpPayload({ messageId: undefined }));
     fake.handlers.onBroadcast("conversation.bumped", bumpPayload({ at: "không-phải-ngày" }));
+    // "message.created" chỉ chạy trên topic `conv:{id}`, KHÔNG bao giờ trên `user:{id}` ⇒
+    // vẫn là tên lạ thật sự với hub này. Đừng thay bằng một tên hub CÓ nhận (vd
+    // `notification.bumped`) — bài test sẽ xanh giả và không còn khoá được gì.
     fake.handlers.onBroadcast("message.created", { id: "m1" });
 
     expect(listener).not.toHaveBeenCalled();

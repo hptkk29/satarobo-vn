@@ -1,4 +1,5 @@
 import { db } from "@/lib/db";
+import { notifyStaff } from "@/lib/notifications/notify";
 import { getSetting } from "@/lib/settings/service";
 import { getSuperAdminUserIds } from "@/lib/crm/marketing-alerts";
 import { vnParts, vnYmd } from "@/lib/time/vn";
@@ -152,23 +153,26 @@ export async function runIntakeHealthAlerts(
     return { alerts: alerts.length, notified: 0 };
   }
 
+  // Quy ước `href` = đường admin clean-URL, KHÔNG tiền tố "/admin" (chuông admin push
+  // thẳng đường này). Giữ "/admin/..." thì link vẫn tới nơi nhưng ăn thêm một hop
+  // redirect legacy — chậm và lệch với 20+ nơi sinh thông báo khác.
+  const HREF = "/crm/webhook-replay";
+
   let notified = 0;
   for (const alert of alerts) {
-    for (const userId of admins) {
-      await db.staffNotification.upsert({
-        where: { userId_dedupeKey: { userId, dedupeKey: alert.dedupeKey } },
-        update: { body: alert.body },
-        create: {
-          userId,
-          category: "INTAKE_ALERT",
-          title: alert.title,
-          body: alert.body,
-          dedupeKey: alert.dedupeKey,
-          href: "/admin/crm/webhook-replay",
-        },
-      });
-      notified++;
-    }
+    // MỘT lời gọi cho cả danh sách SUPER_ADMIN — fan-out realtime gộp thành một lô.
+    // `notifyStaff` ghi kèm `href` ở nhánh update, thứ cần để chữa bản ghi cũ: dedupeKey
+    // khoá theo giờ/ngày nên thông báo đã sinh trong cùng khung đó không chạy lại nhánh
+    // create. Không `reopen`: cron chạy hàng giờ, một sự cố kéo dài không được dội chuông
+    // lại mỗi lượt.
+    notified += await notifyStaff({
+      userIds: admins,
+      dedupeKey: alert.dedupeKey,
+      category: "INTAKE_ALERT",
+      title: alert.title,
+      body: alert.body,
+      href: HREF,
+    });
   }
 
   return { alerts: alerts.length, notified };

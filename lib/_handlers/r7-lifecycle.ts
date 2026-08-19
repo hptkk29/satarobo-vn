@@ -4,6 +4,7 @@
 //     thay/bổ sung handler auto giao bài + sinh tiến độ. Tất cả idempotent (dedupeKey).
 import { db } from "@/lib/db";
 import { on, type DomainEventLite } from "@/lib/events/registry";
+import { notifyStaff } from "@/lib/notifications/notify";
 
 const str = (v: unknown): string => (v == null ? "" : String(v));
 
@@ -61,18 +62,23 @@ export async function onSessionTaught(event: DomainEventLite): Promise<void> {
   const teacherId = session.actualTeacherId ?? session.class?.teacherId;
   if (!teacherId) return; // R7-14 sẽ xử lý giao bài/tiến độ kể cả khi chưa có GV.
 
-  await db.staffNotification.upsert({
-    where: {
-      userId_dedupeKey: { userId: teacherId, dedupeKey: `session.taught:${sessionId}` },
-    },
-    create: {
-      userId: teacherId,
-      category: "CLASS",
-      title: "Buổi học đã hoàn tất",
-      body: `Buổi của lớp ${session.class?.name ?? ""} đã được đánh dấu hoàn tất.`,
-      dedupeKey: `session.taught:${sessionId}`,
-    },
-    update: {},
+  // Đường ADMIN clean-URL (không tiền tố /admin) — quy ước chung của `href`:
+  // chuông admin push thẳng, chuông site GV đổi qua `teacherHref()` (/sessions/* → /lich).
+  // Trỏ ĐÍCH DANH buổi (`/sessions/<id>` có page thật) thay vì danh sách, vì thông báo
+  // nói về đúng một buổi — bắt GV tự dò lại trong danh sách là bỏ phí thông tin đã có.
+  const href = `/sessions/${sessionId}`;
+
+  // `notifyStaff` ghi href ở CẢ create lẫn update — đúng thứ cần để chữa bản ghi sinh trước
+  // bản vá href (chúng có `href = null`, thành text chết, và dedupeKey không đổi nên nhánh
+  // create không bao giờ chạy lại). Không `reopen`: đây không phải tin mới.
+  await notifyStaff({
+    userIds: [teacherId],
+    dedupeKey: `session.taught:${sessionId}`,
+    category: "CLASS",
+    title: "Buổi học đã hoàn tất",
+    body: `Buổi của lớp ${session.class?.name ?? ""} đã được đánh dấu hoàn tất.`,
+    href,
+    entityId: sessionId,
   });
 }
 

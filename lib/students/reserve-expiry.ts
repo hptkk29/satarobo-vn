@@ -1,5 +1,6 @@
 import "server-only";
 import { db } from "@/lib/db";
+import { notifyStaff } from "@/lib/notifications/notify";
 
 // =============================================================================
 // LMS-11 — Bảo lưu quá hạn: quét StudentReserve đang active có expectedEndAt < now
@@ -26,17 +27,17 @@ export async function runReserveExpiryCheck(
     const userId = r.createdByUserId;
     if (!userId) continue; // không có người phụ trách → bỏ qua (không có target)
     const dueStr = r.expectedEndAt?.toISOString().slice(0, 10) ?? "";
-    await db.staffNotification.upsert({
-      where: { userId_dedupeKey: { userId, dedupeKey: `reserve-expiry:${r.id}` } },
-      update: { body: `Bảo lưu của ${r.student?.name ?? "HV"} đã quá hạn (${dueStr})` },
-      create: {
-        userId,
-        category: "RESERVE_EXPIRY",
-        title: "Bảo lưu quá hạn",
-        body: `Bảo lưu của ${r.student?.name ?? "HV"} đã quá hạn (${dueStr}) — cần gia hạn hoặc cho phục học`,
-        href: `/students/${r.studentId}/edit`,
-        dedupeKey: `reserve-expiry:${r.id}`,
-      },
+    // ⚠️ Body ở nhánh update cũ NGẮN HƠN bản create (thiếu vế "cần gia hạn hoặc cho phục
+    // học"). Nay một nội dung duy nhất cho cả hai nhánh — bản đầy đủ thắng, vì vế bị thiếu
+    // chính là việc người nhận phải làm.
+    await notifyStaff({
+      userIds: [userId],
+      dedupeKey: `reserve-expiry:${r.id}`,
+      category: "RESERVE_EXPIRY",
+      title: "Bảo lưu quá hạn",
+      body: `Bảo lưu của ${r.student?.name ?? "HV"} đã quá hạn (${dueStr}) — cần gia hạn hoặc cho phục học`,
+      href: `/students/${r.studentId}/edit`,
+      entityId: r.studentId,
     });
     notified++;
   }

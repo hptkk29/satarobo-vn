@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { db } from "@/lib/db";
+import { notifyStaff } from "@/lib/notifications/notify";
 import { verifyCronAuth } from "@/lib/cron/auth";
 import { findExpiredReserves } from "@/lib/students/reserve-service";
 
@@ -38,17 +38,21 @@ export async function GET(req: NextRequest) {
       timeZone: "Asia/Ho_Chi_Minh",
     });
     const dedupeKey = `reserve.expired:${r.id}:${vnDate(now)}`;
-    await db.staffNotification.upsert({
-      where: { userId_dedupeKey: { userId: r.createdByUserId, dedupeKey } },
-      create: {
-        userId: r.createdByUserId,
-        category: "STUDENT",
-        title: "Bảo lưu đã quá hạn",
-        body: `Lượt bảo lưu của học viên ${r.studentName} đã quá hạn dự kiến quay lại (${dueStr}). Vui lòng liên hệ phụ huynh để gia hạn hoặc kết thúc bảo lưu.`,
-        href: `/students/${r.studentId}`,
-        dedupeKey,
-      },
-      update: {},
+    // `/students/<id>` KHÔNG có page (thư mục chỉ chứa `edit/`) → link cũ 404. Màn hồ sơ
+    // học viên thật là `/students/<id>/edit`, cũng là nơi có khu "Lịch sử bảo lưu" để
+    // gia hạn/kết thúc — đúng việc mà thông báo này yêu cầu người nhận làm.
+    const href = `/students/${r.studentId}/edit`;
+    // `notifyStaff` ghi href ở CẢ hai nhánh — thứ cần để chữa bản ghi 404 do lần chạy cron
+    // trước sinh ra trong CÙNG ngày (dedupeKey khoá theo ngày ⇒ không được create lại).
+    // Không `reopen`: cron chạy hằng ngày, kéo về chưa-đọc là dội chuông mỗi sáng.
+    await notifyStaff({
+      userIds: [r.createdByUserId],
+      dedupeKey,
+      category: "STUDENT",
+      title: "Bảo lưu đã quá hạn",
+      body: `Lượt bảo lưu của học viên ${r.studentName} đã quá hạn dự kiến quay lại (${dueStr}). Vui lòng liên hệ phụ huynh để gia hạn hoặc kết thúc bảo lưu.`,
+      href,
+      entityId: r.studentId,
     });
     stats.notified++;
   }

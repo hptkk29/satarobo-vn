@@ -465,6 +465,7 @@ export async function assignTrialTeacherAction(
       title: "Bạn được phân công lớp trải nghiệm",
       body: `Bạn vừa được gán phụ trách lớp trải nghiệm ${clsName?.name ?? ""}. Xem lịch & học viên ở mục Trial.`,
       dedupeKey: `trial-class.assigned:${trialClassId}`,
+      entityId: trialClassId,
     });
   }
 

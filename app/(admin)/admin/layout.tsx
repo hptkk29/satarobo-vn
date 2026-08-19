@@ -117,6 +117,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
       {/* Main */}
       <div className="flex flex-1 flex-col overflow-hidden">
         <Topbar
+          userId={session.user.id}
           userName={session.user.name}
           userRole={activeRole ?? session.user.role}
           roles={roleOptions}
