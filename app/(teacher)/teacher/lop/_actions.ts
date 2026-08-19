@@ -14,7 +14,10 @@ import { revalidatePath } from "next/cache";
 import { AttendanceStatus, type MakeupStatus } from "@prisma/client";
 import { auth } from "@/lib/auth";
 import { resolveActor } from "@/lib/auth/actor";
-import { checkPermission } from "@/lib/auth/check-permission";
+import {
+  checkPermission,
+  decidePermissionWithGrant,
+} from "@/lib/auth/check-permission";
 import { withMakeupException } from "@/lib/db-scope";
 import { getSessionRosterStudentIds } from "@/lib/attendance/roster";
 import { isSessionOwnedByTeacher } from "@/lib/lms/session-ownership";
@@ -140,10 +143,35 @@ export async function saveClassAttendanceAction(
   const centerId = sess.class.centerId ?? sess.centerId ?? null;
 
   // (3) Role có quyền điểm danh không (CLASS scope — seed TEACHER:attendance:mark[CLASS]).
-  const allowed = await checkPermission("attendance:mark", {
-    classId: sess.classId,
-    centerId,
-  });
+  //
+  // ⚠️ 19/08 — GV DẠY THAY. Bước (2) đã chứng minh buổi thuộc về người này qua
+  // `substituteTeacherId`/`actualTeacherId`, nhưng `actor.assignedClassIds` chỉ nạp từ
+  // `Class.teacherId/assistantId` (lib/auth/actor.ts:443-446) nên scope CLASS KHÔNG khớp:
+  // trên PROD (RBAC_V2_ENABLED=true) GV dạy thay bấm Lưu là ăn "Không có quyền điểm danh
+  // lớp này" và điểm danh không bao giờ vào DB — quản lý đọc thành "GV chưa điểm danh".
+  // Local/CI chạy v1 nên KHÔNG tái hiện được; đừng tin kết quả thử ở máy.
+  //
+  // Vá bằng cách đưa ĐÚNG lớp vừa được chứng minh sở hữu vào bản sao actor CHỈ cho lần
+  // kiểm này, rồi vẫn đi qua nguyên pipeline quyền (grant mới → v1/v2 → cờ). KHÔNG nới
+  // `assignedClassIds` ở lib/auth/actor.ts: tập đó còn nuôi SCORM (lib/auth/lms-scope),
+  // học bạ (lib/lms/report-card-core) và chat DM với phụ huynh (lib/chat/dm) — nới ở đó
+  // là GV dạy thay 1 buổi tự nhiên có luôn học bạ và hộp chat của cả lớp.
+  const target = { classId: sess.classId, centerId };
+  const allowed =
+    (await checkPermission("attendance:mark", target)) ||
+    // Nhánh GV dạy thay: chỉ chạy khi lớp KHÔNG nằm trong assignedClassIds (tức cổng trên
+    // vừa trượt đúng vì lý do này). Vẫn là cùng một pipeline quyền, chỉ khác ở chỗ actor
+    // được bổ sung đúng lớp mà bước (2) đã chứng minh là của người này.
+    (!actor.assignedClassIds.has(sess.classId) &&
+      decidePermissionWithGrant({
+        sessionUser: session.user,
+        actor: {
+          ...actor,
+          assignedClassIds: new Set([...actor.assignedClassIds, sess.classId]),
+        },
+        action: "attendance:mark",
+        target,
+      }));
   if (!allowed) return { ok: false, error: "Không có quyền điểm danh lớp này" };
 
   // (4) SEC-M02: mỗi studentId từ client PHẢI thuộc ROSTER hợp lệ của buổi (enrolled active

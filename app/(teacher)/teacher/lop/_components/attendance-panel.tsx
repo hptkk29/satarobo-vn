@@ -16,6 +16,7 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Check, Save, Users } from "lucide-react";
 import { toast } from "sonner";
@@ -110,6 +111,7 @@ export function AttendancePanel({
     ),
   );
   const [pending, startTransition] = useTransition();
+  const router = useRouter();
 
   /** Em ĐÃ có bản ghi điểm danh trong DB lúc mở màn (dùng cho luật bỏ-chọn ở setStatus). */
   const savedIds = useMemo(
@@ -199,8 +201,13 @@ export function AttendancePanel({
 
     startTransition(async () => {
       const res = await saveClassAttendanceAction(sessionId, records);
-      if (res.ok) toast.success(`Đã lưu điểm danh ${res.saved} học viên`);
-      else toast.error(res.error);
+      if (res.ok) {
+        toast.success(`Đã lưu điểm danh ${res.saved} học viên`);
+        // Nạp lại RSC sau khi ghi: `savedIds` (và mọi chỉ báo "đã điểm danh" quanh nó)
+        // suy từ prop `rows` — không refresh thì nó đóng băng ở bản chụp lúc mount, GV
+        // mở lại thấy chip trắng trong khi DB đã có bản ghi rồi tưởng lưu hụt.
+        router.refresh();
+      } else toast.error(res.error);
     });
   }
 

@@ -10,6 +10,7 @@ import { scopedDb, withMakeupException } from "@/lib/db-scope";
 import { AttendanceGrid } from "./_components/attendance-grid";
 import { AttendanceSelector } from "./_components/attendance-selector";
 import { ENROLLMENT_ACTIVE_STATUS_LIST } from "@/lib/enrollment-status";
+import { vnEndOfDay } from "@/lib/time/vn";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Điểm danh | Admin" };
@@ -66,22 +67,42 @@ export default async function AttendanceAdminPage({ searchParams }: SearchParams
 
   // Load list of sessions for selector (upcoming or recent past)
   // QA 21/07 — loại buổi của lớp đã xoá mềm khỏi selector (đồng bộ /sessions).
-  const sessions = await sdb.classSession.findMany({
-    where: {
-      ...(classFilter ? { classId: classFilter } : {}),
-      class: { deletedAt: null, ...classScope },
-    },
-    orderBy: { date: "desc" },
-    take: 100,
-    select: {
-      id: true,
-      date: true,
-      topic: true,
-      classId: true,
-      class: { select: { name: true } },
-      _count: { select: { attendances: true } },
-    },
-  });
+  //
+  // ⚠️ 19/08 — TÁCH LÀM 2 TRUY VẤN, đừng gộp lại thành `orderBy date desc + take 100`.
+  // Bản gộp lấy 100 NGÀY LỚN NHẤT, mà lịch được sinh sẵn tới tận năm sau nên hạn ngạch bị
+  // buổi TƯƠNG LAI ăn hết: đo trên DB dev/test ở khung "tất cả lớp" thì 28/36 buổi ĐÃ điểm
+  // danh nằm ngoài cửa sổ — người dùng mở dropdown không thấy buổi mình vừa dạy đâu.
+  // Điểm danh nhìn về quá khứ, nên quá khứ phải được ưu tiên chỗ và xếp trước.
+  const selectorWhere: Prisma.ClassSessionWhereInput = {
+    ...(classFilter ? { classId: classFilter } : {}),
+    class: { deletedAt: null, ...classScope },
+  };
+  const selectorSelect = {
+    id: true,
+    date: true,
+    topic: true,
+    classId: true,
+    class: { select: { name: true } },
+    _count: { select: { attendances: true } },
+  } as const;
+  const selectorTodayEnd = vnEndOfDay(new Date());
+  const [pastSessions, upcomingSessions] = await Promise.all([
+    sdb.classSession.findMany({
+      where: { ...selectorWhere, date: { lte: selectorTodayEnd } },
+      orderBy: { date: "desc" },
+      take: classFilter ? 300 : 120,
+      select: selectorSelect,
+    }),
+    sdb.classSession.findMany({
+      where: { ...selectorWhere, date: { gt: selectorTodayEnd } },
+      orderBy: { date: "asc" },
+      take: classFilter ? 300 : 40,
+      select: selectorSelect,
+    }),
+  ]);
+  // Buổi đã diễn ra (mới nhất trước) rồi mới tới buổi sắp tới (gần nhất trước).
+  const sessions = [...pastSessions, ...upcomingSessions];
+  const upcomingIds = new Set(upcomingSessions.map((s) => s.id));
 
   const classes = await sdb.class.findMany({
     where: { deletedAt: null, ...classScope },
@@ -239,7 +260,11 @@ export default async function AttendanceAdminPage({ searchParams }: SearchParams
         sessions={sessions.map((s) => ({
           id: s.id,
           label: `${formatDateTime(s.date)} · ${s.class.name}${s.topic ? ` — ${s.topic}` : ""}${
-            s._count.attendances > 0 ? " (đã điểm danh)" : ""
+            upcomingIds.has(s.id)
+              ? " (sắp tới)"
+              : s._count.attendances > 0
+                ? ` (đã điểm danh ${s._count.attendances})`
+                : " (chưa điểm danh)"
           }`,
         }))}
       />

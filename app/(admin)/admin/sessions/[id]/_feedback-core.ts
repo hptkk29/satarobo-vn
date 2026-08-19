@@ -25,6 +25,7 @@ import { enqueueNewFeedback } from "@/lib/email/triggers";
 import { hasRole } from "@/lib/auth/permissions";
 import { publishEvent } from "@/lib/events/publish";
 import { isSessionOwnedByTeacher } from "@/lib/lms/session-ownership";
+import { isBlankFeedbackInput } from "@/lib/lms/feedback-content";
 
 export type FeedbackResult = { ok: true } | { ok: false; error: string };
 
@@ -162,7 +163,12 @@ export async function saveSessionFeedbackCore(
     const comment = it.comment.trim();
     const rating = it.rating ?? null;
     const old = existingBy.get(it.studentId);
-    if (comment.length === 0) {
+    // 19/08 — "dòng rỗng" phải tính CẢ SAO, không chỉ chữ. Bản cũ chỉ xét `comment` nên
+    // GV chấm sao mà không gõ chữ thì: (a) chưa có phiếu → `continue`, số sao rơi vào hư
+    // không nhưng hàm vẫn trả ok và màn hình vẫn toast "Đã lưu"; (b) đã có phiếu → rơi
+    // xuống nhánh xoá/gỡ bên dưới, tức thao tác CHẤM SAO lại đi PHÁ phiếu đang có.
+    // Cả hai đều là mất dữ liệu im lặng — đúng thứ người dùng báo là "nhập rồi mà mất".
+    if (isBlankFeedbackInput(comment, rating)) {
       if (!old) continue; // chưa có phiếu — không có gì để xoá
       if (hasExtended(old)) {
         // FIX #1 — phiếu mở rộng (rubric/notes/projectName): chỉ gỡ comment/sao,
@@ -190,11 +196,13 @@ export async function saveSessionFeedbackCore(
           classSessionId_studentId: { classSessionId: sessionId, studentId: it.studentId },
         },
         // FIX #5 — update KHÔNG ghi đè createdById (giữ tác giả phiếu gốc cho PDF/portal).
-        update: { comment, rating },
+        // `comment || null`: phiếu chỉ-có-sao lưu comment NULL chứ không phải chuỗi rỗng —
+        // mọi chỗ đọc đều coi null là "chưa có văn xuôi" (portal, PDF, session-eval-card).
+        update: { comment: comment || null, rating },
         create: {
           classSessionId: sessionId,
           studentId: it.studentId,
-          comment,
+          comment: comment || null,
           rating,
           createdById: user.id,
         },

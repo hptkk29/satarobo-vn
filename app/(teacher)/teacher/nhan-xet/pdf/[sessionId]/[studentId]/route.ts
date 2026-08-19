@@ -8,6 +8,7 @@ import { auth } from "@/lib/auth";
 import { resolveActor } from "@/lib/auth/actor";
 import { scopedDb } from "@/lib/db-scope";
 import { canManageSessionRecord } from "@/app/(admin)/admin/sessions/[id]/_feedback-core";
+import { feedbackHasContent } from "@/lib/lms/feedback-content";
 import {
   normalizeEvalNotes,
   normalizeEvalRatings,
@@ -84,6 +85,8 @@ export async function GET(
         projectName: true,
         notes: true,
         rubric: true,
+        comment: true,
+        rating: true,
         updatedAt: true,
         createdById: true,
       },
@@ -93,7 +96,12 @@ export async function GET(
       select: { name: true },
     }),
   ]);
-  if (!fb || (fb.rubric == null && fb.notes == null)) {
+  // 19/08 — điều kiện cũ `rubric == null && notes == null` loại nhầm phiếu lưu qua
+  // `saveSessionFeedback` (/teacher/nhan-xet, editor ở /admin/sessions/[id]) vốn chỉ có
+  // comment + sao. Đó là phiếu THẬT: phụ huynh đọc được trên portal, admin thấy trên thẻ
+  // nhận xét — riêng nút "Xem phiếu" thì trả JSON 404, đúng cảm giác "phiếu tôi lưu bị mất".
+  // Nay chỉ chặn phiếu THỰC SỰ trống (GV mở phiếu rồi bỏ đi, không điền gì).
+  if (!feedbackHasContent(fb)) {
     return NextResponse.json(
       { error: "Chưa có phiếu nhận xét — hãy lưu phiếu trước khi xuất PDF" },
       { status: 404 },
@@ -134,6 +142,7 @@ export async function GET(
             notes: normalizeEvalNotes(fb.notes),
             ratings: normalizeEvalRatings(fb.rubric),
             evaluatedByName: gv?.name ?? null,
+            comment: fb.comment,
           },
         }) as unknown as ReactElement<DocumentProps>,
       ),

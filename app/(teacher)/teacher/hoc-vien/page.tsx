@@ -35,6 +35,7 @@ import { getCourseCriteria } from "@/lib/lms/report-card";
 import { ENROLLMENT_ACTIVE_STATUS_LIST } from "@/lib/enrollment-status";
 import { ENROLLMENT_STATUS } from "@/lib/labels/registry";
 import { normalizeEvalNotes } from "@/lib/lms/session-eval-rubric";
+import { feedbackHasContent } from "@/lib/lms/feedback-content";
 import { cn } from "@/lib/utils";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -475,6 +476,8 @@ async function ReviewsTab({
       id: true,
       projectName: true,
       notes: true,
+      // `rubric` chỉ dùng để biết phiếu có nội dung hay không (gate nút "Xem phiếu").
+      rubric: true,
       comment: true,
       rating: true,
       classSession: {
@@ -504,6 +507,9 @@ async function ReviewsTab({
         const hasNotes =
           !!f.notes &&
           (notes.knowledge || notes.skill || notes.attitude || notes.proposal);
+        // Nút "Xem phiếu" trước đây render VÔ ĐIỀU KIỆN, kể cả với phiếu GV mở rồi bỏ
+        // trống — bấm vào ra trang JSON 404 thô. Gate theo đúng điều kiện của route PDF.
+        const hasPdfContent = feedbackHasContent(f);
         return (
           <div key={f.id} className="t-card p-5">
             <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
@@ -517,14 +523,16 @@ async function ReviewsTab({
                   {f.projectName ? ` · ${f.projectName}` : ""}
                 </p>
               </div>
-              <a
-                href={`/teacher/nhan-xet/pdf/${f.classSession.id}/${studentId}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-1 text-sm font-semibold text-primary-ink hover:text-primary-ink-hover"
-              >
-                Xem phiếu <FileDown className="h-4 w-4" aria-hidden />
-              </a>
+              {hasPdfContent && (
+                <a
+                  href={`/teacher/nhan-xet/pdf/${f.classSession.id}/${studentId}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 text-sm font-semibold text-primary-ink hover:text-primary-ink-hover"
+                >
+                  Xem phiếu <FileDown className="h-4 w-4" aria-hidden />
+                </a>
+              )}
             </div>
             {hasNotes ? (
               <dl className="grid grid-cols-1 gap-3 sm:grid-cols-2">

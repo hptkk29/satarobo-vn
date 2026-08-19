@@ -1,5 +1,7 @@
 import "server-only";
+import type { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
+import { vnEndOfDay } from "@/lib/time/vn";
 import { ENROLLMENT_ACTIVE_STATUS_LIST } from "@/lib/enrollment-status";
 import { summarizeSessionFeedback } from "@/lib/lms/session-feedback-roster";
 import {
@@ -73,9 +75,25 @@ export async function loadClassSessionFeedback(
   classId: string,
   limitSessions = 30,
 ): Promise<ClassSessionFeedbackData> {
+  // Cửa sổ buổi: buổi ĐÃ DIỄN RA, cộng thêm buổi tương lai NÀO ĐÃ CÓ dữ liệu (hiếm, nhưng
+  // saveSessionEval không chặn ngày nên vẫn có thể xảy ra).
+  //
+  // ⚠️ ĐỪNG bỏ điều kiện này để quay về `where: { classId }` thuần. Lịch được sinh sẵn cho
+  // cả khoá, nên với `orderBy date desc + take N` thì N chỗ bị buổi TƯƠNG LAI (rỗng theo
+  // định nghĩa) chiếm hết và phiếu của các buổi đã dạy bị đẩy ra ngoài — tab hiện trống
+  // trong khi dữ liệu vẫn còn nguyên. Cùng một cái bẫy đã nổ ở selector /admin/attendance.
+  const todayEnd = vnEndOfDay(new Date());
+  const sessionWindow: Prisma.ClassSessionWhereInput = {
+    classId,
+    OR: [
+      { date: { lte: todayEnd } },
+      { studentFeedbacks: { some: {} } },
+      { attendances: { some: {} } },
+    ],
+  };
   const [sessionRows, totalSessions] = await Promise.all([
     db.classSession.findMany({
-      where: { classId },
+      where: sessionWindow,
       orderBy: { date: "desc" },
       take: limitSessions,
       select: {
