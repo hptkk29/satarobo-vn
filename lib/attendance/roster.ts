@@ -156,3 +156,36 @@ export async function getSessionRosterStudentIds(
   const { rows } = await buildSessionAttendanceRows(actor, sessionId);
   return new Set(rows.map((r) => r.studentId));
 }
+
+/**
+ * Bản ghi điểm danh HIỆN CÓ của một buổi, theo học viên — đọc bằng `db` TRẦN.
+ *
+ * ⚠️ Vì sao không dùng `scopedDb`/`withMakeupException`: `Attendance` ∈ SCOPED_MODELS
+ * nhưng KHÔNG ∈ MAKEUP_EXCEPTION_MODELS, nên cả hai đường đều chèn
+ * `centerId IN visibleCenterIds`. Giáo viên cơ sở CS1 dạy thay một buổi của CS2 sẽ đọc
+ * ra RỖNG — và chỗ gọi (đường lưu điểm danh) hiểu "rỗng" là "chưa có gì", rồi ghi đè
+ * `makeupStatus`/`absenceReason` bằng giá trị suy ra ⇒ học viên đã học bù xong tụt về
+ * "cần bù" và lý do phụ huynh xin nghỉ bị xoá. Chính roster hiển thị ngay trên màn hình
+ * cũng đọc bằng `db` trần vì lý do này.
+ *
+ * Cách ly: giống buildSessionAttendanceRows — caller PHẢI xác minh quyền trên `sessionId`
+ * trước (isSessionOwnedByTeacher / canManageSessionClass).
+ */
+export async function getExistingAttendanceByStudent(
+  sessionId: string,
+  studentIds: string[],
+): Promise<
+  Map<string, { makeupStatus: string; absenceReason: string | null; status: string }>
+> {
+  if (studentIds.length === 0) return new Map();
+  const rows = await db.attendance.findMany({
+    where: { sessionId, studentId: { in: studentIds } },
+    select: { studentId: true, status: true, makeupStatus: true, absenceReason: true },
+  });
+  return new Map(
+    rows.map((r) => [
+      r.studentId,
+      { status: r.status, makeupStatus: r.makeupStatus, absenceReason: r.absenceReason },
+    ]),
+  );
+}

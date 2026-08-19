@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { auth } from "@/lib/auth";
 import { getStudentProgress } from "@/lib/progress";
+import { mapWithConcurrency } from "@/lib/util/concurrency";
 import { sendProgressReportEmail } from "@/lib/email/progress-report";
 import { ENROLLMENT_ACTIVE_STATUS_LIST } from "@/lib/enrollment-status";
 import { hasRole } from "@/lib/auth/permissions";
@@ -61,7 +62,10 @@ export async function generateClassProgressReports(
   let created = 0;
   let emailed = 0;
 
-  for (const e of enrollments) {
+  // Song song CÓ TRẦN (3): mỗi học viên tốn ~6 truy vấn + 1 email + 1 insert. Nối đuôi thì
+  // lớp 20 em chạy ~160 lượt tuần tự trong MỘT Server Action — dễ chạm trần thời gian và
+  // người bấm không biết nó còn chạy hay đã chết. Trần thấp vì có gửi email ở giữa.
+  await mapWithConcurrency(enrollments, 3, async (e) => {
     const st = e.student;
     const p = await getStudentProgress(st.id, classId);
 
@@ -112,7 +116,7 @@ export async function generateClassProgressReports(
       },
     });
     created++;
-  }
+  });
 
   revalidatePath(`/classes/${classId}/progress`);
   return { ok: true, created, emailed };

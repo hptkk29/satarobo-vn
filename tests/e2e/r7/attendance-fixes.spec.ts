@@ -322,6 +322,70 @@ test.describe("[ATTFIX] 7 lỗi điểm danh — rà soát lớp học", () => {
   });
 
   // ───────────────────────────────────────────────────────────────────────────
+  // 19/08 — HỒI SINH nhu cầu đã thu hồi. Khoá unique (studentId, missedSessionId) nên
+  // row không bao giờ bị xoá; nhánh `update` của upsert trước đây chỉ ghi `note`, nên
+  // chuỗi "vắng → sửa nhầm có mặt → sửa lại vắng" để MakeupNeed kẹt ở CANCELLED trong
+  // khi Attendance.makeupStatus = NEEDS_MAKEUP ⇒ HV biến mất khỏi /admin/hoc-bu.
+  // ───────────────────────────────────────────────────────────────────────────
+  test("[ATTFIX-04b] createMakeupNeed hồi sinh CANCELLED → PENDING; KHÔNG đụng SCHEDULED/COMPLETED", async () => {
+    const student = await db.student.create({
+      data: { name: "Bé Vắng Lại", centerId: c1 },
+      select: { id: true },
+    });
+    const missed = await makeSession(cls1.id, c1, new Date(Date.now() - DAY));
+
+    const created = await createMakeupNeed({ studentId: student.id, missedSessionId: missed.id });
+    expect(created.ok).toBe(true);
+    await cancelPendingMakeupNeed({ studentId: student.id, missedSessionId: missed.id });
+
+    // Không bật cờ → KHÔNG hồi sinh (giữ nguyên quyết định huỷ của quản lý ở /admin/hoc-bu).
+    await createMakeupNeed({ studentId: student.id, missedSessionId: missed.id });
+    expect(
+      (await db.makeupNeed.findUniqueOrThrow({ where: { id: created.id! }, select: { status: true } })).status,
+    ).toBe("CANCELLED");
+
+    // Đánh vắng lại (chuyển trạng thái thật) → nhu cầu sống lại, KHÔNG tạo row thứ hai.
+    const again = await createMakeupNeed({
+      studentId: student.id,
+      missedSessionId: missed.id,
+      reviveCancelled: true,
+    });
+    expect(again.ok).toBe(true);
+    expect(again.id).toBe(created.id);
+    expect(
+      (await db.makeupNeed.findUniqueOrThrow({ where: { id: created.id! }, select: { status: true } })).status,
+    ).toBe("PENDING");
+    expect(
+      await db.makeupNeed.count({ where: { studentId: student.id, missedSessionId: missed.id } }),
+    ).toBe(1);
+
+    // Nhu cầu ĐÃ XẾP BUỔI BÙ: giữ nguyên, không bị kéo về PENDING sau lưng người xếp lịch.
+    const student2 = await db.student.create({
+      data: { name: "Bé Đã Hẹn Bù", centerId: c1 },
+      select: { id: true },
+    });
+    const missed2 = await makeSession(cls1.id, c1, new Date(Date.now() - 3 * DAY));
+    const scheduled2 = await db.makeupNeed.create({
+      data: {
+        studentId: student2.id,
+        classId: cls1.id,
+        centerId: c1,
+        missedSessionId: missed2.id,
+        status: "SCHEDULED",
+      },
+      select: { id: true },
+    });
+    await createMakeupNeed({
+      studentId: student2.id,
+      missedSessionId: missed2.id,
+      reviveCancelled: true,
+    });
+    expect(
+      (await db.makeupNeed.findUniqueOrThrow({ where: { id: scheduled2.id }, select: { status: true } })).status,
+    ).toBe("SCHEDULED");
+  });
+
+  // ───────────────────────────────────────────────────────────────────────────
   // Fix #7 — buổi TƯƠNG LAI: gate vnTodayEnd (server chốt trong
   // saveClassAttendanceAction; action cần auth() nên kiểm công thức + ngữ nghĩa
   // bằng oracle Intl độc lập).

@@ -24,12 +24,29 @@ function dayKey(d: Date): number {
   return startOfDay(d).getTime();
 }
 
+/**
+ * Mốc cho dedupeKey của lần HỒI SINH: theo NGÀY (giờ VN đủ dùng) — đổi ngày thì phụ
+ * huynh được báo lại, còn bấm Lưu nhiều lần trong cùng ngày vẫn chỉ một thông báo.
+ */
+function revivedStamp(): string {
+  return new Date().toISOString().slice(0, 10);
+}
+
 /** Tạo (idempotent) MakeupNeed PENDING từ 1 buổi đã lỡ. */
 export async function createMakeupNeed(params: {
   studentId: string;
   missedSessionId: string;
   createdById?: string | null;
   note?: string | null;
+  /**
+   * Cho phép HỒI SINH nhu cầu đang ở CANCELLED. Chỉ bật khi đây là một CHUYỂN TRẠNG THÁI
+   * thật ("HV vừa được đánh vắng lại"), KHÔNG bật cho mỗi lần bấm Lưu.
+   *
+   * Lý do: MakeupNeed không ghi ai huỷ vì sao, nên bật vô điều kiện sẽ dựng dậy cả những
+   * nhu cầu mà quản lý CHỦ Ý huỷ ở /admin/hoc-bu — cứ mỗi lần giáo viên mở buổi cũ bấm
+   * Lưu là nó lại hiện về hàng chờ.
+   */
+  reviveCancelled?: boolean;
 }): Promise<{ ok: boolean; id?: string; error?: string }> {
   const sess = await db.classSession.findUnique({
     where: { id: params.missedSessionId },
@@ -49,14 +66,37 @@ export async function createMakeupNeed(params: {
       note: params.note ?? null,
       createdById: params.createdById ?? null,
     },
-    select: { id: true },
+    select: { id: true, status: true },
   });
 
+  // 19/08 — HỒI SINH nhu cầu đã bị thu hồi.
+  //
+  // Khoá unique là (studentId, missedSessionId) nên row KHÔNG BAO GIỜ bị xoá, chỉ đổi
+  // status. `cancelPendingMakeupNeed` đặt CANCELLED khi sửa điểm danh vắng → có mặt.
+  // Nhánh `update` ở trên chỉ ghi `note`, nên chuỗi thao tác rất đời thường
+  // "vắng → sửa nhầm thành có mặt → sửa lại thành vắng" để lại: Attendance.makeupStatus
+  // = NEEDS_MAKEUP nhưng MakeupNeed vẫn CANCELLED. Mọi màn học bù lọc theo
+  // MakeupNeed.status ∈ {PENDING, SCHEDULED} ⇒ học viên biến mất khỏi /admin/hoc-bu,
+  // không lỗi, không log, và mất suất bù.
+  //
+  // CHỈ hồi sinh từ CANCELLED, và CHỈ khi chỗ gọi khẳng định đây là chuyển trạng thái thật
+  // (`reviveCancelled`). SCHEDULED/COMPLETED giữ nguyên — đã hẹn buổi bù với phụ huynh thì
+  // không được tự ý đặt lại sau lưng người xếp lịch.
+  const revived = need.status === "CANCELLED" && params.reviveCancelled === true;
+  if (revived) {
+    await db.makeupNeed.update({
+      where: { id: need.id },
+      data: { status: "PENDING", makeupSessionId: null, completedAt: null },
+    });
+  }
+
   // R7-17 — báo PH/HV nhu cầu bù đã ghi nhận (side-effect tách qua outbox).
+  // Lần hồi sinh là MỘT SỰ KIỆN MỚI: giữ nguyên dedupeKey cũ thì outbox nuốt luôn
+  // (id không đổi) và phụ huynh không bao giờ được báo lại.
   await publishEvent(
     "makeup.requested",
     { makeupNeedId: need.id, studentId: params.studentId, centerId: sess.class.centerId },
-    { dedupeKey: `makeup.requested:${need.id}` },
+    { dedupeKey: `makeup.requested:${need.id}${revived ? `:revived-${revivedStamp()}` : ""}` },
   );
 
   return { ok: true, id: need.id };
