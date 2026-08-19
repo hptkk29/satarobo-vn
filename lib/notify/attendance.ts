@@ -1,5 +1,6 @@
 import "server-only";
 import { db } from "@/lib/db";
+import { notifyStaff } from "@/lib/notifications/notify";
 import { sendZaloNotification } from "@/lib/zalo/service";
 import { formatDateVN } from "@/lib/format/date";
 import { attendanceLabel, type AttendanceStatusValue } from "@/lib/labels";
@@ -168,20 +169,16 @@ export async function notifyTeacherAttendanceEdited(params: {
   const dateStr = formatDateVN(sess.date);
   const by = params.editedByName?.trim() ? ` bởi ${params.editedByName.trim()}` : "";
   const dedupeKey = `attendance.edited:${params.sessionId}`;
-  await db.staffNotification.upsert({
-    where: { userId_dedupeKey: { userId: teacherId, dedupeKey } },
-    create: {
-      userId: teacherId,
-      category: "CLASS",
-      title: "Điểm danh buổi học bị chỉnh sửa",
-      body: `Điểm danh buổi ${dateStr} lớp ${sess.class.name} vừa được cập nhật${by}. Vui lòng kiểm tra lại.`,
-      href: `/attendance?sessionId=${params.sessionId}`,
-      dedupeKey,
-    },
-    // Sửa lại lần nữa → làm mới nội dung + đưa về chưa đọc để GV thấy.
-    update: {
-      body: `Điểm danh buổi ${dateStr} lớp ${sess.class.name} vừa được cập nhật${by}. Vui lòng kiểm tra lại.`,
-      readAt: null,
-    },
+  await notifyStaff({
+    userIds: [teacherId],
+    dedupeKey,
+    category: "CLASS",
+    title: "Điểm danh buổi học bị chỉnh sửa",
+    body: `Điểm danh buổi ${dateStr} lớp ${sess.class.name} vừa được cập nhật${by}. Vui lòng kiểm tra lại.`,
+    href: `/attendance?sessionId=${params.sessionId}`,
+    entityId: params.sessionId,
+    // `reopen` — MỘT trong số ít nơi cố ý kéo về chưa-đọc: mỗi lần chạm hàm này là một lần
+    // SỬA THẬT do người khác gây ra, và GV phải kiểm lại sổ điểm danh của mình lần nữa.
+    reopen: true,
   });
 }

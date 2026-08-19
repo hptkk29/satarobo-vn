@@ -100,8 +100,16 @@ export type ChatBroadcastEvent =
   | "participant.removed"
   | "conversation.locked";
 
-/** Event chạy trên topic mức NGƯỜI DÙNG `user:{User.id}`. */
-export type ChatUserBroadcastEvent = "conversation.bumped";
+/**
+ * Event chạy trên topic mức NGƯỜI DÙNG `user:{User.id}`.
+ *
+ * Thêm event mới ở đây KHÔNG cần migration: policy `user_can_receive_own_user_broadcast`
+ * chỉ so `realtime.topic()` với `'user:' || auth.jwt()->>'app_user_id'`, KHÔNG lọc theo
+ * tên event ⇒ ai nghe được topic của mình thì nghe được mọi event trên đó.
+ * Nhưng client thì CÓ lọc theo tên (`components/chat/user-channel.ts`) — thêm tên ở đây
+ * mà quên mở cửa bên đó là event bị nuốt CÂM, không log, không lỗi.
+ */
+export type ChatUserBroadcastEvent = "conversation.bumped" | "notification.bumped";
 
 /**
  * Payload `conversation.bumped` — chỉ là TÍN HIỆU "có gì đó mới ở hội thoại X",
@@ -122,6 +130,22 @@ export type ConversationBumpedPayload = {
   /** Để sau này ưu tiên push (US-14) mà không phải đổi hợp đồng. */
   kind: "CHAT" | "ANNOUNCEMENT" | "DELETED";
   /** ISO timestamp của sự kiện — client dùng để sắp lại thứ tự cục bộ nếu cần. */
+  at: string;
+};
+
+/**
+ * Payload `notification.bumped` — tín hiệu "chuông của bạn vừa có gì đó mới", dùng để badge
+ * chuông nhảy ngay thay vì đợi vòng poll 60s.
+ *
+ * ⚠️ BR-30, chặt hơn cả `conversation.bumped`: KHÔNG tiêu đề, KHÔNG `href`, KHÔNG tên/SĐT/
+ * email/preview — thông báo nhân sự mang nội dung nghiệp vụ (tên học viên, tên lớp), mà kênh
+ * `user:{id}` chỉ chứng minh được "đúng người", KHÔNG chứng minh được "đúng quyền xem nội
+ * dung đó". Cũng KHÔNG đẩy số chưa đọc: con số là kết quả một truy vấn CÓ KIỂM QUYỀN, đẩy
+ * qua broadcast là dựng nguồn sự thật thứ hai rồi hai bên lệch nhau.
+ * Client nhận tín hiệu xong đi hỏi lại server (đường đã kiểm quyền) rồi mới vẽ.
+ */
+export type NotificationBumpedPayload = {
+  /** ISO timestamp của sự kiện — chỉ để client khử trùng / bỏ tín hiệu cũ. */
   at: string;
 };
 
@@ -160,6 +184,34 @@ export function userBumpBroadcasts(
       topic: `user:${id}`,
       event: "conversation.bumped" satisfies ChatUserBroadcastEvent,
       payload: { ...payload },
+      private: true,
+    });
+  }
+  return out;
+}
+
+/**
+ * Builder THUẦN: 1 phần tử `notification.bumped` cho MỖI người nhận, topic `user:{userId}`.
+ * Cùng khuôn `userBumpBroadcasts` (khử trùng userId + bỏ chuỗi rỗng) — một người nhận hai
+ * thông báo cùng lúc thì cũng chỉ cần một tín hiệu, vì client sẽ đi đếm lại chứ không cộng dồn.
+ *
+ * Payload dựng LẠI từng khoá thay vì `{ ...payload }`: nơi gọi thường có sẵn cả object
+ * StaffNotification trong tay, và spread là đường ngắn nhất để tên học viên / `href` lọt ra
+ * kênh realtime (BR-30). Ở đây chỉ `at` đi được ra ngoài, dù người gọi có đưa gì thêm.
+ */
+export function notificationBumpBroadcasts(
+  userIds: readonly string[],
+  payload: NotificationBumpedPayload,
+): BroadcastMessage[] {
+  const seen = new Set<string>();
+  const out: BroadcastMessage[] = [];
+  for (const id of userIds) {
+    if (!id || seen.has(id)) continue;
+    seen.add(id);
+    out.push({
+      topic: `user:${id}`,
+      event: "notification.bumped" satisfies ChatUserBroadcastEvent,
+      payload: { at: payload.at },
       private: true,
     });
   }

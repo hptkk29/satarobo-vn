@@ -78,6 +78,7 @@ export function AppShell({
       {/* Cột nội dung */}
       <div className="flex min-h-screen flex-1 flex-col lg:pl-64 print:pl-0">
         <Topbar
+          userId={userId}
           userName={userName}
           adminReturnUrl={adminReturnUrl}
           onMenuClick={() => setDrawerOpen(true)}

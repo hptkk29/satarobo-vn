@@ -28,6 +28,11 @@ const ALLOWLIST: Record<string, string> = {
   "/parent-requests/bao-vang":
     "stub chuyển hướng sang /parent-requests (giữ cho link cũ không vỡ)",
   "/search": "vào bằng ô tìm kiếm trên topbar (<form action=\"/search\">), không phải mục menu",
+  "/thong-bao":
+    "CỐ Ý không lên sidebar — ràng buộc cốt lõi của PRD hệ thông báo: chuông ở topbar là điểm " +
+    "vào DUY NHẤT, thêm mục menu là phá chính tiền đề đó. Vào từ nút \"Xem tất cả thông báo\" ở " +
+    "chân panel chuông. Nếu nghiệm thu cho thấy người dùng không tìm ra trang thì chữa bằng " +
+    "onboarding hoặc menu avatar, TUYỆT ĐỐI không bằng cách thêm sidebar.",
 };
 
 function walk(dir: string, out: string[] = []): string[] {

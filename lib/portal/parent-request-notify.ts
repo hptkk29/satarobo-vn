@@ -4,6 +4,7 @@
 // idempotent theo (userId, dedupeKey) — cùng mẫu lib/crm/sla.ts + conversation-notif.ts.
 import type { ParentRequestType, Role } from "@prisma/client";
 import { db } from "@/lib/db";
+import { notifyStaff } from "@/lib/notifications/notify";
 import { REQUEST_TYPE_LABEL } from "@/lib/portal/request-labels";
 
 /** Ngưỡng nhắc lại yêu cầu chưa xử lý (câu 40: quá 12h → hệ thống nhắc). */
@@ -35,7 +36,12 @@ export async function getParentRequestRecipients(
   });
 }
 
-/** Ghi StaffNotification cho từng người nhận, idempotent theo dedupeKey (không nhân đôi). */
+/**
+ * Ghi StaffNotification cho cả nhóm người nhận trong MỘT lời gọi, idempotent theo dedupeKey.
+ * Gộp cả nhóm là có chủ đích: một cơ sở có thể có chục Sale/QL, và fan-out realtime tính
+ * chi phí theo từng người nhận — bắn từng người một là nhân số lượt phát lên bấy nhiêu lần.
+ * Không `reopen`: đã báo rồi thì thôi, người nhận tự quyết khi nào coi là đã đọc.
+ */
 async function notifyRecipients(params: {
   recipients: { id: string }[];
   dedupeKey: string;
@@ -43,24 +49,17 @@ async function notifyRecipients(params: {
   title: string;
   body: string;
   href: string;
+  requestId: string;
 }): Promise<number> {
-  let count = 0;
-  for (const u of params.recipients) {
-    await db.staffNotification.upsert({
-      where: { userId_dedupeKey: { userId: u.id, dedupeKey: params.dedupeKey } },
-      create: {
-        userId: u.id,
-        category: params.category,
-        title: params.title,
-        body: params.body,
-        href: params.href,
-        dedupeKey: params.dedupeKey,
-      },
-      update: {}, // đã có → giữ nguyên (chỉ 1 lần)
-    });
-    count++;
-  }
-  return count;
+  return notifyStaff({
+    userIds: params.recipients.map((u) => u.id),
+    dedupeKey: params.dedupeKey,
+    category: params.category,
+    title: params.title,
+    body: params.body,
+    href: params.href,
+    entityId: params.requestId,
+  });
 }
 
 const typeLabel = (type: string): string =>
@@ -80,6 +79,7 @@ export async function notifyParentRequestCreated(input: {
   if (recipients.length === 0) return 0;
   return notifyRecipients({
     recipients,
+    requestId: input.requestId,
     dedupeKey: `parent_request.created:${input.requestId}`,
     category: "PARENT_REQUEST",
     title: "Yêu cầu mới từ phụ huynh",
@@ -114,6 +114,7 @@ export async function runParentRequestReminder(
     if (recipients.length === 0) continue;
     notified += await notifyRecipients({
       recipients,
+      requestId: req.id,
       dedupeKey: `parent_request.reminder:${req.id}`,
       category: "PARENT_REQUEST",
       title: "Nhắc: yêu cầu phụ huynh quá hạn",

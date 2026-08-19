@@ -2,6 +2,7 @@
 // Cron chạy hằng ngày; sau ngày 05 mà kỳ tháng trước chưa CONFIRMED / chưa có báo cáo
 // → StaffNotification cho SUPER_ADMIN (dedupeKey chống spam).
 import { db } from "@/lib/db";
+import { notifyStaff } from "@/lib/notifications/notify";
 import { previousMonthKey, isMonthlyDeadlinePassed } from "@/lib/crm/marketing-report";
 
 /** userId của SUPER_ADMIN đang hiệu lực (qua UserOrgRole). */
@@ -18,18 +19,18 @@ export async function getSuperAdminUserIds(now = new Date()): Promise<string[]> 
   return [...new Set(rows.map((r) => r.userId))];
 }
 
-async function notifyAll(userIds: string[], dedupeKey: string, title: string, body: string): Promise<number> {
-  let n = 0;
-  for (const userId of userIds) {
-    await db.staffNotification.upsert({
-      where: { userId_dedupeKey: { userId, dedupeKey } },
-      update: { body },
-      create: { userId, category: "MARKETING_ALERT", title, body, dedupeKey, href: "/marketing/funnel" },
-    });
-    n++;
-  }
-  return n;
-}
+// Một lời gọi cho CẢ danh sách SUPER_ADMIN — fan-out realtime gộp thành một lô. Không
+// `reopen`: cron chạy mỗi ngày, kéo lại chưa-đọc là dội chuông sáng nào cũng có cho tới
+// khi ai đó chốt sổ.
+const notifyAll = (userIds: string[], dedupeKey: string, title: string, body: string): Promise<number> =>
+  notifyStaff({
+    userIds,
+    dedupeKey,
+    category: "MARKETING_ALERT",
+    title,
+    body,
+    href: "/marketing/funnel",
+  });
 
 /**
  * C9.5 — sau ngày 05, kỳ chi phí tháng trước chưa CONFIRMED → alert.

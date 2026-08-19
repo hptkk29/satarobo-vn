@@ -4,6 +4,7 @@
 // hướng tới nhân viên (assignedToId, fallback adminId). Idempotent qua dedupeKey.
 import { db } from "@/lib/db";
 import { on, type DomainEventLite } from "@/lib/events/registry";
+import { notifyStaff } from "@/lib/notifications/notify";
 
 const str = (v: unknown): string => (v == null ? "" : String(v));
 
@@ -26,17 +27,14 @@ export async function onTrialAssigned(event: DomainEventLite): Promise<void> {
 
   const childName = child?.fullName ?? "học viên";
   const dedupeKey = `trial.assigned:${trialEnrollmentId}`;
-  await db.staffNotification.upsert({
-    where: { userId_dedupeKey: { userId, dedupeKey } },
-    create: {
-      userId,
-      category: "LEAD",
-      title: "Đã xếp lớp trải nghiệm",
-      body: `Đã xếp lớp trải nghiệm cho ${childName}.`,
-      href: child?.leadId ? `/leads/${child.leadId}` : null,
-      dedupeKey,
-    },
-    update: {},
+  await notifyStaff({
+    userIds: [userId],
+    dedupeKey,
+    category: "LEAD",
+    title: "Đã xếp lớp trải nghiệm",
+    body: `Đã xếp lớp trải nghiệm cho ${childName}.`,
+    href: child?.leadId ? `/leads/${child.leadId}` : null,
+    entityId: trialEnrollmentId,
   });
 }
 
