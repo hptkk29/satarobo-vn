@@ -8,6 +8,7 @@ import { seedTestimonials } from "./seed-testimonials";
 import { seedDepartments } from "./seed-departments";
 import { seedOrgUnits } from "./seed-orgunit";
 import { seedRoles } from "./seed-roles";
+import { seedWorkingHours } from "./seed-working-hours";
 
 const db = new PrismaClient();
 
@@ -439,6 +440,9 @@ PHÙ HỢP CHO:
 
   // ─── DepartmentDef (Track Department — phòng ban động) ──────────────────────
   await seedDepartments(db);
+
+  // ─── Giờ làm việc mặc định toàn hệ thống (Q-C 19/08) ────────────────────────
+  await seedWorkingHours(db);
 
   console.log("\n🎉 Seed hoàn tất!");
   console.log("─".repeat(50));
