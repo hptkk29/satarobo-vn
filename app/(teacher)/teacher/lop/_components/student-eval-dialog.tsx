@@ -77,6 +77,8 @@ export function StudentEvalDialog({
     existing?.projectName ?? DEFAULT_PROJECT_NAME,
   );
   const [notes, setNotes] = useState<EvalNotes>(existing?.notes ?? EMPTY_NOTES);
+  /** GV có thực sự động vào bảng năng lực chưa (9 tiêu chí mở ra đã sẵn mức 3). */
+  const [ratingsTouched, setRatingsTouched] = useState(false);
   const [ratings, setRatings] = useState<Record<string, number>>(() => {
     const seed: Record<string, number> = {};
     for (const c of EVAL_CRITERIA)
@@ -85,6 +87,22 @@ export function StudentEvalDialog({
   });
 
   function submit() {
+    // 19/08 — CHẶN phiếu bịa.
+    //
+    // Hộp thoại mở ra là đã điền sẵn tên dự án mặc định + cả 9 tiêu chí ở mức 3 (tiện cho
+    // GV, giữ nguyên). Nhưng bấm Lưu ngay lúc đó thì hệ thống ghi một phiếu ĐẦY ĐỦ mà
+    // không ai đánh giá gì, học viên bị đánh dấu "đã nhận xét", và phụ huynh mở cổng ra
+    // đọc được bảng năng lực toàn mức 3 như thể giáo viên đã chấm. Phiếu ĐANG SỬA thì
+    // không chặn — nội dung cũ vẫn còn nguyên đó.
+    const hasProse = [notes.knowledge, notes.skill, notes.attitude, notes.proposal].some(
+      (v) => v.trim().length > 0,
+    );
+    if (!existing && !hasProse && !ratingsTouched) {
+      toast.error(
+        "Phiếu chưa có nội dung — viết ít nhất một mục nhận xét hoặc chấm một tiêu chí rồi lưu.",
+      );
+      return;
+    }
     start(async () => {
       const res = await saveSessionEval({
         sessionId,
@@ -201,12 +219,13 @@ export function StudentEvalDialog({
                             <select
                               id={`ev-${c.id}`}
                               value={ratings[c.id]}
-                              onChange={(e) =>
+                              onChange={(e) => {
+                                setRatingsTouched(true);
                                 setRatings((r) => ({
                                   ...r,
                                   [c.id]: Number(e.target.value),
-                                }))
-                              }
+                                }));
+                              }}
                               className="w-full rounded-lg border border-border bg-card px-2 py-1 text-xs text-foreground outline-none focus:border-primary-soft focus:ring-2 focus:ring-primary-soft dark:focus:ring-primary"
                             >
                               {c.levels.map((lv) => (

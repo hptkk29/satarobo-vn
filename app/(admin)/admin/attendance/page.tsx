@@ -6,10 +6,13 @@ import { auth } from "@/lib/auth";
 import { hasRole } from "@/lib/auth/permissions";
 import { checkPermission } from "@/lib/auth/check-permission";
 import { resolveActor } from "@/lib/auth/actor";
-import { scopedDb, withMakeupException } from "@/lib/db-scope";
+import { scopedDb } from "@/lib/db-scope";
 import { AttendanceGrid } from "./_components/attendance-grid";
 import { AttendanceSelector } from "./_components/attendance-selector";
-import { ENROLLMENT_ACTIVE_STATUS_LIST } from "@/lib/enrollment-status";
+import {
+  buildSessionAttendanceRows,
+  type AttendanceRosterRow,
+} from "@/lib/attendance/roster";
 import { vnEndOfDay } from "@/lib/time/vn";
 
 export const dynamic = "force-dynamic";
@@ -118,123 +121,29 @@ export default async function AttendanceAdminPage({ searchParams }: SearchParams
     topic: string | null;
     className: string;
   } | null = null;
-  let rows: Array<{
-    studentId: string;
-    studentName: string;
-    studentPhone: string | null;
-    enrollmentStatus: string;
-    existing: {
-      id: string;
-      status: "PRESENT" | "ABSENT" | "LATE" | "EXCUSED" | "ABSENT_EXCUSED" | "ABSENT_UNEXCUSED";
-      note: string | null;
-      makeupStatus: "NONE" | "NEEDS_MAKEUP" | "MADE_UP";
-      absenceReason: string | null;
-    } | null;
-    // R7-08 — HS học bù LIÊN CƠ SỞ: chỉ hiện trong đúng buổi này, KHÔNG lộ hồ sơ.
-    makeupFromCenter?: string | null;
-  }> = [];
+  let rows: AttendanceRosterRow[] = [];
 
   if (sessionId) {
-    // Scope theo selector: GV mở thẳng sessionId của lớp ngoài phạm vi → null (ẩn roster).
-    const sess = await sdb.classSession.findFirst({
+    // 19/08 — DÙNG CHUNG buildSessionAttendanceRows với trang chi tiết lớp và site GV.
+    //
+    // Trước đây trang này tự dựng roster bằng một truy vấn chép tay gần y hệt helper,
+    // nhưng THIẾU hai bộ lọc xoá mềm (`enrollment.deletedAt`, `student.deletedAt`). Hệ
+    // quả không phải chỉ là "hiện thừa vài dòng": khi lưu, markAttendance đối chiếu với
+    // getSessionRosterStudentIds — vốn đi qua helper ĐÚNG — nên mọi bản ghi của học viên
+    // đã xoá đều bị từ chối, và vì $transaction là trọn lô nên CẢ LỚP không lưu được với
+    // thông báo "Có học viên không thuộc danh sách buổi này". Một roster, một sự thật.
+    //
+    // Helper KHÔNG tự kiểm cách ly cơ sở (xem docstring của nó) — cổng scope giữ nguyên
+    // ở truy vấn dưới đây.
+    const gate = await sdb.classSession.findFirst({
       where: { id: sessionId, class: { deletedAt: null, ...classScope } },
-      include: {
-        class: {
-          select: {
-            id: true,
-            name: true,
-            enrollments: {
-              where: { status: { in: ENROLLMENT_ACTIVE_STATUS_LIST } },
-              select: {
-                status: true,
-                student: { select: { id: true, name: true, phone: true } },
-              },
-              orderBy: { student: { name: "asc" } },
-            },
-          },
-        },
-        attendances: {
-          select: {
-            id: true,
-            studentId: true,
-            status: true,
-            note: true,
-            makeupStatus: true,
-            absenceReason: true,
-          },
-        },
-      },
+      select: { id: true },
     });
-
-    if (sess) {
-      selectedSession = {
-        id: sess.id,
-        date: sess.date,
-        topic: sess.topic,
-        className: sess.class.name,
-      };
-      const existingMap = new Map(sess.attendances.map((a) => [a.studentId, a]));
-      rows = sess.class.enrollments.map((enr) => {
-        const existing = existingMap.get(enr.student.id);
-        return {
-          studentId: enr.student.id,
-          studentName: enr.student.name,
-          studentPhone: enr.student.phone,
-          enrollmentStatus: enr.status,
-          existing: existing
-            ? {
-                id: existing.id,
-                status: existing.status,
-                note: existing.note,
-                makeupStatus: existing.makeupStatus,
-                absenceReason: existing.absenceReason,
-              }
-            : null,
-        };
-      });
-
-      // R7-08 (AC4) — HS được xếp HỌC BÙ vào buổi này (có thể từ cơ sở khác).
-      // GV lớp đích thấy HS bù trong ĐÚNG buổi này + badge "Học bù từ <CS>";
-      // KHÔNG truy cập hồ sơ đầy đủ. Đọc chéo cơ sở qua exception whitelist.
-      {
-        const xdb = withMakeupException(actor);
-        const guests = await xdb.makeupNeed.findMany({
-          where: { makeupSessionId: sessionId, status: "SCHEDULED" },
-          select: {
-            studentId: true,
-            centerId: true,
-            student: { select: { name: true } },
-          },
-        });
-        const enrolledIds = new Set(rows.map((r) => r.studentId));
-        const visitors = guests.filter((g) => !enrolledIds.has(g.studentId));
-        if (visitors.length > 0) {
-          const centerIds = [...new Set(visitors.map((g) => g.centerId).filter(Boolean))] as string[];
-          const centers = await sdb.center.findMany({
-            where: { id: { in: centerIds } },
-            select: { id: true, name: true, code: true },
-          });
-          const centerName = new Map(centers.map((c) => [c.id, c.code ?? c.name]));
-          for (const g of visitors) {
-            const existing = existingMap.get(g.studentId);
-            rows.push({
-              studentId: g.studentId,
-              studentName: g.student.name,
-              studentPhone: null, // T5 hẹp — không lộ hồ sơ HS cơ sở khác
-              enrollmentStatus: "MAKEUP",
-              existing: existing
-                ? {
-                    id: existing.id,
-                    status: existing.status,
-                    note: existing.note,
-                    makeupStatus: existing.makeupStatus,
-                    absenceReason: existing.absenceReason,
-                  }
-                : null,
-              makeupFromCenter: (g.centerId && centerName.get(g.centerId)) || "cơ sở khác",
-            });
-          }
-        }
+    if (gate) {
+      const roster = await buildSessionAttendanceRows(actor, sessionId);
+      if (roster.session) {
+        selectedSession = roster.session;
+        rows = roster.rows;
       }
     }
   }

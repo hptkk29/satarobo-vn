@@ -7,7 +7,6 @@ import { scopedDb } from "@/lib/db-scope";
 import { SessionFeedbackEditor } from "./_components/session-feedback-editor";
 import { SessionChecklist } from "./_components/session-checklist";
 import { canManageSessionClass } from "./_actions";
-import { hasRole } from "@/lib/auth/permissions";
 import { checkPermission } from "@/lib/auth/check-permission";
 import { SessionEvalCard } from "@/components/admin/session-eval-card";
 import { parseFeedbackNotes, parseFeedbackRubric } from "@/lib/lms/session-eval-rubric";
@@ -96,8 +95,12 @@ export default async function SessionDetailPage({ params }: Props) {
   // Đào tạo: CHỈ ĐỌC phiếu nhận xét (không quản buổi) — để link "Mở buổi" từ trang lớp
   // không dẫn tới ngõ cụt.
   const canViewFeedback = await checkPermission("session-feedback:view-all");
-  if (!canEdit && !canViewFeedback && !hasRole(session.user, "HR")) {
-    // HR có employees:view-all nhưng buổi học không thuộc phạm vi → chặn hẳn nếu không quản lý được.
+  // 19/08 — điều kiện cũ có thêm `&& !hasRole(session.user, "HR")`, tức ĐẢO ĐÚNG Ý ĐỊNH
+  // đã ghi ở chính comment của nó ("HR ... chặn hẳn nếu không quản lý được"): với người
+  // mang vai HR thì mệnh đề luôn false ⇒ KHÔNG redirect ⇒ HR đọc được toàn bộ phiếu nhận
+  // xét của mọi buổi, trong khi seed cố ý KHÔNG cấp `session-feedback:view-all` cho HR.
+  // Không ai được vào đây bằng "vai gì" cả — chỉ bằng quyền quản buổi hoặc quyền đọc phiếu.
+  if (!canEdit && !canViewFeedback) {
     redirect("/sessions");
   }
 

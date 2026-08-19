@@ -3,14 +3,25 @@
 // Tổng số buổi = số Lesson trong giáo trình (Curriculum active) của khoá lớp.
 // Đã học      = buổi có mặt (PRESENT/LATE) + buổi vắng-có-bù đã bù xong (MADE_UP).
 // Còn lại     = tổng − đã học.
-// Vắng không bù = buổi ABSENT/EXCUSED chưa bù (PHẦN 2).
+// Vắng không bù = buổi VẮNG (đủ 4 nhãn vắng, xem lib/labels) chưa bù (PHẦN 2).
 //
 // Hàm thuần `computeStudentProgress` để test; wrapper `getStudentClassProgress`
 // lấy số liệu thật + vị trí buổi theo LỊCH THỰC (ClassSession đã trừ/dời nghỉ).
 
 import { db } from "@/lib/db";
+import {
+  ABSENT_STATUSES,
+  PRESENT_STATUSES,
+  type AttendanceStatusValue,
+} from "@/lib/labels";
 
-export type AttendanceLiteStatus = "PRESENT" | "ABSENT" | "LATE" | "EXCUSED";
+/**
+ * ⚠️ 19/08 — TRƯỚC ĐÂY chỉ có 4 giá trị ("PRESENT" | "ABSENT" | "LATE" | "EXCUSED"), trong
+ * khi site giáo viên ghi ABSENT_UNEXCUSED / ABSENT_EXCUSED. Bản ghi nhãn mới rơi qua CẢ
+ * hai nhánh đếm ⇒ hồ sơ học viên bên admin báo 0 buổi vắng cho mọi buổi do GV điểm danh,
+ * còn cổng phụ huynh (map đủ 6 nhãn) lại báo đúng. Alias sang nguồn chung ở lib/labels.
+ */
+export type AttendanceLiteStatus = AttendanceStatusValue;
 export type MakeupStatusLite = "NONE" | "NEEDS_MAKEUP" | "MADE_UP";
 
 export interface AttendanceProgressItem {
@@ -34,8 +45,6 @@ export interface StudentProgress {
   currentSession: number;
 }
 
-const PRESENT_STATUSES = new Set<AttendanceLiteStatus>(["PRESENT", "LATE"]);
-
 export interface ComputeProgressInput {
   totalLessons: number;
   /** Số buổi đã diễn ra theo lịch thực. */
@@ -52,7 +61,7 @@ export function computeStudentProgress(input: ComputeProgressInput): StudentProg
     const madeUp = a.makeupStatus === "MADE_UP";
     if (PRESENT_STATUSES.has(a.status) || madeUp) {
       attended++;
-    } else if (a.status === "ABSENT" || a.status === "EXCUSED") {
+    } else if (ABSENT_STATUSES.has(a.status)) {
       absentNoMakeup++;
     }
   }
@@ -100,7 +109,13 @@ export async function getStudentClassProgress(
 
   const [totalLessons, sessionsHeld, attendances] = await Promise.all([
     getTotalLessons(classId),
-    db.classSession.count({ where: { classId, date: { lte: todayEnd } } }),
+    // 19/08 — LOẠI buổi đã huỷ khỏi "đã diễn ra". Buổi huỷ không tính học cũng không
+    // tính vắng (luật ở lib/labels.ts + lib/attendance/summary.ts đã theo); riêng chỗ này
+    // còn đếm nên "buổi X/N" và % chuyên cần của cùng một lớp ra hai con số khác nhau
+    // tuỳ màn hình.
+    db.classSession.count({
+      where: { classId, date: { lte: todayEnd }, status: { not: "CANCELLED" } },
+    }),
     db.attendance.findMany({
       where: { studentId, session: { classId } },
       select: { status: true, makeupStatus: true },
@@ -128,7 +143,7 @@ export interface StudentAbsence {
 /** Chi tiết buổi vắng (ABSENT/EXCUSED) của HS — ngày, lý do, trạng thái bù. */
 export async function getStudentAbsences(studentId: string): Promise<StudentAbsence[]> {
   const rows = await db.attendance.findMany({
-    where: { studentId, status: { in: ["ABSENT", "EXCUSED"] } },
+    where: { studentId, status: { in: [...ABSENT_STATUSES] } },
     select: {
       status: true,
       makeupStatus: true,

@@ -19,7 +19,7 @@
 import { z } from "zod";
 import type { Prisma } from "@prisma/client";
 import { resolveActor } from "@/lib/auth/actor";
-import { scopedDb } from "@/lib/db-scope";
+import { scopedDb, withMakeupException } from "@/lib/db-scope";
 import { getSessionRosterStudentIds } from "@/lib/attendance/roster";
 import { enqueueNewFeedback } from "@/lib/email/triggers";
 import { hasRole } from "@/lib/auth/permissions";
@@ -124,7 +124,15 @@ export async function saveSessionFeedbackCore(
   // chưa scoped → cách ly qua buổi (sdb.findUnique IDOR-filter) + gate ownership dưới.
   const actor = await resolveActor(user.id);
   const sdb = scopedDb(actor);
-  const sess = await sdb.classSession.findUnique({
+  // 19/08 — nạp buổi qua withMakeupException, KHÔNG qua scopedDb thuần.
+  //
+  // Giáo viên là nguồn lực dùng chung: Hội sở điều một GV của CS1 sang dạy lớp ở CS2 thì
+  // `actor.visibleCenterIds` vẫn chỉ có CS1, nên `sdb.classSession.findUnique` lọc mất
+  // buổi và hàm này trả "Buổi học không tồn tại" — trong khi CÙNG GV đó điểm danh bình
+  // thường vì đường điểm danh (teacher/lop/_actions.ts) đã đi qua withMakeupException.
+  // Cách ly không bị nới: quyền sở hữu buổi vẫn do canManageSessionRecord chốt ngay dưới,
+  // và CENTER_MANAGER vẫn bị so centerId đúng như cũ.
+  const sess = await withMakeupException(actor).classSession.findUnique({
     where: { id: sessionId },
     select: SESSION_GATE_SELECT,
   });
@@ -304,7 +312,8 @@ export async function saveSessionEvalCore(
 
   const actor = await resolveActor(user.id);
   const sdb = scopedDb(actor);
-  const sess = await sdb.classSession.findUnique({
+  // Xem ghi chú ở saveSessionFeedbackCore về withMakeupException (GV dạy lớp cơ sở khác).
+  const sess = await withMakeupException(actor).classSession.findUnique({
     where: { id: sessionId },
     select: SESSION_GATE_SELECT,
   });
@@ -330,9 +339,21 @@ export async function saveSessionEvalCore(
   // FIX #4 — đọc comment cũ trước khi ghi: re-save không đổi văn xuôi thì KHÔNG email lại.
   const old = await sdb.studentSessionFeedback.findUnique({
     where: { classSessionId_studentId: { classSessionId: sessionId, studentId } },
-    select: { comment: true },
+    select: { comment: true, notes: true },
   });
   const commentChanged = (old?.comment ?? null) !== comment;
+
+  // 19/08 — ĐỪNG xoá "nhận xét nhanh" của đường kia.
+  //
+  // Repo có hai đường ghi vào cùng bảng: đường này (4 mục + rubric) và
+  // saveSessionFeedbackCore (comment + sao). Phiếu ở đây coi `comment` là 4 mục nối lại,
+  // nên GV mở hộp thoại rubric — vốn KHÔNG hiển thị nhận xét nhanh đang có — chấm sao rồi
+  // bấm Lưu là ghi `comment = null`, tức xoá trắng nội dung người khác vừa viết mà không
+  // ai thấy. Chỉ giữ lại khi phiếu cũ đúng là loại "chỉ có comment" (không có 4 mục);
+  // nếu phiếu cũ vốn có notes thì xoá hết 4 mục = có ý xoá văn xuôi, làm đúng như thế.
+  const oldIsQuickCommentOnly =
+    old != null && old.notes == null && !!old.comment?.trim();
+  const commentPatch = comment !== null || !oldIsQuickCommentOnly ? { comment } : {};
 
   let saved: { id: string };
   try {
@@ -343,7 +364,7 @@ export async function saveSessionEvalCore(
         projectName: projectName ?? null,
         notes,
         rubric,
-        comment,
+        ...commentPatch,
       },
       create: {
         classSessionId: sessionId,

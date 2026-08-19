@@ -44,30 +44,42 @@ export function FeedbackPanel({
   editable: boolean;
 }) {
   const router = useRouter();
-  const [state, setState] = useState<
-    Record<string, { comment: string; rating: number | null }>
-  >(() =>
-    Object.fromEntries(
-      rows.map((r) => [
-        r.studentId,
-        { comment: r.existingComment, rating: r.existingRating },
-      ]),
-    ),
-  );
+  /**
+   * CHỈ giữ phần GV vừa gõ; giá trị hiển thị = prop server + phần đã gõ.
+   *
+   * ⚠️ 19/08 — bản cũ chụp toàn bộ `rows` vào state lúc mount, còn mốc so-sánh-dirty lại
+   * đọc thẳng `r.existingComment` (prop, luôn tươi). Sau `router.refresh()` — hoặc khi
+   * quản lý/GV khác vừa lưu phiếu — hai bên lệch nhau, mọi dòng bị coi là "vừa sửa" và
+   * "Lưu tất cả" ghi đè nội dung MỚI bằng bản chụp CŨ (dòng rỗng còn bị hiểu là lệnh xoá).
+   */
+  const [edits, setEdits] = useState<
+    Record<string, { comment?: string; rating?: number | null }>
+  >({});
   const [pending, startTransition] = useTransition();
 
+  function valueOf(r: FeedbackPanelRow): { comment: string; rating: number | null } {
+    const e = edits[r.studentId];
+    return {
+      comment: e && e.comment !== undefined ? e.comment : r.existingComment,
+      rating: e && "rating" in e ? (e.rating ?? null) : r.existingRating,
+    };
+  }
+
   function setComment(studentId: string, comment: string) {
-    setState((s) => ({ ...s, [studentId]: { ...s[studentId], comment } }));
+    setEdits((s) => ({ ...s, [studentId]: { ...s[studentId], comment } }));
   }
   function setRating(studentId: string, rating: number) {
     // Bấm lại đúng sao đang chọn = bỏ chấm (rating về null).
-    setState((s) => ({
-      ...s,
-      [studentId]: {
-        ...s[studentId],
-        rating: s[studentId]?.rating === rating ? null : rating,
-      },
-    }));
+    setEdits((s) => {
+      const row = rows.find((r) => r.studentId === studentId);
+      const cur = s[studentId];
+      const currentRating =
+        cur && "rating" in cur ? (cur.rating ?? null) : (row?.existingRating ?? null);
+      return {
+        ...s,
+        [studentId]: { ...cur, rating: currentRating === rating ? null : rating },
+      };
+    });
   }
 
   function saveAll() {
@@ -75,20 +87,16 @@ export function FeedbackPanel({
     // chạm KHÔNG gửi → server không nhầm phiếu rubric-only (comment rỗng) thành lệnh xoá.
     const items = rows
       .filter((r) => {
-        const cur = state[r.studentId] ?? {
-          comment: r.existingComment,
-          rating: r.existingRating,
-        };
+        const cur = valueOf(r);
         return (
           cur.comment.trim() !== r.existingComment.trim() ||
-          (cur.rating ?? null) !== (r.existingRating ?? null)
+          cur.rating !== (r.existingRating ?? null)
         );
       })
-      .map((r) => ({
-        studentId: r.studentId,
-        comment: state[r.studentId]?.comment ?? "",
-        rating: state[r.studentId]?.rating ?? null,
-      }));
+      .map((r) => {
+        const cur = valueOf(r);
+        return { studentId: r.studentId, comment: cur.comment, rating: cur.rating };
+      });
     if (items.length === 0) {
       toast("Không có thay đổi để lưu");
       return;
@@ -97,6 +105,7 @@ export function FeedbackPanel({
       const res = await saveSessionFeedback({ sessionId, items });
       if (res.ok) {
         toast.success(`Đã lưu nhận xét ${items.length} học viên`);
+        setEdits({});
         router.refresh();
       } else {
         toast.error(res.error);
@@ -113,7 +122,7 @@ export function FeedbackPanel({
   return (
     <div className="space-y-3">
       {rows.map((r) => {
-        const cur = state[r.studentId] ?? { comment: "", rating: null };
+        const cur = valueOf(r);
         return (
           <div key={r.studentId} className="t-card p-4">
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">

@@ -182,16 +182,53 @@ export async function saveClassAttendanceAction(
     return { ok: false, error: "Có học viên không thuộc danh sách buổi này" };
   }
 
+  // 19/08 — đọc bản ghi ĐANG CÓ trước khi ghi đè.
+  //
+  // Bản cũ tính lại makeupStatus/absenceReason từ payload rồi ghi thẳng vào nhánh
+  // `update`. Panel điểm danh của site GV chỉ gửi {studentId, status, note} — không gửi
+  // makeupStatus, không gửi absenceReason — nên MỖI lần GV mở buổi cũ bấm Lưu lại là:
+  //   • học viên đã HỌC BÙ XONG (MADE_UP) tụt về NEEDS_MAKEUP ⇒ hiện lại ở /admin/hoc-bu
+  //     như chưa bù, và % chuyên cần / học bạ tính theo đó cũng sai;
+  //   • lý do phụ huynh xin nghỉ bị xoá trắng.
+  const existingRows = await xdb.attendance.findMany({
+    where: {
+      sessionId: data.sessionId,
+      studentId: { in: data.records.map((r) => r.studentId) },
+    },
+    select: { studentId: true, makeupStatus: true, absenceReason: true },
+  });
+  const existingBy = new Map(existingRows.map((r) => [r.studentId, r]));
+
+  /**
+   * Trạng thái bù HIỆU LỰC sau lần lưu này. Luật:
+   *   • không vắng            → NONE (đi học thì không có gì để bù);
+   *   • client gửi tường minh → theo client;
+   *   • đã MADE_UP mà nhãn mới vẫn "cần bù" → GIỮ MADE_UP (đã bù rồi, đừng tụt hạng);
+   *   • còn lại               → suy từ nhãn điểm danh (vắng có phép = NONE).
+   */
+  const plans = data.records.map((r) => {
+    const absent = isAbsent(r.status);
+    const old = existingBy.get(r.studentId);
+    const derived = absent ? deriveMakeup(r.status, r.makeupStatus) : "NONE";
+    const makeupStatus: MakeupStatus =
+      !absent || r.makeupStatus
+        ? derived
+        : old?.makeupStatus === "MADE_UP" && derived === "NEEDS_MAKEUP"
+          ? "MADE_UP"
+          : derived;
+    const absenceReason = !absent
+      ? null
+      : r.absenceReason !== undefined
+        ? r.absenceReason?.trim() || null
+        : (old?.absenceReason ?? null);
+    return { r, makeupStatus, absenceReason };
+  });
+
   // Write — upsert theo khoá composite sessionId_studentId; $transaction để lỗi giữa
   // chừng rollback trọn lô (GV bấm Lưu 1 lần cho cả lớp).
   try {
     await xdb.$transaction(
-      data.records.map((r) => {
-        const absent = isAbsent(r.status);
-        const makeupStatus = absent
-          ? deriveMakeup(r.status, r.makeupStatus)
-          : "NONE";
-        const absenceReason = absent ? r.absenceReason?.trim() || null : null;
+      plans.map(({ r, makeupStatus, absenceReason }) => {
         return xdb.attendance.upsert({
           where: {
             sessionId_studentId: {
@@ -228,19 +265,22 @@ export async function saveClassAttendanceAction(
   // (idempotent trong service — 1 nhu cầu/buổi/HV). câu 47: học bù có thể liên cơ sở.
   // Chiều ngược: sửa vắng → CÓ MẶT (PRESENT/LATE) → thu hồi MakeupNeed PENDING còn
   // treo của (HV, buổi này) — không để nhu cầu bù ma nằm ở /admin/hoc-bu.
+  //
+  // 19/08 — đi theo makeupStatus HIỆU LỰC (plans) chứ không theo `isAbsent` như trước.
+  // Nhánh cũ chỉ thu hồi khi HV chuyển sang CÓ MẶT, nên thao tác rất thường gặp
+  // "vắng không phép → vắng CÓ PHÉP" rơi vào khe: không tạo (đúng), cũng không thu hồi
+  // (sai) ⇒ MakeupNeed PENDING nằm mồ côi ở /admin/hoc-bu trong khi buổi đó đã có phép.
+  // MADE_UP thì KHÔNG đụng gì — nhu cầu đã hoàn tất, không phải việc của màn điểm danh.
   try {
-    for (const r of data.records) {
-      if (
-        isAbsent(r.status) &&
-        deriveMakeup(r.status, r.makeupStatus) === "NEEDS_MAKEUP"
-      ) {
+    for (const { r, makeupStatus, absenceReason } of plans) {
+      if (makeupStatus === "NEEDS_MAKEUP") {
         await createMakeupNeed({
           studentId: r.studentId,
           missedSessionId: data.sessionId,
           createdById: actorId,
-          note: r.absenceReason?.trim() || null,
+          note: absenceReason,
         });
-      } else if (!isAbsent(r.status)) {
+      } else if (makeupStatus === "NONE") {
         await cancelPendingMakeupNeed({
           studentId: r.studentId,
           missedSessionId: data.sessionId,

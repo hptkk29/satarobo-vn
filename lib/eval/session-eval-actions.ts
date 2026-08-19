@@ -10,6 +10,8 @@ import { z } from "zod";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { hasRole } from "@/lib/auth/permissions";
+import { resolveActor } from "@/lib/auth/actor";
+import { getSessionRosterStudentIds } from "@/lib/attendance/roster";
 import {
   getSessionEvalState,
   getTrialSessionEvalState,
@@ -27,7 +29,9 @@ type Result<T> = { ok: true; data: T } | { ok: false; error: string };
  */
 async function gateFill(
   sessionId: string,
-): Promise<{ ok: true; classCenterId: string | null } | { ok: false; error: string }> {
+): Promise<
+  { ok: true; classCenterId: string | null; userId: string } | { ok: false; error: string }
+> {
   const session = await auth();
   if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
 
@@ -46,7 +50,7 @@ async function gateFill(
     (hasRole(u, "TEACHER") && (cls.teacherId === u.id || cls.assistantId === u.id));
 
   if (!allowed) return { ok: false, error: "Không có quyền điền phiếu buổi học này" };
-  return { ok: true, classCenterId: cls.centerId };
+  return { ok: true, classCenterId: cls.centerId, userId: u.id };
 }
 
 /** Nạp phiếu SESSION_EVAL đang áp cho buổi (kèm đáp án đã lưu). */
@@ -87,6 +91,16 @@ export async function saveSessionEvalAction(input: unknown): Promise<Result<{ sa
 
   // Lấy form/đợt ĐANG ÁP từ server (không tin client). Đợt phải còn MỞ + khớp buổi,
   // và roundId client gửi phải trùng → chặn ghi vào đợt đã đóng/đổi giữa chừng.
+  // SEC-M02 cho hệ SESSION_EVAL — 19/08. Guard này ĐÃ CÓ ở đường nhận xét buổi
+  // (saveSessionEvalCore, _feedback-core.ts) nhưng bị bỏ sót ở đây: studentId đến thẳng
+  // từ client nên GV của lớp A ghi được phiếu đánh giá cho học viên bất kỳ của lớp/cơ sở
+  // khác, và phiếu đó hiện lên trong báo cáo đợt khảo sát như phiếu thật.
+  const actor = await resolveActor(g.userId);
+  const rosterIds = await getSessionRosterStudentIds(actor, parsed.data.sessionId);
+  if (parsed.data.submissions.some((sub) => !rosterIds.has(sub.studentId))) {
+    return { ok: false, error: "Có học viên không thuộc danh sách buổi này" };
+  }
+
   const state = await getSessionEvalState(parsed.data.sessionId);
   if (!state.active) return { ok: false, error: "Buổi học chưa có phiếu đánh giá đang mở" };
   if (state.roundId !== parsed.data.roundId) {
@@ -121,7 +135,7 @@ export async function saveSessionEvalAction(input: unknown): Promise<Result<{ sa
  */
 async function gateTrialFill(
   trialSessionId: string,
-): Promise<{ ok: true } | { ok: false; error: string }> {
+): Promise<{ ok: true; trialClassId: string } | { ok: false; error: string }> {
   const session = await auth();
   if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
 
@@ -130,6 +144,7 @@ async function gateTrialFill(
     select: {
       id: true,
       teacherId: true,
+      trialClassId: true,
       trialClass: { select: { teacherId: true, assistantId: true, centerId: true } },
     },
   });
@@ -145,7 +160,7 @@ async function gateTrialFill(
       (cls.teacherId === u.id || cls.assistantId === u.id || sess.teacherId === u.id));
 
   if (!allowed) return { ok: false, error: "Không có quyền điền phiếu buổi học thử này" };
-  return { ok: true };
+  return { ok: true, trialClassId: sess.trialClassId };
 }
 
 /** Nạp phiếu SESSION_EVAL đang áp cho buổi LỚP TRẢI NGHIỆM (kèm đáp án đã lưu). */
@@ -185,6 +200,17 @@ export async function saveTrialSessionEvalAction(input: unknown): Promise<Result
 
   const g = await gateTrialFill(parsed.data.trialSessionId);
   if (!g.ok) return g;
+
+  // Cùng guard SEC-M02 như lớp chính. Với lớp trải nghiệm, "studentId" của EvalResponse
+  // chính là LeadChild.id (xem admin/trial-classes/[id]/page.tsx nơi dựng danh sách).
+  const trialRoster = await db.trialEnrollment.findMany({
+    where: { trialClassId: g.trialClassId, status: { in: ["ACTIVE", "COMPLETED"] } },
+    select: { id: true, leadChildId: true },
+  });
+  const trialIds = new Set(trialRoster.flatMap((e) => [e.leadChildId, e.id]));
+  if (parsed.data.submissions.some((sub) => !trialIds.has(sub.studentId))) {
+    return { ok: false, error: "Có học viên không thuộc lớp trải nghiệm này" };
+  }
 
   const state = await getTrialSessionEvalState(parsed.data.trialSessionId);
   if (!state.active) return { ok: false, error: "Buổi học thử chưa có phiếu đánh giá đang mở" };

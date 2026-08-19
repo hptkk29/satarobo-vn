@@ -207,11 +207,18 @@ export async function markAttendance(
   // B1 — record "Cần học bù" (NEEDS_MAKEUP) → tạo MakeupNeed PENDING gắn buổi này.
   // Chiều ngược: sửa vắng → CÓ MẶT (PRESENT/LATE) → thu hồi MakeupNeed PENDING còn
   // treo của (HV, buổi này) — không để nhu cầu bù ma nằm ở /admin/hoc-bu.
+  //
+  // 19/08 — thu hồi theo makeupStatus HIỆU LỰC, không theo "có mặt hay không". Nhánh cũ
+  // chỉ chạy khi HV chuyển sang PRESENT/LATE, nên thao tác "vắng cần bù → vắng KHÔNG cần
+  // bù (có phép)" rơi vào khe: không tạo, cũng không thu hồi ⇒ MakeupNeed PENDING nằm
+  // mồ côi ở /admin/hoc-bu. MADE_UP thì không đụng (nhu cầu đã hoàn tất).
   try {
     for (const r of data.records) {
-      if (r.makeupStatus === "NEEDS_MAKEUP") {
+      const absent = r.status === "ABSENT" || r.status === "EXCUSED";
+      const makeupStatus: MakeupStatus = absent ? (r.makeupStatus ?? "NONE") : "NONE";
+      if (makeupStatus === "NEEDS_MAKEUP") {
         await createMakeupNeed({ studentId: r.studentId, missedSessionId: data.sessionId, note: r.absenceReason ?? null });
-      } else if (r.status === "PRESENT" || r.status === "LATE") {
+      } else if (makeupStatus === "NONE") {
         await cancelPendingMakeupNeed({ studentId: r.studentId, missedSessionId: data.sessionId });
       }
     }
