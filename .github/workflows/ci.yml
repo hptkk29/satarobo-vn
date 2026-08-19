@@ -261,9 +261,19 @@ jobs:
       - name: Install Playwright browsers
         run: |
           for lan in 1 2 3; do
-            timeout 360 pnpm exec playwright install --with-deps chromium && exit 0
+            # Dọn apt-get MỒ CÔI của lần trước. `timeout` chỉ giết tiến trình CHA
+            # (`playwright install`); `apt-get` con VẪN CHẠY và giữ /var/lib/apt/lists/lock
+            # ⇒ lần thử sau chết ngay với "Could not get lock", cả 3 lần đều vô ích.
+            # Đã đo thật: job site GV, run 32236393980 — lần 2 và 3 chết trong 17 giây.
+            if [ "$lan" -gt 1 ]; then
+              sudo pkill -9 -x apt-get 2>/dev/null || true
+              sudo pkill -9 -x dpkg 2>/dev/null || true
+              sudo rm -f /var/lib/apt/lists/lock /var/lib/dpkg/lock /var/lib/dpkg/lock-frontend || true
+              sudo dpkg --configure -a >/dev/null 2>&1 || true
+            fi
+            timeout 300 pnpm exec playwright install --with-deps chromium && exit 0
             echo "::warning::playwright install lần $lan treo hoặc lỗi — thử lại"
-            sleep 15
+            sleep 10
           done
           echo "::error::playwright install hỏng cả 3 lần — thường là mirror apt của runner, chạy lại job"
           exit 1
@@ -363,9 +373,19 @@ jobs:
       - name: Install Playwright browsers
         run: |
           for lan in 1 2 3; do
-            timeout 360 pnpm exec playwright install --with-deps chromium && exit 0
+            # Dọn apt-get MỒ CÔI của lần trước. `timeout` chỉ giết tiến trình CHA
+            # (`playwright install`); `apt-get` con VẪN CHẠY và giữ /var/lib/apt/lists/lock
+            # ⇒ lần thử sau chết ngay với "Could not get lock", cả 3 lần đều vô ích.
+            # Đã đo thật: job site GV, run 32236393980 — lần 2 và 3 chết trong 17 giây.
+            if [ "$lan" -gt 1 ]; then
+              sudo pkill -9 -x apt-get 2>/dev/null || true
+              sudo pkill -9 -x dpkg 2>/dev/null || true
+              sudo rm -f /var/lib/apt/lists/lock /var/lib/dpkg/lock /var/lib/dpkg/lock-frontend || true
+              sudo dpkg --configure -a >/dev/null 2>&1 || true
+            fi
+            timeout 300 pnpm exec playwright install --with-deps chromium && exit 0
             echo "::warning::playwright install lần $lan treo hoặc lỗi — thử lại"
-            sleep 15
+            sleep 10
           done
           echo "::error::playwright install hỏng cả 3 lần — thường là mirror apt của runner, chạy lại job"
           exit 1
@@ -516,9 +536,19 @@ jobs:
       - name: Install Playwright browsers
         run: |
           for lan in 1 2 3; do
-            timeout 360 pnpm exec playwright install --with-deps chromium && exit 0
+            # Dọn apt-get MỒ CÔI của lần trước. `timeout` chỉ giết tiến trình CHA
+            # (`playwright install`); `apt-get` con VẪN CHẠY và giữ /var/lib/apt/lists/lock
+            # ⇒ lần thử sau chết ngay với "Could not get lock", cả 3 lần đều vô ích.
+            # Đã đo thật: job site GV, run 32236393980 — lần 2 và 3 chết trong 17 giây.
+            if [ "$lan" -gt 1 ]; then
+              sudo pkill -9 -x apt-get 2>/dev/null || true
+              sudo pkill -9 -x dpkg 2>/dev/null || true
+              sudo rm -f /var/lib/apt/lists/lock /var/lib/dpkg/lock /var/lib/dpkg/lock-frontend || true
+              sudo dpkg --configure -a >/dev/null 2>&1 || true
+            fi
+            timeout 300 pnpm exec playwright install --with-deps chromium && exit 0
             echo "::warning::playwright install lần $lan treo hoặc lỗi — thử lại"
-            sleep 15
+            sleep 10
           done
           echo "::error::playwright install hỏng cả 3 lần — thường là mirror apt của runner, chạy lại job"
           exit 1
@@ -606,9 +636,19 @@ jobs:
       - name: Install Playwright browsers
         run: |
           for lan in 1 2 3; do
-            timeout 360 pnpm exec playwright install --with-deps chromium && exit 0
+            # Dọn apt-get MỒ CÔI của lần trước. `timeout` chỉ giết tiến trình CHA
+            # (`playwright install`); `apt-get` con VẪN CHẠY và giữ /var/lib/apt/lists/lock
+            # ⇒ lần thử sau chết ngay với "Could not get lock", cả 3 lần đều vô ích.
+            # Đã đo thật: job site GV, run 32236393980 — lần 2 và 3 chết trong 17 giây.
+            if [ "$lan" -gt 1 ]; then
+              sudo pkill -9 -x apt-get 2>/dev/null || true
+              sudo pkill -9 -x dpkg 2>/dev/null || true
+              sudo rm -f /var/lib/apt/lists/lock /var/lib/dpkg/lock /var/lib/dpkg/lock-frontend || true
+              sudo dpkg --configure -a >/dev/null 2>&1 || true
+            fi
+            timeout 300 pnpm exec playwright install --with-deps chromium && exit 0
             echo "::warning::playwright install lần $lan treo hoặc lỗi — thử lại"
-            sleep 15
+            sleep 10
           done
           echo "::error::playwright install hỏng cả 3 lần — thường là mirror apt của runner, chạy lại job"
           exit 1
