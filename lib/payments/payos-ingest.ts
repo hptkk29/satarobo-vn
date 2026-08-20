@@ -5,11 +5,19 @@ import { getSetting } from "@/lib/settings/service";
 import { ensureParentAccountForOrder } from "@/lib/parents/provision";
 import { sendEmailForTrigger } from "@/lib/email/trigger";
 import { notifyOrderByZnsIfNoEmail } from "@/lib/notify/order";
-import { extractOrderCode } from "@/lib/payments/sepay";
+import { extractOrderCode, normalizeContent } from "@/lib/payments/sepay";
+import { canonicalPhone, phoneVariants } from "@/lib/phone";
+import {
+  transferContentPartsForOrder,
+  MAX_TRANSFER_CONTENT,
+  VIETQR_ADDINFO_MAX,
+  type TransferContentParts,
+} from "@/lib/payments/vietqr";
 import {
   planAllocation,
   deriveStatus,
   isOrderSettled,
+  outstandingOf,
   type AllocTarget,
   type RequestStatus,
 } from "./allocation";
@@ -29,6 +37,11 @@ import { PAYOS_PROVIDER } from "./payos";
 //  3. Ngoại lệ THẬT duy nhất rơi vào xử lý tay = không tra ra phiếu thu nào
 //     (UNMATCHED). Tiền vẫn nằm nguyên trong `BankTransaction`, không mất.
 //  4. KHÔNG gọi API ngoài (email/ZNS/cấp tài khoản) BÊN TRONG transaction.
+//  5. 20/08 — nội dung CK đổi sang dạng người đọc (`NguyenVanA_84987654321_Sata4`),
+//     đối khớp thêm nhánh (d) theo SĐT. Nhánh này chỉ rót khi ra ĐÚNG MỘT đơn
+//     đang chờ thu; nhập nhằng thì trả null kèm lý do — rót nhầm đơn tệ hơn nhiều
+//     so với để kế toán gán tay. Đây KHÔNG mâu thuẫn với "không từ chối nhận tiền":
+//     tiền vẫn ghi sổ đầy đủ ở `BankTransaction`, chỉ là chưa phân bổ.
 // =============================================================================
 
 /** Payload `data` của webhook payOS (chỉ khai field ta dùng; cổng gửi thêm nhiều). */
@@ -170,18 +183,466 @@ function isUniqueViolation(err: unknown): boolean {
 export type MatchTarget = {
   paymentRequestId: string;
   orderId: string;
-  via: "matchKey" | "qrSession" | "orderCode";
+  /** `manual` = kế toán tự gán ở /admin/bien-dong-so-du, không phải máy tra ra. */
+  via: "matchKey" | "qrSession" | "orderCode" | "phone" | "manual";
   qrSessionId?: string;
 };
 
+/** Kết quả tra đích kèm LÝ DO khi không chốt được — `note` đi thẳng vào `unmatchedNote`. */
+export type ResolveOutcome = {
+  target: MatchTarget | null;
+  /** Chỉ có khi target = null VÀ ta biết vì sao (vd khớp SĐT nhưng nhiều đơn). */
+  note?: string;
+};
+
 /**
- * Tìm phiếu thu đích: (a) `matchKey` → (b) `providerOrderCode` → QrSession → phiếu.
+ * Bóc SĐT phụ huynh ra khỏi nội dung CK (THUẦN).
+ *
+ * 20/08 — nội dung CK đổi sang dạng người đọc `HoTenCon_SdtPH_TenKhoa`, nên SĐT
+ * trở thành đường đối khớp. Nhận `84XXXXXXXXX` (11 số) và `0XXXXXXXXX` (10 số),
+ * trả canonical `84XXXXXXXXX`.
+ *
+ * ⚠️ Hai vòng dò, KHÔNG gộp làm một:
+ *  1. Theo BIÊN TOKEN (tách ở mọi ký tự không phải số) — đây là ca thường, và nó
+ *     không thể cắt bừa giữa hai cụm số dính nhau.
+ *  2. Chỉ khi (1) trượt mới quét cửa sổ trượt trên chuỗi số ĐÃ GỘP: có ngân hàng
+ *     dán số tiền/mã tham chiếu dính liền SĐT.
+ * Cửa sổ 11 dò trước 10 để "84…" không bị đọc nhầm thành mảnh của số khác.
+ *
+ * KHÔNG nhận dạng 9 số trần (Excel nuốt số 0) như `canonicalPhone`: quét chuỗi tự
+ * do mà nhận 9 số thì mọi số tài khoản đều thành "SĐT".
+ */
+export function extractVnPhoneCandidates(content: string | null | undefined): string[] {
+  // ⚠️ GỠ MÃ ĐƠN TRƯỚC KHI DÒ. `ORD260820000001` là 12 chữ số dính liền nhau, và
+  // cửa sổ trượt ở vòng (2) đẻ ra "SĐT" hợp lệ GIẢ từ chính nó — đo được:
+  // "ORD260820000001D1" → 84820000001. Mã đơn đã có nhánh (c) lo, ở đây nó chỉ là
+  // rác gây nhiễu.
+  const raw = String(content ?? "").replace(/ORD[\s.\-_]*\d{6}[\s.\-_]*\d{6}/gi, " ");
+  if (!raw) return [];
+
+  const out: string[] = [];
+  const push = (hit: string | null) => {
+    if (hit && !out.includes(hit)) out.push(hit);
+  };
+
+  for (const token of raw.split(/[^0-9]+/)) push(phoneFromDigits(token));
+  // ⚠️ Cửa sổ trượt CHỈ chạy khi vòng token trắng tay — giữ nguyên ngữ nghĩa cũ.
+  // Chạy luôn cả hai vòng thì mọi nội dung "sạch" cũng đẻ thêm số ứng viên rác từ
+  // các cụm số dính nhau, mà từ 20/08 nhiều ứng viên = NHẬP NHẰNG = không rót ⇒
+  // ta tự tay biến ca đang chạy tốt thành đối soát tay.
+  if (out.length === 0) {
+    const digits = raw.replace(/\D/g, "");
+    for (const len of [11, 10]) {
+      for (let i = 0; i + len <= digits.length; i++) {
+        push(phoneFromDigits(digits.slice(i, i + len)));
+      }
+    }
+  }
+  // Trần an toàn: nội dung có 6 số điện thoại là rác/quảng cáo, đã chắc chắn phải
+  // xử lý tay — không cần dò DB cho từng số.
+  return out.slice(0, 5);
+}
+
+/**
+ * Bản 1-số giữ cho đường gọi cũ (test hồi quy, log). ⚠️ ĐỪNG dùng nó cho việc
+ * ĐỐI KHỚP: lấy số đầu tiên chính là con bug "bà ngoại chuyển hộ" — ngân hàng ghi
+ * "CT tu 0912345678 NGUYEN THI B chuyen tien TranMinhAnh_84905111222_Sata2" thì số
+ * đầu tiên là số NGƯỜI GỬI, không phải phụ huynh. Đối khớp dùng
+ * `extractVnPhoneCandidates` + bằng chứng phụ (tên con / tên khoá).
+ */
+export function extractVnPhone(content: string | null | undefined): string | null {
+  return extractVnPhoneCandidates(content)[0] ?? null;
+}
+
+/** Chỉ đúng 2 dạng người ta gõ vào nội dung CK; chuẩn hoá vẫn nhờ lib/phone.ts. */
+function phoneFromDigits(digits: string): string | null {
+  if (digits.length === 11 && digits.startsWith("84")) return canonicalPhone(digits);
+  if (digits.length === 10 && digits.startsWith("0")) return canonicalPhone(digits);
+  return null;
+}
+
+/**
+ * (d) Đối khớp theo SĐT phụ huynh — nhánh SINH RA CÙNG định dạng nội dung CK mới.
+ *
+ * Nguyên tắc: SĐT chỉ THU HẸP tập ứng viên, không tự nó quyết định. Ra đúng 1 đơn
+ * đang chờ thu mới rót tiền; còn nhập nhằng thì TRẢ NULL kèm lý do — rót nhầm đơn
+ * tệ hơn nhiều so với để kế toán gán tay (tiền vẫn nằm nguyên trong BankTransaction).
+ */
+async function resolveByPhone(data: PayosWebhookData): Promise<ResolveOutcome> {
+  const content = typeof data.description === "string" ? data.description : "";
+
+  // Nội dung TỰ KHAI mã đơn ⇒ nhánh (c) đã thử và trượt (đơn không tồn tại, hoặc
+  // đơn đó không còn phiếu nào chờ thu). Suy ra đơn khác từ SĐT lúc này là ĐOÁN:
+  // đúng thứ mà chủ dự án cấm. Để kế toán gán tay.
+  if (extractOrderCode(content)) return { target: null };
+
+  const phones = extractVnPhoneCandidates(content);
+  if (phones.length === 0) return { target: null };
+
+  const amount = Math.round(Number(data.amount ?? 0));
+  const lookups: PhoneLookup[] = [];
+  for (const phone of phones) {
+    lookups.push({ phone, orders: await findPendingOrdersByPhone(phone) });
+  }
+  return decideByPhoneCandidates(lookups, content, amount);
+}
+
+/** Tập ứng viên đã nạp sẵn cho MỘT số điện thoại — đầu vào của phần quyết định THUẦN. */
+export type PhoneLookup = { phone: string; orders: PhoneCandidate[] };
+
+/**
+ * Phần QUYẾT ĐỊNH của nhánh (d), tách hẳn khỏi DB để test được không cần Postgres.
+ *
+ * Đơn thắng xét theo TỪNG số rồi gom theo orderId: hai số khác nhau cùng dẫn về
+ * MỘT đơn (SĐT mẹ ở đơn, SĐT bố trong nội dung) vẫn là một ứng viên, không phải
+ * nhập nhằng.
+ */
+export function decideByPhoneCandidates(
+  lookups: PhoneLookup[],
+  content: string,
+  amount: number,
+): ResolveOutcome {
+  const winners = new Map<string, PhoneCandidate>();
+  const notes: string[] = [];
+
+  for (const { phone, orders } of lookups) {
+    const picked = pickOrderForPhone(phone, orders, content, amount);
+    if (picked.order) winners.set(picked.order.id, picked.order);
+    if (picked.note) notes.push(picked.note);
+  }
+
+  if (winners.size === 0) {
+    return { target: null, note: notes.join("; ") || undefined };
+  }
+
+  // ⚠️ ≥2 ĐƠN KHÁC NHAU cùng "hợp lệ" ⇒ KHÔNG rót. Nội dung CK có nhiều số (số
+  // người gửi + số phụ huynh) là ca thật; chọn bừa một đơn là rót tiền nhà này vào
+  // nợ nhà khác rồi tự động chốt đơn + gửi biên nhận — hỏng theo cách rất khó phát
+  // hiện. Tiền vẫn nằm nguyên ở BankTransaction, kế toán gán tay.
+  if (winners.size > 1) {
+    const phones = lookups.map((l) => l.phone);
+    const detail = [...winners.values()].map(describeCandidate).join(", ");
+    return {
+      target: null,
+      note:
+        `Nội dung CK chứa ${phones.length} số điện thoại (${phones.join(", ")}) dẫn tới ` +
+        `${winners.size} đơn khác nhau (${detail}) — cần gán tay`,
+    };
+  }
+
+  const chosen = [...winners.values()][0]!;
+  // Neo vào phiếu chưa đóng đủ SỚM NHẤT y hệt nhánh (c): nội dung CK mới KHÔNG
+  // phân biệt được đợt 1 với đợt 2 (cùng một chuỗi), nên waterfall lo phần còn lại.
+  const first = chosen.paymentRequests[0];
+  if (!first) return { target: null };
+  return { target: { paymentRequestId: first.id, orderId: chosen.id, via: "phone" } };
+}
+
+/** Đơn đang chờ thu gắn với MỘT số điện thoại (người mua / phụ huynh của học viên). */
+async function findPendingOrdersByPhone(phone: string): Promise<PhoneCandidate[]> {
+  // DB còn lẫn `0…` (dữ liệu cũ) lẫn `84…` (đường ghi mới) → phải nở cả 2 dạng,
+  // đúng lý do `phoneVariants` tồn tại.
+  const variants = phoneVariants(phone);
+  return db.order.findMany({
+    where: {
+      deletedAt: null,
+      // Đơn đã huỷ/hoàn tiền không phải đích rót tự động. DRAFT cũng KHÔNG: đó là
+      // đơn sale ĐANG SOẠN DỞ (vẫn kịp có phiếu thu PENDING) — rót tiền vào đó là
+      // chốt giùm một đơn chưa ai duyệt, và đơn thật của khách vẫn nợ. Nếu đơn bị
+      // loại là ứng viên DUY NHẤT thì ta ra 0 đơn → UNMATCHED → kế toán quyết,
+      // đúng ý đồ.
+      status: { notIn: ["DRAFT", "CANCELLED", "REFUNDED"] },
+      paymentRequests: { some: { status: { in: ["PENDING", "PARTIAL"] } } },
+      OR: [
+        { customerPhone: { in: variants } },
+        { student: { parentPhone: { in: variants } } },
+        { student: { parentUser: { phone: { in: variants } } } },
+      ],
+    },
+    select: {
+      id: true,
+      code: true,
+      customerName: true,
+      // ⚠️ PHẢI có: chuỗi đối chiếu được TÁI DỰNG bằng đúng công thức bên phát
+      // (transferContentPartsForOrder), mà công thức đó lấy SĐT từ chính đơn —
+      // không phải từ số vừa bóc ra khỏi nội dung CK.
+      customerPhone: true,
+      student: { select: { name: true } },
+      items: { orderBy: { createdAt: "asc" }, take: 1, select: { itemName: true } },
+      paymentRequests: {
+        where: { status: { in: ["PENDING", "PARTIAL"] } },
+        orderBy: [{ sortOrder: "asc" }, { installmentNo: "asc" }],
+        // KHÔNG `take: 1` nữa: tiêu chí phụ theo số tiền (bên dưới) cần phần CÒN
+        // THIẾU của CẢ ĐƠN, mà phần đó là tổng của mọi phiếu chưa đóng đủ.
+        select: {
+          id: true,
+          amountDue: true,
+          sortOrder: true,
+          status: true,
+          allocations: { select: { amount: true } },
+        },
+      },
+    },
+    // Trần an toàn: một SĐT ra vài chục đơn là dữ liệu bất thường, đã chắc chắn
+    // phải xử lý tay — không cần kéo hết về chỉ để đếm.
+    take: 20,
+  });
+}
+
+/**
+ * Chuẩn hoá để SO TÊN: đưa `đ/Đ` về `d/D` TRƯỚC khi `normalizeContent` xoá ký tự lạ.
+ *
+ * ⚠️ Bỏ bước này là hỏng thật, đã đo: `normalizeContent("Trần Đức Anh")` ra
+ * "TRANUCANH" — chữ Đ (U+0110, không phân rã NFD được) bị xoá THẲNG — trong khi
+ * nội dung CK do chính ta sinh ra là "TranDucAnh". Hai vế không bao giờ "chứa"
+ * nhau, nên mọi tên có chữ Đ ở giữa mất khả năng thu hẹp.
+ */
+function normalizeForCompare(s: string | null | undefined): string {
+  return normalizeContent(
+    String(s ?? "")
+      .replace(/đ/g, "d")
+      .replace(/Đ/g, "D"),
+  );
+}
+
+/** Phiếu thu chờ thu của một đơn ứng viên — đủ số liệu để tính phần CÒN THIẾU. */
+type CandidateRequest = {
+  id: string;
+  amountDue: number;
+  sortOrder: number;
+  status: string;
+  allocations: { amount: number }[];
+};
+
+export type PhoneCandidate = {
+  id: string;
+  code: string;
+  customerName: string;
+  customerPhone: string | null;
+  student: { name: string } | null;
+  items: { itemName: string }[];
+  paymentRequests: CandidateRequest[];
+};
+
+/** Phần CÒN THIẾU của MỘT phiếu thu ứng viên. */
+function outstandingOfRequest(r: CandidateRequest): number {
+  return outstandingOf({
+    id: r.id,
+    amountDue: r.amountDue,
+    allocated: r.allocations.reduce((s, a) => s + a.amount, 0),
+    sortOrder: r.sortOrder,
+    status: r.status as RequestStatus,
+  });
+}
+
+/**
+ * Phần CÒN THIẾU của cả đơn = tổng phần còn thiếu của mọi phiếu chưa đóng đủ.
+ *
+ * ⚠️ CHỈ dùng để MÔ TẢ đơn cho kế toán trong note. KHÔNG dùng để so với số tiền
+ * giao dịch — xem `narrowByAmount`, hai vế đó khác đơn vị.
+ */
+function outstandingOfOrder(o: PhoneCandidate): number {
+  return o.paymentRequests.reduce((sum, r) => sum + outstandingOfRequest(r), 0);
+}
+
+const vnd = (n: number): string => `${n.toLocaleString("vi-VN")}đ`;
+
+/** Mô tả một đơn ứng viên cho kế toán: mã đơn + phần còn thiếu (để chọn nhanh). */
+function describeCandidate(o: PhoneCandidate): string {
+  return `${o.code} (còn thiếu ${vnd(outstandingOfOrder(o))})`;
+}
+
+/**
+ * Chuỗi mà hệ thống THỰC SỰ PHÁT RA cho đơn này, ở trần của mã QR.
+ *
+ * ⚠️ Dựng bằng CHÍNH `transferContentPartsForOrder` chứ không ghép tay: bên phát
+ * (bảng phiếu thu, hộp QR, ảnh VietQR) và bên đối khớp phải chung một công thức,
+ * lệch nhau là tiền rơi vào đối soát tay mà không ai biết.
+ *
+ * VÌ SAO ở trần 25: đó là trần của trường "purpose of transaction" (EMVCo) — chuỗi
+ * đi vào mã QR, tức chuỗi phụ huynh quét và ngân hàng gửi lại. Đây là bản dùng cho
+ * mọi so-mảnh (tầng 2), vì mảnh ở bản 25 luôn là TIỀN TỐ của mảnh ở bản 80.
+ */
+function expectedPartsFor(
+  o: PhoneCandidate,
+  maxLength: number = VIETQR_ADDINFO_MAX,
+): TransferContentParts {
+  return transferContentPartsForOrder(
+    {
+      studentName: o.student?.name ?? null,
+      customerName: o.customerName,
+      customerPhone: o.customerPhone,
+      courseName: o.items[0]?.itemName ?? null,
+    },
+    maxLength,
+  );
+}
+
+/**
+ * CẢ HAI chuỗi hệ thống phát ra cho đơn này — bản 25 (nhúng vào mã QR) và bản 80
+ * (sale đọc qua điện thoại, phụ huynh gõ tay).
+ *
+ * ⚠️ VÌ SAO PHẢI THỬ CẢ HAI: bản 25 KHÔNG phải chuỗi con của bản 80 khi tên con bị
+ * cắt — nhát cắt rơi vào GIỮA chuỗi nên tính liền mạch đứt (`NguyenV_849…` không
+ * nằm trong `NguyenVanA_849…`). Chỉ tái dựng bản 25 thì mọi phụ huynh GÕ TAY theo
+ * bản sale đọc đều trượt tầng 1, tụt xuống tầng 2 (bằng chứng yếu hơn, và tầng 2
+ * chỉ nhận khi ra đúng một đơn) — mất bằng chứng mạnh một cách vô cớ.
+ *
+ * Thử thêm bản 80 chỉ có thể THÊM khớp, không thể khớp nhầm: nó chứa NHIỀU thông
+ * tin hơn bản 25 (tên con đầy đủ), tức là điều kiện CHẶT hơn.
+ */
+function expectedContentsFor(o: PhoneCandidate): string[] {
+  const short = expectedPartsFor(o, VIETQR_ADDINFO_MAX).content;
+  const long = expectedPartsFor(o, MAX_TRANSFER_CONTENT).content;
+  return short === long ? [short] : [short, long];
+}
+
+/**
+ * Chọn đơn cho MỘT số điện thoại — hoặc trả lý do vì sao không chọn được.
+ *
+ * ⚠️ LUẬT LÕI (vá 20/08): SĐT KHÔNG BAO GIỜ đủ để rót tiền, KỂ CẢ khi chỉ có đúng
+ * một đơn ứng viên. Phải có BẰNG CHỨNG PHỤ trong nội dung CK.
+ *
+ * Vì sao bỏ lối tắt "một ứng viên thì khỏi kiểm" (đã đo, hỏng thật): bà ngoại
+ * chuyển hộ, ngân hàng ghi "CT tu 0912345678 NGUYEN THI B chuyen tien
+ * TranMinhAnh_84905111222_Sata2" — số ĐẦU TIÊN là số người gửi. Nếu người gửi tình
+ * cờ cũng là phụ huynh và có đúng 1 đơn đang chờ thu thì tiền nhà A rót vào đơn nhà
+ * B, đơn B tự CONFIRMED + gửi biên nhận + cấp tài khoản phụ huynh, còn đơn A vẫn nợ.
+ *
+ * ⚠️ SỬA 20/08 (vòng 3) — BẰNG CHỨNG PHỤ SO VỚI CÁI GÌ. Bản trước đòi nội dung CK
+ * chứa TÊN HỌC VIÊN ĐẦY ĐỦ hoặc TÊN KHOÁ ĐẦY ĐỦ. Sai chuẩn: chuỗi nhúng vào QR bị
+ * cắt còn 25 ký tự (VIETQR_ADDINFO_MAX), mà ngân sách tên con = 25 − (len(tên
+ * khoá) + 13) nên với khoá tên dài thì tên con MẤT SẠCH và tên khoá cũng cụt. Đo
+ * trên danh mục thật: 8/11 khoá không bao giờ khớp ⇒ mọi giao dịch hợp lệ rơi vào
+ * đối soát tay, im lặng. Nay so với **chuỗi hệ thống thực sự phát ra**:
+ *
+ * (Từ 20/08 vòng 4, `shortCourseToken` rút tên khoá về MÃ NGẮN 5 ký tự nên tên con
+ * quay lại chuỗi 25 ở cả 11/11 khoá. Lợi ích phụ đáng kể cho chính hàm này: hai
+ * anh em ruột cùng phụ huynh cùng khoá không còn sinh chuỗi giống hệt nhau ⇒ tầng
+ * 1 hết hoà ⇒ bớt phải trông vào tiêu chí phụ theo số tiền.)
+ *
+ *  Tầng 1 — nội dung CHỨA trọn chuỗi tái dựng của đơn đó, thử CẢ HAI trần 25 và 80
+ *    (xem `expectedContentsFor`). Bằng chứng mạnh nhất (gồm cả SĐT lẫn phần
+ *    tên/khoá sống sót) và không thể khớp nhầm sang nhà khác.
+ *  Tầng 2 — nội dung chứa TIỀN TỐ tên con (≥4 ký tự) HOẶC phần tên khoá sống sót
+ *    (≥3 ký tự): phủ ca phụ huynh gõ tay bản 80 ký tự, hoặc ngân hàng cắt bớt.
+ *    Chỉ nhận khi tầng này ra ĐÚNG MỘT đơn — nhiều đơn thì rơi xuống tầng 3.
+ *  Tầng 3 — không đủ bằng chứng ⇒ null + note liệt kê đơn cho kế toán chọn.
+ *
+ * Luôn so kiểu "CHỨA" (không phải "BẰNG") vì ngân hàng chèn thêm chữ đầu/cuối
+ * ("CT tu …", "GD …"), trên chuỗi đã bỏ dấu + viết hoa + bỏ ký tự lạ.
+ */
+function pickOrderForPhone(
+  phone: string,
+  orders: PhoneCandidate[],
+  content: string,
+  amount: number,
+): { order: PhoneCandidate | null; note?: string } {
+  if (orders.length === 0) {
+    return {
+      order: null,
+      note: `Nội dung CK có SĐT ${phone} nhưng không có đơn nào đang chờ thu gắn với số này`,
+    };
+  }
+
+  const norm = normalizeForCompare(content);
+  const contains = (piece: string, min: number): boolean => {
+    const n = normalizeForCompare(piece);
+    return n.length >= min && norm.includes(n);
+  };
+
+  // ── Tầng 1 — khớp trọn chuỗi tái dựng ─────────────────────────────────────
+  // ⚠️ Đơn KHÔNG có cả tên lẫn khoá thì chuỗi tái dựng chỉ còn mỗi SĐT; "khớp"
+  // lúc đó chính là khớp bằng SĐT trần — đúng cái lỗ hổng "bà ngoại chuyển hộ".
+  // Nên loại thẳng: đơn đó không có bằng chứng phụ nào để xác thực.
+  const exact = orders.filter((o) => {
+    const p = expectedPartsFor(o);
+    if (!p.name && !p.course) return false;
+    return expectedContentsFor(o).some((c) => contains(c, 4));
+  });
+  if (exact.length === 1) return { order: exact[0]! };
+  if (exact.length > 1) {
+    // Hoà ở tầng mạnh nhất = hai đơn CÙNG con, CÙNG khoá, CÙNG số (ghi danh lại).
+    // Chỉ ở đây mới dùng tới số tiền — xem ghi chú "TIÊU CHÍ PHỤ" bên dưới.
+    const byAmount = narrowByAmount(exact, amount);
+    if (byAmount) return { order: byAmount };
+    return { order: null, note: ambiguousNote(phone, exact, amount) };
+  }
+
+  // ── Tầng 2 — khớp mảnh ────────────────────────────────────────────────────
+  // Ngưỡng 4 (tên) / 3 (khoá): dưới ngưỡng thì mảnh quá ngắn, khớp bừa mọi chuỗi.
+  const partial = orders.filter((o) => {
+    const p = expectedPartsFor(o);
+    return contains(p.name, 4) || contains(p.course, 3);
+  });
+  // ⚠️ CHỈ nhận khi ra ĐÚNG MỘT đơn. Bằng chứng ở tầng này yếu (một mảnh chữ),
+  // dùng số tiền để tách hoà là biến số tiền thành khoá đối khớp — cấm (bất biến #2).
+  if (partial.length === 1) return { order: partial[0]! };
+
+  // ── Tầng 3 — không đủ bằng chứng ──────────────────────────────────────────
+  if (partial.length === 0) {
+    const detail = orders.map(describeCandidate).join(", ");
+    return {
+      order: null,
+      note:
+        `Khớp SĐT ${phone} với ${orders.length} đơn ${detail} nhưng nội dung CK không ` +
+        `nhắc tên học viên hay tên khoá của đơn nào — cần gán tay`,
+    };
+  }
+  return { order: null, note: ambiguousNote(phone, partial, amount) };
+}
+
+/**
+ * ⚠️ TIÊU CHÍ PHỤ — số tiền. Đây KHÔNG phải khoá đối khớp (bất biến #2 của file:
+ * không bao giờ từ chối/quyết định NHẬN tiền vì lệch số). Nó chỉ THU HẸP ở bước
+ * cuối, sau khi SĐT và bằng chứng chuỗi đã lọc, cho ca "hai đơn cùng con cùng
+ * khoá" vốn tắc vĩnh viễn. Không tách được thì vẫn nhường cho gán tay.
+ *
+ * ⚠️ VÁ 20/08 — SO ĐÚNG ĐƠN VỊ: phần còn thiếu của TỪNG PHIẾU THU, KHÔNG phải của
+ * cả đơn. Mọi mã QR đều phát theo PHIẾU (`_qr-core.ts` lấy `outstandingOfRequest`,
+ * màn chi tiết đơn lấy `dueNow.amount` của đợt đang tới hạn), nên `amount` mà ngân
+ * hàng gửi về luôn ở đơn vị "một phiếu". So với tổng của cả đơn là so hai đại
+ * lượng khác nhau, và nó rót tiền vào SAI ĐƠN chứ không chỉ trượt:
+ *
+ *   Đơn A trả góp 2 đợt, còn thiếu 10tr (đợt 1 = 5tr) · Đơn B trọn gói còn 5tr,
+ *   cùng SĐT + cùng tên con + cùng khoá nên hoà ở tầng 1. Phụ huynh quét QR đợt 1
+ *   của A, chuyển 5tr → bản cũ thấy A(10tr)≠5tr, B(5tr)==5tr ⇒ "đúng một đơn" ⇒
+ *   rót hết vào B, B tự CONFIRMED + gửi biên nhận + cấp tài khoản phụ huynh, còn A
+ *   vẫn nợ. Bản này: A có phiếu 5tr, B có phiếu 5tr ⇒ 2 đơn ⇒ trả null, gán tay.
+ *
+ * Vẫn GIỮ tie-break (thay vì bỏ hẳn) vì sau khi tên con quay lại chuỗi 25 ký tự,
+ * hoà ở tầng 1 chỉ còn xảy ra với hai đơn CÙNG con CÙNG khoá (ghi danh lại, hoặc
+ * anh em trùng 7 ký tự đầu của tên) — ca hiếm mà bỏ tie-break là tắc vĩnh viễn.
+ */
+function narrowByAmount(pool: PhoneCandidate[], amount: number): PhoneCandidate | null {
+  if (amount <= 0) return null;
+  const hit = pool.filter((o) => o.paymentRequests.some((r) => outstandingOfRequest(r) === amount));
+  return hit.length === 1 ? hit[0]! : null;
+}
+
+/** Note tầng 3: kế toán cần mã đơn + phần còn thiếu để chọn tay cho nhanh. */
+function ambiguousNote(phone: string, pool: PhoneCandidate[], amount: number): string {
+  const detail = pool.map(describeCandidate).join(", ");
+  return (
+    `Khớp SĐT ${phone} và nội dung CK nhưng còn ${pool.length} đơn đang chờ thu ` +
+    `${detail} — số tiền ${vnd(amount)} không tách được đơn nào, cần chọn tay`
+  );
+}
+
+/**
+ * Tìm phiếu thu đích: (a) `matchKey` → (b) `providerOrderCode` → QrSession → phiếu
+ * → (c) mã đơn trong nội dung → (d) SĐT phụ huynh trong nội dung.
  *
  * ⚠️ Nhánh (b) KHÔNG được lọc theo `expiresAt`/`status` của QrSession. Sale xuất
  * lại QR 5 lần thì có 5 session cùng trỏ 1 phiếu thu; PH quét cái nào, hết hạn
  * bao lâu, tiền cũng phải về đúng phiếu đó.
+ *
+ * ⚠️ THỨ TỰ LÀ HỢP ĐỒNG HỒI QUY: (a)(b)(c) phải chạy TRƯỚC (d) thì mọi QR/nội dung
+ * CK phát trước 20/08 (còn mang `ORD…D1`) mới tiếp tục khớp y như cũ.
  */
-export async function resolvePaymentTarget(data: PayosWebhookData): Promise<MatchTarget | null> {
+export async function resolvePaymentTargetDetailed(
+  data: PayosWebhookData,
+): Promise<ResolveOutcome> {
   const candidates = collectMatchKeyCandidates(data);
   if (candidates.length > 0) {
     const rows = await db.paymentRequest.findMany({
@@ -190,7 +651,9 @@ export async function resolvePaymentTarget(data: PayosWebhookData): Promise<Matc
     });
     for (const c of candidates) {
       const hit = rows.find((r) => r.matchKey === c);
-      if (hit) return { paymentRequestId: hit.id, orderId: hit.orderId, via: "matchKey" };
+      if (hit) {
+        return { target: { paymentRequestId: hit.id, orderId: hit.orderId, via: "matchKey" } };
+      }
     }
   }
 
@@ -202,10 +665,12 @@ export async function resolvePaymentTarget(data: PayosWebhookData): Promise<Matc
     });
     if (session?.paymentRequest) {
       return {
-        paymentRequestId: session.paymentRequest.id,
-        orderId: session.paymentRequest.orderId,
-        via: "qrSession",
-        qrSessionId: session.id,
+        target: {
+          paymentRequestId: session.paymentRequest.id,
+          orderId: session.paymentRequest.orderId,
+          via: "qrSession",
+          qrSessionId: session.id,
+        },
       };
     }
   }
@@ -231,10 +696,18 @@ export async function resolvePaymentTarget(data: PayosWebhookData): Promise<Matc
     });
     const first = order?.paymentRequests[0];
     if (order && first) {
-      return { paymentRequestId: first.id, orderId: order.id, via: "orderCode" };
+      return { target: { paymentRequestId: first.id, orderId: order.id, via: "orderCode" } };
     }
   }
-  return null;
+
+  // (d) Nội dung CK dạng người đọc `HoTenCon_SdtPH_TenKhoa` (chốt 20/08) — không
+  // còn mã đơn để bám, tra ngược từ SĐT phụ huynh.
+  return resolveByPhone(data);
+}
+
+/** Bản gọn giữ cho đường gọi cũ/test cũ — bỏ phần lý do, chỉ lấy đích. */
+export async function resolvePaymentTarget(data: PayosWebhookData): Promise<MatchTarget | null> {
+  return (await resolvePaymentTargetDetailed(data)).target;
 }
 
 // ── Thân xử lý ──────────────────────────────────────────────────────────────
@@ -329,12 +802,16 @@ export async function ingestPayosWebhook(
   const bankTransactionId = txn.id;
 
   // ── Bước 4: tra đích phân bổ ──────────────────────────────────────────────
-  const target = await resolvePaymentTarget(data);
+  const resolved = await resolvePaymentTargetDetailed(data);
+  const target = resolved.target;
   if (!target) {
     const note =
       `Không tra ra phiếu thu. orderCode=${data.orderCode ?? "-"}, ` +
       `VA=${data.virtualAccountNumber ?? "-"}, ref=${data.reference ?? "-"}, ` +
-      `nội dung="${data.description ?? "-"}"`;
+      `nội dung="${data.description ?? "-"}"` +
+      // Lý do CỤ THỂ (vd "khớp SĐT … nhưng có 2 đơn đang chờ thu") là thứ kế toán
+      // cần để gán tay ở /admin/bien-dong-so-du — không có nó thì họ phải tự dò.
+      (resolved.note ? `. ${resolved.note}` : "");
     await db.bankTransaction.update({
       where: { id: bankTransactionId },
       data: { status: "UNMATCHED", unmatchedNote: note },
@@ -365,6 +842,56 @@ export async function ingestPayosWebhook(
     return { status: "UNMATCHED", bankTransactionId, reason: note };
   }
 
+  // Từ đây là phần DÙNG CHUNG với đối soát tay ở /admin/bien-dong-so-du —
+  // xem `allocateToOrder`. Hai đường phải rót tiền y hệt nhau, nếu không thì
+  // giao dịch gán tay và giao dịch webhook để lại hai loại dấu vết khác nhau
+  // trong sổ, và không ai đối chiếu nổi.
+  return allocateToOrder({ bankTransactionId, order, amount, provider, providerTxnId, target, data });
+}
+
+/**
+ * Phần của ĐƠN mà việc rót tiền cần đọc. Khai tường minh (thay vì suy từ Prisma)
+ * để đường gán tay biết chính xác phải `select` những cột nào — thiếu `orgUnitId`
+ * là dung sai làm tròn đọc nhầm cấu hình, thiếu `student` là không cấp được tài
+ * khoản phụ huynh sau khi đơn chốt.
+ */
+export type AllocationOrder = {
+  id: string;
+  code: string;
+  status: string;
+  centerId: string | null;
+  orgUnitId: string | null;
+  studentId: string | null;
+  student: { id: string; parentUserId: string | null } | null;
+};
+
+/**
+ * RÓT một giao dịch đã ghi sổ vào phiếu thu của MỘT đơn — thân chung của cả hai
+ * đường: webhook cổng thanh toán (`ingestPayosWebhook`) và ĐỐI SOÁT TAY của kế
+ * toán (`/admin/bien-dong-so-du`).
+ *
+ * ⚠️ VÌ SAO PHẢI DÙNG CHUNG. Rót tiền không chỉ là ghi `PaymentAllocation`: còn
+ * phải khoá đơn (advisory lock), đọc lại trạng thái trong khoá để hai luồng song
+ * song không rót hai lần, tính lại trạng thái phiếu TỪ SỔ, ghi tiền dư sang
+ * `CreditBalance`, ghi song song sổ CŨ (`Payment` marker) vì công nợ hiển thị vẫn
+ * đọc ở đó, rồi mới tới side-effect sau commit (chốt đơn, cấp tài khoản phụ
+ * huynh, gửi biên nhận). Viết bản thứ hai cho đường gán tay là chắc chắn bỏ sót
+ * vài bước, và bỏ sót ở đây nghĩa là tiền vào sổ mới mà công nợ không đổi.
+ *
+ * Idempotent: đọc lại `BankTransaction.status` TRONG khoá, khác `UNMATCHED` thì
+ * rút lui với `DUPLICATE`. Nhờ vậy kế toán bấm hai lần cũng chỉ rót một lần.
+ */
+export async function allocateToOrder(params: {
+  bankTransactionId: string;
+  order: AllocationOrder;
+  amount: number;
+  provider: string;
+  providerTxnId: string;
+  target: MatchTarget;
+  /** Payload gốc — chỉ dùng để ghi nhật ký. Đường gán tay truyền bản tóm tắt. */
+  data: PayosWebhookData;
+}): Promise<IngestOutcome> {
+  const { bankTransactionId, order, amount, provider, providerTxnId, target, data } = params;
   // Dung sai làm tròn — đọc TRƯỚC transaction (getSetting tự truy vấn DB riêng,
   // gọi trong transaction là mời deadlock pool).
   const tolerance = await getSetting("payment.roundingToleranceVnd", {

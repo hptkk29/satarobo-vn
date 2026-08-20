@@ -7,6 +7,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { hasRole } from "@/lib/auth/permissions";
 import { checkPermission } from "@/lib/auth/check-permission";
+import { isCenterChecklistEnabled } from "@/lib/flags";
 import { ALL_CHECKLIST_KEYS } from "@/lib/center-checklist";
 
 type Result = { ok: true } | { ok: false; error: string };
@@ -22,6 +23,12 @@ const schema = z.object({
 export async function saveCenterChecklist(input: unknown): Promise<Result> {
   const session = await auth();
   if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
+
+  // 20/08 — tính năng đã GỠ (cờ mặc định OFF). Layout của segment đã chặn đường VÀO trang,
+  // nhưng Server Action là endpoint riêng: tab mở sẵn từ trước lúc tắt cờ, hay POST tay vào
+  // action id, vẫn gọi thẳng vào đây mà không đi qua layout ⇒ phải tự chốt, kẻo "đã gỡ" mà
+  // dữ liệu checklist vẫn ghi thêm được.
+  if (!isCenterChecklistEnabled()) return { ok: false, error: "Tính năng checklist cơ sở đã tắt" };
 
   const parsed = schema.safeParse(input);
   if (!parsed.success) {

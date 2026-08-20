@@ -7,6 +7,8 @@ import { QrCode, BadgeCheck, CalendarClock } from "lucide-react";
 import { QrZoom } from "./qr-zoom";
 import { recordOrderInstallmentsAction, markOrderInstallmentPaidAction } from "../_actions";
 import { formatDateVN } from "@/lib/format/date";
+import { MoneyInput } from "@/components/ui/money-input";
+import { HelpHint } from "@/components/admin/ui/help-hint";
 
 type Installment = {
   id: string;
@@ -149,12 +151,31 @@ export function OrderInstallmentPlan({
           <p className="text-xs font-semibold text-muted-foreground">Thiết lập tối đa 2 đợt (tổng = {vnd(totalAmount)})</p>
           <label className="block text-sm">
             <span className="text-xs text-muted-foreground">Đợt 1 — đã thu (đ)</span>
-            <input type="number" min={0} max={totalAmount} value={dot1} onChange={(e) => setDot1(Math.min(totalAmount, Math.max(0, Number(e.target.value) || 0)))} className="mt-0.5 w-full rounded-md border border-border px-2 py-1.5 text-sm" />
+            {/* Ô tiền: gõ 10000000 → hiện 10.000.000. Vẫn kẹp [0, tổng đơn] như cũ —
+                MoneyInput ở chế độ controlled nên nhận lại đúng số đã kẹp.
+                suffix={null}: nhãn đã ghi "(đ)", và ô hẹp này dùng px-2 riêng — để hậu tố
+                thì nó đè lên chữ số (px-2 ghi đè pr-8 mà MoneyInput chừa cho hậu tố). */}
+            <MoneyInput
+              name="dot1Amount"
+              min={0}
+              max={totalAmount}
+              value={dot1}
+              onValueChange={(v) => setDot1(Math.min(totalAmount, Math.max(0, v ?? 0)))}
+              suffix={null}
+              className="mt-0.5 rounded-md px-2 py-1.5"
+            />
           </label>
           <div className="grid grid-cols-2 gap-2">
             <label className="block text-sm">
               <span className="text-xs text-muted-foreground">Đợt 2 — tự tính (đ)</span>
-              <input type="number" value={dot2} readOnly aria-readonly className="mt-0.5 w-full rounded-md border border-border bg-muted px-2 py-1.5 text-sm text-muted-foreground" />
+              <MoneyInput
+                name="dot2Amount"
+                value={dot2}
+                readOnly
+                aria-readonly
+                suffix={null}
+                className="mt-0.5 rounded-md bg-muted px-2 py-1.5 text-muted-foreground"
+              />
             </label>
             <label className="block text-sm">
               <span className="text-xs text-muted-foreground">Hẹn đóng đợt 2</span>
@@ -162,17 +183,21 @@ export function OrderInstallmentPlan({
             </label>
           </div>
           <label className="block text-sm">
-            <span className="text-xs text-muted-foreground">Nhắc công nợ trước (ngày)</span>
+            {/* Câu giải thích cơ chế nhắc nợ trước nằm dưới nút Lưu — xa ô nhập nên hay
+                bị bỏ qua. Chuyển vào icon "?" ngay cạnh nhãn, giữ nguyên chữ. */}
+            <span className="text-xs text-muted-foreground">
+              Nhắc công nợ trước (ngày){" "}
+              <HelpHint>
+                {dot2 > 0
+                  ? `Email nhắc công nợ đợt 2 gửi từ ${reminderDays} ngày trước hạn.`
+                  : "Nhắc công nợ đợt 2 tự động khi có đợt 2 (email)."}
+              </HelpHint>
+            </span>
             <input type="number" min={0} value={reminderDays} onChange={(e) => setReminderDays(Math.max(0, Number(e.target.value) || 0))} disabled={dot2 <= 0} className="mt-0.5 w-full rounded-md border border-border px-2 py-1.5 text-sm disabled:bg-muted" />
           </label>
           <button onClick={save} disabled={pending} className="w-full rounded-md bg-primary-dark px-3 py-2 text-sm font-semibold text-white disabled:opacity-50">
             {pending ? "Đang lưu…" : "Lưu kế hoạch thanh toán"}
           </button>
-          <p className="text-[11px] text-muted-foreground">
-            {dot2 > 0
-              ? `Email nhắc công nợ đợt 2 gửi từ ${reminderDays} ngày trước hạn.`
-              : "Nhắc công nợ đợt 2 tự động khi có đợt 2 (email)."}
-          </p>
         </div>
       )}
     </section>
@@ -185,6 +210,14 @@ export function OrderQrSection({
   transferContent,
   dueNow,
 }: {
+  /**
+   * URL ảnh QR, hoặc null khi KHÔNG có mã để đưa. Từ 20/08 có HAI lý do null:
+   *  1. cơ sở chưa cấu hình tài khoản nhận tiền (lý do cũ);
+   *  2. người xem thiếu `orders:view-pii` — nội dung CK trên mã chứa SĐT phụ huynh
+   *     nên server cố tình không dựng URL ([id]/page.tsx).
+   * Ô trống bên dưới vì thế nói CẢ HAI lý do: prop không mang theo lý do cụ thể, mà
+   * thêm prop thì phải sửa `order-detail-client.tsx` (ngoài phạm vi đợt vá này).
+   */
   qrUrl: string | null;
   transferContent: string;
   /** Số tiền QR đang in + nhãn ("Đợt 1" / "Toàn bộ đơn" / "Còn thiếu"). */
@@ -203,11 +236,12 @@ export function OrderQrSection({
               src={qrUrl}
               alt="VietQR thanh toán"
               title={`${dueNow.label}: ${dueNow.amount.toLocaleString("vi-VN")}đ`}
-              matchKey={transferContent}
+              transferContent={transferContent}
               className="h-56 w-56"
             />
             {/* Nói rõ QR đang thu bao nhiêu — khách đóng 2 đợt dễ tưởng phải
-                chuyển cả tổng đơn. Đây cũng là số webhook SePay dùng đối khớp. */}
+                chuyển cả tổng đơn. Nội dung CK bên dưới là dạng người đọc
+                (`HoTenCon_SdtPH_TenKhoa`, chốt 20/08), sale đọc thẳng cho khách. */}
             <p className="text-center text-sm font-semibold text-foreground">
               {dueNow.label}: {dueNow.amount.toLocaleString("vi-VN")}đ
             </p>
@@ -221,7 +255,12 @@ export function OrderQrSection({
         ) : (
           <div className="flex h-56 flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-border bg-muted p-4 text-center">
             <QrCode className="h-8 w-8 text-muted-foreground" />
-            <p className="text-sm text-muted-foreground">Chưa cấu hình tài khoản nhận tiền.</p>
+            <p className="text-sm text-muted-foreground">Chưa có mã QR để hiển thị.</p>
+            <p className="text-xs text-muted-foreground">
+              Cơ sở chưa cấu hình tài khoản nhận tiền — hoặc tài khoản của bạn không có
+              quyền xem thông tin liên hệ, mà nội dung chuyển khoản trên mã QR có SĐT
+              phụ huynh nên mã bị ẩn.
+            </p>
             <a href="/tich-hop" className="text-xs font-semibold text-primary underline">
               Cấu hình VietQR trong Tích hợp →
             </a>

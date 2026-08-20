@@ -1,5 +1,5 @@
 import "server-only";
-import type { Role } from "@prisma/client";
+import type { InstallmentApprovalStatus, Prisma, Role } from "@prisma/client";
 import { db } from "@/lib/db";
 import { assertCan } from "@/lib/auth/permissions";
 import { writeAudit } from "@/lib/audit/audit-log";
@@ -213,6 +213,116 @@ export type InstallmentApprovalActor = {
   roles?: (Role | string)[] | null;
 };
 
+/** Phần đơn mà việc duyệt kế hoạch cần đọc — dùng chung cho luồng lẻ và luồng gộp. */
+export type InstallmentApprovalOrder = {
+  id: string;
+  centerId: string | null;
+  leadId: string | null;
+  installmentApprovalStatus: InstallmentApprovalStatus | null;
+};
+
+// -----------------------------------------------------------------------------
+// THÂN của việc duyệt/từ chối kế hoạch, nhận sẵn `tx` — xem lý do tách ở
+// lib/orders/discount.ts (một nút duyệt cả đơn ⇒ hai việc phải chung transaction).
+//
+// ⚠️ Duyệt kế hoạch KHÔNG chỉ là đổi một cột: nó còn ghi bù Payment cho đợt 2 đã thu
+// và SINH PHIẾU THU theo đợt. Ai mượn lại thân hàm này mà bỏ bớt sẽ được một đơn
+// "đã duyệt" nhưng không có phiếu để thu tiền — nên chỗ duy nhất biết đủ việc là đây.
+// -----------------------------------------------------------------------------
+
+/** Đặt cột duyệt kế hoạch + nhật ký + ghi bù Payment đợt 2 + sinh phiếu thu theo đợt. */
+export async function applyInstallmentApproval(
+  tx: Prisma.TransactionClient,
+  params: {
+    order: InstallmentApprovalOrder;
+    actor: InstallmentApprovalActor;
+    reason?: string;
+  },
+): Promise<void> {
+  const { order, actor } = params;
+  await tx.order.update({
+    where: { id: order.id },
+    data: {
+      installmentApprovalStatus: "APPROVED",
+      installmentApprovedById: actor.id,
+      installmentApprovedAt: new Date(),
+      installmentRejectReason: null,
+    },
+  });
+  await writeAudit({
+    actor: { id: actor.id, name: actor.name },
+    module: "finance",
+    entityType: "Order",
+    entityId: order.id,
+    action: "INSTALLMENT_APPROVED",
+    oldValues: { installmentApprovalStatus: order.installmentApprovalStatus },
+    newValues: { installmentApprovalStatus: "APPROVED" },
+    reason: params.reason?.trim() || undefined,
+    orgUnitId: order.centerId,
+    tx,
+  });
+  // Đợt2 đã PAID (Ledger-B) nhưng bị gate trước đó → ghi bù Payment(RECORDED).
+  const dot2 = await tx.orderInstallment.findFirst({
+    where: { orderId: order.id, soDot: 2, status: "PAID" },
+    select: { soDot: true, amount: true },
+  });
+  if (dot2) {
+    await ensureOrderPaymentRecorded(tx, {
+      orderId: order.id,
+      soDot: dot2.soDot,
+      amount: dot2.amount,
+      leadId: order.leadId,
+      centerId: order.centerId,
+      actor: { id: actor.id, name: actor.name },
+    });
+  }
+  // QĐ-1 (03/08) — ĐÂY là nơi duy nhất phiếu thu theo đợt ra đời. Cùng transaction
+  // với việc set APPROVED ở trên: duyệt hỏng thì phiếu cũng không tồn tại, và
+  // ngược lại không có đơn nào "đã duyệt mà chưa có phiếu".
+  await materializeInstallmentRequests(tx, order.id, { id: actor.id, name: actor.name });
+}
+
+/**
+ * Đặt cột từ chối kế hoạch + nhật ký + thu hồi phiếu theo đợt (hồi sinh phiếu toàn đơn).
+ *
+ * Không cần `leadId` (khác nhánh duyệt): từ chối thì không ghi Payment cho ai cả.
+ */
+export async function applyInstallmentRejection(
+  tx: Prisma.TransactionClient,
+  params: {
+    order: Omit<InstallmentApprovalOrder, "leadId">;
+    actor: InstallmentApprovalActor;
+    reason: string;
+  },
+): Promise<void> {
+  const { order, actor } = params;
+  const reason = params.reason.trim();
+  await tx.order.update({
+    where: { id: order.id },
+    data: {
+      installmentApprovalStatus: "REJECTED",
+      installmentApprovedById: actor.id,
+      installmentApprovedAt: new Date(),
+      installmentRejectReason: reason,
+    },
+  });
+  await writeAudit({
+    actor: { id: actor.id, name: actor.name },
+    module: "finance",
+    entityType: "Order",
+    entityId: order.id,
+    action: "INSTALLMENT_REJECTED",
+    oldValues: { installmentApprovalStatus: order.installmentApprovalStatus },
+    newValues: { installmentApprovalStatus: "REJECTED" },
+    reason,
+    orgUnitId: order.centerId,
+    tx,
+  });
+  // Kế hoạch bị bác sau khi đã lỡ duyệt → thu hồi phiếu theo đợt (chưa dính tiền)
+  // và cho phiếu "thu toàn đơn" sống lại, để đơn vẫn thu được.
+  await revertInstallmentRequests(tx, order.id, { id: actor.id, name: actor.name });
+}
+
 /** Sale yêu cầu duyệt kế hoạch 2 đợt → PENDING_APPROVAL (reset cờ duyệt/từ chối cũ). */
 export async function requestInstallmentApproval(params: {
   orderId: string;
@@ -249,7 +359,13 @@ export async function requestInstallmentApproval(params: {
   return { ok: true };
 }
 
-/** CENTER_MANAGER/SUPER_ADMIN duyệt kế hoạch 2 đợt → APPROVED + ghi bù Payment đợt2 nếu đã PAID. */
+/**
+ * CENTER_MANAGER/SUPER_ADMIN duyệt kế hoạch 2 đợt → APPROVED + ghi bù Payment đợt2 nếu đã PAID.
+ *
+ * @deprecated Dùng `approveOrder()` (lib/orders/approval.ts) — một nút duyệt cho cả
+ * giảm giá lẫn kế hoạch thanh toán. Giữ lại cho đơn/luồng chỉ có kế hoạch trả góp và
+ * cho caller cũ (e2e gọi thẳng lib); hành vi KHÔNG đổi.
+ */
 export async function approveInstallmentPlan(params: {
   orderId: string;
   actor: InstallmentApprovalActor;
@@ -270,54 +386,17 @@ export async function approveInstallmentPlan(params: {
   }
 
   await db.$transaction(async (tx) => {
-    await tx.order.update({
-      where: { id: order.id },
-      data: {
-        installmentApprovalStatus: "APPROVED",
-        installmentApprovedById: params.actor.id,
-        installmentApprovedAt: new Date(),
-        installmentRejectReason: null,
-      },
-    });
-    await writeAudit({
-      actor: { id: params.actor.id, name: params.actor.name },
-      module: "finance",
-      entityType: "Order",
-      entityId: order.id,
-      action: "INSTALLMENT_APPROVED",
-      oldValues: { installmentApprovalStatus: order.installmentApprovalStatus },
-      newValues: { installmentApprovalStatus: "APPROVED" },
-      reason: params.reason?.trim() || undefined,
-      orgUnitId: order.centerId,
-      tx,
-    });
-    // Đợt2 đã PAID (Ledger-B) nhưng bị gate trước đó → ghi bù Payment(RECORDED).
-    const dot2 = await tx.orderInstallment.findFirst({
-      where: { orderId: order.id, soDot: 2, status: "PAID" },
-      select: { soDot: true, amount: true },
-    });
-    if (dot2) {
-      await ensureOrderPaymentRecorded(tx, {
-        orderId: order.id,
-        soDot: dot2.soDot,
-        amount: dot2.amount,
-        leadId: order.leadId,
-        centerId: order.centerId,
-        actor: { id: params.actor.id, name: params.actor.name },
-      });
-    }
-    // QĐ-1 (03/08) — ĐÂY là nơi duy nhất phiếu thu theo đợt ra đời. Cùng transaction
-    // với việc set APPROVED ở trên: duyệt hỏng thì phiếu cũng không tồn tại, và
-    // ngược lại không có đơn nào "đã duyệt mà chưa có phiếu".
-    await materializeInstallmentRequests(tx, order.id, {
-      id: params.actor.id,
-      name: params.actor.name,
-    });
+    await applyInstallmentApproval(tx, { order, actor: params.actor, reason: params.reason });
   });
   return { ok: true };
 }
 
-/** CENTER_MANAGER/SUPER_ADMIN từ chối kế hoạch 2 đợt → REJECTED (reason bắt buộc). */
+/**
+ * CENTER_MANAGER/SUPER_ADMIN từ chối kế hoạch 2 đợt → REJECTED (reason bắt buộc).
+ *
+ * @deprecated Dùng `rejectOrder()` (lib/orders/approval.ts) — xem chú thích ở
+ * `approveInstallmentPlan`.
+ */
 export async function rejectInstallmentPlan(params: {
   orderId: string;
   actor: InstallmentApprovalActor;
@@ -340,33 +419,7 @@ export async function rejectInstallmentPlan(params: {
   }
 
   await db.$transaction(async (tx) => {
-    await tx.order.update({
-      where: { id: order.id },
-      data: {
-        installmentApprovalStatus: "REJECTED",
-        installmentApprovedById: params.actor.id,
-        installmentApprovedAt: new Date(),
-        installmentRejectReason: params.reason.trim(),
-      },
-    });
-    await writeAudit({
-      actor: { id: params.actor.id, name: params.actor.name },
-      module: "finance",
-      entityType: "Order",
-      entityId: order.id,
-      action: "INSTALLMENT_REJECTED",
-      oldValues: { installmentApprovalStatus: order.installmentApprovalStatus },
-      newValues: { installmentApprovalStatus: "REJECTED" },
-      reason: params.reason.trim(),
-      orgUnitId: order.centerId,
-      tx,
-    });
-    // Kế hoạch bị bác sau khi đã lỡ duyệt → thu hồi phiếu theo đợt (chưa dính tiền)
-    // và cho phiếu "thu toàn đơn" sống lại, để đơn vẫn thu được.
-    await revertInstallmentRequests(tx, order.id, {
-      id: params.actor.id,
-      name: params.actor.name,
-    });
+    await applyInstallmentRejection(tx, { order, actor: params.actor, reason: params.reason });
   });
   return { ok: true };
 }

@@ -9,7 +9,13 @@ import { Badge } from "@/components/ui/badge";
 import { OrderDetailClient } from "../_components/order-detail-client";
 import { SendEmailModal } from "../_components/send-email-modal";
 import { ORDER_STATUS_LABEL, ORDER_TYPE_LABEL, deriveInstallmentBadge } from "@/lib/orders/status";
-import { getPaymentConfig, buildTransferContent, buildVietQrImageUrl } from "@/lib/payments/vietqr";
+import {
+  getPaymentConfig,
+  transferContentForOrder,
+  transferPhonePart,
+  buildVietQrImageUrl,
+  VIETQR_ADDINFO_MAX,
+} from "@/lib/payments/vietqr";
 import { computeDueNow } from "@/lib/payments/due-now";
 import { getOrderPaymentRequests } from "@/lib/payments/payment-request";
 import { loadActiveQrSessions } from "../_qr-core";
@@ -27,6 +33,35 @@ const STATUS_BADGE_CLASS: Record<OrderStatus, string> = {
   CANCELLED: "bg-state-danger-soft text-state-danger-ink hover:bg-state-danger-soft",
   REFUNDED: "bg-primary-soft text-primary hover:bg-primary-soft",
 };
+
+/**
+ * Che phần SĐT trong nội dung CK — CHỈ cho thứ in ra màn hình.
+ *
+ * VÌ SAO: nội dung CK nay là `HoTenCon_84987654321_TenKhoa`, tức SĐT phụ huynh nằm
+ * NGUYÊN trong đó và được in đậm ở 3 chỗ trên trang. Vai có `orders:view` mà không
+ * có `orders:view-pii` đọc lại được đủ số ⇒ việc che ô "SĐT" phía trên thành vô
+ * nghĩa (và số còn nằm trong RSC payload).
+ *
+ * Vì sao CHE mà không ẨN HẲN khối: che xong chuỗi vẫn còn tên con + tên khoá, đủ
+ * để người không có quyền PII đối chiếu đơn/sao kê bằng mắt, mà không cầm được số
+ * để gọi. Ẩn hẳn thì khối "Nội dung CK" trống trơn, không giúp ai thêm điều gì.
+ *
+ * ⚠️ TUYỆT ĐỐI không dùng cho chuỗi nhúng vào ảnh QR: che ở đó là mã hỏng, tiền
+ * không về được.
+ *
+ * Dùng lại `maskPhone` (hàm che DUY NHẤT của repo) + `transferPhonePart` để biết
+ * chính xác đoạn nào là số — không dò regex lần hai. Đoạn SĐT luôn còn nguyên vẹn
+ * trong chuỗi vì `buildTransferContent` cắt bớt TÊN CON chứ không cắt phần đuôi,
+ * nên phép thay thế này không trượt.
+ */
+function maskPhoneInTransferContent(
+  content: string,
+  rawPhone: string | null | undefined,
+): string {
+  const phonePart = transferPhonePart(rawPhone);
+  if (!phonePart || !content.includes(phonePart)) return content;
+  return content.replace(phonePart, maskPhone(phonePart));
+}
 
 interface Props {
   params: Promise<{ id: string }>;
@@ -96,15 +131,28 @@ export default async function OrderDetailPage({ params }: Props) {
     centerId: order.centerId,
   });
 
-  // Commit 4 — thanh toán 2 đợt + QR (nội dung CK: tên HV + SĐT PH + tên khoá).
+  // Commit 4 — thanh toán 2 đợt + QR.
   // BGĐ 31/07 — QR lấy tài khoản NHẬN TIỀN THEO CƠ SỞ của đơn (fallback cấu hình chung).
+  //
+  // 20/08 — nội dung CK là `HoTenCon_SdtPH_TenKhoa` (không còn mã đơn). Tính MỘT LẦN
+  // ở đây rồi truyền xuống cả khối QR mức đơn lẫn bảng phiếu thu theo đợt: ba chỗ in
+  // ra phải là cùng một chuỗi, lệch nhau là sale đọc một đằng QR mã một nẻo.
   const payCfg = await getPaymentConfig(order.centerId);
-  const transferContent = buildTransferContent(
-    order.student?.name ?? order.customerName,
-    order.customerPhone,
-    order.items[0]?.itemName,
-    // BGĐ 31/07 — mã đơn trong nội dung CK để webhook SePay tự khớp & xác nhận.
-    order.code,
+  // Bản ĐẦY ĐỦ — thứ duy nhất được nhúng vào ảnh QR.
+  //
+  // ⚠️ Trần ký tự lấy TỪ `VIETQR_ADDINFO_MAX` (lib/payments/vietqr.ts), KHÔNG khai
+  // lại số 25 ở đây. Chuỗi này và chuỗi mà `_qr-core.ts#addInfoFor` nhúng vào QR
+  // theo từng phiếu thu PHẢI là một; hai chỗ giữ hai hằng riêng thì chỉ cần một
+  // người sửa lệch là sale đọc một đằng, QR mã một nẻo — mà không có test nào bắt
+  // được vì mỗi bên tự nhất quán với chính nó.
+  const transferContent = transferContentForOrder(
+    {
+      studentName: order.student?.name,
+      customerName: order.customerName,
+      customerPhone: order.customerPhone,
+      courseName: order.items[0]?.itemName,
+    },
+    VIETQR_ADDINFO_MAX,
   );
   // QR in SỐ PHẢI THU NGAY, không phải tổng đơn: khách chọn 2 đợt thì quét đóng
   // đợt 1. Dùng chung `computeDueNow` với webhook SePay — hai bên phải cùng một
@@ -120,7 +168,27 @@ export default async function OrderDetailPage({ params }: Props) {
     installments: order.installments,
     installmentApprovalStatus: order.installmentApprovalStatus,
   });
-  const qrUrl = buildVietQrImageUrl(payCfg, dueNow.amount, transferContent);
+  // ⚠️ QR nhận bản ĐẦY ĐỦ (`transferContent`), KHÔNG phải bản che: mã phải mang đúng
+  // nội dung phụ huynh sẽ chuyển, che ở đây là tiền không về được.
+  //
+  // ⚠️ VÌ THẾ, thiếu `orders:view-pii` thì KHÔNG dựng URL ảnh QR luôn. URL có dạng
+  // `img.vietqr.io/...?addInfo=NguyenVanA_84987654321_Sata4` — nó đi thẳng vào
+  // `<img src>` trong DOM và vào RSC payload, tức SĐT ĐẦY ĐỦ vẫn lọt xuống client dù
+  // chuỗi in ra màn hình đã che (đo được ở vòng soi 3 — khối comment cũ ở đây khẳng
+  // định ngược lại là SAI).
+  //
+  // Vì sao ẨN QR chứ không proxy ảnh qua route của mình: proxy là hạ tầng mới (route
+  // ảnh + gác quyền + chống IDOR theo orderId) cho một vai mà HÔM NAY KHÔNG AI GIỮ —
+  // mọi vai có `orders:view` trong seed-roles đều có kèm `orders:view-pii`. Ẩn là
+  // hành vi trung thực và đúng bản chất: không được xem SĐT thì cũng không được cầm
+  // mã QR, vì mã QR CHÍNH LÀ SĐT đó ở dạng khác.
+  const qrUrl = canViewPii ? buildVietQrImageUrl(payCfg, dueNow.amount, transferContent) : null;
+  // Bản HIỂN THỊ — mọi chỗ in nội dung CK ra màn hình (khối QR mức đơn, bảng phiếu
+  // thu theo đợt, hộp phóng to QR) đều nhận chuỗi này. Che số nhưng GIỮ tên con +
+  // tên khoá để người không có quyền PII vẫn đối chiếu đơn/sao kê bằng mắt được.
+  const transferContentShown = canViewPii
+    ? transferContent
+    : maskPhoneInTransferContent(transferContent, order.customerPhone);
 
   // 03/08 — SỔ PHIẾU THU theo đợt (PaymentRequest) + phiên QR ACTIVE còn hạn của
   // từng phiếu. Đây là nguồn của bảng "Phiếu thu & QR theo đợt"; `OrderQrSection`
@@ -130,6 +198,14 @@ export default async function OrderDetailPage({ params }: Props) {
   const qrSessions = await loadActiveQrSessions(
     actor,
     paymentRequests.map((r) => ({ id: r.id, matchKey: r.matchKey })),
+    // `QrSessionView.transferContent` chỉ để IN RA (ảnh QR đã dựng sẵn từ trước và
+    // nằm ở `qrContent`), nên truyền bản che.
+    transferContentShown,
+    // Cùng một câu trả lời quyền cho cả trang: thiếu `orders:view-pii` → core trả
+    // RỖNG, không phiên QR nào xuống client (ảnh QR của từng đợt cũng mang SĐT đầy
+    // đủ trong `imageSrc`). Truyền tường minh thay vì để core tự suy, để cờ này và
+    // `qrUrl` ở trên chắc chắn đi cùng một nguồn `checkPermission`.
+    { canViewPii },
   );
 
   const emailTemplates = canManage
@@ -239,7 +315,7 @@ export default async function OrderDetailPage({ params }: Props) {
         canApproveDiscount={canApproveDiscount}
         qrUrl={qrUrl}
         dueNow={dueNow}
-        transferContent={transferContent}
+        transferContent={transferContentShown}
         paymentRequests={paymentRequests.map((r) => ({
           id: r.id,
           installmentNo: r.installmentNo,

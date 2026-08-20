@@ -151,10 +151,38 @@ test.describe("[QR] Xuất QR theo từng phiếu thu", () => {
     expect(rows[0]!.amountShown).toBe(3_000_000);
     expect(rows[0]!.centerId).toBe(cs1);
     expect(rows[0]!.expiresAt.getTime()).toBeGreaterThan(Date.now());
-    // Nội dung đối khớp = matchKey của PHIẾU (không phải mã đơn trần).
-    expect(rows[0]!.qrContent).toContain(paymentMatchKey(order.code, 1));
+    // 20/08 — nội dung in lên QR là dạng NGƯỜI ĐỌC `HoTenCon_SdtPH_TenKhoa`, KHÔNG
+    // còn là matchKey (sale phải đọc được chuỗi này cho phụ huynh qua điện thoại).
+    // Đơn seed không gắn học viên/dòng hàng nên rút về "tên người mua_SĐT".
+    expect(rows[0]!.qrContent).toContain("PHQR_84905123456");
+    expect(rows[0]!.qrContent).not.toContain(paymentMatchKey(order.code, 1));
     // Phiếu đợt 2 không bị đụng tới.
     expect(await db.qrSession.count()).toBe(1);
+  });
+
+  test("[QR-01b] đợt 1 và đợt 2 dùng CHUNG một nội dung CK — có chủ đích, không phải lỗi", async () => {
+    // Định dạng chủ dự án chốt 20/08 không mang thông tin "đợt nào". Cái phân biệt
+    // là SỐ TIỀN trên QR; tiền về thì nhánh (d) của webhook neo vào đợt chưa đóng
+    // đủ sớm nhất rồi để waterfall rót tiếp. Khoá hành vi này lại để người sau
+    // đừng "sửa" nó thành mỗi đợt một chuỗi (sẽ vỡ đường đối khớp theo SĐT).
+    const order = await seedOrder(cs1, 10_000_000);
+    const dot1 = await seedRequest(order, 1, 4_000_000);
+    const dot2 = await seedRequest(order, 2, 6_000_000);
+
+    const a = await issueQrForRequestCore(actorCs1, AUDIT, { paymentRequestId: dot1.id });
+    const b = await issueQrForRequestCore(actorCs1, AUDIT, { paymentRequestId: dot2.id });
+    expect(a.ok && b.ok).toBe(true);
+    if (!a.ok || !b.ok) return;
+
+    expect(a.session.transferContent).toBe("PHQR_84905123456");
+    expect(b.session.transferContent).toBe(a.session.transferContent);
+    // …nhưng SỐ TIỀN thì khác nhau, đó mới là thứ phân biệt hai mã.
+    expect(a.session.amountShown).toBe(4_000_000);
+    expect(b.session.amountShown).toBe(6_000_000);
+    // matchKey vẫn nguyên trong DB — đường khớp của mọi QR phát trước 20/08.
+    expect((await db.paymentRequest.findUniqueOrThrow({ where: { id: dot1.id } })).matchKey).toBe(
+      paymentMatchKey(order.code, 1),
+    );
   });
 
   test("[QR-02] bấm Xuất QR 2 lần liên tiếp → KHÔNG có 2 phiên ACTIVE (dùng lại phiên cũ)", async () => {

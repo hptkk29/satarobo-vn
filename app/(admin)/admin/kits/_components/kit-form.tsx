@@ -7,6 +7,7 @@ import { createKit, updateKit } from "../_actions";
 import { StringArrayEditor } from "./string-array-editor";
 import { SpecsEditor } from "./specs-editor";
 import { ImageUploader } from "@/components/admin/ImageUploader";
+import { HelpHint } from "@/components/admin/ui/help-hint";
 
 export type KitFormValue = {
   id: string;
@@ -158,12 +159,15 @@ export function KitForm({ kit }: { kit?: KitFormValue }) {
           <input type="hidden" name="mainImage" value={mainImage ?? ""} />
         </div>
         <div>
-          <label className="mb-1 block text-sm font-semibold text-foreground">
+          {/* <span> chứ không <label>: khối chỉ có nút "?" và trình sửa danh sách, không
+              có ô nhập nào để gắn nhãn — nút "?" cũng là phần tử gắn-nhãn được nên để
+              <label> là nó chiếm chỗ ô nhập. */}
+          <span className="mb-2 flex items-center text-sm font-semibold text-foreground">
             Thư viện ảnh (URL ảnh phụ)
-          </label>
-          <p className="mb-2 text-xs text-muted-foreground">
-            Tạm thời nhập URL — gallery uploader sẽ thêm ở Phase B.
-          </p>
+            <HelpHint className="ml-1">
+              Tạm thời nhập URL — gallery uploader sẽ thêm ở Phase B.
+            </HelpHint>
+          </span>
           <StringArrayEditor
             value={galleryImages}
             onChange={setGalleryImages}

@@ -28,16 +28,13 @@ import {
   updateOrderNoteAction,
   updateOrderPaymentMethodAction,
 } from "../_actions";
-import {
-  requestInstallmentApprovalAction,
-  approveInstallmentPlanAction,
-  rejectInstallmentPlanAction,
-} from "./_installment-approval-actions";
-import {
-  approveOrderDiscountAction,
-  rejectOrderDiscountAction,
-} from "./_discount-approval-actions";
+// ⚠️ CHỈ có hàm "xin duyệt lại". Hai hàm DUYỆT LẺ (approve/rejectInstallmentPlan)
+// đã bị xoá 20/08 — import chúng từ đây là dựng lại endpoint duyệt nửa đơn mà
+// `lib/orders/approval.ts` cấm. Đường duyệt duy nhất: `OrderApprovalButtons`.
+import { requestInstallmentApprovalAction } from "./_installment-request-actions";
+import { OrderApprovalButtons } from "../duyet/_components/order-approval-buttons";
 import { OrderInstallmentPlan, OrderQrSection } from "./order-payment-section";
+import { formatVndPlain } from "@/lib/format/money";
 import {
   PaymentRequestsSection,
   type PaymentRequestRow,
@@ -102,6 +99,21 @@ const APPROVAL_BADGE_CLASS: Record<InstallmentApprovalStatus, string> = {
   REJECTED: "bg-state-danger-soft text-state-danger-ink hover:bg-state-danger-soft",
 };
 
+/**
+ * Ngày (không giờ) theo múi giờ Việt Nam, khai TƯỜNG MINH.
+ *
+ * Khối này render cả ở server lẫn client: server Vercel chạy UTC còn trình duyệt của
+ * người dùng ở +07, để mặc định thì hạn đóng đợt 2 lệch một ngày giữa hai lần vẽ.
+ */
+function formatVnDate(iso: string): string {
+  return new Intl.DateTimeFormat("vi-VN", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    timeZone: "Asia/Ho_Chi_Minh",
+  }).format(new Date(iso));
+}
+
 function formatDateTime(date: Date): string {
   return new Intl.DateTimeFormat("vi-VN", {
     day: "2-digit",
@@ -154,40 +166,18 @@ export function OrderDetailClient({
   const [reason, setReason] = useState("");
   const [internalNote, setInternalNote] = useState(order.internalNote ?? "");
   const [isPending, startTransition] = useTransition();
-  // OD1b — duyệt kế hoạch trả góp 2 đợt.
-  const [rejectModalOpen, setRejectModalOpen] = useState(false);
-  const [rejectReason, setRejectReason] = useState("");
   const approvalStatus = order.installmentApprovalStatus;
-  // BGĐ 31/07 — duyệt giảm giá nhập tay (giải trình + QLCS duyệt).
   const discountStatus = order.discountApprovalStatus;
-  const [discountRejectOpen, setDiscountRejectOpen] = useState(false);
-  const [discountRejectReason, setDiscountRejectReason] = useState("");
 
-  function handleApproveDiscount() {
-    startTransition(async () => {
-      const res = await approveOrderDiscountAction(order.id);
-      if (res.ok) {
-        toast.success("Đã duyệt giảm giá");
-        router.refresh();
-      } else toast.error(res.error ?? "Lỗi");
-    });
-  }
-
-  function handleRejectDiscount() {
-    if (!discountRejectReason.trim()) {
-      toast.error("Nhập lý do từ chối");
-      return;
-    }
-    startTransition(async () => {
-      const res = await rejectOrderDiscountAction(order.id, discountRejectReason);
-      if (res.ok) {
-        toast.success("Đã từ chối giảm giá");
-        setDiscountRejectOpen(false);
-        setDiscountRejectReason("");
-        router.refresh();
-      } else toast.error(res.error ?? "Lỗi");
-    });
-  }
+  // Chốt 20/08/2026 — MỘT khối duyệt, MỘT nút cho cả giảm giá lẫn kế hoạch thanh toán.
+  // Người duyệt nhìn một tờ đơn và trả lời một câu; tách đôi chỉ đẻ ra đơn duyệt nửa vời.
+  const choDuyetGiamGia = discountStatus === "PENDING_APPROVAL";
+  const choDuyetKeHoach = approvalStatus === "PENDING_APPROVAL";
+  const dangChoDuyet = choDuyetGiamGia || choDuyetKeHoach;
+  // Thiếu quyền cho MỘT phần đang chờ là không được bấm: server cũng từ chối cả lệnh,
+  // nên hiện nút ở đây chỉ để người ta bấm rồi nhận lỗi.
+  const duyetDuocCaDon =
+    (!choDuyetGiamGia || canApproveDiscount) && (!choDuyetKeHoach || canApprove);
   // G4 — lịch sử trạng thái dạng dropdown (mặc định đóng).
   const [historyOpen, setHistoryOpen] = useState(false);
   // G4 — sửa phương thức thanh toán (chỉ khi đơn chưa xác nhận).
@@ -280,33 +270,7 @@ export function OrderDetailClient({
     });
   }
 
-  // OD1b — duyệt / từ chối / yêu cầu duyệt kế hoạch trả góp 2 đợt.
-  function handleApprove() {
-    startTransition(async () => {
-      const res = await approveInstallmentPlanAction(order.id);
-      if (res.ok) {
-        toast.success("Đã duyệt kế hoạch trả góp 2 đợt");
-        router.refresh();
-      } else toast.error(res.error ?? "Lỗi");
-    });
-  }
-
-  function handleReject() {
-    if (!rejectReason.trim()) {
-      toast.error("Vui lòng nhập lý do từ chối");
-      return;
-    }
-    startTransition(async () => {
-      const res = await rejectInstallmentPlanAction(order.id, rejectReason.trim());
-      if (res.ok) {
-        toast.success("Đã từ chối kế hoạch trả góp 2 đợt");
-        setRejectModalOpen(false);
-        setRejectReason("");
-        router.refresh();
-      } else toast.error(res.error ?? "Lỗi");
-    });
-  }
-
+  // OD1b — sale xin duyệt lại sau khi kế hoạch bị bác (KHÔNG phải đường duyệt).
   function handleRequestApproval() {
     startTransition(async () => {
       const res = await requestInstallmentApprovalAction(order.id);
@@ -535,91 +499,123 @@ export function OrderDetailClient({
         </div>
       </section>
 
-      {/* BGĐ 31/07 — Duyệt giảm giá (chỉ hiện khi đơn có giảm giá nhập tay) */}
-      {discountStatus && (
+      {/* Chốt 20/08/2026 — MỘT khối duyệt gộp: giảm giá + kế hoạch thanh toán,
+          một nút "Duyệt đơn" cho cả hai. Khối chỉ hiện phần đơn THẬT SỰ có. */}
+      {(discountStatus || approvalStatus) && (
         <section className="rounded-xl border border-border bg-card p-5">
-          <h2 className="mb-3 text-sm font-bold uppercase tracking-wider text-muted-foreground">
-            Duyệt giảm giá
-          </h2>
-          <div className="space-y-3 text-sm">
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="text-muted-foreground">Trạng thái:</span>
-              <Badge className={APPROVAL_BADGE_CLASS[discountStatus]}>
-                {APPROVAL_LABEL[discountStatus]}
-              </Badge>
-              <span className="text-muted-foreground">
-                Giảm {order.discountAmount.toLocaleString("vi-VN")} đ
-                {order.discountPercent ? ` (${order.discountPercent}%)` : ""}
-              </span>
-            </div>
-            {order.discountReason && (
-              <div className="rounded-lg bg-muted p-3 text-foreground">
-                <span className="font-semibold">Giải trình: </span>
-                {order.discountReason}
-              </div>
-            )}
-            {discountStatus === "APPROVED" && order.discountApprovedAt && (
-              <p className="text-xs text-muted-foreground">
-                Duyệt lúc {formatDateTime(order.discountApprovedAt)}
-              </p>
-            )}
-            {discountStatus === "REJECTED" && order.discountRejectReason && (
-              <div className="rounded-lg bg-state-danger-soft p-3 text-state-danger-ink">
-                Lý do từ chối: {order.discountRejectReason}
-              </div>
-            )}
-            {canApproveDiscount && discountStatus === "PENDING_APPROVAL" && (
-              <div className="flex flex-wrap gap-2">
-                <Button size="sm" onClick={handleApproveDiscount} disabled={isPending}>
-                  {isPending && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-                  Duyệt giảm giá
-                </Button>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => setDiscountRejectOpen(true)}
-                  disabled={isPending}
-                >
-                  Từ chối
-                </Button>
-              </div>
-            )}
-            {discountStatus === "PENDING_APPROVAL" && !canApproveDiscount && (
-              <p className="text-xs text-state-warning-ink">
-                Đang chờ Quản lý cơ sở duyệt — đơn chưa thể xác nhận.
-              </p>
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+            <h2 className="text-sm font-bold uppercase tracking-wider text-muted-foreground">
+              {dangChoDuyet ? "Chờ quản lý cơ sở duyệt" : "Duyệt đơn"}
+            </h2>
+            {/* Người duyệt thường có nhiều đơn chờ cùng lúc — cho họ đường sang hàng
+                chờ thay vì bắt quay ra danh sách rồi tự lọc từng đơn. */}
+            {(canApprove || canApproveDiscount) && (
+              <Link
+                href="/orders/duyet"
+                className="text-xs font-medium text-primary hover:underline"
+              >
+                Xem tất cả đơn chờ duyệt →
+              </Link>
             )}
           </div>
-
-          {discountRejectOpen && (
-            <div className="mt-3 space-y-2 rounded-lg border border-state-danger-soft bg-state-danger-soft p-3">
-              <label className="text-sm font-medium" htmlFor="discount-reject">
-                Lý do từ chối (bắt buộc):
-              </label>
-              <Textarea
-                id="discount-reject"
-                value={discountRejectReason}
-                onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) =>
-                  setDiscountRejectReason(e.target.value)
-                }
-                rows={2}
-                placeholder="VD: vượt khung ưu đãi cho phép"
-              />
-              <div className="flex gap-2">
-                <Button size="sm" variant="destructive" onClick={handleRejectDiscount} disabled={isPending}>
-                  Xác nhận từ chối
-                </Button>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => setDiscountRejectOpen(false)}
-                  disabled={isPending}
-                >
-                  Huỷ
-                </Button>
+          <div className="space-y-4 text-sm">
+            {discountStatus && (
+              <div className="space-y-2">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-muted-foreground">Giảm giá:</span>
+                  <Badge className={APPROVAL_BADGE_CLASS[discountStatus]}>
+                    {APPROVAL_LABEL[discountStatus]}
+                  </Badge>
+                  <span className="text-foreground">
+                    {order.discountPercent != null
+                      ? `theo % (${order.discountPercent}%) — ${formatVndPlain(order.discountAmount)}`
+                      : `theo số tiền — ${formatVndPlain(order.discountAmount)}`}
+                  </span>
+                </div>
+                {order.discountReason && (
+                  <div className="rounded-lg bg-muted p-3 text-foreground">
+                    <span className="font-semibold">Giải trình: </span>
+                    {order.discountReason}
+                  </div>
+                )}
+                {discountStatus === "APPROVED" && order.discountApprovedAt && (
+                  <p className="text-xs text-muted-foreground">
+                    Duyệt lúc {formatDateTime(order.discountApprovedAt)}
+                  </p>
+                )}
+                {discountStatus === "REJECTED" && order.discountRejectReason && (
+                  <div className="rounded-lg bg-state-danger-soft p-3 text-state-danger-ink">
+                    Lý do từ chối: {order.discountRejectReason}
+                  </div>
+                )}
               </div>
-            </div>
-          )}
+            )}
+
+            {approvalStatus && (
+              <div className="space-y-2">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-muted-foreground">Kế hoạch thanh toán 2 đợt:</span>
+                  <Badge className={APPROVAL_BADGE_CLASS[approvalStatus]}>
+                    {APPROVAL_LABEL[approvalStatus]}
+                  </Badge>
+                </div>
+                {installments.length > 0 && (
+                  <ul className="space-y-1">
+                    {installments.map((i) => (
+                      <li
+                        key={i.id}
+                        className="flex items-baseline justify-between gap-3 text-foreground"
+                      >
+                        <span>
+                          Đợt {i.soDot}
+                          {i.dueDate && (
+                            <span className="ml-1 text-xs text-muted-foreground">
+                              hạn {formatVnDate(i.dueDate)}
+                            </span>
+                          )}
+                        </span>
+                        <span className="shrink-0 tabular-nums">
+                          {formatVndPlain(i.amount)}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                {approvalStatus === "APPROVED" && order.installmentApprovedAt && (
+                  <p className="text-xs text-muted-foreground">
+                    Duyệt lúc {formatDateTime(order.installmentApprovedAt)}
+                  </p>
+                )}
+                {approvalStatus === "REJECTED" && order.installmentRejectReason && (
+                  <div className="rounded-lg bg-state-danger-soft p-3 text-state-danger-ink">
+                    Lý do từ chối: {order.installmentRejectReason}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {dangChoDuyet &&
+              (duyetDuocCaDon ? (
+                <OrderApprovalButtons orderId={order.id} />
+              ) : (
+                <p className="text-xs text-state-warning-ink">
+                  Đang chờ Quản lý cơ sở duyệt — đơn chưa thể xác nhận.
+                </p>
+              ))}
+
+            {/* Bị bác thì sale sửa lại rồi xin duyệt lần nữa — nút này KHÔNG duyệt. */}
+            {canApprove && approvalStatus === "REJECTED" && (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={handleRequestApproval}
+                disabled={isPending}
+              >
+                {isPending && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+                Yêu cầu duyệt lại
+              </Button>
+            )}
+          </div>
         </section>
       )}
 
@@ -631,72 +627,6 @@ export function OrderDetailClient({
         installments={installments}
         accounting={accounting}
       />
-
-      {/* OD1b — Duyệt kế hoạch trả góp 2 đợt (chỉ hiện khi có kế hoạch cần duyệt) */}
-      {approvalStatus && (
-        <section className="rounded-xl border border-border bg-card p-5">
-          <h2 className="mb-3 text-sm font-bold uppercase tracking-wider text-muted-foreground">
-            Duyệt kế hoạch trả góp 2 đợt
-          </h2>
-          <div className="space-y-3 text-sm">
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="text-muted-foreground">Trạng thái:</span>
-              <Badge className={APPROVAL_BADGE_CLASS[approvalStatus]}>
-                {APPROVAL_LABEL[approvalStatus]}
-              </Badge>
-            </div>
-            {approvalStatus === "APPROVED" && order.installmentApprovedAt && (
-              <p className="text-xs text-muted-foreground">
-                Duyệt lúc {formatDateTime(order.installmentApprovedAt)}
-              </p>
-            )}
-            {approvalStatus === "REJECTED" && order.installmentRejectReason && (
-              <div className="rounded-lg bg-state-danger-soft p-3 text-state-danger-ink">
-                Lý do từ chối: {order.installmentRejectReason}
-              </div>
-            )}
-            {canApprove && (
-              <div className="flex flex-wrap gap-2">
-                {approvalStatus === "PENDING_APPROVAL" && (
-                  <>
-                    <Button
-                      size="sm"
-                      onClick={handleApprove}
-                      disabled={isPending}
-                    >
-                      {isPending && (
-                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                      )}
-                      Duyệt
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => setRejectModalOpen(true)}
-                      disabled={isPending}
-                    >
-                      Từ chối
-                    </Button>
-                  </>
-                )}
-                {approvalStatus === "REJECTED" && (
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={handleRequestApproval}
-                    disabled={isPending}
-                  >
-                    {isPending && (
-                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                    )}
-                    Yêu cầu duyệt lại
-                  </Button>
-                )}
-              </div>
-            )}
-          </div>
-        </section>
-      )}
 
       {/* Notes */}
       <section className="rounded-xl border border-border bg-card p-5">
@@ -869,43 +799,6 @@ export function OrderDetailClient({
         </DialogContent>
       </Dialog>
 
-      {/* OD1b — Reject installment plan modal (reason bắt buộc) */}
-      <Dialog
-        open={rejectModalOpen}
-        onOpenChange={(o) => !isPending && setRejectModalOpen(o)}
-      >
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Từ chối kế hoạch trả góp 2 đợt</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-1.5 py-2">
-            <label className="text-sm font-medium">Lý do từ chối (bắt buộc):</label>
-            <Textarea
-              value={rejectReason}
-              onChange={(e) => setRejectReason(e.target.value)}
-              rows={3}
-            />
-          </div>
-          <DialogFooter>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => setRejectModalOpen(false)}
-              disabled={isPending}
-            >
-              Huỷ
-            </Button>
-            <Button
-              type="button"
-              onClick={handleReject}
-              disabled={isPending || !rejectReason.trim()}
-            >
-              {isPending && <Loader2 className="h-4 w-4 animate-spin" />}
-              Xác nhận từ chối
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }

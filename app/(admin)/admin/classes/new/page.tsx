@@ -6,6 +6,7 @@ import { resolveActor } from "@/lib/auth/actor";
 import { getNonEnrollableCenterIds } from "@/lib/enrollment-flow";
 import { getSelectableOrgUnits } from "@/lib/org/org-service";
 import { getAssignableTeachers } from "@/lib/teachers/assignable";
+import { isClassGroupEnabled } from "@/lib/flags";
 import { ClassForm } from "../_components/class-form";
 
 export const dynamic = "force-dynamic";
@@ -24,6 +25,9 @@ export default async function NewClassPage() {
   // Scope GHI per-model của Class (vá 24/07) — dùng cho CẢ picker GV lẫn picker "Đơn vị"
   // bên dưới: actor kiểu Toại (TRAINING@HO + CM@CS1) chỉ thấy CS1, hết bày GV CS2.
   const classCenters = getModelVisibleCenterIds("Class", actor);
+  // Cờ GỠ "Nhóm lớp" (mặc định OFF từ 20/08) — ô biến mất thì danh sách nhóm cũng thừa,
+  // bỏ luôn 1 query. Bật cờ lại là truy vấn chạy như cũ, không cần revert code.
+  const classGroupEnabled = isClassGroupEnabled();
   const [courses, orgUnits, classGroups, rooms, teachers, curricula] = await Promise.all([
     sdb.course.findMany({
       where: { isActive: true, isTeachable: true },
@@ -32,11 +36,13 @@ export default async function NewClassPage() {
     }),
     // Lớp CHỈ mở ở cơ sở dạy học — Hội sở không nằm trong danh sách (chốt 04/08).
     getSelectableOrgUnits(actor, { types: ["CENTER"] }),
-    sdb.classGroup.findMany({
-      where: { deletedAt: null, status: "ACTIVE" },
-      orderBy: { displayCode: "asc" },
-      select: { id: true, displayCode: true, name: true, centerId: true },
-    }),
+    classGroupEnabled
+      ? sdb.classGroup.findMany({
+          where: { deletedAt: null, status: "ACTIVE" },
+          orderBy: { displayCode: "asc" },
+          select: { id: true, displayCode: true, name: true, centerId: true },
+        })
+      : Promise.resolve([]),
     sdb.room.findMany({
       where: { status: "ACTIVE" },
       orderBy: [{ centerId: "asc" }, { code: "asc" }],
@@ -79,6 +85,7 @@ export default async function NewClassPage() {
           centerId: o.centerId,
         }))}
         classGroups={classGroups}
+        classGroupEnabled={classGroupEnabled}
         rooms={rooms}
         teachers={teachers.map((t) => ({
           id: t.id,

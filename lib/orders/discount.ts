@@ -1,5 +1,5 @@
 import "server-only";
-import type { Role } from "@prisma/client";
+import type { DiscountApprovalStatus, Prisma, Role } from "@prisma/client";
 import { db } from "@/lib/db";
 import { assertCan } from "@/lib/auth/permissions";
 import { writeAudit } from "@/lib/audit/audit-log";
@@ -34,7 +34,90 @@ export type DiscountApprovalActor = {
   roles?: (Role | string)[] | null;
 };
 
-/** QLCS/SUPER_ADMIN duyệt giảm giá → APPROVED (đơn được phép xác nhận). */
+/** Phần đơn mà việc duyệt giảm giá cần đọc — dùng chung cho luồng lẻ và luồng gộp. */
+export type DiscountApprovalOrder = {
+  id: string;
+  centerId: string | null;
+  discountApprovalStatus: DiscountApprovalStatus | null;
+};
+
+// -----------------------------------------------------------------------------
+// THÂN của việc duyệt/từ chối giảm giá, nhận sẵn `tx`.
+//
+// VÌ SAO TÁCH RA. Từ 20/08 quản lý cơ sở duyệt CẢ ĐƠN bằng MỘT nút (giảm giá +
+// kế hoạch thanh toán cùng lúc — xem lib/orders/approval.ts). Hai việc đó phải nằm
+// trong CÙNG một transaction, nếu không sẽ có đơn "duyệt xong một nửa" khi lệnh
+// hỏng giữa chừng. Chép lại thân hàm sang chỗ mới là cách chắc chắn để hai bản
+// trôi khác nhau sau vài lần sửa, nên chỗ duy nhất biết cách đặt cột + ghi nhật ký
+// vẫn là đây; luồng gộp chỉ mượn lại.
+// -----------------------------------------------------------------------------
+
+/** Đặt cột duyệt giảm giá + ghi nhật ký. Caller lo assertCan và kiểm trạng thái. */
+export async function applyDiscountApproval(
+  tx: Prisma.TransactionClient,
+  params: { order: DiscountApprovalOrder; actor: DiscountApprovalActor; reason?: string },
+): Promise<void> {
+  const { order, actor } = params;
+  await tx.order.update({
+    where: { id: order.id },
+    data: {
+      discountApprovalStatus: "APPROVED",
+      discountApprovedById: actor.id,
+      discountApprovedAt: new Date(),
+      discountRejectReason: null,
+    },
+  });
+  await writeAudit({
+    actor: { id: actor.id, name: actor.name },
+    module: "finance",
+    entityType: "Order",
+    entityId: order.id,
+    action: "DISCOUNT_APPROVED",
+    oldValues: { discountApprovalStatus: order.discountApprovalStatus },
+    newValues: { discountApprovalStatus: "APPROVED" },
+    reason: params.reason?.trim() || undefined,
+    orgUnitId: order.centerId,
+    tx,
+  });
+}
+
+/** Đặt cột từ chối giảm giá + ghi nhật ký. Caller lo assertCan và kiểm `reason`. */
+export async function applyDiscountRejection(
+  tx: Prisma.TransactionClient,
+  params: { order: DiscountApprovalOrder; actor: DiscountApprovalActor; reason: string },
+): Promise<void> {
+  const { order, actor } = params;
+  const reason = params.reason.trim();
+  await tx.order.update({
+    where: { id: order.id },
+    data: {
+      discountApprovalStatus: "REJECTED",
+      discountApprovedById: actor.id,
+      discountApprovedAt: new Date(),
+      discountRejectReason: reason,
+    },
+  });
+  await writeAudit({
+    actor: { id: actor.id, name: actor.name },
+    module: "finance",
+    entityType: "Order",
+    entityId: order.id,
+    action: "DISCOUNT_REJECTED",
+    oldValues: { discountApprovalStatus: order.discountApprovalStatus },
+    newValues: { discountApprovalStatus: "REJECTED" },
+    reason,
+    orgUnitId: order.centerId,
+    tx,
+  });
+}
+
+/**
+ * QLCS/SUPER_ADMIN duyệt giảm giá → APPROVED (đơn được phép xác nhận).
+ *
+ * @deprecated Dùng `approveOrder()` (lib/orders/approval.ts) — một nút duyệt cho cả
+ * giảm giá lẫn kế hoạch thanh toán. Giữ lại cho đơn/luồng chỉ có giảm giá và cho
+ * caller cũ; hành vi KHÔNG đổi.
+ */
 export async function approveOrderDiscount(params: {
   orderId: string;
   actor: DiscountApprovalActor;
@@ -59,32 +142,17 @@ export async function approveOrderDiscount(params: {
   }
 
   await db.$transaction(async (tx) => {
-    await tx.order.update({
-      where: { id: order.id },
-      data: {
-        discountApprovalStatus: "APPROVED",
-        discountApprovedById: params.actor.id,
-        discountApprovedAt: new Date(),
-        discountRejectReason: null,
-      },
-    });
-    await writeAudit({
-      actor: { id: params.actor.id, name: params.actor.name },
-      module: "finance",
-      entityType: "Order",
-      entityId: order.id,
-      action: "DISCOUNT_APPROVED",
-      oldValues: { discountApprovalStatus: order.discountApprovalStatus },
-      newValues: { discountApprovalStatus: "APPROVED" },
-      reason: params.reason?.trim() || undefined,
-      orgUnitId: order.centerId,
-      tx,
-    });
+    await applyDiscountApproval(tx, { order, actor: params.actor, reason: params.reason });
   });
   return { ok: true };
 }
 
-/** QLCS/SUPER_ADMIN từ chối giảm giá → REJECTED (reason bắt buộc). */
+/**
+ * QLCS/SUPER_ADMIN từ chối giảm giá → REJECTED (reason bắt buộc).
+ *
+ * @deprecated Dùng `rejectOrder()` (lib/orders/approval.ts) — xem chú thích ở
+ * `approveOrderDiscount`.
+ */
 export async function rejectOrderDiscount(params: {
   orderId: string;
   actor: DiscountApprovalActor;
@@ -110,27 +178,7 @@ export async function rejectOrderDiscount(params: {
   }
 
   await db.$transaction(async (tx) => {
-    await tx.order.update({
-      where: { id: order.id },
-      data: {
-        discountApprovalStatus: "REJECTED",
-        discountApprovedById: params.actor.id,
-        discountApprovedAt: new Date(),
-        discountRejectReason: params.reason.trim(),
-      },
-    });
-    await writeAudit({
-      actor: { id: params.actor.id, name: params.actor.name },
-      module: "finance",
-      entityType: "Order",
-      entityId: order.id,
-      action: "DISCOUNT_REJECTED",
-      oldValues: { discountApprovalStatus: order.discountApprovalStatus },
-      newValues: { discountApprovalStatus: "REJECTED" },
-      reason: params.reason.trim(),
-      orgUnitId: order.centerId,
-      tx,
-    });
+    await applyDiscountRejection(tx, { order, actor: params.actor, reason: params.reason });
   });
   return { ok: true };
 }

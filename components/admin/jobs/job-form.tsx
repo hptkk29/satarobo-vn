@@ -7,6 +7,8 @@ import { useRouter } from 'next/navigation'
 import { jobCreateSchema, type JobCreateInput } from '@/lib/validators/job'
 import { DEPARTMENTS, LOCATIONS, JOB_TYPES, JOB_STATUS } from '@/lib/data/job-options'
 import { StringArrayEditor } from '@/app/(admin)/admin/kits/_components/string-array-editor'
+import { MoneyInput } from '@/components/ui/money-input'
+import { FieldLabel, HelpHint } from '@/components/admin/ui/help-hint'
 import { Loader2 } from 'lucide-react'
 
 const EXPERIENCE_OPTIONS: { value: JobCreateInput['experienceLevel']; label: string }[] = [
@@ -203,7 +205,11 @@ export function JobForm({ action, mode, initialData }: JobFormProps) {
         <h2 className="mb-5 font-bold text-foreground">Nội dung tin tuyển</h2>
         <div className="space-y-5">
           <div>
-            <label className={labelClass}>Mô tả tổng quan *</label>
+            <FieldLabel
+              label="Mô tả tổng quan *"
+              className={labelClass}
+              hint="Tối thiểu 50 ký tự. Hỗ trợ xuống dòng."
+            />
             <textarea
               className={fieldClass}
               rows={6}
@@ -211,7 +217,6 @@ export function JobForm({ action, mode, initialData }: JobFormProps) {
               {...form.register('description')}
             />
             {errors.description && <p className={errorClass}>{errors.description.message}</p>}
-            <p className="mt-1 text-xs text-muted-foreground">Tối thiểu 50 ký tự. Hỗ trợ xuống dòng.</p>
           </div>
 
           <div>
@@ -266,27 +271,52 @@ export function JobForm({ action, mode, initialData }: JobFormProps) {
         <h2 className="mb-5 font-bold text-foreground">Lương & Chỉ tiêu</h2>
         <div className="space-y-4">
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+            {/* Ô TIỀN — gõ "7000000" hiện "7.000.000". Đi qua <Controller> chứ không
+                `register`: MoneyInput trả thẳng số (hoặc null khi ô trống), nên không cần
+                `setValueAs` bóc chuỗi nữa. */}
             <div>
               <label className={labelClass}>Lương min (VND)</label>
-              <input
-                className={fieldClass}
-                type="number"
-                placeholder="7000000"
-                {...form.register('salaryMin', { setValueAs: (v) => (v === '' ? null : Number(v)) })}
+              <Controller
+                control={form.control}
+                name="salaryMin"
+                render={({ field }) => (
+                  <MoneyInput
+                    name="salaryMin"
+                    className={fieldClass}
+                    placeholder="7.000.000"
+                    min={0}
+                    value={field.value ?? null}
+                    onValueChange={field.onChange}
+                    onBlur={field.onBlur}
+                  />
+                )}
               />
             </div>
             <div>
               <label className={labelClass}>Lương max (VND)</label>
-              <input
-                className={fieldClass}
-                type="number"
-                placeholder="15000000"
-                {...form.register('salaryMax', { setValueAs: (v) => (v === '' ? null : Number(v)) })}
+              <Controller
+                control={form.control}
+                name="salaryMax"
+                render={({ field }) => (
+                  <MoneyInput
+                    name="salaryMax"
+                    className={fieldClass}
+                    placeholder="15.000.000"
+                    min={0}
+                    value={field.value ?? null}
+                    onValueChange={field.onChange}
+                    onBlur={field.onBlur}
+                  />
+                )}
               />
               {errors.salaryMax && <p className={errorClass}>{errors.salaryMax.message}</p>}
             </div>
             <div>
-              <label className={labelClass}>Ghi chú lương</label>
+              <FieldLabel
+                label="Ghi chú lương"
+                className={labelClass}
+                hint="Nếu điền Ghi chú lương → hiển thị ghi chú thay vì dải lương."
+              />
               <input
                 className={fieldClass}
                 placeholder="Thoả thuận theo năng lực"
@@ -294,7 +324,6 @@ export function JobForm({ action, mode, initialData }: JobFormProps) {
               />
             </div>
           </div>
-          <p className="text-xs text-muted-foreground">Nếu điền Ghi chú lương → hiển thị ghi chú thay vì dải lương.</p>
 
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div>
@@ -321,10 +350,12 @@ export function JobForm({ action, mode, initialData }: JobFormProps) {
 
       {/* Section 4: Liên hệ */}
       <section className="rounded-xl border border-border bg-card p-6">
-        <h2 className="mb-5 font-bold text-foreground">Thông tin liên hệ</h2>
-        <p className="mb-3 text-xs text-muted-foreground">
-          Để trống = public page dùng email & SĐT mặc định của Sata Robo.
-        </p>
+        <h2 className="mb-5 font-bold text-foreground">
+          Thông tin liên hệ
+          <HelpHint className="ml-1">
+            Để trống = public page dùng email &amp; SĐT mặc định của Sata Robo.
+          </HelpHint>
+        </h2>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div>
             <label className={labelClass}>Email liên hệ</label>
@@ -352,18 +383,23 @@ export function JobForm({ action, mode, initialData }: JobFormProps) {
       <section className="rounded-xl border border-border bg-card p-6">
         <h2 className="mb-5 font-bold text-foreground">Trạng thái</h2>
         <div>
-          <label className={labelClass}>Trạng thái hiển thị</label>
+          <FieldLabel
+            label="Trạng thái hiển thị"
+            className={labelClass}
+            hint={
+              <ul className="space-y-1">
+                <li><strong>DRAFT</strong>: chỉ admin thấy, không xuất hiện trên /tuyen-dung</li>
+                <li><strong>OPEN</strong>: hiển thị public, Google Jobs có thể index</li>
+                <li><strong>CLOSED</strong>: đã đóng tuyển, ẩn khỏi public</li>
+                <li><strong>ON_HOLD</strong>: tạm dừng, ẩn khỏi public</li>
+              </ul>
+            }
+          />
           <select className={`${fieldClass} max-w-xs`} {...form.register('status')}>
             {JOB_STATUS.map((s) => (
               <option key={s.value} value={s.value}>{s.label}</option>
             ))}
           </select>
-          <ul className="mt-3 space-y-1 text-xs text-muted-foreground">
-            <li><strong>DRAFT</strong>: chỉ admin thấy, không xuất hiện trên /tuyen-dung</li>
-            <li><strong>OPEN</strong>: hiển thị public, Google Jobs có thể index</li>
-            <li><strong>CLOSED</strong>: đã đóng tuyển, ẩn khỏi public</li>
-            <li><strong>ON_HOLD</strong>: tạm dừng, ẩn khỏi public</li>
-          </ul>
         </div>
       </section>
 

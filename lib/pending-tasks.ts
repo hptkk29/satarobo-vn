@@ -3,7 +3,7 @@ import { hasRole, type Action, type CanUser } from "@/lib/auth/permissions";
 import type { Actor } from "@/lib/auth/actor";
 import { evaluatePermission } from "@/lib/auth/permission-eval";
 import { recordPermissionShadow } from "@/lib/auth/shadow-report";
-import { isRbacV2Enabled } from "@/lib/flags";
+import { isRbacV2Enabled, isCenterChecklistEnabled } from "@/lib/flags";
 import { isChecklistComplete } from "@/lib/center-checklist";
 import { getNearingEndEnrollments } from "@/lib/students/renewal";
 import { getSetting } from "@/lib/settings/service";
@@ -349,6 +349,14 @@ async function reportCardMilestone(user: TaskUser, cfg: PendingCfg): Promise<Pen
 }
 
 async function centerChecklist(user: TaskUser, now: Date, cfg: PendingCfg): Promise<PendingTaskGroup | null> {
+  // 20/08 — tính năng checklist cơ sở đã GỠ (cờ mặc định OFF, xem `lib/flags.ts`).
+  // Trả `null` = hợp đồng chung của mọi hàm trong file này ("không có việc loại này") ⇒ khối
+  // "Checklist cơ sở hôm qua" tự biến mất khỏi dashboard và chuông tự đánh dấu ĐÃ ĐỌC thông
+  // báo cũ, không phải sửa chỗ render.
+  // Chốt đặt TRƯỚC mọi truy vấn: hàm này quét toàn bộ Center + CenterDayChecklist mỗi lần
+  // dựng dashboard/mở chuông — giữ lại là tốn 2 query cho một nhóm chắc chắn bị vứt.
+  if (!isCenterChecklistEnabled()) return null;
+
   const { isManager, centerScope } = scope(user);
   if (!isManager) return null;
   const yesterday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1);

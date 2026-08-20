@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { MoneyInput } from "@/components/ui/money-input";
 import { Switch } from "@/components/ui/switch";
 import { updateCourseBasics } from "../_actions";
 
@@ -80,13 +81,18 @@ export function CourseBasicsForm({ course }: { course: CourseBasics }) {
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <div className="space-y-1.5">
           <Label htmlFor="c-price">Giá niêm yết (VND)</Label>
-          <Input
+          {/* `updateCourseBasics` vẫn nhận chuỗi số trần như cũ — ô chỉ đổi cách hiển
+              thị, không đổi kiểu dữ liệu gửi đi. */}
+          <MoneyInput
             id="c-price"
-            type="number"
+            name="price"
             min={0}
             value={price}
-            onChange={(e) => setPrice(e.target.value)}
+            onValueChange={(v) => setPrice(v === null ? "" : String(v))}
             placeholder="vd: 10000000"
+            // Dáng ô của shadcn <Input> để không lệch với các ô còn lại trong form.
+            // `pl-` chứ không `px-`: phải chừa lề phải cho chữ "đ".
+            className="h-8 border-input bg-transparent py-1 pl-2.5"
           />
         </div>
         <div className="flex items-end gap-2 pb-1">

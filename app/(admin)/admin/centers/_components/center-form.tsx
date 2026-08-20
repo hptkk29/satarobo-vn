@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useFormStatus } from "react-dom";
 import { toast } from "sonner";
 import { ImageUploader } from "@/components/admin/ImageUploader";
+import { HelpHint } from "@/components/admin/ui/help-hint";
 import { createCenter, updateCenter } from "../_actions";
 
 export type CenterFormValue = {
@@ -170,7 +171,10 @@ export function CenterForm({ center }: { center?: CenterFormValue }) {
         </Grid>
       </Section>
 
-      <Section title="Chấm công (geofence GPS)">
+      <Section
+        title="Chấm công (geofence GPS)"
+        hint="Toạ độ để chấm công QR kiểm tra nhân viên đang ở gần cơ sở. Lấy từ Google Maps (chuột phải vào vị trí → toạ độ). Để trống = bỏ qua kiểm tra vị trí."
+      >
         <Grid cols={3}>
           <Field
             label="Vĩ độ (latitude)"
@@ -192,10 +196,6 @@ export function CenterForm({ center }: { center?: CenterFormValue }) {
             placeholder="150"
           />
         </Grid>
-        <p className="text-xs text-muted-foreground">
-          Toạ độ để chấm công QR kiểm tra nhân viên đang ở gần cơ sở. Lấy từ Google
-          Maps (chuột phải vào vị trí → toạ độ). Để trống = bỏ qua kiểm tra vị trí.
-        </p>
       </Section>
 
       <Section title="Hiển thị">
@@ -204,6 +204,7 @@ export function CenterForm({ center }: { center?: CenterFormValue }) {
             label="Đang hoạt động"
             name="isActive"
             defaultChecked={center?.isActive ?? true}
+            hint="Cơ sở chưa hoạt động sẽ không hiển thị trên trang công khai và Footer."
           />
           <Field
             label="Display Order"
@@ -212,9 +213,6 @@ export function CenterForm({ center }: { center?: CenterFormValue }) {
             defaultValue={center?.displayOrder ?? 0}
           />
         </Grid>
-        <p className="text-xs text-muted-foreground">
-          Cơ sở chưa hoạt động sẽ không hiển thị trên trang công khai và Footer.
-        </p>
       </Section>
 
       <div className="flex gap-3 border-t border-border pt-6">
@@ -246,11 +244,27 @@ function SubmitButton({ isEdit }: { isEdit: boolean }) {
 
 // ============== Form primitives ==============
 
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
+function Section({
+  title,
+  hint,
+  children,
+}: {
+  title: string;
+  /** Có nội dung → icon "?" cạnh tiêu đề khối, thay cho đoạn chữ mờ dài dưới các ô. */
+  hint?: React.ReactNode;
+  children: React.ReactNode;
+}) {
   return (
     <section className="rounded-xl border border-border bg-card p-6">
       <h2 className="mb-4 text-sm font-bold uppercase tracking-wider text-foreground">
         {title}
+        {/* `normal-case tracking-normal` đặt trên NỘI DUNG chứ không trên nút: tiêu đề khối
+            đang uppercase + giãn chữ, hướng dẫn 2–3 câu mà kế thừa thì đọc không nổi. */}
+        {hint && (
+          <HelpHint className="ml-1">
+            <span className="block normal-case tracking-normal">{hint}</span>
+          </HelpHint>
+        )}
       </h2>
       <div className="space-y-4">{children}</div>
     </section>
@@ -317,12 +331,16 @@ function CheckboxField({
   label,
   name,
   defaultChecked,
+  hint,
 }: {
   label: string;
   name: string;
   defaultChecked?: boolean;
+  hint?: React.ReactNode;
 }) {
   return (
+    // Nút "?" nằm trong <label> vẫn an toàn: <button> là interactive content nên trình
+    // duyệt KHÔNG chuyển tiếp cú bấm xuống ô tick.
     <label className="inline-flex cursor-pointer items-center gap-2">
       <input
         type="checkbox"
@@ -330,7 +348,10 @@ function CheckboxField({
         defaultChecked={defaultChecked}
         className="h-4 w-4 rounded border-border text-primary focus:ring-2 focus:ring-primary/30"
       />
-      <span className="text-sm font-semibold text-foreground">{label}</span>
+      <span className="text-sm font-semibold text-foreground">
+        {label}
+        {hint && <HelpHint className="ml-1">{hint}</HelpHint>}
+      </span>
     </label>
   );
 }

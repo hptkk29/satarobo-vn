@@ -3,10 +3,15 @@
 // Danh sách PHIẾU THU của đơn + nút "Xuất QR" NGAY TRÊN TỪNG DÒNG (không phải nút
 // cấp đơn). Sale nhìn một bảng là biết đợt nào còn thiếu bao nhiêu và quét mã nào.
 //
-// ⚠️ Đồng hồ đếm ngược ở đây CHỈ LÀ HIỂN THỊ. QR hết hạn VẪN nhận được tiền — định
-// danh đối khớp (matchKey) bền theo đời phiếu, không theo phiên QR. Dòng chữ nhắc
+// ⚠️ Đồng hồ đếm ngược ở đây CHỈ LÀ HIỂN THỊ. QR hết hạn VẪN nhận được tiền — đối
+// khớp bám vào ĐƠN (SĐT trong nội dung CK), không theo phiên QR. Dòng chữ nhắc
 // điều đó phải luôn hiện cạnh đồng hồ, nếu không sale sẽ tưởng hết giờ là mất tiền
 // và giục phụ huynh chuyển lại → tiền về 2 lần.
+//
+// ⚠️ 20/08 — nội dung CK của MỌI ĐỢT trong cùng một đơn là GIỐNG NHAU
+// (`HoTenCon_SdtPH_TenKhoa`). Không phải lỗi hiển thị: định dạng chủ dự án chọn
+// không mang thông tin đợt. Cái phân biệt đợt là SỐ TIỀN in trên QR, còn tiền về
+// thì rót vào đợt chưa đóng đủ sớm nhất rồi tràn sang đợt sau (waterfall).
 
 import { useCallback, useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
@@ -119,7 +124,7 @@ function QrPanel({
               src={session.imageSrc}
               alt={`QR thanh toán ${label}`}
               title={`${label}: ${vnd(session.amountShown)}`}
-              matchKey={session.matchKey}
+              transferContent={session.transferContent}
               dimmed={expired}
             />
           ) : (
@@ -133,11 +138,11 @@ function QrPanel({
           <p className="text-base font-bold text-foreground">
             {label}: {vnd(session.amountShown)}
           </p>
-          {session.matchKey && (
+          {session.transferContent && (
             <p className="break-all text-xs text-muted-foreground">
               Nội dung CK:{" "}
               <span className="font-mono font-semibold text-foreground">
-                {session.matchKey}
+                {session.transferContent}
               </span>
             </p>
           )}

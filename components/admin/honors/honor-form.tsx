@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import type { Honor, Department } from "@prisma/client";
+import { FieldLabel, HelpHint } from "@/components/admin/ui/help-hint";
 import {
   createHonorAction,
   updateHonorAction,
@@ -187,24 +188,24 @@ export function HonorForm({ mode, initial, employees }: Props) {
       <section className="rounded-xl border border-border bg-card p-6">
         <h2 className="mb-4 text-lg font-bold">
           <span className="text-primary">2.</span> Snapshot lúc trao giải
+          <HelpHint className="ml-1">
+            Lưu lại chức danh + số năm gắn bó tại thời điểm trao giải (giữ history nếu
+            nhân sự đổi chức sau này).
+          </HelpHint>
         </h2>
-        <p className="mb-4 text-xs text-muted-foreground">
-          Lưu lại chức danh + số năm gắn bó tại thời điểm trao giải (giữ history nếu nhân sự đổi
-          chức sau này).
-        </p>
 
         <div className="grid gap-4 sm:grid-cols-2">
           <div>
-            <label className="mb-1 block text-sm font-semibold">Chức danh lúc đó</label>
+            <FieldLabel
+              label="Chức danh lúc đó"
+              hint="Để trống = dùng chức danh hiện tại của nhân sự"
+            />
             <input
               value={jobTitleAtTime}
               onChange={(e) => setJobTitleAtTime(e.target.value)}
               placeholder={selectedEmployee?.jobTitle || "Chức danh khi trao giải"}
               className="w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-primary focus:outline-none"
             />
-            <p className="mt-1 text-xs text-muted-foreground">
-              Để trống = dùng chức danh hiện tại của nhân sự
-            </p>
           </div>
 
           <div>
@@ -380,12 +381,13 @@ export function HonorForm({ mode, initial, employees }: Props) {
               defaultChecked={initial?.isFeatured ?? false}
               className="h-4 w-4 rounded border-border text-primary focus:ring-primary"
             />
-            <div>
-              <span className="text-sm font-semibold">Person of the Month</span>
-              <p className="text-xs text-muted-foreground">
-                Hiển thị spotlight ở /vinh-danh. Chỉ 1 honor được featured tại 1 thời điểm.
-              </p>
-            </div>
+            <span className="text-sm font-semibold">
+              Person of the Month
+              <HelpHint className="ml-1">
+                Hiển thị spotlight ở /vinh-danh. Chỉ 1 honor được featured tại 1 thời
+                điểm.
+              </HelpHint>
+            </span>
           </label>
 
           <label className="flex items-center gap-3">
@@ -395,10 +397,10 @@ export function HonorForm({ mode, initial, employees }: Props) {
               defaultChecked={initial?.isPublished ?? true}
               className="h-4 w-4 rounded border-border text-primary focus:ring-primary"
             />
-            <div>
-              <span className="text-sm font-semibold">Published</span>
-              <p className="text-xs text-muted-foreground">Bỏ tick để ẩn khỏi public site.</p>
-            </div>
+            <span className="text-sm font-semibold">
+              Published
+              <HelpHint className="ml-1">Bỏ tick để ẩn khỏi public site.</HelpHint>
+            </span>
           </label>
         </div>
       </section>

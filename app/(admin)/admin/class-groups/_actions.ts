@@ -11,8 +11,17 @@ import { genClassGroupCode } from "@/lib/codegen";
 import { resolveActor, type Actor } from "@/lib/auth/actor";
 import { scopedDb, passesScope } from "@/lib/db-scope";
 import { syncConversationMembership } from "@/lib/chat/sync-membership";
+import { isClassGroupEnabled } from "@/lib/flags";
 
 type ActionResult = { error?: string };
+
+// 20/08 — tính năng "Nhóm lớp" đã GỠ (cờ `CLASS_GROUP_ENABLED` mặc định OFF).
+// `layout.tsx` chỉ chặn đường VÀO TRANG; Server Action là endpoint HTTP riêng, không đi
+// qua layout: tab mở sẵn từ trước lúc tắt cờ — hoặc POST tay vào action id, mà id vẫn
+// tồn tại vì `_components/*` còn import file này nên nó nằm trong graph build — vẫn gọi
+// thẳng vào đây được. Không chốt ⇒ giao diện tuyên bố "đã gỡ" mà người ta vẫn tạo được
+// nhóm mới và ghi danh cả nhóm vào lớp. Khuôn giống `cham-cong/checklist-co-so/_actions.ts`.
+const TAT_NHOM_LOP = "Tính năng nhóm lớp đã tắt";
 
 // Cách ly cơ sở (chống IDOR ghi): ClassGroup/Student/Class ∈ SCOPED_MODELS;
 // Enrollment relation-scoped qua class.centerId. Mutation theo id từ client phải
@@ -57,6 +66,7 @@ export async function createClassGroup(
   formData: FormData,
 ): Promise<ActionResult> {
   const session = await requireWrite("create");
+  if (!isClassGroupEnabled()) return { error: TAT_NHOM_LOP };
 
   const parsed = classGroupCreateSchema.safeParse(readForm(formData));
   if (!parsed.success) {
@@ -116,6 +126,7 @@ export async function updateClassGroup(
   formData: FormData,
 ): Promise<ActionResult> {
   const session = await requireWrite("edit");
+  if (!isClassGroupEnabled()) return { error: TAT_NHOM_LOP };
 
   const parsed = classGroupCreateSchema.safeParse(readForm(formData));
   if (!parsed.success) {
@@ -166,6 +177,7 @@ export async function updateClassGroup(
 
 export async function deleteClassGroup(id: string): Promise<ActionResult> {
   const session = await requireWrite("delete");
+  if (!isClassGroupEnabled()) return { error: TAT_NHOM_LOP };
   // Cách ly cơ sở: chỉ xoá nhóm lớp trong tầm nhìn actor (chống IDOR).
   const uid = session.user.id;
   if (!uid) return { error: "Phiên không hợp lệ" };
@@ -192,6 +204,7 @@ export async function deleteClassGroupAction(
 ): Promise<{ ok: boolean; error?: string }> {
   const session = await auth();
   if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
+  if (!isClassGroupEnabled()) return { ok: false, error: TAT_NHOM_LOP };
   try {
     await assertPermission("class_group:delete");
   } catch {
@@ -262,6 +275,7 @@ export async function searchStudentsForGroup(
 export async function addStudentToGroup(input: { groupId: string; studentId: string }): Promise<ActionResult & { ok?: boolean }> {
   const session = await auth();
   if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
+  if (!isClassGroupEnabled()) return { ok: false, error: TAT_NHOM_LOP };
   if (!(await checkPermission("class_group:edit"))) return { ok: false, error: "Không có quyền" };
 
   const uid = session.user.id;
@@ -288,6 +302,7 @@ export async function addStudentToGroup(input: { groupId: string; studentId: str
 export async function removeStudentFromGroup(input: { groupId: string; studentId: string }): Promise<ActionResult & { ok?: boolean }> {
   const session = await auth();
   if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
+  if (!isClassGroupEnabled()) return { ok: false, error: TAT_NHOM_LOP };
   if (!(await checkPermission("class_group:edit"))) return { ok: false, error: "Không có quyền" };
   // Cách ly cơ sở: chỉ gỡ HV trong tầm nhìn actor (chống IDOR).
   const uid = session.user.id;
@@ -311,6 +326,7 @@ export async function enrollGroupIntoClass(input: {
 }): Promise<{ ok: boolean; created?: number; skipped?: number; error?: string }> {
   const session = await auth();
   if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
+  if (!isClassGroupEnabled()) return { ok: false, error: TAT_NHOM_LOP };
   if (!(await checkPermission("enrollments:create"))) return { ok: false, error: "Không có quyền ghi danh" };
 
   // Cách ly cơ sở: lớp đích phải thuộc tầm nhìn actor (sdb null-filter + passesScope).

@@ -3,6 +3,8 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { ImageUploader } from "@/components/admin/ImageUploader";
+import { HelpHint } from "@/components/admin/ui/help-hint";
+import { MoneyInput } from "@/components/ui/money-input";
 import { StringArrayEditor } from "@/app/(admin)/admin/kits/_components/string-array-editor";
 import {
   createItemAndRedirect,
@@ -246,17 +248,18 @@ export function ItemForm({
         </h2>
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
           <Field label="Giá / đơn vị (VND)">
-            <input
-              type="number"
+            {/* Ô trống vẫn phải là "" (không phải 0) — payload đang dựa vào đó để gửi
+                `pricePerUnit: null`.
+                KHÔNG truyền `inputClass`: nó có `px-3`, mà class truyền vào được ghép
+                SAU nên sẽ ăn mất `pr-8` mà MoneyInput chừa cho chữ "đ". Class nền của
+                MoneyInput vốn đã trùng `inputClass`. */}
+            <MoneyInput
+              name="pricePerUnit"
               min={0}
-              step={1000}
-              value={pricePerUnit}
-              onChange={(e) =>
-                setPricePerUnit(e.target.value === "" ? "" : Number(e.target.value))
-              }
+              value={pricePerUnit === "" ? null : pricePerUnit}
+              onValueChange={(v) => setPricePerUnit(v ?? "")}
               disabled={pending}
               placeholder="450000"
-              className={inputClass}
             />
           </Field>
           <Field label="Nhà cung cấp">
@@ -274,8 +277,12 @@ export function ItemForm({
 
       {/* Section 3: Threshold + Tags */}
       <section className="rounded-xl border border-border bg-card p-6 space-y-4">
-        <h2 className="text-sm font-bold uppercase tracking-wider text-foreground">
-          Ngưỡng cảnh báo & Phân loại
+        <h2 className="flex items-center text-sm font-bold uppercase tracking-wider text-foreground">
+          Ngưỡng cảnh báo &amp; Phân loại
+          <HelpHint className="ml-1.5">
+            Tồn dưới ngưỡng này sẽ hiển thị cảnh báo. Có thể đặt riêng cho từng cơ sở ở
+            mục &ldquo;Tồn kho từng cơ sở&rdquo; bên dưới.
+          </HelpHint>
         </h2>
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
           <Field label="Ngưỡng tối thiểu mặc định">
@@ -289,10 +296,6 @@ export function ItemForm({
               disabled={pending}
               className={inputClass}
             />
-            <span className="mt-1 block text-xs text-muted-foreground">
-              Tồn dưới ngưỡng này sẽ hiển thị cảnh báo. Override per-center ở
-              section dưới.
-            </span>
           </Field>
           <label className="flex items-center gap-2 self-end pb-2">
             <input
@@ -335,14 +338,14 @@ export function ItemForm({
       {isEdit && balances && balances.length > 0 && (
         <section className="rounded-xl border border-border bg-card">
           <header className="border-b border-border p-4">
-            <h2 className="text-sm font-bold uppercase tracking-wider text-foreground">
+            <h2 className="flex items-center text-sm font-bold uppercase tracking-wider text-foreground">
               Tồn kho từng cơ sở
+              <HelpHint className="ml-1.5">
+                Số lượng cập nhật qua phiếu Nhập/Xuất (F2). Có thể đặt ngưỡng cảnh báo
+                riêng cho mỗi cơ sở; để trống để dùng ngưỡng mặc định{" "}
+                <strong>{defaultMinThreshold}</strong>.
+              </HelpHint>
             </h2>
-            <p className="mt-0.5 text-xs text-muted-foreground">
-              Số lượng cập nhật qua phiếu Nhập/Xuất (F2). Có thể override ngưỡng
-              cảnh báo riêng cho mỗi cơ sở; để trống để dùng ngưỡng mặc định{" "}
-              <strong>{defaultMinThreshold}</strong>.
-            </p>
           </header>
           <div className="overflow-x-auto">
             <PhanTrangBang>

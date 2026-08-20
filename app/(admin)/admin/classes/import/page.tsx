@@ -27,7 +27,14 @@ interface ClassImportRow {
   maxStudents?: number | string;
   status?: string;
   description?: string;
-  notes?: string;
+  // 20/08 — KHÔNG còn khoá `notes`: ô "Ghi chú nội bộ" đã bị gỡ khỏi form lớp (nó trùng
+  // vai với "Mô tả chi tiết đặc thù lớp học"), nên không màn hình nào ĐỌC `Class.notes`
+  // nữa. Vẫn nhận cột đó từ Excel = ghi mù xuống DB rồi chôn ở đó, người nhập tưởng
+  // "ghi chú đã lưu". Cột DB giữ nguyên (không migration) — chỉ cắt đường GHI mới.
+  // Vì sao KHÔNG trỏ sang `description`: đó là đổi ý nghĩa dữ liệu. `description` nay là
+  // sổ bàn giao đặc thù lớp (tính cách từng HV), còn ví dụ trong file mẫu cho cột notes là
+  // "Campaign 2026-05-23" — nhãn chiến dịch. Gộp vào là trộn hai loại nội dung, và với
+  // upsert theo classCode còn ĐÈ mất sổ bàn giao đang có.
 }
 
 const VALID_STATUSES = new Set([
@@ -111,8 +118,8 @@ export default function ImportClassesPage() {
           { key: "minStudents", label: "Min HS" },
           { key: "maxStudents", label: "Max HS" },
           { key: "status", label: "Trạng thái" },
-          { key: "description", label: "Mô tả" },
-          { key: "notes", label: "Ghi chú" },
+          { key: "description", label: "Mô tả chi tiết đặc thù lớp học" },
+          // Cột "Ghi chú" (notes) đã gỡ khỏi bảng ánh xạ — xem chú thích ở ClassImportRow.
         ]}
         parseRow={(row) => {
           const name = asString(row.name);
@@ -174,7 +181,8 @@ export default function ImportClassesPage() {
             maxStudents: row.maxStudents as number | string | undefined,
             status,
             description: asString(row.description),
-            notes: asString(row.notes),
+            // Không dựng `notes`: API import để `notes: undefined` ⇒ Prisma BỎ QUA field,
+            // nên lớp cũ (upsert theo classCode) vẫn giữ nguyên ghi chú đã lưu từ trước.
           };
         }}
         onImport={async (rows) => {
@@ -229,6 +237,14 @@ export default function ImportClassesPage() {
           <li>
             <code>classCode</code> trùng → UPDATE; mới → CREATE; rỗng → luôn
             CREATE.
+          </li>
+          {/* File mẫu .xlsx đang phát hành vẫn còn cột `notes` (nó là artifact nhị phân,
+              sửa ở đợt phát hành mẫu sau). Nói thẳng ở đây để người nhập không điền rồi
+              tưởng đã lưu — bảng xem trước bên trên cũng không hiện cột đó nữa. */}
+          <li>
+            Cột <code>notes</code> trong file mẫu <strong>không còn được nhập</strong>{" "}
+            (ô &ldquo;Ghi chú nội bộ&rdquo; đã gỡ khỏi lớp học). Ghi chú về lớp
+            viết vào cột <code>description</code>.
           </li>
         </ul>
       </div>

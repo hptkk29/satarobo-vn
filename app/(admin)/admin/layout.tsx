@@ -14,7 +14,12 @@ import {
 import { grantedMenuActions } from "@/lib/auth/menu-permissions";
 import { PAGE_GATES } from "@/lib/auth/page-gates";
 import { countChatUnreadForUser } from "@/lib/chat/unread";
-import { isEvalV2Enabled, isRbacV2Enabled, isScormEnabled } from "@/lib/flags";
+import {
+  isClassGroupEnabled,
+  isEvalV2Enabled,
+  isRbacV2Enabled,
+  isScormEnabled,
+} from "@/lib/flags";
 import { Sidebar } from "@/components/admin/sidebar";
 import { Topbar } from "@/components/admin/topbar";
 import { Toaster } from "@/components/ui/sonner";
@@ -111,6 +116,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
           chatUnread={chatUnread}
           evalV2Enabled={isEvalV2Enabled()}
           scormEnabled={isScormEnabled()}
+          classGroupEnabled={isClassGroupEnabled()}
         />
       </div>
 

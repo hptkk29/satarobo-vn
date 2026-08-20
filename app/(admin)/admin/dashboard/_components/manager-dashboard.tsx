@@ -21,8 +21,10 @@ const TRIAL_ACTIVE_STATUSES = ["SCHEDULED", "CONFIRMED", "POSTPONED"] as const;
 
 // Đợt 3C #4 / 3B — Dashboard QUẢN LÝ + SUPER_ADMIN (tổng quan tuyển sinh + vận hành).
 // BỐ CỤC GỌN (commit 1): KPI → biểu đồ → hoạt động gần đây. Các thẻ "việc tồn đọng"
-// (lớp chờ duyệt, buổi chưa hoàn tất, ảnh/yêu cầu chờ duyệt, checklist cơ sở) ĐÃ gom
-// ở khu "Cần xử lý" (PendingTasksSection) cấp trang → KHÔNG lặp lại tại đây.
+// (lớp chờ duyệt, buổi chưa hoàn tất, ảnh/yêu cầu chờ duyệt) ĐÃ gom ở khu "Cần xử lý"
+// (PendingTasksSection) cấp trang → KHÔNG lặp lại tại đây.
+// 20/08: bỏ "checklist cơ sở" khỏi danh sách trên — tính năng đã gỡ, `centerChecklist()`
+// trong lib/pending-tasks.ts trả null nên nhóm việc đó không còn sinh ra nữa.
 // centerScope: != null → giới hạn cơ sở (CENTER_MANAGER không kèm SUPER_ADMIN).
 
 const STATUS_VARIANT: Record<string, "success" | "warning" | "error" | "info" | "neutral"> = {

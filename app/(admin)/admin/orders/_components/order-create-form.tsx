@@ -8,6 +8,7 @@ import type { OrderType, OrderStatus, OrderItemType } from "@prisma/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { MoneyInput } from "@/components/ui/money-input";
 import { Textarea } from "@/components/ui/textarea";
 import {
   Select,
@@ -17,6 +18,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Combobox, type ComboboxOption } from "@/components/ui/combobox";
+import { HelpHint } from "@/components/admin/ui/help-hint";
 import { createOrderManualAction } from "../_actions";
 
 type Course = {
@@ -272,7 +274,14 @@ export function OrderCreateForm({
         </h2>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
           <div className="space-y-1.5">
-            <Label>Loại đơn *</Label>
+            <Label>
+              Loại đơn *
+              <HelpHint>
+                Khoá học = học phí (gói combo cũng nằm ở đây). Sản phẩm = kit/robot bán
+                rời. Chọn sai thì danh sách bên dưới và các hình thức thanh toán sẽ
+                không hiện đúng.
+              </HelpHint>
+            </Label>
             <Select
               items={ORDER_TYPE_ITEMS}
               value={orderType}
@@ -294,7 +303,14 @@ export function OrderCreateForm({
             </Select>
           </div>
           <div className="space-y-1.5">
-            <Label>Trạng thái ban đầu</Label>
+            <Label>
+              Trạng thái ban đầu
+              <HelpHint>
+                Nháp: lưu tạm để sửa tiếp. Chờ thanh toán: đã chốt với khách, đang đợi
+                thu tiền — chọn cái này cho hầu hết đơn. Đã xác nhận đơn: chỉ chọn khi
+                tiền đã về đủ và kế toán đã đối chiếu.
+              </HelpHint>
+            </Label>
             <Select
               items={ORDER_STATUS_ITEMS}
               value={orderStatus}
@@ -311,7 +327,13 @@ export function OrderCreateForm({
             </Select>
           </div>
           <div className="space-y-1.5">
-            <Label>Phương thức TT *</Label>
+            <Label>
+              Phương thức TT *
+              <HelpHint>
+                Cách phụ huynh trả tiền cho đơn này. Danh sách chỉ hiện những hình thức
+                được phép dùng cho loại đơn đang chọn, nên đổi loại đơn là phải chọn lại.
+              </HelpHint>
+            </Label>
             <Select
               items={pmItems}
               value={paymentMethodId}
@@ -372,7 +394,16 @@ export function OrderCreateForm({
             />
           </div>
           <div className="space-y-1.5">
-            <Label>CCCD/CMND</Label>
+            <Label>
+              CCCD/CMND
+              {/* Câu hỏi phụ huynh hay hỏi lại nhân viên ("sao phải đưa CCCD?") — để sẵn
+                  câu trả lời ngay cạnh ô, khỏi mỗi người giải thích một kiểu. */}
+              <HelpHint>
+                Chỉ cần khi phụ huynh muốn xuất hoá đơn hoặc phiếu thu đứng tên mình. Bỏ
+                trống được. Số này là thông tin nhạy cảm nên ở màn Thanh toán sẽ bị che,
+                ai mở xem đầy đủ đều bị ghi nhật ký.
+              </HelpHint>
+            </Label>
             <Input
               value={customer.cccd}
               onChange={(e) =>
@@ -383,7 +414,14 @@ export function OrderCreateForm({
             />
           </div>
           <div className="space-y-1.5">
-            <Label>Trung tâm</Label>
+            <Label>
+              Trung tâm
+              <HelpHint>
+                Cơ sở đứng tên đơn này — doanh thu và công nợ tính về cơ sở đó, và
+                người của cơ sở khác sẽ không thấy đơn. Chỉ để trống khi đơn thật sự
+                không thuộc cơ sở nào.
+              </HelpHint>
+            </Label>
             <Select items={centerItems} value={centerId} onValueChange={(v) => setCenterId(v ?? NO_CENTER)}>
               <SelectTrigger>
                 <SelectValue />
@@ -444,7 +482,14 @@ export function OrderCreateForm({
           Sản phẩm
         </h2>
         <div className="space-y-1.5">
-          <Label>{orderType === "COURSE" ? "Khoá học *" : "Sản phẩm *"}</Label>
+          <Label>
+            {orderType === "COURSE" ? "Khoá học *" : "Sản phẩm *"}
+            <HelpHint>
+              {orderType === "COURSE"
+                ? "Chọn khoá là đơn giá tự điền theo giá niêm yết của khoá đó. Khoá chưa nạp giá sẽ có cảnh báo — khi đó phải nhập đơn giá tay."
+                : "Sản phẩm hết hàng bị khoá, không chọn được — nhập kho trước rồi quay lại. Số tồn hiện ngay trong danh sách."}
+            </HelpHint>
+          </Label>
           <Select
             items={itemItems}
             value={itemRefId}
@@ -520,12 +565,21 @@ export function OrderCreateForm({
             />
           </div>
           <div className="space-y-1.5 sm:col-span-2">
-            <Label>Đơn giá (VND) *</Label>
-            <Input
-              type="number"
+            <Label>
+              Đơn giá (VND) *
+              <HelpHint>
+                Tự điền theo giá niêm yết khi chọn khoá học/sản phẩm; chỉ sửa tay khi
+                khoá chưa có giá. Muốn bớt tiền cho khách thì dùng ô Giảm giá bên dưới —
+                hạ thẳng đơn giá sẽ không ai duyệt và báo cáo mất dấu khoản ưu đãi.
+              </HelpHint>
+            </Label>
+            {/* Ô tiền: gõ 10000000 → hiện 10.000.000. Xoá trắng quy về 0 để chốt chặn
+                `unitPrice <= 0` ở handleSubmit vẫn bắt được như trước. */}
+            <MoneyInput
+              name="unitPrice"
               min={0}
               value={unitPrice}
-              onChange={(e) => setUnitPrice(Number(e.target.value) || 0)}
+              onValueChange={(v) => setUnitPrice(v ?? 0)}
             />
           </div>
         </div>
@@ -539,7 +593,14 @@ export function OrderCreateForm({
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           {/* BGĐ 31/07 — giảm giá: chọn hình thức % hoặc số tiền. */}
           <div className="space-y-1.5">
-            <Label>Giảm giá</Label>
+            <Label>
+              Giảm giá
+              <HelpHint>
+                Theo số tiền: gõ thẳng số tiền bớt cho khách. Theo %: gõ 1–100, hệ thống
+                quy ra tiền trên phần tạm tính. Hai cách cho ra cùng một khoản giảm —
+                chọn cách nào đúng với thoả thuận với phụ huynh thì dễ giải trình hơn.
+              </HelpHint>
+            </Label>
             <div className="flex gap-2">
               <Button
                 type="button"
@@ -559,12 +620,13 @@ export function OrderCreateForm({
               </Button>
             </div>
             {discountMode === "amount" ? (
-              <Input
-                type="number"
+              // Chỉ nhánh "theo số tiền" là ô tiền; nhánh "theo %" vẫn là số đếm 1–100.
+              <MoneyInput
+                name="discountAmount"
                 min={0}
                 value={discountAmount}
-                onChange={(e) => setDiscountAmount(Number(e.target.value) || 0)}
-                placeholder="Số tiền giảm (VND)"
+                onValueChange={(v) => setDiscountAmount(v ?? 0)}
+                placeholder="Số tiền giảm"
               />
             ) : (
               <Input
@@ -584,7 +646,15 @@ export function OrderCreateForm({
         {/* BGĐ 31/07 — giải trình bắt buộc khi giảm giá tay; đơn sẽ chờ QLCS duyệt. */}
         {effectiveDiscount > 0 && (
           <div className="space-y-1.5">
-            <Label>Giải trình giảm giá *</Label>
+            <Label>
+              Giải trình giảm giá *
+              <HelpHint>
+                Quản lý cơ sở duyệt đơn đọc đúng dòng này để đồng ý hay trả lại, nên ghi
+                rõ lý do và ai đã đồng ý (VD: &ldquo;em ruột HV Sata2, chị Lan CS1 đồng
+                ý&rdquo;). Ghi &ldquo;ưu đãi&rdquo; chung chung thì đơn dễ bị trả lại và
+                phụ huynh phải chờ.
+              </HelpHint>
+            </Label>
             <Input
               value={discountReason}
               onChange={(e) => setDiscountReason(e.target.value)}
@@ -624,6 +694,11 @@ export function OrderCreateForm({
               {totalAmount.toLocaleString("vi-VN")}
             </span>{" "}
             đ
+            <HelpHint className="ml-1.5 [&_svg]:size-4">
+              Số tiền phụ huynh phải đóng cho đơn này = Tạm tính − Giảm giá. Nếu phụ
+              huynh đóng làm 2 đợt thì vẫn lấy số này làm tổng, phần chia đợt làm ở màn
+              chi tiết đơn sau khi tạo.
+            </HelpHint>
           </div>
         </div>
       </section>
@@ -631,7 +706,13 @@ export function OrderCreateForm({
       {/* Notes */}
       <section className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <div className="space-y-1.5">
-          <Label>Ghi chú khách hàng</Label>
+          <Label>
+            Ghi chú khách hàng
+            <HelpHint>
+              Nội dung liên quan trực tiếp tới khách: yêu cầu riêng, thoả thuận lúc bán.
+              Việc nội bộ (dặn nhau, đánh giá khách) ghi ở ô bên cạnh.
+            </HelpHint>
+          </Label>
           <Textarea
             value={customerNote}
             onChange={(e) => setCustomerNote(e.target.value)}
@@ -639,7 +720,13 @@ export function OrderCreateForm({
           />
         </div>
         <div className="space-y-1.5">
-          <Label>Ghi chú nội bộ</Label>
+          <Label>
+            Ghi chú nội bộ
+            <HelpHint>
+              Chỉ nhân viên Sata Robo đọc được — dùng để dặn nhau về đơn này (đã hẹn gọi
+              lại, chờ phụ huynh chuyển khoản…).
+            </HelpHint>
+          </Label>
           <Textarea
             value={internalNote}
             onChange={(e) => setInternalNote(e.target.value)}

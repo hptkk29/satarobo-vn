@@ -16,7 +16,7 @@ import type { PhaseFormValue } from "@/lib/classes/phase-form";
 import { loadClassPhases } from "@/lib/classes/phases-service";
 import { vnAddDays, vnStartOfDay, vnYmd } from "@/lib/time/vn";
 import { ClassSessionsManage } from "../_components/class-sessions-manage";
-import { isSessionLifecycleV2Enabled } from "@/lib/flags";
+import { isSessionLifecycleV2Enabled, isClassGroupEnabled } from "@/lib/flags";
 
 interface Props {
   params: Promise<{ id: string }>;
@@ -41,6 +41,9 @@ export default async function EditClassPage({ params }: Props) {
   }
 
   const sdb = scopedDb(actor);
+  // Cờ GỠ "Nhóm lớp" (mặc định OFF từ 20/08) — ô biến mất thì danh sách nhóm cũng thừa,
+  // bỏ luôn 1 query. Bật cờ lại là truy vấn chạy như cũ, không cần revert code.
+  const classGroupEnabled = isClassGroupEnabled();
   const [cls, courses, orgUnits, classGroups, rooms] =
     await Promise.all([
     sdb.class.findFirst({
@@ -82,11 +85,13 @@ export default async function EditClassPage({ params }: Props) {
     }),
     // Lớp CHỈ mở ở cơ sở dạy học — Hội sở không nằm trong danh sách (chốt 04/08).
     getSelectableOrgUnits(actor, { types: ["CENTER"] }),
-    sdb.classGroup.findMany({
-      where: { deletedAt: null, status: "ACTIVE" },
-      orderBy: { displayCode: "asc" },
-      select: { id: true, displayCode: true, name: true, centerId: true },
-    }),
+    classGroupEnabled
+      ? sdb.classGroup.findMany({
+          where: { deletedAt: null, status: "ACTIVE" },
+          orderBy: { displayCode: "asc" },
+          select: { id: true, displayCode: true, name: true, centerId: true },
+        })
+      : Promise.resolve([]),
     sdb.room.findMany({
       where: { status: "ACTIVE" },
       orderBy: [{ centerId: "asc" }, { code: "asc" }],
@@ -312,6 +317,7 @@ export default async function EditClassPage({ params }: Props) {
           centerId: o.centerId,
         }))}
         classGroups={classGroups}
+        classGroupEnabled={classGroupEnabled}
         rooms={rooms}
         teachers={teachers.map((t) => ({
           id: t.id,

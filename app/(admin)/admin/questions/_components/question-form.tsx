@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Plus, Trash2 } from "lucide-react";
 import { StringArrayEditor } from "@/app/(admin)/admin/kits/_components/string-array-editor";
 import { ImageUploader } from "@/components/admin/ImageUploader";
+import { FieldLabel, HelpHint } from "@/components/admin/ui/help-hint";
 import {
   createQuestionAndRedirect,
   updateQuestion,
@@ -258,7 +259,7 @@ export function QuestionForm({
         </h2>
 
         <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-          <Field label="Mã câu hỏi">
+          <Field label="Mã câu hỏi" hint="Tuỳ chọn — duy nhất toàn hệ thống nếu có">
             <input
               type="text"
               value={questionCode}
@@ -267,7 +268,6 @@ export function QuestionForm({
               disabled={pending}
               className={inputClass}
             />
-            <Hint>Tuỳ chọn — duy nhất toàn hệ thống nếu có</Hint>
           </Field>
 
           <Field label="Loại" required>
@@ -303,7 +303,7 @@ export function QuestionForm({
         </div>
 
         <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-          <Field label="Khung chương trình">
+          <Field label="Khung chương trình" hint="Lọc câu hỏi theo Sata x khi soạn bài">
             <select
               value={curriculumId}
               onChange={(e) => setCurriculumId(e.target.value)}
@@ -317,10 +317,10 @@ export function QuestionForm({
                 </option>
               ))}
             </select>
-            <Hint>Lọc câu hỏi theo Sata x khi soạn bài</Hint>
           </Field>
 
-          <Field label="Điểm/câu">
+          {/* Điểm số — KHÔNG phải tiền, giữ nguyên `type="number"`. */}
+          <Field label="Điểm/câu" hint="Trống = dùng mặc định của đề">
             <input
               type="number"
               min={0}
@@ -331,10 +331,9 @@ export function QuestionForm({
               disabled={pending}
               className={inputClass}
             />
-            <Hint>Trống = dùng mặc định của đề</Hint>
           </Field>
 
-          <Field label="Thời gian/câu (giây)">
+          <Field label="Thời gian/câu (giây)" hint="Trống = không giới hạn riêng">
             <input
               type="number"
               min={1}
@@ -345,7 +344,6 @@ export function QuestionForm({
               disabled={pending}
               className={inputClass}
             />
-            <Hint>Trống = không giới hạn riêng</Hint>
           </Field>
         </div>
 
@@ -415,17 +413,19 @@ export function QuestionForm({
       {/* Section 2: Choices (MC/TF) */}
       {showChoices && (
         <section className="rounded-xl border border-border bg-card p-6 space-y-3">
-          <div>
-            <h2 className="text-sm font-bold uppercase tracking-wider text-foreground">
-              Các lựa chọn
-            </h2>
-            <p className="mt-0.5 text-xs text-muted-foreground">
-              Tick đáp án đúng.
-              {type === "MULTIPLE_CHOICE"
-                ? " Có thể chọn nhiều (đa đáp án OK)."
-                : " Đúng/Sai chỉ chọn 1."}
-            </p>
-          </div>
+          <h2 className="text-sm font-bold uppercase tracking-wider text-foreground">
+            Các lựa chọn
+            {/* `normal-case tracking-normal` đặt trên NỘI DUNG chứ không trên nút: tiêu đề
+                đang uppercase + giãn chữ, hướng dẫn mà kế thừa thì đọc không nổi. */}
+            <HelpHint className="ml-1">
+              <span className="block normal-case tracking-normal">
+                Tick đáp án đúng.
+                {type === "MULTIPLE_CHOICE"
+                  ? " Có thể chọn nhiều (đa đáp án OK)."
+                  : " Đúng/Sai chỉ chọn 1."}
+              </span>
+            </HelpHint>
+          </h2>
 
           {choices.map((c, idx) => (
             <div
@@ -503,25 +503,25 @@ export function QuestionForm({
       {/* Section 2-alt: correctAnswer */}
       {showCorrectAnswer && (
         <section className="rounded-xl border border-border bg-card p-6 space-y-3">
-          <div>
-            <h2 className="text-sm font-bold uppercase tracking-wider text-foreground">
-              {type === "SHORT_ANSWER"
-                ? "Đáp án mong đợi"
-                : type === "CODE"
-                  ? "Code mẫu"
-                  : "Đáp án mẫu (gợi ý chấm)"}
-              {type === "SHORT_ANSWER" && (
-                <span className="ml-1 text-state-danger-ink">*</span>
-              )}
-            </h2>
-            <p className="mt-0.5 text-xs text-muted-foreground">
-              {type === "SHORT_ANSWER"
-                ? "Hệ thống sẽ so khớp chuỗi để chấm tự động."
-                : type === "CODE"
-                  ? "Code mẫu để GV tham chiếu khi chấm."
-                  : "Tự luận chấm tay — đáp án mẫu chỉ là gợi ý."}
-            </p>
-          </div>
+          <h2 className="text-sm font-bold uppercase tracking-wider text-foreground">
+            {type === "SHORT_ANSWER"
+              ? "Đáp án mong đợi"
+              : type === "CODE"
+                ? "Code mẫu"
+                : "Đáp án mẫu (gợi ý chấm)"}
+            {type === "SHORT_ANSWER" && (
+              <span className="ml-1 text-state-danger-ink">*</span>
+            )}
+            <HelpHint className="ml-1">
+              <span className="block normal-case tracking-normal">
+                {type === "SHORT_ANSWER"
+                  ? "Hệ thống sẽ so khớp chuỗi để chấm tự động."
+                  : type === "CODE"
+                    ? "Code mẫu để GV tham chiếu khi chấm."
+                    : "Tự luận chấm tay — đáp án mẫu chỉ là gợi ý."}
+              </span>
+            </HelpHint>
+          </h2>
           <textarea
             value={correctAnswer}
             onChange={(e) => setCorrectAnswer(e.target.value)}
@@ -608,23 +608,21 @@ const inputClass =
 function Field({
   label,
   required,
+  hint,
   children,
 }: {
   label: string;
   required?: boolean;
+  /** Hướng dẫn ngắn — ra icon "?" cạnh nhãn thay vì dòng chữ mờ dưới ô. */
+  hint?: React.ReactNode;
   children: React.ReactNode;
 }) {
   return (
+    // Nút "?" nằm trong <label> vẫn an toàn: <button> là interactive content nên trình
+    // duyệt KHÔNG chuyển tiếp cú bấm xuống ô nhập.
     <label className="block">
-      <span className="mb-1 block text-sm font-semibold text-foreground">
-        {label}
-        {required && <span className="ml-1 text-state-danger-ink">*</span>}
-      </span>
+      <FieldLabel label={label} required={required} hint={hint} />
       {children}
     </label>
   );
-}
-
-function Hint({ children }: { children: React.ReactNode }) {
-  return <span className="mt-1 block text-xs text-muted-foreground">{children}</span>;
 }

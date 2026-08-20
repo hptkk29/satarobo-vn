@@ -14,10 +14,21 @@
 //
 // ⚠️ `expiresAt` CHỈ để hiển thị đếm ngược + chặn 2 QR sống song song. Nó KHÔNG phải
 // cửa sổ nhận tiền: QR hết hạn mà phụ huynh vẫn chuyển thì webhook vẫn khớp về đúng
-// phiếu qua matchKey. Đừng thêm điều kiện `expiresAt` vào bất kỳ đường đối khớp nào.
+// đơn (matchKey với QR cũ, SĐT trong nội dung CK với QR mới). Đừng thêm điều kiện
+// `expiresAt` vào bất kỳ đường đối khớp nào.
+//
+// ⚠️ 20/08 — NỘI DUNG CK in ra nay là dạng người đọc `HoTenCon_SdtPH_TenKhoa`, KHÔNG
+// còn là `matchKey`. matchKey vẫn nằm nguyên trong DB và vẫn là đường khớp của mọi
+// QR đã phát trước ngày này.
+//
+// ⚠️ 20/08 (vá vòng 3) — HỆ QUẢ BẢO MẬT của định dạng trên: SĐT phụ huynh nay nằm
+// TRONG chính mã QR. Nên "QR" và "quyền xem thông tin liên hệ" (`orders:view-pii`)
+// dính liền nhau: ai không được xem SĐT thì cũng KHÔNG được nhận mã QR — che số
+// trong mã là mã hỏng, tiền không về được (xem `piiGate` bên dưới).
 import "server-only";
 import QRCode from "qrcode";
 import type { Actor } from "@/lib/auth/actor";
+import { can } from "@/lib/auth/can";
 import { writeAudit, type AuditActor } from "@/lib/audit/audit-log";
 import { scopedDb } from "@/lib/db-scope";
 import { outstandingOf, type RequestStatus } from "@/lib/payments/allocation";
@@ -26,7 +37,12 @@ import {
   generateProviderOrderCode,
   isPayosConfigured,
 } from "@/lib/payments/payos";
-import { getPaymentConfig, buildVietQrImageUrl } from "@/lib/payments/vietqr";
+import {
+  getPaymentConfig,
+  buildVietQrImageUrl,
+  transferContentForOrder,
+  VIETQR_ADDINFO_MAX,
+} from "@/lib/payments/vietqr";
 import { getSetting } from "@/lib/settings/service";
 
 /** Một phiên QR đã "phẳng hoá" cho client component (Date → ISO). */
@@ -45,13 +61,46 @@ export type QrSessionView = {
   createdAt: string;
   /** src dùng thẳng cho <img>: URL ảnh hoặc data-URL sinh từ chuỗi EMVCo. */
   imageSrc: string | null;
-  /** Định danh đối khớp của PHIẾU (nội dung CK) — hiển thị cho sale đọc cho phụ huynh. */
+  /**
+   * Định danh đối khớp KỸ THUẬT của phiếu (`ORD…D1`). KHÔNG in ra cho sale nữa —
+   * giữ lại vì webhook vẫn khớp qua nó với mọi QR phát trước 20/08.
+   */
   matchKey: string | null;
+  /** Nội dung CK dạng người đọc (`NguyenVanA_84987654321_Sata4`) — thứ IN RA cho sale. */
+  transferContent: string;
 };
 
 export type QrIssueResult =
   | { ok: true; session: QrSessionView; reused: boolean }
   | { ok: false; error: string };
+
+/**
+ * Người xem có được nhận MÃ QR (và nội dung CK đầy đủ) hay không.
+ *
+ * VÌ SAO CÓ THAM SỐ NÀY: từ 20/08 nội dung CK là `HoTenCon_SdtPH_TenKhoa`, tức SĐT
+ * phụ huynh nằm ngay trong `addInfo` của mã. Ảnh QR BẮT BUỘC mang chuỗi ĐẦY ĐỦ (che
+ * số = mã hỏng = phụ huynh chuyển tiền xong không khớp được), nên không có cách nào
+ * "vừa đưa QR vừa giấu số". Kết luận: thiếu `orders:view-pii` ⇒ KHÔNG đưa QR.
+ *
+ * VÌ SAO CALLER TRUYỀN VÀO chứ không để core tự đoán: caller tầng HTTP đã hỏi quyền
+ * bằng `checkPermission()` (đường runtime duy nhất, có grant + cờ RBAC v1/v2). Nếu
+ * core hỏi lại bằng đường khác thì hai bên có thể ra hai kết quả — trang che số mà
+ * nút "Xuất QR" lại nhả số, đúng cái lệch mà đợt vá này đang dọn.
+ *
+ * ⚠️ Cờ này là dữ liệu SERVER, KHÔNG được nhận từ đối số client: `_qr-actions.ts`
+ * ("use server") phải tự gọi `checkPermission` rồi truyền xuống. Bỏ trống thì core
+ * suy từ chính `actor` bằng `can()` — fail-closed theo quyền, chứ mặc định KHÔNG
+ * bao giờ là "cho xem" (test service-level gọi core 3 tham số rơi vào nhánh này).
+ */
+export type QrPiiOption = { canViewPii?: boolean };
+
+function resolveCanViewPii(actor: Actor, opts?: QrPiiOption): boolean {
+  return opts?.canViewPii ?? can(actor, "orders:view-pii");
+}
+
+/** Câu từ chối dùng chung cho cả xuất mới lẫn tạo lại — sale đọc là hiểu phải xin gì. */
+const NO_PII_ERROR =
+  "Mã QR mang nội dung chuyển khoản có SĐT phụ huynh — cần quyền xem thông tin liên hệ (orders:view-pii) mới lấy được mã.";
 
 /** Phiếu thu + tổng đã phân bổ, đủ để tính phần còn thiếu. */
 type LoadedRequest = {
@@ -64,12 +113,24 @@ type LoadedRequest = {
   status: RequestStatus;
   sortOrder: number;
   allocated: number;
-  order: { id: string; code: string; centerId: string | null };
+  order: {
+    id: string;
+    code: string;
+    centerId: string | null;
+    /** 3 mảnh dựng nội dung CK dạng người đọc (chốt 20/08). */
+    studentName: string;
+    customerName: string;
+    customerPhone: string | null;
+    courseName: string | null;
+  };
 };
 
 /**
  * Đọc phiếu thu QUA scopedDb — phiếu thuộc cơ sở ngoài tầm nhìn trả null, và caller
  * chỉ được phép báo "không tìm thấy" (đừng lộ là nó tồn tại).
+ *
+ * Nạp kèm tên học viên / SĐT phụ huynh / tên khoá vì nội dung CK nay dựng từ CHÚNG
+ * chứ không còn là `matchKey`.
  */
 async function loadScopedRequest(
   actor: Actor,
@@ -79,7 +140,18 @@ async function loadScopedRequest(
     where: { id: paymentRequestId },
     include: {
       allocations: { select: { amount: true } },
-      order: { select: { id: true, code: true, centerId: true } },
+      order: {
+        select: {
+          id: true,
+          code: true,
+          centerId: true,
+          customerName: true,
+          customerPhone: true,
+          student: { select: { name: true } },
+          // Tên khoá = dòng hàng ĐẦU TIÊN, cùng quy ước với [id]/page.tsx.
+          items: { orderBy: { createdAt: "asc" }, take: 1, select: { itemName: true } },
+        },
+      },
     },
   });
   if (!row) return null;
@@ -93,7 +165,15 @@ async function loadScopedRequest(
     status: row.status as RequestStatus,
     sortOrder: row.sortOrder,
     allocated: row.allocations.reduce((s, a) => s + a.amount, 0),
-    order: row.order,
+    order: {
+      id: row.order.id,
+      code: row.order.code,
+      centerId: row.order.centerId,
+      studentName: row.order.student?.name ?? row.order.customerName,
+      customerName: row.order.customerName,
+      customerPhone: row.order.customerPhone,
+      courseName: row.order.items[0]?.itemName ?? null,
+    },
   };
 }
 
@@ -131,7 +211,11 @@ type QrSessionRow = {
   createdAt: Date;
 };
 
-async function toView(row: QrSessionRow, matchKey: string | null): Promise<QrSessionView> {
+async function toView(
+  row: QrSessionRow,
+  matchKey: string | null,
+  transferContent: string,
+): Promise<QrSessionView> {
   return {
     id: row.id,
     paymentRequestId: row.paymentRequestId,
@@ -144,6 +228,7 @@ async function toView(row: QrSessionRow, matchKey: string | null): Promise<QrSes
     status: row.status as QrSessionView["status"],
     imageSrc: await qrImageSrc(row.qrContent),
     matchKey,
+    transferContent,
   };
 }
 
@@ -163,12 +248,24 @@ const QR_SESSION_SELECT = {
 /**
  * Phiên ACTIVE CÒN HẠN mới nhất của từng phiếu (cho lần render đầu của trang đơn).
  * Đọc qua scopedDb → phiếu/phiên cơ sở khác không lọt sang.
+ *
+ * `transferContent` nhận từ caller (mức ĐƠN) chứ không tự dựng lại: trang đơn đã
+ * tính sẵn một lần cho khối QR mức đơn, truyền xuống thì cả 3 chỗ in ra chắc chắn
+ * là CÙNG một chuỗi.
+ *
+ * ⚠️ Thiếu `orders:view-pii` → trả RỖNG. `QrSessionView.imageSrc` là URL
+ * `img.vietqr.io/...?addInfo=NguyenVanA_84987654321_Sata4` (hoặc data-URL của chuỗi
+ * EMVCo) — tức SĐT ĐẦY ĐỦ đi thẳng vào DOM + RSC payload dù ô "SĐT" phía trên đã che.
+ * Trả rỗng là cách duy nhất bịt đường đó mà không phá mã QR (xem `QrPiiOption`).
  */
 export async function loadActiveQrSessions(
   actor: Actor,
   requests: { id: string; matchKey: string | null }[],
+  transferContent: string,
+  opts?: QrPiiOption,
 ): Promise<Record<string, QrSessionView>> {
   if (requests.length === 0) return {};
+  if (!resolveCanViewPii(actor, opts)) return {};
   const rows = await scopedDb(actor).qrSession.findMany({
     where: {
       paymentRequestId: { in: requests.map((r) => r.id) },
@@ -183,17 +280,53 @@ export async function loadActiveQrSessions(
   for (const row of rows) {
     // orderBy desc → bản ghi đầu tiên gặp là mới nhất; bỏ qua bản sau.
     if (out[row.paymentRequestId]) continue;
-    out[row.paymentRequestId] = await toView(row, matchKeyById.get(row.paymentRequestId) ?? null);
+    out[row.paymentRequestId] = await toView(
+      row,
+      matchKeyById.get(row.paymentRequestId) ?? null,
+      transferContent,
+    );
   }
   return out;
 }
 
-/** Nội dung đối khớp in lên QR: ưu tiên matchKey của phiếu, lùi về mã đơn. */
+/**
+ * Nội dung CK in lên QR — dạng NGƯỜI ĐỌC `HoTenCon_SdtPH_TenKhoa` (chủ dự án chốt
+ * 20/08, thay cho `ORD…D1` cũ mà sale không đọc nổi qua điện thoại).
+ *
+ * ⚠️ Đợt 1 và đợt 2 của CÙNG một đơn ra CÙNG một chuỗi. Đó là hệ quả tất yếu của
+ * định dạng đã chọn, KHÔNG phải bug: nội dung không còn mang thông tin "đợt nào".
+ * Tiền vẫn về đúng chỗ vì nhánh đối khớp theo SĐT (payos-ingest, nhánh (d)) neo
+ * vào phiếu chưa đóng đủ SỚM NHẤT của đơn rồi để waterfall rót tiếp sang đợt sau —
+ * y hệt cách nhánh (c) xử lý nội dung chỉ có mã đơn.
+ *
+ * ⚠️ KHÔNG ghi/không đổi `matchKey` ở đây (BẤT BIẾN #3). Chỉ đổi thứ ĐƯỢC IN RA.
+ *
+ * ⚠️ 20/08 (vá) — PHẢI cắt theo `VIETQR_ADDINFO_MAX` (25) chứ KHÔNG phải trần 80
+ * mặc định. Chuỗi này vừa hiện cho sale đọc vừa nhúng thẳng vào `addInfo` của ảnh
+ * QR, mà `addInfo` là trường EMVCo giới hạn 25 ký tự — để mặc định 80 thì mã QR bị
+ * cắt đuôi im lặng đúng chỗ chứa SĐT, và nhánh đối khớp (d) mất khoá duy nhất.
+ * Cắt tại đây thì phần mất là mấy chữ cuối của TÊN CON (vẫn đọc ra được), và chuỗi
+ * in ra màn hình TRÙNG chuỗi nằm trong QR.
+ */
 function addInfoFor(req: LoadedRequest): string {
-  // matchKey null = phiếu tạo trước khi có định danh per-đợt → lùi về mã đơn (khớp
-  // MỨC ĐƠN như hành vi cũ của webhook SePay). KHÔNG tự sinh/ghi matchKey ở đây.
-  return req.matchKey ?? req.order.code.replace(/-/g, "");
+  return transferContentForOrder(
+    {
+      studentName: req.order.studentName,
+      customerName: req.order.customerName,
+      customerPhone: req.order.customerPhone,
+      courseName: req.order.courseName,
+    },
+    VIETQR_ADDINFO_MAX,
+  );
 }
+
+/**
+ * Bản NGẮN cho payOS: cổng cắt `description` còn 25 ký tự (payos.ts DESCRIPTION_MAX).
+ * Cắt sẵn ở đây thì phần bị bỏ là mấy chữ cuối của TÊN CON; để payos.ts tự cắt thì
+ * dao rơi đúng vào SĐT. Đối khớp của payOS không đọc chuỗi này (webhook trả
+ * `orderCode` → QrSession), nhưng nó vẫn hiện trên sao kê của phụ huynh.
+ */
+const PAYOS_DESCRIPTION_MAX = 25;
 
 type QrPayload = {
   qrContent: string | null;
@@ -204,11 +337,9 @@ type QrPayload = {
 /**
  * Dựng nội dung QR cho số tiền `amount`.
  *
- * payOS đã cấu hình → xin link/QR của cổng (`providerOrderCode` là đường tra dự
- * phòng của webhook: providerOrderCode → QrSession → phiếu thu). Cổng chưa cấu hình
- * HOẶC trả lỗi → lùi về QR ảnh tĩnh VietQR với `addInfo = matchKey`, tức vẫn đối
- * khớp theo ĐỊNH DANH chứ không theo số tiền. Không có nhánh nào ném lỗi ra ngoài:
- * cổng chết không được phép làm sale không thu được tiền.
+ * payOS đã cấu hình → xin link/QR của cổng. Cổng chưa cấu hình HOẶC trả lỗi → lùi
+ * về QR ảnh tĩnh VietQR với `addInfo` = nội dung CK dạng người đọc. Không có nhánh
+ * nào ném lỗi ra ngoài: cổng chết không được phép làm sale không thu được tiền.
  */
 async function buildQrPayload(
   req: LoadedRequest,
@@ -220,9 +351,19 @@ async function buildQrPayload(
   if (isPayosConfigured()) {
     const link = await createPaymentLink({
       orderCode: generateProviderOrderCode(),
-      // Mô tả CHÍNH LÀ định danh đối khớp — webhook payOS đọc `description` để tra
-      // matchKey (collectMatchKeyCandidates). Đổi chuỗi này là gãy đối khớp.
-      description: addInfo,
+      // ⚠️ ĐÃ KHÁC TRƯỚC 20/08: chuỗi này KHÔNG còn là định danh đối khớp. Webhook
+      // payOS khớp qua `orderCode` cổng trả về → `QrSession.providerOrderCode`
+      // (@unique) → phiếu thu — nhánh (b) của resolvePaymentTarget, không đọc mô
+      // tả. Sửa/cắt chuỗi này CHỈ ảnh hưởng thứ phụ huynh nhìn thấy trên sao kê.
+      description: transferContentForOrder(
+        {
+          studentName: req.order.studentName,
+          customerName: req.order.customerName,
+          customerPhone: req.order.customerPhone,
+          courseName: req.order.courseName,
+        },
+        PAYOS_DESCRIPTION_MAX,
+      ),
       amount,
       expiresAt,
     });
@@ -282,7 +423,7 @@ async function createSession(
     select: QR_SESSION_SELECT,
   });
 
-  return { ok: true, session: await toView(row, req.matchKey), reused: false };
+  return { ok: true, session: await toView(row, req.matchKey, addInfoFor(req)), reused: false };
 }
 
 /**
@@ -296,7 +437,13 @@ export async function issueQrForRequestCore(
   actor: Actor,
   auditActor: AuditActor,
   input: { paymentRequestId: string },
+  opts?: QrPiiOption,
 ): Promise<QrIssueResult> {
+  // Gác PII TRƯỚC khi đọc phiếu: không có quyền xem SĐT thì không có mã nào để đưa,
+  // nên không cần chạm DB. Chặn ở đây thì trang tải lần đầu và nút "Xuất QR" nói
+  // CÙNG một câu trả lời — trước đợt vá này chúng lệch nhau (trang che, nút nhả).
+  if (!resolveCanViewPii(actor, opts)) return { ok: false, error: NO_PII_ERROR };
+
   const req = await loadScopedRequest(actor, input.paymentRequestId);
   // Cách ly cơ sở: ngoài tầm nhìn → "không tìm thấy" (đừng lộ là phiếu có tồn tại).
   if (!req) return { ok: false, error: "Không tìm thấy phiếu thu" };
@@ -311,7 +458,7 @@ export async function issueQrForRequestCore(
   });
   if (live) {
     // Không ghi audit cho lượt tái sử dụng — không có gì thay đổi trong hệ thống.
-    return { ok: true, session: await toView(live, req.matchKey), reused: true };
+    return { ok: true, session: await toView(live, req.matchKey, addInfoFor(req)), reused: true };
   }
 
   const res = await createSession(actor, auditActor, req);
@@ -345,7 +492,12 @@ export async function regenerateQrCore(
   actor: Actor,
   auditActor: AuditActor,
   input: { paymentRequestId: string },
+  opts?: QrPiiOption,
 ): Promise<QrIssueResult> {
+  // Cùng lý do như `issueQrForRequestCore`: tạo lại QR cũng là phát ra một mã mang
+  // SĐT, nên không có quyền PII thì cửa này cũng đóng (đóng ở một cửa là vô nghĩa).
+  if (!resolveCanViewPii(actor, opts)) return { ok: false, error: NO_PII_ERROR };
+
   const req = await loadScopedRequest(actor, input.paymentRequestId);
   if (!req) return { ok: false, error: "Không tìm thấy phiếu thu" };
 

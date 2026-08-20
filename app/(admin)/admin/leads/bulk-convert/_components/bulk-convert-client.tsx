@@ -8,6 +8,8 @@ import { useMemo, useState } from 'react'
 import Link from 'next/link'
 import { toast } from 'sonner'
 import { bulkConvertLeadsAction } from '../_actions'
+import { MoneyInput } from "@/components/ui/money-input";
+import { HelpHint } from "@/components/admin/ui/help-hint";
 import { PhanTrangBang } from "@/components/ui/phan-trang-bang";
 
 type ChildInfo = {
@@ -334,7 +336,13 @@ export function BulkConvertClient({
           <input value={search} onChange={(e) => setSearch(e.target.value)} className={inputCls} placeholder="Gõ để lọc…" />
         </div>
         <div className="min-w-[260px]">
-          <label className="mb-1 block text-xs font-medium text-muted-foreground">Gán lớp nhanh (HV chưa gán, cùng khoá & cơ sở)</label>
+          <label className="mb-1 block text-xs font-medium text-muted-foreground">
+            Gán lớp nhanh (HV chưa gán, cùng khoá &amp; cơ sở)
+            <HelpHint>
+              Gán lớp đang chọn cho mọi học viên ĐANG HIỂN THỊ mà chưa có lớp, đúng cơ sở
+              và đúng khoá bé quan tâm. Lớp đã chọn tay trước đó không bị ghi đè.
+            </HelpHint>
+          </label>
           <div className="flex gap-2">
             <select value={bulkClassId} onChange={(e) => setBulkClassId(e.target.value)} className={inputCls}>
               <option value="">— Chọn lớp —</option>
@@ -366,12 +374,27 @@ export function BulkConvertClient({
         <button type="button" onClick={() => consentAllVisible(true)} disabled={running} className="rounded-md border border-border px-2.5 py-1 hover:bg-muted">
           Đồng ý ảnh: tick tất cả
         </button>
-        <button type="button" onClick={fillPaidFromImport} disabled={running} className="rounded-md border border-state-success bg-state-success-soft px-2.5 py-1 font-medium text-state-success-ink hover:bg-state-success-soft-hover">
-          Điền &quot;đã đóng&quot; theo file Excel (lead đã tick)
-        </button>
-        <button type="button" onClick={fillPaidListPrice} disabled={running} className="rounded-md border border-border px-2.5 py-1 hover:bg-muted">
-          Điền &quot;đã đóng&quot; = học phí niêm yết (lead đã tick)
-        </button>
+        {/* Hai nút điền hàng loạt: hệ quả (ghi đè / bỏ qua lead nào) không nhìn ra được
+            từ chữ trên nút ⇒ để trong "?" ngay cạnh, khỏi phải bấm thử mới biết. */}
+        <span className="inline-flex items-center gap-1">
+          <button type="button" onClick={fillPaidFromImport} disabled={running} className="rounded-md border border-state-success bg-state-success-soft px-2.5 py-1 font-medium text-state-success-ink hover:bg-state-success-soft-hover">
+            Điền &quot;đã đóng&quot; theo file Excel (lead đã tick)
+          </button>
+          <HelpHint>
+            Lấy số tiền mà file Excel import đã ghi cho từng bé, cộng lại theo từng phụ
+            huynh. Chỉ điền cho lead đang tick và chưa có khoản ghi nhận; bé nào file
+            không có số thì bỏ qua, không đoán.
+          </HelpHint>
+        </span>
+        <span className="inline-flex items-center gap-1">
+          <button type="button" onClick={fillPaidListPrice} disabled={running} className="rounded-md border border-border px-2.5 py-1 hover:bg-muted">
+            Điền &quot;đã đóng&quot; = học phí niêm yết (lead đã tick)
+          </button>
+          <HelpHint>
+            Dùng khi phụ huynh đóng đủ: điền bằng tổng học phí niêm yết của các lớp đã
+            chọn. Áp cho mọi lead đang tick và GHI ĐÈ số đang có trong ô.
+          </HelpHint>
+        </span>
         <label className="ml-auto inline-flex items-center gap-1.5 text-muted-foreground">
           <input type="checkbox" checked={hideDone} onChange={(e) => setHideDone(e.target.checked)} className="h-4 w-4 rounded border-border" />
           Ẩn lead đã chốt xong
@@ -387,9 +410,30 @@ export function BulkConvertClient({
                 <th className="w-10 px-3 py-2"></th>
                 <th className="px-3 py-2">Phụ huynh</th>
                 <th className="px-3 py-2">Học viên</th>
-                <th className="w-64 px-3 py-2">Lớp</th>
-                <th className="w-24 px-3 py-2">Ảnh: đồng ý</th>
-                <th className="w-56 px-3 py-2">Đã đóng (đ) · ngày</th>
+                <th className="w-64 px-3 py-2">
+                  Lớp
+                  <HelpHint>
+                    Chỉ hiện lớp đang mở cùng cơ sở với lead và đúng khoá bé quan tâm.
+                    Bé nào chưa chọn lớp thì cả lead đó không chốt được.
+                  </HelpHint>
+                </th>
+                <th className="w-24 px-3 py-2">
+                  Ảnh: đồng ý
+                  <HelpHint>
+                    Tick khi phụ huynh đã đồng ý cho trung tâm dùng hình ảnh/video của bé
+                    (NĐ 13/2023). Người tick và thời điểm được ghi nhật ký, nên chỉ tick
+                    khi phụ huynh đã đồng ý thật.
+                  </HelpHint>
+                </th>
+                <th className="w-56 px-3 py-2">
+                  Đã đóng (đ) · ngày
+                  <HelpHint>
+                    Số tiền phụ huynh ĐÃ đóng và ngày tiền thực về — chốt xong hệ thống
+                    tạo luôn khoản thu theo đúng hai ô này. Bỏ TRỐNG số tiền nghĩa là
+                    chưa rõ và sẽ không tạo khoản thu nào (khác với gõ số 0). Lead đã có
+                    khoản ghi nhận trước đó thì ô này khoá lại.
+                  </HelpHint>
+                </th>
                 <th className="w-64 px-3 py-2">Kết quả</th>
               </tr>
             </thead>
@@ -491,14 +535,21 @@ export function BulkConvertClient({
                               </span>
                             ) : (
                               <div className="space-y-1">
-                                <input
-                                  type="number"
+                                {/* Ô tiền: gõ 10000000 → hiện 10.000.000. Giữ state dạng
+                                    chuỗi vì các nút "Điền đã đóng…" cũng ghi chuỗi vào đây,
+                                    và ô TRỐNG (≠ 0) nghĩa là "chưa rõ" — không tạo khoản thu. */}
+                                <MoneyInput
+                                  name={`paidAmount-${lead.id}`}
                                   min={0}
-                                  step={1000}
                                   value={paidAmount[lead.id] ?? ''}
-                                  onChange={(e) => setPaidAmount((prev) => ({ ...prev, [lead.id]: e.target.value }))}
+                                  onValueChange={(v) =>
+                                    setPaidAmount((prev) => ({ ...prev, [lead.id]: v === null ? '' : String(v) }))
+                                  }
                                   disabled={disabled}
                                   placeholder="Bỏ trống nếu chưa rõ"
+                                  // suffix={null}: cột đã ghi "Đã đóng (đ)", và `inputCls`
+                                  // mang px-2 nên hậu tố sẽ đè lên chữ số trong ô hẹp này.
+                                  suffix={null}
                                   className={inputCls}
                                 />
                                 <input
@@ -568,6 +619,12 @@ export function BulkConvertClient({
         >
           {running ? 'Đang chốt…' : `Chốt ${readyLeads.length} lead`}
         </button>
+        <HelpHint className="[&_svg]:size-4" label="Chốt hàng loạt nghĩa là gì" side="top">
+          Chỉ chốt những lead đã tick VÀ đã chọn lớp cho mọi bé của lead đó. Mỗi lead
+          được tạo học viên, ghi danh, đơn học phí và tài khoản phụ huynh chờ kích hoạt.
+          Chạy theo lô 20 lead; nếu đứt giữa chừng, bấm chốt lại là an toàn — lead đã
+          chốt không bị tạo trùng.
+        </HelpHint>
       </div>
 
       <p className="text-xs text-muted-foreground">

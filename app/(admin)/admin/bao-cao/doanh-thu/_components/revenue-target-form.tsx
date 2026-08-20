@@ -5,6 +5,8 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { MoneyInput } from "@/components/ui/money-input";
+import { HelpHint } from "@/components/admin/ui/help-hint";
 import { setRevenueTargetAction } from "../_actions";
 
 type CenterOption = { id: string; name: string };
@@ -46,7 +48,14 @@ export function RevenueTargetForm({
   return (
     <form onSubmit={onSubmit} className="grid grid-cols-1 gap-3 md:grid-cols-5 md:items-end">
       <div className="space-y-1">
-        <Label htmlFor="rt-center">Cơ sở</Label>
+        <Label htmlFor="rt-center">
+          Cơ sở
+          <HelpHint>
+            Mục tiêu này áp cho cơ sở nào. &ldquo;Toàn hệ thống&rdquo; là mục tiêu chung
+            của cả công ty và chỉ cấp hội sở đặt được — mục tiêu của từng cơ sở vẫn đặt
+            riêng, không tự chia từ số chung.
+          </HelpHint>
+        </Label>
         <select
           id="rt-center"
           name="centerId"
@@ -63,25 +72,44 @@ export function RevenueTargetForm({
       </div>
 
       <div className="space-y-1">
-        <Label htmlFor="rt-period">Kỳ (YYYY-MM)</Label>
+        <Label htmlFor="rt-period">
+          Kỳ (YYYY-MM)
+          <HelpHint>
+            Mục tiêu tính theo THÁNG. Mỗi cơ sở chỉ có một mục tiêu cho mỗi tháng — lưu
+            lại cho tháng đã có sẽ thay số cũ, không cộng thêm.
+          </HelpHint>
+        </Label>
         <Input id="rt-period" name="period" type="month" defaultValue={defaultPeriod} required />
       </div>
 
       <div className="space-y-1">
-        <Label htmlFor="rt-amount">Mục tiêu (VNĐ)</Label>
-        <Input
+        <Label htmlFor="rt-amount">
+          Mục tiêu (VNĐ)
+          <HelpHint>
+            Doanh thu cần đạt trong tháng đã chọn. Con số này hiện trên trang báo cáo
+            doanh thu để so với số thu thực tế — ai xem được báo cáo của cơ sở nào thì
+            thấy mục tiêu của cơ sở đó.
+          </HelpHint>
+        </Label>
+        {/* Ô tiền: gõ 10000000 → hiện 10.000.000. Số trần vẫn đi lên qua FormData nhờ ô
+            ẩn cùng `name` — setRevenueTargetAction không phải sửa gì. */}
+        <MoneyInput
           id="rt-amount"
           name="targetAmount"
-          type="number"
           min={0}
-          step={1}
           placeholder="0"
           required
         />
       </div>
 
       <div className="space-y-1">
-        <Label htmlFor="rt-note">Ghi chú</Label>
+        <Label htmlFor="rt-note">
+          Ghi chú
+          <HelpHint>
+            Ghi lý do đặt mức này (VD: &ldquo;mùa hè, tăng 20% so với tháng 5&rdquo;) để
+            sau này nhìn lại còn hiểu vì sao. Chỉ người xem báo cáo đọc được.
+          </HelpHint>
+        </Label>
         <Input id="rt-note" name="note" type="text" placeholder="Tùy chọn" />
       </div>
 

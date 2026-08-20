@@ -24,6 +24,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { MoneyInput } from "@/components/ui/money-input";
+import { HelpHint } from "@/components/admin/ui/help-hint";
 import { Textarea } from "@/components/ui/textarea";
 import {
   Select,
@@ -189,13 +191,44 @@ export function PaymentsClient({
                 <TableHead>Hình thức</TableHead>
                 <TableHead>Ngày thu</TableHead>
                 <TableHead>Người thu</TableHead>
-                <TableHead>Nguồn HV</TableHead>
+                <TableHead>
+                  Nguồn HV
+                  {/* Nhãn cột dễ đọc nhầm thành "cơ sở của học viên". Nó là NGUỒN LEAD
+                      (Facebook, giới thiệu…) — chỉ giải thích được bằng một câu, nên để
+                      trong "?" thay vì bơm thêm chữ vào hàng tiêu đề đã 14 cột. */}
+                  <HelpHint>
+                    Kênh mà phụ huynh biết tới Sata Robo, lấy từ lead lúc đăng ký
+                    (Facebook, giới thiệu, hội thảo…). Dùng để biết tiền về từ kênh nào.
+                    Dấu &ldquo;—&rdquo; là khoản không đi từ lead nào.
+                  </HelpHint>
+                </TableHead>
                 <TableHead>Tên PH</TableHead>
                 <TableHead>CCCD PH</TableHead>
                 <TableHead>Địa chỉ</TableHead>
-                <TableHead>Sale</TableHead>
-                <TableHead>Kế toán</TableHead>
-                <TableHead>Phiếu thu</TableHead>
+                <TableHead>
+                  Sale
+                  <HelpHint>
+                    Trạng thái phía người thu tiền. &ldquo;Đã ghi nhận&rdquo; = nhân viên
+                    khai đã nhận tiền của phụ huynh, chưa ai đối chiếu lại.
+                  </HelpHint>
+                </TableHead>
+                <TableHead>
+                  Kế toán
+                  <HelpHint>
+                    &ldquo;Chờ kế toán&rdquo; = mới ghi nhận, chưa đối chiếu nên CHƯA
+                    tính là đã thu và chưa trừ công nợ. &ldquo;Đã xác nhận&rdquo; = kế
+                    toán đối chiếu xong (tiền có thật), khoản mới trừ công nợ và sinh
+                    phiếu thu. &ldquo;Từ chối&rdquo; = khoản không hợp lệ, phải ghi nhận
+                    lại cho đúng.
+                  </HelpHint>
+                </TableHead>
+                <TableHead>
+                  Phiếu thu
+                  <HelpHint>
+                    Chỉ có sau khi kế toán xác nhận khoản thu. Bấm vào mã phiếu để mở bản
+                    in PDF cho phụ huynh.
+                  </HelpHint>
+                </TableHead>
                 {canConfirm && <TableHead className="text-right">Thao tác</TableHead>}
               </TableRow>
             </TableHeader>
@@ -278,11 +311,16 @@ export function PaymentsClient({
                           <RowActions paymentId={p.id} updatedAt={p.updatedAt} />
                         ) : (
                           // Đơn chưa convert → chưa gắn ghi danh → confirm sẽ lỗi. Chờ convert.
-                          <span
-                            className="text-xs text-muted-foreground"
-                            title="Khoản chưa gắn ghi danh — xác nhận được sau khi convert lead thành học viên"
-                          >
+                          // Lời giải thích trước đây nằm ở `title=""` của trình duyệt:
+                          // trễ 1–2 giây mới hiện và trên máy tính bảng thì không bao giờ
+                          // hiện. Chuyển sang icon "?" — cùng một câu, hiện ngay.
+                          <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
                             Chờ convert
+                            <HelpHint>
+                              Khoản này chưa gắn ghi danh nào nên kế toán chưa xác nhận
+                              được. Chốt lead thành học viên (màn Chuyển đổi) là nút xác
+                              nhận sẽ hiện ra.
+                            </HelpHint>
                           </span>
                         )
                       ) : (
@@ -468,7 +506,14 @@ function RecordForm({
       </CardHeader>
       <CardContent className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <div className="space-y-1.5 sm:col-span-2">
-          <Label>Đơn hàng *</Label>
+          <Label>
+            Đơn hàng *
+            <HelpHint>
+              Khoản thu này trừ vào công nợ của đơn được chọn, nên chọn sai đơn là sai
+              công nợ của phụ huynh khác. Không thấy đơn cần tìm thì kiểm tra lại đơn đã
+              được tạo chưa.
+            </HelpHint>
+          </Label>
           <Select value={orderId} onValueChange={(v) => setOrderId(v ?? "")}>
             <SelectTrigger>
               <SelectValue placeholder="Chọn đơn hàng" />
@@ -483,17 +528,32 @@ function RecordForm({
           </Select>
         </div>
         <div className="space-y-1.5">
-          <Label>Số tiền *</Label>
-          <Input
-            type="number"
-            inputMode="numeric"
+          <Label>
+            Số tiền *
+            <HelpHint>
+              Số tiền THẬT nhận được trong lần thu này, không phải tổng đơn. Phụ huynh
+              đóng làm nhiều lần thì ghi nhận nhiều khoản, mỗi lần một khoản.
+            </HelpHint>
+          </Label>
+          {/* Ô tiền: gõ 10000000 → hiện 10.000.000. Giữ state dạng CHUỖI (ô trống = "")
+              để `Number(amount)` lúc submit ra đúng con số như trước, server không đổi. */}
+          <MoneyInput
+            name="amount"
+            min={0}
             value={amount}
-            onChange={(e) => setAmount(e.target.value)}
+            onValueChange={(v) => setAmount(v === null ? "" : String(v))}
             placeholder="0"
           />
         </div>
         <div className="space-y-1.5">
-          <Label>Phương thức *</Label>
+          <Label>
+            Phương thức *
+            <HelpHint>
+              Tiền đi bằng đường nào: tiền mặt tại quầy, chuyển khoản, hay qua cổng
+              thanh toán. Kế toán đối chiếu khoản này với đúng sổ đó (két hoặc sao kê
+              ngân hàng), nên chọn sai là khoản treo không tìm ra tiền.
+            </HelpHint>
+          </Label>
           <Select value={method} onValueChange={(v) => setMethod(v ?? "CASH")}>
             <SelectTrigger>
               <SelectValue />
@@ -508,7 +568,13 @@ function RecordForm({
           </Select>
         </div>
         <div className="space-y-1.5">
-          <Label>Ngày thu *</Label>
+          <Label>
+            Ngày thu *
+            <HelpHint>
+              Ngày tiền thực sự về theo biên lai / sao kê ngân hàng, không phải ngày bạn
+              ngồi nhập vào phần mềm.
+            </HelpHint>
+          </Label>
           <Input
             type="date"
             value={paidDate}
@@ -516,7 +582,14 @@ function RecordForm({
           />
         </div>
         <div className="space-y-1.5">
-          <Label>Enrollment ID (tuỳ chọn)</Label>
+          <Label>
+            Enrollment ID (tuỳ chọn)
+            <HelpHint>
+              Mã ghi danh để gắn khoản thu vào đúng học viên trong lớp. Bỏ trống được,
+              nhưng khoản chưa gắn ghi danh sẽ nằm ở &ldquo;Chờ convert&rdquo; và kế toán
+              chưa xác nhận được.
+            </HelpHint>
+          </Label>
           <Input
             value={enrollmentId}
             onChange={(e) => setEnrollmentId(e.target.value)}
@@ -524,7 +597,13 @@ function RecordForm({
           />
         </div>
         <div className="space-y-1.5 sm:col-span-2">
-          <Label>Link chứng từ (tuỳ chọn)</Label>
+          <Label>
+            Link chứng từ (tuỳ chọn)
+            <HelpHint>
+              Đường dẫn tới ảnh biên lai / màn hình chuyển khoản đã lưu ở nơi khác. Có
+              chứng từ thì kế toán đối chiếu và xác nhận nhanh hơn nhiều.
+            </HelpHint>
+          </Label>
           <Input
             value={evidenceUrl}
             onChange={(e) => setEvidenceUrl(e.target.value)}
@@ -640,10 +719,11 @@ function RowActions({
   if (mode === "adjust") {
     return (
       <div className="flex flex-col items-end gap-1.5">
-        <Input
-          type="number"
+        <MoneyInput
+          name="adjustAmount"
+          min={0}
           value={amount}
-          onChange={(e) => setAmount(e.target.value)}
+          onValueChange={(v) => setAmount(v === null ? "" : String(v))}
           placeholder="Số tiền mới"
           className="w-56"
         />

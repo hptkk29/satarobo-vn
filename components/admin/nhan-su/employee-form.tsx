@@ -12,6 +12,8 @@ import type {
 } from "@prisma/client";
 import { ImageUploader } from "@/components/admin/ImageUploader";
 import { Switch } from "@/components/ui/switch";
+import { MoneyInput } from "@/components/ui/money-input";
+import { FieldLabel, HelpHint } from "@/components/admin/ui/help-hint";
 import { StringArrayEditor } from "@/app/(admin)/admin/kits/_components/string-array-editor";
 import { getEmployeeFieldVisibility } from "@/lib/auth/permissions";
 import {
@@ -270,7 +272,15 @@ export function EmployeeForm({
         </div>
 
         <div className="mt-4">
-          <label className="mb-1 block text-sm font-semibold">Trạng thái công việc</label>
+          <FieldLabel
+            label="Trạng thái công việc"
+            hint={
+              <>
+                Mặc định <strong>Đang làm</strong>. <code>isActive</code> bên dưới chỉ là
+                legacy flag — list filter chính dùng trạng thái này.
+              </>
+            }
+          />
           <select
             value={data.status}
             onChange={(e) =>
@@ -284,10 +294,6 @@ export function EmployeeForm({
               </option>
             ))}
           </select>
-          <p className="mt-1 text-xs text-muted-foreground">
-            Mặc định <strong>Đang làm</strong>. <code>isActive</code> bên dưới chỉ là legacy
-            flag — list filter chính dùng trạng thái này.
-          </p>
         </div>
 
         <div className="mt-5 flex flex-wrap items-center gap-6">
@@ -345,16 +351,21 @@ export function EmployeeForm({
               <span className="text-sm font-medium text-state-info-ink">
                 Nhân viên HO (Hội sở)
               </span>
+              {/* Nút "?" nằm trong <label> vẫn an toàn: <button> là interactive content
+                  nên trình duyệt KHÔNG chuyển tiếp cú bấm xuống công tắc. */}
+              <HelpHint className="text-state-info-ink">
+                Bật khi NV thuộc <strong>Hội sở</strong> (cross-center, không gắn 1 cơ sở
+                cụ thể). Hệ thống gán <code>EmployeeOrgAssignment</code> PRIMARY tới đơn vị
+                HO thay vì chọn cơ sở.
+              </HelpHint>
             </label>
-            <p className="mt-1 text-xs text-muted-foreground">
-              Bật khi NV thuộc <strong>Hội sở</strong> (cross-center, không gắn 1 cơ sở
-              cụ thể). Hệ thống gán <code>EmployeeOrgAssignment</code> PRIMARY tới đơn vị
-              HO thay vì chọn cơ sở.
-            </p>
           </div>
 
           <div>
-            <label className="mb-1 block text-sm font-semibold">Đơn vị làm việc</label>
+            <FieldLabel
+              label="Đơn vị làm việc"
+              hint="Gồm Hội sở (HO) + các cơ sở. Lưu phân công PRIMARY vào đơn vị này."
+            />
             <select
               value={data.orgUnitId}
               onChange={(e) => setData({ ...data, orgUnitId: e.target.value })}
@@ -367,9 +378,6 @@ export function EmployeeForm({
                 </option>
               ))}
             </select>
-            <p className="mt-1 text-xs text-muted-foreground">
-              Gồm Hội sở (HO) + các cơ sở. Lưu phân công PRIMARY vào đơn vị này.
-            </p>
           </div>
 
           {visibility.personal && (
@@ -444,18 +452,16 @@ export function EmployeeForm({
               </div>
 
               <div>
-                <label className="mb-1 block text-sm font-semibold">
-                  Ngày kết thúc HĐ
-                </label>
+                <FieldLabel
+                  label="Ngày kết thúc HĐ"
+                  hint="Cho hợp đồng có thời hạn. Để trống nếu vô thời hạn."
+                />
                 <input
                   type="date"
                   value={data.endDate}
                   onChange={(e) => setData({ ...data, endDate: e.target.value })}
                   className="w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-primary focus:outline-none"
                 />
-                <p className="mt-1 text-xs text-muted-foreground">
-                  Cho hợp đồng có thời hạn. Để trống nếu vô thời hạn.
-                </p>
               </div>
 
               <div>
@@ -512,6 +518,10 @@ export function EmployeeForm({
           <div className="mt-4 rounded-lg border border-state-warning-soft bg-state-warning-soft p-4">
             <p className="mb-3 text-sm font-semibold text-state-warning-ink">
               💰 Lương (chỉ HR / Accountant / SUPER_ADMIN thấy)
+              <HelpHint className="ml-1 text-state-warning-ink">
+                Tính lương cơ bản L1/L2 sẽ làm ở Phase 4.8 (Payroll). Hiện chỉ lưu Bậc/Mức
+                + lương BHXH.
+              </HelpHint>
             </p>
             <div className="grid gap-4 sm:grid-cols-3">
               <div>
@@ -548,25 +558,28 @@ export function EmployeeForm({
                 <label className="mb-1 block text-xs font-semibold">
                   Lương đóng BHXH (VNĐ)
                 </label>
-                <input
-                  type="number"
+                {/* Ô TIỀN — gõ "5000000" hiện "5.000.000". Form này submit bằng state
+                    (không đọc FormData) nên `name` chỉ để MoneyInput dựng ô ẩn; giá trị
+                    thật đi qua `onValueChange`. */}
+                <MoneyInput
+                  name="bhxhBase"
                   min={0}
-                  step={100000}
                   value={data.bhxhBase}
-                  onChange={(e) => setData({ ...data, bhxhBase: e.target.value })}
-                  placeholder="5000000"
-                  className="w-full rounded border border-state-warning px-2 py-1.5 text-sm"
+                  onValueChange={(v) => setData({ ...data, bhxhBase: v ?? "" })}
+                  placeholder="5.000.000"
+                  suffix={null}
+                  className="rounded border-state-warning px-2 py-1.5"
                 />
               </div>
             </div>
-            <p className="mt-2 text-xs text-state-warning-ink">
-              Tính lương cơ bản L1/L2 sẽ làm ở Phase 4.8 (Payroll). Hiện chỉ lưu Bậc/Mức + lương BHXH.
-            </p>
           </div>
         )}
 
         <div className="mt-4">
-          <label className="mb-1 block text-sm font-semibold">Display order</label>
+          <FieldLabel
+            label="Display order"
+            hint="Thứ tự hiển thị ở /vinh-danh, /ve-chung-toi. Số nhỏ hiện trước."
+          />
           <input
             type="number"
             value={data.displayOrder}
@@ -575,20 +588,20 @@ export function EmployeeForm({
             }
             className="w-32 rounded-lg border border-border px-3 py-2 text-sm focus:border-primary focus:outline-none"
           />
-          <p className="mt-1 text-xs text-muted-foreground">
-            Thứ tự hiển thị ở /vinh-danh, /ve-chung-toi. Số nhỏ hiện trước.
-          </p>
         </div>
       </section>
 
       {/* ─── Chuyên môn giảng dạy (chỉ Đào tạo / Giảng dạy) ─── */}
       {teachingCodes.has(data.department) && (
         <section className="rounded-xl border border-border bg-card p-6">
-          <h2 className="mb-4 text-lg font-bold">Chuyên môn giảng dạy</h2>
-          <p className="mb-4 text-xs text-muted-foreground">
-            Hiển thị khi phòng ban là <strong>Phòng Đào tạo</strong> hoặc{" "}
-            <strong>Giảng dạy</strong>. Đổi phòng ban khác sẽ ẩn UI nhưng dữ liệu vẫn giữ.
-          </p>
+          <h2 className="mb-4 text-lg font-bold">
+            Chuyên môn giảng dạy
+            <HelpHint className="ml-1">
+              Hiển thị khi phòng ban là <strong>Phòng Đào tạo</strong> hoặc{" "}
+              <strong>Giảng dạy</strong>. Đổi phòng ban khác sẽ ẩn UI nhưng dữ liệu vẫn
+              giữ.
+            </HelpHint>
+          </h2>
 
           <div className="space-y-5">
             <div>

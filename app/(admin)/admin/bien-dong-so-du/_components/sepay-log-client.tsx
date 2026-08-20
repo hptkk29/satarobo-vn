@@ -19,6 +19,14 @@ type Item = {
   content: string | null;
   orderCode: string | null;
   order: { id: string; status: string; totalAmount: number; customerName: string } | null;
+  /**
+   * Trạng thái dòng tương ứng trong SỔ giao dịch (`BankTransaction`): MATCHED /
+   * UNMATCHED / IGNORED. `null` = chưa nối được sang sổ (nhật ký cũ trước ngày dựng
+   * sổ, hoặc dòng chưa từng đi tới bước ghi sổ) — không kết luận đúng/sai.
+   */
+  txnStatus: string | null;
+  /** Lý do sổ mới KHÔNG tra ra phiếu thu — thứ kế toán cần để xử lý tay. */
+  unmatchedNote: string | null;
 };
 
 const STATUS_UI: Record<string, { label: string; cls: string }> = {
@@ -80,8 +88,23 @@ export function SepayLogClient({ items }: { items: Item[] }) {
               )}
               {rows.map((i) => {
                 const ui = STATUS_UI[i.status] ?? { label: i.status, cls: "bg-muted text-muted-foreground" };
+                // Webhook có HAI kiểu thành công khác nhau về nghiệp vụ: khớp theo mã
+                // đơn trong nội dung CK (CONFIRM_ORDER) và khớp qua sổ phiếu thu
+                // (MATCH_TXN — đường DUY NHẤT còn chạy từ 20/08). Gọi đúng tên để
+                // người đối soát biết tiền vào bằng đường nào.
+                const matchedViaLedger = i.status === "SUCCESS" && i.action === "MATCH_TXN";
+                const label = matchedViaLedger ? "Đã khớp phiếu thu" : ui.label;
                 return (
-                  <tr key={i.id} className={i.status === "FAILED" ? "bg-state-warning-soft/40" : undefined}>
+                  // Tô nền cảnh báo cho dòng CÒN CẦN NGƯỜI: bỏ qua dòng FAILED mà sổ
+                  // giao dịch sau đó đã khớp (retry của cổng), kẻo lại đỏ oan.
+                  <tr
+                    key={i.id}
+                    className={
+                      i.status === "FAILED" && i.txnStatus !== "MATCHED"
+                        ? "bg-state-warning-soft/40"
+                        : undefined
+                    }
+                  >
                     <td className="px-3 py-2 align-top text-xs text-muted-foreground">
                       {i.at.slice(0, 16).replace("T", " ")}
                       {i.gateway && <div className="text-muted-foreground">{i.gateway}</div>}
@@ -114,17 +137,40 @@ export function SepayLogClient({ items }: { items: Item[] }) {
                           <br />
                           <span className="text-state-warning-ink">(không tìm thấy đơn)</span>
                         </span>
+                      ) : i.txnStatus === "UNMATCHED" ? (
+                        // 20/08 — điều kiện cảnh báo đổi từ "nội dung CK KHÔNG CÓ MÃ ĐƠN"
+                        // sang "sổ giao dịch KHÔNG TRA RA ĐƠN". Nội dung CK nay không bao
+                        // giờ còn mã đơn nữa nên điều kiện cũ đỏ 100% ⇒ vô nghĩa và che
+                        // mất đúng những dòng cần người xử lý.
+                        <span className="text-xs font-medium text-state-warning-ink">
+                          Không tra ra đơn
+                        </span>
+                      ) : i.txnStatus === "MATCHED" ? (
+                        <span className="text-xs text-muted-foreground">
+                          Đã rót vào phiếu thu (xem bảng trên)
+                        </span>
                       ) : (
-                        <span className="text-xs text-state-warning-ink">Nội dung CK không có mã đơn</span>
+                        <span className="text-xs text-muted-foreground">—</span>
                       )}
                     </td>
                     <td className="px-3 py-2 align-top">
                       <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${ui.cls}`}>
-                        {ui.label}
+                        {label}
                       </span>
                     </td>
                     <td className="px-3 py-2 align-top text-xs text-muted-foreground">
-                      {i.error ?? (i.status === "SUCCESS" ? "Đơn đã xác nhận + cấp TK phụ huynh" : "—")}
+                      {i.error ??
+                        (matchedViaLedger
+                          ? "Tiền đã rót vào phiếu thu của đơn — không cần xử lý tay"
+                          : i.status === "SUCCESS"
+                            ? "Đơn đã xác nhận + cấp TK phụ huynh"
+                            : "—")}
+                      {/* Lý do sổ mới không tra ra phiếu thu (tra theo gì, vướng ở đâu).
+                          In ra vì đây là chỉ dẫn xử lý tay; chỉ hiện khi khác `error`
+                          để không lặp y nguyên một câu hai lần. */}
+                      {i.unmatchedNote && i.unmatchedNote !== i.error && (
+                        <div className="mt-1 text-state-warning-ink">{i.unmatchedNote}</div>
+                      )}
                       {i.status === "FAILED" && i.order && (
                         <div className="mt-1">
                           <Link href={`/orders/${i.order.id}`} className="font-semibold text-primary hover:underline">

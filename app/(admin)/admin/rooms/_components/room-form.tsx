@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useFormStatus } from "react-dom";
 import { StringArrayEditor } from "@/app/(admin)/admin/kits/_components/string-array-editor";
+import { FieldLabel, HelpHint } from "@/components/admin/ui/help-hint";
 import { createRoom, updateRoom } from "../_actions";
 
 export type RoomFormValue = {
@@ -102,10 +103,15 @@ export function RoomForm({
         </Grid>
       </Section>
 
-      <Section title="Thiết bị">
-        <p className="-mt-2 text-xs text-muted-foreground">
-          Mỗi mục là 1 thiết bị. VD: <em>Robot SR1</em>, <em>Laptop</em>, <em>Máy chiếu</em>.
-        </p>
+      <Section
+        title="Thiết bị"
+        hint={
+          <>
+            Mỗi mục là 1 thiết bị. VD: <em>Robot SR1</em>, <em>Laptop</em>,{" "}
+            <em>Máy chiếu</em>.
+          </>
+        }
+      >
         <StringArrayEditor
           value={equipment}
           onChange={setEquipment}
@@ -151,11 +157,27 @@ function SubmitButton({ isEdit }: { isEdit: boolean }) {
   );
 }
 
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
+function Section({
+  title,
+  hint,
+  children,
+}: {
+  title: string;
+  /** Có nội dung → icon "?" cạnh tiêu đề khối, thay cho đoạn chữ mờ dài dưới các ô. */
+  hint?: React.ReactNode;
+  children: React.ReactNode;
+}) {
   return (
     <section className="rounded-xl border border-border bg-card p-6">
       <h2 className="mb-4 text-sm font-bold uppercase tracking-wider text-foreground">
         {title}
+        {/* `normal-case tracking-normal` đặt trên NỘI DUNG chứ không trên nút: tiêu đề khối
+            đang uppercase + giãn chữ, hướng dẫn 2–3 câu mà kế thừa thì đọc không nổi. */}
+        {hint && (
+          <HelpHint className="ml-1">
+            <span className="block normal-case tracking-normal">{hint}</span>
+          </HelpHint>
+        )}
       </h2>
       <div className="space-y-4">{children}</div>
     </section>
@@ -194,11 +216,11 @@ function Field({
   const baseClass =
     "w-full rounded-lg border border-border bg-card px-3 py-2 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20";
   return (
+    // `helper` nay ra icon "?" CẠNH NHÃN thay vì dòng chữ mờ dưới ô — sửa một chỗ, cả form
+    // đổi theo. Nút "?" nằm trong <label> vẫn an toàn: <button> là interactive content nên
+    // trình duyệt KHÔNG chuyển tiếp cú bấm xuống ô nhập.
     <label className="block">
-      <span className="mb-1 block text-sm font-semibold text-foreground">
-        {label}
-        {required && <span className="ml-1 text-state-danger-ink">*</span>}
-      </span>
+      <FieldLabel label={label} required={required} hint={helper} />
       {type === "textarea" ? (
         <textarea
           name={name}
@@ -219,7 +241,6 @@ function Field({
           className={baseClass}
         />
       )}
-      {helper && <span className="mt-1 block text-xs text-muted-foreground">{helper}</span>}
     </label>
   );
 }

@@ -13,6 +13,8 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { MoneyInput } from "@/components/ui/money-input";
+import { HelpHint } from "@/components/admin/ui/help-hint";
 import { Textarea } from "@/components/ui/textarea";
 import {
   Select,
@@ -28,6 +30,11 @@ import {
 import { createProductAction, updateProductAction } from "../_actions";
 
 const NO_KIT = "NONE";
+
+/** Dáng ô nhập của shadcn `<Input>` — đắp lên `<MoneyInput>` (vốn theo dáng form tự
+ *  viết: cao hơn, nền bg-card) để ô tiền không lệch với các ô khác của form.
+ *  `pl-` chứ không `px-`: `px-` sẽ ăn mất lề phải MoneyInput chừa cho chữ "đ". */
+const SHADCN_INPUT_LOOK = "h-8 border-input bg-transparent py-1 pl-2.5";
 
 export function ProductForm({
   product,
@@ -109,7 +116,10 @@ export function ProductForm({
         </h2>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div className="space-y-1.5">
-            <Label>SKU *</Label>
+            <Label>
+              SKU *
+              {isEdit && <HelpHint>Mã SKU không sửa được sau khi tạo.</HelpHint>}
+            </Label>
             <Input
               value={data.sku}
               onChange={(e) => update("sku", e.target.value.toUpperCase())}
@@ -117,11 +127,6 @@ export function ProductForm({
               disabled={isEdit}
               required
             />
-            {isEdit && (
-              <p className="text-xs text-muted-foreground">
-                Mã SKU không sửa được sau khi tạo
-              </p>
-            )}
           </div>
           <div className="space-y-1.5">
             <Label>Trạng thái *</Label>
@@ -192,42 +197,35 @@ export function ProductForm({
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
           <div className="space-y-1.5">
             <Label>Giá bán *</Label>
-            <Input
-              type="number"
+            {/* Giá bán không cho trống: `null` (xoá sạch ô) quy về 0 để payload giữ đúng
+                kiểu number như trước. */}
+            <MoneyInput
+              name="salePrice"
               min={0}
               value={data.salePrice}
-              onChange={(e) =>
-                update("salePrice", Number(e.target.value) || 0)
-              }
+              onValueChange={(v) => update("salePrice", v ?? 0)}
               required
+              className={SHADCN_INPUT_LOOK}
             />
           </div>
           <div className="space-y-1.5">
             <Label>Giá vốn (nội bộ)</Label>
-            <Input
-              type="number"
+            <MoneyInput
+              name="costPrice"
               min={0}
-              value={data.costPrice ?? ""}
-              onChange={(e) =>
-                update(
-                  "costPrice",
-                  e.target.value === "" ? null : Number(e.target.value) || 0,
-                )
-              }
+              value={data.costPrice}
+              onValueChange={(v) => update("costPrice", v)}
+              className={SHADCN_INPUT_LOOK}
             />
           </div>
           <div className="space-y-1.5">
             <Label>Giá thuê / tháng</Label>
-            <Input
-              type="number"
+            <MoneyInput
+              name="rentalPricePerMonth"
               min={0}
-              value={data.rentalPricePerMonth ?? ""}
-              onChange={(e) =>
-                update(
-                  "rentalPricePerMonth",
-                  e.target.value === "" ? null : Number(e.target.value) || 0,
-                )
-              }
+              value={data.rentalPricePerMonth}
+              onValueChange={(v) => update("rentalPricePerMonth", v)}
+              className={SHADCN_INPUT_LOOK}
             />
           </div>
         </div>
@@ -240,7 +238,15 @@ export function ProductForm({
         </h2>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div className="space-y-1.5">
-            <Label>Tồn kho hiện tại</Label>
+            <Label>
+              Tồn kho hiện tại
+              {isEdit && (
+                <HelpHint>
+                  Dùng &ldquo;Điều chỉnh tồn kho&rdquo; trên trang chi tiết để thay
+                  đổi.
+                </HelpHint>
+              )}
+            </Label>
             <Input
               type="number"
               min={0}
@@ -250,15 +256,12 @@ export function ProductForm({
               }
               disabled={isEdit}
             />
-            {isEdit && (
-              <p className="text-xs text-muted-foreground">
-                Dùng &ldquo;Điều chỉnh tồn kho&rdquo; trên trang detail để
-                thay đổi
-              </p>
-            )}
           </div>
           <div className="space-y-1.5">
-            <Label>Ngưỡng cảnh báo</Label>
+            <Label>
+              Ngưỡng cảnh báo
+              <HelpHint>Cảnh báo khi tồn ≤ ngưỡng.</HelpHint>
+            </Label>
             <Input
               type="number"
               min={0}
@@ -267,7 +270,6 @@ export function ProductForm({
                 update("minThreshold", Number(e.target.value) || 0)
               }
             />
-            <p className="text-xs text-muted-foreground">Cảnh báo khi tồn ≤ ngưỡng</p>
           </div>
         </div>
       </section>
@@ -320,7 +322,12 @@ export function ProductForm({
         <h2 className="text-sm font-bold uppercase tracking-wider text-muted-foreground">
           Ảnh sản phẩm
         </h2>
-        <Label>URL ảnh (mỗi dòng 1 URL, tối đa 10)</Label>
+        <Label>
+          URL ảnh (mỗi dòng 1 URL, tối đa 10)
+          <HelpHint>
+            R2 uploader component sẽ thêm sau (Phase 5.10.x). Tạm paste URL.
+          </HelpHint>
+        </Label>
         <Textarea
           value={data.imageUrls.join("\n")}
           onChange={(e) =>
@@ -335,9 +342,6 @@ export function ProductForm({
           rows={4}
           placeholder="https://..."
         />
-        <p className="text-xs text-muted-foreground">
-          R2 uploader component sẽ thêm sau (Phase 5.10.x). Tạm paste URL.
-        </p>
       </section>
 
       <div className="flex gap-3">

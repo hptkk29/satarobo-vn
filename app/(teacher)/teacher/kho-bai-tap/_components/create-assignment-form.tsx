@@ -14,6 +14,7 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { HelpHint } from "@/components/admin/ui/help-hint";
 import {
   AttachmentUpload,
   type UploadedFile,
@@ -269,6 +270,14 @@ export function CreateAssignmentForm() {
             <div className="mb-2.5 flex items-center justify-between gap-2">
               <span className="text-sm font-semibold text-foreground">
                 Câu {qi + 1}
+                {/* Cách đánh dấu đáp án đúng chuyển từ dòng chữ dưới danh sách lựa
+                    chọn lên icon "?" cạnh tên câu: soạn đề 10 câu thì dòng đó lặp
+                    lại 10 lần, đọc một lần là đủ. */}
+                {q.type === "MULTIPLE_CHOICE" && (
+                  <HelpHint className="ml-1" label={`Hướng dẫn câu ${qi + 1}`}>
+                    Bấm vòng tròn để đánh dấu đáp án đúng (có thể chọn nhiều).
+                  </HelpHint>
+                )}
               </span>
               <div className="flex items-center gap-2">
                 <div className="flex gap-1.5">
@@ -361,9 +370,6 @@ export function CreateAssignmentForm() {
                 >
                   <Plus className="h-4 w-4" aria-hidden /> Thêm lựa chọn
                 </button>
-                <p className="text-xs text-muted-foreground">
-                  Bấm vòng tròn để đánh dấu đáp án đúng (có thể chọn nhiều).
-                </p>
               </div>
             ) : (
               <div className="mt-3 space-y-1.5">

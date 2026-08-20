@@ -9,6 +9,7 @@ import {
   ArrowLeftRight,
   Award,
   BarChart3,
+  BadgeCheck,
   Bell,
   BookMarked,
   BookOpen,
@@ -76,8 +77,13 @@ type NavItem = {
   perm?: Action[];
   /** Mục có badge số động. `"chat"` = tổng tin nhắn chưa đọc (layout tính, sidebar vẽ). */
   badge?: "chat";
-  /** Mục gắn feature flag — chỉ hiện khi flag bật (R7-16: "eval"). */
-  flag?: "eval" | "scorm";
+  /**
+   * Mục gắn feature flag — chỉ hiện khi flag BẬT (R7-16: "eval").
+   *
+   * ⚠️ "classGroup" là cờ GỠ, không phải cờ mở: mặc định TẮT nên mục biến mất,
+   * env `CLASS_GROUP_ENABLED="true"` mới hiện lại. Xem lib/flags.ts.
+   */
+  flag?: "eval" | "scorm" | "classGroup";
   /**
    * R3: nhãn cụm con (sub-section) trong 1 NavGroup. Các item liền kề cùng `cluster`
    * được gom dưới 1 nhãn nhỏ — render trước item ĐẦU TIÊN hiển thị của cụm (robust với
@@ -138,7 +144,10 @@ const NAV_GROUPS: NavGroup[] = [
     label: "Lớp học & Lịch học",
     items: [
       { label: "Lớp học", href: "/classes", icon: BookOpen, perm: ["classes:view-all", "classes:view-own"] },
-      { label: "Nhóm lớp", href: "/class-groups", icon: Boxes, perm: ["class_group:view-all"] },
+      // 20/08/2026 — chủ dự án yêu cầu ẩn hẳn tính năng Nhóm lớp khỏi sidebar.
+      // Giữ mục lại (thay vì xoá dòng) để bật lại chỉ tốn 1 env, không cần nhớ
+      // icon/perm/thứ tự cũ. Route /class-groups cũng đã bị layout chặn.
+      { label: "Nhóm lớp", href: "/class-groups", icon: Boxes, perm: ["class_group:view-all"], flag: "classGroup" },
       { label: "Buổi học", href: "/sessions", icon: CalendarDays, perm: ["sessions:view"] },
       { label: "Lịch tổng", href: "/lich", icon: CalendarCheck, perm: ["sessions:view", "classes:view-all", "classes:view-own"] },
       // attendance:edit đi kèm vì CSKH (Sale) chỉ có quyền SỬA hồi tố (Task #16),
@@ -232,6 +241,16 @@ const NAV_GROUPS: NavGroup[] = [
     label: "Tài chính",
     items: [
       { label: "Đơn hàng", href: "/orders", icon: ShoppingBag, perm: ["orders:view"] },
+      // 20/08/2026 — hàng chờ DUYỆT ĐƠN của quản lý cơ sở (một nút duyệt cho cả giảm
+      // giá lẫn kế hoạch thanh toán). Thiếu mục này thì trang chỉ tới được từ TRONG
+      // chi tiết một đơn đang chờ — tức phải tìm ra đơn rồi mới biết hàng chờ tồn tại.
+      // perm dùng OR: ai có MỘT trong hai quyền duyệt là thấy link.
+      {
+        label: "Duyệt đơn hàng",
+        href: "/orders/duyet",
+        icon: BadgeCheck,
+        perm: ["discounts:approve", "installments:approve"],
+      },
       // Ghi nhận khoản thu là việc của quầy (payments:record) — xem ghi chú trong
       // app/(admin)/admin/payments/page.tsx. Đừng thu lại còn mỗi payments:manage.
       { label: "Thanh toán", href: "/payments", icon: CreditCard, perm: ["payments:manage", "payments:record"] },
@@ -326,6 +345,7 @@ export function Sidebar({
   chatUnread = 0,
   evalV2Enabled = false,
   scormEnabled = false,
+  classGroupEnabled = false,
 }: {
   granted: string[];
   /** `User.id` — topic realtime `user:{id}` để badge "Tin nhắn" tự nhảy. */
@@ -334,6 +354,8 @@ export function Sidebar({
   chatUnread?: number;
   evalV2Enabled?: boolean;
   scormEnabled?: boolean;
+  /** Cờ GỠ — mặc định false ⇒ mục "Nhóm lớp" ẩn. */
+  classGroupEnabled?: boolean;
 }) {
   const pathname = usePathname();
 
@@ -351,11 +373,12 @@ export function Sidebar({
         (it) =>
           (!it.flag ||
             (it.flag === "eval" && evalV2Enabled) ||
-            (it.flag === "scorm" && scormEnabled)) &&
+            (it.flag === "scorm" && scormEnabled) ||
+            (it.flag === "classGroup" && classGroupEnabled)) &&
           (!it.perm || it.perm.some((p) => grantedSet.has(p))),
       ),
     })).filter((g) => g.items.length > 0);
-  }, [grantedSet, evalV2Enabled, scormEnabled]);
+  }, [grantedSet, evalV2Enabled, scormEnabled, classGroupEnabled]);
 
   // Nhóm đang chứa trang hiện tại (deterministic SSR + client → không hydration mismatch).
   const activeGroupLabel = useMemo(() => {

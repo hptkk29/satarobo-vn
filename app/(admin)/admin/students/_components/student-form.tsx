@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useFormStatus } from "react-dom";
 import { ImageUploader } from "@/components/admin/ImageUploader";
 import { StringArrayEditor } from "@/app/(admin)/admin/kits/_components/string-array-editor";
+import { FieldLabel } from "@/components/admin/ui/help-hint";
 import { createStudent, updateStudent } from "../_actions";
 
 export type StudentFormValue = {
@@ -444,11 +445,11 @@ function Field({
   const baseClass =
     "w-full rounded-lg border border-border bg-card px-3 py-2 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20";
   return (
+    // `helper` nay ra icon "?" CẠNH NHÃN thay vì dòng chữ mờ dưới ô — sửa một chỗ, cả form
+    // đổi theo. Nút "?" nằm trong <label> vẫn an toàn: <button> là interactive content nên
+    // trình duyệt KHÔNG chuyển tiếp cú bấm xuống ô nhập.
     <label className="block">
-      <span className="mb-1 block text-sm font-semibold text-foreground">
-        {label}
-        {required && <span className="ml-1 text-state-danger-ink">*</span>}
-      </span>
+      <FieldLabel label={label} required={required} hint={helper} />
       {type === "textarea" ? (
         <textarea
           name={name}
@@ -470,7 +471,6 @@ function Field({
           className={baseClass}
         />
       )}
-      {helper && <span className="mt-1 block text-xs text-muted-foreground">{helper}</span>}
     </label>
   );
 }
@@ -492,10 +492,7 @@ function SelectField({
 }) {
   return (
     <label className="block">
-      <span className="mb-1 block text-sm font-semibold text-foreground">
-        {label}
-        {required && <span className="ml-1 text-state-danger-ink">*</span>}
-      </span>
+      <FieldLabel label={label} required={required} hint={helper} />
       <select
         name={name}
         defaultValue={defaultValue ?? ""}
@@ -508,7 +505,6 @@ function SelectField({
           </option>
         ))}
       </select>
-      {helper && <span className="mt-1 block text-xs text-muted-foreground">{helper}</span>}
     </label>
   );
 }

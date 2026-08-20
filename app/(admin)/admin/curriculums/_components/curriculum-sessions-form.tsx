@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { AlertTriangle, X } from "lucide-react";
+import { HelpHint } from "@/components/admin/ui/help-hint";
 import {
   applyResizeCurriculum,
   previewResizeCurriculum,
@@ -107,11 +108,15 @@ export function CurriculumSessionsForm({
     <section className="rounded-xl border border-border bg-card p-4">
       <h2 className="text-sm font-bold uppercase tracking-wider text-foreground">
         Số buổi
+        {/* `normal-case tracking-normal` đặt trên NỘI DUNG chứ không trên nút: tiêu đề
+            đang uppercase + giãn chữ, hướng dẫn 2 câu mà kế thừa thì đọc không nổi. */}
+        <HelpHint className="ml-1">
+          <span className="block normal-case tracking-normal">
+            Nhập tổng số buổi. Tăng → thêm buổi mới ở cuối (giữ nguyên buổi cũ); giảm →
+            lưu trữ buổi cuối (có cảnh báo nếu gắn bài tập/đề thi/tài liệu, không xóa).
+          </span>
+        </HelpHint>
       </h2>
-      <p className="mt-1 text-xs text-muted-foreground">
-        Nhập tổng số buổi. Tăng → thêm buổi mới ở cuối (giữ nguyên buổi cũ); giảm →
-        lưu trữ buổi cuối (có cảnh báo nếu gắn bài tập/đề thi/tài liệu, không xóa).
-      </p>
 
       {error && (
         <div className="mt-3 rounded-lg border border-state-danger-soft bg-state-danger-soft px-3 py-2 text-sm text-state-danger-ink">

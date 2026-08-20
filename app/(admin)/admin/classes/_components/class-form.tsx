@@ -15,6 +15,7 @@ import {
 } from "@/lib/classes/phase-form";
 import { SchedulePhasesEditor } from "./schedule-phases-editor";
 import { ClassSchedulePhases } from "../[id]/_components/class-schedule-phases";
+import { FieldLabel } from "@/components/admin/ui/help-hint";
 
 export type ClassFormValue = {
   id: string;
@@ -41,6 +42,11 @@ export type ClassFormValue = {
   maxStudents: number;
   minStudents: number;
   status: "PLANNED" | "RECRUITING" | "PENDING_APPROVAL" | "ACTIVE" | "COMPLETED" | "CANCELLED";
+  /**
+   * 20/08 — ô "Ghi chú nội bộ" ĐÃ GỠ khỏi form (yêu cầu chủ dự án). Field giữ lại trong
+   * type vì các trang gọi vẫn dựng `ClassFormValue` từ cùng một query, và cột DB `notes`
+   * vẫn còn dữ liệu cũ; form chỉ không render/không gửi nó nữa.
+   */
   notes: string | null;
 };
 
@@ -101,6 +107,7 @@ export function ClassForm({
   courses,
   orgUnits,
   classGroups,
+  classGroupEnabled = false,
   rooms,
   teachers,
   hoCenterIds = [],
@@ -115,6 +122,12 @@ export function ClassForm({
   courses: CourseOption[];
   orgUnits: OrgUnitOption[];
   classGroups: ClassGroupOption[];
+  /**
+   * Cờ GỠ tính năng "Nhóm lớp" (`isClassGroupEnabled()` — mặc định OFF từ 20/08/2026).
+   * false ⇒ KHÔNG render ô "Nhóm lớp cố định". Prop `classGroups` vẫn hoạt động y như cũ
+   * để bật lại cờ là ô hiện lại, không phải revert code.
+   */
+  classGroupEnabled?: boolean;
   rooms: RoomOption[];
   teachers: TeacherOption[];
   /** Cơ sở KHÔNG dạy học (Hội sở) — GV thuộc đây điều đi dạy được mọi cơ sở. */
@@ -378,37 +391,54 @@ export function ClassForm({
             />
           </Grid>
 
-          <SelectField
-            label="Nhóm lớp cố định (tuỳ chọn)"
-            name="classGroupId"
-            defaultValue={cls?.classGroupId ?? ""}
-            options={[
-              { value: "", label: "— Không gán nhóm —" },
-              ...classGroups.map((g) => ({
-                value: g.id,
-                label: `${g.displayCode}${g.name ? ` · ${g.name}` : ""}`,
-              })),
-            ]}
-            helper="Nếu chọn, lớp sẽ kế thừa cơ sở của nhóm. Dùng cho lộ trình tăng khoá Sata3 → 4 → 5…"
-          />
+          {/* Cờ GỠ (20/08) — ô này chỉ hiện khi bật lại `CLASS_GROUP_ENABLED`. Ẩn ⇒ FormData
+              không còn khoá `classGroupId`; server hiểu "vắng mặt = giữ nguyên nhóm cũ"
+              nên lớp đang gắn nhóm KHÔNG bị gỡ nhóm khi bấm Cập nhật (xem updateClass). */}
+          {classGroupEnabled && (
+            <SelectField
+              label="Nhóm lớp cố định (tuỳ chọn)"
+              name="classGroupId"
+              defaultValue={cls?.classGroupId ?? ""}
+              options={[
+                { value: "", label: "— Không gán nhóm —" },
+                ...classGroups.map((g) => ({
+                  value: g.id,
+                  label: `${g.displayCode}${g.name ? ` · ${g.name}` : ""}`,
+                })),
+              ]}
+              helper="Nếu chọn, lớp sẽ kế thừa cơ sở của nhóm. Dùng cho lộ trình tăng khoá Sata3 → 4 → 5…"
+            />
+          )}
 
+          {/* 20/08 — đổi vai ô này: không còn là "mô tả ngắn để giới thiệu lớp" mà là SỔ BÀN
+              GIAO nội bộ. Mục đích chủ dự án nêu rõ: đổi giáo viên thì người mới đọc được
+              tính cách/lưu ý từng học viên. Nội dung nhạy cảm ⇒ nhắc ngay tại nhãn rằng
+              phụ huynh KHÔNG thấy (đã rà: `Class.description` chỉ đọc ở 2 trang admin này
+              và khối mô tả trên site GV — không có đường nào ra portal/public). */}
           <Field
-            label="Mô tả ngắn"
+            label="Mô tả chi tiết đặc thù lớp học"
             name="description"
             type="textarea"
-            rows={2}
+            rows={6}
             defaultValue={cls?.description ?? undefined}
-            placeholder="Mô tả lớp học (có thể hiển thị public)"
+            placeholder={
+              "Đặc thù của lớp để bàn giao khi đổi giáo viên. Ví dụ:\n" +
+              "- Minh Anh: nhút nhát, cần gọi tên riêng mới phát biểu.\n" +
+              "- Bảo Nam: rất nhanh, xong sớm thì giao thêm bài mở rộng kẻo nghịch.\n" +
+              "- Cả lớp trầm sau 19h — nên đổi sang hoạt động nhóm."
+            }
+            hint="Chỉ nhân sự và giáo viên của lớp đọc được — KHÔNG hiển thị cho phụ huynh. Dùng để bàn giao khi đổi giáo viên: tính cách từng học viên, lưu ý riêng, cách xử lý."
           />
 
           {/* R7-06 — chốt version giáo trình lúc tạo lớp (chỉ khi tạo mới). */}
           {!isEdit && (
             <div>
               <label className="block">
-                <span className="mb-1 block text-sm font-semibold text-foreground">
-                  Giáo trình áp dụng
-                  <span className="ml-1 text-state-danger-ink">*</span>
-                </span>
+                <FieldLabel
+                  label="Giáo trình áp dụng"
+                  required
+                  hint="Mặc định = version ACTIVE mới nhất. Version được chốt (snapshot) vào lớp và sinh kế hoạch buổi."
+                />
                 <select
                   name="curriculumId"
                   value={curriculumId}
@@ -427,15 +457,12 @@ export function ClassForm({
                   )}
                 </select>
               </label>
-              {courseId && courseCurricula.length === 0 ? (
+              {/* GIỮ dạng chữ, KHÔNG chuyển sang icon "?": đây là lý do người dùng bấm
+                  "Tạo lớp" mà không được — hover mới thấy thì coi như không thấy. */}
+              {courseId && courseCurricula.length === 0 && (
                 <span className="mt-1 block text-xs text-state-danger-ink">
                   Khoá học chưa có giáo trình đang áp dụng (ACTIVE) — không thể tạo
                   lớp. Hãy kích hoạt giáo trình trước.
-                </span>
-              ) : (
-                <span className="mt-1 block text-xs text-muted-foreground">
-                  Mặc định = version ACTIVE mới nhất. Version được chốt (snapshot)
-                  vào lớp và sinh kế hoạch buổi.
                 </span>
               )}
             </div>
@@ -566,14 +593,10 @@ export function ClassForm({
             />
           </Grid>
 
-          <Field
-            label="Ghi chú nội bộ"
-            name="notes"
-            type="textarea"
-            rows={3}
-            defaultValue={cls?.notes ?? undefined}
-            placeholder="Note cho admin (không hiển thị public)"
-          />
+          {/* 20/08 — CHỖ CŨ CỦA "Ghi chú nội bộ". Bỏ theo yêu cầu chủ dự án: nó trùng vai
+              với "Mô tả chi tiết đặc thù lớp học" ở trên, người nhập phải đoán viết vào ô
+              nào. Cột `notes` trong DB GIỮ NGUYÊN (không migration) và server không ghi đè
+              ghi chú cũ khi form không gửi khoá này — xem updateClass. */}
         </Section>
       </fieldset>
 
@@ -632,7 +655,13 @@ type FieldProps = {
   onChange?: (v: string) => void;
   placeholder?: string;
   required?: boolean;
+  /**
+   * 20/08 — `helper` KHÔNG còn in thành dòng chữ mờ dưới ô nữa; nó đi vào cùng icon "?"
+   * với `hint`. Giữ lại hai tên vì các chỗ gọi đang dùng cả hai và ý nghĩa như nhau.
+   */
   helper?: string;
+  /** Hướng dẫn đặt sau icon "?" cạnh nhãn — hover/bấm mới hiện. */
+  hint?: React.ReactNode;
 };
 
 function Field({
@@ -648,6 +677,7 @@ function Field({
   placeholder,
   required,
   helper,
+  hint,
 }: FieldProps) {
   const isControlled = value !== undefined;
   const bind = isControlled
@@ -656,11 +686,10 @@ function Field({
   const baseClass =
     "w-full rounded-lg border border-border bg-card px-3 py-2 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20";
   return (
+    // Nút "?" của FieldLabel nằm trong <label> vẫn an toàn: <button> là interactive
+    // content nên trình duyệt KHÔNG chuyển tiếp cú bấm xuống ô nhập.
     <label className="block">
-      <span className="mb-1 block text-sm font-semibold text-foreground">
-        {label}
-        {required && <span className="ml-1 text-state-danger-ink">*</span>}
-      </span>
+      <FieldLabel label={label} required={required} hint={hint ?? helper} />
       {type === "textarea" ? (
         <textarea
           name={name}
@@ -682,7 +711,6 @@ function Field({
           className={baseClass}
         />
       )}
-      {helper && <span className="mt-1 block text-xs text-muted-foreground">{helper}</span>}
     </label>
   );
 }
@@ -715,10 +743,7 @@ function SelectField({
   const isControlled = value !== undefined;
   return (
     <label className="block">
-      <span className="mb-1 block text-sm font-semibold text-foreground">
-        {label}
-        {required && <span className="ml-1 text-state-danger-ink">*</span>}
-      </span>
+      <FieldLabel label={label} required={required} hint={helper} />
       <select
         name={name}
         {...(isControlled
@@ -742,7 +767,6 @@ function SelectField({
           </optgroup>
         ))}
       </select>
-      {helper && <span className="mt-1 block text-xs text-muted-foreground">{helper}</span>}
     </label>
   );
 }

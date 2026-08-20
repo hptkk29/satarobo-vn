@@ -170,10 +170,38 @@ export default async function SepayLogPage({
     : [];
   const orderByCode = new Map(legacyOrders.map((o) => [o.code, o]));
 
+  // 20/08 — Nối dòng nhật ký kỹ thuật với SỔ giao dịch. Trước đây màn này kết luận
+  // "chưa xử lý được" bằng cách xem nội dung CK CÓ MÃ ĐƠN hay không; từ 20/08 nội
+  // dung CK không còn nhúng mã đơn nữa nên điều kiện đó đúng với MỌI giao dịch mới
+  // ⇒ cảnh báo mất sạch giá trị phân loại và che luôn những dòng UNMATCHED thật.
+  // Câu hỏi đúng là "có TRA RA ĐƠN không" — chỉ `BankTransaction.status` trả lời
+  // được, kèm `unmatchedNote` nói rõ vướng ở đâu để kế toán biết đường xử lý.
+  // Khoá nối = `providerTxnId` mà `resolveProviderTxnId` dựng: reference trước, thiếu
+  // thì tới id giao dịch của SePay (đúng thứ tự webhook truyền vào ingest).
+  const legacyTxnKeys = [
+    ...new Set(
+      legacyRows
+        .map((r) => {
+          const p = readPayload(r.requestPayload);
+          return p.referenceCode ?? (p.id != null ? String(p.id) : null);
+        })
+        .filter((k): k is string => Boolean(k)),
+    ),
+  ];
+  const legacyTxns = legacyTxnKeys.length
+    ? await sdb.bankTransaction.findMany({
+        where: { provider: "SEPAY", providerTxnId: { in: legacyTxnKeys } },
+        select: { providerTxnId: true, status: true, unmatchedNote: true },
+      })
+    : [];
+  const txnByKey = new Map(legacyTxns.map((t) => [t.providerTxnId, t]));
+
   const legacyItems = legacyRows.map((r) => {
     const p = readPayload(r.requestPayload);
     const code = extractOrderCode(p.content ?? p.description);
     const order = code ? (orderByCode.get(code) ?? null) : null;
+    const txnKey = p.referenceCode ?? (p.id != null ? String(p.id) : null);
+    const txn = txnKey ? (txnByKey.get(txnKey) ?? null) : null;
     return {
       id: r.id,
       at: r.createdAt.toISOString(),
@@ -188,6 +216,10 @@ export default async function SepayLogPage({
       order: order
         ? { id: order.id, status: order.status, totalAmount: order.totalAmount, customerName: order.customerName }
         : null,
+      // null = không có dòng nào trong sổ giao dịch (log trước ngày dựng sổ, hoặc
+      // dòng AUTH_FAILED chưa từng đi tới bước ghi sổ) — KHÔNG suy ra là lỗi.
+      txnStatus: txn?.status ?? null,
+      unmatchedNote: txn?.unmatchedNote ?? null,
     };
   });
 
@@ -218,7 +250,7 @@ export default async function SepayLogPage({
         </div>
       </div>
 
-      <BankTxnClient items={txnItems} />
+      <BankTxnClient items={txnItems} canManage={canManagePayments} />
 
       <p className="mt-3 text-xs text-muted-foreground">
         Chỉ hiện 200 giao dịch gần nhất. Bảng trống nghĩa là chưa có tiền về qua cổng (webhook

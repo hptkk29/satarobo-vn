@@ -6,6 +6,7 @@ import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import type { PaymentMethod, PaymentMethodType } from "@prisma/client";
 import { Button } from "@/components/ui/button";
+import { HelpHint } from "@/components/admin/ui/help-hint";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -102,7 +103,12 @@ export function PaymentMethodForm({ method }: { method?: PaymentMethod }) {
 
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div className="space-y-1.5">
-            <Label htmlFor="code">Mã *</Label>
+            {/* Ghi chú "mã không đổi được" chuyển vào icon "?" cạnh nhãn — dòng chữ dưới
+                ô đẩy form dài ra mà chỉ đúng ở chế độ sửa. Lỗi validate thì GIỮ dạng chữ. */}
+            <Label htmlFor="code">
+              Mã *
+              {isEdit && <HelpHint>Mã không thể đổi sau khi tạo.</HelpHint>}
+            </Label>
             <Input
               id="code"
               name="code"
@@ -113,11 +119,6 @@ export function PaymentMethodForm({ method }: { method?: PaymentMethod }) {
             />
             {errors.code && (
               <p className="text-xs text-state-danger-ink">{errors.code}</p>
-            )}
-            {isEdit && (
-              <p className="text-xs text-muted-foreground">
-                Mã không thể đổi sau khi tạo
-              </p>
             )}
           </div>
 
@@ -166,16 +167,16 @@ export function PaymentMethodForm({ method }: { method?: PaymentMethod }) {
         </div>
 
         <div className="space-y-1.5">
-          <Label htmlFor="image">URL hình ảnh (logo)</Label>
+          <Label htmlFor="image">
+            URL hình ảnh (logo)
+            <HelpHint>Tạm thời nhập URL. Upload qua R2 sẽ thêm ở sprint sau.</HelpHint>
+          </Label>
           <Input
             id="image"
             name="image"
             defaultValue={method?.image ?? ""}
             placeholder="https://..."
           />
-          <p className="text-xs text-muted-foreground">
-            Tạm thời nhập URL. Upload qua R2 sẽ thêm ở sprint sau.
-          </p>
           {errors.image && (
             <p className="text-xs text-state-danger-ink">{errors.image}</p>
           )}
@@ -260,16 +261,20 @@ export function PaymentMethodForm({ method }: { method?: PaymentMethod }) {
       {/* Gateway config */}
       {showGatewayFields && (
         <section className="space-y-4 rounded-xl border-l-4 border-primary border-y border-r border-border bg-primary-soft/20 p-5">
-          <h2 className="text-sm font-bold uppercase tracking-wider text-primary">
+          {/* Ví dụ JSON là hướng dẫn cho MỤC này → gắn "?" cạnh tiêu đề khối. */}
+          <h2 className="flex items-center gap-1.5 text-sm font-bold uppercase tracking-wider text-primary">
             Cấu hình gateway (JSON)
+            <HelpHint>
+              VD:{" "}
+              {/* Nền tooltip là bg-foreground (đảo màu) nên chip `bg-muted` cũ sẽ thành
+                  chữ sáng trên nền sáng. `break-all` vì chuỗi JSON không có dấu cách
+                  để xuống dòng. */}
+              <code className="rounded bg-background/15 px-1 py-0.5 font-mono break-all">
+                {`{"merchantId":"XYZ","apiKey":"...","returnUrl":"..."}`}
+              </code>
+              . Sprint 5.6.5 sẽ tích hợp thực tế.
+            </HelpHint>
           </h2>
-          <p className="text-xs text-muted-foreground">
-            VD:{" "}
-            <code className="rounded bg-muted px-1.5 py-0.5">
-              {`{"merchantId":"XYZ","apiKey":"...","returnUrl":"..."}`}
-            </code>
-            . Sprint 5.6.5 sẽ tích hợp thực tế.
-          </p>
           <Textarea
             name="gatewayConfig"
             rows={4}

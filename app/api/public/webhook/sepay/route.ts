@@ -5,7 +5,7 @@ import { ensureOrderPaymentRecorded } from "@/lib/finance/payment";
 import { ensureParentAccountForOrder } from "@/lib/parents/provision";
 import { sendEmailForTrigger } from "@/lib/email/trigger";
 import { computeDueNow } from "@/lib/payments/due-now";
-import { ingestPayosWebhook } from "@/lib/payments/payos-ingest";
+import { ingestPayosWebhook, type IngestOutcome } from "@/lib/payments/payos-ingest";
 import { markInstallmentPaid } from "@/lib/orders/installments";
 import { notifyOrderByZnsIfNoEmail } from "@/lib/notify/order";
 import {
@@ -175,7 +175,17 @@ export async function POST(req: NextRequest) {
     // CHỈ làm cho ca KHÔNG CÓ ĐƠN: các ca còn lại (trả thiếu, giảm giá chưa
     // duyệt, đơn đã xử lý) đã có đơn rõ ràng và do người quyết định — giữ nguyên.
     if (decision.action === "MANUAL" && !order) {
-      await ingestPayosWebhook(
+      // 20/08 — TRƯỚC BẢN VÁ NÀY kết quả `ingestPayosWebhook` bị VỨT ĐI, rồi
+      // nhánh dưới LUÔN ghi MANUAL_REVIEW/FAILED kèm câu "không khớp mã đơn".
+      // Từ 20/08 nội dung CK không còn nhúng mã đơn ⇒ `extractOrderCode` luôn
+      // null ⇒ MỌI giao dịch thật rơi vào đây ⇒ nhật ký đỏ 100% ngay cả khi sổ
+      // mới đã khớp đúng phiếu thu, phân bổ xong, đơn đã CONFIRMED và biên nhận
+      // đã gửi. Hai hậu quả: (a) tín hiệu vận hành bão hoà nên lần hỏng THẬT
+      // không ai nhận ra — đúng cơ chế đã giấu sự cố 26,8tr suốt 6 ngày; (b) kế
+      // toán thấy "cần xử lý tay" có thể ghi Payment tay LẦN HAI cho giao dịch
+      // đã tự ghi sổ ⇒ cộng đôi tiền.
+      // Nay PHÂN NHÁNH THEO KẾT QUẢ ingest, và lý do ghi log lấy từ chính nó.
+      const ingested: IngestOutcome = await ingestPayosWebhook(
         {
           orderCode: payload.referenceCode ?? undefined,
           reference: payload.referenceCode ?? undefined,
@@ -187,10 +197,41 @@ export async function POST(req: NextRequest) {
           paymentLinkId: txnId ?? undefined,
         },
         "SEPAY",
-      ).catch((err) => {
+      ).catch((err: unknown) => {
         console.error("[sepay] ghi sổ giao dịch chưa khớp lỗi:", err);
-        return null;
+        // Ingest NÉM lỗi → vẫn là FAILED, nhưng phải mang thông điệp lỗi THẬT
+        // xuống nhật ký, đừng thay bằng câu mô tả sai nguyên nhân.
+        return {
+          status: "ERROR" as const,
+          reason: err instanceof Error ? err.message : "Lỗi không rõ khi ghi sổ giao dịch",
+        };
       });
+
+      if (ingested.status === "MATCHED" || ingested.status === "DUPLICATE") {
+        // Sổ mới tra ra phiếu thu bằng SĐT / tài khoản ảo / số tiền — KHÔNG cần
+        // mã đơn trong nội dung CK. Tiền đã vào đúng chỗ ⇒ đây là THÀNH CÔNG.
+        // DUPLICATE = SePay retry một giao dịch đã ghi nhận, cũng không phải lỗi.
+        await logIntegration({ action: "MATCH_TXN", status: "SUCCESS", payload });
+        return NextResponse.json({
+          success: true,
+          handled: true,
+          ledger: "v2",
+          match: ingested.status,
+        });
+      }
+
+      // UNMATCHED / IGNORED / ERROR → vẫn là hàng chờ xử lý tay, nhưng ghi LÝ DO
+      // THẬT (`unmatchedNote` do ingest dựng: tra theo gì, vướng ở đâu) thay vì
+      // "không khớp mã đơn trong nội dung chuyển khoản" — câu đó nay luôn đúng về
+      // chữ nhưng vô nghĩa về nghiệp vụ, không chỉ được cho kế toán làm gì tiếp.
+      await logIntegration({
+        action: "MANUAL_REVIEW",
+        status: "FAILED",
+        payload,
+        error: ingested.reason,
+      });
+      // Luôn trả 200 (xem ghi chú bên dưới): SePay coi non-2xx là lỗi và retry mãi.
+      return NextResponse.json({ success: true, handled: false, reason: ingested.reason });
     }
 
     await logIntegration({

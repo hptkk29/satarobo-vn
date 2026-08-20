@@ -22,7 +22,7 @@ export function QrZoom({
   src,
   alt,
   title,
-  matchKey,
+  transferContent,
   dimmed = false,
   className = "h-52 w-52",
 }: {
@@ -30,8 +30,11 @@ export function QrZoom({
   alt: string;
   /** Dòng đọc cho khách: "Đợt 1/2: 4.000.000đ". */
   title: string;
-  /** Nội dung chuyển khoản — thứ quyết định tiền rơi đúng đợt. */
-  matchKey?: string | null;
+  /**
+   * Nội dung chuyển khoản dạng người đọc (`NguyenVanA_84987654321_Sata4`) — sale
+   * đọc chuỗi này cho phụ huynh. Từ 20/08 KHÔNG còn là mã `ORD…D1`.
+   */
+  transferContent?: string | null;
   /** QR đã hết hiệu lực hiển thị → làm mờ như lúc chưa phóng to. */
   dimmed?: boolean;
   className?: string;
@@ -70,10 +73,10 @@ export function QrZoom({
               alt={alt}
               className="h-auto w-full max-w-[min(80vw,26rem)] rounded-lg border border-border bg-card object-contain"
             />
-            {matchKey && (
+            {transferContent && (
               <p className="break-all text-center text-sm text-muted-foreground">
                 Nội dung CK:{" "}
-                <span className="font-mono font-semibold text-foreground">{matchKey}</span>
+                <span className="font-mono font-semibold text-foreground">{transferContent}</span>
               </p>
             )}
             <p className="text-center text-xs text-muted-foreground">

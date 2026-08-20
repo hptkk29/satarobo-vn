@@ -39,6 +39,7 @@ import { HubGalleryTab } from "./_components/hub-gallery-tab";
 import { BackLink } from "../_components/ui/back-link";
 import { getSessionBirthdays } from "@/lib/students/birthday";
 import { BirthdayBanner } from "./_components/birthday-banner";
+import { HelpHint } from "@/components/admin/ui/help-hint";
 
 export const metadata = { title: "Lớp của tôi | Giáo viên Sata Robo" };
 
@@ -228,6 +229,10 @@ export default async function TeacherClassesPage({
         scheduleDays: true,
         startTime: true,
         endTime: true,
+        // 20/08 — "Mô tả chi tiết đặc thù lớp học": sổ bàn giao nội bộ (tính cách từng HV,
+        // lưu ý riêng). Đọc ở đây chính là LÝ DO field đổi vai — đổi giáo viên thì người
+        // mới phải thấy ngay, không phải đi hỏi lại. KHÔNG bao giờ đẩy sang portal PH.
+        description: true,
         course: { select: { name: true } },
         center: { select: { name: true } },
       },
@@ -287,6 +292,25 @@ export default async function TeacherClassesPage({
             <p className="mt-1 text-sm text-muted-foreground">{subtitle}</p>
           )}
         </div>
+
+        {/* Sổ bàn giao của lớp — đặt TRÊN thanh tab để hiện ở mọi tab: GV nhận lớp mới cần
+            đọc trước khi làm bất cứ việc gì, nhét vào một tab là coi như không ai thấy.
+            Rỗng thì không render (khối trống chỉ tổ đẩy nội dung xuống). `whitespace-pre-line`
+            giữ nguyên xuống dòng vì nhân sự gõ theo kiểu gạch đầu dòng từng học viên. */}
+        {cls.description?.trim() && (
+          <section className="mb-6 rounded-xl border border-border bg-muted/40 p-4">
+            <h2 className="mb-2 flex items-center gap-1 text-sm font-bold text-foreground">
+              Mô tả đặc thù lớp học
+              <HelpHint label="Ai đọc được mô tả này">
+                Ghi chú bàn giao nội bộ — chỉ nhân sự và giáo viên của lớp đọc được,
+                KHÔNG hiển thị cho phụ huynh. Cần sửa thì báo quản lý cơ sở.
+              </HelpHint>
+            </h2>
+            <p className="whitespace-pre-line text-sm leading-relaxed text-muted-foreground">
+              {cls.description}
+            </p>
+          </section>
+        )}
 
         <HubTabBar
           classId={classId}

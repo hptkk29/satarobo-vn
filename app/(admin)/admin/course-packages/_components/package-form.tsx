@@ -11,6 +11,8 @@ import {
   type JsonObjectItem,
 } from "./json-array-editor";
 import { ImageUploader } from "@/components/admin/ImageUploader";
+import { MoneyInput } from "@/components/ui/money-input";
+import { HelpHint } from "@/components/admin/ui/help-hint";
 import { FaqEditor, type FaqItem } from "./faq-editor";
 
 type PackageFormValue = {
@@ -89,7 +91,8 @@ interface PackageFormProps {
 type FieldProps = {
   label: string;
   name: string;
-  type?: "text" | "number" | "textarea";
+  /** `money` = ô tiền có chấm phân cách; vẫn submit số trần như `number`. */
+  type?: "text" | "number" | "textarea" | "money";
   rows?: number;
   defaultValue?: string | number | null;
   placeholder?: string;
@@ -267,19 +270,19 @@ export function PackageForm({ pkg, courses = [], defaultCourseId }: PackageFormP
           <Field
             label="Giá niêm yết (VND)"
             name="priceOriginal"
-            type="number"
+            type="money"
             defaultValue={pkg?.priceOriginal}
           />
           <Field
             label="Giá ưu đãi sớm (VND)"
             name="priceEarlyBird"
-            type="number"
+            type="money"
             defaultValue={pkg?.priceEarlyBird}
           />
           <Field
             label="Giá hội viên (VND)"
             name="priceMember"
-            type="number"
+            type="money"
             defaultValue={pkg?.priceMember}
           />
         </Grid>
@@ -362,11 +365,22 @@ export function PackageForm({ pkg, courses = [], defaultCourseId }: PackageFormP
 
       {/* FL1-05 — gắn gói BÁN với khoá DẠY (Course) để gỡ "trùng" gói/khoá. */}
       <Section title="Khoá dạy liên kết (chương trình giảng)">
-        <label className="block space-y-1.5">
-          <span className="text-sm font-medium text-foreground">
-            Khoá dạy (Course) cung cấp giáo trình cho gói này
+        {/* Bọc bằng <div> chứ không phải <label> nữa: nút "?" cũng là phần tử gắn nhãn
+            được, đứng trong <label> thì nó CƯỚP nhãn của <select> (nhãn tính theo phần
+            tử gắn-nhãn đầu tiên). Dùng htmlFor để giữ đúng liên kết nhãn ↔ ô chọn. */}
+        <div className="space-y-1.5">
+          <span className="flex items-center text-sm font-medium text-foreground">
+            <label htmlFor="pkg-course-id">
+              Khoá dạy (Course) cung cấp giáo trình cho gói này
+            </label>
+            <HelpHint className="ml-1">
+              Gói = đơn vị BÁN (giá, marketing). Khoá dạy = đơn vị GIẢNG (chương
+              trình). Liên kết để mỗi gói trỏ đúng khoá dạy, tránh trùng lặp. Giá vẫn
+              lấy từ gói — không đổi.
+            </HelpHint>
           </span>
           <select
+            id="pkg-course-id"
             name="courseId"
             value={courseId}
             onChange={(e) => setCourseId(e.target.value)}
@@ -380,12 +394,7 @@ export function PackageForm({ pkg, courses = [], defaultCourseId }: PackageFormP
               </option>
             ))}
           </select>
-        </label>
-        <p className="text-xs text-muted-foreground">
-          Gói = đơn vị BÁN (giá, marketing). Khoá dạy = đơn vị GIẢNG (chương trình).
-          Liên kết để mỗi gói trỏ đúng khoá dạy, tránh trùng lặp. Giá vẫn lấy từ gói —
-          không đổi.
-        </p>
+        </div>
       </Section>
 
       <Section title="Khoá cha (landing marketing)">
@@ -471,14 +480,16 @@ export function PackageForm({ pkg, courses = [], defaultCourseId }: PackageFormP
         />
 
         <div>
-          <label className="mb-1.5 block text-sm font-semibold text-foreground">
+          {/* <span> chứ không <label>: khối này không có ô nhập nào để gắn nhãn, mà
+              trong nó lại có nút "?" — để <label> thì nút hoá thành "ô" được gắn nhãn. */}
+          <span className="mb-1.5 flex items-center text-sm font-semibold text-foreground">
             FAQ riêng cho khóa này
-          </label>
+            <HelpHint className="ml-1">
+              Mỗi FAQ là 1 cặp question/answer. Sẽ render trong section &ldquo;Câu hỏi
+              thường gặp&rdquo; trên trang chi tiết.
+            </HelpHint>
+          </span>
           <FaqEditor value={faqs} onChange={setFaqs} />
-          <p className="mt-1 text-xs text-muted-foreground">
-            Mỗi FAQ là 1 cặp question/answer. Sẽ render trong section "Câu hỏi
-            thường gặp" trên trang chi tiết.
-          </p>
         </div>
       </Section>
 
@@ -530,6 +541,17 @@ function Field({
           rows={rows || 3}
           defaultValue={defaultValue ?? ""}
           className={inputClasses}
+          {...props}
+        />
+      ) : type === "money" ? (
+        // Chỉ đắp thêm `disabled:bg-muted`: class nền của MoneyInput đã trùng
+        // `inputClasses`, mà truyền cả chuỗi thì `px-3` trong đó sẽ ăn mất `pr-8`
+        // MoneyInput chừa cho chữ "đ" (class truyền vào được ghép sau).
+        <MoneyInput
+          name={name}
+          defaultValue={defaultValue}
+          min={0}
+          className="disabled:bg-muted"
           {...props}
         />
       ) : (

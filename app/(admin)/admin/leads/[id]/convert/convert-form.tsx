@@ -4,6 +4,8 @@ import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { Plus, Trash2, AlertTriangle } from 'lucide-react'
 import { toast } from 'sonner'
+import { MoneyInput } from '@/components/ui/money-input'
+import { HelpHint } from '@/components/admin/ui/help-hint'
 import { submitConvertV2 } from './actions'
 
 type ClassOpt = {
@@ -196,6 +198,10 @@ export function ConvertForm({
           <label className="block">
             <span className="mb-1 block text-xs font-medium text-muted-foreground">
               Email <span className="font-normal text-muted-foreground">(không bắt buộc)</span>
+              <HelpHint>
+                Chỉ là kênh dự phòng. Bỏ trống cũng không sao — thông báo và mã kích hoạt
+                đi theo số điện thoại.
+              </HelpHint>
             </span>
             <input
               type="email"
@@ -206,7 +212,14 @@ export function ConvertForm({
             />
           </label>
           <label className="block">
-            <span className="mb-1 block text-xs font-medium text-muted-foreground">SĐT * (tài khoản đăng nhập)</span>
+            <span className="mb-1 block text-xs font-medium text-muted-foreground">
+              SĐT * (tài khoản đăng nhập)
+              <HelpHint>
+                Chính là tên đăng nhập của phụ huynh vào cổng học viên, và là số nhận mã
+                kích hoạt qua Zalo. Gõ sai một chữ số là phụ huynh không vào được — sửa
+                lại phải nhờ quản trị.
+              </HelpHint>
+            </span>
             <input value={parentPhone} onChange={(e) => setParentPhone(e.target.value)} className={inputCls} />
           </label>
           <label className="block">
@@ -277,7 +290,14 @@ export function ConvertForm({
                   />
                 </label>
                 <label className="block">
-                  <span className="mb-1 block text-xs font-medium text-muted-foreground">Lớp đăng ký *</span>
+                  <span className="mb-1 block text-xs font-medium text-muted-foreground">
+                    Lớp đăng ký *
+                    <HelpHint>
+                      Danh sách chỉ có lớp đang mở tại cơ sở của lead. Chốt xong bé vào
+                      thẳng lớp này và học phí của lớp thành công nợ của phụ huynh — đổi
+                      lớp sau phải làm ở màn Lớp học.
+                    </HelpHint>
+                  </span>
                   <select
                     value={s.classId}
                     onChange={(e) => patch(s.key, { classId: e.target.value })}
@@ -326,7 +346,14 @@ export function ConvertForm({
       {/* FL2-01 — Học phí: 1 đợt (full) hoặc 2 đợt (đợt 1 đã thu + đợt 2 hẹn ngày). */}
       {hasOrder && (
         <div className="rounded-xl border border-border bg-card p-4">
-          <h2 className="mb-1 text-sm font-semibold text-foreground">Học phí</h2>
+          <h2 className="mb-1 text-sm font-semibold text-foreground">
+            Học phí
+            <HelpHint className="ml-1">
+              Tổng lấy từ đơn hàng đã tạo cho lead này, không sửa được ở đây — muốn đổi
+              thì sửa đơn hàng rồi quay lại. Chọn &ldquo;đóng đủ 1 đợt&rdquo; khi phụ
+              huynh đóng hết ngay; chọn &ldquo;2 đợt&rdquo; khi còn nợ lại một phần.
+            </HelpHint>
+          </h2>
           <p className="mb-3 text-xs text-muted-foreground">
             Tổng đơn hàng: <strong>{orderTotal.toLocaleString('vi-VN')}đ</strong>
           </p>
@@ -356,19 +383,36 @@ export function ConvertForm({
           {installPlan === 'TWO' && (
             <div className="mt-3 grid gap-3 sm:grid-cols-3">
               <label className="block">
-                <span className="mb-1 block text-xs font-medium text-muted-foreground">Đợt 1 — đã thu (VNĐ)</span>
-                <input
-                  type="number"
+                <span className="mb-1 block text-xs font-medium text-muted-foreground">
+                  Đợt 1 — đã thu (VNĐ)
+                  <HelpHint>
+                    Số tiền phụ huynh ĐÃ đóng thật tại thời điểm chốt, không phải số dự
+                    kiến. Không được lớn hơn tổng đơn; phần còn lại tự thành đợt 2.
+                  </HelpHint>
+                </span>
+                {/* Ô tiền: gõ 10000000 → hiện 10.000.000. Vẫn giữ state dạng chuỗi để
+                    phép kẹp dot1Num (parseInt + clamp theo tổng đơn) không đổi. */}
+                <MoneyInput
+                  name="dot1Amount"
                   min={0}
                   max={orderTotal}
                   value={dot1Amount}
-                  onChange={(e) => setDot1Amount(e.target.value)}
+                  onValueChange={(v) => setDot1Amount(v === null ? '' : String(v))}
                   placeholder="0"
+                  // suffix={null}: nhãn đã ghi "(VNĐ)", và `inputCls` mang px-3 nên nó ghi
+                  // đè phần lề phải mà MoneyInput chừa cho hậu tố ⇒ hậu tố đè lên chữ số.
+                  suffix={null}
                   className={inputCls}
                 />
               </label>
               <label className="block">
-                <span className="mb-1 block text-xs font-medium text-muted-foreground">Đợt 2 — còn lại</span>
+                <span className="mb-1 block text-xs font-medium text-muted-foreground">
+                  Đợt 2 — còn lại
+                  <HelpHint>
+                    Tự tính = tổng đơn − đợt 1, không gõ tay được. Đây chính là khoản
+                    công nợ hệ thống sẽ nhắc phụ huynh trước hạn.
+                  </HelpHint>
+                </span>
                 <input
                   value={`${dot2Num.toLocaleString('vi-VN')}đ`}
                   readOnly
@@ -376,7 +420,13 @@ export function ConvertForm({
                 />
               </label>
               <label className="block">
-                <span className="mb-1 block text-xs font-medium text-muted-foreground">Đợt 2 — ngày hẹn đóng *</span>
+                <span className="mb-1 block text-xs font-medium text-muted-foreground">
+                  Đợt 2 — ngày hẹn đóng *
+                  <HelpHint>
+                    Ngày phụ huynh hẹn đóng nốt. Hệ thống nhắc công nợ dựa vào ngày này,
+                    nên phải là ngày đã thống nhất với phụ huynh chứ không đặt đại.
+                  </HelpHint>
+                </span>
                 <input
                   type="date"
                   value={dot2DueDate}
@@ -412,6 +462,14 @@ export function ConvertForm({
         >
           Hủy
         </button>
+        {/* Hệ quả của việc chốt nằm ở NÚT chứ không ở ô nào — đặt "?" ngay cạnh nút để
+            người chốt đọc được trước khi bấm. */}
+        <HelpHint className="self-center [&_svg]:size-4" label="Chốt lead nghĩa là gì">
+          Bấm chốt là hệ thống tạo hồ sơ học viên, ghi danh vào lớp đã chọn và tạo tài
+          khoản phụ huynh ở trạng thái chờ kích hoạt; lead chuyển sang &ldquo;đã chuyển
+          đổi&rdquo;. Lỡ bấm hai lần cũng không tạo trùng, nhưng gỡ ra thì phải nhờ quản
+          trị — kiểm lại tên bé, lớp và số tiền trước khi bấm.
+        </HelpHint>
       </div>
     </div>
   )

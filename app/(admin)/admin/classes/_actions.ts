@@ -618,10 +618,37 @@ export async function updateClass(
   });
   if (!before) return { error: "Không tìm thấy lớp" };
 
+  // 20/08 — HAI Ô ĐÃ GỠ KHỎI FORM: "Nhóm lớp cố định" (cờ `CLASS_GROUP_ENABLED` mặc định
+  // OFF) và "Ghi chú nội bộ" (bỏ hẳn). Ô không render ⇒ FormData KHÔNG còn hai khoá đó,
+  // mà `classCreateSchema` lại mặc định chúng về `null` ⇒ `toUpdateData` sẽ
+  // `classGroup: { disconnect: true }` + `notes: null`. Nghĩa là: mỗi lần ai đó bấm
+  // "Cập nhật" một lớp là lớp bị GỠ KHỎI NHÓM và XOÁ SẠCH ghi chú cũ, không cảnh báo gì.
+  //
+  // Quy ước phân biệt — `formData.get()` trả `null` khi khoá VẮNG MẶT, trả `""` khi ô có
+  // mặt nhưng để trống. Vắng mặt = "form này không quản field đó" ⇒ GIỮ NGUYÊN giá trị
+  // đang lưu. Chuỗi rỗng = người dùng cố ý xoá ⇒ vẫn ghi null như cũ.
+  // (Đường nhập Excel/API cũ có gửi 2 khoá này thì chạy y hệt trước.)
+  const keepClassGroup = formData.get("classGroupId") === null;
+  const keepNotes = formData.get("notes") === null;
+  // ⚠️ Class ∈ SCOPED_MODELS: findUnique lọc hậu kỳ theo record.centerId → select PHẢI
+  // kèm centerId, thiếu là trả null cho lớp actor VẪN xem được.
+  const kept =
+    keepClassGroup || keepNotes
+      ? await sdb.class.findUnique({
+          where: { id },
+          select: { centerId: true, classGroupId: true, notes: true },
+        })
+      : null;
+  const input = {
+    ...parsed.data,
+    ...(keepClassGroup ? { classGroupId: kept?.classGroupId ?? null } : {}),
+    ...(keepNotes ? { notes: kept?.notes ?? null } : {}),
+  };
+
   // QA 21/07 (B4) — KHÔNG cho đổi cờ sang CANCELLED qua update trần: hủy lớp phải
   // đi qua cancelClassAction (rút ghi danh + hủy buổi tương lai + hoàn tiền).
   // Đổi cờ trần để lại HS "Đang học" + buổi "Sắp tới" trong lớp đã Huỷ.
-  if (parsed.data.status === "CANCELLED" && before.status !== "CANCELLED") {
+  if (input.status === "CANCELLED" && before.status !== "CANCELLED") {
     return {
       error:
         'Không đổi trạng thái "Huỷ" trực tiếp — dùng nút "Hủy lớp" (có rút ghi danh, hủy buổi và hoàn tiền).',
@@ -631,7 +658,7 @@ export async function updateClass(
   const { actorId, actorName } = getAuditActor(session);
 
   // PR-C: suy ra centerId/orgUnitId (kế thừa nhóm lớp nếu có) để dual-write.
-  const { centerId, orgUnitId } = await resolveClassOrg(parsed.data, sdb);
+  const { centerId, orgUnitId } = await resolveClassOrg(input, sdb);
 
   // Cách ly cơ sở: lớp HIỆN TẠI + cơ sở ĐÍCH (nếu đổi) đều phải trong tầm nhìn actor.
   if (!passesScope("Class", { centerId: before.centerId }, actor)) {
@@ -648,8 +675,8 @@ export async function updateClass(
   const teacherCenterErr = await assertTeachersInCenter(
     sdb,
     centerId,
-    parsed.data.teacherId,
-    parsed.data.assistantId,
+    input.teacherId,
+    input.assistantId,
   );
   if (teacherCenterErr) return { error: teacherCenterErr };
 
@@ -678,30 +705,30 @@ export async function updateClass(
   const scheduleProvided = planPhases !== null || formData.getAll("scheduleDays").length > 0;
 
   const flat = planPhases
-    ? flatScheduleAtStart(planPhases, parsed.data.startDate ?? null)
+    ? flatScheduleAtStart(planPhases, input.startDate ?? null)
     : null;
   const dataWithSchedule = flat
     ? {
-        ...parsed.data,
+        ...input,
         scheduleDays: flat.scheduleDays,
         startTime: flat.startTime,
         endTime: flat.endTime,
       }
-    : parsed.data;
+    : input;
 
   const dataWithEndDate = {
     ...dataWithSchedule,
     endDate:
-      parsed.data.endDate ??
+      input.endDate ??
       (await suggestClassEndDate({
         centerId,
-        startDate: parsed.data.startDate,
+        startDate: input.startDate,
         // Lịch không gửi kèm → tính bằng lịch ĐANG LƯU, không phải mảng rỗng của schema.
         scheduleDays: scheduleProvided
           ? dataWithSchedule.scheduleDays
           : (current?.scheduleDays ?? []),
         phases: planPhases ?? undefined,
-        courseId: parsed.data.courseId,
+        courseId: input.courseId,
         curriculumId: current?.curriculumId ?? null,
       }).catch(() => null)),
   };

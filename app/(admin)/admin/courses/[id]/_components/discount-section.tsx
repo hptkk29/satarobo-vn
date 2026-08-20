@@ -9,6 +9,8 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { MoneyInput } from "@/components/ui/money-input";
+import { HelpHint } from "@/components/admin/ui/help-hint";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import {
@@ -52,6 +54,10 @@ const TYPE_LABEL: Record<CourseDiscountType, string> = {
 };
 
 const TYPE_OPTIONS: CourseDiscountType[] = ["AMOUNT", "PERCENT", "SCHOLARSHIP", "PROGRAM"];
+
+/** Dáng ô nhập của shadcn `<Input>` — đắp lên `<MoneyInput>` (vốn theo dáng form tự
+ *  viết: cao hơn, nền bg-card) để hai ô cạnh nhau không lệch nhau. */
+const SHADCN_INPUT_LOOK = "h-8 border-input bg-transparent py-1 pl-2.5";
 
 function formatValue(d: DiscountRow): string {
   if (d.type === "AMOUNT") return `${d.value.toLocaleString("vi-VN")}đ`;
@@ -178,10 +184,12 @@ export function DiscountSection({
     <div className="rounded-xl border border-border bg-card shadow-sm">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border p-4">
         <div>
-          <h2 className="text-lg font-semibold text-foreground">Ưu đãi</h2>
-          <p className="mt-0.5 text-sm text-muted-foreground">
-            Cấu hình giảm giá / học bổng áp dụng toàn hệ thống cho khoá này.
-          </p>
+          <h2 className="flex items-center gap-1.5 text-lg font-semibold text-foreground">
+            Ưu đãi
+            <HelpHint>
+              Cấu hình giảm giá / học bổng áp dụng toàn hệ thống cho khoá này.
+            </HelpHint>
+          </h2>
         </div>
         {canEdit && editingId === null && (
           <Button size="sm" onClick={openNew}>
@@ -220,14 +228,33 @@ export function DiscountSection({
                   {form.type === "AMOUNT" ? "(VND)" : form.type === "PROGRAM" ? "" : "(%)"}
                 </span>
               </Label>
-              <Input
-                id="d-value"
-                type="number"
-                min={0}
-                value={form.value}
-                onChange={(e) => setForm((f) => ({ ...f, value: e.target.value }))}
-                placeholder={form.type === "AMOUNT" ? "500000" : "10"}
-              />
+              {/* Ô này ĐA NGHĨA theo loại ưu đãi: AMOUNT là SỐ TIỀN (cần chấm phân
+                  cách), còn PERCENT/SCHOLARSHIP là PHẦN TRĂM — định dạng nghìn cho %
+                  là sai. Nên chỉ đổi sang ô tiền đúng nhánh AMOUNT. */}
+              {form.type === "AMOUNT" ? (
+                <MoneyInput
+                  id="d-value"
+                  name="value"
+                  min={0}
+                  value={form.value}
+                  onValueChange={(v) =>
+                    setForm((f) => ({ ...f, value: v === null ? "" : String(v) }))
+                  }
+                  placeholder="500000"
+                  // Kéo về đúng dáng <Input> shadcn để ô không đổi chiều cao/nền mỗi
+                  // lần đổi loại ưu đãi. `pl-` chứ không `px-`: giữ chỗ cho chữ "đ".
+                  className={SHADCN_INPUT_LOOK}
+                />
+              ) : (
+                <Input
+                  id="d-value"
+                  type="number"
+                  min={0}
+                  value={form.value}
+                  onChange={(e) => setForm((f) => ({ ...f, value: e.target.value }))}
+                  placeholder="10"
+                />
+              )}
             </div>
           </div>
 

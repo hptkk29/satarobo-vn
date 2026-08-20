@@ -30,6 +30,7 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { HelpHint } from "@/components/admin/ui/help-hint";
 import {
   gradeSubmission,
   gradeSubmissionRubric,
@@ -325,12 +326,15 @@ export function GradeForm({
                   key={c.key}
                   className="rounded-lg border border-border p-3"
                 >
-                  <div className="mb-2">
-                    <p className="text-sm font-semibold text-foreground">
-                      {c.label}
-                    </p>
-                    <p className="text-xs text-muted-foreground">{c.desc}</p>
-                  </div>
+                  {/* Mô tả tiêu chí gộp vào icon "?" cạnh nhãn: để dạng dòng chữ
+                      thì 6 tiêu chí ăn thêm 6 dòng, đẩy bảng rubric dài quá một
+                      màn hình — trong khi GV chỉ cần đọc mô tả ở vài lần đầu. */}
+                  <p className="mb-2 text-sm font-semibold text-foreground">
+                    {c.label}
+                    <HelpHint className="ml-1" label={`Tiêu chí ${c.label}`}>
+                      {c.desc}
+                    </HelpHint>
+                  </p>
                   <div className="flex flex-wrap gap-1.5">
                     {RUBRIC_LEVELS.map((l) => {
                       const active = levels[c.key] === l.key;

@@ -1,13 +1,19 @@
 "use client";
 
 // Bảng GIAO DỊCH TIỀN VỀ (BankTransaction) — sổ gốc của mọi phân bổ.
-// Chỉ ĐỌC: xử lý tay (khớp lại, hoàn tiền) làm ở trang đơn nơi có đủ ngữ cảnh
-// giảm giá/đợt thu. Cột "Rót vào phiếu" cho thấy tiền đã đi đâu — đây là thứ
-// IntegrationLog cũ không trả lời được (log chỉ nói webhook chạy xong hay hỏng).
+// Cột "Rót vào phiếu" cho thấy tiền đã đi đâu — thứ IntegrationLog cũ không trả lời
+// được (log chỉ nói webhook chạy xong hay hỏng).
+//
+// ⚠️ 21/08 — BỎ nguyên tắc "chỉ đọc". Trước đây màn này cố tình không có thao tác
+// nào, với lý do "xử lý tay làm ở trang đơn nơi có đủ ngữ cảnh". Lý do đó chỉ đúng
+// khi đã BIẾT tiền của đơn nào — mà hàng chờ này tồn tại chính vì KHÔNG biết. Nay
+// dòng UNMATCHED có nút gán vào đơn / bỏ qua ngay tại chỗ (xem `XuLyGiaoDich`).
+// Dòng đã MATCHED vẫn không có nút: rót rồi thì sửa ở trang đơn, nơi thấy đủ đợt thu.
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { PhanTrangBang } from "@/components/ui/phan-trang-bang";
+import { XuLyGiaoDich } from "./xu-ly-giao-dich";
 
 export type AllocationView = {
   paymentRequestId: string;
@@ -53,7 +59,14 @@ function requestLabel(a: AllocationView): string {
   return a.installmentNo === 0 ? "Toàn đơn" : `Đợt ${a.installmentNo}`;
 }
 
-export function BankTxnClient({ items }: { items: BankTxnItem[] }) {
+export function BankTxnClient({
+  items,
+  canManage = false,
+}: {
+  items: BankTxnItem[];
+  /** `payments:manage` — chỉ người này mới thấy nút. Server vẫn kiểm lại. */
+  canManage?: boolean;
+}) {
   const [q, setQ] = useState("");
 
   const rows = useMemo(() => {
@@ -94,12 +107,13 @@ export function BankTxnClient({ items }: { items: BankTxnItem[] }) {
                 <th className="w-32 px-3 py-2">Cổng</th>
                 <th className="w-32 px-3 py-2">Trạng thái</th>
                 <th className="px-3 py-2">Rót vào phiếu thu</th>
+                {canManage && <th className="w-44 px-3 py-2">Xử lý</th>}
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
               {rows.length === 0 && (
                 <tr>
-                  <td colSpan={6} className="px-3 py-8 text-center text-muted-foreground">
+                  <td colSpan={canManage ? 7 : 6} className="px-3 py-8 text-center text-muted-foreground">
                     {items.length === 0
                       ? "Chưa có giao dịch nào — chưa bật webhook cổng thanh toán hoặc chưa có tiền về."
                       : "Không có giao dịch khớp bộ lọc."}
@@ -142,7 +156,7 @@ export function BankTxnClient({ items }: { items: BankTxnItem[] }) {
                     <td className="px-3 py-2 align-top">
                       {i.allocations.length === 0 ? (
                         <span className="text-xs text-state-warning-ink">
-                          Chưa rót vào phiếu nào — mở đơn để xử lý tay
+                          Chưa rót vào phiếu nào{canManage ? " — dùng nút bên phải" : ""}
                         </span>
                       ) : (
                         <ul className="space-y-1">
@@ -184,6 +198,19 @@ export function BankTxnClient({ items }: { items: BankTxnItem[] }) {
                         </ul>
                       )}
                     </td>
+                    {canManage && (
+                      <td className="px-3 py-2 align-top">
+                        {i.status === "UNMATCHED" ? (
+                          <XuLyGiaoDich
+                            bankTransactionId={i.id}
+                            amount={i.amount}
+                            goiY={i.content}
+                          />
+                        ) : (
+                          <span className="text-xs text-muted-foreground">—</span>
+                        )}
+                      </td>
+                    )}
                   </tr>
                 );
               })}

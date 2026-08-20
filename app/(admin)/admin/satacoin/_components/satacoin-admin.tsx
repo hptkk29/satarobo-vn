@@ -33,6 +33,22 @@ type Txn = {
   alreadyReversed: boolean;
 };
 
+/**
+ * ⚠️ CỐ Ý KHÔNG dùng `<MoneyInput>` (ô tiền có chấm phân cách nghìn) cho hai ô
+ * "Số coin" / "Số coin (âm = trừ)" bên dưới — đã cân nhắc ở vòng rà 20/08, đừng
+ * lật lại.
+ *
+ * Yêu cầu của chủ dự án là "thêm dấu chấm cho SỐ TIỀN". SataCoin là ĐIỂM THƯỞNG
+ * nội bộ, KHÔNG phải VNĐ: giá trị thực tế là hàng đơn vị tới hàng chục (rule mặc
+ * định +5 coin), nên dấu chấm phân cách nghìn không bao giờ xuất hiện — thêm vào
+ * chỉ đổi kiểu ô nhập mà không đổi thứ gì người dùng thấy, đồng thời làm ô này
+ * TRÔNG NHƯ ô tiền — rồi người sau gõ "5.000" tưởng là năm nghìn đồng trong khi hệ
+ * thống ghi 5000 coin vào sổ cái thưởng. (`MoneyInput` có `allowNegative` nên vẫn
+ * nhận được số âm; vấn đề không nằm ở đó mà ở việc gắn nhãn "tiền" cho thứ không
+ * phải tiền.)
+ *
+ * `<input type="number">` là đúng ngữ nghĩa cho một con số đếm được, có dấu.
+ */
 export function SataCoinAdmin({
   rules,
   students,

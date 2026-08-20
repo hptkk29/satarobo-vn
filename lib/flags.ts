@@ -168,3 +168,36 @@ export function isAuthPhoneProvisioningEnabled(): boolean {
 export function isPaymentLedgerV2Enabled(): boolean {
   return process.env.PAYMENT_LEDGER_V2 === "true"; // mặc định OFF
 }
+
+/**
+ * 20/08/2026 — TẮT tính năng NHÓM LỚP theo yêu cầu chủ dự án ("ẩn nhóm lớp,
+ * disable tính năng nhóm lớp ở sidebar luôn").
+ *
+ * Mặc định **OFF** — ngược chiều mọi cờ khác trong file này, vì đây là cờ GỠ chứ
+ * không phải cờ mở: hành vi mong muốn là ẩn, còn env chỉ để bật lại nếu cần.
+ *
+ * Cờ này che: mục sidebar "Nhóm lớp", ô "Nhóm lớp cố định" trong form lớp, và
+ * mọi route `/admin/class-groups/*` (layout tự đá về /admin/classes).
+ *
+ * KHÔNG đụng schema: `Class.classGroupId` và bảng `ClassGroup` giữ nguyên dữ liệu.
+ * Lớp nào đang gắn nhóm vẫn gắn — chỉ là không ai sửa được qua giao diện nữa.
+ * Bật lại: đặt env `CLASS_GROUP_ENABLED="true"` + redeploy, không cần revert code.
+ */
+export function isClassGroupEnabled(): boolean {
+  return process.env.CLASS_GROUP_ENABLED === "true"; // mặc định OFF (đã gỡ)
+}
+
+/**
+ * 20/08/2026 — TẮT tính năng CHECKLIST CƠ SỞ (mở/đóng cơ sở hằng ngày) theo yêu
+ * cầu chủ dự án ("ẩn checklist cơ sở, disable chức năng này, xoá luôn ở dashboard").
+ *
+ * Mặc định **OFF** (cờ GỠ — xem `isClassGroupEnabled`). Che: route
+ * `/admin/cham-cong/checklist-co-so/*`, lối vào từ trang Chấm công, và nhóm việc
+ * "Checklist cơ sở hôm qua" trên dashboard quản lý (`lib/pending-tasks.ts`).
+ *
+ * KHÔNG đụng schema: bảng `CenterDayChecklist` và dữ liệu đã ghi giữ nguyên.
+ * Bật lại: env `CENTER_CHECKLIST_ENABLED="true"` + redeploy.
+ */
+export function isCenterChecklistEnabled(): boolean {
+  return process.env.CENTER_CHECKLIST_ENABLED === "true"; // mặc định OFF (đã gỡ)
+}

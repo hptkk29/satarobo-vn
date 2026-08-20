@@ -10,6 +10,8 @@ import {
   Plus,
   X,
 } from "lucide-react";
+import { HelpHint } from "@/components/admin/ui/help-hint";
+import { MoneyInput } from "@/components/ui/money-input";
 import {
   recordAdjustment,
   recordIssue,
@@ -363,24 +365,27 @@ function MovementModal({
           )}
 
           {type === "receipt" && (
-            <label className="block">
-              <span className="mb-1 block text-xs font-semibold text-foreground">
-                Giá / đơn vị (VND, tuỳ chọn)
+            // Không bọc <label> nữa: nút "?" cũng là phần tử gắn-nhãn được, nằm trong
+            // <label> thì nó cướp nhãn của ô nhập. Nối bằng htmlFor cho chắc.
+            <div>
+              <span className="mb-1 flex items-center text-xs font-semibold text-foreground">
+                <label htmlFor="mv-unit-price">Giá / đơn vị (VND, tuỳ chọn)</label>
+                <HelpHint className="ml-1">
+                  Total cost tự tính = SL × giá. Để trống nếu chưa có giá.
+                </HelpHint>
               </span>
-              <input
-                type="number"
+              {/* pl- chứ không px-: px sẽ đè mất chỗ trống bên phải dành cho chữ "đ". */}
+              <MoneyInput
+                id="mv-unit-price"
+                name="unitPrice"
                 min={0}
-                step={1000}
                 value={unitPrice}
-                onChange={(e) => setUnitPrice(e.target.value)}
+                onValueChange={(v) => setUnitPrice(v === null ? "" : String(v))}
                 disabled={pending}
                 placeholder="850000"
-                className="w-full rounded-md border border-border px-2.5 py-1.5 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
+                className="rounded-md py-1.5 pl-2.5"
               />
-              <span className="mt-0.5 block text-[10px] text-muted-foreground">
-                Total cost tự tính = SL × giá. Để trống nếu chưa có giá.
-              </span>
-            </label>
+            </div>
           )}
 
           {type === "transfer" && (

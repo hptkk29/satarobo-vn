@@ -1,5 +1,6 @@
 import "server-only";
 import { db } from "@/lib/db";
+import { canonicalPhone } from "@/lib/phone";
 
 // =============================================================================
 // Commit 4 — VietQR động. Tài khoản nhận tiền lưu ở IntegrationConfig
@@ -75,35 +76,319 @@ export async function setPaymentConfig(
   });
 }
 
-/** Bỏ dấu + ký tự lạ cho nội dung chuyển khoản (ngân hàng giới hạn ký tự). */
-function sanitize(s: string): string {
+/**
+ * Bỏ dấu tiếng Việt + MỌI ký tự không phải chữ/số (kể cả khoảng trắng) trong MỘT
+ * thành phần: "Nguyễn Văn A" → "NguyenVanA".
+ *
+ * Khoảng trắng bị bỏ hẳn (khác bản cũ vốn giữ lại) vì dấu phân cách giữa các
+ * thành phần nay là "_" — còn khoảng trắng thì ngân hàng cắt/gộp tuỳ ý và ta mất
+ * biên giữa tên con với tên khoá.
+ */
+function sanitizePart(s: string): string {
   return s
     .normalize("NFD")
     .replace(/[̀-ͯ]/g, "")
     .replace(/đ/g, "d")
     .replace(/Đ/g, "D")
-    .replace(/[^A-Za-z0-9 ]/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
+    .replace(/[^A-Za-z0-9]/g, "");
+}
+
+/** Trần ký tự của nội dung CK theo giới hạn ngân hàng (chuỗi phụ huynh GÕ TAY). */
+export const MAX_TRANSFER_CONTENT = 80;
+
+/**
+ * Trần ký tự của `addInfo` khi NHÚNG VÀO MÃ QR — 25, không phải 80.
+ *
+ * VÌ SAO 25: `addInfo` đi vào trường EMVCo `08` ("purpose of transaction") của
+ * chuẩn VietQR, đặc tả giới hạn 25 ký tự; dài hơn thì bên dựng mã CẮT ĐUÔI IM
+ * LẶNG — không lỗi, không cảnh báo. Đây KHÔNG phải con số tuỳ hứng.
+ *
+ * VÌ SAO PHẢI CẮT SẴN Ở TA thay vì để nó tự cắt: định dạng chốt 20/08 là
+ * `HoTenCon_SdtPH_TenKhoa`, SĐT nằm SAU tên con ⇒ tên con dài là dao rơi trúng
+ * SĐT. Mất SĐT = mất khoá đối khớp DUY NHẤT của nhánh (d)
+ * (lib/payments/payos-ingest.ts) ⇒ mọi giao dịch của phụ huynh đó rơi vào đối
+ * soát tay vĩnh viễn mà không ai biết. `buildTransferContent` cắt TÊN CON và giữ
+ * trọn SĐT + tên khoá, nên cắt ở ta là an toàn — đã đo: "NguyenThiMinhKhue_
+ * 84987654321_Sata4" dài 34 ký tự, vượt trần 9 ký tự.
+ */
+export const VIETQR_ADDINFO_MAX = 25;
+
+/**
+ * Trần ký tự của MÃ KHOÁ ngắn trong nội dung CK.
+ *
+ * VÌ SAO 5 — hai lý do trùng nhau, không phải số chọn bừa:
+ *  1. Toàn bộ danh mục thật đều có mã đúng 5 ký tự: `Sata1`…`Sata8` và `Combo`
+ *     (prisma/seed-courses.ts đặt tên khoá là `${c.id} — ${c.displayName}`, phần
+ *     mã là `c.id`). Cắt ở 5 nên KHÔNG khoá nào bị cụt mã.
+ *  2. Đúng bằng phần còn lại của trần QR sau khi trả đủ các phần bắt buộc:
+ *     25 − 11 (SĐT canonical `84…`) − 2 (hai dấu `_`) − 7 (`TRANSFER_NAME_MIN`) = 5.
+ *     Chọn lớn hơn thì ở trần 25 nó vẫn bị ngân sách cắt lại (mã khoá trong QR sẽ
+ *     KHÁC mã khoá trong bản 80 ký tự sale đọc — hai bên lệch nhau là tự đẻ ca
+ *     trượt đối khớp); chọn nhỏ hơn thì mã thật bị cụt vô cớ.
+ */
+export const COURSE_TOKEN_MAX = 5;
+
+/**
+ * Hạn mức TỐI THIỂU bảo đảm cho TÊN CON trước khi tên khoá được lấy chỗ.
+ *
+ * VÌ SAO PHẢI CÓ (đo 20/08, hỏng thật): bản trước cấp chỗ cho tên con bằng "phần
+ * thừa sau khi SĐT và tên khoá đã lấy đủ", mà tên khoá là tên marketing dài
+ * ("Sata4 — Bứt Phá Giới Hạn" → sạch còn 19 ký tự) ⇒ ngân sách tên con ≤ 0 với
+ * **11/11 khoá thật** ⇒ tên con biến mất khỏi MỌI chuỗi. Hệ quả nghiệp vụ: kế toán
+ * nhìn sao kê chỉ thấy số + mã khoá cụt, không biết tiền của con nào — đúng thứ
+ * chủ dự án đổi định dạng để có được.
+ *
+ * VÌ SAO 7: đủ chứa họ + ký tự đầu của chữ đệm ("NguyenV"), và là số lớn nhất còn
+ * chừa trọn 5 ký tự mã khoá ở trần 25 (7 + 1 + 11 + 1 + 5 = 25 khít).
+ *
+ * ⚠️ Giới hạn CÒN LẠI, cố ý không vá ở đây: hai anh em ruột mà 7 ký tự đầu của tên
+ * trùng nhau ("Nguyen Van An" / "Nguyen Van Anh" → đều "NguyenV") vẫn sinh chuỗi
+ * giống hệt ở trần 25. Viết tắt kiểu "NVAn" tách được ca đó nhưng làm hỏng định
+ * dạng chủ dự án đã chốt (`NguyenV_84987654321_Sata4`), nên ca này nhường cho tiêu
+ * chí phụ theo số tiền ở lib/payments/payos-ingest.ts.
+ */
+export const TRANSFER_NAME_MIN = 7;
+
+/**
+ * Rút MÃ KHOÁ NGẮN từ tên dòng hàng: `"Sata4 — Bứt Phá Giới Hạn"` → `"Sata4"`.
+ *
+ * ⚠️ VÌ SAO KHÔNG DÙNG THẲNG `OrderItem.itemName`: đó là tên MARKETING đầy đủ
+ * (`Course.name`), dài 17–24 ký tự sau khi bỏ dấu — một mình nó đã ăn hết trần 25
+ * của mã QR. Ví dụ chủ dự án đưa ra khi chốt định dạng dùng đúng `Sata4`, tức yêu
+ * cầu vốn đã ngụ ý mã ngắn chứ không phải tên đầy đủ.
+ *
+ * Quy tắc tách: phần TRƯỚC dấu gạch ngang là mã. Chỉ coi là dấu phân cách khi gặp
+ * gạch DÀI (`—` / `–`, dạng seed đang dùng) hoặc gạch ngắn CÓ KHOẢNG TRẮNG HAI BÊN
+ * (` - `, dạng `shortName` trong courses-pricing.ts). Gạch ngắn dính chữ là dấu nối
+ * trong từ ("E-learning") — cắt ở đó là chặt cụt tên khoá.
+ *
+ * Không có dấu gạch (2 khoá gốc `"Lập trình Robot"`, `"Luyện thi Robosim"`) → sạch
+ * hoá rồi cắt ở `COURSE_TOKEN_MAX`. Rỗng/null → chuỗi rỗng (thành phần bị bỏ qua).
+ */
+export function shortCourseToken(courseName: string | null | undefined): string {
+  const raw = String(courseName ?? "").trim();
+  if (!raw) return "";
+  const sep = raw.match(/[—–]|\s-\s/);
+  const head = sep && sep.index !== undefined ? raw.slice(0, sep.index) : raw;
+  // Tên bắt đầu bằng chính dấu gạch ("— Bứt Phá") thì phần đầu rỗng → lùi về cả
+  // chuỗi, đừng trả rỗng: mất luôn thành phần tên khoá là mất một bằng chứng phụ.
+  const token = sanitizePart(head) || sanitizePart(raw);
+  return token.slice(0, COURSE_TOKEN_MAX);
 }
 
 /**
- * Nội dung CK: "<MÃ ĐƠN> <Họ tên học viên> <SĐT phụ huynh> <Tên khoá>".
+ * Phần SĐT trong nội dung CK — canonical `84XXXXXXXXX` (lib/phone.ts là nguồn
+ * chuẩn hoá DUY NHẤT của repo, đừng viết lại regex ở đây).
  *
- * BGĐ 31/07 — MÃ ĐƠN đứng ĐẦU để webhook SePay khớp được giao dịch với đơn
- * (lib/payments/sepay.ts extractOrderCode). Ngân hàng thường xoá dấu gạch nối nên
- * sanitize() bỏ luôn "-" ở đây cho khớp cách hiển thị của bank ("ORD260521000001").
+ * Số không chuẩn hoá được (số bàn, số nước ngoài, dữ liệu cũ lỗi) vẫn in phần chữ
+ * số để kế toán soi sao kê còn đối chiếu được bằng mắt; nó KHÔNG tự khớp bừa được
+ * vì nhánh đối khớp theo SĐT (lib/payments/payos-ingest.ts) chỉ nhận di động VN.
+ */
+export function transferPhonePart(raw: string | null | undefined): string {
+  const canon = canonicalPhone(raw);
+  if (canon) return canon;
+  const digits = String(raw ?? "").replace(/\D/g, "");
+  return digits.length >= 8 && digits.length <= 15 ? digits : "";
+}
+
+/**
+ * TÊN GỌI của học viên — chữ CUỐI trong họ tên: `"Trần Minh An"` → `"An"`.
+ *
+ * ⚠️ VÌ SAO CÓ (chủ dự án 21/08): trần 25 ký tự của mã QR không đủ cho họ tên đầy
+ * đủ, và bản trước cắt cụt giữa chừng ra `"NguyenV"` — vừa khó đọc, vừa không phải
+ * tên ai cả. Chủ dự án chốt: "nếu họ tên dài quá thì chỉ lấy tên", mẫu
+ * `An_84987654321_sata4`. Tên gọi ngắn, phụ huynh nhận ra ngay, và tách anh em ruột
+ * TỐT HƠN cách cắt cũ (hai anh em thường trùng họ + chữ đệm, khác nhau ở chữ cuối —
+ * `"Trần Minh An"`/`"Trần Minh Anh"` cắt 7 ký tự đều ra `"TranMin"`, lấy tên gọi
+ * thì ra `"An"`/`"Anh"`).
+ *
+ * ⚠️ Phải tách chữ TRƯỚC khi `sanitizePart` — hàm đó xoá luôn khoảng trắng nên gọi
+ * sau thì không còn biên chữ nào để tách.
+ */
+export function givenNamePart(fullName: string | null | undefined): string {
+  const words = String(fullName ?? "")
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
+  if (words.length === 0) return "";
+  return sanitizePart(words[words.length - 1]!);
+}
+
+/**
+ * Nội dung CK: `HoTenCon_SdtPH_TenKhoa` — vd `NguyenVanA_84987654321_Sata4`.
+ *
+ * ⚠️ Chủ dự án 20/08 ĐẢO quy ước cũ: nội dung KHÔNG còn mang MÃ ĐƠN
+ * (`ORD260820000001D1`). Lý do: sale phải đọc chuỗi này qua điện thoại cho phụ
+ * huynh và kế toán phải nhìn sao kê biết tiền của ai — mã đơn không nói lên gì.
+ * Tham số `orderCode` cũ ĐÃ BỎ HẲN khỏi chữ ký (không để lại tham số câm, kẻo
+ * người sau truyền mã đơn vào rồi tưởng nó có trong chuỗi).
+ *
+ * Đối khớp tiền về không còn dựa vào chuỗi này nữa mà đi nhánh SĐT — xem
+ * `resolvePaymentTarget` nhánh (d) trong lib/payments/payos-ingest.ts.
+ *
+ * Thành phần rỗng bị BỎ QUA (không để lại "__"). Thiếu chỗ thì cắt theo thứ tự ưu
+ * tiên đã chốt: SĐT trọn tuyệt đối → tên con giữ tối thiểu `TRANSFER_NAME_MIN` →
+ * tên khoá (vốn đã là MÃ NGẮN, xem `shortCourseToken`) cắt sau cùng.
  */
 export function buildTransferContent(
   studentName: string,
   parentPhone: string | null | undefined,
   courseName: string | null | undefined,
-  orderCode?: string | null,
+  maxLength: number = MAX_TRANSFER_CONTENT,
 ): string {
-  const ref = orderCode ? orderCode.replace(/-/g, "") : "";
-  return sanitize(
-    [ref, studentName, parentPhone ?? "", courseName ?? ""].filter(Boolean).join(" "),
-  ).slice(0, 80);
+  return transferContentParts(studentName, parentPhone, courseName, maxLength).content;
+}
+
+/**
+ * Ba mảnh của nội dung CK **sau khi đã cắt** + chuỗi cuối cùng.
+ *
+ * ⚠️ "SAU KHI ĐÃ CẮT" là toàn bộ lý do kiểu này tồn tại. Ở trần QR 25 ký tự, HỌ
+ * TÊN đầy đủ gần như luôn phải thu về TÊN GỌI (`givenNamePart`). Bên đối khớp
+ * (lib/payments/payos-ingest.ts nhánh (d)) phải so với đúng những gì hệ thống
+ * THỰC SỰ PHÁT RA — so với tên đầy đủ là hồi quy đã đo: 8/11 khoá học trong dữ
+ * liệu thật không bao giờ khớp, tiền hợp lệ rơi hết vào đối soát tay.
+ *
+ * ⚠️ Quan hệ giữa bản 25 và bản 80 (`MAX_TRANSFER_CONTENT`): `phone` và `course`
+ * GIỐNG HỆT nhau ở hai bản (SĐT không bao giờ bị cắt; mã khoá đã ngắn sẵn 5 ký
+ * tự), nhưng `name` KHÁC HẲN — bản 80 giữ họ tên đầy đủ (`"NguyenVanA"`) còn bản
+ * 25 chỉ còn tên gọi (`"A"`). Vì vậy chuỗi 25 KHÔNG phải chuỗi con của chuỗi 80
+ * (`A_849…` không nằm trong `NguyenVanA_849…`). Đây là hệ quả cố ý của định dạng
+ * chốt 21/08, KHÔNG phải bug — và là lý do nhánh (d) phải tái dựng CẢ HAI trần:
+ * phụ huynh quét QR gửi bản 25, phụ huynh gõ tay theo lời sale gửi bản 80.
+ */
+export type TransferContentParts = {
+  /** Tên con còn sống sót — tối thiểu `TRANSFER_NAME_MIN` ký tự nếu còn chỗ. */
+  name: string;
+  /** SĐT — trọn vẹn, trừ khi `maxLength` nhỏ hơn cả độ dài số (ca không có thật). */
+  phone: string;
+  /** Mã khoá ngắn còn sống sót (có thể ngắn hơn `shortCourseToken` khi hết chỗ). */
+  course: string;
+  /** Chuỗi cuối cùng — ĐÚNG BẰNG `buildTransferContent(...)` cùng tham số. */
+  content: string;
+};
+
+/**
+ * Bản "mổ xẻ" của `buildTransferContent`: cùng một phép tính, nhưng trả thêm
+ * từng mảnh sống sót. `buildTransferContent` gọi thẳng vào đây nên hai đường
+ * KHÔNG THỂ lệch nhau — lệch là sale đọc một đằng, webhook so một nẻo.
+ */
+export function transferContentParts(
+  studentName: string,
+  parentPhone: string | null | undefined,
+  courseName: string | null | undefined,
+  maxLength: number = MAX_TRANSFER_CONTENT,
+): TransferContentParts {
+  const phone = transferPhonePart(parentPhone);
+  const wantName = sanitizePart(studentName ?? "");
+  // ⚠️ MÃ NGẮN, không phải tên marketing — xem `shortCourseToken`. Đây là thay đổi
+  // làm cho định dạng chốt 20/08 THỰC SỰ đạt: trước đó tên khoá dài nuốt hết ngân
+  // sách và tên con biến mất ở cả 11/11 khoá thật.
+  const wantCourse = shortCourseToken(courseName);
+
+  // ── Chia ngân sách ký tự ──────────────────────────────────────────────────
+  // Thứ tự ưu tiên (chủ dự án chốt 20/08), KHÔNG được đảo:
+  //   1. SĐT giữ TRỌN tuyệt đối — nó là khoá đối khớp DUY NHẤT của nhánh (d)
+  //      (lib/payments/payos-ingest.ts). Mất số = tiền rơi vào đối soát tay.
+  //   2. TÊN CON giữ tối thiểu `TRANSFER_NAME_MIN` — mục đích nghiệp vụ của cả
+  //      định dạng này là để kế toán nhìn sao kê biết tiền của con nào.
+  //   3. TÊN KHOÁ cắt sau cùng.
+  //
+  // Quy ước tính: coi MỌI thành phần đều tốn `len + 1` (1 ký tự cho dấu "_" đứng
+  // trước nó) rồi cộng bù 1 vào ngân sách — nhờ vậy không phải xét riêng "thành
+  // phần nào đang là thành phần đầu tiên" khi có thành phần rỗng.
+  const budget = maxLength + 1 - (phone ? phone.length + 1 : 0);
+  const nameCost = wantName ? wantName.length + 1 : 0;
+  const courseCost = wantCourse ? wantCourse.length + 1 : 0;
+
+  let name = wantName;
+  let course = wantCourse;
+  if (nameCost + courseCost > budget) {
+    // ── Bước 1: THU GỌN HỌ TÊN VỀ TÊN GỌI, chưa cắt chữ nào ────────────────
+    // Chủ dự án 21/08: "nếu họ tên dài quá thì chỉ lấy tên" (mẫu
+    // `An_84987654321_sata4`). Thu gọn nguyên chữ bao giờ cũng hơn cắt cụt: `"An"`
+    // là một cái tên, `"NguyenV"` thì không. Đại đa số ca dừng ngay ở đây — tên gọi
+    // tiếng Việt hiếm khi quá 6 ký tự sau khi bỏ dấu.
+    const shortName = givenNamePart(studentName);
+    const shortCost = shortName ? shortName.length + 1 : 0;
+    if (shortName && shortCost + courseCost <= budget) {
+      name = shortName; // tên khoá giữ NGUYÊN VẸN
+    } else {
+      // ── Bước 2: tên gọi vẫn không vừa → mới cắt ─────────────────────────
+      // Cắt trên TÊN GỌI chứ không phải họ tên đầy đủ: mất mấy chữ cuối của tên
+      // gọi vẫn còn nhận ra, còn cắt họ tên thì ra một mẩu họ vô nghĩa.
+      const base = shortName || wantName;
+      const nameFloorCost = base ? Math.min(base.length, TRANSFER_NAME_MIN) + 1 : 0;
+      const courseRoom = budget - nameFloorCost - 1; // −1 cho dấu "_" của tên khoá
+      course = courseRoom > 0 ? wantCourse.slice(0, courseRoom) : "";
+      // Tên khoá cắt xong còn thừa bao nhiêu thì trả lại hết cho tên.
+      const nameRoom = budget - (course ? course.length + 1 : 0) - 1;
+      name = nameRoom > 0 ? base.slice(0, nameRoom) : "";
+    }
+  }
+
+  const ordered = [name, phone, course].filter(Boolean);
+  const cut = ordered.join("_").slice(0, maxLength);
+
+  // Phép chia ngân sách ở trên đã bảo đảm không vượt trần, nên `.slice` chỉ là
+  // LƯỚI AN TOÀN (ca `maxLength` nhỏ hơn cả độ dài SĐT). Vẫn soi lại từng mảnh từ
+  // chuỗi ĐÃ CẮT để `parts` không bao giờ mô tả sai `content`.
+  const alive: string[] = [];
+  let pos = 0;
+  for (const p of ordered) {
+    alive.push(cut.slice(pos, pos + p.length));
+    pos += p.length + 1; // +1 cho dấu "_" đứng sau mảnh này
+  }
+  // Lấy lần lượt các mảnh còn sống theo ĐÚNG thứ tự đã ghép. Mảnh nào vốn rỗng
+  // thì không có mặt trong `ordered` nên cũng không được lấy — nhờ vậy chỉ số
+  // không bao giờ lệch khi thiếu SĐT hoặc thiếu tên khoá.
+  const take = (): string => alive.shift() ?? "";
+  return {
+    name: name ? take() : "",
+    phone: phone ? take() : "",
+    course: course ? take() : "",
+    content: cut.replace(/_+$/, ""),
+  };
+}
+
+/**
+ * Dữ liệu tối thiểu của ĐƠN để dựng nội dung CK.
+ *
+ * Có kiểu này để cả 3 nơi in nội dung ra màn hình (bảng phiếu thu, hộp phóng to
+ * QR, khối "Thanh toán & QR" mức đơn) VÀ chuỗi nhúng vào ảnh QR dùng CHUNG một
+ * công thức. Lệch công thức = sale đọc một đằng, QR mã một nẻo.
+ */
+export type TransferContentSource = {
+  /** Tên học viên (ưu tiên) — đơn chưa gắn học viên thì lùi về tên người mua. */
+  studentName?: string | null;
+  customerName: string;
+  customerPhone?: string | null;
+  /** Tên khoá = tên dòng hàng đầu tiên của đơn. */
+  courseName?: string | null;
+};
+
+/** Nội dung CK của MỘT ĐƠN. Mọi đợt của cùng đơn ra CÙNG chuỗi — xem ghi chú ở _qr-core.ts. */
+export function transferContentForOrder(
+  o: TransferContentSource,
+  maxLength: number = MAX_TRANSFER_CONTENT,
+): string {
+  return transferContentPartsForOrder(o, maxLength).content;
+}
+
+/**
+ * Bản mổ xẻ mức ĐƠN — dùng ở nhánh đối khớp theo SĐT. Giữ chung một chỗ quy ước
+ * "tên học viên, thiếu thì lùi về tên người mua" để bên phát và bên đối khớp
+ * không thể suy ra hai chuỗi khác nhau.
+ */
+export function transferContentPartsForOrder(
+  o: TransferContentSource,
+  maxLength: number = MAX_TRANSFER_CONTENT,
+): TransferContentParts {
+  return transferContentParts(
+    o.studentName?.trim() || o.customerName,
+    o.customerPhone,
+    o.courseName,
+    maxLength,
+  );
 }
 
 /** URL ảnh VietQR động (compact2 — có logo + số tiền + nội dung). null nếu chưa cấu hình. */

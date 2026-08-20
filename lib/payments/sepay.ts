@@ -1,8 +1,17 @@
 // lib/payments/sepay.ts — BGĐ 31/07: tự động xác nhận đơn khi tiền về tài khoản.
 //
 // SePay (https://sepay.vn) đọc biến động số dư ngân hàng rồi POST webhook về hệ
-// thống. Ta khớp giao dịch với ĐƠN HÀNG qua MÃ ĐƠN nằm trong nội dung chuyển khoản
-// (QR đã nhúng sẵn mã đơn ở addInfo — xem lib/payments/vietqr.ts).
+// thống.
+//
+// ⚠️ 20/08 — QR KHÔNG CÒN NHÚNG MÃ ĐƠN. Nội dung CK nay là dạng người đọc
+// `HoTenCon_SdtPH_TenKhoa` (chủ dự án chốt; xem lib/payments/vietqr.ts), nên
+// `extractOrderCode` bên dưới CHỈ còn khớp được:
+//   - đơn đã phát QR/nội dung CK TRƯỚC 20/08, và
+//   - khách tự gõ tay mã đơn.
+// Với nội dung dạng mới, `decideSepayAction` trả MANUAL (không thấy đơn) và route
+// đẩy giao dịch sang `ingestPayosWebhook`, ở đó nhánh (d) tra ngược theo SĐT phụ
+// huynh rồi phân bổ bình thường. Tức "MANUAL + không có đơn" KHÔNG còn đồng nghĩa
+// với "phải xử lý tay" — đọc lib/payments/payos-ingest.ts trước khi kết luận.
 //
 // Phần THUẦN (parse/khớp) tách khỏi route để test không cần HTTP/DB.
 

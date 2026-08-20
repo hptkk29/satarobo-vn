@@ -9,6 +9,7 @@ import {
   submitAuditAndRedirect,
 } from "../_actions";
 import { PhanTrangBang } from "@/components/ui/phan-trang-bang";
+import { HelpHint } from "@/components/admin/ui/help-hint";
 
 export interface AuditRowInit {
   itemId: string;
@@ -155,19 +156,23 @@ export function BulkAuditForm({
   return (
     <div className="space-y-4">
       <div className="rounded-lg border border-state-warning-soft bg-state-warning-soft px-4 py-3 text-sm text-state-warning-ink">
-        <div>
-          <strong>Cơ sở:</strong> {centerName}
-          {auditCode && (
-            <>
-              {" "}
-              · <strong>Mã phiếu:</strong> {auditCode}
-            </>
-          )}
-        </div>
-        <div className="mt-1 text-xs text-state-warning-ink">
-          Nhập số lượng thực tế đếm được. Mọi dòng có Δ ≠ 0 đều cần lý do ≥ 5
-          ký tự. Submit sẽ ghi nhận movement ADJUSTMENT và cập nhật tồn kho
-          atomic.
+        {/* Luật "Δ ≠ 0 phải có lý do" chuyển vào icon "?" được vì màn hình vẫn nhắc
+            động: cột "Lý do" ghi rõ điều kiện, thanh thống kê đếm "thiếu lý do", và
+            nút Submit tự khoá — người dùng không thể bỏ sót vì không đọc dòng này. */}
+        <div className="flex flex-wrap items-center gap-1">
+          <span>
+            <strong>Cơ sở:</strong> {centerName}
+            {auditCode && (
+              <>
+                {" "}
+                · <strong>Mã phiếu:</strong> {auditCode}
+              </>
+            )}
+          </span>
+          <HelpHint>
+            Nhập số lượng thực tế đếm được. Mọi dòng có Δ ≠ 0 đều cần lý do ≥ 5 ký tự.
+            Submit sẽ ghi nhận movement ADJUSTMENT và cập nhật tồn kho atomic.
+          </HelpHint>
         </div>
       </div>
 

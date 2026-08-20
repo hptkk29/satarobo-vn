@@ -31,20 +31,52 @@ test.describe("[PAYOS] webhook ghi nhận + phân bổ tiền", () => {
   }
 
   /** Đơn chờ thanh toán + N phiếu thu theo đợt (mỗi phiếu có matchKey riêng, bền theo đời phiếu). */
-  async function seedOrderWithRequests(amounts: number[], opts?: { email?: string | null }) {
+  async function seedOrderWithRequests(
+    amounts: number[],
+    opts?: {
+      email?: string | null;
+      /** 20/08 — nhánh đối khớp theo SĐT tra ngược từ đây. */
+      customerPhone?: string;
+      /** Mã đơn ĐÚNG DẠNG `ORD-YYMMDD-NNNNNN` cho ca hồi quy nhánh (c). */
+      code?: string;
+      /** Tên học viên trên đơn (để test thu hẹp khi 1 SĐT có nhiều đơn). */
+      studentName?: string;
+      /** Tên dòng hàng = tên khoá trong nội dung CK. */
+      courseName?: string;
+    },
+  ) {
     const center = await seedCenter();
     const total = amounts.reduce((s, a) => s + a, 0);
+    const student = opts?.studentName
+      ? await db.student.create({
+          data: { name: opts.studentName, centerId: center.id, parentPhone: opts?.customerPhone },
+        })
+      : null;
     const order = await db.order.create({
       data: {
-        code: `ORD-${uniq()}`,
+        code: opts?.code ?? `ORD-${uniq()}`,
         type: "COURSE",
         status: "PENDING_PAYMENT",
         customerName: "Phụ huynh payOS",
-        customerPhone: "0905000777",
+        customerPhone: opts?.customerPhone ?? "0905000777",
         customerEmail: opts?.email ?? null,
+        studentId: student?.id ?? null,
         centerId: center.id,
         subtotal: total,
         totalAmount: total,
+        ...(opts?.courseName
+          ? {
+              items: {
+                create: {
+                  type: "COURSE_ENROLLMENT" as const,
+                  itemName: opts.courseName,
+                  quantity: 1,
+                  unitPrice: total,
+                  totalPrice: total,
+                },
+              },
+            }
+          : {}),
       },
     });
     const requests = [];
@@ -395,5 +427,204 @@ test.describe("[PAYOS] webhook ghi nhận + phân bổ tiền", () => {
 
     expect(await db.paymentAllocation.count()).toBe(0);
     expect(await db.creditBalance.count()).toBe(0);
+  });
+
+  // ── 12→16: NHÁNH (d) ĐỐI KHỚP THEO SĐT ───────────────────────────────────
+  // 20/08 — nội dung CK đổi sang dạng người đọc `HoTenCon_SdtPH_TenKhoa`, không
+  // còn mã đơn để bám. Đây là đường tiền tự về đúng đơn của định dạng mới; hỏng
+  // nhánh này = mọi giao dịch rơi vào đối soát tay.
+  test("[PAYOS-12] nội dung CK dạng mới (tên_SĐT_khoá) → khớp đúng đơn qua SĐT, rót vào đợt sớm nhất", async () => {
+    const { order, requests } = await seedOrderWithRequests([3_000_000, 2_000_000], {
+      customerPhone: "0987654321",
+      studentName: "Nguyễn Văn A",
+      courseName: "Sata 4",
+    });
+    const [dot1, dot2] = requests;
+
+    const res = await ingestPayosWebhook(
+      payload({ amount: 3_000_000, description: "NguyenVanA_84987654321_Sata4" }),
+    );
+
+    expect(res.status).toBe("MATCHED");
+    if (res.status !== "MATCHED") return;
+    expect(res.orderId).toBe(order.id);
+    // Nội dung không phân biệt được đợt → neo vào phiếu chưa đóng đủ SỚM NHẤT.
+    expect(res.paymentRequestId).toBe(dot1!.id);
+    expect(await statusOf(dot1!.id)).toBe("PAID");
+    expect(await statusOf(dot2!.id)).toBe("PENDING");
+  });
+
+  test("[PAYOS-12b] DB lưu SĐT dạng cũ `0…`, nội dung CK dạng `84…` → vẫn khớp", async () => {
+    // Đây là ca thật của giai đoạn chuyển tiếp canonical SĐT (lib/phone.ts).
+    const { order } = await seedOrderWithRequests([2_000_000], {
+      customerPhone: "0912345678",
+      studentName: "Trần Bảo Long",
+      courseName: "Sata 2",
+    });
+
+    const res = await ingestPayosWebhook(
+      payload({ amount: 2_000_000, description: "TranBaoLong_84912345678_Sata2" }),
+    );
+
+    expect(res.status).toBe("MATCHED");
+    if (res.status !== "MATCHED") return;
+    expect(res.orderId).toBe(order.id);
+  });
+
+  test("[PAYOS-13] một SĐT có 2 đơn đang chờ thu, nội dung không phân biệt được → UNMATCHED, KHÔNG đoán bừa", async () => {
+    // Hai đơn CÙNG tên con + CÙNG khoá ⇒ thu hẹp bằng nội dung cũng bó tay.
+    await seedOrderWithRequests([3_000_000], {
+      customerPhone: "0987654321",
+      studentName: "Nguyễn Văn A",
+      courseName: "Sata 4",
+    });
+    await seedOrderWithRequests([4_000_000], {
+      customerPhone: "0987654321",
+      studentName: "Nguyễn Văn A",
+      courseName: "Sata 4",
+    });
+
+    const res = await ingestPayosWebhook(
+      payload({ amount: 3_000_000, description: "NguyenVanA_84987654321_Sata4" }),
+    );
+
+    expect(res.status).toBe("UNMATCHED");
+    if (res.status !== "UNMATCHED") return;
+
+    // Tiền vẫn nằm nguyên trong sổ, KHÔNG rót vào đơn nào.
+    const txn = await db.bankTransaction.findUniqueOrThrow({ where: { id: res.bankTransactionId } });
+    expect(txn.amount).toBe(3_000_000);
+    expect(await db.paymentAllocation.count()).toBe(0);
+
+    // Kế toán phải đọc được VÌ SAO, nếu không họ lại phải tự dò như sự cố 12/08.
+    expect(txn.unmatchedNote).toContain("84987654321");
+    expect(txn.unmatchedNote).toContain("2 đơn");
+    expect(txn.unmatchedNote).toContain("chọn tay");
+  });
+
+  test("[PAYOS-13b] 2 đơn cùng SĐT nhưng KHÁC tên con → thu hẹp bằng nội dung, khớp đúng đơn", async () => {
+    const anh = await seedOrderWithRequests([3_000_000], {
+      customerPhone: "0987654321",
+      studentName: "Nguyễn Văn Anh",
+      courseName: "Sata 4",
+    });
+    const binh = await seedOrderWithRequests([4_000_000], {
+      customerPhone: "0987654321",
+      studentName: "Nguyễn Văn Bình",
+      courseName: "Sata 4",
+    });
+
+    const res = await ingestPayosWebhook(
+      payload({ amount: 4_000_000, description: "NguyenVanBinh_84987654321_Sata4" }),
+    );
+
+    expect(res.status).toBe("MATCHED");
+    if (res.status !== "MATCHED") return;
+    expect(res.orderId).toBe(binh.order.id);
+    expect(await statusOf(binh.requests[0]!.id)).toBe("PAID");
+    expect(await statusOf(anh.requests[0]!.id)).toBe("PENDING");
+  });
+
+  test("[PAYOS-13c] tên con có chữ Đ vẫn thu hẹp được (bẫy normalizeContent nuốt chữ Đ)", async () => {
+    // `normalizeContent("Trần Đức Anh")` ra "TRANUCANH" — Đ không phân rã NFD nên bị
+    // xoá thẳng — trong khi nội dung CK là "TranDucAnh". Không vá thì mọi tên có Đ ở
+    // giữa mất khả năng thu hẹp và rơi hết vào đối soát tay.
+    const duc = await seedOrderWithRequests([3_000_000], {
+      customerPhone: "0987654321",
+      studentName: "Trần Đức Anh",
+      courseName: "Sata 4",
+    });
+    const hoa = await seedOrderWithRequests([4_000_000], {
+      customerPhone: "0987654321",
+      studentName: "Trần Thu Hoa",
+      courseName: "Sata 4",
+    });
+
+    const res = await ingestPayosWebhook(
+      payload({ amount: 3_000_000, description: "TranDucAnh_84987654321_Sata4" }),
+    );
+
+    expect(res.status).toBe("MATCHED");
+    if (res.status !== "MATCHED") return;
+    expect(res.orderId).toBe(duc.order.id);
+    expect(await statusOf(hoa.requests[0]!.id)).toBe("PENDING");
+  });
+
+  test("[PAYOS-14] SĐT không có trong hệ thống → UNMATCHED kèm lý do", async () => {
+    await seedOrderWithRequests([3_000_000], {
+      customerPhone: "0987654321",
+      studentName: "Nguyễn Văn A",
+      courseName: "Sata 4",
+    });
+
+    const res = await ingestPayosWebhook(
+      payload({ amount: 3_000_000, description: "LeThiB_84900111222_Sata1" }),
+    );
+
+    expect(res.status).toBe("UNMATCHED");
+    if (res.status !== "UNMATCHED") return;
+    expect(await db.paymentAllocation.count()).toBe(0);
+    const txn = await db.bankTransaction.findUniqueOrThrow({ where: { id: res.bankTransactionId } });
+    expect(txn.unmatchedNote).toContain("84900111222");
+  });
+
+  test("[PAYOS-15] HỒI QUY — nội dung CK CŨ còn mã ORD vẫn khớp qua nhánh (c), không đụng nhánh SĐT", async () => {
+    // Ca quan trọng nhất của lần đổi này: đơn đã phát QR TRƯỚC 20/08 vẫn thu được
+    // tiền. Mã đơn phải đúng dạng ORD-YYMMDD-NNNNNN thì extractOrderCode mới đọc ra.
+    const { order, requests } = await seedOrderWithRequests([3_000_000, 2_000_000], {
+      code: "ORD-260819-000123",
+      customerPhone: "0987654321",
+      studentName: "Nguyễn Văn A",
+      courseName: "Sata 4",
+    });
+    const [dot1, dot2] = requests;
+
+    const res = await ingestPayosWebhook(
+      payload({ amount: 3_000_000, description: "CK ORD260819000123 NGUYEN VAN A" }),
+    );
+
+    expect(res.status).toBe("MATCHED");
+    if (res.status !== "MATCHED") return;
+    expect(res.orderId).toBe(order.id);
+    expect(res.paymentRequestId).toBe(dot1!.id);
+    expect(await statusOf(dot1!.id)).toBe("PAID");
+    expect(await statusOf(dot2!.id)).toBe("PENDING");
+  });
+
+  test("[PAYOS-15b] HỒI QUY — matchKey của phiếu (QR cũ theo đợt) vẫn thắng nhánh SĐT", async () => {
+    // Nội dung mang CẢ matchKey lẫn SĐT: phải rơi vào ĐÚNG ĐỢT theo matchKey,
+    // không phải "đợt sớm nhất" của nhánh SĐT.
+    const { requests } = await seedOrderWithRequests([3_000_000, 2_000_000], {
+      customerPhone: "0987654321",
+      studentName: "Nguyễn Văn A",
+      courseName: "Sata 4",
+    });
+    const [dot1, dot2] = requests;
+
+    const res = await ingestPayosWebhook(
+      payload({ amount: 2_000_000, description: `${dot2!.matchKey} 84987654321` }),
+    );
+
+    expect(res.status).toBe("MATCHED");
+    if (res.status !== "MATCHED") return;
+    expect(res.paymentRequestId).toBe(dot2!.id);
+    expect(await statusOf(dot1!.id)).toBe("PENDING");
+    expect(await statusOf(dot2!.id)).toBe("PAID");
+  });
+
+  test("[PAYOS-16] đơn đã CANCELLED không được nhánh SĐT chọn làm đích", async () => {
+    const { order } = await seedOrderWithRequests([3_000_000], {
+      customerPhone: "0987654321",
+      studentName: "Nguyễn Văn A",
+      courseName: "Sata 4",
+    });
+    await db.order.update({ where: { id: order.id }, data: { status: "CANCELLED" } });
+
+    const res = await ingestPayosWebhook(
+      payload({ amount: 3_000_000, description: "NguyenVanA_84987654321_Sata4" }),
+    );
+
+    expect(res.status).toBe("UNMATCHED");
+    expect(await db.paymentAllocation.count()).toBe(0);
   });
 });
