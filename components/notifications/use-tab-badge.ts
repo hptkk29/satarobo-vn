@@ -33,15 +33,18 @@ export function withTabBadge(title: string, unread: number): string {
   return buildTabTitlePrefix(unread) + stripTabBadge(title);
 }
 
-/** Href của favicon gốc, đọc một lần rồi giữ — sau khi vẽ chấm thì `<link>` không còn href gốc. */
-let faviconGoc: string | null = null;
+/** Href gốc của từng thẻ favicon — để trả lại nguyên trạng khi hết mục chưa đọc. */
+const hrefGoc = new WeakMap<HTMLLinkElement, string>();
 /** Data URL đã vẽ chấm, dựng một lần cho cả phiên. */
 let faviconCoCham: string | null = null;
 /** Trình duyệt/định dạng không cho vẽ lại favicon → thôi, không thử nữa, không báo lỗi. */
 let faviconBoCuoc = false;
+/** Cờ chống đệ quy: thao tác của chính ta cũng làm `<head>` đổi và đánh thức observer. */
+let dangApDung = false;
 
-function linkFavicon(): HTMLLinkElement | null {
-  return document.querySelector<HTMLLinkElement>('link[rel~="icon"]');
+/** Mọi thẻ favicon THƯỜNG (bỏ qua apple-touch-icon — nó không hiện trên thanh tab). */
+function cacTheFavicon(): HTMLLinkElement[] {
+  return [...document.querySelectorAll<HTMLLinkElement>('link[rel~="icon"]')];
 }
 
 /**
@@ -91,30 +94,52 @@ async function dungFaviconCoCham(src: string): Promise<string | null> {
   }
 }
 
+/**
+ * Đổi `href` của MỌI thẻ favicon — cố ý KHÔNG gỡ/chèn node nào trong `<head>`.
+ *
+ * Hai lỗi đã đo thật 20/08/2026, bản vá phải né cả hai:
+ *
+ *  1. Chỉ sửa thẻ ĐẦU TIÊN là chưa đủ. `<head>` có ĐẾN HAI thẻ `rel="icon"` — một do HTML
+ *     server dựng, một do Next chèn lúc hydrate. Sửa mỗi cái đầu thì cái sau vẫn trỏ
+ *     `/icon.png` gốc và trình duyệt chọn nó ⇒ tiêu đề tab hiện `(9+)` bình thường mà chấm đỏ
+ *     KHÔNG BAO GIỜ xuất hiện. Đúng triệu chứng người dùng báo.
+ *
+ *  2. ⛔ ĐỪNG "dọn cho sạch" bằng cách gỡ các thẻ rồi chèn một thẻ mới. Đã thử: nó phá cơ chế
+ *     quản lý `<head>` của Next — sau lần điều hướng phía client đầu tiên, thẻ `<title>` BIẾN
+ *     MẤT hoàn toàn và tab chỉ còn hiện URL. Đo bằng công tắc tạm: tắt phần favicon thì tiêu đề
+ *     sống sót, bật lên thì mất. Sửa thuộc tính thì an toàn, gỡ node thì không.
+ */
 async function datFavicon(coCham: boolean): Promise<void> {
   if (faviconBoCuoc) return;
-  const link = linkFavicon();
-  if (!link) {
+
+  const cacThe = cacTheFavicon();
+  if (cacThe.length === 0) {
     faviconBoCuoc = true;
     return;
   }
+  for (const l of cacThe) if (!hrefGoc.has(l)) hrefGoc.set(l, l.href);
 
-  faviconGoc ??= link.href;
-
-  if (!coCham) {
-    link.href = faviconGoc;
-    return;
-  }
-
-  if (!faviconCoCham) {
-    faviconCoCham = await dungFaviconCoCham(faviconGoc);
+  if (coCham && !faviconCoCham) {
+    const nguon = hrefGoc.get(cacThe[0]!);
+    faviconCoCham = nguon ? await dungFaviconCoCham(nguon) : null;
     if (!faviconCoCham) {
       // Suy biến an toàn theo đúng PRD: chỉ dùng tiêu đề tab, không báo lỗi, không thử lại.
       faviconBoCuoc = true;
       return;
     }
   }
-  link.href = faviconCoCham;
+
+  dangApDung = true;
+  try {
+    for (const l of cacThe) {
+      const dich = coCham ? faviconCoCham! : (hrefGoc.get(l) ?? l.href);
+      if (l.getAttribute("href") !== dich) l.setAttribute("href", dich);
+    }
+  } finally {
+    queueMicrotask(() => {
+      dangApDung = false;
+    });
+  }
 }
 
 /**
@@ -128,7 +153,6 @@ export function useTabBadge(unread: number): void {
   useEffect(() => {
     if (typeof document === "undefined") return;
 
-    const title = document.querySelector("title");
     let tuMinhSua = false;
 
     const apDung = () => {
@@ -145,16 +169,26 @@ export function useTabBadge(unread: number): void {
     apDung();
     void datFavicon(unread > 0);
 
-    const observer = title
-      ? new MutationObserver(() => {
-          if (tuMinhSua) return;
-          apDung();
-        })
-      : null;
-    if (observer && title) observer.observe(title, { childList: true, characterData: true, subtree: true });
+    // MỘT observer bám cả `<head>`, KHÔNG bám riêng thẻ `<title>`.
+    //
+    // Vì sao: khi điều hướng phía client, Next THAY luôn thẻ `<title>` chứ không chỉ đổi chữ
+    // bên trong. Observer bám vào thẻ cũ thì chết theo thẻ đó — đo được 20/08/2026: sau lần
+    // chuyển trang đầu tiên, tiêu đề thành "Lớp của tôi | …" và tiền tố `(2)` biến mất vĩnh
+    // viễn, trong khi PRD §7.11e đòi ghép lại mỗi lần tiêu đề trang đổi.
+    // `subtree + characterData` bắt cả hai kiểu: thay thẻ (childList của head) và sửa chữ
+    // trong thẻ cũ (characterData). Cùng observer đó lo luôn thẻ favicon Next chèn mới.
+    const observer = new MutationObserver(() => {
+      if (tuMinhSua || dangApDung) return;
+      apDung();
+      const coTheChuaDoi = cacTheFavicon().some(
+        (l) => faviconCoCham !== null && l.getAttribute("href") !== faviconCoCham,
+      );
+      if (unread > 0 && coTheChuaDoi) void datFavicon(true);
+    });
+    observer.observe(document.head, { childList: true, subtree: true, characterData: true });
 
     return () => {
-      observer?.disconnect();
+      observer.disconnect();
       // Trả tiêu đề về nguyên gốc: đăng xuất hoặc gỡ component mà còn để lại `(8)` là nói dối.
       document.title = stripTabBadge(document.title);
       void datFavicon(false);
