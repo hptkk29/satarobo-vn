@@ -246,8 +246,37 @@ jobs:
           DATABASE_URL: ${{ env.CI_DATABASE_URL }}
           DIRECT_URL: ${{ env.CI_DATABASE_URL }}
 
+      # Cache binary trình duyệt — lần chạy sau khỏi tải lại ~130MB.
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-${{ hashFiles('pnpm-lock.yaml') }}
+
+      # `--with-deps` gọi apt-get, mà mirror Ubuntu của runner CÓ LÚC TREO HẲN. Đo 19/08/2026:
+      # apt đứng im 19 phút không một dòng log, job hết trần 20 phút và bị huỷ TRƯỚC KHI chạy nổi
+      # một dòng test nào — 3/5 job E2E chết cùng kiểu đó, hai lần liên tiếp, trong khi 2 job còn
+      # lại dùng ĐÚNG lệnh này thì qua. Không phải cấu hình sai, là mạng của runner.
+      # `timeout` cắt sau 6 phút rồi thử lại, thay vì để cả ngân sách job trôi vào một bước cài đặt.
       - name: Install Playwright browsers
-        run: pnpm exec playwright install --with-deps chromium
+        run: |
+          for lan in 1 2 3; do
+            # Dọn apt-get MỒ CÔI của lần trước. `timeout` chỉ giết tiến trình CHA
+            # (`playwright install`); `apt-get` con VẪN CHẠY và giữ /var/lib/apt/lists/lock
+            # ⇒ lần thử sau chết ngay với "Could not get lock", cả 3 lần đều vô ích.
+            # Đã đo thật: job site GV, run 32236393980 — lần 2 và 3 chết trong 17 giây.
+            if [ "$lan" -gt 1 ]; then
+              sudo pkill -9 -x apt-get 2>/dev/null || true
+              sudo pkill -9 -x dpkg 2>/dev/null || true
+              sudo rm -f /var/lib/apt/lists/lock /var/lib/dpkg/lock /var/lib/dpkg/lock-frontend || true
+              sudo dpkg --configure -a >/dev/null 2>&1 || true
+            fi
+            timeout 300 pnpm exec playwright install --with-deps chromium && exit 0
+            echo "::warning::playwright install lần $lan treo hoặc lỗi — thử lại"
+            sleep 10
+          done
+          echo "::error::playwright install hỏng cả 3 lần — thường là mirror apt của runner, chạy lại job"
+          exit 1
 
       - name: Build app
         run: pnpm build
@@ -329,8 +358,37 @@ jobs:
       - name: Migrate DB schema (local CI Postgres)
         run: pnpm exec prisma migrate deploy
 
+      # Cache binary trình duyệt — lần chạy sau khỏi tải lại ~130MB.
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-${{ hashFiles('pnpm-lock.yaml') }}
+
+      # `--with-deps` gọi apt-get, mà mirror Ubuntu của runner CÓ LÚC TREO HẲN. Đo 19/08/2026:
+      # apt đứng im 19 phút không một dòng log, job hết trần 20 phút và bị huỷ TRƯỚC KHI chạy nổi
+      # một dòng test nào — 3/5 job E2E chết cùng kiểu đó, hai lần liên tiếp, trong khi 2 job còn
+      # lại dùng ĐÚNG lệnh này thì qua. Không phải cấu hình sai, là mạng của runner.
+      # `timeout` cắt sau 6 phút rồi thử lại, thay vì để cả ngân sách job trôi vào một bước cài đặt.
       - name: Install Playwright browsers
-        run: pnpm exec playwright install --with-deps chromium
+        run: |
+          for lan in 1 2 3; do
+            # Dọn apt-get MỒ CÔI của lần trước. `timeout` chỉ giết tiến trình CHA
+            # (`playwright install`); `apt-get` con VẪN CHẠY và giữ /var/lib/apt/lists/lock
+            # ⇒ lần thử sau chết ngay với "Could not get lock", cả 3 lần đều vô ích.
+            # Đã đo thật: job site GV, run 32236393980 — lần 2 và 3 chết trong 17 giây.
+            if [ "$lan" -gt 1 ]; then
+              sudo pkill -9 -x apt-get 2>/dev/null || true
+              sudo pkill -9 -x dpkg 2>/dev/null || true
+              sudo rm -f /var/lib/apt/lists/lock /var/lib/dpkg/lock /var/lib/dpkg/lock-frontend || true
+              sudo dpkg --configure -a >/dev/null 2>&1 || true
+            fi
+            timeout 300 pnpm exec playwright install --with-deps chromium && exit 0
+            echo "::warning::playwright install lần $lan treo hoặc lỗi — thử lại"
+            sleep 10
+          done
+          echo "::error::playwright install hỏng cả 3 lần — thường là mirror apt của runner, chạy lại job"
+          exit 1
 
       - name: Build app
         run: pnpm build
@@ -397,8 +455,10 @@ jobs:
       - name: Generate Prisma client
         run: pnpm exec prisma generate
 
-      - name: Install Playwright browsers
-        run: pnpm exec playwright install --with-deps chromium
+      # KHÔNG cài trình duyệt: toàn bộ 47 spec của tests/e2e/r7 là service-level — gọi thẳng
+      # hàm trong lib/, không spec nào dùng fixture `page`/`browser`. Bước cài trước đây chỉ tổ
+      # kéo dài job và là chỗ duy nhất khiến nó chết (apt treo 19 phút, xem chú thích ở job smoke).
+      # ⚠️ Thêm spec CÓ dùng browser vào tests/e2e/r7 thì phải cài lại trình duyệt ở đây.
 
       - name: Run Phase R7 e2e
         # playwright.r7.config.ts: globalSetup (tái dùng a0) chạy prisma migrate deploy
@@ -461,8 +521,37 @@ jobs:
       - name: Generate Prisma client
         run: pnpm exec prisma generate
 
+      # Cache binary trình duyệt — lần chạy sau khỏi tải lại ~130MB.
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-${{ hashFiles('pnpm-lock.yaml') }}
+
+      # `--with-deps` gọi apt-get, mà mirror Ubuntu của runner CÓ LÚC TREO HẲN. Đo 19/08/2026:
+      # apt đứng im 19 phút không một dòng log, job hết trần 20 phút và bị huỷ TRƯỚC KHI chạy nổi
+      # một dòng test nào — 3/5 job E2E chết cùng kiểu đó, hai lần liên tiếp, trong khi 2 job còn
+      # lại dùng ĐÚNG lệnh này thì qua. Không phải cấu hình sai, là mạng của runner.
+      # `timeout` cắt sau 6 phút rồi thử lại, thay vì để cả ngân sách job trôi vào một bước cài đặt.
       - name: Install Playwright browsers
-        run: pnpm exec playwright install --with-deps chromium
+        run: |
+          for lan in 1 2 3; do
+            # Dọn apt-get MỒ CÔI của lần trước. `timeout` chỉ giết tiến trình CHA
+            # (`playwright install`); `apt-get` con VẪN CHẠY và giữ /var/lib/apt/lists/lock
+            # ⇒ lần thử sau chết ngay với "Could not get lock", cả 3 lần đều vô ích.
+            # Đã đo thật: job site GV, run 32236393980 — lần 2 và 3 chết trong 17 giây.
+            if [ "$lan" -gt 1 ]; then
+              sudo pkill -9 -x apt-get 2>/dev/null || true
+              sudo pkill -9 -x dpkg 2>/dev/null || true
+              sudo rm -f /var/lib/apt/lists/lock /var/lib/dpkg/lock /var/lib/dpkg/lock-frontend || true
+              sudo dpkg --configure -a >/dev/null 2>&1 || true
+            fi
+            timeout 300 pnpm exec playwright install --with-deps chromium && exit 0
+            echo "::warning::playwright install lần $lan treo hoặc lỗi — thử lại"
+            sleep 10
+          done
+          echo "::error::playwright install hỏng cả 3 lần — thường là mirror apt của runner, chạy lại job"
+          exit 1
 
       - name: Run Phase FL e2e
         # playwright.fl.config.ts: globalSetup (tái dùng a0) chạy prisma migrate deploy
@@ -532,8 +621,37 @@ jobs:
         # webServer (teacher layout gate flag — OFF thì /teacher/* không render).
         run: pnpm build
 
+      # Cache binary trình duyệt — lần chạy sau khỏi tải lại ~130MB.
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-${{ hashFiles('pnpm-lock.yaml') }}
+
+      # `--with-deps` gọi apt-get, mà mirror Ubuntu của runner CÓ LÚC TREO HẲN. Đo 19/08/2026:
+      # apt đứng im 19 phút không một dòng log, job hết trần 20 phút và bị huỷ TRƯỚC KHI chạy nổi
+      # một dòng test nào — 3/5 job E2E chết cùng kiểu đó, hai lần liên tiếp, trong khi 2 job còn
+      # lại dùng ĐÚNG lệnh này thì qua. Không phải cấu hình sai, là mạng của runner.
+      # `timeout` cắt sau 6 phút rồi thử lại, thay vì để cả ngân sách job trôi vào một bước cài đặt.
       - name: Install Playwright browsers
-        run: pnpm exec playwright install --with-deps chromium
+        run: |
+          for lan in 1 2 3; do
+            # Dọn apt-get MỒ CÔI của lần trước. `timeout` chỉ giết tiến trình CHA
+            # (`playwright install`); `apt-get` con VẪN CHẠY và giữ /var/lib/apt/lists/lock
+            # ⇒ lần thử sau chết ngay với "Could not get lock", cả 3 lần đều vô ích.
+            # Đã đo thật: job site GV, run 32236393980 — lần 2 và 3 chết trong 17 giây.
+            if [ "$lan" -gt 1 ]; then
+              sudo pkill -9 -x apt-get 2>/dev/null || true
+              sudo pkill -9 -x dpkg 2>/dev/null || true
+              sudo rm -f /var/lib/apt/lists/lock /var/lib/dpkg/lock /var/lib/dpkg/lock-frontend || true
+              sudo dpkg --configure -a >/dev/null 2>&1 || true
+            fi
+            timeout 300 pnpm exec playwright install --with-deps chromium && exit 0
+            echo "::warning::playwright install lần $lan treo hoặc lỗi — thử lại"
+            sleep 10
+          done
+          echo "::error::playwright install hỏng cả 3 lần — thường là mirror apt của runner, chạy lại job"
+          exit 1
 
       - name: Run teacher-site browser e2e
         run: pnpm test:e2e:teacher

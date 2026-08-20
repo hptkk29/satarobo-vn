@@ -3,6 +3,7 @@
 // (StaffNotification inbox admin). Idempotent qua dedupeKey kèm giờ mới.
 import { db } from "@/lib/db";
 import { on, type DomainEventLite } from "@/lib/events/registry";
+import { notifyStaff } from "@/lib/notifications/notify";
 
 const str = (v: unknown): string => (v == null ? "" : String(v));
 
@@ -36,17 +37,14 @@ export async function onTrialScheduleChanged(event: DomainEventLite): Promise<vo
 
   // dedupeKey kèm giờ mới (toAt) → reschedule thật tạo thông báo mới, retry thì không.
   const dedupeKey = `trial.schedule_changed:${trialId}:${str(event.payload.toAt)}`;
-  await db.staffNotification.upsert({
-    where: { userId_dedupeKey: { userId, dedupeKey } },
-    create: {
-      userId,
-      category: "LEAD",
-      title: "Đổi lịch học thử",
-      body,
-      href: `/leads/${leadId}`,
-      dedupeKey,
-    },
-    update: {},
+  await notifyStaff({
+    userIds: [userId],
+    dedupeKey,
+    category: "LEAD",
+    title: "Đổi lịch học thử",
+    body,
+    href: `/leads/${leadId}`,
+    entityId: trialId,
   });
 }
 

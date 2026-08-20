@@ -159,6 +159,75 @@ describe("[bump] userBumpBroadcasts — builder thuần", () => {
 });
 
 /**
+ * Chuông nhân sự đi nhờ ĐÚNG kênh `user:{id}` sẵn có — không topic mới, không migration
+ * (policy `user_can_receive_own_user_broadcast` chỉ so topic, KHÔNG lọc tên event).
+ * Bất biến đắt nhất ở đây là BR-30: payload chỉ được là TÍN HIỆU.
+ */
+describe("[noti] notificationBumpBroadcasts — builder thuần", () => {
+  it("mỗi userId một phần tử topic user:{id}, event notification.bumped, private=true", async () => {
+    const { notificationBumpBroadcasts } = await loadModule();
+    const out = notificationBumpBroadcasts(["u1", "u2", "u3"], {
+      at: "2026-08-19T03:04:05.000Z",
+    });
+    expect(out.map((m) => m.topic)).toEqual(["user:u1", "user:u2", "user:u3"]);
+    expect(out.every((m) => m.event === "notification.bumped" && m.private === true)).toBe(true);
+  });
+
+  it("payload có ĐÚNG khoá `at` — không tiêu đề/href/unreadCount (BR-30)", async () => {
+    const { notificationBumpBroadcasts } = await loadModule();
+    const [one] = notificationBumpBroadcasts(["u1"], { at: "2026-08-19T03:04:05.000Z" });
+    expect(Object.keys(one!.payload)).toEqual(["at"]);
+    expect(one!.payload.at).toBe("2026-08-19T03:04:05.000Z");
+  });
+
+  /**
+   * Nơi gọi thật thường có nguyên object StaffNotification trong tay (title, href,
+   * studentId…). Builder dựng lại từng khoá thay vì spread, nên dù người gọi có nhét thêm
+   * gì thì cũng KHÔNG có đường nào rò ra kênh realtime — chỗ mà "đúng người" không đồng
+   * nghĩa "đúng quyền xem nội dung".
+   */
+  it("người gọi nhét thêm khoá (title/href) ⇒ builder VẪN chỉ đẩy `at`", async () => {
+    const { notificationBumpBroadcasts } = await loadModule();
+    const smuggled = {
+      at: "2026-08-19T03:04:05.000Z",
+      title: "Nhận xét mới của HV Nguyễn Văn A",
+      href: "/attendance?sessionId=abc",
+      unreadCount: 7,
+    };
+    const [one] = notificationBumpBroadcasts(["u1"], smuggled);
+    expect(Object.keys(one!.payload)).toEqual(["at"]);
+  });
+
+  it("khử trùng userId + bỏ chuỗi rỗng (một người nhận 2 thông báo chỉ cần 1 tín hiệu)", async () => {
+    const { notificationBumpBroadcasts } = await loadModule();
+    const out = notificationBumpBroadcasts(["u1", "u1", "", "u2"], {
+      at: "2026-08-19T03:04:05.000Z",
+    });
+    expect(out.map((m) => m.topic)).toEqual(["user:u1", "user:u2"]);
+  });
+
+  // Event mới KHÔNG được có đường gửi riêng: nó phải đi qua đúng primitive đang giữ trần
+  // lô 60/POST đã đo (n=95 → 502, n=200 → 429 và KHÔNG ai nhận).
+  it("đi qua broadcastMessages: 130 người → 3 lô ≤60, không phần tử nào rơi", async () => {
+    const fetchMock = vi.fn(async () => new Response("{}", { status: 202 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { broadcastMessages, notificationBumpBroadcasts } = await loadModule();
+    const ids = Array.from({ length: 130 }, (_, i) => `u${i}`);
+    const ok = await broadcastMessages(
+      notificationBumpBroadcasts(ids, { at: "2026-08-19T03:04:05.000Z" }),
+    );
+
+    expect(ok).toBe(true);
+    const batches = fetchMock.mock.calls.map((c) =>
+      sentBody((c as unknown as [string, RequestInit])[1]),
+    );
+    expect(batches.map((b) => b.length)).toEqual([60, 60, 10]);
+    expect(batches.flat().map((m) => m.topic)).toEqual(ids.map((id) => `user:${id}`));
+  });
+});
+
+/**
  * ⚠️ NHÓM NÀY TỪNG HỢP THỨC HOÁ MỘT LỖI SẢN PHẨM.
  *
  * Bản cũ gim ngưỡng lô = 200 với `fetch` giả LUÔN trả 202, nên nó "chứng minh" rằng chia

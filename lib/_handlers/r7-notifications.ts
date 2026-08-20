@@ -4,6 +4,7 @@
 // portal feed) và nhân viên (StaffNotification — inbox admin).
 import { db } from "@/lib/db";
 import { on, type DomainEventLite } from "@/lib/events/registry";
+import { notifyStaff } from "@/lib/notifications/notify";
 import { formatVndPlain } from "@/lib/format/money";
 
 const str = (v: unknown): string => (v == null ? "" : String(v));
@@ -109,17 +110,15 @@ export async function onClassSessionChanged(event: DomainEventLite): Promise<voi
 
   // GV phụ trách (StaffNotification inbox).
   if (cls.teacherId) {
-    await db.staffNotification.upsert({
-      where: { userId_dedupeKey: { userId: cls.teacherId, dedupeKey: `class.session_changed:${event.id}` } },
-      create: {
-        userId: cls.teacherId,
-        category: "CLASS",
-        title: "Lịch lớp thay đổi",
-        body: `Lớp ${cls.name} ${what}.`,
-        href: `/classes/${classId}/edit`,
-        dedupeKey: `class.session_changed:${event.id}`,
-      },
-      update: {},
+    await notifyStaff({
+      userIds: [cls.teacherId],
+      dedupeKey: `class.session_changed:${event.id}`,
+      category: "CLASS",
+      title: "Lịch lớp thay đổi",
+      body: `Lớp ${cls.name} ${what}.`,
+      href: `/classes/${classId}/edit`,
+      entityId: classId,
+      // Không `reopen`: event phát lại là chuyện của hạ tầng, không phải lịch đổi lần nữa.
     });
   }
 }
@@ -155,17 +154,14 @@ export async function onClassCancelled(event: DomainEventLite): Promise<void> {
 
   // GV phụ trách (StaffNotification inbox).
   if (cls.teacherId) {
-    await db.staffNotification.upsert({
-      where: { userId_dedupeKey: { userId: cls.teacherId, dedupeKey: `class.cancelled:${event.id}` } },
-      create: {
-        userId: cls.teacherId,
-        category: "CLASS",
-        title: "Lớp đã bị hủy",
-        body: `Lớp ${cls.name} đã bị hủy.${reasonSuffix}`,
-        href: `/classes/${classId}/edit`,
-        dedupeKey: `class.cancelled:${event.id}`,
-      },
-      update: {},
+    await notifyStaff({
+      userIds: [cls.teacherId],
+      dedupeKey: `class.cancelled:${event.id}`,
+      category: "CLASS",
+      title: "Lớp đã bị hủy",
+      body: `Lớp ${cls.name} đã bị hủy.${reasonSuffix}`,
+      href: `/classes/${classId}/edit`,
+      entityId: classId,
     });
   }
 }
@@ -181,17 +177,14 @@ export async function onLeadTrialAttended(event: DomainEventLite): Promise<void>
   const userId = lead?.assignedToId ?? lead?.adminId;
   if (!userId) return;
 
-  await db.staffNotification.upsert({
-    where: { userId_dedupeKey: { userId, dedupeKey: `lead.trialAttended:${leadId}` } },
-    create: {
-      userId,
-      category: "LEAD",
-      title: "Lead đã học thử xong",
-      body: `Phụ huynh ${lead?.parentName ?? ""} đã hoàn tất buổi học thử — liên hệ chốt.`,
-      href: `/leads/${leadId}`,
-      dedupeKey: `lead.trialAttended:${leadId}`,
-    },
-    update: {},
+  await notifyStaff({
+    userIds: [userId],
+    dedupeKey: `lead.trialAttended:${leadId}`,
+    category: "LEAD",
+    title: "Lead đã học thử xong",
+    body: `Phụ huynh ${lead?.parentName ?? ""} đã hoàn tất buổi học thử — liên hệ chốt.`,
+    href: `/leads/${leadId}`,
+    entityId: leadId,
   });
 }
 

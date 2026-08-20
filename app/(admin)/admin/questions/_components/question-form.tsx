@@ -17,7 +17,12 @@ type QuestionType =
   | "TRUE_FALSE"
   | "SHORT_ANSWER"
   | "ESSAY"
-  | "CODE";
+  | "CODE"
+  // Parity site GV 18/08 — 3 loại mới soạn ở kho GV/thư viện mẫu (payload Question.meta).
+  // Form ngân hàng này KHÔNG soạn mới 3 loại đó (TYPE_OPTIONS giữ 5) — chỉ nhận kiểu.
+  | "FILL_BLANK"
+  | "MATCHING"
+  | "ORDERING";
 type Difficulty = "EASY" | "MEDIUM" | "HARD" | "EXPERT";
 
 interface LessonOption {

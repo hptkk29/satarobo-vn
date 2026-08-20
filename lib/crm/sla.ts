@@ -2,6 +2,7 @@
 // evaluateSla THUẦN (C6.1–C6.5) + runSlaCheck (cron → StaffNotification dedupeKey, C6.6).
 import type { LeadStatus } from "@prisma/client";
 import { db } from "@/lib/db";
+import { notifyStaff } from "@/lib/notifications/notify";
 import { getSetting } from "@/lib/settings/service";
 
 export type SlaRule = "SLA-0" | "SLA-1" | "SLA-2" | "SLA-3" | "SLA-4";
@@ -137,17 +138,16 @@ export async function runSlaCheck(now = new Date()): Promise<{ violations: numbe
     const userId = lead.assignedToId ?? lead.adminId;
     if (!userId) continue;
     for (const rule of rules) {
-      await db.staffNotification.upsert({
-        where: { userId_dedupeKey: { userId, dedupeKey: `sla:${rule}:${lead.id}` } },
-        update: { body: SLA_LABEL[rule] },
-        create: {
-          userId,
-          category: "SLA",
-          title: `Cảnh báo SLA (${rule})`,
-          body: SLA_LABEL[rule],
-          href: `/leads/${lead.id}`,
-          dedupeKey: `sla:${rule}:${lead.id}`,
-        },
+      // Không `reopen`: cron quét lại mỗi lượt, vi phạm vẫn còn nguyên chừng nào lead chưa
+      // được chăm ⇒ kéo về chưa-đọc là dội chuông mỗi lượt cron cho cùng một việc.
+      await notifyStaff({
+        userIds: [userId],
+        dedupeKey: `sla:${rule}:${lead.id}`,
+        category: "SLA",
+        title: `Cảnh báo SLA (${rule})`,
+        body: SLA_LABEL[rule],
+        href: `/leads/${lead.id}`,
+        entityId: lead.id,
       });
       notified++;
     }
@@ -156,17 +156,14 @@ export async function runSlaCheck(now = new Date()): Promise<{ violations: numbe
     if (isLeadIdle({ status: lead.status, lastActivityAt: lead.lastActivityAt, createdAt: lead.createdAt }, now, idleHours)) {
       const idleBody = `Lead chưa được xử lý quá ${idleHours} giờ`;
       const idleKey = `sla:idle24:${lead.id}`;
-      await db.staffNotification.upsert({
-        where: { userId_dedupeKey: { userId, dedupeKey: idleKey } },
-        update: { body: idleBody },
-        create: {
-          userId,
-          category: "SLA",
-          title: "Cảnh báo lead im lặng",
-          body: idleBody,
-          href: `/leads/${lead.id}`,
-          dedupeKey: idleKey,
-        },
+      await notifyStaff({
+        userIds: [userId],
+        dedupeKey: idleKey,
+        category: "SLA",
+        title: "Cảnh báo lead im lặng",
+        body: idleBody,
+        href: `/leads/${lead.id}`,
+        entityId: lead.id,
       });
       notified++;
     }

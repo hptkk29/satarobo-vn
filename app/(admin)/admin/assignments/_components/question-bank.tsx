@@ -14,7 +14,12 @@ type QuestionType =
   | "TRUE_FALSE"
   | "SHORT_ANSWER"
   | "ESSAY"
-  | "CODE";
+  | "CODE"
+  // Parity site GV 18/08 — loại mới (soạn ở thư viện mẫu / kho GV, payload Question.meta);
+  // editor này chỉ HIỂN THỊ nhãn, không soạn mới 3 loại này.
+  | "FILL_BLANK"
+  | "MATCHING"
+  | "ORDERING";
 
 type ChoiceValue = { text: string; isCorrect: boolean };
 
@@ -41,6 +46,9 @@ const TYPE_LABEL: Record<QuestionType, string> = {
   SHORT_ANSWER: "Trả lời ngắn",
   ESSAY: "Tự luận",
   CODE: "Lập trình",
+  FILL_BLANK: "Điền chỗ trống",
+  MATCHING: "Ghép cặp",
+  ORDERING: "Sắp xếp thứ tự",
 };
 
 const inputClass =

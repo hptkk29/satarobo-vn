@@ -56,4 +56,35 @@ describe("computeStudentProgress", () => {
     expect(r.attended).toBe(3);
     expect(r.remaining).toBe(0);
   });
+
+  // Hồi quy 19/08 — site GV ghi nhãn MỚI (ABSENT_UNEXCUSED / ABSENT_EXCUSED). Bản cũ chỉ
+  // đếm ["ABSENT","EXCUSED"] nên hồ sơ học viên bên admin báo 0 buổi vắng cho toàn bộ dữ
+  // liệu thật, trong khi cổng phụ huynh báo đúng.
+  it("đếm ĐỦ 4 nhãn vắng, kể cả 2 nhãn mới của site giáo viên", () => {
+    const r = computeStudentProgress({
+      totalLessons: 10,
+      sessionsHeld: 4,
+      attendances: [
+        { status: "ABSENT" },
+        { status: "EXCUSED" },
+        { status: "ABSENT_UNEXCUSED" },
+        { status: "ABSENT_EXCUSED" },
+      ],
+    });
+    expect(r.absentNoMakeup).toBe(4);
+    expect(r.attended).toBe(0);
+  });
+
+  it("vắng nhãn mới nhưng ĐÃ HỌC BÙ thì tính là đã học, không tính vắng", () => {
+    const r = computeStudentProgress({
+      totalLessons: 10,
+      sessionsHeld: 2,
+      attendances: [
+        { status: "ABSENT_UNEXCUSED", makeupStatus: "MADE_UP" },
+        { status: "ABSENT_UNEXCUSED", makeupStatus: "NEEDS_MAKEUP" },
+      ],
+    });
+    expect(r.attended).toBe(1);
+    expect(r.absentNoMakeup).toBe(1);
+  });
 });

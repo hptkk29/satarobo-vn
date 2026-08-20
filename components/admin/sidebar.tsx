@@ -143,7 +143,9 @@ const NAV_GROUPS: NavGroup[] = [
   {
     label: "Lớp học & Lịch học",
     items: [
-      { label: "Lớp học", href: "/classes", icon: BookOpen, perm: ["classes:view-all", "classes:view-own"] },
+      // `session-feedback:view-all` tới từ nhánh main (xem nhận xét/đánh giá từng
+      // buổi) — giữ nguyên, đừng gỡ khi giải quyết xung đột.
+      { label: "Lớp học", href: "/classes", icon: BookOpen, perm: ["classes:view-all", "classes:view-own", "session-feedback:view-all"] },
       // 20/08/2026 — chủ dự án yêu cầu ẩn hẳn tính năng Nhóm lớp khỏi sidebar.
       // Giữ mục lại (thay vì xoá dòng) để bật lại chỉ tốn 1 env, không cần nhớ
       // icon/perm/thứ tự cũ. Route /class-groups cũng đã bị layout chặn.

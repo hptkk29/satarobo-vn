@@ -20,6 +20,7 @@ const SRC: TemplateSourceQuestion = {
   timeLimitSec: 60,
   lessonId: "lesson1",
   correctAnswer: null,
+  meta: { ui: "single" }, // Parity 18/08 — payload soạn đề phải theo bản clone
   isPublic: true,
   notes: "note",
   choices: [
@@ -46,6 +47,8 @@ describe("cloneQuestionForAssignment", () => {
     expect(cloned.points).toBe(2);
     expect(cloned.lessonId).toBe("lesson1");
     expect(cloned.isPublic).toBe(true);
+    // Parity 18/08 — meta (FILL_BLANK/MATCHING/ORDERING/ui) phải theo bản clone.
+    expect(cloned.meta).toEqual({ ui: "single" });
   });
 
   it("[T-LMS-3] choices clone qua nested create theo order/text/isCorrect/imageUrl", () => {

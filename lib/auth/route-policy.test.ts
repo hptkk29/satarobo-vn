@@ -630,6 +630,38 @@ describe("L5. teacher host × role — flag ON", () => {
     ).toEqual<RouteDecision>({ type: "redirectPath", path: "/" });
   });
 
+  // Sự cố 19/08/2026: 6 segment tồn tại ở CẢ hai site. Nhánh "chuẩn hoá path lạc khu" chạy
+  // trước nên clean URL của đúng những màn này bị ném về trang chủ GV — im lặng, không lỗi.
+  // Năm cái đầu hỏng từ trước bản vá; `lich` suýt hỏng thêm khi vá link chết "Lịch tổng" bên admin.
+  it.each(["don-tu", "hoc-ba", "huong-dan", "scorm", "tin-nhan", "lich"])(
+    "clean URL /%s trùng tên segment admin nhưng vẫn phải mở màn GV",
+    (seg) => {
+      expect(
+        decideRoute({ hostKind: "teacher", pathname: `/${seg}`, ...authed("TEACHER"), ...ON }),
+      ).toEqual<RouteDecision>({ type: "rewrite", path: `/teacher/${seg}` });
+    },
+  );
+
+  it("trang Tất cả thông báo chạy được ở CẢ hai host", () => {
+    // Ràng buộc PRD: trang này KHÔNG có trên sidebar ⇒ nếu segment thiếu thì lỗi chỉ lộ ra khi
+    // người dùng bấm "Xem tất cả thông báo" ở chân panel — muộn và khó lần.
+    expect(isAdminRoute("/thong-bao")).toBe(true);
+    expect(
+      decideRoute({ hostKind: "admin", pathname: "/thong-bao", ...authed("SUPER_ADMIN") }),
+    ).toEqual<RouteDecision>({ type: "rewrite", path: "/admin/thong-bao" });
+    expect(
+      decideRoute({ hostKind: "teacher", pathname: "/thong-bao", ...authed("TEACHER"), ...ON }),
+    ).toEqual<RouteDecision>({ type: "rewrite", path: "/teacher/thong-bao" });
+  });
+
+  it("path lạc khu THẬT (không phải màn GV) vẫn bị đưa về trang chủ GV", () => {
+    for (const p of ["/dashboard", "/leads", "/portal/ho-so", "/admin/students"]) {
+      expect(
+        decideRoute({ hostKind: "teacher", pathname: p, ...authed("TEACHER"), ...ON }),
+      ).toEqual<RouteDecision>({ type: "redirectPath", path: "/" });
+    }
+  });
+
   it("đa vai trò kiêm TEACHER ([CENTER_MANAGER, TEACHER]) → vào site GV", () => {
     expect(
       decideRoute({

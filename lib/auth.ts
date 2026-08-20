@@ -6,6 +6,8 @@ import { db } from "@/lib/db";
 import { loginSchema } from "@/lib/validators/auth";
 import { rateLimit } from "@/lib/rate-limit";
 import { canonicalPhone } from "@/lib/phone";
+// Phase T0.1 — map role cũ sang tên mới. Nguồn dùng chung với mọi chỗ đọc role từ DB.
+import { migrateLegacyRole } from "@/lib/auth/legacy-role";
 
 type SessionGrant = { action: string; grant: "ALLOW" | "DENY" };
 
@@ -43,13 +45,6 @@ const envSlug = (process.env.VERCEL_TARGET_ENV ?? process.env.VERCEL_ENV)
 const authCookieDomain = envSlug
   ? process.env.AUTH_COOKIE_DOMAIN?.trim() || undefined
   : undefined;
-
-// Phase T0.1 — map role cũ (JWT phát hành trước khi rename) sang tên mới.
-function migrateLegacyRole(role: string): string {
-  if (role === "MANAGER") return "CENTER_MANAGER";
-  if (role === "SALES") return "SALES_CSM";
-  return role;
-}
 
 // SEC-H01 — IP client cho rate-limit login (Vercel để IP thật ở x-forwarded-for).
 function getClientIp(request: Request | undefined): string {

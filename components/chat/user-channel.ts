@@ -5,7 +5,11 @@
 // Món nợ Đợt 1: chỉ tồn tại kênh mức HỘI THOẠI (`conv:{id}`) và client chỉ join kênh của
 // hội thoại ĐANG MỞ ⇒ tin đến ở hội thoại khác không có tín hiệu nào tới trình duyệt, nên
 // badge chưa đọc lẫn danh sách hội thoại đều đứng yên tới khi người dùng bấm đi bấm lại.
-// Kênh này chở đúng một event NHẸ: `conversation.bumped` (không body, không PII — BR-30).
+// Kênh này chở các event NHẸ, thuần TÍN HIỆU (không body, không PII — BR-30):
+//   • `conversation.bumped`  — có tin mới ở một hội thoại của tôi;
+//   • `notification.bumped`  — chuông nhân sự của tôi có mục mới (khỏi chờ vòng poll 60s).
+// Kênh vốn đã mở sẵn cho mọi trang có badge, nên chở thêm tín hiệu chuông KHÔNG tốn thêm
+// kết nối, thêm topic, hay thêm policy nào (policy chỉ so topic, không lọc theo tên event).
 //
 // VÌ SAO LÀ HUB REFCOUNT chứ không phải "mỗi component một hook":
 // trên site GV, `SidebarContent` được render Ở HAI NƠI (sidebar desktop + drawer mobile,
@@ -43,10 +47,29 @@ const RECONNECT_MAX_MS = 30_000;
 export type UserChannelEvent =
   /** Có tin mới ở một hội thoại nào đó của tôi. */
   | { type: "bump"; bump: ConversationBump }
+  /**
+   * Chuông nhân sự của tôi vừa có gì đó mới. Chỉ có MỐC THỜI GIAN, không tiêu đề/`href`
+   * (BR-30) — người nghe phải đi hỏi lại server rồi mới vẽ.
+   */
+  | { type: "noti"; at: Date }
   /** Kênh vừa (re)kết nối — hãy hỏi lại server, có thể đã lỡ bump lúc mất mạng. */
   | { type: "resync" };
 
 export type UserChannelListener = (event: UserChannelEvent) => void;
+
+/**
+ * Payload `notification.bumped` → mốc thời gian; `null` nếu dị dạng.
+ *
+ * Nghiêm ngặt có chủ đích, đúng nếp `parseConversationBumped`: thà BỎ một tín hiệu hỏng còn
+ * hơn đoán bừa (`new Date(undefined)` ra Invalid Date, để lọt là người nghe cầm rác). Bỏ
+ * cũng không mất gì: lần `SUBSCRIBED` kế tiếp phát `resync`, người nghe hỏi lại server là bù đủ.
+ */
+function parseNotificationBumped(payload: Record<string, unknown>): Date | null {
+  const at = payload.at;
+  if (typeof at !== "string" && typeof at !== "number" && !(at instanceof Date)) return null;
+  const parsed = new Date(at);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
 
 export type UserChannelSubscription = { unsubscribe: () => void };
 
@@ -216,11 +239,21 @@ export function createUserChannelHub(deps: {
       }
     };
 
+    // Lọc theo TÊN event, không phải "nhận hết cho tiện": topic `user:{id}` là kênh dùng
+    // chung, event lạ (hoặc event của phiên bản client cũ/mới hơn) phải rơi im lặng chứ
+    // không được biến thành tín hiệu sai. Mỗi tên có parser riêng — payload dị dạng ⇒ bỏ,
+    // `resync` ở lần SUBSCRIBED kế tiếp bù lại.
     const handleBroadcast = (event: string, payload: Record<string, unknown>) => {
       if (gen !== generation) return;
-      if (event !== "conversation.bumped") return;
-      const bump = parseConversationBumped(payload);
-      if (bump) emit({ type: "bump", bump });
+      if (event === "conversation.bumped") {
+        const bump = parseConversationBumped(payload);
+        if (bump) emit({ type: "bump", bump });
+        return;
+      }
+      if (event === "notification.bumped") {
+        const at = parseNotificationBumped(payload);
+        if (at) emit({ type: "noti", at });
+      }
     };
 
     /**

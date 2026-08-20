@@ -6,8 +6,7 @@ import { SessionEvalFill, type StudentLite } from "../../../evaluations/_compone
 import { loadClassSessionRoster } from "../_attendance-actions";
 import type { AttendanceRosterRow } from "@/lib/attendance/roster";
 import { formatDateDMY } from "@/lib/format/date";
-
-type SessionOpt = { id: string; date: string; topic: string | null; status: string };
+import type { SessionRow } from "./class-sessions-manage";
 
 function fmt(dateIso: string): string {
   const d = new Date(dateIso);
@@ -24,10 +23,17 @@ export function rowsToEvalStudents(rows: AttendanceRosterRow[]): StudentLite[] {
   }));
 }
 
+/** Danh sách HV đang hiển thị PHẢI đi cùng buổi sinh ra nó (xem ghi chú component). */
+type Loaded = { sessionId: string; students: StudentLite[] };
+
 /**
  * R2-CLASS-7 — Tab "Đánh giá" lớp chính: chọn buổi → nạp DS học viên (qua roster
  * điểm danh, scope-checked) → SessionEvalFill (phiếu SESSION_EVAL lớp chính). Học
  * viên buổi mặc định render server-side; đổi buổi mới fetch lại (không useEffect).
+ *
+ * ⚠️ Vá cùng bệnh với ClassAttendancePanel (bug 19/08): `selectedId` và `students` để
+ * rời nhau thì có một nhịp render key MỚI + dữ liệu CŨ ⇒ SessionEvalFill remount bằng
+ * danh sách HV của buổi trước rồi đứng yên. Gộp vào một state `Loaded`, chỉ set cùng lúc.
  */
 export function ClassEvalPanel({
   sessions,
@@ -35,29 +41,42 @@ export function ClassEvalPanel({
   initialStudents,
   canEdit,
 }: {
-  sessions: SessionOpt[];
+  sessions: SessionRow[];
   initialSessionId: string | null;
   initialStudents: StudentLite[];
   canEdit: boolean;
 }) {
-  const [selectedId, setSelectedId] = useState<string>(initialSessionId ?? "");
-  const [students, setStudents] = useState<StudentLite[]>(initialStudents);
+  const server: Loaded = { sessionId: initialSessionId ?? "", students: initialStudents };
+  const [picked, setPicked] = useState<Loaded | null>(null);
+  const [pendingId, setPendingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [pending, startTransition] = useTransition();
+  const [, startTransition] = useTransition();
+
+  // Lựa chọn của người dùng THẮNG bản server.
+  //
+  // ⚠️ ĐỪNG "tối ưu" thành `picked.sessionId === server.sessionId ? server : picked` —
+  // đã thử và đó là hồi quy: chọn LẠI đúng buổi mặc định (thao tác tự nhiên nhất để làm
+  // tươi dữ liệu) sẽ vứt roster vừa nạp và quay về ảnh chụp RSC lúc mở trang, tức tái
+  // hiện đúng triệu chứng gốc "GV điểm danh rồi mà admin không thấy".
+  const loaded = picked ?? server;
+  const selectedId = pendingId ?? loaded.sessionId;
+  const loading = pendingId !== null && pendingId !== loaded.sessionId;
 
   function onSelect(id: string) {
-    setSelectedId(id);
     setError(null);
     if (!id) {
-      setStudents([]);
+      setPendingId(null);
+      setPicked({ sessionId: "", students: [] });
       return;
     }
+    setPendingId(id);
     startTransition(async () => {
       const res = await loadClassSessionRoster(id);
+      setPendingId(null);
       if (res.ok) {
-        setStudents(rowsToEvalStudents(res.rows));
+        setPicked({ sessionId: id, students: rowsToEvalStudents(res.rows) });
       } else {
-        setStudents([]);
+        setPicked({ sessionId: id, students: [] });
         setError(res.error);
       }
     });
@@ -98,10 +117,17 @@ export function ClassEvalPanel({
         </div>
       )}
 
-      {selectedId && !error ? (
-        <div className={pending ? "opacity-60" : ""}>
-          <SessionEvalFill key={selectedId} sessionId={selectedId} students={students} canEdit={canEdit} />
-        </div>
+      {loading ? (
+        <p className="rounded-xl border border-dashed border-border p-8 text-center text-sm text-muted-foreground">
+          Đang tải danh sách học viên của buổi…
+        </p>
+      ) : loaded.sessionId && !error ? (
+        <SessionEvalFill
+          key={loaded.sessionId}
+          sessionId={loaded.sessionId}
+          students={loaded.students}
+          canEdit={canEdit}
+        />
       ) : !error ? (
         <p className="text-sm text-muted-foreground">Chọn một buổi học để mở phiếu đánh giá.</p>
       ) : null}

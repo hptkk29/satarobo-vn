@@ -14,9 +14,15 @@ import { revalidatePath } from "next/cache";
 import { AttendanceStatus, type MakeupStatus } from "@prisma/client";
 import { auth } from "@/lib/auth";
 import { resolveActor } from "@/lib/auth/actor";
-import { checkPermission } from "@/lib/auth/check-permission";
+import {
+  checkPermission,
+  decidePermissionWithGrant,
+} from "@/lib/auth/check-permission";
 import { withMakeupException } from "@/lib/db-scope";
-import { getSessionRosterStudentIds } from "@/lib/attendance/roster";
+import {
+  getExistingAttendanceByStudent,
+  getSessionRosterStudentIds,
+} from "@/lib/attendance/roster";
 import { isSessionOwnedByTeacher } from "@/lib/lms/session-ownership";
 import { getAuditActor } from "@/lib/audit/log";
 import { writeAudit } from "@/lib/audit/audit-log";
@@ -26,6 +32,7 @@ import {
 } from "@/lib/makeup/service";
 import { notifyAttendanceForSession } from "@/lib/notify/attendance";
 import { evaluateAbsenceRisk } from "@/lib/risk/service";
+import { mapWithConcurrency } from "@/lib/util/concurrency";
 
 const MAKEUP_STATUSES = ["NONE", "NEEDS_MAKEUP", "MADE_UP"] as const;
 
@@ -140,10 +147,35 @@ export async function saveClassAttendanceAction(
   const centerId = sess.class.centerId ?? sess.centerId ?? null;
 
   // (3) Role có quyền điểm danh không (CLASS scope — seed TEACHER:attendance:mark[CLASS]).
-  const allowed = await checkPermission("attendance:mark", {
-    classId: sess.classId,
-    centerId,
-  });
+  //
+  // ⚠️ 19/08 — GV DẠY THAY. Bước (2) đã chứng minh buổi thuộc về người này qua
+  // `substituteTeacherId`/`actualTeacherId`, nhưng `actor.assignedClassIds` chỉ nạp từ
+  // `Class.teacherId/assistantId` (lib/auth/actor.ts:443-446) nên scope CLASS KHÔNG khớp:
+  // trên PROD (RBAC_V2_ENABLED=true) GV dạy thay bấm Lưu là ăn "Không có quyền điểm danh
+  // lớp này" và điểm danh không bao giờ vào DB — quản lý đọc thành "GV chưa điểm danh".
+  // Local/CI chạy v1 nên KHÔNG tái hiện được; đừng tin kết quả thử ở máy.
+  //
+  // Vá bằng cách đưa ĐÚNG lớp vừa được chứng minh sở hữu vào bản sao actor CHỈ cho lần
+  // kiểm này, rồi vẫn đi qua nguyên pipeline quyền (grant mới → v1/v2 → cờ). KHÔNG nới
+  // `assignedClassIds` ở lib/auth/actor.ts: tập đó còn nuôi SCORM (lib/auth/lms-scope),
+  // học bạ (lib/lms/report-card-core) và chat DM với phụ huynh (lib/chat/dm) — nới ở đó
+  // là GV dạy thay 1 buổi tự nhiên có luôn học bạ và hộp chat của cả lớp.
+  const target = { classId: sess.classId, centerId };
+  const allowed =
+    (await checkPermission("attendance:mark", target)) ||
+    // Nhánh GV dạy thay: chỉ chạy khi lớp KHÔNG nằm trong assignedClassIds (tức cổng trên
+    // vừa trượt đúng vì lý do này). Vẫn là cùng một pipeline quyền, chỉ khác ở chỗ actor
+    // được bổ sung đúng lớp mà bước (2) đã chứng minh là của người này.
+    (!actor.assignedClassIds.has(sess.classId) &&
+      decidePermissionWithGrant({
+        sessionUser: session.user,
+        actor: {
+          ...actor,
+          assignedClassIds: new Set([...actor.assignedClassIds, sess.classId]),
+        },
+        action: "attendance:mark",
+        target,
+      }));
   if (!allowed) return { ok: false, error: "Không có quyền điểm danh lớp này" };
 
   // (4) SEC-M02: mỗi studentId từ client PHẢI thuộc ROSTER hợp lệ của buổi (enrolled active
@@ -154,16 +186,56 @@ export async function saveClassAttendanceAction(
     return { ok: false, error: "Có học viên không thuộc danh sách buổi này" };
   }
 
+  // 19/08 — đọc bản ghi ĐANG CÓ trước khi ghi đè.
+  //
+  // Bản cũ tính lại makeupStatus/absenceReason từ payload rồi ghi thẳng vào nhánh
+  // `update`. Panel điểm danh của site GV chỉ gửi {studentId, status, note} — không gửi
+  // makeupStatus, không gửi absenceReason — nên MỖI lần GV mở buổi cũ bấm Lưu lại là:
+  //   • học viên đã HỌC BÙ XONG (MADE_UP) tụt về NEEDS_MAKEUP ⇒ hiện lại ở /admin/hoc-bu
+  //     như chưa bù, và % chuyên cần / học bạ tính theo đó cũng sai;
+  //   • lý do phụ huynh xin nghỉ bị xoá trắng.
+  //
+  // ⚠️ Đọc bằng helper dùng `db` TRẦN, KHÔNG bằng `xdb`: Attendance là model SCOPED và
+  // KHÔNG nằm trong danh sách ngoại lệ học bù, nên `xdb` vẫn chèn lọc cơ sở — GV dạy thay
+  // ở cơ sở khác sẽ đọc ra rỗng và hai luật giữ dữ liệu bên dưới không bao giờ chạy.
+  const existingBy = await getExistingAttendanceByStudent(
+    data.sessionId,
+    data.records.map((r) => r.studentId),
+  );
+
+  /**
+   * Trạng thái bù HIỆU LỰC sau lần lưu này. Luật:
+   *   • không vắng            → NONE (đi học thì không có gì để bù);
+   *   • client gửi tường minh → theo client;
+   *   • đã MADE_UP mà nhãn mới vẫn "cần bù" → GIỮ MADE_UP (đã bù rồi, đừng tụt hạng);
+   *   • còn lại               → suy từ nhãn điểm danh (vắng có phép = NONE).
+   */
+  const plans = data.records.map((r) => {
+    const absent = isAbsent(r.status);
+    const old = existingBy.get(r.studentId);
+    const derived = absent ? deriveMakeup(r.status, r.makeupStatus) : "NONE";
+    // ĐÃ HỌC BÙ XONG thì giữ nguyên chừng nào HV VẪN LÀ VẮNG — không ràng thêm
+    // `derived === "NEEDS_MAKEUP"`: ràng vậy bỏ sót ca vắng CÓ PHÉP đã bù xong
+    // (deriveMakeup trả NONE) ⇒ MADE_UP bị hạ, HV mất một buổi "đã học".
+    const makeupStatus: MakeupStatus =
+      !absent || r.makeupStatus
+        ? derived
+        : old?.makeupStatus === "MADE_UP"
+          ? "MADE_UP"
+          : derived;
+    const absenceReason = !absent
+      ? null
+      : r.absenceReason !== undefined
+        ? r.absenceReason?.trim() || null
+        : (old?.absenceReason ?? null);
+    return { r, makeupStatus, absenceReason };
+  });
+
   // Write — upsert theo khoá composite sessionId_studentId; $transaction để lỗi giữa
   // chừng rollback trọn lô (GV bấm Lưu 1 lần cho cả lớp).
   try {
     await xdb.$transaction(
-      data.records.map((r) => {
-        const absent = isAbsent(r.status);
-        const makeupStatus = absent
-          ? deriveMakeup(r.status, r.makeupStatus)
-          : "NONE";
-        const absenceReason = absent ? r.absenceReason?.trim() || null : null;
+      plans.map(({ r, makeupStatus, absenceReason }) => {
         return xdb.attendance.upsert({
           where: {
             sessionId_studentId: {
@@ -200,17 +272,27 @@ export async function saveClassAttendanceAction(
   // (idempotent trong service — 1 nhu cầu/buổi/HV). câu 47: học bù có thể liên cơ sở.
   // Chiều ngược: sửa vắng → CÓ MẶT (PRESENT/LATE) → thu hồi MakeupNeed PENDING còn
   // treo của (HV, buổi này) — không để nhu cầu bù ma nằm ở /admin/hoc-bu.
+  //
+  // ⚠️ CHỈ thu hồi khi HV quay lại CÓ MẶT. ĐỪNG mở rộng sang "mọi trạng thái không cần bù"
+  // — bản thử 19/08 làm thế và hoá ra huỷ luôn suất bù của HV vắng CÓ PHÉP: nhu cầu bù của
+  // họ do phiếu xin nghỉ đã duyệt (/admin/parent-requests) hoặc do quản lý tạo tay sinh ra,
+  // trong khi deriveMakeup("ABSENT_EXCUSED") = NONE ⇒ mỗi lần GV bấm Lưu là xoá mất quyền
+  // lợi của học viên. Nhu cầu mồ côi (đổi vắng-không-phép → vắng-có-phép) thà để người ở
+  // /admin/hoc-bu quyết định. MADE_UP: không đụng — nhu cầu đã hoàn tất.
   try {
-    for (const r of data.records) {
-      if (
-        isAbsent(r.status) &&
-        deriveMakeup(r.status, r.makeupStatus) === "NEEDS_MAKEUP"
-      ) {
+    // Song song CÓ TRẦN — mỗi HV một lượt độc lập; nối đuôi thì GV bấm Lưu phải chờ hết
+    // 20 vòng truy vấn mới thấy phản hồi.
+    await mapWithConcurrency(plans, 5, async ({ r, makeupStatus, absenceReason }) => {
+      if (makeupStatus === "NEEDS_MAKEUP") {
         await createMakeupNeed({
           studentId: r.studentId,
           missedSessionId: data.sessionId,
           createdById: actorId,
-          note: r.absenceReason?.trim() || null,
+          note: absenceReason,
+          // Chuyển trạng thái THẬT: trước lần lưu này HV chưa ở diện cần bù. Lưu lại một
+          // buổi vốn đã NEEDS_MAKEUP thì không dựng dậy nhu cầu mà quản lý vừa huỷ tay.
+          reviveCancelled:
+            existingBy.get(r.studentId)?.makeupStatus !== "NEEDS_MAKEUP",
         });
       } else if (!isAbsent(r.status)) {
         await cancelPendingMakeupNeed({
@@ -218,7 +300,7 @@ export async function saveClassAttendanceAction(
           missedSessionId: data.sessionId,
         });
       }
-    }
+    });
   } catch (err) {
     console.error("[saveClassAttendanceAction] makeup:", err);
   }
@@ -227,13 +309,14 @@ export async function saveClassAttendanceAction(
   // từ site GV (đường chính) không bao giờ tạo StudentRiskAlert/CareTask. Best-effort:
   // .catch để không chặn luồng lưu.
   try {
-    for (const r of data.records) {
-      if (isAbsent(r.status)) {
-        await evaluateAbsenceRisk(r.studentId, sess.classId).catch((err) =>
+    await mapWithConcurrency(
+      data.records.filter((r) => isAbsent(r.status)),
+      5,
+      (r) =>
+        evaluateAbsenceRisk(r.studentId, sess.classId).catch((err) =>
           console.error("[saveClassAttendanceAction] risk:", err),
-        );
-      }
-    }
+        ),
+    );
   } catch (err) {
     console.error("[saveClassAttendanceAction] risk:", err);
   }

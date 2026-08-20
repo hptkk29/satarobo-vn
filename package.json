@@ -21,6 +21,7 @@
     "db:seed:course-categories": "tsx prisma/seed-course-categories.ts",
     "db:seed:orgunit": "tsx prisma/seed-orgunit.ts",
     "db:seed:departments": "tsx prisma/seed-departments.ts",
+    "db:seed:working-hours": "tsx prisma/seed-working-hours.ts",
     "db:seed:roles": "tsx prisma/seed-roles.ts",
     "db:seed:permissions": "tsx prisma/seed-permission-registry.ts",
     "permissions:list": "tsx scripts/list-permissions.ts",

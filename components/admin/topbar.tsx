@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import { logoutToGate } from "@/lib/auth/logout-client";
 import { BookOpenText, LogOut, ChevronDown, User, Search } from "lucide-react";
-import { NotificationBell } from "@/components/admin/notification-bell";
+import { NotificationBell } from "@/components/notifications/notification-bell";
 import { RoleSwitcher } from "@/components/admin/role-switcher";
 import {
   DropdownMenu,
@@ -16,6 +16,8 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { roleLabel } from "@/lib/labels";
 
 interface TopbarProps {
+  /** `User.id` — chuông cần để mở kênh realtime của chính người này. */
+  userId: string;
   userName?: string | null;
   userRole?: string;
   /** #13 — mọi vai trò user giữ; ≤1 vai thì RoleSwitcher tự ẩn. */
@@ -24,7 +26,7 @@ interface TopbarProps {
   activeRole?: string | null;
 }
 
-export function Topbar({ userName, userRole, roles = [], activeRole = null }: TopbarProps) {
+export function Topbar({ userId, userName, userRole, roles = [], activeRole = null }: TopbarProps) {
   const router = useRouter();
   const initials = userName
     ? userName
@@ -54,7 +56,9 @@ export function Topbar({ userName, userRole, roles = [], activeRole = null }: To
       <div className="flex items-center gap-2">
         {/* Module nhắc việc — chuông thông báo việc cần xử lý */}
         <RoleSwitcher roles={roles} activeRole={activeRole} />
-        <NotificationBell />
+        {/* Site admin phục vụ ở clean URL không tiền tố /admin ⇒ href lưu trong DB đã đúng
+            dạng, không phải đổi gì. */}
+        <NotificationBell userId={userId} viewAllHref="/thong-bao" />
 
         {/* User dropdown */}
         <DropdownMenu>

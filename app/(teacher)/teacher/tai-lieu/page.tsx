@@ -26,9 +26,10 @@ import {
   type CourseMaterialRow,
 } from "./_components/course-materials-list";
 import {
-  LessonFilterList,
-  type LessonView,
-} from "./_components/lesson-filter-list";
+  LessonTable,
+  type LessonDoc,
+  type LessonRow,
+} from "./_components/lesson-table";
 import { BackLink } from "../_components/ui/back-link";
 
 export const metadata = { title: "Thư viện tài liệu | Giáo viên Sata Robo" };
@@ -108,7 +109,7 @@ export default async function TeacherMaterialsPage({
     const lessonIds = lessons.map((l) => l.id);
     const scormOn = isScormEnabled();
 
-    let lessonViews: LessonView[] = [];
+    let lessonRows: LessonRow[] = [];
     if (lessonIds.length > 0) {
       // Lớp GV dạy khoá này → lấy buổi gắn lesson để cấp sessionId cho viewer SCORM.
       const myCourseClassIds = myClasses
@@ -118,13 +119,8 @@ export default async function TeacherMaterialsPage({
         sdb.document.findMany({
           where: { lessonId: { in: lessonIds } },
           orderBy: { title: "asc" },
-          select: {
-            id: true,
-            title: true,
-            fileUrl: true,
-            type: true,
-            lessonId: true,
-          },
+          // ⚠️ KHÔNG select fileUrl — client chỉ nhận id, viewer tự tra URL ở server.
+          select: { id: true, title: true, type: true, lessonId: true },
         }),
         scormOn
           ? sdb.scormPackage.findMany({
@@ -150,17 +146,20 @@ export default async function TeacherMaterialsPage({
           : Promise.resolve([] as { id: string; lessonId: string | null }[]),
       ]);
 
-      const docsByLesson = new Map<string, LessonView["documents"]>();
+      // Tách "Giáo án" vs "Bài tập về nhà" theo loại Document: WORKSHEET = phiếu
+      // bài tập; còn lại là giáo án/tư liệu buổi (parity cột bảng bản mock).
+      const planByLesson = new Map<string, LessonDoc[]>();
+      const worksheetByLesson = new Map<string, LessonDoc[]>();
       for (const d of docs) {
         if (!d.lessonId) continue;
-        const arr = docsByLesson.get(d.lessonId) ?? [];
+        const target = d.type === "WORKSHEET" ? worksheetByLesson : planByLesson;
+        const arr = target.get(d.lessonId) ?? [];
         arr.push({
           id: d.id,
           title: d.title,
-          fileUrl: d.fileUrl,
           typeLabel: DOC_TYPE_LABEL[d.type] ?? d.type,
         });
-        docsByLesson.set(d.lessonId, arr);
+        target.set(d.lessonId, arr);
       }
       const scormByLesson = new Map(scormPkgs.map((p) => [p.lessonId, p]));
       const sessionByLesson = new Map<string, string>();
@@ -170,14 +169,15 @@ export default async function TeacherMaterialsPage({
         }
       }
 
-      lessonViews = lessons.map((l) => {
+      lessonRows = lessons.map((l) => {
         const pkg = scormByLesson.get(l.id) ?? null;
         return {
           id: l.id,
           order: l.order,
           title: l.title,
-          objectives: l.objectives,
-          homework: (l.homeworkDefault ?? "").trim() || null,
+          planDocs: planByLesson.get(l.id) ?? [],
+          worksheetDocs: worksheetByLesson.get(l.id) ?? [],
+          homeworkText: (l.homeworkDefault ?? "").trim() || null,
           scorm: pkg
             ? {
                 id: pkg.id,
@@ -185,17 +185,16 @@ export default async function TeacherMaterialsPage({
                 sessionId: sessionByLesson.get(l.id) ?? null,
               }
             : null,
-          documents: docsByLesson.get(l.id) ?? [],
         };
       });
     }
 
     return (
       <div className="space-y-4">
-        <BackLink href="?" label="Thư viện tài liệu" />
+        <BackLink href="?" label="Tất cả khóa học" />
         <PageHeader
           title={`Tài liệu — ${course.name}`}
-          subtitle="Bài giảng theo khung chương trình — chỉ xem & trình chiếu, không chỉnh sửa."
+          subtitle={`${lessonRows.length} buổi học · mỗi buổi gồm giáo án PDF, giáo án SCORM và bài tập về nhà.`}
         />
 
         <div className="rounded-xl border border-border bg-primary-soft p-4">
@@ -207,7 +206,7 @@ export default async function TeacherMaterialsPage({
             {curriculumName ?? "Chưa gán khung chương trình"}
           </div>
           <div className="mt-0.5 text-sm text-muted-foreground">
-            {course.name} · {lessonViews.length} buổi
+            {course.name} · {lessonRows.length} buổi
           </div>
         </div>
 
@@ -218,7 +217,7 @@ export default async function TeacherMaterialsPage({
           </p>
         )}
 
-        {lessonViews.length === 0 ? (
+        {lessonRows.length === 0 ? (
           <EmptyState
             icon={FileText}
             title={
@@ -228,7 +227,7 @@ export default async function TeacherMaterialsPage({
             }
           />
         ) : (
-          <LessonFilterList lessonViews={lessonViews} scormOn={scormOn} />
+          <LessonTable rows={lessonRows} scormOn={scormOn} />
         )}
       </div>
     );

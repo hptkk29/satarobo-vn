@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useFormStatus } from "react-dom";
 import { toast } from "sonner";
@@ -122,7 +123,7 @@ export function CenterForm({ center }: { center?: CenterFormValue }) {
         />
         <Grid cols={2}>
           <Field
-            label="Giờ làm việc"
+            label="Giờ làm việc (hiển thị công khai)"
             name="workingHours"
             defaultValue={center?.workingHours ?? undefined}
             placeholder="T2-T6: 17h-21h, T7-CN: 8h-17h"
@@ -134,6 +135,21 @@ export function CenterForm({ center }: { center?: CenterFormValue }) {
             placeholder="Nguyễn Văn A"
           />
         </Grid>
+        {isEdit && (
+          // Ô "Giờ làm việc" ở trên là CHỮ HIỂN THỊ trên trang công khai — hệ thống không
+          // đọc được nó. Giờ mà hệ thống thật sự dùng (tính hạn xử lý, giờ gửi thông báo)
+          // khai ở màn riêng, theo từng thứ và từng vai.
+          <p className="text-xs text-muted-foreground">
+            Dòng trên chỉ là chữ hiển thị cho khách. Giờ làm việc hệ thống dùng để tính
+            toán khai tại{" "}
+            <Link
+              href={`/centers/${center!.id}/gio-lam-viec`}
+              className="font-semibold text-primary underline-offset-2 hover:underline"
+            >
+              Giờ làm việc theo thứ →
+            </Link>
+          </p>
+        )}
         <Field
           label="Mô tả ngắn"
           name="description"

@@ -10,15 +10,18 @@
 // (guard ở caller + kiểm lại sub.assignment.classId===classId chống IDOR).
 // ⚠️ Câu 46: payload client CHỈ tên học viên — KHÔNG SĐT/email/tên PH.
 import Link from "next/link";
-import { Ban, Eye, FileX2, Library, PencilLine, Plus } from "lucide-react";
+import { Ban, Eye, FileX2, Library, PencilLine } from "lucide-react";
 import type { SubmissionStatus } from "@prisma/client";
 import type { Actor } from "@/lib/auth/actor";
 import { scopedDb } from "@/lib/db-scope";
+import { checkPermission } from "@/lib/auth/check-permission";
 import { ENROLLMENT_ACTIVE_STATUS_LIST } from "@/lib/enrollment-status";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { EmptyState } from "../../_components/ui/empty-state";
 import { GradeForm } from "../../cham-bai/_components/grade-form";
+import { AssignDialog } from "../../cham-bai/_components/assign-dialog";
+import { loadTeacherAssignData } from "../../cham-bai/_data";
+import { resolveTemplateOwnerId } from "../../kho-bai-tap/_owner";
 import { BackLink } from "../../_components/ui/back-link";
 import { PhanTrangBang } from "@/components/ui/phan-trang-bang";
 
@@ -308,19 +311,28 @@ export async function HubAssignmentsTab({
     );
   }
 
-  // ── List: bài đã giao ở lớp + Giao bài ───────────────────────────────────────
-  const [assignments, cls] = await Promise.all([
+  // ── List: bài đã giao ở lớp + Giao bài (popup, parity 18/08) ─────────────────
+  const [{ ownerId }, canAuthor, canAssign] = await Promise.all([
+    resolveTemplateOwnerId(sdb, actor.userId),
+    checkPermission("assignments:author-own"),
+    checkPermission("assignments:assign-own", { classId }),
+  ]);
+  const [assignments, cls, assignData] = await Promise.all([
     sdb.assignment.findMany({
       where: { classId, status: { in: ["PUBLISHED", "CLOSED"] } },
       select: {
         id: true,
         title: true,
         status: true,
+        kind: true,
         dueAt: true,
-        templateId: true,
+        // Nguồn = AI SOẠN đề (template người khác → "Đào tạo"); templateId != null
+        // không đủ vì đề kho GV cũng là template.
+        template: { select: { createdById: true } },
+        classSession: { select: { date: true, topic: true } },
         _count: {
           select: {
-            questions: true, // >0 → hình thức "Kiểm tra"
+            questions: true,
             submissions: { where: { status: { in: SUBMITTED_STATUSES } } },
           },
         },
@@ -339,25 +351,38 @@ export async function HubAssignmentsTab({
         },
       },
     }),
+    // Kho + thư viện + buổi học, khoá về đúng lớp đang mở (dialog Giao bài).
+    loadTeacherAssignData(sdb, {
+      ownerId,
+      classIds: [...actor.assignedClassIds],
+      lockClassId: classId,
+    }),
   ]);
   const rosterCount = cls?._count.enrollments ?? 0;
 
-  // Giao bài → trang riêng (thay popup): khoá lớp này + quay lại đúng tab Bài tập.
-  const backToHub = `/teacher/lop?classId=${classId}&tab=bai-tap`;
-  const assignHref = `/teacher/cham-bai?compose=giao&lockClassId=${classId}&back=${encodeURIComponent(backToHub)}`;
+  const sessionFmt = new Intl.DateTimeFormat("vi-VN", {
+    day: "2-digit",
+    month: "2-digit",
+    timeZone: "Asia/Ho_Chi_Minh",
+  });
 
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="text-sm text-muted-foreground">
-          Bài tập &amp; kiểm tra đã giao cho lớp. Đầu bài lấy từ thư viện Đào
-          tạo.
+          Bài tập về nhà và bài kiểm tra của lớp. Chọn đầu bài từ kho bạn tự
+          soạn hoặc thư viện do trung tâm cài sẵn.
         </p>
-        <Button asChild className="shrink-0">
-          <Link href={assignHref}>
-            <Plus className="mr-1.5 h-4 w-4" aria-hidden /> Giao bài
-          </Link>
-        </Button>
+        {canAssign && (
+          <AssignDialog
+            classes={assignData.classes}
+            sessions={assignData.sessions}
+            courses={assignData.courses}
+            mine={assignData.mine}
+            library={assignData.library}
+            canAuthor={canAuthor}
+          />
+        )}
       </div>
 
       <div className="t-card overflow-hidden">
@@ -402,8 +427,10 @@ export async function HubAssignmentsTab({
                   </tr>
                 ) : (
                   assignments.map((a) => {
-                    const isTest = a._count.questions > 0;
-                    const fromAdmin = a.templateId != null;
+                    // Cột Hình thức theo KIND (khớp dialog giao + tab kho).
+                    const isTest = a.kind === "CLASSWORK";
+                    const fromAdmin =
+                      a.template != null && a.template.createdById !== ownerId;
                     const due =
                       a.dueAt && a.dueAt.getFullYear() >= 2000
                         ? dueFmt.format(a.dueAt)
@@ -413,8 +440,16 @@ export async function HubAssignmentsTab({
                         key={a.id}
                         className="border-b border-border/60 transition-colors last:border-0 hover:bg-muted/50"
                       >
-                        <td className="px-5 py-3.5 font-semibold text-foreground">
-                          {a.title}
+                        <td className="max-w-xs px-5 py-3.5">
+                          <p className="font-semibold text-foreground">
+                            {a.title}
+                          </p>
+                          {a.classSession && (
+                            <p className="truncate text-xs text-primary-ink">
+                              Buổi: {sessionFmt.format(a.classSession.date)} ·{" "}
+                              {a.classSession.topic?.trim() || "Buổi học"}
+                            </p>
+                          )}
                         </td>
                         <td className="px-5 py-3.5">
                           {isTest ? (

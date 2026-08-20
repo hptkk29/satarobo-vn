@@ -1,0 +1,98 @@
+name: Backfill phân loại thông báo (Supabase prod)
+
+# =============================================================================
+# Chạy TAY (workflow_dispatch) — xếp NHÓM + MỨC cho thông báo đã có sẵn trên PROD.
+#
+# VÌ SAO CẦN: migration `20260819110000_noti_v2_staff_notification_fields` thêm các cột
+# `groupKey` / `priority` / `entityType` với giá trị mặc định ("system" / 2 / null). Nghĩa là
+# MỌI bản ghi sinh trước migration đều nằm ở nhóm "Hệ thống", mức thường — chip lọc "Cần thực
+# hiện", "Tin nhắn PH", "Việc mới", "Đến hạn" trống trơn và không mục nào được đẩy lên đầu theo
+# độ khẩn. Dữ liệu KHÔNG mất, chỉ là chưa xếp loại; nhưng người dùng nhìn vào thì thấy như
+# tính năng hỏng.
+#
+# `deploy.yml` chỉ chạy `migrate deploy` (SCHEMA). Bước xếp loại là DATA nên phải chạy riêng.
+#
+# VÌ SAO LÀ WORKFLOW CHỨ KHÔNG CHẠY TỪ MÁY DEV: thông tin đăng nhập DB production CHỈ nằm
+# trong GitHub Actions secrets (`PROD_DATABASE_URL` / `PROD_DIRECT_URL`). `vercel env pull
+# --environment=production` KHÔNG cho ra URL prod — đã thử 19/08/2026, nó trả về DATABASE_URL
+# của project DEV. Chạy script ở máy dev với env đó sẽ đập vào DB dev và báo "Cần sửa: 0",
+# trông y hệt thành công trong khi prod vẫn nguyên. Đừng đi lại đường đó.
+#
+# AN TOÀN:
+#  · Mặc định DRY-RUN — chỉ in ra, không ghi. Phải chọn `apply = true` mới ghi thật.
+#  · Idempotent: chạy lần hai báo "Cần sửa: 0".
+#  · Script CHỈ đụng 3 cột phân loại. KHÔNG bao giờ chạm `readAt`/`seenAt` — hai mốc đó là dữ
+#    liệu có hệ quả (chủ dự án chốt 19/08: mốc đọc được dùng cho đánh giá nhân sự).
+#  · Chạy lại sau MỖI lần sửa `lib/notifications/catalog.ts` để dòng cũ theo kịp phân loại mới.
+#
+# SECRETS (đã khai sẵn cho deploy.yml): PROD_DATABASE_URL / PROD_DIRECT_URL.
+# Dùng PROD_DIRECT_URL (session pooler :5432) cho client script — transaction pooler :6543 có
+# quirk prepared-statement đã cắn repo này hai lần (xem scripts/_script-db.ts).
+# =============================================================================
+
+on:
+  workflow_dispatch:
+    inputs:
+      apply:
+        description: "Ghi thật vào DB prod? (bỏ trống = chỉ xem trước, không ghi)"
+        type: boolean
+        default: false
+
+concurrency:
+  group: backfill-noti-classification
+  cancel-in-progress: false
+
+jobs:
+  backfill:
+    name: Xếp nhóm + mức cho thông báo cũ (Supabase prod)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Kiểm tra secrets prod (fail sớm)
+        run: |
+          missing=0
+          [ -n "${{ secrets.PROD_DATABASE_URL }}" ] || { echo "::error::Thiếu secret PROD_DATABASE_URL"; missing=1; }
+          [ -n "${{ secrets.PROD_DIRECT_URL }}" ]   || { echo "::error::Thiếu secret PROD_DIRECT_URL"; missing=1; }
+          exit $missing
+
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v3
+        with: { version: 11 }
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Generate Prisma client
+        run: pnpm exec prisma generate
+
+      # LUÔN chạy dry-run trước, kể cả khi người dùng chọn apply: log của bước này là bản ghi
+      # "trước khi sửa có bao nhiêu dòng lệch" — không có nó thì sau này không đối chiếu được.
+      - name: Xem trước (dry-run) — KHÔNG ghi gì
+        run: pnpm exec tsx scripts/noti-backfill-classification.ts
+        env:
+          DATABASE_URL: ${{ secrets.PROD_DIRECT_URL }}
+          DIRECT_URL: ${{ secrets.PROD_DIRECT_URL }}
+
+      - name: Ghi thật (--apply)
+        if: ${{ inputs.apply }}
+        run: pnpm exec tsx scripts/noti-backfill-classification.ts --apply
+        env:
+          DATABASE_URL: ${{ secrets.PROD_DIRECT_URL }}
+          DIRECT_URL: ${{ secrets.PROD_DIRECT_URL }}
+
+      - name: 'Kiểm lại sau khi ghi — kỳ vọng "Cần sửa: 0"'
+        if: ${{ inputs.apply }}
+        run: pnpm exec tsx scripts/noti-backfill-classification.ts
+        env:
+          DATABASE_URL: ${{ secrets.PROD_DIRECT_URL }}
+          DIRECT_URL: ${{ secrets.PROD_DIRECT_URL }}
+
+      - name: Nhắc việc còn lại
+        if: ${{ inputs.apply }}
+        run: |
+          echo "::notice::Backfill xong. Còn một bước nữa cho hệ giờ làm việc: chạy workflow seed giờ làm việc, hoặc 'pnpm db:seed:working-hours' với env prod."

@@ -159,6 +159,13 @@ export interface SessionEvalPdfData {
   notes: EvalNotes;
   ratings: Record<string, number>;
   evaluatedByName: string | null;
+  /**
+   * Nhận xét văn xuôi KHÔNG chia 4 mục — phiếu lưu qua đường `saveSessionFeedback`
+   * (/teacher/nhan-xet và editor ở /admin/sessions/[id]) chỉ có `comment` + sao.
+   * Đó vẫn là phiếu thật, phụ huynh vẫn đọc được trên portal; trước 19/08 xuất PDF
+   * thì 404 vì route đòi phải có notes/rubric. Dùng làm nội dung dự phòng khi 4 mục rỗng.
+   */
+  comment?: string | null;
 }
 
 const GROUPS = groupedEvalCriteria();
@@ -192,6 +199,7 @@ export function SessionEvalPdf({ data }: { data: SessionEvalPdfData }) {
   );
   const proposal = (data.notes[PROPOSAL_KEY] ?? "").trim();
   const hasNotes = bullets.length > 0 || proposal.length > 0;
+  const legacyComment = (data.comment ?? "").trim();
 
   return (
     <Document>
@@ -250,6 +258,11 @@ export function SessionEvalPdf({ data }: { data: SessionEvalPdfData }) {
                   </Text>
                 </View>
               ) : null}
+            </View>
+          ) : legacyComment ? (
+            <View>
+              <Text style={s.notesHeading}>Đánh giá tổng quan quá trình học tập:</Text>
+              <Text style={s.noteText}>{legacyComment}</Text>
             </View>
           ) : (
             <Text style={s.noteText}>—</Text>

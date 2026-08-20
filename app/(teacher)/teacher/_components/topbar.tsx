@@ -3,7 +3,8 @@
 import { Menu } from "lucide-react";
 import { ThemeToggle } from "./theme-toggle";
 import { UserMenu } from "./user-menu";
-import { NotificationBell } from "./notification-bell";
+import { NotificationBell } from "@/components/notifications/notification-bell";
+import { teacherHref } from "@/lib/teacher/notification-href";
 
 /**
  * Topbar site GV.
@@ -17,10 +18,13 @@ import { NotificationBell } from "./notification-bell";
  * đó chưa từng tới người nhận chính. Nay dùng chung API bell.
  */
 export function Topbar({
+  userId,
   userName,
   adminReturnUrl,
   onMenuClick,
 }: {
+  /** `User.id` — chuông cần để mở kênh realtime của chính người này. */
+  userId: string;
   userName: string;
   adminReturnUrl?: string;
   onMenuClick: () => void;
@@ -37,7 +41,14 @@ export function Topbar({
       </button>
 
       <div className="ml-auto flex items-center gap-1 sm:gap-3">
-        <NotificationBell />
+        {/* href trong DB viết theo đường admin ⇒ phải đổi sang màn site GV. Đường nào site GV
+            không có thì `teacherHref` trả null: hiện chữ, không gắn link chết — hơn là ném GV
+            sang host admin rồi bị route-policy 307 đá ngược. */}
+        <NotificationBell
+          userId={userId}
+          resolveHref={teacherHref}
+          viewAllHref="/teacher/thong-bao"
+        />
         <ThemeToggle />
         <UserMenu name={userName} adminReturnUrl={adminReturnUrl} />
       </div>

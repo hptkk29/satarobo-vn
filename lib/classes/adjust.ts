@@ -5,6 +5,7 @@ import { publishEvent } from "@/lib/events/publish";
 import { detectSessionConflicts } from "@/lib/lms/schedule-conflict";
 import { sessionWindow } from "@/lib/lms/schedule-conflict";
 import { vnAddDays } from "@/lib/time/vn";
+import { findLockedSessions } from "@/lib/classes/phases-service";
 
 // =============================================================================
 // R7-06 — Điều chỉnh buổi học: HỦY buổi (sinh buổi bù cuối lịch, giữ tổng số buổi)
@@ -61,6 +62,25 @@ export async function cancelSession(opts: {
   }
   if (session.status === "CANCELLED") {
     return { ok: false, error: "Buổi đã bị huỷ trước đó" };
+  }
+
+  // 19/08 — KHÔNG huỷ buổi ĐÃ ĐƯỢC DÙNG (đã điểm danh / có nhận xét / đã giao bài / có
+  // ảnh lớp). Chặn theo `status` là chưa đủ: điểm danh KHÔNG đổi status buổi (chỉ
+  // completeSession đổi, mà nó nằm sau cờ SESSION_LIFECYCLE_V2 đang OFF), nên một buổi đã
+  // dạy xong với 20 bản ghi điểm danh vẫn mang nhãn SCHEDULED và huỷ được. Huỷ xong thì
+  // buổi đó rơi khỏi mọi phép tính chuyên cần (buổi CANCELLED không tính học, không tính
+  // vắng) ⇒ số buổi đã học của cả lớp tụt xuống mà không ai biết vì sao.
+  // Dùng chung định nghĩa "buổi đã dùng" với màn đổi lịch (findLockedSessions).
+  const lockedCancel = await findLockedSessions(
+    [sessionId],
+    new Map([[sessionId, session.status]]),
+  );
+  const cancelReason = lockedCancel.get(sessionId);
+  if (cancelReason) {
+    return {
+      ok: false,
+      error: `Buổi ${cancelReason} — không thể huỷ. Sửa dữ liệu của buổi trước, hoặc dời buổi thay vì huỷ.`,
+    };
   }
 
   // Các buổi còn lại của lớp (không tính buổi đang huỷ) để tính ngày buổi bù cuối.
@@ -151,6 +171,21 @@ export async function adjustSession(opts: {
   const hasRoom = roomId !== undefined;
   if (!hasDate && !hasTeacher && !hasRoom) {
     return { ok: false, error: "Không có thay đổi nào" };
+  }
+
+  // 19/08 — DỜI NGÀY một buổi đã được dùng là VIẾT LẠI LỊCH SỬ: điểm danh ngày 05/08 bỗng
+  // hiện thành 12/08, phiếu nhận xét và ảnh lớp đi theo. Màn đổi lịch theo giai đoạn đã
+  // chặn bằng findLockedSessions từ lâu, riêng đường "Điều chỉnh" từng buổi thì quên.
+  // Chỉ chặn khi ĐỔI NGÀY — đổi GV dạy thay / phòng vẫn cho, đó là ghi nhận thực tế.
+  if (hasDate && date.getTime() !== session.date.getTime()) {
+    const locked = await findLockedSessions(
+      [sessionId],
+      new Map([[sessionId, session.status]]),
+    );
+    const reason = locked.get(sessionId);
+    if (reason) {
+      return { ok: false, error: `Buổi ${reason} — không thể dời ngày.` };
+    }
   }
 
   // W2-4 (LMS-6) / T4.2 — chặn đổi buổi gây trùng GV/phòng với LỚP KHÁC.
