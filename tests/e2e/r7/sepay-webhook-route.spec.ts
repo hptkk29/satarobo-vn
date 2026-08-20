@@ -31,7 +31,7 @@
  * ngắn là bỏ qua đúng bước đang cần kiểm.
  *
  * ⚠️ ĐỔI HÀNH VI 20/08 (vòng 4) mà các "bảo hiểm fixture" dưới đây phải phản ánh:
- * `shortCourseToken` rút tên khoá về MÃ NGẮN 5 ký tự và `TRANSFER_NAME_MIN` bảo đảm
+ * `shortCourseToken` rút tên khoá về MÃ NGẮN 5 ký tự và `givenNamePart` thu họ tên
  * hạn mức tối thiểu cho tên con ⇒ tên con KHÔNG còn biến mất khỏi chuỗi 25 ký tự
  * nữa (trước đó mất sạch ở 11/11 khoá thật). Khẳng định kiểu `not.toContain("NGUYEN")`
  * của bản cũ nay SAI VỀ CHUẨN — thứ cần khoá lại là ngược lại: chuỗi 25 ký tự PHẢI
@@ -48,7 +48,7 @@ import {
   shortCourseToken,
   MAX_TRANSFER_CONTENT,
   VIETQR_ADDINFO_MAX,
-  TRANSFER_NAME_MIN,
+  givenNamePart,
 } from "../../../lib/payments/vietqr";
 import { normalizeContent } from "../../../lib/payments/sepay";
 
@@ -269,16 +269,19 @@ test.describe("[SEPAY-ROUTE] nhật ký webhook SePay", () => {
     });
 
     // ── Bảo hiểm fixture ──────────────────────────────────────────────────────
-    // (1) Đây ĐÚNG là ca cắt: tên con ở bản 25 ngắn hơn hẳn bản 80 và là TIỀN TỐ
-    //     của nó — chứ không phải một fixture vừa vặn tình cờ.
+    // (1) Đây ĐÚNG là ca phải thu gọn: họ tên đầy đủ không vừa trần 25 nên bản QR
+    //     chỉ còn TÊN GỌI — chứ không phải một fixture vừa vặn tình cờ.
     expect(a.qrParts.name.length).toBeLessThan(a.spokenParts.name.length);
-    expect(a.spokenParts.name.startsWith(a.qrParts.name)).toBe(true);
-    // (2) Thứ vòng vá 20/08 khoá lại: dù bị cắt, tên con KHÔNG biến mất — nó giữ
-    //     được ít nhất `TRANSFER_NAME_MIN` ký tự và nằm ngay đầu chuỗi CK. Bản
-    //     trước của spec khẳng định ngược lại (`not.toContain("NGUYEN")`) vì hồi đó
-    //     tên khoá dài nuốt hết ngân sách; giữ khẳng định cũ là khoá cứng đúng cái
-    //     bug đã sửa — kế toán nhìn sao kê không biết tiền của con nào.
-    expect(a.qrParts.name.length).toBeGreaterThanOrEqual(TRANSFER_NAME_MIN);
+    // ⚠️ 21/08 — HẬU TỐ, không phải tiền tố. Quy tắc cũ cắt 7 ký tự ĐẦU của họ tên
+    //     ("NguyenT"); chủ dự án chốt đổi sang lấy TÊN GỌI ("Khue") vì "NguyenT"
+    //     không phải tên của ai cả. Nên bản 80 KẾT THÚC bằng bản 25.
+    expect(a.spokenParts.name.endsWith(a.qrParts.name)).toBe(true);
+    expect(a.qrParts.name).toBe(givenNamePart("Nguyễn Thị Minh Khuê"));
+    // (2) Thứ cả hai vòng vá đều khoá lại: tên con KHÔNG biến mất khỏi chuỗi QR —
+    //     bản đầu tiên của định dạng này nuốt sạch tên ở cả 11/11 khoá thật, và
+    //     spec cũ còn khẳng định ngược lại (`not.toContain("NGUYEN")`), tức khoá
+    //     cứng đúng cái bug — kế toán nhìn sao kê không biết tiền của con nào.
+    expect(a.qrParts.name.length).toBeGreaterThan(0);
     expect(a.qrContent.startsWith(a.qrParts.name)).toBe(true);
     // (3) Và mã khoá không bị cắt cụt theo — nguyên vẹn 5 ký tự của danh mục thật.
     expect(a.qrParts.course).toBe(shortCourseToken(COURSE));

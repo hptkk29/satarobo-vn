@@ -473,12 +473,18 @@ test.describe("[PAYOS] webhook ghi nhận + phân bổ tiền", () => {
 
   test("[PAYOS-13] một SĐT có 2 đơn đang chờ thu, nội dung không phân biệt được → UNMATCHED, KHÔNG đoán bừa", async () => {
     // Hai đơn CÙNG tên con + CÙNG khoá ⇒ thu hẹp bằng nội dung cũng bó tay.
+    //
+    // ⚠️ SỐ TIỀN PHẢI BẰNG NHAU. Sau khi thêm tiêu chí phụ theo số tiền
+    // (`narrowByAmount`), hai đơn lệch tiền là tách được ngay và ca này KHÔNG còn
+    // là ca nhập nhằng nữa — fixture cũ (3tr vs 4tr) khiến spec tự mâu thuẫn với
+    // tên của chính nó. Cho bằng nhau thì cả nội dung LẪN số tiền đều bó tay, đúng
+    // thứ spec muốn khoá: bó tay thì DỪNG, không đoán.
     await seedOrderWithRequests([3_000_000], {
       customerPhone: "0987654321",
       studentName: "Nguyễn Văn A",
       courseName: "Sata 4",
     });
-    await seedOrderWithRequests([4_000_000], {
+    await seedOrderWithRequests([3_000_000], {
       customerPhone: "0987654321",
       studentName: "Nguyễn Văn A",
       courseName: "Sata 4",
