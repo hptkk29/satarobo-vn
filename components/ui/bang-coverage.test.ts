@@ -30,6 +30,8 @@ const MIEN_TRU: Record<string, string> = {
   "app/(public)/hoc-cu/page.tsx": "bảng so sánh gói học cụ — nội dung cố định",
   "components/legacy-laptrinhrobot/InternalAwards.tsx":
     "bảng giải thưởng trên landing cũ — danh sách chốt cứng trong code, không đọc từ DB",
+  "app/(sale)/sale/trial/_components/trial-list.tsx":
+    "một bảng = MỘT khung giờ, số dòng chặn bởi sức chứa lớp trải nghiệm (6–8 bé). Phân trang trong một buổi 6 bé là thêm thanh điều khiển vô nghĩa; lượng dữ liệu cả trang đã chặn bằng cửa sổ 21 ngày + take:200 ở lib/trial/sale-roster.ts",
 };
 
 function walk(dir: string, out: string[] = []): string[] {
