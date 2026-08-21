@@ -247,7 +247,7 @@ async function seed() {
     key: string,
     name: string,
     role: "TEACHER" | "CENTER_MANAGER" | "PARENT",
-    phone: string,
+    _phone: string,
   ) =>
     db.user.create({
       data: {
