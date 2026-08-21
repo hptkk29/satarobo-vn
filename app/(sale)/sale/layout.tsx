@@ -1,7 +1,8 @@
 // app/(sale)/sale/layout.tsx — Đợt B: khung site Sale (sale.satarobo.vn).
 //
-// Chốt Q11 (21/08/2026): Sale Hub là **site riêng**; biểu mẫu nhập khách đang ở
-// host này sẽ dời sang `satarobo.vn/nhap-khach-hang` (đợt F).
+// Chốt Q11 (21/08/2026): Sale Hub là **site riêng**. Biểu mẫu nhập khách vốn ở
+// host này ĐÃ DỜI sang `satarobo.vn/nhap-khach-hang` (22/08/2026) — host cũ chỉ
+// còn đá 307 sang đó khi cờ `SALE_SITE_ENABLED` TẮT.
 //
 // Gate 3 tầng, soi chiếu `app/(teacher)/teacher/layout.tsx`:
 //   (1) chưa đăng nhập → /login

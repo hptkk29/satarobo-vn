@@ -809,41 +809,40 @@ describe("L5/L6. TEACHER × host × flag TEACHER_SITE_ENABLED (2-phase, ĐÃ wir
 });
 
 // ─────────────────────────────────────────────────────────────────────────
-// Sale host (sale.satarobo.vn) — site tĩnh CÔNG KHAI, KHÔNG auth.
-// Form nhập liệu Sale → MISA AMIS CRM. Clean URL rewrite nội bộ →
-// public/sale/*.html (giữ nguyên mã nhúng MISA). MISA tự POST + redirect về
-// /thank-you (field RedirectURL trong form) — decideRoute chỉ serve URL đó.
+// Sale host (sale.satarobo.vn) — biểu mẫu tĩnh CÔNG KHAI đã NGHỈ (22/08/2026).
+//
+// Địa chỉ nhập khách duy nhất nay là `satarobo.vn/nhap-khach-hang` (có đăng
+// nhập). Host cũ chỉ còn đá 307 về đó — 307 chứ KHÔNG 308 để quyết định vận
+// hành này còn đảo được mà không vướng cache vĩnh viễn của trình duyệt/CDN.
 // ─────────────────────────────────────────────────────────────────────────
 
-describe("Sale host (sale.satarobo.vn) — form tĩnh, không auth", () => {
-  it("/ → rewrite form nhập liệu tĩnh", () => {
-    expect(
-      decideRoute({ hostKind: "sale", pathname: "/", role: null, sessionValid: false }),
-    ).toEqual<RouteDecision>({ type: "rewrite", path: "/sale/nhap-lieu.html" });
-  });
+const TO_INTAKE: RouteDecision = {
+  type: "redirectHost",
+  host: "public",
+  path: "/nhap-khach-hang",
+  status: 307,
+};
 
-  it("/thank-you (+ trailing slash) → rewrite trang cảm ơn tĩnh", () => {
-    expect(
-      decideRoute({ hostKind: "sale", pathname: "/thank-you", role: null, sessionValid: false }),
-    ).toEqual<RouteDecision>({ type: "rewrite", path: "/sale/thank-you.html" });
-    expect(
-      decideRoute({ hostKind: "sale", pathname: "/thank-you/", role: null, sessionValid: false }),
-    ).toEqual<RouteDecision>({ type: "rewrite", path: "/sale/thank-you.html" });
-  });
-
-  it("file tĩnh /sale/*.html (đích rewrite / truy cập trực tiếp) → next", () => {
-    for (const p of ["/sale/nhap-lieu.html", "/sale/thank-you.html"]) {
+describe("Sale host (sale.satarobo.vn) — biểu mẫu tĩnh đã nghỉ", () => {
+  it("mọi đường CŨ của biểu mẫu → về trang nhập khách mới", () => {
+    for (const p of [
+      "/",
+      "/thank-you",
+      "/thank-you/",
+      "/sale/nhap-lieu.html",
+      "/sale/thank-you.html",
+    ]) {
       expect(
         decideRoute({ hostKind: "sale", pathname: p, role: null, sessionValid: false }),
-      ).toEqual<RouteDecision>({ type: "next" });
+      ).toEqual<RouteDecision>(TO_INTAKE);
     }
   });
 
-  it("path lạ trên sale host → về form nhập liệu (/)", () => {
+  it("path lạ trên sale host → cũng về trang nhập khách mới", () => {
     for (const p of ["/random", "/khoa-hoc", "/admin/leads", "/portal/lich-hoc", "/login"]) {
       expect(
         decideRoute({ hostKind: "sale", pathname: p, role: null, sessionValid: false }),
-      ).toEqual<RouteDecision>({ type: "redirectPath", path: "/" });
+      ).toEqual<RouteDecision>(TO_INTAKE);
     }
   });
 
@@ -855,16 +854,89 @@ describe("Sale host (sale.satarobo.vn) — form tĩnh, không auth", () => {
     }
   });
 
-  it("CÔNG KHAI: mọi role + ẩn danh đều nhận CÙNG quyết định (auth bị bỏ qua)", () => {
+  it("cờ TẮT: mọi role + ẩn danh đều nhận CÙNG quyết định (không còn gì để phục vụ)", () => {
     for (const role of [...ALL_ROLES, null] as MaybeRole[]) {
       const sessionValid = role !== null;
       expect(
         decideRoute({ hostKind: "sale", pathname: "/", role, sessionValid }),
-      ).toEqual<RouteDecision>({ type: "rewrite", path: "/sale/nhap-lieu.html" });
-      expect(
-        decideRoute({ hostKind: "sale", pathname: "/thank-you", role, sessionValid }),
-      ).toEqual<RouteDecision>({ type: "rewrite", path: "/sale/thank-you.html" });
+      ).toEqual<RouteDecision>(TO_INTAKE);
     }
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────
+// Biểu mẫu nhập khách hàng — `satarobo.vn/nhap-khach-hang` (22/08/2026).
+//
+// NGOẠI LỆ có chủ đích: trang NỘI BỘ đứng ở host PUBLIC (chủ dự án chốt một
+// địa chỉ duy nhất). Vì thế nó phải tự mang cổng đăng nhập ngay ở tầng này —
+// mọi trang public khác đều cho khách vãng lai vào.
+// ─────────────────────────────────────────────────────────────────────────
+
+describe("/nhap-khach-hang — biểu mẫu nội bộ trên host public", () => {
+  it("🔴 chưa đăng nhập → /login kèm callbackUrl (KHÔNG cho xem biểu mẫu)", () => {
+    for (const p of ["/nhap-khach-hang", "/nhap-khach-hang/"]) {
+      expect(
+        decideRoute({ hostKind: "public", pathname: p, role: null, sessionValid: false }),
+      ).toEqual<RouteDecision>({
+        type: "redirectPath",
+        path: "/login",
+        callbackUrl: "/nhap-khach-hang",
+      });
+    }
+  });
+
+  it("phiên đã bị vô hiệu → /login kèm lý do", () => {
+    expect(
+      decideRoute({
+        hostKind: "public",
+        pathname: "/nhap-khach-hang",
+        role: "SALES_CSM",
+        sessionValid: false,
+      }),
+    ).toEqual<RouteDecision>({
+      type: "redirectPath",
+      path: "/login",
+      callbackUrl: "/nhap-khach-hang",
+      reason: "session-invalidated",
+    });
+  });
+
+  it("nhân sự đã đăng nhập → phục vụ tại chỗ (quyền leads:create do layout gác)", () => {
+    for (const role of ALL_ROLES.filter((r) => r !== "PARENT")) {
+      expect(
+        decideRoute({ hostKind: "public", pathname: "/nhap-khach-hang", ...authed(role) }),
+      ).toEqual<RouteDecision>({ type: "next" });
+    }
+  });
+
+  it("PARENT → về portal, không lảng vảng ở biểu mẫu nội bộ", () => {
+    expect(
+      decideRoute({ hostKind: "public", pathname: "/nhap-khach-hang", ...authed("PARENT") }),
+    ).toEqual<RouteDecision>({
+      type: "redirectHost",
+      host: "portal",
+      path: "/",
+      status: 307,
+    });
+  });
+
+  it("admin host → đá 307 sang host public (mục sidebar trỏ đường tương đối)", () => {
+    for (const p of ["/nhap-khach-hang", "/nhap-khach-hang/"]) {
+      expect(
+        decideRoute({ hostKind: "admin", pathname: p, ...authed("MARKETING") }),
+      ).toEqual<RouteDecision>(TO_INTAKE);
+    }
+  });
+
+  it("admin host: chưa đăng nhập cũng đá sang public (cổng nằm ở đó, không nhân đôi)", () => {
+    expect(
+      decideRoute({
+        hostKind: "admin",
+        pathname: "/nhap-khach-hang",
+        role: null,
+        sessionValid: false,
+      }),
+    ).toEqual<RouteDecision>(TO_INTAKE);
   });
 });
 
@@ -1034,16 +1106,18 @@ describe("isInfraPath — đường hạ tầng KHÔNG được canonical-hoá",
 const saleOn = { hostKind: "sale", saleSiteEnabled: true } as const;
 
 describe("[Đợt B] Site Sale — cờ BẬT", () => {
-  it("đường dẫn CÔNG KHAI của biểu mẫu vẫn sống (MISA còn trỏ RedirectURL vào /thank-you)", () => {
-    for (const p of ["/thank-you", "/thank-you/"]) {
+  it("đường dẫn CŨ của biểu mẫu → về trang nhập khách mới (kể cả khi cờ BẬT)", () => {
+    // MISA còn trỏ `RedirectURL` vào /thank-you, và quảng cáo/QR cũ còn trỏ vào
+    // /sale/nhap-lieu.html — cả hai phải đáp về địa chỉ mới, không được 404.
+    for (const p of [
+      "/thank-you",
+      "/thank-you/",
+      "/sale/nhap-lieu.html",
+      "/sale/thank-you.html",
+    ]) {
       expect(
         decideRoute({ ...saleOn, pathname: p, role: null, sessionValid: false }),
-      ).toEqual<RouteDecision>({ type: "rewrite", path: "/sale/thank-you.html" });
-    }
-    for (const p of ["/sale/nhap-lieu.html", "/sale/thank-you.html"]) {
-      expect(
-        decideRoute({ ...saleOn, pathname: p, role: null, sessionValid: false }),
-      ).toEqual<RouteDecision>({ type: "next" });
+      ).toEqual<RouteDecision>(TO_INTAKE);
     }
   });
 
@@ -1118,9 +1192,11 @@ describe("[Đợt B] Site Sale — cờ BẬT", () => {
     }
   });
 
-  it("cờ TẮT giữ nguyên hành vi cũ — kể cả khi đã đăng nhập", () => {
+  it("cờ TẮT: host cũ về trang nhập khách mới — kể cả khi đã đăng nhập", () => {
+    // Trước 22/08 nhánh này rewrite ra biểu mẫu tĩnh. Biểu mẫu đó đã nghỉ nên
+    // cờ TẮT không còn nghĩa "giữ nguyên hành vi cũ" — nó là "host này rỗng".
     expect(
       decideRoute({ hostKind: "sale", saleSiteEnabled: false, pathname: "/", ...authed("SALES_CSM") }),
-    ).toEqual<RouteDecision>({ type: "rewrite", path: "/sale/nhap-lieu.html" });
+    ).toEqual<RouteDecision>(TO_INTAKE);
   });
 });

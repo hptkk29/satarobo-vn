@@ -210,19 +210,21 @@ export function isCenterChecklistEnabled(): boolean {
  * có (honeypot, giới hạn theo IP, trần dung lượng) chỉ chống **spam**, không chống
  * **truy cập trái phép** — trái CLAUDE.md #5 ("API route VẪN phải auth() + assertCan").
  *
- * ⚠️ MẶC ĐỊNH **OFF**, và đó là chủ đích: biểu mẫu tĩnh `sale.satarobo.vn/nhap-lieu.html`
- * mà marketing/sale-admin đang dùng hằng ngày gửi bài **ẩn danh**. Bật cờ này là
- * phiếu của họ bị từ chối ngay lập tức. Hai thứ đó không cùng sống được.
+ * ⚠️ **22/08/2026 ĐẢO CHIỀU MẶC ĐỊNH: OFF → ON.** Trước đây phải OFF vì biểu mẫu
+ * tĩnh `sale.satarobo.vn/nhap-lieu.html` gửi bài **ẩn danh** hằng ngày — bật là
+ * cắt đường nhập liệu của marketing. Nay biểu mẫu đó đã NGHỈ (xoá khỏi
+ * `public/sale/`, host cũ đá 307 sang `satarobo.vn/nhap-khach-hang` có đăng
+ * nhập), nên không còn ai gửi ẩn danh nữa: để OFF chỉ còn là giữ một cửa mở cho
+ * người ngoài `curl` vào tạo Lead thật.
  *
- * ĐIỀU KIỆN BẬT (đủ cả 3):
- *   1. Trang nhập khách có đăng nhập đã lên prod và mở được.
- *   2. Marketing / sale-admin đã được thông báo và biết đường vào mới.
- *   3. Đã rà mọi nơi còn trỏ tới biểu mẫu cũ (QR, quảng cáo, chữ ký email).
+ * Khuôn `!== "false"` (mặc định BẬT) — cố ý ngược khuôn `=== "true"` của các cờ
+ * mở tính năng: cờ này là CỔNG KHOÁ, quên đặt env phải là khoá chứ không phải mở.
  *
- * Rollback = đổi env về rỗng + redeploy, không revert code.
+ * Rollback (mở lại cửa ẩn danh): đặt env `LEAD_INTAKE_REQUIRE_AUTH="false"` +
+ * redeploy — KHÔNG revert code. Chỉ làm khi phải dựng lại biểu mẫu công khai.
  */
 export function isLeadIntakeAuthRequired(): boolean {
-  return process.env.LEAD_INTAKE_REQUIRE_AUTH === "true"; // mặc định OFF
+  return process.env.LEAD_INTAKE_REQUIRE_AUTH !== "false"; // mặc định ON
 }
 
 /**

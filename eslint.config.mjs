@@ -252,6 +252,28 @@ export default tseslint.config(
     },
   },
 
+  // app/(intake)/** — biểu mẫu nhập khách hàng (`satarobo.vn/nhap-khach-hang`).
+  // Cùng luật với site GV/Sale: shadcn THUẦN + db block. Nó đứng ở host public
+  // nhưng là khu NỘI BỘ có đăng nhập ⇒ phải đi `scopedDb`, không phải `@/lib/db`.
+  //
+  // ⚠️ Route group mới KHÔNG tự thừa hưởng khối nào ở trên — thiếu khối này là
+  // cổng cách ly cơ sở thủng mà không ai báo.
+  {
+    files: ['app/(intake)/**/*.{ts,tsx}'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            ...adminBlockedImports.patterns,
+            ...clientBlockedImports.patterns,
+            ...dbBlockedImports.patterns,
+          ],
+        },
+      ],
+    },
+  },
+
   // TS-03 (US-02 AC5) — no-inline-authz 2 tầng trên action files (Server Actions).
   // Tầng (a): no-restricted-syntax cấm kiểm quyền inline (selectors ở đầu file).
   // Tầng (b): plugin local `authz` — action GHI dữ liệu phải gọi can()/assertCan().

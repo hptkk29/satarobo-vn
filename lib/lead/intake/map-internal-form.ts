@@ -1,31 +1,41 @@
-// lib/lead/intake/map-internal-form.ts — G-D (biên bản chốt 4 cổng, 21/08/2026).
+// lib/lead/intake/map-internal-form.ts — biểu mẫu "Nhập khách hàng"
+// (`satarobo.vn/nhap-khach-hang`, có đăng nhập).
 //
-// Mapper cho biểu mẫu "Nhập khách hàng" bản CÓ ĐĂNG NHẬP (`/admin/nhap-khach-hang`).
+// Thay hẳn biểu mẫu tĩnh công khai ở `sale.satarobo.vn` (nghỉ 22/08/2026). Hai
+// khác biệt bản chất so với biểu mẫu cũ:
+//   1. **Mã nhân viên không còn là một ô để gõ** — lấy từ phiên đăng nhập. Không
+//      gõ sai được, không gõ hộ nhau được, không cần nhớ mã của mình.
+//   2. **Không ô nào bắt buộc** (chủ dự án chốt 22/08). Kể cả SĐT: lead từ quảng
+//      cáo Facebook thường chỉ có link FB lúc mới thu về. Thiếu thì CẢNH BÁO chứ
+//      không từ chối — người nhập đang ngồi trước mặt khách/inbox, họ biết rõ
+//      hơn ta là phiếu này có đáng lưu không.
 //
-// Khác biểu mẫu tĩnh `public/sale/nhap-lieu.html` ở đúng một điểm bản chất:
-// **mã nhân viên không còn là một ô để gõ**, mà lấy từ phiên đăng nhập. Người
-// nhập không gõ sai được, không gõ hộ nhau được, và không cần nhớ mã của mình.
+// Bộ ô (đúng 7, chốt 22/08): tên PH · SĐT PH · tên con · nguồn · link FB · cơ sở
+// · ghi chú. Ô email/trường/lớp của bản trước đã BỎ.
 //
 // Giữ nguyên mọi thứ còn lại của đường nhập đang chạy: vẫn trả `MappedLead` để
-// `ingestIntakeLead()` xử lý (chuẩn hoá SĐT, chống trùng, tra cơ sở, tra người
-// phụ trách theo mã NV, tự chia). KHÔNG mở đường ghi lead thứ hai.
+// `ingestIntakeLead()` xử lý (chống trùng, tra cơ sở, tra người phụ trách theo
+// mã NV, tự chia). KHÔNG mở đường ghi lead thứ hai.
 import { canonicalPhone } from "@/lib/phone";
-import { centerHintFromCode, parentNameFallback, str } from "./normalize";
+import {
+  centerHintFromCode,
+  normalizeFacebookUrl,
+  parentNameFallback,
+  str,
+} from "./normalize";
 import type { MapResult } from "./types";
-
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 /** Dữ liệu người nhập gõ trên biểu mẫu (đã qua zod ở tầng action). */
 export type InternalFormInput = {
-  /** Có thể rỗng: mapper suy từ tên bé + cảnh báo, chỉ từ chối khi thiếu cả hai. */
-  parentName: string | null;
-  phone: string;
+  parentName?: string | null;
+  /** Đã chuẩn hoá `84…` bởi `phoneVnNullable`; `null` = người nhập bỏ trống. */
+  phone?: string | null;
   childName?: string | null;
-  schoolName?: string | null;
-  gradeLevel?: string | null;
+  /** Ô "Nguồn" gõ tự do → `Lead.source`. */
+  source?: string | null;
+  facebookUrl?: string | null;
   /** Mã cơ sở thật (`Center.code`), vd "CS1" — không phải số thứ tự của form cũ. */
   centerCode?: string | null;
-  email?: string | null;
   note?: string | null;
 };
 
@@ -41,31 +51,43 @@ export function mapInternalForm(
   input: InternalFormInput,
   staff: InternalFormStaff,
 ): MapResult {
-  const phone = canonicalPhone(str(input.phone) ?? "");
-  if (!phone) return { ok: false, error: "Số điện thoại không hợp lệ" };
-
   const warnings: string[] = [];
   const noteLines: string[] = [];
+
+  // SĐT: zod đã chuẩn hoá hoặc từ chối. `canonicalPhone` chạy lại ở đây để
+  // mapper vẫn đúng khi được gọi từ test/đường khác với chuỗi thô.
+  const phone = input.phone ? (canonicalPhone(input.phone) ?? "") : "";
+  if (input.phone && !phone) {
+    warnings.push(`Số điện thoại "${input.phone}" không đọc được — chưa lưu.`);
+  }
 
   const childName = str(input.childName);
   let parentName = str(input.parentName) ?? "";
   if (!parentName) {
-    // Khác biểu mẫu công khai: đây là người NHÀ MÌNH đang ngồi gõ và hỏi được
-    // khách ngay. Phiếu không có cả tên phụ huynh lẫn tên bé thì trả lại để hỏi
-    // tiếp, thay vì đẻ ra một lead "Phụ huynh (chưa rõ tên)" không ai gọi nổi.
-    if (!childName) {
-      return { ok: false, error: "Cần ít nhất tên phụ huynh hoặc tên bé" };
-    }
     parentName = parentNameFallback(childName);
-    warnings.push("Phiếu không có tên phụ huynh — cần hỏi lại khi gọi.");
+    warnings.push(
+      childName
+        ? "Phiếu không có tên phụ huynh — cần hỏi lại khi gọi."
+        : "Phiếu không có tên phụ huynh lẫn tên bé — cần hỏi lại khi gọi.",
+    );
   }
 
-  // Email là ô phụ: sai định dạng thì bỏ qua + nói ra, không chặn cả phiếu.
-  const rawEmail = str(input.email);
-  let email: string | null = null;
-  if (rawEmail) {
-    if (EMAIL_RE.test(rawEmail)) email = rawEmail;
-    else warnings.push(`Email "${rawEmail}" sai định dạng — chưa lưu, hỏi lại giúp.`);
+  const fb = normalizeFacebookUrl(input.facebookUrl);
+  if (fb.warning) {
+    warnings.push(fb.warning);
+    // Không đọc được KHÔNG có nghĩa là vứt: giữ nguyên chuỗi người nhập gõ
+    // trong ghi chú để còn cứu được bằng mắt người.
+    noteLines.push(`Link Facebook (chưa đọc được): ${str(input.facebookUrl)}`);
+  }
+
+  // Không có SĐT lẫn link FB thì lead này không có cách nào liên hệ. Vẫn lưu
+  // (không ô nào bắt buộc) nhưng phải nói thẳng ra, không để im.
+  if (!phone && !fb.url) {
+    warnings.push(
+      "Phiếu chưa có số điện thoại lẫn link Facebook — chưa có cách liên hệ khách.",
+    );
+  } else if (!phone) {
+    warnings.push("Phiếu chưa có số điện thoại — liên hệ qua link Facebook.");
   }
 
   // Dấu vết người nhập. Có mã NV thì tầng ingest còn dùng nó để tra người phụ
@@ -87,16 +109,13 @@ export function mapInternalForm(
     lead: {
       parentName,
       phone,
-      email,
+      email: null,
+      facebookUrl: fb.url,
+      leadSource: str(input.source),
       centerHint: centerHintFromCode(input.centerCode),
-      child: childName
-        ? {
-            fullName: childName,
-            schoolName: str(input.schoolName),
-            gradeLevel: str(input.gradeLevel),
-          }
-        : null,
-      // ⭐ Điểm khác biệt của G-D: danh tính đến từ phiên, không từ ô nhập.
+      // Bộ ô mới không hỏi trường/lớp nữa ⇒ `LeadChild` chỉ mang tên bé.
+      child: childName ? { fullName: childName } : null,
+      // ⭐ Danh tính đến từ phiên, không từ ô nhập.
       employeeCode: staff.employeeCode,
       noteLines,
       // Giữ đúng hành vi của phiếu Sale đang chạy (nhân viên nhập hộ khi tư vấn

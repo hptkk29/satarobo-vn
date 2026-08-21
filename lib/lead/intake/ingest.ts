@@ -48,6 +48,18 @@ export type IntakeContext = {
    * riêng có nghiệm thu, không kèm lén vào đây.
    */
   legacyWebhook?: boolean;
+  /**
+   * Cho phép phiếu KHÔNG có số điện thoại (`Lead.phone` = chuỗi rỗng).
+   *
+   * CHỈ biểu mẫu nội bộ `/nhap-khach-hang` bật cờ này (chủ dự án chốt 22/08/2026:
+   * không ô nào bắt buộc — lead quảng cáo Facebook thường chỉ có link FB). Mọi
+   * nguồn NGOÀI giữ nguyên luật cũ: không có số ⇒ từ chối, vì phiếu ẩn danh
+   * không số là rác/spam, còn phiếu do người nhà mình ngồi gõ thì không.
+   *
+   * Bật cờ này KHÔNG mở đường cho lead trùng: `phoneVariants("")` trả mảng rỗng
+   * nên nhánh chống trùng theo SĐT tự bỏ qua (xem chỗ gọi `findRecentDuplicate`).
+   */
+  allowMissingPhone?: boolean;
 };
 
 export type IntakeResult = {
@@ -244,8 +256,15 @@ export async function ingestIntakeLead(
   // Đường mới: SĐT phải chuẩn hoá được, không thì từ chối (lead không gọi được
   // thì vô dụng). Đường cũ: giữ chuỗi thô để không làm rơi lead đang chảy.
   const rawPhone = mapped.phone?.trim() ?? "";
-  const phone = canonicalPhone(rawPhone) ?? (ctx.legacyWebhook ? rawPhone : null);
-  if (!phone) return { ok: false, error: "Số điện thoại không hợp lệ" };
+  const phone =
+    canonicalPhone(rawPhone) ??
+    // `|| null`, KHÔNG `?? `: webhook cũ gửi SĐT rỗng vẫn phải bị từ chối như
+    // trước (chuỗi rỗng không nullish nên `??` sẽ nuốt luôn nhánh dưới).
+    (ctx.legacyWebhook ? rawPhone || null : null) ??
+    // Biểu mẫu nội bộ: ô SĐT bỏ trống là hợp lệ. Gõ SAI thì mapper đã bỏ đi kèm
+    // cảnh báo, nên tới đây chuỗi rỗng luôn nghĩa là "chưa có số".
+    (ctx.allowMissingPhone && rawPhone === "" ? "" : null);
+  if (phone === null) return { ok: false, error: "Số điện thoại không hợp lệ" };
 
   const parentName = mapped.parentName.trim();
   if (!parentName) return { ok: false, error: "Thiếu tên phụ huynh" };
@@ -305,7 +324,9 @@ export async function ingestIntakeLead(
     warnings.push("Lead chưa gắn được cơ sở — cần chọn cơ sở khi xử lý.");
   }
 
-  const dup = await findRecentDuplicate(phone);
+  // Không có số thì không có gì để so — bỏ hẳn nhánh chống trùng (so chuỗi rỗng
+  // với chuỗi rỗng sẽ gộp MỌI lead chưa có số vào làm một).
+  const dup = phone ? await findRecentDuplicate(phone) : null;
   if (dup) {
     const dupLead = await db.lead.findUnique({
       where: { id: dup.id },
@@ -350,7 +371,10 @@ export async function ingestIntakeLead(
           centerId: centerId ?? undefined,
           assignedToId: assignedToId ?? undefined,
           ...(assignedToId ? { status: "ASSIGNED" as const, assignedAt: new Date() } : {}),
-          source: ctx.source,
+          // Nguồn marketing do người nhập khai thắng kênh kỹ thuật (xem
+          // `MappedLead.leadSource`); bỏ trống thì giữ nguyên hành vi cũ.
+          source: mapped.leadSource ?? ctx.source,
+          facebookUrl: mapped.facebookUrl ?? undefined,
           eventId: eventId ?? undefined,
           consentMarketing: mapped.consentMarketing,
           note: note ?? undefined,
