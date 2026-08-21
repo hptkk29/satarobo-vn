@@ -142,6 +142,13 @@ export const SCOPE_EXEMPT = new Set<string>([
   // khỏi chính người trong cuộc. Cách ly cho màn admin: filter TAY theo
   // getVisibleCenterIds(actor) (US-15).
   "Conversation",
+  // EL-03 — cấu hình mức gắn đánh giá: bảng CON của TrnProgram (programId @unique).
+  // Mang cột đơn vị để đối soát đêm đếm được, nhưng tầm nhìn đi theo CHƯƠNG TRÌNH chứ không
+  // tự lọc: một dòng cấu hình không có nghĩa độc lập với chương trình nó gắn vào, và inject
+  // `centerId IN [...]` sẽ ẩn mất cấu hình của chương trình dùng chung toàn công ty (centerId NULL)
+  // khỏi chính người đang xem chương trình đó ⇒ màn cấu hình hiện rỗng và bị đọc thành
+  // "chưa cấu hình" (fail-closed REPORT_ONLY) trong khi thực tế đã cấu hình.
+  "TrnEvalLinkConfig",
 ]);
 
 function bypassesScope(actor: Actor): boolean {

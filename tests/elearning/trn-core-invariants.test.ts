@@ -10,7 +10,11 @@
 import { describe, it, expect } from "vitest";
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
-import { SCOPED_MODELS, NULL_IS_GLOBAL_MODELS } from "@/lib/db-scope";
+import {
+  SCOPED_MODELS,
+  NULL_IS_GLOBAL_MODELS,
+  SCOPE_EXEMPT,
+} from "@/lib/db-scope";
 import { SOFT_DELETE_MODELS } from "@/lib/soft-delete";
 import { BACKFILL_SPECS, DUAL_WRITE_MODELS } from "@/lib/org/center-bridge";
 
@@ -132,6 +136,10 @@ describe("EL-03 · phân loại cách ly — 5 bảng có đủ hai cột đơn 
     }
     // Bảng con theo chương trình — scope đi theo TrnProgram, không tự lọc.
     expect(SCOPED_MODELS.has("TrnEvalLinkConfig")).toBe(false);
+    // ...NHƯNG phải có tên trong SCOPE_EXEMPT. Bất biến [A0-04-T12-01] đòi MỌI model
+    // có centerId phải nằm ở một trong hai danh sách — để "không scope" luôn là một
+    // quyết định CÓ LÝ DO được viết ra, chứ không phải một lần quên.
+    expect(SCOPE_EXEMPT.has("TrnEvalLinkConfig")).toBe(true);
   });
 
   it("3 model 2c* vào NULL_IS_GLOBAL_MODELS; TrnEvaluationResult thì KHÔNG", () => {
