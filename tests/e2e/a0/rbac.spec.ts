@@ -7,6 +7,7 @@ import { test, expect } from "@playwright/test";
 import { db } from "../../../lib/db";
 import { resetDb, seedOrg, seedRoles, seedUser } from "../_helpers/seed";
 import { testEmail } from "../_helpers/fixtures";
+import { ROLE_SEED } from "../../../prisma/seed-roles";
 import {
   RbacError,
   createRole,
@@ -51,10 +52,16 @@ test.describe("[A0-02] RBAC động", () => {
     await resetDb();
   });
 
-  test("[A0-02-T1-02] seedRoles → đúng 14 role, KHÔNG có HO_MANAGER (AC8)", async () => {
+  test("[A0-02-T1-02] seedRoles → đúng 15 role, KHÔNG có HO_MANAGER (AC8)", async () => {
     await seedRoles();
-    // Số role bám theo seedRoleDefs (prisma/seed-roles.ts): 13 role nền + CENTER_CLASS_MANAGER (#16).
-    expect(await db.roleDef.count()).toBe(14);
+    // Hai assert khác nhau, giữ cả hai:
+    //  • Số đếm bằng `ROLE_SEED.length` — chứng minh seed GHI ĐỦ mọi dòng của file
+    //    nguồn. Tự điều chỉnh khi thêm vai, không cần sửa tay.
+    //  • Số ĐÈM cứng — danh mục vai là bề mặt an ninh, thêm một vai phải là việc có
+    //    người bấm sửa con số này, không được trôi qua im lặng. 14 → 15: EL-02 thêm AUDITOR
+    //    (13 role nền + CENTER_CLASS_MANAGER (#16) + AUDITOR).
+    expect(await db.roleDef.count()).toBe(ROLE_SEED.length);
+    expect(await db.roleDef.count()).toBe(15);
     expect(await db.roleDef.findUnique({ where: { code: "HO_MANAGER" } })).toBeNull();
     const sa = await db.roleDef.findUnique({ where: { code: "SUPER_ADMIN" } });
     expect(sa?.isSystem).toBe(true);

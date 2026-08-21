@@ -24,6 +24,8 @@
 import "server-only";
 import type { Prisma } from "@prisma/client";
 import { writeAudit } from "@/lib/audit/audit-log";
+import { reconcileUserOrgRoles } from "@/lib/auth/org-role-sync";
+import type { Role } from "@prisma/client";
 
 type Tx = Prisma.TransactionClient;
 
@@ -48,7 +50,7 @@ export async function keoTaiKhoanTheoHoSo(
 ): Promise<boolean> {
   const taiKhoan = await tx.user.findFirst({
     where: { employeeId: input.employeeId, deletedAt: null },
-    select: { id: true, centerId: true, orgUnitId: true },
+    select: { id: true, centerId: true, orgUnitId: true, role: true, roles: true },
   });
   if (!taiKhoan) return false;
   const cu: DonVi = { centerId: taiKhoan.centerId, orgUnitId: taiKhoan.orgUnitId };
@@ -58,6 +60,33 @@ export async function keoTaiKhoanTheoHoSo(
     where: { id: taiKhoan.id },
     data: { centerId: input.donVi.centerId, orgUnitId: input.donVi.orgUnitId },
   });
+
+  // ĐỔI ĐƠN VỊ PHẢI NEO LẠI VAI — không thì đổi cơ sở chỉ là đổi nhãn.
+  //
+  // `User.orgUnitId` là thứ hiển thị; thứ QUYẾT ĐẮC quyền là các dòng `UserOrgRole`.
+  // Trước bản vá này `reconcileUserOrgRoles` chỉ được gọi từ đường ĐỔI VAI TRÒ (hàm đó
+  // còn thoát sớm với "Vai trò không thay đổi"), nên chuyển một người sang cơ sở khác
+  // KHÔNG hề dịch vai của họ. Trường hợp đắt nhất đo được trên prod: giáo viên parttime
+  // đang neo tại Hội sở ⇒ `isHoLevel` ⇒ đọc được học viên, điểm danh, nhận xét của MỌI
+  // cơ sở; gán họ về CS1/CS2 trên màn nhân sự vẫn không thu hẹp gì.
+  //
+  // CHỈ neo lại khi đơn vị ĐÍCH có thật. Đích `null` (người Hội sở, hoặc vừa xoá đơn vị)
+  // thì `reconcileUserOrgRoles` ném `OrgRoleSyncError` — cố ý fail-closed — và ném ở đây là
+  // chặn luôn việc lưu hồ sơ. Giữ nguyên hiện trạng cho nhánh đó: không nới thêm quyền cho ai,
+  // và việc rà nhóm thiếu đơn vị neo thuộc script chẩn đoán riêng.
+  if (cu.orgUnitId !== input.donVi.orgUnitId && input.donVi.orgUnitId) {
+    const roles: Role[] =
+      taiKhoan.roles.length > 0 ? taiKhoan.roles : [taiKhoan.role];
+    await reconcileUserOrgRoles({
+      tx,
+      userId: taiKhoan.id,
+      previous: { roles, orgUnitId: cu.orgUnitId },
+      next: { roles, orgUnitId: input.donVi.orgUnitId },
+      actorId: input.actor.id ?? null,
+      actorName: input.actor.name,
+      reason: "Đổi đơn vị làm việc trên hồ sơ nhân sự — neo lại vai theo đơn vị mới",
+    });
+  }
   await writeAudit({
     actor: { id: input.actor.id ?? "", name: input.actor.name },
     module: "users",

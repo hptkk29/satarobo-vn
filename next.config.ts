@@ -16,6 +16,16 @@ const CSP_REPORT_ONLY = [
   "font-src 'self' data:",
   "connect-src 'self' https://www.google-analytics.com https://region1.google-analytics.com https://www.facebook.com",
   "frame-src 'self' https://www.youtube.com https://www.youtube-nocookie.com",
+  // EL-07 (C21) — video đào tạo nội bộ phát qua `https://*.r2.cloudflarestorage.com`
+  // (đường ký, private). Host đó ĐÃ nằm trong danh sách nên GĐ2 không phải sửa dòng này.
+  //
+  // ⚠️ Hai điều phải nhớ khi tới GĐ2:
+  //  1. Header đang là `Content-Security-Policy-Report-Only` (xem dòng khai bên dưới) —
+  //     nên sai host CHỈ hiện trong console, không chặn. Ngày bật enforce là ngày video
+  //     chết nếu quên. AC7 của EL-07 bắt thử enforce cục bộ ngay trong PR nền.
+  //  2. Video đào tạo nội bộ KHÔNG BAO GIỜ nằm trong bucket gắn `cdn.satarobo.vn` —
+  //     đó là bucket CÔNG KHAI. Nằm ở đó thì hình mờ động, chặn tua, giới hạn tốc độ và
+  //     toàn bộ cơ chế chống học đối phó của GĐ2 chỉ là trang trí: ai có link là tải được.
   "media-src 'self' https://cdn.satarobo.vn https://*.r2.cloudflarestorage.com",
 ].join("; ");
 

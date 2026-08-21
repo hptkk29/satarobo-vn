@@ -17,6 +17,7 @@ export function AppShell({
   userId,
   userName,
   adminReturnUrl,
+  elearningUrl,
   chatUnread = 0,
   children,
 }: {
@@ -25,6 +26,8 @@ export function AppShell({
   userName: string;
   /** F3 (Q41) — URL admin cho GV kiêm nhiệm; undefined = không hiện lối về admin. */
   adminReturnUrl?: string;
+  /** EL-01 — lối vào khu đào tạo nội bộ; null = cờ OFF → ẩn mục menu. */
+  elearningUrl?: string | null;
   /** Số tin chưa đọc do layout (RSC) tính — số ban đầu, KHÔNG fetch ở client. */
   chatUnread?: number;
   children: React.ReactNode;
@@ -81,6 +84,7 @@ export function AppShell({
           userId={userId}
           userName={userName}
           adminReturnUrl={adminReturnUrl}
+          elearningUrl={elearningUrl}
           onMenuClick={() => setDrawerOpen(true)}
         />
         <main className="mx-auto w-full max-w-7xl flex-1 px-4 py-5 sm:px-6 sm:py-6 lg:px-8 print:max-w-none print:p-0">

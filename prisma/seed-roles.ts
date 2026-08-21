@@ -1,5 +1,5 @@
 // prisma/seed-roles.ts — A0-02: seed danh mục RoleDef + RolePermission mẫu (Doc 15 §2.3).
-// 14 role; KHÔNG có HO_MANAGER. SUPER_ADMIN/PARENT = isSystem (không xóa/đổi code).
+// 15 role (EL-02 thêm AUDITOR); KHÔNG có HO_MANAGER. SUPER_ADMIN/PARENT = isSystem (không xóa/đổi code).
 // Idempotent: upsert RoleDef theo code + reset permission của role mỗi lần chạy.
 // ⚠️ NGUYÊN TỬ: cả vòng lặp nằm trong một `$transaction` — đọc chú thích ở `seedRoles()`
 // trước khi sửa. Tách ra = mất quyền toàn hệ thống giữa lúc seed (cờ v2 đang BẬT trên prod).
@@ -48,6 +48,26 @@ export const ROLE_SEED: RoleSeed[] = [
       { action: "chat:announce", scopeType: "GLOBAL" },
       { action: "chat:moderate", scopeType: "GLOBAL" },
       { action: "chat:admin", scopeType: "GLOBAL" },
+      // --- Đào tạo nội bộ (EL-02 §3) --- tất cả GLOBAL: không ô nào của ma trận
+      // mang scope khác, và cách ly cơ sở của module này đến từ dữ liệu lượt giao chứ
+      // không từ scopeType (xem ghi chú R1 đầu file).
+      { action: "elearning:portal:access", scopeType: "GLOBAL" },
+      { action: "elearning:lesson:learn", scopeType: "GLOBAL" },
+      { action: "elearning:program:manage", scopeType: "GLOBAL" },
+      { action: "elearning:content:author", scopeType: "GLOBAL" },
+      { action: "elearning:content:publish", scopeType: "GLOBAL" },
+      { action: "elearning:assignment:create", scopeType: "GLOBAL" },
+      { action: "elearning:assignment:extend", scopeType: "GLOBAL" },
+      { action: "elearning:requirement:manage", scopeType: "GLOBAL" },
+      { action: "elearning:progress:view-own", scopeType: "GLOBAL" },
+      { action: "elearning:progress:view-team", scopeType: "GLOBAL" },
+      { action: "elearning:progress:view-all", scopeType: "GLOBAL" },
+      { action: "elearning:video-analytics:view", scopeType: "GLOBAL" },
+      { action: "elearning:exam:grade", scopeType: "GLOBAL" },
+      { action: "elearning:exam:unlock", scopeType: "GLOBAL" },
+      { action: "elearning:certificate:issue", scopeType: "GLOBAL" },
+      { action: "elearning:certificate:revoke", scopeType: "GLOBAL" },
+      { action: "elearning:report:export", scopeType: "GLOBAL" },
     ],
   },
   {
@@ -90,6 +110,12 @@ export const ROLE_SEED: RoleSeed[] = [
       { action: "honors:view", scopeType: "GLOBAL" },
       { action: "hr_attendance:checkin", scopeType: "GLOBAL" },
       { action: "blog:view", scopeType: "GLOBAL" },
+      // --- Đào tạo nội bộ (EL-02 §3) --- tất cả GLOBAL: không ô nào của ma trận
+      // mang scope khác, và cách ly cơ sở của module này đến từ dữ liệu lượt giao chứ
+      // không từ scopeType (xem ghi chú R1 đầu file).
+      { action: "elearning:portal:access", scopeType: "GLOBAL" },
+      { action: "elearning:lesson:learn", scopeType: "GLOBAL" },
+      { action: "elearning:progress:view-own", scopeType: "GLOBAL" },
     ],
   },
   {
@@ -123,6 +149,25 @@ export const ROLE_SEED: RoleSeed[] = [
       { action: "courses:view", scopeType: "GLOBAL" },
       { action: "centers:view", scopeType: "GLOBAL" },
       { action: "holidays:view", scopeType: "GLOBAL" },
+      // --- Đào tạo nội bộ (EL-02 §3) --- tất cả GLOBAL: không ô nào của ma trận
+      // mang scope khác, và cách ly cơ sở của module này đến từ dữ liệu lượt giao chứ
+      // không từ scopeType (xem ghi chú R1 đầu file).
+      { action: "elearning:portal:access", scopeType: "GLOBAL" },
+      { action: "elearning:lesson:learn", scopeType: "GLOBAL" },
+      { action: "elearning:program:manage", scopeType: "GLOBAL" },
+      { action: "elearning:content:author", scopeType: "GLOBAL" },
+      { action: "elearning:assignment:create", scopeType: "GLOBAL" },
+      { action: "elearning:assignment:extend", scopeType: "GLOBAL" },
+      { action: "elearning:requirement:manage", scopeType: "GLOBAL" },
+      { action: "elearning:progress:view-own", scopeType: "GLOBAL" },
+      { action: "elearning:progress:view-team", scopeType: "GLOBAL" },
+      { action: "elearning:progress:view-all", scopeType: "GLOBAL" },
+      { action: "elearning:video-analytics:view", scopeType: "GLOBAL" },
+      { action: "elearning:exam:grade", scopeType: "GLOBAL" },
+      { action: "elearning:exam:unlock", scopeType: "GLOBAL" },
+      { action: "elearning:certificate:issue", scopeType: "GLOBAL" },
+      { action: "elearning:certificate:revoke", scopeType: "GLOBAL" },
+      { action: "elearning:report:export", scopeType: "GLOBAL" },
     ],
   },
   {
@@ -155,6 +200,12 @@ export const ROLE_SEED: RoleSeed[] = [
       { action: "jobs:create", scopeType: "GLOBAL" },
       { action: "jobs:edit", scopeType: "GLOBAL" },
       { action: "jobs:delete", scopeType: "GLOBAL" },
+      // --- Đào tạo nội bộ (EL-02 §3) --- tất cả GLOBAL: không ô nào của ma trận
+      // mang scope khác, và cách ly cơ sở của module này đến từ dữ liệu lượt giao chứ
+      // không từ scopeType (xem ghi chú R1 đầu file).
+      { action: "elearning:portal:access", scopeType: "GLOBAL" },
+      { action: "elearning:lesson:learn", scopeType: "GLOBAL" },
+      { action: "elearning:progress:view-own", scopeType: "GLOBAL" },
     ],
   },
   {
@@ -210,6 +261,12 @@ export const ROLE_SEED: RoleSeed[] = [
       // gác trang /media (page-gates.test: action làm gate phải GLOBAL).
       { action: "media:view", scopeType: "GLOBAL" },
       { action: "media:upload-draft", scopeType: "GLOBAL" },
+      // --- Đào tạo nội bộ (EL-02 §3) --- tất cả GLOBAL: không ô nào của ma trận
+      // mang scope khác, và cách ly cơ sở của module này đến từ dữ liệu lượt giao chứ
+      // không từ scopeType (xem ghi chú R1 đầu file).
+      { action: "elearning:portal:access", scopeType: "GLOBAL" },
+      { action: "elearning:lesson:learn", scopeType: "GLOBAL" },
+      { action: "elearning:progress:view-own", scopeType: "GLOBAL" },
     ],
   },
   {
@@ -292,12 +349,38 @@ export const ROLE_SEED: RoleSeed[] = [
       // Admin (lý do + audit), KHÔNG phải bằng một dòng grant GLOBAL ở đây.
       // Pin chống tái phát: `lib/auth/chat-permissions.test.ts` — "TRAINING không có bất
       // kỳ action chat:* nào ở CẢ v1 lẫn v2".
+      // --- Đào tạo nội bộ (EL-02 §3) --- tất cả GLOBAL: không ô nào của ma trận
+      // mang scope khác, và cách ly cơ sở của module này đến từ dữ liệu lượt giao chứ
+      // không từ scopeType (xem ghi chú R1 đầu file).
+      { action: "elearning:portal:access", scopeType: "GLOBAL" },
+      { action: "elearning:lesson:learn", scopeType: "GLOBAL" },
+      { action: "elearning:program:manage", scopeType: "GLOBAL" },
+      { action: "elearning:content:author", scopeType: "GLOBAL" },
+      { action: "elearning:content:publish", scopeType: "GLOBAL" },
+      { action: "elearning:assignment:create", scopeType: "GLOBAL" },
+      { action: "elearning:assignment:extend", scopeType: "GLOBAL" },
+      { action: "elearning:requirement:manage", scopeType: "GLOBAL" },
+      { action: "elearning:progress:view-own", scopeType: "GLOBAL" },
+      { action: "elearning:progress:view-team", scopeType: "GLOBAL" },
+      { action: "elearning:progress:view-all", scopeType: "GLOBAL" },
+      { action: "elearning:video-analytics:view", scopeType: "GLOBAL" },
+      { action: "elearning:exam:grade", scopeType: "GLOBAL" },
+      { action: "elearning:exam:unlock", scopeType: "GLOBAL" },
+      { action: "elearning:report:export", scopeType: "GLOBAL" },
     ],
   },
   {
     // HO_SALE: xem lead toàn hệ thống nhưng KHÔNG sửa (Doc 15 §2).
     code: "HO_SALE", name: "Sale Hội sở (chỉ xem)",
-    perms: [{ action: "leads:view-all", scopeType: "GLOBAL" }],
+    perms: [
+      { action: "leads:view-all", scopeType: "GLOBAL" },
+      // --- Đào tạo nội bộ (EL-02 §3) --- tất cả GLOBAL: không ô nào của ma trận
+      // mang scope khác, và cách ly cơ sở của module này đến từ dữ liệu lượt giao chứ
+      // không từ scopeType (xem ghi chú R1 đầu file).
+      { action: "elearning:portal:access", scopeType: "GLOBAL" },
+      { action: "elearning:lesson:learn", scopeType: "GLOBAL" },
+      { action: "elearning:progress:view-own", scopeType: "GLOBAL" },
+    ],
   },
   {
     // #09 — Kiệt duyệt 09/07/2026 (de-xuat-scope-v2-center-manager-teacher.md §3).
@@ -453,6 +536,17 @@ export const ROLE_SEED: RoleSeed[] = [
       { action: "chat:read", scopeType: "CENTER" },
       { action: "chat:send", scopeType: "CENTER" },
       { action: "chat:announce", scopeType: "CENTER" },
+      // --- Đào tạo nội bộ (EL-02 §3) --- tất cả GLOBAL: không ô nào của ma trận
+      // mang scope khác, và cách ly cơ sở của module này đến từ dữ liệu lượt giao chứ
+      // không từ scopeType (xem ghi chú R1 đầu file).
+      { action: "elearning:portal:access", scopeType: "GLOBAL" },
+      { action: "elearning:lesson:learn", scopeType: "GLOBAL" },
+      { action: "elearning:assignment:create", scopeType: "GLOBAL" },
+      { action: "elearning:assignment:extend", scopeType: "GLOBAL" },
+      { action: "elearning:progress:view-own", scopeType: "GLOBAL" },
+      { action: "elearning:progress:view-team", scopeType: "GLOBAL" },
+      { action: "elearning:video-analytics:view", scopeType: "GLOBAL" },
+      { action: "elearning:report:export", scopeType: "GLOBAL" },
     ],
   },
   {
@@ -495,6 +589,12 @@ export const ROLE_SEED: RoleSeed[] = [
       // canStageToClass trong app/(admin)/admin/media/actions.ts.
       { action: "media:view", scopeType: "GLOBAL" },
       { action: "media:upload-draft", scopeType: "GLOBAL" },
+      // --- Đào tạo nội bộ (EL-02 §3) --- tất cả GLOBAL: không ô nào của ma trận
+      // mang scope khác, và cách ly cơ sở của module này đến từ dữ liệu lượt giao chứ
+      // không từ scopeType (xem ghi chú R1 đầu file).
+      { action: "elearning:portal:access", scopeType: "GLOBAL" },
+      { action: "elearning:lesson:learn", scopeType: "GLOBAL" },
+      { action: "elearning:progress:view-own", scopeType: "GLOBAL" },
     ],
   },
   {
@@ -550,6 +650,12 @@ export const ROLE_SEED: RoleSeed[] = [
       { action: "orders:view", scopeType: "GLOBAL" },
       { action: "orders:view-pii", scopeType: "GLOBAL" },
       { action: "products:view", scopeType: "GLOBAL" },
+      // --- Đào tạo nội bộ (EL-02 §3) --- tất cả GLOBAL: không ô nào của ma trận
+      // mang scope khác, và cách ly cơ sở của module này đến từ dữ liệu lượt giao chứ
+      // không từ scopeType (xem ghi chú R1 đầu file).
+      { action: "elearning:portal:access", scopeType: "GLOBAL" },
+      { action: "elearning:lesson:learn", scopeType: "GLOBAL" },
+      { action: "elearning:progress:view-own", scopeType: "GLOBAL" },
     ],
   },
   {
@@ -622,6 +728,12 @@ export const ROLE_SEED: RoleSeed[] = [
       { action: "chat:send", scopeType: "ASSIGNED" },
       { action: "chat:announce", scopeType: "ASSIGNED" },
       { action: "chat:moderate", scopeType: "ASSIGNED" },
+      // --- Đào tạo nội bộ (EL-02 §3) --- tất cả GLOBAL: không ô nào của ma trận
+      // mang scope khác, và cách ly cơ sở của module này đến từ dữ liệu lượt giao chứ
+      // không từ scopeType (xem ghi chú R1 đầu file).
+      { action: "elearning:portal:access", scopeType: "GLOBAL" },
+      { action: "elearning:lesson:learn", scopeType: "GLOBAL" },
+      { action: "elearning:progress:view-own", scopeType: "GLOBAL" },
     ],
   },
   {
@@ -634,6 +746,12 @@ export const ROLE_SEED: RoleSeed[] = [
       { action: "chat:send", scopeType: "ASSIGNED" },
       { action: "chat:announce", scopeType: "ASSIGNED" },
       { action: "chat:moderate", scopeType: "ASSIGNED" },
+      // --- Đào tạo nội bộ (EL-02 §3) --- tất cả GLOBAL: không ô nào của ma trận
+      // mang scope khác, và cách ly cơ sở của module này đến từ dữ liệu lượt giao chứ
+      // không từ scopeType (xem ghi chú R1 đầu file).
+      { action: "elearning:portal:access", scopeType: "GLOBAL" },
+      { action: "elearning:lesson:learn", scopeType: "GLOBAL" },
+      { action: "elearning:progress:view-own", scopeType: "GLOBAL" },
     ],
   },
   {
@@ -655,6 +773,32 @@ export const ROLE_SEED: RoleSeed[] = [
       { action: "enrollments:view-all", scopeType: "GLOBAL" },
       { action: "orders:view", scopeType: "GLOBAL" },
       { action: "orders:view-pii", scopeType: "GLOBAL" },
+      // --- Đào tạo nội bộ (EL-02 §3) --- tất cả GLOBAL: không ô nào của ma trận
+      // mang scope khác, và cách ly cơ sở của module này đến từ dữ liệu lượt giao chứ
+      // không từ scopeType (xem ghi chú R1 đầu file).
+      { action: "elearning:portal:access", scopeType: "GLOBAL" },
+      { action: "elearning:lesson:learn", scopeType: "GLOBAL" },
+      { action: "elearning:progress:view-own", scopeType: "GLOBAL" },
+    ],
+  },
+  {
+    code: "AUDITOR", name: "Kiểm toán đào tạo (chỉ đọc)",
+    // EL-02 — vai MỚI duy nhất của module (QĐ-7: không tạo 6 vai, chỉ tạo 1).
+    // ĐÚNG 5 quyền, TẤT CẢ LÀ ĐỌC. Ba điều phải giữ nguyên khi sửa:
+    //  1. KHÔNG có `elearning:lesson:learn` — có nó thì người mang vai này (BGĐ) bị cỗ
+    //     máy giao bài nhắm vào, đúng thứ vai kiểm toán không được dính.
+    //  2. KHÔNG có quyền ghi nào. Thêm một quyền ghi là vai kiểm toán thành vai vận hành.
+    //  3. KHÔNG có `elearning:audit:view` — key đó cố ý không tồn tại: `AuditLog` không
+    //     nằm trong SCOPED_MODELS nên một key GLOBAL là mở nhật ký TOÀN HỆ, kể cả module
+    //     ngoài e-learning. R8 chỉ SUPER_ADMIN trong toàn cửa sổ GƐ0→GƐ5.
+    // Cấp vai này cho AI là quyết định có tên người + chữ ký duyệt (DoD (c)), không
+    // cấp theo chức danh — nó thấy tiến độ học của toàn hệ thống.
+    perms: [
+      { action: "elearning:portal:access", scopeType: "GLOBAL" },
+      { action: "elearning:progress:view-team", scopeType: "GLOBAL" },
+      { action: "elearning:progress:view-all", scopeType: "GLOBAL" },
+      { action: "elearning:video-analytics:view", scopeType: "GLOBAL" },
+      { action: "elearning:report:export", scopeType: "GLOBAL" },
     ],
   },
   {

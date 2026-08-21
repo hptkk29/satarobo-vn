@@ -1,0 +1,98 @@
+name: EL-02 · Chẩn đoán Actor (UserOrgRole) trên PROD
+
+# =============================================================================
+# Chạy TAY (workflow_dispatch). MẶC ĐỊNH CHỈ XEM — không ghi một dòng nào.
+#
+# VÌ SAO CẦN WORKFLOW NÀY thay vì chạy ở máy: 44/93 biến môi trường prod khai là
+# Sensitive nên `vercel env pull` KHÔNG lấy được chuỗi kết nối prod. Đây là đường
+# duy nhất để có bản in trên dữ liệu THẬT, và DoD (b) của EL-02 bắt buộc đính bản
+# in đó vào ticket.
+#
+# ĐỌC BẢN IN THEO BỐN NHÓM:
+#   NHÓM 1  sửa được       → chạy lại với apply = CO-TOI-DA-DOC-BAN-CHI-XEM
+#   NHÓM 2  không có hồ sơ → chuyển phòng Nhân sự, đội xây KHÔNG tự vá
+#   NHÓM 3  thiếu đơn vị   → chuyển phòng Nhân sự (gán đơn vị là quyết định tổ chức)
+#   NHÓM 4  HO-level       → ĐỐI CHIẾU với danh sách Hội sở đã duyệt. Đây là cổng
+#                            thứ ba của GĐ0 và là chỗ bắt US-05 nếu tái diễn.
+#
+# ⚠️ `apply` GHI THẬT vào bảng quyền của prod, và prod đang enforce RBAC v2
+# (`RBAC_V2_ENABLED=true`) ⇒ đổi hành vi NGAY. Chỉ chạm NHÓM 1; nhóm 2/3/4 không
+# bị đụng tới. Backfill KHÔNG rollback tự động — script in nhật ký id đã tạo.
+#
+# SECRETS (đã khai cho deploy.yml): PROD_DIRECT_URL (session pooler :5432 — tránh
+# quirk prepared-statement của transaction pooler).
+# =============================================================================
+
+on:
+  workflow_dispatch:
+    inputs:
+      apply:
+        description: 'Để TRỐNG = chỉ xem. Gõ đúng CO-TOI-DA-DOC-BAN-CHI-XEM để ghi thật.'
+        required: false
+        default: ''
+
+concurrency:
+  group: elearning-actor-audit
+  cancel-in-progress: false
+
+jobs:
+  audit:
+    name: Chẩn đoán Actor (Supabase prod)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Kiểm tra secret prod (fail sớm)
+        run: |
+          [ -n "${{ secrets.PROD_DIRECT_URL }}" ] || {
+            echo "::error::Thiếu secret PROD_DIRECT_URL"; exit 1; }
+
+      # Câu thần chú phải gõ ĐÚNG. Bất kỳ giá trị nào khác rỗng mà gõ sai → DỪNG,
+      # không âm thầm rơi về chế độ chỉ xem: người gõ đang ĐỊNH ghi, và im lặng
+      # không ghi cũng sai y như im lặng ghi.
+      - name: Xác nhận ý định
+        run: |
+          v='${{ inputs.apply }}'
+          if [ -z "$v" ]; then
+            echo "CHE_DO=xem" >> "$GITHUB_ENV"
+            echo "🔍 Chế độ CHỈ XEM."
+          elif [ "$v" = "CO-TOI-DA-DOC-BAN-CHI-XEM" ]; then
+            echo "CHE_DO=ghi" >> "$GITHUB_ENV"
+            echo "⚠️ Chế độ GHI THẬT — chỉ chạm NHÓM 1."
+          else
+            echo "::error::Câu xác nhận sai. Gõ đúng CO-TOI-DA-DOC-BAN-CHI-XEM hoặc để trống."
+            exit 1
+          fi
+
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v3
+        with: { version: 11 }
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Generate Prisma client
+        run: pnpm exec prisma generate
+
+      - name: Chạy chẩn đoán
+        run: |
+          if [ "$CHE_DO" = "ghi" ]; then
+            pnpm exec tsx scripts/elearning-actor-audit.ts --apply
+          else
+            pnpm exec tsx scripts/elearning-actor-audit.ts
+          fi
+        env:
+          DATABASE_URL: ${{ secrets.PROD_DIRECT_URL }}
+          DIRECT_URL: ${{ secrets.PROD_DIRECT_URL }}
+
+      - name: Lưu nhật ký backfill (chỉ khi có ghi)
+        if: env.CHE_DO == 'ghi'
+        uses: actions/upload-artifact@v4
+        with:
+          name: elearning-actor-audit-log
+          path: elearning-actor-audit-*.log
+          if-no-files-found: warn
