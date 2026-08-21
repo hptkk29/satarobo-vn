@@ -47,6 +47,15 @@ export const SCOPED_MODELS = new Set<string>([
   // (tiền vừa về, chưa biết của đơn nào) → xem NULL_IS_GLOBAL_MODELS. Ẩn nhóm này
   // khỏi người đối soát chính là làm mất đúng thứ họ cần xử lý.
   "BankTransaction",
+
+  // EL-03 — đào tạo nội bộ. ĐÚnG 4 model mang cột đơn vị; 8 bảng còn lại của module là
+  // bảng CON (scope theo bảng cha) hoặc ngoại lệ nhịp ghi cao (TrnVideoSession).
+  // ⚠️ Ba trong bốn model này có NULL = TOÀN CÔNG TY ⇒ xem NULL_IS_GLOBAL_MODELS ngay dưới.
+  // Quên khai ở đó thì chương trình/khoá dùng chung toàn hệ TÀNG HÌNH với người cấp cơ sở.
+  "TrnProgram",
+  "TrnCourse",
+  "TrnRequirement",
+  "TrnEvaluationResult", // KHÁC 3 model trên: NULL = chưa backfill, KHÔNG phải toàn công ty
 ]);
 
 /**
@@ -67,6 +76,16 @@ export const NULL_IS_GLOBAL_MODELS = new Set<string>([
   // cơ sở nào", và đó CHÍNH LÀ nhóm cần mọi người đối soát nhìn thấy để xử lý.
   // Khớp xong thì centerId được điền, từ đó bị scope bình thường.
   "BankTransaction",
+
+  // EL-03 — chương trình / khoá / yêu cầu đào tạo dùng chung toàn công ty thì KHÔNG gắn cơ sở nào.
+  // Đây là nghiệp vụ bình thường của module chứ không phải dữ liệu thiếu: khoá "An toàn thông tin"
+  // áp cho cả công ty, không thuộc CS1 hay CS2.
+  // ⚠️ TrnEvaluationResult CỐ Ý KHÔNG nằm ở đây — với nó NULL là dữ liệu chưa backfill, và biến
+  // "chưa biết cơ sở" thành "ai cũng thấy" là vỡ cách ly (QĐ-CDA-10 cấm đích danh).
+  "TrnProgram",
+  "TrnCourse",
+  "TrnRequirement",
+  "TrnEvalLinkConfig",
 ]);
 
 // FIX-C3 (B1) — soft-delete đã chuyển lên TẦNG base `db` (lib/soft-delete.ts + lib/db.ts)
@@ -213,6 +232,15 @@ export function getModelPrefixes(model: string): string[] {
     case "Survey":
     case "SurveyResponse":
       return ["parent-feedback:", "khao-sat:"];
+    // EL-03 — đào tạo nội bộ. Thiếu nhánh này thì `getModelPrefixes` trả mảng rỗng
+    // và tầm nhìn rơi về `isHoLevel` DIỆN RỘNG: bất kỳ ai có MỘT vai neo tại Hội sở —
+    // kể cả vai chẳng liên quan đào tạo — sẽ đọc được chương trình và kết quả đánh giá của
+    // MỌI cơ sở. Đúng lỗi #04 đã mắc với `Attendance` và đã có test riêng chặn.
+    case "TrnProgram":
+    case "TrnCourse":
+    case "TrnRequirement":
+    case "TrnEvaluationResult":
+      return ["elearning:"];
     default:
       return [];
   }
