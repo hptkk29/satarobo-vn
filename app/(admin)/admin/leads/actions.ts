@@ -14,6 +14,7 @@ import { resolveActor } from '@/lib/auth/actor'
 import { passesScope, scopedDb } from '@/lib/db-scope'
 import { getLeadPaymentSummary } from '@/lib/payments/summary'
 import { autoAssignLead, reassignOpenLeads } from '@/lib/lead/assign'
+import { leadSharingEnabled } from '@/lib/lead/sharing'
 import { validateTransferTarget } from '@/lib/crm/transfer-validate'
 import { autoAssignNewLead, manualAssignLead, reassignForCenter } from '@/lib/lead/auto-assign'
 import { centerIdForOrgUnit } from '@/lib/org/org-service'
@@ -68,6 +69,12 @@ export async function toggleLeadShareAction(
 ): Promise<{ ok: boolean; error?: string }> {
   const session = await auth()
   if (!session?.user) return { ok: false, error: 'Chưa đăng nhập' }
+  // Đợt E (22/08) — chính sách "dùng chung lead" đã TẮT (Q8: lead độc quyền).
+  // Chặn ở action, không chỉ ẩn nút: UI cũ còn nằm trong cache trình duyệt và
+  // Server Action là một endpoint gọi thẳng được.
+  if (!leadSharingEnabled()) {
+    return { ok: false, error: 'Tính năng dùng chung lead đã ngừng — mỗi lead do một người phụ trách' }
+  }
   if (!(await checkPermission('leads:edit'))) return { ok: false, error: 'Không có quyền' }
 
   const before = await db.lead.findUnique({

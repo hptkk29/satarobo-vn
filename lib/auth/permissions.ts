@@ -332,7 +332,14 @@ export const PERMISSIONS: Record<Action, Role[]> = {
   // hệ) → thêm MARKETING (ĐẢO quyết định "che PII cho MARKETING" của a+b 20/07). Lưu ý:
   // canViewLeadPii bao cả email (email-logs) + ghi chú tư vấn (lead detail) → MARKETING thấy
   // luôn các mục này. Cách ly cơ sở vẫn do scopedDb.
-  "leads:view-pii": ["SUPER_ADMIN", "CENTER_MANAGER", "SALES_CSM", "MARKETING"],
+  // ⚠️ Đợt E (22/08/2026) — chủ dự án chốt Q9: **Quản lý cơ sở KHÔNG thấy SĐT lead**.
+  // ĐẢO chính quyết định #11 T2 (Kiệt ký 10/07) từng cấp quyền này cho CENTER_MANAGER.
+  // QL vẫn xem được DANH SÁCH lead (leads:view-all) — chỉ SĐT/email/tên/ghi chú bị
+  // che ở tầng dữ liệu (lib/lead/pii.ts), và tìm-theo-SĐT bị tắt theo (nếu còn tìm
+  // được thì che chỉ là hình thức: dò từng số cũng ra khách).
+  // Marketing GIỮ quyền — chủ dự án trả lời "không" khi được hỏi có che luôn không.
+  // Khoá bằng test: lib/auth/lead-pii-policy.test.ts. Sửa đây phải sửa seed-roles.ts.
+  "leads:view-pii": ["SUPER_ADMIN", "SALES_CSM", "MARKETING"],
   "leads:create": ["SUPER_ADMIN", "CENTER_MANAGER", "SALES_CSM", "MARKETING"],
   "leads:edit": ["SUPER_ADMIN", "CENTER_MANAGER", "SALES_CSM", "MARKETING"],
   "leads:assign": ["SUPER_ADMIN", "CENTER_MANAGER"],

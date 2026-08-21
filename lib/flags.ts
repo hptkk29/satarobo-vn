@@ -251,3 +251,19 @@ export function isLeadIntakeAuthRequired(): boolean {
 export function isSaleSiteEnabled(): boolean {
   return process.env.SALE_SITE_ENABLED === "true"; // mặc định OFF
 }
+
+/**
+ * Đợt E (22/08/2026) — chính sách CHIA SẺ LEAD trong cơ sở (`Lead.isSharedWithTeam`).
+ *
+ * Chủ dự án chốt Q8 (21/08): **lead độc quyền tuyệt đối**, bỏ tính năng dùng chung.
+ *
+ * ⚠️ Đây là ĐẢO quyết định BGĐ câu 10 ký 10/07/2026, và tính năng ĐANG CHẠY PROD.
+ * Mặc định **OFF** = chính sách mới có hiệu lực. Gỡ theo 2 pha: ngừng tôn trọng cờ
+ * ở tầng đọc + ẩn nút; **GIỮ cột `Lead.isSharedWithTeam` và toàn bộ dữ liệu**.
+ *
+ * Bật lại = env `LEAD_SHARING_ENABLED="true"` + redeploy. Không revert code, không
+ * mất dữ liệu — đây là quyết định CHÍNH SÁCH, mà chính sách thì đổi được.
+ */
+export function isLeadSharingEnabled(): boolean {
+  return process.env.LEAD_SHARING_ENABLED === "true"; // mặc định OFF (đã gỡ)
+}
