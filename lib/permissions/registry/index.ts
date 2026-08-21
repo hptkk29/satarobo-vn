@@ -14,6 +14,7 @@ import { financeModule } from "./finance";
 import { contentModule } from "./content";
 import { inventoryModule } from "./inventory";
 import { systemModule } from "./system";
+import { elearningModule } from "./elearning";
 
 export type { PermissionDecl, ModuleDecl, DescriptorRow } from "./types";
 
@@ -40,6 +41,7 @@ export const ALL_MODULE_DECLS: ModuleDecl[] = [
   contentModule,
   inventoryModule,
   systemModule,
+  elearningModule, // EL-02 — đào tạo nội bộ (17 key, prefix duy nhất)
 ];
 
 /**
