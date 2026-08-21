@@ -131,7 +131,7 @@ async function main() {
   // KHÔNG suy từ centerId — cầu `OrgUnit.code = Center.code` bị QĐ-CDA-11 bước 4 cấm.
   const hoSo = await prisma.employee.findMany({
     where: { id: { in: nhanSu.map((u) => u.employeeId).filter((x): x is string => !!x) } },
-    select: { id: true, orgUnitId: true, fullName: true },
+    select: { id: true, orgUnitId: true, centerId: true, fullName: true },
   });
   const hoSoTheoId = new Map(hoSo.map((e) => [e.id, e]));
 
@@ -216,8 +216,16 @@ async function main() {
     console.log("   trong danh sách đó là US-05 tái diễn — gỡ `UserOrgRole` tại HO và");
     console.log("   neo lại ở đúng cơ sở của họ (KHÔNG dùng grant DENY: `can()` v2 là");
     console.log("   ALLOW-wins thuần, DENY bị bỏ qua im lặng).");
+    console.log("   Cột đọc: [neo vai] ← thứ QUYẾT ĐỊNH quyền · tk=User.orgUnitId · hs=Employee.orgUnitId");
+    console.log("   Neo vai ở HO trong khi tk/hs đã là cơ sở = dữ liệu ĐÚNG nhưng vai CHƯA DẮT theo.");
     for (const r of nhom4) {
-      console.log(`   ${ten(r.u)}  @  ${r.taiDonVi.join(", ")}`);
+      const e = r.u.employeeId ? hoSoTheoId.get(r.u.employeeId) : null;
+      const nhan = (id: string | null | undefined) =>
+        id ? (donViTheoId.get(id)?.code ?? id) : "—";
+      console.log(
+        `   ${ten(r.u)}  @  ${r.taiDonVi.join(", ")}` +
+          `   [tk=${nhan(r.u.orgUnitId)} hs=${nhan(e?.orgUnitId)}]`,
+      );
     }
     console.log();
   }
