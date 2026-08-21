@@ -224,3 +224,30 @@ export function isCenterChecklistEnabled(): boolean {
 export function isLeadIntakeAuthRequired(): boolean {
   return process.env.LEAD_INTAKE_REQUIRE_AUTH === "true"; // mặc định OFF
 }
+
+/**
+ * Đợt B (21/08/2026) — site Sale riêng `sale.satarobo.vn` (route group thứ 6
+ * `app/(sale)/`). Chốt Q11: Sale Hub là **site riêng**, còn biểu mẫu nhập khách
+ * hiện ở host này sẽ dời sang `satarobo.vn/nhap-khach-hang`.
+ *
+ * Khuôn `=== "true"` (mặc định OFF) — cố ý ngược khuôn `isTeacherSiteEnabled()`
+ * vốn mặc định ON vì đã qua kỳ flip 10/07/2026.
+ *
+ * OFF: host `sale` hành xử **y hệt hôm nay** — phục vụ 2 trang HTML tĩnh công
+ * khai, bỏ qua đăng nhập. 0 byte giao diện site Sale được phục vụ.
+ *
+ * ⚠️ ĐIỀU KIỆN BẬT — bật sớm là **cắt đường nhập liệu của marketing**:
+ *   1. Biểu mẫu nhập khách đã dời sang `satarobo.vn/nhap-khach-hang` và chạy thật.
+ *   2. Marketing / sale-admin đã được thông báo.
+ *   3. Đã rà mọi nơi còn trỏ `sale.satarobo.vn` (QR, quảng cáo, chữ ký email).
+ *
+ * ⚠️ KHÔNG bật `AUTH_COOKIE_DOMAIN` kèm theo: `.env.example` ghi rõ thứ tự bắt
+ * buộc là **tách sale khỏi zone trước**, vì bật khi host này còn phục vụ trang
+ * tĩnh công khai = lộ cookie phiên sang host công khai. Site Sale dùng cổng đăng
+ * nhập riêng trên chính host của nó — chạy được, chỉ tốn một lần đăng nhập.
+ *
+ * Rollback = đổi env + redeploy, không revert code.
+ */
+export function isSaleSiteEnabled(): boolean {
+  return process.env.SALE_SITE_ENABLED === "true"; // mặc định OFF
+}

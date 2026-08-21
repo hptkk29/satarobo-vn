@@ -1020,3 +1020,107 @@ describe("isInfraPath — đường hạ tầng KHÔNG được canonical-hoá",
       expect(isInfraPath(p)).toBe(false));
   }
 });
+
+// ─────────────────────────────────────────────────────────────────────────
+// Đợt B (21/08/2026) — SITE SALE có đăng nhập, sau cờ `SALE_SITE_ENABLED`.
+//
+// Nguyên tắc: **cờ TẮT = không đổi một hành vi nào** (khối describe phía trên
+// vẫn xanh nguyên vẹn, không sửa một dòng). Cờ BẬT mới mở site có đăng nhập.
+//
+// ⚠️ Cờ này CHỈ được bật sau khi biểu mẫu nhập khách đã dời khỏi host sale và
+// marketing đã được thông báo — bật sớm là cắt đường nhập liệu của họ.
+// ─────────────────────────────────────────────────────────────────────────
+
+const saleOn = { hostKind: "sale", saleSiteEnabled: true } as const;
+
+describe("[Đợt B] Site Sale — cờ BẬT", () => {
+  it("đường dẫn CÔNG KHAI của biểu mẫu vẫn sống (MISA còn trỏ RedirectURL vào /thank-you)", () => {
+    for (const p of ["/thank-you", "/thank-you/"]) {
+      expect(
+        decideRoute({ ...saleOn, pathname: p, role: null, sessionValid: false }),
+      ).toEqual<RouteDecision>({ type: "rewrite", path: "/sale/thank-you.html" });
+    }
+    for (const p of ["/sale/nhap-lieu.html", "/sale/thank-you.html"]) {
+      expect(
+        decideRoute({ ...saleOn, pathname: p, role: null, sessionValid: false }),
+      ).toEqual<RouteDecision>({ type: "next" });
+    }
+  });
+
+  it("🔴 KHÔNG cho mọi /sale/* đi thẳng — trang app cùng tiền tố phải bị gác", () => {
+    // Route group app/(sale)/sale/ sinh ra đường dẫn /sale/leads, /sale/trial…
+    // trùng tiền tố với file tĩnh public/sale/*.html. Nếu giữ luật "startsWith
+    // /sale/ → next" thì TOÀN BỘ trang app mở toang cho người chưa đăng nhập.
+    expect(
+      decideRoute({ ...saleOn, pathname: "/sale/leads", role: null, sessionValid: false }),
+    ).toMatchObject({ type: "redirectPath", path: "/login" });
+  });
+
+  it("chưa đăng nhập → về /login kèm callbackUrl (KHÔNG vòng lặp ở chính /login)", () => {
+    expect(
+      decideRoute({ ...saleOn, pathname: "/leads", role: null, sessionValid: false }),
+    ).toMatchObject({ type: "redirectPath", path: "/login", callbackUrl: "/leads" });
+    // Bẫy đã từng dính với /dang-xuat: quên nhánh này là vòng lặp chuyển hướng vô tận.
+    expect(
+      decideRoute({ ...saleOn, pathname: "/login", role: null, sessionValid: false }),
+    ).toEqual<RouteDecision>({ type: "next" });
+  });
+
+  it("Sale thuần → phục vụ site Sale (clean URL rewrite sang /sale/*)", () => {
+    expect(
+      decideRoute({ ...saleOn, pathname: "/", ...authed("SALES_CSM") }),
+    ).toEqual<RouteDecision>({ type: "rewrite", path: "/sale" });
+    expect(
+      decideRoute({ ...saleOn, pathname: "/leads", ...authed("SALES_CSM") }),
+    ).toEqual<RouteDecision>({ type: "rewrite", path: "/sale/leads" });
+    // Đích rewrite tự nó phải đi thẳng, không rewrite lần hai.
+    expect(
+      decideRoute({ ...saleOn, pathname: "/sale/leads", ...authed("SALES_CSM") }),
+    ).toEqual<RouteDecision>({ type: "next" });
+  });
+
+  it("Sale đang ở /login mà đã đăng nhập → về trang chủ site Sale", () => {
+    expect(
+      decideRoute({ ...saleOn, pathname: "/login", ...authed("SALES_CSM") }),
+    ).toMatchObject({ type: "redirectPath", path: "/" });
+  });
+
+  it("nhân sự KIÊM NHIỆM (có vai khác ngoài Sale) → về admin, KHÔNG bị nhốt trong site hẹp", () => {
+    // QĐ-3 (16/07): chỉ Sale THUẦN vào site này. Quản lý cơ sở kiêm Sale mà bị
+    // nhốt ở đây là mất toàn bộ quyền quản lý của họ.
+    expect(
+      decideRoute({
+        ...saleOn,
+        pathname: "/",
+        role: "CENTER_MANAGER",
+        roles: ["CENTER_MANAGER", "SALES_CSM"],
+        sessionValid: true,
+      }),
+    ).toEqual<RouteDecision>({ type: "redirectHost", host: "admin", path: "/dashboard", status: 307 });
+  });
+
+  it("nhân sự khác → admin · phụ huynh → portal", () => {
+    for (const role of ["HR", "TEACHER", "ACCOUNTANT", "TRAINING", "MARKETING"] as const) {
+      expect(
+        decideRoute({ ...saleOn, pathname: "/", ...authed(role) }),
+      ).toEqual<RouteDecision>({ type: "redirectHost", host: "admin", path: "/dashboard", status: 307 });
+    }
+    expect(
+      decideRoute({ ...saleOn, pathname: "/", ...authed("PARENT") }),
+    ).toEqual<RouteDecision>({ type: "redirectHost", host: "portal", path: "/", status: 307 });
+  });
+
+  it("infra path vẫn đi thẳng ở cả hai trạng thái cờ", () => {
+    for (const p of ["/favicon.ico", "/api/anything", "/robots.txt", "/_next/static/x.js"]) {
+      expect(
+        decideRoute({ ...saleOn, pathname: p, role: null, sessionValid: false }),
+      ).toEqual<RouteDecision>({ type: "next" });
+    }
+  });
+
+  it("cờ TẮT giữ nguyên hành vi cũ — kể cả khi đã đăng nhập", () => {
+    expect(
+      decideRoute({ hostKind: "sale", saleSiteEnabled: false, pathname: "/", ...authed("SALES_CSM") }),
+    ).toEqual<RouteDecision>({ type: "rewrite", path: "/sale/nhap-lieu.html" });
+  });
+});

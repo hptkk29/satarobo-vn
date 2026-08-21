@@ -230,6 +230,28 @@ export default tseslint.config(
     },
   },
 
+  // app/(sale)/** — Đợt B site Sale: cùng luật với site giáo viên (shadcn THUẦN
+  // + db block). Site MỚI đi `scopedDb` từ đầu, KHÔNG grandfather.
+  //
+  // ⚠️ Route group mới KHÔNG tự thừa hưởng khối nào ở trên — thiếu khối này là
+  // `import { db } from "@/lib/db"` hợp lệ trong toàn bộ site Sale, cổng cách ly
+  // cơ sở thủng mà không ai báo.
+  {
+    files: ['app/(sale)/**/*.{ts,tsx}'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            ...adminBlockedImports.patterns,
+            ...clientBlockedImports.patterns,
+            ...dbBlockedImports.patterns,
+          ],
+        },
+      ],
+    },
+  },
+
   // TS-03 (US-02 AC5) — no-inline-authz 2 tầng trên action files (Server Actions).
   // Tầng (a): no-restricted-syntax cấm kiểm quyền inline (selectors ở đầu file).
   // Tầng (b): plugin local `authz` — action GHI dữ liệu phải gọi can()/assertCan().
