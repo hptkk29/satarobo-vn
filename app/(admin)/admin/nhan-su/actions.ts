@@ -9,6 +9,7 @@ import {
   getEmployeeFieldVisibility,
   stripHiddenEmployeeFields,
 } from "@/lib/auth/permissions";
+import { suyCoSoTuDonVi } from "@/lib/hr/employee-unit";
 import { assertPermission } from "@/lib/auth/check-permission";
 import { writeAudit } from "@/lib/audit/audit-log";
 import { ASSIGNABLE_ROLES } from "@/lib/labels";
@@ -217,9 +218,13 @@ export async function createEmployeeAction(
     });
   }
 
-  // NV HO → không gán Center (centerId null); chỗ làm xác định qua assignment HO.
+  // ĐƠN VỊ LÀM VIỆC → CƠ SỞ. Form (PR-C) gửi `orgUnitId`, `centerId` suy ra Ở ĐÂY —
+  // phần "suy ra ở server" đó trước đây chưa từng được viết, nên lưu vẫn báo thành công
+  // mà `centerId` giữ nguyên giá trị cũ. NV HO → không thuộc cơ sở nào; chỗ làm xác định
+  // qua `EmployeeOrgAssignment`.
   const createData = { ...parsed.data };
-  if (isHO) createData.centerId = null;
+  const donViTao = await suyCoSoTuDonVi({ isHO, orgUnitId: createData.orgUnitId });
+  if (donViTao) createData.centerId = donViTao.centerId;
   // SEC-M15: chống mass-assignment khi CREATE (write path song song với update:265-270).
   // Non-SUPER_ADMIN không được tự đặt cờ CEO; CENTER_MANAGER thuần không được đặt bậc/mức lương.
   if (!canSetPrivileged) createData.isCEO = false;
@@ -247,13 +252,6 @@ export async function createEmployeeAction(
     }
     return { ok: false, error: "Lỗi cơ sở dữ liệu — không tạo được nhân sự" };
   }
-
-  await syncHoAssignment(
-    sdb,
-    { id: session.user.id ?? null, name: session.user.name ?? session.user.email ?? session.user.id ?? "Unknown" },
-    created.id,
-    isHO,
-  );
 
   // #10 — NV HO: gán phân công PRIMARY vào OrgUnit Hội sở (khi isHO, orgUnitId rỗng).
   await syncHoAssignment(
@@ -330,8 +328,11 @@ export async function updateEmployeeAction(
   // client gửi null do đã redact + chặn set field ngoài quyền. Bao trùm strip salary CM cũ.
   const data = { ...parsed.data };
   stripHiddenEmployeeFields(data, getEmployeeFieldVisibility(session.user.role));
-  // NV HO → không gán Center.
-  if (isHO === true) data.centerId = null;
+  // ĐƠN VỊ LÀM VIỆC → CƠ SỞ (xem `lib/hr/employee-unit.ts`). Ba trạng thái của
+  // `orgUnitId` tách bạch: undefined = không đụng tới đơn vị ⇒ giữ nguyên cơ sở;
+  // null = chủ ý xoá; có giá trị = suy cơ sở từ khoá ngoại của đơn vị.
+  const donViSua = await suyCoSoTuDonVi({ isHO, orgUnitId: data.orgUnitId });
+  if (donViSua) data.centerId = donViSua.centerId;
 
   // Đổi cơ sở → cơ sở đích cũng phải trong tầm nhìn actor.
   if (data.centerId !== undefined) {
@@ -359,8 +360,13 @@ export async function updateEmployeeAction(
   });
 
   // ĐƠN VỊ NẰM Ở HAI BẢNG — sửa hồ sơ thì kéo tài khoản theo (xem lib/hr/sync-employee-unit.ts).
-  // Đọc LẠI sau khi ghi, không lấy từ `data`: `orgUnitId` do cơ chế ghi kép trong
-  // `lib/db.ts` điền, `data` chỉ có `centerId`.
+  // Đọc LẠI sau khi ghi, không lấy từ `data`: hai cột do hai nguồn điền — `orgUnitId`
+  // từ form, `centerId` do `suyCoSoTuDonVi` ở trên — và cơ chế ghi kép trong `lib/db.ts`
+  // còn có thể bổ sung. Đọc lại là cách duy nhất biết kết quả cuối cùng.
+  //
+  // ⚠️ Cổng dưới đây trước đây KHÔNG BAO GIỜ mở: form gửi `orgUnitId` chứ không gửi
+  // `centerId`, nên `data.centerId` luôn `undefined` ⇒ tài khoản `User` không bao giờ
+  // được kéo theo hồ sơ, và vai cũng không được neo lại đúng đơn vị.
   if (data.centerId !== undefined) {
     const sauKhiGhi = await sdb.employee.findUnique({
       where: { id },
@@ -386,15 +392,6 @@ export async function updateEmployeeAction(
     newValues: auditAfter,
     orgUnitId: auditAfter?.centerId ?? auditBefore?.centerId ?? null,
   });
-
-  if (typeof isHO === "boolean") {
-    await syncHoAssignment(
-      sdb,
-      { id: session.user.id ?? null, name: session.user.name ?? session.user.email ?? session.user.id ?? "Unknown" },
-      id,
-      isHO,
-    );
-  }
 
   // #10 — NV HO: đồng bộ phân công PRIMARY vào OrgUnit Hội sở.
   if (isHO !== undefined) {
