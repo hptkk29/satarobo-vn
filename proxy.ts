@@ -130,18 +130,7 @@ export default auth((req: NextAuthRequest) => {
     // quan ⇒ cho đi thẳng. Webhook ngoài (SePay/Zalo) trỏ nhầm vào .vercel.app cũng nhờ
     // đây mà sống thay vì rụng payload im lặng.
     if (isInfraPath(pathname)) return NextResponse.next();
-    // EL-01 — khu đào tạo nội bộ dùng path thật /elearning/* trên localhost (không
-  // rewrite). Đối xứng với nhánh isTeacherPath ngay trên: không có nhánh này thì
-  // hành vi trên máy dev KHÁC prod — kiểu lệch tốn nhiều giờ nhất để truy ra.
-  // Gate role + gate hồ sơ nhân sự do layout app/(elearning) tự lo (EL-01 PR2).
-  if (isElearningPath(pathname)) {
-    if (!session?.user) {
-      return redirectTo(req, "/login", { callbackUrl: sanitizeCallbackUrl(pathname) });
-    }
-    return NextResponse.next();
-  }
-
-  if (isLegacyAdminPrefixed(pathname)) {
+    if (isLegacyAdminPrefixed(pathname)) {
       const cleanPath = pathname.replace(/^\/admin/, "") || "/dashboard";
       return redirectToHost(req, ADMIN_HOST, cleanPath, 308);
     }
@@ -211,6 +200,22 @@ export default auth((req: NextAuthRequest) => {
   // Site GV dùng path thật /teacher/* trên localhost (không rewrite). Gác login;
   // gate role do layout app/(teacher) tự lo (defense-in-depth như admin).
   if (isTeacherPath(pathname)) {
+    if (!session?.user) {
+      return redirectTo(req, "/login", { callbackUrl: sanitizeCallbackUrl(pathname) });
+    }
+    return NextResponse.next();
+  }
+
+  // EL-01 — khu đào tạo nội bộ dùng path thật /elearning/* trên localhost (không
+  // rewrite). Đối xứng với nhánh isTeacherPath ngay trên: không có nhánh này thì hành vi
+  // trên máy dev KHÁC prod — kiểu lệch tốn nhiều giờ nhất để truy ra.
+  // Gate role + gate hồ sơ nhân sự do layout app/(elearning) tự lo (EL-01 PR2).
+  //
+  // ⚠️ Khối này PHẢI nằm ở BRANCH 3. Bản PR1 đặt nhầm nó trong BRANCH 1
+  // (`kind === "vercel" && NODE_ENV === "production"`) ⇒ trên localhost và trên mọi host
+  // thật nó KHÔNG BAO GIỜ chạy, `/elearning` rơi xuống nhánh cuối và đá về `/login`
+  // MẤT `callbackUrl` — đăng nhập xong văng ra trang chủ, không ai biết tại sao.
+  if (isElearningPath(pathname)) {
     if (!session?.user) {
       return redirectTo(req, "/login", { callbackUrl: sanitizeCallbackUrl(pathname) });
     }

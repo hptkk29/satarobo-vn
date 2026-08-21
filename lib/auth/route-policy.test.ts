@@ -1188,4 +1188,30 @@ describe("EL-01 · AC10. Bất biến cấu trúc khu e-learning", () => {
       expect(proxy, `HOST_BY_KIND thiếu "${kind}"`).toContain(`${kind}:`);
     }
   });
+
+  it("nhánh /elearning trên localhost nằm ở BRANCH 3, KHÔNG lọt vào BRANCH 1", async () => {
+    const { readFileSync } = await import("node:fs");
+    const { resolve } = await import("node:path");
+    const proxy = readFileSync(resolve(process.cwd(), "proxy.ts"), "utf8");
+
+    const branch1 = proxy.indexOf("BRANCH 1:");
+    const branch3 = proxy.indexOf("BRANCH 3:");
+    const teacher = proxy.indexOf("isTeacherPath(pathname)");
+    const elearning = proxy.indexOf("isElearningPath(pathname)");
+
+    expect(branch1).toBeGreaterThan(-1);
+    expect(branch3).toBeGreaterThan(branch1);
+    expect(teacher).toBeGreaterThan(branch3);
+
+    // BUG THẬT đã xảy ra ở PR1 và lọt qua merge: khối này bị đặt trong BRANCH 1
+    // (`kind === "vercel" && NODE_ENV === "production"`) nên chỉ sống ở preview
+    // deployment. Hậu quả trên localhost và mọi host thật: `/elearning` rơi xuống
+    // nhánh cuối, bị đá về `/login` MẤT `callbackUrl` — đăng nhập xong văng ra
+    // trang chủ. Không có lỗi, không có log; e2e bắt được nhờ đòi `callbackUrl`.
+    // Guard này rẻ hơn nhiều so với lần truy vết tiếp theo.
+    expect(
+      elearning,
+      "isElearningPath phải nằm SAU mốc BRANCH 3 — đặt trong BRANCH 1 là nhánh chết",
+    ).toBeGreaterThan(branch3);
+  });
 });

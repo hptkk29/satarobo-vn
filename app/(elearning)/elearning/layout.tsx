@@ -23,7 +23,10 @@ import { scopedDb } from "@/lib/db-scope";
 export const dynamic = "force-dynamic";
 
 export const metadata = {
-  title: "Đào tạo nội bộ | Sata Robo",
+  // Nhãn NGƯỜI DÙNG thấy là "Học tập nội bộ" (AC1) — trùng với mục menu họ vừa bấm.
+  // "Đào tạo nội bộ" chỉ còn dùng trong tài liệu/tên job CI: nó trùng tên phòng Đào tạo
+  // nên người dùng đọc thành "khu của phòng Đào tạo" thay vì "chỗ tôi học".
+  title: "Học tập nội bộ | Sata Robo",
   robots: { index: false, follow: false },
 };
 

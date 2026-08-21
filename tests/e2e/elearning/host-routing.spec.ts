@@ -25,15 +25,22 @@ test.describe("[EL-01] khu đào tạo nội bộ — định tuyến và cổng
     await expect(page.locator("form")).toBeVisible();
   });
 
-  test("khu nội bộ phải noindex — không được lọt lên công cụ tìm kiếm", async ({ page }) => {
+  test("khách vãng lai KHÔNG nhận được một byte nội dung nào của khu nội bộ", async ({
+    page,
+  }) => {
     const res = await page.goto("/elearning");
-    const robots = res?.headers()["x-robots-tag"] ?? "";
-    // Đá về /login vẫn phải giữ noindex ở chặng đầu; nếu header rỗng thì kiểm meta.
-    if (!robots) {
-      const meta = await page.locator('meta[name="robots"]').getAttribute("content");
-      expect(meta ?? "").toContain("noindex");
-    } else {
-      expect(robots).toContain("noindex");
-    }
+    // `page.goto` ĐI THEO redirect, nên `res` ở đây là trang `/login` chứ không phải
+    // trang e-learning. Bản đầu của bài này quên điều đó và đi đòi `noindex` trên
+    // chính trang login — đỏ vì lý do sai, và tệ hơn: nó KHÔNG kiểm gì về e-learning.
+    //
+    // Điều kiểm được (và đáng kiểm) khi chưa đăng nhập là: chặng cuối là `/login`, và
+    // HTML trả về không mang theo mẩu nội dung nào của khu nội bộ.
+    expect(page.url()).toContain("/login");
+    const html = await page.content();
+    expect(html).not.toContain("Học tập nội bộ");
+
+    // `noindex` của khu nội bộ khai ở `app/(elearning)/elearning/layout.tsx`
+    // (`metadata.robots`) nên chỉ thấy được khi ĐÃ đăng nhập — kiểm ở
+    // `employee-gate.spec.ts` cùng nhóm case cần phiên thật.
   });
 });
