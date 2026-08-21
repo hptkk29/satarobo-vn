@@ -201,3 +201,26 @@ export function isClassGroupEnabled(): boolean {
 export function isCenterChecklistEnabled(): boolean {
   return process.env.CENTER_CHECKLIST_ENABLED === "true"; // mặc định OFF (đã gỡ)
 }
+
+/**
+ * G-D (21/08/2026) — KHOÁ endpoint nhận phiếu nhập khách (`/api/public/lead-intake/sale-form`).
+ *
+ * VÌ SAO CẦN: `isInfraPath` cho `/api/*` đi thẳng ở MỌI host, nên bất kỳ ai trên
+ * Internet cũng `curl` được vào endpoint này và **tạo Lead thật**. Phòng thủ hiện
+ * có (honeypot, giới hạn theo IP, trần dung lượng) chỉ chống **spam**, không chống
+ * **truy cập trái phép** — trái CLAUDE.md #5 ("API route VẪN phải auth() + assertCan").
+ *
+ * ⚠️ MẶC ĐỊNH **OFF**, và đó là chủ đích: biểu mẫu tĩnh `sale.satarobo.vn/nhap-lieu.html`
+ * mà marketing/sale-admin đang dùng hằng ngày gửi bài **ẩn danh**. Bật cờ này là
+ * phiếu của họ bị từ chối ngay lập tức. Hai thứ đó không cùng sống được.
+ *
+ * ĐIỀU KIỆN BẬT (đủ cả 3):
+ *   1. Trang nhập khách có đăng nhập đã lên prod và mở được.
+ *   2. Marketing / sale-admin đã được thông báo và biết đường vào mới.
+ *   3. Đã rà mọi nơi còn trỏ tới biểu mẫu cũ (QR, quảng cáo, chữ ký email).
+ *
+ * Rollback = đổi env về rỗng + redeploy, không revert code.
+ */
+export function isLeadIntakeAuthRequired(): boolean {
+  return process.env.LEAD_INTAKE_REQUIRE_AUTH === "true"; // mặc định OFF
+}

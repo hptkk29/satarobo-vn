@@ -8,6 +8,11 @@ import {
 } from "@/lib/lead/intake/map-sale-form";
 import { mirrorSaleFormToMisa } from "@/lib/lead/intake/misa-mirror";
 import { logWebhookDelivery } from "@/lib/lead/webhook";
+import { auth } from "@/lib/auth";
+import { checkPermission } from "@/lib/auth/check-permission";
+import { isLeadIntakeAuthRequired } from "@/lib/flags";
+import { getStaffIdentity } from "@/lib/lead/intake/staff-identity";
+import { pickEmployeeCode } from "@/lib/lead/intake/identity-override";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -25,8 +30,17 @@ export const dynamic = "force-dynamic";
 //  - lỗi thì trả 1 trang HTML nhỏ có nút quay lại, để người nhập không mất
 //    công gõ lại cả phiếu.
 //
-// Route nằm dưới `/api/*` nên đi thẳng qua cổng host `sale` mà không cần auth
-// (`isInfraPath` trong `lib/auth/route-policy.ts`).
+// ⚠️ Route nằm dưới `/api/*` nên `isInfraPath` (`lib/auth/route-policy.ts`) cho
+// nó đi thẳng qua cổng host — ở MỌI host. Nghĩa là bịt cổng trang KHÔNG bịt được
+// endpoint: ai trên Internet cũng `curl` vào đây tạo Lead thật. Honeypot +
+// giới hạn theo IP + trần dung lượng chỉ chống SPAM, không chống truy cập trái phép.
+//
+// G-D (21/08/2026) — hai lớp vá:
+//   1. Cổng đăng nhập, gài sau cờ `LEAD_INTAKE_REQUIRE_AUTH` (mặc định OFF).
+//      Bật là biểu mẫu tĩnh ẩn danh đang dùng hằng ngày chết ⇒ chỉ bật khi trang
+//      có đăng nhập đã lên và marketing đã được thông báo. Xem `lib/flags.ts`.
+//   2. **Có hiệu lực NGAY, không phụ thuộc cờ:** phiếu nào đến kèm phiên đăng
+//      nhập thì mã nhân viên lấy từ PHIÊN, không lấy từ ô người dùng gõ.
 // =============================================================================
 
 const SALE_HOST = "sale.satarobo.vn";
@@ -98,6 +112,21 @@ export async function POST(req: NextRequest) {
     "unknown";
 
   try {
+    // ── G-D: cổng đăng nhập ───────────────────────────────────────────────
+    // Kiểm TRƯỚC khi đọc body: không tốn công xử lý phiếu của người không được
+    // phép, và không để thông báo lỗi tiết lộ gì về nghiệp vụ bên trong.
+    const session = await auth();
+    if (isLeadIntakeAuthRequired() && !session?.user) {
+      return errorPage(
+        "Cần đăng nhập để nhập khách hàng. Mở trang nhập khách trong hệ thống rồi thử lại giúp nhé.",
+        401,
+      );
+    }
+    // Có phiên thì phải đúng người có quyền nhập lead — kể cả khi cờ còn TẮT.
+    if (session?.user && !(await checkPermission("leads:create"))) {
+      return errorPage("Tài khoản của bạn không có quyền nhập khách hàng.", 403);
+    }
+
     // Chốt kích thước 2 lớp. Header là đường nhanh nhưng KHÔNG tin được: HTTP/2
     // và chunked thường không gửi `content-length`, và `Number(null ?? 0)` = 0
     // lọt qua mọi so sánh. Nên phải đo lại chính chuỗi đã đọc.
@@ -145,6 +174,28 @@ export async function POST(req: NextRequest) {
 
     const mapped = mapSaleForm(payload);
     if (!mapped.ok) return errorPage(mapped.error, 400);
+
+    // ── G-D: danh tính lấy từ PHIÊN, không từ ô người dùng gõ ─────────────
+    // Ô "Mã số NV" trên phiếu quyết định lead giao cho ai (`resolveOwner`),
+    // nhưng ai cũng gõ được mã của người khác. Có phiên thì phiên thắng.
+    if (session?.user) {
+      const staff = await getStaffIdentity(
+        session.user.id,
+        session.user.name ?? session.user.email ?? "Không rõ",
+      );
+      const pick = pickEmployeeCode(staff.employeeCode, mapped.lead.employeeCode);
+      mapped.lead.employeeCode = pick.code;
+      if (pick.spoofed) {
+        // Không chặn phiếu — có thể là nhập hộ đồng nghiệp. Nhưng phải để lại vết,
+        // vì đây cũng đúng hình dạng của việc cướp lead.
+        mapped.lead.warnings.push(
+          `Phiếu ghi mã nhân viên khác với người đang đăng nhập — đã dùng mã của người nhập (${pick.code}).`,
+        );
+      }
+      if (pick.source === "session") {
+        mapped.lead.noteLines.push(`Người nhập (đã đăng nhập): ${staff.displayName}`);
+      }
+    }
 
     const result = await ingestIntakeLead(mapped.lead, {
       source: "sale-form",
