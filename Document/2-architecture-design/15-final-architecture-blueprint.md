@@ -33,7 +33,7 @@
 |---|---|---|
 | Pháp lý dữ liệu trẻ em | AI camera/face recognition, phân tích sức khỏe, sinh trắc học, geofencing/IoT/định vị **học sinh** | Điểm danh thủ công bởi GV/admin + PH báo vắng + lịch sử chỉnh sửa. Geofence CHỈ cho nhân viên (R5) |
 | Quá xa MVP | Web3/NFT/IPFS, SataCoin blockchain, Learn2Earn, Marketplace, SaaS/White-label/Franchise billing | Chứng chỉ PDF + mã tra cứu; điểm thưởng/badge nội bộ (backlog) |
-| AI (toàn bộ) | AI Tutor/CRM Assistant/Reporting/Learning path/Prediction | Rule-based: `nextCourseId`, RiskAlert, Class Health Score |
+| AI (toàn bộ) | ~~AI Tutor/CRM Assistant/Reporting/Learning path/Prediction~~ **[ĐẢO MỘT PHẦN 21/08/2026 — chủ dự án ký: LÀM "AI chấm điểm chất lượng tư vấn" cho nhân viên bán hàng (đọc hội thoại đã có → chấm theo thẻ điểm G1–G8 → người phúc tra). Xem `docs/sale-hub/bien-ban-chot-4-cong-2108.md`.]** Phần **VẪN LOẠI, không đảo:** AI Tutor · AI learning path · AI prediction · AI chấm điểm **học viên** · mọi AI ra quyết định nhân sự thay người. | Rule-based: `nextCourseId`, RiskAlert, Class Health Score. **Riêng chấm điểm tư vấn:** LLM chỉ **chấm và đề xuất**, kết quả sinh ra ở trạng thái *chờ phúc tra*, không có đường tự công bố; **không bao giờ** gắn trực tiếp vào lương/kỷ luật. |
 | Sai quyết định cũ | FB Lead Form là main flow → **Messenger**; student login riêng → profile trong tài khoản PH; ~~teacher domain riêng → admin theo role~~ **[ĐẢO 04/07/2026 — phiếu BGĐ câu 7 duyệt lại: site GV riêng `giaovien.satarobo.vn`]**; route có studentId → active profile; `User.centerId` → OrgUnit |
 
 ### Backlog phase sau (thứ tự đề xuất)
@@ -1078,6 +1078,6 @@ Modular Monolith
 + Audit hợp nhất + Privacy-first dữ liệu trẻ em
 ```
 
-KHÔNG đưa lại vào core: AI camera, sinh trắc học, định vị học sinh, Web3/NFT/blockchain, marketplace, student login riêng, ~~teacher domain riêng~~ (đảo 04/07/2026 — phiếu BGĐ câu 7, xem §0 Q10), online video LMS, AI learning path, AI prediction.
+KHÔNG đưa lại vào core: AI camera, sinh trắc học, định vị học sinh, Web3/NFT/blockchain, marketplace, student login riêng, ~~teacher domain riêng~~ (đảo 04/07/2026 — phiếu BGĐ câu 7, xem §0 Q10), online video LMS, AI learning path, AI prediction, **AI chấm điểm học viên**. ⚠️ **Ngoại lệ đã đảo 21/08/2026:** *AI chấm điểm chất lượng tư vấn của nhân viên bán hàng* nay **trong core** — chủ dự án ký, xem §0 bảng "Đã LOẠI" và `docs/sale-hub/bien-ban-chot-4-cong-2108.md`. Đảo này **hẹp**: chỉ chấm hội thoại bán hàng của nhân viên, không mở lại bất kỳ mục AI nào khác.
 
 > §11 đã CHỐT (2026-06-06) — đủ điều kiện bắt đầu **PR-A0-01: OrgUnit schema + seed ROOT SataRobo + HO/CS1/CS2**.
