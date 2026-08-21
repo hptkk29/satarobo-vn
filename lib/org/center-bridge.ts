@@ -252,6 +252,40 @@ export const BACKFILL_SPECS: readonly BackfillSpec[] = [
     scoped: true,
     vi: "giao dịch SataCoin — 3 dòng, 0 NULL; gắn học viên của cơ sở",
   },
+
+  // ── EL-03 · Đào tạo nội bộ ─────────────────────────────────────
+  // 5 bảng của module có ĐỦ hai cột. Thiếu một dòng ở đây thì test [US-07-IT-08b] đỏ —
+  // đó là chủ đích: bảng mới có cột đơn vị mà không khai thì đối soát đêm lặng lẽ bỏ qua nó.
+  {
+    model: "TrnProgram",
+    nullMeaning: "NULL_TOAN_HE_THONG",
+    scoped: true,
+    vi: "chương trình đào tạo — NULL = áp toàn công ty (ví dụ An toàn thông tin), không phải thiếu dữ liệu",
+  },
+  {
+    model: "TrnCourse",
+    nullMeaning: "NULL_TOAN_HE_THONG",
+    scoped: true,
+    vi: "khoá học nội bộ — NULL = dùng chung toàn công ty",
+  },
+  {
+    model: "TrnRequirement",
+    nullMeaning: "NULL_TOAN_HE_THONG",
+    scoped: true,
+    vi: "yêu cầu đào tạo — NULL = áp toàn công ty; orgUnitId còn kiêm cột đích khi scopeKind=ORG_UNIT",
+  },
+  {
+    model: "TrnEvalLinkConfig",
+    nullMeaning: "NULL_TOAN_HE_THONG",
+    scoped: false,
+    vi: "cấu hình mức gắn đánh giá — bảng con theo chương trình, scope theo TrnProgram",
+  },
+  {
+    model: "TrnEvaluationResult",
+    nullMeaning: "BAT_BUOC",
+    scoped: true,
+    vi: "kết quả đánh giá 4 mức — luôn thuộc một cơ sở; NULL là dữ liệu chưa backfill, KHÔNG phải toàn công ty",
+  },
 ] as const;
 
 /** Model → spec, tra nhanh. */
