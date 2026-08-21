@@ -493,7 +493,7 @@ export function decideRoute(input: RouteInput): RouteDecision {
 
     // PARENT: chuẩn hoá landing admin-ish (vd callbackUrl mặc định /dashboard)
     // về portal home, rồi rewrite clean URL → /portal/*.
-    if (isAdminRoute(pathname)) {
+    if (isAdminRoute(pathname) || isIntakePath(pathname)) {
       return { type: "redirectPath", path: PORTAL_HOME };
     }
     if (isPortalPath(pathname)) return { type: "next" };
@@ -580,6 +580,7 @@ export function decideRoute(input: RouteInput): RouteDecision {
     if (
       isAdminRoute(pathname) ||
       isPortalPath(pathname) ||
+      isIntakePath(pathname) ||
       isLegacyAdminPrefixed(pathname)
     ) {
       return { type: "redirectPath", path: TEACHER_HOME };
@@ -594,6 +595,15 @@ export function decideRoute(input: RouteInput): RouteDecision {
   // clean URL nội bộ → file .html tĩnh. noindex đã nằm trong meta của HTML.
   if (hostKind === "sale") {
     if (isInfraPath(pathname)) return { type: "next" };
+
+    // Biểu mẫu nhập khách đứng ở host public. Không bắt ở đây thì khi cờ
+    // `SALE_SITE_ENABLED` bật, `/nhap-khach-hang` rơi vào luật rewrite chung
+    // → `/sale/nhap-khach-hang` → 404 câm, đúng kiểu hỏng "bấm vào không đi
+    // đâu" mà clean URL của site GV đã dính một lần (xem TEACHER_ROUTE_SEGMENTS).
+    // Sale THUẦN có `leads:create` nên đích đúng là biểu mẫu, không phải trang chủ.
+    if (isIntakePath(pathname)) {
+      return { type: "redirectHost", host: "public", path: INTAKE_PATH, status: 307 };
+    }
 
     // ⛔ 22/08/2026 — BIỂU MẪU TĨNH CÔNG KHAI ĐÃ NGHỈ.
     // Hai file `public/sale/*.html` đã xoá; địa chỉ mới là

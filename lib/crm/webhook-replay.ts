@@ -77,6 +77,51 @@ async function replayMisaMirror(payload: unknown): Promise<number> {
   throw new ReplayError("MIRROR_FAILED", `MISA vẫn từ chối (${outcome.reason}).`);
 }
 
+/**
+ * Gửi lại bản sao MISA cho phiếu từ biểu mẫu `/nhap-khach-hang`.
+ *
+ * Payload ở đây là dữ liệu NGHIỆP VỤ (parentName/phone/childName/…), không phải
+ * bộ trường MISA thô như `misa-mirror` của biểu mẫu tĩnh cũ — nên phải có nhánh
+ * riêng, không dùng lại `mirrorSaleFormToMisa` (nó lọc theo tên trường MISA và
+ * sẽ để lại payload rỗng).
+ */
+async function replayMisaInternal(payload: unknown): Promise<number> {
+  const { mirrorInternalFormToMisa } = await import("@/lib/lead/intake/misa-mirror");
+
+  const p = (payload ?? {}) as Record<string, unknown>;
+  const text = (k: string): string | null => {
+    const v = p[k];
+    return typeof v === "string" && v.trim() ? v : null;
+  };
+  const parentName = text("parentName");
+  if (!parentName) {
+    throw new ReplayError("PAYLOAD_INVALID", "Phiếu không có tên phụ huynh — không dựng lại được.");
+  }
+
+  const outcome = await mirrorInternalFormToMisa({
+    parentName,
+    phone: text("phone") ?? "",
+    childName: text("childName"),
+    source: text("source"),
+    facebookUrl: text("facebookUrl"),
+    centerCode: text("centerCode"),
+    note: text("note"),
+    employeeCode: text("employeeCode"),
+  });
+
+  if (outcome.status === "sent") return 1;
+  if (outcome.status === "off") {
+    throw new ReplayError("MIRROR_OFF", "Cờ intake.mirrorMisa đang TẮT — bật lại rồi thử.");
+  }
+  if (outcome.status === "misconfigured") {
+    throw new ReplayError(
+      "MIRROR_MISCONFIGURED",
+      `Thiếu env tham số webform MISA (${outcome.missing.join(", ")}).`,
+    );
+  }
+  throw new ReplayError("MIRROR_FAILED", `MISA vẫn từ chối (${outcome.reason}).`);
+}
+
 /** Replay 1 delivery: re-xử lý theo source. Idempotent (C11.2/C11.3). */
 export async function replayDelivery(deliveryId: string): Promise<{ created: number }> {
   const d = await db.webhookDelivery.findUnique({ where: { id: deliveryId } });
@@ -92,6 +137,9 @@ export async function replayDelivery(deliveryId: string): Promise<{ created: num
       break;
     case "misa-mirror":
       created = await replayMisaMirror(d.payload);
+      break;
+    case "misa-mirror-app":
+      created = await replayMisaInternal(d.payload);
       break;
     default:
       throw new ReplayError("SOURCE_UNSUPPORTED", `Chưa hỗ trợ replay source "${d.source}".`);

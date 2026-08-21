@@ -37,12 +37,32 @@ const MISA_ENDPOINT =
 
 const TIMEOUT_MS = 5_000;
 
+/**
+ * Đã ghi vết "thiếu env" trong tiến trình này chưa. Cố ý là biến MODULE (sống
+ * theo instance serverless, không phải theo request): đủ để chặn cơn lũ một
+ * dòng-mỗi-phiếu, mà vẫn ghi lại vài lần mỗi giờ nên không ai bỏ sót được.
+ */
+let misconfigReported = false;
+
 /** Trường dữ liệu được phép chuyển tiếp — đúng bộ trường của form Sale. */
 const FORWARDABLE = new Set<string>(Object.values(SALE_FORM_FIELDS));
 
 export type MirrorOutcome =
   | { status: "off" }
-  | { status: "misconfigured"; missing: string[] }
+  | {
+      status: "misconfigured";
+      missing: string[];
+      /**
+       * Tiến trình này ĐÃ ghi một vết cho đúng lỗi cấu hình này rồi.
+       *
+       * Thiếu env là lỗi CỐ ĐỊNH: phiếu nào cũng hỏng y hệt. Ghi mỗi phiếu một
+       * dòng `WebhookDelivery` FAILED sẽ đẩy các dòng lỗi THẬT (phiếu dính
+       * honeypot, phiếu MISA từ chối) ra khỏi cửa sổ 100 dòng của màn Replay —
+       * tức là dọn sạch đúng chỗ để cứu lead. Caller nên bỏ qua việc ghi khi cờ
+       * này bật; `console.error` thì vẫn kêu mỗi lần.
+       */
+      alreadyReported: boolean;
+    }
   | { status: "sent"; via: "env" | "form" }
   | { status: "failed"; reason: string };
 
@@ -107,12 +127,14 @@ export async function mirrorSaleFormToMisa(
 
   const { config, via, missing } = misaFormConfig(payload);
   if (!config) {
+    const alreadyReported = misconfigReported;
+    misconfigReported = true;
     console.error(
       `[misa-mirror] Cờ intake.mirrorMisa ĐANG BẬT nhưng không dựng được tham số form ` +
         `(thiếu ${missing.join(", ")} ở env, và phiếu cũng không mang ID/Companycode/FormKey). ` +
         `MISA KHÔNG nhận được phiếu này. Đặt env hoặc tắt cờ để khỏi báo động giả.`,
     );
-    return { status: "misconfigured", missing };
+    return { status: "misconfigured", missing, alreadyReported };
   }
 
   const fields: Record<string, string> = {};
@@ -179,12 +201,14 @@ export async function mirrorInternalFormToMisa(
 
   const { config, missing } = misaFormConfig({});
   if (!config) {
+    const alreadyReported = misconfigReported;
+    misconfigReported = true;
     console.error(
       `[misa-mirror] Cờ intake.mirrorMisa ĐANG BẬT nhưng thiếu ${missing.join(", ")} ` +
         `ở env — MISA KHÔNG nhận được phiếu từ /nhap-khach-hang. ` +
         `Đặt env hoặc tắt cờ để khỏi báo động giả.`,
     );
-    return { status: "misconfigured", missing };
+    return { status: "misconfigured", missing, alreadyReported };
   }
 
   const fields = buildMisaInternalFields(input, {

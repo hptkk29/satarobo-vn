@@ -5,7 +5,7 @@
 //   2. Không mất dữ liệu khi MISA chưa có ô cho "Nguồn" / "Link Facebook" —
 //      hai giá trị đó phải rơi xuống `Description`, không được bốc hơi.
 import { describe, it, expect } from "vitest";
-import { buildMisaInternalFields, misaCenterIndex } from "./misa-internal";
+import { buildMisaInternalFields, misaCenterIndex, misaPhone } from "./misa-internal";
 
 const BASE = {
   parentName: "Chị Hương",
@@ -31,12 +31,23 @@ describe("misaCenterIndex — Center.code của ta → số thứ tự của MIS
   });
 });
 
+describe("misaPhone — canonical nội bộ → dạng MISA đang có", () => {
+  it("84XXXXXXXXX → 0XXXXXXXXX", () => {
+    expect(misaPhone("84905123456")).toBe("0905123456");
+  });
+
+  it("chuỗi không phải canonical → giữ nguyên, không bịa", () => {
+    for (const v of ["", "0905123456", "84123"]) expect(misaPhone(v)).toBe(v);
+  });
+});
+
 describe("buildMisaInternalFields — ánh xạ trường", () => {
   it("map đúng bộ trường MISA (LastName = TÊN CON, CustomField25 = tên PH)", () => {
     expect(buildMisaInternalFields(BASE)).toMatchObject({
       LastName: "Bé Minh",
       CustomField25: "Chị Hương",
-      CustomField15: "84905123456",
+      // MISA nhận dạng "0…" như mọi bản ghi cũ của chính nó, KHÔNG phải "84…".
+      CustomField15: "0905123456",
       CustomField17: "1",
       CustomField26: "CS1.TVV.007",
     });

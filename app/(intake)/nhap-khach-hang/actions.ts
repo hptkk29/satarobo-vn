@@ -98,8 +98,19 @@ export async function createInternalLeadAction(
   const mirror = await mirrorInternalFormToMisa(misaInput);
   if (mirror.status === "failed" || mirror.status === "misconfigured") {
     console.error(`[nhap-khach-hang] mirror MISA: ${mirror.status}`, mirror);
+  }
+  // Thiếu env là lỗi cấu hình cố định — ghi vết MỘT lần cho mỗi tiến trình, đừng
+  // đẩy các dòng lỗi thật ra khỏi cửa sổ 100 dòng của màn Replay.
+  const shouldLog =
+    mirror.status === "failed" ||
+    (mirror.status === "misconfigured" && !mirror.alreadyReported);
+  if (shouldLog) {
     await logWebhookDelivery({
-      source: "misa-mirror",
+      // ⚠️ KHÁC "misa-mirror" của biểu mẫu tĩnh cũ: payload ở đây là dữ liệu
+      // NGHIỆP VỤ (parentName/phone/…), không phải bộ trường MISA thô. Dùng
+      // chung một tên nguồn là đường replay bên kia lọc sạch payload rồi gửi
+      // phiếu TRẮNG sang MISA và đóng bản ghi — mất luôn đường cứu.
+      source: "misa-mirror-app",
       externalId: res.leadId ?? null,
       payload: misaInput,
       status: "FAILED",
@@ -123,6 +134,9 @@ export async function createInternalLeadAction(
     leadId: res.leadId,
     duplicate: res.duplicate,
     childAdded: res.childAdded,
-    warnings: mapped.lead.warnings.length ? mapped.lead.warnings : undefined,
+    // `res.warnings` gồm CẢ cảnh báo của tầng ingest (cơ sở không nhận ra, mã NV
+    // không giữ vai Sale…) — thứ trước đây chỉ nằm trong `note`, người vừa gõ
+    // phiếu không bao giờ thấy.
+    warnings: res.warnings?.length ? res.warnings : undefined,
   };
 }

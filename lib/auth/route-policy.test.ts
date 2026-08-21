@@ -928,6 +928,31 @@ describe("/nhap-khach-hang — biểu mẫu nội bộ trên host public", () =>
     }
   });
 
+  it("host sale (cờ BẬT) → sang biểu mẫu, KHÔNG rơi vào rewrite /sale/* rồi 404", () => {
+    expect(
+      decideRoute({
+        hostKind: "sale",
+        saleSiteEnabled: true,
+        pathname: "/nhap-khach-hang",
+        ...authed("SALES_CSM"),
+      }),
+    ).toEqual<RouteDecision>(TO_INTAKE);
+  });
+
+  it("host giáo viên / portal → về nhà của họ (không có quyền nhập lead)", () => {
+    expect(
+      decideRoute({
+        hostKind: "teacher",
+        teacherSiteEnabled: true,
+        pathname: "/nhap-khach-hang",
+        ...authed("TEACHER"),
+      }),
+    ).toEqual<RouteDecision>({ type: "redirectPath", path: "/" });
+    expect(
+      decideRoute({ hostKind: "portal", pathname: "/nhap-khach-hang", ...authed("PARENT") }),
+    ).toEqual<RouteDecision>({ type: "redirectPath", path: "/" });
+  });
+
   it("admin host: chưa đăng nhập cũng đá sang public (cổng nằm ở đó, không nhân đôi)", () => {
     expect(
       decideRoute({

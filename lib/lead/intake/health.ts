@@ -24,9 +24,23 @@ import { vnParts, vnYmd } from "@/lib/time/vn";
 //     lờ thì lần hỏng thật cũng bị phớt lờ theo.
 // =============================================================================
 
-/** Nguồn nhận lead tự động cần canh. Thêm nguồn mới thì thêm 1 dòng ở đây. */
+/**
+ * Nguồn nhận lead tự động cần canh nhánh IM LẶNG. Thêm nguồn mới thì thêm 1 dòng.
+ *
+ * ⚠️ 22/08/2026 — GỠ "sale-form": biểu mẫu tĩnh công khai đã nghỉ, nên nó im
+ * lặng là ĐÚNG, không phải sự cố. Để lại thì bộ dò kêu mỗi ngày suốt ~7 ngày
+ * (bằng đúng cửa sổ nền) — mà báo động giả bị phớt lờ thì lần hỏng thật cũng bị
+ * phớt lờ theo, đúng thứ file này sinh ra để tránh.
+ *
+ * Biểu mẫu thay thế (`satarobo.vn/nhap-khach-hang`) CỐ Ý không có mặt ở đây:
+ * `Lead.source` của nó nay mang **nguồn marketing người nhập gõ tự do**
+ * ("Facebook Ads", "giới thiệu"…), không còn là tên kênh, nên gom theo `source`
+ * là vô nghĩa. Đổi lại, kiểu hỏng mà nhánh IM LẶNG sinh ra để bắt (biểu mẫu ẩn
+ * danh hỏng mà không ai hay) đã hết đường xảy ra: người nhập phải đăng nhập và
+ * thấy ngay lỗi trên màn hình. Lỗi mirror MISA vẫn được bắt ở nhánh (1) qua
+ * `WebhookDelivery` nguồn "misa-mirror-app".
+ */
 export const MONITORED_SOURCES = [
-  "sale-form",
   "quatang",
   "facebook",
   "zalo",
@@ -34,7 +48,7 @@ export const MONITORED_SOURCES = [
 ] as const;
 
 /** Nguồn `WebhookDelivery` không sinh Lead — chỉ theo dõi lỗi, không xét im lặng. */
-const DELIVERY_ONLY_SOURCES = new Set(["misa-mirror"]);
+const DELIVERY_ONLY_SOURCES = new Set(["misa-mirror", "misa-mirror-app"]);
 
 export type IntakeAlert = {
   kind: "failing" | "silent";

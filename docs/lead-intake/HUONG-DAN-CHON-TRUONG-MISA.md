@@ -57,12 +57,15 @@ bản HTML cũ, nên nó không tự mang theo 3 tham số ẩn của form nữa
    | `MISA_WEBFORM_COMPANYCODE` | `name="Companycode"` |
    | `MISA_WEBFORM_KEY` | `name="FormKey"` |
 
-> ⚠️ **Thiếu 3 biến này = MISA không nhận được phiếu nào.** Không im lặng: mỗi
-> phiếu hỏng sẽ đẻ một dòng `WebhookDelivery` trạng thái `FAILED` xem được ở màn
-> tích hợp, nhưng vẫn nên đặt env ngay hôm đi vào chạy thật.
+> ⚠️ **Thiếu 3 biến này = MISA không nhận được phiếu nào.** Lead vẫn vào hệ thống
+> Sata Robo bình thường — chỉ bản sao sang MISA là không đi. Không im lặng: lỗi
+> được ghi thành dòng `WebhookDelivery` nguồn `misa-mirror-app` trạng thái
+> `FAILED`, xem ở màn **CRM → Webhook lỗi — Replay**, và gửi lại được sau khi
+> đặt env. (Ghi 1 lần cho mỗi tiến trình chứ không mỗi phiếu, để không đẩy các
+> dòng lỗi khác ra khỏi danh sách.)
 >
-> Nếu **không muốn gửi MISA nữa** thì tắt hẳn bằng `SystemSetting` → `intake.mirrorMisa`
-> = tắt, sẽ không có cảnh báo giả nào.
+> Chưa muốn đụng MISA lúc này? Tắt hẳn bằng `SystemSetting` → `intake.mirrorMisa`
+> — sạch sẽ hơn là để nó báo lỗi mỗi ngày.
 
 ---
 

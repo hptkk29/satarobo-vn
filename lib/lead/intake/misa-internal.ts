@@ -54,6 +54,18 @@ export type MisaOptionalFieldNames = {
   facebookUrl?: string;
 };
 
+/**
+ * SĐT canonical nội bộ (`84905123456`) → dạng MISA đang có (`0905123456`).
+ *
+ * Vì sao không gửi thẳng `84…`: mọi bản ghi MISA do chính biểu mẫu này sinh ra
+ * trước 22/08/2026 đều mang dạng `0…` (trình duyệt chuyển tiếp NGUYÊN chuỗi
+ * người nhập gõ). Đổi định dạng giữa chừng là tra cứu/đối khớp bên MISA trượt
+ * hết phần dữ liệu cũ — mà bên đó ta không kiểm soát được cách họ so khớp.
+ */
+export function misaPhone(canonical: string): string {
+  return /^84\d{9}$/.test(canonical) ? `0${canonical.slice(2)}` : canonical;
+}
+
 /** `Center.code` ("CS1") → số thứ tự phía MISA ("1"). Không khớp ⇒ bỏ ô. */
 export function misaCenterIndex(code: string | null | undefined): string | null {
   const m = /^CS(\d+)$/i.exec((code ?? "").trim());
@@ -80,7 +92,7 @@ export function buildMisaInternalFields(
 
   put(F.childName, input.childName || input.parentName || "Khách chưa rõ tên");
   put(F.parentName, input.parentName);
-  put(F.phone, input.phone);
+  put(F.phone, input.phone ? misaPhone(input.phone) : null);
   put(F.centerIndex, misaCenterIndex(input.centerCode));
   put(F.employeeCode, input.employeeCode);
 
