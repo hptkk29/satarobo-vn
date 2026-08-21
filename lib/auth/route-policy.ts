@@ -158,6 +158,14 @@ export const ADMIN_ROUTE_SEGMENTS: ReadonlySet<string> = new Set<string>([
   "media",
   "news",
   "nhan-su",
+  // Đợt F (22/08/2026) — biểu mẫu nhập nhanh khách hàng. Q11: địa chỉ công khai
+  // là `satarobo.vn/nhap-khach-hang`, và dòng này chính là thứ làm nó tới nơi
+  // (public host 308 sang admin host cho mọi admin route).
+  // ⚠️ Dòng này còn VÁ MỘT LỖI: trang đã tồn tại từ PR #126 mà không ai khai
+  // segment ⇒ trên admin host nó rơi xuống nhánh cuối "non-admin path → bounce về
+  // public" ⇒ 404. Trang chết, link sidebar dẫn tới 404. Lần thứ ba lặp lại vết
+  // này (/user-groups US-03, /thong-bao) nên đã khoá bằng test.
+  "nhap-khach-hang",
   "notifications",
   "orders",
   "otp-logs",
