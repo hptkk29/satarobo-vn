@@ -24,7 +24,13 @@ import { join } from "node:path";
 const h = vi.hoisted(() => ({
   isElearningEnabled: vi.fn(() => true),
   resolveActor: vi.fn(async (userId: string) => ({ userId }) as unknown),
-  findFirst: vi.fn(async () => null as { id: string } | null),
+  // Tham số phải được KHAI KIỂU, không được để `vi.fn(async () => ...)` không tham số:
+  // khi đó `mock.calls[0]` là tuple rỗng và `calls[0][0].where` không biên dịch được
+  // (TS2493/TS2339). Vitest vẫn chạy xanh — chỉ `tsc` bắt, nên dễ lọt nếu chỉ chạy test.
+  findFirst: vi.fn(
+    async (_args: { where: Record<string, unknown>; select?: unknown }) =>
+      null as { id: string } | null,
+  ),
   bypassSeen: [] as boolean[],
 }));
 
