@@ -83,23 +83,39 @@ describe("EL-02 · AC7. 17 key phải nằm trong ALL_ACTIONS (matrix v1)", () =
 });
 
 describe("EL-02 · AC8 / BP-2(a). Bề mặt xung đột đúng một chỗ", () => {
-  /** Ba nơi ĐƯỢC PHÉP nhắc tới key `elearning:` — mọi nơi khác là rải rác. */
+  /** Bốn nơi ĐƯỢC PHÉP KHAI key `elearning:` — mọi nơi khác là rải rác. */
   const ALLOWED = [
     "lib/permissions/registry/elearning.ts", // nơi khai duy nhất
     "lib/permissions/registry/elearning.test.ts", // chính file này
     "lib/auth/permissions.ts", // matrix v1, bắt buộc theo AC7
     "prisma/seed-roles.ts", // gán quyền cho vai (dữ liệu, không phải khai báo)
-    "tests/elearning/permissions.test.ts", // bảng ma trận
+    "tests/elearning/permissions.test.ts", // bảng ma trận đối chiếu
   ];
 
-  it("không có key `elearning:` nào rải rác ngoài danh sách cho phép", () => {
+  it("không có KHAI BÁO key `elearning:` nào rải rác ngoài danh sách cho phép", () => {
+    // Soát KHAI BÁO, không soát mọi lần nhắc tới key. Phân biệt này quan trọng:
+    // call-site hợp lệ (`can(actor, "elearning:portal:access")`) sẽ mọc lên ở mọi
+    // ticket EL-03+ và đó là chuyện bình thường; nếu bắt cả chúng thì test này
+    // biến thành thuế phải trả mỗi ticket, và cái giá quen thuộc của một test
+    // hay đỏ vô cớ là có người tắt nó đi.
+    //
+    // Ba hình dạng KHAI BÁO cần chặn:
+    //   `key: "elearning:…"`      → một PermissionDecl thứ hai ở đâu đó
+    //   `"elearning:…": [`        → một dòng matrix v1 thứ hai
+    //   `action: "elearning:…"`   → gán quyền cho vai (chỉ seed-roles.ts được làm)
     let out = "";
     try {
       out = execFileSync(
         "git",
-        // Khóa quyền LUÔN xuất hiện trong dấu nháy. Không có dấu nháy thì bắt nhầm
-        // thuộc tính object (`elearning: ELEARNING_HOST` trong HOST_BY_KIND của proxy.ts).
-        ["grep", "-lE", "--", "[\"']elearning:", "--", "*.ts", "*.tsx"],
+        [
+          "grep",
+          "-lE",
+          "--",
+          "(key|action): \"elearning:|\"elearning:[a-z:-]+\": \\[",
+          "--",
+          "*.ts",
+          "*.tsx",
+        ],
         { encoding: "utf8" },
       );
     } catch (err) {
