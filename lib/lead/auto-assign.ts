@@ -9,6 +9,7 @@ import {
   pickCenterEvenly,
   type SaleStat,
 } from "@/lib/lead/assign-strategy";
+import { assignmentWrite } from "@/lib/lead/assignment";
 
 // Module CRM & Lead PHẦN 2 — chia lead tự động (cơ sở → chế độ) + khoá khi đã tương tác.
 
@@ -167,7 +168,9 @@ export async function autoAssignNewLead(leadId: string, actor: Actor): Promise<A
     await tx.lead.update({
       where: { id: leadId },
       data: {
-        assignedToId: target,
+        // Đợt A — `assignmentWrite` ghi kèm `assignedAt`; thiếu mốc thì SLA-2/SLA-3
+        // không bao giờ kêu (đo prod 21/08: 33 lead có vết chia, chỉ 1 có mốc).
+        ...assignmentWrite(target),
         ...(lead.status === "NEW" ? { status: "ASSIGNED" as LeadStatus } : {}),
       },
     });
@@ -229,7 +232,7 @@ export async function manualAssignLead(
     await tx.lead.update({
       where: { id: leadId },
       data: {
-        assignedToId: saleId,
+        ...assignmentWrite(saleId), // Đợt A — kèm mốc phân công
         ...(lead.status === "NEW" ? { status: "ASSIGNED" as LeadStatus } : {}),
       },
     });

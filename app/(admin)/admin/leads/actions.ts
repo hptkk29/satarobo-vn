@@ -16,6 +16,7 @@ import { getLeadPaymentSummary } from '@/lib/payments/summary'
 import { autoAssignLead, reassignOpenLeads } from '@/lib/lead/assign'
 import { validateTransferTarget } from '@/lib/crm/transfer-validate'
 import { autoAssignNewLead, manualAssignLead, reassignForCenter } from '@/lib/lead/auto-assign'
+import { assignmentWrite } from '@/lib/lead/assignment'
 import { centerIdForOrgUnit } from '@/lib/org/org-service'
 import { rejectHeadOffice } from '@/lib/enrollment-flow'
 import { LEAD_STATUS_LABEL, canTransitionLeadStatus } from '@/lib/leads/status'
@@ -937,7 +938,9 @@ export async function transferLead(
       where: { id: lead.id },
       data: {
         centerId: toCenterId,
-        assignedToId: toSaleId,
+        // Đợt A — kèm mốc phân công. Chuyển lead sang người khác thì người nhận
+        // phải có cửa sổ SLA riêng, không thừa hưởng đồng hồ của người trước.
+        ...assignmentWrite(toSaleId),
         handoverNote: d.handoverNote,
         ...(lead.status === 'NEW' && toSaleId ? { status: 'ASSIGNED' as const } : {}),
       },
