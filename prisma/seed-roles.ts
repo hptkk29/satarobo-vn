@@ -61,6 +61,9 @@ export const ROLE_SEED: RoleSeed[] = [
       { action: "payments:manage", scopeType: "GLOBAL" },
       { action: "payments:view", scopeType: "GLOBAL" },
       { action: "orders:manage", scopeType: "GLOBAL" },
+      // G-A (21/08/2026) — cổng tạo đơn nay kiểm `orders:create`; ai có
+      // `orders:manage` phải có kèm để không mất chức năng đang dùng.
+      { action: "orders:create", scopeType: "GLOBAL" },
       { action: "payroll:view", scopeType: "GLOBAL" },
       { action: "payroll:edit", scopeType: "GLOBAL" },
       { action: "payments:record", scopeType: "GLOBAL" },
@@ -402,6 +405,8 @@ export const ROLE_SEED: RoleSeed[] = [
       // QLCS CS1 không đụng được đơn/phiếu thu của CS2.
       { action: "installments:approve", scopeType: "GLOBAL" },
       { action: "orders:manage", scopeType: "GLOBAL" },
+      // G-A (21/08/2026) — kèm theo `orders:manage`, xem chú thích ở HO_ACCOUNTANT.
+      { action: "orders:create", scopeType: "GLOBAL" },
       // Chủ dự án chốt 03/08/2026 — QLCS cần ĐỐI SOÁT tiền về nhưng CHỈ XEM.
       // `payments:view` mở Công nợ + Biến động số dư ở chế độ đọc; mọi thao tác tiền
       // (sửa/hoàn/cấu hình) vẫn đòi payments:manage / payments:confirm mà vai này KHÔNG có.
@@ -548,6 +553,12 @@ export const ROLE_SEED: RoleSeed[] = [
       { action: "kits:view", scopeType: "CENTER" },
       { action: "payments:record", scopeType: "GLOBAL" },
       { action: "orders:view", scopeType: "GLOBAL" },
+      // G-A (biên bản chốt 4 cổng, 21/08/2026) — mở trục chốt đơn cho Sale:
+      // Order → payments:record → đủ điều kiện convert. GLOBAL vì cổng gọi trần
+      // (can() v2 với scope CENTER cần target); phạm vi "chỉ đơn gắn lead của
+      // mình" do `checkOrderCreateOwnership()` gác, cách ly cơ sở do scopedDb gác.
+      // KHÔNG cấp `orders:manage` (mở/huỷ/hoàn toàn hệ thống).
+      { action: "orders:create", scopeType: "GLOBAL" },
       { action: "orders:view-pii", scopeType: "GLOBAL" },
       { action: "products:view", scopeType: "GLOBAL" },
     ],

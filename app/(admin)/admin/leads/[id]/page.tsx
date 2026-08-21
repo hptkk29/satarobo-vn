@@ -415,7 +415,11 @@ export default async function LeadDetailPage({ params }: Props) {
       {/* E2-LEAD (item 2) — khối thanh toán: đã nộp / tổng phải thu / còn thiếu + điều kiện chốt. */}
       {(paymentSummary.hasOrder || dealClosable) && (
         <div className="mb-6">
-          <LeadPaymentCard leadId={lead.id} summary={paymentSummary} />
+          <LeadPaymentCard
+            leadId={lead.id}
+            summary={paymentSummary}
+            canCreateOrder={await checkPermission("orders:create")}
+          />
         </div>
       )}
 

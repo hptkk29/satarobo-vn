@@ -12,6 +12,7 @@ import {
   orderStatusChangeSchema,
 } from "@/lib/validators/order";
 import { generateOrderCode, withUniqueRetry } from "@/lib/orders/code";
+import { checkOrderCreateOwnership } from "@/lib/orders/create-guard";
 import { canTransition } from "@/lib/orders/status";
 import { recordInstallmentPlan, markInstallmentPaid } from "@/lib/orders/installments";
 import { discountFromPercent, needsDiscountApproval } from "@/lib/orders/discount";
@@ -45,6 +46,27 @@ async function requireOrdersManage() {
     redirect("/dashboard?error=unauthorized");
   }
   return session;
+}
+
+/**
+ * G-A (biên bản chốt 4 cổng, 21/08/2026) — cổng TẠO đơn.
+ *
+ * Trước đây cổng này là `orders:manage`, khiến Sale không tạo được đơn ⇒ không
+ * `payments:record` ⇒ không đủ điều kiện convert ⇒ **không chốt được khách**.
+ * Nay cổng là `orders:create` (rộng hơn về người, hẹp hơn về phạm vi), còn phạm
+ * vi "chỉ đơn gắn lead của mình" do `checkOrderCreateOwnership()` gác bên trong.
+ *
+ * Trả kèm `canManageAll` để action biết có phải áp ràng buộc chủ-lead hay không.
+ */
+async function requireOrdersCreate() {
+  const session = await auth();
+  if (!session?.user) redirect("/login");
+  // Cả 2 action đều GLOBAL ở mọi RoleDef giữ chúng ⇒ gọi trần, không cần target.
+  if (!(await checkPermission("orders:create"))) {
+    redirect("/dashboard?error=unauthorized");
+  }
+  const canManageAll = await checkPermission("orders:manage");
+  return { session, canManageAll };
 }
 
 function encodeCursor(createdAt: Date, id: string): string {
@@ -139,7 +161,7 @@ export async function queryOrders(
 
 // ─── CREATE MANUAL ORDER ────────────────────────────────────────────
 export async function createOrderManualAction(input: unknown) {
-  const session = await requireOrdersManage();
+  const { session, canManageAll } = await requireOrdersCreate();
   const actor = await resolveActor(session.user.id);
   const sdb = scopedDb(actor);
   const parsed = orderCreateManualSchema.safeParse(input);
@@ -152,6 +174,28 @@ export async function createOrderManualAction(input: unknown) {
   }
 
   const data = parsed.data;
+
+  // G-A — người chỉ có `orders:create` (Sale) phải gắn đơn vào lead CỦA MÌNH.
+  // Lead nạp qua `scopedDb` ⇒ lead ngoài cơ sở trả null ⇒ guard từ chối.
+  // Kiểm TRƯỚC mọi truy vấn khác để không rò rỉ thông tin qua thông báo lỗi.
+  if (!canManageAll) {
+    const leadId = data.leadId?.trim() || null;
+    const lead = leadId
+      ? await sdb.lead.findFirst({
+          where: { id: leadId, deletedAt: null },
+          select: { id: true, assignedToId: true, centerId: true },
+        })
+      : null;
+    const guard = checkOrderCreateOwnership({
+      canManageAll,
+      leadId,
+      lead,
+      actorUserId: session.user.id,
+    });
+    if (!guard.ok) return { ok: false as const, error: guard.message };
+    // Cơ sở của đơn lấy theo lead (guard trả về), không tin giá trị client gửi.
+    data.centerId = guard.enforcedCenterId ?? null;
+  }
 
   // Cách ly cơ sở (ghi): nếu form chọn cơ sở, cơ sở đó phải thuộc tầm nhìn actor
   // (orders:manage hiện là GLOBAL — guard này chỉ chặn khi role bị thu hẹp sau này).
@@ -708,7 +752,9 @@ export async function updateOrderPaymentMethodAction(
 
 // ─── HELPER: load form data cho create page ─────────────────────────
 export async function loadCreateOrderFormData() {
-  const session = await requireOrdersManage();
+  // G-A — dữ liệu nạp form tạo đơn: cổng theo `orders:create` (không phải
+  // `orders:manage`), nếu không Sale mở trang sẽ bị đá về dashboard.
+  const { session } = await requireOrdersCreate();
   // PaymentMethod/Course/Product là catalog, Center exempt — scopedDb pass-through.
   const sdb = scopedDb(await resolveActor(session.user.id));
 

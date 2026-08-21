@@ -17,8 +17,9 @@ export default async function OrdersPage() {
     redirect("/dashboard?error=unauthorized");
   }
 
-  // orders:manage chỉ HO_ACCOUNTANT (GLOBAL) — không cần target.
-  const canCreate = await checkPermission("orders:manage");
+  // G-A (21/08/2026) — nút "Tạo đơn" theo `orders:create` (Sale nay có).
+  // Sale bấm vào sẽ được yêu cầu chọn khách của mình ở trang tạo đơn.
+  const canCreate = await checkPermission("orders:create");
 
   return (
     <div>

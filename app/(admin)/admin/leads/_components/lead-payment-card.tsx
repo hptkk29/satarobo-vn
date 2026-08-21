@@ -10,9 +10,17 @@ const fmt = (n: number) => `${n.toLocaleString("vi-VN")}đ`;
 export function LeadPaymentCard({
   leadId,
   summary,
+  canCreateOrder = false,
 }: {
   leadId: string;
   summary: LeadPaymentSummary;
+  /**
+   * G-A (21/08/2026) — trước đây nút "Tạo đơn hàng" hiện cho MỌI vai; ai không đủ
+   * quyền bấm vào bị đá về dashboard không lời giải thích (đúng triệu chứng
+   * "Sale kẹt" được báo). Nay trang truyền xuống kết quả `orders:create` để
+   * menu ≡ cổng. Mặc định `false` — thà ẩn nhầm còn hơn hiện nút chết.
+   */
+  canCreateOrder?: boolean;
 }) {
   const { paid, total, remaining, hasOrder, scholarshipFull, eligible } = summary;
 
@@ -49,12 +57,14 @@ export function LeadPaymentCard({
         )}
       </div>
 
-      <Link
-        href={`/orders/new?leadId=${leadId}`}
-        className="mt-3 inline-flex items-center gap-1 rounded-lg border border-border bg-card px-3 py-1.5 text-sm font-medium text-foreground hover:bg-muted"
-      >
-        + Tạo đơn hàng cho lead này
-      </Link>
+      {canCreateOrder && (
+        <Link
+          href={`/orders/new?leadId=${leadId}`}
+          className="mt-3 inline-flex items-center gap-1 rounded-lg border border-border bg-card px-3 py-1.5 text-sm font-medium text-foreground hover:bg-muted"
+        >
+          + Tạo đơn hàng cho lead này
+        </Link>
+      )}
     </div>
   );
 }
