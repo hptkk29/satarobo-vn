@@ -3,15 +3,23 @@
  * ai THẤY lead trong danh sách. Postgres LOCAL (.env.test). Actor resolve THẬT từ DB
  * (OrgUnit + RoleDef + UserOrgRole), query qua scopedDb như page thật.
  *
+ * ⚠️ CẬP NHẬT 22/08/2026 — ĐỢT E ĐẢO CHÍNH QUYẾT ĐỊNH MÀ FILE NÀY KHOÁ.
+ * Chủ dự án chốt Q8 (21/08): **lead độc quyền tuyệt đối**, bỏ tính năng dùng chung.
+ * Spec nay nghiệm thu HAI trạng thái, theo cờ `LEAD_SHARING_ENABLED`:
+ *   · Mặc định (chính sách TẮT): sale khác KHÔNG thấy lead, kể cả lead đang bật cờ.
+ *   · Bật lại bằng env: hành vi cũ trở lại nguyên vẹn — đó là đường quay lui, và
+ *     giữ ca cũ ở đây là cách duy nhất biết đường quay lui còn sống.
+ *
  * ⚠️ `scopeToSelfWhere()` dưới đây là BẢN SAO where của app/(admin)/admin/leads/page.tsx
  * (nhánh scopeToSelf — sale chỉ có leads:view-own):
- *   AND: [{ OR: [{ assignedToId: <sale> }, { isSharedWithTeam: true }] }]
+ *   AND: [{ OR: [{ assignedToId: <sale> }, ...leadSharedOrClause()] }]
  * gói trong AND để không đè key OR của search q. NẾU ĐỔI where ở page → PHẢI đổi spec này.
  *
- * T1: sale2 cùng CS1 — KHÔNG thấy lead riêng của sale1; bật isSharedWithTeam → THẤY.
- * T2 (Q4): sale3 @CS2 — KHÔNG thấy lead CS1 dù đã shared (share KHÔNG xuyên cơ sở,
- *          scopedDb inject centerId lo phần cách ly).
+ * T1: sale2 cùng CS1 — KHÔNG thấy lead riêng của sale1, và (Đợt E) vẫn KHÔNG thấy
+ *     sau khi bật cờ dùng chung.
+ * T2 (Q4): sale3 @CS2 — KHÔNG thấy lead CS1 (cách ly cơ sở, độc lập với chính sách).
  * T3: CENTER_MANAGER @CS1 (view-all, không scope-to-self) — thấy bất kể shared.
+ * T4 (Đợt E): bật LEAD_SHARING_ENABLED → hành vi cũ sống lại.
  *
  * Chạy: CRM_SKIP_WEBSERVER=1 npx playwright test -c playwright.crm.config.ts lead-share-visibility
  */
@@ -23,6 +31,7 @@ import { testEmail } from "../_helpers/fixtures";
 import { assignUserOrgRole, type RbacActor } from "../../../lib/auth/rbac-service";
 import { resolveActorUncached, type Actor } from "../../../lib/auth/actor";
 import { scopedDb } from "../../../lib/db-scope";
+import { leadSharedOrClause } from "../../../lib/lead/sharing";
 
 const SA: RbacActor = { id: "seed-sa", name: "SA", role: "SUPER_ADMIN" };
 
@@ -54,13 +63,17 @@ async function makeActor(
 /**
  * BẢN SAO where của leads/page.tsx nhánh scopeToSelf (sale view-own) — xem header.
  * Cách ly cơ sở KHÔNG nằm ở đây: scopedDb(actor) tự inject `centerId IN visible`.
+ *
+ * Gọi thẳng `leadSharedOrClause()` chứ không chép lại điều kiện: chép ra đây là đẻ
+ * nguồn sự thật thứ hai, và lần sau chính sách đổi thì spec vẫn xanh trong khi màn
+ * hình đã khác — đúng kiểu test ru ngủ.
  */
 function scopeToSelfWhere(userId: string): Prisma.LeadWhereInput {
   return {
     deletedAt: null,
     AND: [
       {
-        OR: [{ assignedToId: userId }, { isSharedWithTeam: true }],
+        OR: [{ assignedToId: userId }, ...leadSharedOrClause()],
       },
     ],
   };
@@ -120,19 +133,37 @@ test.describe("[#11-SHARE] Lead dùng chung (isSharedWithTeam) — phạm vi hi�
     });
   }
 
-  test("[#11-SHARE-01] Sale2 cùng cơ sở: KHÔNG thấy lead riêng của sale1; bật dùng chung → THẤY", async () => {
+  test("[#11-SHARE-01] Sale2 cùng cơ sở KHÔNG thấy lead của sale1 — kể cả khi cờ dùng chung đang BẬT", async () => {
     // Bất biến gốc: owner luôn thấy lead của mình (nhánh assignedToId).
     expect(await visibleLeadIds(sale1.actor, sale1.userId)).toContain(leadId);
 
     // Chưa shared → sale2 (cùng CS1, không phải assignee) KHÔNG thấy.
     expect(await visibleLeadIds(sale2.actor, sale2.userId)).not.toContain(leadId);
 
-    // Bật dùng chung → nhánh isSharedWithTeam=true mở cho cả team CS1.
+    // ⚠️ ĐÂY LÀ CHỖ HÀNH VI ĐỔI (Đợt E — Q8 chủ dự án chốt 21/08). Trước 22/08 dòng
+    // dưới là `toContain`. Nay lead độc quyền: cờ dùng chung vẫn còn nguyên trong DB
+    // nhưng tầng đọc không tôn trọng nó nữa.
     await shareLead();
-    expect(await visibleLeadIds(sale2.actor, sale2.userId)).toContain(leadId);
+    expect(await visibleLeadIds(sale2.actor, sale2.userId)).not.toContain(leadId);
   });
 
-  test("[#11-SHARE-02] (Q4) Sale CS2 KHÔNG thấy lead CS1 dù đã shared — share không xuyên cơ sở", async () => {
+  test("[#11-SHARE-04] (Đợt E) Bật lại LEAD_SHARING_ENABLED → hành vi cũ sống lại", async () => {
+    // Đường quay lui là lời hứa của Đợt E: đổi chính sách bằng env, không revert
+    // code, không mất dữ liệu. Lời hứa không có test thì chỉ là lời hứa.
+    await shareLead();
+    const cu = process.env.LEAD_SHARING_ENABLED;
+    process.env.LEAD_SHARING_ENABLED = "true";
+    try {
+      expect(await visibleLeadIds(sale2.actor, sale2.userId)).toContain(leadId);
+    } finally {
+      if (cu === undefined) delete process.env.LEAD_SHARING_ENABLED;
+      else process.env.LEAD_SHARING_ENABLED = cu;
+    }
+    // Trả env về mặc định → lại không thấy.
+    expect(await visibleLeadIds(sale2.actor, sale2.userId)).not.toContain(leadId);
+  });
+
+  test("[#11-SHARE-02] (Q4) Sale CS2 KHÔNG thấy lead CS1 dù đã shared — cách ly cơ sở", async () => {
     await shareLead();
 
     // Dù where có nhánh isSharedWithTeam=true, scopedDb(sale3) inject centerId IN [CS2]
@@ -141,13 +172,16 @@ test.describe("[#11-SHARE] Lead dùng chung (isSharedWithTeam) — phạm vi hi�
     expect(seen).not.toContain(leadId);
     expect(seen).toHaveLength(0);
 
-    // Đối chứng: lead CS2 shared thì sale3 thấy bình thường (nhánh shared hoạt động ở CS2).
+    // Đối chứng: lead CS2 do CHÍNH sale3 phụ trách thì thấy bình thường — chứng minh
+    // ca trên trượt vì cách ly cơ sở, không phải vì actor hỏng.
+    // (Trước Đợt E đối chứng dùng một lead shared không có chủ; nay cờ dùng chung
+    // không còn mở cửa nữa nên phải đổi sang nhánh assignedToId.)
     const leadCs2 = await db.lead.create({
       data: {
         parentName: "PH CS2",
         phone: "0900002222",
         centerId: cs2,
-        isSharedWithTeam: true,
+        assignedToId: sale3.userId,
         status: "NEW",
       },
       select: { id: true },
