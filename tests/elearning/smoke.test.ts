@@ -8,6 +8,8 @@
  */
 import { describe, expect, it, afterEach } from "vitest";
 import { isElearningEnabled } from "@/lib/flags";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 
 describe("[EL-07] hạ tầng test module e-learning", () => {
   it("thư mục tests/elearning được vitest nhận (AC4)", () => {
@@ -38,5 +40,25 @@ describe("[EL-07-T7-05] cờ ELEARNING_ENABLED — chỉ đúng chuỗi 'true' m
   it("đúng chuỗi 'true' → ON", () => {
     process.env.ELEARNING_ENABLED = "true";
     expect(isElearningEnabled()).toBe(true);
+  });
+});
+
+describe("EL-01 · khu nội bộ phải noindex — guard trên mã nguồn", () => {
+  const LAYOUT = join(process.cwd(), "app/(elearning)/elearning/layout.tsx");
+
+  it("layout khai metadata.robots index:false", () => {
+    const src = readFileSync(LAYOUT, "utf8");
+    expect(src).toMatch(/robots:\s*\{[^}]*index:\s*false/);
+  });
+
+  it("proxy.ts KHÔNG phải nơi duy nhất giữ noindex cho khu này", () => {
+    // Vì sao guard này tồn tại: header `X-Robots-Tag` chỉ được gắn ở BRANCH 2 của
+    // `proxy.ts`, tức chỉ khi request tới bằng ĐÚNG host thật. Mọi đường khác —
+    // localhost, preview, ai đó thêm rewrite mới — không có header đó. Nếu noindex
+    // chỉ sống ở middleware thì khu nội bộ hở ra ở mọi đường còn lại mà không có
+    // dấu hiệu nào. `metadata` ở layout đi theo route, không theo host.
+    const src = readFileSync(LAYOUT, "utf8");
+    expect(src).toContain("metadata");
+    expect(src).toContain("follow: false");
   });
 });

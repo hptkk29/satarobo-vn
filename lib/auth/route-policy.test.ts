@@ -1163,15 +1163,19 @@ describe("EL-01. e-learning host × role — cờ ON", () => {
 // nó phải chạy trong CI. Bất biến kiểm được KHÔNG cần git: PR1 chưa tạo route group.
 // ─────────────────────────────────────────────────────────────────────────
 
-describe("EL-01 · AC10. PR1 là PR độc lập nhỏ nhất", () => {
-  it("chưa có file nào trong app/(elearning)/ — route group thuộc PR2", async () => {
+describe("EL-01 · AC10. Bất biến cấu trúc khu e-learning", () => {
+  // PR1 đã merge (case này từng khẳng định route group CHƯA tồn tại, và nó đã làm
+  // đúng việc: đỏ ngay khi PR2 bắt đầu tạo thư mục). PR2 lật lại khẳng định — từ nay
+  // route group PHẢI tồn tại, vì host thứ 6 rewrite vào đó; thiếu nó thì cờ ON cho 404.
+  it("route group app/(elearning)/ tồn tại — đích rewrite của host thứ 6", async () => {
     const { existsSync } = await import("node:fs");
     const { resolve } = await import("node:path");
-    expect(
-      existsSync(resolve(process.cwd(), "app/(elearning)")),
-      "PR1 KHÔNG được tạo route group. Thấy app/(elearning)/ nghĩa là PR1 đã bị gộp " +
-        "với PR2 — tách ra, xem docs/elearning/quy-uoc-nen.md quy ước 8.",
-    ).toBe(false);
+    for (const f of [
+      "app/(elearning)/elearning/layout.tsx",
+      "app/(elearning)/elearning/page.tsx",
+    ]) {
+      expect(existsSync(resolve(process.cwd(), f)), `thiếu ${f}`).toBe(true);
+    }
   });
 
   it("proxy.ts và route-policy.ts nhất quán: mọi HostKind định tuyến đều có host thật", async () => {
@@ -1183,5 +1187,31 @@ describe("EL-01 · AC10. PR1 là PR độc lập nhỏ nhất", () => {
     for (const kind of ["admin", "portal", "public", "teacher", "elearning"]) {
       expect(proxy, `HOST_BY_KIND thiếu "${kind}"`).toContain(`${kind}:`);
     }
+  });
+
+  it("nhánh /elearning trên localhost nằm ở BRANCH 3, KHÔNG lọt vào BRANCH 1", async () => {
+    const { readFileSync } = await import("node:fs");
+    const { resolve } = await import("node:path");
+    const proxy = readFileSync(resolve(process.cwd(), "proxy.ts"), "utf8");
+
+    const branch1 = proxy.indexOf("BRANCH 1:");
+    const branch3 = proxy.indexOf("BRANCH 3:");
+    const teacher = proxy.indexOf("isTeacherPath(pathname)");
+    const elearning = proxy.indexOf("isElearningPath(pathname)");
+
+    expect(branch1).toBeGreaterThan(-1);
+    expect(branch3).toBeGreaterThan(branch1);
+    expect(teacher).toBeGreaterThan(branch3);
+
+    // BUG THẬT đã xảy ra ở PR1 và lọt qua merge: khối này bị đặt trong BRANCH 1
+    // (`kind === "vercel" && NODE_ENV === "production"`) nên chỉ sống ở preview
+    // deployment. Hậu quả trên localhost và mọi host thật: `/elearning` rơi xuống
+    // nhánh cuối, bị đá về `/login` MẤT `callbackUrl` — đăng nhập xong văng ra
+    // trang chủ. Không có lỗi, không có log; e2e bắt được nhờ đòi `callbackUrl`.
+    // Guard này rẻ hơn nhiều so với lần truy vết tiếp theo.
+    expect(
+      elearning,
+      "isElearningPath phải nằm SAU mốc BRANCH 3 — đặt trong BRANCH 1 là nhánh chết",
+    ).toBeGreaterThan(branch3);
   });
 });
