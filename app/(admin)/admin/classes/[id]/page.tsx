@@ -10,6 +10,7 @@ import { getAssignableTeachers } from "@/lib/teachers/assignable";
 import { isSessionLifecycleV2Enabled, isClassGroupEnabled } from "@/lib/flags";
 import { resolveClassSlots } from "@/lib/classes/slots";
 import { pickDefaultSession } from "@/lib/classes/default-session";
+import { buildSessionNumberMap } from "@/lib/lms/session-order";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { ClassForm, type ClassFormValue } from "../_components/class-form";
 import { ClassApprovalActions } from "./_components/class-approval-actions";
@@ -223,11 +224,16 @@ export default async function ClassDetailPage({ params }: Props) {
     lessonTitle: p.lessonId ? lessonTitleById.get(p.lessonId) ?? null : null,
   }));
 
+  // R1 21/08 — số buổi. `sessions` ở trên KHÔNG bị `take` nên đã là toàn bộ buổi của lớp,
+  // đúng điều kiện của buildSessionNumberMap. Nếu sau này thêm `take` vào query đó thì
+  // PHẢI nạp riêng danh sách id+date đầy đủ, kẻo số buổi lệch.
+  const sessionNumberOf = buildSessionNumberMap(sessions);
   const sessionRows = sessions.map((s) => ({
     id: s.id,
     date: s.date.toISOString(),
     topic: s.topic,
     status: s.status,
+    seq: sessionNumberOf.get(s.id) ?? null,
     attendanceCount: s._count.attendances,
     feedbackCount: s._count.studentFeedbacks,
   }));

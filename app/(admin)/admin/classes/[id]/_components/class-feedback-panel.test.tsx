@@ -26,6 +26,7 @@ const DATA: ClassSessionFeedbackData = {
     {
       id: "s2",
       dateISO: "2026-08-10T02:00:00.000Z",
+      seq: 2,
       label: "Bài 2: Cảm biến",
       status: "COMPLETED",
       attended: 2,
@@ -36,6 +37,7 @@ const DATA: ClassSessionFeedbackData = {
     {
       id: "s1",
       dateISO: "2026-08-03T02:00:00.000Z",
+      seq: 1,
       label: "Bài 1: Làm quen",
       status: "COMPLETED",
       attended: 2,
@@ -54,7 +56,15 @@ const DATA: ClassSessionFeedbackData = {
       sessionId: "s1",
       studentId: "hv1",
       projectName: "Dự án 1: Xe dò line",
-      notes: { knowledge: "Nắm chắc bài cũ.", skill: "", attitude: "", proposal: "" },
+      // Phiếu CŨ (trước 21/08): 4 mục rời, chưa có "Đánh giá chung" — giữ nguyên ở đây
+      // để khoá đường đọc ngược; phiếu dạng mới có case riêng bên dưới.
+      notes: {
+        overall: "",
+        knowledge: "Nắm chắc bài cũ.",
+        skill: "",
+        attitude: "",
+        proposal: "",
+      },
       rubric: null,
       comment: "Kiến thức: Nắm chắc bài cũ.",
       rating: 4,

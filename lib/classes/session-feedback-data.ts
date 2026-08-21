@@ -5,6 +5,12 @@ import { vnEndOfDay } from "@/lib/time/vn";
 import { ENROLLMENT_ACTIVE_STATUS_LIST } from "@/lib/enrollment-status";
 import { summarizeSessionFeedback } from "@/lib/lms/session-feedback-roster";
 import {
+  attendanceCoversRoster,
+  buildSessionNumberMap,
+  isSessionSettled,
+  sortSessionsForWork,
+} from "@/lib/lms/session-order";
+import {
   parseFeedbackNotes,
   parseFeedbackRubric,
   type EvalNotes,
@@ -23,6 +29,8 @@ import {
 export type ClassFeedbackSession = {
   id: string;
   dateISO: string;
+  /** Buổi thứ mấy của lớp (1-based theo ngày — lib/lms/session-order); null nếu không tra được. */
+  seq: number | null;
   /** "Bài 3: Tên bài" nếu buổi đã gắn giáo án, else topic, else "Buổi học". */
   label: string;
   status: string;
@@ -91,7 +99,7 @@ export async function loadClassSessionFeedback(
       { attendances: { some: {} } },
     ],
   };
-  const [sessionRows, totalSessions] = await Promise.all([
+  const [sessionRows, totalSessions, allSessions] = await Promise.all([
     db.classSession.findMany({
       where: sessionWindow,
       orderBy: { date: "desc" },
@@ -105,14 +113,18 @@ export async function loadClassSessionFeedback(
       },
     }),
     db.classSession.count({ where: { classId } }),
+    // R1 21/08 — số buổi phải tính trên TOÀN BỘ buổi của lớp. Query ở trên có `take` +
+    // lọc cửa sổ nên đánh số theo chỉ số mảng của nó sẽ ra số SAI (xem lib/lms/session-order).
+    db.classSession.findMany({ where: { classId }, select: { id: true, date: true } }),
   ]);
+  const sessionNumberOf = buildSessionNumberMap(allSessions);
 
   const sessionIds = sessionRows.map((s) => s.id);
   if (sessionIds.length === 0) {
     return { sessions: [], students: [], entries: [], totalSessions };
   }
 
-  const [enrollments, feedbacks, attendances] = await Promise.all([
+  const [enrollments, feedbacks, attendances, mediaRows] = await Promise.all([
     db.enrollment.findMany({
       where: {
         classId,
@@ -141,7 +153,18 @@ export async function loadClassSessionFeedback(
       where: { sessionId: { in: sessionIds } },
       select: { sessionId: true, studentId: true, status: true },
     }),
+    // Ảnh theo buổi — tín hiệu thứ ba của "buổi đã xong việc" (quyết định thứ tự hiển
+    // thị). Tính cả DRAFT/PENDING, chỉ loại REJECTED (khớp site GV). `distinct` để lớp
+    // có vài trăm ảnh không kéo về vài trăm dòng chỉ để dựng một Set id buổi.
+    db.classSessionMedia.findMany({
+      where: { classSessionId: { in: sessionIds }, status: { not: "REJECTED" } },
+      select: { classSessionId: true },
+      distinct: ["classSessionId"],
+    }),
   ]);
+  const photoSessionIds = new Set(
+    mediaRows.map((m) => m.classSessionId).filter((x): x is string => !!x),
+  );
 
   // Tên người viết phiếu: MỘT truy vấn gộp, không hỏi theo từng phiếu. Dùng createdById
   // chứ không phải GV chính của lớp — buổi dạy thay thì hai thứ đó khác nhau.
@@ -179,24 +202,51 @@ export async function loadClassSessionFeedback(
     feedbackIdsBySession.set(f.classSessionId, arr);
   }
 
-  const sessions: ClassFeedbackSession[] = sessionRows.map((s) => {
-    const sum = summarizeSessionFeedback(
-      attendanceBySession.get(s.id) ?? [],
-      feedbackIdsBySession.get(s.id) ?? [],
-    );
-    return {
-      id: s.id,
-      dateISO: s.date.toISOString(),
-      label: s.lesson
-        ? `Bài ${s.lesson.order}: ${s.lesson.title}`
-        : (s.topic ?? "Buổi học"),
-      status: s.status,
-      attended: sum.attended,
-      reviewed: sum.reviewed,
-      attendanceTaken: sum.attendanceTaken,
-      complete: sum.complete,
-    };
-  });
+  // R2 21/08 — thứ tự hiển thị: buổi CÒN NỢ VIỆC lên trước (theo số buổi tăng dần),
+  // buổi đã xong cả điểm danh-đủ-sĩ-số + nhận xét + ảnh xuống sau.
+  // ⚠️ Sort TRONG BỘ NHỚ, KHÔNG đổi `orderBy` của query: query có `take: limitSessions`
+  // nên `asc` sẽ cắt mất chính các buổi vừa dạy (xem ghi chú ở đầu hàm).
+  const sessions: ClassFeedbackSession[] = sortSessionsForWork(
+    sessionRows.map((s) => {
+      const attRows = attendanceBySession.get(s.id) ?? [];
+      const sum = summarizeSessionFeedback(
+        attRows,
+        feedbackIdsBySession.get(s.id) ?? [],
+      );
+      const seq = sessionNumberOf.get(s.id) ?? null;
+      return {
+        row: {
+          id: s.id,
+          dateISO: s.date.toISOString(),
+          seq,
+          label: s.lesson
+            ? `Bài ${s.lesson.order}: ${s.lesson.title}`
+            : (s.topic ?? "Buổi học"),
+          status: s.status,
+          attended: sum.attended,
+          reviewed: sum.reviewed,
+          attendanceTaken: sum.attendanceTaken,
+          complete: sum.complete,
+        } satisfies ClassFeedbackSession,
+        seq,
+        done: isSessionSettled({
+          cancelled: s.status === "CANCELLED",
+          rosterEmpty: rosterIds.size === 0,
+          work: {
+            // `rosterIds` dựng ở trên (đã lọc deletedAt) — dùng lại, đừng đếm số dòng
+            // Attendance: học viên học bù từ lớp khác cũng sinh bản ghi ở đây.
+            attendanceDone: attendanceCoversRoster(
+              attRows.map((a) => a.studentId),
+              rosterIds,
+            ),
+            feedbackDone: sum.complete,
+            photoDone: photoSessionIds.has(s.id),
+          },
+        }),
+      };
+    }),
+    (r) => ({ number: r.seq, complete: r.done }),
+  ).map((r) => r.row);
 
   const entries: ClassFeedbackEntry[] = feedbacks.map((f) => ({
     sessionId: f.classSessionId,
