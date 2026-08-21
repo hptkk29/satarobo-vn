@@ -16,6 +16,16 @@
 //   #4 email "nhận xét mới" CHỈ enqueue khi comment THỰC SỰ đổi (so old↔new đọc
 //      trước khi ghi) — re-save không spam phụ huynh.
 //   #5 createdById chỉ set khi CREATE — re-save không cướp tác giả phiếu.
+//
+// ⚠️ NỢ ĐÃ BIẾT (có từ trước 21/08, 21/08 làm nó DỄ VẤP HƠN):
+// Hai đường ghi vào cùng bảng nhưng KHÁC cột — `saveSessionEvalCore` ghi `notes`
+// (+ mirror sang `comment`), còn `saveSessionFeedbackCore` chỉ ghi `comment`. Mọi chỗ
+// HIỂN THỊ lại ưu tiên `notes` (evalNotesProse). Hệ quả: phiếu đã có `notes` mà bị sửa
+// qua "nhận xét nhanh" (/teacher/nhan-xet, editor ở /admin/sessions/[id]) thì phụ huynh
+// nhận EMAIL bản mới nhưng portal/PDF/thẻ admin vẫn in bản CŨ, và lần lưu phiếu sau còn
+// ghi đè ngược lại. Trước 21/08 hai ô trông khác nhau (4 ô có nhãn vs 1 ô trần) nên ít
+// ai nhầm; nay cả hai đều là MỘT ô văn xuôi. Vá đúng = cho đường nhận xét nhanh ghi vào
+// `notes.overall` luôn — việc riêng, KHÔNG làm lén trong story này.
 import { z } from "zod";
 import type { Prisma } from "@prisma/client";
 import { resolveActor } from "@/lib/auth/actor";
@@ -27,7 +37,14 @@ import { getFreshGateUser } from "@/lib/auth/fresh-gate-user";
 import { publishEvent } from "@/lib/events/publish";
 import { isSessionOwnedByTeacher } from "@/lib/lms/session-ownership";
 import { isBlankFeedbackInput } from "@/lib/lms/feedback-content";
-import { parseFeedbackNotes } from "@/lib/lms/session-eval-rubric";
+import {
+  EMPTY_NOTES,
+  EVAL_OVERALL_HARD_MAX,
+  EVAL_OVERALL_MAX,
+  normalizeEvalNotes,
+  parseFeedbackNotes,
+  toOverallText,
+} from "@/lib/lms/session-eval-rubric";
 
 export type FeedbackResult = { ok: true } | { ok: false; error: string };
 
@@ -86,17 +103,27 @@ const feedbackSchema = z.object({
     .max(100),
 });
 
-// Phiếu nhận xét buổi (site GV) — 1 HV/lần: Dự án + 4 mục văn xuôi + rubric 9 tiêu chí.
+// Phiếu nhận xét buổi (site GV) — 1 HV/lần: Dự án + văn xuôi + rubric 9 tiêu chí.
+//
+// 21/08 — văn xuôi nay là MỘT ô `overall` ("Đánh giá chung", ≤ EVAL_OVERALL_MAX).
+// 4 khoá cũ vẫn nhận được và vẫn để `.max(3000)`: bản ghi cũ có thể dài hơn 2000 và
+// vẫn phải lưu lại được khi giáo viên mở phiếu cũ ra sửa phần rubric. MỌI khoá đều
+// optional để hộp thoại mới (chỉ gửi `overall`) và mọi caller cũ cùng chạy được.
+const evalNotesSchema = z.object({
+  // Trần CỨNG ở đây; trần nghiệp vụ EVAL_OVERALL_MAX kiểm sau khi đọc phiếu cũ
+  // (nội dung cũ dài hơn 2000 vẫn phải lưu lại được — xem EVAL_OVERALL_HARD_MAX).
+  overall: z.string().trim().max(EVAL_OVERALL_HARD_MAX).optional(),
+  knowledge: z.string().trim().max(3000).optional(),
+  skill: z.string().trim().max(3000).optional(),
+  attitude: z.string().trim().max(3000).optional(),
+  proposal: z.string().trim().max(3000).optional(),
+});
+
 const sessionEvalSchema = z.object({
   sessionId: z.string().min(1),
   studentId: z.string().min(1),
   projectName: z.string().trim().max(200).nullable().optional(),
-  notes: z.object({
-    knowledge: z.string().trim().max(3000),
-    skill: z.string().trim().max(3000),
-    attitude: z.string().trim().max(3000),
-    proposal: z.string().trim().max(3000),
-  }),
+  notes: evalNotesSchema,
   // { criterionId: level 1-5 } — chấp nhận mọi key (9 tiêu chí lib/lms/session-eval-rubric).
   rubric: z.record(z.string(), z.coerce.number().int().min(1).max(5)),
 });
@@ -313,7 +340,10 @@ export async function saveSessionEvalCore(
   if (!parsed.success) {
     return { ok: false, error: parsed.error.issues[0]?.message ?? "Dữ liệu không hợp lệ" };
   }
-  const { sessionId, studentId, projectName, notes, rubric } = parsed.data;
+  const { sessionId, studentId, projectName, rubric } = parsed.data;
+  // Ghi ĐỦ 5 khoá: hộp thoại mới chỉ gửi `overall`, và nếu để 4 khoá cũ nguyên giá trị
+  // thì phiếu cũ vừa được viết lại sẽ hiển thị CẢ đoạn mới lẫn 4 mục cũ (nội dung lặp).
+  const notes = { ...EMPTY_NOTES, ...parsed.data.notes };
 
   const actor = await resolveActor(user.id);
   const sdb = scopedDb(actor);
@@ -334,19 +364,54 @@ export async function saveSessionEvalCore(
     return { ok: false, error: "Học viên không thuộc danh sách buổi này" };
   }
 
-  // comment tương thích cũ = 4 mục nối lại (rỗng hết → null, phiếu rubric-only vẫn lưu).
+  // comment tương thích cũ (email PH, badge "đã nhận xét", portal đường cũ) = văn xuôi
+  // của phiếu: từ 21/08 là ô "Đánh giá chung"; phiếu gửi kiểu cũ vẫn nối 4 mục như trước.
+  // Rỗng hết → null, phiếu rubric-only vẫn lưu.
   const comment =
+    notes.overall.trim() ||
     [notes.knowledge, notes.skill, notes.attitude, notes.proposal]
       .map((s) => s.trim())
       .filter(Boolean)
-      .join("\n") || null;
+      .join("\n") ||
+    null;
 
   // FIX #4 — đọc comment cũ trước khi ghi: re-save không đổi văn xuôi thì KHÔNG email lại.
   const old = await sdb.studentSessionFeedback.findUnique({
     where: { classSessionId_studentId: { classSessionId: sessionId, studentId } },
     select: { comment: true, notes: true },
   });
-  const commentChanged = (old?.comment ?? null) !== comment;
+  // Phiếu CŨ (4 mục) mở ra là hộp thoại ghép sẵn thành một đoạn CÓ NHÃN, khác chuỗi
+  // `comment` cũ (4 mục nối KHÔNG nhãn). Nếu chỉ so chuỗi thì mỗi lần giáo viên mở phiếu
+  // cũ ra bấm Lưu — kể cả không gõ thêm chữ nào — phụ huynh lại nhận một email "nhận xét
+  // mới". Nhận diện đúng ca "chỉ đổi hình thức" rồi im lặng.
+  const chiChuyenDangPhieuCu =
+    old != null && comment != null && toOverallText(normalizeEvalNotes(old.notes)) === comment;
+  const commentChanged = (old?.comment ?? null) !== comment && !chiChuyenDangPhieuCu;
+
+  // Chặn phiếu TRẮNG ở SERVER (trước 21/08 chỉ có chốt ở hộp thoại).
+  //
+  // Các màn "đã nhận xét x/y" (site GV, /admin/attendance) đếm theo DÒNG chứ không mở
+  // JSON ra soi, nên một dòng trắng làm chúng báo "nhận xét xong" cho buổi chưa ai viết
+  // gì — và `comment.added` bên dưới còn bắn thông báo cho phụ huynh. Hộp thoại hiện luôn
+  // gửi đủ 9 tiêu chí rubric nên nhánh này không chạm người dùng thật; nó đóng đường cho
+  // caller khác (và cho zod nay để mọi khoá notes optional).
+  // Phiếu ĐANG SỬA không chặn: `old != null` nghĩa là nội dung cũ vẫn còn đó.
+  if (old == null && comment === null && Object.keys(rubric).length === 0) {
+    return { ok: false, error: "Phiếu chưa có nội dung — viết đánh giá chung hoặc chấm tiêu chí." };
+  }
+
+  // Trần 2000 ký tự áp cho nội dung GV VỪA SỬA. Nội dung CŨ (4 mục ghép lại) có thể dài
+  // hơn; giữ nguyên không sửa thì cho qua, nếu không giáo viên bị khoá cứng khỏi chính
+  // phiếu của mình — kể cả khi chỉ đổi một ô năng lực. Xem EVAL_OVERALL_HARD_MAX.
+  if (
+    notes.overall.length > EVAL_OVERALL_MAX &&
+    notes.overall !== toOverallText(normalizeEvalNotes(old?.notes))
+  ) {
+    return {
+      ok: false,
+      error: `Đánh giá chung dài ${notes.overall.length} ký tự — tối đa ${EVAL_OVERALL_MAX}.`,
+    };
+  }
 
   // 19/08 — ĐỪNG xoá "nhận xét nhanh" của đường kia.
   //
@@ -356,10 +421,11 @@ export async function saveSessionEvalCore(
   // bấm Lưu là ghi `comment = null`, tức xoá trắng nội dung người khác vừa viết mà không
   // ai thấy. Chỉ giữ lại khi phiếu cũ đúng là loại "chỉ có comment" (không có 4 mục);
   // nếu phiếu cũ vốn có notes thì xoá hết 4 mục = có ý xoá văn xuôi, làm đúng như thế.
-  // ⚠️ KHÔNG suy loại phiếu từ `old.notes == null`: chính hàm này LUÔN ghi `notes` (schema
-  // bắt buộc đủ 4 khoá), nên sau lần lưu rubric ĐẦU TIÊN `notes` là một object 4 chuỗi
-  // rỗng — khác null. Lấy null làm dấu hiệu thì từ lần lưu thứ hai trở đi guard tắt và
-  // nhận xét nhanh bị xoá đúng như trước khi vá. Phải hỏi "4 mục có chữ nào không".
+  // ⚠️ KHÔNG suy loại phiếu từ `old.notes == null`: chính hàm này LUÔN ghi `notes` đủ 5
+  // khoá (spread EMPTY_NOTES ở trên), nên sau lần lưu rubric ĐẦU TIÊN `notes` là một
+  // object toàn chuỗi rỗng — khác null. Lấy null làm dấu hiệu thì từ lần lưu thứ hai trở
+  // đi guard tắt và nhận xét nhanh bị xoá đúng như trước khi vá. Phải hỏi "có mục nào có
+  // chữ không" — `parseFeedbackNotes` từ 21/08 xét cả `overall` lẫn 4 khoá cũ.
   const oldIsQuickCommentOnly =
     old != null && parseFeedbackNotes(old.notes) === null && !!old.comment?.trim();
   const commentPatch = comment !== null || !oldIsQuickCommentOnly ? { comment } : {};

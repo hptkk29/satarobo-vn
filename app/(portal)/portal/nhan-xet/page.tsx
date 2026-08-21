@@ -8,15 +8,18 @@ import {
 } from "@/lib/eval/session-eval-portal";
 import { isPortalV2Enabled } from "@/lib/flags";
 import {
+  getSessionNumberMapForClasses,
   getStudentFeedback,
   parseFeedbackNotes,
   parseFeedbackRubric,
 } from "@/lib/portal/feedback";
 import {
-  EVAL_NOTE_FIELDS,
+  EVAL_OVERALL_LABEL,
   evalLevelText,
+  evalNotesProse,
   groupedEvalCriteria,
 } from "@/lib/lms/session-eval-rubric";
+import { sessionNumberLabel } from "@/lib/lms/session-order";
 import { NhanXetPageV2 } from "@/components/portal/nhan-xet-page";
 
 // Nhóm rubric (9 tiêu chí × 4 nhóm) — cùng nguồn nhãn với V2 (components/portal/nhan-xet-page).
@@ -77,8 +80,10 @@ export default async function NhanXetPage() {
         notes: true,
         rubric: true,
         createdAt: true,
+        classSessionId: true,
         classSession: {
           select: {
+            classId: true,
             date: true,
             class: {
               select: {
@@ -94,11 +99,24 @@ export default async function NhanXetPage() {
     getStudentSessionEvals(studentId),
   ]);
 
-  // Ảnh buổi gắn các buổi có phiếu đánh giá — gate theo StudentConsent CLASS_MEDIA.
-  const mediaBySession = await getSessionMediaForStudent(
-    studentId,
-    evals.map((e) => e.classSessionId),
-  );
+  // R1 21/08 — SỐ BUỔI cho phụ huynh, tính trên TOÀN BỘ buổi của các lớp có phiếu
+  // (lib/lms/session-order), để phụ huynh và giáo viên gọi một buổi bằng cùng một số.
+  // ⚠️ Bản V2 (components/portal/nhan-xet-page) lấy số qua lib/portal/feedback — file
+  // ĐÓ KHÔNG phục vụ trang này. Cờ PORTAL_V2_ENABLED mặc định OFF nên V1 mới là bản
+  // phụ huynh đang thấy: sửa một bên là "sửa xong mà không thấy đổi".
+  const fbClassIds = [
+    ...new Set(
+      feedbacks.map((f) => f.classSession?.classId).filter((x): x is string => !!x),
+    ),
+  ];
+  const [mediaBySession, sessionNumberOf] = await Promise.all([
+    // Ảnh buổi gắn các buổi có phiếu đánh giá — gate theo StudentConsent CLASS_MEDIA.
+    getSessionMediaForStudent(
+      studentId,
+      evals.map((e) => e.classSessionId),
+    ),
+    getSessionNumberMapForClasses(fbClassIds),
+  ]);
 
   const hasAny = feedbacks.length > 0 || evals.length > 0;
 
@@ -198,7 +216,9 @@ export default async function NhanXetPage() {
               // FIX #2 — parse phiếu mở rộng bằng ĐÚNG helper của V2 (lib/portal/feedback)
               // để 2 bản không lệch nội dung: notes ưu tiên hơn comment (phiếu mới lưu
               // comment = 4 mục nối lại, render cả 2 sẽ lặp); rubric render theo nhóm.
-              const notes = parseFeedbackNotes(f.notes);
+              // 21/08 — MỘT cửa đọc văn xuôi: phiếu mới ("Đánh giá chung") lẫn phiếu cũ
+              // (4 mục). Xem lib/lms/session-eval-rubric#evalNotesProse.
+              const prose = evalNotesProse(parseFeedbackNotes(f.notes));
               const rubric = parseFeedbackRubric(f.rubric);
               return (
                 <li
@@ -207,6 +227,9 @@ export default async function NhanXetPage() {
                 >
                   <div className="mb-1 flex flex-wrap items-center justify-between gap-2">
                     <span className="text-sm font-semibold text-neutral-900">
+                      {sessionNumberOf.has(f.classSessionId)
+                        ? `${sessionNumberLabel(sessionNumberOf.get(f.classSessionId))} · `
+                        : ""}
                       {f.classSession.class.classCode
                         ? `${f.classSession.class.classCode} · `
                         : ""}
@@ -235,23 +258,28 @@ export default async function NhanXetPage() {
                     </p>
                   )}
 
-                  {notes ? (
+                  {prose?.kind === "overall" ? (
                     <div className="space-y-1">
-                      {EVAL_NOTE_FIELDS.map((fld) => {
-                        const text = notes[fld.key].trim();
-                        if (!text) return null;
-                        return (
-                          <p
-                            key={fld.key}
-                            className="whitespace-pre-wrap text-sm text-neutral-700"
-                          >
-                            <span className="font-semibold text-neutral-900">
-                              {fld.label}:
-                            </span>{" "}
-                            {text}
-                          </p>
-                        );
-                      })}
+                      <p className="text-xs font-semibold uppercase tracking-wide text-neutral-500">
+                        {EVAL_OVERALL_LABEL}
+                      </p>
+                      <p className="whitespace-pre-wrap text-sm text-neutral-700">
+                        {prose.text}
+                      </p>
+                    </div>
+                  ) : prose?.kind === "legacy" ? (
+                    <div className="space-y-1">
+                      {prose.rows.map((fld) => (
+                        <p
+                          key={fld.key}
+                          className="whitespace-pre-wrap text-sm text-neutral-700"
+                        >
+                          <span className="font-semibold text-neutral-900">
+                            {fld.label}:
+                          </span>{" "}
+                          {fld.text}
+                        </p>
+                      ))}
                     </div>
                   ) : f.comment?.trim() ? (
                     <p className="whitespace-pre-wrap text-sm text-neutral-700">
