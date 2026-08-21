@@ -408,7 +408,12 @@ jobs:
   e2e-r7:
     name: E2E Phase R7 (Playwright service-level + Postgres local)
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    # 344 test tuần tự (workers=1) — suờn lớn nhất trong các job e2e. Đo được: cùng 344
+    # test, cùng 0 lỗi, bước chạy dao động 4,5 phút → 12,5 phút chỉ vì tốc độ runner
+    # (job 96766997067 vs 96715795093). Thêm retries=2: 2 test đỏ đẩy 4,5 → 9,2 phút.
+    # Trần 20 không đủ cho ca xấu, và khi chạm trần job bị giết CÂM — trông y hệt một
+    # cú treo, đã tốn một vòng điều tra để nhận ra không phải. teacher/elearning vốn đã được 25.
+    timeout-minutes: 30
     needs: quality
 
     services:
@@ -466,7 +471,10 @@ jobs:
         run: pnpm test:e2e:r7
 
       - name: Upload R7 Playwright report
-        if: failure()
+        # `always()` chứ không `failure()`: job bị GitHub giết vì hết trần mang trạng thái
+        # "cancelled", không phải "failure" ⇒ bước này bị bỏ qua và KHÔNG còn một dấu vết
+        # nào để truy. Đó là lý do lần trước phải đoán từ log trống.
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: playwright-report-r7
