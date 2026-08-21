@@ -7,6 +7,7 @@ import {
   isAdminRoute,
   isInfraPath,
   isLegacyAdminPrefixed,
+  isElearningPath,
   isTeacherPath,
   sanitizeCallbackUrl,
   type HostKind,
@@ -19,6 +20,7 @@ const ADMIN_HOST = "admin.satarobo.vn";
 const PORTAL_HOST = "hocvien.satarobo.vn"; // Phase T2.2 — portal phụ huynh/site con
 const SALE_HOST = "sale.satarobo.vn"; // Site tĩnh nhập liệu Sale → MISA AMIS CRM
 const TEACHER_HOST = "giaovien.satarobo.vn"; // L6 — site giáo viên (flag TEACHER_SITE_ENABLED)
+const ELEARNING_HOST = "e-learning.satarobo.vn"; // EL-01 — đào tạo nội bộ (flag ELEARNING_ENABLED)
 
 function detectHost(host: string): HostKind {
   if (host === PUBLIC_HOST || host === `www.${PUBLIC_HOST}`) return "public";
@@ -26,6 +28,7 @@ function detectHost(host: string): HostKind {
   if (host === PORTAL_HOST) return "portal";
   if (host === SALE_HOST) return "sale";
   if (host === TEACHER_HOST) return "teacher";
+  if (host === ELEARNING_HOST) return "elearning";
   if (host.endsWith(".vercel.app")) return "vercel";
   return "unknown"; // localhost, preview deployments
 }
@@ -35,6 +38,7 @@ const HOST_BY_KIND = {
   portal: PORTAL_HOST,
   public: PUBLIC_HOST,
   teacher: TEACHER_HOST,
+  elearning: ELEARNING_HOST,
 } as const;
 
 /** Redirect to same path on different host (preserves query string). */
@@ -126,7 +130,18 @@ export default auth((req: NextAuthRequest) => {
     // quan ⇒ cho đi thẳng. Webhook ngoài (SePay/Zalo) trỏ nhầm vào .vercel.app cũng nhờ
     // đây mà sống thay vì rụng payload im lặng.
     if (isInfraPath(pathname)) return NextResponse.next();
-    if (isLegacyAdminPrefixed(pathname)) {
+    // EL-01 — khu đào tạo nội bộ dùng path thật /elearning/* trên localhost (không
+  // rewrite). Đối xứng với nhánh isTeacherPath ngay trên: không có nhánh này thì
+  // hành vi trên máy dev KHÁC prod — kiểu lệch tốn nhiều giờ nhất để truy ra.
+  // Gate role + gate hồ sơ nhân sự do layout app/(elearning) tự lo (EL-01 PR2).
+  if (isElearningPath(pathname)) {
+    if (!session?.user) {
+      return redirectTo(req, "/login", { callbackUrl: sanitizeCallbackUrl(pathname) });
+    }
+    return NextResponse.next();
+  }
+
+  if (isLegacyAdminPrefixed(pathname)) {
       const cleanPath = pathname.replace(/^\/admin/, "") || "/dashboard";
       return redirectToHost(req, ADMIN_HOST, cleanPath, 308);
     }
@@ -148,7 +163,8 @@ export default auth((req: NextAuthRequest) => {
     kind === "admin" ||
     kind === "portal" ||
     kind === "sale" ||
-    kind === "teacher"
+    kind === "teacher" ||
+    kind === "elearning"
   ) {
     const decision = decideRoute({
       hostKind: kind,
@@ -158,8 +174,10 @@ export default auth((req: NextAuthRequest) => {
       sessionValid: Boolean(session?.user),
     });
     const response = execute(req, decision);
-    // Admin + teacher là khu nội bộ → noindex (SEO defense).
-    return kind === "admin" || kind === "teacher" ? withAdminHeaders(response) : response;
+    // Admin + teacher + e-learning đều là khu NỘI BỘ → noindex (SEO defense).
+    return kind === "admin" || kind === "teacher" || kind === "elearning"
+      ? withAdminHeaders(response)
+      : response;
   }
 
   // ═══════════════════════════════════════════════════════════════════
