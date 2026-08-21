@@ -1163,15 +1163,19 @@ describe("EL-01. e-learning host × role — cờ ON", () => {
 // nó phải chạy trong CI. Bất biến kiểm được KHÔNG cần git: PR1 chưa tạo route group.
 // ─────────────────────────────────────────────────────────────────────────
 
-describe("EL-01 · AC10. PR1 là PR độc lập nhỏ nhất", () => {
-  it("chưa có file nào trong app/(elearning)/ — route group thuộc PR2", async () => {
+describe("EL-01 · AC10. Bất biến cấu trúc khu e-learning", () => {
+  // PR1 đã merge (case này từng khẳng định route group CHƯA tồn tại, và nó đã làm
+  // đúng việc: đỏ ngay khi PR2 bắt đầu tạo thư mục). PR2 lật lại khẳng định — từ nay
+  // route group PHẢI tồn tại, vì host thứ 6 rewrite vào đó; thiếu nó thì cờ ON cho 404.
+  it("route group app/(elearning)/ tồn tại — đích rewrite của host thứ 6", async () => {
     const { existsSync } = await import("node:fs");
     const { resolve } = await import("node:path");
-    expect(
-      existsSync(resolve(process.cwd(), "app/(elearning)")),
-      "PR1 KHÔNG được tạo route group. Thấy app/(elearning)/ nghĩa là PR1 đã bị gộp " +
-        "với PR2 — tách ra, xem docs/elearning/quy-uoc-nen.md quy ước 8.",
-    ).toBe(false);
+    for (const f of [
+      "app/(elearning)/elearning/layout.tsx",
+      "app/(elearning)/elearning/page.tsx",
+    ]) {
+      expect(existsSync(resolve(process.cwd(), f)), `thiếu ${f}`).toBe(true);
+    }
   });
 
   it("proxy.ts và route-policy.ts nhất quán: mọi HostKind định tuyến đều có host thật", async () => {
