@@ -26,7 +26,16 @@
  */
 import { PrismaClient } from "@prisma/client";
 
-const prisma = new PrismaClient();
+/**
+ * Transaction pooler (:6543) làm Prisma chết với "prepared statement ... does not exist"
+ * khi chạy nhiều truy vấn rời — đã gặp thật. Script vận hành dùng SESSION pooler
+ * (`DIRECT_URL`, :5432), cùng lý do workflow `seed-prod-roles.yml` dùng `PROD_DIRECT_URL`.
+ */
+const prisma = new PrismaClient({
+  datasources: {
+    db: { url: process.env.DIRECT_URL || process.env.DATABASE_URL || "" },
+  },
+});
 const APPLY = process.argv.includes("--apply");
 
 type Hang = {
