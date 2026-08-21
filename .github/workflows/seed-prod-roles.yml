@@ -67,7 +67,7 @@ jobs:
       - name: Generate Prisma client
         run: pnpm exec prisma generate
 
-      - name: Seed RolePermission (prod) — kỳ vọng "✅ Seeded 14 RoleDef"
+      - name: Seed RolePermission (prod) — kỳ vọng "✅ Seeded 15 RoleDef"
         run: pnpm exec tsx prisma/seed-roles.ts
         env:
           # client seed dùng session pooler (:5432) để tránh prepared-statement quirk
