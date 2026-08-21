@@ -15,6 +15,7 @@ import { isTeacherSiteEnabled } from "@/lib/flags";
 import { resolveActor } from "@/lib/auth/actor";
 import { scopedDb } from "@/lib/db-scope";
 import { adminHomeUrl } from "@/lib/auth/hosts";
+import { elearningEntryUrl } from "@/lib/elearning/entry";
 import { countChatUnreadForUser } from "@/lib/chat/unread";
 import { AppShell } from "./_components/app-shell";
 import "./teacher.css";
@@ -55,6 +56,9 @@ export default async function TeacherLayout({
   // theo chuẩn site mới (A0-04, ESLint chặn @/lib/db trần trong app/(teacher)).
   const actor = await resolveActor(session.user.id);
   const sdb = scopedDb(actor);
+
+  // EL-01 — null khi cờ OFF hoặc tài khoản không có hồ sơ nhân sự ⇒ ẩn mục menu.
+  const elearningUrl = await elearningEntryUrl(session.user.id);
   const dbUser = await sdb.user.findUnique({
     where: { id: session.user.id },
     select: {
@@ -93,6 +97,7 @@ export default async function TeacherLayout({
       userId={session.user.id}
       userName={session.user.name ?? session.user.email ?? "Giáo viên"}
       adminReturnUrl={adminReturnUrl}
+      elearningUrl={elearningUrl}
       chatUnread={chatUnread}
     >
       {children}
