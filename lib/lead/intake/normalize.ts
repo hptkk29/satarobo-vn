@@ -47,6 +47,17 @@ export function centerHintFromIndex(raw: unknown): CenterHint | null {
   return /^[1-9][0-9]*$/.test(s) ? { kind: "code", value: `CS${s}` } : null;
 }
 
+/**
+ * Cơ sở chọn từ DANH SÁCH THẬT (`Center.code`, vd "CS1") → hint dạng code.
+ *
+ * Dùng cho biểu mẫu nội bộ có đăng nhập (G-D): người nhập chọn cơ sở từ danh
+ * sách nạp từ DB, nên không còn phải quy đổi số thứ tự như biểu mẫu cũ.
+ */
+export function centerHintFromCode(raw: unknown): CenterHint | null {
+  const s = str(raw);
+  return s ? { kind: "code", value: s.toUpperCase() } : null;
+}
+
 /** Cơ sở nguồn gửi dạng chuỗi tự do → giữ nguyên để tầng ingest so khớp DB. */
 export function centerHintFromText(raw: unknown): CenterHint | null {
   const s = str(raw);

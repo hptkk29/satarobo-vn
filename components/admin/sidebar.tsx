@@ -59,6 +59,7 @@ import {
   type LucideIcon,
   Undo2,
   UserCog,
+  UserPlus,
   Users,
   UsersRound,
   Wallet,
@@ -106,6 +107,9 @@ const NAV_GROUPS: NavGroup[] = [
     label: "CRM & Tuyển sinh",
     items: [
       { label: "Leads", href: "/leads", icon: Users, perm: ["leads:view-all", "leads:view-own"] },
+      // G-D (21/08/2026) — nhập nhanh khách hàng sau đăng nhập, thay biểu mẫu công
+      // khai sale.satarobo.vn. perm khớp PAGE_GATES["/nhap-khach-hang"].
+      { label: "Nhập khách hàng", href: "/nhap-khach-hang", icon: UserPlus, perm: ["leads:create"] },
       // PR #81 — nhập liệu ban đầu: import Excel "đã đăng ký" rồi chốt hàng loạt.
       // perm khớp gate trang (leads:view-all AND leads:import) — sidebar dùng OR nên
       // để leads:import (Sale có leads:import nhưng KHÔNG có view-all → trang tự

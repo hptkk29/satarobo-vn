@@ -111,6 +111,12 @@ export const PAGE_GATES = {
   /** Tracking lead. Gác bằng leads:view-all từ đầu; sidebar khai nhầm site-content:view. */
   "/marketing": ["leads:view-all"],
 
+  /** G-D (21/08/2026) — nhập nhanh khách hàng, bản CÓ ĐĂNG NHẬP thay cho biểu mẫu
+   *  công khai `sale.satarobo.vn`. Ai nhập được lead thì vào được: marketing,
+   *  sale-admin, Sale cơ sở. `leads:create` là GLOBAL ở cả 3 RoleDef giữ nó nên
+   *  dùng làm gate cấp trang được (gate gọi trần, không target). */
+  "/nhap-khach-hang": ["leads:create"],
+
   /** Chuyển lớp/cơ sở. Sale TẠO yêu cầu, QL cơ sở DUYỆT (enrollments:transfer chỉ điều
    *  khiển nút duyệt trong trang). Menu cũ khai `enrollments:transfer` ⇒ Sale không thấy
    *  đường vào chính việc của mình. Đây là lỗi giấu-tính-năng, không phải hở quyền. */
