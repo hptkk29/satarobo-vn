@@ -193,3 +193,45 @@ describe("EL-03 · AC16. Cầu đơn vị KHÔNG được nới thêm nhánh the
     expect(m![1]).toContain('ou2."code" = c."code"');
   });
 });
+
+describe("EL-03 · 5 cột chịu lực bổ sung — chỉ-ADD, toàn bộ nullable", () => {
+  const SQL2 = readFileSync(
+    join(
+      ROOT,
+      "prisma/migrations/20260821130000_el_trn_consent_and_eval_link_cols/migration.sql",
+    ),
+    "utf8",
+  )
+    .split("\n")
+    .filter((l) => !l.trimStart().startsWith("--"))
+    .join("\n");
+
+  it("TrnEvalLinkConfig có đủ 3 cột đường pháp lý + updatedByUserId", () => {
+    // `mode = LINKED` chỉ lưu được khi ĐỦ SÁU thứ, ba trong đó là các cột này.
+    // Thiếu chúng thì luật ấy là chữ chết: bật liên kết đánh giá ↔ lương mà không
+    // lưu được số hiệu quyết định lẫn người duyệt.
+    for (const col of [
+      "decisionDocCode",
+      "decisionDocEffectiveAt",
+      "hrApprovedByUserId",
+      "updatedByUserId",
+    ]) {
+      expect(SQL2, col).toContain(`"${col}"`);
+    }
+  });
+
+  it("TrnPolicyAcceptance có revokedAt — đường update DUY NHẤT được phép", () => {
+    // Rút đồng ý là ĐÓNG dòng đang hiệu lực, không xoá nó: dòng cũ là bằng chứng
+    // bất biến rằng người đó đã được thông báo phạm vi nào, vào ngày nào.
+    expect(SQL2).toMatch(
+      /ALTER TABLE "TrnPolicyAcceptance" ADD COLUMN\s+"revokedAt"/,
+    );
+  });
+
+  it("mọi cột thêm đều NULLABLE — điều kiện để chỉ-ADD là an toàn", () => {
+    // Một `ADD COLUMN ... NOT NULL` không kèm DEFAULT sẽ nổ trên bảng có dữ liệu.
+    // Bảng hiện còn rỗng nên nó sẽ đi lọt ở dev và chỉ nổ trên prod.
+    expect(SQL2).not.toMatch(/ADD COLUMN[^;]*NOT NULL/);
+    expect(SQL2).not.toMatch(/\bDROP\b/);
+  });
+});

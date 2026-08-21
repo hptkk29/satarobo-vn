@@ -7268,6 +7268,12 @@ model TrnPolicyAcceptance {
   policyKey     String
   policyVersion String
   acceptedAt    DateTime @default(now()) @db.Timestamptz(6)
+  /// Rút đồng ý: đÓNG dòng đang hiệu lực, KHÔNG xoá nó. Đây là đường `update` DUY NHẤT
+  /// được phép trên bảng này; mọi đường update/delete khác đều bị cấm, vì dòng cũ là BẰNG
+  /// CHỨNG BẤT BIẾN rằng người đó đã được thông báo phạm vi nào, vào ngày nào.
+  /// Đóng xong: hệ thống ngừng thu nhịp xem NGAY, và nghĩa vụ học chuyển sang hình thức
+  /// khác (điểm danh trực tiếp / xác nhận của quản lý) chứ KHÔNG tự huỷ.
+  revokedAt     DateTime? @db.Timestamptz(6)
 
   user User @relation("TrnPolicyAcceptanceUser", fields: [userId], references: [id], onDelete: Cascade)
 
@@ -7360,6 +7366,19 @@ model TrnEvalLinkConfig {
   /// Kỳ đánh giá đầu tiên bị ảnh hưởng phải nằm SAU ngày này.
   effectiveFrom   DateTime?          @db.Timestamptz(6)
 
+  // ĐƯỜNG PHÁP LÝ CỦA CHẾ TÀI — `mode = LINKED` chỉ lưu được khi ĐỦ SÁU thứ: ba cột dưới đây
+  // + `effectiveFrom` + ≥1 tiêu chí + tổng trọng số = 100. Thiếu một là từ chối, nêu đúng ô thiếu.
+  // Không có mấy cột này thì luật đó là CHỮ CHẾT: không chỗ nào lưu số hiệu quyết định, không
+  // chỗ nào lưu ai duyệt — tức bật liên kết lương mà không có căn cứ nào truy được về sau.
+  /// Số hiệu quyết định sửa SR.QD.231 cho phép gắn đánh giá vào lương.
+  decisionDocCode        String?
+  /// Ngày hiệu lực của quyết định đó. Zod: `effectiveFrom >= decisionDocEffectiveAt`.
+  decisionDocEffectiveAt DateTime? @db.Timestamptz(6)
+  /// Người của Nhân sự đã duyệt — có TÊN, không phải một cờ boolean.
+  hrApprovedByUserId     String?
+  /// Ai sửa lần cuối. Mọi lần đổi đi qua `defineAction` với `requireReason: true`.
+  updatedByUserId        String?
+
   centerId  String?
   orgUnitId String?
 
@@ -7369,6 +7388,7 @@ model TrnEvalLinkConfig {
 
   program TrnProgram @relation(fields: [programId], references: [id], onDelete: Cascade)
 
+  @@index([mode, effectiveFrom])
   @@index([centerId])
   @@index([orgUnitId])
 }
