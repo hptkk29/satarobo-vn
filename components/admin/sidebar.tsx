@@ -35,6 +35,7 @@ import {
   IdCard,
   Image as ImageIcon,
   KeyRound,
+  ListOrdered,
   LayoutDashboard,
   Mail,
   MapPin,
@@ -112,6 +113,11 @@ const NAV_GROUPS: NavGroup[] = [
       // redirect; đặt view-all ở đây để không hiện link chết cho Sale).
       { label: "Chốt hàng loạt", href: "/leads/bulk-convert", icon: Workflow, perm: ["leads:view-all"] },
       { label: "Cấu hình chia lead", href: "/leads/cau-hinh-chia", icon: Settings, perm: ["leads:assign-config"] },
+      // Đợt D — sổ lượt luân phiên (chỉ đọc). Đặt cạnh Cấu hình chia lead vì hai
+      // trang trả lời hai nửa của cùng một câu hỏi: chia KIỂU GÌ, và đã chia RA SAO.
+      // perm rộng hơn cấu hình (view-all thay vì assign-config): người phải trả lời
+      // "sao bạn kia nhiều lead hơn" là Quản lý cơ sở, không phải Super Admin.
+      { label: "Sổ lượt chia lead", href: "/leads/so-luot", icon: ListOrdered, perm: ["leads:view-all"] },
       { label: "Bàn giao lead", href: "/ban-giao-lead", icon: ArrowLeftRight, perm: ["leads:assign"] },
       { label: "Chuyển lead liên CS", href: "/leads/bao-cao-chuyen", icon: Workflow, perm: ["leads:assign"] },
       // BGĐ 31/07 — nguồn giới thiệu (affiliate): mã + link ?ref= + đối soát.

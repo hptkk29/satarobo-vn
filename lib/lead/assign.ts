@@ -1,6 +1,8 @@
 import { db } from "@/lib/db";
 import { logLeadAudit } from "@/lib/audit/log";
 import { assignmentWrite } from "@/lib/lead/assignment";
+import { takeRotationTurn, takeRotationTurns } from "@/lib/lead/rotation";
+import { orgUnitIdForCenter } from "@/lib/org/org-service";
 import type { LeadStatus, Prisma } from "@prisma/client";
 
 // =============================================================================
@@ -19,7 +21,13 @@ export type Actor = { actorId: string | null; actorName: string };
 
 // ─── Pure functions (test được, không chạm DB) ───────────────────────────────
 
-/** Chọn sale ít lead mở nhất; tie-break theo id để ổn định. */
+/**
+ * Chọn sale ít lead mở nhất; tie-break theo id để ổn định.
+ *
+ * ⚠️ KHÔNG CÒN ĐƯỜNG CHIA NÀO GỌI HÀM NÀY (Đợt D, 22/08/2026) — chủ dự án chốt
+ * chia đều theo SỐ LƯỢT, không theo tải. Giữ lại vì hàm thuần, có test riêng, và
+ * còn là bản đối chứng khi cần so hai cách chia. Đừng nối lại vào luồng chia.
+ */
 export function pickAssignee(candidates: AssigneeLoad[]): string | null {
   if (candidates.length === 0) return null;
   return [...candidates].sort(
@@ -30,6 +38,9 @@ export function pickAssignee(candidates: AssigneeLoad[]): string | null {
 /**
  * Chia danh sách lead cho các sale theo round-robin, cân bằng TRÊN tải hiện có.
  * Trả về Map leadId → assigneeId.
+ *
+ * ⚠️ Thay bằng `planFairTurns` (lib/lead/rotation.ts) từ Đợt D — xem ghi chú ở
+ * `pickAssignee`. Giữ lại cùng lý do.
  */
 export function distributeRoundRobin(
   leadIds: string[],
@@ -81,8 +92,16 @@ export async function getSalesLoad(
 }
 
 /**
- * Tự động gán 1 lead cho SALES_CSM ít tải nhất trong cùng cơ sở.
- * Fallback toàn hệ thống nếu cơ sở không có sale. Ghi audit + activity.
+ * Tự động gán 1 lead cho sale TỚI LƯỢT trong cùng cơ sở. Ghi audit + activity.
+ *
+ * ⚠️ Đợt D (22/08/2026) — VIẾT LẠI PHẦN CHỌN NGƯỜI. Đây là đường chia THỨ HAI
+ * của repo (đường kia là `autoAssignNewLead`), còn sống ở nút "chia lại lead"
+ * trên bảng kanban và ở webhook nhận lead bản cũ. Vá một đường mà bỏ đường này
+ * thì luật "chia đều tuyệt đối" chỉ đúng với một phần lead — đúng cái bẫy mà
+ * chẩn đoán prod 21/08 đã chỉ ra (69% lead không đi qua vòng chia).
+ *
+ * Hai thay đổi: (1) chọn theo SỔ LƯỢT thay vì ít-tải-nhất; (2) BỎ fallback chia
+ * xuyên cơ sở — người nhận không mở nổi lead ngoài cơ sở mình (`scopedDb`).
  */
 export async function autoAssignLead(
   leadId: string,
@@ -94,11 +113,15 @@ export async function autoAssignLead(
   });
   if (!lead) return { ok: false, error: "Lead không tồn tại" };
 
-  let load = await getSalesLoad(lead.centerId);
-  if (load.length === 0 && lead.centerId) {
-    load = await getSalesLoad(null); // fallback: mọi SALES_CSM
+  const load = await getSalesLoad(lead.centerId);
+  if (load.length === 0) {
+    return { ok: false, error: "Cơ sở này không có tư vấn viên đang hoạt động để giao lead" };
   }
-  const target = pickAssignee(load);
+  const orgUnitId = lead.centerId ? await orgUnitIdForCenter(lead.centerId) : null;
+  if (!orgUnitId) {
+    return { ok: false, error: "Lead chưa thuộc cơ sở nào — chọn cơ sở trước khi chia" };
+  }
+  const target = await takeRotationTurn(orgUnitId, load.map((l) => l.id));
   if (!target) return { ok: false, error: "Không có SALES_CSM active để gán" };
 
   const targetUser = await db.user.findUnique({
@@ -130,7 +153,7 @@ export async function autoAssignLead(
         actorId: actor.actorId,
         actorName: actor.actorName,
         type: "NOTE",
-        content: `Phân công cho ${targetUser?.name ?? target} (round-robin)`,
+        content: `Phân công cho ${targetUser?.name ?? target} (luân phiên đều lượt)`,
         metadata: { assignedToId: target } as Prisma.InputJsonValue,
       },
     });
@@ -163,20 +186,29 @@ export async function reassignOpenLeads(
   });
   if (openLeads.length === 0) return { ok: true, reassigned: 0 };
 
-  let load = await getSalesLoad(leaving?.centerId ?? null);
-  // loại trừ chính người đang nghỉ (phòng trường hợp gọi trước khi deactivate)
-  load = load.filter((l) => l.id !== userId);
-  if (load.length === 0 && leaving?.centerId) {
-    load = (await getSalesLoad(null)).filter((l) => l.id !== userId);
-  }
+  // Đợt D — cùng luật với hai đường chia kia: theo SỔ LƯỢT, KHÔNG xuyên cơ sở.
+  // Không còn sale trong cơ sở ⇒ báo lỗi và ĐỂ NGUYÊN lead ở người vừa nghỉ.
+  // Nghe khó chịu, nhưng lead nằm ở tài khoản đã khoá thì quản lý vẫn thấy và
+  // giao tay được; còn ném sang cơ sở khác thì thành lead không ai mở nổi.
+  const load = (await getSalesLoad(leaving?.centerId ?? null)).filter((l) => l.id !== userId);
   if (load.length === 0) {
-    return { ok: false, reassigned: 0, error: "Không còn SALES_CSM để chia" };
+    return { ok: false, reassigned: 0, error: "Không còn tư vấn viên trong cơ sở để chia lại" };
+  }
+  const orgUnitId = leaving?.centerId ? await orgUnitIdForCenter(leaving.centerId) : null;
+  if (!orgUnitId) {
+    return { ok: false, reassigned: 0, error: "Không suy được đơn vị của người nghỉ để ghi sổ lượt" };
   }
 
-  const dist = distributeRoundRobin(
-    openLeads.map((l) => l.id),
-    load,
-  );
+  // Một lần khoá cho cả rổ — xem takeRotationTurns.
+  const ke = await takeRotationTurns(orgUnitId, load.map((l) => l.id), openLeads.length);
+  const dist = new Map<string, string>();
+  openLeads.forEach((l, i) => {
+    const nguoiNhan = ke[i];
+    if (nguoiNhan) dist.set(l.id, nguoiNhan);
+  });
+  if (dist.size === 0) {
+    return { ok: false, reassigned: 0, error: "Không còn tư vấn viên trong cơ sở để chia lại" };
+  }
 
   const nameMap = new Map(
     (
@@ -215,5 +247,7 @@ export async function reassignOpenLeads(
     }
   });
 
-  return { ok: true, reassigned: openLeads.length };
+  // Báo đúng số ĐÃ chia, không phải số lead tìm thấy — hai số này bằng nhau ở
+  // đường đi thường, nhưng báo theo số thật thì khi lệch còn nhìn ra.
+  return { ok: true, reassigned: dist.size };
 }
