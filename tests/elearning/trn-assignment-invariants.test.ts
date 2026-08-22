@@ -140,20 +140,9 @@ describe("Hai quyết định nghiệp vụ đóng băng trong schema", () => {
   });
 });
 
-describe("PR này KHÔNG mang giao diện hay action nào", () => {
-  it("không có file app/ hay _actions nào của EL-05 trong PR", async () => {
-    // PR0 cố ý chỉ-schema. Kéo UI vào đây là làm một PR schema không review nổi,
-    // và migration là thứ đắt nhất để review sai.
-    const { execFileSync } = await import("node:child_process");
-    const out = execFileSync(
-      "git",
-      ["diff", "--name-only", "origin/test...HEAD"],
-      { encoding: "utf8" },
-    );
-    const files = out.split("\n").map((f) => f.trim()).filter(Boolean);
-    const ui = files.filter(
-      (f) => f.startsWith("app/") || f.includes("_actions") || f.endsWith(".tsx"),
-    );
-    expect(ui).toEqual([]);
-  });
-});
+// ĐÃ GỠ một case ở đây: "PR này không mang giao diện hay action nào", chạy
+// `git diff origin/test...HEAD`. Nó xanh ở máy và đỏ ở CI, vì CI checkout không có ref
+// `origin/test`. Nhưng lỗi thật sâu hơn một chuyện môi trường: nó kiểm tính chất của
+// MỘT PR, không phải tính chất của MÃ. "PR này gồm những file nào" là việc của người
+// review, không phải của bộ test — và một test biết về lịch sử git sẽ hỏng mỗi lần
+// đổi cách checkout, rebase, hay squash.
