@@ -21,6 +21,10 @@ import { rejectHeadOffice } from '@/lib/enrollment-flow'
 import { LEAD_STATUS_LABEL, canTransitionLeadStatus } from '@/lib/leads/status'
 import { leadChildSchema } from '@/lib/validators/lead'
 import { syncLeadChildNameToStudents } from '@/lib/students/sync-name'
+import {
+  getPriorHistoryByPhone,
+  summarizePriorHistory,
+} from '@/lib/students/prior-history'
 
 const statusSchema = z.enum([
   'NEW',
@@ -616,9 +620,18 @@ export async function createLeadManual(
         error: `SĐT đã tồn tại trong CRM (trạng thái: ${LEAD_STATUS_LABEL[dup.status] ?? dup.status}${who}). Mở lead hiện có thay vì tạo mới.`,
       }
     }
+    // 21/08 — hồ sơ cũ nằm ở CƠ SỞ KHÁC: `Lead` ∈ SCOPED_MODELS nên sale ở đây không mở
+    // được nó, và câu báo cụt "báo quản lý cơ sở kiểm tra" khiến họ đứng hình. Nói thêm
+    // MỘT tầng không-PII: khách đã từng đăng ký / học ở cơ sở nào, khi nào. Không lộ tên
+    // phụ huynh, ghi chú tư vấn hay sale phụ trách — muốn xem vẫn phải qua đúng cơ sở.
+    const actorForLookup = await resolveActor(session.user.id!)
+    const prior = await getPriorHistoryByPhone(actorForLookup, d.phone)
+    const summary = summarizePriorHistory(prior)
     return {
       ok: false,
-      error: 'SĐT đã tồn tại trong CRM. Vui lòng báo quản lý cơ sở kiểm tra.',
+      error:
+        'SĐT đã tồn tại trong CRM. Vui lòng báo quản lý cơ sở kiểm tra.' +
+        (summary ? ` ${summary}` : ''),
     }
   }
 

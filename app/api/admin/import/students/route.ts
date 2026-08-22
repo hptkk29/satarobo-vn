@@ -13,6 +13,7 @@ import {
 import { checkPermission } from "@/lib/auth/check-permission";
 import { orgUnitIdForCenter } from "@/lib/org/org-service";
 import { syncStudentNameToCrm } from "@/lib/students/sync-name";
+import { removeStudentFromClasses } from "@/lib/students/remove-from-classes";
 
 // Excel date parser — reused pattern from B3 / C2.
 function parseExcelDate(v: unknown): Date | null {
@@ -301,13 +302,37 @@ export async function POST(req: NextRequest) {
             // không import Excel lại tái tạo đúng bug "lead hiện tên cũ" vừa vá.
             const prev = await tx.student.findUnique({
               where: { studentCode: r.data.studentCode },
-              select: { id: true, name: true, parentPhone: true },
+              select: {
+                id: true,
+                name: true,
+                parentPhone: true,
+                status: true,
+                centerId: true,
+              },
             });
             await tx.student.upsert({
               where: { studentCode: r.data.studentCode },
               create: { ...base, studentCode: r.data.studentCode },
               update: base,
             });
+            // 21/08 — cột "Trạng thái" của file Excel đặt được INACTIVE. Trước đây import
+            // chỉ ghi `Student.status` mà không đụng `Enrollment` ⇒ học viên hiện "Nghỉ
+            // học" ở /students nhưng VẪN nằm trong lớp ở mọi màn roster (roster đọc từ
+            // Enrollment, không đọc Student.status). Cùng một lỗ với ô Trạng thái trên form
+            // sửa học viên. Form thì CHẶN và chỉ sang nút "Nghỉ học hẳn"; import là nhập
+            // liệu hàng loạt nên chặn cả file là tệ hơn — ở đây gỡ lớp luôn cho khớp.
+            // KHÔNG tạo yêu cầu hoàn tiền: đó là việc của luồng nghỉ học có lý do
+            // (`withdrawStudentAction`), không phải của một dòng Excel.
+            if (prev && prev.status !== "INACTIVE" && base.status === "INACTIVE") {
+              await removeStudentFromClasses({
+                tx: tx as unknown as Prisma.TransactionClient,
+                studentId: prev.id,
+                actorId: session.user.id ?? null,
+                actorName: session.user.name ?? "Import Excel",
+                reason: "Import Excel đặt trạng thái Nghỉ học",
+                orgUnitId: prev.centerId,
+              });
+            }
             if (prev && prev.name !== base.name) {
               renamedAny = true;
               await syncStudentNameToCrm({

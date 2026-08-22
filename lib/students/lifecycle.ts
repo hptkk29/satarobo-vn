@@ -1,6 +1,22 @@
-import type { Prisma } from "@prisma/client";
+import type { EnrollmentStatus, Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
+import {
+  ENROLLMENT_ACTIVE_STATUS_LIST,
+  STUDYING_ENROLLMENT_STATUSES,
+} from "@/lib/enrollment-status";
 import { getSetting } from "@/lib/settings/service";
+
+/**
+ * Ghi danh đang GIỮ CHỖ trong một lớp (đúng bộ mà roster + sĩ số coi là thuộc lớp).
+ * Dùng chung với `@/lib/enrollment-status` để tab vòng đời không lệch khỏi màn lớp.
+ */
+export const IN_CLASS_ENROLLMENT_STATUSES: EnrollmentStatus[] = [
+  ...ENROLLMENT_ACTIVE_STATUS_LIST,
+];
+
+// `STUDYING_ENROLLMENT_STATUSES` sống ở `lib/enrollment-status.ts` (file KHÔNG kéo Prisma,
+// nên client component dùng chung được); re-export ở đây cho các call-site cũ.
+export { STUDYING_ENROLLMENT_STATUSES };
 
 // Default tuning constants — caller async truyền từ SystemSetting "student.*".
 export const RENEWAL_WINDOW_DAYS = 90;
@@ -39,7 +55,7 @@ export const LIFECYCLE_VIEW_LABEL: Record<LifecycleView, string> = {
 export const LIFECYCLE_VIEW_DESCRIPTION: Record<LifecycleView, string> = {
   all: "Tất cả học viên (active)",
   active: "Có ít nhất 1 lớp đang học",
-  waiting: "Đã đăng ký nhưng chưa được xếp lớp",
+  waiting: "Đang học ở trung tâm nhưng chưa ngồi lớp nào (chờ xếp / vừa bị gỡ khỏi lớp)",
   reserved: "Đang bảo lưu (tạm dừng học)",
   "frequent-absent": `Vắng ≥${FREQUENT_ABSENT_THRESHOLD} buổi trong ${FREQUENT_ABSENT_WINDOW} buổi gần nhất`,
   renewal: `Hoàn thành khoá cũ + đăng ký mới trong ${RENEWAL_WINDOW_DAYS} ngày`,
@@ -69,19 +85,42 @@ export function buildLifecycleWhere(
         AND: [
           base,
           { status: "ACTIVE" },
-          { enrollments: { some: { status: "STUDYING", deletedAt: null } } },
+          {
+            enrollments: {
+              some: { status: { in: STUDYING_ENROLLMENT_STATUSES }, deletedAt: null },
+            },
+          },
         ],
       };
 
     case "waiting":
+      // "Chờ xếp lớp" = còn đang học ở trung tâm nhưng KHÔNG ngồi trong lớp nào.
+      // Ba nguồn đổ vào tab này:
+      //   1. học viên tạo tay, chưa có ghi danh nào;
+      //   2. đã ghi danh PENDING/CONFIRMED, chờ giáo vụ xếp lớp;
+      //   3. (21/08) vừa bị gỡ khỏi lớp ở /classes/[id]/students — mọi ghi danh đã về
+      //      WITHDREW/CANCELLED nhưng học viên VẪN đang học ⇒ chờ xếp lớp lại.
+      // Nhánh (1) nằm gọn trong nhánh (3): không có ghi danh nào thì cũng không có
+      // ghi danh nào đang giữ chỗ.
       return {
         AND: [
           base,
           { status: "ACTIVE" },
-          { enrollments: { none: { status: "STUDYING", deletedAt: null } } },
+          {
+            enrollments: {
+              none: { status: { in: STUDYING_ENROLLMENT_STATUSES }, deletedAt: null },
+            },
+          },
           {
             OR: [
-              { enrollments: { none: { deletedAt: null } } },
+              {
+                enrollments: {
+                  none: {
+                    status: { in: IN_CLASS_ENROLLMENT_STATUSES },
+                    deletedAt: null,
+                  },
+                },
+              },
               {
                 enrollments: {
                   some: { status: { in: ["PENDING", "CONFIRMED"] }, deletedAt: null },
@@ -119,7 +158,8 @@ export function buildLifecycleWhere(
             enrollments: {
               some: {
                 enrolledAt: { gte: cutoff },
-                status: { in: ["PENDING", "CONFIRMED", "STUDYING"] },
+                // Kèm legacy ACTIVE — ghi danh do convert lead sinh ra mang status này.
+                status: { in: ["PENDING", "CONFIRMED", "STUDYING", "ACTIVE"] },
                 deletedAt: null,
               },
             },

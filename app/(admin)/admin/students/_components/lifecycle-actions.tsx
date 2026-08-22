@@ -9,6 +9,7 @@ import { ResumeReserveModal } from "./resume-reserve-modal";
 import { WithdrawModal } from "./withdraw-modal";
 import { ReactivateModal } from "./reactivate-modal";
 import { formatDateVN } from "@/lib/format/date";
+import { STUDYING_ENROLLMENT_STATUSES } from "@/lib/enrollment-status";
 
 const STATUS_LABEL: Record<StudentStatus, string> = {
   ACTIVE: "Đang học",
@@ -47,8 +48,10 @@ export function LifecycleActions({
 }) {
   const [open, setOpen] = useState<ModalKind>(null);
 
-  const studyingEnrollments = enrollments.filter(
-    (e) => e.status === "STUDYING",
+  // 21/08 — trước đây chỉ nhận "STUDYING", nên với ghi danh mang status mặc định
+  // `ACTIVE` (đa số học viên convert từ lead) nút "🟡 Bảo lưu" KHÔNG BAO GIỜ hiện.
+  const studyingEnrollments = enrollments.filter((e) =>
+    (STUDYING_ENROLLMENT_STATUSES as readonly string[]).includes(e.status),
   );
 
   return (
