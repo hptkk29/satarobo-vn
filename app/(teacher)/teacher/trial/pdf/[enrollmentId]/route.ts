@@ -1,23 +1,16 @@
 // PDF phiếu đánh giá Trial (site GV). Chỉ HV trải nghiệm của GV + ĐÃ LƯU phiếu
 // (getTeacherTrialRubricContext guard own-teacher; existing null → 404 "lưu trước").
-import { createElement, type ReactElement } from "react";
+//
+// Đợt C (22/08/2026) — phần DỰNG phiếu chuyển sang `lib/pdf/trial-eval-response.ts`
+// dùng chung với site Sale. Cùng một loại phiếu mà hai bản sao là hai bản sẽ trôi
+// khác nhau. Guard thì KHÔNG dùng chung: bên này own-teacher, bên kia cách ly cơ sở.
 import { NextResponse } from "next/server";
-import { renderToBuffer, type DocumentProps } from "@react-pdf/renderer";
 import { auth } from "@/lib/auth";
 import { getTeacherTrialRubricContext } from "@/lib/lms/teacher-schedule";
-import { withFreshFonts } from "@/lib/pdf/brand";
-import { TrialEvalPdf } from "@/lib/pdf/trial-eval";
+import { trialEvalPdfResponse } from "@/lib/pdf/trial-eval-response";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
-
-function safeFilename(sName: string): string {
-  return sName
-    .normalize("NFD")
-    .replace(/[̀-ͯ]/g, "")
-    .replace(/[^A-Za-z0-9_.-]/g, "_")
-    .replace(/_+/g, "_");
-}
 
 export async function GET(
   _req: Request,
@@ -36,58 +29,17 @@ export async function GET(
       { status: 404 },
     );
   }
-  // Gán ra biến riêng: TS mất narrowing của `ctx.existing` khi dùng trong callback.
-  const existing = ctx.existing;
-  if (!existing) {
+  if (!ctx.existing) {
     return NextResponse.json(
       { error: "Chưa có phiếu đánh giá — hãy lưu phiếu trước khi xuất PDF" },
       { status: 404 },
     );
   }
 
-  const dateLabel = existing.updatedAt.toLocaleDateString("vi-VN", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-    timeZone: "Asia/Ho_Chi_Minh",
-  });
-
-  let pdf: Buffer;
-  try {
-    pdf = await withFreshFonts(() =>
-      renderToBuffer(
-        createElement(TrialEvalPdf, {
-          data: {
-            studentName: ctx.studentName,
-            courseName: ctx.courseName,
-            trialClassName: ctx.trialClassName,
-            scores: existing.scores,
-            totalScore: existing.totalScore,
-            rank: existing.rank,
-            generalComment: existing.generalComment,
-            orientation: existing.orientation,
-            evaluatedByName: existing.evaluatedByName,
-            dateLabel,
-          },
-        }) as unknown as ReactElement<DocumentProps>,
-      ),
-    );
-  } catch (err) {
-    return NextResponse.json(
-      {
-        error: `Lỗi tạo PDF: ${err instanceof Error ? err.message : "Unknown"}`,
-      },
-      { status: 500 },
-    );
-  }
-
-  const filename = `PhieuTrial-${safeFilename(ctx.studentName)}.pdf`;
-  return new NextResponse(new Uint8Array(pdf), {
-    status: 200,
-    headers: {
-      "Content-Type": "application/pdf",
-      "Content-Disposition": `inline; filename="${filename}"`,
-      "Cache-Control": "no-store",
-    },
+  return trialEvalPdfResponse({
+    studentName: ctx.studentName,
+    courseName: ctx.courseName,
+    trialClassName: ctx.trialClassName,
+    existing: ctx.existing,
   });
 }

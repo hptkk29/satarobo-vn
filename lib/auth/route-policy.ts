@@ -165,6 +165,10 @@ export const ADMIN_ROUTE_SEGMENTS: ReadonlySet<string> = new Set<string>([
   "media",
   "news",
   "nhan-su",
+  // ⚠️ KHÔNG khai "nhap-khach-hang" ở đây. Biểu mẫu nhập khách ĐỨNG THẬT ở host
+  // public (`app/(intake)/`, chốt 22/08/2026) — khai vào đây là biến nó thành
+  // admin route, và bất kỳ nhánh host nào kiểm `isAdminRoute` trước `isIntakePath`
+  // sẽ đá nó sang admin host rồi bị đá ngược về public. Dùng `isIntakePath()`.
   "notifications",
   "orders",
   "otp-logs",
