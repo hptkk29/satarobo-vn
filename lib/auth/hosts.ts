@@ -27,6 +27,17 @@ export function areaForRole(role: string): SwitchableArea {
   return "admin";
 }
 
+/**
+ * EL-01 PR3 — URL khu đào tạo nội bộ (host thứ 6).
+ *
+ * KHÔNG nằm trong `SwitchableArea`: đây không phải một "khu vực chuyển được" theo vai —
+ * mọi nhân sự đều vào được (QĐ-7: EMP = mọi vai staff), nên nó là một LỐI VÀO thêm
+ * trong menu tài khoản chứ không phải một nhánh của bộ chuyển khu.
+ */
+export function elearningHomeUrl(): string {
+  return "https://e-learning.satarobo.vn/";
+}
+
 /** URL admin (dùng cho lối "Về trang quản trị" từ site giáo viên). */
 export function adminHomeUrl(): string {
   return areaHomeUrl("admin");

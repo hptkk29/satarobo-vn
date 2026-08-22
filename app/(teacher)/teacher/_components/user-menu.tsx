@@ -5,6 +5,7 @@ import { logoutToGate } from "@/lib/auth/logout-client";
 import {
   BookOpenText,
   ChevronDown,
+  GraduationCap,
   LayoutGrid,
   LogOut,
   User,
@@ -23,10 +24,19 @@ import {
 export function UserMenu({
   name,
   adminReturnUrl,
+  elearningUrl,
 }: {
   name: string;
   /** F3 (Q41) — GV kiêm nhiệm: lối quay về trang quản trị. undefined = ẩn. */
   adminReturnUrl?: string;
+  /**
+   * EL-01 — lối vào khu đào tạo nội bộ. null/undefined = ẩn (cờ OFF).
+   *
+   * KHÁC `adminReturnUrl` ở chỗ điều kiện hiện: quay về quản trị chỉ dành cho GV
+   * kiêm nhiệm (có vai admin), còn đào tạo nội bộ mọi vai nhân viên đều vào được
+   * (QĐ-7) — nên layout chỉ cần xem cờ, không xem vai.
+   */
+  elearningUrl?: string | null;
 }) {
   return (
     <DropdownMenu>
@@ -62,6 +72,20 @@ export function UserMenu({
           <User className="h-4 w-4" aria-hidden />
           Hồ sơ cá nhân
         </DropdownMenuItem>
+
+
+        {/* EL-01 (AC1) — vị trí thứ hai, ngay dưới "Hồ sơ cá nhân". Mở tab mới
+            để GV đang dở tiết/điểm danh không mất trang đang làm. */}
+        {elearningUrl ? (
+          <DropdownMenuItem
+            render={
+              <a href={elearningUrl} target="_blank" rel="noopener noreferrer" />
+            }
+          >
+            <GraduationCap className="h-4 w-4" aria-hidden />
+            Học tập nội bộ
+          </DropdownMenuItem>
+        ) : null}
 
         <DropdownMenuItem render={<Link href="/teacher/huong-dan" />}>
           <BookOpenText className="h-4 w-4" aria-hidden />

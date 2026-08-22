@@ -75,7 +75,7 @@ while (i < lines.length) {
       const fm = args.match(/fields:\s*\[([^\]]+)\]/);
       const relNameM = args.match(/"([^"]+)"/);
       const tok = ln.split(/\s+/);
-      const targetType = (tok[1] || '').replace(/[\?\[\]]/g, '');
+      const targetType = (tok[1] || '').replace(/[?[\]]/g, '');
       if (fm && models.has(targetType)) {
         const fkCols = fm[1].split(',').map(s => s.trim());
         fkCols.forEach(c => { fkFields.add(c); fkInfo[c] = { target: targetType, relName: relNameM ? relNameM[1] : null }; });
@@ -92,7 +92,7 @@ while (i < lines.length) {
     const fname = tok[0];
     if (!/^\w+$/.test(fname)) continue;
     const typeTokRaw = tok[1] || '';
-    const baseType = typeTokRaw.replace(/[\?\[\]]/g, '');
+    const baseType = typeTokRaw.replace(/[?[\]]/g, '');
     const isList = /\[\]/.test(typeTokRaw);
     const isOpt = /\?/.test(typeTokRaw);
 

@@ -6,6 +6,7 @@ import { SessionEvalFill, type StudentLite } from "../../../evaluations/_compone
 import { loadClassSessionRoster } from "../_attendance-actions";
 import type { AttendanceRosterRow } from "@/lib/attendance/roster";
 import { formatDateDMY } from "@/lib/format/date";
+import { sessionNumberLabel } from "@/lib/lms/session-order";
 import type { SessionRow } from "./class-sessions-manage";
 
 function fmt(dateIso: string): string {
@@ -103,6 +104,8 @@ export function ClassEvalPanel({
           <option value="">— Chọn buổi học —</option>
           {sessions.map((s) => (
             <option key={s.id} value={s.id}>
+              {/* Số buổi mở đầu — khớp dropdown tab Điểm danh (class-attendance-panel). */}
+              {s.seq ? `${sessionNumberLabel(s.seq)} · ` : ""}
               {fmt(s.date)}
               {s.topic ? ` — ${s.topic}` : ""}
               {s.status === "CANCELLED" ? " (đã huỷ)" : ""}

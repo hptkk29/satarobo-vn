@@ -253,3 +253,22 @@ export function isLeadIntakeAuthRequired(): boolean {
 export function isSaleSiteEnabled(): boolean {
   return process.env.SALE_SITE_ENABLED === "true"; // mặc định OFF
 }
+
+/**
+ * EL-07 — khu đào tạo nội bộ `e-learning.satarobo.vn` (route group thứ 6
+ * `app/(elearning)/`). Cờ sinh ra ở trạng thái OFF; PR nền là no-op với người dùng.
+ *
+ * ⚠️ **Cố ý NGƯỢC khuôn `isTeacherSiteEnabled()`** (`lib/flags.ts` phía trên: dùng
+ * `!== "false"`, tức mặc định ON). Khuôn đó đúng cho site giáo viên vì nó **đã qua
+ * kỳ flip 10/07/2026** và nay là hành vi mặc định của hệ thống. E-learning thì chưa
+ * có một dòng giao diện nào — chép nguyên khuôn đó sang sẽ cho cờ **bật sẵn ngay khi
+ * merge**, ngược hẳn ý định 2 pha. Vì vậy ở đây dùng `=== "true"`:
+ *   - unset · `"1"` · `"TRUE"` · `"yes"`  → false
+ *   - đúng chuỗi `"true"`                 → true
+ *
+ * OFF: host e-learning bounce về khu của người dùng (staff → admin, PARENT → portal),
+ * 0 byte HTML e-learning được phục vụ. Rollback = đổi env + redeploy, không revert code.
+ */
+export function isElearningEnabled(): boolean {
+  return process.env.ELEARNING_ENABLED === "true"; // mặc định OFF
+}

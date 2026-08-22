@@ -149,10 +149,13 @@ async function main() {
       console.log(`  ✅ DB updated: Course[${updated.slug}].thumbnail`);
 
       results.push({ slug: course.slug, url: publicUrl, status: "ok" });
-    } catch (err: any) {
-      console.error(`  ❌ Failed: ${err.message}`);
-      if (err.Code) console.error(`     Code: ${err.Code}`);
-      results.push({ slug: course.slug, url: "", status: "fail", error: err.message });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error(`  ❌ Failed: ${msg}`);
+      // `Code` là trường riêng của lỗi AWS SDK (S3/R2), không có trên Error chuẩn.
+      const code = (err as { Code?: unknown }).Code;
+      if (code) console.error(`     Code: ${String(code)}`);
+      results.push({ slug: course.slug, url: "", status: "fail", error: msg });
     }
   }
 

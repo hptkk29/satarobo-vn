@@ -39,28 +39,28 @@ const nullableStr = z
   .string()
   .nullable()
   .optional()
-  .transform((v) => (v === "" || v === undefined ? null : v));
+  .transform((v) => (v === "" || v === undefined || v === null ? null : v));
 
 const nullableEmail = z
   .union([z.string().email(), z.literal(""), z.null()])
   .optional()
-  .transform((v) => (v === "" || v === undefined ? null : v));
+  .transform((v) => (v === "" || v === undefined || v === null ? null : v));
 
 const nullableUrl = z
   .union([z.string().url(), z.literal(""), z.null()])
   .optional()
-  .transform((v) => (v === "" || v === undefined ? null : v));
+  .transform((v) => (v === "" || v === undefined || v === null ? null : v));
 
 const nullableDate = z
-  .union([z.coerce.date(), z.literal(""), z.null()])
+  .union([z.null(), z.literal(""), z.coerce.date()])
   .optional()
-  .transform((v) => (v === "" || v === undefined ? null : (v as Date)));
+  .transform((v) => (v === "" || v === undefined || v === null ? null : (v as Date)));
 
 const nullableInt = (min: number, max: number) =>
   z
-    .union([z.coerce.number().int().min(min).max(max), z.literal(""), z.null()])
+    .union([z.null(), z.literal(""), z.coerce.number().int().min(min).max(max)])
     .optional()
-    .transform((v) => (v === "" || v === undefined ? null : (v as number)));
+    .transform((v) => (v === "" || v === undefined || v === null ? null : (v as number)));
 
 export const employeeCreateSchema = z.object({
   employeeCode: z
@@ -95,7 +95,7 @@ export const employeeCreateSchema = z.object({
   endDate: nullableDate,
   // VND là số nguyên (H5/COL2) → làm tròn về Int.
   bhxhBase: z
-    .union([z.coerce.number().nonnegative(), z.literal(""), z.null()])
+    .union([z.null(), z.literal(""), z.coerce.number().nonnegative()])
     .optional()
     .transform((v) =>
       v === "" || v === undefined || v === null ? null : Math.round(v as number),

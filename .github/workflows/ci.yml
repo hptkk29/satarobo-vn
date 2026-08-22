@@ -408,7 +408,12 @@ jobs:
   e2e-r7:
     name: E2E Phase R7 (Playwright service-level + Postgres local)
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    # 344 test tuần tự (workers=1) — suờn lớn nhất trong các job e2e. Đo được: cùng 344
+    # test, cùng 0 lỗi, bước chạy dao động 4,5 phút → 12,5 phút chỉ vì tốc độ runner
+    # (job 96766997067 vs 96715795093). Thêm retries=2: 2 test đỏ đẩy 4,5 → 9,2 phút.
+    # Trần 20 không đủ cho ca xấu, và khi chạm trần job bị giết CÂM — trông y hệt một
+    # cú treo, đã tốn một vòng điều tra để nhận ra không phải. teacher/elearning vốn đã được 25.
+    timeout-minutes: 30
     needs: quality
 
     services:
@@ -466,7 +471,10 @@ jobs:
         run: pnpm test:e2e:r7
 
       - name: Upload R7 Playwright report
-        if: failure()
+        # `always()` chứ không `failure()`: job bị GitHub giết vì hết trần mang trạng thái
+        # "cancelled", không phải "failure" ⇒ bước này bị bỏ qua và KHÔNG còn một dấu vết
+        # nào để truy. Đó là lý do lần trước phải đoán từ log trống.
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: playwright-report-r7
@@ -661,5 +669,103 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: playwright-report-teacher
+          path: playwright-report/
+          retention-days: 7
+
+  e2e-elearning:
+    name: "E2E đào tạo nội bộ EL-07 (browser + prebuilt server, flag ON)"
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    needs: quality
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: ci
+          POSTGRES_PASSWORD: ci
+          POSTGRES_DB: ci_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      DATABASE_URL: postgresql://ci:ci@localhost:5432/ci_test
+      DIRECT_URL: postgresql://ci:ci@localhost:5432/ci_test
+      NEXTAUTH_SECRET: "ci-build-only-secret-do-not-use-in-prod-32chars"
+      NEXTAUTH_URL: "http://localhost:3141"
+      NEXT_PUBLIC_APP_URL: "http://localhost:3141"
+      BASE_URL: "http://localhost:3141"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v3
+        with: { version: 11 }
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Generate Prisma client
+        run: pnpm exec prisma generate
+
+      - name: Migrate DB schema
+        # Trước build: ISR public pages query DB lúc build (xem comment đầu file).
+        run: pnpm exec prisma migrate deploy
+
+      - name: Build app
+        # Browser spec cần server THẬT: playwright.elearning.config.ts ở CI chạy
+        # `pnpm start -p 3141` (prebuilt) + tự bơm ELEARNING_ENABLED=true cho
+        # webServer (cờ e-learning mặc định OFF — thiếu thì host bounce về admin, 0 byte HTML e-learning).
+        run: pnpm build
+
+      # Cache binary trình duyệt — lần chạy sau khỏi tải lại ~130MB.
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-${{ hashFiles('pnpm-lock.yaml') }}
+
+      # `--with-deps` gọi apt-get, mà mirror Ubuntu của runner CÓ LÚC TREO HẲN. Đo 19/08/2026:
+      # apt đứng im 19 phút không một dòng log, job hết trần 20 phút và bị huỷ TRƯỚC KHI chạy nổi
+      # một dòng test nào — 3/5 job E2E chết cùng kiểu đó, hai lần liên tiếp, trong khi 2 job còn
+      # lại dùng ĐÚNG lệnh này thì qua. Không phải cấu hình sai, là mạng của runner.
+      # `timeout` cắt sau 6 phút rồi thử lại, thay vì để cả ngân sách job trôi vào một bước cài đặt.
+      - name: Install Playwright browsers
+        run: |
+          for lan in 1 2 3; do
+            # Dọn apt-get MỒ CÔI của lần trước. `timeout` chỉ giết tiến trình CHA
+            # (`playwright install`); `apt-get` con VẪN CHẠY và giữ /var/lib/apt/lists/lock
+            # ⇒ lần thử sau chết ngay với "Could not get lock", cả 3 lần đều vô ích.
+            # Đã đo thật: job site GV, run 32236393980 (giữ nguyên ghi chú gốc) — lần 2 và 3 chết trong 17 giây.
+            if [ "$lan" -gt 1 ]; then
+              sudo pkill -9 -x apt-get 2>/dev/null || true
+              sudo pkill -9 -x dpkg 2>/dev/null || true
+              sudo rm -f /var/lib/apt/lists/lock /var/lib/dpkg/lock /var/lib/dpkg/lock-frontend || true
+              sudo dpkg --configure -a >/dev/null 2>&1 || true
+            fi
+            timeout 300 pnpm exec playwright install --with-deps chromium && exit 0
+            echo "::warning::playwright install lần $lan treo hoặc lỗi — thử lại"
+            sleep 10
+          done
+          echo "::error::playwright install hỏng cả 3 lần — thường là mirror apt của runner, chạy lại job"
+          exit 1
+
+      - name: Run e-learning browser e2e
+        run: pnpm test:e2e:elearning
+
+      - name: Upload e-learning Playwright report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report-elearning
           path: playwright-report/
           retention-days: 7

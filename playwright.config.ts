@@ -17,7 +17,17 @@ export default defineConfig({
   // lib server-only không resolve). FL chạy ở playwright.fl.config.ts + job CI riêng.
   // `teacher/` = spec browser site GV, CHỈ chạy qua playwright.teacher.config.ts (cần
   // webServer với TEACHER_SITE_ENABLED=true). Smoke không có server đó → loại như phase dir.
-  testIgnore: ["**/a0/**", "**/r[0-9]*/**", "**/fl/**", "**/crm/**", "**/teacher/**"],
+  // `elearning/` = spec browser khu đào tạo nội bộ, CHỈ chạy qua
+  // playwright.elearning.config.ts — bộ đó bơm ELEARNING_ENABLED=true, còn smoke chạy
+  // cờ OFF (mặc định) nên cho chạy ở đây là test đỏ vì lý do sai.
+  testIgnore: [
+    "**/a0/**",
+    "**/r[0-9]*/**",
+    "**/fl/**",
+    "**/crm/**",
+    "**/teacher/**",
+    "**/elearning/**",
+  ],
   // Each test gets 30s timeout
   timeout: 30_000,
   expect: { timeout: 5_000 },

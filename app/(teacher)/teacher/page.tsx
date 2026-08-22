@@ -231,8 +231,12 @@ export default async function TeacherHomePage() {
 
   const attHref = (s: Sess) =>
     `/teacher/lop?classId=${s.classId}&sessionId=${s.id}`;
+  // 21/08 — luồng giáo viên chốt lại: Lớp của tôi → mở lớp → chọn buổi → điểm danh →
+  // nhận xét + ảnh. Hai màn XUYÊN LỚP (/teacher/diem-danh, /teacher/nhan-xet) không còn
+  // thuộc luồng GV — chức năng đó chuyển sang admin/sale (/admin/attendance). Vì vậy
+  // mọi lối bấm ở đây đi thẳng vào Class Hub, KHÔNG vòng qua hai màn kia.
   const evalHref = (s: Sess) =>
-    `/teacher/nhan-xet?classId=${s.classId}&sessionId=${s.id}`;
+    `/teacher/lop?classId=${s.classId}&tab=nhan-xet&rvSession=${s.id}`;
   const timeRange = (s: Sess) =>
     s.class.startTime && s.class.endTime
       ? `${s.class.startTime}–${s.class.endTime}`
@@ -406,7 +410,7 @@ export default async function TeacherHomePage() {
           emptyText="Đã điểm danh đầy đủ các buổi."
           href={attHref}
           renderMeta={(s) => `${dayFmt.format(s.date)} · ${timeRange(s)}`}
-          seeAllHref="/teacher/diem-danh"
+          seeAllHref="/teacher/lop"
         />
         <PendingList
           title="Buổi chưa nhận xét"
@@ -418,7 +422,7 @@ export default async function TeacherHomePage() {
             const st = statOf(s);
             return `${dayFmt.format(s.date)} · đã nhận xét ${st.reviewed}/${st.attended} HV`;
           }}
-          seeAllHref="/teacher/nhan-xet"
+          seeAllHref="/teacher/lop"
         />
       </div>
 

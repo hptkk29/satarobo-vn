@@ -2,7 +2,14 @@
 
 import { useRouter } from "next/navigation";
 import { logoutToGate } from "@/lib/auth/logout-client";
-import { BookOpenText, LogOut, ChevronDown, User, Search } from "lucide-react";
+import {
+  BookOpenText,
+  LogOut,
+  ChevronDown,
+  GraduationCap,
+  User,
+  Search,
+} from "lucide-react";
 import { NotificationBell } from "@/components/notifications/notification-bell";
 import { RoleSwitcher } from "@/components/admin/role-switcher";
 import {
@@ -24,9 +31,24 @@ interface TopbarProps {
   roles?: string[];
   /** null = đang xem gộp mọi vai trò. */
   activeRole?: string | null;
+  /**
+   * EL-01 PR3 — URL khu đào tạo nội bộ, hoặc `null` khi cờ ELEARNING_ENABLED OFF.
+   *
+   * Tính Ở SERVER rồi truyền xuống: component này là client, không đọc được
+   * `process.env.ELEARNING_ENABLED`. Đừng đổi sang `NEXT_PUBLIC_*` để đọc trực tiếp —
+   * cờ này gác cả đường định tuyến ở middleware, hai nguồn sự thật sẽ lệch nhau.
+   */
+  elearningUrl?: string | null;
 }
 
-export function Topbar({ userId, userName, userRole, roles = [], activeRole = null }: TopbarProps) {
+export function Topbar({
+  userId,
+  userName,
+  userRole,
+  roles = [],
+  activeRole = null,
+  elearningUrl = null,
+}: TopbarProps) {
   const router = useRouter();
   const initials = userName
     ? userName
@@ -82,6 +104,24 @@ export function Topbar({ userId, userName, userRole, roles = [], activeRole = nu
             <DropdownMenuItem onClick={() => router.push("/settings")}>
               <User className="mr-2 h-4 w-4" /> Hồ sơ cá nhân
             </DropdownMenuItem>
+            {/* EL-01 PR3 (AC1 bản sửa) — chèn NGAY DƯỚI "Hồ sơ cá nhân" (vị trí
+                thứ hai theo BA §9.1). `elearningUrl` null ⇒ không render — null khi cờ OFF
+                HOẶC tài khoản không có hồ sơ nhân sự (`lib/elearning/entry.ts`).
+                Dùng <a target="_blank"> chứ không router.push: điều hướng CROSS-HOST, và AC1
+                đòi mở TAB MỚI để người đang dở việc quản trị không mất trang. */}
+            {elearningUrl ? (
+              <DropdownMenuItem
+                render={
+                  <a
+                    href={elearningUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  />
+                }
+              >
+                <GraduationCap className="mr-2 h-4 w-4" /> Học tập nội bộ
+              </DropdownMenuItem>
+            ) : null}
             <DropdownMenuItem onClick={() => router.push("/huong-dan")}>
               <BookOpenText className="mr-2 h-4 w-4" /> Hướng dẫn sử dụng
             </DropdownMenuItem>

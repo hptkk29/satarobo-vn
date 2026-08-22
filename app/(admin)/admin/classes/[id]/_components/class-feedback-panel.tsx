@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { ExternalLink, MessageSquareText } from "lucide-react";
 import { formatDateDMY } from "@/lib/format/date";
+import { sessionNumberLabel } from "@/lib/lms/session-order";
 import { PhanTrangBang } from "@/components/ui/phan-trang-bang";
 import { SessionEvalCard } from "@/components/admin/session-eval-card";
 import type { ClassSessionFeedbackData } from "@/lib/classes/session-feedback-data";
@@ -41,7 +42,10 @@ export function ClassFeedbackPanel({ data }: { data: ClassSessionFeedbackData })
     arr.push(e);
     entriesByStudent.set(e.studentId, arr);
   }
-  // Mới nhất lên trước — cùng chiều với bảng buổi phía trên.
+  // Mới nhất lên trước.
+  // ⚠️ 21/08 — KHÁC chiều với bảng "Tổng quan theo buổi" phía trên: bảng đó nay xếp theo
+  // việc-còn-nợ rồi tới số buổi (lib/lms/session-order), còn khối này là lịch sử của MỘT
+  // học viên nên đọc ngược thời gian vẫn tự nhiên hơn. Chủ ý, đừng "đồng bộ" lại.
   for (const arr of entriesByStudent.values()) {
     arr.sort((a, b) => (bySession.get(b.sessionId) ?? "").localeCompare(bySession.get(a.sessionId) ?? ""));
   }
@@ -72,6 +76,7 @@ export function ClassFeedbackPanel({ data }: { data: ClassSessionFeedbackData })
           <table className="w-full min-w-[34rem] text-sm">
             <thead>
               <tr className="border-b border-border text-left text-xs uppercase tracking-wide text-muted-foreground">
+                <th className="px-4 py-2 font-semibold">Buổi</th>
                 <th className="px-4 py-2 font-semibold">Ngày</th>
                 <th className="px-4 py-2 font-semibold">Bài / chủ đề</th>
                 <th className="px-4 py-2 font-semibold">Đã nhận xét</th>
@@ -83,6 +88,11 @@ export function ClassFeedbackPanel({ data }: { data: ClassSessionFeedbackData })
                 const note = statusNote(s);
                 return (
                   <tr key={s.id}>
+                    {/* Ô riêng, không ghép vào text node của nhãn bài — test hồi quy dò
+                        nhãn bằng getByText khớp chính xác. */}
+                    <td className="whitespace-nowrap px-4 py-2 font-semibold tabular-nums text-foreground">
+                      {sessionNumberLabel(s.seq)}
+                    </td>
                     <td className="whitespace-nowrap px-4 py-2 font-medium tabular-nums text-foreground">
                       {formatDateDMY(s.dateISO)}
                     </td>
@@ -158,7 +168,11 @@ export function ClassFeedbackPanel({ data }: { data: ClassSessionFeedbackData })
                             <SessionEvalCard
                               key={`${e.sessionId}-${e.studentId}`}
                               title={s ? s.label : "Buổi học"}
-                              subtitle={s ? formatDateDMY(s.dateISO) : null}
+                              subtitle={
+                                s
+                                  ? `${sessionNumberLabel(s.seq)} · ${formatDateDMY(s.dateISO)}`
+                                  : null
+                              }
                               data={e}
                             />
                           );

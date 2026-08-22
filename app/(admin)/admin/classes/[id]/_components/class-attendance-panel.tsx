@@ -6,6 +6,7 @@ import { AttendanceGrid } from "../../../attendance/_components/attendance-grid"
 import { loadClassSessionRoster } from "../_attendance-actions";
 import type { AttendanceRosterRow } from "@/lib/attendance/roster";
 import { formatDateDMY } from "@/lib/format/date";
+import { sessionNumberLabel } from "@/lib/lms/session-order";
 import type { SessionRow } from "./class-sessions-manage";
 
 function fmt(dateIso: string): string {
@@ -17,7 +18,10 @@ function fmt(dateIso: string): string {
 
 /** Nhãn <option>: phải nói được buổi nào ĐÃ điểm danh, nếu không người dùng mò mù. */
 function optionLabel(s: SessionRow): string {
-  const base = `${fmt(s.date)}${s.topic ? ` — ${s.topic}` : ""}`;
+  // 21/08 — mở đầu bằng SỐ BUỔI: quản lý và giáo viên nói chuyện với nhau bằng "buổi 7",
+  // không bằng ngày. Giữ y hệt ở class-eval-panel để hai dropdown cùng trang không lệch.
+  const no = s.seq ? `${sessionNumberLabel(s.seq)} · ` : "";
+  const base = `${no}${fmt(s.date)}${s.topic ? ` — ${s.topic}` : ""}`;
   if (s.status === "CANCELLED") return `${base} (đã huỷ)`;
   return `${base} · ${s.attendanceCount > 0 ? `đã điểm danh ${s.attendanceCount}` : "chưa điểm danh"}`;
 }

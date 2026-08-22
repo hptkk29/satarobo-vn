@@ -1225,3 +1225,197 @@ describe("[Đợt B] Site Sale — cờ BẬT", () => {
     ).toEqual<RouteDecision>(TO_INTAKE);
   });
 });
+
+// EL-01 — e-learning host (e-learning.satarobo.vn) × role × cờ ELEARNING_ENABLED.
+// 2-phase như L5: cờ OFF = hành vi hiện tại y nguyên, 0 byte HTML e-learning.
+//
+// Khác teacher ở ĐÚNG MỘT chỗ: điều kiện vào là "không phải PARENT-thuần"
+// (QĐ-7: EMP = mọi vai staff), không phải một vai cụ thể.
+// ─────────────────────────────────────────────────────────────────────────
+
+describe("EL-01. e-learning host × role — cờ OFF (mặc định)", () => {
+  const OFF = { elearningEnabled: false } as const;
+
+  it.each(STAFF_ROLES)("%s trên e-learning → bounce admin /dashboard", (role) => {
+    expect(
+      decideRoute({ hostKind: "elearning", pathname: "/", ...authed(role), ...OFF }),
+    ).toEqual<RouteDecision>({
+      type: "redirectHost",
+      host: "admin",
+      path: "/dashboard",
+      status: 307,
+    });
+  });
+
+  it("PARENT trên e-learning → bounce portal", () => {
+    expect(
+      decideRoute({ hostKind: "elearning", pathname: "/", ...authed("PARENT"), ...OFF }),
+    ).toEqual<RouteDecision>({
+      type: "redirectHost",
+      host: "portal",
+      path: "/",
+      status: 307,
+    });
+  });
+
+  it("cờ OFF: KHÔNG rewrite path nào — 0 byte HTML e-learning được phục vụ", () => {
+    for (const p of ["/", "/khoa-hoc", "/bao-cao", "/elearning", "/elearning/x"]) {
+      const d = decideRoute({
+        hostKind: "elearning",
+        pathname: p,
+        ...authed("TRAINING"),
+        ...OFF,
+      });
+      expect(d.type).not.toBe("rewrite");
+      expect(d.type).not.toBe("next");
+    }
+  });
+});
+
+describe("EL-01. e-learning host × role — cờ ON", () => {
+  const ON = { elearningEnabled: true } as const;
+
+  it.each(STAFF_ROLES)("%s (vai staff bất kỳ) vào được — QĐ-7 EMP = mọi vai staff", (role) => {
+    expect(
+      decideRoute({ hostKind: "elearning", pathname: "/", ...authed(role), ...ON }),
+    ).toEqual<RouteDecision>({ type: "rewrite", path: "/elearning" });
+  });
+
+  it("PARENT-thuần → bounce portal (đào tạo nội bộ không dành cho phụ huynh)", () => {
+    expect(
+      decideRoute({ hostKind: "elearning", pathname: "/bao-cao", ...authed("PARENT"), ...ON }),
+    ).toEqual<RouteDecision>({
+      type: "redirectHost",
+      host: "portal",
+      path: "/",
+      status: 307,
+    });
+  });
+
+  it("chưa login → /login kèm callbackUrl", () => {
+    expect(
+      decideRoute({
+        hostKind: "elearning",
+        pathname: "/khoa-hoc/an-toan",
+        role: null,
+        sessionValid: false,
+        ...ON,
+      }),
+    ).toEqual<RouteDecision>({
+      type: "redirectPath",
+      path: "/login",
+      callbackUrl: "/khoa-hoc/an-toan",
+      reason: undefined,
+    });
+  });
+
+  it("clean URL được rewrite vào route group", () => {
+    expect(
+      decideRoute({ hostKind: "elearning", pathname: "/khoa-hoc", ...authed("TEACHER"), ...ON }),
+    ).toEqual<RouteDecision>({ type: "rewrite", path: "/elearning/khoa-hoc" });
+  });
+
+  it("path /elearning/* thật → next (không rewrite chồng)", () => {
+    expect(
+      decideRoute({ hostKind: "elearning", pathname: "/elearning/khoa-hoc", ...authed("HR"), ...ON }),
+    ).toEqual<RouteDecision>({ type: "next" });
+  });
+
+  it.each(["/admin/leads", "/portal/ho-so", "/teacher/lich"])(
+    "path lạc khu %s → về trang chủ e-learning",
+    (p) => {
+      expect(
+        decideRoute({ hostKind: "elearning", pathname: p, ...authed("SALES_CSM"), ...ON }),
+      ).toEqual<RouteDecision>({ type: "redirectPath", path: "/" });
+    },
+  );
+
+  it("đã login vào /login → về trang chủ e-learning", () => {
+    expect(
+      decideRoute({ hostKind: "elearning", pathname: "/login", ...authed("TRAINING"), ...ON }),
+    ).toEqual<RouteDecision>({ type: "redirectPath", path: "/" });
+  });
+
+  it("/doi-mat-khau phục vụ tại chỗ, KHÔNG rewrite", () => {
+    expect(
+      decideRoute({ hostKind: "elearning", pathname: "/doi-mat-khau", ...authed("TEACHER"), ...ON }),
+    ).toEqual<RouteDecision>({ type: "next" });
+  });
+
+  it("infra path không bị auth", () => {
+    expect(
+      decideRoute({
+        hostKind: "elearning",
+        pathname: "/api/auth/session",
+        role: null,
+        sessionValid: false,
+        ...ON,
+      }),
+    ).toEqual<RouteDecision>({ type: "next" });
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────
+// EL-01 · AC10 — kích thước PR1 (QĐ-CDA-13 BP-1).
+//
+// `lib/auth/route-policy.ts` là chỗ va chạm số một giữa e-learning (host thứ 6) và
+// parity site giáo viên (host thứ 5): hai luồng sửa CÙNG hàm decideRoute() và CÙNG
+// bảng test này. PR1 vì thế chỉ được chạm proxy.ts + route-policy.ts + test này
+// (+ lib/flags.ts nếu cần) — route group, layout gate, lối vào đi PR sau.
+//
+// Quy tắc quy trình mà không có test thì tuần thứ ba sẽ có người gộp "cho tiện", nên
+// nó phải chạy trong CI. Bất biến kiểm được KHÔNG cần git: PR1 chưa tạo route group.
+// ─────────────────────────────────────────────────────────────────────────
+
+describe("EL-01 · AC10. Bất biến cấu trúc khu e-learning", () => {
+  // PR1 đã merge (case này từng khẳng định route group CHƯA tồn tại, và nó đã làm
+  // đúng việc: đỏ ngay khi PR2 bắt đầu tạo thư mục). PR2 lật lại khẳng định — từ nay
+  // route group PHẢI tồn tại, vì host thứ 6 rewrite vào đó; thiếu nó thì cờ ON cho 404.
+  it("route group app/(elearning)/ tồn tại — đích rewrite của host thứ 6", async () => {
+    const { existsSync } = await import("node:fs");
+    const { resolve } = await import("node:path");
+    for (const f of [
+      "app/(elearning)/elearning/layout.tsx",
+      "app/(elearning)/elearning/page.tsx",
+    ]) {
+      expect(existsSync(resolve(process.cwd(), f)), `thiếu ${f}`).toBe(true);
+    }
+  });
+
+  it("proxy.ts và route-policy.ts nhất quán: mọi HostKind định tuyến đều có host thật", async () => {
+    const { readFileSync } = await import("node:fs");
+    const { resolve } = await import("node:path");
+    const proxy = readFileSync(resolve(process.cwd(), "proxy.ts"), "utf8");
+    // Mỗi kind xử lý ở BRANCH 2 phải có một dòng trong HOST_BY_KIND — thiếu thì
+    // redirectHost ném undefined vào URL và người dùng rơi vào vòng lặp câm.
+    for (const kind of ["admin", "portal", "public", "teacher", "elearning"]) {
+      expect(proxy, `HOST_BY_KIND thiếu "${kind}"`).toContain(`${kind}:`);
+    }
+  });
+
+  it("nhánh /elearning trên localhost nằm ở BRANCH 3, KHÔNG lọt vào BRANCH 1", async () => {
+    const { readFileSync } = await import("node:fs");
+    const { resolve } = await import("node:path");
+    const proxy = readFileSync(resolve(process.cwd(), "proxy.ts"), "utf8");
+
+    const branch1 = proxy.indexOf("BRANCH 1:");
+    const branch3 = proxy.indexOf("BRANCH 3:");
+    const teacher = proxy.indexOf("isTeacherPath(pathname)");
+    const elearning = proxy.indexOf("isElearningPath(pathname)");
+
+    expect(branch1).toBeGreaterThan(-1);
+    expect(branch3).toBeGreaterThan(branch1);
+    expect(teacher).toBeGreaterThan(branch3);
+
+    // BUG THẬT đã xảy ra ở PR1 và lọt qua merge: khối này bị đặt trong BRANCH 1
+    // (`kind === "vercel" && NODE_ENV === "production"`) nên chỉ sống ở preview
+    // deployment. Hậu quả trên localhost và mọi host thật: `/elearning` rơi xuống
+    // nhánh cuối, bị đá về `/login` MẤT `callbackUrl` — đăng nhập xong văng ra
+    // trang chủ. Không có lỗi, không có log; e2e bắt được nhờ đòi `callbackUrl`.
+    // Guard này rẻ hơn nhiều so với lần truy vết tiếp theo.
+    expect(
+      elearning,
+      "isElearningPath phải nằm SAU mốc BRANCH 3 — đặt trong BRANCH 1 là nhánh chết",
+    ).toBeGreaterThan(branch3);
+  });
+});

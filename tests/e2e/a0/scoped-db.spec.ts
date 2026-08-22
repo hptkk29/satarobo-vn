@@ -5,6 +5,7 @@
 import { test, expect } from "@playwright/test";
 import { db } from "../../../lib/db";
 import { resetDb, seedOrg, seedRoles, seedUser } from "../_helpers/seed";
+import { ROLE_SEED } from "../../../prisma/seed-roles";
 import { testEmail } from "../_helpers/fixtures";
 import { assignUserOrgRole, type RbacActor } from "../../../lib/auth/rbac-service";
 import { resolveActorUncached } from "../../../lib/auth/actor";
@@ -99,7 +100,10 @@ test.describe("[A0-04] scopedDb cách ly cơ sở", () => {
 
   test("[A0-04-T1-01] model không centerId (RoleDef) → không bị scope (AC9)", async () => {
     const actor = await makeUser("cm1f", "CS1", "CENTER_MANAGER");
-    expect(await scopedDb(actor).roleDef.count()).toBe(14);
+    // Bài này chứng minh "model không có centerId thì không bị lọc" — điều đó không
+    // phụ thuộc vào việc có bao nhiêu vai, nên bám `ROLE_SEED.length` thay vì số đèm cứng
+    // (14 → 15 khi EL-02 thêm AUDITOR đã làm bài này đỏ mà chẳng liên quan gì tới scope).
+    expect(await scopedDb(actor).roleDef.count()).toBe(ROLE_SEED.length);
   });
 
   test("[A0-04-T1-02] bypass → thấy tất cả + ghi AuditLog SCOPE_BYPASS (AC10)", async () => {

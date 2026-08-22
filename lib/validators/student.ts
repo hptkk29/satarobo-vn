@@ -61,12 +61,12 @@ const nullableEmail = z
   });
 
 const nullableDate = z
-  .union([z.coerce.date(), z.literal(""), z.null()])
+  .union([z.null(), z.literal(""), z.coerce.date()])
   .optional()
-  .transform((v) => (v === "" || v === undefined ? null : v));
+  .transform((v) => (v === "" || v === undefined || v === null ? null : v));
 
 const nullableGrade = z
-  .union([z.coerce.number().int().min(1).max(12), z.literal(""), z.null()])
+  .union([z.null(), z.literal(""), z.coerce.number().int().min(1).max(12)])
   .optional()
   .transform((v) => (v === "" || v === undefined || v === null ? null : v));
 

@@ -299,3 +299,145 @@ export async function deleteAttendance(id: string): Promise<ActionResult> {
   revalidatePath("/attendance");
   return {};
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 21/08 — "Hoàn tất buổi" bấm thẳng từ danh sách buổi của lớp ở màn điểm danh.
+//
+// ⚠️ ĐỌC TRƯỚC KHI SỬA — hai chỗ ở đây là quyết định có chủ đích, không phải sót:
+//
+// 1. KHÔNG đi qua `completeSessionAction` (classes/[id]/session/_actions.ts). Hàm đó
+//    gác sau cờ `SESSION_LIFECYCLE_V2` — cờ TẮT ở cả dev lẫn prod, nên bấm nút sẽ chỉ
+//    nhận "tính năng chưa được bật". Chủ dự án chốt 21/08: màn này phải đóng được buổi.
+//    Nên ở đây gọi thẳng `lib/lms/session-lifecycle.completeSession` — CÙNG một state
+//    machine, không đẻ đường thứ hai đổi `status` bằng tay.
+//
+// 2. `assignMode` GIM CỨNG "DEFER". Chủ dự án nói rõ: "hoàn tất buổi ở đây là hoàn tất
+//    điểm danh, nhận xét, ảnh/video — bài tập về nhà không liên quan". Để "NOW" thì
+//    event `session.taught` sẽ tự tạo HomeworkAssignment và bắn thông báo "Bài tập mới"
+//    tới học viên/phụ huynh ngay lúc nhân viên bấm nút. Giao bài vẫn làm được bằng nút
+//    "Giao bài" sẵn có ở trang lớp. ĐỪNG mở thành tham số cho gọn — mở ra là màn điểm
+//    danh im lặng trở thành đường gửi tin cho phụ huynh.
+//
+// Cổng: 3 việc phải XONG ĐỦ (kiểm lại Ở SERVER, không tin nút bị disable trên giao
+// diện — Server Action là endpoint riêng, POST thẳng vào được).
+import { completeSession } from "@/lib/lms/session-lifecycle";
+import { getAuditActor } from "@/lib/audit/log";
+import { passesScope } from "@/lib/db-scope";
+import { sessionWorkState } from "@/lib/lms/attendance-queue";
+import {
+  buildSessionMediaCoverage,
+  isSessionWorkComplete,
+  SESSION_MEDIA_SELECT,
+} from "@/lib/lms/session-order";
+import { ENROLLMENT_ACTIVE_STATUS_LIST } from "@/lib/enrollment-status";
+
+export type CompleteAttendanceSessionResult = {
+  ok: boolean;
+  error?: string;
+  /** Buổi vốn đã COMPLETED — bấm lại không phát lại event. */
+  alreadyCompleted?: boolean;
+};
+
+export async function completeAttendanceSessionAction(
+  sessionId: string,
+): Promise<CompleteAttendanceSessionResult> {
+  const session = await auth();
+  if (!session?.user?.id) return { ok: false, error: "Chưa đăng nhập" };
+  if (!(await checkPermission("sessions:edit"))) {
+    return { ok: false, error: "Không có quyền hoàn tất buổi" };
+  }
+
+  const actor = await resolveActor(session.user.id);
+  const sdb = scopedDb(actor);
+
+  const sess = await sdb.classSession.findUnique({
+    where: { id: sessionId },
+    select: {
+      id: true,
+      classId: true,
+      status: true,
+      centerId: true,
+      class: { select: { centerId: true } },
+    },
+  });
+  if (!sess) return { ok: false, error: "Không tìm thấy buổi học" };
+  if (!passesScope("Class", { centerId: sess.class?.centerId ?? null }, actor)) {
+    return { ok: false, error: "Lớp không thuộc cơ sở bạn quản lý" };
+  }
+
+  // Ownership: quản lý/HO/SUPER_ADMIN, hoặc GV phụ trách ĐÚNG lớp này — khớp luật của
+  // completeSessionAction để hai đường không cho phép hai tập người khác nhau.
+  const isManager =
+    actor.isSuperAdmin ||
+    actor.isHoLevel ||
+    actor.orgRoles.some((r) => r.roleCode === "CENTER_MANAGER");
+  if (!isManager && !actor.assignedClassIds.has(sess.classId)) {
+    return { ok: false, error: "Chỉ giáo viên phụ trách mới hoàn tất được buổi này" };
+  }
+  if (sess.status === "CANCELLED") {
+    return { ok: false, error: "Buổi đã bị huỷ — không thể hoàn tất" };
+  }
+
+  // Kiểm lại đủ 3 việc ở server.
+  const [roster, attendanceRows, feedbackRows, mediaRows] = await Promise.all([
+    sdb.enrollment.findMany({
+      where: {
+        classId: sess.classId,
+        status: { in: ENROLLMENT_ACTIVE_STATUS_LIST },
+        deletedAt: null,
+        student: { deletedAt: null },
+      },
+      select: { studentId: true },
+    }),
+    sdb.attendance.findMany({
+      where: { sessionId },
+      select: { studentId: true, status: true },
+    }),
+    sdb.studentSessionFeedback.findMany({
+      where: { classSessionId: sessionId },
+      select: { studentId: true },
+    }),
+    // Từng dòng kèm thẻ học viên — luật là mọi em đi học phải có ảnh, đếm gộp không
+    // trả lời được câu đó (xem SessionWorkInput.media).
+    sdb.classSessionMedia.findMany({
+      where: { classSessionId: sessionId, status: { not: "REJECTED" } },
+      select: SESSION_MEDIA_SELECT,
+    }),
+  ]);
+
+  const cover = buildSessionMediaCoverage(mediaRows).get(sessionId) ?? {
+    classWide: false,
+    tagged: new Set<string>(),
+  };
+  const work = sessionWorkState({
+    rosterStudentIds: roster.map((r) => r.studentId),
+    attendanceRows,
+    feedbackStudentIds: feedbackRows.map((f) => f.studentId),
+    media: { taggedStudentIds: cover.tagged, hasClassWide: cover.classWide },
+  });
+  if (!isSessionWorkComplete(work)) {
+    const missing = [
+      work.attendanceDone ? null : "điểm danh đủ lớp",
+      work.feedbackDone ? null : "nhận xét đủ học viên đi học",
+      work.photoDone ? null : "ảnh/video cho mọi học viên đi học",
+    ].filter(Boolean);
+    return { ok: false, error: `Chưa hoàn tất: còn thiếu ${missing.join(", ")}.` };
+  }
+
+  const { actorId, actorName } = getAuditActor(session);
+  const res = await completeSession({
+    sessionId,
+    // Đã kiểm điểm danh ĐỦ CẢ LỚP ở trên — chặt hơn hẳn cảnh báo "chưa có bản ghi nào"
+    // của lifecycle, nên không cần hỏi lại người dùng.
+    confirmNoAttendance: true,
+    assignMode: "DEFER", // xem ghi chú (2) ở đầu khối
+    actorId,
+    actorName,
+  });
+  if (!res.ok) return { ok: false, error: res.error ?? "Hoàn tất buổi thất bại" };
+
+  revalidatePath("/attendance");
+  revalidatePath(`/classes/${sess.classId}`);
+  revalidatePath(`/sessions/${sessionId}`);
+  return { ok: true, alreadyCompleted: res.alreadyCompleted };
+}

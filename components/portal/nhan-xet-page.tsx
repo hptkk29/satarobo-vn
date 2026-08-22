@@ -11,8 +11,9 @@ import {
 import { cn } from "@/lib/utils";
 import type { FeedbackItem } from "@/lib/portal/feedback";
 import {
-  EVAL_NOTE_FIELDS,
+  EVAL_OVERALL_LABEL,
   evalLevelText,
+  evalNotesProse,
   groupedEvalCriteria,
   type EvalNotes,
 } from "@/lib/lms/session-eval-rubric";
@@ -53,16 +54,27 @@ function CommentBody({ text }: { text: string }) {
   );
 }
 
-// Phiếu mở rộng: 4 mục văn xuôi (Kiến thức/Kỹ năng/Thái độ/Đề xuất) — nhãn cam, bỏ mục trống.
+// Phiếu mở rộng. Từ 21/08 có HAI dạng cùng tồn tại (evalNotesProse):
+//   • phiếu mới — một đoạn "Đánh giá chung";
+//   • phiếu cũ  — 4 mục Kiến thức/Kỹ năng/Thái độ/Đề xuất, nhãn cam, bỏ mục trống.
 function NotesBody({ notes }: { notes: EvalNotes }) {
-  const rows = EVAL_NOTE_FIELDS.map((f) => ({
-    ...f,
-    text: notes[f.key].trim(),
-  })).filter((r) => r.text.length > 0);
-  if (rows.length === 0) return null;
+  const prose = evalNotesProse(notes);
+  if (!prose) return null;
+  if (prose.kind === "overall") {
+    return (
+      <div className="rounded-xl bg-muted/40 p-4 space-y-2">
+        <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+          {EVAL_OVERALL_LABEL}
+        </p>
+        <p className="whitespace-pre-wrap text-sm leading-relaxed text-muted-foreground">
+          {prose.text}
+        </p>
+      </div>
+    );
+  }
   return (
     <div className="rounded-xl bg-muted/40 p-4 space-y-2">
-      {rows.map((r) => (
+      {prose.rows.map((r) => (
         <p
           key={r.key}
           className="text-sm leading-relaxed text-muted-foreground"
