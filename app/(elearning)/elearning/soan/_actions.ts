@@ -1,0 +1,73 @@
+"use server";
+
+import { z } from "zod";
+import { defineAction } from "@/lib/actions/define";
+import { ActionError } from "@/lib/actions/factory";
+import { computeMinReadSeconds } from "@/lib/elearning/reading";
+
+/**
+ * EL-04 — SOẠN BÀI ĐỌC.
+ *
+ * Trình soạn bài là tính năng HẠNG NHẤT, không phải màn phụ: phòng Đào tạo phải
+ * soạn được một bài hoàn chỉnh mà không hỏi lập trình viên. Dự án không còn chốt
+ * danh mục khoá, nên nếu soạn bài khó thì danh mục sẽ trống vào ngày mở — và đó
+ * đúng là rủi ro số 1 của module.
+ */
+
+const luuBaiSchema = z.object({
+  lessonId: z.string().min(1),
+  title: z.string().trim().min(1, "Tên bài không được trống"),
+  contentMd: z.string().min(1, "Nội dung không được trống"),
+});
+
+export const luuBaiDocAction = defineAction({
+  name: "luuBaiDoc",
+  permission: "elearning:content:author",
+  module: "elearning",
+  entityType: "TrnLesson",
+  auditAction: "UPDATE",
+  schema: luuBaiSchema,
+  handler: async ({ db, input }) => {
+    const cu = await db.trnLesson.findFirst({
+      where: { id: input.lessonId, deletedAt: null },
+      select: { id: true, kind: true, title: true, contentMd: true, minReadSeconds: true },
+    });
+    if (!cu) throw new ActionError("NOT_FOUND", "Không tìm thấy bài học");
+    if (cu.kind !== "READ") {
+      throw new ActionError(
+        "WRONG_KIND",
+        "Trình soạn này chỉ dùng cho bài dạng đọc",
+      );
+    }
+
+    // ⚠️ `minReadSeconds` tính LÚC LƯU và lưu CỨNG. Trang đọc chỉ đọc lại, không
+    // tính lại theo từng lượt xem — tính lại nghĩa là sửa một chữ trong bài cũng
+    // đổi ngưỡng của người đang đọc dở, và họ đang ở giữa chừng thì đột nhiên
+    // "chưa đủ".
+    const minReadSeconds = computeMinReadSeconds(input.contentMd);
+
+    await db.trnLesson.update({
+      where: { id: cu.id },
+      data: {
+        title: input.title,
+        contentMd: input.contentMd,
+        minReadSeconds,
+      },
+    });
+
+    return {
+      entityId: cu.id,
+      oldValues: {
+        title: cu.title,
+        minReadSeconds: cu.minReadSeconds,
+        soKyTu: cu.contentMd?.length ?? 0,
+      },
+      newValues: {
+        title: input.title,
+        minReadSeconds,
+        soKyTu: input.contentMd.length,
+      },
+      data: { minReadSeconds },
+    };
+  },
+});
