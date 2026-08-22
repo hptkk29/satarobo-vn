@@ -47,6 +47,23 @@ export type ReconcileInput = {
   actorId: string | null;
   actorName: string;
   reason: string;
+  /**
+   * DỌN DÒNG ĐẶT SAI CHỖ — mặc định TẮT, bật có chủ đích.
+   *
+   * Vòng thu hồi thường chỉ đụng những dòng mà `previous` DỰ ĐOÁN là đang có. Nếu dòng thật
+   * nằm ở đơn vị khác với thứ `previous` nói, nó KHÔNG BAO GIỜ được dọn — đo được trên prod
+   * 22/08/2026: tài khoản có `User.orgUnitId = CS2` nhưng vẫn giữ dòng vai neo tại Hội sở,
+   * và lưu lại hồ sơ bao nhiêu lần cũng không gỡ được.
+   *
+   * Bật cờ này thì ngoài vòng thường, hàm dọn thêm các dòng ĐANG HIỆU LỰC mang ĐÚNG VAI
+   * mà bảng ánh xạ vừa sinh ra, nhưng đặt ở ĐƠN VỊ KHÁC với nơi đúng.
+   *
+   * ⚠️ Chỉ bật ở đường ĐỒNG BỘ ĐƠN VỊ TỪ HỒ SƠ NHÂN SỰ, nơi hồ sơ LÀ nguồn sự thật về "người
+   * này làm ở đâu". Đừng bật ở đường đổi vai trò hay đường gán tay: ở đó một người CÓ THỂ
+   * được cấp cùng một vai ở nhiều đơn vị một cách hợp lệ (GV dạy chéo cơ sở), và dọn ở đó là
+   * thu hồi nhầm quyền của người đang dùng.
+   */
+  revokeMisplaced?: boolean;
 };
 
 export type ReconcileResult = {
@@ -226,6 +243,58 @@ export async function reconcileUserOrgRoles(
       tx,
     });
     revoked.push(t.roleCode);
+  }
+
+  // DỌN DÒNG ĐẶT SAI CHỖ (chỉ khi `revokeMisplaced`) — xem chú thích ở `ReconcileInput`.
+  //
+  // Vòng trên dựa vào `previous`, tức dựa vào thứ người gọi TIN LÀ đang có. Vòng này dựa vào
+  // DÒNG THẬT trong DB. Chỉ đụng những vai mà bảng ánh xạ VỪA SINH RA (`nextPlan`), nên vai gán
+  // tay mang mã khác vẫn nằm ngoài tầm với.
+  if (input.revokeMisplaced) {
+    const noiDung = new Map<string, string>(); // roleId -> orgUnitId ĐÚNG
+    for (const t of nextPlan.targets) {
+      noiDung.set(roleIdByCode.get(t.roleCode) as string, t.orgUnitId);
+    }
+    const codeByRoleId = new Map(roleDefs.map((r) => [r.id, r.code]));
+
+    for (const row of existing) {
+      if (!isLive(row, now)) continue;
+      const dung = noiDung.get(row.roleId);
+      // Vai không thuộc bảng ánh xạ lần này ⇒ không đụng. Đặt đúng chỗ ⇒ không đụng.
+      if (dung === undefined || dung === row.orgUnitId) continue;
+
+      await tx.userOrgRole.update({
+        where: {
+          userId_orgUnitId_roleId: {
+            userId,
+            orgUnitId: row.orgUnitId,
+            roleId: row.roleId,
+          },
+        },
+        data: { status: "EXPIRED", effectiveTo: now },
+      });
+      const code = codeByRoleId.get(row.roleId) ?? row.roleId;
+      await logRbacAudit({
+        entity: "ASSIGNMENT",
+        entityId: `${userId}:${row.orgUnitId}:${row.roleId}`,
+        action: "REVOKE",
+        actorId: input.actorId,
+        actorName: input.actorName,
+        // Lý do KHÁC vòng trên, để người đọc nhật ký phân biệt được "đổi đơn vị bình thường"
+        // với "dọn một dòng đã kẹt sai chỗ từ trước".
+        reason: `${input.reason} — dọn dòng vai đặt sai đơn vị`,
+        oldValues: { status: "ACTIVE", orgUnitId: row.orgUnitId },
+        newValues: {
+          roleCode: code,
+          status: "EXPIRED",
+          effectiveTo: now,
+          dungRa: dung,
+          auto: true,
+        },
+        tx,
+      });
+      revoked.push(code);
+    }
   }
 
   return { assigned, revoked };
