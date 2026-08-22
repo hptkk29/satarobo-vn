@@ -16,6 +16,14 @@
  *
  * ⚠️ actor.isSuperAdmin suy từ UserOrgRole chứ KHÔNG từ User.role — thiếu dòng đó thì
  * scopedDb chèn `centerId IN []` và trang lớp trả 404 (xem seedAdmin).
+ *
+ * ⚠️ VÌ SAO NẰM Ở `tests/e2e/a0` CHỨ KHÔNG PHẢI `r7` (nơi có các spec cùng chủ đề):
+ * job CI "E2E Phase R7" CỐ Ý không cài trình duyệt — toàn bộ spec R7 là service-level,
+ * và chính bước `playwright install` từng là chỗ duy nhất giết job đó (apt treo 19 phút).
+ * Bộ A0 mới là bộ có đủ ba thứ spec này cần: trình duyệt, webServer :3100, Postgres local
+ * + `.env.test` — giống `login-identifier.spec.ts` / `forgot-password.spec.ts` ở cạnh đây.
+ * Phần LOGIC (không cần trình duyệt) của cùng bản vá nằm ở
+ * `tests/e2e/r7/withdraw-student-legacy-active.spec.ts`.
  */
 import { test, expect } from "@playwright/test";
 import { db } from "../../../lib/db";
