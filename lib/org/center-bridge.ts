@@ -286,6 +286,18 @@ export const BACKFILL_SPECS: readonly BackfillSpec[] = [
     scoped: true,
     vi: "kết quả đánh giá 4 mức — luôn thuộc một cơ sở; NULL là dữ liệu chưa backfill, KHÔNG phải toàn công ty",
   },
+  {
+    model: "TrnAssignment",
+    nullMeaning: "BAT_BUOC",
+    scoped: true,
+    vi: "lượt giao bài — luôn thuộc một cơ sở",
+  },
+  {
+    model: "TrnEnrollment",
+    nullMeaning: "BAT_BUOC",
+    scoped: true,
+    vi: "lượt ghi danh — cột NOT NULL trong schema; không có cơ sở thì không tạo được bản ghi",
+  },
 ] as const;
 
 /** Model → spec, tra nhanh. */
