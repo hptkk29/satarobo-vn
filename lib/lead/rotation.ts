@@ -139,34 +139,49 @@ export async function takeRotationTurns(
       });
       const byUser = new Map(rows.map((r) => [r.userId, r]));
 
-      // Người rời vòng vẫn còn dòng trong bảng — đó là chủ đích: họ quay lại thì
-      // vào đúng chỗ cũ, không được làm lại từ đầu để nhận dồn.
-      const known = candidateIds
-        .map((id) => byUser.get(id))
-        .filter((r): r is NonNullable<typeof r> => r != null)
+      // ── GHI DANH TRƯỚC, CHỌN SAU ─────────────────────────────────────────
+      // Mọi ứng viên chưa có dòng thì TẠO NGAY, ở khởi điểm của thời điểm này,
+      // rồi mới chọn trên danh sách đã đầy đủ.
+      //
+      // ⚠️ Bản đầu (22/08) tính khởi điểm ngay trong lúc ghi và bị THỔI PHỒNG SỔ:
+      // khi vòng đang lấp đầy, "min của những dòng đã có" là 1 (người vừa nhận),
+      // nên người thứ hai vào vòng bị ghi khởi điểm 1 rồi thành 2 khi mới nhận 1
+      // lead. 6 lead chia ra thành 8 lượt. Bắt được bằng e2e chạm DB thật — test
+      // thuần không thấy vì nó nhận sẵn danh sách ứng viên đầy đủ, tức đã giả
+      // định sẵn đúng cái mà tầng này phải tự dựng.
+      //
+      // Người rời vòng vẫn giữ dòng — chủ đích: quay lại thì vào đúng chỗ cũ,
+      // không làm lại từ đầu để nhận dồn.
+      const daCo = rows
+        .filter((r) => candidateIds.includes(r.userId))
         .map((r) => ({ id: r.userId, turns: r.turns, lastTurnAt: r.lastTurnAt }));
-      const seed = seedTurnsForNewcomer(known);
+      const khoiDiem = seedTurnsForNewcomer(daCo);
+      for (const userId of candidateIds) {
+        if (byUser.has(userId)) continue;
+        const moi = await tx.leadRotationTurn.create({
+          data: { orgUnitId, userId, turns: khoiDiem, seedTurns: khoiDiem, lastTurnAt: null },
+          select: { userId: true, turns: true, lastTurnAt: true },
+        });
+        byUser.set(userId, moi);
+      }
 
       const candidates: RotationCandidate[] = candidateIds.map((id) => {
-        const r = byUser.get(id);
-        return r
-          ? { id, turns: r.turns, lastTurnAt: r.lastTurnAt }
-          : { id, turns: seed, lastTurnAt: null };
+        const r = byUser.get(id)!;
+        return { id, turns: r.turns, lastTurnAt: r.lastTurnAt };
       });
 
       const ke = planFairTurns(candidates, count);
       if (ke.length === 0) return [];
 
       // Gộp theo người rồi ghi MỘT lần mỗi người — lô 200 lead không nên thành
-      // 200 lượt ghi trong một transaction.
+      // 200 lượt ghi trong một transaction. Mọi dòng đã tồn tại sau bước ghi
+      // danh ⇒ chỉ còn `increment`, không còn nhánh `create` để tính sai.
       const them = new Map<string, number>();
       for (const id of ke) them.set(id, (them.get(id) ?? 0) + 1);
       for (const [userId, n] of them) {
-        const before = byUser.get(userId);
-        await tx.leadRotationTurn.upsert({
+        await tx.leadRotationTurn.update({
           where: { orgUnitId_userId: { orgUnitId, userId } },
-          update: { turns: { increment: n }, lastTurnAt: now },
-          create: { orgUnitId, userId, turns: (before?.turns ?? seed) + n, lastTurnAt: now },
+          data: { turns: { increment: n }, lastTurnAt: now },
         });
       }
       return ke;
@@ -175,13 +190,21 @@ export async function takeRotationTurns(
   );
 }
 
-/** Bảng theo dõi công khai: ai đã nhận bao nhiêu lượt trong một đơn vị. */
+/**
+ * Bảng theo dõi công khai.
+ *
+ * Trả CẢ `turns` (vị trí trong vòng) lẫn `seedTurns` (khởi điểm lúc vào vòng),
+ * để màn hình nói được con số THẬT: `turns - seedTurns` = số lead người đó thật
+ * sự đã nhận qua vòng chia. Với người có mặt từ đầu, khởi điểm là 0 nên hai số
+ * trùng nhau; chỉ người vào sau mới lệch — và nếu không tách ra thì bảng bằng
+ * chứng lại nói sai đúng về người dễ bị soi nhất.
+ */
 export async function getRotationBoard(
   orgUnitId: string,
-): Promise<{ userId: string; turns: number; lastTurnAt: Date | null }[]> {
+): Promise<{ userId: string; turns: number; seedTurns: number; lastTurnAt: Date | null }[]> {
   return db.leadRotationTurn.findMany({
     where: { orgUnitId },
-    select: { userId: true, turns: true, lastTurnAt: true },
+    select: { userId: true, turns: true, seedTurns: true, lastTurnAt: true },
     orderBy: [{ turns: "desc" }, { userId: "asc" }],
   });
 }
