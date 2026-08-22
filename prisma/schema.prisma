@@ -1319,8 +1319,15 @@ model TeacherReview {
 model Lead {
   id               String     @id @default(cuid())
   parentName       String
+  /// Có thể là chuỗi RỖNG: biểu mẫu /nhap-khach-hang (22/08/2026) không bắt buộc
+  /// ô nào, mà lead từ quảng cáo Facebook rất hay chỉ có link FB chưa có số.
+  /// KHÔNG nới cột sang nullable (mọi đường đọc đang giả định string) — "" là
+  /// giá trị "chưa có số", và `phoneVariants("")` trả [] nên dedup tự bỏ qua.
   phone            String
   email            String?
+  /// Link Facebook/Messenger của phụ huynh — lead chạy quảng cáo FB thường có
+  /// link trước khi có số. Ô này là đường liên hệ THẬT, không phải ghi chú.
+  facebookUrl      String?
   childName        String?
   childAge         Int?
   centerId         String?

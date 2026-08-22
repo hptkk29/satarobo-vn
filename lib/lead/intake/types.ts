@@ -26,9 +26,30 @@ export type CenterHint =
 /** Kết quả map 1 payload → dữ liệu sẵn sàng ghi Lead. */
 export type MappedLead = {
   parentName: string;
-  /** Đã chuẩn hoá canonical `84XXXXXXXXX` (qua `canonicalPhone`). */
+  /**
+   * Đã chuẩn hoá canonical `84XXXXXXXXX` (qua `canonicalPhone`).
+   *
+   * Chuỗi RỖNG chỉ hợp lệ khi caller bật `allowMissingPhone` (biểu mẫu nội bộ
+   * `/nhap-khach-hang` — chốt 22/08/2026: không ô nào bắt buộc). Mọi nguồn ngoài
+   * vẫn bị `ingestIntakeLead` từ chối nếu thiếu số.
+   */
   phone: string;
   email?: string | null;
+  /**
+   * Link Facebook/Messenger của phụ huynh → `Lead.facebookUrl`. Với lead từ
+   * quảng cáo FB, đây thường là đường liên hệ DUY NHẤT lúc mới thu về.
+   */
+  facebookUrl?: string | null;
+  /**
+   * Nguồn khách do NGƯỜI NHẬP khai (ô "Nguồn" trên biểu mẫu) → ghi đè
+   * `IntakeContext.source` khi ghi `Lead.source`.
+   *
+   * Hai khái niệm khác nhau, đừng gộp: `ctx.source` là **kênh kỹ thuật** phiếu
+   * đi vào (dùng cho log, `LeadDuplicate.source`, cảnh báo sức khoẻ đường nhận),
+   * còn cái này là **nguồn marketing** mà người nhập biết ("chạy ads bài A",
+   * "PH cũ giới thiệu"). Trống ⇒ giữ nguyên `ctx.source` như trước.
+   */
+  leadSource?: string | null;
   centerHint?: CenterHint | null;
   /** Con được tạo thành bản ghi `LeadChild` thật. */
   child?: IntakeChild | null;

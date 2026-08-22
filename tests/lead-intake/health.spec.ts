@@ -108,27 +108,36 @@ describe.skipIf(!RUN)("Canh sức khoẻ đường nhận lead", () => {
     expect(alerts.filter((a) => a.source === `${P}sale-form`)).toHaveLength(0);
   }, 60_000);
 
-  it("nguồn CHẠY ĐỀU rồi tịt hẳn ⇒ kêu im lặng", async () => {
-    // 14 lead rải trong 7 ngày trước cửa sổ, 0 lead trong 24h gần nhất.
+  it("🔴 nguồn ĐÃ KHAI TỬ (sale-form) tịt hẳn ⇒ KHÔNG kêu", async () => {
+    // Biểu mẫu tĩnh công khai nghỉ 22/08/2026, nên nó im là ĐÚNG. Để nó trong
+    // `MONITORED_SOURCES` là kêu mỗi ngày suốt ~7 ngày — báo động giả bị phớt lờ
+    // thì lần hỏng thật cũng bị phớt lờ theo.
     for (let d = 2; d <= 8; d++) await seedLeads("sale-form", 2, d * DAY);
     const alerts = await detectIntakeAlerts(NOW);
-    const silent = alerts.filter((a) => a.kind === "silent" && a.source === "sale-form");
+    expect(alerts.filter((a) => a.kind === "silent" && a.source === "sale-form")).toHaveLength(0);
+  }, 60_000);
+
+  it("nguồn CHẠY ĐỀU rồi tịt hẳn ⇒ kêu im lặng", async () => {
+    // 14 lead rải trong 7 ngày trước cửa sổ, 0 lead trong 24h gần nhất.
+    for (let d = 2; d <= 8; d++) await seedLeads("quatang", 2, d * DAY);
+    const alerts = await detectIntakeAlerts(NOW);
+    const silent = alerts.filter((a) => a.kind === "silent" && a.source === "quatang");
     expect(silent).toHaveLength(1);
     expect(silent[0]!.body).toContain("KHÔNG có lead nào");
   }, 60_000);
 
   it("nguồn lưu lượng THẤP im 1 ngày ⇒ KHÔNG kêu (đây là chỗ báo động giả hay sinh ra)", async () => {
     // 3 lead trong 7 ngày = dưới 1/ngày ⇒ im một ngày là chuyện thường.
-    for (let d = 2; d <= 4; d++) await seedLeads("sale-form", 1, d * DAY);
+    for (let d = 2; d <= 4; d++) await seedLeads("quatang", 1, d * DAY);
     const alerts = await detectIntakeAlerts(NOW);
-    expect(alerts.filter((a) => a.kind === "silent" && a.source === "sale-form")).toHaveLength(0);
+    expect(alerts.filter((a) => a.kind === "silent" && a.source === "quatang")).toHaveLength(0);
   }, 60_000);
 
   it("nguồn vẫn đang về lead ⇒ KHÔNG kêu dù nền dày", async () => {
-    for (let d = 2; d <= 8; d++) await seedLeads("sale-form", 2, d * DAY);
-    await seedLeads("sale-form", 1, 2 * HOUR); // vừa có lead 2 giờ trước
+    for (let d = 2; d <= 8; d++) await seedLeads("quatang", 2, d * DAY);
+    await seedLeads("quatang", 1, 2 * HOUR); // vừa có lead 2 giờ trước
     const alerts = await detectIntakeAlerts(NOW);
-    expect(alerts.filter((a) => a.kind === "silent" && a.source === "sale-form")).toHaveLength(0);
+    expect(alerts.filter((a) => a.kind === "silent" && a.source === "quatang")).toHaveLength(0);
   }, 60_000);
 
   it("nguồn KHÔNG nằm trong danh sách canh ⇒ bỏ qua, không kêu bừa", async () => {

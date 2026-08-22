@@ -269,6 +269,7 @@ export type Action =
   | "discounts:approve" // BGĐ 31/07 — duyệt giảm giá nhập tay (kèm giải trình)
   | "orders:view"
   | "orders:manage"
+  | "orders:create" // G-A (21/08/2026) — quyền HẸP: tạo đơn GẮN LEAD CỦA MÌNH (lib/orders/create-guard.ts)
   | "orders:view-pii" // che SĐT/email/địa chỉ khách trên đơn hàng — vai CRM/kế toán mới xem đầy đủ
 
   // --- Phase 5.7 — Vouchers ---
@@ -634,6 +635,13 @@ export const PERMISSIONS: Record<Action, Role[]> = {
   "discounts:approve": ["SUPER_ADMIN", "CENTER_MANAGER", "ACCOUNTANT"],
   "orders:view": ["SUPER_ADMIN", "CENTER_MANAGER", "SALES_CSM", "ACCOUNTANT"],
   "orders:manage": ["SUPER_ADMIN", "CENTER_MANAGER", "ACCOUNTANT"],
+  // G-A (biên bản chốt 4 cổng, 21/08/2026): mở đường chốt đơn cho Sale mà KHÔNG
+  // cấp `orders:manage` (vốn cho mở/huỷ/hoàn toàn hệ thống). Ai có `orders:manage`
+  // cũng phải có action này vì cổng tạo đơn nay kiểm `orders:create`.
+  // Phạm vi "chỉ đơn gắn lead của mình" KHÔNG nằm ở scope RBAC mà ở guard tường
+  // minh `checkOrderCreateOwnership()` — vì `can()` v2 với scope CENTER cần target,
+  // còn cổng tạo đơn gọi trần. Xem lib/orders/create-guard.ts.
+  "orders:create": ["SUPER_ADMIN", "CENTER_MANAGER", "ACCOUNTANT", "SALES_CSM"],
   // Xem đầy đủ liên hệ khách trên đơn (CRM + kế toán); vai khác thấy bản che.
   "orders:view-pii": ["SUPER_ADMIN", "CENTER_MANAGER", "SALES_CSM", "ACCOUNTANT"],
 

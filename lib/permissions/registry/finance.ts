@@ -47,6 +47,12 @@ export const financeModule: ModuleDecl = {
     { key: "orders:view", action: "view" },
     { key: "orders:manage", action: "manage" },
     {
+      key: "orders:create",
+      action: "create",
+      description:
+        "Tạo đơn hàng. Ai KHÔNG có orders:manage thì chỉ tạo được đơn gắn lead của chính mình (guard: lib/orders/create-guard.ts).",
+    },
+    {
       key: "orders:view-pii",
       action: "view-pii",
       // Field thật đang mask trên trang đơn: customerName/customerPhone/customerEmail.

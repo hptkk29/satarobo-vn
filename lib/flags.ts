@@ -203,6 +203,58 @@ export function isCenterChecklistEnabled(): boolean {
 }
 
 /**
+ * G-D (21/08/2026) — KHOÁ endpoint nhận phiếu nhập khách (`/api/public/lead-intake/sale-form`).
+ *
+ * VÌ SAO CẦN: `isInfraPath` cho `/api/*` đi thẳng ở MỌI host, nên bất kỳ ai trên
+ * Internet cũng `curl` được vào endpoint này và **tạo Lead thật**. Phòng thủ hiện
+ * có (honeypot, giới hạn theo IP, trần dung lượng) chỉ chống **spam**, không chống
+ * **truy cập trái phép** — trái CLAUDE.md #5 ("API route VẪN phải auth() + assertCan").
+ *
+ * ⚠️ **22/08/2026 ĐẢO CHIỀU MẶC ĐỊNH: OFF → ON.** Trước đây phải OFF vì biểu mẫu
+ * tĩnh `sale.satarobo.vn/nhap-lieu.html` gửi bài **ẩn danh** hằng ngày — bật là
+ * cắt đường nhập liệu của marketing. Nay biểu mẫu đó đã NGHỈ (xoá khỏi
+ * `public/sale/`, host cũ đá 307 sang `satarobo.vn/nhap-khach-hang` có đăng
+ * nhập), nên không còn ai gửi ẩn danh nữa: để OFF chỉ còn là giữ một cửa mở cho
+ * người ngoài `curl` vào tạo Lead thật.
+ *
+ * Khuôn `!== "false"` (mặc định BẬT) — cố ý ngược khuôn `=== "true"` của các cờ
+ * mở tính năng: cờ này là CỔNG KHOÁ, quên đặt env phải là khoá chứ không phải mở.
+ *
+ * Rollback (mở lại cửa ẩn danh): đặt env `LEAD_INTAKE_REQUIRE_AUTH="false"` +
+ * redeploy — KHÔNG revert code. Chỉ làm khi phải dựng lại biểu mẫu công khai.
+ */
+export function isLeadIntakeAuthRequired(): boolean {
+  return process.env.LEAD_INTAKE_REQUIRE_AUTH !== "false"; // mặc định ON
+}
+
+/**
+ * Đợt B (21/08/2026) — site Sale riêng `sale.satarobo.vn` (route group thứ 6
+ * `app/(sale)/`). Chốt Q11: Sale Hub là **site riêng**, còn biểu mẫu nhập khách
+ * hiện ở host này sẽ dời sang `satarobo.vn/nhap-khach-hang`.
+ *
+ * Khuôn `=== "true"` (mặc định OFF) — cố ý ngược khuôn `isTeacherSiteEnabled()`
+ * vốn mặc định ON vì đã qua kỳ flip 10/07/2026.
+ *
+ * OFF: host `sale` hành xử **y hệt hôm nay** — phục vụ 2 trang HTML tĩnh công
+ * khai, bỏ qua đăng nhập. 0 byte giao diện site Sale được phục vụ.
+ *
+ * ⚠️ ĐIỀU KIỆN BẬT — bật sớm là **cắt đường nhập liệu của marketing**:
+ *   1. Biểu mẫu nhập khách đã dời sang `satarobo.vn/nhap-khach-hang` và chạy thật.
+ *   2. Marketing / sale-admin đã được thông báo.
+ *   3. Đã rà mọi nơi còn trỏ `sale.satarobo.vn` (QR, quảng cáo, chữ ký email).
+ *
+ * ⚠️ KHÔNG bật `AUTH_COOKIE_DOMAIN` kèm theo: `.env.example` ghi rõ thứ tự bắt
+ * buộc là **tách sale khỏi zone trước**, vì bật khi host này còn phục vụ trang
+ * tĩnh công khai = lộ cookie phiên sang host công khai. Site Sale dùng cổng đăng
+ * nhập riêng trên chính host của nó — chạy được, chỉ tốn một lần đăng nhập.
+ *
+ * Rollback = đổi env + redeploy, không revert code.
+ */
+export function isSaleSiteEnabled(): boolean {
+  return process.env.SALE_SITE_ENABLED === "true"; // mặc định OFF
+}
+
+/**
  * EL-07 — khu đào tạo nội bộ `e-learning.satarobo.vn` (route group thứ 6
  * `app/(elearning)/`). Cờ sinh ra ở trạng thái OFF; PR nền là no-op với người dùng.
  *

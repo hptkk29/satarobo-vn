@@ -48,6 +48,18 @@ export type IntakeContext = {
    * riêng có nghiệm thu, không kèm lén vào đây.
    */
   legacyWebhook?: boolean;
+  /**
+   * Cho phép phiếu KHÔNG có số điện thoại (`Lead.phone` = chuỗi rỗng).
+   *
+   * CHỈ biểu mẫu nội bộ `/nhap-khach-hang` bật cờ này (chủ dự án chốt 22/08/2026:
+   * không ô nào bắt buộc — lead quảng cáo Facebook thường chỉ có link FB). Mọi
+   * nguồn NGOÀI giữ nguyên luật cũ: không có số ⇒ từ chối, vì phiếu ẩn danh
+   * không số là rác/spam, còn phiếu do người nhà mình ngồi gõ thì không.
+   *
+   * Bật cờ này KHÔNG mở đường cho lead trùng: `phoneVariants("")` trả mảng rỗng
+   * nên nhánh chống trùng theo SĐT tự bỏ qua (xem chỗ gọi `findRecentDuplicate`).
+   */
+  allowMissingPhone?: boolean;
 };
 
 export type IntakeResult = {
@@ -58,6 +70,16 @@ export type IntakeResult = {
   /** Trùng SĐT nhưng KHÁC con ⇒ đã gắn thêm `LeadChild` vào lead cũ (QĐ D1). */
   childAdded?: boolean;
   error?: string;
+  /**
+   * TOÀN BỘ cảnh báo — của mapper LẪN của tầng này (cơ sở không nhận ra, mã NV
+   * không giữ vai Sale, lead chưa gắn cơ sở…).
+   *
+   * Vì sao phải trả ra: chúng vẫn được ghi vào `note`, nhưng người vừa gõ phiếu
+   * thì không đọc `note`. Trước đây caller chỉ hiện được `mapped.lead.warnings`
+   * nên mọi cảnh báo sinh ở tầng này chỉ có ai mở lead ra mới thấy — tức là
+   * không ai thấy đúng lúc còn sửa được.
+   */
+  warnings?: string[];
 };
 
 type CenterPick = { centerId: string | null; warning: string | null };
@@ -244,8 +266,15 @@ export async function ingestIntakeLead(
   // Đường mới: SĐT phải chuẩn hoá được, không thì từ chối (lead không gọi được
   // thì vô dụng). Đường cũ: giữ chuỗi thô để không làm rơi lead đang chảy.
   const rawPhone = mapped.phone?.trim() ?? "";
-  const phone = canonicalPhone(rawPhone) ?? (ctx.legacyWebhook ? rawPhone : null);
-  if (!phone) return { ok: false, error: "Số điện thoại không hợp lệ" };
+  const phone =
+    canonicalPhone(rawPhone) ??
+    // `|| null`, KHÔNG `?? `: webhook cũ gửi SĐT rỗng vẫn phải bị từ chối như
+    // trước (chuỗi rỗng không nullish nên `??` sẽ nuốt luôn nhánh dưới).
+    (ctx.legacyWebhook ? rawPhone || null : null) ??
+    // Biểu mẫu nội bộ: ô SĐT bỏ trống là hợp lệ. Gõ SAI thì mapper đã bỏ đi kèm
+    // cảnh báo, nên tới đây chuỗi rỗng luôn nghĩa là "chưa có số".
+    (ctx.allowMissingPhone && rawPhone === "" ? "" : null);
+  if (phone === null) return { ok: false, error: "Số điện thoại không hợp lệ" };
 
   const parentName = mapped.parentName.trim();
   if (!parentName) return { ok: false, error: "Thiếu tên phụ huynh" };
@@ -270,8 +299,25 @@ export async function ingestIntakeLead(
   if (center.warning) warnings.push(center.warning);
   if (owner.warning) warnings.push(owner.warning);
 
-  const centerId =
-    ctx.centerId ?? center.centerId ?? owner.fallbackCenterId ?? null;
+  // Cơ sở của NGƯỜI NHẬP chỉ là phương án 2, và phải qua đúng bộ lọc mà ô cơ sở
+  // trên phiếu đã qua: LEAD KHÔNG BAO GIỜ VỀ HỘI SỞ (chủ dự án chốt 04/08).
+  //
+  // Bỏ bước này là gài đúng cái bẫy cho người dùng chính của biểu mẫu nhập
+  // khách: marketing ngồi ở Hội sở, để trống ô cơ sở với ý "để hệ thống tự
+  // chia" — lead lại bị ghim `centerId = hoi-so`, `autoAssignNewLead` thoát sớm
+  // vì đã có cơ sở, và Sale ở CS1/CS2 KHÔNG thấy lead đó (Lead ∈ SCOPED_MODELS).
+  let fallbackCenterId = owner.fallbackCenterId;
+  if (fallbackCenterId) {
+    const nonEnrollable = await getNonEnrollableCenterIds();
+    if (nonEnrollable.includes(fallbackCenterId)) {
+      fallbackCenterId = null;
+      warnings.push(
+        "Người nhập thuộc đơn vị không nhận lead (Hội sở) — lead để hệ thống chia về cơ sở dạy học.",
+      );
+    }
+  }
+
+  const centerId = ctx.centerId ?? center.centerId ?? fallbackCenterId ?? null;
 
   // ⚠️ CƠ SỞ CỦA LEAD vs CƠ SỞ CỦA NGƯỜI NHẬP — phải khớp mới được gán thẳng.
   //
@@ -289,8 +335,8 @@ export async function ingestIntakeLead(
   if (
     assignedToId &&
     centerId &&
-    owner.fallbackCenterId &&
-    owner.fallbackCenterId !== centerId
+    fallbackCenterId &&
+    fallbackCenterId !== centerId
   ) {
     assignedToId = null;
     warnings.push(
@@ -305,7 +351,9 @@ export async function ingestIntakeLead(
     warnings.push("Lead chưa gắn được cơ sở — cần chọn cơ sở khi xử lý.");
   }
 
-  const dup = await findRecentDuplicate(phone);
+  // Không có số thì không có gì để so — bỏ hẳn nhánh chống trùng (so chuỗi rỗng
+  // với chuỗi rỗng sẽ gộp MỌI lead chưa có số vào làm một).
+  const dup = phone ? await findRecentDuplicate(phone) : null;
   if (dup) {
     const dupLead = await db.lead.findUnique({
       where: { id: dup.id },
@@ -324,11 +372,33 @@ export async function ingestIntakeLead(
     if (!closed) {
       const childAdded = await attachExtraChild(dup.id, mapped, centerId, actorName);
       await logDuplicateAttempt(dup.id, phone, ctx.source);
-      // Nhánh này KHÔNG tạo Lead nên không có `note` nào để đựng cảnh báo. Không
-      // ghi lại thì mọi cảnh báo (mã NV sai, cơ sở lạ, thiếu tên PH) bốc hơi —
-      // đúng kiểu nuốt lỗi im lặng mà luật cứng #6 cấm.
-      await recordIntakeNotes(dup.id, mapped.noteLines, warnings, actorName);
-      return { ok: true, leadId: dup.id, duplicate: true, childAdded };
+
+      // ⚠️ Nhánh này KHÔNG tạo Lead ⇒ mọi thứ chỉ sống ở CỘT của bản ghi mới sẽ
+      // bốc hơi. Link Facebook là ca đó: điền vào lead cũ nếu nó còn trống, còn
+      // khác nhau thì nói ra chứ không đè (hai link khác nhau có thể là hai
+      // người nhà — người xử lý lead phải tự quyết).
+      const dupNoteLines = [...mapped.noteLines];
+      if (mapped.facebookUrl) {
+        const cur = await db.lead.findUnique({
+          where: { id: dup.id },
+          select: { facebookUrl: true },
+        });
+        if (!cur?.facebookUrl) {
+          await db.lead.update({
+            where: { id: dup.id },
+            data: { facebookUrl: mapped.facebookUrl },
+          });
+          dupNoteLines.push(`Link Facebook (điền từ phiếu mới): ${mapped.facebookUrl}`);
+        } else if (cur.facebookUrl !== mapped.facebookUrl) {
+          dupNoteLines.push(`Link Facebook khác trên phiếu mới: ${mapped.facebookUrl}`);
+        }
+      }
+      if (mapped.leadSource) dupNoteLines.push(`Nguồn trên phiếu mới: ${mapped.leadSource}`);
+
+      // Không ghi lại thì mọi cảnh báo (mã NV sai, cơ sở lạ, thiếu tên PH) cũng
+      // bốc hơi — đúng kiểu nuốt lỗi im lặng mà luật cứng #6 cấm.
+      await recordIntakeNotes(dup.id, dupNoteLines, warnings, actorName);
+      return { ok: true, leadId: dup.id, duplicate: true, childAdded, warnings };
     }
 
     warnings.push(
@@ -350,7 +420,10 @@ export async function ingestIntakeLead(
           centerId: centerId ?? undefined,
           assignedToId: assignedToId ?? undefined,
           ...(assignedToId ? { status: "ASSIGNED" as const, assignedAt: new Date() } : {}),
-          source: ctx.source,
+          // Nguồn marketing do người nhập khai thắng kênh kỹ thuật (xem
+          // `MappedLead.leadSource`); bỏ trống thì giữ nguyên hành vi cũ.
+          source: mapped.leadSource ?? ctx.source,
+          facebookUrl: mapped.facebookUrl ?? undefined,
           eventId: eventId ?? undefined,
           consentMarketing: mapped.consentMarketing,
           note: note ?? undefined,
@@ -400,7 +473,7 @@ export async function ingestIntakeLead(
       console.error(`[intake:${ctx.source}] auto-assign error:`, err),
     );
 
-    return { ok: true, leadId: lead.id, duplicate: false };
+    return { ok: true, leadId: lead.id, duplicate: false, warnings };
   } catch (err) {
     // Đua eventId giữa 2 request song song → coi như đã xử lý.
     if (err instanceof Error && err.message.includes("Unique constraint")) {

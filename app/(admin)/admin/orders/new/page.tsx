@@ -19,10 +19,12 @@ export default async function NewOrderPage({
 }) {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  // orders:manage chỉ HO_ACCOUNTANT (GLOBAL) — không cần target.
-  if (!(await checkPermission("orders:manage"))) {
+  // G-A (21/08/2026) — cổng tạo đơn là `orders:create`; `orders:manage` chỉ còn
+  // quyết định có được tạo đơn KHÔNG gắn lead hay không (xem dưới).
+  if (!(await checkPermission("orders:create"))) {
     redirect("/dashboard?error=unauthorized");
   }
+  const canManageAll = await checkPermission("orders:manage");
 
   const data = await loadCreateOrderFormData();
 
@@ -30,12 +32,31 @@ export default async function NewOrderPage({
   // actor (scopedDb) — ngoài scope/không tồn tại → bỏ qua leadId (đơn walk-in thường).
   const { leadId } = await searchParams;
   let lead: { id: string; parentName: string; phone: string; email: string | null; centerId: string | null } | null = null;
+  let leadAssignedToId: string | null = null;
   if (leadId) {
     const actor = await resolveActor(session.user.id);
-    lead = await scopedDb(actor).lead.findUnique({
+    const row = await scopedDb(actor).lead.findUnique({
       where: { id: leadId },
-      select: { id: true, parentName: true, phone: true, email: true, centerId: true },
+      select: { id: true, parentName: true, phone: true, email: true, centerId: true, assignedToId: true },
     });
+    if (row) {
+      const { assignedToId, ...rest } = row;
+      lead = rest;
+      leadAssignedToId = assignedToId;
+    }
+  }
+
+  // G-A — Sale (chỉ có `orders:create`) chỉ tạo đơn cho khách CỦA MÌNH. Chặn ngay
+  // ở trang thay vì để họ điền xong cả form rồi mới báo lỗi khi bấm Lưu.
+  // Server action vẫn kiểm lại độc lập — đây chỉ là lớp trải nghiệm, không phải
+  // lớp bảo vệ (gọi thẳng action vẫn bị `checkOrderCreateOwnership()` chặn).
+  if (!canManageAll) {
+    if (!lead) {
+      redirect("/leads?error=chon-khach-truoc-khi-tao-don");
+    }
+    if (leadAssignedToId !== session.user.id) {
+      redirect(`/leads/${lead.id}?error=khong-phai-khach-cua-ban`);
+    }
   }
 
   return (

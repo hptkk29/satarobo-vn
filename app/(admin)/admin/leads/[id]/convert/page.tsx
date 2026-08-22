@@ -130,7 +130,11 @@ export default async function ConvertV2Page({ params }: Props) {
 
       {/* Khối thanh toán: đã nộp / tổng phải thu / còn thiếu + điều kiện chốt. */}
       <div className="mb-6">
-        <LeadPaymentCard leadId={lead.id} summary={paymentSummary} />
+        <LeadPaymentCard
+          leadId={lead.id}
+          summary={paymentSummary}
+          canCreateOrder={await checkPermission('orders:create')}
+        />
       </div>
 
       <ConvertForm

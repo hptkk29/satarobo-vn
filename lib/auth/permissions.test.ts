@@ -229,6 +229,22 @@ describe("permissions matrix — FL W0-NAV-2 role hygiene (BA #07 3.C)", () => {
     expect(can("SALES_CSM", "parent-requests:manage")).toBe(true);
   });
 
+  // G-A (biên bản chốt 4 cổng, 21/08/2026) — ghim Ý ĐỊNH của quyết định: cấp HẸP.
+  // Nếu ai đó sau này "tiện tay" cấp orders:manage cho Sale thì test này đỏ.
+  it("[G-A] SALES_CSM tạo được đơn nhưng KHÔNG quản trị đơn", () => {
+    expect(can("SALES_CSM", "orders:create")).toBe(true);
+    expect(can("SALES_CSM", "orders:manage")).toBe(false);
+  });
+
+  it("[G-A] mọi vai có orders:manage đều phải có orders:create (cổng tạo đơn đã đổi)", () => {
+    for (const role of ["SUPER_ADMIN", "CENTER_MANAGER", "ACCOUNTANT"] as const) {
+      expect(can(role, "orders:manage")).toBe(true);
+      // Cổng tạo đơn nay kiểm `orders:create`; thiếu dòng này là vai đó MẤT
+      // chức năng tạo đơn đang dùng hằng ngày.
+      expect(can(role, "orders:create")).toBe(true);
+    }
+  });
+
   it("ACCOUNTANT bỏ Khoá dạy + Tin tức; GIỮ tài chính + kho", () => {
     expect(can("ACCOUNTANT", "courses:view")).toBe(false);
     expect(can("ACCOUNTANT", "news:view")).toBe(false);
