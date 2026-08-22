@@ -114,3 +114,37 @@ export function mergeSnapshot(db: ReadSnapshot, incoming: ReadSnapshot): ReadSna
     ),
   };
 }
+
+/**
+ * Hạ `# Tiêu đề` xuống `## Tiêu đề` trước khi render nội dung bài học.
+ *
+ * ⚠️ Vì sao cần: `components/blog/markdown-renderer.tsx` khai `h1: () => null` —
+ * mọi thẻ `<h1>` render thành RỖNG. Với bài blog đó là cố ý (tiêu đề bài do trang
+ * render riêng, tránh hai h1 trên một trang). Với NỘI DUNG BÀI HỌC thì đó là MẤT
+ * NỘI DUNG CÂM: người soạn gõ `# Phần 1`, xem trước thấy trống, và không có thông
+ * báo nào giải thích.
+ *
+ * Hạ cấp thay vì sửa renderer chung: trang học đã có `<h1>` là tên bài, nên tiêu
+ * đề trong nội dung vốn phải là cấp 2 — vừa giữ nội dung, vừa đúng thứ bậc tiêu
+ * đề cho trình đọc màn hình.
+ *
+ * Chỉ đụng `#` ở ĐẦU DÒNG và KHÔNG đụng trong khối mã: một dòng `# comment` trong
+ * ví dụ shell không phải tiêu đề.
+ */
+export function demoteH1(md: string): string {
+  // Quét theo DÒNG thay vì thay thế bằng ký tự canh: mọi placeholder đều có thể
+  // trùng nội dung thật của người soạn, và ký tự điều khiển trong regex thì ESLint
+  // chặn — đúng, nó là mùi chứ không phải giải pháp.
+  let trongKhoiMa = false;
+  return md
+    .split(/\r?\n/)
+    .map((dong) => {
+      if (/^\s*```/.test(dong)) {
+        trongKhoiMa = !trongKhoiMa;
+        return dong;
+      }
+      if (trongKhoiMa) return dong;
+      return dong.replace(/^#(?!#)\s/, "## ");
+    })
+    .join("\n");
+}
