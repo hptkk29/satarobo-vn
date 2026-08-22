@@ -1,6 +1,6 @@
 // R1-06 — SLA engine (THUẦN, C6.1–C6.5). Pure.
 import { describe, it, expect } from "vitest";
-import { evaluateSla, isLeadIdle } from "@/lib/crm/sla";
+import { evaluateSla, isLeadIdle, slaInputFromLead } from "@/lib/crm/sla";
 import { canTransitionLeadStatus } from "@/lib/leads/status";
 
 const NOW = new Date("2026-06-09T12:00:00Z");
@@ -79,5 +79,52 @@ describe("[R7-01-C4] canTransitionLeadStatus", () => {
     expect(
       canTransitionLeadStatus("REGISTERED", "ENROLLED", { hasRecordedPayment: false }).ok,
     ).toBe(true);
+  });
+});
+
+// Đợt A (21/08/2026) — sửa lỗi: SLA-4 "lead im lặng" từng đọc `Lead.updatedAt`,
+// nên MỌI lần ghi vào lead (bật cờ dùng chung, sửa ghi chú, đổi trạng thái) đều
+// reset đồng hồ. Mốc đúng là `lastActivityAt`, thiếu thì lấy `createdAt`.
+describe("[Đợt A] slaInputFromLead — mốc im lặng lấy đúng cột", () => {
+  const nen = {
+    qualifiedAt: null,
+    handedAt: null,
+    receivedConfirmedAt: null,
+    assignedAt: null,
+    firstContactAt: null,
+  };
+
+  it("có hoạt động thật → dùng lastActivityAt", () => {
+    const hoatDong = ago(3 * D);
+    const out = slaInputFromLead({ ...nen, lastActivityAt: hoatDong, createdAt: ago(30 * D) });
+    expect(out.lastActivityAt).toEqual(hoatDong);
+  });
+
+  it("chưa có hoạt động nào → lấy createdAt làm mốc (không bỏ sót lead bị quên)", () => {
+    const tao = ago(10 * D);
+    const out = slaInputFromLead({ ...nen, lastActivityAt: null, createdAt: tao });
+    expect(out.lastActivityAt).toEqual(tao);
+  });
+
+  it("lead im lặng lâu → SLA-4 kêu", () => {
+    const input = slaInputFromLead({ ...nen, lastActivityAt: ago(5 * D), createdAt: ago(30 * D) });
+    expect(evaluateSla(input, NOW)).toContain("SLA-4");
+  });
+
+  it("vừa có hoạt động → SLA-4 im", () => {
+    const input = slaInputFromLead({ ...nen, lastActivityAt: ago(1 * H), createdAt: ago(30 * D) });
+    expect(evaluateSla(input, NOW)).not.toContain("SLA-4");
+  });
+
+  it("KHÔNG còn đọc updatedAt — sửa vặt trên lead không được làm im đồng hồ", () => {
+    // Lead im lặng 5 ngày nhưng vừa bị ghi (updatedAt = bây giờ) ⇒ vẫn phải kêu.
+    const input = slaInputFromLead({
+      ...nen,
+      lastActivityAt: ago(5 * D),
+      createdAt: ago(30 * D),
+      // @ts-expect-error — cố tình truyền thừa để chắc hàm KHÔNG đụng tới nó
+      updatedAt: NOW,
+    });
+    expect(evaluateSla(input, NOW)).toContain("SLA-4");
   });
 });
