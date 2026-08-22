@@ -14,10 +14,13 @@
  *   · `--undo` chỉ xoá đúng những cặp script này tạo ra, và chỉ khi phiếu còn mang
  *     dấu `DEMO_MARK` — phiếu người thật viết đè lên sau đó sẽ không bị xoá nhầm.
  *
- * Phủ đủ 3 dạng phiếu để nhìn thấy khác biệt:
- *   Buổi 1 — phiếu ĐẦY ĐỦ: tên dự án + 4 mục văn xuôi + rubric 9 tiêu chí.
+ * Phủ đủ 4 dạng phiếu để nhìn thấy khác biệt:
+ *   Buổi 1 — phiếu CŨ ĐẦY ĐỦ: tên dự án + 4 mục văn xuôi + rubric 9 tiêu chí.
  *   Buổi 2 — phiếu RUBRIC-ONLY (comment/notes = null): đúng ca từng ra thẻ TRỐNG ở admin.
- *   Buổi 3 — phiếu KIỂU CŨ: comment văn xuôi + chấm sao, không rubric.
+ *   Buổi 3 — phiếu KIỂU CŨ NHẤT: comment văn xuôi + chấm sao, không rubric.
+ *   Buổi 4 — phiếu MỚI (từ 21/08): một ô "Đánh giá chung" (`notes.overall`) + rubric.
+ * Ba dạng đầu là DỮ LIỆU CŨ đang nằm trên prod — giữ để mọi đường đọc phải chứng minh
+ * còn hiểu chúng sau khi 4 ô gộp thành một.
  * Cố ý chừa vài học viên KHÔNG có phiếu để thấy cột "đã nhận xét x/y" chạy đúng, và
  * thêm 1 học viên NGOÀI SĨ SỐ (mô phỏng học bù) để thấy nhóm "Ngoài sĩ số".
  */
@@ -123,7 +126,8 @@ async function main() {
     ungVien.find((s) => s.name.length >= 5 && !/^(.)\1{2,}/.test(s.name) && !/^zz/i.test(s.name)) ??
     null;
 
-  const [b1, b2, b3] = sessions;
+  // b4 CÓ THỂ undefined (lớp chỉ có đúng 3 buổi) — khối dạng-mới bên dưới tự bỏ qua.
+  const [b1, b2, b3, b4] = sessions;
   type Ke = {
     sessionId: string;
     studentId: string;
@@ -185,6 +189,26 @@ async function main() {
       rating: 5 - (i % 3),
     });
   });
+
+  // ── Buổi 4: phiếu DẠNG MỚI (21/08) — chỉ ô "Đánh giá chung", 4 khoá cũ để rỗng.
+  //    Đây là hình dạng mà hộp thoại nhận xét sinh ra từ nay; giữ cạnh 3 dạng cũ để
+  //    nhìn được cả hai lối hiển thị trên cùng một lớp.
+  if (b4) {
+    roster.slice(0, 6).forEach((hv, i) => {
+      const chung = `${DEMO_MARK} ${hv.name} tiếp thu tốt nội dung buổi học, nhớ và gọi lại được các khối lệnh đã học. Thao tác lắp ráp gọn gàng, biết tự kiểm tra trước khi chạy thử. Tinh thần học tập tích cực, chủ động hỗ trợ bạn cùng nhóm. Đề xuất: luyện thêm phần điều kiện rẽ nhánh ở nhà để buổi sau vào bài nhanh hơn.`;
+      ke.push({
+        sessionId: b4.id,
+        studentId: hv.id,
+        createdById: gvChinh,
+        projectName: `${DEMO_MARK} Dự án 4: Robot phân loại màu`,
+        notes: { overall: chung, knowledge: "", skill: "", attitude: "", proposal: "" },
+        rubric: rubricFor(i + 1),
+        // comment = bản sao văn xuôi (đường email/portal cũ) — khớp saveSessionEvalCore.
+        comment: chung,
+        rating: null,
+      });
+    });
+  }
 
   // ── Học viên ngoài sĩ số (học bù) ở buổi 3.
   if (khach) {
@@ -256,6 +280,7 @@ async function main() {
   console.log(`  Buổi 1 ${nhan(b1)} — phiếu đầy đủ (dự án + 4 mục + rubric 9 tiêu chí)`);
   console.log(`  Buổi 2 ${nhan(b2)} — RUBRIC-ONLY, không văn xuôi`);
   console.log(`  Buổi 3 ${nhan(b3)} — kiểu cũ: nhận xét + chấm sao${khach ? ` + 1 HV ngoài sĩ số (${khach.name})` : ""}`);
+  if (b4) console.log(`  Buổi 4 ${nhan(b4)} — DẠNG MỚI 21/08: ô "Đánh giá chung" + rubric`);
   console.log(`  Xem tại: /classes/${cls.id} → tab "Đánh giá & Nhận xét"`);
 }
 

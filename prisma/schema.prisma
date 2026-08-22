@@ -352,6 +352,9 @@ model OrgUnit {
   positions  Position[]  @relation("PositionOrgUnit")
   workScopes WorkScope[] @relation("WorkScopeOrgUnit")
 
+  /// EL-03 — yêu cầu đào tạo áp cho chính đơn vị này (scopeKind=ORG_UNIT).
+  trnRequirements TrnRequirement[] @relation("TrnRequirementOrgUnit")
+
   @@index([type])
   @@index([parentId])
   @@index([deletedAt])
@@ -646,6 +649,10 @@ model Position {
   reports     Position[]           @relation("PositionReportsTo")
   roles       PositionRole[]
   assignments PositionAssignment[]
+
+  /// EL-03 — yêu cầu đào tạo theo vị trí. PROD có 0 dòng Position (20/08/2026) nên
+  /// ở GƐ1 nhánh này áp cho 0 người — giữ FK vì nó rẻ, không vì nó dùng được ngay.
+  trnRequirements TrnRequirement[] @relation("TrnRequirementPosition")
 
   @@index([orgUnitId, isActive])
   @@index([reportsToPositionId])
@@ -1112,6 +1119,9 @@ model User {
   auditLogs           UserAuditLog[]            @relation("UserAuditLogs")
   grantAuditLogs      PermissionGrantAuditLog[] @relation("UserGrantAudits")
   positionAssignments PositionAssignment[]      @relation("UserPositionAssignments")
+
+  /// EL-03 — bằng chứng đã được thông báo phạm vi dữ liệu thu thập (QĐ-CDA-12).
+  trnPolicyAcceptances TrnPolicyAcceptance[] @relation("TrnPolicyAcceptanceUser")
 
   @@index([email])
   @@index([phone])
@@ -2393,6 +2403,9 @@ model DepartmentDef {
   createdAt    DateTime   @default(now()) @db.Timestamptz(6)
   updatedAt    DateTime   @updatedAt @db.Timestamptz(6)
   employees    Employee[]
+
+  /// EL-03 — yêu cầu đào tạo theo phòng ban (nhánh dùng được thật ở GƐ1: 15/15 có phòng ban).
+  trnRequirements TrnRequirement[] @relation("TrnRequirementDepartment")
 
   @@index([isActive, displayOrder])
 }
@@ -5415,6 +5428,10 @@ model ScormPackage {
 
   // 1 active duy nhất mỗi buổi: PARTIAL unique `(lessonId) WHERE isActiveForLesson`
   // tạo bằng raw SQL trong migration (Prisma không khai báo partial index native).
+
+  /// EL-03 — bài học nội bộ kiểu SCORM. Cột khai từ GƐ1, khoá bằng validator tới GƐ4.
+  trnLessons TrnLesson[] @relation("TrnLessonScorm")
+
   @@index([lessonId])
   @@index([status])
 }
@@ -6733,4 +6750,696 @@ model OrgUnitDriftItem {
 
   @@index([runId])
   @@index([model])
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// EL-03 — LÕI ĐÀO TẠO NỘI BỘ (`Trn*`)
+//
+// QĐ-1: mọi bảng của module mang tiền tố `Trn` — quy ước PHÒNG NGỪA, không phải
+// sửa lỗi. Bằng chứng va chạm là thật: `Course.isPublished @default(true)` và
+// `/khoa-hoc` lọc đúng cờ đó ⇒ một `Course` tạo nhầm sẽ hiện trên trang bán hàng
+// công khai cho phụ huynh. `TrnCourse` là bảng KHÁC, không dùng lại `Course`.
+//
+// QĐ-2: người học là `User` nhân sự, KHÔNG phải `Student`. Vì thế không tái dùng
+// bảng khảo thí cũ — `ExamAttempt.studentId` là FK BẮT BUỘC tới `Student`.
+//
+// Nguồn đặc tả: §3.3 "Mô hình dữ liệu" của kế hoạch (bản chi tiết), KHÔNG phải
+// khối tóm tắt trong ticket EL-03 — hai mục mâu thuẫn nhau về `TrnProgram.status`
+// (7 giá trị vs 3) và tên cột (`orderIndex` vs `order`, `contentMd` vs `bodyMd`);
+// chủ dự án chốt lấy §3.3 ngày 21/08/2026.
+//
+// ⚠️ Đổi giá trị enum về sau là `ALTER TYPE` — KHÔNG thuộc nhóm chỉ-ADD an toàn
+// và vướng luật cứng #4 khi bảng đã có dữ liệu prod. Mọi enum dưới đây khai ĐỦ
+// giá trị ngay từ GĐ1, kể cả giá trị chưa dùng tới.
+// ═══════════════════════════════════════════════════════════════════════════
+
+/// Vòng đời chương trình đào tạo. 7 giá trị — 3 giá trị (DRAFT/ACTIVE/ARCHIVED)
+/// KHÔNG biểu diễn được bước duyệt mà §8.3 đòi.
+enum TrnProgramStatus {
+  DRAFT
+  PENDING_APPROVAL
+  APPROVED
+  RUNNING
+  DONE
+  EVALUATED
+  CANCELLED
+}
+
+/// Thẻ (b) — chức năng. Sinh phần `[CN]` của mã `SR.DT.[CN].[NĂM].[STT]`.
+enum TrnFunctionTag {
+  SALE
+  TEACHING
+  MARKETING
+  HR
+  ACCOUNTING
+  OPERATION
+  COMPANY_WIDE
+}
+
+/// Thẻ (a) — bậc công việc. BỎ L5 (C6): §8.3 định nghĩa L5 = "<60 ngày, CTV,
+/// thực tập" nhưng đó là GIAI ĐOẠN, không phải bậc ⇒ tách sang `TrnStageTag`.
+enum TrnLevelTag {
+  L1
+  L2
+  L3
+  L4
+}
+
+/// Thẻ (a, tách ra) — giai đoạn, độc lập với bậc công việc.
+enum TrnStageTag {
+  NEW_HIRE
+  IN_SERVICE
+}
+
+/// Thẻ (c) — thời lượng: ngắn / trung bình / dài.
+enum TrnDurationTag {
+  S
+  M
+  LG
+}
+
+/// Thẻ (d) — tính chất. `MANDATORY_COMPLIANCE` buộc phải có `validityMonths`.
+enum TrnNatureTag {
+  MANDATORY
+  MANDATORY_COMPLIANCE
+  RECOMMENDED
+  OPTIONAL
+}
+
+/// Thẻ (e) — hình thức tổ chức.
+enum TrnFormatTag {
+  ELEARNING
+  OFFLINE
+  BLENDED
+  OJT
+  COACHING
+  WEBINAR
+}
+
+/// Thẻ (f) — mức bảo mật (C7). KHÔNG phải nhãn trang trí: `RESTRICTED` trở lên ⇒
+/// bật hình mờ động, cấm tải tệp đính kèm, và BẮT BUỘC `visibility=ASSIGNED_ONLY`.
+enum TrnSecurityTag {
+  PUBLIC
+  INTERNAL
+  RESTRICTED
+  CONFIDENTIAL
+}
+
+enum TrnCourseStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+/// Ai THẤY được khoá. Mặc định `ASSIGNED_ONLY` là fail-closed: khoá mới tạo
+/// không tự xuất hiện với ai. Tách khỏi `selfEnrollEnabled` vì có ca thật
+/// "thấy được nhưng phải chờ giao".
+enum TrnCourseVisibility {
+  ASSIGNED_ONLY
+  SELF_ENROLL
+  RULE_BASED
+}
+
+/// Vòng đời một phiên bản khoá — 5 giá trị (§3.3), có bước rà soát và duyệt.
+enum TrnVersionStatus {
+  DRAFT
+  PENDING_REVIEW
+  APPROVED
+  PUBLISHED
+  ARCHIVED
+}
+
+/// 6 loại bài, khai đủ ở GĐ1. `SCORM` bị validator khoá cho tới GĐ4 — khai cột
+/// trước vì thêm cột vào bảng đã có dữ liệu prod vướng luật cứng #4.
+enum TrnLessonKind {
+  READ
+  VIDEO
+  SCORM
+  QUIZ
+  TASK
+  LIVE_SESSION
+}
+
+/// Phạm vi áp dụng của một yêu cầu đào tạo — ĐÚNG 5 giá trị (HỢP ĐỒNG V2 §Z3).
+/// ⚠️ `POSITION` dùng được về mã nhưng PROD có 0 dòng `Position` (đo 20/08/2026)
+/// ⇒ ở GĐ1 một yêu cầu `POSITION` áp cho 0 người. Màn tạo phải vô hiệu hoá lựa
+/// chọn này kèm dòng giải thích, KHÔNG hiện một ô chọn rỗng.
+enum TrnReqScope {
+  POSITION
+  DEPARTMENT
+  LEVEL_TAG
+  ORG_UNIT
+  ALL_STAFF
+}
+
+/// Vòng đời một yêu cầu đào tạo.
+enum TrnReqStatus {
+  DRAFT
+  ACTIVE
+  ARCHIVED
+}
+
+/// 4 mức đánh giá Kirkpatrick.
+enum TrnEvalLevel {
+  L1
+  L2
+  L3
+  L4
+}
+
+/// Nguồn sinh ra một lượt ghi danh — ĐÚNG 4 giá trị (§5.0.4). Khai đủ 4 ngay từ
+/// đầu vì thêm giá trị vào enum Postgres sau này là `ALTER TYPE`.
+/// `EQUIVALENCE` = công nhận tương đương; nó KHÔNG phải trạng thái thứ 7 của
+/// `TrnEnrollmentStatus` — nhãn hiển thị suy từ chính cột `source` này.
+enum TrnEnrollSource {
+  ASSIGNMENT
+  REQUIREMENT
+  EQUIVALENCE
+  SELF_ENROLL
+}
+
+/// ĐÚNG 6 giá trị. KHÔNG có `ASSIGNED`, KHÔNG có `COMPLETED_VERIFIED` — thêm giá
+/// trị thứ 7 làm vỡ mọi chỉ số đếm theo `status` (HỢP ĐỒNG V2 §Z9).
+/// Bảng `TrnEnrollment` thuộc EL-05; enum khai ở migration này.
+enum TrnEnrollmentStatus {
+  NOT_STARTED
+  IN_PROGRESS
+  COMPLETED
+  COMPLETED_LATE
+  OVERDUE
+  REVOKED
+}
+
+/// Mức gắn đánh giá (QĐ-CDA-06b). Không có dòng cấu hình ⇒ hiểu là `REPORT_ONLY`
+/// (fail-closed): giai đoạn đầu chỉ báo cáo, chưa gắn gì vào xét lương.
+enum TrnEvalLinkMode {
+  REPORT_ONLY
+  LINKED
+}
+
+/// Tiêu chí được phép gắn vào đánh giá — đúng hai lựa chọn quyết định nêu.
+enum TrnEvalCriterion {
+  ON_TIME
+  EXAM_SCORE
+}
+
+// ─── 9 BẢNG LÕI ────────────────────────────────────────────────────────────
+
+/// Chương trình đào tạo (B3, §8.3) + kế hoạch gộp thẳng vào form (B2).
+///
+/// centerId/orgUnitId NULL = ÁP TOÀN CÔNG TY (không phải "chưa gán") ⇒ model này
+/// phải nằm trong NULL_IS_GLOBAL_MODELS, nếu không thì chương trình dùng chung
+/// toàn hệ TÀNG HÌNH với người cấp cơ sở.
+model TrnProgram {
+  id    String @id @default(cuid())
+  /// SR.DT.[CN].[NĂM].[STT] — ĐÃ BỎ đoạn [CB] (C6).
+  code  String @unique
+  year  Int
+  seq   Int
+  title String
+
+  /// 3–5 mục tiêu hành vi (§8.2).
+  objectivesJson Json?
+
+  // ── 6 nhóm thẻ phân loại (bảng thẻ ở EL-08) ──
+  primaryFunctionTag TrnFunctionTag
+  functionTags       TrnFunctionTag[]
+  levelTags          TrnLevelTag[]
+  stageTag           TrnStageTag
+  durationTag        TrnDurationTag
+  natureTag          TrnNatureTag
+  formatTag          TrnFormatTag
+  /// Nhóm thẻ thứ SÁU (C7) — mức bảo mật MẶC ĐỊNH cho các khoá thuộc chương trình.
+  /// Giá trị HIỆU DỤNG nằm ở TrnCourse.securityLevel (kế thừa lúc tạo, sửa được).
+  securityTag        TrnSecurityTag   @default(INTERNAL)
+
+  // ── Văn bản nguồn (C15b/C20) — bắt buộc để XUẤT BẢN, không bắt buộc để lưu nháp ──
+  sourceDocCode        String?
+  sourceDocVersion     String?
+  sourceDocEffectiveAt DateTime? @db.Timestamptz(6)
+  /// Văn bản nguồn lên phiên bản mới → khoá tự chuyển "Cần rà lại".
+  needsReview          Boolean   @default(false)
+
+  /// Bắt buộc khi natureTag = MANDATORY_COMPLIANCE (§13.4). CHỈ là giá trị MẶC
+  /// ĐỊNH khi tạo TrnRequirement. Nguồn sự thật của chu kỳ tái chứng nhận là
+  /// TrnRequirement.validityMonths — không chỉ số nào đọc trực tiếp cột này.
+  validityMonths Int?
+  /// (C15c) nội dung có ngày chết định trước — hết hạn thì lưu trữ, KHÔNG dùng
+  /// làm bằng chứng tuân thủ nội bộ.
+  expiresAt      DateTime? @db.Timestamptz(6)
+
+  /// FK bật ở EL-08 khi TrnTrainingNeed có mặt.
+  needId           String?
+  /// Đường thoát duy nhất của §8.1 — không có phiếu thì phải có lý do; không
+  /// được để trống CẢ HAI (kiểm ở Zod, DB không ép được).
+  needExemptReason String?
+
+  /// (C19) ngân sách dự kiến. KHÔNG bao gồm giờ công người học — và từ QĐ-CDA-05
+  /// (giờ học TỰ CHỌN, không tính công) dòng đó bằng 0đ, không phải "chưa định lượng".
+  budgetPlanned Decimal? @db.Decimal(14, 2)
+
+  status TrnProgramStatus @default(DRAFT)
+
+  ownerUserId        String
+  /// Người chịu trách nhiệm NỘI DUNG có tên — bắt buộc để xuất bản.
+  contentOwnerUserId String?
+
+  centerId  String?
+  orgUnitId String?
+
+  createdById String?
+  createdAt   DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt   DateTime  @updatedAt @db.Timestamptz(6)
+  deletedAt   DateTime? @db.Timestamptz(6)
+
+  courses        TrnCourse[]
+  evaluationRows TrnEvaluationResult[]
+  evalLinkConfig TrnEvalLinkConfig?
+
+  /// Chống hai người sinh trùng STT trong cùng chức năng + năm.
+  @@unique([primaryFunctionTag, year, seq])
+  @@index([status, year])
+  @@index([orgUnitId])
+  @@index([centerId])
+  @@index([needsReview])
+}
+
+/// Khoá học nội bộ. KHÔNG dùng lại Course (bảng bán hàng công khai) — Course
+/// isPublished mặc định true và /khoa-hoc lọc đúng cờ đó, nên một bản ghi tạo
+/// nhầm ở đó sẽ hiện trên trang bán hàng cho phụ huynh.
+///
+/// centerId/orgUnitId NULL = áp toàn công ty ⇒ NULL_IS_GLOBAL_MODELS.
+model TrnCourse {
+  id        String  @id @default(cuid())
+  programId String?
+  code      String  @unique
+  slug      String  @unique
+  title     String
+  summary   String?
+
+  estimatedMinutes Int?
+  sequential       Boolean @default(false)
+
+  status      TrnCourseStatus @default(DRAFT)
+  publishedAt DateTime?       @db.Timestamptz(6)
+
+  /// Mức bảo mật HIỆU DỤNG. Mặc định kế thừa TrnProgram.securityTag lúc tạo nhưng
+  /// sửa được: hành vi thật (hình mờ, cấm tải, ẩn câu hỏi) áp ở cấp KHOÁ vì đó là
+  /// thứ người học mở ra.
+  /// RESTRICTED trở lên ⇒ visibility BẮT BUỘC ASSIGNED_ONLY (chặn ở Zod).
+  securityLevel TrnSecurityTag @default(INTERNAL)
+
+  /// Ai THẤY khoá này. Fail-closed: khoá mới tạo không tự hiện với ai.
+  visibility        TrnCourseVisibility @default(ASSIGNED_ONLY)
+  /// Cho phép tự bấm vào học. Tách khỏi visibility vì có ca thật "thấy được
+  /// nhưng phải chờ giao".
+  selfEnrollEnabled Boolean             @default(false)
+  /// Dùng CHUNG schema Zod và CHUNG hàm thuần ruleToWhere() với
+  /// TrnAssignmentRule.filterJson (EL-05). Tuyệt đối KHÔNG viết bộ dịch thứ hai:
+  /// hai bộ dịch lệch nhau là loại lỗi không ai phát hiện được bằng mắt.
+  catalogRuleJson   Json?
+
+  /// Nhân bản khoá (QĐ-CDA-07 mục 2) — không có cột này thì bản sao mất dấu vết
+  /// nguồn và không ai trả lời được "khoá này chép từ đâu, bản gốc sửa gì sau đó".
+  clonedFromCourseId String?
+
+  ownerUserId String?
+  centerId    String?
+  orgUnitId   String?
+
+  createdById String?
+  createdAt   DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt   DateTime  @updatedAt @db.Timestamptz(6)
+  deletedAt   DateTime? @db.Timestamptz(6)
+
+  program      TrnProgram?        @relation(fields: [programId], references: [id], onDelete: SetNull)
+  modules      TrnModule[]
+  versions     TrnCourseVersion[]
+  requirements TrnRequirement[]
+
+  @@index([status, orgUnitId])
+  @@index([orgUnitId])
+  @@index([centerId])
+  @@index([visibility, status])
+  @@index([programId])
+}
+
+/// Ảnh chụp một phiên bản khoá. BR-013 "giao lại phần chênh lệch" tính được nhờ
+/// ảnh chụp danh sách bài (TrnCourseVersionLesson), không nhờ có cột version.
+model TrnCourseVersion {
+  id       String @id @default(cuid())
+  courseId String
+  major    Int
+  minor    Int
+
+  clonedFromVersionId String?
+
+  status            TrnVersionStatus @default(DRAFT)
+  changeNote        String?
+  approvedByUserId  String?
+  publishedByUserId String?
+  publishedAt       DateTime?        @db.Timestamptz(6)
+  createdAt         DateTime         @default(now()) @db.Timestamptz(6)
+
+  course  TrnCourse                @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  lessons TrnCourseVersionLesson[]
+
+  @@unique([courseId, major, minor])
+  @@index([courseId, status])
+  /// Nguồn của chỉ số "số khoá được xuất bản mỗi tháng" — chỉ số theo dõi rủi ro
+  /// "danh mục trống sau ngày mở". Không có index thì báo cáo quét toàn bảng.
+  @@index([status, publishedAt])
+}
+
+/// Ảnh chụp danh sách bài của MỘT phiên bản. contentHash là thứ cho phép
+/// diff(v1, v2) phát hiện bài đã đổi nội dung mà vẫn giữ nguyên id.
+model TrnCourseVersionLesson {
+  id          String  @id @default(cuid())
+  versionId   String
+  lessonId    String
+  orderIndex  Int
+  required    Boolean @default(true)
+  contentHash String
+
+  version TrnCourseVersion @relation(fields: [versionId], references: [id], onDelete: Cascade)
+  lesson  TrnLesson        @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+
+  @@unique([versionId, lessonId])
+  @@index([lessonId])
+}
+
+/// Chương trong một khoá.
+///
+/// Bẫy kỹ thuật của kéo-thả sắp thứ tự: @@unique([courseId, orderIndex]) là ràng
+/// buộc KIỂM NGAY trong Postgres (không DEFERRABLE), nên đổi chỗ hai chương bằng
+/// hai lệnh UPDATE liên tiếp sẽ vi phạm khoá ở lệnh ĐẦU TIÊN. Đường đúng: một
+/// transaction, đánh số lại toàn bộ qua khoảng lệch tạm (orderIndex += 10000) rồi
+/// mới gán số cuối. Lỗi này lộ ra ở lần kéo thả THỨ HAI, không phải lần đầu.
+model TrnModule {
+  id         String   @id @default(cuid())
+  courseId   String
+  title      String
+  orderIndex Int
+  createdAt  DateTime @default(now()) @db.Timestamptz(6)
+
+  course  TrnCourse   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  lessons TrnLesson[]
+
+  @@unique([courseId, orderIndex])
+}
+
+/// Bài học. Bảng CON của TrnModule ⇒ KHÔNG mang cột đơn vị (scope theo khoá).
+model TrnLesson {
+  id         String        @id @default(cuid())
+  moduleId   String
+  title      String
+  orderIndex Int
+  kind       TrnLessonKind
+
+  /// kind=READ
+  contentMd       String? @db.Text
+  /// QĐ-9 lát cắt 1 — trỏ 50 bài hướng dẫn đã số hoá, là nội dung MỒI có sẵn ngay
+  /// ngày mở (biện pháp chặn rủi ro "danh mục trống sau ngày mở").
+  sourceGuideSlug String?
+  /// Sàn thời gian đọc để tính là đã đọc — bài dưới 60 từ vẫn phải đủ 30 giây.
+  minReadSeconds  Int     @default(30)
+
+  // ── kind=VIDEO ──
+  /// Chuẩn nộp QĐ-3: H.264 720p, ≤200MB, ≤15 phút — kiểm LÚC TẢI LÊN, thay cho
+  /// "chờ transcode" của BR-016. lib/storage/upload-config.ts đang cho 500MB ⇒
+  /// đường này phải khai preset riêng chặt hơn.
+  videoKey     String?
+  /// (C11) mặc định 360p cho kết nối di động.
+  videoKey360  String?
+  durationSec  Int?
+  videoMeta    Json?
+  /// (C10) phụ đề tiếng Việt là ĐIỀU KIỆN XUẤT BẢN cho mọi bài VIDEO của khoá
+  /// MANDATORY* — không phải "tuỳ chọn của người tải lên".
+  captionKey   String?
+  /// (C10/C11) cho người khiếm thính, người học ở trung tâm ồn, người mạng yếu.
+  transcriptMd String? @db.Text
+  audioKey     String?
+  /// Số câu hỏi chèn giữa video, suy từ TrnLessonCue — giữ dạng cột đếm để danh
+  /// sách bài không phải join.
+  cueCount     Int     @default(0)
+
+  /// kind=SCORM — khai cột từ GĐ1, KHOÁ bằng validator tới GĐ4.
+  scormPackageId String?
+  /// kind=QUIZ → TrnExam (EL-14). Cột trần tới khi bảng đó có mặt.
+  examId         String?
+  /// kind=TASK → TrnRubric (EL-15). Cột trần tới khi bảng đó có mặt.
+  rubricId       String?
+  /// kind=LIVE_SESSION
+  sessionDate    DateTime? @db.Timestamptz(6)
+
+  createdAt DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime  @updatedAt @db.Timestamptz(6)
+  deletedAt DateTime? @db.Timestamptz(6)
+
+  module         TrnModule                @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+  scormPackage   ScormPackage?            @relation("TrnLessonScorm", fields: [scormPackageId], references: [id], onDelete: SetNull)
+  versionLessons TrnCourseVersionLesson[]
+  cues           TrnLessonCue[]
+  videoSessions  TrnVideoSession[]
+
+  @@unique([moduleId, orderIndex])
+  @@index([kind])
+  @@index([scormPackageId])
+}
+
+/// Yêu cầu đào tạo — "ai BẮT BUỘC phải học khoá này".
+///
+/// orgUnitId mang HAI vai: cột đơn vị của bản ghi, VÀ cột đích khi
+/// scopeKind='ORG_UNIT' (§3.3 chốt: không đẻ cột thứ hai).
+/// centerId/orgUnitId NULL = áp toàn công ty ⇒ NULL_IS_GLOBAL_MODELS.
+model TrnRequirement {
+  id        String      @id @default(cuid())
+  courseId  String
+  scopeKind TrnReqScope
+
+  // 4 cột đích, KHÔNG có scopeId chung: một cột chuỗi trần không có toàn vẹn
+  // tham chiếu và sẽ mục IM LẶNG khi vị trí/phòng ban bị xoá.
+  // ĐÚNG MỘT cột có giá trị theo scopeKind; ALL_STAFF ⇒ cả 4 NULL (kiểm ở Zod).
+  positionId   String?
+  departmentId String?
+  levelTag     TrnLevelTag?
+
+  /// Số ngày kể từ joinedAt hoặc ngày đổi vị trí.
+  dueDays        Int
+  /// Chu kỳ tái chứng nhận. NGUỒN SỰ THẬT DUY NHẤT của chu kỳ và của vế Dat(u,r,d)
+  /// trong NSM. KHÔNG có cột graceDays.
+  validityMonths Int?
+
+  effectiveFrom   DateTime     @default(now()) @db.Timestamptz(6)
+  effectiveTo     DateTime?    @db.Timestamptz(6)
+  status          TrnReqStatus @default(ACTIVE)
+  createdByUserId String?
+
+  centerId  String?
+  orgUnitId String?
+
+  createdAt DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime  @updatedAt @db.Timestamptz(6)
+  deletedAt DateTime? @db.Timestamptz(6)
+
+  course     TrnCourse      @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  position   Position?      @relation("TrnRequirementPosition", fields: [positionId], references: [id], onDelete: SetNull)
+  department DepartmentDef? @relation("TrnRequirementDepartment", fields: [departmentId], references: [id], onDelete: SetNull)
+  orgUnit    OrgUnit?       @relation("TrnRequirementOrgUnit", fields: [orgUnitId], references: [id], onDelete: SetNull)
+
+  /// Postgres coi hai NULL là KHÁC nhau nên khoá này KHÔNG chặn được trùng ở
+  /// nhánh nullable — phải kiểm thêm ở service tạo mới.
+  @@unique([courseId, scopeKind, positionId, departmentId, levelTag, orgUnitId])
+  @@index([scopeKind])
+  @@index([courseId])
+  @@index([centerId])
+  @@index([orgUnitId])
+}
+
+/// Bằng chứng "người này đã được thông báo phạm vi dữ liệu thu thập, vào ngày ấy".
+///
+/// KHÔNG BAO GIỜ update một dòng đã ghi: đổi phạm vi thu ⇒ TĂNG policyVersion ⇒
+/// người dùng xác nhận lại. Sửa tại chỗ là làm hỏng chính chuỗi bằng chứng mà 8
+/// cơ chế giám sát của GĐ2 dựa vào (QĐ-CDA-12).
+/// Bảng CON theo người dùng ⇒ không mang cột đơn vị.
+model TrnPolicyAcceptance {
+  id            String   @id @default(cuid())
+  userId        String
+  policyKey     String
+  policyVersion String
+  acceptedAt    DateTime @default(now()) @db.Timestamptz(6)
+  /// Rút đồng ý: đÓNG dòng đang hiệu lực, KHÔNG xoá nó. Đây là đường `update` DUY NHẤT
+  /// được phép trên bảng này; mọi đường update/delete khác đều bị cấm, vì dòng cũ là BẰNG
+  /// CHỨNG BẤT BIẾN rằng người đó đã được thông báo phạm vi nào, vào ngày nào.
+  /// Đóng xong: hệ thống ngừng thu nhịp xem NGAY, và nghĩa vụ học chuyển sang hình thức
+  /// khác (điểm danh trực tiếp / xác nhận của quản lý) chứ KHÔNG tự huỷ.
+  revokedAt     DateTime? @db.Timestamptz(6)
+
+  user User @relation("TrnPolicyAcceptanceUser", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, policyKey, policyVersion])
+  @@index([policyKey, policyVersion])
+}
+
+/// Kết quả đánh giá 4 mức Kirkpatrick của một chương trình.
+///
+/// KHÁC 3 model trên: centerId/orgUnitId ở đây là BẮT BUỘC (nhóm BAT_BUOC), NULL
+/// nghĩa là dữ liệu chưa backfill chứ KHÔNG phải "toàn công ty" ⇒ model này KHÔNG
+/// vào NULL_IS_GLOBAL_MODELS.
+model TrnEvaluationResult {
+  id            String       @id @default(cuid())
+  programId     String
+  level         TrnEvalLevel
+  subjectUserId String
+  /// Khoá chống trùng theo nguồn: một phiếu khảo sát / một bài thi / một kỳ đánh giá.
+  sourceRef     String
+  score         Decimal?     @db.Decimal(6, 2)
+  payloadJson   Json
+  recordedAt    DateTime     @default(now()) @db.Timestamptz(6)
+
+  centerId  String?
+  orgUnitId String?
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+
+  program TrnProgram @relation(fields: [programId], references: [id], onDelete: Cascade)
+
+  @@unique([programId, level, subjectUserId, sourceRef])
+  @@index([programId, level])
+  @@index([centerId])
+  @@index([orgUnitId])
+}
+
+// ─── 3 BẢNG KHAI RỖNG TỪ GĐ1 (migration ở đây; luồng ghi + màn hình ở ticket sau) ──
+
+/// Câu hỏi chèn giữa video, gắn mốc giây (QĐ-CDA-04, model #37).
+/// Migration ở EL-03; luồng chèn câu hỏi và màn hình ở EL-12.
+///
+/// Vì sao là BẢNG chứ không phải mảng Json trên TrnLesson: mảng Json mất khoá duy
+/// nhất, mất FK, và không đếm được.
+/// Bảng CON ⇒ không mang cột đơn vị.
+model TrnLessonCue {
+  id       String @id @default(cuid())
+  lessonId String
+  /// Mốc giây trong video. Zod ép 0 < atSec < TrnLesson.durationSec.
+  atSec    Int
+
+  /// FK nullable tới ngân hàng câu hỏi — tái dùng KHI nó tồn tại (GĐ3).
+  questionId String?
+  /// Câu hỏi khai tại chỗ, dùng ở GĐ2 khi ngân hàng câu hỏi chưa có.
+  /// Bất biến (Zod): ĐÚNG MỘT trong questionId / inlineJson có giá trị. Đường GĐ2
+  /// BẮT BUỘC là inlineJson — ai thiết kế màn soạn cue mà giả định đã có ngân
+  /// hàng câu hỏi sẽ dựng một màn không dùng được trong 4 tuần đầu.
+  inlineJson Json?
+
+  /// true = không trả lời thì không phát tiếp.
+  blocking   Boolean  @default(true)
+  orderIndex Int      @default(0)
+  createdAt  DateTime @default(now()) @db.Timestamptz(6)
+
+  lesson TrnLesson @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+
+  /// Hai cue trùng giây là lỗi soạn nội dung — chặn ở tầng DB.
+  @@unique([lessonId, atSec])
+  @@index([lessonId])
+}
+
+/// Cấu hình mức gắn đánh giá theo chương trình (QĐ-CDA-06b, model #38).
+/// Migration ở EL-03; màn hình ở ticket cấu hình mức gắn đánh giá.
+///
+/// Đây là YÊU CẦU MỚI, không phải hằng số trong mã: chủ dự án chốt "giai đoạn đầu
+/// chưa gắn gì, chỉ báo cáo; sau này admin sẽ setup mức đánh giá để xét lương".
+/// Vế sau biến "gắn hay không" thành DỮ LIỆU CÓ MÀN HÌNH, để bật liên kết về sau
+/// không cần lập trình viên.
+/// centerId/orgUnitId NULL = áp toàn công ty ⇒ NULL_IS_GLOBAL_MODELS.
+model TrnEvalLinkConfig {
+  id        String @id @default(cuid())
+  /// Một chương trình MỘT dòng.
+  programId String @unique
+
+  /// Không có dòng cấu hình ⇒ hiểu là REPORT_ONLY (fail-closed).
+  mode            TrnEvalLinkMode    @default(REPORT_ONLY)
+  criteria        TrnEvalCriterion[]
+  /// Zod: tổng trọng số của các tiêu chí ĐÃ CHỌN = 100.
+  weightOnTime    Int?
+  weightExamScore Int?
+  /// Kỳ đánh giá đầu tiên bị ảnh hưởng phải nằm SAU ngày này.
+  effectiveFrom   DateTime?          @db.Timestamptz(6)
+
+  // ĐƯỜNG PHÁP LÝ CỦA CHẾ TÀI — `mode = LINKED` chỉ lưu được khi ĐỦ SÁU thứ: ba cột dưới đây
+  // + `effectiveFrom` + ≥1 tiêu chí + tổng trọng số = 100. Thiếu một là từ chối, nêu đúng ô thiếu.
+  // Không có mấy cột này thì luật đó là CHỮ CHẾT: không chỗ nào lưu số hiệu quyết định, không
+  // chỗ nào lưu ai duyệt — tức bật liên kết lương mà không có căn cứ nào truy được về sau.
+  /// Số hiệu quyết định sửa SR.QD.231 cho phép gắn đánh giá vào lương.
+  decisionDocCode        String?
+  /// Ngày hiệu lực của quyết định đó. Zod: `effectiveFrom >= decisionDocEffectiveAt`.
+  decisionDocEffectiveAt DateTime? @db.Timestamptz(6)
+  /// Người của Nhân sự đã duyệt — có TÊN, không phải một cờ boolean.
+  hrApprovedByUserId     String?
+  /// Ai sửa lần cuối. Mọi lần đổi đi qua `defineAction` với `requireReason: true`.
+  updatedByUserId        String?
+
+  centerId  String?
+  orgUnitId String?
+
+  createdById String?
+  createdAt   DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt   DateTime @updatedAt @db.Timestamptz(6)
+
+  program TrnProgram @relation(fields: [programId], references: [id], onDelete: Cascade)
+
+  @@index([mode, effectiveFrom])
+  @@index([centerId])
+  @@index([orgUnitId])
+}
+
+/// Phiên xem video — TẦNG 2 (dữ liệu đo hành vi), thời hạn lưu 90 NGÀY.
+///
+/// Bảng này khai ở GĐ1 CHỈ VÌ cột purgeAfter phải có mặt ngay trong câu CREATE
+/// TABLE (QĐ-CDA-14). Luồng ghi (heartbeat, bitmap, khoá phát Redis) và màn hình
+/// vẫn ở EL-12.
+///
+/// purgeAfter = thời điểm bản ghi phiên sinh ra + 90 ngày, GHI CỨNG lúc INSERT,
+/// KHÔNG tính lại ở các nhịp ghi sau. Hai lý do, cả hai đắt nếu làm ngược:
+///   1. Đổi chính sách lưu trữ về sau KHÔNG được hồi tố lên dữ liệu đã thu dưới
+///      bản thông báo cũ — cùng tinh thần TrnPolicyAcceptance không sửa tại chỗ.
+///   2. Cron dọn quét bằng MỘT điều kiện purgeAfter < now() có index, không phải
+///      bằng một phép tính trên từng dòng.
+///
+/// Bảng này phải nằm NGOÀI SOFT_DELETE_MODELS và NGOÀI DUAL_WRITE_MODELS. Vế đầu
+/// là ĐIỀU KIỆN để cron dọn 90 ngày xoá CỨNG được: bảng có xoá mềm thì "xoá sau
+/// 90 ngày" chỉ là đặt một cột deletedAt và dữ liệu thô VẪN NẰM NGUYÊN trong DB —
+/// đúng thứ quyết định không cho phép.
+///
+/// KHÔNG mang cột đơn vị (ngoại lệ nhịp ghi cao N, §5.0.3).
+model TrnVideoSession {
+  id           String  @id @default(cuid())
+  lessonId     String
+  /// FK bật ở EL-05 khi TrnEnrollment có mặt — cột trần tới lúc đó.
+  enrollmentId String?
+  userId       String
+
+  startedAt      DateTime @default(now()) @db.Timestamptz(6)
+  lastBeatAt     DateTime @default(now()) @db.Timestamptz(6)
+  totalWatchSec  Int      @default(0)
+  maxPositionSec Int      @default(0)
+
+  // TẦNG 2 — KHÔNG lưu IP thô. Băm + tiền tố là đủ để phát hiện bất thường mà
+  // không giữ định danh mạng của nhân viên.
+  ipHash        String?
+  ipPrefix      String?
+  deviceClass   String?
+  browserFamily String?
+
+  checkpointAnswered Int   @default(0)
+  checkpointMissed   Int   @default(0)
+  checkpointLogJson  Json?
+
+  /// NOT NULL, ghi cứng lúc INSERT = mốc tạo + 90 ngày.
+  purgeAfter DateTime @db.Timestamptz(6)
+
+  lesson TrnLesson @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+
+  @@index([purgeAfter])
+  @@index([userId, lessonId])
 }

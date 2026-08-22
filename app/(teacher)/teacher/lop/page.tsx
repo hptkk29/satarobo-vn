@@ -15,6 +15,10 @@ import { resolveActor } from "@/lib/auth/actor";
 import { withMakeupException } from "@/lib/db-scope";
 import { isSessionOwnedByTeacher } from "@/lib/lms/session-ownership";
 import { buildSessionAttendanceRows } from "@/lib/attendance/roster";
+import {
+  buildSessionNumberMap,
+  sessionNumberLabel,
+} from "@/lib/lms/session-order";
 import { ENROLLMENT_ACTIVE_STATUS_LIST } from "@/lib/enrollment-status";
 import { EmptyState } from "../_components/ui/empty-state";
 import { PageHeader } from "../_components/ui/page-header";
@@ -43,10 +47,12 @@ import { HelpHint } from "@/components/admin/ui/help-hint";
 
 export const metadata = { title: "Lớp của tôi | Giáo viên Sata Robo" };
 
+// 21/08 — CÓ `year` (đồng bộ với các bảng buổi khác của site GV).
 const dayFmt = new Intl.DateTimeFormat("vi-VN", {
   weekday: "short",
   day: "2-digit",
   month: "2-digit",
+  year: "numeric",
   timeZone: "Asia/Ho_Chi_Minh",
 });
 
@@ -135,10 +141,16 @@ export default async function TeacherClassesPage({
     }
 
     // Sinh nhật tổ chức tại buổi này — đọc SAU khi ownership đã gác ở trên.
-    const [{ rows }, birthdays] = await Promise.all([
+    const [{ rows }, birthdays, allSessions] = await Promise.all([
       buildSessionAttendanceRows(actor, sessionId),
       getSessionBirthdays(sessionId),
+      // R1 — số buổi tính trên TOÀN BỘ buổi của lớp (lib/lms/session-order).
+      xdb.classSession.findMany({
+        where: { classId },
+        select: { id: true, date: true },
+      }),
     ]);
+    const sessionNo = buildSessionNumberMap(allSessions).get(sessionId) ?? null;
     // Câu 46: bỏ studentPhone khỏi payload client — chỉ giữ tên + trạng thái.
     const panelRows: AttendancePanelRow[] = rows.map((r) => ({
       studentId: r.studentId,
@@ -159,6 +171,7 @@ export default async function TeacherClassesPage({
         <PageHeader
           title={`Điểm danh — ${sess.topic ?? sess.class.name}`}
           subtitle={[
+            sessionNo ? sessionNumberLabel(sessionNo) : null,
             dayFmt.format(sess.date),
             sess.class.startTime && sess.class.endTime
               ? `${sess.class.startTime}-${sess.class.endTime}`

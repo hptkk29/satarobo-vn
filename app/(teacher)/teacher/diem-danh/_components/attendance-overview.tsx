@@ -15,6 +15,8 @@ export interface AttendanceRow {
   id: string;
   classId: string;
   className: string;
+  /** "Buổi 7" | "—" — server tính (lib/lms/session-order), client chỉ in ra. */
+  sessionNo: string;
   date: string; // đã format
   time: string; // "08:00-10:00" | ""
   topic: string;
@@ -55,7 +57,8 @@ export function AttendanceOverview({ rows }: { rows: AttendanceRow[] }) {
       if (!q) return true;
       return (
         r.topic.toLowerCase().includes(q) ||
-        r.className.toLowerCase().includes(q)
+        r.className.toLowerCase().includes(q) ||
+        r.sessionNo.toLowerCase().includes(q)
       );
     });
   }, [rows, query, cls, state]);
@@ -65,7 +68,7 @@ export function AttendanceOverview({ rows }: { rows: AttendanceRow[] }) {
       <ListToolbar
         query={query}
         onQuery={setQuery}
-        placeholder="Tìm theo lớp, chủ đề..."
+        placeholder="Tìm theo lớp, chủ đề, số buổi..."
         filters={[
           { value: cls, onChange: setCls, options: classOptions },
           { value: state, onChange: setState, options: stateOptions },
@@ -82,9 +85,12 @@ export function AttendanceOverview({ rows }: { rows: AttendanceRow[] }) {
         <div className="t-card overflow-hidden">
           <div className="overflow-x-auto">
             <PhanTrangBang>
-              <table className="min-w-[770px] w-full border-collapse text-left text-sm">
+              <table className="min-w-[830px] w-full border-collapse text-left text-sm">
                 <thead>
                   <tr className="border-b border-border bg-muted/50 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+                    <th scope="col" className="px-5 py-3">
+                      Buổi
+                    </th>
                     <th scope="col" className="px-5 py-3">
                       Buổi học
                     </th>
@@ -111,6 +117,9 @@ export function AttendanceOverview({ rows }: { rows: AttendanceRow[] }) {
                       key={r.id}
                       className="border-b border-border/60 transition-colors last:border-0 hover:bg-muted/50"
                     >
+                      <td className="px-5 py-3.5 whitespace-nowrap font-semibold text-foreground tabular-nums">
+                        {r.sessionNo}
+                      </td>
                       <td className="px-5 py-3.5">
                         <p className="font-semibold text-foreground">{r.topic}</p>
                         {r.time && (

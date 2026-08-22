@@ -11,19 +11,19 @@ const nullableStr = z
   .string()
   .nullable()
   .optional()
-  .transform((v) => (v === '' || v === undefined ? null : v))
+  .transform((v) => (v === '' || v === undefined || v === null ? null : v))
 
 const nullableInt = (min: number, max: number) =>
   z
-    .union([z.coerce.number().int().min(min).max(max), z.literal(''), z.null()])
+    .union([z.null(), z.literal(''), z.coerce.number().int().min(min).max(max)])
     .optional()
-    .transform((v) => (v === '' || v === undefined ? null : (v as number)))
+    .transform((v) => (v === '' || v === undefined || v === null ? null : (v as number)))
 
 // DOB: chấp nhận Date hoặc date string; '' → null; KHÔNG cho ngày tương lai.
 const nullablePastDate = z
-  .union([z.coerce.date(), z.literal(''), z.null()])
+  .union([z.null(), z.literal(''), z.coerce.date()])
   .optional()
-  .transform((v) => (v === '' || v === undefined ? null : (v as Date)))
+  .transform((v) => (v === '' || v === undefined || v === null ? null : (v as Date)))
   .refine((v) => v === null || v <= new Date(), {
     message: 'Ngày sinh không được ở tương lai',
   })

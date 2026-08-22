@@ -28,7 +28,7 @@ while (i < lines.length) {
     if (!ln || ln.startsWith('//') || ln.startsWith('@@')) continue;
     const tok = ln.split(/\s+/); const fname = tok[0];
     if (!/^\w+$/.test(fname)) continue;
-    const tt = tok[1] || ''; const base = tt.replace(/[\?\[\]]/g, '');
+    const tt = tok[1] || ''; const base = tt.replace(/[?[\]]/g, '');
     if (models.has(base)) continue; // navigation, không phải cột
     cols.push({
       name: fname, base, list: /\[\]/.test(tt), opt: /\?/.test(tt),

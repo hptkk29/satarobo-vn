@@ -16,6 +16,7 @@ import type { PhaseFormValue } from "@/lib/classes/phase-form";
 import { loadClassPhases } from "@/lib/classes/phases-service";
 import { vnAddDays, vnStartOfDay, vnYmd } from "@/lib/time/vn";
 import { ClassSessionsManage } from "../_components/class-sessions-manage";
+import { buildSessionNumberMap } from "@/lib/lms/session-order";
 import { isSessionLifecycleV2Enabled, isClassGroupEnabled } from "@/lib/flags";
 
 interface Props {
@@ -168,11 +169,15 @@ export default async function EditClassPage({ params }: Props) {
     lessonTitle: p.lessonId ? lessonTitleById.get(p.lessonId) ?? null : null,
   }));
 
+  // R1 21/08 — số buổi. Query trên KHÔNG có `take` nên `sessions` đã là toàn bộ buổi của
+  // lớp, đúng điều kiện của buildSessionNumberMap (xem lib/lms/session-order).
+  const sessionNumberOf = buildSessionNumberMap(sessions);
   const sessionRows = sessions.map((s) => ({
     id: s.id,
     date: s.date.toISOString(),
     topic: s.topic,
     status: s.status,
+    seq: sessionNumberOf.get(s.id) ?? null,
     attendanceCount: s._count.attendances,
     feedbackCount: s._count.studentFeedbacks,
   }));

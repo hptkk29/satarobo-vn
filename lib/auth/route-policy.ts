@@ -1,5 +1,9 @@
 import type { Role } from "@prisma/client";
-import { isTeacherSiteEnabled, isCommonLoginAtRootEnabled } from "@/lib/flags";
+import {
+  isTeacherSiteEnabled,
+  isCommonLoginAtRootEnabled,
+  isElearningEnabled,
+} from "@/lib/flags";
 
 /**
  * Host-based access control — PURE decision layer (no NextRequest dependency).
@@ -40,6 +44,7 @@ export type HostKind =
   | "admin"
   | "portal"
   | "teacher"
+  | "elearning"
   | "sale"
   | "vercel"
   | "unknown";
@@ -53,7 +58,7 @@ export type RouteDecision =
   | { type: "redirectPath"; path: string; callbackUrl?: string; reason?: string }
   | {
       type: "redirectHost";
-      host: "admin" | "portal" | "public" | "teacher";
+      host: "admin" | "portal" | "public" | "teacher" | "elearning";
       path: string;
       status: 307 | 308;
     };
@@ -77,6 +82,11 @@ export interface RouteInput {
    * `COMMON_LOGIN_AT_ROOT` (mặc định OFF → giữ 308 sang admin). Test truyền tường minh.
    */
   commonLoginAtRoot?: boolean;
+  /**
+   * EL-01 — cờ khu đào tạo nội bộ. Bỏ trống → đọc env `ELEARNING_ENABLED`
+   * (mặc định OFF). Test truyền tường minh để không phụ thuộc env.
+   */
+  elearningEnabled?: boolean;
 }
 
 // ───────────────────────────────────────────────────────────────────────────
@@ -246,6 +256,11 @@ export function isPortalPath(p: string): boolean {
   return p === "/portal" || p.startsWith("/portal/");
 }
 
+/** EL-01 — path khu đào tạo nội bộ (route group `app/(elearning)/elearning/*`). */
+export function isElearningPath(p: string): boolean {
+  return p === "/elearning" || p.startsWith("/elearning/");
+}
+
 /** L5 — path site giáo viên (route group `app/(teacher)/teacher/*`). */
 export function isTeacherPath(p: string): boolean {
   return p === "/teacher" || p.startsWith("/teacher/");
@@ -316,6 +331,7 @@ export function sanitizeCallbackUrl(p: string): string {
 
 const PORTAL_HOME = "/";
 const STAFF_HOME = "/dashboard";
+const ELEARNING_HOME = "/"; // clean URL trên e-learning host (rewrite → /elearning)
 const TEACHER_HOME = "/"; // clean URL trên teacher host (rewrite nội bộ → /teacher)
 // Sale host — 2 trang HTML tĩnh self-contained (giữ nguyên mã nhúng MISA).
 const SALE_FORM_FILE = "/sale/nhap-lieu.html";
@@ -358,6 +374,7 @@ export function decideRoute(input: RouteInput): RouteDecision {
     isTeacher &&
     effectiveRoles.filter((r) => r !== null && r !== "PARENT").every((r) => r === "TEACHER");
   const teacherSiteOn = input.teacherSiteEnabled ?? isTeacherSiteEnabled();
+  const elearningOn = input.elearningEnabled ?? isElearningEnabled();
   const loginAtRoot = input.commonLoginAtRoot ?? isCommonLoginAtRootEnabled();
 
   // Chỉ gắn reason khi đã từng có session nhưng bị vô hiệu (deactivated),
@@ -446,6 +463,90 @@ export function decideRoute(input: RouteInput): RouteDecision {
   // ── Teacher host (giaovien.satarobo.vn) — L5, phiếu BGĐ câu 7 (04/07/2026) ─
   // 2-phase qua flag TEACHER_SITE_ENABLED. Chỉ TEACHER (kể cả đa vai trò kiêm
   // TEACHER); role khác đá về khu của họ. Clean URL rewrite nội bộ → /teacher/*.
+  // ── E-learning host (e-learning.satarobo.vn) ─ EL-01 ───────────────────
+  // Khá chính xác khuôn teacher ở trên, TRỪ **một khác biệt duy nhất**: điều kiện
+  // vào là "**không phải PARENT-thuần**" chứ không phải một vai cụ thể — QĐ-7 chuối
+  // EMP = mọi vai staff. Nhân sự nào cũng phải học, nên gắn cổng vào một vai là sai
+  // nghệ vụ và sẽ phải sửa lại mỗi lần thêm vai mới.
+  //
+  // ⚠️ Cổng này quyết theo enum `Role` v1 (`MaybeRole`), KHÔNG theo `RoleDef`. Vai
+  // `AUD` (kiểm soát, sẽ tạo ở EL-02) là một `RoleDef` **không có enum v1 tương ứng**
+  // ⇒ tự nó KHÔNG qua được cổng này. Người giữ AUD phải đồng thời có một `Role` v1
+  // staff bất kỳ. Đây là hành vi ĐÚNG CHỦ ĐÍCH (fail-closed), có case test khoá lại.
+  //
+  // Đường thứ hai của cổng vào — "không có hồ sơ nhân sự thì không vào" (QĐ-CDA-10) —
+  // nằm ở **layout RSC** của route group, KHÔNG ở đây: hàm này thuần tuý và không chạm DB
+  // (middleware chỉ thấy JWT). Xem EL-01 PR2.
+  if (hostKind === "elearning") {
+    if (isInfraPath(pathname)) return { type: "next" };
+
+    // Cờ OFF (pha 1): khu chưa mở — bậy về khu của người dùng, **0 byte** HTML
+    // e-learning được phục vụ. Giống hệt teacher-OFF.
+    if (!elearningOn) {
+      if (isParent) {
+        return { type: "redirectHost", host: "portal", path: "/", status: 307 };
+      }
+      return { type: "redirectHost", host: "admin", path: STAFF_HOME, status: 307 };
+    }
+
+    if (pathname === "/login") {
+      if (isStaff) return { type: "redirectPath", path: ELEARNING_HOME };
+      if (isParent) {
+        return { type: "redirectHost", host: "portal", path: "/", status: 307 };
+      }
+      return { type: "next" }; // chưa login → form login
+    }
+
+    // Trang OTP công khai (kích hoạt / quên mật khẩu) — chưa login vẫn vào.
+    if (isPublicOtpPath(pathname)) {
+      if (isStaff) return { type: "redirectPath", path: ELEARNING_HOME };
+      if (isParent) {
+        return { type: "redirectHost", host: "portal", path: "/", status: 307 };
+      }
+      return { type: "next" };
+    }
+
+    // Trang đổi mật khẩu bắt buộc — phục vụ tại chỗ, KHÔNG rewrite.
+    if (pathname === "/doi-mat-khau") {
+      if (!authed) {
+        return { type: "redirectPath", path: "/login", reason: invalidReason };
+      }
+      return { type: "next" };
+    }
+
+    if (!authed) {
+      return {
+        type: "redirectPath",
+        path: "/login",
+        callbackUrl: sanitizeCallbackUrl(pathname),
+        reason: invalidReason,
+      };
+    }
+
+    // PARENT-thuần → về portal. Đào tạo nội bộ không dành cho phụ huynh.
+    if (!isStaff) {
+      return { type: "redirectHost", host: "portal", path: "/", status: 307 };
+    }
+
+    // Staff: chuẩn hoá path lạc khu rồi rewrite clean URL → /elearning/*.
+    //
+    // ⚠️ Thứ tự hỏi giống nhánh teacher và cũng có chủ đích: hỏi "đã là path e-learning
+    // chưa" TRƯỚC, rồi mới hỏi "có phải đường admin không". Khu này sẽ có những tên
+    // trùng với admin (`bao-cao`, `huong-dan`, `cai-dat`…); hỏi ngược thì clean URL của
+    // đúng những màn đó bị ném về trang chủ — không lỗi, không dấu vết.
+    if (isElearningPath(pathname)) return { type: "next" };
+    if (pathname === "/") return { type: "rewrite", path: "/elearning" };
+    if (
+      isAdminRoute(pathname) ||
+      isPortalPath(pathname) ||
+      isTeacherPath(pathname) ||
+      isLegacyAdminPrefixed(pathname)
+    ) {
+      return { type: "redirectPath", path: ELEARNING_HOME };
+    }
+    return { type: "rewrite", path: "/elearning" + pathname };
+  }
+
   if (hostKind === "teacher") {
     if (isInfraPath(pathname)) return { type: "next" };
 

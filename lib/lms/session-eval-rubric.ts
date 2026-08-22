@@ -1,14 +1,24 @@
 // lib/lms/session-eval-rubric.ts — Rubric "Phiếu nhận xét buổi học" của site GV.
 //
 // Port NGUYÊN từ TeachUI (src/data/mock.ts evalCriteria): 9 tiêu chí × 4 nhóm × 5 mức
-// (1 = tốt nhất … 5 = cần cố gắng). Phiếu gồm: tên Dự án + 4 mục nhận xét văn xuôi
-// (Kiến thức/Kỹ năng/Thái độ/Đề xuất) + 9 dropdown năng lực. Pure (không "use server")
-// nên dùng được cả server, client và @react-pdf.
+// (1 = tốt nhất … 5 = cần cố gắng). Phiếu gồm: tên Dự án + nhận xét văn xuôi + 9
+// dropdown năng lực. Pure (không "use server") nên dùng được cả server, client và
+// @react-pdf.
+//
+// ⚠️ 21/08 — Ô VĂN XUÔI ĐỔI HÌNH: 4 ô rời (Kiến thức/Kỹ năng/Thái độ/Đề xuất) gộp
+// thành MỘT ô "Đánh giá chung" (`overall`, ≤ 2000 ký tự). 4 khoá cũ KHÔNG bị xoá khỏi
+// kiểu dữ liệu và KHÔNG có migration nào đụng vào phiếu đã lưu: hàng nghìn phiếu trên
+// prod vẫn nằm ở dạng 4 mục, nên mọi chỗ ĐỌC phải hiểu cả hai dạng (xem
+// `evalNotesProse`), còn chỗ GHI thì từ nay chỉ điền `overall`. Phiếu cũ chuyển sang
+// dạng mới đúng lúc giáo viên mở ra sửa (`toOverallText` ghép 4 mục thành một đoạn).
 
 export type EvalLevel = { value: number; text: string };
 export type EvalCriterion = { id: string; group: string; name: string; levels: EvalLevel[] };
 
-/** 4 mục nhận xét văn xuôi (mục ①). */
+/**
+ * 4 mục nhận xét văn xuôi CŨ (phiếu trước 21/08). Giữ lại để ĐỌC phiếu cũ — đừng dựng
+ * form nhập mới từ mảng này nữa.
+ */
 export const EVAL_NOTE_FIELDS = [
   { key: "knowledge", label: "Kiến thức" },
   { key: "skill", label: "Kỹ năng" },
@@ -17,9 +27,55 @@ export const EVAL_NOTE_FIELDS = [
 ] as const;
 
 export type EvalNoteKey = (typeof EVAL_NOTE_FIELDS)[number]["key"];
-export type EvalNotes = Record<EvalNoteKey, string>;
+/** Phiếu mới điền `overall`; 4 khoá còn lại chỉ còn dữ liệu ở phiếu cũ. */
+export type EvalNotes = Record<EvalNoteKey, string> & { overall: string };
 
-export const EMPTY_NOTES: EvalNotes = { knowledge: "", skill: "", attitude: "", proposal: "" };
+export const EMPTY_NOTES: EvalNotes = {
+  overall: "",
+  knowledge: "",
+  skill: "",
+  attitude: "",
+  proposal: "",
+};
+
+/** Nhãn + trần độ dài của ô nhận xét MỚI. */
+export const EVAL_OVERALL_LABEL = "Đánh giá chung";
+export const EVAL_OVERALL_MAX = 2000;
+/**
+ * Trần AN TOÀN của cột (chống payload rác), KHÁC trần nghiệp vụ 2000 ở trên.
+ * Vì sao cần hai con số: phiếu CŨ có 4 mục × 3000 ký tự, ghép lại kèm nhãn có thể vượt
+ * 2000. Bắt trần 2000 lên cả nội dung cũ thì giáo viên KHÔNG lưu nổi phiếu đó nữa —
+ * kể cả khi chỉ muốn đổi một ô năng lực — cho tới khi tự tay xoá bớt chữ mình đã viết.
+ * Luật thật: 2000 áp cho nội dung GV VỪA SỬA; nội dung cũ giữ nguyên thì cho qua
+ * (xem saveSessionEvalCore).
+ */
+export const EVAL_OVERALL_HARD_MAX = 13000;
+
+/** Khối "Hướng dẫn gợi ý khi viết nhận xét chung" hiện dưới ô nhập (chốt 21/08). */
+export const EVAL_OVERALL_GUIDE_INTRO =
+  "Hướng dẫn gợi ý khi viết nhận xét chung: (Lưu ý sử dụng ngôn từ phù hợp, tích cực và dễ hiểu để phụ huynh đọc)";
+
+export const EVAL_OVERALL_GUIDE_ITEMS: { label: string; text: string }[] = [
+  {
+    label: "Kiến thức",
+    text: "Đánh giá mức độ tiếp thu, ghi nhớ và vận dụng kiến thức đã học của học viên (hiểu bài tốt, nắm được kiến thức cơ bản, ghi nhớ câu lệnh, biết áp dụng kiến thức vào bài tập,...)",
+  },
+  {
+    label: "Kỹ năng",
+    text: "Đánh giá các kỹ năng học viên đã thể hiện trong quá trình học tập và thực hành (kỹ năng lắp ráp, thao tác máy tính, lập trình, tư duy logic, giải quyết vấn đề, khả năng vận dụng kiến thức, sự chủ động trong thực hành,...)",
+  },
+  {
+    label: "Thái độ",
+    text: "Đánh giá tinh thần và thái độ học tập của học viên (tập trung, chủ động, tích cực, chăm chỉ, hợp tác, thực hiện đúng hướng dẫn, có tinh thần học hỏi,...). Có thể đề cập nhẹ nhàng những điểm cần cải thiện (Cần tập trung hơn khi...; Chủ động hơn trong việc...; Tích cực tham gia...)",
+  },
+  {
+    label: "Đề xuất",
+    text: "Đưa ra hướng luyện tập và giải pháp cụ thể giúp học viên phát triển thêm kỹ năng hoặc cải thiện những nội dung còn hạn chế (Khuyến khích ôn tập thêm kiến thức đã học; Rèn luyện thêm kỹ năng lập trình; Tăng cường thực hành; Luyện tập thêm các câu lệnh; Chủ động thực hiện bài tập ở nhà,...)",
+  },
+];
+
+export const EVAL_OVERALL_GUIDE_NOTE =
+  "Nội dung nhận xét cần đảm bảo có đầy đủ Kiến thức – Kỹ năng – Thái độ – Đề xuất, ưu tiên cách diễn đạt tích cực, mang tính xây dựng và phù hợp để phụ huynh theo dõi quá trình học tập của học viên.";
 
 /** Mức mặc định khi mở phiếu mới (giữa thang) — khớp reference. */
 export const DEFAULT_EVAL_LEVEL = 3;
@@ -173,10 +229,11 @@ export function normalizeEvalRatings(raw: unknown): Record<string, number> {
   return out;
 }
 
-/** Chuẩn hoá 4 mục nhận xét từ Json đã lưu. */
+/** Chuẩn hoá các mục nhận xét từ Json đã lưu (phiếu mới `overall` + 4 mục cũ). */
 export function normalizeEvalNotes(raw: unknown): EvalNotes {
   const obj = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
   return {
+    overall: typeof obj.overall === "string" ? obj.overall : "",
     knowledge: typeof obj.knowledge === "string" ? obj.knowledge : "",
     skill: typeof obj.skill === "string" ? obj.skill : "",
     attitude: typeof obj.attitude === "string" ? obj.attitude : "",
@@ -184,15 +241,66 @@ export function normalizeEvalNotes(raw: unknown): EvalNotes {
   };
 }
 
+/** 4 mục cũ CÓ NỘI DUNG của một phiếu (bỏ mục trống) — rỗng với phiếu dạng mới. */
+export function legacyNoteRows(
+  notes: EvalNotes,
+): { key: EvalNoteKey; label: string; text: string }[] {
+  return EVAL_NOTE_FIELDS.map((f) => ({ ...f, text: notes[f.key].trim() })).filter(
+    (r) => r.text.length > 0,
+  );
+}
+
+/**
+ * Văn xuôi của phiếu, đã phân biệt hai dạng dữ liệu — MỌI chỗ hiển thị nên đi qua đây
+ * thay vì tự đoán, nếu không phiếu cũ sẽ mất chữ hoặc phiếu mới bị in hai lần.
+ *   • `{ kind: "overall" }`  — phiếu từ 21/08: một đoạn "Đánh giá chung".
+ *   • `{ kind: "legacy" }`   — phiếu cũ: các mục Kiến thức/Kỹ năng/Thái độ/Đề xuất.
+ *   • `null`                 — phiếu không có văn xuôi (chỉ rubric/sao).
+ * `overall` thắng khi phiếu có cả hai (phiếu cũ vừa được sửa lại theo dạng mới).
+ */
+export function evalNotesProse(
+  notes: EvalNotes | null | undefined,
+):
+  | { kind: "overall"; text: string }
+  | { kind: "legacy"; rows: { key: EvalNoteKey; label: string; text: string }[] }
+  | null {
+  if (!notes) return null;
+  const overall = notes.overall.trim();
+  if (overall) return { kind: "overall", text: overall };
+  const rows = legacyNoteRows(notes);
+  return rows.length > 0 ? { kind: "legacy", rows } : null;
+}
+
+/**
+ * Nội dung mồi cho ô "Đánh giá chung" khi giáo viên mở lại một phiếu.
+ * Phiếu cũ (4 mục) được GHÉP thành một đoạn có nhãn — không cắt bớt, kể cả khi dài hơn
+ * EVAL_OVERALL_MAX: thà để giáo viên tự rút gọn còn hơn im lặng nuốt chữ họ đã viết
+ * (hộp thoại chặn Lưu và báo số ký tự thừa).
+ */
+export function toOverallText(notes: EvalNotes | null | undefined): string {
+  if (!notes) return "";
+  const overall = notes.overall.trim();
+  if (overall) return overall;
+  return legacyNoteRows(notes)
+    .map((r) => `${r.label}: ${r.text}`)
+    .join("\n");
+}
+
 // ─── ĐỌC phiếu đã lưu (parse Json do GV ghi — có thể null/sai dạng, KHÔNG throw) ──
 // Trước 18/08 hai hàm này nằm trong lib/portal/feedback.ts, kéo theo `server-only` +
 // Prisma cho bất kỳ ai muốn render phiếu. Chuyển về đây (module thuần) để portal PH,
 // site GV và màn admin dùng CHUNG một cách hiểu dữ liệu. feedback.ts re-export lại.
 
-/** 4 mục nhận xét văn xuôi từ Json đã lưu → null nếu không có mục nào có nội dung. */
+/**
+ * Nhận xét văn xuôi từ Json đã lưu → null nếu KHÔNG mục nào có nội dung.
+ * Tính cả `overall` (phiếu từ 21/08) lẫn 4 mục cũ — bỏ sót `overall` ở đây là phiếu mới
+ * bị coi như "chưa có nhận xét" trên portal phụ huynh, PDF và màn quản lý.
+ */
 export function parseFeedbackNotes(raw: unknown): EvalNotes | null {
   const notes = normalizeEvalNotes(raw);
-  const hasAny = EVAL_NOTE_FIELDS.some((f) => notes[f.key].trim().length > 0);
+  const hasAny =
+    notes.overall.trim().length > 0 ||
+    EVAL_NOTE_FIELDS.some((f) => notes[f.key].trim().length > 0);
   return hasAny ? notes : null;
 }
 

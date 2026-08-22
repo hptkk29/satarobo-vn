@@ -72,7 +72,7 @@ async function cleanup() {
 function ac1MigrateStatus() {
   // Gộp cả stdout lẫn stderr — prisma in một phần ra stderr khi non-TTY,
   // chỉ đọc stdout có lúc thiếu chuỗi xác nhận (bug lộ ở tổng nghiệm thu Đợt 0).
-  let out = "";
+  let out: string;
   try {
     out = execSync("pnpm exec prisma migrate status 2>&1", {
       cwd: process.cwd(),
@@ -82,7 +82,15 @@ function ac1MigrateStatus() {
     });
   } catch (e) {
     const err = e as { stdout?: unknown; stderr?: unknown };
-    out = `${String(err.stdout ?? "")}\n${String(err.stderr ?? "")}` || String(e);
+    // Nối stdout + stderr; CHỈ khi cả hai đều rỗng mới rơi về String(e).
+    // (Bản cũ viết `${a}\n${b}` || String(e)` — template literal luôn truthy vì có
+    // "\n", nên nhánh dự phòng không bao giờ chạy: prisma chết câm thì `out` là "\n"
+    // và AC1 báo FAIL mà không kèm lý do.)
+    const joined = [err.stdout, err.stderr]
+      .map((part) => String(part ?? "").trim())
+      .filter(Boolean)
+      .join("\n");
+    out = joined || String(e);
   }
   const clean = out.includes("Database schema is up to date");
   report(

@@ -1,7 +1,11 @@
 // hub-sessions-tab.tsx — Tab "Điểm danh" của Class Hub.
 //
-// Bảng buổi giàu thông tin (port SessionsTab reference TeachUI): BUỔI HỌC (topic +
-// Phòng) / NGÀY·GIỜ / ĐIỂM DANH (Có mặt X/Y) / TRẠNG THÁI / THAO TÁC.
+// Bảng buổi giàu thông tin (port SessionsTab reference TeachUI): BUỔI (số thứ tự) /
+// BUỔI HỌC (topic + Phòng) / NGÀY·GIỜ / ĐIỂM DANH (Có mặt X/Y) / TRẠNG THÁI / THAO TÁC.
+//
+// 21/08 — thứ tự hiển thị KHÔNG còn là "ngày mới nhất trước": buổi đã xong cả ba việc
+// (điểm danh + nhận xét đủ HV + có ảnh) lùi xuống DƯỚI, phần còn nợ việc và các buổi
+// sắp tới nằm trên, xếp theo số buổi tăng dần (lib/lms/session-order).
 // Có mặt = PRESENT + LATE (khớp FEEDBACK_ATTENDED_STATUSES). "canMark" = buổi đã tới
 // ngày (≤ hết hôm nay giờ VN) → buổi tương lai khoá "Chưa tới giờ".
 //
@@ -14,14 +18,28 @@ import type { AttendanceStatus } from "@prisma/client";
 import type { Actor } from "@/lib/auth/actor";
 import { withMakeupException } from "@/lib/db-scope";
 import { ENROLLMENT_ACTIVE_STATUS_LIST } from "@/lib/enrollment-status";
+import { summarizeSessionFeedback } from "@/lib/lms/session-feedback-roster";
+import {
+  attendanceCoversRoster,
+  buildSessionMediaCoverage,
+  buildSessionNumberMap,
+  mediaCoversAttendees,
+  SESSION_MEDIA_SELECT,
+  isSessionSettled,
+  isSessionWorkComplete,
+  sessionNumberLabel,
+  sortSessionsForWork,
+} from "@/lib/lms/session-order";
 import { EmptyState } from "../../_components/ui/empty-state";
 import { SessionStatusPill } from "../../_components/ui/session-status-pill";
 import { PhanTrangBang } from "@/components/ui/phan-trang-bang";
 
+// 21/08 — CÓ `year` (xem ghi chú cùng nội dung ở hub-reviews-tab).
 const dayFmt = new Intl.DateTimeFormat("vi-VN", {
   weekday: "short",
   day: "2-digit",
   month: "2-digit",
+  year: "numeric",
   timeZone: "Asia/Ho_Chi_Minh",
 });
 
@@ -38,6 +56,12 @@ function vnTodayEndMs(now = new Date()): number {
 
 const ATTENDED: AttendanceStatus[] = ["PRESENT", "LATE"];
 
+/** studentId của học viên ĐI HỌC (PRESENT/LATE) trong một buổi — em vắng không tính. */
+function attendedIdsOf(rows: { studentId: string; status: string }[]): string[] {
+  return rows.filter((a) => ATTENDED.includes(a.status as AttendanceStatus)).map((a) => a.studentId);
+}
+
+
 export async function HubSessionsTab({
   actor,
   classId,
@@ -49,7 +73,7 @@ export async function HubSessionsTab({
 }) {
   const xdb = withMakeupException(actor);
 
-  const [sessions, cls] = await Promise.all([
+  const [sessions, cls, allSessions] = await Promise.all([
     xdb.classSession.findMany({
       where: { classId },
       select: {
@@ -59,6 +83,8 @@ export async function HubSessionsTab({
         status: true,
         room: { select: { code: true, name: true } },
       },
+      // ⚠️ GIỮ `desc` + `take: 60` — cửa sổ "buổi gần đây". Thứ tự HIỂN THỊ do
+      // sortSessionsForWork quyết định sau khi query (lib/lms/session-order).
       orderBy: { date: "desc" },
       take: 60,
     }),
@@ -72,40 +98,122 @@ export async function HubSessionsTab({
             },
           },
         },
+        // Danh sách studentId của sĩ số — dùng cho "điểm danh xong chưa"
+        // (attendanceCoversRoster). Lọc deletedAt ở CẢ enrollment lẫn student: `_count`
+        // ngay trên không lọc, giữ nguyên vì nó là mẫu số hiển thị "Có mặt X/Y" đã có
+        // từ trước, đổi là đổi con số người dùng đang quen.
+        enrollments: {
+          where: {
+            status: { in: ENROLLMENT_ACTIVE_STATUS_LIST },
+            deletedAt: null,
+            student: { deletedAt: null },
+          },
+          select: { studentId: true },
+        },
       },
+    }),
+    // R1 — số buổi tính trên TOÀN BỘ buổi của lớp, không phải cửa sổ 60 dòng trên.
+    xdb.classSession.findMany({
+      where: { classId },
+      select: { id: true, date: true },
     }),
   ]);
   const rosterCount = cls?._count.enrollments ?? 0;
+  const rosterIds = (cls?.enrollments ?? []).map((e) => e.studentId);
+  const numberOf = buildSessionNumberMap(allSessions);
 
   // Điểm danh theo buổi: buổi có ≥1 bản ghi = đã điểm danh; đếm PRESENT+LATE = có mặt.
+  // Kèm nhận xét + ảnh để biết buổi nào ĐÃ XONG VIỆC (quyết định thứ tự hiển thị).
   const ids = sessions.map((s) => s.id);
-  const att = ids.length
-    ? await xdb.attendance.findMany({
-        where: { sessionId: { in: ids } },
-        select: { sessionId: true, status: true },
-      })
-    : [];
+  const [att, fbRows, mediaRows] = ids.length
+    ? await Promise.all([
+        xdb.attendance.findMany({
+          where: { sessionId: { in: ids } },
+          select: { sessionId: true, studentId: true, status: true },
+        }),
+        xdb.studentSessionFeedback.findMany({
+          where: { classSessionId: { in: ids } },
+          select: { classSessionId: true, studentId: true },
+        }),
+        // Ảnh: tính cả DRAFT/PENDING, chỉ loại REJECTED (xem hub-reviews-tab).
+        xdb.classSessionMedia.findMany({
+          where: { classSessionId: { in: ids }, status: { not: "REJECTED" } },
+          select: SESSION_MEDIA_SELECT,
+        }),
+      ])
+    : [[], [], []];
   const doneSet = new Set<string>();
   const presentBy = new Map<string, number>();
+  const attBySession = new Map<string, { studentId: string; status: string }[]>();
   for (const a of att) {
     doneSet.add(a.sessionId);
     if (ATTENDED.includes(a.status)) {
       presentBy.set(a.sessionId, (presentBy.get(a.sessionId) ?? 0) + 1);
     }
+    const list = attBySession.get(a.sessionId) ?? [];
+    list.push({ studentId: a.studentId, status: a.status });
+    attBySession.set(a.sessionId, list);
   }
+  const fbBySession = new Map<string, string[]>();
+  for (const f of fbRows) {
+    const list = fbBySession.get(f.classSessionId) ?? [];
+    list.push(f.studentId);
+    fbBySession.set(f.classSessionId, list);
+  }
+  // Ai đã có ảnh, theo TỪNG buổi (lib/lms/session-order).
+  const mediaBy = buildSessionMediaCoverage(mediaRows);
   const todayEnd = vnTodayEndMs();
 
   if (sessions.length === 0) {
     return <EmptyState icon={CalendarX2} title="Lớp chưa có buổi học nào." />;
   }
 
+  // R1/R2 — số buổi + "đã xong cả 3 việc"; buổi còn nợ việc và buổi sắp tới lên trên.
+  // Sort ở server, TRƯỚC <PhanTrangBang> (component phân trang trên mảng đã nhận).
+  const rows = sortSessionsForWork(
+    sessions.map((s) => {
+      const stat = summarizeSessionFeedback(
+        attBySession.get(s.id) ?? [],
+        fbBySession.get(s.id) ?? [],
+      );
+      const markedIds = (attBySession.get(s.id) ?? []).map((a) => a.studentId);
+      // Ba việc của giáo viên (chốt 21/08): điểm danh đủ sĩ số · nhận xét đủ học viên đi
+      // học · ảnh/video đủ học viên đi học. Đủ cả ba = buổi HOÀN TẤT.
+      const work = {
+        attendanceDone: attendanceCoversRoster(markedIds, rosterIds),
+        feedbackDone: stat.complete,
+        photoDone: mediaCoversAttendees({
+          attendedStudentIds: attendedIdsOf(attBySession.get(s.id) ?? []),
+          taggedStudentIds: mediaBy.get(s.id)?.tagged ?? [],
+          hasClassWide: mediaBy.get(s.id)?.classWide ?? false,
+        }),
+      };
+      return {
+        s,
+        no: numberOf.get(s.id) ?? null,
+        // Nhãn "Hoàn tất" chỉ bật khi THỰC SỰ xong ba việc — khác `complete` bên dưới,
+        // vốn còn gộp cả buổi đã huỷ và lớp không còn ai học (không có việc để làm).
+        workDone: isSessionWorkComplete(work),
+        complete: isSessionSettled({
+          cancelled: s.status === "CANCELLED",
+          rosterEmpty: rosterIds.length === 0,
+          work,
+        }),
+      };
+    }),
+    (r) => ({ number: r.no, complete: r.complete }),
+  );
+
   return (
     <div className="t-card overflow-hidden">
       <div className="overflow-x-auto">
         <PhanTrangBang>
-          <table className="min-w-[660px] w-full border-collapse text-left text-sm">
+          <table className="min-w-[720px] w-full border-collapse text-left text-sm">
             <thead>
               <tr className="border-b border-border bg-muted/50 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+                <th scope="col" className="px-5 py-3">
+                  Buổi
+                </th>
                 <th scope="col" className="px-5 py-3">
                   Buổi học
                 </th>
@@ -124,7 +232,7 @@ export async function HubSessionsTab({
               </tr>
             </thead>
             <tbody>
-              {sessions.map((s) => {
+              {rows.map(({ s, no, workDone }) => {
                 const canMark =
                   s.date.getTime() <= todayEnd && s.status !== "CANCELLED";
                 const done = doneSet.has(s.id);
@@ -135,6 +243,9 @@ export async function HubSessionsTab({
                     key={s.id}
                     className="border-b border-border/60 transition-colors last:border-0 hover:bg-muted/50"
                   >
+                    <td className="px-5 py-3.5 whitespace-nowrap font-semibold text-foreground tabular-nums">
+                      {sessionNumberLabel(no)}
+                    </td>
                     <td className="px-5 py-3.5">
                       <p className="font-semibold text-foreground">
                         {s.topic ?? "Buổi học"}
@@ -170,7 +281,14 @@ export async function HubSessionsTab({
                       )}
                     </td>
                     <td className="px-5 py-3.5 whitespace-nowrap">
-                      <SessionStatusPill status={s.status} />
+                      {workDone ? (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-state-success-soft px-2.5 py-1 text-xs font-semibold text-state-success-ink">
+                          <CircleCheck className="h-3.5 w-3.5" aria-hidden />
+                          Hoàn tất
+                        </span>
+                      ) : (
+                        <SessionStatusPill status={s.status} />
+                      )}
                     </td>
                     <td className="px-5 py-3.5 text-right whitespace-nowrap">
                       {!canMark ? (

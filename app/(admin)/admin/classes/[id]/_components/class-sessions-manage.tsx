@@ -7,6 +7,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { CalendarRange, Ban, Pencil, ExternalLink } from "lucide-react";
+import { sessionNumberLabel } from "@/lib/lms/session-order";
 import { cancelSessionAction, adjustSessionAction } from "../_curriculum-actions";
 import { CompleteSession } from "../session/_components/complete-session";
 import { GiveHomework } from "../session/_components/give-homework";
@@ -16,6 +17,11 @@ export type SessionRow = {
   date: string; // ISO
   topic: string | null;
   status: "SCHEDULED" | "IN_PROGRESS" | "COMPLETED" | "CANCELLED";
+  /**
+   * Buổi thứ mấy của lớp (1-based, xếp theo ngày — lib/lms/session-order). Tính ở
+   * page.tsx trên TOÀN BỘ buổi của lớp; null khi không tra được.
+   */
+  seq: number | null;
   /**
    * Số bản ghi điểm danh / phiếu nhận xét của buổi (đếm ở page.tsx).
    *
@@ -162,6 +168,13 @@ function SessionItem({
     <li className="py-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="min-w-0">
+          {/* Số buổi ở element RIÊNG (không ghép vào text node của ngày) — test hồi quy
+              dò nhãn bằng getByText khớp chính xác. */}
+          <span
+            className={`mr-2 inline-flex rounded-md bg-muted px-1.5 py-0.5 text-xs font-bold tabular-nums ${ cancelled ? "text-muted-foreground" : "text-foreground" }`}
+          >
+            {sessionNumberLabel(session.seq)}
+          </span>
           <span
             className={`text-sm font-semibold tabular-nums ${ cancelled ? "text-muted-foreground line-through" : "text-foreground" }`}
           >

@@ -15,6 +15,7 @@ import {
   ArrowLeft,
   Ban,
   CalendarX2,
+  CircleCheck,
   ClipboardCheck,
   ClipboardPen,
 } from "lucide-react";
@@ -23,6 +24,18 @@ import type { Actor } from "@/lib/auth/actor";
 import { scopedDb } from "@/lib/db-scope";
 import { ENROLLMENT_ACTIVE_STATUS_LIST } from "@/lib/enrollment-status";
 import { summarizeSessionFeedback } from "@/lib/lms/session-feedback-roster";
+import {
+  attendanceCoversRoster,
+  buildSessionMediaCoverage,
+  buildSessionNumberMap,
+  mediaCoversAttendees,
+  SESSION_MEDIA_SELECT,
+  type SessionMediaRow,
+  isSessionSettled,
+  sessionNumberLabel,
+  sortSessionsForWork,
+} from "@/lib/lms/session-order";
+import { deriveSessionProjectName } from "@/lib/lms/session-project-name";
 import {
   normalizeEvalNotes,
   normalizeEvalRatings,
@@ -36,10 +49,13 @@ import { StudentEvalDialog } from "./student-eval-dialog";
 import { initialsOf } from "@/lib/ui/initials";
 import { PhanTrangBang } from "@/components/ui/phan-trang-bang";
 
+// 21/08 — CÓ `year`. Bảng này trải dài nhiều khoá học nên "T3, 12/08" một mình không
+// nói được là năm nay hay năm ngoái; đừng gỡ ra cho gọn.
 const dayFmt = new Intl.DateTimeFormat("vi-VN", {
   weekday: "short",
   day: "2-digit",
   month: "2-digit",
+  year: "numeric",
   timeZone: "Asia/Ho_Chi_Minh",
 });
 /** "YYYY-MM-DD" (giờ VN) — nhãn ngày trong phiếu/PDF (khớp reference). */
@@ -51,6 +67,12 @@ const isoFmt = new Intl.DateTimeFormat("en-CA", {
 });
 
 const ATTENDED: AttendanceStatus[] = ["PRESENT", "LATE"];
+
+/** studentId của học viên ĐI HỌC (PRESENT/LATE) trong một buổi — em vắng không tính. */
+function attendedIdsOf(rows: { studentId: string; status: string }[]): string[] {
+  return rows.filter((a) => ATTENDED.includes(a.status as AttendanceStatus)).map((a) => a.studentId);
+}
+
 const ATT_BADGE: Record<AttendanceStatus, { label: string; cls: string }> = {
   PRESENT: {
     label: "Có mặt",
@@ -121,6 +143,10 @@ export async function HubReviewsTab({
         date: true,
         topic: true,
         status: true,
+        // R5 21/08 — nguồn TÊN DỰ ÁN tự điền. Ưu tiên customTitle của lớp (bản sao
+        // per-lớp, sửa được ở tab Chương trình) rồi mới tới tên bài của giáo trình.
+        plan: { select: { customTitle: true } },
+        lesson: { select: { order: true, title: true } },
         class: { select: { name: true, course: { select: { name: true } } } },
       },
     });
@@ -136,7 +162,7 @@ export async function HubReviewsTab({
       );
     }
 
-    const [attRows, fbRows, clsRoster] = await Promise.all([
+    const [attRows, fbRows, clsRoster, allSessions, mediaOfSession] = await Promise.all([
       sdb.attendance.findMany({
         where: { sessionId: reviewSessionId },
         select: { studentId: true, status: true },
@@ -170,8 +196,29 @@ export async function HubReviewsTab({
           },
         },
       }),
+      // R1 — số buổi phải tính trên TOÀN BỘ buổi của lớp (xem lib/lms/session-order).
+      // Chỉ id+date nên rẻ; lớp dài nhất cũng vài chục dòng.
+      sdb.classSession.findMany({
+        where: { classId },
+        select: { id: true, date: true },
+      }),
+      // Ảnh/video của buổi — để biết em nào ĐÃ có, em nào còn thiếu. Luật 21/08: học
+      // viên đi học BẮT BUỘC có ảnh/video, nên bảng phải nói được điều đó chứ không chỉ
+      // bày ra nút Tải lên.
+      sdb.classSessionMedia.findMany({
+        where: { classSessionId: reviewSessionId, status: { not: "REJECTED" } },
+        select: SESSION_MEDIA_SELECT,
+      }),
     ]);
 
+    const sessionNo = buildSessionNumberMap(allSessions).get(reviewSessionId) ?? null;
+    const media = buildSessionMediaCoverage(mediaOfSession).get(reviewSessionId) ?? {
+      classWide: false,
+      tagged: new Set<string>(),
+    };
+    /** Em này đã có ảnh/video chưa (ảnh chung cả lớp tính cho mọi em). */
+    const hasMedia = (studentId: string) =>
+      media.classWide || media.tagged.has(studentId);
     const roster = (clsRoster?.enrollments ?? []).map((e) => e.student);
     const attMap = new Map(attRows.map((a) => [a.studentId, a.status]));
     const attendanceTaken = attRows.length > 0;
@@ -191,13 +238,24 @@ export async function HubReviewsTab({
     const courseName = sess.class.course.name;
     const topic = sess.topic ?? "Buổi học";
     const dateIso = isoFmt.format(sess.date);
+    // R5 — tên dự án của buổi, dùng CHUNG cho mọi học viên của buổi này.
+    const projectName = deriveSessionProjectName({
+      sessionNumber: sessionNo,
+      planTitle: sess.plan?.customTitle,
+      lessonTitle: sess.lesson?.title,
+      lessonOrder: sess.lesson?.order,
+      topic: sess.topic,
+    });
 
     return (
       <div>
         <BackToList classId={classId} />
         <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
           <div>
-            <h2 className="text-lg font-bold text-foreground">{topic}</h2>
+            <h2 className="text-lg font-bold text-foreground">
+              {sessionNo ? `${sessionNumberLabel(sessionNo)} · ` : ""}
+              {topic}
+            </h2>
             <p className="text-sm text-muted-foreground">
               {dateIso} · {SESSION_STATUS_LABEL[sess.status] ?? sess.status}
             </p>
@@ -308,15 +366,27 @@ export async function HubReviewsTab({
                           </td>
                           <td className="px-5 py-3.5">
                             {evalOk ? (
-                              <UploadPhotoDialog
-                                classId={classId}
-                                initialSessionId={reviewSessionId}
-                                initialTagged={[st.id]}
-                                compact
-                              />
+                              <div className="flex flex-wrap items-center gap-2">
+                                <UploadPhotoDialog
+                                  classId={classId}
+                                  initialSessionId={reviewSessionId}
+                                  initialTagged={[st.id]}
+                                  compact
+                                />
+                                {hasMedia(st.id) ? (
+                                  <span className="inline-flex items-center gap-1 rounded-full bg-state-success-soft px-2 py-0.5 text-xs font-semibold text-state-success-ink">
+                                    <CircleCheck className="h-3.5 w-3.5" aria-hidden />
+                                    Đã có
+                                  </span>
+                                ) : (
+                                  <span className="inline-flex items-center rounded-full border border-dashed border-border px-2 py-0.5 text-xs font-semibold text-muted-foreground">
+                                    Chưa có
+                                  </span>
+                                )}
+                              </div>
                             ) : (
                               <span className="text-xs text-muted-foreground">
-                                —
+                                Vắng — không cần
                               </span>
                             )}
                           </td>
@@ -329,6 +399,7 @@ export async function HubReviewsTab({
                                 courseName={courseName}
                                 sessionTopic={topic}
                                 sessionDate={dateIso}
+                                projectName={projectName}
                                 existing={
                                   done && fb
                                     ? {
@@ -373,31 +444,55 @@ export async function HubReviewsTab({
           },
         },
       },
+      // Danh sách studentId của sĩ số — dùng cho "điểm danh xong chưa"
+      // (attendanceCoversRoster). Lọc deletedAt ở CẢ enrollment lẫn student; `_count`
+      // ngay trên KHÔNG lọc và giữ nguyên vì nó là mẫu số của cột "Đi học X/Y" đã có
+      // từ trước.
+      enrollments: {
+        where: {
+          status: { in: ENROLLMENT_ACTIVE_STATUS_LIST },
+          deletedAt: null,
+          student: { deletedAt: null },
+        },
+        select: { studentId: true },
+      },
     },
   });
   const rosterCount = cls?._count.enrollments ?? 0;
+  const rosterIds = (cls?.enrollments ?? []).map((e) => e.studentId);
   const timeLabel =
     cls?.startTime && cls?.endTime ? `${cls.startTime}-${cls.endTime}` : "";
 
-  const sessions = await sdb.classSession.findMany({
-    where: {
-      classId,
-      status: { not: "CANCELLED" },
-      date: { lte: new Date(vnTodayEndMs()) },
-    },
-    select: {
-      id: true,
-      date: true,
-      topic: true,
-      status: true,
-      room: { select: { code: true, name: true } },
-    },
-    orderBy: { date: "desc" },
-    take: 100,
-  });
+  const [sessions, allSessions] = await Promise.all([
+    sdb.classSession.findMany({
+      where: {
+        classId,
+        status: { not: "CANCELLED" },
+        date: { lte: new Date(vnTodayEndMs()) },
+      },
+      select: {
+        id: true,
+        date: true,
+        topic: true,
+        status: true,
+        room: { select: { code: true, name: true } },
+      },
+      // ⚠️ orderBy GIỮ `desc` + `take: 100`: đây là cửa sổ "buổi gần nhất". Đổi sang
+      // `asc` là lớp dài bị cắt mất đúng những buổi vừa dạy. Thứ tự HIỂN THỊ do
+      // sortSessionsForWork quyết định SAU khi query — xem lib/lms/session-order.
+      orderBy: { date: "desc" },
+      take: 100,
+    }),
+    // R1 — số buổi tính trên TOÀN BỘ buổi của lớp, không phải trên cửa sổ 100 dòng trên.
+    sdb.classSession.findMany({
+      where: { classId },
+      select: { id: true, date: true },
+    }),
+  ]);
+  const numberOf = buildSessionNumberMap(allSessions);
 
   const ids = sessions.map((s) => s.id);
-  const [attRows, fbRows] = await Promise.all([
+  const [attRows, fbRows, mediaRows] = await Promise.all([
     ids.length
       ? sdb.attendance.findMany({
           where: { sessionId: { in: ids } },
@@ -412,7 +507,21 @@ export async function HubReviewsTab({
           select: { classSessionId: true, studentId: true },
         })
       : Promise.resolve([] as { classSessionId: string; studentId: string }[]),
+    // R2 — tín hiệu thứ ba "đã up ảnh". Tính CẢ DRAFT/PENDING (giáo viên đã làm xong
+    // phần việc của mình; duyệt là việc của quản lý), chỉ loại REJECTED. Ảnh không gắn
+    // buổi (classSessionId = null) không quy được về buổi nào nên không tính.
+    ids.length
+      ? sdb.classSessionMedia.findMany({
+          where: {
+            classSessionId: { in: ids },
+            status: { not: "REJECTED" },
+          },
+          select: SESSION_MEDIA_SELECT,
+        })
+      : Promise.resolve([] as SessionMediaRow[]),
   ]);
+  // Ai đã có ảnh, theo TỪNG buổi (lib/lms/session-order).
+  const mediaBy = buildSessionMediaCoverage(mediaRows);
   const attBySession = new Map<
     string,
     { studentId: string; status: string }[]
@@ -438,13 +547,49 @@ export async function HubReviewsTab({
     );
   }
 
+  // R1/R2 — gắn số buổi + trạng thái 3 việc rồi xếp: buổi CÒN NỢ VIỆC lên trên (theo
+  // thứ tự buổi tăng dần), buổi đã xong cả điểm danh + nhận xét + ảnh xuống dưới.
+  // Sort phải làm Ở ĐÂY (server), trước <PhanTrangBang> — component đó phân trang trên
+  // mảng đã nhận, sort sau nó thì chỉ đảo được thứ tự trong TỪNG trang.
+  const rows = sortSessionsForWork(
+    sessions.map((s) => {
+      const stat = summarizeSessionFeedback(
+        attBySession.get(s.id) ?? [],
+        fbBySession.get(s.id) ?? [],
+      );
+      const markedIds = (attBySession.get(s.id) ?? []).map((a) => a.studentId);
+      return {
+        s,
+        stat,
+        no: numberOf.get(s.id) ?? null,
+        complete: isSessionSettled({
+          cancelled: s.status === "CANCELLED",
+          rosterEmpty: rosterIds.length === 0,
+          work: {
+            attendanceDone: attendanceCoversRoster(markedIds, rosterIds),
+            feedbackDone: stat.complete,
+            photoDone: mediaCoversAttendees({
+              attendedStudentIds: attendedIdsOf(attBySession.get(s.id) ?? []),
+              taggedStudentIds: mediaBy.get(s.id)?.tagged ?? [],
+              hasClassWide: mediaBy.get(s.id)?.classWide ?? false,
+            }),
+          },
+        }),
+      };
+    }),
+    (r) => ({ number: r.no, complete: r.complete }),
+  );
+
   return (
     <div className="t-card overflow-hidden">
       <div className="overflow-x-auto">
         <PhanTrangBang>
-          <table className="min-w-[660px] w-full border-collapse text-left text-sm">
+          <table className="min-w-[720px] w-full border-collapse text-left text-sm">
             <thead>
               <tr className="border-b border-border bg-muted/50 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+                <th scope="col" className="px-5 py-3">
+                  Buổi
+                </th>
                 <th scope="col" className="px-5 py-3">
                   Buổi học
                 </th>
@@ -463,17 +608,16 @@ export async function HubReviewsTab({
               </tr>
             </thead>
             <tbody>
-              {sessions.map((s) => {
-                const stat = summarizeSessionFeedback(
-                  attBySession.get(s.id) ?? [],
-                  fbBySession.get(s.id) ?? [],
-                );
+              {rows.map(({ s, stat, no }) => {
                 const roomLabel = s.room?.code ?? s.room?.name ?? null;
                 return (
                   <tr
                     key={s.id}
                     className="border-b border-border/60 transition-colors last:border-0 hover:bg-muted/50"
                   >
+                    <td className="px-5 py-3.5 whitespace-nowrap font-semibold text-foreground tabular-nums">
+                      {sessionNumberLabel(no)}
+                    </td>
                     <td className="px-5 py-3.5">
                       <p className="font-semibold text-foreground">
                         {s.topic ?? "Buổi học"}
