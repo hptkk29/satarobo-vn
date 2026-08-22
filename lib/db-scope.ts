@@ -60,6 +60,10 @@ export const SCOPED_MODELS = new Set<string>([
   // LUÔN thuộc một cơ sở. NULL = chưa backfill ⇒ KHÔNG vào NULL_IS_GLOBAL_MODELS.
   "TrnAssignment",
   "TrnEnrollment",
+  // EL-04 — yêu cầu của chủ thể dữ liệu. `BAT_BUOC`: NULL = chưa backfill.
+  // ⚠️ Đây là DỮ LIỆU CÁ NHÂN — đưa vào NULL_IS_GLOBAL_MODELS là biến "chưa biết cơ sở"
+  // thành "ai cũng thấy", tức rò rỉ, không phải tiện lợi.
+  "TrnDataSubjectRequest",
 ]);
 
 /**
@@ -253,6 +257,7 @@ export function getModelPrefixes(model: string): string[] {
     case "TrnEvaluationResult":
     case "TrnAssignment":
     case "TrnEnrollment":
+    case "TrnDataSubjectRequest":
       return ["elearning:"];
     default:
       return [];

@@ -298,6 +298,12 @@ export const BACKFILL_SPECS: readonly BackfillSpec[] = [
     scoped: true,
     vi: "lượt ghi danh — cột NOT NULL trong schema; không có cơ sở thì không tạo được bản ghi",
   },
+  {
+    model: "TrnDataSubjectRequest",
+    nullMeaning: "BAT_BUOC",
+    scoped: true,
+    vi: "yêu cầu của chủ thể dữ liệu — dữ liệu cá nhân, luôn thuộc cơ sở của người gửi",
+  },
 ] as const;
 
 /** Model → spec, tra nhanh. */
