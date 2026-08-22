@@ -3533,8 +3533,12 @@ model LeadRotationTurn {
   id         String    @id @default(cuid())
   orgUnitId  String
   userId     String
-  /// Tổng số lượt đã nhận từ trước tới nay. CHỈ TĂNG — không có đường về 0.
+  /// Vị trí trong vòng. CHỈ TĂNG — không có đường về 0.
   turns      Int       @default(0)
+  /// Khởi điểm lúc VÀO vòng (0 nếu có mặt từ đầu; = mức thấp nhất của vòng nếu
+  /// vào sau). Số lead thật sự đã nhận qua vòng chia = `turns - seedTurns`.
+  /// Không có cột này thì bảng bằng chứng nói sai về đúng người dễ bị soi nhất.
+  seedTurns  Int       @default(0)
   /// Lần gần nhất tới lượt; null = chưa bao giờ. Dùng để phá hoà cho công bằng.
   lastTurnAt DateTime? @db.Timestamptz(6)
   createdAt  DateTime  @default(now()) @db.Timestamptz(6)

@@ -90,10 +90,19 @@ export default async function LeadRotationBoardPage() {
           <strong>không tiêu lượt</strong> — nên tổng số lead của một người có thể
           cao hơn số lượt, và đó không phải lỗi.
         </p>
+        <p className="mt-2">
+          Người vào sau <strong>không phải nhận bù cả quá khứ</strong>: họ được đặt
+          ngang mức thấp nhất của vòng lúc vào. Vì vậy cột{" "}
+          <strong>Vị trí vòng</strong> của họ cao hơn số lead thật đã nhận — cột{" "}
+          <strong>Lead đã nhận</strong> mới là con số để đối chiếu với thực tế.
+        </p>
       </PageHelp>
 
       <div className="mt-4 space-y-5">
         {boards.map(({ center, orgUnitId, rows }) => {
+          // Chênh lệch đo trên VỊ TRÍ trong vòng (`turns`) — đó mới là thứ có bất
+          // biến "không quá 1". Số lead THẬT (`turns - seedTurns`) lệch nhiều là
+          // bình thường khi có người vào sau, và nói ngược lại là bảng nói dối.
           const vals = rows.map((r) => r.turns);
           const lech = vals.length ? Math.max(...vals) - Math.min(...vals) : 0;
           return (
@@ -121,7 +130,8 @@ export default async function LeadRotationBoardPage() {
                   <thead>
                     <tr className="border-b border-border text-left text-muted-foreground">
                       <th className="pb-2 font-medium">Tư vấn viên</th>
-                      <th className="pb-2 text-right font-medium">Số lượt</th>
+                      <th className="pb-2 text-right font-medium">Lead đã nhận</th>
+                      <th className="pb-2 text-right font-medium">Vị trí vòng</th>
                       <th className="pb-2 text-right font-medium">Lần gần nhất</th>
                     </tr>
                   </thead>
@@ -139,7 +149,15 @@ export default async function LeadRotationBoardPage() {
                               </span>
                             ) : null}
                           </td>
-                          <td className="py-2 text-right tabular-nums text-foreground">{r.turns}</td>
+                          <td className="py-2 text-right tabular-nums text-foreground">
+                            {r.turns - r.seedTurns}
+                          </td>
+                          <td className="py-2 text-right tabular-nums text-muted-foreground">
+                            {r.turns}
+                            {r.seedTurns > 0 ? (
+                              <span className="ml-1 text-xs">(vào vòng ở {r.seedTurns})</span>
+                            ) : null}
+                          </td>
                           <td className="py-2 text-right text-muted-foreground">
                             {r.lastTurnAt ? formatDateVN(r.lastTurnAt) : "—"}
                           </td>
