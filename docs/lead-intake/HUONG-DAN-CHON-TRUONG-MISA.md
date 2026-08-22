@@ -52,7 +52,8 @@ Lấy từ chính mã nhúng của **"Form Nhập KH v2"** (AMIS CRM → Thiết
 > Chưa muốn đụng MISA? Tắt hẳn bằng `SystemSetting` → `intake.mirrorMisa`.
 
 Hai biến `MISA_WEBFORM_REDIRECT` / `MISA_WEBFORM_ALLOWURL` **để trống** — mặc định
-trong mã đã là `https://satarobo.vn/nhap-khach-hang`, đúng giá trị form v2 khai.
+trong mã đã khớp mã nhúng: `RedirectURL` = `https://satarobo.vn/nhap-khach-hang`,
+`AllowURL` = `*`. ⚠️ Đọc §4 trước khi đụng vào `AllowURL`.
 
 ---
 
@@ -81,14 +82,31 @@ sách thì sửa đúng mảng đó.
 
 ---
 
-## 4. Nếu MISA từ chối phiếu
+## 4. 🔴 `AllowURL` — cái bẫy đã mất nửa buổi (22/08/2026)
 
-Ta POST từ **máy chủ**, không qua trình duyệt, nên request không có `Origin`/`Referer`.
-Nếu MISA chặn theo `AllowURL` thì phiếu bị từ chối — và chuyện đó **không im lặng**:
-một dòng `WebhookDelivery` nguồn `misa-mirror-app` FAILED kèm mã HTTP.
+**MISA đối chiếu `AllowURL` ta gửi với giá trị lưu trong cấu hình form. Không khớp thì
+nó VỨT phiếu — nhưng vẫn trả `302 + Location` y hệt lúc thành công.** Không mã lỗi,
+không thông báo, `WebhookDelivery` sạch bong, còn bên MISA thì rỗng không.
 
-Xử lý: đặt `MISA_WEBFORM_ALLOWURL="*"` (form cũ vốn khai vậy) rồi gửi lại phiếu ở màn
-Replay. Không cần sửa mã nguồn.
+Lần đầu dựng form v2, `AllowURL` được khai là `https://satarobo.vn/nhap-khach-hang`.
+Mọi phiếu đều "gửi thành công" mà không bản ghi nào xuất hiện. Đổi cấu hình form về
+`*` (giống form cũ) là chạy ngay.
+
+⇒ **Luật:** giá trị `AllowURL` trong mã nhúng và hằng số `MISA_ALLOW_URL`
+(`lib/lead/intake/misa-internal.ts`) **phải trùng nhau**. Đổi một bên thì đổi cả hai,
+hoặc đặt env `MISA_WEBFORM_ALLOWURL`. Có test khoá lại giá trị này.
+
+### Cách chẩn đoán nếu tái diễn
+
+| Gửi gì | MISA trả | Nghĩa là |
+|---|---|---|
+| `ID` hoặc `FormKey` sai/thiếu | **500**, không redirect | Khoá hỏng — `WebhookDelivery` bắt được |
+| Định danh đúng, `AllowURL` khớp | **302** + Location | Đã lưu |
+| Định danh đúng, `AllowURL` **lệch** | **302** + Location | ⚠️ **Vứt phiếu** — không phân biệt được từ HTTP |
+
+Tức **302 chỉ chứng minh khoá đúng, KHÔNG chứng minh đã lưu**. Muốn chắc thì mở MISA
+ra nhìn — ta không có API để hỏi. Mỗi lượt gửi MISA trả header `x-request-id`; đưa mã
+đó cho MISA hỗ trợ là họ tra được log hai đầu.
 
 ---
 

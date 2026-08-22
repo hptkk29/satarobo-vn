@@ -14,6 +14,7 @@ import {
   misaCenterIndex,
   misaLeadSourceId,
   misaPhone,
+  MISA_ALLOW_URL,
   MISA_LEAD_SOURCE,
 } from "./misa-internal";
 
@@ -27,6 +28,15 @@ const BASE = {
   note: null,
   employeeCode: "CS1.TVV.007",
 };
+
+describe("MISA_ALLOW_URL — khoá bài học 22/08/2026", () => {
+  it("🔴 phải là `*`, trùng mã nhúng của form v2", () => {
+    // Sai giá trị này thì MISA VỨT phiếu mà vẫn trả 302 + Location — không mã
+    // lỗi, không cảnh báo, `WebhookDelivery` sạch bong, MISA rỗng không.
+    // Đổi `AllowURL` trong cấu hình form MISA thì phải đổi kèm ở đây.
+    expect(MISA_ALLOW_URL).toBe("*");
+  });
+});
 
 describe("misaCenterIndex — Center.code của ta → số thứ tự của MISA", () => {
   it("CS1/CS2 → 1/2, không phân biệt hoa thường", () => {

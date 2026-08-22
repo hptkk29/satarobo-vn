@@ -3,6 +3,8 @@ import { getSetting } from "@/lib/settings/service";
 import { SALE_FORM_FIELDS } from "./map-sale-form";
 import {
   buildMisaInternalFields,
+  MISA_ALLOW_URL,
+  MISA_REDIRECT_URL,
   type MisaInternalInput,
 } from "./misa-internal";
 
@@ -37,14 +39,7 @@ const MISA_ENDPOINT =
 
 const TIMEOUT_MS = 5_000;
 
-/**
- * Trang nhập khách — vừa là `AllowURL` (nơi biểu mẫu đứng) vừa là `RedirectURL`
- * (đích sau khi lưu) của webform MISA "Form Nhập KH v2".
- *
- * Trước 22/08/2026 `RedirectURL` trỏ `sale.satarobo.vn/thank-you`. Trang đó ĐÃ
- * XOÁ cùng biểu mẫu tĩnh — để nguyên là trỏ tới chỗ không còn tồn tại.
- */
-const INTAKE_PAGE_URL = "https://satarobo.vn/nhap-khach-hang";
+
 
 /**
  * Đã ghi vết "thiếu env" trong tiến trình này chưa. Cố ý là biến MODULE (sống
@@ -122,14 +117,12 @@ function misaFormConfig(
       ID: id,
       Companycode: companyCode,
       FormKey: formKey,
-      // Khớp ĐÚNG hai giá trị mà mã nhúng của form v2 khai. Trước đây để `*` vì
-      // form cũ khai vậy; form v2 khai một URL cụ thể, mà ta POST từ MÁY CHỦ nên
-      // không có `Origin`/`Referer` để MISA tự suy ra — sai cặp này là ca hỏng
-      // khó đoán nhất ở đây.
-      AllowURL: process.env.MISA_WEBFORM_ALLOWURL ?? INTAKE_PAGE_URL,
+      // ⚠️ PHẢI TRÙNG mã nhúng của form — xem `MISA_ALLOW_URL`. Sai giá trị này
+      // thì MISA vứt phiếu mà vẫn trả 302 (đã mất nửa buổi vì nó, 22/08/2026).
+      AllowURL: process.env.MISA_WEBFORM_ALLOWURL ?? MISA_ALLOW_URL,
       // MISA trả redirect sau khi lưu. Ta không đọc/không đi theo response
       // (`redirect: "manual"`), đặt giá trị này chỉ để payload khớp hình dạng.
-      RedirectURL: process.env.MISA_WEBFORM_REDIRECT ?? INTAKE_PAGE_URL,
+      RedirectURL: process.env.MISA_WEBFORM_REDIRECT ?? MISA_REDIRECT_URL,
     },
     via,
     missing: [],
@@ -192,7 +185,11 @@ async function postToMisa(
       redirect: "manual", // MISA trả 302 về RedirectURL — không đi theo.
       signal: AbortSignal.timeout(TIMEOUT_MS),
     });
-    // 2xx và 3xx đều là "MISA đã nhận" (bên đó redirect sau khi lưu).
+    // ⚠️ 2xx/3xx chỉ chứng minh MISA **chấp nhận request**, KHÔNG chứng minh nó
+    // đã lưu bản ghi: sai `AllowURL` là nó vứt phiếu mà vẫn trả 302 + Location.
+    // Đường duy nhất bắt được ca đó là mở MISA ra nhìn — ta không có API để hỏi.
+    // Bù lại, sai `ID`/`FormKey` thì MISA trả **500**, nên nhánh dưới vẫn bắt
+    // được ca khoá hỏng/hết hạn.
     if (res.status >= 400) {
       console.error(`[misa-mirror] MISA trả ${res.status} (tham số lấy từ ${via})`);
       return { status: "failed", reason: `http-${res.status}` };

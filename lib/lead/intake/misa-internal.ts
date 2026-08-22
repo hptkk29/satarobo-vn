@@ -25,6 +25,26 @@
 // ═══════════════════════════════════════════════════════════════════════════
 import { normalizeVi } from "./normalize";
 
+/**
+ * ⚠️⚠️ HAI GIÁ TRỊ NÀY PHẢI TRÙNG **Y HỆT** MÃ NHÚNG CỦA FORM MISA. ⚠️⚠️
+ *
+ * Bài học 22/08/2026, mất nửa buổi mới truy ra: MISA đối chiếu `AllowURL` ta gửi
+ * với giá trị lưu trong cấu hình form. **Không khớp thì nó vứt phiếu — nhưng vẫn
+ * trả `302 + Location` y hệt lúc thành công.** Không mã lỗi, không thông báo,
+ * không gì cả. Bên MISA rỗng không, bên ta tưởng đã gửi xong.
+ *
+ * Cách truy ra (nếu tái diễn): sai `FormKey`/`ID` thì MISA trả **500** — nghĩa là
+ * 302 chứng minh khoá đúng, KHÔNG chứng minh phiếu đã lưu. Muốn biết lưu hay
+ * không thì chỉ có mở MISA ra nhìn.
+ *
+ * ⇒ Đổi `AllowURL` trong cấu hình form MISA thì PHẢI đổi ở đây (hoặc đặt env
+ * `MISA_WEBFORM_ALLOWURL`), nếu không bản sao sang MISA chết im lặng.
+ */
+export const MISA_ALLOW_URL = "*";
+
+/** Đích MISA redirect tới sau khi lưu. Ta không đi theo — xem `misa-mirror.ts`. */
+export const MISA_REDIRECT_URL = "https://satarobo.vn/nhap-khach-hang";
+
 /** Tên trường MISA của "Form Nhập KH v2". Đổi ở đây là đổi cả đường mirror. */
 export const MISA_INTERNAL_FIELDS = {
   childName: "LastName",
