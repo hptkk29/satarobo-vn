@@ -10,6 +10,10 @@ dotenv.config({ path: ".env.test", override: true });
 
 export default defineConfig({
   testDir: "./tests/e2e/r2",
+  // Cùng bệnh với r1 (vá 22/08): thiếu dòng này thì mọi spec đổ ngay ở bước nạp
+  // module khi chuỗi import chạm `import "server-only"`. Không có job CI nên nó
+  // chết âm thầm. `tsconfig.playwright.json` stub `server-only`.
+  tsconfig: "./tsconfig.playwright.json",
   globalSetup: "./tests/e2e/a0/global-setup.ts",
   timeout: 30_000,
   expect: { timeout: 5_000 },

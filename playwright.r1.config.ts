@@ -10,6 +10,11 @@ dotenv.config({ path: ".env.test", override: true });
 
 export default defineConfig({
   testDir: "./tests/e2e/r1",
+  // Bộ này CHẾT từ 19/08 mà không ai biết vì nó không có job CI: `lib/crm/sla.ts`
+  // nay import `notifications/notify` → `import "server-only"` → mọi spec đổ ngay
+  // ở bước nạp module. `tsconfig.playwright.json` stub `server-only`; các config
+  // crm/r7 đã có dòng này từ lâu, chỉ r1 bị bỏ quên.
+  tsconfig: "./tsconfig.playwright.json",
   globalSetup: "./tests/e2e/a0/global-setup.ts",
   timeout: 30_000,
   expect: { timeout: 5_000 },
