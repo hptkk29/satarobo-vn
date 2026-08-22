@@ -7238,6 +7238,9 @@ model TrnLesson {
   cues           TrnLessonCue[]
   videoSessions  TrnVideoSession[]
 
+  /// EL-04 — tiến độ của mọi lượt học trên bài này.
+  progress TrnLessonProgress[]
+
   @@unique([moduleId, orderIndex])
   @@index([kind])
   @@index([scormPackageId])
@@ -7731,10 +7734,158 @@ model TrnEnrollment {
   assignment TrnAssignment? @relation(fields: [assignmentId], references: [id], onDelete: SetNull)
 
   /// Một người, một khoá, một chu kỳ — đúng một lượt.
+
+  /// EL-04 — tiến độ từng bài của lượt ghi danh này.
+  lessonProgress TrnLessonProgress[]
   @@unique([courseId, userId, cycle])
   @@index([userId, status])
   @@index([status, dueAt])
   @@index([centerId])
   @@index([orgUnitId])
   @@index([assignmentId])
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// EL-04 PR1 — TIẾN ĐỘ HỌC + QUYỀN CHỦ THỂ DỮ LIỆU
+// ═══════════════════════════════════════════════════════════════════════════
+
+/// ĐÚNG 3 giá trị. Không có "SKIPPED", không có "FAILED" — bài học không trượt;
+/// trượt là chuyện của bài THI (EL-14), một bảng khác.
+enum TrnLessonProgressStatus {
+  NOT_STARTED
+  IN_PROGRESS
+  DONE
+}
+
+enum TrnDsrKind {
+  VIEW_EXPORT
+  CORRECTION
+  WITHDRAW_CONSENT
+}
+
+enum TrnDsrStatus {
+  NEW
+  IN_PROGRESS
+  DONE
+  REJECTED
+}
+
+/// Tiến độ của MỘT LƯỢT GHI DANH trên MỘT BÀI. Bảng nóng nhất module —
+/// heartbeat ghi đè liên tục trong lúc học.
+///
+/// ─── KHÔNG mang cột đơn vị, và đó là NGOẠI LỆ CÓ TÊN ─────────────────────────
+/// Ba lý do, không phải một:
+///  1. Đây là đường ghi NÓNG. Cơ chế ghi kép `centerId → orgUnitId` tra DB ở mỗi
+///     lệnh ghi; cõng thêm một truy vấn vào mỗi nhịp heartbeat là trả ngược đúng
+///     phần công đã cắt khi gom 9 truy vấn xuống 1.
+///  2. Dữ liệu này KHÔNG TỰ ĐỨNG: nó chỉ có nghĩa qua `enrollmentId`, mà
+///     `TrnEnrollment` đã scoped. Cách ly đi qua đường đó khi ĐỌC.
+///  3. Vòng đời khác: bitmap là dữ liệu tầng 2, bị dọn sau 90 ngày; cột đơn vị là
+///     thuộc tính vĩnh viễn. Trộn hai vòng đời vào một bảng đã đủ, thêm cột đơn
+///     vị là trộn ba.
+///
+/// ⛔ Vì thế model này phải nằm NGOÀI cả bốn danh sách: `SCOPED_MODELS`,
+/// `NULL_IS_GLOBAL_MODELS`, `BACKFILL_SPECS`/`DUAL_WRITE_MODELS`, và
+/// `SOFT_DELETE_MODELS`. Cũng KHÔNG khai vào `SCOPE_EXEMPT` — danh sách đó dành
+/// cho model CÓ `centerId` mà cố ý không scope. Có test khẳng định cả bốn.
+///
+/// ─── HAI TẦNG DỮ LIỆU TRONG CÙNG MỘT BẢNG ────────────────────────────────────
+/// TẦNG 1 (chứng từ, giữ dài): `status` · `coveredSec` · `readSeconds` ·
+///   `verifiedAt` · `completedAt`. Cron dọn KHÔNG được chạm.
+/// TẦNG 2 (đo hành vi, 90 ngày): `segmentBitmap` và các cột đếm giám sát.
+/// Thứ tự bắt buộc khi dọn: bitmap chỉ được xoá SAU KHI `coveredSec` đã chốt trên
+/// chính dòng đó — xoá trước là xoá luôn bằng chứng hoàn thành, không khôi phục được.
+model TrnLessonProgress {
+  id           String @id @default(cuid())
+  enrollmentId String
+  userId       String
+  lessonId     String
+
+  /// ⚠️ PHẢI nullable. Cron đêm dọn tầng 2 bằng `SET segmentBitmap = NULL`; khai
+  /// NOT NULL là khoá chết chính bước dọn 90 ngày mà quyết định đòi.
+  /// 1 bit = 1 đoạn `segmentSec` giây.
+  segmentBitmap  Bytes?
+  segmentSec     Int      @default(5)
+  coveredSec     Int      @default(0)
+  contentSec     Int      @default(0)
+  totalWatchSec  Int      @default(0)
+  maxPositionSec Int      @default(0)
+  lastActivityAt DateTime @default(now()) @db.Timestamptz(6)
+
+  // ── Bài ĐỌC — CÙNG bảng, cố ý không tách bảng thứ hai ──
+  // Tách ra thì mọi báo cáo tiến độ phải join thêm một nguồn, và "một lượt học
+  // một bài" mất chỗ đứng duy nhất của nó.
+  readSeconds  Int @default(0)
+  scrollMaxPct Int @default(0)
+
+  // ── Cột giám sát của GĐ2, khai ĐỦ ngay từ GĐ1 ──
+  // Bảng này là bảng nóng nhất module; `ALTER TABLE` lên nó khi đã có dữ liệu prod
+  // là đúng thứ luật cứng #4 bắt tránh. Khai sớm tốn 0 đồng.
+  seekCount         Int       @default(0)
+  blockedSeekCount  Int       @default(0)
+  attnAskedCount    Int       @default(0)
+  attnPassedCount   Int       @default(0)
+  attnPendingAt     DateTime? @db.Timestamptz(6)
+  attnPendingPosSec Int?
+  cueLogJson        Json?
+
+  status         TrnLessonProgressStatus @default(NOT_STARTED)
+  firstStartedAt DateTime?               @db.Timestamptz(6)
+  completedAt    DateTime?               @db.Timestamptz(6)
+  /// CHỈ SERVER GHI — mốc "đã đọc/xem có kiểm chứng" của MỘT BÀI.
+  /// KHÁC `TrnEnrollment.verifiedAt`, vốn là mốc của cả LƯỢT (BR-004). Hai cột,
+  /// hai cấp, đừng gộp.
+  verifiedAt     DateTime?               @db.Timestamptz(6)
+
+  /// Chống nhịp heartbeat tới trễ hoặc đảo thứ tự: nhịp mang `seq` nhỏ hơn bị bỏ.
+  seq            Int       @default(0)
+  /// Mốc cron đã dọn bitmap của dòng này — để phân biệt "chưa từng có bitmap" với
+  /// "đã có và đã dọn đúng hạn".
+  bitmapPurgedAt DateTime? @db.Timestamptz(6)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  enrollment TrnEnrollment @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+  lesson     TrnLesson     @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+
+  /// Một lượt ghi danh · một bài = ĐÚNG một dòng tiến độ.
+  /// ⚠️ Khoá này chỉ chặn được trùng vì `enrollmentId` là NOT NULL. Nới nó thành
+  /// nullable thì Postgres coi hai NULL là KHÁC nhau và khoá mất tác dụng IM LẶNG
+  /// — một người sẽ đẻ nhiều dòng tiến độ cho cùng một bài.
+  @@unique([enrollmentId, lessonId])
+  @@index([userId, lessonId])
+  @@index([lessonId, status])
+  @@index([lastActivityAt])
+}
+
+/// Yêu cầu của CHỦ THỂ DỮ LIỆU: xem/xuất, đính chính, rút đồng ý.
+///
+/// KHÔNG có `deletedAt` và KHÔNG có đường xoá: đây là bản ghi thực thi quyền của
+/// người lao động với dữ liệu của chính họ. Xoá được là mất bằng chứng đã tiếp nhận.
+///
+/// `centerId`/`orgUnitId` nhóm `BAT_BUOC`: NULL = chưa backfill, KHÔNG phải "toàn
+/// công ty" ⇒ KHÔNG vào `NULL_IS_GLOBAL_MODELS`. Với dữ liệu cá nhân thì biến
+/// "chưa biết cơ sở" thành "ai cũng thấy" là rò rỉ, không phải tiện lợi.
+model TrnDataSubjectRequest {
+  id     String       @id @default(cuid())
+  userId String
+  kind   TrnDsrKind
+  detail String       @db.Text
+  status TrnDsrStatus @default(NEW)
+
+  handledByUserId String?
+  handledAt       DateTime? @db.Timestamptz(6)
+  resolutionNote  String?   @db.Text
+
+  centerId  String?
+  orgUnitId String?
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  @@index([status, createdAt])
+  @@index([userId])
+  @@index([centerId])
+  @@index([orgUnitId])
 }
