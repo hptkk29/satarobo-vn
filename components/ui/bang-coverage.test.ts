@@ -49,7 +49,20 @@ function boChuThich(src: string): string {
 
 const TEN_TUONG_DOI = (f: string) => path.relative(ROOT, f).split(path.sep).join("/");
 
+// Quét CÓ NHỚ: cả ba `it` đều gọi `fileCoBang()`, mà mỗi lượt là một lần duyệt đồng bộ
+// toàn bộ `app/` + `components/` rồi đọc từng file. Chạy riêng thì ~1s, nhưng trong cả bộ
+// (267 file test chạy song song) lượt thứ hai vượt trần 5s và test đỏ vì HẾT GIỜ chứ
+// không phải vì có bảng thiếu phân trang — đúng kiểu đỏ giả làm người ta mất niềm tin vào
+// test. Cây thư mục không đổi giữa các `it` nên nhớ lại là an toàn tuyệt đối.
+let _cache: string[] | null = null;
+
 function fileCoBang(): string[] {
+  if (_cache) return _cache;
+  _cache = quetFileCoBang();
+  return _cache;
+}
+
+function quetFileCoBang(): string[] {
   return GOC.flatMap((g) => walk(path.join(ROOT, g)))
     .filter((f) => !f.includes(".test."))
     .filter((f) => {
