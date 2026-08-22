@@ -1,5 +1,6 @@
 import { db } from "@/lib/db";
 import { logLeadAudit } from "@/lib/audit/log";
+import { assignmentWrite } from "@/lib/lead/assignment";
 import type { LeadStatus, Prisma } from "@prisma/client";
 
 // =============================================================================
@@ -109,7 +110,7 @@ export async function autoAssignLead(
     await tx.lead.update({
       where: { id: leadId },
       data: {
-        assignedToId: target,
+        ...assignmentWrite(target), // Đợt A — kèm mốc phân công (đường cũ, 3 webhook)
         ...(lead.status === "NEW" ? { status: "ASSIGNED" as LeadStatus } : {}),
       },
     });
@@ -190,7 +191,7 @@ export async function reassignOpenLeads(
     for (const [leadId, assigneeId] of dist) {
       await tx.lead.update({
         where: { id: leadId },
-        data: { assignedToId: assigneeId },
+        data: assignmentWrite(assigneeId), // Đợt A — kèm mốc phân công
       });
       await logLeadAudit({
         leadId,
