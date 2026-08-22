@@ -28,6 +28,8 @@ const MIEN_TRU: Record<string, string> = {
   "app/(teacher)/teacher/huong-dan/_components/guide-markdown.tsx": "bảng trong tài liệu hướng dẫn",
   "app/(public)/khoa-hoc/page.tsx": "bảng SO SÁNH hai khoá học — nội dung cố định, không phải danh sách",
   "app/(public)/hoc-cu/page.tsx": "bảng so sánh gói học cụ — nội dung cố định",
+  "app/(admin)/admin/leads/so-luot/page.tsx":
+    "một bảng = MỘT cơ sở, số dòng = số tư vấn viên từng nhận lead ở cơ sở đó (thực tế 2). Phân trang một bảng 2 dòng là thêm thanh điều khiển vô nghĩa, mà đây lại đúng là bảng cần nhìn HẾT một lượt để tin là công bằng",
   "components/legacy-laptrinhrobot/InternalAwards.tsx":
     "bảng giải thưởng trên landing cũ — danh sách chốt cứng trong code, không đọc từ DB",
 };

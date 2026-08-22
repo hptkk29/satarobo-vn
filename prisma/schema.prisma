@@ -3519,6 +3519,31 @@ model LeadAssignmentConfig {
   @@index([orgUnitId])
 }
 
+// Đợt D (22/08/2026) — SỔ LƯỢT của vòng luân phiên chia lead.
+//
+// Chủ dự án chốt Q7 (21/08): chia đều theo SỐ LƯỢT, "qua ngày không reset".
+// Bộ đếm phải sống ở DB chứ không suy từ bảng Lead: 69% lead trên prod không đi
+// qua vòng chia (gán tay / sale tự nhập / nhập Excel), lấy tổng lead làm bộ đếm
+// là để phần nhiễu quyết định phần được chia.
+//
+// `orgUnitId` chứ không `centerId` — luật cứng Nền Hệ thống #3 cho bảng MỚI.
+// Dòng của người đã rời vòng được GIỮ LẠI: họ quay lại thì vào đúng chỗ cũ,
+// không làm lại từ 0 rồi nhận dồn.
+model LeadRotationTurn {
+  id         String    @id @default(cuid())
+  orgUnitId  String
+  userId     String
+  /// Tổng số lượt đã nhận từ trước tới nay. CHỈ TĂNG — không có đường về 0.
+  turns      Int       @default(0)
+  /// Lần gần nhất tới lượt; null = chưa bao giờ. Dùng để phá hoà cho công bằng.
+  lastTurnAt DateTime? @db.Timestamptz(6)
+  createdAt  DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt  DateTime  @updatedAt @db.Timestamptz(6)
+
+  @@unique([orgUnitId, userId])
+  @@index([orgUnitId])
+}
+
 // Module CRM & Lead PHẦN 3/4 — log chuyển lead (sale/cơ sở) + bàn giao.
 model LeadTransfer {
   id                String   @id @default(cuid())
