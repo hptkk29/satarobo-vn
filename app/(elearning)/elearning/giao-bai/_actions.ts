@@ -2,6 +2,7 @@
 
 import { defineAction } from "@/lib/actions/define";
 import { cauHinhXemTruoc } from "@/lib/elearning/assignment-preview";
+import { cauHinhTaoLuotGiao } from "@/lib/elearning/assignment-create";
 
 /**
  * EL-05 — giao bài.
@@ -15,3 +16,5 @@ import { cauHinhXemTruoc } from "@/lib/elearning/assignment-preview";
  * `defineAction` trả về một hàm async nên hợp lệ.
  */
 export const xemTruocTapNguoiHocAction = defineAction(cauHinhXemTruoc);
+
+export const taoLuotGiaoAction = defineAction(cauHinhTaoLuotGiao);
