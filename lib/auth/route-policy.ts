@@ -691,10 +691,10 @@ export function decideRoute(input: RouteInput): RouteDecision {
   }
 
   // ── Sale host (sale.satarobo.vn) — form nhập liệu Sale → MISA AMIS CRM ───
-  // Site tĩnh CÔNG KHAI, KHÔNG auth (role/session bỏ qua). Phục vụ 2 trang HTML
-  // self-contained từ public/sale/* (giữ NGUYÊN mã nhúng MISA). MISA tự POST +
-  // redirect về /thank-you (field RedirectURL trong form) — ta chỉ rewrite
-  // clean URL nội bộ → file .html tĩnh. noindex đã nằm trong meta của HTML.
+  // Biểu mẫu tĩnh công khai + trang cảm ơn đã XOÁ (22/08/2026). Mấy đường dẫn
+  // cũ giữ lại trong RETIRED_SALE_PATHS chỉ để đá về địa chỉ mới, KHÔNG phải
+  // vì còn trang nào ở đó — quảng cáo/QR cũ và RedirectURL cũ của MISA vẫn có
+  // thể trỏ vào, 404 thì người nhập không biết đi đâu.
   if (hostKind === "sale") {
     if (isInfraPath(pathname)) return { type: "next" };
 

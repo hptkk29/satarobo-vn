@@ -3,6 +3,7 @@
 import { useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
+import { MISA_LEAD_SOURCE } from "@/lib/lead/intake/misa-internal";
 import { createInternalLeadAction } from "../actions";
 
 type CenterOption = { code: string; name: string };
@@ -166,19 +167,19 @@ export function QuickLeadForm({ centers }: { centers: CenterOption[] }) {
               className={inputClass}
               value={form.source}
               onChange={(e) => set("source")(e.target.value)}
-              placeholder="Facebook Ads, giới thiệu, sự kiện…"
+              placeholder="Chọn gợi ý hoặc tự gõ…"
               autoComplete="off"
               list="nguon-goi-y"
             />
-            {/* Gợi ý cho nhanh tay, KHÔNG khoá lựa chọn: ô này gõ tự do (chốt 22/08). */}
+            {/* Gợi ý = ĐÚNG 12 nhãn `LeadSourceID` của webform MISA "Form Nhập
+                KH v2". Chọn một gợi ý ⇒ phiếu bên MISA vào đúng ô nguồn; gõ chữ
+                tự do vẫn được (chốt 22/08) và chuỗi đó rơi xuống ô Ghi chú của
+                MISA — không mất. Danh sách lấy từ `MISA_LEAD_SOURCE`, đừng chép
+                tay lần hai. */}
             <datalist id="nguon-goi-y">
-              <option value="Facebook Ads" />
-              <option value="Messenger" />
-              <option value="Zalo" />
-              <option value="Giới thiệu" />
-              <option value="Sự kiện" />
-              <option value="Khách gọi vào" />
-              <option value="Website" />
+              {MISA_LEAD_SOURCE.map((s) => (
+                <option key={s.id} value={s.label} />
+              ))}
             </datalist>
           </div>
 

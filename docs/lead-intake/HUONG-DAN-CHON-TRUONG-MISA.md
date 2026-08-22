@@ -1,136 +1,103 @@
-# Hướng dẫn: chọn trường trên webform MISA cho biểu mẫu `/nhap-khach-hang`
+# Webform MISA cho biểu mẫu `/nhap-khach-hang` — "Form Nhập KH v2"
 
-> Người làm: chủ dự án / người có quyền quản trị AMIS CRM.
-> Người nhận kết quả: dev (dán 3–5 giá trị vào env Vercel, không phải sửa code).
-> Ngày: 22/08/2026.
+> Cập nhật 22/08/2026: chủ dự án **đã tạo xong** webform mới và gửi mã nhúng.
+> Bộ trường khớp đúng 7 ô của trang nhập khách; mã nguồn đã map theo bản này.
+> Việc còn lại chỉ là **đặt 3 biến env** trên Vercel.
 
 ---
 
-## 1. Vì sao cần bước này
+## 1. Đối chiếu trường — đã khớp đủ
 
-Biểu mẫu nhập khách hàng đã dời về `satarobo.vn/nhap-khach-hang` và **bộ ô đã đổi**
-(7 ô, không ô nào bắt buộc):
-
-| # | Ô trên trang mới | Trường MISA tương ứng | Tình trạng |
+| # | Ô trên `/nhap-khach-hang` | Trường MISA | Ghi chú |
 |---|---|---|---|
-| 1 | Tên phụ huynh | `CustomField25` | ✅ đã có |
-| 2 | SĐT phụ huynh | `CustomField15` | ✅ đã có |
-| 3 | Tên con | `LastName` | ✅ đã có (MISA **bắt buộc** ô này) |
-| 4 | **Nguồn** | `LeadSourceID` | ⚠️ có, nhưng là **danh sách chọn** — xem §3 |
-| 5 | **Link Facebook** | *(chưa có)* | ❌ **cần tạo mới** — xem §4 |
-| 6 | Cơ sở PH chọn | `CustomField17` (`1`=CS1, `2`=CS2) | ✅ đã có |
-| 7 | Ghi chú | `Description` | ✅ đã có |
-| — | Mã số NV nhập liệu | `CustomField26` | ✅ đã có — **hệ thống tự điền** theo tài khoản đăng nhập, không còn ô để gõ |
+| 1 | Tên phụ huynh | `CustomField25` | |
+| 2 | SĐT phụ huynh | **`Mobile`** | ⚠️ form v2 dùng trường CHUẨN, **khác** form cũ (`CustomField15`) |
+| 3 | Tên con | `LastName` | ô **duy nhất** MISA bắt buộc |
+| 4 | Nguồn | `LeadSourceID` | 12 giá trị (1–13, không có 5) — xem §3 |
+| 5 | Link Facebook | `CustomField22` | |
+| 6 | Cơ sở PH chọn | `CustomField17` | `1` = CS1 · `2` = CS2 |
+| 7 | Ghi chú | `Description` | |
+| — | *(tự động)* Mã số NV | `CustomField26` | lấy từ tài khoản đăng nhập, không có ô để gõ |
 
-Ba ô cũ **đã bỏ khỏi trang mới**: Email PH, Trường bé, Lớp bé. Trên MISA cứ để
-nguyên các trường đó — ta chỉ ngừng gửi giá trị, không xoá gì bên MISA.
+Form v2 **không còn** Email / trường / lớp / tỉnh / địa chỉ — đúng bằng bộ 7 ô. Không
+còn trường nào bị bỏ trống vô nghĩa như hồi dùng chung form cũ.
 
-**Chưa làm gì thì hệ thống vẫn chạy đúng:** "Nguồn" và "Link Facebook" được ghép
-vào ô **Ghi chú/`Description`** của MISA (không mất dữ liệu, chỉ là chưa lọc được
-bên đó). Làm xong §3–§4 thì hai giá trị này nhảy vào ô riêng — **không phải sửa
-code, chỉ đặt env**.
+**Định dạng gửi đi:** SĐT gửi dạng `0905123456` (không phải canonical nội bộ
+`84905123456`) để đối khớp với bản ghi MISA cũ không bị trượt.
 
 ---
 
-## 2. Lấy 3 tham số định danh form (BẮT BUỘC, làm trước)
+## 2. Ba biến env — việc DUY NHẤT còn lại
 
-Biểu mẫu mới gửi phiếu sang MISA từ **máy chủ**, chứ không phải từ trình duyệt như
-bản HTML cũ, nên nó không tự mang theo 3 tham số ẩn của form nữa. Phải khai vào env.
+Lấy từ chính mã nhúng của **"Form Nhập KH v2"** (AMIS CRM → Thiết lập → Web Form →
+*Lấy mã nhúng*), 3 dòng `<input type='text' style='display: none;'>` đầu tiên:
 
-**Cách lấy:**
+| Biến env | Lấy từ | Giá trị |
+|---|---|---|
+| `MISA_WEBFORM_ID` | `name='ID'` | `998e71a2-2c0e-8b52-acc1-fee33ce4c7a3` |
+| `MISA_WEBFORM_COMPANYCODE` | `name='Companycode'` | `uys4eef4` |
+| `MISA_WEBFORM_KEY` | `name='FormKey'` | chuỗi 44 ký tự — **không chép vào repo**, chỉ đặt ở env |
 
-1. Vào **AMIS CRM → Thiết lập → Web Form** → mở form **"Form nhập liên hệ từ Sale"**.
-2. Bấm **Lấy mã nhúng / Xuất mã HTML**.
-3. Trong đoạn mã, tìm 3 dòng `<input type="hidden" …>` sau và **chép nguyên giá trị**:
+Đặt cho **cả `Production` lẫn `test`**.
 
-   ```html
-   <input ... name="ID"          value="c53af301-…">
-   <input ... name="Companycode" value="uys4eef4">
-   <input ... name="FormKey"     value="oCCXw…=">
-   ```
-
-4. Gửi 3 giá trị đó cho dev → dev đặt vào env Vercel (cả `Production` và `test`):
-
-   | Biến env | Lấy từ |
-   |---|---|
-   | `MISA_WEBFORM_ID` | `name="ID"` |
-   | `MISA_WEBFORM_COMPANYCODE` | `name="Companycode"` |
-   | `MISA_WEBFORM_KEY` | `name="FormKey"` |
-
-> ⚠️ **Thiếu 3 biến này = MISA không nhận được phiếu nào.** Lead vẫn vào hệ thống
-> Sata Robo bình thường — chỉ bản sao sang MISA là không đi. Không im lặng: lỗi
-> được ghi thành dòng `WebhookDelivery` nguồn `misa-mirror-app` trạng thái
-> `FAILED`, xem ở màn **CRM → Webhook lỗi — Replay**, và gửi lại được sau khi
-> đặt env. (Ghi 1 lần cho mỗi tiến trình chứ không mỗi phiếu, để không đẩy các
-> dòng lỗi khác ra khỏi danh sách.)
+> ⚠️ **Đây là form MỚI, ID khác form cũ** `c53af301-…` của biểu mẫu tĩnh
+> `sale.satarobo.vn` đã nghỉ. Đừng chép lại giá trị cũ — sẽ đổ vào nhầm collection.
 >
-> Chưa muốn đụng MISA lúc này? Tắt hẳn bằng `SystemSetting` → `intake.mirrorMisa`
-> — sạch sẽ hơn là để nó báo lỗi mỗi ngày.
+> Thiếu env ⇒ lead **vẫn vào hệ thống Sata Robo bình thường**, chỉ bản sao sang MISA
+> không đi; lỗi ghi thành `WebhookDelivery` nguồn `misa-mirror-app` trạng thái
+> `FAILED` (xem **CRM → Webhook lỗi — Replay**), gửi lại được sau khi đặt env. Ghi 1
+> lần cho mỗi tiến trình chứ không mỗi phiếu, để không đẩy các dòng lỗi khác ra khỏi
+> danh sách.
+>
+> Chưa muốn đụng MISA? Tắt hẳn bằng `SystemSetting` → `intake.mirrorMisa`.
+
+Hai biến `MISA_WEBFORM_REDIRECT` / `MISA_WEBFORM_ALLOWURL` **để trống** — mặc định
+trong mã đã là `https://satarobo.vn/nhap-khach-hang`, đúng giá trị form v2 khai.
 
 ---
 
-## 3. Ô "Nguồn" — `LeadSourceID`
+## 3. Ô "Nguồn" — gõ tự do nhưng vẫn khớp MISA
 
-Trên trang mới, **Nguồn là ô gõ tự do** (chủ dự án chốt 22/08). Trên MISA nó là
-**danh sách chọn 12 giá trị số** (value 1–13, không có 5). Hai kiểu này không tự
-khớp nhau được, nên chọn **một** trong hai đường:
+Chủ dự án chốt ô này **gõ tự do**, còn MISA thì là danh sách chọn 12 giá trị. Cách
+xử lý: ô trên trang có **gợi ý = đúng 12 nhãn của MISA**.
 
-**Đường A — giữ ô gõ tự do (mặc định, không cần làm gì).**
-Nguồn người nhập gõ đi vào `Lead.source` của hệ thống ta (lọc được ở màn Leads), và
-xuống ô Ghi chú của MISA. Không cần cấu hình gì thêm.
+- Chọn một gợi ý (hoặc gõ trùng nhãn, không phân biệt dấu/hoa-thường) → gửi đúng
+  `LeadSourceID` tương ứng.
+- Gõ chữ tự do ("chị Hoa lớp 3 giới thiệu") → `LeadSourceID` để trống, **nguyên văn
+  chuỗi rơi xuống ô Ghi chú** của MISA. Không mất chữ nào.
 
-**Đường B — muốn nguồn vào đúng ô `LeadSourceID` của MISA.**
-Gửi cho dev **danh sách 12 nguồn kèm số**, đúng như MISA đang khai. Lấy bằng cách:
-mở lại đoạn mã nhúng ở §2, tìm khối `<select name="LeadSourceID">` rồi chép cả khối:
+Danh sách nằm ở `MISA_LEAD_SOURCE` (`lib/lead/intake/misa-internal.ts`) — **một chỗ
+duy nhất**, dùng chung cho cả gợi ý trên trang lẫn ánh xạ khi gửi. MISA đổi danh
+sách thì sửa đúng mảng đó.
 
-```html
-<select name="LeadSourceID">
-  <option value="1">Quảng cáo Facebook</option>
-  <option value="2">…</option>
-  ...
-</select>
-```
-
-Dev sẽ đổi ô "Nguồn" trên trang thành dropdown đúng 12 giá trị đó (một từ điển
-nguồn duy nhất cho cả hai hệ thống) và khai `MISA_FIELD_LEAD_SOURCE="LeadSourceID"`.
+| id | nhãn | | id | nhãn |
+|---|---|---|---|---|
+| 1 | Marketing Hội Sở từ Quảng Cáo | | 8 | Ban lãnh đạo công ty |
+| 2 | Review, chia sẻ, seeding từ Trung tâm | | 9 | Nguồn khác |
+| 3 | KH tự đến Trung Tâm | | 10 | Marketing Hội Sở từ Tool quét KH |
+| 4 | Phụ huynh giới thiệu | | 11 | Marketing Hội Sở từ Organic |
+| 6 | Sự kiện | | 12 | Marketing Hội Sở từ Seeding |
+| 7 | Nhân viên giới thiệu | | 13 | Cộng tác viên giới thiệu |
 
 ---
 
-## 4. Ô "Link Facebook" — cần tạo mới trên MISA
+## 4. Nếu MISA từ chối phiếu
 
-MISA **chưa có** trường nào cho link Facebook. Nếu muốn bên MISA cũng thấy link:
+Ta POST từ **máy chủ**, không qua trình duyệt, nên request không có `Origin`/`Referer`.
+Nếu MISA chặn theo `AllowURL` thì phiếu bị từ chối — và chuyện đó **không im lặng**:
+một dòng `WebhookDelivery` nguồn `misa-mirror-app` FAILED kèm mã HTTP.
 
-1. **AMIS CRM → Thiết lập → Tuỳ chỉnh dữ liệu / Trường mở rộng** của đối tượng
-   **Tiềm năng (Lead)** → **Thêm trường**.
-2. Khai:
-   - Tên hiển thị: **Link Facebook**
-   - Kiểu dữ liệu: **Văn bản** (một dòng), độ dài tối đa **300**
-   - Không bắt buộc.
-3. Quay lại **Web Form** → kéo trường vừa tạo vào form → **Lưu** → **Xuất lại mã nhúng**.
-4. Trong mã nhúng mới, tìm trường vừa thêm để lấy **tên kỹ thuật** của nó — dạng
-   `name="CustomField27"` (số cụ thể do MISA cấp, không đoán trước được).
-5. Gửi tên đó cho dev → dev đặt `MISA_FIELD_FACEBOOK="CustomField27"`.
+Xử lý: đặt `MISA_WEBFORM_ALLOWURL="*"` (form cũ vốn khai vậy) rồi gửi lại phiếu ở màn
+Replay. Không cần sửa mã nguồn.
 
 ---
 
-## 5. Tóm tắt: anh gửi cho dev đúng những thứ này
-
-- [ ] **Bắt buộc:** 3 giá trị `ID` / `Companycode` / `FormKey` (§2).
-- [ ] *Tuỳ chọn:* cả khối `<select name="LeadSourceID">` với 12 dòng `<option>` (§3, đường B).
-- [ ] *Tuỳ chọn:* tên kỹ thuật của trường "Link Facebook" vừa tạo (§4).
-
-Cách gửi gọn nhất: **xuất lại mã nhúng của form và gửi nguyên file/đoạn mã** — trong
-đó đã có đủ cả ba thứ trên. Đoạn mã này không phải mật khẩu (trước đây nó nằm công
-khai trong `sale.satarobo.vn/nhap-lieu.html`), nhưng vẫn nên gửi qua kênh nội bộ.
-
----
-
-## 6. Chỗ code liên quan (cho dev)
+## 5. Chỗ code liên quan
 
 | Việc | File |
 |---|---|
-| Ánh xạ ô của ta → tên trường MISA | `lib/lead/intake/misa-internal.ts` |
+| Ánh xạ ô của ta → tên trường MISA + 12 nguồn | `lib/lead/intake/misa-internal.ts` |
 | Gửi + xử lý hỏng (không bao giờ rollback lead) | `lib/lead/intake/misa-mirror.ts` |
 | Gọi mirror sau khi đã ghi Lead | `app/(intake)/nhap-khach-hang/actions.ts` |
+| Phát lại phiếu hỏng | `lib/crm/webhook-replay.ts` (`case "misa-mirror-app"`) |
 | Cờ tắt/bật mirror | `SystemSetting` → `intake.mirrorMisa` |
-| Đối chiếu bộ trường (bản verify 16/07/2026) | `Document/0-yeucau/2-ba-phan-tich/09-ui-ux-site-sale-tuyensinh.md` §7 tab 6 |

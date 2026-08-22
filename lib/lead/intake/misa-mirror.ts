@@ -38,6 +38,15 @@ const MISA_ENDPOINT =
 const TIMEOUT_MS = 5_000;
 
 /**
+ * Trang nhập khách — vừa là `AllowURL` (nơi biểu mẫu đứng) vừa là `RedirectURL`
+ * (đích sau khi lưu) của webform MISA "Form Nhập KH v2".
+ *
+ * Trước 22/08/2026 `RedirectURL` trỏ `sale.satarobo.vn/thank-you`. Trang đó ĐÃ
+ * XOÁ cùng biểu mẫu tĩnh — để nguyên là trỏ tới chỗ không còn tồn tại.
+ */
+const INTAKE_PAGE_URL = "https://satarobo.vn/nhap-khach-hang";
+
+/**
  * Đã ghi vết "thiếu env" trong tiến trình này chưa. Cố ý là biến MODULE (sống
  * theo instance serverless, không phải theo request): đủ để chặn cơn lũ một
  * dòng-mỗi-phiếu, mà vẫn ghi lại vài lần mỗi giờ nên không ai bỏ sót được.
@@ -67,7 +76,19 @@ export type MirrorOutcome =
   | { status: "failed"; reason: string };
 
 /** 3 tham số định danh form. Ưu tiên env; thiếu thì lấy chính cái form gửi lên. */
-function misaFormConfig(payload: Record<string, string>): {
+function misaFormConfig(
+  payload: Record<string, string>,
+  /**
+   * Ưu tiên 3 tham số NẰM TRONG PHIẾU thay vì env.
+   *
+   * Chỉ đường phát lại phiếu CŨ bật cờ này, và đó là chuyện sống còn từ
+   * 22/08/2026: env nay trỏ webform **"Form Nhập KH v2"** (bộ trường mới), còn
+   * phiếu cũ mang bộ trường của form `c53af301-…` — trong đó SĐT là
+   * `CustomField15`, ô mà form v2 KHÔNG có. Gửi phiếu cũ vào form mới thì MISA
+   * nhận một bản ghi cụt, không báo lỗi. Phiếu cũ phải về đúng form đã sinh ra nó.
+   */
+  preferPayload = false,
+): {
   config: Record<string, string> | null;
   via: "env" | "form";
   missing: string[];
@@ -77,8 +98,11 @@ function misaFormConfig(payload: Record<string, string>): {
   const envCompany = process.env.MISA_WEBFORM_COMPANYCODE;
   const envKey = process.env.MISA_WEBFORM_KEY;
 
-  const pick = (fromEnv: string | undefined, fromForm: string | undefined) =>
-    (fromEnv && fromEnv.trim()) || (fromForm && fromForm.trim()) || "";
+  const pick = (fromEnv: string | undefined, fromForm: string | undefined) => {
+    const env = fromEnv?.trim() || "";
+    const form = fromForm?.trim() || "";
+    return preferPayload ? form || env : env || form;
+  };
 
   const id = pick(envId, payload.ID);
   const companyCode = pick(envCompany, payload.Companycode);
@@ -90,19 +114,22 @@ function misaFormConfig(payload: Record<string, string>): {
   if (!formKey) missing.push("MISA_WEBFORM_KEY");
   if (missing.length > 0) return { config: null, via: "env", missing };
 
-  const via: "env" | "form" =
-    envId && envCompany && envKey ? "env" : "form";
+  const usedEnv = id === envId?.trim() && companyCode === envCompany?.trim();
+  const via: "env" | "form" = usedEnv ? "env" : "form";
 
   return {
     config: {
       ID: id,
       Companycode: companyCode,
       FormKey: formKey,
-      AllowURL: "*",
-      // MISA trả redirect sau khi lưu. Ta không đọc/không đi theo response, đặt
-      // giá trị này chỉ để payload khớp hình dạng bên đó vẫn nhận.
-      RedirectURL:
-        process.env.MISA_WEBFORM_REDIRECT ?? "https://sale.satarobo.vn/thank-you",
+      // Khớp ĐÚNG hai giá trị mà mã nhúng của form v2 khai. Trước đây để `*` vì
+      // form cũ khai vậy; form v2 khai một URL cụ thể, mà ta POST từ MÁY CHỦ nên
+      // không có `Origin`/`Referer` để MISA tự suy ra — sai cặp này là ca hỏng
+      // khó đoán nhất ở đây.
+      AllowURL: process.env.MISA_WEBFORM_ALLOWURL ?? INTAKE_PAGE_URL,
+      // MISA trả redirect sau khi lưu. Ta không đọc/không đi theo response
+      // (`redirect: "manual"`), đặt giá trị này chỉ để payload khớp hình dạng.
+      RedirectURL: process.env.MISA_WEBFORM_REDIRECT ?? INTAKE_PAGE_URL,
     },
     via,
     missing: [],
@@ -125,7 +152,8 @@ export async function mirrorSaleFormToMisa(
     return { status: "failed", reason: "setting-unreadable" };
   }
 
-  const { config, via, missing } = misaFormConfig(payload);
+  // `true`: phiếu cũ về đúng form cũ (xem chú thích ở `misaFormConfig`).
+  const { config, via, missing } = misaFormConfig(payload, true);
   if (!config) {
     const alreadyReported = misconfigReported;
     misconfigReported = true;
