@@ -14,6 +14,7 @@ import {
   mergeSnapshot,
   MIN_READ_FLOOR,
   MIN_READ_CEIL,
+  demoteH1,
 } from "./reading";
 
 const tu = (n: number) => Array.from({ length: n }, (_, i) => `tu${i}`).join(" ");
@@ -137,5 +138,31 @@ describe("mergeSnapshot — hai tab không làm tiến độ chạy lùi", () =>
       mergeSnapshot({ readSeconds: 0, scrollMaxPct: 40 }, { readSeconds: 0, scrollMaxPct: -30 })
         .scrollMaxPct,
     ).toBe(40);
+  });
+});
+
+describe("demoteH1 — chống mất nội dung câm ở renderer chung", () => {
+  it("hạ # thành ## để không bị `h1: () => null` nuốt", () => {
+    // Người soạn gõ `# Phần 1`, renderer chung trả về RỖNG, và không có thông báo
+    // nào giải thích. Đây là mất nội dung câm, không phải lỗi trình bày.
+    expect(demoteH1("# Phần 1\nnội dung")).toBe("## Phần 1\nnội dung");
+  });
+
+  it("không đụng ## và ###", () => {
+    expect(demoteH1("## Đã là cấp 2\n### cấp 3")).toBe("## Đã là cấp 2\n### cấp 3");
+  });
+
+  it("KHÔNG đụng `#` trong khối mã", () => {
+    // `# cài đặt` trong ví dụ shell là chú thích, không phải tiêu đề. Hạ cấp nó là
+    // sửa nội dung người ta viết.
+    const md = "# Tiêu đề\n\n```bash\n# cài đặt\npnpm i\n```";
+    const r = demoteH1(md);
+    expect(r).toContain("## Tiêu đề");
+    expect(r).toContain("# cài đặt");
+    expect(r).not.toContain("## cài đặt");
+  });
+
+  it("không đụng `#` giữa dòng (thẻ hashtag)", () => {
+    expect(demoteH1("xem thêm #robotics")).toBe("xem thêm #robotics");
   });
 });
