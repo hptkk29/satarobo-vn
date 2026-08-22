@@ -17,3 +17,18 @@ export const ENROLLMENT_ACTIVE_STATUSES = [
 export const ENROLLMENT_ACTIVE_STATUS_LIST: EnrollmentStatus[] = [
   ...ENROLLMENT_ACTIVE_STATUSES,
 ];
+
+/**
+ * Ghi danh đang HỌC THẬT (khác `ENROLLMENT_ACTIVE_STATUSES`: bộ kia còn gồm CONFIRMED
+ * "đã xếp chưa bắt đầu" và PAUSED "bảo lưu nhưng vẫn thuộc lớp").
+ *
+ * ⚠️ PHẢI CÓ `ACTIVE`: đó là giá trị MẶC ĐỊNH của `Enrollment.status` trong schema và là
+ * thứ hai đường convert lead (`lib/crm/convert-lead.ts`, `convert-lead-v2.ts`, kể cả
+ * bulk-convert) sinh ra vì chúng KHÔNG truyền `status` ⇒ phần lớn học viên THẬT mang
+ * `ACTIVE`, không phải `STUDYING`. Chốt cứng vào riêng `STUDYING` là nguồn của bug
+ * 21/08/2026 (nghỉ học không gỡ khỏi lớp; bảo lưu không bấm được).
+ *
+ * File này KHÔNG import `@/lib/db` nên client component dùng được — đừng chuyển hằng số
+ * này sang `lib/students/lifecycle.ts` (bên đó kéo Prisma vào bundle).
+ */
+export const STUDYING_ENROLLMENT_STATUSES: EnrollmentStatus[] = ["STUDYING", "ACTIVE"];

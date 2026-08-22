@@ -9,43 +9,53 @@ type CenterOption = { code: string; name: string };
 
 type Entered = { id?: string; label: string; note: string };
 
+/**
+ * Bộ ô chốt 22/08/2026 — ĐÚNG 7 ô, **không ô nào bắt buộc**.
+ *
+ * Ô email / trường bé / lớp bé của bản trước đã bỏ (hỏi sau, điền ở màn chi tiết
+ * lead). Thêm/bớt ô ở đây phải sửa kèm `lib/validators/internal-lead.ts` +
+ * `lib/lead/intake/map-internal-form.ts` — ba chỗ đi thành một bộ.
+ */
 const EMPTY = {
-  phone: "",
   parentName: "",
+  phone: "",
   childName: "",
+  source: "",
+  facebookUrl: "",
   centerCode: "",
-  schoolName: "",
-  gradeLevel: "",
-  email: "",
   note: "",
 };
 
 /**
- * G-D — biểu mẫu nhập nhanh, **không có ô "Mã số NV"**: người nhập đã đăng nhập
- * nên hệ thống tự biết là ai.
+ * Biểu mẫu nhập nhanh, **không có ô "Mã số NV"**: người nhập đã đăng nhập nên hệ
+ * thống tự biết là ai.
  *
  * Thiết kế theo đúng việc thật: gõ xong một phiếu thì **ở lại trang**, ô trống,
- * con trỏ nhảy về ô số điện thoại để gõ phiếu kế tiếp. Danh sách phiếu vừa nhập
- * hiện ngay bên dưới để đối chiếu, kèm liên kết mở khách vừa tạo.
+ * con trỏ nhảy về ô đầu để gõ phiếu kế tiếp. Danh sách phiếu vừa nhập hiện ngay
+ * bên cạnh để đối chiếu, kèm liên kết mở khách vừa tạo.
  */
 export function QuickLeadForm({ centers }: { centers: CenterOption[] }) {
   const [form, setForm] = useState(EMPTY);
   const [entered, setEntered] = useState<Entered[]>([]);
   const [pending, startTransition] = useTransition();
-  const phoneRef = useRef<HTMLInputElement>(null);
+  const firstRef = useRef<HTMLInputElement>(null);
 
-  const set = (k: keyof typeof EMPTY) => (v: string) => setForm((f) => ({ ...f, [k]: v }));
+  const set = (k: keyof typeof EMPTY) => (v: string) =>
+    setForm((f) => ({ ...f, [k]: v }));
+
+  // Không ô nào bắt buộc — chỉ chặn đúng ca bấm Lưu trên biểu mẫu trắng (server
+  // kiểm lại bằng `hasAnyContent`; đây chỉ để nút không im lặng nuốt cú bấm).
+  const isBlank = Object.values(form).every((v) => v.trim() === "");
 
   function submit() {
     startTransition(async () => {
       const res = await createInternalLeadAction({
-        phone: form.phone,
         parentName: form.parentName || null,
+        phone: form.phone || null,
         childName: form.childName || null,
+        source: form.source || null,
+        facebookUrl: form.facebookUrl || null,
         centerCode: form.centerCode || null,
-        schoolName: form.schoolName || null,
-        gradeLevel: form.gradeLevel || null,
-        email: form.email || null,
         note: form.note || null,
       });
 
@@ -54,7 +64,12 @@ export function QuickLeadForm({ centers }: { centers: CenterOption[] }) {
         return;
       }
 
-      const label = form.parentName || form.childName || form.phone;
+      const label =
+        form.parentName ||
+        form.childName ||
+        form.phone ||
+        form.facebookUrl ||
+        "Khách mới";
       if (res.duplicate) {
         toast.warning(
           res.childAdded
@@ -79,7 +94,7 @@ export function QuickLeadForm({ centers }: { centers: CenterOption[] }) {
         ...prev,
       ]);
       setForm(EMPTY);
-      phoneRef.current?.focus();
+      firstRef.current?.focus();
     });
   }
 
@@ -97,53 +112,94 @@ export function QuickLeadForm({ centers }: { centers: CenterOption[] }) {
         }}
       >
         <div className="grid gap-4 sm:grid-cols-2">
-          <div className="sm:col-span-2">
-            <label className={labelClass} htmlFor="phone">
-              Số điện thoại phụ huynh <span className="text-state-danger-ink">*</span>
-            </label>
-            <input
-              id="phone"
-              ref={phoneRef}
-              className={inputClass}
-              value={form.phone}
-              onChange={(e) => set("phone")(e.target.value)}
-              placeholder="0905 123 456"
-              inputMode="tel"
-              autoComplete="off"
-              autoFocus
-              required
-            />
-          </div>
-
           <div>
             <label className={labelClass} htmlFor="parentName">
               Tên phụ huynh
             </label>
             <input
               id="parentName"
+              ref={firstRef}
               className={inputClass}
               value={form.parentName}
               onChange={(e) => set("parentName")(e.target.value)}
+              placeholder="Chị Nguyễn Thị An"
+              autoComplete="off"
+              autoFocus
+            />
+          </div>
+
+          <div>
+            <label className={labelClass} htmlFor="phone">
+              SĐT phụ huynh
+            </label>
+            <input
+              id="phone"
+              className={inputClass}
+              value={form.phone}
+              onChange={(e) => set("phone")(e.target.value)}
+              placeholder="0905 123 456"
+              inputMode="tel"
               autoComplete="off"
             />
           </div>
 
           <div>
             <label className={labelClass} htmlFor="childName">
-              Tên bé
+              Tên con
             </label>
             <input
               id="childName"
               className={inputClass}
               value={form.childName}
               onChange={(e) => set("childName")(e.target.value)}
+              placeholder="Nguyễn Minh Khoa"
               autoComplete="off"
             />
           </div>
 
           <div>
+            <label className={labelClass} htmlFor="source">
+              Nguồn
+            </label>
+            <input
+              id="source"
+              className={inputClass}
+              value={form.source}
+              onChange={(e) => set("source")(e.target.value)}
+              placeholder="Facebook Ads, giới thiệu, sự kiện…"
+              autoComplete="off"
+              list="nguon-goi-y"
+            />
+            {/* Gợi ý cho nhanh tay, KHÔNG khoá lựa chọn: ô này gõ tự do (chốt 22/08). */}
+            <datalist id="nguon-goi-y">
+              <option value="Facebook Ads" />
+              <option value="Messenger" />
+              <option value="Zalo" />
+              <option value="Giới thiệu" />
+              <option value="Sự kiện" />
+              <option value="Khách gọi vào" />
+              <option value="Website" />
+            </datalist>
+          </div>
+
+          <div className="sm:col-span-2">
+            <label className={labelClass} htmlFor="facebookUrl">
+              Link Facebook
+            </label>
+            <input
+              id="facebookUrl"
+              className={inputClass}
+              value={form.facebookUrl}
+              onChange={(e) => set("facebookUrl")(e.target.value)}
+              placeholder="facebook.com/… hoặc m.me/…"
+              inputMode="url"
+              autoComplete="off"
+            />
+          </div>
+
+          <div className="sm:col-span-2">
             <label className={labelClass} htmlFor="centerCode">
-              Cơ sở
+              Cơ sở phụ huynh chọn
             </label>
             <select
               id="centerCode"
@@ -158,47 +214,6 @@ export function QuickLeadForm({ centers }: { centers: CenterOption[] }) {
                 </option>
               ))}
             </select>
-          </div>
-
-          <div>
-            <label className={labelClass} htmlFor="gradeLevel">
-              Lớp
-            </label>
-            <input
-              id="gradeLevel"
-              className={inputClass}
-              value={form.gradeLevel}
-              onChange={(e) => set("gradeLevel")(e.target.value)}
-              placeholder="Lớp 2"
-              autoComplete="off"
-            />
-          </div>
-
-          <div className="sm:col-span-2">
-            <label className={labelClass} htmlFor="schoolName">
-              Trường bé đang học
-            </label>
-            <input
-              id="schoolName"
-              className={inputClass}
-              value={form.schoolName}
-              onChange={(e) => set("schoolName")(e.target.value)}
-              autoComplete="off"
-            />
-          </div>
-
-          <div className="sm:col-span-2">
-            <label className={labelClass} htmlFor="email">
-              Email phụ huynh
-            </label>
-            <input
-              id="email"
-              className={inputClass}
-              value={form.email}
-              onChange={(e) => set("email")(e.target.value)}
-              inputMode="email"
-              autoComplete="off"
-            />
           </div>
 
           <div className="sm:col-span-2">
@@ -216,12 +231,13 @@ export function QuickLeadForm({ centers }: { centers: CenterOption[] }) {
         </div>
 
         <p className="mt-4 text-xs text-muted-foreground">
-          Không cần nhập mã nhân viên — hệ thống lấy từ tài khoản bạn đang đăng nhập.
+          Không ô nào bắt buộc — điền được tới đâu lưu tới đó. Mã nhân viên hệ
+          thống tự lấy từ tài khoản bạn đang đăng nhập.
         </p>
 
         <button
           type="submit"
-          disabled={pending || !form.phone.trim()}
+          disabled={pending || isBlank}
           className="mt-3 w-full rounded-lg bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground hover:opacity-90 disabled:opacity-50"
         >
           {pending ? "Đang lưu…" : "Lưu và nhập phiếu tiếp"}

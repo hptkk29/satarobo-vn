@@ -35,6 +35,7 @@ import {
   IdCard,
   Image as ImageIcon,
   KeyRound,
+  ListOrdered,
   LayoutDashboard,
   Mail,
   MapPin,
@@ -107,8 +108,12 @@ const NAV_GROUPS: NavGroup[] = [
     label: "CRM & Tuyển sinh",
     items: [
       { label: "Leads", href: "/leads", icon: Users, perm: ["leads:view-all", "leads:view-own"] },
-      // G-D (21/08/2026) — nhập nhanh khách hàng sau đăng nhập, thay biểu mẫu công
-      // khai sale.satarobo.vn. perm khớp PAGE_GATES["/nhap-khach-hang"].
+      // Nhập nhanh khách hàng sau đăng nhập, thay biểu mẫu công khai
+      // sale.satarobo.vn (nghỉ 22/08/2026). perm khớp PAGE_GATES["/nhap-khach-hang"].
+      //
+      // ⚠️ Trang này ĐỨNG Ở HOST PUBLIC (satarobo.vn/nhap-khach-hang) — chủ dự án
+      // chốt một địa chỉ duy nhất. Trên admin host, `decideRoute` đá 307 sang đó;
+      // link tương đối vì vậy vẫn đúng ở cả localhost lẫn test.satarobo.vn.
       { label: "Nhập khách hàng", href: "/nhap-khach-hang", icon: UserPlus, perm: ["leads:create"] },
       // PR #81 — nhập liệu ban đầu: import Excel "đã đăng ký" rồi chốt hàng loạt.
       // perm khớp gate trang (leads:view-all AND leads:import) — sidebar dùng OR nên
@@ -116,6 +121,11 @@ const NAV_GROUPS: NavGroup[] = [
       // redirect; đặt view-all ở đây để không hiện link chết cho Sale).
       { label: "Chốt hàng loạt", href: "/leads/bulk-convert", icon: Workflow, perm: ["leads:view-all"] },
       { label: "Cấu hình chia lead", href: "/leads/cau-hinh-chia", icon: Settings, perm: ["leads:assign-config"] },
+      // Đợt D — sổ lượt luân phiên (chỉ đọc). Đặt cạnh Cấu hình chia lead vì hai
+      // trang trả lời hai nửa của cùng một câu hỏi: chia KIỂU GÌ, và đã chia RA SAO.
+      // perm rộng hơn cấu hình (view-all thay vì assign-config): người phải trả lời
+      // "sao bạn kia nhiều lead hơn" là Quản lý cơ sở, không phải Super Admin.
+      { label: "Sổ lượt chia lead", href: "/leads/so-luot", icon: ListOrdered, perm: ["leads:view-all"] },
       { label: "Bàn giao lead", href: "/ban-giao-lead", icon: ArrowLeftRight, perm: ["leads:assign"] },
       { label: "Chuyển lead liên CS", href: "/leads/bao-cao-chuyen", icon: Workflow, perm: ["leads:assign"] },
       // BGĐ 31/07 — nguồn giới thiệu (affiliate): mã + link ?ref= + đối soát.

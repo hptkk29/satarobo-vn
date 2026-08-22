@@ -5,6 +5,7 @@ import reactHooksPlugin from 'eslint-plugin-react-hooks'
 import { DB_IMPORT_ALLOWLIST } from './lib/eslint/db-import-allowlist.mjs'
 import { INLINE_AUTHZ_ALLOWLIST } from './lib/eslint/inline-authz-allowlist.mjs'
 import inlineAuthzPlugin from './lib/eslint/require-can-in-write-action.mjs'
+import noBareNextResponsePlugin from './lib/eslint/no-bare-next-response.mjs'
 
 // R6-F1 — chặn import @/lib/db TRẦN trong route group admin/portal (nơi cần cách ly
 // cơ sở). Code mới PHẢI đi qua scopedDb(actor) (cổng an toàn dữ liệu, A0-04/D1).
@@ -238,6 +239,100 @@ export default tseslint.config(
   // cơ sở thủng mà không ai báo.
   {
     files: ['app/(sale)/**/*.{ts,tsx}'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            ...adminBlockedImports.patterns,
+            ...clientBlockedImports.patterns,
+            ...dbBlockedImports.patterns,
+          ],
+        },
+      ],
+    },
+  },
+
+  // app/(intake)/** — biểu mẫu nhập khách hàng (`satarobo.vn/nhap-khach-hang`).
+  // Cùng luật với site GV/Sale: shadcn THUẦN + db block. Nó đứng ở host public
+  // nhưng là khu NỘI BỘ có đăng nhập ⇒ phải đi `scopedDb`, không phải `@/lib/db`.
+  //
+  // ⚠️ Route group mới KHÔNG tự thừa hưởng khối nào ở trên — thiếu khối này là
+  // cổng cách ly cơ sở thủng mà không ai báo.
+  {
+    files: ['app/(intake)/**/*.{ts,tsx}'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            ...adminBlockedImports.patterns,
+            ...clientBlockedImports.patterns,
+            ...dbBlockedImports.patterns,
+          ],
+        },
+      ],
+    },
+  },
+
+  // scripts/** — EL-07: mở phạm vi `pnpm lint` sang thư mục này (trước đây chỉ quét
+  // `app components lib`, nên script CHẠY TAY TRÊN PROD nằm ngoài mọi cổng chất lượng).
+  //
+  // Đây là khai môi trường Node, KHÔNG phải hạ luật: `console`/`process`/`__dirname`/
+  // `Buffer`/`require` thật sự CÓ tồn tại khi chạy script bằng Node — thiếu khai thì
+  // `no-undef` báo nhầm 43 chỗ. Tắt rule là giấu lỗi; khai globals là sửa cấu hình.
+  {
+    files: ['scripts/**/*.{ts,mts,cts,mjs,cjs,js}'],
+    languageOptions: {
+      globals: {
+        console: 'readonly',
+        process: 'readonly',
+        __dirname: 'readonly',
+        __filename: 'readonly',
+        Buffer: 'readonly',
+        require: 'readonly',
+        module: 'writable',
+        exports: 'writable',
+        fetch: 'readonly',
+        URL: 'readonly',
+        setTimeout: 'readonly',
+        clearTimeout: 'readonly',
+      },
+    },
+  },
+
+  // scripts/**/*.cjs — CommonJS thật: `require()` là cú pháp ĐÚNG của định dạng này,
+  // không phải nợ kỹ thuật. Tắt rule ở đúng phần mở rộng .cjs, không tắt toàn thư mục.
+  {
+    files: ['scripts/**/*.cjs'],
+    rules: {
+      '@typescript-eslint/no-require-imports': 'off',
+    },
+  },
+
+  // EL-07 (C23) — route API e-learning phải trả envelope chuẩn `lib/api/response.ts`.
+  // Phạm vi HẸP có chủ đích: chỉ module này, KHÔNG áp cho 69 route cũ (sửa chúng là
+  // việc riêng). Một chuẩn không có máy cưỡng chế thì chết trong hai sprint — đúng
+  // điều đã xảy ra với `lib/api/response.ts`: tồn tại nhưng có ĐÚNG 0 consumer.
+  {
+    files: ['app/api/elearning/**/*.ts', 'app/api/cron/elearning-*/**/*.ts'],
+    plugins: { elearning: noBareNextResponsePlugin },
+    rules: {
+      'elearning/no-bare-next-response': 'error',
+    },
+  },
+
+  // app/(elearning)/** — EL-07: khu đào tạo nội bộ (host thứ 6). Khu QUẢN TRỊ nội
+  // bộ ⇒ chuẩn admin: shadcn THUẦN (chặn Magic/Motion) + chặn Recharts như client
+  // + db block. Site MỚI đi scopedDb từ đầu, KHÔNG grandfather, KHÔNG xin entry
+  // trong DB_IMPORT_ALLOWLIST.
+  //
+  // ⚠️ Khối này PHẢI tồn tại trước file .tsx đầu tiên của module. Luật "cổng DB đã
+  // đóng" gắn theo GLOB TỪNG ROUTE GROUP (khai tay: admin, portal, teacher, và giờ
+  // là elearning) — route group mới KHÔNG tự thừa hưởng luật nào. Thiếu khối này
+  // thì `app/(elearning)/**` import `@/lib/db` trần HỢP LỆ và không ai báo.
+  {
+    files: ['app/(elearning)/**/*.{ts,tsx}'],
     rules: {
       'no-restricted-imports': [
         'error',

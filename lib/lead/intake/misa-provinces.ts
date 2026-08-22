@@ -1,5 +1,7 @@
-// SINH TỰ ĐỘNG từ danh sách <option> của `public/sale/nhap-lieu.html` (select
-// `ShippingProvinceID`) — đây là bảng mã tỉnh PHÍA MISA, không phải mã hành chính VN.
+// SINH TỰ ĐỘNG từ danh sách <option> (select `ShippingProvinceID`) của biểu mẫu
+// tĩnh `public/sale/nhap-lieu.html` — file đó đã XOÁ 22/08/2026 cùng biểu mẫu;
+// cần dựng lại bảng này thì lấy trong lịch sử git.
+// Đây là bảng mã tỉnh PHÍA MISA, không phải mã hành chính VN.
 // Chỉ dùng để đổi id thành tên người đọc được khi ghi vào `Lead.note`.
 // Danh sách 63 tỉnh CŨ (trước sáp nhập 07/2025) vì form MISA vẫn đang dùng bản đó.
 

@@ -6,6 +6,9 @@ import type { Mock } from "vitest";
 vi.mock("@/lib/db", () => ({
   db: {
     studentSessionFeedback: { findMany: vi.fn() },
+    // 21/08 — getStudentFeedback nạp thêm buổi của lớp để đánh SỐ BUỔI khớp site GV
+    // (lib/lms/session-order). Mặc định rỗng ⇒ số buổi lùi về Lesson.order như trước.
+    classSession: { findMany: vi.fn(() => Promise.resolve([])) },
     user: { findMany: vi.fn() },
   },
 }));
@@ -18,6 +21,7 @@ import {
 } from "@/lib/portal/feedback";
 
 const fbFindMany = db.studentSessionFeedback.findMany as unknown as Mock;
+const sessionFindMany = db.classSession.findMany as unknown as Mock;
 const userFindMany = db.user.findMany as unknown as Mock;
 
 describe("parseFeedbackNotes — 4 mục văn xuôi từ Json GV ghi", () => {
@@ -34,9 +38,27 @@ describe("parseFeedbackNotes — 4 mục văn xuôi từ Json GV ghi", () => {
     expect(parseFeedbackNotes({})).toBeNull();
   });
 
-  it("có ≥1 mục nội dung → trả đủ 4 key, mục thiếu/sai kiểu thành chuỗi rỗng", () => {
+  it("có ≥1 mục nội dung → trả đủ 5 key, mục thiếu/sai kiểu thành chuỗi rỗng", () => {
     const out = parseFeedbackNotes({ skill: "Lắp ráp nhanh", knowledge: 5, attitude: null });
-    expect(out).toEqual({ knowledge: "", skill: "Lắp ráp nhanh", attitude: "", proposal: "" });
+    expect(out).toEqual({
+      overall: "",
+      knowledge: "",
+      skill: "Lắp ráp nhanh",
+      attitude: "",
+      proposal: "",
+    });
+  });
+
+  // 21/08 — phiếu dạng MỚI: chỉ có "Đánh giá chung". Bỏ `overall` khỏi phép kiểm
+  // "có nội dung không" là phiếu mới bị coi như trống ở portal PH, PDF và màn quản lý.
+  it("phiếu chỉ có overall (Đánh giá chung) → KHÔNG bị coi là trống", () => {
+    const out = parseFeedbackNotes({ overall: "Con tiếp thu tốt, cần chủ động hơn." });
+    expect(out?.overall).toBe("Con tiếp thu tốt, cần chủ động hơn.");
+    expect(out?.knowledge).toBe("");
+  });
+
+  it("overall toàn khoảng trắng + 4 mục rỗng → null", () => {
+    expect(parseFeedbackNotes({ overall: "   " })).toBeNull();
   });
 });
 
@@ -76,6 +98,8 @@ describe("getStudentFeedback — map row (DB mock)", () => {
   beforeEach(() => {
     fbFindMany.mockReset();
     userFindMany.mockReset();
+    sessionFindMany.mockReset();
+    sessionFindMany.mockResolvedValue([]);
   });
 
   const baseSession = {
@@ -105,6 +129,7 @@ describe("getStudentFeedback — map row (DB mock)", () => {
     expect(it0.comment).toBe(""); // null → '' nhưng card KHÔNG rỗng nhờ notes/rubric
     expect(it0.projectName).toBe("Dự án 3: Robot tránh vật cản");
     expect(it0.notes).toEqual({
+      overall: "",
       knowledge: "Nắm chắc vòng lặp",
       skill: "",
       attitude: "",

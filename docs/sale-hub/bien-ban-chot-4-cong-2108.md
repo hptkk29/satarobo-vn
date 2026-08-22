@@ -87,3 +87,27 @@ Bốn cổng đã mở không có nghĩa mọi câu hỏi đã có đáp án. C�
 **Ngày chốt:** 21/08/2026
 **Người chốt:** ☐ ______________________ *(chủ dự án ký tên — bản này ghi lại nội dung đã quyết trong phiên làm việc, chưa có chữ ký giấy)*
 **Người ghi biên bản:** phân tích nghiệp vụ
+
+---
+
+# Phụ lục — chốt bổ sung 22/08/2026 (dời biểu mẫu nhập khách)
+
+Chủ dự án chốt trực tiếp trong phiên làm việc, thực thi ngay trong PR #126.
+
+| # | Câu hỏi | Quyết định | Hệ quả code |
+|---|---|---|---|
+| 1 | Biểu mẫu nhập khách đứng ở đâu | **`satarobo.vn/nhap-khach-hang`**, bắt buộc đăng nhập | Route group mới `app/(intake)/`; cổng đăng nhập ở `decideRoute()` (host public) + layout |
+| 2 | Mã nhân viên nhập liệu | **Tự lấy theo tài khoản đã đăng nhập** | Giữ nguyên `getStaffIdentity()` — không còn ô để gõ |
+| 3 | Bộ ô | **Đúng 7**: tên PH · SĐT PH · tên con · nguồn · link FB · cơ sở (CS1/CS2, **không Hội sở**) · ghi chú | Bỏ 3 ô cũ: email PH, trường bé, lớp bé |
+| 4 | Ràng buộc nhập | **KHÔNG ô nào bắt buộc**, kể cả SĐT | `allowMissingPhone` ở tầng ingest; chỉ chặn phiếu TRẮNG |
+| 5 | Ô "Nguồn" | **Gõ tự do** (có gợi ý, không khoá danh sách) | Ghi thẳng `Lead.source` |
+| 6 | Đổ dữ liệu ra Google Sheet | **Không cần** | Không xây đường sheet nào |
+| 7 | Biểu mẫu công khai cũ | **Khoá luôn** | Xoá `public/sale/*.html`; host cũ 307 sang địa chỉ mới; `LEAD_INTAKE_REQUIRE_AUTH` đổi mặc định **OFF → ON** |
+
+**Việc còn lại của chủ dự án** (không chặn merge — thiếu thì phiếu vẫn vào hệ thống ta, chỉ MISA không nhận):
+
+1. Gửi 3 tham số webform MISA (`ID` / `Companycode` / `FormKey`) để đặt env — xem
+   [`docs/lead-intake/HUONG-DAN-CHON-TRUONG-MISA.md`](../lead-intake/HUONG-DAN-CHON-TRUONG-MISA.md).
+2. *(tuỳ chọn)* Danh sách 12 giá trị `LeadSourceID` nếu muốn ô "Nguồn" khớp 1-1 với MISA.
+3. *(tuỳ chọn)* Tạo trường "Link Facebook" trên MISA rồi gửi mã trường.
+4. Thông báo nội bộ cho marketing / sale-admin về địa chỉ mới.

@@ -2,6 +2,7 @@ import { auth } from "@/lib/auth";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { resolveActor } from "@/lib/auth/actor";
+import { elearningEntryUrl } from "@/lib/elearning/entry";
 import { scopedDb } from "@/lib/db-scope";
 import { hasStaffRole } from "@/lib/auth/permissions";
 import {
@@ -53,6 +54,9 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   // gọi checkPermission dùng chung 1 lần resolve/request.
   const actor = await resolveActor(session.user.id);
   const sdb = scopedDb(actor);
+
+  // EL-01 — null khi cờ OFF hoặc tài khoản không có hồ sơ nhân sự ⇒ ẩn mục menu.
+  const elearningUrl = await elearningEntryUrl(session.user.id);
   const dbUser = await sdb.user.findUnique({
     where: { id: session.user.id },
     select: { isActive: true, tokenVersion: true, deletedAt: true, mustChangePassword: true },
@@ -128,6 +132,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
           userRole={activeRole ?? session.user.role}
           roles={roleOptions}
           activeRole={activeRole}
+          elearningUrl={elearningUrl}
         />
         <main className="flex-1 overflow-y-auto p-6">{children}</main>
       </div>

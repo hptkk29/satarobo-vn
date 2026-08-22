@@ -19,6 +19,7 @@ import {
   Rect,
 } from "@react-pdf/renderer";
 import {
+  evalNotesProse,
   EVAL_NOTE_FIELDS,
   evalLevelText,
   groupedEvalCriteria,
@@ -171,7 +172,6 @@ export interface SessionEvalPdfData {
 const GROUPS = groupedEvalCriteria();
 /** "Đề xuất" đứng riêng cuối hộp nhận xét (như bản thiết kế), 3 mục còn lại là gạch đầu dòng. */
 const PROPOSAL_KEY: EvalNoteKey = "proposal";
-const BULLET_FIELDS = EVAL_NOTE_FIELDS.filter((f) => f.key !== PROPOSAL_KEY);
 const PROPOSAL_FIELD = EVAL_NOTE_FIELDS.find((f) => f.key === PROPOSAL_KEY);
 
 /** Nền chuyển sắc tím — @react-pdf không hiểu CSS linear-gradient, phải vẽ bằng Svg. */
@@ -194,10 +194,14 @@ function GradientBg() {
 }
 
 export function SessionEvalPdf({ data }: { data: SessionEvalPdfData }) {
-  const bullets = BULLET_FIELDS.map((f) => ({ ...f, value: (data.notes[f.key] ?? "").trim() })).filter(
-    (f) => f.value.length > 0,
-  );
-  const proposal = (data.notes[PROPOSAL_KEY] ?? "").trim();
+  // 21/08 — phiếu MỚI có một đoạn "Đánh giá chung"; phiếu CŨ vẫn là 4 mục (3 gạch đầu
+  // dòng + "Đề xuất" đứng riêng, đúng bản thiết kế gốc). Giữ CẢ HAI nhánh: hàng nghìn
+  // phiếu cũ trên prod vẫn phải in ra đúng như trước.
+  const prose = evalNotesProse(data.notes);
+  const legacyRows = prose?.kind === "legacy" ? prose.rows : [];
+  const bullets = legacyRows.filter((r) => r.key !== PROPOSAL_KEY);
+  const proposal = legacyRows.find((r) => r.key === PROPOSAL_KEY)?.text ?? "";
+  const overall = prose?.kind === "overall" ? prose.text : "";
   const hasNotes = bullets.length > 0 || proposal.length > 0;
   const legacyComment = (data.comment ?? "").trim();
 
@@ -236,7 +240,12 @@ export function SessionEvalPdf({ data }: { data: SessionEvalPdfData }) {
           <Text style={s.sectionTitleText}>1. Nhận xét của giáo viên</Text>
         </View>
         <View style={s.notesBox}>
-          {hasNotes ? (
+          {overall ? (
+            <View>
+              <Text style={s.notesHeading}>Đánh giá tổng quan quá trình học tập:</Text>
+              <Text style={s.noteText}>{overall}</Text>
+            </View>
+          ) : hasNotes ? (
             <View>
               <Text style={s.notesHeading}>Đánh giá tổng quan quá trình học tập:</Text>
               {bullets.map((f) => (
@@ -245,7 +254,7 @@ export function SessionEvalPdf({ data }: { data: SessionEvalPdfData }) {
                   <View style={s.bulletBody}>
                     <Text style={s.noteText}>
                       <Text style={s.noteLabel}>{f.label}: </Text>
-                      {f.value}
+                      {f.text}
                     </Text>
                   </View>
                 </View>

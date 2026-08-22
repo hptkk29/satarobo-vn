@@ -12,6 +12,12 @@ import {
   promoteConfirmedAction,
   setEnrollmentSaleAction,
 } from "../_actions";
+import {
+  StudentRowActions,
+  type LeaveCandidate,
+  type TargetClassOption,
+} from "./student-row-actions";
+import { LeaveSystemDialog } from "./leave-system-dialog";
 
 type Row = {
   id: string;
@@ -21,6 +27,9 @@ type Row = {
   studentCode: string | null;
   /** T3.2 — chỉ hàng "đang trong lớp" mới có sale phụ trách. */
   saleId?: string | null;
+  /** 21/08 — chỉ hàng "đang trong lớp" mới có thao tác chuyển/gỡ. */
+  studentId?: string;
+  studentStatus?: string;
 };
 
 type SaleOption = { id: string; name: string };
@@ -33,6 +42,10 @@ export function AssignStudents({
   assignable,
   canOverride,
   sales = [],
+  canTransfer = false,
+  canRemove = false,
+  canDeleteStudent = false,
+  targetClasses = [],
 }: {
   classId: string;
   maxStudents: number;
@@ -42,6 +55,12 @@ export function AssignStudents({
   canOverride: boolean;
   /** T3.2 — sale cùng cơ sở với lớp (đã lọc ở server). */
   sales?: SaleOption[];
+  /** 21/08 — quyền từng thao tác, gác sẵn ở server (xem page.tsx). */
+  canTransfer?: boolean;
+  canRemove?: boolean;
+  canDeleteStudent?: boolean;
+  /** Lớp đích cùng khoá + cùng cơ sở cho nút "Chuyển lớp". */
+  targetClasses?: TargetClassOption[];
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -60,6 +79,10 @@ export function AssignStudents({
       return next;
     });
   }
+
+  // Bước "Nghỉ hẳn" giữ Ở ĐÂY chứ không trong dòng học viên: gỡ xong dòng đó biến mất
+  // khỏi roster, hộp thoại nằm trong nó sẽ bị unmount trước khi người dùng kịp bấm.
+  const [leaveCandidate, setLeaveCandidate] = useState<LeaveCandidate | null>(null);
 
   // T3.2 — đổi sale phụ trách ngay tại dòng học viên (giữ optimistic để select không
   // nháy về giá trị cũ trước khi router.refresh() xong).
@@ -196,7 +219,7 @@ export function AssignStudents({
             {current.map((s) => (
               <li
                 key={s.id}
-                className="flex items-center justify-between gap-3 py-2 text-sm"
+                className="flex flex-wrap items-center justify-between gap-3 py-2 text-sm"
               >
                 <span className="flex items-center gap-3 font-medium text-foreground">
                   {/* tick chọn chỉ cho em "Đã xếp" — em khác giữ nguyên hàng tĩnh */}
@@ -249,12 +272,34 @@ export function AssignStudents({
                   >
                     {s.statusLabel}
                   </span>
+                  {s.studentId && (
+                    <StudentRowActions
+                      classId={classId}
+                      enrollmentId={s.id}
+                      studentId={s.studentId}
+                      studentName={s.name}
+                      studentStatus={s.studentStatus ?? "ACTIVE"}
+                      canTransfer={canTransfer}
+                      canRemove={canRemove}
+                      canDeleteStudent={canDeleteStudent}
+                      targetClasses={targetClasses}
+                      onOfferLeave={setLeaveCandidate}
+                    />
+                  )}
                 </span>
               </li>
             ))}
           </ul>
         )}
       </section>
+
+      {leaveCandidate && (
+        <LeaveSystemDialog
+          classId={classId}
+          candidate={leaveCandidate}
+          onClose={() => setLeaveCandidate(null)}
+        />
+      )}
 
       {/* Gán học viên đủ điều kiện */}
       <section className="rounded-xl border border-border bg-card p-5">

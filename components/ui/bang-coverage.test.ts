@@ -28,6 +28,8 @@ const MIEN_TRU: Record<string, string> = {
   "app/(teacher)/teacher/huong-dan/_components/guide-markdown.tsx": "bảng trong tài liệu hướng dẫn",
   "app/(public)/khoa-hoc/page.tsx": "bảng SO SÁNH hai khoá học — nội dung cố định, không phải danh sách",
   "app/(public)/hoc-cu/page.tsx": "bảng so sánh gói học cụ — nội dung cố định",
+  "app/(admin)/admin/leads/so-luot/page.tsx":
+    "một bảng = MỘT cơ sở, số dòng = số tư vấn viên từng nhận lead ở cơ sở đó (thực tế 2). Phân trang một bảng 2 dòng là thêm thanh điều khiển vô nghĩa, mà đây lại đúng là bảng cần nhìn HẾT một lượt để tin là công bằng",
   "components/legacy-laptrinhrobot/InternalAwards.tsx":
     "bảng giải thưởng trên landing cũ — danh sách chốt cứng trong code, không đọc từ DB",
   "app/(sale)/sale/trial/_components/trial-list.tsx":
@@ -51,7 +53,20 @@ function boChuThich(src: string): string {
 
 const TEN_TUONG_DOI = (f: string) => path.relative(ROOT, f).split(path.sep).join("/");
 
+// Quét CÓ NHỚ: cả ba `it` đều gọi `fileCoBang()`, mà mỗi lượt là một lần duyệt đồng bộ
+// toàn bộ `app/` + `components/` rồi đọc từng file. Chạy riêng thì ~1s, nhưng trong cả bộ
+// (267 file test chạy song song) lượt thứ hai vượt trần 5s và test đỏ vì HẾT GIỜ chứ
+// không phải vì có bảng thiếu phân trang — đúng kiểu đỏ giả làm người ta mất niềm tin vào
+// test. Cây thư mục không đổi giữa các `it` nên nhớ lại là an toàn tuyệt đối.
+let _cache: string[] | null = null;
+
 function fileCoBang(): string[] {
+  if (_cache) return _cache;
+  _cache = quetFileCoBang();
+  return _cache;
+}
+
+function quetFileCoBang(): string[] {
   return GOC.flatMap((g) => walk(path.join(ROOT, g)))
     .filter((f) => !f.includes(".test."))
     .filter((f) => {

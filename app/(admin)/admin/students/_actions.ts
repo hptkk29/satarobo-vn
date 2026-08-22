@@ -6,7 +6,7 @@ import { requestOtp, issueOfflineOtp } from "@/lib/otp/service";
 import { describeOtpSendError } from "@/lib/otp/messages";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import type { Prisma } from "@prisma/client";
+import type { EnrollmentStatus, Prisma } from "@prisma/client";
 import { hasRole, type Action } from "@/lib/auth/permissions";
 import {
   canViewLeadPii,
@@ -31,8 +31,13 @@ import { writeAudit } from "@/lib/audit/audit-log";
 import { sendEmailForTrigger } from "@/lib/email/trigger";
 import { genStudentCode } from "@/lib/codegen";
 import { canTransition } from "@/lib/enrollments/status";
-import { removeStudentFromClasses } from "@/lib/students/remove-from-classes";
-import { createRefundRequest } from "@/lib/finance/refund";
+import {
+  removeStudentFromClasses,
+  REMOVABLE_ENROLLMENT_STATUSES,
+  type RemovedEnrollment,
+} from "@/lib/students/remove-from-classes";
+import { withdrawStudentFromAllClasses } from "@/lib/students/withdraw";
+import { STUDYING_ENROLLMENT_STATUSES } from "@/lib/enrollment-status";
 import {
   syncConversationMembership,
   CHAT_MEMBER_ENROLLMENT_STATUSES,
@@ -267,6 +272,21 @@ export async function updateStudent(id: string, formData: FormData): Promise<Act
   const { actorId, actorName } = getAuditActor(session);
   const data = parsed.data;
 
+  // BUG 21/08 (nguyên nhân 2) — ô "Trạng thái" của form cho chọn thẳng "Nghỉ học".
+  // Đường này chỉ ghi `Student.status` và KHÔNG đụng `Enrollment` ⇒ học viên hiện
+  // "Nghỉ học" ở /students nhưng VẪN nằm trong lớp ở mọi màn roster (roster đọc từ
+  // Enrollment, không đọc Student.status). Không tự ý cascade ở đây: cho nghỉ học là
+  // sự kiện có LÝ DO bắt buộc + gỡ khỏi lớp + yêu cầu hoàn tiền + email báo phụ huynh —
+  // tất cả nằm ở `withdrawStudentAction`. Chặn tại chỗ và chỉ đúng nút phải bấm.
+  if (data.status === "INACTIVE" && before.status !== "INACTIVE") {
+    return {
+      error:
+        'Không đặt "Nghỉ học" từ ô Trạng thái. Dùng nút "❌ Nghỉ học hẳn" ở khối ' +
+        '"Lifecycle học viên" ngay dưới form — nút đó mới gỡ học viên khỏi lớp, ' +
+        "ghi lý do và tạo yêu cầu hoàn tiền.",
+    };
+  }
+
   // #15 — CCCD PH là PII: chỉ actor có payments:view-pii mới sửa. Vai khác GIỮ NGUYÊN
   // giá trị cũ → bỏ field khỏi payload update (không ghi đè null/rỗng, không lộ PII qua form).
   if (!(await checkPermission("payments:view-pii"))) {
@@ -390,6 +410,33 @@ export async function deleteStudent(id: string): Promise<ActionResult> {
         reason: "Xoá học viên khỏi hệ thống",
         orgUnitId: before.centerId,
       });
+
+      // 21/08 — DẤU VẾT "đã từng học ở cơ sở nào". Xoá học viên là xoá MỀM, nhưng
+      // `Student.deletedAt` không nói được em học ở đâu, từ bao giờ tới bao giờ; còn
+      // `StudentCenterHistory` trước nay CHỈ được ghi khi duyệt chuyển cơ sở
+      // (`lib/transfer/service.ts:208`) nên học viên chưa từng chuyển thì không có dòng nào.
+      // Chốt sổ tại đây để sau này sale cơ sở KHÁC tra ra khách cũ
+      // (`lib/students/prior-history.ts`) — đúng yêu cầu "vẫn lưu giữ lead đã từng học tại cơ sở đó".
+      if (before.centerId) {
+        const openRows = await tx.studentCenterHistory.count({
+          where: { studentId: id, toDate: null },
+        });
+        if (openRows === 0) {
+          await tx.studentCenterHistory.create({
+            data: {
+              studentId: id,
+              // StudentCenterHistory ∈ SCOPED_MODELS ⇒ create BẮT BUỘC có centerId,
+              // quên là dòng vô hình với chính cơ sở đó.
+              centerId: before.centerId,
+              reason: "Chốt sổ khi xoá học viên khỏi hệ thống",
+            },
+          });
+        }
+        await tx.studentCenterHistory.updateMany({
+          where: { studentId: id, toDate: null },
+          data: { toDate: new Date() },
+        });
+      }
 
       await logStudentAudit({
         studentId: id,
@@ -547,6 +594,11 @@ export async function reserveStudentAction(input: {
     };
   }
 
+  // 21/08 — trước đây chốt cứng `!== "STUDYING"`. `Enrollment.status` mặc định của schema
+  // LÀ `ACTIVE` và convert lead không truyền status ⇒ đa số học viên thật KHÔNG bảo lưu
+  // được, báo lỗi "Chỉ có thể bảo lưu lớp đang STUDYING" dù em đang học bình thường.
+  // State machine vốn đã cho `ACTIVE → PAUSED` (lib/enrollments/status.ts:23).
+  let singleEnrollmentStatus: EnrollmentStatus | null = null;
   if (input.enrollmentId) {
     const enr = await sdb.enrollment.findFirst({
       where: { id: input.enrollmentId, studentId: input.studentId },
@@ -558,12 +610,13 @@ export async function reserveStudentAction(input: {
         error: "Đăng ký không tồn tại hoặc không thuộc học viên này",
       };
     }
-    if (enr.status !== "STUDYING") {
+    if (!STUDYING_ENROLLMENT_STATUSES.includes(enr.status)) {
       return {
         ok: false as const,
-        error: "Chỉ có thể bảo lưu lớp đang STUDYING",
+        error: "Chỉ bảo lưu được ghi danh đang học",
       };
     }
+    singleEnrollmentStatus = enr.status;
   }
 
   const { actorId, actorName } = getAuditActor(session);
@@ -618,12 +671,18 @@ export async function reserveStudentAction(input: {
       });
     }
 
-    const enrollmentsToPause = input.enrollmentId
-      ? [{ id: input.enrollmentId, status: "STUDYING" as const }]
-      : await tx.enrollment.findMany({
-          where: { studentId: input.studentId, status: "STUDYING" },
-          select: { id: true, status: true },
-        });
+    const enrollmentsToPause =
+      input.enrollmentId && singleEnrollmentStatus
+        // Dùng status THẬT vừa đọc, không chốt "STUDYING": ghi sai `fromStatus` là làm
+        // hỏng lịch sử ghi danh (bản cũ luôn ghi STUDYING kể cả khi thực tế là ACTIVE).
+        ? [{ id: input.enrollmentId, status: singleEnrollmentStatus }]
+        : await tx.enrollment.findMany({
+            where: {
+              studentId: input.studentId,
+              status: { in: STUDYING_ENROLLMENT_STATUSES },
+            },
+            select: { id: true, status: true },
+          });
 
     for (const enr of enrollmentsToPause) {
       await tx.enrollment.update({
@@ -881,6 +940,7 @@ export async function withdrawStudentAction(input: {
   }
 
   const { actorId, actorName } = getAuditActor(session);
+  let removedEnrollments: RemovedEnrollment[] = [];
 
   await sdb.$transaction(async (txRaw) => {
     const tx = txRaw as unknown as Prisma.TransactionClient;
@@ -927,67 +987,38 @@ export async function withdrawStudentAction(input: {
       tx,
     });
 
-    const activeEnrollments = await tx.enrollment.findMany({
-      where: {
-        studentId: input.studentId,
-        status: { in: ["PENDING", "CONFIRMED", "STUDYING", "PAUSED"] },
-      },
-      select: { id: true, status: true, classId: true },
+    // BUG 21/08 — khối này TRƯỚC ĐÂY tự liệt kê status ["PENDING","CONFIRMED",
+    // "STUDYING","PAUSED"] ngay tại chỗ và BỎ SÓT `ACTIVE` (mặc định của schema, và là
+    // thứ convert lead sinh ra) ⇒ bấm "Nghỉ học hẳn" xong em đó vẫn nằm nguyên trong lớp
+    // và cũng không có yêu cầu hoàn tiền. Toàn bộ cascade nay nằm ở
+    // `lib/students/withdraw.ts`, dùng chung `REMOVABLE_ENROLLMENT_STATUSES` với
+    // `deleteStudent`, và có test hồi quy riêng — đừng chép danh sách status về lại đây.
+    // (sync nhóm chat nằm trong removeStudentFromClasses, cùng transaction.)
+    removedEnrollments = await withdrawStudentFromAllClasses({
+      tx,
+      studentId: input.studentId,
+      actorId,
+      actorName,
+      reason: `Học viên nghỉ học: ${input.reason.trim()}`,
+      orgUnitId: student.centerId,
     });
-
-    for (const enr of activeEnrollments) {
-      await tx.enrollment.update({
-        where: { id: enr.id },
-        data: { status: "WITHDREW" },
-      });
-
-      await tx.enrollmentAuditLog.create({
-        data: {
-          enrollmentId: enr.id,
-          fromStatus: enr.status,
-          toStatus: "WITHDREW",
-          changedByUserId: actorId,
-          changedByName: actorName,
-          reason: `Học viên nghỉ học: ${input.reason.trim()}`,
-        },
-      });
-
-      // P3 (additive): also write to unified AuditLog.
-      await writeAudit({
-        actor: { id: actorId, name: actorName },
-        module: "students",
-        entityType: "Enrollment",
-        entityId: enr.id,
-        action: "STATUS_CHANGE",
-        oldValues: { status: enr.status },
-        newValues: { status: "WITHDREW" },
-        changedFields: ["status"],
-        reason: `Học viên nghỉ học: ${input.reason.trim()}`,
-        orgUnitId: student.centerId,
-        tx,
-      });
-
-      // W3-1 / LMS-9 — HS nghỉ học → tạo yêu cầu hoàn tiền (PENDING) cho ghi danh
-      // còn sống, trong cùng transaction. Idempotent + chỉ tạo khi có khoản đã thu.
-      await createRefundRequest({
-        enrollmentId: enr.id,
-        trigger: "WITHDRAW",
-        reason: `Học viên nghỉ học: ${input.reason.trim()}`,
-        requestedById: actorId,
-        actorName,
-        tx,
-      });
-    }
-
-    // US-03 chat / TS-06 — HV nghỉ học: sync nhóm từng lớp bị ảnh hưởng, cùng tx.
-    // PH còn con khác đang học lớp đó thì Ở LẠI (điều kiện theo TẬP học viên).
-    for (const classId of new Set(activeEnrollments.map((e) => e.classId))) {
-      await syncConversationMembership(tx, classId);
-    }
   }, { timeout: 30_000, maxWait: 10_000 });
 
   revalidatePath("/students");
   revalidatePath(`/students/${input.studentId}/edit`);
+  // Roster lớp + danh sách ghi danh vừa đổi theo. Trước 21/08 các path này thiếu ⇒ kể cả
+  // khi DB đã đúng, màn lớp nào KHÔNG force-dynamic vẫn phát bản cũ (còn tên HV đã nghỉ).
+  //
+  // ⚠️ TIỀN TỐ `/admin`: URL sạch `admin.satarobo.vn/classes/…` chỉ là vỏ — proxy rewrite
+  // NỘI BỘ sang `/admin` + pathname (`lib/auth/route-policy.ts:622`), nên route Next thật
+  // là `/admin/classes/…`. Các dòng `revalidatePath("/students")` cũ trong repo không khớp
+  // route nào (vô hại vì các màn đó đều `force-dynamic`) — đừng chép theo.
+  revalidatePath("/admin/enrollments");
+  revalidatePath("/admin/classes");
+  for (const classId of new Set(removedEnrollments.map((e) => e.classId))) {
+    revalidatePath(`/admin/classes/${classId}`);
+    revalidatePath(`/admin/classes/${classId}/students`);
+  }
 
   const studentForEmail = await sdb.student.findUnique({
     where: { id: input.studentId },
@@ -1372,8 +1403,14 @@ export async function unlinkChildFromParent(
 }
 
 // ─── REACTIVATE STUDENT (INACTIVE/PAUSED → ACTIVE) ───────────────────
-// Note: KHÔNG auto-create enrollment. Admin phải tạo Enrollment mới
-// qua flow Enrollment riêng.
+// Note: KHÔNG auto-create enrollment. Admin phải tạo Enrollment mới qua flow Enrollment
+// riêng — phục hồi tự động là đoán mò (lớp cũ có thể đã đầy, đã kết thúc, hoặc em cần
+// lớp khác hẳn), và ghi danh cũ đã mang trạng thái kết thúc + đã có yêu cầu hoàn tiền.
+//
+// 21/08 — NHƯNG KHÔNG ĐƯỢC IM LẶNG. Cho nghỉ học đã gỡ em khỏi mọi lớp; bấm "Kích hoạt
+// lại" chỉ đưa `Student.status` về ACTIVE ⇒ em thành học viên "đang học mà không có lớp
+// nào", biến mất khỏi mọi roster cho tới khi ai đó nhớ ra phải tạo ghi danh mới. Nay trả
+// `liveClassCount` để UI nói thẳng ra việc còn phải làm.
 export async function reactivateStudentAction(input: {
   studentId: string;
   note?: string | null;
@@ -1436,7 +1473,16 @@ export async function reactivateStudentAction(input: {
 
   revalidatePath("/students");
   revalidatePath(`/students/${input.studentId}/edit`);
-  return { ok: true as const };
+
+  // Đếm SAU transaction: chỉ để báo cho người dùng, không phải điều kiện nghiệp vụ.
+  const liveClassCount = await sdb.enrollment.count({
+    where: {
+      studentId: input.studentId,
+      status: { in: REMOVABLE_ENROLLMENT_STATUSES },
+      deletedAt: null,
+    },
+  });
+  return { ok: true as const, liveClassCount };
 }
 
 /**

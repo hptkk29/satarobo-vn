@@ -315,6 +315,31 @@ export default async function LeadDetailPage({ params }: Props) {
         <Info label="Khoá quan tâm" value={lead.course?.name ?? lead.source} />
         <Info label="Cơ sở" value={lead.center?.name ?? null} />
         <Info label="Nguồn" value={lead.source} />
+        {/* Ô "Link Facebook" của biểu mẫu /nhap-khach-hang (22/08/2026). Với lead
+            chạy quảng cáo FB đây thường là đường liên hệ DUY NHẤT lúc mới thu về.
+            Là PII (chỉ đích danh một người) ⇒ che như SĐT/email khi không có
+            quyền xem PII; `rel` đủ bộ vì đây là link ra ngoài do người dùng nhập. */}
+        {lead.facebookUrl && (
+          <div>
+            <dt className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              Link Facebook
+            </dt>
+            <dd className="mt-1 break-words text-sm text-foreground">
+              {canViewPii ? (
+                <a
+                  href={lead.facebookUrl}
+                  target="_blank"
+                  rel="noopener noreferrer nofollow"
+                  className="font-medium text-primary hover:underline"
+                >
+                  Mở hồ sơ Facebook
+                </a>
+              ) : (
+                "•••"
+              )}
+            </dd>
+          </div>
+        )}
         {/* BGĐ 31/07 — nguồn giới thiệu (affiliate) khi lead vào qua link ?ref= */}
         {lead.affiliate && (
           <Info

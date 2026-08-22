@@ -287,7 +287,29 @@ export type Action =
   | "chat:send"
   | "chat:announce"
   | "chat:moderate"
-  | "chat:admin";
+  | "chat:admin"
+
+  // --- Đào tạo nội bộ (EL-02 — lib/permissions/registry/elearning.ts) ---
+  // Key 3 đoạn, khác 2 đoạn của mọi key cũ. Có chủ đích: `resource:verb` không đủ chỗ
+  // cho một module 17 quyền trải trên 8 nhóm đối tượng. Test parity (b) trong
+  // `registry.test.ts` chỉ soát key 2 đoạn nên bỏ qua nhóm này; parity (a) vẫn phủ.
+  | "elearning:portal:access"
+  | "elearning:lesson:learn"
+  | "elearning:program:manage"
+  | "elearning:content:author"
+  | "elearning:content:publish"
+  | "elearning:assignment:create"
+  | "elearning:assignment:extend"
+  | "elearning:requirement:manage"
+  | "elearning:progress:view-own"
+  | "elearning:progress:view-team"
+  | "elearning:progress:view-all"
+  | "elearning:video-analytics:view"
+  | "elearning:exam:grade"
+  | "elearning:exam:unlock"
+  | "elearning:certificate:issue"
+  | "elearning:certificate:revoke"
+  | "elearning:report:export";
 
 // =============================================================================
 // MATRIX — Mỗi action liệt kê rõ những role được phép.
@@ -661,6 +683,52 @@ export const PERMISSIONS: Record<Action, Role[]> = {
   "chat:moderate": ["SUPER_ADMIN", "TEACHER"],
   // /admin/hoi-thoai + khoá hội thoại + tra cứu F-AUDIT — chỉ Admin HO (US-15 AC5).
   "chat:admin": ["SUPER_ADMIN"],
+
+  // --- Đào tạo nội bộ (EL-02) ---
+  // ⚠️ BẢNG NÀY KHÔNG PHẢI nguồn sự thật của quyền e-learning. Nguồn là `RoleDef` +
+  // `RolePermission` trong DB (v2 đang enforce trên prod), seed tại `prisma/seed-roles.ts`.
+  // Khai ở đây vì một lý do kỹ thuật dễ quên: `ALL_ACTIONS = Object.keys(PERMISSIONS)`, và
+  // `buildActor()` lọc grant theo đúng tập đó — không khai thì mọi `PermissionGrant` /
+  // `UserPermissionGrant` mang key e-learning bị vứt IM LẶNG, không lỗi, không cảnh báo.
+  //
+  // Ánh xạ cột của ma trận EL-02 §3 sang 9 vai v1: SA→SUPER_ADMIN · HR→HR · TR→TRAINING ·
+  // CM→CENTER_MANAGER · STAFF9→{SALES_CSM, TEACHER, MARKETING, ACCOUNTANT}. Cột **AUD
+  // (Kiểm toán) và cột **HR KHÔNG BIỂU DIỄN ĐƯỢC Ở ĐÂY** — `AUDITOR` là `RoleDef` mới, không có vai v1
+  // tương ứng; 5 quyền đọc của vai đó sống ở DB.
+  //
+  // Cột **HR của bảng §3 là `HO_HR`**, nhưng vai v1 tên `HR` ánh xạ sang **`CENTER_HR`**
+  // (`LEGACY_TO_ROLEDEF` — `patch-rbac-staff.ts`, pin trong `rbac-parity.test.ts`). Hai
+  // vai khác nhau: `CENTER_HR` là nhân sự MỘT cơ sở, chỉ là NGƯỜI HỌC. Nếu đổ 13 quyền
+  // quản lý của cột HR vào dòng v1 `HR` thì parity v1↔v2 gãy ngay (đã đỏ khi viết
+  // ticket này) — và tệ hơn là ở local/dev, nơi v1 vẫn chạy, nhân sự cơ sở bỗng được
+  // cấp chứng nhận và xem tiến độ toàn hệ thống. Vì vậy các dòng dưới chỉ liệt kê
+  // những vai v1 có ánh xạ 1-1 sang v2; phần còn lại của ma trận sống ở DB.
+  // Đừng "sửa" bằng cách thêm vai vạ vào
+  // các dòng dưới — làm vậy là nới quyền thật cho local/dev (nơi v1 vẫn chạy).
+  // PARENT = 0 key, tuyệt đối không thêm.
+  "elearning:portal:access": [
+    "SUPER_ADMIN", "CENTER_MANAGER", "HR", "SALES_CSM", "TEACHER", "TRAINING", "MARKETING", "ACCOUNTANT",
+  ],
+  "elearning:lesson:learn": [
+    "SUPER_ADMIN", "CENTER_MANAGER", "HR", "SALES_CSM", "TEACHER", "TRAINING", "MARKETING", "ACCOUNTANT",
+  ],
+  "elearning:program:manage": ["SUPER_ADMIN", "TRAINING"],
+  "elearning:content:author": ["SUPER_ADMIN", "TRAINING"],
+  "elearning:content:publish": ["SUPER_ADMIN", "TRAINING"],
+  "elearning:assignment:create": ["SUPER_ADMIN", "TRAINING", "CENTER_MANAGER"],
+  "elearning:assignment:extend": ["SUPER_ADMIN", "TRAINING", "CENTER_MANAGER"],
+  "elearning:requirement:manage": ["SUPER_ADMIN", "TRAINING"],
+  "elearning:progress:view-own": [
+    "SUPER_ADMIN", "CENTER_MANAGER", "HR", "SALES_CSM", "TEACHER", "TRAINING", "MARKETING", "ACCOUNTANT",
+  ],
+  "elearning:progress:view-team": ["SUPER_ADMIN", "TRAINING", "CENTER_MANAGER"],
+  "elearning:progress:view-all": ["SUPER_ADMIN", "TRAINING"],
+  "elearning:video-analytics:view": ["SUPER_ADMIN", "TRAINING", "CENTER_MANAGER"],
+  "elearning:exam:grade": ["SUPER_ADMIN", "TRAINING"],
+  "elearning:exam:unlock": ["SUPER_ADMIN", "TRAINING"],
+  "elearning:certificate:issue": ["SUPER_ADMIN"],
+  "elearning:certificate:revoke": ["SUPER_ADMIN"],
+  "elearning:report:export": ["SUPER_ADMIN", "TRAINING", "CENTER_MANAGER"],
 };
 
 // =============================================================================

@@ -1,5 +1,6 @@
 import "server-only";
 import { db } from "@/lib/db";
+import { buildSessionNumberMap } from "@/lib/lms/session-order";
 import {
   parseFeedbackNotes,
   parseFeedbackRubric,
@@ -33,6 +34,27 @@ export type FeedbackItem = {
 export { parseFeedbackNotes, parseFeedbackRubric };
 
 /**
+ * Bảng tra "buổi thứ mấy" cho các lớp có phiếu nhận xét của con (lib/lms/session-order).
+ *
+ * Nằm ở lib/ và dùng `db` TRẦN có chủ đích: `ClassSession` ∈ SCOPED_MODELS nên
+ * `scopedDb(actor).classSession` sẽ lọc theo `visibleCenterIds`, mà tài khoản PHỤ HUYNH
+ * không đứng ở cơ sở nào (RELATIONSHIP_ROLE_CODES, centerScope null) ⇒ gọi qua scopedDb
+ * là trả về rỗng và số buổi biến mất im lặng ở cổng phụ huynh.
+ * Cách ly ở đây là OWNERSHIP: caller phải xác minh con qua `requireActiveStudent` rồi
+ * truyền vào đúng những classId lấy từ phiếu CỦA CON — chỉ trả về id/ngày, không dữ liệu HV.
+ */
+export async function getSessionNumberMapForClasses(
+  classIds: string[],
+): Promise<Map<string, number>> {
+  if (classIds.length === 0) return new Map();
+  const rows = await db.classSession.findMany({
+    where: { classId: { in: classIds } },
+    select: { id: true, classId: true, date: true },
+  });
+  return buildSessionNumberMap(rows);
+}
+
+/**
  * @param limit LIMIT đẩy xuống DB (mặc định 20 — đủ cho trang Nhận xét, học viên
  * >50 feedback không phình payload). Feed thông báo chỉ cần 3 card/con →
  * truyền 3, KHÔNG kéo toàn bộ nhận xét về rồi slice.
@@ -44,6 +66,7 @@ export async function getStudentFeedback(studentId: string, limit = 20): Promise
     take: limit,
     select: {
       id: true,
+      classSessionId: true,
       comment: true,
       rating: true,
       projectName: true,
@@ -52,6 +75,7 @@ export async function getStudentFeedback(studentId: string, limit = 20): Promise
       createdById: true,
       classSession: {
         select: {
+          classId: true,
           date: true,
           lesson: { select: { order: true, title: true } },
           class: { select: { classCode: true } },
@@ -60,18 +84,34 @@ export async function getStudentFeedback(studentId: string, limit = 20): Promise
     },
   });
 
+  // 21/08 — SỐ BUỔI phải khớp thứ mà giáo viên và quản lý đang nhìn (lib/lms/session-order:
+  // hạng theo ngày trong lớp). Trước đây portal in `lesson.order`, nên buổi chưa gắn giáo
+  // án hiện dấu "•" và phụ huynh hỏi "buổi 7" thì không ai đối chiếu được với site GV.
+  const classIds = [
+    ...new Set(rows.map((r) => r.classSession?.classId).filter((x): x is string => !!x)),
+  ];
   const teacherIds = [...new Set(rows.map((r) => r.createdById))];
-  const teachers = teacherIds.length
-    ? await db.user.findMany({ where: { id: { in: teacherIds } }, select: { id: true, name: true } })
-    : [];
+  // Hai truy vấn phụ chạy SONG SONG — trang nhận xét nằm trên đường vào của cổng phụ
+  // huynh, thêm một round-trip nối đuôi là cộng thẳng vào thời gian mở trang, nhân theo
+  // số con của phụ huynh đó.
+  const [sessionNumberOf, teachers] = await Promise.all([
+    getSessionNumberMapForClasses(classIds),
+    teacherIds.length
+      ? db.user.findMany({ where: { id: { in: teacherIds } }, select: { id: true, name: true } })
+      : Promise.resolve([] as { id: string; name: string }[]),
+  ]);
   const tmap = new Map(teachers.map((t) => [t.id, t.name]));
 
   return rows.map((r) => {
     const les = r.classSession?.lesson;
+    const no = sessionNumberOf.get(r.classSessionId) ?? les?.order ?? null;
     return {
       id: r.id,
-      order: les?.order ?? null,
-      title: les ? `Buổi ${les.order}: ${les.title}` : "Buổi học",
+      order: no,
+      // ⚠️ Chỉ ghép "Buổi N: …" khi CÓ tên bài. Buổi chưa gắn giáo án giữ nhãn "Buổi học"
+      // như cũ: thẻ ở portal V2 in số buổi ở huy hiệu riêng rồi cắt tiền tố khỏi tiêu đề
+      // (`replace(/^Buổi \d+: /)`), nên trả về "Buổi 7" trần sẽ thành tiêu đề trùng huy hiệu.
+      title: les ? `Buổi ${no ?? les.order}: ${les.title}` : "Buổi học",
       dateISO: r.classSession?.date?.toISOString() ?? "",
       teacher: tmap.get(r.createdById) ?? null,
       className: r.classSession?.class?.classCode ?? null,

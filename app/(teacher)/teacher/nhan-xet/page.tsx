@@ -24,6 +24,17 @@ import {
   deriveFeedbackRoster,
   summarizeSessionFeedback,
 } from "@/lib/lms/session-feedback-roster";
+import {
+  attendanceCoversRoster,
+  buildSessionMediaCoverage,
+  buildSessionNumberMap,
+  mediaCoversAttendees,
+  SESSION_MEDIA_SELECT,
+  type SessionMediaRow,
+  isSessionSettled,
+  sessionNumberLabel,
+  sortSessionsForWork,
+} from "@/lib/lms/session-order";
 import { isSessionOwnedByTeacher } from "@/lib/lms/session-ownership";
 import { Badge } from "@/components/ui/badge";
 import { PageHeader } from "../_components/ui/page-header";
@@ -37,10 +48,12 @@ import { BackLink } from "../_components/ui/back-link";
 
 export const metadata = { title: "Nhận xét buổi học | Giáo viên Sata Robo" };
 
+// 21/08 — CÓ `year` (đồng bộ với các bảng buổi khác của site GV).
 const dayFmt = new Intl.DateTimeFormat("vi-VN", {
   weekday: "short",
   day: "2-digit",
   month: "2-digit",
+  year: "numeric",
   timeZone: "Asia/Ho_Chi_Minh",
 });
 
@@ -98,7 +111,7 @@ export default async function TeacherFeedbackPage({
       return <NotYours />;
     }
 
-    const [attRows, enrRows, fbRows] = await Promise.all([
+    const [attRows, enrRows, fbRows, allSessions] = await Promise.all([
       sdb.attendance.findMany({
         where: { sessionId },
         select: {
@@ -118,7 +131,13 @@ export default async function TeacherFeedbackPage({
         where: { classSessionId: sessionId },
         select: { studentId: true, comment: true, rating: true },
       }),
+      // R1 — số buổi tính trên TOÀN BỘ buổi của lớp (lib/lms/session-order).
+      sdb.classSession.findMany({
+        where: { classId },
+        select: { id: true, date: true },
+      }),
     ]);
+    const sessionNo = buildSessionNumberMap(allSessions).get(sessionId) ?? null;
 
     const { attendanceTaken, students } = deriveFeedbackRoster(
       attRows.map((a) => ({
@@ -149,7 +168,7 @@ export default async function TeacherFeedbackPage({
         />
         <PageHeader
           title={`Nhận xét — ${sess.class.name}`}
-          subtitle={`${dayFmt.format(sess.date)}${sess.topic ? ` · ${sess.topic}` : ""} · ${SESSION_STATUS_LABEL[sess.status] ?? sess.status}`}
+          subtitle={`${sessionNo ? `${sessionNumberLabel(sessionNo)} · ` : ""}${dayFmt.format(sess.date)}${sess.topic ? ` · ${sess.topic}` : ""} · ${SESSION_STATUS_LABEL[sess.status] ?? sess.status}`}
         />
         {!attendanceTaken && (
           <p className="mb-4 rounded-lg border border-state-warning-soft bg-state-warning-soft px-3 py-2 text-sm text-state-warning-ink dark:border-state-warning">
@@ -192,24 +211,54 @@ export default async function TeacherFeedbackPage({
   if (classId && (classAssigned || classSessions.length > 0)) {
     const cls = await sdb.class.findUnique({
       where: { id: classId },
-      select: { name: true },
+      select: {
+        name: true,
+        // Sĩ số theo DANH SÁCH studentId — cần để biết buổi đã điểm danh ĐỦ chưa
+        // (attendanceCoversRoster). Lọc deletedAt ở cả enrollment lẫn student.
+        enrollments: {
+          where: {
+            status: { in: ENROLLMENT_ACTIVE_STATUS_LIST },
+            deletedAt: null,
+            student: { deletedAt: null },
+          },
+          select: { studentId: true },
+        },
+      },
     });
+    const rosterIds = (cls?.enrollments ?? []).map((e) => e.studentId);
     const sessions = classSessions;
 
     // Badge "đã nhận xét x/y HV": gom Attendance + feedback của các buổi trong 1 lượt.
+    // Kèm ảnh + toàn bộ buổi của lớp cho số buổi (R1) và thứ tự hiển thị (R2).
     const ids = sessions.map((s) => s.id);
-    const attRows = ids.length
-      ? await sdb.attendance.findMany({
-          where: { sessionId: { in: ids } },
-          select: { sessionId: true, studentId: true, status: true },
-        })
-      : [];
-    const fbRows = ids.length
-      ? await sdb.studentSessionFeedback.findMany({
-          where: { classSessionId: { in: ids } },
-          select: { classSessionId: true, studentId: true },
-        })
-      : [];
+    const [attRows, fbRows, mediaRows, allClassSessions] = await Promise.all([
+      ids.length
+        ? sdb.attendance.findMany({
+            where: { sessionId: { in: ids } },
+            select: { sessionId: true, studentId: true, status: true },
+          })
+        : Promise.resolve([] as { sessionId: string; studentId: string; status: string }[]),
+      ids.length
+        ? sdb.studentSessionFeedback.findMany({
+            where: { classSessionId: { in: ids } },
+            select: { classSessionId: true, studentId: true },
+          })
+        : Promise.resolve([] as { classSessionId: string; studentId: string }[]),
+      // Ảnh: tính cả DRAFT/PENDING, chỉ loại REJECTED (khớp hub-reviews-tab).
+      ids.length
+        ? sdb.classSessionMedia.findMany({
+            where: { classSessionId: { in: ids }, status: { not: "REJECTED" } },
+            select: SESSION_MEDIA_SELECT,
+          })
+        : Promise.resolve([] as SessionMediaRow[]),
+      sdb.classSession.findMany({
+        where: { classId },
+        select: { id: true, date: true },
+      }),
+    ]);
+    const numberOf = buildSessionNumberMap(allClassSessions);
+    // Ai đã có ảnh, theo TỪNG buổi (lib/lms/session-order).
+  const mediaBy = buildSessionMediaCoverage(mediaRows);
     const attBySession = new Map<
       string,
       { studentId: string; status: string }[]
@@ -240,11 +289,36 @@ export default async function TeacherFeedbackPage({
           />
         ) : (
           <div className="space-y-2">
-            {sessions.map((s) => {
-              const stat = summarizeSessionFeedback(
-                attBySession.get(s.id) ?? [],
-                fbBySession.get(s.id) ?? [],
-              );
+            {sortSessionsForWork(
+              sessions.map((s) => {
+                const stat = summarizeSessionFeedback(
+                  attBySession.get(s.id) ?? [],
+                  fbBySession.get(s.id) ?? [],
+                );
+                const markedIds = (attBySession.get(s.id) ?? []).map((a) => a.studentId);
+                return {
+                  s,
+                  stat,
+                  no: numberOf.get(s.id) ?? null,
+                  complete: isSessionSettled({
+                    cancelled: s.status === "CANCELLED",
+                    rosterEmpty: rosterIds.length === 0,
+                    work: {
+                      attendanceDone: attendanceCoversRoster(markedIds, rosterIds),
+                      feedbackDone: stat.complete,
+                      photoDone: mediaCoversAttendees({
+                        attendedStudentIds: (attBySession.get(s.id) ?? [])
+                          .filter((a) => a.status === "PRESENT" || a.status === "LATE")
+                          .map((a) => a.studentId),
+                        taggedStudentIds: mediaBy.get(s.id)?.tagged ?? [],
+                        hasClassWide: mediaBy.get(s.id)?.classWide ?? false,
+                      }),
+                    },
+                  }),
+                };
+              }),
+              (r) => ({ number: r.no, complete: r.complete }),
+            ).map(({ s, stat, no }) => {
               return (
                 // href CHỈ-query (giữ path hiện tại): chạy đúng cả trên host giaovien
                 // (clean URL /nhan-xet) LẪN localhost/preview (path thật /teacher/nhan-xet).
@@ -255,7 +329,10 @@ export default async function TeacherFeedbackPage({
                 >
                   <div className="min-w-0">
                     <p className="text-sm font-medium text-foreground">
-                      {dayFmt.format(s.date)}
+                      <span className="font-bold tabular-nums">
+                        {sessionNumberLabel(no)}
+                      </span>{" "}
+                      · {dayFmt.format(s.date)}
                     </p>
                     {s.topic && (
                       <p className="truncate text-xs text-muted-foreground">

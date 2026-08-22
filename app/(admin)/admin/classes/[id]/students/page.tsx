@@ -66,7 +66,10 @@ export default async function ClassStudentsPage({ params }: Props) {
         id: true,
         status: true,
         saleId: true, // T3.2 — sale phụ trách hiển thị/sửa ngay trong lớp
-        student: { select: { name: true, studentCode: true } },
+        studentId: true,
+        // 21/08 — `student.status` quyết định nút nào hiện sau khi gỡ khỏi lớp:
+        // còn đang học → "chờ xếp lớp lại"; đã Nghỉ học → mở thêm nút "Nghỉ hẳn".
+        student: { select: { name: true, studentCode: true, status: true } },
       },
     }),
     sdb.enrollment.findMany({
@@ -99,6 +102,8 @@ export default async function ClassStudentsPage({ params }: Props) {
     name: e.student?.name ?? "(không tên)",
     studentCode: e.student?.studentCode ?? null,
     saleId: e.saleId,
+    studentId: e.studentId,
+    studentStatus: e.student?.status ?? "ACTIVE",
   }));
   const assignableRows = assignable.map((e) => ({
     id: e.id,
@@ -110,6 +115,59 @@ export default async function ClassStudentsPage({ params }: Props) {
 
   // SUPER_ADMIN/CENTER_MANAGER mới được override sức chứa (classes:create).
   const canOverride = await checkPermission("classes:create", { centerId: cls.centerId });
+
+  // 21/08 — ba thao tác trên từng dòng học viên, ba quyền khác nhau. Gác Ở SERVER để ẩn
+  // nút thay vì để server action ném lỗi sau khi người dùng đã gõ xong lý do.
+  const [canTransfer, canRemove, canDeleteStudent] = await Promise.all([
+    checkPermission("enrollments:transfer", { centerId: cls.centerId }),
+    checkPermission("enrollments:cancel", { centerId: cls.centerId }),
+    checkPermission("students:delete", { centerId: cls.centerId }),
+  ]);
+
+  // Lớp đích cho nút "Chuyển lớp". Siết CÙNG KHOÁ (khác khoá = đổi mức phí — luật
+  // R6-E2 ở `lib/transfer/service.ts:176`) và CÙNG CƠ SỞ với lớp nguồn: `transferEnrollment`
+  // KHÔNG cập nhật `Student.centerId`/`StudentCenterHistory`, nên chuyển chéo cơ sở bằng
+  // đường này sẽ để học viên mang cơ sở cũ. Chuyển cơ sở đi màn /chuyen-lop (có duyệt).
+  const targetClassesRaw = canTransfer
+    ? await sdb.class.findMany({
+        where: {
+          deletedAt: null,
+          id: { not: cls.id },
+          courseId: cls.courseId,
+          centerId: cls.centerId,
+          status: { in: ["PLANNED", "RECRUITING", "PENDING_APPROVAL", "ACTIVE"] },
+        },
+        orderBy: [{ startDate: "desc" }, { name: "asc" }],
+        select: {
+          id: true,
+          name: true,
+          classCode: true,
+          status: true,
+          maxStudents: true,
+          center: { select: { name: true } },
+          _count: {
+            select: {
+              enrollments: {
+                where: {
+                  status: { in: [...CAPACITY_COUNT_STATUSES] },
+                  deletedAt: null,
+                  student: { deletedAt: null },
+                },
+              },
+            },
+          },
+        },
+      })
+    : [];
+  const targetClasses = targetClassesRaw.map((c) => ({
+    id: c.id,
+    name: c.name,
+    classCode: c.classCode,
+    status: c.status,
+    maxStudents: c.maxStudents,
+    enrolledCount: c._count.enrollments,
+    centerName: c.center?.name ?? null,
+  }));
 
   return (
     <div>
@@ -134,6 +192,10 @@ export default async function ClassStudentsPage({ params }: Props) {
         assignable={assignableRows}
         canOverride={canOverride}
         sales={saleOptions}
+        canTransfer={canTransfer}
+        canRemove={canRemove}
+        canDeleteStudent={canDeleteStudent}
+        targetClasses={targetClasses}
       />
     </div>
   );

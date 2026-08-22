@@ -34,8 +34,16 @@ import { attendanceSummaryForEnrollments } from "@/lib/attendance/summary";
 import { getCourseCriteria } from "@/lib/lms/report-card";
 import { ENROLLMENT_ACTIVE_STATUS_LIST } from "@/lib/enrollment-status";
 import { ENROLLMENT_STATUS } from "@/lib/labels/registry";
-import { normalizeEvalNotes } from "@/lib/lms/session-eval-rubric";
+import {
+  EVAL_OVERALL_LABEL,
+  evalNotesProse,
+  normalizeEvalNotes,
+} from "@/lib/lms/session-eval-rubric";
 import { feedbackHasContent } from "@/lib/lms/feedback-content";
+import {
+  buildSessionNumberMap,
+  sessionNumberLabel,
+} from "@/lib/lms/session-order";
 import { cn } from "@/lib/utils";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -48,10 +56,12 @@ import { PhanTrangBang } from "@/components/ui/phan-trang-bang";
 
 export const metadata = { title: "Hồ sơ học viên | Giáo viên Sata Robo" };
 
+// 21/08 — CÓ `year` (đồng bộ với các bảng buổi khác của site GV).
 const dayFmt = new Intl.DateTimeFormat("vi-VN", {
   weekday: "short",
   day: "2-digit",
   month: "2-digit",
+  year: "numeric",
   timeZone: "Asia/Ho_Chi_Minh",
 });
 const dueFmt = new Intl.DateTimeFormat("vi-VN", {
@@ -483,6 +493,7 @@ async function ReviewsTab({
       classSession: {
         select: {
           id: true,
+          classId: true,
           date: true,
           topic: true,
           class: { select: { name: true } },
@@ -491,6 +502,17 @@ async function ReviewsTab({
     },
     orderBy: { createdAt: "desc" },
   });
+
+  // R1 21/08 — số buổi, tính trên TOÀN BỘ buổi của các lớp học viên đang theo
+  // (lib/lms/session-order); tab này trước đây là màn nhận xét DUY NHẤT không có số buổi.
+  const allSessions = classIds.length
+    ? await sdb.classSession.findMany({
+        where: { classId: { in: classIds } },
+        select: { id: true, classId: true, date: true },
+      })
+    : [];
+  const sessionNumberOf = buildSessionNumberMap(allSessions);
+
   if (feedbacks.length === 0) {
     return (
       <EmptyState
@@ -503,10 +525,9 @@ async function ReviewsTab({
   return (
     <div className="space-y-4">
       {feedbacks.map((f) => {
-        const notes = normalizeEvalNotes(f.notes);
-        const hasNotes =
-          !!f.notes &&
-          (notes.knowledge || notes.skill || notes.attitude || notes.proposal);
+        // 21/08 — MỘT cửa đọc văn xuôi cho cả phiếu mới ("Đánh giá chung") lẫn phiếu cũ
+        // (4 mục). Đừng quay lại đọc thẳng notes.knowledge/… — phiếu mới sẽ mất chữ.
+        const prose = evalNotesProse(normalizeEvalNotes(f.notes));
         // Nút "Xem phiếu" trước đây render VÔ ĐIỀU KIỆN, kể cả với phiếu GV mở rồi bỏ
         // trống — bấm vào ra trang JSON 404 thô. Gate theo đúng điều kiện của route PDF.
         const hasPdfContent = feedbackHasContent(f);
@@ -515,6 +536,9 @@ async function ReviewsTab({
             <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
               <div className="min-w-0">
                 <p className="font-semibold text-foreground">
+                  {sessionNumberOf.has(f.classSession.id)
+                    ? `${sessionNumberLabel(sessionNumberOf.get(f.classSession.id))} · `
+                    : ""}
                   {f.classSession.topic ?? "Buổi học"}
                 </p>
                 <p className="text-sm text-muted-foreground">
@@ -534,12 +558,20 @@ async function ReviewsTab({
                 </a>
               )}
             </div>
-            {hasNotes ? (
+            {prose?.kind === "overall" ? (
+              <div className="rounded-lg bg-muted/50 px-3.5 py-2.5">
+                <p className="text-xs font-bold uppercase tracking-wide text-primary-ink">
+                  {EVAL_OVERALL_LABEL}
+                </p>
+                <p className="mt-0.5 whitespace-pre-wrap text-sm text-foreground">
+                  {prose.text}
+                </p>
+              </div>
+            ) : prose?.kind === "legacy" ? (
               <dl className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                <NoteItem label="Kiến thức" value={notes.knowledge} />
-                <NoteItem label="Kỹ năng" value={notes.skill} />
-                <NoteItem label="Thái độ" value={notes.attitude} />
-                <NoteItem label="Đề xuất" value={notes.proposal} />
+                {prose.rows.map((r) => (
+                  <NoteItem key={r.key} label={r.label} value={r.text} />
+                ))}
               </dl>
             ) : f.comment ? (
               <p className="whitespace-pre-wrap rounded-lg bg-muted/50 px-3.5 py-2.5 text-sm text-foreground">

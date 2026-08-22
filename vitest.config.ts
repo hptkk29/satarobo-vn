@@ -23,6 +23,10 @@ export default defineConfig({
       // Nhận lead từ nguồn ngoài (form Sale / quatang) — tầng DB thật, tự skip
       // khi không có Postgres local. Cùng lý do phải khai ở đây như 2 dòng trên.
       "tests/lead-intake/**/*.{test,spec}.ts",
+      // EL-07 — đào tạo nội bộ. Cùng lý do phải khai ở đây như 3 dòng trên: `include`
+      // là bộ lọc CỨNG, nên `vitest run tests/elearning` sẽ báo "No test files found"
+      // và job CI vẫn XANH dù test viết đúng — hỏng câm đúng loại nguy hiểm nhất.
+      "tests/elearning/**/*.{test,spec}.ts",
     ],
     coverage: {
       reporter: ["text", "json", "html"],

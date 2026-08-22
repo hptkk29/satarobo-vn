@@ -1,6 +1,10 @@
 import "server-only";
 import { getSetting } from "@/lib/settings/service";
 import { SALE_FORM_FIELDS } from "./map-sale-form";
+import {
+  buildMisaInternalFields,
+  type MisaInternalInput,
+} from "./misa-internal";
 
 // =============================================================================
 // MIRROR SANG MISA — chỉ dùng trong GIAI ĐOẠN CHUYỂN TIẾP.
@@ -33,12 +37,32 @@ const MISA_ENDPOINT =
 
 const TIMEOUT_MS = 5_000;
 
+/**
+ * Đã ghi vết "thiếu env" trong tiến trình này chưa. Cố ý là biến MODULE (sống
+ * theo instance serverless, không phải theo request): đủ để chặn cơn lũ một
+ * dòng-mỗi-phiếu, mà vẫn ghi lại vài lần mỗi giờ nên không ai bỏ sót được.
+ */
+let misconfigReported = false;
+
 /** Trường dữ liệu được phép chuyển tiếp — đúng bộ trường của form Sale. */
 const FORWARDABLE = new Set<string>(Object.values(SALE_FORM_FIELDS));
 
 export type MirrorOutcome =
   | { status: "off" }
-  | { status: "misconfigured"; missing: string[] }
+  | {
+      status: "misconfigured";
+      missing: string[];
+      /**
+       * Tiến trình này ĐÃ ghi một vết cho đúng lỗi cấu hình này rồi.
+       *
+       * Thiếu env là lỗi CỐ ĐỊNH: phiếu nào cũng hỏng y hệt. Ghi mỗi phiếu một
+       * dòng `WebhookDelivery` FAILED sẽ đẩy các dòng lỗi THẬT (phiếu dính
+       * honeypot, phiếu MISA từ chối) ra khỏi cửa sổ 100 dòng của màn Replay —
+       * tức là dọn sạch đúng chỗ để cứu lead. Caller nên bỏ qua việc ghi khi cờ
+       * này bật; `console.error` thì vẫn kêu mỗi lần.
+       */
+      alreadyReported: boolean;
+    }
   | { status: "sent"; via: "env" | "form" }
   | { status: "failed"; reason: string };
 
@@ -103,17 +127,33 @@ export async function mirrorSaleFormToMisa(
 
   const { config, via, missing } = misaFormConfig(payload);
   if (!config) {
+    const alreadyReported = misconfigReported;
+    misconfigReported = true;
     console.error(
       `[misa-mirror] Cờ intake.mirrorMisa ĐANG BẬT nhưng không dựng được tham số form ` +
         `(thiếu ${missing.join(", ")} ở env, và phiếu cũng không mang ID/Companycode/FormKey). ` +
         `MISA KHÔNG nhận được phiếu này. Đặt env hoặc tắt cờ để khỏi báo động giả.`,
     );
-    return { status: "misconfigured", missing };
+    return { status: "misconfigured", missing, alreadyReported };
   }
 
-  const body = new URLSearchParams(config);
+  const fields: Record<string, string> = {};
   for (const [key, value] of Object.entries(payload)) {
-    if (FORWARDABLE.has(key) && value) body.set(key, value);
+    if (FORWARDABLE.has(key) && value) fields[key] = value;
+  }
+
+  return postToMisa(config, fields, via);
+}
+
+/** Gửi một bộ trường đã dựng sẵn sang MISA. Dùng chung cho cả 2 biểu mẫu. */
+async function postToMisa(
+  config: Record<string, string>,
+  fields: Record<string, string>,
+  via: "env" | "form",
+): Promise<MirrorOutcome> {
+  const body = new URLSearchParams(config);
+  for (const [key, value] of Object.entries(fields)) {
+    if (value) body.set(key, value);
   }
 
   try {
@@ -135,4 +175,47 @@ export async function mirrorSaleFormToMisa(
     console.error("[misa-mirror] gửi thất bại:", reason, err);
     return { status: "failed", reason };
   }
+}
+
+/**
+ * Bản sao phiếu từ biểu mẫu NỘI BỘ `/nhap-khach-hang` sang MISA.
+ *
+ * Khác `mirrorSaleFormToMisa`: phiếu ở đây do Server Action dựng, KHÔNG có 3
+ * input ẩn (ID/Companycode/FormKey) mà biểu mẫu tĩnh cũ gửi kèm ⇒ **bắt buộc có
+ * env `MISA_WEBFORM_*`**. Thiếu env thì trả `misconfigured` để caller ghi
+ * `WebhookDelivery` — nhìn thấy được ở màn replay, không im lặng như log console.
+ *
+ * KHÔNG BAO GIỜ ném. Postgres là nguồn sự thật: lead đã ghi xong trước khi gọi
+ * hàm này, hỏng ở đây tuyệt đối không được rollback lead.
+ */
+export async function mirrorInternalFormToMisa(
+  input: MisaInternalInput,
+): Promise<MirrorOutcome> {
+  try {
+    const enabled = await getSetting("intake.mirrorMisa");
+    if (!enabled) return { status: "off" };
+  } catch (err) {
+    console.error("[misa-mirror] không đọc được cờ intake.mirrorMisa:", err);
+    return { status: "failed", reason: "setting-unreadable" };
+  }
+
+  const { config, missing } = misaFormConfig({});
+  if (!config) {
+    const alreadyReported = misconfigReported;
+    misconfigReported = true;
+    console.error(
+      `[misa-mirror] Cờ intake.mirrorMisa ĐANG BẬT nhưng thiếu ${missing.join(", ")} ` +
+        `ở env — MISA KHÔNG nhận được phiếu từ /nhap-khach-hang. ` +
+        `Đặt env hoặc tắt cờ để khỏi báo động giả.`,
+    );
+    return { status: "misconfigured", missing, alreadyReported };
+  }
+
+  const fields = buildMisaInternalFields(input, {
+    // Khai khi MISA đã có ô riêng cho 2 giá trị này (xem misa-internal.ts).
+    leadSource: process.env.MISA_FIELD_LEAD_SOURCE?.trim() || undefined,
+    facebookUrl: process.env.MISA_FIELD_FACEBOOK?.trim() || undefined,
+  });
+
+  return postToMisa(config, fields, "env");
 }

@@ -37,7 +37,7 @@ const tagsClean = z
 
 // VND là số nguyên (H5/COL2) → làm tròn về Int để khớp cột Int trong DB.
 const nullableIntVnd = z
-  .union([z.coerce.number(), z.null(), z.literal("")])
+  .union([z.null(), z.literal(""), z.coerce.number()])
   .optional()
   .transform((v) => {
     if (v === null || v === undefined || v === "") return null;
@@ -75,7 +75,7 @@ export const StockMovementTypeEnum = z.enum([
 const positiveInt = z.coerce.number().int().min(1, "Số lượng phải >= 1");
 
 const nullableIntVndNonNeg = z
-  .union([z.coerce.number(), z.null(), z.literal("")])
+  .union([z.null(), z.literal(""), z.coerce.number()])
   .optional()
   .transform((v) => {
     if (v === null || v === undefined || v === "") return null;

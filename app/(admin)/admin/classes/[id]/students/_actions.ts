@@ -4,16 +4,30 @@
 // Logic nghiệp vụ ở lib/lms/assign.ts. Override sức chứa cần quyền cao hơn
 // (classes:create — SUPER_ADMIN/CENTER_MANAGER) + audit (ghi trong lib).
 import { revalidatePath } from "next/cache";
+import type { Prisma } from "@prisma/client";
 import { auth } from "@/lib/auth";
 import { checkPermission } from "@/lib/auth/check-permission";
 import { resolveActor, type Actor } from "@/lib/auth/actor";
 import { scopedDb, passesScope } from "@/lib/db-scope";
 import { getAuditActor } from "@/lib/audit/log";
+import { writeAudit } from "@/lib/audit/audit-log";
+import { syncConversationMembership } from "@/lib/chat/sync-membership";
 import {
   assignEnrollments,
   assignAllFiltered,
   type AssignResult,
 } from "@/lib/lms/assign";
+import {
+  REMOVABLE_ENROLLMENT_STATUSES,
+  removalTargetStatus,
+} from "@/lib/students/remove-from-classes";
+import {
+  decideRemovalOutcome,
+  describeRemovalOutcome,
+  type RemovalOutcome,
+} from "@/lib/lms/remove-from-class";
+import { transferEnrollment } from "@/app/(admin)/admin/enrollments/_actions";
+import { deleteStudent } from "@/app/(admin)/admin/students/_actions";
 
 type Gate = { actor: Actor; actorId: string | null; actorName: string };
 
@@ -189,4 +203,210 @@ export async function promoteConfirmedAction(
     revalidatePath("/enrollments");
   }
   return { ok: true, promoted: res.count };
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 21/08/2026 — Gỡ / chuyển học viên ngay trên roster lớp.
+//
+// Ba nút, ba mức quyền KHÁC NHAU (đừng gộp vào `classes:edit` của phần gán):
+//   • "Chuyển lớp"   → enrollments:transfer  (giữ nguyên ghi danh + sổ sách, dời lớp)
+//   • "Xoá khỏi lớp" → enrollments:cancel    (kết thúc ghi danh ở lớp NÀY)
+//   • "Nghỉ hẳn"     → students:delete       (xoá học viên khỏi hệ thống, giữ dấu vết CRM)
+//
+// ⚠️ TIỀN TỐ `/admin` trong revalidatePath: URL sạch `admin.satarobo.vn/classes/…` chỉ là
+// vỏ — proxy rewrite nội bộ sang `/admin` + pathname (`lib/auth/route-policy.ts:622`), nên
+// route Next thật là `/admin/classes/…`. Các dòng `revalidatePath("/classes/…")` phía trên
+// file này không khớp route nào (vô hại vì roster `force-dynamic`) — đừng chép theo.
+// ═══════════════════════════════════════════════════════════════════════════
+
+/** Làm mới mọi màn đọc roster của lớp sau khi sĩ số đổi. */
+function revalidateClassRoster(classId: string): void {
+  revalidatePath(`/admin/classes/${classId}/students`);
+  revalidatePath(`/admin/classes/${classId}`);
+  revalidatePath("/admin/classes");
+  revalidatePath("/admin/enrollments");
+  revalidatePath("/admin/students");
+}
+
+export type RemoveFromClassResult = {
+  ok: boolean;
+  error?: string;
+  /** Kết cục để UI quyết định có mở nút "Nghỉ hẳn" hay không. */
+  outcome?: RemovalOutcome;
+  message?: string;
+  studentId?: string;
+  studentName?: string;
+  otherLiveClassCount?: number;
+};
+
+/**
+ * Gỡ 1 học viên khỏi lớp này. Ghi danh chuyển sang trạng thái kết thúc
+ * (`removalTargetStatus`: PENDING→CANCELLED, còn lại→WITHDREW) — KHÔNG set
+ * `Enrollment.deletedAt` (đó là soft-delete TÀI CHÍNH, sẽ rút khoản phải thu khỏi công
+ * nợ — xem đầu `lib/students/remove-from-classes.ts`).
+ *
+ * KHÔNG tạo yêu cầu hoàn tiền: gỡ khỏi lớp ≠ nghỉ học. Học viên nghỉ hẳn thì đi
+ * `withdrawStudentAction` (nút "❌ Nghỉ học hẳn" ở hồ sơ học viên) — đường đó mới sinh
+ * yêu cầu hoàn tiền và gửi email cho phụ huynh.
+ */
+export async function removeFromClassAction(
+  classId: string,
+  enrollmentId: string,
+  reason: string,
+): Promise<RemoveFromClassResult> {
+  const session = await auth();
+  if (!session?.user?.id) return { ok: false, error: "Chưa đăng nhập" };
+  if (!(await checkPermission("enrollments:cancel"))) {
+    return { ok: false, error: "Không có quyền gỡ học viên khỏi lớp" };
+  }
+  const trimmed = reason.trim();
+  if (trimmed.length < 5) {
+    return { ok: false, error: "Lý do phải có ít nhất 5 ký tự" };
+  }
+  if (trimmed.length > 1000) return { ok: false, error: "Lý do quá dài" };
+
+  const actor = await resolveActor(session.user.id);
+  const { actorId, actorName } = getAuditActor(session);
+  if (!(await assertClassInScope(actor, classId))) {
+    return { ok: false, error: "Lớp không thuộc cơ sở bạn quản lý" };
+  }
+
+  const sdb = scopedDb(actor);
+  const enr = await sdb.enrollment.findFirst({
+    where: { id: enrollmentId, classId, deletedAt: null },
+    select: {
+      id: true,
+      status: true,
+      centerId: true,
+      studentId: true,
+      student: { select: { name: true, status: true, centerId: true } },
+    },
+  });
+  if (!enr || !enr.student) return { ok: false, error: "Ghi danh không thuộc lớp này" };
+  // scopedDb KHÔNG che WRITE — tự gác cách ly cơ sở trên chính bản ghi sắp sửa.
+  if (!passesScope("Enrollment", { centerId: enr.centerId }, actor)) {
+    return { ok: false, error: "Ghi danh không thuộc cơ sở bạn quản lý" };
+  }
+  if (!REMOVABLE_ENROLLMENT_STATUSES.includes(enr.status)) {
+    return { ok: false, error: `Ghi danh đã kết thúc (${enr.status}) — không cần gỡ` };
+  }
+
+  const toStatus = removalTargetStatus(enr.status);
+  const auditReason = `Gỡ khỏi lớp: ${trimmed}`;
+  let otherLiveClassCount = 0;
+
+  await sdb.$transaction(async (txRaw) => {
+    const tx = txRaw as unknown as Prisma.TransactionClient;
+
+    await tx.enrollment.update({
+      where: { id: enr.id },
+      data: { status: toStatus, endedAt: new Date() },
+    });
+    await tx.enrollmentAuditLog.create({
+      data: {
+        enrollmentId: enr.id,
+        fromStatus: enr.status,
+        toStatus,
+        changedByUserId: actorId,
+        changedByName: actorName,
+        reason: auditReason,
+        extraData: { sourceClassId: classId },
+      },
+    });
+    await writeAudit({
+      actor: { id: actorId, name: actorName },
+      module: "classes",
+      entityType: "Enrollment",
+      entityId: enr.id,
+      action: "STATUS_CHANGE",
+      oldValues: { status: enr.status },
+      newValues: { status: toStatus },
+      changedFields: ["status"],
+      reason: auditReason,
+      orgUnitId: enr.centerId,
+      tx,
+    });
+    // US-03 chat — phụ huynh rời nhóm lớp nếu không còn con nào trong lớp, cùng tx.
+    await syncConversationMembership(tx, classId);
+
+    // "Check kỹ": ĐẾM LẠI trong cùng transaction, không suy từ dữ liệu đọc trước đó.
+    otherLiveClassCount = await tx.enrollment.count({
+      where: {
+        studentId: enr.studentId,
+        id: { not: enr.id },
+        status: { in: REMOVABLE_ENROLLMENT_STATUSES },
+        deletedAt: null,
+      },
+    });
+  }, { timeout: 30_000, maxWait: 10_000 });
+
+  revalidateClassRoster(classId);
+
+  const outcome = decideRemovalOutcome({
+    studentStatus: enr.student.status,
+    otherLiveClassCount,
+  });
+  return {
+    ok: true,
+    outcome,
+    message: describeRemovalOutcome(outcome, enr.student.name, otherLiveClassCount),
+    studentId: enr.studentId,
+    studentName: enr.student.name,
+    otherLiveClassCount,
+  };
+}
+
+/**
+ * Chuyển học viên sang lớp khác NGAY TRÊN roster. Bọc mỏng `transferEnrollment`
+ * (đường chuyển lớp chuẩn: giữ ghi danh cũ ở trạng thái TRANSFERRED + trỏ
+ * `transferredToId`, tạo ghi danh mới CONFIRMED ở lớp đích, kiểm sức chứa trong
+ * transaction Serializable, ghi 4 bản ghi audit, sync chat cả hai nhóm).
+ * Hàm gốc tự gác `enrollments:transfer` + cách ly cơ sở hai đầu.
+ */
+export async function transferFromClassAction(
+  classId: string,
+  enrollmentId: string,
+  targetClassId: string,
+  reason: string,
+): Promise<{ ok: boolean; error?: string; newEnrollmentId?: string }> {
+  const res = await transferEnrollment({
+    enrollmentId,
+    targetClassId,
+    reason: reason.trim(),
+  });
+  if (!res.ok) return { ok: false, error: res.error };
+
+  revalidateClassRoster(classId);
+  revalidateClassRoster(targetClassId);
+  return { ok: true, newEnrollmentId: res.data?.newEnrollmentId };
+}
+
+/**
+ * "Nghỉ hẳn" — xoá học viên khỏi hệ thống sau khi đã gỡ hết lớp.
+ *
+ * Đi qua `deleteStudent` (xoá MỀM `Student.deletedAt` + dọn nốt ghi danh còn sót +
+ * audit), nên các guard của nó vẫn nguyên: chỉ SUPER_ADMIN/CENTER_MANAGER, chỉ học viên
+ * đã ở trạng thái Nghỉ học, chỉ trong tầm nhìn cơ sở của người thao tác.
+ *
+ * Dấu vết KHÔNG mất: hồ sơ `Lead` của gia đình không bị đụng tới, `Student` chỉ xoá mềm,
+ * và `deleteStudent` chốt `StudentCenterHistory` để cơ sở khác tra ra "khách này đã từng
+ * đăng ký ở đâu" (xem `lib/students/prior-history.ts`).
+ */
+export async function withdrawFromSystemAction(
+  classId: string,
+  studentId: string,
+): Promise<{ ok: boolean; error?: string }> {
+  const session = await auth();
+  if (!session?.user?.id) return { ok: false, error: "Chưa đăng nhập" };
+  // Kiểm quyền TRƯỚC: `deleteStudent` từ chối bằng `redirect("/dashboard?error=unauthorized")`
+  // (ném NEXT_REDIRECT), tức người dùng bị đá khỏi trang thay vì thấy báo lỗi tại chỗ.
+  if (!(await checkPermission("students:delete"))) {
+    return { ok: false, error: "Không có quyền xoá học viên khỏi hệ thống" };
+  }
+
+  const res = await deleteStudent(studentId);
+  if (res.error) return { ok: false, error: res.error };
+
+  revalidateClassRoster(classId);
+  return { ok: true };
 }

@@ -10,6 +10,7 @@ import { canManageSessionClass } from "./_actions";
 import { checkPermission } from "@/lib/auth/check-permission";
 import { SessionEvalCard } from "@/components/admin/session-eval-card";
 import { parseFeedbackNotes, parseFeedbackRubric } from "@/lib/lms/session-eval-rubric";
+import { buildSessionNumberMap, sessionNumberLabel } from "@/lib/lms/session-order";
 import { getPreSessionInfo } from "@/lib/lms/pre-session";
 import { ENROLLMENT_ACTIVE_STATUS_LIST } from "@/lib/enrollment-status";
 import { BookOpen, Users, AlertTriangle, FileWarning } from "lucide-react";
@@ -172,6 +173,16 @@ export default async function SessionDetailPage({ params }: Props) {
     year: "numeric",
   });
 
+  // R1 21/08 — "buổi thứ mấy" của lớp. Tính trên TOÀN BỘ buổi của lớp (lib/lms/session-order),
+  // để trang này, trang lớp và site GV cùng gọi một buổi bằng cùng một số.
+  const sessionNo =
+    buildSessionNumberMap(
+      await sdb.classSession.findMany({
+        where: { classId: sess.class.id },
+        select: { id: true, date: true },
+      }),
+    ).get(sess.id) ?? null;
+
   // LMS-4 — thông tin chuẩn bị (chỉ khi buổi chưa hoàn tất).
   const pre = sess.status !== "COMPLETED" ? await getPreSessionInfo(sess.id) : null;
 
@@ -186,6 +197,7 @@ export default async function SessionDetailPage({ params }: Props) {
           {sess.class.classCode ? `${sess.class.classCode} · ` : ""}{sess.class.name}
         </h1>
         <p className="mt-1 text-sm text-muted-foreground">
+          {sessionNo ? `${sessionNumberLabel(sessionNo)} · ` : ""}
           {dateStr}
           {sess.class.startTime && sess.class.endTime ? ` · ${sess.class.startTime}–${sess.class.endTime}` : ""}
           {sess.class.center?.name ? ` · ${sess.class.center.name}` : ""}

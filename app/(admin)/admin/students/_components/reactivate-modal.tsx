@@ -38,7 +38,17 @@ export function ReactivateModal({
         note: note || null,
       });
       if (result.ok) {
-        toast.success("Đã kích hoạt lại học viên");
+        // 21/08 — cho nghỉ học đã gỡ em khỏi MỌI lớp; kích hoạt lại chỉ đổi trạng thái hồ
+        // sơ. Không nói ra thì em thành "đang học mà không lớp nào", biến mất khỏi mọi
+        // roster cho tới khi có người nhớ tạo ghi danh mới.
+        if (result.liveClassCount === 0) {
+          toast.warning(
+            `Đã kích hoạt lại ${studentName} — em CHƯA có lớp nào. Vào Đăng ký học để tạo ghi danh mới, hoặc xếp lớp từ trang Học sinh của lớp.`,
+            { duration: 8000 },
+          );
+        } else {
+          toast.success("Đã kích hoạt lại học viên");
+        }
         onClose();
         router.refresh();
       } else {
@@ -55,8 +65,11 @@ export function ReactivateModal({
             Kích hoạt lại — {studentName}
           </DialogTitle>
           <DialogDescription>
-            Học viên chuyển về trạng thái ACTIVE. KHÔNG tự động tạo
-            enrollment mới — admin phải tạo Enrollment thủ công sau đó.
+            Học viên chuyển về trạng thái <b>Đang học</b>. <b>KHÔNG</b> tự phục hồi ghi
+            danh cũ (lớp cũ có thể đã đầy hoặc đã kết thúc, và ghi danh cũ đã chốt sổ) —
+            sau bước này phải <b>tạo ghi danh mới</b> ở màn Đăng ký học, hoặc xếp em vào
+            lớp từ trang Học sinh của lớp. Trước khi có ghi danh mới, em nằm ở tab{" "}
+            <b>Chờ xếp lớp</b>.
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4 py-2">

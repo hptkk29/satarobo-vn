@@ -809,41 +809,40 @@ describe("L5/L6. TEACHER × host × flag TEACHER_SITE_ENABLED (2-phase, ĐÃ wir
 });
 
 // ─────────────────────────────────────────────────────────────────────────
-// Sale host (sale.satarobo.vn) — site tĩnh CÔNG KHAI, KHÔNG auth.
-// Form nhập liệu Sale → MISA AMIS CRM. Clean URL rewrite nội bộ →
-// public/sale/*.html (giữ nguyên mã nhúng MISA). MISA tự POST + redirect về
-// /thank-you (field RedirectURL trong form) — decideRoute chỉ serve URL đó.
+// Sale host (sale.satarobo.vn) — biểu mẫu tĩnh CÔNG KHAI đã NGHỈ (22/08/2026).
+//
+// Địa chỉ nhập khách duy nhất nay là `satarobo.vn/nhap-khach-hang` (có đăng
+// nhập). Host cũ chỉ còn đá 307 về đó — 307 chứ KHÔNG 308 để quyết định vận
+// hành này còn đảo được mà không vướng cache vĩnh viễn của trình duyệt/CDN.
 // ─────────────────────────────────────────────────────────────────────────
 
-describe("Sale host (sale.satarobo.vn) — form tĩnh, không auth", () => {
-  it("/ → rewrite form nhập liệu tĩnh", () => {
-    expect(
-      decideRoute({ hostKind: "sale", pathname: "/", role: null, sessionValid: false }),
-    ).toEqual<RouteDecision>({ type: "rewrite", path: "/sale/nhap-lieu.html" });
-  });
+const TO_INTAKE: RouteDecision = {
+  type: "redirectHost",
+  host: "public",
+  path: "/nhap-khach-hang",
+  status: 307,
+};
 
-  it("/thank-you (+ trailing slash) → rewrite trang cảm ơn tĩnh", () => {
-    expect(
-      decideRoute({ hostKind: "sale", pathname: "/thank-you", role: null, sessionValid: false }),
-    ).toEqual<RouteDecision>({ type: "rewrite", path: "/sale/thank-you.html" });
-    expect(
-      decideRoute({ hostKind: "sale", pathname: "/thank-you/", role: null, sessionValid: false }),
-    ).toEqual<RouteDecision>({ type: "rewrite", path: "/sale/thank-you.html" });
-  });
-
-  it("file tĩnh /sale/*.html (đích rewrite / truy cập trực tiếp) → next", () => {
-    for (const p of ["/sale/nhap-lieu.html", "/sale/thank-you.html"]) {
+describe("Sale host (sale.satarobo.vn) — biểu mẫu tĩnh đã nghỉ", () => {
+  it("mọi đường CŨ của biểu mẫu → về trang nhập khách mới", () => {
+    for (const p of [
+      "/",
+      "/thank-you",
+      "/thank-you/",
+      "/sale/nhap-lieu.html",
+      "/sale/thank-you.html",
+    ]) {
       expect(
         decideRoute({ hostKind: "sale", pathname: p, role: null, sessionValid: false }),
-      ).toEqual<RouteDecision>({ type: "next" });
+      ).toEqual<RouteDecision>(TO_INTAKE);
     }
   });
 
-  it("path lạ trên sale host → về form nhập liệu (/)", () => {
+  it("path lạ trên sale host → cũng về trang nhập khách mới", () => {
     for (const p of ["/random", "/khoa-hoc", "/admin/leads", "/portal/lich-hoc", "/login"]) {
       expect(
         decideRoute({ hostKind: "sale", pathname: p, role: null, sessionValid: false }),
-      ).toEqual<RouteDecision>({ type: "redirectPath", path: "/" });
+      ).toEqual<RouteDecision>(TO_INTAKE);
     }
   });
 
@@ -855,16 +854,114 @@ describe("Sale host (sale.satarobo.vn) — form tĩnh, không auth", () => {
     }
   });
 
-  it("CÔNG KHAI: mọi role + ẩn danh đều nhận CÙNG quyết định (auth bị bỏ qua)", () => {
+  it("cờ TẮT: mọi role + ẩn danh đều nhận CÙNG quyết định (không còn gì để phục vụ)", () => {
     for (const role of [...ALL_ROLES, null] as MaybeRole[]) {
       const sessionValid = role !== null;
       expect(
         decideRoute({ hostKind: "sale", pathname: "/", role, sessionValid }),
-      ).toEqual<RouteDecision>({ type: "rewrite", path: "/sale/nhap-lieu.html" });
-      expect(
-        decideRoute({ hostKind: "sale", pathname: "/thank-you", role, sessionValid }),
-      ).toEqual<RouteDecision>({ type: "rewrite", path: "/sale/thank-you.html" });
+      ).toEqual<RouteDecision>(TO_INTAKE);
     }
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────
+// Biểu mẫu nhập khách hàng — `satarobo.vn/nhap-khach-hang` (22/08/2026).
+//
+// NGOẠI LỆ có chủ đích: trang NỘI BỘ đứng ở host PUBLIC (chủ dự án chốt một
+// địa chỉ duy nhất). Vì thế nó phải tự mang cổng đăng nhập ngay ở tầng này —
+// mọi trang public khác đều cho khách vãng lai vào.
+// ─────────────────────────────────────────────────────────────────────────
+
+describe("/nhap-khach-hang — biểu mẫu nội bộ trên host public", () => {
+  it("🔴 chưa đăng nhập → /login kèm callbackUrl (KHÔNG cho xem biểu mẫu)", () => {
+    for (const p of ["/nhap-khach-hang", "/nhap-khach-hang/"]) {
+      expect(
+        decideRoute({ hostKind: "public", pathname: p, role: null, sessionValid: false }),
+      ).toEqual<RouteDecision>({
+        type: "redirectPath",
+        path: "/login",
+        callbackUrl: "/nhap-khach-hang",
+      });
+    }
+  });
+
+  it("phiên đã bị vô hiệu → /login kèm lý do", () => {
+    expect(
+      decideRoute({
+        hostKind: "public",
+        pathname: "/nhap-khach-hang",
+        role: "SALES_CSM",
+        sessionValid: false,
+      }),
+    ).toEqual<RouteDecision>({
+      type: "redirectPath",
+      path: "/login",
+      callbackUrl: "/nhap-khach-hang",
+      reason: "session-invalidated",
+    });
+  });
+
+  it("nhân sự đã đăng nhập → phục vụ tại chỗ (quyền leads:create do layout gác)", () => {
+    for (const role of ALL_ROLES.filter((r) => r !== "PARENT")) {
+      expect(
+        decideRoute({ hostKind: "public", pathname: "/nhap-khach-hang", ...authed(role) }),
+      ).toEqual<RouteDecision>({ type: "next" });
+    }
+  });
+
+  it("PARENT → về portal, không lảng vảng ở biểu mẫu nội bộ", () => {
+    expect(
+      decideRoute({ hostKind: "public", pathname: "/nhap-khach-hang", ...authed("PARENT") }),
+    ).toEqual<RouteDecision>({
+      type: "redirectHost",
+      host: "portal",
+      path: "/",
+      status: 307,
+    });
+  });
+
+  it("admin host → đá 307 sang host public (mục sidebar trỏ đường tương đối)", () => {
+    for (const p of ["/nhap-khach-hang", "/nhap-khach-hang/"]) {
+      expect(
+        decideRoute({ hostKind: "admin", pathname: p, ...authed("MARKETING") }),
+      ).toEqual<RouteDecision>(TO_INTAKE);
+    }
+  });
+
+  it("host sale (cờ BẬT) → sang biểu mẫu, KHÔNG rơi vào rewrite /sale/* rồi 404", () => {
+    expect(
+      decideRoute({
+        hostKind: "sale",
+        saleSiteEnabled: true,
+        pathname: "/nhap-khach-hang",
+        ...authed("SALES_CSM"),
+      }),
+    ).toEqual<RouteDecision>(TO_INTAKE);
+  });
+
+  it("host giáo viên / portal → về nhà của họ (không có quyền nhập lead)", () => {
+    expect(
+      decideRoute({
+        hostKind: "teacher",
+        teacherSiteEnabled: true,
+        pathname: "/nhap-khach-hang",
+        ...authed("TEACHER"),
+      }),
+    ).toEqual<RouteDecision>({ type: "redirectPath", path: "/" });
+    expect(
+      decideRoute({ hostKind: "portal", pathname: "/nhap-khach-hang", ...authed("PARENT") }),
+    ).toEqual<RouteDecision>({ type: "redirectPath", path: "/" });
+  });
+
+  it("admin host: chưa đăng nhập cũng đá sang public (cổng nằm ở đó, không nhân đôi)", () => {
+    expect(
+      decideRoute({
+        hostKind: "admin",
+        pathname: "/nhap-khach-hang",
+        role: null,
+        sessionValid: false,
+      }),
+    ).toEqual<RouteDecision>(TO_INTAKE);
   });
 });
 
@@ -1034,16 +1131,18 @@ describe("isInfraPath — đường hạ tầng KHÔNG được canonical-hoá",
 const saleOn = { hostKind: "sale", saleSiteEnabled: true } as const;
 
 describe("[Đợt B] Site Sale — cờ BẬT", () => {
-  it("đường dẫn CÔNG KHAI của biểu mẫu vẫn sống (MISA còn trỏ RedirectURL vào /thank-you)", () => {
-    for (const p of ["/thank-you", "/thank-you/"]) {
+  it("đường dẫn CŨ của biểu mẫu → về trang nhập khách mới (kể cả khi cờ BẬT)", () => {
+    // MISA còn trỏ `RedirectURL` vào /thank-you, và quảng cáo/QR cũ còn trỏ vào
+    // /sale/nhap-lieu.html — cả hai phải đáp về địa chỉ mới, không được 404.
+    for (const p of [
+      "/thank-you",
+      "/thank-you/",
+      "/sale/nhap-lieu.html",
+      "/sale/thank-you.html",
+    ]) {
       expect(
         decideRoute({ ...saleOn, pathname: p, role: null, sessionValid: false }),
-      ).toEqual<RouteDecision>({ type: "rewrite", path: "/sale/thank-you.html" });
-    }
-    for (const p of ["/sale/nhap-lieu.html", "/sale/thank-you.html"]) {
-      expect(
-        decideRoute({ ...saleOn, pathname: p, role: null, sessionValid: false }),
-      ).toEqual<RouteDecision>({ type: "next" });
+      ).toEqual<RouteDecision>(TO_INTAKE);
     }
   });
 
@@ -1118,10 +1217,206 @@ describe("[Đợt B] Site Sale — cờ BẬT", () => {
     }
   });
 
-  it("cờ TẮT giữ nguyên hành vi cũ — kể cả khi đã đăng nhập", () => {
+  it("cờ TẮT: host cũ về trang nhập khách mới — kể cả khi đã đăng nhập", () => {
+    // Trước 22/08 nhánh này rewrite ra biểu mẫu tĩnh. Biểu mẫu đó đã nghỉ nên
+    // cờ TẮT không còn nghĩa "giữ nguyên hành vi cũ" — nó là "host này rỗng".
     expect(
       decideRoute({ hostKind: "sale", saleSiteEnabled: false, pathname: "/", ...authed("SALES_CSM") }),
-    ).toEqual<RouteDecision>({ type: "rewrite", path: "/sale/nhap-lieu.html" });
+    ).toEqual<RouteDecision>(TO_INTAKE);
+  });
+});
+
+// EL-01 — e-learning host (e-learning.satarobo.vn) × role × cờ ELEARNING_ENABLED.
+// 2-phase như L5: cờ OFF = hành vi hiện tại y nguyên, 0 byte HTML e-learning.
+//
+// Khác teacher ở ĐÚNG MỘT chỗ: điều kiện vào là "không phải PARENT-thuần"
+// (QĐ-7: EMP = mọi vai staff), không phải một vai cụ thể.
+// ─────────────────────────────────────────────────────────────────────────
+
+describe("EL-01. e-learning host × role — cờ OFF (mặc định)", () => {
+  const OFF = { elearningEnabled: false } as const;
+
+  it.each(STAFF_ROLES)("%s trên e-learning → bounce admin /dashboard", (role) => {
+    expect(
+      decideRoute({ hostKind: "elearning", pathname: "/", ...authed(role), ...OFF }),
+    ).toEqual<RouteDecision>({
+      type: "redirectHost",
+      host: "admin",
+      path: "/dashboard",
+      status: 307,
+    });
+  });
+
+  it("PARENT trên e-learning → bounce portal", () => {
+    expect(
+      decideRoute({ hostKind: "elearning", pathname: "/", ...authed("PARENT"), ...OFF }),
+    ).toEqual<RouteDecision>({
+      type: "redirectHost",
+      host: "portal",
+      path: "/",
+      status: 307,
+    });
+  });
+
+  it("cờ OFF: KHÔNG rewrite path nào — 0 byte HTML e-learning được phục vụ", () => {
+    for (const p of ["/", "/khoa-hoc", "/bao-cao", "/elearning", "/elearning/x"]) {
+      const d = decideRoute({
+        hostKind: "elearning",
+        pathname: p,
+        ...authed("TRAINING"),
+        ...OFF,
+      });
+      expect(d.type).not.toBe("rewrite");
+      expect(d.type).not.toBe("next");
+    }
+  });
+});
+
+describe("EL-01. e-learning host × role — cờ ON", () => {
+  const ON = { elearningEnabled: true } as const;
+
+  it.each(STAFF_ROLES)("%s (vai staff bất kỳ) vào được — QĐ-7 EMP = mọi vai staff", (role) => {
+    expect(
+      decideRoute({ hostKind: "elearning", pathname: "/", ...authed(role), ...ON }),
+    ).toEqual<RouteDecision>({ type: "rewrite", path: "/elearning" });
+  });
+
+  it("PARENT-thuần → bounce portal (đào tạo nội bộ không dành cho phụ huynh)", () => {
+    expect(
+      decideRoute({ hostKind: "elearning", pathname: "/bao-cao", ...authed("PARENT"), ...ON }),
+    ).toEqual<RouteDecision>({
+      type: "redirectHost",
+      host: "portal",
+      path: "/",
+      status: 307,
+    });
+  });
+
+  it("chưa login → /login kèm callbackUrl", () => {
+    expect(
+      decideRoute({
+        hostKind: "elearning",
+        pathname: "/khoa-hoc/an-toan",
+        role: null,
+        sessionValid: false,
+        ...ON,
+      }),
+    ).toEqual<RouteDecision>({
+      type: "redirectPath",
+      path: "/login",
+      callbackUrl: "/khoa-hoc/an-toan",
+      reason: undefined,
+    });
+  });
+
+  it("clean URL được rewrite vào route group", () => {
+    expect(
+      decideRoute({ hostKind: "elearning", pathname: "/khoa-hoc", ...authed("TEACHER"), ...ON }),
+    ).toEqual<RouteDecision>({ type: "rewrite", path: "/elearning/khoa-hoc" });
+  });
+
+  it("path /elearning/* thật → next (không rewrite chồng)", () => {
+    expect(
+      decideRoute({ hostKind: "elearning", pathname: "/elearning/khoa-hoc", ...authed("HR"), ...ON }),
+    ).toEqual<RouteDecision>({ type: "next" });
+  });
+
+  it.each(["/admin/leads", "/portal/ho-so", "/teacher/lich"])(
+    "path lạc khu %s → về trang chủ e-learning",
+    (p) => {
+      expect(
+        decideRoute({ hostKind: "elearning", pathname: p, ...authed("SALES_CSM"), ...ON }),
+      ).toEqual<RouteDecision>({ type: "redirectPath", path: "/" });
+    },
+  );
+
+  it("đã login vào /login → về trang chủ e-learning", () => {
+    expect(
+      decideRoute({ hostKind: "elearning", pathname: "/login", ...authed("TRAINING"), ...ON }),
+    ).toEqual<RouteDecision>({ type: "redirectPath", path: "/" });
+  });
+
+  it("/doi-mat-khau phục vụ tại chỗ, KHÔNG rewrite", () => {
+    expect(
+      decideRoute({ hostKind: "elearning", pathname: "/doi-mat-khau", ...authed("TEACHER"), ...ON }),
+    ).toEqual<RouteDecision>({ type: "next" });
+  });
+
+  it("infra path không bị auth", () => {
+    expect(
+      decideRoute({
+        hostKind: "elearning",
+        pathname: "/api/auth/session",
+        role: null,
+        sessionValid: false,
+        ...ON,
+      }),
+    ).toEqual<RouteDecision>({ type: "next" });
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────
+// EL-01 · AC10 — kích thước PR1 (QĐ-CDA-13 BP-1).
+//
+// `lib/auth/route-policy.ts` là chỗ va chạm số một giữa e-learning (host thứ 6) và
+// parity site giáo viên (host thứ 5): hai luồng sửa CÙNG hàm decideRoute() và CÙNG
+// bảng test này. PR1 vì thế chỉ được chạm proxy.ts + route-policy.ts + test này
+// (+ lib/flags.ts nếu cần) — route group, layout gate, lối vào đi PR sau.
+//
+// Quy tắc quy trình mà không có test thì tuần thứ ba sẽ có người gộp "cho tiện", nên
+// nó phải chạy trong CI. Bất biến kiểm được KHÔNG cần git: PR1 chưa tạo route group.
+// ─────────────────────────────────────────────────────────────────────────
+
+describe("EL-01 · AC10. Bất biến cấu trúc khu e-learning", () => {
+  // PR1 đã merge (case này từng khẳng định route group CHƯA tồn tại, và nó đã làm
+  // đúng việc: đỏ ngay khi PR2 bắt đầu tạo thư mục). PR2 lật lại khẳng định — từ nay
+  // route group PHẢI tồn tại, vì host thứ 6 rewrite vào đó; thiếu nó thì cờ ON cho 404.
+  it("route group app/(elearning)/ tồn tại — đích rewrite của host thứ 6", async () => {
+    const { existsSync } = await import("node:fs");
+    const { resolve } = await import("node:path");
+    for (const f of [
+      "app/(elearning)/elearning/layout.tsx",
+      "app/(elearning)/elearning/page.tsx",
+    ]) {
+      expect(existsSync(resolve(process.cwd(), f)), `thiếu ${f}`).toBe(true);
+    }
+  });
+
+  it("proxy.ts và route-policy.ts nhất quán: mọi HostKind định tuyến đều có host thật", async () => {
+    const { readFileSync } = await import("node:fs");
+    const { resolve } = await import("node:path");
+    const proxy = readFileSync(resolve(process.cwd(), "proxy.ts"), "utf8");
+    // Mỗi kind xử lý ở BRANCH 2 phải có một dòng trong HOST_BY_KIND — thiếu thì
+    // redirectHost ném undefined vào URL và người dùng rơi vào vòng lặp câm.
+    for (const kind of ["admin", "portal", "public", "teacher", "elearning"]) {
+      expect(proxy, `HOST_BY_KIND thiếu "${kind}"`).toContain(`${kind}:`);
+    }
+  });
+
+  it("nhánh /elearning trên localhost nằm ở BRANCH 3, KHÔNG lọt vào BRANCH 1", async () => {
+    const { readFileSync } = await import("node:fs");
+    const { resolve } = await import("node:path");
+    const proxy = readFileSync(resolve(process.cwd(), "proxy.ts"), "utf8");
+
+    const branch1 = proxy.indexOf("BRANCH 1:");
+    const branch3 = proxy.indexOf("BRANCH 3:");
+    const teacher = proxy.indexOf("isTeacherPath(pathname)");
+    const elearning = proxy.indexOf("isElearningPath(pathname)");
+
+    expect(branch1).toBeGreaterThan(-1);
+    expect(branch3).toBeGreaterThan(branch1);
+    expect(teacher).toBeGreaterThan(branch3);
+
+    // BUG THẬT đã xảy ra ở PR1 và lọt qua merge: khối này bị đặt trong BRANCH 1
+    // (`kind === "vercel" && NODE_ENV === "production"`) nên chỉ sống ở preview
+    // deployment. Hậu quả trên localhost và mọi host thật: `/elearning` rơi xuống
+    // nhánh cuối, bị đá về `/login` MẤT `callbackUrl` — đăng nhập xong văng ra
+    // trang chủ. Không có lỗi, không có log; e2e bắt được nhờ đòi `callbackUrl`.
+    // Guard này rẻ hơn nhiều so với lần truy vết tiếp theo.
+    expect(
+      elearning,
+      "isElearningPath phải nằm SAU mốc BRANCH 3 — đặt trong BRANCH 1 là nhánh chết",
+    ).toBeGreaterThan(branch3);
   });
 });
 

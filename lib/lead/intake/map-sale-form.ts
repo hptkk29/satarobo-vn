@@ -8,7 +8,11 @@ import {
 import type { MapResult } from "./types";
 
 // =============================================================================
-// MAPPER — "Form nhập liên hệ từ Sale" trên `sale.satarobo.vn/nhap-lieu.html`.
+// MAPPER — "Form nhập liên hệ từ Sale", biểu mẫu tĩnh `sale.satarobo.vn/nhap-lieu.html`.
+//
+// ⛔ Biểu mẫu đó đã NGHỈ 22/08/2026 (thay bằng `satarobo.vn/nhap-khach-hang`, xem
+// `map-internal-form.ts`). File này GIỮ LẠI vì `lib/crm/webhook-replay.ts` còn
+// phát lại các `WebhookDelivery` nguồn "sale-form" đã nhận trước đó qua đúng đây.
 //
 // Tên trường GIỮ NGUYÊN của MISA (`LastName`, `CustomField15`…) vì trong giai
 // đoạn chuyển tiếp ta còn mirror y nguyên payload sang MISA (QĐ-3). Đổi tên

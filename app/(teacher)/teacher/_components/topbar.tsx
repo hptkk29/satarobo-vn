@@ -21,12 +21,15 @@ export function Topbar({
   userId,
   userName,
   adminReturnUrl,
+  elearningUrl,
   onMenuClick,
 }: {
   /** `User.id` — chuông cần để mở kênh realtime của chính người này. */
   userId: string;
   userName: string;
   adminReturnUrl?: string;
+  /** EL-01 — lối vào khu đào tạo nội bộ; null = cờ OFF → ẩn. */
+  elearningUrl?: string | null;
   onMenuClick: () => void;
 }) {
   return (
@@ -50,7 +53,11 @@ export function Topbar({
           viewAllHref="/teacher/thong-bao"
         />
         <ThemeToggle />
-        <UserMenu name={userName} adminReturnUrl={adminReturnUrl} />
+        <UserMenu
+          name={userName}
+          adminReturnUrl={adminReturnUrl}
+          elearningUrl={elearningUrl}
+        />
       </div>
     </header>
   );

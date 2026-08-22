@@ -3,6 +3,7 @@ import {
   isTeacherSiteEnabled,
   isCommonLoginAtRootEnabled,
   isSaleSiteEnabled,
+  isElearningEnabled,
 } from "@/lib/flags";
 
 /**
@@ -15,11 +16,11 @@ import {
  *    (`giaovien.satarobo.vn` — phiếu BGĐ câu 7, 04/07/2026); role khác vào
  *    teacher host bị đá về khu của họ. Flag OFF → teacher host bounce về admin
  *    (GV tiếp tục dùng admin, KHÔNG đổi hành vi hiện tại).
- *  - Sale host (`sale.satarobo.vn`): site tĩnh CÔNG KHAI (KHÔNG auth) — form
- *    nhập liệu cho Sale đẩy thẳng về MISA AMIS CRM. Phục vụ 2 trang HTML
- *    self-contained từ `public/sale/*` (giữ NGUYÊN mã nhúng MISA). MISA tự
- *    POST + redirect về `/thank-you` (field `RedirectURL` trong form); ta chỉ
- *    rewrite clean URL → file .html tĩnh. `noindex` nằm trong meta của HTML.
+ *  - Sale host (`sale.satarobo.vn`): biểu mẫu tĩnh CÔNG KHAI đã **NGHỈ**
+ *    (22/08/2026). Địa chỉ nhập khách duy nhất nay là
+ *    `satarobo.vn/nhap-khach-hang` — có đăng nhập, mã NV lấy từ phiên. Host này
+ *    chỉ còn đá 307 về đó khi cờ `SALE_SITE_ENABLED` TẮT; cờ BẬT thì nó phục vụ
+ *    site Sale (`app/(sale)`) cho Sale THUẦN.
  *  - Chưa login + route bảo vệ: redirect /login GIỮ NGUYÊN host đang đứng.
  *  - Public host: ai cũng vào; route /admin|/portal lọt vào → đá về đúng host.
  *
@@ -44,6 +45,7 @@ export type HostKind =
   | "admin"
   | "portal"
   | "teacher"
+  | "elearning"
   | "sale"
   | "vercel"
   | "unknown";
@@ -57,7 +59,7 @@ export type RouteDecision =
   | { type: "redirectPath"; path: string; callbackUrl?: string; reason?: string }
   | {
       type: "redirectHost";
-      host: "admin" | "portal" | "public" | "teacher";
+      host: "admin" | "portal" | "public" | "teacher" | "elearning";
       path: string;
       status: 307 | 308;
     };
@@ -87,6 +89,11 @@ export interface RouteInput {
    * `COMMON_LOGIN_AT_ROOT` (mặc định OFF → giữ 308 sang admin). Test truyền tường minh.
    */
   commonLoginAtRoot?: boolean;
+  /**
+   * EL-01 — cờ khu đào tạo nội bộ. Bỏ trống → đọc env `ELEARNING_ENABLED`
+   * (mặc định OFF). Test truyền tường minh để không phụ thuộc env.
+   */
+  elearningEnabled?: boolean;
 }
 
 // ───────────────────────────────────────────────────────────────────────────
@@ -264,6 +271,11 @@ export function isPortalPath(p: string): boolean {
   return p === "/portal" || p.startsWith("/portal/");
 }
 
+/** EL-01 — path khu đào tạo nội bộ (route group `app/(elearning)/elearning/*`). */
+export function isElearningPath(p: string): boolean {
+  return p === "/elearning" || p.startsWith("/elearning/");
+}
+
 /** L5 — path site giáo viên (route group `app/(teacher)/teacher/*`). */
 export function isTeacherPath(p: string): boolean {
   return p === "/teacher" || p.startsWith("/teacher/");
@@ -334,10 +346,32 @@ export function sanitizeCallbackUrl(p: string): string {
 
 const PORTAL_HOME = "/";
 const STAFF_HOME = "/dashboard";
+const ELEARNING_HOME = "/"; // clean URL trên e-learning host (rewrite → /elearning)
 const TEACHER_HOME = "/"; // clean URL trên teacher host (rewrite nội bộ → /teacher)
-// Sale host — 2 trang HTML tĩnh self-contained (giữ nguyên mã nhúng MISA).
-const SALE_FORM_FILE = "/sale/nhap-lieu.html";
-const SALE_THANKYOU_FILE = "/sale/thank-you.html";
+
+/**
+ * Biểu mẫu nhập khách hàng nội bộ (`app/(intake)/nhap-khach-hang`).
+ *
+ * ĐỨNG THẬT ở host public — chủ dự án chốt 22/08/2026 một địa chỉ duy nhất
+ * `satarobo.vn/nhap-khach-hang`, thay biểu mẫu công khai `sale.satarobo.vn`.
+ * Đây là NGOẠI LỆ có chủ đích của luật "trang nội bộ ở admin host": người nhập
+ * là marketing/sale-admin, họ gõ địa chỉ này hàng ngày và không phải nhớ
+ * subdomain nào. Bù lại nó bị gác đăng nhập ngay ở tầng này (xem nhánh public
+ * host) chứ không chỉ ở layout.
+ */
+const INTAKE_PATH = "/nhap-khach-hang";
+
+/** Đường dẫn cũ của biểu mẫu tĩnh — nay chỉ còn để đá về địa chỉ mới. */
+const RETIRED_SALE_PATHS: ReadonlySet<string> = new Set([
+  "/sale/nhap-lieu.html",
+  "/sale/thank-you.html",
+  "/thank-you",
+  "/thank-you/",
+]);
+
+export function isIntakePath(p: string): boolean {
+  return p === INTAKE_PATH || p === `${INTAKE_PATH}/`;
+}
 
 /**
  * Quyết định routing thuần tuý cho 3 host thật (public/admin/portal).
@@ -384,6 +418,7 @@ export function decideRoute(input: RouteInput): RouteDecision {
     effectiveRoles.includes("SALES_CSM") &&
     effectiveRoles.filter((r) => r !== null && r !== "PARENT").every((r) => r === "SALES_CSM");
   const saleSiteOn = input.saleSiteEnabled ?? isSaleSiteEnabled();
+  const elearningOn = input.elearningEnabled ?? isElearningEnabled();
   const loginAtRoot = input.commonLoginAtRoot ?? isCommonLoginAtRootEnabled();
 
   // Chỉ gắn reason khi đã từng có session nhưng bị vô hiệu (deactivated),
@@ -419,6 +454,25 @@ export function decideRoute(input: RouteInput): RouteDecision {
       // viễn → khi bật COMMON_LOGIN_AT_ROOT (F4) sau này client cũ vẫn auto-đá sang
       // admin/login, F4 không có hiệu lực. 307 không cache nên chuyển đổi sạch.
       return { type: "redirectHost", host: "admin", path: pathname, status: 307 };
+    }
+    // Biểu mẫu nhập khách hàng nội bộ — trang DUY NHẤT của host public đòi đăng
+    // nhập. Gác ngay ở đây (chứ không chỉ ở layout) để người chưa đăng nhập
+    // không phải tải một trang chỉ để bị đá; đồng thời giữ `callbackUrl` nên
+    // đăng nhập xong quay lại đúng biểu mẫu.
+    if (isIntakePath(pathname)) {
+      if (!authed) {
+        return {
+          type: "redirectPath",
+          path: "/login",
+          callbackUrl: sanitizeCallbackUrl(INTAKE_PATH),
+          reason: invalidReason,
+        };
+      }
+      // PARENT không có `leads:create`; đá thẳng về portal cho khỏi lạc.
+      if (isParent) {
+        return { type: "redirectHost", host: "portal", path: PORTAL_HOME, status: 307 };
+      }
+      return { type: "next" };
     }
     if (isAdminRoute(pathname)) {
       return { type: "redirectHost", host: "admin", path: pathname, status: 308 };
@@ -461,7 +515,7 @@ export function decideRoute(input: RouteInput): RouteDecision {
 
     // PARENT: chuẩn hoá landing admin-ish (vd callbackUrl mặc định /dashboard)
     // về portal home, rồi rewrite clean URL → /portal/*.
-    if (isAdminRoute(pathname)) {
+    if (isAdminRoute(pathname) || isIntakePath(pathname)) {
       return { type: "redirectPath", path: PORTAL_HOME };
     }
     if (isPortalPath(pathname)) return { type: "next" };
@@ -472,6 +526,90 @@ export function decideRoute(input: RouteInput): RouteDecision {
   // ── Teacher host (giaovien.satarobo.vn) — L5, phiếu BGĐ câu 7 (04/07/2026) ─
   // 2-phase qua flag TEACHER_SITE_ENABLED. Chỉ TEACHER (kể cả đa vai trò kiêm
   // TEACHER); role khác đá về khu của họ. Clean URL rewrite nội bộ → /teacher/*.
+  // ── E-learning host (e-learning.satarobo.vn) ─ EL-01 ───────────────────
+  // Khá chính xác khuôn teacher ở trên, TRỪ **một khác biệt duy nhất**: điều kiện
+  // vào là "**không phải PARENT-thuần**" chứ không phải một vai cụ thể — QĐ-7 chuối
+  // EMP = mọi vai staff. Nhân sự nào cũng phải học, nên gắn cổng vào một vai là sai
+  // nghệ vụ và sẽ phải sửa lại mỗi lần thêm vai mới.
+  //
+  // ⚠️ Cổng này quyết theo enum `Role` v1 (`MaybeRole`), KHÔNG theo `RoleDef`. Vai
+  // `AUD` (kiểm soát, sẽ tạo ở EL-02) là một `RoleDef` **không có enum v1 tương ứng**
+  // ⇒ tự nó KHÔNG qua được cổng này. Người giữ AUD phải đồng thời có một `Role` v1
+  // staff bất kỳ. Đây là hành vi ĐÚNG CHỦ ĐÍCH (fail-closed), có case test khoá lại.
+  //
+  // Đường thứ hai của cổng vào — "không có hồ sơ nhân sự thì không vào" (QĐ-CDA-10) —
+  // nằm ở **layout RSC** của route group, KHÔNG ở đây: hàm này thuần tuý và không chạm DB
+  // (middleware chỉ thấy JWT). Xem EL-01 PR2.
+  if (hostKind === "elearning") {
+    if (isInfraPath(pathname)) return { type: "next" };
+
+    // Cờ OFF (pha 1): khu chưa mở — bậy về khu của người dùng, **0 byte** HTML
+    // e-learning được phục vụ. Giống hệt teacher-OFF.
+    if (!elearningOn) {
+      if (isParent) {
+        return { type: "redirectHost", host: "portal", path: "/", status: 307 };
+      }
+      return { type: "redirectHost", host: "admin", path: STAFF_HOME, status: 307 };
+    }
+
+    if (pathname === "/login") {
+      if (isStaff) return { type: "redirectPath", path: ELEARNING_HOME };
+      if (isParent) {
+        return { type: "redirectHost", host: "portal", path: "/", status: 307 };
+      }
+      return { type: "next" }; // chưa login → form login
+    }
+
+    // Trang OTP công khai (kích hoạt / quên mật khẩu) — chưa login vẫn vào.
+    if (isPublicOtpPath(pathname)) {
+      if (isStaff) return { type: "redirectPath", path: ELEARNING_HOME };
+      if (isParent) {
+        return { type: "redirectHost", host: "portal", path: "/", status: 307 };
+      }
+      return { type: "next" };
+    }
+
+    // Trang đổi mật khẩu bắt buộc — phục vụ tại chỗ, KHÔNG rewrite.
+    if (pathname === "/doi-mat-khau") {
+      if (!authed) {
+        return { type: "redirectPath", path: "/login", reason: invalidReason };
+      }
+      return { type: "next" };
+    }
+
+    if (!authed) {
+      return {
+        type: "redirectPath",
+        path: "/login",
+        callbackUrl: sanitizeCallbackUrl(pathname),
+        reason: invalidReason,
+      };
+    }
+
+    // PARENT-thuần → về portal. Đào tạo nội bộ không dành cho phụ huynh.
+    if (!isStaff) {
+      return { type: "redirectHost", host: "portal", path: "/", status: 307 };
+    }
+
+    // Staff: chuẩn hoá path lạc khu rồi rewrite clean URL → /elearning/*.
+    //
+    // ⚠️ Thứ tự hỏi giống nhánh teacher và cũng có chủ đích: hỏi "đã là path e-learning
+    // chưa" TRƯỚC, rồi mới hỏi "có phải đường admin không". Khu này sẽ có những tên
+    // trùng với admin (`bao-cao`, `huong-dan`, `cai-dat`…); hỏi ngược thì clean URL của
+    // đúng những màn đó bị ném về trang chủ — không lỗi, không dấu vết.
+    if (isElearningPath(pathname)) return { type: "next" };
+    if (pathname === "/") return { type: "rewrite", path: "/elearning" };
+    if (
+      isAdminRoute(pathname) ||
+      isPortalPath(pathname) ||
+      isTeacherPath(pathname) ||
+      isLegacyAdminPrefixed(pathname)
+    ) {
+      return { type: "redirectPath", path: ELEARNING_HOME };
+    }
+    return { type: "rewrite", path: "/elearning" + pathname };
+  }
+
   if (hostKind === "teacher") {
     if (isInfraPath(pathname)) return { type: "next" };
 
@@ -548,6 +686,7 @@ export function decideRoute(input: RouteInput): RouteDecision {
     if (
       isAdminRoute(pathname) ||
       isPortalPath(pathname) ||
+      isIntakePath(pathname) ||
       isLegacyAdminPrefixed(pathname)
     ) {
       return { type: "redirectPath", path: TEACHER_HOME };
@@ -563,33 +702,40 @@ export function decideRoute(input: RouteInput): RouteDecision {
   if (hostKind === "sale") {
     if (isInfraPath(pathname)) return { type: "next" };
 
-    // Hai trang tĩnh CÔNG KHAI — sống ở CẢ HAI trạng thái cờ.
-    // `/thank-you` là đích `RedirectURL` của biểu mẫu MISA (`misa-mirror.ts`),
-    // cắt nó là người nhập xong không thấy màn xác nhận.
-    if (pathname === SALE_FORM_FILE || pathname === SALE_THANKYOU_FILE) {
-      return { type: "next" };
-    }
-    if (pathname === "/thank-you" || pathname === "/thank-you/") {
-      return { type: "rewrite", path: SALE_THANKYOU_FILE };
+    // Biểu mẫu nhập khách đứng ở host public. Không bắt ở đây thì khi cờ
+    // `SALE_SITE_ENABLED` bật, `/nhap-khach-hang` rơi vào luật rewrite chung
+    // → `/sale/nhap-khach-hang` → 404 câm, đúng kiểu hỏng "bấm vào không đi
+    // đâu" mà clean URL của site GV đã dính một lần (xem TEACHER_ROUTE_SEGMENTS).
+    // Sale THUẦN có `leads:create` nên đích đúng là biểu mẫu, không phải trang chủ.
+    if (isIntakePath(pathname)) {
+      return { type: "redirectHost", host: "public", path: INTAKE_PATH, status: 307 };
     }
 
-    // ── Cờ TẮT (mặc định): giữ NGUYÊN hành vi hôm nay ────────────────────
-    // Site tĩnh công khai, bỏ qua đăng nhập. Không một byte giao diện site Sale
-    // được phục vụ. Đây là trạng thái đang chạy prod — đừng đổi.
+    // ⛔ 22/08/2026 — BIỂU MẪU TĨNH CÔNG KHAI ĐÃ NGHỈ.
+    // Hai file `public/sale/*.html` đã xoá; địa chỉ mới là
+    // `satarobo.vn/nhap-khach-hang` (có đăng nhập). Mọi đường cũ — kể cả
+    // `/thank-you` mà `RedirectURL` của MISA còn trỏ tới — đá về địa chỉ mới.
+    //
+    // 307 chứ KHÔNG 308: đây là quyết định vận hành (khoá biểu mẫu ẩn danh), có
+    // thể phải đảo lại. 308 permanent bị trình duyệt/CDN nhớ vĩnh viễn nên đảo
+    // xong máy khách cũ vẫn đá sang trang mới — đúng vết xe `/login` đã ghi ở
+    // nhánh public host.
+    if (RETIRED_SALE_PATHS.has(pathname)) {
+      return { type: "redirectHost", host: "public", path: INTAKE_PATH, status: 307 };
+    }
+
+    // ── Cờ TẮT (mặc định): host này không còn gì để phục vụ ──────────────
+    // Trước đây nó phục vụ 2 file tĩnh. Nay biểu mẫu đã dời đi ⇒ mọi đường về
+    // địa chỉ mới, thay vì trả trang trắng hay 404.
     if (!saleSiteOn) {
-      // Giữ luật rộng cũ: mọi `/sale/*` đi thẳng (chỉ có 2 file, nhưng không
-      // siết ở trạng thái này để cờ TẮT là no-op tuyệt đối).
-      if (pathname.startsWith("/sale/")) return { type: "next" };
-      if (pathname === "/") return { type: "rewrite", path: SALE_FORM_FILE };
-      // Path lạ trên sale host → về form nhập liệu (site chỉ có 2 trang).
-      return { type: "redirectPath", path: "/" };
+      return { type: "redirectHost", host: "public", path: INTAKE_PATH, status: 307 };
     }
 
     // ── Cờ BẬT: site Sale có đăng nhập ───────────────────────────────────
-    // ⚠️ TỪ ĐÂY KHÔNG còn luật "mọi /sale/* đi thẳng": route group
-    // `app/(sale)/sale/` sinh ra `/sale/leads`, `/sale/trial`… trùng tiền tố với
-    // file tĩnh. Giữ luật rộng = mở toang toàn bộ trang app cho người chưa đăng
-    // nhập. Hai file tĩnh đã được cho qua tường minh ở trên.
+    // ⚠️ KHÔNG có luật "mọi /sale/* đi thẳng": route group `app/(sale)/sale/`
+    // sinh ra `/sale/leads`, `/sale/trial`… — luật rộng kiểu đó (di sản thời còn
+    // 2 file tĩnh cùng tiền tố) là mở toang toàn bộ trang app cho người chưa
+    // đăng nhập.
 
     // Đứng TRƯỚC cổng auth, nếu không là vòng lặp chuyển hướng vô tận —
     // repo đã dính đúng lỗi này với `/dang-xuat`.
@@ -654,6 +800,13 @@ export function decideRoute(input: RouteInput): RouteDecision {
     // Portal segment lọt sang admin → đẩy về portal host.
     if (isPortalPath(pathname)) {
       return { type: "redirectHost", host: "portal", path: "/", status: 308 };
+    }
+
+    // Biểu mẫu nhập khách hàng đứng ở host public (một địa chỉ duy nhất). Mục
+    // sidebar admin trỏ `/nhap-khach-hang` nên đây là đường đi THẬT của người
+    // dùng, không phải phòng hờ. 307 (không cache) để còn đảo được.
+    if (isIntakePath(pathname)) {
+      return { type: "redirectHost", host: "public", path: INTAKE_PATH, status: 307 };
     }
 
     // Legacy /admin/X URLs (bookmark cũ) → strip prefix, giữ host.

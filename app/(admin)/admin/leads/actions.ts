@@ -17,11 +17,16 @@ import { autoAssignLead, reassignOpenLeads } from '@/lib/lead/assign'
 import { leadSharingEnabled } from '@/lib/lead/sharing'
 import { validateTransferTarget } from '@/lib/crm/transfer-validate'
 import { autoAssignNewLead, manualAssignLead, reassignForCenter } from '@/lib/lead/auto-assign'
+import { assignmentWrite } from '@/lib/lead/assignment'
 import { centerIdForOrgUnit } from '@/lib/org/org-service'
 import { rejectHeadOffice } from '@/lib/enrollment-flow'
 import { LEAD_STATUS_LABEL, canTransitionLeadStatus } from '@/lib/leads/status'
 import { leadChildSchema } from '@/lib/validators/lead'
 import { syncLeadChildNameToStudents } from '@/lib/students/sync-name'
+import {
+  getPriorHistoryByPhone,
+  summarizePriorHistory,
+} from '@/lib/students/prior-history'
 
 const statusSchema = z.enum([
   'NEW',
@@ -623,9 +628,18 @@ export async function createLeadManual(
         error: `SĐT đã tồn tại trong CRM (trạng thái: ${LEAD_STATUS_LABEL[dup.status] ?? dup.status}${who}). Mở lead hiện có thay vì tạo mới.`,
       }
     }
+    // 21/08 — hồ sơ cũ nằm ở CƠ SỞ KHÁC: `Lead` ∈ SCOPED_MODELS nên sale ở đây không mở
+    // được nó, và câu báo cụt "báo quản lý cơ sở kiểm tra" khiến họ đứng hình. Nói thêm
+    // MỘT tầng không-PII: khách đã từng đăng ký / học ở cơ sở nào, khi nào. Không lộ tên
+    // phụ huynh, ghi chú tư vấn hay sale phụ trách — muốn xem vẫn phải qua đúng cơ sở.
+    const actorForLookup = await resolveActor(session.user.id!)
+    const prior = await getPriorHistoryByPhone(actorForLookup, d.phone)
+    const summary = summarizePriorHistory(prior)
     return {
       ok: false,
-      error: 'SĐT đã tồn tại trong CRM. Vui lòng báo quản lý cơ sở kiểm tra.',
+      error:
+        'SĐT đã tồn tại trong CRM. Vui lòng báo quản lý cơ sở kiểm tra.' +
+        (summary ? ` ${summary}` : ''),
     }
   }
 
@@ -944,7 +958,9 @@ export async function transferLead(
       where: { id: lead.id },
       data: {
         centerId: toCenterId,
-        assignedToId: toSaleId,
+        // Đợt A — kèm mốc phân công. Chuyển lead sang người khác thì người nhận
+        // phải có cửa sổ SLA riêng, không thừa hưởng đồng hồ của người trước.
+        ...assignmentWrite(toSaleId),
         handoverNote: d.handoverNote,
         ...(lead.status === 'NEW' && toSaleId ? { status: 'ASSIGNED' as const } : {}),
       },
