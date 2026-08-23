@@ -30,6 +30,35 @@ export function maskFreeText(v: string | null | undefined): string | null {
   return MASKED_TEXT;
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Đợt E (22/08/2026) — cắt liên hệ TRONG một đoạn văn tự do
+// ─────────────────────────────────────────────────────────────────────────────
+// Hai biểu thức này là NGUỒN DUY NHẤT của câu hỏi "cái gì trông giống liên hệ".
+// `lib/chat/queries.ts` (BR-30) uỷ quyền về đây — trước 22/08 nó giữ bản sao
+// riêng, và hai bản sao là hai luật sẽ trôi lệch.
+//
+// Bắt: 0/84/+84 + đầu số di động VN (3|5|7|8|9) + 8 số. Cố ý KHÔNG bắt số cố
+// định và dãy số bất kỳ — bắt rộng thì "học phí 2500000" cũng bị đục, và một
+// màn hình đục lỗ khắp nơi sẽ bị người dùng bỏ qua chứ không được tin.
+const PHONE_LIKE_RE = /(?<![0-9])(?:\+?84|0)(?:3|5|7|8|9)[0-9]{8}(?![0-9])/g;
+const EMAIL_LIKE_RE = /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g;
+
+/**
+ * Che SĐT/email nằm LẪN trong nội dung tự do, GIỮ phần còn lại đọc được.
+ *
+ * Khác {@link maskFreeText} (ẩn hẳn cả đoạn): dùng cho chỗ mà nội dung vẫn phải
+ * đọc được để làm việc — inbox Messenger, nhật ký hội thoại. Che cột `phone` mà
+ * để nguyên câu "sdt em 0905123456" thì việc che chỉ là hình thức.
+ *
+ * ⚠️ Đây là rào chống TIỆN TAY, không phải chống cố ý: ai đọc được toàn bộ hội
+ * thoại thì gần như luôn moi được cách liên lạc (khách gõ số tách ra từng cụm,
+ * gửi ảnh, hẹn gặp…). Đừng bán nó như một bảo đảm.
+ */
+export function redactContactsInText(v: string | null | undefined): string | null {
+  if (v == null || v === "") return v ?? null;
+  return v.replace(EMAIL_LIKE_RE, "•••").replace(PHONE_LIKE_RE, "•••");
+}
+
 /** Bộ field PII chung của Lead — mask 1 lượt, giữ nguyên field khác. */
 export function maskLeadPiiFields<
   T extends {

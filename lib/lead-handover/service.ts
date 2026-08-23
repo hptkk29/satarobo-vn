@@ -1,5 +1,6 @@
 import { db } from "@/lib/db";
 import { logLeadAudit } from "@/lib/audit/log";
+import { assignmentWrite } from "@/lib/lead/assignment";
 import type { Prisma } from "@prisma/client";
 
 // =============================================================================
@@ -88,7 +89,8 @@ export async function bulkReassignLeads(params: {
       await tx.lead.update({
         where: { id: lead.id },
         data: {
-          assignedToId: params.toUserId,
+          // Đợt A — bàn giao hàng loạt cũng là đổi chủ ⇒ phải làm mới mốc phân công.
+          ...assignmentWrite(params.toUserId),
           handoverNote: params.reason ?? undefined,
         },
       });

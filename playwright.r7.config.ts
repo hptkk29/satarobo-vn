@@ -17,8 +17,14 @@ export default defineConfig({
   expect: { timeout: 5_000 },
   retries: process.env.CI ? 2 : 0,
   workers: 1,
+  // Playwright tự dừng TRƯỚC trần job (30) ⇒ nó còn kịp in tóm tắt và ghi báo cáo.
+  // Không có dòng này thì GitHub giết tiến trình giữa chừng, không tóm tắt, không artifact.
+  globalTimeout: 25 * 60_000,
+  // `list` CẢ Ở CI. Reporter cũ (html + github) không in gì trong lúc chạy, nên một lần
+  // chạy XANH cũng im lặng 12 phút — và im lặng đó bị đọc nhầm thành "job treo", tốn
+  // một vòng điều tra. Có `list` thì nhìn log biết đang ở test nào.
   reporter: process.env.CI
-    ? [["html", { open: "never" }], ["github"]]
+    ? [["list"], ["html", { open: "never" }], ["github"]]
     : [["html", { open: "never" }], ["list"]],
 
   use: {

@@ -61,6 +61,14 @@ export type Action =
   | "leads:view-own"
   | "leads:create"
   | "leads:edit"
+  // 23/08/2026 — sửa HẸP: chỉ những ô CÓ TRONG biểu mẫu `/nhap-khach-hang`, và
+  // chỉ trên phiếu do CHÍNH MÌNH nhập (`Lead.createdById`).
+  //
+  // ⚠️ CỐ Ý TÁCH KHỎI `leads:edit`. Quyền đó đang gác ~10 action khác —
+  // đổi trạng thái, giao việc, chuyển cơ sở, thêm/sửa con, ghi chú, bàn giao.
+  // Cấp `leads:edit` cho Sale Hội sở là mở toang cả chuỗi đó, trong khi chủ dự
+  // án chốt họ chỉ được sửa đúng bộ ô mình đã gõ; Sale cơ sở mới toàn quyền.
+  | "leads:edit-own-intake"
   | "leads:assign"
   | "leads:assign-config" // 03/08 — tách riêng màn "Cấu hình chia lead" khỏi leads:assign
   | "leads:delete"
@@ -269,6 +277,7 @@ export type Action =
   | "discounts:approve" // BGĐ 31/07 — duyệt giảm giá nhập tay (kèm giải trình)
   | "orders:view"
   | "orders:manage"
+  | "orders:create" // G-A (21/08/2026) — quyền HẸP: tạo đơn GẮN LEAD CỦA MÌNH (lib/orders/create-guard.ts)
   | "orders:view-pii" // che SĐT/email/địa chỉ khách trên đơn hàng — vai CRM/kế toán mới xem đầy đủ
 
   // --- Phase 5.7 — Vouchers ---
@@ -353,8 +362,19 @@ export const PERMISSIONS: Record<Action, Role[]> = {
   // hệ) → thêm MARKETING (ĐẢO quyết định "che PII cho MARKETING" của a+b 20/07). Lưu ý:
   // canViewLeadPii bao cả email (email-logs) + ghi chú tư vấn (lead detail) → MARKETING thấy
   // luôn các mục này. Cách ly cơ sở vẫn do scopedDb.
-  "leads:view-pii": ["SUPER_ADMIN", "CENTER_MANAGER", "SALES_CSM", "MARKETING"],
+  // ⚠️ Đợt E (22/08/2026) — chủ dự án chốt Q9: **Quản lý cơ sở KHÔNG thấy SĐT lead**.
+  // ĐẢO chính quyết định #11 T2 (Kiệt ký 10/07) từng cấp quyền này cho CENTER_MANAGER.
+  // QL vẫn xem được DANH SÁCH lead (leads:view-all) — chỉ SĐT/email/tên/ghi chú bị
+  // che ở tầng dữ liệu (lib/lead/pii.ts), và tìm-theo-SĐT bị tắt theo (nếu còn tìm
+  // được thì che chỉ là hình thức: dò từng số cũng ra khách).
+  // Marketing GIỮ quyền — chủ dự án trả lời "không" khi được hỏi có che luôn không.
+  // Khoá bằng test: lib/auth/lead-pii-policy.test.ts. Sửa đây phải sửa seed-roles.ts.
+  "leads:view-pii": ["SUPER_ADMIN", "SALES_CSM", "MARKETING"],
   "leads:create": ["SUPER_ADMIN", "CENTER_MANAGER", "SALES_CSM", "MARKETING"],
+  // v1 KHÔNG có vai "Sale Hội sở" (nó chỉ tồn tại ở RBAC v2, gán tay ở
+  // /admin/users/[id]/org-roles). Để trống ngoài SUPER_ADMIN là ĐÚNG, không
+  // phải sót: nơi nào còn enforce v1 thì tính năng này chưa có mặt.
+  "leads:edit-own-intake": ["SUPER_ADMIN"],
   "leads:edit": ["SUPER_ADMIN", "CENTER_MANAGER", "SALES_CSM", "MARKETING"],
   "leads:assign": ["SUPER_ADMIN", "CENTER_MANAGER"],
   "leads:assign-config": ["SUPER_ADMIN"],
@@ -366,11 +386,11 @@ export const PERMISSIONS: Record<Action, Role[]> = {
   "leads:import": ["SUPER_ADMIN", "CENTER_MANAGER", "SALES_CSM"],
 
   // --- Trial classes (Phase T1.4) ---
-  "trials:view": ["SUPER_ADMIN", "CENTER_MANAGER", "SALES_CSM", "TEACHER"],
+  "trials:view": ["SUPER_ADMIN", "CENTER_MANAGER", "SALES_CSM", "TEACHER", "TRAINING"],
   "trials:manage": ["SUPER_ADMIN", "CENTER_MANAGER", "SALES_CSM"],
   "trials:feedback": ["SUPER_ADMIN", "CENTER_MANAGER", "TEACHER"],
   // R7-02 — gán GV + override sĩ số chỉ quản lý cơ sở; cấu hình số buổi = Đào tạo/Admin.
-  "trials:assign-teacher": ["SUPER_ADMIN", "CENTER_MANAGER"],
+  "trials:assign-teacher": ["SUPER_ADMIN", "CENTER_MANAGER", "TRAINING"],
   "trials:override-capacity": ["SUPER_ADMIN", "CENTER_MANAGER"],
   // FL W0 (QĐ-T1): cấu hình đào tạo/LMS = TRAINING (Đào tạo). CENTER_MANAGER chỉ xem nội dung LMS.
   "training:manage": ["SUPER_ADMIN", "TRAINING"],
@@ -451,10 +471,10 @@ export const PERMISSIONS: Record<Action, Role[]> = {
   "students:import": ["SUPER_ADMIN", "CENTER_MANAGER"],
 
   // --- Classes ---
-  "classes:view-all": ["SUPER_ADMIN", "CENTER_MANAGER", "SALES_CSM", "ACCOUNTANT", "HR", "MARKETING"],
+  "classes:view-all": ["SUPER_ADMIN", "CENTER_MANAGER", "SALES_CSM", "ACCOUNTANT", "HR", "MARKETING", "TRAINING"],
   "classes:view-own": ["SUPER_ADMIN", "TEACHER"],
   "classes:create": ["SUPER_ADMIN", "CENTER_MANAGER"],
-  "classes:edit": ["SUPER_ADMIN", "CENTER_MANAGER"],
+  "classes:edit": ["SUPER_ADMIN", "CENTER_MANAGER", "TRAINING"],
   "classes:delete": ["SUPER_ADMIN"],
 
   // --- Class groups (Phase T0.2) ---
@@ -634,6 +654,13 @@ export const PERMISSIONS: Record<Action, Role[]> = {
   "discounts:approve": ["SUPER_ADMIN", "CENTER_MANAGER", "ACCOUNTANT"],
   "orders:view": ["SUPER_ADMIN", "CENTER_MANAGER", "SALES_CSM", "ACCOUNTANT"],
   "orders:manage": ["SUPER_ADMIN", "CENTER_MANAGER", "ACCOUNTANT"],
+  // G-A (biên bản chốt 4 cổng, 21/08/2026): mở đường chốt đơn cho Sale mà KHÔNG
+  // cấp `orders:manage` (vốn cho mở/huỷ/hoàn toàn hệ thống). Ai có `orders:manage`
+  // cũng phải có action này vì cổng tạo đơn nay kiểm `orders:create`.
+  // Phạm vi "chỉ đơn gắn lead của mình" KHÔNG nằm ở scope RBAC mà ở guard tường
+  // minh `checkOrderCreateOwnership()` — vì `can()` v2 với scope CENTER cần target,
+  // còn cổng tạo đơn gọi trần. Xem lib/orders/create-guard.ts.
+  "orders:create": ["SUPER_ADMIN", "CENTER_MANAGER", "ACCOUNTANT", "SALES_CSM"],
   // Xem đầy đủ liên hệ khách trên đơn (CRM + kế toán); vai khác thấy bản che.
   "orders:view-pii": ["SUPER_ADMIN", "CENTER_MANAGER", "SALES_CSM", "ACCOUNTANT"],
 

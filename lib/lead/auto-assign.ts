@@ -4,11 +4,13 @@ import { orgUnitIdForCenter } from "@/lib/org/org-service";
 import { getNonEnrollableCenterIds } from "@/lib/enrollment-flow";
 import type { LeadStatus, Prisma, LeadAssignMode } from "@prisma/client";
 import {
-  pickRoundRobin,
   pickByCloseRate,
   pickCenterEvenly,
   type SaleStat,
 } from "@/lib/lead/assign-strategy";
+import { takeRotationTurn } from "@/lib/lead/rotation";
+import { canManualAssign } from "@/lib/lead/assign-guard";
+import { assignmentWrite } from "@/lib/lead/assignment";
 
 // Module CRM & Lead PHẦN 2 — chia lead tự động (cơ sở → chế độ) + khoá khi đã tương tác.
 
@@ -157,9 +159,45 @@ export async function autoAssignNewLead(leadId: string, actor: Actor): Promise<A
     return { ok: true, assignedToId: null, centerId, mode }; // chờ quản lý gán tay
   }
 
-  let stats = await getSaleStats(centerId);
-  if (stats.length === 0 && centerId) stats = await getSaleStats(null); // fallback toàn hệ thống
-  const target = mode === "CLOSE_RATE" ? pickByCloseRate(stats) : pickRoundRobin(stats);
+  // ⚠️ Đợt D (22/08/2026) — BỎ fallback chia xuyên cơ sở (lỗi 4.3 của spec).
+  //
+  // Bản cũ: cơ sở không còn sale nào thì `getSaleStats(null)` lấy sale TOÀN HỆ
+  // THỐNG. Nghe như "cứu lead", thực tế đẻ ra LEAD CHẾT: `scopedDb` cách ly cơ
+  // sở nên người nhận KHÔNG MỞ ĐƯỢC lead vừa được giao. Đã xảy ra thật — lead CS1
+  // rơi vào tay một sale CS2 và nằm im ở đó cho tới lúc chủ dự án gỡ tay 21/08.
+  // Nay: không có sale trong cơ sở ⇒ để CHƯA PHÂN cho quản lý xử, đúng SS-LR-11.
+  const stats = await getSaleStats(centerId);
+  if (stats.length === 0) {
+    console.warn(
+      `[lead:auto-assign] Cơ sở ${centerId ?? "(chưa xác định)"} không có sale đủ điều kiện — lead ${leadId} để CHƯA PHÂN.`,
+    );
+    return { ok: true, assignedToId: null, centerId, mode };
+  }
+
+  // Chọn người nhận.
+  //
+  // ROUND_ROBIN (chế độ MỌI cơ sở đang dùng — đo prod 21/08) nay đi qua SỔ LƯỢT
+  // bền: chủ dự án chốt Q7 "chia đều số lượt, qua ngày không reset, không phân
+  // biệt người nhiều việc người ít việc". Xem lib/lead/rotation.ts.
+  //
+  // CLOSE_RATE giữ nguyên đường cũ (cân tải theo tỷ lệ chốt). Không cơ sở nào
+  // đang bật nó; giữ lại để không lặng lẽ đổi một cấu hình ai đó cố ý đặt.
+  let target: string | null;
+  if (mode === "CLOSE_RATE") {
+    target = pickByCloseRate(stats);
+  } else {
+    const orgUnitId = centerId ? await orgUnitIdForCenter(centerId) : null;
+    target = orgUnitId
+      ? await takeRotationTurn(orgUnitId, stats.map((s) => s.id))
+      : // Không suy được đơn vị ⇒ KHÔNG có sổ lượt để ghi. Thà để chưa phân còn
+        // hơn chia bằng đường khác rồi lệch sổ mà không ai biết.
+        null;
+    if (!target && orgUnitId === null) {
+      console.warn(
+        `[lead:auto-assign] Không suy được orgUnitId từ cơ sở ${centerId ?? "(null)"} — lead ${leadId} để CHƯA PHÂN.`,
+      );
+    }
+  }
   if (!target) return { ok: true, assignedToId: null, centerId, mode }; // không có sale → để trống
 
   const targetUser = await db.user.findUnique({ where: { id: target }, select: { name: true } });
@@ -167,7 +205,9 @@ export async function autoAssignNewLead(leadId: string, actor: Actor): Promise<A
     await tx.lead.update({
       where: { id: leadId },
       data: {
-        assignedToId: target,
+        // Đợt A — `assignmentWrite` ghi kèm `assignedAt`; thiếu mốc thì SLA-2/SLA-3
+        // không bao giờ kêu (đo prod 21/08: 33 lead có vết chia, chỉ 1 có mốc).
+        ...assignmentWrite(target),
         ...(lead.status === "NEW" ? { status: "ASSIGNED" as LeadStatus } : {}),
       },
     });
@@ -207,29 +247,72 @@ export async function reassignForCenter(
 ): Promise<string | null> {
   const mode = await getCenterMode(centerId);
   if (mode === "MANUAL") return null;
-  let stats = (await getSaleStats(centerId)).filter((s) => s.id !== excludeSaleId);
-  if (stats.length === 0) stats = (await getSaleStats(null)).filter((s) => s.id !== excludeSaleId);
-  return mode === "CLOSE_RATE" ? pickByCloseRate(stats) : pickRoundRobin(stats);
+  // Đợt D — như autoAssignNewLead: KHÔNG còn fallback xuyên cơ sở (lỗi 4.3).
+  // Chuyển lead sang cơ sở không có sale ⇒ trả null ⇒ lead nằm ở cơ sở mới, chưa
+  // phân. Đúng hơn là ném cho một người không mở được nó.
+  const stats = (await getSaleStats(centerId)).filter((s) => s.id !== excludeSaleId);
+  if (stats.length === 0) return null;
+  if (mode === "CLOSE_RATE") return pickByCloseRate(stats);
+
+  // ⚠️ Ở đây LƯỢT BỊ TIÊU NGAY, trước khi chỗ gọi ghi xong việc chuyển. Nếu
+  // transaction chuyển lead hỏng sau đó thì người này mang một lượt không có lead.
+  // Chấp nhận có chủ đích: lệch tối đa 1 lượt trong một tình huống hiếm, đổi lấy
+  // việc không bao giờ có hai lead cùng tiêu một lượt. Ngược lại (ghi lượt sau)
+  // thì mỗi lần lỗi là một lượt BIẾN MẤT — và cái đó lệch về đúng một phía.
+  const orgUnitId = await orgUnitIdForCenter(centerId);
+  if (!orgUnitId) return null;
+  return takeRotationTurn(orgUnitId, stats.map((s) => s.id));
 }
 
-/** Quản lý gán tay 1 lead cho 1 sale cụ thể. */
+/**
+ * Quản lý gán tay 1 lead cho 1 sale cụ thể.
+ *
+ * ⚠️ Đợt G (23/08/2026) — THÊM KIỂM NGƯỜI NHẬN. Trước đó điều kiện duy nhất là
+ * "có vai SALES_CSM và chưa xoá mềm": không kiểm còn làm việc, không kiểm cùng
+ * cơ sở. Đó đúng là cơ chế đã đẻ ra sự cố phải gỡ tay 21/08 — một lead CS1 nằm
+ * trong tay sale CS2, mà `scopedDb` cách ly cơ sở nên **người đó không mở nổi
+ * nó**; lead nằm chết, không màn nào báo lỗi.
+ *
+ * Đợt D đã bịt đường TỰ ĐỘNG (bỏ fallback chia xuyên cơ sở) nhưng đường gán tay
+ * vẫn mở nguyên — bịt một nửa thì cái nửa còn lại chính là chỗ sự cố tái diễn.
+ *
+ * Luật để ở `lib/lead/assign-guard.ts` (thuần, có test) chứ không viết `if` tại
+ * chỗ: sẽ còn cửa gán thứ hai, thứ ba, và lần trước nó chỉ nằm ở một chỗ.
+ */
 export async function manualAssignLead(
   leadId: string,
   saleId: string,
   actor: Actor,
+  opts: { actorIsHoLevel?: boolean } = {},
 ): Promise<{ ok: boolean; error?: string }> {
   const [lead, sale] = await Promise.all([
-    db.lead.findUnique({ where: { id: leadId }, select: { id: true, assignedToId: true, status: true } }),
-    db.user.findFirst({ where: { id: saleId, roles: { has: "SALES_CSM" }, deletedAt: null }, select: { id: true, name: true } }),
+    db.lead.findUnique({
+      where: { id: leadId },
+      select: { id: true, assignedToId: true, status: true, centerId: true },
+    }),
+    db.user.findFirst({
+      where: { id: saleId, roles: { has: "SALES_CSM" } },
+      select: { id: true, name: true, isActive: true, deletedAt: true, centerId: true },
+    }),
   ]);
   if (!lead) return { ok: false, error: "Lead không tồn tại" };
   if (!sale) return { ok: false, error: "Sale không hợp lệ" };
+
+  // `deletedAt` cố ý KHÔNG lọc ở truy vấn nữa: lọc ở đó thì người đã xoá mềm rơi
+  // vào nhánh "Sale không hợp lệ" — đúng kết quả nhưng sai thông báo, và người
+  // bấm nút không hiểu vì sao. Guard nói rõ từng lý do.
+  const guard = canManualAssign({
+    sale,
+    leadCenterId: lead.centerId,
+    actorIsHoLevel: opts.actorIsHoLevel ?? false,
+  });
+  if (!guard.ok) return { ok: false, error: guard.error };
 
   await db.$transaction(async (tx) => {
     await tx.lead.update({
       where: { id: leadId },
       data: {
-        assignedToId: saleId,
+        ...assignmentWrite(saleId), // Đợt A — kèm mốc phân công
         ...(lead.status === "NEW" ? { status: "ASSIGNED" as LeadStatus } : {}),
       },
     });

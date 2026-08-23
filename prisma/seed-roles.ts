@@ -81,6 +81,9 @@ export const ROLE_SEED: RoleSeed[] = [
       { action: "payments:manage", scopeType: "GLOBAL" },
       { action: "payments:view", scopeType: "GLOBAL" },
       { action: "orders:manage", scopeType: "GLOBAL" },
+      // G-A (21/08/2026) — cổng tạo đơn nay kiểm `orders:create`; ai có
+      // `orders:manage` phải có kèm để không mất chức năng đang dùng.
+      { action: "orders:create", scopeType: "GLOBAL" },
       { action: "payroll:view", scopeType: "GLOBAL" },
       { action: "payroll:edit", scopeType: "GLOBAL" },
       { action: "payments:record", scopeType: "GLOBAL" },
@@ -282,6 +285,9 @@ export const ROLE_SEED: RoleSeed[] = [
     code: "TRAINING", name: "Đào tạo (toàn LMS)",
     // 24/07 (user chốt): KHOÁ CHẶT về chỉ curriculum + LMS + DUYỆT học bạ. Gỡ:
     // students/classes:view-all (hết xem HV/lớp toàn hệ thống — Toại về đúng CS1),
+    //   ⚠️ 23/08: `classes:view-all` ĐÃ TRẢ LẠI (kèm classes:edit + trials:assign-teacher)
+    //   — Đào tạo nay quản lý toàn bộ GV. `students:view-all` VẪN GỠ, đừng trả nốt theo
+    //   quán tính. Lý do đầy đủ ở khối comment ngay trên 4 dòng perm đó.
     // reports:training, evaluations:manage, trials:config, report-cards:manage
     // (chỉ còn report-cards:review = duyệt). GIỮ training:manage (chìa khoá LMS:
     // gác SCORM + mở khoá curriculum + soạn đề/câu hỏi — bỏ là hỏng LMS).
@@ -330,6 +336,23 @@ export const ROLE_SEED: RoleSeed[] = [
       // KHÔNG kèm sessions:*/classes:* (không mở lại module Lớp/Buổi học cho Đào tạo).
       // Trang /admin/classes/[id] mở ĐÚNG một tab "Đánh giá & Nhận xét" cho vai này.
       { action: "session-feedback:view-all", scopeType: "GLOBAL" },
+      // 23/08 (chủ dự án) — ĐẢO một phần đợt khoá chặt 24/07. Đào tạo nay là người
+      // QUẢN LÝ TOÀN BỘ GIÁO VIÊN, nên phải nhìn được mọi lớp của mọi cơ sở để xếp GV
+      // đi dạy: lớp chính (đã ghi danh) và lớp trải nghiệm (trial).
+      //   · classes:view-all — mở lại đúng quyền bị gỡ 24/07 ("Toại về đúng CS1").
+      //     Không có nó thì /attendance và /admin/classes chỉ bày lớp Đào tạo tự dạy.
+      //   · classes:edit — KHÔNG có action hẹp kiểu "classes:assign-teacher"; gán GV/trợ
+      //     giảng cho lớp chính đi chung `updateClass`. Kèm theo (đã cân nhắc, chấp nhận):
+      //     đổi lịch/phòng/tên lớp, sinh & xếp lại buổi, và HUỶ LỚP (cancelClassAction).
+      //     KHÔNG kèm: tạo lớp, xoá lớp (perm riêng), duyệt/từ chối lớp (chặn bằng
+      //     APPROVE_ROLES chứ không bằng permission — xem requireApprover).
+      //   · trials:view + trials:assign-teacher — đủ để mở màn Trial và gán GV. CỐ Ý
+      //     KHÔNG cấp trials:manage (thêm/bớt học viên, tạo lớp trải nghiệm) và
+      //     trials:config: quản lý toàn bộ GV ≠ điều hành tuyển sinh lớp thử.
+      { action: "classes:view-all", scopeType: "GLOBAL" },
+      { action: "classes:edit", scopeType: "GLOBAL" },
+      { action: "trials:view", scopeType: "GLOBAL" },
+      { action: "trials:assign-teacher", scopeType: "GLOBAL" },
       // 03/08 — checkin là self-action của mọi nhân viên; sót từ khi thêm TRAINING
       // (FL W0) nên tài khoản chỉ-Đào-tạo không mở được trang chấm công nào.
       { action: "hr_attendance:checkin", scopeType: "GLOBAL" },
@@ -370,10 +393,35 @@ export const ROLE_SEED: RoleSeed[] = [
     ],
   },
   {
-    // HO_SALE: xem lead toàn hệ thống nhưng KHÔNG sửa (Doc 15 §2).
-    code: "HO_SALE", name: "Sale Hội sở (chỉ xem)",
+    // HO_SALE — ĐẢO CHÍNH SÁCH 23/08/2026 (chủ dự án chốt).
+    //
+    // Cũ (Doc 15 §2): "xem lead TOÀN HỆ THỐNG nhưng KHÔNG sửa".
+    // Mới: NGƯỢC LẠI — nhập được, sửa được, nhưng CHỈ phần của mình:
+    //   · nhập phiếu (`leads:create`) — phiếu vẫn TỰ CHIA về Sale cơ sở đã chọn,
+    //     không giữ lại ở Hội sở (chốt 04/08 "lead không bao giờ về Hội sở" GIỮ NGUYÊN);
+    //   · chỉ thấy phiếu do CHÍNH MÌNH nhập (`leads:view-own` scope OWN →
+    //     `Lead.createdById`), KHÔNG thấy phiếu người khác nhập;
+    //   · chỉ sửa các ô CÓ TRONG biểu mẫu `/nhap-khach-hang`
+    //     (`leads:edit-own-intake`) — Sale cơ sở mới toàn quyền sửa.
+    //
+    // ⚠️ `leads:view-all` ĐÃ GỠ có chủ đích. Giữ lại là mâu thuẫn trực tiếp với
+    // "không thấy lead của người khác": v2 là ALLOW-wins, không có DENY để bù.
+    // ⚠️ KHÔNG cấp `leads:edit` — quyền đó gác ~10 action khác (đổi trạng thái,
+    // giao việc, chuyển cơ sở, thêm con…). Đó là lý do có key hẹp riêng.
+    code: "HO_SALE", name: "Sale Hội sở (phiếu mình nhập)",
     perms: [
-      { action: "leads:view-all", scopeType: "GLOBAL" },
+      { action: "leads:create", scopeType: "GLOBAL" },
+      // GLOBAL chứ KHÔNG "OWN" — luật R1 đầu file: action bị gọi TRẦN (không kèm
+      // target) thì scope OWN luôn trả false và người ta bị đá khỏi trang.
+      // `leads:view-own` đúng là gọi trần ở `/leads` + `/leads/[id]`; giới hạn
+      // "chỉ phiếu mình nhập" nằm ở MỆNH ĐỀ LỌC của truy vấn, không ở scopeType.
+      { action: "leads:view-own", scopeType: "GLOBAL" },
+      // Ngược lại, key này LUÔN được gọi kèm target `{ createdById }` trong
+      // `updateLeadFields` ⇒ OWN có tác dụng thật, là chốt chặn cuối ở server.
+      { action: "leads:edit-own-intake", scopeType: "OWN" },
+      // Nhập xong phải đọc lại được SĐT/tên mình vừa gõ, không thì màn danh sách
+      // hiện phiếu của chính mình mà bị che.
+      { action: "leads:view-pii", scopeType: "GLOBAL" },
       // --- Đào tạo nội bộ (EL-02 §3) --- tất cả GLOBAL: không ô nào của ma trận
       // mang scope khác, và cách ly cơ sở của module này đến từ dữ liệu lượt giao chứ
       // không từ scopeType (xem ghi chú R1 đầu file).
@@ -401,9 +449,12 @@ export const ROLE_SEED: RoleSeed[] = [
     perms: [
       // ── Lead ──
       { action: "leads:view-all", scopeType: "GLOBAL" },
-      // #11 T2 (Kiệt ký 10/07) — PII lead cho role trực tiếp CSKH; GLOBAL theo R1
-      // (call-site gọi trần qua canViewLeadPii), cách ly cơ sở do scopedDb.
-      { action: "leads:view-pii", scopeType: "GLOBAL" },
+      // ⚠️ Đợt E (22/08/2026) — `leads:view-pii` ĐÃ GỠ khỏi vai này theo Q9 chủ dự
+      // án chốt 21/08: Quản lý cơ sở KHÔNG thấy SĐT lead. Đảo #11 T2 (Kiệt ký
+      // 10/07) từng cấp quyền này. Giữ nguyên leads:view-all — QL vẫn điều hành
+      // được, chỉ không đọc được số. Khoá bằng lib/auth/lead-pii-policy.test.ts.
+      // ⚠️ Đổi ở đây CHƯA có hiệu lực trên prod: phải chạy workflow seed-prod-roles.yml
+      // sau khi merge vào main, nếu không prod vẫn giữ quyền cũ trong DB.
       { action: "leads:create", scopeType: "GLOBAL" },
       { action: "leads:edit", scopeType: "GLOBAL" },
       { action: "leads:assign", scopeType: "GLOBAL" },
@@ -485,6 +536,8 @@ export const ROLE_SEED: RoleSeed[] = [
       // QLCS CS1 không đụng được đơn/phiếu thu của CS2.
       { action: "installments:approve", scopeType: "GLOBAL" },
       { action: "orders:manage", scopeType: "GLOBAL" },
+      // G-A (21/08/2026) — kèm theo `orders:manage`, xem chú thích ở HO_ACCOUNTANT.
+      { action: "orders:create", scopeType: "GLOBAL" },
       // Chủ dự án chốt 03/08/2026 — QLCS cần ĐỐI SOÁT tiền về nhưng CHỈ XEM.
       // `payments:view` mở Công nợ + Biến động số dư ở chế độ đọc; mọi thao tác tiền
       // (sửa/hoàn/cấu hình) vẫn đòi payments:manage / payments:confirm mà vai này KHÔNG có.
@@ -648,6 +701,12 @@ export const ROLE_SEED: RoleSeed[] = [
       { action: "kits:view", scopeType: "CENTER" },
       { action: "payments:record", scopeType: "GLOBAL" },
       { action: "orders:view", scopeType: "GLOBAL" },
+      // G-A (biên bản chốt 4 cổng, 21/08/2026) — mở trục chốt đơn cho Sale:
+      // Order → payments:record → đủ điều kiện convert. GLOBAL vì cổng gọi trần
+      // (can() v2 với scope CENTER cần target); phạm vi "chỉ đơn gắn lead của
+      // mình" do `checkOrderCreateOwnership()` gác, cách ly cơ sở do scopedDb gác.
+      // KHÔNG cấp `orders:manage` (mở/huỷ/hoàn toàn hệ thống).
+      { action: "orders:create", scopeType: "GLOBAL" },
       { action: "orders:view-pii", scopeType: "GLOBAL" },
       { action: "products:view", scopeType: "GLOBAL" },
       // --- Đào tạo nội bộ (EL-02 §3) --- tất cả GLOBAL: không ô nào của ma trận

@@ -231,6 +231,52 @@ export default tseslint.config(
     },
   },
 
+  // app/(sale)/** — Đợt B site Sale: cùng luật với site giáo viên (shadcn THUẦN
+  // + db block). Site MỚI đi `scopedDb` từ đầu, KHÔNG grandfather.
+  //
+  // ⚠️ Route group mới KHÔNG tự thừa hưởng khối nào ở trên — thiếu khối này là
+  // `import { db } from "@/lib/db"` hợp lệ trong toàn bộ site Sale, cổng cách ly
+  // cơ sở thủng mà không ai báo.
+  {
+    files: ['app/(sale)/**/*.{ts,tsx}'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            ...adminBlockedImports.patterns,
+            ...clientBlockedImports.patterns,
+            ...dbBlockedImports.patterns,
+          ],
+        },
+      ],
+    },
+  },
+
+  // components/lead-intake/** — biểu mẫu nhập khách DÙNG CHUNG.
+  //
+  // 23/08/2026 trang dời vào `app/(admin)/admin/nhap-khach-hang/` (khối admin
+  // phía trên đã phủ). Nhưng component sống ở `components/` nên KHÔNG thừa hưởng
+  // khối nào — mà site Sale sau này sẽ mount lại chính nó. Giữ đúng luật cũ ở
+  // đây: shadcn THUẦN + cấm `@/lib/db` trần (phải đi `scopedDb`).
+  //
+  // ⚠️ Bỏ khối này là cổng cách ly cơ sở thủng mà không ai báo.
+  {
+    files: ['components/lead-intake/**/*.{ts,tsx}'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            ...adminBlockedImports.patterns,
+            ...clientBlockedImports.patterns,
+            ...dbBlockedImports.patterns,
+          ],
+        },
+      ],
+    },
+  },
+
   // scripts/** — EL-07: mở phạm vi `pnpm lint` sang thư mục này (trước đây chỉ quét
   // `app components lib`, nên script CHẠY TAY TRÊN PROD nằm ngoài mọi cổng chất lượng).
   //

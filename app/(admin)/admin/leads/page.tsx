@@ -5,6 +5,7 @@ import { scopedDb } from '@/lib/db-scope'
 import { resolveActor } from '@/lib/auth/actor'
 import { checkPermission, checkPermissionDetail } from '@/lib/auth/check-permission'
 import { maskLeadPiiFields } from '@/lib/lead/pii'
+import { leadSharedOrClause, leadSharingEnabled } from '@/lib/lead/sharing'
 import { canViewLeadPii } from '@/lib/auth/check-permission'
 import { LeadsTable } from './_components/leads-table'
 import type { LeadRow } from './_components/leads-table'
@@ -47,6 +48,8 @@ export default async function LeadsPage({
 
   // SALES_CSM (chỉ view-own) → scope về lead của chính mình.
   const scopeToSelf = !canViewAll && canViewOwn
+  // Đợt E — chính sách "dùng chung lead": mặc định TẮT (lead độc quyền).
+  const sharingOn = leadSharingEnabled()
 
   // Cách ly cơ sở: Lead ∈ SCOPED_MODELS → sdb.lead tự inject `centerId IN visible`.
   // CENTER_MANAGER@CS1 không thấy lead CS2 (kể cả khi tự set filterCenter=CS2 → giao
@@ -104,9 +107,18 @@ export default async function LeadsPage({
       ? {
           AND: [
             {
+              // Đợt E (22/08) — lead ĐỘC QUYỀN: mệnh đề "dùng chung" nay RỖNG
+              // theo mặc định. Đường quay lui: env LEAD_SHARING_ENABLED="true".
+              //
+              // 23/08 — thêm `createdById`: "của tôi" có HAI nghĩa và cả hai đều
+              // đúng. Sale cơ sở = phiếu được GIAO cho mình; Sale Hội sở = phiếu
+              // mình NHẬP (phiếu đó tự chia về cơ sở nên họ không bao giờ là
+              // assignee — thiếu vế này thì danh sách của họ rỗng trắng).
+              // Không nới cho ai khác: người có `leads:view-all` không đi nhánh này.
               OR: [
                 { assignedToId: session.user.id },
-                { isSharedWithTeam: true },
+                { createdById: session.user.id },
+                ...leadSharedOrClause(),
               ],
             },
           ],
@@ -221,8 +233,9 @@ export default async function LeadsPage({
         createdAt: l.createdAt.toISOString(),
         overdue: l.tasks.length > 0,
         lastTrialDate: trialDates[0]?.toISOString() ?? null,
-        // SHARE T1 — badge "Dùng chung" trên card.
-        isSharedWithTeam: l.isSharedWithTeam,
+        // SHARE T1 — badge "Dùng chung" trên card. Đợt E: chính sách tắt thì
+        // badge tắt theo (client không đọc được env, nên cắt ngay ở server).
+        isSharedWithTeam: sharingOn && l.isSharedWithTeam,
         assignedToId: l.assignedToId,
       }
     })
@@ -301,8 +314,8 @@ export default async function LeadsPage({
       center: lead.center,
       courseName: lead.course?.name ?? null,
       assignedTo: lead.assignedTo,
-      // SHARE T1 — badge "Dùng chung" trên bảng.
-      isSharedWithTeam: lead.isSharedWithTeam,
+      // SHARE T1 — badge "Dùng chung" trên bảng. Đợt E: xem ghi chú ở kanban.
+      isSharedWithTeam: sharingOn && lead.isSharedWithTeam,
       assignedToId: lead.assignedToId,
     }
   })

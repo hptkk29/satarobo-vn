@@ -55,6 +55,17 @@ const STATUS_OPTIONS = [
   { value: "INACTIVE", label: "Nghỉ học" },
 ] as const;
 
+/**
+ * BUG 21/08 — ô này từng cho chọn thẳng "Nghỉ học": `updateStudent` chỉ ghi
+ * `Student.status` mà không gỡ ghi danh, nên em đó vẫn nằm nguyên trong lớp ở mọi màn
+ * roster. Đường đúng là nút "❌ Nghỉ học hẳn" (bắt lý do + gỡ lớp + hoàn tiền + email).
+ * Học viên ĐÃ nghỉ vẫn giữ option để form không tự nhảy sang giá trị khác khi sửa hồ sơ.
+ */
+function statusOptionsFor(current: string | undefined) {
+  if (current === "INACTIVE") return [...STATUS_OPTIONS];
+  return STATUS_OPTIONS.filter((o) => o.value !== "INACTIVE");
+}
+
 const GENDER_OPTIONS = [
   { value: "MALE", label: "Nam" },
   { value: "FEMALE", label: "Nữ" },
@@ -94,6 +105,7 @@ export function StudentForm({
   const [error, setError] = useState<string | null>(null);
   const [avatarUrl, setAvatarUrl] = useState<string | null>(student?.avatarUrl ?? null);
   const [allergies, setAllergies] = useState<string[]>(student?.allergies ?? []);
+  const statusOptions = statusOptionsFor(student?.status);
 
   async function action(formData: FormData) {
     setError(null);
@@ -157,8 +169,13 @@ export function StudentForm({
             label="Trạng thái"
             name="status"
             defaultValue={student?.status ?? "ACTIVE"}
-            options={[...STATUS_OPTIONS]}
+            options={statusOptions}
             required
+            helper={
+              student?.status === "INACTIVE"
+                ? undefined
+                : 'Cho nghỉ học phải dùng nút "❌ Nghỉ học hẳn" ở khối Lifecycle bên dưới — nút đó mới gỡ học viên khỏi lớp.'
+            }
           />
         </Grid>
 

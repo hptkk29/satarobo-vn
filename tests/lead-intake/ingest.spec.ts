@@ -3,6 +3,7 @@ import { PrismaClient } from "@prisma/client";
 import { ingestIntakeLead } from "../../lib/lead/intake/ingest";
 import { mapSaleForm, SALE_FORM_FIELDS } from "../../lib/lead/intake/map-sale-form";
 import { mapQuatang, quatangClientMeta } from "../../lib/lead/intake/map-quatang";
+import { mapInternalForm } from "../../lib/lead/intake/map-internal-form";
 import type { MappedLead } from "../../lib/lead/intake/types";
 
 // =============================================================================
@@ -625,4 +626,101 @@ describe.skipIf(!RUN)("Lead intake · tầng DB thật", () => {
     expect(row?.note).toContain("Tỉnh/TP: Đà Nẵng");
     expect(row?.note).toContain("không có tên phụ huynh");
   }, 60_000);
+
+  // ═══════════════════════════════════════════════════════════════════════
+  // Biểu mẫu `/nhap-khach-hang` (22/08/2026) — KHÔNG ô nào bắt buộc.
+  //
+  // Đây là phần unit test thuần KHÔNG chạm được: `Lead.phone` là cột NOT NULL,
+  // và luật chống trùng nằm trong DB. Nếu chuỗi rỗng không lưu được, hoặc dedup
+  // gộp mọi lead chưa có số vào làm một, thì chỉ ở đây mới lộ ra.
+  // ═══════════════════════════════════════════════════════════════════════
+  describe("nhập khách hàng nội bộ — phiếu không có số điện thoại", () => {
+    const STAFF = { employeeCode: null, displayName: `${P}Người nhập` };
+
+    afterAll(async () => {
+      // `purge()` dọn theo danh sách SĐT nên không với tới lead phone="".
+      const rows = await db.lead.findMany({
+        where: { phone: "", parentName: { startsWith: P } },
+        select: { id: true },
+      });
+      const ids = rows.map((r) => r.id);
+      if (ids.length > 0) {
+        await db.leadChild.deleteMany({ where: { leadId: { in: ids } } });
+        await db.leadActivity.deleteMany({ where: { leadId: { in: ids } } });
+        await db.leadDuplicate.deleteMany({ where: { primaryLeadId: { in: ids } } });
+        await db.lead.deleteMany({ where: { id: { in: ids } } });
+      }
+    }, 60_000);
+
+    async function nhap(over: Record<string, string | null>) {
+      const mapped = mapInternalForm(
+        {
+          parentName: `${P}Chị Không Số`,
+          phone: null,
+          childName: null,
+          source: null,
+          facebookUrl: null,
+          centerCode: CODE_A,
+          note: null,
+          ...over,
+        },
+        STAFF,
+      );
+      expect(mapped.ok).toBe(true);
+      if (!mapped.ok) throw new Error(mapped.error);
+      return ingestIntakeLead(mapped.lead, {
+        source: "sale-form-app",
+        allowMissingPhone: true,
+      });
+    }
+
+    it("lưu được lead chỉ có link Facebook (cột phone NOT NULL nhận chuỗi rỗng)", async () => {
+      const r = await nhap({ facebookUrl: "facebook.com/chi.khong.so" });
+      expect(r.ok).toBe(true);
+      expect(r.duplicate).toBe(false);
+
+      const row = await db.lead.findUnique({
+        where: { id: r.leadId! },
+        select: { phone: true, facebookUrl: true, centerId: true, source: true, note: true },
+      });
+      expect(row?.phone).toBe("");
+      expect(row?.facebookUrl).toBe("https://facebook.com/chi.khong.so");
+      expect(row?.centerId).toBe(centerAId);
+      // Không gõ ô "Nguồn" ⇒ giữ nguyên kênh kỹ thuật của tầng ingest.
+      expect(row?.source).toBe("sale-form-app");
+      expect(row?.note).toContain("chưa có số điện thoại");
+    }, 60_000);
+
+    it("🔴 hai phiếu chưa có số KHÔNG bị dedup gộp làm một", async () => {
+      const a = await nhap({ facebookUrl: "facebook.com/khach.mot" });
+      const b = await nhap({ facebookUrl: "facebook.com/khach.hai" });
+
+      expect(a.ok && b.ok).toBe(true);
+      expect(b.duplicate).toBe(false);
+      expect(b.leadId).not.toBe(a.leadId);
+    }, 60_000);
+
+    it("ô Nguồn người nhập gõ thắng kênh kỹ thuật khi ghi Lead.source", async () => {
+      const r = await nhap({ source: "Facebook Ads", facebookUrl: "facebook.com/khach.ba" });
+      const row = await db.lead.findUnique({
+        where: { id: r.leadId! },
+        select: { source: true },
+      });
+      expect(row?.source).toBe("Facebook Ads");
+    }, 60_000);
+
+    it("nguồn NGOÀI vẫn bị từ chối khi thiếu số (cờ không rò sang đường khác)", async () => {
+      const mapped = mapInternalForm(
+        { parentName: `${P}Chị Ngoài`, phone: null, centerCode: CODE_A },
+        STAFF,
+      );
+      expect(mapped.ok).toBe(true);
+      if (!mapped.ok) return;
+      // KHÔNG truyền allowMissingPhone → đúng luật cũ của mọi nguồn ngoài.
+      const r = await ingestIntakeLead(mapped.lead, { source: "sale-form" });
+      expect(r.ok).toBe(false);
+      expect(r.error).toContain("Số điện thoại");
+    }, 60_000);
+  });
+
 });

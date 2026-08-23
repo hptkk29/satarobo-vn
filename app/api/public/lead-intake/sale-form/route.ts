@@ -8,16 +8,29 @@ import {
 } from "@/lib/lead/intake/map-sale-form";
 import { mirrorSaleFormToMisa } from "@/lib/lead/intake/misa-mirror";
 import { logWebhookDelivery } from "@/lib/lead/webhook";
+import { auth } from "@/lib/auth";
+import { checkPermission } from "@/lib/auth/check-permission";
+import { isLeadIntakeAuthRequired } from "@/lib/flags";
+import { getStaffIdentity } from "@/lib/lead/intake/staff-identity";
+import { pickEmployeeCode } from "@/lib/lead/intake/identity-override";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 // =============================================================================
-// NHẬN PHIẾU "Form nhập liên hệ từ Sale" — sale.satarobo.vn/nhap-lieu.html
+// NHẬN PHIẾU "Form nhập liên hệ từ Sale" — endpoint CŨ của biểu mẫu tĩnh.
 //
-// Trước 16/08/2026 form POST thẳng sang MISA và hệ thống ta KHÔNG có gì. Nay
-// nó POST về đây: tạo Lead thật (admin + site Sale xử lý được), rồi gửi bản sao
-// sang MISA trong giai đoạn chuyển tiếp (cờ `intake.mirrorMisa`).
+// ⛔ 22/08/2026 — biểu mẫu tĩnh `sale.satarobo.vn/nhap-lieu.html` đã NGHỈ, thay
+// bằng `satarobo.vn/nhap-khach-hang` (Server Action, có đăng nhập). Endpoint này
+// GIỮ LẠI có chủ đích, KHÔNG phải quên dọn:
+//   - `LEAD_INTAKE_REQUIRE_AUTH` nay mặc định BẬT ⇒ nó đã khoá với người ngoài;
+//   - `lib/crm/webhook-replay.ts` còn phát lại `WebhookDelivery` nguồn
+//     "sale-form" (các phiếu đã nhận trước đây) qua đúng mapper này;
+//   - nếu một ngày phải dựng lại biểu mẫu công khai thì chỉ cần đặt cờ về
+//     "false", không phải viết lại đường nhận.
+//
+// Trước 16/08/2026 form POST thẳng sang MISA và hệ thống ta KHÔNG có gì. Từ 16/08
+// nó POST về đây: tạo Lead thật, rồi gửi bản sao sang MISA (cờ `intake.mirrorMisa`).
 //
 // Đây là POST FORM CỦA TRÌNH DUYỆT, không phải fetch JSON:
 //  - body là `application/x-www-form-urlencoded`;
@@ -25,21 +38,27 @@ export const dynamic = "force-dynamic";
 //  - lỗi thì trả 1 trang HTML nhỏ có nút quay lại, để người nhập không mất
 //    công gõ lại cả phiếu.
 //
-// Route nằm dưới `/api/*` nên đi thẳng qua cổng host `sale` mà không cần auth
-// (`isInfraPath` trong `lib/auth/route-policy.ts`).
+// ⚠️ Route nằm dưới `/api/*` nên `isInfraPath` (`lib/auth/route-policy.ts`) cho
+// nó đi thẳng qua cổng host — ở MỌI host. Nghĩa là bịt cổng trang KHÔNG bịt được
+// endpoint: ai trên Internet cũng `curl` vào đây tạo Lead thật. Honeypot +
+// giới hạn theo IP + trần dung lượng chỉ chống SPAM, không chống truy cập trái phép.
+//
+// G-D (21/08/2026) — hai lớp vá:
+//   1. Cổng đăng nhập, gài sau cờ `LEAD_INTAKE_REQUIRE_AUTH` (mặc định OFF).
+//      Bật là biểu mẫu tĩnh ẩn danh đang dùng hằng ngày chết ⇒ chỉ bật khi trang
+//      có đăng nhập đã lên và marketing đã được thông báo. Xem `lib/flags.ts`.
+//   2. **Có hiệu lực NGAY, không phụ thuộc cờ:** phiếu nào đến kèm phiên đăng
+//      nhập thì mã nhân viên lấy từ PHIÊN, không lấy từ ô người dùng gõ.
 // =============================================================================
 
-const SALE_HOST = "sale.satarobo.vn";
 const MAX_BODY_BYTES = 100_000;
 
 /**
- * Trên host sale, `/thank-you` được rewrite sang file tĩnh. Trên host khác
- * (test.satarobo.vn, localhost) KHÔNG có rewrite đó, nên phải trỏ thẳng file —
- * nếu không thì nghiệm thu trên test sẽ 404 ở đúng bước cuối.
+ * Đích sau khi lưu xong. 22/08/2026 trang cảm ơn tĩnh đã bị xoá cùng biểu mẫu
+ * cũ ⇒ trả người nhập về biểu mẫu MỚI (nó ở host public; đứng trên host nào thì
+ * tầng route policy tự đá tiếp về đúng chỗ).
  */
-function pagePath(host: string, pretty: string, file: string): string {
-  return host.toLowerCase() === SALE_HOST ? pretty : file;
-}
+const INTAKE_PAGE = "/nhap-khach-hang";
 
 function redirect(req: NextRequest, path: string, params: Record<string, string>) {
   const url = new URL(path, req.nextUrl.origin);
@@ -81,23 +100,31 @@ function errorPage(message: string, status: number) {
 
 /** Vào thẳng bằng trình duyệt (GET) → đưa về form, đừng trả 405 khó hiểu. */
 export async function GET(req: NextRequest) {
-  const host = req.headers.get("host") ?? "";
-  return NextResponse.redirect(
-    new URL(pagePath(host, "/", "/sale/nhap-lieu.html"), req.nextUrl.origin),
-    303,
-  );
+  return NextResponse.redirect(new URL(INTAKE_PAGE, req.nextUrl.origin), 303);
 }
 
 export async function POST(req: NextRequest) {
-  const host = req.headers.get("host") ?? "";
-  const thankYou = pagePath(host, "/thank-you", "/sale/thank-you.html");
-
   const ip =
     req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
     req.headers.get("x-real-ip") ||
     "unknown";
 
   try {
+    // ── G-D: cổng đăng nhập ───────────────────────────────────────────────
+    // Kiểm TRƯỚC khi đọc body: không tốn công xử lý phiếu của người không được
+    // phép, và không để thông báo lỗi tiết lộ gì về nghiệp vụ bên trong.
+    const session = await auth();
+    if (isLeadIntakeAuthRequired() && !session?.user) {
+      return errorPage(
+        "Cần đăng nhập để nhập khách hàng. Mở trang nhập khách trong hệ thống rồi thử lại giúp nhé.",
+        401,
+      );
+    }
+    // Có phiên thì phải đúng người có quyền nhập lead — kể cả khi cờ còn TẮT.
+    if (session?.user && !(await checkPermission("leads:create"))) {
+      return errorPage("Tài khoản của bạn không có quyền nhập khách hàng.", 403);
+    }
+
     // Chốt kích thước 2 lớp. Header là đường nhanh nhưng KHÔNG tin được: HTTP/2
     // và chunked thường không gửi `content-length`, và `Number(null ?? 0)` = 0
     // lọt qua mọi so sánh. Nên phải đo lại chính chuỗi đã đọc.
@@ -127,7 +154,7 @@ export async function POST(req: NextRequest) {
         status: "FAILED",
         errorMessage: `Honeypot "${SALE_FORM_HONEYPOT}" có giá trị — nghi bot, không tạo lead. IP ${ip}.`,
       }).catch((err) => console.error("[sale-form] không ghi được honeypot log:", err));
-      return redirect(req, thankYou, { ok: "1" });
+      return redirect(req, INTAKE_PAGE, { ok: "1" });
     }
 
     const max = await getSetting("intake.saleFormRateLimitMax");
@@ -145,6 +172,28 @@ export async function POST(req: NextRequest) {
 
     const mapped = mapSaleForm(payload);
     if (!mapped.ok) return errorPage(mapped.error, 400);
+
+    // ── G-D: danh tính lấy từ PHIÊN, không từ ô người dùng gõ ─────────────
+    // Ô "Mã số NV" trên phiếu quyết định lead giao cho ai (`resolveOwner`),
+    // nhưng ai cũng gõ được mã của người khác. Có phiên thì phiên thắng.
+    if (session?.user) {
+      const staff = await getStaffIdentity(
+        session.user.id,
+        session.user.name ?? session.user.email ?? "Không rõ",
+      );
+      const pick = pickEmployeeCode(staff.employeeCode, mapped.lead.employeeCode);
+      mapped.lead.employeeCode = pick.code;
+      if (pick.spoofed) {
+        // Không chặn phiếu — có thể là nhập hộ đồng nghiệp. Nhưng phải để lại vết,
+        // vì đây cũng đúng hình dạng của việc cướp lead.
+        mapped.lead.warnings.push(
+          `Phiếu ghi mã nhân viên khác với người đang đăng nhập — đã dùng mã của người nhập (${pick.code}).`,
+        );
+      }
+      if (pick.source === "session") {
+        mapped.lead.noteLines.push(`Người nhập (đã đăng nhập): ${staff.displayName}`);
+      }
+    }
 
     const result = await ingestIntakeLead(mapped.lead, {
       source: "sale-form",
@@ -184,7 +233,7 @@ export async function POST(req: NextRequest) {
       }).catch((err) => console.error("[sale-form] không ghi được mirror log:", err));
     }
 
-    return redirect(req, thankYou, {
+    return redirect(req, INTAKE_PAGE, {
       ok: "1",
       ...(result.duplicate ? { dup: "1" } : {}),
       ...(result.childAdded ? { child: "1" } : {}),

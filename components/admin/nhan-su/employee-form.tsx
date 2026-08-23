@@ -366,8 +366,16 @@ export function EmployeeForm({
               label="Đơn vị làm việc"
               hint="Gồm Hội sở (HO) + các cơ sở. Lưu phân công PRIMARY vào đơn vị này."
             />
+            {/* KHOÁ khi đang bật "Nhân viên HO".
+                BẪy đã xảy ra thật (22/08): ô này trước đây VẪN BẬT khi công tắc HO ON, nhưng
+                lúc lưu thì `orgUnitId: isHO ? null : ...` VỨT BỎ lựa chọn đó. Người dùng chọn
+                CS1, bấm Lưu, thấy "Đã cập nhật" — và không gì được ghi. Bốn giáo viên parttime
+                đã mắt một vòng như vậy, vẫn ở HO-level và vẫn thấy mọi cơ sở.
+                Khoá ô làm việc vứt bỏ trở thành BẤT KHẢ THI, thay vì im lặng. */}
             <select
               value={data.orgUnitId}
+              disabled={isHO}
+              aria-describedby={isHO ? "don-vi-bi-khoa" : undefined}
               onChange={(e) => setData({ ...data, orgUnitId: e.target.value })}
               className="w-full rounded-lg border border-border px-3 py-2 text-sm focus:border-primary focus:outline-none"
             >
@@ -378,6 +386,16 @@ export function EmployeeForm({
                 </option>
               ))}
             </select>
+            {isHO && (
+              <p
+                id="don-vi-bi-khoa"
+                className="mt-1 text-xs text-state-info-ink"
+              >
+                Đang bật <strong>Nhân viên HO</strong> nên không chọn cơ sở được. Muốn
+                chuyển người này về một cơ sở thì <strong>tắt công tắc trên</strong> trước,
+                rồi mới chọn.
+              </p>
+            )}
           </div>
 
           {visibility.personal && (

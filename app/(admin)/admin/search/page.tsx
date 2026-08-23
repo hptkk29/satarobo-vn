@@ -7,6 +7,7 @@ import { resolveActor } from "@/lib/auth/actor";
 import { checkPermission, checkPermissionDetail } from "@/lib/auth/check-permission";
 import { canViewLeadPii } from "@/lib/auth/check-permission";
 import { maskLeadPiiFields } from "@/lib/lead/pii";
+import { leadSharedOrClause } from "@/lib/lead/sharing";
 import { LEAD_STATUS_LABEL } from "@/lib/leads/status";
 import { phoneSearchTerm } from "@/lib/phone";
 
@@ -68,9 +69,10 @@ export default async function GlobalSearchPage({
                   ? {
                       AND: [
                         {
+                          // Đợt E (22/08) — lead độc quyền, xem lib/lead/sharing.ts.
                           OR: [
                             { assignedToId: session.user.id },
-                            { isSharedWithTeam: true },
+                            ...leadSharedOrClause(),
                           ],
                         },
                       ],

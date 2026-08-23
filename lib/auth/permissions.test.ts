@@ -34,9 +34,12 @@ describe("permissions matrix — FL W0 TRAINING role", () => {
   });
 
   it("TRAINING KHOÁ CHẶT 24/07: chỉ curriculum+LMS+duyệt học bạ — KHÔNG xem HV/lớp toàn hệ thống, KHÔNG tài chính/HR/lead", () => {
-    // Bỏ 24/07 — Đào tạo hết thấy học viên/lớp cả 2 cơ sở (Toại về đúng CS1).
+    // Bỏ 24/07 — Đào tạo hết thấy học viên cả 2 cơ sở (Toại về đúng CS1).
+    // ⚠️ 23/08 (chủ dự án): `classes:view-all` ĐÃ TRẢ LẠI — Đào tạo nay quản lý toàn
+    // bộ GV nên phải nhìn mọi lớp để xếp người đi dạy. `students:view-all` GIỮ NGUYÊN
+    // trạng gỡ: quản GV không kéo theo quyền xem danh sách học viên toàn hệ thống.
     expect(can("TRAINING", "students:view-all")).toBe(false);
-    expect(can("TRAINING", "classes:view-all")).toBe(false);
+    expect(can("TRAINING", "classes:view-all")).toBe(true);
     // Bỏ 24/07 — báo cáo đào tạo / đánh giá GV / cấu hình học thử / sửa học bạ.
     expect(can("TRAINING", "reports:training")).toBe(false);
     expect(can("TRAINING", "evaluations:manage")).toBe(false);
@@ -57,12 +60,26 @@ describe("permissions matrix — FL W0 TRAINING role", () => {
     // Ngoại lệ hẹp của đợt khoá 24/07: chủ dự án yêu cầu "admin hoặc đào tạo xem
     // được hết đánh giá, nhận xét các buổi học trong lớp, của từng học viên".
     expect(can("TRAINING", "session-feedback:view-all")).toBe(true);
-    // Ranh giới: nếu ai đó "tiện tay" cấp sessions:view/classes:* cho Đào tạo thì
-    // test này đỏ — quyền đọc nhận xét KHÔNG được biến thành quyền quản buổi/lớp.
+    // Ranh giới: nếu ai đó "tiện tay" cấp sessions:* / attendance:* cho Đào tạo thì
+    // test này đỏ — quyền đọc nhận xét KHÔNG được biến thành quyền quản BUỔI HỌC.
     expect(can("TRAINING", "sessions:view")).toBe(false);
     expect(can("TRAINING", "sessions:edit")).toBe(false);
     expect(can("TRAINING", "attendance:view")).toBe(false);
-    expect(can("TRAINING", "classes:edit")).toBe(false);
+  });
+
+  it("23/08 — Đào tạo quản lý toàn bộ GV: xếp GV cho lớp chính + lớp trải nghiệm", () => {
+    // Chủ dự án 23/08: "role đào tạo bây giờ sẽ là người quản lý toàn bộ giáo viên,
+    // nên sẽ thấy toàn bộ lớp để sắp xếp giáo viên đến dạy các lớp chính hoặc trial".
+    expect(can("TRAINING", "classes:view-all")).toBe(true);
+    // Gán GV/trợ giảng cho lớp chính đi chung `updateClass` — không có action hẹp hơn.
+    expect(can("TRAINING", "classes:edit")).toBe(true);
+    expect(can("TRAINING", "trials:view")).toBe(true);
+    expect(can("TRAINING", "trials:assign-teacher")).toBe(true);
+    // Ranh giới CỐ Ý: xếp người đi dạy ≠ điều hành tuyển sinh/lớp học.
+    expect(can("TRAINING", "classes:create")).toBe(false);
+    expect(can("TRAINING", "classes:delete")).toBe(false);
+    expect(can("TRAINING", "trials:manage")).toBe(false);
+    expect(can("TRAINING", "trials:config")).toBe(false);
   });
 });
 
@@ -227,6 +244,22 @@ describe("permissions matrix — FL W0-NAV-2 role hygiene (BA #07 3.C)", () => {
     expect(can("SALES_CSM", "trials:manage")).toBe(true);
     expect(can("SALES_CSM", "course-packages:view")).toBe(true);
     expect(can("SALES_CSM", "parent-requests:manage")).toBe(true);
+  });
+
+  // G-A (biên bản chốt 4 cổng, 21/08/2026) — ghim Ý ĐỊNH của quyết định: cấp HẸP.
+  // Nếu ai đó sau này "tiện tay" cấp orders:manage cho Sale thì test này đỏ.
+  it("[G-A] SALES_CSM tạo được đơn nhưng KHÔNG quản trị đơn", () => {
+    expect(can("SALES_CSM", "orders:create")).toBe(true);
+    expect(can("SALES_CSM", "orders:manage")).toBe(false);
+  });
+
+  it("[G-A] mọi vai có orders:manage đều phải có orders:create (cổng tạo đơn đã đổi)", () => {
+    for (const role of ["SUPER_ADMIN", "CENTER_MANAGER", "ACCOUNTANT"] as const) {
+      expect(can(role, "orders:manage")).toBe(true);
+      // Cổng tạo đơn nay kiểm `orders:create`; thiếu dòng này là vai đó MẤT
+      // chức năng tạo đơn đang dùng hằng ngày.
+      expect(can(role, "orders:create")).toBe(true);
+    }
   });
 
   it("ACCOUNTANT bỏ Khoá dạy + Tin tức; GIỮ tài chính + kho", () => {

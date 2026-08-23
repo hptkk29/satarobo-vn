@@ -47,6 +47,17 @@ export function centerHintFromIndex(raw: unknown): CenterHint | null {
   return /^[1-9][0-9]*$/.test(s) ? { kind: "code", value: `CS${s}` } : null;
 }
 
+/**
+ * Cơ sở chọn từ DANH SÁCH THẬT (`Center.code`, vd "CS1") → hint dạng code.
+ *
+ * Dùng cho biểu mẫu nội bộ có đăng nhập (G-D): người nhập chọn cơ sở từ danh
+ * sách nạp từ DB, nên không còn phải quy đổi số thứ tự như biểu mẫu cũ.
+ */
+export function centerHintFromCode(raw: unknown): CenterHint | null {
+  const s = str(raw);
+  return s ? { kind: "code", value: s.toUpperCase() } : null;
+}
+
 /** Cơ sở nguồn gửi dạng chuỗi tự do → giữ nguyên để tầng ingest so khớp DB. */
 export function centerHintFromText(raw: unknown): CenterHint | null {
   const s = str(raw);
@@ -132,4 +143,70 @@ export function buildNote(
     ...warnings.filter(Boolean).map((w) => `⚠️ ${w}`),
   ];
   return lines.length > 0 ? lines.join("\n") : null;
+}
+
+// ───────────────────────────────────────────────────────────────────────────
+// Link Facebook của phụ huynh (ô mới, 22/08/2026)
+// ───────────────────────────────────────────────────────────────────────────
+
+/** Kết quả chuẩn hoá link FB: `url` dùng được, hoặc `null` kèm lý do. */
+export type FacebookUrlResult = { url: string | null; warning: string | null };
+
+/**
+ * Chuẩn hoá ô "Link Facebook" thành một URL BẤM ĐƯỢC, hoặc trả `null` + lý do.
+ *
+ * Người nhập dán đủ kiểu — đây là những dạng gặp thật khi trực quảng cáo:
+ * | Gõ vào | Ra |
+ * |---|---|
+ * | `https://facebook.com/abc` | giữ nguyên |
+ * | `facebook.com/abc` · `m.me/abc` · `fb.com/abc` | thêm `https://` |
+ * | `minh.nguyen.549` (tên tài khoản, không có dấu `/`) | `https://www.facebook.com/minh.nguyen.549` |
+ * | `javascript:alert(1)` · `data:…` | `null` + cảnh báo |
+ *
+ * ⚠️ Chặn scheme lạ là BẮT BUỘC, không phải cẩn thận thừa: giá trị này được
+ * render thành `<a href>` trong màn admin. Nhận `javascript:` là mở đúng một lỗ
+ * XSS mà người tấn công chỉ cần gõ vào ô của biểu mẫu nội bộ.
+ */
+export function normalizeFacebookUrl(raw: unknown): FacebookUrlResult {
+  const s = str(raw);
+  if (!s) return { url: null, warning: null };
+
+  const bad = (why: string): FacebookUrlResult => ({
+    url: null,
+    warning: `Link Facebook "${s}" ${why} — chưa lưu vào ô link, đã giữ lại trong ghi chú.`,
+  });
+
+  // Khoảng trắng giữa chuỗi ⇒ đây là câu chữ, không phải link.
+  if (/\s/.test(s)) return bad("không phải một đường dẫn");
+
+  let candidate = s;
+  if (s.includes("://")) {
+    if (!/^https?:\/\//i.test(s)) return bad("dùng giao thức không cho phép");
+  } else if (/^[a-z][a-z0-9+.-]*:/i.test(s)) {
+    // `javascript:…`, `data:…`, `mailto:…` — có scheme nhưng không có `//`.
+    return bad("dùng giao thức không cho phép");
+  } else if (s.includes("/")) {
+    candidate = `https://${s}`;
+  } else {
+    // KHÔNG có dấu `/` ⇒ coi là TÊN TÀI KHOẢN, không phải tên miền.
+    //
+    // Đây là ô "Link Facebook", người ta không gõ tên miền trần vào đây. Ngược
+    // lại, tên tài khoản Facebook rất hay có dấu chấm ("minh.nguyen.549") — mà
+    // đoán nó là tên miền thì hỏng hẳn: `new URL("https://minh.nguyen.549")`
+    // NÉM lỗi, vì nhãn cuối toàn số nên trình phân giải hiểu là địa chỉ IPv4.
+    candidate = `https://www.facebook.com/${s}`;
+  }
+
+  let parsed: URL;
+  try {
+    parsed = new URL(candidate);
+  } catch {
+    return bad("không phải một đường dẫn");
+  }
+  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+    return bad("dùng giao thức không cho phép");
+  }
+  if (!parsed.hostname.includes(".")) return bad("không phải một đường dẫn");
+
+  return { url: parsed.toString(), warning: null };
 }

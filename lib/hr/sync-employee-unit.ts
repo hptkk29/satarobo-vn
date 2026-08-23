@@ -85,6 +85,11 @@ export async function keoTaiKhoanTheoHoSo(
       actorId: input.actor.id ?? null,
       actorName: input.actor.name,
       reason: "Đổi đơn vị làm việc trên hồ sơ nhân sự — neo lại vai theo đơn vị mới",
+      // BẬT Ở ĐÚNG ĐƯỜNG NÀY và không ở đâu khác: hồ sơ nhân sự LÀ nguồn sự thật về
+      // "người này làm ở đâu", nên một dòng vai cùng mã đặt ở đơn vị khác là dị thường
+      // cần dọn. Đo được trên prod 22/08: tài khoản đã trỏ CS2 mà vẫn giữ dòng vai neo
+      // tại Hội sở ⇒ vẫn `isHoLevel` ⇒ vẫn thấy mọi cơ sở, lưu lại bao nhiêu lần cũng vậy.
+      revokeMisplaced: true,
     });
   }
   await writeAudit({

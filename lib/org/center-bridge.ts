@@ -252,6 +252,70 @@ export const BACKFILL_SPECS: readonly BackfillSpec[] = [
     scoped: true,
     vi: "giao dịch SataCoin — 3 dòng, 0 NULL; gắn học viên của cơ sở",
   },
+
+  // ── EL-03 · Đào tạo nội bộ ─────────────────────────────────────
+  // 5 bảng của module có ĐỦ hai cột. Thiếu một dòng ở đây thì test [US-07-IT-08b] đỏ —
+  // đó là chủ đích: bảng mới có cột đơn vị mà không khai thì đối soát đêm lặng lẽ bỏ qua nó.
+  {
+    model: "TrnTrainingNeed",
+    nullMeaning: "NULL_TOAN_HE_THONG",
+    scoped: true,
+    vi: "phiếu nhu cầu đào tạo — NULL = nhu cầu toàn công ty, không của riêng cơ sở nào",
+  },
+  {
+    model: "TrnProgram",
+    nullMeaning: "NULL_TOAN_HE_THONG",
+    scoped: true,
+    vi: "chương trình đào tạo — NULL = áp toàn công ty (ví dụ An toàn thông tin), không phải thiếu dữ liệu",
+  },
+  {
+    model: "TrnCourse",
+    nullMeaning: "NULL_TOAN_HE_THONG",
+    scoped: true,
+    vi: "khoá học nội bộ — NULL = dùng chung toàn công ty",
+  },
+  {
+    model: "TrnRequirement",
+    nullMeaning: "NULL_TOAN_HE_THONG",
+    scoped: true,
+    vi: "yêu cầu đào tạo — NULL = áp toàn công ty; orgUnitId còn kiêm cột đích khi scopeKind=ORG_UNIT",
+  },
+  {
+    model: "TrnEvalLinkConfig",
+    nullMeaning: "NULL_TOAN_HE_THONG",
+    scoped: false,
+    vi: "cấu hình mức gắn đánh giá — bảng con theo chương trình, scope theo TrnProgram",
+  },
+  {
+    model: "TrnEvaluationResult",
+    nullMeaning: "BAT_BUOC",
+    scoped: true,
+    vi: "kết quả đánh giá 4 mức — luôn thuộc một cơ sở; NULL là dữ liệu chưa backfill, KHÔNG phải toàn công ty",
+  },
+  {
+    model: "TrnAssignment",
+    nullMeaning: "BAT_BUOC",
+    scoped: true,
+    vi: "lượt giao bài — luôn thuộc một cơ sở",
+  },
+  {
+    model: "TrnEquivalence",
+    nullMeaning: "BAT_BUOC",
+    scoped: true,
+    vi: "công nhận tương đương — luôn thuộc cơ sở của người được công nhận; NULL = chưa backfill",
+  },
+  {
+    model: "TrnEnrollment",
+    nullMeaning: "BAT_BUOC",
+    scoped: true,
+    vi: "lượt ghi danh — cột NOT NULL trong schema; không có cơ sở thì không tạo được bản ghi",
+  },
+  {
+    model: "TrnDataSubjectRequest",
+    nullMeaning: "BAT_BUOC",
+    scoped: true,
+    vi: "yêu cầu của chủ thể dữ liệu — dữ liệu cá nhân, luôn thuộc cơ sở của người gửi",
+  },
 ] as const;
 
 /** Model → spec, tra nhanh. */

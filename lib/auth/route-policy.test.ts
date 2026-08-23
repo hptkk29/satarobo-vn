@@ -809,41 +809,40 @@ describe("L5/L6. TEACHER × host × flag TEACHER_SITE_ENABLED (2-phase, ĐÃ wir
 });
 
 // ─────────────────────────────────────────────────────────────────────────
-// Sale host (sale.satarobo.vn) — site tĩnh CÔNG KHAI, KHÔNG auth.
-// Form nhập liệu Sale → MISA AMIS CRM. Clean URL rewrite nội bộ →
-// public/sale/*.html (giữ nguyên mã nhúng MISA). MISA tự POST + redirect về
-// /thank-you (field RedirectURL trong form) — decideRoute chỉ serve URL đó.
+// Sale host (sale.satarobo.vn) — biểu mẫu tĩnh CÔNG KHAI đã NGHỈ (22/08/2026).
+//
+// Địa chỉ nhập khách duy nhất nay là `admin.satarobo.vn/nhap-khach-hang`
+// (23/08/2026 dời vào admin). Host cũ chỉ còn đá 307 về đó — 307 chứ KHÔNG 308
+// để quyết định vận hành này còn đảo được mà không vướng cache vĩnh viễn.
 // ─────────────────────────────────────────────────────────────────────────
 
-describe("Sale host (sale.satarobo.vn) — form tĩnh, không auth", () => {
-  it("/ → rewrite form nhập liệu tĩnh", () => {
-    expect(
-      decideRoute({ hostKind: "sale", pathname: "/", role: null, sessionValid: false }),
-    ).toEqual<RouteDecision>({ type: "rewrite", path: "/sale/nhap-lieu.html" });
-  });
+const TO_INTAKE: RouteDecision = {
+  type: "redirectHost",
+  host: "admin",
+  path: "/nhap-khach-hang",
+  status: 307,
+};
 
-  it("/thank-you (+ trailing slash) → rewrite trang cảm ơn tĩnh", () => {
-    expect(
-      decideRoute({ hostKind: "sale", pathname: "/thank-you", role: null, sessionValid: false }),
-    ).toEqual<RouteDecision>({ type: "rewrite", path: "/sale/thank-you.html" });
-    expect(
-      decideRoute({ hostKind: "sale", pathname: "/thank-you/", role: null, sessionValid: false }),
-    ).toEqual<RouteDecision>({ type: "rewrite", path: "/sale/thank-you.html" });
-  });
-
-  it("file tĩnh /sale/*.html (đích rewrite / truy cập trực tiếp) → next", () => {
-    for (const p of ["/sale/nhap-lieu.html", "/sale/thank-you.html"]) {
+describe("Sale host (sale.satarobo.vn) — biểu mẫu tĩnh đã nghỉ", () => {
+  it("mọi đường CŨ của biểu mẫu → về trang nhập khách mới", () => {
+    for (const p of [
+      "/",
+      "/thank-you",
+      "/thank-you/",
+      "/sale/nhap-lieu.html",
+      "/sale/thank-you.html",
+    ]) {
       expect(
         decideRoute({ hostKind: "sale", pathname: p, role: null, sessionValid: false }),
-      ).toEqual<RouteDecision>({ type: "next" });
+      ).toEqual<RouteDecision>(TO_INTAKE);
     }
   });
 
-  it("path lạ trên sale host → về form nhập liệu (/)", () => {
+  it("path lạ trên sale host → cũng về trang nhập khách mới", () => {
     for (const p of ["/random", "/khoa-hoc", "/admin/leads", "/portal/lich-hoc", "/login"]) {
       expect(
         decideRoute({ hostKind: "sale", pathname: p, role: null, sessionValid: false }),
-      ).toEqual<RouteDecision>({ type: "redirectPath", path: "/" });
+      ).toEqual<RouteDecision>(TO_INTAKE);
     }
   });
 
@@ -855,16 +854,138 @@ describe("Sale host (sale.satarobo.vn) — form tĩnh, không auth", () => {
     }
   });
 
-  it("CÔNG KHAI: mọi role + ẩn danh đều nhận CÙNG quyết định (auth bị bỏ qua)", () => {
+  it("cờ TẮT: mọi role + ẩn danh đều nhận CÙNG quyết định (không còn gì để phục vụ)", () => {
     for (const role of [...ALL_ROLES, null] as MaybeRole[]) {
       const sessionValid = role !== null;
       expect(
         decideRoute({ hostKind: "sale", pathname: "/", role, sessionValid }),
-      ).toEqual<RouteDecision>({ type: "rewrite", path: "/sale/nhap-lieu.html" });
-      expect(
-        decideRoute({ hostKind: "sale", pathname: "/thank-you", role, sessionValid }),
-      ).toEqual<RouteDecision>({ type: "rewrite", path: "/sale/thank-you.html" });
+      ).toEqual<RouteDecision>(TO_INTAKE);
     }
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────
+// Biểu mẫu nhập khách hàng — `admin.satarobo.vn/nhap-khach-hang`.
+//
+// 23/08/2026 DỜI VÀO ADMIN (đảo chốt 22/08 vốn để nó ở host public). Lý do:
+// mục sidebar admin trỏ `/nhap-khach-hang` nên mỗi lần nhập là người dùng bị
+// văng khỏi khung admin sang site khác rồi phải bấm quay lại.
+//
+// 🔴 Bất biến sống-còn của đợt này: **không được đá qua đá lại**. Public đá
+// sang admin; nếu segment `nhap-khach-hang` thiếu trong `ADMIN_ROUTE_SEGMENTS`
+// thì admin đá ngược về public → vòng lặp vô hạn. Test cuối khối khoá đúng đó.
+// ─────────────────────────────────────────────────────────────────────────
+
+describe("/nhap-khach-hang — biểu mẫu nội bộ, nay ở admin host", () => {
+  it("admin host + nhân sự → PHỤC VỤ TẠI CHỖ (rewrite vào route group)", () => {
+    for (const p of ["/nhap-khach-hang", "/nhap-khach-hang/"]) {
+      expect(
+        decideRoute({ hostKind: "admin", pathname: p, ...authed("MARKETING") }),
+      ).toEqual<RouteDecision>({ type: "rewrite", path: "/admin" + p });
+    }
+  });
+
+  it("🔴 admin host + chưa đăng nhập → /login kèm callbackUrl", () => {
+    expect(
+      decideRoute({
+        hostKind: "admin",
+        pathname: "/nhap-khach-hang",
+        role: null,
+        sessionValid: false,
+      }),
+    ).toEqual<RouteDecision>({
+      type: "redirectPath",
+      path: "/login",
+      callbackUrl: "/nhap-khach-hang",
+    });
+  });
+
+  it("phiên đã bị vô hiệu → /login kèm lý do", () => {
+    expect(
+      decideRoute({
+        hostKind: "admin",
+        pathname: "/nhap-khach-hang",
+        role: "SALES_CSM",
+        sessionValid: false,
+      }),
+    ).toEqual<RouteDecision>({
+      type: "redirectPath",
+      path: "/login",
+      callbackUrl: "/nhap-khach-hang",
+      reason: "session-invalidated",
+    });
+  });
+
+  it("địa chỉ public CŨ → đá 307 sang admin (dấu trang + RedirectURL của MISA)", () => {
+    for (const p of ["/nhap-khach-hang", "/nhap-khach-hang/"]) {
+      // Đá VÔ ĐIỀU KIỆN: ai vào được là việc của nhánh admin, không nhân đôi cổng.
+      expect(
+        decideRoute({ hostKind: "public", pathname: p, ...authed("MARKETING") }),
+      ).toEqual<RouteDecision>(TO_INTAKE);
+      expect(
+        decideRoute({ hostKind: "public", pathname: p, role: null, sessionValid: false }),
+      ).toEqual<RouteDecision>(TO_INTAKE);
+    }
+  });
+
+  it("PARENT lạc vào địa chỉ public cũ → về portal, không lảng vảng", () => {
+    expect(
+      decideRoute({ hostKind: "public", pathname: "/nhap-khach-hang", ...authed("PARENT") }),
+    ).toEqual<RouteDecision>(TO_INTAKE);
+    // Tới admin host thì nhánh admin đá tiếp về portal — cổng nằm ở MỘT chỗ.
+    expect(
+      decideRoute({ hostKind: "admin", pathname: "/nhap-khach-hang", ...authed("PARENT") }),
+    ).toEqual<RouteDecision>({
+      type: "redirectHost",
+      host: "portal",
+      path: "/",
+      status: 307,
+    });
+  });
+
+  it("host sale (cờ BẬT) → sang biểu mẫu, KHÔNG rơi vào rewrite /sale/* rồi 404", () => {
+    expect(
+      decideRoute({
+        hostKind: "sale",
+        saleSiteEnabled: true,
+        pathname: "/nhap-khach-hang",
+        ...authed("SALES_CSM"),
+      }),
+    ).toEqual<RouteDecision>(TO_INTAKE);
+  });
+
+  it("host giáo viên / portal → về nhà của họ (không có quyền nhập lead)", () => {
+    expect(
+      decideRoute({
+        hostKind: "teacher",
+        teacherSiteEnabled: true,
+        pathname: "/nhap-khach-hang",
+        ...authed("TEACHER"),
+      }),
+    ).toEqual<RouteDecision>({ type: "redirectPath", path: "/" });
+    expect(
+      decideRoute({ hostKind: "portal", pathname: "/nhap-khach-hang", ...authed("PARENT") }),
+    ).toEqual<RouteDecision>({ type: "redirectPath", path: "/" });
+  });
+
+  it("🔴 KHÔNG vòng lặp: đích của cú đá phải được admin host phục vụ tại chỗ", () => {
+    // Đi đúng đường một người dùng thật đi: gõ địa chỉ public cũ → theo
+    // Location → phải DỪNG ở admin, không bị đá tiếp. Thiếu segment
+    // "nhap-khach-hang" trong ADMIN_ROUTE_SEGMENTS là hỏng đúng ở bước 2.
+    const step1 = decideRoute({
+      hostKind: "public",
+      pathname: "/nhap-khach-hang",
+      ...authed("SALES_CSM"),
+    });
+    expect(step1).toEqual<RouteDecision>(TO_INTAKE);
+
+    const step2 = decideRoute({
+      hostKind: "admin",
+      pathname: step1.type === "redirectHost" ? step1.path : "",
+      ...authed("SALES_CSM"),
+    });
+    expect(step2.type).toBe("rewrite");
+    expect(step2).not.toMatchObject({ type: "redirectHost", host: "public" });
   });
 });
 
@@ -1022,6 +1143,113 @@ describe("isInfraPath — đường hạ tầng KHÔNG được canonical-hoá",
 });
 
 // ─────────────────────────────────────────────────────────────────────────
+// Đợt B (21/08/2026) — SITE SALE có đăng nhập, sau cờ `SALE_SITE_ENABLED`.
+//
+// Nguyên tắc: **cờ TẮT = không đổi một hành vi nào** (khối describe phía trên
+// vẫn xanh nguyên vẹn, không sửa một dòng). Cờ BẬT mới mở site có đăng nhập.
+//
+// ⚠️ Cờ này CHỈ được bật sau khi biểu mẫu nhập khách đã dời khỏi host sale và
+// marketing đã được thông báo — bật sớm là cắt đường nhập liệu của họ.
+// ─────────────────────────────────────────────────────────────────────────
+
+const saleOn = { hostKind: "sale", saleSiteEnabled: true } as const;
+
+describe("[Đợt B] Site Sale — cờ BẬT", () => {
+  it("đường dẫn CŨ của biểu mẫu → về trang nhập khách mới (kể cả khi cờ BẬT)", () => {
+    // MISA còn trỏ `RedirectURL` vào /thank-you, và quảng cáo/QR cũ còn trỏ vào
+    // /sale/nhap-lieu.html — cả hai phải đáp về địa chỉ mới, không được 404.
+    for (const p of [
+      "/thank-you",
+      "/thank-you/",
+      "/sale/nhap-lieu.html",
+      "/sale/thank-you.html",
+    ]) {
+      expect(
+        decideRoute({ ...saleOn, pathname: p, role: null, sessionValid: false }),
+      ).toEqual<RouteDecision>(TO_INTAKE);
+    }
+  });
+
+  it("🔴 KHÔNG cho mọi /sale/* đi thẳng — trang app cùng tiền tố phải bị gác", () => {
+    // Route group app/(sale)/sale/ sinh ra đường dẫn /sale/leads, /sale/trial…
+    // trùng tiền tố với file tĩnh public/sale/*.html. Nếu giữ luật "startsWith
+    // /sale/ → next" thì TOÀN BỘ trang app mở toang cho người chưa đăng nhập.
+    expect(
+      decideRoute({ ...saleOn, pathname: "/sale/leads", role: null, sessionValid: false }),
+    ).toMatchObject({ type: "redirectPath", path: "/login" });
+  });
+
+  it("chưa đăng nhập → về /login kèm callbackUrl (KHÔNG vòng lặp ở chính /login)", () => {
+    expect(
+      decideRoute({ ...saleOn, pathname: "/leads", role: null, sessionValid: false }),
+    ).toMatchObject({ type: "redirectPath", path: "/login", callbackUrl: "/leads" });
+    // Bẫy đã từng dính với /dang-xuat: quên nhánh này là vòng lặp chuyển hướng vô tận.
+    expect(
+      decideRoute({ ...saleOn, pathname: "/login", role: null, sessionValid: false }),
+    ).toEqual<RouteDecision>({ type: "next" });
+  });
+
+  it("Sale thuần → phục vụ site Sale (clean URL rewrite sang /sale/*)", () => {
+    expect(
+      decideRoute({ ...saleOn, pathname: "/", ...authed("SALES_CSM") }),
+    ).toEqual<RouteDecision>({ type: "rewrite", path: "/sale" });
+    expect(
+      decideRoute({ ...saleOn, pathname: "/leads", ...authed("SALES_CSM") }),
+    ).toEqual<RouteDecision>({ type: "rewrite", path: "/sale/leads" });
+    // Đích rewrite tự nó phải đi thẳng, không rewrite lần hai.
+    expect(
+      decideRoute({ ...saleOn, pathname: "/sale/leads", ...authed("SALES_CSM") }),
+    ).toEqual<RouteDecision>({ type: "next" });
+  });
+
+  it("Sale đang ở /login mà đã đăng nhập → về trang chủ site Sale", () => {
+    expect(
+      decideRoute({ ...saleOn, pathname: "/login", ...authed("SALES_CSM") }),
+    ).toMatchObject({ type: "redirectPath", path: "/" });
+  });
+
+  it("nhân sự KIÊM NHIỆM (có vai khác ngoài Sale) → về admin, KHÔNG bị nhốt trong site hẹp", () => {
+    // QĐ-3 (16/07): chỉ Sale THUẦN vào site này. Quản lý cơ sở kiêm Sale mà bị
+    // nhốt ở đây là mất toàn bộ quyền quản lý của họ.
+    expect(
+      decideRoute({
+        ...saleOn,
+        pathname: "/",
+        role: "CENTER_MANAGER",
+        roles: ["CENTER_MANAGER", "SALES_CSM"],
+        sessionValid: true,
+      }),
+    ).toEqual<RouteDecision>({ type: "redirectHost", host: "admin", path: "/dashboard", status: 307 });
+  });
+
+  it("nhân sự khác → admin · phụ huynh → portal", () => {
+    for (const role of ["HR", "TEACHER", "ACCOUNTANT", "TRAINING", "MARKETING"] as const) {
+      expect(
+        decideRoute({ ...saleOn, pathname: "/", ...authed(role) }),
+      ).toEqual<RouteDecision>({ type: "redirectHost", host: "admin", path: "/dashboard", status: 307 });
+    }
+    expect(
+      decideRoute({ ...saleOn, pathname: "/", ...authed("PARENT") }),
+    ).toEqual<RouteDecision>({ type: "redirectHost", host: "portal", path: "/", status: 307 });
+  });
+
+  it("infra path vẫn đi thẳng ở cả hai trạng thái cờ", () => {
+    for (const p of ["/favicon.ico", "/api/anything", "/robots.txt", "/_next/static/x.js"]) {
+      expect(
+        decideRoute({ ...saleOn, pathname: p, role: null, sessionValid: false }),
+      ).toEqual<RouteDecision>({ type: "next" });
+    }
+  });
+
+  it("cờ TẮT: host cũ về trang nhập khách mới — kể cả khi đã đăng nhập", () => {
+    // Trước 22/08 nhánh này rewrite ra biểu mẫu tĩnh. Biểu mẫu đó đã nghỉ nên
+    // cờ TẮT không còn nghĩa "giữ nguyên hành vi cũ" — nó là "host này rỗng".
+    expect(
+      decideRoute({ hostKind: "sale", saleSiteEnabled: false, pathname: "/", ...authed("SALES_CSM") }),
+    ).toEqual<RouteDecision>(TO_INTAKE);
+  });
+});
+
 // EL-01 — e-learning host (e-learning.satarobo.vn) × role × cờ ELEARNING_ENABLED.
 // 2-phase như L5: cờ OFF = hành vi hiện tại y nguyên, 0 byte HTML e-learning.
 //

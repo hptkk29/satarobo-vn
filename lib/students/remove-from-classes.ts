@@ -36,6 +36,8 @@ export function removalTargetStatus(from: EnrollmentStatus): EnrollmentStatus {
 
 export type RemovedEnrollment = {
   id: string;
+  /** Lớp mà ghi danh này vừa bị gỡ ra — caller dùng để revalidate màn roster lớp đó. */
+  classId: string;
   fromStatus: EnrollmentStatus;
   toStatus: EnrollmentStatus;
 };
@@ -107,7 +109,12 @@ export async function removeStudentFromClasses(params: {
       tx,
     });
 
-    removed.push({ id: enr.id, fromStatus: enr.status, toStatus });
+    removed.push({
+      id: enr.id,
+      classId: enr.classId,
+      fromStatus: enr.status,
+      toStatus,
+    });
   }
 
   // US-03 chat — HV rời các lớp → sync nhóm lớp từng lớp (PH rời nếu hết con trong

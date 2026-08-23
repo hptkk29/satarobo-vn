@@ -18,6 +18,7 @@ import { OrderKindSelect } from "./_components/order-kind-select";
 import { LeadPaymentCard } from "../_components/lead-payment-card";
 import { getLeadPaymentSummary } from "@/lib/payments/summary";
 import { maskFreeText, maskPersonName, maskLeadPiiFields } from "@/lib/lead/pii";
+import { canSeeLead, leadSharingEnabled } from "@/lib/lead/sharing";
 import { canViewLeadPii } from "@/lib/auth/check-permission";
 import { ShareToggle } from "./_components/share-toggle";
 import { formatDateVN } from "@/lib/format/date";
@@ -81,9 +82,21 @@ export default async function LeadDetailPage({ params }: Props) {
   });
   if (!lead) notFound();
 
-  // Scope: SALES_CSM chỉ xem lead của mình — TRỪ lead đã bật "dùng chung" (#11 T1
-  // câu 10 BGĐ): CSKH cùng cơ sở xem được (cách ly cơ sở đã do scopedDb lo ở trên).
-  if (!canViewAll && lead.assignedToId !== session.user.id && !lead.isSharedWithTeam) {
+  // Scope: SALES_CSM chỉ xem lead của mình. Cách ly cơ sở đã do scopedDb lo ở trên.
+  //
+  // ⚠️ Đợt E (22/08) — chủ dự án chốt LEAD ĐỘC QUYỀN TUYỆT ĐỐI (Q8), ĐẢO quyết
+  // định BGĐ câu 10 ký 10/07: lead "dùng chung" KHÔNG còn mở cửa cho sale khác.
+  // Quy tắc gom vào canSeeLead() để trang này và trang danh sách không trôi lệch.
+  if (
+    !canSeeLead({
+      canViewAll,
+      isOwner: lead.assignedToId === session.user.id,
+      // 23/08 — người NHẬP phiếu cũng vào được phiếu của mình (Sale Hội sở).
+      isCreator: !!lead.createdById && lead.createdById === session.user.id,
+      isShared: lead.isSharedWithTeam,
+      sharingEnabled: leadSharingEnabled(),
+    })
+  ) {
     redirect("/leads?view=kanban");
   }
 
@@ -247,8 +260,10 @@ export default async function LeadDetailPage({ params }: Props) {
         </div>
         <div className="flex items-center gap-2">
           {/* #11 T1 — bật/tắt "dùng chung": chỉ OWNER hoặc QL cơ sở (leads:assign);
-              server action tự guard lại (đây là gate hiển thị). */}
-          {(lead.assignedToId === session.user.id || canAssign) && (
+              server action tự guard lại (đây là gate hiển thị).
+              Đợt E — chính sách tắt thì ẩn hẳn nút; action cũng từ chối. */}
+          {leadSharingEnabled() &&
+            (lead.assignedToId === session.user.id || canAssign) && (
             <ShareToggle
               leadId={lead.id}
               isShared={lead.isSharedWithTeam}
@@ -302,6 +317,31 @@ export default async function LeadDetailPage({ params }: Props) {
         <Info label="Khoá quan tâm" value={lead.course?.name ?? lead.source} />
         <Info label="Cơ sở" value={lead.center?.name ?? null} />
         <Info label="Nguồn" value={lead.source} />
+        {/* Ô "Link Facebook" của biểu mẫu /nhap-khach-hang (22/08/2026). Với lead
+            chạy quảng cáo FB đây thường là đường liên hệ DUY NHẤT lúc mới thu về.
+            Là PII (chỉ đích danh một người) ⇒ che như SĐT/email khi không có
+            quyền xem PII; `rel` đủ bộ vì đây là link ra ngoài do người dùng nhập. */}
+        {lead.facebookUrl && (
+          <div>
+            <dt className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              Link Facebook
+            </dt>
+            <dd className="mt-1 break-words text-sm text-foreground">
+              {canViewPii ? (
+                <a
+                  href={lead.facebookUrl}
+                  target="_blank"
+                  rel="noopener noreferrer nofollow"
+                  className="font-medium text-primary hover:underline"
+                >
+                  Mở hồ sơ Facebook
+                </a>
+              ) : (
+                "•••"
+              )}
+            </dd>
+          </div>
+        )}
         {/* BGĐ 31/07 — nguồn giới thiệu (affiliate) khi lead vào qua link ?ref= */}
         {lead.affiliate && (
           <Info
@@ -415,7 +455,11 @@ export default async function LeadDetailPage({ params }: Props) {
       {/* E2-LEAD (item 2) — khối thanh toán: đã nộp / tổng phải thu / còn thiếu + điều kiện chốt. */}
       {(paymentSummary.hasOrder || dealClosable) && (
         <div className="mb-6">
-          <LeadPaymentCard leadId={lead.id} summary={paymentSummary} />
+          <LeadPaymentCard
+            leadId={lead.id}
+            summary={paymentSummary}
+            canCreateOrder={await checkPermission("orders:create")}
+          />
         </div>
       )}
 

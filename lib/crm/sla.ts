@@ -103,6 +103,35 @@ export function isLeadIdle(
 }
 
 /**
+ * Đợt A (21/08/2026) — dựng `SlaInput` từ một bản ghi Lead. THUẦN, để test được.
+ *
+ * SỬA LỖI: trước đây `runSlaCheck` truyền `lead.updatedAt` vào ô `lastActivityAt`.
+ * `updatedAt` đổi mỗi khi **bất kỳ** cột nào của Lead được ghi — kể cả bật cờ
+ * "dùng chung", sửa ghi chú, hay đổi trạng thái — nên **SLA-4 ("lead im lặng")
+ * bị reset bởi những thao tác không phải là chăm khách**. Cột đúng là
+ * `Lead.lastActivityAt` (chỉ đổi khi có `LeadActivity` thật), và lead chưa có
+ * hoạt động nào thì lấy `createdAt` làm mốc — cùng quy ước với `isLeadIdle`.
+ */
+export function slaInputFromLead(lead: {
+  qualifiedAt: Date | null;
+  handedAt: Date | null;
+  receivedConfirmedAt: Date | null;
+  assignedAt: Date | null;
+  firstContactAt: Date | null;
+  lastActivityAt: Date | null;
+  createdAt: Date;
+}): SlaInput {
+  return {
+    qualifiedAt: lead.qualifiedAt,
+    handedAt: lead.handedAt,
+    receivedConfirmedAt: lead.receivedConfirmedAt,
+    assignedAt: lead.assignedAt,
+    firstContactAt: lead.firstContactAt,
+    lastActivityAt: lead.lastActivityAt ?? lead.createdAt,
+  };
+}
+
+/**
  * Quét lead → sinh StaffNotification cho mỗi vi phạm (idempotent qua dedupeKey, C6.6).
  * Người nhận: assignedToId (ưu tiên) → adminId. Không có người nhận → bỏ qua.
  */
@@ -122,18 +151,7 @@ export async function runSlaCheck(now = new Date()): Promise<{ violations: numbe
   let violations = 0;
   let notified = 0;
   for (const lead of leads) {
-    const rules = evaluateSla(
-      {
-        qualifiedAt: lead.qualifiedAt,
-        handedAt: lead.handedAt,
-        receivedConfirmedAt: lead.receivedConfirmedAt,
-        assignedAt: lead.assignedAt,
-        firstContactAt: lead.firstContactAt,
-        lastActivityAt: lead.updatedAt,
-      },
-      now,
-      thresholds,
-    );
+    const rules = evaluateSla(slaInputFromLead(lead), now, thresholds);
     violations += rules.length;
     const userId = lead.assignedToId ?? lead.adminId;
     if (!userId) continue;

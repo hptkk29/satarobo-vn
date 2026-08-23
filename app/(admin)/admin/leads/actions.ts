@@ -8,19 +8,27 @@ import { checkPermission } from '@/lib/auth/check-permission'
 import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
 import { phoneVn } from '@/lib/validators/phone'
+import { phoneVariants } from '@/lib/phone'
 import type { Prisma } from '@prisma/client'
 import { logLeadAudit, getAuditActor } from '@/lib/audit/log'
 import { resolveActor } from '@/lib/auth/actor'
 import { passesScope, scopedDb } from '@/lib/db-scope'
 import { getLeadPaymentSummary } from '@/lib/payments/summary'
 import { autoAssignLead, reassignOpenLeads } from '@/lib/lead/assign'
+import { leadSharingEnabled } from '@/lib/lead/sharing'
 import { validateTransferTarget } from '@/lib/crm/transfer-validate'
 import { autoAssignNewLead, manualAssignLead, reassignForCenter } from '@/lib/lead/auto-assign'
+import { assignmentWrite } from '@/lib/lead/assignment'
 import { centerIdForOrgUnit } from '@/lib/org/org-service'
 import { rejectHeadOffice } from '@/lib/enrollment-flow'
+import { normalizeFacebookUrl } from '@/lib/lead/intake/normalize'
 import { LEAD_STATUS_LABEL, canTransitionLeadStatus } from '@/lib/leads/status'
 import { leadChildSchema } from '@/lib/validators/lead'
 import { syncLeadChildNameToStudents } from '@/lib/students/sync-name'
+import {
+  getPriorHistoryByPhone,
+  summarizePriorHistory,
+} from '@/lib/students/prior-history'
 
 const statusSchema = z.enum([
   'NEW',
@@ -68,6 +76,12 @@ export async function toggleLeadShareAction(
 ): Promise<{ ok: boolean; error?: string }> {
   const session = await auth()
   if (!session?.user) return { ok: false, error: 'Chưa đăng nhập' }
+  // Đợt E (22/08) — chính sách "dùng chung lead" đã TẮT (Q8: lead độc quyền).
+  // Chặn ở action, không chỉ ẩn nút: UI cũ còn nằm trong cache trình duyệt và
+  // Server Action là một endpoint gọi thẳng được.
+  if (!leadSharingEnabled()) {
+    return { ok: false, error: 'Tính năng dùng chung lead đã ngừng — mỗi lead do một người phụ trách' }
+  }
   if (!(await checkPermission('leads:edit'))) return { ok: false, error: 'Không có quyền' }
 
   const before = await db.lead.findUnique({
@@ -574,6 +588,21 @@ const manualLeadSchema = z.object({
   courseId: z.string().trim().optional().or(z.literal('')),
   source: z.string().trim().min(1).max(100).optional().or(z.literal('')),
   note: z.string().trim().max(2000).optional().or(z.literal('')),
+  // Ô "Link Facebook" của biểu mẫu nhập khách (23/08). Đi qua CÙNG bộ chuẩn hoá
+  // với đường nhập — nếu không, cùng một người gõ "minh.nguyen.549" ở hai màn sẽ
+  // ra hai giá trị khác nhau, và đối khớp lead theo link Facebook sẽ trượt.
+  //
+  // ⚠️ Chuẩn hoá ở đây KHÔNG phải cho đẹp: nó chặn `javascript:`/`data:` — giá
+  // trị này được render thành `<a href>` trong màn admin (xem normalize.ts).
+  // Chuỗi không phải link thì thành '' chứ không ném lỗi: người sửa đang gõ dở
+  // không đáng bị chặn cả phiếu, và cảnh báo đã có ở đường nhập.
+  facebookUrl: z
+    .string()
+    .trim()
+    .max(500)
+    .optional()
+    .or(z.literal(''))
+    .transform((v) => (v ? (normalizeFacebookUrl(v).url ?? '') : v)),
 })
 
 /** Tạo 1 lead thủ công (thu ở sự kiện/trung tâm). Chống trùng theo SĐT. */
@@ -593,7 +622,11 @@ export async function createLeadManual(
   // P2-2: trùng SĐT → báo lỗi RÕ (không fail thầm lặng). Kèm trạng thái + người
   // phụ trách nếu nhân viên có quyền xem (view-all hoặc cùng cơ sở).
   const dup = await db.lead.findFirst({
-    where: { phone: d.phone, deletedAt: null },
+    // Đợt G — tra theo BIẾN THỂ SĐT. DB chứa song song `0…` (cũ) và `84…`
+    // (canonical); so đúng-bằng nên nhập `84905…` khi đã có `0905…` là đẻ hồ sơ
+    // thứ hai — và từ Đợt D mỗi hồ sơ thừa còn tiêu một lượt sai trong sổ.
+    // `lib/lead/dedup.ts` đã làm đúng từ lâu; hai màn tay này bị bỏ quên.
+    where: { phone: { in: phoneVariants(d.phone) }, deletedAt: null },
     select: {
       id: true,
       status: true,
@@ -616,9 +649,18 @@ export async function createLeadManual(
         error: `SĐT đã tồn tại trong CRM (trạng thái: ${LEAD_STATUS_LABEL[dup.status] ?? dup.status}${who}). Mở lead hiện có thay vì tạo mới.`,
       }
     }
+    // 21/08 — hồ sơ cũ nằm ở CƠ SỞ KHÁC: `Lead` ∈ SCOPED_MODELS nên sale ở đây không mở
+    // được nó, và câu báo cụt "báo quản lý cơ sở kiểm tra" khiến họ đứng hình. Nói thêm
+    // MỘT tầng không-PII: khách đã từng đăng ký / học ở cơ sở nào, khi nào. Không lộ tên
+    // phụ huynh, ghi chú tư vấn hay sale phụ trách — muốn xem vẫn phải qua đúng cơ sở.
+    const actorForLookup = await resolveActor(session.user.id!)
+    const prior = await getPriorHistoryByPhone(actorForLookup, d.phone)
+    const summary = summarizePriorHistory(prior)
     return {
       ok: false,
-      error: 'SĐT đã tồn tại trong CRM. Vui lòng báo quản lý cơ sở kiểm tra.',
+      error:
+        'SĐT đã tồn tại trong CRM. Vui lòng báo quản lý cơ sở kiểm tra.' +
+        (summary ? ` ${summary}` : ''),
     }
   }
 
@@ -645,6 +687,9 @@ export async function createLeadManual(
       source: d.source || 'Nhập tay',
       note: d.note || null,
       status: 'NEW',
+      // NGƯỜI NHẬP (23/08) — cùng nghĩa với biểu mẫu /nhap-khach-hang. Đường
+      // nhập tay này cũng phải ghi, không thì "phiếu tôi nhập" thủng một nửa.
+      createdById: session.user.id,
       activities: {
         create: {
           actorId,
@@ -683,6 +728,30 @@ export async function createLeadManual(
 
 const updateLeadFieldsSchema = manualLeadSchema.partial()
 
+/**
+ * Bộ ô người NHẬP phiếu được sửa — đúng bằng biểu mẫu `/nhap-khach-hang`
+ * (chủ dự án chốt 23/08/2026: "chỉ được sửa các trường có ở form nhap-khach-hang,
+ * còn các trường khác thì không được sửa, Sale cs được toàn quyền sửa").
+ *
+ * Danh sách này là ALLOWLIST, không phải blocklist: thêm ô mới vào biểu mẫu mà
+ * quên khai ở đây thì người nhập KHÔNG sửa được ô đó — hỏng theo chiều an toàn.
+ * Ngược lại (blocklist) thì mỗi cột mới của `Lead` tự động mở toang.
+ *
+ * `email` / `childAge` / `courseId` KHÔNG có trong biểu mẫu ⇒ không nằm đây.
+ */
+const INTAKE_EDITABLE_FIELDS = [
+  'parentName',
+  'phone',
+  'childName',
+  'source',
+  'note',
+  'orgUnitId', // ô "Cơ sở phụ huynh chọn" (centerId suy ra từ đây)
+  'facebookUrl',
+] as const
+
+const INTAKE_FIELD_DENIED =
+  'Bạn chỉ sửa được các ô có trong biểu mẫu nhập khách hàng của phiếu do mình nhập.'
+
 /** Sửa thông tin cơ bản của 1 lead. */
 export async function updateLeadFields(
   leadId: string,
@@ -690,7 +759,16 @@ export async function updateLeadFields(
 ): Promise<{ ok: boolean; error?: string }> {
   const session = await auth()
   if (!session?.user) return { ok: false, error: 'Chưa đăng nhập' }
-  if (!(await checkPermission('leads:edit'))) return { ok: false, error: 'Không có quyền' }
+  // Hai đường vào, KHÔNG cùng quyền hạn:
+  //   · `leads:edit` — Sale cơ sở / quản lý: toàn quyền, y như trước.
+  //   · `leads:edit-own-intake` — người NHẬP phiếu (Sale Hội sở): chỉ bộ ô của
+  //     biểu mẫu, và chỉ trên phiếu mình nhập.
+  //
+  // ⚠️ Đường thứ hai CỐ Ý không kiểm ở đây mà kiểm sau khi đọc lead: nó mang
+  // scope OWN, mà OWN gọi TRẦN (không kèm `createdById`) thì luôn false — kiểm
+  // sớm là chặn nhầm đúng người được phép. Bất biến R1 (lib/auth/rbac-scope.test.ts)
+  // quét call-site để bắt lại đúng lỗi này.
+  const canEditAll = await checkPermission('leads:edit')
 
   const parsed = updateLeadFieldsSchema.safeParse(input)
   if (!parsed.success) {
@@ -712,7 +790,9 @@ export async function updateLeadFields(
       courseId: true,
       source: true,
       note: true,
+      facebookUrl: true,
       assignedToId: true,
+      createdById: true,
     },
   })
   // Cách ly cơ sở (chống IDOR ghi): Lead phải thuộc tầm nhìn cơ sở actor —
@@ -721,14 +801,37 @@ export async function updateLeadFields(
   if (!before || !passesScope('Lead', before, actor)) {
     return { ok: false, error: 'Lead không tồn tại' }
   }
-  if (!(await actorMayMutateLead(session.user.id, before.assignedToId))) {
-    return { ok: false, error: MUTATE_DENIED }
+  if (canEditAll) {
+    if (!(await actorMayMutateLead(session.user.id, before.assignedToId))) {
+      return { ok: false, error: MUTATE_DENIED }
+    }
+  } else {
+    // Đường HẸP (người nhập). `actorMayMutateLead` không dùng được ở đây: nó cho
+    // qua khi là assignee HOẶC có `leads:view-all` — vai này không có cả hai.
+    //
+    // Kiểm bằng `can()` KÈM TARGET để scope OWN có tác dụng thật, thay vì tự so
+    // `createdById` tại chỗ (luật cứng Nền Hệ thống #1: mọi kiểm quyền đi qua
+    // `can()`; so tay ở Server Action là thứ lint `no-inline-authz` cấm).
+    const mayEditOwn = await checkPermission('leads:edit-own-intake', {
+      createdById: before.createdById ?? undefined,
+    })
+    if (!mayEditOwn) return { ok: false, error: 'Không có quyền' }
+
+    // Bộ ô: ALLOWLIST. Gửi kèm ô ngoài danh sách là TỪ CHỐI CẢ PHIẾU, không
+    // lặng lẽ bỏ qua — im lặng thì người sửa tưởng đã lưu, và bên kia thì không.
+    const viPham = Object.keys(d).filter(
+      (k) => !(INTAKE_EDITABLE_FIELDS as readonly string[]).includes(k),
+    )
+    if (viPham.length > 0) {
+      return { ok: false, error: `${INTAKE_FIELD_DENIED} (${viPham.join(', ')})` }
+    }
   }
 
   // Đổi SĐT → kiểm tra trùng.
   if (d.phone && d.phone !== before.phone) {
     const dup = await db.lead.findFirst({
-      where: { phone: d.phone, deletedAt: null, id: { not: leadId } },
+      // Đợt G — như trên: tra theo biến thể, không so đúng-bằng.
+      where: { phone: { in: phoneVariants(d.phone) }, deletedAt: null, id: { not: leadId } },
       select: { id: true },
     })
     if (dup) return { ok: false, error: 'SĐT đã tồn tại ở lead khác' }
@@ -752,6 +855,9 @@ export async function updateLeadFields(
     ...(d.courseId !== undefined ? { courseId: d.courseId || null } : {}),
     ...(d.source !== undefined ? { source: d.source || null } : {}),
     ...(d.note !== undefined ? { note: d.note || null } : {}),
+    // 23/08 — ô "Link Facebook" CÓ trong biểu mẫu nhập khách nhưng action này
+    // chưa bao giờ ghi được: sửa xong là mất im lặng. Thêm cho cả hai đường.
+    ...(d.facebookUrl !== undefined ? { facebookUrl: d.facebookUrl || null } : {}),
   }
   await db.lead.update({ where: { id: leadId }, data: updateData })
 
@@ -807,8 +913,14 @@ export async function assignLeadToSaleAction(
   if (!session?.user) return { ok: false, error: 'Chưa đăng nhập' }
   if (!(await checkPermission('leads:assign'))) return { ok: false, error: 'Không có quyền' }
 
+  // Đợt G — người gán ở cấp Hội sở được gán xuyên cơ sở (điều phối liên cơ sở là
+  // nghiệp vụ có thật, xem màn "Chuyển lead liên CS"). Người cấp cơ sở thì không:
+  // đó là vế đã thiếu và đã gây sự cố 21/08.
+  const assignActor = await resolveActor(session.user.id)
   const { actorId, actorName } = getAuditActor(session)
-  const res = await manualAssignLead(leadId, saleId, { actorId, actorName })
+  const res = await manualAssignLead(leadId, saleId, { actorId, actorName }, {
+    actorIsHoLevel: assignActor.isHoLevel,
+  })
   if (!res.ok) return res
 
   revalidatePath('/leads')
@@ -818,14 +930,34 @@ export async function assignLeadToSaleAction(
 
 const ASSIGN_MODES = ['ROUND_ROBIN', 'CLOSE_RATE', 'MANUAL'] as const
 
-/** Quản lý cơ sở đặt chế độ chia cho cơ sở mình; SUPER_ADMIN đặt mọi cơ sở. */
+/**
+ * Đặt chế độ chia lead cho một cơ sở.
+ *
+ * ⚠️ Đợt G (23/08/2026) — SIẾT CỔNG. Trước đó action này chỉ đòi `leads:assign`
+ * trong khi TRANG gác `leads:assign-config` (chốt 03/08: tách riêng màn cấu hình
+ * khỏi quyền điều phối lead). Cổng action lỏng hơn cổng trang là lỗ hổng vô hình:
+ * màn hình trông như đã khoá mà endpoint thì không — và `leads:assign` thì
+ * CENTER_MANAGER có.
+ *
+ * Cụ thể mất gì: gọi thẳng action là đổi được chế độ của cả cơ sở sang
+ * `CLOSE_RATE`, tức thoát khỏi sổ lượt dựng ở Đợt D, lách đúng quyết định Q7
+ * ("chia đều số lượt, tuyệt đối không được sai") mà không sinh một dòng quyết
+ * định nào ai đọc được sau này.
+ *
+ * Nhánh CENTER_MANAGER bên dưới GIỮ NGUYÊN dù hiện là nhánh chết (v1 matrix cho
+ * `leads:assign-config` chỉ SUPER_ADMIN): nếu sau này chủ dự án cấp quyền đó cho
+ * Quản lý cơ sở (plan/14 Q5, CHƯA ký) thì giới hạn "chỉ cơ sở mình" phải sẵn ở
+ * đây, chứ không phải nhớ ra lúc đó.
+ */
 export async function setCenterAssignModeAction(
   centerId: string,
   mode: string,
 ): Promise<{ ok: boolean; error?: string }> {
   const session = await auth()
   if (!session?.user) return { ok: false, error: 'Chưa đăng nhập' }
-  if (!(await checkPermission('leads:assign', { centerId }))) return { ok: false, error: 'Không có quyền' }
+  if (!(await checkPermission('leads:assign-config', { centerId }))) {
+    return { ok: false, error: 'Không có quyền' }
+  }
 
   if (!ASSIGN_MODES.includes(mode as (typeof ASSIGN_MODES)[number])) {
     return { ok: false, error: 'Chế độ không hợp lệ' }
@@ -937,7 +1069,9 @@ export async function transferLead(
       where: { id: lead.id },
       data: {
         centerId: toCenterId,
-        assignedToId: toSaleId,
+        // Đợt A — kèm mốc phân công. Chuyển lead sang người khác thì người nhận
+        // phải có cửa sổ SLA riêng, không thừa hưởng đồng hồ của người trước.
+        ...assignmentWrite(toSaleId),
         handoverNote: d.handoverNote,
         ...(lead.status === 'NEW' && toSaleId ? { status: 'ASSIGNED' as const } : {}),
       },

@@ -92,6 +92,14 @@
     {
       "path": "/api/cron/chat-zns-notify",
       "schedule": "*/30 * * * *"
+    },
+    {
+      "path": "/api/cron/elearning-reminders",
+      "schedule": "7,22,37,52 * * * *"
+    },
+    {
+      "path": "/api/cron/elearning-dem",
+      "schedule": "47 17 * * *"
     }
   ]
 }

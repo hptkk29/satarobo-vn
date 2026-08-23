@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   buildNote,
   centerHintFromIndex,
+  normalizeFacebookUrl,
   centerHintFromText,
   isSameChildName,
   matchCenter,
@@ -189,5 +190,57 @@ describe("matchCenter — cơ sở khớp lỏng CHỒNG NHAU", () => {
     expect(
       matchCenter({ kind: "text", value: "12 Lê Lợi và 34 Lê Lai" }, tie),
     ).toBeNull();
+  });
+});
+
+// ───────────────────────────────────────────────────────────────────────────
+// Ô "Link Facebook" (22/08/2026) — người nhập dán đủ kiểu, và giá trị này được
+// render thành <a href> trong màn admin nên phải chặn scheme lạ.
+// ───────────────────────────────────────────────────────────────────────────
+
+describe("normalizeFacebookUrl", () => {
+  it("URL đầy đủ → giữ nguyên", () => {
+    expect(normalizeFacebookUrl("https://facebook.com/abc").url).toBe(
+      "https://facebook.com/abc",
+    );
+    expect(normalizeFacebookUrl("http://m.me/abc").url).toBe("http://m.me/abc");
+  });
+
+  it("thiếu scheme → thêm https://", () => {
+    expect(normalizeFacebookUrl("facebook.com/abc").url).toBe(
+      "https://facebook.com/abc",
+    );
+    expect(normalizeFacebookUrl("m.me/abc").url).toBe("https://m.me/abc");
+  });
+
+  it("chỉ có tên tài khoản → dựng link hồ sơ Facebook", () => {
+    expect(normalizeFacebookUrl("minh.nguyen.549").url).toBe(
+      "https://www.facebook.com/minh.nguyen.549",
+    );
+  });
+
+  it("🔴 scheme nguy hiểm → null + cảnh báo (chống XSS qua thẻ <a href>)", () => {
+    for (const raw of [
+      "javascript:alert(1)",
+      "JavaScript:alert(1)",
+      "data:text/html,<script>",
+      "vbscript:msgbox(1)",
+    ]) {
+      const r = normalizeFacebookUrl(raw);
+      expect(r.url).toBeNull();
+      expect(r.warning).toContain("giao thức không cho phép");
+    }
+  });
+
+  it("cả câu chữ (có khoảng trắng) → null + cảnh báo, không đoán bừa", () => {
+    const r = normalizeFacebookUrl("chị Hương ở Hoà Khánh");
+    expect(r.url).toBeNull();
+    expect(r.warning).toContain("không phải một đường dẫn");
+  });
+
+  it("rỗng → null, KHÔNG cảnh báo (ô không bắt buộc)", () => {
+    for (const raw of ["", "   ", null, undefined]) {
+      expect(normalizeFacebookUrl(raw)).toEqual({ url: null, warning: null });
+    }
   });
 });
