@@ -51,6 +51,10 @@ export default async function SaleLeadDetailPage({
   // Khối đơn hàng chỉ nạp khi người xem thật sự tạo được đơn. Không có quyền mà
   // vẫn nạp là tốn hai truy vấn ở MỌI lần mở trang, chỉ để vẽ một khối rồi giấu.
   const coQuyenTaoDon = await checkPermission("orders:create");
+  // Ghi danh đòi CẢ HAI quyền (tạo học viên VÀ đăng ký) — Marketing có thể có
+  // một mà không có cái kia, nên phép VÀ chứ không phải HOẶC.
+  const choGhiDanh =
+    (await checkPermission("students:create")) && (await checkPermission("enrollments:create"));
   const [donHang, formTaoDon] = coQuyenTaoDon
     ? await Promise.all([
         getSaleLeadOrders(actor, session.user.id, lead.id),
@@ -92,6 +96,7 @@ export default async function SaleLeadDetailPage({
               tongDaGhiNhan={donHang.tongDaGhiNhan}
               conThieu={donHang.conThieu}
               phuongThuc={formTaoDon.paymentMethods.map((m) => ({ id: m.id, name: m.name }))}
+              choGhiDanh={choGhiDanh}
             />
           ) : null}
 

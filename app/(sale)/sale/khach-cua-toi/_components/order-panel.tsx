@@ -49,6 +49,7 @@ export function SaleOrderPanel({
   tongDaGhiNhan,
   conThieu,
   phuongThuc,
+  choGhiDanh,
 }: {
   leadId: string;
   orders: OrderView[];
@@ -56,6 +57,8 @@ export function SaleOrderPanel({
   tongDaGhiNhan: number;
   conThieu: number;
   phuongThuc: { id: string; name: string }[];
+  /** Người xem có đủ quyền ghi danh không (`students:create` VÀ `enrollments:create`). */
+  choGhiDanh: boolean;
 }) {
   const router = useRouter();
   const [pending, start] = useTransition();
@@ -229,6 +232,23 @@ export function SaleOrderPanel({
               );
             })}
           </ul>
+
+          {/* Bước kế tiếp chỉ hiện khi ĐÃ có tiền: hệ thống chặn chốt khi chưa
+              ghi nhận khoản nào, nên vẽ nút ra sớm là mời người dùng đi vào một
+              cánh cửa đóng. */}
+          {choGhiDanh && tongDaGhiNhan > 0 ? (
+            <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border p-3">
+              <span className="text-sm text-muted-foreground">
+                Khách đã đóng tiền — chốt được rồi.
+              </span>
+              <Link
+                href={`/sale/ghi-danh/${leadId}`}
+                className="rounded-lg bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground hover:opacity-90"
+              >
+                Ghi danh vào lớp →
+              </Link>
+            </div>
+          ) : null}
 
           <p className="mt-3 text-xs text-muted-foreground">
             Ghi nhận nghĩa là bạn đã cầm tiền. Kế toán đối soát rồi mới{" "}
