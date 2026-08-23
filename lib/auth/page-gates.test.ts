@@ -29,7 +29,13 @@ const SIDEBAR = path.join(ROOT, "components/admin/sidebar.tsx");
  * Thêm ngoại lệ mới thì thêm một dòng ở đây, đừng nới `pageFile` thành "tìm khắp
  * app/" — quét mù sẽ nuốt luôn ca trang bị xoá mà gate còn nằm lại trong bảng.
  */
-const PAGE_DIR_OVERRIDE: Record<string, string> = {};
+const PAGE_DIR_OVERRIDE: Record<string, string> = {
+  // Site Sale nằm ở route group riêng `app/(sale)/`, không phải `(admin)`.
+  // Khai tường minh từng route thay vì nới `pageFile` thành "tìm khắp app/":
+  // quét mù sẽ nuốt luôn ca trang bị xoá mà gate còn nằm lại trong bảng.
+  "/sale/trial": "app/(sale)",
+  "/sale/nhap-khach-hang": "app/(sale)",
+};
 
 const pageFile = (href: string) =>
   path.join(ROOT, PAGE_DIR_OVERRIDE[href] ?? "app/(admin)/admin", href, "page.tsx");
