@@ -1,8 +1,11 @@
 # Webform MISA cho biểu mẫu `/nhap-khach-hang` — "Form Nhập KH v2"
 
-> Cập nhật 22/08/2026: chủ dự án **đã tạo xong** webform mới và gửi mã nhúng.
-> Bộ trường khớp đúng 7 ô của trang nhập khách; mã nguồn đã map theo bản này.
-> Việc còn lại chỉ là **đặt 3 biến env** trên Vercel.
+> ✅ **23/08/2026 — CHẠY THÔNG ĐẦU–CUỐI trên `test`.** Nhập phiếu qua biểu mẫu
+> thật → Lead vào hệ thống ta → bản sao xuất hiện trong MISA (xác nhận bằng mắt
+> trên CRM, `x-request-id=1641223676`). Env đã đặt đủ cho `Production`/`Preview`/`test`.
+>
+> Bộ trường khớp đúng 7 ô của trang nhập khách; mã nguồn map theo webform
+> **"Form Nhập KH v2"**.
 
 ---
 
@@ -51,9 +54,14 @@ Lấy từ chính mã nhúng của **"Form Nhập KH v2"** (AMIS CRM → Thiết
 >
 > Chưa muốn đụng MISA? Tắt hẳn bằng `SystemSetting` → `intake.mirrorMisa`.
 
-Hai biến `MISA_WEBFORM_REDIRECT` / `MISA_WEBFORM_ALLOWURL` **để trống** — mặc định
-trong mã đã khớp mã nhúng: `RedirectURL` = `https://satarobo.vn/nhap-khach-hang`,
-`AllowURL` = `*`. ⚠️ Đọc §4 trước khi đụng vào `AllowURL`.
+`MISA_WEBFORM_REDIRECT` để trống (mặc định trong mã đã đúng).
+`MISA_WEBFORM_ALLOWURL` **đã đặt = `*`** trên cả 3 môi trường — xem §4 để hiểu
+vì sao nó nằm ở env chứ không chỉ là hằng số trong mã.
+
+> ⚠️ **Vercel giấu VĨNH VIỄN giá trị đã đánh dấu Sensitive** — `vercel env pull`
+> lẫn dashboard đều trả `[SENSITIVE]`. Không có cách nào ĐỌC LẠI để đối chiếu.
+> Nghi env sai thì đường duy nhất là **xoá và ghi đè** bằng giá trị lấy lại từ
+> mã nhúng. Đã mất một buổi 23/08 vì tưởng đọc được.
 
 ---
 
@@ -105,8 +113,28 @@ hoặc đặt env `MISA_WEBFORM_ALLOWURL`. Có test khoá lại giá trị này.
 | Định danh đúng, `AllowURL` **lệch** | **302** + Location | ⚠️ **Vứt phiếu** — không phân biệt được từ HTTP |
 
 Tức **302 chỉ chứng minh khoá đúng, KHÔNG chứng minh đã lưu**. Muốn chắc thì mở MISA
-ra nhìn — ta không có API để hỏi. Mỗi lượt gửi MISA trả header `x-request-id`; đưa mã
-đó cho MISA hỗ trợ là họ tra được log hai đầu.
+ra nhìn — ta không có API để hỏi.
+
+### Cách xem app THẬT SỰ gửi gì (đừng suy đoán như 22–23/08)
+
+Mỗi lượt gửi nay ghi một dòng log, **kể cả khi thành công** — đọc bằng:
+
+```bash
+vercel logs https://test.satarobo.vn | grep misa-mirror
+```
+
+```
+[misa-mirror] MISA 302 · x-request-id=1641223676 · AllowURL="*" · form=…e4c7a3
+              · truong=[LastName,CustomField25,Mobile,CustomField26,CustomField22,LeadSourceID,Description]
+```
+
+Dòng này trả lời đúng 3 câu hỏi từng phải đoán: `AllowURL` app gửi là gì (ngoặc
+kép hai đầu ⇒ thấy được khoảng trắng thừa), đang bắn vào form nào (6 ký tự cuối
+của `ID`), và bộ trường ra sao. `x-request-id` đưa cho MISA hỗ trợ là họ tra được
+log hai đầu.
+
+⚠️ **Bài học quy trình:** `vercel logs` đọc được từ đầu. Chuỗi 22–23/08 mất nhiều
+lượt redeploy chỉ vì suy luận từ mã nguồn thay vì đọc log của bản đang chạy.
 
 ---
 
