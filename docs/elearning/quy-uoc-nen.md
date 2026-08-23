@@ -1,8 +1,10 @@
 # Quy ước nền — module đào tạo nội bộ (e-learning)
 
-> **Đọc file này TRƯỚC KHI MỞ PR đụng module e-learning.** Chín quy ước dưới đây, bốn cái đầu được
-> máy cưỡng chế (ESLint / Vitest / CI), **năm cái sau thì không** — chúng chỉ sống nếu người ta đọc
-> chỗ này. Đó là lý do chúng nằm trong ticket nền EL-07 chứ không rải rác trong các ticket dùng.
+> **Đọc file này TRƯỚC KHI MỞ PR đụng module e-learning.** Mười hai quy ước dưới đây. Quy ước 1–4 và
+> 12 được **máy cưỡng chế** (ESLint / Vitest / CI); **5–11 thì không** — chúng chỉ sống nếu người ta
+> đọc chỗ này. Đó là lý do chúng nằm ở một chỗ chứ không rải rác trong các ticket dùng.
+>
+> 1–9 thuộc ticket nền EL-07; **10–12 chốt qua EL-05** (23/08/2026).
 
 Nguồn: `02-KE-HOACH-THUC-HIEN-Elearning-v1.4.md` — ticket EL-07, quyết định QĐ-CDA-02b (biện pháp
 1, 3, 4) và QĐ-CDA-13 (BP-1, BP-2).
@@ -42,6 +44,13 @@ Khi thêm, `scripts/` đỏ 56 lỗi. Cách xử đã dùng: khai **globals Node
 **Vì sao phải khai:** `include` là **bộ lọc CỨNG**. Không khai thì `vitest run tests/elearning` báo
 *"No test files found"* và **job CI vẫn XANH** dù test viết đúng — hỏng câm, tưởng có lưới an toàn
 mà không có. Đường dẫn truyền ở dòng lệnh chỉ lọc **tiếp** trong tập này, không mở rộng nó.
+
+
+> 🔴 **Đã vấp lần hai (EL-05, 23/08).** Guard đăng ký cron viết ở `tests/cron/` — thư mục
+> KHÔNG có trong `include` — nên nó im lặng không chạy, đúng loại lỗi mà chính nó sinh ra để
+> bắt. Đã chuyển sang `lib/cron/`. **Các thư mục test đang được phủ:** `lib/**`,
+> `components/**`, `app/**`, `tests/chat/**`, `tests/elearning/**`. Viết test ngoài bốn chỗ
+> đó thì phải khai thêm vào `include`, không có ngoại lệ.
 
 ### 4. Job CI có tên
 
@@ -112,7 +121,54 @@ mất quyền trên prod.
 
 ---
 
-## Ràng buộc kèm theo, không thuộc chín quy ước nhưng dễ quên
+## Ba quy ước bổ sung — chốt qua EL-05 (23/08/2026)
+
+### 10. Cấu hình action đặt ở `lib/elearning/*`, `_actions.ts` chỉ bọc một dòng
+
+```ts
+// lib/elearning/assignment-create.ts
+export const cauHinhTaoLuotGiao: ActionConfig<Input, KetQua> = { ... };
+
+// app/(elearning)/elearning/giao-bai/_actions.ts
+"use server";
+export const taoLuotGiaoAction = defineAction(cauHinhTaoLuotGiao);
+```
+
+**Vì sao:** tệp `"use server"` không nạp được trong vitest, nên khuôn cũ của repo là **chép
+cấu hình sang tệp test** kèm một guard so nguồn (xem `lib/elearning/mark-lesson-read.test.ts`).
+Hai bản chép tay sớm muộn cũng trôi khỏi nhau, và guard chỉ bắt được phần chữ nó nghĩ tới.
+Đặt cấu hình ở lib thì test chạy **đúng cái máy chủ chạy** — không bản sao, không guard.
+
+Khuôn cũ vẫn còn ở vài tệp EL-04; **không viết thêm cái mới theo khuôn đó**.
+
+### 11. Cột `orgUnitId` NOT NULL ⇒ gọi `orgUnitIdForCenter()` TƯỜNG MINH
+
+CLAUDE.md nói "code mới không phải tự gọi `orgUnitIdForCenter()`" — câu đó đúng cho cột
+**bỏ trống được**, vì `lib/org/dual-write.ts` điền hộ ở tầng `db`.
+
+Với cột **NOT NULL** (`TrnAssignment.orgUnitId`, `TrnEnrollment.orgUnitId`) thì trình biên
+dịch đòi giá trị, và **ép kiểu để né sẽ giấu mất mọi lỗi cột khác của cùng lời gọi**. Gọi
+tường minh; dual-write tôn trọng giá trị đã set nên không có nguồn ghi thứ hai.
+
+⚠️ **Không suy được đơn vị thì LOẠI dòng đó, không lấy đơn vị khác điền đại.** `orgUnitId`
+là cột quyết định **ai nhìn thấy**; điền đại là xếp hồ sơ vào nhầm đơn vị mà không có thông
+báo nào.
+
+### 12. Guard soi `where` theo `Prisma.dmmf` cho mọi hàm dựng truy vấn
+
+Xem `tests/elearning/assignment-rule.test.ts`.
+
+**Vì sao cần dù đã có `pnpm typecheck`:** object nằm trong spread hoặc trong nhánh điều kiện
+**không bị TS kiểm thừa thuộc tính**. Một quan hệ Prisma KHÔNG TỒN TẠI vẫn biên dịch xanh và
+chỉ nổ **lúc chạy, trên màn hình người dùng**. Đã xảy ra thật ở EL-05 PR1
+(`userAccount.trnEnrollments` — `TrnEnrollment.userId` là cột trần, không có quan hệ).
+
+⚠️ Guard phải chạy qua **mọi nhánh** của hàm. Bản đầu của chính guard này bỏ lọt con bug nó
+sinh ra để bắt, vì chỉ phủ một nhánh của điều kiện.
+
+---
+
+## Ràng buộc kèm theo, không thuộc mười hai quy ước nhưng dễ quên
 
 - **Ngân sách cron: tối đa 2 khe** cho cả module. Bảy mốc nhắc gộp vào **một** cron quét
   (`elearning-reminders`, nhịp 15 phút); việc dọn dữ liệu thô 90 ngày gộp vào cron đêm
