@@ -7858,10 +7858,19 @@ model TrnLessonProgress {
   verifiedAt     DateTime?               @db.Timestamptz(6)
 
   /// Chống nhịp heartbeat tới trễ hoặc đảo thứ tự: nhịp mang `seq` nhỏ hơn bị bỏ.
-  seq            Int       @default(0)
+  seq Int @default(0)
+
+  /// EL-09 — buổi TRỰC TIẾP: ai là người tick "đã dự".
+  ///
+  /// Nullable vì chỉ bài dạng `LIVE_SESSION` mới có. Không có cột này thì việc
+  /// điểm danh tay không có nhật ký, và câu hỏi "ai xác nhận người này đã dự"
+  /// không trả lời được — trong khi đó chính là thứ chống việc cấp chứng nhận
+  /// cho người mới học phần trực tuyến (BR-004).
+  attendanceMarkedByUserId String?
+  attendanceMarkedAt       DateTime? @db.Timestamptz(6)
   /// Mốc cron đã dọn bitmap của dòng này — để phân biệt "chưa từng có bitmap" với
   /// "đã có và đã dọn đúng hạn".
-  bitmapPurgedAt DateTime? @db.Timestamptz(6)
+  bitmapPurgedAt           DateTime? @db.Timestamptz(6)
 
   createdAt DateTime @default(now()) @db.Timestamptz(6)
   updatedAt DateTime @updatedAt @db.Timestamptz(6)
@@ -8054,4 +8063,44 @@ model TrnTrainingNeed {
   @@index([status, createdAt])
   @@index([orgUnitId])
   @@index([centerId])
+}
+
+/// Công nhận tương đương (C8, EL-09).
+///
+/// ⚠️ Không có bảng này thì ma trận đào tạo ngày mở **tô xám 100%**: người đã học
+/// khoá An toàn từ hai năm trước hiện ra như chưa từng học, và khoá tuân thủ 12
+/// tháng không có mốc gốc nào để tính hạn tái chứng nhận.
+///
+/// ⚠️ Nó KHÔNG đẻ ra trạng thái thứ bảy. Lượt ghi danh sinh từ đây mang
+/// `status = COMPLETED` + `source = EQUIVALENCE`; nhãn "Công nhận tương đương"
+/// suy từ CỘT `source`, và tách khỏi "Hoàn thành" trên mọi báo cáo.
+///
+/// ⚠️ `originalEffectiveAt` là NGÀY HIỆU LỰC GỐC, không phải ngày bấm nút. Chu kỳ
+/// tái chứng nhận tính từ nó — lấy ngày nhập liệu là kéo dài hiệu lực thêm đúng
+/// khoảng thời gian người ta chậm nhập.
+model TrnEquivalence {
+  id       String @id @default(cuid())
+  userId   String
+  courseId String
+
+  /// Bằng chứng là gì (chứng chỉ ngoài, biên bản lớp cũ, quyết định…). Bắt buộc:
+  /// một lượt công nhận không nêu được bằng chứng thì nó chỉ là một lời nói.
+  evidenceSource      String
+  /// Ngày hiệu lực GỐC — mốc để tính hạn tái chứng nhận.
+  originalEffectiveAt DateTime @db.Timestamptz(6)
+  /// Người xác nhận, CÓ TÊN. Bắt buộc, không mặc định.
+  confirmedByUserId   String
+  note                String?
+
+  centerId  String
+  orgUnitId String
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+
+  /// Một người chỉ được công nhận tương đương MỘT lần cho mỗi khoá.
+  @@unique([userId, courseId])
+  @@index([courseId])
+  @@index([originalEffectiveAt])
+  @@index([centerId])
+  @@index([orgUnitId])
 }

@@ -116,10 +116,14 @@ export default async function Page({
             />
           </dl>
 
-          {(tong.thuHoi > 0 || tong.tamDung > 0) && (
+          {(tong.thuHoi > 0 || tong.tamDung > 0 || tong.tuongDuong > 0) && (
             <p className="mt-2 text-xs text-muted-foreground">
-              Ngoài mẫu số: {tong.thuHoi} đã thu hồi · {tong.tamDung} tạm dừng đồng hồ.
-              Họ không được yêu cầu học trong kỳ này nên không tính vào tỉ lệ.
+              Ngoài mẫu số: {tong.thuHoi} đã thu hồi · {tong.tamDung} tạm dừng đồng hồ
+              {tong.tuongDuong > 0 && ` · ${tong.tuongDuong} công nhận tương đương`}. Họ
+              không nằm trong phép đo hạn chót của kỳ này nên không tính vào tỉ lệ
+              {tong.tuongDuong > 0 &&
+                " — riêng nhóm công nhận tương đương VẪN được tính là đã được đào tạo"}
+              .
             </p>
           )}
 
