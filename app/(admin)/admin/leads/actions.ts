@@ -20,6 +20,7 @@ import { autoAssignNewLead, manualAssignLead, reassignForCenter } from '@/lib/le
 import { assignmentWrite } from '@/lib/lead/assignment'
 import { centerIdForOrgUnit } from '@/lib/org/org-service'
 import { rejectHeadOffice } from '@/lib/enrollment-flow'
+import { normalizeFacebookUrl } from '@/lib/lead/intake/normalize'
 import { LEAD_STATUS_LABEL, canTransitionLeadStatus } from '@/lib/leads/status'
 import { leadChildSchema } from '@/lib/validators/lead'
 import { syncLeadChildNameToStudents } from '@/lib/students/sync-name'
@@ -586,6 +587,21 @@ const manualLeadSchema = z.object({
   courseId: z.string().trim().optional().or(z.literal('')),
   source: z.string().trim().min(1).max(100).optional().or(z.literal('')),
   note: z.string().trim().max(2000).optional().or(z.literal('')),
+  // Ô "Link Facebook" của biểu mẫu nhập khách (23/08). Đi qua CÙNG bộ chuẩn hoá
+  // với đường nhập — nếu không, cùng một người gõ "minh.nguyen.549" ở hai màn sẽ
+  // ra hai giá trị khác nhau, và đối khớp lead theo link Facebook sẽ trượt.
+  //
+  // ⚠️ Chuẩn hoá ở đây KHÔNG phải cho đẹp: nó chặn `javascript:`/`data:` — giá
+  // trị này được render thành `<a href>` trong màn admin (xem normalize.ts).
+  // Chuỗi không phải link thì thành '' chứ không ném lỗi: người sửa đang gõ dở
+  // không đáng bị chặn cả phiếu, và cảnh báo đã có ở đường nhập.
+  facebookUrl: z
+    .string()
+    .trim()
+    .max(500)
+    .optional()
+    .or(z.literal(''))
+    .transform((v) => (v ? (normalizeFacebookUrl(v).url ?? '') : v)),
 })
 
 /** Tạo 1 lead thủ công (thu ở sự kiện/trung tâm). Chống trùng theo SĐT. */
@@ -666,6 +682,9 @@ export async function createLeadManual(
       source: d.source || 'Nhập tay',
       note: d.note || null,
       status: 'NEW',
+      // NGƯỜI NHẬP (23/08) — cùng nghĩa với biểu mẫu /nhap-khach-hang. Đường
+      // nhập tay này cũng phải ghi, không thì "phiếu tôi nhập" thủng một nửa.
+      createdById: session.user.id,
       activities: {
         create: {
           actorId,
@@ -704,6 +723,30 @@ export async function createLeadManual(
 
 const updateLeadFieldsSchema = manualLeadSchema.partial()
 
+/**
+ * Bộ ô người NHẬP phiếu được sửa — đúng bằng biểu mẫu `/nhap-khach-hang`
+ * (chủ dự án chốt 23/08/2026: "chỉ được sửa các trường có ở form nhap-khach-hang,
+ * còn các trường khác thì không được sửa, Sale cs được toàn quyền sửa").
+ *
+ * Danh sách này là ALLOWLIST, không phải blocklist: thêm ô mới vào biểu mẫu mà
+ * quên khai ở đây thì người nhập KHÔNG sửa được ô đó — hỏng theo chiều an toàn.
+ * Ngược lại (blocklist) thì mỗi cột mới của `Lead` tự động mở toang.
+ *
+ * `email` / `childAge` / `courseId` KHÔNG có trong biểu mẫu ⇒ không nằm đây.
+ */
+const INTAKE_EDITABLE_FIELDS = [
+  'parentName',
+  'phone',
+  'childName',
+  'source',
+  'note',
+  'orgUnitId', // ô "Cơ sở phụ huynh chọn" (centerId suy ra từ đây)
+  'facebookUrl',
+] as const
+
+const INTAKE_FIELD_DENIED =
+  'Bạn chỉ sửa được các ô có trong biểu mẫu nhập khách hàng của phiếu do mình nhập.'
+
 /** Sửa thông tin cơ bản của 1 lead. */
 export async function updateLeadFields(
   leadId: string,
@@ -711,7 +754,16 @@ export async function updateLeadFields(
 ): Promise<{ ok: boolean; error?: string }> {
   const session = await auth()
   if (!session?.user) return { ok: false, error: 'Chưa đăng nhập' }
-  if (!(await checkPermission('leads:edit'))) return { ok: false, error: 'Không có quyền' }
+  // Hai đường vào, KHÔNG cùng quyền hạn:
+  //   · `leads:edit` — Sale cơ sở / quản lý: toàn quyền, y như trước.
+  //   · `leads:edit-own-intake` — người NHẬP phiếu (Sale Hội sở): chỉ bộ ô của
+  //     biểu mẫu, và chỉ trên phiếu mình nhập.
+  //
+  // ⚠️ Đường thứ hai CỐ Ý không kiểm ở đây mà kiểm sau khi đọc lead: nó mang
+  // scope OWN, mà OWN gọi TRẦN (không kèm `createdById`) thì luôn false — kiểm
+  // sớm là chặn nhầm đúng người được phép. Bất biến R1 (lib/auth/rbac-scope.test.ts)
+  // quét call-site để bắt lại đúng lỗi này.
+  const canEditAll = await checkPermission('leads:edit')
 
   const parsed = updateLeadFieldsSchema.safeParse(input)
   if (!parsed.success) {
@@ -733,7 +785,9 @@ export async function updateLeadFields(
       courseId: true,
       source: true,
       note: true,
+      facebookUrl: true,
       assignedToId: true,
+      createdById: true,
     },
   })
   // Cách ly cơ sở (chống IDOR ghi): Lead phải thuộc tầm nhìn cơ sở actor —
@@ -742,8 +796,30 @@ export async function updateLeadFields(
   if (!before || !passesScope('Lead', before, actor)) {
     return { ok: false, error: 'Lead không tồn tại' }
   }
-  if (!(await actorMayMutateLead(session.user.id, before.assignedToId))) {
-    return { ok: false, error: MUTATE_DENIED }
+  if (canEditAll) {
+    if (!(await actorMayMutateLead(session.user.id, before.assignedToId))) {
+      return { ok: false, error: MUTATE_DENIED }
+    }
+  } else {
+    // Đường HẸP (người nhập). `actorMayMutateLead` không dùng được ở đây: nó cho
+    // qua khi là assignee HOẶC có `leads:view-all` — vai này không có cả hai.
+    //
+    // Kiểm bằng `can()` KÈM TARGET để scope OWN có tác dụng thật, thay vì tự so
+    // `createdById` tại chỗ (luật cứng Nền Hệ thống #1: mọi kiểm quyền đi qua
+    // `can()`; so tay ở Server Action là thứ lint `no-inline-authz` cấm).
+    const mayEditOwn = await checkPermission('leads:edit-own-intake', {
+      createdById: before.createdById ?? undefined,
+    })
+    if (!mayEditOwn) return { ok: false, error: 'Không có quyền' }
+
+    // Bộ ô: ALLOWLIST. Gửi kèm ô ngoài danh sách là TỪ CHỐI CẢ PHIẾU, không
+    // lặng lẽ bỏ qua — im lặng thì người sửa tưởng đã lưu, và bên kia thì không.
+    const viPham = Object.keys(d).filter(
+      (k) => !(INTAKE_EDITABLE_FIELDS as readonly string[]).includes(k),
+    )
+    if (viPham.length > 0) {
+      return { ok: false, error: `${INTAKE_FIELD_DENIED} (${viPham.join(', ')})` }
+    }
   }
 
   // Đổi SĐT → kiểm tra trùng.
@@ -773,6 +849,9 @@ export async function updateLeadFields(
     ...(d.courseId !== undefined ? { courseId: d.courseId || null } : {}),
     ...(d.source !== undefined ? { source: d.source || null } : {}),
     ...(d.note !== undefined ? { note: d.note || null } : {}),
+    // 23/08 — ô "Link Facebook" CÓ trong biểu mẫu nhập khách nhưng action này
+    // chưa bao giờ ghi được: sửa xong là mất im lặng. Thêm cho cả hai đường.
+    ...(d.facebookUrl !== undefined ? { facebookUrl: d.facebookUrl || null } : {}),
   }
   await db.lead.update({ where: { id: leadId }, data: updateData })
 

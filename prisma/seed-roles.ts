@@ -373,10 +373,35 @@ export const ROLE_SEED: RoleSeed[] = [
     ],
   },
   {
-    // HO_SALE: xem lead toàn hệ thống nhưng KHÔNG sửa (Doc 15 §2).
-    code: "HO_SALE", name: "Sale Hội sở (chỉ xem)",
+    // HO_SALE — ĐẢO CHÍNH SÁCH 23/08/2026 (chủ dự án chốt).
+    //
+    // Cũ (Doc 15 §2): "xem lead TOÀN HỆ THỐNG nhưng KHÔNG sửa".
+    // Mới: NGƯỢC LẠI — nhập được, sửa được, nhưng CHỈ phần của mình:
+    //   · nhập phiếu (`leads:create`) — phiếu vẫn TỰ CHIA về Sale cơ sở đã chọn,
+    //     không giữ lại ở Hội sở (chốt 04/08 "lead không bao giờ về Hội sở" GIỮ NGUYÊN);
+    //   · chỉ thấy phiếu do CHÍNH MÌNH nhập (`leads:view-own` scope OWN →
+    //     `Lead.createdById`), KHÔNG thấy phiếu người khác nhập;
+    //   · chỉ sửa các ô CÓ TRONG biểu mẫu `/nhap-khach-hang`
+    //     (`leads:edit-own-intake`) — Sale cơ sở mới toàn quyền sửa.
+    //
+    // ⚠️ `leads:view-all` ĐÃ GỠ có chủ đích. Giữ lại là mâu thuẫn trực tiếp với
+    // "không thấy lead của người khác": v2 là ALLOW-wins, không có DENY để bù.
+    // ⚠️ KHÔNG cấp `leads:edit` — quyền đó gác ~10 action khác (đổi trạng thái,
+    // giao việc, chuyển cơ sở, thêm con…). Đó là lý do có key hẹp riêng.
+    code: "HO_SALE", name: "Sale Hội sở (phiếu mình nhập)",
     perms: [
-      { action: "leads:view-all", scopeType: "GLOBAL" },
+      { action: "leads:create", scopeType: "GLOBAL" },
+      // GLOBAL chứ KHÔNG "OWN" — luật R1 đầu file: action bị gọi TRẦN (không kèm
+      // target) thì scope OWN luôn trả false và người ta bị đá khỏi trang.
+      // `leads:view-own` đúng là gọi trần ở `/leads` + `/leads/[id]`; giới hạn
+      // "chỉ phiếu mình nhập" nằm ở MỆNH ĐỀ LỌC của truy vấn, không ở scopeType.
+      { action: "leads:view-own", scopeType: "GLOBAL" },
+      // Ngược lại, key này LUÔN được gọi kèm target `{ createdById }` trong
+      // `updateLeadFields` ⇒ OWN có tác dụng thật, là chốt chặn cuối ở server.
+      { action: "leads:edit-own-intake", scopeType: "OWN" },
+      // Nhập xong phải đọc lại được SĐT/tên mình vừa gõ, không thì màn danh sách
+      // hiện phiếu của chính mình mà bị che.
+      { action: "leads:view-pii", scopeType: "GLOBAL" },
       // --- Đào tạo nội bộ (EL-02 §3) --- tất cả GLOBAL: không ô nào của ma trận
       // mang scope khác, và cách ly cơ sở của module này đến từ dữ liệu lượt giao chứ
       // không từ scopeType (xem ghi chú R1 đầu file).

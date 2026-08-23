@@ -17,6 +17,12 @@ export const crmModule: ModuleDecl = {
     },
     { key: "leads:create", action: "create" },
     { key: "leads:edit", action: "edit" },
+    {
+      key: "leads:edit-own-intake",
+      action: "edit-own-intake",
+      description:
+        "Sửa phiếu do chính mình nhập, chỉ các ô có trong biểu mẫu nhập khách hàng.",
+    },
     { key: "leads:assign", action: "assign" },
     {
       key: "leads:assign-config",

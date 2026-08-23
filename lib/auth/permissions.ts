@@ -61,6 +61,14 @@ export type Action =
   | "leads:view-own"
   | "leads:create"
   | "leads:edit"
+  // 23/08/2026 — sửa HẸP: chỉ những ô CÓ TRONG biểu mẫu `/nhap-khach-hang`, và
+  // chỉ trên phiếu do CHÍNH MÌNH nhập (`Lead.createdById`).
+  //
+  // ⚠️ CỐ Ý TÁCH KHỎI `leads:edit`. Quyền đó đang gác ~10 action khác —
+  // đổi trạng thái, giao việc, chuyển cơ sở, thêm/sửa con, ghi chú, bàn giao.
+  // Cấp `leads:edit` cho Sale Hội sở là mở toang cả chuỗi đó, trong khi chủ dự
+  // án chốt họ chỉ được sửa đúng bộ ô mình đã gõ; Sale cơ sở mới toàn quyền.
+  | "leads:edit-own-intake"
   | "leads:assign"
   | "leads:assign-config" // 03/08 — tách riêng màn "Cấu hình chia lead" khỏi leads:assign
   | "leads:delete"
@@ -363,6 +371,10 @@ export const PERMISSIONS: Record<Action, Role[]> = {
   // Khoá bằng test: lib/auth/lead-pii-policy.test.ts. Sửa đây phải sửa seed-roles.ts.
   "leads:view-pii": ["SUPER_ADMIN", "SALES_CSM", "MARKETING"],
   "leads:create": ["SUPER_ADMIN", "CENTER_MANAGER", "SALES_CSM", "MARKETING"],
+  // v1 KHÔNG có vai "Sale Hội sở" (nó chỉ tồn tại ở RBAC v2, gán tay ở
+  // /admin/users/[id]/org-roles). Để trống ngoài SUPER_ADMIN là ĐÚNG, không
+  // phải sót: nơi nào còn enforce v1 thì tính năng này chưa có mặt.
+  "leads:edit-own-intake": ["SUPER_ADMIN"],
   "leads:edit": ["SUPER_ADMIN", "CENTER_MANAGER", "SALES_CSM", "MARKETING"],
   "leads:assign": ["SUPER_ADMIN", "CENTER_MANAGER"],
   "leads:assign-config": ["SUPER_ADMIN"],

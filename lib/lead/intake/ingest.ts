@@ -25,6 +25,17 @@ export type IntakeContext = {
   referrer?: string | null;
   /** Tên hiển thị trong `LeadActivity` khi hệ thống tự thao tác. */
   actorName?: string;
+  /**
+   * `User.id` của NGƯỜI NHẬP — đi thẳng vào `Lead.createdById` (23/08/2026).
+   *
+   * Khác `assignedToId` (người CHĂM): phiếu do Sale Hội sở nhập vẫn tự chia về
+   * Sale cơ sở, nhưng người nhập phải theo được phiếu của mình.
+   *
+   * Bỏ trống ở các nguồn KHÔNG có phiên đăng nhập (webhook facebook/zalo/
+   * google-form) — đúng nghĩa "không rõ ai nhập", và cột này quyết định QUYỀN
+   * NHÌN nên đoán bừa là lộ phiếu người khác.
+   */
+  createdByUserId?: string | null;
   /** Cơ sở đã biết sẵn (lời gọi cũ truyền thẳng id) — thắng `centerHint`. */
   centerId?: string | null;
   /** `Lead.eventId` dựng sẵn bởi caller; nếu bỏ trống sẽ suy từ `externalId`. */
@@ -424,6 +435,7 @@ export async function ingestIntakeLead(
           // `MappedLead.leadSource`); bỏ trống thì giữ nguyên hành vi cũ.
           source: mapped.leadSource ?? ctx.source,
           facebookUrl: mapped.facebookUrl ?? undefined,
+          createdById: ctx.createdByUserId ?? undefined,
           eventId: eventId ?? undefined,
           consentMarketing: mapped.consentMarketing,
           note: note ?? undefined,

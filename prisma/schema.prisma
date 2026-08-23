@@ -1334,6 +1334,16 @@ model Lead {
   orgUnitId        String? // PR-A: OrgUnit.id (song song centerId, scopedDb flip ở PR-D)
   courseId         String?
   assignedToId     String?
+  // 23/08/2026 — NGƯỜI NHẬP phiếu. Khác `assignedToId` (người CHĂM): phiếu do
+  // Sale Hội sở nhập vẫn tự chia về Sale cơ sở, nhưng người nhập phải theo được
+  // phiếu của mình. Trước đó danh tính người nhập chỉ nằm dưới dạng CHỮ trong
+  // `note` ("Nhân viên nhập: HO.KD.001") — không lọc được, nên không dựng nổi
+  // luật "chỉ thấy phiếu mình nhập".
+  //
+  // Cột TRẦN, không FK — cùng tiền lệ `orgUnitId` (PR-A). Chỉ so bằng với
+  // `actor.userId`; muốn tên người nhập thì tra `User` riêng.
+  // NULL = phiếu cũ, hoặc phiếu vào từ webhook (không có phiên đăng nhập).
+  createdById      String?
   // #11 T1 (câu 10 BGĐ, Kiệt ký 10/07): "dùng chung" — CSKH cùng CƠ SỞ thấy lead này
   // (đọc mở rộng OR isSharedWithTeam=true, cách ly cơ sở vẫn do scopedDb). Chỉ owner
   // (assignee) hoặc CENTER_MANAGER bật/tắt; sharedById = ai bật (không FK — chỉ hiển thị).
@@ -1431,6 +1441,7 @@ model Lead {
   // IDX-2: trang leads (Kanban + table) page/order theo createdAt DESC dưới scope centerId
   // → composite cho index-ordered rows (bỏ sort + OFFSET scan). Bảng high-growth.
   @@index([centerId, status, createdAt])
+  @@index([createdById])
 }
 
 // BGĐ 31/07 — NGƯỜI/ĐỐI TÁC GIỚI THIỆU (affiliate).

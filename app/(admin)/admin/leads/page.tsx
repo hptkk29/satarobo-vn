@@ -109,8 +109,15 @@ export default async function LeadsPage({
             {
               // Đợt E (22/08) — lead ĐỘC QUYỀN: mệnh đề "dùng chung" nay RỖNG
               // theo mặc định. Đường quay lui: env LEAD_SHARING_ENABLED="true".
+              //
+              // 23/08 — thêm `createdById`: "của tôi" có HAI nghĩa và cả hai đều
+              // đúng. Sale cơ sở = phiếu được GIAO cho mình; Sale Hội sở = phiếu
+              // mình NHẬP (phiếu đó tự chia về cơ sở nên họ không bao giờ là
+              // assignee — thiếu vế này thì danh sách của họ rỗng trắng).
+              // Không nới cho ai khác: người có `leads:view-all` không đi nhánh này.
               OR: [
                 { assignedToId: session.user.id },
+                { createdById: session.user.id },
                 ...leadSharedOrClause(),
               ],
             },

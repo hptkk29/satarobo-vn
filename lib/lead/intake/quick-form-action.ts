@@ -73,6 +73,9 @@ export async function createInternalLeadAction(
     // marketing người nhập gõ đi vào `Lead.source` qua `mapped.lead.leadSource`.
     source: "sale-form-app",
     actorName: session.user.name ?? session.user.email ?? "Nhân viên",
+    // NGƯỜI NHẬP — khác người CHĂM. Phiếu vẫn tự chia về Sale cơ sở như cũ;
+    // cột này để chính người nhập theo được phiếu của mình (chủ dự án 23/08).
+    createdByUserId: session.user.id,
     ipAddress: h.get("x-forwarded-for")?.split(",")[0]?.trim() ?? null,
     userAgent: h.get("user-agent"),
     // Giữ NGUYÊN chuỗi cũ dù trang đã dời sang admin host: đây là nhãn nhận

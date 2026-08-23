@@ -91,6 +91,8 @@ export default async function LeadDetailPage({ params }: Props) {
     !canSeeLead({
       canViewAll,
       isOwner: lead.assignedToId === session.user.id,
+      // 23/08 — người NHẬP phiếu cũng vào được phiếu của mình (Sale Hội sở).
+      isCreator: !!lead.createdById && lead.createdById === session.user.id,
       isShared: lead.isSharedWithTeam,
       sharingEnabled: leadSharingEnabled(),
     })

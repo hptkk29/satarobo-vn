@@ -24,14 +24,22 @@ import { isLeadSharingEnabled } from "@/lib/flags";
 export function canSeeLead(input: {
   /** Có `leads:view-all` — quản lý/CRM nhìn toàn bộ lead trong tầm nhìn cơ sở. */
   canViewAll: boolean;
-  /** Người xem chính là người phụ trách lead. */
+  /** Người xem chính là người phụ trách lead (`assignedToId`). */
   isOwner: boolean;
+  /**
+   * Người xem chính là NGƯỜI NHẬP phiếu (`Lead.createdById`) — 23/08/2026.
+   *
+   * Vế riêng chứ không gộp vào `isOwner`: phiếu do Sale Hội sở nhập TỰ CHIA về
+   * Sale cơ sở, nên người nhập không bao giờ là assignee. Thiếu vế này thì họ
+   * nhập xong bấm "Mở" là bị đá về danh sách.
+   */
+  isCreator?: boolean;
   /** Lead đang bật cờ "dùng chung" (dữ liệu cũ vẫn còn). */
   isShared: boolean;
   /** Chính sách chia sẻ lead có đang bật không. */
   sharingEnabled: boolean;
 }): boolean {
-  if (input.canViewAll || input.isOwner) return true;
+  if (input.canViewAll || input.isOwner || input.isCreator) return true;
   return input.sharingEnabled && input.isShared;
 }
 
