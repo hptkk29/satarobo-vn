@@ -141,6 +141,12 @@ export const PAGE_GATES = {
    *  `trials:view` là quyền Sale vốn đã có; không mở thêm gì. */
   "/sale/trial": ["trials:view"],
 
+  /** Chốt đơn — tạo đơn cho khách của mình. `orders:create` là action HẸP mở ở
+   *  Đợt 0 (G-A), KHÔNG phải `orders:manage` (mở/huỷ/hoàn toàn hệ thống).
+   *  Phạm vi "chỉ đơn gắn khách của mình" do `checkOrderCreateOwnership()` gác
+   *  trong chính action — gate trang chỉ chặn sớm cho đỡ phí một vòng gọi. */
+  "/sale/chot-don": ["orders:create"],
+
   /** Khách của tôi — danh sách + chi tiết + ghi hoạt động + việc follow-up.
    *  `leads:view-own` là quyền Sale vốn đã có. KHÔNG dùng `leads:view-all`: đó
    *  là quyền của quản lý, và trang này cố ý chỉ trả lời "khách nào của tôi". */

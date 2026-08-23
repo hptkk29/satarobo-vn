@@ -15,6 +15,10 @@ import { LEAD_STATUS_LABEL } from "@/lib/leads/status";
 import { formatDateVN } from "@/lib/format/date";
 import { Badge } from "@/components/ui/badge";
 import { LeadTouchPanel } from "../_components/touch-panel";
+import { SaleOrderPanel } from "../_components/order-panel";
+import { getSaleLeadOrders } from "@/lib/orders/sale-orders";
+import { checkPermission } from "@/lib/auth/check-permission";
+import { loadCreateOrderFormData } from "@/app/(admin)/admin/orders/_actions";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Chi tiết khách | Tư vấn tuyển sinh" };
@@ -44,6 +48,16 @@ export default async function SaleLeadDetailPage({
   // `null` = không tồn tại HOẶC không phải khách của bạn — cố ý không phân biệt.
   if (!lead) notFound();
 
+  // Khối đơn hàng chỉ nạp khi người xem thật sự tạo được đơn. Không có quyền mà
+  // vẫn nạp là tốn hai truy vấn ở MỌI lần mở trang, chỉ để vẽ một khối rồi giấu.
+  const coQuyenTaoDon = await checkPermission("orders:create");
+  const [donHang, formTaoDon] = coQuyenTaoDon
+    ? await Promise.all([
+        getSaleLeadOrders(actor, session.user.id, lead.id),
+        loadCreateOrderFormData(),
+      ])
+    : [null, null];
+
   return (
     <div>
       <Link
@@ -62,6 +76,25 @@ export default async function SaleLeadDetailPage({
 
       <div className="grid gap-4 lg:grid-cols-[1fr_20rem]">
         <div className="space-y-4">
+          {donHang && formTaoDon ? (
+            <SaleOrderPanel
+              leadId={lead.id}
+              orders={donHang.orders.map((o) => ({
+                id: o.id,
+                code: o.code,
+                status: o.status,
+                totalAmount: o.totalAmount,
+                daGhiNhan: o.daGhiNhan,
+                createdAt: o.createdAt.toISOString(),
+                items: o.items,
+              }))}
+              tongDon={donHang.tongDon}
+              tongDaGhiNhan={donHang.tongDaGhiNhan}
+              conThieu={donHang.conThieu}
+              phuongThuc={formTaoDon.paymentMethods.map((m) => ({ id: m.id, name: m.name }))}
+            />
+          ) : null}
+
           <LeadTouchPanel
             leadId={lead.id}
             activities={lead.activities.map((a) => ({
