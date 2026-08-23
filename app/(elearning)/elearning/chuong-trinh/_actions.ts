@@ -6,6 +6,15 @@ import {
   cauHinhDuyetPhieuNhuCau,
 } from "@/lib/elearning/training-need";
 import { cauHinhTaoChuongTrinh } from "@/lib/elearning/program-create";
+import {
+  cauHinhTaoChuong,
+  cauHinhTaoBai,
+  cauHinhSapThuTu,
+  cauHinhDatBatBuoc,
+  cauHinhDatTuanTu,
+  cauHinhVongDoiKhoa,
+  cauHinhNhanBanKhoa,
+} from "@/lib/elearning/course-authoring";
 
 /**
  * EL-08 — phiếu nhu cầu + chương trình đào tạo.
@@ -18,3 +27,17 @@ export const taoPhieuNhuCauAction = defineAction(cauHinhTaoPhieuNhuCau);
 export const duyetPhieuNhuCauAction = defineAction(cauHinhDuyetPhieuNhuCau);
 
 export const taoChuongTrinhAction = defineAction(cauHinhTaoChuongTrinh);
+
+export const taoChuongAction = defineAction(cauHinhTaoChuong);
+
+export const taoBaiAction = defineAction(cauHinhTaoBai);
+
+export const sapThuTuAction = defineAction(cauHinhSapThuTu);
+
+export const datBatBuocAction = defineAction(cauHinhDatBatBuoc);
+
+export const datTuanTuAction = defineAction(cauHinhDatTuanTu);
+
+export const vongDoiKhoaAction = defineAction(cauHinhVongDoiKhoa);
+
+export const nhanBanKhoaAction = defineAction(cauHinhNhanBanKhoa);
