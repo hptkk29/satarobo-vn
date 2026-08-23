@@ -257,6 +257,12 @@ export const BACKFILL_SPECS: readonly BackfillSpec[] = [
   // 5 bảng của module có ĐỦ hai cột. Thiếu một dòng ở đây thì test [US-07-IT-08b] đỏ —
   // đó là chủ đích: bảng mới có cột đơn vị mà không khai thì đối soát đêm lặng lẽ bỏ qua nó.
   {
+    model: "TrnTrainingNeed",
+    nullMeaning: "NULL_TOAN_HE_THONG",
+    scoped: true,
+    vi: "phiếu nhu cầu đào tạo — NULL = nhu cầu toàn công ty, không của riêng cơ sở nào",
+  },
+  {
     model: "TrnProgram",
     nullMeaning: "NULL_TOAN_HE_THONG",
     scoped: true,

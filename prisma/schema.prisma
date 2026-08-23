@@ -7059,6 +7059,7 @@ model TrnProgram {
   updatedAt   DateTime  @updatedAt @db.Timestamptz(6)
   deletedAt   DateTime? @db.Timestamptz(6)
 
+  need           TrnTrainingNeed?      @relation(fields: [needId], references: [id], onDelete: SetNull)
   courses        TrnCourse[]
   evaluationRows TrnEvaluationResult[]
   evalLinkConfig TrnEvalLinkConfig?
@@ -8003,4 +8004,54 @@ model TrnIncident {
 
   @@index([scope, detectedAt])
   @@index([assignmentId])
+}
+
+/// Hai trạng thái, không hơn (bản tối giản của B1 — C2).
+///
+/// Thêm trạng thái thứ ba ("đang xem xét", "trả lại") nghe hợp lý nhưng mỗi giá
+/// trị mới là một nhánh phải nhớ ở mọi câu truy vấn về sau, đổi lấy một thông tin
+/// mà ô lý do đã nói được.
+enum TrnTrainingNeedStatus {
+  NEW
+  APPROVED
+}
+
+/// Phiếu nhu cầu đào tạo (B1, §8.1).
+///
+/// ⚠️ Bảng này tồn tại vì một MÂU THUẪN CỨNG trong tài liệu gốc: BA §22.1 xếp
+/// bước "Nhu cầu" sang giai đoạn sau, trong khi chính §8.1 viết *"không được tạo
+/// chương trình nếu không gắn phiếu nhu cầu đã duyệt"*. Không có bảng này thì
+/// luật kia không thi hành được, và nó sẽ lặng lẽ thành một câu chữ không ai theo.
+///
+/// Đường thoát duy nhất là `TrnProgram.needExemptReason` — không có phiếu thì
+/// phải viết ra lý do; không được để trống CẢ HAI.
+model TrnTrainingNeed {
+  id               String                @id @default(cuid())
+  code             String                @unique
+  title            String
+  requesterUserId  String
+  /// Mô tả nhóm người học bằng LỜI, không phải luật lọc: ở bước đề xuất thì
+  /// người đề nghị chưa biết (và không cần biết) hệ thống lọc nhân sự thế nào.
+  targetGroupText  String
+  reason           String                @db.Text
+  expectedOutcome  String                @db.Text
+  /// Quý dự kiến, dạng "2026-Q3". Chuỗi chứ không phải ngày: đây là dự kiến ở
+  /// mức quý, ép thành ngày cụ thể là bịa ra độ chính xác không có thật.
+  proposedQuarter  String
+  status           TrnTrainingNeedStatus @default(NEW)
+  approvedByUserId String?
+  approvedAt       DateTime?             @db.Timestamptz(6)
+
+  centerId  String?
+  orgUnitId String?
+
+  programs TrnProgram[]
+
+  createdAt DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime  @updatedAt @db.Timestamptz(6)
+  deletedAt DateTime? @db.Timestamptz(6)
+
+  @@index([status, createdAt])
+  @@index([orgUnitId])
+  @@index([centerId])
 }

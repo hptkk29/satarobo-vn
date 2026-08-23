@@ -1,11 +1,12 @@
 # Quy ước nền — module đào tạo nội bộ (e-learning)
 
-> **Đọc file này TRƯỚC KHI MỞ PR đụng module e-learning.** Mười bốn quy ước dưới đây.
-> Quy ước **1–4, 12, 13** được **máy cưỡng chế** (ESLint / Vitest / CI); **5–11 và 14** thì
-> không — chúng chỉ sống nếu người ta đọc chỗ này. Đó là lý do chúng nằm ở một chỗ chứ
+> **Đọc file này TRƯỚC KHI MỞ PR đụng module e-learning.** Mười sáu quy ước dưới đây.
+> Quy ước **1–4, 12, 13, 16** được **máy cưỡng chế** (ESLint / Vitest / CI); **5–11, 14, 15**
+> thì không — chúng chỉ sống nếu người ta đọc chỗ này. Đó là lý do chúng nằm ở một chỗ chứ
 > không rải rác trong các ticket dùng.
 >
-> 1–9 thuộc ticket nền EL-07; **10–12 chốt qua EL-05**, **13–14 qua EL-06** (23/08/2026).
+> 1–9 thuộc ticket nền EL-07; **10–12 qua EL-05**, **13–14 qua EL-06**, **15–16 qua EL-08**
+> (23/08/2026).
 
 Nguồn: `02-KE-HOACH-THUC-HIEN-Elearning-v1.4.md` — ticket EL-07, quyết định QĐ-CDA-02b (biện pháp
 1, 3, 4) và QĐ-CDA-13 (BP-1, BP-2).
@@ -196,7 +197,36 @@ khi có việc chưa chạy là thứ khó phát hiện nhất, vì không có g
 
 ---
 
-## Ràng buộc kèm theo, không thuộc mười bốn quy ước nhưng dễ quên
+## Hai quy ước bổ sung — chốt qua EL-08 (23/08/2026)
+
+### 15. ĐỌC enum trong `prisma/schema.prisma` trước khi viết máy trạng thái
+
+**Đã vấp:** EL-08 viết máy trạng thái phiên bản với `PENDING_APPROVAL` và một hành động
+`DUYET_VA_XUAT_BAN` gộp. Schema thật có `TrnVersionStatus` = `DRAFT · PENDING_REVIEW ·
+APPROVED · PUBLISHED · ARCHIVED` và `TrnLessonKind` = `READ · VIDEO · SCORM · QUIZ · TASK ·
+LIVE_SESSION`. Ba chỗ sai, typecheck bắt cả ba.
+
+Sửa xong hoá ra **bản schema đúng hơn bản bịa**: duyệt và xuất bản là hai bước, và tách ra
+mới cho người duyệt nói được *"đúng rồi, nhưng chờ tới đầu quý hãy phát"*. Enum trong schema
+là kết quả của một vòng thiết kế đã có lý do — đoán lại từ đầu là bỏ mất lý do đó.
+
+### 16. Ghi lại `orderIndex` dưới khoá duy nhất phải đi HAI PHA
+
+`TrnModule` có `@@unique([courseId, orderIndex])`, `TrnLesson` có
+`@@unique([moduleId, orderIndex])`. Ghi thẳng thứ tự mới sẽ **va khoá ngay bước đầu** vì còn
+phần tử mang số đích.
+
+Khuôn đúng ở `lib/elearning/course-outline.ts` (`dungHaiPhaGhiThuTu`): pha 1 đẩy **toàn bộ**
+sang dải âm, pha 2 ghi số thật — cả hai trong CÙNG một transaction. Pha 1 phải phủ mọi phần
+tử kể cả cái không đổi chỗ; chỉ đẩy "cái có đổi" thì vẫn còn số dương nằm lại và pha 2 va
+đúng vào chúng.
+
+Đây không phải lỗi mất dữ liệu — nó chỉ làm thao tác kéo thả thất bại với một lỗi khó hiểu,
+và người dùng kết luận hệ thống hỏng.
+
+---
+
+## Ràng buộc kèm theo, không thuộc mười sáu quy ước nhưng dễ quên
 
 - **Ngân sách cron: tối đa 2 khe** cho cả module. Bảy mốc nhắc gộp vào **một** cron quét
   (`elearning-reminders`, nhịp 15 phút); việc dọn dữ liệu thô 90 ngày gộp vào cron đêm
