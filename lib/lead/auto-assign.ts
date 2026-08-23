@@ -9,6 +9,7 @@ import {
   type SaleStat,
 } from "@/lib/lead/assign-strategy";
 import { takeRotationTurn } from "@/lib/lead/rotation";
+import { canManualAssign } from "@/lib/lead/assign-guard";
 import { assignmentWrite } from "@/lib/lead/assignment";
 
 // Module CRM & Lead PHẦN 2 — chia lead tự động (cơ sở → chế độ) + khoá khi đã tương tác.
@@ -263,18 +264,49 @@ export async function reassignForCenter(
   return takeRotationTurn(orgUnitId, stats.map((s) => s.id));
 }
 
-/** Quản lý gán tay 1 lead cho 1 sale cụ thể. */
+/**
+ * Quản lý gán tay 1 lead cho 1 sale cụ thể.
+ *
+ * ⚠️ Đợt G (23/08/2026) — THÊM KIỂM NGƯỜI NHẬN. Trước đó điều kiện duy nhất là
+ * "có vai SALES_CSM và chưa xoá mềm": không kiểm còn làm việc, không kiểm cùng
+ * cơ sở. Đó đúng là cơ chế đã đẻ ra sự cố phải gỡ tay 21/08 — một lead CS1 nằm
+ * trong tay sale CS2, mà `scopedDb` cách ly cơ sở nên **người đó không mở nổi
+ * nó**; lead nằm chết, không màn nào báo lỗi.
+ *
+ * Đợt D đã bịt đường TỰ ĐỘNG (bỏ fallback chia xuyên cơ sở) nhưng đường gán tay
+ * vẫn mở nguyên — bịt một nửa thì cái nửa còn lại chính là chỗ sự cố tái diễn.
+ *
+ * Luật để ở `lib/lead/assign-guard.ts` (thuần, có test) chứ không viết `if` tại
+ * chỗ: sẽ còn cửa gán thứ hai, thứ ba, và lần trước nó chỉ nằm ở một chỗ.
+ */
 export async function manualAssignLead(
   leadId: string,
   saleId: string,
   actor: Actor,
+  opts: { actorIsHoLevel?: boolean } = {},
 ): Promise<{ ok: boolean; error?: string }> {
   const [lead, sale] = await Promise.all([
-    db.lead.findUnique({ where: { id: leadId }, select: { id: true, assignedToId: true, status: true } }),
-    db.user.findFirst({ where: { id: saleId, roles: { has: "SALES_CSM" }, deletedAt: null }, select: { id: true, name: true } }),
+    db.lead.findUnique({
+      where: { id: leadId },
+      select: { id: true, assignedToId: true, status: true, centerId: true },
+    }),
+    db.user.findFirst({
+      where: { id: saleId, roles: { has: "SALES_CSM" } },
+      select: { id: true, name: true, isActive: true, deletedAt: true, centerId: true },
+    }),
   ]);
   if (!lead) return { ok: false, error: "Lead không tồn tại" };
   if (!sale) return { ok: false, error: "Sale không hợp lệ" };
+
+  // `deletedAt` cố ý KHÔNG lọc ở truy vấn nữa: lọc ở đó thì người đã xoá mềm rơi
+  // vào nhánh "Sale không hợp lệ" — đúng kết quả nhưng sai thông báo, và người
+  // bấm nút không hiểu vì sao. Guard nói rõ từng lý do.
+  const guard = canManualAssign({
+    sale,
+    leadCenterId: lead.centerId,
+    actorIsHoLevel: opts.actorIsHoLevel ?? false,
+  });
+  if (!guard.ok) return { ok: false, error: guard.error };
 
   await db.$transaction(async (tx) => {
     await tx.lead.update({
