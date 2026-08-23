@@ -190,6 +190,17 @@ async function postToMisa(
     // Đường duy nhất bắt được ca đó là mở MISA ra nhìn — ta không có API để hỏi.
     // Bù lại, sai `ID`/`FormKey` thì MISA trả **500**, nên nhánh dưới vẫn bắt
     // được ca khoá hỏng/hết hạn.
+    // Vết DUY NHẤT ta có để đối chứng khi MISA "nhận mà không lưu" (xem cảnh báo
+    // ngay trên). Ghi cả lúc THÀNH CÔNG vì đó mới là ca khó: 302 nhìn y hệt nhau
+    // dù phiếu được lưu hay bị vứt, nên khi bên MISA báo "không thấy" thì đây là
+    // thứ duy nhất phân biệt được "app chưa gửi" với "MISA đã nhận rồi bỏ".
+    // `x-request-id` đưa cho MISA hỗ trợ là họ tra được log hai đầu.
+    // KHÔNG log `FormKey` (luật cứng #9 — không log giá trị secret).
+    console.log(
+      `[misa-mirror] MISA ${res.status} · x-request-id=${res.headers.get("x-request-id") ?? "(khong co)"} ` +
+        `· AllowURL=${JSON.stringify(config.AllowURL)} · form=…${config.ID.slice(-6)} ` +
+        `· truong=[${Object.keys(fields).join(",")}]`,
+    );
     if (res.status >= 400) {
       console.error(`[misa-mirror] MISA trả ${res.status} (tham số lấy từ ${via})`);
       return { status: "failed", reason: `http-${res.status}` };
