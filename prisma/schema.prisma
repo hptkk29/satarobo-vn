@@ -7302,11 +7302,11 @@ model TrnRequirement {
 /// cơ chế giám sát của GĐ2 dựa vào (QĐ-CDA-12).
 /// Bảng CON theo người dùng ⇒ không mang cột đơn vị.
 model TrnPolicyAcceptance {
-  id            String   @id @default(cuid())
+  id            String    @id @default(cuid())
   userId        String
   policyKey     String
   policyVersion String
-  acceptedAt    DateTime @default(now()) @db.Timestamptz(6)
+  acceptedAt    DateTime  @default(now()) @db.Timestamptz(6)
   /// Rút đồng ý: đÓNG dòng đang hiệu lực, KHÔNG xoá nó. Đây là đường `update` DUY NHẤT
   /// được phép trên bảng này; mọi đường update/delete khác đều bị cấm, vì dòng cũ là BẰNG
   /// CHỨNG BẤT BIẾN rằng người đó đã được thông báo phạm vi nào, vào ngày nào.
@@ -7549,10 +7549,10 @@ model TrnAssignment {
   isMandatory  Boolean         @default(false)
   audienceMode TrnAudienceMode @default(STATIC)
 
-  startAt          DateTime     @default(now()) @db.Timestamptz(6)
-  dueAt            DateTime?    @db.Timestamptz(6)
-  dueRelativeDays  Int?
-  dueAnchor        TrnDueAnchor @default(ASSIGNED_AT)
+  startAt         DateTime     @default(now()) @db.Timestamptz(6)
+  dueAt           DateTime?    @db.Timestamptz(6)
+  dueRelativeDays Int?
+  dueAnchor       TrnDueAnchor @default(ASSIGNED_AT)
 
   /// HẠN CHÓT CỨNG CÓ HIỆU LỰC (QĐ-CDA-05). Mặc định `false`, và mặc định đó là
   /// phần thi hành chứ không phải gu:
@@ -7565,7 +7565,7 @@ model TrnAssignment {
   allowLate Boolean @default(false)
 
   completionRuleJson Json
-  maxAttempts        Int   @default(1)
+  maxAttempts        Int  @default(1)
 
   /// Chống tua và chặn tốc độ phát — cơ chế giám sát của GĐ2, khai cột từ GĐ1.
   blockSeek       Boolean @default(true)
@@ -7663,19 +7663,19 @@ model TrnAssignmentExclude {
 /// vì `TrnEnrollment` ∈ `SCOPED_MODELS` và NULL ở đây nghĩa là "chưa backfill",
 /// không phải "toàn công ty".
 model TrnEnrollment {
-  id     String @id @default(cuid())
+  id           String  @id @default(cuid())
   /// Tên cột là `userId`, KHÔNG phải `learnerUserId` — đồng bộ với
   /// `TrnLessonProgress.userId` và `TrnCertificate.userId`.
-  userId String
+  userId       String
   /// NOT NULL. Lượt giao cấp LESSON nở về khoá chứa bài; cấp PATH nở thành nhiều dòng.
-  courseId String
+  courseId     String
   /// NULL = không sinh từ lượt giao (công nhận tương đương, auto từ `TrnRequirement`,
   /// hoặc tự ghi danh).
   assignmentId String?
 
   /// Chu kỳ tái chứng nhận — tăng khi khoá được giao lại theo `validityMonths`.
-  cycle  Int             @default(1)
-  source TrnEnrollSource @default(ASSIGNMENT)
+  cycle  Int                 @default(1)
+  source TrnEnrollSource     @default(ASSIGNMENT)
   /// ĐÚNG 6 giá trị. "Công nhận tương đương" KHÔNG phải trạng thái thứ 7 — nó là
   /// `COMPLETED` + `verifiedAt` + `source = EQUIVALENCE`, nhãn suy từ cột `source`.
   status TrnEnrollmentStatus @default(NOT_STARTED)
@@ -7705,6 +7705,12 @@ model TrnEnrollment {
   /// đang `pausedAt != null` bị LOẠI khỏi CẢ tử số lẫn mẫu số của chỉ số đúng hạn.
   pausedAt   DateTime? @db.Timestamptz(6)
   pausedDays Int       @default(0)
+
+  /// EL-05 — thu hồi. Rời tập luật ĐỘNG ⇒ `REVOKED` + lý do "rời tập luật"; thu hồi
+  /// tay ⇒ lý do người vận hành nhập. KHÔNG đẻ trạng thái mới cho hai đường đó —
+  /// chúng khác nhau ở LÝ DO, không khác ở trạng thái.
+  revokedAt    DateTime? @db.Timestamptz(6)
+  revokeReason String?
 
   // ── Ảnh chụp tổ chức lúc giao, GHI MỘT LẦN, không bao giờ cập nhật ──
   // Vì sao bắt buộc chứ không phải tối ưu: báo cáo nhóm theo phòng ban và quản lý
@@ -7737,6 +7743,7 @@ model TrnEnrollment {
 
   /// EL-04 — tiến độ từng bài của lượt ghi danh này.
   lessonProgress TrnLessonProgress[]
+
   @@unique([courseId, userId, cycle])
   @@index([userId, status])
   @@index([status, dueAt])

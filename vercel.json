@@ -92,6 +92,10 @@
     {
       "path": "/api/cron/chat-zns-notify",
       "schedule": "*/30 * * * *"
+    },
+    {
+      "path": "/api/cron/elearning-dynamic-audience",
+      "schedule": "30 18 * * *"
     }
   ]
 }
