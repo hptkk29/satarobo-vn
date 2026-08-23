@@ -1,10 +1,11 @@
 # Quy ước nền — module đào tạo nội bộ (e-learning)
 
-> **Đọc file này TRƯỚC KHI MỞ PR đụng module e-learning.** Mười hai quy ước dưới đây. Quy ước 1–4 và
-> 12 được **máy cưỡng chế** (ESLint / Vitest / CI); **5–11 thì không** — chúng chỉ sống nếu người ta
-> đọc chỗ này. Đó là lý do chúng nằm ở một chỗ chứ không rải rác trong các ticket dùng.
+> **Đọc file này TRƯỚC KHI MỞ PR đụng module e-learning.** Mười bốn quy ước dưới đây.
+> Quy ước **1–4, 12, 13** được **máy cưỡng chế** (ESLint / Vitest / CI); **5–11 và 14** thì
+> không — chúng chỉ sống nếu người ta đọc chỗ này. Đó là lý do chúng nằm ở một chỗ chứ
+> không rải rác trong các ticket dùng.
 >
-> 1–9 thuộc ticket nền EL-07; **10–12 chốt qua EL-05** (23/08/2026).
+> 1–9 thuộc ticket nền EL-07; **10–12 chốt qua EL-05**, **13–14 qua EL-06** (23/08/2026).
 
 Nguồn: `02-KE-HOACH-THUC-HIEN-Elearning-v1.4.md` — ticket EL-07, quyết định QĐ-CDA-02b (biện pháp
 1, 3, 4) và QĐ-CDA-13 (BP-1, BP-2).
@@ -168,7 +169,34 @@ sinh ra để bắt, vì chỉ phủ một nhánh của điều kiện.
 
 ---
 
-## Ràng buộc kèm theo, không thuộc mười hai quy ước nhưng dễ quên
+## Hai quy ước bổ sung — chốt qua EL-06 (23/08/2026)
+
+### 13. Ngân sách cron của module là ĐÚNG HAI KHE, không xin thêm
+
+`/api/cron/elearning-reminders` (mỗi 15 phút, lệch pha) và `/api/cron/elearning-dem` (00:47
+giờ VN). Mọi việc nền khác **gộp vào một trong hai**, kể cả việc dọn dữ liệu (QĐ-CDA-14 điểm
+2). Sau PR EL-06, `vercel.json` có **đúng 25** cron — con số này là AC11.
+
+**Đã vấp một lần:** EL-05 thêm `elearning-dynamic-audience` thành khe thứ ba, trong khi việc
+nó làm chính là **việc (2) của `elearning-dem`**. Đã gộp lại và trả khe.
+
+⚠️ **Mọi lịch cron mới phải MỞ `vercel.json` đối chiếu trước khi đặt**, không suy từ trí nhớ:
+mọi phút chia hết cho 5 đã bị `email-queue`/`sla-check`/`chat-zns-notify` chiếm, và `0 20 * * *`
+đã bị `orgunit-drift` chiếm. Guard `lib/cron/dang-ky-cron.test.ts` canh bốn chiều (route thiếu
+lịch · lịch trỏ vào hư không · lịch trùng · route không có cổng xác thực).
+
+### 14. Việc nền chưa làm được phải NÓI RA trong phản hồi, không bỏ trống
+
+Cron đêm có hai việc chưa chạy được vì bảng thuộc ticket khác chưa tồn tại (`TrnCertificate`
+— EL-16; `TrnExamAttempt` — EL-14). Cả hai trả về một trường nói rõ **bảng nào, ticket nào**.
+
+**Số đếm của việc chưa chạy được là `null`, KHÔNG phải `0`.** `0` đọc thành *"đã chạy và không
+có gì để làm"* — tức nói dối; `null` đọc thành *"chưa chạy được"*. Một cron báo "xong" trong
+khi có việc chưa chạy là thứ khó phát hiện nhất, vì không có gì vỡ.
+
+---
+
+## Ràng buộc kèm theo, không thuộc mười bốn quy ước nhưng dễ quên
 
 - **Ngân sách cron: tối đa 2 khe** cho cả module. Bảy mốc nhắc gộp vào **một** cron quét
   (`elearning-reminders`, nhịp 15 phút); việc dọn dữ liệu thô 90 ngày gộp vào cron đêm
