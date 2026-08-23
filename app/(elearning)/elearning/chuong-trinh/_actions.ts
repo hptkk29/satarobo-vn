@@ -7,6 +7,7 @@ import {
 } from "@/lib/elearning/training-need";
 import { cauHinhTaoChuongTrinh } from "@/lib/elearning/program-create";
 import {
+  cauHinhTaoKhoa,
   cauHinhTaoChuong,
   cauHinhTaoBai,
   cauHinhSapThuTu,
@@ -27,6 +28,8 @@ export const taoPhieuNhuCauAction = defineAction(cauHinhTaoPhieuNhuCau);
 export const duyetPhieuNhuCauAction = defineAction(cauHinhDuyetPhieuNhuCau);
 
 export const taoChuongTrinhAction = defineAction(cauHinhTaoChuongTrinh);
+
+export const taoKhoaAction = defineAction(cauHinhTaoKhoa);
 
 export const taoChuongAction = defineAction(cauHinhTaoChuong);
 

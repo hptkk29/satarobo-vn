@@ -99,6 +99,84 @@ async function docDanBai(db: ScopedDb, courseId: string): Promise<ChuongTrongDan
   }));
 }
 
+// ── Tạo khoá ───────────────────────────────────────────────────────────────
+
+export const taoKhoaSchema = z
+  .object({
+    programId: z.string().min(1, "Khoá phải thuộc một chương trình"),
+    title: z.string().trim().min(1, "Tên khoá không được trống"),
+    summary: z.union([z.null(), z.string().trim()]).optional(),
+    estimatedMinutes: z.union([z.null(), z.number().int().min(1).max(6000)]).optional(),
+  })
+  .strict();
+
+export const cauHinhTaoKhoa: ActionConfig<
+  z.infer<typeof taoKhoaSchema>,
+  { courseId: string; code: string }
+> = {
+  name: "taoKhoa",
+  permission: "elearning:content:author",
+  module: "elearning",
+  entityType: "TrnCourse",
+  auditAction: "CREATE",
+  schema: taoKhoaSchema,
+  handler: async ({ db, actor, input }) => {
+    // ⚠️ Khoá BẮT BUỘC thuộc một chương trình, không tạo khoá mồ côi. Chương trình
+    // là nơi giữ sáu nhóm thẻ phân loại và mối nối với phiếu nhu cầu (§8.1); khoá
+    // đứng ngoài là một đường vòng qua toàn bộ luật đó.
+    const ct = await db.trnProgram.findFirst({
+      where: { id: input.programId, deletedAt: null },
+      select: { id: true, code: true, securityTag: true, centerId: true, orgUnitId: true },
+    });
+    if (!ct) throw new ActionError("NOT_FOUND", "Không tìm thấy chương trình", "programId");
+
+    const dem = await db.trnCourse.count({ where: { programId: ct.id } });
+
+    let tao: { id: string; code: string } | null = null;
+    for (let lan = 1; lan <= 20 && !tao; lan += 1) {
+      const code = `${ct.code}.K${String(dem + lan).padStart(2, "0")}`;
+      const slug = code.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+      const trung = await db.trnCourse.findFirst({
+        where: { OR: [{ code }, { slug }] },
+        select: { id: true },
+      });
+      if (trung) continue;
+      tao = await db.trnCourse.create({
+        data: {
+          programId: ct.id,
+          code,
+          slug,
+          title: input.title,
+          summary: input.summary ?? null,
+          estimatedMinutes: input.estimatedMinutes ?? null,
+          status: "DRAFT",
+          // Kế thừa mức bảo mật của chương trình (C7): khoá không được LỎNG HƠN
+          // chương trình chứa nó, nếu không thẻ bảo mật ở cấp trên thành trang trí.
+          securityLevel: ct.securityTag,
+          visibility: "ASSIGNED_ONLY",
+          selfEnrollEnabled: false,
+          centerId: ct.centerId,
+          orgUnitId: ct.orgUnitId,
+          ownerUserId: actor.userId,
+          createdById: actor.userId,
+        },
+        select: { id: true, code: true },
+      });
+    }
+    if (!tao) throw new ActionError("CONFLICT", "Không sinh được mã khoá, thử lại giúp tôi");
+
+    // Dựng luôn bản nháp v1.0: khoá không có bản nháp thì mọi thao tác soạn sau
+    // đó phải tự tạo, và mỗi chỗ tự tạo là một chỗ có thể tạo khác nhau.
+    await banNhap(db, tao.id);
+
+    return {
+      entityId: tao.id,
+      data: { courseId: tao.id, code: tao.code },
+      newValues: { code: tao.code, title: input.title, thuocChuongTrinh: ct.code },
+    };
+  },
+};
+
 // ── Tạo chương ─────────────────────────────────────────────────────────────
 
 export const taoChuongSchema = z
