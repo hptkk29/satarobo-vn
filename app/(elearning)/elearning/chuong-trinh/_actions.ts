@@ -16,6 +16,10 @@ import {
   cauHinhVongDoiKhoa,
   cauHinhNhanBanKhoa,
 } from "@/lib/elearning/course-authoring";
+import {
+  cauHinhCongNhanTuongDuong,
+  cauHinhDiemDanhBuoi,
+} from "@/lib/elearning/equivalence";
 
 /**
  * EL-08 — phiếu nhu cầu + chương trình đào tạo.
@@ -44,3 +48,7 @@ export const datTuanTuAction = defineAction(cauHinhDatTuanTu);
 export const vongDoiKhoaAction = defineAction(cauHinhVongDoiKhoa);
 
 export const nhanBanKhoaAction = defineAction(cauHinhNhanBanKhoa);
+
+export const congNhanTuongDuongAction = defineAction(cauHinhCongNhanTuongDuong);
+
+export const diemDanhBuoiAction = defineAction(cauHinhDiemDanhBuoi);

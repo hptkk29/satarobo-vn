@@ -299,6 +299,12 @@ export const BACKFILL_SPECS: readonly BackfillSpec[] = [
     vi: "lượt giao bài — luôn thuộc một cơ sở",
   },
   {
+    model: "TrnEquivalence",
+    nullMeaning: "BAT_BUOC",
+    scoped: true,
+    vi: "công nhận tương đương — luôn thuộc cơ sở của người được công nhận; NULL = chưa backfill",
+  },
+  {
     model: "TrnEnrollment",
     nullMeaning: "BAT_BUOC",
     scoped: true,
