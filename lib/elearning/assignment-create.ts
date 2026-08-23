@@ -7,6 +7,7 @@ import { dungHangGhiDanh } from "@/lib/elearning/enrollment-rows";
 import type { NguoiTrongTap } from "@/lib/elearning/audience";
 import type { Actor } from "@/lib/auth/actor";
 import { publishEvent } from "@/lib/events/publish";
+import { phatSuKienGhiDanhMoi } from "@/lib/elearning/enrollment-events";
 import { orgUnitIdForCenter } from "@/lib/org/org-service";
 
 /**
@@ -227,6 +228,18 @@ export const cauHinhTaoLuotGiao: ActionConfig<TaoLuotGiaoInput, TaoLuotGiaoKetQu
           skipDuplicates: true,
         });
       }
+
+      // Một sự kiện cho MỖI người: handler thông báo cần id lượt ghi danh để
+      // dựng liên kết "vào học". Sự kiện cấp lượt giao ở dưới KHÔNG thay được
+      // việc này — nó không biết ai nhận cái gì.
+      await phatSuKienGhiDanhMoi(
+        tx as never,
+        {
+          assignmentId: assignment.id,
+          userIds: dungDon.map((r) => r.userId),
+          tx,
+        },
+      );
 
       // Sự kiện đi TRONG giao dịch: outbox và dữ liệu cùng sống hoặc cùng chết.
       await publishEvent(

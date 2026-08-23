@@ -40,6 +40,10 @@ export const PENDING_SYNC_TYPES = [
   "class_no_teacher",
   "registered_stale",
   "report_card_milestone",
+  // EL-06 — khoá đào tạo nội bộ tới hạn. Khai ở đây vì vòng đồng bộ SINH RA khoá
+  // `elearning_due:pending`/`:overdue`; thiếu dòng này thì reconcile coi chúng là
+  // thông báo của nguồn khác và không bao giờ dọn, để chuông đọng mãi.
+  "elearning_due",
 ] as const satisfies readonly PendingTaskType[];
 
 /** Rỗng = khai đủ. Còn phần tử = có loại việc chưa khai ở `PENDING_SYNC_TYPES`. */

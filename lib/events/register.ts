@@ -1,6 +1,7 @@
 // lib/events/register.ts — A0-07: đăng ký handler 1 lần/process (idempotent).
 // Nghiệp vụ thật thêm registerXxx() ở đây. Hiện chỉ demo.ping (A0 dựng cơ chế).
 import { registerPingDemo } from "@/lib/events/_demo/ping-handlers";
+import { registerElearningNotifyHandlers } from "@/lib/elearning/_handlers/notify";
 import { registerLeadConvertedHandlers } from "@/lib/crm/_handlers/lead-converted";
 import { registerR7NotificationHandlers } from "@/lib/_handlers/r7-notifications";
 import { registerR7LifecycleHandlers } from "@/lib/_handlers/r7-lifecycle";
@@ -40,4 +41,5 @@ export function ensureHandlersRegistered(): void {
   registerConversationNotifHandlers(); // LMS-15 — conversation.message_posted → báo GV (PH gửi) / PH (GV trả lời)
   registerParentRequestHandlers(); // #08 — parent_request.created → báo Sale + Quản lý cơ sở
   registerChatParticipantRemovedHandlers(); // US-07/F-KICK — chat.participant_removed → đá client ra khỏi kênh realtime
+  registerElearningNotifyHandlers(); // EL-06 — giao bài / quá hạn / hoàn thành → in-app + email (KHÔNG ZNS)
 }

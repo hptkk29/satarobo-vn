@@ -4,6 +4,7 @@ import { defineAction } from "@/lib/actions/define";
 import { cauHinhXemTruoc } from "@/lib/elearning/assignment-preview";
 import { cauHinhTaoLuotGiao } from "@/lib/elearning/assignment-create";
 import { cauHinhGiaHan, cauHinhThuHoi } from "@/lib/elearning/assignment-lifecycle";
+import { cauHinhGhiNhanSuCo } from "@/lib/elearning/incident";
 
 /**
  * EL-05 — giao bài.
@@ -23,3 +24,5 @@ export const taoLuotGiaoAction = defineAction(cauHinhTaoLuotGiao);
 export const giaHanLuotGiaoAction = defineAction(cauHinhGiaHan);
 
 export const thuHoiLuotGiaoAction = defineAction(cauHinhThuHoi);
+
+export const ghiNhanSuCoAction = defineAction(cauHinhGhiNhanSuCo);

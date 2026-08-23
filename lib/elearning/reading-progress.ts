@@ -7,6 +7,7 @@ import {
   assertPolicyAccepted,
   PolicyNotAcceptedError,
 } from "@/lib/elearning/policy-acceptance";
+import { cuonKhoaSauKhiXongBai } from "@/lib/elearning/rollup";
 import { checkContentAccess } from "@/lib/elearning/content-gate";
 import {
   capReadSeconds,
@@ -231,6 +232,13 @@ export async function ghiNhipDoc(input: GhiNhipInput): Promise<GhiNhipKetQua> {
       ...(xong ? { verifiedAt: input.now, completedAt: input.now } : {}),
     },
   });
+
+  // ⚠️ Chỉ cuộn khi bài này VỪA đạt: cuộn mỗi nhịp heartbeat là ba câu đếm mỗi
+  // 15 giây cho mỗi người đang đọc. Hàm cuộn tự nuốt lỗi — nó là việc phụ, không
+  // được làm hỏng việc ghi tiến độ vừa xong.
+  if (xong && cu?.verifiedAt == null) {
+    await cuonKhoaSauKhiXongBai(enrollment.id, input.now);
+  }
 
   return { ok: true, snapshot: gop, done: xong };
 }

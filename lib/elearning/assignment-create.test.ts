@@ -21,6 +21,7 @@ const h = vi.hoisted(() => ({
   taoAssignment: vi.fn(async (_a: unknown) => ({ id: "a1" })),
   createMany: vi.fn(async (_a: { data: unknown[] }) => ({ count: 0 })),
   publish: vi.fn(async () => null),
+  enrollmentIds: [] as string[],
   orgForCenter: vi.fn(async (cid: string) => (cid === "cs-mo-coi" ? null : `ou-${cid}`)),
 }));
 
@@ -31,7 +32,11 @@ vi.mock("@/lib/org/org-service", () => ({ orgUnitIdForCenter: h.orgForCenter }))
 
 const fakeTx = {
   trnAssignment: { create: h.taoAssignment },
-  trnEnrollment: { createMany: h.createMany },
+  trnEnrollment: {
+    createMany: h.createMany,
+    // `phatSuKienGhiDanhMoi` tra lại id sau `createMany` (Prisma không trả id).
+    findMany: vi.fn(async () => h.enrollmentIds.map((id) => ({ id }))),
+  },
 };
 
 vi.mock("@/lib/db-scope", () => ({

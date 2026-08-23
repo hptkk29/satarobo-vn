@@ -8,6 +8,7 @@ import { checkPermission } from '@/lib/auth/check-permission'
 import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
 import { phoneVn } from '@/lib/validators/phone'
+import { phoneVariants } from '@/lib/phone'
 import type { Prisma } from '@prisma/client'
 import { logLeadAudit, getAuditActor } from '@/lib/audit/log'
 import { resolveActor } from '@/lib/auth/actor'
@@ -621,7 +622,11 @@ export async function createLeadManual(
   // P2-2: trùng SĐT → báo lỗi RÕ (không fail thầm lặng). Kèm trạng thái + người
   // phụ trách nếu nhân viên có quyền xem (view-all hoặc cùng cơ sở).
   const dup = await db.lead.findFirst({
-    where: { phone: d.phone, deletedAt: null },
+    // Đợt G — tra theo BIẾN THỂ SĐT. DB chứa song song `0…` (cũ) và `84…`
+    // (canonical); so đúng-bằng nên nhập `84905…` khi đã có `0905…` là đẻ hồ sơ
+    // thứ hai — và từ Đợt D mỗi hồ sơ thừa còn tiêu một lượt sai trong sổ.
+    // `lib/lead/dedup.ts` đã làm đúng từ lâu; hai màn tay này bị bỏ quên.
+    where: { phone: { in: phoneVariants(d.phone) }, deletedAt: null },
     select: {
       id: true,
       status: true,
@@ -825,7 +830,8 @@ export async function updateLeadFields(
   // Đổi SĐT → kiểm tra trùng.
   if (d.phone && d.phone !== before.phone) {
     const dup = await db.lead.findFirst({
-      where: { phone: d.phone, deletedAt: null, id: { not: leadId } },
+      // Đợt G — như trên: tra theo biến thể, không so đúng-bằng.
+      where: { phone: { in: phoneVariants(d.phone) }, deletedAt: null, id: { not: leadId } },
       select: { id: true },
     })
     if (dup) return { ok: false, error: 'SĐT đã tồn tại ở lead khác' }
@@ -907,8 +913,14 @@ export async function assignLeadToSaleAction(
   if (!session?.user) return { ok: false, error: 'Chưa đăng nhập' }
   if (!(await checkPermission('leads:assign'))) return { ok: false, error: 'Không có quyền' }
 
+  // Đợt G — người gán ở cấp Hội sở được gán xuyên cơ sở (điều phối liên cơ sở là
+  // nghiệp vụ có thật, xem màn "Chuyển lead liên CS"). Người cấp cơ sở thì không:
+  // đó là vế đã thiếu và đã gây sự cố 21/08.
+  const assignActor = await resolveActor(session.user.id)
   const { actorId, actorName } = getAuditActor(session)
-  const res = await manualAssignLead(leadId, saleId, { actorId, actorName })
+  const res = await manualAssignLead(leadId, saleId, { actorId, actorName }, {
+    actorIsHoLevel: assignActor.isHoLevel,
+  })
   if (!res.ok) return res
 
   revalidatePath('/leads')
@@ -918,14 +930,34 @@ export async function assignLeadToSaleAction(
 
 const ASSIGN_MODES = ['ROUND_ROBIN', 'CLOSE_RATE', 'MANUAL'] as const
 
-/** Quản lý cơ sở đặt chế độ chia cho cơ sở mình; SUPER_ADMIN đặt mọi cơ sở. */
+/**
+ * Đặt chế độ chia lead cho một cơ sở.
+ *
+ * ⚠️ Đợt G (23/08/2026) — SIẾT CỔNG. Trước đó action này chỉ đòi `leads:assign`
+ * trong khi TRANG gác `leads:assign-config` (chốt 03/08: tách riêng màn cấu hình
+ * khỏi quyền điều phối lead). Cổng action lỏng hơn cổng trang là lỗ hổng vô hình:
+ * màn hình trông như đã khoá mà endpoint thì không — và `leads:assign` thì
+ * CENTER_MANAGER có.
+ *
+ * Cụ thể mất gì: gọi thẳng action là đổi được chế độ của cả cơ sở sang
+ * `CLOSE_RATE`, tức thoát khỏi sổ lượt dựng ở Đợt D, lách đúng quyết định Q7
+ * ("chia đều số lượt, tuyệt đối không được sai") mà không sinh một dòng quyết
+ * định nào ai đọc được sau này.
+ *
+ * Nhánh CENTER_MANAGER bên dưới GIỮ NGUYÊN dù hiện là nhánh chết (v1 matrix cho
+ * `leads:assign-config` chỉ SUPER_ADMIN): nếu sau này chủ dự án cấp quyền đó cho
+ * Quản lý cơ sở (plan/14 Q5, CHƯA ký) thì giới hạn "chỉ cơ sở mình" phải sẵn ở
+ * đây, chứ không phải nhớ ra lúc đó.
+ */
 export async function setCenterAssignModeAction(
   centerId: string,
   mode: string,
 ): Promise<{ ok: boolean; error?: string }> {
   const session = await auth()
   if (!session?.user) return { ok: false, error: 'Chưa đăng nhập' }
-  if (!(await checkPermission('leads:assign', { centerId }))) return { ok: false, error: 'Không có quyền' }
+  if (!(await checkPermission('leads:assign-config', { centerId }))) {
+    return { ok: false, error: 'Không có quyền' }
+  }
 
   if (!ASSIGN_MODES.includes(mode as (typeof ASSIGN_MODES)[number])) {
     return { ok: false, error: 'Chế độ không hợp lệ' }

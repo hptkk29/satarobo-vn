@@ -7754,6 +7754,7 @@ model TrnEnrollment {
 
   /// EL-04 — tiến độ từng bài của lượt ghi danh này.
   lessonProgress TrnLessonProgress[]
+  reminders      TrnReminder[]
 
   @@unique([courseId, userId, cycle])
   @@index([userId, status])
@@ -7906,4 +7907,100 @@ model TrnDataSubjectRequest {
   @@index([userId])
   @@index([centerId])
   @@index([orgUnitId])
+}
+
+/// Bảy mốc nhắc của §12.2, theo đúng thứ tự thời gian.
+///
+/// `T_MINUS_2H` là mốc mà nhịp NGÀY không phục vụ được — đó là lý do cron nhắc
+/// chạy mỗi 15 phút chứ không chạy đêm.
+enum TrnReminderMilestone {
+  T0
+  T_MINUS_5D
+  T_MINUS_2D
+  T_MINUS_1D
+  T_MINUS_2H
+  T_PLUS_0
+  T_PLUS_3D
+}
+
+/// ⚠️ `CANCELLED` là lý do bảng này TỒN TẠI. `EmailQueue` chỉ có
+/// `PENDING/SENT/FAILED` — không có "đã huỷ" — nên sổ nghiệp vụ của lịch nhắc
+/// không dồn vào đó được. `SKIPPED` = tới mốc nhưng không cần nhắc (đã xong).
+enum TrnReminderStatus {
+  PENDING
+  SENT
+  SKIPPED
+  CANCELLED
+}
+
+/// Sổ lịch nhắc — MỘT dòng cho mỗi (lượt ghi danh × mốc), có vòng đời huỷ được.
+///
+/// Ba lý do không dồn vào `EmailQueue` (kế hoạch §TrnReminder):
+///   1. `EmailQueue` không có trạng thái "đã huỷ";
+///   2. AC3/AC4 của EL-06 ĐẾM số dòng `SKIPPED`/`CANCELLED` — không có bảng thì
+///      không có gì để đếm;
+///   3. chỉ số T4 đo "nhắc tồn đọng quá mốc" cho CẢ in-app, còn
+///      `EmailQueue.scheduledAt` chỉ phủ email.
+///
+/// Bảng CON của `TrnEnrollment`: cách ly cơ sở đi theo bảng cha, nên KHÔNG mang
+/// cột đơn vị (cùng khuôn 8 bảng con của EL-03).
+model TrnReminder {
+  id           String               @id @default(cuid())
+  enrollmentId String
+  milestone    TrnReminderMilestone
+  /// Mốc PHẢI gửi. Cron quét `status = PENDING AND scheduledAt <= now`.
+  scheduledAt  DateTime             @db.Timestamptz(6)
+  status       TrnReminderStatus    @default(PENDING)
+  sentAt       DateTime?            @db.Timestamptz(6)
+  /// Kênh đã gửi thật — mảng vì một mốc có thể đi cả in-app lẫn email.
+  sentChannels String[]             @default([])
+  /// Vì sao bỏ qua / huỷ. Thu hồi hay gia hạn đều phải ghi lý do vào đây.
+  reason       String?
+
+  enrollment TrnEnrollment @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  /// Chống nhắc trùng: một lượt ghi danh chỉ có ĐÚNG MỘT dòng cho mỗi mốc.
+  @@unique([enrollmentId, milestone])
+  @@index([status, scheduledAt])
+  @@index([enrollmentId])
+}
+
+/// Phạm vi của một sự cố: một lượt giao, hay toàn hệ thống.
+enum TrnIncidentScope {
+  ASSIGNMENT
+  GLOBAL
+}
+
+/// Sự cố hệ thống — gia hạn CẢ lượt giao, không xét từng đơn (QĐ-CDA-15 mục 2).
+///
+/// Kịch bản chắc chắn xảy ra tuần đầu: 16h50 ngày hạn, video không chạy trên
+/// điện thoại của bốn người. Không có bảng này thì cách xử duy nhất là sửa tay
+/// từng dòng, không để lại dấu vết nào.
+///
+/// 🔴 `confirmedByUserId` là NGƯỜI TRỰC CÓ TÊN — `String` NOT NULL, không
+/// nullable, không mặc định. Không có tên người thì không có bản ghi sự cố: một
+/// vai ghi bằng tên phòng là một vai không ai nhận.
+model TrnIncident {
+  id                String           @id @default(cuid())
+  title             String
+  detectedAt        DateTime         @db.Timestamptz(6)
+  resolvedAt        DateTime?        @db.Timestamptz(6)
+  confirmedByUserId String
+  scope             TrnIncidentScope
+  assignmentId      String?
+  /// Số ngày gia hạn cho mọi người trong phạm vi.
+  extendDays        Int
+  /// Mốc đã THI HÀNH việc gia hạn. NULL = đã ghi nhận sự cố nhưng chưa áp dụng.
+  appliedAt         DateTime?        @db.Timestamptz(6)
+  /// Số dòng ghi danh đã được gia hạn — để đối chiếu sau, không phải đếm lại.
+  appliedCount      Int              @default(0)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  @@index([scope, detectedAt])
+  @@index([assignmentId])
 }
