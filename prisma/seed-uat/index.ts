@@ -10,6 +10,7 @@
 //
 // CHỈ THÊM/CẬP NHẬT — không có một câu xoá nào. Xem đầu `_common.ts`.
 import { db, assertSeedAllowed, layCoSo, layUat, MOI_CO_SO } from "./_common";
+import { seedTaiKhoan } from "./00-tai-khoan";
 import { seedNen } from "./01-nen";
 import { seedCrm } from "./02-crm";
 import { seedHocVu } from "./03-hoc-vu";
@@ -25,6 +26,10 @@ async function main() {
   assertSeedAllowed();
 
   const coSo = await layCoSo();
+  // LUÔN chạy trước layUat(): DB test đã bị xoá sạch 3 lần, và mỗi lần xoá là mất
+  // luôn 12 tài khoản mà mọi bước sau trỏ vào. Bước này idempotent (upsert theo
+  // email) nên chạy lại trên DB còn nguyên cũng không sinh gì thêm.
+  await seedTaiKhoan();
   const uat = await layUat();
   console.log(`  Cơ sở  : ${coSo.map((c) => c.code).join(", ")}`);
   console.log(`  Số dòng: ${MOI_CO_SO} mỗi cơ sở`);
