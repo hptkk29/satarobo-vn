@@ -4,7 +4,7 @@ import { useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { toast } from "sonner";
 import { MISA_LEAD_SOURCE } from "@/lib/lead/intake/misa-internal";
-import { createInternalLeadAction } from "../actions";
+import { createInternalLeadAction } from "@/lib/lead/intake/quick-form-action";
 
 type CenterOption = { code: string; name: string };
 

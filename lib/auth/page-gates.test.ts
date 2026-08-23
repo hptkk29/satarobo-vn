@@ -22,15 +22,14 @@ const SIDEBAR = path.join(ROOT, "components/admin/sidebar.tsx");
 /**
  * Route trong `PAGE_GATES` KHÔNG nằm ở `app/(admin)/admin/*`.
  *
- * Mặc định mọi màn có gate đều ở route group admin. Ngoại lệ đầu tiên (22/08/2026):
- * biểu mẫu nhập khách hàng đứng ở HOST PUBLIC (`satarobo.vn/nhap-khach-hang`) —
- * chủ dự án chốt một địa chỉ duy nhất cho marketing/sale-admin gõ hằng ngày.
+ * Hiện RỖNG: ngoại lệ duy nhất từng có — biểu mẫu nhập khách ở host public
+ * (`app/(intake)/`, 22/08/2026) — đã dời về admin ngày 23/08, nên bảng gate lại
+ * đúng một luật "mọi màn có gate đều ở route group admin".
+ *
  * Thêm ngoại lệ mới thì thêm một dòng ở đây, đừng nới `pageFile` thành "tìm khắp
  * app/" — quét mù sẽ nuốt luôn ca trang bị xoá mà gate còn nằm lại trong bảng.
  */
-const PAGE_DIR_OVERRIDE: Record<string, string> = {
-  "/nhap-khach-hang": "app/(intake)",
-};
+const PAGE_DIR_OVERRIDE: Record<string, string> = {};
 
 const pageFile = (href: string) =>
   path.join(ROOT, PAGE_DIR_OVERRIDE[href] ?? "app/(admin)/admin", href, "page.tsx");

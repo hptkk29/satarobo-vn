@@ -1,6 +1,11 @@
 "use server";
 
-// Nhập khách hàng SAU ĐĂNG NHẬP — `satarobo.vn/nhap-khach-hang`.
+// Nhập khách hàng SAU ĐĂNG NHẬP — `admin.satarobo.vn/nhap-khach-hang`.
+//
+// Đặt ở `lib/` chứ không cạnh trang: chủ dự án chốt 23/08 rằng site Sale sau này
+// cũng có biểu mẫu này. Action + `<QuickLeadForm>` + `loadIntakeCenterOptions()`
+// là bộ ba dùng chung — trang chỉ ghép lại. Chép logic sang chỗ thứ hai là mở
+// đường cho hai biểu mẫu lệch nhau.
 //
 // Vì sao có màn này: biểu mẫu cũ (`sale.satarobo.vn`) công khai và bắt người
 // nhập **gõ tay mã nhân viên của mình** mỗi lần. Gõ sai thì lead giao nhầm
@@ -70,6 +75,8 @@ export async function createInternalLeadAction(
     actorName: session.user.name ?? session.user.email ?? "Nhân viên",
     ipAddress: h.get("x-forwarded-for")?.split(",")[0]?.trim() ?? null,
     userAgent: h.get("user-agent"),
+    // Giữ NGUYÊN chuỗi cũ dù trang đã dời sang admin host: đây là nhãn nhận
+    // dạng nguồn phiếu trong dữ liệu đã có, đổi là cắt đôi lịch sử báo cáo.
     landingPage: "/nhap-khach-hang",
     // Chốt 22/08: không ô nào bắt buộc, kể cả SĐT (lead quảng cáo FB thường chỉ
     // có link Facebook lúc mới thu về).

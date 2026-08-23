@@ -253,14 +253,16 @@ export default tseslint.config(
     },
   },
 
-  // app/(intake)/** — biểu mẫu nhập khách hàng (`satarobo.vn/nhap-khach-hang`).
-  // Cùng luật với site GV/Sale: shadcn THUẦN + db block. Nó đứng ở host public
-  // nhưng là khu NỘI BỘ có đăng nhập ⇒ phải đi `scopedDb`, không phải `@/lib/db`.
+  // components/lead-intake/** — biểu mẫu nhập khách DÙNG CHUNG.
   //
-  // ⚠️ Route group mới KHÔNG tự thừa hưởng khối nào ở trên — thiếu khối này là
-  // cổng cách ly cơ sở thủng mà không ai báo.
+  // 23/08/2026 trang dời vào `app/(admin)/admin/nhap-khach-hang/` (khối admin
+  // phía trên đã phủ). Nhưng component sống ở `components/` nên KHÔNG thừa hưởng
+  // khối nào — mà site Sale sau này sẽ mount lại chính nó. Giữ đúng luật cũ ở
+  // đây: shadcn THUẦN + cấm `@/lib/db` trần (phải đi `scopedDb`).
+  //
+  // ⚠️ Bỏ khối này là cổng cách ly cơ sở thủng mà không ai báo.
   {
-    files: ['app/(intake)/**/*.{ts,tsx}'],
+    files: ['components/lead-intake/**/*.{ts,tsx}'],
     rules: {
       'no-restricted-imports': [
         'error',

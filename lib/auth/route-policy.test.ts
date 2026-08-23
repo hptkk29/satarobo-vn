@@ -811,14 +811,14 @@ describe("L5/L6. TEACHER × host × flag TEACHER_SITE_ENABLED (2-phase, ĐÃ wir
 // ─────────────────────────────────────────────────────────────────────────
 // Sale host (sale.satarobo.vn) — biểu mẫu tĩnh CÔNG KHAI đã NGHỈ (22/08/2026).
 //
-// Địa chỉ nhập khách duy nhất nay là `satarobo.vn/nhap-khach-hang` (có đăng
-// nhập). Host cũ chỉ còn đá 307 về đó — 307 chứ KHÔNG 308 để quyết định vận
-// hành này còn đảo được mà không vướng cache vĩnh viễn của trình duyệt/CDN.
+// Địa chỉ nhập khách duy nhất nay là `admin.satarobo.vn/nhap-khach-hang`
+// (23/08/2026 dời vào admin). Host cũ chỉ còn đá 307 về đó — 307 chứ KHÔNG 308
+// để quyết định vận hành này còn đảo được mà không vướng cache vĩnh viễn.
 // ─────────────────────────────────────────────────────────────────────────
 
 const TO_INTAKE: RouteDecision = {
   type: "redirectHost",
-  host: "public",
+  host: "admin",
   path: "/nhap-khach-hang",
   status: 307,
 };
@@ -865,30 +865,45 @@ describe("Sale host (sale.satarobo.vn) — biểu mẫu tĩnh đã nghỉ", () =
 });
 
 // ─────────────────────────────────────────────────────────────────────────
-// Biểu mẫu nhập khách hàng — `satarobo.vn/nhap-khach-hang` (22/08/2026).
+// Biểu mẫu nhập khách hàng — `admin.satarobo.vn/nhap-khach-hang`.
 //
-// NGOẠI LỆ có chủ đích: trang NỘI BỘ đứng ở host PUBLIC (chủ dự án chốt một
-// địa chỉ duy nhất). Vì thế nó phải tự mang cổng đăng nhập ngay ở tầng này —
-// mọi trang public khác đều cho khách vãng lai vào.
+// 23/08/2026 DỜI VÀO ADMIN (đảo chốt 22/08 vốn để nó ở host public). Lý do:
+// mục sidebar admin trỏ `/nhap-khach-hang` nên mỗi lần nhập là người dùng bị
+// văng khỏi khung admin sang site khác rồi phải bấm quay lại.
+//
+// 🔴 Bất biến sống-còn của đợt này: **không được đá qua đá lại**. Public đá
+// sang admin; nếu segment `nhap-khach-hang` thiếu trong `ADMIN_ROUTE_SEGMENTS`
+// thì admin đá ngược về public → vòng lặp vô hạn. Test cuối khối khoá đúng đó.
 // ─────────────────────────────────────────────────────────────────────────
 
-describe("/nhap-khach-hang — biểu mẫu nội bộ trên host public", () => {
-  it("🔴 chưa đăng nhập → /login kèm callbackUrl (KHÔNG cho xem biểu mẫu)", () => {
+describe("/nhap-khach-hang — biểu mẫu nội bộ, nay ở admin host", () => {
+  it("admin host + nhân sự → PHỤC VỤ TẠI CHỖ (rewrite vào route group)", () => {
     for (const p of ["/nhap-khach-hang", "/nhap-khach-hang/"]) {
       expect(
-        decideRoute({ hostKind: "public", pathname: p, role: null, sessionValid: false }),
-      ).toEqual<RouteDecision>({
-        type: "redirectPath",
-        path: "/login",
-        callbackUrl: "/nhap-khach-hang",
-      });
+        decideRoute({ hostKind: "admin", pathname: p, ...authed("MARKETING") }),
+      ).toEqual<RouteDecision>({ type: "rewrite", path: "/admin" + p });
     }
+  });
+
+  it("🔴 admin host + chưa đăng nhập → /login kèm callbackUrl", () => {
+    expect(
+      decideRoute({
+        hostKind: "admin",
+        pathname: "/nhap-khach-hang",
+        role: null,
+        sessionValid: false,
+      }),
+    ).toEqual<RouteDecision>({
+      type: "redirectPath",
+      path: "/login",
+      callbackUrl: "/nhap-khach-hang",
+    });
   });
 
   it("phiên đã bị vô hiệu → /login kèm lý do", () => {
     expect(
       decideRoute({
-        hostKind: "public",
+        hostKind: "admin",
         pathname: "/nhap-khach-hang",
         role: "SALES_CSM",
         sessionValid: false,
@@ -901,31 +916,31 @@ describe("/nhap-khach-hang — biểu mẫu nội bộ trên host public", () =>
     });
   });
 
-  it("nhân sự đã đăng nhập → phục vụ tại chỗ (quyền leads:create do layout gác)", () => {
-    for (const role of ALL_ROLES.filter((r) => r !== "PARENT")) {
+  it("địa chỉ public CŨ → đá 307 sang admin (dấu trang + RedirectURL của MISA)", () => {
+    for (const p of ["/nhap-khach-hang", "/nhap-khach-hang/"]) {
+      // Đá VÔ ĐIỀU KIỆN: ai vào được là việc của nhánh admin, không nhân đôi cổng.
       expect(
-        decideRoute({ hostKind: "public", pathname: "/nhap-khach-hang", ...authed(role) }),
-      ).toEqual<RouteDecision>({ type: "next" });
+        decideRoute({ hostKind: "public", pathname: p, ...authed("MARKETING") }),
+      ).toEqual<RouteDecision>(TO_INTAKE);
+      expect(
+        decideRoute({ hostKind: "public", pathname: p, role: null, sessionValid: false }),
+      ).toEqual<RouteDecision>(TO_INTAKE);
     }
   });
 
-  it("PARENT → về portal, không lảng vảng ở biểu mẫu nội bộ", () => {
+  it("PARENT lạc vào địa chỉ public cũ → về portal, không lảng vảng", () => {
     expect(
       decideRoute({ hostKind: "public", pathname: "/nhap-khach-hang", ...authed("PARENT") }),
+    ).toEqual<RouteDecision>(TO_INTAKE);
+    // Tới admin host thì nhánh admin đá tiếp về portal — cổng nằm ở MỘT chỗ.
+    expect(
+      decideRoute({ hostKind: "admin", pathname: "/nhap-khach-hang", ...authed("PARENT") }),
     ).toEqual<RouteDecision>({
       type: "redirectHost",
       host: "portal",
       path: "/",
       status: 307,
     });
-  });
-
-  it("admin host → đá 307 sang host public (mục sidebar trỏ đường tương đối)", () => {
-    for (const p of ["/nhap-khach-hang", "/nhap-khach-hang/"]) {
-      expect(
-        decideRoute({ hostKind: "admin", pathname: p, ...authed("MARKETING") }),
-      ).toEqual<RouteDecision>(TO_INTAKE);
-    }
   });
 
   it("host sale (cờ BẬT) → sang biểu mẫu, KHÔNG rơi vào rewrite /sale/* rồi 404", () => {
@@ -953,15 +968,24 @@ describe("/nhap-khach-hang — biểu mẫu nội bộ trên host public", () =>
     ).toEqual<RouteDecision>({ type: "redirectPath", path: "/" });
   });
 
-  it("admin host: chưa đăng nhập cũng đá sang public (cổng nằm ở đó, không nhân đôi)", () => {
-    expect(
-      decideRoute({
-        hostKind: "admin",
-        pathname: "/nhap-khach-hang",
-        role: null,
-        sessionValid: false,
-      }),
-    ).toEqual<RouteDecision>(TO_INTAKE);
+  it("🔴 KHÔNG vòng lặp: đích của cú đá phải được admin host phục vụ tại chỗ", () => {
+    // Đi đúng đường một người dùng thật đi: gõ địa chỉ public cũ → theo
+    // Location → phải DỪNG ở admin, không bị đá tiếp. Thiếu segment
+    // "nhap-khach-hang" trong ADMIN_ROUTE_SEGMENTS là hỏng đúng ở bước 2.
+    const step1 = decideRoute({
+      hostKind: "public",
+      pathname: "/nhap-khach-hang",
+      ...authed("SALES_CSM"),
+    });
+    expect(step1).toEqual<RouteDecision>(TO_INTAKE);
+
+    const step2 = decideRoute({
+      hostKind: "admin",
+      pathname: step1.type === "redirectHost" ? step1.path : "",
+      ...authed("SALES_CSM"),
+    });
+    expect(step2.type).toBe("rewrite");
+    expect(step2).not.toMatchObject({ type: "redirectHost", host: "public" });
   });
 });
 
