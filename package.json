@@ -28,6 +28,7 @@
     "db:seed:roles": "tsx prisma/seed-roles.ts",
     "db:seed:elearning": "tsx prisma/seed-elearning.ts",
     "db:seed:permissions": "tsx prisma/seed-permission-registry.ts",
+    "db:seed:uat": "tsx prisma/seed-uat/index.ts",
     "permissions:list": "tsx scripts/list-permissions.ts",
     "db:seed:marketing": "tsx prisma/seed-marketing-content.ts",
     "db:seed:session-eval": "tsx prisma/seed-session-eval.ts",
