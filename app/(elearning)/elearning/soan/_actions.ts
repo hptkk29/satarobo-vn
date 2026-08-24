@@ -4,6 +4,7 @@ import { z } from "zod";
 import { defineAction } from "@/lib/actions/define";
 import { ActionError } from "@/lib/actions/factory";
 import { computeMinReadSeconds } from "@/lib/elearning/reading";
+import { cauHinhLuuBaiVideo } from "@/lib/elearning/video-lesson";
 
 /**
  * EL-04 — SOẠN BÀI ĐỌC.
@@ -71,3 +72,10 @@ export const luuBaiDocAction = defineAction({
     };
   },
 });
+
+/**
+ * EL-10 — lưu siêu dữ liệu bài VIDEO.
+ *
+ * Cấu hình ở lib (quy ước 10) nên test chạy đúng cái máy chủ chạy.
+ */
+export const luuBaiVideoAction = defineAction(cauHinhLuuBaiVideo);

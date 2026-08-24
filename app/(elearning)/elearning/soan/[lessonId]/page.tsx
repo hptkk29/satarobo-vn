@@ -4,6 +4,7 @@ import { resolveActor } from "@/lib/auth/actor";
 import { can } from "@/lib/auth/can";
 import { scopedDb } from "@/lib/db-scope";
 import { LessonEditor } from "../_components/lesson-editor";
+import { VideoUploader } from "../_components/video-uploader";
 
 /**
  * EL-04 — TRANG SOẠN MỘT BÀI ĐỌC.
@@ -61,6 +62,8 @@ export default async function Page({
       title: true,
       kind: true,
       contentMd: true,
+      videoKey: true,
+      durationSec: true,
       module: { select: { title: true, course: { select: { title: true } } } },
     },
   });
@@ -72,6 +75,34 @@ export default async function Page({
       </div>
     );
   }
+  // EL-10 — bài VIDEO có màn riêng: tải tệp, không có trình soạn Markdown.
+  //
+  // ⚠️ Mở màn SOẠN cho video KHÔNG có nghĩa là mở màn HỌC. Trang học vẫn chặn
+  // `kind !== READ` cho tới khi EL-11 có trình phát — gỡ chặn sớm là đưa người
+  // học tới một trang trắng.
+  if (lesson.kind === "VIDEO") {
+    return (
+      <div className="mx-auto max-w-3xl px-4 py-6">
+        <nav className="mb-3 text-xs text-muted-foreground">
+          {lesson.module.course.title} · {lesson.module.title}
+        </nav>
+        <h1 className="text-xl font-bold">{lesson.title}</h1>
+        <div className="mt-4">
+          <VideoUploader
+            lessonId={lesson.id}
+            title={lesson.title}
+            videoKeyHienCo={lesson.videoKey}
+            durationSecHienCo={lesson.durationSec}
+          />
+        </div>
+        <p className="mt-3 text-xs text-muted-foreground">
+          Trình phát video cho người học thuộc ticket EL-11 — tải tệp bây giờ vẫn
+          đúng, người học sẽ xem được khi trình phát xong.
+        </p>
+      </div>
+    );
+  }
+
   if (lesson.kind !== "READ") {
     return (
       <div className="mx-auto max-w-lg px-4 py-16 text-center text-sm">
