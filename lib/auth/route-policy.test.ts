@@ -943,7 +943,11 @@ describe("/nhap-khach-hang — biểu mẫu nội bộ, nay ở admin host", () 
     });
   });
 
-  it("host sale (cờ BẬT) → sang biểu mẫu, KHÔNG rơi vào rewrite /sale/* rồi 404", () => {
+  it("host sale (cờ BẬT) → ở LẠI site Sale, sang bản biểu mẫu của chính nó", () => {
+    // ⚠️ 23/08/2026 — ĐẢO KỲ VỌNG. Trước đó ca này đòi 307 sang host admin
+    // (`TO_INTAKE`), vì site Sale chưa có biểu mẫu. Nay nó có
+    // `/sale/nhap-khach-hang`, nên đá sang host khác là ném tư vấn viên ra khỏi
+    // site của mình giữa lúc đang nhập liệu.
     expect(
       decideRoute({
         hostKind: "sale",
@@ -951,7 +955,7 @@ describe("/nhap-khach-hang — biểu mẫu nội bộ, nay ở admin host", () 
         pathname: "/nhap-khach-hang",
         ...authed("SALES_CSM"),
       }),
-    ).toEqual<RouteDecision>(TO_INTAKE);
+    ).toEqual<RouteDecision>({ type: "redirectPath", path: "/sale/nhap-khach-hang" });
   });
 
   it("host giáo viên / portal → về nhà của họ (không có quyền nhập lead)", () => {

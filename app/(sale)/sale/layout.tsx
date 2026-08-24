@@ -1,8 +1,8 @@
 // app/(sale)/sale/layout.tsx — Đợt B: khung site Sale (sale.satarobo.vn).
 //
-// Chốt Q11 (21/08/2026): Sale Hub là **site riêng**. Biểu mẫu nhập khách vốn ở
-// host này ĐÃ DỜI sang `satarobo.vn/nhap-khach-hang` (22/08/2026) — host cũ chỉ
-// còn đá 307 sang đó khi cờ `SALE_SITE_ENABLED` TẮT.
+// Chốt Q11 (21/08/2026): Sale Hub là **site riêng**. Biểu mẫu nhập khách công
+// khai cũ đã nghỉ (22/08); từ 23/08 site này có BẢN CÓ ĐĂNG NHẬP của riêng nó tại
+// `/sale/nhap-khach-hang`, dùng chung ba mảnh với bản admin.
 //
 // Gate 3 tầng, soi chiếu `app/(teacher)/teacher/layout.tsx`:
 //   (1) chưa đăng nhập → /login
@@ -22,6 +22,9 @@ import { hasRole, hasStaffRole } from "@/lib/auth/permissions";
 import { isSaleSiteEnabled } from "@/lib/flags";
 import { resolveActor } from "@/lib/auth/actor";
 import { scopedDb } from "@/lib/db-scope";
+import { grantedMenuActions } from "@/lib/auth/menu-permissions";
+import { isRbacV2Enabled } from "@/lib/flags";
+import { SaleNav } from "@/components/sale/sale-nav";
 
 export const dynamic = "force-dynamic";
 
@@ -79,16 +82,29 @@ export default async function SaleLayout({
   // `/doi-mat-khau` nằm ở `app/(auth)` (ngoài layout này) → không vòng lặp.
   if (dbUser.mustChangePassword) redirect("/doi-mat-khau");
 
+  // Thanh điều hướng hỏi ĐÚNG hàm quyết định mà cổng trang dùng
+  // (`grantedMenuActions` → evaluatePermission + cờ). Tự gọi `can()` ở component
+  // là cách chắc chắn để menu và cổng nói hai câu chuyện khác nhau khi cờ đổi —
+  // bài học 10/07 của site admin, không lặp lại ở đây.
+  //
+  // Site Sale không có màn đổi vai (Sale thuần chỉ có một vai) nên truyền thẳng
+  // session user + actor, không qua `menuUserForRole`.
+  const granted = grantedMenuActions({
+    sessionUser: {
+      role: session.user.role,
+      roles: session.user.roles,
+      grants: session.user.grants,
+    },
+    actor,
+    flagOn: isRbacV2Enabled(),
+  });
+
   return (
     <div className="sale-root min-h-screen bg-background text-foreground">
-      <header className="border-b border-border bg-card">
-        <div className="mx-auto flex max-w-5xl items-center justify-between px-6 py-4">
-          <span className="text-sm font-semibold">Sata Robo · Tư vấn tuyển sinh</span>
-          <span className="text-sm text-muted-foreground">
-            {session.user.name ?? session.user.email}
-          </span>
-        </div>
-      </header>
+      <SaleNav
+        granted={granted}
+        userLabel={session.user.name ?? session.user.email ?? ""}
+      />
       <main className="mx-auto max-w-5xl px-6 py-8">{children}</main>
     </div>
   );
