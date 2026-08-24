@@ -144,9 +144,12 @@ export async function createInternalLeadAction(
     leadId: res.leadId,
     duplicate: res.duplicate,
     childAdded: res.childAdded,
-    // `res.warnings` gồm CẢ cảnh báo của tầng ingest (cơ sở không nhận ra, mã NV
-    // không giữ vai Sale…) — thứ trước đây chỉ nằm trong `note`, người vừa gõ
-    // phiếu không bao giờ thấy.
+    // `res.warnings` gồm CẢ cảnh báo của tầng ingest (cơ sở không nhận ra, mã NV sai,
+    // tài khoản ngưng hoạt động…) — thứ trước đây chỉ nằm trong `note`, người vừa
+    // gõ phiếu không bao giờ thấy.
+    //
+    // 24/08 — ca "người nhập không giữ vai Sale" ĐÃ Bỏ khỏi danh sách này: đó là
+    // đường đi bình thường chứ không phải sự cố (xem `resolveOwner` trong ingest.ts).
     warnings: res.warnings?.length ? res.warnings : undefined,
   };
 }

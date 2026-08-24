@@ -15,8 +15,25 @@ describe("splitLeadNote", () => {
     const view = splitLeadNote(REAL_NOTE);
     expect(view.human).toBe("con 6 tuổi, muốn học trải nghiệm, nhắn Zalo cho mẹ");
     expect(view.info).toEqual(["Nhân viên nhập: SR.NV.002"]);
-    expect(view.warnings).toHaveLength(1);
-    expect(view.warnings[0]).toContain("không giữ vai Sale");
+    // 24/08 — câu "không giữ vai Sale" bị chặn hiển thị VỚI MỌI NGƯỜI (kể cả quản
+    // trị), nên nó không được nằm trong `warnings` — nhóm duy nhất được vẽ ra màn hình.
+    expect(view.warnings).toHaveLength(0);
+    expect(view.hidden).toHaveLength(1);
+  });
+
+  it("câu 'không giữ vai Sale' không lọt vào bất kỳ nhóm nào được hiển thị", () => {
+    const view = splitLeadNote(REAL_NOTE);
+    const visible = [view.human ?? "", ...view.info, ...view.warnings].join(" ");
+    expect(visible).not.toContain("không giữ vai Sale");
+  });
+
+  it("phiếu chỉ có đúng câu bị chặn ⇒ không hiện khối nào cả", () => {
+    const view = splitLeadNote(
+      '⚠️ "HO.MKT.001" không giữ vai Sale nên không nhận lead — đã chia tự động.',
+    );
+    expect(view.human).toBeNull();
+    expect(hasSystemLines(view)).toBe(false);
+    expect(view.hidden).toHaveLength(1);
   });
 
   it("phiếu chỉ có dòng máy ghi ⇒ human = null (Sale thấy ô trống, không thấy nhiễu)", () => {
@@ -76,6 +93,11 @@ describe("mergeLeadNote — chống xoá mất dấu vết khi Sale sửa ghi ch
   it("round-trip: tách rồi ráp lại chuỗi không đổi", () => {
     const view = splitLeadNote(REAL_NOTE);
     expect(mergeLeadNote(view.human, REAL_NOTE)).toBe(REAL_NOTE);
+  });
+
+  it("dòng bị chặn hiển thị VẪN ở lại trong DB — lọc lúc ĐỌC ≠ xoá lúc GHI", () => {
+    const merged = mergeLeadNote("đã gọi", REAL_NOTE);
+    expect(merged).toContain("không giữ vai Sale");
   });
 
   it("phiếu chưa có note nào ⇒ chỉ lưu chữ người gõ; rỗng thì null", () => {

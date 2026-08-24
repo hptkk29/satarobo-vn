@@ -47,6 +47,20 @@ const SYSTEM_LINE_PREFIXES = [
 /** Tiền tố `buildNote()` gắn cho mọi cảnh báo. */
 const WARNING_PREFIX = "⚠️";
 
+/**
+ * Dòng đã BỪNG sinh ra nhưng còn nằm trong `note` của phiếu CŨ — bỏ hẳn khi hiển
+ * thị, không cho ai thấy kể cả quản trị (chủ dự án chốt 24/08/2026).
+ *
+ * Ca duy nhất hiện nay: '"HO.MKT.001" không giữ vai Sale nên không nhận lead…'.
+ * Nguồn phát đã gỡ tại `lib/lead/intake/ingest.ts` (xem lý do ở đó), nhưng hơn
+ * trăm phiếu trước đó đã nốt câu này vào DB rồi. Lọc ở tầng ĐỌC để khỏi đụng
+ * dao kéo vào dữ liệu prod cho một việc thuần hiển thị — đổi ý thì xoá mảng này là câu
+ * chữ hiện lại nguyên vẹn, không mất gì.
+ */
+const SUPPRESSED_LINE_FRAGMENTS = [
+  "không giữ vai Sale nên không nhận lead",
+] as const;
+
 export type LeadNoteView = {
   /** Đúng những gì người nhập gõ. `null` khi phiếu không có chữ nào của người. */
   human: string | null;
@@ -54,6 +68,12 @@ export type LeadNoteView = {
   info: string[];
   /** Dòng cảnh báo, GIỮ NGUYÊN tiền tố "⚠️ " như đang lưu. */
   warnings: string[];
+  /**
+   * Dòng bị chặn hiển thị (`SUPPRESSED_LINE_FRAGMENTS`). KHÔNG vẽ ra đâu cả,
+   * nhưng `mergeLeadNote` vẫn gắn lại — lọc lúc ĐỌC thì không được biến thành xoá
+   * lúc GHI. Người dùng chỉ sửa ghi chú của mình, không đồng ý dọn DB hộ.
+   */
+  hidden: string[];
 };
 
 function isSystemInfoLine(line: string): boolean {
@@ -61,19 +81,21 @@ function isSystemInfoLine(line: string): boolean {
 }
 
 /**
- * Bổ `Lead.note` thành 3 phần. Không bao giờ ném lỗi và không bao giờ làm rơi
- * chữ: mọi dòng đều rơi vào đúng một trong ba nhóm.
+ * Bổ `Lead.note` thành 4 nhóm. Không bao giờ ném lỗi và không bao giờ làm rơi
+ * chữ: mọi dòng đều rơi vào đúng một nhóm (kể cả nhóm bị ẩn).
  */
 export function splitLeadNote(note: string | null | undefined): LeadNoteView {
-  if (!note) return { human: null, info: [], warnings: [] };
+  if (!note) return { human: null, info: [], warnings: [], hidden: [] };
 
   const info: string[] = [];
   const warnings: string[] = [];
+  const hidden: string[] = [];
   const humanLines: string[] = [];
 
   for (const line of note.split("\n")) {
     const trimmed = line.trim();
-    if (trimmed.startsWith(WARNING_PREFIX)) warnings.push(line);
+    if (SUPPRESSED_LINE_FRAGMENTS.some((f) => trimmed.includes(f))) hidden.push(line);
+    else if (trimmed.startsWith(WARNING_PREFIX)) warnings.push(line);
     else if (isSystemInfoLine(trimmed)) info.push(line);
     else humanLines.push(line);
   }
@@ -89,6 +111,7 @@ export function splitLeadNote(note: string | null | undefined): LeadNoteView {
     human: humanLines.length > 0 ? humanLines.join("\n") : null,
     info,
     warnings,
+    hidden,
   };
 }
 
@@ -110,9 +133,11 @@ export function mergeLeadNote(
   human: string | null | undefined,
   previous: string | null | undefined,
 ): string | null {
-  const { info, warnings } = splitLeadNote(previous);
+  const { info, warnings, hidden } = splitLeadNote(previous);
   const body = (human ?? "").trim();
 
-  const lines = [...info, ...(body ? [body] : []), ...warnings];
+  // `hidden` đi cuối: nó vốn là dòng ⚠️ nên nằm cùng khối cảnh báo, và phải còn
+  // lại trong DB dù không ai nhìn thấy nó nữa.
+  const lines = [...info, ...(body ? [body] : []), ...warnings, ...hidden];
   return lines.length > 0 ? lines.join("\n") : null;
 }
