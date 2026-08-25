@@ -5,13 +5,12 @@ import { checkPermission } from "@/lib/auth/check-permission";
 import { resolveActor } from "@/lib/auth/actor";
 import { getModelVisibleCenterIds } from "@/lib/db-scope";
 import { getFunnelCounts } from "@/lib/crm/funnel-query";
+import { buildFunnelCards } from "@/lib/crm/funnel-cards";
 import { computeFunnelMetrics } from "@/lib/crm/marketing-metrics";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Funnel Marketing | Admin" };
-
-const vnd = (n: number) => Math.round(n).toLocaleString("vi-VN");
 
 export default async function MarketingFunnelPage() {
   const session = await auth();
@@ -26,17 +25,11 @@ export default async function MarketingFunnelPage() {
   const counts = await getFunnelCounts({ centerIds });
   const m = computeFunnelMetrics(counts);
 
-  const cards: { label: string; value: string }[] = [
-    { label: "L1 (hội thoại)", value: counts.l1.toLocaleString("vi-VN") },
-    { label: "L2 (đạt SĐT)", value: counts.l2.toLocaleString("vi-VN") },
-    { label: "L3 (chốt)", value: counts.l3.toLocaleString("vi-VN") },
-    { label: "CR L1→L2", value: `${(m.crL1L2 * 100).toFixed(1)}%` },
-    { label: "CR L2→L3", value: `${(m.crL2L3 * 100).toFixed(1)}%` },
-    { label: "Chi phí QC", value: vnd(counts.spend) },
-    { label: "CPL", value: vnd(m.cpl) },
-    { label: "CPA", value: vnd(m.cpa) },
-    { label: "ROAS", value: m.roas.toFixed(2) },
-  ];
+  // V-02 — THI HÀNH hợp đồng `spendAvailable` (lib/crm/funnel-query.ts): với actor bị giới
+  // hạn cơ sở, `AdsInsightDaily` KHÔNG được hỏi (bảng không có cột `centerId`) nên `spend`
+  // về 0 với nghĩa "KHÔNG ĐO ĐƯỢC". In số 0 ở Chi phí QC/CPL/CPA/ROAS đọc y hệt "tháng này
+  // không tốn đồng quảng cáo nào" — luật hiển thị nằm ở `buildFunnelCards`, có test riêng.
+  const cards = buildFunnelCards(counts, m);
 
   return (
     <div>
@@ -51,7 +44,15 @@ export default async function MarketingFunnelPage() {
               <CardTitle className="text-sm font-medium text-muted-foreground">{c.label}</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-black text-foreground">{c.value}</div>
+              <div
+                className={
+                  c.khongDoDuoc
+                    ? "text-2xl font-black text-muted-foreground"
+                    : "text-2xl font-black text-foreground"
+                }
+              >
+                {c.value}
+              </div>
             </CardContent>
           </Card>
         ))}
@@ -59,6 +60,13 @@ export default async function MarketingFunnelPage() {
       <p className="mt-4 text-xs text-muted-foreground">
         ROAS = doanh thu (đơn CONFIRMED/COMPLETED) / chi phí QC.
       </p>
+      {!counts.spendAvailable && (
+        <p className="mt-2 text-xs text-muted-foreground">
+          Chi phí quảng cáo hiện chỉ đo được ở phạm vi toàn hệ thống (bảng chi phí chưa tách
+          theo cơ sở), nên Chi phí QC / CPL / CPA / ROAS hiển thị “—”:{" "}
+          <strong>không đo được</strong>, KHÔNG phải bằng 0.
+        </p>
+      )}
     </div>
   );
 }
