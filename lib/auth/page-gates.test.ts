@@ -35,6 +35,7 @@ const PAGE_DIR_OVERRIDE: Record<string, string> = {
   // quét mù sẽ nuốt luôn ca trang bị xoá mà gate còn nằm lại trong bảng.
   "/sale/trial": "app/(sale)",
   "/sale/khach-cua-toi": "app/(sale)",
+  "/sale/tra-cuu": "app/(sale)",
 
   "/sale/nhap-khach-hang": "app/(sale)",
 };

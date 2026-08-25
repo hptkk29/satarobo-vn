@@ -141,6 +141,11 @@ export const PAGE_GATES = {
    *  `trials:view` là quyền Sale vốn đã có; không mở thêm gì. */
   "/sale/trial": ["trials:view"],
 
+  /** Tra cứu danh mục — bảng giá khoá/học cụ + lớp còn chỗ. CHỈ ĐỌC.
+   *  Hai action đều là quyền Sale vốn đã có và đều GLOBAL. Vào được bằng MỘT
+   *  trong hai; trang tự quyết khối nào hiện, không đá ai ra vì thiếu một quyền. */
+  "/sale/tra-cuu": ["products:view", "classes:view-all"],
+
   /** Chốt đơn — tạo đơn cho khách của mình. `orders:create` là action HẸP mở ở
    *  Đợt 0 (G-A), KHÔNG phải `orders:manage` (mở/huỷ/hoàn toàn hệ thống).
    *  Phạm vi "chỉ đơn gắn khách của mình" do `checkOrderCreateOwnership()` gác
