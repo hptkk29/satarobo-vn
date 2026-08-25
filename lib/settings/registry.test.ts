@@ -57,6 +57,35 @@ describe("[R6-A] registry — validate giá trị (US-R6A-1 AC4)", () => {
   });
 });
 
+describe("[F-20] hạn duyệt ảnh/video trong Cấu hình vận hành", () => {
+  it("[F-20-T30] mặc định đúng spec: 10h sáng, 1 ngày sau buổi dạy", () => {
+    expect(SETTINGS["media.reviewDeadlineHour"].default).toBe(10);
+    expect(SETTINGS["media.reviewDeadlineOffsetDays"].default).toBe(1);
+  });
+
+  it("[F-20-T31] mỗi cơ sở đặt hạn riêng được (centerOverridable)", () => {
+    expect(SETTINGS["media.reviewDeadlineHour"].centerOverridable).toBe(true);
+    expect(SETTINGS["media.reviewDeadlineOffsetDays"].centerOverridable).toBe(true);
+  });
+
+  it("[F-20-T32] nhãn nói rõ GIỜ VN — người sửa cấu hình không phải đoán múi giờ", () => {
+    expect(SETTINGS["media.reviewDeadlineHour"].label).toMatch(/giờ VN/i);
+  });
+
+  it("[F-20-T33] giờ ngoài 0..23 và số ngày ngoài 0..7 → từ chối ngay ở ô cấu hình", () => {
+    expect(validateSettingValue("media.reviewDeadlineHour", 24).ok).toBe(false);
+    expect(validateSettingValue("media.reviewDeadlineHour", -1).ok).toBe(false);
+    expect(validateSettingValue("media.reviewDeadlineHour", 9.5).ok).toBe(false);
+    expect(validateSettingValue("media.reviewDeadlineOffsetDays", 8).ok).toBe(false);
+    expect(validateSettingValue("media.reviewDeadlineOffsetDays", -1).ok).toBe(false);
+    // Biên hợp lệ vẫn phải qua.
+    expect(validateSettingValue("media.reviewDeadlineHour", 0).ok).toBe(true);
+    expect(validateSettingValue("media.reviewDeadlineHour", 23).ok).toBe(true);
+    expect(validateSettingValue("media.reviewDeadlineOffsetDays", 0).ok).toBe(true);
+    expect(validateSettingValue("media.reviewDeadlineOffsetDays", 7).ok).toBe(true);
+  });
+});
+
 describe("[R6-A] resolve — Center → Global → default (US-R6A-2)", () => {
   const numDef = SETTINGS["class.maxStudents.default"]; // centerOverridable=true
   const globalOnly = SETTINGS["enrollment.suspendMaxMonths"]; // centerOverridable=false
