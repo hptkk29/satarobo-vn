@@ -32,9 +32,15 @@ BEGIN
 END $$;
 
 -- ─── Bước 2: bỏ khoá cũ, đặt khoá theo buổi ─────────────────────────────────
--- Tên ràng buộc do Prisma sinh: "<Bảng>_<cột>_key".
-ALTER TABLE "TrialRubricEval"
-  DROP CONSTRAINT IF EXISTS "TrialRubricEval_trialEnrollmentId_key";
+-- ⚠️ PHẢI là DROP INDEX, KHÔNG phải DROP CONSTRAINT.
+--
+-- Khoá cũ được tạo bằng `CREATE UNIQUE INDEX "TrialRubricEval_trialEnrollmentId_key"`
+-- (xem 20260712000000_trial_rubric_eval/migration.sql:20) — đó là một INDEX, không
+-- phải một ràng buộc ở cấp bảng. `ALTER TABLE ... DROP CONSTRAINT IF EXISTS` sẽ chạy
+-- XANH mà KHÔNG GỠ GÌ, và DB vẫn ép một ca một phiếu: giáo viên lưu phiếu buổi thứ hai
+-- sẽ dính unique-violation, bị nuốt thành "Lỗi cơ sở dữ liệu".
+-- Repo đã có tiền lệ làm đúng ở 20260618020000_exam_attempt_retake/migration.sql:5.
+DROP INDEX IF EXISTS "TrialRubricEval_trialEnrollmentId_key";
 
 CREATE UNIQUE INDEX IF NOT EXISTS "TrialRubricEval_trialEnrollmentId_trialClassSessionId_key"
   ON "TrialRubricEval"("trialEnrollmentId", "trialClassSessionId");

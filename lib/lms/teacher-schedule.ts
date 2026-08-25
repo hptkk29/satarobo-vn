@@ -187,8 +187,18 @@ export async function getTeacherTrialRoster(
     where: {
       status: { not: "CANCELLED" },
       date: { gte: from, lt: to },
-      // Own-rows: buổi GV trực tiếp dạy HOẶC là GV chính của lớp Trial.
-      OR: [{ teacherId }, { trialClass: { teacherId } }],
+      // Own-rows: buổi GV trực tiếp dạy, HOẶC là GV chính của lớp, HOẶC được Đào tạo
+      // phân công cho MỘT CA cụ thể trong lớp đó (GĐ3).
+      //
+      // ⚠️ Nhánh thứ ba là bắt buộc: từ GĐ3, Đào tạo phân công theo TỪNG CA qua
+      // `TrialEnrollment.gvPhanCongId`, không còn qua giáo viên của lớp. Thiếu nó thì
+      // giáo viên được phân công không thấy ca của mình trên site GV, còn giáo viên
+      // chính của lớp lại thấy cả ca đã giao cho người khác — ngược ma trận §8.2.
+      OR: [
+        { teacherId },
+        { trialClass: { teacherId } },
+        { trialClass: { enrollments: { some: { gvPhanCongId: teacherId } } } },
+      ],
     },
     select: {
       id: true,
@@ -226,7 +236,11 @@ export async function getTeacherTrialRoster(
     where: {
       scheduledSessionId: null,
       status: { in: ["ACTIVE", "COMPLETED"] },
-      trialClass: { teacherId, status: { not: "CANCELLED" } },
+      // GĐ3 — thêm nhánh "được phân công theo ca", cùng lý do như ở truy vấn buổi.
+      OR: [
+        { trialClass: { teacherId, status: { not: "CANCELLED" } } },
+        { gvPhanCongId: teacherId, trialClass: { status: { not: "CANCELLED" } } },
+      ],
     },
     select: {
       id: true,
@@ -398,6 +412,7 @@ export async function getTeacherTrialRubricContext(
     select: {
       id: true,
       scheduledSessionId: true,
+      gvPhanCongId: true, // GĐ3 — nhánh sở hữu chính, xem `owned` bên dưới
       leadChild: { select: { fullName: true, interestedCourseId: true } },
       trialClass: { select: { name: true, teacherId: true, assistantId: true } },
     },
@@ -413,7 +428,11 @@ export async function getTeacherTrialRubricContext(
     });
     sessionTeacherId = sess?.teacherId ?? null;
   }
+  // GĐ3 — `gvPhanCongId` (phân công theo TỪNG CA) là nhánh CHÍNH từ nay; ba nhánh cũ
+  // giữ làm dự phòng cho lớp chưa được phân công theo ca. Thiếu nhánh đầu thì giáo
+  // viên được Đào tạo phân công không mở nổi phiếu đánh giá của chính ca mình dạy.
   const owned =
+    enr.gvPhanCongId === userId ||
     enr.trialClass.teacherId === userId ||
     enr.trialClass.assistantId === userId ||
     sessionTeacherId === userId;
