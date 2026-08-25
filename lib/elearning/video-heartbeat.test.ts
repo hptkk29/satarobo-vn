@@ -505,22 +505,43 @@ describe("câu hỏi chèn giữa video", () => {
     };
   };
 
+  /**
+   * Có lượt ghi nào chạm BITMAP không.
+   *
+   * ⚠️ Canh thứ này thay vì đếm số lượt `upsert`: sổ cue cũng đi qua `upsert` (nó
+   * phải tạo được dòng tiến độ khi bài chưa có dòng nào), nên đếm lượt gọi là canh
+   * nhầm thứ. Bất biến THẬT là: đang bị chặn thì KHÔNG được cộng phủ.
+   */
+  const coGhiBitmap = () =>
+    h.upsert.mock.calls.some((c) => JSON.stringify(c[0]).includes("segmentBitmap"));
+
   const dangTreo = (soLanSai = 0, hoiLuc = NOW) => ({
     v: 1,
     treo: { cueId: "c1", hoiLuc: hoiLuc.toISOString(), soLanSai },
     xong: [],
   });
 
-  it("chạm mốc ⇒ trả câu hỏi và DỪNG ghi tiến độ", async () => {
+  it("chạm mốc ⇒ trả câu hỏi, ghi nhận TỚI mốc rồi dừng", async () => {
+    // Ghi tới mốc là đúng: người học đã xem tới đó. Thoát sớm không ghi gì thì
+    // đoạn đó bay mất vĩnh viễn VÀ `maxPositionSec` đứng yên — làm nhịp mang câu
+    // trả lời bị chính cổng chặn-tua nuốt.
     datCue([cue()]);
     tienDo(null);
+    // Người học đang ở giây 25 và xem tiếp tới 35; cue nằm ở 30.
+    h.progress = { ...(h.progress as object), maxPositionSec: 25, coveredSec: 25 };
     const r = await nhip({ seq: 2, tuSec: 25, denSec: 35, viTriSec: 35 });
     expect(r.ok).toBe(true);
     if (!r.ok) return;
     expect(r.data.status).toBe("CHO_TRA_LOI");
     expect(r.data.thachThuc?.loai).toBe("CUE");
-    // Không gộp bitmap khi đang chặn — đoạn sau mốc chưa được tính.
-    expect(h.upsert).not.toHaveBeenCalled();
+    expect(r.data.thachThuc?.atSec).toBe(30);
+    expect(coGhiBitmap()).toBe(true);
+
+    // Nhưng KHÔNG được ghi quá mốc: mốc đã xem phải kẹp ở giây 30, không phải 35.
+    const arg = h.upsert.mock.calls[0]![0] as unknown as {
+      update: { maxPositionSec: number };
+    };
+    expect(arg.update.maxPositionSec).toBe(30);
   });
 
   it("🔴 thân phản hồi KHÔNG mang đáp án đúng", async () => {
@@ -543,7 +564,7 @@ describe("câu hỏi chèn giữa video", () => {
     expect(r.ok).toBe(true);
     if (!r.ok) return;
     expect(r.data.thachThuc?.id).toBe("cue-c1");
-    expect(h.upsert).not.toHaveBeenCalled();
+    expect(coGhiBitmap()).toBe(false);
   });
 
   it("🔴 KHÔNG có đường bỏ qua bằng cách ngồi im", async () => {
@@ -556,7 +577,7 @@ describe("câu hỏi chèn giữa video", () => {
     expect(r.ok).toBe(true);
     if (!r.ok) return;
     expect(r.data.status).toBe("CHO_TRA_LOI");
-    expect(h.upsert).not.toHaveBeenCalled();
+    expect(coGhiBitmap()).toBe(false);
   });
 
   it("trả lời SAI ⇒ 200 kèm chính câu đó, có cờ `saiRoi`", async () => {
@@ -588,7 +609,7 @@ describe("câu hỏi chèn giữa video", () => {
     expect(r.ok).toBe(true);
     if (!r.ok) return;
     expect(r.data.status).toBe("GHI_NHAN");
-    expect(h.upsert).toHaveBeenCalledTimes(1);
+    expect(coGhiBitmap()).toBe(true);
   });
 
   it("🔴 trả lời bằng id của cơ chế TẬP TRUNG không mở được cue", async () => {
@@ -646,6 +667,77 @@ describe("câu hỏi chèn giữa video", () => {
       .join(" ");
     expect(moiLanGhi).not.toContain("attnAskedCount");
     expect(moiLanGhi).not.toContain("attnPassedCount");
+  });
+
+  it("🔴 nhịp MANG CÂU TRẢ LỜI không được bị cổng chặn-tua nuốt", async () => {
+    // Kịch bản thật, nhịp 15 giây, cue chặn ở giây 110:
+    //  · nhịp trước kết ở giây 100 ⇒ `maxPositionSec` = 100
+    //  · nhịp sau (100,115] chạm cue ⇒ bung câu hỏi
+    //  · người học trả lời ⇒ nhịp mang đáp án có `tuSec` = 115
+    // Nếu cổng chặn-tua so 115 với 100 thì câu trả lời KHÔNG BAO GIỜ tới được chỗ
+    // chấm: mọi cue chặn khoá cứng bài học, và thông báo hiện ra là "khoá này
+    // không cho tua tới" — không liên quan gì tới việc họ vừa làm.
+    datCue([cue({ atSec: 110 })]);
+    tienDo(dangTreo());
+    const r = await nhip({
+      seq: 3,
+      tuSec: 115,
+      denSec: 120,
+      viTriSec: 120,
+      traLoiThachThuc: { id: "cue-c1", dapAn: "1" },
+    });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.data.status).toBe("GHI_NHAN");
+  });
+
+  it("🔴 phủ TRƯỚC mốc cue phải được tính, và mốc đã xem phải nhích", async () => {
+    // Thoát sớm ở cổng cue mà không ghi gì nghĩa là đoạn từ nhịp trước tới mốc cue
+    // bay mất vĩnh viễn, và `maxPositionSec` đứng yên — chính là thứ làm nhịp trả
+    // lời bị coi là tua trộm.
+    datCue([cue({ atSec: 110 })]);
+    tienDo(null);
+    h.progress = {
+      segmentBitmap: null,
+      segmentSec: 5,
+      coveredSec: 100,
+      contentSec: 600,
+      maxPositionSec: 100,
+      seq: 1,
+      verifiedAt: null,
+      attnAskedCount: 0,
+      attnPendingAt: null,
+      cueLogJson: null,
+    };
+    const r = await nhip({ seq: 2, tuSec: 100, denSec: 115, viTriSec: 115 });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.data.thachThuc?.id).toBe("cue-c1");
+    // Có ghi bitmap cho phần TRƯỚC mốc.
+    expect(coGhiBitmap()).toBe(true);
+    // Và tỉ lệ phủ trả về là số THẬT, không phải 0 — trả 0 làm thanh tiến độ trên
+    // màn hình tụt về 0% mỗi lần câu hỏi bung ra.
+    expect(r.data.coveredSec).toBeGreaterThan(0);
+  });
+
+  it("🔴 bài CHƯA có dòng tiến độ: cue vẫn phải ghi sổ được", async () => {
+    // Người vừa mở bài đã chạm mốc cue ở nhịp đầu tiên. Không ghi được câu treo
+    // thì nhịp sau `so.treo` vẫn null ⇒ câu trả lời của họ rơi vào hư không:
+    // hoặc bị hỏi lại mãi (kẹt cứng), hoặc mốc trôi qua và cue bị BỎ QUA hẳn.
+    datCue([cue()]);
+    h.progress = null;
+    // Phát liên tục từ đầu bài — nhịp đầu bắt đầu ở giây 0, không phải giữa chừng
+    // (bắt đầu giữa chừng khi chưa xem gì CHÍNH LÀ một cú tua tới, và bị chặn ở
+    // cổng trước).
+    const r1 = await nhip({ seq: 1, tuSec: 0, denSec: 35, viTriSec: 35 });
+    expect(r1.ok).toBe(true);
+    if (!r1.ok) return;
+    expect(r1.data.thachThuc?.id).toBe("cue-c1");
+    // Phải có một lượt ghi câu treo — không thì trạng thái không sống qua nhịp.
+    const daGhi = [...h.upsert.mock.calls, ...h.updateMany.mock.calls]
+      .map((c) => JSON.stringify(c[0]))
+      .join(" ");
+    expect(daGhi).toContain("cueLogJson");
   });
 
   it("bài KHÔNG có cue ⇒ hành vi không đổi, không thêm lượt ghi nào", async () => {

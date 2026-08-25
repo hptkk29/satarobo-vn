@@ -65,7 +65,15 @@ export function CueEditor(props: {
   const [loai, setLoai] = useState<string>("single");
   const [cauHoi, setCauHoi] = useState("");
   const [dapAn, setDapAn] = useState(["", "", "", ""]);
-  const [dung, setDung] = useState(0);
+  /**
+   * Chỉ số các ô ĐÚNG, theo mảng CHƯA lọc.
+   *
+   * ⚠️ Là một TẬP, không phải một số. Bản đầu giữ đúng một số nguyên và dựng ô
+   * chọn bằng radio cho cả loại "Nhiều đáp án" — nên loại đó chỉ đánh dấu được
+   * một ý, và câu người soạn tưởng có hai đáp án đúng thì không ai trả lời đúng
+   * được. Với cue CHẶN, đó là video khoá cứng vĩnh viễn.
+   */
+  const [dung, setDung] = useState<number[]>([0]);
   const [dungBool, setDungBool] = useState(true);
   const [chan, setChan] = useState(true);
 
@@ -78,6 +86,26 @@ export function CueEditor(props: {
       toast.error("Mốc thời gian phải dạng 2:30 hoặc số giây");
       return;
     }
+    // ⚠️ LỌC TRƯỚC, rồi ánh xạ chỉ số sang mảng đã lọc.
+    //
+    // Bản đầu gửi `options` ĐÃ lọc kèm chỉ số của mảng CHƯA lọc. Người soạn tích
+    // ô 4 rồi xoá trắng ô 2 là gửi lên `options` 3 phần tử với `correctIndex: 3` —
+    // trỏ ra NGOÀI mảng. Zod không kiểm chéo hai trường đó, nên nó lưu thành công,
+    // và câu hỏi ấy KHÔNG ĐÁP ÁN NÀO đúng được: với cue chặn là khoá cứng vĩnh
+    // viễn, và người học chỉ thấy "Chưa đúng" lặp vô hạn.
+    const giu = dapAn
+      .map((v, i) => ({ v: v.trim(), i }))
+      .filter((x) => x.v.length > 0);
+    const options = giu.map((x) => x.v);
+    const chiSoMoi = dung
+      .map((cu) => giu.findIndex((x) => x.i === cu))
+      .filter((x) => x >= 0);
+
+    if (loai !== "boolean" && chiSoMoi.length === 0) {
+      toast.error("Ô được đánh dấu đúng đang để trống — chọn lại đáp án đúng");
+      return;
+    }
+
     const cau =
       loai === "boolean"
         ? { id: crypto.randomUUID(), type: "boolean" as const, question: cauHoi, correct: dungBool }
@@ -86,15 +114,15 @@ export function CueEditor(props: {
               id: crypto.randomUUID(),
               type: "multiple" as const,
               question: cauHoi,
-              options: dapAn.filter((x) => x.trim()),
-              correctIndices: [dung],
+              options,
+              correctIndices: chiSoMoi,
             }
           : {
               id: crypto.randomUUID(),
               type: "single" as const,
               question: cauHoi,
-              options: dapAn.filter((x) => x.trim()),
-              correctIndex: dung,
+              options,
+              correctIndex: chiSoMoi[0]!,
             };
 
     batDau(async () => {
@@ -112,6 +140,7 @@ export function CueEditor(props: {
       setMoc("");
       setCauHoi("");
       setDapAn(["", "", "", ""]);
+      setDung([0]);
       router.refresh();
     });
   };
@@ -242,10 +271,20 @@ export function CueEditor(props: {
             <div className="space-y-1">
               {dapAn.map((v, i) => (
                 <div key={i} className="flex items-center gap-2">
+                  {/* Loại "Nhiều đáp án" phải tích được NHIỀU ô. Dùng radio cho cả
+                      hai loại là biến nhãn trên màn hình thành lời nói dối. */}
                   <input
-                    type="radio"
-                    checked={dung === i}
-                    onChange={() => setDung(i)}
+                    type={loai === "multiple" ? "checkbox" : "radio"}
+                    checked={dung.includes(i)}
+                    onChange={() =>
+                      setDung((cu) =>
+                        loai === "multiple"
+                          ? cu.includes(i)
+                            ? cu.filter((x) => x !== i)
+                            : [...cu, i].sort((a, b) => a - b)
+                          : [i],
+                      )
+                    }
                     title="Đáp án đúng"
                   />
                   <input

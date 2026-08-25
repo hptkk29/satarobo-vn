@@ -145,7 +145,15 @@ export const cauHinhThemCue: ActionConfig<ThemCueInput, { cueId: string }> = {
         return cue.id;
       });
     } catch (e) {
-      if (String(e).includes("P2002")) {
+      // ⚠️ Đọc `e.code`, KHÔNG dò chuỗi. `String(e)` của Prisma cho ra
+      // "PrismaClientKnownRequestError: Unique constraint failed on the fields:
+      // (`atSec`)" — KHÔNG chứa "P2002". Dò chuỗi là một nhánh không bao giờ chạy,
+      // và người soạn nhận màn hình 500 thay vì câu tiếng Việt.
+      const ma =
+        typeof e === "object" && e !== null && "code" in e
+          ? (e as { code?: unknown }).code
+          : undefined;
+      if (ma === "P2002") {
         throw new ActionError(
           "TRUNG_GIAY",
           "Đã có câu hỏi ở giây này — chọn một mốc khác",

@@ -80,15 +80,20 @@ export function chamCue(q: CauHoiCue, dapAn: string | null | undefined): boolean
       if (s !== "true" && s !== "false") return false;
       return (s === "true") === q.correct;
     case "multiple": {
-      const chon = s
-        .split(",")
-        .map((x) => Number(x.trim()))
-        .filter((x) => Number.isInteger(x));
-      // So như TẬP HỢP: thứ tự bấm không phải là một phần của đáp án, và thiếu
-      // vế "đủ số lượng" thì chọn đại một ý đúng cũng được tính là đúng.
+      // ⚠️ KHỬ TRÙNG trước khi đếm. Không khử thì `"0,0"` có độ dài 2 và khớp một
+      // câu có hai đáp án đúng `[0,1]` — tức chọn một ý rồi gửi lặp lại là qua
+      // được câu hỏi mà không biết ý thứ hai là gì.
+      const chon = new Set(
+        s
+          .split(",")
+          .map((x) => Number(x.trim()))
+          .filter((x) => Number.isInteger(x)),
+      );
+      // So như TẬP HỢP: thứ tự bấm không phải một phần của đáp án; và thiếu vế
+      // "đủ số lượng" thì chọn đại một ý đúng cũng được tính là đúng.
       const dung = new Set(q.correctIndices);
-      if (chon.length !== dung.size) return false;
-      return chon.every((x) => dung.has(x));
+      if (chon.size !== dung.size) return false;
+      return [...chon].every((x) => dung.has(x));
     }
   }
 }
@@ -244,4 +249,129 @@ export function cueIdTu(id: string | null | undefined): string | null {
   if (!id || !id.startsWith("cue-")) return null;
   const s = id.slice(4);
   return s.length > 0 ? s : null;
+}
+
+// ── Quyết định cho một nhịp ─────────────────────────────────────────────────
+
+export type CueDayDu = CueRut & { inlineJson: unknown };
+
+export type QuyetDinhCue =
+  /** Không có gì chặn. `so` khác `null` nghĩa là sổ vừa đổi và phải ghi. */
+  | { loai: "DI_TIEP"; so: SoCue | null }
+  /**
+   * Chạm mốc mới: ghi nhận phần xem TỚI `catDen` rồi treo câu hỏi.
+   *
+   * ⚠️ `catDen` là thứ chữa con bug nặng nhất của cơ chế này. Bản đầu thoát sớm
+   * mà không ghi gì, nên: (1) đoạn từ nhịp trước tới mốc cue bay mất vĩnh viễn;
+   * (2) `maxPositionSec` đứng yên, nên nhịp MANG CÂU TRẢ LỜI có `tuSec` vượt mốc
+   * đã ghi và bị cổng chặn-tua nuốt — câu trả lời không bao giờ tới chỗ chấm, và
+   * MỌI cue chặn khoá cứng bài học với thông báo "khoá này không cho tua tới".
+   */
+  | { loai: "HOI"; cueId: string; cau: CauHoiCue; catDen: number; so: SoCue }
+  /** Đang treo, chưa trả lời (hoặc trả lời sai): không ghi nhận gì thêm. */
+  | { loai: "CHO"; cueId: string; cau: CauHoiCue; saiRoi: boolean; so: SoCue | null };
+
+function docCau(c: CueDayDu | undefined): CauHoiCue | null {
+  if (!c) return null;
+  const r = cueInlineSchema.safeParse(c.inlineJson);
+  // Câu hỏng khuôn ⇒ coi như không có. KHÔNG dừng video câm: một bản ghi bẩn do
+  // người soạn để lại không được phép nhốt người học ra khỏi bài của họ.
+  if (!r.success || !laCauChamDuoc(r.data)) return null;
+  return r.data;
+}
+
+/**
+ * Cổng cue cho một nhịp — THUẦN, không chạm DB.
+ *
+ * Tách khỏi đường ghi để test được mọi nhánh mà không dựng Prisma, và để đường ghi
+ * chỉ còn đúng MỘT chỗ ghi tiến độ.
+ */
+export function quyetDinhCue(input: {
+  cues: CueDayDu[];
+  so: SoCue;
+  tuSec: number;
+  denSec: number;
+  traLoi: { id: string; dapAn?: string | null } | null;
+  now: Date;
+}): QuyetDinhCue {
+  if (input.cues.length === 0) return { loai: "DI_TIEP", so: null };
+
+  let so = input.so;
+  const treo = so.treo ?? null;
+
+  // ── Có câu đang treo ─────────────────────────────────────────────────────
+  if (treo) {
+    const cau = docCau(input.cues.find((x) => x.id === treo.cueId));
+    if (!cau) {
+      // Cue bị xoá hoặc hỏng trong lúc treo ⇒ gỡ treo. Giữ treo là khoá vĩnh viễn
+      // vì không còn câu nào để trả lời.
+      return { loai: "DI_TIEP", so: { ...so, treo: null } };
+    }
+
+    if (cueIdTu(input.traLoi?.id) !== treo.cueId) {
+      // Chưa trả lời, hoặc trả lời cho câu khác ⇒ gửi lại câu hỏi.
+      return { loai: "CHO", cueId: treo.cueId, cau, saiRoi: false, so: null };
+    }
+
+    if (!chamCue(cau, input.traLoi?.dapAn ?? null)) {
+      return {
+        loai: "CHO",
+        cueId: treo.cueId,
+        cau,
+        saiRoi: true,
+        so: { ...so, treo: { ...treo, soLanSai: treo.soLanSai + 1 } },
+      };
+    }
+
+    // Đúng: đóng sổ rồi RƠI XUỐNG vòng quét dưới — cùng một nhịp có thể chạm mốc
+    // tiếp theo, và bỏ qua nó là bỏ luôn (mốc đã trôi qua, không nhịp nào chạm lại).
+    so = {
+      v: 1,
+      treo: null,
+      xong: [...so.xong, { cueId: treo.cueId, dung: true }],
+      hanhVi: [
+        ...(so.hanhVi ?? []),
+        {
+          cueId: treo.cueId,
+          askedAt: treo.hoiLuc,
+          answeredAt: input.now.toISOString(),
+          soLanSai: treo.soLanSai,
+        },
+      ],
+    };
+  }
+
+  // ── Quét mốc trong khoảng vừa xem ────────────────────────────────────────
+  // Vòng lặp vì một nhịp có thể chứa nhiều mốc: cue hỏng/không chặn được đánh dấu
+  // xong rồi quét tiếp, thay vì bỏ qua các mốc sau nó.
+  for (let i = 0; i < CUE_TOI_DA + 1; i += 1) {
+    const cue = chonCueDeHoi({
+      cues: input.cues,
+      tuSec: input.tuSec,
+      denSec: input.denSec,
+      so,
+    });
+    if (!cue) return { loai: "DI_TIEP", so: so === input.so ? null : so };
+
+    const day = input.cues.find((x) => x.id === cue.id)!;
+    const cau = docCau(day);
+
+    if (!cau || !cue.blocking) {
+      // Câu hỏng, hoặc cue không chặn: đánh dấu xong để nó không chặn mỗi nhịp,
+      // rồi quét tiếp mốc sau.
+      so = { ...so, xong: [...so.xong, { cueId: cue.id, dung: false }] };
+      continue;
+    }
+
+    return {
+      loai: "HOI",
+      cueId: cue.id,
+      cau,
+      // Ghi nhận tới ĐÚNG mốc, không tới hết khoảng: video dừng ở đó.
+      catDen: cue.atSec,
+      so: { ...so, treo: { cueId: cue.id, hoiLuc: input.now.toISOString(), soLanSai: 0 } },
+    };
+  }
+
+  return { loai: "DI_TIEP", so };
 }

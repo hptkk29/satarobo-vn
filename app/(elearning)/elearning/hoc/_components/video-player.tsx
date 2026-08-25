@@ -148,13 +148,34 @@ export function VideoPlayer(props: {
         setLoi(null);
         if (json.data) {
           setPhu(json.data.coveredSec);
-          bienDaXem.current = Math.max(bienDaXem.current, den);
-          batDau.current = den;
+          // ⚠️ Chỉ nhích mốc khi nhịp này KHÔNG bị chặn bởi một câu hỏi. Nhích vô
+          // điều kiện là đẩy `batDau` vượt qua mốc câu hỏi, và nhịp mang câu trả
+          // lời sẽ bị cổng chặn-tua của server từ chối.
+          if (!json.data.thachThuc) {
+            bienDaXem.current = Math.max(bienDaXem.current, den);
+            batDau.current = den;
+          }
           if (json.data.thachThuc) {
-            datThachThuc(json.data.thachThuc);
+            const tt = json.data.thachThuc;
+            datThachThuc(tt);
             setSaiRoi(Boolean(json.data.saiRoi));
             // Câu hỏi CHẶN thì dừng video. Câu không chặn chỉ hiện lên.
-            if (json.data.thachThuc.chan) v.pause();
+            if (tt.chan) v.pause();
+
+            // ⚠️ TUA VỀ ĐÚNG MỐC câu hỏi, và kéo `batDau` về theo.
+            //
+            // Video bị dừng giữa một nhịp, nên con trỏ đã chạy quá mốc tới vài
+            // giây. Không kéo về thì nhịp MANG CÂU TRẢ LỜI bắt đầu ở chỗ vượt mốc
+            // đã ghi, và chính cổng chặn-tua của server nuốt mất câu trả lời —
+            // người học kẹt cứng với thông báo "khoá này không cho tua tới".
+            //
+            // Tua về cũng đúng về nội dung: câu hỏi neo vào giây đó, và họ sẽ xem
+            // tiếp từ đó sau khi trả lời.
+            if (tt.atSec != null) {
+              v.currentTime = tt.atSec;
+              batDau.current = tt.atSec;
+              bienDaXem.current = Math.max(bienDaXem.current, tt.atSec);
+            }
           } else {
             // Server nói không còn câu nào treo ⇒ gỡ lớp phủ và chạy tiếp. Đây là
             // đường DUY NHẤT xoá câu hỏi; client không tự quyết.
@@ -358,7 +379,11 @@ export function VideoPlayer(props: {
               {thachThuc.luaChon.length > 0 ? (
                 <div className="mt-3 space-y-1.5 text-left">
                   {thachThuc.luaChon.map((lc) => {
-                    const chonNhieu = thachThuc.luaChon.length > 2;
+                    // ⚠️ Đọc CỜ từ hợp đồng, không suy từ số lựa chọn. Bản đầu
+                    // suy bằng `luaChon.length > 2`, nên một câu MỘT-đáp-án có 3
+                    // lựa chọn trở lên biến thành ô tích nhiều: người học tích hai
+                    // ý, client gửi "0,2", và câu họ trả lời đúng bị chấm sai.
+                    const chonNhieu = thachThuc.chonNhieu === true;
                     const dangBat = dangChon.includes(lc.ma);
                     return (
                       <button

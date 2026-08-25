@@ -224,8 +224,17 @@ describe("ràng buộc khi đặt câu hỏi", () => {
 
   it("trùng giây ⇒ lỗi TIẾNG VIỆT, không phải P2002 thô", async () => {
     // `P2002` lọt ra ngoài là màn hình 500 và người soạn không biết mình vừa làm gì.
+    // ⚠️ Mock phải giống lỗi THẬT của Prisma: mã nằm ở `e.code`, còn lời nhắn
+    // KHÔNG chứa chuỗi "P2002". Bản đầu của case này ném một `Error` có chữ
+    // "P2002" trong lời nhắn, nên nó XANH trên một nhánh `String(e).includes(...)`
+    // không bao giờ chạy ngoài đời — test giả lập sai thì nó chỉ kiểm chính bản
+    // giả lập đó.
     b.create = vi.fn(async () => {
-      throw new Error("Unique constraint failed P2002");
+      const e = new Error(
+        "Unique constraint failed on the fields: (`atSec`)",
+      ) as Error & { code?: string };
+      e.code = "P2002";
+      throw e;
     });
     const e = await batLoi(them());
     expect(e.message).toContain("giây này");

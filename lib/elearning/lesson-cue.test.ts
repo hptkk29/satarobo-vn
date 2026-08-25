@@ -18,6 +18,7 @@ import {
   idCue,
   cueIdTu,
   laCauChamDuoc,
+  quyetDinhCue,
   LOAI_CUE,
   SO_CUE_RONG,
   type CauHoiCue,
@@ -90,6 +91,17 @@ describe("chấm câu nhiều-đáp-án", () => {
     // 4 lựa chọn trở thành câu ai bấm bừa cũng qua.
     expect(chamCue(multiple, "0")).toBe(false);
     expect(chamCue(multiple, "2")).toBe(false);
+  });
+
+  it("🔴 gửi TRÙNG một chỉ số không lách được", () => {
+    // Không khử trùng thì `"0,0"` có độ dài 2 và khớp câu có hai đáp án đúng
+    // `[0,1]` — tức chọn một ý rồi gửi lặp lại là qua được câu hỏi mà không biết
+    // ý thứ hai là gì.
+    expect(chamCue(multiple, "0,0")).toBe(false);
+    expect(chamCue(multiple, "2,2")).toBe(false);
+    // Nhưng lặp một ý ĐÃ nằm trong tập đúng thì vẫn đúng: tập chọn vẫn là {0,2}.
+    // Tính chất phải giữ là "lặp không thay được ý còn thiếu", không phải "cấm lặp".
+    expect(chamCue(multiple, "0,2,2")).toBe(true);
   });
 
   it("chọn THỪA ⇒ sai", () => {
@@ -273,5 +285,101 @@ describe("sổ trả lời cue", () => {
     expect(so.hanhVi).toHaveLength(1);
     // Xoá `hanhVi` không làm hỏng sổ.
     expect(docSoCue({ ...so, hanhVi: [] }).xong).toHaveLength(1);
+  });
+});
+
+// ── 7. Quyết định cho một nhịp ─────────────────────────────────────────────
+
+describe("quyết định cue cho một nhịp", () => {
+  const day = (id: string, atSec: number, o: Record<string, unknown> = {}) => ({
+    id,
+    atSec,
+    blocking: true,
+    inlineJson: single,
+    ...o,
+  });
+  const NOW = new Date("2026-08-25T10:00:00.000Z");
+  const qd = (i: Record<string, unknown>) =>
+    quyetDinhCue({
+      cues: [day("c1", 30)],
+      so: SO_CUE_RONG,
+      tuSec: 0,
+      denSec: 100,
+      traLoi: null,
+      now: NOW,
+      ...i,
+    } as never);
+
+  it("chạm mốc ⇒ HỎI, và cắt tại đúng mốc", () => {
+    const r = qd({});
+    expect(r.loai).toBe("HOI");
+    if (r.loai !== "HOI") return;
+    // Cắt ở mốc, không ở cuối khoảng: video dừng tại đó.
+    expect(r.catDen).toBe(30);
+    expect(r.so.treo?.cueId).toBe("c1");
+  });
+
+  it("không chạm mốc nào ⇒ ĐI TIẾP, sổ không đổi", () => {
+    const r = qd({ tuSec: 40, denSec: 50 });
+    expect(r.loai).toBe("DI_TIEP");
+    if (r.loai !== "DI_TIEP") return;
+    // `null` = không có gì phải ghi. Trả sổ mới mỗi nhịp là một lượt ghi DB thừa
+    // cho mỗi người đang xem, mỗi 15 giây.
+    expect(r.so).toBeNull();
+  });
+
+  it("🔴 cue THỨ HAI trong cùng nhịp không bị bỏ qua", () => {
+    // Hai mốc gần nhau (màn soạn chỉ cấm trùng GIÂY). Trả lời đúng cái thứ nhất
+    // rồi đi tiếp là bỏ luôn cái thứ hai — mốc đã trôi qua, không nhịp nào chạm
+    // lại, và bài vẫn được chấm hoàn thành.
+    const r = quyetDinhCue({
+      cues: [day("c1", 30), day("c2", 35)],
+      so: {
+        v: 1,
+        treo: { cueId: "c1", hoiLuc: NOW.toISOString(), soLanSai: 0 },
+        xong: [],
+      },
+      tuSec: 0,
+      denSec: 100,
+      traLoi: { id: "cue-c1", dapAn: "1" },
+      now: NOW,
+    });
+    expect(r.loai).toBe("HOI");
+    if (r.loai !== "HOI") return;
+    expect(r.cueId).toBe("c2");
+  });
+
+  it("câu HỎNG không chặn, và không nuốt mốc sau nó", () => {
+    const r = quyetDinhCue({
+      cues: [day("c1", 30, { inlineJson: { type: "essay" } }), day("c2", 35)],
+      so: SO_CUE_RONG,
+      tuSec: 0,
+      denSec: 100,
+      traLoi: null,
+      now: NOW,
+    });
+    expect(r.loai).toBe("HOI");
+    if (r.loai !== "HOI") return;
+    expect(r.cueId).toBe("c2");
+  });
+
+  it("bài KHÔNG có cue ⇒ đi tiếp ngay, không đụng sổ", () => {
+    const r = qd({ cues: [] });
+    expect(r.loai).toBe("DI_TIEP");
+    if (r.loai !== "DI_TIEP") return;
+    expect(r.so).toBeNull();
+  });
+
+  it("cue treo bị XOÁ ⇒ gỡ treo, không khoá vĩnh viễn", () => {
+    const r = quyetDinhCue({
+      cues: [],
+      so: { v: 1, treo: { cueId: "da-xoa", hoiLuc: NOW.toISOString(), soLanSai: 0 }, xong: [] },
+      tuSec: 0,
+      denSec: 100,
+      traLoi: null,
+      now: NOW,
+    });
+    // Bài không còn cue nào ⇒ thoát ngay ở nhánh đầu.
+    expect(r.loai).toBe("DI_TIEP");
   });
 });

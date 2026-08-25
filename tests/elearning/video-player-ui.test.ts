@@ -180,7 +180,8 @@ describe("xử lỗi theo hợp đồng EL-12a", () => {
   });
 
   it("thách thức thì DỪNG video và hiện lớp phủ", () => {
-    expect(MA).toContain("datThachThuc(json.data.thachThuc)");
+    expect(MA).toContain("datThachThuc(tt)");
+    expect(MA).toContain("if (tt.chan) v.pause();");
     expect(MA).toContain("thachThuc.cauHoi");
   });
 
@@ -208,6 +209,25 @@ describe("xử lỗi theo hợp đồng EL-12a", () => {
     // nó. Đúng loại lỗi đã cắn ở trình tải video; ở đây nó thành "trả lời đúng
     // nhưng video không chạy tiếp".
     expect(MA).toContain("thachThucRef.current");
+  });
+
+  it("🔴 tua VỀ ĐÚNG MỐC khi câu hỏi bung ra", () => {
+    // Video dừng giữa một nhịp nên con trỏ đã chạy quá mốc. Không kéo về thì nhịp
+    // mang câu trả lời bắt đầu ở chỗ vượt mốc đã ghi, và cổng chặn-tua của server
+    // nuốt mất câu trả lời — người học kẹt cứng.
+    expect(MA).toContain("v.currentTime = tt.atSec");
+    expect(MA).toContain("batDau.current = tt.atSec");
+  });
+
+  it("🔴 mốc KHÔNG nhích khi nhịp bị câu hỏi chặn", () => {
+    expect(MA).toContain("if (!json.data.thachThuc) {");
+  });
+
+  it("🔴 'chọn nhiều' đọc CỜ từ hợp đồng, không đoán theo số lựa chọn", () => {
+    // Suy bằng `luaChon.length > 2` biến một câu MỘT-đáp-án có 3 lựa chọn thành ô
+    // tích nhiều, và câu người học trả lời đúng bị chấm sai.
+    expect(MA).toContain("thachThuc.chonNhieu === true");
+    expect(MA).not.toContain("luaChon.length > 2");
   });
 
   it("sai thì cho làm lại TẠI CHỖ, không khoá", () => {

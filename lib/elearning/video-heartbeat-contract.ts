@@ -93,6 +93,14 @@ export type ThachThuc = {
   luaChon: { ma: string; nhan: string }[];
   /** `true` = video phải DỪNG cho tới khi trả lời. */
   chan: boolean;
+  /**
+   * `true` = câu cho chọn NHIỀU ý.
+   *
+   * ⚠️ Gửi tường minh, không để trình phát suy từ số lựa chọn. Bản đầu suy bằng
+   * `luaChon.length > 2`, nên một câu MỘT-đáp-án có 3 lựa chọn trở lên biến thành
+   * ô tích nhiều — người học tích hai ý, và câu họ trả lời đúng bị chấm sai.
+   */
+  chonNhieu?: boolean;
   /** Giây trong video mà câu hỏi này neo vào. Chỉ có với `CUE`. */
   atSec?: number;
 };
