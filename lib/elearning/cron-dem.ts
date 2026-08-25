@@ -156,10 +156,28 @@ export async function runElearningDem(now = new Date()): Promise<KetQuaDem> {
     });
     ket.don.bitmap = xoaBitmap.count;
 
-    // (c) `TrnExamAttempt.ipHash`/`deviceClass` — bảng thuộc EL-14, CHƯA tồn
-    // tại. `null` (không phải 0) để phân biệt "chưa làm được" với "không có gì
-    // để dọn"; 0 ở đây sẽ đọc thành đã dọn và không có gì, tức nói dối.
-    ket.don.examAttempt = null;
+    // (c) EL-14 — dấu vân kỹ thuật của lượt thi (`ipHash`, `ipPrefix`,
+    // `deviceClass`, `browserFamily`). Đây là dữ liệu TẦNG 2; bản ghi lượt thi và
+    // điểm là tầng 1 và ở lại.
+    //
+    // ⚠️ Đi bằng `purgeAfter` — cột NOT NULL ghi cứng lúc INSERT — chứ không tính
+    // lại hạn ở đây. Tính lại là dựng nguồn sự thật thứ hai, và ngày ai đó đổi
+    // con số 90 thì hai chỗ lệch nhau mà không gì báo.
+    const xoaVanThi = await db.trnExamAttempt.updateMany({
+      where: {
+        purgeAfter: { lt: now },
+        // Chỉ chạm dòng CÒN dấu vân: không có vế này thì mỗi đêm cron ghi lại
+        // toàn bộ lượt thi cũ, và `updatedAt` của chúng nhảy mỗi ngày.
+        OR: [{ ipHash: { not: null } }, { deviceClass: { not: null } }],
+      },
+      data: {
+        ipHash: null,
+        ipPrefix: null,
+        deviceClass: null,
+        browserFamily: null,
+      },
+    });
+    ket.don.examAttempt = xoaVanThi.count;
   } catch (e) {
     ket.loi.push({ viec: "don-tang-2", message: String(e) });
   }
