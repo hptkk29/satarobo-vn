@@ -84,7 +84,7 @@ export default async function LeadDetailPage({ params }: Props) {
   // Scope: SALES_CSM chỉ xem lead của mình — TRỪ lead đã bật "dùng chung" (#11 T1
   // câu 10 BGĐ): CSKH cùng cơ sở xem được (cách ly cơ sở đã do scopedDb lo ở trên).
   if (!canViewAll && lead.assignedToId !== session.user.id && !lead.isSharedWithTeam) {
-    redirect("/leads?view=kanban");
+    redirect("/leads?view=table");
   }
 
   // #11 T1 Q2 — actor chỉ vào được NHỜ "dùng chung" → read-only về UX: ẩn nút
@@ -214,7 +214,7 @@ export default async function LeadDetailPage({ params }: Props) {
   return (
     <div className="max-w-6xl p-6">
       <Link
-        href="/leads?view=kanban"
+        href="/leads?view=table"
         className="mb-4 inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
       >
         <ChevronLeft className="h-4 w-4" /> Quay lại danh sách

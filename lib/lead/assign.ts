@@ -3,6 +3,7 @@ import { logLeadAudit } from "@/lib/audit/log";
 import { assignmentWrite } from "@/lib/lead/assignment";
 import { takeRotationTurn, takeRotationTurns } from "@/lib/lead/rotation";
 import { orgUnitIdForCenter } from "@/lib/org/org-service";
+import { LEAD_CLOSED_STATUSES } from "@/lib/leads/status";
 import type { LeadStatus, Prisma } from "@prisma/client";
 
 // =============================================================================
@@ -10,11 +11,10 @@ import type { LeadStatus, Prisma } from "@prisma/client";
 // =============================================================================
 
 // Lead "đang mở" = chưa kết thúc → tính tải cho round-robin.
-export const TERMINAL_LEAD_STATUSES: LeadStatus[] = [
-  "ENROLLED",
-  "LOST",
-  "DUPLICATE",
-];
+// GĐ0 — định nghĩa chuyển về @/lib/leads/status (trước đó cùng danh sách này nằm ở
+// 5 file rời: 4 bản giống nhau và 1 bản có thêm REGISTERED, không ai biết vì sao lệch).
+/** @deprecated Tên cũ. Dùng `LEAD_CLOSED_STATUSES` từ `@/lib/leads/status`. */
+export const TERMINAL_LEAD_STATUSES = LEAD_CLOSED_STATUSES;
 
 export type AssigneeLoad = { id: string; openCount: number };
 export type Actor = { actorId: string | null; actorName: string };

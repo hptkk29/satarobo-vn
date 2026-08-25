@@ -10,10 +10,14 @@ import {
 } from "@/lib/lead/assign-strategy";
 import { takeRotationTurn } from "@/lib/lead/rotation";
 import { assignmentWrite } from "@/lib/lead/assignment";
+import { LEAD_CLOSED_STATUSES } from "@/lib/leads/status";
 
 // Module CRM & Lead PHẦN 2 — chia lead tự động (cơ sở → chế độ) + khoá khi đã tương tác.
 
-export const TERMINAL_LEAD_STATUSES: LeadStatus[] = ["ENROLLED", "LOST", "DUPLICATE"];
+// GĐ0 — định nghĩa chuyển về @/lib/leads/status. Giữ tên cũ vì lib/lead/intake/ingest.ts
+// đang import từ đây.
+/** @deprecated Tên cũ. Dùng `LEAD_CLOSED_STATUSES` từ `@/lib/leads/status`. */
+export const TERMINAL_LEAD_STATUSES = LEAD_CLOSED_STATUSES;
 
 export type Actor = { actorId: string | null; actorName: string };
 

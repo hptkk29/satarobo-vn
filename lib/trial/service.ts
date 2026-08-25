@@ -12,6 +12,7 @@ import { teacherCenterAssignmentError } from "@/lib/teachers/center-filter";
 import { nextSeq, yy } from "@/lib/codegen";
 import { publishEvent } from "@/lib/events/publish";
 import { writeAudit } from "@/lib/audit/audit-log";
+import { LEAD_PIPELINE_EXIT_STATUSES } from "@/lib/leads/status";
 
 // ─── PURE helpers (deterministic — KHÔNG new Date() ở top) ─────────────────────
 
@@ -617,8 +618,10 @@ async function syncTrialProgress(tx: Prisma.TransactionClient, trialEnrollmentId
   const lead = await tx.lead.findUnique({ where: { id: leadId }, select: { status: true } });
   if (!lead) return;
   // KHÔNG động vào lead đã chốt / rời pipeline (sale tự quản từ đây).
-  const TERMINAL = ["REGISTERED", "ENROLLED", "LOST", "DUPLICATE"];
-  if (TERMINAL.includes(lead.status)) return;
+  // GĐ0 — đây là chỗ DUY NHẤT dùng tập "rời phễu" (có thêm REGISTERED so với tập
+  // "đã đóng" của round-robin/bàn giao). Trước GĐ0 hai tập nằm ở 5 file rời và không
+  // ai biết vì sao chúng lệch nhau; nay khác biệt được đặt tên và có test khoá.
+  if (LEAD_PIPELINE_EXIT_STATUSES.includes(lead.status)) return;
 
   // mọi con (đang/đã học thử) của lead này đã đủ buổi?
   const siblings = await tx.trialEnrollment.findMany({
