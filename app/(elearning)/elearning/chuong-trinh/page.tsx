@@ -228,6 +228,10 @@ export default async function Page() {
         <Link href="/elearning/kho-cau-hoi" className="underline">
           kho câu hỏi
         </Link>
+        , và đề thi ở{" "}
+        <Link href="/elearning/de-thi" className="underline">
+          màn đề thi
+        </Link>
         .
       </p>
     </div>
