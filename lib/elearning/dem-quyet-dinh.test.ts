@@ -11,6 +11,8 @@ import {
   chonQuaHan,
   chonThuLaiChoDuLieu,
   mocDonTang2,
+  mocDonTaiDo,
+  chonTaiDoDeHuy,
   type DongQuaHan,
 } from "@/lib/elearning/dem-quyet-dinh";
 
@@ -143,5 +145,49 @@ describe("việc (4) — mốc dọn dữ liệu tầng 2", () => {
     expect(mocDonTang2(NOW, 30).bitmapLastActivityTruoc.toISOString()).toBe(
       "2026-07-24T00:47:00.000Z",
     );
+  });
+});
+
+describe("EL-10 việc (6) — dọn lượt tải dở", () => {
+  const u = (o: Record<string, unknown> = {}) => ({
+    key: "elearning/master/l1/x.mp4",
+    initiated: ngay("2026-08-01"),
+    ...o,
+  });
+
+  it("mốc mặc định là 24 giờ trước", () => {
+    // Ngắn hơn thì huỷ nhầm lượt đang chạy: người soạn tải 200MB qua mạng chậm
+    // có thể mất cả buổi, và huỷ giữa chừng là bắt họ làm lại từ đầu.
+    expect(mocDonTaiDo(NOW).toISOString()).toBe("2026-08-22T00:47:00.000Z");
+  });
+
+  it("lượt cũ hơn mốc ⇒ huỷ; mới hơn ⇒ giữ", () => {
+    const r = chonTaiDoDeHuy(
+      [u({ key: "elearning/master/a/1.mp4" }), u({ key: "elearning/master/b/2.mp4", initiated: NOW })],
+      mocDonTaiDo(NOW),
+    );
+    expect(r.huy).toHaveLength(1);
+    expect(r.giu).toHaveLength(1);
+  });
+
+  it("KHÔNG rõ mốc bắt đầu ⇒ GIỮ, không huỷ liều", () => {
+    // Huỷ một lượt có thể đang chạy là làm mất công người soạn; giữ thêm một hôm
+    // chỉ tốn vài xu lưu trữ.
+    const r = chonTaiDoDeHuy([u({ initiated: null })], mocDonTaiDo(NOW));
+    expect(r.huy).toHaveLength(0);
+  });
+
+  it("tệp NGOÀI tiền tố `elearning/` không bị đụng tới", () => {
+    // Bucket có thể còn tiền tố khác; dọn quá tay là xoá tệp của module khác.
+    const r = chonTaiDoDeHuy(
+      [u({ key: "uploads/videos/x.mp4" }), u({ key: "scorm/p1/x.zip" })],
+      mocDonTaiDo(NOW),
+    );
+    expect(r.huy).toHaveLength(0);
+    expect(r.giu).toHaveLength(2);
+  });
+
+  it("danh sách rỗng không lỗi", () => {
+    expect(chonTaiDoDeHuy([], mocDonTaiDo(NOW)).huy).toEqual([]);
   });
 });

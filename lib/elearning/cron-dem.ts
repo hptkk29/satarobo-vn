@@ -1,19 +1,34 @@
 import { db } from "@/lib/db";
+import { chotCoHetHan } from "@/lib/elearning/watch-flag-close";
+import { quetMoCo } from "@/lib/elearning/watch-flag-scan";
 import { publishEvent } from "@/lib/events/publish";
-import { chonQuaHan, mocDonTang2, type DongQuaHan } from "@/lib/elearning/dem-quyet-dinh";
+import {
+  chonQuaHan,
+  mocDonTang2,
+  mocDonTaiDo,
+  chonTaiDoDeHuy,
+  type DongQuaHan,
+} from "@/lib/elearning/dem-quyet-dinh";
+import { donTaiDo } from "@/lib/elearning/cleanup-multipart";
 import { runDynamicAudienceSync } from "@/lib/elearning/dynamic-audience-run";
 import { thuLaiHangDoiNhanSu } from "@/lib/elearning/retry-queue";
 
 /**
  * EL-06 — CRON ĐÊM `elearning-dem`, chạy 00:47 giờ Việt Nam (`47 17 * * *` UTC).
  *
- * NĂM việc tuần tự, mỗi việc idempotent. Thứ tự KHÔNG đổi được:
+ * SÁU việc tuần tự, mỗi việc idempotent. Thứ tự KHÔNG đổi được:
  *
  *   1. quét quá hạn → `OVERDUE` + phát sự kiện
  *   2. tập ĐỘNG §10.4 — người mới khớp luật thì thêm, rời tập thì thu hồi
  *   3. chứng nhận T-30/T-7 + tự giao lại khi hết hiệu lực  ⛔ CHƯA LÀM ĐƯỢC
  *   4. dọn dữ liệu tầng 2 (QĐ-CDA-14)
+ *   6. dọn lượt tải nhiều phần bỏ dở trên R2 (EL-10)
  *   5. thử lại hàng đợi "chờ dữ liệu Nhân sự"
+ *   7. cờ nghi ngờ (EL-13): quét mở cờ, rồi chốt cờ hết cửa sổ khiếu nại
+ *
+ * Việc (6) mang số 6 nhưng chạy TRƯỚC việc (5): nó thuộc nhóm DỌN, và số thứ tự
+ * giữ nguyên theo đặc tả để đối chiếu được. Đổi số cho "gọn" là làm mọi trích
+ * dẫn tài liệu trỏ sai chỗ.
  *
  * ⚠️ Việc (4) phải chạy SAU (1) và (3), không chạy trước: cả hai việc kia ĐỌC
  * trạng thái của kỳ đang chốt, còn (4) thì xoá dữ liệu — dọn trước là rút thảm
@@ -30,6 +45,11 @@ export type KetQuaDem = {
   chungNhan: { chuaLamDuoc: string } | { nhac: number };
   don: { videoSession: number; bitmap: number; examAttempt: number | null };
   thuLai: { taoMoi: number; vanKet: number; nguoiVanKet: string[] };
+  /** EL-10 việc (6) — lượt tải nhiều phần bỏ dở, đã huỷ trên R2. */
+  taiDo: { daHuy: number; conGiu: number } | { chuaLamDuoc: string };
+  /** EL-13 việc (7) — cờ nghi ngờ: quét mở, rồi chốt cờ hết cửa sổ khiếu nại. */
+  moCo: { daXet: number; daMo: number; thieuNguoiXu: number };
+  chotCo: { daChot: number; boQua: number };
   loi: { viec: string; message: string }[];
 };
 
@@ -51,6 +71,9 @@ export async function runElearningDem(now = new Date()): Promise<KetQuaDem> {
     },
     don: { videoSession: 0, bitmap: 0, examAttempt: null },
     thuLai: { taoMoi: 0, vanKet: 0, nguoiVanKet: [] },
+    moCo: { daXet: 0, daMo: 0, thieuNguoiXu: 0 },
+    chotCo: { daChot: 0, boQua: 0 },
+    taiDo: { daHuy: 0, conGiu: 0 },
     loi: [],
   };
 
@@ -139,6 +162,32 @@ export async function runElearningDem(now = new Date()): Promise<KetQuaDem> {
     ket.don.examAttempt = null;
   } catch (e) {
     ket.loi.push({ viec: "don-tang-2", message: String(e) });
+  }
+
+  // ── Việc 6: dọn lượt tải nhiều phần bỏ dở ─────────────────────────────────
+  // Chạy CÙNG nhóm việc dọn (sau việc 1 và 3, trước việc 5) và KHÔNG xin khe
+  // cron thứ ba — ngân sách của module là đúng hai khe.
+  try {
+    ket.taiDo = await donTaiDo(chonTaiDoDeHuy, mocDonTaiDo(now));
+  } catch (e) {
+    ket.loi.push({ viec: "don-tai-do", message: String(e) });
+  }
+
+  // ── Việc 7: cờ nghi ngờ ───────────────────────────────────────────────────
+  // Gộp vào KHE NÀY, không xin khe cron thứ ba — ngân sách module là đúng hai khe.
+  //
+  // ⚠️ QUÉT trước, CHỐT sau, và hai bước bắt lỗi RIÊNG. Gộp chung một `try` thì
+  // một lỗi lúc quét sẽ nuốt luôn bước chốt, và cửa sổ khiếu nại 14 ngày âm thầm
+  // không có hiệu lực — không ai thấy, vì cron vẫn báo chạy xong.
+  try {
+    ket.moCo = await quetMoCo(now);
+  } catch (e) {
+    ket.loi.push({ viec: "mo-co", message: String(e) });
+  }
+  try {
+    ket.chotCo = await chotCoHetHan(now);
+  } catch (e) {
+    ket.loi.push({ viec: "chot-co", message: String(e) });
   }
 
   // ── Việc 5: thử lại hàng đợi "chờ dữ liệu Nhân sự" ────────────────────────

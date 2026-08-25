@@ -7059,6 +7059,7 @@ model TrnProgram {
   updatedAt   DateTime  @updatedAt @db.Timestamptz(6)
   deletedAt   DateTime? @db.Timestamptz(6)
 
+  need           TrnTrainingNeed?      @relation(fields: [needId], references: [id], onDelete: SetNull)
   courses        TrnCourse[]
   evaluationRows TrnEvaluationResult[]
   evalLinkConfig TrnEvalLinkConfig?
@@ -7250,7 +7251,8 @@ model TrnLesson {
   videoSessions  TrnVideoSession[]
 
   /// EL-04 — tiến độ của mọi lượt học trên bài này.
-  progress TrnLessonProgress[]
+  progress   TrnLessonProgress[]
+  watchFlags TrnWatchFlag[]
 
   @@unique([moduleId, orderIndex])
   @@index([kind])
@@ -7857,10 +7859,19 @@ model TrnLessonProgress {
   verifiedAt     DateTime?               @db.Timestamptz(6)
 
   /// Chống nhịp heartbeat tới trễ hoặc đảo thứ tự: nhịp mang `seq` nhỏ hơn bị bỏ.
-  seq            Int       @default(0)
+  seq Int @default(0)
+
+  /// EL-09 — buổi TRỰC TIẾP: ai là người tick "đã dự".
+  ///
+  /// Nullable vì chỉ bài dạng `LIVE_SESSION` mới có. Không có cột này thì việc
+  /// điểm danh tay không có nhật ký, và câu hỏi "ai xác nhận người này đã dự"
+  /// không trả lời được — trong khi đó chính là thứ chống việc cấp chứng nhận
+  /// cho người mới học phần trực tuyến (BR-004).
+  attendanceMarkedByUserId String?
+  attendanceMarkedAt       DateTime? @db.Timestamptz(6)
   /// Mốc cron đã dọn bitmap của dòng này — để phân biệt "chưa từng có bitmap" với
   /// "đã có và đã dọn đúng hạn".
-  bitmapPurgedAt DateTime? @db.Timestamptz(6)
+  bitmapPurgedAt           DateTime? @db.Timestamptz(6)
 
   createdAt DateTime @default(now()) @db.Timestamptz(6)
   updatedAt DateTime @updatedAt @db.Timestamptz(6)
@@ -8003,4 +8014,179 @@ model TrnIncident {
 
   @@index([scope, detectedAt])
   @@index([assignmentId])
+}
+
+/// Hai trạng thái, không hơn (bản tối giản của B1 — C2).
+///
+/// Thêm trạng thái thứ ba ("đang xem xét", "trả lại") nghe hợp lý nhưng mỗi giá
+/// trị mới là một nhánh phải nhớ ở mọi câu truy vấn về sau, đổi lấy một thông tin
+/// mà ô lý do đã nói được.
+enum TrnTrainingNeedStatus {
+  NEW
+  APPROVED
+}
+
+/// Phiếu nhu cầu đào tạo (B1, §8.1).
+///
+/// ⚠️ Bảng này tồn tại vì một MÂU THUẪN CỨNG trong tài liệu gốc: BA §22.1 xếp
+/// bước "Nhu cầu" sang giai đoạn sau, trong khi chính §8.1 viết *"không được tạo
+/// chương trình nếu không gắn phiếu nhu cầu đã duyệt"*. Không có bảng này thì
+/// luật kia không thi hành được, và nó sẽ lặng lẽ thành một câu chữ không ai theo.
+///
+/// Đường thoát duy nhất là `TrnProgram.needExemptReason` — không có phiếu thì
+/// phải viết ra lý do; không được để trống CẢ HAI.
+model TrnTrainingNeed {
+  id               String                @id @default(cuid())
+  code             String                @unique
+  title            String
+  requesterUserId  String
+  /// Mô tả nhóm người học bằng LỜI, không phải luật lọc: ở bước đề xuất thì
+  /// người đề nghị chưa biết (và không cần biết) hệ thống lọc nhân sự thế nào.
+  targetGroupText  String
+  reason           String                @db.Text
+  expectedOutcome  String                @db.Text
+  /// Quý dự kiến, dạng "2026-Q3". Chuỗi chứ không phải ngày: đây là dự kiến ở
+  /// mức quý, ép thành ngày cụ thể là bịa ra độ chính xác không có thật.
+  proposedQuarter  String
+  status           TrnTrainingNeedStatus @default(NEW)
+  approvedByUserId String?
+  approvedAt       DateTime?             @db.Timestamptz(6)
+
+  centerId  String?
+  orgUnitId String?
+
+  programs TrnProgram[]
+
+  createdAt DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime  @updatedAt @db.Timestamptz(6)
+  deletedAt DateTime? @db.Timestamptz(6)
+
+  @@index([status, createdAt])
+  @@index([orgUnitId])
+  @@index([centerId])
+}
+
+/// Công nhận tương đương (C8, EL-09).
+///
+/// ⚠️ Không có bảng này thì ma trận đào tạo ngày mở **tô xám 100%**: người đã học
+/// khoá An toàn từ hai năm trước hiện ra như chưa từng học, và khoá tuân thủ 12
+/// tháng không có mốc gốc nào để tính hạn tái chứng nhận.
+///
+/// ⚠️ Nó KHÔNG đẻ ra trạng thái thứ bảy. Lượt ghi danh sinh từ đây mang
+/// `status = COMPLETED` + `source = EQUIVALENCE`; nhãn "Công nhận tương đương"
+/// suy từ CỘT `source`, và tách khỏi "Hoàn thành" trên mọi báo cáo.
+///
+/// ⚠️ `originalEffectiveAt` là NGÀY HIỆU LỰC GỐC, không phải ngày bấm nút. Chu kỳ
+/// tái chứng nhận tính từ nó — lấy ngày nhập liệu là kéo dài hiệu lực thêm đúng
+/// khoảng thời gian người ta chậm nhập.
+model TrnEquivalence {
+  id       String @id @default(cuid())
+  userId   String
+  courseId String
+
+  /// Bằng chứng là gì (chứng chỉ ngoài, biên bản lớp cũ, quyết định…). Bắt buộc:
+  /// một lượt công nhận không nêu được bằng chứng thì nó chỉ là một lời nói.
+  evidenceSource      String
+  /// Ngày hiệu lực GỐC — mốc để tính hạn tái chứng nhận.
+  originalEffectiveAt DateTime @db.Timestamptz(6)
+  /// Người xác nhận, CÓ TÊN. Bắt buộc, không mặc định.
+  confirmedByUserId   String
+  note                String?
+
+  centerId  String
+  orgUnitId String
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+
+  /// Một người chỉ được công nhận tương đương MỘT lần cho mỗi khoá.
+  @@unique([userId, courseId])
+  @@index([courseId])
+  @@index([originalEffectiveAt])
+  @@index([centerId])
+  @@index([orgUnitId])
+}
+
+/// EL-13 — chủ thể bị gắn cờ: dòng tiến độ một bài, hay một phiên xem.
+enum TrnFlagSubject {
+  LESSON_PROGRESS
+  VIDEO_SESSION
+}
+
+/// EL-13 — vòng đời cờ nghi ngờ.
+///
+/// `OPEN` → người học khiếu nại → `APPEALED` → người xử quyết: giữ cờ (`UPHELD`)
+/// hoặc gỡ cờ (`REVOKED`). Hết cửa sổ khiếu nại mà vẫn `OPEN` thì cron chốt
+/// `UPHELD` — im lặng để cờ treo mãi là cách tệ nhất, vì người bị gắn cờ không
+/// biết mình còn bao lâu để nói lại.
+enum TrnFlagStatus {
+  OPEN
+  APPEALED
+  UPHELD
+  REVOKED
+}
+
+/// EL-13 — CỜ NGHI NGỜ HỌC ĐỐI PHÓ.
+///
+/// ⚠️ Là một BẢNG CÓ VÒNG ĐỜI, cố ý KHÔNG phải hai cột `flagged`/`flagReason` trên
+/// `TrnLessonProgress`. Hai cột thì không giữ được lịch sử khiếu nại, không biết
+/// ai xử, và gỡ cờ xong là mất sạch dấu vết việc từng có cờ — trong khi đây là dữ
+/// liệu quan hệ lao động.
+///
+/// ⚠️ `evidenceJson` CHỈ chứa SỐ LIỆU TỔNG HỢP. Nó là lưới an toàn cuối cùng: sau
+/// 90 ngày dữ liệu thô tầng 2 bị dọn, nhưng người khiếu nại và người xử vẫn phải
+/// nhìn CÙNG một bộ số. Nhét bitmap thô hay nhật ký phiên vào đây là rò tầng 2
+/// sang tầng 1 và vô hiệu hoá chính hạn dọn 90 ngày.
+model TrnWatchFlag {
+  id           String  @id @default(cuid())
+  userId       String
+  lessonId     String
+  enrollmentId String?
+
+  subjectKind      TrnFlagSubject
+  /// Đúng MỘT trong hai cột dưới có giá trị, theo `subjectKind`.
+  lessonProgressId String?
+  videoSessionId   String?
+
+  /// MÃ LUẬT, không phải câu văn: `WATCH_TIME_TOO_LOW` · `SEEK_ABUSE` · `TOO_FAST`
+  /// · `HEARTBEAT_FLOOD`. Câu văn tiếng Việt nằm ở tầng hiển thị — để ở đây thì
+  /// sửa câu chữ là sửa dữ liệu lịch sử.
+  ruleCode     String
+  evidenceJson Json
+
+  status   TrnFlagStatus @default(OPEN)
+  openedAt DateTime      @default(now()) @db.Timestamptz(6)
+
+  appealedAt     DateTime? @db.Timestamptz(6)
+  appealNote     String?
+  /// `= openedAt + 14 ngày`. Hết cửa sổ mà cờ còn `OPEN` thì chốt `UPHELD`.
+  appealDeadline DateTime  @db.Timestamptz(6)
+
+  /// NGƯỜI XỬ CÓ TÊN, gán ngay lúc mở cờ — không phải "phòng Đào tạo" chung
+  /// chung. Không có tên người thì không ai thấy mình phải trả lời, và khiếu nại
+  /// nằm đó tới khi hết hạn.
+  handlerUserId String
+  /// `= appealedAt + 5 ngày làm việc`. Quá hạn thì vào hàng đợi việc của người xử.
+  decisionDueAt DateTime? @db.Timestamptz(6)
+
+  decidedAt       DateTime? @db.Timestamptz(6)
+  decidedByUserId String?
+  /// Bắt buộc khi gỡ cờ (`REVOKED`) — gỡ mà không nói lý do thì lần sau không ai
+  /// biết luật đã sai ở đâu.
+  decisionNote    String?
+
+  centerId  String?
+  orgUnitId String?
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  lesson TrnLesson @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+
+  @@index([status, openedAt])
+  @@index([userId, status])
+  @@index([orgUnitId, status])
+  /// Cron chốt `UPHELD` khi hết cửa sổ đi bằng index này.
+  @@index([appealDeadline])
+  @@index([handlerUserId, status])
+  @@index([decisionDueAt, status])
 }

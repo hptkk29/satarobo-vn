@@ -10,6 +10,7 @@
  */
 import { describe, it, expect } from "vitest";
 import {
+  nhanNhom,
   phanNhom,
   tongHopTuanThu,
   soNgayTre,
@@ -28,6 +29,7 @@ const d = (o: Partial<DongBaoCao> = {}): DongBaoCao => ({
   departmentName: "Đào tạo",
   managerName: "Trần B",
   status: "IN_PROGRESS",
+  source: "ASSIGNMENT",
   progressPercent: 40,
   dueAtOriginal: ngay("2026-09-01"),
   completedAt: null,
@@ -110,10 +112,40 @@ describe("tỉ lệ đúng hạn — mẫu số loại ai", () => {
       d({ status: "IN_PROGRESS" }),
       d({ status: "REVOKED" }),
       d({ pausedAt: ngay("2026-08-01") }),
+      d({ status: "COMPLETED", source: "EQUIVALENCE" }),
     ];
     const t = tongHopTuanThu(ds);
-    const tong = t.dungHan + t.tre + t.dangHoc + t.chuaHoc + t.thuHoi + t.tamDung;
+    const tong =
+      t.dungHan + t.tre + t.dangHoc + t.chuaHoc + t.thuHoi + t.tamDung + t.tuongDuong;
     expect(tong).toBe(t.daGiao);
+  });
+});
+
+describe("EL-09 — công nhận tương đương là nhãn RIÊNG", () => {
+  it("`source = EQUIVALENCE` KHÔNG gộp vào Hoàn thành đúng hạn", () => {
+    // Lượt này mang `status = COMPLETED`. Gộp vào "đúng hạn" là thổi phồng tỉ lệ
+    // tuân thủ bằng những người chưa từng học trong hệ thống này.
+    expect(phanNhom(d({ status: "COMPLETED", source: "EQUIVALENCE" }))).toBe("TUONG_DUONG");
+  });
+
+  it("ra khỏi MẪU SỐ của tỉ lệ đúng hạn", () => {
+    // Luật 3: lượt này không có `dueAtOriginal` nên nó đứng NGOÀI phân hoạch
+    // đúng-hạn/trễ. Để trong mẫu số là kéo nó vào một phép đo nó không thuộc về.
+    const t = tongHopTuanThu([
+      d({ status: "COMPLETED" }),
+      d({ status: "COMPLETED", source: "EQUIVALENCE" }),
+    ]);
+    expect(t.tuongDuong).toBe(1);
+    expect(t.tyLeDungHan).toBe(100);
+  });
+
+  it("nhãn hiển thị bằng tiếng Việt, tách bạch", () => {
+    expect(nhanNhom("TUONG_DUONG")).toBe("Công nhận tương đương");
+    expect(nhanNhom("TUONG_DUONG")).not.toContain("Hoàn thành");
+  });
+
+  it("thu hồi vẫn thắng, kể cả với lượt tương đương", () => {
+    expect(phanNhom(d({ status: "REVOKED", source: "EQUIVALENCE" }))).toBe("THU_HOI");
   });
 });
 

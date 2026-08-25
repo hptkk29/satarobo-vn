@@ -80,6 +80,18 @@ export default async function Page({
     <div className="mx-auto max-w-6xl px-4 py-6">
       <h1 className="text-2xl font-bold">Báo cáo tuân thủ hạn chót</h1>
 
+      {/* Lối vào R2. Trang nào không có lối vào thì chỉ người viết nó biết đường
+          tới — và một báo cáo giám sát không ai mở là một báo cáo không tồn tại.
+          Chỉ hiện cho người có quyền: R2 chứa dữ liệu hành vi từng cá nhân. */}
+      {can(actor, "elearning:video-analytics:view") ? (
+        <Link
+          href="/elearning/bao-cao/video"
+          className="mt-2 inline-block text-sm text-primary underline"
+        >
+          Xem chi tiết xem video và cờ nghi ngờ →
+        </Link>
+      ) : null}
+
       {cacLuot.length === 0 ? (
         <p className="mt-4 text-sm text-muted-foreground">
           Chưa có lượt giao nào đang chạy.
@@ -116,10 +128,14 @@ export default async function Page({
             />
           </dl>
 
-          {(tong.thuHoi > 0 || tong.tamDung > 0) && (
+          {(tong.thuHoi > 0 || tong.tamDung > 0 || tong.tuongDuong > 0) && (
             <p className="mt-2 text-xs text-muted-foreground">
-              Ngoài mẫu số: {tong.thuHoi} đã thu hồi · {tong.tamDung} tạm dừng đồng hồ.
-              Họ không được yêu cầu học trong kỳ này nên không tính vào tỉ lệ.
+              Ngoài mẫu số: {tong.thuHoi} đã thu hồi · {tong.tamDung} tạm dừng đồng hồ
+              {tong.tuongDuong > 0 && ` · ${tong.tuongDuong} công nhận tương đương`}. Họ
+              không nằm trong phép đo hạn chót của kỳ này nên không tính vào tỉ lệ
+              {tong.tuongDuong > 0 &&
+                " — riêng nhóm công nhận tương đương VẪN được tính là đã được đào tạo"}
+              .
             </p>
           )}
 

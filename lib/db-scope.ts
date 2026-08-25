@@ -52,6 +52,9 @@ export const SCOPED_MODELS = new Set<string>([
   // bảng CON (scope theo bảng cha) hoặc ngoại lệ nhịp ghi cao (TrnVideoSession).
   // ⚠️ Ba trong bốn model này có NULL = TOÀN CÔNG TY ⇒ xem NULL_IS_GLOBAL_MODELS ngay dưới.
   // Quên khai ở đó thì chương trình/khoá dùng chung toàn hệ TÀNG HÌNH với người cấp cơ sở.
+  // EL-08 — phiếu nhu cầu đào tạo. Cùng ngữ nghĩa với chương trình sinh ra từ nó:
+  // NULL = nhu cầu TOÀN CÔNG TY, nên phải khai cả ở NULL_IS_GLOBAL_MODELS dưới.
+  "TrnTrainingNeed",
   "TrnProgram",
   "TrnCourse",
   "TrnRequirement",
@@ -60,10 +63,20 @@ export const SCOPED_MODELS = new Set<string>([
   // LUÔN thuộc một cơ sở. NULL = chưa backfill ⇒ KHÔNG vào NULL_IS_GLOBAL_MODELS.
   "TrnAssignment",
   "TrnEnrollment",
+  // EL-09 — công nhận tương đương. Cùng nhóm `BAT_BUOC` với lượt ghi danh: một
+  // lượt công nhận LUÔN thuộc cơ sở của người được công nhận. NULL ở đây là dữ
+  // liệu chưa backfill, KHÔNG phải "toàn công ty" ⇒ KHÔNG vào NULL_IS_GLOBAL.
+  "TrnEquivalence",
   // EL-04 — yêu cầu của chủ thể dữ liệu. `BAT_BUOC`: NULL = chưa backfill.
   // ⚠️ Đây là DỮ LIỆU CÁ NHÂN — đưa vào NULL_IS_GLOBAL_MODELS là biến "chưa biết cơ sở"
   // thành "ai cũng thấy", tức rò rỉ, không phải tiện lợi.
   "TrnDataSubjectRequest",
+  // EL-13 — cờ nghi ngờ học đối phó. `BAT_BUOC`: một cờ luôn thuộc cơ sở của
+  // người bị gắn cờ.
+  // ⚠️ TUYỆT ĐỐI KHÔNG đưa vào NULL_IS_GLOBAL_MODELS. Đây là dữ liệu quan hệ lao
+  // động của một cá nhân; coi "chưa backfill" là "ai cũng thấy" ở đây không phải
+  // tiện lợi mà là rò rỉ — và rò đúng loại thông tin gây tổn hại nhất.
+  "TrnWatchFlag",
 ]);
 
 /**
@@ -90,6 +103,7 @@ export const NULL_IS_GLOBAL_MODELS = new Set<string>([
   // áp cho cả công ty, không thuộc CS1 hay CS2.
   // ⚠️ TrnEvaluationResult CỐ Ý KHÔNG nằm ở đây — với nó NULL là dữ liệu chưa backfill, và biến
   // "chưa biết cơ sở" thành "ai cũng thấy" là vỡ cách ly (QĐ-CDA-10 cấm đích danh).
+  "TrnTrainingNeed",
   "TrnProgram",
   "TrnCourse",
   "TrnRequirement",
@@ -251,13 +265,16 @@ export function getModelPrefixes(model: string): string[] {
     // và tầm nhìn rơi về `isHoLevel` DIỆN RỘNG: bất kỳ ai có MỘT vai neo tại Hội sở —
     // kể cả vai chẳng liên quan đào tạo — sẽ đọc được chương trình và kết quả đánh giá của
     // MỌI cơ sở. Đúng lỗi #04 đã mắc với `Attendance` và đã có test riêng chặn.
+    case "TrnTrainingNeed":
     case "TrnProgram":
     case "TrnCourse":
     case "TrnRequirement":
     case "TrnEvaluationResult":
+    case "TrnEquivalence":
     case "TrnAssignment":
     case "TrnEnrollment":
     case "TrnDataSubjectRequest":
+    case "TrnWatchFlag":
       return ["elearning:"];
     default:
       return [];

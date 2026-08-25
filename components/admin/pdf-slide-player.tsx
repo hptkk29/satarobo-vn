@@ -2,11 +2,13 @@
 
 // components/admin/pdf-slide-player.tsx — trình chiếu giáo án PDF dạng slider (pdf.js).
 // Mỗi trang PDF = 1 slide; prev/next + phím mũi tên + đếm trang + toàn màn hình (SlideStage).
+// ⚠️ Phím tắt ở đây (←/→/Space/PageUp/PageDown) phải KHÔNG đụng phím **F** — F là bật/tắt
+// toàn màn hình do SlideStage nghe; đừng thêm F vào danh sách lật trang bên dưới.
 // Tải PDF qua asset resolver (vé), render từng trang vào canvas, fit khung. Worker = /public.
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
 import type { PDFDocumentProxy, PDFDocumentLoadingTask, RenderTask } from "pdfjs-dist";
-import { SlideStage } from "@/components/admin/slide-stage";
+import { SlideStage, type SlideStageFit } from "@/components/admin/slide-stage";
 
 interface PdfSlidePlayerProps {
   launchTicket: string;
@@ -15,6 +17,9 @@ interface PdfSlidePlayerProps {
   packageName: string;
   name: string;
   employeeCode: string;
+  /** Chuyển tiếp cho SlideStage — site GV dùng "viewport" + lối thoát (xem SlideStageFit). */
+  fit?: SlideStageFit;
+  exitHref?: string;
 }
 
 /** Build URL asset: mã hoá từng segment, đính vé vào query (giống ScormPlayer). */
@@ -30,6 +35,8 @@ export function PdfSlidePlayer({
   packageName,
   name,
   employeeCode,
+  fit,
+  exitHref,
 }: PdfSlidePlayerProps) {
   const [numPages, setNumPages] = useState(0);
   const [pageNum, setPageNum] = useState(1);
@@ -163,6 +170,8 @@ export function PdfSlidePlayer({
     return () => window.removeEventListener("keydown", onKey);
   }, [go]);
 
+  // Cỡ nút khớp nút "Toàn màn hình" bên cạnh (h-8) — cùng một hàng thì phải cùng chiều
+  // cao, và ở 375px đây cũng là vùng bấm đủ rộng cho ngón tay.
   const toolbar = (
     <div className="flex items-center gap-1">
       <button
@@ -170,9 +179,10 @@ export function PdfSlidePlayer({
         onClick={() => go(-1)}
         disabled={pageNum <= 1 || loading}
         title="Trang trước (←)"
-        className="inline-flex items-center rounded border border-border px-1.5 py-0.5 text-muted-foreground hover:bg-muted disabled:opacity-40"
+        aria-label="Trang trước"
+        className="inline-flex h-8 items-center rounded-md border border-border px-2 text-muted-foreground hover:bg-muted disabled:opacity-40"
       >
-        <ChevronLeft className="h-3.5 w-3.5" />
+        <ChevronLeft className="h-4 w-4" aria-hidden />
       </button>
       <span className="min-w-[3rem] text-center tabular-nums text-muted-foreground">
         {numPages ? `${pageNum} / ${numPages}` : "…"}
@@ -182,9 +192,10 @@ export function PdfSlidePlayer({
         onClick={() => go(1)}
         disabled={pageNum >= numPages || loading}
         title="Trang sau (→)"
-        className="inline-flex items-center rounded border border-border px-1.5 py-0.5 text-muted-foreground hover:bg-muted disabled:opacity-40"
+        aria-label="Trang sau"
+        className="inline-flex h-8 items-center rounded-md border border-border px-2 text-muted-foreground hover:bg-muted disabled:opacity-40"
       >
-        <ChevronRight className="h-3.5 w-3.5" />
+        <ChevronRight className="h-4 w-4" aria-hidden />
       </button>
     </div>
   );
@@ -196,6 +207,8 @@ export function PdfSlidePlayer({
       name={name}
       employeeCode={employeeCode}
       toolbar={toolbar}
+      fit={fit}
+      exitHref={exitHref}
     >
       <div ref={containerRef} className="absolute inset-0 flex items-center justify-center p-2">
         {loading ? (
