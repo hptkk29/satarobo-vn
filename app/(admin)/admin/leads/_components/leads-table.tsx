@@ -313,6 +313,7 @@ export function LeadsTable({
   pageSize,
   canUpdate,
   canDelete,
+  canExport,
   currentStatus,
   currentQ,
   currentUserId,
@@ -323,6 +324,11 @@ export function LeadsTable({
   pageSize: number
   canUpdate: boolean
   canDelete: boolean
+  /**
+   * A-03 — có `leads:export` không. KHÔNG có mặc định: quên truyền = nút biến mất (fail
+   * closed), chứ không phải hiện cho mọi người như bản trước.
+   */
+  canExport: boolean
   currentStatus?: string
   currentQ?: string
   currentUserId: string
@@ -370,16 +376,26 @@ export function LeadsTable({
                     ))}
         </select>
 
-        {/* Export CSV */}
-        <a
-          href={`/api/admin/leads/export${currentStatus ? `?status=${currentStatus}` : ''}${currentQ ? `${currentStatus ? '&' : '?'}q=${encodeURIComponent(currentQ)}` : ''}`}
-          download
-          className="ml-auto inline-flex items-center gap-2 rounded-lg border border-border bg-card px-3 py-2 text-sm font-semibold text-muted-foreground hover:bg-muted hover:text-foreground"
-          title="Xuất CSV"
-        >
-          <Download className="h-4 w-4" />
-          <span className="hidden sm:inline">Xuất CSV</span>
-        </a>
+        {/*
+          A-03 — nút xuất chỉ hiện khi CÓ `leads:export`.
+          Vì sao không để nó hiện rồi dựa vào 403 của route: thẻ mang thuộc tính `download`,
+          nên trình duyệt LƯU phần thân 403 thành một file tên `export` chứa
+          `{"error":"Forbidden"}` — không toast, không trang lỗi, người dùng mở bằng Excel
+          thấy rác và tưởng hệ thống hỏng file. Cổng THẬT vẫn nằm ở route (view-all AND
+          export); đây chỉ là lớp không-mời-bấm.
+          Nhãn đổi "CSV" → "Excel": route trả .xlsx từ A-03 (route.ts · Content-Disposition).
+        */}
+        {canExport && (
+          <a
+            href={`/api/admin/leads/export${currentStatus ? `?status=${currentStatus}` : ''}${currentQ ? `${currentStatus ? '&' : '?'}q=${encodeURIComponent(currentQ)}` : ''}`}
+            download
+            className="ml-auto inline-flex items-center gap-2 rounded-lg border border-border bg-card px-3 py-2 text-sm font-semibold text-muted-foreground hover:bg-muted hover:text-foreground"
+            title="Xuất danh sách lead ra file Excel (.xlsx)"
+          >
+            <Download className="h-4 w-4" />
+            <span className="hidden sm:inline">Xuất Excel</span>
+          </a>
+        )}
       </div>
 
       {/* Table */}

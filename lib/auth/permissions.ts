@@ -359,7 +359,15 @@ export const PERMISSIONS: Record<Action, Role[]> = {
   "leads:assign": ["SUPER_ADMIN", "CENTER_MANAGER"],
   "leads:assign-config": ["SUPER_ADMIN"],
   "leads:delete": ["SUPER_ADMIN", "CENTER_MANAGER"],
-  "leads:export": ["SUPER_ADMIN", "CENTER_MANAGER", "MARKETING"],
+  // A-03 (24/08/2026) — quyền xuất file lead KHÔNG còn đến từ vai. Cấp cho từng quản lý
+  // qua NHÓM (`/admin/user-groups` → PermissionGrant GROUP), bật/tắt không cần deploy.
+  // ⚠️ GIỮ KHOÁ, chỉ làm rỗng danh sách vai — xoá khoá thì `ALL_ACTIONS` mất mục này và
+  // `buildActor` vứt IM LẶNG mọi grant mang nó (lib/auth/actor.ts:367-371).
+  // ⚠️ SUPER_ADMIN ở lại là BẮT BUỘC, không phải sót: ma trận v1 là tra bảng thuần (`:781`,
+  // không có bypass như v2) và permissions.test.ts ghim "mọi ALL_ACTIONS đều phủ
+  // SUPER_ADMIN". Nhóm được xuất theo quyết định 24/08 = CENTER_MANAGER + SUPER_ADMIN,
+  // trong đó CENTER_MANAGER nhận qua nhóm. Gỡ khỏi seed v2: prisma/seed-roles.ts.
+  "leads:export": ["SUPER_ADMIN"],
   // Task #07 — theo pattern students:import. SALES_CSM được cấp theo quyết định
   // user 07/07/2026 (Sale là người giữ danh sách đăng ký thật — câu 33 phiếu Sale).
   // v2: đã seed CENTER scope cho CENTER_SALES_CSM trong seed-roles.ts cùng ngày.

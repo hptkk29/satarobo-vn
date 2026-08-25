@@ -126,6 +126,15 @@ export const ROLE_SEED: RoleSeed[] = [
     // (BGĐ câu 10).
     code: "HO_HR", name: "Nhân sự Hội sở",
     perms: [
+      // OQ-7 (chủ dự án chốt 24/08/2026 — PRD A §6.10): HR Hội sở tự gán được vai cho
+      // nhân sự, không phải nhờ SUPER_ADMIN từng lần. GLOBAL vì call-site gọi TRẦN
+      // (`app/(admin)/admin/users/[id]/org-roles/page.tsx:20`) — scope hẹp = khoá trang.
+      // 🔴 ĐÂY LÀ QUYỀN CẤP QUYỀN. Nó chỉ an toàn khi 3 rào §6.10 đã có trong
+      // `lib/auth/rbac-service.ts`: R1 không gán được vai mang `roles:*`/`users:manage`
+      // (chống nhân bản quyền) · R2 không tự gán cho chính mình · R3 reason bắt buộc +
+      // `logRbacAudit`. Rào R1/R2 nằm NGOÀI file này — nếu chúng chưa có, ĐỪNG chạy
+      // `seed-prod-roles.yml` với dòng này.
+      { action: "roles:assign", scopeType: "GLOBAL" },
       { action: "employees:view-all", scopeType: "GLOBAL" },
       { action: "employees:edit", scopeType: "GLOBAL" },
       { action: "employees:view-public", scopeType: "GLOBAL" },
@@ -226,7 +235,8 @@ export const ROLE_SEED: RoleSeed[] = [
       { action: "jobs:view", scopeType: "GLOBAL" },
       { action: "leads:create", scopeType: "GLOBAL" },
       { action: "leads:edit", scopeType: "GLOBAL" },
-      { action: "leads:export", scopeType: "GLOBAL" },
+      // A-03 (24/08/2026): `leads:export` GỠ khỏi mọi vai — cấp qua NHÓM
+      // (`/admin/user-groups`), xem lib/auth/permissions.ts cùng khoá.
       { action: "notifications:manage", scopeType: "GLOBAL" },
       { action: "parent-feedback:view", scopeType: "GLOBAL" },
       { action: "hr_attendance:checkin", scopeType: "GLOBAL" },
@@ -408,7 +418,9 @@ export const ROLE_SEED: RoleSeed[] = [
       { action: "leads:edit", scopeType: "GLOBAL" },
       { action: "leads:assign", scopeType: "GLOBAL" },
       { action: "leads:import", scopeType: "GLOBAL" },
-      { action: "leads:export", scopeType: "GLOBAL" },
+      // A-03 (24/08/2026): `leads:export` GỠ khỏi vai. QLCS vẫn nằm trong "nhóm được
+      // xuất" (quyết định 24/08) nhưng nhận qua NHÓM quyền, để admin bật/tắt cho TỪNG
+      // người mà không sửa mã. Xem lib/auth/permissions.ts cùng khoá.
       // ── Học viên · lớp · ghi danh ──
       { action: "students:view-all", scopeType: "GLOBAL" },
       { action: "students:create", scopeType: "GLOBAL" },

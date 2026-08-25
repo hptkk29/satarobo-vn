@@ -14,6 +14,44 @@ import {
 } from "@/lib/validators/permission-grant";
 import { logGrantAudit, getAuditActor } from "@/lib/audit/log";
 
+/**
+ * SEC-M13 + A-03-7 — nhóm khoá KHÔNG được cấp/sửa qua override TỪNG NGƯỜI.
+ *
+ * `roles:` + `users:manage` (SEC-M13): chống leo thang — có `roles:*` là tự gán được
+ * SUPER_ADMIN cho mình.
+ *
+ * `leads:` (A-03-7, PRD A §6.3b): KHÔNG phải chuyện leo thang mà là **tắt cách ly cơ sở**.
+ * `lib/db-scope.ts:246-252` thấy BẤT KỲ action nào trong `actor.grantsAllow` khớp prefix
+ * của model là đặt `hasAll = true` → `getModelVisibleCenterIds` trả `"ALL"` → `injectScope`
+ * trả args nguyên vẹn. Prefix của `Lead` là `["leads:"]` (`:133`) và `MessengerConversation`
+ * dùng CHUNG prefix đó (`:136`) ⇒ một dòng override `leads:*` cho một người làm người đó
+ * thấy lead + hội thoại Messenger của MỌI cơ sở. Vì vậy rào theo TIỀN TỐ, không theo khoá:
+ * `leads:view-pii` nguy hiểm y như `leads:export`. (Ngoại lệ OI-4 cho `*:view-pii` vẫn còn
+ * hiệu lực với các họ khoá khác — `payments:view-pii`, `orders:view-pii`.)
+ *
+ * Cần cấp quyền xuất lead cho một quản lý → dùng NHÓM (`/admin/user-groups`): grant nhóm đi
+ * vào `actor.permissionGrants`, KHÔNG đổ vào `grantsAllow`, nên `scopedDb` vẫn cách ly.
+ */
+const KHOA_CAM_OVERRIDE_TIEN_TO = ["roles:", "leads:"] as const;
+const KHOA_CAM_OVERRIDE = ["users:manage"] as const;
+
+const LOI_CAM_OVERRIDE =
+  "Không cấp quyền này qua override từng người. Quyền quản trị-quyền (vai trò / quản lý " +
+  "user) chỉ đến từ vai trò; quyền lead (kể cả xuất file) cấp qua Nhóm quyền — override " +
+  "từng người sẽ TẮT cách ly cơ sở của toàn bộ dữ liệu lead.";
+
+/**
+ * Trả về thông báo lỗi nếu khoá bị cấm override, `null` nếu hợp lệ.
+ * ⚠️ KHÔNG xét `grant`: chặn cả `DENY`. Bản trước chỉ chặn `ALLOW`, để hở đường vòng
+ * "tạo DENY (lọt) → `updateGrantAction` đổi sang ALLOW". Ghim bằng `_actions.test.ts`.
+ */
+function loiCamOverride(action: string): string | null {
+  const cam =
+    KHOA_CAM_OVERRIDE_TIEN_TO.some((p) => action.startsWith(p)) ||
+    (KHOA_CAM_OVERRIDE as readonly string[]).includes(action);
+  return cam ? LOI_CAM_OVERRIDE : null;
+}
+
 async function requireUsersManage() {
   const session = await auth();
   if (!session?.user) redirect("/login");
@@ -62,20 +100,9 @@ export async function addGrantAction(userId: string, formData: FormData) {
     };
   }
 
-  // SEC-M13: chặn leo thang quyền qua grant. KHÔNG cho ALLOW các action quản trị-quyền
-  // (roles:* → có thể tự gán SUPER_ADMIN; users:manage → quản user) qua override từng
-  // người — những quyền này chỉ đến từ vai trò. LƯU Ý: *:view-pii CỐ Ý cho grant per-user
-  // (OI-4, Kiệt ký 10/07 — MARKETING xem PII lead) nên KHÔNG chặn ở đây.
-  if (
-    parsed.data.grant === "ALLOW" &&
-    (parsed.data.action.startsWith("roles:") || parsed.data.action === "users:manage")
-  ) {
-    return {
-      ok: false as const,
-      error:
-        "Không thể cấp quyền quản trị-quyền (vai trò / quản lý user) qua override từng người — dùng gán vai trò.",
-    };
-  }
+  // SEC-M13 + A-03-7 — xem `loiCamOverride` ở đầu file. Chặn CẢ `DENY`, không chỉ `ALLOW`.
+  const camThem = loiCamOverride(parsed.data.action);
+  if (camThem) return { ok: false as const, error: camThem };
 
   // Duplicate check (composite unique sẽ throw, nhưng UX tốt hơn nếu báo trước)
   const existing = await sdb.userPermissionGrant.findUnique({
@@ -150,6 +177,12 @@ export async function updateGrantAction(grantId: string, formData: FormData) {
   });
   if (!currentGrant)
     return { ok: false as const, error: "Không tìm thấy grant" };
+
+  // A-03-7 — CÙNG rào như `addGrantAction`. Thiếu chỗ này là còn nguyên đường vòng: tạo
+  // `DENY leads:export` rồi sửa thành `ALLOW`. Khoá lấy từ grant ĐANG có trong DB, không
+  // từ form (form sửa chỉ mang `grant` + `reason`).
+  const camSua = loiCamOverride(currentGrant.action);
+  if (camSua) return { ok: false as const, error: camSua };
 
   const { actorId, actorName } = getAuditActor(session);
 

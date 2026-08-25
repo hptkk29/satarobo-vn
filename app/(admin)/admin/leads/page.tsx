@@ -274,6 +274,13 @@ export default async function LeadsPage({
 
   const canUpdate = (await checkPermission('leads:edit'))
   const canDelete = (await checkPermission('leads:delete'))
+  // A-03 — nút "Xuất Excel" là thẻ `<a download>`: 403 của route bị trình duyệt LƯU THÀNH
+  // FILE chứ không hiện lỗi, nên người bấm nhận về một file tên `export` chứa
+  // `{"error":"Forbidden"}` và tưởng hệ thống hỏng. Cổng thật vẫn ở route
+  // (`app/api/admin/leads/export/route.ts` — view-all AND export); prop này chỉ để đừng mời
+  // người ta bấm vào một cánh cửa khoá. `leads:export` đã gỡ khỏi MỌI vai, cấp qua NHÓM
+  // (`/admin/user-groups`), nên đa số quản lý sẽ KHÔNG thấy nút cho tới khi được xếp nhóm.
+  const canExport = (await checkPermission('leads:export'))
 
   const leads: LeadRow[] = rawLeads.map((raw) => {
     // #11 T2 — mask PII (tên PH/SĐT/email/tên con/note) trước khi build payload client.
@@ -325,6 +332,7 @@ export default async function LeadsPage({
         pageSize={soDong}
         canUpdate={canUpdate}
         canDelete={canDelete}
+        canExport={canExport}
         currentStatus={statusFilter}
         currentQ={q}
         currentUserId={session.user.id}
