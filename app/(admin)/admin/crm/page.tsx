@@ -9,28 +9,20 @@ import type { LeadStatus } from "@prisma/client";
 import { StatCardAdmin } from "@/components/design-system/admin/stat-card-admin";
 import { FunnelChart } from "@/components/charts/funnel-chart";
 import { BarChart } from "@/components/charts/bar-chart";
-import { LEAD_STATUS_LABEL } from "@/lib/leads/status";
+import {
+  LEAD_STATUS_LABEL,
+  LEAD_CLOSED_STATUSES,
+  LEAD_FUNNEL_STAGES,
+} from "@/lib/leads/status";
 import { PhanTrangBang } from "@/components/ui/phan-trang-bang";
 
 export const metadata = { title: "CRM Dashboard | Admin" };
 export const dynamic = "force-dynamic";
 
-const TERMINAL: LeadStatus[] = ["ENROLLED", "LOST", "DUPLICATE"];
-
-// Gom status thành các bậc phễu chuyển đổi.
-const FUNNEL_STAGES: { name: string; statuses: LeadStatus[] }[] = [
-  { name: "Lead mới", statuses: ["NEW", "ASSIGNED"] },
-  {
-    name: "Đã liên hệ",
-    statuses: ["CONTACTED", "CONSULTING", "NO_ANSWER", "NURTURING"],
-  },
-  {
-    name: "Học thử",
-    statuses: ["TRIAL_SCHEDULED", "TRIAL_ATTENDED", "DEMO_SCHEDULED"],
-  },
-  { name: "Chờ quyết định", statuses: ["AWAITING_DECISION"] },
-  { name: "Đã chốt", statuses: ["ENROLLED"] },
-];
+// GĐ0 — hai hằng dưới đây chuyển về @/lib/leads/status. Bản chép cũ của phễu bỏ sót
+// TRIAL_IN_PROGRESS và REGISTERED nên cột "Học thử" và "Đã chốt" đếm thiếu; nay đã đủ.
+const TERMINAL = LEAD_CLOSED_STATUSES;
+const FUNNEL_STAGES = LEAD_FUNNEL_STAGES;
 
 export default async function CrmDashboardPage() {
   const session = await auth();

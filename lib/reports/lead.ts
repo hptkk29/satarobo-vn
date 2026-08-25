@@ -1,6 +1,11 @@
 // lib/reports/lead.ts — R7-17: Báo cáo Lead (phễu SR.QD.217 mở rộng).
 // HÀM THUẦN: nhận MẢNG record phẳng (đã query sẵn) → trả object số liệu.
 // KHÔNG gọi DB ở đây (Vitest test không cần Postgres). Mirror style lib/crm/marketing-report.ts.
+//
+// GĐ0 — import chỉ chạm @/lib/leads/status (thuần hằng số + type-only prisma), nên
+// file này vẫn test được không cần Postgres.
+import type { LeadStatus } from "@prisma/client";
+import { CONVERTED_STATUSES, LEAD_STATUS_LABEL_SHORT } from "@/lib/leads/status";
 
 /** Record Lead phẳng cần cho báo cáo (đã select sẵn ở tầng page). */
 export type LeadReportRecord = {
@@ -15,25 +20,6 @@ export type LeadReportRecord = {
 const pad = (n: number) => String(n).padStart(2, "0");
 const ratio = (num: number, denom: number): number => (denom > 0 ? num / denom : 0);
 
-/** Nhãn tiếng Việt cho từng LeadStatus (đủ mọi giá trị enum). */
-export const LEAD_STATUS_LABEL: Record<string, string> = {
-  NEW: "Mới",
-  ASSIGNED: "Đã phân",
-  CONTACTED: "Đã liên hệ",
-  NO_ANSWER: "Không nghe máy",
-  CONSULTING: "Đang tư vấn",
-  TRIAL_SCHEDULED: "Hẹn học thử",
-  TRIAL_IN_PROGRESS: "Đang học thử",
-  TRIAL_ATTENDED: "Đã học thử",
-  AWAITING_DECISION: "Chờ quyết định",
-  ENROLLED: "Đã ghi danh",
-  REGISTERED: "Đã đăng ký",
-  NURTURING: "Đang nuôi dưỡng",
-  LOST: "Thất bại",
-  DUPLICATE: "Trùng",
-  DEMO_SCHEDULED: "Hẹn demo (cũ)",
-};
-
 /** Nhãn nguồn hoa hồng. */
 export const COMMISSION_SOURCE_LABEL: Record<string, string> = {
   MARKETING_ADMIN: "Marketing/Admin",
@@ -41,8 +27,16 @@ export const COMMISSION_SOURCE_LABEL: Record<string, string> = {
   REFERRAL: "Giới thiệu",
 };
 
-/** Các status được coi là ĐÃ CHỐT (chuyển đổi thành công). */
-export const CONVERTED_STATUSES = new Set(["ENROLLED", "REGISTERED"]);
+/**
+ * GĐ0 — nhãn và tập "đã chốt" nay lấy từ nguồn duy nhất @/lib/leads/status.
+ * Re-export CONVERTED_STATUSES để call-site cũ (màn marketing) không phải đổi đường
+ * import; định nghĩa chỉ còn MỘT chỗ.
+ */
+export { CONVERTED_STATUSES };
+
+/** Nhãn rút gọn dùng cho trục biểu đồ và phễu. */
+const statusLabel = (status: string): string =>
+  LEAD_STATUS_LABEL_SHORT[status as LeadStatus] ?? status;
 
 /** Thứ tự các bước phễu chuẩn SR.QD.217 (cho FunnelChart). */
 export const FUNNEL_ORDER: string[] = [
@@ -111,7 +105,7 @@ export function countByStatus(records: LeadReportRecord[]): StatusCount[] {
   const m = new Map<string, number>();
   for (const r of records) m.set(r.status, (m.get(r.status) ?? 0) + 1);
   return [...m.entries()]
-    .map(([status, count]) => ({ status, label: LEAD_STATUS_LABEL[status] ?? status, count }))
+    .map(([status, count]) => ({ status, label: statusLabel(status), count }))
     .sort((a, b) => b.count - a.count);
 }
 
@@ -124,7 +118,7 @@ export type FunnelStep = { status: string; label: string; count: number };
 export function buildFunnel(records: LeadReportRecord[]): FunnelStep[] {
   return FUNNEL_ORDER.map((status, i) => ({
     status,
-    label: LEAD_STATUS_LABEL[status] ?? status,
+    label: statusLabel(status),
     count: records.filter((r) => rankOf(r.status) >= i).length,
   }));
 }

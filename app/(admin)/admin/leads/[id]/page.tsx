@@ -237,7 +237,7 @@ export default async function LeadDetailPage({ params }: Props) {
   return (
     <div className="max-w-6xl p-6">
       <Link
-        href="/leads?view=kanban"
+        href="/leads?view=table"
         className="mb-4 inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
       >
         <ChevronLeft className="h-4 w-4" /> Quay lại danh sách

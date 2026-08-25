@@ -23,7 +23,11 @@ import { centerIdForOrgUnit } from '@/lib/org/org-service'
 import { rejectHeadOffice } from '@/lib/enrollment-flow'
 import { normalizeFacebookUrl } from '@/lib/lead/intake/normalize'
 import { mergeLeadNote } from '@/lib/lead/note-view'
-import { LEAD_STATUS_LABEL, canTransitionLeadStatus } from '@/lib/leads/status'
+import {
+  LEAD_STATUS_LABEL,
+  LEAD_STATUS_VALUES,
+  canTransitionLeadStatus,
+} from '@/lib/leads/status'
 import { leadChildSchema } from '@/lib/validators/lead'
 import { syncLeadChildNameToStudents } from '@/lib/students/sync-name'
 import {
@@ -31,23 +35,9 @@ import {
   summarizePriorHistory,
 } from '@/lib/students/prior-history'
 
-const statusSchema = z.enum([
-  'NEW',
-  'ASSIGNED',
-  'CONTACTED',
-  'NO_ANSWER',
-  'CONSULTING',
-  'TRIAL_SCHEDULED',
-  'TRIAL_ATTENDED',
-  'TRIAL_IN_PROGRESS',
-  'AWAITING_DECISION',
-  'REGISTERED',
-  'ENROLLED',
-  'NURTURING',
-  'LOST',
-  'DUPLICATE',
-  'DEMO_SCHEDULED',
-])
+// GĐ0 — tuple lấy từ nguồn duy nhất @/lib/leads/status (trước đây chép tay 15 chuỗi
+// ở đây và một bản nữa trong lib/validators/lead.ts, hai bản lệch thứ tự nhau).
+const statusSchema = z.enum(LEAD_STATUS_VALUES)
 
 // ─── #11 T1 (câu 10 BGĐ, Kiệt ký spec 10/07) — lead "dùng chung" ────────────
 /**

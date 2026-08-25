@@ -1,6 +1,7 @@
 import { db } from "@/lib/db";
 import { logLeadAudit } from "@/lib/audit/log";
 import { assignmentWrite } from "@/lib/lead/assignment";
+import { LEAD_CLOSED_STATUSES } from "@/lib/leads/status";
 import type { Prisma } from "@prisma/client";
 
 // =============================================================================
@@ -9,7 +10,8 @@ import type { Prisma } from "@prisma/client";
 // =============================================================================
 
 // Trạng thái "đã đóng" — khi lọc onlyActive thì loại các lead này.
-const TERMINAL_STATUSES = ["ENROLLED", "LOST", "DUPLICATE"] as const;
+// GĐ0 — lấy từ nguồn duy nhất thay vì chép tay lần thứ ba.
+const TERMINAL_STATUSES = LEAD_CLOSED_STATUSES;
 
 export interface HandoverFilters {
   statuses?: string[]; // lọc theo LeadStatus cụ thể
