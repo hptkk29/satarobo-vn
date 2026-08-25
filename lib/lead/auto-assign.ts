@@ -12,6 +12,7 @@ import { takeRotationTurn } from "@/lib/lead/rotation";
 import { canManualAssign } from "@/lib/lead/assign-guard";
 import { assignmentWrite } from "@/lib/lead/assignment";
 import { LEAD_CLOSED_STATUSES } from "@/lib/leads/status";
+import { setLeadStatus } from "@/lib/leads/set-status";
 
 // Module CRM & Lead PHẦN 2 — chia lead tự động (cơ sở → chế độ) + khoá khi đã tương tác.
 
@@ -208,13 +209,22 @@ export async function autoAssignNewLead(leadId: string, actor: Actor): Promise<A
   await db.$transaction(async (tx) => {
     await tx.lead.update({
       where: { id: leadId },
-      data: {
-        // Đợt A — `assignmentWrite` ghi kèm `assignedAt`; thiếu mốc thì SLA-2/SLA-3
-        // không bao giờ kêu (đo prod 21/08: 33 lead có vết chia, chỉ 1 có mốc).
-        ...assignmentWrite(target),
-        ...(lead.status === "NEW" ? { status: "ASSIGNED" as LeadStatus } : {}),
-      },
+      // Đợt A — `assignmentWrite` ghi kèm `assignedAt`; thiếu mốc thì SLA-2/SLA-3
+      // không bao giờ kêu (đo prod 21/08: 33 lead có vết chia, chỉ 1 có mốc).
+      data: assignmentWrite(target),
     });
+    // GĐ1 — phần đổi trạng thái đi qua cửa chung để vào sổ. `source: "auto-assign"`
+    // tách được số liệu máy chia với người gán tay.
+    if (lead.status === "NEW") {
+      await setLeadStatus({
+        tx,
+        leadId,
+        to: "ASSIGNED",
+        source: "auto-assign",
+        actorId: actor.actorId,
+        actorName: actor.actorName,
+      });
+    }
     await logLeadAudit({
       leadId,
       action: "ASSIGN",

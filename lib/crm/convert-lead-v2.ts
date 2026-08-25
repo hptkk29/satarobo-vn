@@ -9,6 +9,7 @@ import { computeEnrollmentPrice } from "@/lib/finance/pricing";
 import { linkRecordedPaymentsToEnrollments } from "@/lib/finance/payment";
 import { findParentMatch, findExistingStudent } from "@/lib/crm/dedupe";
 import { canonicalPhone } from "@/lib/phone";
+import { recordLeadStatusChange } from "@/lib/leads/set-status";
 import {
   createBackfillOrderPaymentInTx,
   type BackfillPaymentInput,
@@ -216,6 +217,17 @@ export async function convertLeadV2(actor: AuditActor, input: ConvertV2Input): P
       data: { status: "ENROLLED", convertedById: actor.id, convertedAt: new Date() },
     });
     if (claim.count === 0) throw new Error("ALREADY_CONVERTED");
+    // GĐ1 — giữ nguyên `updateMany` làm lượt claim atomic (hai Sale bấm cùng lúc thì
+    // chỉ một lượt thắng), chỉ nối thêm sổ. `from` là trạng thái đọc TRƯỚC claim.
+    await recordLeadStatusChange({
+      tx,
+      leadId: lead.id,
+      from: lead.status,
+      to: "ENROLLED",
+      source: "convert",
+      actorId: actor.id,
+      actorName: actor.name ?? null,
+    });
 
     const center = await tx.center.findUnique({ where: { id: lead.centerId! }, select: { code: true } });
     const centerCode = center?.code ?? "CS";

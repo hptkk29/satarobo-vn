@@ -28,6 +28,7 @@ import {
   LEAD_STATUS_VALUES,
   canTransitionLeadStatus,
 } from '@/lib/leads/status'
+import { setLeadStatus } from '@/lib/leads/set-status'
 import { leadChildSchema } from '@/lib/validators/lead'
 import { syncLeadChildNameToStudents } from '@/lib/students/sync-name'
 import {
@@ -168,9 +169,17 @@ export async function updateLeadStatus(
   const { actorId, actorName } = getAuditActor(session)
 
   await db.$transaction(async (tx) => {
-    await tx.lead.update({
-      where: { id: leadId },
-      data: { status: parsed.data },
+    // GĐ1 — đi qua cửa chung: ngoài việc đổi cột, nó ghi LeadStatusHistory và dời
+    // `statusChangedAt` (mốc mà nhắc việc đọc, thay cho `updatedAt` vốn bị mọi thao
+    // tác chạm lead dời đi). `LeadActivity` bên dưới vẫn giữ — đó là dòng thời gian
+    // cho người đọc, khác mục đích với sổ trạng thái dùng để tính tỷ lệ chuyển đổi.
+    await setLeadStatus({
+      tx,
+      leadId,
+      to: parsed.data,
+      source: 'admin',
+      actorId,
+      actorName,
     })
 
     await logLeadAudit({

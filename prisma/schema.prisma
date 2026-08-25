@@ -1436,6 +1436,20 @@ model Lead {
   children       LeadChild[]
   lastActivityAt DateTime?   @db.Timestamptz(6) // cập nhật khi có LeadActivity; SLA lead_idle_24h đọc field này
 
+  // ─── GĐ1 — sổ trạng thái ───────────────────────────────────────────────────
+  /// Mốc lần đổi trạng thái GẦN NHẤT. Có cột này thì nhắc việc mới đo được "nằm im
+  /// bao lâu ở bậc hiện tại"; trước GĐ1 mọi cảnh báo đọc `updatedAt`, mà mọi thao
+  /// tác chạm lead đều dời `updatedAt` nên lead nằm im 10 ngày vẫn không lên chuông.
+  statusChangedAt DateTime? @db.Timestamptz(6)
+  /// Lead rơi khỏi phễu ở BẬC NÀO (trạng thái ngay trước khi sang DANG_NUOI_DUONG
+  /// hoặc mất). NULL với toàn bộ lead cũ — không suy ngược được, đừng bịa.
+  droppedAtStage  LeadStatus?
+  /// Lý do rơi, nhập tay. Bảng danh mục `LyDoRot` là việc của giai đoạn sau; ở GĐ1
+  /// chỉ mở chỗ chứa để không phải đổi cột lần hai.
+  dropReason      String?
+
+  statusHistory LeadStatusHistory[]
+
   @@index([phone])
   @@index([status])
   @@index([assignedToId])
@@ -1451,6 +1465,49 @@ model Lead {
   // → composite cho index-ordered rows (bỏ sort + OFFSET scan). Bảng high-growth.
   @@index([centerId, status, createdAt])
   @@index([createdById])
+}
+
+/// GĐ1 — SỔ ĐỔI TRẠNG THÁI LEAD. Một dòng cho MỖI lần trạng thái đổi thật.
+///
+/// Vì sao cần bảng riêng dù đã có `LeadActivity` loại STATUS_CHANGE: activity là
+/// dòng thời gian cho NGƯỜI ĐỌC, ai cũng chèn được, kiểu nội dung tự do, và hai
+/// đường ghi của module học thử chưa bao giờ ghi vào đó. Tỷ lệ chuyển đổi từng
+/// chặng phải tính từ một bảng có cấu trúc chặt, không suy từ trạng thái hiện tại
+/// (suy như vậy thì lead đã rớt biến mất khỏi mọi bậc, mẫu số sai).
+///
+/// KHÔNG có FK tới User: `changedById` có thể là null khi hệ thống tự đổi (cron,
+/// webhook, tiến độ điểm danh) và ta không muốn xoá user làm cascade mất lịch sử.
+model LeadStatusHistory {
+  id     String @id @default(cuid())
+  leadId String
+  lead   Lead   @relation(fields: [leadId], references: [id], onDelete: Cascade)
+
+  /// NULL = dòng đầu tiên của lead (lúc tạo), không có bậc trước.
+  fromStatus LeadStatus?
+  toStatus   LeadStatus
+
+  /// Ai đổi. NULL = hệ thống tự đổi. `changedByName` là ảnh chụp tên tại thời điểm
+  /// đổi — đổi tên nhân sự sau này không viết lại lịch sử.
+  changedById   String?
+  changedByName String?
+
+  /// Đổi từ đâu: "admin" | "assign" | "auto-assign" | "trial" | "payment" |
+  /// "convert" | "import" | "handover". Dùng để tách số liệu do người làm và do máy chạy.
+  source String
+
+  /// Lý do (khi rơi khỏi phễu). Chép sang `Lead.dropReason` ở cùng giao dịch.
+  reason String?
+
+  centerId  String? // cách ly cơ sở (scopedDb)
+  /// Cột SONG SONG với centerId theo P1 · US-07. Cột trần, không FK.
+  orgUnitId String?
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+
+  @@index([leadId, createdAt])
+  @@index([toStatus, createdAt])
+  @@index([centerId])
+  @@index([orgUnitId])
 }
 
 // BGĐ 31/07 — NGƯỜI/ĐỐI TÁC GIỚI THIỆU (affiliate).

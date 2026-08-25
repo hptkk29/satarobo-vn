@@ -625,13 +625,27 @@ async function registeredStale(user: TaskUser, now: Date, cfg: PendingCfg): Prom
     where: {
       deletedAt: null,
       status: "REGISTERED",
-      // updatedAt = mốc gần nhất chạm lead (proxy thời gian nằm ở REGISTERED — schema không
-      // có status-history riêng). Quá REGISTERED_STALE_DAYS → nhắc chốt.
-      updatedAt: { lt: staleBefore },
+      // GĐ1 — đo bằng MỐC ĐỔI TRẠNG THÁI THẬT (`statusChangedAt`), không còn dùng
+      // `updatedAt` làm proxy. Proxy cũ sai theo hướng nguy hiểm nhất: MỌI thao tác
+      // chạm lead (ghi chú, đổi người phụ trách, gắn nguồn giới thiệu) đều dời
+      // `updatedAt`, nên lead nằm im hai tuần vẫn không bao giờ lên chuông.
+      //
+      // Lead cũ có `statusChangedAt` NULL (chưa đổi trạng thái lần nào kể từ GĐ1) —
+      // rơi về `updatedAt` để không mất trắng nhóm tồn đọng đang có.
+      OR: [
+        { statusChangedAt: { lt: staleBefore } },
+        { statusChangedAt: null, updatedAt: { lt: staleBefore } },
+      ],
       ...(selfOnly ? { assignedToId: user.id } : centerScope ? { centerId: centerScope } : {}),
     },
-    select: { id: true, parentName: true, childName: true, updatedAt: true },
-    orderBy: { updatedAt: "asc" },
+    select: {
+      id: true,
+      parentName: true,
+      childName: true,
+      updatedAt: true,
+      statusChangedAt: true,
+    },
+    orderBy: [{ statusChangedAt: "asc" }, { updatedAt: "asc" }],
     take: 50,
   });
   return {

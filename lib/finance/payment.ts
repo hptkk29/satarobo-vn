@@ -7,6 +7,7 @@ import { writeAudit, type AuditActor } from "@/lib/audit/audit-log";
 import { publishEvent } from "@/lib/events/publish";
 import { issueReceipt } from "@/lib/finance/receipt";
 import { allocateByWeight } from "@/lib/finance/allocate";
+import { recordLeadStatusChange } from "@/lib/leads/set-status";
 
 type Tx = Prisma.TransactionClient;
 
@@ -154,6 +155,16 @@ export async function maybeAdvanceLeadToRegistered(
     data: { status: "REGISTERED" },
   });
   if (upd.count === 0) return false;
+  // GĐ1 — `updateMany` ở trên là lượt claim atomic, giữ nguyên; chỉ nối thêm sổ.
+  await recordLeadStatusChange({
+    tx,
+    leadId: params.leadId,
+    from: "AWAITING_DECISION",
+    to: "REGISTERED",
+    source: "payment",
+    actorId: params.actor.id,
+    actorName: params.actor.name ?? null,
+  });
   await tx.leadActivity.create({
     data: {
       leadId: params.leadId,
