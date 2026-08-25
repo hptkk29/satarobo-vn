@@ -179,4 +179,18 @@ export type GatedHref = keyof typeof PAGE_GATES;
  * `page-gates.test.ts` giữ danh sách này làm ngoại lệ tường minh — thêm route mới vào
  * đây phải kèm lý do, không được im lặng.
  */
-export const GATE_MISMATCH_ALLOWLIST: readonly string[] = ["/cham-cong/lich-ca-nhan-vien"];
+export const GATE_MISMATCH_ALLOWLIST: readonly string[] = [
+  "/cham-cong/lich-ca-nhan-vien",
+  // Ghi danh trên site Sale (`app/(sale)/sale/ghi-danh/[leadId]`).
+  //
+  // Bảng trên dùng phép HOẶC (`checkAnyPermission`), mà chốt lead đòi CẢ HAI
+  // quyền: `students:create` VÀ `enrollments:create`. Hai quyền đó tách nhau có
+  // chủ đích — Marketing giữ một mà không giữ cái kia — nên gộp vào bảng bằng
+  // phép HOẶC sẽ MỞ CỬA cho người chỉ có một nửa. `submitConvertV2` cũng kiểm
+  // đúng phép VÀ đó, nên trang và action nói cùng một câu; cái lệch duy nhất là
+  // với BẢNG, và đó là lệch có chủ đích.
+  //
+  // Không có mục menu nào cho route này (vào từ hồ sơ khách) nên cũng không có
+  // nguy cơ menu-và-cổng nói khác nhau — thứ mà bảng sinh ra để chặn.
+  "/sale/ghi-danh",
+];

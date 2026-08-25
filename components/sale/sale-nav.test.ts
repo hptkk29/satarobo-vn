@@ -72,6 +72,7 @@ describe("[site Sale] thanh điều hướng ≡ cổng trang", () => {
       "utf8",
     );
     expect(detail).toContain("/sale/chot-don/");
+    expect(detail).toContain("/sale/ghi-danh/");
   });
 
   it("có nút đăng xuất", () => {

@@ -189,7 +189,6 @@ export default async function SaleHomePage() {
             ĐÃ CÓ là nói dối người dùng về trạng thái sản phẩm — "Lớp trải
             nghiệm" từng nằm ở đây suốt trong khi nó đã chạy được. */}
         <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-muted-foreground">
-          <li>Ghi danh — chuyển khách đã đóng tiền thành học viên</li>
           <li>Hoa hồng của tôi</li>
         </ul>
       </div>

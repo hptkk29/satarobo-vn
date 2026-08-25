@@ -28,6 +28,14 @@ const ALLOWLIST: Record<string, string> = {
   "/parent-requests/bao-vang":
     "stub chuyển hướng sang /parent-requests (giữ cho link cũ không vỡ)",
   "/search": "vào bằng ô tìm kiếm trên topbar (<form action=\"/search\">), không phải mục menu",
+  "/convert-conflicts":
+    "vào từ khối cảnh báo trong form chuyển đổi (`convert-form.tsx`) khi gặp xung đột hồ sơ " +
+    "phụ huynh — màn xử-lý-sự-cố, không phải việc hằng ngày, nên KHÔNG lên sidebar. " +
+    "⚠️ 24/08/2026: đường dẫn nay truyền qua prop `conflictHref` (site Sale mount lại form " +
+    "này và phải KHÔNG có liên kết, vì màn gộp hồ sơ là của khu quản trị). Máy dò của test " +
+    "quét chuỗi `href=\"…\"` viết thường nên không thấy `conflictHref=\"…\"` — liên kết VẪN " +
+    "hiện cho admin, chỉ là dò không ra. Nếu sau này thấy người dùng không tìm được màn này " +
+    "thì chữa bằng mục menu thật, đừng chữa bằng cách nới máy dò.",
   "/thong-bao":
     "CỐ Ý không lên sidebar — ràng buộc cốt lõi của PRD hệ thông báo: chuông ở topbar là điểm " +
     "vào DUY NHẤT, thêm mục menu là phá chính tiền đề đó. Vào từ nút \"Xem tất cả thông báo\" ở " +
