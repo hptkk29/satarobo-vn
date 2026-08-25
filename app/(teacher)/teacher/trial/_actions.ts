@@ -84,9 +84,27 @@ export async function saveTrialRubricAction(input: {
   const sdb = scopedDb(actor);
   const evaluatedByName = session.user.name ?? session.user.email ?? null;
 
+  // GĐ4 — mỗi BUỔI một phiếu. Trước GĐ4 upsert khoá theo `trialEnrollmentId` nên chấm
+  // buổi 2 GHI ĐÈ IM LẶNG phiếu buổi 1 và dời luôn con trỏ buổi; phần đã mất trước
+  // ngày này không khôi phục được, đây chỉ chặn mất thêm.
+  //
+  // Ca chưa gắn buổi (`trialClassSessionId` null) thì KHÔNG cho lưu: khoá kép cho phép
+  // nhiều NULL nên lưu vào đó là đẻ phiếu trùng không ai gỡ được.
+  if (!ctx.trialClassSessionId) {
+    return {
+      ok: false,
+      error: "Ca này chưa được xếp buổi — xếp buổi trước khi chấm phiếu",
+    };
+  }
+
   try {
     await sdb.trialRubricEval.upsert({
-      where: { trialEnrollmentId: enrollmentId },
+      where: {
+        trialEnrollmentId_trialClassSessionId: {
+          trialEnrollmentId: enrollmentId,
+          trialClassSessionId: ctx.trialClassSessionId,
+        },
+      },
       create: {
         trialEnrollmentId: enrollmentId,
         trialClassSessionId: ctx.trialClassSessionId,

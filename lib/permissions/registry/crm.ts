@@ -41,6 +41,12 @@ export const crmModule: ModuleDecl = {
       action: "feedback",
       description: "GV ghi nhận xét buổi trải nghiệm.",
     },
+    {
+      key: "trials:attendance",
+      action: "attendance",
+      description:
+        "Sale điểm danh buổi trải nghiệm. Tách khỏi trials:feedback vì điểm danh là việc của Sale phụ trách khách, nộp phiếu đánh giá là việc của giáo viên.",
+    },
     { key: "trials:assign-teacher", action: "assign-teacher" },
     {
       key: "trials:override-capacity",

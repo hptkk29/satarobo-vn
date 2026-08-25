@@ -6355,6 +6355,10 @@ model TrialAttendance {
   trialEnrollment   TrialEnrollment       @relation(fields: [trialEnrollmentId], references: [id], onDelete: Cascade)
   status            TrialAttendanceStatus @default(PRESENT)
   note              String?               @db.Text
+  /// GĐ4 — AI điểm danh. Trước GĐ4 bảng này không lưu người thao tác, nên khi đổi vai
+  /// điểm danh từ giáo viên sang Sale thì lịch sử cũ không quy được trách nhiệm.
+  /// NULL với mọi dòng có trước GĐ4 — không suy ngược được, đừng bịa.
+  markedById        String?
   createdAt         DateTime              @default(now()) @db.Timestamptz(6)
   updatedAt         DateTime              @updatedAt @db.Timestamptz(6)
 
@@ -6366,8 +6370,19 @@ model TrialAttendance {
 // scores = JSON { focus, interact, keyboard, experience, absorb, logic } → điểm đã chọn.
 // Cấu trúc rubric cố định trong lib/trial/rubric.ts (không drive bằng DB).
 model TrialRubricEval {
-  id                  String   @id @default(cuid())
-  trialEnrollmentId   String   @unique
+  id String @id @default(cuid())
+
+  // ⚠️ GĐ4 (25/08/2026) — BỎ `@unique` trên `trialEnrollmentId`, khoá lại theo BUỔI.
+  //
+  // Trước GĐ4 mỗi ca chỉ chứa được MỘT phiếu, mà đường ghi lại là `upsert` theo
+  // `trialEnrollmentId`. Hệ quả: giáo viên chấm buổi 2 sẽ GHI ĐÈ IM LẶNG phiếu buổi 1
+  // và dời luôn con trỏ buổi. Dữ liệu buổi cũ mất hẳn, không khôi phục được — phần đã
+  // mất trước ngày này thì đành chịu, đây chỉ chặn không mất thêm.
+  //
+  // Khoá kép cho phép nhiều NULL (Postgres coi NULL là khác nhau), nên phiếu KHÔNG gắn
+  // buổi vẫn trùng được. Chấp nhận có chủ đích: phiếu không gắn buổi là dữ liệu cũ,
+  // không phải đường ghi mới — mọi đường ghi từ GĐ4 đều bắt buộc có buổi.
+  trialEnrollmentId   String
   trialClassSessionId String? // buổi được đánh giá (ref phẳng)
   scores              Json // criterionId -> points (thang 8.0)
   totalScore          Float
@@ -6379,6 +6394,10 @@ model TrialRubricEval {
   createdAt           DateTime @default(now()) @db.Timestamptz(6)
   updatedAt           DateTime @updatedAt @db.Timestamptz(6)
 
+  // Một phiếu / một buổi / một ca — cùng khuôn với `TrialAttendance`, bảng vốn đã
+  // khoá đúng theo buổi từ đầu.
+  @@unique([trialEnrollmentId, trialClassSessionId])
+  @@index([trialEnrollmentId])
   @@index([trialClassSessionId])
 }
 
