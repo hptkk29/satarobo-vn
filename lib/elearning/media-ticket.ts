@@ -34,14 +34,20 @@ function ky(body: string): string {
     .digest("base64url");
 }
 
+/**
+ * @param now Mốc phát vé, epoch ms. Có tham số này để ĐỐI XỨNG với `kiemVeMedia`:
+ *   thiếu nó thì test phải ký bằng đồng hồ thật rồi kiểm bằng mốc giả, và vé xanh
+ *   hay đỏ tuỳ giờ chạy CI — một loại đỏ chập chờn không ai lần ra.
+ */
 export function kyVeMedia(
   input: { lessonId: string; userId: string },
   ttlGiay = VE_TTL_GIAY,
+  now = Date.now(),
 ): string {
   const payload: VeMedia = {
     lessonId: input.lessonId,
     userId: input.userId,
-    exp: Date.now() + ttlGiay * 1000,
+    exp: now + ttlGiay * 1000,
   };
   const body = Buffer.from(JSON.stringify(payload)).toString("base64url");
   return `${body}.${ky(body)}`;

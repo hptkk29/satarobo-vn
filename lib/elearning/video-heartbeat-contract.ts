@@ -120,13 +120,26 @@ export function coTheThuLai(ma: MaLoiNhip): boolean {
 // ── Ba quyết định thuần mà cả hai đầu phải hiểu giống nhau ─────────────────
 
 /**
- * Cơ chế "chặn tua tới": con trỏ nhảy tới vùng CHƯA xem thì từ chối.
+ * Cơ chế "chặn tua tới": nhảy tới vùng CHƯA xem thì từ chối.
  *
  * Tua LÙI luôn được — xem lại là hành vi học bình thường. Tua tới trong vùng ĐÃ
  * xem cũng được, vì không ai gian lận bằng cách nhảy tới chỗ mình đã xem rồi.
+ *
+ * ⚠️ SO BẰNG ĐIỂM BẮT ĐẦU của khoảng vừa xem (`tuSec`), KHÔNG bằng vị trí con trỏ.
+ * Đây là chỗ bản đầu của hàm này sai, và sai theo hướng chặn đứng cả sản phẩm:
+ * con trỏ LUÔN chạy trước mốc đã ghi, vì mốc chỉ được cập nhật ở cuối mỗi nhịp.
+ * Với nhịp 15 giây thì mọi nhịp bình thường đều trông như "nhảy tới 15 giây chưa
+ * xem" — kể cả nhịp ĐẦU TIÊN của mọi bài (con trỏ ở giây 10, mốc còn 0). Người
+ * học sẽ không xem nổi một video nào, và lỗi hiện ra là "khoá này không cho tua
+ * tới" — một câu không liên quan gì tới việc họ vừa làm.
+ *
+ * Điểm bắt đầu thì khác: phát liên tục nghĩa là nhịp sau bắt đầu ĐÚNG chỗ nhịp
+ * trước dừng, nên nó bám sát mốc đã xem. Chỉ khi người ta kéo con trỏ đi thì
+ * khoảng vừa xem mới bắt đầu ở một chỗ xa hơn mốc.
  */
 export function chanTuaToi(input: {
-  viTriSec: number;
+  /** Điểm BẮT ĐẦU khoảng vừa xem trong nhịp này. */
+  batDauSec: number;
   maxDaXemSec: number;
   chanTua: boolean;
   /** Dung sai: trình phát báo vị trí lệch vài trăm mili giây là bình thường. */
@@ -134,7 +147,7 @@ export function chanTuaToi(input: {
 }): boolean {
   if (!input.chanTua) return false;
   const dungSai = input.dungSaiSec ?? 2;
-  return input.viTriSec > input.maxDaXemSec + dungSai;
+  return input.batDauSec > input.maxDaXemSec + dungSai;
 }
 
 /**

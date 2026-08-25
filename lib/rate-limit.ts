@@ -67,6 +67,34 @@ function getUpstash(): typeof upstashClient {
   return upstashClient;
 }
 
+/**
+ * Run one Redis command against the shared Upstash instance.
+ *
+ * Exported so other features (e.g. the e-learning play lock) can reuse the SAME
+ * env-var resolution instead of re-deriving `UPSTASH_*` / `KV_*` in a second
+ * place — two copies of that fallback chain is two things to keep in sync, and
+ * the one that drifts fails silently by falling back to no-Redis.
+ *
+ * Returns `null` when Upstash is not configured or the call fails. Callers MUST
+ * decide what "no shared store" means for them; this helper deliberately does
+ * not pick fail-open or fail-closed on their behalf.
+ */
+export async function upstashCommand(cmd: string[]): Promise<unknown | null> {
+  const client = getUpstash();
+  if (!client) return null;
+  try {
+    const res = await client.fetch("/", {
+      method: "POST",
+      body: JSON.stringify(cmd),
+    });
+    if (!res.ok) return null;
+    const data = (await res.json()) as { result?: unknown };
+    return data.result ?? null;
+  } catch {
+    return null;
+  }
+}
+
 // =============================================================================
 // In-memory fallback (legacy behavior)
 // =============================================================================

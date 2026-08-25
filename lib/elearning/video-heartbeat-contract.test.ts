@@ -108,30 +108,30 @@ describe("ánh xạ mã lỗi sang HTTP — khai đủ, không gộp", () => {
 
 describe("cơ chế CHẶN TUA TỚI", () => {
   const tua = (o: Partial<Parameters<typeof chanTuaToi>[0]>) =>
-    chanTuaToi({ viTriSec: 0, maxDaXemSec: 100, chanTua: true, ...o });
+    chanTuaToi({ batDauSec: 0, maxDaXemSec: 100, chanTua: true, ...o });
 
   it("nhảy tới vùng CHƯA xem ⇒ chặn", () => {
-    expect(tua({ viTriSec: 500 })).toBe(true);
+    expect(tua({ batDauSec: 500 })).toBe(true);
   });
 
   it("tua LÙI luôn được — xem lại là hành vi học bình thường", () => {
-    expect(tua({ viTriSec: 10 })).toBe(false);
+    expect(tua({ batDauSec: 10 })).toBe(false);
   });
 
   it("tua tới trong vùng ĐÃ xem cũng được", () => {
     // Không ai gian lận bằng cách nhảy tới chỗ mình đã xem rồi.
-    expect(tua({ viTriSec: 99 })).toBe(false);
+    expect(tua({ batDauSec: 99 })).toBe(false);
   });
 
   it("có dung sai — lệch vài giây là bình thường", () => {
     // Trình phát báo vị trí lệch vài trăm mili giây; chặn sát quá là chặn nhầm
     // người xem thật, liên tục.
-    expect(tua({ viTriSec: 101 })).toBe(false);
-    expect(tua({ viTriSec: 110 })).toBe(true);
+    expect(tua({ batDauSec: 101 })).toBe(false);
+    expect(tua({ batDauSec: 110 })).toBe(true);
   });
 
   it("khoá KHÔNG bật chặn tua ⇒ không chặn gì", () => {
-    expect(tua({ viTriSec: 9999, chanTua: false })).toBe(false);
+    expect(tua({ batDauSec: 9999, chanTua: false })).toBe(false);
   });
 });
 
