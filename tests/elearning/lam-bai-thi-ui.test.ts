@@ -66,8 +66,8 @@ describe("trộn thứ tự không làm lệch chấm", () => {
   it("trộn CÂU và trộn LỰA CHỌN, nhưng mã giữ nguyên chỉ số gốc", () => {
     // Trộn cả mã thì server chấm theo một thứ tự, client hiện theo thứ tự khác, và
     // người bấm đúng bị chấm sai.
-    expect(chiMa(VIEW)).toContain("de.shuffleQuestions ? tron(dung) : dung");
-    expect(chiMa(VIEW)).toContain("tron(loc.luaChon)");
+    expect(chiMa(VIEW)).toContain("de.shuffleQuestions ? tron(dung, dangMo.id)");
+    expect(chiMa(VIEW)).toContain("tron(loc.luaChon,");
     // `locCauHoiChoNguoiHoc` sinh `ma` từ chỉ số gốc; hàm trộn chỉ đảo thứ tự phần
     // tử, không đánh số lại.
     expect(chiMa(VIEW)).not.toContain("ma: String(i)");
@@ -133,5 +133,23 @@ describe("cấu hình action ở lib, tệp `use server` chỉ là vỏ", () => 
     expect(ACTIONS).toContain("@/lib/elearning/exam-taking");
     expect(chiMa(ACTIONS)).not.toContain("z.object");
     expect(chiMa(ACTIONS)).not.toContain("handler:");
+  });
+});
+
+describe("🔴 trộn TẤT ĐỊNH, không ngẫu nhiên mỗi lượt tải", () => {
+  it("không dùng `Math.random()`", () => {
+    // Trang này là Server Component: nó chạy lại mỗi lượt tải. Trộn ngẫu nhiên
+    // nghĩa là thứ tự lựa chọn NHẢY LOẠN mỗi lần người học tải lại trang giữa lúc
+    // đang thi — lựa chọn đã lưu vẫn đúng, nhưng họ mất phương hướng và sẽ nghĩ hệ
+    // thống hỏng.
+    expect(chiMa(VIEW)).not.toContain("Math.random()");
+  });
+
+  it("hạt giống gắn với LƯỢT THI, không phải giờ hệ thống", () => {
+    // Cùng lượt thi ⇒ thứ tự cố định; hai người khác nhau ⇒ khác nhau; hai lượt của
+    // cùng một người ⇒ cũng khác nhau.
+    expect(chiMa(VIEW)).toContain("tron(dung, dangMo.id)");
+    expect(chiMa(VIEW)).toContain("`${dangMo.id}:${c.id}`");
+    expect(chiMa(VIEW)).not.toContain("Date.now()) || 1");
   });
 });

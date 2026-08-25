@@ -5,6 +5,7 @@ import type { Actor } from "@/lib/auth/actor";
 import { orgUnitIdForCenter } from "@/lib/org/org-service";
 import { dungHaiPhaGhiThuTu } from "@/lib/elearning/course-outline";
 import { coSoCuaCauHoi } from "@/lib/elearning/question-bank";
+import { chamMayDuoc } from "@/lib/elearning/exam-grading";
 
 /**
  * EL-14c — DỰNG ĐỀ THI.
@@ -180,9 +181,27 @@ export const cauHinhThemCauVaoDe: ActionConfig<
     // mình là mượn đường vòng để đọc kho của họ.
     const cau = await db.trnQuestion.findFirst({
       where: { id: input.questionId, deletedAt: null },
-      select: { id: true, defaultPoints: true, stem: true },
+      select: { id: true, defaultPoints: true, stem: true, type: true },
     });
     if (!cau) throw new ActionError("NOT_FOUND", "Không tìm thấy câu hỏi");
+
+    // ⚠️ CHƯA cho câu CHẤM TAY vào đề — quy ước 20, và lần này là tôi tự vi phạm.
+    //
+    // Một câu chấm tay đẩy lượt thi vào `PENDING_GRADE`, mà module CHƯA có màn chấm
+    // nào. `PENDING_GRADE` là trạng thái KHÔNG CÓ LỐI RA: điểm mãi `null`, `passed`
+    // mãi `null`, bài không bao giờ xong, và người học đứng nguyên tại một bài
+    // nghĩa vụ có hạn chót cứng cho tới lúc bị khoá vì quá hạn — không làm gì sai
+    // và không có đường nào tự thoát.
+    //
+    // Câu chấm tay vẫn SOẠN được và nằm trong kho; chỉ chưa đưa vào đề được. Mở ở
+    // EL-14e, cùng PR có hàng chờ chấm.
+    if (!chamMayDuoc(cau.type)) {
+      throw new ActionError(
+        "CHUA_CO_DUONG_CHAM_TAY",
+        `Câu chấm tay chưa đưa vào đề được — hệ thống chưa có màn chấm, và lượt thi sẽ treo vô hạn. Mở ở đợt sau (EL-14e).`,
+        "questionId",
+      );
+    }
 
     const soCauHienCo = await db.trnExamQuestion.count({ where: { examId: de.id } });
 

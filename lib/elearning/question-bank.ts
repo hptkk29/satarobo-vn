@@ -4,6 +4,7 @@ import { ActionError } from "@/lib/actions/factory";
 import type { Actor } from "@/lib/auth/actor";
 import { orgUnitIdForCenter } from "@/lib/org/org-service";
 import { duocVaoDe, LOAI_CHUA_MO, MUC_KHO } from "@/lib/elearning/exam-grading";
+import { dungNoiDungCauHoi } from "@/lib/elearning/question-content-map";
 
 /**
  * EL-14b — KHO CÂU HỎI đào tạo nội bộ.
@@ -179,14 +180,32 @@ export const cauHinhTaoCauHoi: ActionConfig<TaoCauHoiInput, { questionId: string
           difficulty: input.difficulty ?? "MEDIUM",
           skillTags: input.skillTags ?? [],
           defaultPoints: input.defaultPoints ?? 1,
-          // Khuôn dùng chung để trình soạn và trình hiển thị đọc được; bảng
-          // `TrnChoice` bên dưới là bản TRUY VẤN ĐƯỢC của cùng nội dung.
-          contentJson: { type: input.type, choices: input.choices ?? [] },
+          // Chỗ giữ chỗ; ghi nội dung THẬT ngay dưới, khi đã có `id` — khuôn dùng
+          // chung đòi `id`, và dùng một giá trị ngẫu nhiên là làm bản ghi đổi nội
+          // dung mà không đổi gì.
+          contentJson: {},
           centerId,
           orgUnitId,
           createdByUserId: actor.userId,
         },
         select: { id: true },
+      });
+
+      // ⚠️ Đi QUA `dungNoiDungCauHoi`, không tự dựng hình dạng tại chỗ. Bản đầu ghi
+      // `{ type: "SINGLE", choices: [...] }` — một khuôn mà đường THI không bao giờ
+      // đọc được, nên mọi câu trắc nghiệm hiện ra không có nút đáp án nào và mọi
+      // lượt thi treo `PENDING_GRADE` vĩnh viễn. Không gì bắt được, vì `contentJson`
+      // khai `Json` và TypeScript không nối writer với reader.
+      await t.trnQuestion.update({
+        where: { id: q.id },
+        data: {
+          contentJson: dungNoiDungCauHoi({
+            questionId: q.id,
+            type: input.type,
+            stem: input.stem,
+            choices: input.choices,
+          }) as object,
+        },
       });
 
       // ⚠️ Hai bên ghi trong CÙNG transaction. Tách ra thì một lỗi ở giữa để lại
@@ -277,7 +296,12 @@ export const cauHinhSuaCauHoi: ActionConfig<SuaCauHoiInput, { questionId: string
           difficulty: input.difficulty ?? "MEDIUM",
           skillTags: input.skillTags ?? [],
           defaultPoints: input.defaultPoints ?? 1,
-          contentJson: { type: input.type, choices: input.choices ?? [] },
+          contentJson: dungNoiDungCauHoi({
+            questionId: cu.id,
+            type: input.type,
+            stem: input.stem,
+            choices: input.choices,
+          }) as object,
         },
       });
       // Thay TRỌN bộ lựa chọn: sửa từng dòng thì `orderIndex` cũ còn sót và

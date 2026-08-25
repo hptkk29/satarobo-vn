@@ -51,6 +51,7 @@ type Ban = {
   baiTheoDe: unknown;
   tienDo: unknown;
   soLuotDaThi: number;
+  timBai: ReturnType<typeof vi.fn<(a: unknown) => void>>;
   createLuot: ReturnType<typeof vi.fn<(a: unknown) => Promise<{ id: string; attemptNo: number }>>>;
   updateLuot: ReturnType<typeof vi.fn<(a: unknown) => Promise<unknown>>>;
   upsertTraLoi: ReturnType<typeof vi.fn<(a: unknown) => Promise<unknown>>>;
@@ -62,7 +63,12 @@ let b: Ban;
 const dbGia = () => {
   const api = {
     trnEnrollment: { findFirst: vi.fn(async () => b.enrollment) },
-    trnLesson: { findFirst: vi.fn(async () => b.baiTheoDe ?? b.lesson) },
+    trnLesson: {
+      findFirst: vi.fn(async (a: unknown) => {
+        b.timBai(a);
+        return b.baiTheoDe ?? b.lesson;
+      }),
+    },
     trnCourse: { findUnique: vi.fn(async () => b.course) },
     trnExam: { findFirst: vi.fn(async () => b.de) },
     trnExamAttempt: {
@@ -170,6 +176,7 @@ beforeEach(() => {
     baiTheoDe: null,
     tienDo: null,
     soLuotDaThi: 3,
+    timBai: vi.fn<(a: unknown) => void>(),
     createLuot: vi.fn(async (_a: unknown) => ({ id: "lt-moi", attemptNo: 1 })),
     updateLuot: vi.fn(async (_a: unknown) => ({})),
     upsertTraLoi: vi.fn(async (_a: unknown) => ({})),
@@ -555,3 +562,62 @@ describe("khoá quyền của người học", () => {
     }
   });
 });
+
+// ── 8. Ba lỗi do vòng rà đối kháng tìm ra ──────────────────────────────────
+
+describe("🔴 lượt ghi danh bị THU HỒI giữa lúc đang thi", () => {
+  const nop = () =>
+    cauHinhNopBai.handler({
+      db: dbGia(),
+      actor,
+      input: { attemptId: "lt1" },
+    } as never);
+
+  it("thu hồi rồi ⇒ KHÔNG nộp được, không ghi gì", async () => {
+    // Chuỗi cổng đầy đủ chỉ chạy ở `batDauThi`, nhưng một lượt thi sống tới 30
+    // phút — và trong khoảng đó lượt ghi danh có thể bị thu hồi. Không kiểm lại
+    // thì người đã bị thu hồi vẫn được chấm và vẫn được ghi "đã hoàn thành" vào
+    // một khoá họ không còn thuộc về.
+    b.enrollment = { ...(b.enrollment as object), status: "REVOKED" };
+    const e = await batLoi(nop());
+    expect(e.code).toBe("REVOKED");
+    expect(b.updateLuot).not.toHaveBeenCalled();
+  });
+
+  it("lưu câu trả lời cũng bị chặn", async () => {
+    b.enrollment = { ...(b.enrollment as object), status: "REVOKED" };
+    const e = await batLoi(
+      cauHinhLuuCauTraLoi.handler({
+        db: dbGia(),
+        actor,
+        input: { attemptId: "lt1", examQuestionId: "eq1", chon: [1] },
+      } as never),
+    );
+    expect(e.code).toBe("REVOKED");
+    expect(b.upsertTraLoi).not.toHaveBeenCalled();
+  });
+});
+
+describe("🔴 ghi 'đã xong' phải RÀNG BUỘC theo khoá của lượt ghi danh", () => {
+  it("truy vấn tìm bài mang ràng buộc khoá", async () => {
+    // `TrnLesson.examId` KHÔNG unique và một đề gắn được vào nhiều bài, nên
+    // `findFirst` trần có thể trả bài của khoá khác — thậm chí cơ sở khác — và ghi
+    // "đã hoàn thành" vào đúng bài đó. Người học thấy bài mình vừa thi vẫn chưa
+    // xong, còn một người lạ ở khoá khác bỗng có một bài xong.
+    b.dsEq = [
+      { id: "eq1", points: 4, question: { type: "SINGLE", contentJson: CAU_SINGLE } },
+    ];
+    b.dsTraLoi = [{ id: "a1", examQuestionId: "eq1", selectedChoiceIds: ["1"] }];
+    b.baiTheoDe = { id: "les1" };
+    await cauHinhNopBai.handler({
+      db: dbGia(),
+      actor,
+      input: { attemptId: "lt1" },
+    } as never);
+    const arg = b.timBai.mock.calls.at(-1)![0] as {
+      where: { module?: { courseId?: string } };
+    };
+    expect(arg.where.module?.courseId).toBe("c1");
+  });
+});
+

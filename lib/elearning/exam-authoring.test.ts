@@ -97,7 +97,7 @@ beforeEach(() => {
     de: { ...deNhap },
     bai: null,
     khoa: { id: "c1" },
-    cau: { id: "q1", defaultPoints: 2, stem: "..." },
+    cau: { id: "q1", defaultPoints: 2, stem: "...", type: "SINGLE" },
     eq: { id: "eq1", orderIndex: 0 },
     dsCau: [],
     dsEq: [{ id: "eq1" }, { id: "eq2" }, { id: "eq3" }],
@@ -515,5 +515,33 @@ describe("🔴 gắn đề vào bài — không có đường này thì mở QUI
     b.de = null;
     await batLoi(gan());
     expect(b.updateBai).not.toHaveBeenCalled();
+  });
+});
+describe("🔴 câu CHẤM TAY chưa được vào đề — cửa chưa có lối ra", () => {
+  it("thêm câu tự luận vào đề ⇒ từ chối, nói rõ chờ đợt nào", async () => {
+    // `PENDING_GRADE` là trạng thái KHÔNG CÓ LỐI RA khi chưa có màn chấm: điểm mãi
+    // `null`, bài không bao giờ xong, và người học đứng nguyên tại một bài nghĩa
+    // vụ có hạn chót cứng.
+    b.cau = { id: "q1", defaultPoints: 2, stem: "...", type: "ESSAY" };
+    const e = await batLoi(
+      cauHinhThemCauVaoDe.handler({
+        db: dbGia(),
+        actor: actorHO,
+        input: { examId: "de1", questionId: "q1" },
+      } as never),
+    );
+    expect(e.code).toBe("CHUA_CO_DUONG_CHAM_TAY");
+    expect(e.message).toContain("EL-14e");
+    expect(b.createEq).not.toHaveBeenCalled();
+  });
+
+  it("câu chấm MÁY vẫn vào được", async () => {
+    b.cau = { id: "q1", defaultPoints: 2, stem: "...", type: "SINGLE" };
+    await cauHinhThemCauVaoDe.handler({
+      db: dbGia(),
+      actor: actorHO,
+      input: { examId: "de1", questionId: "q1" },
+    } as never);
+    expect(b.createEq).toHaveBeenCalledTimes(1);
   });
 });

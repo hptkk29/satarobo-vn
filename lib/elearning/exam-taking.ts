@@ -322,7 +322,26 @@ async function napLuotDangMo(db: ScopedDb, actor: Actor, attemptId: string) {
   if (luot.status !== "IN_PROGRESS") {
     throw new ActionError("LUOT_DA_DONG", "Lượt thi này đã nộp rồi");
   }
-  return luot;
+
+  // ⚠️ KIỂM LẠI lượt ghi danh, không chỉ tin lượt thi đã mở.
+  //
+  // Chuỗi cổng đầy đủ chạy ở `batDauThi`, nhưng một lượt thi sống tới 30 phút — và
+  // trong khoảng đó lượt ghi danh có thể bị THU HỒI. Không kiểm lại thì người đã bị
+  // thu hồi vẫn nộp được, vẫn được chấm, và vẫn được ghi "đã hoàn thành" vào một
+  // khoá họ không còn thuộc về.
+  if (luot.enrollmentId) {
+    const gd = await db.trnEnrollment.findFirst({
+      where: { id: luot.enrollmentId, userId: actor.userId },
+      select: { status: true, courseId: true },
+    });
+    if (!gd) throw new ActionError("NOT_FOUND", "Không tìm thấy lượt học của bạn");
+    if (gd.status === "REVOKED") {
+      throw new ActionError("REVOKED", "Lượt học đã bị thu hồi");
+    }
+    return { ...luot, courseId: gd.courseId };
+  }
+
+  return { ...luot, courseId: null as string | null };
 }
 
 export const cauHinhLuuCauTraLoi: ActionConfig<LuuCauTraLoiInput, { daLuu: boolean }> = {
@@ -466,11 +485,12 @@ export const cauHinhNopBai: ActionConfig<NopBaiInput, KetQuaNop> = {
     // Trượt thì giữ nguyên `IN_PROGRESS`: enum `TrnLessonProgressStatus` cố ý không
     // có `FAILED`, và bịa một trạng thái thứ hai cho "chưa xong" là đẻ nguồn sự
     // thật thứ hai cạnh `progressPercent`.
-    if (tong.passed === true && luot.enrollmentId) {
+    if (tong.passed === true && luot.enrollmentId && luot.courseId) {
       await ghiXongBaiThi(db, {
         enrollmentId: luot.enrollmentId,
         userId: actor.userId,
         examId: luot.examId,
+        courseId: luot.courseId,
         now,
       });
     }
@@ -499,10 +519,25 @@ export const cauHinhNopBai: ActionConfig<NopBaiInput, KetQuaNop> = {
  */
 async function ghiXongBaiThi(
   db: ScopedDb,
-  i: { enrollmentId: string; userId: string; examId: string; now: Date },
+  i: {
+    enrollmentId: string;
+    userId: string;
+    examId: string;
+    courseId: string;
+    now: Date;
+  },
 ): Promise<void> {
+  // ⚠️ RÀNG BUỘC theo khoá của lượt ghi danh. `TrnLesson.examId` KHÔNG unique và
+  // một đề gắn được vào nhiều bài, nên `findFirst` trần có thể trả về bài của khoá
+  // khác — thậm chí của cơ sở khác — và ghi "đã hoàn thành" vào đúng bài đó. Không
+  // gì báo: người học thấy bài mình vừa thi vẫn chưa xong, còn một người lạ ở khoá
+  // khác bỗng có một bài xong mà họ chưa từng mở.
   const bai = await db.trnLesson.findFirst({
-    where: { examId: i.examId, deletedAt: null },
+    where: {
+      examId: i.examId,
+      deletedAt: null,
+      module: { courseId: i.courseId },
+    },
     select: { id: true },
   });
   if (!bai) return;

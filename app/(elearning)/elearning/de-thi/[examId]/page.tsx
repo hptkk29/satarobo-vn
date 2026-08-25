@@ -4,6 +4,7 @@ import { resolveActor } from "@/lib/auth/actor";
 import { can } from "@/lib/auth/can";
 import { scopedDb } from "@/lib/db-scope";
 import { ExamBuilder } from "../_components/exam-builder";
+import { UnlockPanel } from "../_components/unlock-panel";
 
 /**
  * EL-14c — DỰNG BỘ CÂU CHO MỘT ĐỀ.
@@ -53,6 +54,7 @@ export default async function Page({
       passScore: true,
       maxScore: true,
       durationMin: true,
+      maxAttempts: true,
       questions: {
         select: {
           id: true,
@@ -97,6 +99,49 @@ export default async function Page({
     })
   ).filter((q) => !dungTrongDe.has(q.id));
 
+  // ── Ai đã hết lượt (để mở khoá) ───────────────────────────────────────────
+  // Chỉ có nghĩa với đề ĐÃ kích hoạt; đề nháp thì chưa ai thi.
+  const hetLuot: { userId: string; ten: string; soLuot: number; datChua: boolean }[] = [];
+  if (de.isActive) {
+    const luot = await db.trnExamAttempt.groupBy({
+      by: ["userId"],
+      where: { examId: de.id },
+      _count: { _all: true },
+    });
+    const soMoKhoa = await db.trnExamUnlock.groupBy({
+      by: ["userId"],
+      where: { examId: de.id },
+      _count: { _all: true },
+    });
+    const moKhoaCua = new Map(soMoKhoa.map((x) => [x.userId, x._count._all]));
+
+    const canMo = luot.filter(
+      (x) => x._count._all >= de.maxAttempts + (moKhoaCua.get(x.userId) ?? 0),
+    );
+    if (canMo.length > 0) {
+      const [nguoi, daDat] = await Promise.all([
+        db.user.findMany({
+          where: { id: { in: canMo.map((x) => x.userId) } },
+          select: { id: true, name: true, email: true },
+        }),
+        db.trnExamAttempt.findMany({
+          where: { examId: de.id, userId: { in: canMo.map((x) => x.userId) }, passed: true },
+          select: { userId: true },
+        }),
+      ]);
+      const tenCua = new Map(nguoi.map((u) => [u.id, u.name ?? u.email ?? u.id]));
+      const dat = new Set(daDat.map((x) => x.userId));
+      for (const x of canMo) {
+        hetLuot.push({
+          userId: x.userId,
+          ten: tenCua.get(x.userId) ?? x.userId,
+          soLuot: x._count._all,
+          datChua: dat.has(x.userId),
+        });
+      }
+    }
+  }
+
   return (
     <div className="mx-auto max-w-3xl space-y-5 px-4 py-8">
       <nav className="text-xs text-muted-foreground">
@@ -125,6 +170,21 @@ export default async function Page({
         khoCon={khoCon}
         duocKichHoat={can(actor, "elearning:content:publish")}
       />
+
+      {/* Mở khoá là quyền RIÊNG (`elearning:exam:unlock`), không phải quyền soạn —
+          nên khối này gác cửa riêng. */}
+      {de.isActive && can(actor, "elearning:exam:unlock") ? (
+        <section>
+          <h2 className="text-sm font-bold">Mở thêm lượt thi</h2>
+          <div className="mt-2">
+            <UnlockPanel
+              examId={de.id}
+              hetLuot={hetLuot}
+              tranLuot={de.maxAttempts}
+            />
+          </div>
+        </section>
+      ) : null}
     </div>
   );
 }

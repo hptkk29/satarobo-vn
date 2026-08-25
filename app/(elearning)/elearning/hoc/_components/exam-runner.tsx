@@ -75,6 +75,37 @@ export function ExamRunner(props: {
   );
   const dangLuu = useRef(new Set<string>());
 
+  /**
+   * ⚠️ ĐỒNG BỘ LẠI CẢ BA state khi lượt thi đổi.
+   *
+   * `useState` chỉ đọc giá trị khởi tạo ở lượt kết xuất ĐẦU TIÊN — mà lượt đầu tiên
+   * là lúc chưa bấm "Bắt đầu", khi `luot` còn `null`. Sau khi bấm,
+   * `router.refresh()` đưa props mới xuống nhưng state vẫn giữ giá trị cũ. Hậu quả:
+   *
+   *  · đồng hồ đứng 0:00 và banner "Hết giờ" hiện ngay giây đầu của bài thi;
+   *  · câu ĐÃ LƯU không hiện lại là đã chọn — người học tưởng mình mất bài và làm
+   *    lại từ đầu.
+   *
+   * Cùng một lớp lỗi với `dangHuy` ở trình tải video: state không đổi trong lượt
+   * gọi đã đóng gói nó.
+   */
+  const attemptId = luot?.attemptId ?? null;
+  useEffect(() => {
+    if (!luot) return;
+    setConLai(luot.conLaiGiay);
+    setTraLoi(
+      Object.fromEntries(luot.cacCau.map((c) => [c.examQuestionId, c.daChon])),
+    );
+    setChuText(
+      Object.fromEntries(
+        luot.cacCau.map((c) => [c.examQuestionId, c.textAnswer ?? ""]),
+      ),
+    );
+    // Chỉ chạy khi ĐỔI LƯỢT, không chạy mỗi lần props về: chạy mỗi lần là ghi đè
+    // lựa chọn người học vừa bấm bằng bản trên máy chủ, và ô họ vừa tích nhảy về.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [attemptId]);
+
   // ── Đồng hồ đếm ngược ─────────────────────────────────────────────────────
   useEffect(() => {
     if (!luot) return;
