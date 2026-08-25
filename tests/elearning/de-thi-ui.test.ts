@@ -31,21 +31,22 @@ const chiMa = (src: string) =>
     })
     .join("\n");
 
-describe("🔴 cổng và cửa — loại bài QUIZ CÒN KHOÁ", () => {
-  it("`QUIZ` vẫn nằm trong danh sách CHƯA MỞ", () => {
-    // Dựng được đề mà người học chưa thi được thì mở loại bài là dựng lại bẫy cũ.
-    expect(laLoaiBaiDaMo("QUIZ")).toBe(false);
-    expect(LOAI_BAI_CHUA_MO.QUIZ).toBeTruthy();
+describe("🔴 cổng và cửa — `QUIZ` mở CÙNG đường làm bài", () => {
+  it("`QUIZ` đã mở, và `TASK` vẫn đóng", () => {
+    // Ở PR dựng đề (EL-14c) loại này còn khoá, đúng — lúc đó mới có một đầu. Nay
+    // đủ hai đầu: dựng đề, gắn đề vào bài, và người học thi được.
+    expect(laLoaiBaiDaMo("QUIZ")).toBe(true);
+    expect(LOAI_BAI_CHUA_MO.TASK).toBeTruthy();
   });
 
-  it("màn đề NÓI THẲNG rằng người học chưa thi được", () => {
-    // Người soạn dựng đề rồi không thấy nó đâu sẽ đi báo lỗi — và họ báo đúng.
-    expect(DS).toContain("chưa thi được");
+  it("màn đề nói rõ BƯỚC TIẾP, không để người soạn dừng giữa chừng", () => {
+    // Đề không tự tới người học; nó tới qua một bài dạng "Bài kiểm tra".
+    expect(DS).toContain("Bài kiểm tra");
   });
 
-  it("màn tạo đề KHÔNG phơi lựa chọn gắn vào một BÀI", () => {
-    // Đường đó chỉ có nghĩa khi loại bài "Bài kiểm tra" đã mở; phơi ra bây giờ là
-    // mời người soạn đi vào ngõ cụt.
+  it("màn tạo đề vẫn KHÔNG phơi `lessonId`", () => {
+    // Đường nối là `TrnLesson.examId`, đặt ở màn soạn BÀI. Phơi thêm một đường thứ
+    // hai ở đây là hai nguồn sự thật cho cùng một quan hệ.
     expect(chiMa(FORM)).not.toContain("lessonId");
   });
 });

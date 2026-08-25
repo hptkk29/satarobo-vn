@@ -387,3 +387,85 @@ export const cauHinhKichHoatDe: ActionConfig<
 /** Cơ sở của đề — cùng luật với câu hỏi, tái dùng để hai bên không trôi khỏi nhau. */
 export { coSoCuaCauHoi as coSoCuaDe };
 export type { Actor };
+
+export const ganDeVaoBaiSchema = z
+  .object({
+    lessonId: z.string().min(1),
+    /** `null` = gỡ đề khỏi bài. */
+    examId: z.union([z.null(), z.string().min(1)]),
+  })
+  .strict();
+export type GanDeVaoBaiInput = z.infer<typeof ganDeVaoBaiSchema>;
+
+/**
+ * EL-14d — GẮN ĐỀ VÀO MỘT BÀI KIỂM TRA.
+ *
+ * ⚠️ Không có action này thì mở loại bài `QUIZ` là dựng lại đúng cái bẫy vừa gỡ,
+ * chỉ đổi hình dạng: người soạn tạo được bài kiểm tra, cổng xuất bản đòi `examId`,
+ * và KHÔNG màn nào đặt được nó — họ kẹt ở bước xuất bản thay vì người học kẹt ở
+ * bước học.
+ *
+ * ⚠️ `TrnLesson.examId` là ĐƯỜNG NỐI DUY NHẤT giữa bài và đề (xem chú thích đầu
+ * `exam-taking.ts`). `TrnExam.lessonId` để dành, không đường nào ghi.
+ */
+export const cauHinhGanDeVaoBai: ActionConfig<GanDeVaoBaiInput, { examId: string | null }> = {
+  name: "ganDeVaoBai",
+  permission: "elearning:content:author",
+  module: "elearning",
+  entityType: "TrnLesson",
+  auditAction: "UPDATE",
+  schema: ganDeVaoBaiSchema,
+  handler: async ({ db, input }) => {
+    const bai = await db.trnLesson.findFirst({
+      where: { id: input.lessonId, deletedAt: null },
+      select: { id: true, kind: true, examId: true, module: { select: { courseId: true } } },
+    });
+    if (!bai) throw new ActionError("NOT_FOUND", "Không tìm thấy bài học");
+
+    // Cách ly đi qua chuỗi cha — `TrnLesson` không nằm trong `SCOPED_MODELS`, và
+    // `scopedDb` không che đường ghi.
+    const khoa = await db.trnCourse.findFirst({
+      where: { id: bai.module.courseId, deletedAt: null },
+      select: { id: true },
+    });
+    if (!khoa) throw new ActionError("NOT_FOUND", "Không tìm thấy bài học");
+
+    if (bai.kind !== "QUIZ") {
+      throw new ActionError(
+        "WRONG_KIND",
+        `Chỉ bài dạng "Bài kiểm tra" mới gắn được đề. Bài này là ${bai.kind}.`,
+        "lessonId",
+      );
+    }
+
+    if (input.examId) {
+      const de = await db.trnExam.findFirst({
+        where: { id: input.examId, deletedAt: null },
+        select: { id: true, isActive: true },
+      });
+      if (!de) throw new ActionError("NOT_FOUND", "Không tìm thấy đề thi");
+      // ⚠️ Chỉ gắn đề ĐÃ KÍCH HOẠT. Gắn đề nháp là để bài đi ra với người học trên
+      // một bộ câu còn sửa được — và đề sửa xong thì điểm của người thi trước lệch
+      // khỏi thang của người thi sau.
+      if (!de.isActive) {
+        throw new ActionError(
+          "DE_CHUA_KICH_HOAT",
+          "Chỉ gắn được đề đã kích hoạt — kích hoạt đề trước",
+          "examId",
+        );
+      }
+    }
+
+    await db.trnLesson.update({
+      where: { id: bai.id },
+      data: { examId: input.examId },
+    });
+
+    return {
+      entityId: bai.id,
+      data: { examId: input.examId },
+      oldValues: { examId: bai.examId },
+      newValues: { examId: input.examId },
+    };
+  },
+};

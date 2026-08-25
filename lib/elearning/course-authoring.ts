@@ -91,6 +91,10 @@ async function docDanBai(db: ScopedDb, courseId: string): Promise<ChuongTrongDan
           kind: true,
           contentMd: true,
           captionKey: true,
+          // EL-14d — cổng xuất bản đòi bài `QUIZ` phải có đề. Thiếu trường này ở
+          // đây thì cổng đọc `undefined` và KHÔNG BAO GIỜ nổ — một cổng chặn im
+          // lặng không chặn gì.
+          examId: true,
         },
       },
     },

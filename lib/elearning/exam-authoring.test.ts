@@ -16,6 +16,7 @@ import {
   cauHinhGoCauKhoiDe,
   cauHinhSapXepDe,
   cauHinhKichHoatDe,
+  cauHinhGanDeVaoBai,
 } from "@/lib/elearning/exam-authoring";
 
 const h = vi.hoisted(() => ({
@@ -34,6 +35,8 @@ const DE_NEN = {
 
 type Ban = {
   de: unknown;
+  bai: unknown;
+  khoa: unknown;
   cau: unknown;
   eq: unknown;
   dsCau: { points: number }[];
@@ -44,6 +47,7 @@ type Ban = {
   updateDe: ReturnType<typeof vi.fn<(a: unknown) => Promise<unknown>>>;
   updateEq: ReturnType<typeof vi.fn<(a: unknown) => Promise<unknown>>>;
   delEq: ReturnType<typeof vi.fn<(a: unknown) => Promise<unknown>>>;
+  updateBai: ReturnType<typeof vi.fn<(a: unknown) => Promise<unknown>>>;
 };
 let b: Ban;
 
@@ -64,6 +68,8 @@ const dbGia = () => {
   return {
     trnExam: { findFirst: vi.fn(async () => b.de), create: b.createDe, update: b.updateDe },
     trnQuestion: { findFirst: vi.fn(async () => b.cau) },
+    trnLesson: { findFirst: vi.fn(async () => b.bai), update: b.updateBai },
+    trnCourse: { findFirst: vi.fn(async () => b.khoa) },
     trnExamQuestion: eqApi,
     $transaction: async (fn: (t: unknown) => Promise<unknown>) =>
       fn({ trnExamQuestion: eqApi }),
@@ -89,6 +95,8 @@ beforeEach(() => {
   h.orgUnitId.mockResolvedValue(null);
   b = {
     de: { ...deNhap },
+    bai: null,
+    khoa: { id: "c1" },
     cau: { id: "q1", defaultPoints: 2, stem: "..." },
     eq: { id: "eq1", orderIndex: 0 },
     dsCau: [],
@@ -99,6 +107,7 @@ beforeEach(() => {
     updateDe: vi.fn(async (_a: unknown) => ({})),
     updateEq: vi.fn(async (_a: unknown) => ({})),
     delEq: vi.fn(async (_a: unknown) => ({})),
+    updateBai: vi.fn(async (_a: unknown) => ({})),
   };
 });
 
@@ -447,5 +456,64 @@ describe("khoá quyền", () => {
       expect(c.permission, c.name).toBe("elearning:content:author");
     }
     expect(cauHinhKichHoatDe.permission).toBe("elearning:content:publish");
+  });
+});
+
+// ── 7. Gắn đề vào bài kiểm tra ─────────────────────────────────────────────
+
+describe("🔴 gắn đề vào bài — không có đường này thì mở QUIZ là bẫy mới", () => {
+  const gan = (input: Record<string, unknown> = {}) =>
+    cauHinhGanDeVaoBai.handler({
+      db: dbGia(),
+      actor: actorHO,
+      input: { lessonId: "les1", examId: "de1", ...input },
+    } as never);
+
+  beforeEach(() => {
+    b.bai = { id: "les1", kind: "QUIZ", examId: null, module: { courseId: "c1" } };
+    b.khoa = { id: "c1" };
+    b.de = { ...deNhap, isActive: true, maxScore: 10 };
+  });
+
+  it("gắn được đề đã kích hoạt", async () => {
+    await gan();
+    const arg = b.updateBai.mock.calls[0]![0] as { data: { examId: string } };
+    expect(arg.data.examId).toBe("de1");
+  });
+
+  it("gỡ đề khỏi bài được", async () => {
+    await gan({ examId: null });
+    const arg = b.updateBai.mock.calls[0]![0] as { data: { examId: null } };
+    expect(arg.data.examId).toBeNull();
+  });
+
+  it("🔴 đề NHÁP ⇒ từ chối", async () => {
+    // Gắn đề nháp là để bài đi ra với người học trên một bộ câu còn sửa được — và
+    // đề sửa xong thì điểm người thi trước lệch khỏi thang của người thi sau.
+    b.de = { ...deNhap, isActive: false };
+    const e = await batLoi(gan());
+    expect(e.code).toBe("DE_CHUA_KICH_HOAT");
+    expect(b.updateBai).not.toHaveBeenCalled();
+  });
+
+  it("bài KHÔNG phải QUIZ ⇒ từ chối", async () => {
+    b.bai = { id: "les1", kind: "VIDEO", examId: null, module: { courseId: "c1" } };
+    const e = await batLoi(gan());
+    expect(e.code).toBe("WRONG_KIND");
+  });
+
+  it("bài của cơ sở KHÁC ⇒ NOT_FOUND, không ghi gì", async () => {
+    // Cách ly đi qua chuỗi cha: `TrnLesson` không nằm trong `SCOPED_MODELS`, và
+    // `scopedDb` không che đường ghi.
+    b.khoa = null;
+    const e = await batLoi(gan());
+    expect(e.code).toBe("NOT_FOUND");
+    expect(b.updateBai).not.toHaveBeenCalled();
+  });
+
+  it("đề ngoài phạm vi ⇒ NOT_FOUND", async () => {
+    b.de = null;
+    await batLoi(gan());
+    expect(b.updateBai).not.toHaveBeenCalled();
   });
 });

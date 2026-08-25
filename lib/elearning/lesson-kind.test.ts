@@ -68,18 +68,19 @@ describe("trình soạn chỉ thấy loại đã mở", () => {
     expect(laLoaiBaiDaMo("VIDEO")).toBe(true);
   });
 
-  it("`QUIZ` và `TASK` đang đóng, và sẽ mở ở EL-14 / EL-15", () => {
-    expect(laLoaiBaiDaMo("QUIZ")).toBe(false);
-    expect(LOAI_BAI_CHUA_MO.QUIZ).toContain("EL-14");
+  it("`QUIZ` ĐÃ MỞ (EL-14d), `TASK` còn đóng chờ EL-15", () => {
+    // `QUIZ` mở ở ĐÚNG PR có đường làm bài, không mở sớm ở PR chỉ dựng được đề.
+    expect(laLoaiBaiDaMo("QUIZ")).toBe(true);
+    expect(laLoaiBaiDaMo("TASK")).toBe(false);
     expect(LOAI_BAI_CHUA_MO.TASK).toContain("EL-15");
   });
 });
 
 describe("câu giải thích cho người học", () => {
   it("nói rõ loại nào và chờ ai", () => {
-    const s = vaySaoChuaMo("QUIZ");
-    expect(s).toContain("Bài kiểm tra");
-    expect(s).toContain("EL-14");
+    const s = vaySaoChuaMo("TASK");
+    expect(s).toContain("Bài tập");
+    expect(s).toContain("EL-15");
   });
 
   it("loại lạ vẫn ra câu đọc được, không ném", () => {

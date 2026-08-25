@@ -11,6 +11,8 @@ import { VideoPlayer } from "../../_components/video-player";
 import { kyVeMedia } from "@/lib/elearning/media-ticket";
 import { TOC_DO_TOI_DA } from "@/lib/elearning/video-heartbeat-contract";
 import { vaySaoChuaMo } from "@/lib/elearning/lesson-kind";
+import { ExamRunner } from "../../_components/exam-runner";
+import { nenLamBai } from "@/lib/elearning/exam-view";
 
 /**
  * EL-04 — TRANG ĐỌC MỘT BÀI.
@@ -98,6 +100,7 @@ export default async function Page({
       contentMd: true,
       minReadSeconds: true,
       videoKey: true,
+      examId: true,
       captionKey: true,
       durationSec: true,
       module: { select: { title: true, course: { select: { title: true } } } },
@@ -204,6 +207,52 @@ export default async function Page({
             tocDoToiDa={enrollment.assignment?.maxPlaybackRate ?? TOC_DO_TOI_DA}
           />
         </div>
+      </div>
+    );
+  }
+
+  // ── Bài KIỂM TRA (EL-14d) ─────────────────────────────────────────────────
+  if (lesson.kind === "QUIZ") {
+    if (!lesson.examId) {
+      return (
+        <TuChoi
+          title="Bài kiểm tra chưa có đề"
+          detail="Người soạn chưa gắn đề cho bài này. Báo với Đào tạo để họ hoàn thiện."
+        />
+      );
+    }
+    const nen = await nenLamBai({
+      db,
+      userId: session.user.id,
+      enrollmentId: enrollment.id,
+      examId: lesson.examId,
+    });
+    if (!nen) {
+      return (
+        <TuChoi
+          title="Chưa mở được bài kiểm tra"
+          detail="Đề chưa được kích hoạt. Báo với Đào tạo."
+        />
+      );
+    }
+
+    return (
+      <div className="mx-auto max-w-3xl px-4 py-8">
+        <nav className="mb-2 text-xs text-muted-foreground">
+          {lesson.module.course.title} · {lesson.module.title}
+        </nav>
+        <h1 className="mb-4 text-2xl font-bold">{lesson.title}</h1>
+        <ExamRunner
+          enrollmentId={enrollment.id}
+          lessonId={lesson.id}
+          tenDe={nen.tenDe}
+          durationMin={nen.durationMin}
+          passScore={nen.passScore}
+          maxScore={nen.maxScore}
+          soLuotConLai={nen.soLuotConLai}
+          luotDangLam={nen.luotDangLam}
+          ketQuaGanNhat={nen.ketQuaGanNhat}
+        />
       </div>
     );
   }

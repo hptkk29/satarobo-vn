@@ -1,0 +1,19 @@
+"use server";
+
+import { defineAction } from "@/lib/actions/define";
+import {
+  cauHinhBatDauThi,
+  cauHinhLuuCauTraLoi,
+  cauHinhNopBai,
+} from "@/lib/elearning/exam-taking";
+
+/**
+ * EL-14d — làm bài thi.
+ *
+ * ⚠️ Tệp CỐ Ý mỏng (quy ước 10): cấu hình nằm ở `lib/elearning/exam-taking.ts`.
+ * Tệp `"use server"` không nạp được trong vitest, nên để logic ở đây là buộc test
+ * chép lại cấu hình — và bản được kiểm sẽ không phải bản đang chạy.
+ */
+export const batDauThiAction = defineAction(cauHinhBatDauThi);
+export const luuCauTraLoiAction = defineAction(cauHinhLuuCauTraLoi);
+export const nopBaiAction = defineAction(cauHinhNopBai);

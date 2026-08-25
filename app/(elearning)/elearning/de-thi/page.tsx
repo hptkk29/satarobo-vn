@@ -8,13 +8,9 @@ import { NewExamForm } from "./_components/new-exam-form";
 /**
  * EL-14c — DANH SÁCH ĐỀ THI.
  *
- * ⚠️ Đề dựng được, nhưng người học CHƯA thi được — đường làm bài thuộc EL-14d. Nói
- * thẳng điều đó trên màn hình, vì người soạn bỏ công dựng một đề rồi không thấy nó
- * đâu sẽ đi báo lỗi, và họ báo đúng.
- *
- * Cũng vì thế loại bài `QUIZ` VẪN ĐÓNG ở trình soạn khoá: mở nó bây giờ là dựng
- * lại đúng cái bẫy vừa gỡ — người soạn gắn được đề vào bài, khoá xuất bản trót lọt,
- * và người học mở ra thì kẹt.
+ * ⚠️ Đề KHÔNG tự tới người học. Nó tới qua một bài dạng `QUIZ`, và đường nối là
+ * `TrnLesson.examId` — đặt ở màn soạn bài. Màn này nói rõ bước tiếp, vì dựng xong
+ * một đề rồi không biết làm gì với nó là bỏ dở giữa chừng.
  */
 
 export const dynamic = "force-dynamic";
@@ -77,12 +73,11 @@ export default async function Page() {
           </Link>
           .
         </p>
-        {/* Nói THẲNG phần chưa xong. Người soạn dựng đề rồi không thấy nó đâu sẽ đi
-            báo lỗi — và họ báo đúng. */}
-        <p className="mt-2 rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-900">
-          Đề dựng và kích hoạt được, nhưng <strong>người học chưa thi được</strong> —
-          đường làm bài thuộc đợt sau. Loại bài “Bài kiểm tra” cũng vì thế còn khoá ở
-          trình soạn khoá.
+        {/* Nói rõ ĐƯỜNG ĐI, vì đề chỉ tới được người học qua một bài dạng
+            "Bài kiểm tra" — dựng xong đề mà không biết bước tiếp là bỏ dở giữa chừng. */}
+        <p className="mt-2 rounded-md bg-muted px-3 py-2 text-xs">
+          Đề chỉ tới người học qua một bài dạng <strong>Bài kiểm tra</strong>: kích
+          hoạt đề xong, mở bài đó ở màn soạn khoá rồi gắn đề vào.
         </p>
       </div>
 

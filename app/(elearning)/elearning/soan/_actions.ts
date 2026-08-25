@@ -6,6 +6,7 @@ import {
   cauHinhThemCue,
   cauHinhXoaCue,
 } from "@/lib/elearning/lesson-cue-authoring";
+import { cauHinhGanDeVaoBai } from "@/lib/elearning/exam-authoring";
 import { ActionError } from "@/lib/actions/factory";
 import { computeMinReadSeconds } from "@/lib/elearning/reading";
 import { cauHinhLuuBaiVideo } from "@/lib/elearning/video-lesson";
@@ -94,3 +95,11 @@ export const luuBaiVideoAction = defineAction(cauHinhLuuBaiVideo);
  */
 export const themCueAction = defineAction(cauHinhThemCue);
 export const xoaCueAction = defineAction(cauHinhXoaCue);
+
+/**
+ * EL-14d — gắn đề vào bài kiểm tra.
+ *
+ * Không có đường này thì mở loại bài `QUIZ` là dựng lại bẫy cũ ở hình dạng mới:
+ * người soạn tạo được bài, cổng xuất bản đòi `examId`, và không màn nào đặt được nó.
+ */
+export const ganDeVaoBaiAction = defineAction(cauHinhGanDeVaoBai);
