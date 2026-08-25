@@ -4,7 +4,9 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { FlaskConical } from "lucide-react";
-import { enrollLeadChildAction } from "../../../trial-classes/_actions";
+// GĐ6 — trỏ sang lớp action của màn "Lớp Trial". Đây là điểm bám CỨNG duy nhất từ
+// ngoài vào thư mục màn cũ; quên dòng này khi gỡ màn cũ là build ĐỎ.
+import { enrollLeadChildLopTrialAction } from "../../../lop-trial/_actions";
 
 type TrialSession = {
   id: string;
@@ -72,7 +74,7 @@ export function TrialEnrollWidget({
     }
     const sessionId = pickedSession[childId] || undefined;
     startTransition(async () => {
-      const res = await enrollLeadChildAction({
+      const res = await enrollLeadChildLopTrialAction({
         trialClassId,
         leadChildId: childId,
         allowOverride,

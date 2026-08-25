@@ -237,6 +237,6 @@ export async function saveTrialSessionEvalAction(input: unknown): Promise<Result
   );
   if (!res.ok) return { ok: false, error: res.error };
 
-  revalidatePath("/trial-classes");
+  revalidatePath("/lop-trial");
   return { ok: true, data: { saved: res.saved } };
 }
