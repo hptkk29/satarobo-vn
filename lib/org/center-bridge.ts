@@ -115,6 +115,14 @@ export const BACKFILL_SPECS: readonly BackfillSpec[] = [
     vi: "sổ đổi trạng thái lead — chép lead.centerId lúc đổi",
   },
   {
+    // GĐ3 — nhật ký dời lịch ca trải nghiệm. Chép centerId của LỚP tại thời điểm dời;
+    // lớp luôn có cơ sở nên NULL ở đây là dữ liệu thiếu, không phải nghĩa riêng.
+    model: "TrialReschedule",
+    nullMeaning: "BAT_BUOC",
+    scoped: true,
+    vi: "nhật ký dời lịch — chép trialClass.centerId lúc dời",
+  },
+  {
     model: "ConversationMessage",
     nullMeaning: "BAT_BUOC",
     scoped: true,

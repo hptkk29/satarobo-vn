@@ -23,6 +23,7 @@ export const SCOPED_MODELS = new Set<string>([
   "TrialClassV2", // R7-02 — lớp trải nghiệm theo cơ sở
   "LeadTrialHistory", // FL-R2 — lịch sử học thử theo cơ sở
   "LeadStatusHistory", // GĐ1 — sổ đổi trạng thái lead theo cơ sở
+  "TrialReschedule", // GĐ3 — nhật ký dời lịch ca trải nghiệm theo cơ sở
   // FL3-02 (W5f phase B) — centerId backfilled (denormalized từ class). Flip EXEMPT→SCOPED.
   // ⚠️ DEPLOY-GATE: chỉ an toàn sau khi backfill Enrollment/ClassSession.centerId = 100%
   // (centerId null sẽ bị inject `centerId IN [...]` → ẨN NHẦM record). Xem e2e cách ly.
@@ -237,6 +238,10 @@ export function getModelPrefixes(model: string): string[] {
       // Cùng lý do: sổ đổi trạng thái là dữ liệu lead. Thiếu map thì báo cáo tỷ lệ
       // chuyển đổi rò số liệu lead cơ sở khác cho bất kỳ ai có một vai Hội sở.
       return ["leads:"];
+    case "TrialReschedule":
+      // Nhật ký dời lịch ca trải nghiệm — dữ liệu học thử, bám `trials:` (và `leads:`
+      // vì nó gắn với khách của Sale). Thiếu map là rơi về fallback ALL.
+      return ["trials:", "leads:"];
     case "ClassSession":
       // Buổi học gắn lớp → map cả action sessions: lẫn classes: (ai quản lý lớp ở cơ sở
       // nào thì thấy buổi cơ sở đó). GV có classes:view-own/sessions:view → scope cơ sở mình.

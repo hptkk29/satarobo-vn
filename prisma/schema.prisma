@@ -6337,11 +6337,67 @@ model TrialEnrollment {
   createdAt          DateTime              @default(now()) @db.Timestamptz(6)
   updatedAt          DateTime              @updatedAt @db.Timestamptz(6)
 
+  // ─── GĐ3 — hai ô giáo viên, tách theo VAI người ghi ────────────────────────
+  //
+  // Đặt ở ĐÂY (per ca của một bé) chứ không phải trên TrialClassV2, vì luồng đã
+  // chốt là trial 1-1 theo từng khách: Sale đề xuất cho ca của mình, Đào tạo duyệt
+  // cho ca đó, và khi dời lịch thì chỉ ca đó mất phân công. Để ở cấp LỚP thì dời
+  // lịch cho bé A sẽ gỡ luôn giáo viên của bé B, C trong cùng lớp.
+  //
+  // `TrialClassV2.teacherId` và `TrialClassSession.teacherId` VẪN GIỮ nguyên vai trò
+  // cũ: giáo viên mặc định của lớp/buổi. Hai cột dưới đây là quyết định cho TỪNG CA.
+  /// Sale ĐỀ XUẤT (đã bàn trước với giáo viên đó). KHÔNG bắt buộc.
+  gvDeXuatId   String?
+  /// Đào tạo PHÂN CÔNG. Có giá trị = đã chốt, Sale không sửa được nữa.
+  gvPhanCongId String?
+  /// Số lần ca này bị dời lịch. Chỉ số chất lượng chốt lịch của Sale.
+  rescheduleCount Int @default(0)
+
   attendances TrialAttendance[]
+  reschedules TrialReschedule[]
 
   @@index([trialClassId])
   @@index([leadChildId])
   @@index([scheduledSessionId])
+  @@index([gvPhanCongId])
+}
+
+/// GĐ3 — NHẬT KÝ DỜI LỊCH của một ca trải nghiệm.
+///
+/// Vì sao là bảng riêng chứ không phải một trạng thái buổi: chủ dự án đã chốt GIỮ
+/// `TrialSessionStatus` ba giá trị (buổi là của cả lớp, còn dời lịch là việc của MỘT
+/// bé — nhét vào trạng thái buổi thì một buổi bốn bé không mang nổi bốn trạng thái).
+///
+/// Vì sao phải giữ vết dù trên màn hình bé đó "biến mất" khỏi buổi cũ: tỷ lệ dời lịch
+/// phản ánh chất lượng chốt lịch của Sale. Xoá thẳng là mất hẳn chỉ số đó, không dựng
+/// lại được.
+model TrialReschedule {
+  id                String          @id @default(cuid())
+  trialEnrollmentId String
+  trialEnrollment   TrialEnrollment @relation(fields: [trialEnrollmentId], references: [id], onDelete: Cascade)
+
+  /// Buổi CŨ (có thể null nếu ca chưa từng được xếp buổi nào).
+  fromSessionId String?
+  /// Buổi MỚI được dời sang.
+  toSessionId   String
+
+  /// Giáo viên bị gỡ phân công vì lượt dời này — giữ để đối chiếu khi có khiếu nại.
+  gvBiGoId String?
+  /// Vì sao dời: "PH vắng" | "PH xin dời" | ghi chú tự do của Sale.
+  reason   String?
+
+  changedById   String?
+  changedByName String?
+
+  centerId  String? // cách ly cơ sở (scopedDb)
+  /// Cột SONG SONG với centerId theo P1 · US-07. Cột trần, không FK.
+  orgUnitId String?
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+
+  @@index([trialEnrollmentId, createdAt])
+  @@index([centerId])
+  @@index([orgUnitId])
 }
 
 /// R7-02 — điểm danh + nhận xét per buổi per LeadChild.
