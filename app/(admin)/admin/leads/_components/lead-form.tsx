@@ -33,11 +33,22 @@ const inputCls =
 
 export function LeadForm({
   orgUnits,
+  centers,
   courses,
   initial,
   courseFromChildren = false,
 }: {
   orgUnits: Option[];
+  /**
+   * Option cho ô "Cơ sở quan tâm" của khối CON — value là **Center.id**, KHÁC
+   * `orgUnits` (value = OrgUnit.id) dùng cho ô "Đơn vị" của lead. Hai danh sách
+   * trông giống hệt nhau trên màn hình nhưng lưu hai loại mã khác nhau: `LeadChild
+   * .interestedCenterId` trỏ sang bảng Center, còn `Lead.orgUnitId` trỏ sang cây
+   * tổ chức. Trước 25/08 chỗ này mượn thẳng `orgUnits` ⇒ con lưu OrgUnit.id, ra
+   * màn chi tiết tra không thấy Center nào và mất trắng tên cơ sở.
+   * Dựng danh sách bằng `leadChildCenterOptions()`, đừng map tay.
+   */
+  centers: Option[];
   courses: TeachableCourse[];
   initial?: LeadFormInitial;
   /**
@@ -197,7 +208,7 @@ export function LeadForm({
                   <ChildFields
                     value={kid}
                     onChange={(p) => patchKid(i, p)}
-                    centers={orgUnits}
+                    centers={centers}
                     courseGroups={courseGroups}
                   />
                 </div>

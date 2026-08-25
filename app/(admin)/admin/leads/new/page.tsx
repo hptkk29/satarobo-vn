@@ -6,6 +6,7 @@ import { checkPermission } from "@/lib/auth/check-permission";
 import { scopedDb } from "@/lib/db-scope";
 import { resolveActor } from "@/lib/auth/actor";
 import { getSelectableOrgUnits } from "@/lib/org/org-service";
+import { leadChildCenterOptions } from "@/lib/lead/child-center-options";
 import { LeadForm } from "../_components/lead-form";
 
 export const metadata = { title: "Thêm lead | Admin" };
@@ -35,7 +36,16 @@ export default async function NewLeadPage() {
         <ChevronLeft className="h-4 w-4" /> Danh sách lead
       </Link>
       <h1 className="mb-4 text-2xl font-bold text-foreground">Thêm lead thủ công</h1>
-      <LeadForm orgUnits={orgUnits.map((o) => ({ id: o.orgUnitId, name: o.name }))} courses={courses} />
+      {/*
+        Hai danh sách, hai loại mã — đừng gộp. `orgUnits` (OrgUnit.id) cho ô "Đơn
+        vị" của LEAD; `centers` (Center.id) cho ô "Cơ sở quan tâm" của từng CON,
+        vì `LeadChild.interestedCenterId` trỏ sang bảng Center.
+      */}
+      <LeadForm
+        orgUnits={orgUnits.map((o) => ({ id: o.orgUnitId, name: o.name }))}
+        centers={leadChildCenterOptions(orgUnits)}
+        courses={courses}
+      />
     </div>
   );
 }

@@ -6,6 +6,7 @@ import { checkPermission } from "@/lib/auth/check-permission";
 import { scopedDb } from "@/lib/db-scope";
 import { resolveActor } from "@/lib/auth/actor";
 import { getSelectableOrgUnits } from "@/lib/org/org-service";
+import { leadChildCenterOptions } from "@/lib/lead/child-center-options";
 import { canViewLeadPii } from "@/lib/auth/check-permission";
 import { LeadForm } from "../../_components/lead-form";
 import { LeadChildrenManager } from "../../_components/lead-children";
@@ -87,6 +88,10 @@ export default async function EditLeadPage({ params }: { params: Promise<{ id: s
       <h1 className="mb-4 text-2xl font-bold text-foreground">Sửa thông tin lead</h1>
       <LeadForm
         orgUnits={orgUnits.map((o) => ({ id: o.orgUnitId, name: o.name }))}
+        // Chế độ SỬA không hiện khối con trong form (quản lý ở `LeadChildrenManager`
+        // bên dưới) nhưng vẫn truyền đúng danh sách: prop bắt buộc để không ai
+        // dựng lại được một LeadForm mượn nhầm `orgUnits` cho ô cơ sở của con.
+        centers={leadChildCenterOptions(orgUnits)}
         courses={courses}
         initial={{
           id: lead.id,
@@ -127,7 +132,15 @@ export default async function EditLeadPage({ params }: { params: Promise<{ id: s
             note: c.note,
             trialStatus: c.trialStatus,
           }))}
-          centers={orgUnits.map((o) => ({ id: o.orgUnitId, name: o.name }))}
+          // V-4 G-01b — TRƯỚC 25/08 chỗ này map `o.orgUnitId`. Ô "Cơ sở quan tâm"
+          // ghi vào `LeadChild.interestedCenterId`, vốn trỏ sang bảng **Center**
+          // (schema: "tham chiếu Center"), nên sửa một con ở đây là lưu OrgUnit.id
+          // — ra màn chi tiết tra trong danh sách Center không thấy, tên cơ sở
+          // biến mất không lời nào. Chiều ngược lại còn tệ hơn: con do luồng nhận
+          // lead ngoài / nhập Excel tạo (đang giữ đúng Center.id) mở lên đây thì
+          // `<select>` không khớp option nào, tụt về "— Chưa chọn —", bấm Lưu là
+          // xoá trắng cơ sở đúng.
+          centers={leadChildCenterOptions(orgUnits)}
           courses={courses}
           legacyChildName={lead.childName}
           legacyChildAge={lead.childAge}
