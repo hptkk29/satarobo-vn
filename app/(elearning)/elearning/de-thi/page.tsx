@@ -39,6 +39,11 @@ export default async function Page() {
   }
 
   const db = scopedDb(actor);
+  // Đếm bài đang chờ chấm để lối vào hàng chờ KHÔNG trông như một liên kết chết.
+  // Người chấm không mở một màn "có thể trống"; họ mở một màn có N người đang đợi.
+  const demChoCham = can(actor, "elearning:exam:grade")
+    ? await db.trnExamAttempt.count({ where: { status: "PENDING_GRADE" } })
+    : 0;
   const [cacDe, cacKhoa] = await Promise.all([
     db.trnExam.findMany({
       where: { deletedAt: null },
@@ -80,6 +85,21 @@ export default async function Page() {
           hoạt đề xong, mở bài đó ở màn soạn khoá rồi gắn đề vào.
         </p>
       </div>
+
+      {/* Lối vào HÀNG CHỜ CHẤM. Khu e-learning không có thanh điều hướng chung, nên
+          mỗi màn mới phải được một màn cũ dẫn tới — không thì chỉ người viết nó biết
+          đường. Đặt ở đây vì cả ba vai có `elearning:exam:grade` đều có
+          `elearning:content:author`; ngày nào tách ra thì phải tìm cho nó lối vào khác. */}
+      {can(actor, "elearning:exam:grade") ? (
+        <Link
+          href="/elearning/cham-bai"
+          className="block rounded-md border p-3 text-sm underline"
+        >
+          {demChoCham > 0
+            ? `Chấm bài — ${demChoCham} bài đang chờ`
+            : "Chấm bài — không có bài nào chờ"}
+        </Link>
+      ) : null}
 
       <NewExamForm cacKhoa={cacKhoa} />
 

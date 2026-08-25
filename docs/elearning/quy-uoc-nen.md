@@ -485,3 +485,9 @@ Zod kiểm từng trường riêng lẻ sẽ luôn để lọt.
 - **Cờ `ELEARNING_ENABLED` dùng `=== "true"`**, cố ý ngược khuôn `isTeacherSiteEnabled()` (dùng
   `!== "false"`, mặc định ON vì đã qua kỳ flip). Chép nguyên khuôn đó sang sẽ cho cờ **bật sẵn ngay
   khi merge**.
+- **Cột `TrnExam.showAnswerPolicy` đang NGỦ — biết là ngủ, đừng tưởng nó đang chạy.** Cột có trong
+  schema, có mặc định `AFTER_LAST_ATTEMPT`, và `cauHinhTaoDe` ghi nó xuống; nhưng **không có chỗ nào
+  đọc**, và trình soạn đề **không hỏi** người soạn giá trị này. Hiện chưa hại ai vì module chưa có màn
+  xem lại đáp án — không ai được hứa gì cả. Ngày dựng màn đó, việc ĐẦU TIÊN là đọc cột này; dựng xong
+  màn rồi mới nhớ ra thì đã lỡ trả đáp án cho người còn lượt thi. Cùng loại với quy ước 20, chỉ khác
+  chiều: đây là **cửa dựng sẵn chưa có cổng**.

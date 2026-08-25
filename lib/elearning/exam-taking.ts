@@ -517,7 +517,7 @@ export const cauHinhNopBai: ActionConfig<NopBaiInput, KetQuaNop> = {
  *
  * Tìm bài qua `TrnLesson.examId` — đường nối duy nhất (xem chú thích đầu tệp).
  */
-async function ghiXongBaiThi(
+export async function ghiXongBaiThi(
   db: ScopedDb,
   i: {
     enrollmentId: string;

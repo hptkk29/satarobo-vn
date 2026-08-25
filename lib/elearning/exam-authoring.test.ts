@@ -517,22 +517,17 @@ describe("🔴 gắn đề vào bài — không có đường này thì mở QUI
     expect(b.updateBai).not.toHaveBeenCalled();
   });
 });
-describe("🔴 câu CHẤM TAY chưa được vào đề — cửa chưa có lối ra", () => {
-  it("thêm câu tự luận vào đề ⇒ từ chối, nói rõ chờ đợt nào", async () => {
-    // `PENDING_GRADE` là trạng thái KHÔNG CÓ LỐI RA khi chưa có màn chấm: điểm mãi
-    // `null`, bài không bao giờ xong, và người học đứng nguyên tại một bài nghĩa
-    // vụ có hạn chót cứng.
+describe("câu CHẤM TAY vào đề được — vì `PENDING_GRADE` đã có LỐI RA", () => {
+  it("thêm câu tự luận ⇒ nhận", async () => {
+    // Ở PR trước loại này bị chặn, và chặn là ĐÚNG lúc đó: mở một cửa chưa có lối
+    // ra là để lượt thi treo vĩnh viễn. Nay có màn chấm tay, nên mở.
     b.cau = { id: "q1", defaultPoints: 2, stem: "...", type: "ESSAY" };
-    const e = await batLoi(
-      cauHinhThemCauVaoDe.handler({
-        db: dbGia(),
-        actor: actorHO,
-        input: { examId: "de1", questionId: "q1" },
-      } as never),
-    );
-    expect(e.code).toBe("CHUA_CO_DUONG_CHAM_TAY");
-    expect(e.message).toContain("EL-14e");
-    expect(b.createEq).not.toHaveBeenCalled();
+    await cauHinhThemCauVaoDe.handler({
+      db: dbGia(),
+      actor: actorHO,
+      input: { examId: "de1", questionId: "q1" },
+    } as never);
+    expect(b.createEq).toHaveBeenCalledTimes(1);
   });
 
   it("câu chấm MÁY vẫn vào được", async () => {
