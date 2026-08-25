@@ -36,6 +36,10 @@ export const ROLE_SEED: RoleSeed[] = [
       { action: "roles:assign", scopeType: "GLOBAL" },
       // US-03 — quản nhóm người dùng + grant nhóm (chỉ SUPER_ADMIN, như roles:manage).
       { action: "user-groups:manage", scopeType: "GLOBAL" },
+      // C-01 — chỉ tiêu lead theo tháng × cơ sở. SUPER_ADMIN đã bypass toàn bộ quyền
+      // trong can() v2 nên dòng này KHÔNG đổi hành vi; khai cho khớp v1 + rõ ý, và để
+      // ma trận nói được "ai đặt được chỉ tiêu toàn hệ thống" mà không phải suy từ bypass.
+      { action: "lead_targets:manage", scopeType: "GLOBAL" },
       // #17 (câu 55): học bạ. SUPER_ADMIN đã bypass toàn bộ quyền trong can() v2
       // (lib/auth/can.ts) → 2 dòng này KHÔNG đổi hành vi, thêm cho khớp v1 + rõ ý.
       { action: "report-cards:manage", scopeType: "GLOBAL" },
@@ -463,6 +467,15 @@ export const ROLE_SEED: RoleSeed[] = [
       { action: "leads:assign", scopeType: "GLOBAL" },
       { action: "leads:import", scopeType: "GLOBAL" },
       { action: "leads:export", scopeType: "GLOBAL" },
+      // C-01 — đặt chỉ tiêu lead (SỐ HỌC SINH) theo tháng cho CƠ SỞ MÌNH QUẢN.
+      // Key riêng, KHÔNG mượn `leads:assign-config` (mượn là mở kèm màn cấu hình chia
+      // lead tự động — chốt 24/08, OQ-C5). GLOBAL theo R1: gate trang gọi TRẦN, nên
+      // scope CENTER sẽ trả FALSE trên prod trong khi máy dev (v1) vẫn xanh. Cách ly cơ
+      // sở ép TAY bằng `checkRevenueTargetScope` trong action — `LeadTarget` ∈
+      // SCOPE_EXEMPT nên scopedDb KHÔNG chặn giúp.
+      // ⚠️ Đổi ở đây CHƯA có hiệu lực trên prod: phải chạy workflow seed-prod-roles.yml
+      // sau khi merge vào main, nếu không QLCS mở màn ra là TRẮNG, không kèm lỗi.
+      { action: "lead_targets:manage", scopeType: "GLOBAL" },
       // ── Học viên · lớp · ghi danh ──
       { action: "students:view-all", scopeType: "GLOBAL" },
       { action: "students:create", scopeType: "GLOBAL" },

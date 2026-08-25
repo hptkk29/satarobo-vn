@@ -74,6 +74,11 @@ export type Action =
   | "leads:delete"
   | "leads:export"
   | "leads:import" // Task #07 — import danh sách "khách đã đăng ký" từ Excel (Lead REGISTERED + LeadChild)
+  // C-01 — đặt/sửa chỉ tiêu SỐ HỌC SINH theo tháng × cơ sở (bảng LeadTarget).
+  // Key RIÊNG theo chốt kỹ thuật 24/08/2026 (OQ-C5) — KHÔNG dùng lại `leads:assign-config`,
+  // vì key đó đang gác màn "Cấu hình chia lead tự động": cấp cho QLCS để họ gõ một con số
+  // là mở kèm một năng lực khác hẳn mà không ai định trao.
+  | "lead_targets:manage"
   // #11 T2 (OI-4) — xem PII lead: SĐT/email/tên PH-HS/ghi chú tư vấn.
   // ⚠️ MARKETING **CÓ** quyền này (user chốt 21/07, ĐẢO quyết định "che PII cho
   // MARKETING" ngày 10-20/07 — lý do đầy đủ ở ma trận bên dưới). Comment cũ ghi
@@ -385,6 +390,12 @@ export const PERMISSIONS: Record<Action, Role[]> = {
   // user 07/07/2026 (Sale là người giữ danh sách đăng ký thật — câu 33 phiếu Sale).
   // v2: đã seed CENTER scope cho CENTER_SALES_CSM trong seed-roles.ts cùng ngày.
   "leads:import": ["SUPER_ADMIN", "CENTER_MANAGER", "SALES_CSM"],
+  // C-01 — chỉ tiêu lead theo tháng × cơ sở. Chỉ QLCS + Admin (chốt 24/08/2026, OQ-C5).
+  // Sale KHÔNG có: chỉ tiêu là thứ người ta bị đo, không phải thứ tự đặt cho mình.
+  // Cách ly cơ sở KHÔNG đến từ đây — `LeadTarget` ∈ SCOPE_EXEMPT nên `scopedDb` là
+  // pass-through; luật "chỉ cơ sở mình quản" ép TAY trong action bằng
+  // `checkRevenueTargetScope` (lib/reports/revenue-target-scope.ts, có test).
+  "lead_targets:manage": ["SUPER_ADMIN", "CENTER_MANAGER"],
 
   // --- Trial classes (Phase T1.4) ---
   "trials:view": ["SUPER_ADMIN", "CENTER_MANAGER", "SALES_CSM", "TEACHER", "TRAINING"],

@@ -38,6 +38,15 @@ export const crmModule: ModuleDecl = {
       action: "import",
       description: "Import danh sách khách đã đăng ký từ Excel.",
     },
+    {
+      key: "lead_targets:manage",
+      action: "manage",
+      // C-01 — chỉ tiêu SỐ HỌC SINH theo tháng × cơ sở (bảng LeadTarget). TÁCH khỏi
+      // `leads:assign-config` (màn cấu hình chia lead tự động) theo chốt 24/08/2026:
+      // gộp hai việc vào một key là cấp nhầm năng lực khi mở cho Quản lý cơ sở.
+      description:
+        "Đặt/sửa chỉ tiêu lead (số học sinh) theo tháng × cơ sở. Không bao gồm cấu hình chia lead.",
+    },
 
     // --- Trials (lớp trải nghiệm) ---
     { key: "trials:view", action: "view" },

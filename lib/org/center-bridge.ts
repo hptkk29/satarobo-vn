@@ -163,6 +163,12 @@ export const BACKFILL_SPECS: readonly BackfillSpec[] = [
     vi: "mục tiêu doanh thu cấp HO/toàn hệ thống",
   },
   {
+    model: "LeadTarget",
+    nullMeaning: "NULL_TOAN_HE_THONG",
+    scoped: false,
+    vi: "C-01 — chỉ tiêu SỐ HỌC SINH theo tháng; NULL = chỉ tiêu toàn hệ thống, điền cơ sở vào là hỏng nghĩa",
+  },
+  {
     model: "SataCoinRule",
     nullMeaning: "NULL_TOAN_HE_THONG",
     scoped: false,

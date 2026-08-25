@@ -177,6 +177,18 @@ export const PAGE_GATES = {
    */
   "/bao-cao/doanh-thu": ["payments:manage", "revenue_targets:manage"],
 
+  /**
+   * C-01 — Chỉ tiêu lead theo tháng × cơ sở. Màn này CHỈ để đặt/sửa con số, nên gác
+   * bằng đúng quyền ghi: ai không đặt được thì vào cũng không có việc gì làm ở đây
+   * (số liệu thực-vs-chỉ-tiêu nằm ở tab Kinh doanh của dashboard, gác riêng).
+   *
+   * KHÔNG kèm `leads:view-all`: action đó seed GLOBAL nên gate sẽ nhận, nhưng như vậy
+   * là mở màn ĐẶT chỉ tiêu cho cả Sale/Marketing — người bị đo, không phải người đặt.
+   * `lead_targets:manage` GLOBAL ở mọi RoleDef giữ nó (bắt buộc: gate gọi
+   * `checkAnyPermission` KHÔNG có target).
+   */
+  "/bao-cao/muc-tieu-lead": ["lead_targets:manage"],
+
   "/bao-cao/dao-tao": ["reports:training"],
   "/bao-cao/hieu-suat-gv": ["reports:training"],
   "/bao-cao/cohort": ["reports:training"],

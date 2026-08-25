@@ -57,6 +57,7 @@ import {
   ShoppingBag,
   SlidersHorizontal,
   Star,
+  Target,
   type LucideIcon,
   Undo2,
   UserCog,
@@ -342,6 +343,8 @@ const NAV_GROUPS: NavGroup[] = [
       { label: "Churn / rời bỏ", href: "/bao-cao/churn", icon: BarChart3, perm: ["enrollments:view-all"] },
       // B-01: đọc thẳng bảng gate — menu và cổng trang không thể lệch nhau.
       { label: "Doanh thu vs mục tiêu", href: "/bao-cao/doanh-thu", icon: Coins, perm: [...PAGE_GATES["/bao-cao/doanh-thu"]] },
+      // C-01: màn đặt chỉ tiêu lead (số học sinh) theo tháng × cơ sở.
+      { label: "Chỉ tiêu lead", href: "/bao-cao/muc-tieu-lead", icon: Target, perm: [...PAGE_GATES["/bao-cao/muc-tieu-lead"]] },
       // US-16 AC4 — đo pilot chat (kích hoạt TK + đọc thông báo đầu ≤48h) theo từng lớp.
       // `chat:admin` khớp ĐÚNG gate của trang (chỉ SUPER_ADMIN) — không mượn PAGE_GATES vì
       // route này cố ý không khai ở đó.

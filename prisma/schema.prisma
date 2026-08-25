@@ -6103,6 +6103,40 @@ model RevenueTarget {
   @@index([orgUnitId])
 }
 
+/// C-01 — chỉ tiêu SỐ HỌC SINH theo tháng × cơ sở. Song sinh với RevenueTarget ở trên.
+///
+/// ĐƠN VỊ ĐẾM: `targetCount` là số HỌC SINH (`LeadChild`), KHÔNG phải số phụ huynh
+/// (`Lead`) — quyết định 24/08/2026 (B4) nối doanh số về từng con qua `Order.leadChildId`,
+/// nên đơn vị sinh doanh thu là đứa trẻ và chỉ tiêu phải đếm cùng thứ với tử số của C2.
+/// Một phụ huynh hai con = 2 đơn vị chỉ tiêu. (E-02 thì ngược lại: đếm theo phụ huynh.)
+///
+/// `centerId = NULL` ⇒ chỉ tiêu TOÀN HỆ THỐNG (KHÔNG phải "chưa gán cơ sở").
+/// ⚠️ Khai vào SCOPE_EXEMPT (lib/db-scope.ts), KHÔNG khai SCOPED_MODELS — `injectScope`
+///    chèn `centerId IN (...)` trần và dòng toàn hệ thống sẽ tàng hình.
+/// ⚠️ `@@unique([centerId, period])` với `centerId` nullable: Postgres coi NULL là
+///    DISTINCT ⇒ `upsert` KHÔNG match nhánh toàn hệ thống, phải `findFirst` + create/update
+///    tay (khuôn có sẵn ở app/(admin)/admin/bao-cao/doanh-thu/_actions.ts).
+model LeadTarget {
+  id       String  @id @default(cuid())
+  centerId String?
+  // Luật cứng Nền Hệ thống #3 + quyết định 24/08 (B1): bảng MỚI mang CẢ HAI cột.
+  // Ở đây bảng nằm NGOÀI scope nên `orgUnitId` chỉ để ghi kép/đối soát, không phải cột lọc.
+  // `lib/org/dual-write.ts` tự lấp khi `centerId` có giá trị — không tự gọi orgUnitIdForCenter().
+  orgUnitId String?
+
+  period      String // "YYYY-MM" — cùng quy ước RevenueTarget.period + monthKeyVN
+  targetCount Int // SỐ HỌC SINH
+  note        String?
+  createdById String?
+  createdAt   DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt   DateTime @updatedAt @db.Timestamptz(6)
+
+  @@unique([centerId, period])
+  @@index([period])
+  @@index([centerId])
+  @@index([orgUnitId])
+}
+
 // ═══ R7-02 — Lớp trải nghiệm N buổi ══════════════════════════════════════════
 enum TrialClassV2Status {
   OPEN
