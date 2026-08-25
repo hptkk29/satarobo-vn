@@ -58,10 +58,24 @@ export function AttendanceBoard({
   );
   const selectedSession = sessions.find((s) => s.id === selectedSessionId) ?? null;
 
-  // Học viên tham gia điểm danh = đang học / đã hoàn tất (loại rút, loại huỷ).
+  // Học viên tham gia điểm danh của BUỔI ĐANG CHỌN.
+  //
+  // Hai điều kiện, đừng bỏ điều kiện thứ hai:
+  //   1. Ca còn sống (loại ca đã rút, đã huỷ).
+  //   2. Ca ĐANG được xếp vào ĐÚNG buổi này.
+  //
+  // ⚠️ Không lọc theo buổi thì sau khi dời lịch, bé vẫn đứng ở buổi cũ — mà nút Lưu
+  // bị chặn tới khi đủ sĩ số, nên Sale buộc phải đánh có mặt (thổi số buổi đã dự, tự
+  // đẩy trạng thái lead) hoặc đánh vắng khống. Ca chưa xếp buổi nào (dữ liệu cũ) vẫn
+  // hiện ở mọi buổi để không ai bị bỏ quên.
   const markable = useMemo(
-    () => enrollments.filter((e) => e.status === "ACTIVE" || e.status === "COMPLETED"),
-    [enrollments],
+    () =>
+      enrollments.filter(
+        (e) =>
+          (e.status === "ACTIVE" || e.status === "COMPLETED") &&
+          (e.scheduledSessionId === null || e.scheduledSessionId === selectedSessionId),
+      ),
+    [enrollments, selectedSessionId],
   );
 
   // Nháp lưu theo khoá "sessionId:enrollmentId" để đổi chip qua lại không mất thao tác

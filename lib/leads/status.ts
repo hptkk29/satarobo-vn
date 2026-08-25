@@ -142,6 +142,23 @@ export const KANBAN_COLUMNS: LeadStatus[] = [...LEAD_STATUS_VALUES];
 export const LEAD_CLOSED_STATUSES: LeadStatus[] = ["DA_MAT"];
 
 /**
+ * Lead KHÔNG còn nằm trong hàng đợi của Sale nào — dùng cho CHỐNG TRÙNG lúc nhập lead.
+ *
+ * Khác `LEAD_CLOSED_STATUSES` đúng ở chỗ có thêm `DA_DANG_KY`, và khác biệt đó là
+ * CỐ Ý — hai câu hỏi khác nhau:
+ *   - "Sale này đang gánh bao nhiêu việc?"  → LEAD_CLOSED_STATUSES (lead đã đăng ký
+ *     vẫn còn việc: xếp lớp, chốt convert).
+ *   - "Gắn con thứ hai vào hồ sơ cũ được không?" → tập này. Gắn vào hồ sơ đã đăng ký
+ *     là CHÔN VIỆC: hồ sơ đó không đổi trạng thái nữa, không sinh nhắc việc, không ai
+ *     nhìn tới. Mà đây là ca rất thường: nhà cho con thứ nhất nhập học rồi hỏi tiếp
+ *     cho con thứ hai trong cùng cửa sổ chống trùng.
+ *
+ * ⚠️ Trước GĐ5 hai tập này TRÙNG NHAU (đều chứa ENROLLED), nên chỉ cần một hằng. Sau
+ * khi gộp ENROLLED vào DA_DANG_KY thì chúng tách đôi — dùng nhầm là mất lead im lặng.
+ */
+export const LEAD_KHONG_NHAN_THEM_CON: LeadStatus[] = ["DA_DANG_KY", "DA_MAT"];
+
+/**
  * Lead đã RỜI PHỄU tư vấn — tự động hoá không được đẩy trạng thái nữa.
  * Dùng cho: module học thử (tiến độ điểm danh KHÔNG được kéo ngược trạng thái của
  * lead đã đăng ký), và mọi nơi khác cần "sale tự quản từ đây".

@@ -60,14 +60,16 @@ export default async function ChiTietLopTrialPage({
   // Giáo viên thuần chỉ chấm lớp mình; người quản lý chấm mọi lớp trong tầm nhìn.
   const canDanhGia = canFeedback && (isManager || cls.teacherId === session.user.id);
 
-  // Chỉ nạp danh sách GV khi có quyền gán. `includeIds` giữ GV đang gán để <select>
-  // không tự rớt giá trị đang chọn khi người đó không còn khớp bộ lọc.
-  const teachers = canAssignTeacher
-    ? await getAssignableTeachers({
-        centerIds: [cls.centerId],
-        includeIds: [cls.teacherId],
-      })
-    : [];
+  // ⚠️ Danh sách GV phải nạp cho MỌI người xem, không chỉ người có quyền gán.
+  //
+  // Bản cũ trả mảng rỗng khi thiếu `trials:assign-teacher`, mà chính mảng đó là nơi
+  // tra TÊN giáo viên đang phụ trách — nên sau khi GĐ3 gỡ quyền khỏi Quản lý cơ sở,
+  // Sale/QLCS/GV đều thấy mọi lớp là "Chưa gán" kể cả lớp đã có giáo viên.
+  // Đọc tên không phải là quyền ghi; quyền chỉ quyết định có render <select> hay không.
+  const teachers = await getAssignableTeachers({
+    centerIds: [cls.centerId],
+    includeIds: [cls.teacherId],
+  });
   const teacherOptions = teachers.map((t) => ({ id: t.id, name: t.name ?? "(không tên)" }));
 
   // GĐ3 — danh sách GV cho ô đề xuất/phân công của TỪNG CA. Khác `teacherOptions` ở

@@ -1,7 +1,8 @@
 import { db } from "@/lib/db";
 import { canonicalPhone } from "@/lib/phone";
 import { findRecentDuplicate, logDuplicateAttempt } from "../dedup";
-import { autoAssignNewLead, TERMINAL_LEAD_STATUSES } from "../auto-assign";
+import { autoAssignNewLead } from "../auto-assign";
+import { LEAD_KHONG_NHAN_THEM_CON } from "@/lib/leads/status";
 import { autoAssignLead } from "../assign";
 import { getNonEnrollableCenterIds } from "@/lib/enrollment-flow";
 import { buildNote, isSameChildName, matchCenter } from "./normalize";
@@ -360,14 +361,20 @@ export async function ingestIntakeLead(
       select: { status: true },
     });
 
-    // Hồ sơ cũ ĐÃ ĐÓNG (ENROLLED / LOST / DUPLICATE) thì gắn con thứ hai vào đó
-    // là chôn việc: lead đóng không nằm trong hàng đợi của Sale nào, không đổi
-    // trạng thái, không sinh nhắc việc. Mà đây là ca RẤT THƯỜNG — nhà cho con
-    // thứ nhất nhập học rồi hỏi tiếp cho con thứ hai trong cùng cửa sổ 90 ngày.
-    // ⇒ coi là nhu cầu MỚI: rơi xuống tạo lead mới, vẫn ghi `LeadDuplicate` để
-    // truy vết liên hệ giữa hai hồ sơ.
+    // Hồ sơ cũ ĐÃ ĐÓNG (đã đăng ký / đã mất) thì gắn con thứ hai vào đó là chôn việc:
+    // lead đóng không nằm trong hàng đợi của Sale nào, không đổi trạng thái, không
+    // sinh nhắc việc. Mà đây là ca RẤT THƯỜNG — nhà cho con thứ nhất nhập học rồi hỏi
+    // tiếp cho con thứ hai trong cùng cửa sổ 90 ngày.
+    // ⇒ coi là nhu cầu MỚI: rơi xuống tạo lead mới, vẫn ghi `LeadDuplicate` để truy
+    // vết liên hệ giữa hai hồ sơ.
+    //
+    // ⚠️ GĐ5 — PHẢI dùng `LEAD_KHONG_NHAN_THEM_CON`, KHÔNG dùng `TERMINAL_LEAD_STATUSES`.
+    // Trước GĐ5 hai tập trùng nhau (đều chứa ENROLLED) nên dùng cái nào cũng đúng. Sau
+    // khi gộp ENROLLED vào DA_DANG_KY, tập "đã đóng" cố ý BỎ trạng thái đó ra (lead đã
+    // đăng ký vẫn còn việc xếp lớp, vẫn tính tải cho Sale) — dùng nhầm ở đây là nhu cầu
+    // của con thứ hai bị chôn im lặng vào hồ sơ đã chốt.
     const closed =
-      dupLead != null && TERMINAL_LEAD_STATUSES.includes(dupLead.status);
+      dupLead != null && LEAD_KHONG_NHAN_THEM_CON.includes(dupLead.status);
 
     if (!closed) {
       const childAdded = await attachExtraChild(dup.id, mapped, centerId, actorName);

@@ -370,7 +370,11 @@ export const PERMISSIONS: Record<Action, Role[]> = {
   "leads:import": ["SUPER_ADMIN", "CENTER_MANAGER", "SALES_CSM"],
 
   // --- Trial classes (Phase T1.4) ---
-  "trials:view": ["SUPER_ADMIN", "CENTER_MANAGER", "SALES_CSM", "TEACHER"],
+  // GĐ3 — TRAINING phải có `trials:view`, nếu không thì cấp `trials:assign-teacher`
+  // cho họ là vô nghĩa: cả ba trang của màn Lớp Trial đều gác bằng `trials:view`, nên
+  // Đào tạo bị đá về /dashboard trước khi thấy được nút phân công. Seed v2 đã có, đây
+  // là bản v1 — mà local/dev/CI chạy v1 (lib/flags.ts:8 mặc định OFF).
+  "trials:view": ["SUPER_ADMIN", "CENTER_MANAGER", "SALES_CSM", "TEACHER", "TRAINING"],
   "trials:manage": ["SUPER_ADMIN", "CENTER_MANAGER", "SALES_CSM"],
   // GĐ4 (25/08/2026) — tách đôi theo ma trận đặc tả §8.2. Trước GĐ4 cả điểm danh lẫn
   // nộp phiếu đều dùng chung `trials:feedback`, nên Sale KHÔNG điểm danh được còn
