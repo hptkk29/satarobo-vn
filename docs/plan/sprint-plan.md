@@ -331,8 +331,8 @@ Các PRD chỉ ra rằng nhiều hạng mục là **lỗi đang chạy trên pro
 
 | # | Hạng mục | Khu vực | Điểm | Người | Phụ thuộc | Rủi ro |
 |---|---|---|---|---|---|---|
-| 1 | **SL-00** — chốt quy ước bảng mới mang **cả** `centerId` + `orgUnitId`; viết vào `documentation/` **trước dòng code đầu tiên** của F và G | A | 1 | L | — | 🔴 Sai ⇒ 5 bảng mới của F+G phải làm lại; sửa sau = migration trên bảng có dữ liệu prod |
-| 2 | **SL-01** — thêm `UserOrgRole.source` (`AUTO`/`MANUAL`, additive nullable + backfill); nhánh thu hồi `reconcileUserOrgRoles` **chỉ** đụng dòng `source = AUTO` | A | 3 | L | SL-00 | 🔴 Không có ⇒ đổi ô "Đơn vị" ở `users/_actions.ts:363-380` xoá mất cấu hình đa cơ sở |
+| 1 | ✅ **SL-00 — ĐÃ CHỐT 24/08/2026 (quyết định B1):** bảng mới mang **cả** `centerId` + `orgUnitId`. Việc còn lại chỉ là **viết vào `documentation/`** trước dòng code đầu tiên của F và G | A | 0,5 | L | — | 🟢 Câu hỏi đã đóng; đừng mở lại. Bảng không phải dữ liệu theo đơn vị (`UserTablePreference`, `AdsSyncRun`) vẫn **không mang cột nào** và phải ghi lý do vào chú thích schema |
+| 2 | 🔴 **SL-01 (GẤP)** — thêm `UserOrgRole.source` (`AUTO`/`MANUAL`, additive nullable + backfill); nhánh thu hồi `reconcileUserOrgRoles` **chỉ** đụng dòng `source = AUTO` | A | 3 | L | SL-00 | 🔴 **Mức độ đổi 24/08/2026:** chủ dự án xác nhận prod **đang có** cấu hình đa cơ sở gán tay (OQ-5) ⇒ lỗ hổng này **đang mở**: một thao tác đổi ô "Đơn vị" ở `users/_actions.ts:363-380` hoặc `nhan-su/actions.ts:377` là xoá mất cấu hình đó, **không** nhằm thu hồi quyền. Làm **trước** khi đụng hai màn đó |
 | 3 | **A.1 test đỏ** — e2e QLCS 2 cơ sở **khác REGION** · e2e chống IDOR bộ lọc (`?center=` ngoài phạm vi) · e2e 403 export | A | 3 | S | — | 🟠 Chưa có test đỏ thì chưa được viết Server Action (luật cứng #5) |
 | 4 | **V-02** — vá `funnel-query.ts:15`: thêm `where` + lọc theo `getVisibleCenterIds(actor)` (không dùng `db` trần) | V | 2 | S | — | 🔴 Rò **đang xảy ra**: QLCS xem được chi phí QC toàn hệ thống |
 | 5 | **A-01 (UI)** — form gán vai: **chặn cứng** neo `CENTER_MANAGER` tại `OrgUnit` type `HO`/`ROOT` + hiện số cơ sở đang giữ + cảnh báo "cần đăng xuất/đăng nhập lại" | A | 3 | F | SL-01 | 🔴 Một dòng vai tại HO/ROOT ⇒ `isHoLevel` ⇒ thấy **mọi** cơ sở (`lib/auth/actor.ts:255`, `:278-281`) |
@@ -341,12 +341,15 @@ Các PRD chỉ ra rằng nhiều hạng mục là **lỗi đang chạy trên pro
 | | **Tổng** | | **15** | | | |
 
 **Tiêu chí kết thúc sprint 1**
-- [ ] SL-00 và SL-01 đã ký, đã ghi vào `documentation/` — **không ai được mở migration F hoặc G trước mốc này**.
+- [ ] ✅ SL-00 **đã ký 24/08/2026** (cả hai cột). 🔴 **SL-01 chưa ký và nay là việc GẤP** (prod đang có cấu hình đa cơ sở gán tay — OQ-5). Cả hai phải **ghi vào `documentation/`** — không ai được mở migration F hoặc G trước mốc này.
+- [ ] 🔴 **Đã đo prod** (§6.9 Đ1–Đ4), trong đó **Đ4** xác nhận anh Phúc **chưa** bị rớt khỏi nhóm chat lớp của cơ sở thứ hai; **script backfill `UserOrgRole`** đã dry-run (việc mới từ OQ-5).
+- [ ] 🔴 **Đã có tài khoản QLCS thuần** (không `SUPER_ADMIN`) giữ 2 cơ sở **khác vùng** để UAT/e2e A-01 — nghiệm thu bằng tài khoản anh Phúc là **xanh giả** (V-7).
+- [ ] 🔴 **3 rào R1/R2/R3** cho `roles:assign` của `HO_HR` đã có test, và lịch **chạy `seed-prod-roles.yml`** sau merge lên `main` đã ghi vào runbook (việc mới từ OQ-7).
 - [ ] Migration SL-01 chạy dry-run xong, người vận hành đã chạy tay trên prod (luật cứng #4).
 - [ ] 3 bộ e2e của A **đỏ** (chưa xanh — đúng ý đồ).
 - [ ] `curl`/truy vấn xác nhận QLCS cấp cơ sở **không còn** đọc được `spend` toàn hệ thống.
 - [ ] `pnpm typecheck && pnpm lint && pnpm build` PASS.
-- [ ] Đã khởi động **§9** (ban hành SR.QD.232, chốt 2 giá trị Cấu hình vận hành, pháp lý ảnh trẻ em) — nếu chưa, sprint 1 **không đóng**.
+- [ ] **§9**: ✅ `SR.QD.232` **đã ban hành** (áp dụng 23/08/2026) · ✅ pháp lý ảnh trẻ em — chủ dự án **chấp nhận rủi ro** (B7, 24/08) · ⚠️ Cấu hình vận hành: ngưỡng lead treo = 2 ngày (thiếu mức đỏ), lý do rớt **bỏ danh mục**, ⏳ **còn danh mục nguồn lead**.
 
 ---
 
@@ -430,9 +433,9 @@ Các PRD chỉ ra rằng nhiều hạng mục là **lỗi đang chạy trên pro
 |---|---|---|---|---|---|---|
 | 23 | **Story 7 · SL-06** — `ClassMediaReviewDay(classId, reviewDate, status, noPhotoNote?, deadlineAt, reviewedBy*, mediaCount, approvedCount, deletedCount, centerId?, orgUnitId?)`, unique `[classId, reviewDate]`; upsert ở T2/T4/T7; `computeReviewDeadline` thuần | F | 3 | L | #15 | 🔴 `deadlineAt` phải **đóng băng** lúc dòng sinh — đổi cấu hình **không** được dịch deadline quá khứ, nếu không SLA F-30 **đổi kết quả của quá khứ**. 🔴 `ClassSession.ckMedia` (`prisma/schema.prisma:1967`) là ô tích **TAY** — **không dùng làm nguồn** |
 | 24 | **Story 6 · SL-05** — `MediaWatchProgress` unique `[mediaId, userId]` + `segments Json` + `lastFlushAt`; Server Action `reportMediaWatch` (chặn đoạn giả mạo); `mergeSegments`/`coveredSeconds`/`isWatchComplete` thuần | F | 3 | S | #18 | 🔴 Cộng theo **một con số** không phân biệt "xem 10 phút liền" với "tua đi tua lại 30 giây đầu 20 lần" — chống tua **bắt buộc** đo theo độ phủ đoạn |
-| 25 | **Story 8 · SL-07** — liên kết `ClassSessionMedia` ↔ `ReportCard` + `retentionDueAt?`; `ReportCardExportLog` + cắm ghi vào **cả 4** route PDF | F | 3 | S | #15 | 🔴 4 route xuất PDF **không ghi bất kỳ mốc nào** (grep `writeAudit|create(|new Date()` = **0 hit**) ⇒ câu "học bạ đã xuất chưa" **hiện không trả lời được**. Cần **OQ-F1** đóng trước |
+| 25 | **Story 8 · SL-07** — liên kết `ClassSessionMedia` ↔ `ReportCard` + `retentionDueAt?`; ✅ **24/08/2026: `ReportCardExportLog` + cắm ghi vào 4 route PDF ĐÃ BỎ** — thay bằng **`ReportCard.sentToParentAt`** (additive) set trong handler `reportcard.published` khi tạo `Notification` cho PH (`lib/_handlers/report-card.ts:33-44`) | F | 2 | S | #15 | ✅ **OQ-F1 đóng theo nghĩa (c) "đã gửi đến PH"** (B6). ⚠️ **KHÔNG** thêm giá trị enum `ReportCardStatus`: hai đường đọc của PH lọc cứng `status = "PUBLISHED"` (`lib/lms/report-card.ts:220`, `:239`) ⇒ đổi trạng thái = **PH mất học bạ**. "Đã gửi đến PH" là **nhãn suy ra** từ `sentToParentAt != null`. Ước lượng giảm 3 → 2 ngày vì bỏ được 4 điểm cắm log |
 | 26 | **Story 9 · F-01** — mở luồng kho cho video: `category: "video"`, dialog nhận `image/*` **và** `video/*`, ghi `kind`/`mimeType`/`sizeBytes`/`durationSec`, **trần dung lượng lô** cho video | F | 3 | F | #18 | 🟠 **T12**: `upload-config.ts:53-63` cho 500MB mà chưa có nén ⇒ hạ trần tạm (đề xuất 100MB / 90 giây) và nói rõ với GV. Cần **OQ-F4** |
-| 27 | **G.0** — chốt **OQ-G1** (`Order.leadChildId` hay bảng phân bổ) · **OQ-G2** (doanh số từ `Payment` hay `Order.totalAmount`) · **OQ-G3** (lý do rớt ở `Lead` hay `LeadChild`) · **OQ-G7** (2 cột người nhập); ghi vào `documentation/` | G | 1 | L | — | 🔴 Bốn câu này **khoá danh sách cột cuối cùng**. Chốt sau khi C-03 chạy = **quy lại toàn bộ đơn cũ bằng tay** |
+| 27 | **G.0** — ✅ **OQ-G1 đóng** (`Order.leadChildId`, một đơn – một con) · ✅ **OQ-G2 đóng** (doanh số theo học sinh = `Payment` CONFIRMED) · ✅ **OQ-G3 đóng 24/08** (`lostNote` ở **`Lead`**) · 🔴 **OQ-G7 còn treo** (2 cột người nhập); ghi vào `documentation/` | G | 0,5 | L | — | 🟠 Chỉ còn OQ-G7 khoá danh sách cột cuối cùng — chốt sau khi C-03 chạy = quy lại dữ liệu bằng tay |
 | 28 | **V-06** — `lib/pending-tasks.ts:202-233` nhánh `mediaApproval` chuyển sang `scopedDb(actor)`, bỏ nhánh `user.centerId` đơn trị (`:114`), nới trần `take: 50` (`:217`) | V | 2 | F | A-01-6 | 🟠 **T10**: vai khác `CENTER_MANAGER` đang đếm ảnh `PENDING` của **mọi** cơ sở |
 | | **Tổng** | | **15** | | | |
 
@@ -443,7 +446,7 @@ Các PRD chỉ ra rằng nhiều hạng mục là **lỗi đang chạy trên pro
 - [ ] Mỗi lần tải PDF học bạ qua **bất kỳ** trong 4 route → sinh đúng **1** dòng log; câu "học bạ X đã xuất chưa, lần cuối lúc nào" trả lời được bằng **một** câu SQL.
 - [ ] Định nghĩa **"đã xuất" vs "đã phát hành"** viết thành văn trong `documentation/`, và **mọi** chỗ trong F tham chiếu cùng một định nghĩa.
 - [ ] GV chọn 1 video + 3 ảnh trong một lượt → 4 dòng `DRAFT`, `kind` đúng từng dòng.
-- [ ] **OQ-G1, OQ-G2, OQ-G3, OQ-G7 đã ký.**
+- [ ] ✅ OQ-G1 + OQ-G2 **đã ký 24/08/2026**. 🔴 **OQ-G3 (tầng đặt `lostNote`) và OQ-G7 (2 cột người nhập) vẫn phải ký trước khi sinh migration G.**
 
 ---
 
@@ -481,7 +484,7 @@ Các PRD chỉ ra rằng nhiều hạng mục là **lỗi đang chạy trên pro
 |---|---|---|---|---|---|---|
 | 35 | **Story 12 · F-12 + F-17** — lưới của một folder (lớp × ngày): thumbnail ảnh + poster video có badge thời lượng, sắp theo buổi rồi giờ, hiện tên HV được tag, trạng thái từng ô, **phân trang cuộn theo lô** | F | 3 | F | #29 | 🔴 Lưới phải hiện **đủ** media kể cả > 200 ảnh — đối lập trực tiếp với `page.tsx:45, :51 take: 100`. Media `DRAFT` **không** xuất hiện |
 | 36 | **Story 13 (phần 1)** — overlay xem từng media: vuốt trái/phải, `←`/`→`, `Esc` thoát; giữ vị trí khi đóng/mở lại | F | 2 | F | #35 | 🟠 Repo **chưa có** lightbox nào cho media lớp (`media-client.tsx` không có handler `keydown`) |
-| 37 | **G.2b** — migration additive **SL-10** (`lostReasonId`/`lostNote`/`lostAt`, `contractValue`, `campaignId`/`adsetId`/`adId`) + **SL-11** (`LeadLostReason`, `LeadSource` — **không** mang cột phạm vi) + **SL-12** (6 trường G-01 còn thiếu) + **SL-13** (`UserTablePreference` — **cố ý không** mang cột phạm vi) + seed 2 danh mục | G | 3 | S | #33 | 🔴 **SL-09b + SL-12 khoá DANH SÁCH CỘT CUỐI CÙNG**. G-04 lưu cấu hình theo **tên cột** — đổi sau khi user đã lưu ⇒ cấu hình **mồ côi**. Cần **OQ-G6** (danh mục lý do rớt) |
+| 37 | **G.2b** — migration additive **SL-10** (**`Lead.lostNote` bắt buộc** + **`Lead.lostAt`** — B5; ~~`lostReasonId`~~ bỏ; `contractValue`, `campaignId`/`adsetId`/`adId`) + **SL-11** (~~`LeadLostReason`~~ **chỉ còn `LeadSource`** — **không** mang cột phạm vi) + **SL-12** (6 trường G-01 còn thiếu) + **SL-13** (`UserTablePreference` — **cố ý không** mang cột phạm vi) + seed **1** danh mục | G | 2,5 | S | #33 | 🔴 **SL-09b + SL-12 khoá DANH SÁCH CỘT CUỐI CÙNG**. ✅ Tầng `lostNote` đã chốt (B5 — `Lead`); ⏳ **vẫn cần giá trị khởi tạo của `LeadSource`** |
 | 38 | **G.3 (V-18 + V-19)** — đường ghi: ngừng nhét `Tỉnh/TP`/`Địa chỉ`/`Nhân viên nhập` vào `note`; tách `createdById`+`createdByCode` khỏi `assignedToId`; **mọi** `create` `LeadChild` tự set `centerId`+`orgUnitId` | G | 3 | S | #37 | 🔴 `scopedDb` **không che write** ⇒ quên set `centerId` = bản ghi **tàng hình** với chính QLCS cơ sở đó. Đường tạo phải rà: `lib/lead/intake/ingest.ts:200`, `addLeadChild` |
 | 39 | **V-01** — helper `recordLeadActivity` duy nhất dùng ở đủ **15** call-site; vá `lib/crm/sla.ts:132` (`lead.updatedAt` → `lead.lastActivityAt`); backfill `lastActivityAt = MAX(LeadActivity.createdAt)` | V / C | 3 | L | #33 | 🔴 **Thứ tự bắt buộc**: vá `sla.ts` **trước** backfill. Không vá ⇒ cột C-05 hiện **số nhỏ giả tạo** |
 | 40 | **V-07** — dedup nhập tay đổi sang `phone: { in: phoneVariants(d.phone) }` ở `actions.ts:596` và `:731`; **giữ nguyên** tính cross-center có chủ đích | V / G | 2 | L | — | 🟠 Sale nhập tay SĐT đã tồn tại dạng `0…` đang **tạo lead trùng** |
@@ -576,7 +579,7 @@ Các PRD chỉ ra rằng nhiều hạng mục là **lỗi đang chạy trên pro
 
 | # | Hạng mục | Khu vực | Điểm | Người | Phụ thuộc | Rủi ro |
 |---|---|---|---|---|---|---|
-| 53 | **C.0** — chốt **OQ-C1** ("đã chốt" = `ENROLLED` hay tính cả "đã trả tiền") · **OQ-C3** (= OQ-G3) · **OQ-C6** (ngưỡng lead treo, đề xuất 7/14) · **OQ-C7** (= OQ-G6); **chạy truy vấn đo lệch §C.6.9 trên prod (chỉ đọc)** | C | 2 | L | G.2 | 🔴 Không có kết quả đo thì **không ai biết chốt định nghĩa nào làm số nhảy bao nhiêu**. Thêm giá trị enum **sau khi** có dữ liệu prod là migration trên bảng đang chạy |
+| 53 | **C.0** — ✅ **OQ-C1, OQ-C3, OQ-C6, OQ-C7 đã chốt 24/08/2026**; việc còn lại: **chạy truy vấn đo lệch §C.6.9 trên prod (chỉ đọc)** | C | 0,5 | L | G.2 | 🔴 Định nghĩa đã chốt nhưng **mức lệch chưa đo** — không đo thì không báo trước được cho người dùng khi số nhảy |
 | 54 | **C.3 test đỏ** — cách ly `LeadChild` theo cơ sở · C1 đếm đúng học sinh · C3 theo **lứa** · C4 loại dòng `closedAt < createdAt` | C | 2 | S | #53 | 🟠 Luật cứng #5 |
 | 55 | **C.4** — `lib/reports/lead-kpi.ts` (`CLOSED_CHILD_STATUSES`, `LOST_CHILD_STATUSES`, `isChildClosed`) + `lib/reports/date-vn.ts` — **hàm thuần, không gọi DB**, có unit test khẳng định nó **khác** `CONVERTED_STATUSES` (`lib/reports/lead.ts:45`) | C | 2 | S | #54 | 🔴 "Tỷ lệ chốt" hiện có **ÍT NHẤT 8** công thức khác nhau trong repo — không có nguồn sự thật (`CDB-dashboard.md` §C.2.2) |
 | 56 | **C.7** — tab C: **C1** tổng lead · **C2** tỷ lệ đạt mục tiêu · **C3** tỷ lệ thành công · **C4** thời gian chốt (avg + median + p90) | C | 5 | F | #55, A-02 | 🔴 Chưa đặt mục tiêu → **"Chưa đặt mục tiêu"**, **KHÔNG** hiện `0%` (tiền lệ `computeAchievement` trả `null` — `lib/reports/revenue-target.ts:32-39`). Tooltip ghi rõ mẫu số là **cohort** |
@@ -584,7 +587,7 @@ Các PRD chỉ ra rằng nhiều hạng mục là **lỗi đang chạy trên pro
 | | **Tổng** | | **14** | | | |
 
 **Tiêu chí kết thúc sprint 11**
-- [ ] Kết quả truy vấn đo lệch §C.6.9 trên prod đã được đọc và ghi lại; **OQ-C1/C3/C6/C7 đã ký**.
+- [ ] Kết quả truy vấn đo lệch §C.6.9 trên prod đã được đọc và ghi lại. ✅ OQ-C1 + OQ-C7 đã ký 24/08; ⚠️ OQ-C6 mới có ngưỡng vàng (2 ngày); 🔴 **OQ-C3 chưa ký**.
 - [ ] Test đỏ: "lead 1 PH – 2 con, con A convert, con B chưa → C1 = 2, C3 tử số = 1" chuyển **đỏ → xanh**.
 - [ ] Actor CS1 **không** thấy con số của CS2 (e2e).
 - [ ] C4 loại bản ghi `closedAt < createdAt` khỏi phép tính **và đếm riêng** (không im lặng bỏ).
@@ -599,7 +602,7 @@ Các PRD chỉ ra rằng nhiều hạng mục là **lỗi đang chạy trên pro
 |---|---|---|---|---|---|---|
 | 58 | **C.6** — bảng `LeadTarget` (chỉ tiêu lead theo tháng × cơ sở) + màn đặt chỉ tiêu theo khuôn `RevenueTargetForm` / `setRevenueTargetAction` | C | 3 | S | #55 | 🟠 **Nhớ nhánh `centerId = null`**: Postgres coi `NULL` là DISTINCT trong unique index ⇒ upsert **không match**, phải `findFirst` + create/update tay (`bao-cao/doanh-thu/_actions.ts:72-87`). Cần **OQ-C5** (key quyền) |
 | 59 | **C.8** — bảng **C-03** (Lead đã chuyển đổi, 9 cột, đếm theo **học sinh**) + bảng **C-05** (Lead rớt) + cột "số ngày chưa tiếp cận lại" **trên cả bảng lead đang chăm** + badge cảnh báo khi vượt ngưỡng | C | 3 | S | #56, V-01 | 🔴 Đây là **biện pháp đối trọng duy nhất** cho việc "lead rớt là thủ công" — bỏ nó đi thì C3 là **con số tự khen**. Cột giá trị của C-03 chặn bởi OQ-G1/OQ-G2 |
-| 60 | **C.9** — **C-06** đánh dấu rớt **bắt buộc** `lostReasonId` (**đổi chữ ký** `updateLeadStatus(leadId, rawStatus)` — `actions.ts:127-130`, **không** nhét lý do vào `note`) + **C-07** mục "Lịch sử trạng thái" trên trang chi tiết lead | C | 3 | F | #37, #44 | 🟠 Danh mục rỗng ⇒ **chặn cứng người dùng**: bắt buộc chọn lý do mà không có gì để chọn (OQ-G6/OQ-C7) |
+| 60 | **C.9** — **C-06** đánh dấu rớt: `LeadChild.status = LOST` (theo con) + **bắt buộc `Lead.lostNote`** (ô ghi chú tự do ở cấp phụ huynh — 12(b) + B5) + `Lead.lostAt`; **đổi chữ ký** `updateLeadStatus(leadId, rawStatus)` (`actions.ts:127-130`), **không** nhét lý do vào `note` + **C-07** mục "Lịch sử trạng thái" | C | 2,5 | F | #37, #44 | 🟢 Rủi ro "danh mục rỗng chặn cứng người dùng" **đã biến mất**. ⚠️ Hai bẫy của B5: con rớt sau **đè** ghi chú của con trước; gỡ một con khỏi `LOST` **chỉ được xoá** `Lead.lostNote`/`lostAt` khi **không còn con nào** `LOST` |
 | 61 | **E.0 + E.1** — chốt **OQ-1** (định nghĩa "PH đã tương tác") · **OQ-2** (bộ `Enrollment.status` của mẫu số) · **OQ-3** (QLCS bấm kênh 1-1 thì xảy ra gì); test đỏ E | E | 3 | L | A-02 | 🔴 **OQ-3**: QLCS **không** là participant của DM, **không** mở được DM mới (`DmKind` chỉ có 2 giá trị — `lib/chat/dm.ts:67`; `openDmTargetOf` ép `centerId: null` để QLCS tự deny — `:135, 139`), và `assertActiveParticipant` chặn cứng (`lib/chat/queries.ts:434`). Không chốt ⇒ **code ra nút chết** hoặc ai đó "vá" bằng cách nới `assertActiveParticipant` |
 | 62 | **E.2 · E-01** — `countSessionGaps` dựa `resolveAttendanceQueuePhase` + mở rộng `/admin/attendance` nhận `dateFrom`/`dateTo` | E | 3 | F | #61 | 🔴 **KHÔNG** dùng lại `sessionIncomplete` (`lib/pending-tasks.ts:235`): cứng `date < startOfToday` và scope **đơn trị** ⇒ mâu thuẫn trực tiếp với A-01. Cần **OQ-5** (thứ tự suy "GV phụ trách" — repo đang có **4** thứ tự khác nhau) và **OQ-6** |
 | | **Tổng** | | **15** | | | |
@@ -620,7 +623,7 @@ Các PRD chỉ ra rằng nhiều hạng mục là **lỗi đang chạy trên pro
 
 | # | Hạng mục | Khu vực | Điểm | Người | Phụ thuộc | Rủi ro |
 |---|---|---|---|---|---|---|
-| 63 | **D.0** — chốt **OQ-D1** (SR.QD.232 đã ban hành chưa) · **OQ-D2** (tiền tệ + múi giờ ad account) · **OQ-D4** (loại token + hạn) · **OQ-D6** (campaign hay ad set); đo prod **A6** (`AdsInsightDaily`, `MarketingCostPeriod` bao nhiêu dòng) và **A7** (`StaffNotification` `dedupeKey LIKE 'cost-unconfirmed:%'` tồn đọng) | D | 2 | L | — | 🔴 **T-04**: tiền tệ khác VND ⇒ sai **~26.000 lần** theo hướng làm ROAS đẹp. 🔴 **E-07**: kênh cảnh báo có thể **đã bão hoà** trước khi ta thêm cảnh báo mới vào |
+| 63 | **D.0** — ✅ **OQ-D1 đóng** (`SR.QD.232` đã ban hành, áp dụng **23/08/2026**) · ✅ **OQ-D2 đóng** (**VND** + **GMT+7**) · 🔴 còn **OQ-D4** (loại token + hạn) · 🔴 **OQ-D6** (campaign hay ad set); đo prod **A6** (`AdsInsightDaily`, `MarketingCostPeriod` bao nhiêu dòng) và **A7** (`StaffNotification` `dedupeKey LIKE 'cost-unconfirmed:%'` tồn đọng) | D | 1 | L | — | 🟢 **T-04 đã tắt**: tiền tệ VND, không lệch 26.000 lần. 🔴 **E-07** vẫn còn: kênh cảnh báo có thể **đã bão hoà**. 🔴 OQ-D4 chưa đóng ⇒ token hết hạn là job **chết im** |
 | 64 | **D.2 test đỏ** — parser **18 ca** · thứ tự ưu tiên `adset override → campaign override → parser → CHƯA PHÂN BỔ` · `DISTINCT ON` không cộng trùng · bất biến tổng khi chia tỷ lệ | D | 3 | S | #63 | 🟠 Luật cứng #5 |
 | 65 | **D.3** — migration additive: `AdsSyncRun` (**cố ý KHÔNG** mang cột phạm vi — nhật ký vận hành) + `AdsSpendSnapshot` (append-only, mang **cả** `centerId` + `orgUnitId`, `campaignId` + `campaignNameRaw` + `adsetId`) + `AdsCampaignMapping` + `AdsBudgetTarget`; khai `SCOPED_MODELS` + `BACKFILL_SPECS` + `getModelPrefixes`. **KHÔNG đụng** `AdsInsightDaily`/`MarketingCostPeriod` | D | 3 | S | #64 | 🔴 **T-02**: `upsertAdsInsight` (`lib/crm/ads-insights.ts:55`) **ghi đè lịch sử** — trái thẳng D-01 và **xoá bằng chứng của 5 rủi ro khác**. Phải **gỡ/deprecated ngay trong PR đầu**, nếu không người viết job sẽ gọi lại nó cho nhanh (**E-04**) |
 | 66 | **D.4 (V-10)** — `lib/ads/campaign-code.ts` parser `SR.QD.232` + `lib/ads/meta-client.ts` gửi token qua header `Authorization: Bearer` | D | 3 | L | #64 | 🔴 Token trong query string lọt Sentry vì `beforeSend` **chỉ** xoá headers/cookies, **không** scrub URL của span |
@@ -644,7 +647,7 @@ Các PRD chỉ ra rằng nhiều hạng mục là **lỗi đang chạy trên pro
 | 68 | **D.5** — `lib/ads/sync.ts` + `app/api/cron/ads-sync/route.ts` lịch `"0 17 * * *"` UTC (= **00:00 giờ VN**, kèm chú thích) + mục thứ 24 trong `vercel.json` + ghi **một dòng `AdsSyncRun` mỗi lượt, kể cả lượt ghi 0 dòng** + cơ chế tự tố cáo (không snapshot cho `D-1` sau 26 giờ → `notifyStaff`) + thêm vào `cron-pump-test.yml` | D | 5 | S | #65, #66 | 🔴 **T-05**: `"0 0 * * *"` là **07:00 giờ VN**, không phải 00:00. 🔴 **T-01**: không có sổ lần chạy ⇒ IM-01 + IM-03 + IM-08 **đều vô hình**. 🔴 **E-03**: lần chạy thật đầu tiên **là trên prod** ⇒ phải dry-run ghi sổ mà **không** ghi số trước |
 | 69 | **D.6 · D-07** — màn gán mapping campaign/adset → cơ sở + tab "Chưa phân bổ" (campaign + chi tiêu + lần thấy gần nhất) + ràng buộc **tổng tỷ lệ = 100%** cho `MULTI` | D | 5 | F | #65 | 🔴 **D-07-2**: campaign `MULTI` chưa khai tỷ lệ ⇒ toàn bộ chi tiêu vào `CHƯA PHÂN BỔ` — **không chia đều, không đoán**. Cần **OQ-D5** (vai `MARKETING` cấp cơ sở có được sửa mapping không — gán campaign cho CS1 là **lấy tiền khỏi** CS2) |
 | 70 | **E.4 · E-03** — bảng chi tiết PH tương tác (tên PH · SĐT · danh sách người đã tương tác) với **hai cổng quyền tách nhau**: (a) vào trang; (b) thấy cột SĐT qua `canViewParentContact` | E | 3 | L | #67 | 🔴 Không đạt cổng (b) ⇒ **không đưa trường `phone` vào payload RSC**, không phải ẩn bằng CSS (tiền lệ `StaffChatMember` — `components/chat/staff/types.ts:31-40`). 🔴 Nguồn SĐT là `User.phone` (`:1051`), **không** phải `Student.parentPhone` (`:1536`) |
-| 71 | **G.7 · G-03** — bổ sung cột mới của G-01/G-06 + doanh số theo con vào file xuất | G | 2 | L | A-03, #52 | 🟠 Cần **OQ-G12** (file xuất theo cấu hình cột của người xuất hay bộ cột cố định — PRD nghiêng về **cố định**) và OQ-6 của A (CSV hay `.xlsx`) |
+| 71 | **G.7 · G-03** — bổ sung cột mới của G-01/G-06 + doanh số theo con vào file xuất, **định dạng `.xlsx`** (SheetJS đã có — `package.json:112`) | G | 2 | L | A-03, #52 | ✅ **OQ-6 của A đã đóng 24/08 (B12): `.xlsx`**. ⏳ OQ-G12 chưa có chỉ đạo khác ⇒ giữ khuyến nghị PRD: **bộ cột cố định**, không theo tuỳ chọn cột của người xuất |
 | | **Tổng** | | **15** | | | |
 
 **Tiêu chí kết thúc sprint 14**
@@ -666,7 +669,7 @@ Các PRD chỉ ra rằng nhiều hạng mục là **lỗi đang chạy trên pro
 | 72 | **D.7** — `lib/reports/ads-spend.ts` là **cửa duy nhất** đọc snapshot + **D1** ngân sách thực tế theo cơ sở | D | 3 | S | #68, #69 | 🔴 **D-00-1**: `lib/crm/funnel-query.ts:15` là ví dụ điển hình của việc mỗi chỗ tự viết một kiểu |
 | 73 | **D.8** — **D-02/D-03** chỉ tiêu + % thực tế/chỉ tiêu · **D2 CPL** · **D3 CPA** | D | 3 | S | #72, **C.7** | 🔴 **T-08**: mẫu số = 0 ⇒ hiện `—` + lý do, **không bao giờ** hiện `0`. Hiện mẫu số cạnh tỷ số: `CPL 120.000đ (4.800.000đ / 40 lead)` |
 | 74 | **E.5 · E-04** — `chat-panel.tsx` (client) + `DashboardThreadPanel` (RSC chép từ `ThreadPanel` — `chat-workspace.tsx:188-283`) + mở/đóng bằng **đúng một** searchParam `?chat=` | E | 5 | F | #70 | 🔴 Diff **0 dòng** trong `components/chat/**` (trừ ngoại lệ §6.5.3). 🔴 `sendTarget` phải là bản sao **khớp hệt server** gồm `createdById` — bỏ nó ⇒ vai scope OWN **bị xám ô nhập trên prod** trong khi Server Action vẫn cho gửi, và **không lộ ở local**. 🔴 `components/ui/sheet.tsx` có **0 call-site** trong repo — E-04 là call-site đầu tiên |
-| 75 | **B.0** — chạy §B.6.8 trên prod; chốt **OQ-B1** (thống nhất định nghĩa doanh thu hay chỉ đổi nhãn) · **OQ-B2** (điều chỉnh nhiều lần tính bản nào) · **OQ-B4** (danh mục đầu phí) · **OQ-B7** (chi phí có phải duyệt không) | B | 2 | L | — | 🔴 **Không có số đo thì không ai dám đổi định nghĩa doanh thu**. Repo có **HAI** định nghĩa chạy song song; chọn (a) ⇒ số của kế toán và ROAS **tụt ngay**, phải báo trước |
+| 75 | **B.0** — **chạy §B.6.8 trên prod** (bắt buộc, chỉ đọc); ✅ **OQ-B1 đã chốt 24/08: THỐNG NHẤT về `Payment` CONFIRMED** (Đường 1 — sửa logic) · 🔴 còn **OQ-B2** (điều chỉnh nhiều lần tính bản nào) · 🔴 **OQ-B4** (danh mục đầu phí) · 🔴 **OQ-B7** (chi phí có phải duyệt không) | B | 2 | L | — | 🔴 Định nghĩa đã chốt nhưng **số đo vẫn bắt buộc**: số của kế toán và ROAS sẽ **tụt ngay** ngày lên prod, phải đo rồi **báo trước cho kế toán + marketing** |
 | 76 | **D.9 · D-08** — banner cảnh báo `CHƯA PHÂN BỔ` (số tiền + số campaign + link tới D-07) + banner trên `/admin/marketing/funnel` (D-00-2) | D | 2 | L | #72 | 🟢 Banner funnel là **một dòng JSX** — làm sớm được |
 | | **Tổng** | | **15** | | | |
 
@@ -677,7 +680,7 @@ Các PRD chỉ ra rằng nhiều hạng mục là **lỗi đang chạy trên pro
 - [ ] E-04: URL vẫn là `/dashboard`; header/sidebar **không remount**; đóng panel xoá **đúng một** searchParam, giữ nguyên `center`, `dateFrom`, `dateTo`, `tab`.
 - [ ] E-04: người không phải participant mở panel → thông điệp tiếng Việt + lối đi thay thế, **không** 500.
 - [ ] E-04: ba prop `announcementsHref`/`membersHref`/`backHref` **không** còn trỏ về `/tin-nhan`.
-- [ ] Kết quả §B.6.8 trên prod đã đọc; **OQ-B1/B2/B4/B7 đã ký**.
+- [ ] Kết quả §B.6.8 trên prod đã đọc. ✅ OQ-B1 đã ký 24/08 (thống nhất `Payment` CONFIRMED — **Đường 1**); 🔴 **OQ-B2/B4/B7 chưa ký**.
 
 ---
 
@@ -689,7 +692,7 @@ Các PRD chỉ ra rằng nhiều hạng mục là **lỗi đang chạy trên pro
 | 78 | **B.3 (V-09)** — `lib/finance/revenue.ts`: `revenueWhere(filters)` + `netRevenueOf` + `grossRevenueOf`; chuyển **3 chỗ lặp** sang dùng; unit test đối chiếu **gộp vs thuần** | B | 3 | S | #77 | 🔴 Số sẽ **thấp hơn** con số 3 màn hiện tại đang hiện — phải báo trước, không để người dùng tự phát hiện |
 | 79 | **B.4 + B.5 (V-08)** — migration additive index `[centerId, paidDate]` + `[accountantStatus, paidDate]` trên `Payment`; vá `lib/reports/revenue-target-data.ts:24-25` (có test cho **cả ba** chế độ phạm vi) | B | 3 | L | #78 | 🟠 `RevenueTarget` ∈ `SCOPE_EXEMPT`; `@@unique([centerId, period])` coi `NULL` là DISTINCT ⇒ QLCS 2 cơ sở chọn "tất cả" đang bị so **doanh thu 2 cơ sở** với **mục tiêu cả công ty** |
 | 80 | **B.6** — **B1** doanh thu · **B5** bảng doanh thu theo **ngày lịch VN** (`generate_series`, ngày không giao dịch vẫn hiện dòng `0`) · **B6** mục tiêu + tỷ lệ hoàn thành | B | 5 | F | #78, #79 | 🔴 Repo **chưa từng có trục NGÀY** — mọi báo cáo tiền gom theo **tháng** qua `monthKeyVN` (`lib/reports/lead.ts:87-90`) |
-| 81 | **B.7** — đổi nhãn `accountant-dashboard.tsx` thành *"Giá trị đơn đã chốt"* và `/admin/marketing/funnel` thành *"ROAS theo giá trị đơn"* | B | 1 | L | #80 | 🟢 Một dòng JSX mỗi chỗ. **Đừng** đổi logic nếu OQ-B1 chọn "chỉ đổi nhãn" |
+| 81 | **B.7** — ✅ **SỬA LOGIC** `accountant-dashboard.tsx:26-31` + `funnel-query.ts:17-20` sang `Payment` CONFIRMED (B3 — Đường 1), rồi đổi nhãn cho rõ nghĩa | B | 2 | L | #80 + §B.6.8 đã chạy | 🔴 **Không còn là "một dòng JSX"** — đây là **đổi con số người dùng đang nhìn**. Điều kiện cứng: đã đo §B.6.8 trên prod **và** đã thông báo trước cho kế toán + marketing |
 | 82 | **E.6** — nghiệm thu tay E theo §8.4 (4 việc **xanh hết ở CI mà vẫn hỏng thật**) | E | 1 | F | #74 | 🔴 Ô nhập tin có xám không **chỉ lộ trên prod** (v2), không lộ ở local (v1) |
 | | **Tổng** | | **15** | | | |
 
@@ -871,10 +874,10 @@ Các PRD chỉ ra rằng nhiều hạng mục là **lỗi đang chạy trên pro
 
 | # | Việc | Vì sao code vô nghĩa nếu thiếu | Chủ (vai) | Phải xong TRƯỚC |
 |---|---|---|---|---|
-| **NC-1** | **Ban hành `SR.QD.232`** — quy ước đặt tên campaign/ad set/ad cho Marketing: `[MÃ CƠ SỞ]_[MỤC TIÊU]_[KHOÁ HỌC]_[ĐỊNH DẠNG]_[MMYY]_[MÃ NỘI DUNG]`. Mã cơ sở **luôn đứng đầu**, dùng đúng danh mục mã cơ sở của hệ thống, ngăn cách `_`, **không dấu tiếng Việt**. Campaign chạy chung nhiều cơ sở dùng mã `MULTI` và **bắt buộc** khai tỷ lệ ở D-07 | Bật D-01 trước khi phổ biến ⇒ dữ liệu những ngày đầu **rơi hết** vào `CHƯA PHÂN BỔ`, và cộng với append-only thì chỉ sửa được bằng gán tay từng campaign (spec `:216`, D **T-07**) | **Trưởng Marketing** | **S13** (trước khi bật job) |
+| ~~**NC-1**~~ | ✅ **XONG 24/08/2026 (B9): `SR.QD.232` đã ban hành, ngày áp dụng 23/08/2026.** Việc còn lại thuộc Marketing: đổi tên campaign **đang chạy** cho khớp quy ước trước khi bật job D-01 | Campaign chạy trước 23/08 rơi vào `CHƯA PHÂN BỔ` và chỉ sửa được bằng gán tay (D-07) — đã biết trước | **Trưởng Marketing** | **Trước khi bật job (S13)** |
 | **NC-1b** | **Đổi tên các campaign ĐANG CHẠY** theo quy ước mới | Ban hành văn bản mà campaign cũ giữ nguyên tên ⇒ parser vẫn trả `null` (cổng **A5** của D) | **Trưởng Marketing** | **S13** |
-| **NC-2** | **Chốt ngưỡng cảnh báo lead treo** (số ngày cảnh báo / số ngày đỏ). Spec `:218` ghi rõ đang **để trống**. PRD đề xuất **7 / 14** | Không có số thì **C-05-2 không nghiệm thu được**; và cột này là **biện pháp đối trọng duy nhất** cho việc lead rớt là thủ công | **Vận hành** (OQ-C6) | **S12** |
-| **NC-3** | **Chốt danh mục `LeadLostReason`** (lý do rớt) và **`LeadSource`** (nguồn lead) — giá trị ban đầu. Spec `:218` ghi rõ đang **để trống** | G-06-1 bắt buộc chọn lý do; danh mục rỗng = **chặn cứng người dùng**. Và migrate `Lead.source` (String tự do) **không có đích để map** | **Vận hành + Sale + Marketing** (OQ-G6 = OQ-C7) | **S7** (trước migration SL-11) |
+| ~~**NC-2**~~ | ✅ **XONG 24/08/2026 (12(a)): ngưỡng lead treo — vàng 2 ngày · đỏ 7 ngày.** Vào registry `crm.staleLeadWarnDays = 2` / `crm.staleLeadDangerDays = 7`, `centerOverridable` | — | — | Đóng |
+| ⚠️ **NC-3** | ~~Chốt danh mục `LeadLostReason`~~ ❌ **BỎ 24/08/2026 (12(b))** — lý do rớt là **ô ghi chú tự do**. ⏳ **Còn: chốt danh mục `LeadSource`** (nguồn lead) — giá trị ban đầu | Migrate `Lead.source` (String tự do) **không có đích để map** nếu thiếu danh sách này. Phần lý do rớt không còn chặn G-06-1 | **Vận hành + Marketing** (OQ-G6) | **S7** (trước migration SL-11) |
 | **NC-4** | **Chốt danh mục đầu phí** (`ADS · RENT · SALARY · UTILITY · MARKETING_OFFLINE · OTHER`?) | B-05 không có template và B2 **không nghiệm thu được** | **Kế toán** (OQ-B4) | **S15** |
 | **NC-5** | **Xác minh `accountCurrency` + `accountTimezone`** của ad account thật, **chụp màn hình** ghi vào tài liệu | Tiền tệ khác VND ⇒ sai **~26.000 lần** theo hướng làm số đẹp. Múi giờ khác ⇒ `statDate` lệch với trục ngày của B5 | **Trưởng Marketing** (người có quyền Ads Manager) — cổng **A2** | **S13** |
 | **NC-6** | **Xác nhận danh sách `Center.code`** đầy đủ: mọi cơ sở đang hoạt động **đều có mã** (`SELECT code FROM "Center" WHERE "isActive" AND code IS NULL` ⇒ 0 dòng) | Parser `SR.QD.232` đối chiếu mã cơ sở; cơ sở thiếu mã ⇒ tiền của nó **luôn** rơi `CHƯA PHÂN BỔ` | **Vận hành** — cổng **A4** | **S13** |
@@ -900,58 +903,82 @@ Các PRD chỉ ra rằng nhiều hạng mục là **lỗi đang chạy trên pro
 
 ### 9.3 Danh sách câu hỏi mở còn lại — chủ và mốc
 
+> 📍 **Bảng kẹt & cách gỡ:** `docs/plan/ket-va-cach-go.md` — dịch danh sách dưới đây thành
+> "bước nào đang bị chặn, ai gỡ được, gỡ từng bước ra sao", kèm truy vấn SQL sẵn cho các phép đo.
+> ✅ **Cập nhật 24/08/2026 — chủ dự án đã trả lời 12 câu chặn khởi công.** Nguồn:
+> `docs/plan/cau-hoi-can-quyet.md` §"Quyết định của chủ dự án — chốt 24/08/2026".
+> **Đóng:** SL-00 (cả hai cột) · OQ-C1 (`ENROLLED`) · OQ-B1 (`Payment` CONFIRMED, **Đường 1**) · OQ-G1
+> (`Order.leadChildId`) · OQ-G2 (`Payment`) · OQ-C7 (bỏ danh mục lý do rớt) · OQ-F1 (đã gửi đến PH) ·
+> OQ-F7 (tách bucket trong đợt F) · OQ-D1 (`SR.QD.232` áp dụng 23/08) · OQ-D2 (VND + GMT+7) · OQ-2 của A
+> (cấp quản lý) · OQ-6 của A (`.xlsx`) · pháp lý ảnh trẻ em (**chấp nhận rủi ro**).
+> **Đóng thêm cùng ngày:** OQ-G3/OQ-C3 (`lostNote` đặt ở **`Lead`**) · OQ-C6 (vàng 2 ngày · **đỏ 7 ngày**).
+> **Đợt 2 cùng ngày — đóng thêm:** A·OQ-4 (gộp theo phạm vi chọn) · A·OQ-5 (prod **đã có** QLCS đa cơ sở
+> gán tay ⇒ sinh việc đo prod + SL-01 gấp + backfill) · A·OQ-7 (chỉ `SUPER_ADMIN`) · B·OQ-B9 ("01 → hôm nay").
+> Chốt kỹ thuật của Dev (chờ phản đối): A·OQ-3 (Popover + Checkbox) · G·OQ-G7 (2 cột).
+> **Đợt 3 cùng ngày — chủ dự án chỉnh lại 2 câu:** A·OQ-4 → **mặc định gộp + công tắc tách theo cơ sở**
+> (không phải "không tách") · A·OQ-7 → **MỞ `roles:assign` cho `HO_HR`** (không phải "giữ chỉ SUPER_ADMIN",
+> nên phải viết 3 rào §6.10 + chạy `seed-prod-roles.yml`). Đóng thêm: A·OQ-8 = **có, cơ sở khác vùng là ca
+> thật**; OQ-5 = người đó là **anh Phúc** (cần xác định vai trước khi ước lượng backfill).
+> **Đợt 4 cùng ngày — 12 câu KỸ THUẬT đã chốt (Dev quyết, chờ phản đối):** C·OQ-C5 · D·OQ-D6 · B·OQ-B5 ·
+> F/PRD·OQ-F6 · F/PRD·OQ-F8 · G·OQ-G8 · G·OQ-G11 · G·OQ-G12 · E·OQ-4 · E·OQ-5 · E·OQ-6 · E·OQ-8.
+> 🔴 **Hệ quả gộp: 5 permission key MỚI** (`lead_targets:manage` · `costs:view|manage|approve` ·
+> `dashboard:view`) ⇒ **bắt buộc chạy `seed-prod-roles.yml` ngay sau khi merge `test` → `main`**; quên là
+> màn trắng không kèm lỗi và **không tái hiện được ở local**.
+> **Còn treo chặn sprint đầu:** ⏳ danh mục **nguồn lead** (`LeadSource`).
+
+
 Bảy PRD cộng lại có **~71 câu hỏi mở**. Bảng dưới liệt kê những câu **chặn một hạng mục cụ thể trong kế hoạch này**; phần còn lại (P1/P2) theo dõi trong PRD gốc.
 
 | OQ | Nội dung tóm tắt | Chủ | Chặn sprint |
 |---|---|---|---|
-| A · OQ-3 | Multi-select cơ sở dựng bằng `<select multiple>` native hay component tự viết trên Base UI | Chủ dự án | **S2** |
-| A · OQ-4 | QLCS chọn nhiều cơ sở → 4 tab hiển thị **gộp** hay **tách theo cơ sở** | Chủ dự án | **S2** (ảnh hưởng hình dạng dữ liệu trả về của cả B/C/D/E) |
-| A · OQ-2 | "Từ cấp quản lý trở lên" gồm đúng những vai nào (ai vào nhóm `leads:export` ngày go-live) | Chủ dự án | **S2** |
-| A · OQ-6 | Endpoint export giữ **CSV** hay đổi sang **`.xlsx`** (repo có `xlsx` SheetJS, **không có** `exceljs`) | Chủ dự án | **S2**; kéo theo F-30-3 và C-04 |
-| A · OQ-7 | Mở `roles:assign` cho `HO_HR` hay giữ **chỉ SUPER_ADMIN** gán đa cơ sở | Chủ dự án | **S1** |
-| A · OQ-8 | Cơ sở thứ hai của QLCS có thuộc REGION **khác thật** không | Chủ dự án | **S1** (quyết định dữ liệu test) |
-| A · OQ-5 | Đã có QLCS đa cơ sở **thật** trên prod chưa (có cần backfill `UserOrgRole` không) | Chủ dự án | **S1** |
-| F/PRD · OQ-F1 | "Học bạ **đã xuất**" = **đã PHÁT HÀNH** (`status = PUBLISHED`) hay **đã có người tải PDF** | Chủ dự án + Đào tạo | **S5** (Story 8) |
+| ⚙️ A · OQ-3 | **Chốt kỹ thuật 24/08 (Dev, chờ phản đối):** multi-select = dropdown checkbox trên `Popover` + `Checkbox` của shadcn, không thêm thư viện | Dev | — |
+| ~~A · OQ-4~~ | ✅ **ĐÃ CHỐT 24/08/2026 (bản chốt): mặc định GỘP + công tắc "Tách theo cơ sở"** (`?split=1`, chỉ hiện khi chọn ≥2 cơ sở). 🔴 Mọi hàm số liệu B/C/D/E nhận `groupByCenter` **ngay từ bản đầu** — thêm sau = viết lại tầng truy vấn của 4 tab | — | Đóng |
+| ~~A · OQ-2~~ | ✅ **ĐÃ CHỐT 24/08/2026 (B11):** QLCS → quản lý khu vực → giám đốc. ⚠️ Hệ thống chỉ có **2/3 tầng** ⇒ nhóm `leads:export` v1 = **`CENTER_MANAGER` + `SUPER_ADMIN`**; vai quản lý khu vực chưa tồn tại (thêm RoleDef + mở neo vai tại REGION = P2); vai chức năng Hội sở **không** thuộc nhóm | — | Đóng |
+| ~~A · OQ-6~~ | ✅ **ĐÃ CHỐT 24/08/2026 (B12): đổi sang `.xlsx`** — dùng `xlsx` (SheetJS) đã có ở `package.json:112`, không thêm thư viện. Kéo theo F-30-3 và C-04 | — | Đóng |
+| ~~A · OQ-7~~ | ✅ **ĐÃ CHỐT 24/08/2026 (bản chốt): MỞ `roles:assign` cho `HO_HR`**, kèm 3 rào R1/R2/R3 (`A-nen-tang.md` §6.10) + **chạy `seed-prod-roles.yml` sau khi merge lên `main`** | — | Đóng |
+| ~~A · OQ-8~~ | ✅ **ĐÃ CHỐT 24/08/2026: CÓ — cơ sở khác vùng là ca thật.** Dữ liệu test A-01 phải có **REGION thứ hai**; e2e phủ ca QLCS giữ 2 cơ sở khác vùng | — | Đóng |
+| 🔴 ~~A · OQ-5~~ | **ĐÃ TRẢ LỜI 24/08/2026: CÓ — anh Phúc, VỪA QLCS VỪA `SUPER_ADMIN`.** ⇒ giữ đủ V-1→V-2→V-3, **thêm V-7** (tài khoản QLCS thuần cho UAT/e2e — tài khoản anh Phúc luôn xanh dù A-01 hỏng). Hỏng do SL-01 ở tài khoản này **không lộ ở dashboard**, chỉ lộ ở **nhóm chat lớp cơ sở thứ hai** — truy vấn Đ4 ở `A-nen-tang.md` §6.9 | Dev | **S1** |
+| ~~F/PRD · OQ-F1~~ | ✅ **ĐÃ CHỐT 24/08/2026 (B6): "đã gửi đến được cho PH"** — cột mới `ReportCard.sentToParentAt`, nhãn UI "Đã gửi đến PH", **không** thêm giá trị enum. Bỏ được `ReportCardExportLog` + 4 điểm cắm log | — | Đóng |
 | F/PRD · OQ-F2 | Cách đọc F-10 (A hay B) — xem X-4 | Chủ dự án | **S6** |
 | F/PRD · OQ-F4 | Trần **dung lượng/thời lượng** video một lần up (500MB hiện tại × F-18 "phải xem hết" = việc bất khả thi) | Chủ dự án | **S5** |
-| F/PRD · OQ-F5 | Media prod đang có `classSessionId = null` xử lý sao (backfill theo `takenAt` hay miễn trừ theo mốc) | Chủ dự án + Dev | **S3** |
-| F/PRD · OQ-F7 | Chuyển bucket riêng **trong đợt này** hay để sau (ảnh hưởng object key) | Chủ dự án | **S3** |
-| F/PRD · OQ-F8 | Cảnh báo F-21 **gộp** vào cron sẵn có hay thêm entry thứ 24 — xem X-5 | Dev | **S4** |
+| F/PRD · OQ-F5 | Media prod đang có `classSessionId = null` xử lý sao (backfill theo `takenAt` hay miễn trừ theo mốc) — **cần đo prod trước** | Chủ dự án + Dev | **S3** |
+| ~~F/PRD · OQ-F7~~ | ✅ **ĐÃ CHỐT 24/08/2026 (B8): tách bucket NGAY trong đợt F.** Kèm: nới `isOwnStorageUrl` cho 2 bucket; media cũ ở lại bucket công khai (di sản — OQ-F6) | — | Đóng |
+| ⚙️ ~~F/PRD · OQ-F8~~ | ✅ **Chốt kỹ thuật 24/08 (Dev): entry cron RIÊNG.** Đã đo: `vercel.json` 23 khe, Pro cho 40 — không chạm trần | — | Đóng |
 | F/BL · OQ-F2 | Thời gian **ân hạn** trước khi xoá vĩnh viễn (đề xuất 30 ngày); ai được khôi phục | Chủ dự án | **S4** |
 | F/BL · OQ-F5 | Ảnh **đã bị từ chối** xoá khỏi R2 **ngay** hay cũng vào ân hạn — xem X-1 | Chủ dự án | **S4** |
 | F/BL · OQ-F6 | `autoApprove` giữ hay bỏ — xem X-2 | Chủ dự án | **S4** |
 | F/BL · OQ-F7 | Đợt 1 ra mắt **chỉ ảnh** rồi video đợt 2, hay chờ đủ cả hai | Chủ dự án | **S5** |
-| G · OQ-G1 | `Order.leadChildId` hay bảng `OrderLeadChildAllocation` | Chủ dự án | **S5** |
-| G · OQ-G2 | "Doanh số theo học sinh" lấy từ **`Payment` thực thu** hay **`Order.totalAmount`** | Chủ dự án | **S5** |
-| G · OQ-G3 = C · OQ-C3 | Lý do rớt ở `Lead` hay `LeadChild` — xem X-3 | Chủ dự án | **S5** |
-| G · OQ-G7 | "Người nhập lead" lưu **2 cột** (`createdById` + `createdByCode`) hay 1 chuỗi ghép | Chủ dự án | **S5** |
+| ~~G · OQ-G1~~ | ✅ **ĐÃ CHỐT 24/08/2026 (B4): `Order.leadChildId`** + quy tắc một đơn – một con. Bảng `OrderLeadChildAllocation` loại | — | Đóng |
+| ~~G · OQ-G2~~ | ✅ **ĐÃ CHỐT 24/08/2026 (B3): `Payment` CONFIRMED** (thực thu), không `Order.totalAmount` | — | Đóng |
+| ~~G · OQ-G3 = C · OQ-C3~~ | ✅ **ĐÃ CHỐT 24/08/2026 (B5): ô ghi chú `lostNote` đặt ở `Lead`** (cấp phụ huynh); trạng thái `LOST` vẫn theo từng con. `G-lead.md` §6.3.b đã sửa cho khớp SL-10 — X-3 đóng | — | Đóng |
+| ⚙️ G · OQ-G7 | **Chốt kỹ thuật 24/08 (Dev, chờ phản đối): 2 cột** `createdById` + `createdByCode`; chuỗi `mãNV_tên` chỉ là cách hiển thị | Dev | — |
 | G · OQ-G10 | Bảng nào là **nguồn sự thật** cho lịch sử chuyển sale (hiện **3 bảng, 3 đường ghi**, không bảng nào phủ hết) | Chủ dự án | **S8** (G-06-7, P1) |
-| G · OQ-G11 | Bộ cột **mặc định** của danh sách lead sau G có giữ đúng 7 cột hiện tại không | Chủ dự án | **S9** (trước khi bật G-04) |
-| G · OQ-G12 | File xuất theo **cấu hình cột của người xuất** hay **bộ cột cố định** | Chủ dự án | **S14** |
-| G · OQ-G8 | `LeadChild.gender` (`String?`) có chuẩn hoá về enum `Gender` không (2-phase) | Chủ dự án | **S7** |
-| C · OQ-C1 | "Đã chốt" = `ENROLLED` hay tính cả "đã trả tiền nhưng chưa ghi danh" | Chủ dự án | **S11** (trước migration G nếu phải thêm giá trị enum) |
-| C · OQ-C5 | Quyền đặt chỉ tiêu lead dùng key nào (dùng lại `leads:assign-config` hay đẻ key mới) | Chủ dự án | **S12** |
+| ⚙️ ~~G · OQ-G11~~ | ✅ **Chốt kỹ thuật 24/08 (Dev): giữ nguyên 7 cột mặc định.** Khoá danh sách cột (SL-09b + SL-12) **trước** khi có người lưu cấu hình đầu tiên | — | Đóng |
+| ⚙️ ~~G · OQ-G12~~ | ✅ **Chốt kỹ thuật 24/08 (Dev): bộ cột CỐ ĐỊNH** cho file xuất, tách khỏi G-04 | — | Đóng |
+| ⚙️ ~~G · OQ-G8~~ | ✅ **Chốt kỹ thuật 24/08 (Dev): ĐỂ NỢ** — giữ `String?`; validator chuẩn hoá đầu vào mới. Kích hoạt nợ khi có báo cáo cần nhóm theo giới tính | — | Đóng (ghi nợ) |
+| ~~C · OQ-C1~~ | ✅ **ĐÃ CHỐT 24/08/2026 (B2): chỉ `ENROLLED`** ("đăng ký thành công, trở thành học viên") ⇒ **không** phải thêm giá trị enum. ⚠️ Vẫn phải chạy §C.6.9 trên prod trước khi bật C3 | — | Đóng |
+| ⚙️ ~~C · OQ-C5~~ | ✅ **Chốt kỹ thuật 24/08 (Dev): key MỚI `lead_targets:manage`** — KHÔNG dùng lại `leads:assign-config` (key đó chưa seed cho vai nào **và** đang gác màn cấu hình chia lead). Phải seed prod | — | Đóng |
 | C · OQ-C8 | Tỷ lệ thành công tính theo **lứa** hay theo **kỳ chốt** | Chủ dự án | **S11** |
 | C · OQ-C4 | "Lần tiếp cận gần nhất" tính những loại `LeadActivity` nào (tính `STATUS_CHANGE` thì Sale **reset được đồng hồ mà không gọi khách**) | Vận hành | **S12** |
 | D · OQ-D3 | Có bao nhiêu ad account (job hiện đọc **một** `META_AD_ACCOUNT_ID`) | Marketing | **S13** |
 | D · OQ-D5 | Vai `MARKETING` cấp cơ sở có được sửa mapping D-07 không (gán campaign cho CS1 là **lấy tiền khỏi** CS2) | Chủ dự án | **S14** |
-| D · OQ-D6 | Đơn vị chi tiết nhất là **campaign** hay **ad set** | Marketing | **S13** |
+| ⚙️ ~~D · OQ-D6~~ | ✅ **Chốt kỹ thuật 24/08 (Dev): `level=adset`**, lưu kèm `campaignId` + `adsetId` | — | Đóng |
 | D · OQ-D8 | Chi phí marketing **ngoài Meta** (tờ rơi, sự kiện, KOL) đi đường nào — PRD đề xuất qua **bảng chi phí của B**, không nhét vào bảng ads (nếu không **B3 trừ hai lần**) | Chủ dự án | **S15** |
-| B · OQ-B1 | **Thống nhất** định nghĩa doanh thu ở 3 chỗ hay **chỉ đổi nhãn** — xem EL-8 | Chủ dự án + Kế toán | **S15** |
+| ~~B · OQ-B1~~ | ✅ **ĐÃ CHỐT 24/08/2026 (B3): THỐNG NHẤT về `Payment` CONFIRMED** (Đường 1 — sửa logic `accountant-dashboard.tsx:26-31` + `funnel-query.ts:17-20`). ⚠️ Điều kiện cứng: đo §B.6.8 trước + **báo trước cho kế toán và marketing** vì số của họ tụt ngay | — | Đóng |
 | B · OQ-B2 | Một khoản bị điều chỉnh **nhiều lần** thì tính bản nào (PRD đề xuất **bản `ADJUSTED` mới nhất thắng**) | Kế toán | **S15** |
 | B · OQ-B3 | "Dòng tiền" = **thu ghi nhận** hay **tiền vật lý về ngân hàng** | Chủ dự án | **S18** |
-| B · OQ-B5 | Permission key cho chi phí (`costs:view`/`costs:manage`/`costs:approve`?) | Chủ dự án | **S17** |
+| ⚙️ ~~B · OQ-B5~~ | ✅ **Chốt kỹ thuật 24/08 (Dev): `costs:view` / `costs:manage` / `costs:approve`**; người nhập **không** tự duyệt. Phải seed prod | — | Đóng |
 | B · OQ-B6 | Chi phí **cấp công ty** (`centerId = null`) có phân bổ về cơ sở không | BGĐ | **S18** |
-| B · OQ-B9 | Range mặc định của tab B (A-02 chốt "01 → hôm nay"; tài chính thường muốn **tháng trước trọn vẹn**) | Chủ dự án | **S2** (ảnh hưởng A-02) |
+| ~~B · OQ-B9~~ | ✅ **ĐÃ CHỐT 24/08/2026: "01 → hôm nay"**, giống 3 tab kia — không có ngoại lệ cho tab B | — | Đóng |
 | D · OQ-D7 = B · OQ-B8 | Có cần **đóng sổ theo tháng** không (khoá không cho sửa) | Kế toán | Sau S18 (additive, làm sau được) |
 | E · OQ-1 | Định nghĩa **"PH đã tương tác"** (A: đã gửi ≥1 tin trong range · B: `lastReadAt ≥ dateFrom` · C: A hoặc đọc thông báo). **Kèm câu hỏi con: có tính kênh 1-1 vào không?** | Chủ dự án | **S12** |
 | E · OQ-2 | Mẫu số E-02 lọc `Enrollment.status` nào — riêng **(a)** `PAUSED` có tính? **(b)** `COMPLETED` có tính? | Chủ dự án | **S12** |
 | E · OQ-3 | QLCS bấm vào kênh 1-1 thì xảy ra gì (a/b/c) | Chủ dự án | **S12** |
-| E · OQ-4 | Quyền **cấp trang** cho tab E (không mượn `chat:read` được — seed scope CENTER/ASSIGNED nên gọi không target luôn trả `false`: **xanh ở local, khoá cửa trên prod**) | Chủ dự án + Dev | **S12** |
-| E · OQ-5 | Thứ tự suy **"giáo viên phụ trách"** của một buổi (repo đang có **4** thứ tự khác nhau) | Chủ dự án | **S12** |
-| E · OQ-6 | E-01 trang đích: **mở rộng** `/admin/attendance` hay dựng trang mới | Chủ dự án | **S12** |
+| ⚙️ ~~E · OQ-4~~ | ✅ **Chốt kỹ thuật 24/08 (Dev): key MỚI `dashboard:view`** gác trang 4 tab; từng tab gate thêm bằng key lĩnh vực. ❌ Không mượn `chat:read`. Phải seed prod | — | Đóng |
+| ⚙️ ~~E · OQ-5~~ | ✅ **Chốt kỹ thuật 24/08 (Dev): `substituteTeacherId ?? actualTeacherId ?? class.teacherId`**, đặt trong helper dùng chung; chuyển 4 chỗ cũ sang helper là ticket riêng | — | Đóng |
+| ⚙️ ~~E · OQ-6~~ | ✅ **Chốt kỹ thuật 24/08 (Dev): mở rộng `/admin/attendance`**, thiếu `dateFrom`/`dateTo` ⇒ hành vi y hệt hôm nay | — | Đóng |
 | E · OQ-7 | E-03 có xuất hiện trên **site giáo viên** không (nếu có thì cột SĐT phải rỗng với TEACHER) | Chủ dự án | **S14** |
-| E · OQ-8 | Có chấp nhận thêm index `Message(senderId, createdAt)` không | Chủ dự án + Dev | **S13** |
+| ⚙️ ~~E · OQ-8~~ | ✅ **Chốt kỹ thuật 24/08 (Dev): CÓ thêm index**, dùng `CREATE INDEX CONCURRENTLY`, nằm trong story E-02 | — | Đóng |
 
 ### 9.4 Nhịp theo dõi việc ngoài code
 

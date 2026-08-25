@@ -13,6 +13,25 @@
 
 ---
 
+## 0. Quyết định chủ dự án — 24/08/2026 (THẮNG phần thân bài)
+
+Nguồn: `docs/plan/cau-hoi-can-quyet.md` §"Quyết định của chủ dự án — chốt 24/08/2026".
+
+| Mã | Quyết định | Ảnh hưởng trong PRD này |
+|---|---|---|
+| **B1** | Bảng/cột mới mang **CẢ HAI** `centerId` + `orgUnitId` | SL-08 giữ nguyên; áp cho mọi bảng mới của G |
+| **B2** | "Đã chốt" = **đăng ký thành công, thành học viên** ⇒ `LeadChildStatus.ENROLLED` | §6.5 giữ đúng 6 giá trị, **không** thêm giá trị "đã trả tiền chưa ghi danh" |
+| **B3** | "Thực thu" = `Payment` **CONFIRMED** toàn hệ thống | **OQ-G2 đóng** — §6.4 lấy `Payment`, không `Order.totalAmount` |
+| **B4** | `Order.leadChildId`, một đơn – một con | **OQ-G1 đóng** — phương án (a) |
+| **12(b)** | Lý do rớt = **ô ghi chú tự do**, KHÔNG danh mục | Bỏ `LeadLostReason` (§6.6) + `lostReasonId`; **G-06-1 đổi thành "bắt buộc nhập ghi chú"**; G-06-2 chỉ còn nguồn lead |
+| **B5** | Ô ghi chú lý do rớt đặt ở **`Lead`**, KHÔNG phải `lead_student` | 🔴 **PRD này bị đảo** — §6.3.b sửa: `lostNote`/`lostAt` chuyển lên `Lead`. **OQ-G3 đóng** |
+| **12(a)** | Ngưỡng lead treo = **2 ngày** (đỏ tạm 4 ngày) | Dùng cho cột "số ngày chưa tiếp cận lại" |
+| **B12** | Xuất lead = **`.xlsx`** | Bộ cột cố định (OQ-G12, chưa có chỉ đạo khác) |
+
+⏳ **Còn treo:** danh mục **nguồn lead** (`LeadSource`) chưa có giá trị nào.
+
+---
+
 ## 1. Executive Summary
 
 Khu vực G làm ba việc, theo đúng thứ tự phụ thuộc:
@@ -173,8 +192,8 @@ bảng `AuditLog` hợp nhất với `module: "leads"`, `entityType: "Lead"`, k�
 | **G-01-1** | Là Sale, tôi nhập **địa chỉ** (tỉnh/TP · phường/xã · chi tiết) vào ô riêng. | 3 cột thật trên `Lead`. Đường ghi từ form Sale **ngừng** nhét vào `note` (`map-sale-form.ts:122,127`). Picker tỉnh/phường dùng `vietnam-address-data` — **đã có sẵn trong repo** và đã dùng ở `app/(admin)/admin/orders/_components/order-create-form.tsx:174` (mô hình 2 cấp 2025). |
 | **G-01-2** | 🔴 Là QLCS, tôi biết **ai mang lead về**, tách khỏi **ai đang chăm**. | `Lead.createdById` + `Lead.createdByCode` (mã NV) là cột riêng. `assignedToId` giữ nghĩa "sale phụ trách". Đường `ingest.ts:157` **thôi** dùng mã NV làm `assignedToId` mặc định; mã NV luôn được ghi vào `createdByCode` kể cả khi người đó không phải Sale (vá N-2). |
 | **G-01-3** | Là Sale, tôi ghi **lớp học tại trung tâm** của từng con. | `LeadChild.classId String?` (tham chiếu `Class`). Phân biệt rõ với `LeadChild.interestedCenterId` (`:1470`, cơ sở quan tâm) và với `Enrollment` (chỉ có sau khi convert — `Enrollment.leadChildId:1833` với chú thích *"Enrollment tạo trực tiếp → null"*). |
-| **G-06-1** | Là Sale, khi đánh dấu **Rớt** tôi **bắt buộc** chọn lý do. | Server Action từ chối nếu thiếu `lostReasonId`. Lý do lấy từ **bảng danh mục** `LeadLostReason` (§6.6), không phải enum Postgres. |
-| **G-06-2** | Là admin, tôi thêm/sửa/ẩn **lý do rớt** và **nguồn lead** mà không cần deploy. | Hai bảng danh mục `LeadLostReason` + `LeadSource` với `(code, label, isActive, displayOrder)`. `Lead.source` hiện là **String tự do** (`:1327`, validator `actions.ts:575` `z.string().max(100)`, filter `page.tsx:119` dùng `contains`) — không có danh mục nào trong repo (grep `LEAD_SOURCE`/`SOURCE_OPTIONS` = 0 kết quả). |
+| **G-06-1** | Là Sale, khi đánh dấu **Rớt** tôi **bắt buộc nhập ghi chú lý do**. | ✅ **Đổi theo 12(b) + B5 (24/08/2026):** không có danh mục; ghi vào **`Lead.lostNote`** + **`Lead.lostAt`** (cấp phụ huynh), trạng thái `LOST` vẫn set ở `LeadChild`. Server Action từ chối nếu `lostNote` rỗng (`z.string().trim().min(1)`). ~~`lostReasonId` + bảng `LeadLostReason`~~ **loại khỏi phạm vi**. Đánh đổi đã chấp nhận: **không nhóm được "top lý do rớt"**. |
+| **G-06-2** | Là admin, tôi thêm/sửa/ẩn **nguồn lead** mà không cần deploy. | ✅ 24/08/2026: **chỉ còn một** bảng danh mục `LeadSource` với `(code, label, isActive, displayOrder)` — ~~`LeadLostReason`~~ bỏ (12(b)). `Lead.source` hiện là **String tự do** (`:1327`, validator `actions.ts:575` `z.string().max(100)`, filter `page.tsx:119` dùng `contains`) — không có danh mục nào trong repo (grep `LEAD_SOURCE`/`SOURCE_OPTIONS` = 0 kết quả). |
 | **G-06-3** | Là Marketing, tôi bóc CPL/CPA **theo campaign**. | `Lead.campaignId` + `Lead.adsetId` + `Lead.adId`. `utm*` đã có (`:1328-1332`) nhưng là **nhãn chiến dịch**, không phải ID của Meta; `fbclid/fbp/fbc` (`:1333,1335,1336`) là tham số click/cookie, **không** phải Ad ID. |
 | **G-02-1** | Là Sale được cấp quyền, tôi sửa được lead. | Giữ nguyên gate hiện có: `checkPermission('leads:edit')` + `passesScope('Lead', …)` + `actorMayMutateLead` (`actions.ts:50-56`: chủ lead **hoặc** `leads:view-all`). Bộ trường sửa được mở rộng theo G-01/G-06. |
 | **G-02-2** | 🔴 Là QLCS, tôi **nhìn thấy** ai sửa Tên PH / Tên HS / SĐT, lúc nào, cũ → mới. | Ghi audit đã có (`logLeadAudit` → `AuditLog`, `lib/audit/log.ts:141-155`). **Việc phải làm là UI**: thêm mục "Lịch sử thay đổi" trên `app/(admin)/admin/leads/[id]/page.tsx` đọc `AuditLog` (`module='leads'`, `entityId=leadId`) — hiện trang này **chỉ** đọc `activities` (`:54`). Sửa `LeadChild.fullName` cũng phải ghi (đã có tiền lệ `lib/students/sync-name.ts:126`). |
@@ -280,9 +299,9 @@ Ký hiệu: **ĐÃ CÓ** = cột thật đang tồn tại (ghi kèm tên cột t
 | Trường (theo spec) | Thuộc | Lý do |
 |---|---|---|
 | Trạng thái lead (6 giá trị) — **THÊM MỚI** `LeadChild.status` · enum **mới** `LeadChildStatus` (§6.5) | `lead_student` | 🔴 G-07: *"trạng thái chốt ghi nhận theo từng học sinh"*. Con A ghi danh trong khi con B rớt là ca thường. `Lead.status` (`:1322`, 15 giá trị) **giữ nguyên**, mang nghĩa "tình trạng liên hệ với PH" |
-| Lý do rớt (enum cấu hình) — **THÊM MỚI** `LeadChild.lostReasonId` · `String?` → `LeadLostReason` | `lead_student` | Đi kèm trạng thái rớt ⇒ cùng tầng. Con A rớt vì "xa nhà", con B rớt vì "học phí" — hai lý do khác nhau trên cùng một PH. ⚠️ **Lệch có chủ đích so với SL-10** (`A-nen-tang.md` §10.3 đặt ở `Lead`) — xem OQ-G3 |
-| Ghi chú rớt — **THÊM MỚI** `LeadChild.lostNote` · `Text?` | `lead_student` | Cùng tầng với lý do rớt |
-| Thời điểm rớt — **THÊM MỚI** `LeadChild.lostAt` · `DateTime?` | `lead_student` | Cùng tầng. grep `lostReason`/`lostAt` toàn `schema.prisma` = **0 kết quả** |
+| ~~Lý do rớt (enum cấu hình) — `LeadChild.lostReasonId` → `LeadLostReason`~~ | — | ❌ **BỎ 24/08/2026 (quyết định 12(b))** — lý do rớt là **ô ghi chú tự do**, không danh mục |
+| Lý do rớt (**ô ghi chú tự do, BẮT BUỘC**) — **THÊM MỚI** `Lead.lostNote` · `Text?` | **`Lead`** | ✅ **Chốt 24/08/2026 (câu B5): cấp phụ huynh** — khớp SL-10 của `A-nen-tang.md` §10.3. Đề xuất cũ của PRD này (`lead_student`) **bị đảo**. ⚠️ Hệ quả: con A rớt vì "xa nhà", con B rớt vì "học phí" ⇒ **chỉ giữ được ghi chú mới nhất**; lý do từng con tra ở `AuditLog`/`LeadActivity` |
+| Thời điểm rớt — **THÊM MỚI** `Lead.lostAt` · `DateTime?` | **`Lead`** | Cùng tầng với lý do (B5). grep `lostReason`/`lostAt` toàn `schema.prisma` = **0 kết quả** |
 | Thời điểm chốt — **THÊM MỚI** `LeadChild.closedAt` · `DateTime?` | `lead_student` | C-03 tính *thời gian chốt = chốt − vào hệ thống*, đơn vị là **học sinh**. `Lead.convertedAt` (`:1347`) là mốc của cả lead — không thay được |
 | Giá trị hợp đồng / doanh số — **THÊM MỚI** `LeadChild.contractValue` · `Int?` (VND) **+ đường nối tiền thật** (§6.4) | `lead_student` | 🔴 G-07 nói rõ *"doanh số ghi nhận theo từng học sinh"*. `contractValue` là **con số Sale cam kết**; **doanh số thực thu** phải suy từ `Payment` qua đường nối §6.4 — hai thứ khác nhau, đừng gộp |
 | Campaign — **THÊM MỚI** `Lead.campaignId` · `String?` | `lead` | Quảng cáo dẫn tới **cuộc liên lạc**, không thuộc riêng đứa con nào |
@@ -441,23 +460,18 @@ Sáu giá trị khớp đúng sáu bước spec G-06 nêu (*Mới → Đang tư 
 ⚠️ **Không** viết cron/trigger tự đồng bộ hai enum. Luật cứng Nền Hệ thống #8 cấm cron ghi thay đổi quyền;
 tinh thần tương tự ở đây: suy diễn trạng thái là việc của **resolver lúc đọc**, không phải job ghi đè.
 
-### 6.6 Hai bảng danh mục cấu hình được
+### 6.6 Danh mục cấu hình được (còn **một** bảng)
 
 Spec đòi "enum **cấu hình được**" ⇒ **bảng danh mục**, không phải enum Postgres (đổi enum = migration,
 trái hẳn tinh thần "admin tự set" và trái luật cứng #4).
 
-```prisma
-model LeadLostReason {
-  id           String   @id @default(cuid())
-  code         String   @unique      // "TOO_FAR", "PRICE", "NO_TIME"
-  label        String                // "Nhà quá xa cơ sở"
-  isActive     Boolean  @default(true)
-  displayOrder Int      @default(0)
-  createdAt    DateTime @default(now()) @db.Timestamptz(6)
-  updatedAt    DateTime @updatedAt @db.Timestamptz(6)
+> ❌ **`LeadLostReason` BỎ khỏi phạm vi — quyết định 12(b) ngày 24/08/2026.** Lý do rớt là **ô ghi chú tự
+> do** (`lostNote`, bắt buộc khi đánh dấu rớt). Hệ quả đã chấp nhận: không có báo cáo "top lý do rớt".
+> Thêm danh mục về sau là việc **additive** (bảng danh mục + cột `lostReasonId`, ghi chú cũ giữ nguyên).
 
-  @@index([isActive, displayOrder])
-}
+```prisma
+// ❌ ĐÃ BỎ 24/08/2026 — giữ lại để biết đường quay lại nếu sau này cần danh mục:
+// model LeadLostReason { id · code @unique · label · isActive · displayOrder · createdAt · updatedAt }
 
 model LeadSource {
   id           String   @id @default(cuid())
@@ -716,18 +730,18 @@ viewport 375px must work.)
 
 | # | Câu hỏi | Vì sao chặn | Chủ | Hạn |
 |---|---|---|---|---|
-| **OQ-G1** | 🔴 Chốt **(a) `Order.leadChildId`** hay **(b) bảng `OrderLeadChildAllocation`**? | Toàn bộ C-03 đứng trên đây. Chốt sau khi báo cáo chạy = quy lại toàn bộ đơn cũ bằng tay (SL-09b). PRD khuyến nghị (a) + quy tắc "một đơn – một con" | Chủ dự án | **Trước dòng code đầu tiên của G** |
-| **OQ-G2** | 🔴 "Doanh số theo học sinh" lấy từ **`Payment` thực thu** hay **`Order.totalAmount`**? | Khu vực B đã chốt *thực thu*. Nếu C-03 dùng `Order.totalAmount` thì hai tab cùng màn hình cho hai con số khác nhau. PRD khuyến nghị `Payment` | Chủ dự án | Cùng OQ-G1 |
-| **OQ-G3** | 🔴 **Lý do rớt** đặt ở `lead_student` (PRD này) hay `Lead` (SL-10 trong `A-nen-tang.md` §10.3)? | Hai tài liệu đang lệch nhau. G-07 nói trạng thái chốt theo học sinh ⇒ rớt cũng theo học sinh; nhưng C-06 viết "sale đổi trạng thái **lead** sang Rớt". Chốt sai = phải migrate cột sang bảng khác sau khi có dữ liệu | Chủ dự án | Trước khi sinh migration G |
+| ~~**OQ-G1**~~ | ~~Chốt (a) `Order.leadChildId` hay (b) bảng `OrderLeadChildAllocation`?~~ | ✅ **ĐÃ CHỐT 24/08/2026 (B4): phương án (a)** `Order.leadChildId String?` + relation + `@@index([leadChildId])`, quy tắc **một đơn – một con**. Đơn cũ backfill tự động **chỉ khi** lead có đúng 1 con; phần còn lại để `null` + báo cáo hiện dòng "chưa quy được về con". | — | Đóng |
+| ~~**OQ-G2**~~ | ~~"Doanh số theo học sinh" lấy từ `Payment` thực thu hay `Order.totalAmount`?~~ | ✅ **ĐÃ CHỐT 24/08/2026 (B3): `Payment` đã xác nhận (CONFIRMED)** cho toàn hệ thống. Không `Order.totalAmount`, không `LeadChild.contractValue` (đó là cam kết của Sale — cột riêng nếu muốn hiện). | — | Đóng |
+| ~~**OQ-G3**~~ | ~~Ô ghi chú lý do rớt đặt ở `lead_student` hay `Lead`?~~ ✅ **ĐÃ CHỐT 24/08/2026 (câu B5): `Lead`** — §6.3.b của PRD này đã sửa cho khớp SL-10. Trạng thái rớt **vẫn** theo từng con. **Đóng.** | ~~Hai tài liệu đang lệch nhau. G-07 nói trạng thái chốt theo học sinh ⇒ rớt cũng theo học sinh; nhưng C-06 viết "sale đổi trạng thái **lead** sang Rớt". Chốt sai = phải migrate cột sang bảng khác sau khi có dữ liệu | Chủ dự án | Trước khi sinh migration G |
 | **OQ-G4** | Khi **mọi** con đã `LOST`, `Lead.status` có tự chuyển `LOST` không? | PRD đề xuất **không** tự động (§6.5). Nếu chủ dự án muốn tự động thì phải quyết nơi chạy (resolver lúc đọc vs job ghi) và ai chịu trách nhiệm số liệu | Chủ dự án | Trước khi code C-02 |
 | **OQ-G5** | Một lead có bao nhiêu con là **thực tế tối đa**? Có cần trần không? | Ảnh hưởng UI bảng con và cách hiển thị doanh số gộp trên dòng lead | Chủ dự án | Trước khi code G-07 UI |
-| **OQ-G6** | Danh mục **lý do rớt** ban đầu gồm những giá trị nào? Danh mục **nguồn lead** gồm những gì? | Spec ghi rõ hai giá trị này *"đang để trống trong Cấu hình vận hành"*. Không có danh sách thì G-06-1 không nghiệm thu được, và migrate `Lead.source` (String tự do) không có đích để map | Chủ dự án + Marketing | Trước khi seed danh mục |
-| **OQ-G7** | 🔴 **Người nhập lead** hiển thị theo dạng `mãNV_tên` (spec G-01). Lưu 2 cột (`createdById` + `createdByCode`) hay 1 chuỗi ghép? | PRD đề xuất 2 cột (`createdById` để nối `User`, `createdByCode` để giữ mã kể cả khi người đó nghỉ). Chuỗi ghép thì không join được | Chủ dự án | Trước khi sinh migration G |
-| **OQ-G8** | `LeadChild.gender` (`String?` tự do) có chuẩn hoá về enum `Gender` không? | Đổi kiểu cột đang có dữ liệu PROD ⇒ luật cứng #4 ⇒ phải 2-phase (thêm cột enum, backfill "Nam"→`MALE`, đọc song song, drop sau). Có đáng làm trong G không, hay để nợ? | Chủ dự án | Trước khi sinh migration G |
+| **OQ-G6** | ⚠️ **Trả lời một nửa 24/08/2026.** ~~Danh mục lý do rớt~~ → **không có danh mục**, dùng ô ghi chú tự do (12(b)). **Danh mục `nguồn lead` gồm những gì?** — VẪN CHỜ | Không có danh sách nguồn lead thì migrate `Lead.source` (String tự do, `:1327`) không có đích để map. Phần lý do rớt không còn chặn G-06-1 (chỉ cần ô text bắt buộc) | Chủ dự án + Marketing | Trước khi seed `LeadSource` |
+| ⚙️ ~~**OQ-G7**~~ | **Chốt kỹ thuật 24/08/2026 (đề xuất của Dev, chờ phản đối): 2 cột** `createdById` + `createdByCode`. Chuỗi ghép `mãNV_tên` chỉ là **cách hiển thị**, dựng lúc đọc. | 1 chuỗi ghép thì không join `User` được, và mã NV đổi/người nghỉ là hỏng dữ liệu lịch sử | Dev | Trước khi sinh migration G |
+| ⚙️ ~~**OQ-G8**~~ | ~~`LeadChild.gender` có chuẩn hoá về enum `Gender` không?~~ | ✅ **CHỐT KỸ THUẬT 24/08/2026 (Dev): ĐỂ NỢ — giữ `String?`, không chuẩn hoá trong G.** Đổi kiểu cột đang có dữ liệu prod là 2-phase, tốn một chu kỳ migration mà **không phục vụ yêu cầu nào của G-01…G-07**. **Điều kiện kích hoạt món nợ:** khi xuất hiện báo cáo cần **nhóm/lọc theo giới tính**. Trong lúc chờ: validator chuẩn hoá **đầu vào mới** về `"Nam"`/`"Nữ"`/`"Khác"` để không đẻ thêm biến thể. | — | Đóng (ghi nợ) |
 | **OQ-G9** | Học thử **không** đi qua `TrialClassV2` (xếp tay, buổi lẻ) có cần chỗ lưu riêng không? | Hôm nay "ngày học thử + kết quả" chỉ có ở `LeadTrialHistory` (`:6117`), mà bảng đó gắn cứng `trialClassId` (`:6119`). Không có ca ad-hoc thì bỏ qua; có thì cần 2 cột denormalize trên `LeadChild` | Chủ dự án / Vận hành | Trước khi code G-06 |
 | **OQ-G10** | 🔴 Bảng nào là **nguồn sự thật** cho lịch sử chuyển sale trong 3 bảng đang có? | §2.4 — 3 bảng, 3 đường ghi, không bảng nào phủ hết; đường tự chia (`assign.ts`/`auto-assign.ts`) không ghi vào bảng nào. PRD đề xuất `LeadAssignmentHistory`. Chốt sai = tranh chấp hoa hồng vẫn không giải được | Chủ dự án | Trước khi code G-06-7 |
-| **OQ-G11** | Bộ cột **mặc định** của danh sách lead sau G có giữ đúng 7 cột hiện tại không? | PRD đề xuất **giữ nguyên** (§7.4) để bật G-04 không làm giao diện của ai nhảy. Nếu chủ dự án muốn đổi mặc định thì phải chốt **trước** khi user bắt đầu lưu cấu hình | Chủ dự án | Trước khi bật G-04 |
-| **OQ-G12** | File **xuất Excel** có theo cấu hình cột của người xuất không, hay luôn xuất bộ cột cố định? | Spec không nói. Theo cấu hình thì hai người xuất ra hai file khác nhau — khó đối chiếu. PRD nghiêng về **bộ cột cố định**, tách khỏi G-04 | Chủ dự án | Trước khi làm G-03 |
+| ⚙️ ~~**OQ-G11**~~ | ~~Bộ cột mặc định sau G có giữ đúng 7 cột hiện tại không?~~ | ✅ **CHỐT KỸ THUẬT 24/08/2026 (Dev): GIỮ NGUYÊN 7 cột.** Bật G-04 không được làm giao diện của ai nhảy; ai muốn thêm thì tự thêm. ⚠️ Ràng buộc: **danh sách cột phải khoá xong (SL-09b + SL-12) TRƯỚC khi có người lưu cấu hình đầu tiên** — đổi tên/bỏ cột sau đó biến cấu hình đã lưu thành mồ côi. | — | Đóng |
+| ⚙️ ~~**OQ-G12**~~ | ~~File xuất theo cấu hình cột của người xuất hay bộ cột cố định?~~ | ✅ **CHỐT KỸ THUẬT 24/08/2026 (Dev): BỘ CỘT CỐ ĐỊNH**, tách hẳn khỏi G-04. File xuất là thứ người ta **đối chiếu với nhau** và gửi ra ngoài — chạy theo tuỳ chọn cá nhân thì hai người xuất ra hai file khác cấu trúc và mọi công thức Excel dựng sẵn trên đó gãy. G-04 chỉ đổi **màn hình**. Định dạng `.xlsx` (B12). | — | Đóng |
 
 ---
 

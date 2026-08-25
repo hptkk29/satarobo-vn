@@ -10,6 +10,27 @@
 > Mọi khẳng định hiện trạng đều kèm `file:dòng` đọc trực tiếp từ mã nguồn trên nhánh này.
 > Chỗ nào chưa tồn tại được ghi rõ **CHƯA CÓ**.
 
+
+
+## 0. Quyết định chủ dự án & chốt kỹ thuật — 24/08/2026 (THẮNG phần thân bài)
+
+Nguồn: `docs/plan/cau-hoi-can-quyet.md`.
+
+| Mã | Quyết định | Ai chốt |
+|---|---|---|
+| **OQ-4** | Quyền cấp trang: khai key MỚI **`dashboard:view`**; từng tab gate thêm bằng key lĩnh vực sẵn có. ❌ Không mượn `chat:read` | ⚙️ Dev |
+| **OQ-5** | Giáo viên phụ trách = `substituteTeacherId ?? actualTeacherId ?? class.teacherId`, đặt trong **một helper dùng chung** | ⚙️ Dev |
+| **OQ-6** | **Mở rộng** `/admin/attendance` (thêm `dateFrom`/`dateTo`), không dựng trang mới | ⚙️ Dev |
+| **OQ-8** | **Có** thêm `@@index([senderId, createdAt])` trên `Message`, dùng `CREATE INDEX CONCURRENTLY` | ⚙️ Dev |
+
+🔴 **E vẫn còn 4 câu CHẶN CỨNG, chưa ai trả lời** — không code được E-02/E-03/E-04 trước khi có:
+**OQ-1** (định nghĩa "PH đã tương tác" — A/B/C, và có tính kênh 1-1 không) · **OQ-2** (mẫu số lọc
+`Enrollment.status` nào: `PAUSED` có tính? `COMPLETED` có tính?) · **OQ-3** (QLCS bấm vào kênh 1-1 thì xảy
+ra gì) · **OQ-7** (E-03 có lên site giáo viên không — quyết định phạm vi test PII).
+
+⚠️ `dashboard:view` là key MỚI ⇒ **chạy `seed-prod-roles.yml` sau khi merge lên `main`**, nếu không
+**không ai vào được dashboard**.
+
 ---
 
 ## 1. Executive Summary
@@ -631,11 +652,11 @@ Bằng chứng file đó tuân thủ: **10 dòng `^export` và cả 10 đều l�
 | **OQ-1** 🔴 | **Chốt định nghĩa "PH đã tương tác".** Ba phương án ở §6.2: **(A)** PH đã **gửi ≥1 tin** trong range · **(B)** PH có `lastReadAt ≥ dateFrom` · **(C)** A **hoặc** đọc thông báo trong range. **Khuyến nghị: (A)**, vì chỉ (A) đo đúng *khoảng thời gian* — `lastReadAt` (`prisma/schema.prisma:6539`) và `lastLoginAt` (`:1066`) là **vô hướng, bị ghi đè**, nên "đã tương tác trong tháng 7" không tính được từ chúng. | Không có định nghĩa thì E-02 (tử số), E-03 (dòng nào lên bảng) và E-04 (kênh nào hiện trong dropdown) đều không code được. **Kèm câu hỏi con:** có tính kênh **1-1** vào không? Nếu có thì không được lọc phạm vi qua `Conversation.centerId` (§6.2 bẫy chung). | Chủ dự án | Trước khi code E-02 |
 | **OQ-2** 🔴 | **E-02 lọc `Enrollment.status` nào?** Enum có 9 giá trị (`prisma/schema.prisma:71-84`). Hằng sẵn có `ENROLLMENT_ACTIVE_STATUS_LIST = [ACTIVE, CONFIRMED, STUDYING, PAUSED]` (`lib/enrollment-status.ts:17`). Hai câu phải trả lời riêng: **(a)** `PAUSED` (tạm dừng, vẫn thuộc lớp — `lib/enrollment-status.ts:5`) có tính là "đang có con học"? **(b)** `COMPLETED` (học xong khoá, chưa nghỉ hẳn) có tính? **Khuyến nghị: dùng đúng `ENROLLMENT_ACTIVE_STATUS_LIST`** — giữ PAUSED, loại COMPLETED/WITHDREW/TRANSFERRED/CANCELLED/PENDING — để E-02 khớp với sĩ số mà điểm danh đang dùng. | Đây **chính là** mẫu số. Chọn khác đi thì tỉ lệ đổi mà không ai đối chiếu được. | Chủ dự án | Trước khi code E-02 |
 | **OQ-3** 🔴 | **E-04: QLCS bấm vào kênh 1-1 thì xảy ra gì?** Đo được: QLCS **không** là participant của DM, **không** mở được DM mới (`DmKind` chỉ có 2 giá trị — `lib/chat/dm.ts:67`; `openDmTargetOf` ép `centerId: null` để QLCS tự deny — `:135, 139`), và `assertActiveParticipant` chặn cứng (`lib/chat/queries.ts:434`). Ba lựa chọn: **(a)** dropdown chỉ liệt kê kênh người xem là participant (QLCS → chỉ nhóm lớp), mục 1-1 hiện mờ kèm lý do; **(b)** chỉ SUPER_ADMIN mở được 1-1, qua `adminLookupConversationAction` — bắt buộc `reason` + audit, và là **màn tra cứu chỉ-đọc**, không phải `ChatThread`; **(c)** mở `DM_STAFF`/thêm `DmKind` cho QLCS — **nới quyền thật**, ngoài phạm vi E. **Khuyến nghị: (a) cho P0, (b) cho P2.** | Spec E-04 viết "dropdown kênh (1-1 / nhóm lớp)" như thể cả hai đều mở được. Không chốt thì hoặc code ra nút chết, hoặc ai đó "vá" bằng cách nới `assertActiveParticipant`. | Chủ dự án | Trước khi code E-04 |
-| **OQ-4** | **Quyền cấp trang cho tab E là gì?** Không mượn `chat:read` được: dưới RBAC v2 nó seed scope CENTER/ASSIGNED nên gọi **không target** luôn trả `false` — xanh ở local, khoá cửa trên prod (`app/(admin)/admin/bao-cao/chat-pilot/page.tsx:10-14`; `app/(admin)/admin/tin-nhan/page.tsx:16-19`). Cần một action khai mới hoặc mượn quyền dashboard sẵn có. | Chọn sai = QLCS mất cửa trên prod, không tái hiện được ở dev. | Chủ dự án + dev | Trước khi code E |
-| **OQ-5** | **E-01: thứ tự suy "giáo viên phụ trách" của một buổi?** Repo đang có 4 thứ tự khác nhau (§2.3). **Khuyến nghị: `substituteTeacherId ?? actualTeacherId ?? class.teacherId`** (bản của `lib/lms/schedule-conflict.ts:109`) vì nó tôn trọng dạy thay. | Chọn khác báo cáo hiệu suất GV (`hieu-suat-gv/page.tsx:285`) thì hai màn báo hai tên GV cho cùng một buổi. | Chủ dự án | Trước khi code E-01 |
-| **OQ-6** | **E-01 trang đích: mở rộng `/admin/attendance` hay dựng trang mới?** Mở rộng phải thêm `dateFrom`/`dateTo` vào `searchParams` hiện chỉ có `{sessionId, classId, centerId}` (`app/(admin)/admin/attendance/page.tsx:67`). Trang mới thì trùng chức năng. **Khuyến nghị: mở rộng** — trang đó là đích của thông báo, đổi đường dẫn gãy link cũ (`:9-11`). | Ảnh hưởng ước lượng và ảnh hưởng link trong hộp thông báo người dùng. | Chủ dự án | Trước khi code E-01 |
+| ⚙️ ~~**OQ-4**~~ | ~~Quyền cấp trang cho tab E là gì?~~ | ✅ **CHỐT KỸ THUẬT 24/08/2026 (Dev): khai key MỚI `dashboard:view` (scope `GLOBAL`)** gác trang dashboard 4 tab; **từng tab** gate thêm bằng key lĩnh vực sẵn có — **B** → `payments:view` · **C** → `leads:view-all` · **D** → `dashboard:view` · **E** → `dashboard:view` (cột SĐT phụ huynh vẫn qua `canViewParentContact`). ❌ **Không mượn `chat:read`** — scope `CENTER`/`ASSIGNED` nên gọi không target luôn trả `false`: xanh ở local (v1), **khoá cửa trên prod** (v2). 📌 Nợ: `canEditAds` (`lib/crm/ads-insights.ts:44-49`) so `roleCode` bằng tay, trái luật Nền Hệ thống #1 — đưa quyền ads vào registry là việc của D (OQ-D5). ⚠️ Key mới ⇒ **chạy `seed-prod-roles.yml` sau merge**. | — | Đóng |
+| ⚙️ ~~**OQ-5**~~ | ~~Thứ tự suy "giáo viên phụ trách" của một buổi?~~ | ✅ **CHỐT KỸ THUẬT 24/08/2026 (Dev): `substituteTeacherId ?? actualTeacherId ?? class.teacherId`** (`lib/lms/schedule-conflict.ts:109`) — người **thật sự đứng lớp** mới chịu trách nhiệm buổi đó. **Bắt buộc kèm:** đưa thứ tự này vào **một helper dùng chung** (vd `lib/lms/session-teacher.ts`), E-01 gọi helper chứ không tự viết lại — nếu không repo có **thứ tự thứ năm**. Chuyển 4 chỗ cũ (có `hieu-suat-gv/page.tsx:285`) sang helper là **ticket riêng**, không gánh trong E: đổi chúng làm số hiệu suất GV nhảy, phải báo trước. | — | Đóng |
+| ⚙️ ~~**OQ-6**~~ | ~~E-01 trang đích: mở rộng `/admin/attendance` hay dựng trang mới?~~ | ✅ **CHỐT KỸ THUẬT 24/08/2026 (Dev): MỞ RỘNG `/admin/attendance`**, thêm `dateFrom`/`dateTo` vào `searchParams` (hiện chỉ `{sessionId, classId, centerId}` — `page.tsx:67`). Trang đó là **đích của link trong hộp thông báo** (`:9-11`) — đổi đường dẫn là gãy link cũ, và hai trang cùng chức năng sớm muộn lệch nhau. Ràng buộc: thiếu `dateFrom`/`dateTo` ⇒ hành vi **y hệt hôm nay**. | — | Đóng |
 | **OQ-7** | **E-03 có xuất hiện trên site giáo viên không?** Nếu có thì cột SĐT phải rỗng với TEACHER (`canViewParentContact` loại TEACHER có chủ đích — `lib/auth/permissions.ts:947`). | Quyết định phạm vi test PII. | Chủ dự án | Trước khi code E-03 |
-| **OQ-8** | **Có chấp nhận thêm index cho `Message(senderId, createdAt)` không?** Phương án (A) của OQ-1 cần nó; hiện `Message` không có index nào bắt đầu bằng `senderId`/`createdAt` (`prisma/schema.prisma:6569-6571`). Đây là migration **thêm index**, không đụng cột đang có dữ liệu ⇒ không vi phạm luật Nền Hệ thống #4, nhưng vẫn phải nằm trong story được giao. | Chọn (A) mà không thêm index ⇒ tab E quét bảng `Message` mỗi lần mở dashboard. | Chủ dự án + dev | Cùng lúc với OQ-1 |
+| ⚙️ ~~**OQ-8**~~ | ~~Có chấp nhận thêm index cho `Message(senderId, createdAt)` không?~~ | ✅ **CHỐT KỸ THUẬT 24/08/2026 (Dev): CÓ.** Migration **thêm index**, không đụng cột có dữ liệu ⇒ không vi phạm luật cứng #4, nhưng nằm **trong story E-02**, không tách lẻ. Không có nó thì mỗi lần mở dashboard là một lần **quét toàn bảng `Message`** — bảng lớn nhanh nhất hệ thống. ⚠️ Bảng đang chạy ⇒ dùng `CREATE INDEX CONCURRENTLY` (viết tay trong file migration) để không khoá ghi. | — | Đóng |
 
 ---
 

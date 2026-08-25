@@ -10,6 +10,33 @@
 
 ---
 
+## 0. Quyết định chủ dự án — 24/08/2026 (THẮNG phần thân bài)
+
+Nguồn: `docs/plan/cau-hoi-can-quyet.md` §"Quyết định của chủ dự án — chốt 24/08/2026".
+
+| Mã | Quyết định | Ảnh hưởng trong PRD này |
+|---|---|---|
+| **B1** | Bảng mới mang **CẢ HAI** `centerId` + `orgUnitId` | SL-00 **đóng** — không còn là mâu thuẫn cần chốt |
+| **B4** | `Order.leadChildId` (phương án **(a)**), một đơn – một con | SL-09b **đóng** |
+| **12(b)** | Lý do rớt = **ô ghi chú tự do**, KHÔNG danh mục | SL-10 bỏ `lostReasonId`; SL-11 chỉ còn `LeadSource` |
+| **B5** | Ô ghi chú lý do rớt đặt ở **`Lead`** | ✅ **SL-10 giữ nguyên tầng như đang viết** — `G-lead.md` §6.3.b là bên phải sửa |
+| **OQ-4** | **Mặc định GỘP, có công tắc "Tách theo cơ sở"** *(sửa lần 2 trong ngày — bản đầu ghi "không tách", chủ dự án đã chỉnh)* | Truy vấn của B/C/D/E phải nhận tham số `groupByCenter` và trả **được cả hai dạng**. Công tắc chỉ hiện khi đang chọn ≥ 2 cơ sở |
+| **OQ-5** | Prod **đã có** QLCS đa cơ sở thật: **anh Phúc — vừa QLCS vừa `SUPER_ADMIN`** | 🔴 Nâng **SL-01** thành việc gấp, **giữ đủ V-1 → V-2 → V-3**. ⚠️ Hai hệ quả ở §6.9.1: (a) **không nghiệm thu A-01 bằng tài khoản anh Phúc** — `SUPER_ADMIN` luôn xanh dù A-01 hỏng; (b) mất dòng `UserOrgRole` ⇒ anh ấy **âm thầm rời nhóm chat lớp của cơ sở thứ hai** trong khi dashboard vẫn đủ |
+| **OQ-7** | **MỞ `roles:assign` cho `HO_HR`** *(sửa lần 2 trong ngày — bản đầu ghi "giữ chỉ SUPER_ADMIN")* | Seed thêm quyền cho `HO_HR` + **3 rào chống nhân bản quyền** (xem §6.10). ⚠️ Sau khi merge `test` → `main` **phải chạy `seed-prod-roles.yml`**, quên là HR trên prod vẫn không gán được |
+| **OQ-8** | Cơ sở của một QLCS **có thể thuộc vùng khác thật** | Phải có **REGION thứ hai** trong dữ liệu (hiện chỉ `DANANG`) cho e2e A-01; cây `HO → REGION → CENTER` giữ nguyên, không hardcode vùng |
+| **OQ-B9** | Range mặc định tab B = **"01 → hôm nay"**, như 3 tab kia | Bốn tab dùng chung đúng một bộ lọc; đổi tab không nhảy số |
+| **B11** | "Từ cấp quản lý trở lên" = QLCS → quản lý khu vực → giám đốc | OQ-2 **đóng**; A-03 v1 chỉ dựng được 2/3 tầng (xem OQ-2) |
+| **B12** | Xuất lead đổi sang **`.xlsx`** (SheetJS đã có) | OQ-6 **đóng** |
+| **B3** | "Thực thu" = `Payment` CONFIRMED toàn hệ thống | SL-09b bỏ phần "chốt nguồn số": nguồn số là `Payment` |
+
+⏳ **Còn treo, ảnh hưởng trực tiếp A/G:** **OQ-8** (cơ sở thứ hai của QLCS có thuộc REGION khác thật không —
+chặn dữ liệu test A-01) · danh mục **nguồn lead** (`LeadSource` chưa có giá trị nào).
+
+🔴 **Việc MỚI sinh ra từ OQ-5:** đo prod → backfill `UserOrgRole` cho cấu hình đa cơ sở đang gán tay, và
+làm **SL-01 trước** khi đụng vào hai màn `users/_actions.ts` / `nhan-su/actions.ts`.
+
+---
+
 ## 1. Executive Summary
 
 Khu vực A là **nền** của cả đợt phát triển: A chặn B, C, D, E (theo "Thứ tự thi công đề xuất" của spec). Ba việc:
@@ -84,7 +111,7 @@ Khu vực A là **nền** của cả đợt phát triển: A chặn B, C, D, E (
 
 | Vai | Ai | Cần gì từ A |
 |---|---|---|
-| **QLCS đa cơ sở** (`CENTER_MANAGER` giữ N cơ sở) | Quản lý phụ trách nhiều hơn 1 cơ sở, có thể khác tỉnh/TP | A-01 + A-02: xem gộp hoặc tách từng cơ sở mình phụ trách |
+| **QLCS đa cơ sở** (`CENTER_MANAGER` giữ N cơ sở) | Quản lý phụ trách nhiều hơn 1 cơ sở, có thể khác tỉnh/TP. **Đã tồn tại trên prod, đang gán tay** (OQ-5, 24/08/2026) | A-01 + A-02: số **gộp theo đúng phạm vi đang chọn** — chọn tất cả thì gộp hết, chọn một cơ sở thì chỉ cơ sở đó (OQ-4) |
 | **QLCS đơn cơ sở** | Đa số hiện tại | Không được hồi quy: vẫn chỉ thấy cơ sở mình |
 | **SUPER_ADMIN / cấp Hội sở** | Ban giám đốc, kế toán HO, marketing HO | Chọn "Tất cả cơ sở"; bật/tắt quyền export cho từng quản lý |
 | **Sale (`SALES_CSM`)** | Nhân viên tư vấn | **Không** được xuất Excel lead trừ khi được cấp riêng (spec: "chỉ từ cấp quản lý trở lên") |
@@ -107,7 +134,7 @@ Quy mô hiện tại: HO + CS1 (211 Nguyễn Hữu Thọ) + CS2 (114 Hoàng Di�
 | **A-02-3** | Bốn tab dùng lại đúng một component + một resolver. | 4 tab đều import cùng `components/admin/scope-filter-bar.tsx` và gọi cùng `resolveScopeFilters()` trong `lib/reports/filters.ts`. Đổi tab **giữ nguyên** bộ lọc (cùng searchParams). |
 | **A-02-4** | Truyền cơ sở ngoài phạm vi qua URL không rò dữ liệu. | `?center=<id ngoài visibleCenterIds>` → bị loại im lặng, kết quả = phạm vi hợp lệ còn lại; không 500. (Giữ đúng hành vi chống IDOR sẵn có ở `lib/reports/filters.ts:67-73`.) |
 | **A-02-7** | 🔴 Bật được "Tất cả cơ sở" cho một tab **chỉ khi** mọi model tab đó đọc đều đã cách ly được. | Trước khi giao khung lọc cho một tab: mọi model tab đó đọc **phải** nằm trong `SCOPED_MODELS`, **hoặc** có đường lọc tay + test cách ly. Model chưa cách ly được (`AdsInsightDaily`, `MarketingCostPeriod`, `Conversation`, `RevenueTarget`) ⇒ tab đó **chưa** được bật "Tất cả". Lý do: `injectScope` thoát ngay ở `lib/db-scope.ts:269` với model ngoài `SCOPED_MODELS` (§9/RT-2). |
-| **A-01-6** | QLCS đa cơ sở **làm việc được** ở cơ sở thứ hai, không chỉ xem được. | Các cổng **GHI** trên đường dashboard + điểm danh phải chấp nhận mọi cơ sở trong `actor.visibleCenterIds`, không so với `session.user.centerId`. Tối thiểu: `canManageSessionClass` (`app/(admin)/admin/sessions/[id]/_actions.ts:38`), `students/[id]/_actions.ts:27`, `lib/lms/skill-access.ts:19`. e2e: QLCS 2 cơ sở **điểm danh + chốt buổi** được lớp ở cơ sở thứ hai. |
+| **A-01-6** | QLCS đa cơ sở **làm việc được** ở cơ sở thứ hai, không chỉ xem được. | Các cổng **GHI** trên đường dashboard + điểm danh phải chấp nhận mọi cơ sở trong `actor.visibleCenterIds`, không so với `session.user.centerId`. ✅ **ĐÃ LÀM 26/08/2026** cho **5** cổng: `canManageSessionClass` · `canManageSessionRecord` (`_feedback-core.ts` — cổng nhận xét, **chặn `completeSession`** nên bỏ sót là mở nửa vời) · `students/[id]/_actions.ts` · `lib/lms/skill-access.ts` · gate UI `students/[id]/edit/page.tsx` (không sửa thì server cho mà nút không hiện). ⚠️ **Luật đúng là `roleManagesCenter(actor, "CENTER_MANAGER", centerId)`** (`lib/auth/managed-centers.ts`), **KHÔNG** phải `visibleCenterIds`: vế đó nở theo vai kiêm nhiệm ⇒ QLCS@CS1 kiêm kế toán@CS2 sẽ ghi được lên CS2. 🔴 Còn ~13 cổng cùng khuôn chưa dọn — `docs/plan/ket-va-cach-go.md` K-18. e2e trình duyệt: chưa có. |
 | **A-01-7** | Người vừa được gán cơ sở thứ hai không phải đoán vì sao chưa thấy gì. | `session.user.centerId` là **ảnh chụp lúc đăng nhập** (`lib/auth.ts:203-215`); `assignUserOrgRole` **không** bump `tokenVersion` (`lib/auth/rbac-service.ts:172-241`). ⇒ Hoặc bump `tokenVersion` khi gán/gỡ `UserOrgRole`, hoặc hiện cảnh báo "cần đăng xuất/đăng nhập lại" ngay trên màn gán vai. |
 | **A-03-7** | 🔴 Không ai vô tình tắt được cách ly cơ sở của `Lead`. | Màn `/admin/users/[id]/permissions` **chặn cứng** mọi key khớp `leads:*` (mở rộng blocklist ở `app/(admin)/admin/users/[id]/permissions/_actions.ts:65-77`, hiện chỉ chặn `roles:*` + `users:manage`). Lý do: §6.3b. **Đây là yêu cầu, không phải câu hỏi mở.** |
 | **A-03-1** | Là admin, tôi bật/tắt quyền xuất Excel lead **cho từng quản lý**. | Thao tác trên `/admin/user-groups`: thêm/bớt người khỏi nhóm mang grant `leads:export`. Có `reason` bắt buộc, ghi `RbacAuditLog`. Không sửa mã, không deploy. |
@@ -221,12 +248,13 @@ Hình dạng đề nghị:
 lib/reports/filters.ts
   export type ScopeFilters = {
     centerIds: string[] | null   // null = toàn bộ phạm vi cho phép của actor
-    dateFrom: Date               // mặc định: ngày 01 tháng hiện tại (giờ VN)
+    dateFrom: Date               // mặc định: ngày 01 tháng hiện tại (giờ VN) — OQ-B9 chốt 24/08
     dateTo: Date                 // mặc định: hôm nay, cuối ngày
+    groupByCenter: boolean       // OQ-4 (24/08): false = gộp (mặc định) · true = tách từng cơ sở
   }
   export async function resolveScopeFilters(actor, sp): Promise<ScopeFilterContext>
 
-components/admin/scope-filter-bar.tsx   // form GET, multi-select + 2 input date
+components/admin/scope-filter-bar.tsx   // form GET, multi-select + 2 input date + công tắc "Tách theo cơ sở"
 
 app/(admin)/admin/dashboard/
   page.tsx        // đọc searchParams -> resolveScopeFilters -> render <ScopeFilterBar> + tab đang chọn
@@ -237,6 +265,8 @@ app/(admin)/admin/dashboard/
 
 1. **`Center` nằm trong `SCOPE_EXEMPT`** (`lib/db-scope.ts:105-107`) ⇒ `scopedDb(actor).center.findMany()` là **pass-through, trả MỌI cơ sở**. Phần lớn trang list đang đổ thẳng kết quả này vào dropdown. Selector của A-02 **bắt buộc** lọc theo `actor.visibleCenterIds` (đúng như `lib/reports/filters.ts:63-65` đang làm), tuyệt đối không gọi `sdb.center.findMany()` trần.
 2. **Hai quy ước URL cùng tồn tại:** `?center=` + giá trị `ALL` (ReportFilterBar) và `?centerId=` + chuỗi rỗng (~14 trang khác). A chốt `?center=`; **không** đổi 14 trang kia trong đợt này.
+3. **Công tắc "Tách theo cơ sở" (OQ-4) phải nằm trong `ScopeFilters`, không phải state của từng tab.** Bốn tab đọc **cùng** `searchParams` (`?split=1`), nếu không thì bật ở tab này sang tab kia lại tắt. Công tắc **chỉ render khi `centerIds.length >= 2`**; một cơ sở thì tách và gộp cho ra cùng con số.
+4. **Mỗi hàm số liệu của B/C/D/E nhận `groupByCenter` ngay từ bản đầu tiên.** Viết cứng dạng gộp rồi "thêm tách sau" là viết lại toàn bộ tầng truy vấn của 4 tab — đúng cái bẫy mà OQ-4 sinh ra để tránh.
 3. **`lib/dashboard/widget-registry.ts` là mã chết** — có `DASHBOARD_WIDGETS` + `visibleWidgets(actor)` nghe rất giống thứ A-02 cần, nhưng **không dòng sản phẩm nào import** (chỉ file test của chính nó). Đừng xây lên trên nó, cũng đừng tưởng đã có sẵn.
 4. **`getSelectableOrgUnits()` tự nhận là "nguồn duy nhất cho mọi center-picker"** (`lib/org/org-service.ts:352-354`) nhưng **không bộ lọc list nào gọi nó** — chỉ các màn form. Đừng tin doc-comment đó.
 5. `components/ui/select.tsx` và `combobox.tsx` dựng trên **Base UI**, không phải Radix — đừng dán snippet shadcn/Radix vào. Repo **chưa có** multi-select; A-02 phải tự dựng bằng primitive sẵn có hoặc `<select multiple>` native.
@@ -332,19 +362,167 @@ Validator P0 ép grant nhóm chỉ `dataScope: ALL` (`app/(admin)/admin/user-gro
 
 ---
 
+## 6.10 Mở `roles:assign` cho `HO_HR` — 3 rào bắt buộc (OQ-7, 24/08/2026)
+
+Quyền `roles:assign` là quyền **cấp quyền**. Mở trần cho `HO_HR` nghĩa là Nhân sự Hội sở tự gán được cho
+chính mình gần như mọi vai — không phải vì ai đó có ý xấu, mà vì hệ thống không có gì ngăn. Đo trên mã:
+
+- ✅ **Đã có sẵn một rào:** `assignUserOrgRole` chặn gán vai `SUPER_ADMIN` nếu actor không phải SUPER_ADMIN
+  (SEC-M13 — `lib/auth/rbac-service.ts:184-193`). Rào này **đủ** cho đúng một vai, và **không** đủ cho phần còn lại.
+- 🔴 **Chưa có rào nào cho:** tự gán cho chính mình · gán vai **mang chính `roles:*`** (nhân bản quyền cấp
+  quyền) hoặc `users:manage` · gán vai tại node **HO** (neo vai ở HO ⇒ `isHoLevel` ⇒ **thấy mọi cơ sở**).
+
+**Ba rào phải viết cùng lúc với việc seed quyền — không tách ra "làm sau":**
+
+| # | Rào | Ghi chú hiện thực |
+|---|---|---|
+| **R1** | Actor **không phải SUPER_ADMIN** thì **không gán được vai chứa `roles:*` hoặc `users:manage`** | Đúng tiền lệ đang có ở màn per-user: blocklist `_actions.ts:65-77`. Đây là rào chống **nhân bản quyền** |
+| **R2** | **Không tự gán cho chính mình** (`parsed.userId === actor.id` ⇒ từ chối) | Muốn đổi quyền của chính mình thì nhờ SUPER_ADMIN — đúng tinh thần "hai người cho một việc nhạy cảm" |
+| **R3** | `reason` **bắt buộc**, ghi `logRbacAudit` (đã có hàm) | Doc 15 §2 vốn đã đòi "audit + reason bắt buộc" cho mọi thay đổi vai |
+
+**Không** thêm rào cấm gán tại node HO: HR cần tạo được nhân sự Hội sở (HO_ACCOUNTANT ở HO là việc thường
+ngày). R1 + R2 đã chặn đúng đường leo thang mà vẫn để HR làm việc của họ — và đường nguy hiểm nhất trong đó
+(**neo `CENTER_MANAGER` tại HO/ROOT ⇒ `isHoLevel` ⇒ thấy mọi cơ sở**) **đã** bị chặn sẵn bởi **A-01-3**
+(bất biến `L-A5` trong `docs/plan/test-coverage.md`). Nghĩa là mở `roles:assign` cho HR **không** mở lại
+đường đó, miễn A-01-3 được hiện thực đúng — nên A-01-3 và §6.10 phải lên cùng một đợt, không tách.
+
+⚠️ **Sau khi merge `test` → `main`: chạy `seed-prod-roles.yml`.** Quên bước này thì trên prod HR vẫn không
+gán được, và không có thông báo lỗi nào giải thích vì sao — tiền lệ đã ghi trong `MEMORY.md`.
+
+---
+
+## 6.9 Đo prod trước A-01 — BẮT BUỘC (sinh ra từ OQ-5, 24/08/2026)
+
+Chủ dự án xác nhận **đã có QLCS phụ trách từ 2 cơ sở trở lên trên prod, đang xử lý tạm bằng tay**. Trước khi
+viết A-01 hay bất kỳ script backfill nào, phải biết **hiện có bao nhiêu cấu hình như vậy** và **đã mất dòng
+nào chưa**. Ba truy vấn dưới **chỉ đọc**, chạy an toàn trên prod.
+
+```sql
+-- [A-01-Đ1] Ai đang giữ nhiều hơn 1 cơ sở qua UserOrgRole (nguồn quyền thật)?
+SELECT u.id, u.name, u.email,
+       count(DISTINCT o.id)                    AS so_co_so,
+       string_agg(DISTINCT o.code, ', ')       AS cac_co_so,
+       string_agg(DISTINCT r.code, ', ')       AS cac_vai
+FROM "UserOrgRole" uor
+JOIN "OrgUnit" o ON o.id = uor."orgUnitId" AND o.type = 'CENTER'
+JOIN "RoleDef" r ON r.id = uor."roleId"
+JOIN "User"    u ON u.id = uor."userId"
+WHERE uor.status = 'ACTIVE'
+  AND (uor."effectiveTo" IS NULL OR uor."effectiveTo" > now())
+GROUP BY u.id, u.name, u.email
+HAVING count(DISTINCT o.id) > 1
+ORDER BY so_co_so DESC;
+
+-- [A-01-Đ2] Dòng ĐÃ BỊ THU HỒI (dấu vết của lỗ hổng SL-01: gán tay bị reconcile EXPIRED).
+--           Có kết quả ⇒ cấu hình tay ĐÃ từng bị xoá, không phải rủi ro lý thuyết.
+SELECT u.name, o.code AS co_so, r.code AS vai, uor.status,
+       uor."effectiveFrom", uor."effectiveTo", uor."grantedById"
+FROM "UserOrgRole" uor
+JOIN "OrgUnit" o ON o.id = uor."orgUnitId" AND o.type = 'CENTER'
+JOIN "RoleDef" r ON r.id = uor."roleId"
+JOIN "User"    u ON u.id = uor."userId"
+WHERE uor.status <> 'ACTIVE' OR (uor."effectiveTo" IS NOT NULL AND uor."effectiveTo" <= now())
+ORDER BY uor."effectiveTo" DESC NULLS LAST
+LIMIT 100;
+
+-- [A-01-Đ3] Lệch giữa "cơ sở neo" trên User và tập cơ sở có quyền thật.
+--           Đây là tập mà cách xử lý tay hiện nay dễ để lại mâu thuẫn nhất.
+SELECT u.id, u.name, c.code AS center_id_tren_user,
+       string_agg(DISTINCT o.code, ', ') AS co_so_co_quyen
+FROM "User" u
+LEFT JOIN "Center" c ON c.id = u."centerId"
+LEFT JOIN "UserOrgRole" uor ON uor."userId" = u.id AND uor.status = 'ACTIVE'
+LEFT JOIN "OrgUnit"    o   ON o.id = uor."orgUnitId" AND o.type = 'CENTER'
+WHERE u."deletedAt" IS NULL AND u."isActive"
+GROUP BY u.id, u.name, c.code
+HAVING count(DISTINCT o.id) > 1
+    OR (c.code IS NOT NULL AND count(DISTINCT o.id) = 0);
+```
+
+### 6.9.1 Người đó là **anh Phúc — vừa QLCS vừa `SUPER_ADMIN`** (chủ dự án xác nhận 24/08/2026)
+
+Đây **không** phải chi tiết nhân sự, nó đổi hai thứ trong kế hoạch:
+
+**(a) Tài khoản anh Phúc KHÔNG dùng để nghiệm thu A-01 được.** `SUPER_ADMIN` đi vào nhánh `isHoLevel` của
+`buildActor()` và thấy **mọi** cơ sở bất kể cấu hình đa cơ sở đúng hay sai. Đăng nhập bằng tài khoản đó để
+"kiểm tra QLCS 2 cơ sở chạy chưa" sẽ **luôn xanh**, kể cả khi A-01 hỏng hoàn toàn. ⇒ UAT và e2e A-01
+**bắt buộc** dùng một tài khoản **QLCS thuần** (không `SUPER_ADMIN`, không vai HO nào) giữ 2 cơ sở
+**khác vùng** — khớp bất biến `L-A1` trong `docs/plan/test-coverage.md`.
+
+**(b) Lỗ hổng SL-01 trên tài khoản anh Phúc là loại hỏng ÂM THẦM — hỏng thật, nhưng không hỏng ở chỗ ai
+cũng nhìn.** Đo trên mã:
+
+- Tư cách thành viên **nhóm chat lớp** của QLCS dẫn xuất từ `UserOrgRole` có `role.code ∈`
+  `CHAT_CENTER_MANAGER_ROLE_CODES` = `["CENTER_MANAGER", "CENTER_CLASS_MANAGER"]`
+  (`lib/chat/sync-membership.ts:155-158`). **`SUPER_ADMIN` KHÔNG nằm trong danh sách này.**
+- Đường v1 dự phòng chỉ khớp `User.roles[]` chứa `CENTER_MANAGER` **và** `User.centerId` = cơ sở của lớp
+  (`lib/chat/sync-membership.ts:15-16`) ⇒ nó chỉ đỡ được **một** cơ sở: cơ sở neo trên `User`.
+- ⇒ Với **cơ sở thứ hai**, chỗ duy nhất giữ anh Phúc trong nhóm lớp là **dòng `UserOrgRole` v2**. Nếu
+  `reconcileUserOrgRoles` `EXPIRED` dòng đó (đúng lỗ hổng SL-01), anh ấy **lặng lẽ rời mọi nhóm chat lớp
+  của cơ sở thứ hai**, trong khi **mọi báo cáo và dashboard vẫn hiện đủ** vì `SUPER_ADMIN` che.
+
+Nói cách khác: hiện trạng "xử lý tạm bằng tay đang chạy được" **không chứng minh** cấu hình đa cơ sở đang
+lành — nó chỉ chứng minh `SUPER_ADMIN` che được phần nhìn thấy. Phần **không** che được là chat.
+
+⇒ **Giữ nguyên cả V-1 → V-2 → V-3.** Không có nhánh "bỏ backfill".
+
+```sql
+-- [A-01-Đ4] Anh Phúc (hoặc bất kỳ ai vừa SUPER_ADMIN vừa CENTER_MANAGER) có đang
+--           BỊ RỚT khỏi nhóm chat lớp của cơ sở mình quản không?
+--           Có dòng trả về = dấu hiệu SL-01 ĐÃ nổ, dù dashboard vẫn hiện đủ.
+WITH ql AS (   -- ai đang giữ vai QLCS/giáo vụ tại một cơ sở, qua UserOrgRole
+  SELECT uor."userId", o.id AS org_id, o.code AS co_so
+  FROM "UserOrgRole" uor
+  JOIN "OrgUnit" o ON o.id = uor."orgUnitId" AND o.type = 'CENTER'
+  JOIN "RoleDef" r ON r.id = uor."roleId"
+  WHERE uor.status = 'ACTIVE'
+    AND (uor."effectiveTo" IS NULL OR uor."effectiveTo" > now())
+    AND r.code IN ('CENTER_MANAGER', 'CENTER_CLASS_MANAGER')
+)
+SELECT u.name, ql.co_so, count(c.id) AS nhom_lop_bi_rot
+FROM ql
+JOIN "User" u ON u.id = ql."userId"
+JOIN "OrgUnit" o ON o.id = ql.org_id
+JOIN "Conversation" c
+  ON c."orgUnitId" = o.id AND c.type = 'CLASS_GROUP' AND c.status = 'ACTIVE'
+LEFT JOIN "ConversationParticipant" cp
+  ON cp."conversationId" = c.id AND cp."userId" = ql."userId" AND cp."leftAt" IS NULL
+WHERE cp.id IS NULL
+GROUP BY u.name, ql.co_so
+ORDER BY nhom_lop_bi_rot DESC;
+```
+
+⚠️ Truy vấn Đ4 giả định `Conversation.type = 'CLASS_GROUP'` và `orgUnitId` đã được ghi kép — nếu dữ liệu cũ
+còn `centerId` mà thiếu `orgUnitId` thì đổi vế `JOIN` sang `c."centerId"`. Kiểm bằng
+`SELECT count(*) FILTER (WHERE "orgUnitId" IS NULL) FROM "Conversation";` trước khi tin kết quả.
+
+**Đọc kết quả:**
+
+| Kết quả | Nghĩa | Việc kéo theo |
+|---|---|---|
+| Đ1 trả **0 dòng** nhưng chủ dự án nói "có" | Cấu hình tay **không nằm ở `UserOrgRole`** (nhiều khả năng đang chữa bằng cách đổi `User.centerId` qua lại, hoặc cấp `leads:view-all`) | Backfill phải **dựng lại từ đầu**, không phải chép cột |
+| Đ1 trả > 0 | Có cấu hình thật để backfill | Ghi lại **nguyên trạng** trước khi chạy SL-01 |
+| Đ2 có dòng `EXPIRED` gần đây | 🔴 Lỗ hổng SL-01 **đã nổ ít nhất một lần** | Ưu tiên SL-01 lên trước mọi việc khác của A; báo cho người bị mất quyền |
+| Đ3 có dòng | Hai nguồn sự thật đang lệch | Chốt nguồn nào thắng **trước** khi A-02 đọc phạm vi |
+
+⚠️ **Thứ tự bắt buộc: đo (§6.9) → SL-01 → backfill.** Làm backfill trước khi có cột `source` là nhân bản đúng
+những dòng mà `reconcileUserOrgRoles` sẽ thu hồi ở lần sửa ô "Đơn vị" kế tiếp.
+
+---
+
 ## 7. Open Questions
 
 | # | Câu hỏi | Vì sao chặn | Chủ | Hạn |
 |---|---|---|---|---|
 | ~~**OQ-1**~~ | ~~`RBAC_V2_ENABLED` trên prod đang ON hay OFF?~~ | ✅ **ĐÃ GIẢI — không còn chặn.** `lib/auth/permission-decision.ts:48-49` trả kết quả grant **trước khi** đọc cờ; cờ chỉ dùng khi grant miss (`:55`). Cách làm ở §6.3 giữ key trong `ALL_ACTIONS` và chỉ làm rỗng danh sách role, nên không phụ thuộc trạng thái cờ. | — | Đóng |
 | ~~**OQ-1b**~~ | ~~Có chặn cứng `leads:*` khỏi màn per-user không?~~ | ✅ **ĐÃ CHUYỂN THÀNH YÊU CẦU A-03-7.** Một rào an toàn không được để ở dạng câu hỏi mở. | — | Đóng |
-| **OQ-6** | Endpoint export giữ **CSV** hay đổi sang **`.xlsx`**? | Spec nói "xuất Excel", mã đang sinh CSV (`route.ts:129-133`). Repo có `xlsx` (SheetJS), không có `exceljs`. | Chủ dự án | Trước khi làm A-03 |
-| **OQ-2** | "Từ cấp quản lý trở lên" trong A-03 gồm đúng những vai nào? | Quyết định nhóm mặc định ai được thêm vào ngày go-live. Spec chỉ nói "cấp quản lý trở lên", chưa liệt kê. | Chủ dự án | Trước khi tạo nhóm |
-| **OQ-3** | Multi-select cơ sở dựng bằng `<select multiple>` native hay component tự viết trên Base UI? | Repo **chưa có** multi-select và **cấm** thêm thư viện UI mới. | Chủ dự án | Trước khi code A-02 |
-| **OQ-4** | Khi QLCS chọn nhiều cơ sở, các con số của 4 tab hiển thị **gộp** hay **tách theo cơ sở**? | Ảnh hưởng hình dạng dữ liệu trả về của cả B/C/D/E. | Chủ dự án | Trước khi code A-02 |
-| **OQ-5** | Có QLCS đa cơ sở nào **thật** trên prod chưa, hay A-01 là chuẩn bị trước? | Quyết định có cần script backfill `UserOrgRole` hay không. | Chủ dự án | Trước khi triển khai A-01 |
-| **OQ-7** | Có mở `roles:assign` cho `HO_HR` không, hay giữ **chỉ SUPER_ADMIN** gán đa cơ sở? | Hôm nay chỉ SUPER_ADMIN gán được (`prisma/seed-roles.ts:36`). Giữ nguyên = mọi lần thêm/bớt cơ sở phải qua một người. | Chủ dự án | Trước khi triển khai A-01 |
-| **OQ-8** | Cơ sở thứ hai của QLCS có thuộc REGION khác thật không, hay chỉ khác cơ sở trong cùng Đà Nẵng? | Nếu thật sự khác vùng thì phải tạo REGION thứ hai trong dữ liệu (hiện chỉ có `DANANG`). | Chủ dự án | Trước khi viết e2e A-01 |
+| ~~**OQ-6**~~ | ~~Endpoint export giữ **CSV** hay đổi sang **`.xlsx`**?~~ | ✅ **ĐÃ CHỐT 24/08/2026 (B12): đổi sang `.xlsx`**, dùng `xlsx` (SheetJS) đã có ở `package.json:112` — không thêm thư viện. Sửa `route.ts:129-133` từ sinh CSV sang sinh workbook; header/`Content-Type` đổi theo. | — | Đóng |
+| ~~**OQ-2**~~ | ~~"Từ cấp quản lý trở lên" trong A-03 gồm đúng những vai nào?~~ | ✅ **ĐÃ CHỐT 24/08/2026 (B11): quản lý từng cơ sở → quản lý khu vực (tỉnh/TP hoặc vùng) → giám đốc.** ⚠️ Hệ thống hôm nay **chỉ dựng được 2/3 tầng**: `CENTER_MANAGER` có; giám đốc = `SUPER_ADMIN`; **không có vai quản lý khu vực** (15 RoleDef ở `prisma/seed-roles.ts`, không vai nào neo REGION) và picker đơn vị **cố ý** loại node REGION (`lib/org/org-tree.ts:172-178`). ⇒ **nhóm A-03 v1 = `CENTER_MANAGER` + `SUPER_ADMIN`**; tầng khu vực = thêm RoleDef + mở neo vai tại REGION, để P2. Vai **chức năng** Hội sở (`HO_HR`/`HO_ACCOUNTANT`/`HO_MARKETING`/`HO_SALE`) **không** thuộc nhóm này. | — | Đóng |
+| ⚙️ ~~**OQ-3**~~ | **Chốt kỹ thuật 24/08/2026 (đề xuất của Dev, chờ phản đối):** dropdown **checkbox** dựng bằng `Popover` + `Checkbox` của shadcn đã có trong repo — **không** thêm thư viện, **không** dùng `<select multiple>` native (rất khó bấm ở viewport 375px, và không hiện được nhãn "Tất cả cơ sở"). | Repo **chưa có** multi-select và **cấm** thêm thư viện UI mới. | Dev | Trước khi code A-02 |
+| ~~**OQ-4**~~ | ~~Khi QLCS chọn nhiều cơ sở, các con số của 4 tab hiển thị **gộp** hay **tách theo cơ sở**?~~ | ✅ **ĐÃ CHỐT 24/08/2026: MẶC ĐỊNH GỘP + CÔNG TẮC "Tách theo cơ sở".** Mở tab ra là số gộp của phạm vi đang chọn; bật công tắc thì mỗi cơ sở một dòng/cột, kèm dòng **Tổng**. ⇒ Mọi truy vấn của B/C/D/E nhận `groupByCenter: boolean` và **trả được cả hai dạng** — không được viết cứng một dạng rồi chắp vá sau. Công tắc **chỉ hiện khi đang chọn ≥ 2 cơ sở** (1 cơ sở thì tách = gộp, hiện ra chỉ gây nhiễu). | — | Đóng |
+| ~~**OQ-5**~~ | ~~Có QLCS đa cơ sở nào **thật** trên prod chưa?~~ | 🔴 **ĐÃ TRẢ LỜI 24/08/2026: CÓ RỒI, đang xử lý tạm bằng tay.** ⇒ (1) **cần script backfill `UserOrgRole`** cho các cấu hình tay hiện có; (2) **SL-01 thành việc gấp, không phải việc "nên có"** — hôm nay cấu hình gán tay có thể bị `reconcileUserOrgRoles` thu hồi im lặng khi ai đó sửa ô "Đơn vị" ở `users/_actions.ts:363-380` hoặc `nhan-su/actions.ts:377`; (3) **phải đo prod trước** (đếm user có >1 `UserOrgRole` cơ sở, đối chiếu `User.centerId`) rồi mới viết backfill. | — | Đóng, sinh việc mới |
+| ~~**OQ-7**~~ | ~~Có mở `roles:assign` cho `HO_HR` không?~~ | ✅ **ĐÃ CHỐT 24/08/2026: MỞ cho `HO_HR`** (đảo lại quyết định đầu ngày). Seed thêm `roles:assign` cho `HO_HR` trong `prisma/seed-roles.ts`, **kèm 3 rào ở §6.10** — nếu mở trần thì HR tự cấp được gần như mọi quyền cho chính mình. ⚠️ Sau merge `test` → `main` **phải chạy `seed-prod-roles.yml`**. | — | Đóng |
+| ~~**OQ-8**~~ | ~~Cơ sở thứ hai của QLCS có thuộc REGION khác thật không?~~ | ✅ **ĐÃ CHỐT 24/08/2026: CÓ — cơ sở khác vùng là ca thật, phải đỡ được.** ⇒ (1) dữ liệu test A-01 **bắt buộc** có **REGION thứ hai** (hiện chỉ `DANANG`); (2) e2e phải phủ ca "một QLCS giữ 2 cơ sở **khác vùng**"; (3) không chỗ nào được suy phạm vi từ vùng — đi qua `getSubtreeCenterIds` như cũ. | — | Đóng |
 
 ---
 
@@ -440,7 +618,9 @@ Chi tiết ở §6.2 mục 6–8. Tóm tắt: đổi `ReportFilters.centerId` v�
 - **Luật #4** — không tự ý sinh migration đổi/bỏ cột trên bảng đang có dữ liệu PROD; chỉ trong story được giao, có dry-run, Dev chạy tay.
 - Model mới phải khai **cả hai** nơi: `SCOPED_MODELS` (`lib/db-scope.ts:11`) **và** `BACKFILL_SPECS` (`lib/org/center-bridge.ts:45`). Quên → test `[US-07-IT-08b]` đỏ hoặc dữ liệu rò im lặng.
 
-> 🔴 **SL-00 — MÂU THUẪN PHẢI CHỐT TRƯỚC DÒNG CODE ĐẦU TIÊN CỦA F VÀ G.**
+> ✅ **SL-00 — ĐÃ CHỐT 24/08/2026 (quyết định B1): bảng mới mang CẢ HAI cột.** Phần dưới giữ nguyên làm lý lẽ.
+>
+> 🔴 ~~**SL-00 — MÂU THUẪN PHẢI CHỐT TRƯỚC DÒNG CODE ĐẦU TIÊN CỦA F VÀ G.**~~
 > Luật #3 nói bảng **mới** mang `orgUnitId`, **không** thêm `centerId` mới. Nhưng `injectScope` **chỉ** chèn `centerId: { in: [...] }` (`lib/db-scope.ts:277-279`) — cho tới khi cutover `orgScope.cutoverEnabled` được bật.
 > ⇒ **Bảng mới nào cần `scopedDb` cách ly thì BẮT BUỘC mang CẢ HAI cột** `centerId` + `orgUnitId`, nếu không nó sẽ có `orgUnitId` đẹp đẽ mà **không bao giờ được lọc**.
 > Ngoại lệ có chủ đích: bảng **không** phải dữ liệu theo đơn vị (vd sở thích cá nhân — SL-13) thì **không** mang cột nào cả.
@@ -450,7 +630,7 @@ Chi tiết ở §6.2 mục 6–8. Tóm tắt: đổi `ReportFilters.centerId` v�
 
 | # | Bảng | Thay đổi | Vì sao phải khoá trước | Loại |
 |---|---|---|---|---|
-| **SL-01** | `UserOrgRole` | Thêm cột nguồn gốc dòng, vd `source` (`AUTO` / `MANUAL`, mặc định `AUTO`, additive nullable rồi backfill). Nhánh thu hồi của `reconcileUserOrgRoles` **chỉ** được đụng dòng `source = AUTO`. | Hôm nay reconcile phân biệt "tự sinh" vs "gán tay" bằng cách **suy lại `prevPlan` từ MỘT đơn vị neo** (`lib/auth/legacy-role-map.ts:96-122`) — schema **không có cột nào ghi ai tạo ra dòng**. Khi đơn vị neo cũ **trùng đúng** cơ sở được gán tay, dòng gán tay rơi vào `prevPlan` và bị `EXPIRED` (`lib/auth/org-role-sync.ts:198-229`). Hai màn kích hoạt: `users/_actions.ts:363-380`, `nhan-su/actions.ts:377` → `lib/hr/sync-employee-unit.ts:77-89`. ⇒ Cấu hình đa cơ sở bị phá bởi một thao tác **không nhằm thu hồi quyền**. | **ADDITIVE** |
+| 🔴 **SL-01** (GẤP — xem OQ-5) | `UserOrgRole` | ⚠️ **24/08/2026: mức độ đổi từ "nên có" thành GẤP.** Chủ dự án xác nhận **trên prod ĐANG có cấu hình đa cơ sở gán tay** ⇒ lỗ hổng dưới đây **không còn là giả thuyết**, nó đang chờ nổ ở lần sửa ô "Đơn vị" tiếp theo. Thêm cột nguồn gốc dòng, vd `source` (`AUTO` / `MANUAL`, mặc định `AUTO`, additive nullable rồi backfill). Nhánh thu hồi của `reconcileUserOrgRoles` **chỉ** được đụng dòng `source = AUTO`. | Hôm nay reconcile phân biệt "tự sinh" vs "gán tay" bằng cách **suy lại `prevPlan` từ MỘT đơn vị neo** (`lib/auth/legacy-role-map.ts:96-122`) — schema **không có cột nào ghi ai tạo ra dòng**. Khi đơn vị neo cũ **trùng đúng** cơ sở được gán tay, dòng gán tay rơi vào `prevPlan` và bị `EXPIRED` (`lib/auth/org-role-sync.ts:198-229`). Hai màn kích hoạt: `users/_actions.ts:363-380`, `nhan-su/actions.ts:377` → `lib/hr/sync-employee-unit.ts:77-89`. ⇒ Cấu hình đa cơ sở bị phá bởi một thao tác **không nhằm thu hồi quyền**. | **ADDITIVE** |
 
 > Có thể vá thuần code (bỏ qua dòng không do lần sync trước tạo), nhưng cách bền là ghi nguồn ngay trên dòng. **Đây là thay đổi schema duy nhất khu vực A cần.**
 
@@ -477,9 +657,9 @@ Hiện trạng: `Lead` 46 trường vô hướng, **có cả** `centerId` lẫn 
 |---|---|---|---|---|
 | **SL-08** | `LeadChild` | Thêm `centerId String?` + `orgUnitId String?`; khai vào `SCOPED_MODELS` + `BACKFILL_SPECS`. | `LeadChild` **không có cột cách ly nào** ⇒ `scopedDb` không auto-scope; cách ly chỉ gián tiếp qua `Lead` cha. G-07 nói **doanh số và trạng thái chốt ghi nhận theo từng học sinh** ⇒ `LeadChild` trở thành **đơn vị sinh doanh thu** và bảng C-03 đọc thẳng nó. Không khoá trước = rò chéo cơ sở ở đúng bảng tiền. | **ADDITIVE** |
 | **SL-09** | `LeadChild` | Thêm enum **MỚI** `LeadChildStatus` (tối thiểu `NEW`, `CONSULTING`, `TRIAL_SCHEDULED`, `TRIAL_ATTENDED`, `ENROLLED`, `LOST`) + cột `status`, `closedAt DateTime?`, `contractValue Int?`. **KHÔNG tái dùng `LeadStatus` 15 giá trị** của cấp phụ huynh. | G-07 + C-03 đòi "thời điểm chốt", "giá trị", "% trên tổng doanh thu" **theo học sinh**. Hôm nay `LeadChild` chỉ có `trialStatus` (`NONE/SCHEDULED/IN_PROGRESS/ATTENDED`) — **học thử**, không phải chốt. `Lead.convertedAt` (`:1347`) là mốc của **lead**, không của từng con. | **ADDITIVE** |
-| **SL-09b** | `Order` (hoặc bảng phân bổ mới) | Chọn MỘT: (a) `Order.leadChildId String?` + relation + `@@index([leadChildId])`; hoặc (b) bảng mới `OrderLeadChildAllocation(orderId, leadChildId, amount)`, unique `[orderId, leadChildId]` — khi một đơn chia cho nhiều con. Kèm **chốt nguồn số** cho "doanh số theo học sinh": `Order` hay `Payment`. | G-07 "doanh số ghi nhận theo **TỪNG học sinh**" **không hiện thực được** với schema hiện tại: `Order` chỉ có `leadId`. Chốt **sau** khi báo cáo C-03 đã chạy = phải quy lại **toàn bộ đơn cũ bằng tay**. | **ADDITIVE** |
-| **SL-10** | `Lead` | Nhóm **bắt buộc** của G-06: `lostReasonId` (trỏ danh mục SL-11) + `lostNote Text?` + `lostAt DateTime?`; `contractValue Int?`; `campaignId` / `adId`. | C-05/C-06 **không chạy được** nếu thiếu: "lý do rớt (enum cấu hình)" là **bắt buộc** khi sale đánh dấu rớt. grep `lostReason` / `lostAt` toàn schema = **0 hit**. `utm*` + `fbclid/fbp/fbc` đã có nhưng **không phải** Ad/Campaign ID ⇒ D-04/D-05 chỉ tính CPL mức tổng, không bóc theo campaign. | **ADDITIVE** |
-| **SL-11** | **BẢNG MỚI** `LeadLostReason` **+ `LeadSource`** | Hai danh mục cấu hình được: `(code, label, isActive, displayOrder)`. `Lead.source` hiện là **String tự do** (`:1327`) — không enum, không danh mục. | Spec nói "enum **cấu hình được**" ⇒ phải là bảng danh mục, không phải enum Postgres (đổi enum = migration, trái tinh thần "admin tự set"). Đang để trống trong Cấu hình vận hành (mục cuối spec). | **BẢNG MỚI** |
+| **SL-09b** | `Order` | ✅ **CHỐT 24/08/2026 (B4): phương án (a)** — `Order.leadChildId String?` + relation + `@@index([leadChildId])`, quy tắc **một đơn – một con**. Phương án (b) `OrderLeadChildAllocation` **loại**. Nguồn số của "doanh số theo học sinh" = **`Payment` CONFIRMED** (B3), không phải `Order.totalAmount`. Đơn cũ: backfill tự động chỉ khi lead có **đúng 1** con; còn lại để `null` và báo cáo phải hiện dòng "chưa quy được về con". | G-07 "doanh số ghi nhận theo **TỪNG học sinh**" **không hiện thực được** với schema hiện tại: `Order` chỉ có `leadId`. Chốt **sau** khi báo cáo C-03 đã chạy = phải quy lại **toàn bộ đơn cũ bằng tay**. | **ADDITIVE** |
+| **SL-10** | `Lead` — ✅ **tầng đã chốt 24/08/2026 (câu B5)** | Nhóm **bắt buộc** của G-06, đã bỏ danh mục theo quyết định 12(b): ~~`lostReasonId`~~ **`lostNote Text?` (ô ghi chú tự do, BẮT BUỘC khi đánh dấu rớt)** + `lostAt DateTime?`; `contractValue Int?`; `campaignId` / `adId`. ⚠️ Trạng thái rớt vẫn ở `LeadChild.status` (SL-09) — chỉ **lý do** ở cấp phụ huynh, và con rớt sau **ghi đè** ghi chú của con trước. | C-05/C-06 **không chạy được** nếu thiếu: "lý do rớt (enum cấu hình)" là **bắt buộc** khi sale đánh dấu rớt. grep `lostReason` / `lostAt` toàn schema = **0 hit**. `utm*` + `fbclid/fbp/fbc` đã có nhưng **không phải** Ad/Campaign ID ⇒ D-04/D-05 chỉ tính CPL mức tổng, không bóc theo campaign. | **ADDITIVE** |
+| **SL-11** | **BẢNG MỚI** ~~`LeadLostReason`~~ **`LeadSource`** | ✅ 24/08/2026: **bỏ `LeadLostReason`** — lý do rớt là ô ghi chú tự do (12(b)). Còn **một** danh mục cấu hình được: `(code, label, isActive, displayOrder)`. ⏳ Giá trị khởi tạo của `LeadSource` **vẫn chờ** vận hành. `Lead.source` hiện là **String tự do** (`:1327`) — không enum, không danh mục. | Spec nói "enum **cấu hình được**" ⇒ phải là bảng danh mục, không phải enum Postgres (đổi enum = migration, trái tinh thần "admin tự set"). Đang để trống trong Cấu hình vận hành (mục cuối spec). | **BẢNG MỚI** |
 | **SL-12** | `Lead` | G-01 còn thiếu **6 trường**: giới tính PH, ngày sinh PH, link Facebook PH, địa chỉ (TP / phường / chi tiết), người nhập lead (`createdById` + `createdByName` dạng `mãNV_tên`), lớp tại trung tâm. | Đối chiếu thật: `Lead` **không có** `gender` / `dob` cho PH (chỉ `LeadChild.gender:1468`, `LeadChild.dob:1466`); `fbclid/fbp/fbc` là tham số quảng cáo **không phải** link profile; **không có** cột địa chỉ (mẫu có sẵn ở `Student.address/ward/district/city:1545-1548`); **không có** `createdById` — chỉ suy gián tiếp từ `LeadAuditLog action='CREATE'`, tức **mất** với dữ liệu tạo trước khi bật audit. | **ADDITIVE** |
 | **SL-13** | **BẢNG MỚI** `UserTablePreference` | `(userId, tableKey, columns Json, pageSize Int?, updatedAt)`, unique `[userId, tableKey]`. **Chốt tường minh: bảng này KHÔNG mang `centerId`/`orgUnitId`** — là sở thích cá nhân, không phải dữ liệu theo đơn vị (ngoại lệ có chủ đích của SL-00). | G-04 "tuỳ chọn cột kiểu MISA, lưu theo **từng user**" — grep `Preference` / `columnPref` / `visibleColumns` / `SavedView` / `TableView` trên schema = **0 kết quả**. `SystemSetting` theo key toàn cục, `CenterSetting` theo `(orgUnitId, key)` — **cả hai không có chiều `userId`**. Phải tạo mới. | **BẢNG MỚI** |
 | **SL-14** | enum `LeadStatus` | **Chốt bảng ánh xạ**, không drop giá trị. | Spec G-06 nêu **6** trạng thái; enum hiện có **15** (`:37-55`). 6 giá trị ánh xạ được (`NEW`, `CONSULTING`, `TRIAL_SCHEDULED`, `TRIAL_ATTENDED`, `ENROLLED`, `LOST`), còn **9 giá trị thừa** đang có dữ liệu PROD. Luật #4 cấm drop ⇒ phải chốt ánh xạ **trước** khi C-02/C-03 đếm, nếu không mỗi báo cáo đếm một kiểu. | **KHÔNG đổi schema** — chốt quy ước |

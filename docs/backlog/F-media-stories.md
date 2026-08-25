@@ -595,11 +595,25 @@ prisma/schema.prisma
 
 ## Open Questions
 
+> ⚠️ **MÃ TRÙNG VỚI `docs/prd/F-media.md` — đọc bảng ánh xạ trước khi trả lời "chốt OQ-Fx".**
+> Hai tài liệu đánh số độc lập, nên **cùng một mã chỉ hai câu khác nhau**. Cho tới khi đổi tên
+> (`OQ-F-BL-x` / `OQ-F-PRD-x`), dùng bảng này:
+>
+> | Mã ở **file này** (backlog) | Nội dung | Mã cùng nội dung ở **PRD** |
+> |---|---|---|
+> | `OQ-F1` | Nén video chạy ở đâu | `OQ-F3` của PRD |
+> | `OQ-F3` | "Học bạ đã xuất" nghĩa là gì | `OQ-F1` của PRD — ✅ **ĐÃ CHỐT 24/08/2026** |
+> | `OQ-F4` | Ảnh **không thuộc học bạ nào** giữ bao lâu | *(PRD không có — chỉ ở đây)* |
+> | `OQ-F2/F5/F6/F7/F8/F9` | ân hạn · ảnh bị từ chối · tự duyệt · thứ tự ảnh/video · người ký lệnh xoá · consent | *(PRD không có — chỉ ở đây)* |
+>
+> ⇒ Bốn câu **chỉ có ở file này** (`OQ-F4`, `OQ-F5`, `OQ-F6`, `OQ-F9`) là những câu dễ bị bỏ quên nhất,
+> vì người đọc PRD không thấy chúng.
+
 | # | Câu hỏi | Vì sao chặn | Chủ | Hạn |
 |---|---|---|---|---|
 | **OQ-F1** | Nén video (F-02) chạy ở đâu? Nếu không nén được trong đợt này thì đường lùi (giới hạn thời lượng + dung lượng lúc upload) có được chấp nhận không? | Chặn Story 5, đổi hình dạng Story 9/12/14 | Chủ dự án + Dev BE | Trước khi bắt đầu Story 9 |
 | **OQ-F2** | Thời gian **ân hạn** trước khi xoá vĩnh viễn khỏi R2 là bao lâu (đề xuất 30 ngày)? Ai được khôi phục? | Chặn Story 4; số này quyết định giữa "mất vĩnh viễn" và "gọi lại được" | Chủ dự án | Trước Story 4 |
-| **OQ-F3** | "Học bạ **đã xuất**" nghĩa là `publishedAt != null` (đã phát hành) hay là có lần tải PDF? | Chặn Story 8 + 18; hiểu sai = job xoá chạy sai chiều | Chủ dự án + Đào tạo | Trước Story 8 |
+| ~~**OQ-F3**~~ | ~~"Học bạ **đã xuất**" nghĩa là `publishedAt != null` hay có lần tải PDF?~~ | ✅ **ĐÃ CHỐT 24/08/2026 (quyết định B6 — cùng câu với `OQ-F1` của PRD): "đã gửi đến được cho PH"**, mốc `ReportCard.sentToParentAt`, nhãn "Đã gửi đến PH". **Không** thêm giá trị enum. Story 8 bỏ được `ReportCardExportLog` + 4 điểm cắm log; Story 18 dùng `sentToParentAt IS NOT NULL`. Chi tiết `docs/prd/F-media.md` §0. | — | Đóng |
 | **OQ-F4** | Ảnh **không thuộc học bạ nào** (ảnh sinh hoạt, ảnh chung lớp) áp chính sách lưu trữ nào? | F-05 không nói; đây là **đa số** ảnh trong kho | Chủ dự án | Trước Story 18 |
 | **OQ-F5** | Ảnh **đã bị QLCS từ chối** có được xoá khỏi R2 **ngay** không, hay cũng vào ân hạn? Spec F-15 nói xoá ngay. | Ảnh bị từ chối thường là ảnh có vấn đề (lộ mặt trẻ chưa có consent, ảnh riêng tư) — giữ lại 30 ngày trên storage là rủi ro; xoá ngay là mất khả năng khiếu nại | Chủ dự án | Trước Story 4 |
 | **OQ-F6** | Người **có quyền duyệt tự upload** thì ảnh vào thẳng `APPROVED` (`actions.ts:337, :345`). Giữ nguyên hay bắt qua duyệt như mọi ảnh khác? | Đổi hành vi đang chạy trên prod; ảnh hưởng trực tiếp con số F-30 | Chủ dự án | Trước Story 15 |

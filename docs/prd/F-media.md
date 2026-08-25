@@ -11,6 +11,41 @@
 
 ---
 
+## 0. Quyết định chủ dự án — 24/08/2026 (THẮNG phần thân bài)
+
+Nguồn: `docs/plan/cau-hoi-can-quyet.md` §"Quyết định của chủ dự án — chốt 24/08/2026".
+
+| Mã | Quyết định | Ảnh hưởng trong PRD này |
+|---|---|---|
+| **B1** | Bảng mới mang **CẢ HAI** `centerId` + `orgUnitId` | SL-00 đóng — 5 bảng mới của F khai đủ `SCOPED_MODELS` + `BACKFILL_SPECS` + `getModelPrefixes` |
+| **B6** | "Học bạ đã xuất" = **đã gửi đến được cho PH**, thêm trạng thái **"Đã gửi đến PH"** | **OQ-F1 đóng** — nhưng **không** theo nghĩa (a) cũng **không** theo (b): xem §5 dưới đây |
+| **B7** | **Chấp nhận rủi ro** với ảnh trẻ em đang phơi trên bucket công khai | Quyết định của chủ dự án, không phải kỹ thuật. F **không bị chặn** vì rủi ro tồn đọng; các biện pháp của F vẫn làm đủ |
+| **B8** | **Tách bucket riêng cho media lớp NGAY trong đợt F** | **OQ-F7 đóng** — làm sớm, khoá **trước SL-02** vì ảnh hưởng object key |
+
+### Hệ quả bắt buộc của B6 — đừng hiện thực bằng giá trị enum mới
+
+`ReportCardStatus` hôm nay có 4 giá trị (`prisma/schema.prisma:6261-6266`) và **hai đường đọc của phụ
+huynh lọc cứng `status = "PUBLISHED"`**: `lib/lms/report-card.ts:220` (danh sách học bạ trong portal) và
+`:239` (đường tải PDF, `app/api/portal/report-card/[id]/route.ts`). ⇒ Thêm giá trị `SENT_TO_PARENT` rồi
+**chuyển** trạng thái sang đó = **phụ huynh mất học bạ ngay lúc bấm gửi**.
+
+**Cách làm đã chốt:**
+
+1. Thêm cột **additive** `ReportCard.sentToParentAt DateTime?` (giữ nguyên `status = PUBLISHED`).
+2. "Đã gửi đến PH" là **nhãn suy ra** trên UI từ `sentToParentAt != null` — đúng ý "thêm trạng thái",
+   không đụng enum, không đụng máy trạng thái `lib/lms/report-card-core.ts:128-140`.
+3. Mốc gửi lấy từ **đường đã có**: handler `reportcard.published` đang tạo `Notification` cho PH của học
+   viên (`lib/_handlers/report-card.ts:33-44`) ⇒ set `sentToParentAt` **trong cùng handler**, sau khi upsert
+   thông báo thành công. Không đẻ đường gửi thứ hai.
+4. **F-05 đổi điều kiện**: từ `status = PUBLISHED` sang **`sentToParentAt IS NOT NULL`**. Media chỉ được
+   xoá sau khi học bạ **thực sự đến** phụ huynh — chặt hơn nghĩa (a) cũ, và không mong manh như nghĩa (b)
+   (vốn phụ thuộc "có ai bấm tải chưa").
+5. Học bạ `PUBLISHED` **trước** khi có cột này: `sentToParentAt = null` ⇒ **không bị xoá media**. Muốn
+   nhận diện chúng thì backfill từ `Notification` (`dedupeKey LIKE 'reportcard.published:%'`), chạy tay,
+   dry-run trước — luật cứng #4.
+
+---
+
 ## 1. Executive Summary
 
 Khu vực F là khối nặng nhất của đợt: nó vừa xây mới (trang duyệt của QLCS, theo dõi xem video, báo cáo SLA, job xoá theo hạn), vừa **sửa lại vòng đời media đang chạy trên prod**.
@@ -218,7 +253,7 @@ Chỉ **báo cáo tiến độ** có bảng vết `ProgressReportLog` (`prisma/s
 | **F-04-1** | PH chỉ xem được media `APPROVED` **và đúng buổi học**. | Thêm điều kiện `classSessionId` vào cả hai đường đọc portal — xem §6.1.4. 🔴 Hiện `lib/portal/photos.ts:29-41` và `app/(portal)/portal/hinh-anh/page.tsx:58-79` **KHÔNG lọc `classSessionId`** (trường này chỉ dùng để gom nhóm — `photos.ts:46-70`). |
 | **F-04-2** | Media gắn vào học bạ cũng chịu cùng luật. | Trình dựng học bạ chỉ nhận media `APPROVED` có `classSessionId` thuộc tập buổi của `Enrollment` đó (SL-07). Không có liên kết nào ⇒ không gắn được. |
 | **F-05-1** | Media quá 12 tháng **và** học bạ đã xuất thì bị xoá tự động. | Job chạy theo lịch, xoá **object R2 trước, row DB sau**, ghi `MediaRetentionLog` mỗi media. Xem §6.1.5. |
-| **F-05-2** | Media nằm trong học bạ **chưa xuất** thì giữ lại + ghi log lý do + học bạ nào. | Dòng log `decision = KEPT_REPORT_CARD_UNPUBLISHED` kèm `reportCardId` + `reportCardStatus` + `reason` đọc được. |
+| **F-05-2** | Media nằm trong học bạ **chưa gửi đến PH** thì giữ lại + ghi log lý do + học bạ nào. | ✅ **B6 (24/08/2026):** điều kiện là `sentToParentAt IS NOT NULL`. Dòng log `decision = KEPT_REPORT_CARD_NOT_SENT` kèm `reportCardId` + `reportCardStatus` + `sentToParentAt` + `reason` đọc được. |
 | **F-05-3** | Job chạy lại không xoá nhầm, không xoá hai lần. | Idempotent theo `MediaRetentionLog`; trần số lượng mỗi lần chạy; xác thực `verifyCronAuth`. |
 
 #### P1
@@ -481,7 +516,7 @@ Và **thêm một ràng buộc nữa** mà chữ "đúng buổi học đó" hàm
 
 | Thiếu | Bằng chứng | Phải có trước |
 |---|---|---|
-| Không biết học bạ **đã xuất chưa** | 4 route PDF không ghi mốc nào (§2.9) | Chốt nghĩa "đã xuất" (OQ-F1) rồi làm theo §(2) |
+| Không biết học bạ **đã gửi đến PH chưa** | `ReportCard` chỉ có `publishedAt`; không cột nào ghi "đã gửi" (`schema:6268-6291`) | ✅ Nghĩa đã chốt (B6, nghĩa **(c)**) ⇒ thêm cột `sentToParentAt` + set trong handler `reportcard.published` — xem §0 |
 | Không biết media **thuộc học bạ nào** | `ReportCard` không có cột media, không bảng nối (§2.3) | **SL-07** |
 | Không có ngưỡng 12 tháng cho media | `RETENTION_DAYS` = 5 năm, chỉ áp `Student` (`lib/compliance/retention.ts:11`, `:25-35`) | Key registry riêng `media.retentionMonths` (default **12**) |
 | Không có chỗ ghi vết | `runRetentionScan` chỉ `console.warn`, số **không lưu ở đâu** (`:43-51`) | Bảng `MediaRetentionLog` — §(4) |
@@ -494,7 +529,10 @@ Và **thêm một ràng buộc nữa** mà chữ "đúng buổi học đó" hàm
 | **(a) ĐÃ PHÁT HÀNH** — khuyến nghị | `ReportCard.status = PUBLISHED` + `publishedAt` (`schema:6272`, `:6279`) | **Đã tồn tại**, là mốc **vòng đời** xảy ra đúng một lần, có `publishedSnapshot` đóng băng số liệu. Không cần thêm gì. |
 | (b) **ĐÃ TẢI FILE PDF** | không có | Phải thêm `ReportCardExportLog(reportCardId, exportedById, exportedAt, route, ip?)` **và** cắm `writeAudit`/ghi log vào cả **4** route (§2.9). "Tải file" là hành vi **đọc**, xảy ra 0..N lần ⇒ dùng làm điều kiện xoá là mong manh: học bạ đúng nhưng chưa ai bấm tải thì ảnh không bao giờ được xoá. |
 
-⇒ PRD này đặc tả theo **(a)**; nếu chủ dự án chọn (b) thì thêm một bước bắt buộc trước F-05 (xem OQ-F1).
+| **(c) ĐÃ GỬI ĐẾN PH** — ✅ **ĐÃ CHỐT 24/08/2026 (B6)** | `ReportCard.sentToParentAt` (**cột mới, additive**), set trong handler `reportcard.published` khi `Notification` cho PH được tạo (`lib/_handlers/report-card.ts:33-44`) | Chặt hơn (a): học bạ phát hành mà thông báo không tới PH thì **media không bị xoá**. Không mong manh như (b): không phụ thuộc "có ai bấm tải chưa". **Không** thêm giá trị enum — xem §0. |
+
+⇒ ~~PRD này đặc tả theo **(a)**~~ ✅ **Chốt 24/08/2026: nghĩa (c)**. Điều kiện của F-05 là
+`sentToParentAt IS NOT NULL`, **không** phải `status = PUBLISHED`. Nghĩa (b) (đếm lượt tải PDF) **loại**.
 
 **(3) Điều kiện xoá / không xoá**
 
@@ -502,31 +540,34 @@ Và **thêm một ràng buộc nữa** mà chữ "đúng buổi học đó" hàm
 // lib/compliance/media-retention.ts — quyết định THUẦN, test không cần DB.
 export type MediaRetentionDecision =
   | { decision: "DELETED"; reason: string }
-  | { decision: "KEPT_REPORT_CARD_UNPUBLISHED"; reason: string; reportCardId: string; reportCardStatus: string }
+  | { decision: "KEPT_REPORT_CARD_NOT_SENT"; reason: string; reportCardId: string; reportCardStatus: string }
   | { decision: "KEPT_NOT_DUE"; reason: string }
 
 export function decideMediaRetention(input: {
   mediaCreatedAt: Date
   now: Date
   retentionMonths: number                 // mặc định 12, từ SystemSetting
-  linkedReportCards: { id: string; status: string }[]   // SL-07
+  // ✅ B6 (24/08/2026): thêm sentToParentAt — "đã xuất" = ĐÃ GỬI ĐẾN PH, không phải chỉ PUBLISHED.
+  linkedReportCards: { id: string; status: string; sentToParentAt: Date | null }[]   // SL-07
 }): MediaRetentionDecision {
   const dueAt = new Date(input.mediaCreatedAt)
   dueAt.setMonth(dueAt.getMonth() + input.retentionMonths)
   if (input.now < dueAt) {
     return { decision: "KEPT_NOT_DUE", reason: `Chưa tới hạn ${input.retentionMonths} tháng (hạn ${dueAt.toISOString()})` }
   }
-  // "Chưa xuất" = còn ÍT NHẤT MỘT học bạ liên kết chưa PUBLISHED. Đủ một cái là giữ.
-  const blocking = input.linkedReportCards.find((rc) => rc.status !== "PUBLISHED")
+  // "Chưa xuất" = còn ÍT NHẤT MỘT học bạ liên kết CHƯA GỬI ĐẾN PH. Đủ một cái là giữ.
+  // ⚠️ Học bạ PUBLISHED nhưng sentToParentAt = null (gồm toàn bộ học bạ cũ trước khi có cột này)
+  //    vẫn CHẶN việc xoá — cố ý, đây là hướng an toàn.
+  const blocking = input.linkedReportCards.find((rc) => rc.sentToParentAt == null)
   if (blocking) {
     return {
-      decision: "KEPT_REPORT_CARD_UNPUBLISHED",
-      reason: `Học bạ ${blocking.id} đang ở trạng thái ${blocking.status} — chưa phát hành`,
+      decision: "KEPT_REPORT_CARD_NOT_SENT",
+      reason: `Học bạ ${blocking.id} (trạng thái ${blocking.status}) chưa gửi đến phụ huynh`,
       reportCardId: blocking.id,
       reportCardStatus: blocking.status,
     }
   }
-  return { decision: "DELETED", reason: `Quá ${input.retentionMonths} tháng, mọi học bạ liên kết đã PUBLISHED` }
+  return { decision: "DELETED", reason: `Quá ${input.retentionMonths} tháng, mọi học bạ liên kết đã gửi đến PH` }
 }
 ```
 
@@ -544,7 +585,7 @@ export function decideMediaRetention(input: {
 | `objectKey` | `String` | Key R2 suy từ `fileUrl` — thứ duy nhất còn lại để dọn tay nếu bước xoá R2 hỏng |
 | `mediaCreatedAt` | `DateTime` | Mốc tính 12 tháng (tái kiểm được) |
 | `takenAt` | `DateTime?` | Snapshot |
-| `decision` | `String` | `DELETED` · `KEPT_REPORT_CARD_UNPUBLISHED` · `KEPT_NOT_DUE` · `FAILED_STORAGE` · `FAILED_DB` |
+| `decision` | `String` | `DELETED` · `KEPT_REPORT_CARD_NOT_SENT` · `KEPT_NOT_DUE` · `FAILED_STORAGE` · `FAILED_DB` |
 | `reason` | `String @db.Text` | Câu giải thích đọc được (từ `decideMediaRetention`) |
 | `reportCardId` | `String?` | Học bạ chặn việc xoá (F-05: "ghi log lý do + **học bạ nào**") |
 | `reportCardStatus` | `String?` | Trạng thái học bạ lúc quyết |
@@ -563,7 +604,7 @@ Khai vào `SCOPED_MODELS` (`lib/db-scope.ts:11`) **và** `BACKFILL_SPECS` (`lib/
 | runId | mediaId | objectKey | decision | reason | reportCardId | storageDeletedAt | rowDeletedAt |
 |---|---|---|---|---|---|---|---|
 | `run_c9x1` | `cm_a7f2` | `class-media/ses_88/cm_a7f2.jpg` | `DELETED` | `Quá 12 tháng, mọi học bạ liên kết đã PUBLISHED` | `null` | `2027-08-23T00:12:31Z` | `2027-08-23T00:12:31Z` |
-| `run_c9x1` | `cm_b3k9` | `class-media/ses_91/cm_b3k9.mp4` | `KEPT_REPORT_CARD_UNPUBLISHED` | `Học bạ rc_5512 đang ở trạng thái PENDING_REVIEW — chưa phát hành` | `rc_5512` | `null` | `null` |
+| `run_c9x1` | `cm_b3k9` | `class-media/ses_91/cm_b3k9.mp4` | `KEPT_REPORT_CARD_NOT_SENT` | `Học bạ rc_5512 (trạng thái PENDING_REVIEW) chưa gửi đến phụ huynh` | `rc_5512` | `null` | `null` |
 | `run_c9x1` | `cm_d0p4` | `class-media/ses_88/cm_d0p4.jpg` | `FAILED_STORAGE` | `DeleteObject trả 500 — sẽ thử lại lần chạy sau` | `null` | `null` | `null` |
 
 **(5) Ranh giới transaction — xoá object trước hay xoá row trước?**
@@ -1055,14 +1096,14 @@ Chỉ ghi câu **thực sự chưa trả lời được** từ mã + spec.
 
 | # | Câu hỏi | Vì sao chặn | Chủ | Cần trước |
 |---|---|---|---|---|
-| **OQ-F1** | "Học bạ **đã xuất**" (F-05) nghĩa là **đã PHÁT HÀNH** (`ReportCard.status = PUBLISHED`) hay **đã có người tải file PDF**? | Nghĩa (a) dùng được ngay (`schema:6272`, `:6279`). Nghĩa (b) đòi thêm bảng `ReportCardExportLog` + cắm ghi vào **cả 4** route PDF (hiện 0 route nào ghi gì — §2.9). Chốt sai = phải sửa điều kiện của job đã xoá dữ liệu thật. | Chủ dự án | Trước SL-07 |
+| ~~**OQ-F1**~~ | ~~"Học bạ đã xuất" (F-05) nghĩa là gì?~~ | ✅ **ĐÃ CHỐT 24/08/2026 (B6): "đã gửi đến được cho PH"** — nghĩa **(c)**, cột mới `ReportCard.sentToParentAt`, nhãn UI "Đã gửi đến PH". **Không** thêm giá trị enum (2 đường đọc của PH lọc cứng `status = "PUBLISHED"` — `lib/lms/report-card.ts:220`, `:239`). F-05 dùng `sentToParentAt IS NOT NULL`. Chi tiết §0. | — | Đóng |
 | **OQ-F2** | Giữ **nguyên câu chữ F-10** (chỉ hiện ngày có media chưa duyệt — cách đọc A) hay mở rộng để folder trống cũng hiện (cách đọc B)? | Đọc chặt thì **F-14 không bao giờ render được** và F-31 mất 2 trạng thái (`Chưa duyệt`, `Không có ảnh`). Đây là mâu thuẫn trong chính spec, không suy ra được từ mã. | Chủ dự án | Trước khi code F.2 |
 | **OQ-F3** | F-02 (H.264/720p) thực thi bằng gì? | Repo **không có** ffmpeg/sharp/transcode ở bất kỳ đâu; Vercel function không phải chỗ chạy ffmpeg cho file 500MB. Ba hướng: dịch vụ ngoài (Cloudflare Stream…), worker riêng, hoặc **hoãn F-02** và chỉ nhận video đã đúng chuẩn (chặn ở validate). Chọn hướng nào quyết định `transcodeStatus` có ý nghĩa gì. | Chủ dự án + Dev | Trước SL-04 |
 | **OQ-F4** | Trần dung lượng/thời lượng video một lần up? | `UPLOAD_CONFIG.video` đang **500MB** (`lib/storage/upload-config.ts`) trong khi ảnh là 10MB. QLCS phải **xem hết** mọi video (F-18) ⇒ 10 video × 10 phút = 100 phút mỗi ngày mỗi lớp. Không có trần thời lượng thì F-18 biến trang duyệt thành việc bất khả thi. | Chủ dự án | Trước khi bật upload video |
 | **OQ-F5** | Media prod đang có `classSessionId = null` xử lý sao khi bật điều kiện F-04? | Thêm `classSessionId: { not: null }` vào đường đọc PH (§6.1.4) làm chúng **biến mất khỏi portal ngay lập tức**. Cần chọn: backfill theo `takenAt` khớp `ClassSession.date`, hay miễn trừ media trước một mốc. Số lượng thực tế chưa đo (cần truy vấn prod). | Chủ dự án + Dev | Trước khi triển khai F-04 |
-| **OQ-F6** | Dọn object R2 **mồ côi lịch sử** (do `deleteMedia`/`deleteDraftMedia` cũ và các row `REJECTED`) — làm trong F hay tách? | Bucket công khai ⇒ mỗi object mồ côi là một ảnh học viên tải được vô danh. Nhưng đây là việc **rà kho**, không phải vòng đời, và cần dry-run + người vận hành chạy tay (luật cứng #4). | Chủ dự án | Trước khi đóng F |
-| **OQ-F7** | Media lớp chuyển sang **bucket riêng** (F-01-3) trong đợt F hay để sau? | Đổi bucket làm mọi `fileUrl` cũ vẫn trỏ bucket công khai ⇒ hai kho song song, và `isOwnStorageUrl` (`actions.ts:150-156`) so với **một** `getR2PublicUrl()` nên phải nới. Làm sớm thì di sản nhỏ; làm muộn thì di sản lớn hơn mỗi ngày. | Chủ dự án | Trước SL-02 (ảnh hưởng object key) |
-| **OQ-F8** | Cảnh báo F-21 gộp vào `/api/cron/parent-request-reminder` (23 cron) hay thêm entry thứ 24? | Hồ sơ repo lo ngại giới hạn số cron nhưng **đánh dấu CHƯA KIỂM CHỨNG**. Cần một câu trả lời dứt khoát về giới hạn của gói Vercel đang dùng. | Dev | Trước khi code F-21 |
+| ⚙️ ~~**OQ-F6**~~ | ~~Dọn object R2 mồ côi lịch sử — làm trong F hay tách?~~ | ✅ **CHỐT KỸ THUẬT 24/08/2026 (Dev): TÁCH thành story riêng**, chạy **ngay sau khi F đóng**. Lý do: đây là **rà kho lịch sử**, khác bản chất với vòng đời media mà F đặc tả — nhét chung là trộn hai loại rủi ro vào một lần chạy. Story riêng: liệt kê → đối chiếu DB → báo cáo → xoá; **dry-run mặc định**, người vận hành chạy tay (luật cứng #4), giữ log từng object. Đừng để sang quý sau: mỗi ngày trôi là thêm object mồ côi mới. | — | Đóng |
+| ~~**OQ-F7**~~ | ~~Media lớp chuyển sang bucket riêng (F-01-3) trong đợt F hay để sau?~~ | ✅ **ĐÃ CHỐT 24/08/2026 (B8): tách NGAY trong đợt F.** Việc phải làm kèm: nới `isOwnStorageUrl` (`actions.ts:150-156`) để nhận **2** bucket; media cũ ở lại bucket công khai (di sản — dọn theo OQ-F6); khoá **trước SL-02** vì ảnh hưởng object key. | — | Đóng |
+| ⚙️ ~~**OQ-F8**~~ | ~~Cảnh báo F-21 gộp vào cron sẵn có hay thêm entry thứ 24?~~ | ✅ **CHỐT KỸ THUẬT 24/08/2026 (Dev): THÊM ENTRY RIÊNG.** Nỗi lo trần cron **đã đo, không có thật**: `vercel.json` đang khai **23** cron, gói Pro cho **40**. Tách riêng vì gộp hai job khác mục đích vào một khe làm chúng **chết chung**, không tắt riêng được, log lẫn lộn. (Nếu dự án không ở gói Pro thì trần khác — deploy thử là biết, Vercel từ chối build khi vượt.) | — | Đóng |
 
 ---
 

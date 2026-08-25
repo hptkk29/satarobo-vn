@@ -235,6 +235,11 @@ cụm đó phình** — tiền đi thẳng vào cơ sở sai. Đó là lý do c�
 
 ### IM-06 — Múi giờ: Meta theo timezone TÀI KHOẢN QUẢNG CÁO, hệ thống theo giờ VN
 
+> ✅ **Cập nhật 24/08/2026 (quyết định B10): chủ dự án khai ad account đặt múi giờ GMT+7 (Asia/Ho_Chi_Minh)**
+> ⇒ trùng trục ngày của hệ thống, lệch (a) **không xảy ra** nếu lời khai đúng.
+> ⚠️ Vẫn **ghi `AdsSyncRun.accountTimezone`** đọc từ `timezone_name` của API mỗi lần chạy — đó là thứ phân
+> biệt "số khớp" với IM-06 khi có sự cố, và là cách phát hiện tài khoản bị đổi múi giờ về sau.
+
 **Cơ chế sai — hai lệch chồng nhau:**
 
 **(a) Lệch "ngày" của dữ liệu.** Meta trả `date_start` theo timezone của tài khoản quảng cáo (đặt lúc mở tài
@@ -273,6 +278,11 @@ tháng.
 ---
 
 ### IM-07 — Đơn vị tiền: Meta có thể trả USD, báo cáo tính VND
+
+> ✅ **Cập nhật 24/08/2026 (quyết định B10): chủ dự án khai ad account dùng VND.**
+> ⚠️ **Rào chắn dưới đây GIỮ NGUYÊN, không được gỡ.** Lời khai là của người, không phải của API: tài khoản
+> có thể bị đổi, hoặc mai này thêm tài khoản thứ hai (OQ-D3 chưa đóng). Giữ kiểm `account_currency` ≠ `VND`
+> ⇒ `AdsSyncRun.status = BLOCKED`. Giá trị của lời khai là: **không cần lớp quy đổi tỷ giá** trong v1.
 
 **Cơ chế sai:**
 
@@ -487,7 +497,7 @@ Phải xong **trước khi job chạy thật lần đầu**. "Chủ" ghi theo va
 | **T-01** | **Không có sổ lần chạy** ⇒ IM-01 + IM-03 + IM-08 đều vô hình. Job chết im, không ai biết, số cũ vẫn hiển thị | Cao | Cao | Tạo model `AdsSyncRun` (§9.1) và ghi **một dòng mỗi lượt chạy, kể cả lượt ghi 0 dòng**. Test CI: gọi handler với Meta giả → assert có đúng 1 dòng `AdsSyncRun` với `rowsFetched`/`rowsWritten` khớp. **Không merge PR job nếu chưa có test này** (luật Nền Hệ thống #5: test viết trước) | Dev BE | Cùng PR tạo job |
 | **T-02** | **UPSERT ghi đè lịch sử** (`lib/crm/ads-insights.ts:55-71`) — trái thẳng câu chữ D-01, và **xoá bằng chứng của 5 rủi ro khác** | Chắc chắn (mã hiện tại làm đúng vậy) | Cao | Bảng snapshot **MỚI** `AdsSpendDaily` append-only (§9.1), khoá `@@unique([runId, date, channel, campaignId, adsetId])`; bản cũ đánh `supersededAt`/`supersededByRunId`, **không xoá**. **KHÔNG tái dùng `upsertAdsInsight`** — đánh dấu deprecated hoặc gỡ cùng PR để người sau không "dùng lại cho nhanh" | Dev BE + chủ dự án duyệt schema | Trước migration đầu tiên |
 | **T-03** | **Snapshot thiếu chiều campaign + cơ sở** ⇒ D-06/D-07/D-08 **bất khả thi**, và IM-11 không vá được | Chắc chắn | Cao | `AdsSpendDaily` mang `campaignId` + `campaignNameRaw` (nguyên văn) + `adsetId` + **CẢ HAI** `centerId` và `orgUnitId` (SL-00, `A-nen-tang.md` §10). Khai vào **cả hai** nơi: `SCOPED_MODELS` (`lib/db-scope.ts:10`) **và** `BACKFILL_SPECS` (`lib/org/center-bridge.ts:45`) — quên nơi thứ hai thì test `[US-07-IT-08b]` đỏ hoặc dữ liệu rò im lặng | Dev BE | Cùng T-02 |
-| **T-04** | **Đơn vị tiền không xác minh** — USD cộng thẳng vào thang VND, sai ~26.000 lần theo hướng làm ROAS đẹp | Trung bình | **Rất cao** | Xin `account_currency`; currency ≠ `VND` ⇒ `AdsSyncRun.status = BLOCKED` + cảnh báo, **không tự đoán tỷ giá**. Đổi cột tiền sang `Int` (VND) hoặc `Decimal`, bỏ `Float` (`prisma/schema.prisma:952`) | Dev BE; xác nhận currency thật: Trưởng Marketing (người có quyền Ads Manager) | Trước lần chạy thật đầu tiên |
+| **T-04** | ⚠️ **Đơn vị tiền** — chủ dự án khai **VND** (B10, 24/08/2026) ⇒ xác suất giảm, **nhưng rào chắn giữ nguyên**: lời khai không thay được kiểm tra bằng API | Thấp | **Rất cao** | Xin `account_currency`; currency ≠ `VND` ⇒ `AdsSyncRun.status = BLOCKED` + cảnh báo, **không tự đoán tỷ giá**. Đổi cột tiền sang `Int` (VND) hoặc `Decimal`, bỏ `Float` (`prisma/schema.prisma:952`) | Dev BE; xác nhận currency thật: Trưởng Marketing (người có quyền Ads Manager) | Trước lần chạy thật đầu tiên |
 | **T-05** | **Múi giờ**: (a) Meta trả theo timezone tài khoản QC, hệ tính theo giờ VN; (b) cron Vercel chạy UTC — `"0 0 * * *"` = **07:00 VN**, không phải 00:00 VN như spec | Cao | Trung bình–Cao | Lưu `accountTimezone` mỗi lần chạy; khác giá trị kỳ vọng đã chốt ⇒ `BLOCKED`. Lịch cron `"0 17 * * *"` **kèm chú thích giờ VN** đúng quy ước 3 route đang có (`class-schedule-sync/route.ts:12`, `student-birthday/route.ts:14`, `chat-membership-reconcile/route.ts:7`). Đối soát bắt buộc có mẫu **ngày cuối tháng** | Dev BE | Cùng PR tạo job |
 | **T-06** | **Token nằm trong QUERY STRING** (`lib/crm/ads-insights.ts:93`) ⇒ lọt vào log/trace/Sentry | Trung bình | Cao | Chuyển sang header `Authorization: Bearer <token>` (Meta hỗ trợ). Lý do khẩn: `Sentry.httpIntegration()` (`sentry.server.config.ts:18`) bắt outgoing fetch, còn `beforeSend` (`:22-32`) **chỉ** xoá `event.request.headers`/`cookies` — **không** scrub URL của span ⇒ token đi thẳng vào Sentry | Dev BE | Cùng PR, không hoãn |
 | **T-07** | **Bật job trước khi ban hành `SR.QD.232`** ⇒ mọi ngày đầu rơi `CHƯA PHÂN BỔ`; cộng IM-04 thì **không sửa lại được** | Cao (spec đã cảnh báo đúng điều này) | Trung bình | Cổng người: ban hành văn bản + **đổi tên các campaign đang chạy** trước, rồi mới bật. Nếu buộc bật trước thì T-02 (append-only + backfill được) trở thành điều kiện **cứng**, không phải "nên có" | Trưởng Marketing | Trước ngày bật job |
