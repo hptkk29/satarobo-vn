@@ -370,6 +370,14 @@ export const ROLE_SEED: RoleSeed[] = [
       { action: "elearning:exam:grade", scopeType: "GLOBAL" },
       { action: "elearning:exam:unlock", scopeType: "GLOBAL" },
       { action: "elearning:report:export", scopeType: "GLOBAL" },
+      // ── GĐ3 (chủ dự án chốt câu 2, 25/08/2026) — PHÂN CÔNG GIÁO VIÊN TRẢI NGHIỆM ──
+      // Chuyển từ Quản lý cơ sở sang Đào tạo: Sale chỉ ĐỀ XUẤT, Đào tạo mới chốt.
+      // `trials:view` đi kèm bắt buộc — thiếu nó thì Đào tạo không vào nổi trang
+      // /lop-trial/[id] để bấm nút (trang gác bằng trials:view).
+      // scopeType GLOBAL là BẮT BUỘC: hai call-site gọi trần không kèm target, mà
+      // scope CENTER thiếu target.centerId thì `can()` trả false (luật R1, có test khoá).
+      { action: "trials:view", scopeType: "GLOBAL" },
+      { action: "trials:assign-teacher", scopeType: "GLOBAL" },
     ],
   },
   {
@@ -442,7 +450,9 @@ export const ROLE_SEED: RoleSeed[] = [
       // ── Trải nghiệm · phụ huynh · media ──
       { action: "trials:view", scopeType: "GLOBAL" },
       { action: "trials:manage", scopeType: "GLOBAL" },
-      { action: "trials:assign-teacher", scopeType: "GLOBAL" },
+      // GĐ3 (25/08/2026) — `trials:assign-teacher` ĐÃ GỠ khỏi vai này, chuyển sang
+      // Đào tạo theo chốt câu 2. Quản lý cơ sở vẫn giữ trials:manage/feedback/config
+      // và vẫn override được sĩ số; chỉ riêng việc CHỐT giáo viên là của Đào tạo.
       { action: "trials:feedback", scopeType: "GLOBAL" },
       { action: "trials:override-capacity", scopeType: "GLOBAL" },
       { action: "parent-requests:manage", scopeType: "GLOBAL" },

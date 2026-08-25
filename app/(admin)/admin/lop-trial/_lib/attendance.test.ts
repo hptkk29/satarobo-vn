@@ -17,6 +17,11 @@ function hocVien(id: string): EnrollmentRow {
     phone: null,
     leadId: null,
     status: "ACTIVE",
+    // GĐ3 — bốn field của "ca" trải nghiệm; hàm đếm không dùng tới nhưng type đòi đủ.
+    scheduledSessionId: null,
+    gvDeXuatId: null,
+    gvPhanCongId: null,
+    rescheduleCount: 0,
   };
 }
 

@@ -183,6 +183,10 @@ export async function layChiTietLop(
       phone: e.leadChild?.lead?.phone ?? null,
       leadId: e.leadChild?.lead?.id ?? null,
       status: e.status as EnrollmentRow["status"],
+      scheduledSessionId: e.scheduledSessionId,
+      gvDeXuatId: e.gvDeXuatId,
+      gvPhanCongId: e.gvPhanCongId,
+      rescheduleCount: e.rescheduleCount,
     })),
   };
 }

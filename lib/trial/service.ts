@@ -14,6 +14,7 @@ import { publishEvent } from "@/lib/events/publish";
 import { writeAudit } from "@/lib/audit/audit-log";
 import { LEAD_PIPELINE_EXIT_STATUSES } from "@/lib/leads/status";
 import { setLeadStatus } from "@/lib/leads/set-status";
+import { danhGiaDoiLich, saleDuocDeXuat } from "@/lib/trial/reschedule-rules";
 
 // ─── PURE helpers (deterministic — KHÔNG new Date() ở top) ─────────────────────
 
@@ -788,4 +789,170 @@ export async function unenrollLeadChild(params: {
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : "Lỗi gỡ học viên" };
   }
+}
+
+// ─── GĐ3 — DỜI LỊCH một ca trải nghiệm ────────────────────────────────────────
+
+/**
+ * Dời một ca trải nghiệm sang buổi khác.
+ *
+ * Luồng đã chốt với chủ dự án (25/08/2026): phụ huynh vắng hoặc xin dời → Sale bấm
+ * "Dời lịch", chọn buổi mới → **giáo viên đang phụ trách ca đó MẤT PHÂN CÔNG**, Sale
+ * đề xuất lại nếu muốn (không bắt buộc), và giáo viên được BÁO là lịch đã dời.
+ *
+ * Ba điều dễ làm sai, đã xử ở đây:
+ *
+ * 1. **Không xoá bản ghi điểm danh của buổi cũ.** Bé vắng ở buổi cũ chính là lý do
+ *    phải dời; xoá đi là mất luôn bằng chứng và `attendedCount` sẽ tính sai.
+ * 2. **Không đụng giáo viên của LỚP hay của BUỔI.** Chỉ ca này mất phân công; lớp có
+ *    nhiều bé, gỡ ở cấp lớp là gỡ nhầm của người khác.
+ * 3. **Ghi vết vào `TrialReschedule` dù trên màn bé đó biến mất khỏi buổi cũ.** Tỷ lệ
+ *    dời lịch là chỉ số chất lượng chốt lịch của Sale, xoá thẳng là mất hẳn.
+ */
+export async function rescheduleTrialEnrollment(params: {
+  trialEnrollmentId: string;
+  toSessionId: string;
+  reason?: string | null;
+  actorId: string | null;
+}): Promise<{ ok: boolean; error?: string; gvBiGoId?: string | null }> {
+  try {
+    return await db.$transaction(async (tx) => {
+      const enr = await tx.trialEnrollment.findUnique({
+        where: { id: params.trialEnrollmentId },
+        select: {
+          id: true,
+          status: true,
+          trialClassId: true,
+          leadChildId: true,
+          scheduledSessionId: true,
+          gvPhanCongId: true,
+          rescheduleCount: true,
+          trialClass: { select: { centerId: true, orgUnitId: true, name: true } },
+        },
+      });
+      if (!enr) return { ok: false, error: "Không tìm thấy ca trải nghiệm" };
+
+      // Buổi mới phải thuộc ĐÚNG lớp đó và chưa diễn ra. Kiểm ở server chứ không chỉ
+      // ở UI: action nhận id thẳng từ client.
+      const ses = await tx.trialClassSession.findUnique({
+        where: { id: params.toSessionId },
+        select: { id: true, trialClassId: true, status: true },
+      });
+
+      // Toàn bộ phần quyết định nằm ở hàm thuần (có test phủ đủ nhánh) — ở đây chỉ
+      // nạp dữ liệu rồi hỏi. Hai bản logic là hai cơ hội lệch nhau.
+      const luat = danhGiaDoiLich({
+        caStatus: enr.status,
+        caTrialClassId: enr.trialClassId,
+        caSessionId: enr.scheduledSessionId,
+        buoiMoi: ses
+          ? { id: ses.id, trialClassId: ses.trialClassId, status: ses.status }
+          : null,
+      });
+      if (!luat.ok) return { ok: false, error: luat.error };
+
+      const gvBiGoId = enr.gvPhanCongId;
+
+      await tx.trialEnrollment.update({
+        where: { id: enr.id },
+        data: {
+          scheduledSessionId: params.toSessionId,
+          // Mất phân công. Xoá luôn đề xuất cũ để Sale đề xuất lại từ đầu — giữ đề
+          // xuất cũ thì Đào tạo dễ tưởng Sale đã cân nhắc cho lịch MỚI.
+          gvPhanCongId: null,
+          gvDeXuatId: null,
+          rescheduleCount: enr.rescheduleCount + 1,
+        },
+      });
+
+      await tx.trialReschedule.create({
+        data: {
+          trialEnrollmentId: enr.id,
+          fromSessionId: enr.scheduledSessionId,
+          toSessionId: params.toSessionId,
+          gvBiGoId,
+          reason: params.reason?.trim() || null,
+          changedById: params.actorId,
+          changedByName: await actorName(params.actorId, tx),
+          centerId: enr.trialClass.centerId,
+          orgUnitId: enr.trialClass.orgUnitId,
+        },
+      });
+
+      await writeAudit({
+        actor: { id: params.actorId, name: await actorName(params.actorId, tx) },
+        module: "trial",
+        entityType: "TrialEnrollment",
+        entityId: enr.id,
+        action: "UPDATE",
+        oldValues: { scheduledSessionId: enr.scheduledSessionId, gvPhanCongId: gvBiGoId },
+        newValues: { scheduledSessionId: params.toSessionId, gvPhanCongId: null },
+        orgUnitId: enr.trialClass.centerId,
+        tx,
+      });
+
+      return { ok: true, gvBiGoId };
+    });
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Lỗi dời lịch" };
+  }
+}
+
+/**
+ * Sale ĐỀ XUẤT giáo viên cho một ca. Chỉ ghi được khi Đào tạo CHƯA chốt — sau khi
+ * `gvPhanCongId` có giá trị thì Sale không sửa nữa (chốt câu 1).
+ */
+export async function proposeTrialTeacher(params: {
+  trialEnrollmentId: string;
+  gvDeXuatId: string | null;
+  actorId: string | null;
+}): Promise<{ ok: boolean; error?: string }> {
+  const enr = await db.trialEnrollment.findUnique({
+    where: { id: params.trialEnrollmentId },
+    select: { id: true, status: true, gvPhanCongId: true },
+  });
+  if (!enr) return { ok: false, error: "Không tìm thấy ca trải nghiệm" };
+  const luat = saleDuocDeXuat({ status: enr.status, gvPhanCongId: enr.gvPhanCongId });
+  if (!luat.ok) return { ok: false, error: luat.error };
+  if (params.gvDeXuatId) {
+    const gv = await db.user.findUnique({
+      where: { id: params.gvDeXuatId },
+      select: { id: true },
+    });
+    if (!gv) return { ok: false, error: "Giáo viên không tồn tại" };
+  }
+  await db.trialEnrollment.update({
+    where: { id: enr.id },
+    data: { gvDeXuatId: params.gvDeXuatId },
+  });
+  return { ok: true };
+}
+
+/**
+ * Đào tạo PHÂN CÔNG giáo viên cho một ca (duyệt đề xuất của Sale hoặc chỉ định người
+ * khác). Ghi đè được, vì đây là quyền quyết định cuối.
+ */
+export async function assignTrialCaseTeacher(params: {
+  trialEnrollmentId: string;
+  gvPhanCongId: string | null;
+  actorId: string | null;
+}): Promise<{ ok: boolean; error?: string; daDoi?: boolean }> {
+  const enr = await db.trialEnrollment.findUnique({
+    where: { id: params.trialEnrollmentId },
+    select: { id: true, status: true, gvPhanCongId: true },
+  });
+  if (!enr) return { ok: false, error: "Không tìm thấy ca trải nghiệm" };
+  if (enr.status !== "ACTIVE") return { ok: false, error: "Ca này đã kết thúc" };
+  if (params.gvPhanCongId) {
+    const gv = await db.user.findUnique({
+      where: { id: params.gvPhanCongId },
+      select: { id: true },
+    });
+    if (!gv) return { ok: false, error: "Giáo viên không tồn tại" };
+  }
+  await db.trialEnrollment.update({
+    where: { id: enr.id },
+    data: { gvPhanCongId: params.gvPhanCongId },
+  });
+  return { ok: true, daDoi: enr.gvPhanCongId !== params.gvPhanCongId };
 }

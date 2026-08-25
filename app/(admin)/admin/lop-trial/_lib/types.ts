@@ -60,7 +60,7 @@ export type SessionRow = {
   attendance: Record<string, { status: TrialAttendanceMark; note: string | null }>;
 };
 
-/** Một học viên trong lớp trải nghiệm. */
+/** Một học viên trong lớp trải nghiệm (một "ca" trải nghiệm). */
 export type EnrollmentRow = {
   id: string;
   leadChildId: string | null;
@@ -69,6 +69,15 @@ export type EnrollmentRow = {
   phone: string | null;
   leadId: string | null;
   status: TrialEnrollmentStatusV2;
+  // ─── GĐ3 ───────────────────────────────────────────────────────────────────
+  /** Buổi ca này đang được xếp vào. null = chưa xếp buổi nào. */
+  scheduledSessionId: string | null;
+  /** Sale ĐỀ XUẤT. Chỉ còn ý nghĩa khi Đào tạo chưa chốt. */
+  gvDeXuatId: string | null;
+  /** Đào tạo PHÂN CÔNG. Có giá trị = đã chốt, Sale không sửa đề xuất được nữa. */
+  gvPhanCongId: string | null;
+  /** Số lần ca này đã bị dời lịch. */
+  rescheduleCount: number;
 };
 
 /** Ứng viên trả về từ ô tìm học viên. */
