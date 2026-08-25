@@ -161,6 +161,11 @@ export const ADMIN_ROUTE_SEGMENTS: ReadonlySet<string> = new Set<string>([
   // Site GV cũng có màn `/lich` riêng — không xung đột: nhánh teacher host hỏi
   // `TEACHER_ROUTE_SEGMENTS` trước, xem chú thích ở đó.
   "lich",
+  // GĐ2 — màn "Lớp Trial" gộp hai màn cũ. Thiếu segment ở đây thì localhost chạy
+  // hoàn hảo còn admin.satarobo.vn 308 sang public rồi 404 (đúng tiền lệ /to-chuc và
+  // /user-groups). Hai segment cũ "trial-classes" và "trials" GIỮ NGUYÊN cho tới GĐ6
+  // vì hai màn cũ vẫn chạy song song để nghiệm thu.
+  "lop-trial",
   "marketing",
   "media",
   "news",

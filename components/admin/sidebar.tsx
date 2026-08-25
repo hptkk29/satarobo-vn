@@ -133,8 +133,12 @@ const NAV_GROUPS: NavGroup[] = [
       // R1-01 — hội thoại Messenger của Page. Trang có thật từ lâu nhưng CHƯA BAO GIỜ
       // có lối vào: chỉ gõ URL mới tới (rà 11/08).
       { label: "Messenger CRM", href: "/crm/messenger", icon: MessagesSquare, perm: ["leads:view-all", "leads:view-own"] },
-      { label: "Học thử", href: "/trials", icon: FlaskConical, perm: ["trials:view"] },
-      { label: "Lớp trải nghiệm", href: "/trial-classes", icon: FlaskConical, perm: ["trials:view"] },
+      // GĐ2 — màn gộp. Ba lối vào cùng lúc là CỐ Ý trong giai đoạn nghiệm thu song song:
+      // người vận hành đối chiếu chéo hai bên trên cùng dữ liệu. Hai dòng cũ gỡ ở GĐ6,
+      // đừng để nó thành vĩnh viễn như chính cặp /trials + /trial-classes hiện tại.
+      { label: "Lớp Trial", href: "/lop-trial", icon: FlaskConical, perm: ["trials:view"] },
+      { label: "Học thử (cũ)", href: "/trials", icon: FlaskConical, perm: ["trials:view"] },
+      { label: "Lớp trải nghiệm (cũ)", href: "/trial-classes", icon: FlaskConical, perm: ["trials:view"] },
     ],
   },
   {

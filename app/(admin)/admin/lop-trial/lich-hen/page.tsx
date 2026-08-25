@@ -1,0 +1,60 @@
+// app/(admin)/admin/lop-trial/lich-hen/page.tsx — GĐ2.
+// Mặt phẳng V1: buổi hẹn học thử 1-1 gắn thẳng vào lead (model TrialClass).
+// Thay màn /admin/trials cũ. CỐ Ý không gộp chung bảng với lớp trải nghiệm: hai bên
+// là hai model khác nhau, gộp được thì đã gộp từ lâu.
+import { redirect } from "next/navigation";
+import { auth } from "@/lib/auth";
+import { hasRole } from "@/lib/auth/permissions";
+import { checkPermission } from "@/lib/auth/check-permission";
+import { resolveActor } from "@/lib/auth/actor";
+import { getAssignableTeachers } from "@/lib/teachers/assignable";
+import { layDanhSachHen } from "../_lib/queries";
+import { BookingFilterChips } from "../_components/booking-filter-chips";
+import { SearchForm } from "../_components/search-form";
+import { BookingList } from "../_components/booking-list";
+
+export const dynamic = "force-dynamic";
+
+export default async function LichHenPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ status?: string; q?: string }>;
+}) {
+  const session = await auth();
+  if (!session?.user) redirect("/login");
+  if (!(await checkPermission("trials:view"))) redirect("/dashboard");
+
+  const { status, q } = await searchParams;
+  const canManage = await checkPermission("trials:manage");
+  // Chỉ GV THUẦN mới bị ép chỉ thấy buổi của mình. Người kiêm nhiệm (quản lý cơ sở kiêm
+  // dạy) phải thấy cả buổi của người khác lẫn buổi CHƯA gán ai để còn xếp lịch.
+  const ownTeacherId =
+    hasRole(session.user, "TEACHER") && !canManage ? session.user.id : null;
+
+  const actor = await resolveActor(session.user.id);
+  const [{ bookings, rooms, classes }, teachers] = await Promise.all([
+    layDanhSachHen(actor, status, { ownTeacherId, q }),
+    getAssignableTeachers({ centerIds: actor.visibleCenterIds }),
+  ]);
+
+  return (
+    <div className="space-y-4">
+      <BookingFilterChips current={status} q={q} />
+
+      <SearchForm
+        action="/lop-trial/lich-hen"
+        placeholder="Tìm theo tên phụ huynh, SĐT hoặc tên con…"
+        defaultValue={q}
+        hidden={{ status }}
+      />
+
+      <BookingList
+        bookings={bookings}
+        teachers={teachers.map((t) => ({ id: t.id, name: t.name ?? "(không tên)" }))}
+        rooms={rooms}
+        classes={classes}
+        canManage={canManage}
+      />
+    </div>
+  );
+}

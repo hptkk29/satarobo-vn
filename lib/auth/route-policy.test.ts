@@ -91,6 +91,22 @@ describe("A. admin host × role", () => {
     }
   });
 
+  // GĐ2 — màn "Lớp Trial" gộp hai màn cũ. Đây là lưới DUY NHẤT bắt được lỗi thiếu
+  // segment: trên localhost trang chạy hoàn hảo, chỉ admin host mới 308 sang public
+  // rồi 404. Hai segment cũ vẫn phải sống tới GĐ6 vì hai màn cũ chạy song song.
+  it("lop-trial là admin route — kể cả tab con và path chi tiết", () => {
+    expect(isAdminRoute("/lop-trial")).toBe(true);
+    expect(isAdminRoute("/lop-trial/lich-hen")).toBe(true);
+    expect(isAdminRoute("/lop-trial/moi")).toBe(true);
+    expect(isAdminRoute("/lop-trial/abc123")).toBe(true);
+    expect(
+      decideRoute({ hostKind: "admin", pathname: "/lop-trial", ...authed("SUPER_ADMIN") }),
+    ).toEqual<RouteDecision>({ type: "rewrite", path: "/admin/lop-trial" });
+    // Hai màn cũ CHƯA gỡ — mất một trong hai là người nghiệm thu mất đường đối chiếu.
+    expect(isAdminRoute("/trials")).toBe(true);
+    expect(isAdminRoute("/trial-classes")).toBe(true);
+  });
+
   // US-03 (Nền Hệ thống P0) — /user-groups từng THIẾU trong ADMIN_ROUTE_SEGMENTS dù
   // page tồn tại → link sidebar trên admin.satarobo.vn bounce 308 về public = 404.
   // Pin thêm path chi tiết (nested [id]) để không tái phát.
