@@ -22,6 +22,7 @@ import { assignmentWrite } from '@/lib/lead/assignment'
 import { centerIdForOrgUnit } from '@/lib/org/org-service'
 import { rejectHeadOffice } from '@/lib/enrollment-flow'
 import { normalizeFacebookUrl } from '@/lib/lead/intake/normalize'
+import { mergeLeadNote } from '@/lib/lead/note-view'
 import { LEAD_STATUS_LABEL, canTransitionLeadStatus } from '@/lib/leads/status'
 import { leadChildSchema } from '@/lib/validators/lead'
 import { syncLeadChildNameToStudents } from '@/lib/students/sync-name'
@@ -470,7 +471,10 @@ export async function updateLeadNote(
     return { ok: false, error: MUTATE_DENIED }
   }
 
-  const newNote = note.trim() || null
+  // 24/08 — ô ghi chú trên UI chỉ chứa phần NGƯỜI GÕ (dòng máy ghi đã bị bốc ra
+  // khi hiển thị). Ghi thẳng chuỗi đó xuống là xoá mất dấu vết người nhập + cảnh
+  // báo chia lead của phiếu cũ, nên phải ráp lại từ bản đang lưu.
+  const newNote = mergeLeadNote(note, before.note)
   const { actorId, actorName } = getAuditActor(session)
 
   await db.$transaction(async (tx) => {
@@ -854,7 +858,8 @@ export async function updateLeadFields(
     ...(d.orgUnitId !== undefined ? { orgUnitId: d.orgUnitId || null, centerId } : {}),
     ...(d.courseId !== undefined ? { courseId: d.courseId || null } : {}),
     ...(d.source !== undefined ? { source: d.source || null } : {}),
-    ...(d.note !== undefined ? { note: d.note || null } : {}),
+    // 24/08 — xem ghi chú ở updateLeadNote: ráp lại phần máy ghi, đừng đè trắng.
+    ...(d.note !== undefined ? { note: mergeLeadNote(d.note, before.note) } : {}),
     // 23/08 — ô "Link Facebook" CÓ trong biểu mẫu nhập khách nhưng action này
     // chưa bao giờ ghi được: sửa xong là mất im lặng. Thêm cho cả hai đường.
     ...(d.facebookUrl !== undefined ? { facebookUrl: d.facebookUrl || null } : {}),
@@ -1156,6 +1161,38 @@ function leadChildData(parsed: unknown) {
   }
 }
 
+/**
+ * Đồng bộ "Khoá quan tâm" của LEAD theo lựa chọn của Sale ở khối CON (24/08/2026).
+ *
+ * Chủ dự án chốt: khoá quan tâm của một phiếu là khoá mà Sale chọn lúc nhập con —
+ * không phải một ô rời để ai gõ gì cũng được, và tuyệt đối không suy từ `source`.
+ * `Lead.courseId` vì vậy là BẢN SAO có chủ đích của `LeadChild.interestedCourseId`,
+ * để mọi màn đang đọc `lead.course` (chi tiết, bảng, kanban, convert, bulk-convert)
+ * đổi theo mà không phải sửa từng nơi.
+ *
+ * Con mới sửa/mới thêm thắng (sắp theo `updatedAt` giảm dần) — đó là lựa chọn
+ * người dùng vừa bấm. Không con nào chọn khoá ⇒ trả về trống, đúng luật "để trống
+ * cho tới khi Sale chọn".
+ *
+ * ⚠️ Gọi hàm này CÓ ĐIỀU KIỆN, đừng gọi vô tư. Biểu mẫu TẠO lead có ô "Khoá
+ * quan tâm" ở cấp lead RỒI mới đến khối con, và tạo xong nó gọi `addLeadChild` cho
+ * từng con. Nếu con không chọn khoá mà vẫn đồng bộ, ta sẽ XOÁ TRẮNG thứ người
+ * dùng vừa chọn cách đó hai giây — mất dữ liệu im lặng. Luật: chỉ đồng bộ khi con
+ * THỰC SỰ chọn khoá, hoặc khi đang gỡ đúng cái khoá do chính con đó đặt.
+ */
+async function syncLeadCourseFromChildren(
+  tx: Prisma.TransactionClient,
+  leadId: string,
+): Promise<void> {
+  const kids = await tx.leadChild.findMany({
+    where: { leadId },
+    select: { interestedCourseId: true },
+    orderBy: { updatedAt: 'desc' },
+  })
+  const picked = kids.find((k) => k.interestedCourseId)?.interestedCourseId ?? null
+  await tx.lead.update({ where: { id: leadId }, data: { courseId: picked } })
+}
+
 /** Thêm 1 con vào lead. `input` gồm `leadId` + các field con (leadChildSchema). */
 export async function addLeadChild(
   input: unknown,
@@ -1186,9 +1223,17 @@ export async function addLeadChild(
   const data = leadChildData(parsed.data)
 
   const { actorId, actorName } = getAuditActor(session)
-  const child = await db.leadChild.create({
-    data: { leadId, ...data },
-    select: { id: true, fullName: true },
+  const child = await db.$transaction(async (txRaw) => {
+    const tx = txRaw as unknown as Prisma.TransactionClient
+    const created = await tx.leadChild.create({
+      data: { leadId, ...data },
+      select: { id: true, fullName: true },
+    })
+    // Cùng transaction với lượt ghi con: nửa vời (có con, khoá của lead chưa đổi)
+    // đúng là trạng thái mà người dùng báo lỗi. Con không chọn khoá thì KHÔNG đụng
+    // đến khoá của lead (xem cảnh báo ở `syncLeadCourseFromChildren`).
+    if (data.interestedCourseId) await syncLeadCourseFromChildren(tx, leadId)
+    return created
   })
 
   await logLeadAudit({
@@ -1216,7 +1261,13 @@ export async function updateLeadChild(
 
   const child = await db.leadChild.findUnique({
     where: { id: childId },
-    select: { id: true, leadId: true, fullName: true, lead: { select: { centerId: true } } },
+    select: {
+      id: true,
+      leadId: true,
+      fullName: true,
+      interestedCourseId: true,
+      lead: { select: { centerId: true, courseId: true } },
+    },
   })
   const actor = await resolveActor(session.user.id)
   if (!child || !passesScope('Lead', { centerId: child.lead?.centerId ?? null }, actor)) {
@@ -1238,6 +1289,16 @@ export async function updateLeadChild(
   await db.$transaction(async (txRaw) => {
     const tx = txRaw as unknown as Prisma.TransactionClient
     await tx.leadChild.update({ where: { id: childId }, data })
+    // Khoá quan tâm: chọn khoá mới thì lead nhận ngay. Gỡ trắng thì chỉ tính lại khi
+    // khoá đang hiển thị trên lead ĐÚNG là do con này đặt — nếu không, đó là khoá
+    // nhập tay/import của phiếu, không phải của ta để mà xoá.
+    const clearingCourseSetByThisChild =
+      !data.interestedCourseId &&
+      !!child.interestedCourseId &&
+      child.lead?.courseId === child.interestedCourseId
+    if (data.interestedCourseId || clearingCourseSetByThisChild) {
+      await syncLeadCourseFromChildren(tx, child.leadId)
+    }
 
     // KHÔNG .catch() nuốt lỗi ở đây nữa: query hỏng giữa transaction là tx đã toang,
     // nuốt đi chỉ đổi được thông báo lỗi khó hiểu hơn ở query kế tiếp.
@@ -1283,7 +1344,13 @@ export async function deleteLeadChild(
 
   const child = await db.leadChild.findUnique({
     where: { id: childId },
-    select: { id: true, leadId: true, fullName: true, lead: { select: { centerId: true } } },
+    select: {
+      id: true,
+      leadId: true,
+      fullName: true,
+      interestedCourseId: true,
+      lead: { select: { centerId: true, courseId: true } },
+    },
   })
   const actor = await resolveActor(session.user.id)
   if (!child || !passesScope('Lead', { centerId: child.lead?.centerId ?? null }, actor)) {
@@ -1300,7 +1367,17 @@ export async function deleteLeadChild(
   }
 
   const { actorId, actorName } = getAuditActor(session)
-  await db.leadChild.delete({ where: { id: childId } })
+  // Khoá quan tâm của lead có phải do CHÍNH đứa sắp xoá đặt không. Chỉ tính lại
+  // khi đúng là của nó — lead nhập từ Excel/tay có khoá riêng, xoá một đứa con
+  // không liên quan mà cũng xoá luôn khoá của phiếu là mất dữ liệu không ai gọi.
+  const courseCameFromThisChild =
+    !!child.interestedCourseId && child.lead?.courseId === child.interestedCourseId
+
+  await db.$transaction(async (txRaw) => {
+    const tx = txRaw as unknown as Prisma.TransactionClient
+    await tx.leadChild.delete({ where: { id: childId } })
+    if (courseCameFromThisChild) await syncLeadCourseFromChildren(tx, child.leadId)
+  })
 
   await logLeadAudit({
     leadId: child.leadId,

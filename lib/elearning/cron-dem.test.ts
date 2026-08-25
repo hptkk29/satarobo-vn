@@ -177,3 +177,24 @@ describe("một việc hỏng KHÔNG làm chết cả lượt chạy", () => {
     expect(h.thuTu).toContain("thu-lai");
   });
 });
+
+describe("việc 6 — dọn lượt tải nhiều phần bỏ dở", () => {
+  it("chạy trong CÙNG lượt cron, không xin khe thứ ba", async () => {
+    // Ngân sách của module là đúng hai khe cron (QĐ-CDA-14 điểm 2).
+    const r = await runElearningDem(NOW);
+    expect(r.taiDo).toBeDefined();
+  });
+
+  it("bucket chưa cấu hình ⇒ NÓI RA, không báo 0", async () => {
+    // `0` đọc thành "đã quét và không có gì" — tức nói dối về một việc chưa chạy.
+    const r = await runElearningDem(NOW);
+    expect("chuaLamDuoc" in r.taiDo || "daHuy" in r.taiDo).toBe(true);
+  });
+
+  it("việc dọn tải dở chạy TRƯỚC việc thử lại hàng đợi", async () => {
+    // Nó thuộc nhóm DỌN; đặt sau việc (5) là xen một việc xoá vào giữa một việc
+    // đang tạo bản ghi.
+    await runElearningDem(NOW);
+    expect(h.thuTu.indexOf("don")).toBeLessThan(h.thuTu.indexOf("thu-lai"));
+  });
+});

@@ -257,6 +257,12 @@ export const BACKFILL_SPECS: readonly BackfillSpec[] = [
   // 5 bảng của module có ĐỦ hai cột. Thiếu một dòng ở đây thì test [US-07-IT-08b] đỏ —
   // đó là chủ đích: bảng mới có cột đơn vị mà không khai thì đối soát đêm lặng lẽ bỏ qua nó.
   {
+    model: "TrnTrainingNeed",
+    nullMeaning: "NULL_TOAN_HE_THONG",
+    scoped: true,
+    vi: "phiếu nhu cầu đào tạo — NULL = nhu cầu toàn công ty, không của riêng cơ sở nào",
+  },
+  {
     model: "TrnProgram",
     nullMeaning: "NULL_TOAN_HE_THONG",
     scoped: true,
@@ -293,10 +299,22 @@ export const BACKFILL_SPECS: readonly BackfillSpec[] = [
     vi: "lượt giao bài — luôn thuộc một cơ sở",
   },
   {
+    model: "TrnEquivalence",
+    nullMeaning: "BAT_BUOC",
+    scoped: true,
+    vi: "công nhận tương đương — luôn thuộc cơ sở của người được công nhận; NULL = chưa backfill",
+  },
+  {
     model: "TrnEnrollment",
     nullMeaning: "BAT_BUOC",
     scoped: true,
     vi: "lượt ghi danh — cột NOT NULL trong schema; không có cơ sở thì không tạo được bản ghi",
+  },
+  {
+    model: "TrnWatchFlag",
+    nullMeaning: "BAT_BUOC",
+    scoped: true,
+    vi: "cờ nghi ngờ học đối phó — luôn thuộc cơ sở của người bị gắn cờ",
   },
   {
     model: "TrnDataSubjectRequest",

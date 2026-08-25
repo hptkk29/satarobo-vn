@@ -183,10 +183,17 @@ export default async function ScormPlayPage({ params, searchParams }: PageProps)
   const statusLabel = attempt
     ? COMPLETION_VI[attempt.completion] ?? attempt.completion
     : undefined;
+  // `timeZone` là BẮT BUỘC: đây là Server Component, Vercel chạy tiến trình giờ **UTC**
+  // (máy dev +07 nên không lộ ra) ⇒ thiếu nó là người dùng đọc "lần mở gần nhất" lệch 7 tiếng.
+  // `lastAccessedAt` là DateTime — mốc thời gian THẬT, khác hẳn cột `@db.Date` (ngày trần,
+  // phải giữ `timeZone: "UTC"`). Đừng đổi hai loại này cho nhau: lệch nguyên một ngày.
+  // Trang GV app/(teacher)/teacher/scorm/play/[id]/page.tsx format y hệt — sửa THÀNH CẶP,
+  // vá một bên thôi thì hai màn cùng dữ liệu hiện hai giờ khác nhau.
   const lastAccessedLabel = attempt
     ? new Intl.DateTimeFormat("vi-VN", {
         dateStyle: "short",
         timeStyle: "short",
+        timeZone: "Asia/Ho_Chi_Minh",
       }).format(attempt.lastAccessedAt)
     : undefined;
 

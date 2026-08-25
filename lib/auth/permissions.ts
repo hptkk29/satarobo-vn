@@ -386,11 +386,11 @@ export const PERMISSIONS: Record<Action, Role[]> = {
   "leads:import": ["SUPER_ADMIN", "CENTER_MANAGER", "SALES_CSM"],
 
   // --- Trial classes (Phase T1.4) ---
-  "trials:view": ["SUPER_ADMIN", "CENTER_MANAGER", "SALES_CSM", "TEACHER"],
+  "trials:view": ["SUPER_ADMIN", "CENTER_MANAGER", "SALES_CSM", "TEACHER", "TRAINING"],
   "trials:manage": ["SUPER_ADMIN", "CENTER_MANAGER", "SALES_CSM"],
   "trials:feedback": ["SUPER_ADMIN", "CENTER_MANAGER", "TEACHER"],
   // R7-02 — gán GV + override sĩ số chỉ quản lý cơ sở; cấu hình số buổi = Đào tạo/Admin.
-  "trials:assign-teacher": ["SUPER_ADMIN", "CENTER_MANAGER"],
+  "trials:assign-teacher": ["SUPER_ADMIN", "CENTER_MANAGER", "TRAINING"],
   "trials:override-capacity": ["SUPER_ADMIN", "CENTER_MANAGER"],
   // FL W0 (QĐ-T1): cấu hình đào tạo/LMS = TRAINING (Đào tạo). CENTER_MANAGER chỉ xem nội dung LMS.
   "training:manage": ["SUPER_ADMIN", "TRAINING"],
@@ -471,10 +471,10 @@ export const PERMISSIONS: Record<Action, Role[]> = {
   "students:import": ["SUPER_ADMIN", "CENTER_MANAGER"],
 
   // --- Classes ---
-  "classes:view-all": ["SUPER_ADMIN", "CENTER_MANAGER", "SALES_CSM", "ACCOUNTANT", "HR", "MARKETING"],
+  "classes:view-all": ["SUPER_ADMIN", "CENTER_MANAGER", "SALES_CSM", "ACCOUNTANT", "HR", "MARKETING", "TRAINING"],
   "classes:view-own": ["SUPER_ADMIN", "TEACHER"],
   "classes:create": ["SUPER_ADMIN", "CENTER_MANAGER"],
-  "classes:edit": ["SUPER_ADMIN", "CENTER_MANAGER"],
+  "classes:edit": ["SUPER_ADMIN", "CENTER_MANAGER", "TRAINING"],
   "classes:delete": ["SUPER_ADMIN"],
 
   // --- Class groups (Phase T0.2) ---
