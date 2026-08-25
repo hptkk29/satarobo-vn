@@ -93,6 +93,15 @@ export const BACKFILL_SPECS: readonly BackfillSpec[] = [
     vi: "lịch sử học thử — trialClass.centerId",
   },
   {
+    // GĐ1 — sổ đổi trạng thái lead. NULL được phép: lead chưa gán cơ sở (lead quảng
+    // cáo mới về, chưa ai chia) vẫn phải ghi được lịch sử. Chép centerId của lead tại
+    // thời điểm đổi, không suy lại lúc đọc.
+    model: "LeadStatusHistory",
+    nullMeaning: "NULL_CHUA_KHOP",
+    scoped: true,
+    vi: "sổ đổi trạng thái lead — chép lead.centerId lúc đổi",
+  },
+  {
     model: "ConversationMessage",
     nullMeaning: "BAT_BUOC",
     scoped: true,

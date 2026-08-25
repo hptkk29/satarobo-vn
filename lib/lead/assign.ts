@@ -4,7 +4,8 @@ import { assignmentWrite } from "@/lib/lead/assignment";
 import { takeRotationTurn, takeRotationTurns } from "@/lib/lead/rotation";
 import { orgUnitIdForCenter } from "@/lib/org/org-service";
 import { LEAD_CLOSED_STATUSES } from "@/lib/leads/status";
-import type { LeadStatus, Prisma } from "@prisma/client";
+import { setLeadStatus } from "@/lib/leads/set-status";
+import type { Prisma } from "@prisma/client";
 
 // =============================================================================
 // LEAD AUTO-ASSIGN — round-robin theo cơ sở (Phase T1.3)
@@ -132,11 +133,20 @@ export async function autoAssignLead(
   await db.$transaction(async (tx) => {
     await tx.lead.update({
       where: { id: leadId },
-      data: {
-        ...assignmentWrite(target), // Đợt A — kèm mốc phân công (đường cũ, 3 webhook)
-        ...(lead.status === "NEW" ? { status: "ASSIGNED" as LeadStatus } : {}),
-      },
+      data: assignmentWrite(target), // Đợt A — kèm mốc phân công (đường cũ, 3 webhook)
     });
+    // GĐ1 — tách phần đổi trạng thái ra cửa chung để nó vào sổ. Gán lead đã liên hệ
+    // rồi thì KHÔNG kéo ngược về "Đã phân công", nên vẫn giữ điều kiện chỉ đổi từ NEW.
+    if (lead.status === "NEW") {
+      await setLeadStatus({
+        tx,
+        leadId,
+        to: "ASSIGNED",
+        source: "assign",
+        actorId: actor.actorId,
+        actorName: actor.actorName,
+      });
+    }
     await logLeadAudit({
       leadId,
       action: "ASSIGN",
