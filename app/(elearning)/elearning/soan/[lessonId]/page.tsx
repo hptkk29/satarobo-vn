@@ -6,6 +6,7 @@ import { scopedDb } from "@/lib/db-scope";
 import { LessonEditor } from "../_components/lesson-editor";
 import { VideoUploader } from "../_components/video-uploader";
 import { CueEditor } from "../_components/cue-editor";
+import { QuizLessonEditor } from "../_components/quiz-lesson-editor";
 import { cueInlineSchema } from "@/lib/elearning/lesson-cue";
 
 /**
@@ -65,6 +66,7 @@ export default async function Page({
       kind: true,
       contentMd: true,
       videoKey: true,
+      examId: true,
       cues: {
         select: { id: true, atSec: true, blocking: true, inlineJson: true },
         orderBy: { atSec: "asc" },
@@ -120,6 +122,44 @@ export default async function Page({
                 loai: q.success ? q.data.type : "?",
               };
             })}
+          />
+        </div>
+      </div>
+    );
+  }
+
+  // ── Bài KIỂM TRA (EL-14d) — gắn đề ────────────────────────────────────────
+  if (lesson.kind === "QUIZ") {
+    const cacDe = await db.trnExam.findMany({
+      where: { deletedAt: null, isActive: true },
+      select: {
+        id: true,
+        title: true,
+        maxScore: true,
+        passScore: true,
+        _count: { select: { questions: true } },
+      },
+      orderBy: { createdAt: "desc" },
+      take: 200,
+    });
+
+    return (
+      <div className="mx-auto max-w-3xl px-4 py-6">
+        <nav className="mb-3 text-xs text-muted-foreground">
+          {lesson.module.course.title} · {lesson.module.title}
+        </nav>
+        <h1 className="text-xl font-bold">{lesson.title}</h1>
+        <div className="mt-4">
+          <QuizLessonEditor
+            lessonId={lesson.id}
+            examIdHienCo={lesson.examId}
+            cacDe={cacDe.map((d) => ({
+              id: d.id,
+              title: d.title,
+              soCau: d._count.questions,
+              maxScore: d.maxScore,
+              passScore: d.passScore,
+            }))}
           />
         </div>
       </div>

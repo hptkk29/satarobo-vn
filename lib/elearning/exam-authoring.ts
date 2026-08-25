@@ -5,6 +5,8 @@ import type { Actor } from "@/lib/auth/actor";
 import { orgUnitIdForCenter } from "@/lib/org/org-service";
 import { dungHaiPhaGhiThuTu } from "@/lib/elearning/course-outline";
 import { coSoCuaCauHoi } from "@/lib/elearning/question-bank";
+import { chamMayDuoc } from "@/lib/elearning/exam-grading";
+import { cueInlineSchema, laCauChamDuoc } from "@/lib/elearning/lesson-cue";
 
 /**
  * EL-14c — DỰNG ĐỀ THI.
@@ -127,6 +129,8 @@ async function napDe(db: ScopedDb, examId: string) {
       isActive: true,
       passScore: true,
       maxScore: true,
+      durationMin: true,
+      maxAttempts: true,
       _count: { select: { attempts: true } },
     },
   });
@@ -180,9 +184,16 @@ export const cauHinhThemCauVaoDe: ActionConfig<
     // mình là mượn đường vòng để đọc kho của họ.
     const cau = await db.trnQuestion.findFirst({
       where: { id: input.questionId, deletedAt: null },
-      select: { id: true, defaultPoints: true, stem: true },
+      select: { id: true, defaultPoints: true, stem: true, type: true },
     });
     if (!cau) throw new ActionError("NOT_FOUND", "Không tìm thấy câu hỏi");
+
+    // ⚠️ Câu CHẤM TAY nay vào đề được — vì `PENDING_GRADE` đã có LỐI RA
+    // (`lib/elearning/exam-manual-grading.ts` + màn hàng chờ chấm). Ở PR trước nó
+    // bị chặn, đúng: mở một cửa mà chưa có lối ra là để lượt thi treo vĩnh viễn và
+    // người học kẹt ở một bài nghĩa vụ có hạn chót cứng.
+    //
+    // Nếu ngày nào đó màn chấm bị gỡ, chỗ này phải khoá lại cùng lúc.
 
     const soCauHienCo = await db.trnExamQuestion.count({ where: { examId: de.id } });
 
@@ -348,12 +359,45 @@ export const cauHinhKichHoatDe: ActionConfig<
 
     const cacCau = await db.trnExamQuestion.findMany({
       where: { examId: de.id },
-      select: { points: true },
+      select: {
+        points: true,
+        orderIndex: true,
+        question: { select: { type: true, contentJson: true } },
+      },
+      orderBy: { orderIndex: "asc" },
     });
     if (cacCau.length === 0) {
       throw new ActionError(
         "DE_RONG",
         "Đề chưa có câu hỏi nào — thêm câu trước khi kích hoạt",
+      );
+    }
+
+    // ⚠️ CỔNG CHẶN CÂU TRẮC NGHIỆM MÀ MÁY KHÔNG ĐỌC ĐƯỢC — đặt ở ĐÂY vì đây là
+    // lần cuối còn sửa được.
+    //
+    // `contentJson` khai kiểu `Json`, nên TypeScript không nối bên GHI với bên
+    // ĐỌC và không có gì đỏ khi hai bên lệch nhau. Một câu không parse được rơi
+    // vào nhánh "chờ người chấm" của `chamMotCau` — cố ý, để không biến bản ghi
+    // bẩn thành điểm 0 của người học. Nhưng hệ quả dây chuyền thì nặng: MỌI lượt
+    // của MỌI người trên đề đó đóng ở `PENDING_GRADE`, bài học không bao giờ lên
+    // xong, và sau khi kích hoạt thì bộ câu bị đóng băng nên không gỡ câu hỏng ra
+    // được nữa.
+    //
+    // Bắt tại cổng thì người soạn sửa câu trong kho rồi kích hoạt lại — mất một
+    // phút. Để lọt thì phải chấm tay từng lượt của cả trăm người.
+    const hong = cacCau
+      .map((c, i) => ({ c, so: i + 1 }))
+      .filter(({ c }) => chamMayDuoc(c.question.type))
+      .filter(({ c }) => {
+        const r = cueInlineSchema.safeParse(c.question.contentJson);
+        return !r.success || !laCauChamDuoc(r.data);
+      })
+      .map(({ so }) => so);
+    if (hong.length > 0) {
+      throw new ActionError(
+        "CAU_MAY_KHONG_DOC_DUOC",
+        `Hệ thống không đọc được nội dung câu ${hong.join(", ")} nên không tự chấm được. Mở câu đó trong kho, lưu lại, rồi kích hoạt lại.`,
       );
     }
 
@@ -387,3 +431,155 @@ export const cauHinhKichHoatDe: ActionConfig<
 /** Cơ sở của đề — cùng luật với câu hỏi, tái dùng để hai bên không trôi khỏi nhau. */
 export { coSoCuaCauHoi as coSoCuaDe };
 export type { Actor };
+
+export const ganDeVaoBaiSchema = z
+  .object({
+    lessonId: z.string().min(1),
+    /** `null` = gỡ đề khỏi bài. */
+    examId: z.union([z.null(), z.string().min(1)]),
+  })
+  .strict();
+export type GanDeVaoBaiInput = z.infer<typeof ganDeVaoBaiSchema>;
+
+/**
+ * EL-14d — GẮN ĐỀ VÀO MỘT BÀI KIỂM TRA.
+ *
+ * ⚠️ Không có action này thì mở loại bài `QUIZ` là dựng lại đúng cái bẫy vừa gỡ,
+ * chỉ đổi hình dạng: người soạn tạo được bài kiểm tra, cổng xuất bản đòi `examId`,
+ * và KHÔNG màn nào đặt được nó — họ kẹt ở bước xuất bản thay vì người học kẹt ở
+ * bước học.
+ *
+ * ⚠️ `TrnLesson.examId` là ĐƯỜNG NỐI DUY NHẤT giữa bài và đề (xem chú thích đầu
+ * `exam-taking.ts`). `TrnExam.lessonId` để dành, không đường nào ghi.
+ */
+export const cauHinhGanDeVaoBai: ActionConfig<GanDeVaoBaiInput, { examId: string | null }> = {
+  name: "ganDeVaoBai",
+  permission: "elearning:content:author",
+  module: "elearning",
+  entityType: "TrnLesson",
+  auditAction: "UPDATE",
+  schema: ganDeVaoBaiSchema,
+  handler: async ({ db, input }) => {
+    const bai = await db.trnLesson.findFirst({
+      where: { id: input.lessonId, deletedAt: null },
+      select: { id: true, kind: true, examId: true, module: { select: { courseId: true } } },
+    });
+    if (!bai) throw new ActionError("NOT_FOUND", "Không tìm thấy bài học");
+
+    // Cách ly đi qua chuỗi cha — `TrnLesson` không nằm trong `SCOPED_MODELS`, và
+    // `scopedDb` không che đường ghi.
+    const khoa = await db.trnCourse.findFirst({
+      where: { id: bai.module.courseId, deletedAt: null },
+      select: { id: true },
+    });
+    if (!khoa) throw new ActionError("NOT_FOUND", "Không tìm thấy bài học");
+
+    if (bai.kind !== "QUIZ") {
+      throw new ActionError(
+        "WRONG_KIND",
+        `Chỉ bài dạng "Bài kiểm tra" mới gắn được đề. Bài này là ${bai.kind}.`,
+        "lessonId",
+      );
+    }
+
+    if (input.examId) {
+      const de = await db.trnExam.findFirst({
+        where: { id: input.examId, deletedAt: null },
+        select: { id: true, isActive: true },
+      });
+      if (!de) throw new ActionError("NOT_FOUND", "Không tìm thấy đề thi");
+      // ⚠️ Chỉ gắn đề ĐÃ KÍCH HOẠT. Gắn đề nháp là để bài đi ra với người học trên
+      // một bộ câu còn sửa được — và đề sửa xong thì điểm của người thi trước lệch
+      // khỏi thang của người thi sau.
+      if (!de.isActive) {
+        throw new ActionError(
+          "DE_CHUA_KICH_HOAT",
+          "Chỉ gắn được đề đã kích hoạt — kích hoạt đề trước",
+          "examId",
+        );
+      }
+    }
+
+    await db.trnLesson.update({
+      where: { id: bai.id },
+      data: { examId: input.examId },
+    });
+
+    return {
+      entityId: bai.id,
+      data: { examId: input.examId },
+      oldValues: { examId: bai.examId },
+      newValues: { examId: input.examId },
+    };
+  },
+};
+
+/**
+ * SỬA thông số một đề còn NHÁP.
+ *
+ * ⚠️ Màn dựng đề bảo người soạn "thêm câu, hoặc **sửa điểm đạt**" khi điểm đạt vượt
+ * tổng điểm — nhưng trước hàm này không có đường nào sửa điểm đạt. Đó là quy ước 20
+ * nhìn từ phía ngược lại: bày ra một lựa chọn không có lối đi. Người soạn đọc câu đó,
+ * đi tìm nút, không thấy, và phải xoá đề làm lại từ đầu.
+ *
+ * ⚠️ CHỈ sửa được khi còn NHÁP. Đề đã kích hoạt là đề có người đang thi: đổi điểm đạt
+ * lúc đó là chấm lại hồi tố những lượt đã xong bằng một thang khác, và không ai được
+ * báo. `maxScore` KHÔNG sửa tay ở đây — nó là tổng điểm các câu, đóng băng lúc kích
+ * hoạt.
+ */
+export const suaDeSchema = z
+  .object({
+    examId: z.string().min(1),
+    title: z.string().trim().min(3, "Tên đề quá ngắn").max(200),
+    passScore: z.number().int().min(0).max(10_000),
+    durationMin: z.number().int().min(1).max(600),
+    maxAttempts: z.number().int().min(1).max(20),
+  })
+  .strict();
+
+export type SuaDeInput = z.infer<typeof suaDeSchema>;
+
+export const cauHinhSuaDe: ActionConfig<SuaDeInput, { id: string }> = {
+  name: "suaDe",
+  permission: "elearning:content:author",
+  module: "elearning",
+  entityType: "TrnExam",
+  auditAction: "UPDATE",
+  schema: suaDeSchema,
+  handler: async ({ db, input }) => {
+    const de = await napDe(db, input.examId);
+    if (de.isActive) {
+      throw new ActionError(
+        "DE_DA_KICH_HOAT",
+        "Đề đã kích hoạt — sửa thông số lúc này là chấm lại hồi tố các lượt đã xong",
+      );
+    }
+
+    await db.trnExam.update({
+      where: { id: de.id },
+      data: {
+        title: input.title,
+        passScore: input.passScore,
+        durationMin: input.durationMin,
+        maxAttempts: input.maxAttempts,
+      },
+    });
+
+    return {
+      entityId: de.id,
+      data: { id: de.id },
+      oldValues: {
+        title: de.title,
+        passScore: de.passScore,
+        durationMin: de.durationMin,
+        maxAttempts: de.maxAttempts,
+      },
+      newValues: {
+        title: input.title,
+        passScore: input.passScore,
+        durationMin: input.durationMin,
+        maxAttempts: input.maxAttempts,
+      },
+    };
+  },
+};

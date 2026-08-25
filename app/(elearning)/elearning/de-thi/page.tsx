@@ -3,18 +3,15 @@ import { auth } from "@/lib/auth";
 import { resolveActor } from "@/lib/auth/actor";
 import { can } from "@/lib/auth/can";
 import { scopedDb } from "@/lib/db-scope";
+import { TRAN_HANG_CHO } from "@/lib/elearning/exam-grading-queue";
 import { NewExamForm } from "./_components/new-exam-form";
 
 /**
  * EL-14c — DANH SÁCH ĐỀ THI.
  *
- * ⚠️ Đề dựng được, nhưng người học CHƯA thi được — đường làm bài thuộc EL-14d. Nói
- * thẳng điều đó trên màn hình, vì người soạn bỏ công dựng một đề rồi không thấy nó
- * đâu sẽ đi báo lỗi, và họ báo đúng.
- *
- * Cũng vì thế loại bài `QUIZ` VẪN ĐÓNG ở trình soạn khoá: mở nó bây giờ là dựng
- * lại đúng cái bẫy vừa gỡ — người soạn gắn được đề vào bài, khoá xuất bản trót lọt,
- * và người học mở ra thì kẹt.
+ * ⚠️ Đề KHÔNG tự tới người học. Nó tới qua một bài dạng `QUIZ`, và đường nối là
+ * `TrnLesson.examId` — đặt ở màn soạn bài. Màn này nói rõ bước tiếp, vì dựng xong
+ * một đề rồi không biết làm gì với nó là bỏ dở giữa chừng.
  */
 
 export const dynamic = "force-dynamic";
@@ -43,6 +40,17 @@ export default async function Page() {
   }
 
   const db = scopedDb(actor);
+  // Đếm bài đang chờ chấm để lối vào hàng chờ KHÔNG trông như một liên kết chết.
+  // Người chấm không mở một màn "có thể trống"; họ mở một màn có N người đang đợi.
+  // Đếm CHẶN ở đúng trần của hàng chờ: đếm không giới hạn rồi hiện "247 bài" trong
+  // khi hàng chờ chỉ liệt kê 200 là hai con số lệch nhau mà không ai giải thích được.
+  const demChoCham = can(actor, "elearning:exam:grade")
+    ? await db.trnExamAttempt.count({
+        where: { status: "PENDING_GRADE" },
+        take: TRAN_HANG_CHO + 1,
+      })
+    : 0;
+  const demTran = demChoCham > TRAN_HANG_CHO;
   const [cacDe, cacKhoa] = await Promise.all([
     db.trnExam.findMany({
       where: { deletedAt: null },
@@ -77,14 +85,28 @@ export default async function Page() {
           </Link>
           .
         </p>
-        {/* Nói THẲNG phần chưa xong. Người soạn dựng đề rồi không thấy nó đâu sẽ đi
-            báo lỗi — và họ báo đúng. */}
-        <p className="mt-2 rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-900">
-          Đề dựng và kích hoạt được, nhưng <strong>người học chưa thi được</strong> —
-          đường làm bài thuộc đợt sau. Loại bài “Bài kiểm tra” cũng vì thế còn khoá ở
-          trình soạn khoá.
+        {/* Nói rõ ĐƯỜNG ĐI, vì đề chỉ tới được người học qua một bài dạng
+            "Bài kiểm tra" — dựng xong đề mà không biết bước tiếp là bỏ dở giữa chừng. */}
+        <p className="mt-2 rounded-md bg-muted px-3 py-2 text-xs">
+          Đề chỉ tới người học qua một bài dạng <strong>Bài kiểm tra</strong>: kích
+          hoạt đề xong, mở bài đó ở màn soạn khoá rồi gắn đề vào.
         </p>
       </div>
+
+      {/* Lối vào HÀNG CHỜ CHẤM. Khu e-learning không có thanh điều hướng chung, nên
+          mỗi màn mới phải được một màn cũ dẫn tới — không thì chỉ người viết nó biết
+          đường. Đặt ở đây vì cả ba vai có `elearning:exam:grade` đều có
+          `elearning:content:author`; ngày nào tách ra thì phải tìm cho nó lối vào khác. */}
+      {can(actor, "elearning:exam:grade") ? (
+        <Link
+          href="/elearning/cham-bai"
+          className="block rounded-md border p-3 text-sm underline"
+        >
+          {demChoCham > 0
+            ? `Chấm bài — ${demTran ? `hơn ${TRAN_HANG_CHO}` : demChoCham} bài đang chờ`
+            : "Chấm bài — không có bài nào chờ"}
+        </Link>
+      ) : null}
 
       <NewExamForm cacKhoa={cacKhoa} />
 

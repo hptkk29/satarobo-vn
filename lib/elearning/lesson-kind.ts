@@ -28,8 +28,12 @@ import type { TrnLessonKind } from "@prisma/client";
  * `LIVE_SESSION` nằm trong này dù trang học không vẽ gì cho nó — đường của nó là
  * giảng viên tick "đã dự" (`lib/elearning/equivalence.ts`), không phải người học tự
  * bấm. Đủ hai đầu, chỉ khác hình dạng.
+ *
+ * `QUIZ` mở ở EL-14d, ĐÚNG PR có đường làm bài — không mở sớm hơn ở EL-14c dù lúc
+ * đó đã dựng được đề. Mở khi mới có một đầu là dựng lại đúng cái bẫy tệp này sinh
+ * ra để gỡ.
  */
-export const LOAI_BAI_DA_MO = ["READ", "VIDEO", "LIVE_SESSION"] as const;
+export const LOAI_BAI_DA_MO = ["READ", "VIDEO", "LIVE_SESSION", "QUIZ"] as const;
 
 export type LoaiBaiDaMo = (typeof LOAI_BAI_DA_MO)[number];
 
@@ -41,7 +45,6 @@ export type LoaiBaiDaMo = (typeof LOAI_BAI_DA_MO)[number];
  */
 export const LOAI_BAI_CHUA_MO: Record<string, string> = {
   SCORM: "chưa có đường tải gói SCORM cho khu đào tạo nội bộ",
-  QUIZ: "EL-14 (ngân hàng câu hỏi + đề thi)",
   TASK: "EL-15 (bài tập + khung chấm)",
 };
 

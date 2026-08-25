@@ -8336,8 +8336,10 @@ model TrnExam {
   blueprintJson Json?
 
   durationMin Int
-  /// Điểm ĐẠT, TUYỆT ĐỐI (không phải phần trăm). Giao diện cho nhập theo %, nhưng
-  /// cột lưu con số tuyệt đối — lưu % thì đổi `maxScore` là im lặng đổi ngưỡng đạt
+  /// Điểm ĐẠT, TUYỆT ĐỐI (không phải phần trăm) — và giao diện cũng NHẬP TUYỆT ĐỐI,
+  /// không có phép quy đổi % nào ở giữa. (Bản đầu của chú thích này nói giao diện
+  /// nhập theo %; mã chưa bao giờ làm thế, và một chú thích sai ở schema là thứ người
+  /// sau tin trước khi họ đọc mã.) Lưu % thì đổi `maxScore` là im lặng đổi ngưỡng đạt
   /// của mọi lượt đã thi.
   passScore   Int
   /// Tổng điểm của đề, ĐÓNG BĂNG lúc kích hoạt.
