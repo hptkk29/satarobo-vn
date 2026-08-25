@@ -628,7 +628,7 @@ async function syncTrialProgress(
   const lead = await tx.lead.findUnique({ where: { id: leadId }, select: { status: true } });
   if (!lead) return;
   // KHÔNG động vào lead đã chốt / rời pipeline (sale tự quản từ đây).
-  // GĐ0 — đây là chỗ DUY NHẤT dùng tập "rời phễu" (có thêm REGISTERED so với tập
+  // GĐ0 — đây là chỗ DUY NHẤT dùng tập "rời phễu" (có thêm DA_DANG_KY so với tập
   // "đã đóng" của round-robin/bàn giao). Trước GĐ0 hai tập nằm ở 5 file rời và không
   // ai biết vì sao chúng lệch nhau; nay khác biệt được đặt tên và có test khoá.
   if (LEAD_PIPELINE_EXIT_STATUSES.includes(lead.status)) return;
@@ -649,7 +649,7 @@ async function syncTrialProgress(
     const res = await setLeadStatus({
       tx,
       leadId,
-      to: "AWAITING_DECISION",
+      to: "CHO_QUYET_DINH",
       source: "trial",
       actorId,
     });
@@ -660,11 +660,11 @@ async function syncTrialProgress(
         { tx, dedupeKey: `lead.awaitingDecision:${leadId}` },
       );
     }
-  } else if (attendedCount >= 1 && lead.status === "TRIAL_SCHEDULED") {
+  } else if (attendedCount >= 1 && lead.status === "DA_HEN_HOC_THU") {
     const res = await setLeadStatus({
       tx,
       leadId,
-      to: "TRIAL_IN_PROGRESS",
+      to: "DANG_HOC_THU",
       source: "trial",
       actorId,
     });

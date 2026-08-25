@@ -443,7 +443,10 @@ export async function ingestIntakeLead(
           childName: mapped.child?.fullName ?? mapped.childName ?? undefined,
           centerId: centerId ?? undefined,
           assignedToId: assignedToId ?? undefined,
-          ...(assignedToId ? { status: "ASSIGNED" as const, assignedAt: new Date() } : {}),
+          // GĐ5 — chỉ còn ghi MỐC phân công. Trạng thái ASSIGNED cũ nay là MOI, mà
+          // MOI đã là mặc định của cột nên đặt lại chẳng khác gì; việc "lead này có
+          // người nhận" đọc từ assignedToId + assignedAt.
+          ...(assignedToId ? { assignedAt: new Date() } : {}),
           // Nguồn marketing do người nhập khai thắng kênh kỹ thuật (xem
           // `MappedLead.leadSource`); bỏ trống thì giữ nguyên hành vi cũ.
           source: mapped.leadSource ?? ctx.source,

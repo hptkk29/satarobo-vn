@@ -116,7 +116,7 @@ async function writeCreates(creates: LeadCreatePlan[]): Promise<void> {
         centerId: c.centerId,
         orgUnitId: c.orgUnitId,
         courseId: c.courseId,
-        status: "REGISTERED",
+        status: "DA_DANG_KY",
       },
     });
   }

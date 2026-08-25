@@ -229,8 +229,8 @@ export async function updateLeadStatus(
     // ấy giáo viên KHÔNG BAO GIỜ thấy, và nó còn đẻ ra một ngày giả trong báo cáo.
     // Nay chỉ ghi việc cần làm vào dòng thời gian; Sale xếp buổi thật ở "Lớp trải nghiệm".
     if (
-      parsed.data === 'TRIAL_SCHEDULED' &&
-      before.status !== 'TRIAL_SCHEDULED'
+      parsed.data === 'DA_HEN_HOC_THU' &&
+      before.status !== 'DA_HEN_HOC_THU'
     ) {
       // Ghi dòng hoạt động + reset đồng hồ SLA idle trong CÙNG transaction — cùng
       // nếp với `addLeadActivity`/`addLeadTask` ở file này. (Trên nhánh `test` chỗ
@@ -718,7 +718,7 @@ export async function createLeadManual(
       courseId: d.courseId || null,
       source: d.source || 'Nhập tay',
       note: d.note || null,
-      status: 'NEW',
+      status: 'MOI',
       // NGƯỜI NHẬP (23/08) — cùng nghĩa với biểu mẫu /nhap-khach-hang. Đường
       // nhập tay này cũng phải ghi, không thì "phiếu tôi nhập" thủng một nửa.
       createdById: session.user.id,
@@ -1106,7 +1106,10 @@ export async function transferLead(
         // phải có cửa sổ SLA riêng, không thừa hưởng đồng hồ của người trước.
         ...assignmentWrite(toSaleId),
         handoverNote: d.handoverNote,
-        ...(lead.status === 'NEW' && toSaleId ? { status: 'ASSIGNED' as const } : {}),
+        // GĐ5 — ĐÃ GỠ nhánh tự đẩy MOI → ASSIGNED khi bàn giao. "Đã phân công" nay đọc
+        // từ assignedToId/assignedAt (do assignmentWrite ở trên ghi), không phải một bậc
+        // phễu, nên dịch thẳng theo bảng ánh xạ sẽ thành `MOI → MOI` — một phép gán rỗng
+        // gây hiểu nhầm là còn logic. Trạng thái phễu giữ nguyên qua lượt bàn giao.
       },
     })
 

@@ -58,7 +58,7 @@ function fakeTx(state: State): Prisma.TransactionClient {
       }),
       updateMany: async (args: { where: { status: string } }) => {
         if (state.leadStatus !== args.where.status) return { count: 0 };
-        state.leadStatus = "REGISTERED";
+        state.leadStatus = "DA_DANG_KY";
         return { count: 1 };
       },
       // GĐ1 — dời mốc `statusChangedAt`; test chỉ cần nó không nổ.
@@ -88,7 +88,7 @@ function fakeTx(state: State): Prisma.TransactionClient {
 
 const baseState = (): State => ({
   payments: [],
-  leadStatus: "AWAITING_DECISION",
+  leadStatus: "CHO_QUYET_DINH",
   leadCenterId: "center-lead",
   leadOrgUnitId: "ou-lead",
   statusHistory: [],
@@ -158,7 +158,7 @@ describe("ensureOrderPaymentRecorded (K3 — 1 khoản = 1 dòng ledger)", () =>
   it("[PH-2] ghi nhận tiền → lead AWAITING_DECISION tự lên REGISTERED + có activity; status khác giữ nguyên", async () => {
     const state = baseState();
     await ensureOrderPaymentRecorded(fakeTx(state), { orderId: "o1", soDot: 1, amount: 1, leadId: "l1", actor: { id: "u1" } });
-    expect(state.leadStatus).toBe("REGISTERED");
+    expect(state.leadStatus).toBe("DA_DANG_KY");
     expect(state.activities).toHaveLength(1);
 
     const converted = baseState();

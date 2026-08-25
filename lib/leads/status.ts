@@ -1,13 +1,10 @@
 import type { LeadStatus } from "@prisma/client";
 
 // =============================================================================
-// LEAD PIPELINE — Phase T1.1
+// LEAD PIPELINE — nguồn sự thật DUY NHẤT cho trạng thái lead.
 //
-// GĐ0 (25/08/2026) — NGUỒN SỰ THẬT DUY NHẤT cho trạng thái lead.
-// Trước GĐ0, nhãn/màu/danh sách hợp lệ/danh sách "đã kết thúc" bị chép ở 6 nơi
-// với nội dung lệch nhau (bảng nhãn ở dashboard thiếu 2 giá trị và gọi ENROLLED
-// là "Đã đăng ký" trong khi REGISTERED mới là "Đã đăng ký"). Mọi bản chép đã
-// được gỡ; chỗ nào cần bảng tra cứu thì import từ đây.
+// GĐ0 (25/08/2026) gom mọi bảng tra cứu về đây (trước đó chép ở 6 nơi, lệch nhau).
+// GĐ5 (25/08/2026) rút enum từ 15 xuống 10 giá trị theo đặc tả bàn giao mục 3.
 //
 // ⚠️ Thêm/bớt giá trị enum: sửa LEAD_STATUS_VALUES rồi để TypeScript dẫn đường —
 // mọi `Record<LeadStatus, …>` bên dưới sẽ đỏ cho tới khi khai đủ. Riêng các MẢNG
@@ -16,240 +13,169 @@ import type { LeadStatus } from "@prisma/client";
 
 /**
  * Bộ giá trị LeadStatus theo thứ tự phễu SR.QD.217.
- * `as const` để dùng trực tiếp làm tuple cho `z.enum(...)` — nhờ vậy schema Zod
- * không còn phải chép tay 15 chuỗi (trước GĐ0 có 2 bản chép, lệch thứ tự nhau).
+ * `as const` để dùng trực tiếp làm tuple cho `z.enum(...)`.
  */
 export const LEAD_STATUS_VALUES = [
-  "NEW",
-  "ASSIGNED",
-  "CONTACTED",
-  "NO_ANSWER",
-  "CONSULTING",
-  "TRIAL_SCHEDULED",
-  "TRIAL_ATTENDED",
-  "TRIAL_IN_PROGRESS",
-  "AWAITING_DECISION",
-  "REGISTERED",
-  "ENROLLED",
-  "NURTURING",
-  "LOST",
-  "DUPLICATE",
-  "DEMO_SCHEDULED",
+  "MOI",
+  "DA_LIEN_HE",
+  "DANG_TU_VAN",
+  "DA_HEN_HOC_THU",
+  "DANG_HOC_THU",
+  "DA_HOC_THU",
+  "CHO_QUYET_DINH",
+  "DA_DANG_KY",
+  "DANG_NUOI_DUONG",
+  "DA_MAT",
 ] as const satisfies readonly LeadStatus[];
 
-/** Status hợp lệ cho filter + chuyển đổi (gồm cả deprecated để lọc data cũ nếu còn). */
+/** Status hợp lệ cho filter + chuyển đổi. */
 export const ALL_LEAD_STATUSES: LeadStatus[] = [...LEAD_STATUS_VALUES];
 
 // ─── Nhãn ────────────────────────────────────────────────────────────────────
 
 /** Nhãn đầy đủ — dùng ở bảng, thẻ, chi tiết lead. */
 export const LEAD_STATUS_LABEL: Record<LeadStatus, string> = {
-  NEW: "Mới",
-  ASSIGNED: "Đã phân công",
-  CONTACTED: "Đã liên hệ",
-  NO_ANSWER: "Không nghe máy",
-  CONSULTING: "Đang tư vấn",
-  TRIAL_SCHEDULED: "Đã hẹn học thử",
-  TRIAL_ATTENDED: "Đã học thử",
-  TRIAL_IN_PROGRESS: "Đang học thử",
-  AWAITING_DECISION: "Chờ quyết định",
-  REGISTERED: "Đã đăng ký",
-  ENROLLED: "Đã ghi danh",
-  NURTURING: "Đang nuôi dưỡng",
-  LOST: "Đã mất",
-  DUPLICATE: "Trùng lặp",
-  DEMO_SCHEDULED: "Đã hẹn demo (cũ)",
+  MOI: "Mới",
+  DA_LIEN_HE: "Đã liên hệ",
+  DANG_TU_VAN: "Đang tư vấn",
+  DA_HEN_HOC_THU: "Đã hẹn học thử",
+  DANG_HOC_THU: "Đang học thử",
+  DA_HOC_THU: "Đã học thử",
+  CHO_QUYET_DINH: "Chờ quyết định",
+  DA_DANG_KY: "Đã đăng ký",
+  DANG_NUOI_DUONG: "Đang nuôi dưỡng",
+  DA_MAT: "Đã mất",
 };
 
 /**
- * Nhãn rút gọn cho trục biểu đồ và phễu (chuyển từ lib/reports/lead.ts về đây).
+ * Nhãn rút gọn cho trục biểu đồ và phễu.
  * Cố ý KHÁC nhãn đầy đủ: trục biểu đồ hẹp, "Đang nuôi dưỡng" bị cắt chữ.
  */
 export const LEAD_STATUS_LABEL_SHORT: Record<LeadStatus, string> = {
-  NEW: "Mới",
-  ASSIGNED: "Đã phân",
-  CONTACTED: "Đã liên hệ",
-  NO_ANSWER: "Không nghe máy",
-  CONSULTING: "Đang tư vấn",
-  TRIAL_SCHEDULED: "Hẹn học thử",
-  TRIAL_IN_PROGRESS: "Đang học thử",
-  TRIAL_ATTENDED: "Đã học thử",
-  AWAITING_DECISION: "Chờ quyết định",
-  REGISTERED: "Đã đăng ký",
-  ENROLLED: "Đã ghi danh",
-  NURTURING: "Đang nuôi dưỡng",
-  LOST: "Thất bại",
-  DUPLICATE: "Trùng",
-  DEMO_SCHEDULED: "Hẹn demo (cũ)",
+  MOI: "Mới",
+  DA_LIEN_HE: "Đã liên hệ",
+  DANG_TU_VAN: "Đang tư vấn",
+  DA_HEN_HOC_THU: "Hẹn học thử",
+  DANG_HOC_THU: "Đang học thử",
+  DA_HOC_THU: "Đã học thử",
+  CHO_QUYET_DINH: "Chờ quyết định",
+  DA_DANG_KY: "Đã đăng ký",
+  DANG_NUOI_DUONG: "Nuôi dưỡng",
+  DA_MAT: "Đã mất",
 };
 
 // ─── Màu ─────────────────────────────────────────────────────────────────────
 
 export const LEAD_STATUS_BADGE: Record<LeadStatus, string> = {
-  NEW: "bg-sky-100 text-sky-700",
-  ASSIGNED: "bg-cyan-100 text-cyan-700",
-  CONTACTED: "bg-blue-100 text-blue-700",
-  NO_ANSWER: "bg-amber-100 text-amber-700",
-  CONSULTING: "bg-indigo-100 text-indigo-700",
-  TRIAL_SCHEDULED: "bg-violet-100 text-violet-700",
-  TRIAL_ATTENDED: "bg-purple-100 text-purple-700",
-  TRIAL_IN_PROGRESS: "bg-violet-100 text-violet-800",
-  AWAITING_DECISION: "bg-orange-100 text-orange-700",
-  REGISTERED: "bg-emerald-100 text-emerald-700",
-  ENROLLED: "bg-green-100 text-green-700",
-  NURTURING: "bg-yellow-100 text-yellow-700",
-  LOST: "bg-red-100 text-red-700",
-  DUPLICATE: "bg-gray-200 text-gray-600",
-  DEMO_SCHEDULED: "bg-purple-100 text-purple-700",
+  MOI: "bg-sky-100 text-sky-700",
+  DA_LIEN_HE: "bg-blue-100 text-blue-700",
+  DANG_TU_VAN: "bg-indigo-100 text-indigo-700",
+  DA_HEN_HOC_THU: "bg-violet-100 text-violet-700",
+  DANG_HOC_THU: "bg-violet-100 text-violet-800",
+  DA_HOC_THU: "bg-purple-100 text-purple-700",
+  CHO_QUYET_DINH: "bg-orange-100 text-orange-700",
+  DA_DANG_KY: "bg-emerald-100 text-emerald-700",
+  DANG_NUOI_DUONG: "bg-yellow-100 text-yellow-700",
+  DA_MAT: "bg-red-100 text-red-700",
 };
 
 // Top border accent cho Kanban column header.
 export const LEAD_STATUS_ACCENT: Record<LeadStatus, string> = {
-  NEW: "border-sky-400",
-  ASSIGNED: "border-cyan-400",
-  CONTACTED: "border-blue-400",
-  NO_ANSWER: "border-amber-400",
-  CONSULTING: "border-indigo-400",
-  TRIAL_SCHEDULED: "border-violet-400",
-  TRIAL_ATTENDED: "border-purple-400",
-  TRIAL_IN_PROGRESS: "border-violet-500",
-  AWAITING_DECISION: "border-orange-400",
-  REGISTERED: "border-emerald-500",
-  ENROLLED: "border-green-500",
-  NURTURING: "border-yellow-400",
-  LOST: "border-red-400",
-  DUPLICATE: "border-gray-300",
-  DEMO_SCHEDULED: "border-purple-300",
+  MOI: "border-sky-400",
+  DA_LIEN_HE: "border-blue-400",
+  DANG_TU_VAN: "border-indigo-400",
+  DA_HEN_HOC_THU: "border-violet-400",
+  DANG_HOC_THU: "border-violet-500",
+  DA_HOC_THU: "border-purple-400",
+  CHO_QUYET_DINH: "border-orange-400",
+  DA_DANG_KY: "border-emerald-500",
+  DANG_NUOI_DUONG: "border-yellow-400",
+  DA_MAT: "border-red-400",
 };
 
 /** Sắc thái cho <StatusBadge> ở dashboard quản lý. */
 export type LeadStatusVariant = "success" | "warning" | "error" | "info" | "neutral";
 
 export const LEAD_STATUS_VARIANT: Record<LeadStatus, LeadStatusVariant> = {
-  NEW: "info",
-  ASSIGNED: "info",
-  CONTACTED: "warning",
-  NO_ANSWER: "warning",
-  CONSULTING: "info",
-  TRIAL_SCHEDULED: "info",
-  TRIAL_ATTENDED: "info",
-  TRIAL_IN_PROGRESS: "info",
-  AWAITING_DECISION: "warning",
-  REGISTERED: "success",
-  ENROLLED: "success",
-  NURTURING: "warning",
-  LOST: "error",
-  DUPLICATE: "neutral",
-  DEMO_SCHEDULED: "info",
+  MOI: "info",
+  DA_LIEN_HE: "warning",
+  DANG_TU_VAN: "info",
+  DA_HEN_HOC_THU: "info",
+  DANG_HOC_THU: "info",
+  DA_HOC_THU: "info",
+  CHO_QUYET_DINH: "warning",
+  DA_DANG_KY: "success",
+  DANG_NUOI_DUONG: "warning",
+  DA_MAT: "error",
 };
 
 /** Chấm/thanh màu đặc cho biểu đồ cột trạng thái ở màn marketing. */
 export const LEAD_STATUS_DOT: Record<LeadStatus, string> = {
-  NEW: "bg-state-info",
-  ASSIGNED: "bg-state-info",
-  CONTACTED: "bg-state-warning",
-  NO_ANSWER: "bg-state-warning",
-  CONSULTING: "bg-state-info",
-  TRIAL_SCHEDULED: "bg-primary",
-  TRIAL_ATTENDED: "bg-primary",
-  TRIAL_IN_PROGRESS: "bg-primary",
-  AWAITING_DECISION: "bg-primary",
-  REGISTERED: "bg-state-success",
-  ENROLLED: "bg-state-success",
-  NURTURING: "bg-primary",
-  LOST: "bg-gray-400",
-  DUPLICATE: "bg-gray-300",
-  DEMO_SCHEDULED: "bg-primary",
+  MOI: "bg-state-info",
+  DA_LIEN_HE: "bg-state-warning",
+  DANG_TU_VAN: "bg-state-info",
+  DA_HEN_HOC_THU: "bg-primary",
+  DANG_HOC_THU: "bg-primary",
+  DA_HOC_THU: "bg-primary",
+  CHO_QUYET_DINH: "bg-primary",
+  DA_DANG_KY: "bg-state-success",
+  DANG_NUOI_DUONG: "bg-primary",
+  DA_MAT: "bg-gray-400",
 };
 
 // ─── Tập con ─────────────────────────────────────────────────────────────────
 
-// Cột Kanban hiển thị (theo thứ tự vận hành). KHÔNG show DEMO_SCHEDULED (deprecated).
-// NHÓM 03 — Việc 1: thêm REGISTERED (đã đăng ký — đã có khoản Sale ghi nhận, chưa
-// convert) sau AWAITING_DECISION, trước ENROLLED (= "đã chốt/convert" trong pipeline
-// này — schema KHÔNG có status CONVERTED riêng, ENROLLED đóng vai trò đó). Vị trí theo
-// phễu SR.QD.217; đổi vị trí = đổi thứ tự mảng (final chờ câu 38 phiếu xác nhận).
-export const KANBAN_COLUMNS: LeadStatus[] = [
-  "NEW",
-  "ASSIGNED",
-  "CONTACTED",
-  "NO_ANSWER",
-  "CONSULTING",
-  "TRIAL_SCHEDULED",
-  "TRIAL_IN_PROGRESS",
-  "TRIAL_ATTENDED",
-  "AWAITING_DECISION",
-  "REGISTERED",
-  "ENROLLED",
-  "NURTURING",
-  "LOST",
-  "DUPLICATE",
-];
+/**
+ * Cột Kanban theo thứ tự vận hành.
+ * GĐ5 — nay phủ ĐỦ 10 giá trị (trước đây bỏ DEMO_SCHEDULED vì đã deprecated;
+ * giá trị đó không còn tồn tại nên không còn ngoại lệ nào).
+ */
+export const KANBAN_COLUMNS: LeadStatus[] = [...LEAD_STATUS_VALUES];
 
 /**
  * Lead đã ĐÓNG HẲN — không còn là việc đang mở của sale.
  * Dùng cho: đếm tải round-robin, lọc ứng viên bàn giao, đếm "lead đang mở" ở CRM.
  *
- * ⚠️ CỐ Ý KHÔNG có REGISTERED: lead đã ghi nhận tiền vẫn còn việc phải làm
- * (xếp lớp, chốt convert) nên vẫn tính là tải của sale.
+ * ⚠️ CỐ Ý KHÔNG có DA_DANG_KY: lead đã ghi nhận tiền vẫn còn việc phải làm (xếp lớp,
+ * chốt convert) nên vẫn tính là tải của sale.
  */
-export const LEAD_CLOSED_STATUSES: LeadStatus[] = ["ENROLLED", "LOST", "DUPLICATE"];
+export const LEAD_CLOSED_STATUSES: LeadStatus[] = ["DA_MAT"];
 
 /**
  * Lead đã RỜI PHỄU tư vấn — tự động hoá không được đẩy trạng thái nữa.
  * Dùng cho: module học thử (tiến độ điểm danh KHÔNG được kéo ngược trạng thái của
  * lead đã đăng ký), và mọi nơi khác cần "sale tự quản từ đây".
- *
- * Khác LEAD_CLOSED_STATUSES đúng một giá trị: REGISTERED. Trước GĐ0 hai tập này
- * nằm ở 5 file rời và không ai biết vì sao chúng lệch nhau.
  */
 export const LEAD_PIPELINE_EXIT_STATUSES: LeadStatus[] = [
-  "REGISTERED",
+  "DA_DANG_KY",
   ...LEAD_CLOSED_STATUSES,
 ];
 
 /**
- * Bậc phễu chuyển đổi của dashboard CRM (chuyển từ app/(admin)/admin/crm/page.tsx).
- *
- * ⚠️ Bản chép cũ ở màn CRM BỎ SÓT `TRIAL_IN_PROGRESS` và `REGISTERED`: lead đang học
- * thử dở và lead ĐÃ GHI NHẬN TIỀN không rơi vào bậc nào, nên cột "Học thử" và "Đã chốt"
- * đếm THIẾU. GĐ0 vá luôn — hệ quả: hai cột đó sẽ tăng so với số cũ, và "Đã chốt" nay
- * khớp với `CONVERTED_STATUSES` mà báo cáo Lead vẫn dùng (trước đó hai màn lệch nhau).
- * Lưới chặn tái diễn nằm ở lib/leads/status.test.ts.
+ * Bậc phễu chuyển đổi của dashboard CRM.
+ * Lưới chặn bỏ sót nằm ở lib/leads/status.test.ts.
  */
 export const LEAD_FUNNEL_STAGES: { name: string; statuses: LeadStatus[] }[] = [
-  { name: "Lead mới", statuses: ["NEW", "ASSIGNED"] },
-  {
-    name: "Đã liên hệ",
-    statuses: ["CONTACTED", "CONSULTING", "NO_ANSWER", "NURTURING"],
-  },
-  {
-    name: "Học thử",
-    statuses: [
-      "TRIAL_SCHEDULED",
-      "TRIAL_IN_PROGRESS",
-      "TRIAL_ATTENDED",
-      "DEMO_SCHEDULED",
-    ],
-  },
-  { name: "Chờ quyết định", statuses: ["AWAITING_DECISION"] },
-  { name: "Đã chốt", statuses: ["REGISTERED", "ENROLLED"] },
+  { name: "Lead mới", statuses: ["MOI"] },
+  { name: "Đã liên hệ", statuses: ["DA_LIEN_HE", "DANG_TU_VAN", "DANG_NUOI_DUONG"] },
+  { name: "Học thử", statuses: ["DA_HEN_HOC_THU", "DANG_HOC_THU", "DA_HOC_THU"] },
+  { name: "Chờ quyết định", statuses: ["CHO_QUYET_DINH"] },
+  { name: "Đã chốt", statuses: ["DA_DANG_KY"] },
 ];
 
 /**
- * Status CỐ Ý nằm ngoài phễu: lead rớt và bản ghi trùng không phải một bậc chuyển đổi.
- * Khai tường minh để test phân biệt được "bỏ sót" với "loại có chủ đích".
+ * Status CỐ Ý nằm ngoài phễu: lead rớt không phải một bậc chuyển đổi.
+ * GĐ5 — chỉ còn DA_MAT (DUPLICATE đã bị gỡ khỏi enum).
  */
-export const LEAD_FUNNEL_EXCLUDED: LeadStatus[] = ["LOST", "DUPLICATE"];
+export const LEAD_FUNNEL_EXCLUDED: LeadStatus[] = ["DA_MAT"];
 
 /**
- * Status coi là ĐÃ CHỐT (chuyển đổi thành công) cho báo cáo phễu.
+ * Status coi là ĐÃ CHỐT cho báo cáo phễu.
  * Kiểu ReadonlySet<string> có chủ đích: call-site nhận `status: string` từ record
  * phẳng đã select sẵn, không phải LeadStatus đã narrow.
  */
 export const CONVERTED_STATUSES: ReadonlySet<string> = new Set<string>([
-  "ENROLLED",
-  "REGISTERED",
+  "DA_DANG_KY",
 ] satisfies LeadStatus[]);
 
 export function leadStatusLabel(status: LeadStatus | string): string {
@@ -257,32 +183,25 @@ export function leadStatusLabel(status: LeadStatus | string): string {
 }
 
 // =============================================================================
-// R7-01 — Transition guard (permissive; chỉ chặn case REGISTERED có điều kiện C4).
+// Transition guard
 // =============================================================================
 
 /**
  * Kiểm tra chuyển trạng thái lead có hợp lệ không.
- * PERMISSIVE: cho phép mọi chuyển đổi giữa các status hiện hữu, TRỪ:
- *  - to === "REGISTERED": chỉ hợp lệ khi from === "AWAITING_DECISION" và đã có khoản ghi nhận.
- *  - from === to: no-op, luôn ok.
+ *
+ * PERMISSIVE có chủ đích: đặc tả cho phép rơi vào "nuôi dưỡng"/"đã mất" từ BẤT KỲ
+ * bậc nào, nên chặn theo sơ đồ cứng sẽ cản đúng thao tác thường ngày của Sale.
+ *
+ * ⚠️ GĐ5 — nhánh chặn `REGISTERED` CŨ ĐÃ GỠ. Nó từng đòi "chỉ vào Đã đăng ký từ Chờ
+ * quyết định khi đã có khoản ghi nhận". Sau khi gộp ENROLLED vào DA_DANG_KY, nhánh đó
+ * chặn luôn cả đường convert hợp lệ, mà cổng tiền thật nằm ở `evaluatePaymentGuard`
+ * trong convert chứ không phải ở đây. Để lại là chặn ngầm không ai hiểu.
  */
 export function canTransitionLeadStatus(
   from: LeadStatus,
   to: LeadStatus,
-  opts: { hasRecordedPayment: boolean },
+  _opts?: { hasRecordedPayment?: boolean },
 ): { ok: boolean; reason?: string } {
   if (from === to) return { ok: true };
-
-  if (to === "REGISTERED") {
-    if (from === "AWAITING_DECISION" && opts.hasRecordedPayment === true) {
-      return { ok: true };
-    }
-    return {
-      ok: false,
-      reason:
-        "Chỉ chuyển sang 'Đã đăng ký' từ 'Chờ quyết định' khi đã có khoản ghi nhận",
-    };
-  }
-
   return { ok: true };
 }

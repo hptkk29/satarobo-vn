@@ -149,9 +149,13 @@ export default async function LeadsPage({
     ...(statusFilter && view === 'table' ? { status: statusFilter } : {}),
   }
 
-  // NHÓM 03 — Việc 2: đếm lead REGISTERED (đã đăng ký, chưa convert) cho tab preset.
+  // NHÓM 03 — Việc 2: đếm lead "Đã đăng ký" cho tab preset.
+  // GĐ5 — con số này nay đếm CẢ lead đã convert, vì DA_DANG_KY gộp REGISTERED lẫn
+  // ENROLLED. Cố ý để badge khớp đúng thứ tab lọc ra (ô lọc chỉ nhận `status`, không
+  // diễn tả được `convertedAt`); danh sách "đã đăng ký mà CHƯA convert" nằm ở màn
+  // /leads/bulk-convert, nơi có lọc thêm convertedAt.
   const registeredCount = await sdb.lead.count({
-    where: { ...baseWhere, status: 'REGISTERED' },
+    where: { ...baseWhere, status: 'DA_DANG_KY' },
   })
 
   const canCloseDeal =
@@ -441,7 +445,7 @@ function Header({
   )
 }
 
-// ─── NHÓM 03 (Việc 2) — tab preset "Đã đăng ký" (?status=REGISTERED) ──────────
+// ─── NHÓM 03 (Việc 2) — tab preset "Đã đăng ký" (?status=DA_DANG_KY) ─────────
 function StatusTabs({
   params,
   view,
@@ -464,7 +468,7 @@ function StatusTabs({
     if (status) u.set('status', status)
     return `/leads?${u.toString()}`
   }
-  const isRegistered = view === 'table' && params.status === 'REGISTERED'
+  const isRegistered = view === 'table' && params.status === 'DA_DANG_KY'
   const tabCls = (active: boolean) =>
     `rounded-lg px-3 py-1.5 text-sm font-medium ${
       // Tab ĐANG CHỌN là trạng thái điều hướng, không phải "thành công" — dùng màu
@@ -478,7 +482,7 @@ function StatusTabs({
       <Link href={qs(undefined)} className={tabCls(view === 'table' && !params.status)}>
         Tất cả
       </Link>
-      <Link href={qs('REGISTERED')} className={tabCls(isRegistered)}>
+      <Link href={qs('DA_DANG_KY')} className={tabCls(isRegistered)}>
         Đã đăng ký{' '}
         <span
           className={`ml-1 rounded-full px-1.5 py-0.5 text-xs font-semibold ${ isRegistered ? 'bg-white/20' : 'bg-primary-soft text-primary' }`}

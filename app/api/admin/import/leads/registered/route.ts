@@ -1,6 +1,6 @@
 // Task #07 Việc 1 — POST /api/admin/import/leads/registered
 // Import danh sách "khách ĐÃ ĐĂNG KÝ" (file Excel thật của Sale, 3 sheet theo
-// tháng) → Lead status REGISTERED + LeadChild per học viên.
+// tháng) → Lead status DA_DANG_KY (convertedAt vẫn null) + LeadChild per học viên.
 //
 // - multipart/form-data: file (.xlsx) + mode ("dry-run" | "confirm").
 // - Dry-run BẮT BUỘC trước: trả preview {tổng, hợp lệ, lỗi, sẽ gộp, bỏ qua} —
@@ -506,9 +506,11 @@ export async function POST(req: NextRequest) {
               courseId: c.courseId,
               assignedToId: c.assignedToId,
               assignedAt: c.assignedToId ? new Date() : null,
-              // BGĐ câu 4(1): khách ĐÃ đăng ký → REGISTERED trực tiếp (backfill,
+              // BGĐ câu 4(1): khách ĐÃ đăng ký → DA_DANG_KY trực tiếp (backfill,
               // không đi transition guard C4). Convert → flow convert v2.
-              status: "REGISTERED",
+              // GĐ5 — lead nhập kiểu này CHƯA convert; mốc phân biệt là `convertedAt`
+              // (vẫn null ở đây), không còn là bậc status riêng như REGISTERED cũ.
+              status: "DA_DANG_KY",
               source: c.source,
               note: c.note,
               children: {
@@ -526,7 +528,7 @@ export async function POST(req: NextRequest) {
                   actorId,
                   actorName,
                   type: "NOTE",
-                  content: `Nhập từ Excel danh sách đăng ký (REGISTERED, ${c.children.length} học viên)`,
+                  content: `Nhập từ Excel danh sách đăng ký (Đã đăng ký, ${c.children.length} học viên)`,
                   metadata: { system: true, import: "registered-excel" },
                 },
               },
@@ -564,7 +566,7 @@ export async function POST(req: NextRequest) {
                   actorId,
                   actorName,
                   type: "NOTE",
-                  content: `Gộp từ Excel danh sách đăng ký (bổ sung field trống${m.newChildren.length > 0 ? `, +${m.newChildren.length} học viên` : ""}${m.set.status ? ", chuyển REGISTERED" : ""})`,
+                  content: `Gộp từ Excel danh sách đăng ký (bổ sung field trống${m.newChildren.length > 0 ? `, +${m.newChildren.length} học viên` : ""}${m.set.status ? ", chuyển Đã đăng ký" : ""})`,
                   metadata: { system: true, import: "registered-excel", merge: true },
                 },
               },

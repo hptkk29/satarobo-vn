@@ -77,7 +77,7 @@ async function getManagerStats(actor: Actor) {
     sdb.lead.count({ where: ACTIVE_LEAD }),
     sdb.lead.count({ where: { ...ACTIVE_LEAD, createdAt: { gte: monthStart } } }),
     sdb.lead.count({ where: { ...ACTIVE_LEAD, createdAt: { gte: lastMonth, lt: monthStart } } }),
-    sdb.lead.count({ where: { ...ACTIVE_LEAD, status: "ENROLLED" } }),
+    sdb.lead.count({ where: { ...ACTIVE_LEAD, status: "DA_DANG_KY" } }),
     sdb.student.count({ where: { deletedAt: null } }),
     sdb.news.count({ where: { isPublished: true } }),
     sdb.lead.findMany({ where: { ...ACTIVE_LEAD, createdAt: { gte: fourteenDaysAgo } }, select: { createdAt: true } }),

@@ -56,7 +56,7 @@ describe("[LT-U-03] where lịch hẹn học thử giữ đúng luật ẩn củ
     expect(w.status).toEqual({ notIn: ["ENROLLED", "REJECTED"] });
     expect(w.lead).toEqual({
       deletedAt: null,
-      status: { notIn: ["ENROLLED", "LOST", "REGISTERED", "DUPLICATE"] },
+      status: { notIn: ["DA_DANG_KY", "DA_MAT"] },
     });
   });
 
@@ -98,7 +98,7 @@ describe("[LT-U-03] where lịch hẹn học thử giữ đúng luật ẩn củ
     };
     // Đây là chỗ dễ sai nhất: gán đè `where.lead` là mất luôn bộ lọc rời-phễu.
     expect(lead.deletedAt).toBeNull();
-    expect(lead.status).toEqual({ notIn: ["ENROLLED", "LOST", "REGISTERED", "DUPLICATE"] });
+    expect(lead.status).toEqual({ notIn: ["DA_DANG_KY", "DA_MAT"] });
     expect(lead.OR).toHaveLength(3);
   });
 });

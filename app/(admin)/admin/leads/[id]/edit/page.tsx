@@ -131,7 +131,7 @@ export default async function EditLeadPage({ params }: { params: Promise<{ id: s
           courses={courses}
           legacyChildName={lead.childName}
           legacyChildAge={lead.childAge}
-          readOnly={lead.status === "LOST"}
+          readOnly={lead.status === "DA_MAT"}
         />
       </div>
     </div>

@@ -6,20 +6,29 @@ import { scopedDb } from "@/lib/db-scope";
 import { resolveActor } from "@/lib/auth/actor";
 import { HandoverForm } from "./_components/handover-form";
 import { PageHelp } from "@/components/admin/ui/page-help";
+import type { LeadStatus } from "@prisma/client";
 
 export const metadata = { title: "Bàn giao lead | Admin" };
 export const dynamic = "force-dynamic";
 
-const LEAD_STATUSES = [
-  "NEW",
-  "ASSIGNED",
-  "CONTACTED",
-  "NO_ANSWER",
-  "CONSULTING",
-  "TRIAL_SCHEDULED",
-  "TRIAL_ATTENDED",
-  "AWAITING_DECISION",
-  "NURTURING",
+// Trạng thái được phép bàn giao. Khai kiểu LeadStatus[] có chủ ý: prop nhận string[]
+// nên trước đây mảng này KHÔNG được kiểm kiểu — đổi tên enum ở GĐ5 không làm tsc đỏ
+// một dòng nào, màn hình chỉ lặng lẽ hiện 9 ô trọn lọc ra 0 lead.
+//
+// GĐ5 — 9 giá trị cũ gộp còn 7: NEW+ASSIGNED → MOI ("đã phân công" nay đọc từ
+// assignedToId), CONTACTED+NO_ANSWER → DA_LIEN_HE ("không nghe máy" là thuộc tính của
+// LẦN GỌI, không phải của lead).
+//
+// ⚠️ Danh sách này VẪN thiếu DANG_HOC_THU (trước là TRIAL_IN_PROGRESS) — giữ nguyên
+// thiếu sót có sẵn từ bản cũ, KHÔNG tự thêm ở đợt đổi tên này.
+const LEAD_STATUSES: LeadStatus[] = [
+  "MOI",
+  "DA_LIEN_HE",
+  "DANG_TU_VAN",
+  "DA_HEN_HOC_THU",
+  "DA_HOC_THU",
+  "CHO_QUYET_DINH",
+  "DANG_NUOI_DUONG",
 ];
 
 export default async function HandoverPage() {

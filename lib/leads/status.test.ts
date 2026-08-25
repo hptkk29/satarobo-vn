@@ -102,7 +102,7 @@ describe("các tập con đều nằm trong enum", () => {
 
 describe("hai tập 'kết thúc' tách theo mục đích, không gộp làm một", () => {
   // LEAD_CLOSED_STATUSES = lead đã đóng hẳn (dùng cho đếm tải round-robin, bàn giao).
-  // LEAD_PIPELINE_EXIT_STATUSES = đã rời phễu, gồm cả REGISTERED (dùng cho module trial:
+  // LEAD_PIPELINE_EXIT_STATUSES = đã rời phễu, gồm cả DA_DANG_KY (dùng cho module trial:
   // lead đã ghi nhận tiền thì tiến độ học thử KHÔNG được đẩy trạng thái nữa).
   it("tập rời phễu bao trùm tập đã đóng", () => {
     for (const s of LEAD_CLOSED_STATUSES) {
@@ -110,21 +110,22 @@ describe("hai tập 'kết thúc' tách theo mục đích, không gộp làm m�
     }
   });
 
-  it("tập rời phễu có thêm đúng REGISTERED", () => {
+  it("tập rời phễu có thêm đúng DA_DANG_KY", () => {
     const them = LEAD_PIPELINE_EXIT_STATUSES.filter(
       (s) => !LEAD_CLOSED_STATUSES.includes(s),
     );
-    expect(them).toEqual(["REGISTERED"]);
+    expect(them).toEqual(["DA_DANG_KY"]);
   });
 
-  it("REGISTERED KHÔNG nằm trong tập đã đóng — lead đã đăng ký vẫn là việc đang mở của sale", () => {
-    expect(LEAD_CLOSED_STATUSES).not.toContain("REGISTERED");
+  it("DA_DANG_KY KHÔNG nằm trong tập đã đóng — lead đã đăng ký vẫn là việc đang mở của sale", () => {
+    expect(LEAD_CLOSED_STATUSES).not.toContain("DA_DANG_KY");
   });
 });
 
 describe("phễu CRM phủ hết trạng thái", () => {
-  // Đây là lỗi GĐ0 vá: bản chép cũ ở màn CRM bỏ sót TRIAL_IN_PROGRESS và REGISTERED,
-  // nên lead đang học thử dở và lead ĐÃ ghi nhận tiền không rơi vào bậc nào.
+  // Đây là lỗi GĐ0 vá: bản chép cũ ở màn CRM bỏ sót DANG_HOC_THU (TRIAL_IN_PROGRESS)
+  // và DA_DANG_KY (REGISTERED), nên lead đang học thử dở và lead ĐÃ ghi nhận tiền
+  // không rơi vào bậc nào.
   const trongPheu = LEAD_FUNNEL_STAGES.flatMap((s) => s.statuses);
 
   it("mọi trạng thái đều có bậc, trừ nhóm loại có chủ đích", () => {
@@ -151,54 +152,88 @@ describe("phễu CRM phủ hết trạng thái", () => {
 });
 
 describe("KANBAN_COLUMNS", () => {
-  it("bỏ DEMO_SCHEDULED (deprecated) và chỉ bỏ đúng nó", () => {
+  // GĐ5 ĐỔI KHẲNG ĐỊNH: bản cũ khoá "vắng ĐÚNG một cột DEMO_SCHEDULED" vì giá trị đó
+  // đã deprecated nhưng vẫn còn trong enum. Nay DEMO_SCHEDULED đã bị gỡ hẳn (gộp vào
+  // DA_HEN_HOC_THU) nên không còn ngoại lệ nào — bảng Kanban phải phủ ĐỦ enum. Giữ
+  // khẳng định cũ thì test xanh giả: nó chỉ so một mảng rỗng với một mảng rỗng.
+  it("phủ đủ enum — không cột nào bị bỏ quên", () => {
     const vang = ENUM_VALUES.filter((v) => !KANBAN_COLUMNS.includes(v));
-    expect(vang).toEqual(["DEMO_SCHEDULED"]);
+    expect(vang).toEqual([]);
+  });
+
+  it("không có cột thừa (giá trị đã xoá khỏi enum)", () => {
+    const thua = KANBAN_COLUMNS.filter((v) => !ENUM_VALUES.includes(v));
+    expect(thua).toEqual([]);
   });
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Ảnh chụp phễu — GĐ0 KHÔNG được đổi số liệu báo cáo. Bộ này chốt hành vi hiện
-// tại để GĐ1/GĐ5 sau đó biết chính xác con số nào đổi và giải thích được.
+// Ảnh chụp phễu — bản GĐ5. Bản GĐ0 chốt hành vi CŨ (8 bậc, tên tiếng Anh) đúng
+// để lượt rút enum này biết con số nào đổi; nay enum đã rút nên ảnh chụp phải
+// chụp lại, không thì nó khoá một hiện trạng không còn tồn tại.
+//
+// ĐỔI KHẲNG ĐỊNH (GĐ5): phễu còn 7 bậc thay vì 8 — NEW và ASSIGNED cùng ánh xạ về
+// MOI, vì "đã phân công" nay là chức năng của `Lead.assignedToId` chứ không phải một
+// bậc chuyển đổi. Số bậc phễu ở báo cáo VÌ THẾ giảm 1; đó là thay đổi số liệu có
+// chủ đích, không phải hồi quy.
 // ─────────────────────────────────────────────────────────────────────────────
-describe("ảnh chụp phễu trước khi sửa", () => {
-  it("FUNNEL_ORDER giữ nguyên 8 bậc theo SR.QD.217", () => {
+describe("ảnh chụp phễu sau khi rút enum", () => {
+  it("FUNNEL_ORDER còn 7 bậc theo SR.QD.217", () => {
     expect(FUNNEL_ORDER).toEqual([
-      "NEW",
-      "ASSIGNED",
-      "CONTACTED",
-      "CONSULTING",
-      "TRIAL_SCHEDULED",
-      "TRIAL_ATTENDED",
-      "AWAITING_DECISION",
-      "ENROLLED",
+      "MOI",
+      "DA_LIEN_HE",
+      "DANG_TU_VAN",
+      "DA_HEN_HOC_THU",
+      "DA_HOC_THU",
+      "CHO_QUYET_DINH",
+      "DA_DANG_KY",
     ]);
   });
 
-  it("TRIAL_IN_PROGRESS và REGISTERED có bậc tích luỹ, không rơi ra ngoài phễu", () => {
-    expect(STATUS_RANK.TRIAL_IN_PROGRESS).toBe(STATUS_RANK.TRIAL_SCHEDULED);
-    expect(STATUS_RANK.REGISTERED).toBe(STATUS_RANK.ENROLLED);
+  it("DANG_HOC_THU và DANG_NUOI_DUONG có bậc tích luỹ, không rơi ra ngoài phễu", () => {
+    // Hai giá trị này KHÔNG phải bậc riêng: đang học thử vẫn tính là đã hẹn học thử,
+    // đang nuôi dưỡng vẫn tính là đã tư vấn. Cặp cũ (REGISTERED ↔ ENROLLED) không còn
+    // kiểm được nữa vì hai giá trị đó đã gộp làm một — so chúng là so chính nó.
+    expect(STATUS_RANK.DANG_HOC_THU).toBe(STATUS_RANK.DA_HEN_HOC_THU);
+    expect(STATUS_RANK.DANG_NUOI_DUONG).toBe(STATUS_RANK.DANG_TU_VAN);
   });
 
-  it("chỉ LOST và DUPLICATE nằm ngoài phễu", () => {
+  it("chỉ DA_MAT nằm ngoài phễu", () => {
+    // Cũ là LOST + DUPLICATE. DUPLICATE đã gỡ khỏi enum (chống trùng nay làm bằng
+    // ràng buộc lúc tạo lead), nên chỉ còn đúng một giá trị ngoài phễu.
     const ngoai = ENUM_VALUES.filter((v) => (STATUS_RANK[v] ?? -1) < 0);
-    expect(ngoai.sort()).toEqual(["DUPLICATE", "LOST"]);
+    expect(ngoai.sort()).toEqual(["DA_MAT"]);
   });
 });
 
-describe("canTransitionLeadStatus giữ nguyên hành vi permissive", () => {
+describe("canTransitionLeadStatus — nay permissive HOÀN TOÀN", () => {
   it("cho phép mọi chuyển đổi thường", () => {
-    expect(canTransitionLeadStatus("NEW", "LOST", { hasRecordedPayment: false }).ok).toBe(true);
-    expect(canTransitionLeadStatus("CONSULTING", "NURTURING", { hasRecordedPayment: false }).ok).toBe(true);
+    expect(canTransitionLeadStatus("MOI", "DA_MAT").ok).toBe(true);
+    expect(canTransitionLeadStatus("DANG_TU_VAN", "DANG_NUOI_DUONG").ok).toBe(true);
   });
 
   it("no-op luôn hợp lệ", () => {
-    expect(canTransitionLeadStatus("LOST", "LOST", { hasRecordedPayment: false }).ok).toBe(true);
+    expect(canTransitionLeadStatus("DA_MAT", "DA_MAT").ok).toBe(true);
   });
 
-  it("chỉ chặn vào REGISTERED khi chưa có khoản ghi nhận", () => {
-    expect(canTransitionLeadStatus("AWAITING_DECISION", "REGISTERED", { hasRecordedPayment: true }).ok).toBe(true);
-    expect(canTransitionLeadStatus("AWAITING_DECISION", "REGISTERED", { hasRecordedPayment: false }).ok).toBe(false);
-    expect(canTransitionLeadStatus("CONSULTING", "REGISTERED", { hasRecordedPayment: true }).ok).toBe(false);
+  // ĐỔI KHẲNG ĐỊNH (GĐ5): bản cũ khoá "chỉ chặn vào REGISTERED khi chưa có khoản ghi
+  // nhận" và "vào REGISTERED phải đi từ AWAITING_DECISION". Nhánh đó ĐÃ GỠ khỏi
+  // `canTransitionLeadStatus`: sau khi ENROLLED gộp vào DA_DANG_KY, nó chặn luôn cả
+  // đường convert hợp lệ. Cổng tiền THẬT nằm ở `evaluatePaymentGuard` (lib/crm/
+  // convert-lead-v2.ts) — có kiểm cả trường hợp học bổng 100% mà nhánh cũ không kiểm.
+  // Vì vậy khẳng định đúng bây giờ là: hàm này KHÔNG chặn, và tham số hasRecordedPayment
+  // không còn tác dụng. Giữ khẳng định cũ = khoá một cổng đã dời đi nơi khác.
+  it("KHÔNG còn chặn đường vào DA_DANG_KY — cổng tiền đã dời sang evaluatePaymentGuard", () => {
+    expect(canTransitionLeadStatus("CHO_QUYET_DINH", "DA_DANG_KY", { hasRecordedPayment: true }).ok).toBe(true);
+    expect(canTransitionLeadStatus("CHO_QUYET_DINH", "DA_DANG_KY", { hasRecordedPayment: false }).ok).toBe(true);
+    expect(canTransitionLeadStatus("DANG_TU_VAN", "DA_DANG_KY", { hasRecordedPayment: true }).ok).toBe(true);
+  });
+
+  it("mọi cặp trạng thái đều hợp lệ — không cặp nào bị chặn ngầm", () => {
+    for (const from of ENUM_VALUES) {
+      for (const to of ENUM_VALUES) {
+        expect(canTransitionLeadStatus(from, to).ok).toBe(true);
+      }
+    }
   });
 });

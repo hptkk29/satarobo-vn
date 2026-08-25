@@ -23,7 +23,7 @@ async function getSalesStats(userId: string) {
   const [pipeline, totalMine, enrolledMonth, nearingEnd, leadsForWeekly] = await Promise.all([
     sdb.lead.groupBy({ by: ["status"], where: { assignedToId: userId, deletedAt: null }, _count: { _all: true } }),
     sdb.lead.count({ where: { assignedToId: userId, deletedAt: null } }),
-    sdb.lead.count({ where: { assignedToId: userId, deletedAt: null, status: "ENROLLED", updatedAt: { gte: monthStart } } }),
+    sdb.lead.count({ where: { assignedToId: userId, deletedAt: null, status: "DA_DANG_KY", updatedAt: { gte: monthStart } } }),
     getNearingEndEnrollments(),
     // Phễu lead theo TUẦN (8 tuần) — lead CỦA TÔI: tổng mới vs chuyển đổi.
     sdb.lead.findMany({

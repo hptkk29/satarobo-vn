@@ -34,24 +34,30 @@ enum CommissionSource {
   REFERRAL
 }
 
+/// GĐ5 (25/08/2026) — RÚT TỪ 15 XUỐNG 10 GIÁ TRỊ theo đặc tả bàn giao mục 3.
+///
+/// Năm giá trị bị gỡ và lý do:
+///   ASSIGNED       → chức năng của `Lead.assignedToId`, không phải một bậc phễu.
+///   NO_ANSWER      → thuộc tính của LẦN GỌI, không phải của lead. Về DA_LIEN_HE.
+///   DUPLICATE      → chặn bằng ràng buộc lúc tạo, không phải một bậc phễu.
+///   DEMO_SCHEDULED → đã deprecated từ lâu, dữ liệu đã map sang hẹn học thử.
+///   ENROLLED       → GỘP vào DA_DANG_KY (chủ dự án chốt câu 6 = A). Phân biệt "đã
+///                    chốt" với "mới đăng ký" bằng `Lead.convertedAt`, không bằng
+///                    trạng thái — mốc đó do chính lượt convert ghi nên chính xác hơn.
+///
+/// ⚠️ Khoá chống đua của convert PHẢI bám `convertedAt IS NULL` (đã đổi trước khi gộp).
+/// Bám status như bản cũ thì sau khi gộp, lead "đã đăng ký" sẽ không convert được nữa.
 enum LeadStatus {
-  // Phase T1.1 — pipeline mở rộng (giữ giá trị cũ để back-compat)
-  NEW
-  ASSIGNED
-  CONTACTED
-  NO_ANSWER
-  CONSULTING
-  TRIAL_SCHEDULED
-  TRIAL_ATTENDED
-  AWAITING_DECISION
-  ENROLLED
-  NURTURING
-  LOST
-  DUPLICATE
-  DEMO_SCHEDULED // deprecated — data đã map sang TRIAL_SCHEDULED, giữ cho back-compat
-  // R7-01 (additive) — QĐ-O9
-  TRIAL_IN_PROGRESS // đang học thử (lớp trải nghiệm đang diễn ra)
-  REGISTERED // đã đăng ký (đã có khoản Sale ghi nhận, chưa convert)
+  MOI
+  DA_LIEN_HE
+  DANG_TU_VAN
+  DA_HEN_HOC_THU
+  DANG_HOC_THU
+  DA_HOC_THU
+  CHO_QUYET_DINH
+  DA_DANG_KY
+  DANG_NUOI_DUONG
+  DA_MAT
 }
 
 /// R7-01 — trạng thái học thử của từng con trong 1 lead (LeadChild).
@@ -1359,7 +1365,7 @@ model Lead {
   isSharedWithTeam Boolean    @default(false)
   sharedAt         DateTime?  @db.Timestamptz(6)
   sharedById       String?
-  status           LeadStatus @default(NEW)
+  status           LeadStatus @default(MOI)
   source           String?
   utmSource        String?
   utmMedium        String?

@@ -4,7 +4,6 @@ import { assignmentWrite } from "@/lib/lead/assignment";
 import { takeRotationTurn, takeRotationTurns } from "@/lib/lead/rotation";
 import { orgUnitIdForCenter } from "@/lib/org/org-service";
 import { LEAD_CLOSED_STATUSES } from "@/lib/leads/status";
-import { setLeadStatus } from "@/lib/leads/set-status";
 import type { Prisma } from "@prisma/client";
 
 // =============================================================================
@@ -135,18 +134,13 @@ export async function autoAssignLead(
       where: { id: leadId },
       data: assignmentWrite(target), // Đợt A — kèm mốc phân công (đường cũ, 3 webhook)
     });
-    // GĐ1 — tách phần đổi trạng thái ra cửa chung để nó vào sổ. Gán lead đã liên hệ
-    // rồi thì KHÔNG kéo ngược về "Đã phân công", nên vẫn giữ điều kiện chỉ đổi từ NEW.
-    if (lead.status === "NEW") {
-      await setLeadStatus({
-        tx,
-        leadId,
-        to: "ASSIGNED",
-        source: "assign",
-        actorId: actor.actorId,
-        actorName: actor.actorName,
-      });
-    }
+    // GĐ5 — ĐÃ GỠ lượt đổi trạng thái NEW→ASSIGNED ở đây.
+    //
+    // Điều kiện cũ ("chỉ đổi từ NEW, không kéo ngược lead đã liên hệ về Đã phân
+    // công") nay tự thoả: NEW và ASSIGNED cùng ánh xạ về MOI, nên lệnh ghi chỉ có
+    // thể là MOI→MOI và `setLeadStatus` sẽ trả KHONG_DOI. `assignmentWrite(target)`
+    // ngay trên vẫn ghi assignedToId + assignedAt — đó mới là nơi đọc ra việc phân
+    // công — và dòng audit ASSIGN bên dưới vẫn vào sổ.
     await logLeadAudit({
       leadId,
       action: "ASSIGN",

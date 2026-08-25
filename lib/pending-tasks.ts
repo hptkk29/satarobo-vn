@@ -403,12 +403,12 @@ async function leadFollowup(user: TaskUser, now: Date, cfg: PendingCfg): Promise
   };
 
   const [newLeads, overdueLeads, items] = await Promise.all([
-    db.lead.count({ where: { ...baseWhere, status: "NEW" } }),
+    db.lead.count({ where: { ...baseWhere, status: "MOI" } }),
     db.lead.count({ where: { ...baseWhere, tasks: { some: { status: "OPEN", dueAt: { lt: now } } } } }),
     db.lead.findMany({
       where: {
         ...baseWhere,
-        OR: [{ status: "NEW" }, { tasks: { some: { status: "OPEN", dueAt: { lt: now } } } }],
+        OR: [{ status: "MOI" }, { tasks: { some: { status: "OPEN", dueAt: { lt: now } } } }],
       },
       select: { id: true, parentName: true, status: true },
       orderBy: { createdAt: "asc" },
@@ -427,7 +427,7 @@ async function leadFollowup(user: TaskUser, now: Date, cfg: PendingCfg): Promise
     href: "/leads",
     items: items.map((l) => ({
       id: l.id,
-      label: `${l.parentName}${l.status === "NEW" ? " (mới)" : ""}`,
+      label: `${l.parentName}${l.status === "MOI" ? " (mới)" : ""}`,
       href: `/leads/${l.id}`,
     })),
   };
@@ -612,7 +612,10 @@ async function classNoTeacher(user: TaskUser, now: Date, cfg: PendingCfg): Promi
 }
 
 async function registeredStale(user: TaskUser, now: Date, cfg: PendingCfg): Promise<PendingTaskGroup | null> {
-  // Câu 38 — khách đã "Đã đăng ký" (REGISTERED) nhưng chưa chốt ghi danh quá lâu.
+  // Câu 38 — khách đã "Đã đăng ký" (DA_DANG_KY) nhưng chưa chốt ghi danh quá lâu.
+  // GĐ5 — DA_DANG_KY nay gộp cả ENROLLED cũ, nên tập này KHÔNG còn thuần "chưa chốt":
+  // lead đã convert xong vẫn mang DA_DANG_KY và sẽ lọt vào nhóm tồn đọng. Xem ghi chú
+  // ở `where` bên dưới — đã lọc thêm `convertedAt: null` để giữ đúng nghĩa "câu 38".
   const canAll = cfg.can("leads:view-all");
   const canOwn = cfg.can("leads:view-own");
   if (!canAll && !canOwn) return null;
@@ -624,7 +627,10 @@ async function registeredStale(user: TaskUser, now: Date, cfg: PendingCfg): Prom
   const rows = await db.lead.findMany({
     where: {
       deletedAt: null,
-      status: "REGISTERED",
+      status: "DA_DANG_KY",
+      // GĐ5 — lọc thêm `convertedAt: null`: sau khi gộp ENROLLED vào DA_DANG_KY, không
+      // có điều kiện này thì MỌI lead đã chốt ghi danh cũng lên chuông "chưa chốt".
+      convertedAt: null,
       // GĐ1 — đo bằng MỐC ĐỔI TRẠNG THÁI THẬT (`statusChangedAt`), không còn dùng
       // `updatedAt` làm proxy. Proxy cũ sai theo hướng nguy hiểm nhất: MỌI thao tác
       // chạm lead (ghi chú, đổi người phụ trách, gắn nguồn giới thiệu) đều dời

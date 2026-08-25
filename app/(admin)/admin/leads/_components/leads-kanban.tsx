@@ -82,10 +82,16 @@ export function LeadsKanban({
     setItems(leads);
   }, [leads]);
 
-  /** FL2-01 — chuyển sang ENROLLED = chốt deal → ĐIỀU HƯỚNG vào trang chi tiết lead
-   *  (convert v2 đa con + học phí 1/2 đợt), KHÔNG mở popup close-deal cũ. */
+  /** FL2-01 — thả vào cột "Đã đăng ký" = chốt deal → ĐIỀU HƯỚNG vào trang chi tiết lead
+   *  (convert v2 đa con + học phí 1/2 đợt), KHÔNG mở popup close-deal cũ.
+   *
+   *  GĐ5 — trước đây bàn cờ có HAI cột cuối: thả vào REGISTERED chỉ đổi trạng thái, thả
+   *  vào ENROLLED mới điều hướng. Enum mới gộp chúng thành DA_DANG_KY nên chỉ còn MỘT
+   *  cột, và cột đó mang nghĩa "chốt". Hệ quả cần biết: người CÓ quyền chốt deal không
+   *  còn đường kéo-thả để chỉ ghi nhận "đã đăng ký" — họ đi qua màn chuyển đổi, nơi có
+   *  cổng kiểm tiền. Người KHÔNG có quyền chốt vẫn kéo đổi trạng thái như cũ. */
   function requestMove(leadId: string, to: LeadStatus) {
-    if (to === "ENROLLED" && canCloseDeal) {
+    if (to === "DA_DANG_KY" && canCloseDeal) {
       router.push(`/leads/${leadId}`);
       return;
     }

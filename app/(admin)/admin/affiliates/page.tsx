@@ -44,11 +44,13 @@ export default async function AffiliatesPage() {
   ]);
 
   // Lead đã CHỐT theo từng affiliate — đo hiệu quả thật, không chỉ đếm lead.
-  // "Chốt" = ENROLLED/REGISTERED (đã ghi danh hoặc đã ghi nhận tiền).
+  // "Chốt" = DA_DANG_KY. Trước GĐ5 phải liệt kê 2 giá trị ENROLLED + REGISTERED
+  // ("đã ghi danh" và "đã ghi nhận tiền" là hai bậc riêng); enum mới gộp chúng làm
+  // một nên chỉ còn một giá trị, KHÔNG phải bỏ sót bậc nào.
   const closedLeads = await sdb.lead.findMany({
     where: {
       affiliateId: { not: null },
-      status: { in: ["ENROLLED", "REGISTERED"] },
+      status: "DA_DANG_KY",
       deletedAt: null,
     },
     select: { affiliateId: true },

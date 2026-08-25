@@ -26,8 +26,11 @@ export const BOOKING_STATUS_VALUES = [
 /** Buổi hẹn coi là "đã xong" — mặc định ẩn cho đỡ nhiễu danh sách việc đang làm. */
 const BOOKING_TERMINAL = ["ENROLLED", "REJECTED"] as const;
 
-/** Lead đã rời phễu tư vấn thì buổi hẹn cũ của họ không còn là việc đang làm. */
-const BOOKING_LEAD_EXCLUDED = ["ENROLLED", "LOST", "REGISTERED", "DUPLICATE"] as const;
+/** Lead đã rời phễu tư vấn thì buổi hẹn cũ của họ không còn là việc đang làm.
+ *  GĐ5 — bốn giá trị cũ gộp còn hai: ENROLLED+REGISTERED → DA_DANG_KY (một bậc duy
+ *  nhất cho "đã đăng ký"), LOST+DUPLICATE → DA_MAT (bản ghi trùng nay bị chặn ngay lúc
+ *  tạo nên không còn là một bậc phễu). Tập lead bị ẩn KHÔNG đổi, chỉ gọn tên lại. */
+const BOOKING_LEAD_EXCLUDED = ["DA_DANG_KY", "DA_MAT"] as const;
 
 /**
  * `where` cho danh sách lớp trải nghiệm.

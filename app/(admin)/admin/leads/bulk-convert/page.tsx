@@ -18,7 +18,7 @@ export default async function BulkConvertPage() {
   const session = await auth();
   if (!session?.user) redirect("/login");
 
-  // leads:view-all chặn Sale: màn này liệt kê MỌI lead REGISTERED của cơ sở (kèm
+  // leads:view-all chặn Sale: màn này liệt kê MỌI lead "đã đăng ký" của cơ sở (kèm
   // PII) và có nhánh bỏ qua guard tiền — Sale convert lead của mình ở đường đơn lẻ.
   const allowed =
     (await checkPermission("leads:view-all")) &&
@@ -29,8 +29,12 @@ export default async function BulkConvertPage() {
 
   const sdb = scopedDb(await resolveActor(session.user.id));
 
+  // GĐ5 — "đã đăng ký mà CHƯA convert" nay cần HAI điều kiện. Trước đây một mình
+  // REGISTERED đã đủ vì lượt convert đẩy lead sang ENROLLED; enum mới gộp hai bậc đó
+  // làm một, nên nếu chỉ lọc DA_DANG_KY thì danh sách này sẽ chứa cả lead đã chốt rồi
+  // và mời người dùng convert lại lần nữa.
   const leads = await sdb.lead.findMany({
-    where: { status: "REGISTERED", deletedAt: null },
+    where: { status: "DA_DANG_KY", convertedAt: null, deletedAt: null },
     orderBy: { createdAt: "asc" },
     take: 500,
     select: {

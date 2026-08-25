@@ -19,16 +19,16 @@ const d = (s: string) => new Date(s);
 
 // Fixture: 10 lead phủ nhiều status / nguồn / cơ sở / tháng.
 const records: LeadReportRecord[] = [
-  { status: "NEW", source: "facebook", centerId: "c1", commissionSource: "MARKETING_ADMIN", createdAt: d("2026-05-02T03:00:00Z") },
-  { status: "ASSIGNED", source: "facebook", centerId: "c1", commissionSource: "MARKETING_ADMIN", createdAt: d("2026-05-10T03:00:00Z") },
-  { status: "CONTACTED", source: "zalo", centerId: "c1", commissionSource: "SALE_SELF", createdAt: d("2026-05-15T03:00:00Z") },
-  { status: "CONSULTING", source: "zalo", centerId: "c2", commissionSource: "SALE_SELF", createdAt: d("2026-06-01T03:00:00Z") },
-  { status: "TRIAL_SCHEDULED", source: "facebook", centerId: "c2", commissionSource: "REFERRAL", createdAt: d("2026-06-03T03:00:00Z") },
-  { status: "TRIAL_ATTENDED", source: "facebook", centerId: "c2", commissionSource: "REFERRAL", createdAt: d("2026-06-05T03:00:00Z") },
-  { status: "AWAITING_DECISION", source: null, centerId: "c2", commissionSource: null, createdAt: d("2026-06-06T03:00:00Z") },
-  { status: "ENROLLED", source: "facebook", centerId: "c1", commissionSource: "MARKETING_ADMIN", createdAt: d("2026-06-07T03:00:00Z"), convertedAt: d("2026-06-08T03:00:00Z") },
-  { status: "REGISTERED", source: "zalo", centerId: "c2", commissionSource: "SALE_SELF", createdAt: d("2026-06-08T03:00:00Z"), convertedAt: d("2026-06-09T03:00:00Z") },
-  { status: "LOST", source: "zalo", centerId: "c1", commissionSource: "SALE_SELF", createdAt: d("2026-06-09T03:00:00Z") },
+  { status: "MOI", source: "facebook", centerId: "c1", commissionSource: "MARKETING_ADMIN", createdAt: d("2026-05-02T03:00:00Z") },
+  { status: "MOI", source: "facebook", centerId: "c1", commissionSource: "MARKETING_ADMIN", createdAt: d("2026-05-10T03:00:00Z") },
+  { status: "DA_LIEN_HE", source: "zalo", centerId: "c1", commissionSource: "SALE_SELF", createdAt: d("2026-05-15T03:00:00Z") },
+  { status: "DANG_TU_VAN", source: "zalo", centerId: "c2", commissionSource: "SALE_SELF", createdAt: d("2026-06-01T03:00:00Z") },
+  { status: "DA_HEN_HOC_THU", source: "facebook", centerId: "c2", commissionSource: "REFERRAL", createdAt: d("2026-06-03T03:00:00Z") },
+  { status: "DA_HOC_THU", source: "facebook", centerId: "c2", commissionSource: "REFERRAL", createdAt: d("2026-06-05T03:00:00Z") },
+  { status: "CHO_QUYET_DINH", source: null, centerId: "c2", commissionSource: null, createdAt: d("2026-06-06T03:00:00Z") },
+  { status: "DA_DANG_KY", source: "facebook", centerId: "c1", commissionSource: "MARKETING_ADMIN", createdAt: d("2026-06-07T03:00:00Z"), convertedAt: d("2026-06-08T03:00:00Z") },
+  { status: "DA_DANG_KY", source: "zalo", centerId: "c2", commissionSource: "SALE_SELF", createdAt: d("2026-06-08T03:00:00Z"), convertedAt: d("2026-06-09T03:00:00Z") },
+  { status: "DA_MAT", source: "zalo", centerId: "c1", commissionSource: "SALE_SELF", createdAt: d("2026-06-09T03:00:00Z") },
 ];
 
 describe("[R7-17] monthKeyVN", () => {
@@ -43,10 +43,10 @@ describe("[#10] groupByWeek — phễu lead theo tuần", () => {
   const now = d("2026-07-08T00:00:00Z");
   it("bucket 7 ngày, đếm tổng + chuyển đổi (REGISTERED/ENROLLED); ngoài cửa sổ → bỏ", () => {
     const recs: LeadReportRecord[] = [
-      { status: "NEW", source: null, centerId: null, commissionSource: null, createdAt: d("2026-07-07T00:00:00Z") }, // tuần cuối (idx7)
-      { status: "REGISTERED", source: null, centerId: null, commissionSource: null, createdAt: d("2026-07-06T00:00:00Z") }, // idx7, converted
-      { status: "NEW", source: null, centerId: null, commissionSource: null, createdAt: d("2026-06-30T00:00:00Z") }, // idx6
-      { status: "ENROLLED", source: null, centerId: null, commissionSource: null, createdAt: d("2026-05-01T00:00:00Z") }, // ngoài 8 tuần → bỏ
+      { status: "MOI", source: null, centerId: null, commissionSource: null, createdAt: d("2026-07-07T00:00:00Z") }, // tuần cuối (idx7)
+      { status: "DA_DANG_KY", source: null, centerId: null, commissionSource: null, createdAt: d("2026-07-06T00:00:00Z") }, // idx7, converted
+      { status: "MOI", source: null, centerId: null, commissionSource: null, createdAt: d("2026-06-30T00:00:00Z") }, // idx6
+      { status: "DA_DANG_KY", source: null, centerId: null, commissionSource: null, createdAt: d("2026-05-01T00:00:00Z") }, // ngoài 8 tuần → bỏ
     ];
     const w = groupByWeek(recs, 8, now);
     expect(w).toHaveLength(8);
@@ -80,31 +80,29 @@ describe("[R7-17] leadSummary", () => {
 describe("[R7-17] buildFunnel cumulative", () => {
   it("đếm lead đã chạm tới ít nhất mỗi bước; LOST không tính", () => {
     const f = buildFunnel(records);
-    // 9 lead trong pipeline (loại LOST). NEW = mọi lead rank>=0 = 9.
-    expect(f[0]).toMatchObject({ status: "NEW", count: 9 });
-    // ASSIGNED rank>=1: tất cả trừ NEW → 8.
-    expect(f[1].count).toBe(8);
-    // CONTACTED rank>=2 → 7.
-    expect(f[2].count).toBe(7);
-    // CONSULTING rank>=3 → 6.
-    expect(f[3].count).toBe(6);
-    // TRIAL_SCHEDULED rank>=4 → 5.
-    expect(f[4].count).toBe(5);
-    // TRIAL_ATTENDED rank>=5 → 4.
-    expect(f[5].count).toBe(4);
-    // AWAITING_DECISION rank>=6 → 3.
-    expect(f[6].count).toBe(3);
-    // ENROLLED rank>=7 → ENROLLED + REGISTERED = 2.
-    expect(f[7]).toMatchObject({ status: "ENROLLED", count: 2 });
+    // GĐ5 — phễu còn 7 bậc (trước là 8): bậc "đã phân công" biến mất vì ASSIGNED gộp
+    // vào MOI, việc phân công nay đọc ở `Lead.assignedToId` chứ không phải một bậc phễu.
+    expect(f).toHaveLength(7);
+    // 9 lead trong phễu (loại 1 lead DA_MAT, rank -1). Bậc đầu = mọi lead rank>=0.
+    expect(f[0]).toMatchObject({ status: "MOI", count: 9 });
+    // rank>=1: trừ 2 lead đang ở MOI → 7.
+    expect(f[1]).toMatchObject({ status: "DA_LIEN_HE", count: 7 });
+    expect(f[2]).toMatchObject({ status: "DANG_TU_VAN", count: 6 });
+    expect(f[3]).toMatchObject({ status: "DA_HEN_HOC_THU", count: 5 });
+    expect(f[4]).toMatchObject({ status: "DA_HOC_THU", count: 4 });
+    expect(f[5]).toMatchObject({ status: "CHO_QUYET_DINH", count: 3 });
+    // Bậc chốt gộp cả "đã đăng ký" lẫn "đã ghi danh" cũ → 2.
+    expect(f[6]).toMatchObject({ status: "DA_DANG_KY", count: 2 });
   });
 });
 
 describe("[R7-17] funnelConversionRates", () => {
   it("tỷ lệ chuyển từng bước = count[i+1]/count[i]", () => {
     const rates = funnelConversionRates(buildFunnel(records));
-    expect(rates).toHaveLength(7);
-    expect(rates[0]).toMatchObject({ rate: 8 / 9 }); // NEW→ASSIGNED
-    expect(rates[6]).toMatchObject({ rate: 2 / 3 }); // AWAITING→ENROLLED
+    // 7 bậc ⇒ 6 khoảng chuyển.
+    expect(rates).toHaveLength(6);
+    expect(rates[0]).toMatchObject({ rate: 7 / 9 }); // Mới → Đã liên hệ
+    expect(rates[5]).toMatchObject({ rate: 2 / 3 }); // Chờ quyết định → Đã đăng ký
   });
 
   it("chia 0 an toàn khi bước trước = 0", () => {
@@ -117,9 +115,11 @@ describe("[R7-17] countByStatus", () => {
   it("đếm theo status hiện tại, sắp xếp giảm dần", () => {
     const counts = countByStatus(records);
     const map = Object.fromEntries(counts.map((c) => [c.status, c.count]));
-    expect(map.NEW).toBe(1);
-    expect(map.LOST).toBe(1);
-    expect(map.ENROLLED).toBe(1);
+    // GĐ5 — fixture nay có 2 lead ở MOI (một cái vốn là ASSIGNED) và 2 ở DA_DANG_KY
+    // (một cái vốn là REGISTERED). Tổng vẫn 10.
+    expect(map.MOI).toBe(2);
+    expect(map.DA_MAT).toBe(1);
+    expect(map.DA_DANG_KY).toBe(2);
     expect(counts.reduce((a, c) => a + c.count, 0)).toBe(10);
   });
 });
@@ -171,7 +171,7 @@ describe("[R7-17] buildLeadReport tổng hợp", () => {
   it("gộp đủ các nhóm; rỗng → không lỗi", () => {
     const r = buildLeadReport(records, { c1: "CS1", c2: "CS2" });
     expect(r.summary.total).toBe(10);
-    expect(r.funnel).toHaveLength(8);
+    expect(r.funnel).toHaveLength(7); // GĐ5 — 7 bậc, xem [R7-17] buildFunnel cumulative
     expect(r.byCenter).toHaveLength(2);
     const empty = buildLeadReport([]);
     expect(empty.summary.total).toBe(0);

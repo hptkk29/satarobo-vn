@@ -163,8 +163,13 @@ export default async function LeadDetailPage({ params }: Props) {
         }),
       ])
     : [[], []];
-  const dealClosable =
-    canCloseDeal && status !== "ENROLLED" && status !== "LOST" && status !== "DUPLICATE";
+  // GĐ5 — điều kiện "chưa chốt" nay đọc `convertedAt`, KHÔNG đọc status. Bản cũ dùng
+  // `status !== "ENROLLED"` vì ENROLLED là bậc riêng sau REGISTERED; enum mới gộp hai
+  // bậc đó thành DA_DANG_KY, nên nếu dịch thẳng thành `status !== "DA_DANG_KY"` thì
+  // lead vừa nộp tiền (trước đây là REGISTERED) sẽ mất luôn nút Chuyển đổi — tức là
+  // chặn đúng bước tiếp theo của quy trình. `convertedAt` do chính lượt convert ghi nên
+  // là mốc "đã chốt" chính xác, khớp ghi chú enum trong schema.
+  const dealClosable = canCloseDeal && lead.convertedAt === null && status !== "DA_MAT";
 
   // E2-LEAD (item 2) — tóm tắt thanh toán (đã nộp / tổng phải thu / còn thiếu).
   const paymentSummary = await getLeadPaymentSummary(sdb, lead.id);
@@ -189,8 +194,8 @@ export default async function LeadDetailPage({ params }: Props) {
       select: { id: true, sku: true, name: true },
     }),
   ]);
-  // Lead LOST (hoặc không có quyền sửa / chỉ xem nhờ "dùng chung") → con read-only.
-  const childrenReadOnly = !canTransfer || status === "LOST" || isSharedViewer;
+  // Lead ĐÃ MẤT (hoặc không có quyền sửa / chỉ xem nhờ "dùng chung") → con read-only.
+  const childrenReadOnly = !canTransfer || status === "DA_MAT" || isSharedViewer;
 
   // R7-02 — lớp trải nghiệm đang mở (cùng cơ sở lead) để xếp con vào.
   const canTrialManage = (await checkPermission("trials:manage", { centerId: lead.centerId }));
