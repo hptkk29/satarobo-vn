@@ -8501,3 +8501,179 @@ model TrnExamUnlock {
   @@index([examId, userId])
   @@index([userId])
 }
+
+// ════════════════════════════════════════════════════════════════════════════
+// EL-15 — BÀI TẬP CHẤM TAY + KHUNG CHẤM (rubric)
+//
+// ⚠️ Rubric cũ của repo (`RubricCriterion`/`RubricLevel`) KHÔNG dùng lại được: nó
+// là enum CỨNG 6 tiêu chí robotics × 4 mức, gắn với lớp học sinh. Nó không biểu
+// diễn nổi thang 100 điểm của quy trình tư vấn hay khung ngạch giáo viên — hai thứ
+// EL-15 sinh ra để chấm. Dùng lại là bẻ cong một cấu trúc cho việc nó không làm
+// được, và mỗi khung mới sẽ phải sửa enum.
+// ════════════════════════════════════════════════════════════════════════════
+
+enum TrnRubricStatus {
+  DRAFT
+  ACTIVE
+  ARCHIVED
+}
+
+enum TrnSubmissionStatus {
+  DRAFT
+  SUBMITTED
+  GRADED
+  /// Người chấm trả lại để làm lại. KHÁC `DRAFT`: đã từng nộp, đã từng được đọc.
+  NEEDS_REVISION
+}
+
+/// KHUNG CHẤM một bài tập.
+model TrnRubric {
+  id    String @id @default(cuid())
+  code  String @unique
+  title String
+
+  /// Tổng điểm của khung (thường 100). ĐÓNG BĂNG lúc kích hoạt, cùng lý do với
+  /// `TrnExam.maxScore`: tính lại lúc chấm là để một tiêu chí bị sửa điểm sau đó
+  /// làm lệch thang của những bài đã chấm.
+  totalPoints Int @default(100)
+
+  /// Ngưỡng ĐẠT, tuyệt đối (vd 80 trên thang 100) — và giao diện cũng NHẬP TUYỆT
+  /// ĐỐI, không quy đổi %.
+  ///
+  /// ⚠️ Ngưỡng nằm ở KHUNG chứ không ở bài học: một khung dùng cho nhiều bài, và
+  /// mỗi bài đặt một ngưỡng khác nhau trên cùng khung nghĩa là hai người cùng làm
+  /// một việc được chấm bằng hai thước. Muốn ngưỡng khác thì tạo khung khác.
+  passPoints Int @default(80)
+
+  version Int             @default(1)
+  status  TrnRubricStatus @default(DRAFT)
+
+  ownerUserId String
+
+  /// NULL = khung DÙNG CHUNG toàn công ty ⇒ `NULL_IS_GLOBAL_MODELS`.
+  centerId  String?
+  orgUnitId String?
+
+  deletedAt DateTime? @db.Timestamptz(6)
+  createdAt DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime  @updatedAt @db.Timestamptz(6)
+
+  criteria TrnRubricCriterion[]
+
+  @@index([status])
+  @@index([centerId])
+  @@index([orgUnitId])
+}
+
+/// Một TIÊU CHÍ trong khung chấm.
+model TrnRubricCriterion {
+  id       String @id @default(cuid())
+  rubricId String
+
+  label       String
+  description String? @db.Text
+
+  /// Trọng số, tổng các tiêu chí = `TrnRubric.totalPoints`. Kiểm ở Zod — Postgres
+  /// không ép được tổng của nhiều dòng.
+  weight     Int
+  orderIndex Int
+
+  /// Các MỨC của tiêu chí: `[{label, points, desc}]`.
+  ///
+  /// ⚠️ Người chấm chọn MỘT mức, và `points` của mức đó là điểm tiêu chí. Không có
+  /// phép nhân trọng số nào ở giữa: hai phép quy đổi (mức→điểm rồi điểm→trọng số)
+  /// là hai chỗ để lệch, và người chấm không kiểm được con số cuối bằng mắt.
+  levelsJson Json
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  rubric TrnRubric        @relation(fields: [rubricId], references: [id], onDelete: Cascade)
+  scores TrnRubricScore[]
+
+  @@unique([rubricId, orderIndex])
+  @@index([rubricId])
+}
+
+/// Một lượt NỘP BÀI TẬP.
+model TrnSubmission {
+  id           String  @id @default(cuid())
+  lessonId     String
+  enrollmentId String?
+  userId       String
+  attemptNo    Int     @default(1)
+
+  contentText String? @db.Text
+
+  /// Tệp đính kèm: `[{key, mime, size, name}]` — `key` là khoá trên kho R2.
+  ///
+  /// ⚠️ Nội dung ở đây MANG DỮ LIỆU CÁ NHÂN CỦA BÊN THỨ BA: §13.3 bắt giáo viên nộp
+  /// "video dạy thử" và tư vấn viên nộp "ghi âm hội thoại" — tức trẻ em và phụ
+  /// huynh. Bốn quy tắc của kế hoạch áp ở TẦNG ĐƯỜNG GHI, không phải ở cột này.
+  attachmentsJson Json?
+
+  submittedAt DateTime?           @db.Timestamptz(6)
+  status      TrnSubmissionStatus @default(DRAFT)
+
+  /// `null` cho tới khi chấm xong. KHÔNG mặc định 0 — 0 nghĩa là "làm sai hết",
+  /// còn `null` nghĩa là "chưa ai chấm".
+  score  Int?
+  passed Boolean?
+
+  gradedByUserId String?
+  gradedAt       DateTime? @db.Timestamptz(6)
+
+  /// HẠN CHẤM = `submittedAt` + `SLA_GRADE_DAYS` NGÀY LÀM VIỆC.
+  ///
+  /// ⚠️ Không có cột này thì "nộp bài → có điểm trong 3 ngày làm việc" là thiện chí
+  /// chứ không phải cam kết đo được, và hàng đợi chấm không có chỉ số tồn đọng.
+  /// Index `[status, dueGradeAt]` chính là thứ cron nhắc người chấm đọc.
+  dueGradeAt DateTime? @db.Timestamptz(6)
+
+  feedback String? @db.Text
+
+  centerId  String
+  orgUnitId String
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  scores TrnRubricScore[]
+
+  /// Một người · một bài · một số thứ tự lượt = đúng một dòng. Đây là thứ chặn hai
+  /// tab cùng bấm "Nộp bài" tạo ra hai lượt.
+  @@unique([lessonId, userId, attemptNo])
+  @@index([status, gradedByUserId])
+  @@index([status, dueGradeAt])
+  @@index([userId, lessonId])
+  @@index([enrollmentId])
+  @@index([centerId])
+  @@index([orgUnitId])
+}
+
+/// Điểm một TIÊU CHÍ của một lượt nộp.
+model TrnRubricScore {
+  id           String @id @default(cuid())
+  submissionId String
+  criterionId  String
+
+  /// Chỉ số MỨC người chấm chọn, trong `levelsJson` của tiêu chí.
+  levelIndex Int
+  /// Điểm của mức đó, CHÉP LẠI lúc chấm.
+  ///
+  /// ⚠️ Chép chứ không join sống sang `levelsJson`: sửa khung sau đó sẽ ĐỔI HỒI TỐ
+  /// điểm của mọi bài đã chấm, và không ai giải thích được vì sao bảng điểm tháng
+  /// trước in lại hôm nay ra số khác.
+  points     Float
+  note       String? @db.Text
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  submission TrnSubmission      @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  criterion  TrnRubricCriterion @relation(fields: [criterionId], references: [id], onDelete: Restrict)
+
+  /// Một lượt nộp · một tiêu chí = đúng một dòng.
+  @@unique([submissionId, criterionId])
+  @@index([submissionId])
+}

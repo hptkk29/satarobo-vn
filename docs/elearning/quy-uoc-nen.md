@@ -527,3 +527,14 @@ là hai *khuôn* khác nhau, lần này là cùng khuôn nhưng hai *trần* kh�
 `lib/assignments/question-content-db.ts`) và cho mọi bên GHI nhập lại, đừng gõ số.
 Kèm một test chạy đầu ra dài **đúng bằng trần** của bên ghi qua khuôn của bên đọc.
 Hai con số nằm ở hai tệp thì chúng sẽ trôi khỏi nhau.
+- **`prisma migrate diff --from-migrations` KHÔNG dùng thẳng được — nó phun ra cả TRÔI LỆCH có sẵn
+  của repo.** Đo ngày 26/08/2026: lệnh đó sinh ra `DROP INDEX "OrgUnit_path_idx"` cộng **14 khối**
+  `ALTER TABLE ... ALTER COLUMN ... SET DATA TYPE TIMESTAMP(3)` trên các bảng **đang có dữ liệu
+  PROD** (`ClassSessionMedia`, `EvaluationRound`, `HomeworkAssignment`, `ReportCard`, …) — tức hạ
+  `timestamptz(6)` xuống `timestamp(3)` và **vứt múi giờ** của dữ liệu đang chạy. Đó là vi phạm
+  luật cứng #4, và nó nằm sẵn trong đầu ra của một lệnh trông vô hại.
+  **Cách làm đúng:** sinh diff ra tệp tạm, **lọc giữ CHỈ các khối nhắc tên bảng của ticket**, rồi
+  khẳng định lại bằng `grep -E "^(DROP|ALTER TABLE .* (DROP|ALTER))"` phải RỖNG. Migration của
+  EL-13 và EL-14 đã sạch theo cách này (chỉ `CREATE` + `ADD CONSTRAINT` trên bảng của chính chúng)
+  — đối chiếu với chúng khi nghi ngờ. Trôi lệch gốc là nợ có thật của repo, nhưng **vá nó không
+  bao giờ là việc của một ticket tính năng**.
