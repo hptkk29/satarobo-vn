@@ -40,14 +40,21 @@ const classes: TrialClassRec[] = [
   { id: "c2", centerId: "CS2", capacity: 2, status: "COMPLETED", sessionCount: 2 },
 ];
 
-// CS1: e1 ATTENDED+REGISTERED dự đủ 2; e2 ATTENDED chưa đăng ký dự 1; e3 WITHDRAWN
-// CS2: e4 ATTENDED+ENROLLED dự đủ 2; e5 IN_PROGRESS dự 1
+// CS1: e1 ATTENDED + lead DA_DANG_KY dự đủ 2; e2 ATTENDED chưa chốt dự 1; e3 WITHDRAWN
+// CS2: e4 ATTENDED + lead DA_DANG_KY dự đủ 2; e5 IN_PROGRESS dự 1
+//
+// ⚠️ `leadStatus` là LeadStatus (enum MỚI 10 giá trị), KHÔNG phải string tự do. Fixture
+// cũ dùng REGISTERED/ENROLLED/AWAITING_DECISION/TRIAL_* — những giá trị đã bị xoá khỏi
+// enum ở GĐ5 — nên bộ test vẫn xanh trong khi sản phẩm vẽ chuyển đổi 0%. Giữ nguyên
+// kiểu chặt để lần đổi enum sau tsc đỏ ngay tại đây.
+// ⚠️ ATTENDED/IN_PROGRESS/SCHEDULED ở `leadChildTrialStatus` là LeadChildTrialStatus,
+// COMPLETED/ACTIVE/WITHDRAWN là TrialEnrollmentStatus — enum KHÁC, không đổi theo GĐ5.
 const enrollments: TrialEnrollmentRec[] = [
-  { id: "e1", trialClassId: "c1", leadChildId: "k1", status: "COMPLETED", leadChildTrialStatus: "ATTENDED", leadStatus: "REGISTERED" },
-  { id: "e2", trialClassId: "c1", leadChildId: "k2", status: "ACTIVE", leadChildTrialStatus: "ATTENDED", leadStatus: "AWAITING_DECISION" },
-  { id: "e3", trialClassId: "c1", leadChildId: "k3", status: "WITHDRAWN", leadChildTrialStatus: "SCHEDULED", leadStatus: "TRIAL_SCHEDULED" },
-  { id: "e4", trialClassId: "c2", leadChildId: "k4", status: "COMPLETED", leadChildTrialStatus: "ATTENDED", leadStatus: "ENROLLED" },
-  { id: "e5", trialClassId: "c2", leadChildId: "k5", status: "ACTIVE", leadChildTrialStatus: "IN_PROGRESS", leadStatus: "TRIAL_IN_PROGRESS" },
+  { id: "e1", trialClassId: "c1", leadChildId: "k1", status: "COMPLETED", leadChildTrialStatus: "ATTENDED", leadStatus: "DA_DANG_KY" },
+  { id: "e2", trialClassId: "c1", leadChildId: "k2", status: "ACTIVE", leadChildTrialStatus: "ATTENDED", leadStatus: "CHO_QUYET_DINH" },
+  { id: "e3", trialClassId: "c1", leadChildId: "k3", status: "WITHDRAWN", leadChildTrialStatus: "SCHEDULED", leadStatus: "DA_HEN_HOC_THU" },
+  { id: "e4", trialClassId: "c2", leadChildId: "k4", status: "COMPLETED", leadChildTrialStatus: "ATTENDED", leadStatus: "DA_DANG_KY" },
+  { id: "e5", trialClassId: "c2", leadChildId: "k5", status: "ACTIVE", leadChildTrialStatus: "IN_PROGRESS", leadStatus: "DANG_HOC_THU" },
 ];
 
 const attendances: TrialAttendanceRec[] = [
@@ -77,10 +84,19 @@ describe("[R7-17] buildTrialReport", () => {
     expect(r.attendance.fullRate).toBe(pct(2, 5)); // 40
   });
 
-  it("chuyển đổi ATTENDED → REGISTERED/ENROLLED", () => {
+  it("chuyển đổi ATTENDED → DA_DANG_KY", () => {
     expect(r.conversion.attended).toBe(3); // k1,k2,k4
-    expect(r.conversion.registered).toBe(2); // k1 REGISTERED, k4 ENROLLED
+    expect(r.conversion.registered).toBe(2); // k1, k4 DA_DANG_KY
     expect(r.conversion.rate).toBe(pct(2, 3)); // 66.7
+  });
+
+  // Lưới chặn hồi quy: chuyển đổi phải KHÁC 0 khi có lead DA_DANG_KY. Bug GĐ5 hiện ra
+  // đúng dạng "mọi tỉ lệ về 0" nên assert này bắt được cả khi ai đó chép tay lại tập
+  // trạng thái vào REGISTERED_LEAD_STATUSES.
+  it("không bao giờ ra 0% khi fixture có lead đã đăng ký", () => {
+    expect(r.conversion.registered).toBeGreaterThan(0);
+    expect(r.conversion.rate).toBeGreaterThan(0);
+    expect(r.byCenter.every((c) => c.conversionRate > 0)).toBe(true);
   });
 
   it("phễu trạng thái học thử theo child", () => {
@@ -104,7 +120,7 @@ describe("[R7-17] buildTrialReport", () => {
     expect(cs1.registered).toBe(1); // k1
     expect(cs1.fullAttendance).toBe(1); // e1
     expect(cs2.attended).toBe(1); // k4
-    expect(cs2.registered).toBe(1); // k4 ENROLLED
+    expect(cs2.registered).toBe(1); // k4 DA_DANG_KY
     expect(cs2.conversionRate).toBe(100);
     expect(cs2.fullAttendance).toBe(1); // e4
   });

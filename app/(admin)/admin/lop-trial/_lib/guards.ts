@@ -89,6 +89,8 @@ export type ScopedBooking = {
   scheduledAt: Date | null;
   centerId: string | null;
   teacherId: string | null;
+  /** Phòng ĐANG gán — cần để lượt lưu không bị rào phạm vi đá văng dữ liệu cũ. */
+  roomId: string | null;
   hasFeedback: boolean;
 };
 
@@ -107,6 +109,7 @@ export async function loadScopedBooking(
       scheduledAt: true,
       centerId: true,
       teacherId: true,
+      roomId: true,
       feedback: { select: { id: true } },
     },
   });
@@ -118,6 +121,7 @@ export async function loadScopedBooking(
     scheduledAt: row.scheduledAt,
     centerId: row.centerId,
     teacherId: row.teacherId,
+    roomId: row.roomId,
     hasFeedback: Boolean(row.feedback),
   };
 }

@@ -5,7 +5,7 @@
 // Mặt phẳng V1: các buổi hẹn học thử 1-1 gắn thẳng vào lead. Mỗi buổi là một thẻ
 // đóng/mở; mở ra mới hiện form sửa để danh sách dài vẫn đọc lướt được ở 375px.
 
-import { useState, useTransition } from "react";
+import { useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
@@ -15,7 +15,8 @@ import {
   updateBookingLopTrialAction,
   deleteBookingLopTrialAction,
 } from "../_actions";
-import type { BookingRow, BookingStatus, Option } from "../_lib/types";
+import { roomCenterAssignmentError } from "@/lib/rooms/center-filter";
+import type { BookingRow, BookingStatus, Option, RoomOption } from "../_lib/types";
 
 /** Bảy trạng thái buổi hẹn, theo đúng thứ tự phễu. */
 const CAC_TRANG_THAI: readonly BookingStatus[] = [
@@ -53,7 +54,7 @@ export function BookingList({
 }: {
   bookings: BookingRow[];
   teachers: Option[];
-  rooms: Option[];
+  rooms: RoomOption[];
   classes: Option[];
   canManage: boolean;
 }) {
@@ -90,7 +91,7 @@ function BookingCard({
 }: {
   booking: BookingRow;
   teachers: Option[];
-  rooms: Option[];
+  rooms: RoomOption[];
   classes: Option[];
   canManage: boolean;
 }) {
@@ -105,8 +106,27 @@ function BookingCard({
   const [status, setStatus] = useState<BookingStatus>(booking.status);
   const [teacherId, setTeacherId] = useState(booking.teacherId ?? "");
   const [roomId, setRoomId] = useState(booking.roomId ?? "");
-  const [classId, setClassId] = useState(booking.classId ?? "");
   const [notes, setNotes] = useState(booking.notes ?? "");
+
+  // Phòng lọc theo cơ sở CỦA BUỔI HẸN (màn cũ có lọc, bản gộp làm rơi mất). Ba trường
+  // hợp luôn được hiện:
+  //  - phòng dùng chung (`centerId === null`);
+  //  - buổi chưa gán cơ sở → không có gì để lọc, thà hiện đủ còn hơn khoá cứng;
+  //  - phòng ĐANG được gán, kể cả khác cơ sở — nếu nó rớt khỏi danh sách thì `<select>`
+  //    hiện trống và cú bấm "Lưu lịch" kế tiếp sẽ ÂM THẦM gỡ phòng khỏi buổi.
+  const roomOptions = useMemo(
+    () =>
+      rooms.filter(
+        (r) =>
+          // MỘT quy tắc dùng chung với rào server (updateBookingLopTrialAction).
+          // Trước đây hai bên chép tay cùng điều kiện, và chỉ cần một bên sửa là
+          // người dùng chọn hợp lệ trên màn rồi bị server từ chối — hoặc tệ hơn,
+          // chọn được thứ server lẽ ra phải chặn.
+          roomCenterAssignmentError(booking.centerId, r) === null ||
+          r.id === booking.roomId,
+      ),
+    [rooms, booking.centerId, booking.roomId],
+  );
 
   function onSave() {
     startTransition(async () => {
@@ -116,7 +136,6 @@ function BookingCard({
         // Ô trống nghĩa là "bỏ gán", phải thành null; chuỗi rỗng sẽ trượt Zod.
         teacherId: teacherId || null,
         roomId: roomId || null,
-        classId: classId || null,
         notes: notes || null,
       });
       if (res.ok) {
@@ -261,7 +280,7 @@ function BookingCard({
                   className={inputCls}
                 >
                   <option value="">— Không —</option>
-                  {rooms.map((r) => (
+                  {roomOptions.map((r) => (
                     <option key={r.id} value={r.id}>
                       {r.name}
                     </option>
@@ -269,21 +288,16 @@ function BookingCard({
                 </select>
               </Field>
 
-              <Field label="Lớp chính thức">
-                <select
-                  value={classId}
-                  onChange={(e) => setClassId(e.target.value)}
-                  disabled={pending}
-                  className={inputCls}
-                >
-                  <option value="">— Không —</option>
-                  {classes.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name}
-                    </option>
-                  ))}
-                </select>
-              </Field>
+              {/* Lớp chính thức là dòng CHỈ ĐỌC, không phải ô chọn — cùng lý do
+                  với server (xem updateBookingLopTrialAction): xếp con vào lớp
+                  chính thức phải đi qua luồng ghi danh, nơi có cổng học phí và
+                  cổng sĩ số. Màn cũ đã gỡ ô này từ FL2-04; bản gộp dựng lại nhầm. */}
+              <div className="md:col-span-2">
+                <ReadRow
+                  label="Lớp chính thức"
+                  value={classes.find((c) => c.id === booking.classId)?.name ?? "—"}
+                />
+              </div>
 
               <Field label="Ghi chú">
                 <textarea

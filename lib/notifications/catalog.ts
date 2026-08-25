@@ -174,9 +174,12 @@ const BY_PREFIX: Readonly<Record<string, NotiDef>> = {
     group: "action_required", priority: 1, entity: "class",
     recipients: "Quản lý cơ sở / Đào tạo", target: "/sessions",
   },
+  // ⚠️ `status=` phải là giá trị LeadStatus CÒN SỐNG: màn /leads bỏ qua giá trị lạ
+  // KHÔNG báo lỗi, nên link cũ (?status=REGISTERED) mở ra TOÀN BỘ danh sách lead —
+  // trông như bộ lọc chạy đúng mà thật ra không lọc gì.
   "registered_stale:": {
     group: "action_required", priority: 2, entity: "lead",
-    recipients: "Tư vấn viên phụ trách lead", target: "/leads?status=REGISTERED",
+    recipients: "Tư vấn viên phụ trách lead", target: "/leads?status=DA_DANG_KY",
   },
   "report_card_milestone:": {
     group: "due_date", priority: 2, entity: "report_card",

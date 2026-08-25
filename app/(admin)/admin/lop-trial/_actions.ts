@@ -18,7 +18,10 @@ import { getAuditActor } from "@/lib/audit/log";
 import { writeAudit } from "@/lib/audit/audit-log";
 import { publishEvent } from "@/lib/events/publish";
 import { teacherCenterAssignmentError } from "@/lib/teachers/center-filter";
+import { roomCenterAssignmentError } from "@/lib/rooms/center-filter";
 import { leadStatusLabel } from "@/lib/leads/status";
+import { TRIAL_STATUS_LABEL } from "@/lib/trials/status";
+import { setLeadStatus } from "@/lib/leads/set-status";
 import { phoneSearchTerm } from "@/lib/phone";
 import {
   setTrialProgramConfig,
@@ -563,6 +566,17 @@ const HEN_SANG_LEAD: Partial<Record<TrialClassStatus, LeadStatus>> = {
   REJECTED: "DA_MAT",
 };
 
+/**
+ * Cập nhật buổi hẹn học thử V1.
+ *
+ * ⚠️ `classId` ("lớp chính thức") nhận vào nhưng KHÔNG được ghi — có chủ đích.
+ * Màn cũ đã gỡ ô này từ FL2-04 và cố tình ghi lại giá trị cũ (`classId: item.classId`)
+ * chứ không cho sửa: xếp con vào lớp là việc của luồng ghi danh, nơi có cổng học phí
+ * và cổng sĩ số. Bản gộp dựng lại ô chọn mà KHÔNG mang theo hai cổng đó, nên bất kỳ ai
+ * xếp được lịch cũng gán được con vào lớp chính thức bất kỳ trong tầm nhìn — chưa nộp
+ * đồng nào vẫn vào lớp. Giữ trường trong Zod (client cũ còn gửi lên) nhưng bỏ qua giá
+ * trị là cách hẹp nhất để đóng, không phá hợp đồng đang chạy.
+ */
 export async function updateBookingLopTrialAction(
   trialId: string,
   input: unknown,
@@ -594,6 +608,21 @@ export async function updateBookingLopTrialAction(
     if (err) return { ok: false, error: err };
   }
 
+  // Phòng: lọc ở client là TIỆN NGHI, không phải rào. `roomId` đi thẳng từ client
+  // nên POST tay gán được phòng của cơ sở KHÁC vào buổi hẹn — lịch phòng cơ sở kia
+  // mọc thêm một buổi lạ mà không ai ở đó gây ra. Rào ở đây khớp NGUYÊN quy tắc
+  // client (`roomOptions` trong booking-list.tsx): phòng dùng chung (`centerId` null)
+  // và buổi chưa gán cơ sở đều cho qua, phòng đang được gán sẵn cũng cho qua để lượt
+  // lưu không đá văng dữ liệu cũ.
+  if (parsed.data.roomId && parsed.data.roomId !== booking.roomId) {
+    const phong = await sdb.room.findUnique({
+      where: { id: parsed.data.roomId },
+      select: { centerId: true },
+    });
+    const err = roomCenterAssignmentError(booking.centerId, phong);
+    if (err) return { ok: false, error: err };
+  }
+
   // Khác màn cũ ĐÚNG một chỗ: giờ được quy đổi từ chuỗi ĐỒNG HỒ VN ở server, thay vì
   // nhận ISO do client dựng bằng `new Date(...)` của máy người dùng. Máy đặt múi giờ
   // khác +07 trước đây hiện sai giờ rồi lưu đè sai luôn.
@@ -615,7 +644,7 @@ export async function updateBookingLopTrialAction(
         status: parsed.data.status,
         teacherId: parsed.data.teacherId,
         roomId: parsed.data.roomId,
-        classId: parsed.data.classId,
+        // ⚠️ CỐ Ý KHÔNG ghi `classId` — xem chú thích ở đầu hàm.
         notes: parsed.data.notes,
         ...(becameAttended && { attendedAt: new Date() }),
       },
@@ -645,23 +674,40 @@ export async function updateBookingLopTrialAction(
       // REGISTERED (đã nộp tiền, chưa convert) vẫn bị buổi hẹn kéo về "đã học thử".
       // Hai bậc đó nay là một, nên lead đã nộp tiền cũng được che — đúng ý câu chú
       // thích gốc "không kéo lùi kết quả đã chốt".
-      const guarded =
-        lead && lead.status !== "DA_DANG_KY" && lead.status !== leadNextStatus;
-      if (guarded) {
-        await tx.lead.update({
-          where: { id: booking.leadId },
-          data: { status: leadNextStatus },
+      if (lead && lead.status !== "DA_DANG_KY") {
+        // ⚠️ Đi qua CỬA GHI `setLeadStatus`, không `tx.lead.update` thẳng.
+        //
+        // Bản trước ghi thẳng cột `status` nên lượt đổi này KHÔNG có dòng nào trong
+        // `LeadStatusHistory` — đúng cái khuyết mà GĐ1 dựng sổ để bịt, và bịt hụt
+        // ngay ở màn có lưu lượng cao nhất. Kèm theo đó là mất `statusChangedAt`
+        // (cron nhắc "đăng ký quá lâu" đọc cột này) và mất `droppedAtStage` khi
+        // buổi hẹn bị REJECTED → lead sang DA_MAT mà không ai biết nó rụng ở bậc nào.
+        //
+        // Cửa tự lo phần idempotent (`lead.status === leadNextStatus` thì không ghi
+        // gì), nên vế `!== leadNextStatus` của rào cũ bỏ được.
+        const doi = await setLeadStatus({
+          tx,
+          leadId: booking.leadId,
+          to: leadNextStatus,
+          source: "trial",
+          actorId,
+          actorName,
+          reason: `Buổi hẹn học thử chuyển sang "${TRIAL_STATUS_LABEL[parsed.data.status]}"`,
         });
-        await tx.leadActivity.create({
-          data: {
-            leadId: booking.leadId,
-            actorId,
-            actorName,
-            type: "STATUS_CHANGE",
-            content: `Chuyển trạng thái: ${lead.status} → ${leadNextStatus} (từ buổi học thử)`,
-            metadata: { from: lead.status, to: leadNextStatus, via: "trial" },
-          },
-        });
+        // Dòng thời gian người đọc (LeadActivity) là thứ KHÁC sổ trạng thái: sổ để
+        // máy đếm phễu, dòng này để Sale đọc. Chỉ ghi khi có đổi thật.
+        if (doi.changed) {
+          await tx.leadActivity.create({
+            data: {
+              leadId: booking.leadId,
+              actorId,
+              actorName,
+              type: "STATUS_CHANGE",
+              content: `Chuyển trạng thái: ${leadStatusLabel(doi.from)} → ${leadStatusLabel(doi.to)} (từ buổi học thử)`,
+              metadata: { from: doi.from, to: doi.to, via: "trial" },
+            },
+          });
+        }
       }
     }
   });

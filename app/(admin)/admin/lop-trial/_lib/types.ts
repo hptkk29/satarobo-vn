@@ -92,6 +92,16 @@ export type Candidate = {
 /** Lựa chọn cho dropdown (giáo viên, phòng, cơ sở, lớp chính thức). */
 export type Option = { id: string; name: string };
 
+/**
+ * Phòng học kèm cơ sở sở hữu. `centerId === null` = phòng DÙNG CHUNG (không gắn cơ
+ * sở nào) nên luôn được phép chọn.
+ *
+ * Mọi dropdown phòng BẮT BUỘC lọc theo cơ sở của đối tượng đang sửa — đổ hết phòng
+ * của mọi cơ sở là mời người dùng xếp buổi CS1 vào phòng CS2, và lỗi đó chỉ lộ ra
+ * khi có người tới lớp.
+ */
+export type RoomOption = Option & { centerId: string | null };
+
 // ─── Mặt phẳng V1: lịch hẹn học thử ──────────────────────────────────────────
 
 export type BookingStatus =
@@ -110,6 +120,8 @@ export type BookingRow = {
   parentName: string | null;
   phone: string | null;
   childName: string | null;
+  /** Cơ sở của buổi hẹn — dùng để lọc dropdown phòng. null = buổi chưa gán cơ sở. */
+  centerId: string | null;
   centerName: string | null;
   status: BookingStatus;
   /**

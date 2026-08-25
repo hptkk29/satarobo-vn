@@ -6,35 +6,18 @@
 // chốt nghiệp vụ, không phải giới hạn kỹ thuật. Vai trò của cron này chỉ là nhắc ĐÚNG
 // NGƯỜI ĐÚNG LÚC; việc liên lạc vẫn do Sale làm tay.
 //
-// Hai mốc nhắc, chạy chung một route:
-//   - "1 ngày": buổi diễn ra trong khoảng 12h–36h tới.
-//   - "2 giờ" : buổi diễn ra trong khoảng 1h–3h tới.
-// Cửa sổ rộng hơn mốc danh nghĩa vì cron chỉ chạy theo nhịp cố định; hẹp quá thì buổi
-// rơi vào khe giữa hai lần chạy sẽ không bao giờ được nhắc.
+// Hai mốc nhắc, chạy chung một route: "1 ngày" (23h–25h tới) và "2 giờ" (1,5h–2,5h tới).
+// Bề rộng cửa sổ + lý do phải rộng hơn nhịp cron một chút: xem `MOC` trong `_moc.ts`.
+//
+// Nội dung nhắc in NGÀY-GIỜ THẬT, không dùng chữ tương đối ("ngày mai") — chữ tương đối
+// chỉ đúng khi cửa sổ trùng khít mốc danh nghĩa, và đã từng sai đúng như vậy (lỗi #21).
 import { NextResponse, type NextRequest } from "next/server";
 import { db } from "@/lib/db";
 import { verifyCronAuth } from "@/lib/cron/auth";
 import { notifyStaff } from "@/lib/notifications/notify";
-import { vnParts } from "@/lib/time/vn";
+import { chonMoc, mocBatDau, nhanThoiDiem } from "./_moc";
 
 export const dynamic = "force-dynamic";
-
-/** Mốc thật của một buổi: cột `date` là UTC-midnight ngày VN, giờ nằm ở chuỗi `startTime`. */
-function mocBatDau(date: Date, startTime: string): Date | null {
-  const m = /^([01]\d|2[0-3]):([0-5]\d)$/.exec(startTime);
-  if (!m) return null;
-  // `date` đã là UTC 00:00 của ngày VN ⇒ cộng giờ VN rồi trừ 7 tiếng ra mốc UTC thật.
-  const ms =
-    date.getTime() + (Number(m[1]) * 60 + Number(m[2])) * 60_000 - 7 * 3_600_000;
-  return new Date(ms);
-}
-
-type Moc = { ten: "1-ngay" | "2-gio"; tuGio: number; denGio: number; nhan: string };
-
-const MOC: readonly Moc[] = [
-  { ten: "1-ngay", tuGio: 12, denGio: 36, nhan: "ngày mai" },
-  { ten: "2-gio", tuGio: 1, denGio: 3, nhan: "khoảng 2 tiếng nữa" },
-];
 
 export async function GET(req: NextRequest) {
   if (!verifyCronAuth(req)) {
@@ -44,6 +27,8 @@ export async function GET(req: NextRequest) {
   const now = new Date();
   // Quét rộng một lần rồi lọc trong bộ nhớ: cột `date` chỉ có NGÀY nên không thể lọc
   // theo giờ ở tầng SQL. Số buổi trải nghiệm mỗi ngày rất nhỏ, không đáng lo về tải.
+  // Khoảng quét (−24h…+72h) CỐ Ý rộng hơn cửa sổ nhắc (tối đa 25h): buổi 23:59 của ngày
+  // VN lệch tới +31h so với mốc UTC-midnight của chính nó — cắt sát là mất buổi cuối ngày.
   const sessions = await db.trialClassSession.findMany({
     where: {
       status: "SCHEDULED",
@@ -70,7 +55,7 @@ export async function GET(req: NextRequest) {
       continue;
     }
     const conBaoLau = (batDau.getTime() - now.getTime()) / 3_600_000;
-    const moc = MOC.find((m) => conBaoLau >= m.tuGio && conBaoLau < m.denGio);
+    const moc = chonMoc(conBaoLau);
     if (!moc) continue;
 
     // Ca ĐANG HỌC được xếp vào buổi này. Ca đã gỡ/đã xong thì không nhắc nữa.
@@ -99,9 +84,7 @@ export async function GET(req: NextRequest) {
         continue;
       }
 
-      const p = vnParts(batDau);
-      const gio = `${String(p.hour).padStart(2, "0")}:${String(p.minute).padStart(2, "0")}`;
-      const ngay = `${String(p.day).padStart(2, "0")}/${String(p.month + 1).padStart(2, "0")}`;
+      const { gio, ngay } = nhanThoiDiem(batDau);
 
       await notifyStaff({
         userIds: [userId],
@@ -109,13 +92,15 @@ export async function GET(req: NextRequest) {
         // khác nhau. Kèm cả id ca để hai bé cùng buổi không đè chuông của nhau.
         dedupeKey: `trial.reminder:${moc.ten}:${ca.id}:${s.id}`,
         category: "TRIAL",
+        // Tiêu đề in NGÀY/GIỜ THẬT thay vì "ngày mai": cửa sổ cron rộng hơn mốc danh
+        // nghĩa nên chữ tương đối có thể lệch hẳn một ngày (lỗi #21).
         title:
           moc.ten === "1-ngay"
-            ? "Nhắc phụ huynh buổi trải nghiệm ngày mai"
-            : "Buổi trải nghiệm sắp bắt đầu",
+            ? `Nhắc phụ huynh buổi trải nghiệm ${gio} ngày ${ngay}`
+            : `Buổi trải nghiệm bắt đầu lúc ${gio} ngày ${ngay}`,
         // SĐT nằm trong body có chủ đích: nhắc việc mà phải mở lead ra mới gọi được thì
         // mất đúng cái tiện. `notifyStaff` tự che bớt số trước khi lưu.
-        body: `Nhắn phụ huynh ${lead?.parentName ?? ""} (${lead?.phone ?? "chưa có SĐT"}) về buổi trải nghiệm của ${ca.leadChild?.fullName ?? "học viên"} — buổi ${s.seq} lớp ${s.trialClass?.name ?? ""}, ${moc.nhan} lúc ${gio} ngày ${ngay}.`,
+        body: `Nhắn phụ huynh ${lead?.parentName ?? ""} (${lead?.phone ?? "chưa có SĐT"}) về buổi trải nghiệm của ${ca.leadChild?.fullName ?? "học viên"} — buổi ${s.seq} lớp ${s.trialClass?.name ?? ""}, lúc ${gio} ngày ${ngay}.`,
         href: lead?.id ? `/leads/${lead.id}` : "/lop-trial",
         entityId: ca.id,
       });

@@ -14,6 +14,7 @@ import type {
   EnrollmentRow,
   Option,
   ProgramConfig,
+  RoomOption,
   SessionRow,
   TrialClassStatusV2,
 } from "./types";
@@ -82,7 +83,7 @@ export async function layCauHinh(actor: Actor): Promise<ProgramConfig> {
 /** Cơ sở + phòng để đổ vào form tạo lớp. */
 export async function layLuaChonTaoLop(
   actor: Actor,
-): Promise<{ centers: Option[]; rooms: (Option & { centerId: string | null })[] }> {
+): Promise<{ centers: Option[]; rooms: RoomOption[] }> {
   const sdb = scopedDb(actor);
   const [centers, rooms] = await Promise.all([
     sdb.center.findMany({
@@ -196,7 +197,7 @@ export async function layDanhSachHen(
   actor: Actor,
   status: string | undefined,
   opts: { ownTeacherId?: string | null; q?: string },
-): Promise<{ bookings: BookingRow[]; rooms: Option[]; classes: Option[] }> {
+): Promise<{ bookings: BookingRow[]; rooms: RoomOption[]; classes: Option[] }> {
   const sdb = scopedDb(actor);
   const [rows, rooms, classes] = await Promise.all([
     sdb.trialClass.findMany({
@@ -219,7 +220,9 @@ export async function layDanhSachHen(
     }),
     sdb.room.findMany({
       where: { status: "ACTIVE" },
-      select: { id: true, name: true },
+      // `centerId` là bắt buộc, không phải trang trí: dropdown phòng ở màn buổi hẹn
+      // lọc theo cơ sở CỦA TỪNG BUỔI, nên client phải biết phòng thuộc cơ sở nào.
+      select: { id: true, name: true, centerId: true },
       orderBy: { displayOrder: "asc" },
     }),
     sdb.class.findMany({
@@ -236,6 +239,7 @@ export async function layDanhSachHen(
     parentName: t.lead?.parentName ?? null,
     phone: t.lead?.phone ?? null,
     childName: t.lead?.children[0]?.fullName ?? t.lead?.childName ?? null,
+    centerId: t.centerId,
     centerName: t.center?.name ?? null,
     status: t.status as BookingRow["status"],
     // Server quy đổi sang đồng hồ VN — client KHÔNG tự tính (xem ghi chú ở types.ts).

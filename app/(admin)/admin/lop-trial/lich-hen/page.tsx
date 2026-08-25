@@ -32,10 +32,20 @@ export default async function LichHenPage({
     hasRole(session.user, "TEACHER") && !canManage ? session.user.id : null;
 
   const actor = await resolveActor(session.user.id);
-  const [{ bookings, rooms, classes }, teachers] = await Promise.all([
-    layDanhSachHen(actor, status, { ownTeacherId, q }),
-    getAssignableTeachers({ centerIds: actor.visibleCenterIds }),
-  ]);
+  // CỐ Ý chạy tuần tự, không Promise.all: danh sách GV phải kèm `includeIds` là các GV
+  // ĐANG được gán, mà chỉ biết được sau khi có bookings.
+  const { bookings, rooms, classes } = await layDanhSachHen(actor, status, {
+    ownTeacherId,
+    q,
+  });
+  const teachers = await getAssignableTeachers({
+    centerIds: actor.visibleCenterIds,
+    // Thiếu `includeIds` là bug ÂM: GV đã đổi cơ sở hoặc nghỉ việc rớt khỏi danh sách
+    // ⇒ `<select>` không khớp `value` nên hiện TRỐNG, trong khi tiêu đề thẻ vẫn in tên
+    // GV đó. Người dùng sửa ghi chú rồi bấm "Lưu lịch" là gỡ luôn phân công mà không
+    // hề biết. Giữ GV đang gán trong danh sách để ô luôn hiển thị đúng hiện trạng.
+    includeIds: bookings.map((b) => b.teacherId),
+  });
 
   return (
     <div className="space-y-4">

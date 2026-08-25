@@ -10,27 +10,37 @@ import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { createLopTrialClassAction } from "../_actions";
-import type { Option } from "../_lib/types";
-
-type RoomOption = Option & { centerId: string | null };
+import type { Option, RoomOption } from "../_lib/types";
 
 export function CreateForm({
   centers,
   rooms,
   teachers,
+  defaultSessionCount,
+  maxSessions,
 }: {
   centers: Option[];
   rooms: RoomOption[];
   teachers: Option[];
+  /** Số buổi của cấu hình chương trình đang hiệu lực (server nạp, KHÔNG hardcode). */
+  defaultSessionCount: number;
+  /** Trần `crm.trialMaxSessions`. Server chặn ở đây nên ô nhập phải chặn y hệt. */
+  maxSessions: number;
 }): JSX.Element {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
+
+  // Kẹp mặc định vào trần NGAY TỪ GIÁ TRỊ KHỞI TẠO: cấu hình chương trình và trần là
+  // hai thiết lập độc lập (xem registry `crm.trialMaxSessions`), nên cấu hình cũ để 8
+  // trong khi trần siết còn 4 là chuyện bình thường. Không kẹp thì form mở ra đã sẵn
+  // một giá trị mà server chắc chắn từ chối.
+  const soBuoiMacDinh = Math.min(Math.max(defaultSessionCount, 1), maxSessions);
 
   const [name, setName] = useState("");
   const [centerId, setCenterId] = useState(centers[0]?.id ?? "");
   // Giữ dạng chuỗi cho mọi ô number: `<input>` trả chuỗi, và schema đã `z.coerce`
   // nên đổi sang number ở client chỉ tạo thêm chỗ để lệch (ô rỗng → NaN).
-  const [sessionCount, setSessionCount] = useState("8");
+  const [sessionCount, setSessionCount] = useState(String(soBuoiMacDinh));
   const [startTime, setStartTime] = useState("18:00");
   const [endTime, setEndTime] = useState("19:30");
   const [capacity, setCapacity] = useState("8");
@@ -116,13 +126,14 @@ export function CreateForm({
         <input
           type="number"
           min={1}
-          max={20}
+          max={maxSessions}
           value={sessionCount}
           onChange={(e) => setSessionCount(e.target.value)}
           disabled={pending}
           className={field}
           required
         />
+        <span className="text-xs text-muted-foreground">Từ 1 đến {maxSessions} buổi</span>
       </label>
 
       <label className={labelCls}>

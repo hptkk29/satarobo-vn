@@ -51,6 +51,90 @@ WHERE status::text NOT IN (
 )
 GROUP BY 1;
 
+-- ═════════════════════════════════════════════════════════════════════════════
+-- 3b + 3c — BA CỘT ENUM CÒN LẠI. Mục 1–3 ở trên MỚI CHỈ ĐẾM `Lead.status`.
+--
+-- Migration 20260825180000 cast BỐN cột chứ không phải một:
+--   Lead.status · Lead.droppedAtStage · LeadStatusHistory.fromStatus/.toStatus
+-- Nhánh `ELSE 'MOI'` áp cho cả bốn. Cột nào không đếm trước thì không ai biết nó
+-- vừa nuốt gì — và với `droppedAtStage` thì mất luôn dấu "lead rụng ở bậc nào",
+-- tức là mất đúng cái mà GĐ1 dựng bảng sổ để đo.
+--
+-- ⚠️ Vì sao ba cột này phải viết vòng vèo qua `query_to_xml` chứ không SELECT thẳng:
+-- chúng ra đời ở migration 20260825120000 (sổ trạng thái). Nếu DB đích chưa apply
+-- migration đó thì bảng/cột CHƯA TỒN TẠI, mà Postgres phân giải tên bảng/cột ngay ở
+-- bước PHÂN TÍCH CÚ PHÁP — câu SQL nhắc thẳng tên sẽ nổ 42P01/42703 và cả script dừng,
+-- không ra được số nào, kể cả các mục đã chạy được. `query_to_xml` nhận câu truy vấn
+-- dưới dạng CHUỖI nên chỉ phân giải lúc chạy, và `CASE` bảo đảm nhánh đó không chạy
+-- khi `to_regclass` / `information_schema` nói là chưa có.
+-- ═════════════════════════════════════════════════════════════════════════════
+
+-- ─── 3b. Preflight: ba cột kia đã tồn tại chưa? ──────────────────────────────
+-- Chạy TRƯỚC mục 3c. Cột nào `false` thì mục 3c cố ý không trả dòng nào cho nó —
+-- "không có dòng" ở đó nghĩa là CHƯA CÓ CỘT, không phải "cột rỗng".
+SELECT
+  to_regclass('public."LeadStatusHistory"') IS NOT NULL AS co_bang_leadstatushistory,
+  EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'Lead'
+      AND column_name = 'droppedAtStage'
+  ) AS co_cot_lead_droppedatstage;
+
+-- ─── 3c. Phân bố giá trị của ba cột ──────────────────────────────────────────
+-- Đọc như mục 1: đây là con số phải đối chiếu SAU migration.
+-- `gia_tri` nào KHÔNG nằm trong 15 giá trị liệt kê ở mục 3 là cùng một cảnh báo đỏ —
+-- DỪNG, xử lý trước khi cast.
+WITH co_gi AS (
+  SELECT
+    to_regclass('public."LeadStatusHistory"') IS NOT NULL AS co_lsh,
+    EXISTS (
+      SELECT 1 FROM information_schema.columns
+      WHERE table_schema = 'public' AND table_name = 'Lead'
+        AND column_name = 'droppedAtStage'
+    ) AS co_dropped
+),
+nguon AS (
+  SELECT 'Lead.droppedAtStage' AS cot,
+         CASE WHEN (SELECT co_dropped FROM co_gi)
+           THEN xpath('/table/row', query_to_xml(
+                  'SELECT "droppedAtStage"::text AS gia_tri, count(*) AS so_dong
+                     FROM "Lead"
+                    WHERE "droppedAtStage" IS NOT NULL
+                    GROUP BY 1',
+                  false, false, ''))
+           ELSE ARRAY[]::xml[]
+         END AS dong
+  UNION ALL
+  SELECT 'LeadStatusHistory.fromStatus',
+         CASE WHEN (SELECT co_lsh FROM co_gi)
+           -- fromStatus NULL là HỢP LỆ (dòng sổ đầu tiên của lead, không có bậc trước).
+           -- COALESCE để nó hiện thành một hàng có tên, thay vì biến mất khỏi bảng đếm.
+           THEN xpath('/table/row', query_to_xml(
+                  'SELECT COALESCE("fromStatus"::text, ''(NULL — dòng sổ đầu)'') AS gia_tri,
+                          count(*) AS so_dong
+                     FROM "LeadStatusHistory"
+                    GROUP BY 1',
+                  false, false, ''))
+           ELSE ARRAY[]::xml[]
+         END
+  UNION ALL
+  SELECT 'LeadStatusHistory.toStatus',
+         CASE WHEN (SELECT co_lsh FROM co_gi)
+           THEN xpath('/table/row', query_to_xml(
+                  'SELECT "toStatus"::text AS gia_tri, count(*) AS so_dong
+                     FROM "LeadStatusHistory"
+                    GROUP BY 1',
+                  false, false, ''))
+           ELSE ARRAY[]::xml[]
+         END
+)
+SELECT
+  n.cot,
+  (xpath('/row/gia_tri/text()', r.x))[1]::text          AS gia_tri,
+  (xpath('/row/so_dong/text()', r.x))[1]::text::bigint  AS so_dong
+FROM nguon n, unnest(n.dong) AS r(x)
+ORDER BY n.cot, so_dong DESC;
+
 -- ─── 4. Điều kiện tiên quyết: lead ĐÃ CONVERT phải có convertedAt ─────────────
 -- Sau khi gộp, "đã chốt" được nhận biết bằng `convertedAt` chứ không bằng trạng thái.
 -- Lead nào status=ENROLLED mà convertedAt NULL sẽ mất dấu "đã chốt" sau migration.

@@ -1,6 +1,8 @@
 # Q18d — Vercel Cron KHÔNG chạy trên custom environment → site test không có cron.
-# Workflow này bơm 2 cron SỐNG CÒN cho UAT: dispatch-events (DomainEvent outbox —
-# thiếu nó mọi side-effect đứng im) + email-queue (worker gửi mail).
+# Workflow này bơm các cron SỐNG CÒN cho UAT: dispatch-events (DomainEvent outbox —
+# thiếu nó mọi side-effect đứng im), email-queue (worker gửi mail), chat-zns-notify và
+# trial-reminder. Danh sách thật nằm ở vòng `for` bên dưới — cron mới thêm vào
+# vercel.json mà quên khai ở đây thì lần chạy đầu tiên của nó rơi thẳng vào PROD.
 # /api/cron/* được miễn basic-auth trong proxy.ts — route tự verify Bearer CRON_SECRET.
 #
 # 01/08/2026 — BỎ GUARD HẾT HẠN. Guard cũ (tắt từ 01/08) đặt hồi 22/07 khi site
@@ -28,7 +30,15 @@ jobs:
           # chat-zns-notify (US-14): thêm 09/08/2026 để nghiệm thu được luồng nhắc tin
           # nhắn trên test. Trên test KHÔNG có credential Zalo ⇒ mọi tin ghi SIMULATED,
           # không có tin thật nào tới phụ huynh — đúng thứ ta cần cho UAT.
-          for p in dispatch-events email-queue chat-zns-notify; do
+          #
+          # trial-reminder (GĐ6): thêm 25/08/2026. Cron này có trong vercel.json nhưng
+          # Vercel Cron KHÔNG chạy trên environment `test` ⇒ nếu không bơm ở đây thì LẦN
+          # CHẠY THẬT ĐẦU TIÊN của nó sẽ là trên PROD, không có lưới nghiệm thu nào.
+          # Bơm mỗi 5 phút thay vì mỗi giờ như prod là AN TOÀN: `notifyStaff` chống trùng
+          # bằng dedupeKey `trial.reminder:<mốc>:<ca>:<buổi>`, gọi lại chỉ chạm bản ghi cũ
+          # chứ không kêu chuông lần hai. Nhắc là chuông nội bộ cho Sale — KHÔNG gửi gì
+          # cho phụ huynh, nên bơm dày cũng không có tin thật nào bay ra ngoài.
+          for p in dispatch-events email-queue chat-zns-notify trial-reminder; do
             code=$(curl -s -o /dev/null -w "%{http_code}" \
               -H "Authorization: Bearer ${{ secrets.TEST_CRON_SECRET }}" \
               "https://test.satarobo.vn/api/cron/$p")
