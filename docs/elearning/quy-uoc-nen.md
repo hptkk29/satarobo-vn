@@ -1,13 +1,13 @@
 # Quy ước nền — module đào tạo nội bộ (e-learning)
 
-> **Đọc file này TRƯỚC KHI MỞ PR đụng module e-learning.** Hai mươi ba quy ước dưới đây.
-> Quy ước **1–4, 12, 13, 16, 21** được **máy cưỡng chế** (ESLint / Vitest / CI); phần còn lại
+> **Đọc file này TRƯỚC KHI MỞ PR đụng module e-learning.** Hai mươi sáu quy ước dưới đây.
+> Quy ước **1–4, 12, 13, 16, 21, 24** được **máy cưỡng chế** (ESLint / Vitest / CI); phần còn lại
 > thì không — chúng chỉ sống nếu người ta đọc chỗ này. Đó là lý do chúng nằm ở một chỗ chứ
 > không rải rác trong các ticket dùng.
 >
 > 1–9 thuộc ticket nền EL-07; **10–12 qua EL-05**, **13–14 qua EL-06**, **15–16 qua EL-08**
-> (23/08/2026); **17–19 qua EL-10 và EL-12**, **20–23 qua vòng rà đối kháng EL-10**
-> (25/08/2026).
+> (23/08/2026); **17–19 qua EL-10 và EL-12**, **20–23 qua vòng rà đối kháng EL-10**,
+> **24–26 qua EL-13** (25/08/2026).
 
 Nguồn: `02-KE-HOACH-THUC-HIEN-Elearning-v1.4.md` — ticket EL-07, quyết định QĐ-CDA-02b (biện pháp
 1, 3, 4) và QĐ-CDA-13 (BP-1, BP-2).
@@ -363,7 +363,54 @@ chỗ. Không có lối thứ ba là "tin con số client gửi kèm".
 
 ---
 
-## Ràng buộc kèm theo, không thuộc hai mươi ba quy ước nhưng dễ quên
+## Ba quy ước bổ sung — chốt qua EL-13 (25/08/2026)
+
+### 24. Khoá quyền là CHUỖI TỰ DO — sai thì không có gì đỏ
+
+`permission: "elearning:report:view"` trong một `ActionConfig`. Khoá đó không tồn
+tại trong `ROLE_SEED`. Typecheck xanh (kiểu là `string`), lint xanh, build xanh.
+Hậu quả: `can()` luôn trả `false`, tính năng im lặng không dùng được với **mọi**
+vai — kể cả SUPER_ADMIN. Chỉ lộ khi có người thật ngồi thử, và câu họ báo là
+*"bấm không ăn gì"*.
+
+**Cách áp dụng:** đã có guard trong `tests/elearning/permissions.test.ts` quét mọi
+`permission:` trong `lib/elearning/**` và đối chiếu `ROLE_SEED`. Module mới phải
+có guard tương đương — hoặc mở rộng guard này ra thư mục của mình. Guard chỉ soi
+dòng **khai** quyền, không soi mọi chuỗi trong tệp: chú thích hay nhắc tên khoá
+cũ, bắt cả chúng là báo động giả.
+
+### 25. Tính năng ghi CÁO BUỘC thì bộ test phải hỏi NGƯỢC
+
+Mọi bộ test khác trong module hỏi *"có chặn/bắt đúng thứ phải bắt không"*. Với cờ
+nghi ngờ, phần lớn case phải hỏi *"có gắn NHẦM không"*.
+
+Vì hậu quả bất đối xứng: bỏ sót một người đối phó là mất một lượt học hình thức;
+gắn cờ nhầm một người học thật là cáo buộc về hành vi người lao động, có tên người
+xử, có hồ sơ, và người bị gắn phải đi khiếu nại để gỡ. Một bên là lãng phí, bên
+kia là tổn hại.
+
+**Cách áp dụng:** ở loại tính năng này, ngưỡng để RỘNG và mỗi luật chỉ bắt thứ gần
+như bất khả thi khi làm thật. Viết case cho từng dạng người dùng ĐÚNG LUẬT trông
+giống kẻ gian: dùng hết quyền được cấp (xem đúng trần tốc độ), làm nhiều lần một
+việc tốt (tua lùi xem lại), hạ tầng kém (mạng chậm), mẫu dữ liệu quá nhỏ.
+
+Và mọi đường ghi cáo buộc phải có **đường nói lại** dựng cùng lúc, không hẹn ticket
+sau — cùng lý do khiến `evidenceJson` phải đóng băng con số: hai bên phải nhìn
+cùng một thứ.
+
+### 26. Hạn của người phải tính bằng NGÀY LÀM VIỆC
+
+Khiếu nại gửi chiều thứ Sáu, cộng 5 ngày lịch ra thứ Tư ⇒ người xử chỉ có 3 ngày
+làm việc thật, và mỗi lần rơi vào cuối tuần lại ra một con số khác. Họ trễ hạn vì
+**cách tính**, không phải vì chậm.
+
+**Cách áp dụng:** hạn ràng buộc MÁY (dọn dữ liệu, hết hiệu lực vé) tính bằng ngày
+lịch; hạn ràng buộc NGƯỜI tính bằng ngày làm việc. Ngày lễ thì đừng đoán — repo
+chưa có bảng lịch nghỉ, và chế một danh sách lễ không ai duyệt là dựng nguồn sự
+thật thứ hai.
+
+---
+## Ràng buộc kèm theo, không thuộc hai mươi sáu quy ước nhưng dễ quên
 
 - **Ngân sách cron: tối đa 2 khe** cho cả module. Bảy mốc nhắc gộp vào **một** cron quét
   (`elearning-reminders`, nhịp 15 phút); việc dọn dữ liệu thô 90 ngày gộp vào cron đêm
