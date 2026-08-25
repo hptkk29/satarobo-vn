@@ -439,7 +439,7 @@ describe.skipIf(!RUN)("Lead intake · tầng DB thật", () => {
 
   // ── Các ca vá sau vòng review đối kháng 16/08 ────────────────────────────
 
-  it("mã NV KHÔNG giữ vai Sale (giáo viên) ⇒ không gán cho họ, vẫn ghi công vào note", async () => {
+  it("mã NV KHÔNG giữ vai Sale (giáo viên) ⇒ không gán cho họ, và KHÔNG cảnh báo", async () => {
     const r = await ingestIntakeLead(
       lead({ phone: PHONE.teacherCode, employeeCode: EMP_CODE_TEACHER }),
       { source: "sale-form" },
@@ -455,10 +455,21 @@ describe.skipIf(!RUN)("Lead intake · tầng DB thật", () => {
     // Bất biến của repo: chủ lead luôn là Sale. Giáo viên KHÔNG được nhận.
     expect(row?.assignedTo?.email).not.toBe(`${P}gv@example.test`);
     if (row?.assignedTo) expect(row.assignedTo.role).toBe("SALES_CSM");
-    // 24/08 — KHÔNG còn câu cảnh báo (đây là đường đi bình thường, không phải sự cố).
-    // Công người mang lead về vẫn phải còn — đó mới là bất biến cần giữ.
-    expect(row?.note).not.toContain("không giữ vai Sale");
-    expect(row?.note).toContain(`Nhân viên nhập: ${EMP_CODE_TEACHER}`);
+    // 24/08 — KHÔNG còn câu cảnh báo: đây là đường đi bình thường (Marketing/Sale Hội sở,
+    // giáo viên thu số ở sự kiện), không phải sự cố.
+    //
+    // `?? ""` là cần thiết chứ không phải cho chắc: ca này dựng `MappedLead` THẲNG,
+    // không qua mapper, nên `noteLines` rỗng — bỏ nốt câu cảnh báo thì
+    // `buildNote([], [])` trả `null`, và `.not.toContain` trên `null` là lỗi KIỂU
+    // chứ không phải sai hành vi (đã làm đỏ CI ngay lần đầu).
+    expect(row?.note ?? "").not.toContain("không giữ vai Sale");
+    // Và câu đó cũng không về tới người vừa gõ phiếu qua `warnings`.
+    // Cố ý KHÔNG assert `warnings` RỖNG: tuỳ cơ sở của tài khoản giáo viên trong
+    // seed, nhánh "người nhập thuộc cơ sở khác" vẫn có thể kêu — đó là cảnh báo
+    // KHÁC và vẫn đúng. Chỉ khoá đúng câu đã gỡ.
+    expect((r.warnings ?? []).join(" ")).not.toContain("không giữ vai Sale");
+    // Công người mang lead về không mất — nhưng dòng "Nhân viên nhập: <mã>" do
+    // MAPPER ghi, nên bất biến đó khoá ở map-sale-form.test.ts chứ không phải ở đây.
   }, 60_000);
 
   it("người nhập ở cơ sở KHÁC cơ sở trên phiếu ⇒ không gán chéo (lead không thành vô hình)", async () => {
