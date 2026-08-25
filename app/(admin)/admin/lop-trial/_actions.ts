@@ -319,7 +319,9 @@ export async function searchLopTrialCandidatesAction(input: {
   const leads = await sdb.lead.findMany({
     where: {
       centerId: cls.centerId,
-      status: { notIn: ["ENROLLED", "LOST", "DUPLICATE", "REGISTERED"] },
+      // GĐ5 — bốn giá trị cũ gộp còn hai: ENROLLED+REGISTERED → DA_DANG_KY,
+      // LOST+DUPLICATE → DA_MAT. Tập lead bị loại khỏi danh sách ứng viên KHÔNG đổi.
+      status: { notIn: ["DA_DANG_KY", "DA_MAT"] },
       children: { some: childFree },
       ...(q
         ? {
@@ -556,8 +558,9 @@ export async function completeLopTrialSessionAction(
 
 /** Trạng thái buổi hẹn → trạng thái lead. Chỉ "tiến", không "lùi". */
 const HEN_SANG_LEAD: Partial<Record<TrialClassStatus, LeadStatus>> = {
-  ATTENDED: "TRIAL_ATTENDED",
-  REJECTED: "LOST",
+  // Khoá là TrialClassStatus (KHÔNG đổi), giá trị là LeadStatus (đã đổi ở GĐ5).
+  ATTENDED: "DA_HOC_THU",
+  REJECTED: "DA_MAT",
 };
 
 export async function updateBookingLopTrialAction(
@@ -637,9 +640,13 @@ export async function updateBookingLopTrialAction(
         where: { id: booking.leadId },
         select: { status: true },
       });
-      // Không đè lead đã ghi danh — buổi hẹn không được kéo lùi kết quả đã chốt.
+      // Không đè lead đã đăng ký — buổi hẹn không được kéo lùi kết quả đã chốt.
+      // GĐ5 — chốt chặn nay RỘNG HƠN bản cũ: trước đây chỉ chặn ENROLLED, còn lead
+      // REGISTERED (đã nộp tiền, chưa convert) vẫn bị buổi hẹn kéo về "đã học thử".
+      // Hai bậc đó nay là một, nên lead đã nộp tiền cũng được che — đúng ý câu chú
+      // thích gốc "không kéo lùi kết quả đã chốt".
       const guarded =
-        lead && lead.status !== "ENROLLED" && lead.status !== leadNextStatus;
+        lead && lead.status !== "DA_DANG_KY" && lead.status !== leadNextStatus;
       if (guarded) {
         await tx.lead.update({
           where: { id: booking.leadId },

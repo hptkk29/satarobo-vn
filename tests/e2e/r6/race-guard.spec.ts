@@ -22,7 +22,7 @@ async function setup() {
   const course = await db.course.create({ data: { name: "Sata 1", slug: "sata-1-g2" } });
   const klass = await db.class.create({ data: { name: "Lớp A", courseId: course.id, centerId: cs1 } });
   const lead = await db.lead.create({
-    data: { parentName: "Chị Lan", phone: "0901234567", centerId: cs1, status: "AWAITING_DECISION" },
+    data: { parentName: "Chị Lan", phone: "0901234567", centerId: cs1, status: "CHO_QUYET_DINH" },
   });
   return { cs1, course, klass, lead };
 }
@@ -56,7 +56,7 @@ test.describe("[R6-G2] Chống race tiền/convert", () => {
     // đúng 1 bộ trong DB.
     expect(await db.student.count()).toBe(1);
     expect(await db.order.count()).toBe(1);
-    expect((await db.lead.findUnique({ where: { id: lead.id } }))!.status).toBe("ENROLLED");
+    expect((await db.lead.findUnique({ where: { id: lead.id } }))!.status).toBe("DA_DANG_KY");
   });
 
   test("[R6-G2-T6-02] convert lần 2 (tuần tự) → ALREADY_ENROLLED, không tạo thêm bộ", async () => {

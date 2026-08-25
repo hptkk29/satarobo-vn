@@ -4,7 +4,7 @@
 // BẤT BIẾN TIỀN (memory payment-double-count / mutual-exclusive): kế hoạch trả góp là
 // nguồn sự thật "đã nộp". Ở đây Σ Payment CONFIRMED == Σ OrderInstallment PAID cho mỗi đơn
 // (mỗi installment PAID có ĐÚNG 1 Payment CONFIRMED tương ứng — KHÔNG sinh khoản thừa).
-import type { PrismaClient } from "@prisma/client";
+import type { LeadStatus, PrismaClient } from "@prisma/client";
 import type { SeedConfig } from "./_config";
 import {
   CENTERS,
@@ -34,14 +34,17 @@ const STAGE_WEIGHTS: (readonly [Stage, number])[] = [
   ["LOST", 0.07],
   ["NURTURING", 0.03],
 ];
-const STAGE_STATUS: Record<Stage, string> = {
-  NEW: "NEW",
-  CONSULTING: "CONSULTING",
-  TRIAL: "TRIAL_IN_PROGRESS",
-  AWAITING: "AWAITING_DECISION",
-  ENROLLED: "ENROLLED",
-  LOST: "LOST",
-  NURTURING: "NURTURING",
+// Kiểu là LeadStatus chứ không phải string: cả file đẩy dữ liệu qua `unknown[]` rồi
+// `as never`, nên bảng ánh xạ này là chỗ DUY NHẤT tsc còn canh được giá trị enum. Để
+// `string` như trước thì enum đổi mà seed vẫn xanh, chỉ chết lúc chạy createMany.
+const STAGE_STATUS: Record<Stage, LeadStatus> = {
+  NEW: "MOI",
+  CONSULTING: "DANG_TU_VAN",
+  TRIAL: "DANG_HOC_THU",
+  AWAITING: "CHO_QUYET_DINH",
+  ENROLLED: "DA_DANG_KY",
+  LOST: "DA_MAT",
+  NURTURING: "DANG_NUOI_DUONG",
 };
 
 export async function seedCrm(db: PrismaClient, cfg: SeedConfig): Promise<void> {

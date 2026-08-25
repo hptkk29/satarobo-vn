@@ -43,7 +43,7 @@ export type SetLeadStatusResult =
  * Trạng thái coi là "rơi khỏi phễu" — khi vào đây thì ghi lại BẬC TRƯỚC ĐÓ vào
  * `Lead.droppedAtStage`, nếu không thì mất luôn thông tin rơi ở đâu.
  */
-const TRANG_THAI_ROI: readonly LeadStatus[] = ["NURTURING", "LOST"];
+const TRANG_THAI_ROI: readonly LeadStatus[] = ["DANG_NUOI_DUONG", "DA_MAT"];
 
 /**
  * Đổi trạng thái lead và ghi sổ trong CÙNG một giao dịch.

@@ -38,39 +38,53 @@ export { CONVERTED_STATUSES };
 const statusLabel = (status: string): string =>
   LEAD_STATUS_LABEL_SHORT[status as LeadStatus] ?? status;
 
-/** Thứ tự các bước phễu chuẩn SR.QD.217 (cho FunnelChart). */
-export const FUNNEL_ORDER: string[] = [
-  "NEW",
-  "ASSIGNED",
-  "CONTACTED",
-  "CONSULTING",
-  "TRIAL_SCHEDULED",
-  "TRIAL_ATTENDED",
-  "AWAITING_DECISION",
-  "ENROLLED",
-];
+/**
+ * Thứ tự các bước phễu chuẩn SR.QD.217 (cho FunnelChart).
+ *
+ * GĐ5 — còn 7 bậc (trước 8). Bậc "đã phân công" biến mất vì ASSIGNED gộp vào MOI:
+ * phân công nay là `Lead.assignedToId`, không phải một nấc chuyển đổi. Các bậc còn lại
+ * giữ nguyên ý nghĩa, chỉ đổi tên.
+ *
+ * `satisfies` để một giá trị viết sai chính tả bị TypeScript bắt — danh sách này CỐ Ý
+ * là tập con của enum (DANG_HOC_THU / DANG_NUOI_DUONG / DA_MAT không phải bậc phễu)
+ * nên không dùng được ràng buộc đủ-mọi-giá-trị.
+ */
+const FUNNEL_ORDER_STRICT = [
+  "MOI",
+  "DA_LIEN_HE",
+  "DANG_TU_VAN",
+  "DA_HEN_HOC_THU",
+  "DA_HOC_THU",
+  "CHO_QUYET_DINH",
+  "DA_DANG_KY",
+] as const satisfies readonly LeadStatus[];
+
+export const FUNNEL_ORDER: string[] = [...FUNNEL_ORDER_STRICT];
 
 /**
  * Rank stage phễu mà một status "đã chạm tới" (cumulative funnel).
- * Status ngoài phễu (LOST/DUPLICATE) = -1 → không tính vào phễu nhưng vẫn đếm theo status.
+ * Status ngoài phễu (DA_MAT) = -1 → không tính vào phễu nhưng vẫn đếm theo status.
+ *
+ * ⚠️ Khai bằng `Record<LeadStatus, number>` rồi mới nới ra `Record<string, number>` khi
+ * export: bảng này index bằng `string` (record phẳng từ page không narrow), nên nếu khai
+ * thẳng kiểu nới thì THIẾU một giá trị enum sẽ không ai báo — lead rơi vào `?? -1`, biến
+ * mất khỏi phễu, và biểu đồ vẫn vẽ ra số 0 trông rất bình thường. Đây đúng là cách bảng
+ * cũ chết câm khi enum đổi tên ở GĐ5.
  */
-export const STATUS_RANK: Record<string, number> = {
-  NEW: 0,
-  ASSIGNED: 1,
-  CONTACTED: 2,
-  NO_ANSWER: 2, // đã thử liên hệ
-  CONSULTING: 3,
-  NURTURING: 3, // đang nuôi dưỡng (đã tư vấn)
-  TRIAL_SCHEDULED: 4,
-  DEMO_SCHEDULED: 4, // deprecated, map vào hẹn học thử
-  TRIAL_IN_PROGRESS: 4,
-  TRIAL_ATTENDED: 5,
-  AWAITING_DECISION: 6,
-  ENROLLED: 7,
-  REGISTERED: 7,
-  LOST: -1,
-  DUPLICATE: -1,
+const STATUS_RANK_STRICT: Record<LeadStatus, number> = {
+  MOI: 0,
+  DA_LIEN_HE: 1,
+  DANG_TU_VAN: 2,
+  DANG_NUOI_DUONG: 2, // đang nuôi dưỡng = đã tư vấn (giữ nguyên quy ước cũ của NURTURING)
+  DA_HEN_HOC_THU: 3,
+  DANG_HOC_THU: 3, // đang học thử chưa qua bậc "đã hẹn" (quy ước cũ của TRIAL_IN_PROGRESS)
+  DA_HOC_THU: 4,
+  CHO_QUYET_DINH: 5,
+  DA_DANG_KY: 6,
+  DA_MAT: -1,
 };
+
+export const STATUS_RANK: Record<string, number> = STATUS_RANK_STRICT;
 
 function rankOf(status: string): number {
   return STATUS_RANK[status] ?? -1;
@@ -113,7 +127,7 @@ export type FunnelStep = { status: string; label: string; count: number };
 
 /**
  * Phễu cumulative: số lead ĐÃ CHẠM tới ÍT NHẤT mỗi bước (rank >= bước). THUẦN.
- * Lead ENROLLED tính ở mọi bước; lead LOST không tính (rank -1).
+ * Lead DA_DANG_KY tính ở mọi bước; lead DA_MAT không tính (rank -1).
  */
 export function buildFunnel(records: LeadReportRecord[]): FunnelStep[] {
   return FUNNEL_ORDER.map((status, i) => ({
@@ -197,7 +211,7 @@ export type WeekStat = { weekStart: string; label: string; total: number; conver
 
 /**
  * Phễu lead theo TUẦN (câu 16): `weeks` tuần gần nhất (mỗi tuần = bucket 7 ngày) tính
- * đến `now`. Mỗi bucket: tổng lead tạo trong tuần + số đã chuyển đổi (REGISTERED/ENROLLED
+ * đến `now`. Mỗi bucket: tổng lead tạo trong tuần + số đã chuyển đổi (DA_DANG_KY
  * ∈ CONVERTED_STATUSES). Sắp cũ→mới. THUẦN — nhận `now` để test tất định. Đầu vào rỗng →
  * vẫn trả đủ `weeks` bucket số 0.
  */
@@ -253,7 +267,7 @@ export type LeadReportSummary = {
   total: number;
   converted: number;
   conversionRate: number;
-  /** Lead đang ở pipeline hoạt động (rank >= 0, chưa chốt và chưa LOST/DUPLICATE). */
+  /** Lead đang ở pipeline hoạt động (rank >= 0, chưa chốt và chưa DA_MAT). */
   active: number;
   lost: number;
 };

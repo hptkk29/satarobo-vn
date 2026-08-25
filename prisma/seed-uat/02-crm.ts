@@ -13,19 +13,31 @@ import {
 } from "./_common";
 import type { Prisma } from "@prisma/client";
 
-/** Phễu SR.QD.217: phần lớn lead nằm giữa phễu, ít lead ở hai đầu. */
+/** Phễu SR.QD.217: phần lớn lead nằm giữa phễu, ít lead ở hai đầu.
+ *
+ * Trọng số đã CỘNG DỒN khi hai bậc cũ rơi vào cùng một bậc mới, để phân bố dữ liệu
+ * mẫu không đổi so với trước (tổng vẫn 100):
+ *  - MOI 16      = NEW 8 + ASSIGNED 8      — "đã phân công" nay đọc ở `assignedToId`,
+ *                                            không còn là một bậc của phễu.
+ *  - DA_LIEN_HE 18 = CONTACTED 12 + NO_ANSWER 6 — "không nghe máy" là kết quả của MỘT
+ *                                            lần gọi, nay nằm ở LeadActivity chứ không
+ *                                            phải trạng thái của lead. Dữ liệu mẫu vì
+ *                                            thế MẤT dấu "gọi không ai bắt máy".
+ *  - DA_MAT 8    = LOST 8                  — DUPLICATE không có trong phễu này.
+ *
+ * Bậc DANG_HOC_THU (mới) cố ý KHÔNG có mặt: phễu cũ không sinh TRIAL_IN_PROGRESS bao
+ * giờ, thêm vào đây là tự chế phân bố mới. Xem ghi chú bàn giao.
+ */
 const PHEU = [
-  { s: "NEW" as const, w: 8 },
-  { s: "ASSIGNED" as const, w: 8 },
-  { s: "CONTACTED" as const, w: 12 },
-  { s: "CONSULTING" as const, w: 14 },
-  { s: "TRIAL_SCHEDULED" as const, w: 10 },
-  { s: "TRIAL_ATTENDED" as const, w: 8 },
-  { s: "AWAITING_DECISION" as const, w: 6 },
-  { s: "ENROLLED" as const, w: 12 },
-  { s: "NURTURING" as const, w: 8 },
-  { s: "NO_ANSWER" as const, w: 6 },
-  { s: "LOST" as const, w: 8 },
+  { s: "MOI" as const, w: 16 },
+  { s: "DA_LIEN_HE" as const, w: 18 },
+  { s: "DANG_TU_VAN" as const, w: 14 },
+  { s: "DA_HEN_HOC_THU" as const, w: 10 },
+  { s: "DA_HOC_THU" as const, w: 8 },
+  { s: "CHO_QUYET_DINH" as const, w: 6 },
+  { s: "DA_DANG_KY" as const, w: 12 },
+  { s: "DANG_NUOI_DUONG" as const, w: 8 },
+  { s: "DA_MAT" as const, w: 8 },
 ];
 const TONG_W = PHEU.reduce((a, b) => a + b.w, 0);
 
@@ -35,7 +47,7 @@ function trangThai(r: number) {
     x -= p.w;
     if (x <= 0) return p.s;
   }
-  return "NEW" as const;
+  return "MOI" as const;
 }
 
 const NGUON = ["Facebook Ads", "Messenger Page HO", "Giới thiệu", "Vãng lai", "Google",
@@ -89,8 +101,10 @@ export async function seedCrm(coSo: CoSo[], uat: Uat) {
       const chuaGan = caBien && chance(rng, 0.4);
       const dungChung = caBien && !chuaGan && chance(rng, 0.5);
 
-      const daLienHe = ["CONTACTED", "CONSULTING", "TRIAL_SCHEDULED", "TRIAL_ATTENDED",
-        "AWAITING_DECISION", "ENROLLED", "NURTURING", "NO_ANSWER", "LOST"].includes(st);
+      // Danh sách cũ liệt kê "mọi bậc trừ NEW và ASSIGNED"; hai bậc đó nay gộp thành MOI
+      // nên viết thẳng thành phép so sánh — vừa đúng y như cũ, vừa được tsc canh (mảng
+      // chuỗi + .includes() không báo lỗi khi enum đổi, sẽ âm thầm cho ra false).
+      const daLienHe = st !== "MOI";
 
       leads.push({
         id,
@@ -118,8 +132,11 @@ export async function seedCrm(coSo: CoSo[], uat: Uat) {
         sharedById: dungChung ? sale.id : null,
         lastActivityAt: ngay(-int(rng, 0, Math.max(1, tuoiNgay))),
         createdAt: taoLuc,
-        convertedAt: st === "ENROLLED" ? ngay(-int(rng, 0, Math.max(1, tuoiNgay - 3))) : null,
-        convertedById: st === "ENROLLED" ? sale.id : null,
+        // ENROLLED và REGISTERED nay chung một bậc DA_DANG_KY; thứ phân biệt "đã chốt
+        // hẳn" với "mới ghi đăng ký" là convertedAt. Phễu này chỉ sinh lead đã chốt nên
+        // mọi DA_DANG_KY đều có convertedAt.
+        convertedAt: st === "DA_DANG_KY" ? ngay(-int(rng, 0, Math.max(1, tuoiNgay - 3))) : null,
+        convertedById: st === "DA_DANG_KY" ? sale.id : null,
       });
 
       for (let c = 0; c < soCon; c++) {
@@ -211,8 +228,11 @@ export async function seedCrm(coSo: CoSo[], uat: Uat) {
   xong("Nguồn giới thiệu", nAff);
 
   // Trả về lead ĐÃ CHỐT để bước học vụ dựng học viên bám đúng nguồn lead.
+  // Lọc theo convertedAt chứ không theo bậc phễu: DA_DANG_KY gộp cả ENROLLED lẫn
+  // REGISTERED, mà "đã chốt" là ENROLLED cũ — dấu duy nhất còn phân biệt được là
+  // convertedAt. Ở bộ seed này hai cách lọc cho cùng kết quả.
   const daChot = leads
-    .filter((l) => l.status === "ENROLLED")
+    .filter((l) => l.convertedAt != null)
     .map((l) => ({ id: String(l.id), centerId: String(l.centerId), phone: String(l.phone), parentName: String(l.parentName) }));
   return { daChot, tongLead: leads.length, shuffle: (xs: string[]) => shuffle(rng, xs) };
 }

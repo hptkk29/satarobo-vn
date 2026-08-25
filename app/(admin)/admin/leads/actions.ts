@@ -195,10 +195,10 @@ export async function updateLeadStatus(
       },
     })
 
-    // Phase T1.4 — vào TRIAL_SCHEDULED → tự tạo lịch học thử (nếu chưa có buổi đang mở).
+    // Phase T1.4 — vào DA_HEN_HOC_THU → tự tạo lịch học thử (nếu chưa có buổi đang mở).
     if (
-      parsed.data === 'TRIAL_SCHEDULED' &&
-      before.status !== 'TRIAL_SCHEDULED'
+      parsed.data === 'DA_HEN_HOC_THU' &&
+      before.status !== 'DA_HEN_HOC_THU'
     ) {
       const openTrial = await tx.trialClass.findFirst({
         where: { leadId, status: { in: ['SCHEDULED', 'CONFIRMED', 'POSTPONED'] } },
@@ -657,7 +657,7 @@ export async function createLeadManual(
       courseId: d.courseId || null,
       source: d.source || 'Nhập tay',
       note: d.note || null,
-      status: 'NEW',
+      status: 'MOI',
       activities: {
         create: {
           actorId,
@@ -954,7 +954,10 @@ export async function transferLead(
         // phải có cửa sổ SLA riêng, không thừa hưởng đồng hồ của người trước.
         ...assignmentWrite(toSaleId),
         handoverNote: d.handoverNote,
-        ...(lead.status === 'NEW' && toSaleId ? { status: 'ASSIGNED' as const } : {}),
+        // GĐ5 — ĐÃ GỠ nhánh tự đẩy MOI → ASSIGNED khi bàn giao. "Đã phân công" nay đọc
+        // từ assignedToId/assignedAt (do assignmentWrite ở trên ghi), không phải một bậc
+        // phễu, nên dịch thẳng theo bảng ánh xạ sẽ thành `MOI → MOI` — một phép gán rỗng
+        // gây hiểu nhầm là còn logic. Trạng thái phễu giữ nguyên qua lượt bàn giao.
       },
     })
 

@@ -98,7 +98,7 @@ export async function POST(req: NextRequest) {
         centerId: data.centerId,
         courseId,
         source: data.source,
-        status: 'NEW',
+        status: 'MOI',
         utmSource: data.utmSource,
         utmMedium: data.utmMedium,
         utmCampaign: data.utmCampaign,

@@ -374,7 +374,7 @@ describe.skipIf(!RUN)("Lead intake · tầng DB thật", () => {
     expect(second.leadId).toBe(first.leadId);
   }, 60_000);
 
-  it("mã NV có thật ⇒ gán thẳng cho người đó + status ASSIGNED", async () => {
+  it("mã NV có thật ⇒ gán thẳng cho người đó (assignedTo + assignedAt)", async () => {
     const r = await ingestIntakeLead(
       lead({ phone: PHONE.noCenter, employeeCode: EMP_CODE, centerHint: null }),
       { source: "sale-form" },
@@ -390,7 +390,10 @@ describe.skipIf(!RUN)("Lead intake · tầng DB thật", () => {
       },
     });
     expect(row?.assignedTo?.email).toBe(`${P}sale@example.test`);
-    expect(row?.status).toBe("ASSIGNED");
+    // GĐ5 gỡ bậc ASSIGNED khỏi phễu: "đã phân công" nay đọc ở `assignedToId`/`assignedAt`
+    // (hai dòng quanh đây), còn status ở lại MOI. Giữ dòng này để bắt trường hợp việc
+    // gán người lỡ tay đẩy lead sang bậc khác.
+    expect(row?.status).toBe("MOI");
     expect(row?.assignedAt).not.toBeNull();
     // Không chọn cơ sở trên phiếu ⇒ lấy cơ sở của chính nhân viên nhập.
     expect(row?.centerId).toBe(centerAId);
@@ -514,14 +517,22 @@ describe.skipIf(!RUN)("Lead intake · tầng DB thật", () => {
     expect(all).toContain("Tỉnh/TP: Đà Nẵng");
   }, 60_000);
 
-  it("hồ sơ cũ ĐÃ ĐÓNG (ENROLLED) ⇒ tạo lead MỚI, không chôn con thứ hai vào hồ sơ đóng", async () => {
+  // ⚠️ GĐ5 — CẦN NGƯỜI QUYẾT (ánh xạ tên enum làm ca này ĐỎ khi chạy thật):
+  //   ENROLLED ánh xạ sang DA_DANG_KY theo bảng, NHƯNG `TERMINAL_LEAD_STATUSES`
+  //   (= LEAD_CLOSED_STATUSES) nay CHỈ còn DA_MAT — status.ts cố ý loại DA_DANG_KY
+  //   vì lead đã ghi nhận tiền vẫn là việc đang mở của sale. Nên hồ sơ DA_DANG_KY
+  //   KHÔNG còn là "đã đóng", và con thứ hai sẽ được gắn vào chính hồ sơ cũ.
+  //   Hai lối ra: (a) đổi ca này sang DA_MAT nếu ý định là "hồ sơ đã đóng" nói chung;
+  //   (b) giữ DA_DANG_KY và đổi kỳ vọng nếu nghiệp vụ chấp nhận gộp con vào hồ sơ
+  //   đã đăng ký. Chọn hộ — người đổi tên enum không đủ căn cứ để quyết.
+  it("hồ sơ cũ ĐÃ ĐÓNG (DA_DANG_KY) ⇒ tạo lead MỚI, không chôn con thứ hai vào hồ sơ đóng", async () => {
     const first = await ingestIntakeLead(
       lead({ phone: PHONE.closedLead, child: { fullName: "Bé Anh Cả" } }),
       { source: "sale-form" },
     );
     await db.lead.update({
       where: { id: first.leadId! },
-      data: { status: "ENROLLED" },
+      data: { status: "DA_DANG_KY" },
     });
 
     const second = await ingestIntakeLead(

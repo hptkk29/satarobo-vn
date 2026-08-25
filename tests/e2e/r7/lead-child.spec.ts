@@ -1,10 +1,16 @@
 /**
- * R7-01 — Lead có N con (LeadChild) + guard chuyển trạng thái sang REGISTERED.
+ * R7-01 — Lead có N con (LeadChild) + guard chuyển trạng thái sang DA_DANG_KY.
  * Postgres LOCAL (.env.test).
  *
  * - Tạo 1 lead + N LeadChild (quan hệ 1-N + cascade khi xoá lead).
- * - canTransitionLeadStatus: NEW→REGISTERED chặn; AWAITING_DECISION→REGISTERED
+ * - canTransitionLeadStatus: MOI→DA_DANG_KY chặn; CHO_QUYET_DINH→DA_DANG_KY
  *   chặn khi CHƯA có khoản ghi nhận; chỉ mở khi đã có khoản (R7-04).
+ *
+ * ⚠️ GĐ5 (25/08/2026) — CẦN NGƯỜI QUYẾT: `canTransitionLeadStatus` nay trả `ok`
+ *   cho MỌI cặp (nhánh chặn REGISTERED đã gỡ khỏi lib/leads/status.ts, cổng tiền
+ *   dời sang `evaluatePaymentGuard` trong convert). Ba ca R7-01-04/05/06 dưới đây
+ *   mới chỉ được ÁNH XẠ TÊN enum, CHƯA sửa kỳ vọng: 04 và 05 sẽ ĐỎ khi chạy thật.
+ *   Hoặc viết lại chúng cho cổng tiền mới, hoặc xoá — không thuộc phạm vi đổi tên.
  */
 import { test, expect } from "@playwright/test";
 import { db } from "../../../lib/db";
@@ -22,7 +28,7 @@ test.describe("[R7-01] LeadChild + transition guard", () => {
       data: {
         parentName: "Chị Hoa",
         phone: "0911111111",
-        status: "NEW",
+        status: "MOI",
         children: {
           create: [
             { fullName: "Bé An", ageYears: 8 },
@@ -55,27 +61,27 @@ test.describe("[R7-01] LeadChild + transition guard", () => {
     if (ok.success) expect(ok.data.trialStatus).toBe("NONE");
   });
 
-  test("[R7-01-04] NEW→REGISTERED bị CHẶN (không phải từ AWAITING_DECISION)", () => {
-    const r = canTransitionLeadStatus("NEW", "REGISTERED", { hasRecordedPayment: true });
+  test("[R7-01-04] MOI→DA_DANG_KY bị CHẶN (không phải từ CHO_QUYET_DINH)", () => {
+    const r = canTransitionLeadStatus("MOI", "DA_DANG_KY", { hasRecordedPayment: true });
     expect(r.ok).toBe(false);
     expect(r.reason).toBeTruthy();
   });
 
-  test("[R7-01-05] AWAITING_DECISION→REGISTERED bị CHẶN khi CHƯA có khoản ghi nhận", () => {
-    const r = canTransitionLeadStatus("AWAITING_DECISION", "REGISTERED", { hasRecordedPayment: false });
+  test("[R7-01-05] CHO_QUYET_DINH→DA_DANG_KY bị CHẶN khi CHƯA có khoản ghi nhận", () => {
+    const r = canTransitionLeadStatus("CHO_QUYET_DINH", "DA_DANG_KY", { hasRecordedPayment: false });
     expect(r.ok).toBe(false);
   });
 
-  test("[R7-01-06] AWAITING_DECISION→REGISTERED MỞ khi đã có khoản ghi nhận", () => {
-    const r = canTransitionLeadStatus("AWAITING_DECISION", "REGISTERED", { hasRecordedPayment: true });
+  test("[R7-01-06] CHO_QUYET_DINH→DA_DANG_KY MỞ khi đã có khoản ghi nhận", () => {
+    const r = canTransitionLeadStatus("CHO_QUYET_DINH", "DA_DANG_KY", { hasRecordedPayment: true });
     expect(r.ok).toBe(true);
   });
 
-  test("[R7-01-07] enum REGISTERED tồn tại trong DB (migration applied) — ghi/đọc được", async () => {
+  test("[R7-01-07] enum DA_DANG_KY tồn tại trong DB (migration applied) — ghi/đọc được", async () => {
     const lead = await db.lead.create({
-      data: { parentName: "PH Reg", phone: "0933333333", status: "REGISTERED" },
+      data: { parentName: "PH Reg", phone: "0933333333", status: "DA_DANG_KY" },
       select: { status: true },
     });
-    expect(lead.status).toBe("REGISTERED");
+    expect(lead.status).toBe("DA_DANG_KY");
   });
 });

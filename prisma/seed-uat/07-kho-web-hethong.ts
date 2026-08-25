@@ -117,7 +117,9 @@ export async function seedKhoWebHeThong(coSo: CoSo[], uat: Uat) {
 
   // Ghi danh học thử: lấy con của lead đang ở nhánh học thử của phễu.
   const conLead = await db.leadChild.findMany({
-    where: { id: { startsWith: "uat-leadchild-" }, lead: { status: { in: ["TRIAL_SCHEDULED", "TRIAL_ATTENDED", "AWAITING_DECISION", "ENROLLED"] } } },
+    // Nhánh học thử của phễu. DANG_HOC_THU (TRIAL_IN_PROGRESS cũ) không có ở đây vì
+    // 02-crm.ts không sinh bậc đó — thêm vào chỉ tốn một điều kiện không bao giờ khớp.
+    where: { id: { startsWith: "uat-leadchild-" }, lead: { status: { in: ["DA_HEN_HOC_THU", "DA_HOC_THU", "CHO_QUYET_DINH", "DA_DANG_KY"] } } },
     select: { id: true, lead: { select: { centerId: true } } },
     take: 120,
   });

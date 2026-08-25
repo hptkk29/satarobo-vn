@@ -41,44 +41,51 @@ describe("[R1-06] evaluateSla", () => {
   });
 });
 
+// GĐ5 — enum rút còn 10 giá trị: bậc ASSIGNED đã gộp vào MOI (việc "đã phân công" nay
+// đọc ở `Lead.assignedToId`), nên luật idle chỉ còn xét đúng một trạng thái là MOI.
 describe("[R7-01-C3] isLeadIdle", () => {
-  it("NEW + 13h ago vượt ngưỡng 12h → idle", () => {
-    expect(isLeadIdle({ status: "NEW", lastActivityAt: ago(13 * H) }, NOW, 12)).toBe(true);
+  it("MOI + 13h ago vượt ngưỡng 12h → idle", () => {
+    expect(isLeadIdle({ status: "MOI", lastActivityAt: ago(13 * H) }, NOW, 12)).toBe(true);
   });
-  it("NEW + 13h ago dưới ngưỡng 24h → không idle", () => {
-    expect(isLeadIdle({ status: "NEW", lastActivityAt: ago(13 * H) }, NOW, 24)).toBe(false);
+  it("MOI + 13h ago dưới ngưỡng 24h → không idle", () => {
+    expect(isLeadIdle({ status: "MOI", lastActivityAt: ago(13 * H) }, NOW, 24)).toBe(false);
   });
-  it("status CONTACTED → không idle (ngoài NEW/ASSIGNED)", () => {
-    expect(isLeadIdle({ status: "CONTACTED", lastActivityAt: ago(13 * H) }, NOW, 12)).toBe(false);
+  it("status DA_LIEN_HE → không idle (ngoài MOI)", () => {
+    expect(isLeadIdle({ status: "DA_LIEN_HE", lastActivityAt: ago(13 * H) }, NOW, 12)).toBe(false);
   });
   it("lastActivityAt null → không idle", () => {
-    expect(isLeadIdle({ status: "NEW", lastActivityAt: null }, NOW, 12)).toBe(false);
+    expect(isLeadIdle({ status: "MOI", lastActivityAt: null }, NOW, 12)).toBe(false);
   });
 });
 
-describe("[R7-01-C4] canTransitionLeadStatus", () => {
-  it("NEW→REGISTERED → ok:false", () => {
-    expect(canTransitionLeadStatus("NEW", "REGISTERED", { hasRecordedPayment: true }).ok).toBe(false);
+// ĐỔI KHẲNG ĐỊNH (GĐ5). Bản cũ khoá ba điều nay KHÔNG còn đúng:
+//   - "NEW→REGISTERED → ok:false" (chặn nhảy cóc vào bậc chốt),
+//   - "AWAITING_DECISION→REGISTERED chưa có khoản ghi nhận → ok:false" (cổng tiền),
+//   - "REGISTERED→ENROLLED → ok:true" (tiến từ đã-đăng-ký sang đã-nhập-học).
+// Cả nhánh chặn `REGISTERED` trong `canTransitionLeadStatus` ĐÃ GỠ: sau khi ENROLLED
+// gộp vào DA_DANG_KY, nhánh đó chặn luôn đường convert hợp lệ. Cổng tiền thật nằm ở
+// `evaluatePaymentGuard` (lib/crm/convert-lead-v2.ts) — nơi có kiểm cả ca học bổng 100%.
+// Khẳng định thứ ba cũng không kiểm được nữa: REGISTERED và ENROLLED nay là CÙNG một
+// giá trị, so chúng là so chính nó (no-op), đã có test no-op phủ rồi.
+describe("[R7-01-C4] canTransitionLeadStatus — permissive hoàn toàn", () => {
+  it("nhảy thẳng vào DA_DANG_KY → ok:true (cổng tiền không nằm ở đây)", () => {
+    expect(canTransitionLeadStatus("MOI", "DA_DANG_KY", { hasRecordedPayment: true }).ok).toBe(true);
   });
-  it("AWAITING_DECISION→REGISTERED không có khoản ghi nhận → ok:false", () => {
+  it("vào DA_DANG_KY khi chưa có khoản ghi nhận → ok:true", () => {
     expect(
-      canTransitionLeadStatus("AWAITING_DECISION", "REGISTERED", { hasRecordedPayment: false }).ok,
-    ).toBe(false);
-  });
-  it("AWAITING_DECISION→REGISTERED có khoản ghi nhận → ok:true", () => {
-    expect(
-      canTransitionLeadStatus("AWAITING_DECISION", "REGISTERED", { hasRecordedPayment: true }).ok,
+      canTransitionLeadStatus("CHO_QUYET_DINH", "DA_DANG_KY", { hasRecordedPayment: false }).ok,
     ).toBe(true);
   });
-  it("AWAITING_DECISION→CONTACTED → ok:true (permissive)", () => {
+  it("vào DA_DANG_KY khi đã có khoản ghi nhận → ok:true", () => {
     expect(
-      canTransitionLeadStatus("AWAITING_DECISION", "CONTACTED", { hasRecordedPayment: false }).ok,
+      canTransitionLeadStatus("CHO_QUYET_DINH", "DA_DANG_KY", { hasRecordedPayment: true }).ok,
     ).toBe(true);
   });
-  it("REGISTERED→ENROLLED → ok:true", () => {
-    expect(
-      canTransitionLeadStatus("REGISTERED", "ENROLLED", { hasRecordedPayment: false }).ok,
-    ).toBe(true);
+  it("lùi bậc CHO_QUYET_DINH→DA_LIEN_HE → ok:true (permissive)", () => {
+    expect(canTransitionLeadStatus("CHO_QUYET_DINH", "DA_LIEN_HE").ok).toBe(true);
+  });
+  it("rớt khỏi bậc chốt DA_DANG_KY→DA_MAT → ok:true", () => {
+    expect(canTransitionLeadStatus("DA_DANG_KY", "DA_MAT").ok).toBe(true);
   });
 });
 

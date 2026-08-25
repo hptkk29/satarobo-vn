@@ -142,8 +142,8 @@ export async function ensureOrderPaymentRecorded(
 }
 
 /**
- * S3 — auto-advance lead AWAITING_DECISION → REGISTERED khi đã ghi nhận thanh toán.
- * updateMany có guard (status=AWAITING_DECISION) → idempotent, không lùi/đụng status khác.
+ * S3 — auto-advance lead CHO_QUYET_DINH → DA_DANG_KY khi đã ghi nhận thanh toán.
+ * updateMany có guard (status=CHO_QUYET_DINH) → idempotent, không lùi/đụng status khác.
  * Trả true nếu vừa nâng cấp (để call-site biết có đổi).
  */
 export async function maybeAdvanceLeadToRegistered(
@@ -151,16 +151,16 @@ export async function maybeAdvanceLeadToRegistered(
   params: { leadId: string; actor: EnsurePaymentActor },
 ): Promise<boolean> {
   const upd = await tx.lead.updateMany({
-    where: { id: params.leadId, status: "AWAITING_DECISION", deletedAt: null },
-    data: { status: "REGISTERED" },
+    where: { id: params.leadId, status: "CHO_QUYET_DINH", deletedAt: null },
+    data: { status: "DA_DANG_KY" },
   });
   if (upd.count === 0) return false;
   // GĐ1 — `updateMany` ở trên là lượt claim atomic, giữ nguyên; chỉ nối thêm sổ.
   await recordLeadStatusChange({
     tx,
     leadId: params.leadId,
-    from: "AWAITING_DECISION",
-    to: "REGISTERED",
+    from: "CHO_QUYET_DINH",
+    to: "DA_DANG_KY",
     source: "payment",
     actorId: params.actor.id,
     actorName: params.actor.name ?? null,
@@ -172,7 +172,7 @@ export async function maybeAdvanceLeadToRegistered(
       actorName: params.actor.name ?? "Hệ thống",
       type: "STATUS_CHANGE",
       content: "Tự động: Chờ quyết định → Đã đăng ký (đã ghi nhận thanh toán)",
-      metadata: { from: "AWAITING_DECISION", to: "REGISTERED", auto: true },
+      metadata: { from: "CHO_QUYET_DINH", to: "DA_DANG_KY", auto: true },
     },
   });
   return true;
