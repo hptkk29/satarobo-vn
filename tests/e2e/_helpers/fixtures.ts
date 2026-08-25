@@ -17,8 +17,16 @@ export const TEST_PASSWORD = "Test@12345";
 export const ORG_CODES = {
   ROOT: "SATAROBO",
   HO: "HO",
+  DANANG: "DANANG",
   CS1: "CS1",
   CS2: "CS2",
+  /**
+   * Khu vực A · A-01 — vùng thứ hai + cơ sở của nó. KHÔNG có trong cây mặc định:
+   * `seedOrgUnits` chỉ dựng khi `codes` gọi tên (`prisma/seed-orgunit.ts` · OPTIONAL_REGIONS).
+   * Dùng qua `seedTwoRegionTree()` trong `./seed-multi-region`, đừng seed tay từng mảnh.
+   */
+  HUE: "HUE",
+  CS3: "CS3",
 } as const;
 
 export type OrgCode = (typeof ORG_CODES)[keyof typeof ORG_CODES];

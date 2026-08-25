@@ -123,8 +123,16 @@ export async function disconnectDb(): Promise<void> {
 }
 
 /**
- * Seed cây OrgUnit: ROOT(SATAROBO) + các code yêu cầu (HO/CS1/CS2), idempotent.
- * `seedOrg(["HO","CS1","CS2"])` → 4 OrgUnit (gồm ROOT). (A0-01)
+ * Seed cây OrgUnit theo hình chốt 11/08/2026: `HO (gốc) → REGION → CENTER`, idempotent.
+ * `seedOrg(["HO","CS1","CS2"])` → 4 OrgUnit: HO + DANANG + CS1 + CS2. (A0-01, US-05)
+ *
+ * KHÔNG còn node `ROOT`/"SATAROBO" trong cây mặc định — hằng `ORG_CODES.ROOT` chỉ còn để
+ * script/spec cũ tra tên.
+ *
+ * Khu vực A · A-01: thêm `"CS3"` vào `codes` để có VÙNG THỨ HAI —
+ * `seedOrg(["HO","CS1","CS2","CS3"])` → 6 OrgUnit (thêm HUE + CS3). Cơ sở CS3 chỉ hoạt
+ * động khi có bản ghi `Center` mã "CS3"; dùng `seedTwoRegionTree()` trong
+ * `./seed-multi-region` thay vì lắp tay từng mảnh.
  */
 export async function seedOrg(codes: string[]): Promise<void> {
   assertTestDb();
