@@ -71,6 +71,12 @@ export const SCOPED_MODELS = new Set<string>([
   // ⚠️ Đây là DỮ LIỆU CÁ NHÂN — đưa vào NULL_IS_GLOBAL_MODELS là biến "chưa biết cơ sở"
   // thành "ai cũng thấy", tức rò rỉ, không phải tiện lợi.
   "TrnDataSubjectRequest",
+  // EL-13 — cờ nghi ngờ học đối phó. `BAT_BUOC`: một cờ luôn thuộc cơ sở của
+  // người bị gắn cờ.
+  // ⚠️ TUYỆT ĐỐI KHÔNG đưa vào NULL_IS_GLOBAL_MODELS. Đây là dữ liệu quan hệ lao
+  // động của một cá nhân; coi "chưa backfill" là "ai cũng thấy" ở đây không phải
+  // tiện lợi mà là rò rỉ — và rò đúng loại thông tin gây tổn hại nhất.
+  "TrnWatchFlag",
 ]);
 
 /**
@@ -268,6 +274,7 @@ export function getModelPrefixes(model: string): string[] {
     case "TrnAssignment":
     case "TrnEnrollment":
     case "TrnDataSubjectRequest":
+    case "TrnWatchFlag":
       return ["elearning:"];
     default:
       return [];

@@ -1,4 +1,5 @@
 import { db } from "@/lib/db";
+import { chotCoHetHan } from "@/lib/elearning/watch-flag-close";
 import { publishEvent } from "@/lib/events/publish";
 import {
   chonQuaHan,
@@ -22,6 +23,7 @@ import { thuLaiHangDoiNhanSu } from "@/lib/elearning/retry-queue";
  *   4. dọn dữ liệu tầng 2 (QĐ-CDA-14)
  *   6. dọn lượt tải nhiều phần bỏ dở trên R2 (EL-10)
  *   5. thử lại hàng đợi "chờ dữ liệu Nhân sự"
+ *   7. chốt cờ nghi ngờ hết cửa sổ khiếu nại (EL-13)
  *
  * Việc (6) mang số 6 nhưng chạy TRƯỚC việc (5): nó thuộc nhóm DỌN, và số thứ tự
  * giữ nguyên theo đặc tả để đối chiếu được. Đổi số cho "gọn" là làm mọi trích
@@ -44,6 +46,8 @@ export type KetQuaDem = {
   thuLai: { taoMoi: number; vanKet: number; nguoiVanKet: string[] };
   /** EL-10 việc (6) — lượt tải nhiều phần bỏ dở, đã huỷ trên R2. */
   taiDo: { daHuy: number; conGiu: number } | { chuaLamDuoc: string };
+  /** EL-13 việc (7) — cờ nghi ngờ hết cửa sổ khiếu nại, chốt thành UPHELD. */
+  chotCo: { daChot: number; boQua: number };
   loi: { viec: string; message: string }[];
 };
 
@@ -65,6 +69,7 @@ export async function runElearningDem(now = new Date()): Promise<KetQuaDem> {
     },
     don: { videoSession: 0, bitmap: 0, examAttempt: null },
     thuLai: { taoMoi: 0, vanKet: 0, nguoiVanKet: [] },
+    chotCo: { daChot: 0, boQua: 0 },
     taiDo: { daHuy: 0, conGiu: 0 },
     loi: [],
   };
@@ -163,6 +168,14 @@ export async function runElearningDem(now = new Date()): Promise<KetQuaDem> {
     ket.taiDo = await donTaiDo(chonTaiDoDeHuy, mocDonTaiDo(now));
   } catch (e) {
     ket.loi.push({ viec: "don-tai-do", message: String(e) });
+  }
+
+  // ── Việc 7: chốt cờ nghi ngờ hết cửa sổ khiếu nại ────────────────────────
+  // Gộp vào KHE NÀY, không xin khe cron thứ ba — ngân sách module là đúng hai khe.
+  try {
+    ket.chotCo = await chotCoHetHan(now);
+  } catch (e) {
+    ket.loi.push({ viec: "chot-co", message: String(e) });
   }
 
   // ── Việc 5: thử lại hàng đợi "chờ dữ liệu Nhân sự" ────────────────────────

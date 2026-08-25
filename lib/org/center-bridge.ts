@@ -311,6 +311,12 @@ export const BACKFILL_SPECS: readonly BackfillSpec[] = [
     vi: "lượt ghi danh — cột NOT NULL trong schema; không có cơ sở thì không tạo được bản ghi",
   },
   {
+    model: "TrnWatchFlag",
+    nullMeaning: "BAT_BUOC",
+    scoped: true,
+    vi: "cờ nghi ngờ học đối phó — luôn thuộc cơ sở của người bị gắn cờ",
+  },
+  {
     model: "TrnDataSubjectRequest",
     nullMeaning: "BAT_BUOC",
     scoped: true,
