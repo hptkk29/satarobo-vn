@@ -15,6 +15,7 @@
  * không thể xảy ra khi xem thật** — chủ yếu là các bất khả thi vật lý (khai đã
  * xem nhiều nội dung hơn số giây đồng hồ đã trôi).
  */
+import { congNgayLamViec } from "@/lib/elearning/ngay-lam-viec";
 
 /** Mã luật — KHÔNG phải câu văn. Câu tiếng Việt nằm ở tầng hiển thị. */
 export type MaLuatCo =
@@ -167,23 +168,13 @@ export function hanKhieuNai(openedAt: Date, ngay = CUA_SO_KHIEU_NAI_NGAY): Date 
 /**
  * Thời hạn trả lời khiếu nại = `appealedAt` + 5 NGÀY LÀM VIỆC.
  *
- * ⚠️ Ngày làm việc, không phải ngày lịch. Cộng 5 ngày lịch cho một khiếu nại gửi
- * chiều thứ Sáu là ra hạn vào thứ Tư, tức người xử chỉ có 3 ngày làm việc thật —
- * và mỗi lần rơi vào cuối tuần lại ra một con số khác. Người xử sẽ trễ hạn vì
- * cách tính, chứ không phải vì họ chậm.
- *
- * Chỉ bỏ thứ Bảy và Chủ nhật. Ngày lễ KHÔNG xử ở đây: repo không có bảng lịch
- * nghỉ, và đoán bừa danh sách lễ là dựng một nguồn sự thật thứ hai không ai duyệt.
+ * ⚠️ Phép cộng ngày làm việc nay nằm ở `lib/elearning/ngay-lam-viec.ts`, vì EL-15
+ * cần đúng phép đó cho hạn chấm bài tập. Chép sang là dựng nguồn sự thật thứ hai,
+ * và hai bản chép sẽ trôi khỏi nhau — đúng cách trần độ dài câu hỏi đã trôi ở
+ * EL-14e. Lý do PHẢI đếm bằng ngày làm việc thì ghi ở tệp đó.
  */
 export function hanTraLoi(appealedAt: Date, soNgayLam = HAN_TRA_LOI_NGAY_LAM): Date {
-  const d = new Date(appealedAt.getTime());
-  let con = soNgayLam;
-  while (con > 0) {
-    d.setUTCDate(d.getUTCDate() + 1);
-    const thu = d.getUTCDay();
-    if (thu !== 0 && thu !== 6) con -= 1;
-  }
-  return d;
+  return congNgayLamViec(appealedAt, soNgayLam);
 }
 
 export type TrangThaiCo = "OPEN" | "APPEALED" | "UPHELD" | "REVOKED";

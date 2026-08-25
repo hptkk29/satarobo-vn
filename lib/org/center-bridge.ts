@@ -341,6 +341,18 @@ export const BACKFILL_SPECS: readonly BackfillSpec[] = [
     vi: "lượt thi — luôn thuộc cơ sở của người thi; NULL = chưa backfill",
   },
   {
+    model: "TrnRubric",
+    nullMeaning: "NULL_TOAN_HE_THONG",
+    scoped: true,
+    vi: "khung chấm bài tập — NULL = khung dùng chung toàn công ty",
+  },
+  {
+    model: "TrnSubmission",
+    nullMeaning: "BAT_BUOC",
+    scoped: true,
+    vi: "lượt nộp bài tập — luôn thuộc cơ sở của người nộp; NULL = chưa backfill",
+  },
+  {
     model: "TrnWatchFlag",
     nullMeaning: "BAT_BUOC",
     scoped: true,

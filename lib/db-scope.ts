@@ -85,6 +85,15 @@ export const SCOPED_MODELS = new Set<string>([
   // ⚠️ `TrnExamAttempt` KHÔNG vào NULL_IS_GLOBAL_MODELS: một lượt thi luôn thuộc
   // cơ sở của người thi. NULL ở đây = chưa backfill, không phải "ai cũng thấy".
   "TrnExamAttempt",
+  // EL-15 — bài tập chấm tay. HAI bảng mang cột đơn vị; hai bảng con
+  // (`TrnRubricCriterion`, `TrnRubricScore`) KHÔNG mang, và cách ly của chúng đến
+  // từ bảng cha — khai thừa ở đây là `[US-07-IT-08c]` đỏ.
+  "TrnRubric",
+  // ⚠️ `TrnSubmission` KHÔNG vào NULL_IS_GLOBAL_MODELS: một lượt nộp luôn thuộc cơ
+  // sở của người nộp. Và nội dung của nó là bài làm của một con người — kèm video
+  // lớp học và ghi âm hội thoại phụ huynh (§13.3) — nên coi "chưa biết cơ sở" là
+  // "ai cũng thấy" ở đây là rò rỉ, không phải tiện lợi.
+  "TrnSubmission",
 ]);
 
 /**
@@ -121,6 +130,10 @@ export const NULL_IS_GLOBAL_MODELS = new Set<string>([
   // HÌNH với mọi người dùng cấp cơ sở, và không gì báo lỗi — họ chỉ thấy kho rỗng.
   "TrnQuestion",
   "TrnExam",
+  // EL-15 — khung chấm DÙNG CHUNG toàn công ty là chuyện thường (khung ngạch giáo
+  // viên, khung quy trình tư vấn). Quên dòng này thì khung chung TÀNG HÌNH với mọi
+  // người dùng cấp cơ sở, và không gì báo lỗi — họ chỉ thấy danh sách rỗng.
+  "TrnRubric",
 ]);
 
 // FIX-C3 (B1) — soft-delete đã chuyển lên TẦNG base `db` (lib/soft-delete.ts + lib/db.ts)
@@ -303,6 +316,8 @@ export function getModelPrefixes(model: string): string[] {
     case "TrnQuestion":
     case "TrnExam":
     case "TrnExamAttempt":
+    case "TrnRubric":
+    case "TrnSubmission":
       return ["elearning:"];
     default:
       return [];
