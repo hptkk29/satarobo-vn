@@ -873,25 +873,45 @@ export async function updateLeadFields(
     // chưa bao giờ ghi được: sửa xong là mất im lặng. Thêm cho cả hai đường.
     ...(d.facebookUrl !== undefined ? { facebookUrl: d.facebookUrl || null } : {}),
   }
-  await db.lead.update({ where: { id: leadId }, data: updateData })
-
   // P2-1: ghi nhật ký kiểm toán — chỉ field thực sự đổi.
   const changedFields = (Object.keys(updateData) as (keyof typeof updateData)[]).filter(
     (k) => (before as Record<string, unknown>)[k] !== (updateData as Record<string, unknown>)[k],
   )
-  if (changedFields.length > 0) {
-    const { actorId, actorName } = getAuditActor(session)
-    const pick = (obj: Record<string, unknown>) =>
-      Object.fromEntries(changedFields.map((k) => [k, obj[k]]))
-    await logLeadAudit({
-      leadId,
-      action: 'UPDATE',
-      actorId,
-      actorName,
-      oldValues: pick(before as Record<string, unknown>),
-      newValues: pick(updateData as Record<string, unknown>),
-      changedFields: changedFields as string[],
-    }).catch(() => {})
+  const { actorId, actorName } = getAuditActor(session)
+  const pick = (obj: Record<string, unknown>) =>
+    Object.fromEntries(changedFields.map((k) => [k, obj[k]]))
+
+  // V-6 · G-02 — lượt ghi và VẾT của nó đi CHUNG một giao dịch.
+  //
+  // Trước 25/08 hai lệnh này rời nhau: `db.lead.update` trần, rồi
+  // `logLeadAudit(...).catch(() => {})` ở ngoài. Hỏng theo đúng chiều tệ nhất —
+  // ghi vết chết thì bản ghi VẪN lưu và lỗi bị nuốt sạch, tức tên/SĐT khách đổi
+  // mà không còn dấu vết nào, và cũng không ai biết là đã mất dấu. Spec G-02 nói
+  // ngược lại: 3 ô định danh (Tên PH · SĐT PH · Tên HS) sửa được NHƯNG "bắt buộc
+  // ghi audit log" — bắt buộc thì vết hỏng phải kéo cả lượt sửa đổ theo.
+  // `updateLeadChild` cùng file đã làm đúng vậy từ 08/08; đây là chỗ bị bỏ sót.
+  try {
+    await db.$transaction(async (txRaw) => {
+      const tx = txRaw as unknown as Prisma.TransactionClient
+      await tx.lead.update({ where: { id: leadId }, data: updateData })
+      if (changedFields.length > 0) {
+        await logLeadAudit({
+          leadId,
+          action: 'UPDATE',
+          actorId,
+          actorName,
+          oldValues: pick(before as Record<string, unknown>),
+          newValues: pick(updateData as Record<string, unknown>),
+          changedFields: changedFields as string[],
+          tx,
+        })
+      }
+    })
+  } catch {
+    // Câu chữ cố ý KHÔNG đổ tại nhật ký: lệnh ghi lead cũng nằm trong giao dịch
+    // này, hỏng bên nào thì cả hai cùng hoàn tác. Nói sai chỗ hỏng là đẩy người
+    // trực đi tìm nhầm hướng.
+    return { ok: false, error: 'Không lưu được thay đổi — đã hoàn tác, thử lại' }
   }
 
   revalidatePath(`/leads/${leadId}`)

@@ -35,6 +35,10 @@ const h = vi.hoisted(() => ({
   leadFindFirst: vi.fn(),
   leadFindUnique: vi.fn(),
   logLeadAudit: vi.fn(),
+  // V-6 · G-02 (25/08): đường SỬA nay ghi lead + ghi vết TRONG CÙNG một giao
+  // dịch. Giao dịch giả trao lại đúng `leadUpdate` để 3 ca dưới vẫn soi được
+  // `data` như trước — hành vi được pin không đổi, chỉ đường đi đổi.
+  transaction: vi.fn(),
   centerIdForOrgUnit: vi.fn(),
   rejectHeadOffice: vi.fn(),
   autoAssignNewLead: vi.fn(),
@@ -56,6 +60,7 @@ vi.mock("@/lib/db", () => ({
       findFirst: h.leadFindFirst,
       findUnique: h.leadFindUnique,
     },
+    $transaction: h.transaction,
   },
 }));
 vi.mock("@/lib/db-scope", () => ({
@@ -104,6 +109,9 @@ beforeEach(() => {
   h.leadCreate.mockResolvedValue({ id: "lead-moi" });
   h.leadUpdate.mockResolvedValue({ id: "lead-cu" });
   h.logLeadAudit.mockResolvedValue(undefined);
+  h.transaction.mockImplementation(async (fn: (tx: unknown) => Promise<unknown>) =>
+    fn({ lead: { update: h.leadUpdate } }),
+  );
   h.centerIdForOrgUnit.mockResolvedValue("cs1");
   h.rejectHeadOffice.mockResolvedValue(null);
   h.autoAssignNewLead.mockResolvedValue(undefined);

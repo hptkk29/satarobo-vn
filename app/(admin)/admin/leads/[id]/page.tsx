@@ -23,6 +23,12 @@ import { canViewLeadPii } from "@/lib/auth/check-permission";
 import { ShareToggle } from "./_components/share-toggle";
 import { formatDateVN } from "@/lib/format/date";
 import { hasSystemLines, splitLeadNote } from "@/lib/lead/note-view";
+import {
+  canViewLeadAuditHistory,
+  getLeadAuditHistory,
+  maskLeadAuditValues,
+} from "@/lib/lead/audit-history";
+import { LeadAuditHistory } from "./_components/lead-audit-history";
 
 export const metadata = { title: "Chi tiết Lead | Admin" };
 export const dynamic = "force-dynamic";
@@ -233,6 +239,22 @@ export default async function LeadDetailPage({ params }: Props) {
       })
     : [];
   const sessionById = new Map(scheduledSessions.map((s) => [s.id, s]));
+
+  // V-6 · G-02 — "Lịch sử thay đổi": vết sửa 3 ô định danh (Tên PH · SĐT PH ·
+  // Tên HS) phải ĐỌC ĐƯỢC bởi người có thẩm quyền, chứ không chỉ nằm im trong
+  // bảng AuditLog sau quyền `audit-logs:view` mà mỗi SUPER_ADMIN có.
+  //
+  // ⚠️ Đây là màn HẸP, KHÔNG phải cửa vào nhật ký chung: `getLeadAuditHistory`
+  // lọc CỨNG `entityType: "Lead"` + `entityId` của đúng lead đang mở, không nhận
+  // bộ lọc nào từ URL. AuditLog không thuộc SCOPED_MODELS nên `sdb` không lọc hộ
+  // — cách ly đã xong ở trên (lead đọc qua scopedDb + canSeeLead), và mở rộng
+  // truy vấn ở đây là mở nhật ký toàn hệ, kể cả module ngoài lead.
+  const canViewAudit = await checkPermission("audit-logs:view");
+  const showAuditHistory = canViewLeadAuditHistory({
+    canViewAllLeads: canViewAll,
+    canViewAuditLogs: canViewAudit,
+  });
+  const auditRows = showAuditHistory ? await getLeadAuditHistory(sdb, lead.id) : [];
 
   return (
     <div className="max-w-6xl p-6">
@@ -546,6 +568,20 @@ export default async function LeadDetailPage({ params }: Props) {
             ))}
           </ul>
         </div>
+      )}
+
+      {/* V-6 · G-02 — vết sửa hồ sơ. Che PII bằng CÙNG cổng `canViewPii` của
+          trang: nội dung vết chứa nguyên văn tên PH/tên HS/SĐT, bày ra không che
+          là mở lại đúng cái cửa #11 T2 vừa đóng, chỉ khác đường đi. */}
+      {showAuditHistory && (
+        <LeadAuditHistory
+          piiMasked={!canViewPii}
+          rows={auditRows.map((r) => ({
+            ...r,
+            oldValues: maskLeadAuditValues(r.oldValues, canViewPii),
+            newValues: maskLeadAuditValues(r.newValues, canViewPii),
+          }))}
+        />
       )}
 
       <LeadActivityPanel
