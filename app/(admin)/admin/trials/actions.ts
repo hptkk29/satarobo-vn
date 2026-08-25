@@ -6,6 +6,7 @@ import { checkPermission } from "@/lib/auth/check-permission";
 import { publishEvent } from "@/lib/events/publish";
 import { getAuditActor } from "@/lib/audit/log";
 import { writeAudit } from "@/lib/audit/audit-log";
+import { recordLeadStatusChange } from "@/lib/lead/status-trail-write";
 import { resolveActor } from "@/lib/auth/actor";
 import { scopedDb, passesScope } from "@/lib/db-scope";
 import {
@@ -128,15 +129,17 @@ export async function updateTrialAction(
           where: { id: trial.leadId },
           data: { status: leadNextStatus },
         });
-        await tx.leadActivity.create({
-          data: {
-            leadId: trial.leadId,
-            actorId,
-            actorName,
-            type: "STATUS_CHANGE",
-            content: `Chuyển trạng thái: ${lead.status} → ${leadNextStatus} (từ buổi học thử)`,
-            metadata: { from: lead.status, to: leadNextStatus, via: "trial" },
-          },
+        // C-07 — trước đây chỗ này chỉ tạo `LeadActivity`, không có dòng
+        // `AuditLog` ⇒ mốc "kết quả buổi học thử đẩy lead sang bước mới" mất khỏi
+        // mục "Lịch sử thay đổi" mà QLCS xem. Nay đi chung một đường ghi vết.
+        await recordLeadStatusChange({
+          tx,
+          leadId: trial.leadId,
+          actorId,
+          actorName,
+          from: lead.status,
+          to: leadNextStatus,
+          source: "TRIAL",
         });
 
         // 25/08 — lead MẤT ⇒ đóng sổ học thử V2: `LeadTrialHistory.outcome = "LOST"`.

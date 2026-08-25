@@ -12,6 +12,11 @@ import { db } from "@/lib/db";
 import { hasMediaConsent } from "@/lib/lms/media-consent";
 import { resolveMediaUrl } from "@/lib/storage/signed-url";
 import { parseOptions, type QuestionType } from "@/lib/eval/schema";
+import {
+  applyEvalPhotoGate,
+  blockedEvalPhotoUrls,
+  type MirrorRow,
+} from "@/lib/eval/session-eval-photo-gate";
 
 /** Đáp án thô để render — valueOptions là Json (Prisma) nên nhận unknown, parseOptions narrow. */
 export type RawAnswer = {
@@ -163,8 +168,14 @@ export async function getStudentSessionEvals(studentId: string): Promise<Session
     : [];
   const sessionMeta = new Map(sessions.map((s) => [s.id, s]));
 
-  // Ảnh PHOTO trong phiếu (urls ở valueOptions) gate theo StudentConsent CLASS_MEDIA:
-  // chưa consent → bỏ hẳn câu PHOTO; có consent → ký URL (presigned GET nếu bật flag).
+  // Ảnh PHOTO trong phiếu (urls ở valueOptions) qua HAI cổng:
+  //  1. StudentConsent CLASS_MEDIA — chưa consent → bỏ hẳn câu PHOTO (như cũ).
+  //  2. F-04 — phải ĐÃ DUYỆT trong hàng duyệt ảnh lớp. Trước bản vá cổng này không tồn
+  //     tại: giáo viên bấm Lưu phiếu là ảnh ra thẳng cổng phụ huynh, không ai duyệt.
+  //     Ảnh mới luôn có bản ghi ClassSessionMedia (ghi cùng transaction lưu phiếu —
+  //     xem lib/eval/session-eval.ts); ảnh KHÔNG có bản ghi nào là ảnh trước bản vá,
+  //     cố ý giữ nguyên để phụ huynh không mất ảnh đang xem. Chi tiết + cách đóng nốt
+  //     điều khoản chuyển tiếp: lib/eval/session-eval-photo-gate.ts.
   const consentGranted = await hasMediaConsent(studentId);
   const photoUrls = new Set<string>();
   if (consentGranted) {
@@ -175,19 +186,33 @@ export async function getStudentSessionEvals(studentId: string): Promise<Session
       }
     }
   }
-  const resolved = await Promise.all([...photoUrls].map(async (u) => [u, await resolveMediaUrl(u)] as const));
+  const urlList = [...photoUrls];
+  const [resolved, mirrorRows] = await Promise.all([
+    Promise.all(urlList.map(async (u) => [u, await resolveMediaUrl(u)] as const)),
+    urlList.length
+      ? db.classSessionMedia.findMany({
+          where: { fileUrl: { in: urlList } },
+          select: { fileUrl: true, status: true },
+        })
+      : Promise.resolve([] as MirrorRow[]),
+  ]);
   const urlMap = new Map(resolved);
+  const blockedPhotos = blockedEvalPhotoUrls(mirrorRows);
 
   return responses.map((r) => {
     const sess = r.classSessionId ? sessionMeta.get(r.classSessionId) : undefined;
-    const answers = renderAnswers(questionMeta, r.answers)
-      // chưa consent → ẩn câu ảnh
-      .filter((a) => a.type !== "PHOTO" || consentGranted)
-      .map((a) =>
-        a.type === "PHOTO" && a.photos
-          ? { ...a, photos: a.photos.map((u) => urlMap.get(u) ?? u) }
-          : a,
-      );
+    // Thứ tự BẮT BUỘC: lọc consent → lọc F-04 (trên URL THÔ) → mới ký URL. Ký trước
+    // rồi mới lọc thì key trong bảng chặn không còn khớp và cổng thành vô hiệu.
+    const answers = applyEvalPhotoGate(
+      renderAnswers(questionMeta, r.answers)
+        // chưa consent → ẩn câu ảnh
+        .filter((a) => a.type !== "PHOTO" || consentGranted),
+      blockedPhotos,
+    ).map((a) =>
+      a.type === "PHOTO" && a.photos
+        ? { ...a, photos: a.photos.map((u) => urlMap.get(u) ?? u) }
+        : a,
+    );
     return {
       responseId: r.id,
       roundName: r.round.name,

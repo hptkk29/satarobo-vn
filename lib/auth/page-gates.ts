@@ -141,6 +141,22 @@ export const PAGE_GATES = {
    *  `trials:view` là quyền Sale vốn đã có; không mở thêm gì. */
   "/sale/trial": ["trials:view"],
 
+  /** Tra cứu danh mục — bảng giá khoá/học cụ + lớp còn chỗ. CHỈ ĐỌC.
+   *  Hai action đều là quyền Sale vốn đã có và đều GLOBAL. Vào được bằng MỘT
+   *  trong hai; trang tự quyết khối nào hiện, không đá ai ra vì thiếu một quyền. */
+  "/sale/tra-cuu": ["products:view", "classes:view-all"],
+
+  /** Chốt đơn — tạo đơn cho khách của mình. `orders:create` là action HẸP mở ở
+   *  Đợt 0 (G-A), KHÔNG phải `orders:manage` (mở/huỷ/hoàn toàn hệ thống).
+   *  Phạm vi "chỉ đơn gắn khách của mình" do `checkOrderCreateOwnership()` gác
+   *  trong chính action — gate trang chỉ chặn sớm cho đỡ phí một vòng gọi. */
+  "/sale/chot-don": ["orders:create"],
+
+  /** Khách của tôi — danh sách + chi tiết + ghi hoạt động + việc follow-up.
+   *  `leads:view-own` là quyền Sale vốn đã có. KHÔNG dùng `leads:view-all`: đó
+   *  là quyền của quản lý, và trang này cố ý chỉ trả lời "khách nào của tôi". */
+  "/sale/khach-cua-toi": ["leads:view-own"],
+
   /** Biểu mẫu nhập khách hàng, bản đứng TRÊN site Sale.
    *  Cùng action với bản `/nhap-khach-hang` bên admin — cùng một việc, cùng một
    *  đường ghi (`ingestIntakeLead`), chỉ khác chỗ đứng. Trước 23/08 Sale gõ địa
@@ -150,6 +166,40 @@ export const PAGE_GATES = {
   /** Ba báo cáo đào tạo. BGĐ chốt 10/07: "báo cáo của chức năng nào thì role chức năng
    *  đó xem". Trước đây gác `classes:view-all` ∨ `training:manage` ⇒ HR/Kế toán/Marketing
    *  mở được bằng URL (menu thì khai `courses:create`, nên giấu). Nay: Đào tạo + QL cơ sở. */
+  /**
+   * B-01 — Doanh thu vs mục tiêu. Trước đây cả menu lẫn trang gác bằng `payments:manage`
+   * ⇒ Quản lý cơ sở, đúng người mà màn này viết cho, KHÔNG mở được: quyền đó là thao tác
+   * TIỀN (mở/huỷ/hoàn, phương thức thanh toán, hoa hồng) và cố ý không nằm ở vai đó.
+   *
+   * Thêm `revenue_targets:manage` (key riêng) thay vì nới `payments:manage`. Giữ luôn
+   * `payments:manage` trong ô này để kế toán không mất đường vào. Cả hai đều GLOBAL ở
+   * mọi RoleDef giữ chúng — bắt buộc, vì gate gọi `checkAnyPermission` KHÔNG có target.
+   */
+  "/bao-cao/doanh-thu": ["payments:manage", "revenue_targets:manage"],
+
+  /**
+   * C-01 — Chỉ tiêu lead theo tháng × cơ sở. Màn này CHỈ để đặt/sửa con số, nên gác
+   * bằng đúng quyền ghi: ai không đặt được thì vào cũng không có việc gì làm ở đây
+   * (số liệu thực-vs-chỉ-tiêu nằm ở tab Kinh doanh của dashboard, gác riêng).
+   *
+   * KHÔNG kèm `leads:view-all`: action đó seed GLOBAL nên gate sẽ nhận, nhưng như vậy
+   * là mở màn ĐẶT chỉ tiêu cho cả Sale/Marketing — người bị đo, không phải người đặt.
+   * `lead_targets:manage` GLOBAL ở mọi RoleDef giữ nó (bắt buộc: gate gọi
+   * `checkAnyPermission` KHÔNG có target).
+   */
+  "/bao-cao/muc-tieu-lead": ["lead_targets:manage"],
+
+  /**
+   * D-02 — Chỉ tiêu ngân sách quảng cáo theo tháng × cơ sở. Cùng luật với màn C-01 ở
+   * trên: màn CHỈ để đặt/sửa con số nên gác bằng đúng quyền ghi.
+   *
+   * KHÔNG kèm `leads:view-all`: action đó seed GLOBAL nên gate sẽ nhận, nhưng nó đang
+   * gác `/admin/marketing/funnel` cho cả QLCS lẫn Marketing ⇒ mượn là mở màn ĐẶT chỉ
+   * tiêu cho người mà chỉ tiêu đó dùng để đo. `ads_budget_targets:manage` GLOBAL ở mọi
+   * RoleDef giữ nó (bắt buộc: gate gọi `checkAnyPermission` KHÔNG có target).
+   */
+  "/bao-cao/ngan-sach-quang-cao": ["ads_budget_targets:manage"],
+
   "/bao-cao/dao-tao": ["reports:training"],
   "/bao-cao/hieu-suat-gv": ["reports:training"],
   "/bao-cao/cohort": ["reports:training"],
@@ -168,4 +218,18 @@ export type GatedHref = keyof typeof PAGE_GATES;
  * `page-gates.test.ts` giữ danh sách này làm ngoại lệ tường minh — thêm route mới vào
  * đây phải kèm lý do, không được im lặng.
  */
-export const GATE_MISMATCH_ALLOWLIST: readonly string[] = ["/cham-cong/lich-ca-nhan-vien"];
+export const GATE_MISMATCH_ALLOWLIST: readonly string[] = [
+  "/cham-cong/lich-ca-nhan-vien",
+  // Ghi danh trên site Sale (`app/(sale)/sale/ghi-danh/[leadId]`).
+  //
+  // Bảng trên dùng phép HOẶC (`checkAnyPermission`), mà chốt lead đòi CẢ HAI
+  // quyền: `students:create` VÀ `enrollments:create`. Hai quyền đó tách nhau có
+  // chủ đích — Marketing giữ một mà không giữ cái kia — nên gộp vào bảng bằng
+  // phép HOẶC sẽ MỞ CỬA cho người chỉ có một nửa. `submitConvertV2` cũng kiểm
+  // đúng phép VÀ đó, nên trang và action nói cùng một câu; cái lệch duy nhất là
+  // với BẢNG, và đó là lệch có chủ đích.
+  //
+  // Không có mục menu nào cho route này (vào từ hồ sơ khách) nên cũng không có
+  // nguy cơ menu-và-cổng nói khác nhau — thứ mà bảng sinh ra để chặn.
+  "/sale/ghi-danh",
+];

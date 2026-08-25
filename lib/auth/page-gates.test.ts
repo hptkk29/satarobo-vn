@@ -34,11 +34,29 @@ const PAGE_DIR_OVERRIDE: Record<string, string> = {
   // Khai tường minh từng route thay vì nới `pageFile` thành "tìm khắp app/":
   // quét mù sẽ nuốt luôn ca trang bị xoá mà gate còn nằm lại trong bảng.
   "/sale/trial": "app/(sale)",
+  "/sale/khach-cua-toi": "app/(sale)",
+  "/sale/tra-cuu": "app/(sale)",
+
   "/sale/nhap-khach-hang": "app/(sale)",
 };
 
+/**
+ * Route mà trang của nó là ROUTE ĐỘNG, nên không có `<href>/page.tsx`.
+ * Vd `/sale/chot-don` → `app/(sale)/sale/chot-don/[leadId]/page.tsx`: đơn luôn
+ * gắn với MỘT khách cụ thể nên không tồn tại trang "chốt đơn" trần.
+ *
+ * Khai ĐƯỜNG DẪN ĐẦY ĐỦ thay vì nới `pageFile` thành "tìm khắp app/" — quét mù
+ * sẽ nuốt luôn ca trang bị xoá mà gate còn nằm lại trong bảng, tức mất đúng cái
+ * mà test này sinh ra để bắt.
+ */
+const PAGE_FILE_OVERRIDE: Record<string, string> = {
+  "/sale/chot-don": "app/(sale)/sale/chot-don/[leadId]/page.tsx",
+};
+
 const pageFile = (href: string) =>
-  path.join(ROOT, PAGE_DIR_OVERRIDE[href] ?? "app/(admin)/admin", href, "page.tsx");
+  PAGE_FILE_OVERRIDE[href]
+    ? path.join(ROOT, PAGE_FILE_OVERRIDE[href])
+    : path.join(ROOT, PAGE_DIR_OVERRIDE[href] ?? "app/(admin)/admin", href, "page.tsx");
 
 /** Bỏ comment để chuỗi trong `// ...` không bị đếm là action thật. */
 function stripComments(src: string): string {

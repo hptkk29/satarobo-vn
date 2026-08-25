@@ -40,6 +40,8 @@ export function ConvertForm({
   prefillStudents,
   classes,
   order,
+  backHref,
+  conflictHref,
 }: {
   leadId: string
   defaultParentName: string
@@ -54,9 +56,35 @@ export function ConvertForm({
   classes: ClassOpt[]
   /** FL2-01 — đơn hàng học phí gắn lead (để chia 1/2 đợt). null = chưa có đơn. */
   order: { id: string; totalAmount: number } | null
+  /**
+   * Nơi quay về sau khi chốt xong (và khi bấm Huỷ).
+   *
+   * Mặc định là clean-URL của host ADMIN. Site Sale mount lại chính form này
+   * nhưng `/leads/:id` bên đó không tồn tại — đá về admin host giữa lúc vừa chốt
+   * xong là ném người dùng ra khỏi site của họ. Truyền `backHref` để ở lại.
+   *
+   * Chọn thêm PROP thay vì nhân bản form: nghiệp vụ chốt lead là chỗ đắt nhất để
+   * có hai bản (idempotency, atomic-claim, tạo tài khoản PH), và hai bản là hai
+   * bản sẽ trôi khác nhau.
+   */
+  backHref?: string
+  /**
+   * Đường tới màn xử lý xung đột hồ sơ phụ huynh. `null` = KHÔNG vẽ liên kết —
+   * dùng cho site Sale, vì `/convert-conflicts` là màn của Super Admin/Quản lý:
+   * vẽ ra cho Sale là một liên kết bấm vào rồi bị đá ra.
+   *
+   * BẮT BUỘC, không có giá trị mặc định. Hai lý do: (1) chỗ gọi mới là chỗ biết
+   * khu của mình có màn đó hay không; (2) `components/admin/nav-coverage.test.ts`
+   * dò lối vào của mọi màn admin bằng cách QUÉT CHUỖI `href="..."` — chôn đường
+   * dẫn vào một biến mặc định ở đây là làm màn `/convert-conflicts` trông như
+   * mồ côi, dù nó vẫn hiện.
+   */
+  conflictHref: string | null
 }) {
   const router = useRouter()
   const [pending, startTransition] = useTransition()
+  // Mặc định = hành vi admin trước 24/08, không đổi một hạt nào cho chỗ gọi cũ.
+  const veLai = backHref ?? `/leads/${leadId}`
   const [conflict, setConflict] = useState<string | null>(null)
 
   const [parentName, setParentName] = useState(defaultParentName)
@@ -154,7 +182,7 @@ export function ConvertForm({
         else if (res.installmentPendingApproval)
           toast.info('Kế hoạch 2 đợt đã gửi — chờ quản lý cơ sở duyệt')
         else if (res.installmentApplied) toast.success('Đã ghi kế hoạch học phí 2 đợt')
-        router.push(`/leads/${leadId}`)
+        router.push(veLai)
         router.refresh()
         return
       }
@@ -180,9 +208,15 @@ export function ConvertForm({
           <div>
             <p className="font-semibold">Xung đột hồ sơ phụ huynh</p>
             <p>{conflict}</p>
-            <a href="/convert-conflicts" className="mt-1 inline-block font-medium underline">
-              Mở màn xử lý xung đột →
-            </a>
+            {conflictHref ? (
+              <a href={conflictHref} className="mt-1 inline-block font-medium underline">
+                Mở màn xử lý xung đột →
+              </a>
+            ) : (
+              <p className="mt-1 font-medium">
+                Báo quản lý cơ sở xử lý — màn gộp hồ sơ nằm ở khu quản trị.
+              </p>
+            )}
           </div>
         </div>
       )}
@@ -457,7 +491,7 @@ export function ConvertForm({
         </button>
         <button
           type="button"
-          onClick={() => router.push(`/leads/${leadId}`)}
+          onClick={() => router.push(veLai)}
           className="rounded-lg border border-border px-4 py-2 text-sm font-medium text-foreground hover:bg-muted"
         >
           Hủy

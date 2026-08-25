@@ -137,7 +137,10 @@ export default async function ConvertV2Page({ params }: Props) {
         />
       </div>
 
+      {/* `conflictHref` truyền tường minh: màn gộp hồ sơ trùng là của khu quản
+          trị, và chỗ gọi mới là chỗ biết khu mình có màn đó hay không. */}
       <ConvertForm
+        conflictHref="/convert-conflicts"
         leadId={lead.id}
         defaultParentName={lead.parentName}
         defaultParentEmail={lead.email ?? ''}

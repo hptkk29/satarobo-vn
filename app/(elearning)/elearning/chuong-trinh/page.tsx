@@ -216,10 +216,21 @@ export default async function Page() {
         )}
       </section>
 
+      {/* Lối vào cho hai màn soạn. Trang không có lối vào thì chỉ người viết nó
+          biết đường tới — khu e-learning không có thanh điều hướng chung, nên mỗi
+          màn mới phải được một màn cũ dẫn tới. */}
       <p className="text-xs text-muted-foreground">
         Soạn nội dung khoá ở{" "}
         <Link href="/elearning/soan-khoa" className="underline">
           màn soạn khoá
+        </Link>
+        , câu hỏi cho đề thi ở{" "}
+        <Link href="/elearning/kho-cau-hoi" className="underline">
+          kho câu hỏi
+        </Link>
+        , và đề thi ở{" "}
+        <Link href="/elearning/de-thi" className="underline">
+          màn đề thi
         </Link>
         .
       </p>

@@ -71,6 +71,29 @@ export const SCOPED_MODELS = new Set<string>([
   // ⚠️ Đây là DỮ LIỆU CÁ NHÂN — đưa vào NULL_IS_GLOBAL_MODELS là biến "chưa biết cơ sở"
   // thành "ai cũng thấy", tức rò rỉ, không phải tiện lợi.
   "TrnDataSubjectRequest",
+  // EL-13 — cờ nghi ngờ học đối phó. `BAT_BUOC`: một cờ luôn thuộc cơ sở của
+  // người bị gắn cờ.
+  // ⚠️ TUYỆT ĐỐI KHÔNG đưa vào NULL_IS_GLOBAL_MODELS. Đây là dữ liệu quan hệ lao
+  // động của một cá nhân; coi "chưa backfill" là "ai cũng thấy" ở đây không phải
+  // tiện lợi mà là rò rỉ — và rò đúng loại thông tin gây tổn hại nhất.
+  "TrnWatchFlag",
+  // EL-14 — khảo thí. Ba bảng mang cột đơn vị; bốn bảng con (`TrnChoice`,
+  // `TrnExamQuestion`, `TrnExamAnswer`, `TrnExamUnlock`) KHÔNG mang, và cách ly
+  // của chúng đến từ bảng cha — khai thừa ở đây là `[US-07-IT-08c]` đỏ.
+  "TrnQuestion",
+  "TrnExam",
+  // ⚠️ `TrnExamAttempt` KHÔNG vào NULL_IS_GLOBAL_MODELS: một lượt thi luôn thuộc
+  // cơ sở của người thi. NULL ở đây = chưa backfill, không phải "ai cũng thấy".
+  "TrnExamAttempt",
+  // EL-15 — bài tập chấm tay. HAI bảng mang cột đơn vị; hai bảng con
+  // (`TrnRubricCriterion`, `TrnRubricScore`) KHÔNG mang, và cách ly của chúng đến
+  // từ bảng cha — khai thừa ở đây là `[US-07-IT-08c]` đỏ.
+  "TrnRubric",
+  // ⚠️ `TrnSubmission` KHÔNG vào NULL_IS_GLOBAL_MODELS: một lượt nộp luôn thuộc cơ
+  // sở của người nộp. Và nội dung của nó là bài làm của một con người — kèm video
+  // lớp học và ghi âm hội thoại phụ huynh (§13.3) — nên coi "chưa biết cơ sở" là
+  // "ai cũng thấy" ở đây là rò rỉ, không phải tiện lợi.
+  "TrnSubmission",
 ]);
 
 /**
@@ -102,6 +125,15 @@ export const NULL_IS_GLOBAL_MODELS = new Set<string>([
   "TrnCourse",
   "TrnRequirement",
   "TrnEvalLinkConfig",
+  // EL-14 — ngân hàng câu hỏi và đề thi DÙNG CHUNG toàn công ty là chuyện thường
+  // (an toàn lao động, phòng cháy…). Quên hai dòng này thì kho câu hỏi chung TÀNG
+  // HÌNH với mọi người dùng cấp cơ sở, và không gì báo lỗi — họ chỉ thấy kho rỗng.
+  "TrnQuestion",
+  "TrnExam",
+  // EL-15 — khung chấm DÙNG CHUNG toàn công ty là chuyện thường (khung ngạch giáo
+  // viên, khung quy trình tư vấn). Quên dòng này thì khung chung TÀNG HÌNH với mọi
+  // người dùng cấp cơ sở, và không gì báo lỗi — họ chỉ thấy danh sách rỗng.
+  "TrnRubric",
 ]);
 
 // FIX-C3 (B1) — soft-delete đã chuyển lên TẦNG base `db` (lib/soft-delete.ts + lib/db.ts)
@@ -119,6 +151,18 @@ export const SCOPE_EXEMPT = new Set<string>([
   // LMS-16 — RevenueTarget là config mục tiêu KPI; centerId null = mục tiêu toàn hệ
   // thống; scope tay qua getRevenueTargets. (Trước đây khai báo lặp 2 lần — đã dọn.)
   "RevenueTarget",
+  // C-01 — LeadTarget: song sinh của RevenueTarget, đo SỐ HỌC SINH thay vì tiền. Cùng
+  // lý do miễn scope: centerId null = chỉ tiêu TOÀN HỆ THỐNG, mà `injectScope` chèn
+  // `centerId IN (...)` trần (:277-279) nên dòng đó sẽ tàng hình với chính người vừa
+  // đặt nó. Đổi lại `scopedDb` KHÔNG chặn giúp ⇒ tầm nhìn ép TAY bằng
+  // `leadTargetListWhere` và quyền ghi bằng `checkRevenueTargetScope` (đều có test).
+  "LeadTarget",
+  // D-02 — AdsBudgetTarget: bảng chỉ tiêu thứ ba, đo TIỀN CHI cho quảng cáo. Cùng lý do
+  // miễn scope với hai bảng trên: centerId null = chỉ tiêu TOÀN HỆ THỐNG, mà `injectScope`
+  // chèn `centerId IN (...)` trần (:277-279) nên dòng đó sẽ tàng hình với chính người vừa
+  // đặt nó. Đổi lại `scopedDb` KHÔNG chặn giúp ⇒ tầm nhìn ép TAY bằng
+  // `adsBudgetTargetListWhere` và quyền ghi bằng `checkRevenueTargetScope` (đều có test).
+  "AdsBudgetTarget",
   // (#03 Pha B, 10/07 — ReportCard / EvaluationRound / ConversationMessage đã rời khỏi đây
   //  sang SCOPED_MODELS sau khi PROD xác nhận 0 dòng centerId NULL.)
   // W3-1 — RefundRequest scope qua quan hệ enrollment→class (Class là SCOPED_MODEL);
@@ -268,6 +312,12 @@ export function getModelPrefixes(model: string): string[] {
     case "TrnAssignment":
     case "TrnEnrollment":
     case "TrnDataSubjectRequest":
+    case "TrnWatchFlag":
+    case "TrnQuestion":
+    case "TrnExam":
+    case "TrnExamAttempt":
+    case "TrnRubric":
+    case "TrnSubmission":
       return ["elearning:"];
     default:
       return [];

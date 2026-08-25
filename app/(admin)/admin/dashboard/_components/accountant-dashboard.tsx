@@ -5,8 +5,7 @@ import { scopedDb } from "@/lib/db-scope";
 import type { Actor } from "@/lib/auth/actor";
 import { CACHE_TAGS } from "@/lib/cache/tags";
 import { actorScopeKey } from "@/lib/cache/scope-key";
-
-const PAID_STATUSES = ["CONFIRMED", "COMPLETED"] as const;
+import { WHERE_THUC_THU } from "@/lib/finance/thuc-thu";
 
 function vnd(n: number): string {
   return `${n.toLocaleString("vi-VN")}đ`;
@@ -20,14 +19,19 @@ async function getAccountantStats(actor: Actor) {
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
   const overdueBefore = new Date(now.getTime() - 7 * 86400000); // PENDING_PAYMENT > 7 ngày
 
-  // FL0 — cách ly cơ sở: Order ∈ SCOPED_MODELS → scopedDb lọc theo tầm nhìn cơ sở.
+  // FL0 — cách ly cơ sở: Order/Payment ∈ SCOPED_MODELS → scopedDb lọc theo tầm nhìn cơ sở.
   const sdb = scopedDb(actor);
+  // B-02 · quyết định B3 (24/08/2026) — "đã thu"/"doanh thu" là THỰC THU: Σ Payment kế
+  // toán đã xác nhận, ĐÃ trừ hoàn và ĐÃ thay bản gốc bằng bản điều chỉnh. Trước đây hai ô
+  // này cộng `Order.totalAmount` của đơn CONFIRMED/COMPLETED — tức giá trị hợp đồng, mà
+  // hoàn/điều chỉnh không bao giờ đụng tới ⇒ số phồng và phồng im lặng.
+  // Công nợ vẫn tính trên Order.PENDING_PAYMENT (không nằm trong quyết định B3).
   const [paidAgg, debtAgg, revenueMonth, debtByCenter, overdueOrders, centers] = await Promise.all([
-    sdb.order.aggregate({ where: { status: { in: [...PAID_STATUSES] } }, _sum: { totalAmount: true } }),
+    sdb.payment.aggregate({ where: WHERE_THUC_THU, _sum: { amount: true } }),
     sdb.order.aggregate({ where: { status: "PENDING_PAYMENT" }, _sum: { totalAmount: true } }),
-    sdb.order.aggregate({
-      where: { status: { in: [...PAID_STATUSES] }, paidAt: { gte: monthStart } },
-      _sum: { totalAmount: true },
+    sdb.payment.aggregate({
+      where: { ...WHERE_THUC_THU, paidDate: { gte: monthStart } },
+      _sum: { amount: true },
     }),
     sdb.order.groupBy({
       by: ["centerId"],
@@ -49,9 +53,9 @@ async function getAccountantStats(actor: Actor) {
 
   const centerName = new Map(centers.map((c) => [c.id, c.name]));
   return {
-    paid: paidAgg._sum.totalAmount ?? 0,
+    paid: paidAgg._sum.amount ?? 0,
     debt: debtAgg._sum.totalAmount ?? 0,
-    revenueMonth: revenueMonth._sum.totalAmount ?? 0,
+    revenueMonth: revenueMonth._sum.amount ?? 0,
     debtByCenter: debtByCenter.map((d) => ({
       label: d.centerId ? centerName.get(d.centerId) ?? "—" : "Chưa gán cơ sở",
       amount: d._sum.totalAmount ?? 0,

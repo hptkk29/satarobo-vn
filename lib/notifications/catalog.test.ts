@@ -33,6 +33,8 @@ const KHOA_DANG_CHAY: ReadonlyArray<[key: string, file: string]> = [
   ["sla:idle24:lead1", "lib/crm/sla.ts"],
   ["cost-unconfirmed:2026-08", "lib/crm/marketing-alerts.ts"],
   ["report-missing:2026-08", "lib/crm/marketing-alerts.ts"],
+  ["media_review.overdue:s:s1:2026-08-25", "lib/lms/media-review-overdue-run.ts"],
+  ["media_review.overdue:c:cls1:2026-08-24:2026-08-25", "lib/lms/media-review-overdue-run.ts"],
   ["session.substitute:s1", "lib/lms/session-teacher-notify.ts"],
   ["session.close-reminder:s1", "lib/lms/session-teacher-notify.ts"],
   ["intake-failing:facebook:2026-08-19-10", "lib/lead/intake/health.ts"],

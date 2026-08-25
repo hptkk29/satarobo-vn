@@ -10,6 +10,9 @@ import { ReadingTracker } from "../../_components/reading-tracker";
 import { VideoPlayer } from "../../_components/video-player";
 import { kyVeMedia } from "@/lib/elearning/media-ticket";
 import { TOC_DO_TOI_DA } from "@/lib/elearning/video-heartbeat-contract";
+import { vaySaoChuaMo } from "@/lib/elearning/lesson-kind";
+import { ExamRunner } from "../../_components/exam-runner";
+import { nenLamBai } from "@/lib/elearning/exam-view";
 
 /**
  * EL-04 — TRANG ĐỌC MỘT BÀI.
@@ -97,6 +100,7 @@ export default async function Page({
       contentMd: true,
       minReadSeconds: true,
       videoKey: true,
+      examId: true,
       captionKey: true,
       durationSec: true,
       module: { select: { title: true, course: { select: { title: true } } } },
@@ -207,14 +211,67 @@ export default async function Page({
     );
   }
 
-  if (lesson.kind !== "READ") {
-    // Các loại bài khác thuộc ticket sau. Nói thẳng thay vì hiện trang trống.
+  // ── Bài KIỂM TRA (EL-14d) ─────────────────────────────────────────────────
+  if (lesson.kind === "QUIZ") {
+    if (!lesson.examId) {
+      return (
+        <TuChoi
+          title="Bài kiểm tra chưa có đề"
+          detail="Người soạn chưa gắn đề cho bài này. Báo với Đào tạo để họ hoàn thiện."
+        />
+      );
+    }
+    const nen = await nenLamBai({
+      db,
+      userId: session.user.id,
+      enrollmentId: enrollment.id,
+      examId: lesson.examId,
+    });
+    if (!nen) {
+      return (
+        <TuChoi
+          title="Chưa mở được bài kiểm tra"
+          detail="Đề chưa được kích hoạt. Báo với Đào tạo."
+        />
+      );
+    }
+
+    return (
+      <div className="mx-auto max-w-3xl px-4 py-8">
+        <nav className="mb-2 text-xs text-muted-foreground">
+          {lesson.module.course.title} · {lesson.module.title}
+        </nav>
+        <h1 className="mb-4 text-2xl font-bold">{lesson.title}</h1>
+        <ExamRunner
+          enrollmentId={enrollment.id}
+          lessonId={lesson.id}
+          tenDe={nen.tenDe}
+          durationMin={nen.durationMin}
+          passScore={nen.passScore}
+          maxScore={nen.maxScore}
+          soLuotConLai={nen.soLuotConLai}
+          luotDangLam={nen.luotDangLam}
+          ketQuaGanNhat={nen.ketQuaGanNhat}
+        />
+      </div>
+    );
+  }
+
+  if (lesson.kind === "LIVE_SESSION") {
+    // Buổi trực tiếp KHÔNG có gì để người học bấm: điểm danh do giảng viên tick
+    // (`lib/elearning/equivalence.ts`). Nói rõ, thay vì để họ tưởng bài hỏng.
     return (
       <TuChoi
-        title="Loại bài này chưa mở"
-        detail="Hiện mới hỗ trợ bài dạng đọc và video. Các loại khác sẽ mở ở đợt sau."
+        title="Buổi học trực tiếp"
+        detail="Bài này ghi nhận bằng điểm danh của giảng viên, không có nội dung để xem ở đây."
       />
     );
+  }
+
+  if (lesson.kind !== "READ") {
+    // Nói RÕ loại nào và chờ ticket nào — câu chung chung làm người học tưởng máy
+    // mình hỏng và đi báo sai chỗ.
+    return <TuChoi title="Loại bài này chưa mở" detail={vaySaoChuaMo(lesson.kind)} />;
   }
 
   const progress = await db.trnLessonProgress.findUnique({

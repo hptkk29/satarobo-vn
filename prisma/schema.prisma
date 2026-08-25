@@ -62,6 +62,21 @@ enum LeadChildTrialStatus {
   ATTENDED
 }
 
+/// C-06 (SL-09) — trạng thái phễu của TỪNG ĐỨA CON, tách hẳn `LeadStatus` (15 giá trị,
+/// cấp phụ huynh). Một phụ huynh hai con: đứa này ghi danh trong khi đứa kia rớt là ca
+/// thường, nên "chốt" và "rớt" phải đo được theo đầu học sinh.
+/// KHÔNG tái dùng `LeadStatus`: 9/15 giá trị của nó ("Không nghe máy", "Trùng lặp",
+/// "Đang nuôi dưỡng"…) vô nghĩa với một đứa trẻ, và guard chuyển trạng thái ở
+/// `lib/leads/status.ts` bám vào ngữ cảnh thanh toán của cả phiếu.
+enum LeadChildStatus {
+  NEW // Mới
+  CONSULTING // Đang tư vấn
+  TRIAL_SCHEDULED // Hẹn học thử
+  TRIAL_ATTENDED // Đã học thử
+  ENROLLED // Chốt
+  LOST // Rớt
+}
+
 enum CourseType {
   ONLINE
   OFFLINE
@@ -1132,6 +1147,9 @@ model User {
   /// EL-03 — bằng chứng đã được thông báo phạm vi dữ liệu thu thập (QĐ-CDA-12).
   trnPolicyAcceptances TrnPolicyAcceptance[] @relation("TrnPolicyAcceptanceUser")
 
+  /// G-04 — tuỳ chọn cột bảng, theo từng người. Cascade: người nghỉ thì cấu hình đi theo.
+  tablePreferences UserTablePreference[] @relation("UserTablePreferences")
+
   @@index([email])
   @@index([phone])
   @@index([centerId])
@@ -1382,6 +1400,16 @@ model Lead {
   convertedById    String?
   convertedAt      DateTime?  @db.Timestamptz(6)
 
+  // C-06 (SL-10, quyết định B5 + 12(b) ngày 24/08/2026) — LÝ DO RỚT ở cấp PHỤ HUYNH.
+  // Ô ghi chú TỰ DO, không danh mục: chủ dự án bỏ hẳn enum lý do rớt, đổi lại là không
+  // có báo cáo "top lý do rớt" (đã chấp nhận).
+  // Trạng thái rớt thì theo TỪNG CON (`LeadChild.status = LOST`) — hai tầng khác nhau,
+  // cố ý. Hệ quả đã biết: hai con rớt vì hai lý do khác nhau ⇒ lượt ghi sau ĐÈ lượt
+  // trước; lý do của từng con tra ở `AuditLog` + `LeadActivity` (mỗi lượt đánh dấu ghi
+  // kèm tên + id của đứa con).
+  lostNote         String?    @db.Text
+  lostAt           DateTime?  @db.Timestamptz(6)
+
   // R1-04/05 — mốc thời gian phễu SR.QD.217 (L1→L2→L3 + bàn giao + SLA).
   qualifiedAt         DateTime?         @db.Timestamptz(6) // L2 — có SĐT + note
   handedAt            DateTime?         @db.Timestamptz(6) // HO bàn giao về CS
@@ -1509,6 +1537,13 @@ model LeadChild {
   interestedCenterId String? // tham chiếu Center
   note               String?              @db.Text
   trialStatus        LeadChildTrialStatus @default(NONE)
+  /// C-06 — trạng thái phễu của riêng đứa con này. NULL = phiếu cũ, CHƯA ai phân loại
+  /// (cột thêm sau khi bảng đã có dữ liệu prod). Cố ý KHÔNG `@default(NEW)`: gán "Mới"
+  /// cho 100% dòng cũ là bịa ra một khẳng định sai về những đứa đã ghi danh từ lâu, và
+  /// mọi báo cáo đếm theo trạng thái sẽ nuốt điều đó không một lời cảnh báo.
+  /// `LOST` ở đây là TRẠNG THÁI rớt (theo từng con); LÝ DO rớt nằm ở `Lead.lostNote`
+  /// (cấp phụ huynh — quyết định B5 ngày 24/08/2026).
+  status             LeadChildStatus?
   createdAt          DateTime             @default(now()) @db.Timestamptz(6)
   updatedAt          DateTime             @updatedAt @db.Timestamptz(6)
 
@@ -6134,6 +6169,125 @@ model RevenueTarget {
   @@index([orgUnitId])
 }
 
+/// C-01 — chỉ tiêu SỐ HỌC SINH theo tháng × cơ sở. Song sinh với RevenueTarget ở trên.
+///
+/// ĐƠN VỊ ĐẾM: `targetCount` là số HỌC SINH (`LeadChild`), KHÔNG phải số phụ huynh
+/// (`Lead`) — quyết định 24/08/2026 (B4) nối doanh số về từng con qua `Order.leadChildId`,
+/// nên đơn vị sinh doanh thu là đứa trẻ và chỉ tiêu phải đếm cùng thứ với tử số của C2.
+/// Một phụ huynh hai con = 2 đơn vị chỉ tiêu. (E-02 thì ngược lại: đếm theo phụ huynh.)
+///
+/// `centerId = NULL` ⇒ chỉ tiêu TOÀN HỆ THỐNG (KHÔNG phải "chưa gán cơ sở").
+/// ⚠️ Khai vào SCOPE_EXEMPT (lib/db-scope.ts), KHÔNG khai SCOPED_MODELS — `injectScope`
+///    chèn `centerId IN (...)` trần và dòng toàn hệ thống sẽ tàng hình.
+/// ⚠️ `@@unique([centerId, period])` với `centerId` nullable: Postgres coi NULL là
+///    DISTINCT ⇒ `upsert` KHÔNG match nhánh toàn hệ thống, phải `findFirst` + create/update
+///    tay (khuôn có sẵn ở app/(admin)/admin/bao-cao/doanh-thu/_actions.ts).
+model LeadTarget {
+  id       String  @id @default(cuid())
+  centerId String?
+  // Luật cứng Nền Hệ thống #3 + quyết định 24/08 (B1): bảng MỚI mang CẢ HAI cột.
+  // Ở đây bảng nằm NGOÀI scope nên `orgUnitId` chỉ để ghi kép/đối soát, không phải cột lọc.
+  // `lib/org/dual-write.ts` tự lấp khi `centerId` có giá trị — không tự gọi orgUnitIdForCenter().
+  orgUnitId String?
+
+  period      String // "YYYY-MM" — cùng quy ước RevenueTarget.period + monthKeyVN
+  targetCount Int // SỐ HỌC SINH
+  note        String?
+  createdById String?
+  createdAt   DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt   DateTime @updatedAt @db.Timestamptz(6)
+
+  @@unique([centerId, period])
+  @@index([period])
+  @@index([centerId])
+  @@index([orgUnitId])
+}
+
+/// D-02 — chỉ tiêu NGÂN SÁCH QUẢNG CÁO theo tháng × cơ sở. Bảng thứ ba của bộ ba chỉ
+/// tiêu, cùng hình dạng với RevenueTarget (tiền THU) và LeadTarget (đầu NGƯỜI); ở đây
+/// đo tiền CHI cho quảng cáo.
+///
+/// ĐỌC KÈM: đây là con số NGƯỜI TA ĐẶT RA, không phải số đã tiêu. Số đã tiêu là
+/// snapshot chi tiêu Facebook của D-01 (chưa xây — đang chờ chốt loại mã kết nối Meta).
+/// D-03 ghép hai vế lại thành "% thực tế / chỉ tiêu", nên trộn hai thứ vào một bảng là
+/// mất luôn khả năng nói "đã tiêu vượt chỉ tiêu".
+///
+/// `centerId = NULL` ⇒ chỉ tiêu TOÀN HỆ THỐNG (KHÔNG phải "chưa gán cơ sở"). Nó KHÁC
+/// hẳn nhóm `CHƯA PHÂN BỔ` của D-06/D-08 — nhóm đó là chi tiêu THẬT chưa quy được về
+/// cơ sở nào, còn dòng NULL ở đây là một chỉ tiêu do người đặt cho cả công ty.
+///
+/// ⚠️ Khai vào SCOPE_EXEMPT (lib/db-scope.ts), KHÔNG khai SCOPED_MODELS — `injectScope`
+///    chèn `centerId IN (...)` trần và dòng toàn hệ thống sẽ tàng hình.
+/// ⚠️ `@@unique([centerId, period])` với `centerId` nullable: Postgres coi NULL là
+///    DISTINCT ⇒ `upsert` KHÔNG match nhánh toàn hệ thống, phải `findFirst` + create/update
+///    tay (khuôn có sẵn ở app/(admin)/admin/bao-cao/doanh-thu/_actions.ts).
+/// ⚠️ `targetAmount` là `Int` ⇒ int4, trần 2_147_483_647 đồng. Đường ghi CHẶN TRƯỚC ở
+///    `ADS_BUDGET_TARGET_AMOUNT_MAX` (lib/reports/ads-budget-target.ts) để lỗi hiện ra
+///    ngay tại ô nhập, không phải thành "Lỗi cơ sở dữ liệu" chẳng nói gì.
+model AdsBudgetTarget {
+  id       String  @id @default(cuid())
+  centerId String?
+  // Luật cứng Nền Hệ thống #3 + quyết định 24/08 (B1): bảng MỚI mang CẢ HAI cột.
+  // Bảng nằm NGOÀI scope nên `orgUnitId` chỉ để ghi kép/đối soát, không phải cột lọc.
+  // `lib/org/dual-write.ts` tự lấp khi `centerId` có giá trị — không tự gọi orgUnitIdForCenter().
+  orgUnitId String?
+
+  period       String // "YYYY-MM" — cùng quy ước RevenueTarget.period + monthKeyVN
+  targetAmount Int // VNĐ, số nguyên
+  note         String?
+  createdById  String?
+  createdAt    DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt    DateTime @updatedAt @db.Timestamptz(6)
+
+  @@unique([centerId, period])
+  @@index([period])
+  @@index([centerId])
+  @@index([orgUnitId])
+}
+
+/// G-04 — tuỳ chọn cột danh sách theo TỪNG NGƯỜI (kiểu MISA).
+///
+/// 🔴 CỐ Ý KHÔNG mang `centerId`/`orgUnitId` — ngoại lệ có chủ đích của luật cứng
+/// Nền Hệ thống #3 ("bảng mới có DỮ LIỆU THEO ĐƠN VỊ bắt buộc có orgUnitId"), đã
+/// chốt tường minh ở PRD G-lead §7.2 / A-nen-tang SL-13. Bốn lý do, viết ra để
+/// người sau khỏi "sửa cho đúng luật":
+///   1. Đây là SỞ THÍCH CÁ NHÂN. Nó không trả lời "bản ghi này thuộc cơ sở nào",
+///      nó trả lời "người này thích nhìn thấy gì".
+///   2. Cách ly đã mạnh hơn scope: MỌI truy vấn khoá cứng `userId` từ phiên đăng
+///      nhập. Không màn nào đọc cấu hình của người khác ⇒ không có gì để scope.
+///   3. Quản lý nhiều cơ sở chỉ có MỘT bộ cột; gắn theo cơ sở thì cột nhảy loạn
+///      mỗi lần họ đổi bộ lọc phạm vi.
+///   4. Khai vào SCOPED_MODELS còn phản tác dụng: `injectScope` chèn
+///      `centerId IN (...)` trần ⇒ dòng `centerId = null` tàng hình với CHÍNH CHỦ.
+/// Vì không có `centerId`, bảng này KHÔNG cần (và không được) khai vào
+/// SCOPED_MODELS/SCOPE_EXEMPT (`lib/db-scope.ts`) hay BACKFILL_SPECS
+/// (`lib/org/center-bridge.ts`) — cả hai test canh gác đều soi theo SỰ CÓ MẶT của
+/// cột, nên thêm cột "cho đủ luật" là tự chuốc thêm hai dòng khai báo vô nghĩa.
+///
+/// `columns` (Json) — hình dạng ở `lib/tables/column-preference.ts`:
+///   { "v": 1, "visible": ["parentName", …], "hidden": ["email", …] }
+/// Cần CẢ `hidden` chứ không chỉ `visible`: thiếu nó thì không phân biệt được
+/// "đã tắt có chủ ý" với "chưa từng biết đến", và cột thêm sau sẽ không bao giờ
+/// hiện ra với người đã lưu cấu hình.
+model UserTablePreference {
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation("UserTablePreferences", fields: [userId], references: [id], onDelete: Cascade)
+
+  /// Định danh bảng, có namespace: "admin.leads.list". Bảng thứ hai chỉ cần khai
+  /// danh mục cột riêng ở tầng mã — KHÔNG phải đổi schema.
+  tableKey String
+  columns  Json
+  /// Dành sẵn cho P2 (nhớ số dòng mỗi trang). v1 luôn null.
+  pageSize Int?
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  @@unique([userId, tableKey])
+  @@index([userId])
+}
+
 // ═══ R7-02 — Lớp trải nghiệm N buổi ══════════════════════════════════════════
 enum TrialClassV2Status {
   OPEN
@@ -7290,7 +7444,8 @@ model TrnLesson {
   videoSessions  TrnVideoSession[]
 
   /// EL-04 — tiến độ của mọi lượt học trên bài này.
-  progress TrnLessonProgress[]
+  progress   TrnLessonProgress[]
+  watchFlags TrnWatchFlag[]
 
   @@unique([moduleId, orderIndex])
   @@index([kind])
@@ -8142,4 +8297,576 @@ model TrnEquivalence {
   @@index([originalEffectiveAt])
   @@index([centerId])
   @@index([orgUnitId])
+}
+
+/// EL-13 — chủ thể bị gắn cờ: dòng tiến độ một bài, hay một phiên xem.
+enum TrnFlagSubject {
+  LESSON_PROGRESS
+  VIDEO_SESSION
+}
+
+/// EL-13 — vòng đời cờ nghi ngờ.
+///
+/// `OPEN` → người học khiếu nại → `APPEALED` → người xử quyết: giữ cờ (`UPHELD`)
+/// hoặc gỡ cờ (`REVOKED`). Hết cửa sổ khiếu nại mà vẫn `OPEN` thì cron chốt
+/// `UPHELD` — im lặng để cờ treo mãi là cách tệ nhất, vì người bị gắn cờ không
+/// biết mình còn bao lâu để nói lại.
+enum TrnFlagStatus {
+  OPEN
+  APPEALED
+  UPHELD
+  REVOKED
+}
+
+/// EL-13 — CỜ NGHI NGỜ HỌC ĐỐI PHÓ.
+///
+/// ⚠️ Là một BẢNG CÓ VÒNG ĐỜI, cố ý KHÔNG phải hai cột `flagged`/`flagReason` trên
+/// `TrnLessonProgress`. Hai cột thì không giữ được lịch sử khiếu nại, không biết
+/// ai xử, và gỡ cờ xong là mất sạch dấu vết việc từng có cờ — trong khi đây là dữ
+/// liệu quan hệ lao động.
+///
+/// ⚠️ `evidenceJson` CHỈ chứa SỐ LIỆU TỔNG HỢP. Nó là lưới an toàn cuối cùng: sau
+/// 90 ngày dữ liệu thô tầng 2 bị dọn, nhưng người khiếu nại và người xử vẫn phải
+/// nhìn CÙNG một bộ số. Nhét bitmap thô hay nhật ký phiên vào đây là rò tầng 2
+/// sang tầng 1 và vô hiệu hoá chính hạn dọn 90 ngày.
+model TrnWatchFlag {
+  id           String  @id @default(cuid())
+  userId       String
+  lessonId     String
+  enrollmentId String?
+
+  subjectKind      TrnFlagSubject
+  /// Đúng MỘT trong hai cột dưới có giá trị, theo `subjectKind`.
+  lessonProgressId String?
+  videoSessionId   String?
+
+  /// MÃ LUẬT, không phải câu văn: `WATCH_TIME_TOO_LOW` · `SEEK_ABUSE` · `TOO_FAST`
+  /// · `HEARTBEAT_FLOOD`. Câu văn tiếng Việt nằm ở tầng hiển thị — để ở đây thì
+  /// sửa câu chữ là sửa dữ liệu lịch sử.
+  ruleCode     String
+  evidenceJson Json
+
+  status   TrnFlagStatus @default(OPEN)
+  openedAt DateTime      @default(now()) @db.Timestamptz(6)
+
+  appealedAt     DateTime? @db.Timestamptz(6)
+  appealNote     String?
+  /// `= openedAt + 14 ngày`. Hết cửa sổ mà cờ còn `OPEN` thì chốt `UPHELD`.
+  appealDeadline DateTime  @db.Timestamptz(6)
+
+  /// NGƯỜI XỬ CÓ TÊN, gán ngay lúc mở cờ — không phải "phòng Đào tạo" chung
+  /// chung. Không có tên người thì không ai thấy mình phải trả lời, và khiếu nại
+  /// nằm đó tới khi hết hạn.
+  handlerUserId String
+  /// `= appealedAt + 5 ngày làm việc`. Quá hạn thì vào hàng đợi việc của người xử.
+  decisionDueAt DateTime? @db.Timestamptz(6)
+
+  decidedAt       DateTime? @db.Timestamptz(6)
+  decidedByUserId String?
+  /// Bắt buộc khi gỡ cờ (`REVOKED`) — gỡ mà không nói lý do thì lần sau không ai
+  /// biết luật đã sai ở đâu.
+  decisionNote    String?
+
+  centerId  String?
+  orgUnitId String?
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  lesson TrnLesson @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+
+  @@index([status, openedAt])
+  @@index([userId, status])
+  @@index([orgUnitId, status])
+  /// Cron chốt `UPHELD` khi hết cửa sổ đi bằng index này.
+  @@index([appealDeadline])
+  @@index([handlerUserId, status])
+  @@index([decisionDueAt, status])
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// EL-14 — KHẢO THÍ ĐÀO TẠO NỘI BỘ (7 bảng)
+//
+// ⚠️ VÌ SAO DỰNG BẢNG MỚI thay vì tái dùng `Question`/`Exam`/`ExamAttempt` đã có:
+// hai cây nội dung KHÔNG có một khoá ngoại nào bắc qua nhau. `Question` treo vào
+// `Curriculum`/`Course`/`Lesson`/`Assignment` — toàn bộ là miền DẠY HỌC SINH; còn
+// `ExamAttempt.studentId → Student` là NOT NULL, trong khi người thi ở đây là
+// `User` (nhân viên). Nhét nhân viên vào đó là phải nới một FK đang chặt, và câu
+// hỏi tuân thủ nội bộ sẽ hiện trong màn chọn đề của giáo viên robotics.
+//
+// ⚠️ Nhưng KHUÔN câu hỏi thì dùng chung (`contentQuestionSchema`) — một khuôn,
+// hai bảng. Đúng tiền lệ `lib/elearning/lesson-cue.ts`.
+// ═══════════════════════════════════════════════════════════════════════════
+
+/// Chín loại câu hỏi của BA §13.1.
+///
+/// ⚠️ Khai ĐỦ CHÍN dù lượt 1 chỉ mở năm: bỏ bớt giá trị enum rồi thêm lại sau là
+/// `ALTER TYPE` trên bảng đã có dữ liệu prod. Phạm vi thi hành khoá ở tầng Zod,
+/// nơi sửa được mà không đụng schema.
+enum TrnQuestionType {
+  SINGLE
+  MULTIPLE
+  TRUE_FALSE
+  FILL_BLANK
+  MATCHING
+  ORDERING
+  SHORT_ANSWER
+  CASE
+  ESSAY
+}
+
+/// `FIXED` = mọi người cùng một bộ câu. `RANDOM` = rút theo `blueprintJson`.
+///
+/// ⚠️ `RANDOM` rút MỘT LẦN lúc kích hoạt đề và vật chất hoá vào `TrnExamQuestion`;
+/// khác biệt giữa người này với người kia đến từ trộn THỨ TỰ, không phải rút khác
+/// bộ câu. Rút-theo-người cần một bảng thứ tám và `TrnExamAnswer` phải trỏ vào nó
+/// — đổi sau khi đã có dữ liệu là đổi khoá ngoại trên bảng sống.
+enum TrnExamMode {
+  FIXED
+  RANDOM
+}
+
+/// Khi nào người học thấy đáp án đúng.
+enum TrnShowAnswerPolicy {
+  NEVER
+  AFTER_EACH_ATTEMPT
+  AFTER_LAST_ATTEMPT
+}
+
+/// Vòng đời một lượt thi.
+///
+/// ⚠️ `PENDING_GRADE` là trạng thái RIÊNG, không gộp vào `SUBMITTED`. Đề có câu
+/// chấm tay mà đóng thẳng sang `GRADED` nghĩa là lượt đó bị chốt điểm 0 và tính
+/// trượt trong khi chưa ai đọc bài — và nó không nằm trong hàng chờ chấm của ai.
+enum TrnAttemptStatus {
+  IN_PROGRESS
+  SUBMITTED
+  PENDING_GRADE
+  GRADED
+  ABANDONED
+}
+
+/// EL-14 — NGÂN HÀNG CÂU HỎI đào tạo nội bộ.
+model TrnQuestion {
+  id String @id @default(cuid())
+
+  /// Đường trong cây ngân hàng, vd `/an-toan/pccc/`. Cây bằng chuỗi đường dẫn chứ
+  /// không bằng bảng cha-con: ngân hàng ở quy mô này không cần một cây có ràng
+  /// buộc, và đổi nhánh chỉ là một lượt cập nhật chuỗi.
+  bankPath    String
+  type        TrnQuestionType
+  /// Đề bài. `stem` chứ không `text` — `text` là tên cột của bảng học sinh, và để
+  /// trùng tên hai miền là mời người đọc nhầm bảng.
+  stem        String          @db.Text
+  explanation String?         @db.Text
+
+  /// Nội dung phụ thuộc loại câu (lựa chọn, đáp án đúng, cặp ghép…), theo
+  /// `contentQuestionSchema` dùng chung.
+  ///
+  /// ⚠️ Đáp án đúng nằm TRONG đây, nên mọi đường trả câu hỏi cho người học phải đi
+  /// qua một hàm lọc — bơm cả cục xuống là gửi kèm đáp án trong thân phản hồi.
+  contentJson Json
+
+  difficulty    String   @default("MEDIUM")
+  skillTags     String[] @default([])
+  /// Điểm mặc định khi đưa câu này vào đề. Điểm THẬT của một đề nằm ở
+  /// `TrnExamQuestion.points` — sửa ở đây không đổi điểm lượt thi đã chấm.
+  defaultPoints Int      @default(1)
+
+  /// Sửa một câu ĐÃ nằm trong đề đã thi thì KHÔNG sửa tại chỗ: tạo bản mới
+  /// (`version + 1`) và đặt `supersededById` trên bản cũ. Sửa tại chỗ làm lệch
+  /// điểm của mọi lượt đã chấm, im lặng.
+  version        Int     @default(1)
+  supersededById String?
+
+  centerId  String?
+  orgUnitId String?
+
+  createdByUserId String?
+  createdAt       DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt       DateTime  @updatedAt @db.Timestamptz(6)
+  deletedAt       DateTime? @db.Timestamptz(6)
+
+  choices       TrnChoice[]
+  examQuestions TrnExamQuestion[]
+
+  @@index([bankPath])
+  @@index([centerId])
+  @@index([orgUnitId])
+  @@index([type, difficulty])
+}
+
+/// EL-14 — lựa chọn của một câu hỏi.
+///
+/// ⚠️ Tồn tại SONG SONG với `contentJson`, cố ý: `contentJson` là khuôn dùng chung
+/// cho trình soạn, còn bảng này là thứ TRUY VẤN ĐƯỢC (thống kê câu nhiễu nào hay
+/// bị chọn — EL-17). Hai bên phải được ghi trong cùng một transaction.
+model TrnChoice {
+  id         String  @id @default(cuid())
+  questionId String
+  text       String  @db.Text
+  isCorrect  Boolean @default(false)
+  orderIndex Int
+
+  question TrnQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  @@unique([questionId, orderIndex])
+  @@index([questionId])
+}
+
+/// EL-14 — MỘT ĐỀ THI.
+model TrnExam {
+  id String @id @default(cuid())
+
+  /// ĐÚNG MỘT trong hai có giá trị. Hai cột cùng có giá trị = hai đường tìm đề, và
+  /// báo cáo sẽ đếm đôi.
+  courseId String?
+  lessonId String?
+
+  title         String
+  mode          TrnExamMode @default(FIXED)
+  /// Công thức rút cho `RANDOM`, vd `{"EASY":10,"MEDIUM":10,"HARD":5}`.
+  blueprintJson Json?
+
+  durationMin Int
+  /// Điểm ĐẠT, TUYỆT ĐỐI (không phải phần trăm) — và giao diện cũng NHẬP TUYỆT ĐỐI,
+  /// không có phép quy đổi % nào ở giữa. (Bản đầu của chú thích này nói giao diện
+  /// nhập theo %; mã chưa bao giờ làm thế, và một chú thích sai ở schema là thứ người
+  /// sau tin trước khi họ đọc mã.) Lưu % thì đổi `maxScore` là im lặng đổi ngưỡng đạt
+  /// của mọi lượt đã thi.
+  passScore   Int
+  /// Tổng điểm của đề, ĐÓNG BĂNG lúc kích hoạt.
+  ///
+  /// ⚠️ Cột này KHÔNG có trong bảng khai của đặc tả (§3.3.3) nhưng được §9 dùng
+  /// năm lần, và chính §9.12 liệt nó vào danh sách "phải đi xin EL-14". Không có
+  /// nó thì không tính được tỉ lệ điểm, và mọi chỉ số phải quay sang đọc
+  /// `passScore` — một con số do chính người bị đo tự đặt.
+  maxScore    Int @default(0)
+
+  maxAttempts   Int @default(1)
+  cooldownHours Int @default(24)
+
+  showAnswerPolicy TrnShowAnswerPolicy @default(AFTER_LAST_ATTEMPT)
+  shuffleQuestions Boolean             @default(true)
+  shuffleChoices   Boolean             @default(true)
+
+  /// `false` = còn nháp, sửa thoải mái. `true` = đã đóng băng bộ câu và `maxScore`.
+  isActive Boolean @default(false)
+
+  centerId  String?
+  orgUnitId String?
+
+  createdByUserId String?
+  createdAt       DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt       DateTime  @updatedAt @db.Timestamptz(6)
+  deletedAt       DateTime? @db.Timestamptz(6)
+
+  questions TrnExamQuestion[]
+  attempts  TrnExamAttempt[]
+  unlocks   TrnExamUnlock[]
+
+  @@index([courseId])
+  @@index([lessonId])
+  @@index([centerId])
+  @@index([orgUnitId])
+}
+
+/// EL-14 — một câu trong một đề, kèm điểm của riêng đề đó.
+model TrnExamQuestion {
+  id         String @id @default(cuid())
+  examId     String
+  questionId String
+  orderIndex Int
+  /// Điểm THẬT dùng để chấm. Tách khỏi `TrnQuestion.defaultPoints` để sửa câu
+  /// trong ngân hàng không làm lệch điểm của lượt đã chấm.
+  points     Int    @default(1)
+
+  exam     TrnExam         @relation(fields: [examId], references: [id], onDelete: Cascade)
+  question TrnQuestion     @relation(fields: [questionId], references: [id], onDelete: Restrict)
+  answers  TrnExamAnswer[]
+
+  @@unique([examId, questionId])
+  @@unique([examId, orderIndex])
+  @@index([examId])
+}
+
+/// EL-14 — MỘT LƯỢT THI của một người.
+///
+/// ⚠️ Mang CẢ HAI cột đơn vị, NOT NULL — khác `TrnLessonProgress` (không mang cột
+/// nào). Ngoại lệ của bảng tiến độ có ba điều kiện: nhịp ghi nóng, không tự đứng
+/// được, và vòng đời tầng 2. Lượt thi ghi vài lần một người một đề, là CHỨNG TỪ
+/// giữ dài, và phải đối soát được ở cron drift đêm — không điều kiện nào áp.
+model TrnExamAttempt {
+  id           String  @id @default(cuid())
+  examId       String
+  userId       String
+  enrollmentId String?
+  attemptNo    Int     @default(1)
+
+  status      TrnAttemptStatus @default(IN_PROGRESS)
+  startedAt   DateTime         @default(now()) @db.Timestamptz(6)
+  submittedAt DateTime?        @db.Timestamptz(6)
+  gradedAt    DateTime?        @db.Timestamptz(6)
+
+  /// `null` cho tới khi chấm xong. KHÔNG mặc định 0 — 0 nghĩa là "làm sai hết",
+  /// còn `null` nghĩa là "chưa ai chấm", và gộp hai thứ đó là đóng sổ trượt cho
+  /// người chưa được chấm.
+  totalScore Int?
+  passed     Boolean?
+
+  gradedByUserId String?
+  feedback       String? @db.Text
+
+  // TẦNG 2 — dấu vân kỹ thuật, KHÔNG lưu IP thô.
+  ipHash        String?
+  ipPrefix      String?
+  deviceClass   String?
+  browserFamily String?
+  /// NOT NULL, ghi cứng lúc INSERT = mốc bắt đầu + 90 ngày. Thêm cột này sau bằng
+  /// `ALTER TABLE` là để lại một lớp dữ liệu hành vi không có hạn dọn.
+  purgeAfter    DateTime @db.Timestamptz(6)
+
+  centerId  String
+  orgUnitId String
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  exam    TrnExam         @relation(fields: [examId], references: [id], onDelete: Cascade)
+  answers TrnExamAnswer[]
+
+  /// Một người · một đề · một số thứ tự lượt = đúng một dòng. Đây là thứ chặn hai
+  /// tab cùng bấm "Bắt đầu thi" tạo ra hai lượt.
+  @@unique([examId, userId, attemptNo])
+  @@index([userId, examId])
+  @@index([status, startedAt])
+  @@index([purgeAfter])
+  @@index([orgUnitId])
+  @@index([centerId])
+}
+
+/// EL-14 — câu trả lời cho MỘT câu trong MỘT lượt.
+model TrnExamAnswer {
+  id             String @id @default(cuid())
+  attemptId      String
+  examQuestionId String
+
+  selectedChoiceIds String[] @default([])
+  textAnswer        String?  @db.Text
+
+  /// `null` = CHƯA CHẤM. Khác hẳn `false` (đã chấm, sai).
+  isCorrect  Boolean?
+  /// `null` = chưa chấm. Không mặc định 0.
+  score      Int?
+  graderNote String?  @db.Text
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  attempt      TrnExamAttempt  @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+  examQuestion TrnExamQuestion @relation(fields: [examQuestionId], references: [id], onDelete: Cascade)
+
+  /// Một lượt · một câu = đúng một dòng. Đây là thứ cho phép lưu dần từng câu
+  /// trong lúc làm bài (mất mạng 10 giây không mất cả bài).
+  @@unique([attemptId, examQuestionId])
+  @@index([attemptId])
+}
+
+/// EL-14 — MỞ KHOÁ THÊM MỘT LƯỢT THI (BR-006).
+///
+/// ⚠️ Bảng riêng chứ không phải một cột `extraAttempts` trên đề: mỗi lần mở khoá là
+/// một sự kiện có người chịu trách nhiệm, có lý do, đếm được. Một cột số thì không
+/// biết ai cộng, cộng khi nào, và vì sao.
+model TrnExamUnlock {
+  id                   String @id @default(cuid())
+  examId               String
+  userId               String
+  unlockedByUserId     String
+  /// BẮT BUỘC. Mở khoá không lý do thì lần sau không ai biết vì sao ngoại lệ đó
+  /// từng được cho.
+  reason               String
+  previousAttemptCount Int    @default(0)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+
+  exam TrnExam @relation(fields: [examId], references: [id], onDelete: Cascade)
+
+  @@index([examId, userId])
+  @@index([userId])
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// EL-15 — BÀI TẬP CHẤM TAY + KHUNG CHẤM (rubric)
+//
+// ⚠️ Rubric cũ của repo (`RubricCriterion`/`RubricLevel`) KHÔNG dùng lại được: nó
+// là enum CỨNG 6 tiêu chí robotics × 4 mức, gắn với lớp học sinh. Nó không biểu
+// diễn nổi thang 100 điểm của quy trình tư vấn hay khung ngạch giáo viên — hai thứ
+// EL-15 sinh ra để chấm. Dùng lại là bẻ cong một cấu trúc cho việc nó không làm
+// được, và mỗi khung mới sẽ phải sửa enum.
+// ════════════════════════════════════════════════════════════════════════════
+
+enum TrnRubricStatus {
+  DRAFT
+  ACTIVE
+  ARCHIVED
+}
+
+enum TrnSubmissionStatus {
+  DRAFT
+  SUBMITTED
+  GRADED
+  /// Người chấm trả lại để làm lại. KHÁC `DRAFT`: đã từng nộp, đã từng được đọc.
+  NEEDS_REVISION
+}
+
+/// KHUNG CHẤM một bài tập.
+model TrnRubric {
+  id    String @id @default(cuid())
+  code  String @unique
+  title String
+
+  /// Tổng điểm của khung (thường 100). ĐÓNG BĂNG lúc kích hoạt, cùng lý do với
+  /// `TrnExam.maxScore`: tính lại lúc chấm là để một tiêu chí bị sửa điểm sau đó
+  /// làm lệch thang của những bài đã chấm.
+  totalPoints Int @default(100)
+
+  /// Ngưỡng ĐẠT, tuyệt đối (vd 80 trên thang 100) — và giao diện cũng NHẬP TUYỆT
+  /// ĐỐI, không quy đổi %.
+  ///
+  /// ⚠️ Ngưỡng nằm ở KHUNG chứ không ở bài học: một khung dùng cho nhiều bài, và
+  /// mỗi bài đặt một ngưỡng khác nhau trên cùng khung nghĩa là hai người cùng làm
+  /// một việc được chấm bằng hai thước. Muốn ngưỡng khác thì tạo khung khác.
+  passPoints Int @default(80)
+
+  version Int             @default(1)
+  status  TrnRubricStatus @default(DRAFT)
+
+  ownerUserId String
+
+  /// NULL = khung DÙNG CHUNG toàn công ty ⇒ `NULL_IS_GLOBAL_MODELS`.
+  centerId  String?
+  orgUnitId String?
+
+  deletedAt DateTime? @db.Timestamptz(6)
+  createdAt DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime  @updatedAt @db.Timestamptz(6)
+
+  criteria TrnRubricCriterion[]
+
+  @@index([status])
+  @@index([centerId])
+  @@index([orgUnitId])
+}
+
+/// Một TIÊU CHÍ trong khung chấm.
+model TrnRubricCriterion {
+  id       String @id @default(cuid())
+  rubricId String
+
+  label       String
+  description String? @db.Text
+
+  /// Trọng số, tổng các tiêu chí = `TrnRubric.totalPoints`. Kiểm ở Zod — Postgres
+  /// không ép được tổng của nhiều dòng.
+  weight     Int
+  orderIndex Int
+
+  /// Các MỨC của tiêu chí: `[{label, points, desc}]`.
+  ///
+  /// ⚠️ Người chấm chọn MỘT mức, và `points` của mức đó là điểm tiêu chí. Không có
+  /// phép nhân trọng số nào ở giữa: hai phép quy đổi (mức→điểm rồi điểm→trọng số)
+  /// là hai chỗ để lệch, và người chấm không kiểm được con số cuối bằng mắt.
+  levelsJson Json
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  rubric TrnRubric        @relation(fields: [rubricId], references: [id], onDelete: Cascade)
+  scores TrnRubricScore[]
+
+  @@unique([rubricId, orderIndex])
+  @@index([rubricId])
+}
+
+/// Một lượt NỘP BÀI TẬP.
+model TrnSubmission {
+  id           String  @id @default(cuid())
+  lessonId     String
+  enrollmentId String?
+  userId       String
+  attemptNo    Int     @default(1)
+
+  contentText String? @db.Text
+
+  /// Tệp đính kèm: `[{key, mime, size, name}]` — `key` là khoá trên kho R2.
+  ///
+  /// ⚠️ Nội dung ở đây MANG DỮ LIỆU CÁ NHÂN CỦA BÊN THỨ BA: §13.3 bắt giáo viên nộp
+  /// "video dạy thử" và tư vấn viên nộp "ghi âm hội thoại" — tức trẻ em và phụ
+  /// huynh. Bốn quy tắc của kế hoạch áp ở TẦNG ĐƯỜNG GHI, không phải ở cột này.
+  attachmentsJson Json?
+
+  submittedAt DateTime?           @db.Timestamptz(6)
+  status      TrnSubmissionStatus @default(DRAFT)
+
+  /// `null` cho tới khi chấm xong. KHÔNG mặc định 0 — 0 nghĩa là "làm sai hết",
+  /// còn `null` nghĩa là "chưa ai chấm".
+  score  Int?
+  passed Boolean?
+
+  gradedByUserId String?
+  gradedAt       DateTime? @db.Timestamptz(6)
+
+  /// HẠN CHẤM = `submittedAt` + `SLA_GRADE_DAYS` NGÀY LÀM VIỆC.
+  ///
+  /// ⚠️ Không có cột này thì "nộp bài → có điểm trong 3 ngày làm việc" là thiện chí
+  /// chứ không phải cam kết đo được, và hàng đợi chấm không có chỉ số tồn đọng.
+  /// Index `[status, dueGradeAt]` chính là thứ cron nhắc người chấm đọc.
+  dueGradeAt DateTime? @db.Timestamptz(6)
+
+  feedback String? @db.Text
+
+  centerId  String
+  orgUnitId String
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  scores TrnRubricScore[]
+
+  /// Một người · một bài · một số thứ tự lượt = đúng một dòng. Đây là thứ chặn hai
+  /// tab cùng bấm "Nộp bài" tạo ra hai lượt.
+  @@unique([lessonId, userId, attemptNo])
+  @@index([status, gradedByUserId])
+  @@index([status, dueGradeAt])
+  @@index([userId, lessonId])
+  @@index([enrollmentId])
+  @@index([centerId])
+  @@index([orgUnitId])
+}
+
+/// Điểm một TIÊU CHÍ của một lượt nộp.
+model TrnRubricScore {
+  id           String @id @default(cuid())
+  submissionId String
+  criterionId  String
+
+  /// Chỉ số MỨC người chấm chọn, trong `levelsJson` của tiêu chí.
+  levelIndex Int
+  /// Điểm của mức đó, CHÉP LẠI lúc chấm.
+  ///
+  /// ⚠️ Chép chứ không join sống sang `levelsJson`: sửa khung sau đó sẽ ĐỔI HỒI TỐ
+  /// điểm của mọi bài đã chấm, và không ai giải thích được vì sao bảng điểm tháng
+  /// trước in lại hôm nay ra số khác.
+  points     Float
+  note       String? @db.Text
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  submission TrnSubmission      @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  criterion  TrnRubricCriterion @relation(fields: [criterionId], references: [id], onDelete: Restrict)
+
+  /// Một lượt nộp · một tiêu chí = đúng một dòng.
+  @@unique([submissionId, criterionId])
+  @@index([submissionId])
 }

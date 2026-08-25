@@ -9,8 +9,9 @@ import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
 import { phoneVn } from '@/lib/validators/phone'
 import { phoneVariants } from '@/lib/phone'
-import type { Prisma } from '@prisma/client'
+import type { LeadChildStatus, Prisma } from '@prisma/client'
 import { logLeadAudit, getAuditActor } from '@/lib/audit/log'
+import { recordLeadStatusChange } from '@/lib/lead/status-trail-write'
 import { resolveActor } from '@/lib/auth/actor'
 import { passesScope, scopedDb } from '@/lib/db-scope'
 import { getLeadPaymentSummary } from '@/lib/payments/summary'
@@ -25,6 +26,11 @@ import { normalizeFacebookUrl } from '@/lib/lead/intake/normalize'
 import { mergeLeadNote } from '@/lib/lead/note-view'
 import { LEAD_STATUS_LABEL, canTransitionLeadStatus } from '@/lib/leads/status'
 import { leadChildSchema } from '@/lib/validators/lead'
+import {
+  decideLeadLostFields,
+  markChildLostSchema,
+  unmarkChildLostSchema,
+} from '@/lib/lead/lost-status'
 import { syncLeadChildNameToStudents } from '@/lib/students/sync-name'
 import {
   getPriorHistoryByPhone,
@@ -183,27 +189,17 @@ export async function updateLeadStatus(
       data: { status: parsed.data },
     })
 
-    await logLeadAudit({
+    // C-07 — vết đổi trạng thái đi qua ĐÚNG MỘT đường cho mọi lối đổi (tay, tự
+    // chia, học thử, thanh toán, chốt ghi danh). Trước đây mỗi chỗ tự ghi một
+    // kiểu nên mục "Lịch sử thay đổi" thiếu mốc mà không ai thấy là thiếu.
+    await recordLeadStatusChange({
+      tx,
       leadId,
-      action: 'STATUS_CHANGE',
       actorId,
       actorName,
-      oldValues: { status: before.status },
-      newValues: { status: parsed.data },
-      changedFields: ['status'],
-      tx,
-    })
-
-    // Phase T1.2 — tự sinh activity timeline cho mỗi lần đổi status.
-    await tx.leadActivity.create({
-      data: {
-        leadId,
-        actorId,
-        actorName,
-        type: 'STATUS_CHANGE',
-        content: `Chuyển trạng thái: ${before.status} → ${parsed.data}`,
-        metadata: { from: before.status, to: parsed.data },
-      },
+      from: before.status,
+      to: parsed.data,
+      source: 'MANUAL',
     })
 
     // 25/08 — lead MẤT ⇒ đóng sổ học thử của mọi con: `LeadTrialHistory.outcome = "LOST"`.
@@ -717,6 +713,12 @@ export async function createLeadManual(
       courseId: d.courseId || null,
       source: d.source || 'Nhập tay',
       note: d.note || null,
+      // 25/08 — nửa còn thiếu của bản vá 23/08 ("thêm cho cả hai đường"): đường
+      // SỬA đã ghi được ô này, đường TẠO thì chưa. Schema nhận + chuẩn hoá rồi
+      // BỎ, nên người gọi gửi link lên vẫn nhận `{ ok: true }` còn giá trị thì
+      // bốc hơi — không lỗi, không nhật ký. Với lead Messenger-first (chưa có
+      // SĐT) đây là thứ duy nhất nối lead ↔ hội thoại, mất là không dựng lại được.
+      facebookUrl: d.facebookUrl || null,
       status: 'NEW',
       // NGƯỜI NHẬP (23/08) — cùng nghĩa với biểu mẫu /nhap-khach-hang. Đường
       // nhập tay này cũng phải ghi, không thì "phiếu tôi nhập" thủng một nửa.
@@ -747,6 +749,9 @@ export async function createLeadManual(
       centerId,
       orgUnitId,
       source: d.source || 'Nhập tay',
+      // Đường SỬA đã ghi ô này vào nhật ký; đường TẠO bỏ trống thì lịch sử một
+      // lead có link Facebook bắt đầu bằng khoảng trắng — không truy được ai điền.
+      facebookUrl: d.facebookUrl || null,
     },
   }).catch(() => {})
 
@@ -891,25 +896,45 @@ export async function updateLeadFields(
     // chưa bao giờ ghi được: sửa xong là mất im lặng. Thêm cho cả hai đường.
     ...(d.facebookUrl !== undefined ? { facebookUrl: d.facebookUrl || null } : {}),
   }
-  await db.lead.update({ where: { id: leadId }, data: updateData })
-
   // P2-1: ghi nhật ký kiểm toán — chỉ field thực sự đổi.
   const changedFields = (Object.keys(updateData) as (keyof typeof updateData)[]).filter(
     (k) => (before as Record<string, unknown>)[k] !== (updateData as Record<string, unknown>)[k],
   )
-  if (changedFields.length > 0) {
-    const { actorId, actorName } = getAuditActor(session)
-    const pick = (obj: Record<string, unknown>) =>
-      Object.fromEntries(changedFields.map((k) => [k, obj[k]]))
-    await logLeadAudit({
-      leadId,
-      action: 'UPDATE',
-      actorId,
-      actorName,
-      oldValues: pick(before as Record<string, unknown>),
-      newValues: pick(updateData as Record<string, unknown>),
-      changedFields: changedFields as string[],
-    }).catch(() => {})
+  const { actorId, actorName } = getAuditActor(session)
+  const pick = (obj: Record<string, unknown>) =>
+    Object.fromEntries(changedFields.map((k) => [k, obj[k]]))
+
+  // V-6 · G-02 — lượt ghi và VẾT của nó đi CHUNG một giao dịch.
+  //
+  // Trước 25/08 hai lệnh này rời nhau: `db.lead.update` trần, rồi
+  // `logLeadAudit(...).catch(() => {})` ở ngoài. Hỏng theo đúng chiều tệ nhất —
+  // ghi vết chết thì bản ghi VẪN lưu và lỗi bị nuốt sạch, tức tên/SĐT khách đổi
+  // mà không còn dấu vết nào, và cũng không ai biết là đã mất dấu. Spec G-02 nói
+  // ngược lại: 3 ô định danh (Tên PH · SĐT PH · Tên HS) sửa được NHƯNG "bắt buộc
+  // ghi audit log" — bắt buộc thì vết hỏng phải kéo cả lượt sửa đổ theo.
+  // `updateLeadChild` cùng file đã làm đúng vậy từ 08/08; đây là chỗ bị bỏ sót.
+  try {
+    await db.$transaction(async (txRaw) => {
+      const tx = txRaw as unknown as Prisma.TransactionClient
+      await tx.lead.update({ where: { id: leadId }, data: updateData })
+      if (changedFields.length > 0) {
+        await logLeadAudit({
+          leadId,
+          action: 'UPDATE',
+          actorId,
+          actorName,
+          oldValues: pick(before as Record<string, unknown>),
+          newValues: pick(updateData as Record<string, unknown>),
+          changedFields: changedFields as string[],
+          tx,
+        })
+      }
+    })
+  } catch {
+    // Câu chữ cố ý KHÔNG đổ tại nhật ký: lệnh ghi lead cũng nằm trong giao dịch
+    // này, hỏng bên nào thì cả hai cùng hoàn tác. Nói sai chỗ hỏng là đẩy người
+    // trực đi tìm nhầm hướng.
+    return { ok: false, error: 'Không lưu được thay đổi — đã hoàn tác, thử lại' }
   }
 
   revalidatePath(`/leads/${leadId}`)
@@ -1358,6 +1383,186 @@ export async function updateLeadChild(
     revalidatePath('/students')
     for (const sid of syncedStudentIds) revalidatePath(`/students/${sid}/edit`)
   }
+  return { ok: true }
+}
+
+// ─── C-06 — đánh dấu RỚT theo TỪNG CON, lý do ghi ở cấp PHỤ HUYNH ────────────
+//
+// Chốt 24/08/2026: TRẠNG THÁI rớt ở `LeadChild.status` (B5), LÝ DO rớt là ô ghi chú
+// TỰ DO bắt buộc ở `Lead.lostNote`/`lostAt` (B5 + 12(b) — không còn danh mục lý do).
+//
+// KHÔNG nhét vào `updateLeadStatus`: hàm đó nhận `(leadId, rawStatus)` và đổi trạng
+// thái ở CẤP PHIẾU, còn đây đổi ở CẤP CON và bắt buộc thêm ô lý do. Cũng KHÔNG nhét
+// lý do vào `note` — đó là ô ghi chú chung, không lọc/đọc lại được theo lượt rớt.
+
+/** Đọc con + phiếu cha, đã qua cách ly cơ sở và quyền sửa. `scopedDb` không che WRITE. */
+async function loadChildForLostChange(
+  sessionUserId: string,
+  leadChildId: string,
+): Promise<
+  | { ok: true; child: { id: string; fullName: string; leadId: string; status: LeadChildStatus | null } }
+  | { ok: false; error: string }
+> {
+  const child = await db.leadChild.findUnique({
+    where: { id: leadChildId },
+    select: {
+      id: true,
+      fullName: true,
+      leadId: true,
+      status: true,
+      lead: { select: { centerId: true, assignedToId: true } },
+    },
+  })
+  const actor = await resolveActor(sessionUserId)
+  // LeadChild không có centerId riêng → scope theo phiếu cha, y như addLeadChild/updateLeadChild.
+  if (!child || !passesScope('Lead', { centerId: child.lead?.centerId ?? null }, actor)) {
+    return { ok: false, error: 'Không tìm thấy con của lead' }
+  }
+  if (!(await actorMayMutateLead(sessionUserId, child.lead?.assignedToId ?? null))) {
+    return { ok: false, error: MUTATE_DENIED }
+  }
+  return {
+    ok: true,
+    child: { id: child.id, fullName: child.fullName, leadId: child.leadId, status: child.status },
+  }
+}
+
+/**
+ * Đánh dấu MỘT con là RỚT. Ô lý do bắt buộc — action từ chối nếu để trống.
+ *
+ * Con rớt sau ĐÈ ghi chú của con trước (lý do là của cả phụ huynh). Đổi lại, mỗi lượt
+ * đánh dấu ghi vết mang `leadChildId` + tên con + lý do vào AuditLog và timeline, nên
+ * lý do của TỪNG con vẫn lần ra được — đó là điều kiện để chấp nhận việc ghi đè.
+ */
+export async function markLeadChildLostAction(
+  input: unknown,
+): Promise<{ ok: boolean; error?: string }> {
+  const session = await auth()
+  if (!session?.user) return { ok: false, error: 'Chưa đăng nhập' }
+  if (!(await checkPermission('leads:edit'))) return { ok: false, error: 'Không có quyền' }
+
+  const parsed = markChildLostSchema.safeParse(input)
+  if (!parsed.success) {
+    return { ok: false, error: parsed.error.issues[0]?.message ?? 'Dữ liệu không hợp lệ' }
+  }
+
+  const loaded = await loadChildForLostChange(session.user.id, parsed.data.leadChildId)
+  if (!loaded.ok) return { ok: false, error: loaded.error }
+  const { child } = loaded
+
+  const { actorId, actorName } = getAuditActor(session)
+  try {
+    await db.$transaction(async (txRaw) => {
+      const tx = txRaw as unknown as Prisma.TransactionClient
+      await tx.leadChild.update({ where: { id: child.id }, data: { status: 'LOST' } })
+
+      const lostChildCount = await tx.leadChild.count({
+        where: { leadId: child.leadId, status: 'LOST' },
+      })
+      const patch = decideLeadLostFields({
+        intent: 'mark',
+        lostChildCount,
+        lostNote: parsed.data.lostNote,
+        now: new Date(),
+      })
+      if (patch) await tx.lead.update({ where: { id: child.leadId }, data: patch })
+
+      // Vết đi CÙNG giao dịch: ghi vết hỏng thì lượt đánh dấu cũng không lưu. Ghi vết
+      // ngoài giao dịch rồi `.catch(() => {})` đúng bằng không có vết — lỗi đã phải vá
+      // một lần ở `updateLeadFields` (V-6 · G-02).
+      // C-07 — cùng một đường ghi với trạng thái phiếu; trạng thái CON đổi cũng
+      // phải để lại mốc đọc được, không đẻ định dạng vết thứ hai.
+      await recordLeadStatusChange({
+        tx,
+        leadId: child.leadId,
+        actorId,
+        actorName,
+        from: child.status,
+        to: 'LOST',
+        source: 'MANUAL',
+        child: { id: child.id, fullName: child.fullName },
+        reason: parsed.data.lostNote,
+        extra: { lostNote: parsed.data.lostNote },
+        extraChangedFields: ['lostNote'],
+      })
+    })
+  } catch {
+    return { ok: false, error: 'Không lưu được lượt đánh dấu rớt' }
+  }
+
+  revalidatePath(`/leads/${child.leadId}`)
+  revalidatePath('/leads')
+  return { ok: true }
+}
+
+/**
+ * Gỡ MỘT con khỏi trạng thái rớt, đưa về một bước phễu bình thường.
+ *
+ * 🔴 Chỉ xoá `Lead.lostNote`/`lostAt` khi KHÔNG CÒN con nào rớt — xoá vô điều kiện là
+ * xoá mất lý do của đứa còn lại, và không có đường nào dựng lại.
+ */
+export async function unmarkLeadChildLostAction(
+  input: unknown,
+): Promise<{ ok: boolean; error?: string }> {
+  const session = await auth()
+  if (!session?.user) return { ok: false, error: 'Chưa đăng nhập' }
+  if (!(await checkPermission('leads:edit'))) return { ok: false, error: 'Không có quyền' }
+
+  // Schema cố ý KHÔNG nhận 'LOST' làm đích: nhận là mở đường đánh dấu rớt đi vòng qua
+  // ô lý do bắt buộc.
+  const parsed = unmarkChildLostSchema.safeParse(input)
+  if (!parsed.success) {
+    return { ok: false, error: parsed.error.issues[0]?.message ?? 'Trạng thái không hợp lệ' }
+  }
+
+  const loaded = await loadChildForLostChange(session.user.id, parsed.data.leadChildId)
+  if (!loaded.ok) return { ok: false, error: loaded.error }
+  const { child } = loaded
+  if (child.status !== 'LOST') {
+    // Không phải chuyện vặt: chạy tiếp là có thể xoá lý do rớt của phiếu trong khi
+    // người dùng chỉ định đổi trạng thái một đứa con không hề rớt.
+    return { ok: false, error: 'Học sinh này không ở trạng thái rớt' }
+  }
+
+  const { actorId, actorName } = getAuditActor(session)
+  try {
+    await db.$transaction(async (txRaw) => {
+      const tx = txRaw as unknown as Prisma.TransactionClient
+      await tx.leadChild.update({
+        where: { id: child.id },
+        data: { status: parsed.data.status },
+      })
+
+      // Đếm SAU khi ghi và TRONG giao dịch: đếm trước thì chính đứa vừa gỡ vẫn bị tính
+      // là đang rớt ⇒ lý do không bao giờ xoá được; đếm ngoài giao dịch thì hai người
+      // bấm cùng lúc ra hai kết quả khác nhau.
+      const lostChildCount = await tx.leadChild.count({
+        where: { leadId: child.leadId, status: 'LOST' },
+      })
+      const patch = decideLeadLostFields({ intent: 'unmark', lostChildCount, now: new Date() })
+      if (patch) await tx.lead.update({ where: { id: child.leadId }, data: patch })
+
+      await recordLeadStatusChange({
+        tx,
+        leadId: child.leadId,
+        actorId,
+        actorName,
+        from: 'LOST',
+        to: parsed.data.status,
+        source: 'MANUAL',
+        child: { id: child.id, fullName: child.fullName },
+        // Ghi rõ phiếu có bị xoá lý do hay không — người đọc nhật ký sau này cần
+        // biết lý do biến mất vì lượt nào.
+        extra: { leadLostCleared: patch !== null },
+        extraChangedFields: patch ? ['lostNote'] : [],
+      })
+    })
+  } catch {
+    return { ok: false, error: 'Không lưu được lượt gỡ trạng thái rớt' }
+  }
+
+  revalidatePath(`/leads/${child.leadId}`)
+  revalidatePath('/leads')
   return { ok: true }
 }
 

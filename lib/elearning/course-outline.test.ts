@@ -232,3 +232,56 @@ describe("(C10) — phụ đề là ĐIỀU KIỆN XUẤT BẢN của khoá bắ
     expect(r.loi).toHaveLength(2);
   });
 });
+
+describe("[EL-14d] cổng xuất bản: bài KIỂM TRA phải có đề", () => {
+  const chuong = (bai: Record<string, unknown>) => [
+    {
+      id: "m1",
+      title: "Chương 1",
+      lessons: [
+        {
+          id: "l1",
+          title: "Bài kiểm tra cuối",
+          kind: "QUIZ",
+          contentMd: null,
+          required: true,
+          ...bai,
+        },
+      ],
+    },
+  ];
+
+  it("bài QUIZ thiếu đề ⇒ KHÔNG xuất bản được", () => {
+    // Bài kiểm tra không đề thì người học mở ra là kẹt, và điều kiện hoàn thành
+    // khoá không bao giờ đạt được — im lặng.
+    const r = kiemDanBai(chuong({ examId: null }) as never);
+    expect(r.ok).toBe(false);
+    expect(r.loi.map((x) => x.code)).toContain("BAI_THI_CHUA_CO_DE");
+  });
+
+  it("bài QUIZ có đề ⇒ qua cổng", () => {
+    const r = kiemDanBai(chuong({ examId: "de1" }) as never);
+    expect(r.loi.map((x) => x.code)).not.toContain("BAI_THI_CHUA_CO_DE");
+  });
+
+  it("🔴 thiếu TRƯỜNG `examId` trong truy vấn ⇒ cổng vẫn nổ, không im lặng cho qua", () => {
+    // Đây là ca nguy hiểm nhất: nếu đường gọi quên `select: { examId: true }` thì
+    // trường về `undefined`. Cổng phải coi `undefined` như "chưa có đề", không
+    // được coi là "có" — một cổng chặn im lặng không chặn gì còn tệ hơn không có.
+    const r = kiemDanBai(chuong({}) as never);
+    expect(r.loi.map((x) => x.code)).toContain("BAI_THI_CHUA_CO_DE");
+  });
+
+  it("bài loại khác KHÔNG bị cổng này chạm", () => {
+    const r = kiemDanBai([
+      {
+        id: "m1",
+        title: "Chương 1",
+        lessons: [
+          { id: "l1", title: "Video", kind: "VIDEO", contentMd: null, required: true },
+        ],
+      },
+    ] as never);
+    expect(r.loi.map((x) => x.code)).not.toContain("BAI_THI_CHUA_CO_DE");
+  });
+});

@@ -23,6 +23,14 @@ import { canViewLeadPii } from "@/lib/auth/check-permission";
 import { ShareToggle } from "./_components/share-toggle";
 import { formatDateVN } from "@/lib/format/date";
 import { hasSystemLines, splitLeadNote } from "@/lib/lead/note-view";
+import {
+  canViewLeadAuditHistory,
+  getLeadAuditHistory,
+  getLeadStatusHistory,
+  maskLeadAuditValues,
+} from "@/lib/lead/audit-history";
+import { LeadAuditHistory } from "./_components/lead-audit-history";
+import { LeadStatusTrail } from "./_components/lead-status-trail";
 
 export const metadata = { title: "Chi tiết Lead | Admin" };
 export const dynamic = "force-dynamic";
@@ -234,6 +242,26 @@ export default async function LeadDetailPage({ params }: Props) {
     : [];
   const sessionById = new Map(scheduledSessions.map((s) => [s.id, s]));
 
+  // V-6 · G-02 — "Lịch sử thay đổi": vết sửa 3 ô định danh (Tên PH · SĐT PH ·
+  // Tên HS) phải ĐỌC ĐƯỢC bởi người có thẩm quyền, chứ không chỉ nằm im trong
+  // bảng AuditLog sau quyền `audit-logs:view` mà mỗi SUPER_ADMIN có.
+  //
+  // ⚠️ Đây là màn HẸP, KHÔNG phải cửa vào nhật ký chung: `getLeadAuditHistory`
+  // lọc CỨNG `entityType: "Lead"` + `entityId` của đúng lead đang mở, không nhận
+  // bộ lọc nào từ URL. AuditLog không thuộc SCOPED_MODELS nên `sdb` không lọc hộ
+  // — cách ly đã xong ở trên (lead đọc qua scopedDb + canSeeLead), và mở rộng
+  // truy vấn ở đây là mở nhật ký toàn hệ, kể cả module ngoài lead.
+  const canViewAudit = await checkPermission("audit-logs:view");
+  const showAuditHistory = canViewLeadAuditHistory({
+    canViewAllLeads: canViewAll,
+    canViewAuditLogs: canViewAudit,
+  });
+  const auditRows = showAuditHistory ? await getLeadAuditHistory(sdb, lead.id) : [];
+  // C-07 — "Mốc trạng thái" đọc truy vấn RIÊNG chứ không lọc lại `auditRows`:
+  // lead bị sửa nhiều thì 50 dòng gần nhất toàn lượt sửa hồ sơ, mốc phễu rơi hết
+  // ra ngoài — đúng lúc cần soi thì bảng trống.
+  const statusRows = showAuditHistory ? await getLeadStatusHistory(sdb, lead.id) : [];
+
   return (
     <div className="max-w-6xl p-6">
       <Link
@@ -414,6 +442,8 @@ export default async function LeadDetailPage({ params }: Props) {
             interestedCenterId: c.interestedCenterId,
             note: canViewPii ? c.note : maskFreeText(c.note),
             trialStatus: c.trialStatus,
+            // C-06 — trạng thái phễu riêng của con (null = phiếu cũ, chưa phân loại).
+            status: c.status,
             trialHistory: c.trialHistory
               .filter((h) => h.attendedCount > 0)
               .map((h) => ({
@@ -429,6 +459,10 @@ export default async function LeadDetailPage({ params }: Props) {
           readOnly={childrenReadOnly}
           legacyChildName={piiLead.childName}
           legacyChildAge={lead.childAge}
+          // C-06 — lý do rớt là văn bản do Sale gõ ⇒ che theo đúng cổng PII của trang,
+          // y như `note` của con ngay trên.
+          lostNote={canViewPii ? lead.lostNote : maskFreeText(lead.lostNote)}
+          lostAt={lead.lostAt ? lead.lostAt.toISOString() : null}
         />
       </div>
 
@@ -546,6 +580,34 @@ export default async function LeadDetailPage({ params }: Props) {
             ))}
           </ul>
         </div>
+      )}
+
+      {/* C-07 — "Mốc trạng thái": ai đổi · lúc nào · TỪ trạng thái nào. Đặt TRƯỚC
+          mục "Lịch sử thay đổi" vì đây là thứ QLCS mở trang để soi; mục kia trộn
+          mọi lượt sửa hồ sơ nên mốc phễu chìm mất trong đó. */}
+      {showAuditHistory && (
+        <LeadStatusTrail
+          piiMasked={!canViewPii}
+          rows={statusRows.map((r) => ({
+            ...r,
+            oldValues: maskLeadAuditValues(r.oldValues, canViewPii),
+            newValues: maskLeadAuditValues(r.newValues, canViewPii),
+          }))}
+        />
+      )}
+
+      {/* V-6 · G-02 — vết sửa hồ sơ. Che PII bằng CÙNG cổng `canViewPii` của
+          trang: nội dung vết chứa nguyên văn tên PH/tên HS/SĐT, bày ra không che
+          là mở lại đúng cái cửa #11 T2 vừa đóng, chỉ khác đường đi. */}
+      {showAuditHistory && (
+        <LeadAuditHistory
+          piiMasked={!canViewPii}
+          rows={auditRows.map((r) => ({
+            ...r,
+            oldValues: maskLeadAuditValues(r.oldValues, canViewPii),
+            newValues: maskLeadAuditValues(r.newValues, canViewPii),
+          }))}
+        />
       )}
 
       <LeadActivityPanel

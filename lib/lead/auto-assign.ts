@@ -1,5 +1,6 @@
 import { db } from "@/lib/db";
 import { logLeadAudit } from "@/lib/audit/log";
+import { recordLeadStatusChange } from "@/lib/lead/status-trail-write";
 import { orgUnitIdForCenter } from "@/lib/org/org-service";
 import { getNonEnrollableCenterIds } from "@/lib/enrollment-flow";
 import type { LeadStatus, Prisma, LeadAssignMode } from "@prisma/client";
@@ -231,6 +232,20 @@ export async function autoAssignNewLead(leadId: string, actor: Actor): Promise<A
         metadata: SYSTEM_META,
       },
     });
+    // C-07 — ĐƯỜNG TỰ CHIA lật `MỚI → ĐÃ PHÂN CÔNG` ngay ở `tx.lead.update` trên,
+    // nhưng vết duy nhất của nó (`ASSIGN`) chỉ mang `assignedToId` ⇒ mốc đầu tiên
+    // của phễu không nằm ở bảng nào. Điều kiện phải TRÙNG KHÍT với dòng lật trên.
+    if (lead.status === "NEW") {
+      await recordLeadStatusChange({
+        tx,
+        leadId,
+        actorId: actor.actorId,
+        actorName: actor.actorName,
+        from: "NEW",
+        to: "ASSIGNED",
+        source: "ASSIGN",
+      });
+    }
   });
 
   return { ok: true, assignedToId: target, centerId, mode };
@@ -336,6 +351,19 @@ export async function manualAssignLead(
         metadata: SYSTEM_META,
       },
     });
+    // C-07 — cùng lý do như đường tự chia: gán tay cũng lật trạng thái mà không
+    // để lại mốc nào. Điều kiện trùng khít với dòng lật ở `tx.lead.update`.
+    if (lead.status === "NEW") {
+      await recordLeadStatusChange({
+        tx,
+        leadId,
+        actorId: actor.actorId,
+        actorName: actor.actorName,
+        from: "NEW",
+        to: "ASSIGNED",
+        source: "ASSIGN",
+      });
+    }
   });
 
   return { ok: true };

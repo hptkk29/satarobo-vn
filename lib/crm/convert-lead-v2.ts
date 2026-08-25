@@ -4,6 +4,7 @@
 import { db } from "@/lib/db";
 import { writeAudit, type AuditActor } from "@/lib/audit/audit-log";
 import { publishEvent } from "@/lib/events/publish";
+import { recordLeadStatusChange } from "@/lib/lead/status-trail-write";
 import { genStudentCodeV2 } from "@/lib/codegen";
 import { computeEnrollmentPrice } from "@/lib/finance/pricing";
 import { linkRecordedPaymentsToEnrollments } from "@/lib/finance/payment";
@@ -455,6 +456,19 @@ export async function convertLeadV2(actor: AuditActor, input: ConvertV2Input): P
           : undefined,
       orgUnitId: lead.centerId,
       tx,
+    });
+    // C-07 — bù mốc trên DÒNG THỜI GIAN của lead (dòng audit ngay trên đã có).
+    // `auditAlreadyWritten`: dòng đó thuộc module `enrollment`, mang thêm mã học
+    // viên + lý do backfill và đang bị e2e ghim — ghi thêm là đếm đôi một sự việc.
+    await recordLeadStatusChange({
+      tx,
+      leadId: lead.id,
+      actorId: actor.id,
+      actorName: actor.name,
+      from: lead.status,
+      to: "ENROLLED",
+      source: "CONVERT",
+      auditAlreadyWritten: true,
     });
 
     // US-03 chat — HV vào lớp qua convert (kể cả bulk-convert + import lead) → PH vào

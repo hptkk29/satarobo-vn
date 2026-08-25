@@ -24,6 +24,7 @@ import {
   DRAFT_BATCH_MAX,
   PUBLISH_BATCH_MAX,
 } from "@/lib/lms/media-publish";
+import { purgeMediaFilesThen, MediaFilePurgeError } from "@/lib/lms/media-r2-delete";
 
 // Cách ly cơ sở (chống IDOR ghi): ClassSessionMedia relation-scoped qua class.centerId.
 // Duyệt/xoá theo mediaId từ client phải xác minh lớp thuộc tầm nhìn actor.
@@ -426,20 +427,43 @@ export async function reviewMedia(input: {
   // Đường duy nhất rời kho là publishClassMediaAction (giữ bất biến C6.2/C6.3).
   const current = await sdb.classSessionMedia.findUnique({
     where: { id: input.id },
-    select: { status: true },
+    select: { status: true, fileUrl: true },
   });
   if (current?.status === "DRAFT") {
     return { ok: false, error: "Ảnh đang trong kho — giáo viên chưa gửi duyệt" };
   }
-  await sdb.classSessionMedia.update({
-    where: { id: input.id },
-    data: {
-      status: input.decision,
-      approvedById: actorId,
-      approvedByName: actorName,
-      approvedAt: new Date(),
-    },
-  });
+  const applyDecision = () =>
+    sdb.classSessionMedia.update({
+      where: { id: input.id },
+      data: {
+        status: input.decision,
+        approvedById: actorId,
+        approvedByName: actorName,
+        approvedAt: new Date(),
+      },
+    });
+
+  if (input.decision === "REJECTED") {
+    // F-03/F-15 — TỪ CHỐI phải làm tệp biến mất, không chỉ đổi trạng thái. Kho R2 là
+    // bucket CÔNG KHAI và cờ ký link (MEDIA_SIGNED_URL) mặc định TẮT, nên tới trước
+    // đây ảnh bị từ chối vẫn tải được bằng link cũ — vô danh, vĩnh viễn. Thứ tự cứng:
+    // xoá kho trước, ghi DB sau (purgeMediaFilesThen ép thứ tự đó).
+    try {
+      await purgeMediaFilesThen(
+        [{ id: input.id, fileUrl: current?.fileUrl ?? null }],
+        applyDecision,
+      );
+    } catch (err) {
+      if (err instanceof MediaFilePurgeError) {
+        // Chưa đổi gì cả — thà báo hỏng còn hơn đánh dấu "đã từ chối" trong khi ảnh
+        // vẫn nằm trên CDN tải được.
+        return { ok: false, error: "Không xoá được ảnh khỏi kho lưu trữ — chưa từ chối, hãy thử lại" };
+      }
+      throw err;
+    }
+  } else {
+    await applyDecision();
+  }
   await writeAudit({
     actor: { id: actorId, name: actorName },
     module: "media",
@@ -463,7 +487,23 @@ export async function deleteMedia(id: string): Promise<{ ok: boolean; error?: st
   }
   const { actorId, actorName } = getAuditActor(session);
   const sdb = scopedDb(await resolveActor(session.user.id));
-  await sdb.classSessionMedia.delete({ where: { id } }).catch(() => null);
+  // Gỡ ảnh cũng phải xoá TỆP — cùng lý do như từ chối ở reviewMedia: xoá mỗi dòng DB
+  // để lại ảnh học viên sống trên CDN công khai mà không còn bản ghi nào lần ra nó.
+  const row = await sdb.classSessionMedia.findUnique({
+    where: { id },
+    select: { fileUrl: true },
+  });
+  if (!row) return { ok: false, error: "Không tìm thấy ảnh" };
+  try {
+    await purgeMediaFilesThen([{ id, fileUrl: row.fileUrl }], () =>
+      sdb.classSessionMedia.delete({ where: { id } }).catch(() => null),
+    );
+  } catch (err) {
+    if (err instanceof MediaFilePurgeError) {
+      return { ok: false, error: "Không xoá được ảnh khỏi kho lưu trữ — chưa xoá, hãy thử lại" };
+    }
+    throw err;
+  }
   await writeAudit({
     actor: { id: actorId, name: actorName },
     module: "media",

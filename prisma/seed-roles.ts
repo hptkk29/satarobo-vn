@@ -36,6 +36,14 @@ export const ROLE_SEED: RoleSeed[] = [
       { action: "roles:assign", scopeType: "GLOBAL" },
       // US-03 — quản nhóm người dùng + grant nhóm (chỉ SUPER_ADMIN, như roles:manage).
       { action: "user-groups:manage", scopeType: "GLOBAL" },
+      // C-01 — chỉ tiêu lead theo tháng × cơ sở. SUPER_ADMIN đã bypass toàn bộ quyền
+      // trong can() v2 nên dòng này KHÔNG đổi hành vi; khai cho khớp v1 + rõ ý, và để
+      // ma trận nói được "ai đặt được chỉ tiêu toàn hệ thống" mà không phải suy từ bypass.
+      { action: "lead_targets:manage", scopeType: "GLOBAL" },
+      // D-02 — chỉ tiêu ngân sách quảng cáo theo tháng × cơ sở. Cùng lý do dòng trên:
+      // SUPER_ADMIN đã bypass trong can() v2 nên dòng này KHÔNG đổi hành vi, khai để
+      // ma trận nói được "ai đặt được chỉ tiêu toàn hệ thống" mà không phải suy từ bypass.
+      { action: "ads_budget_targets:manage", scopeType: "GLOBAL" },
       // #17 (câu 55): học bạ. SUPER_ADMIN đã bypass toàn bộ quyền trong can() v2
       // (lib/auth/can.ts) → 2 dòng này KHÔNG đổi hành vi, thêm cho khớp v1 + rõ ý.
       { action: "report-cards:manage", scopeType: "GLOBAL" },
@@ -80,6 +88,9 @@ export const ROLE_SEED: RoleSeed[] = [
     perms: [
       { action: "payments:manage", scopeType: "GLOBAL" },
       { action: "payments:view", scopeType: "GLOBAL" },
+      // B-01 — trước đây đặt mục tiêu doanh thu đi nhờ `payments:manage`. Tách key
+      // riêng để mở cho Quản lý cơ sở; khai lại ở đây để vai này KHÔNG mất việc đang làm.
+      { action: "revenue_targets:manage", scopeType: "GLOBAL" },
       { action: "orders:manage", scopeType: "GLOBAL" },
       // G-A (21/08/2026) — cổng tạo đơn nay kiểm `orders:create`; ai có
       // `orders:manage` phải có kèm để không mất chức năng đang dùng.
@@ -230,6 +241,16 @@ export const ROLE_SEED: RoleSeed[] = [
       { action: "leads:create", scopeType: "GLOBAL" },
       { action: "leads:edit", scopeType: "GLOBAL" },
       { action: "leads:export", scopeType: "GLOBAL" },
+      // D-02 — đặt chỉ tiêu NGÂN SÁCH QUẢNG CÁO theo tháng × cơ sở. Marketing Hội sở là
+      // người cầm ví quảng cáo nên là người đặt chỉ tiêu (PRD CDB-dashboard §D.4);
+      // Quản lý cơ sở cố ý KHÔNG có — họ xem chi phí/CPL/CPA của cơ sở mình, không tự
+      // khai mẫu số mà D-03 dùng để chấm điểm chính họ.
+      // GLOBAL theo R1: gate trang gọi TRẦN, nên scope CENTER sẽ trả FALSE trên prod
+      // trong khi máy dev (v1) vẫn xanh. Cách ly cơ sở ép TAY bằng `checkRevenueTargetScope`
+      // trong action — `AdsBudgetTarget` ∈ SCOPE_EXEMPT nên scopedDb KHÔNG chặn giúp.
+      // ⚠️ Đổi ở đây CHƯA có hiệu lực trên prod: phải chạy workflow seed-prod-roles.yml
+      // sau khi merge vào main, nếu không Marketing mở màn ra là TRẮNG, không kèm lỗi.
+      { action: "ads_budget_targets:manage", scopeType: "GLOBAL" },
       { action: "notifications:manage", scopeType: "GLOBAL" },
       { action: "parent-feedback:view", scopeType: "GLOBAL" },
       { action: "hr_attendance:checkin", scopeType: "GLOBAL" },
@@ -460,6 +481,15 @@ export const ROLE_SEED: RoleSeed[] = [
       { action: "leads:assign", scopeType: "GLOBAL" },
       { action: "leads:import", scopeType: "GLOBAL" },
       { action: "leads:export", scopeType: "GLOBAL" },
+      // C-01 — đặt chỉ tiêu lead (SỐ HỌC SINH) theo tháng cho CƠ SỞ MÌNH QUẢN.
+      // Key riêng, KHÔNG mượn `leads:assign-config` (mượn là mở kèm màn cấu hình chia
+      // lead tự động — chốt 24/08, OQ-C5). GLOBAL theo R1: gate trang gọi TRẦN, nên
+      // scope CENTER sẽ trả FALSE trên prod trong khi máy dev (v1) vẫn xanh. Cách ly cơ
+      // sở ép TAY bằng `checkRevenueTargetScope` trong action — `LeadTarget` ∈
+      // SCOPE_EXEMPT nên scopedDb KHÔNG chặn giúp.
+      // ⚠️ Đổi ở đây CHƯA có hiệu lực trên prod: phải chạy workflow seed-prod-roles.yml
+      // sau khi merge vào main, nếu không QLCS mở màn ra là TRẮNG, không kèm lỗi.
+      { action: "lead_targets:manage", scopeType: "GLOBAL" },
       // ── Học viên · lớp · ghi danh ──
       { action: "students:view-all", scopeType: "GLOBAL" },
       { action: "students:create", scopeType: "GLOBAL" },
@@ -542,6 +572,11 @@ export const ROLE_SEED: RoleSeed[] = [
       // `payments:view` mở Công nợ + Biến động số dư ở chế độ đọc; mọi thao tác tiền
       // (sửa/hoàn/cấu hình) vẫn đòi payments:manage / payments:confirm mà vai này KHÔNG có.
       { action: "payments:view", scopeType: "GLOBAL" },
+      // B-01 — đặt mục tiêu doanh thu tháng cho CƠ SỞ MÌNH QUẢN. Key riêng, KHÔNG nới
+      // `payments:manage` (nới là mở luôn hoàn tiền + hoa hồng toàn hệ). GLOBAL theo R1:
+      // call-site gọi trần; cách ly cơ sở ép TAY bằng `checkRevenueTargetScope` trong
+      // action — `RevenueTarget` ∈ SCOPE_EXEMPT nên scopedDb KHÔNG chặn giúp.
+      { action: "revenue_targets:manage", scopeType: "GLOBAL" },
       // Giữ Học bạ hiển thị: màn đó gác [curriculum:view | students:view-own-class],
       // mà curriculum:view vừa bị gỡ theo yêu cầu "chặn phần LMS".
       { action: "students:view-own-class", scopeType: "GLOBAL" },
@@ -822,6 +857,8 @@ export const ROLE_SEED: RoleSeed[] = [
     code: "CENTER_ACCOUNTANT", name: "Kế toán cơ sở",
     perms: [
       { action: "payments:manage", scopeType: "GLOBAL" },
+      // B-01 — giữ nguyên năng lực cũ (trước đây đi nhờ `payments:manage`).
+      { action: "revenue_targets:manage", scopeType: "GLOBAL" },
       { action: "payments:view", scopeType: "GLOBAL" },
       { action: "payments:record", scopeType: "GLOBAL" },
       { action: "payments:confirm", scopeType: "GLOBAL" },

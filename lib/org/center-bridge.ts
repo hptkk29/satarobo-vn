@@ -163,6 +163,18 @@ export const BACKFILL_SPECS: readonly BackfillSpec[] = [
     vi: "mục tiêu doanh thu cấp HO/toàn hệ thống",
   },
   {
+    model: "LeadTarget",
+    nullMeaning: "NULL_TOAN_HE_THONG",
+    scoped: false,
+    vi: "C-01 — chỉ tiêu SỐ HỌC SINH theo tháng; NULL = chỉ tiêu toàn hệ thống, điền cơ sở vào là hỏng nghĩa",
+  },
+  {
+    model: "AdsBudgetTarget",
+    nullMeaning: "NULL_TOAN_HE_THONG",
+    scoped: false,
+    vi: "D-02 — chỉ tiêu NGÂN SÁCH QUẢNG CÁO theo tháng; NULL = chỉ tiêu toàn hệ thống (KHÁC nhóm CHƯA PHÂN BỔ của D-06 — đó là chi tiêu thật chưa quy được về cơ sở), điền cơ sở vào là hỏng nghĩa",
+  },
+  {
     model: "SataCoinRule",
     nullMeaning: "NULL_TOAN_HE_THONG",
     scoped: false,
@@ -309,6 +321,42 @@ export const BACKFILL_SPECS: readonly BackfillSpec[] = [
     nullMeaning: "BAT_BUOC",
     scoped: true,
     vi: "lượt ghi danh — cột NOT NULL trong schema; không có cơ sở thì không tạo được bản ghi",
+  },
+  {
+    model: "TrnQuestion",
+    nullMeaning: "NULL_TOAN_HE_THONG",
+    scoped: true,
+    vi: "câu hỏi ngân hàng đào tạo — NULL = câu dùng chung toàn công ty",
+  },
+  {
+    model: "TrnExam",
+    nullMeaning: "NULL_TOAN_HE_THONG",
+    scoped: true,
+    vi: "đề thi đào tạo — NULL = đề dùng chung toàn công ty",
+  },
+  {
+    model: "TrnExamAttempt",
+    nullMeaning: "BAT_BUOC",
+    scoped: true,
+    vi: "lượt thi — luôn thuộc cơ sở của người thi; NULL = chưa backfill",
+  },
+  {
+    model: "TrnRubric",
+    nullMeaning: "NULL_TOAN_HE_THONG",
+    scoped: true,
+    vi: "khung chấm bài tập — NULL = khung dùng chung toàn công ty",
+  },
+  {
+    model: "TrnSubmission",
+    nullMeaning: "BAT_BUOC",
+    scoped: true,
+    vi: "lượt nộp bài tập — luôn thuộc cơ sở của người nộp; NULL = chưa backfill",
+  },
+  {
+    model: "TrnWatchFlag",
+    nullMeaning: "BAT_BUOC",
+    scoped: true,
+    vi: "cờ nghi ngờ học đối phó — luôn thuộc cơ sở của người bị gắn cờ",
   },
   {
     model: "TrnDataSubjectRequest",
