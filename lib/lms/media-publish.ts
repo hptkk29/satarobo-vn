@@ -9,10 +9,11 @@
 //   lọt vào luồng hiển thị PH).
 // • C6.3 — mọi studentId phải GRANTED CLASS_MEDIA + đang học lớp (check trực tiếp
 //   theo id, chống payload tuỳ ý — mirror uploadClassMedia trong media/actions.ts).
-// Xoá kho KHÔNG đụng R2 object — mirror deleteMedia hiện tại (chỉ xoá row DB).
+// Xoá kho XOÁ LUÔN object trên R2 (F-03 · L-F4) — thứ tự cứng: kho trước, DB sau.
 import { db } from "@/lib/db";
 import { writeAudit, type AuditActor } from "@/lib/audit/audit-log";
 import { ENROLLMENT_ACTIVE_STATUS_LIST } from "@/lib/enrollment-status";
+import { purgeMediaFilesThen, MediaFilePurgeError } from "@/lib/lms/media-r2-delete";
 
 /** Trần 1 lô upload vào kho — khớp giới hạn chọn file phía dialog GV. */
 export const DRAFT_BATCH_MAX = 40;
@@ -283,7 +284,16 @@ export type DeleteDraftMediaResult = { ok: true; deleted: number } | Fail;
 /**
  * Xoá ảnh khỏi kho — CHỈ row status DRAFT (PENDING/APPROVED/REJECTED giữ nguyên,
  * đã/đang trong luồng duyệt phải đi deleteMedia có quyền media:approve). Trả số
- * row đã xoá. KHÔNG xoá file trên R2 (mirror deleteMedia hiện tại — chỉ xoá DB).
+ * row đã xoá.
+ *
+ * F-03 · L-F4 — xoá TỆP trên R2 trước, xoá row DB sau. Trước đây hàm này chỉ xoá row,
+ * nên ảnh "đã dọn khỏi kho" vẫn tải được vô danh bằng link cũ trên bucket công khai.
+ * Kho lỗi ⇒ trả fail, KHÔNG xoá row nào (mất row mà tệp còn thì không ai lần ra nó).
+ *
+ * Khe hở còn lại, có chủ đích: giữa lúc đọc danh sách DRAFT và lúc deleteMany, một
+ * lượt gửi song song có thể đẩy một ảnh sang PENDING — khi đó tệp đã bị xoá còn row
+ * ở lại. Hỏng theo chiều lành (ảnh vỡ, dòng còn để lần ra), và `where status: DRAFT`
+ * vẫn giữ nguyên để không xoá nhầm row đã rời kho.
  */
 export async function deleteDraftMedia(
   actor: AuditActor,
@@ -295,33 +305,46 @@ export async function deleteDraftMedia(
     return fail("TOO_MANY_MEDIA", `Tối đa ${PUBLISH_BATCH_MAX} ảnh mỗi lượt xoá`);
   }
 
+  // Chỉ những row THỰC SỰ sẽ bị xoá mới được đụng tệp (khớp `where` của deleteMany).
+  const drafts = await db.classSessionMedia.findMany({
+    where: { id: { in: mediaIds }, status: "DRAFT" },
+    select: { id: true, fileUrl: true, classId: true },
+  });
+  if (drafts.length === 0) return { ok: true, deleted: 0 };
+
   // centerId cho audit — caller đã đảm bảo cùng lớp trong scope trước khi gọi.
-  const first = await db.classSessionMedia.findFirst({
-    where: { id: { in: mediaIds } },
-    select: { classId: true },
+  const cls = await db.class.findUnique({
+    where: { id: drafts[0]!.classId },
+    select: { centerId: true },
   });
-  const cls = first
-    ? await db.class.findUnique({ where: { id: first.classId }, select: { centerId: true } })
-    : null;
 
-  const deleted = await db.$transaction(async (tx) => {
-    const res = await tx.classSessionMedia.deleteMany({
-      where: { id: { in: mediaIds }, status: "DRAFT" },
-    });
-    if (res.count > 0) {
-      await writeAudit({
-        actor,
-        module: "lms",
-        entityType: "ClassSessionMedia",
-        entityId: mediaIds[0] ?? "*",
-        action: "MEDIA_DRAFT_DELETE",
-        newValues: { ids: mediaIds, deleted: res.count },
-        orgUnitId: cls?.centerId ?? null,
-        tx,
-      });
+  const draftIds = drafts.map((d) => d.id);
+  try {
+    const deleted = await purgeMediaFilesThen(drafts, () =>
+      db.$transaction(async (tx) => {
+        const res = await tx.classSessionMedia.deleteMany({
+          where: { id: { in: draftIds }, status: "DRAFT" },
+        });
+        if (res.count > 0) {
+          await writeAudit({
+            actor,
+            module: "lms",
+            entityType: "ClassSessionMedia",
+            entityId: draftIds[0] ?? "*",
+            action: "MEDIA_DRAFT_DELETE",
+            newValues: { ids: draftIds, deleted: res.count },
+            orgUnitId: cls?.centerId ?? null,
+            tx,
+          });
+        }
+        return res.count;
+      }),
+    );
+    return { ok: true, deleted };
+  } catch (err) {
+    if (err instanceof MediaFilePurgeError) {
+      return fail("R2_DELETE_FAILED", "Không xoá được ảnh khỏi kho lưu trữ — chưa xoá, hãy thử lại");
     }
-    return res.count;
-  });
-
-  return { ok: true, deleted };
+    throw err;
+  }
 }
