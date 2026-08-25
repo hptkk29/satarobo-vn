@@ -60,7 +60,9 @@ export type LoiDanBai =
   | "KHONG_CO_CHUONG"
   | "CHUONG_RONG"
   | "KHONG_CO_BAI_BAT_BUOC"
-  | "BAI_DOC_TRONG";
+  | "BAI_DOC_TRONG"
+  | "BAI_VIDEO_THIEU_PHU_DE"
+  | "CHUA_BIET_KHOA_CO_BAT_BUOC";
 
 export type BaiTrongDanBai = {
   id: string;
@@ -68,6 +70,8 @@ export type BaiTrongDanBai = {
   kind: string;
   contentMd: string | null;
   required: boolean;
+  /** EL-10 (C10) — phụ đề tiếng Việt. Xem `kiemPhuDe`. */
+  captionKey?: string | null;
 };
 
 export type ChuongTrongDanBai = {
@@ -109,5 +113,59 @@ export function kiemDanBai(chuong: ChuongTrongDanBai[]): {
     });
   }
 
+  return { ok: loi.length === 0, loi };
+}
+
+
+/**
+ * EL-10 (C10) — PHỤ ĐỀ TIẾNG VIỆT LÀ ĐIỀU KIỆN XUẤT BẢN, không phải tuỳ chọn.
+ *
+ * Áp cho mọi bài VIDEO của khoá thuộc chương trình `MANDATORY` hoặc
+ * `MANDATORY_COMPLIANCE`.
+ *
+ * ⚠️ Vì sao là cổng CỨNG chứ không phải khuyến nghị: hoàn thành khoá bắt buộc là
+ * nghĩa vụ lao động có hạn chót; không có phụ đề là loại trừ người khiếm thính
+ * khỏi một nghĩa vụ. Và quan trọng hơn — ngày nào đó bổ sung phụ đề HỒI TỐ cho
+ * toàn bộ khoá đã xuất bản là việc không ai làm nổi. Cổng chỉ chặn được ở đây,
+ * lúc khoá chưa ra.
+ *
+ * ⚠️ `natureTag = null` (khoá chưa gắn chương trình) ⇒ CHẶN, không cho qua.
+ * Không biết khoá có bắt buộc hay không thì cho qua là chọn phía mà cái giá của
+ * việc sai là VĨNH VIỄN. Thông báo nói rõ hai đường thoát: gắn chương trình, hoặc
+ * thêm phụ đề.
+ */
+export function kiemPhuDe(input: {
+  chuong: ChuongTrongDanBai[];
+  natureTag: string | null;
+}): { ok: boolean; loi: { code: LoiDanBai; chiTiet: string }[] } {
+  const loi: { code: LoiDanBai; chiTiet: string }[] = [];
+  const coVideo = input.chuong.some((c) => c.lessons.some((b) => b.kind === "VIDEO"));
+
+  if (input.natureTag === null) {
+    if (coVideo) {
+      loi.push({
+        code: "CHUA_BIET_KHOA_CO_BAT_BUOC",
+        chiTiet:
+          "Khoá chưa gắn chương trình nên chưa biết có bắt buộc không — gắn chương trình, hoặc thêm phụ đề cho mọi bài video",
+      });
+    }
+    return { ok: loi.length === 0, loi };
+  }
+
+  if (input.natureTag !== "MANDATORY" && input.natureTag !== "MANDATORY_COMPLIANCE") {
+    return { ok: true, loi };
+  }
+
+  for (const c of input.chuong) {
+    for (const b of c.lessons) {
+      if (b.kind !== "VIDEO") continue;
+      if (!b.captionKey?.trim()) {
+        loi.push({
+          code: "BAI_VIDEO_THIEU_PHU_DE",
+          chiTiet: `Bài video "${b.title}" chưa có phụ đề tiếng Việt — khoá bắt buộc thì phụ đề là điều kiện xuất bản`,
+        });
+      }
+    }
+  }
   return { ok: loi.length === 0, loi };
 }
