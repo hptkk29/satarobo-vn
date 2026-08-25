@@ -17,6 +17,8 @@
  * ⇒ quyền của luồng kia bị ghi đè im lặng.
  */
 import { describe, it, expect } from "vitest";
+import { readdirSync, readFileSync } from "node:fs";
+import { join } from "node:path";
 import { ROLE_SEED } from "@/prisma/seed-roles";
 
 const SA = "SUPER_ADMIN";
@@ -205,5 +207,41 @@ describe("EL-02 · AC5 / T10-08. Không một grant DENY nào", () => {
       ),
     );
     expect([...scopes]).toEqual(["GLOBAL"]);
+  });
+});
+
+/**
+ * ⚠️ GUARD NÀY SINH RA TỪ MỘT LỖI THẬT (EL-13).
+ *
+ * Một `ActionConfig` khai `permission: "elearning:report:view"` — một khoá KHÔNG
+ * TỒN TẠI trong `ROLE_SEED`. Không có gì đỏ: typecheck xanh (kiểu là `string`),
+ * lint xanh, build xanh. Hậu quả là `can()` luôn trả `false` cho action đó, và
+ * tính năng im lặng không dùng được với MỌI vai — kể cả SUPER_ADMIN.
+ *
+ * Loại lỗi này chỉ lộ ra khi có người thật ngồi thử đúng màn đó, và câu họ báo sẽ
+ * là "bấm không ăn gì".
+ */
+describe("mọi khoá quyền dùng trong code đều CÓ THẬT trong ROLE_SEED", () => {
+  it("không action nào khai một quyền `elearning:` không tồn tại", () => {
+    const coThat = new Set<string>();
+    for (const vai of ROLE_SEED) {
+      for (const q of vai.perms) coThat.add(q.action);
+    }
+
+    const goc = join(process.cwd(), "lib", "elearning");
+    const dung = new Set<string>();
+    for (const ten of readdirSync(goc)) {
+      if (!ten.endsWith(".ts") || ten.endsWith(".test.ts")) continue;
+      const src = readFileSync(join(goc, ten), "utf8");
+      // Chỉ soi dòng KHAI quyền của action, không soi mọi chuỗi trong tệp: chú
+      // thích có nhắc tên khoá cũ, và bắt cả chúng là báo động giả.
+      for (const m of src.matchAll(/permission:\s*"(elearning:[^"]+)"/g)) {
+        dung.add(m[1]!);
+      }
+    }
+
+    expect(dung.size).toBeGreaterThan(0);
+    const thieu = [...dung].filter((k) => !coThat.has(k));
+    expect(thieu).toEqual([]);
   });
 });
