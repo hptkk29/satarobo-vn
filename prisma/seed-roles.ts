@@ -80,6 +80,9 @@ export const ROLE_SEED: RoleSeed[] = [
     perms: [
       { action: "payments:manage", scopeType: "GLOBAL" },
       { action: "payments:view", scopeType: "GLOBAL" },
+      // B-01 — trước đây đặt mục tiêu doanh thu đi nhờ `payments:manage`. Tách key
+      // riêng để mở cho Quản lý cơ sở; khai lại ở đây để vai này KHÔNG mất việc đang làm.
+      { action: "revenue_targets:manage", scopeType: "GLOBAL" },
       { action: "orders:manage", scopeType: "GLOBAL" },
       // G-A (21/08/2026) — cổng tạo đơn nay kiểm `orders:create`; ai có
       // `orders:manage` phải có kèm để không mất chức năng đang dùng.
@@ -542,6 +545,11 @@ export const ROLE_SEED: RoleSeed[] = [
       // `payments:view` mở Công nợ + Biến động số dư ở chế độ đọc; mọi thao tác tiền
       // (sửa/hoàn/cấu hình) vẫn đòi payments:manage / payments:confirm mà vai này KHÔNG có.
       { action: "payments:view", scopeType: "GLOBAL" },
+      // B-01 — đặt mục tiêu doanh thu tháng cho CƠ SỞ MÌNH QUẢN. Key riêng, KHÔNG nới
+      // `payments:manage` (nới là mở luôn hoàn tiền + hoa hồng toàn hệ). GLOBAL theo R1:
+      // call-site gọi trần; cách ly cơ sở ép TAY bằng `checkRevenueTargetScope` trong
+      // action — `RevenueTarget` ∈ SCOPE_EXEMPT nên scopedDb KHÔNG chặn giúp.
+      { action: "revenue_targets:manage", scopeType: "GLOBAL" },
       // Giữ Học bạ hiển thị: màn đó gác [curriculum:view | students:view-own-class],
       // mà curriculum:view vừa bị gỡ theo yêu cầu "chặn phần LMS".
       { action: "students:view-own-class", scopeType: "GLOBAL" },
@@ -822,6 +830,8 @@ export const ROLE_SEED: RoleSeed[] = [
     code: "CENTER_ACCOUNTANT", name: "Kế toán cơ sở",
     perms: [
       { action: "payments:manage", scopeType: "GLOBAL" },
+      // B-01 — giữ nguyên năng lực cũ (trước đây đi nhờ `payments:manage`).
+      { action: "revenue_targets:manage", scopeType: "GLOBAL" },
       { action: "payments:view", scopeType: "GLOBAL" },
       { action: "payments:record", scopeType: "GLOBAL" },
       { action: "payments:confirm", scopeType: "GLOBAL" },

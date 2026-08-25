@@ -166,6 +166,17 @@ export const PAGE_GATES = {
   /** Ba báo cáo đào tạo. BGĐ chốt 10/07: "báo cáo của chức năng nào thì role chức năng
    *  đó xem". Trước đây gác `classes:view-all` ∨ `training:manage` ⇒ HR/Kế toán/Marketing
    *  mở được bằng URL (menu thì khai `courses:create`, nên giấu). Nay: Đào tạo + QL cơ sở. */
+  /**
+   * B-01 — Doanh thu vs mục tiêu. Trước đây cả menu lẫn trang gác bằng `payments:manage`
+   * ⇒ Quản lý cơ sở, đúng người mà màn này viết cho, KHÔNG mở được: quyền đó là thao tác
+   * TIỀN (mở/huỷ/hoàn, phương thức thanh toán, hoa hồng) và cố ý không nằm ở vai đó.
+   *
+   * Thêm `revenue_targets:manage` (key riêng) thay vì nới `payments:manage`. Giữ luôn
+   * `payments:manage` trong ô này để kế toán không mất đường vào. Cả hai đều GLOBAL ở
+   * mọi RoleDef giữ chúng — bắt buộc, vì gate gọi `checkAnyPermission` KHÔNG có target.
+   */
+  "/bao-cao/doanh-thu": ["payments:manage", "revenue_targets:manage"],
+
   "/bao-cao/dao-tao": ["reports:training"],
   "/bao-cao/hieu-suat-gv": ["reports:training"],
   "/bao-cao/cohort": ["reports:training"],

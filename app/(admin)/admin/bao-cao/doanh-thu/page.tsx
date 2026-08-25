@@ -1,7 +1,8 @@
 import { redirect } from "next/navigation";
 import { safeCache } from "@/lib/cache/safe-cache";
 import { auth } from "@/lib/auth";
-import { checkPermission } from "@/lib/auth/check-permission";
+import { checkAnyPermission, checkPermission } from "@/lib/auth/check-permission";
+import { PAGE_GATES } from "@/lib/auth/page-gates";
 import { resolveActor, type Actor } from "@/lib/auth/actor";
 import { scopedDb } from "@/lib/db-scope";
 import { CACHE_TAGS } from "@/lib/cache/tags";
@@ -101,9 +102,12 @@ async function computeRevenueRows(actor: Actor, filters: ReportFilters) {
 export default async function RevenueTargetReportPage({ searchParams }: SearchParams) {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  if (!(await checkPermission("payments:manage"))) {
+  if (!(await checkAnyPermission(PAGE_GATES["/bao-cao/doanh-thu"]))) {
     redirect("/dashboard?error=unauthorized");
   }
+  // B-01: vào được TRANG (đọc báo cáo) không có nghĩa là đặt được mục tiêu. Ô nhập chỉ
+  // hiện cho người thật sự có quyền ghi — server vẫn kiểm lại trong action.
+  const canSetTarget = await checkPermission("revenue_targets:manage");
 
   const actor = await resolveActor(session.user.id);
   const sp = await searchParams;
@@ -158,17 +162,19 @@ export default async function RevenueTargetReportPage({ searchParams }: SearchPa
       </div>
 
       {/* Đặt / sửa mục tiêu */}
-      <Card title="Đặt / sửa mục tiêu doanh thu">
-        <RevenueTargetForm
-          centers={fc.visibleCenters}
-          canSetGlobal={fc.isGlobalAllowed}
-          defaultCenterId={fc.selection}
-          defaultPeriod={currentPeriod}
-        />
-        <p className="mt-2 text-xs text-muted-foreground">
-          Mục tiêu lưu theo (cơ sở, kỳ). Đặt lại cùng cơ sở + kỳ sẽ ghi đè giá trị cũ.
-        </p>
-      </Card>
+      {canSetTarget ? (
+        <Card title="Đặt / sửa mục tiêu doanh thu">
+          <RevenueTargetForm
+            centers={fc.visibleCenters}
+            canSetGlobal={fc.isGlobalAllowed}
+            defaultCenterId={fc.selection}
+            defaultPeriod={currentPeriod}
+          />
+          <p className="mt-2 text-xs text-muted-foreground">
+            Mục tiêu lưu theo (cơ sở, kỳ). Đặt lại cùng cơ sở + kỳ sẽ ghi đè giá trị cũ.
+          </p>
+        </Card>
+      ) : null}
 
       {/* Biểu đồ thực vs mục tiêu theo kỳ */}
       <Card title="Doanh thu thực vs mục tiêu theo kỳ">

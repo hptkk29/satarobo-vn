@@ -273,6 +273,7 @@ export type Action =
   | "payments:record" // R7-04 — Sale ghi nhận khoản
   | "payments:confirm" // R7-04 — Kế toán xác nhận (tách nhiệm vụ)
   | "payments:view-pii" // #15 (câu 32) — break-glass xem đầy đủ CCCD PH + địa chỉ (reason + audit)
+  | "revenue_targets:manage" // B-01 — đặt mục tiêu doanh thu tháng × cơ sở (KHÔNG phải quyền thao tác tiền)
   | "installments:approve" // FIX lead→payment→enroll (C4) — duyệt kế hoạch trả góp 2 đợt
   | "discounts:approve" // BGĐ 31/07 — duyệt giảm giá nhập tay (kèm giải trình)
   | "orders:view"
@@ -642,6 +643,14 @@ export const PERMISSIONS: Record<Action, Role[]> = {
   // ≥10 ký tự + audit) chỉ cho kế toán + admin. v2: HO_ACCOUNTANT GLOBAL,
   // CENTER_ACCOUNTANT CENTER (prisma/seed-roles.ts). KHÔNG mở cho CENTER_MANAGER.
   "payments:view-pii": ["SUPER_ADMIN", "ACCOUNTANT"],
+  // B-01 — đặt mục tiêu doanh thu theo tháng × cơ sở. Key RIÊNG, KHÔNG mượn
+  // `payments:manage`: quyền đó là mở/huỷ/hoàn tiền + cấu hình phương thức thanh toán +
+  // hoa hồng toàn hệ, cố ý không nằm ở Quản lý cơ sở (#09, giữ nguyên sau đảo 03/08).
+  // Cũng KHÔNG mượn `payments:view` — đó là quyền ĐỌC đối soát, mượn nó để GHI thì mọi
+  // vai chỉ-đọc về sau tự nhiên ghi được. Cách ly cơ sở KHÔNG đến từ đây: `RevenueTarget`
+  // ∈ SCOPE_EXEMPT nên scopedDb pass-through — luật "chỉ cơ sở mình quản" ép TAY trong
+  // action qua `checkRevenueTargetScope` (lib/reports/revenue-target-scope.ts).
+  "revenue_targets:manage": ["SUPER_ADMIN", "CENTER_MANAGER", "ACCOUNTANT"],
   // C4 — duyệt kế hoạch trả góp 2 đợt: chỉ quản lý cơ sở + admin (audit + reason bắt buộc khi từ chối).
   // #09 (09/07): v2 chuyển quyền này sang HO_ACCOUNTANT (de-xuat-scope §3.3 "tiền tập
   // trung"). `lib/orders/installments.ts` gate bằng matrix v1 (không theo cờ) làm lớp
