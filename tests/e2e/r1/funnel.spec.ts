@@ -1,5 +1,8 @@
 /**
  * R1-08 — getFunnelCounts (C8.1) + metrics. PG LOCAL.
+ * B-02 · quyết định B3 (24/08/2026): `revenue` (mẫu số ROAS) là THỰC THU trên `Payment`,
+ * KHÔNG còn là Σ `Order.totalAmount`. Ba tình huống phải đúng: thu thường · có hoàn ·
+ * có điều chỉnh giảm.
  */
 import { test, expect } from "@playwright/test";
 import { db } from "../../../lib/db";
@@ -7,12 +10,22 @@ import { assertTestDb } from "../../e2e/_helpers/seed";
 import { getFunnelCounts } from "../../../lib/crm/funnel-query";
 import { computeFunnelMetrics } from "../../../lib/crm/marketing-metrics";
 
+/** Tạo 1 đơn tối thiểu để treo bút toán Payment (Payment.orderId là FK bắt buộc). */
+async function taoDon(code: string, phone: string, totalAmount: number) {
+  return db.order.create({
+    data: { code, type: "COURSE", customerName: code, customerPhone: phone, status: "CONFIRMED", totalAmount },
+  });
+}
+
 test.describe("[R1-08] Funnel dashboard", () => {
   test.beforeEach(async () => {
     assertTestDb();
     await db.messengerConversation.deleteMany({});
     await db.lead.deleteMany({});
     await db.adsInsightDaily.deleteMany({});
+    // Payment tham chiếu Order với onDelete: Restrict → phải xoá trước Order.
+    await db.payment.deleteMany({});
+    await db.order.deleteMany({});
   });
 
   test("[R1-08-C8.1] đếm funnel L1/L2/L3 + spend đúng số seed", async () => {
@@ -27,24 +40,61 @@ test.describe("[R1-08] Funnel dashboard", () => {
     await db.lead.create({ data: { parentName: "C", phone: "0900000003" } });
     // spend
     await db.adsInsightDaily.create({ data: { date: new Date("2026-06-01"), channel: "facebook", spend: 1_000_000 } });
-    // revenue = 2tr (đơn CONFIRMED) + 1 đơn DRAFT không tính
-    await db.order.create({ data: { code: "ORD-1", type: "COURSE", customerName: "A", customerPhone: "0900000001", status: "CONFIRMED", totalAmount: 2_000_000 } });
-    await db.order.create({ data: { code: "ORD-2", type: "COURSE", customerName: "B", customerPhone: "0900000002", status: "DRAFT", totalAmount: 9_000_000 } });
+
+    // ── Doanh thu = THỰC THU (không phải giá trị hợp đồng) ────────────────────
+    const paidDate = new Date("2026-06-10");
+    const o1 = await taoDon("ORD-1", "0900000001", 2_000_000);
+    const o2 = await taoDon("ORD-2", "0900000002", 1_000_000);
+    const o3 = await taoDon("ORD-3", "0900000003", 3_000_000);
+    // Đơn có giá trị hợp đồng to nhưng CHƯA thu đồng nào — công thức cũ vẫn cộng nó vào.
+    await taoDon("ORD-4", "0900000004", 9_000_000);
+
+    // (1) thu thường → +2tr
+    await db.payment.create({
+      data: { orderId: o1.id, amount: 2_000_000, method: "cash", paidDate, accountantStatus: "CONFIRMED" },
+    });
+    // (2) có hoàn: thu 1tr rồi hoàn hết (bút toán ÂM, không xoá gốc) → 0
+    const p2 = await db.payment.create({
+      data: { orderId: o2.id, amount: 1_000_000, method: "cash", paidDate, accountantStatus: "CONFIRMED" },
+    });
+    await db.payment.create({
+      data: {
+        orderId: o2.id, amount: -1_000_000, method: "cash", paidDate,
+        accountantStatus: "REFUNDED", adjustmentOfId: p2.id,
+      },
+    });
+    // (3) có điều chỉnh giảm: 3tr → bản ADJUSTED 1tr thay thế bản gốc → +1tr (không phải 4tr)
+    const p3 = await db.payment.create({
+      data: { orderId: o3.id, amount: 3_000_000, method: "cash", paidDate, accountantStatus: "CONFIRMED" },
+    });
+    await db.payment.create({
+      data: {
+        orderId: o3.id, amount: 1_000_000, method: "cash", paidDate,
+        accountantStatus: "ADJUSTED", adjustmentOfId: p3.id,
+      },
+    });
+    // (4) khoản Sale mới ghi nhận, kế toán chưa duyệt → không phải tiền thật
+    await db.payment.create({
+      data: { orderId: o3.id, amount: 5_000_000, method: "cash", paidDate, accountantStatus: "PENDING" },
+    });
 
     const counts = await getFunnelCounts();
     expect(counts.l1).toBe(3);
     expect(counts.l2).toBe(2);
     expect(counts.l3).toBe(1);
     expect(counts.spend).toBe(1_000_000);
-    expect(counts.revenue).toBe(2_000_000); // chỉ đơn CONFIRMED
+    // 2tr + 0 (đã hoàn hết) + 1tr (bản điều chỉnh) = 3tr.
+    // Công thức cũ (Σ Order.totalAmount của đơn CONFIRMED) cho 15tr — phồng 5 lần.
+    expect(counts.revenue).toBe(3_000_000);
 
     const m = computeFunnelMetrics(counts);
     expect(m.cpl).toBe(500_000); // 1tr/2
     expect(m.crL2L3).toBe(0.5); // 1/2
-    expect(m.roas).toBe(2); // 2tr/1tr
+    expect(m.roas).toBe(3); // 3tr/1tr
   });
 
   test.afterEach(async () => {
+    await db.payment.deleteMany({});
     await db.order.deleteMany({});
   });
 });
