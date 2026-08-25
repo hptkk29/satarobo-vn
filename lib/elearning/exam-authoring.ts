@@ -1,0 +1,389 @@
+import { z } from "zod";
+import type { ActionConfig, ScopedDb } from "@/lib/actions/factory";
+import { ActionError } from "@/lib/actions/factory";
+import type { Actor } from "@/lib/auth/actor";
+import { orgUnitIdForCenter } from "@/lib/org/org-service";
+import { dungHaiPhaGhiThuTu } from "@/lib/elearning/course-outline";
+import { coSoCuaCauHoi } from "@/lib/elearning/question-bank";
+
+/**
+ * EL-14c — DỰNG ĐỀ THI.
+ *
+ * ⚠️ Đề có hai đời sống, và ranh giới giữa chúng là thứ phải giữ chặt nhất:
+ *
+ *  · **nháp** (`isActive = false`) — sửa gì cũng được;
+ *  · **đã kích hoạt** — bộ câu và tổng điểm ĐÓNG BĂNG.
+ *
+ * Sửa bộ câu hay điểm của một đề đã có người thi làm LỆCH ĐIỂM của mọi lượt đã
+ * chấm, im lặng — và điểm đó nằm trong hồ sơ nhân sự. `TrnExamAnswer` trỏ
+ * `examQuestionId`, nên gỡ một câu ra khỏi đề là cắt luôn đường về của những câu
+ * trả lời đã chấm.
+ */
+
+const deBaseSchema = z
+  .object({
+    title: z.string().trim().min(3, "Tên đề quá ngắn").max(200),
+    /**
+     * ĐÚNG MỘT trong hai. Hai cột cùng có giá trị = hai đường tìm đề, và báo cáo
+     * sẽ đếm đôi.
+     */
+    courseId: z.union([z.null(), z.string().min(1)]).optional(),
+    lessonId: z.union([z.null(), z.string().min(1)]).optional(),
+    durationMin: z.number().int().min(1).max(600),
+    passScore: z.number().int().min(1).max(10_000),
+    maxAttempts: z.number().int().min(1).max(20),
+    cooldownHours: z.number().int().min(0).max(720),
+    showAnswerPolicy: z
+      .enum(["NEVER", "AFTER_EACH_ATTEMPT", "AFTER_LAST_ATTEMPT"])
+      .optional(),
+    shuffleQuestions: z.boolean().optional(),
+    shuffleChoices: z.boolean().optional(),
+  })
+  .strict();
+
+function kiemNeoDe(
+  d: { courseId?: string | null; lessonId?: string | null },
+  ctx: z.RefinementCtx,
+): void {
+  const co = [d.courseId, d.lessonId].filter(Boolean).length;
+  if (co !== 1) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["courseId"],
+      message: "Đề phải gắn ĐÚNG MỘT chỗ: một khoá học, hoặc một bài học",
+    });
+  }
+}
+
+export const taoDeSchema = deBaseSchema.superRefine(kiemNeoDe);
+export type TaoDeInput = z.infer<typeof taoDeSchema>;
+
+export const cauHinhTaoDe: ActionConfig<TaoDeInput, { examId: string }> = {
+  name: "taoDe",
+  permission: "elearning:content:author",
+  module: "elearning",
+  entityType: "TrnExam",
+  auditAction: "CREATE",
+  schema: taoDeSchema,
+  handler: async ({ db, actor, input }) => {
+    const centerId = coSoCuaCauHoi(actor);
+    const orgUnitId = await orgUnitIdForCenter(centerId);
+
+    const de = await db.trnExam.create({
+      data: {
+        title: input.title,
+        courseId: input.courseId ?? null,
+        lessonId: input.lessonId ?? null,
+        durationMin: input.durationMin,
+        passScore: input.passScore,
+        // `maxScore` = 0 cho tới lúc kích hoạt. Đặt sẵn một con số ở đây là dựng
+        // một tổng điểm không khớp bộ câu nào, và không gì báo cho tới khi có
+        // người thi.
+        maxScore: 0,
+        maxAttempts: input.maxAttempts,
+        cooldownHours: input.cooldownHours,
+        showAnswerPolicy: input.showAnswerPolicy ?? "AFTER_LAST_ATTEMPT",
+        shuffleQuestions: input.shuffleQuestions ?? true,
+        shuffleChoices: input.shuffleChoices ?? true,
+        isActive: false,
+        centerId,
+        orgUnitId,
+        createdByUserId: actor.userId,
+      },
+      select: { id: true },
+    });
+
+    return {
+      entityId: de.id,
+      data: { examId: de.id },
+      newValues: {
+        title: input.title,
+        durationMin: input.durationMin,
+        passScore: input.passScore,
+      },
+    };
+  },
+};
+
+/**
+ * Máy khách trong một transaction — lấy TỪ kiểu của `$transaction` thay vì khai
+ * tay. Khai tay một hình dạng hẹp hơn thì Prisma từ chối, và cách chữa cẩu thả là
+ * ép `as never` — tức mất luôn phần kiểm kiểu ở đúng chỗ đang ghi DB.
+ */
+type TxDb = Parameters<Parameters<ScopedDb["$transaction"]>[0]>[0];
+
+/**
+ * Nạp đề QUA `scopedDb` — chính lượt đọc đó là cổng cách ly.
+ *
+ * `scopedDb` không che đường ghi, nên mọi đường sửa phải mượn một lượt ĐỌC. Bỏ
+ * bước này thì `update` theo `id` sửa được đề của cơ sở khác.
+ */
+async function napDe(db: ScopedDb, examId: string) {
+  const de = await db.trnExam.findFirst({
+    where: { id: examId, deletedAt: null },
+    select: {
+      id: true,
+      title: true,
+      isActive: true,
+      passScore: true,
+      maxScore: true,
+      _count: { select: { attempts: true } },
+    },
+  });
+  if (!de) throw new ActionError("NOT_FOUND", "Không tìm thấy đề thi");
+  return de;
+}
+
+/**
+ * Đề đã KHOÁ chưa.
+ *
+ * ⚠️ Khoá theo `isActive`, KHÔNG theo "đã có người thi chưa". Đợi tới lúc có lượt
+ * thi đầu tiên mới khoá nghĩa là người soạn sửa được đề trong khoảng giữa lúc phát
+ * cho người học và lúc người đầu tiên bấm bắt đầu — và hai người cùng khoá làm hai
+ * đề khác nhau mà bảng điểm coi như một.
+ */
+function chanKhiDaKichHoat(de: { isActive: boolean }, viec: string): void {
+  if (de.isActive) {
+    throw new ActionError(
+      "DE_DA_KICH_HOAT",
+      `Đề đã kích hoạt — không ${viec} được nữa. Tạo đề mới nếu cần thay đổi.`,
+    );
+  }
+}
+
+export const themCauVaoDeSchema = z
+  .object({
+    examId: z.string().min(1),
+    questionId: z.string().min(1),
+    /** Điểm của câu TRONG đề này. Bỏ trống thì lấy điểm mặc định của câu. */
+    points: z.union([z.null(), z.number().int().min(1).max(100)]).optional(),
+  })
+  .strict();
+
+export type ThemCauVaoDeInput = z.infer<typeof themCauVaoDeSchema>;
+
+export const cauHinhThemCauVaoDe: ActionConfig<
+  ThemCauVaoDeInput,
+  { examQuestionId: string }
+> = {
+  name: "themCauVaoDe",
+  permission: "elearning:content:author",
+  module: "elearning",
+  entityType: "TrnExamQuestion",
+  auditAction: "CREATE",
+  schema: themCauVaoDeSchema,
+  handler: async ({ db, input }) => {
+    const de = await napDe(db, input.examId);
+    chanKhiDaKichHoat(de, "thêm câu");
+
+    // Câu hỏi cũng phải qua `scopedDb`: thêm được câu của cơ sở khác vào đề của
+    // mình là mượn đường vòng để đọc kho của họ.
+    const cau = await db.trnQuestion.findFirst({
+      where: { id: input.questionId, deletedAt: null },
+      select: { id: true, defaultPoints: true, stem: true },
+    });
+    if (!cau) throw new ActionError("NOT_FOUND", "Không tìm thấy câu hỏi");
+
+    const soCauHienCo = await db.trnExamQuestion.count({ where: { examId: de.id } });
+
+    try {
+      const eq = await db.trnExamQuestion.create({
+        data: {
+          examId: de.id,
+          questionId: cau.id,
+          orderIndex: soCauHienCo,
+          points: input.points ?? cau.defaultPoints,
+        },
+        select: { id: true },
+      });
+      return {
+        entityId: eq.id,
+        data: { examQuestionId: eq.id },
+        newValues: { examId: de.id, points: input.points ?? cau.defaultPoints },
+      };
+    } catch (e) {
+      // ⚠️ Đọc `e.code`, không dò chuỗi: lời nhắn của Prisma KHÔNG chứa "P2002",
+      // và một nhánh dò chuỗi là nhánh không bao giờ chạy.
+      const ma =
+        typeof e === "object" && e !== null && "code" in e
+          ? (e as { code?: unknown }).code
+          : undefined;
+      if (ma === "P2002") {
+        throw new ActionError(
+          "CAU_DA_CO_TRONG_DE",
+          "Câu này đã có trong đề rồi",
+          "questionId",
+        );
+      }
+      throw e;
+    }
+  },
+};
+
+export const goCauKhoiDeSchema = z
+  .object({ examId: z.string().min(1), examQuestionId: z.string().min(1) })
+  .strict();
+export type GoCauKhoiDeInput = z.infer<typeof goCauKhoiDeSchema>;
+
+export const cauHinhGoCauKhoiDe: ActionConfig<GoCauKhoiDeInput, { daGo: boolean }> = {
+  name: "goCauKhoiDe",
+  permission: "elearning:content:author",
+  module: "elearning",
+  entityType: "TrnExamQuestion",
+  auditAction: "DELETE",
+  schema: goCauKhoiDeSchema,
+  handler: async ({ db, input }) => {
+    const de = await napDe(db, input.examId);
+    chanKhiDaKichHoat(de, "gỡ câu");
+
+    // Câu phải thuộc ĐÚNG đề vừa qua cổng cách ly. Xoá thẳng theo `examQuestionId`
+    // là gỡ được câu khỏi đề bất kỳ, và cổng ở trên thành trang trí.
+    const eq = await db.trnExamQuestion.findFirst({
+      where: { id: input.examQuestionId, examId: de.id },
+      select: { id: true, orderIndex: true },
+    });
+    if (!eq) throw new ActionError("NOT_FOUND", "Không tìm thấy câu trong đề này");
+
+    await db.$transaction(async (t) => {
+      await t.trnExamQuestion.delete({ where: { id: eq.id } });
+      // Dồn lại thứ tự cho liền mạch. Không dồn thì lần thêm câu sau tính
+      // `orderIndex` bằng SỐ LƯỢNG và va khoá duy nhất với một chỗ trống ở giữa.
+      const conLai = await t.trnExamQuestion.findMany({
+        where: { examId: de.id },
+        select: { id: true },
+        orderBy: { orderIndex: "asc" },
+      });
+      await ghiLaiThuTu(t, conLai.map((x) => x.id));
+    });
+
+    return { entityId: eq.id, data: { daGo: true }, oldValues: { orderIndex: eq.orderIndex } };
+  },
+};
+
+export const sapXepDeSchema = z
+  .object({
+    examId: z.string().min(1),
+    /** Danh sách `TrnExamQuestion.id` theo thứ tự MỚI. */
+    thuTu: z.array(z.string().min(1)).min(1).max(200),
+  })
+  .strict();
+export type SapXepDeInput = z.infer<typeof sapXepDeSchema>;
+
+export const cauHinhSapXepDe: ActionConfig<SapXepDeInput, { soCau: number }> = {
+  name: "sapXepDe",
+  permission: "elearning:content:author",
+  module: "elearning",
+  entityType: "TrnExam",
+  auditAction: "UPDATE",
+  schema: sapXepDeSchema,
+  handler: async ({ db, input }) => {
+    const de = await napDe(db, input.examId);
+    chanKhiDaKichHoat(de, "sắp xếp lại");
+
+    const hienCo = await db.trnExamQuestion.findMany({
+      where: { examId: de.id },
+      select: { id: true },
+    });
+    const idCo = new Set(hienCo.map((x) => x.id));
+
+    // ⚠️ Danh sách gửi lên phải phủ ĐÚNG bộ câu hiện có. Thiếu một id thì câu đó
+    // giữ `orderIndex` cũ và va khoá với một câu vừa được dời tới đúng chỗ đó;
+    // thừa một id thì đang dời câu của đề khác.
+    if (input.thuTu.length !== hienCo.length || input.thuTu.some((id) => !idCo.has(id))) {
+      throw new ActionError(
+        "THU_TU_KHONG_KHOP",
+        "Danh sách thứ tự không khớp bộ câu của đề — tải lại trang rồi thử lại",
+        "thuTu",
+      );
+    }
+
+    await db.$transaction(async (t) => {
+      await ghiLaiThuTu(t, input.thuTu);
+    });
+
+    return { entityId: de.id, data: { soCau: input.thuTu.length } };
+  },
+};
+
+/**
+ * Ghi lại thứ tự bằng HAI PHA.
+ *
+ * ⚠️ `@@unique([examId, orderIndex])` làm mọi lượt hoán vị va khoá nếu ghi thẳng:
+ * dời câu A về chỗ 0 trong khi câu B còn đang giữ chỗ 0. Pha 1 đẩy tất cả sang dải
+ * ÂM (không ai dùng), pha 2 mới ghi số thật. Cùng khuôn `dungHaiPhaGhiThuTu` của
+ * dàn bài khoá học — quy ước 16.
+ *
+ * ⚠️ Pha 1 phải phủ MỌI câu, kể cả câu không đổi chỗ. Bỏ qua câu đứng yên là để nó
+ * giữ số cũ và va với một câu vừa được dời tới đúng số đó.
+ */
+async function ghiLaiThuTu(t: TxDb, ids: string[]): Promise<void> {
+  const { pha1, pha2 } = dungHaiPhaGhiThuTu(ids);
+  for (const b of pha1) {
+    await t.trnExamQuestion.update({ where: { id: b.id }, data: { orderIndex: b.orderIndex } });
+  }
+  for (const b of pha2) {
+    await t.trnExamQuestion.update({ where: { id: b.id }, data: { orderIndex: b.orderIndex } });
+  }
+}
+
+export const kichHoatDeSchema = z.object({ examId: z.string().min(1) }).strict();
+export type KichHoatDeInput = z.infer<typeof kichHoatDeSchema>;
+
+export const cauHinhKichHoatDe: ActionConfig<
+  KichHoatDeInput,
+  { maxScore: number; soCau: number }
+> = {
+  name: "kichHoatDe",
+  // Kích hoạt là đưa đề ra dùng thật ⇒ quyền XUẤT BẢN, không phải quyền soạn.
+  permission: "elearning:content:publish",
+  module: "elearning",
+  entityType: "TrnExam",
+  auditAction: "UPDATE",
+  schema: kichHoatDeSchema,
+  handler: async ({ db, input }) => {
+    const de = await napDe(db, input.examId);
+    if (de.isActive) {
+      throw new ActionError("DE_DA_KICH_HOAT", "Đề này đã kích hoạt rồi");
+    }
+
+    const cacCau = await db.trnExamQuestion.findMany({
+      where: { examId: de.id },
+      select: { points: true },
+    });
+    if (cacCau.length === 0) {
+      throw new ActionError(
+        "DE_RONG",
+        "Đề chưa có câu hỏi nào — thêm câu trước khi kích hoạt",
+      );
+    }
+
+    const maxScore = cacCau.reduce((s, c) => s + c.points, 0);
+    // ⚠️ Điểm đạt phải nằm TRONG thang điểm. `passScore > maxScore` là một đề không
+    // ai qua nổi, và người soạn không có cách nào biết trước khi có người trượt.
+    if (de.passScore > maxScore) {
+      throw new ActionError(
+        "DIEM_DAT_VUOT_THANG",
+        `Điểm đạt (${de.passScore}) lớn hơn tổng điểm của đề (${maxScore}) — không ai qua được`,
+        "passScore",
+      );
+    }
+
+    await db.trnExam.update({
+      where: { id: de.id },
+      // Đóng băng tổng điểm TẠI ĐÂY. Tính lại lúc chấm là để một câu bị sửa điểm
+      // sau đó làm lệch thang của những lượt đã chấm.
+      data: { isActive: true, maxScore },
+    });
+
+    return {
+      entityId: de.id,
+      data: { maxScore, soCau: cacCau.length },
+      oldValues: { isActive: false, maxScore: de.maxScore },
+      newValues: { isActive: true, maxScore, soCau: cacCau.length },
+    };
+  },
+};
+
+/** Cơ sở của đề — cùng luật với câu hỏi, tái dùng để hai bên không trôi khỏi nhau. */
+export { coSoCuaCauHoi as coSoCuaDe };
+export type { Actor };
