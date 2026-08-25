@@ -14,6 +14,7 @@ import {
   createBackfillOrderPaymentInTx,
   type BackfillPaymentInput,
 } from "@/lib/crm/backfill-order";
+import { inferLeadChildIdForConvert } from "@/lib/orders/lead-child-link";
 import { syncConversationMembership } from "@/lib/chat/sync-membership";
 import type { CourseDiscountType } from "@prisma/client";
 
@@ -190,6 +191,11 @@ export async function convertLeadV2(actor: AuditActor, input: ConvertV2Input): P
           email: input.parentEmail,
         },
         paid: input.backfillPayment,
+        // N-2 · quyết định B4 — quy đơn backfill về đúng con, KHI VÀ CHỈ KHI lượt chốt
+        // này có đúng một học viên gắn `LeadChild`. Chốt 2 con cùng lượt vẫn là MỘT đơn
+        // chung ⇒ để `null` và báo cáo hiện "chưa quy được về con"; muốn tách doanh thu
+        // thì phải tách thành 2 đơn, đúng như B4 đã lường.
+        leadChildId: inferLeadChildIdForConvert(input.students),
       });
     }
 

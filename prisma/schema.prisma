@@ -1541,6 +1541,7 @@ model LeadChild {
   trialEnrollments TrialEnrollment[] // R7-02
   enrollments      Enrollment[] // R7-06 — enrollment chính thức convert từ con này
   trialHistory     LeadTrialHistory[] // FL-R2 — lịch sử đã từng học thử
+  orders           Order[]            @relation("LeadChildOrders") // N-2 — doanh thu quy về con
 
   @@index([leadId])
 }
@@ -3782,6 +3783,17 @@ model Order {
   leadId String?
   lead   Lead?   @relation("LeadOrders", fields: [leadId], references: [id])
 
+  /// N-2 · quyết định B4 (24/08/2026) — MỘT ĐƠN – MỘT CON. `leadId` là cấp PHỤ HUYNH,
+  /// mà đơn vị sinh doanh thu là ĐỨA TRẺ: không có cột này thì "doanh thu theo học sinh"
+  /// (C-03) và mẫu số của D-04/D-05 không tính được.
+  /// NULL = **chưa quy được về con**, KHÔNG phải "không có con": đơn cũ tạo trước N-2,
+  /// đơn vãng lai không gắn phiếu, và đơn của phiếu nhiều con mà người tạo không chọn.
+  /// Báo cáo BẮT BUỘC hiện nhóm này thành một dòng riêng thay vì bỏ im lặng
+  /// (`lib/reports/revenue-by-child.ts`). Đơn combo 2 con phải tách thành 2 đơn.
+  /// SetNull: xoá phiếu con không được kéo theo đơn — đơn là chứng từ tiền.
+  leadChildId String?
+  leadChild   LeadChild? @relation("LeadChildOrders", fields: [leadChildId], references: [id], onDelete: SetNull)
+
   centerId  String?
   orgUnitId String? // PR-A: OrgUnit.id (song song centerId, scopedDb flip ở PR-D)
   center    Center? @relation(fields: [centerId], references: [id])
@@ -3858,6 +3870,9 @@ model Order {
   // IDX-4: cron order-debt-reminder (getOverdueOrders: status=PENDING + createdAt<cutoff
   // ORDER createdAt) + admin order lists filter status. status+createdAt phục vụ filter+sort.
   @@index([status, createdAt])
+  // N-2 — "doanh thu theo con" gom Payment qua Order.leadChildId; không có index thì
+  // mỗi lần mở tab Kinh doanh là một lượt quét toàn bảng đơn.
+  @@index([leadChildId])
 }
 
 // Commit 4 — lịch thanh toán tối đa 2 đợt cho 1 Order.

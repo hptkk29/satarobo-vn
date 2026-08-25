@@ -13,6 +13,7 @@ import {
 } from "@/lib/validators/order";
 import { generateOrderCode, withUniqueRetry } from "@/lib/orders/code";
 import { checkOrderCreateOwnership } from "@/lib/orders/create-guard";
+import { resolveOrderLeadChildId } from "@/lib/orders/lead-child-link";
 import { canTransition } from "@/lib/orders/status";
 import { recordInstallmentPlan, markInstallmentPaid } from "@/lib/orders/installments";
 import { discountFromPercent, needsDiscountApproval } from "@/lib/orders/discount";
@@ -175,17 +176,29 @@ export async function createOrderManualAction(input: unknown) {
 
   const data = parsed.data;
 
+  // Phiếu khách đọc MỘT lượt cho hai việc: cổng "khách của mình" (G-A) và danh sách con
+  // (N-2). `Lead` ∈ `SCOPED_MODELS` ⇒ phiếu ngoài tầm nhìn trả `null`.
+  //
+  // ⚠️ Con phải đọc QUA PHIẾU, KHÔNG đọc thẳng `sdb.leadChild`: `LeadChild` không có
+  // `centerId` nên KHÔNG nằm trong `SCOPED_MODELS` và `scopedDb` là pass-through với nó.
+  // Phiếu là cổng duy nhất chặn "gắn đơn vào con của cơ sở khác" bằng cách sửa payload.
+  const leadId = data.leadId?.trim() || null;
+  const lead = leadId
+    ? await sdb.lead.findFirst({
+        where: { id: leadId, deletedAt: null },
+        select: {
+          id: true,
+          assignedToId: true,
+          centerId: true,
+          children: { select: { id: true, leadId: true } },
+        },
+      })
+    : null;
+
   // G-A — người chỉ có `orders:create` (Sale) phải gắn đơn vào lead CỦA MÌNH.
-  // Lead nạp qua `scopedDb` ⇒ lead ngoài cơ sở trả null ⇒ guard từ chối.
+  // Lead ngoài cơ sở trả null ⇒ guard từ chối.
   // Kiểm TRƯỚC mọi truy vấn khác để không rò rỉ thông tin qua thông báo lỗi.
   if (!canManageAll) {
-    const leadId = data.leadId?.trim() || null;
-    const lead = leadId
-      ? await sdb.lead.findFirst({
-          where: { id: leadId, deletedAt: null },
-          select: { id: true, assignedToId: true, centerId: true },
-        })
-      : null;
     const guard = checkOrderCreateOwnership({
       canManageAll,
       leadId,
@@ -196,6 +209,17 @@ export async function createOrderManualAction(input: unknown) {
     // Cơ sở của đơn lấy theo lead (guard trả về), không tin giá trị client gửi.
     data.centerId = guard.enforcedCenterId ?? null;
   }
+
+  // N-2 · quyết định B4 — quy đơn về ĐÚNG MỘT CON. Phiếu 1 con thì suy; phiếu nhiều con
+  // mà không chọn thì để `null` và báo cáo nói ra — KHÔNG đoán, vì đoán sai là gán doanh
+  // thu sang đứa khác mà tổng vẫn khớp nên không ai phát hiện.
+  const childLink = resolveOrderLeadChildId({
+    leadId,
+    requestedLeadChildId: data.leadChildId,
+    children: lead?.children ?? [],
+  });
+  if (!childLink.ok) return { ok: false as const, error: childLink.message };
+  const leadChildId = childLink.leadChildId;
 
   // Cách ly cơ sở (ghi): nếu form chọn cơ sở, cơ sở đó phải thuộc tầm nhìn actor
   // (orders:manage hiện là GLOBAL — guard này chỉ chặn khi role bị thu hẹp sau này).
@@ -343,6 +367,8 @@ export async function createOrderManualAction(input: unknown) {
         customerCity: data.customerCity?.trim() || null,
         studentId: data.studentId || null,
         leadId: data.leadId || null,
+        // N-2 — `null` ở đây nghĩa là "chưa quy được về con", KHÔNG phải "không có con".
+        leadChildId,
         centerId: data.centerId || null,
         paymentMethodId: data.paymentMethodId,
         subtotal,
