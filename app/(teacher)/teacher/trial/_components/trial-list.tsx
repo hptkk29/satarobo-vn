@@ -28,7 +28,10 @@ export interface TrialSlotView {
   trialClassName: string;
   dateKey: string; // YYYY-MM-DD — nhóm theo ngày
   dateLabel: string; // "Chủ Nhật, 05/07/2026"
-  timeLabel: string; // "09:00-10:30"
+  dateShort: string; // "CN, 05/07" — cho cột Thời gian trong bảng HV
+  /** Đã qua / đúng hôm nay / sắp tới — server tính theo giờ VN (xem page.tsx). */
+  dayState: "past" | "today" | "upcoming";
+  timeLabel: string; // "09:00–10:30"
   status: string; // SCHEDULED | COMPLETED
   students: TrialStudentView[];
 }
@@ -184,11 +187,14 @@ export function TrialList({ slots }: { slots: TrialSlotView[] }) {
                     ) : (
                       <div className="overflow-x-auto">
                         <PhanTrangBang>
-                          <table className="min-w-[560px] w-full border-collapse text-left text-sm">
+                          <table className="min-w-[700px] w-full border-collapse text-left text-sm">
                             <thead>
                               <tr className="border-b border-border text-xs font-semibold tracking-wide text-muted-foreground uppercase">
                                 <th scope="col" className="px-5 py-2.5">
                                   Học viên
+                                </th>
+                                <th scope="col" className="px-5 py-2.5">
+                                  Thời gian
                                 </th>
                                 <th scope="col" className="px-5 py-2.5">
                                   Khóa học
@@ -216,6 +222,38 @@ export function TrialList({ slots }: { slots: TrialSlotView[] }) {
                                         {st2.birthYear}
                                       </p>
                                     )}
+                                  </td>
+                                  {/* Thời gian lặp lại trên TỪNG DÒNG, không chỉ ở header
+                                      thẻ buổi: khi GV gõ tìm tên hay bật bộ lọc, các dòng
+                                      trải khắp nhiều ngày/khung giờ, nhìn một dòng phải
+                                      biết ngay em đó học lúc nào. Chuỗi ngày do server
+                                      format (timeZone UTC — @db.Date là UTC 00:00 của
+                                      ngày VN), client KHÔNG dựng lại Date. */}
+                                  <td className="px-5 py-3 whitespace-nowrap">
+                                    <p
+                                      className={cn(
+                                        "font-medium tabular-nums",
+                                        // Buổi đã qua thì làm nhạt — GV lướt tìm buổi
+                                        // sắp tới, không phải buổi đã dạy xong.
+                                        s.dayState === "past"
+                                          ? "text-muted-foreground"
+                                          : "text-foreground",
+                                      )}
+                                    >
+                                      {s.dateShort}
+                                      {s.dayState === "today" && (
+                                        // `inline-block align-middle`: span TRẦN có
+                                        // `py-*` thì nền bo tròn tràn khỏi hộp dòng,
+                                        // đè lên dòng giờ dính ngay bên dưới — cùng
+                                        // cách làm với chip ở attendance-panel.
+                                        <span className="ml-1.5 inline-block align-middle rounded-full bg-primary-soft px-2 py-0.5 text-[11px] font-semibold text-primary-ink">
+                                          Hôm nay
+                                        </span>
+                                      )}
+                                    </p>
+                                    <p className="text-xs tabular-nums text-muted-foreground">
+                                      {s.timeLabel}
+                                    </p>
                                   </td>
                                   <td className="px-5 py-3 whitespace-nowrap text-muted-foreground">
                                     {st2.courseName ?? "—"}

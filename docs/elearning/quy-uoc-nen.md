@@ -1,11 +1,12 @@
 # Quy ước nền — module đào tạo nội bộ (e-learning)
 
-> **Đọc file này TRƯỚC KHI MỞ PR đụng module e-learning.** Mười bốn quy ước dưới đây.
-> Quy ước **1–4, 12, 13** được **máy cưỡng chế** (ESLint / Vitest / CI); **5–11 và 14** thì
-> không — chúng chỉ sống nếu người ta đọc chỗ này. Đó là lý do chúng nằm ở một chỗ chứ
+> **Đọc file này TRƯỚC KHI MỞ PR đụng module e-learning.** Mười sáu quy ước dưới đây.
+> Quy ước **1–4, 12, 13, 16** được **máy cưỡng chế** (ESLint / Vitest / CI); **5–11, 14, 15**
+> thì không — chúng chỉ sống nếu người ta đọc chỗ này. Đó là lý do chúng nằm ở một chỗ chứ
 > không rải rác trong các ticket dùng.
 >
-> 1–9 thuộc ticket nền EL-07; **10–12 chốt qua EL-05**, **13–14 qua EL-06** (23/08/2026).
+> 1–9 thuộc ticket nền EL-07; **10–12 qua EL-05**, **13–14 qua EL-06**, **15–16 qua EL-08**
+> (23/08/2026).
 
 Nguồn: `02-KE-HOACH-THUC-HIEN-Elearning-v1.4.md` — ticket EL-07, quyết định QĐ-CDA-02b (biện pháp
 1, 3, 4) và QĐ-CDA-13 (BP-1, BP-2).
@@ -196,7 +197,76 @@ khi có việc chưa chạy là thứ khó phát hiện nhất, vì không có g
 
 ---
 
-## Ràng buộc kèm theo, không thuộc mười bốn quy ước nhưng dễ quên
+## Hai quy ước bổ sung — chốt qua EL-08 (23/08/2026)
+
+### 15. ĐỌC enum trong `prisma/schema.prisma` trước khi viết máy trạng thái
+
+**Đã vấp:** EL-08 viết máy trạng thái phiên bản với `PENDING_APPROVAL` và một hành động
+`DUYET_VA_XUAT_BAN` gộp. Schema thật có `TrnVersionStatus` = `DRAFT · PENDING_REVIEW ·
+APPROVED · PUBLISHED · ARCHIVED` và `TrnLessonKind` = `READ · VIDEO · SCORM · QUIZ · TASK ·
+LIVE_SESSION`. Ba chỗ sai, typecheck bắt cả ba.
+
+Sửa xong hoá ra **bản schema đúng hơn bản bịa**: duyệt và xuất bản là hai bước, và tách ra
+mới cho người duyệt nói được *"đúng rồi, nhưng chờ tới đầu quý hãy phát"*. Enum trong schema
+là kết quả của một vòng thiết kế đã có lý do — đoán lại từ đầu là bỏ mất lý do đó.
+
+### 16. Ghi lại `orderIndex` dưới khoá duy nhất phải đi HAI PHA
+
+`TrnModule` có `@@unique([courseId, orderIndex])`, `TrnLesson` có
+`@@unique([moduleId, orderIndex])`. Ghi thẳng thứ tự mới sẽ **va khoá ngay bước đầu** vì còn
+phần tử mang số đích.
+
+Khuôn đúng ở `lib/elearning/course-outline.ts` (`dungHaiPhaGhiThuTu`): pha 1 đẩy **toàn bộ**
+sang dải âm, pha 2 ghi số thật — cả hai trong CÙNG một transaction. Pha 1 phải phủ mọi phần
+tử kể cả cái không đổi chỗ; chỉ đẩy "cái có đổi" thì vẫn còn số dương nằm lại và pha 2 va
+đúng vào chúng.
+
+Đây không phải lỗi mất dữ liệu — nó chỉ làm thao tác kéo thả thất bại với một lỗi khó hiểu,
+và người dùng kết luận hệ thống hỏng.
+
+---
+
+## Ba quy ước bổ sung — chốt qua EL-10 và EL-12 (25/08/2026)
+
+### 17. Case "đường bình thường" viết TRƯỚC case "chặn được gì"
+
+Một bộ test chỉ hỏi *"cổng có chặn đúng thứ phải chặn không"* sẽ **xanh trọn vẹn
+trên một hệ chặn tất cả mọi người**.
+
+Đã xảy ra thật ở EL-12: `chanTuaToi` so vị trí con trỏ với `maxPositionSec`, và 21
+case của hợp đồng đều xanh. Nhưng mốc đó chỉ cập nhật ở cuối mỗi nhịp, nên con trỏ
+luôn chạy trước nó — với nhịp 15 giây thì *mọi* nhịp bình thường, kể cả nhịp đầu
+tiên của mọi bài, đều trông như "nhảy tới 15 giây chưa xem". Nếu lọt: không ai xem
+nổi một video nào, và thông báo hiện ra là "khoá này không cho tua tới", một câu
+chẳng liên quan gì tới việc người học vừa làm.
+
+**Cách áp dụng:** với mọi cổng chặn, viết ít nhất một case cho người dùng ĐÚNG
+LUẬT đi qua được, và một case cho **nhịp/lượt ĐẦU TIÊN** — trạng thái khởi đầu
+(mốc 0, chưa có dòng dữ liệu) là chỗ điều kiện biên hay sai nhất.
+
+### 18. Hàm KÝ và hàm KIỂM phải đối xứng về tham số thời gian
+
+`kiemVeMedia(token, now)` có mốc kiểm, còn `kyVeMedia(input, ttl)` thì ký bằng
+`Date.now()` thật. Test buộc phải ký bằng đồng hồ thật rồi kiểm bằng mốc giả ⇒ vé
+xanh hay đỏ **tuỳ giờ chạy CI**. Loại đỏ chập chờn này không ai lần ra, và cách xử
+thường gặp là "chạy lại cho xanh".
+
+**Cách áp dụng:** hễ một hàm nhận `now` thì hàm đối ngẫu của nó cũng phải nhận.
+Áp cho mọi cặp ký/kiểm, mã hoá/giải mã, đặt hạn/soi hạn.
+
+### 19. Test canh CHỮ trong chú thích là guard tự vỡ
+
+Case của EL-10 đòi mã nguồn chứa đúng một câu tiếng Việt. Nó đỏ ngay lần đầu ai đó
+viết lại câu đó — **báo động giả trên một tệp không đổi hành vi**. Vài lần như vậy
+là người ta học được cách sửa: xoá dòng assert.
+
+**Cách áp dụng:** canh thứ chạy được. Thay vì đòi có câu "con số client chỉ để
+chặn sớm", hãy khẳng định biến mang con số client **không xuất hiện trong lời gọi
+LƯU**. Thử ngược để chắc: chèn đúng con bug vào rồi xem case có đỏ không.
+
+---
+
+## Ràng buộc kèm theo, không thuộc mười chín quy ước nhưng dễ quên
 
 - **Ngân sách cron: tối đa 2 khe** cho cả module. Bảy mốc nhắc gộp vào **một** cron quét
   (`elearning-reminders`, nhịp 15 phút); việc dọn dữ liệu thô 90 ngày gộp vào cron đêm

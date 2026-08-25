@@ -1,7 +1,8 @@
 // hub-materials-tab.tsx — Tab "Tài liệu học phần" của Class Hub.
 //
 // Bài giảng theo khung chương trình ACTIVE của KHOÁ lớp này: tài liệu (Document, mở
-// tab mới) + SCORM (viewer site GV, watermark #14 — gate ở /teacher/scorm/play). Chỉ
+// tab mới) + SCORM (viewer site GV mở NGAY TẠI TRANG từ 24/08, watermark #14 — gate
+// ở /teacher/scorm/play). Chỉ
 // XEM/trình chiếu, không chỉnh sửa. Tài liệu là teaching-materials (không PII HV/PH —
 // câu 46 an toàn). SCORM sessionId lấy từ buổi của CHÍNH lớp này. Xem toàn kho →
 // /teacher/tai-lieu?courseId=… (đầy đủ bộ lọc + mọi lớp cùng khoá).
@@ -45,6 +46,14 @@ export async function HubMaterialsTab({
   classId: string;
 }) {
   const sdb = scopedDb(actor);
+
+  // Chỗ quay về khi GV bấm "Đóng" trong màn trình chiếu — nơi mở phải tự khai vì nút
+  // "Đóng" cần đích XÁC ĐỊNH (vào thẳng bằng URL / F5 thì Back không trỏ về đây nữa).
+  // URL của Class Hub do page.tsx quy ước: `?classId=…&tab=<tab>`.
+  const backParam = encodeURIComponent(
+    `/teacher/lop?classId=${classId}&tab=tai-lieu`,
+  );
+
   const cls = await sdb.class.findUnique({
     where: { id: classId },
     select: { courseId: true },
@@ -218,20 +227,23 @@ export async function HubMaterialsTab({
                       >
                         Bài giảng SCORM
                       </Badge>
-                      <a
+                      {/* Mở NGAY TẠI TRANG (không tab mới) — chốt 24/08. Viewer phủ kín
+                          khung nhìn nên nó tự là "màn trình chiếu"; đẻ tab mới mỗi lần mở
+                          làm GV phải dọn tab giữa buổi dạy. Đi qua next/link để điều hướng
+                          phía client, và nhờ ở cùng tab nên nút "Đóng" lẫn Back của trình
+                          duyệt đều đưa về đúng chỗ. */}
+                      <Link
                         href={
                           l.scorm.sessionId
-                            ? `/teacher/scorm/play/${l.scorm.id}?sessionId=${l.scorm.sessionId}`
-                            : `/teacher/scorm/play/${l.scorm.id}`
+                            ? `/teacher/scorm/play/${l.scorm.id}?sessionId=${l.scorm.sessionId}&from=${backParam}`
+                            : `/teacher/scorm/play/${l.scorm.id}?from=${backParam}`
                         }
-                        target="_blank"
-                        rel="noopener noreferrer"
                         title={l.scorm.name}
                         className="inline-flex items-center gap-1 rounded-md border border-primary-soft px-2.5 py-1.5 text-xs font-medium text-primary-ink hover:bg-primary-soft-hover dark:border-primary"
                       >
                         <Play className="h-3.5 w-3.5" aria-hidden /> Mở trình
                         chiếu
-                      </a>
+                      </Link>
                     </div>
                   )}
                 </div>

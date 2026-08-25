@@ -3,7 +3,7 @@
 // Port cấu trúc reference :3001 (satarobo-ui-giaovien students/[id]/student-profile):
 // hồ sơ = 4 TAB (Điểm danh / Nhận xét / Bài tập & Kiểm tra / Học bạ), điều hướng qua
 // searchParams (?s=<id>&ptab=…) — server-first, mỗi tab fetch riêng.
-//   (a) không tham số → grid HV các lớp mình (client search + lọc lớp).
+//   (a) không tham số → BẢNG HV các lớp mình (nhóm theo lớp + tìm tên/mã + lọc lớp).
 //   (b) ?s=<id>       → hồ sơ 4 tab.
 //
 // Guard IDOR: HV phải có ghi danh (mọi status, chưa xoá) trong lớp ∈ assignedClassIds.
@@ -291,12 +291,13 @@ export default async function TeacherStudentProfilePage({
     );
   }
 
-  // ── (a) Grid học viên các lớp mình (client search + lọc lớp) ───────────────────
+  // ── (a) Bảng học viên các lớp mình (nhóm theo lớp + client search + lọc lớp) ───
   // Đọc QUA quan hệ class (enrollment dev centerId=null bị scopedDb lọc nếu query thẳng).
-  const gridClasses = classIds.length
+  const listClasses = classIds.length
     ? await sdb.class.findMany({
         where: { id: { in: classIds } },
         select: {
+          id: true,
           name: true,
           enrollments: {
             where: { deletedAt: null },
@@ -310,15 +311,19 @@ export default async function TeacherStudentProfilePage({
         },
       })
     : [];
-  const enrRows = gridClasses.flatMap((c) =>
+  const enrRows = listClasses.flatMap((c) =>
     c.enrollments.map((e) => ({
       status: e.status,
       student: e.student,
+      classId: c.id,
       className: c.name,
     })),
   );
 
   // HV học 2 lớp mình → gộp 1 dòng, liệt kê các lớp (giữ trạng thái "cao nhất").
+  // Giữ THÊM trạng thái của TỪNG lớp: bảng ở chế độ "Nhóm theo lớp" phải hiện trạng
+  // thái trong chính lớp đó, không thì em đã nghỉ lớp A vẫn đọc là "Đang học" ở khối
+  // lớp A chỉ vì còn ghi danh ở lớp B. `status` gộp chỉ dùng cho danh sách phẳng.
   const byStudent = new Map<string, StudentRow>();
   for (const r of enrRows) {
     const cur = byStudent.get(r.student.id) ?? {
@@ -328,7 +333,15 @@ export default async function TeacherStudentProfilePage({
       classes: [],
       status: r.status,
     };
-    if (!cur.classes.includes(r.className)) cur.classes.push(r.className);
+    // Cùng một lớp có thể có nhiều ghi danh (ghi danh lại) → 1 mục/lớp, ưu tiên active.
+    // Đối chiếu theo ID chứ KHÔNG theo tên: `Class.name` không có ràng buộc unique
+    // (chỉ `classCode` mới unique), nên hai lớp trùng tên sẽ bị nhập làm một —
+    // khối "Nhóm theo lớp" ở màn danh sách khi đó cộng nhầm sĩ số của cả hai.
+    const sameClass = cur.classes.find((c) => c.id === r.classId);
+    if (!sameClass)
+      cur.classes.push({ id: r.classId, name: r.className, status: r.status });
+    else if (ENROLLMENT_ACTIVE_STATUS_LIST.includes(r.status))
+      sameClass.status = r.status;
     if (ENROLLMENT_ACTIVE_STATUS_LIST.includes(r.status)) cur.status = r.status; // ưu tiên active
     byStudent.set(r.student.id, cur);
   }

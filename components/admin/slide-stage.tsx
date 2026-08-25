@@ -10,9 +10,26 @@
 //     bấm nút/next hay click vào nội dung (focus vào iframe) hay lúc bật/tắt full màn hình.
 //   Lưu ý: KHÔNG thể chặn chụp màn hình OS (PrintScreen / Win+Shift+S) từ web — watermark
 //   là biện pháp răn đe chính.
-import { useEffect, useRef, useState, type ReactNode } from "react";
-import { Maximize2, Minimize2 } from "lucide-react";
+//
+// ⚠️ 23/08/2026 — nút TOÀN MÀN HÌNH vốn đã có từ đầu nhưng GV báo "chưa có": nó là một
+// icon 3,5×3,5 không nhãn, lọt giữa hàng chữ xám cạnh badge trạng thái ⇒ không ai thấy.
+// Nay nó là nút CÓ NHÃN CHỮ + nền tương phản, nhãn hiện ở MỌI bề rộng (kể cả 375px — ẩn
+// nhãn ở màn hẹp là tái lập đúng vấn đề gốc), kèm phím tắt **F**. Đừng "dọn cho gọn" về
+// icon trần lần nữa, cũng đừng gắn lại `hidden sm:inline` cho nhãn.
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { Maximize2, Minimize2, X } from "lucide-react";
+import Link from "next/link";
 import { cn } from "@/lib/utils";
+
+/**
+ * Cách khung chiếm chỗ ở chế độ THƯỜNG (lúc full màn hình thì luôn phủ kín, không tính):
+ *  - `"inline"` (mặc định) — nằm trong luồng trang, cao gần trọn khung nhìn. Hành vi cũ,
+ *    dùng cho khu admin (`<main>` của admin tự cuộn nên khung vừa khít ở đó).
+ *  - `"viewport"` — phủ kín khung nhìn (`fixed inset-0`). Dùng cho site giáo viên: trang
+ *    trình chiếu bị bọc trong AppShell (Topbar + padding của `<main>`), nên khung theo
+ *    luồng sẽ cộng thêm chiều cao ⇒ trang cuộn dọc và bài giảng bị bóp nhỏ lại.
+ */
+export type SlideStageFit = "inline" | "viewport";
 
 function hhmmss(d: Date): string {
   return d.toLocaleTimeString("vi-VN", {
@@ -31,6 +48,8 @@ export function SlideStage({
   statusLabel,
   lastAccessedLabel,
   toolbar,
+  fit = "inline",
+  exitHref,
   children,
 }: {
   title: string;
@@ -42,6 +61,14 @@ export function SlideStage({
   lastAccessedLabel?: string;
   /** Điều khiển riêng theo loại (vd PDF: ‹ 3/12 ›). */
   toolbar?: ReactNode;
+  /** Xem `SlideStageFit`. Mặc định giữ nguyên hành vi cũ của khu admin. */
+  fit?: SlideStageFit;
+  /**
+   * Lối thoát khi khung phủ kín khung nhìn (`fit="viewport"`): khung phủ kín che mất
+   * sidebar — thiếu chỗ này là GV bị kẹt, không còn lối điều hướng nào.
+   * Không truyền = không hiện (khu admin vẫn còn sidebar bên cạnh).
+   */
+  exitHref?: string;
   children: ReactNode;
 }) {
   const [blurred, setBlurred] = useState(false);
@@ -122,29 +149,83 @@ export function SlideStage({
     };
   }, []);
 
-  function toggleFullscreen() {
+  // GIỮ NGUYÊN cách bật/tắt (requestFullscreen/exitFullscreen trên chính rootRef) — guard
+  // 700ms chống blur giả ở effect trên bám vào sự kiện `fullscreenchange`, nên mọi lối vào
+  // (nút bấm, phím F, Esc của trình duyệt) đều đi qua đúng một cửa và guard vẫn chạy.
+  // useCallback để effect phím tắt bên dưới không phải gắn/gỡ listener mỗi lần render
+  // (component này re-render MỖI GIÂY vì đồng hồ watermark).
+  const toggleFullscreen = useCallback(() => {
     const el = rootRef.current;
     if (!el) return;
+    // `try/catch` KHÔNG bắt được lỗi của hai hàm này: chúng trả về Promise và báo lỗi
+    // bằng REJECT (trình duyệt từ chối, đã có phần tử khác đang full, bấm dồn hai nhịp).
+    // Không gắn .catch thì thành "unhandled rejection" đỏ console giữa giờ dạy — nuốt
+    // đúng theo tinh thần fail-open của cả file này.
+    const swallow = () => {
+      /* fail-open — không chặn việc dạy học */
+    };
     try {
-      if (document.fullscreenElement) void document.exitFullscreen();
-      else void el.requestFullscreen();
+      if (document.fullscreenElement) void document.exitFullscreen().catch(swallow);
+      else void el.requestFullscreen().catch(swallow);
     } catch {
       /* fail-open */
     }
-  }
+  }, []);
+
+  // Phím tắt F — bật/tắt toàn màn hình (Esc thoát là hành vi sẵn có của trình duyệt, KHÔNG
+  // tự xử lý). Để riêng khỏi effect chống chụp màn hình ở trên vì effect đó còn nghe cả
+  // `keyup` — nhét chung thì phím F kích hoạt hai lần một nhịp bấm.
+  // Bỏ qua khi con trỏ đang ở ô nhập liệu: GV gõ chữ "f" vào ô tìm kiếm không được nhảy
+  // toàn màn hình. Cũng bỏ qua khi có Ctrl/Cmd/Alt để không cướp Ctrl+F (tìm trong trang).
+  // Lưu ý: khi tiêu điểm nằm TRONG iframe SCORM thì keydown KHÔNG tới document cha ⇒ phím
+  // F đi thẳng vào nội dung bài giảng. Đó là điều mong muốn — đừng "vá" bằng cách bắt phím
+  // hộ iframe, sẽ chặn mất phím tắt của chính gói SCORM.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "f" && e.key !== "F") return;
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
+      // Giữ phím (hoặc bút trình chiếu kẹt) sinh ~30 keydown/giây với `repeat=true` —
+      // không chặn thì bật/tắt full màn hình 30 lần/giây, màn hình nháy loạn và trình
+      // duyệt bắt đầu từ chối yêu cầu. Chỉ nhận nhịp bấm ĐẦU TIÊN.
+      if (e.repeat) return;
+      const el = document.activeElement as HTMLElement | null;
+      const tag = el?.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
+      if (el?.isContentEditable) return;
+      e.preventDefault();
+      toggleFullscreen();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [toggleFullscreen]);
+
+  const fsTitle = isFullscreen
+    ? "Thoát toàn màn hình (F)"
+    : "Toàn màn hình (F)";
 
   return (
     <div
       ref={rootRef}
       className={cn(
-        "flex flex-col gap-2",
-        isFullscreen ? "h-screen w-screen bg-black p-2" : "h-[calc(100vh-2rem)] p-2",
+        "flex flex-col gap-2 p-2",
+        isFullscreen
+          ? "h-screen w-screen bg-black"
+          : fit === "viewport"
+            ? // 100dvh chứ không phải 100vh: trên trình duyệt di động thanh địa chỉ co/giãn,
+              // 100vh tính theo lúc thanh ẩn ⇒ đáy khung bị cắt mất một dải.
+              "fixed inset-0 z-50 h-[100dvh] bg-background"
+            : "h-[calc(100dvh-2rem)]",
       )}
     >
-      <div className="flex items-center justify-between gap-2 px-1">
+      {/* Ở 375px hàng này (tên bài + badge trạng thái + toolbar + nút full + nút Đóng) dài
+          hơn bề ngang màn hình. Cách chia: dưới 640px tên bài chiếm trọn dòng đầu
+          (`w-full`) để cụm nút được nguyên 1 dòng và tự xuống hàng bên trong (`flex-wrap`)
+          — thay vì tràn ra ngoài. Từ 640px trở lên quay về hành vi cũ: `flex-1` cơ sở 0 nên
+          cụm nút không bao giờ bị đẩy xuống, tên bài dài thì cắt bớt (`truncate`). */}
+      <div className="flex flex-wrap items-center justify-between gap-2 px-1">
         <h1
           className={cn(
-            "truncate text-sm font-medium",
+            "w-full min-w-0 truncate text-sm font-medium sm:w-auto sm:flex-1",
             isFullscreen ? "text-white/90" : "text-foreground",
           )}
         >
@@ -152,7 +233,7 @@ export function SlideStage({
         </h1>
         <div
           className={cn(
-            "flex shrink-0 items-center gap-2 text-xs",
+            "flex min-w-0 flex-wrap items-center justify-end gap-2 text-xs",
             isFullscreen ? "text-white/70" : "text-muted-foreground",
           )}
         >
@@ -163,19 +244,61 @@ export function SlideStage({
             </span>
           ) : null}
           {toolbar}
+          {/* Nút chính của thanh này — cỡ bấm ≥32px, nền + viền tương phản hẳn với hàng chữ
+              xám xung quanh, và nhãn chữ HIỆN Ở MỌI BỀ RỘNG. Ở chế độ toàn màn hình nền là
+              ĐEN nên phải có bảng màu riêng, không dùng token sáng. */}
           <button
             type="button"
             onClick={toggleFullscreen}
-            title={isFullscreen ? "Thoát toàn màn hình" : "Toàn màn hình"}
+            title={fsTitle}
+            aria-label={fsTitle}
+            // KHÔNG dùng `aria-pressed`: nhãn ở đây ĐÃ đổi theo trạng thái
+            // ("Toàn màn hình" ↔ "Thoát toàn màn hình"). Gắn thêm aria-pressed thì trình
+            // đọc màn hình đọc "Thoát toàn màn hình, nút, đã bật" — trạng thái bị nói hai
+            // lần và ngược nghĩa nhau. WAI-ARIA APG: đổi nhãn HOẶC aria-pressed, không cả hai.
             className={cn(
-              "inline-flex items-center gap-1 rounded border px-1.5 py-0.5",
+              "inline-flex h-8 items-center gap-1.5 rounded-md border px-2.5 text-xs font-medium transition-colors",
               isFullscreen
-                ? "border-white/30 text-white/80 hover:bg-white/10"
-                : "border-border text-muted-foreground hover:bg-muted",
+                ? "border-white/40 bg-white/15 text-white hover:bg-white/25"
+                : "border-primary-soft bg-primary-soft text-primary-ink hover:bg-primary-soft-hover dark:border-primary",
             )}
           >
-            {isFullscreen ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}
+            {isFullscreen ? (
+              <Minimize2 className="h-4 w-4" aria-hidden />
+            ) : (
+              <Maximize2 className="h-4 w-4" aria-hidden />
+            )}
+            {/* ⚠️ KHÔNG bọc `hidden sm:inline` như trước: dưới 640px nút thu về icon trần —
+                đúng lại cái vấn đề gốc "GV không thấy nút toàn màn hình". Nhãn phải ĐỌC
+                ĐƯỢC LÀ CHỮ ở mọi bề rộng, kể cả 375px.
+                Đo chỗ trống ở 375px: 375 − p-2 (16) − px-1 (8) = 351px cho hàng tiêu đề;
+                dưới 640px thẻ <h1> đã chiếm trọn dòng riêng (`w-full`) và cụm nút thì
+                `flex-wrap`, nên nút được nguyên một dòng. Bản thân nút ở trạng thái dài
+                nhất ("Thoát toàn màn hình", 19 ký tự text-xs) chỉ ~165px = px-2.5 (20) +
+                icon (16) + gap (6) + chữ (~120) ⇒ dư chỗ, không tràn.
+                `whitespace-nowrap` để nhãn không xuống hai dòng bên trong nút cao h-8
+                (sẽ bị cắt chữ) nếu chỗ trống hẹp hơn tính toán trên. */}
+            <span className="whitespace-nowrap">
+              {isFullscreen ? "Thoát toàn màn hình" : "Toàn màn hình"}
+            </span>
           </button>
+          {/* Lối thoát cho khung phủ kín (site GV): khung này che mất sidebar. Dùng
+              next/link vì từ 24/08 viewer mở CÙNG TAB — `<a>` trần sẽ nạp lại toàn trang
+              tài liệu thay vì điều hướng phía client. Ẩn khi đang toàn màn hình — lúc đó
+              thoát bằng chính nút trên (hoặc Esc), tránh bấm nhầm rời trang giữa giờ dạy.
+              Nhãn nút này VẪN ẩn dưới 640px (khác nút Toàn màn hình ở trên) — CÓ CHỦ ĐÍCH:
+              nó là nút phụ, thu về icon để nhường chỗ trên dòng cho nhãn của nút chính. */}
+          {exitHref && !isFullscreen ? (
+            <Link
+              href={exitHref}
+              title="Đóng trình chiếu"
+              aria-label="Đóng trình chiếu"
+              className="inline-flex h-8 items-center gap-1.5 rounded-md border border-border px-2.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted"
+            >
+              <X className="h-4 w-4" aria-hidden />
+              <span className="hidden sm:inline">Đóng</span>
+            </Link>
+          ) : null}
           <span>{kindLabel}</span>
         </div>
       </div>
