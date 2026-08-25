@@ -27,40 +27,23 @@ const chiMa = (src: string) =>
     .join("\n");
 
 describe("lượt tải dở phải huỷ được, và có tiến độ", () => {
-  it("luồng huỷ đọc REF, không đọc state", () => {
+  it("có nút huỷ, và luồng huỷ đọc REF chứ không đọc state", () => {
     // `tai()` chạy trọn trong MỘT lượt kết xuất. `setDangHuy(...)` chỉ xếp lịch
     // cho lượt SAU, không đổi biến đã đóng gói trong chính lượt gọi này — nên
     // `if (dangHuy)` ở nhánh `catch` LUÔN thấy `null`, và lệnh huỷ không bao giờ
     // chạy. Không ai thấy bằng mắt: các phần đã tải nằm lại R2 và R2 TÍNH TIỀN
     // chúng, tới khi cron đêm dọn sau 24 giờ.
-    // Nhắm ĐÚNG lời gọi huỷ, không quét khối `catch` đầu tiên — khối đó nằm
-    // trong chính hàm `huy()` và không liên quan.
-    expect(chiMa(UP)).toContain("if (luotTaiRef.current) await huy();");
-    expect(chiMa(UP)).not.toContain("if (dangHuy) await huy();");
-  });
-
-
-  it("có nút huỷ, và đường huỷ đọc REF chứ không đọc state", () => {
-    // Bỏ lượt tải giữa chừng mà không gọi `huy` để lại các phần đã tải trên R2 —
-    // R2 tính tiền chúng, và cron đêm chỉ dọn sau 24 giờ.
     expect(UP).toContain("Huỷ lượt tải");
     expect(chiMa(UP)).toContain('buoc: "huy"');
+    expect(chiMa(UP)).toContain("if (luotTaiRef.current) await huy();");
+    expect(chiMa(UP)).not.toContain("if (dangHuy) await huy();");
 
     // ⚠️ Bản trước của case này đòi mã nguồn chứa đúng chuỗi
     // `if (dangHuy) await huy()` — và nó XANH suốt trong khi hành vi thật là mã
-    // chết: `tai()` chạy trọn trong MỘT lượt kết xuất nên `dangHuy` (state) luôn
-    // là `null` ở nhánh `catch`, lệnh huỷ không bao giờ gửi đi. Guard so chuỗi
-    // chứng minh CÓ VIẾT, không chứng minh CÓ CHẠY.
-    //
-    // Hành vi thật nay được canh bằng case bấm-thật ở
-    // `app/(elearning)/elearning/soan/_components/video-uploader.test.tsx`.
-    // Ở đây chỉ giữ đúng một điều kiện tĩnh: nhánh `catch` KHÔNG được quay lại
-    // đọc state.
-    const iCatch = chiMa(UP).indexOf("} catch (e) {");
-    expect(iCatch).toBeGreaterThan(0);
-    const thanCatch = chiMa(UP).slice(iCatch, iCatch + 400);
-    expect(thanCatch).toContain("luotTaiRef.current");
-    expect(thanCatch).not.toMatch(/if \(dangHuy\)/);
+    // CHẾT. Guard so chuỗi chứng minh CÓ VIẾT, không chứng minh CÓ CHẠY; bốn
+    // dòng trên vẫn chỉ là so chuỗi, nên hành vi thật được canh bằng case
+    // bấm-thật ở `_components/video-uploader.test.tsx` (dựng lượt tải hỏng giữa
+    // chừng rồi soi lệnh đã gửi lên mạng).
   });
 
   it("có thanh tiến độ đếm theo SỐ PHẦN", () => {

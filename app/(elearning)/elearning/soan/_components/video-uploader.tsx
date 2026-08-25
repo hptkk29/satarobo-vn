@@ -32,25 +32,21 @@ export function VideoUploader(props: {
   );
   const [xong, setXong] = useState(0);
   const [tong, setTong] = useState(0);
-  const [dangHuy, setDangHuy] = useState<{ khoa: string; uploadId: string } | null>(null);
   /**
-   * ⚠️ Bản trạng thái của `dangHuy` KHÔNG dùng được ở nhánh `catch` bên dưới.
+   * Lượt tải nhiều phần đang mở — giữ ở `ref`, CỐ Ý không giữ ở `useState`.
    *
-   * `tai()` chạy trọn trong MỘT lượt kết xuất; `setDangHuy(...)` chỉ xếp lịch cho
-   * lượt kết xuất SAU, không đổi biến đã đóng gói trong chính lượt gọi này. Nên
-   * `if (dangHuy)` ở `catch` luôn thấy `null` — và lệnh huỷ không bao giờ được gửi.
-   * Hậu quả không ai thấy bằng mắt: các phần đã tải nằm lại R2 và R2 tính tiền
-   * chúng, tới khi cron đêm dọn sau 24 giờ.
+   * `tai()` chạy trọn trong MỘT lượt kết xuất. Một `setState` gọi ở giữa hàm chỉ
+   * xếp lịch cho lượt kết xuất SAU, không đổi biến đã đóng gói trong chính lượt
+   * gọi này — nên bản trước viết `if (dangHuy) await huy()` ở nhánh `catch` LUÔN
+   * thấy `null`, và lệnh huỷ không bao giờ được gửi.
    *
-   * `ref` đọc được NGAY trong cùng lượt gọi, nên nó là bản dùng cho luồng huỷ;
-   * `useState` giữ lại chỉ để vẽ nút Huỷ.
+   * Hỏng im lặng, chỉ thấy trên hoá đơn: các phần đã tải nằm lại R2 và R2 tính
+   * tiền chúng, tới khi cron đêm dọn — sau 24 giờ.
+   *
+   * `ref` đọc được NGAY trong cùng lượt gọi. Không cần bản `state` song song:
+   * nút Huỷ chỉ hiện theo `trangThai === "dang-tai"`, không đọc giá trị này.
    */
   const luotTaiRef = useRef<{ khoa: string; uploadId: string } | null>(null);
-
-  const datLuotTai = (v: { khoa: string; uploadId: string } | null) => {
-    luotTaiRef.current = v;
-    setDangHuy(v);
-  };
 
   const goi = async (than: Record<string, unknown>) => {
     const r = await fetch("/api/elearning/media/upload", {
@@ -75,7 +71,7 @@ export function VideoUploader(props: {
       // Huỷ thất bại không phải việc của người soạn: cron đêm sẽ dọn.
       toast.message("Đã dừng tải — phần đã tải sẽ được dọn tự động");
     }
-    datLuotTai(null);
+    luotTaiRef.current = null;
     setTrangThai("cho");
     setXong(0);
     setTong(0);
@@ -105,7 +101,7 @@ export function VideoUploader(props: {
       })) as { khoa: string; uploadId: string; soPhan: number; partSize: number };
 
       setTong(mo.soPhan);
-      datLuotTai({ khoa: mo.khoa, uploadId: mo.uploadId });
+      luotTaiRef.current = { khoa: mo.khoa, uploadId: mo.uploadId };
 
       const ky = (await goi({
         buoc: "ky-phan",
@@ -134,7 +130,7 @@ export function VideoUploader(props: {
         uploadId: mo.uploadId,
         parts,
       });
-      datLuotTai(null);
+      luotTaiRef.current = null;
 
       // Xác minh THẬT: đọc header mp4 trên máy chủ. Đây là bước quyết định codec
       // và thời lượng ghi vào bài.
