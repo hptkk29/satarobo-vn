@@ -63,6 +63,19 @@ export default async function ChiTietLopTrialPage({
     : [];
   const teacherOptions = teachers.map((t) => ({ id: t.id, name: t.name ?? "(không tên)" }));
 
+  // GĐ3 — danh sách GV cho ô đề xuất/phân công của TỪNG CA. Khác `teacherOptions` ở
+  // trên: ô kia chỉ nạp khi có quyền gán lớp, còn Sale (chỉ có trials:manage) vẫn
+  // phải chọn được người để ĐỀ XUẤT. Nạp riêng khi một trong hai quyền có mặt.
+  const teacherOptionsChoCa =
+    isManager || canAssignTeacher
+      ? (
+          await getAssignableTeachers({
+            centerIds: [cls.centerId],
+            includeIds: cls.enrollments.flatMap((e) => [e.gvDeXuatId, e.gvPhanCongId]),
+          })
+        ).map((t) => ({ id: t.id, name: t.name ?? "(không tên)" }))
+      : [];
+
   const activeUsed = cls.enrollments.filter((e) => e.status === "ACTIVE").length;
   const full = activeUsed >= cls.capacity;
   const daKetThuc = cls.status === "COMPLETED" || cls.status === "CANCELLED";
@@ -162,7 +175,10 @@ export default async function ChiTietLopTrialPage({
           <RosterList
             trialClassId={cls.id}
             enrollments={cls.enrollments}
+            sessions={cls.sessions}
+            teachers={teacherOptionsChoCa}
             canManage={isManager}
+            canAssignTeacher={canAssignTeacher}
           />
         </div>
       </section>

@@ -30,7 +30,12 @@ import {
   completeTrialSession,
   cancelTrialClass,
   notifyTrialTeacherAssigned,
+  rescheduleTrialEnrollment,
+  proposeTrialTeacher,
+  assignTrialCaseTeacher,
 } from "@/lib/trial/service";
+import { baoDaoTaoChoPhanCong } from "@/lib/trial/notify-training";
+import { getSetting } from "@/lib/settings/service";
 import {
   actorCanUseCenter,
   loadScopedBooking,
@@ -236,11 +241,18 @@ export async function enrollLeadChildLopTrialAction(input: {
     return { ok: false, error: "Thiếu lớp hoặc học viên" };
   }
 
+  // GĐ3 (chốt câu 5) — trần đọc từ cấu hình hệ thống, mặc định 4. Admin đổi được ở
+  // /admin/cau-hinh-van-hanh mà không cần deploy. Dữ liệu cũ vượt trần KHÔNG bị đụng:
+  // trần chỉ kiểm lúc ghi mới.
   let totalSessions: number | undefined;
   if (input.totalSessions != null) {
+    const tran = await getSetting("crm.trialMaxSessions");
     const n = Number(input.totalSessions);
-    if (!Number.isInteger(n) || n < 1 || n > 60) {
-      return { ok: false, error: "Số buổi học thử phải là số nguyên từ 1 đến 60" };
+    if (!Number.isInteger(n) || n < 1 || n > tran) {
+      return {
+        ok: false,
+        error: `Số buổi học thử phải là số nguyên từ 1 đến ${tran}`,
+      };
     }
     totalSessions = n;
   }
@@ -714,5 +726,177 @@ export async function deleteBookingLopTrialAction(
   });
 
   lamMoiHen(booking.leadId);
+  return { ok: true };
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 13) Dời lịch một ca trải nghiệm  (GĐ3 — chốt câu 1)
+// ═══════════════════════════════════════════════════════════════════════════
+
+export async function rescheduleLopTrialAction(input: {
+  trialEnrollmentId: string;
+  toSessionId: string;
+  reason?: string | null;
+}): Promise<ActionResult> {
+  const ctx = await requireActor();
+  if (!ctx) return { ok: false, error: CHUA_DANG_NHAP };
+  // Dời lịch là việc của Sale phụ trách khách — cùng cổng với xếp lịch.
+  if (!(await checkPermission("trials:manage"))) {
+    return { ok: false, error: "Không có quyền dời lịch" };
+  }
+  if (!input.trialEnrollmentId || !input.toSessionId) {
+    return { ok: false, error: "Thiếu ca hoặc buổi cần dời sang" };
+  }
+
+  // Chống IDOR: nạp ca qua scopedDb rồi soi lớp của nó.
+  const sdb = scopedDb(ctx.actor);
+  const enr = await sdb.trialEnrollment.findUnique({
+    where: { id: input.trialEnrollmentId },
+    select: {
+      id: true,
+      trialClassId: true,
+      leadChild: { select: { fullName: true } },
+    },
+  });
+  if (!enr) return { ok: false, error: "Không tìm thấy ca trải nghiệm" };
+  const cls = await loadScopedTrialClass(ctx.actor, enr.trialClassId);
+  if (!cls) return { ok: false, error: KHONG_THAY_LOP };
+
+  const res = await rescheduleTrialEnrollment({
+    trialEnrollmentId: input.trialEnrollmentId,
+    toSessionId: input.toSessionId,
+    reason: input.reason ?? null,
+    actorId: ctx.session.user.id,
+  });
+  if (!res.ok) return { ok: false, error: res.error ?? "Dời lịch thất bại" };
+
+  // Mô tả buổi mới cho nội dung thông báo — đọc SAU khi dời để chắc chắn đúng buổi.
+  const ses = await sdb.trialClassSession.findUnique({
+    where: { id: input.toSessionId },
+    select: { seq: true, date: true, startTime: true },
+  });
+  const moTaBuoi = ses
+    ? `Buổi ${ses.seq} · ${ses.date.toLocaleDateString("vi-VN", { timeZone: "UTC" })} ${ses.startTime}`
+    : null;
+  const tenBe = enr.leadChild?.fullName ?? "học viên";
+
+  // Báo giáo viên vừa bị gỡ phân công. Ngoài transaction: chuông hỏng không được
+  // làm hỏng việc dời lịch.
+  if (res.gvBiGoId && res.gvBiGoId !== ctx.session.user.id) {
+    await notifyTrialTeacherAssigned({
+      teacherId: res.gvBiGoId,
+      title: "Ca trải nghiệm bạn phụ trách đã dời lịch",
+      body: `Ca của ${tenBe} (lớp ${cls.name}) đã dời sang ${moTaBuoi ?? "buổi khác"}. Bạn không còn được phân công ca này; Đào tạo sẽ phân công lại.`,
+      // dedupeKey kèm buổi MỚI: mỗi lần dời thật là một tin mới, bấm lại cùng buổi thì không.
+      dedupeKey: `trial-case.rescheduled:${input.trialEnrollmentId}:${input.toSessionId}`,
+      entityId: input.trialEnrollmentId,
+    });
+  }
+
+  // Ca mất phân công ⇒ quay lại hàng chờ của Đào tạo.
+  await baoDaoTaoChoPhanCong({
+    trialEnrollmentId: input.trialEnrollmentId,
+    centerId: cls.centerId,
+    childName: tenBe,
+    className: cls.name,
+    moTaBuoi,
+    laDoiLich: true,
+  });
+
+  lamMoi(enr.trialClassId);
+  return { ok: true };
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 14) Sale ĐỀ XUẤT giáo viên cho một ca  (GĐ3 — chốt câu 1)
+// ═══════════════════════════════════════════════════════════════════════════
+
+export async function proposeLopTrialTeacherAction(input: {
+  trialEnrollmentId: string;
+  gvDeXuatId: string | null;
+}): Promise<ActionResult> {
+  const ctx = await requireActor();
+  if (!ctx) return { ok: false, error: CHUA_DANG_NHAP };
+  if (!(await checkPermission("trials:manage"))) {
+    return { ok: false, error: "Không có quyền đề xuất giáo viên" };
+  }
+
+  const sdb = scopedDb(ctx.actor);
+  const enr = await sdb.trialEnrollment.findUnique({
+    where: { id: input.trialEnrollmentId },
+    select: { id: true, trialClassId: true, leadChild: { select: { fullName: true } } },
+  });
+  if (!enr) return { ok: false, error: "Không tìm thấy ca trải nghiệm" };
+  const cls = await loadScopedTrialClass(ctx.actor, enr.trialClassId);
+  if (!cls) return { ok: false, error: KHONG_THAY_LOP };
+
+  const res = await proposeTrialTeacher({
+    trialEnrollmentId: input.trialEnrollmentId,
+    gvDeXuatId: input.gvDeXuatId,
+    actorId: ctx.session.user.id,
+  });
+  if (!res.ok) return { ok: false, error: res.error ?? "Đề xuất thất bại" };
+
+  // Có đề xuất mới ⇒ nhắc Đào tạo vào duyệt.
+  if (input.gvDeXuatId) {
+    await baoDaoTaoChoPhanCong({
+      trialEnrollmentId: input.trialEnrollmentId,
+      centerId: cls.centerId,
+      childName: enr.leadChild?.fullName ?? "học viên",
+      className: cls.name,
+    });
+  }
+
+  lamMoi(enr.trialClassId);
+  return { ok: true };
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 15) Đào tạo PHÂN CÔNG giáo viên cho một ca  (GĐ3 — chốt câu 1 & 2)
+// ═══════════════════════════════════════════════════════════════════════════
+
+export async function assignLopTrialCaseTeacherAction(input: {
+  trialEnrollmentId: string;
+  gvPhanCongId: string | null;
+}): Promise<ActionResult> {
+  const ctx = await requireActor();
+  if (!ctx) return { ok: false, error: CHUA_DANG_NHAP };
+  // Chốt câu 2: CHỈ bộ phận Đào tạo. Sale có trials:manage nhưng KHÔNG có quyền này.
+  if (!(await checkPermission("trials:assign-teacher"))) {
+    return { ok: false, error: "Chỉ bộ phận Đào tạo được phân công giáo viên" };
+  }
+
+  const sdb = scopedDb(ctx.actor);
+  const enr = await sdb.trialEnrollment.findUnique({
+    where: { id: input.trialEnrollmentId },
+    select: { id: true, trialClassId: true, leadChild: { select: { fullName: true } } },
+  });
+  if (!enr) return { ok: false, error: "Không tìm thấy ca trải nghiệm" };
+  const cls = await loadScopedTrialClass(ctx.actor, enr.trialClassId);
+  if (!cls) return { ok: false, error: KHONG_THAY_LOP };
+
+  const res = await assignTrialCaseTeacher({
+    trialEnrollmentId: input.trialEnrollmentId,
+    gvPhanCongId: input.gvPhanCongId,
+    actorId: ctx.session.user.id,
+  });
+  if (!res.ok) return { ok: false, error: res.error ?? "Phân công thất bại" };
+
+  // Không báo khi: gỡ phân công, giữ nguyên người cũ, hoặc tự gán mình.
+  if (
+    input.gvPhanCongId &&
+    res.daDoi &&
+    input.gvPhanCongId !== ctx.session.user.id
+  ) {
+    await notifyTrialTeacherAssigned({
+      teacherId: input.gvPhanCongId,
+      title: "Bạn được phân công một ca trải nghiệm",
+      body: `Bạn phụ trách ca trải nghiệm của ${enr.leadChild?.fullName ?? "học viên"} tại lớp ${cls.name}.`,
+      dedupeKey: `trial-case.assigned:${input.trialEnrollmentId}:${input.gvPhanCongId}`,
+      entityId: input.trialEnrollmentId,
+    });
+  }
+
+  lamMoi(enr.trialClassId);
   return { ok: true };
 }

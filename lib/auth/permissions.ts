@@ -390,7 +390,9 @@ export const PERMISSIONS: Record<Action, Role[]> = {
   "trials:manage": ["SUPER_ADMIN", "CENTER_MANAGER", "SALES_CSM"],
   "trials:feedback": ["SUPER_ADMIN", "CENTER_MANAGER", "TEACHER"],
   // R7-02 — gán GV + override sĩ số chỉ quản lý cơ sở; cấu hình số buổi = Đào tạo/Admin.
-  "trials:assign-teacher": ["SUPER_ADMIN", "CENTER_MANAGER", "TRAINING"],
+  // GĐ3 (chủ dự án chốt câu 2, 25/08/2026): CHỐT giáo viên là việc của Đào tạo.
+  // Sale chỉ ĐỀ XUẤT; Quản lý cơ sở giữ mọi việc trial còn lại.
+  "trials:assign-teacher": ["SUPER_ADMIN", "TRAINING"],
   "trials:override-capacity": ["SUPER_ADMIN", "CENTER_MANAGER"],
   // FL W0 (QĐ-T1): cấu hình đào tạo/LMS = TRAINING (Đào tạo). CENTER_MANAGER chỉ xem nội dung LMS.
   "training:manage": ["SUPER_ADMIN", "TRAINING"],

@@ -345,6 +345,23 @@ export const SETTINGS = {
     default: 90, // lib/crm/lead-qualify.ts & lib/lead/dedup.ts
     centerOverridable: false,
   }),
+  // GĐ3 (chủ dự án chốt câu 5, 25/08/2026) — TRẦN số buổi học thử: siết về 4, nhưng
+  // admin đổi được ở /admin/cau-hinh-van-hanh mà không cần deploy.
+  //
+  // ⚠️ KHÁC `TrialProgramConfig.sessionCount`: cái kia là SỐ BUỔI MẶC ĐỊNH của chương
+  // trình (được snapshot vào từng lớp lúc tạo, nên lớp cũ giữ số cũ). Cái này là TRẦN
+  // — chặn không cho nhập quá. Hai thứ khác nhau, đừng gộp.
+  //
+  // Dữ liệu cũ vượt trần KHÔNG bị đụng: trần chỉ kiểm lúc GHI MỚI. Siết rồi mà đi sửa
+  // ngược dữ liệu đang chạy là đổi nghiệp vụ sau lưng người dùng.
+  "crm.trialMaxSessions": def({
+    key: "crm.trialMaxSessions",
+    group: "crm",
+    label: "Trần số buổi học thử mỗi ca",
+    schema: z.number().int().min(1).max(60),
+    default: 4,
+    centerOverridable: true,
+  }),
   // SLA phễu SR.QD.217 (lib/crm/sla.ts SLA_THRESHOLDS) — ngưỡng tính bằng PHÚT.
   "crm.sla.respondMinutes": def({
     key: "crm.sla.respondMinutes",
