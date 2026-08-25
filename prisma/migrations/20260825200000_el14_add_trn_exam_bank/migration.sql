@@ -19,8 +19,6 @@
 -- Quên nhánh `getModelPrefixes()` là hỏng CÂM theo hướng NỚI quyền, và không test
 -- nào bắt.
 
-Already up to date
-Done in 251ms using pnpm v11.1.1
 -- CreateEnum
 CREATE TYPE "TrnQuestionType" AS ENUM ('SINGLE', 'MULTIPLE', 'TRUE_FALSE', 'FILL_BLANK', 'MATCHING', 'ORDERING', 'SHORT_ANSWER', 'CASE', 'ESSAY');
 
