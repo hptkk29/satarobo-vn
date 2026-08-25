@@ -96,164 +96,162 @@ export default async function UsersAdminPage() {
       </div>
 
       <div className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
-        <div className="overflow-x-auto">
-          <PhanTrangBang>
-            <table className="min-w-full divide-y divide-border">
-              <thead className="bg-muted">
+        <PhanTrangBang cuonNgang>
+          <table className="min-w-full divide-y divide-border">
+            <thead className="bg-muted">
+              <tr>
+                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  Email
+                </th>
+                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  Tên
+                </th>
+                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  Role
+                </th>
+                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  Nhân sự
+                </th>
+                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  Cơ sở
+                </th>
+                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  Trạng thái
+                </th>
+                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  Đăng nhập cuối
+                </th>
+                <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  Hành động
+                </th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-border">
+              {users.length === 0 ? (
                 <tr>
-                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                    Email
-                  </th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                    Tên
-                  </th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                    Role
-                  </th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                    Nhân sự
-                  </th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                    Cơ sở
-                  </th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                    Trạng thái
-                  </th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                    Đăng nhập cuối
-                  </th>
-                  <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                    Hành động
-                  </th>
+                  <td
+                    colSpan={8}
+                    className="px-4 py-12 text-center text-sm text-muted-foreground"
+                  >
+                    Chưa có tài khoản nào
+                  </td>
                 </tr>
-              </thead>
-              <tbody className="divide-y divide-border">
-                {users.length === 0 ? (
-                  <tr>
-                    <td
-                      colSpan={8}
-                      className="px-4 py-12 text-center text-sm text-muted-foreground"
-                    >
-                      Chưa có tài khoản nào
-                    </td>
-                  </tr>
-                ) : (
-                  users.map((u) => {
-                    const isSelf = u.id === session.user.id;
-                    const isLastActiveSuperAdmin =
-                      hasRole(u, "SUPER_ADMIN") &&
-                      u.isActive &&
-                      activeSuperAdminCount === 1;
-                    const toggleDisabled = isSelf || isLastActiveSuperAdmin;
-                    const toggleReason = isSelf
-                      ? "Không thể tự disable chính mình"
-                      : isLastActiveSuperAdmin
-                        ? "Không thể disable SUPER_ADMIN duy nhất"
-                        : undefined;
-                    return (
-                      <tr key={u.id} className="hover:bg-muted/60">
-                        <td className="px-4 py-3">
-                          <Link
-                            href={`/users/${u.id}/edit`}
-                            className="font-medium text-foreground hover:text-primary"
-                          >
-                            {u.email}
-                          </Link>
-                          {isSelf && (
-                            <span className="ml-2 inline-flex rounded-full bg-state-info-soft px-2 py-0.5 text-[10px] font-semibold text-state-info-ink">
-                              BẠN
-                            </span>
-                          )}
-                        </td>
-                        <td className="px-4 py-3 text-sm text-foreground">
-                          {u.name ?? "—"}
-                        </td>
-                        <td className="px-4 py-3">
-                          <div className="flex flex-wrap items-center gap-1.5">
-                            <RoleBadges role={u.role} roles={u.roles} />
-                            {u._count.permissionGrants > 0 && (
-                              <Link
-                                href={`/users/${u.id}/permissions`}
-                                title="Xem chi tiết overrides"
-                                className="inline-flex items-center gap-0.5 rounded-full bg-primary-soft px-2 py-0.5 text-[10px] font-semibold text-primary hover:bg-primary-soft-hover"
-                              >
-                                <Shield className="h-2.5 w-2.5" />
-                                {u._count.permissionGrants} override
-                              </Link>
-                            )}
-                          </div>
-                        </td>
-                        <td className="px-4 py-3 text-sm">
-                          {u.employee ? (
+              ) : (
+                users.map((u) => {
+                  const isSelf = u.id === session.user.id;
+                  const isLastActiveSuperAdmin =
+                    hasRole(u, "SUPER_ADMIN") &&
+                    u.isActive &&
+                    activeSuperAdminCount === 1;
+                  const toggleDisabled = isSelf || isLastActiveSuperAdmin;
+                  const toggleReason = isSelf
+                    ? "Không thể tự disable chính mình"
+                    : isLastActiveSuperAdmin
+                      ? "Không thể disable SUPER_ADMIN duy nhất"
+                      : undefined;
+                  return (
+                    <tr key={u.id} className="hover:bg-muted/60">
+                      <td className="px-4 py-3">
+                        <Link
+                          href={`/users/${u.id}/edit`}
+                          className="font-medium text-foreground hover:text-primary"
+                        >
+                          {u.email}
+                        </Link>
+                        {isSelf && (
+                          <span className="ml-2 inline-flex rounded-full bg-state-info-soft px-2 py-0.5 text-[10px] font-semibold text-state-info-ink">
+                            BẠN
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-sm text-foreground">
+                        {u.name ?? "—"}
+                      </td>
+                      <td className="px-4 py-3">
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <RoleBadges role={u.role} roles={u.roles} />
+                          {u._count.permissionGrants > 0 && (
                             <Link
-                              href={`/nhan-su/${u.employee.id}`}
-                              className="text-primary hover:underline"
+                              href={`/users/${u.id}/permissions`}
+                              title="Xem chi tiết overrides"
+                              className="inline-flex items-center gap-0.5 rounded-full bg-primary-soft px-2 py-0.5 text-[10px] font-semibold text-primary hover:bg-primary-soft-hover"
                             >
-                              {u.employee.fullName}
-                              {u.employee.employeeCode && (
-                                <span className="ml-1 text-xs text-muted-foreground">
-                                  · {u.employee.employeeCode}
-                                </span>
-                              )}
+                              <Shield className="h-2.5 w-2.5" />
+                              {u._count.permissionGrants} override
                             </Link>
-                          ) : (
-                            <span className="text-muted-foreground">—</span>
                           )}
-                        </td>
-                        <td className="px-4 py-3 text-sm text-muted-foreground">
-                          {u.center?.name ?? "—"}
-                        </td>
-                        <td className="px-4 py-3">
-                          <UserStatusToggle
-                            userId={u.id}
-                            isActive={u.isActive}
-                            disabled={toggleDisabled}
-                            disabledReason={toggleReason}
-                          />
-                        </td>
-                        <td className="px-4 py-3 text-xs tabular-nums">
-                          {(() => {
-                            const { text, idleDays } = formatRelative(
-                              u.lastLoginAt,
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 text-sm">
+                        {u.employee ? (
+                          <Link
+                            href={`/nhan-su/${u.employee.id}`}
+                            className="text-primary hover:underline"
+                          >
+                            {u.employee.fullName}
+                            {u.employee.employeeCode && (
+                              <span className="ml-1 text-xs text-muted-foreground">
+                                · {u.employee.employeeCode}
+                              </span>
+                            )}
+                          </Link>
+                        ) : (
+                          <span className="text-muted-foreground">—</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-sm text-muted-foreground">
+                        {u.center?.name ?? "—"}
+                      </td>
+                      <td className="px-4 py-3">
+                        <UserStatusToggle
+                          userId={u.id}
+                          isActive={u.isActive}
+                          disabled={toggleDisabled}
+                          disabledReason={toggleReason}
+                        />
+                      </td>
+                      <td className="px-4 py-3 text-xs tabular-nums">
+                        {(() => {
+                          const { text, idleDays } = formatRelative(
+                            u.lastLoginAt,
+                          );
+                          if (idleDays === null) {
+                            return (
+                              <span className="inline-flex items-center gap-1 italic text-state-warning-ink">
+                                <AlertCircle className="h-3 w-3" />
+                                {text}
+                              </span>
                             );
-                            if (idleDays === null) {
-                              return (
-                                <span className="inline-flex items-center gap-1 italic text-state-warning-ink">
-                                  <AlertCircle className="h-3 w-3" />
-                                  {text}
+                          }
+                          if (idleDays > 30) {
+                            return (
+                              <div className="flex flex-col gap-0.5">
+                                <span className="text-foreground">{text}</span>
+                                <span className="inline-flex w-fit items-center gap-1 rounded-full bg-state-warning-soft px-1.5 py-0.5 text-[10px] font-semibold text-state-warning-ink">
+                                  <AlertCircle className="h-2.5 w-2.5" />
+                                  Idle {idleDays}d
                                 </span>
-                              );
-                            }
-                            if (idleDays > 30) {
-                              return (
-                                <div className="flex flex-col gap-0.5">
-                                  <span className="text-foreground">{text}</span>
-                                  <span className="inline-flex w-fit items-center gap-1 rounded-full bg-state-warning-soft px-1.5 py-0.5 text-[10px] font-semibold text-state-warning-ink">
-                                    <AlertCircle className="h-2.5 w-2.5" />
-                                    Idle {idleDays}d
-                                  </span>
-                                </div>
-                              );
-                            }
-                            return <span className="text-muted-foreground">{text}</span>;
-                          })()}
-                        </td>
-                        <td className="px-4 py-3 text-right">
-                          <UserRowActions
-                            userId={u.id}
-                            isActive={u.isActive}
-                            isSelf={isSelf}
-                            canOrgRoles={canAssignRoles}
-                          />
-                        </td>
-                      </tr>
-                    );
-                  })
-                )}
-              </tbody>
-            </table>
-          </PhanTrangBang>
-        </div>
+                              </div>
+                            );
+                          }
+                          return <span className="text-muted-foreground">{text}</span>;
+                        })()}
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        <UserRowActions
+                          userId={u.id}
+                          isActive={u.isActive}
+                          isSelf={isSelf}
+                          canOrgRoles={canAssignRoles}
+                        />
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </PhanTrangBang>
       </div>
 
       <div className="mt-4 flex items-start gap-2 rounded-lg border border-state-info-soft bg-state-info-soft p-3 text-xs text-state-info-ink">

@@ -32,9 +32,9 @@ import {
   SESSION_MEDIA_SELECT,
   type SessionMediaRow,
   isSessionSettled,
-  sessionNumberLabel,
   sortSessionsForWork,
 } from "@/lib/lms/session-order";
+import { deriveSessionLabel } from "@/lib/lms/session-project-name";
 import { isSessionOwnedByTeacher } from "@/lib/lms/session-ownership";
 import { Badge } from "@/components/ui/badge";
 import { PageHeader } from "../_components/ui/page-header";
@@ -95,6 +95,9 @@ export default async function TeacherFeedbackPage({
         date: true,
         topic: true,
         status: true,
+        // 25/08 — nguồn NHÃN BUỔI cho tiêu đề màn chi tiết.
+        plan: { select: { customTitle: true } },
+        lesson: { select: { order: true, title: true, moduleCode: true } },
         class: { select: { name: true } },
       },
     });
@@ -168,7 +171,20 @@ export default async function TeacherFeedbackPage({
         />
         <PageHeader
           title={`Nhận xét — ${sess.class.name}`}
-          subtitle={`${sessionNo ? `${sessionNumberLabel(sessionNo)} · ` : ""}${dayFmt.format(sess.date)}${sess.topic ? ` · ${sess.topic}` : ""} · ${SESSION_STATUS_LABEL[sess.status] ?? sess.status}`}
+          subtitle={[
+            deriveSessionLabel({
+              sessionNumber: sessionNo,
+              planTitle: sess.plan?.customTitle,
+              lessonTitle: sess.lesson?.title,
+              lessonOrder: sess.lesson?.order,
+              moduleCode: sess.lesson?.moduleCode,
+              topic: sess.topic,
+            }),
+            dayFmt.format(sess.date),
+            SESSION_STATUS_LABEL[sess.status] ?? sess.status,
+          ]
+            .filter(Boolean)
+            .join(" · ")}
         />
         {!attendanceTaken && (
           <p className="mb-4 rounded-lg border border-state-warning-soft bg-state-warning-soft px-3 py-2 text-sm text-state-warning-ink dark:border-state-warning">
@@ -203,7 +219,15 @@ export default async function TeacherFeedbackPage({
                 ],
               }),
         },
-        select: { id: true, date: true, topic: true, status: true },
+        select: {
+          id: true,
+          date: true,
+          topic: true,
+          status: true,
+          // 25/08 — nguồn NHÃN BUỔI "Buổi 1 - HP1 - Bàn Tay Ma Thuật".
+          plan: { select: { customTitle: true } },
+          lesson: { select: { order: true, title: true, moduleCode: true } },
+        },
         orderBy: { date: "desc" },
       })
     : [];
@@ -328,17 +352,19 @@ export default async function TeacherFeedbackPage({
                   className="t-card t-card-hover flex items-center justify-between gap-3 px-4 py-3 outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 >
                   <div className="min-w-0">
-                    <p className="text-sm font-medium text-foreground">
-                      <span className="font-bold tabular-nums">
-                        {sessionNumberLabel(no)}
-                      </span>{" "}
-                      · {dayFmt.format(s.date)}
+                    <p className="truncate text-sm font-medium text-foreground">
+                      {deriveSessionLabel({
+                        sessionNumber: no,
+                        planTitle: s.plan?.customTitle,
+                        lessonTitle: s.lesson?.title,
+                        lessonOrder: s.lesson?.order,
+                        moduleCode: s.lesson?.moduleCode,
+                        topic: s.topic,
+                      }) || "Buổi học"}
                     </p>
-                    {s.topic && (
-                      <p className="truncate text-xs text-muted-foreground">
-                        {s.topic}
-                      </p>
-                    )}
+                    <p className="text-xs text-muted-foreground">
+                      {dayFmt.format(s.date)}
+                    </p>
                   </div>
                   <div className="flex shrink-0 flex-wrap items-center justify-end gap-1.5">
                     {stat.attendanceTaken ? (

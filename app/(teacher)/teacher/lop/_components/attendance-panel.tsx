@@ -260,8 +260,13 @@ export function AttendancePanel({
         )}
       </div>
 
-      <div className="overflow-x-auto rounded-lg border border-border bg-card">
-        <PhanTrangBang tenDonVi="học viên">
+      {/* Vùng cuộn ngang nằm TRONG PhanTrangBang (cờ `cuonNgang`) để thanh phân trang
+          không bị kéo trôi khỏi màn khi cuộn bảng sang phải.
+          `overflow-hidden` là thứ CẮT góc cho khung: dời thanh cuộn vào trong đã lấy mất
+          `overflow-x-auto` — thứ duy nhất từng tạo vùng cắt — nên hàng tiêu đề `bg-muted/50`
+          thò góc vuông ra ngoài viền bo. Không tái lập thanh cuộn ở ngoài. */}
+      <div className="overflow-hidden rounded-lg border border-border bg-card">
+        <PhanTrangBang cuonNgang tenDonVi="học viên">
           <Table>
             <TableHeader>
               <TableRow className="bg-muted/50 hover:bg-muted/50">

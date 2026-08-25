@@ -185,64 +185,62 @@ export default async function TrainingReportPage({
             Chi tiết theo lớp
           </h2>
         </div>
-        <div className="overflow-x-auto">
-          <PhanTrangBang>
-            <table className="w-full min-w-[560px] text-sm">
-              <thead className="text-left text-xs text-muted-foreground">
+        <PhanTrangBang cuonNgang>
+          <table className="w-full min-w-[560px] text-sm">
+            <thead className="text-left text-xs text-muted-foreground">
+              <tr>
+                <th className="px-4 py-2">Lớp</th>
+                <th className="px-4 py-2 text-right">Buổi tính</th>
+                <th className="px-4 py-2 text-right">Đi học</th>
+                <th className="px-4 py-2 text-right">Vắng</th>
+                <th className="px-4 py-2 text-right">Chờ bù</th>
+                <th className="px-4 py-2 text-right">Đã bù</th>
+                <th className="px-4 py-2 text-right">Chuyên cần</th>
+              </tr>
+            </thead>
+            <tbody>
+              {report.perClass.length === 0 ? (
                 <tr>
-                  <th className="px-4 py-2">Lớp</th>
-                  <th className="px-4 py-2 text-right">Buổi tính</th>
-                  <th className="px-4 py-2 text-right">Đi học</th>
-                  <th className="px-4 py-2 text-right">Vắng</th>
-                  <th className="px-4 py-2 text-right">Chờ bù</th>
-                  <th className="px-4 py-2 text-right">Đã bù</th>
-                  <th className="px-4 py-2 text-right">Chuyên cần</th>
+                  <td
+                    colSpan={7}
+                    className="px-4 py-6 text-center text-muted-foreground"
+                  >
+                    Không có lớp trong phạm vi cơ sở.
+                  </td>
                 </tr>
-              </thead>
-              <tbody>
-                {report.perClass.length === 0 ? (
-                  <tr>
-                    <td
-                      colSpan={7}
-                      className="px-4 py-6 text-center text-muted-foreground"
-                    >
-                      Không có lớp trong phạm vi cơ sở.
+              ) : (
+                report.perClass.map((c) => (
+                  <tr key={c.classId} className="border-t">
+                    <td className="px-4 py-2 font-medium">
+                      {c.classCode ? (
+                        <span className="text-muted-foreground">
+                          {c.classCode} ·{" "}
+                        </span>
+                      ) : null}
+                      {c.className}
+                    </td>
+                    <td className="px-4 py-2 text-right">{c.counted}</td>
+                    <td className="px-4 py-2 text-right text-state-success-ink">
+                      {c.attended}
+                    </td>
+                    <td className="px-4 py-2 text-right text-state-danger-ink">
+                      {c.absent}
+                    </td>
+                    <td className="px-4 py-2 text-right text-state-warning-ink">
+                      {c.needMakeup}
+                    </td>
+                    <td className="px-4 py-2 text-right text-primary">
+                      {c.madeUp}
+                    </td>
+                    <td className="px-4 py-2 text-right font-semibold">
+                      {c.counted > 0 ? `${c.attendanceRate}%` : "—"}
                     </td>
                   </tr>
-                ) : (
-                  report.perClass.map((c) => (
-                    <tr key={c.classId} className="border-t">
-                      <td className="px-4 py-2 font-medium">
-                        {c.classCode ? (
-                          <span className="text-muted-foreground">
-                            {c.classCode} ·{" "}
-                          </span>
-                        ) : null}
-                        {c.className}
-                      </td>
-                      <td className="px-4 py-2 text-right">{c.counted}</td>
-                      <td className="px-4 py-2 text-right text-state-success-ink">
-                        {c.attended}
-                      </td>
-                      <td className="px-4 py-2 text-right text-state-danger-ink">
-                        {c.absent}
-                      </td>
-                      <td className="px-4 py-2 text-right text-state-warning-ink">
-                        {c.needMakeup}
-                      </td>
-                      <td className="px-4 py-2 text-right text-primary">
-                        {c.madeUp}
-                      </td>
-                      <td className="px-4 py-2 text-right font-semibold">
-                        {c.counted > 0 ? `${c.attendanceRate}%` : "—"}
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </PhanTrangBang>
-        </div>
+                ))
+              )}
+            </tbody>
+          </table>
+        </PhanTrangBang>
       </section>
     </div>
   );

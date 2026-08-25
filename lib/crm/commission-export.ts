@@ -8,6 +8,9 @@ const TIER_LABEL: Record<string, string> = {
   SALE_ADMIN: "Sale Admin",
   SALE: "Sale",
   QL_TT: "Quản lý TT",
+  // 25/08 — tầng NGOÀI pool 8% của 4 tầng Sale: +1% cho GV dạy buổi trải nghiệm khi
+  // học viên nhập học. Xem lib/crm/trial-teacher-commission.ts để biết vì sao tách.
+  TRIAL_TEACHER: "GV dạy Trial",
 };
 
 export type ExportLine = {

@@ -267,53 +267,51 @@ export default async function CenterReportPage({
             Chi tiết theo cơ sở
           </h2>
         </div>
-        <div className="overflow-x-auto">
-          <PhanTrangBang>
-            <table className="w-full min-w-[560px] text-sm">
-              <thead className="text-left text-xs text-muted-foreground">
+        <PhanTrangBang cuonNgang>
+          <table className="w-full min-w-[560px] text-sm">
+            <thead className="text-left text-xs text-muted-foreground">
+              <tr>
+                <th className="px-4 py-2">Cơ sở</th>
+                <th className="px-4 py-2 text-right">Đã xác nhận</th>
+                <th className="px-4 py-2 text-right">Chờ xác nhận</th>
+                <th className="px-4 py-2 text-right">Phải thu</th>
+                <th className="px-4 py-2 text-right">Công nợ</th>
+              </tr>
+            </thead>
+            <tbody>
+              {byCenter.length === 0 ? (
                 <tr>
-                  <th className="px-4 py-2">Cơ sở</th>
-                  <th className="px-4 py-2 text-right">Đã xác nhận</th>
-                  <th className="px-4 py-2 text-right">Chờ xác nhận</th>
-                  <th className="px-4 py-2 text-right">Phải thu</th>
-                  <th className="px-4 py-2 text-right">Công nợ</th>
+                  <td
+                    colSpan={5}
+                    className="px-4 py-6 text-center text-muted-foreground"
+                  >
+                    Không có dữ liệu trong phạm vi cơ sở.
+                  </td>
                 </tr>
-              </thead>
-              <tbody>
-                {byCenter.length === 0 ? (
-                  <tr>
-                    <td
-                      colSpan={5}
-                      className="px-4 py-6 text-center text-muted-foreground"
-                    >
-                      Không có dữ liệu trong phạm vi cơ sở.
+              ) : (
+                byCenter.map((c) => (
+                  <tr key={c.centerId} className="border-t">
+                    <td className="px-4 py-2 font-medium">
+                      {labelCenter(c.centerId)}
+                    </td>
+                    <td className="px-4 py-2 text-right text-state-success-ink">
+                      {vnd(c.confirmed)}
+                    </td>
+                    <td className="px-4 py-2 text-right text-state-warning-ink">
+                      {vnd(c.pending)}
+                    </td>
+                    <td className="px-4 py-2 text-right">
+                      {vnd(c.receivable)}
+                    </td>
+                    <td className="px-4 py-2 text-right font-semibold text-state-danger-ink">
+                      {vnd(c.debt)}
                     </td>
                   </tr>
-                ) : (
-                  byCenter.map((c) => (
-                    <tr key={c.centerId} className="border-t">
-                      <td className="px-4 py-2 font-medium">
-                        {labelCenter(c.centerId)}
-                      </td>
-                      <td className="px-4 py-2 text-right text-state-success-ink">
-                        {vnd(c.confirmed)}
-                      </td>
-                      <td className="px-4 py-2 text-right text-state-warning-ink">
-                        {vnd(c.pending)}
-                      </td>
-                      <td className="px-4 py-2 text-right">
-                        {vnd(c.receivable)}
-                      </td>
-                      <td className="px-4 py-2 text-right font-semibold text-state-danger-ink">
-                        {vnd(c.debt)}
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </PhanTrangBang>
-        </div>
+                ))
+              )}
+            </tbody>
+          </table>
+        </PhanTrangBang>
       </section>
     </div>
   );

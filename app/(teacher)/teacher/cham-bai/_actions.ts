@@ -23,6 +23,7 @@ import { scopedDb } from "@/lib/db-scope";
 import { ENROLLMENT_ACTIVE_STATUS_LIST } from "@/lib/enrollment-status";
 import { templateToAssignmentData } from "@/lib/assignments/template";
 import { resolveTemplateDup, publishDraftAssignment } from "@/lib/assignments/publish-draft";
+import { realDueAt } from "@/lib/lms/assignment-window";
 import { getAuditActor } from "@/lib/audit/log";
 import { writeAudit } from "@/lib/audit/audit-log";
 import { resolveTemplateOwnerId } from "../kho-bai-tap/_owner";
@@ -498,4 +499,220 @@ export async function gradeBatchAction(input: {
   revalidatePath("/cham-bai");
   revalidatePath("/teacher/cham-bai");
   return { ok: true, graded: scores.length };
+}
+
+// ──────────────────────────────────────────────────────────────────────────
+// GIA HẠN "NỘP TRỄ" — mở lại cửa nộp cho bài đã quá hạn (chủ dự án 25/08).
+//
+// Quá hạn nay TỰ ĐÓNG (suy lúc đọc — lib/lms/assignment-window.ts). Nút này là đường
+// duy nhất mở lại: ghi hạn MỚI vào `lateUntil`, KHÔNG BAO GIỜ đụng `dueAt` gốc — sửa
+// `dueAt` là xoá luôn dấu vết bài từng trễ, và mọi bản nộp cũ đang mang cờ LATE bỗng
+// thành đúng hạn trong học bạ. (Luật này học từ TrnAssignment bên e-learning.)
+//
+// Gia hạn là NGOẠI LỆ CHÍNH SÁCH nên bắt buộc có lý do + ghi audit, giống ô "Cho phép
+// nộp trễ" của lượt giao e-learning.
+//
+// BẢO MẬT — cùng khoá 2 lớp như 2 action trên:
+//   (1) checkPermission("assignments:assign-own") — ai giao được bài thì mở lại được
+//       cửa nộp của chính bài đó; KHÔNG đẻ capability mới (seed vai phải chạy tay trên
+//       prod, thêm key mới là tính năng chết câm ở nơi chưa seed).
+//   (2) assignment.classId ∈ actor.assignedClassIds — chỉ lớp mình phụ trách.
+// ──────────────────────────────────────────────────────────────────────────
+const lateWindowSchema = z.object({
+  assignmentId: z.string().min(1, "Thiếu mã bài"),
+  /** "YYYY-MM-DDTHH:MM" — đồng hồ VN (input datetime-local), đọc bằng parseDateTime. */
+  lateUntil: z.string().trim().min(1, "Hãy chọn hạn nộp bù"),
+  reason: z
+    .string()
+    .trim()
+    .min(5, "Hãy ghi lý do gia hạn (ít nhất 5 ký tự)")
+    .max(500, "Lý do tối đa 500 ký tự"),
+});
+
+type LateWindowResult = { ok: true } | { ok: false; error: string };
+
+export async function grantLateWindowAction(input: {
+  assignmentId: string;
+  lateUntil: string;
+  reason: string;
+}): Promise<LateWindowResult> {
+  const session = await auth();
+  if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
+
+  const parsed = lateWindowSchema.safeParse(input);
+  if (!parsed.success) {
+    return { ok: false, error: parsed.error.issues[0]?.message ?? "Dữ liệu không hợp lệ" };
+  }
+
+  const until = parseDateTime(parsed.data.lateUntil);
+  if (!until) return { ok: false, error: "Hạn nộp bù không hợp lệ" };
+
+  const actor = await resolveActor(session.user.id);
+  const sdb = scopedDb(actor);
+
+  const asg = await sdb.assignment.findUnique({
+    where: { id: parsed.data.assignmentId },
+    select: { id: true, classId: true, status: true, dueAt: true },
+  });
+  if (!asg) return { ok: false, error: "Không tìm thấy bài" };
+
+  // (2) Cấp LỚP trước (chống IDOR đổi assignmentId trên client), rồi mới tới capability.
+  if (!actor.assignedClassIds.has(asg.classId)) {
+    return { ok: false, error: "Bài không thuộc lớp bạn phụ trách" };
+  }
+  // (1) Role có capability giao/mở bài không.
+  const allowed = await checkPermission("assignments:assign-own", { classId: asg.classId });
+  if (!allowed) return { ok: false, error: "Không có quyền gia hạn bài tập" };
+
+  // Bài chưa giao / đã lưu trữ thì không có ai để gia hạn — HV chưa từng thấy bài.
+  if (asg.status === "DRAFT") return { ok: false, error: "Bài chưa giao cho lớp — hãy giao bài trước" };
+  if (asg.status === "ARCHIVED") return { ok: false, error: "Bài đã lưu trữ — không gia hạn được" };
+
+  const now = new Date();
+  if (until.getTime() <= now.getTime()) {
+    return { ok: false, error: "Hạn nộp bù phải ở tương lai" };
+  }
+  // Hạn bù trước hạn gốc thì cửa gia hạn không bao giờ mở được (bài đóng đúng lúc
+  // quá `dueAt`) — chặn ở đây thay vì để GV tưởng đã mở rồi ngồi chờ HV nộp.
+  // `realDueAt` là bộ lọc dùng chung, bỏ qua `dueAt` kiểu epoch 1970 của bài seed.
+  const hanGoc = realDueAt(asg.dueAt);
+  if (hanGoc && until.getTime() <= hanGoc.getTime()) {
+    return { ok: false, error: "Hạn nộp bù phải sau hạn nộp gốc" };
+  }
+
+  try {
+    await sdb.assignment.update({
+      where: { id: asg.id },
+      data: {
+        lateUntil: until,
+        lateReason: parsed.data.reason,
+        // ⚠️ id NGƯỜI DÙNG (User.id) — KHÁC `createdById` vốn là Employee.id. Cột không
+        // có khoá ngoại nên không có gì nhắc, phải nói ở đây kẻo màn sau tra nhầm bảng.
+        lateGrantedById: session.user.id,
+        lateGrantedAt: now,
+        // Bài bị ĐÓNG TAY (admin) thì mở lại NGAY TRONG CÙNG lệnh ghi này. Đây là chỗ
+        // duy nhất lật cờ: assignmentWindow() cố ý để `status = CLOSED` thắng cửa gia
+        // hạn, nên không lật ở đây là nút gia hạn bấm xong không có tác dụng gì.
+        // Bài KHÔNG có hạn gốc lật xong vẫn đóng đúng `lateUntil` — assignmentWindow()
+        // lấy `lateUntil` làm mốc đóng cho nhóm này, không rơi lại về "mở mãi".
+        ...(asg.status === "CLOSED" ? { status: "PUBLISHED" as const } : {}),
+      },
+    });
+  } catch (err) {
+    console.error("[grantLateWindowAction]", err);
+    return { ok: false, error: "Lỗi cơ sở dữ liệu — không lưu được gia hạn" };
+  }
+
+  try {
+    const { actorId, actorName } = getAuditActor(session);
+    await writeAudit({
+      actor: { id: actorId, name: actorName },
+      module: "assignments",
+      entityType: "Assignment",
+      entityId: asg.id,
+      action: "assignment.late-window-granted",
+      // Lý do đi vào cột `reason` của AuditLog (đúng chỗ của nó), không nhét vào newValues.
+      reason: parsed.data.reason,
+      newValues: {
+        classId: asg.classId,
+        lateUntil: until.toISOString(),
+        reopenedFromClosed: asg.status === "CLOSED",
+      },
+    });
+  } catch (err) {
+    console.error("[grantLateWindowAction] audit:", err);
+  }
+
+  revalidatePath("/cham-bai");
+  revalidatePath("/teacher/cham-bai");
+  revalidatePath("/teacher/lop"); // tab "Bài tập & Kiểm tra" của Class Hub đọc cùng cột
+  return { ok: true };
+}
+
+/**
+ * Thu hồi cửa nộp bù (bài quay lại tự đóng theo `dueAt`).
+ *
+ * Có nút này vì gia hạn mà không rút lại được là một cái bẫy: GV gõ nhầm "26/09" thay vì
+ * "26/08" là bài mở toang một tháng và không ai đóng được ngoài admin.
+ *
+ * CỐ Ý không set lại `status = CLOSED` khi bài CÓ hạn gốc: bài trở về PUBLISHED-quá-hạn
+ * và assignmentWindow() tự cho ra "Đã đóng". Ghi CLOSED xuống cột sẽ khoá luôn nút gia
+ * hạn lần sau ở màn admin.
+ *
+ * NGOẠI LỆ — bài KHÔNG có hạn gốc thì phải ghi CLOSED. Với nhóm đó `lateUntil` chính là
+ * mốc đóng duy nhất, xoá nó đi mà không ghi gì lại là bài rơi về "mở mãi": nút "Thu hồi"
+ * làm ngược hẳn điều nó hứa, và mở toang vĩnh viễn một bài admin từng đóng tay (đường
+ * DUY NHẤT tới được đây với `dueAt` rỗng là bài admin đã đóng rồi GV mở nộp bù).
+ */
+export async function revokeLateWindowAction(input: {
+  assignmentId: string;
+}): Promise<LateWindowResult> {
+  const session = await auth();
+  if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
+
+  const parsed = z
+    .object({ assignmentId: z.string().min(1, "Thiếu mã bài") })
+    .safeParse(input);
+  if (!parsed.success) {
+    return { ok: false, error: parsed.error.issues[0]?.message ?? "Dữ liệu không hợp lệ" };
+  }
+
+  const actor = await resolveActor(session.user.id);
+  const sdb = scopedDb(actor);
+
+  const asg = await sdb.assignment.findUnique({
+    where: { id: parsed.data.assignmentId },
+    select: { id: true, classId: true, lateUntil: true, dueAt: true },
+  });
+  if (!asg) return { ok: false, error: "Không tìm thấy bài" };
+  if (!actor.assignedClassIds.has(asg.classId)) {
+    return { ok: false, error: "Bài không thuộc lớp bạn phụ trách" };
+  }
+  const allowed = await checkPermission("assignments:assign-own", { classId: asg.classId });
+  if (!allowed) return { ok: false, error: "Không có quyền gia hạn bài tập" };
+
+  // Không có hạn gốc → xoá `lateUntil` là bài mở mãi, nên phải đóng bằng cột `status`.
+  // Đòi có `lateUntil` thật để bấm nhầm vào bài chưa từng gia hạn (dữ liệu cũ trên tab
+  // đang mở, hoặc gọi thẳng action) không biến "thu hồi" thành "đóng bài".
+  const dongLaiBangCot = asg.lateUntil != null && realDueAt(asg.dueAt) == null;
+
+  try {
+    await sdb.assignment.update({
+      where: { id: asg.id },
+      // Xoá cả 4 cột: giữ lại `lateReason` mồ côi thì màn sau in ra lý do của một lần
+      // gia hạn không còn hiệu lực. Dấu vết ai-mở-vì-sao nằm ở AuditLog.
+      data: {
+        lateUntil: null,
+        lateReason: null,
+        lateGrantedById: null,
+        lateGrantedAt: null,
+        ...(dongLaiBangCot ? { status: "CLOSED" as const } : {}),
+      },
+    });
+  } catch (err) {
+    console.error("[revokeLateWindowAction]", err);
+    return { ok: false, error: "Lỗi cơ sở dữ liệu — không thu hồi được gia hạn" };
+  }
+
+  try {
+    const { actorId, actorName } = getAuditActor(session);
+    await writeAudit({
+      actor: { id: actorId, name: actorName },
+      module: "assignments",
+      entityType: "Assignment",
+      entityId: asg.id,
+      action: "assignment.late-window-revoked",
+      oldValues: { lateUntil: asg.lateUntil?.toISOString() ?? null },
+      // Ghi rõ lần thu hồi nào có kèm đóng cột `status` — nếu không, sổ audit chỉ thấy
+      // "gỡ gia hạn" trong khi bài thực sự chuyển sang CLOSED.
+      ...(dongLaiBangCot ? { newValues: { status: "CLOSED" } } : {}),
+    });
+  } catch (err) {
+    console.error("[revokeLateWindowAction] audit:", err);
+  }
+
+  revalidatePath("/cham-bai");
+  revalidatePath("/teacher/cham-bai");
+  revalidatePath("/teacher/lop");
+  return { ok: true };
 }

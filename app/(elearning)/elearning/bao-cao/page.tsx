@@ -140,7 +140,7 @@ export default async function Page({
           </div>
 
           <div className="mt-2">
-            <PhanTrangBang tenDonVi="người" soDongMacDinh={25}>
+            <PhanTrangBang cuonNgang tenDonVi="người" soDongMacDinh={25}>
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-border text-left">

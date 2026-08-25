@@ -197,53 +197,51 @@ export default async function RevenueTargetReportPage({ searchParams }: SearchPa
 
       {/* Bảng chi tiết */}
       <Card title="Chi tiết theo kỳ">
-        <div className="overflow-x-auto">
-          <PhanTrangBang>
-            <table className="w-full text-sm">
-              <thead className="text-left text-xs text-muted-foreground">
-                <tr>
-                  <th className="px-3 py-2">Kỳ</th>
-                  <th className="px-3 py-2 text-right">Doanh thu thực</th>
-                  <th className="px-3 py-2 text-right">Mục tiêu</th>
-                  <th className="px-3 py-2 text-right">Chênh lệch</th>
-                  <th className="px-3 py-2 text-right">% đạt</th>
-                  <th className="px-3 py-2 text-center">Trạng thái</th>
+        <PhanTrangBang cuonNgang>
+          <table className="w-full text-sm">
+            <thead className="text-left text-xs text-muted-foreground">
+              <tr>
+                <th className="px-3 py-2">Kỳ</th>
+                <th className="px-3 py-2 text-right">Doanh thu thực</th>
+                <th className="px-3 py-2 text-right">Mục tiêu</th>
+                <th className="px-3 py-2 text-right">Chênh lệch</th>
+                <th className="px-3 py-2 text-right">% đạt</th>
+                <th className="px-3 py-2 text-center">Trạng thái</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((r) => (
+                <tr key={r.period} className="border-t">
+                  <td className="px-3 py-2">{r.period}</td>
+                  <td className="px-3 py-2 text-right">{vnd(r.actual)}</td>
+                  <td className="px-3 py-2 text-right">
+                    {r.target === null ? "—" : vnd(r.target)}
+                  </td>
+                  <td className="px-3 py-2 text-right">
+                    {r.variance === null ? "—" : vnd(r.variance)}
+                  </td>
+                  <td className="px-3 py-2 text-right font-medium">{pct(r.achievedRate)}</td>
+                  <td className="px-3 py-2 text-center">
+                    {r.target === null ? (
+                      <span className="text-muted-foreground">Chưa đặt</span>
+                    ) : r.reached ? (
+                      <span className="text-state-success-ink">Đạt</span>
+                    ) : (
+                      <span className="text-primary">Chưa đạt</span>
+                    )}
+                  </td>
                 </tr>
-              </thead>
-              <tbody>
-                {rows.map((r) => (
-                  <tr key={r.period} className="border-t">
-                    <td className="px-3 py-2">{r.period}</td>
-                    <td className="px-3 py-2 text-right">{vnd(r.actual)}</td>
-                    <td className="px-3 py-2 text-right">
-                      {r.target === null ? "—" : vnd(r.target)}
-                    </td>
-                    <td className="px-3 py-2 text-right">
-                      {r.variance === null ? "—" : vnd(r.variance)}
-                    </td>
-                    <td className="px-3 py-2 text-right font-medium">{pct(r.achievedRate)}</td>
-                    <td className="px-3 py-2 text-center">
-                      {r.target === null ? (
-                        <span className="text-muted-foreground">Chưa đặt</span>
-                      ) : r.reached ? (
-                        <span className="text-state-success-ink">Đạt</span>
-                      ) : (
-                        <span className="text-primary">Chưa đạt</span>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-                {rows.length === 0 ? (
-                  <tr>
-                    <td className="px-3 py-4 text-center text-muted-foreground" colSpan={6}>
-                      Chưa có doanh thu hay mục tiêu trong phạm vi này.
-                    </td>
-                  </tr>
-                ) : null}
-              </tbody>
-            </table>
-          </PhanTrangBang>
-        </div>
+              ))}
+              {rows.length === 0 ? (
+                <tr>
+                  <td className="px-3 py-4 text-center text-muted-foreground" colSpan={6}>
+                    Chưa có doanh thu hay mục tiêu trong phạm vi này.
+                  </td>
+                </tr>
+              ) : null}
+            </tbody>
+          </table>
+        </PhanTrangBang>
       </Card>
     </div>
   );

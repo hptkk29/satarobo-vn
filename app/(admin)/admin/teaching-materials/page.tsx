@@ -384,7 +384,7 @@ export default async function TeachingMaterialsPage({
                   {/* Bài tập của buổi + thống kê nộp */}
                   {l.assignments.length > 0 ? (
                     <div className="overflow-hidden rounded-lg border border-border">
-                      <PhanTrangBang>
+                      <PhanTrangBang cuonNgang>
                         <table className="w-full text-sm">
                           <thead className="bg-muted text-xs text-muted-foreground">
                             <tr>

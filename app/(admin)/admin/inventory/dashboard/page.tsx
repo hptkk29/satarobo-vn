@@ -188,65 +188,63 @@ export default async function InventoryDashboardPage() {
             Tồn kho theo cơ sở
           </h2>
         </header>
-        <div className="overflow-x-auto">
-          <PhanTrangBang>
-            <table className="min-w-full divide-y divide-border text-sm">
-              <thead className="bg-muted">
+        <PhanTrangBang cuonNgang>
+          <table className="min-w-full divide-y divide-border text-sm">
+            <thead className="bg-muted">
+              <tr>
+                <th className="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  Cơ sở
+                </th>
+                <th className="px-4 py-2 text-right text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  Mặt hàng có tồn
+                </th>
+                <th className="px-4 py-2 text-right text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  Tổng giá trị
+                </th>
+                <th className="px-4 py-2 text-right text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  Cảnh báo thấp
+                </th>
+                <th className="px-4 py-2 text-right text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  Hoạt động gần nhất
+                </th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-border">
+              {stats.centers.length === 0 ? (
                 <tr>
-                  <th className="px-4 py-2 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                    Cơ sở
-                  </th>
-                  <th className="px-4 py-2 text-right text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                    Mặt hàng có tồn
-                  </th>
-                  <th className="px-4 py-2 text-right text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                    Tổng giá trị
-                  </th>
-                  <th className="px-4 py-2 text-right text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                    Cảnh báo thấp
-                  </th>
-                  <th className="px-4 py-2 text-right text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                    Hoạt động gần nhất
-                  </th>
+                  <td
+                    colSpan={5}
+                    className="px-4 py-8 text-center text-sm text-muted-foreground"
+                  >
+                    Chưa có cơ sở nào có tồn kho.
+                  </td>
                 </tr>
-              </thead>
-              <tbody className="divide-y divide-border">
-                {stats.centers.length === 0 ? (
-                  <tr>
+              ) : (
+                stats.centers.map((c) => (
+                  <tr key={c.centerId} className="hover:bg-muted/60">
+                    <td className="px-4 py-2 font-medium text-foreground">
+                      {c.centerName}
+                    </td>
+                    <td className="px-4 py-2 text-right tabular-nums text-foreground">
+                      {c.distinctItems}
+                    </td>
+                    <td className="px-4 py-2 text-right tabular-nums font-semibold text-foreground">
+                      {formatVnd(c.totalValue)}
+                    </td>
                     <td
-                      colSpan={5}
-                      className="px-4 py-8 text-center text-sm text-muted-foreground"
+                      className={`px-4 py-2 text-right tabular-nums ${ c.lowStockItems > 0 ? "font-bold text-state-danger-ink" : "text-muted-foreground" }`}
                     >
-                      Chưa có cơ sở nào có tồn kho.
+                      {c.lowStockItems}
+                    </td>
+                    <td className="px-4 py-2 text-right text-xs text-muted-foreground">
+                      {formatRelative(c.lastActivity)}
                     </td>
                   </tr>
-                ) : (
-                  stats.centers.map((c) => (
-                    <tr key={c.centerId} className="hover:bg-muted/60">
-                      <td className="px-4 py-2 font-medium text-foreground">
-                        {c.centerName}
-                      </td>
-                      <td className="px-4 py-2 text-right tabular-nums text-foreground">
-                        {c.distinctItems}
-                      </td>
-                      <td className="px-4 py-2 text-right tabular-nums font-semibold text-foreground">
-                        {formatVnd(c.totalValue)}
-                      </td>
-                      <td
-                        className={`px-4 py-2 text-right tabular-nums ${ c.lowStockItems > 0 ? "font-bold text-state-danger-ink" : "text-muted-foreground" }`}
-                      >
-                        {c.lowStockItems}
-                      </td>
-                      <td className="px-4 py-2 text-right text-xs text-muted-foreground">
-                        {formatRelative(c.lastActivity)}
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </PhanTrangBang>
-        </div>
+                ))
+              )}
+            </tbody>
+          </table>
+        </PhanTrangBang>
       </section>
     </div>
   );

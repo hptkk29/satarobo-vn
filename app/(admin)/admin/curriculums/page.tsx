@@ -135,79 +135,77 @@ export default async function CurriculumsPage({ searchParams }: SearchParams) {
         </div>
       ) : (
         <div className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
-          <div className="overflow-x-auto">
-            <PhanTrangBang>
-              <table className="min-w-full divide-y divide-border">
-                <thead className="bg-muted">
+          <PhanTrangBang cuonNgang>
+            <table className="min-w-full divide-y divide-border">
+              <thead className="bg-muted">
+                <tr>
+                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                    Tên giáo trình
+                  </th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                    Khoá học
+                  </th>
+                  {/* T5.2 — bỏ cột "Version" (bản giáo trình nay là số ẩn, không hiển thị). */}
+                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                    Trạng thái
+                  </th>
+                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                    Số bài
+                  </th>
+                  <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                    Hành động
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border">
+                {curriculums.length === 0 ? (
                   <tr>
-                    <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                      Tên giáo trình
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                      Khoá học
-                    </th>
-                    {/* T5.2 — bỏ cột "Version" (bản giáo trình nay là số ẩn, không hiển thị). */}
-                    <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                      Trạng thái
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                      Số bài
-                    </th>
-                    <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                      Hành động
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-border">
-                  {curriculums.length === 0 ? (
-                    <tr>
-                      <td
-                        colSpan={5}
-                        className="px-4 py-12 text-center text-sm text-muted-foreground"
+                    <td
+                      colSpan={5}
+                      className="px-4 py-12 text-center text-sm text-muted-foreground"
+                    >
+                      Chưa có giáo trình nào khớp bộ lọc.{" "}
+                      <Link
+                        href="/curriculums/new"
+                        className="text-primary hover:underline"
                       >
-                        Chưa có giáo trình nào khớp bộ lọc.{" "}
+                        Tạo mới →
+                      </Link>
+                    </td>
+                  </tr>
+                ) : (
+                  curriculums.map((c) => (
+                    <tr key={c.id} className="hover:bg-muted/60">
+                      <td className="px-4 py-3 font-medium text-foreground">{c.name}</td>
+                      <td className="px-4 py-3 text-sm text-muted-foreground">{c.course.name}</td>
+                      <td className="px-4 py-3">
+                        {c.isActive ? (
+                          <span className="inline-flex rounded-full bg-state-success-soft px-2.5 py-0.5 text-xs font-semibold text-state-success-ink">
+                            Đang sử dụng
+                          </span>
+                        ) : (
+                          <span className="inline-flex rounded-full bg-muted px-2.5 py-0.5 text-xs font-semibold text-muted-foreground">
+                            Không dùng
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-sm tabular-nums font-semibold text-foreground">
+                        {c._count.lessons}
+                      </td>
+                      <td className="px-4 py-3 text-right">
                         <Link
-                          href="/curriculums/new"
-                          className="text-primary hover:underline"
+                          href={`/curriculums/${c.id}/edit`}
+                          className="inline-flex items-center gap-1 rounded-md border border-border px-2.5 py-1 text-xs font-semibold text-foreground hover:bg-muted"
                         >
-                          Tạo mới →
+                          Mở
                         </Link>
                       </td>
                     </tr>
-                  ) : (
-                    curriculums.map((c) => (
-                      <tr key={c.id} className="hover:bg-muted/60">
-                        <td className="px-4 py-3 font-medium text-foreground">{c.name}</td>
-                        <td className="px-4 py-3 text-sm text-muted-foreground">{c.course.name}</td>
-                        <td className="px-4 py-3">
-                          {c.isActive ? (
-                            <span className="inline-flex rounded-full bg-state-success-soft px-2.5 py-0.5 text-xs font-semibold text-state-success-ink">
-                              Đang sử dụng
-                            </span>
-                          ) : (
-                            <span className="inline-flex rounded-full bg-muted px-2.5 py-0.5 text-xs font-semibold text-muted-foreground">
-                              Không dùng
-                            </span>
-                          )}
-                        </td>
-                        <td className="px-4 py-3 text-sm tabular-nums font-semibold text-foreground">
-                          {c._count.lessons}
-                        </td>
-                        <td className="px-4 py-3 text-right">
-                          <Link
-                            href={`/curriculums/${c.id}/edit`}
-                            className="inline-flex items-center gap-1 rounded-md border border-border px-2.5 py-1 text-xs font-semibold text-foreground hover:bg-muted"
-                          >
-                            Mở
-                          </Link>
-                        </td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </PhanTrangBang>
-          </div>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </PhanTrangBang>
         </div>
       )}
     </div>

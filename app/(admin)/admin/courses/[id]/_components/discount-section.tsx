@@ -323,79 +323,77 @@ export function DiscountSection({
       )}
 
       {/* Danh sách */}
-      <div className="overflow-x-auto">
-        <PhanTrangBang>
-          <Table>
-            <TableHeader>
+      <PhanTrangBang cuonNgang>
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Loại</TableHead>
+              <TableHead>Giá trị</TableHead>
+              <TableHead>Ghi chú</TableHead>
+              <TableHead>Hiệu lực</TableHead>
+              <TableHead>Trạng thái</TableHead>
+              {canEdit && <TableHead className="text-right">Thao tác</TableHead>}
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {discounts.length === 0 ? (
               <TableRow>
-                <TableHead>Loại</TableHead>
-                <TableHead>Giá trị</TableHead>
-                <TableHead>Ghi chú</TableHead>
-                <TableHead>Hiệu lực</TableHead>
-                <TableHead>Trạng thái</TableHead>
-                {canEdit && <TableHead className="text-right">Thao tác</TableHead>}
+                <TableCell colSpan={canEdit ? 6 : 5} className="py-8 text-center text-muted-foreground">
+                  Chưa có ưu đãi nào
+                </TableCell>
               </TableRow>
-            </TableHeader>
-            <TableBody>
-              {discounts.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={canEdit ? 6 : 5} className="py-8 text-center text-muted-foreground">
-                    Chưa có ưu đãi nào
+            ) : (
+              discounts.map((d) => (
+                <TableRow key={d.id} className="hover:bg-muted/60">
+                  <TableCell>
+                    <Badge variant="outline">{TYPE_LABEL[d.type]}</Badge>
                   </TableCell>
-                </TableRow>
-              ) : (
-                discounts.map((d) => (
-                  <TableRow key={d.id} className="hover:bg-muted/60">
-                    <TableCell>
-                      <Badge variant="outline">{TYPE_LABEL[d.type]}</Badge>
-                    </TableCell>
-                    <TableCell className="font-medium tabular-nums">{formatValue(d)}</TableCell>
-                    <TableCell className="max-w-[16rem] text-sm text-muted-foreground">
-                      {d.note || "—"}
-                    </TableCell>
-                    <TableCell className="text-xs text-muted-foreground">
-                      {formatDate(d.validFrom)} → {formatDate(d.validTo)}
-                    </TableCell>
-                    <TableCell>
-                      {d.active ? (
-                        <Badge className="bg-state-success-soft text-state-success-ink hover:bg-state-success-soft-hover">
-                          Đang áp dụng
-                        </Badge>
-                      ) : (
-                        <Badge className="bg-muted text-foreground hover:bg-muted">Tắt</Badge>
-                      )}
-                    </TableCell>
-                    {canEdit && (
-                      <TableCell className="text-right">
-                        <div className="flex items-center justify-end gap-2">
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => openEdit(d)}
-                            disabled={isPending}
-                          >
-                            <Pencil className="h-3.5 w-3.5" />
-                            Sửa
-                          </Button>
-                          <Button
-                            variant={confirmDeleteId === d.id ? "destructive" : "outline"}
-                            size="sm"
-                            onClick={() => onDelete(d.id)}
-                            disabled={isPending}
-                          >
-                            <Trash2 className="h-3.5 w-3.5" />
-                            {confirmDeleteId === d.id ? "Xác nhận xoá?" : "Xoá"}
-                          </Button>
-                        </div>
-                      </TableCell>
+                  <TableCell className="font-medium tabular-nums">{formatValue(d)}</TableCell>
+                  <TableCell className="max-w-[16rem] text-sm text-muted-foreground">
+                    {d.note || "—"}
+                  </TableCell>
+                  <TableCell className="text-xs text-muted-foreground">
+                    {formatDate(d.validFrom)} → {formatDate(d.validTo)}
+                  </TableCell>
+                  <TableCell>
+                    {d.active ? (
+                      <Badge className="bg-state-success-soft text-state-success-ink hover:bg-state-success-soft-hover">
+                        Đang áp dụng
+                      </Badge>
+                    ) : (
+                      <Badge className="bg-muted text-foreground hover:bg-muted">Tắt</Badge>
                     )}
-                  </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
-        </PhanTrangBang>
-      </div>
+                  </TableCell>
+                  {canEdit && (
+                    <TableCell className="text-right">
+                      <div className="flex items-center justify-end gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => openEdit(d)}
+                          disabled={isPending}
+                        >
+                          <Pencil className="h-3.5 w-3.5" />
+                          Sửa
+                        </Button>
+                        <Button
+                          variant={confirmDeleteId === d.id ? "destructive" : "outline"}
+                          size="sm"
+                          onClick={() => onDelete(d.id)}
+                          disabled={isPending}
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                          {confirmDeleteId === d.id ? "Xác nhận xoá?" : "Xoá"}
+                        </Button>
+                      </div>
+                    </TableCell>
+                  )}
+                </TableRow>
+              ))
+            )}
+          </TableBody>
+        </Table>
+      </PhanTrangBang>
     </div>
   );
 }

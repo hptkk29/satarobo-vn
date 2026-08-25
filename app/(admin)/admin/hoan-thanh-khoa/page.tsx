@@ -193,7 +193,7 @@ export default async function CompletionPage({ searchParams }: PageProps) {
         <div className="border-b px-4 py-2 text-sm font-semibold text-foreground">
           Đã hoàn thành gần đây
         </div>
-        <PhanTrangBang>
+        <PhanTrangBang cuonNgang>
           <table className="w-full text-sm">
             <thead className="text-left text-xs text-muted-foreground">
               <tr>

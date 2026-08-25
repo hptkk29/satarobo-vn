@@ -86,7 +86,7 @@ export default async function TrialClassesPage() {
 
       {/* Danh sách lớp */}
       <div className="overflow-hidden rounded-xl border border-border bg-card">
-        <PhanTrangBang>
+        <PhanTrangBang cuonNgang>
           <table className="w-full text-sm">
             <thead className="bg-muted text-left text-xs uppercase tracking-wide text-muted-foreground">
               <tr>

@@ -1,20 +1,27 @@
-// app/(teacher)/teacher/anh-lop/page.tsx — #06 (L6): màn "Ảnh lớp" site GV
-// (port VISUAL từ mock satarobo-ui-giaovien: media/page.tsx grid album theo lớp
-// + class-hub tab "Ảnh lớp" gom ảnh theo buổi — data thật của repo này).
+// app/(teacher)/teacher/anh-lop/page.tsx — #06 (L6): màn "Ảnh lớp" site GV.
+//
+// 25/08 — đây là THƯ VIỆN ẢNH CỦA LỚP, phân loại theo BUỔI HỌC. Chủ dự án chốt: giáo
+// viên tải toàn bộ ảnh của lớp ở đây, "sau khi up ảnh thì đẩy qua cho QLCS duyệt từng
+// ảnh". Khâu "đưa vào kho rồi chọn gửi" biến khỏi đường của giáo viên — ảnh tải lên đi
+// thẳng vào hàng chờ duyệt (xem uploadSessionMediaAction).
 //
 // 2 mức điều hướng qua searchParams (pattern lop/page.tsx, href CHỈ-query):
 //   (a) không tham số → grid lớp mình (assignedClassIds) + số ảnh / chờ duyệt.
-//   (b) ?classId=…    → album của lớp: ảnh gom theo BUỔI (classSessionId → fallback
-//                       takenAt → fallback "mức lớp"), badge trạng thái duyệt
-//                       (MediaStatus PENDING/APPROVED/REJECTED) + "Ảnh chung lớp".
+//   (b) ?classId=…    → album của lớp: ảnh gom theo BUỔI, nhãn buổi đầy đủ
+//                       "Buổi 7 - HP1 - Bàn Tay Ma Thuật" (deriveSessionLabel) + badge
+//                       trạng thái duyệt (Chờ duyệt / Đã duyệt / Bị từ chối).
 //
-// CONSENT (bất biến C6.2 — CLAUDE.md "media phải tag + tôn trọng StudentConsent"):
-// trang này KHÔNG tự viết luật consent — upload TÁI DÙNG uploadClassMedia +
-// getClassUploadContext của admin (gate canPublishToClass: GV lớp teacherId/assistantId
-// → GV đăng ĐƯỢC, ảnh vào PENDING chờ QL duyệt). GV chỉ XEM mọi status (cần biết ảnh
-// nào chưa duyệt) + đăng — KHÔNG có nút duyệt/xoá (media:approve = QL).
-// 11/08: kho (DRAFT) của lớp còn nhận ảnh do Marketing/Giáo vụ góp (media:upload-draft)
-// — GV là người DUY NHẤT chọn ảnh trong kho gửi phụ huynh.
+// KHO (DRAFT) VẪN CÒN nhưng chỉ còn là DI SẢN: ảnh tồn từ luồng cũ, cộng ảnh do
+// Marketing / Giáo vụ góp (`media:upload-draft` — chốt 11/08, họ KHÔNG đẩy thẳng vào
+// hàng duyệt được). Giáo viên vẫn là người duy nhất chọn ảnh trong kho gửi đi, nên
+// DraftStorePanel giữ nguyên; nó tự ẩn khi kho rỗng.
+//
+// CONSENT (bất biến C6.2/C6.3): trang này KHÔNG viết luật consent mới — mọi thao tác đi
+// qua action admin (app/(admin)/admin/media/actions.ts). ⚠️ Ảnh mới tải lên KHÔNG gắn
+// thẻ và KHÔNG "chung cả lớp" ⇒ ẩn với phụ huynh cho tới khi giáo viên bấm "Chọn ảnh" ở
+// phiếu nhận xét. Thẻ "Chưa gán học viên" dưới mỗi ảnh là chỗ bày việc còn nợ đó ra.
+// GV chỉ XEM mọi status (cần biết ảnh nào chưa duyệt) — KHÔNG có nút duyệt/xoá
+// (media:approve = QL).
 //
 // Cách ly cơ sở: ClassSessionMedia ∉ SCOPED_MODELS (relation-scoped qua class.centerId,
 // xem app/(admin)/admin/media/actions.ts) → đọc pass-through SAU guard assignedClassIds
@@ -29,6 +36,8 @@ import { resolveActor } from "@/lib/auth/actor";
 import { withMakeupException } from "@/lib/db-scope";
 import { resolveMediaUrls } from "@/lib/storage/signed-url";
 import { getNonConsentStudents } from "@/lib/lms/media-consent";
+import { buildSessionNumberMap } from "@/lib/lms/session-order";
+import { deriveSessionLabel } from "@/lib/lms/session-project-name";
 import { ENROLLMENT_ACTIVE_STATUS_LIST } from "@/lib/enrollment-status";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
@@ -57,7 +66,7 @@ const shortFmt = new Intl.DateTimeFormat("vi-VN", {
   year: "numeric",
   timeZone: "Asia/Ho_Chi_Minh",
 });
-/** "YYYY-MM-DD" theo giờ VN — khóa gộp nhóm ảnh chỉ có takenAt (không gắn buổi). */
+/** "YYYY-MM-DD" theo giờ VN — khóa gộp nhóm ảnh cũ chỉ có takenAt (không gắn buổi). */
 const dayKeyFmt = new Intl.DateTimeFormat("en-CA", {
   year: "numeric",
   month: "2-digit",
@@ -76,10 +85,10 @@ const MEDIA_STATUS: Record<MediaStatus, { label: string; cls: string }> = {
     cls: "bg-state-success-soft text-state-success-ink",
   },
   REJECTED: {
-    label: "Từ chối",
+    label: "Bị từ chối",
     cls: "bg-state-danger-soft text-state-danger-ink",
   },
-  // Kho ảnh — GV upload cả loạt, CHƯA chọn gửi PH (không hiện portal, không vào hàng duyệt).
+  // Kho ảnh — di sản luồng cũ + ảnh Marketing/Giáo vụ góp; không hiện portal.
   DRAFT: {
     label: "Trong kho",
     cls: "bg-state-info-soft text-state-info-ink",
@@ -106,7 +115,7 @@ type MediaView = {
   isClassWide: boolean;
   tagNames: string[];
 };
-/** 1 nhóm album: theo buổi / theo ngày chụp / mức lớp (chưa gắn buổi). */
+/** 1 nhóm album: theo buổi (chuẩn) / theo ngày chụp / mức lớp (ảnh cũ chưa gắn buổi). */
 type AlbumGroup = {
   key: string;
   label: string;
@@ -132,7 +141,7 @@ export default async function TeacherClassPhotosPage({
     // Guard assigned (chống IDOR): lớp không phải của mình → không xem, không lộ tên lớp.
     if (!actor.assignedClassIds.has(classId)) return <NotYours />;
 
-    const [cls, media] = await Promise.all([
+    const [cls, media, allSessions] = await Promise.all([
       xdb.class.findUnique({ where: { id: classId }, select: { name: true } }),
       // ClassSessionMedia ∉ SCOPED_MODELS → pass-through sau guard assigned ở trên.
       // GV thấy MỌI status (kể cả PENDING/REJECTED của lớp mình) — khác portal PH
@@ -156,21 +165,38 @@ export default async function TeacherClassPhotosPage({
         orderBy: { createdAt: "desc" },
         take: 400,
       }),
+      // TOÀN BỘ buổi của lớp (ClassSession ∈ MAKEUP_EXCEPTION_MODELS). ⚠️ KHÔNG cắt
+      // `take`: số buổi là HẠNG theo ngày tính trên cả lớp (lib/lms/session-order) —
+      // dựng bảng tra từ cửa sổ đã lọc là ra số sai cho mọi buổi còn lại. Đây cũng là
+      // nguồn danh sách buổi cho panel kho, nên chỉ đọc một lần.
+      xdb.classSession.findMany({
+        where: { classId },
+        select: {
+          id: true,
+          date: true,
+          topic: true,
+          status: true,
+          plan: { select: { customTitle: true } },
+          lesson: { select: { order: true, title: true, moduleCode: true } },
+        },
+        orderBy: { date: "desc" },
+      }),
     ]);
 
-    // Buổi được ảnh tham chiếu (nhãn nhóm) — ClassSession ∈ MAKEUP_EXCEPTION_MODELS.
-    const sessionIds = [
-      ...new Set(
-        media.map((m) => m.classSessionId).filter((x): x is string => !!x),
-      ),
-    ];
-    const sessions = sessionIds.length
-      ? await xdb.classSession.findMany({
-          where: { id: { in: sessionIds } },
-          select: { id: true, date: true, topic: true },
-        })
-      : [];
-    const sessionMap = new Map(sessions.map((s) => [s.id, s]));
+    const sessionNo = buildSessionNumberMap(allSessions);
+    const sessionMap = new Map(allSessions.map((s) => [s.id, s]));
+    /** Nhãn nhóm của một buổi: "Buổi 7 - HP1 - Bàn Tay Ma Thuật · T3, 12/08/2026". */
+    const labelOf = (s: (typeof allSessions)[number]) =>
+      `${
+        deriveSessionLabel({
+          sessionNumber: sessionNo.get(s.id) ?? null,
+          planTitle: s.plan?.customTitle,
+          lessonTitle: s.lesson?.title,
+          lessonOrder: s.lesson?.order,
+          moduleCode: s.lesson?.moduleCode,
+          topic: s.topic,
+        }) || "Buổi học"
+      } · ${dayFmt.format(s.date)}`;
 
     // Tên HS được tag — câu 46: CHỈ name. Student vẫn scoped (không nới) → ngoài
     // tầm nhìn (hiếm, ảnh cũ HV chuyển cơ sở) hiện "?" như admin media page.
@@ -188,8 +214,9 @@ export default async function TeacherClassPhotosPage({
     // Signed URL khi bật flag MEDIA_SIGNED_URL (OFF → fileUrl trần) — như admin.
     const displayUrls = await resolveMediaUrls(media.map((m) => m.fileUrl));
 
-    // Gom nhóm: buổi → ngày chụp → mức lớp (fallback), nhóm mới nhất lên đầu.
-    // Ảnh DRAFT (kho — chưa gửi PH) TÁCH RIÊNG khỏi album, render ở DraftStorePanel.
+    // Gom nhóm: buổi (chuẩn từ 25/08) → ngày chụp → mức lớp; nhóm mới nhất lên đầu.
+    // Hai nhánh sau chỉ còn phục vụ ẢNH CŨ: đường tải lên hiện tại bắt buộc chọn buổi.
+    // Ảnh DRAFT (kho) TÁCH RIÊNG khỏi album, render ở DraftStorePanel.
     const groups = new Map<string, AlbumGroup>();
     const draftItems: DraftItem[] = [];
     media.forEach((m, i) => {
@@ -201,7 +228,7 @@ export default async function TeacherClassPhotosPage({
       let sortKey: number;
       if (ses) {
         key = `s:${ses.id}`;
-        label = `Buổi ${dayFmt.format(ses.date)}${ses.topic ? ` · ${ses.topic}` : ""}`;
+        label = labelOf(ses);
         sortKey = ses.date.getTime();
       } else if (m.takenAt) {
         key = `d:${dayKeyFmt.format(m.takenAt)}`;
@@ -237,36 +264,26 @@ export default async function TeacherClassPhotosPage({
 
     // Roster cho panel kho (chip chọn HS + disable chưa consent) — CÙNG nguồn dữ liệu
     // getClassUploadContext của dialog upload. Câu 46: chỉ id + TÊN học viên.
-    // B3: kèm danh sách BUỔI của lớp để GV gán buổi ngay lúc gửi (publishClassMedia đã
-    // nhận classSessionId từ trước — chỉ nối UI); mặc định buổi gần nhất ĐÃ diễn ra.
+    // Chỉ đọc khi kho CÒN ảnh: với lớp đã dùng luồng mới, đây là 2 query thừa.
     let rosterStudents: { id: string; name: string }[] = [];
     let nonConsentIds: string[] = [];
     let sessionOptions: { id: string; label: string }[] = [];
     let defaultSessionId = "";
     if (draftItems.length > 0) {
-      const [enrRows, nonConsent, sessionRows] = await Promise.all([
+      const [enrRows, nonConsent] = await Promise.all([
         xdb.enrollment.findMany({
           where: { classId, status: { in: ENROLLMENT_ACTIVE_STATUS_LIST } },
           select: { student: { select: { id: true, name: true } } },
           orderBy: { createdAt: "asc" },
         }),
         getNonConsentStudents(classId),
-        // ClassSession ∈ MAKEUP_EXCEPTION_MODELS — cùng đường đọc sessionMap ở trên.
-        xdb.classSession.findMany({
-          where: { classId, status: { not: "CANCELLED" } },
-          select: { id: true, date: true, topic: true },
-          orderBy: { date: "desc" },
-          take: 200,
-        }),
       ]);
       rosterStudents = enrRows.map((e) => e.student);
       nonConsentIds = nonConsent.map((s) => s.id);
-      sessionOptions = sessionRows.map((sn) => ({
-        id: sn.id,
-        label: `${dayFmt.format(sn.date)}${sn.topic ? ` · ${sn.topic}` : ""}`,
-      }));
+      const usable = allSessions.filter((s) => s.status !== "CANCELLED");
+      sessionOptions = usable.map((s) => ({ id: s.id, label: labelOf(s) }));
       const now = new Date();
-      defaultSessionId = sessionRows.find((sn) => sn.date <= now)?.id ?? "";
+      defaultSessionId = usable.find((s) => s.date <= now)?.id ?? "";
     }
 
     return (
@@ -274,11 +291,11 @@ export default async function TeacherClassPhotosPage({
         <BackLink href="?" label="Ảnh lớp" />
         <PageHeader
           title={`Ảnh lớp — ${cls?.name ?? "Lớp"}`}
-          subtitle="Ảnh gom theo buổi học. Bạn đăng ảnh → quản lý duyệt → phụ huynh xem ảnh con được gắn thẻ (hoặc ảnh chung lớp)."
+          subtitle="Tải toàn bộ ảnh của lớp tại đây, phân loại theo buổi. Ảnh chuyển thẳng cho quản lý cơ sở duyệt từng tấm; duyệt xong bạn vào phiếu nhận xét bấm “Chọn ảnh” để gán ảnh cho từng học viên."
           actions={<UploadPhotoDialog classId={classId} />}
         />
 
-        {/* Kho ảnh — chưa gửi PH: multi-select + gắn HS/cả lớp + gửi/xoá (client) */}
+        {/* Kho ảnh — DI SẢN: ảnh tồn từ luồng cũ + ảnh marketing/giáo vụ góp. Tự ẩn khi rỗng. */}
         {draftItems.length > 0 && (
           <DraftStorePanel
             drafts={draftItems}
@@ -296,7 +313,14 @@ export default async function TeacherClassPhotosPage({
             {ordered.map((g) => (
               <section key={g.key}>
                 <div className="mb-2 flex items-center gap-2">
-                  <Images className="h-4 w-4 text-primary-ink" aria-hidden />
+                  {g.key.startsWith("s:") ? (
+                    <Images className="h-4 w-4 text-primary-ink" aria-hidden />
+                  ) : (
+                    <Calendar
+                      className="h-4 w-4 text-muted-foreground"
+                      aria-hidden
+                    />
+                  )}
                   <h2 className="text-sm font-bold capitalize text-foreground">
                     {g.label}
                   </h2>
@@ -304,41 +328,7 @@ export default async function TeacherClassPhotosPage({
                 </div>
                 <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
                   {g.items.map((m) => (
-                    <figure key={m.id} className="t-card overflow-hidden">
-                      {/* Preview thumbnail (R2 / presigned) — <img> như admin media-client */}
-                      <img
-                        src={m.url}
-                        alt={m.caption ?? "Ảnh lớp"}
-                        className="aspect-square w-full object-cover"
-                      />
-                      <figcaption className="space-y-1 p-2">
-                        <div className="flex flex-wrap items-center gap-1">
-                          <span
-                            className={cn(
-                              "rounded-full px-2 py-0.5 text-[11px] font-semibold",
-                              MEDIA_STATUS[m.status].cls,
-                            )}
-                          >
-                            {MEDIA_STATUS[m.status].label}
-                          </span>
-                          {m.isClassWide && (
-                            <span className="rounded-full bg-state-info-soft px-2 py-0.5 text-[11px] font-semibold text-state-info-ink">
-                              Ảnh chung lớp
-                            </span>
-                          )}
-                        </div>
-                        {m.caption && (
-                          <p className="line-clamp-2 text-xs text-muted-foreground">
-                            {m.caption}
-                          </p>
-                        )}
-                        {m.tagNames.length > 0 && (
-                          <p className="truncate text-[11px] text-muted-foreground">
-                            Tag: {m.tagNames.join(", ")}
-                          </p>
-                        )}
-                      </figcaption>
-                    </figure>
+                    <PhotoCard key={m.id} media={m} />
                   ))}
                 </div>
               </section>
@@ -389,7 +379,7 @@ export default async function TeacherClassPhotosPage({
     <div className="space-y-4">
       <PageHeader
         title="Ảnh lớp"
-        subtitle="Ảnh các buổi học ở những lớp bạn phụ trách — chọn lớp để xem album và đăng ảnh mới."
+        subtitle="Ảnh các buổi học ở những lớp bạn phụ trách — chọn lớp để xem album theo buổi và đăng ảnh mới."
       />
       {classes.length === 0 ? (
         <EmptyBox text="Bạn chưa được phân công lớp nào." />
@@ -457,6 +447,78 @@ export default async function TeacherClassPhotosPage({
         </div>
       )}
     </div>
+  );
+}
+
+/**
+ * Thẻ 1 ảnh. Trạng thái duyệt phải đọc được ngay: giáo viên cần biết VÌ SAO một tấm
+ * chưa tới phụ huynh. Ảnh BỊ TỪ CHỐI làm mờ + viền đỏ (khác hẳn phần còn lại) vì nó là
+ * ảnh sẽ không bao giờ đi tiếp, không phải ảnh đang chờ.
+ */
+function PhotoCard({ media }: { media: MediaView }) {
+  const rejected = media.status === "REJECTED";
+  // Ảnh đã duyệt nhưng chưa gắn em nào và không phải "chung cả lớp" thì ẩn với MỌI phụ
+  // huynh (bất biến C6.2). Từ 25/08 đây là trạng thái BÌNH THƯỜNG sau khi tải lên, nên
+  // phải nói ra chỗ làm tiếp thay vì để giáo viên tưởng đã xong.
+  const unassigned =
+    media.status === "APPROVED" &&
+    !media.isClassWide &&
+    media.tagNames.length === 0;
+
+  return (
+    <figure
+      className={cn(
+        "t-card overflow-hidden",
+        rejected && "border-state-danger-soft dark:border-state-danger",
+      )}
+    >
+      {/* Preview thumbnail (R2 / presigned) — <img> như admin media-client */}
+      <img
+        src={media.url}
+        alt={media.caption ?? "Ảnh lớp"}
+        className={cn(
+          "aspect-square w-full object-cover",
+          rejected && "opacity-50 grayscale",
+        )}
+      />
+      <figcaption className="space-y-1 p-2">
+        <div className="flex flex-wrap items-center gap-1">
+          <span
+            className={cn(
+              "rounded-full px-2 py-0.5 text-[11px] font-semibold",
+              MEDIA_STATUS[media.status].cls,
+            )}
+          >
+            {MEDIA_STATUS[media.status].label}
+          </span>
+          {media.isClassWide && (
+            <span className="rounded-full bg-state-info-soft px-2 py-0.5 text-[11px] font-semibold text-state-info-ink">
+              Ảnh chung lớp
+            </span>
+          )}
+        </div>
+        {rejected && (
+          <p className="text-[11px] font-medium text-state-danger-ink">
+            Quản lý cơ sở đã từ chối — ảnh này không gửi tới phụ huynh.
+          </p>
+        )}
+        {unassigned && (
+          <p className="text-[11px] text-muted-foreground">
+            Chưa gán học viên — vào phiếu nhận xét bấm “Chọn ảnh”.
+          </p>
+        )}
+        {media.caption && (
+          <p className="line-clamp-2 text-xs text-muted-foreground">
+            {media.caption}
+          </p>
+        )}
+        {media.tagNames.length > 0 && (
+          <p className="truncate text-[11px] text-muted-foreground">
+            Tag: {media.tagNames.join(", ")}
+          </p>
+        )}
+      </figcaption>
+    </figure>
   );
 }
 

@@ -337,7 +337,7 @@ export function OrderDetailClient({
         <h2 className="mb-3 text-sm font-bold uppercase tracking-wider text-muted-foreground">
           Sản phẩm ({order.items.length})
         </h2>
-        <PhanTrangBang>
+        <PhanTrangBang cuonNgang>
           <table className="w-full border-collapse text-sm">
             <thead>
               <tr className="border-b border-border bg-muted">
