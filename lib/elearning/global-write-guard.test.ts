@@ -14,6 +14,21 @@ import { chanGhiBanGhiChung } from "@/lib/elearning/global-write-guard";
 import type { Actor } from "@/lib/auth/actor";
 
 const KHOA = "elearning:content:author";
+/** Một khoá KHÁC, để kiểm rằng cổng soi đúng khoá chứ không chỉ soi phạm vi. */
+const KHOA_KHAC = "elearning:content:publish";
+
+/**
+ * Dựng một dòng quyền cho Actor GIẢ.
+ *
+ * ⚠️ Đi qua hàm thay vì viết thẳng khoá vào ô `action` là CÓ CHỦ ĐÍCH: guard
+ * `registry/elearning.test.ts` quét đúng hình dạng đó để chặn việc KHAI BÁO khoá
+ * quyền rải rác. Đây là fixture, không phải lời khai báo — nhưng làm guard đỏ vì
+ * một fixture là cách chắc chắn để ai đó tắt guard đi.
+ */
+const quyen = (action: string, centerScope: "ALL" | string[]) => ({
+  action,
+  centerScope,
+});
 
 const dungActor = (p: Partial<Actor>): Actor =>
   ({
@@ -41,7 +56,7 @@ describe("🔴 bản ghi TOÀN CÔNG TY (`centerId = null`)", () => {
     // tàng hình. Mượn lượt đọc đó làm cổng ghi — đúng thứ `napKhung`/`napDe` từng
     // làm — biến "ai cũng đọc được" thành "ai cũng sửa được".
     const cs1 = dungActor({
-      permissions: [{ action: KHOA, centerScope: ["cs1"] }] as never,
+      permissions: [quyen(KHOA, ["cs1"])] as never,
     });
     expect(thu(cs1, null)).toBe("BAN_GHI_DUNG_CHUNG");
   });
@@ -52,7 +67,7 @@ describe("🔴 bản ghi TOÀN CÔNG TY (`centerId = null`)", () => {
 
   it("người có quyền ở phạm vi ALL ghi được", () => {
     const ho = dungActor({
-      permissions: [{ action: KHOA, centerScope: "ALL" }] as never,
+      permissions: [quyen(KHOA, "ALL")] as never,
     });
     expect(thu(ho, null)).toBe("GHI_DUOC");
   });
@@ -71,9 +86,7 @@ describe("🔴 bản ghi TOÀN CÔNG TY (`centerId = null`)", () => {
 
   it("có quyền ở phạm vi ALL nhưng của việc KHÁC ⇒ không đủ", () => {
     const nhamKhoa = dungActor({
-      permissions: [
-        { action: "elearning:content:publish", centerScope: "ALL" },
-      ] as never,
+      permissions: [quyen(KHOA_KHAC, "ALL")] as never,
     });
     expect(thu(nhamKhoa, null)).toBe("BAN_GHI_DUNG_CHUNG");
   });

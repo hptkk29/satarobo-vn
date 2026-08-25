@@ -586,3 +586,11 @@ mới ghi là một cửa sổ đua, hai tab cùng thêm sẽ va nhau.
 lượt ghi trong `try/catch` bắt `P2002` — phép kiểm chạy TRƯỚC lượt ghi nên nó không
 đóng được cửa sổ đua; (c) nhận diện bằng `e.code === "P2002"` và `e.meta.target`,
 **không soi chuỗi `message`** (quy ước 29).
+- **Guard dùng `git grep` KHÔNG THẤY tệp chưa `git add` — nên nó xanh ở local rồi đỏ trên CI.**
+  `lib/permissions/registry/elearning.test.ts` quét khoá quyền rải rác bằng `execFileSync("git",
+  ["grep", …])`, và `git grep` chỉ soi tệp **đã theo dõi**. Chạy bộ test đầy đủ TRƯỚC lần `git add`
+  đầu tiên của một tệp mới ⇒ tệp đó vô hình với guard ⇒ xanh. CI checkout mọi thứ đã commit nên nó
+  thấy, và đỏ. Đã xảy ra 26/08/2026 với `lib/elearning/global-write-guard.test.ts`.
+  ⇒ **Với tệp MỚI, chạy lại bộ test SAU khi `git add`** (không cần commit — `git grep` thấy cả
+  vùng staged). Cùng họ với bẫy "test chạm DB skip im lặng": cả hai đều báo xanh cho một phép kiểm
+  chưa từng chạy.
