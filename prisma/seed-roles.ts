@@ -285,6 +285,9 @@ export const ROLE_SEED: RoleSeed[] = [
     code: "TRAINING", name: "Đào tạo (toàn LMS)",
     // 24/07 (user chốt): KHOÁ CHẶT về chỉ curriculum + LMS + DUYỆT học bạ. Gỡ:
     // students/classes:view-all (hết xem HV/lớp toàn hệ thống — Toại về đúng CS1),
+    //   ⚠️ 23/08: `classes:view-all` ĐÃ TRẢ LẠI (kèm classes:edit + trials:assign-teacher)
+    //   — Đào tạo nay quản lý toàn bộ GV. `students:view-all` VẪN GỠ, đừng trả nốt theo
+    //   quán tính. Lý do đầy đủ ở khối comment ngay trên 4 dòng perm đó.
     // reports:training, evaluations:manage, trials:config, report-cards:manage
     // (chỉ còn report-cards:review = duyệt). GIỮ training:manage (chìa khoá LMS:
     // gác SCORM + mở khoá curriculum + soạn đề/câu hỏi — bỏ là hỏng LMS).
@@ -333,6 +336,23 @@ export const ROLE_SEED: RoleSeed[] = [
       // KHÔNG kèm sessions:*/classes:* (không mở lại module Lớp/Buổi học cho Đào tạo).
       // Trang /admin/classes/[id] mở ĐÚNG một tab "Đánh giá & Nhận xét" cho vai này.
       { action: "session-feedback:view-all", scopeType: "GLOBAL" },
+      // 23/08 (chủ dự án) — ĐẢO một phần đợt khoá chặt 24/07. Đào tạo nay là người
+      // QUẢN LÝ TOÀN BỘ GIÁO VIÊN, nên phải nhìn được mọi lớp của mọi cơ sở để xếp GV
+      // đi dạy: lớp chính (đã ghi danh) và lớp trải nghiệm (trial).
+      //   · classes:view-all — mở lại đúng quyền bị gỡ 24/07 ("Toại về đúng CS1").
+      //     Không có nó thì /attendance và /admin/classes chỉ bày lớp Đào tạo tự dạy.
+      //   · classes:edit — KHÔNG có action hẹp kiểu "classes:assign-teacher"; gán GV/trợ
+      //     giảng cho lớp chính đi chung `updateClass`. Kèm theo (đã cân nhắc, chấp nhận):
+      //     đổi lịch/phòng/tên lớp, sinh & xếp lại buổi, và HUỶ LỚP (cancelClassAction).
+      //     KHÔNG kèm: tạo lớp, xoá lớp (perm riêng), duyệt/từ chối lớp (chặn bằng
+      //     APPROVE_ROLES chứ không bằng permission — xem requireApprover).
+      //   · trials:view + trials:assign-teacher — đủ để mở màn Trial và gán GV. CỐ Ý
+      //     KHÔNG cấp trials:manage (thêm/bớt học viên, tạo lớp trải nghiệm) và
+      //     trials:config: quản lý toàn bộ GV ≠ điều hành tuyển sinh lớp thử.
+      { action: "classes:view-all", scopeType: "GLOBAL" },
+      { action: "classes:edit", scopeType: "GLOBAL" },
+      { action: "trials:view", scopeType: "GLOBAL" },
+      { action: "trials:assign-teacher", scopeType: "GLOBAL" },
       // 03/08 — checkin là self-action của mọi nhân viên; sót từ khi thêm TRAINING
       // (FL W0) nên tài khoản chỉ-Đào-tạo không mở được trang chấm công nào.
       { action: "hr_attendance:checkin", scopeType: "GLOBAL" },

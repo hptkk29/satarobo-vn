@@ -7,7 +7,7 @@
 // Mọi hiệu ứng bảo vệ FAIL-OPEN: lỗi JS không được chặn việc dạy học.
 import { useEffect } from "react";
 import { mountScorm12Api, type ScormSeed } from "@/components/admin/scorm-api";
-import { SlideStage } from "@/components/admin/slide-stage";
+import { SlideStage, type SlideStageFit } from "@/components/admin/slide-stage";
 
 interface ScormPlayerProps {
   launchTicket: string;
@@ -24,6 +24,9 @@ interface ScormPlayerProps {
   /** Nhãn trạng thái giảng hiện tại (resume) + lần mở gần nhất — hiển thị cho GV. */
   statusLabel?: string;
   lastAccessedLabel?: string;
+  /** Chuyển tiếp cho SlideStage — site GV dùng "viewport" + lối thoát (xem SlideStageFit). */
+  fit?: SlideStageFit;
+  exitHref?: string;
 }
 
 /** Build src iframe: mã hoá từng segment, đính vé vào query. */
@@ -44,6 +47,8 @@ export function ScormPlayer({
   seed,
   statusLabel,
   lastAccessedLabel,
+  fit,
+  exitHref,
 }: ScormPlayerProps) {
   const src = buildAssetSrc(launchUrl, launchTicket);
 
@@ -88,6 +93,8 @@ export function ScormPlayer({
       employeeCode={employeeCode}
       statusLabel={statusLabel}
       lastAccessedLabel={lastAccessedLabel}
+      fit={fit}
+      exitHref={exitHref}
     >
       <iframe
         title={packageName}

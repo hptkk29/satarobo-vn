@@ -6,6 +6,7 @@ import { resolveActor } from '@/lib/auth/actor'
 import { checkPermission, checkPermissionDetail } from '@/lib/auth/check-permission'
 import { maskLeadPiiFields } from '@/lib/lead/pii'
 import { leadSharedOrClause, leadSharingEnabled } from '@/lib/lead/sharing'
+import { splitLeadNote } from '@/lib/lead/note-view'
 import { canViewLeadPii } from '@/lib/auth/check-permission'
 import { LeadsTable } from './_components/leads-table'
 import type { LeadRow } from './_components/leads-table'
@@ -300,7 +301,9 @@ export default async function LeadsPage({
       childAge: lead.childAge,
       status: lead.status,
       source: lead.source,
-      note: lead.note,
+      // 24/08 — ô ghi chú ở ngăn kéo chỉ hiện phần NGƯỜI GÕ; updateLeadNote ráp
+      // lại dòng máy ghi lúc lưu (lib/lead/note-view.ts).
+      note: splitLeadNote(lead.note).human,
       utmSource: lead.utmSource,
       utmMedium: lead.utmMedium,
       utmCampaign: lead.utmCampaign,

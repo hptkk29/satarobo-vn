@@ -97,3 +97,47 @@ export function mocDonTang2(now: Date, soNgayGiuBitmap = 90): MocDon {
     ),
   };
 }
+
+
+/**
+ * EL-10 việc (6) — MỐC DỌN LƯỢT TẢI DỞ.
+ *
+ * Một lượt tải nhiều phần bị bỏ giữa chừng (đóng tab, mất mạng) để lại các phần
+ * đã tải trên R2 VĨNH VIỄN. R2 tính tiền chúng, và chúng không hiện ra ở bất kỳ
+ * danh sách đối tượng nào — `ListObjectsV2` không thấy phần dở, chỉ
+ * `ListMultipartUploads` mới thấy. Nên đây là loại rác không ai phát hiện bằng
+ * mắt, chỉ thấy trên hoá đơn.
+ *
+ * ⚠️ Ngưỡng 24 giờ, không ngắn hơn: người soạn tải tệp 200MB qua mạng chậm có
+ * thể mất cả buổi, và huỷ một lượt đang chạy là bắt họ làm lại từ đầu.
+ *
+ * ⚠️ Việc này GỘP vào cron đêm `elearning-dem`, không xin khe cron thứ ba —
+ * ngân sách của module là ĐÚNG HAI khe (QĐ-CDA-14 điểm 2).
+ */
+export function mocDonTaiDo(now: Date, soGioGiu = 24): Date {
+  return new Date(now.getTime() - soGioGiu * 60 * 60 * 1000);
+}
+
+/** Lượt tải dở nào đã quá hạn giữ. */
+export function chonTaiDoDeHuy<T extends { key: string; initiated: Date | null }>(
+  ds: T[],
+  moc: Date,
+): { huy: T[]; giu: T[] } {
+  const huy: T[] = [];
+  const giu: T[] = [];
+  for (const u of ds) {
+    // Không rõ mốc bắt đầu ⇒ GIỮ. Huỷ một lượt có thể đang chạy là làm mất công
+    // của người soạn; giữ thêm một hôm chỉ tốn vài xu lưu trữ.
+    if (!u.initiated) {
+      giu.push(u);
+      continue;
+    }
+    // Chỉ đụng tệp trong phạm vi module — bucket có thể còn tiền tố khác.
+    if (!u.key.startsWith("elearning/")) {
+      giu.push(u);
+      continue;
+    }
+    (u.initiated.getTime() < moc.getTime() ? huy : giu).push(u);
+  }
+  return { huy, giu };
+}

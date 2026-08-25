@@ -18,6 +18,7 @@ export async function traDongBaoCao(
     select: {
       userId: true,
       status: true,
+      source: true,
       progressPercent: true,
       dueAtOriginal: true,
       completedAt: true,
@@ -83,6 +84,7 @@ export async function traDongBaoCao(
         ? (tenNguoi.get(r.snapManagerUserId)?.ten ?? null)
         : null,
       status: r.status,
+      source: r.source,
       progressPercent: r.progressPercent,
       dueAtOriginal: r.dueAtOriginal,
       completedAt: r.completedAt,

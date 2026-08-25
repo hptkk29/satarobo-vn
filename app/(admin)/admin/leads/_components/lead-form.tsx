@@ -35,10 +35,16 @@ export function LeadForm({
   orgUnits,
   courses,
   initial,
+  courseFromChildren = false,
 }: {
   orgUnits: Option[];
   courses: TeachableCourse[];
   initial?: LeadFormInitial;
+  /**
+   * Lead đã có ít nhất 1 con ⇒ "Khoá quan tâm" của lead do khối con quyết định
+   * (24/08/2026). Khoá ô lại thay vì để hai nơi cùng ghi một giá trị.
+   */
+  courseFromChildren?: boolean;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -130,7 +136,12 @@ export function LeadForm({
           </select>
         </Field>
         <Field label="Khoá quan tâm">
-          <select value={courseId} onChange={(e) => setCourseId(e.target.value)} className={inputCls}>
+          <select
+            value={courseId}
+            onChange={(e) => setCourseId(e.target.value)}
+            disabled={courseFromChildren}
+            className={`${inputCls} disabled:bg-muted disabled:text-muted-foreground`}
+          >
             <option value="">— Chưa chọn —</option>
             {courseGroups.map((g) => (
               <optgroup key={g.label} label={g.label}>
@@ -140,6 +151,11 @@ export function LeadForm({
               </optgroup>
             ))}
           </select>
+          {courseFromChildren && (
+            <p className="mt-1 text-xs text-muted-foreground">
+              Lấy theo khoá quan tâm của con — sửa ở khối &ldquo;Con của phụ huynh&rdquo; bên dưới.
+            </p>
+          )}
         </Field>
         <Field label="Nguồn">
           <input value={source} onChange={(e) => setSource(e.target.value)} className={inputCls} placeholder="Sự kiện, walk-in…" />

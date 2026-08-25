@@ -22,6 +22,8 @@ export type DongBaoCao = {
   departmentName: string | null;
   managerName: string | null;
   status: string;
+  /** `EQUIVALENCE` = công nhận tương đương — nhãn RIÊNG, xem `phanNhom`. */
+  source: string;
   progressPercent: number;
   dueAtOriginal: Date | null;
   completedAt: Date | null;
@@ -32,6 +34,7 @@ export type DongBaoCao = {
 export type NhomTuanThu =
   | "DUNG_HAN"
   | "TRE"
+  | "TUONG_DUONG"
   | "DANG_HOC"
   | "CHUA_HOC"
   | "THU_HOI"
@@ -45,6 +48,8 @@ export type TongHop = {
   chuaHoc: number;
   thuHoi: number;
   tamDung: number;
+  /** EL-09 — công nhận tương đương, tách khỏi "Hoàn thành". */
+  tuongDuong: number;
   /** Mẫu số = đã giao − thu hồi − tạm dừng. `null` khi mẫu số bằng 0. */
   tyLeDungHan: number | null;
 };
@@ -52,6 +57,11 @@ export type TongHop = {
 export function phanNhom(d: DongBaoCao): NhomTuanThu {
   if (d.status === "REVOKED") return "THU_HOI";
   if (d.pausedAt) return "TAM_DUNG";
+  // ⚠️ EL-09 luật 2 — nhãn suy từ CỘT `source`, xét TRƯỚC `status`. Lượt công
+  // nhận tương đương mang `status = COMPLETED`; để nó rơi vào nhánh dưới là gộp
+  // vào "hoàn thành đúng hạn", tức thổi phồng tỉ lệ đúng hạn bằng những người
+  // chưa từng học trong hệ thống này.
+  if (d.source === "EQUIVALENCE") return "TUONG_DUONG";
   if (d.status === "COMPLETED") return "DUNG_HAN";
   if (d.status === "COMPLETED_LATE") return "TRE";
   // Đã mở bài (có `startedAt` hoặc tiến độ > 0) thì là ĐANG HỌC, kể cả khi đang
@@ -70,6 +80,7 @@ export function tongHopTuanThu(ds: DongBaoCao[]): TongHop {
     chuaHoc: 0,
     thuHoi: 0,
     tamDung: 0,
+    tuongDuong: 0,
     tyLeDungHan: null,
   };
   for (const d of ds) {
@@ -92,9 +103,16 @@ export function tongHopTuanThu(ds: DongBaoCao[]): TongHop {
       case "TAM_DUNG":
         t.tamDung += 1;
         break;
+      case "TUONG_DUONG":
+        t.tuongDuong += 1;
+        break;
     }
   }
-  const mau = t.daGiao - t.thuHoi - t.tamDung;
+  // ⚠️ EL-09 luật 3 — lượt công nhận tương đương CÓ `verifiedAt` nên nó vào cả
+  // tử số lẫn mẫu số của M1 (đã được đào tạo), NHƯNG nó không có `dueAtOriginal`
+  // nên đứng NGOÀI phân hoạch đúng-hạn/trễ. Ở báo cáo tuân thủ hạn chót thì đây
+  // là phép đo về HẠN, nên nó ra khỏi mẫu số cùng nhóm thu hồi và tạm dừng.
+  const mau = t.daGiao - t.thuHoi - t.tamDung - t.tuongDuong;
   // Mẫu số 0 ⇒ `null`, KHÔNG phải 0%. "0% tuân thủ" đọc thành thảm hoạ, còn sự
   // thật là chưa có ai để đo.
   t.tyLeDungHan = mau > 0 ? Math.round((t.dungHan / mau) * 100) : null;
@@ -125,6 +143,7 @@ export const R1_COLUMNS = [
 const NHAN_NHOM: Record<NhomTuanThu, string> = {
   DUNG_HAN: "Hoàn thành đúng hạn",
   TRE: "Hoàn thành trễ",
+  TUONG_DUONG: "Công nhận tương đương",
   DANG_HOC: "Đang học",
   CHUA_HOC: "Chưa học",
   THU_HOI: "Đã thu hồi",

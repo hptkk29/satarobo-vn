@@ -182,6 +182,17 @@ export default async function SaleHomePage() {
           </p>
         ) : null}
       </div>
+
+      <div className="mt-6 rounded-xl border border-border bg-card p-5">
+        <h2 className="text-sm font-semibold">Sắp có</h2>
+        {/* Danh sách này phải trừ dần khi màn được dựng. Để nguyên tên một màn
+            ĐÃ CÓ là nói dối người dùng về trạng thái sản phẩm — "Lớp trải
+            nghiệm" từng nằm ở đây suốt trong khi nó đã chạy được. */}
+        <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-muted-foreground">
+          <li>Ghi danh — chuyển khách đã đóng tiền thành học viên</li>
+          <li>Hoa hồng của tôi</li>
+        </ul>
+      </div>
     </div>
   );
 }

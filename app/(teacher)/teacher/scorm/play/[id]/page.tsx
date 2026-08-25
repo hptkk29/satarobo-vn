@@ -2,9 +2,10 @@
 //
 // MIRROR trang admin app/(admin)/admin/scorm/play/[id]/page.tsx (R7-12) — GIỮ NGUYÊN
 // toàn bộ gate canOpenScorm (GV phân công ∪ training:manage) + ScormAccessLog +
-// vé TTL 10p + watermark/blur client (#14, câu 56). Khác biệt DUY NHẤT:
+// vé TTL 10p + watermark/blur client (#14, câu 56). Khác biệt:
 //   • fail-gate → redirect("/teacher") (home GV) thay vì notFound() của khu admin;
-//   • chưa login → return null (layout teacher đã gate login + role TEACHER).
+//   • chưa login → return null (layout teacher đã gate login + role TEACHER);
+//   • khung chiếu `fit="viewport"` + lối thoát `?from=` — xem ghi chú safeExitHref bên dưới.
 // TÁI DÙNG components @/components/admin/{scorm-player,pdf-slide-player,scorm-api}
 // (ESLint teacher chỉ chặn magic/motion/charts/@lib/db — KHÔNG chặn components/admin;
 // player POST /api/scorm/runtime + tải /api/scorm/asset/* — /api/* pass-through trên
@@ -53,7 +54,48 @@ const COMPLETION_VI: Record<string, string> = {
 
 interface PageProps {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ sessionId?: string }>;
+  searchParams: Promise<{ sessionId?: string; from?: string }>;
+}
+
+// Khác admin ở KHUNG HÌNH: trang này nằm trong AppShell (Topbar + padding của <main>), nên
+// khung trình chiếu theo luồng (`fit="inline"`, cao 100dvh−2rem) cộng thêm chiều cao topbar
+// ⇒ trang cuộn dọc và slide bị bóp nhỏ. `fit="viewport"` cho khung phủ kín khung nhìn.
+// Kèm lối thoát vì khung phủ kín che mất sidebar — GV không còn lối điều hướng nào.
+const EXIT_FALLBACK = "/teacher";
+
+/**
+ * Chỗ quay về khi bấm "Đóng" — do NƠI MỞ truyền qua `?from=`, để GV về đúng trang
+ * vừa rời (vd `/teacher/tai-lieu?courseId=…` giữ nguyên khung chương trình đang xem)
+ * thay vì rơi về trang chủ và phải chọn lại khoá từ đầu.
+ *
+ * Từ 24/08 viewer mở CÙNG TAB, nên Back của trình duyệt cũng quay về được. Vẫn giữ
+ * `from` vì nút "Đóng" cần một đích XÁC ĐỊNH: GV mở thẳng bằng URL, bấm F5, hay đi
+ * vài nhịp trong viewer thì Back không còn trỏ về trang tài liệu nữa.
+ * (Header `Referer` KHÔNG dùng được: nơi mở đi qua next/link — điều hướng phía client
+ * không phát request HTML nào để mà có Referer.)
+ *
+ * `from` là dữ liệu người dùng sửa được trên URL ⇒ phải kiểm, nếu không thành lỗ
+ * open-redirect (`?from=https://ke-gian.example` biến nút "Đóng" của chính site GV
+ * thành bàn đạp lừa đảo). Luật: chỉ nhận đường dẫn TƯƠNG ĐỐI trong khu /teacher.
+ *   • `//host` và `/\host` — trình duyệt hiểu là protocol-relative ⇒ ra ngoài. Chặn.
+ *   • `\` — vài trình duyệt quy về `/`. Chặn luôn cho khỏi phải đoán.
+ *   • ký tự điều khiển (\n, \r, \t) — dùng để lách bộ lọc. Chặn.
+ * Không khớp thì im lặng về `/teacher`, KHÔNG báo lỗi: nút "Đóng" sai đích là phiền,
+ * còn chặn cả buổi dạy vì một tham số hỏng thì tệ hơn nhiều.
+ */
+function safeExitHref(raw: string | undefined): string {
+  const v = raw?.trim();
+  if (!v || v.length > 512) return EXIT_FALLBACK;
+  // "/teacher" trần, hoặc có phân tách rõ ràng phía sau. Chặn "/teacherXYZ" —
+  // vẫn cùng origin nên không phải lỗ bảo mật, nhưng là 404 trá hình.
+  if (v !== "/teacher" && !/^\/teacher[/?#]/.test(v)) return EXIT_FALLBACK;
+  if (v.startsWith("//") || v.includes("\\")) return EXIT_FALLBACK;
+  // Ký tự điều khiển (xuống dòng / tab / NUL) là mẹo quen thuộc để lách bộ lọc URL.
+  for (let i = 0; i < v.length; i++) {
+    const c = v.charCodeAt(i);
+    if (c < 0x20 || c === 0x7f) return EXIT_FALLBACK;
+  }
+  return v;
 }
 
 export default async function TeacherScormPlayPage({
@@ -65,8 +107,9 @@ export default async function TeacherScormPlayPage({
   if (!isScormEnabled()) redirect("/teacher");
 
   const { id } = await params;
-  const { sessionId: rawSessionId } = await searchParams;
+  const { sessionId: rawSessionId, from } = await searchParams;
   const sessionId = rawSessionId?.trim() || null;
+  const exitHref = safeExitHref(from);
 
   const session = await auth();
   if (!session?.user) return null; // layout teacher đã gate login + role TEACHER
@@ -183,6 +226,8 @@ export default async function TeacherScormPlayPage({
         packageName={pkg.name}
         name={name}
         employeeCode={employeeCode}
+        fit="viewport"
+        exitHref={exitHref}
       />
     );
   }
@@ -214,10 +259,16 @@ export default async function TeacherScormPlayPage({
   const statusLabel = attempt
     ? (COMPLETION_VI[attempt.completion] ?? attempt.completion)
     : undefined;
+  // `timeZone` là BẮT BUỘC: đây là Server Component, Vercel chạy tiến trình giờ **UTC**
+  // (máy dev +07 nên không lộ ra) ⇒ thiếu nó là GV đọc "lần mở gần nhất" lệch 7 tiếng.
+  // `lastAccessedAt` là DateTime — mốc thời gian THẬT, khác hẳn cột `@db.Date` (ngày trần,
+  // phải giữ `timeZone: "UTC"`). Đừng đổi hai loại này cho nhau: lệch nguyên một ngày.
+  // Trang admin app/(admin)/admin/scorm/play/[id]/page.tsx format y hệt — sửa THÀNH CẶP.
   const lastAccessedLabel = attempt
     ? new Intl.DateTimeFormat("vi-VN", {
         dateStyle: "short",
         timeStyle: "short",
+        timeZone: "Asia/Ho_Chi_Minh",
       }).format(attempt.lastAccessedAt)
     : undefined;
 
@@ -233,6 +284,8 @@ export default async function TeacherScormPlayPage({
       seed={seed}
       statusLabel={statusLabel}
       lastAccessedLabel={lastAccessedLabel}
+      fit="viewport"
+      exitHref={exitHref}
     />
   );
 }
