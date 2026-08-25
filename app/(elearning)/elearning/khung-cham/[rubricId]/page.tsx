@@ -104,7 +104,11 @@ export default async function Page({
         <h1 className="text-2xl font-bold">{khung.title}</h1>
         <p className="mt-1 text-sm text-muted-foreground">
           <span className="font-mono">{khung.code}</span> ·{" "}
-          {khung.status === "ACTIVE" ? "đã kích hoạt" : "nháp"}
+          {khung.status === "ACTIVE"
+            ? "đã kích hoạt"
+            : khung.status === "ARCHIVED"
+              ? "đã lưu trữ"
+              : "nháp"}
         </p>
       </div>
 
@@ -118,6 +122,8 @@ export default async function Page({
 
       <RubricBuilder
         rubricId={khung.id}
+        code={khung.code}
+        title={khung.title}
         status={khung.status}
         totalPoints={khung.totalPoints}
         passPoints={khung.passPoints}

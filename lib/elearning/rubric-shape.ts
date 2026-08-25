@@ -17,8 +17,28 @@ import { z } from "zod";
 export const mucSchema = z
   .object({
     label: z.string().trim().min(1, "Mức phải có tên").max(120),
-    /** Điểm TUYỆT ĐỐI của tiêu chí khi đạt mức này. */
-    points: z.number().min(0).max(1000),
+    /**
+     * Điểm TUYỆT ĐỐI của tiêu chí khi đạt mức này. **SỐ NGUYÊN.**
+     *
+     * ⚠️ Cho phép số thập phân ở đây đẻ ra một lớp lỗi không ai đoán được, vì mọi
+     * cột đích đều là `Int` (`TrnRubric.totalPoints`, `TrnRubric.passPoints`,
+     * `TrnRubricCriterion.weight`, `TrnSubmission.score`). Hai hỏng đã dựng lại
+     * được trên Postgres thật:
+     *
+     *  · **cổng kích hoạt thành may rủi theo bit.** `tongDiemToiDa` cộng double rồi
+     *    so `!==` với một `Int`. Vét cạn bộ ba điểm một chữ số thập phân có tổng
+     *    toán học đúng 100: **8,19%** cho tổng JS ≠ 100. Người soạn bị chặn với câu
+     *    "tổng là 99.99999999999999, không khớp thang 100" và không đoán nổi mình
+     *    rơi vào nhóm nào.
+     *  · **bài đạt ĐÚNG ngưỡng bị chấm trượt.** Mức cao [20.1, 64.3, 15.6] cộng ra
+     *    đúng 100 nên kích hoạt trót lọt; bài chấm [0.1, 64.3, 15.6] = 80 về toán
+     *    học ra `79.99999999999999` ⇒ TRƯỢT, trong khi mọi con số trên màn đều là 80.
+     *
+     * Số nguyên làm cả hai biến mất, và không mất gì: thang 100 với các mức nguyên
+     * đủ mịn cho mọi khung mà module này chấm. Cần mịn hơn thì nâng `totalPoints`
+     * (vd thang 1000), đừng mở số thập phân.
+     */
+    points: z.number().int("Điểm mức phải là số nguyên").min(0).max(1000),
     desc: z.union([z.null(), z.string().trim().max(1000)]).optional(),
   })
   .strict();
@@ -59,7 +79,10 @@ export const dsMucSchema = z
  */
 export function tongDiemToiDa(tieuChi: { levels: Muc[] }[]): number {
   return tieuChi.reduce(
-    (s, tc) => s + Math.max(...tc.levels.map((m) => m.points)),
+    // ⚠️ `Math.max()` của mảng RỖNG là `-Infinity`, không phải 0. Một tiêu chí có
+    // `levelsJson` hỏng khuôn sẽ đọc ra mảng rỗng, và không guard thì cả tổng thành
+    // `-Infinity` — màn soạn hiện "tổng -Infinity/100" và người soạn không hiểu gì.
+    (s, tc) => s + (tc.levels.length === 0 ? 0 : Math.max(...tc.levels.map((m) => m.points))),
     0,
   );
 }

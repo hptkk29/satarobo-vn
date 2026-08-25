@@ -2,6 +2,8 @@ import { z } from "zod";
 import type { ActionConfig, ScopedDb } from "@/lib/actions/factory";
 import { ActionError } from "@/lib/actions/factory";
 import { orgUnitIdForCenter } from "@/lib/org/org-service";
+import { scopedDb } from "@/lib/db-scope";
+import type { Actor } from "@/lib/auth/actor";
 import { dungHaiPhaGhiThuTu } from "@/lib/elearning/course-outline";
 import { coSoCuaCauHoi } from "@/lib/elearning/question-bank";
 import {
@@ -9,6 +11,19 @@ import {
   kiemKhung,
   type Muc,
 } from "@/lib/elearning/rubric-shape";
+import { chanGhiBanGhiChung } from "@/lib/elearning/global-write-guard";
+
+/**
+ * Máy khách BỎ QUA phạm vi, dùng DUY NHẤT để hỏi "mã này có ai dùng chưa".
+ *
+ * ⚠️ `bypass: true` ở đây là có chủ đích và hẹp: `TrnRubric.code` là `@unique` toàn
+ * hệ thống, nên phép kiểm trùng phải nhìn được cả bản ghi ngoài tầm của actor —
+ * nếu không thì nó luôn báo "không trùng" và lượt ghi va thẳng vào khoá DB. Lượt
+ * đọc này chỉ `select: { id }` và không trả gì của cơ sở khác ra ngoài.
+ */
+function taoDbBoQuaPhamVi(actor: Actor) {
+  return scopedDb(actor, { bypass: true });
+}
 
 /**
  * EL-15b — DỰNG KHUNG CHẤM.
@@ -77,13 +92,20 @@ export const cauHinhTaoKhung: ActionConfig<TaoKhungInput, { rubricId: string }> 
       );
     }
 
-    const trung = await db.trnRubric.findFirst({
+    // ⚠️ Lượt kiểm trùng phải BỎ QUA phạm vi cơ sở.
+    //
+    // `code` là `@unique` TOÀN HỆ THỐNG, nhưng `db` ở đây là `scopedDb` — người ở
+    // CS1 sẽ KHÔNG THẤY khung của CS2, nên phép kiểm báo "không trùng" rồi `create`
+    // va thẳng vào khoá. `P2002` không phải `ActionError` nên `runAction` ném tiếp
+    // ra ngoài: không toast, không lỗi trỏ vào ô mã, chỉ một lỗi 500 câm.
+    //
+    // `bypass: true` ở đây an toàn và hẹp: chỉ hỏi "mã này có ai dùng chưa", select
+    // đúng `id`, không trả về gì của cơ sở khác. Thông báo cũng chỉ nói "mã đã
+    // dùng", không nói khung nào của ai.
+    const trung = await taoDbBoQuaPhamVi(actor).trnRubric.findFirst({
       where: { code: input.code },
       select: { id: true },
     });
-    // ⚠️ Bắt TRÙNG MÃ ở đây thay vì để `P2002` bay lên: `code` là `@unique` TOÀN
-    // HỆ THỐNG, nên một người ở CS1 có thể đụng mã của khung CS2 mà họ không có
-    // quyền nhìn thấy. Thông báo phải nói "mã đã dùng", không nói "khung nào".
     if (trung) {
       throw new ActionError(
         "MA_DA_DUNG",
@@ -92,19 +114,33 @@ export const cauHinhTaoKhung: ActionConfig<TaoKhungInput, { rubricId: string }> 
       );
     }
 
-    const khung = await db.trnRubric.create({
-      data: {
-        code: input.code,
-        title: input.title,
-        totalPoints: input.totalPoints,
-        passPoints: input.passPoints,
-        status: "DRAFT",
-        ownerUserId: actor.userId,
-        centerId,
-        orgUnitId,
-      },
-      select: { id: true },
-    });
+    let khung: { id: string };
+    try {
+      khung = await db.trnRubric.create({
+        data: {
+          code: input.code,
+          title: input.title,
+          totalPoints: input.totalPoints,
+          passPoints: input.passPoints,
+          status: "DRAFT",
+          ownerUserId: actor.userId,
+          centerId,
+          orgUnitId,
+        },
+        select: { id: true },
+      });
+    } catch (e) {
+      // Lưới đỡ cho ca hai người cùng gõ một mã trong cùng một khoảnh khắc: phép
+      // kiểm ở trên chạy TRƯỚC lượt ghi, nên nó không đóng được cửa sổ đó.
+      if (laVaKhoa(e, "code")) {
+        throw new ActionError(
+          "MA_DA_DUNG",
+          `Mã "${input.code}" đã có khung khác dùng — chọn mã khác`,
+          "code",
+        );
+      }
+      throw e;
+    }
 
     return {
       entityId: khung.id,
@@ -122,10 +158,28 @@ export const cauHinhTaoKhung: ActionConfig<TaoKhungInput, { rubricId: string }> 
 type TxDb = Parameters<Parameters<ScopedDb["$transaction"]>[0]>[0];
 
 /**
- * Nạp khung QUA `scopedDb` — chính lượt đọc đó là cổng cách ly.
+ * Va khoá DUY NHẤT trên một cột cụ thể.
  *
- * `scopedDb` không che đường ghi, nên mọi đường sửa phải mượn một lượt ĐỌC. Bỏ
- * bước này thì `update` theo `id` sửa được khung của cơ sở khác.
+ * ⚠️ Đọc `e.code`, KHÔNG soi chuỗi thông báo: Prisma đặt mã ở `code`, còn `message`
+ * không chứa "P2002". Một nhánh bắt lỗi soi chuỗi sẽ không bao giờ chạy — repo đã
+ * mắc đúng lỗi đó một lần.
+ */
+function laVaKhoa(e: unknown, cot: string): boolean {
+  const p = e as { code?: string; meta?: { target?: unknown } };
+  if (p?.code !== "P2002") return false;
+  const t = p.meta?.target;
+  const ds = Array.isArray(t) ? t.map(String) : typeof t === "string" ? [t] : [];
+  return ds.some((x) => x.includes(cot));
+}
+
+/**
+ * Nạp khung QUA `scopedDb`.
+ *
+ * ⚠️ Lượt đọc này là cổng cách ly cho khung CÓ CƠ SỞ, và CHỈ cho khung có cơ sở.
+ * `TrnRubric` nằm trong `NULL_IS_GLOBAL_MODELS` nên khung dùng chung
+ * (`centerId = null`) lọt qua nó với MỌI actor — cố ý, để kho chung không tàng
+ * hình. Mượn nó làm cổng GHI là biến "ai cũng đọc được" thành "ai cũng sửa được".
+ * Vì vậy mọi đường ghi còn phải gọi `chanGhiBanGhiChung`.
  */
 async function napKhung(db: ScopedDb, rubricId: string) {
   const khung = await db.trnRubric.findFirst({
@@ -137,6 +191,9 @@ async function napKhung(db: ScopedDb, rubricId: string) {
       status: true,
       totalPoints: true,
       passPoints: true,
+      // ⚠️ PHẢI đọc `centerId`: lượt đọc này KHÔNG phải cổng ghi cho khung dùng
+      // chung. Xem `chanGhiBanGhiChung`.
+      centerId: true,
     },
   });
   if (!khung) throw new ActionError("NOT_FOUND", "Không tìm thấy khung chấm");
@@ -175,8 +232,14 @@ export const cauHinhSuaKhung: ActionConfig<SuaKhungInput, { id: string }> = {
   entityType: "TrnRubric",
   auditAction: "UPDATE",
   schema: suaKhungSchema,
-  handler: async ({ db, input }) => {
+  handler: async ({ db, actor, input }) => {
     const khung = await napKhung(db, input.rubricId);
+    chanGhiBanGhiChung({
+      actor,
+      centerId: khung.centerId,
+      permission: "elearning:content:author",
+      viec: "sửa khung này",
+    });
     chanKhiDaKichHoat(khung, "sửa thông số");
 
     if (input.passPoints > input.totalPoints) {
@@ -188,7 +251,8 @@ export const cauHinhSuaKhung: ActionConfig<SuaKhungInput, { id: string }> = {
     }
 
     if (input.code !== khung.code) {
-      const trung = await db.trnRubric.findFirst({
+      // Cùng lý do với đường TẠO: `scopedDb` mù mã của cơ sở khác.
+      const trung = await taoDbBoQuaPhamVi(actor).trnRubric.findFirst({
         where: { code: input.code, NOT: { id: khung.id } },
         select: { id: true },
       });
@@ -201,15 +265,26 @@ export const cauHinhSuaKhung: ActionConfig<SuaKhungInput, { id: string }> = {
       }
     }
 
-    await db.trnRubric.update({
-      where: { id: khung.id },
-      data: {
-        code: input.code,
-        title: input.title,
-        totalPoints: input.totalPoints,
-        passPoints: input.passPoints,
-      },
-    });
+    try {
+      await db.trnRubric.update({
+        where: { id: khung.id },
+        data: {
+          code: input.code,
+          title: input.title,
+          totalPoints: input.totalPoints,
+          passPoints: input.passPoints,
+        },
+      });
+    } catch (e) {
+      if (laVaKhoa(e, "code")) {
+        throw new ActionError(
+          "MA_DA_DUNG",
+          `Mã "${input.code}" đã có khung khác dùng — chọn mã khác`,
+          "code",
+        );
+      }
+      throw e;
+    }
 
     return {
       entityId: khung.id,
@@ -255,8 +330,14 @@ export const cauHinhThemTieuChi: ActionConfig<
   entityType: "TrnRubricCriterion",
   auditAction: "CREATE",
   schema: themTieuChiSchema,
-  handler: async ({ db, input }) => {
+  handler: async ({ db, actor, input }) => {
     const khung = await napKhung(db, input.rubricId);
+    chanGhiBanGhiChung({
+      actor,
+      centerId: khung.centerId,
+      permission: "elearning:content:author",
+      viec: "thêm tiêu chí cho khung này",
+    });
     chanKhiDaKichHoat(khung, "thêm tiêu chí");
 
     const cuoi = await db.trnRubricCriterion.findFirst({
@@ -268,19 +349,39 @@ export const cauHinhThemTieuChi: ActionConfig<
     // `weight` = điểm mức CAO NHẤT của tiêu chí. Giữ một cột suy được để báo cáo và
     // màn soạn khỏi phải mở `levelsJson` ra tính lại — nhưng nó KHÔNG phải nguồn
     // sự thật: phép cộng thang điểm luôn đọc `levelsJson`.
+    //
+    // KHÔNG cần `Math.round`: điểm mức đã là số nguyên ở tầng Zod. Làm tròn ở đây
+    // từng là chỗ audit ghi một con số KHÁC con số đã lưu — CREATE ghi bản chưa làm
+    // tròn, UPDATE ghi bản đã làm tròn, và dấu vết kiểm toán sinh ra một thay đổi
+    // không ai thực hiện.
     const weight = Math.max(...input.levels.map((m: Muc) => m.points));
 
-    const tc = await db.trnRubricCriterion.create({
-      data: {
-        rubricId: khung.id,
-        label: input.label,
-        description: input.description ?? null,
-        weight: Math.round(weight),
-        orderIndex: (cuoi?.orderIndex ?? -1) + 1,
-        levelsJson: input.levels,
-      },
-      select: { id: true },
-    });
+    // ⚠️ Đọc `orderIndex` lớn nhất rồi mới ghi là một cửa sổ đua: hai tab cùng thêm
+    // tiêu chí sẽ tính ra cùng một số và va `@@unique([rubricId, orderIndex])`.
+    // `P2002` không phải `ActionError` nên nó thoát khỏi `runAction` thành lỗi 500
+    // câm — người soạn thấy nút quay tít rồi thôi, không biết đã lưu hay chưa.
+    let tc: { id: string };
+    try {
+      tc = await db.trnRubricCriterion.create({
+        data: {
+          rubricId: khung.id,
+          label: input.label,
+          description: input.description ?? null,
+          weight,
+          orderIndex: (cuoi?.orderIndex ?? -1) + 1,
+          levelsJson: input.levels,
+        },
+        select: { id: true },
+      });
+    } catch (e) {
+      if (laVaKhoa(e, "orderIndex")) {
+        throw new ActionError(
+          "DANG_CO_NGUOI_SUA",
+          "Có người vừa thêm tiêu chí cho khung này — tải lại trang rồi thêm lại",
+        );
+      }
+      throw e;
+    }
 
     return {
       entityId: tc.id,
@@ -326,13 +427,17 @@ export const cauHinhSuaTieuChi: ActionConfig<SuaTieuChiInput, { id: string }> = 
   entityType: "TrnRubricCriterion",
   auditAction: "UPDATE",
   schema: suaTieuChiSchema,
-  handler: async ({ db, input }) => {
+  handler: async ({ db, actor, input }) => {
     const { tc, khung } = await napTieuChi(db, input.criterionId);
+    chanGhiBanGhiChung({
+      actor,
+      centerId: khung.centerId,
+      permission: "elearning:content:author",
+      viec: "sửa tiêu chí của khung này",
+    });
     chanKhiDaKichHoat(khung, "sửa tiêu chí");
 
-    const weight = Math.round(
-      Math.max(...input.levels.map((m: Muc) => m.points)),
-    );
+    const weight = Math.max(...input.levels.map((m: Muc) => m.points));
 
     await db.trnRubricCriterion.update({
       where: { id: tc.id },
@@ -365,8 +470,14 @@ export const cauHinhXoaTieuChi: ActionConfig<XoaTieuChiInput, { id: string }> = 
   entityType: "TrnRubricCriterion",
   auditAction: "DELETE",
   schema: xoaTieuChiSchema,
-  handler: async ({ db, input }) => {
+  handler: async ({ db, actor, input }) => {
     const { tc, khung } = await napTieuChi(db, input.criterionId);
+    chanGhiBanGhiChung({
+      actor,
+      centerId: khung.centerId,
+      permission: "elearning:content:author",
+      viec: "xoá tiêu chí của khung này",
+    });
     chanKhiDaKichHoat(khung, "xoá tiêu chí");
 
     await db.trnRubricCriterion.delete({ where: { id: tc.id } });
@@ -397,8 +508,14 @@ export const cauHinhSapXepTieuChi: ActionConfig<
   entityType: "TrnRubric",
   auditAction: "UPDATE",
   schema: sapXepTieuChiSchema,
-  handler: async ({ db, input }) => {
+  handler: async ({ db, actor, input }) => {
     const khung = await napKhung(db, input.rubricId);
+    chanGhiBanGhiChung({
+      actor,
+      centerId: khung.centerId,
+      permission: "elearning:content:author",
+      viec: "sắp xếp tiêu chí của khung này",
+    });
     chanKhiDaKichHoat(khung, "sắp xếp tiêu chí");
 
     const hienCo = await db.trnRubricCriterion.findMany({
@@ -466,8 +583,17 @@ export const cauHinhKichHoatKhung: ActionConfig<
   entityType: "TrnRubric",
   auditAction: "UPDATE",
   schema: kichHoatKhungSchema,
-  handler: async ({ db, input }) => {
+  handler: async ({ db, actor, input }) => {
     const khung = await napKhung(db, input.rubricId);
+    // ⚠️ Kích hoạt là ĐÓNG BĂNG và KHÔNG có đường đảo lại trong ứng dụng. Một lượt
+    // kích hoạt nhầm trên khung dùng chung chỉ gỡ được bằng tay trên DB, trong khi
+    // mọi cơ sở đã chấm bằng nó.
+    chanGhiBanGhiChung({
+      actor,
+      centerId: khung.centerId,
+      permission: "elearning:content:publish",
+      viec: "kích hoạt khung này",
+    });
     if (khung.status !== "DRAFT") {
       throw new ActionError("KHUNG_DA_KICH_HOAT", "Khung này đã kích hoạt rồi");
     }

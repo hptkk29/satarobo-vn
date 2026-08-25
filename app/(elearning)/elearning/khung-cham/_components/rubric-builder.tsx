@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
 import {
+  suaKhungAction,
   themTieuChiAction,
   suaTieuChiAction,
   xoaTieuChiAction,
@@ -43,6 +44,8 @@ const diemToiDa = (levels: Muc[]) =>
 
 export function RubricBuilder(props: {
   rubricId: string;
+  code: string;
+  title: string;
   status: string;
   totalPoints: number;
   passPoints: number;
@@ -51,7 +54,6 @@ export function RubricBuilder(props: {
 }) {
   const router = useRouter();
   const [dangChay, batDau] = useTransition();
-  const [thuTu, setThuTu] = useState(props.cacTieuChi.map((t) => t.criterionId));
   const [soan, setSoan] = useState<{
     criterionId: string | null;
     label: string;
@@ -59,6 +61,25 @@ export function RubricBuilder(props: {
     levels: Muc[];
   } | null>(null);
   const [xoaId, setXoaId] = useState<string | null>(null);
+  const [suaKhung, setSuaKhung] = useState<{
+    code: string;
+    title: string;
+    totalPoints: string;
+    passPoints: string;
+  } | null>(null);
+
+  /**
+   * ⚠️ Thứ tự tiêu chí đọc THẲNG từ props, KHÔNG giữ trong `useState`.
+   *
+   * `useState` chỉ đọc giá trị khởi tạo ở lượt kết xuất ĐẦU TIÊN. Giữ danh sách id
+   * trong state thì sau mỗi lần thêm/xoá tiêu chí + `router.refresh()`, state vẫn
+   * là danh sách CŨ — nút ↑ gửi lên một bộ id thiếu (hoặc thừa) và server trả
+   * `THU_TU_KHONG_KHOP`; tệ hơn, nếu số lượng tình cờ khớp thì nó GHI NHẦM thứ tự.
+   *
+   * Cùng một lớp lỗi với `dangHuy` ở trình tải video và ba state của trình làm bài
+   * thi. Cách chữa rẻ nhất là đừng nhân bản trạng thái mà server đã có.
+   */
+  const thuTu = props.cacTieuChi.map((t) => t.criterionId);
 
   const khoa = props.status !== "DRAFT";
   const tongDiem = props.cacTieuChi.reduce(
@@ -66,6 +87,21 @@ export function RubricBuilder(props: {
     0,
   );
   const lechThang = tongDiem !== props.totalPoints;
+
+  const khungSaiSo = suaKhung
+    ? !Number.isInteger(Number(suaKhung.totalPoints)) ||
+      !Number.isInteger(Number(suaKhung.passPoints)) ||
+      suaKhung.totalPoints.trim() === "" ||
+      suaKhung.passPoints.trim() === "" ||
+      Number(suaKhung.passPoints) > Number(suaKhung.totalPoints) ||
+      suaKhung.code.trim().length < 3 ||
+      suaKhung.title.trim().length < 3
+    : false;
+
+  // ⚠️ Tiêu chí có `levelsJson` không đọc được đọc ra danh sách mức RỖNG. Nút kích
+  // hoạt phải khoá vì server chắc chắn ném `TIEU_CHI_HONG` — và con số "tổng X/Y"
+  // trên màn cũng đang thiếu phần điểm của tiêu chí đó, tức nó là số SAI.
+  const coTieuChiHong = props.cacTieuChi.some((t) => t.levels.length === 0);
 
   const chay = (
     fn: () => Promise<{ ok: boolean; error?: { message: string } }>,
@@ -127,10 +163,14 @@ export function RubricBuilder(props: {
         </p>
         {lechThang && props.cacTieuChi.length > 0 ? (
           // Nói TRƯỚC, và nói LỆCH BAO NHIÊU — "không khớp" bắt người ta tự đếm.
+          // ⚠️ Câu này bày ra HAI lối đi (sửa tiêu chí, hoặc sửa thang), nên cả hai
+          // phải bấm được. Trước đó chỉ có lối thứ nhất: `suaKhungAction` tồn tại
+          // nhưng không màn nào gọi — một lựa chọn không có đường đi, đúng thứ quy
+          // ước 20 cấm.
           <p className="mt-1 text-xs text-amber-800">
             Tổng điểm các tiêu chí đang {tongDiem > props.totalPoints ? "thừa" : "thiếu"}{" "}
             {Math.abs(tongDiem - props.totalPoints)} so với thang {props.totalPoints}.
-            Kích hoạt sẽ bị từ chối cho tới khi khớp.
+            Sửa điểm các mức, hoặc đổi thang bên dưới.
           </p>
         ) : null}
         {khoa ? (
@@ -140,6 +180,109 @@ export function RubricBuilder(props: {
           </p>
         ) : null}
       </div>
+
+      {!khoa ? (
+        <div className="rounded-md border p-3 text-sm">
+          {suaKhung ? (
+            <div className="space-y-2">
+              <label className="block text-xs">
+                <span className="text-muted-foreground">Mã khung</span>
+                <input
+                  value={suaKhung.code}
+                  onChange={(e) =>
+                    setSuaKhung({ ...suaKhung, code: e.target.value })
+                  }
+                  maxLength={40}
+                  className="mt-1 w-full rounded-md border px-2 py-1 font-mono text-sm"
+                />
+              </label>
+              <label className="block text-xs">
+                <span className="text-muted-foreground">Tên khung</span>
+                <input
+                  value={suaKhung.title}
+                  onChange={(e) =>
+                    setSuaKhung({ ...suaKhung, title: e.target.value })
+                  }
+                  maxLength={200}
+                  className="mt-1 w-full rounded-md border px-2 py-1 text-sm"
+                />
+              </label>
+              <div className="flex flex-wrap gap-3">
+                <label className="text-xs">
+                  <span className="text-muted-foreground">Thang điểm</span>
+                  <input
+                    type="number"
+                    min={1}
+                    value={suaKhung.totalPoints}
+                    onChange={(e) =>
+                      setSuaKhung({ ...suaKhung, totalPoints: e.target.value })
+                    }
+                    className="mt-1 block w-24 rounded-md border px-2 py-1 text-sm"
+                  />
+                </label>
+                <label className="text-xs">
+                  <span className="text-muted-foreground">
+                    Ngưỡng đạt (điểm, không phải %)
+                  </span>
+                  <input
+                    type="number"
+                    min={0}
+                    value={suaKhung.passPoints}
+                    onChange={(e) =>
+                      setSuaKhung({ ...suaKhung, passPoints: e.target.value })
+                    }
+                    className="mt-1 block w-24 rounded-md border px-2 py-1 text-sm"
+                  />
+                </label>
+              </div>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  disabled={dangChay || khungSaiSo}
+                  onClick={() =>
+                    chay(
+                      () =>
+                        suaKhungAction({
+                          rubricId: props.rubricId,
+                          code: suaKhung.code.trim().toUpperCase(),
+                          title: suaKhung.title.trim(),
+                          totalPoints: Number(suaKhung.totalPoints),
+                          passPoints: Number(suaKhung.passPoints),
+                        }),
+                      "Đã lưu thông số khung",
+                    )
+                  }
+                  className="rounded-md bg-primary px-3 py-1.5 text-xs text-primary-foreground disabled:opacity-50"
+                >
+                  Lưu
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSuaKhung(null)}
+                  className="rounded-md border px-3 py-1.5 text-xs"
+                >
+                  Thôi
+                </button>
+              </div>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() =>
+                setSuaKhung({
+                  code: props.code,
+                  title: props.title,
+                  totalPoints: String(props.totalPoints),
+                  passPoints: String(props.passPoints),
+                })
+              }
+              className="rounded-md border px-2 py-1 text-xs"
+            >
+              Sửa thông số khung
+            </button>
+          )}
+        </div>
+      ) : null}
 
       <ol className="space-y-2">
         {props.cacTieuChi.map((t, i) => (
@@ -203,7 +346,6 @@ export function RubricBuilder(props: {
                       const moi = [...thuTu];
                       const a = moi.indexOf(t.criterionId);
                       [moi[a - 1], moi[a]] = [moi[a]!, moi[a - 1]!];
-                      setThuTu(moi);
                       chay(
                         () =>
                           sapXepTieuChiAction({
@@ -369,7 +511,12 @@ export function RubricBuilder(props: {
             <>
               <button
                 type="button"
-                disabled={dangChay || props.cacTieuChi.length === 0 || lechThang}
+                disabled={
+                  dangChay ||
+                  props.cacTieuChi.length === 0 ||
+                  lechThang ||
+                  coTieuChiHong
+                }
                 onClick={() =>
                   chay(
                     () => kichHoatKhungAction({ rubricId: props.rubricId }),

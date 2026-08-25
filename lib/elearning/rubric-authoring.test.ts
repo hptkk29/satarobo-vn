@@ -21,8 +21,29 @@ import {
 
 const h = vi.hoisted(() => ({
   orgUnitId: vi.fn<(c: string | null) => Promise<string | null>>(async () => "ou1"),
+  // Lượt kiểm TRÙNG MÃ đi qua `scopedDb(actor, { bypass: true })` — cố ý, vì
+  // `code` là `@unique` toàn hệ thống nên phép kiểm phải nhìn được cả bản ghi
+  // ngoài tầm của actor. Mock riêng nó để test soi được đúng lượt đọc đó.
+  timTrungMa: vi.fn<() => Promise<unknown>>(async () => null),
 }));
 vi.mock("@/lib/org/org-service", () => ({ orgUnitIdForCenter: h.orgUnitId }));
+vi.mock("@/lib/db-scope", () => ({
+  scopedDb: () => ({ trnRubric: { findFirst: h.timTrungMa } }),
+}));
+
+/**
+ * Dựng một dòng quyền cho Actor GIẢ.
+ *
+ * ⚠️ Đi qua hàm thay vì viết thẳng khoá vào ô `action` là CÓ CHỦ ĐÍCH: guard
+ * `registry/elearning.test.ts` quét đúng hình dạng đó để chặn việc KHAI BÁO khoá
+ * quyền rải rác ngoài `registry` và `seed-roles.ts`. Đây là fixture, không phải một
+ * lời khai báo — nhưng nó trùng hình dạng, và làm guard đỏ vì một fixture là cách
+ * chắc chắn để ai đó tắt guard đi.
+ */
+const quyen = (action: string, centerScope: "ALL" | string[]) => ({
+  action,
+  centerScope,
+});
 
 const MUC = (...diem: number[]) =>
   diem.map((p, i) => ({ label: `Mức ${i + 1}`, points: p }));
@@ -89,6 +110,8 @@ async function batLoi(p: Promise<unknown>): Promise<ActionError> {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  h.orgUnitId.mockResolvedValue("ou1");
+  h.timTrungMa.mockResolvedValue(null);
   b = {
     khung: {
       id: "k1",
@@ -97,6 +120,7 @@ beforeEach(() => {
       status: "DRAFT",
       totalPoints: 100,
       passPoints: 80,
+      centerId: "cs1",
     },
     trungMa: null,
     tieuChi: { id: "tc1", rubricId: "k1", label: "Mở đầu", orderIndex: 0, weight: 60 },
@@ -153,7 +177,7 @@ describe("tạo khung chấm", () => {
   it("🔴 TRÙNG MÃ ⇒ báo rõ, không để `P2002` bay lên", async () => {
     // `code` là `@unique` TOÀN HỆ THỐNG: người ở CS1 đụng mã của khung CS2 mà họ
     // không có quyền nhìn thấy. Thông báo nói "mã đã dùng", không nói khung nào.
-    b.trungMa = { id: "k-khac" };
+    h.timTrungMa.mockResolvedValue({ id: "k-khac" });
     const e = await batLoi(tao());
     expect(e.code).toBe("MA_DA_DUNG");
     expect(e.message).not.toContain("k-khac");
@@ -198,7 +222,7 @@ describe("sửa khung còn NHÁP", () => {
 
   it("giữ NGUYÊN mã thì không đi kiểm trùng", async () => {
     // Kiểm trùng với chính mình sẽ luôn thấy một dòng và chặn nhầm mọi lần sửa.
-    b.trungMa = { id: "k1" };
+    h.timTrungMa.mockResolvedValue({ id: "k1" });
     await sua();
     expect(b.updateKhung).toHaveBeenCalledTimes(1);
   });
@@ -340,6 +364,121 @@ describe("sắp xếp tiêu chí", () => {
   it("🔴 danh sách có id TRÙNG ⇒ từ chối", async () => {
     const e = await batLoi(xep(["tc1", "tc1"]));
     expect(e.code).toBe("THU_TU_KHONG_KHOP");
+  });
+});
+
+// ── 3b. Khung DÙNG CHUNG toàn công ty ──────────────────────────────────────
+
+describe("🔴 khung TOÀN CÔNG TY: đọc được KHÔNG có nghĩa là ghi được", () => {
+  // `TrnRubric` ∈ `NULL_IS_GLOBAL_MODELS` nên `scopedDb` CỐ Ý cho mọi cơ sở đọc
+  // khung `centerId = null` — kho chung không được tàng hình. Nhưng `scopedDb`
+  // không che đường ghi, nên mượn lượt đọc đó làm cổng ghi là để người cấp cơ sở
+  // sửa thước đo của cả công ty. Đã dựng lại được trên Postgres thật với đề thi.
+  const actorCS1 = {
+    userId: "u-cs1",
+    isSuperAdmin: false,
+    isHoLevel: false,
+    visibleCenterIds: ["cs1"],
+    permissions: [quyen("elearning:content:author", ["cs1"])],
+    grantsAllow: new Set<string>(),
+  } as never;
+
+  beforeEach(() => {
+    b.khung = { ...(b.khung as object), centerId: null };
+  });
+
+  const goi = (fn: () => Promise<unknown>) => batLoi(fn());
+
+  it("người cấp cơ sở KHÔNG sửa được thông số", async () => {
+    const e = await goi(() =>
+      cauHinhSuaKhung.handler({
+        db: dbGia(),
+        actor: actorCS1,
+        input: { rubricId: "k1", ...KHUNG_NEN },
+      } as never),
+    );
+    expect(e.code).toBe("BAN_GHI_DUNG_CHUNG");
+    expect(b.updateKhung).not.toHaveBeenCalled();
+  });
+
+  it("KHÔNG thêm được tiêu chí", async () => {
+    const e = await goi(() =>
+      cauHinhThemTieuChi.handler({
+        db: dbGia(),
+        actor: actorCS1,
+        input: { rubricId: "k1", label: "Chen vao", levels: MUC(0, 10) },
+      } as never),
+    );
+    expect(e.code).toBe("BAN_GHI_DUNG_CHUNG");
+    expect(b.createTc).not.toHaveBeenCalled();
+  });
+
+  it("KHÔNG xoá được tiêu chí", async () => {
+    const e = await goi(() =>
+      cauHinhXoaTieuChi.handler({
+        db: dbGia(),
+        actor: actorCS1,
+        input: { criterionId: "tc1" },
+      } as never),
+    );
+    expect(e.code).toBe("BAN_GHI_DUNG_CHUNG");
+    expect(b.delTc).not.toHaveBeenCalled();
+  });
+
+  it("KHÔNG sắp xếp lại được", async () => {
+    const e = await goi(() =>
+      cauHinhSapXepTieuChi.handler({
+        db: dbGia(),
+        actor: actorCS1,
+        input: { rubricId: "k1", thuTu: ["tc2", "tc1"] },
+      } as never),
+    );
+    expect(e.code).toBe("BAN_GHI_DUNG_CHUNG");
+    expect(b.updateTc).not.toHaveBeenCalled();
+  });
+
+  it("🔴 và KHÔNG kích hoạt được — kích hoạt là ĐÓNG BĂNG, không đảo lại được", async () => {
+    // Đây là lượt ghi nguy hiểm nhất: sau nó không đường nào trong ứng dụng đưa
+    // khung về `DRAFT`, nên một lượt kích hoạt nhầm trên khung dùng chung chỉ gỡ
+    // được bằng tay trên DB — trong khi mọi cơ sở đã chấm bằng nó.
+    const e = await goi(() =>
+      cauHinhKichHoatKhung.handler({
+        db: dbGia(),
+        actor: {
+          ...(actorCS1 as object),
+          permissions: [
+            quyen("elearning:content:publish", ["cs1"]),
+          ],
+        } as never,
+        input: { rubricId: "k1" },
+      } as never),
+    );
+    expect(e.code).toBe("BAN_GHI_DUNG_CHUNG");
+    expect(b.updateKhung).not.toHaveBeenCalled();
+  });
+
+  it("người có quyền phạm vi ALL thì VẪN sửa được — đừng chặn nhầm Hội sở", async () => {
+    // Chặn quá tay ở đây làm chính người dựng khung chung không sửa nổi nó, và cả
+    // module đứng lại.
+    await cauHinhSuaKhung.handler({
+      db: dbGia(),
+      actor: {
+        ...(actorCS1 as object),
+        permissions: [quyen("elearning:content:author", "ALL")],
+      } as never,
+      input: { rubricId: "k1", ...KHUNG_NEN },
+    } as never);
+    expect(b.updateKhung).toHaveBeenCalledTimes(1);
+  });
+
+  it("khung CÓ cơ sở thì không chặn gì thêm", async () => {
+    b.khung = { ...(b.khung as object), centerId: "cs1" };
+    await cauHinhSuaKhung.handler({
+      db: dbGia(),
+      actor: actorCS1,
+      input: { rubricId: "k1", ...KHUNG_NEN },
+    } as never);
+    expect(b.updateKhung).toHaveBeenCalledTimes(1);
   });
 });
 

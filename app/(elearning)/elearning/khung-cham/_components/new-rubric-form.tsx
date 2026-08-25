@@ -23,10 +23,18 @@ export function NewRubricForm() {
     passPoints: "80",
   });
 
-  const tong = Number(f.totalPoints);
-  const dat = Number(f.passPoints);
-  const nguongVuot =
-    Number.isFinite(tong) && Number.isFinite(dat) && dat > tong;
+  // ⚠️ Ô TRỐNG khác số 0. `Number("")` là `0`, nên xoá trắng ô "Ngưỡng đạt" rồi
+  // bấm Tạo sẽ dựng một khung mà MỌI bài đều đạt — hoàn toàn im lặng, vì `0` là
+  // giá trị hợp lệ với Zod (`min(0)`). Đọc ô rỗng thành `NaN` để nó rơi vào nhánh
+  // "chưa nhập" thay vì nhánh "nhập số không".
+  const doSo = (v: string) => (v.trim() === "" ? NaN : Number(v));
+  const tong = doSo(f.totalPoints);
+  const dat = doSo(f.passPoints);
+  const thieuSo = !Number.isInteger(tong) || !Number.isInteger(dat);
+  const nguongVuot = !thieuSo && dat > tong;
+  // Ngưỡng 0 là hợp lệ về kỹ thuật nhưng gần như luôn là gõ nhầm: nó nghĩa là ai
+  // nộp cũng đạt. Cảnh báo, KHÔNG chặn — có thể ai đó thật sự muốn thế.
+  const nguongKhong = !thieuSo && dat === 0;
 
   const tao = () =>
     batDau(async () => {
@@ -114,6 +122,16 @@ export function NewRubricForm() {
           Ngưỡng đạt đang lớn hơn thang điểm — không ai qua được khung này.
         </p>
       ) : null}
+      {thieuSo ? (
+        <p className="text-xs text-red-600">
+          Thang điểm và ngưỡng đạt phải là số nguyên.
+        </p>
+      ) : null}
+      {nguongKhong ? (
+        <p className="text-xs text-amber-700">
+          Ngưỡng đạt bằng 0 — mọi bài nộp đều sẽ "đạt". Nếu không cố ý thì sửa lại.
+        </p>
+      ) : null}
 
       <p className="text-xs text-muted-foreground">
         Tổng điểm các tiêu chí phải khớp thang điểm — hệ thống kiểm lúc kích hoạt.
@@ -124,6 +142,7 @@ export function NewRubricForm() {
           type="button"
           disabled={
             dangChay ||
+            thieuSo ||
             nguongVuot ||
             f.code.trim().length < 3 ||
             f.title.trim().length < 3

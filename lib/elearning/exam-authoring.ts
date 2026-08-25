@@ -7,6 +7,7 @@ import { dungHaiPhaGhiThuTu } from "@/lib/elearning/course-outline";
 import { coSoCuaCauHoi } from "@/lib/elearning/question-bank";
 import { chamMayDuoc } from "@/lib/elearning/exam-grading";
 import { cueInlineSchema, laCauChamDuoc } from "@/lib/elearning/lesson-cue";
+import { chanGhiBanGhiChung } from "@/lib/elearning/global-write-guard";
 
 /**
  * EL-14c — DỰNG ĐỀ THI.
@@ -115,10 +116,16 @@ export const cauHinhTaoDe: ActionConfig<TaoDeInput, { examId: string }> = {
 type TxDb = Parameters<Parameters<ScopedDb["$transaction"]>[0]>[0];
 
 /**
- * Nạp đề QUA `scopedDb` — chính lượt đọc đó là cổng cách ly.
+ * Nạp đề QUA `scopedDb`.
  *
- * `scopedDb` không che đường ghi, nên mọi đường sửa phải mượn một lượt ĐỌC. Bỏ
- * bước này thì `update` theo `id` sửa được đề của cơ sở khác.
+ * ⚠️ Lượt đọc này là cổng cách ly cho đề CÓ CƠ SỞ, và CHỈ cho đề có cơ sở. `TrnExam`
+ * nằm trong `NULL_IS_GLOBAL_MODELS` nên đề dùng chung (`centerId = null`) lọt qua nó
+ * với MỌI actor — cố ý, để kho chung không tàng hình với người cấp cơ sở. Mượn nó
+ * làm cổng GHI là biến "ai cũng đọc được" thành "ai cũng sửa được: đo trên Postgres
+ * thật, một actor cấp cơ sở hạ `passScore` của đề dùng chung từ 80 xuống 1 và nâng
+ * `maxAttempts` lên 99, không lỗi, không cảnh báo.
+ *
+ * Vì vậy mọi đường ghi còn phải gọi `chanGhiBanGhiChung`.
  */
 async function napDe(db: ScopedDb, examId: string) {
   const de = await db.trnExam.findFirst({
@@ -131,6 +138,8 @@ async function napDe(db: ScopedDb, examId: string) {
       maxScore: true,
       durationMin: true,
       maxAttempts: true,
+      // ⚠️ PHẢI đọc `centerId`: lượt đọc này KHÔNG phải cổng ghi cho đề dùng chung.
+      centerId: true,
       _count: { select: { attempts: true } },
     },
   });
@@ -176,8 +185,14 @@ export const cauHinhThemCauVaoDe: ActionConfig<
   entityType: "TrnExamQuestion",
   auditAction: "CREATE",
   schema: themCauVaoDeSchema,
-  handler: async ({ db, input }) => {
+  handler: async ({ db, actor, input }) => {
     const de = await napDe(db, input.examId);
+    chanGhiBanGhiChung({
+      actor,
+      centerId: de.centerId,
+      permission: "elearning:content:author",
+      viec: "thêm câu vào đề này",
+    });
     chanKhiDaKichHoat(de, "thêm câu");
 
     // Câu hỏi cũng phải qua `scopedDb`: thêm được câu của cơ sở khác vào đề của
@@ -243,8 +258,14 @@ export const cauHinhGoCauKhoiDe: ActionConfig<GoCauKhoiDeInput, { daGo: boolean 
   entityType: "TrnExamQuestion",
   auditAction: "DELETE",
   schema: goCauKhoiDeSchema,
-  handler: async ({ db, input }) => {
+  handler: async ({ db, actor, input }) => {
     const de = await napDe(db, input.examId);
+    chanGhiBanGhiChung({
+      actor,
+      centerId: de.centerId,
+      permission: "elearning:content:author",
+      viec: "gỡ câu khỏi đề này",
+    });
     chanKhiDaKichHoat(de, "gỡ câu");
 
     // Câu phải thuộc ĐÚNG đề vừa qua cổng cách ly. Xoá thẳng theo `examQuestionId`
@@ -287,8 +308,14 @@ export const cauHinhSapXepDe: ActionConfig<SapXepDeInput, { soCau: number }> = {
   entityType: "TrnExam",
   auditAction: "UPDATE",
   schema: sapXepDeSchema,
-  handler: async ({ db, input }) => {
+  handler: async ({ db, actor, input }) => {
     const de = await napDe(db, input.examId);
+    chanGhiBanGhiChung({
+      actor,
+      centerId: de.centerId,
+      permission: "elearning:content:author",
+      viec: "sắp xếp đề này",
+    });
     chanKhiDaKichHoat(de, "sắp xếp lại");
 
     const hienCo = await db.trnExamQuestion.findMany({
@@ -351,8 +378,14 @@ export const cauHinhKichHoatDe: ActionConfig<
   entityType: "TrnExam",
   auditAction: "UPDATE",
   schema: kichHoatDeSchema,
-  handler: async ({ db, input }) => {
+  handler: async ({ db, actor, input }) => {
     const de = await napDe(db, input.examId);
+    chanGhiBanGhiChung({
+      actor,
+      centerId: de.centerId,
+      permission: "elearning:content:publish",
+      viec: "kích hoạt đề này",
+    });
     if (de.isActive) {
       throw new ActionError("DE_DA_KICH_HOAT", "Đề này đã kích hoạt rồi");
     }
@@ -546,8 +579,14 @@ export const cauHinhSuaDe: ActionConfig<SuaDeInput, { id: string }> = {
   entityType: "TrnExam",
   auditAction: "UPDATE",
   schema: suaDeSchema,
-  handler: async ({ db, input }) => {
+  handler: async ({ db, actor, input }) => {
     const de = await napDe(db, input.examId);
+    chanGhiBanGhiChung({
+      actor,
+      centerId: de.centerId,
+      permission: "elearning:content:author",
+      viec: "sửa đề này",
+    });
     if (de.isActive) {
       throw new ActionError(
         "DE_DA_KICH_HOAT",
