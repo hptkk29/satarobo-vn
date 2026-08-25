@@ -12,6 +12,7 @@ import {
   chuyenViTri,
   dungHaiPhaGhiThuTu,
   kiemDanBai,
+  kiemPhuDe,
   type ChuongTrongDanBai,
 } from "@/lib/elearning/course-outline";
 
@@ -149,5 +150,85 @@ describe("hàng rào trước khi XUẤT BẢN", () => {
       chuong({ id: "c2", title: "B", lessons: [bai({ contentMd: "", required: false })] }),
     ]);
     expect(r.loi.length).toBeGreaterThanOrEqual(3);
+  });
+});
+
+describe("(C10) — phụ đề là ĐIỀU KIỆN XUẤT BẢN của khoá bắt buộc", () => {
+  const video = (o: Record<string, unknown> = {}) => ({
+    id: "v1",
+    title: "Video 1",
+    kind: "VIDEO",
+    contentMd: null,
+    required: true,
+    captionKey: "elearning/caption/l1/x.vtt",
+    ...o,
+  });
+  const ch = (lessons: unknown[]): ChuongTrongDanBai =>
+    ({ id: "c1", title: "Chương 1", lessons }) as ChuongTrongDanBai;
+
+  it("khoá BẮT BUỘC, video có phụ đề ⇒ cho qua", () => {
+    const r = kiemPhuDe({ chuong: [ch([video()])], natureTag: "MANDATORY" });
+    expect(r.ok).toBe(true);
+  });
+
+  it("khoá BẮT BUỘC, video THIẾU phụ đề ⇒ chặn, và nêu TÊN bài", () => {
+    // Bổ sung phụ đề hồi tố cho khoá đã xuất bản là việc không ai làm nổi — cổng
+    // chỉ chặn được ở đây, lúc khoá chưa ra.
+    for (const k of [null, "", "   "]) {
+      const r = kiemPhuDe({
+        chuong: [ch([video({ captionKey: k, title: "Bài an toàn" })])],
+        natureTag: "MANDATORY_COMPLIANCE",
+      });
+      expect(r.ok, JSON.stringify(k)).toBe(false);
+      expect(r.loi[0]?.chiTiet).toContain("Bài an toàn");
+    }
+  });
+
+  it("khoá KHUYẾN NGHỊ / TỰ CHỌN ⇒ không đòi phụ đề", () => {
+    for (const t of ["RECOMMENDED", "OPTIONAL"]) {
+      const r = kiemPhuDe({
+        chuong: [ch([video({ captionKey: null })])],
+        natureTag: t,
+      });
+      expect(r.ok, t).toBe(true);
+    }
+  });
+
+  it("bài KHÔNG phải video thì không bị đòi phụ đề", () => {
+    const r = kiemPhuDe({
+      chuong: [ch([{ ...video(), kind: "READ", captionKey: null }])],
+      natureTag: "MANDATORY",
+    });
+    expect(r.ok).toBe(true);
+  });
+
+  it("khoá CHƯA GẮN chương trình + có video ⇒ CHẶN, nêu hai đường thoát", () => {
+    // Không biết khoá có bắt buộc hay không thì cho qua là chọn phía mà cái giá
+    // của việc sai là VĨNH VIỄN.
+    const r = kiemPhuDe({ chuong: [ch([video({ captionKey: null })])], natureTag: null });
+    expect(r.ok).toBe(false);
+    expect(r.loi[0]?.code).toBe("CHUA_BIET_KHOA_CO_BAT_BUOC");
+    expect(r.loi[0]?.chiTiet).toContain("gắn chương trình");
+    expect(r.loi[0]?.chiTiet).toContain("phụ đề");
+  });
+
+  it("khoá chưa gắn chương trình nhưng KHÔNG có video ⇒ không chặn", () => {
+    // Cổng này chỉ nói về video; chặn một khoá toàn bài đọc là chặn nhầm.
+    const r = kiemPhuDe({
+      chuong: [ch([{ ...video(), kind: "READ" }])],
+      natureTag: null,
+    });
+    expect(r.ok).toBe(true);
+  });
+
+  it("nêu ĐỦ mọi bài thiếu phụ đề, không dừng ở bài đầu", () => {
+    const r = kiemPhuDe({
+      chuong: [
+        ch([video({ id: "a", title: "A", captionKey: null })]),
+        ch([video({ id: "b", title: "B", captionKey: null })]),
+      ],
+      natureTag: "MANDATORY",
+    });
+    expect(r.loi).toHaveLength(2);
   });
 });

@@ -226,7 +226,47 @@ và người dùng kết luận hệ thống hỏng.
 
 ---
 
-## Ràng buộc kèm theo, không thuộc mười sáu quy ước nhưng dễ quên
+## Ba quy ước bổ sung — chốt qua EL-10 và EL-12 (25/08/2026)
+
+### 17. Case "đường bình thường" viết TRƯỚC case "chặn được gì"
+
+Một bộ test chỉ hỏi *"cổng có chặn đúng thứ phải chặn không"* sẽ **xanh trọn vẹn
+trên một hệ chặn tất cả mọi người**.
+
+Đã xảy ra thật ở EL-12: `chanTuaToi` so vị trí con trỏ với `maxPositionSec`, và 21
+case của hợp đồng đều xanh. Nhưng mốc đó chỉ cập nhật ở cuối mỗi nhịp, nên con trỏ
+luôn chạy trước nó — với nhịp 15 giây thì *mọi* nhịp bình thường, kể cả nhịp đầu
+tiên của mọi bài, đều trông như "nhảy tới 15 giây chưa xem". Nếu lọt: không ai xem
+nổi một video nào, và thông báo hiện ra là "khoá này không cho tua tới", một câu
+chẳng liên quan gì tới việc người học vừa làm.
+
+**Cách áp dụng:** với mọi cổng chặn, viết ít nhất một case cho người dùng ĐÚNG
+LUẬT đi qua được, và một case cho **nhịp/lượt ĐẦU TIÊN** — trạng thái khởi đầu
+(mốc 0, chưa có dòng dữ liệu) là chỗ điều kiện biên hay sai nhất.
+
+### 18. Hàm KÝ và hàm KIỂM phải đối xứng về tham số thời gian
+
+`kiemVeMedia(token, now)` có mốc kiểm, còn `kyVeMedia(input, ttl)` thì ký bằng
+`Date.now()` thật. Test buộc phải ký bằng đồng hồ thật rồi kiểm bằng mốc giả ⇒ vé
+xanh hay đỏ **tuỳ giờ chạy CI**. Loại đỏ chập chờn này không ai lần ra, và cách xử
+thường gặp là "chạy lại cho xanh".
+
+**Cách áp dụng:** hễ một hàm nhận `now` thì hàm đối ngẫu của nó cũng phải nhận.
+Áp cho mọi cặp ký/kiểm, mã hoá/giải mã, đặt hạn/soi hạn.
+
+### 19. Test canh CHỮ trong chú thích là guard tự vỡ
+
+Case của EL-10 đòi mã nguồn chứa đúng một câu tiếng Việt. Nó đỏ ngay lần đầu ai đó
+viết lại câu đó — **báo động giả trên một tệp không đổi hành vi**. Vài lần như vậy
+là người ta học được cách sửa: xoá dòng assert.
+
+**Cách áp dụng:** canh thứ chạy được. Thay vì đòi có câu "con số client chỉ để
+chặn sớm", hãy khẳng định biến mang con số client **không xuất hiện trong lời gọi
+LƯU**. Thử ngược để chắc: chèn đúng con bug vào rồi xem case có đỏ không.
+
+---
+
+## Ràng buộc kèm theo, không thuộc mười chín quy ước nhưng dễ quên
 
 - **Ngân sách cron: tối đa 2 khe** cho cả module. Bảy mốc nhắc gộp vào **một** cron quét
   (`elearning-reminders`, nhịp 15 phút); việc dọn dữ liệu thô 90 ngày gộp vào cron đêm

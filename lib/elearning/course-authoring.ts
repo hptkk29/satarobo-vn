@@ -5,6 +5,7 @@ import {
   chuyenViTri,
   dungHaiPhaGhiThuTu,
   kiemDanBai,
+  kiemPhuDe,
   type ChuongTrongDanBai,
 } from "@/lib/elearning/course-outline";
 import {
@@ -37,7 +38,16 @@ import {
 async function layKhoa(db: ScopedDb, courseId: string) {
   const c = await db.trnCourse.findFirst({
     where: { id: courseId, deletedAt: null },
-    select: { id: true, code: true, title: true, status: true, programId: true },
+    select: {
+      id: true,
+      code: true,
+      title: true,
+      status: true,
+      programId: true,
+      // (C10) — cổng phụ đề đọc `natureTag` của CHƯƠNG TRÌNH chứa khoá; khoá
+      // không mang cờ bắt buộc của riêng nó.
+      program: { select: { natureTag: true } },
+    },
   });
   if (!c) throw new ActionError("NOT_FOUND", "Không tìm thấy khoá học");
   return c;
@@ -74,7 +84,13 @@ async function docDanBai(db: ScopedDb, courseId: string): Promise<ChuongTrongDan
       lessons: {
         where: { deletedAt: null },
         orderBy: { orderIndex: "asc" },
-        select: { id: true, title: true, kind: true, contentMd: true },
+        select: {
+          id: true,
+          title: true,
+          kind: true,
+          contentMd: true,
+          captionKey: true,
+        },
       },
     },
   });
@@ -92,6 +108,7 @@ async function docDanBai(db: ScopedDb, courseId: string): Promise<ChuongTrongDan
       title: b.title,
       kind: b.kind,
       contentMd: b.contentMd,
+      captionKey: b.captionKey,
       // Bài chưa có dòng phiên bản ⇒ coi là BẮT BUỘC. Mặc định phía chặt: đoán
       // "tuỳ chọn" sẽ âm thầm bỏ bài đó khỏi điều kiện hoàn thành.
       required: batBuoc.get(b.id) ?? true,
@@ -470,7 +487,17 @@ export const cauHinhVongDoiKhoa: ActionConfig<
     }
 
     const danBai = await docDanBai(db, c.id);
-    const kiem = kiemDanBai(danBai);
+    const kiemCauTruc = kiemDanBai(danBai);
+    // (C10) — cổng phụ đề đứng NGANG HÀNG với cổng dàn bài, không phải cảnh báo
+    // mềm: bổ sung phụ đề hồi tố cho khoá đã xuất bản là việc không ai làm nổi.
+    const kiemCaption = kiemPhuDe({
+      chuong: danBai,
+      natureTag: c.program?.natureTag ?? null,
+    });
+    const kiem = {
+      ok: kiemCauTruc.ok && kiemCaption.ok,
+      loi: [...kiemCauTruc.loi, ...kiemCaption.loi],
+    };
 
     const ket = chuyenTrangThai({
       tu: ban.status as TrangThaiPhienBan,
@@ -649,7 +676,14 @@ export const cauHinhNhanBanKhoa: ActionConfig<
 /** Dùng cho màn soạn: trả dàn bài + danh sách lỗi để hiện ngay, không đợi bấm. */
 export async function docDanBaiChoMan(db: ScopedDb, courseId: string) {
   const chuong = await docDanBai(db, courseId);
-  return { chuong, kiem: kiemDanBai(chuong) };
+  const c = await layKhoa(db, courseId);
+  const cauTruc = kiemDanBai(chuong);
+  const caption = kiemPhuDe({ chuong, natureTag: c.program?.natureTag ?? null });
+  // Màn soạn phải thấy ĐỦ lỗi, kể cả lỗi phụ đề — biết trước thì sửa một lượt.
+  return {
+    chuong,
+    kiem: { ok: cauTruc.ok && caption.ok, loi: [...cauTruc.loi, ...caption.loi] },
+  };
 }
 
 export { laThayDoiMajor };

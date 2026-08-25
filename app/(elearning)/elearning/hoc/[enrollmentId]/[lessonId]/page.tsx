@@ -7,6 +7,9 @@ import { checkContentAccess } from "@/lib/elearning/content-gate";
 import { getPolicyAcceptance } from "@/lib/elearning/policy-acceptance";
 import { demoteH1 } from "@/lib/elearning/reading";
 import { ReadingTracker } from "../../_components/reading-tracker";
+import { VideoPlayer } from "../../_components/video-player";
+import { kyVeMedia } from "@/lib/elearning/media-ticket";
+import { TOC_DO_TOI_DA } from "@/lib/elearning/video-heartbeat-contract";
 
 /**
  * EL-04 — TRANG ĐỌC MỘT BÀI.
@@ -59,7 +62,15 @@ export default async function Page({
   // ── Sở hữu: khoá theo CHÍNH userId, không tin id trên URL ──────────────────
   const enrollment = await db.trnEnrollment.findFirst({
     where: { id: enrollmentId, userId: session.user.id },
-    select: { id: true, courseId: true, status: true },
+    select: {
+      id: true,
+      courseId: true,
+      status: true,
+      // Hai cột của lượt giao quyết định cách trình phát cư xử. Đọc ở đây thay vì
+      // để trình phát tự đoán: đoán mặc định "cho tua" là vô hiệu hoá cơ chế cho
+      // mọi lượt giao mà không ai thấy.
+      assignment: { select: { blockSeek: true, maxPlaybackRate: true } },
+    },
   });
   // "Không tồn tại" và "không phải của mình" trả CÙNG một màn: phân biệt là nói
   // cho người dò biết id nào có thật.
@@ -85,6 +96,9 @@ export default async function Page({
       kind: true,
       contentMd: true,
       minReadSeconds: true,
+      videoKey: true,
+      captionKey: true,
+      durationSec: true,
       module: { select: { title: true, course: { select: { title: true } } } },
     },
   });
@@ -140,12 +154,65 @@ export default async function Page({
     );
   }
 
+  // ── Bài VIDEO (EL-11) ─────────────────────────────────────────────────────
+  if (lesson.kind === "VIDEO") {
+    if (!lesson.videoKey || !lesson.durationSec) {
+      // Bài khai là video mà chưa có tệp: nói thẳng thay vì hiện khung phát rỗng
+      // rồi để người học tưởng máy mình hỏng.
+      return (
+        <TuChoi
+          title="Bài này chưa có video"
+          detail="Người soạn chưa tải tệp lên. Báo với Đào tạo để họ hoàn thiện bài."
+        />
+      );
+    }
+
+    const tienDo = await db.trnLessonProgress.findUnique({
+      where: { enrollmentId_lessonId: { enrollmentId: enrollment.id, lessonId: lesson.id } },
+      select: { coveredSec: true, maxPositionSec: true },
+    });
+
+    // ⚠️ Vé phát ký ở ĐÂY và chỉ ở đây. Đây là chỗ duy nhất đã đi qua trọn chuỗi
+    // cổng (sở hữu → chính sách → cổng nội dung), nên nó là chỗ duy nhất đủ tư
+    // cách nói "người này được xem bài này". Ký ở một API riêng nghĩa là dựng lại
+    // cả chuỗi cổng đó lần thứ hai, và bản thứ hai sẽ lệch.
+    const ve = kyVeMedia({ lessonId: lesson.id, userId: session.user.id });
+
+    return (
+      <div className="mx-auto max-w-3xl px-4 py-8">
+        <nav className="mb-2 text-xs text-muted-foreground">
+          {lesson.module.course.title} · {lesson.module.title}
+        </nav>
+        <h1 className="text-2xl font-bold">{lesson.title}</h1>
+
+        <div className="mt-6">
+          <VideoPlayer
+            enrollmentId={enrollment.id}
+            lessonId={lesson.id}
+            videoKey={lesson.videoKey}
+            captionKey={lesson.captionKey}
+            ve={ve}
+            // Nhãn hình mờ mang ĐỊNH DANH người xem. Mục đích không phải chặn quay
+            // màn hình — không cơ chế web nào chặn được — mà là làm bản quay lộ ra
+            // ai đã quay.
+            nhanMo={`${session.user.name ?? ""} · ${session.user.email ?? ""}`}
+            durationSec={lesson.durationSec}
+            coveredSecBanDau={tienDo?.coveredSec ?? 0}
+            maxPositionSecBanDau={tienDo?.maxPositionSec ?? 0}
+            chanTua={enrollment.assignment?.blockSeek ?? true}
+            tocDoToiDa={enrollment.assignment?.maxPlaybackRate ?? TOC_DO_TOI_DA}
+          />
+        </div>
+      </div>
+    );
+  }
+
   if (lesson.kind !== "READ") {
     // Các loại bài khác thuộc ticket sau. Nói thẳng thay vì hiện trang trống.
     return (
       <TuChoi
         title="Loại bài này chưa mở"
-        detail="Hiện mới hỗ trợ bài dạng đọc. Các loại khác sẽ mở ở đợt sau."
+        detail="Hiện mới hỗ trợ bài dạng đọc và video. Các loại khác sẽ mở ở đợt sau."
       />
     );
   }
