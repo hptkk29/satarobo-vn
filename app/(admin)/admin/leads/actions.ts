@@ -690,6 +690,12 @@ export async function createLeadManual(
       courseId: d.courseId || null,
       source: d.source || 'Nhập tay',
       note: d.note || null,
+      // 25/08 — nửa còn thiếu của bản vá 23/08 ("thêm cho cả hai đường"): đường
+      // SỬA đã ghi được ô này, đường TẠO thì chưa. Schema nhận + chuẩn hoá rồi
+      // BỎ, nên người gọi gửi link lên vẫn nhận `{ ok: true }` còn giá trị thì
+      // bốc hơi — không lỗi, không nhật ký. Với lead Messenger-first (chưa có
+      // SĐT) đây là thứ duy nhất nối lead ↔ hội thoại, mất là không dựng lại được.
+      facebookUrl: d.facebookUrl || null,
       status: 'NEW',
       // NGƯỜI NHẬP (23/08) — cùng nghĩa với biểu mẫu /nhap-khach-hang. Đường
       // nhập tay này cũng phải ghi, không thì "phiếu tôi nhập" thủng một nửa.
@@ -720,6 +726,9 @@ export async function createLeadManual(
       centerId,
       orgUnitId,
       source: d.source || 'Nhập tay',
+      // Đường SỬA đã ghi ô này vào nhật ký; đường TẠO bỏ trống thì lịch sử một
+      // lead có link Facebook bắt đầu bằng khoảng trắng — không truy được ai điền.
+      facebookUrl: d.facebookUrl || null,
     },
   }).catch(() => {})
 
