@@ -23,6 +23,44 @@ export const VIDEO_MIN_SEC = 5;
  * trình duyệt × hệ điều hành nữa phải thử — và người phát hiện ra tổ hợp hỏng
  * sẽ là người học, giữa buổi học.
  */
+/**
+ * Trần ĐỘ PHÂN GIẢI: 720p là **trần**, không phải sàn.
+ *
+ * Đặc tả viết "H.264 720p" mà không nói chiều nào. Chọn trần vì hai lẽ nằm ngay
+ * trong chính đặc tả: (1) **transcode là OUT** của ticket này ⇒ tệp người soạn nộp
+ * lên CHÍNH LÀ tệp người học tải về, không có bước hạ cỡ nào ở giữa; (2) NFR dữ
+ * liệu di động (≤60MB cho bài 10 phút) không thể đạt nếu bản gốc là 1080p hay 4K.
+ * Tệp NHỎ HƠN 720p thì cho qua — một bản ghi màn hình 960×540 nhẹ hơn, không có
+ * lý do gì chặn.
+ *
+ * So bằng CẠNH DÀI và CẠNH NGẮN, không bằng rộng×cao: video dựng bằng điện thoại
+ * là 720×1280, và so theo chiều rộng sẽ chặn nhầm nó.
+ */
+export const VIDEO_MAX_CANH_DAI = 1280;
+export const VIDEO_MAX_CANH_NGAN = 720;
+
+/**
+ * Trần TỐC ĐỘ BIT, tính bằng byte mỗi giây nội dung.
+ *
+ * SUY RA từ hai trần đã có (200MB / 15 phút = 13,3 MB/phút), KHÔNG viết tay con
+ * số 13,3: viết tay là mở đường cho ba con số trôi khỏi nhau, và lúc đó không ai
+ * biết con nào là chuẩn nộp thật.
+ *
+ * Vì sao cần trần này khi đã có trần dung lượng: một video 60 GIÂY nặng 200MB lọt
+ * cả hai trần cũ (dưới 200MB, dưới 15 phút) — mà đó là 200MB dữ liệu di động cho
+ * một phút nội dung, đúng cái mà NFR C11 sinh ra để chặn.
+ */
+export const VIDEO_BYTE_MOI_GIAY = VIDEO_MAX_BYTES / VIDEO_MAX_SEC;
+
+/**
+ * Trần tính như thể video dài TỐI THIỂU một phút.
+ *
+ * Không có mức miễn này thì một đoạn 5 giây chỉ được nặng 1,1MB — trong khi một
+ * đoạn mở đầu 720p 5 giây nặng 2MB là chuyện thường. Chặn nó là chặn nhầm: 2MB
+ * không đổi được quyết định nào về dữ liệu di động.
+ */
+export const VIDEO_GIAY_TOI_THIEU_TINH_TRAN = 60;
+
 export const VIDEO_MIME = "video/mp4";
 export const VIDEO_EXT = ".mp4";
 
@@ -36,7 +74,10 @@ export type LoiChuanNop =
   | "QUA_LON"
   | "QUA_DAI"
   | "QUA_NGAN"
-  | "THIEU_THOI_LUONG";
+  | "QUA_NANG"
+  | "QUA_NET"
+  | "THIEU_THOI_LUONG"
+  | "THIEU_DO_PHAN_GIAI";
 
 export type KetQuaChuanNop =
   | { ok: true }
@@ -59,6 +100,15 @@ export function kiemChuanNopVideo(input: {
   mime: string;
   sizeBytes: number;
   durationSec?: number | null;
+  /**
+   * Độ phân giải. `null` = đã đo nhưng KHÔNG đọc được ⇒ từ chối.
+   *
+   * ⚠️ Hai trường này là BẮT BUỘC trong kiểu, không `optional`: để `optional` thì
+   * một đường gọi mới quên truyền vẫn biên dịch xanh, và trần độ phân giải im
+   * lặng không áp cho đúng đường đó. Không đo được thì phải nói ra bằng `null`.
+   */
+  rong: number | null;
+  cao: number | null;
 }): KetQuaChuanNop {
   const duoi = duoiCua(input.filename);
 
@@ -116,6 +166,43 @@ export function kiemChuanNopVideo(input: {
       ok: false,
       code: "QUA_NGAN",
       message: `Video dưới ${VIDEO_MIN_SEC} giây gần như chắc chắn là tải nhầm tệp.`,
+    };
+  }
+
+  const giay = input.durationSec;
+  const tranByte = Math.round(
+    VIDEO_BYTE_MOI_GIAY * Math.max(giay, VIDEO_GIAY_TOI_THIEU_TINH_TRAN),
+  );
+  if (input.sizeBytes > tranByte) {
+    const mb = (n: number) => n / 1024 / 1024;
+    const mbMoiPhut = (mb(input.sizeBytes) / giay) * 60;
+    return {
+      ok: false,
+      code: "QUA_NANG",
+      // Nói cả con số của tệp và con số trần: người soạn phải biết phải nén tới
+      // đâu, chứ "nén lại" suông thì họ đoán và tải lại nhiều lượt.
+      message: `Video ${Math.round(mb(input.sizeBytes))}MB cho ${Math.round(
+        giay,
+      )} giây là ${mbMoiPhut.toFixed(1)}MB/phút — trần là ${(
+        mb(VIDEO_BYTE_MOI_GIAY) * 60
+      ).toFixed(1)}MB/phút. Xuất lại ở 720p với tốc độ bit khoảng 1,8 Mbps.`,
+    };
+  }
+
+  if (input.rong == null || input.cao == null) {
+    return {
+      ok: false,
+      code: "THIEU_DO_PHAN_GIAI",
+      message: "Không đọc được kích thước khung video — thử xuất lại tệp.",
+    };
+  }
+  const canhDai = Math.max(input.rong, input.cao);
+  const canhNgan = Math.min(input.rong, input.cao);
+  if (canhDai > VIDEO_MAX_CANH_DAI || canhNgan > VIDEO_MAX_CANH_NGAN) {
+    return {
+      ok: false,
+      code: "QUA_NET",
+      message: `Video tối đa 720p (${VIDEO_MAX_CANH_DAI}×${VIDEO_MAX_CANH_NGAN}). Tệp này ${input.rong}×${input.cao} — xuất lại ở 720p. Hệ thống KHÔNG hạ cỡ hộ, nên tệp nộp lên cũng là tệp người học tải về bằng dữ liệu di động.`,
     };
   }
 

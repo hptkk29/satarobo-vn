@@ -82,6 +82,10 @@ export const cauHinhLuuBaiVideo: ActionConfig<LuuBaiVideoInput, { durationSec: n
         durationSec: input.durationSec,
         videoCodec: input.codec.videoCodec,
         audioCodec: input.codec.audioCodec,
+        // `kiemCodec` chỉ đọc hai trường codec; độ phân giải đã được chặn ở
+        // bước xác minh, không kiểm lại ở đây.
+        rong: null,
+        cao: null,
       });
       if (!k.ok) throw new ActionError(k.code, THONG_BAO_CODEC[k.code], "videoKey");
     }

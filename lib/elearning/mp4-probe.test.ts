@@ -27,6 +27,7 @@ function hop(ten: string, noiDung: number[]): number[] {
 }
 
 const so32 = (n: number) => [(n >>> 24) & 255, (n >>> 16) & 255, (n >>> 8) & 255, n & 255];
+const so16 = (n: number) => [(n >>> 8) & 255, n & 255];
 
 const ftyp = (brand = "isom") => hop("ftyp", [...chu(brand), ...so32(512), ...chu("mp42")]);
 
@@ -34,8 +35,64 @@ const ftyp = (brand = "isom") => hop("ftyp", [...chu(brand), ...so32(512), ...ch
 const mvhd = (timescale: number, duration: number) =>
   hop("mvhd", [...so32(0), ...so32(0), ...so32(0), ...so32(timescale), ...so32(duration)]);
 
-const stsd = (fourcc: string) =>
-  hop("stsd", [...so32(0), ...so32(1), ...so32(16), ...chu(fourcc), 0, 0, 0, 0]);
+/**
+ * `VisualSampleEntry` THẬT — 86 byte, không phải mục 16 byte cho gọn.
+ *
+ * ⚠️ Đây là lần thứ hai fixture của chính bộ test này phải sửa vì "dựng cho gọn":
+ * lần trước là `trak` thiếu `hdlr`. Mục mẫu 16 byte không tồn tại trong mp4 thật
+ * (mục hình tối thiểu 86 byte), và chiều rộng nằm ở byte 32 — tức nằm NGOÀI mục
+ * giả. Test xanh trên mục giả đó không nói được gì về tệp thật.
+ */
+const mauHinh = (fourcc: string, rong = 1280, cao = 720) => {
+  const than = [
+    ...new Array(6).fill(0),
+    ...so16(1), // data_reference_index
+    ...so16(0),
+    ...so16(0),
+    ...so32(0),
+    ...so32(0),
+    ...so32(0), // pre_defined + reserved
+    ...so16(rong),
+    ...so16(cao),
+    ...so32(0x00480000),
+    ...so32(0x00480000), // horiz/vert resolution
+    ...so32(0),
+    ...so16(1), // reserved + frame_count
+    ...new Array(32).fill(0), // compressorname
+    ...so16(24),
+    ...so16(0xffff), // depth + pre_defined
+  ];
+  return [...so32(8 + than.length), ...chu(fourcc), ...than];
+};
+
+/**
+ * `AudioSampleEntry` — 36 byte, xếp trường KHÁC HẲN mục hình.
+ *
+ * Đúng chỗ chứa chiều rộng của mục hình (byte 32) thì ở đây là TẦN SỐ MẪU: đọc
+ * chung một công thức cho cả hai là sinh ra "video 44100×0 điểm ảnh" từ một track
+ * tiếng hoàn toàn bình thường.
+ */
+const mauTieng = (fourcc: string) => {
+  const than = [
+    ...new Array(6).fill(0),
+    ...so16(1),
+    ...so32(0),
+    ...so32(0),
+    ...so16(2),
+    ...so16(16),
+    ...so16(0),
+    ...so16(0), // channels, samplesize, pre_defined, reserved
+    ...so32(0xac440000), // samplerate 44100 dạng 16.16
+  ];
+  return [...so32(8 + than.length), ...chu(fourcc), ...than];
+};
+
+const stsd = (fourcc: string, loai: "vide" | "soun", rong?: number, cao?: number) =>
+  hop("stsd", [
+    ...so32(0),
+    ...so32(1),
+    ...(loai === "vide" ? mauHinh(fourcc, rong, cao) : mauTieng(fourcc)),
+  ]);
 
 /** hdlr: version+flags(4) pre_defined(4) handler_type(4) reserved(12) name */
 const hdlr = (loai: "vide" | "soun") =>
@@ -48,8 +105,14 @@ const hdlr = (loai: "vide" | "soun") =>
  * thật không bao giờ giống. Test xanh trên tệp giả đó không nói được gì về tệp
  * thật; ở đây nó còn che mất chính con bug đang đi tìm.
  */
-const trak = (fourcc: string, loai: "vide" | "soun" = "vide") =>
-  hop("trak", hop("mdia", [...hdlr(loai), ...hop("minf", hop("stbl", stsd(fourcc)))]));
+const trak = (fourcc: string, loai: "vide" | "soun" = "vide", rong?: number, cao?: number) =>
+  hop(
+    "trak",
+    hop("mdia", [
+      ...hdlr(loai),
+      ...hop("minf", hop("stbl", stsd(fourcc, loai, rong, cao))),
+    ]),
+  );
 
 const LOAI_CUA: Record<string, "vide" | "soun"> = {
   avc1: "vide",
@@ -60,10 +123,20 @@ const LOAI_CUA: Record<string, "vide" | "soun"> = {
   "ac-3": "soun",
 };
 
-const moov = (o: { timescale?: number; duration?: number; codecs?: string[] } = {}) =>
+const moov = (
+  o: {
+    timescale?: number;
+    duration?: number;
+    codecs?: string[];
+    rong?: number;
+    cao?: number;
+  } = {},
+) =>
   hop("moov", [
     ...mvhd(o.timescale ?? 1000, o.duration ?? 300_000),
-    ...(o.codecs ?? ["avc1", "mp4a"]).flatMap((c) => trak(c, LOAI_CUA[c] ?? "vide")),
+    ...(o.codecs ?? ["avc1", "mp4a"]).flatMap((c) =>
+      trak(c, LOAI_CUA[c] ?? "vide", o.rong, o.cao),
+    ),
   ]);
 
 const mdat = (n: number) => hop("mdat", new Array(n).fill(0));
@@ -96,6 +169,50 @@ describe("`moov` ở ĐẦU tệp (fast-start)", () => {
     const r = docMp4(b, 0, b.length);
     if (!r.xong) throw new Error("phải đọc xong");
     expect(r.durationSec).toBeNull();
+  });
+});
+
+describe("độ phân giải — đọc từ mục mẫu trong `stsd`", () => {
+  it("đọc đúng chiều rộng và chiều cao của track HÌNH", () => {
+    const b = bytes(ftyp(), moov({ rong: 1280, cao: 720 }), mdat(10));
+    const r = docMp4(b, 0, b.length);
+    if (!r.xong) throw new Error("phải đọc xong");
+    expect(r.rong).toBe(1280);
+    expect(r.cao).toBe(720);
+  });
+
+  it("video dựng DỌC đọc ra 720×1280, không tự đảo", () => {
+    const b = bytes(ftyp(), moov({ rong: 720, cao: 1280 }));
+    const r = docMp4(b, 0, b.length);
+    if (!r.xong) throw new Error("phải đọc xong");
+    expect(r.rong).toBe(720);
+    expect(r.cao).toBe(1280);
+  });
+
+  it("tệp CHỈ CÓ TIẾNG ⇒ kích thước `null`, KHÔNG phải 44100×0", () => {
+    // Byte 32 của mục mẫu tiếng là tần số mẫu. Đọc chung công thức với mục hình
+    // là bịa ra một khung hình 44100 điểm ảnh từ track tiếng bình thường.
+    const b = bytes(ftyp(), moov({ codecs: ["mp4a"] }));
+    const r = docMp4(b, 0, b.length);
+    if (!r.xong) throw new Error("phải đọc xong");
+    expect(r.rong).toBeNull();
+    expect(r.cao).toBeNull();
+    expect(r.audioCodec).toBe("mp4a");
+  });
+
+  it("mục mẫu ngắn bất thường ⇒ kích thước `null`, codec VẪN đọc được", () => {
+    // Fail-closed: không đoán kích thước từ tệp dị dạng. Nhưng cũng không vì thế
+    // mà bỏ luôn codec — hai câu hỏi khác nhau, trả lời được câu nào thì trả lời.
+    const stsdNgan = hop("stsd", [...so32(0), ...so32(1), ...so32(12), ...chu("avc1")]);
+    const trakNgan = hop(
+      "trak",
+      hop("mdia", [...hdlr("vide"), ...hop("minf", hop("stbl", stsdNgan))]),
+    );
+    const b = bytes(ftyp(), hop("moov", [...mvhd(1000, 300_000), ...trakNgan]));
+    const r = docMp4(b, 0, b.length);
+    if (!r.xong) throw new Error("phải đọc xong");
+    expect(r.videoCodec).toBe("avc1");
+    expect(r.rong).toBeNull();
   });
 });
 
@@ -192,6 +309,8 @@ describe("đối chiếu codec với chuẩn", () => {
       durationSec: 10,
       videoCodec: null,
       audioCodec: null,
+      rong: null,
+      cao: null,
     });
     expect(r.ok).toBe(false);
     if (r.ok) return;
@@ -214,7 +333,7 @@ describe("không treo trên tệp dị dạng", () => {
   });
 
   it("lồng sâu bất thường không làm đệ quy chạy mãi", () => {
-    let noi = stsd("avc1");
+    let noi = stsd("avc1", "vide");
     for (let i = 0; i < 30; i += 1) noi = hop("stbl", noi);
     const b = bytes(ftyp(), hop("moov", [...mvhd(1000, 1000), ...hop("trak", noi)]));
     const r = docMp4(b, 0, b.length);

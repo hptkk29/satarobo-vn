@@ -16,6 +16,9 @@ import {
   VIDEO_MAX_SEC,
   VIDEO_MIN_SEC,
   VIDEO_MIME,
+  VIDEO_BYTE_MOI_GIAY,
+  VIDEO_MAX_CANH_DAI,
+  VIDEO_MAX_CANH_NGAN,
 } from "@/lib/elearning/media-rules";
 import { UPLOAD_CONFIG } from "@/lib/storage/upload-config";
 
@@ -25,8 +28,12 @@ const nop = (o: Partial<Parameters<typeof kiemChuanNopVideo>[0]> = {}) =>
     mime: "video/mp4",
     sizeBytes: 50 * 1024 * 1024,
     durationSec: 300,
+    rong: 1280,
+    cao: 720,
     ...o,
   });
+
+const MB = 1024 * 1024;
 
 describe("định dạng — chỉ MP4, không nới", () => {
   it("mp4 hợp lệ thì cho qua", () => {
@@ -62,7 +69,10 @@ describe("định dạng — chỉ MP4, không nới", () => {
 
 describe("dung lượng — biên phải chính xác", () => {
   it("đúng bằng trần thì CÒN nhận", () => {
-    expect(nop({ sizeBytes: VIDEO_MAX_BYTES }).ok).toBe(true);
+    // ⚠️ Phải kèm thời lượng đủ 15 phút: 200MB CHỈ đạt chuẩn ở đúng độ dài tối
+    // đa. 200MB cho 5 phút là 40MB/phút — lọt trần dung lượng nhưng vỡ trần
+    // MB/phút, và đó là chủ ý.
+    expect(nop({ sizeBytes: VIDEO_MAX_BYTES, durationSec: VIDEO_MAX_SEC }).ok).toBe(true);
   });
 
   it("hơn trần đúng 1 byte thì từ chối", () => {
@@ -93,8 +103,9 @@ describe("thời lượng", () => {
   });
 
   it("đúng bằng sàn thì CÒN nhận, dưới 1 giây thì không", () => {
-    expect(nop({ durationSec: VIDEO_MIN_SEC }).ok).toBe(true);
-    expect(nop({ durationSec: VIDEO_MIN_SEC - 1 }).ok).toBe(false);
+    // Đoạn 5 giây thì dung lượng phải nhỏ theo — 50MB cho 5 giây vỡ trần MB/phút.
+    expect(nop({ durationSec: VIDEO_MIN_SEC, sizeBytes: 2 * MB }).ok).toBe(true);
+    expect(nop({ durationSec: VIDEO_MIN_SEC - 1, sizeBytes: 2 * MB }).ok).toBe(false);
   });
 
   it("KHÔNG đọc được thời lượng ⇒ từ chối, không bỏ qua", () => {
@@ -106,6 +117,92 @@ describe("thời lượng", () => {
       if (r.ok) continue;
       expect(r.code).toBe("THIEU_THOI_LUONG");
     }
+  });
+});
+
+describe("tốc độ bit — trần MB/phút", () => {
+  it("60 giây nặng 200MB LỌT hai trần cũ nhưng bị trần MB/phút chặn", () => {
+    // Đây chính là lỗ mà hai trần cũ để lại: dưới 200MB, dưới 15 phút, nhưng là
+    // 200MB dữ liệu di động cho MỘT phút nội dung.
+    const r = nop({ durationSec: 60, sizeBytes: 200 * MB });
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.code).toBe("QUA_NANG");
+  });
+
+  it("thông báo nói con số của tệp VÀ con số trần", () => {
+    // "Nén lại" suông thì người soạn đoán, và tải lại nhiều lượt.
+    const r = nop({ durationSec: 600, sizeBytes: 150 * MB });
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.message).toContain("15.0MB/phút");
+    expect(r.message).toContain("13.3MB/phút");
+  });
+
+  it("150MB cho 10 phút bị chặn, 60MB cho 10 phút thì không", () => {
+    // Con số của chính đặc tả: 150MB/10 phút = 15MB/phút, tức bản 360p cho mạng
+    // di động lại NẶNG HƠN bản gốc 720p — vô lý về bản chất.
+    expect(nop({ durationSec: 600, sizeBytes: 150 * MB }).ok).toBe(false);
+    expect(nop({ durationSec: 600, sizeBytes: 60 * MB }).ok).toBe(true);
+  });
+
+  it("miễn cho đoạn ngắn: tính như thể video dài tối thiểu một phút", () => {
+    // Không có mức miễn này thì đoạn 5 giây chỉ được nặng 1,1MB — trong khi đoạn
+    // mở đầu 720p 5 giây nặng 2MB là chuyện thường.
+    expect(nop({ durationSec: 5, sizeBytes: 2 * MB }).ok).toBe(true);
+    // Nhưng mức miễn là MỘT phút, không phải vô hạn.
+    expect(nop({ durationSec: 5, sizeBytes: 30 * MB }).ok).toBe(false);
+  });
+
+  it("trần MB/phút SUY RA từ hai trần đã có, không viết tay", () => {
+    // Viết tay con số 13,3 là mở đường cho ba con số trôi khỏi nhau, và lúc đó
+    // không ai biết con nào là chuẩn nộp thật.
+    expect(VIDEO_BYTE_MOI_GIAY * VIDEO_MAX_SEC).toBe(VIDEO_MAX_BYTES);
+  });
+});
+
+describe("độ phân giải — 720p là TRẦN, không phải sàn", () => {
+  it("đúng 720p thì nhận, 1080p thì không", () => {
+    expect(nop({ rong: 1280, cao: 720 }).ok).toBe(true);
+    const r = nop({ rong: 1920, cao: 1080, sizeBytes: 10 * MB });
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.code).toBe("QUA_NET");
+  });
+
+  it("NHỎ hơn 720p vẫn nhận — bản ghi màn hình 960×540 nhẹ hơn, chặn nó là chặn nhầm", () => {
+    expect(nop({ rong: 960, cao: 540 }).ok).toBe(true);
+    expect(nop({ rong: 640, cao: 360 }).ok).toBe(true);
+  });
+
+  it("video DỰNG DỌC bằng điện thoại (720×1280) vẫn nhận", () => {
+    // So theo chiều rộng thì 720×1280 trông như "rộng 720, đạt" còn 1080×1920
+    // trông như "rộng 1080, vượt" — nhưng so theo cạnh dài/cạnh ngắn mới đúng.
+    expect(nop({ rong: 720, cao: 1280 }).ok).toBe(true);
+    expect(nop({ rong: 1080, cao: 1920, sizeBytes: 10 * MB }).ok).toBe(false);
+  });
+
+  it("vượt ở CẠNH NÀO cũng bị chặn", () => {
+    expect(nop({ rong: VIDEO_MAX_CANH_DAI + 1, cao: VIDEO_MAX_CANH_NGAN }).ok).toBe(false);
+    expect(nop({ rong: VIDEO_MAX_CANH_DAI, cao: VIDEO_MAX_CANH_NGAN + 1 }).ok).toBe(false);
+  });
+
+  it("KHÔNG đọc được kích thước ⇒ từ chối, không bỏ qua", () => {
+    // Cùng lý do với thời lượng: cho qua khi không đọc được nghĩa là ai muốn
+    // lách chỉ cần nộp tệp mà bộ đọc không hiểu.
+    for (const o of [{ rong: null }, { cao: null }]) {
+      const r = nop(o);
+      expect(r.ok, JSON.stringify(o)).toBe(false);
+      if (r.ok) continue;
+      expect(r.code).toBe("THIEU_DO_PHAN_GIAI");
+    }
+  });
+
+  it("thông báo nói kích thước THẬT của tệp và nói rõ hệ KHÔNG hạ cỡ hộ", () => {
+    const r = nop({ rong: 1920, cao: 1080, sizeBytes: 10 * MB });
+    if (r.ok) return;
+    expect(r.message).toContain("1920×1080");
+    expect(r.message).toContain("KHÔNG hạ cỡ hộ");
   });
 });
 
@@ -173,6 +270,8 @@ describe("chuẩn e-learning phải CHẶT HƠN trần chung", () => {
           mime: m,
           sizeBytes: 1024,
           durationSec: 60,
+          rong: 1280,
+          cao: 720,
         }).ok,
         m,
       ).toBe(false);

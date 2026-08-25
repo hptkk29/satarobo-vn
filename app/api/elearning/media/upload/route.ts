@@ -40,6 +40,12 @@ const taoSchema = z.object({
   mime: z.string().min(1),
   sizeBytes: z.number().int().positive(),
   durationSec: z.union([z.null(), z.number().positive()]).optional(),
+  /**
+   * Độ phân giải trình duyệt đọc được. Như `durationSec`, đây là con số CHẶN SỚM
+   * chứ không phải bằng chứng — bước xác minh đọc lại từ tệp.
+   */
+  rong: z.union([z.null(), z.number().int().positive()]).optional(),
+  cao: z.union([z.null(), z.number().int().positive()]).optional(),
 });
 
 const kySchema = z.object({
@@ -116,6 +122,8 @@ export async function POST(req: NextRequest) {
       mime: input.mime,
       sizeBytes: input.sizeBytes,
       durationSec: input.durationSec ?? null,
+      rong: input.rong ?? null,
+      cao: input.cao ?? null,
     });
     if (!chuan.ok) return fail(chuan.code, chuan.message, { field: "filename" });
 

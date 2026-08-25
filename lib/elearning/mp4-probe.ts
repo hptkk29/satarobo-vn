@@ -24,6 +24,9 @@ export type KetQuaDoc =
       durationSec: number | null;
       videoCodec: CodecVideo | null;
       audioCodec: CodecAudio | null;
+      /** Độ phân giải MÃ HOÁ của track hình, đọc từ mục mẫu trong `stsd`. */
+      rong: number | null;
+      cao: number | null;
     }
   /** Chưa đủ dữ liệu — người gọi tải thêm đúng khoảng này rồi gọi lại. */
   | { xong: false; canDoc: { tu: number; dai: number } }
@@ -31,6 +34,8 @@ export type KetQuaDoc =
 
 const TEN_HOP = (b: Uint8Array, i: number): string =>
   String.fromCharCode(b[i]!, b[i + 1]!, b[i + 2]!, b[i + 3]!);
+
+const u16 = (b: Uint8Array, i: number): number => ((b[i]! << 8) | b[i + 1]!) >>> 0;
 
 const u32 = (b: Uint8Array, i: number): number =>
   ((b[i]! << 24) | (b[i + 1]! << 16) | (b[i + 2]! << 8) | b[i + 3]!) >>> 0;
@@ -87,7 +92,15 @@ function doMvhd(b: Uint8Array, h: Hop): number | null {
   return timescale > 0 ? duration / timescale : null;
 }
 
-export type Track = { loai: "vide" | "soun" | "khac"; fourcc: string | null };
+export type Track = {
+  loai: "vide" | "soun" | "khac";
+  fourcc: string | null;
+  rong: number | null;
+  cao: number | null;
+};
+
+/** Một mục mẫu trong `stsd`: mã hoá, và với track hình là cả kích thước khung. */
+type MauTrack = { fourcc: string | null; rong: number | null; cao: number | null };
 
 /**
  * Đọc từng `trak`: nó là hình hay tiếng (`hdlr`), và mã hoá bằng gì (`stsd`).
@@ -103,7 +116,18 @@ function docTracks(b: Uint8Array, tu: number, den: number): Track[] {
   for (const h of hop) {
     if (h.ten !== "trak") continue;
     const noi = Math.min(h.het, b.length);
-    ra.push({ loai: loaiTrack(b, h.noiDung, noi), fourcc: fourccTrack(b, h.noiDung, noi) });
+    const loai = loaiTrack(b, h.noiDung, noi);
+    // ⚠️ CHỈ đọc kích thước khi track là HÌNH. `AudioSampleEntry` có cách xếp
+    // trường khác hẳn `VisualSampleEntry`: đúng chỗ chứa chiều rộng của video thì
+    // ở track tiếng là số kênh và tần số mẫu. Đọc chung một công thức cho cả hai
+    // là sinh ra "video 2×16 điểm ảnh" từ một track tiếng hoàn toàn bình thường.
+    const mau = docMauTrack(b, h.noiDung, noi, loai === "vide");
+    ra.push({
+      loai,
+      fourcc: mau?.fourcc ?? null,
+      rong: mau?.rong ?? null,
+      cao: mau?.cao ?? null,
+    });
   }
   return ra;
 }
@@ -122,7 +146,22 @@ function loaiTrack(b: Uint8Array, tu: number, den: number): Track["loai"] {
   return t === "vide" || t === "soun" ? t : "khac";
 }
 
-function fourccTrack(b: Uint8Array, tu: number, den: number, sau = 0): string | null {
+/**
+ * Đọc mục mẫu đầu tiên trong `stsd`.
+ *
+ * `VisualSampleEntry` (ISO/IEC 14496-12) xếp trường như sau, tính từ đầu mục:
+ * `size(4) type(4)` · `reserved(6) data_reference_index(2)` ·
+ * `pre_defined(2) reserved(2) pre_defined(12)` · **`width(2) height(2)`** ⇒ chiều
+ * rộng nằm ở byte 32, chiều cao ở byte 34. Mục mẫu hình thật luôn dài ≥86 byte;
+ * mục ngắn hơn 36 byte là tệp dị dạng ⇒ trả `null`, KHÔNG đoán.
+ */
+function docMauTrack(
+  b: Uint8Array,
+  tu: number,
+  den: number,
+  laHinh: boolean,
+  sau = 0,
+): MauTrack | null {
   if (sau > 8) return null;
   const { hop } = duyetHop(b, tu, Math.min(den, b.length), 0);
   for (const h of hop) {
@@ -130,10 +169,16 @@ function fourccTrack(b: Uint8Array, tu: number, den: number, sau = 0): string | 
     if (h.ten === "stsd") {
       // stsd: version+flags(4) entryCount(4) rồi tới mục mẫu [size(4) type(4)]
       const p = h.noiDung + 8;
-      return p + 8 <= noi ? TEN_HOP(b, p + 4) : null;
+      if (p + 8 > noi) return null;
+      const coKichThuoc = laHinh && u32(b, p) >= 36 && p + 36 <= noi;
+      return {
+        fourcc: TEN_HOP(b, p + 4),
+        rong: coKichThuoc ? u16(b, p + 32) : null,
+        cao: coKichThuoc ? u16(b, p + 34) : null,
+      };
     }
     if (["mdia", "minf", "stbl"].includes(h.ten)) {
-      const r = fourccTrack(b, h.noiDung, noi, sau + 1);
+      const r = docMauTrack(b, h.noiDung, noi, laHinh, sau + 1);
       if (r) return r;
     }
   }
@@ -190,6 +235,8 @@ export function docMp4(b: Uint8Array, offset: number, coTep: number): KetQuaDoc 
             : "khac"
         : null,
       audioCodec: tieng ? (tieng.fourcc === "mp4a" ? "mp4a" : "khac") : null,
+      rong: hinh?.rong ?? null,
+      cao: hinh?.cao ?? null,
     };
   }
 

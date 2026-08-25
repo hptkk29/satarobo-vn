@@ -107,11 +107,17 @@ export async function GET(req: NextRequest) {
     mime: "video/mp4",
     sizeBytes: coTep,
     durationSec: kq.durationSec,
+    // Độ phân giải đọc TỪ TỆP. Truyền `null` ở đây là bỏ qua trần 720p — mà trần
+    // đó tồn tại vì hệ KHÔNG hạ cỡ hộ: tệp nộp lên chính là tệp người học tải về.
+    rong: kq.rong,
+    cao: kq.cao,
   });
   if (!chuan.ok) return fail(chuan.code, chuan.message);
 
   return ok({
     durationSec: kq.durationSec,
+    rong: kq.rong,
+    cao: kq.cao,
     videoCodec: kq.videoCodec,
     audioCodec: kq.audioCodec,
     brand: kq.brand,

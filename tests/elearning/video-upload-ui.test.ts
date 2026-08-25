@@ -74,7 +74,16 @@ describe("xác minh SAU khi tải là bước riêng, đọc từ TỆP", () => 
   it("thời lượng lưu vào bài là con số TỪ TỆP, không phải từ trình duyệt", () => {
     // Con số client khai có thể sai, hoặc bị sửa. Nó chỉ dùng chặn sớm.
     expect(chiMa(UP)).toContain("durationSec: Math.round(xm.data.durationSec)");
-    expect(UP).toContain("KHÔNG phải con số cuối cùng");
+    // ⚠️ Canh HÀNH VI, không canh câu chữ trong chú thích: bản trước của case này
+    // đòi mã nguồn chứa đúng một câu tiếng Việt, và nó đỏ ngay lần đầu ai đó viết
+    // lại câu đó — báo động giả về một tệp không hề đổi hành vi.
+    //
+    // Điều thật sự phải giữ: con số trình duyệt khai (`tam?.giay`) chỉ đi vào
+    // bước MỞ lượt tải để chặn sớm, tuyệt đối không đi vào lượt LƯU bài.
+    const iLuuGoi = chiMa(UP).indexOf("luuBaiVideoAction({");
+    const thanLuu = chiMa(UP).slice(iLuuGoi, iLuuGoi + 400);
+    expect(thanLuu).not.toContain("tam?.giay");
+    expect(thanLuu).not.toContain("tam.giay");
   });
 
   it("đường xác minh dùng bộ đọc mp4 đã test, có TRẦN lượt đọc", () => {
@@ -97,6 +106,35 @@ describe("xác minh SAU khi tải là bước riêng, đọc từ TỆP", () => 
     // nằm trên đường người học xem.
     expect(XM).toContain("transformToByteArray");
     expect(XM).toContain("ĐƯỢC dùng ở ĐÂY, khác đường phát");
+  });
+});
+
+describe("chặn SỚM: trần 720p và trần MB/phút không đợi tải xong", () => {
+  const TAI_LEN = doc("app/api/elearning/media/upload/route.ts");
+
+  it("màn tải khai kích thước khung ngay ở bước MỞ lượt tải", () => {
+    // Một tệp 1080p bị từ chối SAU khi tải xong nghĩa là người soạn đã trả giá cả
+    // lượt tải 200MB qua mạng văn phòng chỉ để biết tệp không đạt chuẩn.
+    expect(chiMa(UP)).toContain("v.videoWidth");
+    expect(chiMa(UP)).toContain("rong: tam?.rong ?? null");
+    expect(chiMa(UP)).toContain("cao: tam?.cao ?? null");
+  });
+
+  it("đường mở lượt tải truyền kích thước vào bảng chuẩn nộp", () => {
+    expect(chiMa(TAI_LEN)).toContain("kiemChuanNopVideo");
+    expect(chiMa(TAI_LEN)).toContain("rong: input.rong ?? null");
+  });
+
+  it("đường xác minh truyền kích thước ĐỌC TỪ TỆP, không truyền `null` cho xong", () => {
+    // Truyền `null` ở đó là bỏ qua trần 720p — mà trần đó tồn tại vì hệ KHÔNG hạ
+    // cỡ hộ: tệp nộp lên chính là tệp người học tải về.
+    expect(chiMa(XM)).toContain("rong: kq.rong");
+    expect(chiMa(XM)).toContain("cao: kq.cao");
+  });
+
+  it("màn soạn nói trần cho người soạn biết TRƯỚC khi chọn tệp", () => {
+    expect(UP).toContain("720p");
+    expect(UP).toContain("13,3MB");
   });
 });
 

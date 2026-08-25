@@ -63,9 +63,13 @@ export function VideoUploader(props: {
   };
 
   const tai = async (f: File) => {
-    // Đọc thời lượng ở client để chặn SỚM. Đây KHÔNG phải con số cuối cùng — máy
-    // chủ đọc lại từ tệp sau khi tải xong.
-    const thoiLuongTam = await docThoiLuong(f).catch(() => null);
+    // Đọc thời lượng và kích thước khung ở client để chặn SỚM.
+    // Đây KHÔNG phải con số cuối cùng — máy chủ đọc lại từ tệp sau khi tải xong.
+    //
+    // ⚠️ Chặn sớm không phải để tiện: một tệp 1080p hay một tệp 200MB cho 1 phút
+    // bị từ chối SAU khi tải xong nghĩa là người soạn đã trả giá cả lượt tải 200MB
+    // qua mạng văn phòng chỉ để biết tệp không đạt chuẩn.
+    const tam = await docSieuDuLieu(f).catch(() => null);
 
     setTrangThai("dang-tai");
     setXong(0);
@@ -76,7 +80,9 @@ export function VideoUploader(props: {
         filename: f.name,
         mime: f.type || "video/mp4",
         sizeBytes: f.size,
-        durationSec: thoiLuongTam,
+        durationSec: tam?.giay ?? null,
+        rong: tam?.rong ?? null,
+        cao: tam?.cao ?? null,
       })) as { khoa: string; uploadId: string; soPhan: number; partSize: number };
 
       setTong(mo.soPhan);
@@ -117,7 +123,17 @@ export function VideoUploader(props: {
       const xm = (await fetch(
         `/api/elearning/media/xac-minh?khoa=${encodeURIComponent(mo.khoa)}&lessonId=${props.lessonId}`,
       ).then((r) => r.json())) as
-        | { ok: true; data: { durationSec: number; videoCodec: string; brand: string; audioCodec: string | null } }
+        | {
+            ok: true;
+            data: {
+              durationSec: number;
+              rong: number | null;
+              cao: number | null;
+              videoCodec: string;
+              brand: string;
+              audioCodec: string | null;
+            };
+          }
         | { ok: false; error: { message: string } };
       if (!xm.ok) throw new Error(xm.error.message);
 
@@ -201,22 +217,37 @@ export function VideoUploader(props: {
       )}
 
       <p className="text-xs text-muted-foreground">
-        MP4 mã hoá H.264, tối đa 200MB và 15 phút. Phụ đề tiếng Việt là điều kiện
-        xuất bản của khoá bắt buộc.
+        MP4 mã hoá H.264, tối đa 720p · 200MB · 15 phút, và không quá 13,3MB mỗi
+        phút. Hệ thống không hạ cỡ hộ: tệp tải lên cũng chính là tệp người học tải
+        về bằng dữ liệu di động. Phụ đề tiếng Việt là điều kiện xuất bản của khoá
+        bắt buộc.
       </p>
     </section>
   );
 }
 
-/** Đọc thời lượng bằng thẻ `<video>` — chỉ để chặn sớm, không phải bằng chứng. */
-function docThoiLuong(f: File): Promise<number | null> {
+/**
+ * Đọc thời lượng và kích thước khung bằng thẻ `<video>` — chỉ để chặn sớm, không
+ * phải bằng chứng.
+ *
+ * `videoWidth`/`videoHeight` có giá trị ngay khi `loadedmetadata` bắn; tệp trình
+ * duyệt không giải mã được thì `onerror` bắn trước và ta không khai con số nào —
+ * đúng hơn là khai bừa số 0.
+ */
+function docSieuDuLieu(
+  f: File,
+): Promise<{ giay: number | null; rong: number | null; cao: number | null }> {
   return new Promise((resolve, reject) => {
     const url = URL.createObjectURL(f);
     const v = document.createElement("video");
     v.preload = "metadata";
     v.onloadedmetadata = () => {
       URL.revokeObjectURL(url);
-      resolve(Number.isFinite(v.duration) ? Math.round(v.duration) : null);
+      resolve({
+        giay: Number.isFinite(v.duration) ? Math.round(v.duration) : null,
+        rong: v.videoWidth || null,
+        cao: v.videoHeight || null,
+      });
     };
     v.onerror = () => {
       URL.revokeObjectURL(url);
