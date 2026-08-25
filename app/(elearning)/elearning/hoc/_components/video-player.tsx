@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import type { ThachThuc } from "@/lib/elearning/video-heartbeat-contract";
 
 /**
  * EL-11 — TRÌNH PHÁT VIDEO BÀI HỌC.
@@ -25,8 +26,10 @@ const API = "/api/elearning/video-heartbeat";
 /** Chu kỳ đổi vị trí hình mờ. */
 const MO_MS = 7_000;
 
-type ThachThuc = { loai: string; id: string; cauHoi: string; hanGiay: number };
-
+/**
+ * ⚠️ NHẬP kiểu từ hợp đồng, KHÔNG khai lại ở đây. Bản khai tay cũ thiếu `luaChon`
+ * và `chan`, và nó vẫn biên dịch xanh — đúng thứ hợp đồng sinh ra để chặn.
+ */
 type Phan = {
   ok: boolean;
   data?: {
@@ -34,6 +37,7 @@ type Phan = {
     coveragePercent: number;
     status: string;
     thachThuc?: ThachThuc;
+    saiRoi?: boolean;
   };
   error?: { code: string; message: string };
 };
@@ -63,7 +67,25 @@ export function VideoPlayer(props: {
   const dangGui = useRef(false);
 
   const [phu, setPhu] = useState(props.coveredSecBanDau);
-  const [thachThuc, setThachThuc] = useState<ThachThuc | null>(null);
+  /**
+   * ⚠️ Bản `ref` song song với state.
+   *
+   * `guiNhip` là `useCallback` — nó đóng gói giá trị state của lượt kết xuất tạo
+   * ra nó, nên đọc `thachThuc` trong đó luôn thấy giá trị CŨ. Đúng loại lỗi đã cắn
+   * ở trình tải video (`video-uploader.tsx`), và ở đây nó biểu hiện thành: trả lời
+   * đúng nhưng video không chạy tiếp.
+   *
+   * Hai bản đi cùng nhau qua `datThachThuc`, không bao giờ đặt riêng.
+   */
+  const thachThucRef = useRef<ThachThuc | null>(null);
+  const [thachThuc, setThachThucState] = useState<ThachThuc | null>(null);
+  const datThachThuc = useCallback((v: ThachThuc | null) => {
+    thachThucRef.current = v;
+    setThachThucState(v);
+  }, []);
+  const [saiRoi, setSaiRoi] = useState(false);
+  const [dangChon, setDangChon] = useState<string[]>([]);
+  const [dangGuiTraLoi, setDangGuiTraLoi] = useState(false);
   const [loi, setLoi] = useState<string | null>(null);
   const [moGoc, setMoGoc] = useState(0);
 
@@ -71,7 +93,7 @@ export function VideoPlayer(props: {
 
   // ── Gửi nhịp ──────────────────────────────────────────────────────────────
   const guiNhip = useCallback(
-    async (traLoi?: string) => {
+    async (traLoi?: { id: string; dapAn?: string | null }) => {
       const v = vidRef.current;
       if (!v) return;
       // Chặn chồng nhịp: mạng chậm làm nhịp sau chồng lên nhịp trước, và cả hai
@@ -129,8 +151,17 @@ export function VideoPlayer(props: {
           bienDaXem.current = Math.max(bienDaXem.current, den);
           batDau.current = den;
           if (json.data.thachThuc) {
-            setThachThuc(json.data.thachThuc);
-            v.pause();
+            datThachThuc(json.data.thachThuc);
+            setSaiRoi(Boolean(json.data.saiRoi));
+            // Câu hỏi CHẶN thì dừng video. Câu không chặn chỉ hiện lên.
+            if (json.data.thachThuc.chan) v.pause();
+          } else {
+            // Server nói không còn câu nào treo ⇒ gỡ lớp phủ và chạy tiếp. Đây là
+            // đường DUY NHẤT xoá câu hỏi; client không tự quyết.
+            const dangTreo = thachThucRef.current != null;
+            datThachThuc(null);
+            setSaiRoi(false);
+            if (dangTreo) void v.play();
           }
         }
       } catch {
@@ -140,7 +171,7 @@ export function VideoPlayer(props: {
         dangGui.current = false;
       }
     },
-    [props.ve, props.enrollmentId, props.lessonId],
+    [props.ve, props.enrollmentId, props.lessonId, datThachThuc],
   );
 
   // ── Đồng hồ nhịp ──────────────────────────────────────────────────────────
@@ -229,12 +260,45 @@ export function VideoPlayer(props: {
     if (v.playbackRate > props.tocDoToiDa) v.playbackRate = props.tocDoToiDa;
   };
 
+  /**
+   * Gửi câu trả lời.
+   *
+   * ⚠️ KHÔNG xoá câu hỏi trước khi server trả lời. Bản đầu của hàm này gọi
+   * `setThachThuc(null)` rồi mới gửi — nên khi server từ chối, người học thấy một
+   * video dừng cộng thanh báo lỗi mà KHÔNG CÒN CÂU HỎI NÀO trên màn hình: kẹt
+   * cứng, lối ra duy nhất là tải lại trang. Server là bên quyết định câu hỏi còn
+   * treo hay không, nên chỉ nó mới được xoá nó (nhịp thành công trả về không kèm
+   * `thachThuc` là tín hiệu xoá).
+   *
+   * ⚠️ Cũng không gọi `play()` vô điều kiện. Bản đầu gọi ngay sau khi gửi, nên nếu
+   * server vừa từ chối và dừng video thì dòng này bật lại nó — video chạy tiếp
+   * trong khi mọi nhịp sau đều bị từ chối.
+   */
   const traLoi = async () => {
-    if (!thachThuc) return;
-    const id = thachThuc.id;
-    setThachThuc(null);
-    await guiNhip(id);
-    void vidRef.current?.play();
+    const tt = thachThuc;
+    if (!tt || dangGuiTraLoi) return;
+    setDangGuiTraLoi(true);
+    try {
+      await guiNhip({
+        id: tt.id,
+        // Câu chỉ xác nhận có mặt thì không có đáp án để gửi.
+        dapAn: tt.luaChon.length > 0 ? dangChon.join(",") : undefined,
+      });
+    } finally {
+      setDangGuiTraLoi(false);
+      setDangChon([]);
+    }
+  };
+
+  /** Bật/tắt một lựa chọn. Câu nhiều đáp án cho chọn nhiều; còn lại chỉ một. */
+  const chon = (ma: string, nhieu: boolean) => {
+    setDangChon((cu) =>
+      nhieu
+        ? cu.includes(ma)
+          ? cu.filter((x) => x !== ma)
+          : [...cu, ma].sort()
+        : [ma],
+    );
   };
 
   const pct = props.durationSec > 0 ? Math.round((phu / props.durationSec) * 100) : 0;
@@ -286,14 +350,55 @@ export function VideoPlayer(props: {
 
         {thachThuc ? (
           <div className="absolute inset-0 flex items-center justify-center bg-black/80 p-4">
-            <div className="max-w-sm rounded-lg bg-background p-5 text-center">
+            <div className="max-w-sm rounded-lg bg-background p-5">
               <p className="text-sm font-medium">{thachThuc.cauHoi}</p>
+
+              {/* Câu có lựa chọn = câu hỏi chèn giữa video. Câu không có lựa chọn
+                  = điểm kiểm tra tập trung, chỉ cần một nút xác nhận có mặt. */}
+              {thachThuc.luaChon.length > 0 ? (
+                <div className="mt-3 space-y-1.5 text-left">
+                  {thachThuc.luaChon.map((lc) => {
+                    const chonNhieu = thachThuc.luaChon.length > 2;
+                    const dangBat = dangChon.includes(lc.ma);
+                    return (
+                      <button
+                        key={lc.ma}
+                        type="button"
+                        onClick={() => chon(lc.ma, chonNhieu)}
+                        className={`block w-full rounded-md border px-3 py-2 text-left text-sm ${
+                          dangBat ? "border-primary bg-primary/10 font-medium" : ""
+                        }`}
+                      >
+                        {lc.nhan}
+                      </button>
+                    );
+                  })}
+                </div>
+              ) : null}
+
+              {/* Sai thì nói SAI và cho làm lại tại chỗ — không khoá, không trừ gì.
+                  Khoá lại là nhốt người học ra khỏi một bài có hạn chót cứng, mà
+                  họ không có đường kháng nghị nào. */}
+              {saiRoi ? (
+                <p className="mt-3 text-sm text-amber-700">
+                  Chưa đúng — chọn lại rồi gửi tiếp.
+                </p>
+              ) : null}
+
               <button
                 type="button"
+                disabled={
+                  dangGuiTraLoi ||
+                  (thachThuc.luaChon.length > 0 && dangChon.length === 0)
+                }
                 onClick={() => void traLoi()}
-                className="mt-4 rounded-md bg-primary px-4 py-2 text-sm text-primary-foreground"
+                className="mt-4 w-full rounded-md bg-primary px-4 py-2 text-sm text-primary-foreground disabled:opacity-50"
               >
-                Tôi vẫn đang xem
+                {dangGuiTraLoi
+                  ? "Đang gửi…"
+                  : thachThuc.luaChon.length > 0
+                    ? "Gửi câu trả lời"
+                    : "Tôi vẫn đang xem"}
               </button>
             </div>
           </div>

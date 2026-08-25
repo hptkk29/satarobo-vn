@@ -77,9 +77,8 @@ export default async function Page({
   }
   // EL-10 — bài VIDEO có màn riêng: tải tệp, không có trình soạn Markdown.
   //
-  // ⚠️ Mở màn SOẠN cho video KHÔNG có nghĩa là mở màn HỌC. Trang học vẫn chặn
-  // `kind !== READ` cho tới khi EL-11 có trình phát — gỡ chặn sớm là đưa người
-  // học tới một trang trắng.
+  // ⚠️ Mở màn SOẠN cho video KHÔNG có nghĩa là mở màn HỌC — hai chặn RỜI NHAU.
+  // (EL-11 đã mở nhánh VIDEO ở trang học, nên nay cả hai đều mở.)
   if (lesson.kind === "VIDEO") {
     return (
       <div className="mx-auto max-w-3xl px-4 py-6">
@@ -95,10 +94,6 @@ export default async function Page({
             durationSecHienCo={lesson.durationSec}
           />
         </div>
-        <p className="mt-3 text-xs text-muted-foreground">
-          Trình phát video cho người học thuộc ticket EL-11 — tải tệp bây giờ vẫn
-          đúng, người học sẽ xem được khi trình phát xong.
-        </p>
       </div>
     );
   }

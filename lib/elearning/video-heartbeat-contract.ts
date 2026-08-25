@@ -40,8 +40,27 @@ export const nhipXemSchema = z
     tabHien: z.boolean(),
     /** Vị trí con trỏ hiện tại, để phát hiện tua tới. */
     viTriSec: z.number().min(0),
-    /** Trả lời điểm kiểm tra tập trung, nếu nhịp trước có hỏi. */
-    traLoiThachThuc: z.union([z.null(), z.string().max(200)]).optional(),
+    /**
+     * Trả lời thách thức, nếu nhịp trước có hỏi.
+     *
+     * ⚠️ Là OBJECT chứ không phải chuỗi id, vì hai loại thách thức cần hai thứ
+     * khác nhau: điểm kiểm tra tập trung chỉ cần biết người học CÒN Ở ĐÂY (id là
+     * đủ), còn câu hỏi chèn giữa video cần biết họ CHỌN GÌ.
+     *
+     * ⚠️ `dapAn` là LỰA CHỌN, không phải kết luận đúng/sai. Nhận "đúng/sai" từ
+     * client là để người ta gửi thẳng `{dung:true}` và bỏ qua cả cơ chế.
+     */
+    traLoiThachThuc: z
+      .union([
+        z.null(),
+        z
+          .object({
+            id: z.string().min(1).max(200),
+            dapAn: z.union([z.null(), z.string().max(200)]).optional(),
+          })
+          .strict(),
+      ])
+      .optional(),
   })
   .strict();
 
@@ -56,8 +75,26 @@ export type ThachThuc = {
   loai: "ATTENTION" | "CUE";
   id: string;
   cauHoi: string;
-  /** Hết thời gian này mà không trả lời thì nhịp sau bị BO_QUA. */
-  hanGiay: number;
+  /**
+   * Hạn trả lời, giây. `null` = KHÔNG có hạn.
+   *
+   * ⚠️ Cue chặn CỐ Ý không có hạn. Chép nhánh hết-hạn của điểm kiểm tra tập trung
+   * sang đây là hỏng nặng: nhánh đó gỡ câu treo rồi CHO ĐI TIẾP, nên "chờ 45 giây"
+   * trở thành đường bỏ qua MỌI câu hỏi — và triệu chứng là mọi thứ vẫn trả 200,
+   * không ai thấy gì bất thường.
+   */
+  hanGiay: number | null;
+  /**
+   * Lựa chọn để người học bấm. Rỗng với `ATTENTION` (chỉ cần xác nhận có mặt).
+   *
+   * ⚠️ CHỈ nhãn và mã. Đáp án đúng KHÔNG BAO GIỜ đi xuống đây — nó sẽ nằm trong
+   * tab Network, và cơ chế bị vô hiệu bằng một cú F12.
+   */
+  luaChon: { ma: string; nhan: string }[];
+  /** `true` = video phải DỪNG cho tới khi trả lời. */
+  chan: boolean;
+  /** Giây trong video mà câu hỏi này neo vào. Chỉ có với `CUE`. */
+  atSec?: number;
 };
 
 export type NhipXemKetQua = {
@@ -69,6 +106,15 @@ export type NhipXemKetQua = {
   thachThuc?: ThachThuc;
   /** Nhịp bị cắt vì vượt trần delta — trình phát không cần xử, chỉ để ghi cờ. */
   biCatTran?: boolean;
+  /**
+   * Câu vừa trả lời SAI. Thách thức được gửi LẠI kèm cờ này.
+   *
+   * ⚠️ Trả lời sai KHÔNG phải lỗi HTTP. Nó là 200 kèm chính câu hỏi đó, vì hai lẽ:
+   * (1) trình phát không bao giờ được mất câu hỏi đang treo — mất là người học kẹt
+   * với một video dừng và không có gì để bấm; (2) sai rồi cho làm lại là đường
+   * BÌNH THƯỜNG của việc học, không phải trạng thái lỗi.
+   */
+  saiRoi?: boolean;
 };
 
 // ── Mã lỗi và ánh xạ HTTP ──────────────────────────────────────────────────
