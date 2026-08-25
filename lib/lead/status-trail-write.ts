@@ -17,6 +17,7 @@
 // Lỗi đó đã phải vá một lần ở `updateLeadFields` (V-6 · G-02).
 import type { Prisma } from "@prisma/client";
 import { logLeadAudit } from "@/lib/audit/log";
+import { recordLeadActivity } from "./activity-write";
 import {
   leadStatusTrailAudit,
   leadStatusTrailContent,
@@ -74,14 +75,17 @@ export async function recordLeadStatusChange(input: RecordLeadStatusChangeInput)
     });
   }
 
-  await input.tx.leadActivity.create({
-    data: {
-      leadId: input.leadId,
-      actorId: input.actorId,
-      actorName: input.actorName,
-      type: "STATUS_CHANGE",
-      content: leadStatusTrailContent(change),
-      metadata: leadStatusTrailMetadata(change) as Prisma.InputJsonValue,
-    },
+  // N-4 — qua đường ghi chung để lượt đổi trạng thái cũng bump
+  // `Lead.lastActivityAt`. ⚠️ Bump KHÔNG có nghĩa "đã tiếp cận khách": máy đẩy
+  // trạng thái (ghi nhận tiền, điểm danh học thử, tự chia) vẫn là dòng máy —
+  // `STATUS_CHANGE` cố ý nằm ngoài `LEAD_OUTREACH_TYPES` (`activity-clock.ts`).
+  await recordLeadActivity({
+    tx: input.tx,
+    leadId: input.leadId,
+    actorId: input.actorId,
+    actorName: input.actorName,
+    type: "STATUS_CHANGE",
+    content: leadStatusTrailContent(change),
+    metadata: leadStatusTrailMetadata(change) as Prisma.InputJsonValue,
   });
 }

@@ -12,6 +12,7 @@ import { phoneVariants } from '@/lib/phone'
 import type { LeadChildStatus, Prisma } from '@prisma/client'
 import { logLeadAudit, getAuditActor } from '@/lib/audit/log'
 import { recordLeadStatusChange } from '@/lib/lead/status-trail-write'
+import { recordLeadActivity } from '@/lib/lead/activity-write'
 import { resolveActor } from '@/lib/auth/actor'
 import { passesScope, scopedDb } from '@/lib/db-scope'
 import { getLeadPaymentSummary } from '@/lib/payments/summary'
@@ -127,16 +128,15 @@ export async function toggleLeadShareAction(
       changedFields: ['isSharedWithTeam'],
       tx,
     })
-    await tx.leadActivity.create({
-      data: {
-        leadId,
-        actorId,
-        actorName,
-        type: 'NOTE',
-        content: share
-          ? 'Bật "dùng chung" — CSKH cùng cơ sở xem được lead này'
-          : 'Tắt "dùng chung"',
-      },
+    await recordLeadActivity({
+      tx,
+      leadId,
+      actorId,
+      actorName,
+      type: 'NOTE',
+      content: share
+        ? 'Bật "dùng chung" — CSKH cùng cơ sở xem được lead này'
+        : 'Tắt "dùng chung"',
     })
   })
 
@@ -217,15 +217,14 @@ export async function updateLeadStatus(
         await tx.trialClass.create({
           data: { leadId, centerId: before.centerId, scheduledAt },
         })
-        await tx.leadActivity.create({
-          data: {
-            leadId,
-            actorId,
-            actorName,
-            type: 'NOTE',
-            content:
-              '[Học thử] Đã tạo lịch học thử (chờ xếp lịch/giáo viên). Vào mục Học thử để cập nhật.',
-          },
+        await recordLeadActivity({
+          tx,
+          leadId,
+          actorId,
+          actorName,
+          type: 'NOTE',
+          content:
+            '[Học thử] Đã tạo lịch học thử (chờ xếp lịch/giáo viên). Vào mục Học thử để cập nhật.',
         })
       }
     }
@@ -340,21 +339,18 @@ export async function addLeadActivity(input: {
 
   const { actorId, actorName } = getAuditActor(session)
   // AC4 — ghi hoạt động + reset đồng hồ SLA idle (lastActivityAt) trong 1 tx.
+  // N-4 — cú bump nay nằm TRONG `recordLeadActivity` chứ không viết tay ở đây:
+  // đây từng là 1 trong 3 chỗ duy nhất nhớ bump, và chính sự "nhớ bằng tay" đó
+  // là lý do 10 chỗ còn lại quên.
   await db.$transaction(async (tx) => {
-    await tx.leadActivity.create({
-      data: {
-        leadId: input.leadId,
-        actorId,
-        actorName,
-        type: parsedType.data,
-        content,
-        // Chỉ set khi caller có truyền metadata → tránh ghi đè null không cần.
-        ...(input.metadata != null ? { metadata: input.metadata } : {}),
-      },
-    })
-    await tx.lead.update({
-      where: { id: input.leadId },
-      data: { lastActivityAt: new Date() },
+    await recordLeadActivity({
+      tx,
+      leadId: input.leadId,
+      actorId,
+      actorName,
+      type: parsedType.data,
+      content,
+      metadata: input.metadata ?? null,
     })
   })
 
@@ -1107,20 +1103,19 @@ export async function transferLead(
       },
     })
 
-    await tx.leadActivity.create({
-      data: {
-        leadId: lead.id,
-        actorId,
-        actorName,
-        type: 'HANDOVER',
-        content: d.handoverNote,
-        metadata: {
-          fromSaleId: lead.assignedToId,
-          toSaleId,
-          fromCenterId: lead.centerId,
-          toCenterId,
-          reason: d.reason || null,
-        },
+    await recordLeadActivity({
+      tx,
+      leadId: lead.id,
+      actorId,
+      actorName,
+      type: 'HANDOVER',
+      content: d.handoverNote,
+      metadata: {
+        fromSaleId: lead.assignedToId,
+        toSaleId,
+        fromCenterId: lead.centerId,
+        toCenterId,
+        reason: d.reason || null,
       },
     })
 

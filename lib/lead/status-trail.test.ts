@@ -40,7 +40,12 @@ import { describe, expect, it, vi, beforeEach } from "vitest";
 import fs from "node:fs";
 import path from "node:path";
 
-const h = vi.hoisted(() => ({ logLeadAudit: vi.fn(), activityCreate: vi.fn() }));
+const h = vi.hoisted(() => ({
+  logLeadAudit: vi.fn(),
+  activityCreate: vi.fn(),
+  // N-4 — đường ghi hoạt động chung bump `Lead.lastActivityAt` trong cùng tx.
+  leadUpdate: vi.fn(),
+}));
 vi.mock("@/lib/audit/log", () => ({ logLeadAudit: h.logLeadAudit }));
 
 import {
@@ -320,13 +325,37 @@ describe("[C-07] selectLeadStatusTrail — bảng mốc: ai · lúc nào · từ
 
 // ─── Phần 3: đường GHI — một hàm, hai dòng, cùng transaction ─────────────────
 
-const tx = { leadActivity: { create: h.activityCreate } } as never;
+/** N-4 MOC — mốc `createdAt` mà tx giả trả cho dòng hoạt động. */
+const MOC_TX = new Date("2026-08-25T03:00:00.000Z");
+const tx = {
+  leadActivity: { create: h.activityCreate },
+  lead: { update: h.leadUpdate },
+} as never;
 
 describe("[C-07] recordLeadStatusChange — MỘT đường ghi cho mọi lượt đổi", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     h.logLeadAudit.mockResolvedValue(undefined);
-    h.activityCreate.mockResolvedValue({ id: "act-1" });
+    h.activityCreate.mockResolvedValue({ id: "act-1", createdAt: MOC_TX });
+    h.leadUpdate.mockResolvedValue({ id: "lead-1" });
+  });
+
+  it("[N-4] lượt đổi trạng thái cũng bump `lastActivityAt`, cùng tx", async () => {
+    await recordLeadStatusChange({
+      tx,
+      leadId: "lead-1",
+      actorId: null,
+      actorName: "Hệ thống",
+      from: "AWAITING_DECISION",
+      to: "REGISTERED",
+      source: "PAYMENT",
+    });
+
+    expect(h.leadUpdate).toHaveBeenCalledTimes(1);
+    expect(h.leadUpdate.mock.calls[0][0]).toEqual({
+      where: { id: "lead-1" },
+      data: { lastActivityAt: MOC_TX },
+    });
   });
 
   it("ghi ĐỦ hai dòng: nhật ký + timeline", async () => {

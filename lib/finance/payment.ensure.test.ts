@@ -20,7 +20,12 @@ type State = {
   leadCenterId: string | null;
   activities: unknown[];
   audits: unknown[];
+  /** N-4 — đồng hồ "hoạt động gần nhất"; `null` = chưa ai chạm. */
+  leadLastActivityAt: Date | null;
 };
+
+/** Mốc `createdAt` mà tx giả trả cho dòng hoạt động — cùng vai `now()` của Postgres. */
+const MOC_TX = new Date("2026-08-25T03:00:00.000Z");
 
 /** Tx giả in-memory — mô phỏng đúng phần ensureOrderPaymentRecorded chạm tới. */
 function fakeTx(state: State): Prisma.TransactionClient {
@@ -53,11 +58,18 @@ function fakeTx(state: State): Prisma.TransactionClient {
         state.leadStatus = "REGISTERED";
         return { count: 1 };
       },
+      // N-4 — đường ghi hoạt động chung bump `Lead.lastActivityAt` trong CÙNG tx.
+      update: async (args: { data: { lastActivityAt?: Date } }) => {
+        state.leadLastActivityAt = args.data.lastActivityAt ?? null;
+        return { id: "l1" };
+      },
     },
     leadActivity: {
       create: async (args: { data: unknown }) => {
         state.activities.push(args.data);
-        return args.data;
+        // Trả `createdAt` như Prisma thật: đường ghi chung lấy đúng mốc này làm
+        // `lastActivityAt` (không lấy đồng hồ tiến trình) — xem `activity-write.ts`.
+        return { id: `a${state.activities.length}`, createdAt: MOC_TX };
       },
     },
     auditLog: {
@@ -75,6 +87,7 @@ const baseState = (): State => ({
   leadCenterId: "center-lead",
   activities: [],
   audits: [],
+  leadLastActivityAt: null,
 });
 
 describe("ensureOrderPaymentRecorded (K3 — 1 khoản = 1 dòng ledger)", () => {
@@ -141,6 +154,9 @@ describe("ensureOrderPaymentRecorded (K3 — 1 khoản = 1 dòng ledger)", () =>
     await ensureOrderPaymentRecorded(fakeTx(state), { orderId: "o1", soDot: 1, amount: 1, leadId: "l1", actor: { id: "u1" } });
     expect(state.leadStatus).toBe("REGISTERED");
     expect(state.activities).toHaveLength(1);
+    // N-4 — ghi nhận tiền là 1 trong 10 đường trước đây ghi hoạt động mà để
+    // nguyên đồng hồ. Mốc phải bằng đúng `createdAt` của dòng vừa ghi.
+    expect(state.leadLastActivityAt).toEqual(MOC_TX);
 
     const converted = baseState();
     converted.leadStatus = "CONVERTED";
