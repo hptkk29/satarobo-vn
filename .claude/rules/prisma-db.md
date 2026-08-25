@@ -35,6 +35,37 @@ Direct connection `db.<ref>.supabase.co:5432` chỉ có **IPv6 AAAA record** —
   # dừng: & "$bin\bin\pg_ctl" -D "$bin\data" stop
   ```
   `trust` auth → password trong URL bị bỏ qua nhưng vẫn kết nối OK. Cùng port/DB nên `.env.test` không đổi.
+- ⚠️ **Hai bẫy làm tưởng scoop-Postgres hỏng — cả hai đều đã chặn người kiểm tại chỗ và đẩy
+  code đỏ lên nhánh:**
+  1. **`pg_ctl start` ở TIỀN CẢNH trông như treo.** Nó bám vào log và không trả prompt; hết
+     giờ, lệnh bị giết ⇒ postgres crash rồi tự khởi động lại, log đầy
+     `client backend was terminated by exception 0xC0000142`. **Chạy NỀN** (`run_in_background`)
+     là xong, exit 0 trong vài giây.
+  2. **`could not reserve shared memory region ... error code 487`** ⇒ mọi kết nối rớt
+     (`P1001: Can't reach database server`) **dù `pg_ctl status` báo đang chạy**. Server sống
+     nhưng không fork nổi tiến trình con. Vá bằng cách thu nhỏ vùng shared memory trong
+     `<bin>\data\postgresql.conf`:
+     ```
+     shared_buffers = 32MB     # từ 128MB
+     max_connections = 30      # từ 100
+     huge_pages = off
+     ```
+     (`dynamic_shared_memory_type = windows` vốn đã đúng — KHÔNG phải nguyên nhân, đừng đổi.)
+  `psql` cần `PGPASSWORD=postgres` **và cờ `-w`**; thiếu `-w` thì nó chờ nhập mật khẩu và
+  cũng trông như treo.
+- 🔴 **Bộ test chạm DB SKIP SẠCH khi không có Postgres — im lặng, không đỏ.**
+  `tests/{chat,nen,lead-intake,elearning}` dùng `describe.skipIf(!RUN)`, và `RUN` chỉ bật khi
+  `TEST_DATABASE_URL`/`DATABASE_URL` trỏ `localhost`/`127.0.0.1` (hoặc tên DB chứa
+  `satarobo_test`/`ci_test`). Hệ quả đã xảy ra **hai lần trong một tuần**: người viết chạy bộ
+  THUẦN, thấy xanh, báo PASS — CI có Postgres nên đỏ, và nhánh `test` mang đỏ đó đi.
+  ⇒ **Chạm `lib/lead/**`, `lib/chat/**`, hay bất cứ đường ghi DB nào thì phải dựng Postgres
+  cục bộ rồi chạy đúng ba bước của job CI trước khi báo xanh:**
+  ```bash
+  export TEST_DATABASE_URL='postgresql://postgres:postgres@127.0.0.1:5432/satarobo_test'
+  npx prisma migrate deploy && npx tsx prisma/seed-roles.ts   # seed-roles: RBAC v2 đọc quyền từ DỮ LIỆU
+  pnpm test:chat-db && pnpm test:nen-db && pnpm test:lead-intake
+  ```
+  Thấy `SKIP` trong log là **chưa kiểm được gì**, không phải "xanh".
 - **Env riêng cho test:** `.env.test` (đã `.gitignore`, KHÔNG commit):
   ```
   DATABASE_URL="postgresql://postgres:postgres@127.0.0.1:5432/satarobo_test"
