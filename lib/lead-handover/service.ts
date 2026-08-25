@@ -49,7 +49,14 @@ function resolveWhere(
     and.push({ utmCampaign: filters.campaign });
   }
   if (filters.onlyActive) {
+    // ⚠️ Hai vế, không phải một. Sau GĐ5 tập đóng chỉ còn `DA_MAT` (cố ý — lead đã
+    // đăng ký mà chưa xếp lớp vẫn là việc đang mở), nên lọc theo status MỘT MÌNH sẽ
+    // lôi cả lead đã convert XONG từ đời nào vào danh sách bàn giao. `convertedAt` do
+    // chính lượt convert ghi ⇒ có mốc = hồ sơ đã khép, không còn gì để bàn giao.
+    // Lưu ý: vế này CHỈ áp cho onlyActive. Ai chủ động tick trạng thái `DA_DANG_KY` ở
+    // `filters.statuses` thì vẫn phải thấy đủ lead đã đăng ký — đó là lựa chọn có ý thức.
     and.push({ status: { notIn: [...TERMINAL_STATUSES] as never } });
+    and.push({ convertedAt: null });
   }
   // Cách ly cơ sở (chống bàn giao chéo CS): chỉ những lead trong tầm nhìn cơ sở
   // của actor. Mảng rỗng → không match lead nào (fail-safe). "ALL" → bỏ qua.

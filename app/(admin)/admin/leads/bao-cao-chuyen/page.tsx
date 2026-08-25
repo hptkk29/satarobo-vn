@@ -8,11 +8,15 @@ import { resolveActor } from "@/lib/auth/actor";
 import type { Prisma } from "@prisma/client";
 import { formatDateVN } from "@/lib/format/date";
 import { PhanTrangBang } from "@/components/ui/phan-trang-bang";
+import { CONVERTED_STATUSES } from "@/lib/leads/status";
 
 export const metadata = { title: "Báo cáo chuyển lead liên cơ sở | Admin" };
 export const dynamic = "force-dynamic";
 
-const CLOSED_STATUSES = new Set(["ENROLLED"]);
+// "Kết quả = Đã chốt" của lead sau khi chuyển cơ sở.
+// ⚠️ Trước đây là `new Set(["ENROLLED"])` chép tay: Set<string> nên tsc KHÔNG đỏ khi
+// enum đổi ở GĐ5, cột "Đã chốt" cứ đứng 0/N. Dùng thẳng nguồn duy nhất.
+const CLOSED_STATUSES = CONVERTED_STATUSES;
 
 interface Props {
   searchParams: Promise<{ month?: string }>;

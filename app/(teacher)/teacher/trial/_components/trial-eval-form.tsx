@@ -31,12 +31,16 @@ const RANK_TONE: Record<string, string> = {
 
 export function TrialEvalForm({
   enrollmentId,
+  sessionId,
   studentName,
   courseName,
   existing,
   pdfHref,
 }: {
   enrollmentId: string;
+  /** GĐ4 — BUỔI được chấm. Phiếu khoá theo cặp (ca, buổi) nên phải gửi kèm, nếu
+   * không server lại rơi về buổi đang xếp và ca chỉ đẻ được đúng một phiếu. */
+  sessionId?: string | null;
   studentName: string;
   courseName: string | null;
   existing: TrialEvalExisting | null;
@@ -67,6 +71,7 @@ export function TrialEvalForm({
     start(async () => {
       const res = await saveTrialRubricAction({
         enrollmentId,
+        sessionId: sessionId ?? undefined,
         scores,
         generalComment: comment,
         orientation,

@@ -2,8 +2,8 @@
 //
 // 2 mức qua searchParams (không route động):
 //   (a) không tham số   → HV Trial nhóm theo NGÀY + khung giờ (own-rows GV).
-//   (b) ?sessionId=…     → phiếu đánh giá buổi (reuse TrialSessionEvalFill — action
-//                          session-eval đã gate TEACHER theo teacherId lớp/buổi).
+//   (b) ?enrollmentId=… → phiếu rubric của một ca. Kèm `&sessionId=…` (GĐ4) để chọn
+//                         BUỔI được chấm; bỏ trống = buổi đang xếp cho ca.
 //
 // Quyền: TEACHER có sẵn trials:view + trials:feedback (không đổi permissions).
 // Data: own-rows theo teacherId qua lib/lms/teacher-schedule (db ở lib, không phải
@@ -15,6 +15,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Ban } from "lucide-react";
 import { auth } from "@/lib/auth";
+import { cn } from "@/lib/utils";
 import { checkPermission } from "@/lib/auth/check-permission";
 import {
   getTeacherTrialRoster,
@@ -57,22 +58,30 @@ function capitalize(s: string): string {
 export default async function TeacherTrialPage({
   searchParams,
 }: {
-  searchParams: Promise<{ enrollmentId?: string }>;
+  searchParams: Promise<{ enrollmentId?: string; sessionId?: string }>;
 }) {
   const session = await auth();
   if (!session?.user) return null; // layout đã gate login + role TEACHER
 
   if (!(await checkPermission("trials:view"))) redirect("/");
 
-  const { enrollmentId } = await searchParams;
+  const { enrollmentId, sessionId } = await searchParams;
 
   // ── (b) Phiếu đánh giá rubric 1 HV trải nghiệm ──────────────────────────────
   if (enrollmentId) {
     const ctx = await getTeacherTrialRubricContext(
       session.user.id,
       enrollmentId,
+      sessionId,
     );
     if (!ctx) return <NotYours />;
+
+    // Buổi đang chấm quyết định CẢ biểu mẫu lẫn PDF — phải nói rõ trên URL, vì
+    // `scheduledSessionId` của ca chỉ đổi khi dời lịch (xem ghi chú GĐ4 ở helper).
+    const selected = ctx.trialClassSessionId;
+    const pdfHref = selected
+      ? `/teacher/trial/pdf/${ctx.enrollmentId}?sessionId=${selected}`
+      : `/teacher/trial/pdf/${ctx.enrollmentId}`;
 
     return (
       <div className="space-y-4">
@@ -81,8 +90,53 @@ export default async function TeacherTrialPage({
           title="Phiếu đánh giá buổi thử"
           subtitle={ctx.trialClassName}
         />
+
+        {ctx.sessions.length > 0 && (
+          <section className="t-card px-5 py-4">
+            <h2 className="text-xs font-bold tracking-wide text-muted-foreground uppercase">
+              Buổi được chấm
+            </h2>
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              Mỗi buổi một phiếu riêng. Chọn buổi trước khi nhập điểm.
+            </p>
+            <div className="mt-3 flex flex-wrap gap-2">
+              {ctx.sessions.map((s) => {
+                const active = s.id === selected;
+                return (
+                  <Link
+                    key={s.id}
+                    href={`?enrollmentId=${ctx.enrollmentId}&sessionId=${s.id}`}
+                    aria-current={active ? "true" : undefined}
+                    className={cn(
+                      "rounded-lg border px-3 py-1.5 text-xs font-semibold transition-colors",
+                      active
+                        ? "border-primary bg-primary text-white"
+                        : "border-border text-foreground hover:bg-muted",
+                    )}
+                  >
+                    {s.label}
+                    {s.isScheduled ? " · đang xếp" : ""}
+                    {s.evaluated ? " ✓" : ""}
+                  </Link>
+                );
+              })}
+            </div>
+            {!selected && (
+              <p className="mt-3 text-xs text-state-warning-ink">
+                Ca này chưa được xếp buổi — chọn một buổi ở trên trước khi lưu
+                phiếu.
+              </p>
+            )}
+          </section>
+        )}
+
         <TrialEvalForm
+          // `key` ép React dựng lại form khi đổi buổi: state điểm nằm trong
+          // useState khởi tạo 1 lần, không có key thì bấm sang buổi khác vẫn
+          // thấy điểm của buổi cũ.
+          key={selected ?? "no-session"}
           enrollmentId={ctx.enrollmentId}
+          sessionId={selected}
           studentName={ctx.studentName}
           courseName={ctx.courseName}
           existing={
@@ -94,7 +148,7 @@ export default async function TeacherTrialPage({
                 }
               : null
           }
-          pdfHref={`/teacher/trial/pdf/${ctx.enrollmentId}`}
+          pdfHref={pdfHref}
         />
       </div>
     );

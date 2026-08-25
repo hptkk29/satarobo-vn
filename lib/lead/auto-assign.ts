@@ -19,6 +19,24 @@ import { LEAD_CLOSED_STATUSES } from "@/lib/leads/status";
 /** @deprecated Tên cũ. Dùng `LEAD_CLOSED_STATUSES` từ `@/lib/leads/status`. */
 export const TERMINAL_LEAD_STATUSES = LEAD_CLOSED_STATUSES;
 
+/**
+ * Điều kiện "lead còn là VIỆC ĐANG MỞ của Sale" — dùng cho MỌI phép ĐẾM TẢI.
+ *
+ * ⚠️ Hai vế, thiếu vế nào cũng sai:
+ *   • `status notIn LEAD_CLOSED_STATUSES` — sau GĐ5 tập này chỉ còn `DA_MAT`, CỐ Ý:
+ *     lead đã đăng ký mà chưa xếp lớp thì vẫn là việc Sale phải làm.
+ *   • `convertedAt: null` — nhưng lead đã convert XONG (đã thành học viên) cũng mang
+ *     `DA_DANG_KY`, nên nếu chỉ lọc theo status thì nó tính là tải mở VĨNH VIỄN. Hệ
+ *     quả thật: Sale làm lâu năm bị coi là quá tải và ngừng nhận lead mới. `convertedAt`
+ *     do chính lượt convert ghi (xem ghi chú enum LeadStatus trong schema.prisma) nên
+ *     nó là dấu "đã xong thật", không phải suy từ trạng thái.
+ */
+const LEAD_DANG_MO = {
+  deletedAt: null,
+  status: { notIn: TERMINAL_LEAD_STATUSES },
+  convertedAt: null,
+} satisfies Prisma.LeadWhereInput;
+
 export type Actor = { actorId: string | null; actorName: string };
 
 const SYSTEM_META = { system: true } as Prisma.InputJsonValue;
@@ -64,7 +82,7 @@ export async function getSaleStats(centerId: string | null): Promise<SaleStat[]>
   const [openCounts, handledGroups] = await Promise.all([
     db.lead.groupBy({
       by: ["assignedToId"],
-      where: { assignedToId: { in: ids }, deletedAt: null, status: { notIn: TERMINAL_LEAD_STATUSES } },
+      where: { assignedToId: { in: ids }, ...LEAD_DANG_MO },
       _count: { id: true },
     }),
     db.lead.groupBy({
@@ -105,7 +123,7 @@ export async function getSaleStats(centerId: string | null): Promise<SaleStat[]>
 async function getCenterLoads(centerIds: string[]) {
   const counts = await db.lead.groupBy({
     by: ["centerId"],
-    where: { centerId: { in: centerIds }, deletedAt: null, status: { notIn: TERMINAL_LEAD_STATUSES } },
+    where: { centerId: { in: centerIds }, ...LEAD_DANG_MO },
     _count: { id: true },
   });
   const map = new Map(counts.map((c) => [c.centerId, c._count.id]));

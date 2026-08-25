@@ -657,7 +657,9 @@ async function registeredStale(user: TaskUser, now: Date, cfg: PendingCfg): Prom
     label: "Khách đã đăng ký quá lâu",
     count: rows.length,
     overdueCount: rows.length,
-    href: "/leads?status=REGISTERED",
+    // ⚠️ Khớp với `status: "DA_DANG_KY"` của truy vấn ngay trên. Giá trị enum đã chết
+    // (?status=REGISTERED) bị màn /leads bỏ qua im lặng ⇒ bấm chuông ra CẢ danh sách.
+    href: "/leads?status=DA_DANG_KY",
     items: rows.slice(0, cfg.itemLimit).map((r) => ({
       id: r.id,
       label: `${r.childName ?? r.parentName} — chưa chốt ghi danh`,

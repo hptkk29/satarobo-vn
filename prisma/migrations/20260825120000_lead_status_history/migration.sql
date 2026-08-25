@@ -21,6 +21,19 @@ ALTER TABLE "Lead" ADD COLUMN IF NOT EXISTS "statusChangedAt" TIMESTAMPTZ(6);
 ALTER TABLE "Lead" ADD COLUMN IF NOT EXISTS "droppedAtStage" "LeadStatus";
 ALTER TABLE "Lead" ADD COLUMN IF NOT EXISTS "dropReason" TEXT;
 
+-- Mốc đổi trạng thái ĐẦU TIÊN = lúc lead ra đời (bậc "Mới").
+--
+-- ⚠️ CỐ Ý tách khỏi câu ADD COLUMN ở trên, không viết `ADD COLUMN ... DEFAULT ...`:
+-- gộp vào thì Postgres BACKFILL default cho toàn bộ lead CŨ, tức khai man rằng mọi
+-- lead vừa đổi trạng thái đúng lúc chạy migration — hỏng luôn cái đồng hồ "nằm im bao
+-- lâu ở bậc hiện tại" mà cột này sinh ra để đo. Tách ra thì dòng cũ giữ NULL (đúng:
+-- không suy ngược được), chỉ dòng INSERT MỚI mới nhận mốc.
+--
+-- Vì sao đặt ở DB chứ không sửa code: không đường `lead.create` nào set field này, mà
+-- chúng nằm rải nhiều nơi (form admin, import Excel, webhook, biểu mẫu công khai) —
+-- sửa từng chỗ là chắc chắn sót một đường. Default ở DB phủ cả đường ghi SQL thô.
+ALTER TABLE "Lead" ALTER COLUMN "statusChangedAt" SET DEFAULT CURRENT_TIMESTAMP;
+
 -- ─── Bảng sổ ─────────────────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS "LeadStatusHistory" (
   "id"            TEXT NOT NULL,

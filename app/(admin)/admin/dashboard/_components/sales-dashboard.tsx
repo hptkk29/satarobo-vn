@@ -3,7 +3,12 @@ import { safeCache } from "@/lib/cache/safe-cache";
 import { Users, CheckSquare, FlaskConical, TrendingUp, GraduationCap } from "lucide-react";
 import { resolveActor } from "@/lib/auth/actor";
 import { scopedDb, getModelVisibleCenterIds } from "@/lib/db-scope";
-import { KANBAN_COLUMNS, LEAD_STATUS_LABEL, LEAD_STATUS_BADGE } from "@/lib/leads/status";
+import {
+  KANBAN_COLUMNS,
+  LEAD_STATUS_LABEL,
+  LEAD_STATUS_BADGE,
+  CONVERTED_STATUSES,
+} from "@/lib/leads/status";
 import { getNearingEndEnrollments } from "@/lib/students/renewal";
 import { groupByWeek, type LeadReportRecord } from "@/lib/reports/lead";
 import { BarChart } from "@/components/charts/bar-chart";
@@ -46,7 +51,15 @@ async function getSalesStats(userId: string) {
     total: w.total,
     converted: w.converted,
   }));
-  const closeRate = totalMine > 0 ? Math.round(((countByStatus["ENROLLED"] ?? 0) / totalMine) * 100) : 0;
+  // Tỉ lệ chốt = lead đã đăng ký / tổng lead của tôi.
+  // ⚠️ `countByStatus` là Record<string, number> nên tra khoá sai KHÔNG làm tsc đỏ —
+  // khoá "ENROLLED" cũ chỉ lặng lẽ trả undefined ⇒ mọi sale hiện 0%. Cộng theo
+  // CONVERTED_STATUSES (nguồn duy nhất) thay vì gõ tay tên trạng thái.
+  const convertedMine = [...CONVERTED_STATUSES].reduce(
+    (sum, st) => sum + (countByStatus[st] ?? 0),
+    0,
+  );
+  const closeRate = totalMine > 0 ? Math.round((convertedMine / totalMine) * 100) : 0;
 
   return { totalMine, enrolledMonth, closeRate, countByStatus, weeklyBars, nearingEndCount: nearingEnd.length };
 }

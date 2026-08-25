@@ -6,7 +6,8 @@ import { auth } from "@/lib/auth";
 import { checkPermission } from "@/lib/auth/check-permission";
 import { resolveActor } from "@/lib/auth/actor";
 import { getAssignableTeachers } from "@/lib/teachers/assignable";
-import { layLuaChonTaoLop } from "../_lib/queries";
+import { getSetting } from "@/lib/settings/service";
+import { layCauHinh, layLuaChonTaoLop } from "../_lib/queries";
 import { CreateForm } from "../_components/create-form";
 
 export const dynamic = "force-dynamic";
@@ -18,12 +19,18 @@ export default async function TaoLopTrialPage() {
   if (!(await checkPermission("trials:manage"))) redirect("/lop-trial");
 
   const actor = await resolveActor(session.user.id);
-  const [{ centers, rooms }, teachers] = await Promise.all([
+  const [{ centers, rooms }, teachers, config, maxSessions] = await Promise.all([
     layLuaChonTaoLop(actor),
     // Lúc tạo lớp chưa biết cơ sở nào được chọn nên nạp toàn bộ GV khả dụng; ràng buộc
     // thật nằm ở server action. Đây là hành vi của màn cũ, giữ nguyên để nghiệm thu
     // không lệch — lệch với trang chi tiết (lọc theo cơ sở) là nợ đã biết, xử lý riêng.
     getAssignableTeachers({}),
+    // Số buổi mặc định LẤY TỪ CẤU HÌNH chương trình, không hardcode ở form: hardcode là
+    // cách giá trị mặc định lặng lẽ đi ngược chốt nghiệp vụ sau mỗi lần đổi cấu hình.
+    layCauHinh(actor),
+    // Trần đọc ở cấp GLOBAL (không truyền orgUnitId) vì cơ sở còn chưa được chọn khi
+    // form mở ra. Cơ sở có override thấp hơn thì server action vẫn là chốt chặn cuối.
+    getSetting("crm.trialMaxSessions"),
   ]);
 
   return (
@@ -45,6 +52,8 @@ export default async function TaoLopTrialPage() {
         centers={centers}
         rooms={rooms}
         teachers={teachers.map((t) => ({ id: t.id, name: t.name ?? "(không tên)" }))}
+        defaultSessionCount={config?.sessionCount ?? maxSessions}
+        maxSessions={maxSessions}
       />
     </div>
   );

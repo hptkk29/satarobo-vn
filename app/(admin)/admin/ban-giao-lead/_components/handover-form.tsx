@@ -2,7 +2,9 @@
 
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
+import type { LeadStatus } from "@prisma/client";
 import { previewHandoverAction, runHandoverAction } from "../_actions";
+import { LEAD_STATUS_LABEL } from "@/lib/leads/status";
 
 type SaleOpt = { id: string; label: string };
 
@@ -12,19 +14,22 @@ export function HandoverForm({
   campaigns,
 }: {
   sales: SaleOpt[];
-  statuses: string[];
+  // `LeadStatus[]` chứ KHÔNG phải `string[]`: kiểu string làm mảng trạng thái bên page
+  // mất hoàn toàn kiểm kiểu (đó là lý do đợt đổi enum GĐ5 đi lọt) và làm tra
+  // LEAD_STATUS_LABEL phải ép kiểu.
+  statuses: LeadStatus[];
   campaigns: string[];
 }) {
   const [fromUserId, setFromUserId] = useState("");
   const [toUserId, setToUserId] = useState("");
-  const [selStatuses, setSelStatuses] = useState<string[]>([]);
+  const [selStatuses, setSelStatuses] = useState<LeadStatus[]>([]);
   const [campaign, setCampaign] = useState("");
   const [onlyActive, setOnlyActive] = useState(true);
   const [reason, setReason] = useState("");
   const [count, setCount] = useState<number | null>(null);
   const [pending, start] = useTransition();
 
-  function toggleStatus(s: string) {
+  function toggleStatus(s: LeadStatus) {
     setCount(null);
     setSelStatuses((prev) => (prev.includes(s) ? prev.filter((x) => x !== s) : [...prev, s]));
   }
@@ -105,7 +110,9 @@ export function HandoverForm({
               onClick={() => toggleStatus(s)}
               className={`rounded-full border px-2.5 py-1 text-xs ${ selStatuses.includes(s) ? "border-primary-dark bg-primary-soft text-primary" : "border-border text-muted-foreground" }`}
             >
-              {s}
+              {/* Nhãn tiếng Việt — trước đây in thẳng mã enum ("DA_HEN_HOC_THU") ra
+                  cho người dùng. `s` vẫn là giá trị gửi lên server, chỉ đổi phần hiển thị. */}
+              {LEAD_STATUS_LABEL[s]}
             </button>
           ))}
         </div>
@@ -139,7 +146,9 @@ export function HandoverForm({
             setCount(null);
           }}
         />
-        <span className="text-muted-foreground">Chỉ lead chưa đóng (bỏ ENROLLED/LOST/DUPLICATE)</span>
+        {/* Nhãn phải khớp LEAD_CLOSED_STATUSES ở lib/leads/status.ts — GĐ5 gộp
+            LOST/DUPLICATE thành "Đã mất", và DA_DANG_KY CỐ Ý không nằm trong tập đóng. */}
+        <span className="text-muted-foreground">Chỉ lead chưa đóng (bỏ &quot;Đã mất&quot;)</span>
       </label>
 
       <label className="text-sm sm:col-span-2">

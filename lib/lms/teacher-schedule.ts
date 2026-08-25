@@ -165,6 +165,12 @@ export type TrialRosterSlot = {
 /** HV Trial CHƯA xếp buổi (scheduledSessionId null) — kèm tên lớp để GV biết nguồn. */
 export type TrialRosterUnassigned = TrialRosterStudent & { trialClassName: string };
 
+/** Khoá cặp (ca, buổi) của một phiếu rubric. Buổi null = phiếu cũ chưa gắn buổi —
+ * phải có khoá RIÊNG, không được coi là "đã đánh giá" cho mọi buổi. */
+function evalPairKey(enrollmentId: string, sessionId: string | null): string {
+  return `${enrollmentId}::${sessionId ?? ""}`;
+}
+
 export type TrialRosterResult = {
   slots: TrialRosterSlot[];
   /** #2 — HV lớp Trial của GV nhưng CHƯA gắn buổi: hiển thị riêng để không ai tàng hình. */
@@ -267,18 +273,26 @@ export async function getTeacherTrialRoster(
     : [];
   const courseName = new Map(courses.map((c) => [c.id, c.name]));
 
-  // Enrollment nào đã có phiếu rubric → cờ evaluated.
-  const evaluatedSet = new Set(
+  // GĐ4 — phiếu khoá theo cặp (ca, buổi) nên cờ "đã đánh giá" cũng phải theo CẶP.
+  //
+  // ⚠️ Bản cũ gom theo `trialEnrollmentId` thuần: ca đã chấm buổi 1 rồi dời sang buổi 2
+  // vẫn hiện "Đã đánh giá", giáo viên bấm vào thì biểu mẫu trống — vì phiếu đang nằm ở
+  // buổi khác. Khoá cặp mới nói đúng "buổi NÀY đã có phiếu chưa".
+  const evaluatedPairs = new Set(
     (
       await db.trialRubricEval.findMany({
         where: { trialEnrollmentId: { in: allEnrollments.map((e) => e.id) } },
-        select: { trialEnrollmentId: true },
+        select: { trialEnrollmentId: true, trialClassSessionId: true },
       })
-    ).map((r) => r.trialEnrollmentId),
+    ).map((r) => evalPairKey(r.trialEnrollmentId, r.trialClassSessionId)),
   );
 
   const nowYear = new Date().getUTCFullYear();
-  const toStudent = (e: (typeof allEnrollments)[number]): TrialRosterStudent => ({
+  /** `sessionId` = buổi đang xét (null = nhóm "chưa xếp buổi" → chỉ phiếu cũ chưa gắn buổi). */
+  const toStudent = (
+    e: (typeof allEnrollments)[number],
+    sessionId: string | null,
+  ): TrialRosterStudent => ({
     enrollmentId: e.id,
     studentName: e.leadChild.fullName,
     birthYear:
@@ -288,14 +302,14 @@ export async function getTeacherTrialRoster(
       ? (courseName.get(e.leadChild.interestedCourseId) ?? null)
       : null,
     status: e.status,
-    evaluated: evaluatedSet.has(e.id),
+    evaluated: evaluatedPairs.has(evalPairKey(e.id, sessionId)),
   });
 
   const bySession = new Map<string, TrialRosterStudent[]>();
   for (const e of enrollments) {
     if (!e.scheduledSessionId) continue;
     const arr = bySession.get(e.scheduledSessionId) ?? [];
-    arr.push(toStudent(e));
+    arr.push(toStudent(e, e.scheduledSessionId));
     bySession.set(e.scheduledSessionId, arr);
   }
 
@@ -310,7 +324,7 @@ export async function getTeacherTrialRoster(
       students: bySession.get(s.id) ?? [],
     })),
     unassigned: unassignedRows.map((e) => ({
-      ...toStudent(e),
+      ...toStudent(e, null),
       trialClassName: e.trialClass.name,
     })),
   };
@@ -378,9 +392,24 @@ export async function getTeacherTrialEvalProps(
 
 /* ─────────────── Phiếu đánh giá rubric 1 HV trải nghiệm (form + PDF) ─────────────── */
 
+/** Một buổi của lớp Trial để giáo viên CHỌN chấm (GĐ4 — mỗi buổi một phiếu). */
+export type TeacherTrialRubricSession = {
+  id: string;
+  seq: number;
+  /** "Buổi 2 · 05/07 · 09:00-10:30" */
+  label: string;
+  /** Buổi này đã có phiếu của ĐÚNG ca đang mở chưa. */
+  evaluated: boolean;
+  /** Buổi đang được xếp cho ca (scheduledSessionId) — mặc định chọn. */
+  isScheduled: boolean;
+};
+
 export type TeacherTrialRubricContext = {
   enrollmentId: string;
+  /** Buổi ĐANG chấm (tham số `sessionId`, mặc định là buổi đang xếp). */
   trialClassSessionId: string | null;
+  /** Danh sách buổi của lớp để đổi buổi chấm. */
+  sessions: TeacherTrialRubricSession[];
   studentName: string;
   courseName: string | null;
   trialClassName: string;
@@ -396,11 +425,26 @@ export type TeacherTrialRubricContext = {
   } | null;
 };
 
+// @db.Date là UTC 00:00 của ngày lịch VN → format theo UTC mới ra đúng ngày.
+const rubricDateFmt = new Intl.DateTimeFormat("vi-VN", {
+  day: "2-digit",
+  month: "2-digit",
+  timeZone: "UTC",
+});
+
 /** Bối cảnh phiếu rubric cho 1 enrollment — null nếu không phải HV trải nghiệm của GV.
- * ⚠️ Câu 46: chỉ tên HV + khoá, KHÔNG lead.parentName/phone/email. */
+ * ⚠️ Câu 46: chỉ tên HV + khoá, KHÔNG lead.parentName/phone/email.
+ *
+ * `sessionId` (GĐ4): buổi được chấm. Bỏ trống = buổi đang xếp cho ca
+ * (`scheduledSessionId`) — giữ nguyên hành vi của link cũ.
+ *
+ * ⚠️ Vì sao phải có tham số này: `scheduledSessionId` CHỈ đổi khi dời lịch, nên nếu
+ * màn chấm luôn bám vào nó thì một ca vĩnh viễn chỉ đẻ được MỘT phiếu — khoá kép
+ * (ca, buổi) mà GĐ4 dựng ở DB sẽ không bao giờ có hiệu lực. */
 export async function getTeacherTrialRubricContext(
   userId: string,
   enrollmentId: string,
+  sessionId?: string,
 ): Promise<TeacherTrialRubricContext | null> {
   const enr = await db.trialEnrollment.findUnique({
     where: { id: enrollmentId },
@@ -409,28 +453,55 @@ export async function getTeacherTrialRubricContext(
       scheduledSessionId: true,
       gvPhanCongId: true, // GĐ3 — nhánh sở hữu chính, xem `owned` bên dưới
       leadChild: { select: { fullName: true, interestedCourseId: true } },
-      trialClass: { select: { name: true, teacherId: true, assistantId: true } },
+      trialClass: {
+        select: {
+          name: true,
+          teacherId: true,
+          assistantId: true,
+          sessions: {
+            orderBy: { seq: "asc" },
+            select: {
+              id: true,
+              seq: true,
+              date: true,
+              startTime: true,
+              endTime: true,
+              status: true,
+              teacherId: true,
+            },
+          },
+        },
+      },
     },
   });
   if (!enr) return null;
 
-  // Guard own-teacher: GV chính/trợ giảng lớp Trial, hoặc GV của buổi được xếp.
-  let sessionTeacherId: string | null = null;
-  if (enr.scheduledSessionId) {
-    const sess = await db.trialClassSession.findUnique({
-      where: { id: enr.scheduledSessionId },
-      select: { teacherId: true },
-    });
-    sessionTeacherId = sess?.teacherId ?? null;
-  }
+  const classSessions = enr.trialClass.sessions;
+  // Buổi được chấm. `sessionId` đến từ URL nên PHẢI kiểm nó thuộc đúng lớp của ca này
+  // — không có bước này thì đổi một chữ trên thanh địa chỉ là ghi phiếu sang lớp khác.
+  // Không khớp → null (fail-closed), KHÔNG âm thầm rơi về buổi đang xếp.
+  const scheduled = enr.scheduledSessionId
+    ? (classSessions.find((s) => s.id === enr.scheduledSessionId) ?? null)
+    : null;
+  // `const` (không phải `let`) vì TS không giữ được narrowing của biến `let` bên
+  // trong callback của .find()/.filter() phía dưới.
+  const target: (typeof classSessions)[number] | null = sessionId
+    ? (classSessions.find((s) => s.id === sessionId) ?? null)
+    : scheduled;
+  if (sessionId && !target) return null;
+
   // GĐ3 — `gvPhanCongId` (phân công theo TỪNG CA) là nhánh CHÍNH từ nay; ba nhánh cũ
   // giữ làm dự phòng cho lớp chưa được phân công theo ca. Thiếu nhánh đầu thì giáo
   // viên được Đào tạo phân công không mở nổi phiếu đánh giá của chính ca mình dạy.
+  //
+  // Giữ CẢ giáo viên của buổi đang xếp lẫn của buổi đang chấm: bỏ nhánh "buổi đang xếp"
+  // đi là siết hẹp hơn bản trước GĐ4 — người đang chấm được hôm nay sẽ mất quyền.
   const owned =
     enr.gvPhanCongId === userId ||
     enr.trialClass.teacherId === userId ||
     enr.trialClass.assistantId === userId ||
-    sessionTeacherId === userId;
+    scheduled?.teacherId === userId ||
+    target?.teacherId === userId;
   if (!owned) return null;
 
   const courseName = enr.leadChild.interestedCourseId
@@ -442,18 +513,14 @@ export async function getTeacherTrialRubricContext(
       )?.name ?? null
     : null;
 
-  // GĐ4 — phiếu nay khoá theo BUỔI nên một ca có thể có nhiều phiếu. Lấy phiếu của
-  // ĐÚNG buổi ca đang được xếp; không có buổi thì lấy phiếu mới nhất để màn cũ và
-  // dữ liệu trước GĐ4 (phiếu chưa gắn buổi) vẫn đọc được.
-  const eval0 = await db.trialRubricEval.findFirst({
-    where: {
-      trialEnrollmentId: enrollmentId,
-      ...(enr.scheduledSessionId
-        ? { trialClassSessionId: enr.scheduledSessionId }
-        : {}),
-    },
+  // GĐ4 — phiếu nay khoá theo BUỔI nên một ca có thể có nhiều phiếu. Nạp HẾT phiếu của
+  // ca (số buổi/ca rất nhỏ) để vừa lấy phiếu của buổi đang chấm, vừa gắn cờ "đã chấm"
+  // lên từng buổi trong ô chọn buổi.
+  const evals = await db.trialRubricEval.findMany({
+    where: { trialEnrollmentId: enrollmentId },
     orderBy: { updatedAt: "desc" },
     select: {
+      trialClassSessionId: true,
       scores: true,
       totalScore: true,
       rank: true,
@@ -463,10 +530,29 @@ export async function getTeacherTrialRubricContext(
       evaluatedByName: true,
     },
   });
+  // Không có buổi (dữ liệu trước GĐ4) → lấy phiếu mới nhất để màn cũ vẫn đọc được.
+  const eval0 = target
+    ? (evals.find((e) => e.trialClassSessionId === target.id) ?? null)
+    : (evals[0] ?? null);
+  const evaluatedSessionIds = new Set(
+    evals
+      .map((e) => e.trialClassSessionId)
+      .filter((id): id is string => id !== null),
+  );
 
   return {
     enrollmentId: enr.id,
-    trialClassSessionId: enr.scheduledSessionId,
+    trialClassSessionId: target?.id ?? null,
+    sessions: classSessions
+      // Buổi đã huỷ không chấm được nữa, trừ khi ĐANG mở đúng buổi đó (link cũ).
+      .filter((s) => s.status !== "CANCELLED" || s.id === target?.id)
+      .map((s) => ({
+        id: s.id,
+        seq: s.seq,
+        label: `Buổi ${s.seq} · ${rubricDateFmt.format(s.date)} · ${s.startTime}-${s.endTime}`,
+        evaluated: evaluatedSessionIds.has(s.id),
+        isScheduled: s.id === enr.scheduledSessionId,
+      })),
     studentName: enr.leadChild.fullName,
     courseName,
     trialClassName: enr.trialClass.name,

@@ -16,6 +16,21 @@ import type { Prisma } from "@prisma/client";
 /** @deprecated Tên cũ. Dùng `LEAD_CLOSED_STATUSES` từ `@/lib/leads/status`. */
 export const TERMINAL_LEAD_STATUSES = LEAD_CLOSED_STATUSES;
 
+/**
+ * Điều kiện "lead còn là VIỆC ĐANG MỞ của Sale" (bản sao của cùng luật ở
+ * `lib/lead/auto-assign.ts` — hai đường chia độc lập, sửa một bên nhớ sửa bên kia).
+ *
+ * ⚠️ `status notIn LEAD_CLOSED_STATUSES` MỘT MÌNH LÀ THIẾU: sau GĐ5 tập đóng chỉ còn
+ * `DA_MAT`, nên lead đã convert xong (đã thành học viên) vẫn mang `DA_DANG_KY` và bị
+ * đếm là tải mở VĨNH VIỄN ⇒ Sale lâu năm bị coi là quá tải, ngừng nhận lead mới.
+ * `convertedAt` do chính lượt convert ghi nên nó mới là dấu "đã xong thật".
+ */
+const LEAD_DANG_MO = {
+  deletedAt: null,
+  status: { notIn: TERMINAL_LEAD_STATUSES },
+  convertedAt: null,
+} satisfies Prisma.LeadWhereInput;
+
 export type AssigneeLoad = { id: string; openCount: number };
 export type Actor = { actorId: string | null; actorName: string };
 
@@ -80,8 +95,7 @@ export async function getSalesLoad(
     by: ["assignedToId"],
     where: {
       assignedToId: { in: sales.map((s) => s.id) },
-      deletedAt: null,
-      status: { notIn: TERMINAL_LEAD_STATUSES },
+      ...LEAD_DANG_MO,
     },
     _count: { id: true },
   });
@@ -180,12 +194,10 @@ export async function reassignOpenLeads(
     select: { centerId: true },
   });
 
+  // Chỉ kéo theo lead CÒN VIỆC. Lead đã convert xong không cần người mới tiếp quản —
+  // ném chúng sang sale khác chỉ làm phồng sổ lượt và làm loãng bảng hiệu suất.
   const openLeads = await db.lead.findMany({
-    where: {
-      assignedToId: userId,
-      deletedAt: null,
-      status: { notIn: TERMINAL_LEAD_STATUSES },
-    },
+    where: { assignedToId: userId, ...LEAD_DANG_MO },
     select: { id: true },
   });
   if (openLeads.length === 0) return { ok: true, reassigned: 0 };

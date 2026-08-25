@@ -34,12 +34,19 @@ export function EnrollPanel({
   canManage,
   canOverride,
   full,
+  maxSessions,
 }: {
   trialClassId: string;
   sessions: SessionRow[];
   canManage: boolean;
   canOverride: boolean;
   full: boolean;
+  /**
+   * Trần `crm.trialMaxSessions` do server nạp. Trước đây ô này ghi cứng "1 đến 60"
+   * trong khi server chặn ở 4 — người dùng gõ 6, qua được validate client, rồi bị
+   * server từ chối: hai thông điệp mâu thuẫn trong cùng một thao tác.
+   */
+  maxSessions: number;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -83,8 +90,10 @@ export function EnrollPanel({
     let totalSessions: number | undefined;
     if (raw) {
       const n = Number(raw);
-      if (!Number.isInteger(n) || n < 1 || n > 60) {
-        toast.error("Số buổi phải là số nguyên từ 1 đến 60");
+      if (!Number.isInteger(n) || n < 1 || n > maxSessions) {
+        // Câu chữ khớp NGUYÊN VĂN thông báo của server action để người dùng không
+        // thấy hai giới hạn khác nhau tuỳ chỗ chặn.
+        toast.error(`Số buổi học thử phải là số nguyên từ 1 đến ${maxSessions}`);
         return;
       }
       totalSessions = n;
@@ -184,12 +193,15 @@ export function EnrollPanel({
                     </span>
                   </div>
 
-                  <label className="flex items-center gap-1 text-xs text-muted-foreground">
-                    Số buổi
+                  <label
+                    className="flex items-center gap-1 text-xs text-muted-foreground"
+                    title={`Số buổi học thử: từ 1 đến ${maxSessions}`}
+                  >
+                    Số buổi (≤ {maxSessions})
                     <input
                       type="number"
                       min={1}
-                      max={60}
+                      max={maxSessions}
                       value={soBuoi[c.leadChildId] ?? ""}
                       onChange={(e) =>
                         setSoBuoi((p) => ({ ...p, [c.leadChildId]: e.target.value }))

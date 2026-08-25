@@ -19,9 +19,8 @@ import { PhanTrangBang } from "@/components/ui/phan-trang-bang";
 export const metadata = { title: "CRM Dashboard | Admin" };
 export const dynamic = "force-dynamic";
 
-// GĐ0 — hai hằng dưới đây chuyển về @/lib/leads/status. Bản chép cũ của phễu bỏ sót
-// TRIAL_IN_PROGRESS và REGISTERED nên cột "Học thử" và "Đã chốt" đếm thiếu; nay đã đủ.
-const TERMINAL = LEAD_CLOSED_STATUSES;
+// GĐ0 — hằng phễu chuyển về @/lib/leads/status. Bản chép cũ bỏ sót TRIAL_IN_PROGRESS
+// và REGISTERED nên cột "Học thử" và "Đã chốt" đếm thiếu; nay đã đủ.
 const FUNNEL_STAGES = LEAD_FUNNEL_STAGES;
 
 export default async function CrmDashboardPage() {
@@ -38,8 +37,16 @@ export default async function CrmDashboardPage() {
   const now = new Date();
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
 
-  const [byStatus, bySource, byAssigned, enrolledByAssigned, sales, monthTotal, monthEnrolled] =
-    await Promise.all([
+  const [
+    byStatus,
+    bySource,
+    byAssigned,
+    enrolledByAssigned,
+    sales,
+    monthTotal,
+    monthEnrolled,
+    open,
+  ] = await Promise.all([
       sdb.lead.groupBy({
         by: ["status"],
         where: { deletedAt: null },
@@ -69,17 +76,29 @@ export default async function CrmDashboardPage() {
       sdb.lead.count({
         where: { deletedAt: null, status: "DA_DANG_KY", updatedAt: { gte: monthStart } },
       }),
+      // "Đang xử lý" — phải ĐẾM RIÊNG, không cộng dồn từ `byStatus` được.
+      //
+      // ⚠️ Sau GĐ5, `LEAD_CLOSED_STATUSES` chỉ còn `DA_MAT` (cố ý: lead đã đăng ký mà
+      // chưa xếp lớp vẫn là việc đang mở). Nhưng lead đã convert XONG cũng mang
+      // `DA_DANG_KY`, nên gộp theo status thì mọi hồ sơ đã khép từ đời nào vẫn nằm mãi
+      // trong ô này — con số chỉ có tăng, không bao giờ giảm. `convertedAt` là mốc do
+      // chính lượt convert ghi, tách được hai nhóm đó; groupBy theo status thì không.
+      sdb.lead.count({
+        where: {
+          deletedAt: null,
+          status: { notIn: LEAD_CLOSED_STATUSES },
+          convertedAt: null,
+        },
+      }),
     ]);
 
   const statusCount = new Map<string, number>();
   let total = 0;
-  let open = 0;
   let enrolledTotal = 0;
   for (const g of byStatus) {
     const c = g._count._all;
     statusCount.set(g.status, c);
     total += c;
-    if (!TERMINAL.includes(g.status)) open += c;
     if (g.status === "DA_DANG_KY") enrolledTotal += c;
   }
 

@@ -6,6 +6,7 @@ import { auth } from "@/lib/auth";
 import { checkPermission } from "@/lib/auth/check-permission";
 import { resolveActor } from "@/lib/auth/actor";
 import { getAssignableTeachers } from "@/lib/teachers/assignable";
+import { getSetting } from "@/lib/settings/service";
 import { TrialSessionEvalFill } from "@/app/(admin)/admin/evaluations/_components/trial-session-eval-fill";
 import { layChiTietLop } from "../_lib/queries";
 import { TeacherAssignSelect } from "../_components/teacher-assign-select";
@@ -58,7 +59,17 @@ export default async function ChiTietLopTrialPage({
   // ngược lại — ngược hẳn quy trình đã chốt.
   const canDiemDanh = canAttendance;
   // Giáo viên thuần chỉ chấm lớp mình; người quản lý chấm mọi lớp trong tầm nhìn.
-  const canDanhGia = canFeedback && (isManager || cls.teacherId === session.user.id);
+  //
+  // ⚠️ GĐ3 — `cls.teacherId` (giáo viên MẶC ĐỊNH của lớp) KHÔNG còn là nguồn duy nhất:
+  // Đào tạo phân công theo TỪNG CA qua `TrialEnrollment.gvPhanCongId`. Chỉ so
+  // `cls.teacherId` thì giáo viên được phân công thật sự bị cấm nộp phiếu, còn giáo
+  // viên mặc định của lớp lại nộp được cho ca đã giao người khác — ngược ma trận §8.2.
+  const laGvPhanCongCa = cls.enrollments.some(
+    (e) => e.gvPhanCongId === session.user.id,
+  );
+  const canDanhGia =
+    canFeedback &&
+    (isManager || cls.teacherId === session.user.id || laGvPhanCongCa);
 
   // ⚠️ Danh sách GV phải nạp cho MỌI người xem, không chỉ người có quyền gán.
   //
@@ -66,24 +77,20 @@ export default async function ChiTietLopTrialPage({
   // tra TÊN giáo viên đang phụ trách — nên sau khi GĐ3 gỡ quyền khỏi Quản lý cơ sở,
   // Sale/QLCS/GV đều thấy mọi lớp là "Chưa gán" kể cả lớp đã có giáo viên.
   // Đọc tên không phải là quyền ghi; quyền chỉ quyết định có render <select> hay không.
+  //
+  // MỘT danh sách dùng chung cho cả ba ô (gán lớp · thêm buổi · phân công từng ca).
+  // Trước đây tách hai danh sách theo quyền, và ô "Thêm buổi học" ăn phải danh sách
+  // rỗng khi GĐ3 gỡ `trials:assign-teacher` khỏi Quản lý cơ sở → QLCS không xếp được
+  // giáo viên cho buổi ad-hoc. Base list giống hệt nhau (cùng cơ sở), chỉ khác
+  // `includeIds`, nên gộp là hết cả lớp bug đó.
   const teachers = await getAssignableTeachers({
     centerIds: [cls.centerId],
-    includeIds: [cls.teacherId],
+    includeIds: [
+      cls.teacherId,
+      ...cls.enrollments.flatMap((e) => [e.gvDeXuatId, e.gvPhanCongId]),
+    ],
   });
   const teacherOptions = teachers.map((t) => ({ id: t.id, name: t.name ?? "(không tên)" }));
-
-  // GĐ3 — danh sách GV cho ô đề xuất/phân công của TỪNG CA. Khác `teacherOptions` ở
-  // trên: ô kia chỉ nạp khi có quyền gán lớp, còn Sale (chỉ có trials:manage) vẫn
-  // phải chọn được người để ĐỀ XUẤT. Nạp riêng khi một trong hai quyền có mặt.
-  const teacherOptionsChoCa =
-    isManager || canAssignTeacher
-      ? (
-          await getAssignableTeachers({
-            centerIds: [cls.centerId],
-            includeIds: cls.enrollments.flatMap((e) => [e.gvDeXuatId, e.gvPhanCongId]),
-          })
-        ).map((t) => ({ id: t.id, name: t.name ?? "(không tên)" }))
-      : [];
 
   const activeUsed = cls.enrollments.filter((e) => e.status === "ACTIVE").length;
   const full = activeUsed >= cls.capacity;
@@ -179,13 +186,17 @@ export default async function ChiTietLopTrialPage({
             centerId: cls.centerId,
           })}
           full={full}
+          // Trần số buổi học thử đọc ở cấp GLOBAL — khớp NGUYÊN chỗ server action
+          // kiểm (lop-trial/_actions.ts). Ô nhập chặn khác server là đẩy người dùng
+          // vào cảnh gõ hợp lệ ở client rồi bị từ chối ở server.
+          maxSessions={await getSetting("crm.trialMaxSessions")}
         />
         <div className="mt-3">
           <RosterList
             trialClassId={cls.id}
             enrollments={cls.enrollments}
             sessions={cls.sessions}
-            teachers={teacherOptionsChoCa}
+            teachers={teacherOptions}
             canManage={isManager}
             canAssignTeacher={canAssignTeacher}
           />

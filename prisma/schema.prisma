@@ -1427,7 +1427,15 @@ model Lead {
   /// Mốc lần đổi trạng thái GẦN NHẤT. Có cột này thì nhắc việc mới đo được "nằm im
   /// bao lâu ở bậc hiện tại"; trước GĐ1 mọi cảnh báo đọc `updatedAt`, mà mọi thao
   /// tác chạm lead đều dời `updatedAt` nên lead nằm im 10 ngày vẫn không lên chuông.
-  statusChangedAt DateTime? @db.Timestamptz(6)
+  ///
+  /// `@default(now())` là mốc đổi trạng thái ĐẦU TIÊN (lúc lead ra đời ở bậc "Mới").
+  /// Không có nó thì mọi lead mới sinh ra với `statusChangedAt = NULL`: không đường
+  /// `lead.create` nào trong repo set field này, mà chúng nằm rải nhiều nơi (form
+  /// admin, import Excel, webhook, biểu mẫu công khai) nên sửa từng chỗ là chắc chắn
+  /// sót. Đặt default ở DB thì mọi đường ghi — kể cả SQL thô — đều có dòng sổ đầu.
+  /// ⚠️ Vẫn để NULLABLE: lead CŨ có trước GĐ1 không suy ngược được mốc đó, và
+  /// migration cố ý KHÔNG backfill (xem ghi chú trong 20260825120000).
+  statusChangedAt DateTime? @default(now()) @db.Timestamptz(6)
   /// Lead rơi khỏi phễu ở BẬC NÀO (trạng thái ngay trước khi sang DANG_NUOI_DUONG
   /// hoặc mất). NULL với toàn bộ lead cũ — không suy ngược được, đừng bịa.
   droppedAtStage  LeadStatus?

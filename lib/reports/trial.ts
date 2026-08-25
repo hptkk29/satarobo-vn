@@ -2,6 +2,11 @@
 // Nhận MẢNG record phẳng đã query sẵn → trả object số liệu. Mirror style
 // lib/crm/marketing-report.ts (helper THUẦN, test Vitest không cần Postgres).
 
+// lib/leads/status.ts chỉ import `type LeadStatus` nên vẫn THUẦN — import được ở đây
+// mà không kéo theo Prisma runtime/DB.
+import type { LeadStatus } from "@prisma/client";
+import { CONVERTED_STATUSES } from "@/lib/leads/status";
+
 /** TrialClassV2 (đã select). status: OPEN/RUNNING/COMPLETED/CANCELLED. */
 export type TrialClassRec = {
   id: string;
@@ -20,8 +25,14 @@ export type TrialEnrollmentRec = {
   status: string;
   /** LeadChildTrialStatus: NONE/SCHEDULED/IN_PROGRESS/ATTENDED. */
   leadChildTrialStatus: string;
-  /** Lead.status (REGISTERED/ENROLLED = đã đăng ký). */
-  leadStatus: string | null;
+  /**
+   * Lead.status (DA_DANG_KY = đã đăng ký — xem CONVERTED_STATUSES).
+   *
+   * ⚠️ Khai `LeadStatus | null` chứ KHÔNG phải `string | null`: call-site đưa vào đúng
+   * giá trị enum, còn kiểu string khiến fixture test viết giá trị enum đã chết mà tsc
+   * vẫn xanh — đó chính là cách bug 0% ở đây sống sót qua GĐ5.
+   */
+  leadStatus: LeadStatus | null;
 };
 
 /** TrialAttendance đã select. status: PRESENT/ABSENT. */
@@ -59,7 +70,7 @@ export type TrialReport = {
   };
   /** Dự đủ N buổi (số PRESENT >= sessionCount của lớp). */
   attendance: { total: number; full: number; fullRate: number };
-  /** ATTENDED → REGISTERED/ENROLLED (theo LeadChild duy nhất). */
+  /** ATTENDED → DA_DANG_KY (theo LeadChild duy nhất). */
   conversion: { attended: number; registered: number; rate: number };
   enrollmentStatus: { active: number; completed: number; withdrawn: number };
   /** Phễu trạng thái học thử (theo LeadChild duy nhất). */
@@ -67,8 +78,16 @@ export type TrialReport = {
   byCenter: CenterTrialStats[];
 };
 
-/** Lead đã đăng ký (đếm là "chuyển đổi" từ trial). */
-const REGISTERED_LEAD_STATUSES = new Set(["REGISTERED", "ENROLLED"]);
+/**
+ * Lead đã đăng ký (đếm là "chuyển đổi" từ trial).
+ *
+ * ⚠️ Lấy thẳng từ `CONVERTED_STATUSES` — nguồn sự thật DUY NHẤT ở lib/leads/status.ts.
+ * Trước GĐ5 đây là `new Set(["REGISTERED", "ENROLLED"])` chép tay; vì `leadStatus` của
+ * record phẳng khai `string | null` nên TypeScript KHÔNG hề đỏ khi enum đổi tên, và cả
+ * báo cáo học thử lặng lẽ vẽ chuyển đổi 0% (tổng lẫn từng cơ sở). Đừng chép lại danh
+ * sách vào đây lần nữa — mọi lần đổi enum phải chỉ sửa đúng một chỗ.
+ */
+const REGISTERED_LEAD_STATUSES = CONVERTED_STATUSES;
 /** Enrollment chiếm chỗ (lấp đầy) — không tính WITHDRAWN. */
 const FILLED_STATUSES = new Set(["ACTIVE", "COMPLETED"]);
 

@@ -222,8 +222,12 @@ export function TrialList({ slots }: { slots: TrialSlotView[] }) {
                                   </td>
                                   <td className="px-5 py-3 text-right whitespace-nowrap">
                                     <div className="inline-flex items-center gap-1.5">
+                                      {/* GĐ4 — phải kèm `sessionId` của ĐÚNG buổi đang
+                                          đứng: phiếu khoá theo cặp (ca, buổi), thiếu
+                                          nó thì server rơi về buổi đang xếp của ca và
+                                          giáo viên chấm buổi 2 lại sửa phiếu buổi 1. */}
                                       <Link
-                                        href={`?enrollmentId=${st2.enrollmentId}`}
+                                        href={`?enrollmentId=${st2.enrollmentId}&sessionId=${s.sessionId}`}
                                         className={cn(
                                           "inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring",
                                           st2.evaluated
@@ -241,7 +245,7 @@ export function TrialList({ slots }: { slots: TrialSlotView[] }) {
                                       </Link>
                                       {st2.evaluated && (
                                         <a
-                                          href={`/teacher/trial/pdf/${st2.enrollmentId}`}
+                                          href={`/teacher/trial/pdf/${st2.enrollmentId}?sessionId=${s.sessionId}`}
                                           target="_blank"
                                           rel="noopener noreferrer"
                                           className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs font-semibold text-foreground outline-none transition-colors hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring"

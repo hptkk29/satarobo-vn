@@ -15,6 +15,7 @@ import { writeAudit } from "@/lib/audit/audit-log";
 import { LEAD_PIPELINE_EXIT_STATUSES } from "@/lib/leads/status";
 import { setLeadStatus } from "@/lib/leads/set-status";
 import { danhGiaDoiLich, saleDuocDeXuat } from "@/lib/trial/reschedule-rules";
+import { getSetting } from "@/lib/settings/service";
 
 // ─── PURE helpers (deterministic — KHÔNG new Date() ở top) ─────────────────────
 
@@ -448,10 +449,18 @@ export async function enrollLeadChild(params: {
       });
       // FL-R2 (item 6) — mở/ghi lịch sử học thử per-lead (giữ kể cả khi rời pipeline).
       // totalSessions chốt tại lúc gán; nếu đã có history (lead quay lại) → giữ count cũ.
-      const totalSessions =
+      //
+      // ⚠️ TRẦN ÁP Ở ĐÂY, không chỉ ở tầng action.
+      // Chủ dự án chốt trần 4 buổi (đổi được qua cấu hình `crm.trialMaxSessions`).
+      // Tầng action chỉ kiểm khi người dùng GÕ SỐ vào ô; bỏ trống ô — thao tác THƯỜNG
+      // NHẤT — thì rơi xuống `cls.sessionCount`, mà số buổi của lớp cho phép tới 20.
+      // Không kẹp ở đây thì chốt câu 5 không có hiệu lực trên luồng chính.
+      const tranBuoi = await getSetting("crm.trialMaxSessions");
+      const soBuoiMongMuon =
         params.totalSessions && params.totalSessions > 0
           ? params.totalSessions
           : cls.sessionCount;
+      const totalSessions = Math.min(soBuoiMongMuon, tranBuoi);
       await tx.leadTrialHistory.upsert({
         where: {
           leadChildId_trialClassId: {
@@ -686,6 +695,29 @@ export async function markAttendance(params: {
   actorId: string;
 }): Promise<{ ok: boolean; error?: string }> {
   try {
+    // ⚠️ CHỐNG IDOR — kiểm CA và BUỔI thuộc CÙNG MỘT LỚP trước khi ghi.
+    //
+    // Action gọi vào đây chỉ scope được `trialSessionId` (qua `loadScopedTrialSession`),
+    // còn `trialEnrollmentId` đi thẳng từ client. Không kiểm thì POST tay ghi được điểm
+    // danh cho ca của lớp/cơ sở KHÁC — và tệ hơn, `syncTrialProgress` bên dưới sẽ đổi
+    // luôn trạng thái lead bên đó. Lỗ này có từ màn cũ, không phải hồi quy của đợt này.
+    const [ses, enr] = await Promise.all([
+      db.trialClassSession.findUnique({
+        where: { id: params.trialSessionId },
+        select: { trialClassId: true },
+      }),
+      db.trialEnrollment.findUnique({
+        where: { id: params.trialEnrollmentId },
+        select: { trialClassId: true },
+      }),
+    ]);
+    if (!ses || !enr) return { ok: false, error: "Không tìm thấy buổi hoặc ca trải nghiệm" };
+    if (ses.trialClassId !== enr.trialClassId) {
+      // Gộp một thông điệp cho cả hai ca (không tồn tại / khác lớp) — nói rõ hơn là
+      // biến thông báo lỗi thành kênh dò id.
+      return { ok: false, error: "Học viên không thuộc lớp của buổi này" };
+    }
+
     await db.$transaction(async (tx) => {
       await tx.trialAttendance.upsert({
         where: {
@@ -906,6 +938,27 @@ export async function rescheduleTrialEnrollment(params: {
 }
 
 /**
+ * Người được ĐỀ XUẤT hoặc PHÂN CÔNG cho một ca phải THẬT SỰ là giáo viên đang hoạt động.
+ *
+ * ⚠️ Trước bản vá này, hai hàm dưới chỉ `findUnique` kiểm TỒN TẠI, nên gọi thẳng action
+ * gán được tài khoản phụ huynh hoặc kế toán làm giáo viên của ca. Đường gán ở cấp LỚP
+ * vốn đã kiểm (`teacherCenterAssignmentError`), chỉ đường theo CA là hở.
+ *
+ * Tính cả người giữ TEACHER ở vị trí PHỤ (`roles[]`), giống mọi nơi khác trong repo —
+ * quản lý cơ sở kiêm dạy là ca có thật.
+ */
+async function laGiaoVienHopLe(userId: string): Promise<boolean> {
+  const u = await db.user.findUnique({
+    where: { id: userId },
+    select: { isActive: true, deletedAt: true, role: true, roles: true },
+  });
+  if (!u || !u.isActive || u.deletedAt) return false;
+  return u.role === "TEACHER" || u.roles.includes("TEACHER");
+}
+
+const KHONG_PHAI_GV = "Người được chọn không phải giáo viên đang hoạt động" as const;
+
+/**
  * Sale ĐỀ XUẤT giáo viên cho một ca. Chỉ ghi được khi Đào tạo CHƯA chốt — sau khi
  * `gvPhanCongId` có giá trị thì Sale không sửa nữa (chốt câu 1).
  */
@@ -921,12 +974,8 @@ export async function proposeTrialTeacher(params: {
   if (!enr) return { ok: false, error: "Không tìm thấy ca trải nghiệm" };
   const luat = saleDuocDeXuat({ status: enr.status, gvPhanCongId: enr.gvPhanCongId });
   if (!luat.ok) return { ok: false, error: luat.error };
-  if (params.gvDeXuatId) {
-    const gv = await db.user.findUnique({
-      where: { id: params.gvDeXuatId },
-      select: { id: true },
-    });
-    if (!gv) return { ok: false, error: "Giáo viên không tồn tại" };
+  if (params.gvDeXuatId && !(await laGiaoVienHopLe(params.gvDeXuatId))) {
+    return { ok: false, error: KHONG_PHAI_GV };
   }
   await db.trialEnrollment.update({
     where: { id: enr.id },
@@ -950,12 +999,8 @@ export async function assignTrialCaseTeacher(params: {
   });
   if (!enr) return { ok: false, error: "Không tìm thấy ca trải nghiệm" };
   if (enr.status !== "ACTIVE") return { ok: false, error: "Ca này đã kết thúc" };
-  if (params.gvPhanCongId) {
-    const gv = await db.user.findUnique({
-      where: { id: params.gvPhanCongId },
-      select: { id: true },
-    });
-    if (!gv) return { ok: false, error: "Giáo viên không tồn tại" };
+  if (params.gvPhanCongId && !(await laGiaoVienHopLe(params.gvPhanCongId))) {
+    return { ok: false, error: KHONG_PHAI_GV };
   }
   await db.trialEnrollment.update({
     where: { id: enr.id },
