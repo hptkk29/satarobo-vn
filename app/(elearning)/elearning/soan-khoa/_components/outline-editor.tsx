@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import { loaiBaiChoTrinhSoan, NHAN_LOAI_BAI } from "@/lib/elearning/lesson-kind";
 import Link from "next/link";
 import { toast } from "sonner";
 import {
@@ -33,14 +34,13 @@ type Bai = {
 };
 type Chuong = { id: string; title: string; lessons: Bai[] };
 
-const LOAI_BAI = [
-  ["READ", "Bài đọc"],
-  ["VIDEO", "Video"],
-  ["SCORM", "SCORM"],
-  ["QUIZ", "Bài kiểm tra"],
-  ["TASK", "Bài tập"],
-  ["LIVE_SESSION", "Buổi trực tiếp"],
-] as const;
+/**
+ * ⚠️ Đọc từ nguồn chung, KHÔNG chép tay danh sách ở đây.
+ *
+ * Bản chép tay cũ có đủ 6 loại, trong đó 3 loại không có đường đi nào — người soạn
+ * tạo được, khoá xuất bản được, và người học mở ra thì nhận "chưa mở".
+ */
+const LOAI_BAI = loaiBaiChoTrinhSoan();
 
 const NHAN_TRANG_THAI: Record<string, string> = {
   DRAFT: "Nháp",
@@ -182,7 +182,9 @@ export function OutlineEditor(props: {
                 </span>
                 <span className="flex-1">{b.title}</span>
                 <span className="text-xs text-muted-foreground">
-                  {LOAI_BAI.find(([v]) => v === b.kind)?.[1] ?? b.kind}
+                  {/* Bài loại đã ĐÓNG (tạo từ trước khi khoá lựa chọn) vẫn phải hiện nhãn
+                      đúng — hiện mã thô là để người soạn không nhận ra bài của mình. */}
+                  {NHAN_LOAI_BAI[b.kind] ?? b.kind}
                 </span>
                 {b.kind === "READ" && !b.contentMd?.trim() && (
                   <span className="rounded bg-state-warning-soft px-1.5 py-0.5 text-xs">
@@ -359,7 +361,7 @@ function ThemBai(props: {
         onChange={(e) => setKind(e.target.value)}
         className="rounded border border-border px-2 py-1 text-sm"
       >
-        {LOAI_BAI.map(([v, n]) => (
+        {LOAI_BAI.map(({ ma: v, nhan: n }) => (
           <option key={v} value={v}>
             {n}
           </option>

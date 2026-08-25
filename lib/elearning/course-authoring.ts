@@ -1,6 +1,7 @@
 import { z } from "zod";
 import type { ActionConfig, ScopedDb } from "@/lib/actions/factory";
 import { ActionError } from "@/lib/actions/factory";
+import { LOAI_BAI_ZOD } from "@/lib/elearning/lesson-kind";
 import {
   chuyenViTri,
   dungHaiPhaGhiThuTu,
@@ -239,7 +240,9 @@ export const taoBaiSchema = z
   .object({
     moduleId: z.string().min(1),
     title: z.string().trim().min(1),
-    kind: z.enum(["READ", "VIDEO", "SCORM", "QUIZ", "TASK", "LIVE_SESSION"]),
+    // ⚠️ Chỉ loại ĐÃ MỞ. Nhận cả 6 loại của enum nghĩa là cho tạo bài mà không
+    // đường nào tới được người học — xem `lib/elearning/lesson-kind.ts`.
+    kind: z.enum(LOAI_BAI_ZOD),
     required: z.boolean().default(true),
   })
   .strict();
