@@ -40,7 +40,11 @@ export function TrialEvalForm({
   studentName: string;
   courseName: string | null;
   existing: TrialEvalExisting | null;
-  pdfHref: string;
+  /**
+   * 25/08 — `null` thì KHÔNG hiện nút "Xuất PDF". Site GV truyền null (chủ dự án bỏ nút
+   * này khỏi màn Trial); prop giữ lại vì route PDF vẫn sống và màn khác còn dùng.
+   */
+  pdfHref: string | null;
 }) {
   const router = useRouter();
   const [pending, start] = useTransition();
@@ -225,9 +229,9 @@ export function TrialEvalForm({
         </div>
       </section>
 
-      {/* Hành động: Lưu + (sau khi lưu) Xuất PDF */}
+      {/* Hành động: Lưu + (sau khi lưu) Xuất PDF, nếu chỗ gọi còn muốn nút đó */}
       <div className="flex flex-wrap items-center justify-end gap-2 border-t border-border pt-4">
-        {saved && (
+        {saved && pdfHref && (
           <a
             href={pdfHref}
             target="_blank"

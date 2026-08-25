@@ -138,6 +138,23 @@ export async function updateTrialAction(
             metadata: { from: lead.status, to: leadNextStatus, via: "trial" },
           },
         });
+
+        // 25/08 — lead MẤT ⇒ đóng sổ học thử V2: `LeadTrialHistory.outcome = "LOST"`.
+        //
+        // Đường này KHÔNG đi qua `updateLeadStatus` (nó ghi thẳng `tx.lead.update` ở
+        // trên), mà `updateLeadStatus` là nơi DUY NHẤT còn lại ghi cột này — nên bỏ qua
+        // là màn Trial V1 giết lead xong mà sổ V2 vẫn "PENDING": bảng Trial của site GV
+        // để suất đó ở "Chờ đánh giá" vĩnh viễn, giáo viên thấy một việc không bao giờ
+        // làm xong được. Giữ nguyên chữ ký where của bản gốc để hai đường không lệch.
+        //
+        // Chỉ đụng dòng đang PENDING: con đã nhập học khoá khác rồi thì lead mất không
+        // xoá được thành tích đó.
+        if (leadNextStatus === "LOST") {
+          await tx.leadTrialHistory.updateMany({
+            where: { leadChild: { leadId: trial.leadId }, outcome: "PENDING" },
+            data: { outcome: "LOST" },
+          });
+        }
       }
     }
   });

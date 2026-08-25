@@ -200,7 +200,16 @@ export function AttendanceClassList({
         />
       ) : (
         <div className="overflow-hidden rounded-xl border border-border bg-card">
-          <div className="overflow-x-auto">
+          {/* `relative` KHÔNG thừa: cột cuối có <span className="sr-only">Mở</span>, mà
+              `sr-only` là `position: absolute`. Không có tổ tiên nào được ĐỊNH VỊ thì nó
+              neo vào khung chứa gốc của trang — tức thoát khỏi vùng cuộn này và đứng ở
+              toạ độ x≈880px (bề rộng `min-w` của bảng) tính theo cả trang. Ở 375px điều đó
+              kéo <body> trượt ngang mấy trăm pixel sang một mảng trắng rỗng. Đây đúng là
+              lỗi đã ghi ở `app/(teacher)/teacher/teacher.css` và `.t-card` bên đó chặn
+              bằng cùng một dòng này; site admin không có class tương đương nên phải đặt
+              tại chỗ. `overflow-hidden` ở thẻ ngoài KHÔNG cứu được: phần tử absolute không
+              bị cắt bởi tổ tiên không định vị. */}
+          <div className="relative overflow-x-auto">
             <PhanTrangBang tenDonVi="lớp">
               <table className="w-full min-w-[880px] border-collapse text-left">
                 <thead>

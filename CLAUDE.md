@@ -149,6 +149,8 @@ prisma/
 - ❌ KHÔNG để side-effect "dính chùm" inline trong action (target: side-effect không-atomic đi qua DomainEvent; tiền/enrollment đi transaction).
 - ❌ KHÔNG đưa lại scope đã LOẠI (Doc 15 §0): AI camera/sinh trắc/định vị học sinh · Web3/NFT/blockchain · marketplace · student login riêng · online video LMS · AI learning path/prediction. Nhu cầu "dự báo/khuyến nghị" làm **rule-based**. (Riêng "teacher domain riêng": **ĐÃ ĐẢO 04/07/2026** — phiếu BGĐ câu 7 duyệt site GV riêng `giaovien.satarobo.vn` → route group `app/(teacher)/teacher/`, 2-phase flag `TEACHER_SITE_ENABLED`.)
 - ❌ KHÔNG lưu giấy tờ tùy thân học viên; media phải tag + tôn trọng `StudentConsent`; KHÔNG lộ `studentId` trên URL portal.
+- ❌ **KHÔNG thêm tier nào vào `COMMISSION_TIERS`** (`lib/crm/commission.ts`). `MAX_TOTAL_RATE = 0.08` và Σ 4 tầng Sale ĐÚNG BẰNG 8,00% ⇒ thêm tầng thứ 5 là `validateRates()` ném `RATE_EXCEEDS_CAP` ở MỌI lần gọi `computeCommission()`, chết luôn hoa hồng Sale. Tầng `TRIAL_TEACHER` (+1% GV dạy Trial, 25/08) cố ý nằm NGOÀI pool — xem `lib/crm/trial-teacher-commission.ts`. Nâng trần là quyết định chính sách tiền của BGĐ.
+- ❌ KHÔNG gõ tay tên bài vào `Lesson` để "sửa tên dự án". Nguồn tên buổi/dự án là 2 file marketing (`components/legacy-laptrinhrobot/_data/roadmap-5-years.ts` + `exam-roadmap.ts`) → `lib/lms/curriculum-sata.ts` → `prisma/seed-curriculum-sata.ts`; lần seed sau ghi đè. Nhãn buổi/tên gửi PH đi qua `deriveSessionLabel`/`deriveSessionProjectName`, đừng tự ghép chuỗi.
 
 ## Workflow
 
@@ -203,6 +205,7 @@ feature → PR → merge `test`  → test.satarobo.vn tự deploy → nghiệm t
 
 ## Detailed rules (load on-demand)
 
+- [docs/site-giao-vien-2508.md](docs/site-giao-vien-2508.md) — **Site GV đợt 25/08**: giáo trình Sata thật (`Lesson.moduleCode` + seed) · gộp cột "Buổi học" · ảnh lớp bỏ kho nháp (up → PENDING) · bảng Trial 2 bảng phẳng + dời lịch + `LeadTrialHistory.outcome` + hoa hồng `TRIAL_TEACHER` · bài tập quá hạn tự đóng + gia hạn · `PhanTrangBang cuonNgang`. **Có việc phải chạy TAY sau merge** (migrate + seed giáo trình).
 - [docs/chat-realtime/00-dieu-chinh-cho-repo.md](docs/chat-realtime/00-dieu-chinh-cho-repo.md) — **Module Chat Realtime (đang xây)**: đọc file này + `docs/chat-realtime/architecture.md` trước MỌI task chat. Backlog: `docs/chat-realtime/backlog/`. Luật cứng không thương lượng: (1) client CHỈ ĐỌC realtime, mọi ghi qua Server Action, không bao giờ tạo policy INSERT trên `realtime.messages`; (2) Postgres là nguồn sự thật — broadcast fail → log, không rollback; (3) mọi xoá là SOFT DELETE; (4) không hard-code classId vào Message; (5) đổi phân công/học viên phải gọi `syncConversationMembership` TRONG CÙNG transaction; (6) SĐT/email PH không bao giờ vào payload trả cho PH khác; (7) test ma trận quyền phải xanh trước khi coi story xong; (8) `permissions.md` là nguồn sự thật — code lệch ma trận là bug.
 - [.claude/rules/client-site.md](.claude/rules/client-site.md) — animations, SEO, performance
 - [.claude/rules/admin-site.md](.claude/rules/admin-site.md) — server actions, RBAC patterns

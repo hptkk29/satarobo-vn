@@ -194,126 +194,124 @@ export default async function AssignmentsPage({ searchParams }: SearchParams) {
       </form>
 
       <div className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
-        <div className="overflow-x-auto">
-          <PhanTrangBang>
-            <table className="min-w-full divide-y divide-border">
-              <thead className="bg-muted">
+        <PhanTrangBang cuonNgang>
+          <table className="min-w-full divide-y divide-border">
+            <thead className="bg-muted">
+              <tr>
+                <th className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  Tiêu đề
+                </th>
+                <th className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  Lớp
+                </th>
+                <th className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  Hạn nộp
+                </th>
+                <th className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  Trạng thái
+                </th>
+                <th className="px-3 py-3 text-center text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  Tài liệu
+                </th>
+                <th className="px-3 py-3 text-center text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  Nộp / Chấm
+                </th>
+                <th className="px-3 py-3 text-right text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  Hành động
+                </th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-border">
+              {assignments.length === 0 ? (
                 <tr>
-                  <th className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                    Tiêu đề
-                  </th>
-                  <th className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                    Lớp
-                  </th>
-                  <th className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                    Hạn nộp
-                  </th>
-                  <th className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                    Trạng thái
-                  </th>
-                  <th className="px-3 py-3 text-center text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                    Tài liệu
-                  </th>
-                  <th className="px-3 py-3 text-center text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                    Nộp / Chấm
-                  </th>
-                  <th className="px-3 py-3 text-right text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                    Hành động
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border">
-                {assignments.length === 0 ? (
-                  <tr>
-                    <td
-                      colSpan={7}
-                      className="px-4 py-12 text-center text-sm text-muted-foreground"
+                  <td
+                    colSpan={7}
+                    className="px-4 py-12 text-center text-sm text-muted-foreground"
+                  >
+                    Chưa có bài tập nào khớp bộ lọc.{" "}
+                    <Link
+                      href="/assignments/new"
+                      className="text-primary hover:underline"
                     >
-                      Chưa có bài tập nào khớp bộ lọc.{" "}
-                      <Link
-                        href="/assignments/new"
-                        className="text-primary hover:underline"
-                      >
-                        Tạo mới →
-                      </Link>
-                    </td>
-                  </tr>
-                ) : (
-                  assignments.map((a) => {
-                    const statusInfo = STATUS_INFO[a.status];
-                    const s = statsByAssignment.get(a.id) ?? {
-                      submitted: 0,
-                      graded: 0,
-                      late: 0,
-                      total: 0,
-                    };
-                    const submittedTotal = s.submitted + s.late + s.graded;
-                    return (
-                      <tr key={a.id} className="hover:bg-muted/60">
-                        <td className="px-3 py-3">
-                          <div className="font-medium text-foreground line-clamp-1">
-                            {a.title}
+                      Tạo mới →
+                    </Link>
+                  </td>
+                </tr>
+              ) : (
+                assignments.map((a) => {
+                  const statusInfo = STATUS_INFO[a.status];
+                  const s = statsByAssignment.get(a.id) ?? {
+                    submitted: 0,
+                    graded: 0,
+                    late: 0,
+                    total: 0,
+                  };
+                  const submittedTotal = s.submitted + s.late + s.graded;
+                  return (
+                    <tr key={a.id} className="hover:bg-muted/60">
+                      <td className="px-3 py-3">
+                        <div className="font-medium text-foreground line-clamp-1">
+                          {a.title}
+                        </div>
+                        {a.lesson && (
+                          <div className="text-xs text-muted-foreground">
+                            Bài {a.lesson.order}: {a.lesson.title}
                           </div>
-                          {a.lesson && (
-                            <div className="text-xs text-muted-foreground">
-                              Bài {a.lesson.order}: {a.lesson.title}
-                            </div>
-                          )}
-                        </td>
-                        <td className="px-3 py-3 text-xs text-muted-foreground">
-                          <div className="font-medium">{a.class.name}</div>
-                          {a.class.classCode && (
-                            <div className="text-muted-foreground tabular-nums">
-                              {a.class.classCode}
-                            </div>
-                          )}
-                        </td>
-                        <td className="px-3 py-3 text-sm tabular-nums text-muted-foreground">
-                          {fmtDate(a.dueAt)}
-                        </td>
-                        <td className="px-3 py-3">
-                          <span
-                            className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold ${statusInfo.color}`}
-                          >
-                            {statusInfo.label}
-                          </span>
-                        </td>
-                        <td className="px-3 py-3 text-center text-sm tabular-nums text-foreground">
-                          {a._count.documents}
-                        </td>
-                        <td className="px-3 py-3 text-center text-xs tabular-nums">
-                          {s.total > 0 ? (
-                            <>
-                              <span className="font-semibold text-foreground">
-                                {submittedTotal}
+                        )}
+                      </td>
+                      <td className="px-3 py-3 text-xs text-muted-foreground">
+                        <div className="font-medium">{a.class.name}</div>
+                        {a.class.classCode && (
+                          <div className="text-muted-foreground tabular-nums">
+                            {a.class.classCode}
+                          </div>
+                        )}
+                      </td>
+                      <td className="px-3 py-3 text-sm tabular-nums text-muted-foreground">
+                        {fmtDate(a.dueAt)}
+                      </td>
+                      <td className="px-3 py-3">
+                        <span
+                          className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold ${statusInfo.color}`}
+                        >
+                          {statusInfo.label}
+                        </span>
+                      </td>
+                      <td className="px-3 py-3 text-center text-sm tabular-nums text-foreground">
+                        {a._count.documents}
+                      </td>
+                      <td className="px-3 py-3 text-center text-xs tabular-nums">
+                        {s.total > 0 ? (
+                          <>
+                            <span className="font-semibold text-foreground">
+                              {submittedTotal}
+                            </span>
+                            <span className="text-muted-foreground">/{s.total}</span>
+                            {s.graded > 0 && (
+                              <span className="ml-1 text-state-success-ink">
+                                ({s.graded}✓)
                               </span>
-                              <span className="text-muted-foreground">/{s.total}</span>
-                              {s.graded > 0 && (
-                                <span className="ml-1 text-state-success-ink">
-                                  ({s.graded}✓)
-                                </span>
-                              )}
-                            </>
-                          ) : (
-                            <span className="text-muted-foreground">—</span>
-                          )}
-                        </td>
-                        <td className="px-3 py-3 text-right">
-                          <Link
-                            href={`/assignments/${a.id}/edit`}
-                            className="inline-flex items-center gap-1 rounded-md border border-primary-soft px-2.5 py-1 text-xs font-semibold text-primary hover:bg-primary-soft"
-                          >
-                            Mở
-                          </Link>
-                        </td>
-                      </tr>
-                    );
-                  })
-                )}
-              </tbody>
-            </table>
-          </PhanTrangBang>
-        </div>
+                            )}
+                          </>
+                        ) : (
+                          <span className="text-muted-foreground">—</span>
+                        )}
+                      </td>
+                      <td className="px-3 py-3 text-right">
+                        <Link
+                          href={`/assignments/${a.id}/edit`}
+                          className="inline-flex items-center gap-1 rounded-md border border-primary-soft px-2.5 py-1 text-xs font-semibold text-primary hover:bg-primary-soft"
+                        >
+                          Mở
+                        </Link>
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </PhanTrangBang>
       </div>
     </div>
   );

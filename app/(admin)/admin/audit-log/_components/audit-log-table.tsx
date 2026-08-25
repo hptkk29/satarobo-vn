@@ -90,85 +90,83 @@ export function AuditLogTable({
   return (
     <>
       <div className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
-        <div className="overflow-x-auto">
-          <PhanTrangBang>
-            <table className="min-w-full divide-y divide-border">
-              <thead className="bg-muted">
-                <tr>
-                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                    Thời gian
-                  </th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                    Hành động
-                  </th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                    Module / Đối tượng
-                  </th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                    Thực hiện bởi
-                  </th>
-                  <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                    Chi tiết
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border">
-                {items.map((row) => (
-                  <tr key={row.id} className="hover:bg-muted/60">
-                    <td className="px-4 py-3 text-xs tabular-nums text-foreground">
-                      {formatTime(row.createdAt)}
-                    </td>
-                    <td className="px-4 py-3">
-                      <ActionBadge action={row.action} />
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="text-sm">
-                        <div className="font-medium text-foreground">
-                          {row.module}
-                          <span className="text-muted-foreground"> · </span>
-                          <span className="text-muted-foreground">{row.entityType}</span>
-                        </div>
-                        <div className="max-w-[220px] truncate text-xs text-muted-foreground">
-                          {row.entityId}
-                        </div>
-                        {row.changedFields.length > 0 && (
-                          <div className="mt-0.5 flex flex-wrap gap-1">
-                            {row.changedFields.slice(0, 4).map((f) => (
-                              <span
-                                key={f}
-                                className="inline-flex rounded bg-state-info-soft px-1.5 py-0.5 text-[10px] font-medium text-state-info-ink"
-                              >
-                                {f}
-                              </span>
-                            ))}
-                            {row.changedFields.length > 4 && (
-                              <span className="text-[10px] text-muted-foreground">
-                                +{row.changedFields.length - 4}
-                              </span>
-                            )}
-                          </div>
-                        )}
+        <PhanTrangBang cuonNgang>
+          <table className="min-w-full divide-y divide-border">
+            <thead className="bg-muted">
+              <tr>
+                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  Thời gian
+                </th>
+                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  Hành động
+                </th>
+                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  Module / Đối tượng
+                </th>
+                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  Thực hiện bởi
+                </th>
+                <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  Chi tiết
+                </th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-border">
+              {items.map((row) => (
+                <tr key={row.id} className="hover:bg-muted/60">
+                  <td className="px-4 py-3 text-xs tabular-nums text-foreground">
+                    {formatTime(row.createdAt)}
+                  </td>
+                  <td className="px-4 py-3">
+                    <ActionBadge action={row.action} />
+                  </td>
+                  <td className="px-4 py-3">
+                    <div className="text-sm">
+                      <div className="font-medium text-foreground">
+                        {row.module}
+                        <span className="text-muted-foreground"> · </span>
+                        <span className="text-muted-foreground">{row.entityType}</span>
                       </div>
-                    </td>
-                    <td className="px-4 py-3 text-sm text-foreground">
-                      {row.actorName}
-                    </td>
-                    <td className="px-4 py-3 text-right">
-                      <button
-                        type="button"
-                        onClick={() => setSelected(row)}
-                        className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-semibold text-primary hover:bg-primary-soft"
-                      >
-                        <Eye className="h-3.5 w-3.5" />
-                        Xem
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </PhanTrangBang>
-        </div>
+                      <div className="max-w-[220px] truncate text-xs text-muted-foreground">
+                        {row.entityId}
+                      </div>
+                      {row.changedFields.length > 0 && (
+                        <div className="mt-0.5 flex flex-wrap gap-1">
+                          {row.changedFields.slice(0, 4).map((f) => (
+                            <span
+                              key={f}
+                              className="inline-flex rounded bg-state-info-soft px-1.5 py-0.5 text-[10px] font-medium text-state-info-ink"
+                            >
+                              {f}
+                            </span>
+                          ))}
+                          {row.changedFields.length > 4 && (
+                            <span className="text-[10px] text-muted-foreground">
+                              +{row.changedFields.length - 4}
+                            </span>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </td>
+                  <td className="px-4 py-3 text-sm text-foreground">
+                    {row.actorName}
+                  </td>
+                  <td className="px-4 py-3 text-right">
+                    <button
+                      type="button"
+                      onClick={() => setSelected(row)}
+                      className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-semibold text-primary hover:bg-primary-soft"
+                    >
+                      <Eye className="h-3.5 w-3.5" />
+                      Xem
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </PhanTrangBang>
 
         {(hasMore || isPending) && (
           <div className="flex justify-center border-t border-border p-3">

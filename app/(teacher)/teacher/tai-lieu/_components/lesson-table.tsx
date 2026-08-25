@@ -87,95 +87,93 @@ export function LessonTable({
         />
       ) : (
         <div className="t-card overflow-hidden">
-          <div className="overflow-x-auto">
-            <PhanTrangBang tenDonVi="buổi">
-            <table className="min-w-[880px] w-full border-collapse text-left text-sm">
-              <thead>
-                <tr className="border-b border-border bg-muted/40 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
-                  <th scope="col" className="px-4 py-3 text-center">Buổi</th>
-                  <th scope="col" className="px-4 py-3">Chủ đề</th>
-                  <th scope="col" className="px-4 py-3">Giáo án PDF</th>
-                  <th scope="col" className="px-4 py-3">Giáo án SCORM</th>
-                  <th scope="col" className="px-4 py-3">Bài tập về nhà</th>
+          <PhanTrangBang cuonNgang tenDonVi="buổi">
+          <table className="min-w-[880px] w-full border-collapse text-left text-sm">
+            <thead>
+              <tr className="border-b border-border bg-muted/40 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+                <th scope="col" className="px-4 py-3 text-center">Buổi</th>
+                <th scope="col" className="px-4 py-3">Chủ đề</th>
+                <th scope="col" className="px-4 py-3">Giáo án PDF</th>
+                <th scope="col" className="px-4 py-3">Giáo án SCORM</th>
+                <th scope="col" className="px-4 py-3">Bài tập về nhà</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.map((lesson) => (
+                <tr
+                  key={lesson.id}
+                  className="border-b border-border/60 transition-colors last:border-0 hover:bg-muted/40"
+                >
+                  <td className="px-4 py-3 text-center align-top">
+                    <span className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-primary-soft text-sm font-extrabold text-primary-ink">
+                      {lesson.order}
+                    </span>
+                  </td>
+                  <td className="min-w-[180px] px-4 py-3 align-top">
+                    <p className="font-semibold text-foreground">{lesson.title}</p>
+                  </td>
+                  <td className="px-4 py-3 align-top">
+                    {lesson.planDocs.length > 0 ? (
+                      <div className="space-y-0.5">
+                        {lesson.planDocs.map((d) => (
+                          <DocLink key={d.id} doc={d} icon={FileText} />
+                        ))}
+                      </div>
+                    ) : (
+                      <span className="text-xs text-muted-foreground">—</span>
+                    )}
+                  </td>
+                  <td className="px-4 py-3 align-top">
+                    {scormOn && lesson.scorm ? (
+                      <Link
+                        href={
+                          lesson.scorm.sessionId
+                            ? `/teacher/scorm/play/${lesson.scorm.id}?sessionId=${lesson.scorm.sessionId}&from=${backParam}`
+                            : `/teacher/scorm/play/${lesson.scorm.id}?from=${backParam}`
+                        }
+                        title={lesson.scorm.name}
+                        className="group flex items-center gap-2 rounded-lg px-2 py-1.5 transition-colors hover:bg-primary-soft focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+                      >
+                        <MonitorPlay
+                          className="h-4 w-4 shrink-0 text-muted-foreground group-hover:text-primary-ink"
+                          aria-hidden
+                        />
+                        <span className="max-w-[190px] truncate font-medium text-foreground group-hover:text-primary-ink">
+                          {lesson.scorm.name}
+                        </span>
+                        <MonitorPlay
+                          className="ml-auto h-3.5 w-3.5 shrink-0 text-primary-ink opacity-0 transition-opacity group-hover:opacity-100"
+                          aria-hidden
+                        />
+                      </Link>
+                    ) : (
+                      <span className="text-xs text-muted-foreground">—</span>
+                    )}
+                  </td>
+                  <td className="px-4 py-3 align-top">
+                    {lesson.worksheetDocs.length > 0 || lesson.homeworkText ? (
+                      <div className="space-y-1">
+                        {lesson.worksheetDocs.map((d) => (
+                          <DocLink key={d.id} doc={d} icon={NotebookPen} />
+                        ))}
+                        {lesson.homeworkText && (
+                          <p
+                            className="line-clamp-2 max-w-[220px] text-xs whitespace-pre-wrap text-muted-foreground"
+                            title={lesson.homeworkText}
+                          >
+                            {lesson.homeworkText}
+                          </p>
+                        )}
+                      </div>
+                    ) : (
+                      <span className="text-xs text-muted-foreground">—</span>
+                    )}
+                  </td>
                 </tr>
-              </thead>
-              <tbody>
-                {filtered.map((lesson) => (
-                  <tr
-                    key={lesson.id}
-                    className="border-b border-border/60 transition-colors last:border-0 hover:bg-muted/40"
-                  >
-                    <td className="px-4 py-3 text-center align-top">
-                      <span className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-primary-soft text-sm font-extrabold text-primary-ink">
-                        {lesson.order}
-                      </span>
-                    </td>
-                    <td className="min-w-[180px] px-4 py-3 align-top">
-                      <p className="font-semibold text-foreground">{lesson.title}</p>
-                    </td>
-                    <td className="px-4 py-3 align-top">
-                      {lesson.planDocs.length > 0 ? (
-                        <div className="space-y-0.5">
-                          {lesson.planDocs.map((d) => (
-                            <DocLink key={d.id} doc={d} icon={FileText} />
-                          ))}
-                        </div>
-                      ) : (
-                        <span className="text-xs text-muted-foreground">—</span>
-                      )}
-                    </td>
-                    <td className="px-4 py-3 align-top">
-                      {scormOn && lesson.scorm ? (
-                        <Link
-                          href={
-                            lesson.scorm.sessionId
-                              ? `/teacher/scorm/play/${lesson.scorm.id}?sessionId=${lesson.scorm.sessionId}&from=${backParam}`
-                              : `/teacher/scorm/play/${lesson.scorm.id}?from=${backParam}`
-                          }
-                          title={lesson.scorm.name}
-                          className="group flex items-center gap-2 rounded-lg px-2 py-1.5 transition-colors hover:bg-primary-soft focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-                        >
-                          <MonitorPlay
-                            className="h-4 w-4 shrink-0 text-muted-foreground group-hover:text-primary-ink"
-                            aria-hidden
-                          />
-                          <span className="max-w-[190px] truncate font-medium text-foreground group-hover:text-primary-ink">
-                            {lesson.scorm.name}
-                          </span>
-                          <MonitorPlay
-                            className="ml-auto h-3.5 w-3.5 shrink-0 text-primary-ink opacity-0 transition-opacity group-hover:opacity-100"
-                            aria-hidden
-                          />
-                        </Link>
-                      ) : (
-                        <span className="text-xs text-muted-foreground">—</span>
-                      )}
-                    </td>
-                    <td className="px-4 py-3 align-top">
-                      {lesson.worksheetDocs.length > 0 || lesson.homeworkText ? (
-                        <div className="space-y-1">
-                          {lesson.worksheetDocs.map((d) => (
-                            <DocLink key={d.id} doc={d} icon={NotebookPen} />
-                          ))}
-                          {lesson.homeworkText && (
-                            <p
-                              className="line-clamp-2 max-w-[220px] text-xs whitespace-pre-wrap text-muted-foreground"
-                              title={lesson.homeworkText}
-                            >
-                              {lesson.homeworkText}
-                            </p>
-                          )}
-                        </div>
-                      ) : (
-                        <span className="text-xs text-muted-foreground">—</span>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            </PhanTrangBang>
-          </div>
+              ))}
+            </tbody>
+          </table>
+          </PhanTrangBang>
         </div>
       )}
     </div>

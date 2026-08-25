@@ -836,14 +836,23 @@ model CommissionLine {
   id          String              @id @default(cuid())
   statementId String
   recipientId String // user hưởng hoa hồng
-  tier        String // QC | SALE_ADMIN | SALE | QL_TT
+  tier        String // QC | SALE_ADMIN | SALE | QL_TT | TRIAL_TEACHER
   amount      Int // VND; âm = clawback
   isClawback  Boolean             @default(false)
   leadId      String?
   statement   CommissionStatement @relation(fields: [statementId], references: [id], onDelete: Cascade)
 
+  // Site GV 25/08 — hoa hồng GV dạy trial (tier TRIAL_TEACHER, 1% học phí khi học viên
+  // học thử NHẬP HỌC). Khác 4 tầng Sale ở chỗ nó sinh TỪNG DÒNG theo ghi danh, ngay
+  // trong transaction convert — nên cần khoá chống ghi trùng khi convert bị chạy lại.
+  // 4 tầng Sale không dùng 2 cột này (setStatementLines ghi lại cả kỳ, tự nhất quán).
+  enrollmentId String?
+  note         String?
+
+  @@unique([statementId, tier, recipientId, enrollmentId])
   @@index([statementId])
   @@index([recipientId])
+  @@index([enrollmentId])
 }
 
 // R6-F2 — Bản ghi LỆCH giữa can() v1 (matrix) và v2 (DB actor) khi shadow-run.
@@ -2668,6 +2677,13 @@ model Lesson {
   description String? @db.Text
   content     String? @db.Text
 
+  // Mockup giáo trình 5 năm (25/08) — HỌC PHẦN của bài. Giáo trình Sata3–7 chia
+  // 4 học phần × 12 buổi; nhãn buổi trên site GV in "Buổi 1 - HP1 - Bàn Tay Ma Thuật".
+  // Khoá luyện thi (Sata1/2/8) không chia học phần ⇒ để null, nhãn tự rút còn
+  // "Buổi 1 - <tên bài>". Nguồn nạp: prisma/seed-curriculum-sata.ts.
+  moduleCode String? // "HP1"
+  moduleName String? // "Học phần 1"
+
   duration   Int      @default(90)
   objectives String[] @default([])
   materials  String[] @default([]) // LMS-1: dùng làm "Thiết bị cần chuẩn bị"
@@ -3053,6 +3069,21 @@ model Assignment {
 
   allowText Boolean @default(true)
   allowFile Boolean @default(true)
+
+  // Site GV 25/08 — QUÁ HẠN TỰ ĐÓNG + GV mở gia hạn "nộp trễ".
+  //
+  // Trước đó `dueAt` trôi qua KHÔNG đổi gì: bài vẫn "Đang mở" vĩnh viễn, cổng phụ huynh
+  // vẫn nhận bài (chỉ gắn cờ SubmissionStatus.LATE), và chỉ admin mới đóng được bằng tay.
+  //
+  // Nay trạng thái hiển thị SUY Ở LÚC ĐỌC (lib/lms/assignment-window.ts) — KHÔNG cron,
+  // không cột `closedAt`: quá `dueAt` mà không có cửa gia hạn ⇒ coi như ĐÓNG.
+  // `lateUntil` = hạn của cửa gia hạn do GV mở; bài nộp trong cửa này vẫn tính LATE
+  // (đối chiếu `dueAt`, không đối chiếu `lateUntil`) để học bạ không mất dấu nộp trễ.
+  // Học theo TrnAssignment (e-learning): gia hạn ghi hạn MỚI, KHÔNG bao giờ sửa `dueAt`.
+  lateUntil       DateTime? @db.Timestamptz(6)
+  lateReason      String?   @db.Text
+  lateGrantedById String?
+  lateGrantedAt   DateTime? @db.Timestamptz(6)
 
   status AssignmentStatus @default(DRAFT)
 
@@ -6237,6 +6268,14 @@ model TrialEnrollment {
   // LD3(b) — buổi (TrialClassSession) cụ thể được chọn khi xếp con vào lớp. Scalar nullable
   // (validation "buổi thuộc lớp" đã làm ở action boundary — không cần relation, giữ blast radius nhỏ).
   scheduledSessionId String?
+  // Site GV 25/08 — DỜI LỊCH học thử. Trước đó `scheduledSessionId` ghi ĐÚNG MỘT LẦN lúc
+  // xếp con vào lớp rồi bất biến: không admin/GV/Sale nào đổi được buổi, nên bảng trial
+  // của giáo viên không có cách nào biết suất nào "bị dời lịch".
+  // Nay `rescheduleTrialEnrollment` đổi buổi và GHI LẠI buổi cũ ở đây (buổi gần nhất —
+  // dời nhiều lần thì chỉ giữ lần cuối; lịch sử đầy đủ nằm ở DomainEvent + AuditLog).
+  rescheduledFromSessionId String?
+  rescheduledAt            DateTime? @db.Timestamptz(6)
+  rescheduleReason         String?   @db.Text
   addedById          String?
   createdAt          DateTime              @default(now()) @db.Timestamptz(6)
   updatedAt          DateTime              @updatedAt @db.Timestamptz(6)

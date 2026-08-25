@@ -144,7 +144,7 @@ export default async function Page() {
         {tienDo.length === 0 ? (
           <p>Chưa có bài nào được ghi nhận.</p>
         ) : (
-          <PhanTrangBang tenDonVi="bài" khoaGhiNho="el-du-lieu-cua-toi">
+          <PhanTrangBang cuonNgang tenDonVi="bài" khoaGhiNho="el-du-lieu-cua-toi">
             <table className="w-full text-left text-xs">
               <thead className="text-muted-foreground">
                 <tr>

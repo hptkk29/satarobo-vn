@@ -164,7 +164,7 @@ export function SataCoinAdmin({
       {/* Ledger */}
       <section className="rounded-xl border border-border bg-card">
         <div className="border-b px-4 py-2 text-sm font-semibold text-foreground">Sổ cái gần đây</div>
-        <PhanTrangBang>
+        <PhanTrangBang cuonNgang>
           <table className="w-full text-sm">
             <thead className="text-left text-xs text-muted-foreground">
               <tr>

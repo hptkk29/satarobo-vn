@@ -137,84 +137,82 @@ export default async function TeachersPage({ searchParams }: SearchParams) {
       </form>
 
       <div className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
-        <div className="overflow-x-auto">
-          <PhanTrangBang>
-            <table className="min-w-full divide-y divide-border">
-              <thead className="bg-muted">
+        <PhanTrangBang cuonNgang>
+          <table className="min-w-full divide-y divide-border">
+            <thead className="bg-muted">
+              <tr>
+                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">Tên</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">Cơ sở</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">Ngạch</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">Loại HĐ</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">Trạng thái</th>
+                <th className="px-4 py-3 text-center text-xs font-semibold uppercase tracking-wider text-muted-foreground">Lớp</th>
+                <th className="px-4 py-3 text-center text-xs font-semibold uppercase tracking-wider text-muted-foreground">Tải / tuần</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-border">
+              {staff.length === 0 ? (
                 <tr>
-                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">Tên</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">Cơ sở</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">Ngạch</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">Loại HĐ</th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">Trạng thái</th>
-                  <th className="px-4 py-3 text-center text-xs font-semibold uppercase tracking-wider text-muted-foreground">Lớp</th>
-                  <th className="px-4 py-3 text-center text-xs font-semibold uppercase tracking-wider text-muted-foreground">Tải / tuần</th>
+                  <td colSpan={7} className="px-4 py-12 text-center text-sm text-muted-foreground">
+                    Chưa có giáo viên nào
+                  </td>
                 </tr>
-              </thead>
-              <tbody className="divide-y divide-border">
-                {staff.length === 0 ? (
-                  <tr>
-                    <td colSpan={7} className="px-4 py-12 text-center text-sm text-muted-foreground">
-                      Chưa có giáo viên nào
+              ) : (
+                staff.map((u) => {
+                  const load = computeTeachingLoad(u.teacherClass, overloadHours);
+                  return (
+                  <tr key={u.id} className="hover:bg-muted/60">
+                    <td className="px-4 py-3">
+                      <Link href={`/teachers/${u.id}`} className="flex items-center gap-3 group">
+                        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-primary to-primary text-xs font-bold text-white">
+                          {(u.name ?? u.email ?? "?")[0].toUpperCase()}
+                        </div>
+                        <div>
+                          <div className="font-medium text-foreground group-hover:text-primary">
+                            {u.name ?? "—"}
+                          </div>
+                          <div className="text-xs text-muted-foreground">{u.email}</div>
+                        </div>
+                      </Link>
+                    </td>
+                    <td className="px-4 py-3 text-sm text-muted-foreground">{u.center?.name ?? "—"}</td>
+                    <td className="px-4 py-3">
+                      <span className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold ${u.teacherProfile ? RANK_COLOR[u.teacherProfile.rank] : "bg-muted text-muted-foreground"}`}>
+                        {u.teacherProfile ? RANK_LABEL[u.teacherProfile.rank] : "—"}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-sm text-muted-foreground">
+                      {u.teacherProfile ? EMPLOYMENT_LABEL[u.teacherProfile.employmentType] : "—"}
+                    </td>
+                    <td className="px-4 py-3">
+                      {u.teacherProfile ? (
+                        <span className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold ${TEACHER_STATUS_COLOR[u.teacherProfile.status]}`}>
+                          {TEACHER_STATUS_LABEL[u.teacherProfile.status]}
+                        </span>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">Chưa có hồ sơ</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3 text-center text-sm font-medium tabular-nums text-foreground">
+                      {load.classCount}
+                    </td>
+                    <td className="px-4 py-3 text-center">
+                      <div className="text-sm tabular-nums text-foreground">
+                        {load.sessionsPerWeek} buổi · {load.hoursPerWeek}h
+                      </div>
+                      {load.overloaded && (
+                        <span className="mt-0.5 inline-flex rounded-full bg-state-danger-soft px-2 py-0.5 text-[10px] font-semibold text-state-danger-ink">
+                          Quá tải
+                        </span>
+                      )}
                     </td>
                   </tr>
-                ) : (
-                  staff.map((u) => {
-                    const load = computeTeachingLoad(u.teacherClass, overloadHours);
-                    return (
-                    <tr key={u.id} className="hover:bg-muted/60">
-                      <td className="px-4 py-3">
-                        <Link href={`/teachers/${u.id}`} className="flex items-center gap-3 group">
-                          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-primary to-primary text-xs font-bold text-white">
-                            {(u.name ?? u.email ?? "?")[0].toUpperCase()}
-                          </div>
-                          <div>
-                            <div className="font-medium text-foreground group-hover:text-primary">
-                              {u.name ?? "—"}
-                            </div>
-                            <div className="text-xs text-muted-foreground">{u.email}</div>
-                          </div>
-                        </Link>
-                      </td>
-                      <td className="px-4 py-3 text-sm text-muted-foreground">{u.center?.name ?? "—"}</td>
-                      <td className="px-4 py-3">
-                        <span className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold ${u.teacherProfile ? RANK_COLOR[u.teacherProfile.rank] : "bg-muted text-muted-foreground"}`}>
-                          {u.teacherProfile ? RANK_LABEL[u.teacherProfile.rank] : "—"}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 text-sm text-muted-foreground">
-                        {u.teacherProfile ? EMPLOYMENT_LABEL[u.teacherProfile.employmentType] : "—"}
-                      </td>
-                      <td className="px-4 py-3">
-                        {u.teacherProfile ? (
-                          <span className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold ${TEACHER_STATUS_COLOR[u.teacherProfile.status]}`}>
-                            {TEACHER_STATUS_LABEL[u.teacherProfile.status]}
-                          </span>
-                        ) : (
-                          <span className="text-xs text-muted-foreground">Chưa có hồ sơ</span>
-                        )}
-                      </td>
-                      <td className="px-4 py-3 text-center text-sm font-medium tabular-nums text-foreground">
-                        {load.classCount}
-                      </td>
-                      <td className="px-4 py-3 text-center">
-                        <div className="text-sm tabular-nums text-foreground">
-                          {load.sessionsPerWeek} buổi · {load.hoursPerWeek}h
-                        </div>
-                        {load.overloaded && (
-                          <span className="mt-0.5 inline-flex rounded-full bg-state-danger-soft px-2 py-0.5 text-[10px] font-semibold text-state-danger-ink">
-                            Quá tải
-                          </span>
-                        )}
-                      </td>
-                    </tr>
-                    );
-                  })
-                )}
-              </tbody>
-            </table>
-          </PhanTrangBang>
-        </div>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </PhanTrangBang>
       </div>
     </div>
   );

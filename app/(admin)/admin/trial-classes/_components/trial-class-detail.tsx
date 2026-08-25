@@ -11,6 +11,7 @@ import {
   completeTrialSessionAction,
   enrollLeadChildAction,
   unenrollLeadChildAction,
+  rescheduleTrialEnrollmentAction,
   searchTrialCandidatesAction,
 } from "../_actions";
 
@@ -26,6 +27,10 @@ type Enrollment = {
   phone: string | null;
   leadId: string | null;
   status: "ACTIVE" | "COMPLETED" | "WITHDRAWN" | string;
+  /** Buổi đang xếp — ô chọn "Dời lịch" loại chính buổi này ra. */
+  scheduledSessionId: string | null;
+  /** Đã từng bị dời (id buổi cũ) — hiện nhãn để QLCS/Sale thấy ngay. */
+  rescheduledFromSessionId: string | null;
 };
 
 type Candidate = {
@@ -174,6 +179,57 @@ export function TrialClassDetail({
         return;
       }
       toast.error(res.error ?? "Thêm học viên thất bại");
+    });
+  }
+
+  // ── Dời 1 học viên trải nghiệm sang buổi khác (25/08) ───────────────────────
+  // Trước đây buổi của học viên là BẤT BIẾN sau khi xếp: muốn đổi phải gỡ con ra rồi
+  // xếp lại, và dấu vết "đã từng hẹn buổi nào" mất sạch. Nay dời tại chỗ; buổi cũ được
+  // ghi lại để bảng Trial của site GV in được trạng thái "Bị dời lịch".
+  const [movingId, setMovingId] = useState<string | null>(null);
+  const [moveTo, setMoveTo] = useState("");
+  const [moveReason, setMoveReason] = useState("");
+
+  /**
+   * Buổi được phép dời TỚI: chỉ buổi chưa học (SCHEDULED). Dời vào buổi đã COMPLETED
+   * thì điểm danh buổi đó đã chốt — học viên mới vào mang tiếng vắng mặt vĩnh viễn.
+   */
+  const movableSessions = useMemo(
+    () => sessions.filter((sx) => sx.status === "SCHEDULED"),
+    [sessions],
+  );
+
+  /** Nhãn buổi cho ô chọn: "Buổi 2 · 05/07/2026 · 09:00-10:30". */
+  function sessionPickLabel(sx: SessionData): string {
+    const d = new Date(sx.date);
+    const dmy = [
+      String(d.getUTCDate()).padStart(2, "0"),
+      String(d.getUTCMonth() + 1).padStart(2, "0"),
+      d.getUTCFullYear(),
+    ].join("/");
+    return `Buổi ${sx.seq} · ${dmy} · ${sx.startTime}-${sx.endTime}`;
+  }
+
+  function startMove(enrollmentId: string) {
+    setMovingId(enrollmentId);
+    setMoveTo("");
+    setMoveReason("");
+  }
+
+  function submitMove(enrollmentId: string) {
+    startTransition(async () => {
+      const res = await rescheduleTrialEnrollmentAction({
+        enrollmentId,
+        toSessionId: moveTo,
+        reason: moveReason,
+      });
+      if (res.ok) {
+        toast.success("Đã dời lịch học thử");
+        setMovingId(null);
+        router.refresh();
+      } else {
+        toast.error(res.error ?? "Dời lịch thất bại");
+      }
     });
   }
 
@@ -516,41 +572,105 @@ export function TrialClassDetail({
             {enrollments.map((e) => {
               const inactive = e.status === "WITHDRAWN" || e.status === "CANCELLED";
               return (
-                <li
-                  key={e.id}
-                  className={`flex flex-wrap items-center justify-between gap-2 py-2 ${ inactive ? "opacity-60" : "" }`}
-                >
-                  <div>
-                    <span
-                      className={`font-medium ${inactive ? "text-muted-foreground line-through" : "text-foreground"}`}
-                    >
-                      {e.childName}
-                    </span>
-                    {e.parentName && (
-                      <span className="ml-2 text-xs text-muted-foreground">
-                        PH: {e.parentName}
-                        {e.phone ? ` · ${e.phone}` : ""}
+                <li key={e.id} className={inactive ? "py-2 opacity-60" : "py-2"}>
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div>
+                      <span
+                        className={`font-medium ${inactive ? "text-muted-foreground line-through" : "text-foreground"}`}
+                      >
+                        {e.childName}
                       </span>
-                    )}
+                      {e.parentName && (
+                        <span className="ml-2 text-xs text-muted-foreground">
+                          PH: {e.parentName}
+                          {e.phone ? ` · ${e.phone}` : ""}
+                        </span>
+                      )}
+                      {e.rescheduledFromSessionId && (
+                        <span className="ml-2 rounded-full bg-state-warning-soft px-2 py-0.5 text-xs font-semibold text-state-warning-ink">
+                          Đã dời lịch
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span
+                        className={`rounded-full px-2 py-0.5 text-xs font-semibold ${ ENROLL_BADGE[e.status] ?? "bg-muted text-muted-foreground" }`}
+                      >
+                        {ENROLL_LABEL[e.status] ?? e.status}
+                      </span>
+                      {canManage && e.status === "ACTIVE" && movableSessions.length > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => (movingId === e.id ? setMovingId(null) : startMove(e.id))}
+                          disabled={pending}
+                          title="Dời sang buổi khác"
+                          className="inline-flex items-center gap-1 rounded-md border border-border px-2 py-0.5 text-xs font-medium text-foreground hover:bg-muted disabled:opacity-50"
+                        >
+                          Dời lịch
+                        </button>
+                      )}
+                      {canManage && e.status === "ACTIVE" && (
+                        <button
+                          type="button"
+                          onClick={() => removeStudent(e.leadChildId, e.childName)}
+                          disabled={pending}
+                          title="Gỡ khỏi lớp"
+                          className="inline-flex items-center gap-1 rounded-md border border-state-danger px-2 py-0.5 text-xs font-medium text-state-danger-ink hover:bg-state-danger-soft disabled:opacity-50"
+                        >
+                          <X className="h-3 w-3" /> Gỡ
+                        </button>
+                      )}
+                    </div>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <span
-                      className={`rounded-full px-2 py-0.5 text-xs font-semibold ${ ENROLL_BADGE[e.status] ?? "bg-muted text-muted-foreground" }`}
-                    >
-                      {ENROLL_LABEL[e.status] ?? e.status}
-                    </span>
-                    {canManage && e.status === "ACTIVE" && (
+
+                  {movingId === e.id && (
+                    <div className="mt-2 flex flex-wrap items-end gap-2 rounded-lg border border-border bg-muted/40 p-2">
+                      <label className="flex min-w-[220px] flex-1 flex-col gap-1 text-xs font-medium text-muted-foreground">
+                        Buổi mới
+                        <select
+                          value={moveTo}
+                          onChange={(ev) => setMoveTo(ev.target.value)}
+                          disabled={pending}
+                          className="h-8 rounded-md border border-border bg-background px-2 text-sm text-foreground"
+                        >
+                          <option value="">— Chọn buổi —</option>
+                          {movableSessions
+                            .filter((sx) => sx.id !== e.scheduledSessionId)
+                            .map((sx) => (
+                              <option key={sx.id} value={sx.id}>
+                                {sessionPickLabel(sx)}
+                              </option>
+                            ))}
+                        </select>
+                      </label>
+                      <label className="flex min-w-[220px] flex-[2] flex-col gap-1 text-xs font-medium text-muted-foreground">
+                        Lý do dời (bắt buộc)
+                        <input
+                          value={moveReason}
+                          onChange={(ev) => setMoveReason(ev.target.value)}
+                          disabled={pending}
+                          placeholder="Phụ huynh xin đổi buổi, con ốm…"
+                          className="h-8 rounded-md border border-border bg-background px-2 text-sm text-foreground"
+                        />
+                      </label>
                       <button
                         type="button"
-                        onClick={() => removeStudent(e.leadChildId, e.childName)}
-                        disabled={pending}
-                        title="Gỡ khỏi lớp"
-                        className="inline-flex items-center gap-1 rounded-md border border-state-danger px-2 py-0.5 text-xs font-medium text-state-danger-ink hover:bg-state-danger-soft disabled:opacity-50"
+                        onClick={() => submitMove(e.id)}
+                        disabled={pending || !moveTo || moveReason.trim().length < 3}
+                        className="h-8 rounded-md bg-primary px-3 text-xs font-semibold text-primary-foreground disabled:opacity-50"
                       >
-                        <X className="h-3 w-3" /> Gỡ
+                        Dời
                       </button>
-                    )}
-                  </div>
+                      <button
+                        type="button"
+                        onClick={() => setMovingId(null)}
+                        disabled={pending}
+                        className="h-8 rounded-md border border-border px-3 text-xs font-medium text-foreground hover:bg-muted disabled:opacity-50"
+                      >
+                        Huỷ
+                      </button>
+                    </div>
+                  )}
                 </li>
               );
             })}

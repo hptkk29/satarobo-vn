@@ -80,106 +80,104 @@ export function CompletionTable({
       />
 
       <section className="t-card overflow-hidden">
-        <div className="overflow-x-auto">
-          <PhanTrangBang>
-            <table className="min-w-[660px] w-full text-left text-sm">
-              <thead>
-                <tr className="border-b border-border bg-muted/50 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                  <th scope="col" className="px-4 py-3">
-                    Học viên
-                  </th>
-                  <th scope="col" className="px-4 py-3">
-                    Chuyên cần
-                  </th>
-                  <th scope="col" className="px-4 py-3">
-                    Chuyển sang
-                  </th>
-                  <th scope="col" className="px-4 py-3">
-                    Kết quả
-                  </th>
-                  <th scope="col" className="px-4 py-3">
-                    Hoàn thành khoá
-                  </th>
+        <PhanTrangBang cuonNgang>
+          <table className="min-w-[660px] w-full text-left text-sm">
+            <thead>
+              <tr className="border-b border-border bg-muted/50 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                <th scope="col" className="px-4 py-3">
+                  Học viên
+                </th>
+                <th scope="col" className="px-4 py-3">
+                  Chuyên cần
+                </th>
+                <th scope="col" className="px-4 py-3">
+                  Chuyển sang
+                </th>
+                <th scope="col" className="px-4 py-3">
+                  Kết quả
+                </th>
+                <th scope="col" className="px-4 py-3">
+                  Hoàn thành khoá
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.length === 0 ? (
+                <tr>
+                  <td
+                    colSpan={5}
+                    className="px-4 py-8 text-center text-sm text-muted-foreground"
+                  >
+                    Không tìm thấy học viên phù hợp.
+                  </td>
                 </tr>
-              </thead>
-              <tbody>
-                {filtered.length === 0 ? (
-                  <tr>
-                    <td
-                      colSpan={5}
-                      className="px-4 py-8 text-center text-sm text-muted-foreground"
-                    >
-                      Không tìm thấy học viên phù hợp.
+              ) : (
+                filtered.map((r) => (
+                  <tr
+                    key={r.id}
+                    className="border-b border-border/60 transition-colors last:border-0 hover:bg-muted/50"
+                  >
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-3">
+                        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary-soft text-xs font-semibold text-primary-ink">
+                          {initialsOf(r.name)}
+                        </span>
+                        <span className="font-medium text-foreground">
+                          {r.name}
+                        </span>
+                      </div>
+                    </td>
+                    <td className="px-4 py-3">
+                      {completedSessions === 0 ? (
+                        <span className="text-xs text-muted-foreground">
+                          Chưa có buổi nào
+                        </span>
+                      ) : (
+                        <div>
+                          <p className="font-medium text-foreground">
+                            {r.attended}/{completedSessions} buổi
+                          </p>
+                          {r.absent > 0 || r.needMakeup > 0 ? (
+                            <p className="text-xs text-muted-foreground">
+                              Vắng {r.absent}
+                              {r.needMakeup > 0
+                                ? ` · chờ bù ${r.needMakeup}`
+                                : ""}
+                            </p>
+                          ) : null}
+                        </div>
+                      )}
+                    </td>
+                    <td className="px-4 py-3 whitespace-nowrap text-foreground">
+                      {r.nextCourseName ?? (
+                        <span className="text-muted-foreground">—</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3 whitespace-nowrap">
+                      {r.finalGrade ? (
+                        <span className="font-semibold text-foreground">
+                          {r.finalGrade}
+                        </span>
+                      ) : r.passed ? (
+                        <Badge
+                          variant="outline"
+                          className="w-fit border-state-success-soft bg-state-success-soft text-state-success-ink dark:border-state-success"
+                        >
+                          Đạt
+                        </Badge>
+                      ) : (
+                        <span className="text-muted-foreground">—</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3">
+                      <CompletionCell row={r} />
                     </td>
                   </tr>
-                ) : (
-                  filtered.map((r) => (
-                    <tr
-                      key={r.id}
-                      className="border-b border-border/60 transition-colors last:border-0 hover:bg-muted/50"
-                    >
-                      <td className="px-4 py-3">
-                        <div className="flex items-center gap-3">
-                          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary-soft text-xs font-semibold text-primary-ink">
-                            {initialsOf(r.name)}
-                          </span>
-                          <span className="font-medium text-foreground">
-                            {r.name}
-                          </span>
-                        </div>
-                      </td>
-                      <td className="px-4 py-3">
-                        {completedSessions === 0 ? (
-                          <span className="text-xs text-muted-foreground">
-                            Chưa có buổi nào
-                          </span>
-                        ) : (
-                          <div>
-                            <p className="font-medium text-foreground">
-                              {r.attended}/{completedSessions} buổi
-                            </p>
-                            {r.absent > 0 || r.needMakeup > 0 ? (
-                              <p className="text-xs text-muted-foreground">
-                                Vắng {r.absent}
-                                {r.needMakeup > 0
-                                  ? ` · chờ bù ${r.needMakeup}`
-                                  : ""}
-                              </p>
-                            ) : null}
-                          </div>
-                        )}
-                      </td>
-                      <td className="px-4 py-3 whitespace-nowrap text-foreground">
-                        {r.nextCourseName ?? (
-                          <span className="text-muted-foreground">—</span>
-                        )}
-                      </td>
-                      <td className="px-4 py-3 whitespace-nowrap">
-                        {r.finalGrade ? (
-                          <span className="font-semibold text-foreground">
-                            {r.finalGrade}
-                          </span>
-                        ) : r.passed ? (
-                          <Badge
-                            variant="outline"
-                            className="w-fit border-state-success-soft bg-state-success-soft text-state-success-ink dark:border-state-success"
-                          >
-                            Đạt
-                          </Badge>
-                        ) : (
-                          <span className="text-muted-foreground">—</span>
-                        )}
-                      </td>
-                      <td className="px-4 py-3">
-                        <CompletionCell row={r} />
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </PhanTrangBang>
-        </div>
+                ))
+              )}
+            </tbody>
+          </table>
+        </PhanTrangBang>
       </section>
     </>
   );

@@ -762,3 +762,121 @@ export async function unenrollLeadChild(params: {
     return { ok: false, error: e instanceof Error ? e.message : "Lỗi gỡ học viên" };
   }
 }
+
+// ─── Dời lịch học thử ────────────────────────────────────────────────────────────
+
+/**
+ * Site GV 25/08 — DỜI 1 học viên trải nghiệm sang buổi khác.
+ *
+ * Vì sao tới giờ mới có: `TrialEnrollment.scheduledSessionId` được ghi ĐÚNG MỘT LẦN ở
+ * `enrollLeadChild` rồi bất biến — không admin/Sale/GV nào đổi được buổi. Muốn dời lịch,
+ * cách duy nhất trước đây là gỡ con ra (WITHDRAWN, mất dấu) rồi xếp lại. Vì thế bảng
+ * Trial của site GV không có cách nào biết suất nào "bị dời lịch".
+ *
+ * Ghi lại buổi CŨ vào `rescheduledFromSessionId` — đó là thứ site GV đọc để in trạng
+ * thái. Dời nhiều lần chỉ giữ lần gần nhất; chuỗi đầy đủ nằm ở DomainEvent + AuditLog.
+ *
+ * Buổi mới BẮT BUỘC thuộc CÙNG lớp trải nghiệm (chống chọn nhầm buổi lớp khác — cùng
+ * luật với `enrollLeadChild`). Muốn chuyển sang lớp Trial khác thì gỡ + xếp lại, vì
+ * sĩ số và `LeadTrialHistory` gắn theo lớp.
+ */
+export async function rescheduleTrialEnrollment(params: {
+  enrollmentId: string;
+  toSessionId: string;
+  reason: string;
+  actorId: string;
+}): Promise<{ ok: boolean; error?: string }> {
+  try {
+    return await db.$transaction(async (tx) => {
+      const enr = await tx.trialEnrollment.findUnique({
+        where: { id: params.enrollmentId },
+        select: {
+          id: true,
+          status: true,
+          trialClassId: true,
+          leadChildId: true,
+          scheduledSessionId: true,
+          leadChild: { select: { leadId: true, fullName: true } },
+        },
+      });
+      if (!enr) return { ok: false, error: "Không tìm thấy ghi danh trải nghiệm" };
+      if (enr.status === "WITHDRAWN") {
+        return { ok: false, error: "Học viên đã rút khỏi lớp trải nghiệm — xếp lại thay vì dời" };
+      }
+      if (enr.scheduledSessionId === params.toSessionId) {
+        return { ok: false, error: "Học viên đang ở đúng buổi này" };
+      }
+
+      const to = await tx.trialClassSession.findUnique({
+        where: { id: params.toSessionId },
+        select: { id: true, trialClassId: true, status: true, date: true, startTime: true },
+      });
+      if (!to || to.trialClassId !== enr.trialClassId) {
+        return { ok: false, error: "Buổi học không thuộc lớp trải nghiệm của học viên" };
+      }
+      if (to.status === "CANCELLED") {
+        return { ok: false, error: "Buổi học đã huỷ — chọn buổi khác" };
+      }
+
+      const from = enr.scheduledSessionId
+        ? await tx.trialClassSession.findUnique({
+            where: { id: enr.scheduledSessionId },
+            select: { date: true, startTime: true },
+          })
+        : null;
+
+      const movedAt = new Date();
+      await tx.trialEnrollment.update({
+        where: { id: enr.id },
+        data: {
+          scheduledSessionId: to.id,
+          rescheduledFromSessionId: enr.scheduledSessionId,
+          rescheduledAt: movedAt,
+          rescheduleReason: params.reason,
+        },
+      });
+
+      // Cùng tên sự kiện với đường V1 (`app/(admin)/admin/trials/actions.ts`) để Sale phụ
+      // trách nhận đúng một loại thông báo "Đổi lịch học thử", bất kể lịch nằm ở hệ nào.
+      await publishEvent(
+        "trial.schedule_changed",
+        {
+          trialId: enr.id,
+          leadId: enr.leadChild.leadId,
+          fromAt: from?.date?.toISOString() ?? null,
+          toAt: to.date.toISOString(),
+        },
+        // dedupeKey phải mang MỐC DỜI, không chỉ buổi đích. Khoá theo đích thì dãy
+        // A→B→A→B sinh trùng khoá ở lần thứ ba; `DomainEvent.dedupeKey` là @unique nên
+        // publishEvent ăn P2002 — mà lỗi đó nổ TRONG transaction này, Postgres huỷ cả
+        // transaction, cú `trialEnrollment.update` ngay trên bị rollback và quản lý nhận
+        // một thông báo lỗi khó hiểu cho một thao tác hoàn toàn hợp lệ. Nói cách khác:
+        // học viên vĩnh viễn không dời về được buổi đã từng ở.
+        { tx, dedupeKey: `trial.schedule_changed:${enr.id}:${to.id}:${movedAt.getTime()}` },
+      );
+
+      await writeAudit({
+        actor: { id: params.actorId, name: await actorName(params.actorId, tx) },
+        module: "trial",
+        entityType: "TrialEnrollment",
+        entityId: enr.id,
+        action: "RESCHEDULE",
+        oldValues: {
+          scheduledSessionId: enr.scheduledSessionId,
+          at: from ? `${from.date.toISOString().slice(0, 10)} ${from.startTime}` : null,
+        },
+        newValues: {
+          scheduledSessionId: to.id,
+          at: `${to.date.toISOString().slice(0, 10)} ${to.startTime}`,
+          reason: params.reason,
+          leadChildId: enr.leadChildId,
+        },
+        tx,
+      });
+
+      return { ok: true };
+    });
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Lỗi dời lịch học thử" };
+  }
+}

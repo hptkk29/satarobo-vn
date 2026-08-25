@@ -74,89 +74,87 @@ export default async function AssignmentTemplatesPage() {
       </PageHelp>
 
       <div className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
-        <div className="overflow-x-auto">
-          <PhanTrangBang>
-            <table className="min-w-full divide-y divide-border">
-              <thead className="bg-muted">
+        <PhanTrangBang cuonNgang>
+          <table className="min-w-full divide-y divide-border">
+            <thead className="bg-muted">
+              <tr>
+                <th className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  Tiêu đề
+                </th>
+                <th className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  Khung CT
+                </th>
+                <th className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  Loại
+                </th>
+                <th className="px-3 py-3 text-right text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  Điểm
+                </th>
+                <th className="px-3 py-3 text-center text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  Đã sinh
+                </th>
+                <th className="px-3 py-3 text-right text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  Hành động
+                </th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-border">
+              {templates.length === 0 ? (
                 <tr>
-                  <th className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                    Tiêu đề
-                  </th>
-                  <th className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                    Khung CT
-                  </th>
-                  <th className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                    Loại
-                  </th>
-                  <th className="px-3 py-3 text-right text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                    Điểm
-                  </th>
-                  <th className="px-3 py-3 text-center text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                    Đã sinh
-                  </th>
-                  <th className="px-3 py-3 text-right text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                    Hành động
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border">
-                {templates.length === 0 ? (
-                  <tr>
-                    <td
-                      colSpan={6}
-                      className="px-4 py-12 text-center text-sm text-muted-foreground"
+                  <td
+                    colSpan={6}
+                    className="px-4 py-12 text-center text-sm text-muted-foreground"
+                  >
+                    Chưa có mẫu bài tập nào.{" "}
+                    <Link
+                      href="/assignments/templates/new"
+                      className="text-primary hover:underline"
                     >
-                      Chưa có mẫu bài tập nào.{" "}
+                      Tạo mẫu mới →
+                    </Link>
+                  </td>
+                </tr>
+              ) : (
+                templates.map((t) => (
+                  <tr key={t.id} className="hover:bg-muted/60">
+                    <td className="px-3 py-3">
+                      <div className="font-medium text-foreground line-clamp-1">
+                        {t.title}
+                      </div>
+                      {t.lesson && (
+                        <div className="text-xs text-muted-foreground">
+                          Bài {t.lesson.order}: {t.lesson.title}
+                        </div>
+                      )}
+                    </td>
+                    <td className="px-3 py-3 text-xs text-muted-foreground">
+                      {t.curriculum
+                        ? `${t.curriculum.name} (v${t.curriculum.version})`
+                        : "—"}
+                    </td>
+                    <td className="px-3 py-3 text-xs text-muted-foreground">
+                      {KIND_LABEL[t.kind]}
+                    </td>
+                    <td className="px-3 py-3 text-right text-sm tabular-nums text-foreground">
+                      {t.totalPoints}
+                    </td>
+                    <td className="px-3 py-3 text-center text-sm tabular-nums text-foreground">
+                      {t._count.instances}
+                    </td>
+                    <td className="px-3 py-3 text-right">
                       <Link
-                        href="/assignments/templates/new"
-                        className="text-primary hover:underline"
+                        href={`/assignments/templates/${t.id}/edit`}
+                        className="inline-flex items-center gap-1 rounded-md border border-primary-soft px-2.5 py-1 text-xs font-semibold text-primary hover:bg-primary-soft"
                       >
-                        Tạo mẫu mới →
+                        Mở
                       </Link>
                     </td>
                   </tr>
-                ) : (
-                  templates.map((t) => (
-                    <tr key={t.id} className="hover:bg-muted/60">
-                      <td className="px-3 py-3">
-                        <div className="font-medium text-foreground line-clamp-1">
-                          {t.title}
-                        </div>
-                        {t.lesson && (
-                          <div className="text-xs text-muted-foreground">
-                            Bài {t.lesson.order}: {t.lesson.title}
-                          </div>
-                        )}
-                      </td>
-                      <td className="px-3 py-3 text-xs text-muted-foreground">
-                        {t.curriculum
-                          ? `${t.curriculum.name} (v${t.curriculum.version})`
-                          : "—"}
-                      </td>
-                      <td className="px-3 py-3 text-xs text-muted-foreground">
-                        {KIND_LABEL[t.kind]}
-                      </td>
-                      <td className="px-3 py-3 text-right text-sm tabular-nums text-foreground">
-                        {t.totalPoints}
-                      </td>
-                      <td className="px-3 py-3 text-center text-sm tabular-nums text-foreground">
-                        {t._count.instances}
-                      </td>
-                      <td className="px-3 py-3 text-right">
-                        <Link
-                          href={`/assignments/templates/${t.id}/edit`}
-                          className="inline-flex items-center gap-1 rounded-md border border-primary-soft px-2.5 py-1 text-xs font-semibold text-primary hover:bg-primary-soft"
-                        >
-                          Mở
-                        </Link>
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </PhanTrangBang>
-        </div>
+                ))
+              )}
+            </tbody>
+          </table>
+        </PhanTrangBang>
       </div>
     </div>
   );

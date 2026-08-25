@@ -120,7 +120,7 @@ export default async function Page() {
               Chưa có chương trình nào. Lập một chương trình ở khối trên trước.
             </p>
           ) : (
-            <PhanTrangBang tenDonVi="chương trình" soDongMacDinh={20}>
+            <PhanTrangBang cuonNgang tenDonVi="chương trình" soDongMacDinh={20}>
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-border text-left">
@@ -176,7 +176,7 @@ export default async function Page() {
         {phieu.length === 0 ? (
           <p className="text-sm text-muted-foreground">Chưa có phiếu nhu cầu nào.</p>
         ) : (
-          <PhanTrangBang tenDonVi="phiếu" soDongMacDinh={20}>
+          <PhanTrangBang cuonNgang tenDonVi="phiếu" soDongMacDinh={20}>
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-border text-left">

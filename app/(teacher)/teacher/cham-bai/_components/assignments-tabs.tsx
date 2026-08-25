@@ -163,54 +163,52 @@ function AdminLibraryTab({ templates }: { templates: KhoTemplate[] }) {
         />
       ) : (
         <div className="t-card overflow-hidden">
-          <div className="overflow-x-auto">
-            <PhanTrangBang tenDonVi="mẫu">
-            <table className="min-w-[820px] w-full border-collapse text-left text-sm">
-              <thead>
-                <tr className="border-b border-border bg-muted/50 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
-                  <th scope="col" className="px-5 py-3">Tiêu đề</th>
-                  <th scope="col" className="px-5 py-3">Khoá</th>
-                  <th scope="col" className="px-5 py-3">Hình thức</th>
-                  <th scope="col" className="px-5 py-3">Dạng bài</th>
-                  <th scope="col" className="px-5 py-3">Mô tả</th>
-                  <th scope="col" className="px-5 py-3 text-right">Thao tác</th>
+          <PhanTrangBang cuonNgang tenDonVi="mẫu">
+          <table className="min-w-[820px] w-full border-collapse text-left text-sm">
+            <thead>
+              <tr className="border-b border-border bg-muted/50 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+                <th scope="col" className="px-5 py-3">Tiêu đề</th>
+                <th scope="col" className="px-5 py-3">Khoá</th>
+                <th scope="col" className="px-5 py-3">Hình thức</th>
+                <th scope="col" className="px-5 py-3">Dạng bài</th>
+                <th scope="col" className="px-5 py-3">Mô tả</th>
+                <th scope="col" className="px-5 py-3 text-right">Thao tác</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.map((t) => (
+                <tr
+                  key={t.id}
+                  className="border-b border-border/60 transition-colors last:border-0 hover:bg-muted/50"
+                >
+                  <td className="px-5 py-3.5 font-semibold text-foreground">{t.title}</td>
+                  <td className="px-5 py-3.5 whitespace-nowrap text-muted-foreground">
+                    {t.courseName ?? "Mọi khoá"}
+                  </td>
+                  <td className="px-5 py-3.5 whitespace-nowrap">
+                    <KindBadge kind={t.kind} />
+                  </td>
+                  <td className="px-5 py-3.5 whitespace-nowrap text-muted-foreground">
+                    {t.questionCount > 0 ? `${t.questionCount} câu hỏi` : "Chưa số hoá"}
+                  </td>
+                  <td className="max-w-md px-5 py-3.5 text-muted-foreground">
+                    <span className="line-clamp-2">{t.description}</span>
+                  </td>
+                  <td className="px-5 py-3.5 text-right whitespace-nowrap">
+                    <button
+                      type="button"
+                      onClick={() => setPreview(t)}
+                      aria-label={`Xem ${t.title}`}
+                      className="rounded-lg p-2 text-muted-foreground transition-colors hover:bg-state-info-soft hover:text-state-info-ink"
+                    >
+                      <Eye className="h-4 w-4" aria-hidden />
+                    </button>
+                  </td>
                 </tr>
-              </thead>
-              <tbody>
-                {filtered.map((t) => (
-                  <tr
-                    key={t.id}
-                    className="border-b border-border/60 transition-colors last:border-0 hover:bg-muted/50"
-                  >
-                    <td className="px-5 py-3.5 font-semibold text-foreground">{t.title}</td>
-                    <td className="px-5 py-3.5 whitespace-nowrap text-muted-foreground">
-                      {t.courseName ?? "Mọi khoá"}
-                    </td>
-                    <td className="px-5 py-3.5 whitespace-nowrap">
-                      <KindBadge kind={t.kind} />
-                    </td>
-                    <td className="px-5 py-3.5 whitespace-nowrap text-muted-foreground">
-                      {t.questionCount > 0 ? `${t.questionCount} câu hỏi` : "Chưa số hoá"}
-                    </td>
-                    <td className="max-w-md px-5 py-3.5 text-muted-foreground">
-                      <span className="line-clamp-2">{t.description}</span>
-                    </td>
-                    <td className="px-5 py-3.5 text-right whitespace-nowrap">
-                      <button
-                        type="button"
-                        onClick={() => setPreview(t)}
-                        aria-label={`Xem ${t.title}`}
-                        className="rounded-lg p-2 text-muted-foreground transition-colors hover:bg-state-info-soft hover:text-state-info-ink"
-                      >
-                        <Eye className="h-4 w-4" aria-hidden />
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            </PhanTrangBang>
-          </div>
+              ))}
+            </tbody>
+          </table>
+          </PhanTrangBang>
         </div>
       )}
 

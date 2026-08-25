@@ -126,46 +126,52 @@ export default async function LeadRotationBoardPage() {
                   Chưa có lead nào được chia tự động ở cơ sở này.
                 </p>
               ) : (
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b border-border text-left text-muted-foreground">
-                      <th className="pb-2 font-medium">Tư vấn viên</th>
-                      <th className="pb-2 text-right font-medium">Lead đã nhận</th>
-                      <th className="pb-2 text-right font-medium">Vị trí vòng</th>
-                      <th className="pb-2 text-right font-medium">Lần gần nhất</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {rows.map((r) => {
-                      const u = userById.get(r.userId);
-                      const nghi = u ? !u.isActive || u.deletedAt !== null : true;
-                      return (
-                        <tr key={r.userId} className="border-b border-border/50 last:border-0">
-                          <td className="py-2 text-foreground">
-                            {u?.name ?? r.userId}
-                            {nghi ? (
-                              <span className="ml-2 text-xs text-muted-foreground">
-                                (không còn nhận lead)
-                              </span>
-                            ) : null}
-                          </td>
-                          <td className="py-2 text-right tabular-nums text-foreground">
-                            {r.turns - r.seedTurns}
-                          </td>
-                          <td className="py-2 text-right tabular-nums text-muted-foreground">
-                            {r.turns}
-                            {r.seedTurns > 0 ? (
-                              <span className="ml-1 text-xs">(vào vòng ở {r.seedTurns})</span>
-                            ) : null}
-                          </td>
-                          <td className="py-2 text-right text-muted-foreground">
-                            {r.lastTurnAt ? formatDateVN(r.lastTurnAt) : "—"}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
+                // 4 cột, trong đó cột đầu là tên người + chú thích "(không còn nhận lead)"
+                // và cột "Vị trí vòng" kèm "(vào vòng ở N)" — cộng lại vượt bề ngang máy
+                // điện thoại. Không có vùng cuộn riêng thì bảng nong `<section>` rộng ra và
+                // kéo trượt ngang cả trang, chứ không tự thu lại.
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-border text-left text-muted-foreground">
+                        <th className="pb-2 font-medium">Tư vấn viên</th>
+                        <th className="pb-2 text-right font-medium">Lead đã nhận</th>
+                        <th className="pb-2 text-right font-medium">Vị trí vòng</th>
+                        <th className="pb-2 text-right font-medium">Lần gần nhất</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {rows.map((r) => {
+                        const u = userById.get(r.userId);
+                        const nghi = u ? !u.isActive || u.deletedAt !== null : true;
+                        return (
+                          <tr key={r.userId} className="border-b border-border/50 last:border-0">
+                            <td className="py-2 text-foreground">
+                              {u?.name ?? r.userId}
+                              {nghi ? (
+                                <span className="ml-2 text-xs text-muted-foreground">
+                                  (không còn nhận lead)
+                                </span>
+                              ) : null}
+                            </td>
+                            <td className="py-2 text-right tabular-nums text-foreground">
+                              {r.turns - r.seedTurns}
+                            </td>
+                            <td className="py-2 text-right tabular-nums text-muted-foreground">
+                              {r.turns}
+                              {r.seedTurns > 0 ? (
+                                <span className="ml-1 text-xs">(vào vòng ở {r.seedTurns})</span>
+                              ) : null}
+                            </td>
+                            <td className="py-2 text-right text-muted-foreground">
+                              {r.lastTurnAt ? formatDateVN(r.lastTurnAt) : "—"}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
               )}
             </section>
           );

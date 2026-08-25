@@ -190,64 +190,62 @@ export default async function ProductDetailPage({ params }: Props) {
           </div>
         ) : (
           <div className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
-            <div className="overflow-x-auto">
-              <PhanTrangBang>
-                <table className="min-w-full divide-y divide-border text-sm">
-                  <thead className="bg-muted">
-                    <tr>
-                      <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                        Thời gian
-                      </th>
-                      <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                        Loại
-                      </th>
-                      <th className="px-3 py-2 text-right text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                        Số lượng
-                      </th>
-                      <th className="px-3 py-2 text-right text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                        Trước → Sau
-                      </th>
-                      <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                        Lý do
-                      </th>
-                      <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                        Người
-                      </th>
+            <PhanTrangBang cuonNgang>
+              <table className="min-w-full divide-y divide-border text-sm">
+                <thead className="bg-muted">
+                  <tr>
+                    <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                      Thời gian
+                    </th>
+                    <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                      Loại
+                    </th>
+                    <th className="px-3 py-2 text-right text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                      Số lượng
+                    </th>
+                    <th className="px-3 py-2 text-right text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                      Trước → Sau
+                    </th>
+                    <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                      Lý do
+                    </th>
+                    <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                      Người
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border">
+                  {product.movements.map((m) => (
+                    <tr key={m.id} className="hover:bg-muted/60">
+                      <td className="px-3 py-2 text-xs tabular-nums text-muted-foreground">
+                        {formatDateTime(m.createdAt)}
+                      </td>
+                      <td className="px-3 py-2 text-xs">
+                        {PRODUCT_MOVEMENT_TYPE_LABEL[m.type]}
+                      </td>
+                      <td
+                        className={
+                          "px-3 py-2 text-right font-mono " +
+                          (m.quantity > 0 ? "text-state-success-ink" : "text-state-danger-ink")
+                        }
+                      >
+                        {m.quantity > 0 ? "+" : ""}
+                        {m.quantity}
+                      </td>
+                      <td className="px-3 py-2 text-right text-xs tabular-nums text-muted-foreground">
+                        {m.stockBeforeMovement} → {m.stockAfterMovement}
+                      </td>
+                      <td className="px-3 py-2 text-xs text-foreground">
+                        {m.reason ?? "—"}
+                      </td>
+                      <td className="px-3 py-2 text-xs text-foreground">
+                        {m.createdByName}
+                      </td>
                     </tr>
-                  </thead>
-                  <tbody className="divide-y divide-border">
-                    {product.movements.map((m) => (
-                      <tr key={m.id} className="hover:bg-muted/60">
-                        <td className="px-3 py-2 text-xs tabular-nums text-muted-foreground">
-                          {formatDateTime(m.createdAt)}
-                        </td>
-                        <td className="px-3 py-2 text-xs">
-                          {PRODUCT_MOVEMENT_TYPE_LABEL[m.type]}
-                        </td>
-                        <td
-                          className={
-                            "px-3 py-2 text-right font-mono " +
-                            (m.quantity > 0 ? "text-state-success-ink" : "text-state-danger-ink")
-                          }
-                        >
-                          {m.quantity > 0 ? "+" : ""}
-                          {m.quantity}
-                        </td>
-                        <td className="px-3 py-2 text-right text-xs tabular-nums text-muted-foreground">
-                          {m.stockBeforeMovement} → {m.stockAfterMovement}
-                        </td>
-                        <td className="px-3 py-2 text-xs text-foreground">
-                          {m.reason ?? "—"}
-                        </td>
-                        <td className="px-3 py-2 text-xs text-foreground">
-                          {m.createdByName}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </PhanTrangBang>
-            </div>
+                  ))}
+                </tbody>
+              </table>
+            </PhanTrangBang>
           </div>
         )}
       </section>

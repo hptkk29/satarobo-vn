@@ -22,6 +22,7 @@ import {
   completeTrialSession,
   cancelTrialClass,
   notifyTrialTeacherAssigned,
+  rescheduleTrialEnrollment,
 } from "@/lib/trial/service";
 
 // ───────────────────────────── helpers ─────────────────────────────
@@ -412,6 +413,56 @@ export async function unenrollLeadChildAction(input: {
 
   revalidatePath(`/trial-classes/${input.trialClassId}`);
   revalidatePath("/trial-classes");
+  return { ok: true };
+}
+
+// ─────────────────── 3b) dời lịch học viên trải nghiệm ──────────────────
+
+const rescheduleSchema = z.object({
+  enrollmentId: z.string().min(1, "Thiếu ghi danh"),
+  toSessionId: z.string().min(1, "Chưa chọn buổi mới"),
+  // Bắt buộc nêu lý do: dời lịch là ngoại lệ vận hành, Sale phụ trách và QLCS phải đọc
+  // được vì sao ở AuditLog. Cùng luật với "gia hạn nộp bài" bên e-learning.
+  reason: z.string().trim().min(3, "Nhập lý do dời lịch (tối thiểu 3 ký tự)").max(500),
+});
+
+/** Dời 1 học viên trải nghiệm sang buổi khác CÙNG LỚP — gate `trials:manage` + cách ly cơ sở. */
+export async function rescheduleTrialEnrollmentAction(input: unknown): Promise<ActionResult> {
+  const session = await requireSession();
+  if (!session) return { ok: false, error: "Chưa đăng nhập" };
+  if (!(await checkPermission("trials:manage"))) {
+    return { ok: false, error: "Không có quyền dời lịch học thử" };
+  }
+
+  const parsed = rescheduleSchema.safeParse(input);
+  if (!parsed.success) {
+    return { ok: false, error: parsed.error.issues[0]?.message ?? "Dữ liệu không hợp lệ" };
+  }
+
+  // Cách ly cơ sở: đi qua LỚP của ghi danh, không tin enrollmentId từ client (chống IDOR
+  // — cùng cách các action khác trong file này dùng loadScopedTrialClass).
+  const actor = await resolveActor(session.user.id);
+  const sdb = scopedDb(actor);
+  const enr = await sdb.trialEnrollment.findUnique({
+    where: { id: parsed.data.enrollmentId },
+    select: { trialClassId: true },
+  });
+  if (!enr) return { ok: false, error: "Không tìm thấy ghi danh trải nghiệm" };
+  const cls = await loadScopedTrialClass(actor, enr.trialClassId);
+  if (!cls) return { ok: false, error: "Không tìm thấy lớp trải nghiệm" };
+
+  const res = await rescheduleTrialEnrollment({
+    enrollmentId: parsed.data.enrollmentId,
+    toSessionId: parsed.data.toSessionId,
+    reason: parsed.data.reason,
+    actorId: session.user.id,
+  });
+  if (!res.ok) return { ok: false, error: res.error ?? "Dời lịch thất bại" };
+
+  revalidatePath(`/trial-classes/${enr.trialClassId}`);
+  revalidatePath("/trial-classes");
+  // Bảng Trial của site GV đọc cùng dữ liệu này.
+  revalidatePath("/teacher/trial");
   return { ok: true };
 }
 

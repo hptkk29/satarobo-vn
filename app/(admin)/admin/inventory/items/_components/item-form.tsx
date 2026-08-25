@@ -347,43 +347,41 @@ export function ItemForm({
               </HelpHint>
             </h2>
           </header>
-          <div className="overflow-x-auto">
-            <PhanTrangBang>
-              <table className="min-w-full divide-y divide-border text-sm">
-                <thead className="bg-muted">
-                  <tr>
-                    <th className="px-3 py-2 text-left font-semibold text-muted-foreground">
-                      Cơ sở
-                    </th>
-                    <th className="px-3 py-2 text-right font-semibold text-muted-foreground">
-                      Tồn
-                    </th>
-                    <th className="px-3 py-2 text-right font-semibold text-muted-foreground">
-                      Đã đặt
-                    </th>
-                    <th className="px-3 py-2 text-right font-semibold text-muted-foreground">
-                      Ngưỡng (override)
-                    </th>
-                    <th className="px-3 py-2 text-right font-semibold text-muted-foreground">
-                      Thao tác
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-border">
-                  {balances.map((b) => (
-                    <BalanceRowEditor
-                      key={b.id}
-                      row={b}
-                      itemId={item!.id}
-                      itemUnit={unit}
-                      fallbackThreshold={defaultMinThreshold}
-                      allCenters={allCenters}
-                    />
-                  ))}
-                </tbody>
-              </table>
-            </PhanTrangBang>
-          </div>
+          <PhanTrangBang cuonNgang>
+            <table className="min-w-full divide-y divide-border text-sm">
+              <thead className="bg-muted">
+                <tr>
+                  <th className="px-3 py-2 text-left font-semibold text-muted-foreground">
+                    Cơ sở
+                  </th>
+                  <th className="px-3 py-2 text-right font-semibold text-muted-foreground">
+                    Tồn
+                  </th>
+                  <th className="px-3 py-2 text-right font-semibold text-muted-foreground">
+                    Đã đặt
+                  </th>
+                  <th className="px-3 py-2 text-right font-semibold text-muted-foreground">
+                    Ngưỡng (override)
+                  </th>
+                  <th className="px-3 py-2 text-right font-semibold text-muted-foreground">
+                    Thao tác
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border">
+                {balances.map((b) => (
+                  <BalanceRowEditor
+                    key={b.id}
+                    row={b}
+                    itemId={item!.id}
+                    itemUnit={unit}
+                    fallbackThreshold={defaultMinThreshold}
+                    allCenters={allCenters}
+                  />
+                ))}
+              </tbody>
+            </table>
+          </PhanTrangBang>
         </section>
       )}
 

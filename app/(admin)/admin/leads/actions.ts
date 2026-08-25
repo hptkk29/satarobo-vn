@@ -206,6 +206,23 @@ export async function updateLeadStatus(
       },
     })
 
+    // 25/08 — lead MẤT ⇒ đóng sổ học thử của mọi con: `LeadTrialHistory.outcome = "LOST"`.
+    //
+    // Cột `outcome` có từ FL-R2 với 3 giá trị ENROLLED | LOST | PENDING, nhưng tới trước
+    // 25/08 KHÔNG chỗ nào ghi gì ngoài "PENDING" — nên cờ "đã nhập học" ở roster Sale
+    // (lib/trial/sale-roster.ts) vĩnh viễn tắt, và bảng Trial của site GV không có cách
+    // nào biết suất nào "bị rớt". Nhánh ENROLLED nằm trong transaction convert
+    // (lib/crm/convert-lead-v2.ts); đây là nhánh còn lại.
+    //
+    // Chỉ đụng dòng đang PENDING: con đã nhập học khoá khác rồi thì lead mất không xoá
+    // được thành tích đó.
+    if (parsed.data === 'LOST' && before.status !== 'LOST') {
+      await tx.leadTrialHistory.updateMany({
+        where: { leadChild: { leadId }, outcome: 'PENDING' },
+        data: { outcome: 'LOST' },
+      })
+    }
+
     // Phase T1.4 — vào TRIAL_SCHEDULED → tự tạo lịch học thử (nếu chưa có buổi đang mở).
     if (
       parsed.data === 'TRIAL_SCHEDULED' &&
@@ -525,6 +542,16 @@ export async function deleteLead(
       await tx.lead.update({
         where: { id: leadId, deletedAt: null },
         data: { deletedAt: new Date() },
+      })
+
+      // 25/08 — đóng luôn sổ học thử, cùng luật với nhánh LOST của updateLeadStatus.
+      // Xoá mềm lead mà bỏ sổ lại ở "PENDING" thì bảng Trial của site GV còn in suất đó
+      // là "Chờ đánh giá" mãi mãi — tệ hơn ca chuyển LOST, vì lead đã biến khỏi /admin/leads
+      // nên không ai còn đường đi tới mà đóng lại. Chỉ đụng dòng còn PENDING: bé đã nhập
+      // học ở lớp khác thì thành tích đó không bị xoá theo.
+      await tx.leadTrialHistory.updateMany({
+        where: { leadChild: { leadId }, outcome: 'PENDING' },
+        data: { outcome: 'LOST' },
       })
 
       await logLeadAudit({

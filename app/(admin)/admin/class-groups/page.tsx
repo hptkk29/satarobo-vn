@@ -68,7 +68,7 @@ export default async function ClassGroupsPage() {
       <div className="text-sm text-muted-foreground">{groups.length} nhóm lớp</div>
 
       <div className="overflow-hidden rounded border">
-        <PhanTrangBang>
+        <PhanTrangBang cuonNgang>
           <table className="w-full text-sm">
             <thead className="border-b bg-muted">
               <tr>

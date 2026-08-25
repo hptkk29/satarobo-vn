@@ -4,12 +4,14 @@ import { useMemo, useState } from "react";
 import Link from "next/link";
 import { BookMarked, PencilLine } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { BangPhanTrang } from "@/components/ui/bang-phan-trang";
 import {
   ListToolbar,
   type SelectFilter,
 } from "../../_components/ui/list-toolbar";
 import { EmptyState } from "../../_components/ui/empty-state";
-import { PhanTrangBang } from "@/components/ui/phan-trang-bang";
+import type { AssignmentWindowView } from "../_data";
+import { LateWindowDialog } from "./late-window-dialog";
 
 /** Một hàng bài tập đã giao — plain data từ server. */
 export interface AssignmentRow {
@@ -26,21 +28,39 @@ export interface AssignmentRow {
   sessionLabel: string | null;
   /** Mô tả ngắn của đầu bài (hiện mờ dưới tiêu đề). */
   description: string | null;
-  due: string | null;
   submitted: number;
   total: number;
-  /** AssignmentStatus: PUBLISHED | CLOSED (chỉ hiện bài ĐÃ GIAO). */
-  status: string;
+  /**
+   * Trạng thái SUY tại lúc render (25/08) — thay cho việc in thẳng cột `status`.
+   * Cột `status` một mình không nói được "quá hạn rồi": nó đứng nguyên PUBLISHED
+   * mãi mãi, nên bảng cũ ghi "Đang mở" cho cả bài hết hạn từ tháng trước.
+   */
+  win: AssignmentWindowView;
 }
 
-const STATUS_LABEL: Record<string, string> = {
-  PUBLISHED: "Đang mở",
-  CLOSED: "Đã đóng",
+/** Nhãn + màu pill theo trạng thái suy. Đóng = "info" cho khớp ngôn ngữ màu cũ của site GV. */
+const STATE_CLASS: Record<AssignmentWindowView["state"], string> = {
+  draft: "bg-muted text-muted-foreground",
+  open: "bg-state-success-soft text-state-success-ink",
+  "late-open": "bg-state-warning-soft text-state-warning-ink",
+  closed: "bg-state-info-soft text-state-info-ink",
+  archived: "bg-muted text-muted-foreground",
 };
-const STATUS_CLASS: Record<string, string> = {
-  PUBLISHED: "bg-state-success-soft text-state-success-ink",
-  CLOSED: "bg-state-info-soft text-state-info-ink",
+const STATE_LABEL: Record<AssignmentWindowView["state"], string> = {
+  draft: "Nháp",
+  open: "Đang mở",
+  "late-open": "Nộp trễ",
+  closed: "Đã đóng",
+  archived: "Lưu trữ",
 };
+/** Thứ tự bộ lọc — theo vòng đời bài, không theo bảng chữ cái. */
+const STATE_ORDER: AssignmentWindowView["state"][] = [
+  "draft",
+  "open",
+  "late-open",
+  "closed",
+  "archived",
+];
 
 const ALL = "ALL";
 
@@ -73,14 +93,16 @@ export function AssignmentList({
     { value: "homework", label: "Bài tập" },
   ];
 
+  // Lọc theo trạng thái NGƯỜI DÙNG NHÌN THẤY (suy), không theo cột status: chọn
+  // "Đã đóng" mà ra bài đang hiện chữ "Đang mở" thì bộ lọc thành thứ gây nghi ngờ.
   const statusOptions = useMemo<SelectFilter["options"]>(() => {
-    const present = [...new Set(rows.map((r) => r.status))];
-    const ordered = Object.keys(STATUS_LABEL).filter((s) =>
-      present.includes(s),
-    );
+    const present = new Set(rows.map((r) => r.win.state));
     return [
       { value: ALL, label: "Mọi trạng thái" },
-      ...ordered.map((s) => ({ value: s, label: STATUS_LABEL[s]! })),
+      ...STATE_ORDER.filter((s) => present.has(s)).map((s) => ({
+        value: s,
+        label: STATE_LABEL[s],
+      })),
     ];
   }, [rows]);
 
@@ -90,7 +112,7 @@ export function AssignmentList({
       if (cls !== ALL && r.className !== cls) return false;
       if (kind === "test" && !r.isTest) return false;
       if (kind === "homework" && r.isTest) return false;
-      if (status !== ALL && r.status !== status) return false;
+      if (status !== ALL && r.win.state !== status) return false;
       if (!q) return true;
       return (
         r.title.toLowerCase().includes(q) ||
@@ -119,130 +141,127 @@ export function AssignmentList({
           title="Chưa có bài tập nào được giao ở lớp bạn phụ trách."
         />
       ) : (
+        // BangPhanTrang (KHÔNG phải PhanTrangBang): nó đặt vùng cuộn ngang quanh RIÊNG
+        // cái bảng, thanh phân trang nằm ngoài. Bọc kiểu cũ thì cuộn sang phải là thanh
+        // phân trang trôi mất khỏi màn hình.
         <div className="t-card overflow-hidden">
-          <div className="overflow-x-auto">
-            <PhanTrangBang>
-              <table className="min-w-[880px] w-full border-collapse text-left text-sm">
-                <thead>
-                  <tr className="border-b border-border bg-muted/50 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
-                    <th scope="col" className="px-5 py-3">
-                      Nội dung
-                    </th>
-                    <th scope="col" className="px-5 py-3">
-                      Lớp
-                    </th>
-                    <th scope="col" className="px-5 py-3">
-                      Hình thức
-                    </th>
-                    <th scope="col" className="px-5 py-3">
-                      Nguồn
-                    </th>
-                    <th scope="col" className="px-5 py-3">
-                      Hạn nộp
-                    </th>
-                    <th scope="col" className="px-5 py-3">
-                      Đã nộp
-                    </th>
-                    <th scope="col" className="px-5 py-3">
-                      Trạng thái
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filtered.length === 0 ? (
-                    <tr>
-                      <td
-                        colSpan={7}
-                        className="px-5 py-10 text-center text-sm text-muted-foreground"
-                      >
-                        Không có bài tập khớp bộ lọc.
-                      </td>
-                    </tr>
-                  ) : (
-                    filtered.map((r) => (
-                      <tr
-                        key={r.id}
-                        className="border-b border-border/60 transition-colors last:border-0 hover:bg-muted/50"
-                      >
-                        <td className="max-w-xs px-5 py-3.5">
-                          <Link
-                            href={`?assignmentId=${r.id}`}
-                            className="rounded-sm font-medium text-foreground outline-none hover:text-primary-ink-hover focus-visible:ring-2 focus-visible:ring-ring"
-                          >
-                            {r.title}
-                          </Link>
-                          {r.sessionLabel && (
-                            <p className="truncate text-xs text-primary-ink">
-                              Buổi: {r.sessionLabel}
-                            </p>
-                          )}
-                          {r.description && (
-                            <p
-                              className="truncate text-xs text-muted-foreground"
-                              title={r.description}
-                            >
-                              {r.description}
-                            </p>
-                          )}
-                        </td>
-                        <td className="px-5 py-3.5 whitespace-nowrap">
-                          <Link
-                            href={`/teacher/lop?classId=${r.classId}`}
-                            className="rounded-sm font-medium text-primary-ink outline-none hover:text-primary-ink-hover hover:underline focus-visible:ring-2 focus-visible:ring-ring"
-                          >
-                            {r.className}
-                          </Link>
-                        </td>
-                        <td className="px-5 py-3.5 whitespace-nowrap">
-                          {r.isTest ? (
-                            <span className="inline-flex items-center rounded-full bg-primary-soft px-2.5 py-1 text-xs font-semibold text-primary-ink">
-                              Kiểm tra
-                            </span>
-                          ) : (
-                            <span className="inline-flex items-center rounded-full bg-state-info-soft px-2.5 py-1 text-xs font-semibold text-state-info-ink">
-                              Bài tập
-                            </span>
-                          )}
-                        </td>
-                        <td className="px-5 py-3.5 whitespace-nowrap">
-                          <span className="inline-flex items-center gap-1.5 text-muted-foreground">
-                            {r.fromAdmin ? (
-                              <>
-                                <BookMarked className="h-4 w-4" aria-hidden />
-                                Admin
-                              </>
-                            ) : (
-                              <>
-                                <PencilLine className="h-4 w-4" aria-hidden />
-                                Tự tạo
-                              </>
-                            )}
-                          </span>
-                        </td>
-                        <td className="px-5 py-3.5 whitespace-nowrap text-muted-foreground">
-                          {r.due ?? "—"}
-                        </td>
-                        <td className="px-5 py-3.5 whitespace-nowrap text-foreground">
-                          {r.submitted}/{r.total}
-                        </td>
-                        <td className="px-5 py-3.5 whitespace-nowrap">
-                          <span
-                            className={cn(
-                              "inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold",
-                              STATUS_CLASS[r.status] ??
-                                "bg-muted text-muted-foreground",
-                            )}
-                          >
-                            {STATUS_LABEL[r.status] ?? r.status}
-                          </span>
-                        </td>
-                      </tr>
-                    ))
+          <BangPhanTrang
+            className="pb-3"
+            tenDonVi="bài"
+            khoaGhiNho="gv-bai-tap"
+            colSpan={7}
+            trong="Không có bài tập khớp bộ lọc."
+            // Bỏ cột "Nguồn" (gộp vào ô Nội dung) + cho tiêu đề xuống dòng: bảng cũ
+            // min-w 880px, thêm cột thao tác nữa là tràn ngang trên laptop 1280.
+            tableClassName="min-w-[720px] border-collapse text-left"
+            theadClassName="border-b border-border bg-muted/50 text-xs font-semibold tracking-wide text-muted-foreground uppercase"
+            head={
+              <tr>
+                <th scope="col" className="px-5 py-3">
+                  Nội dung
+                </th>
+                <th scope="col" className="px-5 py-3">
+                  Lớp
+                </th>
+                <th scope="col" className="px-5 py-3">
+                  Hình thức
+                </th>
+                <th scope="col" className="px-5 py-3">
+                  Hạn nộp
+                </th>
+                <th scope="col" className="px-5 py-3">
+                  Đã nộp
+                </th>
+                <th scope="col" className="px-5 py-3">
+                  Trạng thái
+                </th>
+                <th scope="col" className="px-5 py-3 text-right">
+                  <span className="sr-only">Gia hạn</span>
+                </th>
+              </tr>
+            }
+            rows={filtered.map((r) => (
+              <tr
+                key={r.id}
+                className="border-b border-border/60 transition-colors last:border-0 hover:bg-muted/50"
+              >
+                <td className="max-w-sm px-5 py-3.5">
+                  <Link
+                    href={`?assignmentId=${r.id}`}
+                    className="rounded-sm font-medium text-foreground outline-none hover:text-primary-ink-hover focus-visible:ring-2 focus-visible:ring-ring"
+                  >
+                    {r.title}
+                  </Link>
+                  {r.sessionLabel && (
+                    <p className="text-xs text-primary-ink">Buổi: {r.sessionLabel}</p>
                   )}
-                </tbody>
-              </table>
-            </PhanTrangBang>
-          </div>
+                  {r.description && (
+                    <p className="text-xs text-muted-foreground">{r.description}</p>
+                  )}
+                  {/* Nguồn đề: gộp vào đây thay vì chiếm một cột riêng — thông tin
+                      tham khảo, không ai lọc/sắp xếp theo nó. */}
+                  <span className="mt-0.5 inline-flex items-center gap-1.5 text-xs text-muted-foreground">
+                    {r.fromAdmin ? (
+                      <>
+                        <BookMarked className="h-3.5 w-3.5" aria-hidden />
+                        Thư viện admin
+                      </>
+                    ) : (
+                      <>
+                        <PencilLine className="h-3.5 w-3.5" aria-hidden />
+                        Tự tạo
+                      </>
+                    )}
+                  </span>
+                </td>
+                <td className="px-5 py-3.5 whitespace-nowrap">
+                  <Link
+                    href={`/teacher/lop?classId=${r.classId}`}
+                    className="rounded-sm font-medium text-primary-ink outline-none hover:text-primary-ink-hover hover:underline focus-visible:ring-2 focus-visible:ring-ring"
+                  >
+                    {r.className}
+                  </Link>
+                </td>
+                <td className="px-5 py-3.5 whitespace-nowrap">
+                  {r.isTest ? (
+                    <span className="inline-flex items-center rounded-full bg-primary-soft px-2.5 py-1 text-xs font-semibold text-primary-ink">
+                      Kiểm tra
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center rounded-full bg-state-info-soft px-2.5 py-1 text-xs font-semibold text-state-info-ink">
+                      Bài tập
+                    </span>
+                  )}
+                </td>
+                <td className="px-5 py-3.5 whitespace-nowrap text-muted-foreground">
+                  {r.win.dueText ?? "—"}
+                  {/* Cửa nộp bù hiện ngay dưới hạn gốc: GV cần thấy CẢ HAI mốc, hạn gốc
+                      là cái quyết định bài nộp có bị ghi "muộn" hay không. */}
+                  {r.win.lateUntilText && (
+                    <p className="text-xs font-semibold text-state-warning-ink">
+                      Nộp bù đến {r.win.lateUntilText}
+                    </p>
+                  )}
+                </td>
+                <td className="px-5 py-3.5 whitespace-nowrap text-foreground">
+                  {r.submitted}/{r.total}
+                </td>
+                <td className="px-5 py-3.5 whitespace-nowrap">
+                  <span
+                    className={cn(
+                      "inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold",
+                      STATE_CLASS[r.win.state],
+                    )}
+                  >
+                    {r.win.label}
+                  </span>
+                </td>
+                <td className="px-5 py-3.5 text-right whitespace-nowrap">
+                  <LateWindowDialog assignmentId={r.id} title={r.title} win={r.win} />
+                </td>
+              </tr>
+            ))}
+          />
         </div>
       )}
     </>
