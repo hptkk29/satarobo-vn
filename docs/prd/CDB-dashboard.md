@@ -28,8 +28,31 @@ Nguồn: `docs/plan/cau-hoi-can-quyet.md` §"Quyết định của chủ dự á
 | **OQ-4** (A) | **Mặc định gộp + công tắc "Tách theo cơ sở"** | 🔴 **Mọi hàm số liệu của B/C/D/E nhận `groupByCenter: boolean` NGAY TỪ BẢN ĐẦU** và trả được cả hai dạng. Viết cứng dạng gộp rồi thêm tách sau = viết lại tầng truy vấn của cả 4 tab. Công tắc dùng chung `searchParams` (`?split=1`), chỉ hiện khi chọn ≥ 2 cơ sở |
 | **OQ-B9** | Range mặc định tab B = **"01 → hôm nay"** | Bốn tab dùng chung một bộ lọc; **không** đặt riêng "tháng trước trọn vẹn" cho B |
 
-⏳ **Còn treo (ảnh hưởng tài liệu này):** OQ-B3 (nghĩa "dòng tiền"); OQ-B4 (danh mục đầu phí); OQ-B5 (permission key
-chi phí); OQ-B6…B9; OQ-C2, C4, C5, C8, C9; OQ-D3, D4, D5, D6, D7, D8, D9.
+⏳ **Còn treo (ảnh hưởng tài liệu này):** OQ-C2, C4, C8, C9; OQ-D3, D4, D5, D7, D8, D9.
+*(Khu vực B **hết câu treo**: OQ-B1/B5/B9 đóng 24/08 · OQ-B2, B3, B4, B6, B7, B8 đóng 26/08 — xem QĐ-2 ngay dưới.
+OQ-C1/C3/C5/C6/C7 và OQ-D1/D2/D6 đóng 24/08.)*
+
+---
+
+## QĐ-2. Quyết định chủ dự án — 26/08/2026 (khu vực B · THẮNG phần thân bài)
+
+Nguồn: `docs/plan/cau-hoi-can-quyet.md` §"Quyết định của chủ dự án — chốt 26/08/2026".
+Chủ dự án chốt **"làm theo đề xuất"** cho cả sáu câu B còn treo ⇒ nghĩa của thân bài **không đổi**, chỉ
+chuyển từ *đề xuất* thành *luật*. Chi tiết + hệ quả từng câu ở **§B.7**.
+
+📊 **Đo prod 26/08/2026** — cả bốn truy vấn của §B.6.8 đã chạy, kết quả nguyên văn ở **§B.6.8**. Liên quan trực tiếp
+đến QĐ này: **rà điều chỉnh chồng → 0 dòng** (prod chưa có ca nào) ⇒ luật **OQ-B2** được chốt **trước khi**
+ca đầu tiên xuất hiện — lúc rẻ nhất, chưa có dữ liệu cũ phải gỡ. ⚠️ Đổi lại: **không có dữ liệu thật để test** ⇒ test
+phải tự dựng fixture hai bản `ADJUSTED` cùng một gốc.
+
+| Mã | Quyết định | Ảnh hưởng trong PRD này |
+|---|---|---|
+| **OQ-B2** | Bản `ADJUSTED` **mới nhất** của một gốc thắng (`ORDER BY "createdAt" DESC LIMIT 1`) | Giả định **G2** (§B.6.1) không còn là giả định: `adjustPayment` (`payment.ts:521-557`) phải **chặn điều chỉnh chồng ngay từ đầu**, không chỉ dọn lúc đọc. Prod 0 dòng ⇒ chốt luật **trước** khi ca đó xuất hiện, và test phải **tự dựng** ca (không có dữ liệu thật) |
+| **OQ-B3** | "Dòng tiền" = **thu ghi nhận** ⇒ B4 = B1 − B2, **kèm bảng đối soát 3 lớp tiền** | §B.6.4 giữ nguyên. Bảng đối soát (ngân hàng / đã ghi nhận / doanh thu) là **phần bắt buộc**, không phải trang trí. `BankTransaction` **không** làm vế "vào" ở v1 |
+| **OQ-B4** | Danh mục đầu phí = `ADS · RENT · SALARY · UTILITY · MARKETING_OFFLINE · OTHER` | B-05 có template + B2 nghiệm thu được. ⚠️ `ADS` chồng nguồn với **D1** ⇒ phải ghi rõ "không nhập tay quảng cáo đã lấy từ job D-01", nếu không B2 **trừ hai lần** |
+| **OQ-B6** | Chi phí cấp công ty (`centerId = null`) **KHÔNG phân bổ** ở v1, hiện **dòng riêng** | §B.6.2 bẫy B2 giữ nguyên: tổng lợi nhuận các cơ sở **≠** toàn hệ thống — đó là kết quả **cố ý**, phải viết ra UI |
+| **OQ-B7** | Chi phí **phải duyệt** (`status = APPROVED`) mới vào báo cáo; **người nhập không tự duyệt** | Khớp 3 key đã chốt ở OQ-B5. ⚠️ Tách vai chưa đủ — người giữ cả hai vai vẫn tự duyệt được (xem §B.7) |
+| **OQ-B8** | **CÓ** đóng sổ theo tháng (khoá không cho sửa) | Trùng OQ-D7 ⇒ **kéo theo** phần của D. **Additive, làm sau được**, nhưng mọi đường ghi `CostEntry` **và** job D-01 đều phải tôn trọng kỳ khoá |
 
 ---
 
@@ -1287,6 +1310,67 @@ WHERE l."deletedAt" IS NULL;
 
 ⚠️ Chạy trên **prod**, không phải local — `CLAUDE.md` ghi rõ `test.satarobo.vn` và máy local **dùng chung một DB**, và DB đó **không phải** prod.
 
+#### ✅ KẾT QUẢ ĐO PROD — 26/08/2026 (dữ liệu THẬT, chủ dự án chạy; nguyên văn, không làm tròn)
+
+**(1) Lệch ba định nghĩa "đã chốt"**
+
+| Chỉ số | Giá trị |
+|---|---|
+| `def_a_enrolled_or_registered` | **76** |
+| `def_b_enrolled_only` | **75** |
+| `def_c_converted_at` | **75** |
+| `registered_without_converted_at` | **1** |
+| `enrolled_without_converted_at` | **0** |
+
+**Đọc kết quả — QĐ `B2` ("đã chốt" = `ENROLLED`) chỉ làm số giảm 76 → 75.** Lệch **đúng 1 lead**
+(≈ **1,3 %**), và đúng một lead đó là ca `REGISTERED` thiếu `convertedAt` — khớp chính xác đường
+`payment.ts:152-155` mà §C.2.3 mô tả. `enrolled_without_converted_at = 0` ⇒ **không có** di sản
+convert v1 cũ nào cần backfill.
+
+⇒ **Tin tốt: đổi định nghĩa gần như không làm ai giật mình.** Việc "báo trước cho người dùng" vẫn nên
+làm, nhưng nó là **một câu ghi chú**, không phải một chiến dịch truyền thông. ⚠️ Đừng rút ra kết luận
+rộng hơn số đo: rào cản thật của C3 nằm ở **SL-09** (`LeadChild.status` chưa tồn tại), **không** nằm ở
+mức lệch định nghĩa. Ba định nghĩa gần trùng nhau **không** làm C3 tính được.
+
+**(2) Đồng hồ `lastActivityAt` — 🔴 hỏng 100 %, tệ hơn §C.2.5 dự báo**
+
+| Chỉ số | Giá trị |
+|---|---|
+| `total_leads` | **129** |
+| `never_bumped` | **129** |
+| `out_of_sync` | **129** |
+| Dry-run backfill (§C.6.5) — `rows_to_fix` | **139** |
+
+`never_bumped = total_leads` ⇒ **`Lead.lastActivityAt` là `NULL` cho TOÀN BỘ 129 lead — cột này chưa
+bao giờ được ghi một lần nào.** §C.2.5 mới nói "12/15 đường ghi không bump"; số đo cho thấy thực tế là
+**0/15 đường có tác dụng**.
+
+🔴 **Hệ quả cứng cho C5 — không thương lượng:** nếu C5 đọc `Lead.lastActivityAt`, nó trả **kết quả vô
+nghĩa cho 100 % lead**: mọi lead rơi về mốc dự phòng `createdAt`, và QLCS soi lead treo sẽ thấy **sạch
+bong** — đúng cái bẫy §C.6.5 cảnh báo, nhưng ở mức tuyệt đối. ⇒ **BẮT BUỘC dùng biến thể A của §C.6.5**
+(đọc thẳng `LeadActivity` bằng `LATERAL`). **Biến thể B không được đưa vào v1.**
+
+⇒ Vá N-4 + backfill là **việc RIÊNG**, **không** phải điều kiện tiên quyết của C5. Đây là chỗ dễ xếp
+lịch sai nhất: gắn C5 sau N-4 sẽ hoãn C5 vô cớ.
+
+⚠️ **Chênh 139 vs 129 đã giải thích được, không phải mâu thuẫn** — hai truy vấn đếm trên hai tập khác
+nhau: truy vấn đo ở §C.6.9 lọc `WHERE l."deletedAt" IS NULL`, còn dry-run backfill ở §C.6.5 (`JOIN`
+thuần, không có mệnh đề `deletedAt`) **đếm cả lead đã xoá mềm** ⇒ **10 dòng chênh = 10 lead soft-delete
+có hoạt động**. Trước khi chạy `UPDATE` thật, **thêm `AND l."deletedAt" IS NULL`** vào cả dry-run lẫn
+câu áp dụng — không thì backfill bump `updatedAt` của 10 bản ghi đã xoá, vô ích và làm nhiễu audit.
+
+ℹ️ Suy ra thêm từ chính số đo (không phải phép đo mới): `out_of_sync = total_leads = 129`. Với lead
+**không có** `LeadActivity` nào thì `max_at` là `NULL`, và `NULL IS DISTINCT FROM NULL` = `false` ⇒ lead
+đó **không** được đếm vào `out_of_sync`. `out_of_sync` bằng đúng tổng ⇒ **cả 129 lead đều có ít nhất
+một dòng `LeadActivity`**.
+
+⚠️ Nhưng **đừng đọc quá lên**: truy vấn đo **không lọc `type`**, trong khi biến thể A chỉ nhận
+`CALL/MESSAGE/NOTE/EMAIL` (loại `STATUS_CHANGE`, `HANDOVER`). Một lead chỉ có `STATUS_CHANGE` vẫn được
+đếm ở trên nhưng **biến thể A sẽ trả `NULL`** và rơi về mốc dự phòng `Lead.createdAt`. Số lead thuộc
+diện đó **chưa đo** — thêm `AND "type" IN ('CALL','MESSAGE','NOTE','EMAIL')` vào truy vấn đo là biết
+ngay, và nó đáng đo vì đó chính là tập lead mà cột "số ngày chưa tiếp cận" sẽ hiển thị **tuổi lead**
+chứ không phải khoảng cách tiếp cận.
+
 ---
 
 ### C.6.10 — Bảng MỚI `LeadTarget` (chỉ tiêu lead theo tháng × cơ sở)
@@ -1397,7 +1481,7 @@ Dùng ở: C5 (số ngày), B5 (trục ngày), `resolveScopeFilters` (neo hai đ
 
 | Bước | Nội dung | Phụ thuộc | Ghi chú |
 |---|---|---|---|
-| **C.0** | ✅ **OQ-C1, OQ-C3, OQ-C6, OQ-C7 đã chốt 24/08/2026** — việc còn lại là **chạy truy vấn đo lệch §C.6.9 trên prod (chỉ đọc)** | — | Định nghĩa đã chốt nhưng **mức lệch chưa đo**; không đo thì không báo trước được cho người dùng khi số nhảy |
+| **C.0** | ✅ **OQ-C1, OQ-C3, OQ-C6, OQ-C7 đã chốt 24/08/2026** · ✅ **§C.6.9 ĐÃ CHẠY trên prod 26/08** | — | **Hết điều kiện đo.** Kết quả: lệch định nghĩa **chỉ 1 lead** (76 → 75) ⇒ thông báo cho người dùng là một câu ghi chú. Nhưng cùng phép đo lộ ra việc nặng hơn: `lastActivityAt` **NULL cho toàn bộ 129 lead** ⇒ xem hệ quả ràng buộc lên C.5 và C.8 ở §C.6.9 |
 | **C.1** | **A-02** — `resolveScopeFilters` + `ScopeFilters` + `<ScopeFilterBar>` + khoá cache mới | — | Thuộc khu vực A. C **không** khởi động trước bước này (CHUNG-3) |
 | **C.2** | **G.2** — migration SL-08 (`LeadChild.centerId/orgUnitId`) → SL-09 (`LeadChildStatus`, `closedAt`) → SL-10 (**`Lead.lostNote`**/**`Lead.lostAt`** — B5; ~~`lostReasonId`~~ bỏ theo 12(b)) → SL-11 (**chỉ `LeadSource`**) | C.0 | Thuộc khu vực G. Additive toàn bộ |
 | **C.3** | Test đỏ trước: cách ly `LeadChild` theo cơ sở · C1 đếm đúng học sinh · C3 lứa · C4 loại dòng âm | C.2 | Luật cứng Nền Hệ thống #5 |
@@ -1405,7 +1489,7 @@ Dùng ở: C5 (số ngày), B5 (trục ngày), `resolveScopeFilters` (neo hai đ
 | **C.5** | Vá **N-4** (helper `recordLeadActivity` dùng ở đủ 15 call-site) → vá **`sla.ts:132`** → backfill `lastActivityAt` | C.2 | 🔴 **Thứ tự bắt buộc**: vá `sla.ts` **trước** backfill (§C.6.5 bẫy B2) |
 | **C.6** | Bảng `LeadTarget` + màn đặt chỉ tiêu (khuôn `RevenueTargetForm`) | C.2 | Nhớ nhánh `centerId = null` không upsert được |
 | **C.7** | Tab C: C1 · C2 · C3 · C4 (§C.6.1–C.6.4) | C.4 + C.6 | |
-| **C.8** | Bảng C-03 + C-05, cột "số ngày chưa tiếp cận lại" **trên cả bảng lead đang chăm** + cảnh báo ngưỡng | C.5 + C.7 | Cột giá trị của C-03 chặn bởi OQ-G1/OQ-G2 + B1 |
+| **C.8** | Bảng C-03 + C-05, cột "số ngày chưa tiếp cận lại" **trên cả bảng lead đang chăm** + cảnh báo ngưỡng | C.5 + C.7 | Cột giá trị của C-03 chặn bởi OQ-G1/OQ-G2 + B1. ⚠️ **Phụ thuộc C.5 có thể GỠ** — đo prod 26/08 (§C.6.9) cho thấy cột `lastActivityAt` vô dụng 100 %, nên C5 **phải** đi biến thể A (đọc thẳng `LeadActivity`), tức không cần vá N-4 trước. Nếu gỡ, C.5 lùi thành việc song song và C.8 chỉ còn phụ thuộc C.7 |
 | **C.9** | C-06 (đánh dấu rớt bắt buộc lý do) + C-07 (mục "Lịch sử trạng thái" trên trang chi tiết lead) | C.2 | C-07 là **UI thuần** — audit đã có |
 | **C.10** | C-04 xuất Excel | A-03 xong | Quyền + định dạng thuộc khu vực A |
 | **C.11** | Cập nhật `documentation/` + liệt kê file đổi, rồi **DỪNG** | C.4–C.10 | Luật cứng Nền Hệ thống #10 |
@@ -2361,7 +2445,7 @@ HAVING sum(spend) > 0;
 
 | Bước | Nội dung | Phụ thuộc | Ghi chú |
 |---|---|---|---|
-| **D.0** | ✅ OQ-D1, OQ-D2 **đã chốt 24/08** (ban hành 23/08 · VND + GMT+7) · 🔴 còn **OQ-D4** (loại token Meta + hạn) và **OQ-D6** (campaign hay ad set) | — | OQ-D4 quyết định có cần cron `meta-token-refresh`; token hết hạn = job chết im |
+| **D.0** | ✅ OQ-D1, OQ-D2, **OQ-D6** **đã chốt 24/08** (ban hành 23/08 · VND + GMT+7 · `level=adset` — xem D.7 dòng OQ-D6) · 🔴 còn **OQ-D4** (loại token Meta + hạn) | — | OQ-D4 quyết định có cần cron `meta-token-refresh`; token hết hạn = job chết im |
 | **D.1** | Ban hành `SR.QD.232` cho Marketing, có ngày áp dụng | D.0 | **Việc ngoài code.** Spec `:216` |
 | **D.2** | Test đỏ trước: parser 18 ca (§D.6.5) · thứ tự ưu tiên D-07 · `DISTINCT ON` không cộng trùng · bất biến tổng khi chia tỷ lệ | D.0 | Luật cứng Nền Hệ thống #5 |
 | **D.3** | Migration additive: `AdsSpendSnapshot` + `AdsCampaignMapping` + `AdsBudgetTarget` + 2 enum. Khai `SCOPE_EXEMPT` / `SCOPED_MODELS` / `BACKFILL_SPECS` cùng lúc | D.2 | **Additive toàn bộ.** KHÔNG đụng `AdsInsightDaily` / `MarketingCostPeriod` |
@@ -3116,7 +3200,7 @@ export async function getProfit(actor: Actor, f: ScopeFilters) {
 
 | Lý do | Bằng chứng |
 |---|---|
-| Tiền mặt **không** đi qua ngân hàng | `Payment.method` là chuỗi tự do (`prisma/schema.prisma:5694` *"tiền mặt / chuyển khoản / ..."*) ⇒ dùng `BankTransaction` là **bỏ sót** toàn bộ khoản thu tiền mặt |
+| Tiền mặt **không** đi qua ngân hàng | `Payment.method` là chuỗi tự do (`prisma/schema.prisma:5721` *"tiền mặt / chuyển khoản / ..."*) ⇒ dùng `BankTransaction` là **bỏ sót** toàn bộ khoản thu tiền mặt |
 | `BankTransaction` có nhóm **chưa khớp** | `centerId = NULL` nghĩa là *"chưa biết của cơ sở nào"* — nó nằm trong `NULL_IS_GLOBAL_MODELS` (`lib/db-scope.ts:66-69`) đúng vì lý do đó. Không quy được về cơ sở ⇒ không dựng dòng tiền theo cơ sở |
 | Không có vế "ra" tương ứng | Không có bảng giao dịch chi ngân hàng. Trộn "vào theo ngân hàng" với "ra theo sổ chi" là so hai thước đo khác nhau |
 
@@ -3555,20 +3639,70 @@ SELECT
 
 ⚠️ Chạy trên **prod**. `test.satarobo.vn` và máy local dùng chung một DB, và DB đó **không phải** prod (`CLAUDE.md`).
 
+#### ✅ KẾT QUẢ ĐO PROD — 26/08/2026 (dữ liệu THẬT, chủ dự án chạy; nguyên văn, không làm tròn)
+
+**(1) Kỳ `2026-08`**
+
+| Cột | Giá trị |
+|---|---|
+| `gross` (CONFIRMED) | **3.686.000** |
+| `refunded` | `null` (không có dòng `REFUNDED`) |
+| `adjusted_rows` | **0** |
+| `superseded_amount` | `null` (không có bản gốc nào bị điều chỉnh) |
+
+ℹ️ Kết quả ghi lại **chỉ có kỳ `2026-08`**; năm kỳ còn lại của cửa sổ 6 tháng chưa được ghi. Đừng suy
+ra hành vi các tháng trước từ một kỳ.
+
+**(2) Rà điều chỉnh CHỒNG (`OQ-B2`) → 0 dòng**
+
+⇒ **`OQ-B2` chưa có ca nào trên prod.** Đây là **thời điểm rẻ nhất** để chốt luật: chốt "bản `ADJUSTED`
+mới nhất thắng" **và** thêm chặn điều chỉnh chồng ở `adjustPayment` (`payment.ts:521-557`) **ngay bây
+giờ**, khi chưa có dữ liệu phải gỡ. Để đến lúc có ca đầu tiên thì phải làm hai việc thay vì một: vừa
+chặn đường mới, vừa quyết bản nào thắng cho dữ liệu cũ.
+⚠️ **0 dòng KHÔNG có nghĩa là "lỗi không tồn tại"** — `adjustPayment` vẫn không chặn (§B.2.4). Chỉ có
+nghĩa là **chưa ai bấm hai lần**.
+
+**(3) `Payment` CONFIRMED thiếu `centerId` → 0 dòng**
+
+⇒ **Không khoản nào rơi khỏi bộ lọc theo cơ sở.** Đây là điều kiện tiên quyết im lặng của A-02 áp lên
+tab B: nếu số này khác 0, mọi con số B1 lọc theo cơ sở sẽ **thiếu tiền mà không báo lỗi**. Nay đã xác
+nhận **sạch** — ghi lại để lần sau không phải nghi ngờ.
+
+**(4) Đối chiếu hai định nghĩa doanh thu (§B.2.2) — 🔴 phát hiện lớn nhất của phép đo này**
+
+| Định nghĩa | Nguồn | Kỳ hiện tại |
+|---|---|---|
+| `def_a_payment` | `Payment.amount`, `accountantStatus = CONFIRMED` | **3.686.000** |
+| `def_b_order` | `Order.totalAmount`, `status IN (CONFIRMED, COMPLETED)`, theo `paidAt` | **0** |
+
+🔴 **Đây KHÔNG phải "lệch nhỏ" — là một bên MÙ HẲN.** Màn nào lấy `Order` làm nguồn đang hiển thị
+**0 đồng** cho kỳ này trong khi tiền thật đã ghi nhận là **3,686 triệu**. Hai chỗ dùng nguồn `Order` là
+`accountant-dashboard.tsx:26-31` và mẫu số ROAS `funnel-query.ts:103-104` (nguồn `Order`: `db.order.aggregate({ _sum: { totalAmount: true } })`) + `:115` (`revenue:`) — §B.2.2. *(Bản trước dẫn `:17-20`; dòng đó là chú thích đầu file về `AdsInsightDaily`/`spendAvailable`, không phải chỗ dùng nguồn `Order`.)*
+
+⚠️ **Sửa lại thông điệp truyền thông của QĐ `B3`.** `OQ-B1` (B.7) và §CHUNG-1 đang ghi *"số doanh thu
+và ROAS sẽ **tụt** ngay ngày lên prod"*. Với kỳ 2026-08 thì **ngược lại**: thống nhất về `Payment` làm
+số của hai màn đó **nhảy từ 0 lên 3.686.000**. ⇒ Câu chữ báo trước cho kế toán và marketing phải viết
+lại theo hướng **"số sẽ đổi mạnh, chiều đổi khác nhau tuỳ màn"**, không hứa trước là tăng hay giảm cho
+tới khi đo đủ 6 kỳ. Nội dung **quyết định B3 không đổi** — chỉ cách thông báo đổi.
+
+ℹ️ `gross` (kỳ `2026-08`) và `def_a_payment` (từ `date_trunc('month', now())`) **bằng nhau đúng
+3.686.000** — hai truy vấn độc lập cho cùng một số, một phép tự-kiểm nhỏ cho thấy trục ngày `paidDate`
+đọc nhất quán.
+
 ---
 
 ## B.7 Open Questions
 
 | # | Câu hỏi | Vì sao chặn | Chủ | Hạn |
 |---|---|---|---|---|
-| ~~**OQ-B1**~~ | ~~Có **thống nhất** `accountant-dashboard.tsx:26-31` và `funnel-query.ts:17-20` sang định nghĩa (a) không, hay chỉ **đổi nhãn**?~~ | ✅ **ĐÃ CHỐT 24/08/2026 (B3): THỐNG NHẤT về `Payment` CONFIRMED** ⇒ **Đường 1**, sửa **logic** cả hai chỗ, không phải chỉ đổi nhãn. ⚠️ Hệ quả bắt buộc làm kèm: (1) chạy §B.6.8 trên prod đo mức lệch **trước**; (2) **báo trước cho kế toán và marketing** — số doanh thu và ROAS sẽ tụt ngay ngày lên prod; (3) B.7 trong lộ trình đổi từ "chỉ đổi nhãn" thành "sửa logic + đổi nhãn". | — | Đóng |
-| **OQ-B2** | 🔴 Một khoản bị điều chỉnh **nhiều lần** thì tính bản nào? | §B.6.1 giả định G2 + bẫy B2. `adjustPayment` **không chặn** điều chỉnh chồng (`payment.ts:521-557`). Đề xuất: **bản `ADJUSTED` mới nhất thắng**. Chạy truy vấn rà ở §B.6.8 để biết prod có ca này chưa | Kế toán | Trước khi code B1 |
-| **OQ-B3** | 🔴 "Dòng tiền" nghĩa là gì với BGĐ: **thu ghi nhận** hay **tiền vật lý về ngân hàng**? | §B.6.4. Chọn tiền ngân hàng ⇒ bỏ sót toàn bộ thu tiền mặt và cần bảng giao dịch chi (chưa có). PRD chọn thu ghi nhận + bảng đối soát 3 lớp | Chủ dự án | Trước khi code B4 |
-| **OQ-B4** | 🔴 Danh mục **đầu phí** gồm những nhóm nào? | §B.6.2 đề xuất `ADS · RENT · SALARY · UTILITY · MARKETING_OFFLINE · OTHER`. Không có danh sách thì B-05 không có template và B2 không nghiệm thu được | Kế toán | Trước khi seed danh mục |
+| ~~**OQ-B1**~~ | ~~Có **thống nhất** `accountant-dashboard.tsx:26-31` và `funnel-query.ts:103-104`+`:115` sang định nghĩa (a) không, hay chỉ **đổi nhãn**?~~ | ✅ **ĐÃ CHỐT 24/08/2026 (B3): THỐNG NHẤT về `Payment` CONFIRMED** ⇒ **Đường 1**, sửa **logic** cả hai chỗ, không phải chỉ đổi nhãn. ⚠️ Hệ quả bắt buộc làm kèm: (1) ✅ **§B.6.8 đã chạy prod 26/08** — xem khối kết quả ở đó; (2) **báo trước cho kế toán và marketing** — ~~số doanh thu và ROAS sẽ **tụt** ngay ngày lên prod~~ **[SỬA 26/08: sai chiều]** số đo kỳ 2026-08 cho thấy `def_b_order` = **0** còn `def_a_payment` = **3.686.000** ⇒ với hai màn dùng nguồn `Order`, thống nhất về `Payment` làm số **TĂNG mạnh**, không tụt. Thông báo phải viết là *"số sẽ đổi mạnh, chiều đổi khác nhau tuỳ màn"* — chưa đo đủ 6 kỳ thì không hứa chiều; (3) B.7 trong lộ trình đổi từ "chỉ đổi nhãn" thành "sửa logic + đổi nhãn". | — | Đóng |
+| ~~**OQ-B2**~~ | ~~Một khoản bị điều chỉnh **nhiều lần** thì tính bản nào?~~ | ✅ **ĐÃ CHỐT 26/08/2026: bản `ADJUSTED` MỚI NHẤT thắng** — đường đọc lấy đúng một bản cho mỗi `adjustmentOfId` (`ORDER BY "createdAt" DESC LIMIT 1`), **và chặn điều chỉnh chồng ngay từ đầu**: `adjustPayment` (`payment.ts:521-557`) phải **từ chối** khi bản gốc đã có con `ADJUSTED` chưa xoá, thay vì chỉ xử lý lúc đọc. 📊 **Đo prod 26/08/2026** (truy vấn rà ở §B.6.8): **0 dòng** — prod chưa có ca nào ⇒ luật được chốt **trước khi** ca đầu tiên xuất hiện, tức lúc rẻ nhất (không có dữ liệu cũ phải xử). ⚠️ Hai hệ quả: (1) giả định **G2** (§B.6.1) không còn là giả định mà được **cưỡng chế bằng rào ghi**, bẫy **B2** chuyển từ "phải chốt" sang "đã có luật"; (2) 0 dòng nghĩa là **không có dữ liệu thật để test** ⇒ test phải **tự dựng** fixture hai bản `ADJUSTED` cùng một gốc, đừng chờ dữ liệu tự đến. | — | Đóng |
+| ~~**OQ-B3**~~ | ~~"Dòng tiền" nghĩa là gì với BGĐ: **thu ghi nhận** hay **tiền vật lý về ngân hàng**?~~ | ✅ **ĐÃ CHỐT 26/08/2026: "dòng tiền" = THU GHI NHẬN** ⇒ **B4 = B1 (thực thu đã xác nhận) − B2 (chi đã duyệt)**, đúng §B.6.4, **kèm bảng đối soát 3 lớp tiền** (ngân hàng → đã ghi nhận → doanh thu) hiện **cùng** B4 để người dùng thấy khoảng cách. ⚠️ Bảng đối soát là **phần bắt buộc của quyết định**, không phải trang trí: bỏ nó thì B4 bị đọc nhầm thành "tiền đang có trong tài khoản". Hệ quả: **không** dùng `BankTransaction` làm vế "vào" ở v1 — dùng là **bỏ sót toàn bộ thu tiền mặt** (`Payment.method` là chuỗi tự do, `prisma/schema.prisma:5721`); dòng tiền **ngân hàng thật** vẫn là **metric KHÁC**, cần bảng giao dịch chi **chưa tồn tại**, và **không** nằm trong phạm vi B. 🔴 Lớp 1 của bảng đối soát phụ thuộc webhook SePay/payOS — creds chỉ có ở scope Production ⇒ **chỉ smoke được trên prod** (cùng họ điểm mù với ZNS). | — | Đóng |
+| ~~**OQ-B4**~~ | ~~Danh mục **đầu phí** gồm những nhóm nào?~~ | ✅ **ĐÃ CHỐT 26/08/2026: sáu nhóm `ADS · RENT · SALARY · UTILITY · MARKETING_OFFLINE · OTHER`** (đúng đề xuất §B.6.2). Seed vào **bảng `CostCategory`**, **không** enum Postgres — để admin thêm nhóm sau mà không cần migration (cùng lý do với `LeadSource`). B-05 nay có đích: sheet `Danh mục` của `mau-chi-phi-v2.xlsx` liệt kê đúng sáu mã này, và B2 nghiệm thu được theo nhóm. 🔴 **Bẫy trừ hai lần:** `ADS` **chồng nguồn** với **D1** — B.8 bước **B.11** ghi rõ chi phí quảng cáo **đọc từ D1, không nhập tay**. Phải ghi thẳng trên template + màn nhập rằng `ADS` chỉ dành cho quảng cáo **không** đi qua job D-01; quên là B2 cộng đôi và B3 sai theo mà không có cảnh báo nào. `MARKETING_OFFLINE` chính là chỗ đón chi phí tờ rơi/sự kiện/KOL của **OQ-D8** — câu đó vẫn treo, nhưng danh mục đã có sẵn chỗ. | — | Đóng |
 | ⚙️ ~~**OQ-B5**~~ | ~~Permission key cho chi phí?~~ | ✅ **CHỐT KỸ THUẬT 24/08/2026 (Dev): `costs:view` / `costs:manage` / `costs:approve`** trong `lib/permissions/registry/finance.ts` — ba key tách rời vì ba việc khác nhau (xem báo cáo · nhập/sửa phiếu chi · **duyệt**, thứ quyết định con số lợi nhuận). Seed đề nghị: `view` cho QLCS + kế toán · `manage` cho kế toán · `approve` cho `HO_ACCOUNTANT` + `SUPER_ADMIN` (**người nhập không tự duyệt được**). ⚠️ **Chạy `seed-prod-roles.yml` sau merge lên `main`** — quên là kế toán trắng màn. | — | Đóng |
-| **OQ-B6** | Chi phí **cấp công ty** (`centerId = null`) có phân bổ về cơ sở không? | §B.6.2 giả định: **không** ở v1, hiện dòng riêng. Phân bổ ⇒ lợi nhuận từng cơ sở đổi, và cần chốt tiêu chí chia (doanh thu? sĩ số?) | BGĐ | Trước khi code B3 |
-| **OQ-B7** | Chi phí cần **duyệt** mới vào báo cáo, hay nhập là tính? | §B.6.2 chọn phải duyệt (`status = APPROVED`). Nếu bỏ duyệt thì nhanh hơn nhưng ai cũng đổi được lợi nhuận | Kế toán | Trước khi code B2 |
-| **OQ-B8** | Có cần **đóng sổ theo tháng** (khoá không cho sửa) không? | Trùng OQ-D7. Không đóng sổ thì báo cáo tháng trước có thể đổi bất kỳ lúc nào | Kế toán | Sau khi B2 chạy |
+| ~~**OQ-B6**~~ | ~~Chi phí **cấp công ty** (`centerId = null`) có phân bổ về cơ sở không?~~ | ✅ **ĐÃ CHỐT 26/08/2026: KHÔNG phân bổ ở v1** — hiện **một dòng riêng** *"Chi phí công ty (chưa phân bổ)"*. ⇒ đợt này **không phải** chốt tiêu chí chia (theo doanh thu? theo sĩ số?). **Hệ quả cố ý, bắt buộc viết ra UI:** tổng lợi nhuận các cơ sở **≠** lợi nhuận toàn hệ thống (bẫy **B2** §B.6.2) — thiếu dòng riêng + một dòng tổng có nó thì người đọc tưởng hệ thống cộng sai. Chi phí quảng cáo `CHƯA PHÂN BỔ` (§D.6.12) xử **cùng cách**, không đẻ cách thứ hai. `CostEntry.centerId = null` mang nghĩa **"cấp công ty"** ⇒ khai `nullMeaning: "NULL_TOAN_HE_THONG"` trong `BACKFILL_SPECS` (B.8 bước **B.8**) — nghĩa của `NULL` khác nhau theo từng bảng. ⚠️ Nếu về sau bật phân bổ thì nó **đổi số quá khứ** ⇒ phải đi kèm đóng sổ (OQ-B8), không thì lịch sử bị viết lại im lặng. | — | Đóng |
+| ~~**OQ-B7**~~ | ~~Chi phí cần **duyệt** mới vào báo cáo, hay nhập là tính?~~ | ✅ **ĐÃ CHỐT 26/08/2026: PHẢI DUYỆT** — chỉ phiếu `status = APPROVED` mới vào B2/B3/B4; **người nhập không tự duyệt**. Khớp đúng ba key đã chốt ở OQ-B5: `costs:manage` (kế toán nhập) tách khỏi `costs:approve` (`HO_ACCOUNTANT` + `SUPER_ADMIN`). ⚠️ **Tách vai là chưa đủ:** một người giữ **cả hai** vai vẫn tự duyệt được ⇒ muốn câu "không tự duyệt" đúng trên **dữ liệu** chứ không chỉ trên bảng quyền, Server Action duyệt phải **từ chối khi người duyệt chính là người tạo phiếu** (`approvedById === createdById`). **Mặt trái đã biết và chấp nhận:** phiếu còn `PENDING` **không** vào báo cáo ⇒ lợi nhuận kỳ **cao giả** cho tới lúc duyệt xong, rồi tụt khi duyệt bù ⇒ hiện cạnh B2 **số phiếu đang chờ duyệt** + `updatedAt` gần nhất (mở rộng bẫy **B4** §B.6.2), để người đọc biết số còn động. | — | Đóng |
+| ~~**OQ-B8**~~ | ~~Có cần **đóng sổ theo tháng** (khoá không cho sửa) không?~~ | ✅ **ĐÃ CHỐT 26/08/2026: CÓ** — đóng sổ theo tháng, kỳ đã khoá thì không sửa được. **Additive và làm sau được** (không nằm trên đường tới hạn của B1–B6), nhưng phải quyết **trước khi kế toán quen sửa lùi**. Hệ quả khi code: **mọi** đường ghi `CostEntry` — nhập tay (B.9) · import B-05 (B.10) · sửa — đều phải qua cổng *"kỳ đã khoá chưa"*; sót **một** đường là sổ khoá vô nghĩa. Và **job D-01 cũng phải tôn trọng kỳ khoá**, nếu không số quảng cáo quá khứ vẫn bị ghi đè sau khi chốt — đúng thứ `AdsSpendLocked` (§D.6.1) sinh ra để chặn ⇒ **kéo theo OQ-D7**, cùng một cơ chế, phần của D chốt chính thức khi D chạy tới bước đó. 📌 Chưa có key cho việc **khoá/mở kỳ**: chốt khi code, **đừng** mặc định gộp vào `costs:approve` (duyệt một phiếu và khoá cả tháng là hai mức rủi ro khác nhau). | — | Đóng |
 | ~~**OQ-B9**~~ | ~~Range mặc định của tab B là gì?~~ | ✅ **ĐÃ CHỐT 24/08/2026: "01 → hôm nay", giống 3 tab kia.** Không có ngoại lệ cho tab B ⇒ bốn tab dùng chung đúng một bộ lọc, đổi tab không nhảy khoảng ngày. Hệ quả chấp nhận: mặc định là **tháng đang chạy** (số dở dang) — người xem tự đổi sang tháng trước khi cần chốt sổ. | — | Đóng |
 
 ---
@@ -3577,14 +3711,14 @@ SELECT
 
 | Bước | Nội dung | Phụ thuộc | Ghi chú |
 |---|---|---|---|
-| **B.0** | ✅ OQ-B1 **đã chốt 24/08** (thống nhất `Payment` CONFIRMED) · 🔴 vẫn phải chạy §B.6.8 trên prod **trước khi sửa** + còn **OQ-B2, OQ-B4, OQ-B7** | — | Định nghĩa đã chốt nhưng **mức lệch chưa đo**; đổi số người dùng đang nhìn mà không đo trước = không báo trước được |
+| **B.0** | ✅ OQ-B1 chốt 24/08 (thống nhất `Payment` CONFIRMED) · ✅ **OQ-B2, B3, B4, B6, B7, B8 chốt 26/08** (xem QĐ-2) · ✅ **§B.6.8 ĐÃ CHẠY ĐỦ trên prod 26/08** | — | **Hết câu treo, hết điều kiện đo.** Cả bốn phần của §B.6.8 đã chạy: điều chỉnh chồng **0 dòng** · CONFIRMED thiếu `centerId` **0 dòng** · kỳ 2026-08 `gross` **3.686.000** · đối chiếu 2 định nghĩa **`def_a_payment` 3.686.000 vs `def_b_order` 0**. ⚠️ Số đo đảo chiều dự báo: xem khối kết quả ở §B.6.8 trước khi soạn thông báo cho kế toán/marketing |
 | **B.1** | **A-02** — `resolveScopeFilters` + `<ScopeFilterBar>` + khoá cache | — | Thuộc khu vực A (CHUNG-3) |
 | **B.2** | Test đỏ trước: hoàn tiền trừ doanh thu · bản điều chỉnh thay bản gốc · B5 đủ ngày trống · B5 ranh giới ngày VN · B6 ba chế độ mục tiêu | B.0 | Luật cứng Nền Hệ thống #5 |
 | **B.3** | `lib/finance/revenue.ts` (§B.6.0) — `revenueWhere` + `netRevenueOf` + `grossRevenueOf`. Chuyển **3 chỗ lặp** sang dùng | B.2 | Hàm thuần, unit test không cần Postgres |
 | **B.4** | Migration additive: index `[centerId, paidDate]` + `[accountantStatus, paidDate]` trên `Payment` | B.2 | **Additive** — luật cứng #4 chỉ cấm đổi/bỏ cột |
 | **B.5** | Vá `lib/reports/revenue-target-data.ts:24-25` theo quy tắc §B.6.6 | B.3 | Có test cho **cả ba** chế độ phạm vi |
 | **B.6** | B1 + B5 + B6 trên tab Tài chính (hàng chỉ số 1 + bảng theo ngày) | B.3 + B.5 | Ba trong sáu con số lên được ở đây |
-| **B.7** | ✅ **Sửa LOGIC** `accountant-dashboard.tsx:26-31` + `funnel-query.ts:17-20` sang `Payment` CONFIRMED (B3 — Đường 1), rồi đổi nhãn | B.6 + §B.6.8 đã chạy trên prod | ⚠️ **Không còn là "một dòng JSX"**. Đây là đổi con số người dùng đang nhìn ⇒ phải đo trước bằng §B.6.8 và **thông báo trước cho kế toán + marketing** |
+| **B.7** | ✅ **Sửa LOGIC** `accountant-dashboard.tsx:26-31` + `funnel-query.ts:17-20` sang `Payment` CONFIRMED (B3 — Đường 1), rồi đổi nhãn | B.6 · ✅ §B.6.8 đã chạy prod 26/08 | ⚠️ **Không còn là "một dòng JSX"**. Đây là đổi con số người dùng đang nhìn. Đo đã xong ⇒ việc còn lại là **thông báo trước cho kế toán + marketing**, và nội dung thông báo phải theo số đo thật: hai màn nguồn `Order` sẽ **nhảy từ 0 lên 3.686.000** ở kỳ 2026-08, **không tụt** |
 | **B.8** | Migration additive: `CostCategory` + `CostEntry` + 2 enum. Khai `SCOPED_MODELS` + `BACKFILL_SPECS` (`nullMeaning: "NULL_TOAN_HE_THONG"`) + `getModelPrefixes` cùng lúc | B.2 + OQ-B4 + OQ-B5 | Thiếu `BACKFILL_SPECS` → test `[US-07-IT-08b]` đỏ |
 | **B.9** | Màn nhập chi phí tay + duyệt | B.8 | shadcn/ui, `auth()` + `assertCan` đầu mỗi Server Action |
 | **B.10** | B-05 import: `public/templates/mau-chi-phi-v2.xlsx` (soạn tay) + `app/api/admin/import/costs/route.ts` + màn xem trước | B.8 | Khuôn `holidays/route.ts`. **Không** khôi phục `build:templates` |

@@ -46,6 +46,199 @@ huynh lọc cứng `status = "PUBLISHED"`**: `lib/lms/report-card.ts:220` (danh 
 
 ---
 
+## 0b. Quyết định chủ dự án — 26/08/2026 (đợt 2, THẮNG cả §0)
+
+Nguồn: `docs/plan/cau-hoi-can-quyet.md` §"Quyết định của chủ dự án — chốt 26/08/2026".
+
+| Mã | Quyết định | Ảnh hưởng trong PRD này |
+|---|---|---|
+| **OQ-F3** *(= `OQ-F1` của backlog)* | Nén video chạy **CLIENT-SIDE bằng WebCodecs** — trình duyệt của GV nén **trước khi** upload | **4 kết cục mới**, cột `transcodeStatus` lưu **3** (kết cục thứ tư `REJECTED` là **mã lỗi**, không có record để ghi); thêm **luật cứng "server không tin client"** — nhưng luật đó có **hai tầng**, tầng codec/độ phân giải/thời lượng đòi **phụ thuộc mới chưa ai chọn**; thêm **Bước 0 = đo trước khi xây**. Chi tiết §0b.1 |
+| **OQ-F2** | F-10 dùng **cách đọc B** | §6.2.2 đóng: lịch hiện **mọi ngày có buổi học**, mỗi ngày mang 1 trong 4 trạng thái. Câu chữ F-10-1/F-10-2 sửa cho khớp — §0b.3 |
+| *(nối tiếp B8 — 24/08)* | Bucket riêng: biến **`R2_CLASS_MEDIA_BUCKET_NAME`**, tên bucket đề xuất **`satarobo-class-media`** | F-01-3 đang ghi **sai** tên biến (`R2_MEDIA_BUCKET_NAME`) — sửa. Chi tiết §0b.4 |
+| **OQ-F2 + OQ-F5** *(mã của **backlog**)* | Mọi lượt xoá đi qua **ÂN HẠN 30 NGÀY** rồi mới purge khỏi R2; **admin + QLCS** khôi phục được. Ảnh **bị từ chối** cũng **vào ân hạn**, **không** xoá ngay | 🔴 **Ngược câu chữ F-03/F-15 của bản 24/08** ⇒ Goal 2, F-03-2, F-15-2, bảng T9/T10 và ô "`DELETED` → bất kỳ" đều phải sửa. Chi tiết §0b.5 |
+| **OQ-F4** *(mã của **backlog** — KHÁC `OQ-F4` của PRD)* | Ảnh **không gắn học bạ nào**: giữ **3 THÁNG** rồi mới áp vòng đời xoá | Retention đổi từ **một** ngưỡng sang **hai**: 12 tháng (có học bạ) / 3 tháng (không). §6.1.5 + key registry phải sửa. Chi tiết §0b.6 |
+| ⏳ **OQ-F4** *(mã của **PRD này**)* | **CHƯA CHỐT.** Yêu cầu "video thuyết trình" mới đưa ra làm ba con số **chống lại** chính quyết định nén client-side và chống F-18/F-20 | §0b.2 — ghi nguyên con số + ba hướng xử, **chưa chọn hướng nào** |
+
+---
+
+### 0b.1 OQ-F3 — nén video chạy Ở MÁY GIÁO VIÊN (WebCodecs)
+
+✅ **ĐÃ CHỐT 26/08/2026: nén CLIENT-SIDE bằng WebCodecs.** Không dựng worker riêng, không mua dịch vụ
+transcode ngoài. Trình duyệt của GV nén xong rồi mới xin presign; thứ đi lên R2 **đã** đúng chuẩn.
+
+**Bộ trạng thái nén đổi sang đúng 4 kết cục** — thay bộ `PENDING/RUNNING/DONE/FAILED/SKIPPED` mà bản
+24/08 dự kiến (bộ cũ mô tả một pipeline chạy ở server, nay không còn pipeline đó):
+
+| Kết cục | Nghĩa | Ai ghi | Lưu ở đâu |
+|---|---|---|---|
+| `DONE_CLIENT` | GV nén xong ở máy, file lên R2 đã đúng chuẩn | trình duyệt nén thật, **server đọc lại file rồi mới ghi** | cột `transcodeStatus` |
+| `PASSTHROUGH` | File gốc **đã** đúng chuẩn sẵn, không cần nén | tầng validate ở server | cột `transcodeStatus` |
+| `SKIPPED_UNSUPPORTED` | Máy không chạy được WebCodecs; file gốc **vẫn nhận** vì đủ nhỏ | tầng validate ở server | cột `transcodeStatus` |
+| `REJECTED` | Không nén được **và** file quá chuẩn ⇒ **chặn, không cho upload** | tầng validate ở server | ⚙️ **KHÔNG lưu ở cột nào** — xem ngay dưới |
+
+⚙️ **CHỐT KỸ THUẬT (Dev) — `REJECTED` là MÃ LỖI của tầng validate, không phải giá trị lưu trong cột.**
+Đây là **hệ quả bắt buộc** của chính câu đã chốt *"chặn, không cho upload"*, không phải sửa quyết định:
+không cho upload ⇒ **không có record** ⇒ **không có ô nào để ghi `REJECTED` vào**. Vì vậy:
+**cột `transcodeStatus` chỉ lưu đúng 3 giá trị** (`DONE_CLIENT` · `PASSTHROUGH` · `SKIPPED_UNSUPPORTED`)
+— là 3 kết cục của file **đã vào** hệ thống; `REJECTED` là mã lỗi trả về cho client kèm thông điệp tiếng
+Việt nói rõ phải làm gì. Muốn giữ **vết** lượt bị chặn thì ghi `writeAudit`, **đừng** tạo record media
+rác chỉ để đánh dấu.
+
+🔴 **LUẬT CỨNG — server KHÔNG BAO GIỜ tin `transcodeStatus` do client gửi lên.** Client chỉ được nói
+*"tôi đã thử nén"*, không được nói *"tôi nén xong rồi, cho qua"*. Không làm vậy thì GV nào sửa request là
+đẩy được file 500MB vào R2 — đúng cái trần `UPLOAD_CONFIG.video` đang mở sẵn
+(`lib/storage/upload-config.ts:53-63`).
+
+⚠️ **Nhưng "server tự đọc metadata file thật" KHÔNG miễn phí — phải tách làm hai tầng, đừng viết thành
+một câu.** Repo hôm nay **không có** `ffmpeg`, `ffprobe` hay `mediainfo`; `sharp` chỉ nằm ở
+`package.json:162` trong `pnpm.onlyBuiltDependencies` (**không** phải dependency dùng được — đúng như
+phần *Why* của Story 5 tự khai). Đọc **codec / độ phân giải / thời lượng** của một file MP4 ở server đòi
+**công cụ MỚI mà chưa ai chọn**, và nó **chống lại** chính câu kết luận *"chi phí hạ tầng bằng 0"* của
+quyết định này (`docs/plan/ket-va-cach-go.md` K-5).
+
+| Tầng | Server kiểm được gì | Cần thêm gì | Trạng thái |
+|---|---|---|---|
+| **(1) Sàn — BẮT BUỘC, làm ngay** | **Dung lượng byte thật** (đọc từ R2 `HeadObject`, **không** lấy số client khai) · **MIME + magic bytes** đầu file (khai `video/mp4` mà nội dung không phải video → chặn) · hạn mức `UPLOAD_CONFIG` | **Không gì cả** — hạ tầng hiện có đủ | ✅ chốt được ngay, đây là mức luật cứng đang áp |
+| **(2) Trần — codec / độ phân giải / thời lượng** | Xác minh file đúng H.264 · ≤ 1280×720 · trong trần thời lượng | 🔴 **Một phụ thuộc MỚI chưa ai chọn**: thư viện đọc container MP4 chạy trong Node, hoặc `ffprobe` dựng ở đâu đó. Cả hai đều là **chi phí hạ tầng ≠ 0** | ⏳ **PHẢI CHỌN VÀ NÓI TÊN trước Bước 1**; chưa chọn thì chưa được coi tầng (2) là "đã có" |
+
+⇒ **Luật cứng áp dụng ngay = tầng (1).** Nó đã đủ chặn kịch bản đắt nhất (đẩy file 500MB qua request
+sửa tay), vì trần **dung lượng** đã suy ra được từ 1280×720 · ~2 Mbps · biên 20%. Tầng (2) là **cửa cuối**,
+không phải thứ đem ra hứa trước khi có công cụ.
+
+⚠️ Hệ quả kéo theo cho test: AC *"kiểm bằng `ffprobe` trong test"* (backlog Story 5) **chỉ chạy được sau
+khi tầng (2) có công cụ**. Trước đó, test chống giả mạo phải viết theo tầng (1) — file quá dung lượng /
+sai magic bytes — chứ không phải chờ `ffprobe` xuất hiện.
+
+⚠️ Bộ 3 giá trị cột này là bộ **đầu tiên**: `ClassSessionMedia` hiện **chưa có** cột `transcodeStatus` nào
+(SL-04 mới thêm) ⇒ không phải sửa enum trên bảng có dữ liệu prod, không vướng luật cứng #4.
+
+**Ngưỡng chuẩn:**
+
+| Tham số | Ngưỡng |
+|---|---|
+| Độ phân giải | trần **1280×720** |
+| Bitrate | **~2 Mbps** ≈ **15 MB/phút** |
+| Dung lượng trần | **suy ra** từ hai số trên + biên **20%** — cố ý không đặt một con số rời thứ ba, để ba con số không lệch nhau về sau |
+| Thời lượng tối đa | ⏳ **XEM §0b.2 — đang mâu thuẫn, CHƯA CHỐT** |
+
+**Thứ tự thi công — Bước 0 là bước ĐO, không phải bước code:**
+
+| Bước | Việc | Điều kiện qua |
+|---|---|---|
+| **Bước 0 — ĐO TRƯỚC KHI XÂY** | Trang thử nghiệm **độc lập**. **5–7 GV thật** ở CS1/CS2 mở bằng **chính máy họ đang dùng**, up video quay bằng **điện thoại của chính họ**. Ghi lại 4 số mỗi lượt: có chạy được WebCodecs không · mất bao lâu · file ra bao nhiêu MB · có sập tab không | 🔴 Tỷ lệ chạy được **dưới ~70%** ⇒ **quay lại phương án server**, và quay lại **TRƯỚC** khi lỡ code sâu |
+| **Bước 1** | Interface `MediaTranscoder` + **2** hiện thực (`ClientWebCodecs`, `NoopSkip`) + **tầng validate ở server** | Đổi hiện thực không phải sửa call-site |
+| **Bước 2** | Bật nhánh video ở **đợt 2**, bằng **cờ cấu hình** | Đợt 1 vẫn chỉ ảnh |
+
+⚠️ **`modules/` CHƯA TỒN TẠI trong repo** — CLAUDE.md ghi thẳng: *"❌ `modules/*` (modular monolith
+boundary) CHƯA TỒN TẠI — đừng import `modules/integration`"*. Đặt `MediaTranscoder` vào
+`modules/integration` nghĩa là **tạo mới thư mục `modules/`**, mà việc đó tự nó là một quyết định kiến
+trúc (ranh giới modular monolith của Doc 15) — phải nói ra, đừng lặng lẽ tạo trong một story media.
+Đường rẻ hơn cho đợt này: đặt ở `lib/media/transcoder.ts` theo đúng khuôn "interface + N hiện thực",
+dời sang `modules/integration` khi thư mục đó ra đời thật.
+
+**Hai bẫy phải xử ngay trong story, không để "tính sau":**
+
+| Bẫy | Xử |
+|---|---|
+| **(a) Tab đóng giữa chừng** | Cảnh báo `beforeunload` khi đang nén; mở lại thì **cho chọn lại file, làm lại từ đầu**. 🔴 **KHÔNG** lưu trạng thái nén dở — lưu dở là đẻ thêm một máy trạng thái thứ hai nằm ở client, không ai kiểm được |
+| **(b) Máy GV yếu** | Thanh tiến trình hiện **PHẦN TRĂM THẬT** (WebCodecs cho biết số frame đã xử lý), **không** phải spinner vô định. Người nhìn spinner 12 phút sẽ tắt tab — và rơi thẳng vào bẫy (a) |
+
+---
+
+### 0b.2 ⏳ OQ-F4 (trần video) — CHƯA CHỐT: số liệu mới chống lại chính §0b.1 và F-18/F-20
+
+**Đây KHÔNG phải câu đã đóng.** Ghi ra đây để không ai đọc nhầm rằng trần video đã có.
+
+**Nguyên văn yêu cầu của chủ dự án (26/08/2026):** các buổi **12 / 24 / 36 / 48** là buổi **thuyết
+trình**; phải up **video full từng học viên thuyết trình**, mỗi video **10–15 phút**, **12 video mỗi
+buổi** (sĩ số tối đa).
+
+**Ba hệ quả tính được:**
+
+| Hệ quả | Con số | Chống với gì |
+|---|---|---|
+| **Thời lượng duyệt** | 12 × 15 = **180 phút = 3 TIẾNG** video mỗi buổi thuyết trình mỗi lớp | **F-18** bắt QLCS **xem HẾT** trước khi duyệt (`watchedDuration ≥ 95%`, tua không tính — §6.2.4) và **F-20** đặt hạn duyệt **10h sáng hôm sau** |
+| **Dung lượng** | 12 × 15 × ~15 MB/phút ≈ **2,7 GB mỗi buổi**, chưa tính các lớp khác | Trần một file hiện là 500MB; chi phí R2 và rủi ro "kho phình" (T17 của backlog) |
+| **Nén client-side** | Một video **15 phút** nén bằng WebCodecs trên **laptop văn phòng đời cũ** là **hàng chục phút** và **rất dễ sập tab** | Đúng **bẫy (b)** ở §0b.1, ở quy mô lớn hơn nhiều — 12 lượt liên tiếp mỗi buổi |
+
+**Ba hướng xử — CHƯA CHỌN HƯỚNG NÀO:**
+
+| Hướng | Nội dung | Cái mất |
+|---|---|---|
+| **(a)** | **Tách RIÊNG một loại "video thuyết trình"**: không áp F-18 xem hết; duyệt **theo lô / theo xác suất**; đi **đường upload khác**, không nén client-side | Bước duyệt của loại này yếu hơn hẳn — phải nói rõ trong biên bản, và báo cáo F-30 **không được trộn** hai loại làm một |
+| **(b)** | **Gộp thành MỘT video mỗi buổi** thay vì 12 | Mất khả năng gửi riêng video của từng em cho PH của em đó |
+| **(c)** | **Giữ 12 video nhưng giới hạn 3–5 phút mỗi em** | Không còn là "video full" như yêu cầu |
+
+⚠️ Cho tới khi chọn: **không bật upload video**. Trần tạm (hạ dung lượng + thời lượng ở luồng lớp) vẫn
+là thứ đang giữ chỗ.
+
+---
+
+### 0b.3 OQ-F2 — F-10 chốt CÁCH ĐỌC B
+
+✅ **ĐÃ CHỐT 26/08/2026: cách đọc B.** Lịch hiện **MỌI ngày có buổi học**; mỗi ngày mang **1 trong 4
+trạng thái**: `Chưa duyệt` · `Đã duyệt` · `Phê duyệt trễ` · `Không có ảnh`.
+
+Hệ quả: F-14 (nút "Hôm nay không có ảnh") **render được** — cách đọc A làm nút đó chết vì folder trống
+thì không hiện; và F-31 giữ đủ 4 trạng thái. **Câu chữ F-10 phải sửa cho khớp** (§5 F-10-1/F-10-2 và
+§6.2.2 dưới đây đã sửa) — đừng để hai câu mâu thuẫn cùng tồn tại trong spec.
+
+---
+
+### 0b.4 Bucket riêng — tên biến và luật fail-closed
+
+✅ **ĐÃ CHỐT 26/08/2026:** biến môi trường **`R2_CLASS_MEDIA_BUCKET_NAME`**, tên bucket đề xuất
+**`satarobo-class-media`**. Theo **ĐÚNG** khuôn `R2_CHAT_BUCKET_NAME` đã chạy thật
+(`lib/storage/chat-storage.ts:48-65`):
+
+1. Đọc **thẳng** `process.env`, không qua `getR2Bucket()` — để không có đường nào rơi về bucket công khai.
+2. **Fail CLOSED** khi trống → throw, luồng upload media lớp trả lỗi cấu hình, **không** dùng tạm bucket khác.
+3. **TỪ CHỐI** nếu trùng `R2_BUCKET_NAME` — đó chính là bucket đang gắn `R2_PUBLIC_URL` (`cdn.satarobo.vn`),
+   nhận giá trị đó = tự mở lại lỗ hổng.
+
+⚠️ Ghi biến này vào `.env.example` là **việc của story F** — phiên viết tài liệu này **không sửa mã và
+không sửa `.env.example`**.
+
+---
+
+### 0b.5 Xoá media đi qua ÂN HẠN 30 NGÀY — ảnh bị từ chối cũng vậy
+
+✅ **ĐÃ CHỐT 26/08/2026** (`OQ-F2` + `OQ-F5` của backlog): xoá media là **soft** — `status = DELETED` +
+`purgeAfterAt = now + 30 ngày`; object R2 **vẫn còn** trong hạn ân hạn, cron purge mới xoá thật.
+**Admin và QLCS** khôi phục được trước hạn. **Ảnh bị QLCS từ chối đi CHUNG đường đó**, không xoá ngay.
+
+🔴 **Đây là chỗ bản 24/08 nói ngược, phải sửa chứ không được để hai câu cùng tồn tại.** Các chỗ đã sửa
+theo quyết định này: **Goal 2** (§3) · **F-03-2** và **F-15-2** (§5) · **T9/T10** và ô cấm
+"`DELETED` → bất kỳ" (§6.1.1) · bước **F.1c** (§8.2). Câu "**không hoàn tác được**" trong popup xác nhận
+đổi thành "**khôi phục được trong 30 ngày, sau đó mất hẳn**" — nói sai chiều thì người dùng vừa sợ nhầm
+vừa mất đường khiếu nại.
+
+⚠️ **Đánh đổi đã biết và đã chấp nhận:** ảnh bị từ chối thường là ảnh **có vấn đề** (lộ mặt trẻ chưa có
+`StudentConsent`, ảnh riêng tư, ảnh chụp nhầm) — giữ thêm 30 ngày trên storage là **rủi ro có thật**.
+Đổi lại là có **đường khiếu nại** khi QLCS bấm nhầm "X lớn" trong luồng vuốt nhanh. Đã chọn thì phải trả
+giá cho đủ: **thùng rác chỉ admin/QLCS xem được** (PH/GV không có đường nào), và **purge phải chạy đúng
+hạn 30 ngày**, không "để đó tính sau".
+
+---
+
+### 0b.6 Retention có HAI mốc, không phải một
+
+✅ **ĐÃ CHỐT 26/08/2026** (`OQ-F4` của **backlog** — đừng lẫn với `OQ-F4` của PRD ở §0b.2): ảnh **không
+gắn học bạ nào** giữ **3 THÁNG** rồi áp vòng đời xoá; ảnh **có gắn học bạ** giữ **12 THÁNG** như cũ.
+
+Hệ quả bắt buộc, đã sửa vào thân bài: **Goal 6** và chỉ số §3 nói **hai** mốc; **F-05-1** tách hai nhánh;
+`decideMediaRetention` (§6.1.5) nhận **hai** tham số ngưỡng chứ không phải một `retentionMonths`; key
+registry có **hai** khoá `media.retentionMonths` (12) và `media.retentionMonthsUnlinked` (3).
+
+⚠️ Nhánh "không gắn học bạ" trước đây rơi vào `DELETED` sau **12** tháng (§6.1.5 bản 24/08 ghi rõ đó là
+hành vi cố ý). Nay nó có hạn **riêng, ngắn hơn** — đóng luôn rủi ro "kho phình vô hạn", nhưng cũng nghĩa
+là **ảnh sinh hoạt lớp biến mất sớm hơn gấp bốn lần**: phải nói trước với GV và QLCS, không để họ phát
+hiện bằng cách mở album cũ.
+
+⚠️ Mọi lượt xoá của job này vẫn **đi qua ân hạn 30 ngày của §0b.5**, không xoá thẳng.
+
+---
+
 ## 1. Executive Summary
 
 Khu vực F là khối nặng nhất của đợt: nó vừa xây mới (trang duyệt của QLCS, theo dõi xem video, báo cáo SLA, job xoá theo hạn), vừa **sửa lại vòng đời media đang chạy trên prod**.
@@ -55,7 +248,7 @@ Bốn kết luận chịu lực của khảo sát:
 | # | Kết luận | Hệ quả |
 |---|---|---|
 | 1 | Vòng đời hiện tại **không phải một chuỗi** mà là **hai đường song song**: "đăng ngay 1 ảnh" (`uploadClassMedia`) và "kho DRAFT → gửi" (`createDraftMediaBatch` → `publishClassMedia`). Cả hai đều có nhánh `autoApprove` cho người mang `media:approve` → **ảnh thành `APPROVED` ngay, không qua bước duyệt nào**. | F-13/F-16/F-18 dựng ra để bắt QLCS xem, mà `media:approve` lại seed đúng cho **CENTER_MANAGER** (`prisma/seed-roles.ts:449`) ⇒ đúng vai bị ràng buộc là vai đi vòng được. Phải gỡ nhánh này (§6.1.3). |
-| 2 | **Xoá media chưa bao giờ đụng R2.** `deleteMedia` chỉ xoá row DB (`app/(admin)/admin/media/actions.ts:440`), `deleteDraftMedia` cũng vậy (`lib/lms/media-publish.ts:308-310`), và chú thích ghi thẳng điều đó (`lib/lms/media-publish.ts:12`, `:283-286`). Bucket lại là bucket **CÔNG KHAI** gắn `cdn.satarobo.vn` (`.env.example:91-93`). | F-03/F-15 ("xoá khỏi R2, không soft-delete") **chưa có phần thực thi nào**. Mỗi ngày trôi qua là thêm object ảnh học viên tải được vô danh mà DB không còn con trỏ để dọn. |
+| 2 | **Xoá media chưa bao giờ đụng R2.** `deleteMedia` chỉ xoá row DB (`app/(admin)/admin/media/actions.ts:440`), `deleteDraftMedia` cũng vậy (`lib/lms/media-publish.ts:308-310`), và chú thích ghi thẳng điều đó (`lib/lms/media-publish.ts:12`, `:283-286`). Bucket lại là bucket **CÔNG KHAI** gắn `cdn.satarobo.vn` (`.env.example:91-93`). | F-03/F-15 ("cuối cùng phải xoá khỏi R2" — nay qua ân hạn 30 ngày, §0b.5) **chưa có phần thực thi nào**. Mỗi ngày trôi qua là thêm object ảnh học viên tải được vô danh mà DB không còn con trỏ để dọn. |
 | 3 | Trang duyệt hiện tại **phẳng, không phân trang, trần 100 dòng** (`app/(admin)/admin/media/page.tsx:40-55`) và duyệt **từng ảnh một** (`reviewMedia` nhận đúng 1 id — `actions.ts:385-388`). | Ảnh `PENDING` cũ hơn 100 dòng gần nhất **không bao giờ hiện ra**. F.2 không phải "thêm nút", mà là viết lại màn theo trục **ngày → lớp**. |
 | 4 | Ba thứ F cần **chưa tồn tại ở bất kỳ tầng nào**: cột phạm vi cơ sở trên `ClassSessionMedia`, phân biệt ảnh/video, và liên kết media ↔ học bạ. | SL-02, SL-04, SL-07 là **điều kiện cần**, không phải việc làm sau. Không có SL-02 thì trang duyệt của QLCS đa cơ sở **không có gì để lọc** (`injectScope` thoát ngay ở `lib/db-scope.ts:269`). |
 
@@ -190,16 +383,16 @@ Chỉ **báo cáo tiến độ** có bảng vết `ProgressReportLog` (`prisma/s
 ### Goals
 
 1. **Một đường vào, một chỗ duyệt.** Mọi media vào hệ thống đều đi qua `PENDING`; `APPROVED` chỉ sinh ra từ đúng một hàm, nơi có thể ràng buộc "đã xem" và ghi mốc SLA.
-2. **Từ chối = mất thật.** Media bị từ chối/hết hạn thì **object trên R2 biến mất**, không chỉ row DB.
+2. **Từ chối = mất thật, nhưng sau 30 ngày.** Media bị từ chối/hết hạn vào **ân hạn 30 ngày** (§0b.5), hết hạn thì **object trên R2 biến mất**, không chỉ row DB. Trong hạn, admin/QLCS khôi phục được.
 3. **QLCS duyệt theo ngày, không theo dòng.** Trang duyệt gom **ngày → lớp**, tự ẩn khi đã xong, và không bao giờ giấu ảnh cũ.
 4. **Video phải xem xong mới duyệt được**, và tua nhanh không tính là xem.
 5. **Quá hạn thì có người biết** mà không cần ai mở chuông.
-6. **Ảnh học viên không nằm lại quá 12 tháng** trừ khi còn ràng buộc học bạ, và mỗi lần giữ lại đều có lý do ghi lại được.
+6. **Ảnh học viên không nằm lại quá hạn của nó** — **12 tháng** nếu gắn học bạ, **3 tháng** nếu không gắn học bạ nào (§0b.6) — trừ khi còn ràng buộc học bạ chưa gửi tới PH, và mỗi lần giữ lại đều có lý do ghi lại được.
 
 ### Non-Goals (cố ý không làm trong F)
 
 1. **Không** đổi đơn vị đo phạm vi từ `centerId` sang `orgUnitId` — F ghi kép cả hai theo SL-00, cutover là việc P4.
-2. **Không** tự dựng hạ tầng transcode trong app Next.js. F-02 cần một lựa chọn (§7 OQ-F3); PRD này chỉ khoá **chỗ lưu trạng thái** (`transcodeStatus`, SL-04).
+2. **Không** tự dựng hạ tầng transcode ở server (worker riêng / dịch vụ ngoài / ffmpeg trong Vercel function). ✅ **OQ-F3 đã chốt 26/08/2026: nén chạy CLIENT-SIDE bằng WebCodecs** (§0b.1) ⇒ phần server của F chỉ còn **tầng validate** (tự đọc file thật, tự ghi `transcodeStatus`) + **chỗ lưu trạng thái** (SL-04). ⚠️ Tầng validate cũng có giá: tầng (1) miễn phí, tầng (2) (codec/độ phân giải/thời lượng) **đòi một phụ thuộc mới chưa ai chọn** — §0b.1.
 3. **Không** vá cách ly cơ sở của `lib/pending-tasks.ts` cho **mọi** loại việc — F chỉ sửa nhánh `mediaApproval` (`:202-233`).
 4. **Không** đổi hệ thông báo: không thêm enum loại, chỉ thêm dòng vào `lib/notifications/catalog.ts`.
 5. **Không** drop cột/enum nào. `REJECTED` **giữ nguyên** trong enum (luật cứng #4); chỉ đóng băng đường sinh ra nó.
@@ -218,7 +411,7 @@ Chỉ **báo cáo tiến độ** có bảng vết `ProgressReportLog` (`prisma/s
 | Tua nhanh tính là đã xem | — | 0 | unit: chuỗi sự kiện `seek 0→duration` → `watchedSec = 0` |
 | QLCS đa cơ sở thấy media cơ sở khác | **Có thể** (`ClassSessionMedia` ∉ `SCOPED_MODELS` ⇒ `injectScope` trả args nguyên vẹn — `lib/db-scope.ts:269`) | 0 | e2e cách ly: actor CS1 truy vấn media CS2 → 0 dòng |
 | Quá hạn duyệt mà không ai được báo | **100%** (không cron media) | 0 | e2e: đẩy đồng hồ qua deadline → chạy cron → có `StaffNotification` |
-| Media > 12 tháng còn trên R2 | **100%** | 0, trừ nhóm bị học bạ giữ lại | đọc `MediaRetentionLog` theo `runId` |
+| Media quá hạn còn trên R2 — **12 tháng** nếu gắn học bạ, **3 tháng** nếu không gắn (§0b.6) | **100%** | 0, trừ nhóm bị học bạ giữ lại | đọc `MediaRetentionLog` theo `runId`; đếm **tách hai nhóm**, một số gộp che mất nhóm 3 tháng |
 | Media bị xoá mà không giải thích được vì sao | — | 0 | mỗi media trong `runId` có đúng 1 dòng log với `decision` + `reason` |
 
 ---
@@ -247,12 +440,12 @@ Chỉ **báo cáo tiến độ** có bảng vết `ProgressReportLog` (`prisma/s
 | **F-01-1** | Là GV, tôi up ảnh/video vào **kho chưa lưu hành**, gắn với **lớp + buổi học + ngày**. | `classSessionId` trở thành **bắt buộc** ở cả hai đường ghi (hiện `optional().nullable()` — `actions.ts:225`, `:468`; `media-publish.ts:29`). Buổi phải thuộc đúng lớp (đã có: `actions.ts:326-330`, `media-publish.ts:60-68`). `takenAt` fallback ngày buổi. Media trong kho **không** hiện portal, **không** vào hàng duyệt. |
 | **F-01-2** | Media mang đủ dấu vết kỹ thuật ngay lúc tạo. | Mỗi row ghi `kind` (`IMAGE`/`VIDEO`), `mimeType`, `sizeBytes`, `durationSec` (video), `centerId` + `orgUnitId` suy từ `Class` (SL-02, SL-04). 🔴 `scopedDb` **không che write** ⇒ mọi `create` phải tự set `centerId`, quên = row vô hình với chính QLCS cơ sở đó. |
 | **F-03-1** | Trạng thái media theo đúng một máy trạng thái, không có đường tắt. | Xem §6.1.1. Chuyển tiếp không nằm trong bảng đó → action từ chối, không im lặng. |
-| **F-03-2** | Từ chối media là **xoá object trên R2**, không soft-delete. | Đường từ chối gọi `DeleteObjectCommand` (mẫu `app/api/admin/upload-delete/route.ts:63-68`), rồi set `status = DELETED` + `deletedAt`/`deletedById`/`deleteReason`. Row **giữ lại** làm vết cho F-30. |
+| **F-03-2** | Từ chối media **cuối cùng là xoá object trên R2** — nhưng qua **ân hạn 30 ngày**, không xoá ngay. | ✅ **OQ-F2/OQ-F5 của backlog, chốt 26/08 (§0b.5)** *(bản 24/08 ghi "không soft-delete" — **sai**, đã đảo)*. Đường từ chối set `status = DELETED` + `deletedAt`/`deletedById`/`deleteReason` + `purgeAfterAt = now + 30 ngày`; **cron purge** mới gọi `DeleteObjectCommand` (mẫu `app/api/admin/upload-delete/route.ts:63-68`). Row **giữ lại** làm vết cho F-30. |
 | **F-03-3** | 🔴 Không ai bỏ qua được bước duyệt. | Gỡ nhánh `autoApprove` ở **cả hai** đường: `actions.ts:337`, `:345`, `:351-353`; `actions.ts:573` + `media-publish.ts:118-119`, `:218`, `:239-241`. Sau đó `APPROVED` chỉ sinh từ `reviewMedia`. e2e: `SUPER_ADMIN` upload → `PENDING`. |
 | **F-03-4** | Không đảo ngược quyết định đã chốt. | Server chặn `APPROVED → REJECTED` và `REJECTED → APPROVED`. **Hiện tại đang lọt**: `reviewMedia` chỉ chặn `DRAFT` (`actions.ts:401-407`); UI ẩn nút (`media-client.tsx:769`, `:788`) nhưng action vẫn nhận payload. `DELETED` là **terminal tuyệt đối**. |
 | **F-04-1** | PH chỉ xem được media `APPROVED` **và đúng buổi học**. | Thêm điều kiện `classSessionId` vào cả hai đường đọc portal — xem §6.1.4. 🔴 Hiện `lib/portal/photos.ts:29-41` và `app/(portal)/portal/hinh-anh/page.tsx:58-79` **KHÔNG lọc `classSessionId`** (trường này chỉ dùng để gom nhóm — `photos.ts:46-70`). |
 | **F-04-2** | Media gắn vào học bạ cũng chịu cùng luật. | Trình dựng học bạ chỉ nhận media `APPROVED` có `classSessionId` thuộc tập buổi của `Enrollment` đó (SL-07). Không có liên kết nào ⇒ không gắn được. |
-| **F-05-1** | Media quá 12 tháng **và** học bạ đã xuất thì bị xoá tự động. | Job chạy theo lịch, xoá **object R2 trước, row DB sau**, ghi `MediaRetentionLog` mỗi media. Xem §6.1.5. |
+| **F-05-1** | Media quá hạn **và** học bạ đã xuất thì bị xoá tự động. | ✅ **Hai mốc (OQ-F4 backlog, 26/08 — §0b.6): 12 tháng** cho media **gắn học bạ**, **3 tháng** cho media **không gắn học bạ nào**. Job chạy theo lịch, đưa media qua `DELETED` + `purgeAfterAt` (§0b.5) chứ **không** xoá thẳng; cron purge xoá **object R2 trước, row DB sau**; ghi `MediaRetentionLog` mỗi media, có ghi rõ **mốc nào** đã áp. Xem §6.1.5. |
 | **F-05-2** | Media nằm trong học bạ **chưa gửi đến PH** thì giữ lại + ghi log lý do + học bạ nào. | ✅ **B6 (24/08/2026):** điều kiện là `sentToParentAt IS NOT NULL`. Dòng log `decision = KEPT_REPORT_CARD_NOT_SENT` kèm `reportCardId` + `reportCardStatus` + `sentToParentAt` + `reason` đọc được. |
 | **F-05-3** | Job chạy lại không xoá nhầm, không xoá hai lần. | Idempotent theo `MediaRetentionLog`; trần số lượng mỗi lần chạy; xác thực `verifyCronAuth`. |
 
@@ -260,9 +453,11 @@ Chỉ **báo cáo tiến độ** có bảng vết `ProgressReportLog` (`prisma/s
 
 | # | User story | Acceptance criteria |
 |---|---|---|
-| **F-02-1** | Video được chuẩn hoá **H.264, 720p** trước khi lưu R2. | `transcodeStatus` (`PENDING`/`RUNNING`/`DONE`/`FAILED`/`SKIPPED`) + `transcodeError`. Media `kind = VIDEO` chưa `DONE` **không vào hàng duyệt** và không hiện portal. Cách thực thi chờ OQ-F3. |
-| **F-02-2** | Video lỗi transcode không làm kẹt cả folder. | `transcodeStatus = FAILED` → hiện riêng, cho QLCS `DELETED` thẳng; **không** tính vào mẫu số F-16/F-18. |
-| **F-01-3** | Ảnh/video đi vào **bucket riêng**, không phải bucket công khai. | Media lớp dùng `R2_MEDIA_BUCKET_NAME` + helper fail-closed theo đúng mẫu `lib/storage/chat-storage.ts:49-68`. Object key dựng bằng `buildMediaObjectKey` (`lib/lms/media-key.ts:8-15`) — **gỡ mã chết**, thôi lấy tên file người dùng (`upload-url/route.ts:109-119`). |
+| **F-02-1** | Video được chuẩn hoá **H.264, ≤ 720p** trước khi lưu R2 — **nén ở máy GV**. | ✅ **OQ-F3 chốt 26/08/2026 (§0b.1): WebCodecs client-side.** **4 kết cục**, nhưng cột `transcodeStatus` chỉ lưu **3**: `DONE_CLIENT` · `PASSTHROUGH` · `SKIPPED_UNSUPPORTED` (+ `transcodeError`); kết cục thứ tư `REJECTED` là **mã lỗi** của tầng validate, file bị chặn nên không có record để ghi vào (§0b.1). Ngưỡng: **1280×720**, **~2 Mbps ≈ 15 MB/phút**, dung lượng trần **suy ra** từ hai số đó + biên **20%**. Thời lượng tối đa ⏳ **chưa chốt** — §0b.2. |
+| **F-02-1b** | 🔴 Không ai đẩy được file quá chuẩn vào R2 bằng cách sửa request. | **Server KHÔNG tin `transcodeStatus` client gửi lên.** Tầng validate ở server **tầng (1) — bắt buộc, không cần công cụ mới**: dung lượng byte thật đọc từ R2 `HeadObject` + MIME/magic bytes; **tầng (2)** (codec/độ phân giải/thời lượng) ⏳ **đòi một phụ thuộc MỚI chưa ai chọn** — §0b.1. Server **TỰ GHI** trạng thái; giá trị client gửi chỉ là gợi ý *"đã thử nén"*. e2e: giả client POST `DONE_CLIENT` cho file 1080p/500MB → server trả **mã lỗi `REJECTED`** và **không tạo record** (⚙️ không ghi `REJECTED` vào cột — không có record để ghi; muốn giữ vết thì `writeAudit`, §0b.1). |
+| **F-02-1c** | Nén không làm mất việc của GV, và không quay bánh xe câm. | Bẫy **(a)**: cảnh báo `beforeunload` khi đang nén; mở lại → chọn lại file, làm lại từ đầu; **KHÔNG** lưu trạng thái nén dở. Bẫy **(b)**: thanh tiến trình hiện **phần trăm thật** theo số frame WebCodecs đã xử lý, **không** spinner vô định. |
+| **F-02-2** | Video không nén được không làm kẹt cả folder. | Tầng validate trả **mã lỗi `REJECTED`** → **chặn ngay lúc upload**, **không sinh record** ⇒ không bao giờ vào folder. ⚙️ `REJECTED` **không** là giá trị của cột `transcodeStatus` (cột chỉ lưu 3 giá trị của file đã vào hệ thống) — §0b.1. `SKIPPED_UNSUPPORTED` (máy GV không chạy được WebCodecs, file đủ nhỏ) **vẫn vào hàng duyệt bình thường** — nó là video xem được, chỉ là chưa tối ưu. |
+| **F-01-3** | Ảnh/video đi vào **bucket riêng**, không phải bucket công khai. | ✅ **Chốt 26/08/2026 (§0b.4): biến `R2_CLASS_MEDIA_BUCKET_NAME`, bucket đề xuất `satarobo-class-media`** *(bản 24/08 ghi `R2_MEDIA_BUCKET_NAME` — sai, backlog Story 1 đã ghi đúng)*. Helper fail-closed theo đúng khuôn `lib/storage/chat-storage.ts:48-65`: đọc thẳng `process.env`, throw khi trống, **từ chối** khi trùng `R2_BUCKET_NAME`. Object key dựng bằng `buildMediaObjectKey` (`lib/lms/media-key.ts:8-15`) — **gỡ mã chết**, thôi lấy tên file người dùng (`upload-url/route.ts:109-119`). |
 
 #### P2
 
@@ -278,8 +473,8 @@ Chỉ **báo cáo tiến độ** có bảng vết `ProgressReportLog` (`prisma/s
 
 | # | User story | Acceptance criteria |
 |---|---|---|
-| **F-10-1** | Là QLCS, tôi mở trang duyệt và thấy **cây folder theo ngày**; ngày không có lớp thì không có folder. | Danh sách ngày dựng từ `ClassSession.date` (`schema:1937`) với `status ∈ {SCHEDULED, IN_PROGRESS, COMPLETED}` — `CANCELLED` (`schema:2008`) **không** tính. Biểu thức truy vấn: §6.2.2. |
-| **F-10-2** | Ngày đã duyệt hết thì ẩn folder ngày. | "Đã duyệt hết" = mọi lớp của ngày đó đã đóng (§6.2.3). 🔴 **Không có trường nào ghi mốc "lớp đã duyệt hết ảnh"** — phải **ĐẾM** theo `(classId, classSessionId, status)`. `ClassSession.ckMedia` (`schema:1967`) là ô tích **TAY**, nhãn "Tuỳ chọn", **không** suy từ trạng thái duyệt ⇒ **không dùng làm nguồn**. |
+| **F-10-1** | Là QLCS, tôi mở trang duyệt và thấy **cây folder theo ngày**; ngày không có lớp thì không có folder. | ✅ **OQ-F2 chốt 26/08/2026: CÁCH ĐỌC B** (§0b.3) — lịch hiện **MỌI ngày có buổi học**, kể cả ngày **chưa có ảnh nào** (đó chính là ngày cần nút F-14). Danh sách ngày dựng từ `ClassSession.date` (`schema:1937`) với `status ∈ {SCHEDULED, IN_PROGRESS, COMPLETED}` — `CANCELLED` (`schema:2008`) **không** tính. Biểu thức truy vấn: §6.2.2. |
+| **F-10-2** | Ngày đã duyệt hết thì ẩn folder ngày; ngày còn việc thì mang **1 trong 4 trạng thái**. | Bốn trạng thái đúng F-31: `Chưa duyệt` · `Đã duyệt` · `Phê duyệt trễ` · `Không có ảnh`. "Đã duyệt hết" = mọi lớp của ngày đó đã đóng (§6.2.3) — đóng theo **cả hai** đường: duyệt trọn folder **hoặc** F-14 "hôm nay không có ảnh". 🔴 **Không có trường nào ghi mốc "lớp đã duyệt hết ảnh"** — phải **ĐẾM** theo `(classId, classSessionId, status)`. `ClassSession.ckMedia` (`schema:1967`) là ô tích **TAY**, nhãn "Tuỳ chọn", **không** suy từ trạng thái duyệt ⇒ **không dùng làm nguồn**. |
 | **F-10-3** | Cách ly cơ sở đúng cho QLCS đa cơ sở. | Sau SL-02: khai `"ClassSessionMedia"` vào `SCOPED_MODELS` (`lib/db-scope.ts:11`) **và** `BACKFILL_SPECS` (`lib/org/center-bridge.ts:45`). Trước SL-02: lọc 2 bước qua `classId` đã scope, và **bỏ trần 200 lớp** (`page.tsx:33`). |
 | **F-11-1** | Trong một ngày, tôi thấy folder theo **lớp**; tên folder = tên lớp, click sang chi tiết lớp. | Link `/classes/<classId>`. Lớp đã duyệt hết → ẩn (§6.2.3). |
 | **F-11-2** | Icon ⓘ hover hiện **tên GV phụ trách**. | Đọc `Class.teacherId` (`schema:1675`) + `Class.assistantId` (`:1676`) → tên qua `User`. Không lộ SĐT/email. |
@@ -289,7 +484,7 @@ Chỉ **báo cáo tiến độ** có bảng vết `ProgressReportLog` (`prisma/s
 | **F-13-3** | Nút bị **khoá** khi còn video chưa xem hết. | Điều kiện mở nút ở §6.2.4. Khoá thì phải hiện **lý do** ("còn 2 video chưa xem hết"), không im lặng. |
 | **F-14-1** | Nút **"Hôm nay không có ảnh"** chỉ hiện khi folder **không có** media, và bắt buộc nhập ghi chú giải trình. | Ghi `ClassMediaReviewDay.status = NO_PHOTO` + `noPhotoNote` (bắt buộc, độ dài tối thiểu — mẫu `reason` 5..500 của `user-groups/_actions.ts`). Ghi chú này là nguồn duy nhất của cột Ghi chú F-32. |
 | **F-15-1** | Click ảnh → chế độ xem từng ảnh, vuốt / phím mũi tên. | `←`/`→` chuyển, `Esc` thoát. Hiện **CHƯA CÓ** lightbox nào (`media-client.tsx` không có handler `keydown`). |
-| **F-15-2** | Nút **X lớn** = từ chối → popup xác nhận → **xoá khỏi R2**. | Chuyển T9/T10 ở §6.1.1. Popup nêu rõ **không hoàn tác được**. |
+| **F-15-2** | Nút **X lớn** = từ chối → popup xác nhận → ảnh vào **thùng rác 30 ngày**, hết hạn mới xoá khỏi R2. | Chuyển T9/T10 ở §6.1.1. ✅ **Sửa theo OQ-F5 của backlog (§0b.5)** *(bản 24/08 ghi "xoá khỏi R2" + "không hoàn tác được" — **sai**)*. Popup nêu rõ **khôi phục được trong 30 ngày, sau đó mất hẳn**, và chỉ admin/QLCS mở được thùng rác. |
 | **F-15-3** | Nút X **góc** = thoát về F-12, không đụng dữ liệu. | Hai nút X phải khác nhau rõ ràng về vị trí, kích thước, nhãn `aria-label`. |
 | **F-16-1** | Lớp chỉ "hoàn tất" khi **mọi** media đã `APPROVED` hoặc `DELETED`. | Bất biến: `count(status = PENDING) = 0` cho `(classId, ngày)`. `REJECTED` (di sản) tính như `DELETED` — §6.1.2. `DRAFT` **không** tính vào mẫu số. |
 | **F-17-1** | Video nằm **cùng grid** F-12 và **cùng slide** F-15, không màn riêng. | Một danh sách, phân biệt bằng `kind` (SL-04); phần tử video render `<video>` + badge F-19. |
@@ -310,7 +505,7 @@ Chỉ **báo cáo tiến độ** có bảng vết `ProgressReportLog` (`prisma/s
 
 | # | User story | Acceptance criteria |
 |---|---|---|
-| **F-12-3** | Xem trước video nhẹ (thumbnail/poster). | Sinh poster lúc transcode; phụ thuộc OQ-F3. |
+| **F-12-3** | Xem trước video nhẹ (thumbnail/poster). | Sau §0b.1, poster sinh **ở client** trong cùng lượt nén (WebCodecs đã giải mã sẵn frame đầu) và đi lên như một object ảnh riêng — server **không** dựng poster. Máy rơi vào `SKIPPED_UNSUPPORTED` thì không có poster: hiện ô video mặc định, không coi là lỗi. |
 | **F-15-5** | Cử chỉ vuốt trên mobile. | Bổ sung sau khi bàn phím + click đã ổn. |
 
 ---
@@ -387,8 +582,10 @@ stateDiagram-v2
     DRAFT --> PENDING : T4 gửi tới PH
     DRAFT --> [*] : T6 xoá khỏi kho (phải xoá R2)
     PENDING --> APPROVED : T7 duyệt
-    PENDING --> DELETED : T9 từ chối (xoá R2)
-    APPROVED --> DELETED : T10 gỡ (xoá R2)
+    PENDING --> DELETED : T9 từ chối (ân hạn 30 ngày)
+    APPROVED --> DELETED : T10 gỡ (ân hạn 30 ngày)
+    DELETED --> PENDING : khôi phục trong hạn (admin/QLCS)
+    DELETED --> APPROVED : khôi phục trong hạn (admin/QLCS)
     PENDING --> REJECTED : T8 ĐÓNG BĂNG
     REJECTED --> [*] : chỉ qua job retention
     APPROVED --> [*] : chỉ qua job retention
@@ -407,8 +604,10 @@ stateDiagram-v2
 | **T6** | `DRAFT` → **xoá row** | `canPublishToClass` (mọi DRAFT của lớp) **hoặc** `canStageOnlyToClass` + là người tải lên (`actions.ts:630-637`) | `where status: "DRAFT"` (`media-publish.ts:309`) · ≤ **60** id | `writeAudit` `MEDIA_DRAFT_DELETE` (`:312-321`) · 🔴 **KHÔNG đụng R2** (`:283-286`, `:12`) · **MỚI: phải xoá object R2 trước** | ✅ có, **thiếu phần R2** |
 | **T7** | `PENDING` → `APPROVED` | `media:approve` (`actions.ts:391`) + `mediaClassInScope` (`:393-395`, `:27-40`) | `status ≠ DRAFT` (`:401-407`) · **MỚI:** nếu đi qua "Duyệt tất cả" thì mọi video của folder phải `completedAt != null` (§6.2.4) | Ghi `approvedBy*`+`approvedAt` (`:408-416`) · `writeAudit` `STATUS_CHANGE` (`:417-424`) · `revalidatePath("/media")` + `("/portal/hinh-anh")` (`:425-426`) · **MỚI:** nếu folder hết `PENDING` → `ClassMediaReviewDay.status = APPROVED_ALL` + `reviewedAt` | ✅ có |
 | **T8** | `PENDING` → `REJECTED` | như T7 | như T7 | như T7 — 🔴 ghi `approvedById`/`approvedByName`/`approvedAt` **cho cả bản bị từ chối** (`:408-416`) ⇒ tính "thời gian tới lúc duyệt" bằng `approvedAt` sẽ lẫn ảnh bị từ chối | ⚠️ **ĐÓNG BĂNG** — thay bằng T9 |
-| **T9** | `PENDING` → `DELETED` | `media:approve` + `mediaClassInScope` | Popup xác nhận (F-15) · nêu rõ **không hoàn tác** | 1) `DeleteObjectCommand` trên R2 (mẫu `upload-delete/route.ts:63-68`); 2) set `status=DELETED` + `deletedAt`/`deletedById`/`deleteReason`; 3) `writeAudit` `STATUS_CHANGE`; 4) revalidate `/media` + `/portal/hinh-anh`; 5) nếu folder hết `PENDING` → đóng `ClassMediaReviewDay` | ❌ **CHƯA CÓ** |
+| **T9** | `PENDING` → `DELETED` | `media:approve` + `mediaClassInScope` | Popup xác nhận (F-15) · nêu rõ **khôi phục được trong 30 ngày** | ✅ **Sửa theo OQ-F5 backlog (§0b.5)** — **KHÔNG** đụng R2 ở bước này: 1) set `status=DELETED` + `deletedAt`/`deletedById`/`deleteReason` + **`purgeAfterAt = now + 30 ngày`**; 2) `writeAudit` `STATUS_CHANGE`; 3) revalidate `/media` + `/portal/hinh-anh`; 4) nếu folder hết `PENDING` → đóng `ClassMediaReviewDay`. `DeleteObjectCommand` trên R2 (mẫu `upload-delete/route.ts:63-68`) là việc của **cron purge**, chạy sau `purgeAfterAt` | ❌ **CHƯA CÓ** |
+| **T9b** | `DELETED` → trạng thái trước đó (**khôi phục**) | `media:approve` + `mediaClassInScope`, **chỉ admin/QLCS** | `now < purgeAfterAt` (chưa purge) · object R2 còn | Xoá `deletedAt`/`deletedById`/`deleteReason`/`purgeAfterAt`, trả `status` về `PENDING`/`APPROVED` như trước; `writeAudit` cả **hai** lượt (xoá và khôi phục) | ❌ **CHƯA CÓ** |
 | **T10** | `APPROVED` → `DELETED` | như T9 | như T9 + cảnh báo "phụ huynh có thể đã xem ảnh này" | như T9 | ❌ **CHƯA CÓ** |
+| **T12** | `DELETED` → **purge** (xoá object R2 + đóng dấu row) | **cron**, không người | `now ≥ purgeAfterAt` | `DeleteObjectCommand` **thành công trước**, sau đó mới đóng dấu row. R2 lỗi → giữ nguyên `DELETED`, lùi `purgeAfterAt`, ghi log `mediaId` + `key`, lần chạy sau thử lại | ❌ **CHƯA CÓ** |
 | **T11** | `APPROVED` → **xoá row** | `media:approve` + `mediaClassInScope` (`actions.ts:433-437`) | không có | `writeAudit` `DELETE` (`:441-447`) · 🔴 **KHÔNG đụng R2** (`:440`) | ⚠️ **có — THAY bằng T10** |
 
 **Chuyển tiếp BỊ CẤM**
@@ -420,7 +619,8 @@ stateDiagram-v2
 | `DRAFT` → `APPROVED`/`REJECTED` qua `reviewMedia` | Kho chưa phải hàng duyệt. | ✅ đã cấm (`actions.ts:401-407`) |
 | `APPROVED` → `REJECTED` | Đảo ngược quyết định đã công bố tới PH. | 🔴 **ĐANG LỌT** — `reviewMedia` chỉ chặn `DRAFT`; UI ẩn nút (`media-client.tsx:769`, `:788`) nhưng action nhận payload. **Phải chặn ở server.** |
 | `REJECTED` → `APPROVED` | Object có thể đã bị coi là bỏ. | 🔴 **ĐANG LỌT** (cùng lý do) |
-| `DELETED` → bất kỳ | Object R2 đã mất, không phục hồi được. | ❌ chưa có `DELETED` |
+| `DELETED` → bất kỳ, **sau khi đã purge** | Object R2 lúc đó mới thật sự mất, không phục hồi được. | ❌ chưa có `DELETED` |
+| ~~`DELETED` → bất kỳ, **trong hạn ân hạn**~~ | ✅ **KHÔNG CÒN CẤM — OQ-F5 backlog, 26/08 (§0b.5):** trong 30 ngày, admin/QLCS **khôi phục được** (T9b). | ❌ chưa có `DELETED` |
 | ∅ → `DELETED` | Vô nghĩa. | — |
 | ∅ → `APPROVED` (T3), `DRAFT` → `APPROVED` (T5) | **§6.1.3** | ⚠️ đang có |
 
@@ -546,14 +746,21 @@ export type MediaRetentionDecision =
 export function decideMediaRetention(input: {
   mediaCreatedAt: Date
   now: Date
-  retentionMonths: number                 // mặc định 12, từ SystemSetting
+  // ✅ OQ-F4 của BACKLOG (26/08/2026 — §0b.6): HAI mốc, không phải một.
+  //    Chọn mốc theo việc media có gắn học bạ hay không. Cố ý KHÔNG gộp thành 1 tham số:
+  //    gộp lại thì call-site phải tự chọn số, và chỗ nào quên là xoá sớm 4 lần.
+  retentionMonthsLinked: number           // mặc định 12, từ SystemSetting media.retentionMonths
+  retentionMonthsUnlinked: number         // mặc định  3, từ SystemSetting media.retentionMonthsUnlinked
   // ✅ B6 (24/08/2026): thêm sentToParentAt — "đã xuất" = ĐÃ GỬI ĐẾN PH, không phải chỉ PUBLISHED.
   linkedReportCards: { id: string; status: string; sentToParentAt: Date | null }[]   // SL-07
 }): MediaRetentionDecision {
+  const months = input.linkedReportCards.length > 0
+    ? input.retentionMonthsLinked
+    : input.retentionMonthsUnlinked
   const dueAt = new Date(input.mediaCreatedAt)
-  dueAt.setMonth(dueAt.getMonth() + input.retentionMonths)
+  dueAt.setMonth(dueAt.getMonth() + months)
   if (input.now < dueAt) {
-    return { decision: "KEPT_NOT_DUE", reason: `Chưa tới hạn ${input.retentionMonths} tháng (hạn ${dueAt.toISOString()})` }
+    return { decision: "KEPT_NOT_DUE", reason: `Chưa tới hạn ${months} tháng (hạn ${dueAt.toISOString()})` }
   }
   // "Chưa xuất" = còn ÍT NHẤT MỘT học bạ liên kết CHƯA GỬI ĐẾN PH. Đủ một cái là giữ.
   // ⚠️ Học bạ PUBLISHED nhưng sentToParentAt = null (gồm toàn bộ học bạ cũ trước khi có cột này)
@@ -567,11 +774,18 @@ export function decideMediaRetention(input: {
       reportCardStatus: blocking.status,
     }
   }
-  return { decision: "DELETED", reason: `Quá ${input.retentionMonths} tháng, mọi học bạ liên kết đã gửi đến PH` }
+  return {
+    decision: "DELETED",
+    reason: input.linkedReportCards.length > 0
+      ? `Quá ${months} tháng, mọi học bạ liên kết đã gửi đến PH`
+      : `Quá ${months} tháng và không gắn học bạ nào`,
+  }
 }
 ```
 
-⚠️ Media **không** liên kết học bạ nào (`linkedReportCards = []`) → rơi vào nhánh `DELETED`. Đây là hành vi **cố ý** và phải ghi rõ trong runbook: ảnh sinh hoạt lớp thông thường không gắn học bạ, và spec F-05 chỉ nêu học bạ như **ngoại lệ giữ lại**.
+⚠️ Media **không** liên kết học bạ nào (`linkedReportCards = []`) → rơi vào nhánh `DELETED`, nhưng theo mốc **3 tháng** chứ không phải 12 (✅ **OQ-F4 của backlog, 26/08 — §0b.6**; bản 24/08 chỉ có một mốc). Đây là hành vi **cố ý** và phải ghi rõ trong runbook: ảnh sinh hoạt lớp thông thường không gắn học bạ, spec F-05 chỉ nêu học bạ như **ngoại lệ giữ lại**, và **ảnh không gắn học bạ nay biến mất sớm gấp bốn lần** — phải báo trước cho GV/QLCS.
+
+⚠️ Dòng log phải ghi **mốc đã áp** (`months`), không chỉ ghi `decision`: hai media cùng `DELETED` mà khác mốc thì không có cách nào phân biệt về sau.
 
 **(4) Bảng vết `MediaRetentionLog` — cấu trúc đầy đủ**
 
@@ -643,9 +857,18 @@ Trình tự chuẩn cho mỗi media:
 
 ⚠️ Nhắc lại rủi ro đã xảy ra thật: **20 cron prod chưa từng chạy** vì header `Authorization` rụng theo redirect canonical. Đường `/api/cron/retention-scan` đang chạy ⇒ gộp vào nó là **an toàn hơn** đăng ký path mới.
 
-**(7) Ngưỡng 12 tháng đặt ở đâu**
+**(7) Hai ngưỡng đặt ở đâu**
 
-Thêm key registry `media.retentionMonths` (`z.number().int().min(1).max(120)`, default **12**, `centerOverridable: false`) — mẫu `storage.presignTtlSec` (`lib/settings/registry.ts:607-614`). **Không** dùng lại `RETENTION_DAYS` (`lib/compliance/retention.ts:11`): giá trị 5 năm và ngữ nghĩa "hồ sơ học viên" khác hẳn; dùng chung là đảm bảo một ngày ai đó sửa một cái làm hỏng cái kia.
+✅ **OQ-F4 của backlog (26/08 — §0b.6): HAI key registry**, không phải một, cùng mẫu `storage.presignTtlSec` (`lib/settings/registry.ts:607-614`), cùng `z.number().int().min(1).max(120)`, cùng `centerOverridable: false`:
+
+| Key | Default | Áp cho |
+|---|---|---|
+| `media.retentionMonths` | **12** | media **có** gắn học bạ |
+| `media.retentionMonthsUnlinked` | **3** | media **không** gắn học bạ nào |
+
+⚠️ Ràng buộc kiểm ở tầng validate: `media.retentionMonthsUnlinked ≤ media.retentionMonths`. Đặt ngược lại thì ảnh không gắn học bạ sống lâu hơn ảnh có học bạ — vô nghĩa, và không ai phát hiện cho tới lúc đọc log.
+
+**Không** dùng lại `RETENTION_DAYS` (`lib/compliance/retention.ts:11`): giá trị 5 năm và ngữ nghĩa "hồ sơ học viên" khác hẳn; dùng chung là đảm bảo một ngày ai đó sửa một cái làm hỏng cái kia.
 
 ---
 
@@ -665,9 +888,9 @@ Thêm key registry `media.retentionMonths` (`z.number().int().min(1).max(120)`, 
 
 #### 6.2.2 F-10 — danh sách NGÀY hiện folder (biểu thức truy vấn)
 
-🔴 **Mâu thuẫn nội tại của spec phải xử lý trước.** F-10 nói folder ngày chỉ hiện khi *"có lớp học **VÀ** có media chưa duyệt"*. F-14 lại đòi nút *"Hôm nay không có ảnh"* — chỉ hiện khi folder **KHÔNG có** media. Đọc chặt F-10 thì trường hợp F-14 **không bao giờ render được**, và F-31 mất luôn hai trạng thái `Chưa duyệt` / `Không có ảnh`.
+🔴 **Mâu thuẫn nội tại của spec.** F-10 nói folder ngày chỉ hiện khi *"có lớp học **VÀ** có media chưa duyệt"*. F-14 lại đòi nút *"Hôm nay không có ảnh"* — chỉ hiện khi folder **KHÔNG có** media. Đọc chặt F-10 thì trường hợp F-14 **không bao giờ render được**, và F-31 mất luôn hai trạng thái `Chưa duyệt` / `Không có ảnh`.
 
-Hai cách đọc, đặc tả cả hai; **khuyến nghị (B)**:
+✅ **ĐÃ CHỐT 26/08/2026 (OQ-F2): CÁCH ĐỌC (B).** Lịch hiện **mọi ngày có buổi học**, mỗi ngày mang 1 trong 4 trạng thái (`Chưa duyệt` / `Đã duyệt` / `Phê duyệt trễ` / `Không có ảnh`). **Câu chữ F-10 trong spec phải sửa cho khớp** — hai câu mâu thuẫn không được cùng tồn tại. Cách đọc (A) giữ lại dưới đây **chỉ để đối chiếu**, không hiện thực.
 
 ```ts
 // ─── CÁCH ĐỌC (A): CHẶT theo câu chữ F-10 ────────────────────────────────────
@@ -1097,9 +1320,9 @@ Chỉ ghi câu **thực sự chưa trả lời được** từ mã + spec.
 | # | Câu hỏi | Vì sao chặn | Chủ | Cần trước |
 |---|---|---|---|---|
 | ~~**OQ-F1**~~ | ~~"Học bạ đã xuất" (F-05) nghĩa là gì?~~ | ✅ **ĐÃ CHỐT 24/08/2026 (B6): "đã gửi đến được cho PH"** — nghĩa **(c)**, cột mới `ReportCard.sentToParentAt`, nhãn UI "Đã gửi đến PH". **Không** thêm giá trị enum (2 đường đọc của PH lọc cứng `status = "PUBLISHED"` — `lib/lms/report-card.ts:220`, `:239`). F-05 dùng `sentToParentAt IS NOT NULL`. Chi tiết §0. | — | Đóng |
-| **OQ-F2** | Giữ **nguyên câu chữ F-10** (chỉ hiện ngày có media chưa duyệt — cách đọc A) hay mở rộng để folder trống cũng hiện (cách đọc B)? | Đọc chặt thì **F-14 không bao giờ render được** và F-31 mất 2 trạng thái (`Chưa duyệt`, `Không có ảnh`). Đây là mâu thuẫn trong chính spec, không suy ra được từ mã. | Chủ dự án | Trước khi code F.2 |
-| **OQ-F3** | F-02 (H.264/720p) thực thi bằng gì? | Repo **không có** ffmpeg/sharp/transcode ở bất kỳ đâu; Vercel function không phải chỗ chạy ffmpeg cho file 500MB. Ba hướng: dịch vụ ngoài (Cloudflare Stream…), worker riêng, hoặc **hoãn F-02** và chỉ nhận video đã đúng chuẩn (chặn ở validate). Chọn hướng nào quyết định `transcodeStatus` có ý nghĩa gì. | Chủ dự án + Dev | Trước SL-04 |
-| **OQ-F4** | Trần dung lượng/thời lượng video một lần up? | `UPLOAD_CONFIG.video` đang **500MB** (`lib/storage/upload-config.ts`) trong khi ảnh là 10MB. QLCS phải **xem hết** mọi video (F-18) ⇒ 10 video × 10 phút = 100 phút mỗi ngày mỗi lớp. Không có trần thời lượng thì F-18 biến trang duyệt thành việc bất khả thi. | Chủ dự án | Trước khi bật upload video |
+| ~~**OQ-F2**~~ | ~~Giữ **nguyên câu chữ F-10** (cách đọc A) hay mở rộng để folder trống cũng hiện (cách đọc B)?~~ | ✅ **ĐÃ CHỐT 26/08/2026: CÁCH ĐỌC B.** Lịch hiện **mọi ngày có buổi học**, mỗi ngày mang 1 trong 4 trạng thái (`Chưa duyệt` / `Đã duyệt` / `Phê duyệt trễ` / `Không có ảnh`). Hệ quả: F-14 render được, F-31 giữ đủ 4 trạng thái, **câu chữ F-10 trong spec phải sửa cho khớp**. Chi tiết §0b.3 + §6.2.2. | — | Đóng |
+| ~~**OQ-F3**~~ | ~~F-02 (H.264/720p) thực thi bằng gì?~~ | ✅ **ĐÃ CHỐT 26/08/2026: nén CLIENT-SIDE bằng WebCodecs.** `transcodeStatus` = **4** giá trị `DONE_CLIENT` / `PASSTHROUGH` / `SKIPPED_UNSUPPORTED` / `REJECTED`; **server không tin trạng thái client gửi lên** — tự đọc metadata file thật rồi tự ghi. Ngưỡng 1280×720 · ~2 Mbps (~15 MB/phút) · dung lượng trần suy ra + biên 20%. **Bước 0 = đo với 5–7 GV thật trước khi xây**; dưới ~70% chạy được thì quay lại phương án server. Chi tiết §0b.1. ⏳ Thời lượng tối đa **vẫn treo** — xem OQ-F4. | — | Đóng |
+| **OQ-F4** | Trần **thời lượng** video một lần up? *(dung lượng đã suy ra được từ §0b.1: 1280×720 · ~2 Mbps · biên 20%)* | ⏳ **VẪN TREO — và 26/08/2026 còn khó hơn trước.** Yêu cầu mới của chủ dự án (buổi 12/24/36/48 là buổi thuyết trình: **12 video × 10–15 phút** mỗi buổi) sinh ba con số chống lại nhau: **3 tiếng** video/buổi/lớp trong khi F-18 bắt xem hết và F-20 đặt hạn 10h sáng hôm sau · **~2,7 GB/buổi** · một video 15 phút nén WebCodecs trên laptop cũ mất **hàng chục phút** và dễ sập tab. Ba hướng xử (tách riêng loại video thuyết trình / gộp 1 video / giới hạn 3–5 phút mỗi em) ghi ở **§0b.2** — **chưa chọn hướng nào**. | Chủ dự án | Trước khi bật upload video |
 | **OQ-F5** | Media prod đang có `classSessionId = null` xử lý sao khi bật điều kiện F-04? | Thêm `classSessionId: { not: null }` vào đường đọc PH (§6.1.4) làm chúng **biến mất khỏi portal ngay lập tức**. Cần chọn: backfill theo `takenAt` khớp `ClassSession.date`, hay miễn trừ media trước một mốc. Số lượng thực tế chưa đo (cần truy vấn prod). | Chủ dự án + Dev | Trước khi triển khai F-04 |
 | ⚙️ ~~**OQ-F6**~~ | ~~Dọn object R2 mồ côi lịch sử — làm trong F hay tách?~~ | ✅ **CHỐT KỸ THUẬT 24/08/2026 (Dev): TÁCH thành story riêng**, chạy **ngay sau khi F đóng**. Lý do: đây là **rà kho lịch sử**, khác bản chất với vòng đời media mà F đặc tả — nhét chung là trộn hai loại rủi ro vào một lần chạy. Story riêng: liệt kê → đối chiếu DB → báo cáo → xoá; **dry-run mặc định**, người vận hành chạy tay (luật cứng #4), giữ log từng object. Đừng để sang quý sau: mỗi ngày trôi là thêm object mồ côi mới. | — | Đóng |
 | ~~**OQ-F7**~~ | ~~Media lớp chuyển sang bucket riêng (F-01-3) trong đợt F hay để sau?~~ | ✅ **ĐÃ CHỐT 24/08/2026 (B8): tách NGAY trong đợt F.** Việc phải làm kèm: nới `isOwnStorageUrl` (`actions.ts:150-156`) để nhận **2** bucket; media cũ ở lại bucket công khai (di sản — dọn theo OQ-F6); khoá **trước SL-02** vì ảnh hưởng object key. | — | Đóng |
@@ -1131,16 +1354,16 @@ Theo `docs/prd/A-nen-tang.md` §10.5 mục 2, thứ tự khoá bắt buộc **SL
 
 | Bước | Nội dung | Phụ thuộc | Ghi chú |
 |---|---|---|---|
-| **F.0** | Chốt OQ-F1, OQ-F2, OQ-F3, OQ-F7 · khoá SL-00 → SL-07 + `MediaRetentionLog` · viết vào `documentation/` | — | Luật cứng #3/#4; sai SL-00 thì 3 bảng mới phải làm lại |
+| **F.0** | ✅ OQ-F1/F2/F3/F6/F7/F8 **đã đóng** (24 + 26/08) · khoá SL-00 → SL-07 + `MediaRetentionLog` · viết vào `documentation/` | — | Luật cứng #3/#4; sai SL-00 thì 3 bảng mới phải làm lại. ⏳ **CÒN HAI câu treo, không phải một:** **OQ-F4** (trần thời lượng video) — không chặn F.0/F.1, chỉ chặn **F.2d**; **OQ-F5** (media prod `classSessionId = null` xử sao) — chặn **F.1e**, và phép đo prod 26/08 **CHƯA ĐỦ** (`docs/plan/ket-va-cach-go.md` K-2) |
 | **F.1a** | **Test đỏ trước** (luật cứng #5): unit máy trạng thái · unit `mergeSegments`/`isWatchComplete` · unit `evaluateMediaSla` · e2e cách ly cơ sở media · e2e "không ai bỏ qua bước duyệt" | F.0 | Chưa có test đỏ thì chưa được viết Server Action |
 | **F.1b** | §6.1.3 — gỡ `autoApprove` ở cả hai đường ghi; chặn `APPROVED↔REJECTED` ở server | F.1a | Đổi hành vi thấy được ngay; báo trước cho QLCS |
-| **F.1c** | Đường xoá R2 thật cho T6/T9/T10; `DELETED` thay `REJECTED` | F.1b, SL-03 | 🔴 Xoá cứng **không hoàn tác được** — dry-run trước |
+| **F.1c** | Soft-delete + `purgeAfterAt` cho T6/T9/T10 · màn Thùng rác + khôi phục (T9b) · **cron purge** (T12) xoá R2 thật sau 30 ngày; `DELETED` thay `REJECTED` | F.1b, SL-03 | ✅ Theo §0b.5. 🔴 **Cron purge** mới là chỗ xoá cứng không hoàn tác được — dry-run trước, và **diễn tập khôi phục 1 ảnh** trước khi bật |
 | **F.1d** | F-01: bắt buộc `classSessionId`; ghi `centerId`/`orgUnitId`/`kind`/… lúc create | SL-02, SL-04 | |
 | **F.1e** | F-04: thêm điều kiện `classSessionId` vào 2 đường đọc portal + backfill/miễn trừ theo OQ-F5 | F.1d | 🔴 Bật mù = ảnh biến mất khỏi portal của PH |
 | **F.2a** | `ClassMediaReviewDay` + upsert ở T2/T4/T7 + `computeReviewDeadline` | SL-06, F.1b | Sinh dữ liệu cho F.3 và F.4 |
 | **F.2b** | Trang duyệt mới: cây ngày (§6.2.2) → folder lớp (§6.2.3) → grid F-12 | F.2a, SL-02 | Bỏ trần 200 lớp / 100 ảnh của màn cũ |
 | **F.2c** | F-15 lightbox + phím mũi tên; F-13 duyệt cả folder; F-14 "không có ảnh" | F.2b | |
-| **F.2d** | F-17/F-18/F-19: video chung luồng + `MediaWatchProgress` + badge tiến độ | F.2c, SL-04, SL-05, OQ-F3, OQ-F4 | Khoá `playbackRate = 1` |
+| **F.2d** | F-17/F-18/F-19: video chung luồng + `MediaWatchProgress` + badge tiến độ | F.2c, SL-04, SL-05, ~~OQ-F3~~ *(đóng)*, ⏳ **OQ-F4 (còn treo)** | Khoá `playbackRate = 1`. 🔴 **Không bật nhánh video trước khi OQ-F4 chốt** — §0b.2 |
 | **F.2e** | Sửa `lib/pending-tasks.ts:202-233` sang `scopedDb` | F.2a | P1 |
 | **F.3** | F-20 hai key registry + F-21 job cảnh báo + dòng mới trong `catalog.ts` | F.2a, OQ-F8 | Không đổi hệ thông báo, chỉ thêm khoá |
 | **F.4** | F-30…F-32: hàm build thuần + bảng + test | F.2a | Xuất file đi cùng quyết định A-03/OQ-6 |

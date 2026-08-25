@@ -393,9 +393,12 @@ gán được, và không có thông báo lỗi nào giải thích vì sao — t
 
 ## 6.9 Đo prod trước A-01 — BẮT BUỘC (sinh ra từ OQ-5, 24/08/2026)
 
+> ✅ **ĐÃ CHẠY TRÊN PROD 26/08/2026** — kết quả thật ở **§6.9.2**. Bốn truy vấn dưới giữ nguyên làm
+> **bản gốc để chạy lại**; §6.9.2 mới là thứ dùng để ra quyết định.
+
 Chủ dự án xác nhận **đã có QLCS phụ trách từ 2 cơ sở trở lên trên prod, đang xử lý tạm bằng tay**. Trước khi
 viết A-01 hay bất kỳ script backfill nào, phải biết **hiện có bao nhiêu cấu hình như vậy** và **đã mất dòng
-nào chưa**. Ba truy vấn dưới **chỉ đọc**, chạy an toàn trên prod.
+nào chưa**. Bốn truy vấn dưới **chỉ đọc**, chạy an toàn trên prod.
 
 ```sql
 -- [A-01-Đ1] Ai đang giữ nhiều hơn 1 cơ sở qua UserOrgRole (nguồn quyền thật)?
@@ -507,6 +510,97 @@ còn `centerId` mà thiếu `orgUnitId` thì đổi vế `JOIN` sang `c."centerI
 
 ⚠️ **Thứ tự bắt buộc: đo (§6.9) → SL-01 → backfill.** Làm backfill trước khi có cột `source` là nhân bản đúng
 những dòng mà `reconcileUserOrgRoles` sẽ thu hồi ở lần sửa ô "Đơn vị" kế tiếp.
+
+---
+
+### 6.9.2 KẾT QUẢ ĐO PROD — 26/08/2026 (dữ liệu THẬT, chủ dự án chạy)
+
+Bốn truy vấn §6.9 đã chạy trên Supabase **prod**. Ghi **nguyên văn, không làm tròn**.
+
+#### [A-01-Đ1] — chỉ **MỘT** người giữ nhiều hơn 1 cơ sở
+
+| Người | Email | `User.id` | Cơ sở | Vai |
+|---|---|---|---|---|
+| Hồ Đắc Phúc | `hodacphuc.sr@satarobo.vn` | `cmrd3yfgv000h9xkd7bmucaio` | **CS1 + CS2** | `CENTER_MANAGER` |
+
+⇒ Khớp đúng OQ-5: cấu hình đa cơ sở thật **có tồn tại** và **chỉ có một**. Phần backfill V-3 vì thế
+**rất nhỏ**. Nhưng §6.9.1 giữ nguyên: đây là tài khoản **kiêm `SUPER_ADMIN`** ⇒ **không** dùng để
+nghiệm thu A-01.
+
+#### [A-01-Đ2] — 🔴 **SL-01 ĐÃ NỔ THẬT.** Không còn là rủi ro lý thuyết
+
+| Người | Cơ sở | Vai | Trạng thái | `effectiveFrom` | `effectiveTo` | `grantedById` |
+|---|---|---|---|---|---|---|
+| Phan Thanh Toại | CS1 | `CENTER_MANAGER` | `EXPIRED` | 2026-07-10 03:22:40 | **2026-08-20 03:46:14** | `cmrd3u3bq000rm1laztmlac0u` |
+| Lê Thị Phương Liên | CS2 | `CENTER_MANAGER` | `EXPIRED` | 2026-07-10 03:22:42 | **2026-08-20 03:44:39** | `cmrd3qm0s000em1lag3ait8hk` |
+
+Hai dòng bị thu hồi **cùng một ngày**, cách nhau **~1 phút 35 giây** — dấu vết của một lượt thao tác
+liên tiếp trên màn quản trị, đúng khuôn `reconcileUserOrgRoles` mà SL-01 mô tả (`users/_actions.ts:363-380`
+· `nhan-su/actions.ts:377`). Cả hai được cấp cùng lúc **10/07/2026**, sống được ~41 ngày rồi mất.
+
+🔴 **Đối chiếu Đ1 ↔ Đ2 (chủ dự án tự rà khi chạy): hai người này KHÔNG còn dòng `UserOrgRole` cấp cơ sở
+nào.** ⚠️ Kết luận này **không suy ra được từ việc họ vắng mặt ở Đ1** — Đ1 có `HAVING count(DISTINCT o.id) > 1`,
+nên vắng mặt ở Đ1 chỉ nói họ giữ **≤ 1** cơ sở. Đây là đối chiếu **thủ công lúc đo**; ai chạy lại sau
+này muốn xác nhận thì bỏ mệnh đề `HAVING` và lọc theo `userId`.
+
+⇒ **Nếu họ vẫn đang làm quản lý cơ sở thì họ đang hỏng trên prod ngay lúc này.** Và khác anh Phúc, họ
+**không có `SUPER_ADMIN` che** ⇒ mất luôn cả phần nhìn thấy (dashboard, danh sách lớp), không chỉ mất chat.
+
+⚠️ **Đ4 KHÔNG bắt được hai người này** — mệnh đề `ql` của Đ4 lọc `uor.status = 'ACTIVE'` (§6.9, dòng
+`WHERE uor.status = 'ACTIVE'`). Người đã mất dòng quyền thì rơi khỏi tập nguồn ⇒ **con số "nhóm lớp bị
+rớt" của Đ4 là số ĐÁY, không phải số thật.** Muốn biết Toại/Liên rớt bao nhiêu nhóm thì phải đo riêng
+theo `userId`, không dùng lại Đ4.
+
+**Việc phải làm, trước mọi việc khác của A:**
+1. Hỏi vận hành: hai người này **còn giữ vai QLCS không?**
+2. **Còn** ⇒ khôi phục dòng `UserOrgRole` **ngay**, không đợi SL-01 — rồi mới chạy `syncConversationMembership`.
+3. **Không còn** ⇒ ghi vào biên bản là thu hồi **có chủ đích**, để lần đo sau không báo động lại.
+
+#### [A-01-Đ3] — 78 dòng lệch giữa `User.centerId` và quyền thật
+
+**78 không đọc thẳng thành "78 lỗi".** Truy vấn Đ3 đang trộn ba nhóm khác hẳn nhau:
+
+| Nhóm | Nghĩa | Xử lý |
+|---|---|---|
+| `PARENT` — **phần lớn** | **Ngoại lệ CÓ CHỦ ĐÍCH**: vai quan hệ nạp quyền thẳng từ `RoleDef`, **không** cần dòng `UserOrgRole` nào (CLAUDE.md · `RELATIONSHIP_ROLE_CODES` trong `lib/auth/actor.ts`) | ❌ **KHÔNG phải lỗi.** Tuyệt đối **không** "vá" bằng cách gắn `UserOrgRole` cho phụ huynh — đúng cách làm đã bị LOẠI sau sự cố 10/08/2026 |
+| **Nhân sự** | Nguyễn Hữu Thảo Vi · Võ Thị Kim Phụng · Lê Thị Phương · Huỳnh Thị Thanh Tuyền · Nguyễn Thị Hoa · Lisa Dương Hà… | 🔴 **Đây mới là tập nghi hỏng thật.** Phải **lọc ra riêng và rà từng người** |
+| **Trùng tên** | Có **tài khoản "Hồ Đắc Phúc" THỨ HAI**: `cmsiq238k009zaafadq01ul14`, `centerId` = CS1, **không quyền nào** — trùng tên với tài khoản `SUPER_ADMIN` ở Đ1 | ⚠️ Bẫy cho **mọi** thao tác chọn người theo tên: gán quyền nhầm vào tài khoản rỗng ⇒ triệu chứng "đã gán rồi mà vẫn không có quyền", không có thông báo lỗi nào |
+
+⇒ **Đ3 cần một biến thể lọc bỏ vai quan hệ trước khi dùng làm danh sách việc.** Ở dạng hiện tại nó
+trộn ngoại lệ hợp lệ với lỗi thật, và **78 là con số gây hoảng sai** — báo cáo con số trần này lên cấp
+trên sẽ dẫn tới quyết định sai.
+
+#### [A-01-Đ4] — cú rớt nhóm chat lớp đã xảy ra thật
+
+**Đinh Thảo My — CS2 — rớt khỏi 5 nhóm chat lớp của chính cơ sở mình quản.**
+
+Đây đúng là kiểu hỏng âm thầm §6.9.1 dự báo: vẫn đăng nhập được, vẫn thấy báo cáo, chỉ **lặng lẽ không
+còn trong nhóm lớp** — không thông báo lỗi nào. Nhưng nó nổ **khác chỗ dự báo hai điểm**:
+
+- **Không phải anh Phúc.** Dự báo nhắm vào tài khoản kiêm `SUPER_ADMIN`; thực tế nạn nhân là một QLCS
+  **thường**.
+- **Đây là kiểu hỏng THỨ HAI, không phải Đ2.** Đ4 chỉ trả về người **đang có** `UserOrgRole` `ACTIVE`
+  ⇒ Đinh Thảo My **vẫn còn quyền**, chỉ mất **tư cách thành viên chat**. Đ2 thì ngược lại: mất quyền.
+  Hai ca này **chữa bằng hai việc khác nhau** — đừng gộp.
+
+⇒ Khôi phục dòng `UserOrgRole` **không tự** kéo người ta về nhóm chat. Sau mọi lượt khôi phục quyền
+**phải chạy lại `syncConversationMembership`** (luật cứng chat #5: đổi phân công phải sync **trong cùng
+transaction** — ở đây là vá tay nên phải gọi tường minh).
+
+#### Tổng kết bốn phép đo
+
+| Điều §6.9 giả định | Số đo nói gì |
+|---|---|
+| SL-01 có thể thu hồi im lặng cấu hình gán tay | ✅ **Đúng** — 2 dòng mất ngày 20/08/2026 |
+| Chỗ đau nằm ở tài khoản anh Phúc | ❌ **Sai người.** Anh Phúc được `SUPER_ADMIN` che; đau thật là 3 người khác **không có gì che** |
+| Cấu hình đa cơ sở thật là số nhiều | ❌ **Chỉ 1** ⇒ backfill V-3 nhỏ hơn dự tính nhiều |
+| Đ3 chỉ ra danh sách việc | ⚠️ **Một phần** — 78 dòng trộn ngoại lệ `PARENT` hợp lệ với lỗi thật |
+
+⇒ **Giữ nguyên V-1 → V-2 → V-3** (số đo không bác bỏ việc nào), và **chèn thêm một việc số 0 đứng
+trước cả SL-01**: chữa **3 tài khoản có dấu vết hỏng trên prod** — Đinh Thảo My **chắc chắn hỏng**
+(còn quyền, mất chat); Phan Thanh Toại và Lê Thị Phương Liên **hỏng nếu họ còn giữ vai QLCS**, mà điều
+đó chỉ vận hành trả lời được. SL-01 bịt lỗ cho tương lai; việc số 0 là chữa người đang đau hôm nay —
+hai việc khác nhau, đừng để việc sau nuốt việc trước.
 
 ---
 

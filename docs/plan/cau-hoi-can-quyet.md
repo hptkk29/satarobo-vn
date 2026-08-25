@@ -103,19 +103,66 @@ nếu đồng ý thì ghi `OK` vào dòng Quyết định, nếu khác thì ghi 
 
 *Vì sao chặn:* PRD đề xuất **không** tự động (§6.5). Nếu chủ dự án muốn tự động thì phải quyết nơi chạy (resolver lúc đọc vs job ghi) và ai chịu trách nhiệm số liệu
 
-**Quyết định:** 
+**Quyết định:** ⚠️ **Trả lời một nửa 26/08/2026.** Chủ dự án **KHÔNG theo đề xuất** ⇒ `Lead.status` **CÓ** tự chuyển `LOST` khi **mọi** con đã `LOST`.
+
+⏳ **CÒN PHẢI CHỐT — chạy ở đâu:**
+
+| | **(a) Resolver lúc ĐỌC** — *khuyến nghị* | **(b) Job GHI** |
+|---|---|---|
+| Cách làm | Một helper duy nhất suy ra lúc đọc; DB **không** đổi | Cron/trigger ghi đè `Lead.status = LOST` vào DB |
+| Lệch số | **Không bao giờ lệch** | Lệch từ lúc con cuối `LOST` tới lần job chạy kế; lệch vĩnh viễn nếu job chết |
+| Gỡ một con khỏi `LOST` | Lead tự hết `LOST` | Phải có đường ghi ngược — quên là lead kẹt `LOST` dù đang có con được chăm |
+| Cái phải trả | Rà **toàn bộ** chỗ đang đọc `Lead.status` trần, bắt đi qua helper | Sinh dữ liệu do máy ghi, phải có người truy khi lệch |
+
+🔴 **Ai chịu trách nhiệm số liệu** — phải trả lời cùng lúc, không để trống:
+- Chọn **(a)** ⇒ trách nhiệm ở **Dev**: một hàm, sai một chỗ, sửa một chỗ. Kèm test khoá hành vi + chặn đọc `Lead.status` trần ở màn báo cáo.
+- Chọn **(b)** ⇒ phải chỉ **đích danh một người vận hành** đối soát định kỳ (lead `LOST` nhưng còn con đang chăm, và ngược lại). Máy ghi sai thì không ai tự phát hiện. **Không chỉ được người ⇒ không chọn (b).**
+
+Tinh thần đã ghi trong luật cứng Nền Hệ thống #8 (*suy diễn là việc của resolver, không phải job ghi*) nghiêng hẳn về **(a)**. Cho tới khi chốt: **chưa viết cron/trigger nào** đồng bộ hai enum.
 
 ### 14. [G/OQ-G5] Một lead có bao nhiêu con là **thực tế tối đa**? Có cần trần không?
 
 *Vì sao chặn:* Ảnh hưởng UI bảng con và cách hiển thị doanh số gộp trên dòng lead
 
-**Quyết định:** 
+**Quyết định:** ✅ **26/08/2026 — đã đo prod: một lead nhiều nhất `2` con ⇒ KHÔNG đặt trần cứng.** UI bảng con thiết kế cho **2–3 dòng**, render thẳng toàn bộ, **không** cuộn/phân trang.
+⚠️ **`2` là số ĐO ĐƯỢC HÔM NAY, không phải giới hạn hệ thống.** Không hardcode `2` vào đâu cả; nếu mai có lead 5 con thì bảng vẫn phải hiện đủ — chỉ là không cần tối ưu cho ca đó.
 
 ### 15. [G/OQ-G6] Danh mục **lý do rớt** ban đầu gồm những giá trị nào? Danh mục **nguồn lead** gồm những gì?
 
 *Vì sao chặn:* Spec ghi rõ hai giá trị này *"đang để trống trong Cấu hình vận hành"*. Không có danh sách thì G-06-1 không nghiệm thu được, và migrate `Lead.source` (String tự do) không có đích để map
 
-**Quyết định:** ⚠️ **Trả lời một nửa 24/08/2026.** *Lý do rớt:* **KHÔNG có danh mục** — dùng **ô ghi chú tự do** (quyết định 12(b)) ⇒ bỏ nửa `LeadLostReason` của SL-11, G-06-2 chỉ còn phần nguồn lead. *Nguồn lead:* **VẪN CHỜ** — chưa có danh sách thì `Lead.source` không có đích để map, và không migrate được.
+**Quyết định:** ⚠️ **Trả lời một nửa 24/08/2026.** *Lý do rớt:* **KHÔNG có danh mục** — dùng **ô ghi chú tự do** (quyết định 12(b)) ⇒ bỏ nửa `LeadLostReason` của SL-11, G-06-2 chỉ còn phần nguồn lead. *Nguồn lead:* ~~**VẪN CHỜ**~~ → **26/08/2026: đã đo prod + có ĐỀ XUẤT, chờ vận hành duyệt** (dưới đây).
+
+**📊 Dữ liệu thật trên prod (26/08/2026) — tổng 129 lead**, đếm theo `Lead.source`:
+
+| Giá trị đang có | Số lead | | Giá trị đang có | Số lead |
+|---|---|---|---|---|
+| `Ads` | 38 | | `Form` | 5 |
+| `sale-form` | 32 | | `Website` | 3 |
+| `quatang` | 13 | | `Organic` | 3 |
+| `Khác` | 13 | | `lien-he` | 2 |
+| `Giới thiệu` | 12 | | `Nhập tay` | 1 |
+| `Nguồn từ Marketing Hội Sở từ Quảng Cáo` | 6 | | `Import Excel ĐK` | 1 |
+
+**💡 ĐỀ XUẤT danh mục `LeadSource` — 8 mã (CHƯA phải quyết định, chờ vận hành + marketing duyệt):**
+
+| `code` | `label` | Gộp từ | Số lead |
+|---|---|---|---|
+| `ADS` | Quảng cáo | `Ads` (38) + `Nguồn từ Marketing Hội Sở từ Quảng Cáo` (6) | **44** |
+| `SALE_FORM` | Form nội bộ của Sale | `sale-form` (32) | **32** |
+| `QUATANG` | Landing quà tặng | `quatang` (13) | **13** |
+| `KHAC` | Khác | `Khác` (13) + mọi giá trị lạ phát sinh sau này | **13** |
+| `GIOI_THIEU` | Giới thiệu | `Giới thiệu` (12) | **12** |
+| `WEBSITE` | Website | `Website` (3) + `Form` (5) + `lien-he` (2) | **10** |
+| `ORGANIC` | Tự nhiên | `Organic` (3) | **3** |
+| `NHAP_TAY` | Nhập tay / import | `Nhập tay` (1) + `Import Excel ĐK` (1) | **2** |
+| | | **Tổng** | **129** |
+
+🔴 **CẢNH BÁO cho người duyệt — hai chỗ dưới là SUY ĐOÁN TỪ TÊN, chưa xác minh:**
+1. **`Form` + `lien-he` gộp vào `WEBSITE`** — đoán cả ba đều là biểu mẫu trên site công khai. Chưa truy ngược xem `Form` (5 lead) thực sự đến từ đâu. Nếu đó là form ở chỗ khác (sự kiện, landing riêng) thì gộp vào `WEBSITE` là **đếm sai nguồn**.
+2. **`Nguồn từ Marketing Hội Sở từ Quảng Cáo` gộp vào `ADS`** — đoán theo cụm "từ Quảng Cáo". Nhưng chuỗi này còn mang thông tin **ai chạy** (Marketing Hội sở) mà `Ads` trần không có. **Marketing cần phân biệt quảng cáo Hội sở chạy với quảng cáo cơ sở chạy thì PHẢI TÁCH thành 2 mã** (vd `ADS_HO`/`ADS_CS`), và phải tách **trước** khi map — gộp rồi thì không tách ngược được.
+
+**Việc người duyệt phải làm:** xác nhận hoặc bác 2 điểm trên, rồi chốt `label` hiển thị. Ba lưu ý khi seed: (a) đây là **ảnh chụp 26/08**, ngày chạy migration phải **đếm lại**, giá trị mới rơi vào `KHAC`; (b) `Nhập tay` là **mặc định của mã** (`actions.ts:645`, `:673`) chứ không phải người dùng chọn — 1 lead là hợp lý; (c) bộ lọc hiện dùng `contains` (`page.tsx:119`), sau khi có `sourceId` phải đổi sang khớp `code`.
 
 ### 16. [G/OQ-G7] 🔴 **Người nhập lead** hiển thị theo dạng `mãNV_tên` (spec G-01). Lưu 2 cột (`createdById` + `createdByCode`) hay 1 chuỗi ghép?
 
@@ -129,9 +176,19 @@ nếu đồng ý thì ghi `OK` vào dòng Quyết định, nếu khác thì ghi 
 
 **Quyết định:** ⚙️ **Chốt kỹ thuật 24/08/2026 (Dev) — ĐỂ NỢ, không chuẩn hoá trong G.** `LeadChild.gender` giữ `String?`. Lý do: đổi kiểu cột đang có dữ liệu prod là 2-phase (thêm cột → backfill → đọc song song → drop), tốn một chu kỳ migration mà **không phục vụ yêu cầu nào của G-01…G-07**. Ghi vào nợ kỹ thuật kèm **điều kiện kích hoạt**: làm khi xuất hiện báo cáo cần **nhóm/lọc theo giới tính** — lúc đó dữ liệu bẩn mới thành vấn đề thật. Trong lúc chờ: validator chuẩn hoá **đầu vào mới** về `"Nam"`/`"Nữ"`/`"Khác"` để không đẻ thêm biến thể.
 
-### 18. [G/OQ-G9] Học thử **không** đi qua `TrialClassV2` (xếp tay, buổi lẻ) có cần chỗ lưu riêng không?
+### 18. [G/OQ-G9] ~~Học thử **không** đi qua `TrialClassV2` (xếp tay, buổi lẻ) có cần chỗ lưu riêng không?~~ 🔁 **VIẾT LẠI 26/08/2026**
 
-*Vì sao chặn:* Hôm nay "ngày học thử + kết quả" chỉ có ở `LeadTrialHistory` (`:6117`), mà bảng đó gắn cứng `trialClassId` (`:6119`). Không có ca ad-hoc thì bỏ qua; có thì cần 2 cột denormalize trên `LeadChild`
+🔁 **Câu cũ bị bỏ vì khó hiểu** — chủ dự án chưa rõ "xếp tay" nghĩa là gì. Câu hỏi viết lại, không thuật ngữ:
+
+> **Hôm nay muốn cho một em học thử, Sale phải tạo một LỚP HỌC THỬ trong hệ thống rồi xếp em đó vào lớp.**
+>
+> **Câu hỏi: có trường hợp nào GV/Sale hẹn riêng một buổi học thử cho một em — không tạo lớp, không có trong lịch hệ thống — rồi ghi kết quả vào đâu đó không?**
+
+*Trả lời thế nào cũng được, chỉ cần đúng thực tế:*
+- **KHÔNG bao giờ có** ⇒ **bỏ qua câu này**, không thêm cột nào. Xong.
+- **CÓ** ⇒ `LeadChild` cần **2 cột riêng** ghi *ngày học thử* + *kết quả*. Lý do: bảng `LeadTrialHistory` (`prisma/schema.prisma:6144`) hiện **gắn cứng vào id lớp học thử** (`trialClassId` `:6148`) — **không có lớp thì không ghi được vào đâu**, và buổi học thử đó biến mất khỏi mọi báo cáo.
+
+*Ai trả lời:* chủ dự án hoặc Sale — đây là câu về **cách làm việc thật**, không phải câu kỹ thuật.
 
 **Quyết định:** 
 
@@ -139,7 +196,14 @@ nếu đồng ý thì ghi `OK` vào dòng Quyết định, nếu khác thì ghi 
 
 *Vì sao chặn:* §2.4 — 3 bảng, 3 đường ghi, không bảng nào phủ hết; đường tự chia (`assign.ts`/`auto-assign.ts`) không ghi vào bảng nào. PRD đề xuất `LeadAssignmentHistory`. Chốt sai = tranh chấp hoa hồng vẫn không giải được
 
-**Quyết định:** 
+**Quyết định:** ✅ **26/08/2026 — theo đề xuất: `LeadAssignmentHistory` (`prisma/schema.prisma:5268`) là NGUỒN SỰ THẬT DUY NHẤT.**
+
+*Ba việc bắt buộc đi kèm, thiếu một là quay lại nguyên trạng:*
+1. **Vá hai đường tự chia** — `lib/lead/assign.ts:113` và `lib/lead/auto-assign.ts:171`, `:233` phải ghi một dòng `LeadAssignmentHistory` **trong cùng transaction** với lần đổi `Lead.assignedToId`. Hôm nay hai đường này **không ghi vào bảng nào trong ba bảng** — lead do máy chia không để lại dấu vết chuyển sale nào.
+2. **`LeadTransfer` (`:3530`) + `LeadActivity` (`:3554`) type `HANDOVER` (`:3504`) thành đọc-only** — dữ liệu cũ giữ nguyên, không xoá, nhưng không còn là chỗ để tra. `LeadActivity` vẫn ghi tiếp vì nó là dòng thời gian hiển thị cho Sale; chỉ là nó không phải bằng chứng.
+3. **Mọi màn hình/báo cáo tra lịch sử chuyển sale đọc đúng một bảng** (G-06-7).
+
+⚠️ *Không migrate ba bảng về một:* bản ghi cũ ở `LeadTransfer` là di sản; và lịch sử của lead **tự chia trước hôm vá** thì **không dựng lại được** — không có nguồn nào để dựng.
 
 ### 20. [G/OQ-G11] Bộ cột **mặc định** của danh sách lead sau G có giữ đúng 7 cột hiện tại không?
 
@@ -236,19 +300,23 @@ nếu đồng ý thì ghi `OK` vào dòng Quyết định, nếu khác thì ghi 
 
 *Vì sao chặn:* §B.6.1 giả định G2 + bẫy B2. `adjustPayment` **không chặn** điều chỉnh chồng (`payment.ts:521-557`). Đề xuất: **bản `ADJUSTED` mới nhất thắng**. Chạy truy vấn rà ở §B.6.8 để biết prod có ca này chưa
 
-**Quyết định:** 
+**Quyết định:** ✅ **26/08/2026 — LÀM THEO ĐỀ XUẤT: bản `ADJUSTED` MỚI NHẤT thắng** (`ORDER BY "createdAt" DESC LIMIT 1` cho mỗi `adjustmentOfId`).
+📊 **Đo prod 26/08/2026** — truy vấn rà điều chỉnh chồng của §B.6.8 đã chạy: **0 dòng**, prod chưa có ca nào.
+*Hệ quả:* (1) luật được chốt **trước khi** ca đầu tiên xuất hiện ⇒ **chặn ngay từ đầu** thay vì chỉ xử lý lúc đọc — `adjustPayment` (`payment.ts:521-557`) phải **từ chối** khi bản gốc đã có con `ADJUSTED` chưa xoá; (2) giả định **G2** của §B.6.1 chuyển từ *giả định* sang *được cưỡng chế bằng rào ghi*; (3) prod 0 dòng nghĩa là **không có dữ liệu thật để test** ⇒ test phải tự dựng fixture hai bản `ADJUSTED` cùng một gốc.
 
 ### 35. [CDB/OQ-B3] 🔴 "Dòng tiền" nghĩa là gì với BGĐ: **thu ghi nhận** hay **tiền vật lý về ngân hàng**?
 
 *Vì sao chặn:* §B.6.4. Chọn tiền ngân hàng ⇒ bỏ sót toàn bộ thu tiền mặt và cần bảng giao dịch chi (chưa có). PRD chọn thu ghi nhận + bảng đối soát 3 lớp
 
-**Quyết định:** 
+**Quyết định:** ✅ **26/08/2026 — LÀM THEO ĐỀ XUẤT: "dòng tiền" = THU GHI NHẬN.** B4 = B1 (thực thu đã xác nhận) − B2 (chi đã duyệt), **kèm bảng đối soát 3 lớp tiền** (ngân hàng → đã ghi nhận → doanh thu) hiện cùng B4.
+*Hệ quả:* bảng đối soát là **phần bắt buộc của quyết định**, không phải trang trí — bỏ nó thì B4 bị đọc nhầm thành "tiền đang có trong tài khoản". **Không** dùng `BankTransaction` làm vế "vào" ở v1 (bỏ sót toàn bộ thu **tiền mặt**); dòng tiền **ngân hàng thật** vẫn là **metric khác**, cần bảng giao dịch chi chưa tồn tại. ⚠️ Lớp 1 của bảng đối soát phụ thuộc webhook SePay/payOS — creds chỉ ở scope Production ⇒ **chỉ smoke được trên prod**.
 
 ### 36. [CDB/OQ-B4] 🔴 Danh mục **đầu phí** gồm những nhóm nào?
 
 *Vì sao chặn:* §B.6.2 đề xuất `ADS · RENT · SALARY · UTILITY · MARKETING_OFFLINE · OTHER`. Không có danh sách thì B-05 không có template và B2 không nghiệm thu được
 
-**Quyết định:** 
+**Quyết định:** ✅ **26/08/2026 — LÀM THEO ĐỀ XUẤT: sáu nhóm `ADS · RENT · SALARY · UTILITY · MARKETING_OFFLINE · OTHER`.**
+*Hệ quả:* seed vào **bảng `CostCategory`**, **không** enum Postgres (admin thêm nhóm sau không cần migration — cùng lý do với `LeadSource`); sheet `Danh mục` của `mau-chi-phi-v2.xlsx` liệt kê đúng sáu mã. 🔴 **Bẫy trừ hai lần:** `ADS` chồng nguồn với **D1** (chi phí quảng cáo **đọc từ D1, không nhập tay** — `CDB-dashboard.md` B.8 bước B.11) ⇒ phải ghi rõ trên template + màn nhập rằng `ADS` chỉ dành cho quảng cáo **không** qua job D-01. `MARKETING_OFFLINE` là chỗ đón chi phí tờ rơi/sự kiện/KOL của **OQ-D8** (câu đó vẫn treo).
 
 ### 37. [CDB/OQ-B5] Permission key cho chi phí?
 
@@ -260,19 +328,22 @@ nếu đồng ý thì ghi `OK` vào dòng Quyết định, nếu khác thì ghi 
 
 *Vì sao chặn:* §B.6.2 giả định: **không** ở v1, hiện dòng riêng. Phân bổ ⇒ lợi nhuận từng cơ sở đổi, và cần chốt tiêu chí chia (doanh thu? sĩ số?)
 
-**Quyết định:** 
+**Quyết định:** ✅ **26/08/2026 — LÀM THEO ĐỀ XUẤT: KHÔNG phân bổ ở v1**, hiện **một dòng riêng** "Chi phí công ty (chưa phân bổ)".
+*Hệ quả:* không phải chốt tiêu chí chia trong đợt này. Tổng lợi nhuận các cơ sở **≠** lợi nhuận toàn hệ thống — **cố ý**, và phải viết ra UI (dòng riêng + một dòng tổng có nó), nếu không người đọc tưởng hệ thống cộng sai. Chi phí quảng cáo `CHƯA PHÂN BỔ` xử **cùng cách**. `CostEntry.centerId = null` mang nghĩa **"cấp công ty"** ⇒ khai `nullMeaning: "NULL_TOAN_HE_THONG"` trong `BACKFILL_SPECS`. ⚠️ Bật phân bổ về sau là **đổi số quá khứ** ⇒ phải đi kèm đóng sổ (OQ-B8).
 
 ### 39. [CDB/OQ-B7] Chi phí cần **duyệt** mới vào báo cáo, hay nhập là tính?
 
 *Vì sao chặn:* §B.6.2 chọn phải duyệt (`status = APPROVED`). Nếu bỏ duyệt thì nhanh hơn nhưng ai cũng đổi được lợi nhuận
 
-**Quyết định:** 
+**Quyết định:** ✅ **26/08/2026 — LÀM THEO ĐỀ XUẤT: PHẢI DUYỆT.** Chỉ `status = APPROVED` vào báo cáo; **người nhập không tự duyệt**.
+*Hệ quả:* khớp ba key đã chốt ở câu 37 — `costs:manage` (kế toán nhập) tách khỏi `costs:approve` (`HO_ACCOUNTANT` + `SUPER_ADMIN`). ⚠️ **Tách vai chưa đủ:** người giữ **cả hai** vai vẫn tự duyệt được ⇒ Server Action duyệt phải **từ chối khi người duyệt chính là người tạo phiếu**. **Mặt trái chấp nhận:** phiếu `PENDING` không vào báo cáo ⇒ lợi nhuận kỳ **cao giả** cho tới khi duyệt xong ⇒ hiện cạnh B2 số phiếu **đang chờ duyệt** + `updatedAt` gần nhất.
 
 ### 40. [CDB/OQ-B8] Có cần **đóng sổ theo tháng** (khoá không cho sửa) không?
 
 *Vì sao chặn:* Trùng OQ-D7. Không đóng sổ thì báo cáo tháng trước có thể đổi bất kỳ lúc nào
 
-**Quyết định:** 
+**Quyết định:** ✅ **26/08/2026 — LÀM THEO ĐỀ XUẤT: CÓ đóng sổ theo tháng** (kỳ đã khoá thì không sửa được). **Additive, làm sau được** — nhưng phải quyết **trước khi kế toán quen sửa lùi**.
+*Hệ quả:* **mọi** đường ghi `CostEntry` (nhập tay · import B-05 · sửa) phải qua cổng "kỳ đã khoá chưa" — sót một đường là sổ khoá vô nghĩa; **job D-01 cũng phải tôn trọng kỳ khoá** (đúng thứ `AdsSpendLocked` sinh ra để chặn) ⇒ **kéo theo OQ-D7** (câu 31), cùng một cơ chế, phần của D chốt chính thức khi D chạy tới đó. 📌 Chưa có key cho việc **khoá/mở kỳ** — chốt khi code, đừng mặc định gộp vào `costs:approve`.
 
 ### 41. [CDB/OQ-B9] Range mặc định của tab B là gì?
 
@@ -284,23 +355,29 @@ nếu đồng ý thì ghi `OK` vào dòng Quyết định, nếu khác thì ghi 
 
 ## Khu vực E — Tương tác khách hàng  ·  `docs/prd/E-tuong-tac.md`
 
-### 42. [E/OQ-1] **Chốt định nghĩa "PH đã tương tác".** Ba phương án ở §6.2: **(A)** PH đã **gửi ≥1 tin** trong range · **(B)** PH có `lastReadAt ≥ dateFrom` · **(C)** A **hoặc** đọc thông báo trong range. **Khuyến nghị: (A)**, vì chỉ (A) đo đúng *khoảng thời gian* — `lastReadAt` (`prisma/schema.prisma:6539`) và `lastLoginAt` (`:1066`) là **vô hướng, bị ghi đè**, nên "đã tương tác trong tháng 7" không tính được từ
+### 42. [E/OQ-1] **Chốt định nghĩa "PH đã tương tác".** Ba phương án ở §6.2: **(A)** PH đã **gửi ≥1 tin** trong range · **(B)** PH có `lastReadAt ≥ dateFrom` · **(C)** A **hoặc** đọc thông báo trong range. **Khuyến nghị: (A)**, vì chỉ (A) đo đúng *khoảng thời gian* — `lastReadAt` (`prisma/schema.prisma:6566`) và `lastLoginAt` (`:1093`) là **vô hướng, bị ghi đè**, nên "đã tương tác trong tháng 7" không tính được từ
 
 *Vì sao chặn:* Không có định nghĩa thì E-02 (tử số), E-03 (dòng nào lên bảng) và E-04 (kênh nào hiện trong dropdown) đều không code được. **Kèm câu hỏi con:** có tính kênh **1-1** vào không? Nếu có thì không được lọc phạm vi qua `Conversation.centerId` (§6.2 bẫy chung).
 
-**Quyết định:** 
+**Quyết định:** ✅ **26/08/2026 — LÀM THEO ĐỀ XUẤT: phương án (A)** — "PH đã tương tác" = PH đã **gửi ≥ 1 tin** trong khoảng ngày. Chỉ (A) đo đúng **khoảng thời gian**; `lastReadAt` và `lastLoginAt` là **vô hướng, bị ghi đè**. **Câu con: CÓ tính kênh 1-1.**
+*Hệ quả:* 🔴 **KHÔNG được lọc phạm vi qua `Conversation.centerId`** — DM luôn `centerId = null` (`lib/chat/dm.ts:623`), lọc kiểu đó là **rơi sạch** kênh 1-1; trục cách ly của E-02/E-03 là **cơ sở của enrollment** (`Enrollment.centerId`). Kéo theo: **câu 49 (OQ-8) thành bắt buộc** (không có `@@index([senderId, createdAt])` thì mỗi lần mở dashboard là một lần quét toàn bảng `Message`); tử số là phép **đếm**, không dính `assertActiveParticipant`, đổi lại **không được** trả ra một chữ nội dung nào; tử số **khử trùng theo `parentUserId`** như mẫu số (một PH nhắn 50 tin vẫn là 1); định nghĩa phải in **nguyên văn** cạnh con số trên UI.
 
 ### 43. [E/OQ-2] **E-02 lọc `Enrollment.status` nào?** Enum có 9 giá trị (`prisma/schema.prisma:71-84`). Hằng sẵn có `ENROLLMENT_ACTIVE_STATUS_LIST = [ACTIVE, CONFIRMED, STUDYING, PAUSED]` (`lib/enrollment-status.ts:17`). Hai câu phải trả lời riêng: **(a)** `PAUSED` (tạm dừng, vẫn thuộc lớp — `lib/enrollment-status.ts:5`) có tính là "đang có con học"? **(b)** `COMPLETED` (học xong khoá, chưa nghỉ hẳn) có tính? **K
 
 *Vì sao chặn:* Đây **chính là** mẫu số. Chọn khác đi thì tỉ lệ đổi mà không ai đối chiếu được.
 
-**Quyết định:** 
+**Quyết định:** ✅ **26/08/2026 — LÀM THEO ĐỀ XUẤT: dùng đúng `ENROLLMENT_ACTIVE_STATUS_LIST`** (`lib/enrollment-status.ts:17`) = `ACTIVE · CONFIRMED · STUDYING · PAUSED`. ⇒ **(a) `PAUSED` CÓ tính**; **(b) `COMPLETED` KHÔNG tính** (cùng `WITHDREW · TRANSFERRED · CANCELLED · PENDING`).
+*Hệ quả:* mẫu số E-02 **khớp với sĩ số mà điểm danh đang dùng** ⇒ hai màn đối chiếu được. Dùng **hằng có sẵn**, **không** chép danh sách trạng thái sang file mới (bản sao thứ hai là nguồn của lệch). PH có con **vừa học xong khoá, chưa ghi danh khoá mới** rơi khỏi mẫu số ⇒ tỉ lệ **nhích lên** ở kỳ nhiều lớp kết thúc — đúng định nghĩa, không phải lỗi, nhưng phải nói trước với người đọc số.
 
 ### 44. [E/OQ-3] **E-04: QLCS bấm vào kênh 1-1 thì xảy ra gì?** Đo được: QLCS **không** là participant của DM, **không** mở được DM mới (`DmKind` chỉ có 2 giá trị — `lib/chat/dm.ts:67`; `openDmTargetOf` ép `centerId: null` để QLCS tự deny — `:135, 139`), và `assertActiveParticipant` chặn cứng (`lib/chat/queries.ts:434`). Ba lựa chọn: **(a)** dropdown chỉ liệt kê kênh người xem là participant (QLCS → chỉ nhóm lớp),
 
 *Vì sao chặn:* Spec E-04 viết "dropdown kênh (1-1 / nhóm lớp)" như thể cả hai đều mở được. Không chốt thì hoặc code ra nút chết, hoặc ai đó "vá" bằng cách nới `assertActiveParticipant`.
 
-**Quyết định:** 
+**Quyết định:** ✅ **26/08/2026 — LÀM THEO ĐỀ XUẤT: (a) cho P0 · (b) cho P2 · (c) LOẠI.**
+**(a)** dropdown E-04 **chỉ liệt kê hội thoại mà người xem là participant còn hiệu lực** (QLCS ⇒ chỉ nhóm lớp); mục 1-1 **hiện mờ kèm lý do**, không ẩn.
+**(b)** ở P2, **chỉ `SUPER_ADMIN`** mở được 1-1 qua `adminLookupConversationAsActor` (`lib/chat/admin.ts:513`, gọi qua Server Action `adminLookupConversationAction` — `lib/chat/_actions.ts:152`) — bắt buộc `reason`, `writeAudit` **trước khi** đọc dòng tin đầu tiên, và là **màn tra cứu CHỈ-ĐỌC**, không phải `ChatThread`.
+**(c)** thêm `DmKind` mới / mở `DM_STAFF` cho QLCS: **LOẠI** (nới quyền thật, ngoài phạm vi E).
+🔴 *Luật cứng:* **TUYỆT ĐỐI không nới `assertActiveParticipant`** (`lib/chat/queries.ts:415-452`) — không cờ, không tham số bỏ qua, không nhánh ngoại lệ; nới nó là mở quyền **đọc tin nhắn riêng**. `CENTER_MANAGER` **cố ý không** có `chat:admin` (`prisma/seed-roles.ts:545`) ⇒ (b) không mở cho QLCS kể cả ở P2.
 
 ### 45. [E/OQ-4] **Quyền cấp trang cho tab E là gì?** Không mượn `chat:read` được: dưới RBAC v2 nó seed scope CENTER/ASSIGNED nên gọi **không target** luôn trả `false` — xanh ở local, khoá cửa trên prod (`app/(admin)/admin/bao-cao/chat-pilot/page.tsx:10-14`; `app/(admin)/admin/tin-nhan/page.tsx:16-19`). Cần một action khai mới hoặc mượn quyền dashboard sẵn có.
 
@@ -323,11 +400,12 @@ Bắt buộc đi kèm: đưa thứ tự này vào **một helper dùng chung** (
 
 **Quyết định:** ⚙️ **Chốt kỹ thuật 24/08/2026 (Dev) — MỞ RỘNG `/admin/attendance`**, thêm `dateFrom`/`dateTo` vào `searchParams` (hiện chỉ có `{sessionId, classId, centerId}` — `page.tsx:67`). Không dựng trang mới: trang đó đang là **đích của link trong hộp thông báo người dùng** (`:9-11`), đổi đường dẫn là gãy link cũ, và hai trang cùng chức năng thì sớm muộn lệch nhau. Ràng buộc: thiếu `dateFrom`/`dateTo` ⇒ hành vi **y hệt hôm nay** (tương thích ngược tuyệt đối).
 
-### 48. [E/OQ-7] **E-03 có xuất hiện trên site giáo viên không?** Nếu có thì cột SĐT phải rỗng với TEACHER (`canViewParentContact` loại TEACHER có chủ đích — `lib/auth/permissions.ts:947`).
+### 48. [E/OQ-7] **E-03 có xuất hiện trên site giáo viên không?** Nếu có thì cột SĐT phải rỗng với TEACHER (`canViewParentContact` loại TEACHER có chủ đích — `lib/auth/permissions.ts:965`, danh sách vai `:957-963`).
 
 *Vì sao chặn:* Quyết định phạm vi test PII.
 
-**Quyết định:** 
+**Quyết định:** ⏳ **CHƯA TRẢ LỜI (tính đến 26/08/2026).** Ngày 26/08 chủ dự án chốt *"khu vực E làm theo đề xuất"*, **nhưng PRD `E-tuong-tac.md` không đưa khuyến nghị cho câu này** ⇒ **không suy ra được** câu trả lời từ câu chốt chung. Vẫn treo.
+*Hệ quả của mỗi nhánh (để chốt cho nhanh):* **CÓ** ⇒ cột SĐT phải **rỗng** với `TEACHER` (`canViewParentContact` loại `TEACHER` **có chủ đích** — `lib/auth/permissions.ts:965`, danh sách vai `:957-963`) và phạm vi test PII **rộng thêm một site** (thêm bề mặt `app/(teacher)/**` + ca "GV mở E-03 không thấy SĐT"). **KHÔNG** ⇒ E-03 chỉ sống trên admin, phạm vi test giữ nguyên. Câu này **không chặn** E-01/E-02/E-04, chỉ chặn **E-03**.
 
 ### 49. [E/OQ-8] **Có chấp nhận thêm index cho `Message(senderId, createdAt)` không?** Phương án (A) của OQ-1 cần nó; hiện `Message` không có index nào bắt đầu bằng `senderId`/`createdAt` (`prisma/schema.prisma:6569-6571`). Đây là migration **thêm index**, không đụng cột đang có dữ liệu ⇒ không vi phạm luật Nền Hệ thống #4, nhưng vẫn phải nằm trong story được giao.
 
@@ -445,14 +523,95 @@ sau là việc additive (bảng danh mục + cột `lostReasonId`, ghi chú cũ 
 
 ---
 
-### Còn treo sau đợt trả lời 24/08 (đã rút xuống 1 câu)
+### Quyết định của chủ dự án — chốt 26/08/2026 (khu vực B + khu vực E)
+
+> Nguồn: trả lời trực tiếp trong chat 26/08/2026 — **"làm theo đề xuất"** cho **cả hai** khu vực.
+> Phần này **thắng** phần thân bài của mọi PRD nếu có xung đột.
+
+**Khu vực B — sáu câu, đóng theo đúng đề xuất của `docs/prd/CDB-dashboard.md`** (chi tiết + hệ quả ở §QĐ-2
+và §B.7 của PRD đó; ở file này là các câu 34, 35, 36, 38, 39, 40):
+
+| Câu | Chốt gì | Thứ phải nhớ khi code |
+|---|---|---|
+| **OQ-B2** | Bản `ADJUSTED` **mới nhất** thắng (`ORDER BY "createdAt" DESC LIMIT 1`) | **Chặn điều chỉnh chồng ngay từ đầu** ở `adjustPayment`, không chỉ dọn lúc đọc |
+| **OQ-B3** | "Dòng tiền" = **thu ghi nhận** (B1 − B2) | **Bảng đối soát 3 lớp tiền** là phần bắt buộc của quyết định, không phải trang trí |
+| **OQ-B4** | 6 nhóm `ADS · RENT · SALARY · UTILITY · MARKETING_OFFLINE · OTHER` | `ADS` chồng nguồn với D1 ⇒ **không nhập tay** quảng cáo đã lấy từ job D-01, kẻo trừ hai lần |
+| **OQ-B6** | Chi phí cấp công ty (`centerId = null`) **không phân bổ** ở v1 | Tổng các cơ sở **≠** toàn hệ thống — cố ý, phải viết ra UI bằng một dòng riêng |
+| **OQ-B7** | **Phải duyệt** (`APPROVED`) mới vào báo cáo | Người giữ **cả hai** vai vẫn tự duyệt được ⇒ chặn `approvedById === createdById` |
+| **OQ-B8** | **CÓ** đóng sổ theo tháng | Mọi đường ghi `CostEntry` **và** job D-01 phải tôn trọng kỳ khoá ⇒ **kéo theo OQ-D7** |
+
+📊 **Đo prod 26/08/2026** (kết quả nguyên văn ở `CDB-dashboard.md` §B.6.8): rà **điều chỉnh chồng** → **0 dòng**
+⇒ luật OQ-B2 được chốt **trước** khi ca đầu tiên xuất hiện; `Payment` CONFIRMED thiếu `centerId` → **0 dòng**.
+⚠️ Kỳ `2026-08` cho thấy nguồn `Order` **mù hẳn** (**0 đ** so với **3.686.000 đ** thật) ⇒ câu báo trước cho
+kế toán/marketing phải viết theo hướng **"số đổi mạnh, chiều đổi khác nhau tuỳ màn"**, không hứa tăng hay giảm.
+
+**Khu vực E — ba câu chặn cứng, đóng theo đúng khuyến nghị của `docs/prd/E-tuong-tac.md`** (câu 42, 43, 44):
+
+| Câu | Chốt gì | Thứ phải nhớ khi code |
+|---|---|---|
+| **OQ-1** | "PH đã tương tác" = **(A)** PH gửi ≥ 1 tin trong khoảng ngày; **CÓ** tính kênh 1-1 | 🔴 **Không** lọc phạm vi qua `Conversation.centerId` — lọc kiểu đó **rơi sạch** kênh 1-1 |
+| **OQ-2** | Mẫu số = `ENROLLMENT_ACTIVE_STATUS_LIST` (giữ `PAUSED`, loại `COMPLETED`) | Dùng **hằng có sẵn**, không chép danh sách trạng thái sang file mới |
+| **OQ-3** | **(a)** cho P0 · **(b)** cho P2 · **(c)** LOẠI | 🔴 **Tuyệt đối không nới `assertActiveParticipant`** |
+
+⏳ **KHÔNG đóng theo: E/OQ-7** (câu 48 — E-03 có lên site giáo viên không). Câu chốt chung là "làm theo đề
+xuất", **nhưng PRD không đưa đề xuất cho câu này** ⇒ vẫn **chưa được trả lời**, đừng suy ra. Nó chặn **E-03**
+(quyết định phạm vi test PII), không chặn E-01/E-02/E-04.
+
+---
+
+### Quyết định của chủ dự án — chốt 26/08/2026 (đợt 3 — khu vực G)
+
+> Nguồn: trả lời trực tiếp trong chat 26/08/2026 (câu 13, 14, 15-nửa-sau, 18, 19 ở trên).
+> Phần này **thắng** phần thân bài của `docs/prd/G-lead.md` nếu có xung đột — đã ghi vào §0b của PRD đó.
+
+**Quyết định OQ-G4 — `Lead.status` khi mọi con đã `LOST`:** ✅ **CÓ tự chuyển `LOST`** — **ngược** đề xuất
+của PRD ("để Sale set tay").
+⏳ *Vế chưa xong, phải chốt trước khi code C-02:* suy diễn đó **chạy ở đâu** — **(a) resolver lúc đọc**
+(khuyến nghị: không ghi DB, không cron, không bao giờ lệch; đổi lại **mọi** chỗ đọc `Lead.status` phải đi
+qua helper) hay **(b) job ghi** (đơn giản khi đọc, nhưng sinh dữ liệu do máy ghi và **phải có người chịu
+trách nhiệm** khi lệch). Kèm câu **"ai chịu trách nhiệm số liệu"**: chọn (a) ⇒ Dev, một hàm một chỗ; chọn
+(b) ⇒ phải chỉ **đích danh một người vận hành** đối soát định kỳ, không chỉ được người thì **không chọn (b)**.
+Luật cứng Nền Hệ thống #8 (*suy diễn là việc của resolver*) nghiêng hẳn về **(a)**. Cho tới khi chốt:
+**chưa viết cron/trigger nào** đồng bộ hai enum.
+
+**Quyết định OQ-G5 — số con của một lead:** đã **đo prod: nhiều nhất `2` con** ⇒ **không đặt trần cứng**.
+UI bảng con thiết kế cho **2–3 dòng**, render thẳng, không cuộn/phân trang.
+⚠️ *`2` là số **đo được hôm nay**, không phải giới hạn hệ thống* — không hardcode vào đâu; lead 5 con vẫn
+phải hiện đủ, chỉ là không tối ưu cho ca đó.
+
+**Quyết định OQ-G10 — lịch sử chuyển sale:** theo đề xuất ⇒ **`LeadAssignmentHistory` là nguồn sự thật
+duy nhất**. Ba việc kèm theo: (1) vá `lib/lead/assign.ts` + `lib/lead/auto-assign.ts` ghi vào bảng đó
+**trong cùng transaction** với lần đổi `assignedToId` — hôm nay hai đường tự chia **không ghi bảng nào**;
+(2) `LeadTransfer` + `LeadActivity/HANDOVER` thành **đọc-only**, không xoá dữ liệu cũ; (3) mọi màn tra
+lịch sử đọc **đúng một** bảng. *Không dựng lại được* lịch sử của lead tự chia trước hôm vá — không có nguồn.
+
+**Về OQ-G6 nửa sau (danh mục nguồn lead) — CHƯA CHỐT, mới có đề xuất.** Đã đo **129 lead** thật trên prod
+và đề xuất **8 mã** (`ADS` 44 · `SALE_FORM` 32 · `QUATANG` 13 · `KHAC` 13 · `GIOI_THIEU` 12 · `WEBSITE` 10
+· `ORGANIC` 3 · `NHAP_TAY` 2) — bảng đầy đủ ở **câu 15** phía trên. 🔴 Hai chỗ trong đề xuất là **suy đoán
+từ tên**, người duyệt phải xác nhận hoặc bác: gộp `Form`+`lien-he` vào `WEBSITE`, và gộp
+`Nguồn từ Marketing Hội Sở từ Quảng Cáo` vào `ADS` (Marketing cần phân biệt HO/cơ sở thì **phải tách trước
+khi map** — gộp rồi không tách ngược được).
+
+**Về OQ-G9 — câu hỏi được VIẾT LẠI, chưa trả lời.** Bản cũ dùng thuật ngữ (`TrialClassV2`, "xếp tay") nên
+chủ dự án chưa rõ hỏi gì. Bản mới ở **câu 18** hỏi bằng tiếng Việt thường: *có ca nào GV/Sale hẹn riêng một
+buổi học thử cho một em, không tạo lớp, không có trong lịch hệ thống không?* Không có ⇒ bỏ qua; có ⇒
+`LeadChild` cần 2 cột ghi ngày học thử + kết quả.
+
+---
+
+### Còn treo sau đợt trả lời 26/08 (3 câu, không câu nào chặn migration G)
 
 | # | Câu | Trạng thái |
 |---|---|---|
 | ~~**B5**~~ | ~~Lý do rớt (ô ghi chú) đặt ở `Lead` hay `lead_student`?~~ | ✅ **Đóng 24/08/2026: `Lead`** |
 | ~~**12(a) số đỏ**~~ | ~~Ngưỡng đỏ của lead treo~~ | ✅ **Đóng 24/08/2026: 7 ngày** |
-| **Câu 15 (nửa sau)** | Danh mục **nguồn lead** gồm những gì? | ⏳ Chờ vận hành + marketing. Không có danh sách thì `Lead.source` (String tự do) không có đích để map, và `LeadSource` không seed được |
 | ~~**Câu 5 (A/OQ-8)**~~ | ~~Cơ sở thứ hai của QLCS có thuộc **REGION khác thật** không?~~ | ✅ **Đóng 24/08/2026: CÓ** — tạo REGION thứ hai trong dữ liệu test |
+| ~~**Câu 14 (OQ-G5)**~~ | ~~Trần số con của một lead~~ | ✅ **Đóng 26/08/2026: đo prod = 2 con, không đặt trần** |
+| ~~**Câu 19 (OQ-G10)**~~ | ~~Nguồn sự thật cho lịch sử chuyển sale~~ | ✅ **Đóng 26/08/2026: `LeadAssignmentHistory`** + vá 2 đường tự chia |
+| **Câu 13 (OQ-G4) — vế còn lại** | Suy diễn `Lead.status = LOST` chạy ở **resolver lúc đọc** hay **job ghi**? Và **ai chịu trách nhiệm số liệu**? | ⏳ Chủ dự án. Đã chốt "CÓ tự chuyển" 26/08; chưa chốt nơi chạy. Khuyến nghị **(a) resolver**. Chặn C-02, **không** chặn G.2 |
+| **Câu 15 (nửa sau)** | Danh mục **nguồn lead** — duyệt đề xuất 8 mã? | ⏳ Vận hành + marketing. Đã có đề xuất dựng từ 129 lead thật (26/08); chưa duyệt thì **chưa seed `LeadSource`**. Bảng vẫn tạo được ngay |
+| **Câu 18 (OQ-G9)** | Có ca học thử **không tạo lớp** không? (câu đã viết lại 26/08) | ⏳ Chủ dự án / Sale. Không có ⇒ bỏ qua; có ⇒ 2 cột trên `LeadChild`. Additive, thêm sau vẫn được |
+| **Câu 48 (E/OQ-7)** | E-03 có xuất hiện trên **site giáo viên** không? | ⏳ Chủ dự án. Câu chốt "khu vực E làm theo đề xuất" (26/08) **không** phủ câu này — PRD không có đề xuất ⇒ **đừng suy ra**. Chặn **E-03** (phạm vi test PII), không chặn E-01/E-02/E-04 |
 
 
 ### 🔴 Hệ quả gộp của 12 quyết định kỹ thuật: **5 permission key MỚI phải seed prod**

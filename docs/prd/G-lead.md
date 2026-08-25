@@ -28,7 +28,28 @@ Nguồn: `docs/plan/cau-hoi-can-quyet.md` §"Quyết định của chủ dự á
 | **12(a)** | Ngưỡng lead treo = **2 ngày** (đỏ tạm 4 ngày) | Dùng cho cột "số ngày chưa tiếp cận lại" |
 | **B12** | Xuất lead = **`.xlsx`** | Bộ cột cố định (OQ-G12, chưa có chỉ đạo khác) |
 
-⏳ **Còn treo:** danh mục **nguồn lead** (`LeadSource`) chưa có giá trị nào.
+⏳ ~~**Còn treo:** danh mục **nguồn lead** (`LeadSource`) chưa có giá trị nào.~~ → xem §0b (26/08/2026).
+
+---
+
+## 0b. Quyết định chủ dự án — 26/08/2026 (đợt 3, THẮNG cả §0)
+
+Nguồn: `docs/plan/cau-hoi-can-quyet.md` §"Quyết định của chủ dự án — chốt 26/08/2026".
+
+| Mã | Quyết định | Ảnh hưởng trong PRD này |
+|---|---|---|
+| **OQ-G4** | `Lead.status` **CÓ** tự chuyển `LOST` khi **mọi** con đã `LOST` — **ngược** đề xuất của PRD | §6.5 bị đảo: dòng "mọi con `LOST`" trong bảng quan hệ hai enum sửa lại. ⚠️ **Chưa xong** — còn phải chốt *chạy ở đâu* |
+| **OQ-G5** | Đo prod: một lead nhiều nhất **2 con** ⇒ **không đặt trần** | UI bảng con thiết kế cho **2–3 con**, không làm bảng cuộn/phân trang (G-07-1) |
+| **OQ-G10** | `LeadAssignmentHistory` là **nguồn sự thật duy nhất** cho lịch sử chuyển sale | §2.4 + G-06-7: phải vá `lib/lead/assign.ts` + `lib/lead/auto-assign.ts` cùng ghi vào bảng đó |
+| **OQ-G6** (nửa sau) | Có **đề xuất danh mục 8 mã** dựng từ 129 lead thật trên prod — **CHƯA duyệt** | §6.6 ghi cả bảng đề xuất lẫn hai chỗ đang suy đoán |
+
+⏳ **Còn treo sau 26/08 — ba việc, không việc nào chặn migration:**
+
+1. **OQ-G4 vế còn lại** — suy diễn `Lead.status = LOST` chạy ở **resolver lúc đọc** hay **job ghi**,
+   và **ai chịu trách nhiệm số liệu** khi hai nơi lệch nhau (§6.5).
+2. **OQ-G6 nửa sau** — danh mục nguồn lead mới là **đề xuất**, vận hành chưa duyệt ⇒ **chưa seed
+   `LeadSource`**. Bảng vẫn tạo được ngay, chỉ dữ liệu là phải chờ (§6.6).
+3. **OQ-G9** — chủ dự án chưa rõ câu hỏi cũ; đã viết lại bằng tiếng Việt dễ hiểu ở §8.
 
 ---
 
@@ -112,12 +133,27 @@ thật ngay khi `LeadChild` mang doanh số (G-07).
 
 | Bảng | Nơi ghi (đường DUY NHẤT) | Phủ được gì |
 |---|---|---|
-| `LeadAssignmentHistory` (`:5241`) | `lib/lead-handover/service.ts:95` | Bàn giao qua module handover |
-| `LeadTransfer` (`:3503`) | `app/(admin)/admin/leads/actions.ts:963` | Chuyển sale/cơ sở ở màn admin |
-| `LeadActivity` type `HANDOVER` (`:3527`, enum `:3479`) | `app/(admin)/admin/leads/actions.ts:951` | Dòng timeline của cùng thao tác trên |
+| `LeadAssignmentHistory` (`:5268`) | `lib/lead-handover/service.ts:95` | Bàn giao qua module handover |
+| `LeadTransfer` (`:3530`) | `app/(admin)/admin/leads/actions.ts:963` | Chuyển sale/cơ sở ở màn admin |
+| `LeadActivity` (`:3554`) type `HANDOVER` (`:3504`, enum `LeadActivityType` `:3498`) | `app/(admin)/admin/leads/actions.ts:951` | Dòng timeline của cùng thao tác trên |
 
 Không bảng nào phủ hết. `lib/lead/assign.ts` và `lib/lead/auto-assign.ts` (đường tự chia)
 **không ghi vào bảng nào trong ba bảng này** — chỉ ghi `LeadActivity` + `logLeadAudit`.
+
+✅ **ĐÃ CHỐT 26/08/2026 (OQ-G10): `LeadAssignmentHistory` (`:5268`) là NGUỒN SỰ THẬT DUY NHẤT.**
+Theo đề xuất của PRD. Ba việc đi kèm, thiếu một là câu chuyện quay lại nguyên trạng:
+
+1. **Vá hai đường tự chia** — `lib/lead/assign.ts:113` và `lib/lead/auto-assign.ts:171`, `:233` phải ghi
+   một dòng `LeadAssignmentHistory` **trong cùng transaction** với lần đổi `Lead.assignedToId`. Đây là
+   lỗ hổng thật hôm nay: lead do máy tự chia **không để lại dấu vết chuyển sale nào**.
+2. **Hai bảng còn lại thành đọc-only** — `LeadTransfer` (`:3530`) và `LeadActivity` type `HANDOVER`
+   (`:3504`) giữ nguyên dữ liệu cũ, không xoá, nhưng **không còn là chỗ để tra**. `LeadActivity` vẫn
+   ghi tiếp vì nó là dòng thời gian hiển thị cho Sale — chỉ là nó không phải bằng chứng.
+3. **Mọi màn hình/báo cáo tra lịch sử chuyển sale đọc đúng một bảng** — G-06-7. Tranh chấp hoa hồng
+   chỉ giải được khi có **một** chỗ để mở ra.
+
+⚠️ Chốt này **không** đòi migrate dữ liệu ba bảng về một: bản ghi cũ ở `LeadTransfer` là di sản, và
+lịch sử của các lead tự chia trước hôm vá thì **không dựng lại được** — không có nguồn nào để dựng.
 
 ### 2.5 Audit lead đã hợp nhất — đừng làm lại
 
@@ -185,7 +221,7 @@ bảng `AuditLog` hợp nhất với `module: "leads"`, `entityType: "Lead"`, k�
 
 | # | User story | Acceptance criteria |
 |---|---|---|
-| **G-07-1** | Là Sale, tôi thêm đứa con thứ hai vào lead sẵn có mà không phải tạo lead trùng SĐT. | Màn chi tiết lead có bảng con (`app/(admin)/admin/leads/_components/lead-children.tsx` đã có `addLeadChild`/`updateLeadChild`/`deleteLeadChild`). Thêm con **không** đụng `Lead.childName`. Đường công khai đã làm sẵn ca này (`lib/lead/intake/ingest.ts:167` `attachExtraChild`) — giữ nguyên hành vi. |
+| **G-07-1** | Là Sale, tôi thêm đứa con thứ hai vào lead sẵn có mà không phải tạo lead trùng SĐT. | Màn chi tiết lead có bảng con (`app/(admin)/admin/leads/_components/lead-children.tsx` đã có `addLeadChild`/`updateLeadChild`/`deleteLeadChild`). Thêm con **không** đụng `Lead.childName`. Đường công khai đã làm sẵn ca này (`lib/lead/intake/ingest.ts:167` `attachExtraChild`) — giữ nguyên hành vi. ✅ **OQ-G5 đóng 26/08/2026:** đo prod, một lead nhiều nhất **2 con** ⇒ **không đặt trần**; bảng con render **thẳng toàn bộ**, thiết kế cho 2–3 dòng, **không** cuộn/phân trang. Đây là **số đo được hôm nay**, không phải giới hạn — nếu sau này có lead 5 con thì bảng vẫn phải hiện đủ. |
 | **G-07-2** | Là QLCS, tôi thấy trạng thái chốt **của từng đứa con**, không phải của phụ huynh. | `LeadChild.status` kiểu enum **mới** `LeadChildStatus` (§6.5). `Lead.status` giữ nguyên 15 giá trị, **không** bị ghi đè bởi trạng thái con. |
 | **G-07-3** | 🔴 Là BGĐ, tôi xem doanh số quy về **đúng từng con**. | Chốt **một** cách nối `Order` ↔ `LeadChild` (§6.4) **trước** khi C-03 chạy. AC: 1 PH – 2 con – 2 đơn → tổng doanh số 2 dòng = tổng `Payment` của lead; 1 đơn chia 2 con → tổng phần chia = `Order.totalAmount` (bất biến tổng). |
 | **G-07-4** | 🔴 Là QLCS cơ sở 1, tôi **không** đọc được `LeadChild` của cơ sở 2. | `LeadChild` thêm `centerId String?` + `orgUnitId String?`; khai vào `SCOPED_MODELS` (`lib/db-scope.ts:11`) **và** `BACKFILL_SPECS` (`lib/org/center-bridge.ts:45`) — thiếu chỗ thứ hai thì test `[US-07-IT-08b]` đỏ. ⚠️ `scopedDb` **không che write** (`lib/db-scope.ts:4-5`) ⇒ mọi `create` `LeadChild` phải tự set `centerId`. |
@@ -193,7 +229,7 @@ bảng `AuditLog` hợp nhất với `module: "leads"`, `entityType: "Lead"`, k�
 | **G-01-2** | 🔴 Là QLCS, tôi biết **ai mang lead về**, tách khỏi **ai đang chăm**. | `Lead.createdById` + `Lead.createdByCode` (mã NV) là cột riêng. `assignedToId` giữ nghĩa "sale phụ trách". Đường `ingest.ts:157` **thôi** dùng mã NV làm `assignedToId` mặc định; mã NV luôn được ghi vào `createdByCode` kể cả khi người đó không phải Sale (vá N-2). |
 | **G-01-3** | Là Sale, tôi ghi **lớp học tại trung tâm** của từng con. | `LeadChild.classId String?` (tham chiếu `Class`). Phân biệt rõ với `LeadChild.interestedCenterId` (`:1470`, cơ sở quan tâm) và với `Enrollment` (chỉ có sau khi convert — `Enrollment.leadChildId:1833` với chú thích *"Enrollment tạo trực tiếp → null"*). |
 | **G-06-1** | Là Sale, khi đánh dấu **Rớt** tôi **bắt buộc nhập ghi chú lý do**. | ✅ **Đổi theo 12(b) + B5 (24/08/2026):** không có danh mục; ghi vào **`Lead.lostNote`** + **`Lead.lostAt`** (cấp phụ huynh), trạng thái `LOST` vẫn set ở `LeadChild`. Server Action từ chối nếu `lostNote` rỗng (`z.string().trim().min(1)`). ~~`lostReasonId` + bảng `LeadLostReason`~~ **loại khỏi phạm vi**. Đánh đổi đã chấp nhận: **không nhóm được "top lý do rớt"**. |
-| **G-06-2** | Là admin, tôi thêm/sửa/ẩn **nguồn lead** mà không cần deploy. | ✅ 24/08/2026: **chỉ còn một** bảng danh mục `LeadSource` với `(code, label, isActive, displayOrder)` — ~~`LeadLostReason`~~ bỏ (12(b)). `Lead.source` hiện là **String tự do** (`:1327`, validator `actions.ts:575` `z.string().max(100)`, filter `page.tsx:119` dùng `contains`) — không có danh mục nào trong repo (grep `LEAD_SOURCE`/`SOURCE_OPTIONS` = 0 kết quả). |
+| **G-06-2** | Là admin, tôi thêm/sửa/ẩn **nguồn lead** mà không cần deploy. | ✅ 24/08/2026: **chỉ còn một** bảng danh mục `LeadSource` với `(code, label, isActive, displayOrder)` — ~~`LeadLostReason`~~ bỏ (12(b)). `Lead.source` hiện là **String tự do** (`:1327`, validator `actions.ts:575` `z.string().max(100)`, filter `page.tsx:119` dùng `contains`) — không có danh mục nào trong repo (grep `LEAD_SOURCE`/`SOURCE_OPTIONS` = 0 kết quả). ⏳ **Giá trị seed vẫn chờ:** đề xuất 8 mã dựng từ 129 lead thật ở §6.6.a — vận hành **chưa duyệt**. Bảng `LeadSource` tạo được ngay; **dropdown rỗng** cho tới khi có người duyệt. |
 | **G-06-3** | Là Marketing, tôi bóc CPL/CPA **theo campaign**. | `Lead.campaignId` + `Lead.adsetId` + `Lead.adId`. `utm*` đã có (`:1328-1332`) nhưng là **nhãn chiến dịch**, không phải ID của Meta; `fbclid/fbp/fbc` (`:1333,1335,1336`) là tham số click/cookie, **không** phải Ad ID. |
 | **G-02-1** | Là Sale được cấp quyền, tôi sửa được lead. | Giữ nguyên gate hiện có: `checkPermission('leads:edit')` + `passesScope('Lead', …)` + `actorMayMutateLead` (`actions.ts:50-56`: chủ lead **hoặc** `leads:view-all`). Bộ trường sửa được mở rộng theo G-01/G-06. |
 | **G-02-2** | 🔴 Là QLCS, tôi **nhìn thấy** ai sửa Tên PH / Tên HS / SĐT, lúc nào, cũ → mới. | Ghi audit đã có (`logLeadAudit` → `AuditLog`, `lib/audit/log.ts:141-155`). **Việc phải làm là UI**: thêm mục "Lịch sử thay đổi" trên `app/(admin)/admin/leads/[id]/page.tsx` đọc `AuditLog` (`module='leads'`, `entityId=leadId`) — hiện trang này **chỉ** đọc `activities` (`:54`). Sửa `LeadChild.fullName` cũng phải ghi (đã có tiền lệ `lib/students/sync-name.ts:126`). |
@@ -210,7 +246,7 @@ bảng `AuditLog` hợp nhất với `module: "leads"`, `entityType: "Lead"`, k�
 | **G-06-4** | Là Sale, tôi đặt **ngày hẹn follow-up kế tiếp** ngay trên lead. | `Lead.nextFollowUpAt DateTime?`. Hôm nay chỉ có đường gián tiếp qua `LeadTask.dueAt` (`:3550`) — mà `LeadTask` là bảng việc, không phải thuộc tính lead; cron `assignment-due-soon` đọc `dueAt` của bảng khác hẳn (`app/api/cron/assignment-due-soon/route.ts:23`). |
 | **G-06-5** | Là Sale, tôi đánh dấu **mức độ tiềm năng** và **kênh liên hệ ưu tiên**. | `Lead.potential` (Nóng/Ấm/Lạnh) + `Lead.preferredChannel` (Gọi/Zalo/FB). |
 | **G-06-6** | Là Sale, tôi lưu **số Zalo khác SĐT**. | `Lead.zaloPhone String?`, chuẩn hoá qua `canonicalPhone` như `phone`. |
-| **G-06-7** | 🔴 Là QLCS, tôi xem được **một** lịch sử chuyển sale, không phải ba mảnh. | Chốt **một** bảng là nguồn sự thật (đề xuất `LeadAssignmentHistory`) và ép **mọi** đường chuyển ghi vào đó — kể cả đường tự chia (`lib/lead/assign.ts`, `lib/lead/auto-assign.ts` hiện **không** ghi vào bảng nào trong ba bảng). Hai bảng còn lại giữ đọc-only. |
+| **G-06-7** | 🔴 Là QLCS, tôi xem được **một** lịch sử chuyển sale, không phải ba mảnh. | ✅ **ĐÃ CHỐT 26/08/2026 (OQ-G10): `LeadAssignmentHistory` là nguồn sự thật duy nhất** (§2.4). AC: (1) `lib/lead/assign.ts:113` và `lib/lead/auto-assign.ts:171`, `:233` ghi `LeadAssignmentHistory` **trong cùng transaction** với lần đổi `Lead.assignedToId` — hôm nay hai đường này **không ghi bảng nào**; (2) `LeadTransfer` + `LeadActivity` type `HANDOVER` thành **đọc-only** (không xoá dữ liệu cũ); (3) màn lịch sử chuyển sale đọc **đúng một** bảng. ⚠️ Lịch sử của lead tự chia **trước** hôm vá không dựng lại được — không có nguồn. |
 | **G-06-8** | 🔴 Đồng hồ "chưa tiếp cận lại" đúng. | Vá N-4: gom việc ghi `LeadActivity` + bump `lastActivityAt` vào **một** helper duy nhất, dùng ở cả 13 call-site. **Đây là điều kiện cần của C-05** — không vá thì cột "số ngày chưa tiếp cận lại" sai. |
 | **G-06-9** | 🔴 Dedup nhập tay bắt được cả `0…` lẫn `84…`. | Vá N-3: `actions.ts:596` và `:731` đổi sang `phone: { in: phoneVariants(d.phone) }` (đúng khuôn `lib/lead/dedup.ts:18`). **Giữ nguyên** tính cross-center có chủ đích (lý do file này ở trong allowlist ESLint). |
 | **G-01-4** | Giới tính / ngày sinh **phụ huynh** có ô nhập. | `Lead.parentGender Gender?` + `Lead.parentDob DateTime? @db.Date`. Enum `Gender` (`MALE/FEMALE/OTHER`) đã tồn tại `:2414`. |
@@ -224,7 +260,7 @@ bảng `AuditLog` hợp nhất với `module: "leads"`, `entityType: "Lead"`, k�
 | **G-04-5** | Tuỳ chọn cột dùng lại được cho bảng khác (học viên, đơn hàng…). | `tableKey` là chuỗi tự do có namespace (`admin.leads.list`) ⇒ bảng thứ hai chỉ cần khai catalog riêng, không đổi schema. |
 | **G-04-6** | Nhớ cả độ rộng cột / số dòng mỗi trang. | Chỗ chứa đã có sẵn (`pageSize`, khoá `widths` trong JSON) — không hiện thực ở v1. |
 | **G-06-10** | Chuẩn hoá `LeadChild.gender` về enum. | Hôm nay là `String?` (`:1468`), UI ép 3 lựa chọn `["Nam","Nữ","Khác"]` ở tầng client (`lead-children.tsx:71`) — không có ràng buộc DB. Đổi kiểu cột đang có dữ liệu PROD ⇒ luật cứng #4 ⇒ phải 2-phase, xem OQ-G8. |
-| **G-06-11** | Ô "đã học thử" tổng hợp trên từng con. | Hiện đọc được từ `LeadChild.trialStatus` (`:1476`) + `LeadTrialHistory` (`:6117`, có `firstAttendedAt`/`lastAttendedAt`/`outcome`). **Không thêm cột** ở v1 — xem OQ-G9 cho ca học thử ngoài `TrialClassV2`. |
+| **G-06-11** | Ô "đã học thử" tổng hợp trên từng con. | Hiện đọc được từ `LeadChild.trialStatus` (`:1476`) + `LeadTrialHistory` (`:6144`, có `firstAttendedAt`/`lastAttendedAt`/`outcome`). **Không thêm cột** ở v1 — xem OQ-G9 cho ca học thử ngoài `TrialClassV2`. |
 
 ---
 
@@ -239,7 +275,7 @@ Tên nghiệp vụ trong spec là `lead_student`. Trong repo, vai đó **đã c�
 | Quan hệ 1 `Lead` – N con, `onDelete: Cascade` | `prisma/schema.prisma:1463` |
 | Chú thích schema: *"1 Lead có N con. Nền cho lớp trải nghiệm (R7-02)"* | `:1458` |
 | Đã nối ghi danh chính thức | `Enrollment.leadChildId` `:1833` + relation `:1881` |
-| Đã nối học thử | `TrialEnrollment.leadChildId` `:6169`, `LeadTrialHistory.leadChildId` `:6119` |
+| Đã nối học thử | `TrialEnrollment.leadChildId` `:6169`, `LeadTrialHistory.leadChildId` `:6146` |
 | Đã có UI CRUD con | `app/(admin)/admin/leads/_components/lead-children.tsx` |
 | Đường công khai đã tự tách con thứ hai | `lib/lead/intake/ingest.ts:167` `attachExtraChild` |
 
@@ -318,10 +354,10 @@ Ký hiệu: **ĐÃ CÓ** = cột thật đang tồn tại (ghi kèm tên cột t
 | Kênh liên hệ ưu tiên (Gọi/Zalo/FB) — **THÊM MỚI** `Lead.preferredChannel` · enum `LeadContactChannel?` | `lead` | Thuộc tính liên lạc với người lớn |
 | Số Zalo (nếu khác SĐT PH) — **THÊM MỚI** `Lead.zaloPhone` · `String?` | `lead` | Phương tiện liên lạc của người lớn. Chuẩn hoá bằng `canonicalPhone` (`lib/phone.ts`) như `phone` |
 | Đã học thử: có/không — **ĐÃ CÓ** `LeadChild.trialStatus` · `LeadChildTrialStatus` (`:1476`, enum `:58`) | `lead_student` | Mỗi con học thử độc lập |
-| Ngày học thử + kết quả — **ĐÃ CÓ** `LeadTrialHistory.firstAttendedAt` / `.lastAttendedAt` / `.outcome` (`:6117-6135`) | `lead_student` (bảng con) | Đã có bảng lịch sử đủ dùng, **không thêm cột**. ⚠️ Chỉ ghi khi đi qua `TrialClassV2` — xem OQ-G9 |
+| Ngày học thử + kết quả — **ĐÃ CÓ** `LeadTrialHistory.firstAttendedAt` / `.lastAttendedAt` / `.outcome` (`:6158-6160`) | `lead_student` (bảng con) | Đã có bảng lịch sử đủ dùng, **không thêm cột**. ⚠️ Chỉ ghi khi đi qua `TrialClassV2` — xem OQ-G9 |
 | Nhiều học sinh trên một PH — **ĐÃ CÓ** (cấu trúc `Lead 1–N LeadChild`, `:1463`) | cấu trúc | Chính là G-07 |
 | Cờ trùng lặp (check theo SĐT) — **ĐÃ CÓ** bảng `LeadDuplicate` (`:3560`) | bảng riêng | Không phải cột trên lead. ⚠️ Chỉ được ghi ở **một** chỗ: `lib/lead/dedup.ts:37` (đường công khai). Đường nhập tay ở admin **không ghi** và còn bỏ sót `0…` — nợ N-3 |
-| Lịch sử chuyển sale — **ĐÃ CÓ** 3 bảng rời (`LeadAssignmentHistory:5241` · `LeadTransfer:3503` · `LeadActivity` type `HANDOVER`) | bảng riêng, cấp `lead` | Sale phụ trách là thuộc tính cấp PH ⇒ lịch sử cũng cấp PH. ⚠️ 3 đường ghi khác nhau, không bảng nào phủ hết (§2.4) |
+| Lịch sử chuyển sale — **ĐÃ CÓ** 3 bảng rời (`LeadAssignmentHistory:5268` · `LeadTransfer:3530` · `LeadActivity` type `HANDOVER`) | bảng riêng, cấp `lead` | Sale phụ trách là thuộc tính cấp PH ⇒ lịch sử cũng cấp PH. ✅ **Chốt 26/08/2026 (OQ-G10): `LeadAssignmentHistory` là bảng duy nhất được tra**; hai bảng kia đọc-only, và hai đường tự chia phải vá cho ghi vào đó (§2.4) |
 
 #### 6.3.d — 49 trường `Lead` đang có: phân loại đầy đủ
 
@@ -452,13 +488,39 @@ Sáu giá trị khớp đúng sáu bước spec G-06 nêu (*Mới → Đang tư 
 | Sự kiện | `LeadChild.status` | `Lead.status` |
 |---|---|---|
 | Con ghi danh | `ENROLLED` + `closedAt` | Giữ đường hiện tại (`convert-lead*` set `ENROLLED`) |
-| Con rớt, còn con khác đang chăm | `LOST` + `lostReasonId`/`lostAt` | **Không đổi** |
-| **Mọi** con đều `LOST` | — | Cho phép Sale set `LOST` bằng tay; **không** tự động |
+| Con rớt, còn con khác đang chăm | `LOST` + `lostNote`/`lostAt` (ở `Lead` — B5) | **Không đổi** |
+| **Mọi** con đều `LOST` | — | ~~Cho phép Sale set `LOST` bằng tay; **không** tự động~~ → ✅ **TỰ CHUYỂN `LOST`** (chốt 26/08) |
 | Báo cáo C-02 "tỷ lệ thành công" | Đếm theo **con** | Không dùng |
 | Chỉ tiêu C-01 | Spec đề xuất đếm **học sinh** | — |
 
-⚠️ **Không** viết cron/trigger tự đồng bộ hai enum. Luật cứng Nền Hệ thống #8 cấm cron ghi thay đổi quyền;
-tinh thần tương tự ở đây: suy diễn trạng thái là việc của **resolver lúc đọc**, không phải job ghi đè.
+#### 6.5.a — OQ-G4: `Lead.status` tự chuyển `LOST` (chốt 26/08/2026, đảo đề xuất PRD)
+
+✅ **ĐÃ CHỐT 26/08/2026:** khi **mọi** `LeadChild` của một lead đã `LOST` thì `Lead.status` **CÓ** tự
+chuyển `LOST`. Chủ dự án **không** theo đề xuất "để Sale set tay" của PRD. Phần trên của §6.5 đã sửa.
+
+⏳ **CÒN PHẢI CHỐT — chạy ở đâu.** Hai đường, hệ quả khác hẳn nhau:
+
+| | **(a) Resolver lúc ĐỌC** — *khuyến nghị* | **(b) Job GHI** |
+|---|---|---|
+| Cách làm | Một helper duy nhất, ví dụ `resolveLeadStatus(lead, children)`; DB **không** đổi | Cron/trigger ghi đè `Lead.status = LOST` vào DB |
+| Lệch số | **Không bao giờ lệch** — số suy ra ngay tại thời điểm đọc | Lệch trong khoảng từ lúc con cuối `LOST` tới lần job chạy kế; và lệch vĩnh viễn nếu job chết |
+| Sale gỡ một con khỏi `LOST` | Lead tự hết `LOST`, không cần làm gì | Phải có **đường ghi ngược** — quên là lead kẹt `LOST` dù đang có con được chăm |
+| Đọc `Lead.status` trần | ❌ **Không còn được phép** — mọi chỗ đọc phải đi qua helper | ✅ Đọc thẳng cột như hôm nay |
+| Cái phải trả | Rà **toàn bộ** chỗ đang đọc `Lead.status` (§2.3 liệt kê 6 đường ghi tự động; đường đọc nhiều hơn) | Sinh dữ liệu do máy ghi, và **phải có người chịu trách nhiệm** khi số sai |
+| Hợp luật cứng? | ✅ Đúng tinh thần Nền Hệ thống #8: *suy diễn là việc của resolver* | ⚠️ Ngược tinh thần đó |
+
+**Khuyến nghị của PRD: (a).** Chi phí của (a) là chi phí **một lần** (rà đường đọc); chi phí của (b) là
+chi phí **mãi mãi** (mỗi lần lệch phải có người truy).
+
+🔴 **AI CHỊU TRÁCH NHIỆM SỐ LIỆU — phải trả lời cùng lúc với (a)/(b), không để trống:**
+- Nếu chọn **(a)**: trách nhiệm nằm ở **Dev** — chỉ có một hàm, sai thì sai một chỗ và sửa một chỗ.
+  Ràng buộc kèm theo: có test khoá hành vi, và ESLint/rà tay chặn đọc `Lead.status` trần ở màn báo cáo.
+- Nếu chọn **(b)**: phải chỉ đích danh **một người vận hành** đối soát định kỳ (lead `LOST` nhưng còn
+  con đang chăm, và ngược lại), vì máy ghi sai thì không ai tự phát hiện. Không chỉ được người ⇒
+  **không chọn (b)**.
+
+⚠️ Cho tới khi chốt xong vế này: **chưa viết cron/trigger nào đồng bộ hai enum**, và C-02/C-03 chưa
+được dựa vào `Lead.status` để đếm "rớt" — hai báo cáo đó đếm theo **con** (bảng trên).
 
 ### 6.6 Danh mục cấu hình được (còn **một** bảng)
 
@@ -495,6 +557,65 @@ mặc định `'Nhập tay'` (`:645`, `:673`), filter dùng `contains` (`page.ts
 số danh mục nào (grep `LEAD_SOURCE` / `SOURCE_OPTIONS` / `sourceOptions` = 0 kết quả).
 ⇒ 2-phase: thêm `Lead.sourceId` (nguồn sự thật mới), giữ `Lead.source` đọc-only để không vỡ báo cáo cũ,
 map chuỗi cũ → `LeadSource.code` bằng bảng ánh xạ trong kế hoạch migration (file riêng).
+
+#### 6.6.a — ĐỀ XUẤT danh mục `LeadSource` (26/08/2026) — **CHƯA CHỐT, chờ vận hành duyệt**
+
+> ⚠️ Đây là **đề xuất**, không phải quyết định. Không seed `LeadSource` cho tới khi vận hành +
+> marketing duyệt danh sách này (OQ-G6 nửa sau vẫn treo — §0b).
+
+**Dữ liệu thật đã đo trên prod (26/08/2026) — tổng 129 lead**, đếm theo `Lead.source`:
+
+| Giá trị đang có trong DB | Số lead |
+|---|---|
+| `Ads` | 38 |
+| `sale-form` | 32 |
+| `quatang` | 13 |
+| `Khác` | 13 |
+| `Giới thiệu` | 12 |
+| `Nguồn từ Marketing Hội Sở từ Quảng Cáo` | 6 |
+| `Form` | 5 |
+| `Website` | 3 |
+| `Organic` | 3 |
+| `lien-he` | 2 |
+| `Nhập tay` | 1 |
+| `Import Excel ĐK` | 1 |
+| **Tổng** | **129** |
+
+**Đề xuất gộp thành 8 mã:**
+
+| `code` | `label` | Gộp từ giá trị nào | Số lead |
+|---|---|---|---|
+| `ADS` | Quảng cáo | `Ads` (38) + `Nguồn từ Marketing Hội Sở từ Quảng Cáo` (6) | **44** |
+| `SALE_FORM` | Form nội bộ của Sale | `sale-form` (32) | **32** |
+| `QUATANG` | Landing quà tặng | `quatang` (13) | **13** |
+| `KHAC` | Khác | `Khác` (13) + mọi giá trị lạ phát sinh sau này | **13** |
+| `GIOI_THIEU` | Giới thiệu | `Giới thiệu` (12) | **12** |
+| `WEBSITE` | Website | `Website` (3) + `Form` (5) + `lien-he` (2) | **10** |
+| `ORGANIC` | Tự nhiên | `Organic` (3) | **3** |
+| `NHAP_TAY` | Nhập tay / import | `Nhập tay` (1) + `Import Excel ĐK` (1) | **2** |
+| | | **Tổng** | **129** |
+
+🔴 **CẢNH BÁO cho người duyệt — hai chỗ dưới đây là SUY ĐOÁN TỪ TÊN, không phải sự thật đã xác minh:**
+
+1. **Gộp `Form` + `lien-he` vào `WEBSITE`.** Đoán rằng cả ba đều là biểu mẫu trên site công khai. Chưa
+   truy ngược từng bản ghi xem `Form` (5 lead) thực sự đến từ đâu — nếu đó là form ở chỗ khác (sự kiện,
+   landing riêng) thì gộp vào `WEBSITE` là **đếm sai nguồn**.
+2. **Gộp `Nguồn từ Marketing Hội Sở từ Quảng Cáo` (6) vào `ADS`.** Đoán theo cụm "từ Quảng Cáo". Nhưng
+   chuỗi này còn mang thông tin **ai chạy** (Marketing Hội sở) mà `Ads` trần không có — nếu Marketing
+   cần phân biệt *quảng cáo do Hội sở chạy* với *quảng cáo do cơ sở chạy* thì **phải tách thành hai mã**
+   (ví dụ `ADS_HO` / `ADS_CS`), và phải tách **trước** khi map, vì sau khi gộp thì không tách ngược được.
+
+**Việc người duyệt phải làm:** xác nhận (hoặc bác) hai điểm trên, rồi chốt `label` hiển thị. Sau khi
+chốt, bảng ánh xạ chuỗi-cũ → `code` này đi thẳng vào kế hoạch migration
+(`docs/migration/G-lead-migration-plan.md`), không chép lại ở đây.
+
+⚠️ **Ba lưu ý kỹ thuật khi seed:**
+- Danh sách trên là **ảnh chụp ngày 26/08/2026**. Lead mới vẫn đang chảy vào với `source` tự do ⇒ ngày
+  chạy migration phải **đếm lại**, giá trị lạ mới phát sinh rơi vào `KHAC`.
+- `Nhập tay` là **mặc định của mã** (`actions.ts:645`, `:673`), không phải người dùng chọn ⇒ mã
+  `NHAP_TAY` chỉ 1 lead là hợp lý, đừng tưởng đo hụt.
+- Bộ lọc hiện dùng `contains` (`page.tsx:119`) trên chuỗi tự do; sau khi có `sourceId` thì lọc phải đổi
+  sang khớp `code`, không thì `Ads` vẫn khớp nhầm mọi chuỗi chứa chữ "ads".
 
 **Không được xoá cứng dòng danh mục đã dùng.** Ẩn bằng `isActive = false`. Nếu FK là `Restrict` thì DB
 đã chặn; nếu là `SetNull` thì xoá = mất lý do rớt lịch sử, tức mất chính thứ C-05/C-06 cần.
@@ -733,13 +854,13 @@ viewport 375px must work.)
 | ~~**OQ-G1**~~ | ~~Chốt (a) `Order.leadChildId` hay (b) bảng `OrderLeadChildAllocation`?~~ | ✅ **ĐÃ CHỐT 24/08/2026 (B4): phương án (a)** `Order.leadChildId String?` + relation + `@@index([leadChildId])`, quy tắc **một đơn – một con**. Đơn cũ backfill tự động **chỉ khi** lead có đúng 1 con; phần còn lại để `null` + báo cáo hiện dòng "chưa quy được về con". | — | Đóng |
 | ~~**OQ-G2**~~ | ~~"Doanh số theo học sinh" lấy từ `Payment` thực thu hay `Order.totalAmount`?~~ | ✅ **ĐÃ CHỐT 24/08/2026 (B3): `Payment` đã xác nhận (CONFIRMED)** cho toàn hệ thống. Không `Order.totalAmount`, không `LeadChild.contractValue` (đó là cam kết của Sale — cột riêng nếu muốn hiện). | — | Đóng |
 | ~~**OQ-G3**~~ | ~~Ô ghi chú lý do rớt đặt ở `lead_student` hay `Lead`?~~ ✅ **ĐÃ CHỐT 24/08/2026 (câu B5): `Lead`** — §6.3.b của PRD này đã sửa cho khớp SL-10. Trạng thái rớt **vẫn** theo từng con. **Đóng.** | ~~Hai tài liệu đang lệch nhau. G-07 nói trạng thái chốt theo học sinh ⇒ rớt cũng theo học sinh; nhưng C-06 viết "sale đổi trạng thái **lead** sang Rớt". Chốt sai = phải migrate cột sang bảng khác sau khi có dữ liệu | Chủ dự án | Trước khi sinh migration G |
-| **OQ-G4** | Khi **mọi** con đã `LOST`, `Lead.status` có tự chuyển `LOST` không? | PRD đề xuất **không** tự động (§6.5). Nếu chủ dự án muốn tự động thì phải quyết nơi chạy (resolver lúc đọc vs job ghi) và ai chịu trách nhiệm số liệu | Chủ dự án | Trước khi code C-02 |
-| **OQ-G5** | Một lead có bao nhiêu con là **thực tế tối đa**? Có cần trần không? | Ảnh hưởng UI bảng con và cách hiển thị doanh số gộp trên dòng lead | Chủ dự án | Trước khi code G-07 UI |
-| **OQ-G6** | ⚠️ **Trả lời một nửa 24/08/2026.** ~~Danh mục lý do rớt~~ → **không có danh mục**, dùng ô ghi chú tự do (12(b)). **Danh mục `nguồn lead` gồm những gì?** — VẪN CHỜ | Không có danh sách nguồn lead thì migrate `Lead.source` (String tự do, `:1327`) không có đích để map. Phần lý do rớt không còn chặn G-06-1 (chỉ cần ô text bắt buộc) | Chủ dự án + Marketing | Trước khi seed `LeadSource` |
+| **OQ-G4** | ⚠️ **Trả lời một nửa 26/08/2026.** ~~Khi mọi con đã `LOST`, `Lead.status` có tự chuyển `LOST` không?~~ → **CÓ, tự chuyển** (ngược đề xuất PRD). **Còn phải chốt: chạy ở đâu — (a) resolver lúc đọc hay (b) job ghi — và AI CHỊU TRÁCH NHIỆM SỐ LIỆU** | §6.5.a: (a) không bao giờ lệch nhưng bắt mọi chỗ đọc `Lead.status` phải đi qua helper; (b) đọc thẳng cột nhưng sinh dữ liệu do máy ghi, lệch thì phải có người truy. PRD khuyến nghị **(a)**. Chưa chốt vế này ⇒ chưa được viết cron/trigger đồng bộ hai enum | Chủ dự án | Trước khi code C-02 |
+| ~~**OQ-G5**~~ | ~~Một lead có bao nhiêu con là **thực tế tối đa**? Có cần trần không?~~ | ✅ **ĐÃ CHỐT 26/08/2026: đo prod ⇒ nhiều nhất 2 con ⇒ KHÔNG đặt trần.** Bảng con render thẳng toàn bộ, thiết kế cho 2–3 dòng, không cuộn/phân trang. ⚠️ Đây là **số đo được hôm nay**, KHÔNG phải giới hạn hệ thống — lead 5 con vẫn phải hiện đủ | — | Đóng |
+| **OQ-G6** | ⚠️ **Trả lời một nửa 24/08/2026, có đề xuất 26/08/2026.** ~~Danh mục lý do rớt~~ → **không có danh mục**, dùng ô ghi chú tự do (12(b)). **Danh mục `nguồn lead`** — đã đo 129 lead thật trên prod và **đề xuất 8 mã** (§6.6.a), nhưng vận hành **CHƯA DUYỆT** | Không có danh sách nguồn lead thì migrate `Lead.source` (String tự do, `:1327`) không có đích để map. Hai chỗ trong đề xuất là **suy đoán từ tên** (`Form`+`lien-he`→`WEBSITE`; `Nguồn từ Marketing Hội Sở`→`ADS`) — Marketing phải xác nhận hoặc tách | Vận hành + Marketing | Trước khi seed `LeadSource` |
 | ⚙️ ~~**OQ-G7**~~ | **Chốt kỹ thuật 24/08/2026 (đề xuất của Dev, chờ phản đối): 2 cột** `createdById` + `createdByCode`. Chuỗi ghép `mãNV_tên` chỉ là **cách hiển thị**, dựng lúc đọc. | 1 chuỗi ghép thì không join `User` được, và mã NV đổi/người nghỉ là hỏng dữ liệu lịch sử | Dev | Trước khi sinh migration G |
 | ⚙️ ~~**OQ-G8**~~ | ~~`LeadChild.gender` có chuẩn hoá về enum `Gender` không?~~ | ✅ **CHỐT KỸ THUẬT 24/08/2026 (Dev): ĐỂ NỢ — giữ `String?`, không chuẩn hoá trong G.** Đổi kiểu cột đang có dữ liệu prod là 2-phase, tốn một chu kỳ migration mà **không phục vụ yêu cầu nào của G-01…G-07**. **Điều kiện kích hoạt món nợ:** khi xuất hiện báo cáo cần **nhóm/lọc theo giới tính**. Trong lúc chờ: validator chuẩn hoá **đầu vào mới** về `"Nam"`/`"Nữ"`/`"Khác"` để không đẻ thêm biến thể. | — | Đóng (ghi nợ) |
-| **OQ-G9** | Học thử **không** đi qua `TrialClassV2` (xếp tay, buổi lẻ) có cần chỗ lưu riêng không? | Hôm nay "ngày học thử + kết quả" chỉ có ở `LeadTrialHistory` (`:6117`), mà bảng đó gắn cứng `trialClassId` (`:6119`). Không có ca ad-hoc thì bỏ qua; có thì cần 2 cột denormalize trên `LeadChild` | Chủ dự án / Vận hành | Trước khi code G-06 |
-| **OQ-G10** | 🔴 Bảng nào là **nguồn sự thật** cho lịch sử chuyển sale trong 3 bảng đang có? | §2.4 — 3 bảng, 3 đường ghi, không bảng nào phủ hết; đường tự chia (`assign.ts`/`auto-assign.ts`) không ghi vào bảng nào. PRD đề xuất `LeadAssignmentHistory`. Chốt sai = tranh chấp hoa hồng vẫn không giải được | Chủ dự án | Trước khi code G-06-7 |
+| **OQ-G9** | 🔁 **VIẾT LẠI 26/08/2026** — bản cũ khó hiểu, chủ dự án chưa rõ "xếp tay" nghĩa là gì. **Câu hỏi bằng tiếng Việt dễ hiểu:** *"Hôm nay muốn cho một em học thử, Sale phải tạo một **LỚP HỌC THỬ** trong hệ thống rồi xếp em đó vào lớp. Câu hỏi: có trường hợp nào GV/Sale **hẹn riêng một buổi học thử cho một em** — không tạo lớp, không có trong lịch hệ thống — rồi ghi kết quả vào đâu đó không?"* | **KHÔNG bao giờ có** ⇒ bỏ qua câu này, không thêm cột. **CÓ** ⇒ `LeadChild` cần **2 cột riêng** ghi *ngày học thử* + *kết quả*, vì bảng `LeadTrialHistory` (`:6144`) gắn cứng vào id lớp học thử (`trialClassId` `:6148`) — **không có lớp thì không ghi được** | Chủ dự án / Vận hành | Trước khi code G-06 |
+| ~~**OQ-G10**~~ | ~~🔴 Bảng nào là **nguồn sự thật** cho lịch sử chuyển sale trong 3 bảng đang có?~~ | ✅ **ĐÃ CHỐT 26/08/2026: `LeadAssignmentHistory` (`:5268`) là nguồn sự thật DUY NHẤT** — theo đề xuất PRD. Kèm 3 việc bắt buộc (§2.4): vá `assign.ts` + `auto-assign.ts` ghi **trong cùng transaction** với lần đổi `assignedToId`; `LeadTransfer` + `LeadActivity/HANDOVER` thành đọc-only; mọi màn tra lịch sử đọc đúng một bảng. ⚠️ Lịch sử lead tự chia **trước** hôm vá không dựng lại được | — | Đóng |
 | ⚙️ ~~**OQ-G11**~~ | ~~Bộ cột mặc định sau G có giữ đúng 7 cột hiện tại không?~~ | ✅ **CHỐT KỸ THUẬT 24/08/2026 (Dev): GIỮ NGUYÊN 7 cột.** Bật G-04 không được làm giao diện của ai nhảy; ai muốn thêm thì tự thêm. ⚠️ Ràng buộc: **danh sách cột phải khoá xong (SL-09b + SL-12) TRƯỚC khi có người lưu cấu hình đầu tiên** — đổi tên/bỏ cột sau đó biến cấu hình đã lưu thành mồ côi. | — | Đóng |
 | ⚙️ ~~**OQ-G12**~~ | ~~File xuất theo cấu hình cột của người xuất hay bộ cột cố định?~~ | ✅ **CHỐT KỸ THUẬT 24/08/2026 (Dev): BỘ CỘT CỐ ĐỊNH**, tách hẳn khỏi G-04. File xuất là thứ người ta **đối chiếu với nhau** và gửi ra ngoài — chạy theo tuỳ chọn cá nhân thì hai người xuất ra hai file khác cấu trúc và mọi công thức Excel dựng sẵn trên đó gãy. G-04 chỉ đổi **màn hình**. Định dạng `.xlsx` (B12). | — | Đóng |
 
@@ -762,6 +883,14 @@ Trong nội bộ G:
 | **G.7** | G-03: bổ sung cột mới vào file xuất | A-03 xong | Quyền/định dạng thuộc khu vực A |
 | **G.8** | G-05: chạy kế hoạch migration ở `docs/migration/G-lead-migration-plan.md` | G.3–G.6 ổn định | Người vận hành chạy tay trên PROD, có dry-run (luật cứng #4) |
 | **G.9** | Cập nhật `documentation/` phần đã làm + liệt kê file đổi | G.2–G.8 | Luật cứng Nền Hệ thống #10 |
+
+**Ba câu còn treo sau 26/08 chặn đúng những chỗ này, không chặn cả G:**
+
+| Câu treo | Chặn bước nào | Bước nào vẫn chạy được |
+|---|---|---|
+| **OQ-G4 vế "chạy ở đâu"** | Phần suy diễn `Lead.status = LOST` — thuộc C-02, **không** thuộc G.2 | Toàn bộ G.2 (migration `LeadChildStatus` + `closedAt`); trạng thái từng con không phụ thuộc câu này |
+| **OQ-G6 nửa sau (danh mục duyệt)** | **Chỉ seed** `LeadSource` + bước map `Lead.source` cũ trong G.8 | G.2 tạo bảng + cột `sourceId` ngay được; G-06-2 (màn admin quản danh mục) dựng được, chỉ là danh sách rỗng |
+| **OQ-G9** | 2 cột denormalize trên `LeadChild` — **nếu** câu trả lời là CÓ | G.2 và G.3 không chờ: hai cột này additive, thêm sau vẫn được, chỉ tốn thêm một migration |
 
 **Ràng buộc môi trường:** `test.satarobo.vn` và máy local **dùng chung một DB** (`CLAUDE.md`). Toàn bộ G.2
 là additive nên an toàn; bước drop (giai đoạn sau G) mới là bước phải cẩn thận.

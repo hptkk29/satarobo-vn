@@ -12,9 +12,11 @@
 
 
 
-## 0. Quyết định chủ dự án & chốt kỹ thuật — 24/08/2026 (THẮNG phần thân bài)
+## 0. Quyết định chủ dự án & chốt kỹ thuật — 24/08 + 26/08/2026 (THẮNG phần thân bài)
 
 Nguồn: `docs/plan/cau-hoi-can-quyet.md`.
+
+**Chốt kỹ thuật 24/08/2026 (Dev):**
 
 | Mã | Quyết định | Ai chốt |
 |---|---|---|
@@ -23,10 +25,23 @@ Nguồn: `docs/plan/cau-hoi-can-quyet.md`.
 | **OQ-6** | **Mở rộng** `/admin/attendance` (thêm `dateFrom`/`dateTo`), không dựng trang mới | ⚙️ Dev |
 | **OQ-8** | **Có** thêm `@@index([senderId, createdAt])` trên `Message`, dùng `CREATE INDEX CONCURRENTLY` | ⚙️ Dev |
 
-🔴 **E vẫn còn 4 câu CHẶN CỨNG, chưa ai trả lời** — không code được E-02/E-03/E-04 trước khi có:
-**OQ-1** (định nghĩa "PH đã tương tác" — A/B/C, và có tính kênh 1-1 không) · **OQ-2** (mẫu số lọc
-`Enrollment.status` nào: `PAUSED` có tính? `COMPLETED` có tính?) · **OQ-3** (QLCS bấm vào kênh 1-1 thì xảy
-ra gì) · **OQ-7** (E-03 có lên site giáo viên không — quyết định phạm vi test PII).
+**Chốt 26/08/2026 — chủ dự án: *"khu vực E làm theo đề xuất"*.** Ba câu chặn cứng đóng theo **đúng
+khuyến nghị đã ghi trong PRD này**, nghĩa của thân bài không đổi. Chi tiết + hệ quả ở **§7**.
+
+| Mã | Quyết định | Ai chốt |
+|---|---|---|
+| **OQ-1** | "PH đã tương tác" = **(A) PH đã gửi ≥ 1 tin trong khoảng ngày**. Câu con: **CÓ** tính kênh 1-1 ⇒ 🔴 **KHÔNG** lọc phạm vi qua `Conversation.centerId` | Chủ dự án |
+| **OQ-2** | Mẫu số dùng đúng `ENROLLMENT_ACTIVE_STATUS_LIST` = `ACTIVE · CONFIRMED · STUDYING · PAUSED` — **giữ `PAUSED`, loại `COMPLETED`** | Chủ dự án |
+| **OQ-3** | **(a) cho P0** (dropdown chỉ liệt kê kênh người xem là participant; mục 1-1 hiện mờ kèm lý do) · **(b) cho P2** (chỉ `SUPER_ADMIN`, màn tra cứu **chỉ-đọc**, `reason` + audit) · **(c) LOẠI**. 🔴 **Tuyệt đối không nới `assertActiveParticipant`** | Chủ dự án |
+
+✅ **Ba câu chặn cứng đã đóng ⇒ E-02/E-04 code được** (E-01 vốn không bị chúng chặn).
+⚠️ **E-03 thì CHƯA** — nó bị **OQ-7** chặn (xem ngay dưới), không phải bị ba câu này chặn.
+
+⏳ **Còn đúng MỘT câu treo: OQ-7** — *E-03 có lên site giáo viên không?* Chủ dự án chốt "khu vực E làm theo
+đề xuất", **nhưng PRD này KHÔNG đưa khuyến nghị cho OQ-7** ⇒ câu đó **chưa được trả lời**, và **không được
+suy ra** từ câu chốt chung. Nó **không chặn** E-01/E-02/E-04; nó chặn **E-03**, vì là quyết định **phạm vi
+test PII**: nếu **CÓ** lên site GV thì cột SĐT phải **rỗng** với `TEACHER` (`canViewParentContact` loại
+`TEACHER` **có chủ đích** — `lib/auth/permissions.ts:965`, danh sách vai `:957-963`) và bộ test PII rộng thêm một site.
 
 ⚠️ `dashboard:view` là key MỚI ⇒ **chạy `seed-prod-roles.yml` sau khi merge lên `main`**, nếu không
 **không ai vào được dashboard**.
@@ -135,9 +150,9 @@ Không có cột, bảng, hay enum nào mang nghĩa "phụ huynh đã tương t�
 | Tín hiệu | Vị trí | Có mốc thời gian dùng cho range không? |
 |---|---|---|
 | PH **gửi** tin | `Message.senderId` (`prisma/schema.prisma:6552`) + `Message.createdAt` (`:6561`) | ✅ **Có** — lọc được `createdAt BETWEEN` chính xác |
-| PH **đọc** hội thoại | `ConversationParticipant.lastReadAt` (`:6539`) | ⚠️ Chỉ giữ **lần cuối** — trả lời được "có đọc sau ngày X không", **không** trả lời được "có đọc trong tháng 7 không" |
+| PH **đọc** hội thoại | `ConversationParticipant.lastReadAt` (`:6566`) | ⚠️ Chỉ giữ **lần cuối** — trả lời được "có đọc sau ngày X không", **không** trả lời được "có đọc trong tháng 7 không" |
 | PH đọc **thông báo** | `AnnouncementRead.readAt` (`:6590`) | ✅ Có, nhưng chỉ phủ tin `kind = ANNOUNCEMENT` |
-| PH **đăng nhập** | `User.lastLoginAt` (`:1066`) | ⚠️ Vô hướng, bị ghi đè mỗi lần đăng nhập — cùng hạn chế như `lastReadAt` |
+| PH **đăng nhập** | `User.lastLoginAt` (`:1093`) | ⚠️ Vô hướng, bị ghi đè mỗi lần đăng nhập — cùng hạn chế như `lastReadAt` |
 | Hội thoại có hoạt động | `Conversation.lastMessageAt` (`:6514`) | ⚠️ Là hoạt động của **cả nhóm**, không phân biệt ai |
 
 🔴 **Đính chính một giả định trong đề bài:** "PH đã gửi tin trong khoảng thời gian" **KHÔNG** phải tín hiệu gián tiếp — nó **đo trực tiếp được** từ `Message.senderId` + `Message.createdAt`. Ba tín hiệu còn lại (`lastReadAt`, `lastLoginAt`, `Conversation.lastMessageAt`) mới là gián tiếp và **không cộng dồn theo khoảng**.
@@ -649,13 +664,13 @@ Bằng chứng file đó tuân thủ: **10 dòng `^export` và cả 10 đều l�
 
 | # | Câu hỏi | Vì sao chặn | Chủ | Hạn |
 |---|---|---|---|---|
-| **OQ-1** 🔴 | **Chốt định nghĩa "PH đã tương tác".** Ba phương án ở §6.2: **(A)** PH đã **gửi ≥1 tin** trong range · **(B)** PH có `lastReadAt ≥ dateFrom` · **(C)** A **hoặc** đọc thông báo trong range. **Khuyến nghị: (A)**, vì chỉ (A) đo đúng *khoảng thời gian* — `lastReadAt` (`prisma/schema.prisma:6539`) và `lastLoginAt` (`:1066`) là **vô hướng, bị ghi đè**, nên "đã tương tác trong tháng 7" không tính được từ chúng. | Không có định nghĩa thì E-02 (tử số), E-03 (dòng nào lên bảng) và E-04 (kênh nào hiện trong dropdown) đều không code được. **Kèm câu hỏi con:** có tính kênh **1-1** vào không? Nếu có thì không được lọc phạm vi qua `Conversation.centerId` (§6.2 bẫy chung). | Chủ dự án | Trước khi code E-02 |
-| **OQ-2** 🔴 | **E-02 lọc `Enrollment.status` nào?** Enum có 9 giá trị (`prisma/schema.prisma:71-84`). Hằng sẵn có `ENROLLMENT_ACTIVE_STATUS_LIST = [ACTIVE, CONFIRMED, STUDYING, PAUSED]` (`lib/enrollment-status.ts:17`). Hai câu phải trả lời riêng: **(a)** `PAUSED` (tạm dừng, vẫn thuộc lớp — `lib/enrollment-status.ts:5`) có tính là "đang có con học"? **(b)** `COMPLETED` (học xong khoá, chưa nghỉ hẳn) có tính? **Khuyến nghị: dùng đúng `ENROLLMENT_ACTIVE_STATUS_LIST`** — giữ PAUSED, loại COMPLETED/WITHDREW/TRANSFERRED/CANCELLED/PENDING — để E-02 khớp với sĩ số mà điểm danh đang dùng. | Đây **chính là** mẫu số. Chọn khác đi thì tỉ lệ đổi mà không ai đối chiếu được. | Chủ dự án | Trước khi code E-02 |
-| **OQ-3** 🔴 | **E-04: QLCS bấm vào kênh 1-1 thì xảy ra gì?** Đo được: QLCS **không** là participant của DM, **không** mở được DM mới (`DmKind` chỉ có 2 giá trị — `lib/chat/dm.ts:67`; `openDmTargetOf` ép `centerId: null` để QLCS tự deny — `:135, 139`), và `assertActiveParticipant` chặn cứng (`lib/chat/queries.ts:434`). Ba lựa chọn: **(a)** dropdown chỉ liệt kê kênh người xem là participant (QLCS → chỉ nhóm lớp), mục 1-1 hiện mờ kèm lý do; **(b)** chỉ SUPER_ADMIN mở được 1-1, qua `adminLookupConversationAction` — bắt buộc `reason` + audit, và là **màn tra cứu chỉ-đọc**, không phải `ChatThread`; **(c)** mở `DM_STAFF`/thêm `DmKind` cho QLCS — **nới quyền thật**, ngoài phạm vi E. **Khuyến nghị: (a) cho P0, (b) cho P2.** | Spec E-04 viết "dropdown kênh (1-1 / nhóm lớp)" như thể cả hai đều mở được. Không chốt thì hoặc code ra nút chết, hoặc ai đó "vá" bằng cách nới `assertActiveParticipant`. | Chủ dự án | Trước khi code E-04 |
+| ~~**OQ-1**~~ | ~~Chốt định nghĩa "PH đã tương tác" — (A) gửi tin / (B) `lastReadAt` / (C) kết hợp?~~ | ✅ **ĐÃ CHỐT 26/08/2026: phương án (A) — PH đã GỬI ≥ 1 tin trong khoảng ngày.** Lý do giữ đúng khuyến nghị: chỉ (A) đo đúng **khoảng thời gian**; `lastReadAt` (`prisma/schema.prisma:6566`) và `lastLoginAt` (`:1093`) là **vô hướng, bị ghi đè** nên "đã tương tác trong tháng 7" không tính được từ chúng. **Câu con cũng chốt: CÓ tính kênh 1-1.** 🔴 Hệ quả bắt buộc: **KHÔNG được lọc phạm vi qua `Conversation.centerId`** — DM luôn `centerId = null` (`lib/chat/dm.ts:623`), lọc kiểu đó là **rơi sạch** kênh 1-1, đúng kênh PH tương tác thật (§6.2 bẫy chung); trục cách ly của E-02/E-03 là **cơ sở của enrollment** (`Enrollment.centerId`, đã ở `SCOPED_MODELS`). Kéo theo: **(1) OQ-8 thành bắt buộc** — không có `@@index([senderId, createdAt])` thì mỗi lần mở dashboard là một lần quét toàn bảng `Message`; **(2)** tử số là phép **ĐẾM**, không đi qua `getMessagesPage` nên không dính `assertActiveParticipant` — đổi lại nó **không được** trả ra một chữ nội dung nào (§6.3 luật 5); **(3)** tử số phải **khử trùng theo `parentUserId`** như mẫu số — một PH nhắn 50 tin vẫn là **1** (spec §G: E-02 đếm theo PH); **(4)** định nghĩa này phải in **nguyên văn** cạnh con số trên UI (E-02-3). | — | Đóng |
+| ~~**OQ-2**~~ | ~~E-02 lọc `Enrollment.status` nào trong 9 giá trị?~~ | ✅ **ĐÃ CHỐT 26/08/2026: dùng đúng hằng `ENROLLMENT_ACTIVE_STATUS_LIST`** (`lib/enrollment-status.ts:17`) = `ACTIVE · CONFIRMED · STUDYING · PAUSED`. ⇒ **(a) `PAUSED` CÓ tính** (tạm dừng vẫn thuộc lớp — `lib/enrollment-status.ts:5`); **(b) `COMPLETED` KHÔNG tính**, cùng `WITHDREW · TRANSFERRED · CANCELLED · PENDING`. Lý do giữ đúng khuyến nghị: mẫu số E-02 **khớp với sĩ số mà điểm danh đang dùng** — hai màn cùng một tập người thì mới đối chiếu được. **Hệ quả:** dùng **hằng có sẵn**, **không** chép danh sách trạng thái sang file mới (bản sao thứ hai là nguồn của lệch — cùng bài học `hidesContactOf`, `lib/chat/queries.ts:228-231`); và PH có con **vừa học xong khoá, chưa ghi danh khoá mới** rơi khỏi mẫu số ⇒ tỉ lệ **nhích lên** ở kỳ nhiều lớp kết thúc — đó là hành vi **đúng theo định nghĩa đã chốt**, không phải lỗi, nhưng phải nói trước với người đọc số. | — | Đóng |
+| ~~**OQ-3**~~ | ~~E-04: QLCS bấm vào kênh 1-1 thì xảy ra gì?~~ | ✅ **ĐÃ CHỐT 26/08/2026: (a) cho P0 · (b) cho P2 · (c) LOẠI.** **(a)** dropdown E-04 **chỉ liệt kê hội thoại mà người xem là participant còn hiệu lực** (QLCS ⇒ **chỉ nhóm lớp**); mục 1-1 **hiện mờ kèm lý do**, **không ẩn** — ẩn thì người dùng tưởng hệ thống hỏng, hiện mờ thì họ đọc được vì sao. **(b)** ở **P2**, **chỉ `SUPER_ADMIN`** mở được 1-1, qua `adminLookupConversationAsActor` (`lib/chat/admin.ts:513`, gọi qua Server Action `adminLookupConversationAction` — `lib/chat/_actions.ts:152`): **bắt buộc `reason`**, `writeAudit` **trước khi** đọc dòng tin đầu tiên (`:497-512`), và là **màn tra cứu CHỈ-ĐỌC** — **không** phải `ChatThread`. **(c)** thêm `DmKind` mới / mở `DM_STAFF` cho QLCS: **LOẠI** (nới quyền thật, ngoài phạm vi E). 🔴 **Luật cứng đi kèm: TUYỆT ĐỐI KHÔNG nới `assertActiveParticipant`** (`lib/chat/queries.ts:415-452`) — không thêm cờ, không thêm tham số bỏ qua, không thêm nhánh ngoại lệ. Đó là **Non-Goal 2** của E; nới nó là mở quyền **đọc tin nhắn riêng** cho một vai chưa ai trao quyền đó. Kèm theo: `CENTER_MANAGER` **cố ý không** có `chat:admin` (`prisma/seed-roles.ts:545`) ⇒ (b) **không** mở cho QLCS kể cả ở P2. | — | Đóng |
 | ⚙️ ~~**OQ-4**~~ | ~~Quyền cấp trang cho tab E là gì?~~ | ✅ **CHỐT KỸ THUẬT 24/08/2026 (Dev): khai key MỚI `dashboard:view` (scope `GLOBAL`)** gác trang dashboard 4 tab; **từng tab** gate thêm bằng key lĩnh vực sẵn có — **B** → `payments:view` · **C** → `leads:view-all` · **D** → `dashboard:view` · **E** → `dashboard:view` (cột SĐT phụ huynh vẫn qua `canViewParentContact`). ❌ **Không mượn `chat:read`** — scope `CENTER`/`ASSIGNED` nên gọi không target luôn trả `false`: xanh ở local (v1), **khoá cửa trên prod** (v2). 📌 Nợ: `canEditAds` (`lib/crm/ads-insights.ts:44-49`) so `roleCode` bằng tay, trái luật Nền Hệ thống #1 — đưa quyền ads vào registry là việc của D (OQ-D5). ⚠️ Key mới ⇒ **chạy `seed-prod-roles.yml` sau merge**. | — | Đóng |
 | ⚙️ ~~**OQ-5**~~ | ~~Thứ tự suy "giáo viên phụ trách" của một buổi?~~ | ✅ **CHỐT KỸ THUẬT 24/08/2026 (Dev): `substituteTeacherId ?? actualTeacherId ?? class.teacherId`** (`lib/lms/schedule-conflict.ts:109`) — người **thật sự đứng lớp** mới chịu trách nhiệm buổi đó. **Bắt buộc kèm:** đưa thứ tự này vào **một helper dùng chung** (vd `lib/lms/session-teacher.ts`), E-01 gọi helper chứ không tự viết lại — nếu không repo có **thứ tự thứ năm**. Chuyển 4 chỗ cũ (có `hieu-suat-gv/page.tsx:285`) sang helper là **ticket riêng**, không gánh trong E: đổi chúng làm số hiệu suất GV nhảy, phải báo trước. | — | Đóng |
 | ⚙️ ~~**OQ-6**~~ | ~~E-01 trang đích: mở rộng `/admin/attendance` hay dựng trang mới?~~ | ✅ **CHỐT KỸ THUẬT 24/08/2026 (Dev): MỞ RỘNG `/admin/attendance`**, thêm `dateFrom`/`dateTo` vào `searchParams` (hiện chỉ `{sessionId, classId, centerId}` — `page.tsx:67`). Trang đó là **đích của link trong hộp thông báo** (`:9-11`) — đổi đường dẫn là gãy link cũ, và hai trang cùng chức năng sớm muộn lệch nhau. Ràng buộc: thiếu `dateFrom`/`dateTo` ⇒ hành vi **y hệt hôm nay**. | — | Đóng |
-| **OQ-7** | **E-03 có xuất hiện trên site giáo viên không?** Nếu có thì cột SĐT phải rỗng với TEACHER (`canViewParentContact` loại TEACHER có chủ đích — `lib/auth/permissions.ts:947`). | Quyết định phạm vi test PII. | Chủ dự án | Trước khi code E-03 |
+| **OQ-7** | **E-03 có xuất hiện trên site giáo viên không?** Nếu có thì cột SĐT phải rỗng với TEACHER (`canViewParentContact` loại TEACHER có chủ đích — `lib/auth/permissions.ts:965`, danh sách vai `:957-963`). ⏳ **26/08/2026: VẪN CHƯA TRẢ LỜI.** Chủ dự án chốt *"khu vực E làm theo đề xuất"*, **nhưng PRD này không đưa khuyến nghị cho OQ-7** ⇒ **không suy ra được** câu trả lời từ câu chốt chung. Đừng coi là đã chốt. | Quyết định phạm vi test PII: **CÓ** ⇒ cột SĐT phải **rỗng** với `TEACHER` và bộ test PII **rộng thêm một site** (thêm bề mặt `app/(teacher)/**`, thêm ca "GV mở E-03 không thấy SĐT"). **KHÔNG** ⇒ E-03 chỉ sống trên admin, phạm vi test giữ nguyên. Không chặn E-01/E-02/E-04. | Chủ dự án | Trước khi code E-03 |
 | ⚙️ ~~**OQ-8**~~ | ~~Có chấp nhận thêm index cho `Message(senderId, createdAt)` không?~~ | ✅ **CHỐT KỸ THUẬT 24/08/2026 (Dev): CÓ.** Migration **thêm index**, không đụng cột có dữ liệu ⇒ không vi phạm luật cứng #4, nhưng nằm **trong story E-02**, không tách lẻ. Không có nó thì mỗi lần mở dashboard là một lần **quét toàn bảng `Message`** — bảng lớn nhanh nhất hệ thống. ⚠️ Bảng đang chạy ⇒ dùng `CREATE INDEX CONCURRENTLY` (viết tay trong file migration) để không khoá ghi. | — | Đóng |
 
 ---
