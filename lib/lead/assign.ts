@@ -1,5 +1,6 @@
 import { db } from "@/lib/db";
 import { logLeadAudit } from "@/lib/audit/log";
+import { recordLeadStatusChange } from "@/lib/lead/status-trail-write";
 import { assignmentWrite } from "@/lib/lead/assignment";
 import { takeRotationTurn, takeRotationTurns } from "@/lib/lead/rotation";
 import { orgUnitIdForCenter } from "@/lib/org/org-service";
@@ -157,6 +158,25 @@ export async function autoAssignLead(
         metadata: { assignedToId: target } as Prisma.InputJsonValue,
       },
     });
+    // C-07 — lượt chia LẬT LUÔN trạng thái `MỚI → ĐÃ PHÂN CÔNG` ngay trên dòng
+    // `tx.lead.update` ở trên, nhưng vết duy nhất của nó là dòng audit `ASSIGN`
+    // chỉ mang `assignedToId`. Tức mốc đầu tiên của mọi phễu KHÔNG được ghi vào
+    // bảng nào — không lần ra được "lead nằm ở MỚI bao lâu, ai đẩy nó đi".
+    //
+    // ⚠️ Điều kiện phải TRÙNG KHÍT với điều kiện lật trạng thái ở trên: lead đang
+    // ở bước sau (vd Đang tư vấn) được chia lại thì trạng thái KHÔNG đổi — ghi vết
+    // vô điều kiện là bịa ra một lượt "Đang tư vấn → Đã phân công" chưa từng xảy ra.
+    if (lead.status === "NEW") {
+      await recordLeadStatusChange({
+        tx,
+        leadId,
+        actorId: actor.actorId,
+        actorName: actor.actorName,
+        from: "NEW",
+        to: "ASSIGNED",
+        source: "ASSIGN",
+      });
+    }
   });
 
   return { ok: true, assignedToId: target };

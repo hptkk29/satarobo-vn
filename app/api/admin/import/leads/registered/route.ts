@@ -21,6 +21,8 @@ import {
 } from "@/lib/db-scope";
 import { revalidatePath } from "next/cache";
 import { getAuditActor } from "@/lib/audit/log";
+import { recordLeadStatusChange } from "@/lib/lead/status-trail-write";
+import type { Prisma } from "@prisma/client";
 import { checkPermission } from "@/lib/auth/check-permission";
 import { getNonEnrollableCenterIds } from "@/lib/enrollment-flow";
 import { planRowFee, detectSameStudent } from "@/lib/lead/import-fee-plan";
@@ -570,6 +572,23 @@ export async function POST(req: NextRequest) {
               },
             },
           });
+          // C-07 — đường GỘP này đẩy lead cũ sang "Đã đăng ký", nhưng vết duy
+          // nhất là mấy chữ "chuyển REGISTERED" nhét trong `content` của một
+          // dòng NOTE: không lọc được, không có `oldValues`, và mục "Lịch sử
+          // thay đổi" thì trống. Ghi mốc như mọi đường đổi trạng thái khác.
+          if (m.set.status && existing && existing.status !== m.set.status) {
+            await recordLeadStatusChange({
+              // `sdb.$transaction` trao client đã bọc extension — cùng lối ép kiểu
+              // đang dùng ở các action khác (`txRaw as unknown as ...`).
+              tx: tx as unknown as Prisma.TransactionClient,
+              leadId: m.leadId,
+              actorId,
+              actorName,
+              from: existing.status,
+              to: m.set.status,
+              source: "IMPORT",
+            });
+          }
           await Promise.all(
             m.childUpdates.map((cu) => {
               const before = existing?.children.find((ch) => ch.id === cu.childId);

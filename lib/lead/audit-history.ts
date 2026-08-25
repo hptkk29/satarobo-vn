@@ -22,6 +22,14 @@
 // `scopedDb` và file này unit-test được.
 import type { scopedDb } from "@/lib/db-scope";
 import { maskPersonName, maskPhone, maskEmail, maskFreeText } from "@/lib/lead/pii";
+import { LEAD_STATUS_LABEL } from "@/lib/leads/status";
+import { LEAD_CHILD_STATUS_LABEL } from "@/lib/lead/lost-status-labels";
+import {
+  LEAD_CHILD_STATUS_FIELD,
+  LEAD_STATUS_FIELD,
+  LEAD_STATUS_TRAIL_ACTIONS,
+  isLeadStatusTrailRow,
+} from "@/lib/lead/status-trail";
 
 /** 3 ô định danh của spec G-02 — chạm vào là phải nổi bật trong vết. */
 export const LEAD_IDENTITY_FIELDS = ["parentName", "phone", "childName"] as const;
@@ -128,6 +136,11 @@ export const LEAD_AUDIT_FIELD_LABEL: Record<string, string> = {
   note: "Ghi chú",
   facebookUrl: "Link Facebook",
   status: "Trạng thái",
+  // C-07 — ô trạng thái CON (C-06) + ô phụ đi kèm lượt đánh dấu rớt. Thiếu nhãn
+  // thì màn hình in ra `childStatus` / `lostNote` trần.
+  childStatus: "Trạng thái học sinh",
+  lostNote: "Lý do rớt",
+  leadLostCleared: "Đã xoá lý do rớt của phiếu",
   assignedToId: "Sale phụ trách",
   isSharedWithTeam: "Dùng chung với đội",
   children: "Danh sách con",
@@ -144,6 +157,10 @@ export const LEAD_AUDIT_ACTION_LABEL: Record<string, string> = {
   "lead.delete": "Xoá lead",
   "lead.assign": "Chuyển/gán sale",
   "lead.status_change": "Đổi trạng thái",
+  // C-07 — `lib/crm/convert-lead*.ts` ghi qua `writeAudit` nên action là chuỗi
+  // TRẦN "STATUS_CHANGE" (không có tiền tố `lead.`). Thiếu dòng này thì mốc chốt
+  // ghi danh hiện ra dưới dạng mã trần trên màn hình.
+  STATUS_CHANGE: "Đổi trạng thái",
 };
 
 /** Giá trị trong vết ra chuỗi hiển thị được ("—" cho rỗng). */
@@ -152,6 +169,22 @@ export function formatLeadAuditValue(v: unknown): string {
   if (typeof v === "boolean") return v ? "Có" : "Không";
   if (typeof v === "string" || typeof v === "number") return String(v);
   return JSON.stringify(v);
+}
+
+/**
+ * Như `formatLeadAuditValue`, nhưng ô trạng thái ra NHÃN TIẾNG VIỆT.
+ *
+ * C-07: vết đổi trạng thái là thứ QLCS đọc thường xuyên nhất; in `AWAITING_DECISION`
+ * ra màn hình thì đúng dữ liệu mà sai người dùng.
+ */
+export function formatLeadAuditFieldValue(field: string, v: unknown): string {
+  if (typeof v === "string" && v !== "") {
+    if (field === LEAD_STATUS_FIELD) return LEAD_STATUS_LABEL[v as keyof typeof LEAD_STATUS_LABEL] ?? v;
+    if (field === LEAD_CHILD_STATUS_FIELD) {
+      return LEAD_CHILD_STATUS_LABEL[v as keyof typeof LEAD_CHILD_STATUS_LABEL] ?? v;
+    }
+  }
+  return formatLeadAuditValue(v);
 }
 
 /**
@@ -201,4 +234,61 @@ export async function getLeadAuditHistory(
     newValues: (r.newValues ?? null) as Record<string, unknown> | null,
     touchesIdentity: touchesLeadIdentity(r.changedFields),
   }));
+}
+
+/**
+ * C-07 — vết ĐỔI TRẠNG THÁI của đúng một lead, truy vấn RIÊNG.
+ *
+ * ⚠️ Vì sao không lọc lại từ `getLeadAuditHistory`: hàm đó cắt 50 dòng gần nhất.
+ * Một lead bị sửa nhiều (đổi tên, đổi ghi chú, chia lại sale…) sẽ đẩy hết mốc
+ * trạng thái ra ngoài 50 dòng đó — đúng lúc cần nhất thì bảng mốc trống trơn.
+ *
+ * `where` cố định trong hàm, KHÔNG nhận bộ lọc của người gọi (cùng ranh giới với
+ * `getLeadAuditHistory`: đây là màn HẸP theo một bản ghi, không phải cửa vào nhật
+ * ký chung). Lọc theo `action` chỉ để thu hẹp truy vấn — `lib/crm/handover.ts`
+ * cũng ghi `"STATUS_CHANGE"` cho lượt bàn giao KHÔNG đổi trạng thái, nên phải
+ * gạn tiếp bằng `isLeadStatusTrailRow` (soi giá trị, không soi action).
+ */
+export async function getLeadStatusHistory(
+  sdb: ReturnType<typeof scopedDb>,
+  leadId: string,
+  opts: { take?: number } = {},
+): Promise<LeadAuditRow[]> {
+  const take = Math.min(
+    Math.max(1, Math.trunc(opts.take ?? LEAD_AUDIT_DEFAULT_TAKE)),
+    LEAD_AUDIT_MAX_TAKE,
+  );
+  const rows = await sdb.auditLog.findMany({
+    where: {
+      entityType: "Lead",
+      entityId: leadId,
+      action: { in: [...LEAD_STATUS_TRAIL_ACTIONS] },
+    },
+    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+    take,
+    select: {
+      id: true,
+      createdAt: true,
+      actorName: true,
+      action: true,
+      changedFields: true,
+      reason: true,
+      oldValues: true,
+      newValues: true,
+    },
+  });
+
+  return rows
+    .map((r) => ({
+      id: r.id,
+      createdAt: r.createdAt.toISOString(),
+      actorName: r.actorName,
+      action: r.action,
+      changedFields: r.changedFields,
+      reason: r.reason,
+      oldValues: (r.oldValues ?? null) as Record<string, unknown> | null,
+      newValues: (r.newValues ?? null) as Record<string, unknown> | null,
+      touchesIdentity: touchesLeadIdentity(r.changedFields),
+    }))
+    .filter(isLeadStatusTrailRow);
 }

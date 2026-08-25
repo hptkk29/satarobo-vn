@@ -12,6 +12,7 @@ import { teacherCenterAssignmentError } from "@/lib/teachers/center-filter";
 import { nextSeq, yy } from "@/lib/codegen";
 import { publishEvent } from "@/lib/events/publish";
 import { writeAudit } from "@/lib/audit/audit-log";
+import { recordLeadStatusChange } from "@/lib/lead/status-trail-write";
 
 // ─── PURE helpers (deterministic — KHÔNG new Date() ở top) ─────────────────────
 
@@ -547,7 +548,13 @@ export async function cancelTrialClass(params: {
  *  - Auto-Kanban per-lead: có con đang học → "Đang học thử"; MỌI con đủ buổi & chưa chốt
  *    → "Chờ quyết định" (AWAITING_DECISION) NGAY (TBD-2). KHÔNG đụng lead đã chốt/rời pipeline.
  */
-async function syncTrialProgress(tx: Prisma.TransactionClient, trialEnrollmentId: string): Promise<void> {
+async function syncTrialProgress(
+  tx: Prisma.TransactionClient,
+  trialEnrollmentId: string,
+  // C-07 — người bấm điểm danh chính là người đẩy lead sang bước phễu kế tiếp.
+  // Không truyền xuống thì vết đổi trạng thái ghi ra "Hệ thống" và mất người chịu trách nhiệm.
+  actorId: string | null,
+): Promise<void> {
   const enr = await tx.trialEnrollment.findUnique({
     where: { id: trialEnrollmentId },
     select: {
@@ -628,9 +635,22 @@ async function syncTrialProgress(tx: Prisma.TransactionClient, trialEnrollmentId
   const allAttended =
     siblings.length > 0 && siblings.every((s) => s.leadChild.trialStatus === "ATTENDED");
 
+  // C-07 — hai lượt đổi dưới đây TRƯỚC ĐÂY không ghi vào bảng nào: không
+  // `AuditLog`, không `LeadActivity`, chỉ `publishEvent`. Nghĩa là mốc "lead vào
+  // Đang học thử / Chờ quyết định" — đúng khúc giữa phễu — không truy được ai
+  // làm, lúc nào. Nay đi chung đường ghi vết với mọi lượt đổi khác.
   if (allAttended) {
     if (lead.status !== "AWAITING_DECISION") {
       await tx.lead.update({ where: { id: leadId }, data: { status: "AWAITING_DECISION" } });
+      await recordLeadStatusChange({
+        tx,
+        leadId,
+        actorId,
+        actorName: await actorName(actorId, tx),
+        from: lead.status,
+        to: "AWAITING_DECISION",
+        source: "TRIAL",
+      });
       await publishEvent(
         "lead.awaitingDecision",
         { leadId },
@@ -639,6 +659,15 @@ async function syncTrialProgress(tx: Prisma.TransactionClient, trialEnrollmentId
     }
   } else if (attendedCount >= 1 && lead.status === "TRIAL_SCHEDULED") {
     await tx.lead.update({ where: { id: leadId }, data: { status: "TRIAL_IN_PROGRESS" } });
+    await recordLeadStatusChange({
+      tx,
+      leadId,
+      actorId,
+      actorName: await actorName(actorId, tx),
+      from: lead.status,
+      to: "TRIAL_IN_PROGRESS",
+      source: "TRIAL",
+    });
     await publishEvent(
       "lead.trialInProgress",
       { leadId },
@@ -675,7 +704,7 @@ export async function markAttendance(params: {
         },
       });
       // ghi lịch sử + auto-Kanban (idempotent — tính lại từ số buổi PRESENT).
-      await syncTrialProgress(tx, params.trialEnrollmentId);
+      await syncTrialProgress(tx, params.trialEnrollmentId, params.actorId);
     });
     return { ok: true };
   } catch (e) {

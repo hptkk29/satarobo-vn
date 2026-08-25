@@ -11,6 +11,7 @@ import { phoneVn } from '@/lib/validators/phone'
 import { phoneVariants } from '@/lib/phone'
 import type { LeadChildStatus, Prisma } from '@prisma/client'
 import { logLeadAudit, getAuditActor } from '@/lib/audit/log'
+import { recordLeadStatusChange } from '@/lib/lead/status-trail-write'
 import { resolveActor } from '@/lib/auth/actor'
 import { passesScope, scopedDb } from '@/lib/db-scope'
 import { getLeadPaymentSummary } from '@/lib/payments/summary'
@@ -29,7 +30,6 @@ import {
   decideLeadLostFields,
   markChildLostSchema,
   unmarkChildLostSchema,
-  LEAD_CHILD_STATUS_LABEL,
 } from '@/lib/lead/lost-status'
 import { syncLeadChildNameToStudents } from '@/lib/students/sync-name'
 import {
@@ -189,27 +189,17 @@ export async function updateLeadStatus(
       data: { status: parsed.data },
     })
 
-    await logLeadAudit({
+    // C-07 — vết đổi trạng thái đi qua ĐÚNG MỘT đường cho mọi lối đổi (tay, tự
+    // chia, học thử, thanh toán, chốt ghi danh). Trước đây mỗi chỗ tự ghi một
+    // kiểu nên mục "Lịch sử thay đổi" thiếu mốc mà không ai thấy là thiếu.
+    await recordLeadStatusChange({
+      tx,
       leadId,
-      action: 'STATUS_CHANGE',
       actorId,
       actorName,
-      oldValues: { status: before.status },
-      newValues: { status: parsed.data },
-      changedFields: ['status'],
-      tx,
-    })
-
-    // Phase T1.2 — tự sinh activity timeline cho mỗi lần đổi status.
-    await tx.leadActivity.create({
-      data: {
-        leadId,
-        actorId,
-        actorName,
-        type: 'STATUS_CHANGE',
-        content: `Chuyển trạng thái: ${before.status} → ${parsed.data}`,
-        metadata: { from: before.status, to: parsed.data },
-      },
+      from: before.status,
+      to: parsed.data,
+      source: 'MANUAL',
     })
 
     // Phase T1.4 — vào TRIAL_SCHEDULED → tự tạo lịch học thử (nếu chưa có buổi đang mở).
@@ -1453,31 +1443,20 @@ export async function markLeadChildLostAction(
       // Vết đi CÙNG giao dịch: ghi vết hỏng thì lượt đánh dấu cũng không lưu. Ghi vết
       // ngoài giao dịch rồi `.catch(() => {})` đúng bằng không có vết — lỗi đã phải vá
       // một lần ở `updateLeadFields` (V-6 · G-02).
-      await logLeadAudit({
+      // C-07 — cùng một đường ghi với trạng thái phiếu; trạng thái CON đổi cũng
+      // phải để lại mốc đọc được, không đẻ định dạng vết thứ hai.
+      await recordLeadStatusChange({
+        tx,
         leadId: child.leadId,
-        action: 'STATUS_CHANGE',
         actorId,
         actorName,
-        oldValues: { childStatus: child.status, leadChildId: child.id, childName: child.fullName },
-        newValues: {
-          childStatus: 'LOST',
-          leadChildId: child.id,
-          childName: child.fullName,
-          lostNote: parsed.data.lostNote,
-        },
-        changedFields: ['childStatus', 'lostNote'],
+        from: child.status,
+        to: 'LOST',
+        source: 'MANUAL',
+        child: { id: child.id, fullName: child.fullName },
         reason: parsed.data.lostNote,
-        tx,
-      })
-      await tx.leadActivity.create({
-        data: {
-          leadId: child.leadId,
-          actorId,
-          actorName,
-          type: 'STATUS_CHANGE',
-          content: `Đánh dấu RỚT học sinh ${child.fullName} — lý do: ${parsed.data.lostNote}`,
-          metadata: { leadChildId: child.id, to: 'LOST' },
-        },
+        extra: { lostNote: parsed.data.lostNote },
+        extraChangedFields: ['lostNote'],
       })
     })
   } catch {
@@ -1536,32 +1515,19 @@ export async function unmarkLeadChildLostAction(
       const patch = decideLeadLostFields({ intent: 'unmark', lostChildCount, now: new Date() })
       if (patch) await tx.lead.update({ where: { id: child.leadId }, data: patch })
 
-      await logLeadAudit({
+      await recordLeadStatusChange({
+        tx,
         leadId: child.leadId,
-        action: 'STATUS_CHANGE',
         actorId,
         actorName,
-        oldValues: { childStatus: 'LOST', leadChildId: child.id, childName: child.fullName },
-        newValues: {
-          childStatus: parsed.data.status,
-          leadChildId: child.id,
-          childName: child.fullName,
-          // Ghi rõ phiếu có bị xoá lý do hay không — người đọc nhật ký sau này cần
-          // biết lý do biến mất vì lượt nào.
-          leadLostCleared: patch !== null,
-        },
-        changedFields: patch ? ['childStatus', 'lostNote'] : ['childStatus'],
-        tx,
-      })
-      await tx.leadActivity.create({
-        data: {
-          leadId: child.leadId,
-          actorId,
-          actorName,
-          type: 'STATUS_CHANGE',
-          content: `Gỡ trạng thái RỚT của học sinh ${child.fullName} → ${LEAD_CHILD_STATUS_LABEL[parsed.data.status]}`,
-          metadata: { leadChildId: child.id, from: 'LOST', to: parsed.data.status },
-        },
+        from: 'LOST',
+        to: parsed.data.status,
+        source: 'MANUAL',
+        child: { id: child.id, fullName: child.fullName },
+        // Ghi rõ phiếu có bị xoá lý do hay không — người đọc nhật ký sau này cần
+        // biết lý do biến mất vì lượt nào.
+        extra: { leadLostCleared: patch !== null },
+        extraChangedFields: patch ? ['lostNote'] : [],
       })
     })
   } catch {
