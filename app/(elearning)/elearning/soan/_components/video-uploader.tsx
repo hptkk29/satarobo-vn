@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { toast } from "sonner";
 import { luuBaiVideoAction } from "../_actions";
 
@@ -33,6 +33,24 @@ export function VideoUploader(props: {
   const [xong, setXong] = useState(0);
   const [tong, setTong] = useState(0);
   const [dangHuy, setDangHuy] = useState<{ khoa: string; uploadId: string } | null>(null);
+  /**
+   * ⚠️ Bản trạng thái của `dangHuy` KHÔNG dùng được ở nhánh `catch` bên dưới.
+   *
+   * `tai()` chạy trọn trong MỘT lượt kết xuất; `setDangHuy(...)` chỉ xếp lịch cho
+   * lượt kết xuất SAU, không đổi biến đã đóng gói trong chính lượt gọi này. Nên
+   * `if (dangHuy)` ở `catch` luôn thấy `null` — và lệnh huỷ không bao giờ được gửi.
+   * Hậu quả không ai thấy bằng mắt: các phần đã tải nằm lại R2 và R2 tính tiền
+   * chúng, tới khi cron đêm dọn sau 24 giờ.
+   *
+   * `ref` đọc được NGAY trong cùng lượt gọi, nên nó là bản dùng cho luồng huỷ;
+   * `useState` giữ lại chỉ để vẽ nút Huỷ.
+   */
+  const luotTaiRef = useRef<{ khoa: string; uploadId: string } | null>(null);
+
+  const datLuotTai = (v: { khoa: string; uploadId: string } | null) => {
+    luotTaiRef.current = v;
+    setDangHuy(v);
+  };
 
   const goi = async (than: Record<string, unknown>) => {
     const r = await fetch("/api/elearning/media/upload", {
@@ -48,15 +66,16 @@ export function VideoUploader(props: {
   };
 
   const huy = async () => {
-    if (!dangHuy) return;
+    const luot = luotTaiRef.current;
+    if (!luot) return;
     try {
-      await goi({ buoc: "huy", ...dangHuy });
+      await goi({ buoc: "huy", ...luot });
       toast.success("Đã huỷ lượt tải");
     } catch {
       // Huỷ thất bại không phải việc của người soạn: cron đêm sẽ dọn.
       toast.message("Đã dừng tải — phần đã tải sẽ được dọn tự động");
     }
-    setDangHuy(null);
+    datLuotTai(null);
     setTrangThai("cho");
     setXong(0);
     setTong(0);
@@ -86,7 +105,7 @@ export function VideoUploader(props: {
       })) as { khoa: string; uploadId: string; soPhan: number; partSize: number };
 
       setTong(mo.soPhan);
-      setDangHuy({ khoa: mo.khoa, uploadId: mo.uploadId });
+      datLuotTai({ khoa: mo.khoa, uploadId: mo.uploadId });
 
       const ky = (await goi({
         buoc: "ky-phan",
@@ -115,7 +134,7 @@ export function VideoUploader(props: {
         uploadId: mo.uploadId,
         parts,
       });
-      setDangHuy(null);
+      datLuotTai(null);
 
       // Xác minh THẬT: đọc header mp4 trên máy chủ. Đây là bước quyết định codec
       // và thời lượng ghi vào bài.
@@ -156,7 +175,8 @@ export function VideoUploader(props: {
       setTrangThai("cho");
       toast.error(e instanceof Error ? e.message : "Tải video thất bại");
       // Còn lượt tải dở thì huỷ ngay, đừng để nó nằm lại tính tiền.
-      if (dangHuy) await huy();
+      // Đọc REF chứ không đọc state — xem chú thích ở `luotTaiRef`.
+      if (luotTaiRef.current) await huy();
     }
   };
 
