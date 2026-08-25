@@ -5,7 +5,14 @@ import { auth } from "@/lib/auth";
 import { checkPermission } from "@/lib/auth/check-permission";
 import { resolveActor } from "@/lib/auth/actor";
 import { scopedDb } from "@/lib/db-scope";
-import { listRoles, listUserOrgRoles } from "@/lib/auth/rbac-service";
+import {
+  isHoRootOrgType,
+  isPrivilegedRole,
+  laSuperAdminActor,
+  listRoles,
+  listUserOrgRoles,
+  roleBlockedAtHoRoot,
+} from "@/lib/auth/rbac-service";
 import { OrgRolesManager } from "./_components/org-roles-manager";
 
 export const metadata = { title: "Vai trò theo đơn vị | Admin" };
@@ -22,7 +29,8 @@ export default async function UserOrgRolesPage({ params }: Props) {
   }
 
   // User + OrgUnit đều SCOPE_EXEMPT (identity/hạ tầng tổ chức) → sdb pass-through.
-  const sdb = scopedDb(await resolveActor(session.user.id));
+  const viewer = await resolveActor(session.user.id);
+  const sdb = scopedDb(viewer);
 
   const user = await sdb.user.findUnique({
     where: { id },
@@ -30,14 +38,21 @@ export default async function UserOrgRolesPage({ params }: Props) {
   });
   if (!user) notFound();
 
-  const [roles, orgUnits, assignments] = await Promise.all([
+  const [roles, orgUnits, assignments, target] = await Promise.all([
     listRoles(),
+    // `type` là dữ liệu của A-01-3: dropdown cần biết đơn vị nào là HO/ROOT để giải thích
+    // vì sao lựa chọn bị khoá. Giữ nguyên việc liệt kê MỌI type — §6.1 cần neo được cả
+    // REGION cho các cơ sở cùng vùng.
     sdb.orgUnit.findMany({
       where: { deletedAt: null },
       orderBy: { code: "asc" },
-      select: { id: true, code: true, name: true },
+      select: { id: true, code: true, name: true, type: true },
     }),
     listUserOrgRoles(id),
+    // A-01-4 — tầm nhìn SUY RA của người ĐANG ĐƯỢC PHÂN VAI (không phải của người mở trang).
+    // `resolveActor` là cache() theo request và khoá theo userId nên gọi với id khác actor
+    // không đụng cache của viewer.
+    resolveActor(id),
   ]);
 
   const roleById = new Map(roles.map((r) => [r.id, r.code]));
@@ -75,8 +90,34 @@ export default async function UserOrgRolesPage({ params }: Props) {
 
       <OrgRolesManager
         userId={user.id}
-        roles={roles.map((r) => ({ id: r.id, code: r.code, name: r.name }))}
-        orgUnits={orgUnits}
+        viewerUserId={session.user.id}
+        // MỘT định nghĩa "ai là SUPER_ADMIN" dùng chung với `assertAssignGuards` ở server
+        // (`lib/auth/rbac-service.ts`). Trước đây UI đọc `viewer.isSuperAdmin` (v2/DB) còn
+        // server đọc `session.user.role` (legacy) ⇒ hai bên nói ngược nhau được: UI mở khoá
+        // một lựa chọn mà server từ chối, hoặc khoá thứ server cho phép.
+        viewerIsSuperAdmin={laSuperAdminActor({
+          role: session.user.role,
+          roles: session.user.roles,
+          resolved: viewer,
+        })}
+        soCoSoDangGiu={target.visibleCenterIds.length}
+        targetIsHoLevel={target.isHoLevel}
+        // Hai cờ dưới do SERVER suy ra từ đúng hàm mà `assignUserOrgRole` dùng để chặn —
+        // client chỉ AND hai boolean, không tự định nghĩa lại rào. Đây là lớp GIẢI THÍCH:
+        // enforce thật nằm ở `assertAssignGuards` (lib/auth/rbac-service.ts).
+        roles={roles.map((r) => ({
+          id: r.id,
+          code: r.code,
+          name: r.name,
+          capQuyen: isPrivilegedRole(r.permissions),
+          chanTaiHoRoot: roleBlockedAtHoRoot(r.code),
+        }))}
+        orgUnits={orgUnits.map((o) => ({
+          id: o.id,
+          code: o.code,
+          name: o.name,
+          laHoRoot: isHoRootOrgType(o.type),
+        }))}
         assignments={rows}
       />
     </div>
