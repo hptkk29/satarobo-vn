@@ -441,7 +441,16 @@ describe.skipIf(!RUN)("Lead intake · tầng DB thật", () => {
 
   it("mã NV KHÔNG giữ vai Sale (giáo viên) ⇒ không gán cho họ, vẫn ghi công vào note", async () => {
     const r = await ingestIntakeLead(
-      lead({ phone: PHONE.teacherCode, employeeCode: EMP_CODE_TEACHER }),
+      lead({
+        phone: PHONE.teacherCode,
+        employeeCode: EMP_CODE_TEACHER,
+        // ⚠️ Dòng ghi công do MAPPER đẩy vào (`map-sale-form.ts:134`,
+        // `map-internal-form.ts:96`), không phải do `ingestIntakeLead` tự sinh.
+        // Case này dựng `MappedLead` bằng tay nên phải mang theo đúng thứ mapper
+        // thật mang; bỏ nó đi là đang đòi hàm nhận lead làm việc của mapper, và
+        // câu khẳng định bên dưới sẽ đỏ với một tệp mã hoàn toàn đúng.
+        noteLines: [`Nhân viên nhập: ${EMP_CODE_TEACHER}`],
+      }),
       { source: "sale-form" },
     );
 
