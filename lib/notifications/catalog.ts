@@ -262,6 +262,13 @@ const BY_PREFIX: Readonly<Record<string, NotiDef>> = {
     group: "new_task", priority: 2, entity: "trial",
     recipients: "Bộ phận Đào tạo (ca trải nghiệm chưa có giáo viên)", target: "/lop-trial",
   },
+  // GĐ6 — nhắc Sale trước buổi để Sale tự nhắn phụ huynh qua Zalo cá nhân. Hệ thống
+  // KHÔNG gửi tin tự động cho phụ huynh; đây là chốt nghiệp vụ, không phải giới hạn
+  // kỹ thuật. Xếp nhóm "due_date" vì đây là việc CÓ HẠN, không phải việc mới rơi xuống.
+  "trial.reminder:": {
+    group: "due_date", priority: 2, entity: "trial",
+    recipients: "Sale phụ trách lead (không có thì admin lead)", target: "/leads/<leadId>",
+  },
   // Vi phạm SLA chăm lead — theo PRD đây là "đã trễ", không phải "việc mới".
   "sla:": {
     group: "due_date", priority: 1, entity: "lead",
