@@ -455,7 +455,10 @@ describe.skipIf(!RUN)("Lead intake · tầng DB thật", () => {
     // Bất biến của repo: chủ lead luôn là Sale. Giáo viên KHÔNG được nhận.
     expect(row?.assignedTo?.email).not.toBe(`${P}gv@example.test`);
     if (row?.assignedTo) expect(row.assignedTo.role).toBe("SALES_CSM");
-    expect(row?.note).toContain("không giữ vai Sale");
+    // 24/08 — KHÔNG còn câu cảnh báo (đây là đường đi bình thường, không phải sự cố).
+    // Công người mang lead về vẫn phải còn — đó mới là bất biến cần giữ.
+    expect(row?.note).not.toContain("không giữ vai Sale");
+    expect(row?.note).toContain(`Nhân viên nhập: ${EMP_CODE_TEACHER}`);
   }, 60_000);
 
   it("người nhập ở cơ sở KHÁC cơ sở trên phiếu ⇒ không gán chéo (lead không thành vô hình)", async () => {

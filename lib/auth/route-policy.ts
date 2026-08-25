@@ -696,17 +696,20 @@ export function decideRoute(input: RouteInput): RouteDecision {
   if (hostKind === "sale") {
     if (isInfraPath(pathname)) return { type: "next" };
 
-    // Biểu mẫu nhập khách nay ở ADMIN. Không bắt ở đây thì khi cờ
-    // `SALE_SITE_ENABLED` bật, `/nhap-khach-hang` rơi vào luật rewrite chung
-    // → `/sale/nhap-khach-hang` → 404 câm, đúng kiểu hỏng "bấm vào không đi
-    // đâu" mà clean URL của site GV đã dính một lần (xem TEACHER_ROUTE_SEGMENTS).
+    // ✅ 23/08/2026 — site Sale ĐÃ CÓ biểu mẫu của riêng nó tại
+    // `/sale/nhap-khach-hang`, nên đường trần `/nhap-khach-hang` trên host này
+    // đá NỘI BỘ sang đó thay vì ném người dùng sang host admin.
     //
-    // 📌 Chủ dự án chốt 23/08: site Sale SAU NÀY sẽ có biểu mẫu của riêng nó.
-    // Khi dựng, thay dòng dưới bằng `next` + thêm trang
-    // `app/(sale)/sale/nhap-khach-hang/page.tsx` ghép lại từ đúng hai mảnh dùng
-    // chung: `loadIntakeCenterOptions()` + `<QuickLeadForm>`. ĐỪNG chép logic.
+    // Trước đó nhánh này 307 sang admin — tư vấn viên muốn nhập một khách là bị
+    // đá khỏi site của mình rồi phải bấm quay lại. Hai bản dùng CHUNG
+    // `loadIntakeCenterOptions()` + `<QuickLeadForm>` + `quickLeadSubmit`, không
+    // nhân bản logic, nên không có chuyện hai biểu mẫu trôi lệch nhau.
+    //
+    // Vẫn phải bắt ở đây: thiếu nó thì `/nhap-khach-hang` rơi vào luật rewrite
+    // chung → `/sale/nhap-khach-hang` — vô tình đúng đích, nhưng bằng đường
+    // rewrite nên thanh địa chỉ giữ URL cũ và mục điều hướng không sáng đúng chỗ.
     if (isIntakePath(pathname)) {
-      return { type: "redirectHost", host: "admin", path: INTAKE_PATH, status: 307 };
+      return { type: "redirectPath", path: `/sale${INTAKE_PATH}` };
     }
 
     // ⛔ 22/08/2026 — BIỂU MẪU TĨNH CÔNG KHAI ĐÃ NGHỈ.

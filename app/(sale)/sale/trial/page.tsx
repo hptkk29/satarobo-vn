@@ -10,7 +10,8 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { resolveActor } from "@/lib/auth/actor";
-import { checkPermission } from "@/lib/auth/check-permission";
+import { checkAnyPermission } from "@/lib/auth/check-permission";
+import { PAGE_GATES } from "@/lib/auth/page-gates";
 import { canViewParentContact } from "@/lib/auth/permissions";
 import { getSaleTrialRoster } from "@/lib/trial/sale-roster";
 import { SaleTrialList } from "./_components/trial-list";
@@ -24,7 +25,10 @@ const NGAY_TOI = 21;
 export default async function SaleTrialPage() {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  if (!(await checkPermission("trials:view"))) redirect("/");
+  // Gác bằng bảng chung thay vì gõ action rời: thanh điều hướng đọc đúng mảng
+  // này làm `perm`, nên menu và cổng không thể lệch nhau. `page-gates.test.ts`
+  // khoá lại điều đó.
+  if (!(await checkAnyPermission(PAGE_GATES["/sale/trial"]))) redirect("/sale");
 
   const actor = await resolveActor(session.user.id);
 
