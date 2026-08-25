@@ -83,6 +83,8 @@ describe("A. admin host × role", () => {
       "otp-logs",
       "user-groups",
       "hoi-thoai",
+      // A-02 (25/08/2026) — dashboard QLCS 4 tab.
+      "dashboard-qlcs",
     ]) {
       expect(isAdminRoute(`/${seg}`)).toBe(true);
       expect(
@@ -104,6 +106,32 @@ describe("A. admin host × role", () => {
         ...authed("SUPER_ADMIN"),
       }),
     ).toEqual<RouteDecision>({ type: "rewrite", path: "/admin/user-groups/abc123" });
+  });
+
+  /**
+   * A-02 — dashboard QLCS 4 tab nằm ở segment RIÊNG `/dashboard-qlcs`, không dùng lại
+   * `/dashboard` (màn tiếp đất chung của cả 9 vai). Hai điều phải giữ:
+   *  1. Segment mới được nhận là admin route KỂ CẢ khi mang searchParams của bộ lọc —
+   *     `firstSegment` chỉ đọc path, nhưng pin lại để đổi cách tách segment là đỏ ngay.
+   *  2. `/dashboard` CŨ không bị segment mới nuốt (prefix `dashboard` là con của nó).
+   */
+  it("[A-02] /dashboard-qlcs là admin route và KHÔNG đụng /dashboard cũ", () => {
+    expect(isAdminRoute("/dashboard-qlcs")).toBe(true);
+    expect(isAdminRoute("/dashboard")).toBe(true);
+    expect(
+      decideRoute({
+        hostKind: "admin",
+        pathname: "/dashboard-qlcs",
+        ...authed("CENTER_MANAGER"),
+      }),
+    ).toEqual<RouteDecision>({ type: "rewrite", path: "/admin/dashboard-qlcs" });
+    expect(
+      decideRoute({ hostKind: "admin", pathname: "/dashboard", ...authed("CENTER_MANAGER") }),
+    ).toEqual<RouteDecision>({ type: "rewrite", path: "/admin/dashboard" });
+    // Phụ huynh vẫn bị đá về portal — segment mới không mở thêm cửa nào.
+    expect(
+      decideRoute({ hostKind: "admin", pathname: "/dashboard-qlcs", ...authed("PARENT") }),
+    ).toEqual<RouteDecision>({ type: "redirectHost", host: "portal", path: "/", status: 307 });
   });
 
   it("PARENT vào admin route → redirectHost portal (lỗ hổng đã bịt)", () => {

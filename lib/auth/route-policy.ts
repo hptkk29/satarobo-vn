@@ -131,6 +131,12 @@ export const ADMIN_ROUTE_SEGMENTS: ReadonlySet<string> = new Set<string>([
   "crm",
   "curriculums",
   "dashboard",
+  // A-02 (25/08/2026) — dashboard QLCS 4 tab (Tài chính · Kinh doanh · Chi phí
+  // Marketing · Tương tác KH). Segment RIÊNG, KHÔNG dùng lại "/dashboard": trang đó là
+  // màn tiếp đất chung sau đăng nhập, gộp panel của cả 9 vai (GV/Kế toán/HR/Marketing…)
+  // — thay nó bằng 4 tab QLCS là làm trắng màn đầu tiên của mọi vai còn lại.
+  // Thiếu dòng này thì admin host 308 sang public rồi 404, dù page tồn tại.
+  "dashboard-qlcs",
   // BGĐ 31/07 — màn duyệt đơn GV + hộp thư đề xuất sửa giáo án.
   "de-xuat-giao-an",
   "don-tu",

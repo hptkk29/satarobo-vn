@@ -203,6 +203,26 @@ export const PAGE_GATES = {
   "/bao-cao/dao-tao": ["reports:training"],
   "/bao-cao/hieu-suat-gv": ["reports:training"],
   "/bao-cao/cohort": ["reports:training"],
+
+  /**
+   * A-02 — Dashboard QLCS 4 tab (Tài chính · Kinh doanh · Chi phí Marketing · Tương tác
+   * KH). Gác bằng MỘT key riêng `dashboard:view` (chốt kỹ thuật 24/08/2026, E/OQ-4).
+   *
+   * Vì sao không mượn key sẵn có:
+   *  • `chat:read` — ứng viên đầu tiên cho tab E — seed scope CENTER (QLCS) / ASSIGNED
+   *    (GV). Gate cấp trang gọi `checkAnyPermission` KHÔNG có target, mà `scopeMatches`
+   *    đòi target với các scope đó ⇒ luôn false trên prod (v2), xanh ở local (v1). Đây
+   *    đúng cái bẫy đã suýt dính ở `/tin-nhan`.
+   *  • `payments:*` / `leads:view-all` gác được đúng MỘT tab. Đặt vào ô này là hoặc
+   *    khoá cửa của người chỉ cần tab kia, hoặc mở kèm năng lực không ai định trao.
+   *
+   * ⚠️ Vào được TRANG ≠ xem được mọi tab. Gate từng tab (B → `payments:view` ·
+   * C → `leads:view-all` · D/E → `dashboard:view`) đi kèm nội dung của tab đó; khung
+   * này chưa có số liệu nên chưa có gì để lọc.
+   * ⚠️ Key MỚI ⇒ sau khi merge `test` → `main` phải chạy `seed-prod-roles.yml`, nếu
+   * không prod hiện MÀN TRẮNG không kèm lỗi và không tái hiện được ở local (local v1).
+   */
+  "/dashboard-qlcs": ["dashboard:view"],
 } as const satisfies Record<string, readonly Action[]>;
 
 export type GatedHref = keyof typeof PAGE_GATES;

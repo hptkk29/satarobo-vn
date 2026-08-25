@@ -270,6 +270,18 @@ export type Action =
   // #05 — break-glass: xem đầy đủ PII (bỏ mask) trong audit viewer, kèm reason + log riêng.
   | "audit-logs:view-pii"
 
+  // --- Dashboard QLCS 4 tab (A-02) ---
+  // Cổng VÀO màn `/dashboard-qlcs`. Key RIÊNG theo chốt kỹ thuật 24/08/2026 (E/OQ-4),
+  // vì mọi key sẵn có đều sai một trong hai kiểu:
+  //  • `chat:read` (ứng viên đầu cho tab E) seed scope CENTER/ASSIGNED ⇒ gate cấp trang
+  //    gọi KHÔNG target luôn trả false trên prod (v2) trong khi local (v1) vẫn xanh —
+  //    đúng loại "chạy máy tôi thì được". Bất biến này có test: page-gates.test.ts.
+  //  • `payments:*` / `leads:*` gác được đúng MỘT tab, mượn làm cổng chung là hoặc khoá
+  //    cửa của người chỉ cần tab kia, hoặc mở kèm năng lực không ai định trao.
+  // Cách ly cơ sở KHÔNG đến từ đây — nó đến từ `resolveScopeFilters()` (giao
+  // visibleCenterIds × cơ sở chọn trong URL) + `scopedDb` ở từng hàm số liệu.
+  | "dashboard:view"
+
   // --- Settings / system (NEW) ---
   | "settings:view"
   | "settings:edit"
@@ -655,6 +667,20 @@ export const PERMISSIONS: Record<Action, Role[]> = {
   // riêng audit.pii-unmasked). Cùng tập role với view — kiểm soát nằm ở reason+audit.
   "audit-logs:view": ["SUPER_ADMIN"],
   "audit-logs:view-pii": ["SUPER_ADMIN"],
+
+  // --- Dashboard QLCS 4 tab (A-02) ---
+  // Chốt 24/08/2026: `SUPER_ADMIN` + `CENTER_MANAGER` + vai Hội sở.
+  // Enum `Role` của v1 không có tầng HO/CENTER, nên hai vai HO đại diện được ở đây là
+  // ACCOUNTANT (→ HO_ACCOUNTANT) và MARKETING (→ HO_MARKETING) — đúng ánh xạ
+  // LEGACY_TO_V2 của rbac-parity.test.ts. `HO_HR` chỉ tồn tại ở v2 nên được seed thẳng
+  // trong prisma/seed-roles.ts; KHÔNG thêm "HR" vào đây, vì HR ở v1 ánh xạ sang
+  // **CENTER_HR** (nhân sự CƠ SỞ) — thêm là parity đòi cấp cho cả vai cấp cơ sở đó.
+  // `HO_SALE` cố ý KHÔNG có: vai đó là "phiếu mình nhập" (RoleDef ghi rõ), cho họ màn
+  // tổng quan toàn cơ sở là ngược hẳn phạm vi vai. Mở thêm sau = một dòng seed.
+  //
+  // ⚠️ Vào được TRANG ≠ xem được mọi tab. Gate từng tab (B → payments:view ·
+  // C → leads:view-all · D/E → dashboard:view — chốt 24/08) đi kèm nội dung tab.
+  "dashboard:view": ["SUPER_ADMIN", "CENTER_MANAGER", "ACCOUNTANT", "MARKETING"],
 
   // --- Settings / system ---
   "settings:view": ["SUPER_ADMIN"],
