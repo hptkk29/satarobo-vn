@@ -428,8 +428,17 @@ export async function getTeacherTrialRubricContext(
       )?.name ?? null
     : null;
 
-  const eval0 = await db.trialRubricEval.findUnique({
-    where: { trialEnrollmentId: enrollmentId },
+  // GĐ4 — phiếu nay khoá theo BUỔI nên một ca có thể có nhiều phiếu. Lấy phiếu của
+  // ĐÚNG buổi ca đang được xếp; không có buổi thì lấy phiếu mới nhất để màn cũ và
+  // dữ liệu trước GĐ4 (phiếu chưa gắn buổi) vẫn đọc được.
+  const eval0 = await db.trialRubricEval.findFirst({
+    where: {
+      trialEnrollmentId: enrollmentId,
+      ...(enr.scheduledSessionId
+        ? { trialClassSessionId: enr.scheduledSessionId }
+        : {}),
+    },
+    orderBy: { updatedAt: "desc" },
     select: {
       scores: true,
       totalScore: true,

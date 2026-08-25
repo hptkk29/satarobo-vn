@@ -45,13 +45,20 @@ export default async function ChiTietLopTrialPage({
   // layChiTietLop đã lọc theo scopedDb → ngoài cơ sở là 404, không phải "cấm truy cập".
   if (!cls) notFound();
 
-  const [canAssignTeacher, isManager, canFeedback] = await Promise.all([
+  const [canAssignTeacher, isManager, canFeedback, canAttendance] = await Promise.all([
     checkPermission("trials:assign-teacher", { centerId: cls.centerId }),
     checkPermission("trials:manage", { centerId: cls.centerId }),
     checkPermission("trials:feedback", { centerId: cls.centerId }),
+    checkPermission("trials:attendance", { centerId: cls.centerId }),
   ]);
-  // Giáo viên thuần chỉ điểm danh lớp mình; người quản lý điểm danh mọi lớp trong tầm nhìn.
-  const canMark = canFeedback && (isManager || cls.teacherId === session.user.id);
+  // GĐ4 — hai việc, hai quyền, hai vai:
+  //   điểm danh  = Sale phụ trách khách  (`trials:attendance`)
+  //   phiếu đánh giá = giáo viên dạy buổi (`trials:feedback`)
+  // Trước GĐ4 cả hai dùng chung một cờ nên ai điểm danh được thì cũng chấm được và
+  // ngược lại — ngược hẳn quy trình đã chốt.
+  const canDiemDanh = canAttendance;
+  // Giáo viên thuần chỉ chấm lớp mình; người quản lý chấm mọi lớp trong tầm nhìn.
+  const canDanhGia = canFeedback && (isManager || cls.teacherId === session.user.id);
 
   // Chỉ nạp danh sách GV khi có quyền gán. `includeIds` giữ GV đang gán để <select>
   // không tự rớt giá trị đang chọn khi người đó không còn khớp bộ lọc.
@@ -188,7 +195,7 @@ export default async function ChiTietLopTrialPage({
         <AttendanceBoard
           sessions={cls.sessions}
           enrollments={cls.enrollments}
-          canMark={canMark}
+          canMark={canDiemDanh}
         />
       </section>
 
@@ -200,7 +207,7 @@ export default async function ChiTietLopTrialPage({
           <TrialSessionEvalFill
             trialSessions={evalSessions}
             students={evalStudents}
-            canEdit={canMark}
+            canEdit={canDanhGia}
           />
         </section>
       )}

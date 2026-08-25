@@ -85,6 +85,9 @@ export type Action =
   | "trials:view"
   | "trials:manage"
   | "trials:feedback"
+  // GĐ4 — điểm danh buổi trải nghiệm. TÁCH khỏi `trials:feedback` vì hai việc thuộc
+  // hai vai khác nhau: Sale điểm danh, giáo viên nộp phiếu đánh giá.
+  | "trials:attendance"
   // --- Trial class V2 (R7-02) ---
   | "trials:assign-teacher"
   | "trials:override-capacity"
@@ -388,7 +391,11 @@ export const PERMISSIONS: Record<Action, Role[]> = {
   // --- Trial classes (Phase T1.4) ---
   "trials:view": ["SUPER_ADMIN", "CENTER_MANAGER", "SALES_CSM", "TEACHER", "TRAINING"],
   "trials:manage": ["SUPER_ADMIN", "CENTER_MANAGER", "SALES_CSM"],
+  // GĐ4 (25/08/2026) — tách đôi theo ma trận đặc tả §8.2. Trước GĐ4 cả điểm danh lẫn
+  // nộp phiếu đều dùng chung `trials:feedback`, nên Sale KHÔNG điểm danh được còn
+  // giáo viên thì điểm danh được — ngược hẳn quy trình đã chốt.
   "trials:feedback": ["SUPER_ADMIN", "CENTER_MANAGER", "TEACHER"],
+  "trials:attendance": ["SUPER_ADMIN", "CENTER_MANAGER", "SALES_CSM"],
   // R7-02 — gán GV + override sĩ số chỉ quản lý cơ sở; cấu hình số buổi = Đào tạo/Admin.
   // GĐ3 (chủ dự án chốt câu 2, 25/08/2026): CHỐT giáo viên là việc của Đào tạo.
   // Sale chỉ ĐỀ XUẤT; Quản lý cơ sở giữ mọi việc trial còn lại.

@@ -696,10 +696,14 @@ export async function markAttendance(params: {
           trialEnrollmentId: params.trialEnrollmentId,
           status: params.status,
           note: params.note ?? null,
+          // GĐ4 — ghi AI điểm danh. Từ GĐ4 việc này chuyển từ giáo viên sang Sale, nên
+          // không lưu người thao tác là mất luôn khả năng quy trách nhiệm khi có tranh cãi.
+          markedById: params.actorId,
         },
         update: {
           status: params.status,
           note: params.note ?? null,
+          markedById: params.actorId,
         },
       });
       // ghi lịch sử + auto-Kanban (idempotent — tính lại từ số buổi PRESENT).

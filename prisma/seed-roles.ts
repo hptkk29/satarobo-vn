@@ -502,6 +502,9 @@ export const ROLE_SEED: RoleSeed[] = [
       // Đào tạo theo chốt câu 2. Quản lý cơ sở vẫn giữ trials:manage/feedback/config
       // và vẫn override được sĩ số; chỉ riêng việc CHỐT giáo viên là của Đào tạo.
       { action: "trials:feedback", scopeType: "GLOBAL" },
+      // GĐ4 — Quản lý cơ sở giữ CẢ HAI (điểm danh lẫn nộp phiếu) để còn trực thay khi
+      // Sale hoặc giáo viên vắng. Vai chuyên trách mới là người làm thường ngày.
+      { action: "trials:attendance", scopeType: "GLOBAL" },
       { action: "trials:override-capacity", scopeType: "GLOBAL" },
       { action: "parent-requests:manage", scopeType: "GLOBAL" },
       { action: "parent-feedback:view", scopeType: "GLOBAL" },
@@ -693,6 +696,10 @@ export const ROLE_SEED: RoleSeed[] = [
       { action: "honors:view", scopeType: "CENTER" },
       { action: "trials:view", scopeType: "GLOBAL" },
       { action: "trials:manage", scopeType: "GLOBAL" },
+      // GĐ4 (25/08/2026) — Sale ĐIỂM DANH buổi trải nghiệm, đúng ma trận đặc tả §8.2.
+      // Trước GĐ4 việc này gác bằng `trials:feedback` mà vai này không có, nên Sale
+      // không điểm danh được dù quy trình giao cho họ.
+      { action: "trials:attendance", scopeType: "GLOBAL" },
       // ── F5 (Đợt 3, mở phạm vi 10/08/2026): nhắn riêng 1-1 với PHỤ HUYNH MÌNH PHỤ TRÁCH ──
       // Scope **OWN**, giống hệt vai PARENT, và CỐ Ý KHÔNG dùng CENTER: `scopeMatches`
       // cho CENTER chỉ cần `target.centerId` khớp, mà nhóm lớp LUÔN có `centerId` ⇒ cấp

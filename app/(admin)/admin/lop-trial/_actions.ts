@@ -480,7 +480,10 @@ export async function markLopTrialAttendanceAction(
 ): Promise<ActionResult> {
   const ctx = await requireActor();
   if (!ctx) return { ok: false, error: CHUA_DANG_NHAP };
-  if (!(await checkPermission("trials:feedback"))) {
+  // GĐ4 — điểm danh là việc của SALE, gác bằng quyền riêng `trials:attendance`.
+  // Trước GĐ4 gác bằng `trials:feedback` (quyền của giáo viên) nên Sale không làm được
+  // đúng việc quy trình giao cho họ.
+  if (!(await checkPermission("trials:attendance"))) {
     return { ok: false, error: "Không có quyền điểm danh" };
   }
 
@@ -523,7 +526,9 @@ export async function completeLopTrialSessionAction(
 ): Promise<ActionResult> {
   const ctx = await requireActor();
   if (!ctx) return { ok: false, error: CHUA_DANG_NHAP };
-  if (!(await checkPermission("trials:feedback"))) {
+  // "Hoàn tất buổi" đóng vòng đời buổi sau khi đã điểm danh xong ⇒ đi cùng cổng với
+  // điểm danh, không phải cổng nộp phiếu đánh giá.
+  if (!(await checkPermission("trials:attendance"))) {
     return { ok: false, error: "Không có quyền hoàn tất buổi" };
   }
   if (!trialSessionId) return { ok: false, error: "Thiếu buổi học" };
