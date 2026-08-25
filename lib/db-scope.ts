@@ -138,6 +138,18 @@ export const SCOPE_EXEMPT = new Set<string>([
   // LMS-16 — RevenueTarget là config mục tiêu KPI; centerId null = mục tiêu toàn hệ
   // thống; scope tay qua getRevenueTargets. (Trước đây khai báo lặp 2 lần — đã dọn.)
   "RevenueTarget",
+  // C-01 — LeadTarget: song sinh của RevenueTarget, đo SỐ HỌC SINH thay vì tiền. Cùng
+  // lý do miễn scope: centerId null = chỉ tiêu TOÀN HỆ THỐNG, mà `injectScope` chèn
+  // `centerId IN (...)` trần (:277-279) nên dòng đó sẽ tàng hình với chính người vừa
+  // đặt nó. Đổi lại `scopedDb` KHÔNG chặn giúp ⇒ tầm nhìn ép TAY bằng
+  // `leadTargetListWhere` và quyền ghi bằng `checkRevenueTargetScope` (đều có test).
+  "LeadTarget",
+  // D-02 — AdsBudgetTarget: bảng chỉ tiêu thứ ba, đo TIỀN CHI cho quảng cáo. Cùng lý do
+  // miễn scope với hai bảng trên: centerId null = chỉ tiêu TOÀN HỆ THỐNG, mà `injectScope`
+  // chèn `centerId IN (...)` trần (:277-279) nên dòng đó sẽ tàng hình với chính người vừa
+  // đặt nó. Đổi lại `scopedDb` KHÔNG chặn giúp ⇒ tầm nhìn ép TAY bằng
+  // `adsBudgetTargetListWhere` và quyền ghi bằng `checkRevenueTargetScope` (đều có test).
+  "AdsBudgetTarget",
   // (#03 Pha B, 10/07 — ReportCard / EvaluationRound / ConversationMessage đã rời khỏi đây
   //  sang SCOPED_MODELS sau khi PROD xác nhận 0 dòng centerId NULL.)
   // W3-1 — RefundRequest scope qua quan hệ enrollment→class (Class là SCOPED_MODEL);

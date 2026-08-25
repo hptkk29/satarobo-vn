@@ -166,6 +166,40 @@ export const PAGE_GATES = {
   /** Ba báo cáo đào tạo. BGĐ chốt 10/07: "báo cáo của chức năng nào thì role chức năng
    *  đó xem". Trước đây gác `classes:view-all` ∨ `training:manage` ⇒ HR/Kế toán/Marketing
    *  mở được bằng URL (menu thì khai `courses:create`, nên giấu). Nay: Đào tạo + QL cơ sở. */
+  /**
+   * B-01 — Doanh thu vs mục tiêu. Trước đây cả menu lẫn trang gác bằng `payments:manage`
+   * ⇒ Quản lý cơ sở, đúng người mà màn này viết cho, KHÔNG mở được: quyền đó là thao tác
+   * TIỀN (mở/huỷ/hoàn, phương thức thanh toán, hoa hồng) và cố ý không nằm ở vai đó.
+   *
+   * Thêm `revenue_targets:manage` (key riêng) thay vì nới `payments:manage`. Giữ luôn
+   * `payments:manage` trong ô này để kế toán không mất đường vào. Cả hai đều GLOBAL ở
+   * mọi RoleDef giữ chúng — bắt buộc, vì gate gọi `checkAnyPermission` KHÔNG có target.
+   */
+  "/bao-cao/doanh-thu": ["payments:manage", "revenue_targets:manage"],
+
+  /**
+   * C-01 — Chỉ tiêu lead theo tháng × cơ sở. Màn này CHỈ để đặt/sửa con số, nên gác
+   * bằng đúng quyền ghi: ai không đặt được thì vào cũng không có việc gì làm ở đây
+   * (số liệu thực-vs-chỉ-tiêu nằm ở tab Kinh doanh của dashboard, gác riêng).
+   *
+   * KHÔNG kèm `leads:view-all`: action đó seed GLOBAL nên gate sẽ nhận, nhưng như vậy
+   * là mở màn ĐẶT chỉ tiêu cho cả Sale/Marketing — người bị đo, không phải người đặt.
+   * `lead_targets:manage` GLOBAL ở mọi RoleDef giữ nó (bắt buộc: gate gọi
+   * `checkAnyPermission` KHÔNG có target).
+   */
+  "/bao-cao/muc-tieu-lead": ["lead_targets:manage"],
+
+  /**
+   * D-02 — Chỉ tiêu ngân sách quảng cáo theo tháng × cơ sở. Cùng luật với màn C-01 ở
+   * trên: màn CHỈ để đặt/sửa con số nên gác bằng đúng quyền ghi.
+   *
+   * KHÔNG kèm `leads:view-all`: action đó seed GLOBAL nên gate sẽ nhận, nhưng nó đang
+   * gác `/admin/marketing/funnel` cho cả QLCS lẫn Marketing ⇒ mượn là mở màn ĐẶT chỉ
+   * tiêu cho người mà chỉ tiêu đó dùng để đo. `ads_budget_targets:manage` GLOBAL ở mọi
+   * RoleDef giữ nó (bắt buộc: gate gọi `checkAnyPermission` KHÔNG có target).
+   */
+  "/bao-cao/ngan-sach-quang-cao": ["ads_budget_targets:manage"],
+
   "/bao-cao/dao-tao": ["reports:training"],
   "/bao-cao/hieu-suat-gv": ["reports:training"],
   "/bao-cao/cohort": ["reports:training"],

@@ -2,9 +2,16 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Plus, Trash2, Pencil, X, Check, Baby } from "lucide-react";
+import { Plus, Trash2, Pencil, X, Check, Baby, UserX, Undo2 } from "lucide-react";
 import { toast } from "sonner";
-import { addLeadChild, updateLeadChild, deleteLeadChild } from "../actions";
+import {
+  addLeadChild,
+  updateLeadChild,
+  deleteLeadChild,
+  markLeadChildLostAction,
+  unmarkLeadChildLostAction,
+} from "../actions";
+import { LEAD_CHILD_STATUS_BADGE, LEAD_CHILD_STATUS_LABEL } from "@/lib/lead/lost-status-labels";
 import {
   groupTeachableCourses,
   type CourseOptGroup,
@@ -12,6 +19,8 @@ import {
 } from "@/lib/courses/grouped";
 
 export type Option = { id: string; name: string };
+
+type ChildStatusKey = keyof typeof LEAD_CHILD_STATUS_LABEL;
 
 export type ChildDraft = {
   fullName: string;
@@ -37,6 +46,8 @@ export type ChildView = {
   interestedCenterId: string | null;
   note: string | null;
   trialStatus: string;
+  /** C-06 — trạng thái phễu của riêng con này. null = phiếu cũ, chưa ai phân loại. */
+  status?: string | null;
   // FL-R2 (item 6/TR-4) — lịch sử đã từng học thử (giữ kể cả khi lead quay lại pipeline).
   trialHistory?: {
     className: string;
@@ -246,6 +257,8 @@ export function LeadChildrenManager({
   readOnly = false,
   legacyChildName,
   legacyChildAge,
+  lostNote,
+  lostAt,
 }: {
   leadId: string;
   childrenList: ChildView[];
@@ -254,6 +267,9 @@ export function LeadChildrenManager({
   readOnly?: boolean;
   legacyChildName?: string | null;
   legacyChildAge?: number | null;
+  /** C-06 — lý do rớt của CẢ PHIẾU (một ô, dùng chung cho mọi con đang rớt). */
+  lostNote?: string | null;
+  lostAt?: string | null; // ISO
 }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -267,8 +283,61 @@ export function LeadChildrenManager({
   const [adding, setAdding] = useState(false);
   const [form, setForm] = useState<ChildDraft>(emptyChild);
   const [deleteId, setDeleteId] = useState<string | null>(null);
+  // C-06 — con đang mở ô "lý do rớt" + nội dung đang gõ.
+  const [lostForId, setLostForId] = useState<string | null>(null);
+  const [lostDraft, setLostDraft] = useState("");
 
   const patch = (p: Partial<ChildDraft>) => setForm((f) => ({ ...f, ...p }));
+
+  const lostCount = childrenList.filter((c) => c.status === "LOST").length;
+
+  function startLost(id: string) {
+    setAdding(false);
+    setEditingId(null);
+    setDeleteId(null);
+    // Gợi sẵn lý do đang có của phiếu: ô này DÙNG CHUNG cho mọi con, nên người dùng
+    // phải nhìn thấy thứ mình sắp ghi đè trước khi bấm lưu.
+    setLostDraft(lostNote ?? "");
+    setLostForId(id);
+  }
+  function cancelLost() {
+    setLostForId(null);
+    setLostDraft("");
+  }
+  function saveLost(id: string) {
+    const note = lostDraft.trim();
+    if (!note) {
+      toast.error("Bắt buộc nhập lý do rớt");
+      return;
+    }
+    startTransition(async () => {
+      const res = await markLeadChildLostAction({ leadChildId: id, lostNote: note });
+      if (res.ok) {
+        toast.success("Đã đánh dấu rớt");
+        cancelLost();
+        router.refresh();
+      } else {
+        toast.error(res.error ?? "Lỗi");
+      }
+    });
+  }
+  function undoLost(id: string) {
+    startTransition(async () => {
+      const res = await unmarkLeadChildLostAction({ leadChildId: id, status: "CONSULTING" });
+      if (res.ok) {
+        // Nói thẳng chuyện lý do của phiếu còn hay mất: đây là ô dùng chung, người bấm
+        // cần biết mình vừa động vào dữ liệu của đứa con khác hay không.
+        toast.success(
+          lostCount > 1
+            ? "Đã gỡ rớt — vẫn còn con khác đang rớt nên giữ nguyên lý do của phiếu"
+            : "Đã gỡ rớt — đã xoá lý do rớt của phiếu",
+        );
+        router.refresh();
+      } else {
+        toast.error(res.error ?? "Lỗi");
+      }
+    });
+  }
 
   function startAdd(prefill?: Partial<ChildDraft>) {
     setEditingId(null);
@@ -401,7 +470,30 @@ export function LeadChildrenManager({
                   <span className="rounded-full bg-primary-soft px-2 py-0.5 text-[11px] font-medium text-primary">
                     {TRIAL_LABEL[c.trialStatus] ?? c.trialStatus}
                   </span>
+                  {c.status && LEAD_CHILD_STATUS_LABEL[c.status as ChildStatusKey] && (
+                    <span
+                      className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${LEAD_CHILD_STATUS_BADGE[c.status as ChildStatusKey]}`}
+                    >
+                      {LEAD_CHILD_STATUS_LABEL[c.status as ChildStatusKey]}
+                    </span>
+                  )}
                 </div>
+                {/* C-06 — lý do rớt là của CẢ PHIẾU: hiện ngay dưới đứa đang rớt để
+                    người dùng thấy nó dùng chung, và thấy nó bị đè khi đánh dấu đứa kế. */}
+                {c.status === "LOST" && lostNote && (
+                  <p className="mt-1 text-xs text-state-danger-ink">
+                    <span className="font-semibold">Lý do rớt (cả phiếu):</span> {lostNote}
+                    {lostAt && (
+                      <span className="text-muted-foreground">
+                        {" "}
+                        ·{" "}
+                        {new Date(lostAt).toLocaleDateString("vi-VN", {
+                          timeZone: "Asia/Ho_Chi_Minh",
+                        })}
+                      </span>
+                    )}
+                  </p>
+                )}
                 <div className="mt-0.5 text-xs text-muted-foreground">
                   {[
                     c.gradeLevel,
@@ -425,6 +517,25 @@ export function LeadChildrenManager({
               </div>
               {!readOnly && (
                 <div className="flex flex-shrink-0 items-center gap-1">
+                  {c.status === "LOST" ? (
+                    <button
+                      type="button"
+                      onClick={() => undoLost(c.id)}
+                      disabled={isPending}
+                      className="inline-flex items-center gap-1 rounded-md border border-border px-2 py-1 text-xs text-muted-foreground hover:bg-card disabled:opacity-50"
+                    >
+                      <Undo2 size={12} /> Gỡ rớt
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => startLost(c.id)}
+                      disabled={isPending}
+                      className="inline-flex items-center gap-1 rounded-md border border-state-danger px-2 py-1 text-xs text-state-danger-ink hover:bg-state-danger-soft disabled:opacity-50"
+                    >
+                      <UserX size={12} /> Đánh dấu rớt
+                    </button>
+                  )}
                   <button
                     type="button"
                     onClick={() => startEdit(c)}
@@ -441,6 +552,36 @@ export function LeadChildrenManager({
                   >
                     <Trash2 size={12} /> {deleteId === c.id ? "Xác nhận" : "Xoá"}
                   </button>
+                </div>
+              )}
+
+              {/* C-06 — ô lý do rớt: BẮT BUỘC, tự do (không danh mục — quyết định 12(b)) */}
+              {!readOnly && lostForId === c.id && (
+                <div className="w-full rounded-lg border border-state-danger bg-state-danger-soft/40 p-3">
+                  <label
+                    htmlFor={`lost-note-${c.id}`}
+                    className="mb-1 block text-xs font-semibold text-state-danger-ink"
+                  >
+                    Lý do rớt của {c.fullName} <span aria-hidden>*</span>
+                  </label>
+                  <textarea
+                    id={`lost-note-${c.id}`}
+                    value={lostDraft}
+                    onChange={(e) => setLostDraft(e.target.value)}
+                    rows={2}
+                    maxLength={2000}
+                    placeholder="Vì sao phụ huynh không đăng ký? (bắt buộc)"
+                    className={inputCls}
+                  />
+                  <p className="mt-1 text-[11px] text-muted-foreground">
+                    Lý do lưu ở cấp phụ huynh — dùng chung cho mọi con đang rớt của phiếu này.
+                    {lostCount > 0 && " Lưu lượt này sẽ ghi đè lý do đang có."}
+                  </p>
+                  <EditorButtons
+                    isPending={isPending}
+                    onSave={() => saveLost(c.id)}
+                    onCancel={cancelLost}
+                  />
                 </div>
               )}
             </li>

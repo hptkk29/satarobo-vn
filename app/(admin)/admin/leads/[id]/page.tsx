@@ -26,9 +26,11 @@ import { hasSystemLines, splitLeadNote } from "@/lib/lead/note-view";
 import {
   canViewLeadAuditHistory,
   getLeadAuditHistory,
+  getLeadStatusHistory,
   maskLeadAuditValues,
 } from "@/lib/lead/audit-history";
 import { LeadAuditHistory } from "./_components/lead-audit-history";
+import { LeadStatusTrail } from "./_components/lead-status-trail";
 
 export const metadata = { title: "Chi tiết Lead | Admin" };
 export const dynamic = "force-dynamic";
@@ -255,6 +257,10 @@ export default async function LeadDetailPage({ params }: Props) {
     canViewAuditLogs: canViewAudit,
   });
   const auditRows = showAuditHistory ? await getLeadAuditHistory(sdb, lead.id) : [];
+  // C-07 — "Mốc trạng thái" đọc truy vấn RIÊNG chứ không lọc lại `auditRows`:
+  // lead bị sửa nhiều thì 50 dòng gần nhất toàn lượt sửa hồ sơ, mốc phễu rơi hết
+  // ra ngoài — đúng lúc cần soi thì bảng trống.
+  const statusRows = showAuditHistory ? await getLeadStatusHistory(sdb, lead.id) : [];
 
   return (
     <div className="max-w-6xl p-6">
@@ -436,6 +442,8 @@ export default async function LeadDetailPage({ params }: Props) {
             interestedCenterId: c.interestedCenterId,
             note: canViewPii ? c.note : maskFreeText(c.note),
             trialStatus: c.trialStatus,
+            // C-06 — trạng thái phễu riêng của con (null = phiếu cũ, chưa phân loại).
+            status: c.status,
             trialHistory: c.trialHistory
               .filter((h) => h.attendedCount > 0)
               .map((h) => ({
@@ -451,6 +459,10 @@ export default async function LeadDetailPage({ params }: Props) {
           readOnly={childrenReadOnly}
           legacyChildName={piiLead.childName}
           legacyChildAge={lead.childAge}
+          // C-06 — lý do rớt là văn bản do Sale gõ ⇒ che theo đúng cổng PII của trang,
+          // y như `note` của con ngay trên.
+          lostNote={canViewPii ? lead.lostNote : maskFreeText(lead.lostNote)}
+          lostAt={lead.lostAt ? lead.lostAt.toISOString() : null}
         />
       </div>
 
@@ -568,6 +580,20 @@ export default async function LeadDetailPage({ params }: Props) {
             ))}
           </ul>
         </div>
+      )}
+
+      {/* C-07 — "Mốc trạng thái": ai đổi · lúc nào · TỪ trạng thái nào. Đặt TRƯỚC
+          mục "Lịch sử thay đổi" vì đây là thứ QLCS mở trang để soi; mục kia trộn
+          mọi lượt sửa hồ sơ nên mốc phễu chìm mất trong đó. */}
+      {showAuditHistory && (
+        <LeadStatusTrail
+          piiMasked={!canViewPii}
+          rows={statusRows.map((r) => ({
+            ...r,
+            oldValues: maskLeadAuditValues(r.oldValues, canViewPii),
+            newValues: maskLeadAuditValues(r.newValues, canViewPii),
+          }))}
+        />
       )}
 
       {/* V-6 · G-02 — vết sửa hồ sơ. Che PII bằng CÙNG cổng `canViewPii` của

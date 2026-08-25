@@ -7,6 +7,7 @@ import { writeAudit, type AuditActor } from "@/lib/audit/audit-log";
 import { publishEvent } from "@/lib/events/publish";
 import { issueReceipt } from "@/lib/finance/receipt";
 import { allocateByWeight } from "@/lib/finance/allocate";
+import { recordLeadStatusChange } from "@/lib/lead/status-trail-write";
 
 type Tx = Prisma.TransactionClient;
 
@@ -154,15 +155,18 @@ export async function maybeAdvanceLeadToRegistered(
     data: { status: "REGISTERED" },
   });
   if (upd.count === 0) return false;
-  await tx.leadActivity.create({
-    data: {
-      leadId: params.leadId,
-      actorId: params.actor.id,
-      actorName: params.actor.name ?? "Hệ thống",
-      type: "STATUS_CHANGE",
-      content: "Tự động: Chờ quyết định → Đã đăng ký (đã ghi nhận thanh toán)",
-      metadata: { from: "AWAITING_DECISION", to: "REGISTERED", auto: true },
-    },
+  // C-07 — trước đây chỗ này CHỈ tạo `LeadActivity`, không có dòng `AuditLog`
+  // nào ⇒ mốc "tiền vào → Đã đăng ký" biến mất khỏi mục "Lịch sử thay đổi" của
+  // trang chi tiết lead (thứ QLCS được xem), trong khi đường đổi tay thì có.
+  // Nay đi chung một đường ghi với mọi lượt đổi trạng thái khác.
+  await recordLeadStatusChange({
+    tx,
+    leadId: params.leadId,
+    actorId: params.actor.id,
+    actorName: params.actor.name ?? "Hệ thống",
+    from: "AWAITING_DECISION",
+    to: "REGISTERED",
+    source: "PAYMENT",
   });
   return true;
 }

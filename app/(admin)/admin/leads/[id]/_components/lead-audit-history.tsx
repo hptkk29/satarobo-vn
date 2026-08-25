@@ -7,7 +7,7 @@
 import {
   LEAD_AUDIT_ACTION_LABEL,
   LEAD_AUDIT_FIELD_LABEL,
-  formatLeadAuditValue,
+  formatLeadAuditFieldValue,
   type LeadAuditRow,
 } from "@/lib/lead/audit-history";
 
@@ -73,11 +73,11 @@ export function LeadAuditHistory({ rows, piiMasked }: Props) {
                         {nhanO(f)}
                       </span>
                       <span className="ml-2 break-words text-muted-foreground line-through">
-                        {formatLeadAuditValue(r.oldValues?.[f])}
+                        {formatLeadAuditFieldValue(f, r.oldValues?.[f])}
                       </span>
                       <span className="mx-1 text-muted-foreground">→</span>
                       <span className="break-words font-medium">
-                        {formatLeadAuditValue(r.newValues?.[f])}
+                        {formatLeadAuditFieldValue(f, r.newValues?.[f])}
                       </span>
                     </li>
                   ))}

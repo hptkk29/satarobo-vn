@@ -62,6 +62,21 @@ enum LeadChildTrialStatus {
   ATTENDED
 }
 
+/// C-06 (SL-09) — trạng thái phễu của TỪNG ĐỨA CON, tách hẳn `LeadStatus` (15 giá trị,
+/// cấp phụ huynh). Một phụ huynh hai con: đứa này ghi danh trong khi đứa kia rớt là ca
+/// thường, nên "chốt" và "rớt" phải đo được theo đầu học sinh.
+/// KHÔNG tái dùng `LeadStatus`: 9/15 giá trị của nó ("Không nghe máy", "Trùng lặp",
+/// "Đang nuôi dưỡng"…) vô nghĩa với một đứa trẻ, và guard chuyển trạng thái ở
+/// `lib/leads/status.ts` bám vào ngữ cảnh thanh toán của cả phiếu.
+enum LeadChildStatus {
+  NEW // Mới
+  CONSULTING // Đang tư vấn
+  TRIAL_SCHEDULED // Hẹn học thử
+  TRIAL_ATTENDED // Đã học thử
+  ENROLLED // Chốt
+  LOST // Rớt
+}
+
 enum CourseType {
   ONLINE
   OFFLINE
@@ -1123,6 +1138,9 @@ model User {
   /// EL-03 — bằng chứng đã được thông báo phạm vi dữ liệu thu thập (QĐ-CDA-12).
   trnPolicyAcceptances TrnPolicyAcceptance[] @relation("TrnPolicyAcceptanceUser")
 
+  /// G-04 — tuỳ chọn cột bảng, theo từng người. Cascade: người nghỉ thì cấu hình đi theo.
+  tablePreferences UserTablePreference[] @relation("UserTablePreferences")
+
   @@index([email])
   @@index([phone])
   @@index([centerId])
@@ -1373,6 +1391,16 @@ model Lead {
   convertedById    String?
   convertedAt      DateTime?  @db.Timestamptz(6)
 
+  // C-06 (SL-10, quyết định B5 + 12(b) ngày 24/08/2026) — LÝ DO RỚT ở cấp PHỤ HUYNH.
+  // Ô ghi chú TỰ DO, không danh mục: chủ dự án bỏ hẳn enum lý do rớt, đổi lại là không
+  // có báo cáo "top lý do rớt" (đã chấp nhận).
+  // Trạng thái rớt thì theo TỪNG CON (`LeadChild.status = LOST`) — hai tầng khác nhau,
+  // cố ý. Hệ quả đã biết: hai con rớt vì hai lý do khác nhau ⇒ lượt ghi sau ĐÈ lượt
+  // trước; lý do của từng con tra ở `AuditLog` + `LeadActivity` (mỗi lượt đánh dấu ghi
+  // kèm tên + id của đứa con).
+  lostNote         String?    @db.Text
+  lostAt           DateTime?  @db.Timestamptz(6)
+
   // R1-04/05 — mốc thời gian phễu SR.QD.217 (L1→L2→L3 + bàn giao + SLA).
   qualifiedAt         DateTime?         @db.Timestamptz(6) // L2 — có SĐT + note
   handedAt            DateTime?         @db.Timestamptz(6) // HO bàn giao về CS
@@ -1500,6 +1528,13 @@ model LeadChild {
   interestedCenterId String? // tham chiếu Center
   note               String?              @db.Text
   trialStatus        LeadChildTrialStatus @default(NONE)
+  /// C-06 — trạng thái phễu của riêng đứa con này. NULL = phiếu cũ, CHƯA ai phân loại
+  /// (cột thêm sau khi bảng đã có dữ liệu prod). Cố ý KHÔNG `@default(NEW)`: gán "Mới"
+  /// cho 100% dòng cũ là bịa ra một khẳng định sai về những đứa đã ghi danh từ lâu, và
+  /// mọi báo cáo đếm theo trạng thái sẽ nuốt điều đó không một lời cảnh báo.
+  /// `LOST` ở đây là TRẠNG THÁI rớt (theo từng con); LÝ DO rớt nằm ở `Lead.lostNote`
+  /// (cấp phụ huynh — quyết định B5 ngày 24/08/2026).
+  status             LeadChildStatus?
   createdAt          DateTime             @default(now()) @db.Timestamptz(6)
   updatedAt          DateTime             @updatedAt @db.Timestamptz(6)
 
@@ -6101,6 +6136,125 @@ model RevenueTarget {
   @@unique([centerId, period])
   @@index([centerId])
   @@index([orgUnitId])
+}
+
+/// C-01 — chỉ tiêu SỐ HỌC SINH theo tháng × cơ sở. Song sinh với RevenueTarget ở trên.
+///
+/// ĐƠN VỊ ĐẾM: `targetCount` là số HỌC SINH (`LeadChild`), KHÔNG phải số phụ huynh
+/// (`Lead`) — quyết định 24/08/2026 (B4) nối doanh số về từng con qua `Order.leadChildId`,
+/// nên đơn vị sinh doanh thu là đứa trẻ và chỉ tiêu phải đếm cùng thứ với tử số của C2.
+/// Một phụ huynh hai con = 2 đơn vị chỉ tiêu. (E-02 thì ngược lại: đếm theo phụ huynh.)
+///
+/// `centerId = NULL` ⇒ chỉ tiêu TOÀN HỆ THỐNG (KHÔNG phải "chưa gán cơ sở").
+/// ⚠️ Khai vào SCOPE_EXEMPT (lib/db-scope.ts), KHÔNG khai SCOPED_MODELS — `injectScope`
+///    chèn `centerId IN (...)` trần và dòng toàn hệ thống sẽ tàng hình.
+/// ⚠️ `@@unique([centerId, period])` với `centerId` nullable: Postgres coi NULL là
+///    DISTINCT ⇒ `upsert` KHÔNG match nhánh toàn hệ thống, phải `findFirst` + create/update
+///    tay (khuôn có sẵn ở app/(admin)/admin/bao-cao/doanh-thu/_actions.ts).
+model LeadTarget {
+  id       String  @id @default(cuid())
+  centerId String?
+  // Luật cứng Nền Hệ thống #3 + quyết định 24/08 (B1): bảng MỚI mang CẢ HAI cột.
+  // Ở đây bảng nằm NGOÀI scope nên `orgUnitId` chỉ để ghi kép/đối soát, không phải cột lọc.
+  // `lib/org/dual-write.ts` tự lấp khi `centerId` có giá trị — không tự gọi orgUnitIdForCenter().
+  orgUnitId String?
+
+  period      String // "YYYY-MM" — cùng quy ước RevenueTarget.period + monthKeyVN
+  targetCount Int // SỐ HỌC SINH
+  note        String?
+  createdById String?
+  createdAt   DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt   DateTime @updatedAt @db.Timestamptz(6)
+
+  @@unique([centerId, period])
+  @@index([period])
+  @@index([centerId])
+  @@index([orgUnitId])
+}
+
+/// D-02 — chỉ tiêu NGÂN SÁCH QUẢNG CÁO theo tháng × cơ sở. Bảng thứ ba của bộ ba chỉ
+/// tiêu, cùng hình dạng với RevenueTarget (tiền THU) và LeadTarget (đầu NGƯỜI); ở đây
+/// đo tiền CHI cho quảng cáo.
+///
+/// ĐỌC KÈM: đây là con số NGƯỜI TA ĐẶT RA, không phải số đã tiêu. Số đã tiêu là
+/// snapshot chi tiêu Facebook của D-01 (chưa xây — đang chờ chốt loại mã kết nối Meta).
+/// D-03 ghép hai vế lại thành "% thực tế / chỉ tiêu", nên trộn hai thứ vào một bảng là
+/// mất luôn khả năng nói "đã tiêu vượt chỉ tiêu".
+///
+/// `centerId = NULL` ⇒ chỉ tiêu TOÀN HỆ THỐNG (KHÔNG phải "chưa gán cơ sở"). Nó KHÁC
+/// hẳn nhóm `CHƯA PHÂN BỔ` của D-06/D-08 — nhóm đó là chi tiêu THẬT chưa quy được về
+/// cơ sở nào, còn dòng NULL ở đây là một chỉ tiêu do người đặt cho cả công ty.
+///
+/// ⚠️ Khai vào SCOPE_EXEMPT (lib/db-scope.ts), KHÔNG khai SCOPED_MODELS — `injectScope`
+///    chèn `centerId IN (...)` trần và dòng toàn hệ thống sẽ tàng hình.
+/// ⚠️ `@@unique([centerId, period])` với `centerId` nullable: Postgres coi NULL là
+///    DISTINCT ⇒ `upsert` KHÔNG match nhánh toàn hệ thống, phải `findFirst` + create/update
+///    tay (khuôn có sẵn ở app/(admin)/admin/bao-cao/doanh-thu/_actions.ts).
+/// ⚠️ `targetAmount` là `Int` ⇒ int4, trần 2_147_483_647 đồng. Đường ghi CHẶN TRƯỚC ở
+///    `ADS_BUDGET_TARGET_AMOUNT_MAX` (lib/reports/ads-budget-target.ts) để lỗi hiện ra
+///    ngay tại ô nhập, không phải thành "Lỗi cơ sở dữ liệu" chẳng nói gì.
+model AdsBudgetTarget {
+  id       String  @id @default(cuid())
+  centerId String?
+  // Luật cứng Nền Hệ thống #3 + quyết định 24/08 (B1): bảng MỚI mang CẢ HAI cột.
+  // Bảng nằm NGOÀI scope nên `orgUnitId` chỉ để ghi kép/đối soát, không phải cột lọc.
+  // `lib/org/dual-write.ts` tự lấp khi `centerId` có giá trị — không tự gọi orgUnitIdForCenter().
+  orgUnitId String?
+
+  period       String // "YYYY-MM" — cùng quy ước RevenueTarget.period + monthKeyVN
+  targetAmount Int // VNĐ, số nguyên
+  note         String?
+  createdById  String?
+  createdAt    DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt    DateTime @updatedAt @db.Timestamptz(6)
+
+  @@unique([centerId, period])
+  @@index([period])
+  @@index([centerId])
+  @@index([orgUnitId])
+}
+
+/// G-04 — tuỳ chọn cột danh sách theo TỪNG NGƯỜI (kiểu MISA).
+///
+/// 🔴 CỐ Ý KHÔNG mang `centerId`/`orgUnitId` — ngoại lệ có chủ đích của luật cứng
+/// Nền Hệ thống #3 ("bảng mới có DỮ LIỆU THEO ĐƠN VỊ bắt buộc có orgUnitId"), đã
+/// chốt tường minh ở PRD G-lead §7.2 / A-nen-tang SL-13. Bốn lý do, viết ra để
+/// người sau khỏi "sửa cho đúng luật":
+///   1. Đây là SỞ THÍCH CÁ NHÂN. Nó không trả lời "bản ghi này thuộc cơ sở nào",
+///      nó trả lời "người này thích nhìn thấy gì".
+///   2. Cách ly đã mạnh hơn scope: MỌI truy vấn khoá cứng `userId` từ phiên đăng
+///      nhập. Không màn nào đọc cấu hình của người khác ⇒ không có gì để scope.
+///   3. Quản lý nhiều cơ sở chỉ có MỘT bộ cột; gắn theo cơ sở thì cột nhảy loạn
+///      mỗi lần họ đổi bộ lọc phạm vi.
+///   4. Khai vào SCOPED_MODELS còn phản tác dụng: `injectScope` chèn
+///      `centerId IN (...)` trần ⇒ dòng `centerId = null` tàng hình với CHÍNH CHỦ.
+/// Vì không có `centerId`, bảng này KHÔNG cần (và không được) khai vào
+/// SCOPED_MODELS/SCOPE_EXEMPT (`lib/db-scope.ts`) hay BACKFILL_SPECS
+/// (`lib/org/center-bridge.ts`) — cả hai test canh gác đều soi theo SỰ CÓ MẶT của
+/// cột, nên thêm cột "cho đủ luật" là tự chuốc thêm hai dòng khai báo vô nghĩa.
+///
+/// `columns` (Json) — hình dạng ở `lib/tables/column-preference.ts`:
+///   { "v": 1, "visible": ["parentName", …], "hidden": ["email", …] }
+/// Cần CẢ `hidden` chứ không chỉ `visible`: thiếu nó thì không phân biệt được
+/// "đã tắt có chủ ý" với "chưa từng biết đến", và cột thêm sau sẽ không bao giờ
+/// hiện ra với người đã lưu cấu hình.
+model UserTablePreference {
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation("UserTablePreferences", fields: [userId], references: [id], onDelete: Cascade)
+
+  /// Định danh bảng, có namespace: "admin.leads.list". Bảng thứ hai chỉ cần khai
+  /// danh mục cột riêng ở tầng mã — KHÔNG phải đổi schema.
+  tableKey String
+  columns  Json
+  /// Dành sẵn cho P2 (nhớ số dòng mỗi trang). v1 luôn null.
+  pageSize Int?
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  @@unique([userId, tableKey])
+  @@index([userId])
 }
 
 // ═══ R7-02 — Lớp trải nghiệm N buổi ══════════════════════════════════════════

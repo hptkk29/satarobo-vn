@@ -16,6 +16,8 @@ import {
   missingMilestoneComments,
 } from "@/lib/lms/report-card-milestone";
 import { formatDateVN } from "@/lib/format/date";
+import { attachDeadlines } from "@/lib/lms/media-review-deadline-config";
+import { groupPendingMedia, pickOverdueFolders } from "@/lib/lms/media-review-overdue";
 import {
   formatDayKeyDMY,
   shiftDayKey,
@@ -201,10 +203,60 @@ async function parentRequest(user: TaskUser, now: Date, cfg: PendingCfg): Promis
   };
 }
 
+/**
+ * F-21 — id ảnh đang QUÁ HẠN duyệt, theo hạn thật của F-20 (10h sáng ngày hôm sau
+ * NGÀY DẠY, đặt được theo từng cơ sở).
+ *
+ * Trước đây chỗ này dùng ngưỡng chung của dashboard ("nằm chờ quá `staleDays` kể từ
+ * lúc TẢI LÊN"). Hai mốc lệch nhau cả hai chiều, và mốc cũ còn bỏ sót đúng ca hay
+ * gặp nhất: giáo viên tải ảnh lên muộn cho buổi tuần trước — hạn của buổi đó đã trôi
+ * từ lâu, nhưng vì mới tải lên nên bị coi là "còn 2 ngày nữa mới trễ".
+ *
+ * Hỏng ở đây KHÔNG được làm chết cả cái chuông (hàm này nằm trong `Promise.all` của
+ * 15 nguồn việc) → mọi lỗi rơi về ngưỡng cũ thay vì ném lên.
+ */
+async function mediaOverdueIds(
+  rows: readonly {
+    id: string;
+    classId: string;
+    classSessionId: string | null;
+    takenAt: Date | null;
+    createdAt: Date;
+  }[],
+  now: Date,
+  staleMs: number,
+): Promise<Set<string>> {
+  try {
+    const sessionIds = [
+      ...new Set(rows.map((r) => r.classSessionId).filter((v): v is string => !!v)),
+    ];
+    const sessions = sessionIds.length
+      ? await db.classSession.findMany({
+          where: { id: { in: sessionIds } },
+          select: { id: true, classId: true, date: true },
+        })
+      : [];
+    const folders = groupPendingMedia(rows, new Map(sessions.map((s) => [s.id, s])));
+    const classes = await db.class.findMany({
+      // Lớp đã xoá mềm → không tính là quá hạn (ảnh của nó là rác chờ dọn).
+      where: { id: { in: [...new Set(folders.map((f) => f.classId))] }, deletedAt: null },
+      select: { id: true, centerId: true, orgUnitId: true },
+    });
+    const quaHan = pickOverdueFolders(
+      await attachDeadlines(folders, new Map(classes.map((c) => [c.id, c]))),
+      now,
+    );
+    return new Set(quaHan.flatMap((f) => f.mediaIds));
+  } catch (err) {
+    console.warn("[pending-tasks] không tính được hạn duyệt ảnh — dùng ngưỡng cũ:", err);
+    const cutoff = now.getTime() - staleMs;
+    return new Set(rows.filter((r) => r.createdAt.getTime() < cutoff).map((r) => r.id));
+  }
+}
+
 async function mediaApproval(user: TaskUser, now: Date, cfg: PendingCfg): Promise<PendingTaskGroup | null> {
   if (!cfg.can("media:approve")) return null;
   const { centerScope } = scope(user);
-  const twoDaysAgo = new Date(now.getTime() - cfg.staleMs);
 
   // ClassSessionMedia.classId là cột phẳng → lọc cơ sở qua tập classId trong cơ sở.
   let classFilter: { classId: { in: string[] } } | undefined;
@@ -214,22 +266,29 @@ async function mediaApproval(user: TaskUser, now: Date, cfg: PendingCfg): Promis
   }
   const rows = await db.classSessionMedia.findMany({
     where: { status: "PENDING", ...(classFilter ?? {}) },
-    select: { id: true, fileName: true, createdAt: true },
+    select: {
+      id: true,
+      fileName: true,
+      classId: true,
+      classSessionId: true,
+      takenAt: true,
+      createdAt: true,
+    },
     orderBy: { createdAt: "asc" },
     take: 50,
   });
-  const overdueCount = rows.filter((r) => r.createdAt < twoDaysAgo).length;
+  const quaHan = await mediaOverdueIds(rows, now, cfg.staleMs);
   return {
     type: "media_approval",
     label: "Ảnh chờ duyệt",
     count: rows.length,
-    overdueCount,
+    overdueCount: rows.filter((r) => quaHan.has(r.id)).length,
     href: "/media",
     items: rows.slice(0, cfg.itemLimit).map((r) => ({
       id: r.id,
       label: r.fileName ?? "Ảnh lớp học",
       href: "/media",
-      overdue: r.createdAt < twoDaysAgo,
+      overdue: quaHan.has(r.id),
     })),
   };
 }

@@ -28,6 +28,7 @@ export type SettingGroup =
   | "otp"
   | "teacher"
   | "lms"
+  | "media"
   | "storage"
   | "public"
   | "content"
@@ -602,6 +603,30 @@ export const SETTINGS = {
     label: "Cho phụ huynh xem điểm tổng quan bài tập/kiểm tra",
     schema: z.boolean(),
     default: false,
+    centerOverridable: true,
+  }),
+  // ── F-20 — hạn duyệt ảnh/video buổi học ────────────────────────────────
+  // Mặc định "10h sáng ngày hôm sau" (spec F-20 + quyết định #7). Hai key rời chứ
+  // không một chuỗi "10:00 D+1": trang cấu hình hiện ô JSON theo schema, số nguyên
+  // validate được biên, chuỗi thì không.
+  // ⚠️ GIỜ VN, không phải UTC — quy đổi nằm ở lib/lms/media-review-deadline.ts.
+  // ⚠️ Hạn ĐÓNG BĂNG lúc folder duyệt sinh ra (F-20-2): đổi hai key này chỉ đổi
+  // các folder MỚI, không viết lại hạn của quá khứ (nếu không báo cáo SLA F-30 sẽ
+  // đổi kết quả của những tháng đã chốt mỗi lần ai đó chỉnh cấu hình).
+  "media.reviewDeadlineHour": def({
+    key: "media.reviewDeadlineHour",
+    group: "media",
+    label: "Giờ hạn duyệt ảnh/video buổi học (giờ VN, 0–23)",
+    schema: z.number().int().min(0).max(23),
+    default: 10, // spec F-20: 10h sáng
+    centerOverridable: true,
+  }),
+  "media.reviewDeadlineOffsetDays": def({
+    key: "media.reviewDeadlineOffsetDays",
+    group: "media",
+    label: "Hạn duyệt ảnh/video sau ngày dạy (số ngày, 0 = trong ngày)",
+    schema: z.number().int().min(0).max(7),
+    default: 1, // spec F-20: "ngày hôm sau"
     centerOverridable: true,
   }),
   "storage.presignTtlSec": def({

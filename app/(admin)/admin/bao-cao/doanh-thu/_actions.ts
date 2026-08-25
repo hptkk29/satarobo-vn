@@ -4,6 +4,9 @@ import { auth } from "@/lib/auth";
 import { checkPermission } from "@/lib/auth/check-permission";
 import { resolveActor } from "@/lib/auth/actor";
 import { scopedDb } from "@/lib/db-scope";
+import { safeUpdateTag } from "@/lib/cache/safe-cache";
+import { CACHE_TAGS } from "@/lib/cache/tags";
+import { checkRevenueTargetScope } from "@/lib/reports/revenue-target-scope";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 
@@ -40,7 +43,10 @@ const targetSchema = z.object({
 export async function setRevenueTargetAction(formData: FormData): Promise<ActionResult> {
   const session = await auth();
   if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
-  if (!(await checkPermission("payments:manage"))) {
+  // B-01 — quyền RIÊNG cho việc đặt mục tiêu. Trước đây gác bằng quyền thao tác tiền
+  // (mở/huỷ/hoàn, cấu hình phương thức thanh toán, hoa hồng) mà Quản lý cơ sở cố ý
+  // không có ⇒ đúng người cần dùng lại là người bị chặn.
+  if (!(await checkPermission("revenue_targets:manage"))) {
     return { ok: false, error: "Không có quyền đặt mục tiêu doanh thu" };
   }
 
@@ -55,18 +61,15 @@ export async function setRevenueTargetAction(formData: FormData): Promise<Action
   }
   const { centerId, period, targetAmount, note } = parsed.data;
 
-  // Cách ly cơ sở: user không phải HO/SUPER_ADMIN chỉ được đặt mục tiêu cho cơ sở
-  // mình thấy. centerId null (toàn hệ thống) chỉ HO-level/SUPER_ADMIN.
+  // Cách ly cơ sở: Quản lý cơ sở chỉ đặt được mục tiêu cho cơ sở MÌNH QUẢN; centerId
+  // null (toàn hệ thống) chỉ HO-level/SUPER_ADMIN. Luật nằm ở hàm thuần có test
+  // (lib/reports/revenue-target-scope.ts) — quyền `revenue_targets:manage` chỉ trả lời
+  // "được đặt mục tiêu", không trả lời "cho cơ sở nào", và `RevenueTarget` ∈ SCOPE_EXEMPT
+  // nên `scopedDb` là pass-through, không chặn giúp.
   const actor = await resolveActor(session.user.id);
   const sdb = scopedDb(actor); // RevenueTarget là SCOPE_EXEMPT → pass-through (thoả R6-F1)
-  const isGlobalAllowed = actor.isSuperAdmin || actor.isHoLevel;
-  if (centerId === null) {
-    if (!isGlobalAllowed) {
-      return { ok: false, error: "Chỉ cấp hội sở mới đặt được mục tiêu toàn hệ thống" };
-    }
-  } else if (!isGlobalAllowed && !actor.visibleCenterIds.includes(centerId)) {
-    return { ok: false, error: "Cơ sở ngoài phạm vi quản lý của bạn" };
-  }
+  const scope = checkRevenueTargetScope(actor, centerId);
+  if (!scope.ok) return { ok: false, error: scope.error };
 
   try {
     if (centerId === null) {
@@ -96,6 +99,15 @@ export async function setRevenueTargetAction(formData: FormData): Promise<Action
     return { ok: false, error: "Lỗi cơ sở dữ liệu — không lưu được mục tiêu" };
   }
 
+  // B-01 — lưu xong PHẢI thấy số mới ngay. Trang đọc qua `safeCache(..., { tags:
+  // [CACHE_TAGS.report], revalidate: 120 })` với khoá gồm actorScopeKey + bộ lọc;
+  // `revalidatePath` KHÔNG đụng entry của `unstable_cache` ⇒ trước đây bảng vẫn hiện
+  // số cũ tới 2 phút và người dùng bấm Lưu thêm vài lần. Huỷ theo TAG mới đúng chỗ.
+  safeUpdateTag(CACHE_TAGS.report);
+  // Giữ cả hai cách viết đường dẫn: URL thật của trang là `/admin/bao-cao/doanh-thu`
+  // (proxy rewrite từ host admin), bản không tiền tố là dấu vết cũ — vô hại, và trang
+  // đang `force-dynamic` nên hai dòng này chỉ là lớp phụ, tag ở trên mới là cái chữa.
   revalidatePath("/bao-cao/doanh-thu");
+  revalidatePath("/admin/bao-cao/doanh-thu");
   return { ok: true };
 }
