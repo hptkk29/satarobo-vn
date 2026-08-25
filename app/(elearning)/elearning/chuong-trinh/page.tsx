@@ -228,9 +228,13 @@ export default async function Page() {
         <Link href="/elearning/kho-cau-hoi" className="underline">
           kho câu hỏi
         </Link>
-        , và đề thi ở{" "}
+        , đề thi ở{" "}
         <Link href="/elearning/de-thi" className="underline">
           màn đề thi
+        </Link>
+        , và khung chấm bài tập ở{" "}
+        <Link href="/elearning/khung-cham" className="underline">
+          màn khung chấm
         </Link>
         .
       </p>
