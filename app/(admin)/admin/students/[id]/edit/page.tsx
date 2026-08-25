@@ -7,6 +7,7 @@ import { hasRole } from "@/lib/auth/permissions";
 import { checkPermission, checkPermissionDetail } from "@/lib/auth/check-permission";
 import { maskPhone } from "@/lib/utils";
 import { resolveActor } from "@/lib/auth/actor";
+import { roleManagesCenter } from "@/lib/auth/managed-centers";
 import { getSelectableOrgUnits } from "@/lib/org/org-service";
 import { getStudentProgressForClasses } from "@/lib/progress";
 import { getStudentClassProgress, getStudentAbsences } from "@/lib/students/progress";
@@ -115,9 +116,15 @@ export default async function EditStudentPage({ params }: Props) {
   // LMS-17 (W4-b) — mở editor năng lực cho GV PHỤ TRÁCH lớp HS.
   // Mirror đúng logic backend canAssessStudent() trong ../_actions.ts (SUPER_ADMIN |
   // CENTER_MANAGER cùng cơ sở | TEACHER dạy lớp HS đang học) để UI gate khớp server gate.
+  // A-01-6 (26/08/2026): vế QLCS trước đây chép tay `student.centerId ===
+  // session.user.centerId`. Server đã chuyển sang `roleManagesCenter` nhưng gate UI
+  // giữ luật cũ ⇒ với QLCS giữ 2 cơ sở, server CHO nhưng nút không bao giờ hiện ở cơ
+  // sở thứ hai: fix đúng mà không nghiệm thu được bằng mắt. Gọi CHUNG một hàm với
+  // server (`canAssessStudent` → lib/lms/skill-access.ts) thay vì chép lần thứ ba.
   const isSuperOrManager =
     hasRole(session.user, "SUPER_ADMIN") ||
-    (hasRole(session.user, "CENTER_MANAGER") && student.centerId === session.user.centerId);
+    (hasRole(session.user, "CENTER_MANAGER") &&
+      roleManagesCenter(await resolveActor(session.user.id), "CENTER_MANAGER", student.centerId));
   const teachesStudent =
     !isSuperOrManager &&
     hasRole(session.user, "TEACHER") &&

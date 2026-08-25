@@ -2,6 +2,7 @@
 
 import { auth } from "@/lib/auth";
 import { resolveActor } from "@/lib/auth/actor";
+import { roleManagesCenter } from "@/lib/auth/managed-centers";
 import { scopedDb } from "@/lib/db-scope";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
@@ -20,11 +21,32 @@ type ClassGate = {
 };
 
 /**
- * LMS-2/3 — quyền thao tác trên 1 buổi học của lớp: SUPER_ADMIN, CENTER_MANAGER
- * cùng cơ sở, hoặc GV chính/trợ giảng của lớp.
+ * LMS-2/3 — quyền thao tác trên 1 buổi học của lớp: SUPER_ADMIN, CENTER_MANAGER trong
+ * phạm vi cơ sở của mình, hoặc GV chính/trợ giảng của lớp.
  * ⚠️ Gate này KHÔNG biết dạy thay/thực dạy (chỉ nhìn LỚP) — luồng NHẬN XÉT đã chuyển
  * sang `canManageSessionRecord` (./_feedback-core, ownership theo BUỔI). Giữ nguyên
  * cho các caller còn lại (attendance/assignments/exams/checklist + view page).
+ *
+ * ── A-01-6 · bất biến L-A6 (25/08, sửa 26/08/2026) ─────────────────────────────
+ * Nhánh QLCS trước đây là `cls.centerId === u.centerId`, tức so với ĐÚNG MỘT cơ sở neo.
+ * Hậu quả đo được: quản lý giữ 2 cơ sở XEM được lớp ở cơ sở thứ hai (A-01 đã mở đường
+ * đọc) nhưng không điểm danh / bắt đầu / chốt buổi được ở đó — tính năng "xanh hết chỉ
+ * số" mà người thật không làm việc được.
+ *
+ * ⚠️ Bản vá 25/08 (`visibleCenterIds` AND `passesScope("Class", …)`) SAI và đã bị thay:
+ * cả hai vế đều nở theo vai KIÊM NHIỆM nên phép AND không cắt gì — CENTER_MANAGER@CS1
+ * kiêm CENTER_ACCOUNTANT@CS2 (hoặc kiêm MARKETING ⇒ HO_MARKETING@HO) ghi được lên buổi
+ * học của cơ sở họ chỉ có quyền XEM. Lý lẽ đầy đủ + hai kịch bản đo được: khối chú thích
+ * đầu `lib/auth/managed-centers.ts`.
+ *
+ * Điều kiện HÔM NAY là MỘT vế, đo đúng thứ cần đo: cơ sở của lớp phải nằm trong tập cơ
+ * sở mà người này đang giữ CHÍNH vai `CENTER_MANAGER` (`roleManagesCenter`) — suy từ
+ * `PermEntry.roleCode` + `PermEntry.centerScope`, tức từ đúng dòng `UserOrgRole` đẻ ra
+ * quyền. Tập đó luôn ⊆ `visibleCenterIds`, nên AND thêm vế cũ là thừa chứ không "chặt hơn".
+ *
+ * ⚠️ `scopedDb` chỉ che đường ĐỌC (lib/db-scope.ts đầu file) — đây là cổng của đường
+ * GHI nên phải tự kiểm, KHÔNG được trông vào `loadSessionForGate` lọc hộ. Test ghim
+ * điều này bằng cách thay `scopedDb` bằng client giả không lọc gì (`./_actions.test.ts`).
  */
 export async function canManageSessionClass(
   user: { id: string; role: string; centerId: string | null },
@@ -35,7 +57,10 @@ export async function canManageSessionClass(
   const fresh = await getFreshGateUser(user.id);
   const u = fresh ?? user;
   if (hasRole(u, "SUPER_ADMIN")) return true;
-  if (hasRole(u, "CENTER_MANAGER")) return !!cls.centerId && cls.centerId === u.centerId;
+  if (hasRole(u, "CENTER_MANAGER")) {
+    const actor = await resolveActor(user.id);
+    return roleManagesCenter(actor, "CENTER_MANAGER", cls.centerId);
+  }
   if (hasRole(u, "TEACHER")) return cls.teacherId === user.id || cls.assistantId === user.id;
   return false;
 }

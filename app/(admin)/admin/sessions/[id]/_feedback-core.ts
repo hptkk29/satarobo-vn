@@ -36,6 +36,7 @@ import { hasRole } from "@/lib/auth/permissions";
 import { getFreshGateUser } from "@/lib/auth/fresh-gate-user";
 import { publishEvent } from "@/lib/events/publish";
 import { isSessionOwnedByTeacher } from "@/lib/lms/session-ownership";
+import { roleManagesCenter } from "@/lib/auth/managed-centers";
 import { isBlankFeedbackInput } from "@/lib/lms/feedback-content";
 import {
   EMPTY_NOTES,
@@ -74,7 +75,18 @@ export async function canManageSessionRecord(
   const u = (await getFreshGateUser(user.id)) ?? user;
   if (hasRole(u, "SUPER_ADMIN")) return true;
   if (hasRole(u, "CENTER_MANAGER")) {
-    return !!sess.class.centerId && sess.class.centerId === u.centerId;
+    // ── A-01-6 · bất biến L-A6 (26/08/2026) ───────────────────────────────────
+    // Trước: `sess.class.centerId === u.centerId` — so với ĐÚNG MỘT cơ sở neo.
+    // Vì sao cổng NÀY cũng phải sửa (không phải việc dọn cho đẹp): `completeSession`
+    // đòi `ckFeedback` (đã nhận xét đủ học viên có mặt), mà đường GHI nhận xét đi qua
+    // đúng cổng này. Bỏ sót nó thì QLCS giữ 2 cơ sở điểm danh và bấm chốt buổi được ở
+    // cơ sở thứ hai nhưng vẫn kẹt ở bước nhận xét — tính năng mở nửa vời, tệ hơn là
+    // chưa mở, vì người dùng đi được nửa đường rồi mới gặp tường.
+    // Dùng CHUNG một luật với `canManageSessionClass` (./_actions.ts): tập cơ sở mà
+    // người này đang giữ CHÍNH vai CENTER_MANAGER, KHÔNG phải `visibleCenterIds`
+    // (vế đó nở theo vai kiêm nhiệm — xem khối chú thích đầu lib/auth/managed-centers.ts).
+    const actor = await resolveActor(user.id);
+    return roleManagesCenter(actor, "CENTER_MANAGER", sess.class.centerId);
   }
   if (hasRole(u, "TEACHER")) {
     const actor = await resolveActor(user.id);

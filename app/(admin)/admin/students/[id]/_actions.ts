@@ -5,17 +5,38 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { RoboticsSkill, SkillLevel } from "@prisma/client";
 import { hasRole } from "@/lib/auth/permissions";
+import { getFreshGateUser } from "@/lib/auth/fresh-gate-user";
 import { resolveActor } from "@/lib/auth/actor";
+import { roleManagesCenter } from "@/lib/auth/managed-centers";
 import { scopedDb } from "@/lib/db-scope";
 
 type Result = { ok: true } | { ok: false; error: string };
 
-// Quyền chấm năng lực: SUPER_ADMIN, CM cùng cơ sở, hoặc GV dạy lớp HS đang học.
+// Quyền chấm năng lực: SUPER_ADMIN, QLCS trong phạm vi cơ sở MÌNH QUẢN LÝ, hoặc GV dạy
+// lớp HS đang học.
+//
+// A-01-6 (bất biến L-A6, 25/08 — sửa 26/08/2026) — nhánh QLCS đổi từ "bằng cơ sở NEO
+// (`user.centerId`, ảnh chụp lúc đăng nhập)" sang "cơ sở người này đang giữ vai QLCS".
+//
+// ⚠️ Bản 25/08 kiểm `visibleCenterIds` AND `passesScope("Student", …)` và CẢ HAI vế đều
+// sai chỗ: `passesScope` ở đây TRÙNG đúng lớp lọc mà `sdb.student.findUnique` vừa chạy
+// (cùng gọi `getModelVisibleCenterIds("Student", actor)`), nên nó không thêm lớp nào; còn
+// `students:view-all` của một vai KIÊM NHIỆM (CENTER_ACCOUNTANT@CS2, hay HO_MARKETING@HO
+// khi tài khoản kiêm MARKETING) kéo cơ sở lạ vào cả hai vế. Kết quả: QLCS CS1 ghi được
+// bản ghi năng lực lên học viên CS2. Lý lẽ + hai kịch bản đo được: khối chú thích đầu
+// `lib/auth/managed-centers.ts`.
+//
+// 26/08 — vai đọc TỪ DB (`getFreshGateUser`) chứ không từ JWT, đồng bộ với cổng buổi học
+// (`canManageSessionClass`): gỡ vai QLCS trong DB phải có tác dụng ngay, không đợi người
+// đó đăng xuất. `session.user` (JWT) không mang mảng `roles` nên `hasRole` trên nó còn bỏ
+// sót cả vai phụ.
 async function canAssessStudent(
   user: { id: string; role: string; centerId: string | null },
   studentId: string,
 ): Promise<boolean> {
-  if (hasRole(user, "SUPER_ADMIN")) return true;
+  const fresh = await getFreshGateUser(user.id);
+  const u = fresh ?? user;
+  if (hasRole(u, "SUPER_ADMIN")) return true;
   const actor = await resolveActor(user.id);
   const sdb = scopedDb(actor);
   const student = await sdb.student.findUnique({
@@ -23,10 +44,10 @@ async function canAssessStudent(
     select: { centerId: true },
   });
   if (!student) return false;
-  if (hasRole(user, "CENTER_MANAGER")) {
-    return !!student.centerId && student.centerId === user.centerId;
+  if (hasRole(u, "CENTER_MANAGER")) {
+    return roleManagesCenter(actor, "CENTER_MANAGER", student.centerId);
   }
-  if (hasRole(user, "TEACHER")) {
+  if (hasRole(u, "TEACHER")) {
     const teaches = await sdb.enrollment.findFirst({
       where: {
         studentId,
