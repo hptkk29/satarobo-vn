@@ -127,6 +127,10 @@ export default async function DashboardQlcsPage({ searchParams }: PageProps) {
           actor={actor}
           filters={fc.filters}
           visibleCenters={fc.visibleCenters}
+          // B-02: chỉ người ĐẶT được mục tiêu toàn hệ thống mới được ĐỌC dòng
+          // `centerId = NULL`. Lấy thẳng cờ mà `resolveScopeFilters` đã tính, không để
+          // tab tự so lại vai — hai chỗ tính cùng một luật là hai chỗ lệch nhau về sau.
+          isGlobalAllowed={fc.isGlobalAllowed}
         />
       ) : null}
       {tab === "kinh-doanh" ? <TabKinhDoanh /> : null}
