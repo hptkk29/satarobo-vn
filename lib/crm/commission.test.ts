@@ -6,6 +6,8 @@ import {
   validateRates,
   CommissionError,
   DEFAULT_RATES,
+  COMMISSION_TIERS,
+  MAX_TOTAL_RATE,
 } from "@/lib/crm/commission";
 
 const recipients = { QC: "qc", SALE_ADMIN: "adm", SALE: "sale", QL_TT: "tt" };
@@ -47,5 +49,95 @@ describe("[R1-10] commission engine", () => {
   it("chỉ sinh dòng cho tầng có recipient; revenue<=0 → rỗng", () => {
     expect(computeCommission({ revenue: 10_000_000, isRenewal: false, recipients: { SALE: "s" } })).toHaveLength(1);
     expect(computeCommission({ revenue: 0, isRenewal: false, recipients })).toEqual([]);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// GĐ6 (25/08/2026) — tầng giáo viên, trần 9%, và tham số đợt cho mục 9.2.
+// ─────────────────────────────────────────────────────────────────────────────
+describe("[GĐ6] tầng giáo viên + trần 9%", () => {
+  it("GIAO_VIEN nằm trong danh sách tầng và mặc định 1%", () => {
+    expect(COMMISSION_TIERS).toContain("GIAO_VIEN");
+    expect(DEFAULT_RATES.GIAO_VIEN).toBeCloseTo(0.01, 6);
+  });
+
+  it("tổng tỉ lệ mặc định đúng 9% — nới trần theo chốt câu 7 (phương án A)", () => {
+    const tong = COMMISSION_TIERS.reduce((s, t) => s + DEFAULT_RATES[t], 0);
+    expect(tong).toBeCloseTo(0.09, 6);
+    expect(MAX_TOTAL_RATE).toBeCloseTo(0.09, 6);
+    // Mức mặc định phải VỪA CHẠM trần, không vượt — nếu không thì lưu cấu hình
+    // mặc định cũng bị chính validateRates từ chối.
+    expect(() => validateRates()).not.toThrow();
+  });
+
+  it("vượt 9% vẫn bị chặn, và thông điệp nêu ĐÚNG con số trần", () => {
+    try {
+      validateRates({ SALE: 0.05 }); // 0.01+0.01+0.05+0.02+0.01 = 10%
+      throw new Error("đáng lẽ phải ném lỗi");
+    } catch (e) {
+      expect(e).toBeInstanceOf(CommissionError);
+      // Trước GĐ6 chuỗi viết cứng "8%", nới trần mà quên sửa là báo sai cho người dùng.
+      expect((e as CommissionError).message).toContain("9%");
+    }
+  });
+
+  it("sinh dòng cho giáo viên khi có người nhận", () => {
+    const lines = computeCommission({
+      revenue: 10_000_000,
+      isRenewal: false,
+      recipients: { SALE: "s1", GIAO_VIEN: "gv1" },
+    });
+    const gv = lines.find((l) => l.tier === "GIAO_VIEN");
+    expect(gv).toBeDefined();
+    expect(gv?.amount).toBe(100_000);
+    expect(gv?.recipientId).toBe("gv1");
+  });
+
+  it("không có người nhận thì KHÔNG sinh dòng giáo viên", () => {
+    const lines = computeCommission({
+      revenue: 10_000_000,
+      isRenewal: false,
+      recipients: { SALE: "s1" },
+    });
+    expect(lines.some((l) => l.tier === "GIAO_VIEN")).toBe(false);
+  });
+});
+
+describe("[GĐ6] tham số đợt — chỗ để mục 9.2 đổi bằng cấu hình", () => {
+  const base = {
+    revenue: 10_000_000,
+    isRenewal: false,
+    recipients: { SALE: "s1" },
+  };
+
+  it("MẶC ĐỊNH: đợt 2 vẫn tính hoa hồng đầy đủ (một hợp đồng = một kỳ)", () => {
+    // Đây là phương án đang đề xuất: chia mấy đợt thu cũng vẫn là khách mới. Nếu đợt 2
+    // xuống mức tái tục thì Sale có động cơ ép phụ huynh đóng full.
+    const lines = computeCommission({ ...base, soDot: 2 });
+    expect(lines.find((l) => l.tier === "SALE")?.amount).toBe(400_000);
+  });
+
+  it("bật cờ: đợt 2 trở đi coi như tái tục, không sinh dòng nào", () => {
+    expect(
+      computeCommission({ ...base, soDot: 2, dotSauTinhTaiTuc: true }),
+    ).toEqual([]);
+    expect(
+      computeCommission({ ...base, soDot: 3, dotSauTinhTaiTuc: true }),
+    ).toEqual([]);
+  });
+
+  it("bật cờ nhưng đợt 1 thì KHÔNG bị ảnh hưởng", () => {
+    const lines = computeCommission({ ...base, soDot: 1, dotSauTinhTaiTuc: true });
+    expect(lines.find((l) => l.tier === "SALE")?.amount).toBe(400_000);
+  });
+
+  it("bỏ trống soDot coi như đợt 1", () => {
+    const lines = computeCommission({ ...base, dotSauTinhTaiTuc: true });
+    expect(lines.find((l) => l.tier === "SALE")?.amount).toBe(400_000);
+  });
+
+  it("cờ chỉ có tác dụng khi bật TƯỜNG MINH — undefined không tự suy", () => {
+    const lines = computeCommission({ ...base, soDot: 2, dotSauTinhTaiTuc: undefined });
+    expect(lines.length).toBeGreaterThan(0);
   });
 });
