@@ -122,7 +122,13 @@ export default async function DashboardQlcsPage({ searchParams }: PageProps) {
         })}
       </nav>
 
-      {tab === "tai-chinh" ? <TabTaiChinh /> : null}
+      {tab === "tai-chinh" ? (
+        <TabTaiChinh
+          actor={actor}
+          filters={fc.filters}
+          visibleCenters={fc.visibleCenters}
+        />
+      ) : null}
       {tab === "kinh-doanh" ? <TabKinhDoanh /> : null}
       {tab === "chi-phi-marketing" ? <TabChiPhiMarketing /> : null}
       {tab === "tuong-tac-kh" ? <TabTuongTacKh /> : null}
