@@ -42,6 +42,7 @@ import {
   MessageCircle,
   MessageSquarePlus,
   MessagesSquare,
+  Megaphone,
   Network,
   Newspaper,
   NotebookPen,
@@ -345,6 +346,8 @@ const NAV_GROUPS: NavGroup[] = [
       { label: "Doanh thu vs mục tiêu", href: "/bao-cao/doanh-thu", icon: Coins, perm: [...PAGE_GATES["/bao-cao/doanh-thu"]] },
       // C-01: màn đặt chỉ tiêu lead (số học sinh) theo tháng × cơ sở.
       { label: "Chỉ tiêu lead", href: "/bao-cao/muc-tieu-lead", icon: Target, perm: [...PAGE_GATES["/bao-cao/muc-tieu-lead"]] },
+      // D-02: màn đặt chỉ tiêu ngân sách quảng cáo (VNĐ) theo tháng × cơ sở.
+      { label: "Chỉ tiêu ngân sách QC", href: "/bao-cao/ngan-sach-quang-cao", icon: Megaphone, perm: [...PAGE_GATES["/bao-cao/ngan-sach-quang-cao"]] },
       // US-16 AC4 — đo pilot chat (kích hoạt TK + đọc thông báo đầu ≤48h) theo từng lớp.
       // `chat:admin` khớp ĐÚNG gate của trang (chỉ SUPER_ADMIN) — không mượn PAGE_GATES vì
       // route này cố ý không khai ở đó.

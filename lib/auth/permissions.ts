@@ -79,6 +79,12 @@ export type Action =
   // vì key đó đang gác màn "Cấu hình chia lead tự động": cấp cho QLCS để họ gõ một con số
   // là mở kèm một năng lực khác hẳn mà không ai định trao.
   | "lead_targets:manage"
+  // D-02 — đặt/sửa chỉ tiêu NGÂN SÁCH QUẢNG CÁO theo tháng × cơ sở (bảng AdsBudgetTarget).
+  // Key RIÊNG, đúng tiền lệ `revenue_targets:manage` (B-01) + `lead_targets:manage` (C-01).
+  // KHÔNG mượn `leads:view-all` (key đang gác /admin/marketing/funnel — mượn là mở màn ĐẶT
+  // chỉ tiêu cho QLCS lẫn Sale), và KHÔNG lan thêm call-site cho `canEditAds`
+  // (lib/crm/ads-insights.ts so roleCode bằng tay — vi phạm luật Nền Hệ thống #1).
+  | "ads_budget_targets:manage"
   // #11 T2 (OI-4) — xem PII lead: SĐT/email/tên PH-HS/ghi chú tư vấn.
   // ⚠️ MARKETING **CÓ** quyền này (user chốt 21/07, ĐẢO quyết định "che PII cho
   // MARKETING" ngày 10-20/07 — lý do đầy đủ ở ma trận bên dưới). Comment cũ ghi
@@ -396,6 +402,19 @@ export const PERMISSIONS: Record<Action, Role[]> = {
   // pass-through; luật "chỉ cơ sở mình quản" ép TAY trong action bằng
   // `checkRevenueTargetScope` (lib/reports/revenue-target-scope.ts, có test).
   "lead_targets:manage": ["SUPER_ADMIN", "CENTER_MANAGER"],
+  // D-02 — chỉ tiêu ngân sách quảng cáo theo tháng × cơ sở. Marketing + Admin.
+  //
+  // ⚠️ KHÁC C-01 ở đúng một vai: **KHÔNG có CENTER_MANAGER**. PRD CDB-dashboard §D.4
+  // chia đôi rành mạch — Marketing ĐẶT chỉ tiêu ngân sách, QLCS XEM chi phí + CPL + CPA
+  // của riêng cơ sở mình. Tiền quảng cáo tiêu từ tài khoản ads của Hội sở, QLCS không
+  // cầm ví đó; cho họ tự khai chỉ tiêu là để D-03 ("% thực tế / chỉ tiêu") tự chấm điểm
+  // mình. Nới thêm vai sau này là một dòng seed; thu lại vai đã cấp thì phải đi hỏi
+  // từng người xem ai đã đặt số gì — nên mặc định đi hướng đóng.
+  //
+  // Cách ly cơ sở KHÔNG đến từ đây — `AdsBudgetTarget` ∈ SCOPE_EXEMPT nên `scopedDb` là
+  // pass-through; luật "chỉ cơ sở mình quản" ép TAY trong action bằng
+  // `checkRevenueTargetScope` (lib/reports/revenue-target-scope.ts, có test).
+  "ads_budget_targets:manage": ["SUPER_ADMIN", "MARKETING"],
 
   // --- Trial classes (Phase T1.4) ---
   "trials:view": ["SUPER_ADMIN", "CENTER_MANAGER", "SALES_CSM", "TEACHER", "TRAINING"],

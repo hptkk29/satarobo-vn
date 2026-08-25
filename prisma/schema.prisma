@@ -6172,6 +6172,48 @@ model LeadTarget {
   @@index([orgUnitId])
 }
 
+/// D-02 — chỉ tiêu NGÂN SÁCH QUẢNG CÁO theo tháng × cơ sở. Bảng thứ ba của bộ ba chỉ
+/// tiêu, cùng hình dạng với RevenueTarget (tiền THU) và LeadTarget (đầu NGƯỜI); ở đây
+/// đo tiền CHI cho quảng cáo.
+///
+/// ĐỌC KÈM: đây là con số NGƯỜI TA ĐẶT RA, không phải số đã tiêu. Số đã tiêu là
+/// snapshot chi tiêu Facebook của D-01 (chưa xây — đang chờ chốt loại mã kết nối Meta).
+/// D-03 ghép hai vế lại thành "% thực tế / chỉ tiêu", nên trộn hai thứ vào một bảng là
+/// mất luôn khả năng nói "đã tiêu vượt chỉ tiêu".
+///
+/// `centerId = NULL` ⇒ chỉ tiêu TOÀN HỆ THỐNG (KHÔNG phải "chưa gán cơ sở"). Nó KHÁC
+/// hẳn nhóm `CHƯA PHÂN BỔ` của D-06/D-08 — nhóm đó là chi tiêu THẬT chưa quy được về
+/// cơ sở nào, còn dòng NULL ở đây là một chỉ tiêu do người đặt cho cả công ty.
+///
+/// ⚠️ Khai vào SCOPE_EXEMPT (lib/db-scope.ts), KHÔNG khai SCOPED_MODELS — `injectScope`
+///    chèn `centerId IN (...)` trần và dòng toàn hệ thống sẽ tàng hình.
+/// ⚠️ `@@unique([centerId, period])` với `centerId` nullable: Postgres coi NULL là
+///    DISTINCT ⇒ `upsert` KHÔNG match nhánh toàn hệ thống, phải `findFirst` + create/update
+///    tay (khuôn có sẵn ở app/(admin)/admin/bao-cao/doanh-thu/_actions.ts).
+/// ⚠️ `targetAmount` là `Int` ⇒ int4, trần 2_147_483_647 đồng. Đường ghi CHẶN TRƯỚC ở
+///    `ADS_BUDGET_TARGET_AMOUNT_MAX` (lib/reports/ads-budget-target.ts) để lỗi hiện ra
+///    ngay tại ô nhập, không phải thành "Lỗi cơ sở dữ liệu" chẳng nói gì.
+model AdsBudgetTarget {
+  id       String  @id @default(cuid())
+  centerId String?
+  // Luật cứng Nền Hệ thống #3 + quyết định 24/08 (B1): bảng MỚI mang CẢ HAI cột.
+  // Bảng nằm NGOÀI scope nên `orgUnitId` chỉ để ghi kép/đối soát, không phải cột lọc.
+  // `lib/org/dual-write.ts` tự lấp khi `centerId` có giá trị — không tự gọi orgUnitIdForCenter().
+  orgUnitId String?
+
+  period       String // "YYYY-MM" — cùng quy ước RevenueTarget.period + monthKeyVN
+  targetAmount Int // VNĐ, số nguyên
+  note         String?
+  createdById  String?
+  createdAt    DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt    DateTime @updatedAt @db.Timestamptz(6)
+
+  @@unique([centerId, period])
+  @@index([period])
+  @@index([centerId])
+  @@index([orgUnitId])
+}
+
 /// G-04 — tuỳ chọn cột danh sách theo TỪNG NGƯỜI (kiểu MISA).
 ///
 /// 🔴 CỐ Ý KHÔNG mang `centerId`/`orgUnitId` — ngoại lệ có chủ đích của luật cứng

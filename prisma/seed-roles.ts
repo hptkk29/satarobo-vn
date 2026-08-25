@@ -40,6 +40,10 @@ export const ROLE_SEED: RoleSeed[] = [
       // trong can() v2 nên dòng này KHÔNG đổi hành vi; khai cho khớp v1 + rõ ý, và để
       // ma trận nói được "ai đặt được chỉ tiêu toàn hệ thống" mà không phải suy từ bypass.
       { action: "lead_targets:manage", scopeType: "GLOBAL" },
+      // D-02 — chỉ tiêu ngân sách quảng cáo theo tháng × cơ sở. Cùng lý do dòng trên:
+      // SUPER_ADMIN đã bypass trong can() v2 nên dòng này KHÔNG đổi hành vi, khai để
+      // ma trận nói được "ai đặt được chỉ tiêu toàn hệ thống" mà không phải suy từ bypass.
+      { action: "ads_budget_targets:manage", scopeType: "GLOBAL" },
       // #17 (câu 55): học bạ. SUPER_ADMIN đã bypass toàn bộ quyền trong can() v2
       // (lib/auth/can.ts) → 2 dòng này KHÔNG đổi hành vi, thêm cho khớp v1 + rõ ý.
       { action: "report-cards:manage", scopeType: "GLOBAL" },
@@ -237,6 +241,16 @@ export const ROLE_SEED: RoleSeed[] = [
       { action: "leads:create", scopeType: "GLOBAL" },
       { action: "leads:edit", scopeType: "GLOBAL" },
       { action: "leads:export", scopeType: "GLOBAL" },
+      // D-02 — đặt chỉ tiêu NGÂN SÁCH QUẢNG CÁO theo tháng × cơ sở. Marketing Hội sở là
+      // người cầm ví quảng cáo nên là người đặt chỉ tiêu (PRD CDB-dashboard §D.4);
+      // Quản lý cơ sở cố ý KHÔNG có — họ xem chi phí/CPL/CPA của cơ sở mình, không tự
+      // khai mẫu số mà D-03 dùng để chấm điểm chính họ.
+      // GLOBAL theo R1: gate trang gọi TRẦN, nên scope CENTER sẽ trả FALSE trên prod
+      // trong khi máy dev (v1) vẫn xanh. Cách ly cơ sở ép TAY bằng `checkRevenueTargetScope`
+      // trong action — `AdsBudgetTarget` ∈ SCOPE_EXEMPT nên scopedDb KHÔNG chặn giúp.
+      // ⚠️ Đổi ở đây CHƯA có hiệu lực trên prod: phải chạy workflow seed-prod-roles.yml
+      // sau khi merge vào main, nếu không Marketing mở màn ra là TRẮNG, không kèm lỗi.
+      { action: "ads_budget_targets:manage", scopeType: "GLOBAL" },
       { action: "notifications:manage", scopeType: "GLOBAL" },
       { action: "parent-feedback:view", scopeType: "GLOBAL" },
       { action: "hr_attendance:checkin", scopeType: "GLOBAL" },

@@ -189,6 +189,17 @@ export const PAGE_GATES = {
    */
   "/bao-cao/muc-tieu-lead": ["lead_targets:manage"],
 
+  /**
+   * D-02 — Chỉ tiêu ngân sách quảng cáo theo tháng × cơ sở. Cùng luật với màn C-01 ở
+   * trên: màn CHỈ để đặt/sửa con số nên gác bằng đúng quyền ghi.
+   *
+   * KHÔNG kèm `leads:view-all`: action đó seed GLOBAL nên gate sẽ nhận, nhưng nó đang
+   * gác `/admin/marketing/funnel` cho cả QLCS lẫn Marketing ⇒ mượn là mở màn ĐẶT chỉ
+   * tiêu cho người mà chỉ tiêu đó dùng để đo. `ads_budget_targets:manage` GLOBAL ở mọi
+   * RoleDef giữ nó (bắt buộc: gate gọi `checkAnyPermission` KHÔNG có target).
+   */
+  "/bao-cao/ngan-sach-quang-cao": ["ads_budget_targets:manage"],
+
   "/bao-cao/dao-tao": ["reports:training"],
   "/bao-cao/hieu-suat-gv": ["reports:training"],
   "/bao-cao/cohort": ["reports:training"],

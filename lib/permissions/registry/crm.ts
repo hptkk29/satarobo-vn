@@ -48,6 +48,19 @@ export const crmModule: ModuleDecl = {
         "Đặt/sửa chỉ tiêu lead (số học sinh) theo tháng × cơ sở. Không bao gồm cấu hình chia lead.",
     },
 
+    // --- Chỉ tiêu ngân sách quảng cáo (D-02) ---
+    // Ở module `crm` chứ không `finance`: toàn bộ mã quảng cáo của repo đang sống dưới
+    // `lib/crm/` (`ads-insights.ts`) và màn phễu là `/admin/marketing/funnel` — một
+    // màn CRM. Registry đòi mỗi prefix `resource:` nằm ĐÚNG MỘT module, nên đặt sai
+    // chỗ hôm nay là phải dời cả prefix về sau. Khi khu vực D đẻ ra module `marketing`
+    // riêng (kèm `ads:view`/`ads:manage` — nợ đã ghi ở OQ-D5), key này dời sang đó.
+    {
+      key: "ads_budget_targets:manage",
+      action: "manage",
+      description:
+        "Đặt/sửa chỉ tiêu ngân sách quảng cáo (VNĐ) theo tháng × cơ sở. KHÔNG bao gồm xem/sửa số chi tiêu thật, cũng không gán campaign về cơ sở.",
+    },
+
     // --- Trials (lớp trải nghiệm) ---
     { key: "trials:view", action: "view" },
     { key: "trials:manage", action: "manage" },

@@ -169,6 +169,12 @@ export const BACKFILL_SPECS: readonly BackfillSpec[] = [
     vi: "C-01 — chỉ tiêu SỐ HỌC SINH theo tháng; NULL = chỉ tiêu toàn hệ thống, điền cơ sở vào là hỏng nghĩa",
   },
   {
+    model: "AdsBudgetTarget",
+    nullMeaning: "NULL_TOAN_HE_THONG",
+    scoped: false,
+    vi: "D-02 — chỉ tiêu NGÂN SÁCH QUẢNG CÁO theo tháng; NULL = chỉ tiêu toàn hệ thống (KHÁC nhóm CHƯA PHÂN BỔ của D-06 — đó là chi tiêu thật chưa quy được về cơ sở), điền cơ sở vào là hỏng nghĩa",
+  },
+  {
     model: "SataCoinRule",
     nullMeaning: "NULL_TOAN_HE_THONG",
     scoped: false,
