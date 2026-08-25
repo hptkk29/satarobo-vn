@@ -179,9 +179,62 @@ describe("xử lỗi theo hợp đồng EL-12a", () => {
     expect(than).not.toContain("pause()");
   });
 
-  it("câu hỏi tập trung thì DỪNG video và hiện lớp phủ", () => {
-    expect(MA).toContain("setThachThuc(json.data.thachThuc)");
+  it("thách thức thì DỪNG video và hiện lớp phủ", () => {
+    expect(MA).toContain("datThachThuc(tt)");
+    expect(MA).toContain("if (tt.chan) v.pause();");
     expect(MA).toContain("thachThuc.cauHoi");
+  });
+
+  it("🔴 CHỈ server mới xoá được câu hỏi đang treo", () => {
+    // Bản đầu gọi `setThachThuc(null)` NGAY TRƯỚC khi gửi. Server từ chối là người
+    // học thấy video dừng + thanh báo lỗi mà KHÔNG CÒN CÂU HỎI NÀO trên màn hình:
+    // kẹt cứng, lối ra duy nhất là tải lại trang.
+    const iTraLoi = MA.indexOf("const traLoi = async");
+    const than = MA.slice(iTraLoi, iTraLoi + 700);
+    expect(than).not.toContain("datThachThuc(null)");
+    // Và cũng không được `play()` vô điều kiện: server vừa dừng video thì dòng đó
+    // bật lại nó, và video chạy tiếp trong khi mọi nhịp sau đều bị từ chối.
+    expect(than).not.toContain("play()");
+  });
+
+  it("🔴 kiểu `ThachThuc` NHẬP từ hợp đồng, không khai lại", () => {
+    // Bản khai tay cũ thiếu `luaChon` và `chan`, và nó vẫn biên dịch xanh — đúng
+    // thứ hợp đồng sinh ra để chặn.
+    expect(MA).toContain('from "@/lib/elearning/video-heartbeat-contract"');
+    expect(MA).not.toMatch(/type ThachThuc = \{/);
+  });
+
+  it("🔴 câu trả lời đọc REF, không đọc state đóng gói", () => {
+    // `guiNhip` là `useCallback` — nó giữ giá trị state của lượt kết xuất tạo ra
+    // nó. Đúng loại lỗi đã cắn ở trình tải video; ở đây nó thành "trả lời đúng
+    // nhưng video không chạy tiếp".
+    expect(MA).toContain("thachThucRef.current");
+  });
+
+  it("🔴 tua VỀ ĐÚNG MỐC khi câu hỏi bung ra", () => {
+    // Video dừng giữa một nhịp nên con trỏ đã chạy quá mốc. Không kéo về thì nhịp
+    // mang câu trả lời bắt đầu ở chỗ vượt mốc đã ghi, và cổng chặn-tua của server
+    // nuốt mất câu trả lời — người học kẹt cứng.
+    expect(MA).toContain("v.currentTime = tt.atSec");
+    expect(MA).toContain("batDau.current = tt.atSec");
+  });
+
+  it("🔴 mốc KHÔNG nhích khi nhịp bị câu hỏi chặn", () => {
+    expect(MA).toContain("if (!json.data.thachThuc) {");
+  });
+
+  it("🔴 'chọn nhiều' đọc CỜ từ hợp đồng, không đoán theo số lựa chọn", () => {
+    // Suy bằng `luaChon.length > 2` biến một câu MỘT-đáp-án có 3 lựa chọn thành ô
+    // tích nhiều, và câu người học trả lời đúng bị chấm sai.
+    expect(MA).toContain("thachThuc.chonNhieu === true");
+    expect(MA).not.toContain("luaChon.length > 2");
+  });
+
+  it("sai thì cho làm lại TẠI CHỖ, không khoá", () => {
+    // Khoá lại là nhốt người học ra khỏi một bài có hạn chót cứng, mà họ không có
+    // đường kháng nghị nào.
+    expect(MA).toContain("saiRoi");
+    expect(MA).toContain("Chưa đúng");
   });
 });
 
