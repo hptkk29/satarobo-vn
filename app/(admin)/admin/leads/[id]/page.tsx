@@ -436,6 +436,8 @@ export default async function LeadDetailPage({ params }: Props) {
             interestedCenterId: c.interestedCenterId,
             note: canViewPii ? c.note : maskFreeText(c.note),
             trialStatus: c.trialStatus,
+            // C-06 — trạng thái phễu riêng của con (null = phiếu cũ, chưa phân loại).
+            status: c.status,
             trialHistory: c.trialHistory
               .filter((h) => h.attendedCount > 0)
               .map((h) => ({
@@ -451,6 +453,10 @@ export default async function LeadDetailPage({ params }: Props) {
           readOnly={childrenReadOnly}
           legacyChildName={piiLead.childName}
           legacyChildAge={lead.childAge}
+          // C-06 — lý do rớt là văn bản do Sale gõ ⇒ che theo đúng cổng PII của trang,
+          // y như `note` của con ngay trên.
+          lostNote={canViewPii ? lead.lostNote : maskFreeText(lead.lostNote)}
+          lostAt={lead.lostAt ? lead.lostAt.toISOString() : null}
         />
       </div>
 

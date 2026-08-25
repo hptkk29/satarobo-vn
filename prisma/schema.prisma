@@ -62,6 +62,21 @@ enum LeadChildTrialStatus {
   ATTENDED
 }
 
+/// C-06 (SL-09) — trạng thái phễu của TỪNG ĐỨA CON, tách hẳn `LeadStatus` (15 giá trị,
+/// cấp phụ huynh). Một phụ huynh hai con: đứa này ghi danh trong khi đứa kia rớt là ca
+/// thường, nên "chốt" và "rớt" phải đo được theo đầu học sinh.
+/// KHÔNG tái dùng `LeadStatus`: 9/15 giá trị của nó ("Không nghe máy", "Trùng lặp",
+/// "Đang nuôi dưỡng"…) vô nghĩa với một đứa trẻ, và guard chuyển trạng thái ở
+/// `lib/leads/status.ts` bám vào ngữ cảnh thanh toán của cả phiếu.
+enum LeadChildStatus {
+  NEW // Mới
+  CONSULTING // Đang tư vấn
+  TRIAL_SCHEDULED // Hẹn học thử
+  TRIAL_ATTENDED // Đã học thử
+  ENROLLED // Chốt
+  LOST // Rớt
+}
+
 enum CourseType {
   ONLINE
   OFFLINE
@@ -1373,6 +1388,16 @@ model Lead {
   convertedById    String?
   convertedAt      DateTime?  @db.Timestamptz(6)
 
+  // C-06 (SL-10, quyết định B5 + 12(b) ngày 24/08/2026) — LÝ DO RỚT ở cấp PHỤ HUYNH.
+  // Ô ghi chú TỰ DO, không danh mục: chủ dự án bỏ hẳn enum lý do rớt, đổi lại là không
+  // có báo cáo "top lý do rớt" (đã chấp nhận).
+  // Trạng thái rớt thì theo TỪNG CON (`LeadChild.status = LOST`) — hai tầng khác nhau,
+  // cố ý. Hệ quả đã biết: hai con rớt vì hai lý do khác nhau ⇒ lượt ghi sau ĐÈ lượt
+  // trước; lý do của từng con tra ở `AuditLog` + `LeadActivity` (mỗi lượt đánh dấu ghi
+  // kèm tên + id của đứa con).
+  lostNote         String?    @db.Text
+  lostAt           DateTime?  @db.Timestamptz(6)
+
   // R1-04/05 — mốc thời gian phễu SR.QD.217 (L1→L2→L3 + bàn giao + SLA).
   qualifiedAt         DateTime?         @db.Timestamptz(6) // L2 — có SĐT + note
   handedAt            DateTime?         @db.Timestamptz(6) // HO bàn giao về CS
@@ -1500,6 +1525,13 @@ model LeadChild {
   interestedCenterId String? // tham chiếu Center
   note               String?              @db.Text
   trialStatus        LeadChildTrialStatus @default(NONE)
+  /// C-06 — trạng thái phễu của riêng đứa con này. NULL = phiếu cũ, CHƯA ai phân loại
+  /// (cột thêm sau khi bảng đã có dữ liệu prod). Cố ý KHÔNG `@default(NEW)`: gán "Mới"
+  /// cho 100% dòng cũ là bịa ra một khẳng định sai về những đứa đã ghi danh từ lâu, và
+  /// mọi báo cáo đếm theo trạng thái sẽ nuốt điều đó không một lời cảnh báo.
+  /// `LOST` ở đây là TRẠNG THÁI rớt (theo từng con); LÝ DO rớt nằm ở `Lead.lostNote`
+  /// (cấp phụ huynh — quyết định B5 ngày 24/08/2026).
+  status             LeadChildStatus?
   createdAt          DateTime             @default(now()) @db.Timestamptz(6)
   updatedAt          DateTime             @updatedAt @db.Timestamptz(6)
 
