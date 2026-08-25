@@ -1,5 +1,5 @@
 import { type NextRequest } from "next/server";
-import { GetObjectCommand } from "@aws-sdk/client-s3";
+import { GetObjectCommand, HeadObjectCommand } from "@aws-sdk/client-s3";
 import { auth } from "@/lib/auth";
 import { fail } from "@/lib/api/response";
 import { getR2Client } from "@/lib/storage/r2-client";
@@ -58,14 +58,25 @@ export async function GET(
 
   const s3 = getR2Client();
 
-  // Lượt HEAD/đọc siêu dữ liệu: xin 1 byte để lấy dung lượng thật mà không kéo
-  // cả tệp về.
+  // Hỏi dung lượng thật bằng `HeadObject`.
+  //
+  // ⚠️ KHÔNG dùng `GetObject` với `Range: "bytes=0-0"` cho việc này, dù nó cũng ra
+  // đúng con số. Phản hồi của `GetObject` mang một LUỒNG; ở `runtime = "nodejs"`
+  // luồng đó là một socket, và socket chỉ được trả về pool của SDK khi thân được
+  // đọc hết hoặc `destroy()`. Lấy về rồi bỏ đó là **giữ một khe mỗi lượt xin
+  // Range** — pool mặc định 50 khe, `keepAlive` bật, và SDK **không đặt hạn chờ**.
+  //
+  // Nó hỏng theo kiểu tệ nhất: request TREO, không phải 5xx. Chỉ số T1 của đặc tả
+  // đếm tỉ lệ 5xx nên mù hoàn toàn với nó, và ngân sách "8 phiên phát đồng thời"
+  // của chính ticket này lại tựa vào lúc nào phía R2 đóng nối rỗi — một hằng số
+  // bên ngoài, không có trong đặc tả, không đọc được từ mã.
+  //
+  // Đổi sang `HeadObject` cũng bỏ luôn một vòng đi-về tới R2 trên mỗi lượt xin.
+  // Tiền lệ trong kho: `app/(admin)/admin/scorm/_actions.ts:205`.
   let coTep: number;
   try {
-    const dau = await s3.send(
-      new GetObjectCommand({ Bucket: bucket, Key: khoa, Range: "bytes=0-0" }),
-    );
-    coTep = Number(dau.ContentRange?.split("/")[1] ?? dau.ContentLength ?? 0);
+    const dau = await s3.send(new HeadObjectCommand({ Bucket: bucket, Key: khoa }));
+    coTep = Number(dau.ContentLength ?? 0);
   } catch {
     return fail("NOT_FOUND", "Không tìm thấy tệp", { status: 404 });
   }

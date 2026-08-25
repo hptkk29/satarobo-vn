@@ -1,12 +1,13 @@
 # Quy ước nền — module đào tạo nội bộ (e-learning)
 
-> **Đọc file này TRƯỚC KHI MỞ PR đụng module e-learning.** Mười sáu quy ước dưới đây.
-> Quy ước **1–4, 12, 13, 16** được **máy cưỡng chế** (ESLint / Vitest / CI); **5–11, 14, 15**
+> **Đọc file này TRƯỚC KHI MỞ PR đụng module e-learning.** Hai mươi ba quy ước dưới đây.
+> Quy ước **1–4, 12, 13, 16, 21** được **máy cưỡng chế** (ESLint / Vitest / CI); phần còn lại
 > thì không — chúng chỉ sống nếu người ta đọc chỗ này. Đó là lý do chúng nằm ở một chỗ chứ
 > không rải rác trong các ticket dùng.
 >
 > 1–9 thuộc ticket nền EL-07; **10–12 qua EL-05**, **13–14 qua EL-06**, **15–16 qua EL-08**
-> (23/08/2026).
+> (23/08/2026); **17–19 qua EL-10 và EL-12**, **20–23 qua vòng rà đối kháng EL-10**
+> (25/08/2026).
 
 Nguồn: `02-KE-HOACH-THUC-HIEN-Elearning-v1.4.md` — ticket EL-07, quyết định QĐ-CDA-02b (biện pháp
 1, 3, 4) và QĐ-CDA-13 (BP-1, BP-2).
@@ -266,7 +267,103 @@ LƯU**. Thử ngược để chắc: chèn đúng con bug vào rồi xem case c�
 
 ---
 
-## Ràng buộc kèm theo, không thuộc mười chín quy ước nhưng dễ quên
+## Bốn quy ước bổ sung — chốt qua vòng rà đối kháng EL-10 (25/08/2026)
+
+### 20. Cổng CHẶN và đường THOẢ MÃN cổng phải về cùng một PR
+
+Một cổng kiểm tra chỉ được bật khi đã tồn tại đường để người dùng đi qua nó. Cổng về trước,
+cửa về sau ⇒ hệ **kẹt cứng**, và người ở giữa không có lối nào ngoài việc phá cổng.
+
+**Đã vấp:** EL-10 kéo sớm cổng C10 (`kiemPhuDe` chặn xuất bản khoá bắt buộc thiếu phụ đề, ở
+cả `GUI_DUYET`/`DUYET`/`XUAT_BAN`), trong khi đường **đính** phụ đề nằm ở cột IN của EL-11 và
+chưa dựng: `khoaMedia` chỉ được gọi với `loai: "master"`, `kiemChuanNopPhuDe` có **0 lời gọi**
+ngoài test, màn soạn không có ô nhận `.vtt`. Kết quả: **mọi khoá `MANDATORY*` có bài video
+không xuất bản được, và không sửa được từ giao diện.** Hai lối thoát duy nhất đều sai — hạ
+chương trình xuống `OPTIONAL` (mất tính bắt buộc) hoặc bỏ bài video khỏi dàn bài (mất nội dung
+cần dạy).
+
+Nguy hiểm thật không nằm ở chỗ kẹt. Nó nằm ở chỗ **cách vá rẻ nhất trông thấy được là gỡ
+cổng** — một dòng, biên dịch xanh; nếu cổng đó không có test cấp action thì CI không cản, và
+người review đọc diff chỉ thấy "gỡ một khối đang chặn việc". Một lần lọt là hỏng vĩnh viễn:
+bổ sung phụ đề hồi tố cho khoá đã phát là việc không ai làm nổi.
+
+**Cách áp dụng:** trước khi thêm bất kỳ điều kiện chặn nào (xuất bản, giao bài, cấp chứng
+nhận, nộp bài thi), trả lời hai câu — *đường nào tạo ra dữ liệu thoả mãn điều kiện này, và nó
+đã có chưa?* Nếu chưa: dựng nốt đường đó trong cùng PR, hoặc **để cổng sau một cờ** và bật khi
+đường về. Không có trạng thái thứ ba.
+
+### 21. Route handler phải có ít nhất một case GỌI THẬT handler
+
+Test đọc mã nguồn bằng `readFileSync` + `toContain` chứng minh **có viết**, không chứng minh
+**có chạy**, và nó mù hoàn toàn với lớp lỗi tốn kém nhất của một route: **phép NỐI** giữa kết
+quả tính toán và header/thân phản hồi.
+
+**Đã vấp:** cả ba route của EL-10 chỉ được canh bằng so chuỗi. Ba đột biến đã chạy thật, cả ba
+**sống sót toàn bộ 47 case**: xoá dòng gán `Content-Range` ở nhánh 206 · đổi `Content-Length`
+từ `kq.contentLength` sang `coTep` · xin R2 một cửa sổ byte khác cửa sổ đã hứa trong header.
+Đột biến đầu trả **206 không có `Content-Range`** — trình phát huỷ tải, khung đen, mà chỉ số
+T1 ("tỉ lệ 5xx của route Range") đọc **0% lỗi** vì 206 không phải 5xx.
+
+⛔ **Không viện lý do "route cần DB/R2/phiên đăng nhập nên không test được"** — kho này đã làm
+đúng việc đó bốn lần: `app/api/chat/{unread,attachment-url,realtime-token}/route.test.ts` và
+`app/api/elearning/media/[...khoa]/route.test.ts`. Khuôn: `vi.mock` + `import { GET } from
+"./route"` + `await GET(req(), ctx())`. `vitest.config.ts` đã gom `app/**/*.test.{ts,tsx}`,
+đặt test cạnh route là chạy.
+
+**Cách áp dụng:** mỗi route mới kèm một tệp `route.test.ts` cạnh nó, tối thiểu canh trên
+**phản hồi thật**: mã trạng thái đường thành công, mã trạng thái một đường bị chặn, và **giá
+trị đúng của mọi header mang con số**. Guard so chuỗi giữ lại cho thứ mà chỉ nguồn mới nói
+được (vd "route KHÔNG chứa `transformToByteArray`") — không dùng nó thay cho phép nối.
+
+### 22. Ô kết quả nằm trong `try/catch` phải khởi tạo bằng trạng thái "CHƯA CHẠY"
+
+Quy ước 14 nói *"số đếm của việc chưa chạy được là `null`, không phải `0`"*. Đúng, nhưng chưa
+đủ: cái quyết định con số cuối cùng là **giá trị KHỞI TẠO**, vì mọi việc nền đều bọc
+`try/catch` — hàm ném thì phép gán không chạy, và ô giữ nguyên thứ đã điền lúc dựng object.
+
+**Đã vấp:** `cron-dem.ts` khởi tạo `taiDo: { daHuy: 0, conGiu: 0 }`. Khi việc dọn lượt tải dở
+ném (thực tế nhất: token R2 thiếu quyền `ListMultipartUploads` — quyền riêng, khác Put/Get, và
+bucket e-learning là bucket mới), lỗi rơi vào `ket.loi` còn báo cáo trả `daHuy: 0, conGiu: 0`
+— đọc đúng thành *"đã quét, không có rác"*. Route trả `ok(...)` ⇒ HTTP 200 ⇒ giám sát cron
+**xanh**, đêm nào cũng xanh, trong khi rác chồng lên mãi.
+
+Mỉa mai: **cùng một object literal đã làm đúng hai lần** — `chungNhan: { chuaLamDuoc: … }` và
+`examAttempt: null` — rồi phá luật ở ô thứ ba.
+
+**Cách áp dụng:** khởi tạo mọi ô kết quả bằng dạng *chưa chạy* (`{ chuaLamDuoc: "chưa chạy" }`
+hoặc `null`), để **thành công là thứ phải ghi đè vào**, không phải thất bại là thứ phải nhớ
+dọn. Và câu khẳng định canh nó phải **phân biệt được hai hình dạng**:
+`expect("daHuy" in r.x || "chuaLamDuoc" in r.x)` trên một kiểu union đúng bằng hợp của hai
+dạng đó là một **hằng đúng** — nó xanh kể cả khi hàm ném hoàn toàn.
+
+### 23. Kết quả máy chủ đọc ra phải được RÀNG BUỘC vào lượt ghi
+
+Một endpoint đọc dữ liệu thật (byte của tệp, kết quả chấm, số đo) rồi `return ok({…})` mà
+không ghi, không ký, không cấp vé, thì kết quả đó chỉ là **khuyến nghị**. Lượt ghi sau đó
+không có cách nào biết nó đã chạy, và nhận lại chính con số mà client gửi lên.
+
+**Đã vấp:** `xac-minh` đọc header mp4 từ R2, chạy đủ `kiemCodec` + `kiemChuanNopVideo` bằng con
+số **đọc từ byte** — rồi trả JSON và thôi. Đường lưu bài nhận `durationSec` như một con số
+client khai chỉ bị chặn trong `[5, 900]`, và để `codec` là `.optional()` với cổng gác
+`if (input.codec)` — **bỏ trống trường đó là tắt cổng, im lặng**. Ba dòng chú thích ngay trên
+lại tuyên bố *"Chốt codec ở ĐÂY… đây là chỗ duy nhất mà tệp và bản ghi gắn với nhau."*
+
+Đây **không phải lỗ hổng leo thang quyền** — người đi đường này vốn được sửa chính bài đó. Nó
+hỏng ở đường **không cố ý**: bất kỳ call-site mới nào (nhập hàng loạt, lưu lại tiêu đề, một
+trình soạn khác) đều đi lọt, vì mặc định là *"không kiểm"*.
+
+⛔ **Trường đầu vào của một cổng kiểm KHÔNG được `.optional()`.** Luật này đã có sẵn trong kho,
+ở `media-rules.ts`: *"để optional thì một đường gọi mới quên truyền vẫn biên dịch xanh, và
+trần … im lặng không áp cho đúng đường đó. Không đo được thì phải nói ra bằng `null`."*
+
+**Cách áp dụng:** hai lối, chọn một — (a) endpoint đọc trả kèm **vé HMAC hạn ngắn** mang các
+con số đã đo (khuôn có sẵn: `lib/elearning/media-ticket.ts`, chỉ đổi tiền tố), và lượt ghi
+nhận vé làm trường **bắt buộc**, lấy số **từ vé**; hoặc (b) lượt ghi **tự đo lại** ngay tại
+chỗ. Không có lối thứ ba là "tin con số client gửi kèm".
+
+---
+
+## Ràng buộc kèm theo, không thuộc hai mươi ba quy ước nhưng dễ quên
 
 - **Ngân sách cron: tối đa 2 khe** cho cả module. Bảy mốc nhắc gộp vào **một** cron quét
   (`elearning-reminders`, nhịp 15 phút); việc dọn dữ liệu thô 90 ngày gộp vào cron đêm
@@ -277,6 +374,17 @@ LƯU**. Thử ngược để chắc: chèn đúng con bug vào rồi xem case c�
   trục mới. Nếu P4 cần bật trong cửa sổ đó thì là quyết định chung của hai luồng.
 - **Video đào tạo nội bộ không bao giờ nằm trong bucket gắn `cdn.satarobo.vn`** (bucket công khai).
   Nằm ở đó thì mọi cơ chế chống học đối phó của GĐ2 chỉ là trang trí.
+- **Lượt gọi kho tệp chỉ để hỏi siêu dữ liệu phải dùng `HeadObject`, không phải `GetObject`
+  với `Range: "bytes=0-0"`.** Một phản hồi luồng lấy về mà không đọc hết và không `destroy()`
+  sẽ **giữ một khe socket** trong pool của SDK (mặc định 50 khe, `keepAlive` bật, **không có
+  hạn chờ**) cho tới khi phía kho đóng nối rỗi — một hằng số bên ngoài, không có trong đặc tả,
+  không đo được từ mã. Cách hỏng của nó là **request treo, không phải 5xx**, nên mọi chỉ số
+  đếm 5xx đều mù với nó. Tiền lệ đúng: `app/(admin)/admin/scorm/_actions.ts:205`.
+- **AC ĐO LƯỜNG không đóng được bằng unit test — nó đóng bằng một hiện vật đo có ghi lại.**
+  Tách rõ hai loại khi lập DoD: AC *cấu trúc* (vd "mọi phản hồi là 206 với `Content-Range`
+  đúng") đóng bằng test; AC *đo lường* (vd "p95 tới byte đầu ≤ 3 giây với 8 phiên đồng thời,
+  tỉ lệ lỗi ≤ 1%") đóng bằng một lượt chạy tay trên hệ thật, **có số và có ngày**. Ghi cả hai
+  vào ticket, đừng để loại thứ hai đội lốt loại thứ nhất rồi coi như xong khi CI xanh.
 - **Cờ `ELEARNING_ENABLED` dùng `=== "true"`**, cố ý ngược khuôn `isTeacherSiteEnabled()` (dùng
   `!== "false"`, mặc định ON vì đã qua kỳ flip). Chép nguyên khuôn đó sang sẽ cho cờ **bật sẵn ngay
   khi merge**.
