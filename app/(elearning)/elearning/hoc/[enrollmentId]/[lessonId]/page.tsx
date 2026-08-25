@@ -10,6 +10,7 @@ import { ReadingTracker } from "../../_components/reading-tracker";
 import { VideoPlayer } from "../../_components/video-player";
 import { kyVeMedia } from "@/lib/elearning/media-ticket";
 import { TOC_DO_TOI_DA } from "@/lib/elearning/video-heartbeat-contract";
+import { vaySaoChuaMo } from "@/lib/elearning/lesson-kind";
 
 /**
  * EL-04 — TRANG ĐỌC MỘT BÀI.
@@ -207,14 +208,21 @@ export default async function Page({
     );
   }
 
-  if (lesson.kind !== "READ") {
-    // Các loại bài khác thuộc ticket sau. Nói thẳng thay vì hiện trang trống.
+  if (lesson.kind === "LIVE_SESSION") {
+    // Buổi trực tiếp KHÔNG có gì để người học bấm: điểm danh do giảng viên tick
+    // (`lib/elearning/equivalence.ts`). Nói rõ, thay vì để họ tưởng bài hỏng.
     return (
       <TuChoi
-        title="Loại bài này chưa mở"
-        detail="Hiện mới hỗ trợ bài dạng đọc và video. Các loại khác sẽ mở ở đợt sau."
+        title="Buổi học trực tiếp"
+        detail="Bài này ghi nhận bằng điểm danh của giảng viên, không có nội dung để xem ở đây."
       />
     );
+  }
+
+  if (lesson.kind !== "READ") {
+    // Nói RÕ loại nào và chờ ticket nào — câu chung chung làm người học tưởng máy
+    // mình hỏng và đi báo sai chỗ.
+    return <TuChoi title="Loại bài này chưa mở" detail={vaySaoChuaMo(lesson.kind)} />;
   }
 
   const progress = await db.trnLessonProgress.findUnique({

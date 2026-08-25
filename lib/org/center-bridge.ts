@@ -311,6 +311,24 @@ export const BACKFILL_SPECS: readonly BackfillSpec[] = [
     vi: "lượt ghi danh — cột NOT NULL trong schema; không có cơ sở thì không tạo được bản ghi",
   },
   {
+    model: "TrnQuestion",
+    nullMeaning: "NULL_TOAN_HE_THONG",
+    scoped: true,
+    vi: "câu hỏi ngân hàng đào tạo — NULL = câu dùng chung toàn công ty",
+  },
+  {
+    model: "TrnExam",
+    nullMeaning: "NULL_TOAN_HE_THONG",
+    scoped: true,
+    vi: "đề thi đào tạo — NULL = đề dùng chung toàn công ty",
+  },
+  {
+    model: "TrnExamAttempt",
+    nullMeaning: "BAT_BUOC",
+    scoped: true,
+    vi: "lượt thi — luôn thuộc cơ sở của người thi; NULL = chưa backfill",
+  },
+  {
     model: "TrnWatchFlag",
     nullMeaning: "BAT_BUOC",
     scoped: true,

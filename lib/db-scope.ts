@@ -77,6 +77,14 @@ export const SCOPED_MODELS = new Set<string>([
   // động của một cá nhân; coi "chưa backfill" là "ai cũng thấy" ở đây không phải
   // tiện lợi mà là rò rỉ — và rò đúng loại thông tin gây tổn hại nhất.
   "TrnWatchFlag",
+  // EL-14 — khảo thí. Ba bảng mang cột đơn vị; bốn bảng con (`TrnChoice`,
+  // `TrnExamQuestion`, `TrnExamAnswer`, `TrnExamUnlock`) KHÔNG mang, và cách ly
+  // của chúng đến từ bảng cha — khai thừa ở đây là `[US-07-IT-08c]` đỏ.
+  "TrnQuestion",
+  "TrnExam",
+  // ⚠️ `TrnExamAttempt` KHÔNG vào NULL_IS_GLOBAL_MODELS: một lượt thi luôn thuộc
+  // cơ sở của người thi. NULL ở đây = chưa backfill, không phải "ai cũng thấy".
+  "TrnExamAttempt",
 ]);
 
 /**
@@ -108,6 +116,11 @@ export const NULL_IS_GLOBAL_MODELS = new Set<string>([
   "TrnCourse",
   "TrnRequirement",
   "TrnEvalLinkConfig",
+  // EL-14 — ngân hàng câu hỏi và đề thi DÙNG CHUNG toàn công ty là chuyện thường
+  // (an toàn lao động, phòng cháy…). Quên hai dòng này thì kho câu hỏi chung TÀNG
+  // HÌNH với mọi người dùng cấp cơ sở, và không gì báo lỗi — họ chỉ thấy kho rỗng.
+  "TrnQuestion",
+  "TrnExam",
 ]);
 
 // FIX-C3 (B1) — soft-delete đã chuyển lên TẦNG base `db` (lib/soft-delete.ts + lib/db.ts)
@@ -275,6 +288,9 @@ export function getModelPrefixes(model: string): string[] {
     case "TrnEnrollment":
     case "TrnDataSubjectRequest":
     case "TrnWatchFlag":
+    case "TrnQuestion":
+    case "TrnExam":
+    case "TrnExamAttempt":
       return ["elearning:"];
     default:
       return [];

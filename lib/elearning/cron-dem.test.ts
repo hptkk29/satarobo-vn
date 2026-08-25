@@ -16,6 +16,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 const h = vi.hoisted(() => ({
   thuTu: [] as string[],
   enrollments: [] as unknown[],
+  donVanThi: vi.fn(async (_a: { where: Record<string, unknown> }) => ({ count: 4 })),
   updateMany: vi.fn(async (_a: { where: { id: { in: string[] } } }) => ({ count: 0 })),
   deleteVideo: vi.fn(async (_a: { where: unknown }) => ({ count: 0 })),
   updateProgress: vi.fn(async (_a: { where: Record<string, unknown>; data: Record<string, unknown> }) => ({ count: 0 })),
@@ -64,6 +65,7 @@ vi.mock("@/lib/db", () => ({
       },
     },
     trnLessonProgress: { updateMany: h.updateProgress },
+    trnExamAttempt: { updateMany: h.donVanThi },
   },
 }));
 
@@ -83,6 +85,7 @@ beforeEach(() => {
   h.thuTu = [];
   h.enrollments = [];
   h.updateMany.mockClear();
+  h.donVanThi.mockClear();
   h.deleteVideo.mockClear();
   h.updateProgress.mockClear();
   h.publish.mockClear();
@@ -115,11 +118,26 @@ describe("nói ra việc CHƯA LÀM ĐƯỢC, không im lặng bỏ trống", ()
     expect(r.chungNhan).toEqual({ chuaLamDuoc: "TrnCertificate chưa tồn tại (EL-16)" });
   });
 
-  it("`examAttempt` là `null`, KHÔNG phải 0", async () => {
-    // 0 đọc thành "đã dọn và không có gì" — tức nói dối. `null` đọc thành "chưa
-    // chạy được", và đó là sự thật.
+  it("🔴 `examAttempt` nay là SỐ THẬT — bảng EL-14 đã tồn tại", async () => {
+    // Case này trước đây khẳng định `null` ("chưa làm được"). Nó vẫn XANH sau khi
+    // bảng ra đời và cron đã nối vào — vì mock thiếu `trnExamAttempt`, lệnh ném,
+    // `catch` nuốt, và giá trị khởi tạo `null` còn nguyên. Xanh vì đúng lý do sai.
+    //
+    // Nay canh cả hai vế: có số, VÀ không có lỗi nào bị nuốt.
     const r = await runElearningDem(NOW);
-    expect(r.don.examAttempt).toBeNull();
+    expect(r.don.examAttempt).toBe(4);
+    expect(r.loi.filter((l) => l.viec === "don-tang-2")).toEqual([]);
+  });
+
+  it("dọn dấu vân đi bằng `purgeAfter`, và chỉ chạm dòng CÒN dấu vân", async () => {
+    // Tính lại hạn ở đây là dựng nguồn sự thật thứ hai; và thiếu vế "còn dấu vân"
+    // thì mỗi đêm cron ghi lại toàn bộ lượt thi cũ, `updatedAt` nhảy mỗi ngày.
+    await runElearningDem(NOW);
+    const arg = h.donVanThi.mock.calls[0]![0] as {
+      where: { purgeAfter?: unknown; OR?: unknown[] };
+    };
+    expect(arg.where.purgeAfter).toBeTruthy();
+    expect(arg.where.OR?.length).toBeGreaterThan(0);
   });
 });
 

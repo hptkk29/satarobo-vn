@@ -410,6 +410,56 @@ chưa có bảng lịch nghỉ, và chế một danh sách lễ không ai duyệ
 thật thứ hai.
 
 ---
+## Bốn quy ước bổ sung — chốt qua EL-12 cue (25/08/2026)
+
+### 27. Cổng chặn GIỮA CHỪNG phải ghi nhận phần TRƯỚC mốc, không thoát sớm
+
+Câu hỏi chèn giữa video chặn ở giây 110. Bản đầu thoát sớm ngay khi cue bung, nên
+`maxPositionSec` đứng yên ở 100 — và nhịp MANG CÂU TRẢ LỜI bắt đầu ở 115 rồi bị
+**chính cổng chặn-tua** từ chối. Mọi cue chặn khoá cứng bài học, với thông báo
+*"khoá này không cho tua tới"* chẳng liên quan gì tới việc người học vừa làm.
+
+Kèm theo: đoạn từ nhịp trước tới mốc bay mất vĩnh viễn, và thân phản hồi trả
+`coveredSec: 0` làm thanh tiến độ tụt về 0%.
+
+**Cách áp dụng:** cổng chặn ở GIỮA một khoảng thì phải **cắt khoảng tại mốc**, ghi
+nhận phần trước mốc, rồi mới chặn. Và kiểm xem cổng khác có đứng trên con số mình
+vừa để đứng yên không — các cổng đọc chung một mốc thì cổng này đóng băng nó là
+cổng kia hiểu sai.
+
+### 28. Đừng để client SUY RA thứ server đã biết
+
+Server biết câu hỏi thuộc loại `multiple`, nhưng thân phản hồi không mang loại, nên
+trình phát suy bằng `luaChon.length > 2`. Câu MỘT-đáp-án có 3 lựa chọn trở lên biến
+thành ô tích nhiều: người học tích hai ý, và câu họ trả lời đúng bị chấm sai.
+
+**Cách áp dụng:** thà thêm một trường vào hợp đồng còn hơn để client đoán. Mỗi phép
+suy ở client là một bản sao thứ hai của luật, và bản sao đó không có test nào canh.
+(Lọc đáp án đúng ra khỏi phản hồi là ĐÚNG — nhưng lọc đáp án khác với giấu loại câu.)
+
+### 29. Mock lỗi thư viện phải giống lỗi THẬT
+
+Code dò `String(e).includes("P2002")`; test mock ném `new Error("... P2002")` nên
+xanh. Prisma thật để mã ở **`e.code`** và lời nhắn KHÔNG chứa chuỗi đó — nhánh ấy
+chưa bao giờ chạy ngoài đời, và người dùng nhận màn hình 500.
+
+**Cách áp dụng:** mock lỗi phải mang đúng hình dạng thư viện sinh ra (mã ở đâu, lời
+nhắn thế nào). Không chắc thì ép lỗi thật một lần trên DB local rồi in ra xem. Test
+giả lập sai thì nó chỉ kiểm chính bản giả lập đó.
+
+### 30. Chỉ số vào mảng ĐÃ LỌC không phải chỉ số vào mảng gốc
+
+Màn soạn gửi `options` đã bỏ ô trống, kèm `correctIndex` đếm theo mảng **chưa** lọc.
+Tích ô 4 rồi xoá trắng ô 2 ⇒ 3 lựa chọn với `correctIndex: 3`, trỏ RA NGOÀI mảng.
+Zod kiểm từng trường một nên không bắt được, và câu hỏi ấy **không đáp án nào đúng
+được** — với một cổng chặn thì đó là khoá cứng vĩnh viễn.
+
+**Cách áp dụng:** lọc TRƯỚC, rồi ánh xạ chỉ số sang mảng đã lọc. Và ở đâu có hai
+trường phụ thuộc nhau (chỉ số ↔ độ dài mảng) thì phải có **một** phép kiểm chéo —
+Zod kiểm từng trường riêng lẻ sẽ luôn để lọt.
+
+---
+
 ## Ràng buộc kèm theo, không thuộc hai mươi sáu quy ước nhưng dễ quên
 
 - **Ngân sách cron: tối đa 2 khe** cho cả module. Bảy mốc nhắc gộp vào **một** cron quét
