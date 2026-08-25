@@ -10,6 +10,7 @@ import { z } from "zod";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { hasRole } from "@/lib/auth/permissions";
+import { checkPermission } from "@/lib/auth/check-permission";
 import { getFreshGateUser } from "@/lib/auth/fresh-gate-user";
 import { resolveActor } from "@/lib/auth/actor";
 import { getSessionRosterStudentIds } from "@/lib/attendance/roster";
@@ -31,14 +32,27 @@ type Result<T> = { ok: true; data: T } | { ok: false; error: string };
 async function gateFill(
   sessionId: string,
 ): Promise<
-  { ok: true; classCenterId: string | null; userId: string } | { ok: false; error: string }
+  | {
+      ok: true;
+      classCenterId: string | null;
+      userId: string;
+      userName: string | null;
+      classId: string;
+      sessionDate: Date | null;
+    }
+  | { ok: false; error: string }
 > {
   const session = await auth();
   if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
 
   const sess = await db.classSession.findUnique({
     where: { id: sessionId },
-    select: { id: true, class: { select: { teacherId: true, assistantId: true, centerId: true } } },
+    select: {
+      id: true,
+      classId: true,
+      date: true,
+      class: { select: { teacherId: true, assistantId: true, centerId: true } },
+    },
   });
   if (!sess) return { ok: false, error: "Buổi học không tồn tại" };
 
@@ -52,7 +66,14 @@ async function gateFill(
     (hasRole(u, "TEACHER") && (cls.teacherId === u.id || cls.assistantId === u.id));
 
   if (!allowed) return { ok: false, error: "Không có quyền điền phiếu buổi học này" };
-  return { ok: true, classCenterId: cls.centerId, userId: u.id };
+  return {
+    ok: true,
+    classCenterId: cls.centerId,
+    userId: u.id,
+    userName: session.user.name ?? null,
+    classId: sess.classId,
+    sessionDate: sess.date ?? null,
+  };
 }
 
 /** Nạp phiếu SESSION_EVAL đang áp cho buổi (kèm đáp án đã lưu). */
@@ -109,6 +130,11 @@ export async function saveSessionEvalAction(input: unknown): Promise<Result<{ sa
     return { ok: false, error: "Đợt đánh giá đã thay đổi — vui lòng tải lại phiếu" };
   }
 
+  // F-04 — ảnh đính trong phiếu phải qua ĐÚNG hàng duyệt của ảnh lớp trước khi tới phụ
+  // huynh (lib/eval/session-eval-photo-gate.ts). Người điền có media:approve thì duyệt
+  // luôn — khớp uploadClassMedia, để quản lý tự điền phiếu không tự tạo việc cho mình.
+  const autoApprove = await checkPermission("media:approve");
+
   const res = await saveSessionEvalResponses(
     state.roundId,
     parsed.data.sessionId,
@@ -122,10 +148,18 @@ export async function saveSessionEvalAction(input: unknown): Promise<Result<{ sa
         valueText: a.valueText ?? null,
       })),
     })),
+    {
+      classId: g.classId,
+      takenAt: g.sessionDate,
+      uploadedById: g.userId,
+      uploadedByName: g.userName,
+      autoApprove,
+    },
   );
   if (!res.ok) return { ok: false, error: res.error };
 
   revalidatePath(`/sessions/${parsed.data.sessionId}`);
+  revalidatePath("/media");
   return { ok: true, data: { saved: res.saved } };
 }
 
