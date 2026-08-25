@@ -8190,3 +8190,312 @@ model TrnWatchFlag {
   @@index([handlerUserId, status])
   @@index([decisionDueAt, status])
 }
+
+// ═══════════════════════════════════════════════════════════════════════════
+// EL-14 — KHẢO THÍ ĐÀO TẠO NỘI BỘ (7 bảng)
+//
+// ⚠️ VÌ SAO DỰNG BẢNG MỚI thay vì tái dùng `Question`/`Exam`/`ExamAttempt` đã có:
+// hai cây nội dung KHÔNG có một khoá ngoại nào bắc qua nhau. `Question` treo vào
+// `Curriculum`/`Course`/`Lesson`/`Assignment` — toàn bộ là miền DẠY HỌC SINH; còn
+// `ExamAttempt.studentId → Student` là NOT NULL, trong khi người thi ở đây là
+// `User` (nhân viên). Nhét nhân viên vào đó là phải nới một FK đang chặt, và câu
+// hỏi tuân thủ nội bộ sẽ hiện trong màn chọn đề của giáo viên robotics.
+//
+// ⚠️ Nhưng KHUÔN câu hỏi thì dùng chung (`contentQuestionSchema`) — một khuôn,
+// hai bảng. Đúng tiền lệ `lib/elearning/lesson-cue.ts`.
+// ═══════════════════════════════════════════════════════════════════════════
+
+/// Chín loại câu hỏi của BA §13.1.
+///
+/// ⚠️ Khai ĐỦ CHÍN dù lượt 1 chỉ mở năm: bỏ bớt giá trị enum rồi thêm lại sau là
+/// `ALTER TYPE` trên bảng đã có dữ liệu prod. Phạm vi thi hành khoá ở tầng Zod,
+/// nơi sửa được mà không đụng schema.
+enum TrnQuestionType {
+  SINGLE
+  MULTIPLE
+  TRUE_FALSE
+  FILL_BLANK
+  MATCHING
+  ORDERING
+  SHORT_ANSWER
+  CASE
+  ESSAY
+}
+
+/// `FIXED` = mọi người cùng một bộ câu. `RANDOM` = rút theo `blueprintJson`.
+///
+/// ⚠️ `RANDOM` rút MỘT LẦN lúc kích hoạt đề và vật chất hoá vào `TrnExamQuestion`;
+/// khác biệt giữa người này với người kia đến từ trộn THỨ TỰ, không phải rút khác
+/// bộ câu. Rút-theo-người cần một bảng thứ tám và `TrnExamAnswer` phải trỏ vào nó
+/// — đổi sau khi đã có dữ liệu là đổi khoá ngoại trên bảng sống.
+enum TrnExamMode {
+  FIXED
+  RANDOM
+}
+
+/// Khi nào người học thấy đáp án đúng.
+enum TrnShowAnswerPolicy {
+  NEVER
+  AFTER_EACH_ATTEMPT
+  AFTER_LAST_ATTEMPT
+}
+
+/// Vòng đời một lượt thi.
+///
+/// ⚠️ `PENDING_GRADE` là trạng thái RIÊNG, không gộp vào `SUBMITTED`. Đề có câu
+/// chấm tay mà đóng thẳng sang `GRADED` nghĩa là lượt đó bị chốt điểm 0 và tính
+/// trượt trong khi chưa ai đọc bài — và nó không nằm trong hàng chờ chấm của ai.
+enum TrnAttemptStatus {
+  IN_PROGRESS
+  SUBMITTED
+  PENDING_GRADE
+  GRADED
+  ABANDONED
+}
+
+/// EL-14 — NGÂN HÀNG CÂU HỎI đào tạo nội bộ.
+model TrnQuestion {
+  id String @id @default(cuid())
+
+  /// Đường trong cây ngân hàng, vd `/an-toan/pccc/`. Cây bằng chuỗi đường dẫn chứ
+  /// không bằng bảng cha-con: ngân hàng ở quy mô này không cần một cây có ràng
+  /// buộc, và đổi nhánh chỉ là một lượt cập nhật chuỗi.
+  bankPath    String
+  type        TrnQuestionType
+  /// Đề bài. `stem` chứ không `text` — `text` là tên cột của bảng học sinh, và để
+  /// trùng tên hai miền là mời người đọc nhầm bảng.
+  stem        String          @db.Text
+  explanation String?         @db.Text
+
+  /// Nội dung phụ thuộc loại câu (lựa chọn, đáp án đúng, cặp ghép…), theo
+  /// `contentQuestionSchema` dùng chung.
+  ///
+  /// ⚠️ Đáp án đúng nằm TRONG đây, nên mọi đường trả câu hỏi cho người học phải đi
+  /// qua một hàm lọc — bơm cả cục xuống là gửi kèm đáp án trong thân phản hồi.
+  contentJson Json
+
+  difficulty    String   @default("MEDIUM")
+  skillTags     String[] @default([])
+  /// Điểm mặc định khi đưa câu này vào đề. Điểm THẬT của một đề nằm ở
+  /// `TrnExamQuestion.points` — sửa ở đây không đổi điểm lượt thi đã chấm.
+  defaultPoints Int      @default(1)
+
+  /// Sửa một câu ĐÃ nằm trong đề đã thi thì KHÔNG sửa tại chỗ: tạo bản mới
+  /// (`version + 1`) và đặt `supersededById` trên bản cũ. Sửa tại chỗ làm lệch
+  /// điểm của mọi lượt đã chấm, im lặng.
+  version        Int     @default(1)
+  supersededById String?
+
+  centerId  String?
+  orgUnitId String?
+
+  createdByUserId String?
+  createdAt       DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt       DateTime  @updatedAt @db.Timestamptz(6)
+  deletedAt       DateTime? @db.Timestamptz(6)
+
+  choices       TrnChoice[]
+  examQuestions TrnExamQuestion[]
+
+  @@index([bankPath])
+  @@index([centerId])
+  @@index([orgUnitId])
+  @@index([type, difficulty])
+}
+
+/// EL-14 — lựa chọn của một câu hỏi.
+///
+/// ⚠️ Tồn tại SONG SONG với `contentJson`, cố ý: `contentJson` là khuôn dùng chung
+/// cho trình soạn, còn bảng này là thứ TRUY VẤN ĐƯỢC (thống kê câu nhiễu nào hay
+/// bị chọn — EL-17). Hai bên phải được ghi trong cùng một transaction.
+model TrnChoice {
+  id         String  @id @default(cuid())
+  questionId String
+  text       String  @db.Text
+  isCorrect  Boolean @default(false)
+  orderIndex Int
+
+  question TrnQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  @@unique([questionId, orderIndex])
+  @@index([questionId])
+}
+
+/// EL-14 — MỘT ĐỀ THI.
+model TrnExam {
+  id String @id @default(cuid())
+
+  /// ĐÚNG MỘT trong hai có giá trị. Hai cột cùng có giá trị = hai đường tìm đề, và
+  /// báo cáo sẽ đếm đôi.
+  courseId String?
+  lessonId String?
+
+  title         String
+  mode          TrnExamMode @default(FIXED)
+  /// Công thức rút cho `RANDOM`, vd `{"EASY":10,"MEDIUM":10,"HARD":5}`.
+  blueprintJson Json?
+
+  durationMin Int
+  /// Điểm ĐẠT, TUYỆT ĐỐI (không phải phần trăm). Giao diện cho nhập theo %, nhưng
+  /// cột lưu con số tuyệt đối — lưu % thì đổi `maxScore` là im lặng đổi ngưỡng đạt
+  /// của mọi lượt đã thi.
+  passScore   Int
+  /// Tổng điểm của đề, ĐÓNG BĂNG lúc kích hoạt.
+  ///
+  /// ⚠️ Cột này KHÔNG có trong bảng khai của đặc tả (§3.3.3) nhưng được §9 dùng
+  /// năm lần, và chính §9.12 liệt nó vào danh sách "phải đi xin EL-14". Không có
+  /// nó thì không tính được tỉ lệ điểm, và mọi chỉ số phải quay sang đọc
+  /// `passScore` — một con số do chính người bị đo tự đặt.
+  maxScore    Int @default(0)
+
+  maxAttempts   Int @default(1)
+  cooldownHours Int @default(24)
+
+  showAnswerPolicy TrnShowAnswerPolicy @default(AFTER_LAST_ATTEMPT)
+  shuffleQuestions Boolean             @default(true)
+  shuffleChoices   Boolean             @default(true)
+
+  /// `false` = còn nháp, sửa thoải mái. `true` = đã đóng băng bộ câu và `maxScore`.
+  isActive Boolean @default(false)
+
+  centerId  String?
+  orgUnitId String?
+
+  createdByUserId String?
+  createdAt       DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt       DateTime  @updatedAt @db.Timestamptz(6)
+  deletedAt       DateTime? @db.Timestamptz(6)
+
+  questions TrnExamQuestion[]
+  attempts  TrnExamAttempt[]
+  unlocks   TrnExamUnlock[]
+
+  @@index([courseId])
+  @@index([lessonId])
+  @@index([centerId])
+  @@index([orgUnitId])
+}
+
+/// EL-14 — một câu trong một đề, kèm điểm của riêng đề đó.
+model TrnExamQuestion {
+  id         String @id @default(cuid())
+  examId     String
+  questionId String
+  orderIndex Int
+  /// Điểm THẬT dùng để chấm. Tách khỏi `TrnQuestion.defaultPoints` để sửa câu
+  /// trong ngân hàng không làm lệch điểm của lượt đã chấm.
+  points     Int    @default(1)
+
+  exam     TrnExam         @relation(fields: [examId], references: [id], onDelete: Cascade)
+  question TrnQuestion     @relation(fields: [questionId], references: [id], onDelete: Restrict)
+  answers  TrnExamAnswer[]
+
+  @@unique([examId, questionId])
+  @@unique([examId, orderIndex])
+  @@index([examId])
+}
+
+/// EL-14 — MỘT LƯỢT THI của một người.
+///
+/// ⚠️ Mang CẢ HAI cột đơn vị, NOT NULL — khác `TrnLessonProgress` (không mang cột
+/// nào). Ngoại lệ của bảng tiến độ có ba điều kiện: nhịp ghi nóng, không tự đứng
+/// được, và vòng đời tầng 2. Lượt thi ghi vài lần một người một đề, là CHỨNG TỪ
+/// giữ dài, và phải đối soát được ở cron drift đêm — không điều kiện nào áp.
+model TrnExamAttempt {
+  id           String  @id @default(cuid())
+  examId       String
+  userId       String
+  enrollmentId String?
+  attemptNo    Int     @default(1)
+
+  status      TrnAttemptStatus @default(IN_PROGRESS)
+  startedAt   DateTime         @default(now()) @db.Timestamptz(6)
+  submittedAt DateTime?        @db.Timestamptz(6)
+  gradedAt    DateTime?        @db.Timestamptz(6)
+
+  /// `null` cho tới khi chấm xong. KHÔNG mặc định 0 — 0 nghĩa là "làm sai hết",
+  /// còn `null` nghĩa là "chưa ai chấm", và gộp hai thứ đó là đóng sổ trượt cho
+  /// người chưa được chấm.
+  totalScore Int?
+  passed     Boolean?
+
+  gradedByUserId String?
+  feedback       String? @db.Text
+
+  // TẦNG 2 — dấu vân kỹ thuật, KHÔNG lưu IP thô.
+  ipHash        String?
+  ipPrefix      String?
+  deviceClass   String?
+  browserFamily String?
+  /// NOT NULL, ghi cứng lúc INSERT = mốc bắt đầu + 90 ngày. Thêm cột này sau bằng
+  /// `ALTER TABLE` là để lại một lớp dữ liệu hành vi không có hạn dọn.
+  purgeAfter    DateTime @db.Timestamptz(6)
+
+  centerId  String
+  orgUnitId String
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  exam    TrnExam         @relation(fields: [examId], references: [id], onDelete: Cascade)
+  answers TrnExamAnswer[]
+
+  /// Một người · một đề · một số thứ tự lượt = đúng một dòng. Đây là thứ chặn hai
+  /// tab cùng bấm "Bắt đầu thi" tạo ra hai lượt.
+  @@unique([examId, userId, attemptNo])
+  @@index([userId, examId])
+  @@index([status, startedAt])
+  @@index([purgeAfter])
+  @@index([orgUnitId])
+  @@index([centerId])
+}
+
+/// EL-14 — câu trả lời cho MỘT câu trong MỘT lượt.
+model TrnExamAnswer {
+  id             String @id @default(cuid())
+  attemptId      String
+  examQuestionId String
+
+  selectedChoiceIds String[] @default([])
+  textAnswer        String?  @db.Text
+
+  /// `null` = CHƯA CHẤM. Khác hẳn `false` (đã chấm, sai).
+  isCorrect  Boolean?
+  /// `null` = chưa chấm. Không mặc định 0.
+  score      Int?
+  graderNote String?  @db.Text
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  attempt      TrnExamAttempt  @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+  examQuestion TrnExamQuestion @relation(fields: [examQuestionId], references: [id], onDelete: Cascade)
+
+  /// Một lượt · một câu = đúng một dòng. Đây là thứ cho phép lưu dần từng câu
+  /// trong lúc làm bài (mất mạng 10 giây không mất cả bài).
+  @@unique([attemptId, examQuestionId])
+  @@index([attemptId])
+}
+
+/// EL-14 — MỞ KHOÁ THÊM MỘT LƯỢT THI (BR-006).
+///
+/// ⚠️ Bảng riêng chứ không phải một cột `extraAttempts` trên đề: mỗi lần mở khoá là
+/// một sự kiện có người chịu trách nhiệm, có lý do, đếm được. Một cột số thì không
+/// biết ai cộng, cộng khi nào, và vì sao.
+model TrnExamUnlock {
+  id                   String @id @default(cuid())
+  examId               String
+  userId               String
+  unlockedByUserId     String
+  /// BẮT BUỘC. Mở khoá không lý do thì lần sau không ai biết vì sao ngoại lệ đó
+  /// từng được cho.
+  reason               String
+  previousAttemptCount Int    @default(0)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+
+  exam TrnExam @relation(fields: [examId], references: [id], onDelete: Cascade)
+
+  @@index([examId, userId])
+  @@index([userId])
+}
