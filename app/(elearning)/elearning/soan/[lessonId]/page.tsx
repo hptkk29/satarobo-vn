@@ -5,6 +5,8 @@ import { can } from "@/lib/auth/can";
 import { scopedDb } from "@/lib/db-scope";
 import { LessonEditor } from "../_components/lesson-editor";
 import { VideoUploader } from "../_components/video-uploader";
+import { CueEditor } from "../_components/cue-editor";
+import { cueInlineSchema } from "@/lib/elearning/lesson-cue";
 
 /**
  * EL-04 — TRANG SOẠN MỘT BÀI ĐỌC.
@@ -63,6 +65,11 @@ export default async function Page({
       kind: true,
       contentMd: true,
       videoKey: true,
+      cues: {
+        select: { id: true, atSec: true, blocking: true, inlineJson: true },
+        orderBy: { atSec: "asc" },
+      },
+      _count: { select: { progress: true } },
       durationSec: true,
       module: { select: { title: true, course: { select: { title: true } } } },
     },
@@ -92,6 +99,27 @@ export default async function Page({
             title={lesson.title}
             videoKeyHienCo={lesson.videoKey}
             durationSecHienCo={lesson.durationSec}
+          />
+        </div>
+
+        <div className="mt-8 border-t pt-6">
+          <CueEditor
+            lessonId={lesson.id}
+            durationSec={lesson.durationSec}
+            soNguoiHoc={lesson._count.progress}
+            cues={lesson.cues.map((c) => {
+              // Đọc nội dung câu hỏi để HIỆN TÊN. Câu hỏng khuôn vẫn phải liệt kê
+              // ra được — giấu nó đi là để một bản ghi bẩn nằm mãi mà không ai
+              // xoá nổi, vì không ai thấy nó tồn tại.
+              const q = cueInlineSchema.safeParse(c.inlineJson);
+              return {
+                id: c.id,
+                atSec: c.atSec,
+                blocking: c.blocking,
+                cauHoi: q.success ? q.data.question : "(câu hỏi hỏng — nên xoá)",
+                loai: q.success ? q.data.type : "?",
+              };
+            })}
           />
         </div>
       </div>
