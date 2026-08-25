@@ -266,9 +266,12 @@ export async function notifyTrialTeacherAssigned(params: {
   // `href` phải viết theo đường ADMIN clean-URL: chuông admin push thẳng, chuông site GV
   // đổi qua `teacherHref()`. Mặc định cũ "/teacher/trial" sai cả hai đầu — trên host admin
   // bị route-policy 308 sang public rồi 404, còn `teacherHref` không nhận diện được nên
-  // trả null (thông báo thành text chết). "/trials" là màn admin có thật và teacherHref
-  // map đúng sang "/trial" của site GV.
-  const href = params.href ?? "/trials";
+  // trả null (thông báo thành text chết). "/lop-trial" là màn admin có thật và
+  // teacherHref map đúng sang "/trial" của site GV.
+  //
+  // ⚠️ GĐ6 — thông báo CŨ trong DB vẫn mang href "/trials". Đó là lý do route cũ được
+  // giữ dưới dạng chuyển hướng thay vì xoá, và `teacherHref` vẫn nhận diện case cũ.
+  const href = params.href ?? "/lop-trial";
   try {
     await notifyStaff({
       userIds: [params.teacherId],

@@ -227,17 +227,32 @@ const BY_PREFIX: Readonly<Record<string, NotiDef>> = {
   },
   "trial-v1.assigned:": {
     group: "new_task", priority: 2, entity: "trial",
-    recipients: "Giáo viên được phân buổi học thử", target: "/trials",
+    recipients: "Giáo viên được phân buổi học thử", target: "/lop-trial/lich-hen",
   },
   "trial-class.assigned:": {
     group: "new_task", priority: 2, entity: "trial",
-    recipients: "Giáo viên được phân lớp học thử", target: "/trials",
+    recipients: "Giáo viên được phân lớp học thử", target: "/lop-trial",
   },
   // Buổi ad-hoc thêm tay vào lớp trải nghiệm (addTrialSession) — GV được gán buổi đó.
   // Cùng mức với hai loại trên: là ca dạy vừa rơi vào lịch của mình, không phải tin để biết.
   "trial-session.assigned:": {
     group: "new_task", priority: 2, entity: "trial",
-    recipients: "Giáo viên được phân buổi trải nghiệm", target: "/trials",
+    recipients: "Giáo viên được phân buổi trải nghiệm", target: "/lop-trial",
+  },
+  // ── GĐ3 — luồng giáo viên theo TỪNG CA (không phải theo lớp) ────────────────
+  "trial-case.assigned:": {
+    group: "new_task", priority: 2, entity: "trial",
+    recipients: "Giáo viên được Đào tạo phân công một ca trải nghiệm", target: "/lop-trial",
+  },
+  // Lịch bị dời ⇒ giáo viên MẤT ca đang cầm. Ưu tiên cao hơn tin "được phân công":
+  // biết muộn là tới lớp thừa hoặc bỏ trống ca đã hẹn với phụ huynh.
+  "trial-case.rescheduled:": {
+    group: "new_task", priority: 3, entity: "trial",
+    recipients: "Giáo viên vừa bị gỡ phân công do dời lịch", target: "/lop-trial",
+  },
+  "trial.cho-phan-cong:": {
+    group: "new_task", priority: 2, entity: "trial",
+    recipients: "Bộ phận Đào tạo (ca trải nghiệm chưa có giáo viên)", target: "/lop-trial",
   },
   // Vi phạm SLA chăm lead — theo PRD đây là "đã trễ", không phải "việc mới".
   "sla:": {
