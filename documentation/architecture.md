@@ -192,13 +192,14 @@ HO   (gốc, depth 0, code "HO", path "/ho/")
 | b | `User.orgUnitId` | `prisma/schema.prisma:1058` | ❌ — là **anchor** để `reconcileUserOrgRoles` suy vai (`lib/auth/org-role-sync.ts:94-102`) |
 | c | `Employee.centerId` / `Employee.orgUnitId` | `prisma/schema.prisma:2477-2480` | ❌ hồ sơ nhân sự |
 | d | `EmployeeOrgAssignment` (employee × orgUnit) | `prisma/schema.prisma:736-751` | ❌ **cố ý** — `lib/org/assignment-service.ts:2` khẳng định "KHÔNG sinh quyền" |
-| e | **`UserOrgRole`** (user × orgUnit × role) | `prisma/schema.prisma:525-541` | ✅ **CÓ** |
+| e | **`UserOrgRole`** (user × orgUnit × role) | `prisma/schema.prisma:525-567` — có thêm `source` (`:560`, AUTO/MANUAL, SL-01 25/08) | ✅ **CÓ** |
 | f | **`PositionAssignment` + `Position.orgUnitId` + `WorkScope`** | `prisma/schema.prisma:632-726` | ✅ **CÓ** — `lib/org/positions.ts:157-224` trả đúng khuôn `UserOrgRoleRow`, đổ chung vào `buildActor` |
 
-`UserOrgRole` có PK ghép `@@id([userId, orgUnitId, roleId])` (`prisma/schema.prisma:536`) ⇒ **một user gắn được N dòng
+`UserOrgRole` có PK ghép `@@id([userId, orgUnitId, roleId])` (`prisma/schema.prisma:563`) ⇒ **một user gắn được N dòng
 ở N đơn vị**. **KHÔNG có ràng buộc nào** (DB / Zod / service) chặn gắn vào nhiều cơ sở khác nhánh:
 - Zod `assignUserOrgRoleSchema` chỉ `.refine` "effectiveTo phải sau effectiveFrom" (`lib/validators/role.ts:53-65`).
-- Service chỉ kiểm 4 thứ: quyền `roles:assign`, OrgUnit tồn tại, RoleDef tồn tại, chặn leo thang SUPER_ADMIN — rồi upsert thẳng (`lib/auth/rbac-service.ts:179-229`).
+- Service (từ 25/08) kiểm: quyền `roles:assign` qua `decidePermissionWithGrant` (`lib/auth/rbac-service.ts:81-93`), OrgUnit tồn tại, RoleDef tồn tại, rồi `assertAssignGuards` — SEC-M13 → **A-01-3 cấm neo `CENTER_MANAGER` tại HO/ROOT** → R1 cấm vai mang quyền cấp quyền → R2 cấm tự gán cho mình (`lib/auth/rbac-service.ts:160-210`) — rồi upsert.
+- Vẫn **không có** ràng buộc chặn gắn nhiều cơ sở khác nhánh: A-01-3 chỉ chặn *loại đơn vị* (HO/ROOT), không chặn *số lượng* cơ sở. Đa cơ sở là cấu hình **hợp lệ** (`docs/prd/A-nen-tang.md` — QLCS đa cơ sở đã có thật trên prod).
 
 ### 4.3. Cách tính `visibleCenterIds` / `visibleOrgUnitIds` / `isHoLevel`
 
@@ -348,6 +349,56 @@ Bằng chứng: `app/(admin)/admin/bao-cao/doanh-thu/page.tsx:60-74`, `lib/payme
 
 ---
 
+### 4.8. Quy ước cho BẢNG MỚI (SL-00 — chốt 24/08/2026)
+
+> Đây là **quy ước bắt buộc**, viết vào tài liệu **trước dòng code đầu tiên** của các module F/G.
+> Nguồn quyết định: `docs/prd/A-nen-tang.md:19` (B1) · `docs/plan/sprint-plan.md:334`, `:837`.
+
+| Loại bảng mới | Cột phạm vi | Vì sao |
+|---|---|---|
+| **Dữ liệu theo đơn vị**, cần `scopedDb` cách ly | mang **CẢ HAI** `centerId` **và** `orgUnitId` | `injectScope` chỉ chèn `centerId` (`lib/db-scope.ts:278-281`) — đây là thứ đang cách ly thật. `orgUnitId` là cột của tương lai cutover, ghi kép tự động qua `lib/org/dual-write.ts` (§4.5). Thiếu `centerId` = **không cách ly được hôm nay**; thiếu `orgUnitId` = **tàng hình hàng loạt khi lật cutover**. |
+| **Không phải** dữ liệu theo đơn vị (sở thích cá nhân, log kỹ thuật…) | **không mang cột nào** — và **phải ghi lý do vào chú thích schema** | Ví dụ đã chốt: `UserTablePreference` (sở thích cột của từng user — `docs/prd/A-nen-tang.md:664`, SL-13) và `AdsSyncRun`. Thêm cột phạm vi cho bảng loại này chỉ tạo cột luôn null + một câu hỏi "vì sao null" cho người sau. |
+
+⚠️ Bảng mới thuộc nhóm 1 phải khai **đồng thời 3 chỗ**, thiếu chỗ nào cũng hỏng **im lặng**:
+1. `SCOPED_MODELS` (`lib/db-scope.ts:11-50`) — không có ⇒ `injectScope` thoát ngay ở `lib/db-scope.ts:269`, **không cách ly gì cả**.
+2. `getModelPrefixes` (`lib/db-scope.ts:133`) — không map ⇒ fallback `isHoLevel ? "ALL" : visibleCenterIds` (`:226-228`), đúng vết đã cháy một lần với `Attendance`.
+3. `BACKFILL_SPECS` (`lib/org/center-bridge.ts:108-190`) — quên khai ⇒ test `[US-07-IT-08b]` đỏ.
+
+⚠️ **Cả `UserTablePreference` lẫn `AdsSyncRun` hiện CHƯA tồn tại trong `prisma/schema.prisma`** (grep = 0 hit cho cả hai) — đó là bảng theo kế hoạch của khu vực G. Ghi ở đây vì **quy ước đã chốt**, không phải vì code đã có.
+
+### 4.9. Bộ lọc phạm vi dùng chung của dashboard (A-02 — 25/08/2026)
+
+**Hai bộ lọc sống cạnh nhau, CỐ Ý** (`lib/reports/filters.ts:10-16`):
+
+| | `ReportFilters` / `resolveReportFilters` | `ScopeFilters` / `resolveScopeFilters` |
+|---|---|---|
+| Kiểu cơ sở | **đơn trị** `centerId: string \| null` (`:27`) | **đa trị** `centerIds: string[] \| null` (`:156`) |
+| Phục vụ | 8 trang `/bao-cao/*` + đường GHI mục tiêu doanh thu | 4 tab mới ở `/admin/dashboard` |
+| Quy ước URL | `?center=<id>` | `?center=ALL` hoặc danh sách id ngăn bởi dấu phẩy; ngày `?from=`/`?to=` (bí danh `dateFrom`/`dateTo`) |
+
+Cái mới **không thay** cái cũ trong đợt A: đổi kiểu của `ReportFilters` là vỡ 11 chỗ đọc + 8 chỗ ghi. ~14 trang danh sách khác vẫn dùng `?centerId=` và **không** đổi.
+
+**Bất biến của `resolveScopeFilters` (`lib/reports/filters.ts:224-277`)** — hỏng thì hỏng **câm**:
+
+- Cơ sở = giao tập *yêu cầu* × tập *chọn được*; id ngoài `visibleCenterIds` **rơi im lặng**, không throw, không 500 (`:231-246`).
+- Danh sách cơ sở chọn được lọc tay theo `actor.visibleCenterIds` + chỉ cơ sở **đang vận hành** (`loadSelectableCenters`, `:79-94`) — bắt buộc, vì `Center` nằm ngoài `SCOPED_MODELS` nên `sdb.center.findMany()` là **pass-through trả mọi cơ sở**.
+- Không có searchParams ⇒ `centerIds = null` = "toàn bộ phạm vi **cho phép của actor**", **không phải** "toàn hệ thống". `null` **không tự an toàn**: truy vấn phải đắp thêm `scopeCenterWhere(filters, actor)` (`:312-319`) — hàm đó mới biến `null` thành danh sách cơ sở thật.
+- Ngày mặc định: 01 tháng hiện tại → hôm nay, **đo bằng lịch VN** qua `lib/time/vn.ts` (V-17). Trước 25/08 hai đầu ngày neo hai hệ quy chiếu khác nhau (`dateFrom` 00:00 UTC, `dateTo` cuối ngày theo TZ tiến trình) ⇒ trên Vercel/CI chạy UTC là ăn nhầm giao dịch 00:00–07:00 của ngày hôm sau (`lib/reports/filters.ts:18-23`).
+- **Gộp là mặc định (quyết định 24/08 · OQ-4).** Công tắc "Tách theo cơ sở" = `?split=1`, và **chỉ bật được khi phạm vi đang xem có ≥2 cơ sở** (`canSplit`, `:260-263`): ép `?split=1` với một cơ sở vẫn ra `false`. `components/admin/scope-filter-bar.tsx:132-135` **không render** công tắc trong ca đó (đếm theo lựa chọn đang bấm, chưa submit).
+
+⚠️ **Bốn tab hiện là PLACEHOLDER — chưa đọc dữ liệu nào** (`app/(admin)/admin/dashboard/_tabs/*.tsx`, mỗi file ~30 dòng, `void filters`). Chúng nhận `filters` đã giải sẵn từ page cha và **không tự đọc `searchParams`** — hai bộ parse lệch nhau là hỏng câm.
+
+🔴 **Luật cho lúc nối số liệu vào tab:** `scopeFilterCacheKey` (`lib/reports/filters.ts:288-296`) là discriminator **duy nhất** khi tab gọi cache bằng closure 0 tham số. Thêm trường vào `ScopeFilters` mà quên thêm vào khoá = hai bộ lọc khác nhau dùng chung một entry ⇒ **sai số liệu im lặng**. Khoá sắp xếp mảng `centerIds` trên **bản sao** để cùng một tập gửi khác thứ tự cho cùng khoá. Và mọi hàm số liệu phải nhận `groupByCenter` **ngay từ bản đầu** — viết cứng dạng gộp rồi "thêm tách sau" là viết lại cả tầng truy vấn.
+
+🔴 **Chưa tab nào được bật "Tất cả cơ sở" một cách vô điều kiện (A-02-7):** tab Tài chính đọc `RevenueTarget` — model này ngoài `SCOPED_MODELS`, lại có `@@unique([centerId, period])` mà Postgres coi NULL là DISTINCT, nên đổi sang `{ in: [...] }` sẽ **loại mất** dòng mục tiêu toàn công ty (`centerId = null`).
+
+⚠️ **Không phải model nào cũng cách ly được** — `AdsInsightDaily`, `MarketingCostPeriod`, `Conversation`, `RevenueTarget` nằm ngoài `SCOPED_MODELS`. Hệ quả đã xử lý trong đợt này: `lib/crm/funnel-query.ts` **bỏ hẳn** truy vấn chi phí quảng cáo với actor bị giới hạn cơ sở và trả `spendAvailable: false`; chỗ hiển thị đọc cờ đó để in `—` chứ **không** in `0` (`lib/crm/funnel-cards.ts:18`). `AdsInsightDaily` chỉ có `@@unique([date, channel])`, không có `centerId` ⇒ chi phí QC **hôm nay không chia được về cơ sở**.
+
+**File đã đổi (đợt A):** `lib/reports/filters.ts` · `lib/reports/filters.test.ts` (mới) · `components/admin/scope-filter-bar.tsx` (mới) · `components/admin/scope-filter-bar.test.ts` (mới) · `app/(admin)/admin/dashboard/page.tsx` · `app/(admin)/admin/dashboard/_tabs/{tai-chinh,kinh-doanh,chi-phi-marketing,tuong-tac-kh}.tsx` (mới) · `lib/crm/funnel-query.ts` · `lib/crm/funnel-query.test.ts` (mới) · `lib/crm/funnel-cards.ts` (mới) · `lib/crm/funnel-cards.test.ts` (mới) · `app/(admin)/admin/marketing/funnel/page.tsx` · `prisma/seed-orgunit.ts` (REGION thứ hai) · `tests/e2e/_helpers/{seed.ts,fixtures.ts}` · `tests/e2e/_helpers/seed-multi-region.ts` (mới) · `tests/e2e/a0/org-multi-region.spec.ts` (mới).
+*(SL-00 ở §4.8 là quy ước tài liệu — đợt này **không** đổi file mã nào cho riêng nó.)*
+
+---
+
 ## 5. Đường biên tin cậy
 
 ### 5.1. Browser → Server Action
@@ -460,7 +511,11 @@ comment `.github/workflows/seed-prod-roles.yml:13`, **không kiểm chứng đư
 Cùng họ: nested `include` không được scope (`lib/db-scope.ts:4-5`).
 
 **R-05 · `isHoLevel` bật chỉ cần MỘT dòng vai neo tại HO/ROOT** ⇒ `visibleCenterIds` = **mọi cơ sở sống**
-(`lib/auth/actor.ts:255, 278-281`). Không form nào cảnh báo; chỉ có comment `lib/auth/legacy-role-map.ts:94-95`.
+(`lib/auth/actor.ts:255, 277-280`).
+**Đã bịt một phần từ 25/08 (A-01-3):** vai `CENTER_MANAGER` **không** neo được tại HO/ROOT — chặn ở `lib/auth/org-anchor-rules.ts`
+và gác ở **cả hai** đường ghi (`lib/auth/rbac-service.ts:183-185` gán tay; `lib/auth/org-role-sync.ts:167-176` đồng bộ khi
+sửa ô "Đơn vị"). Rủi ro **còn nguyên** cho mọi vai khác: danh sách cấm cố ý chỉ có `CENTER_MANAGER`
+(`lib/auth/org-anchor-rules.ts:21-26`), vì HR vẫn cần tạo nhân sự Hội sở.
 
 **R-06 · Grant per-user ALLOW mở "ALL" cho cả model**
 `lib/db-scope.ts:248-254`: grant ALLOW khớp prefix action ⇒ `hasAll = true` ("per-user grants are global exceptions").
@@ -492,9 +547,19 @@ bump / re-login, trong khi `resolveActor` đọc DB mỗi request. **Hai nguồn
 chỉ `loadPositionRoleRows` mới set (`lib/org/positions.ts:203-206`).
 ⇒ Điều động một người chỉ có `UserOrgRole` **không có tác dụng gì, và không báo lỗi**.
 
-**R-08d · `reconcileUserOrgRoles` không thu hồi vai gán tay**
-Gán theo trạng thái thật nhưng thu hồi theo diff bảng ánh xạ (`lib/auth/legacy-role-map.ts:96-121`).
-⇒ Vai gán tay ở `/admin/users/[id]/org-roles` (vd cơ sở thứ 2) **giữ vĩnh viễn** khi admin đổi "Đơn vị" trên form user.
+**R-08d · Quyền thu hồi của `reconcileUserOrgRoles` — đã đổi cơ chế 25/08 (SL-01)**
+🔴 **Đính chính câu cũ của tài liệu này** ("vai gán tay giữ vĩnh viễn"): điều đó **không đúng trước bản vá**. `prevPlan`
+được **suy lại** từ một đơn vị neo, nên khi đơn vị neo cũ trùng đúng cơ sở được gán tay thì dòng gán tay **rơi vào**
+`prevPlan` và bị `EXPIRED` bởi một thao tác chỉ sửa ô "Đơn vị" (`lib/auth/org-role-sync.ts:15-22`).
+Từ SL-01, quyền thu hồi quyết bằng **cột `UserOrgRole.source`**, không bằng suy luận: nhánh THU HỒI bỏ qua dòng `MANUAL`,
+chỉ `EXPIRED` dòng `AUTO`/`null` (`lib/auth/org-role-sync.ts:93-94`, `:300`, `:307-314`).
+⚠️ **Bất biến chỉ đúng cho dòng `MANUAL` CÒN HIỆU LỰC — đừng đọc thành "máy không bao giờ đụng dòng MANUAL".** Nhánh **GÁN**
+của cùng hàm chạy `upsert` với `update: { status: "ACTIVE", …, source: "AUTO" }` (`:238-266`); guard `liveKeys.has(rowKey(t))`
+(`:238`) chỉ chắn dòng đang sống, nên một dòng `MANUAL` **đã hết hiệu lực** bị hồi sinh **và đổi nhãn về `AUTO`** — đánh đổi
+có chủ đích, tự nhận trong mã (`:244-248`), vì khoá ghép `(userId, orgUnitId, roleId)` buộc máy dùng lại đúng dòng đó.
+⇒ Lần sửa ô "Đơn vị" kế tiếp đổi nhãn, lần sau nữa dòng bị thu hồi im lặng. Chi tiết: `documentation/permissions.md` §11.1.
+⚠️ **Nợ còn lại:** script backfill đánh dấu `MANUAL` cho các cấu hình đa cơ sở **đang gán tay trên prod** chưa có trong repo —
+tới khi chạy, những dòng đó vẫn mang `AUTO` và **vẫn thu hồi được**.
 
 ### Nhóm B — Multi-tenant / dữ liệu
 
@@ -504,7 +569,7 @@ Gán theo trạng thái thật nhưng thu hồi theo diff bảng ánh xạ (`lib
 |---|---|---|---|
 | a | `Σ Payment.amount WHERE accountantStatus='CONFIRMED'` | `Payment.paidDate` | `app/(admin)/admin/bao-cao/doanh-thu/page.tsx:66-71`, `.../manager-dashboard.tsx:95`, `.../bao-cao/trung-tam/page.tsx:331` |
 | b | `Σ Order.totalAmount WHERE status IN (CONFIRMED, COMPLETED)` | `Order.paidAt` | `.../dashboard/_components/accountant-dashboard.tsx:26-31` |
-| c | `Σ Order.totalAmount WHERE status IN (CONFIRMED, COMPLETED)` | **không lọc ngày** | `lib/crm/funnel-query.ts:17-20` (ROAS) |
+| c | `Σ Order.totalAmount WHERE status IN (CONFIRMED, COMPLETED)` | **không lọc ngày** | `lib/crm/funnel-query.ts:103-105` (ROAS) |
 
 Ba màn ra ba con số khác nhau cho cùng một kỳ.
 
@@ -546,7 +611,7 @@ dual-write + backfill SQL có thêm cầu theo `code` (`lib/org/dual-write.ts:67
 **TẤT CẢ** cơ sở (`lib/db-scope.ts:100-107`, kèm TODO chưa audit xong).
 Hầu hết trang list đổ thẳng kết quả này vào dropdown lọc (vd `app/(admin)/admin/students/page.tsx:250-254`).
 Không rò rỉ **số liệu** (model nghiệp vụ đã scoped) nhưng rò rỉ **metadata tổ chức**.
-Helper an toàn có sẵn: `resolveReportFilters()` (`lib/reports/filters.ts:50-85`, có chống IDOR qua URL ở dòng 70-71).
+Helper an toàn có sẵn: `resolveReportFilters()` (`lib/reports/filters.ts:100-125`, chống IDOR qua URL ở `:110-111`) và bản đa cơ sở `resolveScopeFilters()` (`:224-277`, §4.9).
 
 ### Nhóm C — Hạ tầng / cấu hình
 
@@ -595,8 +660,8 @@ Guard `lib/storage/chat-storage.ts:57-64` chỉ chặn **trỏ nhầm tên bucke
 | M-05 | `lib/org/org-service.ts:352-354` tự xưng `getSelectableOrgUnits` là "NGUỒN DUY NHẤT cho mọi center-picker FE/BE" | **Không** bộ lọc list nào gọi nó — chỉ các màn form new/edit dùng; list dùng `sdb.center.findMany()` |
 | M-06 | `lib/db-scope.ts` comment về `LeadAssignmentConfig` ("null = quy tắc toàn hệ thống") | `lib/org/center-bridge.ts:105` nói thẳng là **SAI** so với schema (`centerId String @unique` NOT NULL) |
 | M-07 | Tên file `lib/auth/action-registry.ts` gợi ý là danh mục gốc | Chỉ re-export `ALL_ACTIONS` (`lib/auth/action-registry.ts:5-8`); danh mục gốc là hằng `PERMISSIONS` trong `lib/auth/permissions.ts` (182 key) |
-| M-08 | Key `leads:export` khai đủ 3 chỗ (`lib/auth/permissions.ts:67,362`, `lib/permissions/registry/crm.ts:29`, `prisma/seed-roles.ts:229,411`) | **KHÔNG có call-site enforce nào** — route export thật gate bằng `leads:view-all` (`app/api/admin/leads/export/route.ts:29`). Gỡ `leads:export` của một vai **không chặn được gì** |
-| M-09 | `lib/dashboard/widget-registry.ts` có `visibleWidgets(actor)` lọc widget theo `can()` | **DEAD CODE** — không dòng code sản phẩm nào import. Dashboard chọn panel bằng `hasRole`/`hasAnyRole` (`app/(admin)/admin/dashboard/page.tsx:59, 69-82`) |
+| M-08 | ~~Key `leads:export` khai đủ 3 chỗ nhưng không call-site nào enforce~~ | ⚠️ **ĐÓNG Ở TẦNG MÃ 25/08 (A-03), CHƯA ĐÓNG TRÊN PROD** — route đòi `leads:view-all` **AND** `leads:export` (`app/api/admin/leads/export/route.ts:38-42`); key đã gỡ khỏi mọi vai trong **file** seed và chỉ còn `SUPER_ADMIN` ở ma trận v1 (`lib/auth/permissions.ts:370`), cấp cho người thường qua **nhóm** `/admin/user-groups`. 🔴 Bảng `RolePermission` prod chỉ đổi khi bấm tay `seed-prod-roles.yml` (`prisma/seed-roles.ts:848-871`); trước đó `HO_MARKETING` + `CENTER_MANAGER` **vẫn xuất được lead**. Key còn mồ côi: `elearning:report:export` (`lib/auth/permissions.ts:716`) |
+| M-09 | `lib/dashboard/widget-registry.ts` có `visibleWidgets(actor)` lọc widget theo `can()` | **DEAD CODE** — không dòng code sản phẩm nào import. Dashboard chọn panel bằng `hasRole`/`hasAnyRole` (`app/(admin)/admin/dashboard/page.tsx:104-127`) |
 
 ---
 

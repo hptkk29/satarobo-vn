@@ -168,7 +168,7 @@ Ghi kép `centerId → orgUnitId` làm ở một chỗ: `lib/org/dual-write.ts` 
 |---|---|---|
 | A | `SUM(Payment.amount)` where `accountantStatus='CONFIRMED' AND deletedAt IS NULL`, gom theo `paidDate` | `/bao-cao/doanh-thu:66-71`, `manager-dashboard.tsx:95`, `/bao-cao/trung-tam:331` |
 | B | `SUM(Order.totalAmount)` where `status IN (CONFIRMED, COMPLETED)`, gom theo `Order.paidAt` | `accountant-dashboard.tsx:28-31` |
-| C | `SUM(Order.totalAmount)` where `status IN (CONFIRMED, COMPLETED)`, **không lọc ngày** | `lib/crm/funnel-query.ts:17-20` (ROAS) |
+| C | `SUM(Order.totalAmount)` where `status IN (CONFIRMED, COMPLETED)`, **không lọc ngày** | `lib/crm/funnel-query.ts:103-105` (ROAS) |
 
 Ba màn ra ba con số khác nhau cho cùng một kỳ.
 
@@ -293,7 +293,7 @@ Lớp bind Next: `defineAction` = `auth()` → `resolveActor` → `runAction` �
 
 | Đường | Định dạng | Kiểu | Gate quyền | Cách ly | Watermark | Audit EXPORT |
 |---|---|---|---|---|---|---|
-| `app/api/admin/leads/export/route.ts` | **CSV** (tự nối chuỗi) | API GET | `requireLiveSession` + `checkPermission('leads:view-all')` (`:27-29`) | `scopedDb(actor).lead` (`:54-57`) | ✅ `:109-110` | ✅ `:115-127` |
+| `app/api/admin/leads/export/route.ts` | **XLSX** (SheetJS) — đổi từ CSV ngày 25/08 | API GET | `requireLiveSession` (`:29`) + `checkPermission('leads:view-all')` **AND** `checkPermission('leads:export')` (`:38-42`) | `scopedDb(actor).lead` (`:69`) | ✅ sheet `_watermark` `:137` | ✅ `:151-166` (có thêm cờ `truncated`) |
 | `app/api/admin/cham-cong/shift-export/route.ts` | **XLSX** | API GET | `requireLiveSession` + `checkPermission('hr_attendance:view', {centerId})` (`:35-37`); ⚠️ `hasRole` cứng ép `centerId` về cơ sở mình cho CENTER_MANAGER (`:30-32`) | `scopedDb(actor).shiftRegistration` (`:45`) | ✅ | ✅ |
 | `app/api/admin/crm/commission-export/route.ts` | **XLSX** | API GET | `checkPermission('payments:manage')` (`:19-21`) | Scope **tay** qua `getModelVisibleCenterIds('CommissionStatement')` | ✅ | ✅ |
 | `app/(admin)/admin/audit-log/_actions.ts:118` | CSV | Server Action | `checkPermission('audit-logs:view')` (`:27-33`) | `queryUnifiedAuditLogs(actor, …)` | — | — |
@@ -303,26 +303,35 @@ Lớp bind Next: `defineAction` = `auth()` → `resolveActor` → `runAction` �
 
 Watermark dùng chung: `lib/export/watermark.ts:3-11` — `exportWatermark(actorName, actorId, count, when)`, gắn ở **dòng cuối** CSV / sheet `_watermark` của XLSX.
 
-### 5.2 ⚠️ Key quyền `leads:export` là **quyền mồ côi**
+### 5.2 `leads:export` — từ quyền mồ côi thành cổng thật (A-03, 25/08/2026)
 
 | Sự thật | Bằng chứng |
 |---|---|
-| Key **được khai đầy đủ** ở 3 nơi | `lib/auth/permissions.ts:67`, `:362`; `lib/permissions/registry/crm.ts:29`; `prisma/seed-roles.ts:229`, `:411` |
-| **Không có call-site enforce nào** trong `app/` | grep `leads:export` trên `app/` → 0 kết quả |
-| Đường xuất thật gate bằng `leads:view-all` | `app/api/admin/leads/export/route.ts:29` |
+| Cổng route là **AND** của hai key, thiếu cái nào cũng 403 | `app/api/admin/leads/export/route.ts:38-42` |
+| Key **đã gỡ khỏi mọi vai** trong **FILE** seed v2 | `prisma/seed-roles.ts:238-239` (HO_MARKETING), `:420-422` (CENTER_MANAGER) — chỗ cũ nay là chú thích |
+| 🔴 **DB prod chưa đổi cho tới khi bấm `seed-prod-roles.yml`** — merge chỉ đổi mã; bảng `RolePermission` chỉ ghi lại khi `seedRoles()` chạy, và trên prod nó là `workflow_dispatch` (bấm tay). Trước lúc đó, `HO_MARKETING` + `CENTER_MANAGER` **vẫn xuất được lead** | `prisma/seed-roles.ts:848-871`; `.github/workflows/seed-prod-roles.yml:71`; `documentation/permissions.md` §11.4 |
+| Ma trận v1 chỉ còn `SUPER_ADMIN` | `lib/auth/permissions.ts:370` |
+| Đường cấp cho người thường: **nhóm quyền** | `PermissionGrant` `subjectType = "GROUP"`, màn `/admin/user-groups` |
+| Nút trên UI ẩn khi thiếu quyền | `app/(admin)/admin/leads/page.tsx:283` → `_components/leads-table.tsx:388` |
 
-**Hệ quả:** gỡ `leads:export` khỏi một vai để "chặn export" **không có tác dụng gì**. Ai có `leads:view-all` là xuất được. Key thứ hai cùng cảnh: `elearning:report:export` (`lib/auth/permissions.ts:311`, `:716`) — cũng không call-site.
+🔴 **Vì sao phải AND chứ không THAY THẾ `leads:view-all`:** người neo vai tại HO mà không có `leads:*` nào rơi vào nhánh `!hasAnyPermissionForModel` → `isHoLevel` → `"ALL"` (`lib/db-scope.ts:257-263`) ⇒ nếu chỉ đòi `leads:export` thì người đó xuất được lead **toàn hệ thống**.
+
+⚠️ Nút "Xuất Excel" là thẻ `<a download>` nên **403 bị trình duyệt lưu thành file** chứa `{"error":"Forbidden"}` chứ không hiện lỗi — vì vậy prop `canExport` **không có giá trị mặc định** (quên truyền = nút biến mất, fail-closed). Cổng thật vẫn ở route; ẩn nút chỉ là lớp không-mời-bấm.
+
+**Key còn mồ côi:** `elearning:report:export` (`lib/auth/permissions.ts:311`, `:716`) — vẫn **không** call-site nào enforce.
+
+**File đã đổi (A-03):** `app/api/admin/leads/export/route.ts` (+ `route.test.ts` mới) · `app/(admin)/admin/leads/page.tsx` · `app/(admin)/admin/leads/_components/leads-table.tsx` (+ `leads-table.test.tsx` mới) · `lib/auth/permissions.ts` · `prisma/seed-roles.ts` · `lib/auth/leads-export-role.test.ts` (mới) · `app/(admin)/admin/users/[id]/permissions/_actions.ts` (+ `_actions.test.ts` mới).
 
 ### 5.3 ⚠️ Rủi ro khác của đường xuất lead
 
 | # | Vấn đề |
 |---|---|
-| 1 | Nút "Xuất CSV" render **vô điều kiện** — `LeadsTable` không nhận prop `canExport` (`app/(admin)/admin/leads/_components/leads-table.tsx:374-382`). Thiếu quyền vẫn thấy nút, bấm ra JSON `{error:'Forbidden'}` |
-| 2 | Export **bỏ mất 5/6 bộ lọc** của trang danh sách: chỉ truyền và đọc `status` + `q` (`leads-table.tsx:375`, `export/route.ts:32-33`). Lọc 20 lead rồi bấm xuất → nhận tối đa 5000 lead của cả scope |
-| 3 | `take: 5000` cắt **im lặng**, không cảnh báo. Số trong watermark là số dòng đã cắt, không phải tổng thật (`export/route.ts:57`) |
-| 4 | ⚠️ **Dòng audit EXPORT vô hình với quản lý cơ sở** — đã kiểm chứng đến tận cùng: route truyền `entityId: 'export'` và không truyền `orgUnitId` (`export/route.ts:115-127`); `writeAudit` fallback `resolveAuditOrgUnitIdFromEntity(client, "Lead", "export")` → `findUnique` không thấy → trả `null` (`lib/audit/audit-log.ts:88-91`, `:144-149`); viewer lọc `orgUnitId IN scope` khi scope ≠ "ALL" (`lib/audit/audit-log.ts:218`, `:292`). ⇒ Chỉ SUPER_ADMIN / actor có `audit-logs:*` scope ALL thấy được dòng này |
+| 1 | ✅ **ĐÃ VÁ 25/08** — `LeadsTable` nhận prop `canExport` **bắt buộc** (không default) và chỉ render nút khi có quyền (`app/(admin)/admin/leads/_components/leads-table.tsx:331` khai prop, `:388` render) |
+| 2 | Export **bỏ mất 5/6 bộ lọc** của trang danh sách: chỉ truyền và đọc `status` + `q` (`leads-table.tsx:390`, `export/route.ts:45-50`). Lọc 20 lead rồi bấm xuất → nhận tối đa 5000 lead của cả scope |
+| 3 | ✅ **ĐÃ VÁ 25/08 (A-03-6)** — lấy dư 1 dòng (`take: TRAN_DONG + 1`, `export/route.ts:72`) để biết có bị cắt; chạm trần thì ghi cảnh báo vào sheet `_watermark` (`:141-145`) **và** cờ `truncated` vào audit (`:164`). Trần vẫn là 5000 (`:26`) |
+| 4 | ⚠️ **Dòng audit EXPORT vô hình với quản lý cơ sở** — đã kiểm chứng đến tận cùng: route truyền `entityId: 'export'` và không truyền `orgUnitId` (`export/route.ts:151-166`); `writeAudit` fallback `resolveAuditOrgUnitIdFromEntity(client, "Lead", "export")` → `findUnique` không thấy → trả `null` (`lib/audit/audit-log.ts:88-91`, `:144-149`); viewer lọc `orgUnitId IN scope` khi scope ≠ "ALL" (`lib/audit/audit-log.ts:218`, `:292`). ⇒ Chỉ SUPER_ADMIN / actor có `audit-logs:*` scope ALL thấy được dòng này |
 | 5 | CSV tài khoản phụ huynh dựng ở client ⇒ **không watermark, không audit, không gate riêng** — đây là đường xuất PII (SĐT/email PH) **không truy vết được**, lệch chuẩn so với route lead |
-| 6 | Mask PII: `canViewLeadPii()` quyết định mask hay không (`export/route.ts:80`); giá trị được ghi vào audit `piiMasked` |
+| 6 | Mask PII: `canViewLeadPii()` quyết định mask hay không (`export/route.ts:98`); giá trị được ghi vào audit `piiMasked` |
 
 ---
 
@@ -343,18 +352,23 @@ Watermark dùng chung: `lib/export/watermark.ts:3-11` — `exportWatermark(actor
 
 | # | Bước | Bằng chứng |
 |---|---|---|
-| 1 | Gate trang + action: `requireAssign(actor)` → quyền `roles:assign` | `lib/auth/rbac-service.ts:176` |
+| 1 | Gate action: `requireAssign(actor, resolved)` → `roles:assign` qua `decidePermissionWithGrant` (grant → v1/v2 theo cờ) — **cùng hệ quyền với cổng trang** từ 25/08; trước đó action gác bằng `can()` v1 ma trận tĩnh nên `HO_HR` bị chặn dù trang cho vào | `lib/auth/rbac-service.ts:81-93`, `:380-381` |
 | 2 | Zod `assignUserOrgRoleSchema` — chỉ validate `userId/orgUnitId/roleId/effectiveFrom/To/reason`; refine duy nhất là "effectiveTo phải sau effectiveFrom" | `lib/validators/role.ts:53-65` |
-| 3 | Kiểm `OrgUnit` tồn tại + chưa xoá → `ORG_INVALID` | `rbac-service.ts:179-182` |
-| 4 | Kiểm `RoleDef` tồn tại → `ROLE_NOT_FOUND` | `:183-184` |
-| 5 | **Chống leo thang**: gán vai `SUPER_ADMIN` → chỉ SUPER_ADMIN thật mới được, ngược lại `FORBIDDEN_ROLE` | `:185-197` |
-| 6 | `$transaction`: `userOrgRole.upsert` (khoá `userId_orgUnitId_roleId`); nếu role là `CENTER_MANAGER` và org có `centerId` → `syncCenterClassConversations` **cùng tx** | `:199-229` |
-| 7 | ✅ `logRbacAudit` entity `ASSIGNMENT`, action `ASSIGN`, **kèm `reason`** | `:231-239` |
-| Gỡ | `revokeUserOrgRole`: `update status="EXPIRED", effectiveTo=now` (không xoá dòng) + sync chat + audit `REVOKE` | `:243-278` |
+| 3 | Kiểm `OrgUnit` tồn tại + chưa xoá → `ORG_INVALID` | `rbac-service.ts:387-391` |
+| 4 | Kiểm `RoleDef` tồn tại, **đọc kèm `permissions` từ DB** (dữ liệu enforce của R1) → `ROLE_NOT_FOUND` | `:394-398` |
+| 5 | **Bốn rào, chạy theo thứ tự** trong `assertAssignGuards`: SEC-M13 (chỉ SUPER_ADMIN gán được vai `SUPER_ADMIN`, `FORBIDDEN_ROLE`) → **A-01-3** (cấm neo `CENTER_MANAGER` tại đơn vị type HO/ROOT, `ORG_TYPE_FORBIDDEN`, **áp cho mọi actor kể cả SUPER_ADMIN**) → **R1** (cấm gán vai mang quyền cấp quyền — tiền tố `roles:` hoặc `users:manage`, đọc `permissions` của vai đích **từ DB**, `FORBIDDEN_PRIVILEGED_ROLE`) → **R2** (cấm tự gán cho chính mình; SUPER_ADMIN miễn có chủ đích, `SELF_ASSIGN_FORBIDDEN`) | `lib/auth/rbac-service.ts:160-210`; luật A-01-3 ở `lib/auth/org-anchor-rules.ts` |
+| 5b | **`source`** (SL-01): `create` → luôn `MANUAL`; `update` dòng **hết** hiệu lực → `MANUAL`; `update` dòng **đang sống** → **không đụng** | `:435-440`, `:452`, `:463` |
+| 6 | `$transaction`: `userOrgRole.upsert` (khoá `userId_orgUnitId_roleId`); nếu role là `CENTER_MANAGER` và org có `centerId` → `syncCenterClassConversations` **cùng tx** | `:444-470` |
+| 7 | ✅ `logRbacAudit` entity `ASSIGNMENT`, action `ASSIGN`, **kèm `reason`** | `:472-479` |
+| Gỡ | `revokeUserOrgRole`: rào đối ngẫu SEC-M13 + R1 (`assertRevokeGuards`, `:219-243`) → `update status="EXPIRED", effectiveTo=now` (không xoá dòng) + sync chat + audit `REVOKE` | `:483-534` |
 
-❌ **Không có ràng buộc nào chặn gắn một người vào nhiều cơ sở khác nhánh** — không ở DB (PK ghép `@@id([userId, orgUnitId, roleId])`, `prisma/schema.prisma:536`), không ở Zod, không ở service.
-⚠️ Form là `<select>` **đơn** — chọn đúng 1 đơn vị/lần (`org-roles-manager.tsx:53`, `:96-101`). Muốn phủ N cơ sở phải bấm N lần.
-⚠️ **Nới quyền âm thầm:** chỉ cần **một** dòng vai neo tại OrgUnit type HO/ROOT là `isHoLevel = true` (`lib/auth/actor.ts:255`), khi đó `visibleCenterIds` = **mọi cơ sở sống** (`:278-281`). Không form nào cảnh báo; cảnh báo chỉ nằm trong comment `lib/auth/legacy-role-map.ts:94-95`.
+❌ **Không có ràng buộc nào chặn gắn một người vào nhiều cơ sở khác nhánh** — không ở DB (PK ghép `@@id([userId, orgUnitId, roleId])`, `prisma/schema.prisma:563`), không ở Zod, không ở service.
+⚠️ Form vẫn là `<select>` **đơn** — chọn đúng 1 đơn vị/lần (`org-roles-manager.tsx:167-181`). Muốn phủ N cơ sở phải bấm N lần. Nút "Gán" bị khoá khi thiếu lý do hoặc khi vi phạm một trong ba rào (`:97`) — nhưng đó chỉ là lớp giải thích, enforce ở service.
+⚠️ **Nới quyền âm thầm:** chỉ cần **một** dòng vai neo tại OrgUnit type HO/ROOT là `isHoLevel = true` (`lib/auth/actor.ts:255`), khi đó `visibleCenterIds` = **mọi cơ sở sống** (`:277-280`).
+✅ **Từ 25/08 (A-01-3)** riêng vai `CENTER_MANAGER` bị chặn cứng ở **cả hai** đường ghi — gán tay (`lib/auth/rbac-service.ts:183-185`) và đồng bộ khi sửa ô "Đơn vị" ở `/admin/users/[id]/edit` · `/admin/nhan-su` (`lib/auth/org-role-sync.ts:167-176`, ném `OrgRoleSyncError` ⇒ rollback cả transaction). Luật ở **một** module thuần: `lib/auth/org-anchor-rules.ts`.
+⚠️ Rào **cố ý chỉ có `CENTER_MANAGER`** (`org-anchor-rules.ts:21-26`) — mọi vai khác vẫn neo được tại HO và vẫn bật `isHoLevel`.
+
+**File đã đổi (SL-01 · A-01-3 · OQ-7):** `prisma/schema.prisma` · `prisma/migrations/20260825090000_sl01_userorgrole_source/migration.sql` (mới) · `lib/auth/org-anchor-rules.ts` (mới) · `lib/auth/org-role-sync.ts` (+ `.test.ts` mới) · `lib/auth/rbac-service.ts` (+ `.test.ts` mới) · `prisma/seed-roles.ts` · `app/(admin)/admin/users/[id]/org-roles/page.tsx` · `.../org-roles/_components/org-roles-manager.tsx`.
 
 ### 6.2 Đường B — grant per-user, màn `/admin/users/[id]/permissions`
 
@@ -363,7 +377,7 @@ Watermark dùng chung: `lib/export/watermark.ts:3-11` — `exportWatermark(actor
 | 1 | `requireUsersManage()` → `checkPermission("users:manage")`, thiếu → redirect | `_actions.ts:17-24` |
 | 2 | Zod `grantCreateSchema` | `_actions.ts:35-39` |
 | 3 | Chặn grant cho SUPER_ADMIN ("có toàn quyền — không cần override") | `_actions.ts:57-63` |
-| 4 | **SEC-M13** — chặn leo thang: `ALLOW` cho action bắt đầu `roles:` hoặc `users:manage` bị từ chối. ⚠️ `*:view-pii` **cố ý cho phép** | `_actions.ts:65-77` |
+| 4 | **SEC-M13 + A-03-7** — chặn theo **tiền tố** `roles:` và `leads:`, cộng khoá `users:manage`; chặn **cả `ALLOW` lẫn `DENY`**, ở **cả** `addGrantAction` (`:104`) **lẫn** `updateGrantAction` (`:184` — bịt đường vòng "tạo DENY rồi sửa thành ALLOW"). ⚠️ `*:view-pii` của **họ khoá khác** vẫn cố ý cho phép (OI-4), nhưng `leads:view-pii` thì **không** — vì nó khớp tiền tố `leads:` | `_actions.ts:35-53`, `:104`, `:184` |
 | 5 | Chặn trùng (`userId_action` unique) | `_actions.ts:80-89` |
 | 6 | `$transaction`: `userPermissionGrant.create` + **`user.update tokenVersion: {increment: 1}`** (ép re-login mọi thiết bị) + `logGrantAudit` | `_actions.ts:93-118` |
 | 7 | `revalidatePath` 3 đường | `_actions.ts:120-123` |
@@ -387,7 +401,9 @@ Watermark dùng chung: `lib/export/watermark.ts:3-11` — `exportWatermark(actor
 | ❌ UI sửa danh sách quyền của một `RoleDef` — `setRolePermissionsAction` tồn tại nhưng **không component nào gọi**; `_components/` chỉ có `create-role-form.tsx` | `app/(admin)/admin/roles/actions.ts:73`; `roles/page.tsx:19-25` |
 | ❌ UI tạo `PermissionGrant` với `subjectType = "ROLE"` — grep `subjectType` trong `app/` chỉ ra `GROUP` | `app/(admin)/admin/user-groups/_actions.ts:405-412`, `:467-470` |
 | ⚠️ `RolePermission` có PK ghép `@@id([roleId, action])` ⇒ **một role chỉ mang đúng một `scopeType` cho mỗi action** | `prisma/schema.prisma:418-426` |
-| ⚠️ Đường `reconcileUserOrgRoles` **thu hồi theo diff bảng ánh xạ** ⇒ vai gán TAY ở `/org-roles` (vd cơ sở thứ 2) **không bao giờ bị thu hồi** khi admin đổi "Đơn vị" trên form user | `lib/auth/org-role-sync.ts`, `app/(admin)/admin/users/_actions.ts:159-166` |
+| 🔴 **Đính chính (25/08):** câu cũ "vai gán tay không bao giờ bị thu hồi" là **SAI trước bản vá** — `prevPlan` được **suy lại** từ một đơn vị neo, nên dòng gán tay ở đúng cơ sở neo cũ **vẫn bị `EXPIRED`** bởi thao tác chỉ sửa ô "Đơn vị". Từ SL-01, quyền thu hồi quyết bằng cột `UserOrgRole.source`: nhánh THU HỒI bỏ qua `MANUAL`, chỉ `EXPIRED` dòng `AUTO`/`null` | `lib/auth/org-role-sync.ts:15-22`, `:93-94`, `:300`, `:307-314`; `app/(admin)/admin/users/_actions.ts:159-166` |
+| 🔴 **Bẫy kèm SL-01:** bất biến chỉ đúng cho dòng `MANUAL` **còn hiệu lực**. Nhánh **GÁN** của cùng hàm hồi sinh dòng `MANUAL` **đã hết hiệu lực** và **đổi nhãn về `AUTO`** (guard `liveKeys` chỉ chắn dòng đang sống) ⇒ lần sửa ô "Đơn vị" sau nữa, dòng bị `EXPIRED` im lặng. Sau mỗi lần sửa hồ sơ đa cơ sở phải kiểm lại cột `source` | `lib/auth/org-role-sync.ts:238-266`, `:244-248`; `documentation/permissions.md` §11.1 |
+| ❌ Script backfill đánh dấu `MANUAL` cho cấu hình đa cơ sở **đang gán tay trên prod** — **chưa có trong repo**; tới khi chạy, những dòng đó vẫn mang `AUTO` và vẫn thu hồi được | `prisma/migrations/20260825090000_sl01_userorgrole_source/migration.sql:40-45` |
 
 ### 6.5 Vai quan hệ (PARENT) — ngoại lệ có chủ đích
 
@@ -487,7 +503,7 @@ Muốn dựng "lịch sử chuyển sale đầy đủ" phải hợp nhất 3 ngu
 | 3 | Quyền | `include` lồng nhau **không** được auto-scope | Cao | `lib/db-scope.ts:4-5` |
 | 4 | Quyền | Model quên khai `getModelPrefixes` → fail-open `isHoLevel → "ALL"` (đã cháy 1 lần với Attendance) | Cao | `lib/db-scope.ts:176-180`, `:226-228` |
 | 5 | Quyền | Một grant ALLOW hẹp làm `getModelVisibleCenterIds` trả `"ALL"` toàn hệ thống cho model đó | Cao | `lib/db-scope.ts:248-254` |
-| 6 | Quyền | Một dòng vai neo tại HO/ROOT ⇒ `isHoLevel` ⇒ thấy **mọi** cơ sở; không cảnh báo ở UI | Cao | `lib/auth/actor.ts:255`, `:278-281` |
+| 6 | Quyền | Một dòng vai neo tại HO/ROOT ⇒ `isHoLevel` ⇒ thấy **mọi** cơ sở. ⚠️ Đã bịt **một phần** 25/08: riêng `CENTER_MANAGER` bị chặn ở cả hai đường ghi (A-01-3); các vai khác còn nguyên | Cao | `lib/auth/actor.ts:255`, `:277-280`; `lib/auth/org-anchor-rules.ts` |
 | 7 | Quyền | 63 lần đọc thẳng `session.user.centerId` ở 39 file — vi phạm luật cứng #1; JWT còn stale sau khi đổi đơn vị | Cao | `lib/auth.ts:195,210,234` + 39 file |
 | 8 | Tiền | Hoàn tiền **không trừ** doanh thu / công nợ / portal | Cao | `lib/finance/payment.ts:600-632`, `lib/finance/debt.ts:134`, `lib/portal/billing.ts:117-119` |
 | 9 | Tiền | Điều chỉnh (`ADJUSTED`) bị bỏ qua im lặng | Cao | `lib/finance/payment.ts:541-557` |
@@ -497,8 +513,8 @@ Muốn dựng "lịch sử chuyển sale đầy đủ" phải hợp nhất 3 ngu
 | 13 | Tiền | Sửa kế hoạch trả góp xoá mềm cả bút toán tiền thật `[auto:sepay:*]` | Cao | `lib/orders/installments.ts:98-101` |
 | 14 | Tiền | payOS thiếu checksum key → nhận payload không chữ ký | Cao | `lib/payments/payos.ts:165-168` |
 | 15 | Riêng tư | CSV tài khoản phụ huynh dựng ở client — không watermark, không audit, không gate riêng | Cao | `parent-accounts-client.tsx:97-114` |
-| 16 | Riêng tư | Dòng audit EXPORT lead có `orgUnitId = null` ⇒ vô hình với quản lý cơ sở | Trung bình | `export/route.ts:115-127` + `lib/audit/audit-log.ts:144-149`, `:218` |
-| 17 | Riêng tư | `leads:export` là quyền mồ côi — cấp/gỡ không đổi được gì | Trung bình | grep `leads:export` trên `app/` = 0 |
+| 16 | Riêng tư | Dòng audit EXPORT lead có `orgUnitId = null` ⇒ vô hình với quản lý cơ sở | Trung bình | `export/route.ts:151-166` + `lib/audit/audit-log.ts:144-149`, `:218` |
+| 17 | Riêng tư | ⚠️ **ĐÓNG Ở TẦNG MÃ 25/08, CHƯA ĐÓNG TRÊN PROD** — `leads:export` nay là cổng thật (AND với `leads:view-all`) và đã gỡ khỏi mọi vai **trong file seed**, nhưng bảng `RolePermission` prod chỉ đổi khi bấm tay `seed-prod-roles.yml`; trước đó `HO_MARKETING` + `CENTER_MANAGER` vẫn xuất được. Còn lại: `elearning:report:export` vẫn mồ côi | Trung bình (tới khi re-seed) | `app/api/admin/leads/export/route.ts:38-42`; `prisma/seed-roles.ts:848-871`; `.github/workflows/seed-prod-roles.yml:71`; `lib/auth/permissions.ts:716` |
 | 18 | Quyền | `manualAssignLead` không `passesScope`, call-site không truyền `centerId` | Cao | `lib/lead/auto-assign.ts:221-229`, `actions.ts:808` |
 | 19 | Vận hành | Webhook lead (facebook/zalo/google-form/quatang) **fail-OPEN** khi `NODE_ENV !== "production"` và thiếu secret | Cao | `lib/lead/webhook.ts:44-56`, `:92-104` |
 | 20 | Vận hành | Rate limit **fail-soft** về Map trong bộ nhớ per-instance khi Upstash lỗi / không đặt env — gồm cả chống brute-force login | Trung bình | `lib/rate-limit.ts:143-146` |
@@ -518,13 +534,18 @@ Muốn dựng "lịch sử chuyển sale đầy đủ" phải hợp nhất 3 ngu
 | Model chi phí tổng quát (`Expense`/`Cost`/`Budget`) | ❌ — chỉ có `MarketingCostPeriod` (không `centerId`, không UI nhập) |
 | Model lưu tuỳ chọn giao diện theo user (preference / columnConfig) | ❌ — grep 0 kết quả; thứ gần nhất là sidebar lưu `localStorage` |
 | `exceljs` | ❌ — dùng `xlsx` (SheetJS) |
-| Bộ lọc trên trang `/admin/dashboard` (chọn cơ sở / khoảng ngày) | ❌ — dashboard hiện không có bộ lọc nào |
-| Component multi-select trong `components/ui/` | ❌ — chỉ có `combobox.tsx` single-select |
+| Bộ lọc trên trang `/admin/dashboard` (chọn cơ sở / khoảng ngày) | ✅ **ĐÃ CÓ từ 25/08 (A-02)** — `components/admin/scope-filter-bar.tsx` + `resolveScopeFilters()` (`lib/reports/filters.ts:224`), đặt trong khung 4 tab **ở cuối trang**; các panel phía trên **không** đọc bộ lọc này (`app/(admin)/admin/dashboard/page.tsx:153-158`). Bốn tab hiện là **placeholder, chưa đọc dữ liệu** |
+| Component multi-select trong `components/ui/` | ❌ — vẫn chỉ có `combobox.tsx` single-select. Bộ lọc A-02 dựng dropdown-checkbox bằng `DropdownMenu` + `DropdownMenuCheckboxItem` sẵn có, **không** thêm thư viện (`components/admin/scope-filter-bar.tsx:23-26` (chú thích lý do)) |
 | Preset khoảng ngày ("tháng này" / "7 ngày qua") | ❌ — toàn bộ là `<input type="date">` native (36 file) |
 
-> ⚠️ **ĐÍNH CHÍNH — KHÔNG được đọc bảng này thành "chưa có gì dùng chung":** ĐÃ CÓ component lọc phạm vi dùng chung (cơ sở + khoảng ngày) đang chạy ở **8 trang** `/bao-cao/*`: `components/admin/report-filter-bar.tsx:5-84` + resolver `lib/reports/filters.ts:50-85`.
+> ⚠️ **ĐÍNH CHÍNH — KHÔNG được đọc bảng này thành "chưa có gì dùng chung":** ĐÃ CÓ component lọc phạm vi dùng chung (cơ sở + khoảng ngày) đang chạy ở **8 trang** `/bao-cao/*`: `components/admin/report-filter-bar.tsx:5-84` + resolver `resolveReportFilters` (`lib/reports/filters.ts:100-125`).
 > Call-site: `bao-cao/churn/page.tsx:16,129` · `cohort:16,176` · `dao-tao:16,122` · `doanh-thu:16,134` · `hieu-suat-gv:31,109` · `lead:16,119` · `trial:16,153` · `trung-tam:27,134`.
-> Cái CHƯA có là: multi-select cơ sở, giá trị mặc định khoảng ngày, và việc dùng nó trên `/admin/dashboard`. Ngoài ra hai quy ước URL đang song song — `?center=` (ReportFilterBar) và `?centerId=` (~14 trang danh sách).
+> ⚠️ **Câu tổng kết cũ ở đây ("cái CHƯA có là: multi-select cơ sở, giá trị mặc định khoảng ngày, và việc dùng nó trên `/admin/dashboard`") đã SAI cả 3 vế từ 25/08 (A-02)** — giữ lại làm dấu vết, đừng đọc nó như hiện trạng:
+> · multi-select cơ sở: **có** — `components/admin/scope-filter-bar.tsx:124-145` (`DropdownMenu` + `DropdownMenuCheckboxItem`);
+> · mặc định khoảng ngày: **có** — 01 tháng này → hôm nay, đo bằng lịch VN (`lib/reports/filters.ts:257-258`);
+> · dùng trên `/admin/dashboard`: **có** — `app/(admin)/admin/dashboard/page.tsx:167`, `:213-224` (trong khung 4 tab ở cuối trang).
+> Thứ **thật sự** còn thiếu: 4 tab kia vẫn là placeholder chưa đọc dữ liệu, và các panel phía trên dashboard không đọc bộ lọc. **Đừng dựng bộ lọc đa cơ sở thứ hai** — hai bộ parse lệch nhau là hỏng câm (cảnh báo §4.9 của `architecture.md`).
+> Vẫn đúng: hai quy ước URL song song — `?center=` (ReportFilterBar **và** ScopeFilterBar, `lib/reports/filters.ts:107`, `:233`) và `?centerId=` (~14 trang danh sách).
 | UI sửa quyền của một `RoleDef` | ❌ — phải sửa `prisma/seed-roles.ts` + chạy seed |
 | UI tạo `PermissionGrant` `subjectType = "ROLE"` | ❌ — chỉ có `GROUP` |
 | `modules/*` (modular monolith boundary) | ❌ — chưa tồn tại |
