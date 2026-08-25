@@ -24,7 +24,6 @@ export default function SaleHomePage() {
             ĐÃ CÓ là nói dối người dùng về trạng thái sản phẩm — "Lớp trải
             nghiệm" từng nằm ở đây suốt trong khi nó đã chạy được. */}
         <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-muted-foreground">
-          <li>Khách của tôi — danh sách, chi tiết, ghi hoạt động</li>
           <li>Chốt đơn — tạo đơn, ghi nhận thanh toán, ghi danh</li>
           <li>Hoa hồng của tôi</li>
         </ul>

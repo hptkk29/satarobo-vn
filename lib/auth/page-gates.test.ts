@@ -34,6 +34,7 @@ const PAGE_DIR_OVERRIDE: Record<string, string> = {
   // Khai tường minh từng route thay vì nới `pageFile` thành "tìm khắp app/":
   // quét mù sẽ nuốt luôn ca trang bị xoá mà gate còn nằm lại trong bảng.
   "/sale/trial": "app/(sale)",
+  "/sale/khach-cua-toi": "app/(sale)",
   "/sale/nhap-khach-hang": "app/(sale)",
 };
 

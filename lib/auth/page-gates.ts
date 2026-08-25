@@ -141,6 +141,11 @@ export const PAGE_GATES = {
    *  `trials:view` là quyền Sale vốn đã có; không mở thêm gì. */
   "/sale/trial": ["trials:view"],
 
+  /** Khách của tôi — danh sách + chi tiết + ghi hoạt động + việc follow-up.
+   *  `leads:view-own` là quyền Sale vốn đã có. KHÔNG dùng `leads:view-all`: đó
+   *  là quyền của quản lý, và trang này cố ý chỉ trả lời "khách nào của tôi". */
+  "/sale/khach-cua-toi": ["leads:view-own"],
+
   /** Biểu mẫu nhập khách hàng, bản đứng TRÊN site Sale.
    *  Cùng action với bản `/nhap-khach-hang` bên admin — cùng một việc, cùng một
    *  đường ghi (`ingestIntakeLead`), chỉ khác chỗ đứng. Trước 23/08 Sale gõ địa
