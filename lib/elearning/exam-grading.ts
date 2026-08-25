@@ -20,6 +20,16 @@ import { chamCue, type CauHoiCue } from "@/lib/elearning/lesson-cue";
  * thật cho người trả lời đúng.
  */
 
+/**
+ * Ba mức khó của câu hỏi.
+ *
+ * ⚠️ Ở module THUẦN này chứ không ở `question-bank.ts`, vì trình soạn (component
+ * client) cũng cần nó. `question-bank.ts` nhập `orgUnitIdForCenter` — tức chạm DB —
+ * nên một tệp `"use client"` nhập hằng từ đó sẽ kéo mã máy chủ vào gói client và
+ * làm VỠ BUILD, với thông báo nói về `next/headers` chứ không nói về hằng số.
+ */
+export const MUC_KHO = ["EASY", "MEDIUM", "HARD"] as const;
+
 /** Loại chấm được BẰNG MÁY — đúng ba loại repo thật sự có mã chấm. */
 export const LOAI_CHAM_MAY = ["SINGLE", "MULTIPLE", "TRUE_FALSE"] as const;
 /** Loại chấm TAY — người chấm đọc và cho điểm. */
