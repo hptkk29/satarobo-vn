@@ -1,5 +1,6 @@
 import { db } from "@/lib/db";
 import { chotCoHetHan } from "@/lib/elearning/watch-flag-close";
+import { quetMoCo } from "@/lib/elearning/watch-flag-scan";
 import { publishEvent } from "@/lib/events/publish";
 import {
   chonQuaHan,
@@ -23,7 +24,7 @@ import { thuLaiHangDoiNhanSu } from "@/lib/elearning/retry-queue";
  *   4. dọn dữ liệu tầng 2 (QĐ-CDA-14)
  *   6. dọn lượt tải nhiều phần bỏ dở trên R2 (EL-10)
  *   5. thử lại hàng đợi "chờ dữ liệu Nhân sự"
- *   7. chốt cờ nghi ngờ hết cửa sổ khiếu nại (EL-13)
+ *   7. cờ nghi ngờ (EL-13): quét mở cờ, rồi chốt cờ hết cửa sổ khiếu nại
  *
  * Việc (6) mang số 6 nhưng chạy TRƯỚC việc (5): nó thuộc nhóm DỌN, và số thứ tự
  * giữ nguyên theo đặc tả để đối chiếu được. Đổi số cho "gọn" là làm mọi trích
@@ -46,7 +47,8 @@ export type KetQuaDem = {
   thuLai: { taoMoi: number; vanKet: number; nguoiVanKet: string[] };
   /** EL-10 việc (6) — lượt tải nhiều phần bỏ dở, đã huỷ trên R2. */
   taiDo: { daHuy: number; conGiu: number } | { chuaLamDuoc: string };
-  /** EL-13 việc (7) — cờ nghi ngờ hết cửa sổ khiếu nại, chốt thành UPHELD. */
+  /** EL-13 việc (7) — cờ nghi ngờ: quét mở, rồi chốt cờ hết cửa sổ khiếu nại. */
+  moCo: { daXet: number; daMo: number; thieuNguoiXu: number };
   chotCo: { daChot: number; boQua: number };
   loi: { viec: string; message: string }[];
 };
@@ -69,6 +71,7 @@ export async function runElearningDem(now = new Date()): Promise<KetQuaDem> {
     },
     don: { videoSession: 0, bitmap: 0, examAttempt: null },
     thuLai: { taoMoi: 0, vanKet: 0, nguoiVanKet: [] },
+    moCo: { daXet: 0, daMo: 0, thieuNguoiXu: 0 },
     chotCo: { daChot: 0, boQua: 0 },
     taiDo: { daHuy: 0, conGiu: 0 },
     loi: [],
@@ -170,8 +173,17 @@ export async function runElearningDem(now = new Date()): Promise<KetQuaDem> {
     ket.loi.push({ viec: "don-tai-do", message: String(e) });
   }
 
-  // ── Việc 7: chốt cờ nghi ngờ hết cửa sổ khiếu nại ────────────────────────
+  // ── Việc 7: cờ nghi ngờ ───────────────────────────────────────────────────
   // Gộp vào KHE NÀY, không xin khe cron thứ ba — ngân sách module là đúng hai khe.
+  //
+  // ⚠️ QUÉT trước, CHỐT sau, và hai bước bắt lỗi RIÊNG. Gộp chung một `try` thì
+  // một lỗi lúc quét sẽ nuốt luôn bước chốt, và cửa sổ khiếu nại 14 ngày âm thầm
+  // không có hiệu lực — không ai thấy, vì cron vẫn báo chạy xong.
+  try {
+    ket.moCo = await quetMoCo(now);
+  } catch (e) {
+    ket.loi.push({ viec: "mo-co", message: String(e) });
+  }
   try {
     ket.chotCo = await chotCoHetHan(now);
   } catch (e) {
