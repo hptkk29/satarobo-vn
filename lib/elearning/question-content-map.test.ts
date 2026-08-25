@@ -21,6 +21,11 @@ import {
   LOAI_NOI_DUNG,
 } from "@/lib/elearning/question-content-map";
 import { LOAI_CHAM_MAY, LOAI_CHAM_TAY } from "@/lib/elearning/exam-grading";
+import {
+  TRAN_NOI_DUNG_CAU,
+  TRAN_LUA_CHON,
+} from "@/lib/assignments/question-content-db";
+import { taoCauHoiSchema } from "@/lib/elearning/question-bank";
 
 const LUA_CHON = [
   { text: "Ngắt điện", isCorrect: false },
@@ -157,5 +162,56 @@ describe("không đánh dấu ô nào ⇒ KHÔNG ra chỉ số âm", () => {
       { text: "B", isCorrect: false },
     ]);
     expect(q.type === "single" && q.correctIndex).toBe(0);
+  });
+});
+
+describe("🔴 TRẦN ĐỘ DÀI của bên GHI không được rộng hơn bên ĐỌC", () => {
+  // Đây là cách chuỗi đứt LẦN THỨ HAI, sau lần khuôn nội dung lệch nhau: kho câu
+  // hỏi từng cho `stem` tới 4000 và mỗi lựa chọn tới 1000, trong khi khuôn ĐỌC cắt
+  // ở 2000/500. Người soạn gõ một đề bài dài — hợp lệ theo màn soạn, không có gì
+  // đỏ — là đẻ ra một câu mà đường thi KHÔNG parse nổi. Câu đó rơi vào nhánh "chờ
+  // người chấm", kéo MỌI lượt của MỌI người trên đề đó treo lại.
+  it("câu dài ĐÚNG BẰNG trần vẫn qua được khuôn đọc", () => {
+    const q = dungNoiDungCauHoi({
+      questionId: "q-dai",
+      type: "SINGLE",
+      stem: "x".repeat(TRAN_NOI_DUNG_CAU),
+      choices: [
+        { text: "a".repeat(TRAN_LUA_CHON), isCorrect: true },
+        { text: "b", isCorrect: false },
+      ],
+    });
+    const r = cueInlineSchema.safeParse(q);
+    expect(r.success, r.success ? "" : JSON.stringify(r.error.issues[0])).toBe(true);
+  });
+
+  it("và chính Zod của kho câu hỏi CHẶN ở đúng hai con số đó", () => {
+    // Kiểm hai chiều: khuôn đọc nhận được tới trần, và khuôn ghi không cho vượt.
+    const oke = taoCauHoiSchema.safeParse({
+      bankPath: "/an-toan/",
+      type: "SINGLE",
+      stem: "x".repeat(TRAN_NOI_DUNG_CAU),
+      choices: [
+        { text: "a".repeat(TRAN_LUA_CHON), isCorrect: true },
+        { text: "b", isCorrect: false },
+      ],
+    });
+    expect(oke.success).toBe(true);
+
+    for (const qua of [
+      { stem: "x".repeat(TRAN_NOI_DUNG_CAU + 1), choices: undefined },
+      { stem: "Câu hỏi", choices: TRAN_LUA_CHON + 1 },
+    ]) {
+      const r = taoCauHoiSchema.safeParse({
+        bankPath: "/an-toan/",
+        type: "SINGLE",
+        stem: qua.stem,
+        choices: [
+          { text: "a".repeat(qua.choices ?? 1), isCorrect: true },
+          { text: "b", isCorrect: false },
+        ],
+      });
+      expect(r.success).toBe(false);
+    }
   });
 });

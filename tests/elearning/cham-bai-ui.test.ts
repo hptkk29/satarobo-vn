@@ -82,11 +82,22 @@ describe("màn chấm không đẻ ra trạng thái nửa vời", () => {
 });
 
 describe("câu chấm MÁY chỉ để đọc", () => {
-  it("không dựng ô nhập điểm cho câu máy đã chấm", () => {
-    // Cho sửa ở đây là mở một đường ghi đè im lặng lên kết quả máy, và hai lượt
-    // cùng đề sẽ được chấm bằng hai thang.
-    expect(chiMa(FORM)).toContain("c.mayCham ?");
-    expect(chiMa(FORM)).toContain("canCham");
+  it("không dựng ô nhập điểm cho câu ĐÃ CÓ ĐIỂM", () => {
+    // Cho sửa ở đây là mở một đường ghi đè im lặng lên một con số đã chốt, và hai
+    // lượt cùng đề sẽ được chấm bằng hai thang.
+    expect(chiMa(FORM)).toContain("c.daCoDiem ?");
+  });
+
+  it("🔴 lọc theo ĐIỂM, không theo LOẠI câu", () => {
+    // Lọc theo loại thì câu trắc nghiệm hỏng nội dung không có ô nhập nào — màn
+    // chấm rỗng, nút vẫn bật, và lượt thi kẹt vĩnh viễn.
+    expect(chiMa(FORM)).toContain("filter((c) => !c.daCoDiem)");
+    expect(chiMa(FORM)).not.toContain("mayCham)");
+  });
+
+  it("không còn ô nào để nhập ⇒ khoá nút và nói rõ, không dẫn vào ngõ cụt", () => {
+    expect(chiMa(FORM)).toContain("canCham.length === 0");
+    expect(FORM).toContain("báo kỹ");
   });
 
   it("chỉ gửi lên phần chấm tay", () => {
@@ -109,6 +120,31 @@ describe("màn mới phải có LỐI VÀO", () => {
   it("hàng chờ có đường quay lại, không phải ngõ cụt", () => {
     expect(chiMa(HANG_CHO)).toContain('href="/elearning/de-thi"');
     expect(chiMa(MOT_LUOT)).toContain('href="/elearning/cham-bai"');
+  });
+});
+
+describe("🔴 cổng CHẶN câu máy không đọc được, đặt ở lần cuối còn sửa", () => {
+  it("kích hoạt đề soi được nội dung từng câu chấm máy", () => {
+    // Sau khi kích hoạt, bộ câu đóng băng — không gỡ câu hỏng ra được nữa, mà mọi
+    // lượt của mọi người trên đề đó sẽ treo ở `PENDING_GRADE`.
+    expect(chiMa(SOAN_DE)).toContain("CAU_MAY_KHONG_DOC_DUOC");
+  });
+
+  it("và màn chấm nói cho người chấm biết câu nào rơi vào ca đó", () => {
+    expect(chiMa(FORM)).toContain("mayKhongDocDuoc");
+    expect(FORM).toContain("không đọc được nội dung câu này");
+  });
+});
+
+describe("danh sách bị cắt thì nói ra", () => {
+  it("hàng chờ báo khi còn bài ngoài danh sách", () => {
+    expect(chiMa(HANG_CHO)).toContain("conNua");
+  });
+
+  it("huy hiệu ở màn đề thi đếm chặn ở đúng trần của hàng chờ", () => {
+    // Đếm không giới hạn rồi hiện "247 bài" trong khi hàng chờ liệt kê 200 là hai
+    // con số lệch nhau mà không ai giải thích được.
+    expect(chiMa(DE_THI)).toContain("TRAN_HANG_CHO");
   });
 });
 

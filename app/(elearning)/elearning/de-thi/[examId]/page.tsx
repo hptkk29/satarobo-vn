@@ -161,6 +161,9 @@ export default async function Page({
         isActive={de.isActive}
         passScore={de.passScore}
         maxScore={de.maxScore}
+        title={de.title}
+        durationMin={de.durationMin}
+        maxAttempts={de.maxAttempts}
         cacCau={de.questions.map((q) => ({
           examQuestionId: q.id,
           stem: q.question.stem,

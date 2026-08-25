@@ -491,3 +491,39 @@ Zod kiểm từng trường riêng lẻ sẽ luôn để lọt.
   xem lại đáp án — không ai được hứa gì cả. Ngày dựng màn đó, việc ĐẦU TIÊN là đọc cột này; dựng xong
   màn rồi mới nhớ ra thì đã lỡ trả đáp án cho người còn lượt thi. Cùng loại với quy ước 20, chỉ khác
   chiều: đây là **cửa dựng sẵn chưa có cổng**.
+
+---
+## Hai quy ước bổ sung — chốt qua vòng rà đối kháng EL-14e (25/08/2026)
+
+### 31. Lọc theo TRẠNG THÁI của bản ghi, không theo LOẠI suy ra được
+
+Đường nộp bài CỐ Ý trả `{cham:"TAY"}` cho một câu **trắc nghiệm** mà `contentJson`
+không đọc được — "một bản ghi bẩn không được biến thành điểm 0 của người học". Màn
+chấm tay thì định nghĩa "cần người chấm" là **loại câu tự luận**. Hai định nghĩa
+nghe giống nhau, và chúng KHÔNG trùng nhau.
+
+Hậu quả dây chuyền: câu ấy không bao giờ được hỏi điểm · người chấm bị chặn nếu cố
+cho điểm · phép tính lại biến `null` thành `0` rồi chốt lượt. Và nếu đề **toàn**
+trắc nghiệm thì màn chấm không có ô nào, nút vẫn bật, bấm ra lỗi Zod tiếng Anh —
+`PENDING_GRADE` vẫn **không có lối ra**, đúng thứ PR đó sinh ra để gỡ.
+
+**Cách áp dụng:** khi hỏi "bản ghi này còn chờ ai xử lý không", hỏi **cột trạng
+thái/kết quả** (`score == null`), đừng hỏi một thuộc tính khác rồi suy ra. Loại câu
+là ĐẦU VÀO của quyết định chấm-máy-hay-không; kết quả của quyết định đó nằm ở cột
+điểm. Đọc đầu vào để đoán kết quả là dựng lại phép suy luận **lần thứ hai**, và bản
+thứ hai sẽ lệch — ở đây nó lệch đúng ca mà bản thứ nhất cố ý xử riêng.
+
+### 32. Trần độ dài của bên GHI không được rộng hơn bên ĐỌC
+
+Kho câu hỏi cho `stem` tới 4000 ký tự và mỗi lựa chọn tới 1000; khuôn ĐỌC của đường
+thi cắt ở 2000/500. Người soạn gõ một đề bài dài — **hợp lệ theo màn soạn, không có
+gì đỏ** — là đẻ ra một câu mà đường thi không parse nổi.
+
+Đây là cách chuỗi writer→reader đứt **lần thứ hai** trong cùng một module: lần đầu
+là hai *khuôn* khác nhau, lần này là cùng khuôn nhưng hai *trần* khác nhau. Cột khai
+`Json` nên TypeScript không nối hai bên, và không có gì bắt được.
+
+**Cách áp dụng:** xuất trần từ **một** chỗ (`TRAN_NOI_DUNG_CAU`, `TRAN_LUA_CHON` ở
+`lib/assignments/question-content-db.ts`) và cho mọi bên GHI nhập lại, đừng gõ số.
+Kèm một test chạy đầu ra dài **đúng bằng trần** của bên ghi qua khuôn của bên đọc.
+Hai con số nằm ở hai tệp thì chúng sẽ trôi khỏi nhau.

@@ -17,7 +17,21 @@ import {
   cauHinhSapXepDe,
   cauHinhKichHoatDe,
   cauHinhGanDeVaoBai,
+  cauHinhSuaDe,
+  suaDeSchema,
 } from "@/lib/elearning/exam-authoring";
+import { dungNoiDungCauHoi } from "@/lib/elearning/question-content-map";
+
+/** Nội dung câu trắc nghiệm ĐỌC ĐƯỢC — dựng qua chính đường ghi, không bịa tay. */
+const NOI_DUNG_OK = dungNoiDungCauHoi({
+  questionId: "q1",
+  type: "SINGLE",
+  stem: "Gặp cháy tủ điện thì làm gì trước?",
+  choices: [
+    { text: "Ngắt điện", isCorrect: false },
+    { text: "Báo động rồi ngắt điện", isCorrect: true },
+  ],
+});
 
 const h = vi.hoisted(() => ({
   orgUnitId: vi.fn<(c: string | null) => Promise<string | null>>(async () => "ou1"),
@@ -39,7 +53,11 @@ type Ban = {
   khoa: unknown;
   cau: unknown;
   eq: unknown;
-  dsCau: { points: number }[];
+  dsCau: {
+    points: number;
+    orderIndex: number;
+    question: { type: string; contentJson: unknown };
+  }[];
   dsEq: { id: string }[];
   soCau: number;
   createDe: ReturnType<typeof vi.fn<(a: unknown) => Promise<{ id: string }>>>;
@@ -368,11 +386,74 @@ describe("gỡ câu thì DỒN LẠI thứ tự", () => {
   });
 });
 
+// ── 4b. Sửa đề còn nháp ────────────────────────────────────────────────────
+
+describe("sửa thông số đề còn NHÁP", () => {
+  it("đổi được điểm đạt, thời lượng, số lượt, tên", async () => {
+    // Màn dựng đề bảo người soạn "sửa điểm đạt" khi điểm đạt vượt tổng điểm. Không
+    // có đường sửa thì đó là một lựa chọn không có lối đi, và họ phải xoá đề làm lại.
+    await cauHinhSuaDe.handler({
+      db: dbGia(),
+      actor: actorHO,
+      input: {
+        examId: "de1",
+        title: "Tên mới đủ dài",
+        passScore: 5,
+        durationMin: 45,
+        maxAttempts: 2,
+      },
+    } as never);
+    const arg = b.updateDe.mock.calls[0]![0] as {
+      data: { passScore: number; durationMin: number; maxAttempts: number };
+    };
+    expect(arg.data.passScore).toBe(5);
+    expect(arg.data.durationMin).toBe(45);
+    expect(arg.data.maxAttempts).toBe(2);
+  });
+
+  it("🔴 đề ĐÃ KÍCH HOẠT ⇒ từ chối", async () => {
+    // Đề đã kích hoạt là đề có người đang thi: đổi điểm đạt lúc đó là chấm lại hồi
+    // tố những lượt đã xong bằng một thang khác, và không ai được báo.
+    b.de = { ...(b.de as object), isActive: true };
+    const e = await batLoi(
+      cauHinhSuaDe.handler({
+        db: dbGia(),
+        actor: actorHO,
+        input: {
+          examId: "de1",
+          title: "Tên mới đủ dài",
+          passScore: 5,
+          durationMin: 45,
+          maxAttempts: 2,
+        },
+      } as never),
+    );
+    expect(e.code).toBe("DE_DA_KICH_HOAT");
+    expect(b.updateDe).not.toHaveBeenCalled();
+  });
+
+  it("KHÔNG nhận `maxScore` — nó là tổng điểm các câu, không sửa tay", () => {
+    const r = suaDeSchema.safeParse({
+      examId: "de1",
+      title: "Tên mới đủ dài",
+      passScore: 5,
+      durationMin: 45,
+      maxAttempts: 2,
+      maxScore: 999,
+    });
+    expect(r.success).toBe(false);
+  });
+});
+
 // ── 5. Kích hoạt ───────────────────────────────────────────────────────────
 
 describe("kích hoạt đề", () => {
   const coCau = (diem: number[]) => {
-    b.dsCau = diem.map((p) => ({ points: p }));
+    b.dsCau = diem.map((p, i) => ({
+      points: p,
+      orderIndex: i,
+      question: { type: "SINGLE", contentJson: NOI_DUNG_OK },
+    }));
   };
 
   it("đóng băng tổng điểm = tổng điểm các câu", async () => {
@@ -390,6 +471,36 @@ describe("kích hoạt đề", () => {
       data: { isActive: boolean; maxScore: number };
     };
     expect(arg.data).toEqual({ isActive: true, maxScore: 10 });
+  });
+
+  it("🔴 câu trắc nghiệm mà máy KHÔNG ĐỌC ĐƯỢC ⇒ chặn tại cổng", async () => {
+    // Đây là lần CUỐI còn sửa được: sau khi kích hoạt, bộ câu bị đóng băng nên
+    // không gỡ câu hỏng ra được nữa, mà mọi lượt của mọi người trên đề đó sẽ đóng ở
+    // `PENDING_GRADE` — bài học không bao giờ lên xong cho bất kỳ ai.
+    coCau([3, 3, 4]);
+    b.dsCau[1]!.question.contentJson = { type: "SINGLE", choices: ["a", "b"] };
+    const e = await batLoi(
+      cauHinhKichHoatDe.handler({
+        db: dbGia(),
+        actor: actorHO,
+        input: { examId: "de1" },
+      } as never),
+    );
+    expect(e.code).toBe("CAU_MAY_KHONG_DOC_DUOC");
+    // Chỉ ĐÚNG câu hỏng, và chỉ tên theo số thứ tự người soạn nhìn thấy.
+    expect(e.message).toContain("câu 2");
+    expect(b.updateDe).not.toHaveBeenCalled();
+  });
+
+  it("câu CHẤM TAY không cần đọc được — nó vốn không chấm máy", async () => {
+    coCau([3, 3, 4]);
+    b.dsCau[1]!.question = { type: "ESSAY", contentJson: null };
+    const r = (await cauHinhKichHoatDe.handler({
+      db: dbGia(),
+      actor: actorHO,
+      input: { examId: "de1" },
+    } as never)) as { data: { maxScore: number } };
+    expect(r.data.maxScore).toBe(10);
   });
 
   it("🔴 đề RỖNG ⇒ từ chối", async () => {

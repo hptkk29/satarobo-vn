@@ -4,6 +4,10 @@ import { ActionError } from "@/lib/actions/factory";
 import type { Actor } from "@/lib/auth/actor";
 import { orgUnitIdForCenter } from "@/lib/org/org-service";
 import { duocVaoDe, LOAI_CHUA_MO, MUC_KHO } from "@/lib/elearning/exam-grading";
+import {
+  TRAN_NOI_DUNG_CAU,
+  TRAN_LUA_CHON,
+} from "@/lib/assignments/question-content-db";
 import { dungNoiDungCauHoi } from "@/lib/elearning/question-content-map";
 
 /**
@@ -54,7 +58,10 @@ const cauHoiBase = z
   .object({
     bankPath: bankPathSchema,
     type: loaiSchema,
-    stem: z.string().trim().min(5, "Đề bài quá ngắn").max(4000),
+    // ⚠️ Trần lấy từ khuôn ĐỌC, không tự đặt. Cho dài hơn khuôn đọc là cho người
+    // soạn tạo ra câu mà đường thi không parse nổi — và cách nó hỏng là hàng trăm
+    // lượt thi treo ở "chờ người chấm", không phải một thông báo lỗi.
+    stem: z.string().trim().min(5, "Đề bài quá ngắn").max(TRAN_NOI_DUNG_CAU),
     explanation: z.union([z.null(), z.string().trim().max(4000)]).optional(),
     difficulty: z.enum(MUC_KHO).optional(),
     skillTags: z.array(z.string().trim().min(1).max(50)).max(20).optional(),
@@ -68,7 +75,11 @@ const cauHoiBase = z
     choices: z
       .array(
         z.object({
-          text: z.string().trim().min(1, "Lựa chọn không được trống").max(1000),
+          text: z
+            .string()
+            .trim()
+            .min(1, "Lựa chọn không được trống")
+            .max(TRAN_LUA_CHON),
           isCorrect: z.boolean(),
         }),
       )

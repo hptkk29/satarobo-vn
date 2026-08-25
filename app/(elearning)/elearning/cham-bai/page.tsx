@@ -39,7 +39,9 @@ export default async function Page() {
     );
   }
 
-  const hangCho = await napHangCho(scopedDb(actor), { bayGio: new Date() });
+  const { dong: hangCho, conNua } = await napHangCho(scopedDb(actor), {
+    bayGio: new Date(),
+  });
 
   return (
     <div className="mx-auto max-w-3xl space-y-5 px-4 py-8">
@@ -56,6 +58,14 @@ export default async function Page() {
           trước.
         </p>
       </div>
+
+      {conNua ? (
+        // Im lặng cắt danh sách là để người chấm đọc hết trang rồi tin là hết việc.
+        <p className="rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-900">
+          Còn bài chờ chấm ngoài danh sách này — chấm bớt rồi tải lại trang để thấy
+          tiếp.
+        </p>
+      ) : null}
 
       {hangCho.length === 0 ? (
         <p className="rounded-md bg-muted px-3 py-2 text-sm">

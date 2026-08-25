@@ -3,6 +3,7 @@ import { auth } from "@/lib/auth";
 import { resolveActor } from "@/lib/auth/actor";
 import { can } from "@/lib/auth/can";
 import { scopedDb } from "@/lib/db-scope";
+import { TRAN_HANG_CHO } from "@/lib/elearning/exam-grading-queue";
 import { NewExamForm } from "./_components/new-exam-form";
 
 /**
@@ -41,9 +42,15 @@ export default async function Page() {
   const db = scopedDb(actor);
   // Đếm bài đang chờ chấm để lối vào hàng chờ KHÔNG trông như một liên kết chết.
   // Người chấm không mở một màn "có thể trống"; họ mở một màn có N người đang đợi.
+  // Đếm CHẶN ở đúng trần của hàng chờ: đếm không giới hạn rồi hiện "247 bài" trong
+  // khi hàng chờ chỉ liệt kê 200 là hai con số lệch nhau mà không ai giải thích được.
   const demChoCham = can(actor, "elearning:exam:grade")
-    ? await db.trnExamAttempt.count({ where: { status: "PENDING_GRADE" } })
+    ? await db.trnExamAttempt.count({
+        where: { status: "PENDING_GRADE" },
+        take: TRAN_HANG_CHO + 1,
+      })
     : 0;
+  const demTran = demChoCham > TRAN_HANG_CHO;
   const [cacDe, cacKhoa] = await Promise.all([
     db.trnExam.findMany({
       where: { deletedAt: null },
@@ -96,7 +103,7 @@ export default async function Page() {
           className="block rounded-md border p-3 text-sm underline"
         >
           {demChoCham > 0
-            ? `Chấm bài — ${demChoCham} bài đang chờ`
+            ? `Chấm bài — ${demTran ? `hơn ${TRAN_HANG_CHO}` : demChoCham} bài đang chờ`
             : "Chấm bài — không có bài nào chờ"}
         </Link>
       ) : null}

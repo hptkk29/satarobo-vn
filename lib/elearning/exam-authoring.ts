@@ -5,6 +5,8 @@ import type { Actor } from "@/lib/auth/actor";
 import { orgUnitIdForCenter } from "@/lib/org/org-service";
 import { dungHaiPhaGhiThuTu } from "@/lib/elearning/course-outline";
 import { coSoCuaCauHoi } from "@/lib/elearning/question-bank";
+import { chamMayDuoc } from "@/lib/elearning/exam-grading";
+import { cueInlineSchema, laCauChamDuoc } from "@/lib/elearning/lesson-cue";
 
 /**
  * EL-14c — DỰNG ĐỀ THI.
@@ -127,6 +129,8 @@ async function napDe(db: ScopedDb, examId: string) {
       isActive: true,
       passScore: true,
       maxScore: true,
+      durationMin: true,
+      maxAttempts: true,
       _count: { select: { attempts: true } },
     },
   });
@@ -355,12 +359,45 @@ export const cauHinhKichHoatDe: ActionConfig<
 
     const cacCau = await db.trnExamQuestion.findMany({
       where: { examId: de.id },
-      select: { points: true },
+      select: {
+        points: true,
+        orderIndex: true,
+        question: { select: { type: true, contentJson: true } },
+      },
+      orderBy: { orderIndex: "asc" },
     });
     if (cacCau.length === 0) {
       throw new ActionError(
         "DE_RONG",
         "Đề chưa có câu hỏi nào — thêm câu trước khi kích hoạt",
+      );
+    }
+
+    // ⚠️ CỔNG CHẶN CÂU TRẮC NGHIỆM MÀ MÁY KHÔNG ĐỌC ĐƯỢC — đặt ở ĐÂY vì đây là
+    // lần cuối còn sửa được.
+    //
+    // `contentJson` khai kiểu `Json`, nên TypeScript không nối bên GHI với bên
+    // ĐỌC và không có gì đỏ khi hai bên lệch nhau. Một câu không parse được rơi
+    // vào nhánh "chờ người chấm" của `chamMotCau` — cố ý, để không biến bản ghi
+    // bẩn thành điểm 0 của người học. Nhưng hệ quả dây chuyền thì nặng: MỌI lượt
+    // của MỌI người trên đề đó đóng ở `PENDING_GRADE`, bài học không bao giờ lên
+    // xong, và sau khi kích hoạt thì bộ câu bị đóng băng nên không gỡ câu hỏng ra
+    // được nữa.
+    //
+    // Bắt tại cổng thì người soạn sửa câu trong kho rồi kích hoạt lại — mất một
+    // phút. Để lọt thì phải chấm tay từng lượt của cả trăm người.
+    const hong = cacCau
+      .map((c, i) => ({ c, so: i + 1 }))
+      .filter(({ c }) => chamMayDuoc(c.question.type))
+      .filter(({ c }) => {
+        const r = cueInlineSchema.safeParse(c.question.contentJson);
+        return !r.success || !laCauChamDuoc(r.data);
+      })
+      .map(({ so }) => so);
+    if (hong.length > 0) {
+      throw new ActionError(
+        "CAU_MAY_KHONG_DOC_DUOC",
+        `Hệ thống không đọc được nội dung câu ${hong.join(", ")} nên không tự chấm được. Mở câu đó trong kho, lưu lại, rồi kích hoạt lại.`,
       );
     }
 
@@ -473,6 +510,76 @@ export const cauHinhGanDeVaoBai: ActionConfig<GanDeVaoBaiInput, { examId: string
       data: { examId: input.examId },
       oldValues: { examId: bai.examId },
       newValues: { examId: input.examId },
+    };
+  },
+};
+
+/**
+ * SỬA thông số một đề còn NHÁP.
+ *
+ * ⚠️ Màn dựng đề bảo người soạn "thêm câu, hoặc **sửa điểm đạt**" khi điểm đạt vượt
+ * tổng điểm — nhưng trước hàm này không có đường nào sửa điểm đạt. Đó là quy ước 20
+ * nhìn từ phía ngược lại: bày ra một lựa chọn không có lối đi. Người soạn đọc câu đó,
+ * đi tìm nút, không thấy, và phải xoá đề làm lại từ đầu.
+ *
+ * ⚠️ CHỈ sửa được khi còn NHÁP. Đề đã kích hoạt là đề có người đang thi: đổi điểm đạt
+ * lúc đó là chấm lại hồi tố những lượt đã xong bằng một thang khác, và không ai được
+ * báo. `maxScore` KHÔNG sửa tay ở đây — nó là tổng điểm các câu, đóng băng lúc kích
+ * hoạt.
+ */
+export const suaDeSchema = z
+  .object({
+    examId: z.string().min(1),
+    title: z.string().trim().min(3, "Tên đề quá ngắn").max(200),
+    passScore: z.number().int().min(0).max(10_000),
+    durationMin: z.number().int().min(1).max(600),
+    maxAttempts: z.number().int().min(1).max(20),
+  })
+  .strict();
+
+export type SuaDeInput = z.infer<typeof suaDeSchema>;
+
+export const cauHinhSuaDe: ActionConfig<SuaDeInput, { id: string }> = {
+  name: "suaDe",
+  permission: "elearning:content:author",
+  module: "elearning",
+  entityType: "TrnExam",
+  auditAction: "UPDATE",
+  schema: suaDeSchema,
+  handler: async ({ db, input }) => {
+    const de = await napDe(db, input.examId);
+    if (de.isActive) {
+      throw new ActionError(
+        "DE_DA_KICH_HOAT",
+        "Đề đã kích hoạt — sửa thông số lúc này là chấm lại hồi tố các lượt đã xong",
+      );
+    }
+
+    await db.trnExam.update({
+      where: { id: de.id },
+      data: {
+        title: input.title,
+        passScore: input.passScore,
+        durationMin: input.durationMin,
+        maxAttempts: input.maxAttempts,
+      },
+    });
+
+    return {
+      entityId: de.id,
+      data: { id: de.id },
+      oldValues: {
+        title: de.title,
+        passScore: de.passScore,
+        durationMin: de.durationMin,
+        maxAttempts: de.maxAttempts,
+      },
+      newValues: {
+        title: input.title,
+        passScore: input.passScore,
+        durationMin: input.durationMin,
+        maxAttempts: input.maxAttempts,
+      },
     };
   },
 };
