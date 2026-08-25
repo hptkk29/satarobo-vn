@@ -531,6 +531,33 @@ model UserOrgRole {
   status        AssignStatus @default(ACTIVE)
   grantedById   String // ai cấp (audit)
   createdAt     DateTime     @default(now()) @db.Timestamptz(6)
+  // SL-01 (docs/prd/A-nen-tang.md §10.1) — NGUỒN GỐC dòng này: "AUTO" = do
+  // `reconcileUserOrgRoles` suy ra từ bảng ánh xạ vai↔đơn vị (lib/auth/legacy-role-map.ts);
+  // "MANUAL" = người gán tay ở /admin/users/[id]/org-roles.
+  // BẤT BIẾN: nhánh THU HỒI của `reconcileUserOrgRoles` CHỈ được đụng dòng "AUTO".
+  // Trước đây máy phân biệt máy-sinh / gán-tay bằng cách SUY LẠI `prevPlan` từ MỘT đơn vị
+  // neo — suy luận, không phải bằng chứng: khi đơn vị neo cũ trùng đúng cơ sở được gán tay
+  // thì dòng gán tay bị EXPIRED bởi thao tác chỉ sửa ô "Đơn vị". Cột này là bằng chứng.
+  //
+  // VÌ SAO `String?` CHỨ KHÔNG PHẢI enum Postgres: (a) nullable là bắt buộc theo 2-phase
+  // của repo — dòng cũ chưa phân loại đọc là null và ĐƯỢC ĐỐI XỬ NHƯ "AUTO" (tương thích
+  // ngược, xem lib/auth/org-role-sync.ts); (b) enum mới phải khai một khối `enum` nằm
+  // ngoài model này, còn ràng buộc miền giá trị đã có ở tầng DB bằng CHECK constraint
+  // `userorgrole_source_domain` (migration 20260825090000) — cùng khuôn với các CHECK ở
+  // migration 20260617040000. Cần siết thành enum thật thì làm ở phase sau, additive.
+  // ⚠️ Đường GÁN TAY (`lib/auth/rbac-service.ts` · assignUserOrgRole) ghi "MANUAL" theo
+  // luật CÓ ĐIỀU KIỆN — chép đúng, đừng "đơn giản hoá":
+  //   • `create`                      → LUÔN ghi MANUAL (DEFAULT cột là 'AUTO'; quên là
+  //                                     dòng gán tay đội lốt dòng máy-sinh, SL-01 vô hiệu).
+  //   • `update` mà dòng HẾT hiệu lực → ghi MANUAL (hồi sinh = người vừa nhận trách nhiệm).
+  //   • `update` mà dòng ĐANG sống    → KHÔNG đụng `source` (truyền `undefined`).
+  // Vì sao vế cuối bắt buộc: upsert chạy nhánh `update` cho MỌI dòng đã tồn tại ở khoá, kể cả
+  // dòng đang ACTIVE do `reconcileUserOrgRoles` sinh ra (source='AUTO'). Ghi MANUAL vô điều
+  // kiện thì một cú bấm "Gán" trùng cặp (gia hạn, sửa nhầm, bấm cho chắc) lật AUTO→MANUAL
+  // VĨNH VIỄN ⇒ sau đó hạ vai người này ở /admin/nhan-su hay /admin/users sẽ báo "thành công"
+  // mà quyền cũ KHÔNG bị thu hồi. Ranh giới "đang sống" dùng CHUNG một hàm với đường đồng bộ:
+  // `isLiveOrgRole` export từ `lib/auth/org-role-sync.ts` — hai bản sao là hai bản sẽ trôi lệch.
+  source        String?      @default("AUTO") @db.VarChar(16)
   role          RoleDef      @relation(fields: [roleId], references: [id], onDelete: Restrict)
 
   @@id([userId, orgUnitId, roleId])
