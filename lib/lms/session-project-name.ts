@@ -174,3 +174,23 @@ export function deriveSessionLabel(src: SessionProjectSource): string {
 
   return parts.join(" - ");
 }
+
+/**
+ * TÊN DỰ ÁN ĐỂ HIỂN THỊ — cắt tiền tố `"Dự án N:"` khỏi giá trị ĐÃ LƯU.
+ *
+ * Vì sao (26/08): mọi màn in tên dự án đều đã có nhãn `"Dự án:"` đứng trước, mà
+ * `StudentSessionFeedback.projectName` của phiếu cũ lại lưu sẵn cả tiền tố ⇒ phụ huynh
+ * đọc ra `"Dự án: Dự án 3: Robot tránh vật cản"`.
+ *
+ * Tệ hơn: con số trong tiền tố là số buổi TẠI THỜI ĐIỂM LƯU, nên phiếu của **Buổi 2**
+ * vẫn đề **"Dự án 3"** — hai con số chọi nhau ngay trên một thẻ. Không sửa được dữ liệu
+ * đã lưu (phiếu là bản ghi tại thời điểm gửi, xem ghi chú đầu file), nhưng cắt tiền tố
+ * lúc HIỂN THỊ thì vừa hết lặp nhãn vừa hết con số nói dối.
+ *
+ * Chỉ cắt khi có dấu ngăn ngay sau số — `"Dự án cuối khoá"` là tên bài thật, giữ nguyên.
+ */
+export function displayProjectName(saved: string | null | undefined): string {
+  const t = clean(saved);
+  if (!t) return "";
+  return t.replace(/^dự\s*án\s+\d+\s*[:\-–—.]\s*/i, "").trim() || t;
+}
