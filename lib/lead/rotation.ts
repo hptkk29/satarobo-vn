@@ -46,16 +46,12 @@ export function pickFairTurn(candidates: RotationCandidate[]): string | null {
 }
 
 /**
- * Người mới vào vòng bắt đầu ở VỊ TRÍ nào.
+ * Người mới vào vòng bắt đầu ở số lượt nào.
  *
  * NGANG người ít lượt nhất, không phải 0. Để 0 thì người mới nhận liên tiếp cho
  * tới khi đuổi kịp — với vòng đã chạy vài trăm lượt là hàng trăm lead dồn vào
  * người chưa quen việc, và người cũ đứng chơi. "Luân phiên" là nhập vòng, không
  * phải được trả nợ quá khứ.
- *
- * ⚠️ Đây là VỊ TRÍ XUẤT PHÁT (`LeadRotationTurn.seedTurns`), KHÔNG phải số lượt
- * đã nhận. Trước 26/08/2026 hai thứ này bị gộp làm một ⇒ sổ khai người mới đã
- * nhận cả trăm lượt trong ngày đầu đi làm. Xem ghi chú ở `takeRotationTurns`.
  */
 export function seedTurnsForNewcomer(existing: RotationCandidate[]): number {
   if (existing.length === 0) return 0;
@@ -139,52 +135,22 @@ export async function takeRotationTurns(
       // ĐỌC LẠI SAU KHI GIÀNH KHOÁ — đọc trước khoá thì khoá vô nghĩa.
       const rows = await tx.leadRotationTurn.findMany({
         where: { orgUnitId },
-        select: { userId: true, turns: true, seedTurns: true, lastTurnAt: true },
+        select: { userId: true, turns: true, lastTurnAt: true },
       });
       const byUser = new Map(rows.map((r) => [r.userId, r]));
-
-      // VỊ TRÍ trong vòng = điểm xuất phát + lượt đã nhận. Hai thứ này tách nhau
-      // (xem `seedTurns` trong schema): sổ hiển thị là `turns`, thứ tự chia là tổng.
-      const viTri = (r: { turns: number; seedTurns: number }): number =>
-        r.seedTurns + r.turns;
 
       // Người rời vòng vẫn còn dòng trong bảng — đó là chủ đích: họ quay lại thì
       // vào đúng chỗ cũ, không được làm lại từ đầu để nhận dồn.
       const known = candidateIds
         .map((id) => byUser.get(id))
         .filter((r): r is NonNullable<typeof r> => r != null)
-        .map((r) => ({ id: r.userId, turns: viTri(r), lastTurnAt: r.lastTurnAt }));
+        .map((r) => ({ id: r.userId, turns: r.turns, lastTurnAt: r.lastTurnAt }));
       const seed = seedTurnsForNewcomer(known);
-
-      // ⚠️ MỞ DÒNG NGAY cho người trong vòng mà chưa có dòng — đừng đợi tới lúc
-      // họ thắng.
-      //
-      // Bản trước tạo dòng LƯỜI (chỉ khi thắng), nên người có mặt từ đầu mà chưa
-      // thắng lần nào bị nhầm là "người mới gia nhập" và ăn nguyên `seed` vào sổ:
-      // vòng 3 người xuất phát từ rỗng cho ra sổ 1/2/2 sau đúng 3 lượt. Mở dòng
-      // ngay ở đây thì `seed` được chốt MỘT LẦN, đúng lúc họ thật sự vào vòng —
-      // với vòng còn trống thì đó là 0 cho cả ba.
-      //
-      // `skipDuplicates` là lưới an toàn cho dòng do đường khác tạo; khoá advisory
-      // ở trên đã loại phần đua tranh của chính hàm này.
-      const chuaCoDong = candidateIds.filter((id) => !byUser.has(id));
-      if (chuaCoDong.length > 0) {
-        await tx.leadRotationTurn.createMany({
-          data: chuaCoDong.map((userId) => ({
-            orgUnitId,
-            userId,
-            turns: 0,
-            seedTurns: seed,
-            lastTurnAt: null,
-          })),
-          skipDuplicates: true,
-        });
-      }
 
       const candidates: RotationCandidate[] = candidateIds.map((id) => {
         const r = byUser.get(id);
         return r
-          ? { id, turns: viTri(r), lastTurnAt: r.lastTurnAt }
+          ? { id, turns: r.turns, lastTurnAt: r.lastTurnAt }
           : { id, turns: seed, lastTurnAt: null };
       });
 
@@ -193,15 +159,14 @@ export async function takeRotationTurns(
 
       // Gộp theo người rồi ghi MỘT lần mỗi người — lô 200 lead không nên thành
       // 200 lượt ghi trong một transaction.
-      //
-      // CHỈ tăng `turns` (lượt thật). `seedTurns` đã chốt lúc mở dòng và không bao
-      // giờ đổi nữa — đổi nó là dời điểm xuất phát của một người đang trong vòng.
       const them = new Map<string, number>();
       for (const id of ke) them.set(id, (them.get(id) ?? 0) + 1);
       for (const [userId, n] of them) {
-        await tx.leadRotationTurn.update({
+        const before = byUser.get(userId);
+        await tx.leadRotationTurn.upsert({
           where: { orgUnitId_userId: { orgUnitId, userId } },
-          data: { turns: { increment: n }, lastTurnAt: now },
+          update: { turns: { increment: n }, lastTurnAt: now },
+          create: { orgUnitId, userId, turns: (before?.turns ?? seed) + n, lastTurnAt: now },
         });
       }
       return ke;
@@ -210,21 +175,13 @@ export async function takeRotationTurns(
   );
 }
 
-/**
- * Bảng theo dõi công khai: ai đã nhận bao nhiêu lượt trong một đơn vị.
- *
- * `turns` là lượt THẬT đã nhận — đúng thứ trang sổ in ra. `seedTurns` đi kèm để
- * giải thích được vì sao một người mới vào đang ở 0 lượt mà vẫn chưa tới lượt
- * liên tục: vị trí trong vòng của họ là `seedTurns + turns`.
- */
+/** Bảng theo dõi công khai: ai đã nhận bao nhiêu lượt trong một đơn vị. */
 export async function getRotationBoard(
   orgUnitId: string,
-): Promise<
-  { userId: string; turns: number; seedTurns: number; lastTurnAt: Date | null }[]
-> {
+): Promise<{ userId: string; turns: number; lastTurnAt: Date | null }[]> {
   return db.leadRotationTurn.findMany({
     where: { orgUnitId },
-    select: { userId: true, turns: true, seedTurns: true, lastTurnAt: true },
+    select: { userId: true, turns: true, lastTurnAt: true },
     orderBy: [{ turns: "desc" }, { userId: "asc" }],
   });
 }
