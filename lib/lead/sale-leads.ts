@@ -25,13 +25,44 @@ import { LEAD_KHONG_NHAN_THEM_CON } from "@/lib/leads/status";
 export const TRANG_THAI_DA_DONG: LeadStatus[] = [...LEAD_KHONG_NHAN_THEM_CON];
 
 /**
- * Mệnh đề "lead này có phải của tôi không".
+ * Mệnh đề "lead này có phải KHÁCH CỦA TÔI không" — bản dùng cho việc ĐỌC.
  *
- * Dùng chung một nguồn với trang admin: `leadSharedOrClause()` trả mảng RỖNG khi
- * chính sách lead độc quyền đang bật (mặc định), và trả nhánh `isSharedWithTeam`
- * khi ai đó bật lại bằng env.
+ * Ba vế, đúng bằng bộ vế mà `/admin/leads` dùng cho người chỉ có `leads:view-own`
+ * (xem khối `scopeToSelf` ở trang đó — test S-4 đọc thẳng nguồn để khoá):
+ *
+ *   1. `assignedToId` — phiếu được GIAO cho tôi. Sale cơ sở sống bằng vế này.
+ *   2. `createdById`  — phiếu chính TÔI NHẬP. **S-4 (27/08/2026)**: thiếu vế này
+ *      thì Sale Hội sở thấy site Sale trắng trơn, vì phiếu họ nhập TỰ CHIA về
+ *      Sale cơ sở (chốt 04/08 "lead không bao giờ về Hội sở") nên họ không bao
+ *      giờ là assignee. Trang admin đã có vế này từ 23/08; site Sale thì quên.
+ *   3. nhánh "dùng chung" — RỖNG theo mặc định (`leadSharedOrClause()`), chỉ
+ *      quay lại khi ai đó bật `LEAD_SHARING_ENABLED`.
+ *
+ * ⚠️ Nới ở đây KHÔNG nới cách ly cơ sở, và đó là chỗ dễ tưởng nhầm. Cả cụm này
+ * đi vào `where` như MỘT vế, còn `scopedDb` bọc thêm `AND [ …, centerId IN
+ * visibleCenterIds ]` ở ngoài ⇒ Sale CS1 nhập một phiếu rồi phiếu đó chuyển sang
+ * CS2 thì họ vẫn KHÔNG đọc được. Test `[S-4] nới 'người nhập' KHÔNG được nới
+ * cách ly cơ sở` khoá đúng hình dạng đó.
  */
 export function leadOwnershipWhere(userId: string): Prisma.LeadWhereInput {
+  return {
+    OR: [{ assignedToId: userId }, { createdById: userId }, ...leadSharedOrClause()],
+  };
+}
+
+/**
+ * Mệnh đề "lead này có phải TRÁCH NHIỆM của tôi không" — HẸP hơn vế trên.
+ *
+ * Cố ý KHÔNG có `createdById`. Hai câu hỏi khác nhau và trộn vào nhau là sai:
+ *   · "khách của tôi"      → tôi được XEM (nhập hộ cũng là của tôi);
+ *   · "tôi phải chạm ai"   → tôi là người phải GỌI ĐIỆN.
+ * Phiếu Sale Hội sở nhập được chia cho Sale cơ sở; người phải gọi là Sale cơ sở.
+ * Đổ SLA của họ lên bảng việc Hội sở là đếm đôi `soKhachDangMo` trên hai màn và
+ * bày ra việc mà người xem không bấm được.
+ *
+ * Đây đúng bằng `leadOwnershipWhere` TRƯỚC S-4 ⇒ bảng việc không đổi hành vi.
+ */
+export function leadPhuTrachWhere(userId: string): Prisma.LeadWhereInput {
   return { OR: [{ assignedToId: userId }, ...leadSharedOrClause()] };
 }
 
@@ -74,82 +105,133 @@ export type SaleLeadListInput = {
   take?: number;
 };
 
+/** Số dòng tối đa MỘT lượt đọc. Xem `SaleLeadList.tong` về việc phải nói ra khi cắt. */
+export const SO_DONG_TOI_DA = 200;
+
+/**
+ * Dựng `where` của danh sách "Khách của tôi". THUẦN — tách ra để test được.
+ *
+ * Vì sao không để inline trong `getMyLeads`: mệnh đề này là chỗ duy nhất quyết
+ * định ai đọc được gì trên site Sale, mà nó lại nằm trong một hàm chạm DB nên
+ * không có cách nào soi được bằng test không-DB. Tách ra rồi thì test S-4 dựng
+ * đúng cái `where` thật, đẩy qua `injectScope` và chứng minh được cách ly cơ sở
+ * còn nguyên sau khi nới vế "người nhập".
+ */
+export function buildMyLeadsWhere(
+  input: Pick<SaleLeadListInput, "userId" | "status" | "q" | "gomDaDong" | "canSearchPhone">,
+): Prisma.LeadWhereInput {
+  const { userId, status, q, gomDaDong = false, canSearchPhone = false } = input;
+  const timKiem = q?.trim();
+  // SĐT lưu 2 dạng (`0…` cũ / `84…` mới) — tìm theo phần lõi để không sót.
+  const loiSdt = canSearchPhone && timKiem ? (phoneSearchTerm(timKiem) ?? timKiem) : undefined;
+
+  return {
+    deletedAt: null,
+    // Gói trong AND để nhánh "của tôi" và nhánh "tìm kiếm" không đè key OR của nhau.
+    AND: [
+      leadOwnershipWhere(userId),
+      ...(status ? [{ status }] : gomDaDong ? [] : [{ status: { notIn: TRANG_THAI_DA_DONG } }]),
+      ...(timKiem
+        ? [
+            {
+              OR: [
+                { parentName: { contains: timKiem, mode: "insensitive" as const } },
+                { childName: { contains: timKiem, mode: "insensitive" as const } },
+                ...(loiSdt ? [{ phone: { contains: loiSdt } }] : []),
+              ],
+            },
+          ]
+        : []),
+    ],
+  };
+}
+
+export type SaleLeadList = {
+  rows: SaleLeadRow[];
+  /** TỔNG số khách khớp bộ lọc — có thể lớn hơn `rows.length`. */
+  tong: number;
+  /** Câu nói thẳng "còn N khách chưa hiện", hoặc `null` khi không cắt. */
+  canhBaoCat: string | null;
+};
+
+/**
+ * Câu cảnh báo khi danh sách bị cắt. THUẦN.
+ *
+ * S-4 (27/08/2026) — trước đây truy vấn cắt cứng ở 200 dòng và KHÔNG nói gì.
+ * `PhanTrangBang` phân trang ở tầng hiển thị nên nó chỉ đếm được số dòng đã
+ * nhận: có 237 khách thì thanh dưới bảng in "/ 200 khách". Đó không phải giới
+ * hạn hiển thị, đó là một con số SAI — và người dùng dựa vào nó để nói "tôi có
+ * 200 khách".
+ *
+ * Trả `null` khi `tong <= daHien`: hai truy vấn chạy cách nhau vài mili giây nên
+ * `tong` có thể nhỏ hơn số dòng đã lấy; in "còn -3 khách" thì thà im.
+ */
+export function moTaCatDanhSach(daHien: number, tong: number): string | null {
+  if (tong <= daHien) return null;
+  return `Đang hiện ${daHien} khách chạm gần đây nhất trong tổng số ${tong} — còn ${
+    tong - daHien
+  } khách chưa hiện. Dùng ô tìm hoặc bộ lọc để thu hẹp.`;
+}
+
 /**
  * Danh sách khách của một tư vấn viên.
  *
  * Sắp theo `lastActivityAt` GIẢM DẦN chứ không theo `createdAt`: câu hỏi mở đầu
  * ngày của sale là "hôm nay chạm ai", và khách mới tạo mà chưa chạm thì
  * `lastActivityAt` rỗng nên tự rơi xuống cuối — đúng chỗ cần nhìn lại.
+ *
+ * Trả kèm `tong` (đếm bằng CHÍNH `where` đó) để tầng trên nói được sự thật khi
+ * số khách vượt `take`.
  */
-export async function getMyLeads(input: SaleLeadListInput): Promise<SaleLeadRow[]> {
-  const {
-    actor,
-    userId,
-    status,
-    q,
-    gomDaDong = false,
-    take = 200,
-    canSearchPhone = false,
-  } = input;
+export async function getMyLeads(input: SaleLeadListInput): Promise<SaleLeadList> {
+  const { actor, take = SO_DONG_TOI_DA } = input;
   const sdb = scopedDb(actor);
+  const where = buildMyLeadsWhere(input);
 
-  const timKiem = q?.trim();
-  // SĐT lưu 2 dạng (`0…` cũ / `84…` mới) — tìm theo phần lõi để không sót.
-  const loiSdt = canSearchPhone && timKiem ? (phoneSearchTerm(timKiem) ?? timKiem) : undefined;
-
-  const rows = await sdb.lead.findMany({
-    where: {
-      deletedAt: null,
-      // Gói trong AND để nhánh "của tôi" và nhánh "tìm kiếm" không đè key OR của nhau.
-      AND: [
-        leadOwnershipWhere(userId),
-        ...(status ? [{ status }] : gomDaDong ? [] : [{ status: { notIn: TRANG_THAI_DA_DONG } }]),
-        ...(timKiem
-          ? [
-              {
-                OR: [
-                  { parentName: { contains: timKiem, mode: "insensitive" as const } },
-                  { childName: { contains: timKiem, mode: "insensitive" as const } },
-                  ...(loiSdt ? [{ phone: { contains: loiSdt } }] : []),
-                ],
-              },
-            ]
-          : []),
-      ],
-    },
-    orderBy: [{ lastActivityAt: { sort: "desc", nulls: "last" } }, { createdAt: "desc" }],
-    take,
-    select: {
-      id: true,
-      parentName: true,
-      phone: true,
-      childName: true,
-      status: true,
-      source: true,
-      createdAt: true,
-      lastActivityAt: true,
-      // Chỉ lấy MỘT việc còn mở gần hạn nhất — danh sách không cần cả sổ việc,
-      // và lấy hết là kéo theo hàng nghìn dòng cho một cột hiển thị.
-      tasks: {
-        where: { status: "OPEN" },
-        orderBy: { dueAt: "asc" },
-        take: 1,
-        select: { id: true, title: true, dueAt: true },
+  const [rows, tong] = await Promise.all([
+    sdb.lead.findMany({
+      where,
+      orderBy: [{ lastActivityAt: { sort: "desc", nulls: "last" } }, { createdAt: "desc" }],
+      take,
+      select: {
+        id: true,
+        parentName: true,
+        phone: true,
+        childName: true,
+        status: true,
+        source: true,
+        createdAt: true,
+        lastActivityAt: true,
+        // Chỉ lấy MỘT việc còn mở gần hạn nhất — danh sách không cần cả sổ việc,
+        // và lấy hết là kéo theo hàng nghìn dòng cho một cột hiển thị.
+        tasks: {
+          where: { status: "OPEN" },
+          orderBy: { dueAt: "asc" },
+          take: 1,
+          select: { id: true, title: true, dueAt: true },
+        },
       },
-    },
-  });
+    }),
+    // Cùng `where`, không phải một bộ lọc khác: đếm bằng điều kiện khác là ra
+    // một con số không liên quan tới thứ đang hiện, còn tệ hơn không đếm.
+    sdb.lead.count({ where }),
+  ]);
 
-  return rows.map((r) => ({
-    id: r.id,
-    parentName: r.parentName,
-    phone: r.phone,
-    childName: r.childName,
-    status: r.status,
-    source: r.source,
-    createdAt: r.createdAt,
-    lastActivityAt: r.lastActivityAt,
-    viecSapToi: r.tasks[0] ?? null,
-  }));
+  return {
+    rows: rows.map((r) => ({
+      id: r.id,
+      parentName: r.parentName,
+      phone: r.phone,
+      childName: r.childName,
+      status: r.status,
+      source: r.source,
+      createdAt: r.createdAt,
+      lastActivityAt: r.lastActivityAt,
+      viecSapToi: r.tasks[0] ?? null,
+    })),
+    tong,
+    canhBaoCat: moTaCatDanhSach(rows.length, tong),
+  };
 }
 
 export type SaleLeadDetail = NonNullable<Awaited<ReturnType<typeof getMyLeadDetail>>>;

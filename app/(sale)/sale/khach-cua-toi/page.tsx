@@ -54,7 +54,10 @@ export default async function KhachCuaToiPage({
   const { fieldMask: leadPiiMask } = await checkPermissionDetail("leads:view-pii");
   const canSearchPhone = canViewPii && !leadPiiMask.includes("phone");
 
-  const rows = await getMyLeads({
+  // `canhBaoCat` KHÔNG bỏ được: truy vấn cắt ở 200 dòng, mà thanh phân trang của
+  // bảng chỉ đếm số dòng ĐÃ NHẬN nên nó in "/ 200 khách" cho cả người có 237
+  // khách. Cắt câm ở đây là nói dối về số lượng — xem `moTaCatDanhSach`.
+  const { rows, canhBaoCat } = await getMyLeads({
     actor,
     userId: session.user.id,
     status,
@@ -117,7 +120,7 @@ export default async function KhachCuaToiPage({
             : "Bạn chưa có khách nào. Khách được chia tự động khi có lead mới về cơ sở của bạn, hoặc bấm “Nhập khách mới”."}
         </p>
       ) : (
-        <MyLeadTable rows={view} />
+        <MyLeadTable rows={view} canhBaoCat={canhBaoCat} />
       )}
     </div>
   );

@@ -150,6 +150,28 @@ describe("[bảng việc] chốt chặn nguồn", () => {
     expect(s).not.toMatch(/from\s+["']@\/lib\/db["']/);
   });
 
+  it("[S-4] khối SLA lọc theo NGƯỜI PHỤ TRÁCH, không theo người nhập", () => {
+    // S-4 nới "khách của tôi" sang cả phiếu mình nhập — đúng cho DANH SÁCH, sai
+    // cho BẢNG VIỆC. Phiếu Sale Hội sở nhập được chia cho Sale cơ sở; người phải
+    // gọi điện là Sale cơ sở. Đổ SLA của họ lên bảng của Hội sở là (a) đếm đôi
+    // `soKhachDangMo` trên hai màn, (b) bày việc mà người xem không bấm được.
+    const s = boChuThich(src());
+    const i = s.indexOf("sdb.lead.findMany");
+    expect(i).toBeGreaterThan(-1);
+    expect(s.slice(i, i + 400)).toContain("leadPhuTrachWhere(userId)");
+    expect(s.slice(i, i + 400)).not.toContain("leadOwnershipWhere(userId)");
+  });
+
+  it("[S-4] khối việc follow-up VẪN dùng mệnh đề rộng — việc giao cho tôi thì phải hiện", () => {
+    // Ngược lại với khối trên: `LeadTask` đã lọc `assignedToId: userId` trên
+    // CHÍNH cái việc, nên mệnh đề lead chỉ còn là hàng rào cách ly. Siết nó lại
+    // là giấu mất việc đã giao đích danh cho người đang xem.
+    const s = boChuThich(src());
+    const i = s.indexOf("leadTask.findMany");
+    expect(i).toBeGreaterThan(-1);
+    expect(s.slice(i, i + 400)).toContain("leadOwnershipWhere(userId)");
+  });
+
   it("truy vấn LeadTask lọc qua quan hệ lead — model đó KHÔNG được scopedDb tự lọc", () => {
     // `LeadTask` không nằm trong SCOPED_MODELS. Quên lọc qua `lead` là đọc lọt
     // việc của cơ sở khác mà không có gì báo.
