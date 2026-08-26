@@ -14,6 +14,7 @@ import type { LeadChildStatus, Prisma } from '@prisma/client'
 import { logLeadAudit, getAuditActor } from '@/lib/audit/log'
 import { recordLeadStatusChange } from '@/lib/lead/status-trail-write'
 import { recordLeadActivity } from '@/lib/lead/activity-write'
+import { SYSTEM_ACTIVITY_META } from '@/lib/lead/activity-clock'
 import { resolveActor } from '@/lib/auth/actor'
 import { passesScope, scopedDb } from '@/lib/db-scope'
 import { getLeadPaymentSummary } from '@/lib/payments/summary'
@@ -132,6 +133,10 @@ export async function toggleLeadShareAction(
       content: share
         ? 'Bật "dùng chung" — CSKH cùng cơ sở xem được lead này'
         : 'Tắt "dùng chung"',
+      // S-3 — DÒNG MÁY: bật/tắt cờ chia sẻ là việc nội bộ, không phải một lần gọi
+      // phụ huynh. Thiếu dấu này thì cú bật "dùng chung" tự tay đóng mốc "đã liên
+      // hệ lần đầu" và tắt cảnh báo SLA-3 hộ người.
+      metadata: SYSTEM_ACTIVITY_META,
     })
   })
 
@@ -266,6 +271,9 @@ export async function updateLeadStatus(
         type: 'NOTE',
         content:
           '[Trải nghiệm] Lead đã hẹn học thử — vào màn "Lớp Trial" xếp con vào buổi cụ thể để giáo viên thấy trên lịch dạy.',
+        // S-3 — dòng nhắc việc do MÁY sinh kèm lượt đổi trạng thái, không phải vết
+        // của một lần chạm khách.
+        metadata: SYSTEM_ACTIVITY_META,
       })
     }
   })
@@ -824,7 +832,10 @@ export async function createLeadManual(
           actorName,
           type: 'NOTE',
           content: 'Tạo lead thủ công',
-          metadata: { system: true },
+          // S-3 — cùng MỘT dấu với mọi dòng máy khác. Đường này ghi lồng trong
+          // `lead.create` nên không qua `recordLeadActivity` được; dấu thì vẫn phải
+          // đúng, không thì lead vừa tạo đã mang mốc "đã liên hệ lần đầu".
+          metadata: SYSTEM_ACTIVITY_META,
         },
       },
     },

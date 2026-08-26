@@ -2,6 +2,7 @@ import { db } from "@/lib/db";
 import { logLeadAudit } from "@/lib/audit/log";
 import { recordLeadStatusChange } from "@/lib/lead/status-trail-write";
 import { recordLeadActivity } from "@/lib/lead/activity-write";
+import { SYSTEM_ACTIVITY_META } from "@/lib/lead/activity-clock";
 import { orgUnitIdForCenter } from "@/lib/org/org-service";
 import { getNonEnrollableCenterIds } from "@/lib/enrollment-flow";
 import type { Prisma, LeadAssignMode } from "@prisma/client";
@@ -41,8 +42,6 @@ const LEAD_DANG_MO = {
 } satisfies Prisma.LeadWhereInput;
 
 export type Actor = { actorId: string | null; actorName: string };
-
-const SYSTEM_META = { system: true } as Prisma.InputJsonValue;
 
 /**
  * Lead "đã có tương tác" của sale (gọi/nhắn/email/bàn giao hoặc ghi chú KHÔNG
@@ -267,7 +266,7 @@ export async function autoAssignNewLead(leadId: string, actor: Actor): Promise<A
       actorName: actor.actorName,
       type: "NOTE",
       content: `Tự động chia cho ${targetUser?.name ?? target} (${mode === "CLOSE_RATE" ? "tỷ lệ chốt" : "luân phiên"})`,
-      metadata: SYSTEM_META,
+      metadata: SYSTEM_ACTIVITY_META,
     });
     // C-07 — ĐƯỜNG TỰ CHIA lật `MỚI → ĐÃ PHÂN CÔNG` ngay ở `tx.lead.update` trên,
     // nhưng vết duy nhất của nó (`ASSIGN`) chỉ mang `assignedToId` ⇒ mốc đầu tiên
@@ -385,7 +384,7 @@ export async function manualAssignLead(
       actorName: actor.actorName,
       type: "NOTE",
       content: `Gán tay cho ${sale.name ?? saleId}`,
-      metadata: SYSTEM_META,
+      metadata: SYSTEM_ACTIVITY_META,
     });
     // C-07 — cùng lý do như đường tự chia: gán tay cũng lật trạng thái mà không
     // để lại mốc nào. Điều kiện trùng khít với dòng lật ở `tx.lead.update`.

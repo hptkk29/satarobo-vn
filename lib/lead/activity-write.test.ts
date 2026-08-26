@@ -33,6 +33,8 @@ import path from "node:path";
 import {
   LEAD_OUTREACH_COUNTS_SYSTEM_NOTE,
   LEAD_OUTREACH_TYPES,
+  SYSTEM_ACTIVITY_META,
+  firstLeadOutreachAt,
   isLeadOutreach,
   isSystemWrittenActivity,
   lastLeadOutreachAt,
@@ -50,8 +52,12 @@ const boChuThich = (s: string) =>
 const taoMock = () => {
   const create = vi.fn();
   const update = vi.fn();
-  const tx = { leadActivity: { create }, lead: { update } } as never;
-  return { create, update, tx };
+  // S-3 — cú đóng dấu "chạm khách lần đầu" đi bằng `updateMany` chứ không
+  // `update`: điều kiện "chỉ ghi khi còn trống" phải nằm TRONG `where` để DB tự
+  // xử, không đọc-rồi-ghi (hai lượt chạm cùng lúc sẽ dời mốc về lần thứ hai).
+  const updateMany = vi.fn();
+  const tx = { leadActivity: { create }, lead: { update, updateMany } } as never;
+  return { create, update, updateMany, tx };
 };
 
 describe("[N-4] recordLeadActivity — ghi hoạt động là bump đồng hồ, không tách rời", () => {
@@ -62,6 +68,7 @@ describe("[N-4] recordLeadActivity — ghi hoạt động là bump đồng hồ,
     m = taoMock();
     m.create.mockResolvedValue({ id: "act-1", createdAt: MOC });
     m.update.mockResolvedValue({ id: "lead-1" });
+    m.updateMany.mockResolvedValue({ count: 1 });
   });
 
   it("ghi ĐỦ hai thứ: dòng hoạt động + cú bump `lastActivityAt`", async () => {
@@ -162,6 +169,104 @@ describe("[N-4] recordLeadActivity — ghi hoạt động là bump đồng hồ,
   });
 });
 
+// ─── Phần 1b (S-3): mốc "chạm khách lần đầu" — đồng hồ SLA-3 phải TẮT được ───
+/**
+ * S-3 — `Lead.firstContactAt` là cột DUY NHẤT tắt được cảnh báo SLA-3 ("Chưa
+ * liên hệ khách > 3 giờ", `lib/crm/sla.ts:78`) và là cột đếm ra "khách chưa được
+ * chạm lần nào" trên bảng việc (`soChuaLienHe`, `lib/crm/sale-board.ts:207`).
+ *
+ * Đo được trên mã trước ticket này: chỗ ghi cột đó — `recordFirstContact`
+ * (`lib/crm/handover.ts:69`) — KHÔNG ĐƯỢC GỌI TỪ ĐÂU trong `app/` hay `lib/`;
+ * người gọi duy nhất là `tests/e2e/r1/handover.spec.ts`. Nghĩa là trên máy thật
+ * cột luôn `null`:
+ *   · bảng việc của Sale báo "chưa liên hệ lần nào" cho cả khách đã gọi 10 lần;
+ *   · SLA-3 kêu từ lúc phân công cho tới khi lead đóng — không thao tác nào tắt
+ *     được. Chuông không bao giờ tắt thì người ta học cách phớt lờ chuông, và cả
+ *     cơ chế SLA thành vô dụng.
+ *
+ * Chốt: đóng dấu ngay TRONG `recordLeadActivity` — đường ghi hoạt động duy nhất
+ * (N-4) — nên không có cửa nào ghi hoạt động mà quên mốc, và mốc cùng sống-chết
+ * với dòng hoạt động trong một transaction.
+ *
+ * ⚠️ KHÔNG phải hoạt động nào cũng là "đã chạm khách": máy tự chia lead lúc 2h
+ * sáng không phải Sale gọi cho phụ huynh. Bộ lọc là `isLeadOutreach`
+ * (`activity-clock.ts`) — dùng lại, không dựng bộ lọc thứ hai ở đây.
+ */
+describe("[S-3] recordLeadActivity — chạm khách thật thì đóng dấu `firstContactAt`", () => {
+  let m: ReturnType<typeof taoMock>;
+  const MOC = new Date("2026-08-27T03:00:00.000Z");
+
+  beforeEach(() => {
+    m = taoMock();
+    m.create.mockResolvedValue({ id: "act-1", createdAt: MOC });
+    m.update.mockResolvedValue({ id: "lead-1" });
+    m.updateMany.mockResolvedValue({ count: 1 });
+  });
+
+  const ghi = (type: string, metadata?: unknown) =>
+    recordLeadActivity({
+      tx: m.tx,
+      leadId: "lead-1",
+      actorId: "u-1",
+      actorName: "Sale CS1",
+      type: type as never,
+      content: "nội dung",
+      ...(metadata === undefined ? {} : { metadata: metadata as never }),
+    });
+
+  it.each([...LEAD_OUTREACH_TYPES])("%s do NGƯỜI ghi → đóng dấu chạm khách", async (type) => {
+    await ghi(type);
+    expect(m.updateMany).toHaveBeenCalledTimes(1);
+    expect(m.updateMany.mock.calls[0][0].data).toEqual({ firstContactAt: MOC });
+  });
+
+  it("🔴 dòng do MÁY ghi KHÔNG đóng dấu — không được tắt chuông hộ người", async () => {
+    // Đây là cách hỏng nguy hiểm hơn cả bệnh đang chữa: chuông tắt mà không ai
+    // gọi khách. Spec `activity-clock.ts:54` gọi đúng tên nó là làm-đẹp-giả.
+    await ghi("NOTE", SYSTEM_ACTIVITY_META);
+    expect(m.create).toHaveBeenCalledTimes(1);
+    expect(m.update).toHaveBeenCalledTimes(1); // `lastActivityAt` vẫn nhảy…
+    expect(m.updateMany).not.toHaveBeenCalled(); // …nhưng mốc chạm khách thì không.
+  });
+
+  it("🔴 STATUS_CHANGE không phải một lần chạm khách", async () => {
+    // Ghi nhận tiền / điểm danh học thử / tự chia đều lật trạng thái. Không lần
+    // nào trong đó là Sale nhấc máy.
+    await ghi("STATUS_CHANGE");
+    expect(m.updateMany).not.toHaveBeenCalled();
+  });
+
+  it("🔴 chỉ ghi LẦN ĐẦU — điều kiện `firstContactAt: null` nằm trong `where`", async () => {
+    // "Liên hệ LẦN ĐẦU" mà ghi đè mỗi lượt thì SLA-3 vẫn tắt được, nhưng phễu
+    // mất mốc gốc: báo cáo "bao lâu từ lúc nhận khách tới lần gọi đầu" hoá ra
+    // luôn bằng "tới lần gọi gần nhất". Để DB tự lọc, không đọc-rồi-ghi.
+    await ghi("CALL");
+    expect(m.updateMany.mock.calls[0][0].where).toEqual({
+      id: "lead-1",
+      firstContactAt: null,
+    });
+  });
+
+  it("mốc lấy ĐÚNG `createdAt` của dòng vừa ghi, không `new Date()` phía app", async () => {
+    await ghi("MESSAGE");
+    expect(m.updateMany.mock.calls[0][0].data.firstContactAt).toBe(MOC);
+  });
+
+  it("🔴 đi CÙNG transaction mà chỗ gọi đang mở", async () => {
+    const khac = taoMock();
+    await ghi("CALL");
+    expect(khac.updateMany).not.toHaveBeenCalled();
+    expect(m.updateMany).toHaveBeenCalledTimes(1);
+  });
+
+  it("KHÔNG nuốt lỗi đóng dấu — hỏng thì cả lượt ghi phải đổ", async () => {
+    // Nuốt lỗi ở đây = dòng "đã gọi" nằm trong sổ mà chuông vẫn kêu, và không ai
+    // lần ra vì sao. Cùng bài học đã vá ở N-4 với cú bump `lastActivityAt`.
+    m.updateMany.mockRejectedValue(new Error("updateMany chết"));
+    await expect(ghi("CALL")).rejects.toThrow();
+  });
+});
+
 // ─── Phần 2: đồng hồ "đã TIẾP CẬN" — khái niệm THỨ HAI, chưa chốt ────────────
 
 const act = (type: string, ngay: string, metadata?: unknown) =>
@@ -248,6 +353,55 @@ describe("[N-4] lastLeadOutreachAt — 'có hoạt động' ≠ 'đã tiếp c�
   });
 });
 
+describe("[S-3] firstLeadOutreachAt — mốc chạm khách ĐẦU TIÊN (dùng cho backfill)", () => {
+  it("lấy lần SỚM NHẤT, bất kể thứ tự mảng đưa vào", () => {
+    const hoatDong = [
+      act("MESSAGE", "2026-08-22T02:00:00Z"),
+      act("CALL", "2026-08-05T02:00:00Z"),
+      act("CALL", "2026-08-20T02:00:00Z"),
+    ];
+
+    expect(firstLeadOutreachAt(hoatDong, LEAD_OUTREACH_TYPES)).toEqual(
+      new Date("2026-08-05T02:00:00Z"),
+    );
+  });
+
+  it("🔴 dòng máy KHÔNG kéo mốc đầu về sớm hơn", () => {
+    // Lead nào cũng có một dòng "Tự động chia cho Sale A" ngay lúc vào. Tính nó
+    // là mốc chạm đầu thì mọi lead trên prod đều "đã liên hệ ngay khi vào" —
+    // đúng cái làm-đẹp-giả, chỉ khác là làm một lần cho toàn bộ dữ liệu cũ.
+    const hoatDong = [
+      act("NOTE", "2026-08-01T02:00:00Z", { system: true }),
+      act("CALL", "2026-08-05T02:00:00Z"),
+    ];
+
+    expect(firstLeadOutreachAt(hoatDong, LEAD_OUTREACH_TYPES)).toEqual(
+      new Date("2026-08-05T02:00:00Z"),
+    );
+  });
+
+  it("chưa chạm lần nào → null (không tự rơi về `createdAt`)", () => {
+    expect(firstLeadOutreachAt([], LEAD_OUTREACH_TYPES)).toBeNull();
+    expect(
+      firstLeadOutreachAt([act("STATUS_CHANGE", "2026-08-20T02:00:00Z")], LEAD_OUTREACH_TYPES),
+    ).toBeNull();
+  });
+
+  it("🔴 danh sách loại vẫn là THAM SỐ — cùng một hàm, hai kết quả", () => {
+    const hoatDong = [
+      act("EMAIL", "2026-08-01T02:00:00Z"),
+      act("CALL", "2026-08-10T02:00:00Z"),
+    ];
+
+    expect(firstLeadOutreachAt(hoatDong, ["CALL"] as never)).toEqual(
+      new Date("2026-08-10T02:00:00Z"),
+    );
+    expect(firstLeadOutreachAt(hoatDong, ["CALL", "EMAIL"] as never)).toEqual(
+      new Date("2026-08-01T02:00:00Z"),
+    );
+  });
+});
+
 // ─── Phần 3: chốt chặn nguồn — không đường nào được tự tay ghi hoạt động ─────
 
 describe("[N-4] chốt chặn nguồn — mọi đường ghi hoạt động đi qua một cửa", () => {
@@ -301,5 +455,80 @@ describe("[N-4] chốt chặn nguồn — mọi đường ghi hoạt động đi
     );
 
     expect([...loai].sort()).toEqual([...LEAD_OUTREACH_TYPES].sort());
+  });
+});
+
+// ─── Phần 4 (S-3): dấu "dòng máy" phải THẬT, không thì bộ lọc chạm khách vô nghĩa
+/**
+ * S-3 — `isLeadOutreach` phân biệt người/máy bằng ĐÚNG MỘT dấu: `metadata.system
+ * === true`. Trước ticket này dấu đó chỉ được đóng ở 2 trong 10 dòng do máy ghi
+ * (`lib/lead/auto-assign.ts`). Tám dòng còn lại — chia luân phiên, chia lại khi
+ * sale nghỉ, phiếu trùng SĐT, phiếu thêm con, ghi nội dung phiếu trùng, gán theo
+ * mã NV, bật/tắt "dùng chung", ghi chú hẹn học thử — là `NOTE` KHÔNG dấu.
+ *
+ * Trước S-3 điều đó chỉ làm `hasSaleInteraction` nhận nhầm (lead vừa được máy
+ * chia đã bị coi là "sale đã tương tác" ⇒ không auto-chia lại nữa). Sau S-3 nó
+ * còn TẮT LUÔN cảnh báo SLA-3 ngay lúc lead vào hệ thống — tức thay một chuông
+ * kêu mãi bằng một chuông không bao giờ kêu. Nên dấu phải đóng đủ TRƯỚC, và test
+ * này giữ cho nó đủ mãi.
+ */
+describe("[S-3] mọi dòng hoạt động do MÁY ghi đều mang dấu `SYSTEM_ACTIVITY_META`", () => {
+  /** Cắt ra từng khối đối số của `recordLeadActivity({ … })` bằng đếm ngoặc. */
+  const khoiGoi = (than: string): string[] => {
+    const ra: string[] = [];
+    const moc = "recordLeadActivity({";
+    for (let i = than.indexOf(moc); i !== -1; ) {
+      let sau = 0;
+      let j = than.indexOf("{", i);
+      for (; j < than.length; j++) {
+        if (than[j] === "{") sau++;
+        else if (than[j] === "}" && --sau === 0) break;
+      }
+      ra.push(than.slice(i, j + 1));
+      i = than.indexOf(moc, j);
+    }
+    return ra;
+  };
+
+  // Bốn tệp KHÔNG có đường người ghi: mọi dòng trong đó đều do máy sinh.
+  const TEP_TOAN_MAY = [
+    "lib/lead/assign.ts", // chia luân phiên · chia lại khi sale nghỉ
+    "lib/lead/auto-assign.ts", // tự chia lead mới · gán tay
+    "lib/lead/dedup.ts", // phiếu trùng SĐT
+    "lib/lead/intake/ingest.ts", // thêm con · nội dung phiếu trùng · gán theo mã NV
+  ];
+
+  it.each(TEP_TOAN_MAY)("%s — mọi lượt ghi đều đóng dấu máy", (p) => {
+    const khoi = khoiGoi(boChuThich(doc(p)));
+    expect(khoi.length).toBeGreaterThan(0);
+    const thieu = khoi.filter((k) => !k.includes("SYSTEM_ACTIVITY_META"));
+    expect(thieu).toEqual([]);
+  });
+
+  it("🔴 màn lead: hai dòng máy có dấu, dòng NGƯỜI ghi thì KHÔNG", () => {
+    // `app/(admin)/admin/leads/actions.ts` trộn cả hai loại nên không kẹp cả tệp
+    // được. Kẹp đích danh: nhầm chiều nào cũng hỏng — đóng dấu lên dòng người là
+    // vứt mốc chạm khách thật, quên dấu ở dòng máy là tắt chuông hộ người.
+    const khoi = khoiGoi(boChuThich(doc("app/(admin)/admin/leads/actions.ts")));
+    const timDuy = (khoa: string) => {
+      const hop = khoi.filter((k) => k.includes(khoa));
+      expect(hop).toHaveLength(1);
+      return hop[0]!;
+    };
+
+    expect(timDuy("dùng chung")).toContain("SYSTEM_ACTIVITY_META");
+    expect(timDuy("[Trải nghiệm]")).toContain("SYSTEM_ACTIVITY_META");
+    // Nhật ký tay của Sale (loại do người chọn: Gọi / Nhắn / Email / Ghi chú).
+    expect(timDuy("parsedType.data")).not.toContain("SYSTEM_ACTIVITY_META");
+  });
+
+  it("🔴 `SYSTEM_ACTIVITY_META` là MỘT hằng, không phải chữ `{ system: true }` chép tay", () => {
+    // Chép tay thì mỗi chỗ tự do gõ `{ system: 1 }` hay `{ isSystem: true }` và
+    // `isSystemWrittenActivity` lặng lẽ trả false — hỏng câm đúng loại đang chữa.
+    for (const p of [...TEP_TOAN_MAY, "app/(admin)/admin/leads/actions.ts"]) {
+      expect(boChuThich(doc(p))).not.toMatch(/\{\s*system:\s*true\s*\}/);
+    }
+    expect(SYSTEM_ACTIVITY_META).toEqual({ system: true });
+    expect(isSystemWrittenActivity(SYSTEM_ACTIVITY_META)).toBe(true);
   });
 });

@@ -27,6 +27,18 @@ import type { LeadActivityType } from "@prisma/client";
  *
  * `STATUS_CHANGE` cố ý VẮNG MẶT: máy đẩy trạng thái (ghi nhận tiền, điểm danh
  * học thử, tự chia) không phải một lần chạm khách.
+ *
+ * ⚠️ S-3 — DANH SÁCH NÀY NAY CÒN ĐIỀU KHIỂN CẢ ĐƯỜNG GHI, không chỉ đường đọc:
+ * `recordLeadActivity` lấy nó để quyết có đóng mốc `Lead.firstContactAt` hay
+ * không. Nên câu hỏi còn treo về `HANDOVER` giờ có hệ quả THẤY ĐƯỢC: chuyển một
+ * khách CHƯA AI GỌI sang sale khác sẽ đóng luôn mốc "đã liên hệ lần đầu" và tắt
+ * cảnh báo SLA-3 của khách đó vĩnh viễn (mốc chỉ ghi một lần).
+ * Giữ nguyên vì đây là giá trị DUY NHẤT đang được thống nhất giữa hai chỗ, và
+ * nó nhất quán với luật "ghi chú do NGƯỜI viết thì tính" — `handoverNote` cũng
+ * là chữ người viết. Đo thêm cho lúc chủ dự án quyết: bỏ `HANDOVER` khỏi danh
+ * sách KHÔNG đổi hành vi auto-chia-lại, vì `hasSaleInteraction` chỉ được hỏi khi
+ * `lead.assignedToId == null` (`lib/lead/auto-assign.ts:160-162`) mà lượt bàn
+ * giao nào cũng ghi `assignedToId`.
  */
 export const LEAD_OUTREACH_TYPES: readonly LeadActivityType[] = [
   "CALL",
@@ -39,10 +51,25 @@ export const LEAD_OUTREACH_TYPES: readonly LeadActivityType[] = [
 /**
  * `NOTE` là loại BỊ DÙNG CHUNG: Sale ghi tay "đã gọi, phụ huynh bận" cũng
  * `NOTE`, mà máy ghi "Tự động chia cho Sale A" cũng `NOTE`. Dấu phân biệt duy
- * nhất đang có trong dữ liệu là `metadata.system === true` (`SYSTEM_META` ở
- * `lib/lead/auto-assign.ts`). Mặc định: dòng máy KHÔNG tính là tiếp cận.
+ * nhất đang có trong dữ liệu là `metadata.system === true` (`SYSTEM_ACTIVITY_META`
+ * ngay dưới). Mặc định: dòng máy KHÔNG tính là tiếp cận.
  */
 export const LEAD_OUTREACH_COUNTS_SYSTEM_NOTE = false;
+
+/**
+ * S-3 — DẤU "dòng này do máy ghi", bản GHI của `isSystemWrittenActivity` ngay
+ * dưới. Một hằng chứ không phải chữ `{ system: true }` chép ở mỗi chỗ ghi: chép
+ * tay thì sớm muộn có chỗ gõ `{ system: 1 }` hoặc `{ isSystem: true }`, hàm đọc
+ * lặng lẽ trả `false`, và dòng máy được tính là "Sale đã gọi khách" — hỏng câm
+ * đúng loại nguy hiểm nhất. Test `[S-3] SYSTEM_ACTIVITY_META là MỘT hằng` chặn
+ * đường chép tay đó.
+ *
+ * ⚠️ Ai thêm một dòng `LeadActivity` do MÁY sinh (chia lead, phiếu trùng, ghi
+ * chú tự động…) thì BẮT BUỘC truyền dấu này. Quên dấu không làm gì đỏ ngay,
+ * nhưng nó tắt cảnh báo SLA-3 hộ người: lead vừa vào hệ thống đã mang mốc "đã
+ * liên hệ lần đầu" mà chưa ai nhấc máy.
+ */
+export const SYSTEM_ACTIVITY_META = { system: true } as const;
 
 /** Đủ hình dạng để xét, không đòi nguyên bản ghi Prisma (test dựng tay được). */
 export type LeadActivityLike = {
@@ -84,6 +111,32 @@ export function lastLeadOutreachAt(
   for (const a of activities) {
     if (!isLeadOutreach(a, outreachTypes, countSystemWritten)) continue;
     if (moc === null || a.createdAt.getTime() > moc.getTime()) moc = a.createdAt;
+  }
+  return moc;
+}
+
+/**
+ * Mốc TIẾP CẬN ĐẦU TIÊN — đối xứng với `lastLeadOutreachAt`, cùng bộ lọc, cùng
+ * kiểu tham số hoá. THUẦN.
+ *
+ * Dùng cho việc dựng lại `Lead.firstContactAt` của dữ liệu CŨ (S-3): đường ghi
+ * mới chỉ đóng dấu cho lượt chạm từ nay về sau, còn mọi lead đã có sẵn trên máy
+ * thật vẫn `null` ⇒ SLA-3 của chúng kêu mãi. Đọc lại lịch sử hoạt động rồi lấy
+ * lần chạm sớm nhất là cách duy nhất suy ra mốc đúng — KHÔNG được lấy
+ * `createdAt` của lead làm mốc: như thế là bịa ra một cuộc gọi chưa từng có.
+ *
+ * Trả `null` khi chưa tiếp cận lần nào — chỗ gọi tự quyết làm gì với lead đó
+ * (với backfill thì đúng nghĩa "để nguyên `null`, chuông này kêu thật").
+ */
+export function firstLeadOutreachAt(
+  activities: readonly LeadActivityLike[],
+  outreachTypes: readonly LeadActivityType[],
+  countSystemWritten: boolean = LEAD_OUTREACH_COUNTS_SYSTEM_NOTE,
+): Date | null {
+  let moc: Date | null = null;
+  for (const a of activities) {
+    if (!isLeadOutreach(a, outreachTypes, countSystemWritten)) continue;
+    if (moc === null || a.createdAt.getTime() < moc.getTime()) moc = a.createdAt;
   }
   return moc;
 }
