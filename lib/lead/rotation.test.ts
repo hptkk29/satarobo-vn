@@ -201,6 +201,55 @@ describe("[Đợt D][SS-LR-06] khoá chống hai lead cùng tiêu một lượt"
     const tx = src.indexOf("db.$transaction");
     expect(tx).toBeGreaterThan(-1);
     expect(src.indexOf("planFairTurns(candidates, count)")).toBeGreaterThan(tx);
-    expect(src.indexOf("leadRotationTurn.upsert")).toBeGreaterThan(tx);
+    expect(src.indexOf("leadRotationTurn.update(")).toBeGreaterThan(tx);
+  });
+});
+
+describe("[Đợt D vá 26/08] sổ đếm LƯỢT THẬT, điểm xuất phát để riêng", () => {
+  // Bug đo được ngày 26/08 khi lần đầu chạy thật tests/e2e/crm/lead-rotation-fair
+  // (suite đó chưa có job CI, nên file spec tự ghi là "chưa có tín hiệu"):
+  // `takeRotationTurns` chỉ mở dòng khi ai đó THẮNG ⇒ người có mặt từ đầu mà chưa
+  // thắng bị nhầm là "người mới gia nhập" và ăn nguyên `seed` vào sổ.
+  //   30 lead / 3 sale → sổ 32 (10/11/11) · 6 lead → [2,3,3] · 20 lượt → 22.
+  // Việc CHIA vẫn đúng; sai là ở SỔ — mà sổ chính là thứ /admin/leads/so-luot
+  // dựng ra để người ta hết nghi thiên vị.
+  //
+  // Ba ca dưới quét NGUỒN vì phần chạy thật cần Postgres. Lane `crm` nay ĐÃ có job
+  // CI (e2e-crm), nhưng lane unit chạy ở mọi PR nên đây là lưới gần nhất.
+  const doc = () => fs.readFileSync("lib/lead/rotation.ts", "utf8");
+
+  it("mở dòng cho MỌI người trong vòng, không đợi tới lúc họ thắng", () => {
+    const src = doc();
+    expect(
+      src,
+      "không còn bước tạo dòng sẵn — người chưa thắng lại bị tính là người mới",
+    ).toMatch(/leadRotationTurn\.createMany/);
+    // Và bước đó phải nằm TRƯỚC lúc lên kế hoạch, nếu không thì vô nghĩa.
+    expect(src.indexOf("leadRotationTurn.createMany")).toBeLessThan(
+      src.indexOf("planFairTurns(candidates, count)"),
+    );
+  });
+
+  it("chỉ tăng `turns`, KHÔNG bao giờ chạm `seedTurns` sau khi đã mở dòng", () => {
+    const src = doc();
+    // Phần ghi lượt: từ chỗ gộp theo người tới hết hàm.
+    const batDau = src.indexOf("const them = new Map<string, number>()");
+    expect(batDau).toBeGreaterThan(-1);
+    const phanGhi = src.slice(batDau, src.indexOf("return ke;", batDau));
+    expect(phanGhi).toMatch(/turns: \{ increment: n \}/);
+    expect(
+      phanGhi,
+      "dời điểm xuất phát của người đang trong vòng = xoá dấu vết công bằng",
+    ).not.toMatch(/seedTurns/);
+  });
+
+  it("thứ tự chia đọc `seedTurns + turns`, còn sổ trả về `turns` trần", () => {
+    const src = doc();
+    expect(src, "vị trí trong vòng phải cộng cả điểm xuất phát").toMatch(
+      /seedTurns \+ r\.turns/,
+    );
+    // getRotationBoard vẫn phải trả `turns` nguyên bản cho trang sổ.
+    const board = src.slice(src.indexOf("export async function getRotationBoard"));
+    expect(board).toMatch(/select: \{ userId: true, turns: true, seedTurns: true/);
   });
 });

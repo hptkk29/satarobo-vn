@@ -3604,8 +3604,18 @@ model LeadRotationTurn {
   id         String    @id @default(cuid())
   orgUnitId  String
   userId     String
-  /// Tổng số lượt đã nhận từ trước tới nay. CHỈ TĂNG — không có đường về 0.
+  /// Số lượt THẬT SỰ đã nhận. CHỈ TĂNG — không có đường về 0. Đây là con số
+  /// trang /admin/leads/so-luot in ra, nên nó phải đếm đúng lượt đã phát, KHÔNG
+  /// được cộng thêm điểm xuất phát của người mới (xem `seedTurns`).
   turns      Int       @default(0)
+  /// Điểm XUẤT PHÁT trong vòng, chốt lúc người này lần đầu vào vòng.
+  ///
+  /// Người mới vào NGANG người ít lượt nhất chứ không phải từ 0 — để 0 thì họ
+  /// nhận liên tiếp cho tới khi đuổi kịp (`seedTurnsForNewcomer`). Nhưng điểm
+  /// xuất phát đó là chuyện của THỨ TỰ, không phải của sổ: cộng nó vào `turns`
+  /// là khai với người đọc rằng họ đã nhận lượt mà thật ra chưa.
+  /// ⇒ Vị trí trong vòng = `seedTurns + turns`; sổ hiển thị = `turns`.
+  seedTurns  Int       @default(0)
   /// Lần gần nhất tới lượt; null = chưa bao giờ. Dùng để phá hoà cho công bằng.
   lastTurnAt DateTime? @db.Timestamptz(6)
   createdAt  DateTime  @default(now()) @db.Timestamptz(6)

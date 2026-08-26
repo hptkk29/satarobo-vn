@@ -481,6 +481,69 @@ jobs:
           path: playwright-report/
           retention-days: 7
 
+  e2e-crm:
+    name: E2E Phase CRM (Playwright service-level + Postgres local)
+    runs-on: ubuntu-latest
+    # 12 test / ~1 phút đo ở máy dev. Trần rộng rãi cho runner chậm.
+    timeout-minutes: 20
+    needs: quality
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: ci
+          POSTGRES_PASSWORD: ci
+          POSTGRES_DB: ci_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      DATABASE_URL: postgresql://ci:ci@localhost:5432/ci_test
+      DIRECT_URL: postgresql://ci:ci@localhost:5432/ci_test
+      NEXTAUTH_SECRET: "ci-build-only-secret-do-not-use-in-prod-32chars"
+      NEXTAUTH_URL: "http://localhost:3100"
+      NEXT_PUBLIC_APP_URL: "http://localhost:3100"
+      BASE_URL: "http://localhost:3100"
+      # Cả 3 spec CRM đều service-level (gọi thẳng hàm trong lib/) → bỏ webServer.
+      CRM_SKIP_WEBSERVER: "1"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v3
+        with: { version: 11 }
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Generate Prisma client
+        run: pnpm exec prisma generate
+
+      # KHÔNG cài trình duyệt: không spec nào của tests/e2e/crm dùng fixture
+      # `page`/`browser`. Cùng lý do với job r7 — bước cài apt từng treo 19 phút và
+      # giết cả job. ⚠️ Thêm spec CÓ dùng browser vào đây thì phải cài lại.
+
+      - name: Run Phase CRM e2e
+        run: pnpm test:e2e:crm
+
+      - name: Upload CRM Playwright report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report-crm
+          path: playwright-report/
+          retention-days: 7
+
   e2e-fl:
     name: E2E Phase FL (Playwright service-level + Postgres local)
     runs-on: ubuntu-latest
