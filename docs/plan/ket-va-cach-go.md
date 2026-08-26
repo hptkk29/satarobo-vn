@@ -489,6 +489,43 @@ ALLOW khớp tiền tố model sẽ bật "ALL" cho mọi cơ sở. Nên gom c�
 
 ---
 
+## 7c. K-19 — Vai "ma" của tài khoản đã xoá · ĐÃ DỌN TRÊN PROD 26/08/2026
+
+**Phát hiện:** 10 dòng `UserOrgRole` `status = ACTIVE` thuộc về tài khoản **đã xoá mềm**, kéo dài từ
+08/07/2026. Gồm cả một tài khoản đã xoá giữ `SUPER_ADMIN` tại HO.
+
+**Không phải lỗ hổng đăng nhập** — `lib/auth.ts:157` chặn cả `deletedAt` lẫn `!isActive`, nên các
+tài khoản đó không đăng nhập được và vai của họ không bao giờ thành quyền thật.
+
+**Nhưng là rác dữ liệu có hậu quả:** mọi chỗ đếm/liệt kê nhân sự theo `UserOrgRole` mà **không join
+`User.deletedAt`** đều tính nhầm người đã nghỉ — danh sách chọn GV, báo cáo hiệu suất GV, "ai là HR
+của cơ sở", và các truy vấn chẩn đoán. ⚠️ Chính nó đã làm truy vấn `[A-01-Đ4]` (§6.9 của
+`A-nen-tang.md`) trả về Đinh Thảo My và khiến người đọc kết luận sai rằng SL-01 đã nổ.
+
+**Phân bố theo đợt nghỉ việc** — cho thấy đây là lỗi chạy đều, không phải ca lẻ:
+08/07 (1) · 09/07 (1) · 22/07 (1) · 06/08 (5) · 20/08 (2).
+
+**Đã chạy trên prod 26/08/2026** (người vận hành chạy tay, có bước dry-run trước):
+
+```sql
+UPDATE "UserOrgRole" uor
+SET status = 'EXPIRED', "effectiveTo" = now()
+FROM "User" u
+WHERE u.id = uor."userId" AND u."deletedAt" IS NOT NULL AND uor.status = 'ACTIVE';
+```
+
+Hết hạn hoá chứ **không xoá cứng** — giữ vết để sau còn truy được ai từng giữ vai gì.
+**Kết quả kiểm sau khi chạy: 0 dòng.** ✅
+
+**Vá gốc:** `deleteUserAction` (`app/(admin)/admin/users/_actions.ts`) chỉ đặt `deletedAt` +
+`isActive: false`, **không đụng `UserOrgRole`** ⇒ cứ xoá thêm một người là thêm vài dòng ma. Đang vá
+kèm rào **chặn xoá khi còn lead/ghi danh đang gán** — vì màn `/admin/ban-giao-lead` lọc
+`deletedAt: null` (`page.tsx:51`) nên **xoá trước là tự khoá mất đường bàn giao**.
+
+⚠️ **Luật vận hành rút ra:** *vô hiệu hoá → bàn giao → rồi mới xoá.* Đảo thứ tự là mất đường lùi.
+
+---
+
 ## 8. Thứ tự gỡ đề nghị — nếu chỉ làm được vài việc
 
 1. ~~**K-1** (3 phép đo prod)~~ — ✅ **đã đo 26/08/2026.** Thay bằng **việc số 0 nó sinh ra**: khôi phục
