@@ -56,6 +56,19 @@ export type SaleLeadListInput = {
   status?: LeadStatus;
   /** Tìm theo tên phụ huynh / tên con / số điện thoại. */
   q?: string;
+  /**
+   * Ô tìm có được quét cột SĐT không — S-1 (26/08/2026).
+   *
+   * Đây là rò GIÁN TIẾP, và là chỗ site Sale quên chép mẫu của khu quản trị
+   * (`/admin/leads`, `/admin/search` đều gác từ #11). Không hiện số nhưng cho DÒ:
+   * gõ `0905123456`, thấy một khách hiện lên là biết ngay số đó của ai. Che cột
+   * hiển thị mà để ô tìm quét cột ấy thì việc che chỉ còn là hình thức.
+   *
+   * Phải là KẾT QUẢ của `canViewLeadPii()` (và không bị DENY cấp trường), không
+   * phải suy theo vai. Mặc định `false` — quên truyền thì mất tính năng tìm, chứ
+   * không mất dữ liệu cá nhân.
+   */
+  canSearchPhone?: boolean;
   /** `true` = lấy cả lead đã đóng (đã ghi danh / đã mất / trùng). */
   gomDaDong?: boolean;
   take?: number;
@@ -69,12 +82,20 @@ export type SaleLeadListInput = {
  * `lastActivityAt` rỗng nên tự rơi xuống cuối — đúng chỗ cần nhìn lại.
  */
 export async function getMyLeads(input: SaleLeadListInput): Promise<SaleLeadRow[]> {
-  const { actor, userId, status, q, gomDaDong = false, take = 200 } = input;
+  const {
+    actor,
+    userId,
+    status,
+    q,
+    gomDaDong = false,
+    take = 200,
+    canSearchPhone = false,
+  } = input;
   const sdb = scopedDb(actor);
 
   const timKiem = q?.trim();
   // SĐT lưu 2 dạng (`0…` cũ / `84…` mới) — tìm theo phần lõi để không sót.
-  const loiSdt = timKiem ? (phoneSearchTerm(timKiem) ?? timKiem) : undefined;
+  const loiSdt = canSearchPhone && timKiem ? (phoneSearchTerm(timKiem) ?? timKiem) : undefined;
 
   const rows = await sdb.lead.findMany({
     where: {

@@ -5,7 +5,7 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { hasRole } from "@/lib/auth/permissions";
-import { checkPermission } from "@/lib/auth/check-permission";
+import { checkPermission, canViewLeadPii } from "@/lib/auth/check-permission";
 import { resolveActor } from "@/lib/auth/actor";
 import { getAssignableTeachers } from "@/lib/teachers/assignable";
 import { layDanhSachHen } from "../_lib/queries";
@@ -32,11 +32,16 @@ export default async function LichHenPage({
     hasRole(session.user, "TEACHER") && !canManage ? session.user.id : null;
 
   const actor = await resolveActor(session.user.id);
+  // S-1 — màn này mở cho `trials:view` (QL cơ sở + Sale + GV + Đào tạo) nhưng chỉ
+  // Sale có `leads:view-pii`. Hỏi quyền thật thay vì suy từ vai: quyền còn có thể
+  // bị thu theo từng người bằng grant.
+  const canViewPii = await canViewLeadPii();
   // CỐ Ý chạy tuần tự, không Promise.all: danh sách GV phải kèm `includeIds` là các GV
   // ĐANG được gán, mà chỉ biết được sau khi có bookings.
   const { bookings, rooms, classes } = await layDanhSachHen(actor, status, {
     ownTeacherId,
     q,
+    canViewPii,
   });
   const teachers = await getAssignableTeachers({
     centerIds: actor.visibleCenterIds,
@@ -53,7 +58,11 @@ export default async function LichHenPage({
 
       <SearchForm
         action="/lop-trial/lich-hen"
-        placeholder="Tìm theo tên phụ huynh, SĐT hoặc tên con…"
+        placeholder={
+          canViewPii
+            ? "Tìm theo tên phụ huynh, SĐT hoặc tên con…"
+            : "Tìm theo tên phụ huynh hoặc tên con…"
+        }
         defaultValue={q}
         hidden={{ status }}
       />

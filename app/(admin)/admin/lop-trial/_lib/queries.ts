@@ -3,7 +3,18 @@
 // Mọi truy vấn ĐỌC của màn "Lớp Trial". Tất cả đi qua `scopedDb(actor)` để cách ly
 // cơ sở (CS1 không thấy lớp CS2). Hai hàm dựng `where` nằm ở ./filters — tách ra để
 // test được bằng vitest mà không phải nạp Prisma Client.
+//
+// ⚠️ S-1 (26/08/2026) — CÁCH LY CƠ SỞ KHÔNG PHẢI LÀ CHE PII. `scopedDb` chỉ trả
+// lời "lead này có thuộc cơ sở của bạn không", không trả lời "bạn có được đọc số
+// điện thoại của họ không". Màn này mở cho `trials:view` = Quản lý cơ sở + Sale +
+// **Giáo viên** + **Đào tạo**; trong đó chỉ Sale có `leads:view-pii`. Nên tên phụ
+// huynh + SĐT lấy từ `lead` phải qua `maskLeadPiiFields` NGAY Ở ĐÂY — che ở JSX
+// thì số thật vẫn xuống trình duyệt trong payload RSC.
+//
+// `canViewPii` truyền từ trang gọi (đã hỏi `canViewLeadPii()`), không tự hỏi tại
+// chỗ: file này là tầng truy vấn thuần, giữ nó không dính next-auth để còn test.
 import { scopedDb } from "@/lib/db-scope";
+import { maskLeadPiiFields } from "@/lib/lead/pii";
 import type { Actor } from "@/lib/auth/actor";
 import { vnParts } from "@/lib/time/vn";
 import { toVnInput } from "./schemas";
@@ -120,6 +131,7 @@ export type ChiTietLop = {
 export async function layChiTietLop(
   actor: Actor,
   id: string,
+  canViewPii: boolean,
 ): Promise<ChiTietLop | null> {
   const sdb = scopedDb(actor);
   const cls = await sdb.trialClassV2.findUnique({
@@ -176,19 +188,28 @@ export async function layChiTietLop(
         ]),
       ),
     })),
-    enrollments: cls.enrollments.map((e) => ({
-      id: e.id,
-      leadChildId: e.leadChild?.id ?? null,
-      childName: e.leadChild?.fullName ?? "(không rõ)",
-      parentName: e.leadChild?.lead?.parentName ?? null,
-      phone: e.leadChild?.lead?.phone ?? null,
-      leadId: e.leadChild?.lead?.id ?? null,
-      status: e.status as EnrollmentRow["status"],
-      scheduledSessionId: e.scheduledSessionId,
-      gvDeXuatId: e.gvDeXuatId,
-      gvPhanCongId: e.gvPhanCongId,
-      rescheduleCount: e.rescheduleCount,
-    })),
+    enrollments: cls.enrollments.map((e) => {
+      const che = maskLeadPiiFields(
+        {
+          parentName: e.leadChild?.lead?.parentName ?? null,
+          phone: e.leadChild?.lead?.phone ?? null,
+        },
+        canViewPii,
+      );
+      return {
+        id: e.id,
+        leadChildId: e.leadChild?.id ?? null,
+        childName: e.leadChild?.fullName ?? "(không rõ)",
+        parentName: che.parentName ?? null,
+        phone: che.phone ?? null,
+        leadId: e.leadChild?.lead?.id ?? null,
+        status: e.status as EnrollmentRow["status"],
+        scheduledSessionId: e.scheduledSessionId,
+        gvDeXuatId: e.gvDeXuatId,
+        gvPhanCongId: e.gvPhanCongId,
+        rescheduleCount: e.rescheduleCount,
+      };
+    }),
   };
 }
 
@@ -196,12 +217,14 @@ export async function layChiTietLop(
 export async function layDanhSachHen(
   actor: Actor,
   status: string | undefined,
-  opts: { ownTeacherId?: string | null; q?: string },
+  // `canViewPii` cai QUẢN CẢ HAI việc: che cột hiển thị VÀ cho phép ô tìm quét cột
+  // SĐT. Hai việc đó phải cùng một cờ — che cột mà vẫn cho tìm là vẫn dò ra số.
+  opts: { ownTeacherId?: string | null; q?: string; canViewPii: boolean },
 ): Promise<{ bookings: BookingRow[]; rooms: RoomOption[]; classes: Option[] }> {
   const sdb = scopedDb(actor);
   const [rows, rooms, classes] = await Promise.all([
     sdb.trialClass.findMany({
-      where: buildBookingListWhere(status, opts),
+      where: buildBookingListWhere(status, { ...opts, canSearchPhone: opts.canViewPii }),
       orderBy: [{ status: "asc" }, { scheduledAt: "asc" }],
       take: 200,
       include: {
@@ -233,23 +256,38 @@ export async function layDanhSachHen(
     }),
   ]);
 
-  const bookings: BookingRow[] = rows.map((t) => ({
-    id: t.id,
-    leadId: t.leadId,
-    parentName: t.lead?.parentName ?? null,
-    phone: t.lead?.phone ?? null,
-    childName: t.lead?.children[0]?.fullName ?? t.lead?.childName ?? null,
-    centerId: t.centerId,
-    centerName: t.center?.name ?? null,
-    status: t.status as BookingRow["status"],
-    // Server quy đổi sang đồng hồ VN — client KHÔNG tự tính (xem ghi chú ở types.ts).
-    scheduledAtVn: t.scheduledAt ? toVnInput(t.scheduledAt) : "",
-    teacherId: t.teacherId,
-    teacherName: t.teacher?.name ?? null,
-    roomId: t.roomId,
-    classId: t.classId,
-    notes: t.notes,
-  }));
+  const bookings: BookingRow[] = rows.map((t) => {
+    // ⚠️ Bất đối xứng CÓ CHỦ ĐÍCH với `layChiTietLop`: ở đây tên con đi qua tầng
+    // che (giống `/admin/leads` và `/sale/khach-cua-toi` — cùng loại màn "danh
+    // sách phiếu"), còn danh sách lớp bên kia thì KHÔNG. Lý do: bảng lớp là sổ
+    // điểm danh, giáo viên phải gọi đúng tên đứa trẻ đang ngồi trước mặt. Đừng
+    // "sửa cho đồng bộ" mà không đọc dòng này.
+    const che = maskLeadPiiFields(
+      {
+        parentName: t.lead?.parentName ?? null,
+        phone: t.lead?.phone ?? null,
+        childName: t.lead?.children[0]?.fullName ?? t.lead?.childName ?? null,
+      },
+      opts.canViewPii,
+    );
+    return {
+      id: t.id,
+      leadId: t.leadId,
+      parentName: che.parentName ?? null,
+      phone: che.phone ?? null,
+      childName: che.childName ?? null,
+      centerId: t.centerId,
+      centerName: t.center?.name ?? null,
+      status: t.status as BookingRow["status"],
+      // Server quy đổi sang đồng hồ VN — client KHÔNG tự tính (xem ghi chú ở types.ts).
+      scheduledAtVn: t.scheduledAt ? toVnInput(t.scheduledAt) : "",
+      teacherId: t.teacherId,
+      teacherName: t.teacher?.name ?? null,
+      roomId: t.roomId,
+      classId: t.classId,
+      notes: t.notes,
+    };
+  });
 
   return { bookings, rooms, classes };
 }

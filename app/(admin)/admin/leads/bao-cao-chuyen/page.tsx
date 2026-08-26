@@ -2,7 +2,8 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { ArrowLeftRight } from "lucide-react";
 import { auth } from "@/lib/auth";
-import { checkPermission } from "@/lib/auth/check-permission";
+import { checkPermission, canViewLeadPii } from "@/lib/auth/check-permission";
+import { maskLeadPiiFields } from "@/lib/lead/pii";
 import { getModelVisibleCenterIds, scopedDb, logScopeBypass } from "@/lib/db-scope";
 import { resolveActor } from "@/lib/auth/actor";
 import type { Prisma } from "@prisma/client";
@@ -95,7 +96,13 @@ export default async function TransferReportPage({ searchParams }: Props) {
       : Promise.resolve([]),
   ]);
   const centerMap = new Map(centers.map((c) => [c.id, c]));
-  const leadMap = new Map(leads.map((l) => [l.id, l]));
+  // S-1 — cổng vào màn này là `leads:assign` (SUPER_ADMIN + Quản lý cơ sở), mà QL
+  // cơ sở KHÔNG còn `leads:view-pii` từ Q9. Che ngay khi dựng bảng tra, không phải
+  // ở JSX: dữ liệu che ở JSX vẫn đi trọn vẹn xuống trình duyệt trong payload RSC.
+  const canViewPii = await canViewLeadPii();
+  const leadMap = new Map(
+    leads.map((l) => [l.id, maskLeadPiiFields(l, canViewPii)] as const),
+  );
 
   const rows = transfers.map((t) => {
     const lead = leadMap.get(t.leadId);

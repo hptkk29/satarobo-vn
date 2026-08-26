@@ -12,7 +12,7 @@
 // log và audit sẽ có hai bộ action làm việc giống nhau — trùng tên là nguồn nhầm lẫn.
 import { revalidatePath } from "next/cache";
 import type { LeadStatus, Prisma, TrialClassStatus } from "@prisma/client";
-import { checkPermission } from "@/lib/auth/check-permission";
+import { checkPermission, canViewLeadPii } from "@/lib/auth/check-permission";
 import { scopedDb } from "@/lib/db-scope";
 import { getAuditActor } from "@/lib/audit/log";
 import { writeAudit } from "@/lib/audit/audit-log";
@@ -23,6 +23,7 @@ import { leadStatusLabel } from "@/lib/leads/status";
 import { TRIAL_STATUS_LABEL } from "@/lib/trials/status";
 import { setLeadStatus } from "@/lib/leads/set-status";
 import { phoneSearchTerm } from "@/lib/phone";
+import { maskLeadPiiFields } from "@/lib/lead/pii";
 import {
   setTrialProgramConfig,
   createTrialClass,
@@ -313,6 +314,10 @@ export async function searchLopTrialCandidatesAction(input: {
   const q = (input.query ?? "").trim();
   // SĐT lưu 2 dạng trong DB (0… cũ / 84… mới) — tìm theo phần lõi để không sót.
   const qPhone = phoneSearchTerm(q) ?? q;
+  // S-1 — `trials:manage` KHÔNG kéo theo quyền đọc SĐT lead: Quản lý cơ sở có
+  // quyền này nhưng mất `leads:view-pii` từ Q9. Không gác thì ô tìm ứng viên là
+  // máy dò số: gõ đủ 10 số, thấy ai hiện lên là biết số đó của khách nào.
+  const canViewPii = await canViewLeadPii();
   const sdb = scopedDb(ctx.actor);
   // Chỉ con CHƯA ở lớp ACTIVE nào (partial-unique cho phép đúng 1 lớp ACTIVE / con).
   const childFree = { trialEnrollments: { none: { status: "ACTIVE" as const } } };
@@ -328,7 +333,7 @@ export async function searchLopTrialCandidatesAction(input: {
         ? {
             OR: [
               { parentName: { contains: q, mode: "insensitive" as const } },
-              { phone: { contains: qPhone } },
+              ...(canViewPii ? [{ phone: { contains: qPhone } }] : []),
               {
                 children: {
                   some: { fullName: { contains: q, mode: "insensitive" as const } },
@@ -349,15 +354,18 @@ export async function searchLopTrialCandidatesAction(input: {
     take: 20,
   });
 
-  const candidates: Candidate[] = leads.flatMap((l) =>
-    l.children.map((c) => ({
+  const candidates: Candidate[] = leads.flatMap((l) => {
+    // Che ở SERVER trước khi trả về client — che ở JSX thì số thật vẫn nằm trong
+    // payload của Server Action.
+    const che = maskLeadPiiFields({ parentName: l.parentName, phone: l.phone }, canViewPii);
+    return l.children.map((c) => ({
       leadChildId: c.id,
       childName: c.fullName,
-      parentName: l.parentName,
-      phone: l.phone,
+      parentName: che.parentName ?? null,
+      phone: che.phone ?? null,
       leadStatus: leadStatusLabel(l.status),
-    })),
-  );
+    }));
+  });
   return { ok: true, candidates };
 }
 

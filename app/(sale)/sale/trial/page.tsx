@@ -10,7 +10,7 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { resolveActor } from "@/lib/auth/actor";
-import { checkAnyPermission } from "@/lib/auth/check-permission";
+import { checkAnyPermission, canViewLeadPii } from "@/lib/auth/check-permission";
 import { PAGE_GATES } from "@/lib/auth/page-gates";
 import { canViewParentContact } from "@/lib/auth/permissions";
 import { getSaleTrialRoster } from "@/lib/trial/sale-roster";
@@ -39,7 +39,17 @@ export default async function SaleTrialPage() {
 
   const roster = await getSaleTrialRoster(actor, from, to, {
     // Quyền tính ở tầng này rồi TRUYỀN xuống — hàm truy vấn không tự đoán quyền.
-    canViewParentContact: canViewParentContact(session.user),
+    //
+    // ⚠️ S-1 (26/08/2026) — PHẢI qua CẢ HAI cổng. Cột "Phụ huynh" ở đây lấy từ
+    // `LeadChild.lead.phone`, tức là PHIẾU chứ không phải học viên đã ghi danh —
+    // nên nó thuộc `leads:view-pii` (Q9), không chỉ `canViewParentContact`.
+    // Trước S-1 chỉ hỏi trục sau, mà trục đó vẫn cho Quản lý cơ sở và Kế toán đi
+    // qua ⇒ hai vai không có quyền xem SĐT phiếu vẫn đọc được số thật.
+    //
+    // Giữ nguyên trục cũ trong phép VÀ (không thay thế): nó là luật riêng cho
+    // liên hệ phụ huynh và không nằm trong phạm vi Q9 — bỏ đi là nới quyền cho
+    // Giáo viên/Đào tạo.
+    canViewParentContact: canViewParentContact(session.user) && (await canViewLeadPii()),
   });
 
   return (

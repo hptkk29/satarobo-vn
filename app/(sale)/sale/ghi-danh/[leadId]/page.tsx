@@ -133,9 +133,14 @@ export default async function SaleGhiDanhPage({
         <div className="mt-5">
           <ConvertForm
             leadId={lead.id}
-            defaultParentName={lead.parentName ?? ""}
-            defaultParentEmail={lead.email ?? ""}
-            defaultParentPhone={lead.phone ?? ""}
+            // S-1 — `lead` ở đây ĐÃ được `getMyLeadDetail` che theo `canViewPii`.
+            // Điền bản che vào ô nhập là mời người dùng bấm Lưu và tạo ra một phụ
+            // huynh tên "Nguyễn T. L." — `submitConvertV2` nhận thẳng chuỗi này và
+            // schema KHÔNG validate tên. Để trống thì form chặn ngay, hỏng sớm và
+            // thấy được. (Giống hệt `/admin/leads/[id]/convert`.)
+            defaultParentName={canViewPii ? (lead.parentName ?? "") : ""}
+            defaultParentEmail={canViewPii ? (lead.email ?? "") : ""}
+            defaultParentPhone={canViewPii ? (lead.phone ?? "") : ""}
             prefillStudents={
               lead.children.length > 0
                 ? lead.children.map((c) => ({

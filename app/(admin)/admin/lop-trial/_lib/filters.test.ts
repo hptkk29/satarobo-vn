@@ -89,8 +89,12 @@ describe("[LT-U-03] where lịch hẹn học thử giữ đúng luật ẩn củ
     expect(buildBookingListWhere(undefined, { ownTeacherId: null }).teacherId).toBeUndefined();
   });
 
+  // S-1 (26/08/2026) — nhánh SĐT nay phải xin phép: `canSearchPhone` là kết quả
+  // của `canViewLeadPii()`. Ca này giữ nguyên câu hỏi cũ ("tìm không được làm mất
+  // bộ lọc rời-phễu") nhưng chạy ở nhánh CÓ quyền; nhánh KHÔNG quyền nằm ở
+  // `lib/lead/lead-pii-callsites.test.ts`.
   it("ô tìm phủ 3 nhánh mà KHÔNG làm mất điều kiện lead của chế độ mặc định", () => {
-    const w = buildBookingListWhere(undefined, { q: "Hương" });
+    const w = buildBookingListWhere(undefined, { q: "Hương", canSearchPhone: true });
     const lead = w.lead as {
       deletedAt: null;
       status?: unknown;
