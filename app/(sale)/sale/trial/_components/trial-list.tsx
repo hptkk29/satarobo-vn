@@ -2,6 +2,9 @@
 
 import { useMemo, useState } from "react";
 import type { SaleTrialStudent } from "@/lib/trial/sale-roster";
+// Nhãn nằm ở module RIÊNG, không import từ sale-roster: file đó kéo theo scopedDb +
+// Prisma, mà đây là Client Component.
+import { nhanHoaHongSale } from "@/lib/trial/sale-commission-label";
 
 type SlotDto = {
   sessionId: string;
@@ -81,6 +84,13 @@ export function SaleTrialList({
   const unassignedLoc = unassigned.filter(hopVoiLoc);
   const rong = theoNgay.length === 0 && unassignedLoc.length === 0;
 
+  // Chỉ giải thích khi màn hình THẬT SỰ có dòng "Đã nhập học" — không có thì đây
+  // là một câu thừa che mất bảng.
+  const coNguoiNhapHoc =
+    theoNgay.some(([, ds]) => ds.some((sl) => sl.students.some((hv) => hv.enrolled))) ||
+    unassignedLoc.some((hv) => hv.enrolled);
+  const chuThichHoaHong = nhanHoaHongSale(true);
+
   const oNhap =
     "rounded-lg border border-border bg-card px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring";
 
@@ -137,6 +147,13 @@ export function SaleTrialList({
               <BangHocVien students={unassignedLoc} />
             </section>
           )}
+
+          {coNguoiNhapHoc && chuThichHoaHong && (
+            <p className="rounded-lg border border-dashed border-border px-4 py-3 text-xs text-muted-foreground">
+              <strong className="font-medium">{chuThichHoaHong.nhan}.</strong>{" "}
+              {chuThichHoaHong.lyDo}
+            </p>
+          )}
         </div>
       )}
     </div>
@@ -173,7 +190,7 @@ function BangHocVien({ students }: { students: SaleTrialStudent[] }) {
             <th className="px-5 py-2">Phụ huynh</th>
             <th className="px-5 py-2">Khoá quan tâm</th>
             <th className="px-5 py-2">Phiếu đánh giá</th>
-            <th className="px-5 py-2">Nhập học</th>
+            <th className="px-5 py-2">Nhập học · hoa hồng</th>
           </tr>
         </thead>
         <tbody>
@@ -210,9 +227,16 @@ function BangHocVien({ students }: { students: SaleTrialStudent[] }) {
               </td>
               <td className="px-5 py-3">
                 {s.enrolled ? (
-                  <span className="rounded-full bg-state-success-soft px-2.5 py-1 text-xs font-medium text-state-success-ink">
-                    Đã nhập học
-                  </span>
+                  <>
+                    <span className="rounded-full bg-state-success-soft px-2.5 py-1 text-xs font-medium text-state-success-ink">
+                      Đã nhập học
+                    </span>
+                    {/* Vế "+% hoa hồng" CỐ Ý không phải một con số — xem
+                        nhanHoaHongSale() ở lib/trial/sale-commission-label.ts. */}
+                    <div className="mt-1 text-xs text-muted-foreground">
+                      {nhanHoaHongSale(true)?.nhan}
+                    </div>
+                  </>
                 ) : (
                   <span className="text-muted-foreground">—</span>
                 )}

@@ -81,3 +81,105 @@ describe("[Đợt C] buildSaleTrialStudent — cờ đã nhập học", () => {
     });
   });
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// S-7 (26/08/2026) — vế "+% hoa hồng" của cột "Đã nhập học".
+//
+// Kế hoạch (`plan/25 §3`) ghi cột này là **"Đã nhập học · +% hoa hồng"**, đọc tỉ
+// lệ từ cấu hình chứ không chép con số. Nhưng ĐO TRƯỚC KHI VẼ: hệ thống **chưa
+// từng sinh một dòng hoa hồng nào cho Sale**. Engine 4 tầng
+// (`lib/crm/commission.ts`) đủ logic và có test, nhưng `setStatementLines` —
+// đường DUY NHẤT ghi dòng cho 4 tầng đó — không được gọi từ chỗ nào trong sản
+// phẩm, chỉ có test gọi. Bảng kê kỳ nào cũng rỗng.
+//
+// Nên vế phải của cột KHÔNG được in "+4%" hay "0đ": cả hai đều là **nói dối một
+// con số**. Người xem sẽ tin là đã tính rồi và đi hỏi kế toán vì sao chưa nhận
+// tiền. Đúng luật `SS-CV-08` của kế hoạch kiểm thử: *"Job chốt kỳ hoa hồng chưa
+// chạy → empty-state có nghĩa, KHÔNG hiện 0đ như thể đã chốt"*.
+// ─────────────────────────────────────────────────────────────────────────────
+import { readFileSync, readdirSync, statSync } from "node:fs";
+import { join } from "node:path";
+import { nhanHoaHongSale } from "./sale-commission-label";
+
+describe("[S-7] nhãn hoa hồng cạnh 'Đã nhập học'", () => {
+  it("chưa nhập học → không nói gì về hoa hồng", () => {
+    expect(nhanHoaHongSale(false)).toBeNull();
+  });
+
+  it("đã nhập học → 'chưa tính', KHÔNG in phần trăm và KHÔNG in số tiền", () => {
+    const n = nhanHoaHongSale(true);
+    expect(n).not.toBeNull();
+    expect(n!.nhan).toContain("chưa tính");
+    // Không một chữ số nào trong nhãn: có số là người đọc tin đó là tiền/tỉ lệ thật.
+    expect(n!.nhan).not.toMatch(/\d/);
+    expect(n!.nhan).not.toContain("%");
+    expect(n!.nhan).not.toContain("đ");
+  });
+
+  it("kèm LÝ DO đọc được, không phải một dấu gạch câm", () => {
+    const n = nhanHoaHongSale(true)!;
+    expect(n.lyDo.length).toBeGreaterThan(40);
+    // Lý do phải chỉ đúng thứ còn thiếu để người đọc biết đi hỏi ai.
+    expect(n.lyDo).toMatch(/hoa hồng/i);
+  });
+});
+
+describe("[S-7] nhãn phải ở module THUẦN — không kéo Prisma xuống trình duyệt", () => {
+  it("sale-commission-label.ts không import gì cả", () => {
+    // `trial-list.tsx` là Client Component. Nhãn từng nằm trong `sale-roster.ts`, mà
+    // file đó import `scopedDb` → Prisma. `import type` cũ bị xoá lúc biên dịch nên
+    // không sao; đổi sang import THẬT là cả Prisma đi vào gói gửi xuống trình duyệt.
+    // tsc KHÔNG bắt được chuyện này, chỉ `next build` mới kêu (hoặc không kêu gì cả
+    // mà lặng lẽ phình gói) — nên khoá bằng test.
+    const src = readFileSync(join(process.cwd(), "lib", "trial", "sale-commission-label.ts"), "utf8");
+    expect(src).not.toMatch(/^\s*import\s/m);
+  });
+
+  it("trial-list.tsx chỉ import KIỂU từ sale-roster, không import giá trị", () => {
+    const src = readFileSync(
+      join(process.cwd(), "app", "(sale)", "sale", "trial", "_components", "trial-list.tsx"),
+      "utf8",
+    );
+    const dong = src
+      .split(/\r?\n/)
+      .filter((l) => l.includes("@/lib/trial/sale-roster"));
+    expect(dong.length).toBe(1);
+    expect(dong[0]).toMatch(/^import type /);
+  });
+});
+
+describe("[S-7] canh gác: ngày nào Sale có hoa hồng thật thì nhãn phải đổi", () => {
+  it("`setStatementLines` vẫn CHƯA được gọi từ sản phẩm (chỉ test gọi)", () => {
+    // Ngày ai đó nối job chốt kỳ (US-E4-3), test này đỏ và chỉ thẳng chỗ phải sửa
+    // — thay vì để site Sale in "chưa tính" vĩnh viễn trong khi tiền đã có sổ.
+    const goc = join(process.cwd());
+    const files: string[] = [];
+    const quet = (d: string) => {
+      for (const e of readdirSync(d, { withFileTypes: true })) {
+        const p = join(d, e.name);
+        if (e.isDirectory()) {
+          if (e.name === "node_modules" || e.name === ".next" || e.name === ".git") continue;
+          quet(p);
+        } else if (/\.(ts|tsx)$/.test(e.name) && !/\.(test|spec)\.tsx?$/.test(e.name)) {
+          files.push(p);
+        }
+      }
+    };
+    for (const thuMuc of ["app", "lib", "scripts"]) {
+      const p = join(goc, thuMuc);
+      try {
+        if (statSync(p).isDirectory()) quet(p);
+      } catch {
+        /* thư mục không có thì thôi */
+      }
+    }
+    const goiTu = files.filter((f) => {
+      if (f.endsWith(join("lib", "crm", "commission-statement.ts"))) return false; // nơi ĐỊNH NGHĨA
+      return /\bsetStatementLines\s*\(/.test(readFileSync(f, "utf8"));
+    });
+    expect(
+      goiTu,
+      "Sale ĐÃ có nơi sinh dòng hoa hồng — sửa nhanHoaHongSale() ở lib/trial/sale-commission-label.ts để in số thật",
+    ).toEqual([]);
+  });
+});
