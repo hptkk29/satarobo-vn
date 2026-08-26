@@ -95,6 +95,9 @@ async function docDanBai(db: ScopedDb, courseId: string): Promise<ChuongTrongDan
           // đây thì cổng đọc `undefined` và KHÔNG BAO GIỜ nổ — một cổng chặn im
           // lặng không chặn gì.
           examId: true,
+          // EL-15c — cùng lý do: cổng đòi bài `TASK` phải có khung chấm. Thiếu
+          // trường này thì cổng đọc `undefined` và không bao giờ nổ.
+          rubricId: true,
         },
       },
     },
@@ -645,6 +648,15 @@ export const cauHinhNhanBanKhoa: ActionConfig<
               orderIndex: true,
               contentMd: true,
               minReadSeconds: true,
+              // ⚠️ PHẢI chép hai cột nối này, nếu không bản sao có bài `QUIZ`/`TASK`
+              // mà KHÔNG có đề / khung — và cổng xuất bản chặn nó với câu "chưa gắn
+              // đề thi" trên một khoá người soạn vừa nhân bản từ khoá đã chạy tốt.
+              // Họ không có cách nào hiểu vì sao.
+              //
+              // `examId` vốn đã rớt từ EL-14; `rubricId` sẽ rớt y hệt nếu không thêm
+              // ở đây. Cùng một dòng, cùng một lỗi.
+              examId: true,
+              rubricId: true,
             },
           },
         },
@@ -664,6 +676,8 @@ export const cauHinhNhanBanKhoa: ActionConfig<
               orderIndex: b.orderIndex,
               contentMd: b.contentMd,
               minReadSeconds: b.minReadSeconds,
+              examId: b.examId,
+              rubricId: b.rubricId,
             },
           });
         }

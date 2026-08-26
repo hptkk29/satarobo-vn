@@ -10,6 +10,8 @@ import { ReadingTracker } from "../../_components/reading-tracker";
 import { VideoPlayer } from "../../_components/video-player";
 import { kyVeMedia } from "@/lib/elearning/media-ticket";
 import { TOC_DO_TOI_DA } from "@/lib/elearning/video-heartbeat-contract";
+import { nenNopBai } from "@/lib/elearning/task-view";
+import { TaskSubmitter } from "../../_components/task-submitter";
 import { vaySaoChuaMo } from "@/lib/elearning/lesson-kind";
 import { ExamRunner } from "../../_components/exam-runner";
 import { nenLamBai } from "@/lib/elearning/exam-view";
@@ -101,6 +103,9 @@ export default async function Page({
       minReadSeconds: true,
       videoKey: true,
       examId: true,
+      // ⚠️ Thiếu trường này thì nhánh `TASK` đọc `undefined` và mọi bài tập rơi
+      // vào nhánh "chưa gắn khung" — im lặng, cho cả những bài đã gắn.
+      rubricId: true,
       captionKey: true,
       durationSec: true,
       module: { select: { title: true, course: { select: { title: true } } } },
@@ -265,6 +270,50 @@ export default async function Page({
         title="Buổi học trực tiếp"
         detail="Bài này ghi nhận bằng điểm danh của giảng viên, không có nội dung để xem ở đây."
       />
+    );
+  }
+
+  if (lesson.kind === "TASK") {
+    if (!lesson.rubricId) {
+      return (
+        <TuChoi
+          title="Bài tập chưa có khung chấm"
+          detail="Người soạn chưa gắn khung chấm cho bài này. Báo với Đào tạo để họ hoàn thiện."
+        />
+      );
+    }
+    const nen = await nenNopBai({
+      db,
+      userId: session.user.id,
+      lessonId: lesson.id,
+      rubricId: lesson.rubricId,
+    });
+    if (!nen) {
+      return (
+        <TuChoi
+          title="Chưa mở được bài tập"
+          detail="Không đọc được khung chấm của bài này. Báo với Đào tạo."
+        />
+      );
+    }
+
+    return (
+      <div className="mx-auto max-w-3xl px-4 py-8">
+        <nav className="mb-2 text-xs text-muted-foreground">
+          {lesson.module.course.title} · {lesson.module.title}
+        </nav>
+        <h1 className="mb-4 text-2xl font-bold">{lesson.title}</h1>
+        {lesson.contentMd ? (
+          <p className="mb-4 whitespace-pre-wrap rounded-md border p-3 text-sm">
+            {lesson.contentMd}
+          </p>
+        ) : null}
+        <TaskSubmitter
+          enrollmentId={enrollment.id}
+          lessonId={lesson.id}
+          nen={nen}
+        />
+      </div>
     );
   }
 

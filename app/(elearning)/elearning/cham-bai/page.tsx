@@ -45,9 +45,14 @@ export default async function Page() {
 
   return (
     <div className="mx-auto max-w-3xl space-y-5 px-4 py-8">
-      <nav className="text-xs text-muted-foreground">
+      <nav className="flex gap-3 text-xs text-muted-foreground">
         <Link href="/elearning/de-thi" className="underline">
           Đề thi
+        </Link>
+        {/* Nối chéo hai hàng chờ: cùng NGƯỜI chấm, khác nhịp và khác hình dạng nên
+            tách màn — nhưng người chấm phải đi lại được giữa hai bên. */}
+        <Link href="/elearning/cham-bai-tap" className="underline">
+          Chấm bài tập
         </Link>
       </nav>
 

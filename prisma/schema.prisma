@@ -1407,8 +1407,8 @@ model Lead {
   // cố ý. Hệ quả đã biết: hai con rớt vì hai lý do khác nhau ⇒ lượt ghi sau ĐÈ lượt
   // trước; lý do của từng con tra ở `AuditLog` + `LeadActivity` (mỗi lượt đánh dấu ghi
   // kèm tên + id của đứa con).
-  lostNote         String?    @db.Text
-  lostAt           DateTime?  @db.Timestamptz(6)
+  lostNote String?   @db.Text
+  lostAt   DateTime? @db.Timestamptz(6)
 
   // R1-04/05 — mốc thời gian phễu SR.QD.217 (L1→L2→L3 + bàn giao + SLA).
   qualifiedAt         DateTime?         @db.Timestamptz(6) // L2 — có SĐT + note
@@ -6183,8 +6183,8 @@ model RevenueTarget {
 ///    DISTINCT ⇒ `upsert` KHÔNG match nhánh toàn hệ thống, phải `findFirst` + create/update
 ///    tay (khuôn có sẵn ở app/(admin)/admin/bao-cao/doanh-thu/_actions.ts).
 model LeadTarget {
-  id       String  @id @default(cuid())
-  centerId String?
+  id        String  @id @default(cuid())
+  centerId  String?
   // Luật cứng Nền Hệ thống #3 + quyết định 24/08 (B1): bảng MỚI mang CẢ HAI cột.
   // Ở đây bảng nằm NGOÀI scope nên `orgUnitId` chỉ để ghi kép/đối soát, không phải cột lọc.
   // `lib/org/dual-write.ts` tự lấp khi `centerId` có giá trị — không tự gọi orgUnitIdForCenter().
@@ -6225,8 +6225,8 @@ model LeadTarget {
 ///    `ADS_BUDGET_TARGET_AMOUNT_MAX` (lib/reports/ads-budget-target.ts) để lỗi hiện ra
 ///    ngay tại ô nhập, không phải thành "Lỗi cơ sở dữ liệu" chẳng nói gì.
 model AdsBudgetTarget {
-  id       String  @id @default(cuid())
-  centerId String?
+  id        String  @id @default(cuid())
+  centerId  String?
   // Luật cứng Nền Hệ thống #3 + quyết định 24/08 (B1): bảng MỚI mang CẢ HAI cột.
   // Bảng nằm NGOÀI scope nên `orgUnitId` chỉ để ghi kép/đối soát, không phải cột lọc.
   // `lib/org/dual-write.ts` tự lấp khi `centerId` có giá trị — không tự gọi orgUnitIdForCenter().
@@ -6412,27 +6412,27 @@ model TrialClassSession {
 
 /// R7-02 — ghi danh 1 LeadChild vào 1 lớp trải nghiệm. Partial-unique 1 lớp ACTIVE/con (migration).
 model TrialEnrollment {
-  id                 String                @id @default(cuid())
-  trialClassId       String
-  trialClass         TrialClassV2          @relation(fields: [trialClassId], references: [id], onDelete: Cascade)
-  leadChildId        String
-  leadChild          LeadChild             @relation(fields: [leadChildId], references: [id], onDelete: Cascade)
-  status             TrialEnrollmentStatus @default(ACTIVE)
-  summaryNote        String?               @db.Text // nhận xét tổng kết học thử
+  id                       String                @id @default(cuid())
+  trialClassId             String
+  trialClass               TrialClassV2          @relation(fields: [trialClassId], references: [id], onDelete: Cascade)
+  leadChildId              String
+  leadChild                LeadChild             @relation(fields: [leadChildId], references: [id], onDelete: Cascade)
+  status                   TrialEnrollmentStatus @default(ACTIVE)
+  summaryNote              String?               @db.Text // nhận xét tổng kết học thử
   // LD3(b) — buổi (TrialClassSession) cụ thể được chọn khi xếp con vào lớp. Scalar nullable
   // (validation "buổi thuộc lớp" đã làm ở action boundary — không cần relation, giữ blast radius nhỏ).
-  scheduledSessionId String?
+  scheduledSessionId       String?
   // Site GV 25/08 — DỜI LỊCH học thử. Trước đó `scheduledSessionId` ghi ĐÚNG MỘT LẦN lúc
   // xếp con vào lớp rồi bất biến: không admin/GV/Sale nào đổi được buổi, nên bảng trial
   // của giáo viên không có cách nào biết suất nào "bị dời lịch".
   // Nay `rescheduleTrialEnrollment` đổi buổi và GHI LẠI buổi cũ ở đây (buổi gần nhất —
   // dời nhiều lần thì chỉ giữ lần cuối; lịch sử đầy đủ nằm ở DomainEvent + AuditLog).
   rescheduledFromSessionId String?
-  rescheduledAt            DateTime? @db.Timestamptz(6)
-  rescheduleReason         String?   @db.Text
-  addedById          String?
-  createdAt          DateTime              @default(now()) @db.Timestamptz(6)
-  updatedAt          DateTime              @updatedAt @db.Timestamptz(6)
+  rescheduledAt            DateTime?             @db.Timestamptz(6)
+  rescheduleReason         String?               @db.Text
+  addedById                String?
+  createdAt                DateTime              @default(now()) @db.Timestamptz(6)
+  updatedAt                DateTime              @updatedAt @db.Timestamptz(6)
 
   attendances TrialAttendance[]
 
@@ -7894,7 +7894,22 @@ model TrnEnrollment {
   /// Hạn HIỆN HÀNH — gia hạn từng người không đụng lượt giao.
   dueAt         DateTime? @db.Timestamptz(6)
 
-  extensionReason  String?
+  extensionReason String?
+
+  /// Ngày LÀM VIỆC được MIỄN TRỪ vì NGƯỜI CHẤM trễ hạn SLA (EL-15c).
+  ///
+  /// ⚠️ KHÁC hẳn gia hạn: gia hạn là người xử chủ động cho thêm thời gian và ghi
+  /// `extensionReason`; đây là TRẢ LẠI đúng phần người học đã mất vì lỗi của người
+  /// khác, do máy tính ra, không có người bấm.
+  ///
+  /// Vì sao cần cột này chứ không chỉ nới `dueAt`: `cuonTienDoKhoa` phân biệt
+  /// `COMPLETED` với `COMPLETED_LATE` bằng `dueAtOriginal` — cột BẤT BIẾN. Nới
+  /// `dueAt` mở lại đường nộp và chặn `OVERDUE`, nhưng người bị bỏ quên năm ngày
+  /// rồi học xong VẪN bị đếm là TRỄ trên báo cáo tuân thủ gửi thẳng quản lý trực
+  /// tiếp, CÓ GHI TÊN. Kế hoạch §9.3 luật 2: "thiếu (b) thì (a) vô nghĩa".
+  ///
+  /// `dueAtOriginal` vẫn KHÔNG BAO GIỜ bị ghi lại. Đây là khoản CỘNG bên cạnh.
+  slaGraceDays     Int     @default(0)
   extendedByUserId String?
 
   /// CHỈ SERVER GHI — mốc "hoàn thành có kiểm chứng" (BR-004). Không setter nào từ
@@ -8805,6 +8820,14 @@ model TrnSubmission {
   /// huynh. Bốn quy tắc của kế hoạch áp ở TẦNG ĐƯỜNG GHI, không phải ở cột này.
   attachmentsJson Json?
 
+  /// Khung chấm ĐÓNG BĂNG tại thời điểm nộp.
+  ///
+  /// ⚠️ KHÔNG suy khung qua `TrnLesson.rubricId` lúc chấm: cột đó sửa được bất cứ
+  /// lúc nào, nên đổi khung sau khi đã có người nộp là chấm bài cũ bằng thước mới —
+  /// `TrnRubricScore.criterionId` trỏ tiêu chí của khung khác, và bảng điểm in lại
+  /// ra số khác mà không ai giải thích được.
+  rubricId String?
+
   submittedAt DateTime?           @db.Timestamptz(6)
   status      TrnSubmissionStatus @default(DRAFT)
 
@@ -8824,6 +8847,12 @@ model TrnSubmission {
   dueGradeAt DateTime? @db.Timestamptz(6)
 
   feedback String? @db.Text
+
+  /// SỔ bù SLA: số ngày làm việc ĐÃ bù cho lượt nộp này.
+  ///
+  /// ⚠️ Không có sổ thì cron đêm bù lại mỗi đêm cho cùng một lượt, hạn trôi ra vô
+  /// hạn — và không ai thấy, vì cron không ghi `AuditLog`.
+  slaBuNgayLam Int @default(0)
 
   centerId  String
   orgUnitId String

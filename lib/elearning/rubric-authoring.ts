@@ -643,3 +643,108 @@ export const cauHinhKichHoatKhung: ActionConfig<
     };
   },
 };
+
+// ── Gắn khung vào bài ──────────────────────────────────────────────────────
+
+export const ganKhungVaoBaiSchema = z
+  .object({
+    lessonId: z.string().min(1),
+    /** `null` = gỡ khung khỏi bài. */
+    rubricId: z.union([z.null(), z.string().min(1)]).optional(),
+  })
+  .strict();
+
+export type GanKhungVaoBaiInput = z.infer<typeof ganKhungVaoBaiSchema>;
+
+export const cauHinhGanKhungVaoBai: ActionConfig<
+  GanKhungVaoBaiInput,
+  { rubricId: string | null }
+> = {
+  name: "ganKhungVaoBai",
+  permission: "elearning:content:author",
+  module: "elearning",
+  entityType: "TrnLesson",
+  auditAction: "UPDATE",
+  schema: ganKhungVaoBaiSchema,
+  handler: async ({ db, input }) => {
+    const bai = await db.trnLesson.findFirst({
+      where: { id: input.lessonId, deletedAt: null },
+      select: {
+        id: true,
+        kind: true,
+        rubricId: true,
+        module: { select: { courseId: true } },
+      },
+    });
+    if (!bai) throw new ActionError("NOT_FOUND", "Không tìm thấy bài học");
+
+    // Cách ly đi qua chuỗi cha — `TrnLesson` không nằm trong `SCOPED_MODELS`, và
+    // `scopedDb` không che đường ghi.
+    const khoa = await db.trnCourse.findFirst({
+      where: { id: bai.module.courseId, deletedAt: null },
+      select: { id: true },
+    });
+    if (!khoa) throw new ActionError("NOT_FOUND", "Không tìm thấy bài học");
+
+    if (bai.kind !== "TASK") {
+      throw new ActionError(
+        "WRONG_KIND",
+        `Chỉ bài dạng "Bài tập" mới gắn được khung chấm. Bài này là ${bai.kind}.`,
+        "lessonId",
+      );
+    }
+
+    // ⚠️ ĐỔI KHUNG khi còn lượt CHỜ CHẤM là để người chấm mở bài ra và thấy một bộ
+    // tiêu chí khác với bộ mà người học đã làm bài theo.
+    //
+    // Lượt nộp có đóng băng `rubricId` riêng nên điểm KHÔNG lệch — nhưng màn chấm
+    // vẫn nên nói không, vì người soạn hầu như luôn đang sửa nhầm chỗ. (Đường của
+    // bài THI — `ganDeVaoBai` — chưa có phép kiểm này; ghi thành nợ.)
+    if (input.rubricId !== bai.rubricId) {
+      const dangCho = await db.trnSubmission.findFirst({
+        where: {
+          lessonId: bai.id,
+          status: { in: ["SUBMITTED", "NEEDS_REVISION"] },
+        },
+        select: { id: true },
+      });
+      if (dangCho) {
+        throw new ActionError(
+          "CON_LUOT_CHO_CHAM",
+          "Bài này còn lượt nộp đang chờ chấm — chấm xong rồi mới đổi khung được",
+          "rubricId",
+        );
+      }
+    }
+
+    if (input.rubricId) {
+      const khung = await db.trnRubric.findFirst({
+        where: { id: input.rubricId, deletedAt: null },
+        select: { id: true, status: true },
+      });
+      if (!khung) throw new ActionError("NOT_FOUND", "Không tìm thấy khung chấm");
+      // ⚠️ Chỉ gắn khung ĐÃ KÍCH HOẠT. Gắn khung nháp là để bài đi ra với người học
+      // trên một bộ tiêu chí còn sửa được — và khung sửa xong thì điểm của người
+      // nộp trước lệch khỏi thang của người nộp sau.
+      if (khung.status !== "ACTIVE") {
+        throw new ActionError(
+          "KHUNG_CHUA_KICH_HOAT",
+          "Chỉ gắn được khung đã kích hoạt — kích hoạt khung trước",
+          "rubricId",
+        );
+      }
+    }
+
+    await db.trnLesson.update({
+      where: { id: bai.id },
+      data: { rubricId: input.rubricId ?? null },
+    });
+
+    return {
+      entityId: bai.id,
+      data: { rubricId: input.rubricId ?? null },
+      oldValues: { rubricId: bai.rubricId },
+      newValues: { rubricId: input.rubricId ?? null },
+    };
+  },
+};

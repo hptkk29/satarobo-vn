@@ -62,6 +62,7 @@ export type LoiDanBai =
   | "KHONG_CO_BAI_BAT_BUOC"
   | "BAI_DOC_TRONG"
   | "BAI_THI_CHUA_CO_DE"
+  | "BAI_TAP_CHUA_CO_KHUNG"
   | "BAI_VIDEO_THIEU_PHU_DE"
   | "CHUA_BIET_KHOA_CO_BAT_BUOC";
 
@@ -75,6 +76,8 @@ export type BaiTrongDanBai = {
   captionKey?: string | null;
   /** EL-14d — đề thi của bài `QUIZ`. */
   examId?: string | null;
+  /** EL-15c — khung chấm của bài `TASK`. */
+  rubricId?: string | null;
 };
 
 export type ChuongTrongDanBai = {
@@ -113,6 +116,18 @@ export function kiemDanBai(chuong: ChuongTrongDanBai[]): {
         loi.push({
           code: "BAI_THI_CHUA_CO_DE",
           chiTiet: `Bài kiểm tra "${b.title}" chưa gắn đề thi`,
+        });
+      }
+      // ⚠️ Cổng này thêm ĐÚNG ở PR mở loại bài `TASK`, cùng lúc với đường nộp và
+      // đường chấm — không sớm hơn, không muộn hơn.
+      //
+      // Bài tập không khung chấm thì người chấm mở ra không có tiêu chí nào để cho
+      // điểm, lượt nộp nằm lại vĩnh viễn, và điều kiện hoàn thành khoá không bao
+      // giờ đạt được — im lặng.
+      if (b.kind === "TASK" && !b.rubricId) {
+        loi.push({
+          code: "BAI_TAP_CHUA_CO_KHUNG",
+          chiTiet: `Bài tập "${b.title}" chưa gắn khung chấm`,
         });
       }
     }
