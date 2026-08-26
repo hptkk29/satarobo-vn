@@ -84,21 +84,19 @@ async function duocThaoTacBuoi(ses: {
 }
 
 /**
- * Làm mới cả màn mới LẪN hai màn cũ.
- * Trong giai đoạn chạy song song, người nghiệm thu sẽ mở chéo hai bên trên cùng một
- * dữ liệu; thiếu mấy dòng này thì màn kia hiện số cũ và bị báo là "lỗi mất dữ liệu".
- * GĐ6 gỡ ba dòng cuối cùng với hai màn cũ.
+ * Làm mới màn "Lớp Trial".
+ *
+ * Giai đoạn chạy song song hai màn đã kết thúc ở GĐ6a: `/trial-classes` và `/trials`
+ * nay chỉ là `redirect()`, làm mới chúng là làm mới một trang không có gì để làm mới.
+ * Ba dòng đó đã gỡ đúng như chú thích cũ hứa.
  */
 function lamMoi(trialClassId?: string): void {
   revalidatePath("/lop-trial");
   if (trialClassId) revalidatePath(`/lop-trial/${trialClassId}`);
-  revalidatePath("/trial-classes");
-  if (trialClassId) revalidatePath(`/trial-classes/${trialClassId}`);
 }
 
 function lamMoiHen(leadId?: string): void {
   revalidatePath("/lop-trial/lich-hen");
-  revalidatePath("/trials");
   if (leadId) revalidatePath(`/leads/${leadId}`);
   revalidatePath("/leads");
   revalidatePath("/dashboard");

@@ -9,6 +9,7 @@
 // Hàm này KHÔNG kiểm quyền. Quyền là việc của call-site (`can()` / `checkPermission`)
 // vì mỗi đường vào có ngữ cảnh khác nhau — cửa này chỉ lo ghi cho đúng và đủ.
 import type { LeadStatus, Prisma } from "@prisma/client";
+import { LEAD_DROP_STATUSES } from "@/lib/leads/status";
 
 /** Đường nào đổi trạng thái. Dùng để tách số liệu người làm và máy chạy. */
 export type LeadStatusSource =
@@ -39,11 +40,12 @@ export type SetLeadStatusResult =
   /** Không đổi gì (trạng thái đã đúng, hoặc lead không tồn tại). */
   | { changed: false; reason: "KHONG_DOI" | "KHONG_THAY_LEAD" };
 
-/**
- * Trạng thái coi là "rơi khỏi phễu" — khi vào đây thì ghi lại BẬC TRƯỚC ĐÓ vào
- * `Lead.droppedAtStage`, nếu không thì mất luôn thông tin rơi ở đâu.
- */
-const TRANG_THAI_ROI: readonly LeadStatus[] = ["DANG_NUOI_DUONG", "DA_MAT"];
+// Trạng thái coi là "rơi khỏi phễu" — khi vào đây thì ghi lại BẬC TRƯỚC ĐÓ vào
+// `Lead.droppedAtStage`, nếu không thì mất luôn thông tin rơi ở đâu.
+//
+// Lấy từ `@/lib/leads/status` chứ KHÔNG chép tay: tầng giao diện dùng đúng tập này
+// để quyết định có bắt nhập lý do hay không. Hai bản sao lệch nhau nghĩa là có bậc
+// bị ghi `droppedAtStage` mà không ai hỏi lý do, hoặc ngược lại — hỏi lý do rồi vứt.
 
 /**
  * Đổi trạng thái lead và ghi sổ trong CÙNG một giao dịch.
@@ -77,7 +79,7 @@ export async function setLeadStatus(
   const orgUnitId = lead.orgUnitId;
 
   const now = new Date();
-  const roi = TRANG_THAI_ROI.includes(to);
+  const roi = LEAD_DROP_STATUSES.includes(to);
 
   await tx.lead.update({
     where: { id: leadId },

@@ -15,6 +15,10 @@ export type LeadReportRecord = {
   commissionSource: string | null; // CommissionSource | null
   createdAt: Date;
   convertedAt?: Date | null;
+  /** Bậc lead ĐANG Ở NGAY TRƯỚC khi rụng (`Lead.droppedAtStage`). */
+  droppedAtStage?: string | null;
+  /** Lý do rụng do người bấm ghi (`Lead.dropReason`). */
+  dropReason?: string | null;
 };
 
 const pad = (n: number) => String(n).padStart(2, "0");
@@ -281,6 +285,56 @@ export function leadSummary(records: LeadReportRecord[]): LeadReportSummary {
   return { total, converted, conversionRate: ratio(converted, total), active, lost };
 }
 
+/** Một bậc rụng: bao nhiêu lead rời phễu ở đó và vì sao. */
+export type DropStageStat = {
+  stage: string;
+  label: string;
+  count: number;
+  /** Lý do hay gặp nhất ở bậc này (đã gộp trùng, tối đa 5). */
+  topReasons: { reason: string; count: number }[];
+  /** Số lead rụng ở bậc này mà KHÔNG có lý do — toàn bộ đều là lead rụng TRƯỚC
+   * ngày bật ép nhập lý do. Hiện riêng để không ai đọc nhầm là "không có lý do". */
+  missingReason: number;
+};
+
+/**
+ * "Lead rụng ở BẬC NÀO, và vì sao" — người đọc duy nhất của `Lead.droppedAtStage`
+ * và `Lead.dropReason`.
+ *
+ * ⚠️ Hai cột đó ra đời ở GĐ1 (migration 20260825120000) và tới 26/08 KHÔNG màn nào,
+ * báo cáo nào đọc — ghi vào rồi bỏ đó. Hàm này là chỗ dùng chúng.
+ *
+ * Chỉ đếm lead THẬT SỰ có bậc rụng: `droppedAtStage` chỉ được ghi khi lead vào
+ * `LEAD_DROP_STATUSES`, nên lead còn trong phễu không lọt vào đây.
+ */
+export function groupByDropStage(records: LeadReportRecord[]): DropStageStat[] {
+  const theoBac = new Map<string, { count: number; lyDo: Map<string, number>; thieu: number }>();
+  for (const r of records) {
+    const bac = r.droppedAtStage;
+    if (!bac) continue;
+    const o =
+      theoBac.get(bac) ?? { count: 0, lyDo: new Map<string, number>(), thieu: 0 };
+    o.count++;
+    const ly = r.dropReason?.trim();
+    if (ly) o.lyDo.set(ly, (o.lyDo.get(ly) ?? 0) + 1);
+    else o.thieu++;
+    theoBac.set(bac, o);
+  }
+  return [...theoBac.entries()]
+    .map(([stage, o]) => ({
+      stage,
+      label: LEAD_STATUS_LABEL_SHORT[stage as LeadStatus] ?? stage,
+      count: o.count,
+      topReasons: [...o.lyDo.entries()]
+        .map(([reason, count]) => ({ reason, count }))
+        .sort((a, b) => b.count - a.count || a.reason.localeCompare(b.reason))
+        .slice(0, 5),
+      missingReason: o.thieu,
+    }))
+    // Bậc rụng nhiều nhất lên đầu — đó là chỗ đáng sửa quy trình trước.
+    .sort((a, b) => b.count - a.count || a.stage.localeCompare(b.stage));
+}
+
 export type LeadReport = {
   summary: LeadReportSummary;
   statusCounts: StatusCount[];
@@ -290,6 +344,7 @@ export type LeadReport = {
   byCommissionSource: GroupStat[];
   byCenter: GroupStat[];
   byMonth: MonthStat[];
+  byDropStage: DropStageStat[];
 };
 
 /** Tổng hợp toàn bộ báo cáo Lead từ mảng record phẳng. THUẦN — đầu vào rỗng → số 0. */
@@ -307,5 +362,6 @@ export function buildLeadReport(
     byCommissionSource: groupByCommissionSource(records),
     byCenter: groupByCenter(records, centerNames),
     byMonth: groupByMonth(records),
+    byDropStage: groupByDropStage(records),
   };
 }

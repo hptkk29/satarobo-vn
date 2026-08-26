@@ -7,9 +7,11 @@
 //  3. Rơi khỏi phễu phải ghi BẬC TRƯỚC ĐÓ, và lead quay lại phễu KHÔNG được xoá bậc cũ.
 //  4. KHÔNG tra ngược orgUnitId từ centerId — hàm tra dùng `db` toàn cục nên sẽ thoát
 //     khỏi transaction. Test này chạy với tx giả, không có DB, nên nó bắt được ngay.
+import fs from "node:fs";
 import { describe, it, expect } from "vitest";
 import type { LeadStatus, Prisma } from "@prisma/client";
 import { setLeadStatus, recordLeadStatusChange } from "./set-status";
+import { ALL_LEAD_STATUSES, LEAD_DROP_STATUSES } from "./status";
 
 type LeadRow = {
   status: LeadStatus;
@@ -171,6 +173,40 @@ describe("setLeadStatus — cửa duy nhất đổi trạng thái", () => {
     await setLeadStatus({ tx: fakeTx(lead, history), leadId: "l1", to: "MOI", source: "assign" });
     expect(history[0].orgUnitId).toBeNull();
     expect(history[0].centerId).toBe("cs1");
+  });
+});
+
+describe("LEAD_DROP_STATUSES là MỘT nguồn cho cả cửa ghi lẫn giao diện", () => {
+  // Tầng giao diện (`updateLeadStatus` ở màn lead) ép nhập lý do đúng theo tập này,
+  // còn cửa ghi dùng chính nó để quyết định có ghi `droppedAtStage`/`dropReason` hay
+  // không. Hai bên lệch nhau nghĩa là: có bậc ghi `droppedAtStage` mà không ai hỏi lý
+  // do (cột lý do NULL vĩnh viễn), hoặc hỏi lý do rồi vứt đi.
+  for (const to of ALL_LEAD_STATUSES) {
+    if (to === "MOI") continue; // trạng thái xuất phát của lead mẫu, không đổi được
+    it(`${to}: ghi droppedAtStage ⟺ nằm trong LEAD_DROP_STATUSES`, async () => {
+      const lead = leadMau({ status: "MOI" });
+      await setLeadStatus({
+        tx: fakeTx(lead, []),
+        leadId: "lead-1",
+        to,
+        source: "admin",
+        reason: "lý do kiểm thử",
+      });
+      const laBacRoi = LEAD_DROP_STATUSES.includes(to);
+      expect(lead.droppedAtStage).toBe(laBacRoi ? "MOI" : null);
+      expect(lead.dropReason).toBe(laBacRoi ? "lý do kiểm thử" : null);
+    });
+  }
+
+  it("màn lead ép nhập lý do theo ĐÚNG tập này, không chép tay danh sách khác", () => {
+    // Không gọi được action thật ở lane unit (auth + Postgres), nên quét nguồn.
+    // Bắt đúng lớp lỗi đã xảy ra: cột `dropReason` tồn tại từ GĐ1 mà tới 26/08 vẫn
+    // NULL 100% vì không đường người-bấm nào truyền `reason`.
+    const src = fs.readFileSync("app/(admin)/admin/leads/actions.ts", "utf8");
+    expect(src, "actions.ts không dùng LEAD_DROP_STATUSES để ép lý do").toMatch(
+      /LEAD_DROP_STATUSES\.includes\(/,
+    );
+    expect(src, "reason không được truyền xuống cửa ghi").toMatch(/reason: lyDo/);
   });
 });
 

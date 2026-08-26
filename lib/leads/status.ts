@@ -169,6 +169,25 @@ export const LEAD_PIPELINE_EXIT_STATUSES: LeadStatus[] = [
 ];
 
 /**
+ * Lead RỚT KHỎI PHỄU — vào một trong hai bậc này thì `setLeadStatus` ghi lại BẬC
+ * TRƯỚC ĐÓ vào `Lead.droppedAtStage` và kèm `Lead.dropReason`.
+ *
+ * ⚠️ Đây là tập DUY NHẤT ép người dùng nhập LÝ DO. Vì sao ép: `droppedAtStage` một
+ * mình chỉ trả lời "rụng ở bậc nào", không trả lời "vì sao" — mà báo cáo cần cả hai
+ * mới hành động được. `lib/leads/set-status.ts` vốn khai lý do là "bắt buộc về mặt
+ * nghiệp vụ" nhưng KHÔNG ép ở tầng đó (nhiều đường vào là máy chạy, không có người
+ * để hỏi), nên chỗ ép đúng là tầng người dùng bấm — xem `updateLeadStatus`.
+ *
+ * `DA_DANG_KY` CỐ Ý không có mặt: đó là rời phễu theo hướng THẮNG, không phải rụng.
+ */
+export const LEAD_DROP_STATUSES: LeadStatus[] = ["DANG_NUOI_DUONG", "DA_MAT"];
+
+/** Trạng thái này có bắt buộc kèm lý do khi người dùng đổi tay không. */
+export function canhBaoCanLyDo(to: LeadStatus): boolean {
+  return LEAD_DROP_STATUSES.includes(to);
+}
+
+/**
  * Bậc phễu chuyển đổi của dashboard CRM.
  * Lưới chặn bỏ sót nằm ở lib/leads/status.test.ts.
  */
