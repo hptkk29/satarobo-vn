@@ -49,7 +49,7 @@ on:
         default: giao-trinh
         options: [giao-trinh, anh-cho-duyet, gop-trial]
       mode:
-        description: "dry-run = chỉ in kế hoạch · apply = ghi thật"
+        description: "dry-run = xem trước · apply = ghi thật. ⚠️ giao-trinh: dry-run VẪN GHI Curriculum+Lesson"
         required: true
         type: choice
         default: dry-run
@@ -76,6 +76,16 @@ jobs:
       - name: Kiểm tra secrets + chuỗi xác nhận
         run: |
           missing=0
+          # ⚠️ BẪY ĐÃ SẬP MỘT LẦN (26/08, trên PROD): `--dry-run` của
+          # `seed-curriculum-sata.ts` CHỈ che phần `--relink` — Curriculum + Lesson
+          # VẪN ĐƯỢC GHI (bản xem trước cần Lesson.id có thật để tra). Người vận hành
+          # bấm "dry-run" tin là không ghi gì, và nó đã tạo thật giáo trình Sata8 trên
+          # prod. Hai script kia thì dry-run đúng nghĩa: không ghi một dòng nào.
+          # ⇒ `giao-trinh` BẮT BUỘC gõ chuỗi xác nhận Ở CẢ HAI mode.
+          if [ "${{ inputs.viec }}" = "giao-trinh" ] && [ "${{ inputs.confirm }}" != "GHI THAT VAO PROD" ]; then
+            echo "::error::giao-trinh GHI THẬT kể cả khi mode=dry-run (dry-run chỉ che --relink). Gõ chuỗi xác nhận vào ô confirm nếu thực sự muốn ghi."
+            missing=1
+          fi
           [ -n "${{ secrets.PROD_DATABASE_URL }}" ] || { echo "::error::Thiếu secret PROD_DATABASE_URL"; missing=1; }
           [ -n "${{ secrets.PROD_DIRECT_URL }}" ]   || { echo "::error::Thiếu secret PROD_DIRECT_URL"; missing=1; }
           if [ "${{ inputs.mode }}" = "apply" ] && [ "${{ inputs.confirm }}" != "GHI THAT VAO PROD" ]; then
@@ -116,6 +126,10 @@ jobs:
           esac
           ARGS="${{ inputs.co_them }}"
           if [ "${{ inputs.mode }}" != "apply" ]; then ARGS="$ARGS --dry-run"; fi
+          if [ "${{ inputs.viec }}" = "giao-trinh" ] && [ "${{ inputs.mode }}" != "apply" ]; then
+            echo "::warning::giao-trinh + dry-run VẪN GHI Curriculum + Lesson. Chỉ phần --relink là được che."
+            echo "> ⚠️ **dry-run ở đây VẪN GHI** Curriculum + Lesson — chỉ \`--relink\` được che." >> "$GITHUB_STEP_SUMMARY"
+          fi
           echo "→ tsx $FILE$ARGS"
           echo "## \`$FILE$ARGS\`" >> "$GITHUB_STEP_SUMMARY"
           echo '```' >> "$GITHUB_STEP_SUMMARY"
