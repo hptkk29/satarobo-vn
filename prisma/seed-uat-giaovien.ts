@@ -19,6 +19,10 @@
 // ⚠️ CHỈ chạy trên DB dev/test. Không có cơ chế nào chặn bạn trỏ vào prod ngoài việc
 // đọc kỹ `.env` trước khi gõ lệnh — cùng luật với mọi seed khác trong thư mục này.
 import { db } from "../lib/db";
+import {
+  ensureCommissionStatement,
+  recordTrialTeacherCommission,
+} from "../lib/crm/trial-teacher-commission";
 
 const EMAIL = "uat.giaovien@satarobo.vn";
 const MARK = "UAT-GV";
@@ -91,6 +95,10 @@ async function clean(teacherId: string): Promise<void> {
   }
   // Lead seed mang tiền tố ở `source` → xoá con trước (FK Cascade lo, nhưng nói rõ ý).
   await db.lead.deleteMany({ where: { source: MARK } });
+  const wiped = await db.commissionLine.deleteMany({
+    where: { note: { startsWith: MARK } },
+  });
+  if (wiped.count) console.log(`  🧹 đã dọn ${wiped.count} dòng hoa hồng seed cũ`);
   console.log(`  🧹 đã dọn ${classIds.length} lớp Trial + lead của lần seed trước`);
 }
 
@@ -285,7 +293,42 @@ async function main() {
   }
 
   console.log(`  ✓ ${done} học viên trải nghiệm — đủ 7 trạng thái của bảng`);
-  console.log(`\n   Mở: https://test.satarobo.vn/teacher/trial\n`);
+
+  // ── Hoa hồng GV dạy Trial (NT-21) ───────────────────────────────────────────
+  //
+  // Nhãn "Đã nhập học · +1% HH" ở bảng GV đọc `LeadTrialHistory.outcome` (đã dựng ở
+  // trên), nhưng SỐ TIỀN thì nằm ở `CommissionLine` và chỉ sinh ra khi convert thật.
+  // Người nghiệm thu không có đường nào để convert trên UAT, nên dựng sẵn một dòng —
+  // và dựng bằng CHÍNH hai hàm sản phẩm dùng, để cái được nghiệm thu là đường thật
+  // chứ không phải một bản sao chép tay chỉ đúng ở màn hình.
+  const enrolledKid = KIDS.find((k) => k.want === "enrolled");
+  if (enrolledKid) {
+    const now = new Date();
+    const statement = await ensureCommissionStatement(now);
+    const res = await recordTrialTeacherCommission(db, {
+      statement,
+      teacherUserId: teacher.id,
+      // `CommissionLine.enrollmentId` là cột TRẦN (không FK) — id tổng hợp ở đây chỉ
+      // đóng vai khoá chống ghi trùng, không trỏ tới Enrollment thật nào.
+      enrollmentId: id("enrollment", enrolledKid.n),
+      finalPrice: 7_920_000, // học phí ưu đãi Sata3 — khớp bảng giá thật
+      leadId: id("lead", enrolledKid.n),
+      note: `${MARK} · Trial → nhập học: ${enrolledKid.child}`,
+    });
+    if (res?.ok) {
+      console.log(
+        `  ✓ Hoa hồng GV dạy Trial: ${res.amount.toLocaleString("vi-VN")}đ ` +
+          `(kỳ ${statement.period}) — xem /admin/crm/commission`,
+      );
+    } else if (res) {
+      console.log(
+        `  ⚠️  Kỳ ${res.period} ĐÃ DUYỆT nên không ghi được dòng hoa hồng. ` +
+          `Kế toán mở lại kỳ rồi chạy lại seed.`,
+      );
+    }
+  }
+  console.log(`\n   Bảng Trial GV:  https://test.satarobo.vn/teacher/trial`);
+  console.log(`   Hoa hồng (admin): https://test.satarobo.vn/admin/crm/commission\n`);
 }
 
 main()

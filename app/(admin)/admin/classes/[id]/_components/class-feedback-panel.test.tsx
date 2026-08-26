@@ -136,7 +136,11 @@ describe("ClassFeedbackPanel — nhận xét buổi học của cả lớp", () 
   it("phiếu văn xuôi hiện nhãn mục + tên dự án + người viết phiếu (GV dạy thay)", () => {
     render(<ClassFeedbackPanel data={DATA} />);
     expect(screen.getByText(/Nắm chắc bài cũ/)).toBeTruthy();
-    expect(screen.getByText(/Dự án 1: Xe dò line/)).toBeTruthy();
+    // 26/08 — thẻ đã có nhãn "Dự án:" đứng trước, nên tiền tố "Dự án 1:" trong giá trị
+    // ĐÃ LƯU bị cắt lúc hiển thị (displayProjectName). Trước đó in ra
+    // "Dự án: Dự án 1: Xe dò line", và con số còn chọi với số buổi của phiếu.
+    expect(screen.getByText(/Xe dò line/)).toBeTruthy();
+    expect(screen.queryByText(/Dự án 1: Xe dò line/)).toBeNull();
     expect(screen.getByText(/GV: GV Dạy Thay/)).toBeTruthy();
   });
 

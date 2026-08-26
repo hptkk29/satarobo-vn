@@ -1,3 +1,4 @@
+import { displayProjectName } from "@/lib/lms/session-project-name";
 import {
   EVAL_OVERALL_LABEL,
   evalLevelText,
@@ -145,7 +146,8 @@ export function SessionEvalCard({
 
       {projectName && (
         <p className="mb-2 text-sm text-muted-foreground">
-          <span className="font-semibold text-foreground">Dự án:</span> {projectName}
+          <span className="font-semibold text-foreground">Dự án:</span>{" "}
+          {displayProjectName(projectName)}
         </p>
       )}
 
