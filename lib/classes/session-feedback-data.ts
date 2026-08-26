@@ -15,6 +15,7 @@ import {
   parseFeedbackRubric,
   type EvalNotes,
 } from "@/lib/lms/session-eval-rubric";
+import { resolveDisplayProjectName } from "@/lib/lms/session-project-name";
 
 // Data cho tab "Đánh giá & Nhận xét" của trang chi tiết lớp: toàn bộ phiếu nhận xét
 // buổi (StudentSessionFeedback) của MỘT lớp, xếp theo học viên × buổi.
@@ -109,7 +110,8 @@ export async function loadClassSessionFeedback(
         date: true,
         topic: true,
         status: true,
-        lesson: { select: { order: true, title: true } },
+        plan: { select: { customTitle: true } },
+        lesson: { select: { order: true, title: true, moduleCode: true } },
       },
     }),
     db.classSession.count({ where: { classId } }),
@@ -248,10 +250,29 @@ export async function loadClassSessionFeedback(
     (r) => ({ number: r.seq, complete: r.done }),
   ).map((r) => r.row);
 
+  // 26/08 — tên dự án suy từ BUỔI cho mọi phiếu của buổi đó, thay vì đọc bản sao
+  // đông cứng theo từng học viên (xem resolveDisplayProjectName).
+  const projectNameOf = new Map(
+    sessionRows.map((s) => [
+      s.id,
+      {
+        sessionNumber: sessionNumberOf.get(s.id) ?? null,
+        planTitle: s.plan?.customTitle,
+        lessonTitle: s.lesson?.title,
+        lessonOrder: s.lesson?.order,
+        moduleCode: s.lesson?.moduleCode,
+        topic: s.topic,
+      },
+    ]),
+  );
+
   const entries: ClassFeedbackEntry[] = feedbacks.map((f) => ({
     sessionId: f.classSessionId,
     studentId: f.studentId,
-    projectName: f.projectName,
+    projectName: (() => {
+      const src = projectNameOf.get(f.classSessionId);
+      return src ? resolveDisplayProjectName(src, f.projectName) : f.projectName;
+    })(),
     notes: parseFeedbackNotes(f.notes),
     rubric: parseFeedbackRubric(f.rubric),
     // comment nullable từ khi có phiếu rubric-only → coalesce cho phía render.
