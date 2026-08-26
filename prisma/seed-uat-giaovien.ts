@@ -177,14 +177,15 @@ async function main() {
 
     await db.lead.upsert({
       where: { id: leadId },
-      update: { parentName: k.parent, centerId, status: "TRIAL_SCHEDULED" },
+      // "DA_HEN_HOC_THU" chứ không "TRIAL_SCHEDULED": GĐ5 rút enum LeadStatus còn 10 giá trị.
+      update: { parentName: k.parent, centerId, status: "DA_HEN_HOC_THU" },
       create: {
         id: leadId,
         parentName: k.parent,
         phone: `0900${String(100000 + k.n).slice(-6)}`,
         centerId,
         source: MARK,
-        status: "TRIAL_SCHEDULED",
+        status: "DA_HEN_HOC_THU",
       },
     });
 
@@ -242,8 +243,14 @@ async function main() {
 
     // Phiếu rubric ⇒ nhãn "Đã đánh giá". Chỉ dựng cho đúng dòng muốn thế.
     if (k.want === "evaluated") {
+      // GĐ4 — khoá phiếu là CẶP (ca, buổi), `trialEnrollmentId` một mình thôi duy nhất.
       await db.trialRubricEval.upsert({
-        where: { trialEnrollmentId: enrId },
+        where: {
+          trialEnrollmentId_trialClassSessionId: {
+            trialEnrollmentId: enrId,
+            trialClassSessionId: sesId,
+          },
+        },
         update: {},
         create: {
           trialEnrollmentId: enrId,
@@ -277,7 +284,8 @@ async function main() {
     if (k.want === "enrolled" || k.want === "lost") {
       await db.lead.update({
         where: { id: leadId },
-        data: { status: k.want === "enrolled" ? "ENROLLED" : "LOST" },
+        // GĐ5: ENROLLED gộp vào DA_DANG_KY, LOST thành DA_MAT.
+        data: { status: k.want === "enrolled" ? "DA_DANG_KY" : "DA_MAT" },
       });
     }
 
