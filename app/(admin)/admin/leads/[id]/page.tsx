@@ -615,8 +615,8 @@ export default async function LeadDetailPage({ params }: Props) {
         <div className="mb-6 rounded-xl border border-border bg-card p-4">
           <div className="mb-3 flex items-center justify-between">
             <h2 className="text-sm font-semibold text-foreground">Buổi học thử</h2>
-            <Link href="/trials" className="text-xs font-medium text-primary hover:underline">
-              Quản lý ở mục Học thử →
+            <Link href="/lop-trial/lich-hen" className="text-xs font-medium text-primary hover:underline">
+              Quản lý ở mục Lớp Trial →
             </Link>
           </div>
           <ul className="space-y-2">

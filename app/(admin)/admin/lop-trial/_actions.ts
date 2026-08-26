@@ -683,7 +683,7 @@ export async function updateBookingLopTrialAction(
         //
         // Cửa tự lo phần idempotent (`lead.status === leadNextStatus` thì không ghi
         // gì), nên vế `!== leadNextStatus` của rào cũ bỏ được.
-        const doi = await setLeadStatus({
+        await setLeadStatus({
           tx,
           leadId: booking.leadId,
           to: leadNextStatus,

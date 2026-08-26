@@ -43,6 +43,19 @@ export type BackfillSpec = {
  * 28 bảng còn lại đã có cột từ migration `20260615083728_pr_a_add_orgunitid` (15/06).
  */
 export const BACKFILL_SPECS: readonly BackfillSpec[] = [
+  // ── MEDIA-REVIEW (26/08): sinh ra đã có CẢ HAI cột, không cần backfill ──────
+  {
+    model: "MediaAsset",
+    nullMeaning: "BAT_BUOC",
+    scoped: true,
+    vi: "ảnh/video buổi học — suy từ classSession.centerId; NULL = lỗi đường ghi",
+  },
+  {
+    model: "SessionMediaReview",
+    nullMeaning: "BAT_BUOC",
+    scoped: true,
+    vi: "kết luận duyệt media của buổi — suy từ classSession.centerId",
+  },
   // ── Vận hành lõi: centerId suy từ lớp/học viên, luôn phải có ────────────────
   {
     model: "Enrollment",
