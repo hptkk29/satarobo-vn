@@ -59,7 +59,17 @@ export function redactContactsInText(v: string | null | undefined): string | nul
   return v.replace(EMAIL_LIKE_RE, "•••").replace(PHONE_LIKE_RE, "•••");
 }
 
-/** Bộ field PII chung của Lead — mask 1 lượt, giữ nguyên field khác. */
+/**
+ * Bộ field PII chung của Lead — mask 1 lượt, giữ nguyên field khác.
+ *
+ * ⚠️ Danh sách khoá ở đây phải khớp `sensitiveFields` của `leads:view-pii`
+ * (`lib/permissions/registry/crm.ts`) — thêm một chỗ mà quên chỗ kia là màn
+ * "quyền này che những gì" nói sai với thứ hệ thống thực sự làm.
+ *
+ * ⚠️ Địa chỉ (`city`/`ward`/`addressLine`) CỐ Ý không nằm trong bộ này: đó là dữ
+ * liệu địa bàn để lọc/nhóm/xuất, không phải danh tính. Trước G-01 nó bị nhét vào
+ * `note` nên bị che lây theo `note` — chính là nợ N-1 mà G-01 gỡ.
+ */
 export function maskLeadPiiFields<
   T extends {
     parentName?: string | null;
@@ -67,6 +77,7 @@ export function maskLeadPiiFields<
     email?: string | null;
     childName?: string | null;
     note?: string | null;
+    parentDob?: Date | string | null;
   },
 >(lead: T, canViewPii: boolean): T {
   if (canViewPii) return lead;
@@ -77,5 +88,10 @@ export function maskLeadPiiFields<
     ...(lead.email != null ? { email: lead.email ? maskEmail(lead.email) : lead.email } : {}),
     ...(lead.childName != null ? { childName: lead.childName ? maskPersonName(lead.childName) : lead.childName } : {}),
     ...(lead.note !== undefined ? { note: maskFreeText(lead.note) } : {}),
+    // G-01 — ngày sinh PH: GIẤU HẲN, không mờ hoá. Một ngày sinh mờ hoá
+    // (01/01/1985) trông y hệt ngày sinh thật nên người đọc không biết mình đang
+    // nhìn dữ liệu bịa. Chỉ chèn khoá khi phiếu THỰC SỰ có mang nó — select hẹp
+    // không khai cột này thì đừng tự khẳng định "phụ huynh không có ngày sinh".
+    ...(lead.parentDob !== undefined ? { parentDob: null } : {}),
   };
 }

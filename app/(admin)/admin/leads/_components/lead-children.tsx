@@ -31,6 +31,8 @@ export type ChildDraft = {
   gradeLevel: string;
   interestedCourseId: string;
   interestedCenterId: string;
+  /** G-01 — lớp đang học TẠI trung tâm (Class.id). "" = chưa xếp lớp. */
+  classId: string;
   note: string;
 };
 
@@ -44,6 +46,8 @@ export type ChildView = {
   gradeLevel: string | null;
   interestedCourseId: string | null;
   interestedCenterId: string | null;
+  /** G-01 — lớp đang học TẠI trung tâm (Class.id). null = chưa xếp lớp. */
+  classId: string | null;
   note: string | null;
   trialStatus: string;
   /** C-06 — trạng thái phễu của riêng con này. null = phiếu cũ, chưa ai phân loại. */
@@ -76,6 +80,7 @@ export const emptyChild: ChildDraft = {
   gradeLevel: "",
   interestedCourseId: "",
   interestedCenterId: "",
+  classId: "",
   note: "",
 };
 
@@ -102,6 +107,7 @@ export function childDraftToPayload(d: ChildDraft): Record<string, unknown> {
     gradeLevel: d.gradeLevel.trim() || undefined,
     interestedCourseId: d.interestedCourseId || undefined,
     interestedCenterId: d.interestedCenterId || undefined,
+    classId: d.classId || undefined,
     note: d.note.trim() || undefined,
   };
 }
@@ -116,6 +122,7 @@ function viewToDraft(c: ChildView): ChildDraft {
     gradeLevel: c.gradeLevel ?? "",
     interestedCourseId: c.interestedCourseId ?? "",
     interestedCenterId: c.interestedCenterId ?? "",
+    classId: c.classId ?? "",
     note: c.note ?? "",
   };
 }
@@ -126,11 +133,18 @@ export function ChildFields({
   onChange,
   centers,
   courseGroups,
+  classes = [],
 }: {
   value: ChildDraft;
   onChange: (patch: Partial<ChildDraft>) => void;
   centers: Option[];
   courseGroups: CourseOptGroup[];
+  /**
+   * G-01 — lớp đang mở của trung tâm, để chọn "Lớp tại trung tâm". Danh sách đã
+   * qua `scopedDb` ở page nên chỉ có lớp trong tầm nhìn cơ sở của actor.
+   * Mặc định rỗng: ô tự ẩn thay vì vẽ một select không có lựa chọn nào.
+   */
+  classes?: Option[];
 }) {
   return (
     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -228,6 +242,28 @@ export function ChildFields({
           ))}
         </select>
       </label>
+      {/* G-01 — LỚP ĐANG HỌC tại trung tâm. Ẩn khi không truyền danh sách lớp:
+          một <select> chỉ có mục "— Chưa xếp lớp —" chỉ tổ làm người dùng tưởng
+          trung tâm không còn lớp nào. */}
+      {classes.length > 0 && (
+        <label className="block sm:col-span-2">
+          <span className="mb-1 block text-xs font-medium text-muted-foreground">
+            Lớp tại trung tâm
+          </span>
+          <select
+            value={value.classId}
+            onChange={(e) => onChange({ classId: e.target.value })}
+            className={inputCls}
+          >
+            <option value="">— Chưa xếp lớp —</option>
+            {classes.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
       <label className="block sm:col-span-2">
         <span className="mb-1 block text-xs font-medium text-muted-foreground">Ghi chú</span>
         <textarea
@@ -254,6 +290,7 @@ export function LeadChildrenManager({
   childrenList,
   centers,
   courses,
+  classes = [],
   readOnly = false,
   legacyChildName,
   legacyChildAge,
@@ -264,6 +301,8 @@ export function LeadChildrenManager({
   childrenList: ChildView[];
   centers: Option[];
   courses: TeachableCourse[];
+  /** G-01 — lớp đang mở (đã lọc theo cơ sở của actor ở page). */
+  classes?: Option[];
   readOnly?: boolean;
   legacyChildName?: string | null;
   legacyChildAge?: number | null;
@@ -278,6 +317,10 @@ export function LeadChildrenManager({
     id ? courses.find((c) => c.id === id)?.name ?? null : null;
   const centerName = (id: string | null) =>
     id ? centers.find((c) => c.id === id)?.name ?? null : null;
+  // G-01 — `classId` không ràng FK cứng (như `interestedCenterId`), nên lớp đã xoá
+  // để lại một mã mồ côi. Trả null ⇒ dòng tóm tắt bỏ qua, không in mã cuid ra màn.
+  const className = (id: string | null) =>
+    id ? classes.find((c) => c.id === id)?.name ?? null : null;
 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
@@ -452,6 +495,7 @@ export function LeadChildrenManager({
                 onChange={patch}
                 centers={centers}
                 courseGroups={courseGroups}
+                classes={classes}
               />
               <EditorButtons isPending={isPending} onSave={save} onCancel={cancel} />
             </li>
@@ -500,6 +544,9 @@ export function LeadChildrenManager({
                     c.schoolName,
                     courseName(c.interestedCourseId),
                     centerName(c.interestedCenterId),
+                    // G-01 — nói rõ đây là lớp ĐANG HỌC, kẻo lẫn với "cơ sở quan tâm"
+                    // đứng ngay trước nó trong cùng một dòng.
+                    className(c.classId) ? `Lớp: ${className(c.classId)}` : null,
                   ]
                     .filter(Boolean)
                     .join(" · ") || "—"}
@@ -597,6 +644,7 @@ export function LeadChildrenManager({
             onChange={patch}
             centers={centers}
             courseGroups={courseGroups}
+            classes={classes}
           />
           <EditorButtons isPending={isPending} onSave={save} onCancel={cancel} />
         </div>

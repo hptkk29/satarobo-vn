@@ -9,6 +9,7 @@ import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
 import { phoneVn } from '@/lib/validators/phone'
 import { phoneVariants } from '@/lib/phone'
+import { Gender } from '@prisma/client'
 import type { LeadChildStatus, Prisma } from '@prisma/client'
 import { logLeadAudit, getAuditActor } from '@/lib/audit/log'
 import { recordLeadStatusChange } from '@/lib/lead/status-trail-write'
@@ -626,6 +627,29 @@ const manualLeadSchema = z.object({
     .optional()
     .or(z.literal(''))
     .transform((v) => (v ? (normalizeFacebookUrl(v).url ?? '') : v)),
+
+  // ─── G-01 (26/08/2026) — 5 ô còn thiếu ở CẤP PHỤ HUYNH ───────────────────
+  //
+  // ⚠️ Cả 5 phải giữ được `undefined` khi người gọi KHÔNG gửi khoá, vì
+  // `updateLeadFields` phân biệt "không đụng" (bỏ qua) với "xoá trắng" (ghi
+  // null) đúng bằng phép `!== undefined`. Đó là lý do KHÔNG dùng
+  // `.transform(v => v ?? null)` ở đây: transform chạy cả khi khoá vắng mặt và
+  // biến `undefined` thành `null`, tức mọi lượt sửa một ô sẽ ĐÈ TRẮNG bốn ô kia.
+  parentGender: z.nativeEnum(Gender).optional().or(z.literal('')),
+  // Ngày sinh: nhận chuỗi 'yyyy-mm-dd' từ ô <input type="date">. Chặn tương lai —
+  // ngày sinh ở mai sau chỉ có thể là gõ nhầm, và nó lặng lẽ làm hỏng mọi phép
+  // tính tuổi về sau. `.refine` (không phải `.max(new Date())`) để mốc "bây giờ"
+  // tính lúc PHÂN TÍCH chứ không phải lúc nạp module.
+  parentDob: z
+    .union([z.literal(''), z.coerce.date()])
+    .optional()
+    .refine((v) => !(v instanceof Date) || v <= new Date(), {
+      message: 'Ngày sinh phụ huynh không được ở tương lai',
+    }),
+  // Địa chỉ 3 ô — lưu TÊN, danh mục 2 cấp 2025 (xem lib/address/vn-address.ts).
+  city: z.string().trim().max(100).optional().or(z.literal('')),
+  ward: z.string().trim().max(100).optional().or(z.literal('')),
+  addressLine: z.string().trim().max(255).optional().or(z.literal('')),
 })
 
 /** Tạo 1 lead thủ công (thu ở sự kiện/trung tâm). Chống trùng theo SĐT. */
@@ -715,6 +739,15 @@ export async function createLeadManual(
       // bốc hơi — không lỗi, không nhật ký. Với lead Messenger-first (chưa có
       // SĐT) đây là thứ duy nhất nối lead ↔ hội thoại, mất là không dựng lại được.
       facebookUrl: d.facebookUrl || null,
+      // G-01 — 5 ô mới. `|| null` chứ không `?? null`: chuỗi rỗng (người dùng mở
+      // ô ra rồi bỏ trống) phải thành NULL, không thành ''. Chuỗi rỗng làm hỏng
+      // mọi phép `if (lead.city)` và mọi truy vấn `city: { not: null }` — trong
+      // đó có đúng câu dùng để đo "địa chỉ đã ra khỏi `note` chưa".
+      parentGender: d.parentGender || null,
+      parentDob: d.parentDob || null,
+      city: d.city || null,
+      ward: d.ward || null,
+      addressLine: d.addressLine || null,
       status: 'NEW',
       // NGƯỜI NHẬP (23/08) — cùng nghĩa với biểu mẫu /nhap-khach-hang. Đường
       // nhập tay này cũng phải ghi, không thì "phiếu tôi nhập" thủng một nửa.
@@ -748,6 +781,13 @@ export async function createLeadManual(
       // Đường SỬA đã ghi ô này vào nhật ký; đường TẠO bỏ trống thì lịch sử một
       // lead có link Facebook bắt đầu bằng khoảng trắng — không truy được ai điền.
       facebookUrl: d.facebookUrl || null,
+      // G-01 — địa chỉ vào nhật ký (dữ liệu địa bàn, không phải PII). Ngày sinh và
+      // giới tính PH thì KHÔNG: `parentDob` là PII, và nhật ký kiểm toán được đọc
+      // ở màn lịch sử với một cổng quyền khác cổng `leads:view-pii` — chép giá trị
+      // thô vào đây là mở một cửa sau cho đúng thứ tầng che đang giấu.
+      city: d.city || null,
+      ward: d.ward || null,
+      addressLine: d.addressLine || null,
     },
   }).catch(() => {})
 
@@ -823,6 +863,15 @@ export async function updateLeadFields(
       source: true,
       note: true,
       facebookUrl: true,
+      // G-01 — 5 ô mới PHẢI có mặt ở `select` hẹp này. Thiếu một ô thì phép
+      // so-lệch bên dưới thấy `undefined !== <giá trị mới>` ở MỌI lượt lưu, tức
+      // nhật ký kiểm toán đẻ ra một dòng "đã đổi địa chỉ" cho cả những lần không
+      // ai đụng vào ô đó — và một nhật ký hay bịa thì không làm chứng được nữa.
+      parentGender: true,
+      parentDob: true,
+      city: true,
+      ward: true,
+      addressLine: true,
       assignedToId: true,
       createdById: true,
     },
@@ -891,10 +940,26 @@ export async function updateLeadFields(
     // 23/08 — ô "Link Facebook" CÓ trong biểu mẫu nhập khách nhưng action này
     // chưa bao giờ ghi được: sửa xong là mất im lặng. Thêm cho cả hai đường.
     ...(d.facebookUrl !== undefined ? { facebookUrl: d.facebookUrl || null } : {}),
+    // G-01 — 5 ô mới. `!== undefined` phân biệt "không gửi khoá" (giữ nguyên) với
+    // "gửi khoá rỗng" (xoá trắng về null): không có ô nào bị kẹt giá trị sai vĩnh
+    // viễn, và cũng không ô nào bị đè trắng vì một lượt sửa ô khác.
+    ...(d.parentGender !== undefined ? { parentGender: d.parentGender || null } : {}),
+    ...(d.parentDob !== undefined ? { parentDob: d.parentDob || null } : {}),
+    ...(d.city !== undefined ? { city: d.city || null } : {}),
+    ...(d.ward !== undefined ? { ward: d.ward || null } : {}),
+    ...(d.addressLine !== undefined ? { addressLine: d.addressLine || null } : {}),
   }
   // P2-1: ghi nhật ký kiểm toán — chỉ field thực sự đổi.
-  const changedFields = (Object.keys(updateData) as (keyof typeof updateData)[]).filter(
-    (k) => (before as Record<string, unknown>)[k] !== (updateData as Record<string, unknown>)[k],
+  //
+  // G-01 — `Date` phải so theo MỐC THỜI GIAN, không theo tham chiếu. Từ khi có
+  // `parentDob`, `updateData` mang đối tượng `Date` do zod dựng, còn `before`
+  // mang `Date` do Prisma dựng: `!==` luôn đúng kể cả hai bên cùng một ngày, nên
+  // mỗi lần bấm Lưu lại đẻ một bản ghi kiểm toán rỗng ruột (giá trị cũ = giá trị
+  // mới). Nhật ký hay bịa thì không ai còn tin nó khi cần truy trách nhiệm.
+  const khacNhau = (a: unknown, b: unknown): boolean =>
+    a instanceof Date && b instanceof Date ? a.getTime() !== b.getTime() : a !== b
+  const changedFields = (Object.keys(updateData) as (keyof typeof updateData)[]).filter((k) =>
+    khacNhau((before as Record<string, unknown>)[k], (updateData as Record<string, unknown>)[k]),
   )
   const { actorId, actorName } = getAuditActor(session)
   const pick = (obj: Record<string, unknown>) =>
@@ -1193,6 +1258,7 @@ function leadChildData(parsed: unknown) {
     gradeLevel?: string | null
     interestedCourseId?: string | null
     interestedCenterId?: string | null
+    classId?: string | null
     note?: string | null
   }
   return {
@@ -1204,6 +1270,9 @@ function leadChildData(parsed: unknown) {
     gradeLevel: d.gradeLevel || null,
     interestedCourseId: d.interestedCourseId || null,
     interestedCenterId: d.interestedCenterId || null,
+    // G-01 — LỚP ĐANG HỌC tại trung tâm. Khác `interestedCenterId` (cơ sở QUAN
+    // TÂM, chưa học) và khác `Enrollment` (chỉ có sau khi convert).
+    classId: d.classId || null,
     note: d.note || null,
   }
 }

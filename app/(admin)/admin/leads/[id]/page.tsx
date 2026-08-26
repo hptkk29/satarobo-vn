@@ -18,6 +18,11 @@ import { OrderKindSelect } from "./_components/order-kind-select";
 import { LeadPaymentCard } from "../_components/lead-payment-card";
 import { getLeadPaymentSummary } from "@/lib/payments/summary";
 import { maskFreeText, maskPersonName, maskLeadPiiFields } from "@/lib/lead/pii";
+import {
+  LEAD_CHILD_CLASS_FIND_ARGS,
+  leadChildClassOptions,
+} from "@/lib/lead/child-class-options";
+import { formatVnAddress } from "@/lib/address/vn-address";
 import { canSeeLead, leadSharingEnabled } from "@/lib/lead/sharing";
 import { canViewLeadPii } from "@/lib/auth/check-permission";
 import { ShareToggle } from "./_components/share-toggle";
@@ -31,6 +36,13 @@ import {
 } from "@/lib/lead/audit-history";
 import { LeadAuditHistory } from "./_components/lead-audit-history";
 import { LeadStatusTrail } from "./_components/lead-status-trail";
+
+/** G-01 — nhãn tiếng Việt cho `Gender`. Khoá "" để phiếu chưa khai trả về null. */
+const GIOI_TINH_PH_NHAN: Record<string, string> = {
+  MALE: "Nam",
+  FEMALE: "Nữ",
+  OTHER: "Khác",
+};
 
 export const metadata = { title: "Chi tiết Lead | Admin" };
 export const dynamic = "force-dynamic";
@@ -125,6 +137,10 @@ export default async function LeadDetailPage({ params }: Props) {
       email: lead.email,
       childName: lead.childName,
       note: lead.note,
+      // G-01 — ngày sinh PH là PII: đi qua ĐÚNG tầng che này, không đọc thẳng
+      // `lead.parentDob` ở phần vẽ bên dưới. Non-holder nhận null ⇒ giá trị
+      // không xuống client qua RSC payload, không chỉ bị giấu ở giao diện.
+      parentDob: lead.parentDob,
     },
     canViewPii,
   );
@@ -178,7 +194,7 @@ export default async function LeadDetailPage({ params }: Props) {
   const paymentSummary = await getLeadPaymentSummary(sdb, lead.id);
 
   // R7-01 — options cho khối quản lý con (khoá quan tâm / cơ sở quan tâm).
-  const [childCenters, childCourses, expectedProducts] = await Promise.all([
+  const [childCenters, childCourses, expectedProducts, childClassRows] = await Promise.all([
     sdb.center.findMany({
       where: { isActive: true },
       orderBy: { displayOrder: "asc" },
@@ -196,7 +212,12 @@ export default async function LeadDetailPage({ params }: Props) {
       take: 200,
       select: { id: true, sku: true, name: true },
     }),
+    // G-01 — lớp cho ô "Lớp tại trung tâm" của từng con. Truy vấn KHÔNG lọc
+    // `status`: danh sách này vừa để chọn vừa để TRA TÊN, mà lớp đã kết thúc thì
+    // vẫn phải hiện được tên (xem lib/lead/child-class-options.ts).
+    sdb.class.findMany(LEAD_CHILD_CLASS_FIND_ARGS),
   ]);
+  const childClasses = leadChildClassOptions(childClassRows);
   // Lead LOST (hoặc không có quyền sửa / chỉ xem nhờ "dùng chung") → con read-only.
   const childrenReadOnly = !canTransfer || status === "LOST" || isSharedViewer;
 
@@ -392,6 +413,28 @@ export default async function LeadDetailPage({ params }: Props) {
             value={`${lead.affiliate.name} (${lead.affiliate.code})`}
           />
         )}
+        {/* ─── G-01 (26/08/2026) — 5 ô mới ở cấp phụ huynh ────────────────────
+            Giới tính/ngày sinh ở đây là CỦA PHỤ HUYNH. Của từng con nằm trong
+            khối "Con của phụ huynh" bên dưới. */}
+        <Info label="Giới tính PH" value={GIOI_TINH_PH_NHAN[lead.parentGender ?? ""] ?? null} />
+        <Info
+          label="Ngày sinh PH"
+          // PII — lấy từ bản ĐÃ mask (`piiLead`), không đọc `lead.parentDob`.
+          // Không có quyền ⇒ `piiLead.parentDob` là null ⇒ ô hiện "—", đúng như
+          // ngày sinh của con (đã giấu hẳn từ trước).
+          value={piiLead.parentDob ? formatDateVN(piiLead.parentDob) : null}
+        />
+        {/* Địa chỉ KHÔNG phải PII (dữ liệu địa bàn để lọc/xuất) — trước G-01 nó
+            bị nhét vào `note` nên bị che lây theo `note`, đó chính là nợ N-1. Ba
+            mẩu gộp thành một dòng đọc được; trống hết thì ẩn hẳn ô. */}
+        <Info
+          label="Địa chỉ"
+          value={formatVnAddress({
+            addressLine: lead.addressLine,
+            ward: lead.ward,
+            city: lead.city,
+          })}
+        />
         <Info label="Sale phụ trách" value={lead.assignedTo?.name ?? "Chưa gán"} />
         <Info
           label="Ngày tạo"
@@ -440,6 +483,7 @@ export default async function LeadDetailPage({ params }: Props) {
             gradeLevel: c.gradeLevel,
             interestedCourseId: c.interestedCourseId,
             interestedCenterId: c.interestedCenterId,
+            classId: c.classId,
             note: canViewPii ? c.note : maskFreeText(c.note),
             trialStatus: c.trialStatus,
             // C-06 — trạng thái phễu riêng của con (null = phiếu cũ, chưa phân loại).
@@ -456,6 +500,7 @@ export default async function LeadDetailPage({ params }: Props) {
           }))}
           centers={childCenters}
           courses={childCourses}
+          classes={childClasses}
           readOnly={childrenReadOnly}
           legacyChildName={piiLead.childName}
           legacyChildAge={lead.childAge}

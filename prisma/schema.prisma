@@ -1344,17 +1344,40 @@ model TeacherReview {
 }
 
 model Lead {
-  id               String     @id @default(cuid())
-  parentName       String
+  id          String  @id @default(cuid())
+  parentName  String
   /// Có thể là chuỗi RỖNG: biểu mẫu /nhap-khach-hang (22/08/2026) không bắt buộc
   /// ô nào, mà lead từ quảng cáo Facebook rất hay chỉ có link FB chưa có số.
   /// KHÔNG nới cột sang nullable (mọi đường đọc đang giả định string) — "" là
   /// giá trị "chưa có số", và `phoneVariants("")` trả [] nên dedup tự bỏ qua.
-  phone            String
-  email            String?
+  phone       String
+  email       String?
   /// Link Facebook/Messenger của phụ huynh — lead chạy quảng cáo FB thường có
   /// link trước khi có số. Ô này là đường liên hệ THẬT, không phải ghi chú.
-  facebookUrl      String?
+  facebookUrl String?
+
+  // G-01 (spec KHU VỰC G, 26/08/2026) — thuộc tính của NGƯỜI LỚN, không phải của
+  // đứa trẻ. Giới tính/ngày sinh của CON đã có ở `LeadChild.gender`/`LeadChild.dob`.
+  //
+  // ⚠️ `parentDob` là PII: nó nằm trong `sensitiveFields` của `leads:view-pii`
+  // (lib/permissions/registry/crm.ts) và bị `maskLeadPiiFields` giấu hẳn khi actor
+  // không có quyền. Thêm đường đọc mới cho cột này thì phải đi qua tầng đó.
+  parentGender Gender?
+  parentDob    DateTime? @db.Date
+
+  // G-01 · nợ N-1 — ĐỊA CHỈ NHÀ, ba ô riêng thay cho ba dòng chữ nhét trong `note`.
+  // Chuyện `note` gánh địa chỉ không chỉ làm mất khả năng lọc theo địa bàn: `note`
+  // nằm trong `sensitiveFields` của `leads:view-pii` nên ai không có quyền PII là
+  // mất luôn cả địa chỉ, dù địa chỉ không phải PII.
+  //
+  // Lưu TÊN (không lưu mã) — giống `Order.customerCity`/`customerWard`, để xuất
+  // Excel/đối soát đọc được ngay và không chết khi mã hành chính đổi. Danh mục là
+  // `vietnam-address-data` (mô hình 2 CẤP hiệu lực 01/07/2025: tỉnh → phường/xã,
+  // KHÔNG còn cấp quận/huyện); dịch tên ↔ mã ở `lib/address/vn-address.ts`.
+  city        String? // Tỉnh/Thành
+  ward        String? // Phường/Xã
+  addressLine String? // Số nhà, đường
+
   childName        String?
   childAge         Int?
   centerId         String?
@@ -1407,8 +1430,8 @@ model Lead {
   // cố ý. Hệ quả đã biết: hai con rớt vì hai lý do khác nhau ⇒ lượt ghi sau ĐÈ lượt
   // trước; lý do của từng con tra ở `AuditLog` + `LeadActivity` (mỗi lượt đánh dấu ghi
   // kèm tên + id của đứa con).
-  lostNote         String?    @db.Text
-  lostAt           DateTime?  @db.Timestamptz(6)
+  lostNote String?   @db.Text
+  lostAt   DateTime? @db.Timestamptz(6)
 
   // R1-04/05 — mốc thời gian phễu SR.QD.217 (L1→L2→L3 + bàn giao + SLA).
   qualifiedAt         DateTime?         @db.Timestamptz(6) // L2 — có SĐT + note
@@ -1535,6 +1558,15 @@ model LeadChild {
   gradeLevel         String?
   interestedCourseId String? // tham chiếu Course (không ràng FK cứng — additive)
   interestedCenterId String? // tham chiếu Center
+  /// G-01 — LỚP ĐANG HỌC TẠI TRUNG TÂM của riêng đứa này. Tham chiếu `Class`, cùng
+  /// kiểu "không ràng FK cứng" như hai cột ngay trên (additive trên bảng đã có dữ
+  /// liệu prod). Hệ quả đã biết: xoá lớp thì cột này thành mã mồ côi và giao diện
+  /// hiện "—" — y hệt cách `interestedCenterId` đang hành xử.
+  ///
+  /// KHÁC `interestedCenterId` (cơ sở QUAN TÂM, chưa học) và KHÁC `Enrollment`
+  /// (chỉ có SAU khi convert). Đây là ô Sale gõ trong lúc còn là lead: nhà đang
+  /// học lớp nào ở trung tâm, kể cả khi phiếu chưa convert.
+  classId            String?
   note               String?              @db.Text
   trialStatus        LeadChildTrialStatus @default(NONE)
   /// C-06 — trạng thái phễu của riêng đứa con này. NULL = phiếu cũ, CHƯA ai phân loại
@@ -1553,6 +1585,7 @@ model LeadChild {
   orders           Order[]            @relation("LeadChildOrders") // N-2 — doanh thu quy về con
 
   @@index([leadId])
+  @@index([classId]) // G-01 — "lớp này có bao nhiêu con của lead đang theo?"
 }
 
 model Note {
@@ -6198,8 +6231,8 @@ model RevenueTarget {
 ///    DISTINCT ⇒ `upsert` KHÔNG match nhánh toàn hệ thống, phải `findFirst` + create/update
 ///    tay (khuôn có sẵn ở app/(admin)/admin/bao-cao/doanh-thu/_actions.ts).
 model LeadTarget {
-  id       String  @id @default(cuid())
-  centerId String?
+  id        String  @id @default(cuid())
+  centerId  String?
   // Luật cứng Nền Hệ thống #3 + quyết định 24/08 (B1): bảng MỚI mang CẢ HAI cột.
   // Ở đây bảng nằm NGOÀI scope nên `orgUnitId` chỉ để ghi kép/đối soát, không phải cột lọc.
   // `lib/org/dual-write.ts` tự lấp khi `centerId` có giá trị — không tự gọi orgUnitIdForCenter().
@@ -6240,8 +6273,8 @@ model LeadTarget {
 ///    `ADS_BUDGET_TARGET_AMOUNT_MAX` (lib/reports/ads-budget-target.ts) để lỗi hiện ra
 ///    ngay tại ô nhập, không phải thành "Lỗi cơ sở dữ liệu" chẳng nói gì.
 model AdsBudgetTarget {
-  id       String  @id @default(cuid())
-  centerId String?
+  id        String  @id @default(cuid())
+  centerId  String?
   // Luật cứng Nền Hệ thống #3 + quyết định 24/08 (B1): bảng MỚI mang CẢ HAI cột.
   // Bảng nằm NGOÀI scope nên `orgUnitId` chỉ để ghi kép/đối soát, không phải cột lọc.
   // `lib/org/dual-write.ts` tự lấp khi `centerId` có giá trị — không tự gọi orgUnitIdForCenter().
@@ -6427,27 +6460,27 @@ model TrialClassSession {
 
 /// R7-02 — ghi danh 1 LeadChild vào 1 lớp trải nghiệm. Partial-unique 1 lớp ACTIVE/con (migration).
 model TrialEnrollment {
-  id                 String                @id @default(cuid())
-  trialClassId       String
-  trialClass         TrialClassV2          @relation(fields: [trialClassId], references: [id], onDelete: Cascade)
-  leadChildId        String
-  leadChild          LeadChild             @relation(fields: [leadChildId], references: [id], onDelete: Cascade)
-  status             TrialEnrollmentStatus @default(ACTIVE)
-  summaryNote        String?               @db.Text // nhận xét tổng kết học thử
+  id                       String                @id @default(cuid())
+  trialClassId             String
+  trialClass               TrialClassV2          @relation(fields: [trialClassId], references: [id], onDelete: Cascade)
+  leadChildId              String
+  leadChild                LeadChild             @relation(fields: [leadChildId], references: [id], onDelete: Cascade)
+  status                   TrialEnrollmentStatus @default(ACTIVE)
+  summaryNote              String?               @db.Text // nhận xét tổng kết học thử
   // LD3(b) — buổi (TrialClassSession) cụ thể được chọn khi xếp con vào lớp. Scalar nullable
   // (validation "buổi thuộc lớp" đã làm ở action boundary — không cần relation, giữ blast radius nhỏ).
-  scheduledSessionId String?
+  scheduledSessionId       String?
   // Site GV 25/08 — DỜI LỊCH học thử. Trước đó `scheduledSessionId` ghi ĐÚNG MỘT LẦN lúc
   // xếp con vào lớp rồi bất biến: không admin/GV/Sale nào đổi được buổi, nên bảng trial
   // của giáo viên không có cách nào biết suất nào "bị dời lịch".
   // Nay `rescheduleTrialEnrollment` đổi buổi và GHI LẠI buổi cũ ở đây (buổi gần nhất —
   // dời nhiều lần thì chỉ giữ lần cuối; lịch sử đầy đủ nằm ở DomainEvent + AuditLog).
   rescheduledFromSessionId String?
-  rescheduledAt            DateTime? @db.Timestamptz(6)
-  rescheduleReason         String?   @db.Text
-  addedById          String?
-  createdAt          DateTime              @default(now()) @db.Timestamptz(6)
-  updatedAt          DateTime              @updatedAt @db.Timestamptz(6)
+  rescheduledAt            DateTime?             @db.Timestamptz(6)
+  rescheduleReason         String?               @db.Text
+  addedById                String?
+  createdAt                DateTime              @default(now()) @db.Timestamptz(6)
+  updatedAt                DateTime              @updatedAt @db.Timestamptz(6)
 
   attendances TrialAttendance[]
 

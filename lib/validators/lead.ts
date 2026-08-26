@@ -93,6 +93,9 @@ export const leadChildSchema = z.object({
   gradeLevel: nullableStr,
   interestedCourseId: nullableStr,
   interestedCenterId: nullableStr,
+  // G-01 — lớp con ĐANG HỌC tại trung tâm (tham chiếu Class). Không ràng FK cứng,
+  // cùng kiểu với hai ô ngay trên; lớp bị xoá thì giao diện hiện "—".
+  classId: nullableStr,
   note: nullableStr,
   trialStatus: z.nativeEnum(LeadChildTrialStatus).default(LeadChildTrialStatus.NONE),
 })

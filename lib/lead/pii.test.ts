@@ -45,6 +45,45 @@ describe("#11 T2 — mask PII lead", () => {
 });
 
 // ═════════════════════════════════════════════════════════════════════════════
+// G-01 (26/08/2026) — NGÀY SINH PHỤ HUYNH đi qua đúng tầng che này
+// ═════════════════════════════════════════════════════════════════════════════
+//
+// Ngày sinh là mẩu định danh trực tiếp một người thật, ngang tên và SĐT. Cột mới
+// mà không khai vào đây thì `leads:view-pii` chỉ còn che được một nửa hồ sơ, và
+// nửa còn lại rò ra qua RSC payload — đúng lỗ mà #11 T2 dựng tầng này để bịt.
+//
+// Che bằng cách GIẤU HẲN (null), không "mờ hoá" thành 01/01/1985: một ngày sinh
+// giả trông y hệt ngày sinh thật, và người đọc không có cách nào biết mình đang
+// nhìn dữ liệu bịa. Cùng luật với `LeadChild.dob` (leads/[id]/page.tsx đã truyền
+// null cho non-holder từ trước).
+describe("[G-01] maskLeadPiiFields — ngày sinh phụ huynh", () => {
+  const NGAY = new Date("1985-03-12T00:00:00.000Z");
+
+  it("có quyền PII → giữ nguyên ngày sinh", () => {
+    const lead = { parentName: "Nguyễn Thị Lan", parentDob: NGAY };
+    expect(maskLeadPiiFields(lead, true).parentDob).toBe(NGAY);
+  });
+
+  it("KHÔNG có quyền PII → giấu hẳn (null), không lộ năm sinh", () => {
+    const masked = maskLeadPiiFields({ parentName: "Nguyễn Thị Lan", parentDob: NGAY }, false);
+    expect(masked.parentDob).toBeNull();
+    // Không được rò qua bất kỳ đường serialize nào xuống client.
+    expect(JSON.stringify(masked)).not.toContain("1985");
+  });
+
+  it("phiếu không khai ngày sinh → vẫn null, không đẻ khoá lạ", () => {
+    expect(maskLeadPiiFields({ parentDob: null }, false).parentDob).toBeNull();
+  });
+
+  it("phiếu KHÔNG mang khoá `parentDob` → không tự chèn khoá vào kết quả", () => {
+    // Nhiều đường đọc select hẹp. Tự chèn `parentDob: null` vào đó là đẻ ra một
+    // khẳng định sai ("phụ huynh này không có ngày sinh") ở nơi thật ra là chưa hỏi.
+    const masked = maskLeadPiiFields({ phone: "0909123456" }, false);
+    expect("parentDob" in masked).toBe(false);
+  });
+});
+
+// ═════════════════════════════════════════════════════════════════════════════
 // Đợt E (22/08/2026) — che SĐT trong NỘI DUNG tin nhắn
 // ═════════════════════════════════════════════════════════════════════════════
 //
