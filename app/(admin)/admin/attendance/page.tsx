@@ -36,7 +36,7 @@ import {
   buildSessionNumberMap,
   SESSION_MEDIA_SELECT,
 } from "@/lib/lms/session-order";
-import { deriveSessionTitle } from "@/lib/lms/session-project-name";
+import { deriveSessionLabel } from "@/lib/lms/session-project-name";
 import {
   photoCoveredCount,
   resolveAttendanceQueuePhase,
@@ -246,10 +246,11 @@ export default async function AttendanceAdminPage({ searchParams }: SearchParams
         date: true,
         topic: true,
         status: true,
-        // Tiêu đề buổi lấy từ GIÁO TRÌNH của lớp: kế hoạch buổi ghim cho lớp này trước,
-        // rồi mới tới tên bài của giáo án gốc (deriveSessionTitle).
+        // Nhãn buổi lấy từ GIÁO TRÌNH của lớp: kế hoạch buổi ghim cho lớp này trước,
+        // rồi mới tới tên bài của giáo án gốc (deriveSessionLabel).
+        // `moduleCode` = học phần (HP1…) — thiếu nó thì nhãn rụng mất mảnh giữa.
         plan: { select: { customTitle: true } },
-        lesson: { select: { title: true } },
+        lesson: { select: { title: true, order: true, moduleCode: true } },
       },
     });
     const numberOf = buildSessionNumberMap(sessions);
@@ -338,11 +339,18 @@ export default async function AttendanceAdminPage({ searchParams }: SearchParams
         id: s.id,
         classId: s.classId,
         number: numberOf.get(s.id) ?? null,
-        title: deriveSessionTitle({
-          planTitle: s.plan?.customTitle,
-          lessonTitle: s.lesson?.title,
-          topic: s.topic,
-        }),
+        // 26/08 — MỘT nhãn thay cho cặp cột "Buổi" + "Tiêu đề buổi", khớp site giáo viên.
+        // Cặp cột cũ in "Buổi 1" ở cột trái rồi lại in tên bài vốn đã mở đầu bằng
+        // "Buổi 1 — …" ở cột phải ⇒ đọc ra hai lần số buổi, trông như dữ liệu hỏng.
+        sessionLabel:
+          deriveSessionLabel({
+            sessionNumber: numberOf.get(s.id) ?? null,
+            planTitle: s.plan?.customTitle,
+            lessonTitle: s.lesson?.title,
+            lessonOrder: s.lesson?.order,
+            moduleCode: s.lesson?.moduleCode,
+            topic: s.topic,
+          }) || "Buổi học",
         dateLabel: dayFmt.format(s.date),
         timeLabel: classTime || clockFmt.format(s.date),
         phase: resolveAttendanceQueuePhase({

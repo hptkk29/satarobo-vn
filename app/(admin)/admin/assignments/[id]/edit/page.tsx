@@ -241,42 +241,40 @@ export default async function EditAssignmentPage({ params }: Props) {
               bản nộp rỗng cho HS đang học.
             </div>
           ) : (
-            <div className="overflow-x-auto">
-              <PhanTrangBang>
-                <table className="min-w-full divide-y divide-border">
-                  <thead className="bg-muted">
-                    <tr>
-                      <th className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                        Học viên
-                      </th>
-                      <th className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                        Trạng thái
-                      </th>
-                      <th className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                        Nộp lúc
-                      </th>
-                      <th className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                        Nội dung
-                      </th>
-                      <th className="px-3 py-3 text-right text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                        Điểm
-                      </th>
-                      <th className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                        Nhận xét
-                      </th>
-                      <th className="px-3 py-3 text-right text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                        Hành động
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-border">
-                    {submissions.map((s) => (
-                      <SubmissionRow key={s.id} row={s} />
-                    ))}
-                  </tbody>
-                </table>
-              </PhanTrangBang>
-            </div>
+            <PhanTrangBang cuonNgang>
+              <table className="min-w-full divide-y divide-border">
+                <thead className="bg-muted">
+                  <tr>
+                    <th className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                      Học viên
+                    </th>
+                    <th className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                      Trạng thái
+                    </th>
+                    <th className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                      Nộp lúc
+                    </th>
+                    <th className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                      Nội dung
+                    </th>
+                    <th className="px-3 py-3 text-right text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                      Điểm
+                    </th>
+                    <th className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                      Nhận xét
+                    </th>
+                    <th className="px-3 py-3 text-right text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                      Hành động
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border">
+                  {submissions.map((s) => (
+                    <SubmissionRow key={s.id} row={s} />
+                  ))}
+                </tbody>
+              </table>
+            </PhanTrangBang>
           )}
         </section>
       )}

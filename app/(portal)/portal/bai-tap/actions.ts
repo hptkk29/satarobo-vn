@@ -6,6 +6,7 @@ import { portalDb, portalTx } from "@/lib/portal/db";
 import { requireActiveStudent } from "@/lib/portal/session";
 import { PORTAL_VIEW_COOKIE, type PortalView } from "@/lib/portal/learning";
 import { ENROLLMENT_ACTIVE_STATUS_LIST } from "@/lib/enrollment-status";
+import { assignmentWindow, formatVnShort } from "@/lib/lms/assignment-window";
 import {
   buildPortalSubmissionSchema,
   PORTAL_SUBMISSION_MAX_FILES,
@@ -66,13 +67,30 @@ export async function submitAssignment(
       classId: true,
       status: true,
       dueAt: true,
+      // Site GV 25/08 — cửa nộp bù GV mở; thiếu cột này thì cổng PH đóng bài
+      // ngay khi quá hạn và nút "gia hạn" của GV thành nút không làm gì.
+      lateUntil: true,
       allowText: true,
       allowFile: true,
     },
   });
   if (!assignment) return { ok: false, error: "Không tìm thấy bài tập" };
-  if (assignment.status !== "PUBLISHED") {
-    return { ok: false, error: "Bài tập chưa mở hoặc đã đóng" };
+
+  // Site GV 25/08 — cửa nộp đi qua ĐÚNG hàm mà màn GV dùng để vẽ nhãn trạng thái.
+  // Trước đây ở đây chỉ có `status !== "PUBLISHED"`: quá hạn KHÔNG đóng gì cả, cổng PH
+  // nhận bài vô thời hạn và chỉ gắn cờ LATE.
+  const now = new Date();
+  const win = assignmentWindow(assignment, now);
+  if (!win.acceptsSubmission) {
+    // Nói rõ VÌ SAO + mốc giờ: "chưa mở hoặc đã đóng" khiến PH không biết nên chờ hay
+    // nên xin GV mở nộp bù.
+    if (win.state === "draft") return { ok: false, error: "Bài tập chưa mở" };
+    return {
+      ok: false,
+      error: win.until
+        ? `Bài tập đã đóng — hết hạn nộp lúc ${formatVnShort(win.until)}. Liên hệ giáo viên nếu cần nộp bù.`
+        : "Bài tập đã đóng — liên hệ giáo viên nếu cần nộp bù.",
+    };
   }
 
   const enrolled = await pdb.enrollment.findFirst({
@@ -110,9 +128,9 @@ export async function submitAssignment(
     return { ok: false, error: "Bài đã được chấm — không thể nộp lại" };
   }
 
-  // Sau hạn vẫn cho nộp nhưng đánh dấu trễ.
-  const late = !!assignment.dueAt && Date.now() > assignment.dueAt.getTime();
-  const status = late ? ("LATE" as const) : ("SUBMITTED" as const);
+  // Nộp trong cửa gia hạn vẫn là LATE — đối chiếu `dueAt` gốc (`countsAsLate`), KHÔNG
+  // đối chiếu `lateUntil`: gia hạn là cho nộp bù, không phải xoá dấu nộp trễ trong học bạ.
+  const status = win.countsAsLate ? ("LATE" as const) : ("SUBMITTED" as const);
 
   // 2-phase: cột đơn = file đầu tiên (màn admin/GV cũ vẫn hiện được 1 file).
   const data = {
@@ -121,7 +139,9 @@ export async function submitAssignment(
     fileName: first?.fileName ?? null,
     fileSize: first?.fileSize ?? null,
     mimeType: first?.mimeType ?? null,
-    submittedAt: new Date(),
+    // Cùng mốc `now` đã dùng để xét cửa nộp — hai lần `new Date()` cách nhau vài ms
+    // vẫn có thể rơi hai bên hạn nộp và ghi ra bản nộp tự mâu thuẫn với chính nó.
+    submittedAt: now,
     status,
   };
 

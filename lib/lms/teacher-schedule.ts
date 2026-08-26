@@ -25,6 +25,11 @@ import type {
 } from "@prisma/client";
 import { db } from "@/lib/db";
 import { getModelVisibleCenterIds } from "@/lib/db-scope";
+import {
+  isSettledTrialRow,
+  trialRowStatus,
+  type TrialRowStatus,
+} from "@/lib/lms/trial-row-status";
 import type { Actor } from "@/lib/auth/actor";
 
 /** Buổi Trial GV phụ trách trong [from, to) — bỏ buổi đã hủy. */
@@ -455,4 +460,212 @@ export async function getTeacherTrialRubricContext(
         }
       : null,
   };
+}
+
+
+/* ─────────────────── Bảng Trial site GV (25/08 — 2 bảng phẳng) ───────────────────
+ * Chủ dự án 25/08: màn "Học viên trial" đổi từ lưới thẻ theo ngày sang HAI BẢNG PHẲNG —
+ * "Các suất sắp Trial" (hôm nay → hết 7 ngày tới) và "Đã Trial" ở dưới — cùng bộ cột
+ * Học viên / Phụ huynh / Khoá học / Đánh giá / Trạng thái.
+ *
+ * ⚠️ ĐẢO "câu 46". Cho tới 24/08, site GV CỐ Ý giấu hẳn phụ huynh ở màn Trial. Chủ dự
+ * án 25/08 yêu cầu cột "Phụ huynh" (ví dụ "Hoàng Văn Sơn") — nên ở đây, và CHỈ ở đây,
+ * `lead.parentName` được trả về. SĐT/email phụ huynh vẫn tuyệt đối không đi ra: giáo
+ * viên cần biết gọi con ai là con nhà ai, không cần kênh liên hệ trực tiếp (đó là việc
+ * của Sale, và `canViewParentContact` vẫn chặn TEACHER ở mọi màn khác).
+ */
+
+export type { TrialRowStatus } from "@/lib/lms/trial-row-status";
+
+export type TrialTableRow = {
+  enrollmentId: string;
+  studentName: string;
+  birthYear: number | null;
+  /** Tên phụ huynh — xem ghi chú "ĐẢO câu 46" ở trên. KHÔNG kèm SĐT/email. */
+  parentName: string | null;
+  courseName: string | null;
+  trialClassName: string;
+  /** null = chưa xếp buổi. @db.Date → UTC 00:00 của ngày VN. */
+  date: Date | null;
+  startTime: string | null;
+  endTime: string | null;
+  status: TrialRowStatus;
+  evaluated: boolean;
+};
+
+export type TrialTableResult = {
+  /** Hôm nay → hết `days` ngày tới, xếp theo ngày tăng dần. Rỗng = không hiện bảng. */
+  upcoming: TrialTableRow[];
+  /** Buổi đã qua + mọi suất đã có kết cục (nhập học / rớt / rút), mới nhất lên trước. */
+  done: TrialTableRow[];
+};
+
+// 26/08 (chủ dự án): BỎ khối "Chưa xếp buổi". Bảng Trial chỉ còn học viên ĐÃ ĐƯỢC LÊN
+// LỊCH. Ghi danh chưa gắn buổi là việc của quản lý ở /admin/trial-classes — bày ở site
+// GV thì giáo viên không làm gì được với nó ngoài việc thấy một dòng không có ngày giờ.
+
+/**
+ * Dữ liệu 2 bảng Trial của site GV.
+ *
+ * `today` là mốc UTC 00:00 của NGÀY VN (trang truyền vào — server tính, client không
+ * đụng `new Date()` để khỏi lệch hydrate). `days` = số ngày nhìn tới, mặc định 7.
+ *
+ * Own-rows y như `getTeacherTrialRoster`: buổi GV trực tiếp dạy HOẶC lớp Trial mà GV là
+ * GV chính. Không đi qua scopedDb vì `TrialClassSession` ∉ SCOPED_MODELS (xem đầu file).
+ */
+export async function getTeacherTrialTable(
+  teacherId: string,
+  opts: { today: Date; days?: number; historyDays?: number },
+): Promise<TrialTableResult> {
+  const days = opts.days ?? 7;
+  const historyDays = opts.historyDays ?? 90;
+  const todayMs = opts.today.getTime();
+  const DAY = 24 * 60 * 60 * 1000;
+  // Nửa mở [from, to): "hết 7 ngày tiếp theo" = hôm nay + 7 ngày ⇒ chặn trên là +8 ngày.
+  const upcomingTo = new Date(todayMs + (days + 1) * DAY);
+  const historyFrom = new Date(todayMs - historyDays * DAY);
+
+  const sessions = await db.trialClassSession.findMany({
+    where: {
+      status: { not: "CANCELLED" },
+      date: { gte: historyFrom, lt: upcomingTo },
+      OR: [{ teacherId }, { trialClass: { teacherId } }],
+    },
+    select: {
+      id: true,
+      date: true,
+      startTime: true,
+      endTime: true,
+      status: true,
+      trialClass: { select: { name: true } },
+    },
+    orderBy: [{ date: "asc" }, { startTime: "asc" }],
+    take: 400,
+  });
+
+  const sessionIds = sessions.map((s) => s.id);
+  const enrollmentSelect = {
+    id: true,
+    scheduledSessionId: true,
+    rescheduledFromSessionId: true,
+    status: true,
+    trialClassId: true,
+    leadChildId: true,
+    trialClass: { select: { name: true } },
+    leadChild: {
+      select: {
+        fullName: true,
+        dob: true,
+        ageYears: true,
+        interestedCourseId: true,
+        // ĐẢO câu 46 — CHỈ tên phụ huynh, không SĐT/email (xem ghi chú đầu khối).
+        lead: { select: { parentName: true } },
+      },
+    },
+  } as const;
+
+  // Lead đã XOÁ MỀM thì suất trải nghiệm của nó không còn là việc của ai: giáo viên
+  // không nhập phiếu cho một hồ sơ đã bị gỡ, mà lead thì đã biến khỏi /admin/leads nên
+  // cũng không ai đi đóng sổ hộ được. Lọc ở ĐƯỜNG ĐỌC thay vì trông vào mọi đường ghi
+  // nhớ dọn `LeadTrialHistory.outcome` — đường ghi thì còn thêm mãi, đường đọc chỉ có đây.
+  const aliveLead = { leadChild: { lead: { deletedAt: null } } } as const;
+
+  // CHỈ ghi danh ĐÃ GẮN BUỔI. Ghi danh chưa xếp buổi không còn được bày ở site GV
+  // (chủ dự án 26/08) nên cũng không truy vấn nữa — bớt một round-trip mỗi lần mở trang.
+  const all = sessionIds.length
+    ? await db.trialEnrollment.findMany({
+        where: { scheduledSessionId: { in: sessionIds }, ...aliveLead },
+        select: enrollmentSelect,
+        orderBy: { leadChild: { fullName: "asc" } },
+      })
+    : [];
+  if (all.length === 0) return { upcoming: [], done: [] };
+
+  const courseIds = [
+    ...new Set(
+      all.map((e) => e.leadChild.interestedCourseId).filter((id): id is string => Boolean(id)),
+    ),
+  ];
+  const [courses, evals, histories] = await Promise.all([
+    courseIds.length
+      ? db.course.findMany({ where: { id: { in: courseIds } }, select: { id: true, name: true } })
+      : Promise.resolve([] as { id: string; name: string }[]),
+    db.trialRubricEval.findMany({
+      where: { trialEnrollmentId: { in: all.map((e) => e.id) } },
+      select: { trialEnrollmentId: true },
+    }),
+    // Kết cục học thử (ENROLLED / LOST / PENDING) — 1 dòng / con × lớp.
+    db.leadTrialHistory.findMany({
+      where: {
+        leadChildId: { in: [...new Set(all.map((e) => e.leadChildId))] },
+        trialClassId: { in: [...new Set(all.map((e) => e.trialClassId))] },
+      },
+      select: { leadChildId: true, trialClassId: true, outcome: true },
+    }),
+  ]);
+
+  const courseName = new Map(courses.map((c) => [c.id, c.name]));
+  const evaluatedSet = new Set(evals.map((r) => r.trialEnrollmentId));
+  const outcomeOf = new Map(
+    histories.map((h) => [`${h.leadChildId}:${h.trialClassId}`, h.outcome]),
+  );
+  const sessionById = new Map(sessions.map((s) => [s.id, s]));
+  const nowYear = new Date(todayMs).getUTCFullYear();
+
+  function toRow(e: (typeof all)[number]): TrialTableRow {
+    const ses = e.scheduledSessionId ? (sessionById.get(e.scheduledSessionId) ?? null) : null;
+    const evaluated = evaluatedSet.has(e.id);
+    return {
+      enrollmentId: e.id,
+      studentName: e.leadChild.fullName,
+      birthYear:
+        e.leadChild.dob?.getUTCFullYear() ??
+        (e.leadChild.ageYears != null ? nowYear - e.leadChild.ageYears : null),
+      parentName: e.leadChild.lead?.parentName?.trim() || null,
+      courseName: e.leadChild.interestedCourseId
+        ? (courseName.get(e.leadChild.interestedCourseId) ?? null)
+        : null,
+      trialClassName: ses?.trialClass.name ?? e.trialClass.name,
+      date: ses?.date ?? null,
+      startTime: ses?.startTime ?? null,
+      endTime: ses?.endTime ?? null,
+      evaluated,
+      status: trialRowStatus({
+        enrollmentStatus: e.status,
+        outcome: outcomeOf.get(`${e.leadChildId}:${e.trialClassId}`) ?? null,
+        evaluated,
+        rescheduled: e.rescheduledFromSessionId != null,
+        sessionDate: ses?.date ?? null,
+        sessionStatus: ses?.status ?? null,
+        todayMs,
+      }),
+    };
+  }
+
+  const upcoming: TrialTableRow[] = [];
+  const done: TrialTableRow[] = [];
+  for (const e of all) {
+    const row = toRow(e);
+    // Suất đã có kết cục (nhập học / rớt / rút) rơi xuống bảng dưới dù buổi còn ở tương
+    // lai — với giáo viên thì việc đã xong, không còn là "suất sắp Trial".
+    const settled = isSettledTrialRow(row.status);
+    const inWindow = row.date != null && row.date.getTime() >= todayMs;
+    if (inWindow && !settled) upcoming.push(row);
+    else done.push(row);
+  }
+
+  upcoming.sort(
+    (a, b) =>
+      (a.date?.getTime() ?? 0) - (b.date?.getTime() ?? 0) ||
+      (a.startTime ?? "").localeCompare(b.startTime ?? "") ||
+      a.studentName.localeCompare(b.studentName, "vi"),
+  );
+  done.sort(
+    (a, b) =>
+      (b.date?.getTime() ?? 0) - (a.date?.getTime() ?? 0) ||
+      (b.startTime ?? "").localeCompare(a.startTime ?? "") ||
+      a.studentName.localeCompare(b.studentName, "vi"),
+  );
+
+  return { upcoming, done };
 }

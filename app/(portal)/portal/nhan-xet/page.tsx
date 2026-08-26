@@ -20,6 +20,7 @@ import {
   groupedEvalCriteria,
 } from "@/lib/lms/session-eval-rubric";
 import { sessionNumberLabel } from "@/lib/lms/session-order";
+import { resolveDisplayProjectName } from "@/lib/lms/session-project-name";
 import { NhanXetPageV2 } from "@/components/portal/nhan-xet-page";
 
 // Nhóm rubric (9 tiêu chí × 4 nhóm) — cùng nguồn nhãn với V2 (components/portal/nhan-xet-page).
@@ -85,6 +86,9 @@ export default async function NhanXetPage() {
           select: {
             classId: true,
             date: true,
+            topic: true,
+            plan: { select: { customTitle: true } },
+            lesson: { select: { order: true, title: true, moduleCode: true } },
             class: {
               select: {
                 name: true,
@@ -249,14 +253,31 @@ export default async function NhanXetPage() {
                     )}
                   </div>
 
-                  {f.projectName && (
-                    <p className="mb-1.5 text-sm text-neutral-700">
-                      <span className="font-semibold text-neutral-900">
-                        Dự án:
-                      </span>{" "}
-                      {f.projectName}
-                    </p>
-                  )}
+                  {/* 26/08 — tên dự án suy từ BUỔI, không in bản sao đông cứng trên
+                      phiếu: cùng một buổi mà mỗi học viên lưu một "dự án" khác nhau
+                      (xem resolveDisplayProjectName). */}
+                  {(() => {
+                    const duAn = resolveDisplayProjectName(
+                      {
+                        sessionNumber:
+                          sessionNumberOf.get(f.classSessionId) ?? null,
+                        planTitle: f.classSession?.plan?.customTitle,
+                        lessonTitle: f.classSession?.lesson?.title,
+                        lessonOrder: f.classSession?.lesson?.order,
+                        moduleCode: f.classSession?.lesson?.moduleCode,
+                        topic: f.classSession?.topic,
+                      },
+                      f.projectName,
+                    );
+                    return duAn ? (
+                      <p className="mb-1.5 text-sm text-neutral-700">
+                        <span className="font-semibold text-neutral-900">
+                          Dự án:
+                        </span>{" "}
+                        {duAn}
+                      </p>
+                    ) : null;
+                  })()}
 
                   {prose?.kind === "overall" ? (
                     <div className="space-y-1">

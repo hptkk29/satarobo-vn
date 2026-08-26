@@ -2,6 +2,7 @@ import "server-only";
 import { db } from "@/lib/db";
 import { hasMediaConsent } from "@/lib/lms/media-consent";
 import { resolveMediaUrl } from "@/lib/storage/signed-url";
+import { meaningfulSessionTitle } from "@/lib/lms/session-project-name";
 
 // Portal v2 — ảnh lớp theo buổi của con đang chọn. Cùng luật với bản v1 (C6.2):
 // ảnh APPROVED và (được GẮN THẺ con HOẶC đánh dấu "Ảnh chung cả lớp").
@@ -58,10 +59,13 @@ export async function getStudentPhotos(studentId: string): Promise<StudentPhotos
     if (!byS.has(key)) {
       const ses = m.classSessionId ? smap.get(m.classSessionId) : undefined;
       const les = ses?.lesson;
+      const lesTitle = meaningfulSessionTitle(les?.title);
       byS.set(key, {
         sessionId: key,
         order: les?.order ?? null,
-        title: les ? `Buổi ${les.order}: ${les.title}` : "Buổi học",
+        // 26/08 — cắt tiền tố "Buổi N —" thừa của tên bài trước khi ghép (xem
+        // lib/lms/session-project-name.ts), kẻo ra "Buổi 7: Buổi 7 — …".
+        title: lesTitle ? `Buổi ${les?.order}: ${lesTitle}` : "Buổi học",
         dateISO: (ses?.date ?? m.takenAt)?.toISOString() ?? "",
         photos: [],
       });

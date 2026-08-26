@@ -54,42 +54,40 @@ export function DataTable<T extends Record<string, unknown>>({
 }) {
   return (
     <div className={cn("overflow-hidden rounded-xl border border-border bg-card", className)}>
-      <div className="overflow-x-auto">
-        <PhanTrangBang>
-          <table className="w-full border-collapse text-left">
-            <thead>
-              <tr className="border-b border-border bg-muted/40">
-                {columns.map((col) => (
-                  <th key={col.key} scope="col" className={cn(adminTh, col.className)}>
-                    {col.header}
-                  </th>
-                ))}
+      <PhanTrangBang cuonNgang>
+        <table className="w-full border-collapse text-left">
+          <thead>
+            <tr className="border-b border-border bg-muted/40">
+              {columns.map((col) => (
+                <th key={col.key} scope="col" className={cn(adminTh, col.className)}>
+                  {col.header}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {data.length === 0 ? (
+              <tr>
+                <td colSpan={columns.length} className="px-5 py-10 text-center">
+                  {empty ?? (
+                    <span className="text-sm text-muted-foreground">Chưa có dữ liệu.</span>
+                  )}
+                </td>
               </tr>
-            </thead>
-            <tbody>
-              {data.length === 0 ? (
-                <tr>
-                  <td colSpan={columns.length} className="px-5 py-10 text-center">
-                    {empty ?? (
-                      <span className="text-sm text-muted-foreground">Chưa có dữ liệu.</span>
-                    )}
-                  </td>
+            ) : (
+              data.map((row, i) => (
+                <tr key={rowKey?.(row, i) ?? String(row.id ?? i)} className={adminTr}>
+                  {columns.map((col) => (
+                    <td key={col.key} className={cn(adminTd, col.className)}>
+                      {col.render ? col.render(row, i) : String(row[col.key] ?? "")}
+                    </td>
+                  ))}
                 </tr>
-              ) : (
-                data.map((row, i) => (
-                  <tr key={rowKey?.(row, i) ?? String(row.id ?? i)} className={adminTr}>
-                    {columns.map((col) => (
-                      <td key={col.key} className={cn(adminTd, col.className)}>
-                        {col.render ? col.render(row, i) : String(row[col.key] ?? "")}
-                      </td>
-                    ))}
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </PhanTrangBang>
-      </div>
+              ))
+            )}
+          </tbody>
+        </table>
+      </PhanTrangBang>
     </div>
   );
 }

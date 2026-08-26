@@ -5,8 +5,7 @@
 // C6.2/C6.3 + canUploadToClass của admin — GV đăng ĐƯỢC, ảnh vào PENDING chờ duyệt;
 // GV KHÔNG duyệt/xoá). ClassSessionMedia ∉ SCOPED_MODELS → pass-through SAU guard
 // assignedClassIds (ở caller). ⚠️ Câu 46: tag chỉ TÊN học viên.
-import Link from "next/link";
-import { ArrowRight, Calendar, Images } from "lucide-react";
+import { Calendar, Images } from "lucide-react";
 import type { MediaStatus } from "@prisma/client";
 import type { Actor } from "@/lib/auth/actor";
 import { withMakeupException } from "@/lib/db-scope";
@@ -163,19 +162,7 @@ export async function HubGalleryTab({
           Ảnh các buổi học của lớp. Bạn đăng ảnh → quản lý duyệt → phụ huynh xem
           ảnh con được gắn thẻ (hoặc ảnh chung lớp).
         </p>
-        <div className="flex flex-wrap items-center gap-3">
-          {/* B2: tab hub chỉ HIỆN badge "Trong kho" — thao tác gửi/xoá ảnh kho nằm ở trang
-              Ảnh lớp; trước đây ghi chú vậy nhưng KHÔNG có đường sang (tab cụt). Href
-              /teacher/* là pattern chuẩn của nav-config (proxy lo host giaovien). */}
-          <Link
-            href={`/teacher/anh-lop?classId=${classId}`}
-            className="inline-flex items-center gap-1 text-xs font-semibold text-primary-ink hover:text-primary-ink-hover"
-          >
-            Trang Ảnh lớp (gửi/xoá ảnh trong kho)
-            <ArrowRight className="h-3.5 w-3.5" aria-hidden />
-          </Link>
-          <UploadPhotoDialog classId={classId} />
-        </div>
+        <UploadPhotoDialog classId={classId} />
       </div>
 
       {media.length === 0 ? (

@@ -14,6 +14,9 @@ import { resolveActor } from "@/lib/auth/actor";
 import { canManageClass } from "@/lib/auth/lms-scope";
 import { formatDateDMY } from "@/lib/format/date";
 import { getR2PublicUrl } from "@/lib/storage/r2-client";
+import { resolveMediaUrls } from "@/lib/storage/signed-url";
+import { buildSessionNumberMap } from "@/lib/lms/session-order";
+import { deriveSessionLabel } from "@/lib/lms/session-project-name";
 import {
   createDraftMediaBatch,
   publishClassMedia,
@@ -191,24 +194,47 @@ export async function getClassUploadContext(
       orderBy: { createdAt: "asc" },
     }),
     getNonConsentStudents(classId),
+    // ⚠️ KHÔNG `take`: số buổi ("Buổi 7") là HẠNG theo ngày tính trên TOÀN BỘ buổi của
+    // lớp (lib/lms/session-order) — dựng bảng tra từ một cửa sổ đã cắt sẽ ra số sai cho
+    // mọi buổi còn lại. Một lớp chỉ vài chục buổi nên đọc đủ vẫn rẻ.
     sdb.classSession.findMany({
       where: { classId },
-      select: { id: true, date: true, topic: true },
+      select: {
+        id: true,
+        date: true,
+        topic: true,
+        // Nguồn nhãn "Buổi 1 - HP1 - Bàn Tay Ma Thuật" (deriveSessionLabel) — trước
+        // 25/08 ô chọn buổi chỉ in ngày, giáo viên phải tự nhớ hôm đó dạy bài nào.
+        plan: { select: { customTitle: true } },
+        lesson: { select: { order: true, title: true, moduleCode: true } },
+      },
       orderBy: { date: "desc" },
-      take: 100,
     }),
   ]);
+
+  const sessionNo = buildSessionNumberMap(sessions);
 
   return {
     canUpload: true,
     canPublish,
     students: enr.map((e) => e.student),
     nonConsent,
-    sessions: sessions.map((s) => ({
-      id: s.id,
-      date: s.date.toISOString(),
-      label: `${formatDateDMY(s.date)}${s.topic ? ` · ${s.topic}` : ""}`,
-    })),
+    sessions: sessions.map((s) => {
+      const label = deriveSessionLabel({
+        sessionNumber: sessionNo.get(s.id) ?? null,
+        planTitle: s.plan?.customTitle,
+        lessonTitle: s.lesson?.title,
+        lessonOrder: s.lesson?.order,
+        moduleCode: s.lesson?.moduleCode,
+        topic: s.topic,
+      });
+      return {
+        id: s.id,
+        date: s.date.toISOString(),
+        // Ngày vẫn phải có: hai buổi cùng bài (dạy bù) chỉ phân biệt được bằng ngày.
+        label: `${label || "Buổi học"} · ${formatDateDMY(s.date)}`,
+      };
+    }),
   };
 }
 
@@ -642,4 +668,337 @@ export async function deleteDraftMediaAction(input: {
 
   revalidatePath("/media");
   return { ok: true, deleted: res.deleted };
+}
+
+// =============================================================================
+// ẢNH BUỔI HỌC — LUỒNG GIÁO VIÊN 25/08: tải lên là VÀO THẲNG HÀNG DUYỆT.
+//
+// Chủ dự án chốt: giáo viên tải TOÀN BỘ ảnh của lớp ở màn "Ảnh lớp", phân loại theo
+// BUỔI, "sau khi up ảnh thì đẩy qua cho QLCS duyệt từng ảnh". Khâu "đưa vào kho rồi
+// chọn gửi" biến mất khỏi đường của giáo viên — nó thêm một lượt thao tác cho đúng
+// việc mà QLCS sẽ làm lại ngay sau đó ở hàng duyệt.
+//
+// KHO (DRAFT) KHÔNG BỊ XOÁ BỎ: Marketing / Giáo vụ (chỉ có `media:upload-draft`)
+// vẫn góp ảnh vào kho như chốt 11/08, và kho còn ảnh tồn từ trước. Vì thế hàm dưới
+// đây rơi về DRAFT khi người tải KHÔNG qua được cổng hẹp, thay vì chặn họ lại.
+//
+// ẢNH TẢI LÊN KHÔNG GẮN THẺ và KHÔNG "chung cả lớp" — trạng thái này schema mô tả rõ
+// là ẩn với phụ huynh (bất biến C6.2). CỐ Ý: quyết định "ảnh này của em nào" nay là
+// một bước riêng, làm ở màn nhận xét bằng nút "Chọn ảnh"
+// (toggleMediaStudentTagAction), đúng thứ tự chủ dự án mô tả. Hệ quả phải nhớ: ảnh
+// duyệt xong mà chưa ai chọn thì KHÔNG phụ huynh nào thấy — cột "Chưa có" ở bảng
+// nhận xét chính là chỗ bày việc còn nợ đó ra.
+// =============================================================================
+
+const uploadSessionSchema = z.object({
+  classId: z.string().min(1, "Chọn lớp"),
+  // Buổi BẮT BUỘC (khác đường kho cũ): màn Ảnh lớp gom ảnh theo buổi, và hộp chọn ảnh
+  // ở phiếu nhận xét chỉ mời ảnh của ĐÚNG buổi. Ảnh không gắn buổi rơi khỏi cả hai màn.
+  classSessionId: z.string().min(1, "Chọn buổi học"),
+  files: z
+    .array(
+      z.object({
+        fileUrl: z.string().url("File không hợp lệ"),
+        fileName: z.string().optional().nullable(),
+      }),
+    )
+    .min(1, "Chưa có ảnh nào")
+    .max(DRAFT_BATCH_MAX, `Tối đa ${DRAFT_BATCH_MAX} ảnh mỗi lô`),
+});
+
+/**
+ * Tải N ảnh của MỘT buổi học → vào thẳng hàng chờ QLCS duyệt (PENDING), hoặc APPROVED
+ * nếu chính người tải giữ `media:approve` (giữ lối tắt autoApprove của uploadClassMedia
+ * — QLCS không phải tự duyệt ảnh của mình).
+ *
+ * Vai chỉ-góp-ảnh (Marketing/Giáo vụ) → DRAFT như cũ, trả `status: "DRAFT"` để giao
+ * diện nói đúng chuyện đã xảy ra.
+ */
+export async function uploadSessionMediaAction(input: {
+  classId: string;
+  classSessionId: string;
+  files: { fileUrl: string; fileName?: string | null }[];
+}): Promise<{
+  ok: boolean;
+  error?: string;
+  count?: number;
+  status?: "PENDING" | "APPROVED" | "DRAFT";
+}> {
+  const session = await auth();
+  if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
+
+  const parsed = uploadSessionSchema.safeParse(input);
+  if (!parsed.success) {
+    return { ok: false, error: parsed.error.issues[0]?.message ?? "Dữ liệu không hợp lệ" };
+  }
+  const d = parsed.data;
+
+  // Đẩy thẳng vào hàng duyệt = ảnh sẽ tới phụ huynh ⇒ cổng HẸP (canPublishToClass).
+  const canPublish = await canPublishToClass(session.user, d.classId);
+  if (!canPublish && !(await canStageOnlyToClass(session.user, d.classId))) {
+    return { ok: false, error: "Bạn không phụ trách lớp này — không thể đăng ảnh" };
+  }
+  if (d.files.some((f) => !isOwnStorageUrl(f.fileUrl))) {
+    return { ok: false, error: "Có ảnh không hợp lệ — hãy chọn ảnh qua nút tải ảnh" };
+  }
+
+  const { actorId, actorName } = getAuditActor(session);
+  // Dùng LẠI đường tạo lô của kho: nó đã có transaction, kiểm "buổi thuộc đúng lớp",
+  // fallback takenAt theo ngày buổi và 1 audit cho cả lô. Chép lại ở đây là đẻ bản thứ
+  // hai của những kiểm tra đó, sớm muộn cũng lệch.
+  const created = await createDraftMediaBatch(
+    { id: actorId, name: actorName },
+    {
+      classId: d.classId,
+      classSessionId: d.classSessionId,
+      takenAt: null,
+      files: d.files,
+      uploadedById: actorId,
+      uploadedByName: actorName,
+    },
+  );
+  if (!created.ok) return { ok: false, error: created.message };
+
+  if (!canPublish) {
+    revalidatePath("/media");
+    return { ok: true, count: created.ids.length, status: "DRAFT" };
+  }
+
+  const autoApprove = await checkPermission("media:approve");
+  const status = autoApprove ? ("APPROVED" as const) : ("PENDING" as const);
+  const sdb = scopedDb(await resolveActor(session.user.id));
+  // Nâng trạng thái ngay sau khi tạo. Guard `status: "DRAFT"` + `classId` giữ nguyên
+  // ranh giới đã kiểm ở trên; lô vừa tạo nên không có đường đua thực tế, nhưng nếu
+  // đếm lệch thì ảnh vẫn nằm trong kho và gửi lại được ở màn Ảnh lớp (không mất ảnh).
+  const upd = await sdb.classSessionMedia.updateMany({
+    where: { id: { in: created.ids }, classId: d.classId, status: "DRAFT" },
+    data: {
+      status,
+      ...(autoApprove
+        ? { approvedById: actorId, approvedByName: actorName, approvedAt: new Date() }
+        : {}),
+    },
+  });
+  if (upd.count !== created.ids.length) {
+    return {
+      ok: false,
+      error: "Ảnh đã tải lên nhưng chưa chuyển được sang chờ duyệt — mở trang Ảnh lớp để gửi lại",
+    };
+  }
+
+  const cls = await sdb.class.findUnique({
+    where: { id: d.classId },
+    select: { centerId: true },
+  });
+  await writeAudit({
+    actor: { id: actorId, name: actorName },
+    module: "media",
+    entityType: "ClassSessionMedia",
+    entityId: created.ids[0] ?? "*",
+    action: "MEDIA_SESSION_UPLOAD",
+    newValues: {
+      classId: d.classId,
+      classSessionId: d.classSessionId,
+      count: created.ids.length,
+      ids: created.ids,
+      status,
+    },
+    orgUnitId: cls?.centerId ?? null,
+  });
+
+  revalidatePath("/media");
+  if (autoApprove) revalidatePath("/portal/hinh-anh");
+  return { ok: true, count: created.ids.length, status };
+}
+
+/** 1 ảnh ĐÃ DUYỆT của buổi, dưới góc nhìn của MỘT học viên đang được chọn ảnh. */
+export type SessionPhotoPickerItem = {
+  id: string;
+  /** Đã qua resolveMediaUrls (signed URL khi bật MEDIA_SIGNED_URL). */
+  url: string;
+  caption: string | null;
+  /** Ảnh chung cả lớp — mọi phụ huynh trong lớp đã xem được, không cần gắn thẻ. */
+  isClassWide: boolean;
+  /** Ảnh này đã gắn thẻ CHÍNH em đang mở hộp thoại chưa. */
+  tagged: boolean;
+};
+
+export type SessionPhotoPicker = {
+  /** Được chọn ảnh cho lớp này không (GV lớp / Sale phụ trách / người có media:approve). */
+  canTag: boolean;
+  /** C6.3 — em chưa đồng ý dùng hình ảnh thì KHÔNG gắn thẻ được (server chặn lại). */
+  consentGranted: boolean;
+  items: SessionPhotoPickerItem[];
+};
+
+/**
+ * Ảnh ĐÃ DUYỆT của đúng một buổi, để giáo viên chọn ảnh cho một học viên ở phiếu nhận
+ * xét. Chỉ APPROVED: ảnh chờ duyệt chưa chắc tới được phụ huynh, bày ra là gieo kỳ vọng
+ * sai (giáo viên tưởng đã xong việc trong khi QLCS có thể từ chối).
+ *
+ * ⚠️ Câu 46: payload KHÔNG mang tên/id học viên nào khác — chỉ cờ `tagged` của chính em
+ * đang xét, nên mở hộp thoại của em A không lộ được em B có mặt trong ảnh.
+ */
+export async function getSessionPhotoPicker(input: {
+  classId: string;
+  classSessionId: string;
+  studentId: string;
+}): Promise<SessionPhotoPicker> {
+  const empty: SessionPhotoPicker = { canTag: false, consentGranted: false, items: [] };
+  const session = await auth();
+  if (!session?.user) return empty;
+  // Chọn ảnh = quyết định phụ huynh nào xem được ảnh ⇒ cùng cổng HẸP với việc gửi ảnh.
+  if (!(await canPublishToClass(session.user, input.classId))) return empty;
+
+  const sdb = scopedDb(await resolveActor(session.user.id));
+  // Buổi phải thuộc ĐÚNG lớp (chống đọc chéo bằng payload tuỳ ý) — mẫu uploadClassMedia.
+  const ses = await sdb.classSession.findFirst({
+    where: { id: input.classSessionId, classId: input.classId },
+    select: { id: true },
+  });
+  if (!ses) return empty;
+
+  const [enrolled, granted, rows] = await Promise.all([
+    sdb.enrollment.findFirst({
+      where: {
+        studentId: input.studentId,
+        classId: input.classId,
+        status: { in: ENROLLMENT_ACTIVE_STATUS_LIST },
+        deletedAt: null,
+      },
+      select: { id: true },
+    }),
+    sdb.studentConsent.findFirst({
+      where: { studentId: input.studentId, type: "CLASS_MEDIA", status: "GRANTED" },
+      select: { studentId: true },
+    }),
+    sdb.classSessionMedia.findMany({
+      where: { classSessionId: ses.id, classId: input.classId, status: "APPROVED" },
+      select: {
+        id: true,
+        fileUrl: true,
+        caption: true,
+        isClassWide: true,
+        tags: { select: { studentId: true } },
+      },
+      orderBy: { createdAt: "asc" },
+      take: 200,
+    }),
+  ]);
+  if (!enrolled) return empty;
+
+  const urls = await resolveMediaUrls(rows.map((r) => r.fileUrl));
+  return {
+    canTag: true,
+    consentGranted: !!granted,
+    items: rows.map((r, i) => ({
+      id: r.id,
+      url: urls[i] ?? r.fileUrl,
+      caption: r.caption,
+      isClassWide: r.isClassWide,
+      tagged: r.tags.some((t) => t.studentId === input.studentId),
+    })),
+  };
+}
+
+const toggleTagSchema = z.object({
+  mediaId: z.string().min(1),
+  studentId: z.string().min(1),
+  tagged: z.boolean(),
+});
+
+/**
+ * Gắn / gỡ thẻ MỘT học viên trên MỘT ảnh đã duyệt — đây là thao tác "Chọn ảnh" ở phiếu
+ * nhận xét, và cũng là thứ QUYẾT ĐỊNH phụ huynh nào xem được ảnh (lib/portal/photos.ts).
+ * Vì thế cổng quyền, cách ly cơ sở và luật consent phải y hệt đường gửi ảnh.
+ *
+ * Gỡ thẻ KHÔNG đòi consent: gỡ chỉ thu hẹp phạm vi nhìn thấy, chặn nó lại sẽ khoá luôn
+ * cách sửa sai sau khi phụ huynh thu hồi đồng ý (C6.4).
+ */
+export async function toggleMediaStudentTagAction(input: {
+  mediaId: string;
+  studentId: string;
+  tagged: boolean;
+}): Promise<{ ok: boolean; error?: string }> {
+  const session = await auth();
+  if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
+
+  const parsed = toggleTagSchema.safeParse(input);
+  if (!parsed.success) {
+    return { ok: false, error: parsed.error.issues[0]?.message ?? "Dữ liệu không hợp lệ" };
+  }
+  const d = parsed.data;
+
+  // Cách ly cơ sở theo mediaId (mẫu reviewMedia/deleteMedia) — chống IDOR ghi.
+  if (!(await mediaClassInScope(session.user.id, d.mediaId))) {
+    return { ok: false, error: "Không tìm thấy ảnh" };
+  }
+  const sdb = scopedDb(await resolveActor(session.user.id));
+  const media = await sdb.classSessionMedia.findUnique({
+    where: { id: d.mediaId },
+    select: { classId: true, status: true },
+  });
+  if (!media) return { ok: false, error: "Không tìm thấy ảnh" };
+  if (!(await canPublishToClass(session.user, media.classId))) {
+    return { ok: false, error: "Bạn không phụ trách lớp này" };
+  }
+  // Chỉ ảnh ĐÃ DUYỆT: ảnh trong kho rời kho bằng publishClassMediaAction (đường có kiểm
+  // consent cho cả lô), ảnh chờ duyệt / bị từ chối thì chưa (hoặc sẽ không) tới phụ huynh.
+  if (media.status !== "APPROVED") {
+    return { ok: false, error: "Chỉ chọn được ảnh đã được duyệt" };
+  }
+
+  if (d.tagged) {
+    // C6.3 + "phải đang học lớp này": kiểm TRỰC TIẾP theo studentId để payload tuỳ ý
+    // không gắn được em lớp khác vào ảnh lớp này (mirror uploadClassMedia).
+    const [granted, enrolled] = await Promise.all([
+      sdb.studentConsent.findFirst({
+        where: { studentId: d.studentId, type: "CLASS_MEDIA", status: "GRANTED" },
+        select: { studentId: true },
+      }),
+      sdb.enrollment.findFirst({
+        where: {
+          studentId: d.studentId,
+          classId: media.classId,
+          status: { in: ENROLLMENT_ACTIVE_STATUS_LIST },
+          deletedAt: null,
+        },
+        select: { id: true },
+      }),
+    ]);
+    if (!enrolled) return { ok: false, error: "Học viên không thuộc lớp này — tải lại trang" };
+    if (!granted) {
+      return {
+        ok: false,
+        error: "Học viên chưa đồng ý dùng hình ảnh — không thể chọn ảnh cho em này",
+      };
+    }
+    await sdb.mediaStudentTag.createMany({
+      data: [{ mediaId: d.mediaId, studentId: d.studentId }],
+      skipDuplicates: true,
+    });
+  } else {
+    await sdb.mediaStudentTag.deleteMany({
+      where: { mediaId: d.mediaId, studentId: d.studentId },
+    });
+  }
+
+  const { actorId, actorName } = getAuditActor(session);
+  const cls = await sdb.class.findUnique({
+    where: { id: media.classId },
+    select: { centerId: true },
+  });
+  await writeAudit({
+    actor: { id: actorId, name: actorName },
+    module: "media",
+    entityType: "ClassSessionMedia",
+    entityId: d.mediaId,
+    action: d.tagged ? "MEDIA_TAG_ADD" : "MEDIA_TAG_REMOVE",
+    newValues: { classId: media.classId, studentId: d.studentId },
+    orgUnitId: cls?.centerId ?? null,
+  });
+
+  revalidatePath("/media");
+  revalidatePath("/portal/hinh-anh");
+  return { ok: true };
 }

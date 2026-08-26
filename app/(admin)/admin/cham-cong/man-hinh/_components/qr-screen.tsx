@@ -34,11 +34,15 @@ export function QrScreen({ centerId, centerName }: { centerId: string; centerNam
         <p className="mt-1 text-muted-foreground">{centerName}</p>
       </div>
 
-      <div className="flex h-[360px] w-[360px] items-center justify-center rounded-xl border border-border">
+      {/* `max-w-full` + `aspect-square` thay cho bề cao/rộng cứng: 360px khung + 80px đệm
+          `p-10` của thẻ + 48px đệm của trang là 488px, vượt màn 375px ⇒ mở trang này bằng
+          điện thoại là cả trang trượt ngang. Ảnh QR vốn vuông nên để bề cao chạy theo bề
+          rộng là giữ nguyên hình; trên màn rộng vẫn đúng 360px như cũ. */}
+      <div className="flex aspect-square w-[360px] max-w-full items-center justify-center rounded-xl border border-border">
         {error ? (
           <p className="px-6 text-sm text-state-danger-ink">{error}</p>
         ) : qr ? (
-          <img src={qr} alt="QR chấm công" className="h-[340px] w-[340px]" />
+          <img src={qr} alt="QR chấm công" className="h-auto w-[340px] max-w-full" />
         ) : (
           <Loader2 className="h-10 w-10 animate-spin text-muted-foreground" />
         )}

@@ -67,6 +67,7 @@ export function PhanTrangBang({
   khoaGhiNho,
   soDongMacDinh = SO_DONG_MAC_DINH,
   className,
+  cuonNgang = false,
 }: {
   /** ĐÚNG MỘT phần tử `<table>`. */
   children: ReactNode;
@@ -74,6 +75,16 @@ export function PhanTrangBang({
   khoaGhiNho?: string;
   soDongMacDinh?: number;
   className?: string;
+  /**
+   * Tự bọc RIÊNG cái bảng trong vùng cuộn ngang (`overflow-x-auto`).
+   *
+   * 25/08 — vá lỗi "cuộn sang phải là mất thanh phân trang". Nếp cũ ở ~24 bảng là bọc
+   * cả `<PhanTrangBang>` trong một div `overflow-x-auto`, mà thanh phân trang lại là
+   * con của component ⇒ nó nằm TRONG vùng cuộn: kéo bảng sang phải để đọc cột cuối là
+   * nút chuyển trang trôi khỏi màn hình. Bật cờ này rồi BỎ div bọc ngoài ở chỗ gọi:
+   * bảng cuộn được, thanh phân trang đứng yên.
+   */
+  cuonNgang?: boolean;
 }) {
   const [soDong, setSoDong] = useState(soDongMacDinh);
   const [trang, setTrang] = useState(1);
@@ -133,7 +144,18 @@ export function PhanTrangBang({
 
   return (
     <div className={cn("space-y-3", className)}>
-      {bangDaCat}
+      {cuonNgang ? (
+        // `relative` KHÔNG thừa: nhiều bảng có `<th><span className="sr-only">` mà
+        // `sr-only` là `position:absolute`. Vùng cuộn không được định vị thì cái span đó
+        // neo vào khối chứa ban đầu của TRANG ở x ≈ min-width của bảng (880px…), kéo cả
+        // `<body>` trượt ngang mấy trăm px ở màn 375px — và `overflow-hidden` của thẻ card
+        // KHÔNG cắt được nó, vì absolute chỉ bị cắt bởi tổ tiên CÓ định vị.
+        // Site GV vá bằng `.t-card{position:relative}` (teacher.css); admin không có thứ
+        // tương đương, nên đặt luôn ở đây cho mọi site.
+        <div className="relative overflow-x-auto">{bangDaCat}</div>
+      ) : (
+        bangDaCat
+      )}
       {hienThanh && (
         <div className="flex flex-col gap-2 text-sm text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-2">

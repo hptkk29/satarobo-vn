@@ -1,5 +1,6 @@
 import "server-only";
 import { db } from "@/lib/db";
+import { assignmentWindow, realDueAt } from "@/lib/lms/assignment-window";
 import { getStudentSchedule } from "@/lib/portal/schedule";
 
 // Portal v2 — Cổng học sinh "Bài tập": lộ trình từng buổi + trạng thái bài tập của con.
@@ -7,7 +8,27 @@ import { getStudentSchedule } from "@/lib/portal/schedule";
 const ACTIVE = ["CONFIRMED", "STUDYING", "ACTIVE", "PAUSED"] as const;
 const DONE = new Set(["SUBMITTED", "GRADED"]);
 
-export type TrackAssignment = { id: string; title: string; dueAt: string | null; done: boolean; overdue: boolean };
+export type TrackAssignment = {
+  id: string;
+  title: string;
+  /** Hạn nộp THẬT (đã lọc sentinel 1970) — null = bài không đặt hạn, PH thấy ô trống. */
+  dueAt: string | null;
+  done: boolean;
+  /**
+   * "Hết đường nộp" — cổng nộp bài sẽ chặn nếu PH bấm vào (site GV 25/08). Đang trong
+   * cửa nộp bù GV mở thì KHÔNG phải `closed`: bài vẫn nộp được, gắn cờ chỉ làm PH tưởng
+   * đã mất bài.
+   */
+  closed: boolean;
+  /**
+   * `closed` VÌ QUÁ HẠN — tức có hạn nộp thật và hạn đó đã trôi qua.
+   *
+   * Tách khỏi `closed` vì truy vấn lấy cả `status = CLOSED`: bài admin đóng tay mà chưa
+   * từng đặt hạn cũng đóng, nhưng dán "Quá hạn" cho nó là báo PH lỡ một cái hạn KHÔNG
+   * HỀ TỒN TẠI — mà ô "Hạn" ngay cạnh thì đang để trống.
+   */
+  overdue: boolean;
+};
 export type TrackItem = {
   key: string;
   order: number;
@@ -41,7 +62,8 @@ export async function getStudentAssignmentTrack(studentId: string): Promise<Assi
   ]);
   const classIds = enrollments.map((e) => e.classId);
 
-  const now = Date.now();
+  const now = new Date();
+  const nowMs = now.getTime();
   const items: TrackItem[] = [];
   if (classIds.length > 0) {
     const [sessions, assignments] = await Promise.all([
@@ -57,6 +79,9 @@ export async function getStudentAssignmentTrack(studentId: string): Promise<Assi
           lessonId: true,
           title: true,
           dueAt: true,
+          // Cần cho assignmentWindow — thiếu 2 cột này thì cổng PH và màn GV nói khác nhau.
+          status: true,
+          lateUntil: true,
           submissions: { where: { studentId }, select: { status: true }, take: 1 },
         },
       }),
@@ -75,15 +100,22 @@ export async function getStudentAssignmentTrack(studentId: string): Promise<Assi
       let assignment: TrackAssignment | null = null;
       if (a) {
         const done = DONE.has(a.submissions[0]?.status ?? "");
-        const overdue = !done && !!a.dueAt && a.dueAt.getTime() < now;
-        assignment = { id: a.id, title: a.title, dueAt: a.dueAt?.toISOString() ?? null, done, overdue };
+        // Cùng hàm mà cổng nộp bài (portal/bai-tap/actions) và màn GV dùng: cờ của PH
+        // phải tắt đúng lúc bài lại nộp được, không thì PH thấy đỏ mà vẫn nộp được (hoặc
+        // ngược lại — thấy bình thường mà nộp bị chặn).
+        const closed = !done && !assignmentWindow(a, now).acceptsSubmission;
+        // Hạn thật, không phải `a.dueAt` thô: bài seed để epoch 1970 mà in ra thì PH đọc
+        // "Hạn 01/01/1970" và cờ dưới đây cũng sẽ nói bài quá hạn 56 năm.
+        const due = realDueAt(a.dueAt);
+        const overdue = closed && due != null && now.getTime() > due.getTime();
+        assignment = { id: a.id, title: a.title, dueAt: due?.toISOString() ?? null, done, closed, overdue };
       }
       items.push({
         key: l.id,
         order: l.order,
         title: l.title,
         sessionDate: s.date.toISOString(),
-        taught: s.date.getTime() < now,
+        taught: s.date.getTime() < nowMs,
         assignment,
       });
     }

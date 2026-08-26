@@ -11,6 +11,7 @@ import { checkPermission } from "@/lib/auth/check-permission";
 import { SessionEvalCard } from "@/components/admin/session-eval-card";
 import { parseFeedbackNotes, parseFeedbackRubric } from "@/lib/lms/session-eval-rubric";
 import { buildSessionNumberMap, sessionNumberLabel } from "@/lib/lms/session-order";
+import { resolveDisplayProjectName } from "@/lib/lms/session-project-name";
 import { getPreSessionInfo } from "@/lib/lms/pre-session";
 import { ENROLLMENT_ACTIVE_STATUS_LIST } from "@/lib/enrollment-status";
 import { BookOpen, Users, AlertTriangle, FileWarning } from "lucide-react";
@@ -54,7 +55,8 @@ export default async function SessionDetailPage({ params }: Props) {
       ckIncident: true,
       incidentNote: true,
       lessonNotes: true,
-      lesson: { select: { title: true, order: true } },
+      plan: { select: { customTitle: true } },
+      lesson: { select: { title: true, order: true, moduleCode: true } },
       class: {
         select: {
           id: true,
@@ -150,13 +152,36 @@ export default async function SessionDetailPage({ params }: Props) {
     : [];
   const authorName = new Map(authors.map((u) => [u.id, u.name]));
   const nameByStudent = new Map(enrollments.map((e) => [e.student.id, e.student.name]));
+
+  // R1 21/08 — "buổi thứ mấy" của lớp. Tính trên TOÀN BỘ buổi của lớp (lib/lms/session-order),
+  // để trang này, trang lớp và site GV cùng gọi một buổi bằng cùng một số.
+  // 26/08 — DỜI LÊN TRƯỚC `feedbackCards`: thẻ nhận xét cần số buổi để suy tên dự án.
+  const sessionNo =
+    buildSessionNumberMap(
+      await sdb.classSession.findMany({
+        where: { classId: sess.class.id },
+        select: { id: true, date: true },
+      }),
+    ).get(sess.id) ?? null;
+
+  // 26/08 — tên dự án của BUỔI, dùng chung cho mọi phiếu; không đọc bản sao đông cứng
+  // theo từng học viên (xem resolveDisplayProjectName).
+  const projectSrc = {
+    sessionNumber: sessionNo,
+    planTitle: sess.plan?.customTitle,
+    lessonTitle: sess.lesson?.title,
+    lessonOrder: sess.lesson?.order,
+    moduleCode: sess.lesson?.moduleCode,
+    topic: sess.topic,
+  };
+
   const feedbackCards = sess.studentFeedbacks
     .map((f) => ({
       studentId: f.studentId,
       // Phiếu của HV học bù / đã rời lớp không có trong roster active — vẫn phải hiện.
       studentName: nameByStudent.get(f.studentId) ?? "Học viên ngoài sĩ số",
       data: {
-        projectName: f.projectName,
+        projectName: resolveDisplayProjectName(projectSrc, f.projectName),
         notes: parseFeedbackNotes(f.notes),
         rubric: parseFeedbackRubric(f.rubric),
         comment: f.comment ?? "",
@@ -172,16 +197,6 @@ export default async function SessionDetailPage({ params }: Props) {
     month: "2-digit",
     year: "numeric",
   });
-
-  // R1 21/08 — "buổi thứ mấy" của lớp. Tính trên TOÀN BỘ buổi của lớp (lib/lms/session-order),
-  // để trang này, trang lớp và site GV cùng gọi một buổi bằng cùng một số.
-  const sessionNo =
-    buildSessionNumberMap(
-      await sdb.classSession.findMany({
-        where: { classId: sess.class.id },
-        select: { id: true, date: true },
-      }),
-    ).get(sess.id) ?? null;
 
   // LMS-4 — thông tin chuẩn bị (chỉ khi buổi chưa hoàn tất).
   const pre = sess.status !== "COMPLETED" ? await getPreSessionInfo(sess.id) : null;

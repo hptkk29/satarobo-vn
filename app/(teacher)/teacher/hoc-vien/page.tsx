@@ -44,6 +44,7 @@ import {
   buildSessionNumberMap,
   sessionNumberLabel,
 } from "@/lib/lms/session-order";
+import { resolveDisplayProjectName } from "@/lib/lms/session-project-name";
 import { cn } from "@/lib/utils";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -509,6 +510,8 @@ async function ReviewsTab({
           classId: true,
           date: true,
           topic: true,
+          plan: { select: { customTitle: true } },
+          lesson: { select: { order: true, title: true, moduleCode: true } },
           class: { select: { name: true } },
         },
       },
@@ -557,7 +560,21 @@ async function ReviewsTab({
                 <p className="text-sm text-muted-foreground">
                   {dayFmt.format(f.classSession.date)}
                   {multiClass ? ` · ${f.classSession.class.name}` : ""}
-                  {f.projectName ? ` · ${f.projectName}` : ""}
+                  {/* 26/08 — tên dự án suy từ BUỔI, không in bản sao đông cứng trên phiếu. */}
+                  {(() => {
+                    const duAn = resolveDisplayProjectName(
+                      {
+                        sessionNumber: sessionNumberOf.get(f.classSession.id) ?? null,
+                        planTitle: f.classSession.plan?.customTitle,
+                        lessonTitle: f.classSession.lesson?.title,
+                        lessonOrder: f.classSession.lesson?.order,
+                        moduleCode: f.classSession.lesson?.moduleCode,
+                        topic: f.classSession.topic,
+                      },
+                      f.projectName,
+                    );
+                    return duAn ? ` · ${duAn}` : "";
+                  })()}
                 </p>
               </div>
               {hasPdfContent && (
@@ -646,80 +663,78 @@ async function AssignmentsTab({
   }
   return (
     <div className="t-card overflow-hidden">
-      <div className="overflow-x-auto">
-        <PhanTrangBang>
-          <table className="min-w-[660px] w-full border-collapse text-left text-sm">
-            <thead>
-              <tr className="border-b border-border bg-muted/50 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
-                <th scope="col" className="px-5 py-3">
-                  Nội dung
-                </th>
-                <th scope="col" className="px-5 py-3">
-                  Hình thức
-                </th>
-                <th scope="col" className="px-5 py-3">
-                  Hạn nộp
-                </th>
-                <th scope="col" className="px-5 py-3">
-                  Tình trạng
-                </th>
-                <th scope="col" className="px-5 py-3">
-                  Điểm
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {subs.map((s, i) => {
-                const isTest = s.assignment._count.questions > 0;
-                const submitted = s.status !== "NOT_SUBMITTED";
-                const due =
-                  s.assignment.dueAt && s.assignment.dueAt.getFullYear() >= 2000
-                    ? dueFmt.format(s.assignment.dueAt)
-                    : "—";
-                return (
-                  <tr
-                    key={i}
-                    className="border-b border-border/60 transition-colors last:border-0 hover:bg-muted/50"
-                  >
-                    <td className="px-5 py-3.5 font-semibold text-foreground">
-                      {s.assignment.title}
-                    </td>
-                    <td className="px-5 py-3.5">
-                      <Badge
-                        variant="outline"
-                        className={
-                          isTest
-                            ? "border-primary-soft bg-primary-soft text-primary-ink dark:border-primary dark:bg-primary-soft dark:text-primary-ink"
-                            : "border-state-info-soft bg-state-info-soft text-state-info-ink dark:border-state-info"
-                        }
-                      >
-                        {isTest ? "Kiểm tra" : "Bài tập"}
-                      </Badge>
-                    </td>
-                    <td className="px-5 py-3.5 whitespace-nowrap text-foreground">
-                      {due}
-                    </td>
-                    <td className="px-5 py-3.5 whitespace-nowrap">
-                      {submitted ? (
-                        <span className="inline-flex items-center gap-1.5 font-medium text-state-success-ink">
-                          <CircleCheck className="h-4 w-4" aria-hidden /> Đã nộp
-                        </span>
-                      ) : (
-                        <span className="text-state-warning-ink">Chưa nộp</span>
-                      )}
-                    </td>
-                    <td className="px-5 py-3.5 whitespace-nowrap font-semibold text-foreground">
-                      {s.score != null
-                        ? `${s.score}/${s.assignment.totalPoints}`
-                        : "—"}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </PhanTrangBang>
-      </div>
+      <PhanTrangBang cuonNgang>
+        <table className="min-w-[660px] w-full border-collapse text-left text-sm">
+          <thead>
+            <tr className="border-b border-border bg-muted/50 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+              <th scope="col" className="px-5 py-3">
+                Nội dung
+              </th>
+              <th scope="col" className="px-5 py-3">
+                Hình thức
+              </th>
+              <th scope="col" className="px-5 py-3">
+                Hạn nộp
+              </th>
+              <th scope="col" className="px-5 py-3">
+                Tình trạng
+              </th>
+              <th scope="col" className="px-5 py-3">
+                Điểm
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {subs.map((s, i) => {
+              const isTest = s.assignment._count.questions > 0;
+              const submitted = s.status !== "NOT_SUBMITTED";
+              const due =
+                s.assignment.dueAt && s.assignment.dueAt.getFullYear() >= 2000
+                  ? dueFmt.format(s.assignment.dueAt)
+                  : "—";
+              return (
+                <tr
+                  key={i}
+                  className="border-b border-border/60 transition-colors last:border-0 hover:bg-muted/50"
+                >
+                  <td className="px-5 py-3.5 font-semibold text-foreground">
+                    {s.assignment.title}
+                  </td>
+                  <td className="px-5 py-3.5">
+                    <Badge
+                      variant="outline"
+                      className={
+                        isTest
+                          ? "border-primary-soft bg-primary-soft text-primary-ink dark:border-primary dark:bg-primary-soft dark:text-primary-ink"
+                          : "border-state-info-soft bg-state-info-soft text-state-info-ink dark:border-state-info"
+                      }
+                    >
+                      {isTest ? "Kiểm tra" : "Bài tập"}
+                    </Badge>
+                  </td>
+                  <td className="px-5 py-3.5 whitespace-nowrap text-foreground">
+                    {due}
+                  </td>
+                  <td className="px-5 py-3.5 whitespace-nowrap">
+                    {submitted ? (
+                      <span className="inline-flex items-center gap-1.5 font-medium text-state-success-ink">
+                        <CircleCheck className="h-4 w-4" aria-hidden /> Đã nộp
+                      </span>
+                    ) : (
+                      <span className="text-state-warning-ink">Chưa nộp</span>
+                    )}
+                  </td>
+                  <td className="px-5 py-3.5 whitespace-nowrap font-semibold text-foreground">
+                    {s.score != null
+                      ? `${s.score}/${s.assignment.totalPoints}`
+                      : "—"}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </PhanTrangBang>
     </div>
   );
 }

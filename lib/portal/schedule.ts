@@ -1,6 +1,7 @@
 import "server-only";
 import { db } from "@/lib/db";
 import { sessionTimeRange } from "@/lib/classes/slots";
+import { meaningfulSessionTitle } from "@/lib/lms/session-project-name";
 
 // Portal v2 — dữ liệu trang Lịch học (1 con đang chọn). Ownership: caller truyền studentId
 // đã verify (requireActiveStudent). KHÔNG nhận studentId qua URL.
@@ -89,7 +90,11 @@ export async function getStudentSchedule(studentId: string): Promise<StudentSche
   const all: ScheduleSession[] = sessions.map((s) => ({
     id: s.id,
     order: s.lesson?.order ?? null,
-    title: s.lesson?.title ? `Buổi ${s.lesson.order}: ${s.lesson.title}` : "Buổi học",
+    // 26/08 — xem ghi chú ở lib/portal/feedback.ts: tên bài của giáo trình có thể đã
+    // mang sẵn "Buổi N —", ghép thẳng là in số buổi hai lần.
+    title: meaningfulSessionTitle(s.lesson?.title)
+      ? `Buổi ${s.lesson?.order}: ${meaningfulSessionTitle(s.lesson?.title)}`
+      : "Buổi học",
     dateISO: s.date.toISOString(),
     time: timeOf(s.date),
     room: roomName,

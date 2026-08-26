@@ -149,7 +149,7 @@ export default async function TransferPage({ searchParams }: PageProps) {
         <div className="border-b px-4 py-2 text-sm font-semibold text-foreground">
           Yêu cầu đang chờ
         </div>
-        <PhanTrangBang>
+        <PhanTrangBang cuonNgang>
           <table className="w-full text-sm">
             <thead className="text-left text-xs text-muted-foreground">
               <tr>

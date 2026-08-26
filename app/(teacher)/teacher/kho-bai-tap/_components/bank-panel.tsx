@@ -117,112 +117,110 @@ export function AssignmentBankPanel({
         />
       ) : (
         <div className="t-card overflow-hidden">
-          <div className="overflow-x-auto">
-            <PhanTrangBang tenDonVi="đề">
-            <table className="min-w-[720px] w-full border-collapse text-left text-sm">
-              <thead>
-                <tr className="border-b border-border bg-muted/50 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
-                  <th scope="col" className="px-5 py-3">Tiêu đề</th>
-                  <th scope="col" className="px-5 py-3">Khoá</th>
-                  <th scope="col" className="px-5 py-3">Hình thức</th>
-                  <th scope="col" className="px-5 py-3">Dạng bài</th>
-                  <th scope="col" className="px-5 py-3">Ngày tạo</th>
-                  <th scope="col" className="px-5 py-3 text-right">Thao tác</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filtered.map((t) => (
-                  <tr
-                    key={t.id}
-                    className="border-b border-border/60 transition-colors last:border-0 hover:bg-muted/50"
-                  >
-                    <td className="max-w-xs px-5 py-3.5">
-                      <p className="font-semibold text-foreground">{t.title}</p>
-                      {t.description && (
-                        <p className="mt-0.5 line-clamp-1 text-xs text-muted-foreground">
-                          {t.description}
-                        </p>
-                      )}
-                    </td>
-                    <td className="px-5 py-3.5 whitespace-nowrap text-muted-foreground">
-                      {t.courseName ?? "Mọi khoá"}
-                    </td>
-                    <td className="px-5 py-3.5 whitespace-nowrap">
-                      <KindBadge kind={t.kind} />
-                    </td>
-                    <td className="px-5 py-3.5 whitespace-nowrap">
-                      <p className="font-medium text-foreground">
-                        {t.questionCount} câu hỏi
+          <PhanTrangBang cuonNgang tenDonVi="đề">
+          <table className="min-w-[720px] w-full border-collapse text-left text-sm">
+            <thead>
+              <tr className="border-b border-border bg-muted/50 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+                <th scope="col" className="px-5 py-3">Tiêu đề</th>
+                <th scope="col" className="px-5 py-3">Khoá</th>
+                <th scope="col" className="px-5 py-3">Hình thức</th>
+                <th scope="col" className="px-5 py-3">Dạng bài</th>
+                <th scope="col" className="px-5 py-3">Ngày tạo</th>
+                <th scope="col" className="px-5 py-3 text-right">Thao tác</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.map((t) => (
+                <tr
+                  key={t.id}
+                  className="border-b border-border/60 transition-colors last:border-0 hover:bg-muted/50"
+                >
+                  <td className="max-w-xs px-5 py-3.5">
+                    <p className="font-semibold text-foreground">{t.title}</p>
+                    {t.description && (
+                      <p className="mt-0.5 line-clamp-1 text-xs text-muted-foreground">
+                        {t.description}
                       </p>
-                    </td>
-                    <td className="px-5 py-3.5 whitespace-nowrap text-muted-foreground">
-                      {t.createdAt}
-                    </td>
-                    <td className="px-5 py-3.5 text-right whitespace-nowrap">
-                      {confirmId === t.id ? (
-                        <div className="inline-flex items-center gap-1">
-                          <Button
-                            variant="destructive"
-                            size="sm"
-                            disabled={pending}
-                            onClick={() => del(t)}
-                          >
-                            {pending ? "Đang xoá…" : "Xác nhận xoá"}
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            disabled={pending}
-                            onClick={() => setConfirmId(null)}
-                          >
-                            Huỷ
-                          </Button>
-                        </div>
-                      ) : (
-                        <div className="inline-flex items-center gap-1">
+                    )}
+                  </td>
+                  <td className="px-5 py-3.5 whitespace-nowrap text-muted-foreground">
+                    {t.courseName ?? "Mọi khoá"}
+                  </td>
+                  <td className="px-5 py-3.5 whitespace-nowrap">
+                    <KindBadge kind={t.kind} />
+                  </td>
+                  <td className="px-5 py-3.5 whitespace-nowrap">
+                    <p className="font-medium text-foreground">
+                      {t.questionCount} câu hỏi
+                    </p>
+                  </td>
+                  <td className="px-5 py-3.5 whitespace-nowrap text-muted-foreground">
+                    {t.createdAt}
+                  </td>
+                  <td className="px-5 py-3.5 text-right whitespace-nowrap">
+                    {confirmId === t.id ? (
+                      <div className="inline-flex items-center gap-1">
+                        <Button
+                          variant="destructive"
+                          size="sm"
+                          disabled={pending}
+                          onClick={() => del(t)}
+                        >
+                          {pending ? "Đang xoá…" : "Xác nhận xoá"}
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          disabled={pending}
+                          onClick={() => setConfirmId(null)}
+                        >
+                          Huỷ
+                        </Button>
+                      </div>
+                    ) : (
+                      <div className="inline-flex items-center gap-1">
+                        <button
+                          type="button"
+                          onClick={() => setPreview(t)}
+                          aria-label={`Xem trước ${t.title}`}
+                          className="rounded-lg p-2 text-muted-foreground transition-colors hover:bg-state-info-soft hover:text-state-info-ink"
+                        >
+                          <Eye className="h-4 w-4" aria-hidden />
+                        </button>
+                        {canAuthor && (
+                          <CreateAssignmentDialog
+                            courses={courses}
+                            template={t}
+                            renderTrigger={(open) => (
+                              <button
+                                type="button"
+                                onClick={open}
+                                aria-label={`Sửa ${t.title}`}
+                                className="rounded-lg p-2 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                              >
+                                <Pencil className="h-4 w-4" aria-hidden />
+                              </button>
+                            )}
+                          />
+                        )}
+                        {canAuthor && (
                           <button
                             type="button"
-                            onClick={() => setPreview(t)}
-                            aria-label={`Xem trước ${t.title}`}
-                            className="rounded-lg p-2 text-muted-foreground transition-colors hover:bg-state-info-soft hover:text-state-info-ink"
+                            onClick={() => setConfirmId(t.id)}
+                            aria-label={`Xoá ${t.title}`}
+                            className="rounded-lg p-2 text-muted-foreground transition-colors hover:bg-state-danger-soft hover:text-state-danger-ink"
                           >
-                            <Eye className="h-4 w-4" aria-hidden />
+                            <Trash2 className="h-4 w-4" aria-hidden />
                           </button>
-                          {canAuthor && (
-                            <CreateAssignmentDialog
-                              courses={courses}
-                              template={t}
-                              renderTrigger={(open) => (
-                                <button
-                                  type="button"
-                                  onClick={open}
-                                  aria-label={`Sửa ${t.title}`}
-                                  className="rounded-lg p-2 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-                                >
-                                  <Pencil className="h-4 w-4" aria-hidden />
-                                </button>
-                              )}
-                            />
-                          )}
-                          {canAuthor && (
-                            <button
-                              type="button"
-                              onClick={() => setConfirmId(t.id)}
-                              aria-label={`Xoá ${t.title}`}
-                              className="rounded-lg p-2 text-muted-foreground transition-colors hover:bg-state-danger-soft hover:text-state-danger-ink"
-                            >
-                              <Trash2 className="h-4 w-4" aria-hidden />
-                            </button>
-                          )}
-                        </div>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            </PhanTrangBang>
-          </div>
+                        )}
+                      </div>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          </PhanTrangBang>
         </div>
       )}
 

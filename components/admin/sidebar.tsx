@@ -19,6 +19,7 @@ import {
   CalendarCheck,
   CalendarDays,
   CalendarOff,
+  CheckCheck,
   ChevronDown,
   ClipboardCheck,
   ClipboardEdit,
@@ -133,7 +134,8 @@ const NAV_GROUPS: NavGroup[] = [
       // R1-01 — hội thoại Messenger của Page. Trang có thật từ lâu nhưng CHƯA BAO GIỜ
       // có lối vào: chỉ gõ URL mới tới (rà 11/08).
       { label: "Messenger CRM", href: "/crm/messenger", icon: MessagesSquare, perm: ["leads:view-all", "leads:view-own"] },
-      { label: "Học thử", href: "/trials", icon: FlaskConical, perm: ["trials:view"] },
+      // 26/08 — GỘP hai hệ trial làm một. Mục "Học thử" (hệ V1) đã gỡ; `/trials` nay
+      // chuyển hướng sang đây. Xem app/(admin)/admin/trials/page.tsx.
       { label: "Lớp trải nghiệm", href: "/trial-classes", icon: FlaskConical, perm: ["trials:view"] },
     ],
   },
@@ -170,6 +172,9 @@ const NAV_GROUPS: NavGroup[] = [
       // không có attendance:view — thiếu nó thì họ dùng được trang mà không thấy link.
       { label: "Điểm danh", href: "/attendance", icon: ClipboardCheck, perm: ["attendance:view", "attendance:edit"] },
       { label: "Ảnh lớp học", href: "/media", icon: ImageIcon, perm: [...PAGE_GATES["/media"]] },
+      // MEDIA-REVIEW (26/08) — cổng duyệt ảnh theo NGÀY → LỚP, tách khỏi "Ảnh lớp học"
+      // (thư viện tra cứu). Đặt ngay dưới để hai mục ảnh nằm cạnh nhau.
+      { label: "Duyệt ảnh", href: "/duyet-media", icon: CheckCheck, perm: [...PAGE_GATES["/duyet-media"]] },
       { label: "Học bù", href: "/hoc-bu", icon: RefreshCw, perm: ["parent-requests:manage"] },
       { label: "Cơ sở", href: "/centers", icon: MapPin, perm: ["centers:view"] },
       { label: "Phòng học", href: "/rooms", icon: DoorOpen, perm: ["rooms:view"] },

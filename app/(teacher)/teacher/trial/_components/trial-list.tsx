@@ -1,312 +1,259 @@
 "use client";
 
+// Bảng Trial site GV — 25/08 (chủ dự án): thay lưới thẻ theo ngày bằng HAI BẢNG PHẲNG.
+//
+//   • "Các suất sắp Trial" — hôm nay → hết 7 ngày tới, xếp theo ngày tăng dần.
+//     Không có suất nào trong cửa sổ đó thì KHÔNG hiện bảng (yêu cầu: "không có thì
+//     không hiển thị") — chứ không hiện bảng rỗng.
+//   • "Đã Trial" — nằm dưới cùng, cùng bộ cột, mới nhất lên trước.
+//
+// Cột: Buổi · Học viên · Phụ huynh · Khoá học · Đánh giá · Trạng thái.
+// Cột "Buổi" là thứ chủ dự án không liệt kê nhưng bảng xếp theo ngày mà không in ngày
+// thì giáo viên không dùng được — giữ lại, để đầu bảng.
+//
+// "Đánh giá" chỉ còn nút Nhập/Xem phiếu; nút "Xuất PDF" đã gỡ theo yêu cầu (route
+// /teacher/trial/pdf/[enrollmentId] vẫn còn cho ai có link cũ).
+//
+// ⚠️ Không có `new Date()` ở file này: mọi nhãn ngày đã được server format sẵn. Máy
+// giáo viên không chắc chạy +07, và render server ↔ hydrate client lệch là vỡ trang.
+
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { ClipboardPen, Clock, FileDown, Sparkles, Users } from "lucide-react";
-import { cn } from "@/lib/utils";
-import {
-  ListToolbar,
-  type SelectFilter,
-} from "../../_components/ui/list-toolbar";
+import { CalendarClock, ClipboardList } from "lucide-react";
+import type { TrialRowStatus } from "@/lib/lms/teacher-schedule";
 import { EmptyState } from "../../_components/ui/empty-state";
 import { PhanTrangBang } from "@/components/ui/phan-trang-bang";
+import { ListToolbar, type SelectFilter } from "../../_components/ui/list-toolbar";
+import { khopBatKy } from "@/lib/ui/tim-kiem";
 
-/** Học viên Trial (plain — câu 46: KHÔNG có phụ huynh). */
-export interface TrialStudentView {
+/** 1 dòng bảng — server đã format sẵn ngày giờ. */
+export type TrialRowView = {
   enrollmentId: string;
-  studentName: string;
-  birthYear: number | null;
-  courseName: string | null;
-  status: string; // ACTIVE | COMPLETED | WITHDRAWN
-  /** Đã có phiếu rubric chưa. */
-  evaluated: boolean;
-}
-
-/** Một buổi Trial (slot) — plain data từ server (date đã format sẵn). */
-export interface TrialSlotView {
-  sessionId: string;
+  /** "CN, 05/07" | "" (chưa xếp buổi). */
+  dateLabel: string;
+  /** "09:00–10:30" | "". */
+  timeLabel: string;
   trialClassName: string;
-  dateKey: string; // YYYY-MM-DD — nhóm theo ngày
-  dateLabel: string; // "Chủ Nhật, 05/07/2026"
-  dateShort: string; // "CN, 05/07" — cho cột Thời gian trong bảng HV
-  /** Đã qua / đúng hôm nay / sắp tới — server tính theo giờ VN (xem page.tsx). */
-  dayState: "past" | "today" | "upcoming";
-  timeLabel: string; // "09:00–10:30"
-  status: string; // SCHEDULED | COMPLETED
-  students: TrialStudentView[];
-}
-
-const SESSION_STATUS: Record<string, { label: string; cls: string }> = {
-  SCHEDULED: {
-    label: "Đã hẹn",
-    cls: "bg-state-info-soft text-state-info-ink",
-  },
-  COMPLETED: {
-    label: "Đã dạy",
-    cls: "bg-state-success-soft text-state-success-ink",
-  },
+  /** "Hoàng Gia Bảo - 2016" — server ghép sẵn cả năm sinh. */
+  studentLabel: string;
+  parentName: string | null;
+  courseName: string | null;
+  status: TrialRowStatus;
+  evaluated: boolean;
 };
 
 const ALL = "ALL";
 
-export function TrialList({ slots }: { slots: TrialSlotView[] }) {
+const STATUS_LABEL: Record<TrialRowStatus, string> = {
+  upcoming: "Sắp tới",
+  rescheduled: "Bị dời lịch",
+  "awaiting-eval": "Chờ đánh giá",
+  evaluated: "Đã đánh giá",
+  enrolled: "Đã nhập học · +1% HH",
+  lost: "Bị rớt",
+  withdrawn: "Đã rút",
+};
+
+const STATUS_CLASS: Record<TrialRowStatus, string> = {
+  upcoming: "bg-state-info-soft text-state-info-ink",
+  rescheduled: "bg-state-warning-soft text-state-warning-ink",
+  "awaiting-eval": "bg-state-warning-soft text-state-warning-ink",
+  evaluated: "bg-muted text-muted-foreground",
+  enrolled: "bg-state-success-soft text-state-success-ink",
+  lost: "bg-state-danger-soft text-state-danger-ink",
+  withdrawn: "bg-muted text-muted-foreground",
+};
+
+function StatusPill({ status }: { status: TrialRowStatus }) {
+  return (
+    <span
+      className={`inline-flex whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-semibold ${STATUS_CLASS[status]}`}
+    >
+      {STATUS_LABEL[status]}
+    </span>
+  );
+}
+
+function TrialTable({ rows }: { rows: TrialRowView[] }) {
+  return (
+    <div className="t-card overflow-hidden">
+      {/* Thanh phân trang nằm NGOÀI vùng cuộn ngang: để trong thì cuộn sang phải là
+          nút chuyển trang trôi mất khỏi màn. */}
+      <PhanTrangBang cuonNgang tenDonVi="suất Trial">
+        <table className="w-full min-w-[820px] border-collapse text-left text-sm">
+          <thead>
+            <tr className="border-b border-border bg-muted/50 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+              <th scope="col" className="px-5 py-3">
+                Buổi
+              </th>
+              <th scope="col" className="px-5 py-3">
+                Học viên
+              </th>
+              <th scope="col" className="px-5 py-3">
+                Phụ huynh
+              </th>
+              <th scope="col" className="px-5 py-3">
+                Khoá học
+              </th>
+              <th scope="col" className="px-5 py-3">
+                Đánh giá
+              </th>
+              <th scope="col" className="px-5 py-3">
+                Trạng thái
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r) => (
+              <tr
+                key={r.enrollmentId}
+                className="border-b border-border/60 transition-colors last:border-0 hover:bg-muted/50"
+              >
+                <td className="px-5 py-3.5 whitespace-nowrap">
+                  <p className="font-semibold text-foreground">
+                    {r.dateLabel || "Chưa xếp buổi"}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    {[r.timeLabel, r.trialClassName].filter(Boolean).join(" · ")}
+                  </p>
+                </td>
+                <td className="px-5 py-3.5 font-medium text-foreground">
+                  {r.studentLabel}
+                </td>
+                <td className="px-5 py-3.5 text-foreground">
+                  {r.parentName ?? "—"}
+                </td>
+                <td className="px-5 py-3.5 text-foreground">
+                  {r.courseName ?? "—"}
+                </td>
+                <td className="px-5 py-3.5">
+                  <Link
+                    href={`?enrollmentId=${r.enrollmentId}`}
+                    className={
+                      r.evaluated
+                        ? "inline-flex whitespace-nowrap rounded-lg border border-border px-3 py-1.5 text-xs font-semibold text-foreground hover:bg-muted"
+                        : "inline-flex whitespace-nowrap rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground hover:opacity-90"
+                    }
+                  >
+                    {r.evaluated ? "Xem phiếu" : "Nhập phiếu"}
+                  </Link>
+                </td>
+                <td className="px-5 py-3.5">
+                  <StatusPill status={r.status} />
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </PhanTrangBang>
+    </div>
+  );
+}
+
+export function TrialList({
+  upcoming,
+  done,
+  windowDays,
+}: {
+  upcoming: TrialRowView[];
+  done: TrialRowView[];
+  windowDays: number;
+}) {
   const [query, setQuery] = useState("");
-  const [slot, setSlot] = useState(ALL);
   const [status, setStatus] = useState(ALL);
-  const [evaluated, setEvaluated] = useState(ALL);
 
-  const slotOptions = useMemo<SelectFilter["options"]>(() => {
-    const times = [...new Set(slots.map((s) => s.timeLabel))].sort();
+  // Ô lọc trạng thái suy từ DỮ LIỆU ĐANG CÓ, không liệt kê cứng cả 7 nhãn: giáo viên
+  // mới nhận lớp chỉ có "Sắp tới" mà thấy 7 lựa chọn thì 6 cái bấm vào là bảng trắng.
+  const statusOptions = useMemo<SelectFilter["options"]>(() => {
+    const present = new Set([...upcoming, ...done].map((r) => r.status));
+    const ordered = (Object.keys(STATUS_LABEL) as TrialRowStatus[]).filter((s) =>
+      present.has(s),
+    );
     return [
-      { value: ALL, label: "Tất cả khung giờ" },
-      ...times.map((t) => ({ value: t, label: t })),
+      { value: ALL, label: "Mọi trạng thái" },
+      ...ordered.map((s) => ({ value: s, label: STATUS_LABEL[s] })),
     ];
-  }, [slots]);
+  }, [upcoming, done]);
 
-  const statusOptions: SelectFilter["options"] = [
-    { value: ALL, label: "Mọi tình trạng" },
-    { value: "SCHEDULED", label: "Đã hẹn" },
-    { value: "COMPLETED", label: "Đã dạy" },
-  ];
+  const lọc = useMemo(() => {
+    const apply = (rows: TrialRowView[]) =>
+      rows.filter((r) => {
+        if (status !== ALL && r.status !== status) return false;
+        // Bỏ dấu khi so (lib/ui/tim-kiem) — gõ "hoang gia bao" phải ra "Hoàng Gia Bảo".
+        return khopBatKy(
+          [r.studentLabel, r.parentName, r.courseName, r.trialClassName, r.dateLabel],
+          query,
+        );
+      });
+    return { up: apply(upcoming), dn: apply(done) };
+  }, [upcoming, done, query, status]);
 
-  const evaluatedOptions: SelectFilter["options"] = [
-    { value: ALL, label: "Tất cả đánh giá" },
-    { value: "chua", label: "Chưa đánh giá" },
-    { value: "da", label: "Đã đánh giá" },
-  ];
+  if (upcoming.length === 0 && done.length === 0) {
+    return (
+      <EmptyState
+        icon={CalendarClock}
+        title="Chưa có suất Trial nào"
+        description="Buổi trải nghiệm bạn phụ trách sẽ hiện ở đây ngay khi quản lý xếp lịch."
+      />
+    );
+  }
 
-  // Lọc slot theo khung giờ + tình trạng; lọc HV trong slot theo từ khoá tên +
-  // trạng thái đánh giá (evaluated). Khi có lọc HV → bỏ slot rỗng.
-  const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    const filterStudents = q !== "" || evaluated !== ALL;
-    return slots
-      .filter(
-        (s) =>
-          (slot === ALL || s.timeLabel === slot) &&
-          (status === ALL || s.status === status),
-      )
-      .map((s) => ({
-        ...s,
-        students: s.students.filter(
-          (st) =>
-            (!q || st.studentName.toLowerCase().includes(q)) &&
-            (evaluated === ALL ||
-              (evaluated === "da" ? st.evaluated : !st.evaluated)),
-        ),
-      }))
-      .filter((s) => !filterStudents || s.students.length > 0);
-  }, [slots, query, slot, status, evaluated]);
-
-  // Nhóm theo ngày (giữ thứ tự đã sort của server).
-  const byDate = useMemo(() => {
-    const m = new Map<string, { dateLabel: string; slots: typeof filtered }>();
-    for (const s of filtered) {
-      const g = m.get(s.dateKey) ?? { dateLabel: s.dateLabel, slots: [] };
-      g.slots.push(s);
-      m.set(s.dateKey, g);
-    }
-    return [...m.values()];
-  }, [filtered]);
+  const đangLọc = query.trim().length > 0 || status !== ALL;
 
   return (
-    <>
+    <div className="space-y-6">
       <ListToolbar
         query={query}
         onQuery={setQuery}
-        placeholder="Tìm theo tên học viên..."
-        filters={[
-          { value: slot, onChange: setSlot, options: slotOptions },
-          { value: status, onChange: setStatus, options: statusOptions },
-          {
-            value: evaluated,
-            onChange: setEvaluated,
-            options: evaluatedOptions,
-          },
-        ]}
+        placeholder="Tìm theo tên học viên, phụ huynh, khoá học..."
+        filters={[{ value: status, onChange: setStatus, options: statusOptions }]}
       />
 
-      {slots.length === 0 ? (
-        <EmptyState
-          icon={Sparkles}
-          title="Bạn chưa phụ trách buổi Trial nào."
-        />
-      ) : byDate.length === 0 ? (
-        <EmptyState
-          icon={Sparkles}
-          title="Không có buổi Trial khớp bộ lọc."
-          description="Thử đổi từ khoá hoặc bộ lọc."
-        />
-      ) : (
-        <div className="space-y-6">
-          {byDate.map((day) => (
-            <section key={day.dateLabel} className="space-y-3">
-              <div className="flex flex-wrap items-center gap-2">
-                <h2 className="text-sm font-bold tracking-wide text-foreground uppercase">
-                  {day.dateLabel}
-                </h2>
-                <span className="text-xs text-muted-foreground">
-                  {day.slots.reduce((n, s) => n + s.students.length, 0)} học
-                  viên
-                </span>
-              </div>
-
-              {day.slots.map((s) => {
-                const st = SESSION_STATUS[s.status] ?? {
-                  label: s.status,
-                  cls: "bg-muted text-muted-foreground",
-                };
-                return (
-                  <div key={s.sessionId} className="t-card overflow-hidden">
-                    <header className="flex flex-wrap items-center gap-2 border-b border-border bg-muted/40 px-5 py-3">
-                      <Clock className="h-4 w-4 text-primary-ink" aria-hidden />
-                      <span className="text-sm font-bold text-foreground">
-                        {s.timeLabel}
-                      </span>
-                      <span className="text-sm text-muted-foreground">
-                        · {s.trialClassName}
-                      </span>
-                      <span className="flex items-center gap-1 text-xs text-muted-foreground">
-                        <Users className="h-3.5 w-3.5" aria-hidden />
-                        {s.students.length} học viên
-                      </span>
-                      <span
-                        className={cn(
-                          "ml-auto inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold",
-                          st.cls,
-                        )}
-                      >
-                        {st.label}
-                      </span>
-                    </header>
-
-                    {s.students.length === 0 ? (
-                      <p className="px-5 py-6 text-center text-sm text-muted-foreground">
-                        Buổi chưa xếp học viên nào.
-                      </p>
-                    ) : (
-                      <div className="overflow-x-auto">
-                        <PhanTrangBang>
-                          <table className="min-w-[700px] w-full border-collapse text-left text-sm">
-                            <thead>
-                              <tr className="border-b border-border text-xs font-semibold tracking-wide text-muted-foreground uppercase">
-                                <th scope="col" className="px-5 py-2.5">
-                                  Học viên
-                                </th>
-                                <th scope="col" className="px-5 py-2.5">
-                                  Thời gian
-                                </th>
-                                <th scope="col" className="px-5 py-2.5">
-                                  Khóa học
-                                </th>
-                                <th
-                                  scope="col"
-                                  className="px-5 py-2.5 text-right"
-                                >
-                                  Đánh giá
-                                </th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {s.students.map((st2) => (
-                                <tr
-                                  key={st2.enrollmentId}
-                                  className="border-b border-border/60 last:border-0"
-                                >
-                                  <td className="px-5 py-3">
-                                    <p className="font-medium text-foreground">
-                                      {st2.studentName}
-                                    </p>
-                                    {st2.birthYear && (
-                                      <p className="text-xs text-muted-foreground">
-                                        {st2.birthYear}
-                                      </p>
-                                    )}
-                                  </td>
-                                  {/* Thời gian lặp lại trên TỪNG DÒNG, không chỉ ở header
-                                      thẻ buổi: khi GV gõ tìm tên hay bật bộ lọc, các dòng
-                                      trải khắp nhiều ngày/khung giờ, nhìn một dòng phải
-                                      biết ngay em đó học lúc nào. Chuỗi ngày do server
-                                      format (timeZone UTC — @db.Date là UTC 00:00 của
-                                      ngày VN), client KHÔNG dựng lại Date. */}
-                                  <td className="px-5 py-3 whitespace-nowrap">
-                                    <p
-                                      className={cn(
-                                        "font-medium tabular-nums",
-                                        // Buổi đã qua thì làm nhạt — GV lướt tìm buổi
-                                        // sắp tới, không phải buổi đã dạy xong.
-                                        s.dayState === "past"
-                                          ? "text-muted-foreground"
-                                          : "text-foreground",
-                                      )}
-                                    >
-                                      {s.dateShort}
-                                      {s.dayState === "today" && (
-                                        // `inline-block align-middle`: span TRẦN có
-                                        // `py-*` thì nền bo tròn tràn khỏi hộp dòng,
-                                        // đè lên dòng giờ dính ngay bên dưới — cùng
-                                        // cách làm với chip ở attendance-panel.
-                                        <span className="ml-1.5 inline-block align-middle rounded-full bg-primary-soft px-2 py-0.5 text-[11px] font-semibold text-primary-ink">
-                                          Hôm nay
-                                        </span>
-                                      )}
-                                    </p>
-                                    <p className="text-xs tabular-nums text-muted-foreground">
-                                      {s.timeLabel}
-                                    </p>
-                                  </td>
-                                  <td className="px-5 py-3 whitespace-nowrap text-muted-foreground">
-                                    {st2.courseName ?? "—"}
-                                  </td>
-                                  <td className="px-5 py-3 text-right whitespace-nowrap">
-                                    <div className="inline-flex items-center gap-1.5">
-                                      <Link
-                                        href={`?enrollmentId=${st2.enrollmentId}`}
-                                        className={cn(
-                                          "inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring",
-                                          st2.evaluated
-                                            ? "border border-border text-foreground hover:bg-muted"
-                                            : "bg-primary text-white hover:bg-primary-darker",
-                                        )}
-                                      >
-                                        <ClipboardPen
-                                          className="h-3.5 w-3.5"
-                                          aria-hidden
-                                        />
-                                        {st2.evaluated
-                                          ? "Xem phiếu"
-                                          : "Nhập phiếu"}
-                                      </Link>
-                                      {st2.evaluated && (
-                                        <a
-                                          href={`/teacher/trial/pdf/${st2.enrollmentId}`}
-                                          target="_blank"
-                                          rel="noopener noreferrer"
-                                          className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs font-semibold text-foreground outline-none transition-colors hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring"
-                                        >
-                                          <FileDown
-                                            className="h-3.5 w-3.5"
-                                            aria-hidden
-                                          />{" "}
-                                          Xuất PDF
-                                        </a>
-                                      )}
-                                    </div>
-                                  </td>
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
-                        </PhanTrangBang>
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </section>
-          ))}
-        </div>
+      {/* Rỗng thì KHÔNG dựng bảng — yêu cầu 25/08: "không có thì không hiển thị". */}
+      {lọc.up.length > 0 && (
+        <section>
+          <div className="mb-2 flex flex-wrap items-baseline justify-between gap-2">
+            <h2 className="text-sm font-bold text-foreground">
+              Các suất sắp Trial ({lọc.up.length})
+            </h2>
+            <p className="text-xs text-muted-foreground">
+              Từ hôm nay đến hết {windowDays} ngày tới
+            </p>
+          </div>
+          <TrialTable rows={lọc.up} />
+        </section>
       )}
-    </>
+
+      {lọc.dn.length > 0 && (
+        <section>
+          <div className="mb-2 flex flex-wrap items-baseline justify-between gap-2">
+            <h2 className="text-sm font-bold text-foreground">
+              Đã Trial ({lọc.dn.length})
+            </h2>
+            <p className="text-xs text-muted-foreground">
+              Buổi đã diễn ra và các suất đã có kết quả
+            </p>
+          </div>
+          <TrialTable rows={lọc.dn} />
+        </section>
+      )}
+
+      {/* Lọc ra 0 dòng KHÁC với "chưa tới suất nào" — nói đúng cái đang xảy ra, kẻo
+          giáo viên tưởng mất dữ liệu. */}
+      {đangLọc && lọc.up.length === 0 && lọc.dn.length === 0 && (
+        <EmptyState
+          icon={ClipboardList}
+          title="Không có suất nào khớp"
+          description="Thử đổi từ khoá hoặc bỏ bộ lọc trạng thái."
+        />
+      )}
+
+      {!đangLọc && lọc.up.length === 0 && (
+        <p className="flex items-center gap-2 text-xs text-muted-foreground">
+          <ClipboardList className="h-3.5 w-3.5" aria-hidden />
+          Không có suất Trial nào trong {windowDays} ngày tới.
+        </p>
+      )}
+    </div>
   );
 }

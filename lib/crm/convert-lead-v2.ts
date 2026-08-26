@@ -14,6 +14,13 @@ import {
   type BackfillPaymentInput,
 } from "@/lib/crm/backfill-order";
 import { syncConversationMembership } from "@/lib/chat/sync-membership";
+import {
+  ensureCommissionStatement,
+  findAttendedTrialForLeadChild,
+  recordTrialTeacherCommission,
+  type AttendedTrial,
+  type CommissionStatementRef,
+} from "@/lib/crm/trial-teacher-commission";
 import type { CourseDiscountType } from "@prisma/client";
 
 export type ConvertV2Result =
@@ -161,7 +168,34 @@ export async function convertLeadV2(actor: AuditActor, input: ConvertV2Input): P
     return { ok: false, error: { code: "PARENT_CONFLICT", message: "Email và SĐT khớp 2 hồ sơ khác nhau — cần Admin xử lý" } };
   }
 
+  // ── Chuẩn bị phần HOA HỒNG TRƯỚC transaction (25/08) ───────────────────────────
+  //
+  // Hai việc dưới đây CỐ Ý nằm ngoài `db.$transaction`:
+  //   • tra "con đã học thử ở lớp nào" — thuần ĐỌC, không cần atomic;
+  //   • dựng `CommissionStatement` của kỳ — `upsert` của Prisma trên model nhiều unique
+  //     biên dịch thành đọc-rồi-ghi, nên hai lượt convert song song vào lần đầu tiên của
+  //     tháng có thể đâm P2002. Ném bên trong transaction là RỔ CẢ LƯỢT CONVERT (mất
+  //     lead claim, phụ huynh, học viên, ghi danh, đơn học phí) — đã dựng lại được lỗi
+  //     này trên Postgres thật. Ở ngoài thì P2002 chỉ có nghĩa "người khác vừa tạo
+  //     trước", bắt và đọc lại là xong.
+  //
+  // Một mốc thời gian DUY NHẤT cho cả lượt convert: nhiều học viên trong cùng một lượt
+  // phải rơi vào CÙNG kỳ hoa hồng, kể cả khi transaction chạy vắt qua nửa đêm.
+  const now = new Date();
+  const attendedTrials = new Map<string, AttendedTrial>();
+  for (const s of input.students) {
+    if (!s.leadChildId || attendedTrials.has(s.leadChildId)) continue;
+    const t = await findAttendedTrialForLeadChild(db, s.leadChildId);
+    if (t) attendedTrials.set(s.leadChildId, t);
+  }
+  const needsCommission = [...attendedTrials.values()].some((t) => t.teacherUserId);
+  let commissionStatement: CommissionStatementRef | null = null;
+  if (needsCommission) {
+    commissionStatement = await ensureCommissionStatement(now);
+  }
+
   const result = await db.$transaction(async (tx) => {
+
     // CLAIM atomic chống race (2 Sale song song): chỉ 1 lượt chuyển khỏi status chưa-kết-thúc.
     // C2 — điều kiện claim đổi từ status=REGISTERED sang status NOT IN (terminal): vẫn chỉ 1
     // lượt thắng (lượt sau thấy status=ENROLLED ∈ terminal → count 0 → ALREADY_CONVERTED).
@@ -300,6 +334,71 @@ export async function convertLeadV2(actor: AuditActor, input: ConvertV2Input): P
         select: { id: true },
       });
       enrollmentIds.push(enrollment.id);
+
+      // ── Học thử → nhập học: đóng sổ trải nghiệm + hoa hồng GV dạy Trial (25/08) ──
+      //
+      // Trước đây convert KHÔNG hề đụng tới các bảng Trial: sau khi con nhập học,
+      // `LeadTrialHistory.outcome` vẫn nằm nguyên ở "PENDING" — nghĩa là cột đó chưa
+      // bao giờ mang giá trị nào khác, dù `lib/trial/sale-roster.ts` đã đọc
+      // `outcome === "ENROLLED"` để bật cờ "đã nhập học". Cờ ấy vì thế luôn tắt.
+      //
+      // Nay đóng sổ NGAY TRONG transaction convert (cùng chỗ tạo Enrollment) để không
+      // có khe hở "đã ghi danh nhưng sổ trải nghiệm chưa biết".
+      const trial = s.leadChildId ? (attendedTrials.get(s.leadChildId) ?? null) : null;
+      if (trial) {
+        // Đóng sổ ĐÚNG lớp trải nghiệm con đã học, và chỉ dòng còn PENDING.
+        //
+        // Bản đầu lọc mỗi `leadChildId` — hai lỗi trong một: (1) nó đè cả dòng đã mang
+        // "LOST" của lần học thử trước (nhánh LOST ở updateLeadStatus có lọc PENDING,
+        // nhánh này thì không ⇒ hai đường bất đối xứng, và lịch sử "đã từng rớt" biến
+        // mất); (2) nó bật "ENROLLED" cho MỌI lớp trải nghiệm con từng vào, kể cả lớp ở
+        // cơ sở khác — mà site GV in nhãn "Đã nhập học · +1% HH" theo cặp
+        // (leadChildId, trialClassId), nên giáo viên KHÔNG được trả đồng nào vẫn thấy
+        // hệ thống hứa trả 1%. Đó là cãi nhau về lương, không phải lỗi hiển thị.
+        await tx.leadTrialHistory.updateMany({
+          where: {
+            leadChildId: s.leadChildId!,
+            trialClassId: trial.trialClassId,
+            outcome: "PENDING",
+          },
+          data: { outcome: "ENROLLED" },
+        });
+
+        // +1% học phí cho GV đã dạy buổi trải nghiệm. Bỏ qua khi lớp chưa gán GV hoặc
+        // học phí 0 — hoa hồng KHÔNG được phép làm hỏng việc ghi danh (xem đầu
+        // lib/crm/trial-teacher-commission.ts).
+        if (trial.teacherUserId && commissionStatement) {
+          const res = await recordTrialTeacherCommission(tx, {
+            statement: commissionStatement,
+            teacherUserId: trial.teacherUserId,
+            enrollmentId: enrollment.id,
+            finalPrice: price.finalPrice,
+            leadId: lead.id,
+            note: `Trial → nhập học: ${s.name} · ${trial.trialClassName}`,
+          });
+          // Kỳ đã chốt sổ ⇒ không ghi được dòng nào. KHÔNG được im lặng: giáo viên mất
+          // tiền mà không ai biết, và không có job đối soát nào cho tầng này. Để lại
+          // dấu vết ở AuditLog để kế toán mở lại kỳ rồi bù tay.
+          if (res && !res.ok) {
+            await writeAudit({
+              actor,
+              module: "commission",
+              entityType: "Enrollment",
+              entityId: enrollment.id,
+              action: "TRIAL_TEACHER_COMMISSION_SKIPPED",
+              newValues: {
+                reason: res.reason,
+                period: res.period,
+                amount: res.amount,
+                recipientId: trial.teacherUserId,
+                trialClassId: trial.trialClassId,
+              },
+              orgUnitId: lead.centerId,
+              tx,
+            });
+          }
+        }
+      }
 
       // Consent ảnh per học viên + audit người tick (AC5).
       // ⚠️ KHÔNG lật consent đã THU HỒI: học viên dedupe (dùng lại hồ sơ cũ) có thể

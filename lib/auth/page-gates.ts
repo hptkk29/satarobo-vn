@@ -126,6 +126,11 @@ export const PAGE_GATES = {
    *  nên chưa ai đau) — khai đủ để menu ≡ gate. */
   "/media": ["media:view", "media:upload"],
 
+  /** Cổng duyệt ảnh/video buổi học (MEDIA-REVIEW, 26/08). CHỈ `media:approve` — đây là
+   *  màn RA QUYẾT ĐỊNH, không phải thư viện: người chỉ có `media:view` vào được thì sẽ
+   *  thấy nút "Duyệt tất cả" mà bấm vào là bị Server Action từ chối. */
+  "/duyet-media": ["media:approve"],
+
   // ── Site Sale (sale.satarobo.vn) ────────────────────────────────────────
   // Khai ở ĐÂY chứ không để mỗi trang tự gõ action: thanh điều hướng của site
   // Sale đọc thẳng bảng này làm `perm`, nên menu và cổng trang không thể lệch.

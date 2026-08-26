@@ -15,6 +15,8 @@ import {
 } from "@/lib/lms/session-eval-rubric";
 import { withFreshFonts } from "@/lib/pdf/brand";
 import { SessionEvalPdf } from "@/lib/pdf/session-eval";
+import { buildSessionNumberMap } from "@/lib/lms/session-order";
+import { resolveDisplayProjectName } from "@/lib/lms/session-project-name";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -48,6 +50,8 @@ export async function GET(
       actualTeacherId: true,
       date: true,
       topic: true,
+      plan: { select: { customTitle: true } },
+      lesson: { select: { order: true, title: true, moduleCode: true } },
       class: {
         select: {
           name: true,
@@ -127,6 +131,28 @@ export async function GET(
     timeZone: "Asia/Ho_Chi_Minh",
   });
 
+  // 26/08 — tên dự án in ra PDF gửi phụ huynh suy từ BUỔI, không lấy bản sao đông
+  // cứng trên phiếu (xem resolveDisplayProjectName). Số buổi tính trên TOÀN BỘ buổi
+  // của lớp, không phải chỉ mình buổi này.
+  const sessionNo =
+    buildSessionNumberMap(
+      await sdb.classSession.findMany({
+        where: { classId: sess.classId },
+        select: { id: true, date: true },
+      }),
+    ).get(sess.id) ?? null;
+  const duAn = resolveDisplayProjectName(
+    {
+      sessionNumber: sessionNo,
+      planTitle: sess.plan?.customTitle,
+      lessonTitle: sess.lesson?.title,
+      lessonOrder: sess.lesson?.order,
+      moduleCode: sess.lesson?.moduleCode,
+      topic: sess.topic,
+    },
+    fb.projectName,
+  );
+
   let pdf: Buffer;
   try {
     pdf = await withFreshFonts(() =>
@@ -138,7 +164,7 @@ export async function GET(
             className: sess.class.name,
             sessionTopic: sess.topic ?? "Buổi học",
             dateLabel,
-            projectName: fb.projectName,
+            projectName: duAn,
             notes: normalizeEvalNotes(fb.notes),
             ratings: normalizeEvalRatings(fb.rubric),
             evaluatedByName: gv?.name ?? null,

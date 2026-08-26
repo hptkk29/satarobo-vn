@@ -108,6 +108,10 @@ export default async function TrialClassDetailPage({ params }: Props) {
     phone: e.leadChild?.lead?.phone ?? null,
     leadId: e.leadChild?.lead?.id ?? null,
     status: e.status,
+    // 25/08 — buổi đang xếp + dấu đã-dời, để nút "Dời lịch" biết đang đứng ở đâu và
+    // bảng Trial site GV in được trạng thái "Bị dời lịch".
+    scheduledSessionId: e.scheduledSessionId,
+    rescheduledFromSessionId: e.rescheduledFromSessionId,
   }));
 
   const sessions = cls.sessions.map((s) => ({

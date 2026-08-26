@@ -206,32 +206,51 @@ export async function updateLeadStatus(
       },
     })
 
-    // Phase T1.4 — vào TRIAL_SCHEDULED → tự tạo lịch học thử (nếu chưa có buổi đang mở).
+    // 25/08 — lead MẤT ⇒ đóng sổ học thử của mọi con: `LeadTrialHistory.outcome = "LOST"`.
+    //
+    // Cột `outcome` có từ FL-R2 với 3 giá trị ENROLLED | LOST | PENDING, nhưng tới trước
+    // 25/08 KHÔNG chỗ nào ghi gì ngoài "PENDING" — nên cờ "đã nhập học" ở roster Sale
+    // (lib/trial/sale-roster.ts) vĩnh viễn tắt, và bảng Trial của site GV không có cách
+    // nào biết suất nào "bị rớt". Nhánh ENROLLED nằm trong transaction convert
+    // (lib/crm/convert-lead-v2.ts); đây là nhánh còn lại.
+    //
+    // Chỉ đụng dòng đang PENDING: con đã nhập học khoá khác rồi thì lead mất không xoá
+    // được thành tích đó.
+    if (parsed.data === 'LOST' && before.status !== 'LOST') {
+      await tx.leadTrialHistory.updateMany({
+        where: { leadChild: { leadId }, outcome: 'PENDING' },
+        data: { outcome: 'LOST' },
+      })
+    }
+
+    // 26/08 — GỘP hai hệ Trial: KHÔNG còn đẻ bản ghi `TrialClass` (V1) nữa.
+    //
+    // Nếp cũ (Phase T1.4) tạo sẵn một lịch học thử "ngày mai cùng giờ" làm chỗ giữ chân.
+    // Cái đó nằm ở hệ V1, mà bảng Trial của site giáo viên chỉ đọc V2 — nên lịch giữ chân
+    // ấy giáo viên KHÔNG BAO GIỜ thấy, và nó còn đẻ ra một ngày giả trong báo cáo.
+    // Nay chỉ ghi việc cần làm vào dòng thời gian; Sale xếp buổi thật ở "Lớp trải nghiệm".
     if (
       parsed.data === 'TRIAL_SCHEDULED' &&
       before.status !== 'TRIAL_SCHEDULED'
     ) {
-      const openTrial = await tx.trialClass.findFirst({
-        where: { leadId, status: { in: ['SCHEDULED', 'CONFIRMED', 'POSTPONED'] } },
-        select: { id: true },
+      // Ghi dòng hoạt động + reset đồng hồ SLA idle trong CÙNG transaction — cùng
+      // nếp với `addLeadActivity`/`addLeadTask` ở file này. (Trên nhánh `test` chỗ
+      // này gọi `recordLeadActivity` của lib/lead/activity-write.ts; helper đó đi
+      // cùng luồng QLCS, chưa có ở đây, nên viết thẳng hai bước nó làm.)
+      await tx.leadActivity.create({
+        data: {
+          leadId,
+          actorId,
+          actorName,
+          type: 'NOTE',
+          content:
+            '[Trải nghiệm] Lead đã hẹn học thử — vào "Lớp trải nghiệm" xếp con vào buổi cụ thể để giáo viên thấy trên lịch dạy.',
+        },
       })
-      if (!openTrial) {
-        // Placeholder: ngày mai cùng giờ — GV/admin chỉnh lại lịch thật sau.
-        const scheduledAt = new Date(Date.now() + 24 * 60 * 60 * 1000)
-        await tx.trialClass.create({
-          data: { leadId, centerId: before.centerId, scheduledAt },
-        })
-        await tx.leadActivity.create({
-          data: {
-            leadId,
-            actorId,
-            actorName,
-            type: 'NOTE',
-            content:
-              '[Học thử] Đã tạo lịch học thử (chờ xếp lịch/giáo viên). Vào mục Học thử để cập nhật.',
-          },
-        })
-      }
+      await tx.lead.update({
+        where: { id: leadId },
+        data: { lastActivityAt: new Date() },
+      })
     }
   })
 
@@ -525,6 +544,16 @@ export async function deleteLead(
       await tx.lead.update({
         where: { id: leadId, deletedAt: null },
         data: { deletedAt: new Date() },
+      })
+
+      // 25/08 — đóng luôn sổ học thử, cùng luật với nhánh LOST của updateLeadStatus.
+      // Xoá mềm lead mà bỏ sổ lại ở "PENDING" thì bảng Trial của site GV còn in suất đó
+      // là "Chờ đánh giá" mãi mãi — tệ hơn ca chuyển LOST, vì lead đã biến khỏi /admin/leads
+      // nên không ai còn đường đi tới mà đóng lại. Chỉ đụng dòng còn PENDING: bé đã nhập
+      // học ở lớp khác thì thành tích đó không bị xoá theo.
+      await tx.leadTrialHistory.updateMany({
+        where: { leadChild: { leadId }, outcome: 'PENDING' },
+        data: { outcome: 'LOST' },
       })
 
       await logLeadAudit({

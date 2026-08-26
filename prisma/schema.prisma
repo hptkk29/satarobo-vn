@@ -836,14 +836,23 @@ model CommissionLine {
   id          String              @id @default(cuid())
   statementId String
   recipientId String // user hưởng hoa hồng
-  tier        String // QC | SALE_ADMIN | SALE | QL_TT
+  tier        String // QC | SALE_ADMIN | SALE | QL_TT | TRIAL_TEACHER
   amount      Int // VND; âm = clawback
   isClawback  Boolean             @default(false)
   leadId      String?
   statement   CommissionStatement @relation(fields: [statementId], references: [id], onDelete: Cascade)
 
+  // Site GV 25/08 — hoa hồng GV dạy trial (tier TRIAL_TEACHER, 1% học phí khi học viên
+  // học thử NHẬP HỌC). Khác 4 tầng Sale ở chỗ nó sinh TỪNG DÒNG theo ghi danh, ngay
+  // trong transaction convert — nên cần khoá chống ghi trùng khi convert bị chạy lại.
+  // 4 tầng Sale không dùng 2 cột này (setStatementLines ghi lại cả kỳ, tự nhất quán).
+  enrollmentId String?
+  note         String?
+
+  @@unique([statementId, tier, recipientId, enrollmentId])
   @@index([statementId])
   @@index([recipientId])
+  @@index([enrollmentId])
 }
 
 // R6-F2 — Bản ghi LỆCH giữa can() v1 (matrix) và v2 (DB actor) khi shadow-run.
@@ -2668,6 +2677,13 @@ model Lesson {
   description String? @db.Text
   content     String? @db.Text
 
+  // Mockup giáo trình 5 năm (25/08) — HỌC PHẦN của bài. Giáo trình Sata3–7 chia
+  // 4 học phần × 12 buổi; nhãn buổi trên site GV in "Buổi 1 - HP1 - Bàn Tay Ma Thuật".
+  // Khoá luyện thi (Sata1/2/8) không chia học phần ⇒ để null, nhãn tự rút còn
+  // "Buổi 1 - <tên bài>". Nguồn nạp: prisma/seed-curriculum-sata.ts.
+  moduleCode String? // "HP1"
+  moduleName String? // "Học phần 1"
+
   duration   Int      @default(90)
   objectives String[] @default([])
   materials  String[] @default([]) // LMS-1: dùng làm "Thiết bị cần chuẩn bị"
@@ -3053,6 +3069,21 @@ model Assignment {
 
   allowText Boolean @default(true)
   allowFile Boolean @default(true)
+
+  // Site GV 25/08 — QUÁ HẠN TỰ ĐÓNG + GV mở gia hạn "nộp trễ".
+  //
+  // Trước đó `dueAt` trôi qua KHÔNG đổi gì: bài vẫn "Đang mở" vĩnh viễn, cổng phụ huynh
+  // vẫn nhận bài (chỉ gắn cờ SubmissionStatus.LATE), và chỉ admin mới đóng được bằng tay.
+  //
+  // Nay trạng thái hiển thị SUY Ở LÚC ĐỌC (lib/lms/assignment-window.ts) — KHÔNG cron,
+  // không cột `closedAt`: quá `dueAt` mà không có cửa gia hạn ⇒ coi như ĐÓNG.
+  // `lateUntil` = hạn của cửa gia hạn do GV mở; bài nộp trong cửa này vẫn tính LATE
+  // (đối chiếu `dueAt`, không đối chiếu `lateUntil`) để học bạ không mất dấu nộp trễ.
+  // Học theo TrnAssignment (e-learning): gia hạn ghi hạn MỚI, KHÔNG bao giờ sửa `dueAt`.
+  lateUntil       DateTime? @db.Timestamptz(6)
+  lateReason      String?   @db.Text
+  lateGrantedById String?
+  lateGrantedAt   DateTime? @db.Timestamptz(6)
 
   status AssignmentStatus @default(DRAFT)
 
@@ -6237,6 +6268,14 @@ model TrialEnrollment {
   // LD3(b) — buổi (TrialClassSession) cụ thể được chọn khi xếp con vào lớp. Scalar nullable
   // (validation "buổi thuộc lớp" đã làm ở action boundary — không cần relation, giữ blast radius nhỏ).
   scheduledSessionId String?
+  // Site GV 25/08 — DỜI LỊCH học thử. Trước đó `scheduledSessionId` ghi ĐÚNG MỘT LẦN lúc
+  // xếp con vào lớp rồi bất biến: không admin/GV/Sale nào đổi được buổi, nên bảng trial
+  // của giáo viên không có cách nào biết suất nào "bị dời lịch".
+  // Nay `rescheduleTrialEnrollment` đổi buổi và GHI LẠI buổi cũ ở đây (buổi gần nhất —
+  // dời nhiều lần thì chỉ giữ lần cuối; lịch sử đầy đủ nằm ở DomainEvent + AuditLog).
+  rescheduledFromSessionId String?
+  rescheduledAt            DateTime? @db.Timestamptz(6)
+  rescheduleReason         String?   @db.Text
   addedById          String?
   createdAt          DateTime              @default(now()) @db.Timestamptz(6)
   updatedAt          DateTime              @updatedAt @db.Timestamptz(6)
@@ -8102,5 +8141,113 @@ model TrnEquivalence {
   @@index([courseId])
   @@index([originalEffectiveAt])
   @@index([centerId])
+  @@index([orgUnitId])
+}
+
+enum MediaType {
+  IMAGE
+  VIDEO
+}
+
+/// KHÁC `MediaStatus` (của `ClassSessionMedia` cũ) — cố ý đặt tên riêng để hai hệ không
+/// lẫn vào nhau trong lúc còn sống song song. `PURGED` = đã xoá file khỏi R2, giữ dòng
+/// để còn dấu vết ai loại và loại lúc nào.
+enum MediaAssetStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  PURGED
+}
+
+enum SessionReviewStatus {
+  OPEN
+  APPROVED
+  NO_MEDIA_DECLARED
+}
+
+/// Một tấm ảnh / một video của MỘT BUỔI HỌC.
+model MediaAsset {
+  id String @id @default(cuid())
+
+  centerId String // cách ly cơ sở (scopedDb) — MỌI create PHẢI set, scopedDb không che write
+  // Luật Nền Hệ thống #3: bảng mới mang dữ liệu theo đơn vị phải có `orgUnitId`.
+  // Giữ CẢ HAI vì cutover P4 chưa bật ở đâu — enforcement hôm nay vẫn chạy trên centerId.
+  orgUnitId String?
+
+  classId        String
+  classSessionId String
+  /// Ngày của buổi (@db.Date) — denormalize để dựng cây ngày→lớp không phải join.
+  sessionDate    DateTime @db.Date
+
+  uploadedById   String
+  uploadedByName String?
+
+  /// CẦU SANG HỆ CŨ, sống đúng một giai đoạn (2-phase migration).
+  ///
+  /// `ClassSessionMedia` vẫn là bản ghi GIAO cho phụ huynh (consent, tag học viên, portal,
+  /// đính vào nhận xét buổi) — MediaAsset chỉ thay phần KHO + DUYỆT. Cột này nối 1-1 hai
+  /// dòng sinh ra từ cùng một lần tải lên, để lúc QLCS duyệt ở màn mới thì dòng cũ cũng
+  /// đổi trạng thái theo, không phải đoán bằng cách so `fileUrl`.
+  /// Phase B (sau khi luồng mới chạy ổn trên prod): gỡ ClassSessionMedia → gỡ cột này.
+  legacyMediaId  String?  @unique
+
+  type        MediaType
+  /// Khoá vật thể trên R2. KHÔNG lưu URL đầy đủ — bucket/CDN đổi thì mọi dòng chết.
+  r2Key       String
+  thumbKey    String?
+  /// Chỉ video. Dùng cho cổng "phải xem hết" (BA §7.3b).
+  durationSec Int?
+
+  status         MediaAssetStatus @default(PENDING)
+  reviewedById   String?
+  reviewedByName String?
+  reviewedAt     DateTime?        @db.Timestamptz(6)
+  rejectReason   String?          @db.Text
+  /// Duyệt bằng nút "Duyệt tất cả" chứ không mở từng tấm — để về sau soi lại chất lượng duyệt.
+  approvedInBulk Boolean          @default(false)
+  /// Tỉ lệ đã xem của video (0..1).
+  watchedRatio   Float?
+  /// Hạn dọn file khỏi R2 sau khi bị loại (BA §7.3a — xoá mềm 7 ngày, có đường khôi phục).
+  purgeAfterAt   DateTime?        @db.Timestamptz(6)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  @@index([centerId, sessionDate, status])
+  @@index([classSessionId, status])
+  @@index([status, purgeAfterAt])
+  @@index([orgUnitId])
+}
+
+/// KẾT LUẬN MEDIA của một buổi học — đúng MỘT dòng / buổi.
+///
+/// Đây là thứ quyết định buổi còn nằm trong cây duyệt hay không: `OPEN` là còn việc,
+/// `APPROVED` / `NO_MEDIA_DECLARED` là xong. Không có bảng này thì "lớp không có ảnh"
+/// không thể biến mất khỏi cây, và không có gì để làm báo cáo SLA.
+model SessionMediaReview {
+  id String @id @default(cuid())
+
+  classSessionId String @unique
+  centerId       String
+  orgUnitId      String?
+  sessionDate    DateTime @db.Date
+
+  status        SessionReviewStatus @default(OPEN)
+  /// Bắt buộc ≥10 ký tự khi khai "hôm nay không có ảnh" (BA US-04).
+  noMediaReason String?             @db.Text
+
+  decidedById   String?
+  decidedByName String?
+  decidedAt     DateTime? @db.Timestamptz(6)
+
+  /// Hạn chốt (mặc định 10:00 hôm sau, sửa ở SystemSetting "media.reviewDeadlineHour").
+  /// Quá hạn KHÔNG khoá thao tác — chỉ đánh dấu trễ (BA §7.8).
+  deadlineAt DateTime @db.Timestamptz(6)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  @@index([centerId, sessionDate, status])
+  @@index([status, deadlineAt])
   @@index([orgUnitId])
 }

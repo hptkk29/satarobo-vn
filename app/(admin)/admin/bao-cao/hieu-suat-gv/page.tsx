@@ -138,51 +138,49 @@ export default async function TeacherPerformanceReportPage({
             Chi tiết theo giáo viên
           </h2>
         </div>
-        <div className="overflow-x-auto">
-          <PhanTrangBang>
-            <table className="w-full min-w-[640px] text-sm">
-              <thead className="text-left text-xs text-muted-foreground">
+        <PhanTrangBang cuonNgang>
+          <table className="w-full min-w-[640px] text-sm">
+            <thead className="text-left text-xs text-muted-foreground">
+              <tr>
+                <th className="px-4 py-2">Giáo viên</th>
+                <th className="px-4 py-2 text-right">Buổi đã dạy</th>
+                <th className="px-4 py-2 text-right">Chuyên cần</th>
+                <th className="px-4 py-2 text-right">Học viên</th>
+                <th className="px-4 py-2 text-right">Điểm học bạ TB</th>
+              </tr>
+            </thead>
+            <tbody>
+              {report.rows.length === 0 ? (
                 <tr>
-                  <th className="px-4 py-2">Giáo viên</th>
-                  <th className="px-4 py-2 text-right">Buổi đã dạy</th>
-                  <th className="px-4 py-2 text-right">Chuyên cần</th>
-                  <th className="px-4 py-2 text-right">Học viên</th>
-                  <th className="px-4 py-2 text-right">Điểm học bạ TB</th>
+                  <td
+                    colSpan={5}
+                    className="px-4 py-6 text-center text-muted-foreground"
+                  >
+                    Không có giáo viên phụ trách lớp trong phạm vi cơ sở.
+                  </td>
                 </tr>
-              </thead>
-              <tbody>
-                {report.rows.length === 0 ? (
-                  <tr>
-                    <td
-                      colSpan={5}
-                      className="px-4 py-6 text-center text-muted-foreground"
-                    >
-                      Không có giáo viên phụ trách lớp trong phạm vi cơ sở.
+              ) : (
+                report.rows.map((r) => (
+                  <tr key={r.teacherId} className="border-t">
+                    <td className="px-4 py-2 font-medium">{r.teacherName}</td>
+                    <td className="px-4 py-2 text-right">
+                      {num(r.sessionsTaught)}
+                    </td>
+                    <td className="px-4 py-2 text-right font-semibold">
+                      {r.attendanceCounted > 0 ? `${r.attendanceRate}%` : "—"}
+                    </td>
+                    <td className="px-4 py-2 text-right">
+                      {num(r.studentCount)}
+                    </td>
+                    <td className="px-4 py-2 text-right">
+                      {r.avgReportScore != null ? `${r.avgReportScore}/4` : "—"}
                     </td>
                   </tr>
-                ) : (
-                  report.rows.map((r) => (
-                    <tr key={r.teacherId} className="border-t">
-                      <td className="px-4 py-2 font-medium">{r.teacherName}</td>
-                      <td className="px-4 py-2 text-right">
-                        {num(r.sessionsTaught)}
-                      </td>
-                      <td className="px-4 py-2 text-right font-semibold">
-                        {r.attendanceCounted > 0 ? `${r.attendanceRate}%` : "—"}
-                      </td>
-                      <td className="px-4 py-2 text-right">
-                        {num(r.studentCount)}
-                      </td>
-                      <td className="px-4 py-2 text-right">
-                        {r.avgReportScore != null ? `${r.avgReportScore}/4` : "—"}
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </PhanTrangBang>
-        </div>
+                ))
+              )}
+            </tbody>
+          </table>
+        </PhanTrangBang>
       </section>
     </div>
   );

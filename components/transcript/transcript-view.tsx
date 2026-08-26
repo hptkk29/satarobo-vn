@@ -58,7 +58,7 @@ export function TranscriptView({
         </div>
         {/* Giữ phân trang của nhánh này + lấy màu neutral-500 của nhánh test (sửa tương
             phản a11y) — hai thay đổi độc lập, không cái nào phải nhường cái nào. */}
-        <PhanTrangBang tenDonVi="lớp">
+        <PhanTrangBang cuonNgang tenDonVi="lớp">
           <table className="w-full text-sm">
             <thead className="text-left text-xs text-neutral-500">
               <tr>

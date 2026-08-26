@@ -30,9 +30,9 @@ import { type AssignmentRow } from "./_components/assignment-list";
 import { AssignmentsTabs } from "./_components/assignments-tabs";
 import { BatchGrade } from "./_components/batch-grade";
 import { resolveTemplateOwnerId } from "../kho-bai-tap/_owner";
-import { loadTeacherAssignData } from "./_data";
+import { buildAssignmentWindowView, loadTeacherAssignData } from "./_data";
 import { BackLink } from "../_components/ui/back-link";
-import { PhanTrangBang } from "@/components/ui/phan-trang-bang";
+import { BangPhanTrang } from "@/components/ui/bang-phan-trang";
 
 export const metadata = { title: "Bài tập & kiểm tra | Giáo viên Sata Robo" };
 
@@ -47,17 +47,8 @@ const submitFmt = new Intl.DateTimeFormat("vi-VN", {
   minute: "2-digit",
   timeZone: "Asia/Ho_Chi_Minh",
 });
-/** Ngày cho cột Hạn nộp — dd/mm/yyyy giờ VN.
- *
- * Trước đây để "en-CA" ra ISO "2026-08-12", trong khi CHÍNH màn này đã dùng
- * `submitFmt` kiểu vi-VN cho cột Đã nộp ⇒ một màn hai quy ước ngày. Chuỗi này
- * chỉ để HIỂN THỊ (không dùng sắp xếp — đã kiểm), nên đổi được an toàn. */
-const dueFmt = new Intl.DateTimeFormat("vi-VN", {
-  day: "2-digit",
-  month: "2-digit",
-  year: "numeric",
-  timeZone: "Asia/Ho_Chi_Minh",
-});
+// Cột "Hạn nộp" + pill trạng thái nay dựng ở buildAssignmentWindowView (_data.ts) —
+// dùng chung với tab Bài tập của Class Hub để hai màn không nói khác nhau.
 
 const SUB_STATUS: Record<SubmissionStatus, { label: string; cls: string }> = {
   NOT_SUBMITTED: { label: "Chưa nộp", cls: "bg-muted text-muted-foreground" },
@@ -254,73 +245,72 @@ export default async function TeacherAssignmentsPage({
             ) : undefined
           }
         />
+        {/* BangPhanTrang: vùng cuộn ngang ôm RIÊNG cái bảng, thanh phân trang nằm
+            ngoài — bọc kiểu cũ thì cuộn sang phải là thanh phân trang trôi mất. */}
         <div className="t-card overflow-hidden">
-          <div className="overflow-x-auto">
-            <PhanTrangBang>
-              <table className="min-w-[560px] w-full border-collapse text-left text-sm">
-                <thead>
-                  <tr className="border-b border-border bg-muted/50 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
-                    <th scope="col" className="px-5 py-3">
-                      Học viên
-                    </th>
-                    <th scope="col" className="px-5 py-3">
-                      Tình trạng
-                    </th>
-                    <th scope="col" className="px-5 py-3">
-                      Điểm
-                    </th>
-                    <th scope="col" className="px-5 py-3 text-right">
-                      <span className="sr-only">Chấm</span>
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {roster.map((e) => {
-                    const sub = subByStudent.get(e.student.id);
-                    const st = SUB_STATUS[sub?.status ?? "NOT_SUBMITTED"];
-                    const canGrade =
-                      sub != null && SUBMITTED_STATUSES.includes(sub.status);
-                    return (
-                      <tr
-                        key={e.student.id}
-                        className="border-b border-border/60 transition-colors last:border-0 hover:bg-muted/50"
+          <BangPhanTrang
+            className="pb-3"
+            tenDonVi="học viên"
+            khoaGhiNho="gv-cham-bai-roster"
+            colSpan={4}
+            trong="Lớp chưa có học viên đang học."
+            tableClassName="min-w-[560px] border-collapse text-left"
+            theadClassName="border-b border-border bg-muted/50 text-xs font-semibold tracking-wide text-muted-foreground uppercase"
+            head={
+              <tr>
+                <th scope="col" className="px-5 py-3">
+                  Học viên
+                </th>
+                <th scope="col" className="px-5 py-3">
+                  Tình trạng
+                </th>
+                <th scope="col" className="px-5 py-3">
+                  Điểm
+                </th>
+                <th scope="col" className="px-5 py-3 text-right">
+                  <span className="sr-only">Chấm</span>
+                </th>
+              </tr>
+            }
+            rows={roster.map((e) => {
+              const sub = subByStudent.get(e.student.id);
+              const st = SUB_STATUS[sub?.status ?? "NOT_SUBMITTED"];
+              const canGrade =
+                sub != null && SUBMITTED_STATUSES.includes(sub.status);
+              return (
+                <tr
+                  key={e.student.id}
+                  className="border-b border-border/60 transition-colors last:border-0 hover:bg-muted/50"
+                >
+                  <td className="px-5 py-3.5 font-medium text-foreground">
+                    {e.student.name}
+                  </td>
+                  <td className="px-5 py-3.5 whitespace-nowrap">
+                    <span
+                      className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold ${st.cls}`}
+                    >
+                      {st.label}
+                    </span>
+                  </td>
+                  <td className="px-5 py-3.5 whitespace-nowrap text-foreground">
+                    {sub?.score != null ? `${sub.score}/${asg.totalPoints}` : "—"}
+                  </td>
+                  <td className="px-5 py-3.5 text-right whitespace-nowrap">
+                    {canGrade && sub ? (
+                      <Link
+                        href={`?submissionId=${sub.id}`}
+                        className="rounded-sm text-sm font-semibold text-primary-ink outline-none hover:text-primary-ink-hover focus-visible:ring-2 focus-visible:ring-ring"
                       >
-                        <td className="px-5 py-3.5 font-medium text-foreground">
-                          {e.student.name}
-                        </td>
-                        <td className="px-5 py-3.5 whitespace-nowrap">
-                          <span
-                            className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold ${st.cls}`}
-                          >
-                            {st.label}
-                          </span>
-                        </td>
-                        <td className="px-5 py-3.5 whitespace-nowrap text-foreground">
-                          {sub?.score != null
-                            ? `${sub.score}/${asg.totalPoints}`
-                            : "—"}
-                        </td>
-                        <td className="px-5 py-3.5 text-right whitespace-nowrap">
-                          {canGrade && sub ? (
-                            <Link
-                              href={`?submissionId=${sub.id}`}
-                              className="rounded-sm text-sm font-semibold text-primary-ink outline-none hover:text-primary-ink-hover focus-visible:ring-2 focus-visible:ring-ring"
-                            >
-                              {sub.status === "GRADED" ? "Xem / sửa" : "Chấm"} →
-                            </Link>
-                          ) : (
-                            <span className="text-sm text-muted-foreground">
-                              —
-                            </span>
-                          )}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </PhanTrangBang>
-          </div>
+                        {sub.status === "GRADED" ? "Xem / sửa" : "Chấm"} →
+                      </Link>
+                    ) : (
+                      <span className="text-sm text-muted-foreground">—</span>
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
+          />
         </div>
       </div>
     );
@@ -357,6 +347,9 @@ export default async function TeacherAssignmentsPage({
             status: true,
             kind: true,
             dueAt: true,
+            // 25/08 — cửa nộp bù GV mở: cột "Trạng thái" suy từ (status, dueAt, lateUntil).
+            lateUntil: true,
+            lateReason: true,
             // Nguồn = AI SOẠN đề: template của người khác → "Admin"; của mình/không
             // template → "Tự tạo" (templateId != null không đủ — kho GV cũng là template).
             template: { select: { createdById: true } },
@@ -400,26 +393,34 @@ export default async function TeacherAssignmentsPage({
     timeZone: "Asia/Ho_Chi_Minh",
   });
 
-  const rows: AssignmentRow[] = assignments.map((a) => ({
-    id: a.id,
-    title: a.title,
-    classId: a.classId,
-    className: a.class.name,
-    // Cột Hình thức theo KIND (khớp lựa chọn khi giao + tab kho); logic BatchGrade
-    // mức (b) vẫn tự cộng thêm điều-kiện-có-câu-hỏi, không đổi.
-    isTest: a.kind === "CLASSWORK",
-    fromAdmin: a.template != null && a.template.createdById !== ownerId,
-    sessionLabel: a.classSession
-      ? `${sessionFmt.format(a.classSession.date)} · ${a.classSession.topic?.trim() || "Buổi học"}`
-      : null,
-    description: a.description?.trim() || null,
-    // Guard năm < 2000: một số bài seed để dueAt = epoch (1970) → coi như không có hạn.
-    due:
-      a.dueAt && a.dueAt.getFullYear() >= 2000 ? dueFmt.format(a.dueAt) : null,
-    submitted: a._count.submissions,
-    total: enrollBy.get(a.classId) ?? 0,
-    status: a.status,
-  }));
+  // MỘT mốc `now` cho cả bảng — mỗi dòng tự gọi `new Date()` là bảng có thể vừa
+  // "Đang mở" vừa "Đã đóng" cho hai bài cùng hạn khi render rơi đúng phút hạn.
+  const now = new Date();
+
+  const rows: AssignmentRow[] = assignments.map((a) => {
+    // Hạn nộp + trạng thái + dữ liệu dialog gia hạn (guard dueAt epoch 1970 nằm trong).
+    const win = buildAssignmentWindowView(a, now);
+    return {
+      id: a.id,
+      title: a.title,
+      classId: a.classId,
+      className: a.class.name,
+      // Cột Hình thức theo KIND (khớp lựa chọn khi giao + tab kho); logic BatchGrade
+      // mức (b) vẫn tự cộng thêm điều-kiện-có-câu-hỏi, không đổi.
+      isTest: a.kind === "CLASSWORK",
+      fromAdmin: a.template != null && a.template.createdById !== ownerId,
+      sessionLabel: a.classSession
+        ? `${sessionFmt.format(a.classSession.date)} · ${a.classSession.topic?.trim() || "Buổi học"}`
+        : null,
+      description: a.description?.trim() || null,
+      submitted: a._count.submissions,
+      total: enrollBy.get(a.classId) ?? 0,
+      // Không có quyền giao bài thì tắt luôn nút gia hạn: bấm vào cũng chỉ ăn lỗi
+      // "Không có quyền" từ action. (Cờ đi kèm dữ liệu vì AssignmentsTabs không
+      // chuyền prop xuống AssignmentList.)
+      win: canAssign ? win : { ...win, canExtend: false },
+    };
+  });
 
   return (
     <div>

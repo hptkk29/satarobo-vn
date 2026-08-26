@@ -171,41 +171,39 @@ export default async function ChurnReportPage({
 
       {/* Bảng tỉ lệ churn theo tháng */}
       <Card title="Tỉ lệ churn theo tháng">
-        <div className="overflow-x-auto">
-          <PhanTrangBang>
-            <table className="w-full text-sm">
-              <thead className="text-left text-xs text-muted-foreground">
-                <tr>
-                  <th className="px-3 py-2">Kỳ</th>
-                  <th className="px-3 py-2 text-right">Đang học đầu kỳ</th>
-                  <th className="px-3 py-2 text-right">Rời lớp</th>
-                  <th className="px-3 py-2 text-right">Tỉ lệ churn</th>
+        <PhanTrangBang cuonNgang>
+          <table className="w-full text-sm">
+            <thead className="text-left text-xs text-muted-foreground">
+              <tr>
+                <th className="px-3 py-2">Kỳ</th>
+                <th className="px-3 py-2 text-right">Đang học đầu kỳ</th>
+                <th className="px-3 py-2 text-right">Rời lớp</th>
+                <th className="px-3 py-2 text-right">Tỉ lệ churn</th>
+              </tr>
+            </thead>
+            <tbody>
+              {report.byMonth.map((m) => (
+                <tr key={m.period} className="border-t">
+                  <td className="px-3 py-2">{m.period}</td>
+                  <td className="px-3 py-2 text-right">{num(m.activeAtStart)}</td>
+                  <td className="px-3 py-2 text-right">{num(m.withdrew)}</td>
+                  {/* Không có ai "đang học đầu kỳ" → tỉ lệ không xác định, hiện "—"
+                      thay vì "0.0%" (chia cho 0) gây hiểu nhầm là không có ai rời. */}
+                  <td className="px-3 py-2 text-right font-medium">
+                    {m.activeAtStart > 0 ? pct(m.churnRate) : "—"}
+                  </td>
                 </tr>
-              </thead>
-              <tbody>
-                {report.byMonth.map((m) => (
-                  <tr key={m.period} className="border-t">
-                    <td className="px-3 py-2">{m.period}</td>
-                    <td className="px-3 py-2 text-right">{num(m.activeAtStart)}</td>
-                    <td className="px-3 py-2 text-right">{num(m.withdrew)}</td>
-                    {/* Không có ai "đang học đầu kỳ" → tỉ lệ không xác định, hiện "—"
-                        thay vì "0.0%" (chia cho 0) gây hiểu nhầm là không có ai rời. */}
-                    <td className="px-3 py-2 text-right font-medium">
-                      {m.activeAtStart > 0 ? pct(m.churnRate) : "—"}
-                    </td>
-                  </tr>
-                ))}
-                {report.byMonth.length === 0 ? (
-                  <tr>
-                    <td className="px-3 py-4 text-center text-muted-foreground" colSpan={4}>
-                      Chưa có dữ liệu.
-                    </td>
-                  </tr>
-                ) : null}
-              </tbody>
-            </table>
-          </PhanTrangBang>
-        </div>
+              ))}
+              {report.byMonth.length === 0 ? (
+                <tr>
+                  <td className="px-3 py-4 text-center text-muted-foreground" colSpan={4}>
+                    Chưa có dữ liệu.
+                  </td>
+                </tr>
+              ) : null}
+            </tbody>
+          </table>
+        </PhanTrangBang>
       </Card>
 
       {/* Theo cơ sở */}

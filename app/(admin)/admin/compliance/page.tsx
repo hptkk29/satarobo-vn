@@ -29,7 +29,7 @@ export default async function CompliancePage() {
       {due.length === 0 ? (
         <p className="text-sm text-muted-foreground">Không có học viên nào quá hạn lưu trữ.</p>
       ) : (
-        <PhanTrangBang>
+        <PhanTrangBang cuonNgang>
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b text-left text-muted-foreground">

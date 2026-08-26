@@ -17,7 +17,6 @@ import { getDebtRows } from "@/lib/finance/debt";
 import { PhanTrangBang } from "@/components/ui/phan-trang-bang";
 
 const vnd = (n: number) => `${n.toLocaleString("vi-VN")}đ`;
-const TRIAL_ACTIVE_STATUSES = ["SCHEDULED", "CONFIRMED", "POSTPONED"] as const;
 
 // Đợt 3C #4 / 3B — Dashboard QUẢN LÝ + SUPER_ADMIN (tổng quan tuyển sinh + vận hành).
 // BỐ CỤC GỌN (commit 1): KPI → biểu đồ → hoạt động gần đây. Các thẻ "việc tồn đọng"
@@ -78,7 +77,7 @@ async function getManagerStats(actor: Actor) {
   const [
     totalLeads, newLeadsThisMonth, newLeadsLastMonth, enrolledLeads, totalStudents,
     totalPosts, leadsLast14Days, leadsByStatus, leadsForWeekly, revenuePayments,
-    revenueTargets, trialsLegacyToday, trialV2Classes, sessionsToday, debtRows,
+    revenueTargets, trialV2Classes, sessionsToday, debtRows,
   ] = await Promise.all([
     sdb.lead.count({ where: ACTIVE_LEAD }),
     sdb.lead.count({ where: { ...ACTIVE_LEAD, createdAt: { gte: monthStart } } }),
@@ -97,9 +96,10 @@ async function getManagerStats(actor: Actor) {
       take: 50_000,
     }),
     getRevenueTargets(actor),
-    // Hẹn học thử HÔM NAY — TrialClass (cũ, có scheduledAt).
-    sdb.trialClass.count({ where: { scheduledAt: { gte: dayStart, lt: dayEnd }, status: { in: [...TRIAL_ACTIVE_STATUSES] } } }),
-    // + TrialClassV2 (R7): TrialClassSession không scoped → cách ly qua parent TrialClassV2 (SCOPED).
+    // Hẹn trải nghiệm HÔM NAY — CHỈ V2.
+    // 26/08: bỏ nhánh đếm `TrialClass` (V1). Dữ liệu V1 đã được gộp sang V2
+    // (scripts/gop-trial-v1-sang-v2.ts) nên đếm cả hai là đếm ĐÔI cùng một cuộc hẹn.
+    // TrialClassSession không scoped → cách ly qua parent TrialClassV2 (SCOPED).
     sdb.trialClassV2.findMany({
       where: { sessions: { some: { date: { gte: dayStart, lt: dayEnd }, status: "SCHEDULED" } } },
       select: { sessions: { where: { date: { gte: dayStart, lt: dayEnd }, status: "SCHEDULED" }, select: { id: true } } },
@@ -128,8 +128,8 @@ async function getManagerStats(actor: Actor) {
   const revenueTarget = currentRevRow?.target ?? null;
   const revenueAchieved = (currentRevRow ?? computeAchievement(revenueActual, revenueTarget)).achievedRate;
 
-  // câu 16 (c) — hẹn học thử hôm nay (TrialClass cũ + buổi TrialClassV2 hôm nay).
-  const trialsToday = trialsLegacyToday + trialV2Classes.reduce((s, c) => s + c.sessions.length, 0);
+  // câu 16 (c) — buổi trải nghiệm hôm nay. 26/08: chỉ đếm V2 (hệ V1 đã gộp sang V2).
+  const trialsToday = trialV2Classes.reduce((s, c) => s + c.sessions.length, 0);
 
   // câu 16 (d) — số GV đứng lớp hôm nay (distinct theo GV thực).
   const teacherSet = new Set<string>();
