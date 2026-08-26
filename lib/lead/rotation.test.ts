@@ -118,6 +118,45 @@ describe("[Đợt D] seedTurnsForNewcomer — người mới vào vòng ở đâ
   });
 });
 
+// ═══════════════════════════════════════════════════════════════════════════
+// LỖI BẮT ĐƯỢC KHI CHẠY THẬT TRÊN POSTGRES 22/08/2026 — sổ lượt bị THỔI PHỒNG
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// 4/5 ca e2e đỏ. Bệnh: khi vòng đang LẤP ĐẦY, `seedTurnsForNewcomer` lấy min
+// trên *những dòng đã có*, mà lúc đó mới có đúng một dòng (người vừa nhận, =1).
+// ⇒ người thứ hai vào vòng bị ghi khởi điểm 1, nhận 1 lead thành 2. Sổ nói người
+// đó đã tới lượt 2 lần trong khi thực tế 1. 6 lead chia ra thành 8 lượt.
+//
+// Vì sao test thuần cũ KHÔNG bắt được: nó gọi `pickFairTurn` trên một danh sách
+// ứng viên ĐÃ ĐẦY ĐỦ, tức đã giả định sẵn cái mà tầng DB phải tự dựng. Đó là
+// khoảng trống giữa "toán đúng" và "ghi sổ đúng".
+//
+// Cách vá: tầng DB tạo dòng cho MỌI ứng viên NGAY LẦN ĐẦU thấy họ, ở đúng khởi
+// điểm của lúc đó, rồi mới chọn. Vòng trống ⇒ mọi người khởi điểm 0.
+describe("[Đợt D] khởi điểm phải chốt MỘT LẦN lúc vào vòng, không tính lại mỗi lượt", () => {
+  it("vòng trống, 3 người cùng vào → tất cả khởi điểm 0", () => {
+    // Đây là ca đã sai trên DB thật: min-của-dòng-đã-có cho ra 1, không phải 0.
+    expect(seedTurnsForNewcomer([])).toBe(0);
+  });
+
+  it("mô phỏng đúng cách tầng DB làm: tạo dòng trước, chọn sau → 6 lead = 6 lượt", () => {
+    const ids = ["a", "b", "c"];
+    const so = new Map<string, { turns: number; lastTurnAt: Date | null }>();
+    for (let i = 0; i < 6; i++) {
+      // Bước 1 — mọi ứng viên chưa có dòng thì tạo, ở khởi điểm hiện tại.
+      const daCo = ids.filter((id) => so.has(id)).map((id) => c(id, so.get(id)!.turns));
+      const khoiDiem = seedTurnsForNewcomer(daCo);
+      for (const id of ids) if (!so.has(id)) so.set(id, { turns: khoiDiem, lastTurnAt: null });
+      // Bước 2 — chọn trên danh sách đã đầy đủ.
+      const picked = pickFairTurn(ids.map((id) => c(id, so.get(id)!.turns, so.get(id)!.lastTurnAt)))!;
+      so.set(picked, { turns: so.get(picked)!.turns + 1, lastTurnAt: new Date(2026, 7, 1, 0, i) });
+    }
+    const vals = [...so.values()].map((v) => v.turns);
+    expect(vals.reduce((s, v) => s + v, 0), "6 lead phải sinh đúng 6 lượt").toBe(6);
+    expect(vals.sort()).toEqual([2, 2, 2]);
+  });
+});
+
 describe("[Đợt D] planFairTurns — chia MỘT LÔ lead (sale nghỉ việc)", () => {
   it("lô 6 lead / 3 người → mỗi người đúng 2, thứ tự luân phiên", () => {
     const plan = planFairTurns([c("a", 0), c("b", 0), c("c", 0)], 6);
@@ -200,7 +239,11 @@ describe("[Đợt D][SS-LR-06] khoá chống hai lead cùng tiêu một lượt"
     const src = doc();
     const tx = src.indexOf("db.$transaction");
     expect(tx).toBeGreaterThan(-1);
+    // Ba bước PHẢI nằm sau mốc mở transaction: ghi danh người mới, chọn, ghi lượt.
+    // Ghi danh mà rơi ra ngoài thì hai lượt đồng thời tạo hai dòng cho cùng một
+    // người và một trong hai đổ vì ràng buộc duy nhất.
+    expect(src.indexOf("leadRotationTurn.create")).toBeGreaterThan(tx);
     expect(src.indexOf("planFairTurns(candidates, count)")).toBeGreaterThan(tx);
-    expect(src.indexOf("leadRotationTurn.upsert")).toBeGreaterThan(tx);
+    expect(src.indexOf("leadRotationTurn.update")).toBeGreaterThan(tx);
   });
 });

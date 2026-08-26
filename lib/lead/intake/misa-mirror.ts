@@ -3,6 +3,8 @@ import { getSetting } from "@/lib/settings/service";
 import { SALE_FORM_FIELDS } from "./map-sale-form";
 import {
   buildMisaInternalFields,
+  MISA_ALLOW_URL,
+  MISA_REDIRECT_URL,
   type MisaInternalInput,
 } from "./misa-internal";
 
@@ -37,6 +39,8 @@ const MISA_ENDPOINT =
 
 const TIMEOUT_MS = 5_000;
 
+
+
 /**
  * Đã ghi vết "thiếu env" trong tiến trình này chưa. Cố ý là biến MODULE (sống
  * theo instance serverless, không phải theo request): đủ để chặn cơn lũ một
@@ -67,7 +71,19 @@ export type MirrorOutcome =
   | { status: "failed"; reason: string };
 
 /** 3 tham số định danh form. Ưu tiên env; thiếu thì lấy chính cái form gửi lên. */
-function misaFormConfig(payload: Record<string, string>): {
+function misaFormConfig(
+  payload: Record<string, string>,
+  /**
+   * Ưu tiên 3 tham số NẰM TRONG PHIẾU thay vì env.
+   *
+   * Chỉ đường phát lại phiếu CŨ bật cờ này, và đó là chuyện sống còn từ
+   * 22/08/2026: env nay trỏ webform **"Form Nhập KH v2"** (bộ trường mới), còn
+   * phiếu cũ mang bộ trường của form `c53af301-…` — trong đó SĐT là
+   * `CustomField15`, ô mà form v2 KHÔNG có. Gửi phiếu cũ vào form mới thì MISA
+   * nhận một bản ghi cụt, không báo lỗi. Phiếu cũ phải về đúng form đã sinh ra nó.
+   */
+  preferPayload = false,
+): {
   config: Record<string, string> | null;
   via: "env" | "form";
   missing: string[];
@@ -77,8 +93,11 @@ function misaFormConfig(payload: Record<string, string>): {
   const envCompany = process.env.MISA_WEBFORM_COMPANYCODE;
   const envKey = process.env.MISA_WEBFORM_KEY;
 
-  const pick = (fromEnv: string | undefined, fromForm: string | undefined) =>
-    (fromEnv && fromEnv.trim()) || (fromForm && fromForm.trim()) || "";
+  const pick = (fromEnv: string | undefined, fromForm: string | undefined) => {
+    const env = fromEnv?.trim() || "";
+    const form = fromForm?.trim() || "";
+    return preferPayload ? form || env : env || form;
+  };
 
   const id = pick(envId, payload.ID);
   const companyCode = pick(envCompany, payload.Companycode);
@@ -90,19 +109,20 @@ function misaFormConfig(payload: Record<string, string>): {
   if (!formKey) missing.push("MISA_WEBFORM_KEY");
   if (missing.length > 0) return { config: null, via: "env", missing };
 
-  const via: "env" | "form" =
-    envId && envCompany && envKey ? "env" : "form";
+  const usedEnv = id === envId?.trim() && companyCode === envCompany?.trim();
+  const via: "env" | "form" = usedEnv ? "env" : "form";
 
   return {
     config: {
       ID: id,
       Companycode: companyCode,
       FormKey: formKey,
-      AllowURL: "*",
-      // MISA trả redirect sau khi lưu. Ta không đọc/không đi theo response, đặt
-      // giá trị này chỉ để payload khớp hình dạng bên đó vẫn nhận.
-      RedirectURL:
-        process.env.MISA_WEBFORM_REDIRECT ?? "https://sale.satarobo.vn/thank-you",
+      // ⚠️ PHẢI TRÙNG mã nhúng của form — xem `MISA_ALLOW_URL`. Sai giá trị này
+      // thì MISA vứt phiếu mà vẫn trả 302 (đã mất nửa buổi vì nó, 22/08/2026).
+      AllowURL: process.env.MISA_WEBFORM_ALLOWURL ?? MISA_ALLOW_URL,
+      // MISA trả redirect sau khi lưu. Ta không đọc/không đi theo response
+      // (`redirect: "manual"`), đặt giá trị này chỉ để payload khớp hình dạng.
+      RedirectURL: process.env.MISA_WEBFORM_REDIRECT ?? MISA_REDIRECT_URL,
     },
     via,
     missing: [],
@@ -125,7 +145,8 @@ export async function mirrorSaleFormToMisa(
     return { status: "failed", reason: "setting-unreadable" };
   }
 
-  const { config, via, missing } = misaFormConfig(payload);
+  // `true`: phiếu cũ về đúng form cũ (xem chú thích ở `misaFormConfig`).
+  const { config, via, missing } = misaFormConfig(payload, true);
   if (!config) {
     const alreadyReported = misconfigReported;
     misconfigReported = true;
@@ -164,7 +185,22 @@ async function postToMisa(
       redirect: "manual", // MISA trả 302 về RedirectURL — không đi theo.
       signal: AbortSignal.timeout(TIMEOUT_MS),
     });
-    // 2xx và 3xx đều là "MISA đã nhận" (bên đó redirect sau khi lưu).
+    // ⚠️ 2xx/3xx chỉ chứng minh MISA **chấp nhận request**, KHÔNG chứng minh nó
+    // đã lưu bản ghi: sai `AllowURL` là nó vứt phiếu mà vẫn trả 302 + Location.
+    // Đường duy nhất bắt được ca đó là mở MISA ra nhìn — ta không có API để hỏi.
+    // Bù lại, sai `ID`/`FormKey` thì MISA trả **500**, nên nhánh dưới vẫn bắt
+    // được ca khoá hỏng/hết hạn.
+    // Vết DUY NHẤT ta có để đối chứng khi MISA "nhận mà không lưu" (xem cảnh báo
+    // ngay trên). Ghi cả lúc THÀNH CÔNG vì đó mới là ca khó: 302 nhìn y hệt nhau
+    // dù phiếu được lưu hay bị vứt, nên khi bên MISA báo "không thấy" thì đây là
+    // thứ duy nhất phân biệt được "app chưa gửi" với "MISA đã nhận rồi bỏ".
+    // `x-request-id` đưa cho MISA hỗ trợ là họ tra được log hai đầu.
+    // KHÔNG log `FormKey` (luật cứng #9 — không log giá trị secret).
+    console.log(
+      `[misa-mirror] MISA ${res.status} · x-request-id=${res.headers.get("x-request-id") ?? "(khong co)"} ` +
+        `· AllowURL=${JSON.stringify(config.AllowURL)} · form=…${config.ID.slice(-6)} ` +
+        `· truong=[${Object.keys(fields).join(",")}]`,
+    );
     if (res.status >= 400) {
       console.error(`[misa-mirror] MISA trả ${res.status} (tham số lấy từ ${via})`);
       return { status: "failed", reason: `http-${res.status}` };

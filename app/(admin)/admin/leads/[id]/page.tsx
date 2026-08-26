@@ -18,9 +18,11 @@ import { OrderKindSelect } from "./_components/order-kind-select";
 import { LeadPaymentCard } from "../_components/lead-payment-card";
 import { getLeadPaymentSummary } from "@/lib/payments/summary";
 import { maskFreeText, maskPersonName, maskLeadPiiFields } from "@/lib/lead/pii";
+import { canSeeLead, leadSharingEnabled } from "@/lib/lead/sharing";
 import { canViewLeadPii } from "@/lib/auth/check-permission";
 import { ShareToggle } from "./_components/share-toggle";
 import { formatDateVN } from "@/lib/format/date";
+import { hasSystemLines, splitLeadNote } from "@/lib/lead/note-view";
 
 export const metadata = { title: "Chi tiết Lead | Admin" };
 export const dynamic = "force-dynamic";
@@ -81,9 +83,24 @@ export default async function LeadDetailPage({ params }: Props) {
   });
   if (!lead) notFound();
 
-  // Scope: SALES_CSM chỉ xem lead của mình — TRỪ lead đã bật "dùng chung" (#11 T1
-  // câu 10 BGĐ): CSKH cùng cơ sở xem được (cách ly cơ sở đã do scopedDb lo ở trên).
-  if (!canViewAll && lead.assignedToId !== session.user.id && !lead.isSharedWithTeam) {
+  // Scope: SALES_CSM chỉ xem lead của mình. Cách ly cơ sở đã do scopedDb lo ở trên.
+  //
+  // ⚠️ Đợt E (22/08) — chủ dự án chốt LEAD ĐỘC QUYỀN TUYỆT ĐỐI (Q8), ĐẢO quyết
+  // định BGĐ câu 10 ký 10/07: lead "dùng chung" KHÔNG còn mở cửa cho sale khác.
+  // Quy tắc gom vào canSeeLead() để trang này và trang danh sách không trôi lệch.
+  if (
+    !canSeeLead({
+      canViewAll,
+      isOwner: lead.assignedToId === session.user.id,
+      // 23/08 — người NHẬP phiếu cũng vào được phiếu của mình (Sale Hội sở).
+      isCreator: !!lead.createdById && lead.createdById === session.user.id,
+      isShared: lead.isSharedWithTeam,
+      sharingEnabled: leadSharingEnabled(),
+    })
+  ) {
+    // `view=table` chứ không phải kanban — chủ dự án yêu cầu 25/08: rời trang chi
+    // tiết thì về danh sách ở chế độ BẢNG. Giữ đúng một chế độ cho mọi đường quay
+    // lại, kẻo bấm "Quay lại" ra bảng còn bị đá ra thì ra kanban.
     redirect("/leads?view=table");
   }
 
@@ -106,6 +123,15 @@ export default async function LeadDetailPage({ params }: Props) {
     },
     canViewPii,
   );
+
+  // 24/08 — ô "Ghi chú" trộn hai tác giả: chữ người nhập gõ + dòng máy ghi (mã
+  // NV, cảnh báo chia lead). Sale chăm khách chỉ cần chữ của người; phần máy ghi
+  // là chẩn đoán vận hành nên gác sau `leads:view-all` (Sale cơ sở KHÔNG có key
+  // này — xem prisma/seed-roles.ts — nên đúng là thứ phân biệt cần tìm, và không
+  // phải đẻ thêm permission key mới rồi seed lại 2 môi trường).
+  // Tách trên chuỗi THÔ rồi mới mask, để phần người gõ vẫn được che đúng luật PII.
+  const noteView = splitLeadNote(lead.note);
+  const humanNote = canViewPii ? noteView.human : maskFreeText(noteView.human);
 
   const canAssign = (await checkPermission("leads:assign", { centerId: lead.centerId }));
   const canCloseDeal =
@@ -252,8 +278,10 @@ export default async function LeadDetailPage({ params }: Props) {
         </div>
         <div className="flex items-center gap-2">
           {/* #11 T1 — bật/tắt "dùng chung": chỉ OWNER hoặc QL cơ sở (leads:assign);
-              server action tự guard lại (đây là gate hiển thị). */}
-          {(lead.assignedToId === session.user.id || canAssign) && (
+              server action tự guard lại (đây là gate hiển thị).
+              Đợt E — chính sách tắt thì ẩn hẳn nút; action cũng từ chối. */}
+          {leadSharingEnabled() &&
+            (lead.assignedToId === session.user.id || canAssign) && (
             <ShareToggle
               leadId={lead.id}
               isShared={lead.isSharedWithTeam}
@@ -304,7 +332,12 @@ export default async function LeadDetailPage({ params }: Props) {
       <dl className="mb-6 grid grid-cols-2 gap-4 rounded-xl border border-border bg-card p-4 sm:grid-cols-4">
         <Info label="Tên con" value={piiLead.childName} />
         <Info label="Tuổi" value={lead.childAge?.toString() ?? null} />
-        <Info label="Khoá quan tâm" value={lead.course?.name ?? lead.source} />
+        {/* 24/08 — KHÔNG fallback sang `source` nữa. "Nguồn" (Facebook, walk-in…)
+            và "Khoá quan tâm" là hai chuyện khác hẳn; lấy cái này lấp cái kia làm
+            phiếu chưa hỏi khoá nào trông như đã chốt khoá. Trống cho tới khi Sale
+            thêm con và chọn khoá — lúc đó `Lead.courseId` được đồng bộ từ lựa chọn
+            ấy (xem syncLeadCourseFromChildren trong ../actions.ts). */}
+        <Info label="Khoá quan tâm" value={lead.course?.name ?? null} />
         <Info label="Cơ sở" value={lead.center?.name ?? null} />
         <Info label="Nguồn" value={lead.source} />
         {/* Ô "Link Facebook" của biểu mẫu /nhap-khach-hang (22/08/2026). Với lead
@@ -344,7 +377,18 @@ export default async function LeadDetailPage({ params }: Props) {
           label="Ngày tạo"
           value={formatDateVN(lead.createdAt)}
         />
-        <Info label="Ghi chú" value={piiLead.note} />
+        <Info label="Ghi chú" value={humanNote} />
+        {/* Dấu vết máy ghi — chỉ quản lý/quản trị (`leads:view-all`) đọc. */}
+        {canViewAll && hasSystemLines(noteView) && (
+          <div className="col-span-2 sm:col-span-4">
+            <dt className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+              Nhật ký phiếu (chỉ quản trị)
+            </dt>
+            <dd className="mt-1 whitespace-pre-wrap break-words text-xs text-muted-foreground">
+              {[...noteView.info, ...noteView.warnings].join("\n")}
+            </dd>
+          </div>
+        )}
       </dl>
 
       {/* LD1/G2 — loại đơn dự kiến (Khoá học / Sản phẩm) + item cụ thể theo loại */}

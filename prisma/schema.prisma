@@ -1340,6 +1340,16 @@ model Lead {
   orgUnitId        String? // PR-A: OrgUnit.id (song song centerId, scopedDb flip ở PR-D)
   courseId         String?
   assignedToId     String?
+  // 23/08/2026 — NGƯỜI NHẬP phiếu. Khác `assignedToId` (người CHĂM): phiếu do
+  // Sale Hội sở nhập vẫn tự chia về Sale cơ sở, nhưng người nhập phải theo được
+  // phiếu của mình. Trước đó danh tính người nhập chỉ nằm dưới dạng CHỮ trong
+  // `note` ("Nhân viên nhập: HO.KD.001") — không lọc được, nên không dựng nổi
+  // luật "chỉ thấy phiếu mình nhập".
+  //
+  // Cột TRẦN, không FK — cùng tiền lệ `orgUnitId` (PR-A). Chỉ so bằng với
+  // `actor.userId`; muốn tên người nhập thì tra `User` riêng.
+  // NULL = phiếu cũ, hoặc phiếu vào từ webhook (không có phiên đăng nhập).
+  createdById      String?
   // #11 T1 (câu 10 BGĐ, Kiệt ký 10/07): "dùng chung" — CSKH cùng CƠ SỞ thấy lead này
   // (đọc mở rộng OR isSharedWithTeam=true, cách ly cơ sở vẫn do scopedDb). Chỉ owner
   // (assignee) hoặc CENTER_MANAGER bật/tắt; sharedById = ai bật (không FK — chỉ hiển thị).
@@ -1459,6 +1469,7 @@ model Lead {
   // IDX-2: trang leads (Kanban + table) page/order theo createdAt DESC dưới scope centerId
   // → composite cho index-ordered rows (bỏ sort + OFFSET scan). Bảng high-growth.
   @@index([centerId, status, createdAt])
+  @@index([createdById])
 }
 
 /// GĐ1 — SỔ ĐỔI TRẠNG THÁI LEAD. Một dòng cho MỖI lần trạng thái đổi thật.
@@ -3604,8 +3615,12 @@ model LeadRotationTurn {
   id         String    @id @default(cuid())
   orgUnitId  String
   userId     String
-  /// Tổng số lượt đã nhận từ trước tới nay. CHỈ TĂNG — không có đường về 0.
+  /// Vị trí trong vòng. CHỈ TĂNG — không có đường về 0.
   turns      Int       @default(0)
+  /// Khởi điểm lúc VÀO vòng (0 nếu có mặt từ đầu; = mức thấp nhất của vòng nếu
+  /// vào sau). Số lead thật sự đã nhận qua vòng chia = `turns - seedTurns`.
+  /// Không có cột này thì bảng bằng chứng nói sai về đúng người dễ bị soi nhất.
+  seedTurns  Int       @default(0)
   /// Lần gần nhất tới lượt; null = chưa bao giờ. Dùng để phá hoà cho công bằng.
   lastTurnAt DateTime? @db.Timestamptz(6)
   createdAt  DateTime  @default(now()) @db.Timestamptz(6)
@@ -7190,6 +7205,7 @@ model TrnProgram {
   updatedAt   DateTime  @updatedAt @db.Timestamptz(6)
   deletedAt   DateTime? @db.Timestamptz(6)
 
+  need           TrnTrainingNeed?      @relation(fields: [needId], references: [id], onDelete: SetNull)
   courses        TrnCourse[]
   evaluationRows TrnEvaluationResult[]
   evalLinkConfig TrnEvalLinkConfig?
@@ -7380,6 +7396,9 @@ model TrnLesson {
   cues           TrnLessonCue[]
   videoSessions  TrnVideoSession[]
 
+  /// EL-04 — tiến độ của mọi lượt học trên bài này.
+  progress TrnLessonProgress[]
+
   @@unique([moduleId, orderIndex])
   @@index([kind])
   @@index([scormPackageId])
@@ -7441,11 +7460,11 @@ model TrnRequirement {
 /// cơ chế giám sát của GĐ2 dựa vào (QĐ-CDA-12).
 /// Bảng CON theo người dùng ⇒ không mang cột đơn vị.
 model TrnPolicyAcceptance {
-  id            String   @id @default(cuid())
+  id            String    @id @default(cuid())
   userId        String
   policyKey     String
   policyVersion String
-  acceptedAt    DateTime @default(now()) @db.Timestamptz(6)
+  acceptedAt    DateTime  @default(now()) @db.Timestamptz(6)
   /// Rút đồng ý: đÓNG dòng đang hiệu lực, KHÔNG xoá nó. Đây là đường `update` DUY NHẤT
   /// được phép trên bảng này; mọi đường update/delete khác đều bị cấm, vì dòng cũ là BẰNG
   /// CHỨNG BẤT BIẾN rằng người đó đã được thông báo phạm vi nào, vào ngày nào.
@@ -7620,4 +7639,614 @@ model TrnVideoSession {
 
   @@index([purgeAfter])
   @@index([userId, lessonId])
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// EL-05 PR0 — GIAO BÀI + GHI DANH: **CHỈ SCHEMA**, 0 giao diện, 0 bộ giải luật,
+// 0 Server Action.
+//
+// Vì sao PR này tồn tại và vì sao nó chạy TRƯỚC EL-04: EL-04 (trang đọc + đo tiến
+// độ) khoá route theo `enrollmentId`, chống IDOR bằng `TrnEnrollment`, và khoá ghi
+// sau hạn bằng `TrnAssignment.allowLate` — nhưng kế hoạch xếp EL-04 TRƯỚC EL-05.
+// Vòng phụ thuộc là thật.
+//
+// Cách né dễ dãi — để `TrnLessonProgress.enrollmentId` nullable — ĐÃ BỊ BÁC, và lý
+// do là Postgres chứ không phải kỷ luật: `@@unique([enrollmentId, lessonId])` với
+// `enrollmentId = NULL` KHÔNG chặn được trùng (`NULL != NULL`), nên một người sẽ
+// đẻ nhiều dòng tiến độ cho cùng một bài, im lặng.
+//
+// ⚠️ Hai enum `TrnEnrollSource` và `TrnEnrollmentStatus` ĐÃ `CREATE TYPE` ở
+// migration `el_add_trn_core` (EL-03). KHÔNG khai lại — `CREATE TYPE` lần hai là
+// lỗi `type already exists`.
+// ═══════════════════════════════════════════════════════════════════════════
+
+/// Lượt giao nhắm vào cái gì. `PATH` = lộ trình nhiều khoá; lượt giao cấp `LESSON`
+/// nở về khoá chứa bài đó khi sinh `TrnEnrollment` (ghi danh luôn ở cấp KHOÁ).
+enum TrnContentType {
+  LESSON
+  COURSE
+  PATH
+}
+
+/// `STATIC` = chốt danh sách người học lúc tạo. `DYNAMIC` = tập người theo luật lọc,
+/// ai khớp thì vào, ai rời tập thì `REVOKED` + lý do "rời tập luật".
+enum TrnAudienceMode {
+  STATIC
+  DYNAMIC
+}
+
+/// Mốc tính hạn tương đối: từ lúc được giao, hay từ ngày vào làm.
+enum TrnDueAnchor {
+  ASSIGNED_AT
+  JOINED_AT
+}
+
+enum TrnAssignmentStatus {
+  ACTIVE
+  REVOKED
+}
+
+/// Lượt giao bài.
+///
+/// `centerId`/`orgUnitId` BẮT BUỘC (nhóm `BAT_BUOC`): một lượt giao luôn thuộc một
+/// cơ sở. NULL ở đây là dữ liệu chưa backfill, KHÔNG phải "toàn công ty" — nên model
+/// này KHÔNG vào `NULL_IS_GLOBAL_MODELS`.
+model TrnAssignment {
+  id          String         @id @default(cuid())
+  contentType TrnContentType
+  /// Id của bài / khoá / lộ trình, tuỳ `contentType`. Cột trần có chủ đích: ba đích
+  /// khác bảng nhau nên không có FK nào đúng cho cả ba.
+  contentId   String
+
+  /// Giao theo một phiên bản khoá cụ thể. `baseCourseVersionId` phục vụ BR-013
+  /// "giao lại phần chênh lệch": diff(base, current) ra đúng những bài đã đổi.
+  courseVersionId     String?
+  baseCourseVersionId String?
+
+  title        String
+  isMandatory  Boolean         @default(false)
+  audienceMode TrnAudienceMode @default(STATIC)
+
+  startAt         DateTime     @default(now()) @db.Timestamptz(6)
+  dueAt           DateTime?    @db.Timestamptz(6)
+  dueRelativeDays Int?
+  dueAnchor       TrnDueAnchor @default(ASSIGNED_AT)
+
+  /// HẠN CHÓT CỨNG CÓ HIỆU LỰC (QĐ-CDA-05). Mặc định `false`, và mặc định đó là
+  /// phần thi hành chứ không phải gu:
+  ///  · quá hạn mà `allowLate = false` ⇒ NGƯNG ghi nhận tiến độ mới (409 DUE_PASSED);
+  ///  · bitmap và tiến độ ĐÃ CÓ không bị xoá — bằng chứng đã học vẫn là bằng chứng;
+  ///  · học tiếp phải gia hạn CÓ LÝ DO, và gia hạn ghi `dueAt`, KHÔNG BAO GIỜ ghi
+  ///    `dueAtOriginal`.
+  /// Với `isMandatory = true`, bật cờ này là ngoại lệ phải nhập lý do + AuditLog —
+  /// không cấm cứng, nhưng không được im lặng.
+  allowLate Boolean @default(false)
+
+  completionRuleJson Json
+  maxAttempts        Int  @default(1)
+
+  /// Chống tua và chặn tốc độ phát — cơ chế giám sát của GĐ2, khai cột từ GĐ1.
+  blockSeek       Boolean @default(true)
+  maxPlaybackRate Float   @default(1.5)
+
+  /// ⚠️ CHỈ hai kênh `IN_APP` và `EMAIL` (QĐ-CDA-08 — bỏ hẳn Zalo ZNS). Kiểu để
+  /// `String[]` theo đúng đặc tả, và Zod chặn giá trị thứ ba ở tầng nhập; đừng
+  /// "thêm lại cho tiện" mà không qua quyết định.
+  notifyChannels   String[]
+  reminderSchedule String[]
+
+  status       TrnAssignmentStatus @default(ACTIVE)
+  revokedAt    DateTime?           @db.Timestamptz(6)
+  revokeReason String?
+
+  centerId  String
+  orgUnitId String
+
+  createdByUserId String?
+  createdAt       DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt       DateTime @updatedAt @db.Timestamptz(6)
+
+  rules       TrnAssignmentRule[]
+  includes    TrnAssignmentInclude[]
+  excludes    TrnAssignmentExclude[]
+  enrollments TrnEnrollment[]
+
+  /// Cron quét hạn đi bằng index này.
+  @@index([status, dueAt])
+  @@index([orgUnitId, status])
+  @@index([contentType, contentId])
+  @@index([centerId])
+}
+
+/// Một luật lọc của lượt giao động. Điều kiện TRONG một luật nối VÀ; giữa các luật
+/// nối HOẶC.
+///
+/// `filterJson` dùng Json chứ không 13 cột nullable, NHƯNG bắt buộc có Zod schema +
+/// hàm thuần `ruleToWhere(filterJson)` dịch sang `Prisma.UserWhereInput`.
+/// ⚠️ `TrnCourse.catalogRuleJson` dùng CHUNG schema và CHUNG hàm đó — hai bộ dịch
+/// song song là hai bộ lỗi song song, và lệch nhau thì không ai thấy bằng mắt.
+/// Bảng con ⇒ không mang cột đơn vị.
+model TrnAssignmentRule {
+  id           String @id @default(cuid())
+  assignmentId String
+  filterJson   Json
+  orderIndex   Int    @default(0)
+
+  assignment TrnAssignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+
+  @@index([assignmentId])
+}
+
+/// Người được THÊM TAY vào lượt giao, ngoài kết quả của luật lọc.
+model TrnAssignmentInclude {
+  id            String   @id @default(cuid())
+  assignmentId  String
+  userId        String
+  addedByUserId String?
+  addedAt       DateTime @default(now()) @db.Timestamptz(6)
+
+  assignment TrnAssignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+
+  @@unique([assignmentId, userId])
+  @@index([userId])
+}
+
+/// Danh sách LOẠI TRỪ của lượt giao.
+///
+/// ⛔ Loại trừ hiện thực bằng ĐÚNG BẢNG NÀY. TUYỆT ĐỐI không dùng
+/// `UserPermissionGrant` với `grant = DENY`: `can()` v2 là ALLOW-wins thuần,
+/// nhánh DENY KHÔNG TỒN TẠI, nên một grant DENY bị bỏ qua IM LẶNG — không chặn
+/// được ai và cũng không báo lỗi cho người tạo.
+/// `reason` bắt buộc ở tầng Zod: loại một người khỏi khoá bắt buộc là việc phải
+/// giải thích được về sau.
+model TrnAssignmentExclude {
+  id            String   @id @default(cuid())
+  assignmentId  String
+  userId        String
+  reason        String
+  addedByUserId String?
+  addedAt       DateTime @default(now()) @db.Timestamptz(6)
+
+  assignment TrnAssignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+
+  @@unique([assignmentId, userId])
+  @@index([userId])
+}
+
+/// Một LƯỢT GHI DANH — luôn ở cấp KHOÁ.
+///
+/// `centerId`/`orgUnitId` **NOT NULL**: không có `centerId` thì KHÔNG tạo bản ghi.
+/// Đây là hàng rào duy nhất giữa hiện trạng dữ liệu nhân sự (prod 20/08: 4/15 có
+/// `centerId`) và một bảng đầy bản ghi vô hình với chính cơ sở của người học —
+/// vì `TrnEnrollment` ∈ `SCOPED_MODELS` và NULL ở đây nghĩa là "chưa backfill",
+/// không phải "toàn công ty".
+model TrnEnrollment {
+  id           String  @id @default(cuid())
+  /// Tên cột là `userId`, KHÔNG phải `learnerUserId` — đồng bộ với
+  /// `TrnLessonProgress.userId` và `TrnCertificate.userId`.
+  userId       String
+  /// NOT NULL. Lượt giao cấp LESSON nở về khoá chứa bài; cấp PATH nở thành nhiều dòng.
+  courseId     String
+  /// NULL = không sinh từ lượt giao (công nhận tương đương, auto từ `TrnRequirement`,
+  /// hoặc tự ghi danh).
+  assignmentId String?
+
+  /// Chu kỳ tái chứng nhận — tăng khi khoá được giao lại theo `validityMonths`.
+  cycle  Int                 @default(1)
+  source TrnEnrollSource     @default(ASSIGNMENT)
+  /// ĐÚNG 6 giá trị. "Công nhận tương đương" KHÔNG phải trạng thái thứ 7 — nó là
+  /// `COMPLETED` + `verifiedAt` + `source = EQUIVALENCE`, nhãn suy từ cột `source`.
+  status TrnEnrollmentStatus @default(NOT_STARTED)
+
+  progressPercent Int @default(0)
+
+  /// ⚠️ BẤT BIẾN. Mọi chỉ số đúng-hạn dùng cột này. KHÔNG action nào được ghi lại nó.
+  /// Nullable vì lượt `source = EQUIVALENCE` không có hạn.
+  dueAtOriginal DateTime? @db.Timestamptz(6)
+  /// Hạn HIỆN HÀNH — gia hạn từng người không đụng lượt giao.
+  dueAt         DateTime? @db.Timestamptz(6)
+
+  extensionReason  String?
+  extendedByUserId String?
+
+  /// CHỈ SERVER GHI — mốc "hoàn thành có kiểm chứng" (BR-004). Không setter nào từ
+  /// client, không màn hình nào sửa được.
+  verifiedAt DateTime? @db.Timestamptz(6)
+
+  startedAt      DateTime? @db.Timestamptz(6)
+  completedAt    DateTime? @db.Timestamptz(6)
+  lastActivityAt DateTime? @db.Timestamptz(6)
+  /// Suy từ `completedAt > dueAtOriginal` (BR-005).
+  isLate         Boolean   @default(false)
+
+  /// (C4) chuyển sang nghỉ việc tạm ⇒ tạm dừng đồng hồ: không sinh nhắc, và bản ghi
+  /// đang `pausedAt != null` bị LOẠI khỏi CẢ tử số lẫn mẫu số của chỉ số đúng hạn.
+  pausedAt   DateTime? @db.Timestamptz(6)
+  pausedDays Int       @default(0)
+
+  /// EL-05 — thu hồi. Rời tập luật ĐỘNG ⇒ `REVOKED` + lý do "rời tập luật"; thu hồi
+  /// tay ⇒ lý do người vận hành nhập. KHÔNG đẻ trạng thái mới cho hai đường đó —
+  /// chúng khác nhau ở LÝ DO, không khác ở trạng thái.
+  revokedAt    DateTime? @db.Timestamptz(6)
+  revokeReason String?
+
+  // ── Ảnh chụp tổ chức lúc giao, GHI MỘT LẦN, không bao giờ cập nhật ──
+  // Vì sao bắt buộc chứ không phải tối ưu: báo cáo nhóm theo phòng ban và quản lý
+  // trực tiếp. Join sống sang `Employee` thì một lần chuyển cơ sở làm ĐỔI HỒI TỐ
+  // mọi con số của các tháng đã chốt, và người ký báo cáo tháng trước không giải
+  // thích được vì sao số hôm nay khác.
+  //
+  // ⚠️ Ảnh chụp của GĐ1 đứng trên BA cột có dữ liệu thật: `snapDepartmentId` +
+  // `snapOrgUnitId` + `snapJobTitle`. `snapPositionId` LUÔN NULL cho tới khi Nhân
+  // sự điền bảng vị trí (prod: 0 `Position`) — KHÔNG báo cáo nào được lấy nó làm
+  // nguồn. `snapManagerUserId` phủ 13/15, nguồn chốt là `Employee.managerId`.
+  snapDepartmentId  String?
+  snapPositionId    String?
+  snapOrgUnitId     String?
+  snapManagerUserId String?
+  /// Chuỗi `Employee.jobTitle` tại thời điểm giao — KHÔNG phải `Position.title`
+  /// (bảng đó rỗng trên prod). `jobTitle` là String bắt buộc nên phủ 15/15.
+  snapJobTitle      String
+  snappedAt         DateTime @default(now()) @db.Timestamptz(6)
+
+  centerId  String
+  orgUnitId String
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  assignment TrnAssignment? @relation(fields: [assignmentId], references: [id], onDelete: SetNull)
+
+  /// Một người, một khoá, một chu kỳ — đúng một lượt.
+
+  /// EL-04 — tiến độ từng bài của lượt ghi danh này.
+  lessonProgress TrnLessonProgress[]
+  reminders      TrnReminder[]
+
+  @@unique([courseId, userId, cycle])
+  @@index([userId, status])
+  @@index([status, dueAt])
+  @@index([centerId])
+  @@index([orgUnitId])
+  @@index([assignmentId])
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// EL-04 PR1 — TIẾN ĐỘ HỌC + QUYỀN CHỦ THỂ DỮ LIỆU
+// ═══════════════════════════════════════════════════════════════════════════
+
+/// ĐÚNG 3 giá trị. Không có "SKIPPED", không có "FAILED" — bài học không trượt;
+/// trượt là chuyện của bài THI (EL-14), một bảng khác.
+enum TrnLessonProgressStatus {
+  NOT_STARTED
+  IN_PROGRESS
+  DONE
+}
+
+enum TrnDsrKind {
+  VIEW_EXPORT
+  CORRECTION
+  WITHDRAW_CONSENT
+}
+
+enum TrnDsrStatus {
+  NEW
+  IN_PROGRESS
+  DONE
+  REJECTED
+}
+
+/// Tiến độ của MỘT LƯỢT GHI DANH trên MỘT BÀI. Bảng nóng nhất module —
+/// heartbeat ghi đè liên tục trong lúc học.
+///
+/// ─── KHÔNG mang cột đơn vị, và đó là NGOẠI LỆ CÓ TÊN ─────────────────────────
+/// Ba lý do, không phải một:
+///  1. Đây là đường ghi NÓNG. Cơ chế ghi kép `centerId → orgUnitId` tra DB ở mỗi
+///     lệnh ghi; cõng thêm một truy vấn vào mỗi nhịp heartbeat là trả ngược đúng
+///     phần công đã cắt khi gom 9 truy vấn xuống 1.
+///  2. Dữ liệu này KHÔNG TỰ ĐỨNG: nó chỉ có nghĩa qua `enrollmentId`, mà
+///     `TrnEnrollment` đã scoped. Cách ly đi qua đường đó khi ĐỌC.
+///  3. Vòng đời khác: bitmap là dữ liệu tầng 2, bị dọn sau 90 ngày; cột đơn vị là
+///     thuộc tính vĩnh viễn. Trộn hai vòng đời vào một bảng đã đủ, thêm cột đơn
+///     vị là trộn ba.
+///
+/// ⛔ Vì thế model này phải nằm NGOÀI cả bốn danh sách: `SCOPED_MODELS`,
+/// `NULL_IS_GLOBAL_MODELS`, `BACKFILL_SPECS`/`DUAL_WRITE_MODELS`, và
+/// `SOFT_DELETE_MODELS`. Cũng KHÔNG khai vào `SCOPE_EXEMPT` — danh sách đó dành
+/// cho model CÓ `centerId` mà cố ý không scope. Có test khẳng định cả bốn.
+///
+/// ─── HAI TẦNG DỮ LIỆU TRONG CÙNG MỘT BẢNG ────────────────────────────────────
+/// TẦNG 1 (chứng từ, giữ dài): `status` · `coveredSec` · `readSeconds` ·
+///   `verifiedAt` · `completedAt`. Cron dọn KHÔNG được chạm.
+/// TẦNG 2 (đo hành vi, 90 ngày): `segmentBitmap` và các cột đếm giám sát.
+/// Thứ tự bắt buộc khi dọn: bitmap chỉ được xoá SAU KHI `coveredSec` đã chốt trên
+/// chính dòng đó — xoá trước là xoá luôn bằng chứng hoàn thành, không khôi phục được.
+model TrnLessonProgress {
+  id           String @id @default(cuid())
+  enrollmentId String
+  userId       String
+  lessonId     String
+
+  /// ⚠️ PHẢI nullable. Cron đêm dọn tầng 2 bằng `SET segmentBitmap = NULL`; khai
+  /// NOT NULL là khoá chết chính bước dọn 90 ngày mà quyết định đòi.
+  /// 1 bit = 1 đoạn `segmentSec` giây.
+  segmentBitmap  Bytes?
+  segmentSec     Int      @default(5)
+  coveredSec     Int      @default(0)
+  contentSec     Int      @default(0)
+  totalWatchSec  Int      @default(0)
+  maxPositionSec Int      @default(0)
+  lastActivityAt DateTime @default(now()) @db.Timestamptz(6)
+
+  // ── Bài ĐỌC — CÙNG bảng, cố ý không tách bảng thứ hai ──
+  // Tách ra thì mọi báo cáo tiến độ phải join thêm một nguồn, và "một lượt học
+  // một bài" mất chỗ đứng duy nhất của nó.
+  readSeconds  Int @default(0)
+  scrollMaxPct Int @default(0)
+
+  // ── Cột giám sát của GĐ2, khai ĐỦ ngay từ GĐ1 ──
+  // Bảng này là bảng nóng nhất module; `ALTER TABLE` lên nó khi đã có dữ liệu prod
+  // là đúng thứ luật cứng #4 bắt tránh. Khai sớm tốn 0 đồng.
+  seekCount         Int       @default(0)
+  blockedSeekCount  Int       @default(0)
+  attnAskedCount    Int       @default(0)
+  attnPassedCount   Int       @default(0)
+  attnPendingAt     DateTime? @db.Timestamptz(6)
+  attnPendingPosSec Int?
+  cueLogJson        Json?
+
+  status         TrnLessonProgressStatus @default(NOT_STARTED)
+  firstStartedAt DateTime?               @db.Timestamptz(6)
+  completedAt    DateTime?               @db.Timestamptz(6)
+  /// CHỈ SERVER GHI — mốc "đã đọc/xem có kiểm chứng" của MỘT BÀI.
+  /// KHÁC `TrnEnrollment.verifiedAt`, vốn là mốc của cả LƯỢT (BR-004). Hai cột,
+  /// hai cấp, đừng gộp.
+  verifiedAt     DateTime?               @db.Timestamptz(6)
+
+  /// Chống nhịp heartbeat tới trễ hoặc đảo thứ tự: nhịp mang `seq` nhỏ hơn bị bỏ.
+  seq Int @default(0)
+
+  /// EL-09 — buổi TRỰC TIẾP: ai là người tick "đã dự".
+  ///
+  /// Nullable vì chỉ bài dạng `LIVE_SESSION` mới có. Không có cột này thì việc
+  /// điểm danh tay không có nhật ký, và câu hỏi "ai xác nhận người này đã dự"
+  /// không trả lời được — trong khi đó chính là thứ chống việc cấp chứng nhận
+  /// cho người mới học phần trực tuyến (BR-004).
+  attendanceMarkedByUserId String?
+  attendanceMarkedAt       DateTime? @db.Timestamptz(6)
+  /// Mốc cron đã dọn bitmap của dòng này — để phân biệt "chưa từng có bitmap" với
+  /// "đã có và đã dọn đúng hạn".
+  bitmapPurgedAt           DateTime? @db.Timestamptz(6)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  enrollment TrnEnrollment @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+  lesson     TrnLesson     @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+
+  /// Một lượt ghi danh · một bài = ĐÚNG một dòng tiến độ.
+  /// ⚠️ Khoá này chỉ chặn được trùng vì `enrollmentId` là NOT NULL. Nới nó thành
+  /// nullable thì Postgres coi hai NULL là KHÁC nhau và khoá mất tác dụng IM LẶNG
+  /// — một người sẽ đẻ nhiều dòng tiến độ cho cùng một bài.
+  @@unique([enrollmentId, lessonId])
+  @@index([userId, lessonId])
+  @@index([lessonId, status])
+  @@index([lastActivityAt])
+}
+
+/// Yêu cầu của CHỦ THỂ DỮ LIỆU: xem/xuất, đính chính, rút đồng ý.
+///
+/// KHÔNG có `deletedAt` và KHÔNG có đường xoá: đây là bản ghi thực thi quyền của
+/// người lao động với dữ liệu của chính họ. Xoá được là mất bằng chứng đã tiếp nhận.
+///
+/// `centerId`/`orgUnitId` nhóm `BAT_BUOC`: NULL = chưa backfill, KHÔNG phải "toàn
+/// công ty" ⇒ KHÔNG vào `NULL_IS_GLOBAL_MODELS`. Với dữ liệu cá nhân thì biến
+/// "chưa biết cơ sở" thành "ai cũng thấy" là rò rỉ, không phải tiện lợi.
+model TrnDataSubjectRequest {
+  id     String       @id @default(cuid())
+  userId String
+  kind   TrnDsrKind
+  detail String       @db.Text
+  status TrnDsrStatus @default(NEW)
+
+  handledByUserId String?
+  handledAt       DateTime? @db.Timestamptz(6)
+  resolutionNote  String?   @db.Text
+
+  centerId  String?
+  orgUnitId String?
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  @@index([status, createdAt])
+  @@index([userId])
+  @@index([centerId])
+  @@index([orgUnitId])
+}
+
+/// Bảy mốc nhắc của §12.2, theo đúng thứ tự thời gian.
+///
+/// `T_MINUS_2H` là mốc mà nhịp NGÀY không phục vụ được — đó là lý do cron nhắc
+/// chạy mỗi 15 phút chứ không chạy đêm.
+enum TrnReminderMilestone {
+  T0
+  T_MINUS_5D
+  T_MINUS_2D
+  T_MINUS_1D
+  T_MINUS_2H
+  T_PLUS_0
+  T_PLUS_3D
+}
+
+/// ⚠️ `CANCELLED` là lý do bảng này TỒN TẠI. `EmailQueue` chỉ có
+/// `PENDING/SENT/FAILED` — không có "đã huỷ" — nên sổ nghiệp vụ của lịch nhắc
+/// không dồn vào đó được. `SKIPPED` = tới mốc nhưng không cần nhắc (đã xong).
+enum TrnReminderStatus {
+  PENDING
+  SENT
+  SKIPPED
+  CANCELLED
+}
+
+/// Sổ lịch nhắc — MỘT dòng cho mỗi (lượt ghi danh × mốc), có vòng đời huỷ được.
+///
+/// Ba lý do không dồn vào `EmailQueue` (kế hoạch §TrnReminder):
+///   1. `EmailQueue` không có trạng thái "đã huỷ";
+///   2. AC3/AC4 của EL-06 ĐẾM số dòng `SKIPPED`/`CANCELLED` — không có bảng thì
+///      không có gì để đếm;
+///   3. chỉ số T4 đo "nhắc tồn đọng quá mốc" cho CẢ in-app, còn
+///      `EmailQueue.scheduledAt` chỉ phủ email.
+///
+/// Bảng CON của `TrnEnrollment`: cách ly cơ sở đi theo bảng cha, nên KHÔNG mang
+/// cột đơn vị (cùng khuôn 8 bảng con của EL-03).
+model TrnReminder {
+  id           String               @id @default(cuid())
+  enrollmentId String
+  milestone    TrnReminderMilestone
+  /// Mốc PHẢI gửi. Cron quét `status = PENDING AND scheduledAt <= now`.
+  scheduledAt  DateTime             @db.Timestamptz(6)
+  status       TrnReminderStatus    @default(PENDING)
+  sentAt       DateTime?            @db.Timestamptz(6)
+  /// Kênh đã gửi thật — mảng vì một mốc có thể đi cả in-app lẫn email.
+  sentChannels String[]             @default([])
+  /// Vì sao bỏ qua / huỷ. Thu hồi hay gia hạn đều phải ghi lý do vào đây.
+  reason       String?
+
+  enrollment TrnEnrollment @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  /// Chống nhắc trùng: một lượt ghi danh chỉ có ĐÚNG MỘT dòng cho mỗi mốc.
+  @@unique([enrollmentId, milestone])
+  @@index([status, scheduledAt])
+  @@index([enrollmentId])
+}
+
+/// Phạm vi của một sự cố: một lượt giao, hay toàn hệ thống.
+enum TrnIncidentScope {
+  ASSIGNMENT
+  GLOBAL
+}
+
+/// Sự cố hệ thống — gia hạn CẢ lượt giao, không xét từng đơn (QĐ-CDA-15 mục 2).
+///
+/// Kịch bản chắc chắn xảy ra tuần đầu: 16h50 ngày hạn, video không chạy trên
+/// điện thoại của bốn người. Không có bảng này thì cách xử duy nhất là sửa tay
+/// từng dòng, không để lại dấu vết nào.
+///
+/// 🔴 `confirmedByUserId` là NGƯỜI TRỰC CÓ TÊN — `String` NOT NULL, không
+/// nullable, không mặc định. Không có tên người thì không có bản ghi sự cố: một
+/// vai ghi bằng tên phòng là một vai không ai nhận.
+model TrnIncident {
+  id                String           @id @default(cuid())
+  title             String
+  detectedAt        DateTime         @db.Timestamptz(6)
+  resolvedAt        DateTime?        @db.Timestamptz(6)
+  confirmedByUserId String
+  scope             TrnIncidentScope
+  assignmentId      String?
+  /// Số ngày gia hạn cho mọi người trong phạm vi.
+  extendDays        Int
+  /// Mốc đã THI HÀNH việc gia hạn. NULL = đã ghi nhận sự cố nhưng chưa áp dụng.
+  appliedAt         DateTime?        @db.Timestamptz(6)
+  /// Số dòng ghi danh đã được gia hạn — để đối chiếu sau, không phải đếm lại.
+  appliedCount      Int              @default(0)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  @@index([scope, detectedAt])
+  @@index([assignmentId])
+}
+
+/// Hai trạng thái, không hơn (bản tối giản của B1 — C2).
+///
+/// Thêm trạng thái thứ ba ("đang xem xét", "trả lại") nghe hợp lý nhưng mỗi giá
+/// trị mới là một nhánh phải nhớ ở mọi câu truy vấn về sau, đổi lấy một thông tin
+/// mà ô lý do đã nói được.
+enum TrnTrainingNeedStatus {
+  NEW
+  APPROVED
+}
+
+/// Phiếu nhu cầu đào tạo (B1, §8.1).
+///
+/// ⚠️ Bảng này tồn tại vì một MÂU THUẪN CỨNG trong tài liệu gốc: BA §22.1 xếp
+/// bước "Nhu cầu" sang giai đoạn sau, trong khi chính §8.1 viết *"không được tạo
+/// chương trình nếu không gắn phiếu nhu cầu đã duyệt"*. Không có bảng này thì
+/// luật kia không thi hành được, và nó sẽ lặng lẽ thành một câu chữ không ai theo.
+///
+/// Đường thoát duy nhất là `TrnProgram.needExemptReason` — không có phiếu thì
+/// phải viết ra lý do; không được để trống CẢ HAI.
+model TrnTrainingNeed {
+  id               String                @id @default(cuid())
+  code             String                @unique
+  title            String
+  requesterUserId  String
+  /// Mô tả nhóm người học bằng LỜI, không phải luật lọc: ở bước đề xuất thì
+  /// người đề nghị chưa biết (và không cần biết) hệ thống lọc nhân sự thế nào.
+  targetGroupText  String
+  reason           String                @db.Text
+  expectedOutcome  String                @db.Text
+  /// Quý dự kiến, dạng "2026-Q3". Chuỗi chứ không phải ngày: đây là dự kiến ở
+  /// mức quý, ép thành ngày cụ thể là bịa ra độ chính xác không có thật.
+  proposedQuarter  String
+  status           TrnTrainingNeedStatus @default(NEW)
+  approvedByUserId String?
+  approvedAt       DateTime?             @db.Timestamptz(6)
+
+  centerId  String?
+  orgUnitId String?
+
+  programs TrnProgram[]
+
+  createdAt DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime  @updatedAt @db.Timestamptz(6)
+  deletedAt DateTime? @db.Timestamptz(6)
+
+  @@index([status, createdAt])
+  @@index([orgUnitId])
+  @@index([centerId])
+}
+
+/// Công nhận tương đương (C8, EL-09).
+///
+/// ⚠️ Không có bảng này thì ma trận đào tạo ngày mở **tô xám 100%**: người đã học
+/// khoá An toàn từ hai năm trước hiện ra như chưa từng học, và khoá tuân thủ 12
+/// tháng không có mốc gốc nào để tính hạn tái chứng nhận.
+///
+/// ⚠️ Nó KHÔNG đẻ ra trạng thái thứ bảy. Lượt ghi danh sinh từ đây mang
+/// `status = COMPLETED` + `source = EQUIVALENCE`; nhãn "Công nhận tương đương"
+/// suy từ CỘT `source`, và tách khỏi "Hoàn thành" trên mọi báo cáo.
+///
+/// ⚠️ `originalEffectiveAt` là NGÀY HIỆU LỰC GỐC, không phải ngày bấm nút. Chu kỳ
+/// tái chứng nhận tính từ nó — lấy ngày nhập liệu là kéo dài hiệu lực thêm đúng
+/// khoảng thời gian người ta chậm nhập.
+model TrnEquivalence {
+  id       String @id @default(cuid())
+  userId   String
+  courseId String
+
+  /// Bằng chứng là gì (chứng chỉ ngoài, biên bản lớp cũ, quyết định…). Bắt buộc:
+  /// một lượt công nhận không nêu được bằng chứng thì nó chỉ là một lời nói.
+  evidenceSource      String
+  /// Ngày hiệu lực GỐC — mốc để tính hạn tái chứng nhận.
+  originalEffectiveAt DateTime @db.Timestamptz(6)
+  /// Người xác nhận, CÓ TÊN. Bắt buộc, không mặc định.
+  confirmedByUserId   String
+  note                String?
+
+  centerId  String
+  orgUnitId String
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+
+  /// Một người chỉ được công nhận tương đương MỘT lần cho mỗi khoá.
+  @@unique([userId, courseId])
+  @@index([courseId])
+  @@index([originalEffectiveAt])
+  @@index([centerId])
+  @@index([orgUnitId])
 }

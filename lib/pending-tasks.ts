@@ -3,7 +3,8 @@ import { hasRole, type Action, type CanUser } from "@/lib/auth/permissions";
 import type { Actor } from "@/lib/auth/actor";
 import { evaluatePermission } from "@/lib/auth/permission-eval";
 import { recordPermissionShadow } from "@/lib/auth/shadow-report";
-import { isRbacV2Enabled, isCenterChecklistEnabled } from "@/lib/flags";
+import { isRbacV2Enabled, isCenterChecklistEnabled, isElearningEnabled } from "@/lib/flags";
+import { elearningHomeUrl } from "@/lib/auth/hosts";
 import { isChecklistComplete } from "@/lib/center-checklist";
 import { getNearingEndEnrollments } from "@/lib/students/renewal";
 import { getSetting } from "@/lib/settings/service";
@@ -43,7 +44,8 @@ export type PendingTaskType =
   | "student_birthday"
   | "class_no_teacher"
   | "registered_stale"
-  | "report_card_milestone";
+  | "report_card_milestone"
+  | "elearning_due";
 
 export interface PendingTaskItem {
   id: string;
@@ -701,6 +703,7 @@ export async function getPendingTasks(user: TaskUser, actor: Actor): Promise<Pen
     classNoTeacher(user, now, cfg),
     reportCardMilestone(user, cfg),
     registeredStale(user, now, cfg),
+    elearningDue(user, now, cfg),
   ]);
   return groups
     .filter((g): g is PendingTaskGroup => g !== null)
@@ -713,4 +716,64 @@ export function summarizePendingTasks(groups: PendingTaskGroup[]): { total: numb
     (acc, g) => ({ total: acc.total + g.count, overdue: acc.overdue + g.overdueCount }),
     { total: 0, overdue: 0 },
   );
+}
+
+/**
+ * EL-06 — KHOÁ ĐÀO TẠO NỘI BỘ SẮP TỚI HẠN / ĐÃ QUÁ HẠN của CHÍNH người đang xem.
+ *
+ * ⚠️ Đây là kênh in-app BẮT BUỘC, không phải tiện ích. QĐ-CDA-08 bỏ hẳn Zalo ZNS,
+ * nên kênh còn lại là email công ty + in-app — và người không mở email trong ngày
+ * thì mốc nhắc T-2 giờ KHÔNG có cách nào chạm tới họ. Chuông là chỗ bù duy nhất.
+ *
+ * ⚠️ Nhóm này lấy việc của CHÍNH người đang xem, khác mọi nhóm khác trong tệp
+ * (vốn là việc quản lý phải duyệt). Lọc theo `userId` chứ không theo cơ sở.
+ */
+async function elearningDue(
+  user: TaskUser,
+  now: Date,
+  cfg: PendingCfg,
+): Promise<PendingTaskGroup | null> {
+  if (!isElearningEnabled()) return null;
+
+  // Cửa sổ báo trước 3 ngày: sớm hơn thì việc nằm lì trong chuông cả tuần và
+  // người ta quen mắt bỏ qua; muộn hơn thì không kịp học.
+  const sapToi = new Date(now.getTime() + 3 * 86400000);
+
+  const rows = await db.trnEnrollment.findMany({
+    where: {
+      userId: user.id,
+      status: { in: ["NOT_STARTED", "IN_PROGRESS", "OVERDUE"] },
+      // Đang tạm dừng đồng hồ thì không giục (C4): họ đang nghỉ dài.
+      pausedAt: null,
+      dueAt: { not: null, lte: sapToi },
+    },
+    select: { id: true, dueAt: true, courseId: true },
+    orderBy: { dueAt: "asc" },
+    take: 50,
+  });
+  if (rows.length === 0) return null;
+
+  const khoa = await db.trnCourse.findMany({
+    where: { id: { in: [...new Set(rows.map((r) => r.courseId))] } },
+    select: { id: true, title: true },
+  });
+  const ten = new Map(khoa.map((k) => [k.id, k.title]));
+
+  const quaHan = rows.filter((r) => r.dueAt !== null && r.dueAt.getTime() < now.getTime());
+
+  return {
+    type: "elearning_due",
+    label: "Khoá đào tạo nội bộ tới hạn",
+    count: rows.length,
+    overdueCount: quaHan.length,
+    // Đường dẫn TUYỆT ĐỐI sang host đào tạo: chuông nằm trên host admin/GV, còn
+    // khu học ở host khác — đường tương đối sẽ dẫn về đúng site đang đứng.
+    href: elearningHomeUrl(),
+    items: rows.slice(0, cfg.itemLimit).map((r) => ({
+      id: r.id,
+      label: ten.get(r.courseId) ?? "Khoá đào tạo",
+      href: `${elearningHomeUrl()}/hoc/${r.id}`,
+      overdue: r.dueAt !== null && r.dueAt.getTime() < now.getTime(),
+    })),
+  };
 }

@@ -5,9 +5,12 @@
 //
 // Mỗi buổi 1 hàng: Buổi | Chủ đề | Giáo án PDF | Giáo án SCORM | Bài tập về nhà.
 // Tài liệu mở TRÌNH XEM ở tab mới (/teacher/tai-lieu/xem?d=…) — không đưa URL R2
-// thô ra HTML. SCORM mở trình chiếu watermark có sẵn (/teacher/scorm/play).
+// thô ra HTML. SCORM mở trình chiếu watermark có sẵn (/teacher/scorm/play) — mở NGAY
+// TẠI TRANG (chốt 24/08), thoát bằng nút "Đóng" của viewer, đích lấy từ `?from=`.
 // Tìm theo tên bài hoặc số buổi (thay bộ lọc định dạng cũ — khớp bản mock).
 import { useMemo, useState } from "react";
+import { usePathname, useSearchParams } from "next/navigation";
+import Link from "next/link";
 import {
   ExternalLink,
   FileText,
@@ -47,6 +50,17 @@ export function LessonTable({
   scormOn: boolean;
 }) {
   const [query, setQuery] = useState("");
+
+  // Chỗ quay về khi GV bấm "Đóng" trong màn trình chiếu: URL đang đứng, KÈM QUERY, để
+  // về đúng khoá vừa xem (`?courseId=…`) thay vì rơi về trang chủ. Viewer mở cùng tab
+  // nên Back cũng về được — vẫn khai `from` vì nút "Đóng" cần đích XÁC ĐỊNH (vào thẳng
+  // bằng URL, bấm F5, hay đi vài nhịp trong viewer thì Back không trỏ về đây nữa).
+  const pathname = usePathname();
+  const sp = useSearchParams();
+  const backParam = useMemo(() => {
+    const qs = sp.toString();
+    return encodeURIComponent(qs ? `${pathname}?${qs}` : pathname);
+  }, [pathname, sp]);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -112,14 +126,12 @@ export function LessonTable({
                     </td>
                     <td className="px-4 py-3 align-top">
                       {scormOn && lesson.scorm ? (
-                        <a
+                        <Link
                           href={
                             lesson.scorm.sessionId
-                              ? `/teacher/scorm/play/${lesson.scorm.id}?sessionId=${lesson.scorm.sessionId}`
-                              : `/teacher/scorm/play/${lesson.scorm.id}`
+                              ? `/teacher/scorm/play/${lesson.scorm.id}?sessionId=${lesson.scorm.sessionId}&from=${backParam}`
+                              : `/teacher/scorm/play/${lesson.scorm.id}?from=${backParam}`
                           }
-                          target="_blank"
-                          rel="noopener noreferrer"
                           title={lesson.scorm.name}
                           className="group flex items-center gap-2 rounded-lg px-2 py-1.5 transition-colors hover:bg-primary-soft focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
                         >
@@ -130,11 +142,11 @@ export function LessonTable({
                           <span className="max-w-[190px] truncate font-medium text-foreground group-hover:text-primary-ink">
                             {lesson.scorm.name}
                           </span>
-                          <ExternalLink
+                          <MonitorPlay
                             className="ml-auto h-3.5 w-3.5 shrink-0 text-primary-ink opacity-0 transition-opacity group-hover:opacity-100"
                             aria-hidden
                           />
-                        </a>
+                        </Link>
                       ) : (
                         <span className="text-xs text-muted-foreground">—</span>
                       )}

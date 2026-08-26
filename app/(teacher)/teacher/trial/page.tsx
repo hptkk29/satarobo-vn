@@ -48,6 +48,15 @@ const dateLabelFmt = new Intl.DateTimeFormat("vi-VN", {
   year: "numeric",
   timeZone: "UTC",
 });
+// Nhãn NGẮN cho cột "Thời gian" của từng dòng HV ("CN, 05/07") — cùng luật UTC ở
+// trên. Format Ở ĐÂY (server) chứ không ở client: máy GV không chắc chạy +07, và
+// render server ↔ hydrate client lệch nhau là vỡ hydration.
+const dateShortFmt = new Intl.DateTimeFormat("vi-VN", {
+  weekday: "short",
+  day: "2-digit",
+  month: "2-digit",
+  timeZone: "UTC",
+});
 function isoKey(d: Date): string {
   return d.toISOString().slice(0, 10);
 }
@@ -160,12 +169,24 @@ export default async function TeacherTrialPage({
   const to = new Date(today.getTime() + 31 * DAY_MS);
   const roster = await getTeacherTrialRoster(session.user.id, from, to);
 
+  // Mốc "hôm nay" cho cột Thời gian: `today` đã là UTC 00:00 của ngày lịch VN, mà
+  // `s.date` (@db.Date) cũng vậy → so bằng số milli là khớp tuyệt đối, không phải
+  // so chuỗi. Tính ở server để client không đụng `new Date()` (lệch hydrate).
+  const todayMs = today.getTime();
+
   const slots: TrialSlotView[] = roster.slots.map((s) => ({
     sessionId: s.sessionId,
     trialClassName: s.trialClassName,
     dateKey: isoKey(s.date),
     dateLabel: capitalize(dateLabelFmt.format(s.date)),
-    timeLabel: `${s.startTime}-${s.endTime}`,
+    dateShort: capitalize(dateShortFmt.format(s.date)),
+    dayState:
+      s.date.getTime() === todayMs
+        ? "today"
+        : s.date.getTime() < todayMs
+          ? "past"
+          : "upcoming",
+    timeLabel: `${s.startTime}–${s.endTime}`,
     status: s.status,
     students: s.students.map((st) => ({
       enrollmentId: st.enrollmentId,
@@ -191,9 +212,13 @@ export default async function TeacherTrialPage({
             <h2 className="text-sm font-bold text-foreground">
               Chưa xếp buổi ({roster.unassigned.length})
             </h2>
+            {/* Khối này CỐ Ý không có cột thời gian như bảng dưới: chưa gắn buổi thì
+                chưa có ngày/giờ để hiện. Nói thẳng ra để GV không tưởng là lỗi thiếu
+                dữ liệu khi thấy chỗ này trống mà bảng dưới thì có. */}
             <p className="text-xs text-muted-foreground">
               Học viên đã ghi danh lớp Trial của bạn nhưng chưa gắn vào buổi cụ
-              thể — nhờ quản lý xếp buổi, hoặc nhập phiếu đánh giá trực tiếp.
+              thể nên chưa có ngày giờ học — nhờ quản lý xếp buổi, hoặc nhập
+              phiếu đánh giá trực tiếp.
             </p>
           </header>
           <ul className="divide-y divide-border/60">

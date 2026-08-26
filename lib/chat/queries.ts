@@ -23,6 +23,7 @@ import { db } from "@/lib/db";
 // Luật PII chung của repo — nguồn sự thật DUY NHẤT cho "ai được xem SĐT/email phụ huynh".
 // File này là ma trận tĩnh (không DB, không phiên) nên import được cả trong tsx/ZZTEST.
 import { canViewParentContact } from "@/lib/auth/permissions";
+import { redactContactsInText } from "@/lib/lead/pii";
 import { ENROLLMENT_ACTIVE_STATUS_LIST } from "@/lib/enrollment-status";
 
 // ─── Hằng dùng chung ────────────────────────────────────────────────────────
@@ -158,16 +159,17 @@ export function isArchivedReadExpired(input: ArchivedReadInput): boolean {
   return input.archivedAt.getTime() < archivedReadCutoff(input.now).getTime();
 }
 
-const PHONE_LIKE_RE = /(?<![0-9])(?:\+?84|0)(?:3|5|7|8|9)[0-9]{8}(?![0-9])/g;
-const EMAIL_LIKE_RE = /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g;
-
 /**
  * BR-30 — che mọi thứ TRÔNG GIỐNG liên hệ trong một chuỗi tự do.
  * Cần vì `User.name` của tài khoản sinh từ lead cũ hay là "PH 0905123456": chỉ bỏ
  * cột `phone`/`email` khỏi payload là chưa đủ, SĐT vẫn đi lọt qua đường tên hiển thị.
+ *
+ * ⚠️ 22/08/2026 — hai biểu thức nhận diện đã CHUYỂN sang `lib/lead/pii.ts` và
+ * dùng chung với inbox Messenger (Đợt E). Giữ tên hàm này để không phải sửa 6
+ * chỗ gọi trong module chat, nhưng LUẬT chỉ còn ở một nơi. Đừng chép regex về lại.
  */
 export function redactContactLike(text: string): string {
-  return text.replace(EMAIL_LIKE_RE, "•••").replace(PHONE_LIKE_RE, "•••");
+  return redactContactsInText(text) ?? "";
 }
 
 /** Người xem — chỉ 3 mẩu cần để quyết định ẩn liên hệ. */

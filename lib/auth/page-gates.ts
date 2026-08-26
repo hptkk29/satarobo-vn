@@ -126,6 +126,27 @@ export const PAGE_GATES = {
    *  nên chưa ai đau) — khai đủ để menu ≡ gate. */
   "/media": ["media:view", "media:upload"],
 
+  // ── Site Sale (sale.satarobo.vn) ────────────────────────────────────────
+  // Khai ở ĐÂY chứ không để mỗi trang tự gõ action: thanh điều hướng của site
+  // Sale đọc thẳng bảng này làm `perm`, nên menu và cổng trang không thể lệch.
+  // Trang nằm ở `app/(sale)/sale/...` nên `page-gates.test.ts` cần một dòng
+  // `PAGE_DIR_OVERRIDE` cho mỗi route — bảng này mặc định tìm trong `(admin)`.
+  //
+  // ⚠️ Cả hai action dưới đây đều GLOBAL ở mọi RoleDef giữ chúng (đã có test
+  // riêng khoá bất biến đó): gate cấp trang gọi `checkAnyPermission` KHÔNG có
+  // target, action seed scope CENTER/OWN sẽ trả FALSE trên prod trong khi máy
+  // dev vẫn xanh. Cách ly cơ sở do `scopedDb` lo, không do gate.
+
+  /** Lớp trải nghiệm — Sale xem lịch, xem phiếu đánh giá của GV, xuất PDF.
+   *  `trials:view` là quyền Sale vốn đã có; không mở thêm gì. */
+  "/sale/trial": ["trials:view"],
+
+  /** Biểu mẫu nhập khách hàng, bản đứng TRÊN site Sale.
+   *  Cùng action với bản `/nhap-khach-hang` bên admin — cùng một việc, cùng một
+   *  đường ghi (`ingestIntakeLead`), chỉ khác chỗ đứng. Trước 23/08 Sale gõ địa
+   *  chỉ này bị 307 sang admin host, tức nhập khách là bị đá khỏi site của mình. */
+  "/sale/nhap-khach-hang": ["leads:create"],
+
   /** Ba báo cáo đào tạo. BGĐ chốt 10/07: "báo cáo của chức năng nào thì role chức năng
    *  đó xem". Trước đây gác `classes:view-all` ∨ `training:manage` ⇒ HR/Kế toán/Marketing
    *  mở được bằng URL (menu thì khai `courses:create`, nên giấu). Nay: Đào tạo + QL cơ sở. */

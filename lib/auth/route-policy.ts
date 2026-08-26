@@ -170,6 +170,11 @@ export const ADMIN_ROUTE_SEGMENTS: ReadonlySet<string> = new Set<string>([
   "media",
   "news",
   "nhan-su",
+  // 23/08/2026 — ĐẢO chốt 22/08: biểu mẫu nhập khách DỜI VÀO ADMIN
+  // (`app/(admin)/admin/nhap-khach-hang/`). Segment này là thứ cho phép
+  // `admin.satarobo.vn/nhap-khach-hang` rewrite vào route group; THIẾU nó thì
+  // admin host đá sang public, public đá ngược lại → vòng lặp chuyển hướng.
+  "nhap-khach-hang",
   "notifications",
   "orders",
   "otp-logs",
@@ -347,14 +352,16 @@ const ELEARNING_HOME = "/"; // clean URL trên e-learning host (rewrite → /ele
 const TEACHER_HOME = "/"; // clean URL trên teacher host (rewrite nội bộ → /teacher)
 
 /**
- * Biểu mẫu nhập khách hàng nội bộ (`app/(intake)/nhap-khach-hang`).
+ * Biểu mẫu nhập khách hàng nội bộ (`app/(admin)/admin/nhap-khach-hang`).
  *
- * ĐỨNG THẬT ở host public — chủ dự án chốt 22/08/2026 một địa chỉ duy nhất
- * `satarobo.vn/nhap-khach-hang`, thay biểu mẫu công khai `sale.satarobo.vn`.
- * Đây là NGOẠI LỆ có chủ đích của luật "trang nội bộ ở admin host": người nhập
- * là marketing/sale-admin, họ gõ địa chỉ này hàng ngày và không phải nhớ
- * subdomain nào. Bù lại nó bị gác đăng nhập ngay ở tầng này (xem nhánh public
- * host) chứ không chỉ ở layout.
+ * 23/08/2026 — ĐỨNG THẬT Ở ADMIN HOST (`admin.satarobo.vn/nhap-khach-hang`),
+ * đảo chốt 22/08 vốn để nó ở host public. Lý do đảo: mục sidebar admin trỏ
+ * `/nhap-khach-hang`, nên mỗi lần nhập là người dùng bị **văng khỏi khung
+ * admin** sang site khác rồi phải bấm quay lại.
+ *
+ * Hằng số này nay chỉ còn là ĐÍCH ĐẾN: mọi host khác (public / sale / đường
+ * tĩnh cũ) đá 307 về đây. Segment `nhap-khach-hang` phải nằm trong
+ * `ADMIN_ROUTE_SEGMENTS` — thiếu là đá qua đá lại thành vòng lặp.
  */
 const INTAKE_PATH = "/nhap-khach-hang";
 
@@ -452,24 +459,19 @@ export function decideRoute(input: RouteInput): RouteDecision {
       // admin/login, F4 không có hiệu lực. 307 không cache nên chuyển đổi sạch.
       return { type: "redirectHost", host: "admin", path: pathname, status: 307 };
     }
-    // Biểu mẫu nhập khách hàng nội bộ — trang DUY NHẤT của host public đòi đăng
-    // nhập. Gác ngay ở đây (chứ không chỉ ở layout) để người chưa đăng nhập
-    // không phải tải một trang chỉ để bị đá; đồng thời giữ `callbackUrl` nên
-    // đăng nhập xong quay lại đúng biểu mẫu.
+    // Biểu mẫu nhập khách nay Ở ADMIN (23/08/2026). Địa chỉ public cũ giữ sống
+    // CHỈ để đá sang: marketing/sale đã lưu dấu trang, và `RedirectURL` của
+    // webform MISA còn trỏ về đây — 404 thì người nhập không biết đi đâu.
+    //
+    // Đá VÔ ĐIỀU KIỆN, không gác đăng nhập/quyền tại đây nữa: một địa chỉ chỉ
+    // nên có MỘT nơi quyết định ai vào được. Chưa đăng nhập hay là PARENT thì
+    // nhánh admin host bên dưới xử đúng như mọi trang admin khác.
+    //
+    // 307 chứ KHÔNG 308: đây là quyết định vận hành, có thể đảo. 308 bị trình
+    // duyệt nhớ vĩnh viễn nên đảo xong máy khách cũ vẫn đá sang chỗ mới — đúng
+    // vết xe `/login` đã ghi ở chính nhánh này.
     if (isIntakePath(pathname)) {
-      if (!authed) {
-        return {
-          type: "redirectPath",
-          path: "/login",
-          callbackUrl: sanitizeCallbackUrl(INTAKE_PATH),
-          reason: invalidReason,
-        };
-      }
-      // PARENT không có `leads:create`; đá thẳng về portal cho khỏi lạc.
-      if (isParent) {
-        return { type: "redirectHost", host: "portal", path: PORTAL_HOME, status: 307 };
-      }
-      return { type: "next" };
+      return { type: "redirectHost", host: "admin", path: INTAKE_PATH, status: 307 };
     }
     if (isAdminRoute(pathname)) {
       return { type: "redirectHost", host: "admin", path: pathname, status: 308 };
@@ -512,7 +514,8 @@ export function decideRoute(input: RouteInput): RouteDecision {
 
     // PARENT: chuẩn hoá landing admin-ish (vd callbackUrl mặc định /dashboard)
     // về portal home, rồi rewrite clean URL → /portal/*.
-    if (isAdminRoute(pathname) || isIntakePath(pathname)) {
+    // `isAdminRoute` nay đã phủ cả `/nhap-khach-hang` (segment khai từ 23/08).
+    if (isAdminRoute(pathname)) {
       return { type: "redirectPath", path: PORTAL_HOME };
     }
     if (isPortalPath(pathname)) return { type: "next" };
@@ -683,7 +686,6 @@ export function decideRoute(input: RouteInput): RouteDecision {
     if (
       isAdminRoute(pathname) ||
       isPortalPath(pathname) ||
-      isIntakePath(pathname) ||
       isLegacyAdminPrefixed(pathname)
     ) {
       return { type: "redirectPath", path: TEACHER_HOME };
@@ -692,20 +694,27 @@ export function decideRoute(input: RouteInput): RouteDecision {
   }
 
   // ── Sale host (sale.satarobo.vn) — form nhập liệu Sale → MISA AMIS CRM ───
-  // Site tĩnh CÔNG KHAI, KHÔNG auth (role/session bỏ qua). Phục vụ 2 trang HTML
-  // self-contained từ public/sale/* (giữ NGUYÊN mã nhúng MISA). MISA tự POST +
-  // redirect về /thank-you (field RedirectURL trong form) — ta chỉ rewrite
-  // clean URL nội bộ → file .html tĩnh. noindex đã nằm trong meta của HTML.
+  // Biểu mẫu tĩnh công khai + trang cảm ơn đã XOÁ (22/08/2026). Mấy đường dẫn
+  // cũ giữ lại trong RETIRED_SALE_PATHS chỉ để đá về địa chỉ mới, KHÔNG phải
+  // vì còn trang nào ở đó — quảng cáo/QR cũ và RedirectURL cũ của MISA vẫn có
+  // thể trỏ vào, 404 thì người nhập không biết đi đâu.
   if (hostKind === "sale") {
     if (isInfraPath(pathname)) return { type: "next" };
 
-    // Biểu mẫu nhập khách đứng ở host public. Không bắt ở đây thì khi cờ
-    // `SALE_SITE_ENABLED` bật, `/nhap-khach-hang` rơi vào luật rewrite chung
-    // → `/sale/nhap-khach-hang` → 404 câm, đúng kiểu hỏng "bấm vào không đi
-    // đâu" mà clean URL của site GV đã dính một lần (xem TEACHER_ROUTE_SEGMENTS).
-    // Sale THUẦN có `leads:create` nên đích đúng là biểu mẫu, không phải trang chủ.
+    // ✅ 23/08/2026 — site Sale ĐÃ CÓ biểu mẫu của riêng nó tại
+    // `/sale/nhap-khach-hang`, nên đường trần `/nhap-khach-hang` trên host này
+    // đá NỘI BỘ sang đó thay vì ném người dùng sang host admin.
+    //
+    // Trước đó nhánh này 307 sang admin — tư vấn viên muốn nhập một khách là bị
+    // đá khỏi site của mình rồi phải bấm quay lại. Hai bản dùng CHUNG
+    // `loadIntakeCenterOptions()` + `<QuickLeadForm>` + `quickLeadSubmit`, không
+    // nhân bản logic, nên không có chuyện hai biểu mẫu trôi lệch nhau.
+    //
+    // Vẫn phải bắt ở đây: thiếu nó thì `/nhap-khach-hang` rơi vào luật rewrite
+    // chung → `/sale/nhap-khach-hang` — vô tình đúng đích, nhưng bằng đường
+    // rewrite nên thanh địa chỉ giữ URL cũ và mục điều hướng không sáng đúng chỗ.
     if (isIntakePath(pathname)) {
-      return { type: "redirectHost", host: "public", path: INTAKE_PATH, status: 307 };
+      return { type: "redirectPath", path: `/sale${INTAKE_PATH}` };
     }
 
     // ⛔ 22/08/2026 — BIỂU MẪU TĨNH CÔNG KHAI ĐÃ NGHỈ.
@@ -718,14 +727,14 @@ export function decideRoute(input: RouteInput): RouteDecision {
     // xong máy khách cũ vẫn đá sang trang mới — đúng vết xe `/login` đã ghi ở
     // nhánh public host.
     if (RETIRED_SALE_PATHS.has(pathname)) {
-      return { type: "redirectHost", host: "public", path: INTAKE_PATH, status: 307 };
+      return { type: "redirectHost", host: "admin", path: INTAKE_PATH, status: 307 };
     }
 
     // ── Cờ TẮT (mặc định): host này không còn gì để phục vụ ──────────────
     // Trước đây nó phục vụ 2 file tĩnh. Nay biểu mẫu đã dời đi ⇒ mọi đường về
     // địa chỉ mới, thay vì trả trang trắng hay 404.
     if (!saleSiteOn) {
-      return { type: "redirectHost", host: "public", path: INTAKE_PATH, status: 307 };
+      return { type: "redirectHost", host: "admin", path: INTAKE_PATH, status: 307 };
     }
 
     // ── Cờ BẬT: site Sale có đăng nhập ───────────────────────────────────
@@ -797,13 +806,6 @@ export function decideRoute(input: RouteInput): RouteDecision {
     // Portal segment lọt sang admin → đẩy về portal host.
     if (isPortalPath(pathname)) {
       return { type: "redirectHost", host: "portal", path: "/", status: 308 };
-    }
-
-    // Biểu mẫu nhập khách hàng đứng ở host public (một địa chỉ duy nhất). Mục
-    // sidebar admin trỏ `/nhap-khach-hang` nên đây là đường đi THẬT của người
-    // dùng, không phải phòng hờ. 307 (không cache) để còn đảo được.
-    if (isIntakePath(pathname)) {
-      return { type: "redirectHost", host: "public", path: INTAKE_PATH, status: 307 };
     }
 
     // Legacy /admin/X URLs (bookmark cũ) → strip prefix, giữ host.

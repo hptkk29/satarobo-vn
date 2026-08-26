@@ -9,6 +9,7 @@ import { getSelectableOrgUnits } from "@/lib/org/org-service";
 import { canViewLeadPii } from "@/lib/auth/check-permission";
 import { LeadForm } from "../../_components/lead-form";
 import { LeadChildrenManager } from "../../_components/lead-children";
+import { splitLeadNote } from "@/lib/lead/note-view";
 
 export const metadata = { title: "Sửa lead | Admin" };
 export const dynamic = "force-dynamic";
@@ -97,8 +98,16 @@ export default async function EditLeadPage({ params }: { params: Promise<{ id: s
           orgUnitId: lead.orgUnitId,
           courseId: lead.courseId,
           source: lead.source,
-          note: lead.note,
+          // 24/08 — ô này CHỈ nhận phần chữ người nhập gõ. Dòng máy ghi (mã NV,
+          // cảnh báo chia lead) bị bốc ra và được `updateLeadFields` ráp lại lúc
+          // lưu, nên sửa ghi chú không còn xoá mất dấu vết người nhập.
+          note: splitLeadNote(lead.note).human,
         }}
+        // Lead đã có con ⇒ "Khoá quan tâm" của lead là BẢN SAO lựa chọn của Sale ở
+        // khối con bên dưới (đồng bộ trong syncLeadCourseFromChildren). Mở cho sửa
+        // tay ở đây là dựng hai nguồn sự thật đánh nhau: lần ghi con kế tiếp sẽ đè
+        // im lặng lên thứ người dùng vừa chọn.
+        courseFromChildren={lead.children.length > 0}
       />
 
       {/* R7-01 — quản lý con đã lưu (thêm/sửa/xoá ngay) */}

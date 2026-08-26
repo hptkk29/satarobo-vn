@@ -95,7 +95,11 @@ export type NotiEntityType =
   | "trial"
   | "center"
   | "marketing"
-  | "integration";
+  | "integration"
+  // EL-06 — lượt ghi danh ĐÀO TẠO NỘI BỘ. Cố ý KHÁC `enrollment` (ghi danh học
+  // viên): hai thứ nằm trên hai host khác nhau, nên gộp một giá trị là dựng
+  // deep-link về sai site.
+  | "trn_enrollment";
 
 // ─── Bảng khai ─────────────────────────────────────────────────────────────────
 
@@ -180,6 +184,10 @@ const BY_PREFIX: Readonly<Record<string, NotiDef>> = {
   "report_card_milestone:": {
     group: "due_date", priority: 2, entity: "report_card",
     recipients: "Giáo viên phụ trách lớp", target: "/report-cards",
+  },
+  "elearning_due:": {
+    group: "due_date", priority: 1, entity: "trn_enrollment",
+    recipients: "Chính người được giao khoá", target: "host đào tạo nội bộ",
   },
 
   // ── Sinh từ sự kiện: lớp & buổi học ──

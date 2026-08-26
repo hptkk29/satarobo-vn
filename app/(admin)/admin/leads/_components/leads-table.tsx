@@ -503,7 +503,7 @@ export function LeadsTable({
                       {lead.phone}
                     </td>
                     <td className="px-4 py-3 max-w-[200px]">
-                      <span className="block truncate text-sm text-muted-foreground" title={lead.courseName ?? lead.source ?? ''}>
+                      <span className="block truncate text-sm text-muted-foreground" title={lead.courseName ?? ''}>
                         {lead.courseName ?? '—'}
                       </span>
                       {lead.source && (

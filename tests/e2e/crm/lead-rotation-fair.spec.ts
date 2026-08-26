@@ -151,6 +151,25 @@ test.describe("[Đợt D] Chia lead luân phiên đều lượt", () => {
     const cua = await db.leadRotationTurn.findUnique({
       where: { orgUnitId_userId: { orgUnitId: ou1, userId: moi } },
     });
-    expect(cua?.turns).toBe(1);
+    // 12 lead / 3 người ⇒ vòng đang ở mức 4 ⇒ người mới vào vòng ở 4.
+    expect(cua?.seedTurns, "phải vào NGANG mức thấp nhất, không phải từ 0").toBe(4);
+    // Số lead THẬT đã nhận = vị trí − khởi điểm. Phải là 1, không phải 4.
+    expect((cua?.turns ?? 0) - (cua?.seedTurns ?? 0), "không được nhận dồn").toBe(1);
+  });
+
+  test("[D-ROT-06] Sổ lượt phải KHỚP số lead — không thổi phồng khi vòng đang lấp đầy", () => {
+    // Ca này sinh ra từ chính lỗi 22/08: 6 lead từng bị ghi thành 8 lượt vì khởi
+    // điểm của người vào sau tính theo "min của những dòng đã có" (=1), thay vì
+    // chốt một lần lúc vào vòng. Số ở sổ mà không khớp số lead thì bảng bằng
+    // chứng vô giá trị — nên đây là bất biến, không phải chi tiết.
+    return (async () => {
+      const N = 7;
+      for (let i = 0; i < N; i++) await autoAssignNewLead(await makeLead(cs1, `09500${i}0000`), ACTOR);
+      const so = await db.leadRotationTurn.findMany({ where: { orgUnitId: ou1 } });
+      const daNhan = so.reduce((s, r) => s + (r.turns - r.seedTurns), 0);
+      expect(daNhan, "tổng lead đã nhận phải bằng số lead đã chia").toBe(N);
+      const gan = await db.lead.count({ where: { centerId: cs1, assignedToId: { not: null } } });
+      expect(gan).toBe(N);
+    })();
   });
 });

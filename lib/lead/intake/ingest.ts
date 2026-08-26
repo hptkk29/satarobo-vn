@@ -26,6 +26,17 @@ export type IntakeContext = {
   referrer?: string | null;
   /** Tên hiển thị trong `LeadActivity` khi hệ thống tự thao tác. */
   actorName?: string;
+  /**
+   * `User.id` của NGƯỜI NHẬP — đi thẳng vào `Lead.createdById` (23/08/2026).
+   *
+   * Khác `assignedToId` (người CHĂM): phiếu do Sale Hội sở nhập vẫn tự chia về
+   * Sale cơ sở, nhưng người nhập phải theo được phiếu của mình.
+   *
+   * Bỏ trống ở các nguồn KHÔNG có phiên đăng nhập (webhook facebook/zalo/
+   * google-form) — đúng nghĩa "không rõ ai nhập", và cột này quyết định QUYỀN
+   * NHÌN nên đoán bừa là lộ phiếu người khác.
+   */
+  createdByUserId?: string | null;
   /** Cơ sở đã biết sẵn (lời gọi cũ truyền thẳng id) — thắng `centerHint`. */
   centerId?: string | null;
   /** `Lead.eventId` dựng sẵn bởi caller; nếu bỏ trống sẽ suy từ `externalId`. */
@@ -118,8 +129,10 @@ type OwnerPick = {
 
 /**
  * Mã nhân viên trên phiếu → tài khoản đăng nhập để gán lead thẳng cho người đó.
- * Mọi trường hợp hỏng đều trả `null` + 1 cảnh báo (lead vẫn được tạo, rơi về
- * auto-chia) — chặn lead vì sai mã NV là đánh đổi sai.
+ * Mọi trường hợp HỎNG đều trả `null` + 1 cảnh báo (lead vẫn được tạo, rơi về
+ * auto-chia) — chặn lead vì sai mã NV là đánh đổi sai. Riêng ca "người nhập không
+ * giữ vai Sale" trả `null` MÀ KHÔNG cảnh báo (24/08): đó là luồng bình thường, không
+ * phải sự cố — lý do đầy đủ ở ngay nhánh đó bên dưới.
  *
  * ⚠️ CHỈ gán cho người giữ vai `SALES_CSM`. Ô mã NV trên phiếu là BẮT BUỘC nên
  * giáo viên/lễ tân/marketing thu được số ở sự kiện cũng gõ mã của chính mình;
@@ -169,10 +182,21 @@ async function resolveOwner(mapped: MappedLead): Promise<OwnerPick> {
   const isSale =
     account.role === "SALES_CSM" || account.roles.includes("SALES_CSM");
   if (!isSale) {
+    // 24/08/2026 — KHÔNG cảnh báo nữa (chủ dự án chốt).
+    //
+    // Đây không phải sự cố, đây là đường đi BÌNH THƯỜNG của mọi phiếu do người
+    // ngoài Sale nhập: Marketing Hội sở, Sale Hội sở (chính sách 23/08), giáo viên thu
+    // số ở sự kiện, lễ tân… Họ vốn KHÔNG giữ `SALES_CSM`, và lead tự chia về Sale cơ
+    // sở là ĐÚNG Ý ĐỒ — báo đỏ mỗi lần là gắn nhãn "có gì sai" lên hành vi đúng,
+    // và làm những cảnh báo THẬT (sai mã NV, tài khoản ngưng hoạt động) chìm nghỉm.
+    //
+    // Công người mang lead về vẫn giữ nguyên ở hai chỗ bền hơn một câu chữ:
+    // cột `Lead.createdById` (từ 23/08) và dòng "Nhân viên nhập: <mã>" trong note.
+    // Các nhánh hỏng thật ở trên VẪN cảnh báo — đừng gỡ theo.
     return {
       assignedToId: null,
       fallbackCenterId: employee.centerId,
-      warning: `"${code}" không giữ vai Sale nên không nhận lead — đã chia tự động, công nhập vẫn ghi nhận cho "${code}".`,
+      warning: null,
     };
   }
 
@@ -434,6 +458,7 @@ export async function ingestIntakeLead(
           // `MappedLead.leadSource`); bỏ trống thì giữ nguyên hành vi cũ.
           source: mapped.leadSource ?? ctx.source,
           facebookUrl: mapped.facebookUrl ?? undefined,
+          createdById: ctx.createdByUserId ?? undefined,
           eventId: eventId ?? undefined,
           consentMarketing: mapped.consentMarketing,
           note: note ?? undefined,
