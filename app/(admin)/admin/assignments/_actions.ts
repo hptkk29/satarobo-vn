@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { resolveActor, type Actor } from "@/lib/auth/actor";
 import { passesScope, scopedDb } from "@/lib/db-scope";
+import { actionCoversCenter } from "@/lib/auth/managed-centers";
 import { checkPermission, assertPermission } from "@/lib/auth/check-permission";
 import { canManageSessionClass } from "@/app/(admin)/admin/sessions/[id]/_actions";
 import { z } from "zod";
@@ -38,12 +39,46 @@ type GradeActor = {
 // role HO chỉ cross-center khi CÓ quyền classes:* scope ALL (Toại TRAINING@HO
 // hết sửa/chấm bài tập lớp CS2). KHÔNG dùng cờ isHoLevel trần. classId của
 // Assignment là bắt buộc — nhánh cls null (quan hệ hỏng) giữ rule cũ HO/SUPER.
+//
+// ── A-01-6c · bất biến L-A6 (26/08/2026) — vá lỗ NGƯỢC CHIỀU ──────────────────────
+// `passesScope("Class", …)` MỘT MÌNH nở theo hai đường mà cổng GHI không được hưởng
+// (`lib/db-scope.ts` `getModelVisibleCenterIds`):
+//   1. `grantsAllow`: MỘT dòng `UserPermissionGrant` ALLOW khớp tiền tố `classes:` bật
+//      `hasAll` ⇒ trả "ALL" cho MỌI cơ sở (db-scope.ts:248-253). Cấp một grant chỉ-đọc
+//      cho một người là mở cổng soạn/sửa/chấm bài tập TOÀN HỆ THỐNG cho họ.
+//   2. gom theo TIỀN TỐ model: `classes:view-all` của một vai KIÊM NHIỆM (kế toán cơ sở
+//      @CS2, HO_MARKETING@HO) cũng được cộng vào, dù vai đó không có một action LMS nào.
+//
+// Vế thứ hai `actionCoversCenter` (lib/auth/managed-centers.ts) bịt cả hai: nó suy từ
+// ĐÚNG dòng `UserOrgRole` mang CHÍNH quyền mà `requireRole`/`requireAssignmentEdit` vừa
+// kiểm (`assignments:create` | `:edit` | `:grade`), khớp đúng chuỗi action và không đọc
+// `grantsAllow`. Vì thế `action` phải đi kèm tới đây — đừng "đơn giản hoá" bằng cách
+// hardcode một action, mỗi cổng thô kiểm một quyền khác nhau.
+//
+// ⚠️ CỐ Ý là phép GIAO, KHÔNG phải "hai lớp bảo vệ" trang trí — và KHÔNG phải phép AND
+// vô nghĩa đã bị loại ở A-01-6b (`visibleCenterIds` AND `passesScope`: cả hai vế cùng nở
+// theo vai kiêm nhiệm nên không cắt gì). Ở đây vế cũ được GIỮ NGUYÊN làm TRẦN để không
+// nới quyền cho ai: luật 24/07 "role HO chỉ cross-center khi có classes:* scope ALL" là
+// quyết định của chủ dự án (Toại TRAINING@HO không sửa bài tập lớp CS2) — bỏ vế cũ đi thì
+// TRAINING@HO lấy lại quyền đó. Vế mới chỉ SIẾT, không bao giờ nới.
 function classCenterVisible(
   actor: Actor,
   cls: { centerId: string | null } | null | undefined,
+  action: string,
 ): boolean {
-  if (!cls) return actor.isSuperAdmin || actor.isHoLevel;
-  return passesScope("Class", cls, actor);
+  if (actor.isSuperAdmin) return true;
+  if (!cls) return actor.isHoLevel;
+  // ── A-01-6d (26/08/2026) — nhánh `centerId = null` phải xử lý TRƯỚC ──────────────
+  // KHÁC ca `!cls` ngay trên (quan hệ hỏng): đây là lớp CÓ THẬT nhưng chưa được gán cơ sở
+  // (legacy — lib/enrollment-flow.ts:106 "GIỮ row có centerId = null (legacy chưa gán)").
+  // `actionCoversCenter` fail-closed trên centerId rỗng và docblock của nó (managed-centers.ts)
+  // đòi chỗ gọi tự xử lý nhánh null trước; bản A-01-6c quên, nên Đào tạo tại HO mất quyền
+  // soạn/sửa/chấm mọi bài của lớp legacy ("Không tìm thấy bài tập") — siết ngoài ý định, vì
+  // phép đo CŨ (`passesScope` một mình) thoát sớm ở `visibleCenters === "ALL"` TRƯỚC dòng
+  // kiểm null. Giữ ĐÚNG hành vi cũ cho nhóm này (luật 24/07 "cross-center chỉ khi có
+  // classes:* scope ALL"), không nới thêm ai.
+  if (cls.centerId == null) return passesScope("Class", cls, actor);
+  return passesScope("Class", cls, actor) && actionCoversCenter(actor, action, cls.centerId);
 }
 
 async function requireRole(
@@ -52,7 +87,9 @@ async function requireRole(
   // (chỉ có grade, không có create) qua được — own-class do canGradeClassWork gác sau.
   permission: Parameters<typeof checkPermission>[0] = "assignments:create",
 ): Promise<
-  | { ok: true; userId: string; user: GradeActor; actor: Actor; sdb: Sdb }
+  // `permission` đi kèm gate: cổng cơ sở (`classCenterVisible`) phải đo theo ĐÚNG quyền
+  // vừa kiểm ở đây, không phải theo một action đoán sẵn (A-01-6c).
+  | { ok: true; userId: string; user: GradeActor; actor: Actor; sdb: Sdb; permission: string }
   | { ok: false; error: string }
 > {
   const session = await auth();
@@ -67,6 +104,7 @@ async function requireRole(
     user: session.user,
     actor,
     sdb: scopedDb(actor),
+    permission,
   };
 }
 
@@ -103,12 +141,13 @@ async function assignmentClassVisible(
   sdb: Sdb,
   actor: Actor,
   assignmentId: string,
+  action: string,
 ): Promise<boolean> {
   const a = await sdb.assignment.findUnique({
     where: { id: assignmentId },
     select: { class: { select: { centerId: true } } },
   });
-  return !!a && classCenterVisible(actor, a.class);
+  return !!a && classCenterVisible(actor, a.class, action);
 }
 
 // ──────────────────────────────────────────────────────────────────────────
@@ -133,7 +172,7 @@ export async function createAssignment(
     where: { id: data.classId },
     select: { centerId: true },
   });
-  if (!cls || !classCenterVisible(gate.actor, cls)) {
+  if (!cls || !classCenterVisible(gate.actor, cls, gate.permission)) {
     return { ok: false, error: "Lớp không tồn tại hoặc ngoài phạm vi cơ sở" };
   }
 
@@ -173,14 +212,14 @@ export async function updateAssignment(
   }
 
   // Loại B — bài hiện tại + lớp đích (nếu đổi) đều phải trong tầm nhìn actor.
-  if (!(await assignmentClassVisible(gate.sdb, gate.actor, id))) {
+  if (!(await assignmentClassVisible(gate.sdb, gate.actor, id, gate.permission))) {
     return { ok: false, error: "Không tìm thấy bài tập" };
   }
   const targetCls = await gate.sdb.class.findUnique({
     where: { id: parsed.data.classId },
     select: { centerId: true },
   });
-  if (!targetCls || !classCenterVisible(gate.actor, targetCls)) {
+  if (!targetCls || !classCenterVisible(gate.actor, targetCls, gate.permission)) {
     return { ok: false, error: "Lớp không tồn tại hoặc ngoài phạm vi cơ sở" };
   }
 
@@ -202,7 +241,7 @@ export async function deleteAssignment(id: string): Promise<Result> {
   if (!gate.ok) return gate;
 
   // Loại B — chống IDOR xoá bài tập của lớp cơ sở khác.
-  if (!(await assignmentClassVisible(gate.sdb, gate.actor, id))) {
+  if (!(await assignmentClassVisible(gate.sdb, gate.actor, id, gate.permission))) {
     return { ok: false, error: "Không tìm thấy bài tập" };
   }
 
@@ -262,7 +301,7 @@ export async function attachDocument(
   const { assignmentId, documentId } = parsed.data;
 
   // Loại B — chống IDOR đính tài liệu vào bài tập của lớp cơ sở khác.
-  if (!(await assignmentClassVisible(gate.sdb, gate.actor, assignmentId))) {
+  if (!(await assignmentClassVisible(gate.sdb, gate.actor, assignmentId, gate.permission))) {
     return { ok: false, error: "Không tìm thấy bài tập" };
   }
 
@@ -297,7 +336,7 @@ export async function detachDocument(
   if (!ad) return { ok: false, error: "Không tìm thấy bản ghi" };
 
   // Loại B — chống IDOR gỡ tài liệu của bài tập lớp cơ sở khác.
-  if (!(await assignmentClassVisible(gate.sdb, gate.actor, ad.assignmentId))) {
+  if (!(await assignmentClassVisible(gate.sdb, gate.actor, ad.assignmentId, gate.permission))) {
     return { ok: false, error: "Không tìm thấy bản ghi" };
   }
 
@@ -329,7 +368,7 @@ export async function publishAssignment(
   });
   if (!assignment) return { ok: false, error: "Không tìm thấy bài tập" };
   // Loại B — chống IDOR publish bài tập của lớp cơ sở khác.
-  if (!classCenterVisible(gate.actor, assignment.class)) {
+  if (!classCenterVisible(gate.actor, assignment.class, gate.permission)) {
     return { ok: false, error: "Không tìm thấy bài tập" };
   }
   if (assignment.status !== "DRAFT") {
@@ -400,7 +439,7 @@ export async function changeAssignmentStatus(
   if (!parsed.success) return { ok: false, error: "Tham số không hợp lệ" };
 
   // Loại B — chống IDOR đổi trạng thái bài tập của lớp cơ sở khác.
-  if (!(await assignmentClassVisible(gate.sdb, gate.actor, parsed.data.assignmentId))) {
+  if (!(await assignmentClassVisible(gate.sdb, gate.actor, parsed.data.assignmentId, gate.permission))) {
     return { ok: false, error: "Không tìm thấy bài tập" };
   }
 
@@ -459,7 +498,7 @@ export async function recordSubmission(
   });
   if (!submission) return { ok: false, error: "Không tìm thấy submission" };
   // Loại B — chống IDOR ghi bài nộp cho lớp cơ sở khác.
-  if (!classCenterVisible(gate.actor, submission.assignment.class)) {
+  if (!classCenterVisible(gate.actor, submission.assignment.class, gate.permission)) {
     return { ok: false, error: "Không tìm thấy submission" };
   }
 
@@ -526,7 +565,7 @@ export async function gradeSubmission(
   if (!submission) return { ok: false, error: "Không tìm thấy submission" };
   // Loại B — lớp của bài phải trong tầm nhìn cơ sở actor (chặn review/training
   // cross-center của actor center-scope), sau đó mới xét quyền chấm.
-  if (!classCenterVisible(gate.actor, submission.assignment.class)) {
+  if (!classCenterVisible(gate.actor, submission.assignment.class, gate.permission)) {
     return { ok: false, error: "Không tìm thấy submission" };
   }
   if (!(await canGradeClassWork(gate.user, submission.assignment.class))) {
@@ -573,7 +612,7 @@ export async function gradeSubmission(
 // ──────────────────────────────────────────────────────────────────────────
 
 async function requireAssignmentEdit(): Promise<
-  | { ok: true; userId: string; actor: Actor; sdb: Sdb }
+  | { ok: true; userId: string; actor: Actor; sdb: Sdb; permission: string }
   | { ok: false; error: string }
 > {
   const session = await auth();
@@ -584,7 +623,13 @@ async function requireAssignmentEdit(): Promise<
     return { ok: false, error: "Không có quyền chỉnh sửa bài tập" };
   }
   const actor = await resolveActor(session.user.id);
-  return { ok: true, userId: session.user.id ?? "", actor, sdb: scopedDb(actor) };
+  return {
+    ok: true,
+    userId: session.user.id ?? "",
+    actor,
+    sdb: scopedDb(actor),
+    permission: "assignments:edit",
+  };
 }
 
 // questionCode là @unique (nullable) — sinh mã riêng cho câu hỏi trong bài tập.
@@ -694,7 +739,7 @@ export async function addAssignmentQuestion(
   });
   if (!assignment) return { ok: false, error: "Không tìm thấy bài tập" };
   // Loại B — chống IDOR thêm câu hỏi vào bài tập của lớp cơ sở khác.
-  if (!classCenterVisible(gate.actor, assignment.class)) {
+  if (!classCenterVisible(gate.actor, assignment.class, gate.permission)) {
     return { ok: false, error: "Không tìm thấy bài tập" };
   }
 
@@ -760,7 +805,7 @@ export async function updateAssignmentQuestion(
     return { ok: false, error: "Câu hỏi này không thuộc bài tập nào" };
   }
   // Loại B — chống IDOR sửa câu hỏi thuộc bài tập của lớp cơ sở khác.
-  if (!classCenterVisible(gate.actor, current.assignment?.class ?? null)) {
+  if (!classCenterVisible(gate.actor, current.assignment?.class ?? null, gate.permission)) {
     return { ok: false, error: "Không tìm thấy câu hỏi" };
   }
 
@@ -810,7 +855,7 @@ export async function deleteAssignmentQuestion(id: string): Promise<Result> {
   // Loại B — câu hỏi gắn bài tập: lớp của bài phải trong tầm nhìn actor.
   if (
     current.assignmentId &&
-    !classCenterVisible(gate.actor, current.assignment?.class ?? null)
+    !classCenterVisible(gate.actor, current.assignment?.class ?? null, gate.permission)
   ) {
     return { ok: false, error: "Không tìm thấy câu hỏi" };
   }
@@ -880,7 +925,7 @@ export async function gradeSubmissionRubric(
   });
   if (!submission) return { ok: false, error: "Không tìm thấy submission" };
   // Loại B — lớp của bài phải trong tầm nhìn cơ sở actor trước khi xét quyền chấm.
-  if (!classCenterVisible(gate.actor, submission.assignment.class)) {
+  if (!classCenterVisible(gate.actor, submission.assignment.class, gate.permission)) {
     return { ok: false, error: "Không tìm thấy submission" };
   }
   if (!(await canGradeClassWork(gate.user, submission.assignment.class))) {

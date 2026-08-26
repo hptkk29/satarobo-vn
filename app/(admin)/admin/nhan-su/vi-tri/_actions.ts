@@ -21,9 +21,63 @@ import {
   assertSinglePrimary,
 } from "@/lib/org/positions";
 import { writeAudit } from "@/lib/audit/audit-log";
+import {
+  isHoRootOrgType,
+  loiNeoHoRoot,
+  roleBlockedAtHoRoot,
+} from "@/lib/auth/org-anchor-rules";
 import { parseVnYmd, vnEndOfDay } from "@/lib/time/vn";
 
 export type ActionResult = { ok: true; id?: string } | { ok: false; error: string };
+
+/** Lỗi L-A5 ở đường VỊ TRÍ — bắt riêng để trả đúng câu hướng dẫn, không nuốt thành lỗi chung. */
+class ViTriNeoHoRootError extends Error {}
+
+/**
+ * A-01-3 (bất biến L-A5) — ĐƯỜNG GHI THỨ BA của luật "không neo CENTER_MANAGER ở HO/ROOT".
+ *
+ * Hai đường đã rào là `assignUserOrgRole` (lib/auth/rbac-service.ts) và
+ * `reconcileUserOrgRoles` (lib/auth/org-role-sync.ts). Đường này KHÔNG đi qua cả hai:
+ * `luuViTri` nhận `orgUnitId` + `roleIds` tuỳ ý, và `./page.tsx` liệt kê MỌI OrgUnit còn
+ * sống (gồm Hội sở) × MỌI RoleDef còn sống (gồm CENTER_MANAGER).
+ *
+ * Vì sao nó tương đương hai đường kia: `loadPositionRoleRows` (lib/org/positions.ts) đổ
+ * PositionRole vào `buildActor` ĐÚNG khuôn `UserOrgRoleRow`, nên một vị trí neo tại Hội sở
+ * có tích `CENTER_MANAGER` cho `PermEntry.centerScope = "ALL"` ⇒ `roleManagesCenter` true ở
+ * MỌI cơ sở: người giữ vị trí đó duyệt lớp, chỉnh công, duyệt đơn GV, cấp chứng chỉ, đặt
+ * chế độ chia lead của cơ sở họ không quản lý dòng nào — không cảnh báo, không audit lạ.
+ *
+ * Kiểm TRONG transaction cùng lệnh ghi, cùng lý lẽ với `assertNoReportingCycle`.
+ */
+async function assertViTriKhongNeoSai(
+  tx: {
+    orgUnit: { findUnique: (args: unknown) => Promise<{ type: string } | null> };
+    roleDef: { findMany: (args: unknown) => Promise<{ code: string }[]> };
+  },
+  orgUnitId: string,
+  roleIds: string[],
+): Promise<void> {
+  if (roleIds.length === 0) return; // vị trí chưa gắn vai nào thì không cấp quyền gì
+  const org = await tx.orgUnit.findUnique({
+    where: { id: orgUnitId },
+    select: { type: true },
+  });
+  // Đơn vị không tồn tại → TỪ CHỐI (fail-closed): không đoán `type` cho một FK sai.
+  if (!org) throw new ViTriNeoHoRootError("Đơn vị không tồn tại — chọn lại đơn vị cho vị trí.");
+  if (!isHoRootOrgType(org.type)) return;
+
+  const roles = await tx.roleDef.findMany({
+    where: { id: { in: roleIds } },
+    select: { code: true },
+  });
+  const cam = roles.find((r) => roleBlockedAtHoRoot(r.code));
+  if (cam) {
+    throw new ViTriNeoHoRootError(
+      `${loiNeoHoRoot(cam.code, org.type)} Hãy đổi "Đơn vị" của vị trí sang một cơ sở, ` +
+        `hoặc bỏ vai ${cam.code} khỏi vị trí này.`,
+    );
+  }
+}
 
 const schema = z.object({
   id: z.string().trim().max(64).optional(),
@@ -61,6 +115,11 @@ export async function luuViTri(input: unknown): Promise<ActionResult> {
     // không bị lọc, và mọi ghi ở đây đã qua cổng `roles:manage` (chỉ SUPER_ADMIN).
     const sdb = scopedDb(await resolveActor(session.user.id));
     const id = await sdb.$transaction(async (tx) => {
+      // L-A5 — chặn TRƯỚC mọi lệnh ghi của cả hai nhánh (tạo lẫn sửa): sửa vị trí là sửa
+      // quyền của mọi người đang giữ nó, nên nhánh sửa cũng phải qua rào y như nhánh tạo.
+      // `tx as never`: cùng idiom với hai lời gọi `assertNoReportingCycle` dưới — client
+      // của `$transaction` mang kiểu generic của Prisma, không khớp khuôn tối giản ở trên.
+      await assertViTriKhongNeoSai(tx as never, d.orgUnitId, d.roleIds);
       if (d.id) {
         // Kiểm vòng lặp TRƯỚC khi ghi, trong CÙNG transaction.
         await assertNoReportingCycle(d.id, reportsTo, tx as never);
@@ -112,6 +171,7 @@ export async function luuViTri(input: unknown): Promise<ActionResult> {
     revalidatePath("/admin/nhan-su/vi-tri");
     return { ok: true, id };
   } catch (e) {
+    if (e instanceof ViTriNeoHoRootError) return { ok: false, error: e.message };
     if (e instanceof ReportingCycleError) return { ok: false, error: e.message };
     console.error("[vi-tri] luuViTri lỗi:", e);
     return { ok: false, error: "Không lưu được vị trí — vui lòng thử lại." };

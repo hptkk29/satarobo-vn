@@ -1,14 +1,14 @@
 import { auth } from "@/lib/auth";
 import { redirect, notFound } from "next/navigation";
 import Link from "next/link";
-import { ChevronLeft, KeyRound, Power, Shield, ArrowRight, Building2 } from "lucide-react";
+import { ChevronLeft, KeyRound, Shield, ArrowRight, Building2 } from "lucide-react";
 import { hasRole } from "@/lib/auth/permissions";
 import { checkPermission } from "@/lib/auth/check-permission";
 import { resolveActor } from "@/lib/auth/actor";
 import { scopedDb } from "@/lib/db-scope";
 import { getSelectableOrgUnits } from "@/lib/org/org-service";
 import { UserForm } from "../../_components/user-form";
-import { toggleUserActiveAction } from "../../_actions";
+import { UserStatusToggle } from "../../_components/user-row-actions";
 
 export const metadata = { title: "Sửa tài khoản | Admin" };
 export const dynamic = "force-dynamic";
@@ -85,6 +85,16 @@ export default async function EditUserPage({ params }: Props) {
     hasRole(user, "SUPER_ADMIN") &&
     user.isActive &&
     activeSuperAdminCount === 1;
+
+  // Hai chặn BÁO TRƯỚC, câu chữ khớp bảng danh sách (users/page.tsx:147-152) và khớp
+  // luôn câu server trả về. Đây CHỈ là lớp trang trí — cổng thật nằm trong
+  // `toggleUserActiveAction` (_actions.ts:418, :431-443), nó tự kiểm lại cả hai.
+  const toggleDisabled = isSelf || isLastActiveSuperAdmin;
+  const toggleReason = isSelf
+    ? "Không thể tự disable chính mình"
+    : isLastActiveSuperAdmin
+      ? "Không thể disable SUPER_ADMIN duy nhất"
+      : undefined;
 
   return (
     <div className="max-w-3xl">
@@ -253,28 +263,27 @@ export default async function EditUserPage({ params }: Props) {
             Đổi mật khẩu
           </Link>
 
-          <form
-            action={async () => {
-              "use server";
-              await toggleUserActiveAction(user.id);
-            }}
-          >
-            <button
-              type="submit"
-              disabled={isSelf || isLastActiveSuperAdmin}
-              title={
-                isSelf
-                  ? "Không thể tự disable chính mình"
-                  : isLastActiveSuperAdmin
-                    ? "Không thể disable SUPER_ADMIN duy nhất"
-                    : undefined
-              }
-              className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-state-danger bg-card px-4 py-2 text-sm font-semibold text-state-danger-ink hover:bg-state-danger-soft disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              <Power className="h-4 w-4" />
-              {user.isActive ? "Disable tài khoản" : "Kích hoạt lại"}
-            </button>
-          </form>
+          {/* ⚠️ ĐỪNG quay lại `<form action={async () => { "use server"; … }}>`. Bản cũ gọi
+              `toggleUserActiveAction(user.id)` rồi VỨT giá trị trả về — mà hàm đó không ném
+              lỗi, nó TRẢ `{ ok:false, error }` ở 4 nhánh (tự-disable · không thấy user ·
+              SUPER_ADMIN duy nhất · lỗi DB đã bắt, _actions.ts:419/426/441/490). Kết quả:
+              bấm nút xong trang render lại y nguyên, không một chữ nào — người vận hành
+              tưởng đã tắt tài khoản trong khi nó vẫn bật.
+              `UserStatusToggle` là chỗ DUY NHẤT đã cầm kết quả đó và đổ ra toast
+              (_components/user-row-actions.tsx:35). Dùng lại, đừng chép logic sang đây. */}
+          <div className="inline-flex items-center gap-2 self-start rounded-lg border border-state-danger bg-card px-3 py-2">
+            <span className="text-sm font-semibold text-state-danger-ink">
+              {user.isActive
+                ? "Bấm để vô hiệu hoá tài khoản:"
+                : "Bấm để kích hoạt lại tài khoản:"}
+            </span>
+            <UserStatusToggle
+              userId={user.id}
+              isActive={user.isActive}
+              disabled={toggleDisabled}
+              disabledReason={toggleReason}
+            />
+          </div>
         </div>
         <p className="mt-3 text-xs text-state-danger-ink/80">
           ⚠️ Cả 2 thao tác sẽ tăng tokenVersion → user đó bị đăng xuất khỏi

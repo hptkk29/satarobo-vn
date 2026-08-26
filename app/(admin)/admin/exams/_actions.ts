@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { resolveActor, type Actor } from "@/lib/auth/actor";
 import { passesScope, scopedDb } from "@/lib/db-scope";
+import { actionCoversCenter } from "@/lib/auth/managed-centers";
 import { getEffectiveRoles } from "@/lib/auth/permissions";
 import { checkPermission } from "@/lib/auth/check-permission";
 import { canManageSessionClass } from "@/app/(admin)/admin/sessions/[id]/_actions";
@@ -58,13 +59,19 @@ async function canGradeClassWork(
   );
 }
 
+// MỌI action ghi của file này (soạn/sửa/xoá đề · thêm-bớt-sắp câu hỏi · chấm lượt thi ·
+// đổi trạng thái) đều đi qua đúng cổng thô này ⇒ cổng CƠ SỞ bên dưới đo theo cùng một
+// quyền. `permission` được trả ra thay vì hardcode ở chỗ gọi: đổi quyền ở đây là cổng cơ
+// sở đổi theo, không lệch âm thầm (A-01-6c).
+const EXAM_WRITE_PERMISSION = "exams:edit";
+
 async function requireRole(): Promise<
-  | { ok: true; userId: string; user: SessionUser; actor: Actor; sdb: Sdb }
+  | { ok: true; userId: string; user: SessionUser; actor: Actor; sdb: Sdb; permission: string }
   | { ok: false; error: string }
 > {
   const session = await auth();
   if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
-  if (!(await checkPermission("exams:edit"))) {
+  if (!(await checkPermission(EXAM_WRITE_PERMISSION))) {
     return { ok: false, error: "Không có quyền quản lý đề thi" };
   }
   const actor = await resolveActor(session.user.id);
@@ -74,6 +81,7 @@ async function requireRole(): Promise<
     user: session.user,
     actor,
     sdb: scopedDb(actor),
+    permission: EXAM_WRITE_PERMISSION,
   };
 }
 
@@ -84,21 +92,52 @@ async function requireRole(): Promise<
 // Vá 24/07 — GHI/CHẤM đối xứng ĐỌC: scope per-model qua passesScope("Class"),
 // role HO chỉ cross-center khi CÓ quyền classes:* scope ALL (Toại TRAINING@HO
 // hết sửa đề/chấm lượt thi lớp CS2). KHÔNG dùng cờ isHoLevel trần.
+//
+// ── A-01-6c · bất biến L-A6 (26/08/2026) — vá lỗ NGƯỢC CHIỀU ──────────────────────
+// `passesScope("Class", …)` MỘT MÌNH nở theo hai đường mà cổng GHI không được hưởng
+// (`lib/db-scope.ts` `getModelVisibleCenterIds`):
+//   1. `grantsAllow`: MỘT dòng `UserPermissionGrant` ALLOW khớp tiền tố `classes:` bật
+//      `hasAll` ⇒ trả "ALL" cho MỌI cơ sở (db-scope.ts:248-253);
+//   2. gom theo TIỀN TỐ model: `classes:view-all` của một vai KIÊM NHIỆM chỉ-đọc (kế
+//      toán cơ sở @CS2, HO_MARKETING@HO) cũng được cộng vào.
+// `actionCoversCenter` (lib/auth/managed-centers.ts) bịt cả hai: suy từ ĐÚNG dòng
+// `UserOrgRole` mang chính `exams:edit` — khớp đúng chuỗi action, không đọc `grantsAllow`.
+//
+// ⚠️ CỐ Ý là phép GIAO — KHÁC phép AND vô nghĩa đã bị loại ở A-01-6b (`visibleCenterIds`
+// AND `passesScope`: hai vế cùng nở nên không cắt gì). Vế cũ GIỮ NGUYÊN làm TRẦN để không
+// nới cho ai (luật 24/07 "cross-center chỉ khi có classes:* scope ALL" là quyết định của
+// chủ dự án); vế mới chỉ SIẾT.
 function classCenterVisible(
   actor: Actor,
   cls: { centerId: string | null } | null | undefined,
+  action: string,
 ): boolean {
+  if (actor.isSuperAdmin) return true;
   if (!cls) return true; // đề không gắn lớp — exam bank toàn cục (content chủ đích)
-  return passesScope("Class", cls, actor);
+  // ── A-01-6d (26/08/2026) — nhánh `centerId = null` phải xử lý TRƯỚC ──────────────
+  // KHÁC ca `!cls` ngay trên: đây là đề CÓ gắn lớp, nhưng lớp đó chưa được gán cơ sở
+  // (legacy — lib/enrollment-flow.ts:106 "GIỮ row có centerId = null (legacy chưa gán)").
+  // `actionCoversCenter` fail-closed trên centerId rỗng và docblock của nó (managed-centers.ts)
+  // đòi chỗ gọi tự xử lý nhánh null trước; bản A-01-6c quên, nên Đào tạo tại HO mất quyền
+  // sửa/chấm mọi đề của lớp legacy ("Đề thi không tồn tại") — siết ngoài ý định, vì phép đo
+  // CŨ (`passesScope` một mình) thoát sớm ở `visibleCenters === "ALL"` TRƯỚC dòng kiểm null.
+  // Giữ ĐÚNG hành vi cũ cho nhóm này: luật 24/07 "cross-center chỉ khi có classes:* scope ALL".
+  if (cls.centerId == null) return passesScope("Class", cls, actor);
+  return passesScope("Class", cls, actor) && actionCoversCenter(actor, action, cls.centerId);
 }
 
 /** Loại B — đề thi theo id từ client: lớp gắn đề (nếu có) phải trong tầm nhìn actor. */
-async function examClassVisible(sdb: Sdb, actor: Actor, examId: string): Promise<boolean> {
+async function examClassVisible(
+  sdb: Sdb,
+  actor: Actor,
+  examId: string,
+  action: string,
+): Promise<boolean> {
   const e = await sdb.exam.findUnique({
     where: { id: examId },
     select: { class: { select: { centerId: true } } },
   });
-  return !!e && classCenterVisible(actor, e.class);
+  return !!e && classCenterVisible(actor, e.class, action);
 }
 
 // R7-13 AC1/AC4 — chỉ Đào tạo/Admin (CENTER_MANAGER/SUPER_ADMIN) được sửa đề đã PUBLISHED.
@@ -196,7 +235,7 @@ export async function createExam(
       where: { id: data.classId },
       select: { centerId: true },
     });
-    if (!cls || !classCenterVisible(gate.actor, cls)) {
+    if (!cls || !classCenterVisible(gate.actor, cls, gate.permission)) {
       return { ok: false, error: "Lớp không tồn tại hoặc ngoài phạm vi cơ sở" };
     }
   }
@@ -253,7 +292,7 @@ export async function updateExam(
   if (!current) return { ok: false, error: "Đề thi không tồn tại" };
 
   // Loại B — đề gắn lớp cơ sở khác → chặn (chống IDOR sửa chéo cơ sở).
-  if (!classCenterVisible(gate.actor, current.class)) {
+  if (!classCenterVisible(gate.actor, current.class, gate.permission)) {
     return { ok: false, error: "Đề thi không tồn tại" };
   }
   // Đổi lớp gắn đề → lớp đích cũng phải trong tầm nhìn actor.
@@ -262,7 +301,7 @@ export async function updateExam(
       where: { id: data.classId },
       select: { centerId: true },
     });
-    if (!targetCls || !classCenterVisible(gate.actor, targetCls)) {
+    if (!targetCls || !classCenterVisible(gate.actor, targetCls, gate.permission)) {
       return { ok: false, error: "Lớp không tồn tại hoặc ngoài phạm vi cơ sở" };
     }
   }
@@ -324,7 +363,7 @@ export async function deleteExam(id: string): Promise<Result> {
   if (!gate.ok) return gate;
 
   // Loại B — chống IDOR xoá đề của lớp cơ sở khác.
-  if (!(await examClassVisible(gate.sdb, gate.actor, id))) {
+  if (!(await examClassVisible(gate.sdb, gate.actor, id, gate.permission))) {
     return { ok: false, error: "Đề thi không tồn tại" };
   }
 
@@ -377,7 +416,7 @@ export async function addQuestionToExam(
   const { examId, questionId, points } = parsed.data;
 
   // Loại B — chống IDOR thêm câu hỏi vào đề của lớp cơ sở khác.
-  if (!(await examClassVisible(gate.sdb, gate.actor, examId))) {
+  if (!(await examClassVisible(gate.sdb, gate.actor, examId, gate.permission))) {
     return { ok: false, error: "Đề thi không tồn tại" };
   }
 
@@ -415,7 +454,7 @@ export async function removeQuestionFromExam(
   if (!eq) return { ok: false, error: "Không tìm thấy bản ghi" };
 
   // Loại B — chống IDOR gỡ câu hỏi khỏi đề của lớp cơ sở khác.
-  if (!(await examClassVisible(gate.sdb, gate.actor, eq.examId))) {
+  if (!(await examClassVisible(gate.sdb, gate.actor, eq.examId, gate.permission))) {
     return { ok: false, error: "Không tìm thấy bản ghi" };
   }
 
@@ -468,7 +507,7 @@ export async function updateExamQuestionPoints(
     where: { id: examQuestionId },
     select: { examId: true },
   });
-  if (!cur || !(await examClassVisible(gate.sdb, gate.actor, cur.examId))) {
+  if (!cur || !(await examClassVisible(gate.sdb, gate.actor, cur.examId, gate.permission))) {
     return { ok: false, error: "Không tìm thấy bản ghi" };
   }
 
@@ -504,7 +543,7 @@ export async function reorderExamQuestions({
   }
 
   // Loại B — chống IDOR sắp xếp câu hỏi của đề lớp cơ sở khác.
-  if (!(await examClassVisible(gate.sdb, gate.actor, examId))) {
+  if (!(await examClassVisible(gate.sdb, gate.actor, examId, gate.permission))) {
     return { ok: false, error: "Đề thi không tồn tại" };
   }
 
@@ -568,7 +607,7 @@ export async function autoGenerateExamQuestions(
   const { examId, count, defaultPoints } = parsed.data;
 
   // Loại B — chống IDOR sinh câu hỏi cho đề của lớp cơ sở khác.
-  if (!(await examClassVisible(gate.sdb, gate.actor, examId))) {
+  if (!(await examClassVisible(gate.sdb, gate.actor, examId, gate.permission))) {
     return { ok: false, error: "Đề thi không tồn tại" };
   }
 
@@ -655,7 +694,7 @@ export async function gradeAttempt(attemptId: string): Promise<Result> {
   });
   if (!attempt) return { ok: false, error: "Không tìm thấy bài làm" };
   // Loại B — lớp gắn đề phải trong tầm nhìn cơ sở actor trước khi xét quyền chấm.
-  if (!classCenterVisible(gate.actor, attempt.exam.class)) {
+  if (!classCenterVisible(gate.actor, attempt.exam.class, gate.permission)) {
     return { ok: false, error: "Không tìm thấy bài làm" };
   }
   if (!(await canGradeClassWork(gate.user, attempt.exam.class))) {
@@ -762,7 +801,7 @@ export async function manualGradeAnswer(
   });
   if (!ans) return { ok: false, error: "Không tìm thấy bài trả lời" };
   // Loại B — lớp gắn đề phải trong tầm nhìn cơ sở actor trước khi xét quyền chấm.
-  if (!classCenterVisible(gate.actor, ans.attempt.exam.class)) {
+  if (!classCenterVisible(gate.actor, ans.attempt.exam.class, gate.permission)) {
     return { ok: false, error: "Không tìm thấy bài trả lời" };
   }
   if (!(await canGradeClassWork(gate.user, ans.attempt.exam.class))) {
@@ -822,7 +861,7 @@ export async function changeExamStatus(
   });
   if (!cur) return { ok: false, error: "Đề thi không tồn tại" };
   // Loại B — chống IDOR đổi trạng thái đề của lớp cơ sở khác.
-  if (!classCenterVisible(gate.actor, cur.class)) {
+  if (!classCenterVisible(gate.actor, cur.class, gate.permission)) {
     return { ok: false, error: "Đề thi không tồn tại" };
   }
   const touchesPublished =
