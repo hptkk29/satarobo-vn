@@ -12,6 +12,7 @@
 // ⚠️ ĐẢO "câu 46" (25/08, chủ dự án): bảng Trial NAY CÓ cột "Phụ huynh" — chỉ TÊN.
 // SĐT/email phụ huynh vẫn không bao giờ ra khỏi server (xem ghi chú dài ở khối
 // getTeacherTrialTable trong lib/lms/teacher-schedule.ts).
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Ban } from "lucide-react";
 import { auth } from "@/lib/auth";
