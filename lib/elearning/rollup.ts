@@ -26,6 +26,12 @@ export async function cuonKhoaSauKhiXongBai(
         status: true,
         dueAtOriginal: true,
         progressPercent: true,
+        // ⚠️ PHẢI đọc. Đây là vế THỨ HAI của phép bù SLA — phần miễn trừ vì NGƯỜI
+        // CHẤM trễ. Ghi mà không đọc thì cả phép bù chỉ nới được hạn nộp, còn
+        // người bị bỏ quên năm ngày vẫn bị đếm là TRỄ trên báo cáo tuân thủ gửi
+        // thẳng quản lý trực tiếp, CÓ GHI TÊN. Kế hoạch §9.3 luật 2 gọi đúng tên:
+        // "thiếu (b) thì (a) vô nghĩa".
+        slaGraceDays: true,
       },
     });
     if (!e) return null;
@@ -65,6 +71,7 @@ export async function cuonKhoaSauKhiXongBai(
       soBaiDaXong,
       statusHienTai: e.status,
       dueAtOriginal: e.dueAtOriginal,
+      slaGraceDays: e.slaGraceDays,
       now,
     });
 

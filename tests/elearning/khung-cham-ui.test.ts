@@ -143,20 +143,18 @@ describe("màn mới phải có LỐI VÀO, và cửa chưa mở phải nói rõ
     expect(chiMa(MOT)).toContain('href="/elearning/khung-cham"');
   });
 
-  it("🔴 nói thẳng rằng bài tập chấm tay CHƯA MỞ", () => {
-    // Quy ước 20 nhìn từ phía ngược lại: khung dựng được nhưng chưa có bài nào dùng
-    // nó. Không nói ra thì người soạn dựng xong đi tìm chỗ gắn và tự nghi ngờ mình.
-    expect(DS).toContain("chưa mở");
+  it("🔴 KHÔNG còn câu 'bài tập chấm tay chưa mở' — nó đã mở", () => {
+    // Câu cảnh báo đó đúng ở PR trước và SAI ở PR này. Để nguyên là nói dối người
+    // soạn theo chiều ngược lại: họ dựng khung xong rồi không đi gắn vào bài.
+    expect(DS).not.toContain("chưa mở");
+    // …và thay bằng câu chỉ đúng bước tiếp.
+    expect(DS).toContain("Bài tập");
   });
 
-  it("và loại bài `TASK` VẪN đóng ở PR này", () => {
-    // Mở cửa khi mới có một đầu là dựng lại đúng cái bẫy `lesson-kind.ts` sinh ra
-    // để gỡ. `TASK` mở ở PR có CẢ đường nộp lẫn đường chấm.
-    //
+  it("loại bài `TASK` nay ĐÃ MỞ — cùng PR có đủ nộp, chấm và bù hạn", () => {
     // Kiểm trên GIÁ TRỊ THẬT, không grep mã nguồn: một biểu thức chính quy soi chữ
     // sẽ xanh cả khi ai đó thêm `TASK` bằng một cách viết khác.
-    expect(LOAI_BAI_DA_MO as readonly string[]).not.toContain("TASK");
-    // …và vẫn còn ghi TÊN TICKET sẽ mở nó, để người làm ticket đó tìm được chỗ sửa.
-    expect(LOAI_BAI_CHUA_MO.TASK).toContain("EL-15");
+    expect(LOAI_BAI_DA_MO as readonly string[]).toContain("TASK");
+    expect(LOAI_BAI_CHUA_MO.TASK).toBeUndefined();
   });
 });

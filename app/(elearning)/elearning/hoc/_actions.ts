@@ -1,6 +1,7 @@
 "use server";
 
 import { defineAction } from "@/lib/actions/define";
+import { cauHinhNopBaiTap } from "@/lib/elearning/task-submit";
 import {
   cauHinhBatDauThi,
   cauHinhLuuCauTraLoi,
@@ -17,3 +18,11 @@ import {
 export const batDauThiAction = defineAction(cauHinhBatDauThi);
 export const luuCauTraLoiAction = defineAction(cauHinhLuuCauTraLoi);
 export const nopBaiAction = defineAction(cauHinhNopBai);
+
+/**
+ * EL-15c — nộp bài tập.
+ *
+ * ⚠️ Nối vào ĐÂY cùng PR mở loại bài `TASK`. Mở lựa chọn mà chưa có đường nộp là
+ * đúng cái bẫy `lesson-kind.ts` sinh ra để gỡ.
+ */
+export const nopBaiTapAction = defineAction(cauHinhNopBaiTap);

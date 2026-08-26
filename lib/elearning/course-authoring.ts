@@ -95,6 +95,9 @@ async function docDanBai(db: ScopedDb, courseId: string): Promise<ChuongTrongDan
           // đây thì cổng đọc `undefined` và KHÔNG BAO GIỜ nổ — một cổng chặn im
           // lặng không chặn gì.
           examId: true,
+          // EL-15c — cùng lý do: cổng đòi bài `TASK` phải có khung chấm. Thiếu
+          // trường này thì cổng đọc `undefined` và không bao giờ nổ.
+          rubricId: true,
         },
       },
     },
@@ -114,6 +117,19 @@ async function docDanBai(db: ScopedDb, courseId: string): Promise<ChuongTrongDan
       kind: b.kind,
       contentMd: b.contentMd,
       captionKey: b.captionKey,
+      // ⚠️ CHỖ THỨ TƯ. `select` ở trên có hai cột này, nhưng chép chúng vào đối
+      // tượng trả lại là một bước RIÊNG — và bước đó từng bị bỏ quên.
+      //
+      // Vì `BaiTrongDanBai.examId?`/`rubricId?` khai OPTIONAL nên TypeScript im
+      // lặng, `kiemDanBai` đọc `undefined`, và cổng `!b.examId` / `!b.rubricId`
+      // NỔ VĨNH VIỄN: không khoá nào chứa bài QUIZ hay TASK rời khỏi nháp được,
+      // kể cả khi `TrnLesson.examId`/`rubricId` đã có giá trị đúng trong DB.
+      // Người soạn thấy trình soạn báo "đã gắn đề" mà cổng vẫn bảo "chưa gắn".
+      //
+      // Lỗi này có từ EL-14 với `examId` (bài QUIZ trên `test` đang kẹt), và
+      // EL-15c suýt nhân đôi nó sang `rubricId`.
+      examId: b.examId,
+      rubricId: b.rubricId,
       // Bài chưa có dòng phiên bản ⇒ coi là BẮT BUỘC. Mặc định phía chặt: đoán
       // "tuỳ chọn" sẽ âm thầm bỏ bài đó khỏi điều kiện hoàn thành.
       required: batBuoc.get(b.id) ?? true,
@@ -645,6 +661,22 @@ export const cauHinhNhanBanKhoa: ActionConfig<
               orderIndex: true,
               contentMd: true,
               minReadSeconds: true,
+              // ⚠️ PHẢI chép hai cột nối này, nếu không bản sao có bài `QUIZ`/`TASK`
+              // mà KHÔNG có đề / khung — và cổng xuất bản chặn nó với câu "chưa gắn
+              // đề thi" trên một khoá người soạn vừa nhân bản từ khoá đã chạy tốt.
+              // Họ không có cách nào hiểu vì sao.
+              //
+              // `examId` vốn đã rớt từ EL-14; `rubricId` sẽ rớt y hệt nếu không thêm
+              // ở đây. Cùng một dòng, cùng một lỗi.
+              examId: true,
+              rubricId: true,
+              // ⚠️ Cùng một lỗi, cùng một dòng: bản sao mất phụ đề thì cổng xuất bản
+              // chặn với "bài video thiếu phụ đề", và mất `videoKey` thì bài video
+              // của bản sao rỗng — người soạn phải tải lại toàn bộ video.
+              captionKey: true,
+              videoKey: true,
+              durationSec: true,
+              sessionDate: true,
             },
           },
         },
@@ -664,6 +696,12 @@ export const cauHinhNhanBanKhoa: ActionConfig<
               orderIndex: b.orderIndex,
               contentMd: b.contentMd,
               minReadSeconds: b.minReadSeconds,
+              examId: b.examId,
+              rubricId: b.rubricId,
+              captionKey: b.captionKey,
+              videoKey: b.videoKey,
+              durationSec: b.durationSec,
+              sessionDate: b.sessionDate,
             },
           });
         }

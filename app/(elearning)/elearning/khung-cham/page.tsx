@@ -71,11 +71,11 @@ export default async function Page() {
           Thước đo cho bài tập chấm tay: các tiêu chí, mỗi tiêu chí vài mức, mỗi mức
           một số điểm.
         </p>
-        {/* Nói thẳng rằng cửa chưa mở. Để người soạn dựng xong khung rồi đi tìm chỗ
-            gắn mà không thấy là để họ tự nghi ngờ mình làm sai bước nào. */}
-        <p className="mt-2 rounded-md bg-amber-50 px-3 py-2 text-xs text-amber-900">
-          Bài tập chấm tay <strong>chưa mở</strong> — đường nộp bài và hàng chờ chấm
-          làm ở đợt sau. Khung dựng bây giờ vẫn dùng được nguyên vẹn khi cửa mở.
+        {/* Nói rõ BƯỚC TIẾP. Dựng xong một khung rồi không biết làm gì với nó là
+            bỏ dở giữa chừng — đúng bài học của màn đề thi. */}
+        <p className="mt-2 rounded-md bg-muted px-3 py-2 text-xs">
+          Khung chỉ tới người học qua một bài dạng <strong>Bài tập</strong>: kích hoạt
+          khung xong, mở bài đó ở màn soạn khoá rồi gắn khung vào.
         </p>
       </div>
 

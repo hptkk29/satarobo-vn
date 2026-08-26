@@ -7995,7 +7995,22 @@ model TrnEnrollment {
   /// Hạn HIỆN HÀNH — gia hạn từng người không đụng lượt giao.
   dueAt         DateTime? @db.Timestamptz(6)
 
-  extensionReason  String?
+  extensionReason String?
+
+  /// Ngày LÀM VIỆC được MIỄN TRỪ vì NGƯỜI CHẤM trễ hạn SLA (EL-15c).
+  ///
+  /// ⚠️ KHÁC hẳn gia hạn: gia hạn là người xử chủ động cho thêm thời gian và ghi
+  /// `extensionReason`; đây là TRẢ LẠI đúng phần người học đã mất vì lỗi của người
+  /// khác, do máy tính ra, không có người bấm.
+  ///
+  /// Vì sao cần cột này chứ không chỉ nới `dueAt`: `cuonTienDoKhoa` phân biệt
+  /// `COMPLETED` với `COMPLETED_LATE` bằng `dueAtOriginal` — cột BẤT BIẾN. Nới
+  /// `dueAt` mở lại đường nộp và chặn `OVERDUE`, nhưng người bị bỏ quên năm ngày
+  /// rồi học xong VẪN bị đếm là TRỄ trên báo cáo tuân thủ gửi thẳng quản lý trực
+  /// tiếp, CÓ GHI TÊN. Kế hoạch §9.3 luật 2: "thiếu (b) thì (a) vô nghĩa".
+  ///
+  /// `dueAtOriginal` vẫn KHÔNG BAO GIỜ bị ghi lại. Đây là khoản CỘNG bên cạnh.
+  slaGraceDays     Int     @default(0)
   extendedByUserId String?
 
   /// CHỈ SERVER GHI — mốc "hoàn thành có kiểm chứng" (BR-004). Không setter nào từ
@@ -8906,6 +8921,14 @@ model TrnSubmission {
   /// huynh. Bốn quy tắc của kế hoạch áp ở TẦNG ĐƯỜNG GHI, không phải ở cột này.
   attachmentsJson Json?
 
+  /// Khung chấm ĐÓNG BĂNG tại thời điểm nộp.
+  ///
+  /// ⚠️ KHÔNG suy khung qua `TrnLesson.rubricId` lúc chấm: cột đó sửa được bất cứ
+  /// lúc nào, nên đổi khung sau khi đã có người nộp là chấm bài cũ bằng thước mới —
+  /// `TrnRubricScore.criterionId` trỏ tiêu chí của khung khác, và bảng điểm in lại
+  /// ra số khác mà không ai giải thích được.
+  rubricId String?
+
   submittedAt DateTime?           @db.Timestamptz(6)
   status      TrnSubmissionStatus @default(DRAFT)
 
@@ -8925,6 +8948,12 @@ model TrnSubmission {
   dueGradeAt DateTime? @db.Timestamptz(6)
 
   feedback String? @db.Text
+
+  /// SỔ bù SLA: số ngày làm việc ĐÃ bù cho lượt nộp này.
+  ///
+  /// ⚠️ Không có sổ thì cron đêm bù lại mỗi đêm cho cùng một lượt, hạn trôi ra vô
+  /// hạn — và không ai thấy, vì cron không ghi `AuditLog`.
+  slaBuNgayLam Int @default(0)
 
   centerId  String
   orgUnitId String

@@ -32,8 +32,20 @@ import type { TrnLessonKind } from "@prisma/client";
  * `QUIZ` mở ở EL-14d, ĐÚNG PR có đường làm bài — không mở sớm hơn ở EL-14c dù lúc
  * đó đã dựng được đề. Mở khi mới có một đầu là dựng lại đúng cái bẫy tệp này sinh
  * ra để gỡ.
+ *
+ * `TASK` mở ở EL-15c, ĐÚNG PR có ĐỦ BỐN mảnh: gắn khung vào bài · đường nộp (kèm
+ * tệp đính kèm) · đường chấm theo khung · phép BÙ hạn khi người chấm trễ. Mảnh thứ
+ * tư cũng là điều kiện mở, không phải phần thêm: mở đường nộp mà chưa có phép bù là
+ * để người học bị khoá và bị đánh quá hạn vì người chấm chậm — dựng một mối nguy
+ * rồi hẹn đợt sau đúng bằng việc mở một cửa không có lối ra.
  */
-export const LOAI_BAI_DA_MO = ["READ", "VIDEO", "LIVE_SESSION", "QUIZ"] as const;
+export const LOAI_BAI_DA_MO = [
+  "READ",
+  "VIDEO",
+  "LIVE_SESSION",
+  "QUIZ",
+  "TASK",
+] as const;
 
 export type LoaiBaiDaMo = (typeof LOAI_BAI_DA_MO)[number];
 
@@ -45,7 +57,6 @@ export type LoaiBaiDaMo = (typeof LOAI_BAI_DA_MO)[number];
  */
 export const LOAI_BAI_CHUA_MO: Record<string, string> = {
   SCORM: "chưa có đường tải gói SCORM cho khu đào tạo nội bộ",
-  TASK: "EL-15 (bài tập + khung chấm)",
 };
 
 export const NHAN_LOAI_BAI: Record<string, string> = {

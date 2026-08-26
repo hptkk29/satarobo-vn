@@ -38,8 +38,17 @@ import { thuLaiHangDoiNhanSu } from "@/lib/elearning/retry-queue";
  * không xin khe thứ ba. Cron tập ĐỘNG riêng của EL-05 cũng đã gộp vào việc (2)
  * và trả lại khe của nó — `vercel.json` sau PR này có đúng 25 cron.
  */
+import { tinhBuSla, hanSauKhiBu } from "@/lib/elearning/sla-bu";
 
 export type KetQuaDem = {
+  /**
+   * EL-15c việc (0) — BÙ HẠN cho người nộp khi NGƯỜI CHẤM trễ SLA.
+   *
+   * `conSot` = số lượt còn phải bù nhưng hết giờ chưa làm tới. Nói ra thay vì im
+   * lặng: một cron báo "xong" trong khi còn việc chưa chạy là thứ khó phát hiện
+   * nhất, và ở đây cái chưa chạy là hạn của một con người.
+   */
+  buSla: { daXet: number; daBu: number; conSot: number };
   quaHan: number;
   tapDong: { themMoi: number; thuHoi: number; choDuLieuNhanSu: number };
   chungNhan: { chuaLamDuoc: string } | { nhac: number };
@@ -61,6 +70,7 @@ export async function runElearningDem(now = new Date()): Promise<KetQuaDem> {
   const batDau = Date.now();
   const conGio = () => Date.now() - batDau < TRAN_MS;
   const ket: KetQuaDem = {
+    buSla: { daXet: 0, daBu: 0, conSot: 0 },
     quaHan: 0,
     tapDong: { themMoi: 0, thuHoi: 0, choDuLieuNhanSu: 0 },
     chungNhan: {
@@ -76,6 +86,90 @@ export async function runElearningDem(now = new Date()): Promise<KetQuaDem> {
     taiDo: { daHuy: 0, conGiu: 0 },
     loi: [],
   };
+
+  // ── Việc 0: BÙ HẠN vì người chấm trễ ─────────────────────────────────────
+  //
+  // ⚠️ CHẠY TRƯỚC việc (1), và thứ tự này là ràng buộc THẬT, không phải sở thích.
+  //
+  // Việc (1) quét `dueAt < now` để đánh `OVERDUE`. Nếu bù chạy SAU thì chính đêm
+  // đó lượt vừa được bù VẪN bị đánh quá hạn và phát sự kiện cho người học — rồi
+  // lần lật thứ hai sẽ IM LẶNG vì `dedupeKey: el.over:{id}`, tức họ nhận đúng một
+  // thông báo "bạn đã quá hạn" cho một cái hạn mà hệ thống vừa tự nới ra, và không
+  // bao giờ nhận thông báo đính chính.
+  try {
+    // ⚠️ CHỈ nhóm ĐANG CHỜ CHẤM. Bản đầu quét cả `GRADED`/`NEEDS_REVISION`, và đó
+    // là một cửa sổ KHÔNG BAO GIỜ VƠI: một lượt đã chấm xong vẫn thoả
+    // `dueGradeAt < now` mãi mãi. Với `take: 500` sắp theo hạn CŨ TRƯỚC, 500 dòng
+    // đã tất toán từ đời nào sẽ chiếm trọn cửa sổ, và những lượt vừa trễ hôm nay
+    // KHÔNG BAO GIỜ được xét — phép bù chết lặng lẽ sau vài tháng dữ liệu.
+    //
+    // Nhóm đã chấm nay chốt NGAY LÚC CHẤM (`task-grading.ts`), nơi `gradedAt` vừa
+    // được đặt và tổng nợ là con số cuối cùng. Cron chỉ còn lo nhóm đang chờ — nhóm
+    // này tự vơi, vì chấm xong là nó rời hàng đợi.
+    const canXet = await db.trnSubmission.findMany({
+      where: {
+        dueGradeAt: { lt: now },
+        status: "SUBMITTED",
+        enrollmentId: { not: null },
+      },
+      select: {
+        id: true,
+        enrollmentId: true,
+        dueGradeAt: true,
+        gradedAt: true,
+        slaBuNgayLam: true,
+      },
+      orderBy: { dueGradeAt: "asc" },
+      take: LO,
+    });
+    // ⚠️ Đếm SAU vòng lặp, không gán trước. Bản đầu gán `daXet = canXet.length`
+    // TRƯỚC rồi tính `conSot = canXet.length - daXet` — phép trừ tự triệt tiêu và
+    // `conSot` LUÔN bằng 0, tức cron báo "làm hết" đúng lúc còn việc chưa chạy.
+    // Chính chú thích của `KetQuaDem` cấm cái im lặng đó.
+    for (const l of canXet) {
+      if (!conGio()) break;
+      ket.buSla.daXet += 1;
+      const { themNgayLam, tongDangLe } = tinhBuSla({
+        dueGradeAt: l.dueGradeAt,
+        gradedAt: l.gradedAt,
+        now,
+        so: { daBuNgayLam: l.slaBuNgayLam },
+      });
+      if (themNgayLam <= 0) continue;
+
+      const gd = await db.trnEnrollment.findUnique({
+        where: { id: l.enrollmentId! },
+        select: { id: true, dueAt: true, slaGraceDays: true, status: true },
+      });
+      // Lượt đã thu hồi thì không bù: nới hạn cho một người đã bị rút khỏi khoá là
+      // vô nghĩa, và `dueAt` của họ không còn ai đọc.
+      if (!gd || gd.status === "REVOKED") continue;
+
+      await db.$transaction(async (t) => {
+        await t.trnEnrollment.update({
+          where: { id: gd.id },
+          data: {
+            dueAt: hanSauKhiBu(gd.dueAt, themNgayLam),
+            slaGraceDays: gd.slaGraceDays + themNgayLam,
+            // ⚠️ Quá hạn rồi được bù thì kéo về ĐANG HỌC — y hệt đường gia hạn tay
+            // (`assignment-lifecycle.ts`). Để nguyên `OVERDUE` là giữ một cái nhãn
+            // sai trên hồ sơ của người không làm gì sai.
+            ...(gd.status === "OVERDUE" ? { status: "IN_PROGRESS" } : {}),
+          },
+        });
+        // Cập nhật SỔ trong CÙNG giao dịch. Tách ra thì một lần lỗi giữa chừng sẽ
+        // bù mà không ghi sổ, và đêm sau bù thêm lần nữa cho cùng khoảng chờ.
+        await t.trnSubmission.update({
+          where: { id: l.id },
+          data: { slaBuNgayLam: tongDangLe },
+        });
+      });
+      ket.buSla.daBu += 1;
+    }
+    ket.buSla.conSot = canXet.length - ket.buSla.daXet;
+  } catch (e) {
+    ket.loi.push({ viec: "buSla", message: (e as Error).message });
+  }
 
   // ── Việc 1: quá hạn ───────────────────────────────────────────────────────
   try {

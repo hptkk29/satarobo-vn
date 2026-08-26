@@ -31,6 +31,9 @@ type Bai = {
   kind: string;
   contentMd: string | null;
   required: boolean;
+  /** Cột nối của bài `QUIZ` / `TASK` — dùng để hiện nhãn "chưa gắn" tại chỗ. */
+  examId?: string | null;
+  rubricId?: string | null;
 };
 type Chuong = { id: string; title: string; lessons: Bai[] };
 
@@ -208,10 +211,29 @@ export function OutlineEditor(props: {
                   />
                   bắt buộc
                 </label>
-                {b.kind === "READ" && (
+                {/* ⚠️ Lối vào trình soạn phải mở cho MỌI loại bài có gì để soạn, không
+                    riêng bài đọc. Bài `QUIZ` cần gắn đề, bài `TASK` cần gắn khung
+                    chấm — và cổng xuất bản CHẶN khi thiếu. Chỉ mở cho `READ` nghĩa
+                    là người soạn thấy "chưa gắn khung" mà không có nút nào để bấm:
+                    đúng bẫy quy ước 20, chỉ đổi người bị kẹt. */}
+                {(b.kind === "READ" || b.kind === "QUIZ" || b.kind === "TASK") && (
                   <Link href={`/elearning/soan/${b.id}`} className="text-xs underline">
-                    Soạn nội dung
+                    {b.kind === "QUIZ"
+                      ? "Gắn đề thi"
+                      : b.kind === "TASK"
+                        ? "Gắn khung chấm"
+                        : "Soạn nội dung"}
                   </Link>
+                )}
+                {b.kind === "TASK" && !b.rubricId && (
+                  <span className="rounded bg-state-warning-soft px-1.5 py-0.5 text-xs">
+                    chưa gắn khung
+                  </span>
+                )}
+                {b.kind === "QUIZ" && !b.examId && (
+                  <span className="rounded bg-state-warning-soft px-1.5 py-0.5 text-xs">
+                    chưa gắn đề
+                  </span>
                 )}
                 <NutNho
                   onClick={() => sap("BAI", c.id, b.id, iB - 1)}
