@@ -436,8 +436,8 @@ export function LeadsTable({
   canUpdate,
   canDelete,
   currentStatus,
-  currentQ,
   currentUserId,
+  canExport,
   columns,
   columnPicker,
 }: {
@@ -448,8 +448,9 @@ export function LeadsTable({
   canUpdate: boolean
   canDelete: boolean
   currentStatus?: string
-  currentQ?: string
   currentUserId: string
+  /** G-03 — `leads:export`. Quyền RIÊNG, tách khỏi quyền xem danh sách. */
+  canExport: boolean
   /** G-04 — cột đang hiện, ĐÚNG thứ tự. Server đã ghép cấu hình của người này với
    *  danh mục `lib/tables/lead-columns.ts`; bảng không tự quyết định gì. */
   columns: { key: string; label: string }[]
@@ -482,6 +483,16 @@ export function LeadsTable({
     router.push(`/leads?${params.toString()}`)
   }
 
+  // G-03 — link xuất mang THEO CẢ bộ lọc đang hiện trên màn (cơ sở, sale, nguồn,
+  // khoảng ngày…), không chỉ trạng thái + từ khoá như bản CSV cũ. Trước đây bấm nút
+  // sau khi lọc "CS1, tháng 8" vẫn ra tệp của mọi cơ sở mọi thời kỳ — không sai
+  // quyền (scopedDb vẫn chặn), nhưng là một tệp KHÁC thứ người dùng đang nhìn.
+  // Bỏ `page`/`size`/`view`: đó là chuyện phân trang trên màn, tệp xuất trọn bộ lọc.
+  const exportParams = new URLSearchParams(searchParams.toString())
+  for (const k of ['page', 'size', 'view']) exportParams.delete(k)
+  const exportQuery = exportParams.toString()
+  const exportHref = `/api/admin/leads/export${exportQuery ? `?${exportQuery}` : ''}`
+
   return (
     <div className="space-y-4">
       {/* Filters — tìm kiếm dùng chung ô "Tìm" ở thanh lọc phía trên (tránh 2 ô trùng nhau). */}
@@ -504,16 +515,19 @@ export function LeadsTable({
         <div className="ml-auto flex items-center gap-2">
           {columnPicker}
 
-          {/* Export CSV */}
-          <a
-            href={`/api/admin/leads/export${currentStatus ? `?status=${currentStatus}` : ''}${currentQ ? `${currentStatus ? '&' : '?'}q=${encodeURIComponent(currentQ)}` : ''}`}
-            download
-            className="inline-flex items-center gap-2 rounded-lg border border-border bg-card px-3 py-2 text-sm font-semibold text-muted-foreground hover:bg-muted hover:text-foreground"
-            title="Xuất CSV"
-          >
-            <Download className="h-4 w-4" />
-            <span className="hidden sm:inline">Xuất CSV</span>
-          </a>
+          {/* G-03 — xuất Excel. Nút bị giấu khi thiếu `leads:export`, nhưng đường
+              /api vẫn tự gác lại: giấu nút KHÔNG phải kiểm soát truy cập. */}
+          {canExport && (
+            <a
+              href={exportHref}
+              download
+              className="inline-flex items-center gap-2 rounded-lg border border-border bg-card px-3 py-2 text-sm font-semibold text-muted-foreground hover:bg-muted hover:text-foreground"
+              title="Xuất Excel danh sách lead đang lọc"
+            >
+              <Download className="h-4 w-4" />
+              <span className="hidden sm:inline">Xuất Excel</span>
+            </a>
+          )}
         </div>
       </div>
 
