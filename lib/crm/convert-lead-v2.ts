@@ -15,6 +15,8 @@ import {
   type BackfillPaymentInput,
 } from "@/lib/crm/backfill-order";
 import { inferLeadChildIdForConvert } from "@/lib/orders/lead-child-link";
+import { CLOSED_CHILD_STATUS, resolveClosedLeadChildIds } from "@/lib/lead/close-mark";
+import { decideLeadLostFields } from "@/lib/lead/lost-status";
 import { syncConversationMembership } from "@/lib/chat/sync-membership";
 import {
   ensureCommissionStatement,
@@ -446,6 +448,46 @@ export async function convertLeadV2(actor: AuditActor, input: ConvertV2Input): P
       weights: prices.map((p) => p.finalPrice),
       actor,
     });
+
+    // ── G-06 · MỐC CHỐT theo TỪNG CON (26/08/2026) ────────────────────────────────
+    //
+    // Trước đợt này, chốt ghi danh KHÔNG đụng gì tới `LeadChild`: con đã vào học vẫn
+    // nằm ở trạng thái cũ (hoặc NULL với phiếu cũ) và không có mốc chốt nào. Hệ quả:
+    // C-03 ("Lead đã chuyển đổi") không có cột **thời gian chốt** để tính, còn C-02
+    // (tỷ lệ thành công) thì đếm mẫu số bằng số con mà tử số luôn bằng 0.
+    //
+    // Ghi Ở ĐÂY, trong CÙNG transaction tạo Enrollment — không phải một lượt cập nhật
+    // rời sau commit. Rời nhau là đẻ ra khe "đã ghi danh nhưng chưa có mốc chốt", và
+    // khe đó không có job nào đối soát: nó chỉ hiện ra dưới dạng một con số báo cáo
+    // thấp hơn thực tế.
+    //
+    // ⚠️ Quy theo CON, và quy được BAO NHIÊU CON THÌ GHI BẤY NHIÊU — khác hẳn luật của
+    // ĐƠN HÀNG ngay bên trên (`inferLeadChildIdForConvert`: 2 con ⇒ `null`). Tiền của
+    // một đơn chung không chia được cho hai đứa, nhưng sự kiện "đứa này đã thành học
+    // viên" thì không mập mờ chút nào. Xem `lib/lead/close-mark.ts`.
+    //
+    // `updateMany` + `leadId: lead.id`: chặn ca chỗ gọi truyền `leadChildId` của phiếu
+    // KHÁC (bulk-convert nhận dữ liệu từ file). Con lạ thì không khớp `where` nên
+    // không có gì bị ghi — không ném, không đổ cả lượt chốt vì một mã sai.
+    const closedChildIds = resolveClosedLeadChildIds(input.students);
+    if (closedChildIds.length > 0) {
+      await tx.leadChild.updateMany({
+        where: { id: { in: closedChildIds }, leadId: lead.id },
+        // `now` là mốc DUY NHẤT của cả lượt convert (dựng trước transaction) — hai con
+        // chốt cùng lượt phải mang cùng một mốc, kể cả khi transaction vắt qua nửa đêm.
+        data: { status: CLOSED_CHILD_STATUS, closedAt: now },
+      });
+
+      // Con từng bị đánh dấu RỚT nay quay lại và vào học: `Lead.lostNote`/`lostAt`
+      // (cấp phụ huynh — quyết định B5) có thể đã hết chỗ bám. Đi qua ĐÚNG hàm quyết
+      // định của C-06 thay vì tự xoá: nó chỉ xoá khi KHÔNG CÒN con nào rớt, vì xoá vô
+      // điều kiện là xoá mất lý do rớt của ĐỨA CÒN LẠI và không có đường dựng lại.
+      const lostChildCount = await tx.leadChild.count({
+        where: { leadId: lead.id, status: "LOST" },
+      });
+      const patch = decideLeadLostFields({ intent: "unmark", lostChildCount, now });
+      if (patch) await tx.lead.update({ where: { id: lead.id }, data: patch });
+    }
 
     await writeAudit({
       actor,

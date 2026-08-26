@@ -346,6 +346,35 @@ export const SETTINGS = {
     default: 90, // lib/crm/lead-qualify.ts & lib/lead/dedup.ts
     centerOverridable: false,
   }),
+  // C-05 — CẢNH BÁO LEAD TREO. Quyết định 12(a) của chủ dự án (24/08/2026): vàng ≥ 2
+  // ngày, đỏ ≥ 7 ngày, **cả hai `centerOverridable`** (nguyên văn: "không hardcode").
+  //
+  // ⚠️ Default ở đây phải BẰNG `STALE_LEAD_WARN_DAYS`/`STALE_LEAD_DANGER_DAYS` của
+  // `lib/lead/stale-lead.ts` — file kia là hằng dùng khi CHƯA đọc được cấu hình (test
+  // thuần, component client), file này là giá trị người vận hành sửa được. Hai chỗ lệch
+  // nhau là bảng và cấu hình nói hai ngưỡng khác nhau; `registry.test.ts` ghim lại.
+  //
+  // ⚠️ KHÁC hẳn `crm.sla.*` ngay dưới: nhóm SLA đo phễu SR.QD.217 tính bằng PHÚT và
+  // đếm từ mốc phễu; hai key này đếm NGÀY từ lần TIẾP CẬN gần nhất
+  // (`lastLeadOutreachAt`, `lib/lead/activity-clock.ts`) — mốc khác, đơn vị khác.
+  "crm.staleLeadWarnDays": def({
+    key: "crm.staleLeadWarnDays",
+    group: "crm",
+    label: "Lead treo — cảnh báo VÀNG khi chưa tiếp cận (ngày)",
+    // min 1: đặt 0 là mọi lead đỏ ngay lúc vừa vào hệ thống ⇒ cột cảnh báo thành nhiễu
+    // trắng và người dùng tắt mắt với nó.
+    schema: z.number().int().min(1).max(365),
+    default: 2, // lib/lead/stale-lead.ts STALE_LEAD_WARN_DAYS
+    centerOverridable: true,
+  }),
+  "crm.staleLeadDangerDays": def({
+    key: "crm.staleLeadDangerDays",
+    group: "crm",
+    label: "Lead treo — cảnh báo ĐỎ khi chưa tiếp cận (ngày)",
+    schema: z.number().int().min(1).max(365),
+    default: 7, // lib/lead/stale-lead.ts STALE_LEAD_DANGER_DAYS
+    centerOverridable: true,
+  }),
   // SLA phễu SR.QD.217 (lib/crm/sla.ts SLA_THRESHOLDS) — ngưỡng tính bằng PHÚT.
   "crm.sla.respondMinutes": def({
     key: "crm.sla.respondMinutes",

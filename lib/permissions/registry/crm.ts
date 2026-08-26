@@ -12,8 +12,21 @@ export const crmModule: ModuleDecl = {
       key: "leads:view-pii",
       action: "view-pii",
       // #11 T2 (OI-4) — khớp ĐỦ bộ field maskLeadPiiFields đang gate (lib/lead/pii.ts).
-      sensitiveFields: ["parentName", "phone", "email", "childName", "note"],
-      description: "Xem PII lead (tên PH-HS/SĐT/email/ghi chú tư vấn) không che.",
+      // G-01 (26/08/2026) thêm `parentDob`; C-05 thêm `lostNote` (lý do rớt — ô ghi
+      // chú tự do, cùng hạng "nội dung tư vấn" với `note`). Địa chỉ
+      // (city/ward/addressLine) CỐ Ý không vào đây: dữ liệu địa bàn để lọc/xuất,
+      // không phải danh tính.
+      sensitiveFields: [
+        "parentName",
+        "phone",
+        "email",
+        "childName",
+        "note",
+        "parentDob",
+        "lostNote",
+      ],
+      description:
+        "Xem PII lead (tên PH-HS/SĐT/email/ngày sinh PH/ghi chú tư vấn/lý do rớt) không che.",
     },
     { key: "leads:create", action: "create" },
     { key: "leads:edit", action: "edit" },

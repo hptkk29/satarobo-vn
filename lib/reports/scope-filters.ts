@@ -69,6 +69,27 @@ export type ScopeFilterSearchParams = {
   split?: string | string[];
 };
 
+/**
+ * `URLSearchParams` → `ScopeFilterSearchParams`, cho các route (không phải page) muốn
+ * giải LẠI đúng bộ lọc mà màn hình đang áp dụng — ví dụ đường xuất Excel C-04.
+ *
+ * ⚠️ `center` PHẢI đi qua `getAll`. Trang nhận `searchParams` từ Next nên `?center=a&
+ * center=b` tới tay nó sẵn dạng mảng; còn route cầm `URLSearchParams`, ở đó `get()` chỉ
+ * trả giá trị ĐẦU. Dùng `get()` ở đây là im lặng bỏ mọi cơ sở từ thứ hai trở đi: tệp
+ * xuất ra hẹp hơn bảng trên màn, không có lỗi nào, và người dùng chỉ phát hiện khi đối
+ * chiếu tay.
+ */
+export function parseScopeFilterSearchParams(
+  qs: URLSearchParams,
+): ScopeFilterSearchParams {
+  return {
+    center: qs.getAll("center"),
+    dateFrom: qs.get("dateFrom") ?? undefined,
+    dateTo: qs.get("dateTo") ?? undefined,
+    split: qs.get("split") ?? undefined,
+  };
+}
+
 /** Phần Actor mà bộ lọc cần — khai theo cấu trúc để module này không phải kéo `lib/db` vào. */
 export type ScopeActor = {
   isSuperAdmin: boolean;

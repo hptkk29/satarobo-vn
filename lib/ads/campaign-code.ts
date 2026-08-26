@@ -62,3 +62,50 @@ export function parseCenterCodeFromCampaignName(
   const reason = phan.length === 1 ? "NO_PREFIX" : "CODE_NOT_FOUND";
   return { kind: "UNKNOWN", reason, token };
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// G-06 (26/08/2026) — ô "mã campaign" trên PHIẾU KHÁCH
+// ─────────────────────────────────────────────────────────────────────────────
+// `Lead.campaignName` mang mã campaign để D-04/D-05 bóc CPL/CPA theo campaign.
+// Mã đó là CÙNG MỘT khuôn với tên campaign bên Meta, nên nó đi qua chính
+// `parseCenterCodeFromCampaignName` ở trên — KHÔNG có khuôn thứ hai. Hai khuôn song
+// song là hai luật sẽ trôi lệch, và lúc đó chi tiêu quy về một cơ sở còn lead quy về
+// cơ sở khác, cả hai màn đều trông bình thường.
+
+/** Câu chú giải/lỗi dùng chung cho ô nhập mã campaign — một chỗ, đừng gõ lại. */
+export const CAMPAIGN_NAME_CONVENTION_HINT =
+  "Mã campaign theo quy ước SR.QD.232: [MÃ CƠ SỞ]_[MỤC TIÊU]_[KHOÁ HỌC]_[ĐỊNH DẠNG]_[MMYY]_[MÃ NỘI DUNG] " +
+  "— ví dụ CS1_LEAD_ROBOTICS-L1_VIDEO_0826_A03. Campaign chạy chung nhiều cơ sở dùng MULTI.";
+
+export type CampaignNameCheck =
+  | { ok: true; value: string | null }
+  | { ok: false; message: string };
+
+/**
+ * Kiểm ô "mã campaign" của một phiếu khách trước khi ghi.
+ *
+ * Luật, cố ý RỘNG — chỉ chặn ca CHẮC CHẮN sai:
+ *  · để trống ⇒ `null`, không lỗi (ô này không bắt buộc);
+ *  · `MULTI…`, hoặc tiền tố nằm trong danh mục mã cơ sở ⇒ nhận;
+ *  · đúng khuôn nhưng **mã cơ sở lạ** (`CODE_NOT_FOUND`) ⇒ vẫn NHẬN. Mở cơ sở mới là
+ *    thêm dữ liệu; campaign của cơ sở sắp khai báo không đáng bị chặn cả lượt lưu
+ *    phiếu. Chỗ nói ra chuyện chưa quy được về đâu là cảnh báo "CHƯA PHÂN BỔ" (D-08);
+ *  · **không có dấu `_` nào và cũng không phải mã cơ sở** (`NO_PREFIX`) ⇒ từ chối, kèm
+ *    khuôn đúng. Đây là ca duy nhất không thể là gì khác ngoài gõ sai quy ước.
+ *
+ * Giá trị trả về giữ NGUYÊN VĂN (chỉ cắt khoảng trắng hai đầu): nó phải khớp từng ký
+ * tự với tên campaign bên Meta thì mới đối chiếu được với bảng chi tiêu của D-01.
+ */
+export function checkCampaignNameForLead(
+  raw: string | null | undefined,
+  knownCodes: ReadonlySet<string>,
+): CampaignNameCheck {
+  const ten = (raw ?? "").trim();
+  if (ten === "") return { ok: true, value: null };
+
+  const doc = parseCenterCodeFromCampaignName(ten, knownCodes);
+  if (doc.kind === "UNKNOWN" && doc.reason === "NO_PREFIX") {
+    return { ok: false, message: CAMPAIGN_NAME_CONVENTION_HINT };
+  }
+  return { ok: true, value: ten };
+}
