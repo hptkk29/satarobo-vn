@@ -6,7 +6,10 @@ import {
   parseFeedbackRubric,
   type EvalNotes,
 } from "@/lib/lms/session-eval-rubric";
-import { meaningfulSessionTitle } from "@/lib/lms/session-project-name";
+import {
+  meaningfulSessionTitle,
+  resolveDisplayProjectName,
+} from "@/lib/lms/session-project-name";
 
 // Portal v2 — nhận xét buổi học (StudentSessionFeedback) của con đang chọn.
 
@@ -78,7 +81,9 @@ export async function getStudentFeedback(studentId: string, limit = 20): Promise
         select: {
           classId: true,
           date: true,
-          lesson: { select: { order: true, title: true } },
+          topic: true,
+          plan: { select: { customTitle: true } },
+          lesson: { select: { order: true, title: true, moduleCode: true } },
           class: { select: { classCode: true } },
         },
       },
@@ -124,7 +129,19 @@ export async function getStudentFeedback(studentId: string, limit = 20): Promise
       // comment nay nullable (phiếu nhận xét buổi rubric-only) → coalesce cho portal PH.
       comment: r.comment ?? "",
       rating: r.rating,
-      projectName: r.projectName,
+      // 26/08 — tên dự án suy từ BUỔI, không đọc bản sao đông cứng trên phiếu: cùng
+      // một buổi mà mỗi học viên lưu một "dự án" khác nhau (xem resolveDisplayProjectName).
+      projectName: resolveDisplayProjectName(
+        {
+          sessionNumber: no,
+          planTitle: r.classSession?.plan?.customTitle,
+          lessonTitle: les?.title,
+          lessonOrder: les?.order,
+          moduleCode: les?.moduleCode,
+          topic: r.classSession?.topic,
+        },
+        r.projectName,
+      ),
       notes: parseFeedbackNotes(r.notes),
       rubric: parseFeedbackRubric(r.rubric),
     };
