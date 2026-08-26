@@ -498,9 +498,11 @@ export type TrialTableResult = {
   upcoming: TrialTableRow[];
   /** Buổi đã qua + mọi suất đã có kết cục (nhập học / rớt / rút), mới nhất lên trước. */
   done: TrialTableRow[];
-  /** Ghi danh lớp Trial của GV nhưng CHƯA gắn buổi — giữ để không ai tàng hình. */
-  unassigned: TrialTableRow[];
 };
+
+// 26/08 (chủ dự án): BỎ khối "Chưa xếp buổi". Bảng Trial chỉ còn học viên ĐÃ ĐƯỢC LÊN
+// LỊCH. Ghi danh chưa gắn buổi là việc của quản lý ở /admin/trial-classes — bày ở site
+// GV thì giáo viên không làm gì được với nó ngoài việc thấy một dòng không có ngày giờ.
 
 /**
  * Dữ liệu 2 bảng Trial của site GV.
@@ -568,29 +570,16 @@ export async function getTeacherTrialTable(
   // nhớ dọn `LeadTrialHistory.outcome` — đường ghi thì còn thêm mãi, đường đọc chỉ có đây.
   const aliveLead = { leadChild: { lead: { deletedAt: null } } } as const;
 
-  const [scheduled, unassignedRows] = await Promise.all([
-    sessionIds.length
-      ? db.trialEnrollment.findMany({
-          where: { scheduledSessionId: { in: sessionIds }, ...aliveLead },
-          select: enrollmentSelect,
-          orderBy: { leadChild: { fullName: "asc" } },
-        })
-      : Promise.resolve([]),
-    db.trialEnrollment.findMany({
-      where: {
-        scheduledSessionId: null,
-        status: { in: ["ACTIVE", "COMPLETED"] },
-        trialClass: { teacherId, status: { not: "CANCELLED" } },
-        ...aliveLead,
-      },
-      select: enrollmentSelect,
-      orderBy: { leadChild: { fullName: "asc" } },
-      take: 200,
-    }),
-  ]);
-
-  const all = [...scheduled, ...unassignedRows];
-  if (all.length === 0) return { upcoming: [], done: [], unassigned: [] };
+  // CHỈ ghi danh ĐÃ GẮN BUỔI. Ghi danh chưa xếp buổi không còn được bày ở site GV
+  // (chủ dự án 26/08) nên cũng không truy vấn nữa — bớt một round-trip mỗi lần mở trang.
+  const all = sessionIds.length
+    ? await db.trialEnrollment.findMany({
+        where: { scheduledSessionId: { in: sessionIds }, ...aliveLead },
+        select: enrollmentSelect,
+        orderBy: { leadChild: { fullName: "asc" } },
+      })
+    : [];
+  if (all.length === 0) return { upcoming: [], done: [] };
 
   const courseIds = [
     ...new Set(
@@ -655,7 +644,7 @@ export async function getTeacherTrialTable(
 
   const upcoming: TrialTableRow[] = [];
   const done: TrialTableRow[] = [];
-  for (const e of scheduled) {
+  for (const e of all) {
     const row = toRow(e);
     // Suất đã có kết cục (nhập học / rớt / rút) rơi xuống bảng dưới dù buổi còn ở tương
     // lai — với giáo viên thì việc đã xong, không còn là "suất sắp Trial".
@@ -678,5 +667,5 @@ export async function getTeacherTrialTable(
       a.studentName.localeCompare(b.studentName, "vi"),
   );
 
-  return { upcoming, done, unassigned: unassignedRows.map(toRow) };
+  return { upcoming, done };
 }
