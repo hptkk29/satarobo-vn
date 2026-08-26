@@ -54,7 +54,13 @@ async function lanGanNhat(db: ScopedDb, lessonId: string, userId: string) {
   return db.trnSubmission.findFirst({
     where: { lessonId, userId },
     orderBy: { attemptNo: "desc" },
-    select: { id: true, attemptNo: true, status: true, passed: true },
+    select: {
+      id: true,
+      attemptNo: true,
+      status: true,
+      passed: true,
+      attachmentsJson: true,
+    },
   });
 }
 
@@ -210,6 +216,17 @@ export const cauHinhNopBaiTap: ActionConfig<NopBaiTapInput, KetQuaNop> = {
           userId: actor.userId,
           attemptNo,
           contentText: input.contentText,
+          // ⚠️ CHÉP tệp đính kèm sang lượt mới.
+          //
+          // Không chép thì người bị trả về sửa phần VIẾT sẽ nộp lại và người chấm
+          // lượt 2 thấy 0 bằng chứng — video dạy thử, ghi âm hội thoại biến mất, dù
+          // chúng vẫn nằm nguyên trên kho và vẫn thuộc lượt cũ. Họ phải tải lại một
+          // tệp 300MB cho một lần sửa vài dòng chữ.
+          //
+          // Chép SỔ, không chép byte: khoá vẫn trỏ tệp cũ. Nghĩa là xoá lượt cũ sẽ
+          // làm hỏng lượt mới — nợ đi cùng cột `attachmentsJson` không có khoá ngoại,
+          // đã ghi trong commit.
+          attachmentsJson: truoc?.attachmentsJson ?? undefined,
           // ⚠️ ĐÓNG BĂNG khung tại thời điểm nộp. Suy khung qua `TrnLesson.rubricId`
           // lúc chấm là chấm bài cũ bằng thước mới nếu Đào tạo đổi khung giữa chừng.
           rubricId: bai.rubricId,

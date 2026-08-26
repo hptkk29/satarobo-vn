@@ -1,5 +1,10 @@
+import { randomBytes } from "node:crypto";
 import { z } from "zod";
-import { GetObjectCommand, PutObjectCommand } from "@aws-sdk/client-s3";
+import {
+  DeleteObjectCommand,
+  GetObjectCommand,
+  PutObjectCommand,
+} from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { getR2Client } from "@/lib/storage/r2-client";
 import { getElearningBucket } from "@/lib/storage/elearning-storage";
@@ -81,14 +86,41 @@ export function kiemTepTruocKhiKy(input: {
  * ⚠️ Tên tệp người dùng KHÔNG đi vào khoá. Nó có thể chứa dấu gạch chéo, ký tự
  * điều khiển, hay tên của một người (`ghi-am-chi-Lan-0905xxx.mp3`) — và khoá thì
  * hiện trong URL đã ký. Giữ tên gốc ở cột dữ liệu, không giữ trong đường dẫn.
+ *
+ * ⚠️ KHÔNG dùng SỐ THỨ TỰ. Bản đầu lấy `dsTep.length` làm số, và nó va nhau ở ba ca
+ * đều xảy ra thật:
+ *  · hai tab cùng đính tệp ⇒ cùng đọc `length = 0` ⇒ CÙNG một khoá ⇒ tệp sau ĐÈ tệp
+ *    trước trên kho, còn sổ ghi tên và kích thước của tệp trước;
+ *  · một lượt tải hỏng giữa chừng rồi thử lại ⇒ lặp lại đúng khoá cũ;
+ *  · ngày nào có đường XOÁ tệp thì `length` tụt xuống và khoá quay vòng.
+ *
+ * Chuỗi ngẫu nhiên không có ca nào trong ba ca đó. Nó không cần đoán được — sổ trong
+ * `attachmentsJson` là thứ giữ danh sách, không phải quy tắc đặt tên.
  */
-export function khoaChoTep(submissionId: string, stt: number, mime: string): string {
-  const duoi =
-    mime === "application/pdf" ? "pdf" : mime === "audio/mpeg" ? "mp3" : "mp4";
-  return `${tienToKhoaBaiNop(submissionId)}${stt}.${duoi}`;
+export function khoaChoTep(submissionId: string, mime: string): string {
+  const rieng = randomBytes(12).toString("hex");
+  return `${tienToKhoaBaiNop(submissionId)}${rieng}.${duoiChuan(mime)}`;
 }
 
-/** URL đã ký để TẢI LÊN. Chỉ ký `Content-Type` — xem chú thích ở `chat-storage`. */
+/** Đuôi tệp theo loại — `audio/mp4` là `.m4a`, không phải `.mp4`. */
+function duoiChuan(mime: string): string {
+  if (mime === "application/pdf") return "pdf";
+  if (mime === "audio/mpeg") return "mp3";
+  if (mime === "audio/mp4") return "m4a";
+  return "mp4";
+}
+
+/**
+ * URL đã ký để TẢI LÊN.
+ *
+ * Chỉ ký `Content-Type` — xem chú thích ở `chat-storage`: header đã-ký-nhưng-không-
+ * gửi làm R2 trả 403.
+ *
+ * ⚠️ URL này KHÔNG ràng buộc được dung lượng. Nghĩa là một tệp quá cỡ vẫn LÊN ĐƯỢC
+ * kho; bước `xacMinhTep` sẽ từ chối GHI SỔ nó, nhưng byte đã nằm đó. Đó là lý do có
+ * `xoaTepTrenKho` ngay dưới, và là lý do bước "xong" phải dọn khi từ chối — không
+ * dọn thì kho tích dần những tệp không ai biết là của ai.
+ */
 export async function kyUrlTaiLen(
   khoa: string,
   mime: string,
@@ -102,6 +134,19 @@ export async function kyUrlTaiLen(
       ContentType: mime,
     }),
     { expiresIn: ttlSeconds },
+  );
+}
+
+/**
+ * XOÁ một tệp khỏi kho.
+ *
+ * ⚠️ Dùng khi bước xác minh TỪ CHỐI: tệp đã nằm trên kho rồi, và nội dung ở đây có
+ * thể là video lớp học hay ghi âm phụ huynh (§13.3). Để lại một tệp bị từ chối là
+ * giữ dữ liệu của người thứ ba mà không sổ nào ghi nhận nó tồn tại.
+ */
+export async function xoaTepTrenKho(khoa: string): Promise<void> {
+  await getR2Client().send(
+    new DeleteObjectCommand({ Bucket: getElearningBucket(), Key: khoa }),
   );
 }
 
@@ -158,8 +203,20 @@ export async function xacMinhTep(input: {
   }
 
   // `ContentRange` dạng `bytes 0-15/12345` — phần sau dấu `/` là kích thước THẬT.
+  //
+  // ⚠️ KHÔNG đọc được thì TỪ CHỐI, đừng cho qua. Bản đầu chỉ chặn khi
+  // `Number.isFinite(dai)` — tức một phản hồi thiếu `ContentRange` sẽ bỏ QUA trần
+  // dung lượng hoàn toàn, và đó đúng là ca người ta sẽ tìm ra nếu muốn nhét một tệp
+  // 3GB vào kho.
   const dai = Number(String(than.ContentRange ?? "").split("/")[1] ?? NaN);
-  if (Number.isFinite(dai) && dai > NOP_MAX_BYTES) {
+  if (!Number.isFinite(dai)) {
+    return {
+      ok: false,
+      ma: "KHONG_THAY",
+      noi: "Không đọc được kích thước tệp trên kho — thử tải lại",
+    };
+  }
+  if (dai > NOP_MAX_BYTES) {
     return {
       ok: false,
       ma: "QUA_LON",
@@ -176,5 +233,5 @@ export async function xacMinhTep(input: {
     };
   }
 
-  return { ok: true, size: Number.isFinite(dai) ? dai : 0 };
+  return { ok: true, size: dai };
 }

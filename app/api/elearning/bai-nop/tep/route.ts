@@ -10,6 +10,7 @@ import {
   khoaChoTep,
   kyUrlTaiLen,
   xacMinhTep,
+  xoaTepTrenKho,
 } from "@/lib/elearning/submission-file";
 import { NOP_MAX_TEP } from "@/lib/elearning/submission-file-rules";
 import { ok, fail } from "@/lib/api/response";
@@ -130,7 +131,7 @@ export async function POST(req: NextRequest) {
     });
     if (sai) return loi(sai.ma, sai.noi);
 
-    const khoa = khoaChoTep(lan.id, dsTep.length, input.mime);
+    const khoa = khoaChoTep(lan.id, input.mime);
     const url = await kyUrlTaiLen(khoa, input.mime);
     return ok({ khoa, url });
   }
@@ -149,16 +150,46 @@ export async function POST(req: NextRequest) {
     submissionId: lan.id,
     mime: input.mime,
   });
-  if (!kq.ok) return loi(kq.ma, kq.noi);
+  if (!kq.ok) {
+    // ⚠️ TỪ CHỐI thì DỌN. Tệp đã nằm trên kho rồi (URL ký không ràng buộc được
+    // dung lượng), và nội dung ở đây có thể là video lớp học hay ghi âm phụ huynh
+    // (§13.3). Để lại là giữ dữ liệu của người thứ ba mà không sổ nào ghi nhận nó.
+    if (kq.ma !== "KHONG_THAY") {
+      await xoaTepTrenKho(input.khoa).catch(() => undefined);
+    }
+    return loi(kq.ma, kq.noi);
+  }
 
-  const moi: TepDinhKem[] = [
-    ...dsTep,
-    { key: input.khoa, name: input.tenTep, mime: input.mime, size: kq.size },
-  ];
-  await db.trnSubmission.update({
-    where: { id: lan.id },
-    data: { attachmentsJson: moi },
+  // ⚠️ GHI TRONG GIAO DỊCH, đọc lại sổ ngay trước khi ghi.
+  //
+  // Bản đầu đọc `attachmentsJson` ở đầu request rồi ghi đè cả mảng ở cuối — hai
+  // request song song cho hai tệp KHÁC nhau cùng đọc sổ cũ, và request về sau XOÁ
+  // mất tệp của request về trước. Người học thấy tệp mình vừa tải lên biến mất, và
+  // không có lỗi nào để họ báo.
+  const soTep = await db.$transaction(async (t) => {
+    const nay = await t.trnSubmission.findUnique({
+      where: { id: lan.id },
+      select: { attachmentsJson: true },
+    });
+    const hienCo = docTep(nay?.attachmentsJson);
+    if (hienCo.some((x) => x.key === input.khoa)) return hienCo.length;
+    if (hienCo.length >= NOP_MAX_TEP) return -1;
+
+    const moi: TepDinhKem[] = [
+      ...hienCo,
+      { key: input.khoa, name: input.tenTep, mime: input.mime, size: kq.size },
+    ];
+    await t.trnSubmission.update({
+      where: { id: lan.id },
+      data: { attachmentsJson: moi },
+    });
+    return moi.length;
   });
 
-  return ok({ soTep: moi.length });
+  if (soTep === -1) {
+    await xoaTepTrenKho(input.khoa).catch(() => undefined);
+    return loi("QUA_NHIEU_TEP", `Mỗi lượt nộp tối đa ${NOP_MAX_TEP} tệp`);
+  }
+
+  return ok({ soTep });
 }

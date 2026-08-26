@@ -142,10 +142,13 @@ describe("🔴 TRẢ VỀ để sửa", () => {
     expect(r.data.traVeSua).toBe(true);
     expect(b.upsert).toHaveBeenCalledTimes(2);
     const arg = b.update.mock.calls[0]![0] as {
-      data: { status: string; passed: boolean };
+      data: { status: string; passed: boolean | null; score: number | null };
     };
     expect(arg.data.status).toBe("NEEDS_REVISION");
-    expect(arg.data.passed).toBe(false);
+    // 🔴 `null`, KHÔNG phải `false`. `false` nghĩa là "đã chấm, trượt" — đóng sổ
+    // trượt cho một bài chưa có kết quả cuối, và con số đó chạy vào báo cáo.
+    expect(arg.data.passed).toBeNull();
+    expect(arg.data.score).toBeNull();
   });
 
   it("và KHÔNG ghi bài là xong, kể cả khi đủ điểm", async () => {

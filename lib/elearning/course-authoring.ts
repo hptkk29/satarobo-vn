@@ -670,6 +670,13 @@ export const cauHinhNhanBanKhoa: ActionConfig<
               // ở đây. Cùng một dòng, cùng một lỗi.
               examId: true,
               rubricId: true,
+              // ⚠️ Cùng một lỗi, cùng một dòng: bản sao mất phụ đề thì cổng xuất bản
+              // chặn với "bài video thiếu phụ đề", và mất `videoKey` thì bài video
+              // của bản sao rỗng — người soạn phải tải lại toàn bộ video.
+              captionKey: true,
+              videoKey: true,
+              durationSec: true,
+              sessionDate: true,
             },
           },
         },
@@ -691,6 +698,10 @@ export const cauHinhNhanBanKhoa: ActionConfig<
               minReadSeconds: b.minReadSeconds,
               examId: b.examId,
               rubricId: b.rubricId,
+              captionKey: b.captionKey,
+              videoKey: b.videoKey,
+              durationSec: b.durationSec,
+              sessionDate: b.sessionDate,
             },
           });
         }

@@ -223,8 +223,17 @@ export const cauHinhChamBaiTap: ActionConfig<ChamBaiTapInput, KetQuaChamBaiTap> 
           status: trangThaiMoi,
           gradedAt: now,
           gradedByUserId: actor.userId,
-          score: ket.tong,
-          passed: input.traVeSua ? false : ket.dat,
+          // ⚠️ TRẢ VỀ SỬA thì `score`/`passed` để NULL.
+          //
+          // Lược đồ ghi rõ hai cột này là "null cho tới khi chấm xong", và `null`
+          // KHÁC `false`: `false` nghĩa là "đã chấm, trượt". Ghi `passed: false`
+          // cho một lượt được trả về để sửa là đóng sổ TRƯỢT cho một bài chưa có
+          // kết quả cuối — con số đó rồi sẽ chạy vào báo cáo như một lần trượt thật.
+          //
+          // Điểm từng tiêu chí VẪN được ghi ở `TrnRubricScore` phía trên: người học
+          // vẫn thấy mình yếu chỗ nào, chỉ là lượt này không thành kết quả.
+          score: input.traVeSua ? null : ket.tong,
+          passed: input.traVeSua ? null : ket.dat,
           feedback: input.feedback ?? null,
         },
       });

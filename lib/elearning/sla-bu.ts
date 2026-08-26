@@ -32,6 +32,25 @@ export type SoBuHienCo = {
   daBuNgayLam: number;
 };
 
+/**
+ * ⚠️ GIỚI HẠN ĐÃ BIẾT — miễn trừ cộng theo TỪNG LƯỢT NỘP, mà hạn là của CẢ LƯỢT
+ * GHI DANH.
+ *
+ * Một khoá có hai bài tập, cả hai nộp cùng ngày và cả hai bị chấm trễ 4 ngày. Hai
+ * khoảng chờ đó CHỒNG LÊN NHAU trên trục thời gian — người học chỉ thực sự mất 4
+ * ngày — nhưng sổ cộng 4 + 4 = 8, và `dueAt` nới ra gấp đôi phần đáng bù.
+ *
+ * Sai về phía CÓ LỢI cho người học, và đó là lý do chấp nhận được ở đợt này: sai
+ * ngược lại (bù thiếu) là ghi tên họ vào cột trễ của báo cáo gửi quản lý. Nhưng nó
+ * VẪN là sai, và nó nới cả `slaGraceDays` — tức nới luôn phép so đúng-hạn.
+ *
+ * Muốn đúng thì phải đo HỢP của các khoảng chờ theo lượt ghi danh, tức cần đọc mọi
+ * lượt nộp của lượt ghi danh đó trong một lần và tính hợp khoảng — việc của EL-15d
+ * cùng chỉ số M9/M10, nơi đằng nào cũng phải gom theo lượt ghi danh.
+ */
+export const NO_MIEN_TRU_CHONG_KHOANG =
+  "Miễn trừ cộng theo từng lượt nộp; nhiều bài tập trễ song song sẽ cộng dồn các khoảng chờ chồng nhau (bù THỪA). Đo hợp khoảng ở EL-15d.";
+
 export type KetQuaTinhBu = {
   /** Tổng số ngày làm việc ĐÁNG LẼ được bù, tính từ đầu. */
   tongDangLe: number;
