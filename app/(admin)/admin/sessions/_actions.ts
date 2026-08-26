@@ -9,7 +9,6 @@ import { checkPermission } from "@/lib/auth/check-permission";
 import { resolveActor, type Actor } from "@/lib/auth/actor";
 import { passesScope, scopedDb } from "@/lib/db-scope";
 import { detectSessionConflicts, sessionWindow } from "@/lib/lms/schedule-conflict";
-import { sessionEndAt } from "@/lib/lms/scheduling";
 
 type ActionResult = { error?: string };
 type Sdb = ReturnType<typeof scopedDb>;

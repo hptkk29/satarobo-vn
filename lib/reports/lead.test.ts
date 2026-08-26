@@ -8,6 +8,7 @@ import {
   groupBySource,
   groupByCenter,
   groupByCommissionSource,
+  groupByDropStage,
   groupByMonth,
   groupByWeek,
   leadSummary,
@@ -177,5 +178,70 @@ describe("[R7-17] buildLeadReport tổng hợp", () => {
     expect(empty.summary.total).toBe(0);
     expect(empty.funnel.every((f) => f.count === 0)).toBe(true);
     expect(empty.byMonth).toEqual([]);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// groupByDropStage — người đọc đầu tiên của Lead.droppedAtStage / dropReason.
+// ─────────────────────────────────────────────────────────────────────────────
+describe("groupByDropStage — lead rụng ở bậc nào, vì sao", () => {
+  const rec = (
+    droppedAtStage: string | null,
+    dropReason: string | null,
+  ): LeadReportRecord => ({
+    status: droppedAtStage ? "DA_MAT" : "MOI",
+    source: null,
+    centerId: null,
+    commissionSource: null,
+    createdAt: new Date("2026-08-01T00:00:00Z"),
+    convertedAt: null,
+    droppedAtStage,
+    dropReason,
+  });
+
+  it("bỏ qua lead CÒN trong phễu (droppedAtStage null)", () => {
+    expect(groupByDropStage([rec(null, null), rec(null, "gì đó")])).toEqual([]);
+  });
+
+  it("gom theo bậc và xếp bậc rụng nhiều nhất lên đầu", () => {
+    const r = groupByDropStage([
+      rec("DANG_TU_VAN", "học phí cao"),
+      rec("DANG_TU_VAN", "học phí cao"),
+      rec("DA_HOC_THU", "con không thích"),
+    ]);
+    expect(r.map((x) => [x.stage, x.count])).toEqual([
+      ["DANG_TU_VAN", 2],
+      ["DA_HOC_THU", 1],
+    ]);
+  });
+
+  it("gộp lý do trùng và đếm đúng số lần", () => {
+    const r = groupByDropStage([
+      rec("DANG_TU_VAN", "học phí cao"),
+      rec("DANG_TU_VAN", "học phí cao"),
+      rec("DANG_TU_VAN", "xa nhà"),
+    ]);
+    expect(r[0].topReasons).toEqual([
+      { reason: "học phí cao", count: 2 },
+      { reason: "xa nhà", count: 1 },
+    ]);
+  });
+
+  it("giữ tối đa 5 lý do — bảng báo cáo không phải nơi đổ hết dữ liệu thô", () => {
+    const r = groupByDropStage(
+      Array.from({ length: 8 }, (_, i) => rec("DA_MAT", `lý do ${i}`)),
+    );
+    expect(r[0].topReasons).toHaveLength(5);
+  });
+
+  it("lead rụng KHÔNG có lý do đếm riêng, không lẫn vào topReasons", () => {
+    // Đây là lead rụng TRƯỚC ngày bật ép nhập lý do — khác hẳn "bỏ trống".
+    const r = groupByDropStage([
+      rec("DA_MAT", null),
+      rec("DA_MAT", "   "), // khoảng trắng không phải lý do
+      rec("DA_MAT", "đã chọn nơi khác"),
+    ]);
+    expect(r[0].missingReason).toBe(2);
+    expect(r[0].topReasons).toEqual([{ reason: "đã chọn nơi khác", count: 1 }]);
   });
 });

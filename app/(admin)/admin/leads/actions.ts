@@ -20,6 +20,7 @@ import { assignmentWrite } from '@/lib/lead/assignment'
 import { centerIdForOrgUnit } from '@/lib/org/org-service'
 import { rejectHeadOffice } from '@/lib/enrollment-flow'
 import {
+  LEAD_DROP_STATUSES,
   LEAD_STATUS_LABEL,
   LEAD_STATUS_VALUES,
   canTransitionLeadStatus,
@@ -120,9 +121,19 @@ export async function toggleLeadShareAction(
   return { ok: true }
 }
 
+/**
+ * Đổi trạng thái lead bằng TAY (kéo thẻ Kanban / chọn ở bảng).
+ *
+ * `reason` BẮT BUỘC khi chuyển vào một bậc rơi (`LEAD_DROP_STATUSES`). Ép ở đây chứ
+ * không ở `setLeadStatus` vì phần lớn đường vào cửa ghi là MÁY chạy (điểm danh học
+ * thử, webhook tiền, nhập tệp) — không có ai để hỏi. Chỉ đường người bấm mới hỏi được,
+ * và nếu không hỏi thì `Lead.dropReason` vĩnh viễn NULL: báo cáo biết lead rụng ở bậc
+ * nào nhưng không bao giờ biết vì sao, tức là biết một nửa thì không hành động được.
+ */
 export async function updateLeadStatus(
   leadId: string,
   rawStatus: string,
+  reason?: string,
 ): Promise<{ ok: boolean; error?: string }> {
   const session = await auth()
   if (!session?.user) return { ok: false, error: 'Chua dang nhap' }
@@ -130,6 +141,18 @@ export async function updateLeadStatus(
 
   const parsed = statusSchema.safeParse(rawStatus)
   if (!parsed.success) return { ok: false, error: 'Trang thai khong hop le' }
+
+  // Cắt cả khoảng trắng: "   " không phải là một lý do.
+  const lyDo = reason?.trim() || null
+  if (LEAD_DROP_STATUSES.includes(parsed.data) && (lyDo === null || lyDo.length < 3)) {
+    return {
+      ok: false,
+      error: `Cần ghi lý do khi chuyển sang "${LEAD_STATUS_LABEL[parsed.data]}"`,
+    }
+  }
+  if (lyDo !== null && lyDo.length > 500) {
+    return { ok: false, error: 'Lý do quá dài (tối đa 500 ký tự)' }
+  }
 
   const before = await db.lead.findUnique({
     where: { id: leadId },
@@ -170,6 +193,7 @@ export async function updateLeadStatus(
       source: 'admin',
       actorId,
       actorName,
+      reason: lyDo,
     })
 
     await logLeadAudit({

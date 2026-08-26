@@ -7,10 +7,13 @@ import { Loader2, X, Download, Trash2, CheckCircle2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { updateLeadNote, updateLeadStatus, deleteLead } from '../actions'
 import {
+  LEAD_DROP_STATUSES,
   LEAD_STATUS_LABEL as STATUS_LABELS,
   LEAD_STATUS_BADGE as STATUS_COLORS,
   KANBAN_COLUMNS,
 } from '@/lib/leads/status'
+import type { LeadStatus } from '@prisma/client'
+import { LyDoRotDialog } from './ly-do-rot-dialog'
 import { Badge } from '@/components/ui/badge'
 import { ChonSoDong } from '@/components/ui/chon-so-dong'
 import { DieuHuongTrang } from '@/components/ui/dieu-huong-trang'
@@ -80,6 +83,20 @@ function StatusCell({
   canUpdate: boolean
 }) {
   const [pending, startTransition] = useTransition()
+  /** Bậc rơi đang chờ lý do. `null` = không có gì đang chờ. */
+  const [choLyDo, setChoLyDo] = useState<LeadStatus | null>(null)
+
+  function doiTrangThai(next: LeadStatus, lyDo?: string) {
+    startTransition(async () => {
+      const res = await updateLeadStatus(lead.id, next, lyDo)
+      if (!res.ok) {
+        // Guard pipeline (R7-01) chặn có lý do — nói rõ lý do cho sale.
+        toast.error(res.error ?? 'Không đổi được trạng thái')
+      } else {
+        setChoLyDo(null)
+      }
+    })
+  }
 
   if (!canUpdate) {
     return (
@@ -93,6 +110,13 @@ function StatusCell({
 
   return (
     <div className="relative flex items-center gap-1.5">
+      <LyDoRotDialog
+        status={choLyDo}
+        tenLead={lead.parentName}
+        dangGui={pending}
+        onHuy={() => setChoLyDo(null)}
+        onXacNhan={(lyDo) => choLyDo && doiTrangThai(choLyDo, lyDo)}
+      />
       {pending && <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />}
       <select
         // `value` chứ không phải `defaultValue`: khi server TỪ CHỐI chuyển trạng thái,
@@ -103,14 +127,13 @@ function StatusCell({
         disabled={pending}
         onClick={e => e.stopPropagation()}
         onChange={e => {
-          const next = e.target.value
-          startTransition(async () => {
-            const res = await updateLeadStatus(lead.id, next)
-            if (!res.ok) {
-              // Guard pipeline (R7-01) chặn có lý do — nói rõ lý do cho sale.
-              toast.error(res.error ?? 'Không đổi được trạng thái')
-            }
-          })
+          const next = e.target.value as LeadStatus
+          // Bậc rơi phải kèm lý do — hỏi trước, ghi sau (server cũng kiểm lại).
+          if (LEAD_DROP_STATUSES.includes(next)) {
+            setChoLyDo(next)
+            return
+          }
+          doiTrangThai(next)
         }}
         className={`rounded-full border-0 py-0.5 pl-2.5 pr-6 text-xs font-semibold focus:ring-2 focus:ring-primary/20 ${STATUS_COLORS[lead.status as keyof typeof STATUS_COLORS] ?? 'bg-muted text-muted-foreground'}`}
       >
@@ -188,13 +211,42 @@ function LeadDrawer({
   onClose: () => void
 }) {
   const [note, setNote] = useState(lead?.note ?? '')
-  const [status, setStatus] = useState(lead?.status ?? 'NEW')
+  // 'MOI' chứ không phải 'NEW': GĐ5 rút enum còn 10 giá trị tiếng Việt. Ô này khai
+  // kiểu `string` nên tsc không đỏ — giá trị chết nằm im ở đây từ đợt gộp enum.
+  const [status, setStatus] = useState<LeadStatus>((lead?.status as LeadStatus) ?? 'MOI')
   const [pending, startTransition] = useTransition()
+  /** Bậc rơi đang chờ lý do trước khi Lưu. `null` = không có gì đang chờ. */
+  const [choLyDo, setChoLyDo] = useState<LeadStatus | null>(null)
+
+  function luu(lyDo?: string) {
+    if (!lead) return
+    startTransition(async () => {
+      if (status !== lead.status) {
+        const res = await updateLeadStatus(lead.id, status, lyDo)
+        if (!res.ok) {
+          // Trước đây kết quả bị NUỐT: server từ chối thì ngăn vẫn đóng như thành
+          // công, ô trạng thái vẫn hiện giá trị mới, DB không đổi gì.
+          toast.error(res.error ?? 'Không đổi được trạng thái')
+          return
+        }
+      }
+      await updateLeadNote(lead.id, note)
+      setChoLyDo(null)
+      toast.success('Đã lưu')
+    })
+  }
 
   if (!lead) return null
 
   return (
     <div className="fixed inset-0 z-50">
+      <LyDoRotDialog
+        status={choLyDo}
+        tenLead={lead.parentName}
+        dangGui={pending}
+        onHuy={() => setChoLyDo(null)}
+        onXacNhan={(lyDo) => luu(lyDo)}
+      />
       <button
         type="button"
         aria-label="Đóng chi tiết lead"
@@ -234,7 +286,7 @@ function LeadDrawer({
                 <dd className="mt-1">
                   <select
                     value={status}
-                    onChange={e => setStatus(e.target.value)}
+                    onChange={e => setStatus(e.target.value as LeadStatus)}
                     disabled={!canUpdate || pending}
                     className="rounded-lg border border-border px-3 py-2 text-sm focus:border-primary-purple focus:outline-none focus:ring-2 focus:ring-primary-purple/20 disabled:bg-muted"
                   >
@@ -280,10 +332,12 @@ function LeadDrawer({
                 type="button"
                 disabled={pending}
                 onClick={() => {
-                  startTransition(async () => {
-                    if (status !== lead.status) await updateLeadStatus(lead.id, status)
-                    await updateLeadNote(lead.id, note)
-                  })
+                  // Bậc rơi phải kèm lý do — hỏi trước khi ghi (server kiểm lại).
+                  if (status !== lead.status && LEAD_DROP_STATUSES.includes(status)) {
+                    setChoLyDo(status)
+                    return
+                  }
+                  luu()
                 }}
                 className="mt-3 rounded-lg bg-primary-purple px-4 py-2 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-60"
               >

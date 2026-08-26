@@ -62,6 +62,9 @@ async function computeLeadReport(actor: Actor, filters: ReportFilters) {
         commissionSource: true,
         createdAt: true,
         convertedAt: true,
+        // Sổ rụng (GĐ1) — nguồn cho khối "Lead rụng ở bậc nào" bên dưới.
+        droppedAtStage: true,
+        dropReason: true,
       },
       take: 20_000,
     }),
@@ -77,6 +80,8 @@ async function computeLeadReport(actor: Actor, filters: ReportFilters) {
     commissionSource: r.commissionSource,
     createdAt: r.createdAt,
     convertedAt: r.convertedAt,
+    droppedAtStage: r.droppedAtStage,
+    dropReason: r.dropReason,
   }));
   return buildLeadReport(records, centerNames);
 }
@@ -254,6 +259,59 @@ export default async function LeadReportPage({
             </table>
           </PhanTrangBang>
         </div>
+      </Card>
+
+      {/* Rụng ở bậc nào — người đọc DUY NHẤT của Lead.droppedAtStage + dropReason.
+          Hai cột đó có từ GĐ1 nhưng tới 26/08 không màn nào đọc. */}
+      <Card title="Lead rụng ở bậc nào">
+        {report.byDropStage.length === 0 ? (
+          <p className="text-sm text-muted-foreground">
+            Chưa có lead nào rụng trong khoảng lọc này. (Bậc rụng chỉ ghi khi lead
+            chuyển sang &quot;Đang nuôi dưỡng&quot; hoặc &quot;Đã mất&quot;.)
+          </p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="text-left text-xs text-muted-foreground">
+                <tr>
+                  <th className="px-3 py-2">Rụng ở bậc</th>
+                  <th className="px-3 py-2 text-right">Số lead</th>
+                  <th className="px-3 py-2">Lý do hay gặp</th>
+                </tr>
+              </thead>
+              <tbody>
+                {report.byDropStage.map((d) => (
+                  <tr key={d.stage} className="border-t align-top">
+                    <td className="px-3 py-2 font-medium">{d.label}</td>
+                    <td className="px-3 py-2 text-right tabular-nums">{num(d.count)}</td>
+                    <td className="px-3 py-2">
+                      {d.topReasons.length === 0 ? (
+                        <span className="text-muted-foreground">—</span>
+                      ) : (
+                        <ul className="space-y-0.5">
+                          {d.topReasons.map((r) => (
+                            <li key={r.reason} className="text-muted-foreground">
+                              {r.reason}{" "}
+                              <span className="tabular-nums">({num(r.count)})</span>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                      {d.missingReason > 0 && (
+                        // KHÔNG gộp vào "—": lead rụng trước ngày bật ép nhập lý do
+                        // vốn không có gì để hiện, khác hẳn "người dùng bỏ trống".
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          {num(d.missingReason)} lead rụng trước khi hệ thống bắt ghi
+                          lý do
+                        </p>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </Card>
     </div>
   );
