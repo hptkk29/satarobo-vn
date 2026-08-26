@@ -60,10 +60,26 @@ function isBlankSessionTitle(s: string): boolean {
   return /^buổi\s+\d+$/i.test(s);
 }
 
-/** `clean()` + coi ô trống `"Buổi N"` như chuỗi rỗng. */
+/**
+ * Bỏ tiền tố `"Buổi N"` thừa ở ĐẦU tên bài.
+ *
+ * Nhiều giáo trình đặt tên bài kèm sẵn số buổi — `"Buổi 1 — Làm quen bộ học cụ"`,
+ * `"Buổi 3: Cảm biến"`. Nhãn buổi vốn đã mở đầu bằng `"Buổi N"` rồi, giữ nguyên là in ra
+ * `"Buổi 1 - Buổi 1 — Làm quen bộ học cụ"` — đọc như lỗi. Cắt phần trùng, còn
+ * `"Buổi 1 - Làm quen bộ học cụ"`.
+ *
+ * PHẢI có dấu ngăn (— – - : .) sau con số mới cắt: `"Buổi diễn tập"` hay
+ * `"Buổi 2 ôn tập"` không phải tiền tố đánh số, cắt là mất chữ.
+ */
+function stripSessionNumberPrefix(s: string): string {
+  return s.replace(/^buổi\s+\d+\s*[—–\-:.]\s*/i, "").trim();
+}
+
+/** `clean()` + coi ô trống `"Buổi N"` như chuỗi rỗng + cắt tiền tố `"Buổi N —"` thừa. */
 function meaningful(s: string | null | undefined): string {
   const t = clean(s);
-  return isBlankSessionTitle(t) ? "" : t;
+  if (isBlankSessionTitle(t)) return "";
+  return stripSessionNumberPrefix(t);
 }
 
 /**

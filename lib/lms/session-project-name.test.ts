@@ -143,12 +143,36 @@ describe("ô trống 'Buổi N' không được coi là tên bài", () => {
     expect(deriveSessionProjectName({ sessionNumber: 7, planTitle: "Buổi 7" })).toBe("Dự án 7");
   });
 
-  it("chỉ loại đúng dạng 'Buổi <số>' — tên thật có chữ 'Buổi' vẫn giữ", () => {
-    expect(
-      deriveSessionLabel({ sessionNumber: 2, planTitle: "Buổi 2: Ôn tập giữa kỳ" }),
-    ).toBe("Buổi 2 - Buổi 2: Ôn tập giữa kỳ");
+  it("tên thật có chữ 'Buổi' nhưng KHÔNG phải tiền tố đánh số → giữ nguyên", () => {
     expect(deriveSessionLabel({ sessionNumber: 5, lessonTitle: "Buổi diễn tập" })).toBe(
       "Buổi 5 - Buổi diễn tập",
     );
+    // "Buổi 2 ôn tập" — không có dấu ngăn sau số ⇒ không phải tiền tố, cắt là mất chữ.
+    expect(deriveSessionLabel({ sessionNumber: 2, lessonTitle: "Buổi 2 ôn tập" })).toBe(
+      "Buổi 2 - Buổi 2 ôn tập",
+    );
+  });
+});
+
+describe("cắt tiền tố 'Buổi N —' thừa ở đầu tên bài", () => {
+  // Giáo trình demo trên DB test đặt tên bài kèm sẵn số buổi. Nhãn buổi vốn đã mở đầu
+  // bằng "Buổi N" nên giữ nguyên là in ra "Buổi 1 - Buổi 1 — Làm quen bộ học cụ".
+  it.each([
+    ["Buổi 1 — Làm quen bộ học cụ", "Buổi 1 - Làm quen bộ học cụ"],
+    ["Buổi 1: Làm quen bộ học cụ", "Buổi 1 - Làm quen bộ học cụ"],
+    ["Buổi 1 - Làm quen bộ học cụ", "Buổi 1 - Làm quen bộ học cụ"],
+    ["Buổi 1. Làm quen bộ học cụ", "Buổi 1 - Làm quen bộ học cụ"],
+  ])("%s → %s", (title, expected) => {
+    expect(deriveSessionLabel({ sessionNumber: 1, lessonTitle: title })).toBe(expected);
+  });
+
+  it("phiếu gửi phụ huynh cũng hết phần thừa", () => {
+    expect(
+      deriveSessionProjectName({ sessionNumber: 1, lessonTitle: "Buổi 1 — Làm quen bộ học cụ" }),
+    ).toBe("Làm quen bộ học cụ");
+  });
+
+  it("cắt xong mà rỗng thì coi như không có tên", () => {
+    expect(deriveSessionLabel({ sessionNumber: 4, lessonTitle: "Buổi 4 —" })).toBe("Buổi 4");
   });
 });
