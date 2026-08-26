@@ -8,6 +8,7 @@ import { createLeadManual, updateLeadFields, addLeadChild } from "../actions";
 import { groupTeachableCourses, type TeachableCourse } from "@/lib/courses/grouped";
 import { Combobox, type ComboboxOption } from "@/components/ui/combobox";
 import { provinceIdByName, toNameOptions } from "@/lib/address/vn-address";
+import { CAMPAIGN_NAME_CONVENTION_HINT } from "@/lib/ads/campaign-code";
 import {
   ChildFields,
   childDraftToPayload,
@@ -35,6 +36,13 @@ export interface LeadFormInitial {
   city?: string | null;
   ward?: string | null;
   addressLine?: string | null;
+  // ─── G-06 (26/08/2026) — mã campaign + ngày hẹn kế tiếp ──────────────────
+  campaignName?: string | null;
+  campaignId?: string | null;
+  adsetId?: string | null;
+  adId?: string | null;
+  /** ISO date ('yyyy-mm-dd' hoặc ISO đầy đủ). */
+  nextFollowUpAt?: string | null;
 }
 
 const GIOI_TINH_PH: { value: string; label: string }[] = [
@@ -113,6 +121,15 @@ export function LeadForm({
   // <input type="date"> chỉ nhận 'yyyy-mm-dd'; giá trị vào có thể là ISO đầy đủ.
   const [parentDob, setParentDob] = useState(initial?.parentDob?.slice(0, 10) ?? "");
   const [addressLine, setAddressLine] = useState(initial?.addressLine ?? "");
+
+  // ─── G-06 — mã campaign (4 ô) + ngày hẹn kế tiếp ────────────────────────────
+  const [campaignName, setCampaignName] = useState(initial?.campaignName ?? "");
+  const [campaignId, setCampaignId] = useState(initial?.campaignId ?? "");
+  const [adsetId, setAdsetId] = useState(initial?.adsetId ?? "");
+  const [adId, setAdId] = useState(initial?.adId ?? "");
+  const [nextFollowUpAt, setNextFollowUpAt] = useState(
+    initial?.nextFollowUpAt?.slice(0, 10) ?? "",
+  );
   // Phiếu lưu TÊN tỉnh/phường, picker chạy bằng MÃ ⇒ mở phiếu cũ là một lượt dịch
   // ngược. Dịch trượt thì Combobox không khớp option nào, tụt về rỗng, và lượt bấm
   // Lưu kế tiếp XOÁ TRẮNG địa chỉ đúng — nên phép dịch nằm ở một hàm có test riêng
@@ -180,6 +197,13 @@ export function LeadForm({
       city: cityName,
       ward: wardName,
       addressLine,
+      // G-06 — gửi đủ ở CẢ hai chế độ, cùng luật với khối G-01: ô để trống gửi
+      // chuỗi rỗng ("xoá trắng"), khoá vắng mặt mới là "không đụng".
+      campaignName,
+      campaignId,
+      adsetId,
+      adId,
+      nextFollowUpAt,
     };
     startTransition(async () => {
       const res = isEdit
@@ -334,6 +358,45 @@ export function LeadForm({
             }
             emptyText="Không tìm thấy phường/xã"
           />
+        </Field>
+      </div>
+      {/* G-06 — NGUỒN QUẢNG CÁO + LỊCH HẸN.
+          · Mã campaign đi theo quy ước SR.QD.232 — CÙNG khuôn với tên campaign bên
+            Meta (lib/ads/campaign-code.ts). Sai khuôn thì chi tiêu quy về một cơ sở
+            còn lead quy về cơ sở khác, và cả hai màn đều trông bình thường.
+          · Ba ô ID là mã của Meta, dùng để nối sang bảng chi tiêu (D-01) khi tính
+            CPL/CPA. KHÁC nhóm utm_* đọc từ URL website: lead Messenger-first không
+            đi qua website nên không có utm nào.
+          · Ngày hẹn kế tiếp là thuộc tính của PHIẾU ("lần sau gọi khi nào"), khác
+            bảng việc (LeadTask) — một lead nhiều việc, nhưng chỉ một cái hẹn kế. */}
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <Field label="Mã campaign">
+          <input
+            value={campaignName}
+            onChange={(e) => setCampaignName(e.target.value)}
+            className={inputCls}
+            placeholder="CS1_LEAD_ROBOTICS-L1_VIDEO_0826_A03"
+          />
+          <p className="mt-1 text-[11px] leading-snug text-muted-foreground">
+            {CAMPAIGN_NAME_CONVENTION_HINT}
+          </p>
+        </Field>
+        <Field label="Ngày hẹn liên hệ kế tiếp">
+          <input
+            type="date"
+            value={nextFollowUpAt}
+            onChange={(e) => setNextFollowUpAt(e.target.value)}
+            className={inputCls}
+          />
+        </Field>
+        <Field label="Campaign ID (Meta)">
+          <input value={campaignId} onChange={(e) => setCampaignId(e.target.value)} className={inputCls} />
+        </Field>
+        <Field label="Ad set ID (Meta)">
+          <input value={adsetId} onChange={(e) => setAdsetId(e.target.value)} className={inputCls} />
+        </Field>
+        <Field label="Ad ID (Meta)">
+          <input value={adId} onChange={(e) => setAdId(e.target.value)} className={inputCls} />
         </Field>
       </div>
       <Field label="Ghi chú">

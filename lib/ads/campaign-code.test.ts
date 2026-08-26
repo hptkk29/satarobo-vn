@@ -13,6 +13,7 @@
 import { describe, it, expect } from "vitest";
 import {
   parseCenterCodeFromCampaignName,
+  checkCampaignNameForLead,
   MULTI_CENTER_CODE,
   UNALLOCATED_LABEL,
 } from "@/lib/ads/campaign-code";
@@ -167,5 +168,65 @@ describe("[D-06] hằng số dùng chung", () => {
   it("mã campaign chung và nhãn nhóm chưa phân bổ đúng như quy ước", () => {
     expect(MULTI_CENTER_CODE).toBe("MULTI");
     expect(UNALLOCATED_LABEL).toBe("CHƯA PHÂN BỔ");
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// G-06 (26/08/2026) — ô "mã campaign" trên PHIẾU KHÁCH
+// ─────────────────────────────────────────────────────────────────────────────
+// Lead phải mang mã campaign để D-04/D-05 bóc CPL/CPA theo campaign. Mã đó là
+// CÙNG MỘT khuôn với tên campaign bên Meta (SR.QD.232) — nên nó đi qua chính
+// `parseCenterCodeFromCampaignName` ở trên, KHÔNG có khuôn thứ hai. Hai khuôn
+// song song là hai luật sẽ trôi lệch, và lúc đó chi tiêu quy về một cơ sở còn
+// lead quy về cơ sở khác mà cả hai màn đều trông bình thường.
+describe("[G-06] checkCampaignNameForLead — ô nhập trên phiếu khách", () => {
+  const check = (s: string | null | undefined) => checkCampaignNameForLead(s, BIET);
+
+  it("để trống → null, KHÔNG phải lỗi (ô này không bắt buộc)", () => {
+    for (const v of ["", "   ", null, undefined]) {
+      expect(check(v), JSON.stringify(v)).toEqual({ ok: true, value: null });
+    }
+  });
+
+  it("đúng khuôn → lưu NGUYÊN VĂN (đã cắt khoảng trắng hai đầu)", () => {
+    // Không viết hoa, không đụng dấu: giá trị này phải khớp từng ký tự với tên
+    // campaign bên Meta thì mới đối chiếu được với bảng chi tiêu của D-01.
+    expect(check("  CS1_LEAD_ROBOTICS-L1_VIDEO_0826_A03  ")).toEqual({
+      ok: true,
+      value: "CS1_LEAD_ROBOTICS-L1_VIDEO_0826_A03",
+    });
+  });
+
+  it("campaign chạy chung nhiều cơ sở (`MULTI`) → nhận", () => {
+    expect(check("MULTI_LEAD_ROBOSIM_VIDEO_0926_C01")).toEqual({
+      ok: true,
+      value: "MULTI_LEAD_ROBOSIM_VIDEO_0926_C01",
+    });
+  });
+
+  it("chỉ mỗi mã cơ sở → nhận (đuôi là kỷ luật đặt tên, không phải điều kiện)", () => {
+    expect(check("CS1")).toEqual({ ok: true, value: "CS1" });
+  });
+
+  it("ĐÚNG khuôn nhưng mã cơ sở LẠ → vẫn nhận", () => {
+    // Cố ý không chặn: mở cơ sở mới là thêm dữ liệu, và campaign của cơ sở sắp
+    // khai báo không đáng bị chặn cả lượt lưu phiếu. Chỗ nói ra chuyện này là
+    // cảnh báo "CHƯA PHÂN BỔ" của D-08, không phải ô nhập.
+    expect(check("CS9_LEAD_X_VIDEO_0826_A1")).toEqual({
+      ok: true,
+      value: "CS9_LEAD_X_VIDEO_0826_A1",
+    });
+  });
+
+  it("KHÔNG theo khuôn chút nào (không có dấu `_`, không phải mã cơ sở) → từ chối", () => {
+    const r = check("chien dich he 2026");
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.message).toContain("SR.QD.232");
+  });
+
+  it("câu từ chối phải chỉ ra khuôn đúng, không chỉ nói 'không hợp lệ'", () => {
+    const r = check("khuyenmai");
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.message).toContain("_");
   });
 });

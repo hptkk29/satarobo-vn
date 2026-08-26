@@ -65,6 +65,12 @@ export default async function EditLeadPage({ params }: { params: Promise<{ id: s
         city: true,
         ward: true,
         addressLine: true,
+        // G-06 — mã campaign + ngày hẹn kế tiếp (không phải PII).
+        campaignName: true,
+        campaignId: true,
+        adsetId: true,
+        adId: true,
+        nextFollowUpAt: true,
         children: {
           orderBy: { createdAt: "asc" },
           select: {
@@ -79,6 +85,9 @@ export default async function EditLeadPage({ params }: { params: Promise<{ id: s
             interestedCenterId: true,
             classId: true,
             note: true,
+            // G-06 — giá trị hợp đồng ĐÃ KÝ + mốc chốt.
+            contractValue: true,
+            closedAt: true,
             trialStatus: true,
           },
         },
@@ -142,6 +151,16 @@ export default async function EditLeadPage({ params }: { params: Promise<{ id: s
           city: lead.city,
           ward: lead.ward,
           addressLine: lead.addressLine,
+          // G-06 — mã campaign + ngày hẹn kế tiếp. Không truyền xuống thì ô hiện
+          // rỗng, và lượt bấm Lưu kế tiếp XOÁ TRẮNG giá trị đang có (payload gửi
+          // chuỗi rỗng = "xoá") — mất dữ liệu im lặng, đúng bẫy đã vá ở G-01.
+          campaignName: lead.campaignName,
+          campaignId: lead.campaignId,
+          adsetId: lead.adsetId,
+          adId: lead.adId,
+          nextFollowUpAt: lead.nextFollowUpAt
+            ? lead.nextFollowUpAt.toISOString().slice(0, 10)
+            : null,
         }}
         classes={leadChildClassOptions(classRows)}
         provinces={toAddressOptions(provinces)}
@@ -169,6 +188,10 @@ export default async function EditLeadPage({ params }: { params: Promise<{ id: s
             interestedCenterId: c.interestedCenterId,
             classId: c.classId,
             note: c.note,
+            // G-06 — giá trị hợp đồng ĐÃ KÝ + mốc chốt. Không phải PII, không phải
+            // doanh thu: hai chuyện đều đã nói rõ ở lib/lead/contract-value.ts.
+            contractValue: c.contractValue,
+            closedAt: c.closedAt ? c.closedAt.toISOString() : null,
             trialStatus: c.trialStatus,
           }))}
           classes={leadChildClassOptions(classRows)}

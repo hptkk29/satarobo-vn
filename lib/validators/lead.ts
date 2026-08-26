@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import { LeadChildTrialStatus } from '@prisma/client'
 import { phoneVn } from '@/lib/validators/phone'
+import { parseContractValue } from '@/lib/lead/contract-value'
 
 // AUTH-SĐT P1 — regex riêng đã bị gỡ; nguồn duy nhất là `PHONE_VN_RE` trong
 // `lib/phone.ts`. Re-export để call-site cũ còn import được.
@@ -97,6 +98,21 @@ export const leadChildSchema = z.object({
   // cùng kiểu với hai ô ngay trên; lớp bị xoá thì giao diện hiện "—".
   classId: nullableStr,
   note: nullableStr,
+  // G-06 — GIÁ TRỊ HỢP ĐỒNG ĐÃ KÝ (VND). 🔴 KHÔNG phải doanh thu: doanh thu lấy từ
+  // `Payment` đã xác nhận (quyết định B3). Luật đọc/chặn nằm ở một chỗ duy nhất
+  // (`lib/lead/contract-value.ts`) để ô nhập, API và file nhập liệu cùng một hành vi.
+  //
+  // `z.unknown()` chứ không `z.coerce.number()`: form gửi chuỗi "5.000.000 đ" (người
+  // ta gõ y như trên hợp đồng) mà `coerce` sẽ ra NaN rồi rơi về null — nuốt mất lượt
+  // nhập trong khi người nhập tưởng đã lưu.
+  contractValue: z.unknown().optional().transform((v, ctx) => {
+    const r = parseContractValue(v)
+    if (!r.ok) {
+      ctx.addIssue({ code: 'custom', message: r.message })
+      return z.NEVER
+    }
+    return r.value
+  }),
   trialStatus: z.nativeEnum(LeadChildTrialStatus).default(LeadChildTrialStatus.NONE),
 })
 

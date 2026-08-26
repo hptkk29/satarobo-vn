@@ -34,6 +34,8 @@ import {
   unmarkChildLostSchema,
 } from '@/lib/lead/lost-status'
 import { syncLeadChildNameToStudents } from '@/lib/students/sync-name'
+import { checkCampaignNameForLead } from '@/lib/ads/campaign-code'
+import { loadKnownCenterCodes } from '@/lib/ads/center-codes'
 import {
   getPriorHistoryByPhone,
   summarizePriorHistory,
@@ -650,7 +652,38 @@ const manualLeadSchema = z.object({
   city: z.string().trim().max(100).optional().or(z.literal('')),
   ward: z.string().trim().max(100).optional().or(z.literal('')),
   addressLine: z.string().trim().max(255).optional().or(z.literal('')),
+
+  // ─── G-06 (26/08/2026) — mã campaign + ngày hẹn kế tiếp, cấp PHỤ HUYNH ────
+  //
+  // Cùng luật `undefined` với khối G-01 ngay trên: khoá VẮNG MẶT = "không đụng",
+  // chuỗi RỖNG = "xoá trắng về null". Đừng thêm `.transform(v => v ?? null)`.
+  //
+  // `campaignName` KHÔNG kiểm khuôn ở đây: khuôn SR.QD.232 cần danh mục mã cơ sở
+  // (đọc DB), mà zod schema phải giữ THUẦN. Kiểm bằng `checkCampaignNameForLead`
+  // trong chính Server Action — cùng một hàm khuôn của D-06, không có bản thứ hai.
+  campaignName: z.string().trim().max(255).optional().or(z.literal('')),
+  campaignId: z.string().trim().max(64).optional().or(z.literal('')),
+  adsetId: z.string().trim().max(64).optional().or(z.literal('')),
+  adId: z.string().trim().max(64).optional().or(z.literal('')),
+  // Ngày hẹn liên hệ lại. Cố ý KHÔNG chặn ngày quá khứ: Sale mở phiếu cũ ra sửa ô
+  // khác vẫn phải lưu được, và một cái hẹn đã lỡ chính là thứ C-05 cần nhìn thấy.
+  nextFollowUpAt: z.union([z.literal(''), z.coerce.date()]).optional(),
 })
+
+/**
+ * G-06 — kiểm ô "mã campaign" của phiếu bằng CHÍNH khuôn của D-06.
+ *
+ * Danh mục mã cơ sở đọc từ DB (`Center.code`) và CHỈ đọc khi người dùng thực sự gõ gì
+ * đó — mở cơ sở mới là thêm dữ liệu, không sửa mã, nên không được chôn danh sách vào
+ * đây. Không gõ gì ⇒ `null`, không tốn câu truy vấn nào.
+ */
+async function checkLeadCampaignName(
+  raw: string | undefined,
+): Promise<{ ok: true; value: string | null } | { ok: false; message: string }> {
+  if (!raw || !raw.trim()) return { ok: true, value: null }
+  const codes = await loadKnownCenterCodes()
+  return checkCampaignNameForLead(raw, codes)
+}
 
 /** Tạo 1 lead thủ công (thu ở sự kiện/trung tâm). Chống trùng theo SĐT. */
 export async function createLeadManual(
@@ -721,6 +754,11 @@ export async function createLeadManual(
   const hoErr = await rejectHeadOffice('lead', { orgUnitId, centerId })
   if (hoErr) return { ok: false, error: hoErr }
 
+  // G-06 — mã campaign đi qua ĐÚNG khuôn SR.QD.232 của D-06, không có luật thứ hai.
+  const campaignCheck = await checkLeadCampaignName(d.campaignName)
+  if (!campaignCheck.ok) return { ok: false, error: campaignCheck.message }
+  const campaignName = campaignCheck.value
+
   const lead = await db.lead.create({
     data: {
       parentName: d.parentName,
@@ -748,6 +786,12 @@ export async function createLeadManual(
       city: d.city || null,
       ward: d.ward || null,
       addressLine: d.addressLine || null,
+      // G-06 — mã campaign (đã kiểm khuôn SR.QD.232 ở trên) + ngày hẹn kế tiếp.
+      campaignName,
+      campaignId: d.campaignId || null,
+      adsetId: d.adsetId || null,
+      adId: d.adId || null,
+      nextFollowUpAt: d.nextFollowUpAt || null,
       status: 'NEW',
       // NGƯỜI NHẬP (23/08) — cùng nghĩa với biểu mẫu /nhap-khach-hang. Đường
       // nhập tay này cũng phải ghi, không thì "phiếu tôi nhập" thủng một nửa.
@@ -872,6 +916,14 @@ export async function updateLeadFields(
       city: true,
       ward: true,
       addressLine: true,
+      // G-06 — 5 ô mới, cùng lý do với khối G-01 ngay trên: thiếu ở `select` hẹp
+      // này thì phép so-lệch thấy `undefined !== <giá trị>` ở MỌI lượt lưu và nhật
+      // ký kiểm toán bịa ra một dòng "đã đổi mã campaign" cho cả lần không ai đụng.
+      campaignName: true,
+      campaignId: true,
+      adsetId: true,
+      adId: true,
+      nextFollowUpAt: true,
       assignedToId: true,
       createdById: true,
     },
@@ -926,6 +978,15 @@ export async function updateLeadFields(
     if (hoErr) return { ok: false, error: hoErr }
   }
 
+  // G-06 — mã campaign đi qua ĐÚNG khuôn SR.QD.232 của D-06 (không luật thứ hai).
+  // Chỉ kiểm khi khoá CÓ MẶT: lượt sửa ô khác không được vấp lỗi vì ô này.
+  let campaignName: string | null | undefined
+  if (d.campaignName !== undefined) {
+    const c = await checkLeadCampaignName(d.campaignName)
+    if (!c.ok) return { ok: false, error: c.message }
+    campaignName = c.value
+  }
+
   const updateData = {
     ...(d.parentName !== undefined ? { parentName: d.parentName } : {}),
     ...(d.phone !== undefined ? { phone: d.phone } : {}),
@@ -948,6 +1009,12 @@ export async function updateLeadFields(
     ...(d.city !== undefined ? { city: d.city || null } : {}),
     ...(d.ward !== undefined ? { ward: d.ward || null } : {}),
     ...(d.addressLine !== undefined ? { addressLine: d.addressLine || null } : {}),
+    // G-06 — 5 ô mới, cùng luật `!== undefined` với khối G-01.
+    ...(d.campaignName !== undefined ? { campaignName: campaignName ?? null } : {}),
+    ...(d.campaignId !== undefined ? { campaignId: d.campaignId || null } : {}),
+    ...(d.adsetId !== undefined ? { adsetId: d.adsetId || null } : {}),
+    ...(d.adId !== undefined ? { adId: d.adId || null } : {}),
+    ...(d.nextFollowUpAt !== undefined ? { nextFollowUpAt: d.nextFollowUpAt || null } : {}),
   }
   // P2-1: ghi nhật ký kiểm toán — chỉ field thực sự đổi.
   //
@@ -1260,6 +1327,7 @@ function leadChildData(parsed: unknown) {
     interestedCenterId?: string | null
     classId?: string | null
     note?: string | null
+    contractValue?: number | null
   }
   return {
     fullName: d.fullName,
@@ -1274,6 +1342,10 @@ function leadChildData(parsed: unknown) {
     // TÂM, chưa học) và khác `Enrollment` (chỉ có sau khi convert).
     classId: d.classId || null,
     note: d.note || null,
+    // G-06 — GIÁ TRỊ HỢP ĐỒNG ĐÃ KÝ, không phải tiền đã thu (xem
+    // lib/lead/contract-value.ts). `?? null` chứ KHÔNG `|| null`: số 0 là giá trị
+    // thật (học bổng toàn phần) và `||` sẽ biến nó thành "chưa nhập".
+    contractValue: d.contractValue ?? null,
   }
 }
 

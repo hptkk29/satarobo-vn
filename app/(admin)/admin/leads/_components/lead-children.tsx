@@ -17,6 +17,13 @@ import {
   type CourseOptGroup,
   type TeachableCourse,
 } from "@/lib/courses/grouped";
+import {
+  CONTRACT_VALUE_HINT,
+  CONTRACT_VALUE_LABEL,
+  CONTRACT_VALUE_MAX,
+} from "@/lib/lead/contract-value";
+import { formatVndPlain } from "@/lib/format/money";
+import { MoneyInput } from "@/components/ui/money-input";
 
 export type Option = { id: string; name: string };
 
@@ -34,6 +41,8 @@ export type ChildDraft = {
   /** G-01 — lớp đang học TẠI trung tâm (Class.id). "" = chưa xếp lớp. */
   classId: string;
   note: string;
+  /** G-06 — giá trị hợp đồng ĐÃ KÝ (VND, chuỗi trong nháp). "" = chưa nhập. */
+  contractValue: string;
 };
 
 export type ChildView = {
@@ -49,6 +58,13 @@ export type ChildView = {
   /** G-01 — lớp đang học TẠI trung tâm (Class.id). null = chưa xếp lớp. */
   classId: string | null;
   note: string | null;
+  /**
+   * G-06 — giá trị hợp đồng ĐÃ KÝ (VND). 🔴 KHÔNG phải tiền đã thu; doanh thu lấy
+   * từ khoản thanh toán đã xác nhận (quyết định B3). null = chưa nhập, KHÁC số 0.
+   */
+  contractValue: number | null;
+  /** G-06 — mốc chốt (ISO). Máy ghi ở đường chốt ghi danh, người không sửa tay. */
+  closedAt?: string | null;
   trialStatus: string;
   /** C-06 — trạng thái phễu của riêng con này. null = phiếu cũ, chưa ai phân loại. */
   status?: string | null;
@@ -82,6 +98,7 @@ export const emptyChild: ChildDraft = {
   interestedCenterId: "",
   classId: "",
   note: "",
+  contractValue: "",
 };
 
 const GENDERS = ["Nam", "Nữ", "Khác"];
@@ -109,6 +126,9 @@ export function childDraftToPayload(d: ChildDraft): Record<string, unknown> {
     interestedCenterId: d.interestedCenterId || undefined,
     classId: d.classId || undefined,
     note: d.note.trim() || undefined,
+    // G-06 — gửi chuỗi thô; validator (`parseContractValue`) tự bóc dấu phân cách.
+    // `undefined` khi để trống ⇒ giữ nguyên giá trị cũ thay vì xoá trắng.
+    contractValue: d.contractValue.trim() || undefined,
   };
 }
 
@@ -124,6 +144,9 @@ function viewToDraft(c: ChildView): ChildDraft {
     interestedCenterId: c.interestedCenterId ?? "",
     classId: c.classId ?? "",
     note: c.note ?? "",
+    // `!= null` chứ không `||`: hợp đồng 0 đồng (học bổng toàn phần) là giá trị
+    // thật, `||` sẽ hiện ô trống và lượt lưu kế tiếp xoá mất con số 0 đó.
+    contractValue: c.contractValue != null ? String(c.contractValue) : "",
   };
 }
 
@@ -264,6 +287,25 @@ export function ChildFields({
           </select>
         </label>
       )}
+      {/* G-06 — GIÁ TRỊ HỢP ĐỒNG ĐÃ KÝ. Nhãn + chú giải lấy từ
+          lib/lead/contract-value.ts để không màn nào tự gọi nó là "doanh thu":
+          cộng cột này vào báo cáo doanh thu là làm tổng phồng đúng bằng phần
+          khách chưa đóng, mà con số vẫn trông hợp lý nên không ai phát hiện. */}
+      <label className="block sm:col-span-2">
+        <span className="mb-1 block text-xs font-medium text-muted-foreground">
+          {CONTRACT_VALUE_LABEL}
+        </span>
+        <MoneyInput
+          name={`contractValue-${value.fullName || "moi"}`}
+          value={value.contractValue}
+          onValueChange={(n) => onChange({ contractValue: n == null ? "" : String(n) })}
+          max={CONTRACT_VALUE_MAX}
+          className={inputCls}
+        />
+        <span className="mt-1 block text-[11px] leading-snug text-muted-foreground">
+          {CONTRACT_VALUE_HINT}
+        </span>
+      </label>
       <label className="block sm:col-span-2">
         <span className="mb-1 block text-xs font-medium text-muted-foreground">Ghi chú</span>
         <textarea
@@ -551,6 +593,29 @@ export function LeadChildrenManager({
                     .filter(Boolean)
                     .join(" · ") || "—"}
                 </div>
+                {/* G-06 — giá trị hợp đồng + mốc chốt. Nhãn phải NÓI RÕ "đã ký":
+                    con số này là cam kết của Sale, KHÔNG phải tiền đã vào — doanh
+                    thu thật nằm ở tab Tài chính, tính từ khoản đã xác nhận. */}
+                {(c.contractValue != null || c.closedAt) && (
+                  <div className="mt-1 flex flex-wrap items-center gap-x-3 text-xs">
+                    {c.contractValue != null && (
+                      <span className="text-muted-foreground">
+                        {CONTRACT_VALUE_LABEL}:{" "}
+                        <span className="font-semibold text-foreground">
+                          {formatVndPlain(c.contractValue)}
+                        </span>
+                      </span>
+                    )}
+                    {c.closedAt && (
+                      <span className="text-muted-foreground">
+                        Chốt:{" "}
+                        {new Date(c.closedAt).toLocaleDateString("vi-VN", {
+                          timeZone: "Asia/Ho_Chi_Minh",
+                        })}
+                      </span>
+                    )}
+                  </div>
+                )}
                 {c.note && <p className="mt-1 text-xs text-muted-foreground">{c.note}</p>}
                 {c.trialHistory && c.trialHistory.length > 0 && (
                   <div className="mt-1 space-y-0.5">

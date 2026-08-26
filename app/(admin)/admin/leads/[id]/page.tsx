@@ -435,6 +435,20 @@ export default async function LeadDetailPage({ params }: Props) {
             city: lead.city,
           })}
         />
+        {/* ─── G-06 (26/08/2026) — mã campaign + ngày hẹn kế tiếp ──────────────
+            Không phải PII (không chỉ đích danh ai) ⇒ hiện nguyên cho mọi vai đọc
+            được phiếu; Marketing cần đúng hai thứ này để đo CPL/CPA mà vai đó
+            KHÔNG có `leads:view-pii`. Mã campaign theo quy ước SR.QD.232 — cùng
+            khuôn với tên campaign bên Meta (lib/ads/campaign-code.ts). */}
+        <Info label="Mã campaign" value={lead.campaignName} />
+        <Info
+          label="ID quảng cáo (Meta)"
+          value={[lead.campaignId, lead.adsetId, lead.adId].filter(Boolean).join(" / ") || null}
+        />
+        <Info
+          label="Hẹn liên hệ kế tiếp"
+          value={lead.nextFollowUpAt ? formatDateVN(lead.nextFollowUpAt) : null}
+        />
         <Info label="Sale phụ trách" value={lead.assignedTo?.name ?? "Chưa gán"} />
         <Info
           label="Ngày tạo"
@@ -485,6 +499,12 @@ export default async function LeadDetailPage({ params }: Props) {
             interestedCenterId: c.interestedCenterId,
             classId: c.classId,
             note: canViewPii ? c.note : maskFreeText(c.note),
+            // G-06 — giá trị hợp đồng ĐÃ KÝ + mốc chốt. KHÔNG đi qua cổng PII:
+            // `sensitiveFields` của `leads:view-pii` là tên/SĐT/email/ngày sinh/ghi
+            // chú tư vấn — con số hợp đồng và một cái mốc thời gian không nằm trong
+            // đó, và Marketing (vai không có PII) cần đúng hai thứ này để đo CPA.
+            contractValue: c.contractValue,
+            closedAt: c.closedAt ? c.closedAt.toISOString() : null,
             trialStatus: c.trialStatus,
             // C-06 — trạng thái phễu riêng của con (null = phiếu cũ, chưa phân loại).
             status: c.status,

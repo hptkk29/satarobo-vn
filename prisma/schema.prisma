@@ -1433,6 +1433,31 @@ model Lead {
   lostNote String?   @db.Text
   lostAt   DateTime? @db.Timestamptz(6)
 
+  // ─── G-06 (26/08/2026) — MÃ CAMPAIGN + NGÀY HẸN KẾ TIẾP, cấp PHỤ HUYNH ──────
+  //
+  // Quảng cáo dẫn tới một CUỘC LIÊN LẠC với người lớn, không thuộc riêng đứa con
+  // nào ⇒ bốn ô này ở `Lead`, không ở `LeadChild`.
+  //
+  // ⚠️ KHÁC `utmSource/utmMedium/utmCampaign/...` ngay bên trên: nhóm `utm*` là
+  // NHÃN đọc từ tham số URL khi khách vào website, còn nhóm này là mã/ID của Meta.
+  // Lead Messenger-first (phễu SR.QD.217) không đi qua website nên không có `utm*`
+  // nào — đó là lý do không tái dùng được và cũng là lý do không được gộp hai nhóm.
+  //
+  // `campaignName` là **mã campaign theo quy ước SR.QD.232** (`[MÃ CƠ SỞ]_…`), lưu
+  // NGUYÊN VĂN để khớp từng ký tự với tên campaign bên Meta. Khuôn chỉ có MỘT bản,
+  // ở `lib/ads/campaign-code.ts` (D-06) — đường ghi gọi `checkCampaignNameForLead`,
+  // đừng viết luật kiểm thứ hai.
+  campaignName String?
+  campaignId   String? // ID campaign của Meta — khoá nối sang bảng chi tiêu (D-01)
+  adsetId      String? // D-01 lưu chi tiêu ở mức ad set (chốt 24/08) ⇒ lead cũng cần
+  adId         String?
+
+  /// Ngày Sale hẹn liên hệ lại PHỤ HUYNH. KHÁC `LeadTask.dueAt` — đó là bảng VIỆC
+  /// (một lead nhiều việc), còn đây là thuộc tính của phiếu: "lần sau gọi khi nào".
+  /// NULL = chưa hẹn. Cố ý KHÔNG suy từ `LeadTask`: hai nguồn cho một câu hỏi là
+  /// hai con số sẽ lệch nhau trên hai màn hình.
+  nextFollowUpAt DateTime? @db.Timestamptz(6)
+
   // R1-04/05 — mốc thời gian phễu SR.QD.217 (L1→L2→L3 + bàn giao + SLA).
   qualifiedAt         DateTime?         @db.Timestamptz(6) // L2 — có SĐT + note
   handedAt            DateTime?         @db.Timestamptz(6) // HO bàn giao về CS
@@ -1502,6 +1527,10 @@ model Lead {
   // → composite cho index-ordered rows (bỏ sort + OFFSET scan). Bảng high-growth.
   @@index([centerId, status, createdAt])
   @@index([createdById])
+  // G-06 — nối lead ↔ chi tiêu quảng cáo (mẫu số của CPL/CPA D-04/D-05).
+  @@index([campaignId])
+  // G-06 — "hôm nay phải gọi lại những ai": lọc theo khoảng ngày, quét thường xuyên.
+  @@index([nextFollowUpAt])
 }
 
 // BGĐ 31/07 — NGƯỜI/ĐỐI TÁC GIỚI THIỆU (affiliate).
@@ -1576,6 +1605,28 @@ model LeadChild {
   /// `LOST` ở đây là TRẠNG THÁI rớt (theo từng con); LÝ DO rớt nằm ở `Lead.lostNote`
   /// (cấp phụ huynh — quyết định B5 ngày 24/08/2026).
   status             LeadChildStatus?
+
+  // ─── G-06 (26/08/2026) — MỐC CHỐT + GIÁ TRỊ HỢP ĐỒNG, theo TỪNG CON ─────────
+
+  /// Thời điểm đứa này thành HỌC VIÊN. C-03 tính "thời gian chốt" = mốc này −
+  /// `Lead.createdAt`, và đơn vị đếm là HỌC SINH (G-07), nên `Lead.convertedAt`
+  /// (mốc của cả phiếu) không thay được: một phiếu hai con có thể chốt hai lúc.
+  ///
+  /// Ghi ở ĐƯỜNG CHỐT GHI DANH (`lib/crm/convert-lead-v2.ts`), TRONG CÙNG
+  /// transaction tạo `Enrollment` — không phải một lượt cập nhật rời. Rời nhau là
+  /// có khe hở "đã ghi danh nhưng chưa có mốc chốt", và khe đó không ai đối soát.
+  /// NULL = chưa chốt, hoặc con đã ghi danh TRƯỚC 26/08/2026 (không backfill: mốc
+  /// đúng của những ca cũ không dựng lại được từ dữ liệu đang có).
+  closedAt DateTime? @db.Timestamptz(6)
+
+  /// 🔴 GIÁ TRỊ HỢP ĐỒNG ĐÃ KÝ (VND) — con số Sale CAM KẾT, **KHÔNG phải tiền đã
+  /// thu**. Doanh thu của toàn hệ thống lấy từ `Payment` đã xác nhận (quyết định B3
+  /// + OQ-G2 ngày 24/08/2026): không `Order.totalAmount`, không cột này.
+  /// Cộng cột này vào báo cáo doanh thu là làm tổng phồng đúng bằng phần khách chưa
+  /// đóng — và vẫn ra một con số trông hợp lý nên không ai phát hiện.
+  /// Nhãn + chú giải dùng chung ở `lib/lead/contract-value.ts`.
+  contractValue Int?
+
   createdAt          DateTime             @default(now()) @db.Timestamptz(6)
   updatedAt          DateTime             @updatedAt @db.Timestamptz(6)
 
@@ -1586,6 +1637,8 @@ model LeadChild {
 
   @@index([leadId])
   @@index([classId]) // G-01 — "lớp này có bao nhiêu con của lead đang theo?"
+  // G-06 — C-03 lọc "con đã chốt trong khoảng ngày X→Y" trên mọi lần mở dashboard.
+  @@index([closedAt])
 }
 
 model Note {
