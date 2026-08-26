@@ -666,7 +666,7 @@ export const cauHinhGanKhungVaoBai: ActionConfig<
   entityType: "TrnLesson",
   auditAction: "UPDATE",
   schema: ganKhungVaoBaiSchema,
-  handler: async ({ db, input }) => {
+  handler: async ({ db, actor, input }) => {
     const bai = await db.trnLesson.findFirst({
       where: { id: input.lessonId, deletedAt: null },
       select: {
@@ -682,9 +682,21 @@ export const cauHinhGanKhungVaoBai: ActionConfig<
     // `scopedDb` không che đường ghi.
     const khoa = await db.trnCourse.findFirst({
       where: { id: bai.module.courseId, deletedAt: null },
-      select: { id: true },
+      select: { id: true, centerId: true },
     });
     if (!khoa) throw new ActionError("NOT_FOUND", "Không tìm thấy bài học");
+
+    // ⚠️ `TrnCourse` nằm trong `NULL_IS_GLOBAL_MODELS`, nên lượt đọc ngay trên CỐ Ý
+    // cho khoá DÙNG CHUNG toàn công ty (`centerId = null`) lọt với MỌI actor — kho
+    // chung không được tàng hình. Mượn nó làm cổng GHI là biến "ai cũng đọc được"
+    // thành "ai cũng sửa được", đúng bẫy `chanGhiBanGhiChung` sinh ra để bịt ở
+    // EL-15b. Ở đây bản ghi bị sửa là `TrnLesson` của khoá chung.
+    chanGhiBanGhiChung({
+      actor,
+      centerId: khoa.centerId,
+      permission: "elearning:content:author",
+      viec: "đổi khung chấm của bài trong khoá này",
+    });
 
     if (bai.kind !== "TASK") {
       throw new ActionError(
@@ -720,9 +732,23 @@ export const cauHinhGanKhungVaoBai: ActionConfig<
     if (input.rubricId) {
       const khung = await db.trnRubric.findFirst({
         where: { id: input.rubricId, deletedAt: null },
-        select: { id: true, status: true },
+        select: { id: true, status: true, centerId: true },
       });
       if (!khung) throw new ActionError("NOT_FOUND", "Không tìm thấy khung chấm");
+
+      // ⚠️ Khung của MỘT CƠ SỞ không gắn được vào khoá DÙNG CHUNG.
+      //
+      // Không chặn thì người chấm ở cơ sở khác mở lượt nộp ra và `napLuotNopDeCham`
+      // đọc khung qua `scopedDb` — khung của cơ sở kia bị lọc mất, hàm trả `null`,
+      // trang báo "không mở được lượt nộp này". Bài KHÔNG AI chấm được, `dueGradeAt`
+      // trôi, và cron nới hạn của người học vì một lỗi cấu hình họ không gây ra.
+      if (khung.centerId !== null && khoa.centerId === null) {
+        throw new ActionError(
+          "KHUNG_HEP_HON_KHOA",
+          "Khoá này dùng chung toàn công ty nên chỉ gắn được khung dùng chung — khung của một cơ sở sẽ làm người chấm ở cơ sở khác không mở được bài",
+          "rubricId",
+        );
+      }
       // ⚠️ Chỉ gắn khung ĐÃ KÍCH HOẠT. Gắn khung nháp là để bài đi ra với người học
       // trên một bộ tiêu chí còn sửa được — và khung sửa xong thì điểm của người
       // nộp trước lệch khỏi thang của người nộp sau.

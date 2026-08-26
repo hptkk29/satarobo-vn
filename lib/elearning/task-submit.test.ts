@@ -12,8 +12,18 @@ import { SLA_GRADE_DAYS } from "@/lib/elearning/metrics/constants";
 
 const h = vi.hoisted(() => ({
   orgUnitId: vi.fn<(c: string | null) => Promise<string | null>>(async () => "ou1"),
+  chinhSach: vi.fn<(u: string) => Promise<void>>(async () => undefined),
+  congNoiDung: vi.fn<() => { message: string } | null>(() => null),
 }));
 vi.mock("@/lib/org/org-service", () => ({ orgUnitIdForCenter: h.orgUnitId }));
+// Hai cổng bắt buộc của mọi đường ghi tiến độ (luật cứng #7). Mock để tệp này soi
+// được phần LOGIC NỘP; phép kiểm rằng chúng ĐƯỢC GỌI nằm ở nhóm riêng bên dưới.
+vi.mock("@/lib/elearning/policy-acceptance", () => ({
+  assertPolicyAccepted: h.chinhSach,
+}));
+vi.mock("@/lib/elearning/content-gate", () => ({
+  checkContentAccess: h.congNoiDung,
+}));
 
 // 2026-08-26 là thứ Tư (UTC).
 const NOW = new Date("2026-08-26T09:00:00.000Z");
@@ -35,6 +45,15 @@ const dbGia = () =>
       updateMany: b.updateGd,
     },
     trnLesson: { findFirst: vi.fn(async () => b.bai) },
+    trnCourse: {
+      findFirst: vi.fn(async () => ({
+        id: "c1",
+        visibility: "ASSIGNED_ONLY",
+        selfEnrollEnabled: false,
+        securityLevel: "NORMAL",
+        versions: [{ id: "v1" }],
+      })),
+    },
     trnSubmission: {
       findFirst: vi.fn(async () => b.truoc),
       create: b.create,
@@ -71,6 +90,8 @@ beforeEach(() => {
   vi.useFakeTimers();
   vi.setSystemTime(NOW);
   h.orgUnitId.mockResolvedValue("ou1");
+  h.chinhSach.mockResolvedValue(undefined);
+  h.congNoiDung.mockReturnValue(null);
   b = {
     ghiDanh: {
       id: "en1",
@@ -203,22 +224,38 @@ describe("🔴 nộp LẠI", () => {
   it("đang CHỜ CHẤM ⇒ từ chối", async () => {
     // Cho nộp là đẻ hai lượt cùng chờ, người chấm không biết đọc bản nào, và sổ bù
     // SLA của lượt trước mất mốc.
-    b.truoc = { id: "s0", attemptNo: 1, status: "SUBMITTED" };
+    b.truoc = { id: "s0", attemptNo: 1, status: "SUBMITTED", passed: null };
     const e = await batLoi(nop());
     expect(e.code).toBe("DANG_CHO_CHAM");
     expect(b.create).not.toHaveBeenCalled();
   });
 
-  it("đã CHẤM XONG ⇒ từ chối, nói rõ đường mở lại", async () => {
-    b.truoc = { id: "s0", attemptNo: 1, status: "GRADED" };
+  it("đã chấm và ĐẠT ⇒ từ chối, không cần nộp lại", async () => {
+    b.truoc = { id: "s0", attemptNo: 1, status: "GRADED", passed: true };
     const e = await batLoi(nop());
-    expect(e.code).toBe("DA_CHAM_XONG");
-    expect(e.message).toContain("trả bài");
+    expect(e.code).toBe("DA_DAT_ROI");
+  });
+
+  it("🔴 đã chấm nhưng CHƯA ĐẠT ⇒ nộp lại ĐƯỢC", async () => {
+    // Với ngưỡng 80/100 thì "chưa đạt" là ca THƯỜNG. Chặn nó là dựng ngõ cụt vĩnh
+    // viễn cho đúng nhóm cần nộp lại nhất — và màn học vẫn mời "Nộp lại", tức bày
+    // ra một lựa chọn mà máy chủ luôn từ chối.
+    b.truoc = { id: "s0", attemptNo: 1, status: "GRADED", passed: false };
+    const r = (await nop()) as { data: { attemptNo: number } };
+    expect(r.data.attemptNo).toBe(2);
+  });
+
+  it("đã chấm mà `passed` còn null ⇒ vẫn nộp lại được, không kẹt", async () => {
+    // `null` là "chưa kết luận"; coi nó như đã đạt là khoá người ta lại vì một cột
+    // chưa ai điền.
+    b.truoc = { id: "s0", attemptNo: 1, status: "GRADED", passed: null };
+    const r = (await nop()) as { data: { attemptNo: number } };
+    expect(r.data.attemptNo).toBe(2);
   });
 
   it("bị TRẢ VỀ SỬA ⇒ nộp lại được, số thứ tự TĂNG", async () => {
     // Dòng MỚI, không đè dòng cũ: đè là xoá sạch dấu vết lượt chấm trước.
-    b.truoc = { id: "s0", attemptNo: 1, status: "NEEDS_REVISION" };
+    b.truoc = { id: "s0", attemptNo: 1, status: "NEEDS_REVISION", passed: false };
     const r = (await nop()) as { data: { attemptNo: number } };
     expect(r.data.attemptNo).toBe(2);
   });
@@ -272,5 +309,33 @@ describe("audit và khoá quyền", () => {
       contentText: "   ",
     });
     expect(r.success).toBe(false);
+  });
+});
+
+describe("🔴 hai CỔNG bắt buộc của mọi đường ghi tiến độ (luật cứng #7)", () => {
+  it("gọi cổng CHÍNH SÁCH trước khi ghi gì", async () => {
+    // Điều kiện pháp lý, không phải bước UX — và bài nộp còn mang dữ liệu cá nhân
+    // của BÊN THỨ BA (§13.3), nên bỏ cổng ở đúng đường thu thập nhiều dữ liệu nhất
+    // là chỗ khó biện minh nhất.
+    await nop();
+    expect(h.chinhSach).toHaveBeenCalledWith("u1");
+  });
+
+  it("chưa chấp nhận chính sách ⇒ KHÔNG ghi gì", async () => {
+    h.chinhSach.mockRejectedValueOnce(new Error("chưa chấp nhận"));
+    await expect(nop()).rejects.toThrow();
+    expect(b.create).not.toHaveBeenCalled();
+  });
+
+  it("gọi cổng NỘI DUNG — chuỗi 4 điều kiện ở máy chủ", async () => {
+    await nop();
+    expect(h.congNoiDung).toHaveBeenCalledTimes(1);
+  });
+
+  it("cổng nội dung từ chối ⇒ NOT_FOUND, không lộ khoá tồn tại", async () => {
+    h.congNoiDung.mockReturnValueOnce({ message: "Không tìm thấy khoá học" });
+    const e = await batLoi(nop());
+    expect(e.code).toBe("NOT_FOUND");
+    expect(b.create).not.toHaveBeenCalled();
   });
 });

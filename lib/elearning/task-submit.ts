@@ -9,6 +9,8 @@ import {
   effectiveAllowLate,
   OVERDUE_LOCKED_MESSAGE,
 } from "@/lib/elearning/due-lock";
+import { assertPolicyAccepted } from "@/lib/elearning/policy-acceptance";
+import { checkContentAccess } from "@/lib/elearning/content-gate";
 
 /**
  * EL-15c — NỘP BÀI TẬP.
@@ -52,7 +54,7 @@ async function lanGanNhat(db: ScopedDb, lessonId: string, userId: string) {
   return db.trnSubmission.findFirst({
     where: { lessonId, userId },
     orderBy: { attemptNo: "desc" },
-    select: { id: true, attemptNo: true, status: true },
+    select: { id: true, attemptNo: true, status: true, passed: true },
   });
 }
 
@@ -64,6 +66,13 @@ export const cauHinhNopBaiTap: ActionConfig<NopBaiTapInput, KetQuaNop> = {
   auditAction: "CREATE",
   schema: nopBaiTapSchema,
   handler: async ({ db, actor, input }) => {
+    // ⚠️ CỔNG CHÍNH SÁCH — luật cứng #7 và điều kiện pháp lý, không phải bước UX.
+    // Ba đường ghi tiến độ anh em (`reading-progress`, `video-heartbeat`,
+    // `exam-taking`) đều có nó; nộp bài tập cũng là một lượt ghi tiến độ, và bài nộp
+    // còn mang dữ liệu cá nhân của BÊN THỨ BA (§13.3). Bỏ cổng ở đúng đường thu
+    // thập nhiều dữ liệu nhất là chỗ khó biện minh nhất.
+    await assertPolicyAccepted(actor.userId);
+
     const gd = await db.trnEnrollment.findFirst({
       where: { id: input.enrollmentId },
       select: {
@@ -115,6 +124,33 @@ export const cauHinhNopBaiTap: ActionConfig<NopBaiTapInput, KetQuaNop> = {
       select: { id: true, kind: true, rubricId: true },
     });
     if (!bai) throw new ActionError("NOT_FOUND", "Không tìm thấy bài học");
+
+    // ⚠️ CỔNG NỘI DUNG — chuỗi 4 điều kiện ở máy chủ (BA §3.2, luật cứng #7).
+    // Cùng phép kiểm mà đường thi và đường đọc đang chạy.
+    const khoa = await db.trnCourse.findFirst({
+      where: { id: gd.courseId, deletedAt: null },
+      select: {
+        id: true,
+        visibility: true,
+        selfEnrollEnabled: true,
+        securityLevel: true,
+        versions: { where: { status: "PUBLISHED" }, select: { id: true }, take: 1 },
+      },
+    });
+    if (!khoa) throw new ActionError("NOT_FOUND", "Không tìm thấy khoá học");
+    const tuChoi = checkContentAccess({
+      actor,
+      course: {
+        id: khoa.id,
+        visibility: khoa.visibility,
+        selfEnrollEnabled: khoa.selfEnrollEnabled,
+        securityLevel: khoa.securityLevel,
+        hasPublishedVersion: khoa.versions.length > 0,
+      },
+      hasEnrollment: true,
+    });
+    if (tuChoi) throw new ActionError("NOT_FOUND", tuChoi.message);
+
     if (bai.kind !== "TASK") {
       throw new ActionError("WRONG_KIND", "Bài này không phải bài tập");
     }
@@ -137,10 +173,17 @@ export const cauHinhNopBaiTap: ActionConfig<NopBaiTapInput, KetQuaNop> = {
           "Bài của bạn đang chờ chấm — chưa nộp lại được",
         );
       }
-      if (truoc.status === "GRADED") {
+      // ⚠️ Chấm xong mà ĐẠT thì thôi; chấm xong mà CHƯA ĐẠT thì phải nộp lại được.
+      //
+      // Bản đầu chặn cả hai, trong khi màn học (`task-view.nopDuoc`) vẫn mời "Nộp
+      // lại" cho ca chưa đạt — bày ra một lựa chọn mà máy chủ luôn từ chối. Với
+      // ngưỡng 80/100 thì "chưa đạt" là ca THƯỜNG, nên đó là ngõ cụt vĩnh viễn cho
+      // đúng nhóm người cần nộp lại nhất: bài không bao giờ lên xong, và điều kiện
+      // hoàn thành khoá không bao giờ đạt.
+      if (truoc.status === "GRADED" && truoc.passed === true) {
         throw new ActionError(
-          "DA_CHAM_XONG",
-          "Lượt này đã chấm xong. Nộp lại chỉ mở khi người chấm trả bài về để sửa.",
+          "DA_DAT_ROI",
+          "Lượt này đã đạt — không cần nộp lại.",
         );
       }
     }

@@ -97,12 +97,19 @@ export async function runElearningDem(now = new Date()): Promise<KetQuaDem> {
   // thông báo "bạn đã quá hạn" cho một cái hạn mà hệ thống vừa tự nới ra, và không
   // bao giờ nhận thông báo đính chính.
   try {
-    // Lượt nộp đang chờ chấm HOẶC vừa chấm xong mà đã quá hạn chấm. Lấy cả nhóm
-    // vừa chấm xong vì phần bù của những ngày đã chờ vẫn còn nợ.
+    // ⚠️ CHỈ nhóm ĐANG CHỜ CHẤM. Bản đầu quét cả `GRADED`/`NEEDS_REVISION`, và đó
+    // là một cửa sổ KHÔNG BAO GIỜ VƠI: một lượt đã chấm xong vẫn thoả
+    // `dueGradeAt < now` mãi mãi. Với `take: 500` sắp theo hạn CŨ TRƯỚC, 500 dòng
+    // đã tất toán từ đời nào sẽ chiếm trọn cửa sổ, và những lượt vừa trễ hôm nay
+    // KHÔNG BAO GIỜ được xét — phép bù chết lặng lẽ sau vài tháng dữ liệu.
+    //
+    // Nhóm đã chấm nay chốt NGAY LÚC CHẤM (`task-grading.ts`), nơi `gradedAt` vừa
+    // được đặt và tổng nợ là con số cuối cùng. Cron chỉ còn lo nhóm đang chờ — nhóm
+    // này tự vơi, vì chấm xong là nó rời hàng đợi.
     const canXet = await db.trnSubmission.findMany({
       where: {
         dueGradeAt: { lt: now },
-        status: { in: ["SUBMITTED", "GRADED", "NEEDS_REVISION"] },
+        status: "SUBMITTED",
         enrollmentId: { not: null },
       },
       select: {
@@ -115,13 +122,13 @@ export async function runElearningDem(now = new Date()): Promise<KetQuaDem> {
       orderBy: { dueGradeAt: "asc" },
       take: LO,
     });
-    ket.buSla.daXet = canXet.length;
-
+    // ⚠️ Đếm SAU vòng lặp, không gán trước. Bản đầu gán `daXet = canXet.length`
+    // TRƯỚC rồi tính `conSot = canXet.length - daXet` — phép trừ tự triệt tiêu và
+    // `conSot` LUÔN bằng 0, tức cron báo "làm hết" đúng lúc còn việc chưa chạy.
+    // Chính chú thích của `KetQuaDem` cấm cái im lặng đó.
     for (const l of canXet) {
-      if (!conGio()) {
-        ket.buSla.conSot = canXet.length - ket.buSla.daXet;
-        break;
-      }
+      if (!conGio()) break;
+      ket.buSla.daXet += 1;
       const { themNgayLam, tongDangLe } = tinhBuSla({
         dueGradeAt: l.dueGradeAt,
         gradedAt: l.gradedAt,
@@ -159,6 +166,7 @@ export async function runElearningDem(now = new Date()): Promise<KetQuaDem> {
       });
       ket.buSla.daBu += 1;
     }
+    ket.buSla.conSot = canXet.length - ket.buSla.daXet;
   } catch (e) {
     ket.loi.push({ viec: "buSla", message: (e as Error).message });
   }

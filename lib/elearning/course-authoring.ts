@@ -117,6 +117,19 @@ async function docDanBai(db: ScopedDb, courseId: string): Promise<ChuongTrongDan
       kind: b.kind,
       contentMd: b.contentMd,
       captionKey: b.captionKey,
+      // ⚠️ CHỖ THỨ TƯ. `select` ở trên có hai cột này, nhưng chép chúng vào đối
+      // tượng trả lại là một bước RIÊNG — và bước đó từng bị bỏ quên.
+      //
+      // Vì `BaiTrongDanBai.examId?`/`rubricId?` khai OPTIONAL nên TypeScript im
+      // lặng, `kiemDanBai` đọc `undefined`, và cổng `!b.examId` / `!b.rubricId`
+      // NỔ VĨNH VIỄN: không khoá nào chứa bài QUIZ hay TASK rời khỏi nháp được,
+      // kể cả khi `TrnLesson.examId`/`rubricId` đã có giá trị đúng trong DB.
+      // Người soạn thấy trình soạn báo "đã gắn đề" mà cổng vẫn bảo "chưa gắn".
+      //
+      // Lỗi này có từ EL-14 với `examId` (bài QUIZ trên `test` đang kẹt), và
+      // EL-15c suýt nhân đôi nó sang `rubricId`.
+      examId: b.examId,
+      rubricId: b.rubricId,
       // Bài chưa có dòng phiên bản ⇒ coi là BẮT BUỘC. Mặc định phía chặt: đoán
       // "tuỳ chọn" sẽ âm thầm bỏ bài đó khỏi điều kiện hoàn thành.
       required: batBuoc.get(b.id) ?? true,

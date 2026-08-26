@@ -3,6 +3,7 @@ import type { ActionConfig } from "@/lib/actions/factory";
 import { ActionError } from "@/lib/actions/factory";
 import { dsMucSchema, tinhDiemBaiNop } from "@/lib/elearning/rubric-shape";
 import { ghiXongBai } from "@/lib/elearning/lesson-done";
+import { tinhBuSla, hanSauKhiBu } from "@/lib/elearning/sla-bu";
 
 /**
  * EL-15c — CHẤM BÀI TẬP theo khung.
@@ -85,6 +86,8 @@ export const cauHinhChamBaiTap: ActionConfig<ChamBaiTapInput, KetQuaChamBaiTap> 
         attemptNo: true,
         status: true,
         rubricId: true,
+        dueGradeAt: true,
+        slaBuNgayLam: true,
       },
     });
     if (!lan) throw new ActionError("NOT_FOUND", "Không tìm thấy lượt nộp");
@@ -233,6 +236,50 @@ export const cauHinhChamBaiTap: ActionConfig<ChamBaiTapInput, KetQuaChamBaiTap> 
       }
     });
 
+    // ── CHỐT phần bù SLA — đây là lần cuối, `gradedAt` vừa được đặt ────────
+    //
+    // ⚠️ Làm ở ĐÂY chứ không để cron: sau lượt chấm này `gradedAt` cố định, nên tổng
+    // nợ là con số CUỐI CÙNG. Để cron gánh thì nó phải quét mãi cả nhóm đã chấm —
+    // một cửa sổ không bao giờ vơi, và nó sẽ chiếm chỗ của những lượt vừa trễ.
+    //
+    // ⚠️ Nằm NGOÀI giao dịch chấm, và nuốt lỗi: điểm đã chốt rồi. Bù thiếu một
+    // ngày là chuyện sửa được; mất cả lượt chấm thì không.
+    let buLoi = false;
+    if (lan.enrollmentId) {
+      try {
+        const { themNgayLam, tongDangLe } = tinhBuSla({
+          dueGradeAt: lan.dueGradeAt,
+          gradedAt: now,
+          now,
+          so: { daBuNgayLam: lan.slaBuNgayLam },
+        });
+        if (themNgayLam > 0) {
+          const gd = await db.trnEnrollment.findFirst({
+            where: { id: lan.enrollmentId },
+            select: { id: true, dueAt: true, slaGraceDays: true, status: true },
+          });
+          if (gd && gd.status !== "REVOKED") {
+            await db.$transaction(async (t) => {
+              await t.trnEnrollment.update({
+                where: { id: gd.id },
+                data: {
+                  dueAt: hanSauKhiBu(gd.dueAt, themNgayLam),
+                  slaGraceDays: gd.slaGraceDays + themNgayLam,
+                  ...(gd.status === "OVERDUE" ? { status: "IN_PROGRESS" } : {}),
+                },
+              });
+              await t.trnSubmission.update({
+                where: { id: lan.id },
+                data: { slaBuNgayLam: tongDangLe },
+              });
+            });
+          }
+        }
+      } catch {
+        buLoi = true;
+      }
+    }
+
     // ── ĐẠT thì bài học lên xong ───────────────────────────────────────────
     let ghiTienDoLoi = false;
     if (!input.traVeSua && ket.dat === true && lan.enrollmentId) {
@@ -258,7 +305,7 @@ export const cauHinhChamBaiTap: ActionConfig<ChamBaiTapInput, KetQuaChamBaiTap> 
         totalScore: ket.tong ?? 0,
         passed: ket.dat ?? false,
         traVeSua: input.traVeSua === true,
-        ghiTienDoLoi,
+        ghiTienDoLoi: ghiTienDoLoi || buLoi,
       },
       oldValues: { status: "SUBMITTED", score: null },
       newValues: {
