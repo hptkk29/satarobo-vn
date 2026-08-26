@@ -10,6 +10,9 @@ import { PageHelp } from "@/components/admin/ui/page-help";
 export const metadata = { title: "Bàn giao lead | Admin" };
 export const dynamic = "force-dynamic";
 
+// ⚠️ Phải có REGISTERED + ENROLLED: lead đã convert LUÔN mang `status = ENROLLED`, và đó
+// chính là nhóm mang `Enrollment.saleId` + kênh chat riêng Sale↔PH. Thiếu 2 chip này thì
+// không có cách nào nhắm đúng nhóm cần bàn giao nhất.
 const LEAD_STATUSES = [
   "NEW",
   "ASSIGNED",
@@ -20,6 +23,8 @@ const LEAD_STATUSES = [
   "TRIAL_ATTENDED",
   "AWAITING_DECISION",
   "NURTURING",
+  "REGISTERED",
+  "ENROLLED",
 ];
 
 export default async function HandoverPage() {
@@ -80,6 +85,12 @@ export default async function HandoverPage() {
           Có thể lọc theo trạng thái, chiến dịch, chỉ lead chưa đóng. Task đang
           mở cũng được chuyển. Ghi lịch sử + nhật ký kiểm toán; KHÔNG sửa tài
           khoản sale cũ.
+        </p>
+        <p className="mt-2">
+          Với lead đã ghi danh (trạng thái ENROLLED), lượt bàn giao còn chuyển{" "}
+          <strong>sale phụ trách của ghi danh</strong> và <strong>đóng kênh chat riêng</strong>{" "}
+          giữa sale cũ với phụ huynh. Ghi danh ở cơ sở KHÁC sale nhận sẽ bị gỡ phân công
+          (phải gán lại ở màn học viên của lớp) — số lượng hiện trong thông báo sau khi chạy.
         </p>
       </PageHelp>
 

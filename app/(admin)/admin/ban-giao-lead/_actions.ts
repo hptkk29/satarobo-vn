@@ -50,7 +50,18 @@ export async function previewHandoverAction(input: {
   return { ok: true, count };
 }
 
-export async function runHandoverAction(input: unknown): Promise<{ ok: boolean; error?: string; moved?: number; tasksMoved?: number }> {
+export async function runHandoverAction(input: unknown): Promise<{
+  ok: boolean;
+  error?: string;
+  moved?: number;
+  tasksMoved?: number;
+  /** Ghi danh đổi sale phụ trách — kênh riêng Sale↔PH sống trên cột này. */
+  enrollmentsMoved?: number;
+  /** Ghi danh bị gỡ phân công vì sale nhận khác cơ sở (phải gán tay lại). */
+  enrollmentsUnassigned?: number;
+  /** Kênh riêng của sale cũ đã chuyển chỉ-đọc. */
+  dmArchived?: number;
+}> {
   const session = await auth();
   if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
   if (!(await checkPermission("leads:assign"))) return { ok: false, error: "Không có quyền" };
@@ -75,5 +86,15 @@ export async function runHandoverAction(input: unknown): Promise<{ ok: boolean; 
   });
   if (!res.ok) return { ok: false, error: res.error };
   revalidatePath("/admin/ban-giao-lead");
-  return { ok: true, moved: res.moved, tasksMoved: res.tasksMoved };
+  // Trả ĐỦ 4 con số: lead/task là phần nhìn thấy được, còn ghi danh + kênh chat là phần
+  // quyết định ai còn nhắn riêng được với phụ huynh. Vứt 3 số sau đi thì một lượt bàn
+  // giao chỉ chuyển được vỏ lead vẫn báo "thành công" y hệt lượt chuyển đủ.
+  return {
+    ok: true,
+    moved: res.moved,
+    tasksMoved: res.tasksMoved,
+    enrollmentsMoved: res.enrollmentsMoved,
+    enrollmentsUnassigned: res.enrollmentsUnassigned,
+    dmArchived: res.dmArchived,
+  };
 }

@@ -19,7 +19,13 @@ export function HandoverForm({
   const [toUserId, setToUserId] = useState("");
   const [selStatuses, setSelStatuses] = useState<string[]>([]);
   const [campaign, setCampaign] = useState("");
-  const [onlyActive, setOnlyActive] = useState(true);
+  // ⚠️ MẶC ĐỊNH PHẢI LÀ `false`. Lead đã convert LUÔN mang `status = ENROLLED`
+  // (lib/crm/convert-lead-v2.ts — bước CLAIM), và ENROLLED nằm trong TERMINAL_STATUSES
+  // mà `onlyActive` loại ⇒ để mặc định `true` thì đúng nhóm lead CÓ ghi danh bị loại
+  // sạch: `Enrollment.saleId` không đổi, kênh riêng của sale cũ không đóng, job đối
+  // soát đêm cũng không dọn (vì `saleId` vẫn khớp sale cũ) — mà màn hình vẫn báo
+  // "Đã chuyển N lead". Đây là đường mặc định của người dùng, không phải ca hiếm.
+  const [onlyActive, setOnlyActive] = useState(false);
   const [reason, setReason] = useState("");
   const [count, setCount] = useState<number | null>(null);
   const [pending, start] = useTransition();
@@ -49,7 +55,20 @@ export function HandoverForm({
     start(async () => {
       const res = await runHandoverAction({ fromUserId, toUserId, statuses: selStatuses, campaign, onlyActive, reason });
       if (res.ok) {
-        toast.success(`Đã chuyển ${res.moved} lead, ${res.tasksMoved} task`);
+        // Nói ĐỦ 4 con số: "N lead" một mình không cho biết sale cũ còn nhắn riêng
+        // được phụ huynh nữa hay không.
+        const parts = [
+          `${res.moved} lead`,
+          `${res.tasksMoved} task`,
+          `${res.enrollmentsMoved ?? 0} ghi danh`,
+          `${res.dmArchived ?? 0} kênh chat đóng`,
+        ];
+        toast.success(`Đã chuyển ${parts.join(", ")}`);
+        if (res.enrollmentsUnassigned) {
+          toast.warning(
+            `${res.enrollmentsUnassigned} ghi danh KHÁC CƠ SỞ với sale nhận đã bị gỡ phân công — vào màn học viên của lớp để gán sale đúng cơ sở.`,
+          );
+        }
         setCount(null);
         setReason("");
       } else {
@@ -130,17 +149,25 @@ export function HandoverForm({
         </select>
       </label>
 
-      <label className="flex items-center gap-2 text-sm">
-        <input
-          type="checkbox"
-          checked={onlyActive}
-          onChange={(e) => {
-            setOnlyActive(e.target.checked);
-            setCount(null);
-          }}
-        />
-        <span className="text-muted-foreground">Chỉ lead chưa đóng (bỏ ENROLLED/LOST/DUPLICATE)</span>
-      </label>
+      <div className="text-sm">
+        <label className="flex items-center gap-2">
+          <input
+            type="checkbox"
+            checked={onlyActive}
+            onChange={(e) => {
+              setOnlyActive(e.target.checked);
+              setCount(null);
+            }}
+          />
+          <span className="text-muted-foreground">Chỉ lead chưa đóng (bỏ ENROLLED/LOST/DUPLICATE)</span>
+        </label>
+        {onlyActive ? (
+          <p className="mt-1 text-xs text-amber-700">
+            ⚠️ Bỏ ENROLLED = bỏ luôn khách đã ghi danh: sale phụ trách ghi danh KHÔNG đổi
+            và kênh chat riêng của sale cũ KHÔNG đóng. Sale nghỉ việc thì bỏ tick ô này.
+          </p>
+        ) : null}
+      </div>
 
       <label className="text-sm sm:col-span-2">
         <span className="mb-1 block text-muted-foreground">Lý do bàn giao</span>
