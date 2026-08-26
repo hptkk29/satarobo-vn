@@ -50,6 +50,9 @@ type Center = { id: string; name: string };
 type UiOrderType = Extract<OrderType, "COURSE" | "PRODUCT">;
 
 const NO_CENTER = "NONE";
+// N-2 — mốc "chưa quy được về con" trong ô chọn học sinh. Tách hằng riêng khỏi
+// NO_CENTER dù cùng giá trị: hai ô khác nhau, đổi một cái không được kéo cái kia.
+const NO_CHILD = "NONE";
 
 export function OrderCreateForm({
   paymentMethods,
@@ -58,6 +61,7 @@ export function OrderCreateForm({
   centers,
   provinces,
   leadId = null,
+  leadChildren = [],
   defaultCustomer,
   defaultCenterId,
 }: {
@@ -70,6 +74,8 @@ export function OrderCreateForm({
   // convert-v2 (R7-05/06): khi tạo đơn TỪ một lead, gắn leadId để convert sau tìm
   // được Payment RECORDED qua order.leadId. null = đơn walk-in thông thường.
   leadId?: string | null;
+  // N-2 · quyết định B4 — con của phiếu, để quy đơn về đúng một đứa.
+  leadChildren?: { id: string; fullName: string }[];
   defaultCustomer?: { name?: string; phone?: string; email?: string };
   defaultCenterId?: string | null;
 }) {
@@ -93,6 +99,12 @@ export function OrderCreateForm({
   const [wardOptions, setWardOptions] = useState<ComboboxOption[]>([]);
   const [wardLoading, setWardLoading] = useState(false);
   const [centerId, setCenterId] = useState<string>(defaultCenterId ?? NO_CENTER);
+  // N-2 — phiếu ĐÚNG 1 con thì chọn sẵn (không có lựa chọn nào khác); phiếu nhiều con để
+  // trống, ép người tạo đơn chọn thay vì hệ thống đoán hộ. Server suy lại y hệt luật này
+  // (`resolveOrderLeadChildId`) nên bỏ qua form vẫn ra cùng kết quả.
+  const [leadChildId, setLeadChildId] = useState<string>(
+    leadChildren.length === 1 ? leadChildren[0]!.id : NO_CHILD,
+  );
 
   // Single item
   const [itemRefId, setItemRefId] = useState("");
@@ -133,6 +145,13 @@ export function OrderCreateForm({
   const centerItems = useMemo(
     () => ({ [NO_CENTER]: "— Không gán —", ...Object.fromEntries(centers.map((c) => [c.id, c.name])) }),
     [centers],
+  );
+  const leadChildItems = useMemo(
+    () => ({
+      [NO_CHILD]: "— Chưa quy được về con —",
+      ...Object.fromEntries(leadChildren.map((c) => [c.id, c.fullName])),
+    }),
+    [leadChildren],
   );
   const itemItems = useMemo(() => {
     if (orderType === "COURSE")
@@ -242,6 +261,8 @@ export function OrderCreateForm({
       customerCity: cityName,
       studentId: null,
       leadId: leadId ?? null,
+      // N-2 — null = chưa quy được về con; server kiểm con có thuộc phiếu này không.
+      leadChildId: leadChildId === NO_CHILD ? null : leadChildId,
       centerId: centerId === NO_CENTER ? null : centerId,
       paymentMethodId,
       items: [item],
@@ -413,6 +434,36 @@ export function OrderCreateForm({
               placeholder="9 hoặc 12 chữ số"
             />
           </div>
+          {leadChildren.length > 0 && (
+            <div className="space-y-1.5">
+              <Label>
+                Học sinh của đơn
+                <HelpHint>
+                  Đơn này là của đứa con nào. Doanh thu, tỷ lệ chốt và chi phí trên mỗi
+                  khách đều tính theo HỌC SINH, không theo phụ huynh — để trống thì đơn
+                  rơi vào nhóm &quot;chưa quy được về con&quot; trong báo cáo. Một đơn chỉ
+                  gắn được một con; hai anh em thì lập hai đơn.
+                </HelpHint>
+              </Label>
+              <Select
+                items={leadChildItems}
+                value={leadChildId}
+                onValueChange={(v) => setLeadChildId(v ?? NO_CHILD)}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={NO_CHILD}>— Chưa quy được về con —</SelectItem>
+                  {leadChildren.map((c) => (
+                    <SelectItem key={c.id} value={c.id}>
+                      {c.fullName}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
           <div className="space-y-1.5">
             <Label>
               Trung tâm

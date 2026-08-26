@@ -1,6 +1,7 @@
 import { db } from "@/lib/db";
 import { logLeadAudit } from "@/lib/audit/log";
 import { recordLeadStatusChange } from "@/lib/lead/status-trail-write";
+import { recordLeadActivity } from "@/lib/lead/activity-write";
 import { orgUnitIdForCenter } from "@/lib/org/org-service";
 import { getNonEnrollableCenterIds } from "@/lib/enrollment-flow";
 import type { LeadStatus, Prisma, LeadAssignMode } from "@prisma/client";
@@ -24,6 +25,12 @@ const SYSTEM_META = { system: true } as Prisma.InputJsonValue;
 /**
  * Lead "đã có tương tác" của sale (gọi/nhắn/email/bàn giao hoặc ghi chú KHÔNG
  * phải hệ thống) → KHÔNG auto-chia lại.
+ *
+ * ⚠️ N-4 — đây là BẢN PHÍA DB của đúng khái niệm "đã tiếp cận khách" mà
+ * `lib/lead/activity-clock.ts` giữ bản THUẦN (`LEAD_OUTREACH_TYPES`). Hai bản
+ * cố ý chưa gộp: đổi danh sách ở đây là đổi luôn hành vi auto-chia-lại, việc đó
+ * cần quyết định riêng. Test `[N-4] định nghĩa 'đã tiếp cận' không được tách làm
+ * hai bản` ghim hai danh sách bằng nhau ⇒ sửa một bên là test đỏ, bắt chọn.
  */
 export async function hasSaleInteraction(leadId: string): Promise<boolean> {
   const n = await db.leadActivity.count({
@@ -222,15 +229,14 @@ export async function autoAssignNewLead(leadId: string, actor: Actor): Promise<A
       changedFields: ["assignedToId"],
       tx,
     });
-    await tx.leadActivity.create({
-      data: {
-        leadId,
-        actorId: actor.actorId,
-        actorName: actor.actorName,
-        type: "NOTE",
-        content: `Tự động chia cho ${targetUser?.name ?? target} (${mode === "CLOSE_RATE" ? "tỷ lệ chốt" : "luân phiên"})`,
-        metadata: SYSTEM_META,
-      },
+    await recordLeadActivity({
+      tx,
+      leadId,
+      actorId: actor.actorId,
+      actorName: actor.actorName,
+      type: "NOTE",
+      content: `Tự động chia cho ${targetUser?.name ?? target} (${mode === "CLOSE_RATE" ? "tỷ lệ chốt" : "luân phiên"})`,
+      metadata: SYSTEM_META,
     });
     // C-07 — ĐƯỜNG TỰ CHIA lật `MỚI → ĐÃ PHÂN CÔNG` ngay ở `tx.lead.update` trên,
     // nhưng vết duy nhất của nó (`ASSIGN`) chỉ mang `assignedToId` ⇒ mốc đầu tiên
@@ -341,15 +347,14 @@ export async function manualAssignLead(
       changedFields: ["assignedToId"],
       tx,
     });
-    await tx.leadActivity.create({
-      data: {
-        leadId,
-        actorId: actor.actorId,
-        actorName: actor.actorName,
-        type: "NOTE",
-        content: `Gán tay cho ${sale.name ?? saleId}`,
-        metadata: SYSTEM_META,
-      },
+    await recordLeadActivity({
+      tx,
+      leadId,
+      actorId: actor.actorId,
+      actorName: actor.actorName,
+      type: "NOTE",
+      content: `Gán tay cho ${sale.name ?? saleId}`,
+      metadata: SYSTEM_META,
     });
     // C-07 — cùng lý do như đường tự chia: gán tay cũng lật trạng thái mà không
     // để lại mốc nào. Điều kiện trùng khít với dòng lật ở `tx.lead.update`.

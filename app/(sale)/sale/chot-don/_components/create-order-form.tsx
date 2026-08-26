@@ -30,8 +30,20 @@ type Product = { id: string; sku: string; name: string; salePrice: number };
 
 type Loai = "COURSE" | "PRODUCT";
 
+// N-2 · quyết định B4 — con của phiếu. Doanh thu, tỷ lệ chốt và chi phí trên mỗi khách
+// đều tính theo HỌC SINH, nên đơn phải nói được nó của đứa nào.
+type LeadChild = { id: string; fullName: string };
+
+/**
+ * Mốc "chưa quy được về con" trong ô chọn. Chuỗi rỗng vì `<select>` thuần dùng `value`
+ * là chuỗi; chỗ gửi đi quy nó về `null` (`conId || null`) chứ KHÔNG gửi chuỗi rỗng —
+ * validator đòi `min(1)`, gửi "" là đơn bị từ chối với thông báo chẳng nói gì.
+ */
+const KHONG_CHON_CON = "";
+
 export function CreateOrderForm({
   leadId,
+  leadChildren,
   defaultCustomerName,
   defaultCustomerPhone,
   defaultCustomerEmail,
@@ -40,6 +52,7 @@ export function CreateOrderForm({
   products,
 }: {
   leadId: string;
+  leadChildren: LeadChild[];
   defaultCustomerName: string;
   defaultCustomerPhone: string;
   defaultCustomerEmail: string;
@@ -61,6 +74,12 @@ export function CreateOrderForm({
   const [sdt, setSdt] = useState(defaultCustomerPhone);
   const [email, setEmail] = useState(defaultCustomerEmail);
   const [ghiChu, setGhiChu] = useState("");
+  // Phiếu ĐÚNG 1 con thì chọn sẵn (không có lựa chọn nào khác); phiếu nhiều con để trống
+  // để Sale tự chọn. KHÔNG tự lấy đứa đầu danh sách — đoán sai là gán doanh thu sang đứa
+  // khác mà tổng vẫn khớp nên không ai phát hiện. Server suy lại đúng luật này.
+  const [conId, setConId] = useState<string>(
+    leadChildren.length === 1 ? leadChildren[0]!.id : KHONG_CHON_CON,
+  );
 
   const danhSach = loai === "COURSE" ? courses : products;
   // Phương thức thanh toán lọc theo loại đơn — chọn phải phương thức không dùng
@@ -101,6 +120,8 @@ export function CreateOrderForm({
         customerPhone: sdt.trim(),
         customerEmail: email.trim() || null,
         leadId,
+        // null = chưa quy được về con; báo cáo hiện thành một dòng riêng chứ không nuốt.
+        leadChildId: conId || null,
         // KHÔNG gửi centerId: server ép theo cơ sở của lead
         // (`checkOrderCreateOwnership`), không tin giá trị client.
         paymentMethodId: ptId,
@@ -132,6 +153,32 @@ export function CreateOrderForm({
 
   return (
     <div className="space-y-4">
+      {leadChildren.length > 0 && (
+        <section className="rounded-xl border border-border bg-card p-4">
+          <h2 className="mb-3 text-sm font-semibold">Học sinh của đơn</h2>
+          <label className="text-sm">
+            <span className="text-muted-foreground">Đơn này là của con nào</span>
+            <select
+              value={conId}
+              onChange={(e) => setConId(e.target.value)}
+              className="mt-1 h-9 w-full rounded-lg border border-border bg-background px-2"
+            >
+              <option value={KHONG_CHON_CON}>— chưa quy được về con —</option>
+              {leadChildren.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.fullName}
+                </option>
+              ))}
+            </select>
+          </label>
+          <p className="mt-2 text-xs text-muted-foreground">
+            Doanh thu và tỷ lệ chốt tính theo học sinh, không theo phụ huynh. Bỏ trống thì
+            đơn nằm ở nhóm &quot;chưa quy được về con&quot; trong báo cáo. Một đơn chỉ gắn
+            được một con — hai anh em thì lập hai đơn.
+          </p>
+        </section>
+      )}
+
       <section className="rounded-xl border border-border bg-card p-4">
         <h2 className="mb-3 text-sm font-semibold">Hàng</h2>
         <div className="grid gap-3 sm:grid-cols-2">

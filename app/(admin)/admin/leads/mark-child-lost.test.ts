@@ -95,8 +95,15 @@ const CON = {
   lead: { id: "lead-1", centerId: "cs1", assignedToId: "u-sale" },
 };
 
+const MOC_TX = new Date("2026-08-25T03:00:00.000Z");
+
 const daGhiCon = () => h.childUpdate.mock.calls[0]?.[0] as { where: unknown; data: Record<string, unknown> };
 const daGhiPhieu = () => h.leadUpdate.mock.calls[0]?.[0] as { where: unknown; data: Record<string, unknown> };
+/** Mọi ô của phiếu đã bị lượt chạy này ghi — gộp cả những lần `update` không liên quan. */
+const oPhieuDaGhi = () =>
+  h.leadUpdate.mock.calls.flatMap((c) =>
+    Object.keys((c[0] as { data: Record<string, unknown> }).data),
+  );
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -106,7 +113,9 @@ beforeEach(() => {
   h.childUpdate.mockResolvedValue({ id: CON.id });
   h.childCount.mockResolvedValue(1);
   h.leadUpdate.mockResolvedValue({ id: "lead-1" });
-  h.activityCreate.mockResolvedValue({ id: "act-1" });
+  // N-4 — đường ghi hoạt động chung đọc `createdAt` của dòng vừa tạo để bump
+  // `Lead.lastActivityAt`; tx giả phải trả nó như Prisma thật.
+  h.activityCreate.mockResolvedValue({ id: "act-1", createdAt: MOC_TX });
   h.logLeadAudit.mockResolvedValue(undefined);
   h.resolveActor.mockResolvedValue({ userId: "u-sale" });
   h.passesScope.mockReturnValue(true);
@@ -238,7 +247,12 @@ describe("[C-06] unmarkLeadChildLostAction — gỡ một con khỏi trạng th�
 
     expect(res.ok).toBe(true);
     expect(daGhiCon().data).toEqual({ status: "CONSULTING" });
-    expect(h.leadUpdate).not.toHaveBeenCalled();
+    // N-4 — `lead.update` NAY còn được gọi để bump `lastActivityAt` (đường ghi
+    // hoạt động chung). Thứ phải canh vẫn nguyên: không lượt ghi nào được chạm
+    // `lostNote`/`lostAt` khi còn con khác đang rớt — chạm là xoá mất lý do của
+    // đứa còn lại. Đo theo Ô BỊ GHI, không đo theo "có gọi update hay không".
+    expect(oPhieuDaGhi()).not.toContain("lostNote");
+    expect(oPhieuDaGhi()).not.toContain("lostAt");
   });
 
   it("(b) không còn con nào rớt → xoá cả lý do lẫn mốc", async () => {

@@ -103,6 +103,10 @@ const NAV_GROUPS: NavGroup[] = [
     label: "Tổng quan",
     items: [
       { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard }, // luôn hiện
+      // A-02 — dashboard QLCS 4 tab. Mục RIÊNG, không thay "Dashboard" ở trên: trang đó
+      // là màn tiếp đất chung của cả 9 vai. Đọc thẳng bảng gate ⇒ menu và cổng trang
+      // không thể lệch nhau (bất biến của lib/auth/page-gates.test.ts).
+      { label: "Dashboard QLCS", href: "/dashboard-qlcs", icon: Gauge, perm: [...PAGE_GATES["/dashboard-qlcs"]] },
       { label: "CRM", href: "/crm", icon: BarChart3, perm: ["leads:view-all"] },
     ],
   },

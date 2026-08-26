@@ -68,6 +68,9 @@ export default async function SaleChotDonPage({
       <div className="mt-5">
         <CreateOrderForm
           leadId={lead.id}
+          // N-2 — con của phiếu; `getMyLeadDetail` đã đọc kèm và đã qua cổng "khách của
+          // mình", nên danh sách này không bao giờ chứa con của phiếu người khác.
+          leadChildren={lead.children.map((c) => ({ id: c.id, fullName: c.fullName }))}
           // Thông tin người mua lấy sẵn từ hồ sơ khách — gõ lại là chỗ sinh sai
           // lệch giữa đơn và lead, và sai số điện thoại thì mọi tin nhắn xác nhận
           // đi lạc.

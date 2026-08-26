@@ -53,6 +53,11 @@ export const orderCreateManualSchema = z.object({
   // Optional links
   studentId: z.string().min(1).optional().nullable(),
   leadId: z.string().min(1).optional().nullable(),
+  // N-2 · quyết định B4 (24/08/2026) — MỘT ĐƠN – MỘT CON. Con nào của phiếu `leadId` sinh
+  // ra đơn này. Bỏ trống được: phiếu đúng 1 con thì server tự suy, phiếu nhiều con mà
+  // không chọn thì đơn nằm ở nhóm "chưa quy được về con" (KHÔNG đoán — xem
+  // `lib/orders/lead-child-link.ts`). Quyền sở hữu con do server kiểm, không tin client.
+  leadChildId: z.string().min(1).optional().nullable(),
   centerId: z.string().min(1).optional().nullable(),
   paymentMethodId: z.string().min(1),
 

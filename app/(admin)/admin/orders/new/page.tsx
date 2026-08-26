@@ -33,16 +33,24 @@ export default async function NewOrderPage({
   const { leadId } = await searchParams;
   let lead: { id: string; parentName: string; phone: string; email: string | null; centerId: string | null } | null = null;
   let leadAssignedToId: string | null = null;
+  // N-2 · quyết định B4 — con của phiếu, để người tạo đơn quy đơn về đúng một đứa.
+  let leadChildren: { id: string; fullName: string }[] = [];
   if (leadId) {
     const actor = await resolveActor(session.user.id);
     const row = await scopedDb(actor).lead.findUnique({
       where: { id: leadId },
-      select: { id: true, parentName: true, phone: true, email: true, centerId: true, assignedToId: true },
+      select: {
+        id: true, parentName: true, phone: true, email: true, centerId: true, assignedToId: true,
+        // Đọc kèm trong CÙNG lượt đọc phiếu (phiếu đã qua scope) — không đọc thẳng
+        // `LeadChild`: bảng đó không có `centerId` nên `scopedDb` là pass-through.
+        children: { select: { id: true, fullName: true }, orderBy: { createdAt: "asc" } },
+      },
     });
     if (row) {
-      const { assignedToId, ...rest } = row;
+      const { assignedToId, children, ...rest } = row;
       lead = rest;
       leadAssignedToId = assignedToId;
+      leadChildren = children;
     }
   }
 
@@ -85,6 +93,7 @@ export default async function NewOrderPage({
         centers={data.centers}
         provinces={provinces.map((p) => ({ value: p.id, label: p.name }))}
         leadId={lead?.id ?? null}
+        leadChildren={leadChildren}
         defaultCustomer={
           lead
             ? { name: lead.parentName, phone: lead.phone, email: lead.email ?? "" }

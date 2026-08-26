@@ -34,6 +34,9 @@ export const ROLE_SEED: RoleSeed[] = [
     perms: [
       { action: "roles:manage", scopeType: "GLOBAL" },
       { action: "roles:assign", scopeType: "GLOBAL" },
+      // A-02 — dashboard QLCS 4 tab. SUPER_ADMIN đã bypass toàn bộ quyền trong can() v2
+      // nên dòng này KHÔNG đổi hành vi; khai để ma trận nói được ai mở được màn này.
+      { action: "dashboard:view", scopeType: "GLOBAL" },
       // US-03 — quản nhóm người dùng + grant nhóm (chỉ SUPER_ADMIN, như roles:manage).
       { action: "user-groups:manage", scopeType: "GLOBAL" },
       // C-01 — chỉ tiêu lead theo tháng × cơ sở. SUPER_ADMIN đã bypass toàn bộ quyền
@@ -86,6 +89,11 @@ export const ROLE_SEED: RoleSeed[] = [
     // oversight toàn hệ thống.
     code: "HO_ACCOUNTANT", name: "Kế toán Hội sở",
     perms: [
+      // A-02 — cổng vào dashboard QLCS 4 tab. GLOBAL là BẮT BUỘC, không phải nới tay:
+      // gate cấp trang gọi `checkAnyPermission` KHÔNG target, mà `scopeMatches` đòi
+      // target với scope CENTER ⇒ seed CENTER là khoá cửa chính của chính vai này trên
+      // prod trong khi local (v1) vẫn xanh. Cách ly cơ sở nằm ở `resolveScopeFilters()`.
+      { action: "dashboard:view", scopeType: "GLOBAL" },
       { action: "payments:manage", scopeType: "GLOBAL" },
       { action: "payments:view", scopeType: "GLOBAL" },
       // B-01 — trước đây đặt mục tiêu doanh thu đi nhờ `payments:manage`. Tách key
@@ -140,6 +148,11 @@ export const ROLE_SEED: RoleSeed[] = [
     // (BGĐ câu 10).
     code: "HO_HR", name: "Nhân sự Hội sở",
     perms: [
+      // A-02 — cổng vào dashboard QLCS 4 tab. GLOBAL là BẮT BUỘC, không phải nới tay:
+      // gate cấp trang gọi `checkAnyPermission` KHÔNG target, mà `scopeMatches` đòi
+      // target với scope CENTER ⇒ seed CENTER là khoá cửa chính của chính vai này trên
+      // prod trong khi local (v1) vẫn xanh. Cách ly cơ sở nằm ở `resolveScopeFilters()`.
+      { action: "dashboard:view", scopeType: "GLOBAL" },
       { action: "employees:view-all", scopeType: "GLOBAL" },
       { action: "employees:edit", scopeType: "GLOBAL" },
       { action: "employees:view-public", scopeType: "GLOBAL" },
@@ -230,6 +243,11 @@ export const ROLE_SEED: RoleSeed[] = [
     // hiệu lực khi re-seed + flip cờ; v1 đã áp runtime.) Cách ly cơ sở vẫn do scopedDb.
     code: "HO_MARKETING", name: "Marketing Hội sở",
     perms: [
+      // A-02 — cổng vào dashboard QLCS 4 tab. GLOBAL là BẮT BUỘC, không phải nới tay:
+      // gate cấp trang gọi `checkAnyPermission` KHÔNG target, mà `scopeMatches` đòi
+      // target với scope CENTER ⇒ seed CENTER là khoá cửa chính của chính vai này trên
+      // prod trong khi local (v1) vẫn xanh. Cách ly cơ sở nằm ở `resolveScopeFilters()`.
+      { action: "dashboard:view", scopeType: "GLOBAL" },
       { action: "leads:view-all", scopeType: "GLOBAL" },
       { action: "leads:view-pii", scopeType: "GLOBAL" },
       { action: "blog:edit", scopeType: "GLOBAL" },
@@ -468,6 +486,11 @@ export const ROLE_SEED: RoleSeed[] = [
     // SUPER_ADMIN (QL dùng enrollments:cancel; CLAUDE.md cấm hard-delete).
     code: "CENTER_MANAGER", name: "Quản lý cơ sở",
     perms: [
+      // A-02 — cổng vào dashboard QLCS 4 tab. GLOBAL là BẮT BUỘC, không phải nới tay:
+      // gate cấp trang gọi `checkAnyPermission` KHÔNG target, mà `scopeMatches` đòi
+      // target với scope CENTER ⇒ seed CENTER là khoá cửa chính của chính vai này trên
+      // prod trong khi local (v1) vẫn xanh. Cách ly cơ sở nằm ở `resolveScopeFilters()`.
+      { action: "dashboard:view", scopeType: "GLOBAL" },
       // ── Lead ──
       { action: "leads:view-all", scopeType: "GLOBAL" },
       // ⚠️ Đợt E (22/08/2026) — `leads:view-pii` ĐÃ GỠ khỏi vai này theo Q9 chủ dự
