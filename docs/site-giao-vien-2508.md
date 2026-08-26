@@ -288,3 +288,82 @@ thái, còn 7 cột / 880px. Sau đó **mọi bảng site GV vừa màn 1280px**
 Tất cả **ADDITIVE**: chỉ thêm cột nullable, không đổi/bỏ cột nào. Rollback = `DROP COLUMN`.
 `CommissionLine.enrollmentId` để `NULL` cho 4 tầng Sale nên không vướng unique mới
 (trong Postgres `NULL` không bằng `NULL`).
+
+---
+
+## 9. MEDIA-REVIEW — màn duyệt ảnh MỚI cho QLCS (26/08)
+
+Chủ dự án **đảo chốt** giữa chừng: ban đầu duyệt lại trên `ClassSessionMedia`, sau đổi
+thành *"toi khong muon dung lai classsessionmedia nữa, làm mới cho tôi"*. Module dựng lại
+từ đầu theo BA MEDIA-REVIEW 26/08.
+
+### 9.1 Bảng mới
+
+| Bảng | Vai trò |
+|---|---|
+| `MediaAsset` | một tấm ảnh/video của một buổi + trạng thái duyệt + xoá mềm 7 ngày |
+| `SessionMediaReview` | **kết luận của cả buổi** — 1-1 với `ClassSession` (`@unique`) |
+
+Cả hai vào `SCOPED_MODELS`, `BACKFILL_SPECS` (`nullMeaning: "BAT_BUOC"`) và **map prefix
+`"media:"` trong `getModelPrefixes`**. Cái cuối là bẫy đã từng mắc với `Attendance` (#04):
+model nằm trong `SCOPED_MODELS` mà **không có map prefix** thì tầm nhìn rơi về `isHoLevel`
+diện rộng ⇒ bất kỳ ai có **một** vai neo tại Hội sở, kể cả vai chẳng liên quan, đọc được
+ảnh học viên của **mọi cơ sở**. Có test riêng chặn (`lib/db-scope-function.test.ts`).
+
+### 9.2 Ba chỗ cố ý làm KHÁC bản mô tả
+
+1. **Cây dựng từ LỊCH HỌC, không từ kho ảnh.** BA vừa đòi "chỉ hiện folder có ảnh chưa
+   duyệt" vừa đòi nút "Hôm nay không có ảnh" — hai điều chọi nhau: dựng cây từ ảnh thì lớp
+   **không có ảnh** không bao giờ xuất hiện, không ai bấm được nút đó, mất luôn cơ chế giải
+   trình và báo cáo SLA. Nay lớp rời danh sách khi **có kết luận**, không phải khi hết ảnh.
+2. **Hai mức trên một route** (`/duyet-media` và `?sessionId=`) thay vì 4 route M1–M4:
+   QLCS duyệt liên tục hàng chục lớp mỗi sáng, mỗi lần vào/ra một mức là một lượt tải trang.
+3. **`OperationSetting.mediaReviewDeadline` → `SystemSetting`** khoá `media.reviewDeadlineHour`:
+   repo đã có bảng cấu hình key/value, thêm bảng thứ hai chỉ để giữ một con số là thừa.
+
+### 9.3 Nối vào đường đang chạy (2-phase)
+
+`ClassSessionMedia` **vẫn là bản ghi GIAO cho phụ huynh** (consent, tag học viên, portal,
+đính vào nhận xét buổi). `MediaAsset` chỉ thay phần **KHO + DUYỆT**. Nối bằng
+`MediaAsset.legacyMediaId` (1-1, `@unique`):
+
+- **Tải lên** (`createDraftMediaBatch`) tạo **cả hai dòng trong cùng transaction** — chỉ
+  khi ảnh **có gắn buổi**, vì cây duyệt xếp theo ngày→lớp.
+- **Duyệt / loại** ở màn mới đẩy ngược sang dòng cũ (`propagateToLegacy`): `APPROVED` →
+  `APPROVED` vì nút **"Chọn ảnh"** ở phiếu nhận xét lọc đúng `APPROVED`
+  (`getSessionPhotoPicker`). Để `DRAFT` là giáo viên duyệt xong vẫn không thấy gì.
+- `APPROVED` ở hệ cũ **không** có nghĩa "phụ huynh xem được ngay": ảnh mang
+  `isClassWide: false` và chưa có `MediaStudentTag`, mà cổng phụ huynh lọc theo thẻ.
+
+**Phase B** (sau khi chạy ổn trên prod): gỡ `ClassSessionMedia` → gỡ `legacyMediaId`.
+
+### 9.4 Việc phải chạy TAY sau merge
+
+```bash
+pnpm exec tsx scripts/backfill-media-assets.ts --dry-run   # xem trước
+pnpm exec tsx scripts/backfill-media-assets.ts             # chạy thật
+```
+
+Dựng hàng chờ từ ảnh cũ, **giữ nguyên kết luận đã có** (`APPROVED` cũ → đóng sẵn
+`SessionMediaReview`), không bắt QLCS duyệt lại vài trăm tấm. Idempotent, có `--reset`.
+Script dùng **`DIRECT_URL`** (session pooler): transaction pooler dùng lại tên prepared
+statement giữa các kết nối ⇒ script chạy dài đâm ngay `42P05 prepared statement "s0"
+already exists`.
+
+Đã chạy trên DB dev/test 26/08: **252 ảnh · đóng sẵn 78 buổi · 49 buổi vào hàng chờ**.
+
+### 9.5 Migration
+
+| File | Nội dung |
+|---|---|
+| `20260826180000_media_review` | `MediaAsset` · `SessionMediaReview` · 3 enum (`MediaType`, `MediaAssetStatus`, `SessionReviewStatus`) |
+| `20260826190000_media_asset_legacy_link` | `MediaAsset.legacyMediaId` + unique index |
+
+`MediaAssetStatus` chứ không `MediaStatus`: tên sau **đã tồn tại** (enum của
+`ClassSessionMedia`).
+
+### 9.6 Còn nợ (V1.1 / V2 của BA)
+
+- cron nhắc quá hạn + cron dọn file `REJECTED` khỏi R2 sau 7 ngày (`purgeAfterAt` đã ghi sẵn)
+- báo cáo SLA duyệt · mục "Đã xử lý" xem lại lịch sử
+- video: `markVideoWatchedAction` + cổng 90% đã có ở server, **chưa có đường tải video lên**
