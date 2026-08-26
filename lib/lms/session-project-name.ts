@@ -194,3 +194,37 @@ export function displayProjectName(saved: string | null | undefined): string {
   if (!t) return "";
   return t.replace(/^dự\s*án\s+\d+\s*[:\-–—.]\s*/i, "").trim() || t;
 }
+
+/**
+ * TÊN DỰ ÁN ĐỂ HIỂN THỊ trên phiếu nhận xét đã lưu (portal PH · admin · PDF · site GV).
+ *
+ * ⚠️ Ưu tiên tên suy từ BUỔI HỌC, không phải giá trị đã lưu trên phiếu.
+ *
+ * Vì sao (26/08 — lỗi NT-09 lần 3): `StudentSessionFeedback.projectName` là bản sao ĐÔNG
+ * CỨNG ghi lúc giáo viên bấm lưu, và nó **theo từng học viên**. Đo trên dữ liệu thật của
+ * lớp CS1.LAPTRI.006 buổi 8 ("Buổi 8 — Tay gắp cơ khí"): năm học viên trong CÙNG một buổi
+ * mang năm "dự án" khác nhau — *Xe dò vạch · Cánh tay gắp · Robot tránh vật cản · Xe điều
+ * khiển từ xa · Xe vượt địa hình* — không cái nào dính đến bài học của buổi. Phụ huynh mở
+ * báo cáo ra đọc được "Buổi 8: Tay gắp cơ khí" ở tiêu đề nhưng "Dự án: Robot tránh vật
+ * cản" ngay dưới.
+ *
+ * Cả lớp học chung một bài thì cả lớp làm chung một dự án ⇒ tên dự án là thuộc tính của
+ * BUỔI, suy ra từ giáo trình, giống hệt cách `deriveSessionLabel` dựng nhãn buổi. Ô nhập
+ * ở phiếu giáo viên đã ghi giá trị suy sẵn này từ 25/08, nhưng phiếu CŨ vẫn giữ giá trị
+ * cũ — sửa ở chỗ ĐỌC thì mọi phiếu cũ tự đúng, không cần migration đụng dữ liệu prod.
+ *
+ * Chỉ lùi về giá trị đã lưu khi buổi KHÔNG suy được tên (chưa gắn giáo án): lúc đó thứ
+ * giáo viên gõ tay vẫn hơn `DEFAULT_PROJECT_NAME` trống rỗng.
+ */
+export function resolveDisplayProjectName(
+  src: SessionProjectSource,
+  saved: string | null | undefined,
+): string {
+  const fromSession = deriveSessionTitle(src);
+  if (fromSession) return fromSession;
+
+  const fromSaved = displayProjectName(saved);
+  if (fromSaved) return fromSaved;
+
+  return deriveSessionProjectName(src);
+}

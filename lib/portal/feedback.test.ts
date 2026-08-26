@@ -127,7 +127,10 @@ describe("getStudentFeedback — map row (DB mock)", () => {
     expect(items).toHaveLength(1);
     const it0 = items[0];
     expect(it0.comment).toBe(""); // null → '' nhưng card KHÔNG rỗng nhờ notes/rubric
-    expect(it0.projectName).toBe("Dự án 3: Robot tránh vật cản");
+    // 26/08 — tên dự án bám BÀI HỌC CỦA BUỔI, KHÔNG phải giá trị lưu trên phiếu.
+    // Phiếu này lưu "Dự án 3: Robot tránh vật cản" trong khi buổi là "Cảm biến siêu âm";
+    // đó chính là cảnh phụ huynh đọc tiêu đề một đằng, dòng "Dự án" một nẻo (NT-09).
+    expect(it0.projectName).toBe("Cảm biến siêu âm");
     expect(it0.notes).toEqual({
       overall: "",
       knowledge: "Nắm chắc vòng lặp",
@@ -160,7 +163,8 @@ describe("getStudentFeedback — map row (DB mock)", () => {
     const [it0] = await getStudentFeedback("hs-1");
     expect(it0.comment).toBe("Con học tốt");
     expect(it0.rating).toBe(4);
-    expect(it0.projectName).toBeNull();
+    // Phiếu cũ không lưu tên dự án vẫn ra được tên — suy từ bài học của buổi.
+    expect(it0.projectName).toBe("Cảm biến siêu âm");
     expect(it0.notes).toBeNull();
     expect(it0.rubric).toBeNull();
   });

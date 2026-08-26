@@ -2,7 +2,11 @@
 // Sửa 25/08: tên dự án gửi PH là TÊN BÀI TRẦN (bỏ tiền tố "Dự án N:"), còn số buổi +
 // học phần chuyển hết sang NHÃN BUỔI của bảng (deriveSessionLabel).
 import { describe, it, expect } from "vitest";
-import { deriveSessionLabel, deriveSessionProjectName } from "./session-project-name";
+import {
+  deriveSessionLabel,
+  deriveSessionProjectName,
+  resolveDisplayProjectName,
+} from "./session-project-name";
 import { DEFAULT_PROJECT_NAME } from "./session-eval-rubric";
 
 describe("deriveSessionProjectName — tên gửi phụ huynh", () => {
@@ -174,5 +178,53 @@ describe("cắt tiền tố 'Buổi N —' thừa ở đầu tên bài", () => {
 
   it("cắt xong mà rỗng thì coi như không có tên", () => {
     expect(deriveSessionLabel({ sessionNumber: 4, lessonTitle: "Buổi 4 —" })).toBe("Buổi 4");
+  });
+});
+
+describe("resolveDisplayProjectName — tên dự án theo BUỔI, không theo phiếu", () => {
+  // Dữ liệu THẬT đo được 26/08 trên lớp CS1.LAPTRI.006 buổi 8: năm học viên cùng một
+  // buổi mang năm "dự án" khác nhau, không cái nào dính đến bài học.
+  const buoi8 = {
+    sessionNumber: 8,
+    lessonTitle: "Buổi 8 — Tay gắp cơ khí",
+    lessonOrder: 8,
+    topic: "Buổi 8",
+  };
+
+  it("bỏ qua projectName đã lưu khi buổi suy được tên bài", () => {
+    for (const luu of [
+      "Robot tránh vật cản",
+      "Xe dò vạch",
+      "Xe điều khiển từ xa",
+      "Dự án 3: Robot tránh vật cản",
+    ]) {
+      expect(resolveDisplayProjectName(buoi8, luu)).toBe("Tay gắp cơ khí");
+    }
+  });
+
+  it("cùng một buổi thì mọi học viên ra CÙNG một tên dự án", () => {
+    const ket = ["Cánh tay gắp", "Robot phân loại", null, ""].map((v) =>
+      resolveDisplayProjectName(buoi8, v),
+    );
+    expect(new Set(ket).size).toBe(1);
+  });
+
+  it("tên dự án khớp tiêu đề buổi — không còn cảnh 'Buổi 8: Tay gắp' mà 'Dự án: Robot tránh vật cản'", () => {
+    const nhan = deriveSessionLabel(buoi8);
+    const duAn = resolveDisplayProjectName(buoi8, "Robot tránh vật cản");
+    expect(nhan).toContain(duAn);
+  });
+
+  it("buổi CHƯA gắn giáo án thì mới lùi về giá trị giáo viên đã gõ", () => {
+    const trong = { sessionNumber: 4, topic: "Buổi 4" };
+    expect(resolveDisplayProjectName(trong, "Xe dò vạch")).toBe("Xe dò vạch");
+    // …và cắt tiền tố "Dự án N:" vì nhãn "Dự án:" đã đứng sẵn ở giao diện.
+    expect(resolveDisplayProjectName(trong, "Dự án 2: Xe dò vạch")).toBe("Xe dò vạch");
+  });
+
+  it("không giáo án, không giá trị lưu → vẫn có chữ, không để trống ô", () => {
+    expect(resolveDisplayProjectName({ sessionNumber: 4, topic: "Buổi 4" }, null)).toBe(
+      "Dự án 4",
+    );
   });
 });
