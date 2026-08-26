@@ -44,7 +44,7 @@ function row(over: Partial<AttendanceListRow> & { id: string }): AttendanceListR
   return {
     classId: "c1",
     number: 1,
-    title: "Bài học",
+    sessionLabel: "Buổi 1 - Bài học",
     dateLabel: "T5, 21/08/2026",
     timeLabel: "18:00 - 20:00",
     phase: "PENDING",
@@ -64,18 +64,28 @@ const ROWS: AttendanceListRow[] = [
   row({
     id: "s-pending",
     number: 3,
-    title: "Việc nợ ảnh",
+    sessionLabel: "Buổi 3 - HP1 - Việc nợ ảnh",
     marked: 10,
     attended: 9,
     attendanceDone: true,
     feedbackDone: true,
   }),
-  row({ id: "s-today", number: 4, title: "Việc chiều nay", phase: "TODAY" }),
-  row({ id: "s-upcoming", number: 5, title: "Việc tuần sau", phase: "UPCOMING" }),
+  row({
+    id: "s-today",
+    number: 4,
+    sessionLabel: "Buổi 4 - HP1 - Việc chiều nay",
+    phase: "TODAY",
+  }),
+  row({
+    id: "s-upcoming",
+    number: 5,
+    sessionLabel: "Buổi 5 - HP1 - Việc tuần sau",
+    phase: "UPCOMING",
+  }),
   row({
     id: "s-done",
     number: 1,
-    title: "Xong hết",
+    sessionLabel: "Buổi 1 - HP1 - Xong hết",
     phase: "DONE",
     marked: 10,
     attended: 10,
@@ -97,12 +107,17 @@ function mount(rows: AttendanceListRow[], canComplete = true) {
   );
 }
 
-/** Nội dung cột "Tiêu đề buổi" của từng dòng dữ liệu. */
-function titles(): string[] {
+/**
+ * Nội dung cột "Buổi học" của từng dòng dữ liệu.
+ *
+ * 26/08 — cột này nay là cột ĐẦU TIÊN: hai cột "Buổi" + "Tiêu đề buổi" đã gộp làm
+ * một, khớp site giáo viên (xem đầu attendance-list.tsx).
+ */
+function labels(): string[] {
   return screen
     .getAllByRole("row")
     .slice(1) // bỏ hàng tiêu đề
-    .map((tr) => within(tr).getAllByRole("cell")[1].textContent ?? "");
+    .map((tr) => within(tr).getAllByRole("cell")[0].textContent ?? "");
 }
 
 beforeEach(() => {
@@ -115,23 +130,27 @@ beforeEach(() => {
 describe("AttendanceList", () => {
   it("giữ NGUYÊN thứ tự server đưa xuống — kể cả khi số buổi lộn xộn", () => {
     mount(ROWS);
-    expect(titles()).toEqual([
-      "Việc nợ ảnh18:00 - 20:00",
-      "Việc chiều nay18:00 - 20:00",
-      "Việc tuần sau18:00 - 20:00",
-      "Xong hết18:00 - 20:00",
+    expect(labels()).toEqual([
+      "Buổi 3 - HP1 - Việc nợ ảnh18:00 - 20:00",
+      "Buổi 4 - HP1 - Việc chiều nay18:00 - 20:00",
+      "Buổi 5 - HP1 - Việc tuần sau18:00 - 20:00",
+      "Buổi 1 - HP1 - Xong hết18:00 - 20:00",
     ]);
   });
 
-  it("in số thứ tự buổi ở cột đầu", () => {
+  it("số buổi, học phần và tên bài nằm CHUNG một cột", () => {
     mount([ROWS[0]]);
     const dataRow = screen.getAllByRole("row")[1];
-    expect(within(dataRow).getAllByRole("cell")[0]).toHaveTextContent("Buổi 3");
+    const cells = within(dataRow).getAllByRole("cell");
+    expect(cells[0]).toHaveTextContent("Buổi 3 - HP1 - Việc nợ ảnh");
+    // Không còn cột "Buổi" riêng ⇒ ô kế tiếp là NGÀY, không phải tên bài lặp lại.
+    expect(cells[1]).toHaveTextContent("21/08/2026");
   });
 
-  it("lớp chưa ghim giáo trình thì nói rõ, không để ô trống", () => {
-    mount([row({ id: "s-x", title: "" })]);
-    expect(screen.getByText("(giáo trình chưa đặt tên buổi)")).toBeInTheDocument();
+  it("lớp chưa ghim giáo trình vẫn có nhãn, không để ô trống", () => {
+    // Server đã lo phần rút gọn: không tra được tên bài thì nhãn còn "Buổi N".
+    mount([row({ id: "s-x", sessionLabel: "Buổi 1" })]);
+    expect(labels()[0]).toContain("Buổi 1");
   });
 
   it("lọc theo từ khoá chỉ BỚT dòng, không đảo thứ tự", () => {
@@ -139,10 +158,10 @@ describe("AttendanceList", () => {
     fireEvent.change(screen.getByLabelText("Tìm buổi học"), {
       target: { value: "việc" },
     });
-    expect(titles().map((t) => t.replace("18:00 - 20:00", ""))).toEqual([
-      "Việc nợ ảnh",
-      "Việc chiều nay",
-      "Việc tuần sau",
+    expect(labels().map((t) => t.replace("18:00 - 20:00", ""))).toEqual([
+      "Buổi 3 - HP1 - Việc nợ ảnh",
+      "Buổi 4 - HP1 - Việc chiều nay",
+      "Buổi 5 - HP1 - Việc tuần sau",
     ]);
   });
 
@@ -150,9 +169,9 @@ describe("AttendanceList", () => {
     mount(ROWS);
     const chip = screen.getByRole("button", { name: /Đã hoàn tất/ });
     fireEvent.click(chip);
-    expect(titles()).toHaveLength(1);
+    expect(labels()).toHaveLength(1);
     fireEvent.click(chip);
-    expect(titles()).toHaveLength(4);
+    expect(labels()).toHaveLength(4);
   });
 
   it("buổi còn nợ ảnh: chip Ảnh/video KHÔNG xanh, hai chip kia xanh", () => {
@@ -172,7 +191,8 @@ describe("AttendanceList", () => {
   it("cột Có mặt để dấu — khi chưa ai được điểm danh", () => {
     mount([ROWS[1]]);
     const dataRow = screen.getAllByRole("row")[1];
-    expect(within(dataRow).getAllByRole("cell")[3]).toHaveTextContent("—");
+    // Cột: 0 Buổi học · 1 Ngày · 2 Có mặt · 3 Tình trạng · 4 Việc của buổi.
+    expect(within(dataRow).getAllByRole("cell")[2]).toHaveTextContent("—");
   });
 
   it("ba nút việc trỏ đúng chỗ, link điểm danh giữ lớp đang mở", () => {
