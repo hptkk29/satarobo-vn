@@ -1,17 +1,25 @@
 import { checkPermission, canViewLeadPii } from "@/lib/auth/check-permission";
 import type { Actor } from "@/lib/auth/actor";
 import type { ScopeFilters } from "@/lib/reports/scope-filters";
+import { getConvertedLeadRows } from "@/lib/reports/converted-leads";
 import { getLostLeadRows } from "@/lib/reports/lost-leads";
 import { loadStaleLeadThresholdsByCenter } from "@/lib/lead/stale-lead-config";
 import { ChoDuLieu } from "../_components/cho-du-lieu";
+import { BangLeadChuyenDoi } from "./_bang-lead-chuyen-doi";
 import { BangLeadRot } from "./_bang-lead-rot";
 
 /**
- * Tab Kinh doanh — khu vực C (C-02 khối chỉ số lead · C-03 bảng lead đã chuyển đổi ·
+ * Tab Kinh doanh — khu vực C (C-02 khối chỉ số lead · **C-03 bảng lead đã chuyển đổi** ·
  * C-04 xuất Excel · **C-05 bảng lead rớt**).
  *
- * C-05 đã nối số liệu thật; C-02/C-03/C-04 vẫn chờ nên phần dưới màn giữ khối `ChoDuLieu`
- * — cố ý KHÔNG hiện thẻ "Tổng lead: 0", vì một thẻ 0 trông y hệt kết quả đo thật.
+ * C-03 và C-05 đã nối số liệu thật; C-02/C-04 vẫn chờ nên phần dưới màn giữ khối
+ * `ChoDuLieu` — cố ý KHÔNG hiện thẻ "Tổng lead: 0", vì một thẻ 0 trông y hệt kết quả đo
+ * thật.
+ *
+ * ⚠️ Hai bảng trên tab này lọc theo HAI TRỤC NGÀY khác nhau và đó là chủ ý: C-03 theo
+ * **ngày chốt** (câu hỏi "kỳ này chốt được ai"), C-05 theo **ngày vào hệ thống** (cùng
+ * mẫu số với tổng lead của kỳ). Ép chung một trục là làm hỏng một trong hai câu hỏi —
+ * nên mỗi bảng tự viết trục của mình ra bằng chữ ở dòng mô tả.
  *
  * Gate riêng của tab: trang `/dashboard-qlcs` mở bằng `dashboard:view`, nhưng danh sách
  * lead thì không — chốt 24/08 ghi rõ tab C đi bằng `leads:view-all`
@@ -51,10 +59,19 @@ export async function TabKinhDoanh({
   // Hai ngưỡng cảnh báo là `centerOverridable` (quyết định 12(a)) ⇒ lấy theo TỪNG cơ sở
   // rồi áp cho đúng phiếu của cơ sở đó. Lấy một bộ chung cho cả bảng là cùng một phiếu
   // đổi màu tuỳ người xem đang mở một cơ sở hay nhiều cơ sở.
-  const [nguong, coQuyenPii] = await Promise.all([
+  const [nguong, coQuyenPii, coQuyenTien] = await Promise.all([
     loadStaleLeadThresholdsByCenter(filters.centerIds),
     canViewLeadPii(),
+    // Vào được tab Kinh doanh KHÔNG đồng nghĩa xem được tiền — cùng luật với tab Tài
+    // chính ngay bên cạnh. Thiếu quyền thì hai cột tiền của C-03 không được dựng, và
+    // đường đọc `Payment` cũng không chạy lần nào.
+    checkPermission("payments:view"),
   ]);
+
+  const bcChuyenDoi = await getConvertedLeadRows(actor, filters, {
+    canViewPii: coQuyenPii,
+    includeRevenue: coQuyenTien,
+  });
 
   const bc = await getLostLeadRows(actor, filters, {
     canViewPii: coQuyenPii,
@@ -69,11 +86,20 @@ export async function TabKinhDoanh({
       ? (nguong.byCenter.get(filters.centerIds[0]!) ?? nguong.fallback)
       : nguong.fallback;
 
+  const centerNameById = new Map(visibleCenters.map((c) => [c.id, c.name]));
+
   return (
     <div className="space-y-5">
+      <BangLeadChuyenDoi
+        bc={bcChuyenDoi}
+        centerNameById={centerNameById}
+        dateFromStr={dateFromStr}
+        dateToStr={dateToStr}
+      />
+
       <BangLeadRot
         bc={bc}
-        centerNameById={new Map(visibleCenters.map((c) => [c.id, c.name]))}
+        centerNameById={centerNameById}
         hienCotCoSo={filters.centerIds.length > 1}
         thresholds={nguongHienThi}
         dateFromStr={dateFromStr}
@@ -81,22 +107,22 @@ export async function TabKinhDoanh({
       />
 
       <ChoDuLieu
-        maSpec="C-02 · C-03 · C-04"
-        tieuDe="Chỉ số lead và bảng lead đã chuyển đổi: chưa nối vào màn"
+        maSpec="C-02 · C-04"
+        tieuDe="Khối chỉ số lead và nút xuất Excel: chưa nối vào màn"
         giaiThich={
-          "Bảng lead rớt (C-05) ở trên đã chạy trên dữ liệu thật, kèm hai cột lần tiếp " +
-          "cận gần nhất và số ngày chưa tiếp cận lại. Phần còn lại của khu vực C vẫn " +
-          "thiếu hàm gom số cho khoảng ngày đang lọc."
+          "Hai bảng làm việc của khu vực C (C-03 lead đã chuyển đổi, C-05 lead rớt) đã " +
+          "chạy trên dữ liệu thật. Phần còn lại là khối ba con số ở đầu tab và nút xuất " +
+          "tệp — cả hai đều cần thứ chưa có, không phải chỉ cần ghép giao diện."
         }
         daCo={[
           "Chỉ tiêu lead theo tháng × cơ sở (C-01) — bảng LeadTarget + màn /bao-cao/muc-tieu-lead",
-          "Doanh thu thực thu quy về từng con (nền của C-03) — lib/reports/revenue-by-child.ts",
+          "Doanh thu thực thu quy về từng con — lib/reports/revenue-by-child.ts",
           "Mốc chốt + giá trị hợp đồng theo từng con (G-06) — LeadChild.closedAt / contractValue",
+          "Bảng C-03 đủ 9 cột, đếm theo học sinh, kèm khối đối soát với tab Tài chính",
         ]}
         chuaCo={[
           "C-02 tổng lead · tỷ lệ đạt chỉ tiêu · tỷ lệ chốt, theo khoảng ngày đang lọc",
-          "C-03 bảng lead đã chuyển đổi (giá trị, % trên tổng doanh thu, thời gian chốt)",
-          "C-04 xuất Excel bảng C-03 (áp quyền xuất lead của A-03)",
+          "C-04 xuất Excel bảng C-03 — chặn bởi quyền xuất lead của A-03 (chưa có quyền gán được)",
         ]}
       />
     </div>
