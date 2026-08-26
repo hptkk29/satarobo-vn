@@ -8,7 +8,7 @@ import {
   PolicyNotAcceptedError,
 } from "@/lib/elearning/policy-acceptance";
 import { effectiveAllowLate, isProgressWriteLocked } from "@/lib/elearning/due-lock";
-import { cuonKhoaSauKhiXongBai } from "@/lib/elearning/rollup";
+import { ghiXongBai } from "@/lib/elearning/lesson-done";
 import { cueInlineSchema, laCauChamDuoc } from "@/lib/elearning/lesson-cue";
 import {
   chamMotCau,
@@ -542,35 +542,12 @@ export async function ghiXongBaiThi(
   });
   if (!bai) return;
 
-  const cu = await db.trnLessonProgress.findUnique({
-    where: { enrollmentId_lessonId: { enrollmentId: i.enrollmentId, lessonId: bai.id } },
-    select: { verifiedAt: true },
+  // Phần ghi + guard `REVOKED` + luật "đặt mốc một lần" nằm ở `lesson-done.ts` —
+  // một chỗ cho mọi loại bài. Trước đây luật đó bị chép ba lần và đã trôi khỏi nhau.
+  await ghiXongBai(db, {
+    enrollmentId: i.enrollmentId,
+    lessonId: bai.id,
+    userId: i.userId,
+    now: i.now,
   });
-
-  await db.trnLessonProgress.upsert({
-    where: { enrollmentId_lessonId: { enrollmentId: i.enrollmentId, lessonId: bai.id } },
-    update: {
-      status: "DONE",
-      lastActivityAt: i.now,
-      // Chỉ ĐẶT MỘT LẦN: đây là mốc "lần đầu đạt", và thi lại sau đó không được
-      // đẩy mốc về sau.
-      ...(cu?.verifiedAt == null ? { verifiedAt: i.now, completedAt: i.now } : {}),
-    },
-    create: {
-      enrollmentId: i.enrollmentId,
-      lessonId: bai.id,
-      userId: i.userId,
-      status: "DONE",
-      firstStartedAt: i.now,
-      lastActivityAt: i.now,
-      verifiedAt: i.now,
-      completedAt: i.now,
-    },
-  });
-
-  // Chỉ cuộn khi VỪA đạt lần đầu — cuộn mỗi lần thi lại là ba câu đếm cho một việc
-  // đã xong.
-  if (cu?.verifiedAt == null) {
-    await cuonKhoaSauKhiXongBai(i.enrollmentId, i.now);
-  }
 }

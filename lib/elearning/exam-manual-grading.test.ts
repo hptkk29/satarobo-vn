@@ -302,15 +302,18 @@ describe("🔴 hai người chấm cùng lúc — ai tới trước thắng", ()
   });
 });
 
-describe("🔴 lượt ghi danh ĐÃ THU HỒI", () => {
-  it("vẫn ghi điểm, nhưng KHÔNG lật ngược trạng thái khoá", async () => {
-    // Phép cuộn trạng thái khoá không có nhánh `REVOKED`: đủ bài DONE là ra
-    // COMPLETED. Người bị rút khỏi khoá bỗng "hoàn thành" nó, trên báo cáo tuân thủ
-    // gửi quản lý trực tiếp.
+describe("lượt ghi danh ĐÃ THU HỒI", () => {
+  it("vẫn ghi ĐIỂM — họ đã làm bài thật", async () => {
+    // ⚠️ Phép chặn "không lật ngược REVOKED thành COMPLETED" nay nằm TRONG
+    // `ghiXongBai` (`lesson-done.ts`), không còn ở call-site này — và nó có test
+    // riêng chạy trên hàm THẬT (`lesson-done.test.ts`). Ở đây `ghiXongBaiThi` bị
+    // mock nên tệp này không quan sát được hành vi đó; khẳng định nó ở đây sẽ là
+    // một guard nói dối.
+    //
+    // Cái tệp này CÒN kiểm được, và vẫn đáng kiểm: điểm vẫn được chốt.
     b.ghiDanh = { courseId: "c1", status: "REVOKED" };
     const r = (await cham()) as { data: { passed: boolean; ghiTienDoLoi: boolean } };
     expect(r.data.passed).toBe(true);
-    expect(h.ghiXong).not.toHaveBeenCalled();
     expect(r.data.ghiTienDoLoi).toBe(false);
   });
 });
