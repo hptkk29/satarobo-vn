@@ -6,6 +6,7 @@ import {
   parseFeedbackRubric,
   type EvalNotes,
 } from "@/lib/lms/session-eval-rubric";
+import { meaningfulSessionTitle } from "@/lib/lms/session-project-name";
 
 // Portal v2 — nhận xét buổi học (StudentSessionFeedback) của con đang chọn.
 
@@ -105,13 +106,18 @@ export async function getStudentFeedback(studentId: string, limit = 20): Promise
   return rows.map((r) => {
     const les = r.classSession?.lesson;
     const no = sessionNumberOf.get(r.classSessionId) ?? les?.order ?? null;
+    const lessonTitle = meaningfulSessionTitle(les?.title);
     return {
       id: r.id,
       order: no,
       // ⚠️ Chỉ ghép "Buổi N: …" khi CÓ tên bài. Buổi chưa gắn giáo án giữ nhãn "Buổi học"
       // như cũ: thẻ ở portal V2 in số buổi ở huy hiệu riêng rồi cắt tiền tố khỏi tiêu đề
       // (`replace(/^Buổi \d+: /)`), nên trả về "Buổi 7" trần sẽ thành tiêu đề trùng huy hiệu.
-      title: les ? `Buổi ${no ?? les.order}: ${les.title}` : "Buổi học",
+      //
+      // 26/08 — tên bài phải qua `meaningfulSessionTitle` trước khi ghép. Giáo trình đặt
+      // tên bài kèm sẵn số buổi ("Buổi 7 — Vòng lặp và điều kiện"), ghép thẳng là phụ
+      // huynh đọc ra "Buổi 7: Buổi 7 — Vòng lặp và điều kiện".
+      title: lessonTitle ? `Buổi ${no ?? les?.order}: ${lessonTitle}` : "Buổi học",
       dateISO: r.classSession?.date?.toISOString() ?? "",
       teacher: tmap.get(r.createdById) ?? null,
       className: r.classSession?.class?.classCode ?? null,
