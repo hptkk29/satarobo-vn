@@ -84,6 +84,43 @@ describe("[G-01] maskLeadPiiFields — ngày sinh phụ huynh", () => {
 });
 
 // ═════════════════════════════════════════════════════════════════════════════
+// C-05 (26/08/2026) — LÝ DO RỚT đi qua đúng tầng che này
+// ═════════════════════════════════════════════════════════════════════════════
+//
+// `Lead.lostNote` là ô GHI CHÚ TỰ DO bắt buộc nhập khi đánh dấu rớt (quyết định
+// 12(b) bỏ hẳn danh mục lý do). Nội dung thực tế Sale gõ vào đó là chuyện riêng
+// của một gia đình: "bố mẹ ly hôn", "nhà chuyển vào Sài Gòn", "bé bị tự kỷ nhẹ,
+// mẹ muốn học 1-1". Đúng hạng mục "nội dung tư vấn" mà Q7 xếp là PII.
+//
+// Trước C-05 cột này chưa có đường đọc nào ngoài trang chi tiết lead, nên chưa
+// lộ. Bảng C-05 là chỗ ĐẦU TIÊN in nó ra hàng loạt ⇒ phải khai vào tầng che
+// TRƯỚC, không phải che tay ở chỗ vẽ (che ở JSX thì dữ liệu thật vẫn đi qua RSC
+// payload xuống trình duyệt).
+describe("[C-05] maskLeadPiiFields — lý do rớt", () => {
+  it("có quyền PII → giữ nguyên lý do rớt", () => {
+    const lead = { parentName: "Nguyễn Thị Lan", lostNote: "Bố mẹ ly hôn, mẹ chuyển vào SG" };
+    expect(maskLeadPiiFields(lead, true).lostNote).toBe("Bố mẹ ly hôn, mẹ chuyển vào SG");
+  });
+
+  it("KHÔNG có quyền PII → ẩn hẳn, không rò mẩu nào qua serialize", () => {
+    const masked = maskLeadPiiFields(
+      { parentName: "Nguyễn Thị Lan", lostNote: "Bố mẹ ly hôn, mẹ chuyển vào SG" },
+      false,
+    );
+    expect(masked.lostNote).toBe(MASKED_TEXT);
+    expect(JSON.stringify(masked)).not.toContain("ly hôn");
+  });
+
+  it("phiếu KHÔNG mang khoá `lostNote` → không tự chèn khoá vào kết quả", () => {
+    expect("lostNote" in maskLeadPiiFields({ phone: "0909123456" }, false)).toBe(false);
+  });
+
+  it("chưa nhập lý do (null) → vẫn null, không hoá thành chuỗi che", () => {
+    expect(maskLeadPiiFields({ lostNote: null }, false).lostNote).toBeNull();
+  });
+});
+
+// ═════════════════════════════════════════════════════════════════════════════
 // Đợt E (22/08/2026) — che SĐT trong NỘI DUNG tin nhắn
 // ═════════════════════════════════════════════════════════════════════════════
 //

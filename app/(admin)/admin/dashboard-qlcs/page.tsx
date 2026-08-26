@@ -133,7 +133,18 @@ export default async function DashboardQlcsPage({ searchParams }: PageProps) {
           isGlobalAllowed={fc.isGlobalAllowed}
         />
       ) : null}
-      {tab === "kinh-doanh" ? <TabKinhDoanh /> : null}
+      {tab === "kinh-doanh" ? (
+        <TabKinhDoanh
+          actor={actor}
+          filters={fc.filters}
+          visibleCenters={fc.visibleCenters}
+          // Khoá ngày ĐÃ chuẩn hoá (ngày tương lai đã kẹp) — tab không tự quy lại từ
+          // mốc UTC, để dòng chữ "đang lọc theo ngày vào hệ thống …" luôn khớp đúng
+          // thứ thanh lọc đang hiện.
+          dateFromStr={fc.dateFromStr}
+          dateToStr={fc.dateToStr}
+        />
+      ) : null}
       {tab === "chi-phi-marketing" ? <TabChiPhiMarketing /> : null}
       {tab === "tuong-tac-kh" ? <TabTuongTacKh /> : null}
     </div>

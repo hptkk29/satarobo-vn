@@ -78,6 +78,7 @@ export function maskLeadPiiFields<
     childName?: string | null;
     note?: string | null;
     parentDob?: Date | string | null;
+    lostNote?: string | null;
   },
 >(lead: T, canViewPii: boolean): T {
   if (canViewPii) return lead;
@@ -88,6 +89,11 @@ export function maskLeadPiiFields<
     ...(lead.email != null ? { email: lead.email ? maskEmail(lead.email) : lead.email } : {}),
     ...(lead.childName != null ? { childName: lead.childName ? maskPersonName(lead.childName) : lead.childName } : {}),
     ...(lead.note !== undefined ? { note: maskFreeText(lead.note) } : {}),
+    // C-05 — LÝ DO RỚT (`Lead.lostNote`, quyết định B5 + 12(b) 24/08/2026). Ô ghi chú
+    // TỰ DO nên cùng luật với `note`: ẩn HẲN, không mask từng phần. Bảng "Lead rớt" là
+    // chỗ đầu tiên in cột này ra hàng loạt — che ở JSX thì dữ liệu thật vẫn xuống trình
+    // duyệt qua RSC payload, nên phải cắt ở đây.
+    ...(lead.lostNote !== undefined ? { lostNote: maskFreeText(lead.lostNote) } : {}),
     // G-01 — ngày sinh PH: GIẤU HẲN, không mờ hoá. Một ngày sinh mờ hoá
     // (01/01/1985) trông y hệt ngày sinh thật nên người đọc không biết mình đang
     // nhìn dữ liệu bịa. Chỉ chèn khoá khi phiếu THỰC SỰ có mang nó — select hẹp

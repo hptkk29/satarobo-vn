@@ -10,6 +10,7 @@ import {
   validateSettingValue,
 } from "@/lib/settings/registry";
 import { resolveSettingValue } from "@/lib/settings/resolve";
+import { STALE_LEAD_WARN_DAYS, STALE_LEAD_DANGER_DAYS } from "@/lib/lead/stale-lead";
 
 describe("[R6-A] registry — validate giá trị (US-R6A-1 AC4)", () => {
   it("[R6-A-T2-01] key không có schema → từ chối", () => {
@@ -83,6 +84,30 @@ describe("[F-20] hạn duyệt ảnh/video trong Cấu hình vận hành", () =>
     expect(validateSettingValue("media.reviewDeadlineHour", 23).ok).toBe(true);
     expect(validateSettingValue("media.reviewDeadlineOffsetDays", 0).ok).toBe(true);
     expect(validateSettingValue("media.reviewDeadlineOffsetDays", 7).ok).toBe(true);
+  });
+});
+
+describe("[C-05] ngưỡng cảnh báo lead treo nằm trong Cấu hình vận hành", () => {
+  it("[C-05-T01] mặc định ĐÚNG quyết định 12(a) ngày 24/08/2026: vàng 2 ngày · đỏ 7 ngày", () => {
+    expect(SETTINGS["crm.staleLeadWarnDays"].default).toBe(STALE_LEAD_WARN_DAYS);
+    expect(SETTINGS["crm.staleLeadDangerDays"].default).toBe(STALE_LEAD_DANGER_DAYS);
+    expect(SETTINGS["crm.staleLeadWarnDays"].default).toBe(2);
+    expect(SETTINGS["crm.staleLeadDangerDays"].default).toBe(7);
+  });
+
+  it("[C-05-T02] mỗi cơ sở đặt ngưỡng riêng được (quyết định 12(a) ghi rõ centerOverridable)", () => {
+    expect(SETTINGS["crm.staleLeadWarnDays"].centerOverridable).toBe(true);
+    expect(SETTINGS["crm.staleLeadDangerDays"].centerOverridable).toBe(true);
+  });
+
+  it("[C-05-T03] ngưỡng 0 hoặc âm bị chặn ngay ở ô cấu hình", () => {
+    // 0 ngày = mọi lead đều đỏ ngay lúc vừa vào hệ thống ⇒ cột cảnh báo thành nhiễu
+    // trắng và người dùng tắt mắt với nó. Chặn ở đây, không chặn ở chỗ vẽ.
+    expect(validateSettingValue("crm.staleLeadWarnDays", 0).ok).toBe(false);
+    expect(validateSettingValue("crm.staleLeadDangerDays", -1).ok).toBe(false);
+    expect(validateSettingValue("crm.staleLeadWarnDays", 1.5).ok).toBe(false);
+    expect(validateSettingValue("crm.staleLeadWarnDays", 1).ok).toBe(true);
+    expect(validateSettingValue("crm.staleLeadDangerDays", 365).ok).toBe(true);
   });
 });
 
