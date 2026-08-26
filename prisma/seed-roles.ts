@@ -47,6 +47,10 @@ export const ROLE_SEED: RoleSeed[] = [
       // SUPER_ADMIN đã bypass trong can() v2 nên dòng này KHÔNG đổi hành vi, khai để
       // ma trận nói được "ai đặt được chỉ tiêu toàn hệ thống" mà không phải suy từ bypass.
       { action: "ads_budget_targets:manage", scopeType: "GLOBAL" },
+      // S-5 — XEM sổ lượt chia lead. SUPER_ADMIN đã bypass toàn bộ quyền trong can() v2
+      // nên dòng này KHÔNG đổi hành vi; khai để ma trận nói được ai mở được màn kiểm
+      // chứng mà không phải suy từ bypass.
+      { action: "leads:rotation-view", scopeType: "GLOBAL" },
       // #17 (câu 55): học bạ. SUPER_ADMIN đã bypass toàn bộ quyền trong can() v2
       // (lib/auth/can.ts) → 2 dòng này KHÔNG đổi hành vi, thêm cho khớp v1 + rõ ý.
       { action: "report-cards:manage", scopeType: "GLOBAL" },
@@ -250,6 +254,10 @@ export const ROLE_SEED: RoleSeed[] = [
       { action: "dashboard:view", scopeType: "GLOBAL" },
       { action: "leads:view-all", scopeType: "GLOBAL" },
       { action: "leads:view-pii", scopeType: "GLOBAL" },
+      // S-5 — XEM sổ lượt chia lead. Marketing vốn vào được màn này qua
+      // `leads:view-all`; khai key riêng để gate không phụ thuộc quyền quản lý nữa.
+      // Không đổi ai-thấy-gì với vai này, chỉ làm ý định nói ra thành lời.
+      { action: "leads:rotation-view", scopeType: "GLOBAL" },
       { action: "blog:edit", scopeType: "GLOBAL" },
       { action: "employees:view-public", scopeType: "GLOBAL" },
       { action: "honors:view", scopeType: "GLOBAL" },
@@ -519,6 +527,11 @@ export const ROLE_SEED: RoleSeed[] = [
       // ⚠️ Đổi ở đây CHƯA có hiệu lực trên prod: phải chạy workflow seed-prod-roles.yml
       // sau khi merge vào main, nếu không QLCS mở màn ra là TRẮNG, không kèm lỗi.
       { action: "lead_targets:manage", scopeType: "GLOBAL" },
+      // S-5 — XEM sổ lượt chia lead. Quản lý cơ sở vốn vào được qua `leads:view-all`;
+      // khai key riêng để gate không còn buộc vào quyền quản lý. Người phải trả lời
+      // câu "sao bạn kia nhiều lead hơn" chính là vai này, nên họ giữ đường vào.
+      // GLOBAL là bắt buộc (gate gọi TRẦN); phạm vi cơ sở do `rotationBoardScope` lo.
+      { action: "leads:rotation-view", scopeType: "GLOBAL" },
       // ── Học viên · lớp · ghi danh ──
       { action: "students:view-all", scopeType: "GLOBAL" },
       { action: "students:create", scopeType: "GLOBAL" },
@@ -738,6 +751,15 @@ export const ROLE_SEED: RoleSeed[] = [
       // Task #07 — quyết định user 07/07/2026: Sale được import danh sách "đã đăng
       // ký" (Sale giữ Google Sheet gốc — câu 33). CENTER: import gán vào cơ sở mình.
       { action: "leads:import", scopeType: "GLOBAL" },
+      // S-5 — XEM sổ lượt chia lead, CHỈ ĐỌC. Đây là quyền MỚI của vai này: trước đó
+      // màn kiểm chứng gác bằng `leads:view-all` (vai này cố ý không có) nên chính tổ
+      // Sale không mở được cái màn dựng ra để dập tin đồn thiên vị với họ.
+      // GLOBAL là BẮT BUỘC, không phải nới tay: gate cấp trang gọi `checkAnyPermission`
+      // KHÔNG target, seed CENTER sẽ trả FALSE trên prod trong khi local (v1) vẫn xanh.
+      // Sale vẫn CHỈ thấy sổ cơ sở mình — chặn ở `rotationBoardScope` (lib/lead/rotation.ts).
+      // ⚠️ Đổi ở đây CHƯA có hiệu lực trên prod: phải chạy workflow seed-prod-roles.yml
+      // sau khi merge vào main, nếu không Sale vẫn bị đá ra như cũ.
+      { action: "leads:rotation-view", scopeType: "GLOBAL" },
       { action: "students:create", scopeType: "GLOBAL" },
       { action: "students:view-all", scopeType: "GLOBAL" },
       { action: "students:edit", scopeType: "GLOBAL" },

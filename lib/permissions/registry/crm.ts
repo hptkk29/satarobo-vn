@@ -44,6 +44,15 @@ export const crmModule: ModuleDecl = {
       // được cơ sở mình (leads/actions.ts setCenterAssignModeAction) ⇒ scopable.
       description: "Cấu hình quy tắc chia lead tự động (theo cơ sở).",
     },
+    {
+      key: "leads:rotation-view",
+      action: "rotation-view",
+      // S-5 — CHỈ ĐỌC sổ lượt luân phiên (`LeadRotationTurn`). Tách khỏi
+      // `leads:view-all` để mở được cho tổ Sale mà không mở kèm ~8 màn quản lý
+      // khác; tách khỏi `leads:assign-config` vì đó là quyền SỬA cách chia.
+      // Cách ly cơ sở nằm ở `rotationBoardScope`, không ở scopeType.
+      description: "Xem sổ lượt chia lead (chỉ đọc, theo cơ sở của mình).",
+    },
     { key: "leads:delete", action: "delete" },
     { key: "leads:export", action: "export" },
     {
