@@ -491,15 +491,63 @@ export async function toggleUserActiveAction(id: string) {
   }
 
   // Phase T1.3 — sale SALES_CSM bị disable → chia lại lead OPEN cho người còn lại.
-  // Gọi SAU tx (isActive đã false), best-effort: lỗi chia lead KHÔNG làm hỏng disable.
+  //
+  // Gọi SAU tx và NGOÀI tx. Về DỮ LIỆU vẫn best-effort y như cũ: lượt chia hỏng KHÔNG
+  // được làm hỏng việc vô hiệu hoá — đó là chủ đích cũ, giữ nguyên (test mục (e) ghim).
+  //
+  // NHƯNG "best-effort" không đồng nghĩa với IM LẶNG. Bản cũ `.catch(console.error)` rồi
+  // VỨT luôn giá trị trả về, nên nuốt CẢ HAI đường hỏng:
+  //   • nhánh TRẢ VỀ `{ ok:false, … }` — "Không còn SALES_CSM để chia" (cơ sở chỉ còn đúng
+  //     một sale) hoặc "dừng giữa chừng sau N lead" khi một lô đứt. Đây KHÔNG phải ngoại
+  //     lệ, nên `.catch` cũ không hề chạm tới: chúng bị vứt cùng giá trị trả về;
+  //   • và ngoại lệ thật — `reassignOpenLeads` nay tự bọc từng lô, nhưng mấy truy vấn
+  //     TRƯỚC vòng lặp (`db.user.findUnique`, `db.lead.findMany`, `getSalesLoad`) vẫn ném
+  //     được, nên `.catch` phải còn.
+  // Cả hai đều để lại lead treo ở một tài khoản đã tắt — không ai đang chăm, và người vừa
+  // bấm nút thì tưởng xong. Kết quả phải đi ra tới toast.
+  let canhBaoChiaLead: string | null = null;
   if (!willBeActive && wasSalesCsm) {
-    await reassignOpenLeads(id, { actorId, actorName }).catch((err) =>
-      console.error("[toggleUserActive] reassign leads error:", err),
+    const chia = await reassignOpenLeads(id, { actorId, actorName }).catch(
+      (err: unknown) => {
+        console.error("[toggleUserActive] reassign leads error:", err);
+        // Cùng hình dạng với đường trả về thật, để câu thông báo dưới đây đọc được tiến độ
+        // mà không phải rẽ nhánh: ngoại lệ ⇒ chưa biết gì ⇒ 0/0 ⇒ bỏ mệnh đề tiến độ.
+        return { ok: false as const, reassigned: 0, total: 0, error: "lượt chia đứt giữa chừng" };
+      },
     );
     revalidatePath("/leads");
+    if (!chia.ok) {
+      // Tiến độ THẬT (đếm bằng `.count` đã commit) là thứ trả lời đúng câu hỏi "chia xong
+      // chưa" — con số duy nhất biến một lời cảnh báo thành việc làm được.
+      const conLai = Math.max(chia.total - chia.reassigned, 0);
+      const tienDo =
+        chia.total > 0
+          ? ` Đã chia ${chia.reassigned}/${chia.total}, còn ${conLai} lead vẫn gán cho họ.`
+          : "";
+      // ⚠️ Câu chữ phải chặn phản xạ tự nhiên khi thấy toast đỏ trên một cái NÚT GẠT:
+      // bấm lại. Bấm lại = BẬT tài khoản trở lại, phá đúng việc vừa làm xong.
+      canhBaoChiaLead =
+        `Đã vô hiệu hoá tài khoản, nhưng CHƯA chia xong lead của người này: ` +
+        `${chia.error ?? "lỗi không rõ"}.${tienDo} ` +
+        `ĐỪNG bấm lại nút này (bấm lại sẽ BẬT tài khoản trở lại) — ` +
+        `vào /admin/ban-giao-lead để bàn giao tay.`;
+    }
   }
 
   revalidatePath("/users");
+  if (canhBaoChiaLead) {
+    // Trả `ok:false` là CÓ CHỦ ĐÍCH, theo đúng khuôn `bulkReassignLeads` đang dùng cho
+    // tình huống "đã ghi một phần rồi mới hỏng" (lib/lead-handover/service.ts: `{ ok:false,
+    // error:"Bàn giao dừng giữa chừng sau N lead (đã lưu). Hãy chạy lại…" }`): thao tác
+    // TỔNG THỂ chưa xong, và `UserStatusToggle` (_components/user-row-actions.tsx) chỉ in
+    // thông báo ở nhánh này. Trạng thái tài khoản trên màn hình vẫn đúng vì
+    // `revalidatePath("/users")` ngay trên đã chạy.
+    //
+    // `daVoHieuHoa` để đường gọi khác phân biệt "hỏng một phần" với 4 nhánh TỪ CHỐI thật
+    // sự (tự-disable · không thấy user · SUPER_ADMIN duy nhất · lỗi DB) — ở 4 nhánh đó
+    // KHÔNG có lệnh ghi nào chạy.
+    return { ok: false as const, daVoHieuHoa: true as const, error: canhBaoChiaLead };
+  }
   return { ok: true as const };
 }
 

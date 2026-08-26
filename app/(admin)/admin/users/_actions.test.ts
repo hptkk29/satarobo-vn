@@ -58,6 +58,13 @@
  *    "ghi danh do sale X phụ trách", nên thiếu tên lớp là biết số mà không biết đi đâu.
  * 7. Nhánh fail-closed của bộ đếm (một truy vấn hỏng ⇒ KHÔNG xoá) phải có test. Đổi nó
  *    thành fail-open là mở lại đúng LỖ 2 mà không test nào đỏ.
+ * 8. Vô hiệu hoá tài khoản SALES_CSM kéo theo `reassignOpenLeads`, và kết quả của lượt
+ *    chia đó phải ĐẾN ĐƯỢC người bấm. Bản cũ gọi `.catch(console.error)` rồi VỨT luôn giá
+ *    trị trả về ⇒ nuốt CẢ hai đường hỏng: ngoại lệ (transaction của `reassignOpenLeads`
+ *    không nới trần, mặc định Prisma 5s — lô lớn là đứt) LẪN nhánh trả về
+ *    `{ ok:false, error:"Không còn SALES_CSM để chia" }` (lib/lead/assign.ts). Người vừa
+ *    vô hiệu hoá tài khoản không có cách nào biết lead đã chia xong hay chưa. Mục (e) ghim
+ *    cả hai đường + ghim rằng lượt chia hỏng KHÔNG được làm hỏng việc vô hiệu hoá.
  *
  * Kiểm bằng "DB có bị ghi không", không bằng chuỗi thông báo: một action trả `{ ok:false }`
  * sau khi đã `update` vẫn là một tài khoản đã bị xoá.
@@ -195,7 +202,8 @@ beforeEach(() => {
   h.txOrgRoleUpdateMany.mockResolvedValue({ count: 0 });
   h.logUserAudit.mockResolvedValue(undefined);
   h.logRbacAudit.mockResolvedValue(undefined);
-  h.reassignOpenLeads.mockResolvedValue(undefined);
+  // Hình dạng THẬT của `reassignOpenLeads` (lib/lead/assign.ts) — không phải `undefined`.
+  h.reassignOpenLeads.mockResolvedValue({ ok: true, reassigned: 0, total: 0 });
   h.syncCenterClassConversations.mockResolvedValue(undefined);
   h.reconcileUserOrgRoles.mockResolvedValue(undefined);
   target();
@@ -522,6 +530,130 @@ describe("(d) toggleUserActiveAction giữ nguyên UserOrgRole ACTIVE", () => {
 
     expect(res).toEqual({ ok: true });
     expect(h.leadCount).not.toHaveBeenCalled();
+  });
+});
+
+// ─── (e) Chia lại lead khi sale nghỉ — kết quả phải ĐẾN ĐƯỢC người bấm ──────
+//
+// `UserStatusToggle` (_components/user-row-actions.tsx) là chỗ DUY NHẤT cầm giá trị trả
+// về của action này và đổ ra toast: `res.ok` → toast.success, ngược lại →
+// `toast.error(res.error)`. Nên "đến được người dùng" ở đây nghĩa là: phải trả về một
+// object mà cái toast đó in ra được. Đúng khuôn `bulkReassignLeads` đang dùng cho tình
+// huống "đã ghi một phần rồi mới hỏng" (lib/lead-handover/service.ts: `{ ok:false, error:
+// "Bàn giao dừng giữa chừng sau N lead (đã lưu). Hãy chạy lại…" }`).
+//
+// ⚠️ Câu chữ phải chặn được phản xạ tự nhiên khi thấy toast đỏ trên một cái NÚT GẠT: bấm
+// lại. Bấm lại = BẬT tài khoản trở lại, tức phá đúng việc vừa làm xong.
+
+describe("(e) toggleUserActiveAction — lượt chia lead hỏng không được im lặng", () => {
+  it("chia lead OK → giữ nguyên `{ ok: true }` (đường thường không đổi)", async () => {
+    target({ isActive: true });
+    h.reassignOpenLeads.mockResolvedValue({ ok: true, reassigned: 7, total: 7 });
+
+    const res = await toggleUserActiveAction("u-2");
+
+    expect(res).toEqual({ ok: true });
+    expect(h.reassignOpenLeads).toHaveBeenCalledWith("u-2", {
+      actorId: "admin-1",
+      actorName: "Quản trị",
+    });
+  });
+
+  it("chia lead trả { ok:false } → người bấm ĐƯỢC BÁO, không nuốt", async () => {
+    target({ isActive: true });
+    h.reassignOpenLeads.mockResolvedValue({
+      ok: false,
+      reassigned: 0,
+      total: 12,
+      error: "Không còn SALES_CSM để chia",
+    });
+
+    const res = await toggleUserActiveAction("u-2");
+
+    // Toast in được (nhánh `else` của UserStatusToggle đọc `res.error`).
+    expect(res.ok).toBe(false);
+    const msg = "error" in res ? res.error : "";
+    // Bốn điều câu chữ BẮT BUỘC nói, thiếu cái nào cũng là một lượt vận hành sai:
+    expect(msg).toContain("Đã vô hiệu hoá tài khoản"); // 1. việc chính ĐÃ xong
+    expect(msg).toContain("Không còn SALES_CSM để chia"); // 2. lý do thật, không nuốt
+    expect(msg).toContain("ban-giao-lead"); // 3. đi đâu để làm nốt
+    // 4. và phải chặn phản xạ bấm lại (bấm lại = bật tài khoản trở lại).
+    expect(msg).toMatch(/bấm lại/i);
+  });
+
+  it("báo TIẾN ĐỘ THẬT khi lượt chia đứt giữa chừng (đã chia N/M, còn bao nhiêu)", async () => {
+    target({ isActive: true });
+    // Đứt ở lô 3/9: 120 lead đã commit, 180 lead còn treo cho người đã nghỉ.
+    h.reassignOpenLeads.mockResolvedValue({
+      ok: false,
+      reassigned: 120,
+      total: 300,
+      error: "Chia lại lead dừng giữa chừng sau 120 lead (đã lưu)",
+    });
+
+    const res = await toggleUserActiveAction("u-2");
+
+    const msg = "error" in res ? res.error : "";
+    // Con số là thứ duy nhất biến cảnh báo thành việc làm được: "còn bao nhiêu phải làm tay".
+    expect(msg).toContain("120/300");
+    expect(msg).toContain("180");
+  });
+
+  it("ngoại lệ (chưa biết tiến độ) → KHÔNG bịa ra '0/0'", async () => {
+    target({ isActive: true });
+    h.reassignOpenLeads.mockRejectedValue(new Error("mất kết nối DB"));
+
+    const res = await toggleUserActiveAction("u-2");
+
+    const msg = "error" in res ? res.error : "";
+    expect(msg).not.toContain("0/0");
+    expect(msg).toContain("ban-giao-lead");
+  });
+
+  it("chia lead NÉM ngoại lệ (timeout) → cũng phải đến được người bấm", async () => {
+    target({ isActive: true });
+    h.reassignOpenLeads.mockRejectedValue(
+      new Error("Transaction already closed: timeout 5000ms"),
+    );
+
+    const res = await toggleUserActiveAction("u-2");
+
+    expect(res.ok).toBe(false);
+    expect("error" in res ? res.error : "").toContain("Đã vô hiệu hoá tài khoản");
+  });
+
+  it("🔴 chia lead hỏng KHÔNG được làm hỏng việc vô hiệu hoá (chủ đích cũ)", async () => {
+    target({ isActive: true });
+    h.reassignOpenLeads.mockRejectedValue(new Error("bùm"));
+
+    await toggleUserActiveAction("u-2");
+
+    // Tài khoản VẪN bị tắt + vẫn ghi audit DISABLE. Nếu ai đó "sửa cho gọn" bằng cách
+    // chuyển lượt chia lead vào TRONG transaction, hoặc ném lỗi ra trước khi commit,
+    // hai assert này đỏ.
+    expect(h.txUserUpdate).toHaveBeenCalledTimes(1);
+    const [args] = h.txUserUpdate.mock.calls[0] as [{ data: { isActive: boolean } }];
+    expect(args.data.isActive).toBe(false);
+    expect(h.logUserAudit).toHaveBeenCalledTimes(1);
+  });
+
+  it("BẬT LẠI tài khoản → không chia lead (chỉ nhánh disable mới chia)", async () => {
+    target({ isActive: false });
+
+    const res = await toggleUserActiveAction("u-2");
+
+    expect(res).toEqual({ ok: true });
+    expect(h.reassignOpenLeads).not.toHaveBeenCalled();
+  });
+
+  it("không phải SALES_CSM → không chia lead, không cảnh báo thừa", async () => {
+    target({ isActive: true, role: "TEACHER", roles: ["TEACHER"] });
+    h.reassignOpenLeads.mockRejectedValue(new Error("không được gọi"));
+
+    const res = await toggleUserActiveAction("u-2");
+
+    expect(res).toEqual({ ok: true });
+    expect(h.reassignOpenLeads).not.toHaveBeenCalled();
   });
 });
 

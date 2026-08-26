@@ -1,7 +1,10 @@
 import { db } from "@/lib/db";
 import { logLeadAudit } from "@/lib/audit/log";
 import { LEAD_STATUS_LABEL } from "@/lib/leads/status";
-import { dmKeyOf, reconcileDmConversations } from "@/lib/chat/dm";
+import {
+  applyLeadReassignment,
+  archiveDmOfPreviousSale,
+} from "@/lib/lead/assignment-core";
 import type { LeadStatus, Prisma } from "@prisma/client";
 
 // =============================================================================
@@ -46,23 +49,23 @@ import type { LeadStatus, Prisma } from "@prisma/client";
 //
 // Test gim quyết định này: `service.test.ts` nhóm E ("KHÔNG gọi syncConversationMembership").
 //
-// ⭐ HAI LUẬT CỦA CỘT `Enrollment.saleId` TRONG LƯỢT BÀN GIAO (đọc trước khi sửa `where`)
+// ⭐ PHẦN "ĐỔI CHỦ" ĐÃ TÁCH RA `lib/lead/assignment-core.ts`
 //
-//  L1. BỘ LỌC CHỌN GHI DANH CHỈ ĐƯỢC MANG NGỮ NGHĨA SỞ HỮU: `saleId = sale cũ`,
-//      `deletedAt IS NULL`, và truy vết về đúng những lead vừa đổi chủ. KHÔNG kèm
-//      `status`, KHÔNG kèm `student.parentUserId ≠ null`, KHÔNG kèm cách ly cơ sở của
-//      NGƯỜI BẤM. Ba điều kiện đó phục vụ mục đích khác (chọn PH đi đóng kênh / lọc lead)
-//      nhưng nếu đặt ở đây thì ghi danh rơi ra ngoài sẽ GIỮ NGUYÊN `saleId` = sale cũ,
-//      mà quan hệ Sale↔PH được đánh giá TẠI THỜI ĐIỂM HỎI (`findSaleAssignedEnrollmentIds`)
-//      chứ không phải lúc bàn giao ⇒ nó sống lại khi dữ liệu đổi trạng thái về sau
-//      (PENDING → CONFIRMED, PH kích hoạt tài khoản), và job đối soát đêm KHÔNG dọn được
-//      vì lúc đó quan hệ là THẬT.
+// Repo có 7 đường đổi `Lead.assignedToId`, và trước đây chỉ MỘT đường (chính hàm này)
+// kéo theo `Enrollment.saleId`. Phần chung — `assignedToId` + `assignedAt` +
+// `Enrollment.saleId` theo LUẬT L1/L2 + dòng thời gian — nay nằm ở
+// {@link applyLeadReassignment}; **hai luật L1/L2 được viết đầy đủ ở khối đầu file đó,
+// đọc trước khi sửa bất cứ `where` nào chạm `Enrollment.saleId`**. Tóm tắt:
 //
-//  L2. SALE NHẬN PHẢI CÙNG CƠ SỞ VỚI GHI DANH thì mới được nhận. Đây là bất biến của
-//      chính cột này ở đường ghi tay (`app/(admin)/admin/classes/[id]/students/_actions.ts`
-//      — "Sale phụ trách phải thuộc cùng cơ sở với lớp"). Ghi danh khác cơ sở thì
-//      **GỠ phân công** (`saleId = null`), KHÔNG để lại cho sale cũ — xem
-//      {@link canTakeOverEnrollment}.
+//  L1. Bộ lọc chọn ghi danh CHỈ mang ngữ nghĩa SỞ HỮU (`saleId` = sale cũ, chưa xoá mềm,
+//      truy vết về đúng lead vừa đổi chủ). Không `status`, không `parentUserId ≠ null`,
+//      không cách ly cơ sở của NGƯỜI BẤM.
+//  L2. Sale nhận phải CÙNG CƠ SỞ với ghi danh; khác cơ sở thì GỠ phân công
+//      (`saleId = null`), không để lại cho sale cũ.
+//
+// Ở lại file này là phần RIÊNG của lượt bàn giao hàng loạt: bộ lọc `HandoverFilters` +
+// cách ly cơ sở của người bấm, kiểm người nhận, chia lô, `LeadAssignmentHistory`,
+// chuyển `LeadTask` đang mở, và khuôn audit theo từng lead.
 
 /** Trạng thái "đã đóng" — khi lọc onlyActive thì loại các lead này. */
 const TERMINAL_STATUSES = ["ENROLLED", "LOST", "DUPLICATE"] as const;
@@ -116,38 +119,6 @@ export type HandoverResult = {
   /** Số kênh riêng của sale CŨ đã chuyển chỉ-đọc vì hết phân công. */
   dmArchived: number;
 };
-
-/**
- * Ghi danh này có được giao cho sale nhận không?
- *
- * Cùng bất biến với đường ghi TAY duy nhất còn lại của chính cột `Enrollment.saleId`
- * (`app/(admin)/admin/classes/[id]/students/_actions.ts:143` — "Sale phụ trách phải thuộc
- * cùng cơ sở với lớp", chống gán chéo CS1↔CS2 bằng POST tay). `Enrollment.centerId` là
- * bản sao cơ sở của LỚP (schema.prisma:1850-1852), tức đúng thứ màn kia so sánh.
- *
- * Ghi danh không có cơ sở (lớp HO) → không ràng buộc, y như màn kia.
- *
- * ⚠️ KHÔNG so với `visibleCenterIds`: đó là tầm nhìn của NGƯỜI BẤM, và với SUPER_ADMIN/HO
- * nó là "ALL" nên nhánh kiểm biến mất hoàn toàn — chính là lỗ để một lượt bàn giao gán cả
- * sổ ghi danh CS1 cho sale CS2.
- */
-function canTakeOverEnrollment(
-  enrollmentCenterId: string | null,
-  saleCenterId: string | null,
-): boolean {
-  return enrollmentCenterId === null || enrollmentCenterId === saleCenterId;
-}
-
-/**
- * Dạng `where` của {@link canTakeOverEnrollment} — để đường GHI tự bảo vệ lặp lại đúng
- * điều kiện đã dùng lúc chia nhóm (scopedDb KHÔNG che write; giữa lúc đọc và lúc ghi có
- * khe TOCTOU).
- */
-function centerMatchWhere(saleCenterId: string | null): Prisma.EnrollmentWhereInput {
-  return saleCenterId === null
-    ? { centerId: null }
-    : { OR: [{ centerId: null }, { centerId: saleCenterId }] };
-}
 
 /**
  * Loại bỏ trạng thái không tồn tại trong enum `LeadStatus`.
@@ -204,46 +175,6 @@ function chunk<T>(items: readonly T[], size: number): T[][] {
   const out: T[][] = [];
   for (let i = 0; i < items.length; i += size) out.push([...items.slice(i, i + size)]);
   return out;
-}
-
-/**
- * Đóng kênh riêng của sale CŨ với những phụ huynh vừa đổi người phụ trách.
- *
- * CHẠY SAU KHI TRANSACTION COMMIT, có chủ đích:
- *  • `reconcileDmConversations` là ĐƯỜNG DUY NHẤT đóng một hội thoại 1-1 vì hết quan hệ
- *    nền (archive + tin SYSTEM giải thích lý do — lib/chat/dm.ts:673-703). Viết lại logic
- *    archive ở đây là để hai đường lệch nhau, đúng thứ dm.ts đã gộp lại để tránh.
- *  • Hàm đó chạm `db` trần chứ không nhận `tx`, nên gọi trong transaction sẽ đọc trạng
- *    thái CHƯA commit từ một kết nối khác ⇒ kết luận sai (và có nguy cơ chờ khoá).
- *  • Đây là hiệu ứng phụ KHÔNG-atomic: hỏng thì ghi log, KHÔNG rollback việc bàn giao đã
- *    commit (luật cứng module chat #2). Lưới cuối vẫn còn: job đối soát đêm.
- *
- * KHÔNG mở kênh hộ sale MỚI: mở 1-1 là hành vi chủ động của người dùng (`openDm`), tạo
- * hàng loạt hội thoại rỗng chỉ đẻ rác trong hộp thư.
- */
-async function archiveDmOfPreviousSale(
-  fromUserId: string,
-  parentUserIds: readonly string[],
-): Promise<number> {
-  const peers = [...new Set(parentUserIds)].filter((id) => id && id !== fromUserId);
-  if (peers.length === 0) return 0;
-  try {
-    const dmKeys = peers.map((parentUserId) =>
-      dmKeyOf(fromUserId, parentUserId, "SALE_PARENT"),
-    );
-    const conversations = await db.conversation.findMany({
-      where: { dmKey: { in: dmKeys }, type: "DM_SALE_PARENT", status: "ACTIVE" },
-      select: { id: true },
-    });
-    if (conversations.length === 0) return 0;
-    const res = await reconcileDmConversations({
-      onlyConversationIds: conversations.map((c) => c.id),
-    });
-    return res.dmArchived;
-  } catch (err) {
-    console.error("[lead-handover] đóng kênh riêng của sale cũ lỗi:", err);
-    return 0;
-  }
 }
 
 export async function bulkReassignLeads(params: {
@@ -333,48 +264,31 @@ export async function bulkReassignLeads(params: {
           };
         }
 
-        // ── Ghi danh đi theo lead (kênh riêng Sale↔PH) ──
-        // Truy vết Lead → LeadChild → Enrollment (`Enrollment.leadChildId`, R7-06). Đọc
-        // TRƯỚC khi đổi `Lead.assignedToId` không quan trọng, nhưng phải đọc trước khi
-        // đổi `saleId` để còn biết PH nào bị ảnh hưởng.
-        // Điều kiện `saleId = sale cũ` giữ cho lượt bàn giao KHÔNG cướp ghi danh mà ai
-        // đó đã gán tay cho người khác ở màn học viên của lớp.
+        // ── Phần "đổi chủ" dùng chung (lib/lead/assignment-core.ts) ──
+        // Đổi `assignedToId` + đặt `assignedAt` + kéo `Enrollment.saleId` theo luật L1/L2.
+        // Truy vết Lead → LeadChild → Enrollment (`Enrollment.leadChildId`, R7-06) và
+        // toàn bộ lý lẽ của hai luật nằm trong module đó — ĐỌC Ở ĐÓ trước khi sửa `where`.
         //
-        // ⚠️ LUẬT L1 (xem khối đầu file): `where` dưới đây ĐÃ ĐỦ. BA ĐIỀU KIỆN SAU ĐÃ BỊ
-        // GỠ KHỎI ĐÂY, đừng thêm lại — mỗi cái để lại một ghi danh mang `saleId` của người
-        // đã nghỉ, mà quan hệ Sale↔PH được đánh giá TẠI THỜI ĐIỂM HỎI nên nó sống lại sau:
-        //  1. `status ∈ ENROLLMENT_ACTIVE_STATUS_LIST` — bộ này KHÔNG có `PENDING`; ghi danh
-        //     chờ xếp lớp bị bỏ lại, rồi giáo vụ xếp lớp là quan hệ SỐNG LẠI.
-        //  2. `student.parentUserId ≠ null` — PH chưa có tài khoản lúc bàn giao (rất phổ
-        //     biến) thì sau khi kích hoạt sẽ được nối vào đúng người vừa nghỉ.
-        //  3. `centerId ∈ visibleCenterIds` — `Enrollment.centerId` là bản sao cơ sở của LỚP,
-        //     độc lập với `Lead.centerId`; học viên chuyển sang lớp cơ sở khác rơi ra ngoài
-        //     tầm nhìn QLCS. Đó đúng là ca mà `findSaleAssignedEnrollmentIds` (dm.ts:226-247)
-        //     CỐ Ý không lọc cơ sở để giữ kênh. Lead đã được cách ly ở `where` rồi.
-        // Cách ly cơ sở cho cột này nằm ở chiều KHÁC: sale NHẬN phải cùng cơ sở với ghi
-        // danh (luật L2) — xử lý ngay bên dưới, không phải bằng cách bỏ sót ghi danh.
-        const enrollments = await tx.enrollment.findMany({
-          where: {
-            saleId: params.fromUserId,
-            deletedAt: null,
-            leadChild: { leadId: { in: ids } },
-          },
-          select: {
-            id: true,
-            centerId: true,
-            leadChild: { select: { leadId: true } },
-            student: { select: { parentUserId: true } },
-          },
-        });
-
-        // Đường GHI tự bảo vệ (scopedDb KHÔNG che write): lặp lại ĐỦ điều kiện lọc —
-        // kể cả cách ly cơ sở — trong `where` của updateMany, thay vì chỉ danh sách id.
-        const leadRes = await tx.lead.updateMany({
-          where: { ...where, id: { in: ids } },
-          data: {
-            assignedToId: params.toUserId,
-            handoverNote: params.reason ?? undefined,
-          },
+        // `leadWhere` truyền NGUYÊN bộ lọc (kể cả cách ly cơ sở) chứ không chỉ danh sách
+        // id: đường GHI phải tự bảo vệ vì scopedDb không che write.
+        //
+        // KHÔNG truyền `activity`: lượt bàn giao hàng loạt hiện KHÔNG ghi `LeadActivity`
+        // (dòng thời gian của lead không hiện gì sau khi bàn giao). Giữ nguyên hành vi ở
+        // bước tách helper này; bật lên là thay đổi có chủ ý, phải đi kèm câu chữ + quyết
+        // định về cờ `metadata.system` (nó khoá/mở auto-chia lead về sau).
+        const reassigned = await applyLeadReassignment({
+          tx,
+          leadIds: ids,
+          leadWhere: where,
+          fromUserId: params.fromUserId,
+          toUserId: params.toUserId,
+          // Cơ sở của SALE NHẬN — KHÔNG phải `Lead.centerId` (luật L2).
+          toSaleCenterId: toUser.centerId,
+          // Đây là đường bàn giao KHI SALE NGHỈ VIỆC: ghi danh khác cơ sở phải GỠ phân
+          // công. Để nguyên mới là bug — người đã nghỉ giữ kênh riêng với phụ huynh, và
+          // job đối soát đêm không dọn vì `saleId` vẫn khớp một quan hệ THẬT.
+          strandedPolicy: "UNASSIGN",
+          leadData: { handoverNote: params.reason ?? undefined },
         });
 
         await tx.leadAssignmentHistory.createMany({
@@ -393,58 +307,13 @@ export async function bulkReassignLeads(params: {
           data: { assignedToId: params.toUserId, assignedToName: toUser.name ?? null },
         });
 
-        // ── LUẬT L2: chia theo cơ sở của SALE NHẬN ──
-        // `takeable` = sale nhận được phép phụ trách. `stranded` = khác cơ sở ⇒ GỠ phân
-        // công thay vì để nguyên sale cũ: sale cũ vừa nghỉ việc, để lại là đúng cái bug
-        // mà khối đầu file tuyên bố vá (kênh riêng còn ACTIVE, job đêm không dọn vì
-        // `saleId` vẫn khớp). `saleId = null` là trạng thái hợp lệ sẵn có ("gỡ" ở màn
-        // học viên của lớp, và `onDelete: SetNull` của chính cột này).
-        const takeable: string[] = [];
-        const stranded: string[] = [];
-        for (const e of enrollments) {
-          if (canTakeOverEnrollment(e.centerId, toUser.centerId)) takeable.push(e.id);
-          else stranded.push(e.id);
-        }
-
-        let enrollmentCount = 0;
-        if (takeable.length > 0) {
-          const enrRes = await tx.enrollment.updateMany({
-            where: {
-              id: { in: takeable },
-              saleId: params.fromUserId,
-              deletedAt: null,
-              // Đường GHI tự bảo vệ (scopedDb KHÔNG che write): lặp lại chính điều kiện
-              // đã dùng để chia nhóm, để một lượt ghi chen ngang cũng không tạo ra được
-              // phân công chéo cơ sở.
-              ...centerMatchWhere(toUser.centerId),
-            },
-            data: { saleId: params.toUserId },
-          });
-          enrollmentCount = enrRes.count;
-        }
-
-        let unassignedCount = 0;
-        if (stranded.length > 0) {
-          const strandedRes = await tx.enrollment.updateMany({
-            where: { id: { in: stranded }, saleId: params.fromUserId, deletedAt: null },
-            data: { saleId: null },
-          });
-          unassignedCount = strandedRes.count;
-        }
-
         // Audit per-record (một dòng mỗi lead) — nhật ký bàn giao phải tra được theo lead.
-        const takeableSet = new Set(takeable);
-        const enrollmentsByLead = new Map<string, { moved: string[]; unassigned: string[] }>();
-        for (const e of enrollments) {
-          const leadId = e.leadChild?.leadId;
-          if (!leadId) continue;
-          const bucket = enrollmentsByLead.get(leadId) ?? { moved: [], unassigned: [] };
-          if (takeableSet.has(e.id)) bucket.moved.push(e.id);
-          else bucket.unassigned.push(e.id);
-          enrollmentsByLead.set(leadId, bucket);
-        }
         for (const leadId of ids) {
-          const bucket = enrollmentsByLead.get(leadId) ?? { moved: [], unassigned: [] };
+          const bucket = reassigned.enrollmentsByLead.get(leadId) ?? {
+            moved: [],
+            unassigned: [],
+            kept: [],
+          };
           const changedFields = ["assignedToId"];
           if (bucket.moved.length > 0) changedFields.push("enrollmentSaleMoved");
           if (bucket.unassigned.length > 0) changedFields.push("enrollmentSaleUnassigned");
@@ -468,19 +337,14 @@ export async function bulkReassignLeads(params: {
           });
         }
 
-        // PH của MỌI ghi danh vừa đổi `saleId` (kể cả nhánh gỡ phân công): tập này đi
-        // đóng kênh của sale cũ. Thừa thì vô hại — `reconcileDmConversations` tự kiểm
-        // lại quan hệ; THIẾU mới là lỗ để sale đã nghỉ giữ kênh.
-        const parentIds = enrollments
-          .map((e) => e.student.parentUserId)
-          .filter((id): id is string => typeof id === "string" && id.length > 0);
-
         return {
-          moved: leadRes.count,
+          moved: reassigned.leadsMoved,
           tasks: taskRes.count,
-          enrollments: enrollmentCount,
-          enrollmentsUnassigned: unassignedCount,
-          parentIds,
+          enrollments: reassigned.enrollmentsMoved,
+          enrollmentsUnassigned: reassigned.enrollmentsUnassigned,
+          // PH của MỌI ghi danh vừa đụng tới (kể cả nhánh gỡ phân công): tập này đi đóng
+          // kênh của sale cũ SAU khi tx commit.
+          parentIds: reassigned.affectedParentIds,
         };
       }, HANDOVER_TX_OPTIONS);
 

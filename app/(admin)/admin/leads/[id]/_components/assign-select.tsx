@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { assignLeadToSaleAction } from "../../actions";
+import { enrollmentNotice } from "@/lib/lead/assignment-notice";
 
 export function AssignSelect({
   leadId,
@@ -24,7 +25,12 @@ export function AssignSelect({
     startTransition(async () => {
       const res = await assignLeadToSaleAction(leadId, saleId);
       if (res.ok) {
-        toast.success("Đã gán lead");
+        // Lượt gán tay kéo theo `Enrollment.saleId` (kênh riêng Sale↔PH sống trên cột
+        // này) — con số đó phải ra tới người bấm.
+        const notice = enrollmentNotice(res);
+        toast.success(notice ? `Đã gán lead. ${notice}` : "Đã gán lead", {
+          duration: notice ? 8000 : undefined,
+        });
         router.refresh();
       } else {
         toast.error(res.error ?? "Lỗi gán");

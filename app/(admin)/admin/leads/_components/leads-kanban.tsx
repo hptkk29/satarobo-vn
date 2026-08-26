@@ -12,6 +12,7 @@ import {
 } from "@/lib/leads/status";
 import { Badge } from "@/components/ui/badge";
 import { updateLeadStatus, autoAssignLeadAction } from "../actions";
+import { enrollmentNotice } from "@/lib/lead/assignment-notice";
 
 export type KanbanLead = {
   id: string;
@@ -96,7 +97,15 @@ export function LeadsKanban({
     startTransition(async () => {
       const res = await autoAssignLeadAction(leadId);
       if (res.ok) {
-        toast.success("Đã phân công lead (round-robin)");
+        // Lượt chia kéo theo `Enrollment.saleId` (kênh riêng Sale↔PH sống trên cột này) —
+        // con số đó phải ra tới người bấm.
+        const notice = enrollmentNotice(res);
+        toast.success(
+          notice
+            ? `Đã phân công lead (round-robin). ${notice}`
+            : "Đã phân công lead (round-robin)",
+          { duration: notice ? 8000 : undefined },
+        );
         router.refresh();
       } else {
         toast.error(res.error ?? "Không phân công được");

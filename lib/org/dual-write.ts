@@ -174,6 +174,35 @@ export function dualWriteExtension() {
 }
 
 /**
+ * GHI KÉP CHO MỘT LỆNH `updateMany` — cửa hẹp, mở có điều kiện.
+ *
+ * Extension ở trên KHÔNG hook `updateMany` và lý do vẫn đứng nguyên: ở đó `where` không
+ * nói được các dòng đang thuộc cơ sở nào, nên SUY `orgUnitId` từ dữ liệu SẴN CÓ là gán sai
+ * hàng loạt. Nhưng có một ca mà phản đối đó không áp: khi chính lệnh ghi ĐANG ĐẶT
+ * `data.centerId` bằng một giá trị cụ thể, mọi dòng khớp `where` sẽ cùng về đúng cơ sở đó
+ * ⇒ một `orgUnitId` chung là câu trả lời ĐÚNG cho cả lô. `fillOne` vốn chỉ đọc
+ * `data.centerId` (không bao giờ đọc dòng cũ), nên dùng lại được nguyên vẹn — cùng cache,
+ * cùng cầu cho Center mồ côi, cùng 4 luật ở đầu file.
+ *
+ * VÌ SAO CẦN: `lib/lead/assignment-core.ts` gom 6 đường đổi chủ lead lại và ghi Lead bằng
+ * `updateMany` (bản cũ là `update` — được hook). `Lead` ∈ `DUAL_WRITE_MODELS`, và
+ * `transferLead` là đường DUY NHẤT đổi `Lead.centerId`, nên mất hook ở đó là mỗi lượt
+ * chuyển cơ sở để lại một dòng lệch — trái luật cứng Nền Hệ thống #3.
+ *
+ * Gọi TRƯỚC `updateMany`, trên một BẢN SAO của `data`. Trả `true` nếu có điền.
+ */
+export async function fillOrgUnitOnUpdateMany(
+  model: string,
+  data: { centerId?: unknown; orgUnitId?: unknown },
+): Promise<boolean> {
+  if (!DUAL_WRITE_MODELS.has(model)) return false;
+  // Chưa dựng client trần (chỉ xảy ra khi `lib/db.ts` bị thay bằng mock trong test):
+  // để trống cho đối soát đêm, KHÔNG ném — y luật 4 ở đầu file.
+  if (!dualWriteClient) return false;
+  return fillOne(dualWriteClient as MinimalClient, data as Record<string, unknown>);
+}
+
+/**
  * Client dùng để TRA CỨU bên trong extension.
  *
  * Phải là client TRẦN (chưa qua extension) — dùng chính `db` sẽ đệ quy vô hạn khi

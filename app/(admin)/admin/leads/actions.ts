@@ -17,6 +17,8 @@ import { getLeadPaymentSummary } from '@/lib/payments/summary'
 import { autoAssignLead, reassignOpenLeads } from '@/lib/lead/assign'
 import { validateTransferTarget } from '@/lib/crm/transfer-validate'
 import { autoAssignNewLead, manualAssignLead, reassignForCenter } from '@/lib/lead/auto-assign'
+import { applyLeadReassignment, archiveDmOfPreviousSale } from '@/lib/lead/assignment-core'
+import type { LeadReassignOutcome } from '@/lib/lead/assignment-core'
 import { centerIdForOrgUnit } from '@/lib/org/org-service'
 import { rejectHeadOffice } from '@/lib/enrollment-flow'
 import { LEAD_STATUS_LABEL, canTransitionLeadStatus } from '@/lib/leads/status'
@@ -530,9 +532,21 @@ export async function deleteLead(
 
 // ─── Phase T1.3 — Auto-assign actions ────────────────────────────────────────
 
+/**
+ * Auto-chia 1 lead (round-robin).
+ *
+ * Trả về CẢ số liệu ghi danh — cùng lý do với {@link assignLeadToSaleAction}: lượt chia
+ * nay kéo theo `Enrollment.saleId`, con số đó không được im lặng.
+ */
 export async function autoAssignLeadAction(
   leadId: string,
-): Promise<{ ok: boolean; error?: string }> {
+): Promise<{
+  ok: boolean
+  error?: string
+  enrollmentsMoved?: number
+  enrollmentsUnassigned?: number
+  enrollmentsKept?: number
+}> {
   const session = await auth()
   if (!session?.user) return { ok: false, error: 'Chưa đăng nhập' }
   if (!(await checkPermission('leads:assign'))) return { ok: false, error: 'Không có quyền' }
@@ -543,7 +557,12 @@ export async function autoAssignLeadAction(
 
   revalidatePath('/leads')
   revalidatePath(`/leads/${leadId}`)
-  return { ok: true }
+  return {
+    ok: true,
+    enrollmentsMoved: res.enrollmentsMoved,
+    enrollmentsUnassigned: res.enrollmentsUnassigned,
+    enrollmentsKept: res.enrollmentsKept,
+  }
 }
 
 export async function reassignLeadsFromAction(
@@ -799,11 +818,23 @@ export async function autoAssignNewLeadAction(
   return { ok: true }
 }
 
-/** Quản lý gán tay 1 lead cho 1 sale cụ thể. */
+/**
+ * Quản lý gán tay 1 lead cho 1 sale cụ thể.
+ *
+ * Trả về CẢ số liệu ghi danh: lượt gán tay nay kéo theo `Enrollment.saleId` — cột quyết
+ * định ai còn nhắn riêng được với phụ huynh — nên `{ ok: true }` trần là để người vận hành
+ * không biết ghi danh nào vừa đổi người phụ trách hoặc vừa ở lại với sale cũ.
+ */
 export async function assignLeadToSaleAction(
   leadId: string,
   saleId: string,
-): Promise<{ ok: boolean; error?: string }> {
+): Promise<{
+  ok: boolean
+  error?: string
+  enrollmentsMoved?: number
+  enrollmentsUnassigned?: number
+  enrollmentsKept?: number
+}> {
   const session = await auth()
   if (!session?.user) return { ok: false, error: 'Chưa đăng nhập' }
   if (!(await checkPermission('leads:assign'))) return { ok: false, error: 'Không có quyền' }
@@ -814,7 +845,12 @@ export async function assignLeadToSaleAction(
 
   revalidatePath('/leads')
   revalidatePath(`/leads/${leadId}`)
-  return { ok: true }
+  return {
+    ok: true,
+    enrollmentsMoved: res.enrollmentsMoved,
+    enrollmentsUnassigned: res.enrollmentsUnassigned,
+    enrollmentsKept: res.enrollmentsKept,
+  }
 }
 
 const ASSIGN_MODES = ['ROUND_ROBIN', 'CLOSE_RATE', 'MANUAL'] as const
@@ -886,7 +922,17 @@ const transferSchema = z.object({
 
 export async function transferLead(
   input: unknown,
-): Promise<{ ok: boolean; error?: string; code?: string }> {
+): Promise<{
+  ok: boolean
+  error?: string
+  code?: string
+  /** Số ghi danh đổi sang sale nhận — kênh riêng Sale↔PH sống trên cột này. */
+  enrollmentsMoved?: number
+  /** Số ghi danh bị GỠ phân công vì khác cơ sở (luật L2) — cần gán tay lại. */
+  enrollmentsUnassigned?: number
+  /** Số ghi danh khác cơ sở GIỮ NGUYÊN sale cũ (luật L2). */
+  enrollmentsKept?: number
+}> {
   const session = await auth()
   if (!session?.user) return { ok: false, error: 'Chưa đăng nhập' }
   if (!(await checkPermission('leads:edit'))) return { ok: false, error: 'Không có quyền' }
@@ -954,71 +1000,164 @@ export async function transferLead(
 
   const { actorId, actorName } = getAuditActor(session)
   const [toSale, fromCenter, toCenter] = await Promise.all([
-    toSaleId ? db.user.findUnique({ where: { id: toSaleId }, select: { name: true } }) : null,
+    // ⚠️ `centerId` ở đây KHÔNG phải để hiển thị — nó là cơ sở đem so với
+    // `Enrollment.centerId` theo luật L2 (xem `applyLeadReassignment`). ĐỪNG thay bằng
+    // `toCenterId`: `Enrollment.centerId` là bản sao cơ sở của LỚP, độc lập hoàn toàn với
+    // cơ sở của lead — hai thứ tình cờ trùng nhau ở phần lớn ca nên nhầm lẫn này không tự
+    // lộ ra. Test ghim: `./actions.transfer.test.ts` [T-3].
+    toSaleId
+      ? db.user.findUnique({ where: { id: toSaleId }, select: { name: true, centerId: true } })
+      : null,
     lead.centerId ? db.center.findUnique({ where: { id: lead.centerId }, select: { name: true } }) : null,
     toCenterId ? db.center.findUnique({ where: { id: toCenterId }, select: { name: true } }) : null,
   ])
 
-  await db.$transaction(async (tx) => {
-    await tx.lead.update({
-      where: { id: lead.id },
-      data: {
-        centerId: toCenterId,
-        assignedToId: toSaleId,
-        handoverNote: d.handoverNote,
-        ...(lead.status === 'NEW' && toSaleId ? { status: 'ASSIGNED' as const } : {}),
+  /**
+   * Lead đã bị một trong 6 đường đổi chủ khác xử lý (hoặc bị xoá mềm) giữa lúc `findFirst`
+   * ở trên và lúc ghi. Ném ra để huỷ CẢ lượt: nếu chỉ bỏ qua, phiếu `LeadTransfer` + audit
+   * vẫn nằm lại cho một việc đã không xảy ra, và ghi danh thì đã bị kéo sang sale mới.
+   */
+  class LeadRacedError extends Error {}
+
+  // Không gán trị khởi tạo: nhánh `catch` dưới đây luôn `return` hoặc `throw`, nên chạy
+  // tới dòng sau try/catch nghĩa là transaction đã commit và biến đã có giá trị thật.
+  let outcome: LeadReassignOutcome
+  try {
+    outcome = await db.$transaction(
+      async (tx) => {
+        // ── Phần "đổi chủ" dùng chung (lib/lead/assignment-core.ts) ──
+        // Đổi `assignedToId` + đặt `assignedAt` (mốc bắt đồng hồ SLA-3) + kéo
+        // `Enrollment.saleId` theo LUẬT L1/L2 + ghi dòng thời gian. Hai luật đó viết đầy
+        // đủ ở khối đầu module kia — ĐỌC Ở ĐÓ trước khi sửa bất cứ `where` nào chạm
+        // `Enrollment.saleId`.
+        const moved = await applyLeadReassignment({
+          tx,
+          leadIds: [lead.id],
+          // Lặp lại bộ lọc đã dùng lúc CHỌN (`findFirst` ở trên), không chỉ `id`:
+          // scopedDb KHÔNG che đường ghi.
+          //
+          // ⚠️ `assignedToId` LÀ PHẦN CÓ RĂNG của bộ lọc này — đây là compare-and-swap.
+          // Chỉ `{ deletedAt: null }` thì mọi lead còn sống đều khớp, `leadsMoved` luôn
+          // bằng 1, và `LeadRacedError` bên dưới chỉ nổ khi lead bị XOÁ MỀM — tức nhánh
+          // "lead vừa bị đường khác đổi chủ" (6 đường còn lại) không bao giờ chạy. Khi đó
+          // `fromUserId` đọc NGOÀI transaction đã cũ ⇒ lượt kéo `Enrollment.saleId` tìm
+          // theo sale cũ không thấy gì, và kết cục là `Lead.assignedToId` một đằng,
+          // `Enrollment.saleId` một nẻo — đúng loại phân kỳ mà module kia sinh ra để vá.
+          leadWhere: { deletedAt: null, assignedToId: lead.assignedToId },
+          fromUserId: lead.assignedToId,
+          toUserId: toSaleId,
+          // Cơ sở của SALE NHẬN — KHÔNG phải `toCenterId` của lead (luật L2).
+          toSaleCenterId: toSale?.centerId ?? null,
+          // Sale cũ ở đường này CÒN LÀM VIỆC (quản lý bấm "Chuyển lead", không phải bàn
+          // giao khi nghỉ), nên ghi danh khác cơ sở GIỮ NGUYÊN người phụ trách: gỡ là xoá
+          // một phân công đang chạy tốt và phụ huynh mất luôn kênh riêng với sale đó.
+          strandedPolicy: 'KEEP',
+          leadData: {
+            // `centerId` là đủ — helper tự ghi kép sang `orgUnitId` (luật cứng Nền Hệ
+            // thống #3), vì `updateMany` không đi qua extension ghi kép.
+            centerId: toCenterId,
+            handoverNote: d.handoverNote,
+            ...(lead.status === 'NEW' && toSaleId ? { status: 'ASSIGNED' as const } : {}),
+          },
+          activity: {
+            actorId,
+            actorName,
+            type: 'HANDOVER',
+            content: d.handoverNote,
+            metadata: {
+              fromSaleId: lead.assignedToId,
+              toSaleId,
+              fromCenterId: lead.centerId,
+              toCenterId,
+              reason: d.reason || null,
+            },
+          },
+        })
+        if (moved.leadsMoved === 0) throw new LeadRacedError()
+
+        await tx.leadTransfer.create({
+          data: {
+            leadId: lead.id,
+            fromCenterId: lead.centerId,
+            toCenterId,
+            fromSaleId: lead.assignedToId,
+            toSaleId,
+            note: d.handoverNote,
+            reason: d.reason || null,
+            transferredById: actorId,
+            transferredByName: actorName,
+          },
+        })
+
+        const bucket = moved.enrollmentsByLead.get(lead.id) ?? {
+          moved: [],
+          unassigned: [],
+          kept: [],
+        }
+        const changedFields = ['assignedToId', 'centerId']
+        if (bucket.moved.length > 0) changedFields.push('enrollmentSaleMoved')
+        if (bucket.unassigned.length > 0) changedFields.push('enrollmentSaleUnassigned')
+        if (bucket.kept.length > 0) changedFields.push('enrollmentSaleKept')
+
+        await logLeadAudit({
+          leadId: lead.id,
+          action: 'ASSIGN',
+          actorId,
+          actorName,
+          oldValues: { assignedToId: lead.assignedToId, centerId: lead.centerId },
+          newValues: {
+            assignedToId: toSaleId,
+            centerId: toCenterId,
+            // Ghi rõ ghi danh nào đổi sale phụ trách: đó là thứ quyết định ai còn nhắn
+            // riêng được với phụ huynh. Ghi cả nhánh bị GỠ vì khác cơ sở — không có dòng
+            // này thì không ai tra được vì sao ghi danh mất sale. Và ghi cả nhánh Ở LẠI
+            // với sale cũ: từ đó `Lead.assignedToId` với `Enrollment.saleId` cố ý không
+            // trùng nhau, phải có chỗ tra ra vì sao.
+            enrollmentSaleMoved: bucket.moved,
+            enrollmentSaleUnassigned: bucket.unassigned,
+            enrollmentSaleKept: bucket.kept,
+          },
+          changedFields,
+          tx,
+        })
+
+        // Mang RA NGOÀI tx: PH của MỌI ghi danh vừa đụng tới (để đóng kênh) + số liệu
+        // để báo cho người bấm.
+        return moved
       },
-    })
+      // Luật E-bis #2 của module chat: transaction gánh thêm việc ngoài một thao tác đơn
+      // phải nới trần. Lượt này nay ~9 lượt đi-về DB (đọc ghi danh + 2 lệnh ghi ghi danh +
+      // activity + phiếu chuyển + 3 lượt của `logLeadAudit`) — mặc định Prisma là 5s/2s.
+      { timeout: 30_000, maxWait: 10_000 },
+    )
+  } catch (err) {
+    if (err instanceof LeadRacedError) {
+      return { ok: false, error: 'Lead vừa được đổi chủ ở nơi khác — tải lại trang rồi thử lại' }
+    }
+    throw err
+  }
 
-    await tx.leadActivity.create({
-      data: {
-        leadId: lead.id,
-        actorId,
-        actorName,
-        type: 'HANDOVER',
-        content: d.handoverNote,
-        metadata: {
-          fromSaleId: lead.assignedToId,
-          toSaleId,
-          fromCenterId: lead.centerId,
-          toCenterId,
-          reason: d.reason || null,
-        },
-      },
-    })
+  // Hiệu ứng phụ NGOÀI transaction: đóng kênh riêng Sale↔PH của sale cũ. Best-effort —
+  // hàm tự nuốt lỗi + ghi log, KHÔNG rollback việc đã commit (luật cứng module chat #2);
+  // lưới cuối vẫn là job đối soát đêm. KHÔNG mở kênh hộ sale MỚI (mở 1-1 là hành vi chủ
+  // động của người dùng).
+  if (lead.assignedToId) {
+    await archiveDmOfPreviousSale(lead.assignedToId, outcome.affectedParentIds)
+  }
 
-    await tx.leadTransfer.create({
-      data: {
-        leadId: lead.id,
-        fromCenterId: lead.centerId,
-        toCenterId,
-        fromSaleId: lead.assignedToId,
-        toSaleId,
-        note: d.handoverNote,
-        reason: d.reason || null,
-        transferredById: actorId,
-        transferredByName: actorName,
-      },
-    })
-
-    await logLeadAudit({
-      leadId: lead.id,
-      action: 'ASSIGN',
-      actorId,
-      actorName,
-      oldValues: { assignedToId: lead.assignedToId, centerId: lead.centerId },
-      newValues: { assignedToId: toSaleId, centerId: toCenterId },
-      changedFields: ['assignedToId', 'centerId'],
-      tx,
-    })
-  })
-
-  void toSale
   void fromCenter
   void toCenter
   revalidatePath('/leads')
   revalidatePath(`/leads/${lead.id}`)
-  return { ok: true }
+  // Số liệu ghi danh ĐI RA TỚI NGƯỜI BẤM. Lượt chuyển lead nay kéo theo
+  // `Enrollment.saleId` — thứ quyết định ai còn nhắn riêng được với phụ huynh — nên trả
+  // `{ ok: true }` trần là để người vận hành không biết ghi danh nào vừa đổi/ở lại.
+  return {
+    ok: true,
+    enrollmentsMoved: outcome.enrollmentsMoved,
+    enrollmentsUnassigned: outcome.enrollmentsUnassigned,
+    enrollmentsKept: outcome.enrollmentsKept,
+  }
 }
 
 // ─── R7-01 — LeadChild (1 Lead có N con) ─────────────────────────────────────

@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { ArrowLeftRight } from "lucide-react";
 import { transferLead } from "../../actions";
 import { validateTransferTarget } from "@/lib/crm/transfer-validate";
+import { enrollmentNotice } from "@/lib/lead/assignment-notice";
 
 type Center = { id: string; name: string };
 type Sale = { id: string; name: string | null; centerId: string | null };
@@ -57,7 +58,12 @@ export function TransferDialog({
     startTransition(async () => {
       const res = await transferLead({ leadId, toCenterId, toSaleId, handoverNote, reason });
       if (res.ok) {
-        toast.success("Đã chuyển lead");
+        // Lượt chuyển kéo theo `Enrollment.saleId` — thứ quyết định ai còn nhắn riêng được
+        // với phụ huynh. Con số đó phải ra tới người bấm, không được im lặng.
+        const notice = enrollmentNotice(res);
+        toast.success(notice ? `Đã chuyển lead. ${notice}` : "Đã chuyển lead", {
+          duration: notice ? 8000 : undefined,
+        });
         setOpen(false);
         router.refresh();
       } else toast.error(res.error ?? "Lỗi chuyển lead");
