@@ -76,6 +76,35 @@ function stripSessionNumberPrefix(s: string): string {
 }
 
 /**
+ * Tiền tố học phần `"HP2 - "` ở ĐẦU tên bài.
+ *
+ * Đo trên PROD 26/08: giáo trình do Đào tạo soạn tay đặt tên bài kèm sẵn học phần —
+ * `"HP2 - Họa Sĩ Robot"`, `"HP1 - Máy đập bóng cơ"`, `"HP3 - Ôn tập kiến thức"`. Khác hẳn
+ * dev/test (tên bài kiểu `"Buổi 2 — …"`), nên bẫy này chỉ lộ ra khi chạm dữ liệu thật.
+ *
+ * Hai chỗ đau khác nhau:
+ *   • phiếu gửi PHỤ HUYNH phải là TÊN TRẦN (chốt 25/08) ⇒ `"Dự án: Họa Sĩ Robot"`,
+ *     không phải `"Dự án: HP2 - Họa Sĩ Robot"`;
+ *   • NHÃN BUỔI vẫn muốn có học phần ⇒ `"Buổi 5 - HP2 - Họa Sĩ Robot"`.
+ * Nên KHÔNG vứt tiền tố đi: cắt khỏi tên, rồi trả lại qua `moduleCodeFromTitle` để
+ * `deriveSessionLabel` dựng lại đúng chỗ. Bài đã seed có `Lesson.moduleCode` thật thì
+ * cột đó thắng — đây chỉ là đường lùi cho giáo trình gõ tay chưa có moduleCode.
+ *
+ * PHẢI có dấu ngăn sau số mới cắt: `"HP2"` trần hay `"HPV cảm biến"` không phải tiền tố.
+ */
+const MODULE_PREFIX = /^hp\s*(\d+)\s*[—–\-:.]\s*/i;
+
+function stripModulePrefix(s: string): string {
+  return s.replace(MODULE_PREFIX, "").trim();
+}
+
+/** `"HP2 - Họa Sĩ Robot"` → `"HP2"`; không có tiền tố → `""`. */
+export function moduleCodeFromTitle(s: string | null | undefined): string {
+  const m = MODULE_PREFIX.exec(clean(s));
+  return m ? `HP${m[1]}` : "";
+}
+
+/**
  * `clean()` + coi ô trống `"Buổi N"` như chuỗi rỗng + cắt tiền tố `"Buổi N —"` thừa.
  *
  * Export vì cổng phụ huynh cũng phải làm y hệt: `lib/portal/{feedback,photos,schedule}.ts`
@@ -86,7 +115,8 @@ function stripSessionNumberPrefix(s: string): string {
 export function meaningfulSessionTitle(s: string | null | undefined): string {
   const t = clean(s);
   if (isBlankSessionTitle(t)) return "";
-  return stripSessionNumberPrefix(t);
+  // Cắt CẢ HAI tiền tố, theo thứ tự này: `"Buổi 5 - HP2 - Họa Sĩ Robot"` có cả hai.
+  return stripModulePrefix(stripSessionNumberPrefix(t));
 }
 
 /** Bí danh nội bộ cho gọn — cùng một hàm. */
@@ -166,7 +196,13 @@ export function deriveSessionLabel(src: SessionProjectSource): string {
   const n = sessionOrLessonNumber(src);
   if (n) parts.push(`Buổi ${n}`);
 
-  const mod = clean(src.moduleCode);
+  // `Lesson.moduleCode` (bài đã seed) thắng; giáo trình gõ tay chưa có cột đó thì lấy lại
+  // tiền tố `"HPn - "` vừa bị cắt khỏi chính tên bài — xem `stripModulePrefix`.
+  const mod =
+    clean(src.moduleCode) ||
+    moduleCodeFromTitle(src.planTitle) ||
+    moduleCodeFromTitle(src.lessonTitle) ||
+    moduleCodeFromTitle(src.topic);
   if (mod) parts.push(mod);
 
   const title = deriveSessionTitle(src);
