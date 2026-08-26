@@ -5,6 +5,7 @@ import { can } from "@/lib/auth/can";
 import { scopedDb } from "@/lib/db-scope";
 import { docDanBaiChoMan } from "@/lib/elearning/course-authoring";
 import { OutlineEditor } from "../_components/outline-editor";
+import { EquivalencePanel } from "../_components/equivalence-panel";
 
 /**
  * EL-08 — MÀN SOẠN KHOÁ.
@@ -87,6 +88,23 @@ export default async function Page({
     }),
   ]);
 
+  // Nhân sự có tài khoản — nguồn cho ô chọn người được công nhận tương đương.
+  const dsNhanSu = (
+    await db.employee.findMany({
+      where: { isActive: true, status: "ACTIVE", userAccount: { isNot: null } },
+      select: {
+        fullName: true,
+        employeeCode: true,
+        userAccount: { select: { id: true } },
+      },
+      orderBy: { fullName: "asc" },
+      take: 500,
+    })
+  ).map((n: { fullName: string; employeeCode: string; userAccount: { id: string } | null }) => ({
+    userId: n.userAccount!.id,
+    ten: `${n.fullName} (${n.employeeCode})`,
+  }));
+
   return (
     <div className="mx-auto max-w-5xl px-4 py-6">
       <nav className="mb-2 text-xs text-muted-foreground">
@@ -111,6 +129,21 @@ export default async function Page({
           }),
         )}
       />
+
+      {/* ── Công nhận tương đương ───────────────────────────────────────────
+          ⚠️ `congNhanTuongDuongAction` khai từ EL-09 nhưng 0 màn nào gọi — nên con
+          số "công nhận tương đương" trên báo cáo tuân thủ vĩnh viễn bằng 0, không
+          phải vì không ai đủ điều kiện mà vì không ai ghi được.
+          Chỉ hiện cho người có quyền QUẢN LÝ CHƯƠNG TRÌNH: đây là quyết định về hồ
+          sơ đào tạo của người khác, không phải thao tác soạn nội dung. */}
+      {can(actor, "elearning:program:manage") ? (
+        <section className="mt-8">
+          <h2 className="text-lg font-semibold">Công nhận tương đương</h2>
+          <div className="mt-2">
+            <EquivalencePanel courseId={courseId} nhanSu={dsNhanSu} />
+          </div>
+        </section>
+      ) : null}
     </div>
   );
 }

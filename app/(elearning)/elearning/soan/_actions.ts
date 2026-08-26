@@ -2,6 +2,7 @@
 
 import { z } from "zod";
 import { defineAction } from "@/lib/actions/define";
+import { cauHinhDiemDanhBuoi } from "@/lib/elearning/equivalence";
 import { cauHinhGanKhungVaoBai } from "@/lib/elearning/rubric-authoring";
 import {
   cauHinhThemCue,
@@ -112,3 +113,12 @@ export const ganDeVaoBaiAction = defineAction(cauHinhGanDeVaoBai);
  * chỗ gắn khung chỉ đổi người bị kẹt, từ người học sang người soạn.
  */
 export const ganKhungVaoBaiAction = defineAction(cauHinhGanKhungVaoBai);
+
+/**
+ * EL-09 — tick "đã dự" cho bài `LIVE_SESSION`.
+ *
+ * ⚠️ Nối vào ĐÂY vì trước đó `cauHinhDiemDanhBuoi` là action MỒ CÔI: khai từ EL-09
+ * nhưng 0 màn nào gọi, nên bài buổi trực tiếp không bao giờ lên xong và mọi khoá
+ * kết hợp đứng mãi dở dang.
+ */
+export const diemDanhBuoiAction = defineAction(cauHinhDiemDanhBuoi);

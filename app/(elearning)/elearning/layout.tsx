@@ -13,12 +13,14 @@
 //
 // UI: shadcn thuần — KHÔNG Magic UI / Framer Motion / Recharts (ESLint chặn theo
 // khối glob `app/(elearning)/**` thêm ở EL-07).
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { hasStaffRole } from "@/lib/auth/permissions";
 import { isElearningEnabled } from "@/lib/flags";
 import { resolveActor } from "@/lib/auth/actor";
 import { scopedDb } from "@/lib/db-scope";
+import { can } from "@/lib/auth/can";
 
 export const dynamic = "force-dynamic";
 
@@ -91,5 +93,45 @@ export default async function ElearningLayout({
     );
   }
 
-  return <>{children}</>;
+  // ⚠️ THANH ĐIỀU HƯỚNG — khu này TỪNG KHÔNG CÓ CÁI NÀO.
+  //
+  // Hệ quả đo được: mọi màn hình đã dựng (chương trình · kho câu hỏi · đề thi ·
+  // khung chấm · hai hàng đợi chấm · báo cáo) chỉ tới được bằng cách gõ tay địa chỉ,
+  // hoặc qua vài link chéo giữa chính các màn con của chúng. Một module gần đủ mã mà
+  // chưa ai đi hết được một vòng nào.
+  //
+  // ⚠️ Gác theo QUYỀN, không hiện hết cho mọi người: một người học thuần thấy mục
+  // "Chấm bài" là thấy một cánh cửa họ mở ra sẽ bị từ chối — và họ sẽ nghĩ mình mất
+  // quyền chứ không nghĩ mục đó không dành cho mình.
+  const soan = can(actor, "elearning:content:author");
+  const cham = can(actor, "elearning:exam:grade");
+  const giao = can(actor, "elearning:assignment:create");
+  const baoCao = can(actor, "elearning:progress:view-all");
+
+  const muc: { href: string; nhan: string }[] = [
+    { href: "/elearning", nhan: "Khoá của tôi" },
+    ...(soan ? [{ href: "/elearning/chuong-trinh", nhan: "Chương trình" }] : []),
+    ...(giao ? [{ href: "/elearning/giao-bai", nhan: "Giao bài" }] : []),
+    ...(cham ? [{ href: "/elearning/cham-bai-tap", nhan: "Chấm bài" }] : []),
+    ...(baoCao ? [{ href: "/elearning/bao-cao", nhan: "Báo cáo" }] : []),
+  ];
+
+  return (
+    <>
+      <nav className="border-b bg-background">
+        <div className="mx-auto flex max-w-6xl flex-wrap gap-x-4 gap-y-1 px-4 py-2 text-sm">
+          {muc.map((m) => (
+            <Link
+              key={m.href}
+              href={m.href}
+              className="text-muted-foreground hover:text-foreground hover:underline"
+            >
+              {m.nhan}
+            </Link>
+          ))}
+        </div>
+      </nav>
+      {children}
+    </>
+  );
 }

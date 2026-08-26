@@ -20,6 +20,7 @@ import { orgUnitIdForCenter } from "@/lib/org/org-service";
  *      có `dueAtOriginal` nên đứng ngoài phân hoạch đúng-hạn/trễ.
  *   4. Chu kỳ tái chứng nhận tính từ `originalEffectiveAt`, KHÔNG từ ngày bấm nút.
  */
+import { cuonKhoaSauKhiXongBai } from "@/lib/elearning/rollup";
 
 export const congNhanSchema = z
   .object({
@@ -205,7 +206,8 @@ export const diemDanhSchema = z
  */
 export const cauHinhDiemDanhBuoi: ActionConfig<
   z.infer<typeof diemDanhSchema>,
-  { daDu: boolean }
+  /** `cuonLoi` = đã ghi điểm danh nhưng chưa cập nhật được tiến độ khoá. */
+  { daDu: boolean; cuonLoi: boolean }
 > = {
   name: "diemDanhBuoiTrucTiep",
   // Giảng viên tick, nên dùng khoá soạn nội dung chứ không phải khoá học bài.
@@ -264,10 +266,35 @@ export const cauHinhDiemDanhBuoi: ActionConfig<
       },
     });
 
+    // ⚠️ CUỘN LÊN CẤP KHOÁ — bước này TỪNG THIẾU.
+    //
+    // Ba đường ghi tiến độ khác (đọc · xem video · thi) đều gọi
+    // `cuonKhoaSauKhiXongBai`; đường điểm danh thì không. Hệ quả: tick "đã dự" cho
+    // bài bắt buộc CUỐI CÙNG của một khoá kết hợp vẫn để `TrnEnrollment` đứng ở
+    // `IN_PROGRESS` — khoá không bao giờ hoàn thành, thông báo chúc mừng không gửi,
+    // báo cáo tuân thủ đếm thiếu, và chứng nhận (EL-16) sẽ không có gì để cấp.
+    //
+    // Không tự nhận ra được: người tick thấy ô đã tích, người học thấy bài đã xong.
+    let cuonLoi = false;
+    if (input.daDu) {
+      try {
+        await cuonKhoaSauKhiXongBai(en.id, now);
+      } catch {
+        // Điểm danh ĐÃ ghi. Ném tiếp thì `defineAction` bỏ qua bước audit, nên một
+        // lần tick đã vào sổ lại không có dấu vết ai tick.
+        cuonLoi = true;
+      }
+    }
+
     return {
       entityId: en.id,
-      data: { daDu: input.daDu },
-      newValues: { bai: bai.title, daDu: input.daDu, nguoiTick: actor.userId },
+      data: { daDu: input.daDu, cuonLoi },
+      newValues: {
+        bai: bai.title,
+        daDu: input.daDu,
+        nguoiTick: actor.userId,
+        cuonLoi,
+      },
     };
   },
 };
