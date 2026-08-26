@@ -20,6 +20,8 @@ const h = vi.hoisted(() => ({
   luotNop: [] as unknown[],
   /** `where` mà việc (0) gửi xuống Prisma — kiểm hành vi, không grep chữ. */
   whereBuSla: null as unknown,
+  /** MỌI lượt nộp của lượt ghi danh, cho phép hợp khoảng chờ. */
+  moiLuotNop: [] as unknown[],
   /** Lượt ghi danh mà việc (0) tra theo id. */
   ghiDanhTheoId: new Map<string, unknown>(),
   updateGhiDanh: vi.fn(
@@ -86,12 +88,19 @@ vi.mock("@/lib/db", () => ({
     // `ket.loi`, và 14 test vẫn xanh — tức bộ test khẳng định một thứ nó chưa
     // từng chạy. Đúng họ với bẫy "test chạm DB skip im lặng".
     trnSubmission: {
-      findMany: vi.fn(async (a: { where: unknown }) => {
-        h.whereBuSla = a?.where ?? null;
-        const r = h.luotNop;
-        h.luotNop = [];
-        h.thuTu.push("bu-sla");
-        return r;
+      findMany: vi.fn(async (a: { where: Record<string, unknown> }) => {
+        // Việc (0) hỏi HAI lượt khác nhau:
+        //  · lượt QUÉT — `status: "SUBMITTED"`, tìm ai đang trễ;
+        //  · lượt GOM — theo `enrollmentId`, đọc MỌI lượt nộp để hợp khoảng chờ.
+        // Trả cùng một mảng cho cả hai là mock nói dối về hình dạng dữ liệu.
+        if (a?.where?.status === "SUBMITTED") {
+          h.whereBuSla = a.where;
+          h.thuTu.push("bu-sla");
+          const r = h.luotNop;
+          h.luotNop = [];
+          return r;
+        }
+        return h.moiLuotNop;
       }),
       update: (a: unknown) => h.updateLuotNop(a as never),
     },
@@ -121,6 +130,7 @@ beforeEach(() => {
   h.enrollments = [];
   h.luotNop = [];
   h.whereBuSla = null;
+  h.moiLuotNop = [];
   h.ghiDanhTheoId = new Map();
   h.updateGhiDanh.mockClear();
   h.updateLuotNop.mockClear();
@@ -290,6 +300,7 @@ describe("🔴 việc (0) — BÙ HẠN vì người chấm trễ", () => {
 
   it("nới `dueAt`, cộng `slaGraceDays`, và kéo OVERDUE về ĐANG HỌC", async () => {
     h.luotNop = [luot()];
+    h.moiLuotNop = [luot()];
     h.ghiDanhTheoId.set("en1", ghiDanh());
     const r = await runElearningDem(NOW);
     expect(r.buSla.daBu).toBe(1);
@@ -305,6 +316,7 @@ describe("🔴 việc (0) — BÙ HẠN vì người chấm trễ", () => {
 
   it("🔴 ghi SỔ trong CÙNG giao dịch — nếu không thì đêm sau bù lại", async () => {
     h.luotNop = [luot()];
+    h.moiLuotNop = [luot()];
     h.ghiDanhTheoId.set("en1", ghiDanh());
     await runElearningDem(NOW);
     const arg = h.updateLuotNop.mock.calls[0]![0] as unknown as {
@@ -314,8 +326,10 @@ describe("🔴 việc (0) — BÙ HẠN vì người chấm trễ", () => {
   });
 
   it("SỔ đã đủ ⇒ KHÔNG bù thêm", async () => {
-    h.luotNop = [luot({ slaBuNgayLam: 4 })];
-    h.ghiDanhTheoId.set("en1", ghiDanh());
+    h.luotNop = [luot()];
+    h.moiLuotNop = [luot()];
+    // Sổ nay nằm ở LƯỢT GHI DANH (`slaGraceDays`), không ở từng lượt nộp.
+    h.ghiDanhTheoId.set("en1", ghiDanh({ slaGraceDays: 4 }));
     const r = await runElearningDem(NOW);
     expect(r.buSla.daBu).toBe(0);
     expect(h.updateGhiDanh).not.toHaveBeenCalled();
@@ -325,6 +339,7 @@ describe("🔴 việc (0) — BÙ HẠN vì người chấm trễ", () => {
     // Nới hạn cho người đã bị rút khỏi khoá là vô nghĩa, và `dueAt` của họ không
     // còn ai đọc.
     h.luotNop = [luot()];
+    h.moiLuotNop = [luot()];
     h.ghiDanhTheoId.set("en1", ghiDanh({ status: "REVOKED" }));
     const r = await runElearningDem(NOW);
     expect(r.buSla.daBu).toBe(0);
@@ -350,10 +365,50 @@ describe("🔴 việc (0) — BÙ HẠN vì người chấm trễ", () => {
     // Chính bộ test này từng khẳng định mọi thứ xanh trong khi việc (0) ném lỗi
     // mỗi lượt chạy vì mock thiếu `trnSubmission`.
     h.luotNop = [luot()];
+    h.moiLuotNop = [luot()];
     h.ghiDanhTheoId.set("en1", ghiDanh());
     h.updateGhiDanh.mockRejectedValueOnce(new Error("mất kết nối"));
     const r = await runElearningDem(NOW);
     expect(r.loi.some((l) => l.viec === "buSla")).toBe(true);
+  });
+
+  it("🔴 HAI bài cùng trễ 4 ngày ⇒ bù 4, KHÔNG phải 8", async () => {
+    // Hạn là của LƯỢT GHI DANH. Hai khoảng chờ chồng nhau trên trục thời gian —
+    // người học chỉ thực sự mất 4 ngày. Cộng dồn là nới cả `slaGraceDays`, tức nới
+    // luôn phép so đúng-hạn, và một người trễ THẬT có thể thành "đúng hạn".
+    //
+    // Đây là nợ `NO_MIEN_TRU_CHONG_KHOANG` của EL-15c, nay trả.
+    h.luotNop = [luot({ id: "s1" }), luot({ id: "s2" })];
+    h.moiLuotNop = [luot({ id: "s1" }), luot({ id: "s2" })];
+    h.ghiDanhTheoId.set("en1", ghiDanh());
+    await runElearningDem(NOW);
+    const arg = h.updateGhiDanh.mock.calls[0]![0] as unknown as {
+      data: { slaGraceDays: number };
+    };
+    expect(arg.data.slaGraceDays).toBe(4);
+  });
+
+  it("hai khoảng chờ RỜI NHAU thì cộng lại", async () => {
+    // Chồng nhau mới gộp; rời nhau là hai lần chờ thật, và người học mất cả hai.
+    h.luotNop = [luot({ id: "s1" })];
+    h.moiLuotNop = [
+      // 10/8 → 12/8 (T2→T4): 2 ngày làm.
+      {
+        dueGradeAt: new Date("2026-08-10T00:00:00.000Z"),
+        gradedAt: new Date("2026-08-12T00:00:00.000Z"),
+      },
+      // 17/8 → 19/8 (T2→T4): 2 ngày làm nữa, không dính khoảng trên.
+      {
+        dueGradeAt: new Date("2026-08-17T00:00:00.000Z"),
+        gradedAt: new Date("2026-08-19T00:00:00.000Z"),
+      },
+    ];
+    h.ghiDanhTheoId.set("en1", ghiDanh());
+    await runElearningDem(NOW);
+    const arg = h.updateGhiDanh.mock.calls[0]![0] as unknown as {
+      data: { slaGraceDays: number };
+    };
+    expect(arg.data.slaGraceDays).toBe(4);
   });
 
   it("không có lượt nào quá hạn chấm ⇒ không ghi gì, không lỗi", async () => {

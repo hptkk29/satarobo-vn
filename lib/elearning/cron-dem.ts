@@ -38,7 +38,7 @@ import { thuLaiHangDoiNhanSu } from "@/lib/elearning/retry-queue";
  * không xin khe thứ ba. Cron tập ĐỘNG riêng của EL-05 cũng đã gộp vào việc (2)
  * và trả lại khe của nó — `vercel.json` sau PR này có đúng 25 cron.
  */
-import { tinhBuSla, hanSauKhiBu } from "@/lib/elearning/sla-bu";
+import { mienTruDungCuaLuotHoc, hanSauKhiBu } from "@/lib/elearning/sla-bu";
 
 export type KetQuaDem = {
   /**
@@ -122,51 +122,71 @@ export async function runElearningDem(now = new Date()): Promise<KetQuaDem> {
       orderBy: { dueGradeAt: "asc" },
       take: LO,
     });
+    // ⚠️ GOM THEO LƯỢT GHI DANH, không xử từng lượt nộp riêng.
+    //
+    // Hạn là của lượt GHI DANH, nên hai bài tập cùng trễ 4 ngày phải bù 4 — không
+    // phải 4 + 4. Hai khoảng chờ đó CHỒNG nhau trên trục thời gian, và cộng dồn là
+    // nới cả `slaGraceDays`, tức nới luôn phép so đúng-hạn: một người trễ THẬT có
+    // thể thành "đúng hạn" trên báo cáo tuân thủ. (Nợ `NO_MIEN_TRU_CHONG_KHOANG`
+    // của EL-15c, nay trả.)
+    const theoGhiDanh = new Map<string, typeof canXet>();
+    for (const l of canXet) {
+      const k = l.enrollmentId!;
+      const ds = theoGhiDanh.get(k);
+      if (ds) ds.push(l);
+      else theoGhiDanh.set(k, [l]);
+    }
+
     // ⚠️ Đếm SAU vòng lặp, không gán trước. Bản đầu gán `daXet = canXet.length`
     // TRƯỚC rồi tính `conSot = canXet.length - daXet` — phép trừ tự triệt tiêu và
     // `conSot` LUÔN bằng 0, tức cron báo "làm hết" đúng lúc còn việc chưa chạy.
-    // Chính chú thích của `KetQuaDem` cấm cái im lặng đó.
-    for (const l of canXet) {
+    for (const [enrollmentId, dsLuot] of theoGhiDanh) {
       if (!conGio()) break;
       ket.buSla.daXet += 1;
-      const { themNgayLam, tongDangLe } = tinhBuSla({
-        dueGradeAt: l.dueGradeAt,
-        gradedAt: l.gradedAt,
-        now,
-        so: { daBuNgayLam: l.slaBuNgayLam },
-      });
-      if (themNgayLam <= 0) continue;
 
       const gd = await db.trnEnrollment.findUnique({
-        where: { id: l.enrollmentId! },
+        where: { id: enrollmentId },
         select: { id: true, dueAt: true, slaGraceDays: true, status: true },
       });
       // Lượt đã thu hồi thì không bù: nới hạn cho một người đã bị rút khỏi khoá là
       // vô nghĩa, và `dueAt` của họ không còn ai đọc.
       if (!gd || gd.status === "REVOKED") continue;
 
+      // ⚠️ Đọc MỌI lượt nộp của lượt ghi danh, không chỉ nhóm đang chờ: một bài đã
+      // chấm trễ tuần trước vẫn đóng góp vào hợp khoảng, và bỏ nó ra là bù thiếu.
+      const moiLuot = await db.trnSubmission.findMany({
+        where: { enrollmentId, dueGradeAt: { not: null } },
+        select: { dueGradeAt: true, gradedAt: true },
+      });
+      const dangLe = mienTruDungCuaLuotHoc({ luotNop: moiLuot, now });
+      const themNgayLam = Math.max(0, dangLe - gd.slaGraceDays);
+      if (themNgayLam <= 0) continue;
+
       await db.$transaction(async (t) => {
         await t.trnEnrollment.update({
           where: { id: gd.id },
           data: {
             dueAt: hanSauKhiBu(gd.dueAt, themNgayLam),
-            slaGraceDays: gd.slaGraceDays + themNgayLam,
+            // Đặt THẲNG con số đúng, không cộng dồn: `dangLe` đã là tổng.
+            slaGraceDays: dangLe,
             // ⚠️ Quá hạn rồi được bù thì kéo về ĐANG HỌC — y hệt đường gia hạn tay
             // (`assignment-lifecycle.ts`). Để nguyên `OVERDUE` là giữ một cái nhãn
             // sai trên hồ sơ của người không làm gì sai.
             ...(gd.status === "OVERDUE" ? { status: "IN_PROGRESS" } : {}),
           },
         });
-        // Cập nhật SỔ trong CÙNG giao dịch. Tách ra thì một lần lỗi giữa chừng sẽ
-        // bù mà không ghi sổ, và đêm sau bù thêm lần nữa cho cùng khoảng chờ.
-        await t.trnSubmission.update({
-          where: { id: l.id },
-          data: { slaBuNgayLam: tongDangLe },
-        });
+        // Sổ trên từng lượt nộp giữ để đối chiếu; con số quyết định nay là
+        // `slaGraceDays` của lượt ghi danh.
+        for (const l of dsLuot) {
+          await t.trnSubmission.update({
+            where: { id: l.id },
+            data: { slaBuNgayLam: dangLe },
+          });
+        }
       });
       ket.buSla.daBu += 1;
     }
-    ket.buSla.conSot = canXet.length - ket.buSla.daXet;
+    ket.buSla.conSot = theoGhiDanh.size - ket.buSla.daXet;
   } catch (e) {
     ket.loi.push({ viec: "buSla", message: (e as Error).message });
   }

@@ -153,7 +153,13 @@ export async function onEnrollmentCompleted(event: DomainEventLite): Promise<voi
  * ⚠️ Phải soi CẢ HAI: `roles[]` là mảng đa vai và quyền là hợp, nên chỉ soi
  * `role` chính sẽ bỏ sót người kiêm nhiệm — đúng nhóm hay bị bỏ sót nhất.
  */
-async function userIdCuaVai(vai: "TRAINING"): Promise<string[]> {
+/**
+ * Tài khoản đang hoạt động mang một vai.
+ *
+ * Xuất ra để `grader-reminder.ts` dùng lại — chép sang là dựng bản thứ hai của
+ * cùng phép tra, và hai bản sẽ trôi khỏi nhau đúng ngày ai đó đổi cách lưu vai.
+ */
+export async function userIdCuaVai(vai: "TRAINING"): Promise<string[]> {
   const rows = await db.user.findMany({
     where: {
       isActive: true,

@@ -1,4 +1,5 @@
 import { congNgayLamViec, demNgayLamViec } from "@/lib/elearning/ngay-lam-viec";
+import { hopKhoangCho } from "@/lib/elearning/metrics/grading-queue";
 
 /**
  * BÙ HẠN khi NGƯỜI CHẤM trễ — thuần.
@@ -33,23 +34,37 @@ export type SoBuHienCo = {
 };
 
 /**
- * ⚠️ GIỚI HẠN ĐÃ BIẾT — miễn trừ cộng theo TỪNG LƯỢT NỘP, mà hạn là của CẢ LƯỢT
- * GHI DANH.
+ * MIỄN TRỪ ĐÚNG cho MỘT lượt ghi danh — đo bằng HỢP các khoảng chờ.
  *
- * Một khoá có hai bài tập, cả hai nộp cùng ngày và cả hai bị chấm trễ 4 ngày. Hai
- * khoảng chờ đó CHỒNG LÊN NHAU trên trục thời gian — người học chỉ thực sự mất 4
- * ngày — nhưng sổ cộng 4 + 4 = 8, và `dueAt` nới ra gấp đôi phần đáng bù.
+ * ⚠️ Đây là bản trả nợ `NO_MIEN_TRU_CHONG_KHOANG` của EL-15c. Bản cũ cộng miễn trừ
+ * theo TỪNG lượt nộp, mà hạn là của CẢ lượt ghi danh: hai bài tập cùng nộp một ngày
+ * và cùng bị chấm trễ 4 ngày sẽ cộng 4 + 4 = 8, trong khi người học chỉ thực sự mất
+ * 4 — hai khoảng chờ CHỒNG LÊN NHAU trên trục thời gian.
  *
- * Sai về phía CÓ LỢI cho người học, và đó là lý do chấp nhận được ở đợt này: sai
- * ngược lại (bù thiếu) là ghi tên họ vào cột trễ của báo cáo gửi quản lý. Nhưng nó
- * VẪN là sai, và nó nới cả `slaGraceDays` — tức nới luôn phép so đúng-hạn.
+ * Sai đó về phía CÓ LỢI cho người học, nên nó không gây thiệt hại trực tiếp. Nhưng
+ * nó nới cả `slaGraceDays`, tức nới luôn phép so đúng-hạn — và một người trễ THẬT có
+ * thể thành "đúng hạn" trên báo cáo tuân thủ. Một chỉ số rộng tay theo hướng nào
+ * cũng là chỉ số không dùng được.
  *
- * Muốn đúng thì phải đo HỢP của các khoảng chờ theo lượt ghi danh, tức cần đọc mọi
- * lượt nộp của lượt ghi danh đó trong một lần và tính hợp khoảng — việc của EL-15d
- * cùng chỉ số M9/M10, nơi đằng nào cũng phải gom theo lượt ghi danh.
+ * Nhận MỌI lượt nộp của lượt ghi danh, trả về TỔNG miễn trừ đáng có tính tới `now`.
+ * Chỗ gọi so nó với `slaGraceDays` hiện tại rồi chỉ ghi phần chênh.
  */
-export const NO_MIEN_TRU_CHONG_KHOANG =
-  "Miễn trừ cộng theo từng lượt nộp; nhiều bài tập trễ song song sẽ cộng dồn các khoảng chờ chồng nhau (bù THỪA). Đo hợp khoảng ở EL-15d.";
+export function mienTruDungCuaLuotHoc(input: {
+  luotNop: { dueGradeAt: Date | null; gradedAt: Date | null }[];
+  now: Date;
+}): number {
+  const khoang = input.luotNop
+    .filter((l) => l.dueGradeAt != null)
+    .map((l) => ({
+      tu: l.dueGradeAt!,
+      // Chưa chấm ⇒ đo tới BÂY GIỜ; đã chấm ⇒ dừng ở `gradedAt`. Đo tới `now` cho
+      // một lượt đã chấm từ tuần trước là bù cho khoảng chờ không còn xảy ra nữa.
+      den: l.gradedAt ?? input.now,
+    }))
+    .filter((k) => k.den.getTime() > k.tu.getTime());
+
+  return hopKhoangCho(khoang);
+}
 
 export type KetQuaTinhBu = {
   /** Tổng số ngày làm việc ĐÁNG LẼ được bù, tính từ đầu. */

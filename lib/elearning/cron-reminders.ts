@@ -21,6 +21,8 @@ import { lapLichNhac, lyDoHuy, type Moc } from "@/lib/elearning/reminder-schedul
  * "còn 2 giờ để hoàn thành" trong đúng nhịp này.
  */
 
+import { nhacNguoiCham } from "@/lib/elearning/grader-reminder";
+
 const LO = 200;
 const TRAN_MS = 2 * 60 * 1000;
 
@@ -29,6 +31,13 @@ export type KetQuaNhac = {
   huy: number;
   daGui: number;
   boQua: number;
+  /**
+   * EL-15d việc (4) — nhắc NGƯỜI CHẤM khi hàng đợi vỡ cam kết.
+   *
+   * `thieuNguoiNhan` nói ra khi không có ai để nhắc, thay vì im lặng coi như xong:
+   * một hàng đợi tắc mà không ai nhận được nhắc là đúng cái hỏng khó thấy nhất.
+   */
+  nhacCham: { quaHan: number; daGui: number; thieuNguoiNhan: string | null };
   loi: string[];
 };
 
@@ -43,7 +52,14 @@ type DongEnroll = {
 export async function runElearningReminders(now = new Date()): Promise<KetQuaNhac> {
   const batDau = Date.now();
   const conGio = () => Date.now() - batDau < TRAN_MS;
-  const ket: KetQuaNhac = { lapLich: 0, huy: 0, daGui: 0, boQua: 0, loi: [] };
+  const ket: KetQuaNhac = {
+    lapLich: 0,
+    huy: 0,
+    daGui: 0,
+    boQua: 0,
+    nhacCham: { quaHan: 0, daGui: 0, thieuNguoiNhan: null },
+    loi: [],
+  };
 
   // ── 1. Lập lịch cho lượt ghi danh chưa có dòng nhắc nào ───────────────────
   try {
@@ -148,6 +164,19 @@ export async function runElearningReminders(now = new Date()): Promise<KetQuaNha
     }
   } catch (e) {
     ket.loi.push(`gui: ${String(e)}`);
+  }
+
+  // ── Việc 4: nhắc NGƯỜI CHẤM khi hàng đợi vỡ cam kết ───────────────────────
+  //
+  // ⚠️ Chạy trong khe cron ĐÃ CÓ. Ngân sách module là đúng 2 khe và đã dùng hết —
+  // không xin khe thứ ba (QĐ-CDA-14 điểm 2).
+  //
+  // ⚠️ Nhắc rơi vào người CHẤM, không vào người nộp. Người nộp đã làm xong phần của
+  // mình, và hạn của họ đang được cron đêm tự nới.
+  try {
+    ket.nhacCham = await nhacNguoiCham(now);
+  } catch (e) {
+    ket.loi.push(`nhacCham: ${(e as Error).message}`);
   }
 
   return ket;
