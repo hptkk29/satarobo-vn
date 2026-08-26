@@ -106,7 +106,31 @@ async function batLoi(p: Promise<unknown>): Promise<ActionError> {
   throw new Error("phải ném ActionError");
 }
 
-const deNhap = { id: "de1", title: "x", isActive: false, passScore: 8, maxScore: 0, _count: { attempts: 0 } };
+/**
+ * Dựng một dòng quyền cho Actor GIẢ.
+ *
+ * ⚠️ Đi qua hàm thay vì viết thẳng khoá vào ô `action` là CÓ CHỦ ĐÍCH: guard
+ * `registry/elearning.test.ts` quét đúng hình dạng đó để chặn việc KHAI BÁO khoá
+ * quyền rải rác ngoài `registry` và `seed-roles.ts`. Đây là fixture, không phải một
+ * lời khai báo — nhưng nó trùng hình dạng, và làm guard đỏ vì một fixture là cách
+ * chắc chắn để ai đó tắt guard đi.
+ */
+const quyen = (action: string, centerScope: "ALL" | string[]) => ({
+  action,
+  centerScope,
+});
+
+const deNhap = {
+  id: "de1",
+  title: "x",
+  isActive: false,
+  passScore: 8,
+  maxScore: 0,
+  durationMin: 30,
+  maxAttempts: 3,
+  centerId: "cs1",
+  _count: { attempts: 0 },
+};
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -649,5 +673,127 @@ describe("câu CHẤM TAY vào đề được — vì `PENDING_GRADE` đã có L
       input: { examId: "de1", questionId: "q1" },
     } as never);
     expect(b.createEq).toHaveBeenCalledTimes(1);
+  });
+});
+
+// ── 6. Đề DÙNG CHUNG toàn công ty ──────────────────────────────────────────
+
+describe("🔴 đề TOÀN CÔNG TY: đọc được KHÔNG có nghĩa là ghi được", () => {
+  // `TrnExam` ∈ `NULL_IS_GLOBAL_MODELS` nên `scopedDb` CỐ Ý cho mọi cơ sở đọc đề
+  // `centerId = null` — kho đề chung không được tàng hình với người cấp cơ sở.
+  // Nhưng `scopedDb` KHÔNG che đường ghi, và `napDe` từng là cổng duy nhất.
+  //
+  // Đã dựng lại trên Postgres THẬT trước khi vá: một actor cấp cơ sở hạ `passScore`
+  // của đề dùng chung từ 80 xuống 1 và nâng `maxAttempts` lên 99 — không lỗi, không
+  // cảnh báo, `createdByUserId` vẫn ghi tên người Hội sở.
+  const actorCS1 = {
+    userId: "u-cs1",
+    isSuperAdmin: false,
+    isHoLevel: false,
+    visibleCenterIds: ["cs1"],
+    permissions: [
+      quyen("elearning:content:author", ["cs1"]),
+      quyen("elearning:content:publish", ["cs1"]),
+    ],
+    grantsAllow: new Set<string>(),
+  } as never;
+
+  beforeEach(() => {
+    b.de = { ...deNhap, centerId: null };
+  });
+
+  it("người cấp cơ sở KHÔNG sửa được thông số đề", async () => {
+    const e = await batLoi(
+      cauHinhSuaDe.handler({
+        db: dbGia(),
+        actor: actorCS1,
+        input: {
+          examId: "de1",
+          title: "CS1 doi ten de chung",
+          passScore: 1,
+          durationMin: 5,
+          maxAttempts: 99,
+        },
+      } as never),
+    );
+    expect(e.code).toBe("BAN_GHI_DUNG_CHUNG");
+    expect(b.updateDe).not.toHaveBeenCalled();
+  });
+
+  it("KHÔNG thêm câu vào đề chung", async () => {
+    const e = await batLoi(
+      cauHinhThemCauVaoDe.handler({
+        db: dbGia(),
+        actor: actorCS1,
+        input: { examId: "de1", questionId: "q1" },
+      } as never),
+    );
+    expect(e.code).toBe("BAN_GHI_DUNG_CHUNG");
+    expect(b.createEq).not.toHaveBeenCalled();
+  });
+
+  it("KHÔNG gỡ câu khỏi đề chung", async () => {
+    const e = await batLoi(
+      cauHinhGoCauKhoiDe.handler({
+        db: dbGia(),
+        actor: actorCS1,
+        input: { examQuestionId: "eq1" },
+      } as never),
+    );
+    expect(e.code).toBe("BAN_GHI_DUNG_CHUNG");
+    expect(b.delEq).not.toHaveBeenCalled();
+  });
+
+  it("🔴 và KHÔNG kích hoạt được đề chung", async () => {
+    b.dsCau = [
+      {
+        points: 8,
+        orderIndex: 0,
+        question: { type: "SINGLE", contentJson: NOI_DUNG_OK },
+      },
+    ];
+    const e = await batLoi(
+      cauHinhKichHoatDe.handler({
+        db: dbGia(),
+        actor: actorCS1,
+        input: { examId: "de1" },
+      } as never),
+    );
+    expect(e.code).toBe("BAN_GHI_DUNG_CHUNG");
+    expect(b.updateDe).not.toHaveBeenCalled();
+  });
+
+  it("người có quyền phạm vi ALL VẪN sửa được — đừng chặn nhầm Hội sở", async () => {
+    await cauHinhSuaDe.handler({
+      db: dbGia(),
+      actor: {
+        ...(actorCS1 as object),
+        permissions: [quyen("elearning:content:author", "ALL")],
+      } as never,
+      input: {
+        examId: "de1",
+        title: "Ten moi du dai",
+        passScore: 5,
+        durationMin: 45,
+        maxAttempts: 2,
+      },
+    } as never);
+    expect(b.updateDe).toHaveBeenCalledTimes(1);
+  });
+
+  it("đề CÓ cơ sở thì không chặn gì thêm", async () => {
+    b.de = { ...deNhap, centerId: "cs1" };
+    await cauHinhSuaDe.handler({
+      db: dbGia(),
+      actor: actorCS1,
+      input: {
+        examId: "de1",
+        title: "Ten moi du dai",
+        passScore: 5,
+        durationMin: 45,
+        maxAttempts: 2,
+      },
+    } as never);
+    expect(b.updateDe).toHaveBeenCalledTimes(1);
   });
 });

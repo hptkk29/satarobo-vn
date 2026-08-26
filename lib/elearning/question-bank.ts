@@ -4,6 +4,7 @@ import { ActionError } from "@/lib/actions/factory";
 import type { Actor } from "@/lib/auth/actor";
 import { orgUnitIdForCenter } from "@/lib/org/org-service";
 import { duocVaoDe, LOAI_CHUA_MO, MUC_KHO } from "@/lib/elearning/exam-grading";
+import { chanGhiBanGhiChung } from "@/lib/elearning/global-write-guard";
 import {
   TRAN_NOI_DUNG_CAU,
   TRAN_LUA_CHON,
@@ -278,8 +279,16 @@ export const cauHinhSuaCauHoi: ActionConfig<SuaCauHoiInput, { questionId: string
   entityType: "TrnQuestion",
   auditAction: "UPDATE",
   schema: suaCauHoiSchema,
-  handler: async ({ db, input }) => {
+  handler: async ({ db, actor, input }) => {
     const cu = await napCauHoi(db, input.questionId);
+    // ⚠️ Câu DÙNG CHUNG toàn công ty đọc được từ mọi cơ sở (`NULL_IS_GLOBAL`) —
+    // nhưng đọc được không có nghĩa là sửa được.
+    chanGhiBanGhiChung({
+      actor,
+      centerId: cu.centerId,
+      permission: "elearning:content:author",
+      viec: "sửa câu này",
+    });
 
     // ⚠️ Câu ĐÃ nằm trong một đề thì KHÔNG sửa tại chỗ. Sửa nội dung hay đáp án
     // của một câu đã có người thi làm LỆCH ĐIỂM của mọi lượt đã chấm, im lặng —
@@ -349,8 +358,16 @@ export const cauHinhXoaCauHoi: ActionConfig<XoaCauHoiInput, { daXoa: boolean }> 
   entityType: "TrnQuestion",
   auditAction: "DELETE",
   schema: xoaCauHoiSchema,
-  handler: async ({ db, input }) => {
+  handler: async ({ db, actor, input }) => {
     const cu = await napCauHoi(db, input.questionId);
+    // ⚠️ Câu DÙNG CHUNG toàn công ty đọc được từ mọi cơ sở (`NULL_IS_GLOBAL`) —
+    // nhưng đọc được không có nghĩa là sửa được.
+    chanGhiBanGhiChung({
+      actor,
+      centerId: cu.centerId,
+      permission: "elearning:content:author",
+      viec: "xoá câu này",
+    });
 
     const daDungTrongDe = await db.trnExamQuestion.findFirst({
       where: { questionId: cu.id },

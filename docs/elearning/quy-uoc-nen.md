@@ -538,3 +538,59 @@ Hai con số nằm ở hai tệp thì chúng sẽ trôi khỏi nhau.
   EL-13 và EL-14 đã sạch theo cách này (chỉ `CREATE` + `ADD CONSTRAINT` trên bảng của chính chúng)
   — đối chiếu với chúng khi nghi ngờ. Trôi lệch gốc là nợ có thật của repo, nhưng **vá nó không
   bao giờ là việc của một ticket tính năng**.
+
+---
+## Hai quy ước bổ sung — chốt qua vòng rà đối kháng EL-15b (26/08/2026)
+
+### 33. Lượt đọc của `NULL_IS_GLOBAL` model KHÔNG dùng làm cổng GHI
+
+`TrnRubric`, `TrnExam`, `TrnQuestion` nằm trong `NULL_IS_GLOBAL_MODELS`, nên
+`injectScope` **cố ý** nới lượt đọc thành `centerId IS NULL OR centerId IN (...)`:
+kho chung phải nhìn thấy được từ mọi cơ sở, nếu không nó tàng hình. Đó là hành vi
+đúng.
+
+Nhưng `scopedDb` **không che đường ghi**. Mượn chính lượt đọc đó làm cổng ghi —
+đúng việc `napKhung`/`napDe` đã làm — biến *"ai cũng ĐỌC được bản ghi chung"* thành
+*"ai cũng GHI được bản ghi chung"*. Đo trên Postgres thật: một actor cấp cơ sở hạ
+`passScore` của đề dùng chung toàn công ty từ 80 xuống **1** và nâng `maxAttempts`
+lên **99** — không lỗi, không cảnh báo, `createdByUserId` vẫn ghi tên người Hội sở.
+Nặng hơn nữa vì **kích hoạt là đóng băng và không có đường đảo lại trong ứng dụng**:
+một lượt sửa nhầm chỉ gỡ được bằng tay trên DB, trong khi mọi cơ sở đã chấm bằng cái
+thước sai đó.
+
+**Cách áp dụng:** mọi đường ghi trên model `NULL_IS_GLOBAL` phải đọc thêm `centerId`
+và gọi `chanGhiBanGhiChung` (`lib/elearning/global-write-guard.ts`). Điều kiện là
+chính khoá quyền của việc đó ở **phạm vi `ALL`**, hoặc SUPER_ADMIN, hoặc per-user
+grant ALLOW — **không đẻ khoá thứ 18**, và **`isHoLevel` một mình KHÔNG đủ** (neo một
+vai bất kỳ tại Hội sở là đủ để cờ đó bật).
+
+Repo đã xử đúng bẫy này từ trước cho `EvaluationRound` bằng `roundCenterInScope`
+(`app/(admin)/admin/evaluations/_actions.ts`), kèm chú thích nói thẳng *"semantics
+NULL_IS_GLOBAL cho ĐỌC → KHÔNG dùng làm guard ghi"*. Bài học thật ở đây không phải
+"thiếu một guard" mà là **đã có tiền lệ đúng trong repo và không ai tra trước khi
+viết cái thứ hai**.
+
+### 34. Đọc-rồi-ghi trên cột `@unique` phải BỎ QUA phạm vi, và vẫn phải bắt `P2002`
+
+`TrnRubric.code` là `@unique` **toàn hệ thống**, nhưng phép kiểm trùng đi qua
+`scopedDb` — người ở CS1 không thấy khung của CS2, nên nó báo "không trùng" rồi
+`create` va thẳng vào khoá. `P2002` **không phải** `ActionError`, nên `runAction` ném
+tiếp ra ngoài: không toast, không lỗi trỏ vào ô mã, chỉ một lỗi 500 câm và một
+`PrismaClientKnownRequestError` trên Sentry không nối được với thao tác nào.
+
+Cùng hình dạng với `@@unique([rubricId, orderIndex])`: đọc `orderIndex` lớn nhất rồi
+mới ghi là một cửa sổ đua, hai tab cùng thêm sẽ va nhau.
+
+**Cách áp dụng:** (a) lượt kiểm trùng dùng `scopedDb(actor, { bypass: true })`, chỉ
+`select` khoá chính, và thông báo **không** tiết lộ bản ghi của ai; (b) **vẫn** bọc
+lượt ghi trong `try/catch` bắt `P2002` — phép kiểm chạy TRƯỚC lượt ghi nên nó không
+đóng được cửa sổ đua; (c) nhận diện bằng `e.code === "P2002"` và `e.meta.target`,
+**không soi chuỗi `message`** (quy ước 29).
+- **Guard dùng `git grep` KHÔNG THẤY tệp chưa `git add` — nên nó xanh ở local rồi đỏ trên CI.**
+  `lib/permissions/registry/elearning.test.ts` quét khoá quyền rải rác bằng `execFileSync("git",
+  ["grep", …])`, và `git grep` chỉ soi tệp **đã theo dõi**. Chạy bộ test đầy đủ TRƯỚC lần `git add`
+  đầu tiên của một tệp mới ⇒ tệp đó vô hình với guard ⇒ xanh. CI checkout mọi thứ đã commit nên nó
+  thấy, và đỏ. Đã xảy ra 26/08/2026 với `lib/elearning/global-write-guard.test.ts`.
+  ⇒ **Với tệp MỚI, chạy lại bộ test SAU khi `git add`** (không cần commit — `git grep` thấy cả
+  vùng staged). Cùng họ với bẫy "test chạm DB skip im lặng": cả hai đều báo xanh cho một phép kiểm
+  chưa từng chạy.
