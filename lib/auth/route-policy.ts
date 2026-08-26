@@ -143,6 +143,9 @@ export const ADMIN_ROUTE_SEGMENTS: ReadonlySet<string> = new Set<string>([
   "design-system-preview",
   "design-system-preview-v2",
   "documents",
+  // MEDIA-REVIEW (26/08) — cổng duyệt ảnh/video buổi học của QLCS. Thiếu dòng này thì
+  // admin.satarobo.vn/duyet-media bị 308 sang host public rồi 404, dù page tồn tại.
+  "duyet-media",
   "email-logs",
   "email-templates",
   "enrollments",

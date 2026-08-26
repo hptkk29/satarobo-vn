@@ -94,6 +94,14 @@ export const SCOPED_MODELS = new Set<string>([
   // lớp học và ghi âm hội thoại phụ huynh (§13.3) — nên coi "chưa biết cơ sở" là
   // "ai cũng thấy" ở đây là rò rỉ, không phải tiện lợi.
   "TrnSubmission",
+  // MEDIA-REVIEW (26/08) — ảnh/video buổi học + kết luận duyệt của từng buổi.
+  // Cả hai `BAT_BUOC` mang centerId: một tấm ảnh / một kết luận LUÔN thuộc đúng một cơ
+  // sở. KHÔNG vào NULL_IS_GLOBAL_MODELS — coi "chưa biết cơ sở" là "ai cũng thấy" ở đây
+  // là để ảnh học viên cơ sở này lọt sang QLCS cơ sở kia.
+  // ⚠️ scopedDb KHÔNG che WRITE: mọi `create` phải tự set `centerId`, quên là dòng vô
+  // hình với chính QLCS cơ sở đó (tức ảnh không bao giờ được duyệt).
+  "MediaAsset",
+  "SessionMediaReview",
 ]);
 
 /**
@@ -319,6 +327,13 @@ export function getModelPrefixes(model: string): string[] {
     case "TrnRubric":
     case "TrnSubmission":
       return ["elearning:"];
+    // MEDIA-REVIEW (26/08) — ảnh buổi học + kết luận duyệt. Thiếu nhánh này thì
+    // `getModelPrefixes` trả rỗng và tầm nhìn rơi về `isHoLevel` DIỆN RỘNG: bất kỳ ai
+    // có MỘT vai neo tại Hội sở — kể cả vai chẳng liên quan — đọc được ảnh học viên của
+    // MỌI cơ sở. Đây là ảnh trẻ em, không phải số liệu.
+    case "MediaAsset":
+    case "SessionMediaReview":
+      return ["media:"];
     default:
       return [];
   }
