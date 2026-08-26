@@ -64,24 +64,69 @@ export async function SalesDashboard({ userId, name, embedded = false }: { userI
   const visibleLeadCenters = getModelVisibleCenterIds("Lead", actor);
   const leadTaskScope =
     visibleLeadCenters === "ALL" ? {} : { lead: { centerId: { in: visibleLeadCenters } } };
-  const [openTasks, trials] = await Promise.all([
+  const [openTasks, trialClasses] = await Promise.all([
     sdb.leadTask.findMany({
       where: { assignedToId: userId, status: "OPEN", ...leadTaskScope },
       orderBy: { dueAt: "asc" },
       take: 50,
       select: { id: true, title: true, dueAt: true, leadId: true },
     }),
-    sdb.trialClass.findMany({
+    // 26/08 — đọc V2 sau khi gộp hai hệ Trial.
+    //
+    // Vào từ LỚP (TrialClassV2 ∈ SCOPED_MODELS) để giữ cách ly cơ sở: `TrialClassSession`
+    // không được scopedDb tự lọc, truy vấn thẳng nó là Sale cơ sở này thấy hẹn cơ sở kia.
+    // Lọc ghi danh theo Sale phụ trách lead — một lớp trải nghiệm chứa con của nhiều Sale.
+    sdb.trialClassV2.findMany({
       where: {
-        lead: { assignedToId: userId },
-        scheduledAt: { gte: dayStart },
-        status: { in: ["SCHEDULED", "CONFIRMED", "POSTPONED"] },
+        status: { not: "CANCELLED" },
+        sessions: { some: { date: { gte: dayStart }, status: "SCHEDULED" } },
+        enrollments: { some: { leadChild: { lead: { assignedToId: userId, deletedAt: null } } } },
       },
-      orderBy: { scheduledAt: "asc" },
-      take: 6,
-      select: { id: true, scheduledAt: true, lead: { select: { id: true, parentName: true, childName: true } } },
+      take: 20,
+      select: {
+        sessions: {
+          where: { date: { gte: dayStart }, status: "SCHEDULED" },
+          select: { id: true, date: true, startTime: true },
+        },
+        enrollments: {
+          where: {
+            status: { in: ["ACTIVE", "COMPLETED"] },
+            leadChild: { lead: { assignedToId: userId, deletedAt: null } },
+          },
+          select: {
+            id: true,
+            scheduledSessionId: true,
+            leadChild: {
+              select: { fullName: true, lead: { select: { id: true, parentName: true } } },
+            },
+          },
+        },
+      },
     }),
   ]);
+  // Ghép ghi danh ↔ buổi của nó. `TrialEnrollment.scheduledSessionId` là cột TRẦN
+  // (không FK) nên Prisma không join hộ được — ghép tay ở đây.
+  // Ngày format bằng `@db.Date` ⇒ đọc theo UTC mới ra đúng ngày lịch VN.
+  const trials = trialClasses
+    .flatMap((c) =>
+      c.enrollments.map((e) => {
+        const ses = c.sessions.find((s) => s.id === e.scheduledSessionId);
+        if (!ses) return null; // ghi danh trỏ buổi đã qua / chưa xếp → không phải "sắp tới"
+        const d = ses.date;
+        const ngay = `${String(d.getUTCDate()).padStart(2, "0")}/${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
+        return {
+          id: e.id,
+          leadId: e.leadChild.lead?.id ?? "",
+          name: e.leadChild.fullName || (e.leadChild.lead?.parentName ?? "—"),
+          when: `${ngay} ${ses.startTime}`,
+          sort: d.getTime(),
+        };
+      }),
+    )
+    .filter((x): x is NonNullable<typeof x> => x !== null)
+    .sort((a, b) => a.sort - b.sort)
+    .slice(0, 6);
+
   const overdue = openTasks.filter((t) => t.dueAt < now);
   const dueToday = openTasks.filter((t) => t.dueAt >= now && t.dueAt < dayEnd);
 
@@ -168,19 +213,19 @@ export async function SalesDashboard({ userId, name, embedded = false }: { userI
         {/* Học thử sắp tới */}
         <section className="rounded-xl border border-border bg-card p-5">
           <h2 className="mb-3 flex items-center gap-2 text-sm font-bold uppercase tracking-wider text-muted-foreground">
-            <FlaskConical className="h-4 w-4" /> Học thử sắp tới
+            <FlaskConical className="h-4 w-4" /> Trải nghiệm sắp tới
           </h2>
           {trials.length === 0 ? (
-            <p className="text-sm text-muted-foreground">Chưa có buổi học thử nào.</p>
+            <p className="text-sm text-muted-foreground">Chưa có buổi trải nghiệm nào.</p>
           ) : (
             <ul className="space-y-1.5 text-sm">
               {trials.map((t) => (
                 <li key={t.id} className="flex items-center justify-between gap-2">
-                  <Link href={`/leads/${t.lead.id}`} className="truncate font-medium text-foreground hover:text-primary">
-                    {t.lead.childName ?? t.lead.parentName}
+                  <Link href={`/leads/${t.leadId}`} className="truncate font-medium text-foreground hover:text-primary">
+                    {t.name}
                   </Link>
                   <span className="shrink-0 text-xs text-muted-foreground">
-                    {new Date(t.scheduledAt).toLocaleString("vi-VN", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}
+                    {t.when}
                   </span>
                 </li>
               ))}
