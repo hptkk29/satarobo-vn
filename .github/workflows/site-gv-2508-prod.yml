@@ -1,0 +1,141 @@
+name: Site GV 25/08 — giáo trình + hàng chờ duyệt ảnh + gộp trial (prod)
+
+# =============================================================================
+# Ba việc bắt buộc chạy TAY sau khi luồng site giáo viên lên prod (PR #186).
+# Không cái nào tự chạy theo deploy — `deploy.yml` chỉ áp migration, không seed.
+#
+# ⚠️ VÌ SAO PHẢI QUA WORKFLOW, KHÔNG CHẠY Ở MÁY: `.env` trên máy dev trỏ Supabase
+# DEV (mqvojwcc…), và chuỗi kết nối prod là secret Sensitive trên Vercel nên
+# `vercel env pull` không đọc lại được. Gõ `tsx prisma/seed-…` ở máy là seed nhầm
+# vào DB dev — mà DB dev CHÍNH LÀ DB của test.satarobo.vn, tức phá luôn bản đang
+# nghiệm thu. Workflow này là đường duy nhất chạm prod, dùng PROD_* secrets.
+#
+# MẶC ĐỊNH DRY-RUN — in kế hoạch, không ghi gì. Ghi thật phải chọn mode=apply VÀ
+# gõ đúng chuỗi xác nhận. Cả ba script đều idempotent: chạy lại không nhân đôi.
+#
+# ── BA VIỆC, chạy theo thứ tự này (chọn ở ô `viec`):
+#
+#   1. giao-trinh  → prisma/seed-curriculum-sata.ts
+#      Nạp giáo trình Sata thật vào Curriculum + Lesson. KHÔNG chạy cái này thì
+#      lớp trên prod VẪN in tên buổi cũ và tên dự án vẫn sai — tức bản vá NT-09
+#      lên rồi mà phụ huynh không thấy khác gì.
+#      ⚠️ Hai chốt chặn ghi đè đang BẬT (xem docs/site-giao-vien-2508.md §0):
+#        • bỏ qua khoá đã có giáo trình NGƯỜI SOẠN (Đào tạo gõ tay 48 bài) —
+#          gỡ bằng `--force`, và gỡ là XOÁ SẠCH không có đường lùi;
+#        • không nối lớp đang có — gỡ bằng `--relink`, và `--relink` GHI ĐÈ tiêu
+#          đề buổi giáo vụ đã sửa tay.
+#      Ô `co_them` để truyền `--relink` khi đã soi dry-run và chấp nhận.
+#
+#   2. anh-cho-duyet → scripts/backfill-media-assets.ts
+#      Dựng hàng chờ của màn /duyet-media từ ảnh CŨ. Giữ nguyên kết luận đã có
+#      (ảnh APPROVED cũ → đóng sẵn buổi), không bắt QLCS duyệt lại từ đầu.
+#      Không chạy thì màn duyệt mở ra TRỐNG TRƠN dù DB đầy ảnh.
+#
+#   3. gop-trial → scripts/gop-trial-v1-sang-v2.ts
+#      Chuyển bản ghi TrialClass (hệ V1 đã gỡ) sang lớp trải nghiệm V2. Không
+#      chạy thì các suất trial cũ biến mất khỏi mọi màn — dữ liệu còn trong bảng
+#      nhưng không đường nào đọc tới.
+#
+# SECRETS: PROD_DATABASE_URL / PROD_DIRECT_URL (dùng chung deploy.yml).
+# =============================================================================
+
+on:
+  workflow_dispatch:
+    inputs:
+      viec:
+        description: "Việc cần chạy"
+        required: true
+        type: choice
+        default: giao-trinh
+        options: [giao-trinh, anh-cho-duyet, gop-trial]
+      mode:
+        description: "dry-run = chỉ in kế hoạch · apply = ghi thật"
+        required: true
+        type: choice
+        default: dry-run
+        options: [dry-run, apply]
+      confirm:
+        description: 'Khi mode=apply: gõ đúng "GHI THAT VAO PROD"'
+        required: false
+        default: ""
+      co_them:
+        description: 'Cờ thêm cho script, vd "--relink" (chỉ dùng khi đã soi dry-run)'
+        required: false
+        default: ""
+
+concurrency:
+  group: site-gv-2508-prod
+  cancel-in-progress: false
+
+jobs:
+  chay:
+    name: ${{ inputs.viec }} (${{ inputs.mode }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Kiểm tra secrets + chuỗi xác nhận
+        run: |
+          missing=0
+          [ -n "${{ secrets.PROD_DATABASE_URL }}" ] || { echo "::error::Thiếu secret PROD_DATABASE_URL"; missing=1; }
+          [ -n "${{ secrets.PROD_DIRECT_URL }}" ]   || { echo "::error::Thiếu secret PROD_DIRECT_URL"; missing=1; }
+          if [ "${{ inputs.mode }}" = "apply" ] && [ "${{ inputs.confirm }}" != "GHI THAT VAO PROD" ]; then
+            echo "::error::mode=apply nhưng chuỗi xác nhận sai — dừng, không ghi gì."
+            missing=1
+          fi
+          exit $missing
+
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v3
+        with: { version: 11 }
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Generate Prisma client
+        run: pnpm exec prisma generate
+
+      - name: Chạy
+        run: |
+          set -euo pipefail
+          # Ba script dùng ba quy ước cờ KHÁC NHAU (viết ở ba đợt khác nhau):
+          #   • seed-curriculum-sata.ts   : mặc định GHI, `--dry-run` để xem trước
+          #   • backfill-media-assets.ts  : mặc định GHI, `--dry-run` để xem trước
+          #   • gop-trial-v1-sang-v2.ts   : mặc định GHI, `--dry-run` để xem trước
+          # ⇒ ở đây dry-run là THÊM cờ, không phải bỏ cờ. Đừng "thống nhất" bằng
+          #    cách sửa script: chúng đã chạy trên dev/test với quy ước này.
+          case "${{ inputs.viec }}" in
+            giao-trinh)    FILE="prisma/seed-curriculum-sata.ts" ;;
+            anh-cho-duyet) FILE="scripts/backfill-media-assets.ts" ;;
+            gop-trial)     FILE="scripts/gop-trial-v1-sang-v2.ts" ;;
+            *) echo "::error::viec không hợp lệ"; exit 1 ;;
+          esac
+          ARGS="${{ inputs.co_them }}"
+          if [ "${{ inputs.mode }}" != "apply" ]; then ARGS="$ARGS --dry-run"; fi
+          echo "→ tsx $FILE$ARGS"
+          echo "## \`$FILE$ARGS\`" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          pnpm exec tsx "$FILE" $ARGS | tee -a "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+        env:
+          # session pooler (:5432) cho CẢ HAI biến — ba script này chạy nhiều query
+          # lặp, transaction pooler (:6543) sẽ ném 42P05 prepared statement "s0"
+          # already exists giữa chừng, để lại việc làm dở.
+          DATABASE_URL: ${{ secrets.PROD_DIRECT_URL }}
+          DIRECT_URL: ${{ secrets.PROD_DIRECT_URL }}
+
+      - name: Nhắc bước kiểm
+        if: ${{ inputs.mode == 'apply' }}
+        run: |
+          case "${{ inputs.viec }}" in
+            giao-trinh)
+              echo '::warning::Kiểm: mở một lớp bất kỳ ở /admin/classes → tab Chương trình, tên buổi phải là tên bài thật. Lớp CŨ chỉ đổi nếu đã chạy kèm --relink.' ;;
+            anh-cho-duyet)
+              echo '::warning::Kiểm: mở /duyet-media bằng tài khoản QLCS — phải thấy cây ngày → lớp, không còn trống.' ;;
+            gop-trial)
+              echo '::warning::Kiểm: mở /trial-classes — các suất trial cũ phải hiện đủ.' ;;
+          esac
