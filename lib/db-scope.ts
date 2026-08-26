@@ -71,6 +71,14 @@ export const SCOPED_MODELS = new Set<string>([
   // ⚠️ Đây là DỮ LIỆU CÁ NHÂN — đưa vào NULL_IS_GLOBAL_MODELS là biến "chưa biết cơ sở"
   // thành "ai cũng thấy", tức rò rỉ, không phải tiện lợi.
   "TrnDataSubjectRequest",
+  // MEDIA-REVIEW (26/08) — anh/video buoi hoc + ket luan duyet cua tung buoi.
+  // Ca hai `BAT_BUOC` mang centerId: mot tam anh / mot ket luan LUON thuoc dung mot co
+  // so. KHONG vao NULL_IS_GLOBAL_MODELS — coi "chua biet co so" la "ai cung thay" o day
+  // la de anh hoc vien co so nay lot sang QLCS co so kia.
+  // scopedDb KHONG che WRITE: moi `create` phai tu set `centerId`, quen la dong vo
+  // hinh voi chinh QLCS co so do (tuc anh khong bao gio duoc duyet).
+  "MediaAsset",
+  "SessionMediaReview",
 ]);
 
 /**
@@ -269,6 +277,13 @@ export function getModelPrefixes(model: string): string[] {
     case "TrnEnrollment":
     case "TrnDataSubjectRequest":
       return ["elearning:"];
+    // MEDIA-REVIEW (26/08) — anh buoi hoc + ket luan duyet. Thieu nhanh nay thi
+    // `getModelPrefixes` tra rong va tam nhin roi ve `isHoLevel` DIEN RONG: bat ky ai
+    // co MOT vai neo tai Hoi so, ke ca vai chang lien quan, doc duoc anh hoc vien cua
+    // MOI co so. Day la anh tre em, khong phai so lieu.
+    case "MediaAsset":
+    case "SessionMediaReview":
+      return ["media:"];
     default:
       return [];
   }
