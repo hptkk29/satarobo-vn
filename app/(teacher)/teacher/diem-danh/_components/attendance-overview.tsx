@@ -9,6 +9,7 @@ import {
 } from "../../_components/ui/list-toolbar";
 import { EmptyState } from "../../_components/ui/empty-state";
 import { PhanTrangBang } from "@/components/ui/phan-trang-bang";
+import { khopBatKy } from "@/lib/ui/tim-kiem";
 
 /** 1 buổi đã diễn ra (plain — câu 46: chỉ metadata + đếm). */
 export interface AttendanceRow {
@@ -52,16 +53,14 @@ export function AttendanceOverview({ rows }: { rows: AttendanceRow[] }) {
   ];
 
   const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
     return rows.filter((r) => {
       if (cls !== ALL && r.className !== cls) return false;
       if (state === "done" && !r.done) return false;
       if (state === "pending" && r.done) return false;
-      if (!q) return true;
-      return (
-        r.sessionLabel.toLowerCase().includes(q) ||
-        r.className.toLowerCase().includes(q)
-      );
+      // BỎ DẤU khi so (lib/ui/tim-kiem): gõ "vong lap" phải ra "Vòng lặp và điều kiện".
+      // So bằng `toLowerCase().includes()` trần thì gõ không dấu — cách gõ mặc định của
+      // gần như mọi người dùng Việt — luôn ra 0 kết quả, và trông y như chưa có tìm kiếm.
+      return khopBatKy([r.sessionLabel, r.className], query);
     });
   }, [rows, query, cls, state]);
 

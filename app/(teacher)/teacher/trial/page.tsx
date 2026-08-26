@@ -12,7 +12,6 @@
 // ⚠️ ĐẢO "câu 46" (25/08, chủ dự án): bảng Trial NAY CÓ cột "Phụ huynh" — chỉ TÊN.
 // SĐT/email phụ huynh vẫn không bao giờ ra khỏi server (xem ghi chú dài ở khối
 // getTeacherTrialTable trong lib/lms/teacher-schedule.ts).
-import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Ban } from "lucide-react";
 import { auth } from "@/lib/auth";
@@ -137,49 +136,6 @@ export default async function TeacherTrialPage({
         title="Học viên Trial"
         subtitle={`Suất Trial trong ${TRIAL_WINDOW_DAYS} ngày tới và các suất đã học. Sau buổi, nhập phiếu đánh giá cho từng học viên.`}
       />
-
-      {table.unassigned.length > 0 && (
-        <section className="t-card mb-6 overflow-hidden">
-          <header className="border-b border-border bg-muted/40 px-5 py-3">
-            <h2 className="text-sm font-bold text-foreground">
-              Chưa xếp buổi ({table.unassigned.length})
-            </h2>
-            {/* Khối này CỐ Ý không có cột thời gian như 2 bảng dưới: chưa gắn buổi thì
-                chưa có ngày/giờ để hiện. Nói thẳng ra để GV không tưởng là lỗi dữ liệu. */}
-            <p className="text-xs text-muted-foreground">
-              Học viên đã ghi danh lớp Trial của bạn nhưng chưa gắn vào buổi cụ
-              thể nên chưa có ngày giờ học — nhờ quản lý xếp buổi, hoặc nhập
-              phiếu đánh giá trực tiếp.
-            </p>
-          </header>
-          <ul className="divide-y divide-border/60">
-            {table.unassigned.map((st) => (
-              <li
-                key={st.enrollmentId}
-                className="flex flex-wrap items-center justify-between gap-2 px-5 py-3"
-              >
-                <div>
-                  <p className="text-sm font-medium text-foreground">
-                    {st.studentName}
-                    {st.birthYear ? ` - ${st.birthYear}` : ""}
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    {st.trialClassName}
-                    {st.parentName ? ` · PH: ${st.parentName}` : ""}
-                    {st.courseName ? ` · ${st.courseName}` : ""}
-                  </p>
-                </div>
-                <Link
-                  href={`?enrollmentId=${st.enrollmentId}`}
-                  className="rounded-lg border border-border px-3 py-1.5 text-xs font-semibold text-foreground hover:bg-muted"
-                >
-                  {st.evaluated ? "Xem phiếu" : "Nhập phiếu"}
-                </Link>
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
 
       <TrialList
         upcoming={upcoming}

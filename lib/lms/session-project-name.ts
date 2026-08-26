@@ -75,12 +75,22 @@ function stripSessionNumberPrefix(s: string): string {
   return s.replace(/^buổi\s+\d+\s*[—–\-:.]\s*/i, "").trim();
 }
 
-/** `clean()` + coi ô trống `"Buổi N"` như chuỗi rỗng + cắt tiền tố `"Buổi N —"` thừa. */
-function meaningful(s: string | null | undefined): string {
+/**
+ * `clean()` + coi ô trống `"Buổi N"` như chuỗi rỗng + cắt tiền tố `"Buổi N —"` thừa.
+ *
+ * Export vì cổng phụ huynh cũng phải làm y hệt: `lib/portal/{feedback,photos,schedule}.ts`
+ * tự ghép `"Buổi N: <tên bài>"` (portal V2 cắt lại tiền tố đó để in số buổi ở huy hiệu
+ * riêng), nên nếu tên bài đã mang sẵn `"Buổi 7 — "` thì phụ huynh đọc ra
+ * `"Buổi 7: Buổi 7 — Vòng lặp và điều kiện"`.
+ */
+export function meaningfulSessionTitle(s: string | null | undefined): string {
   const t = clean(s);
   if (isBlankSessionTitle(t)) return "";
   return stripSessionNumberPrefix(t);
 }
+
+/** Bí danh nội bộ cho gọn — cùng một hàm. */
+const meaningful = meaningfulSessionTitle;
 
 /**
  * TIÊU ĐỀ BUỔI lấy từ giáo trình của lớp — chuỗi TRẦN, không có tiền tố "Dự án N".
