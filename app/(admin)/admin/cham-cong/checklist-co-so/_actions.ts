@@ -7,6 +7,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { hasRole } from "@/lib/auth/permissions";
 import { checkPermission } from "@/lib/auth/check-permission";
+import { roleManagesCenter } from "@/lib/auth/managed-centers";
 import { isCenterChecklistEnabled } from "@/lib/flags";
 import { ALL_CHECKLIST_KEYS } from "@/lib/center-checklist";
 
@@ -40,9 +41,25 @@ export async function saveCenterChecklist(input: unknown): Promise<Result> {
     return { ok: false, error: "Không có quyền" };
   }
 
-  // CENTER_MANAGER (không kèm SUPER_ADMIN) chỉ cơ sở mình.
+  const actor = await resolveActor(session.user.id);
+
+  // QLCS (không kèm SUPER_ADMIN) chỉ ghi checklist của cơ sở MÌNH ĐANG QUẢN LÝ.
+  //
+  // A-01-6b (26/08/2026): trước đây vế phải là `session.user.centerId` — MỘT cơ sở neo,
+  // ảnh chụp lúc đăng nhập. QLCS được giao hai cơ sở bị từ chối oan ở cơ sở thứ hai, và
+  // người đổi cơ sở phải đăng xuất mới ghi được. Nguồn sự thật đúng là dòng `UserOrgRole`
+  // đẻ ra vai CENTER_MANAGER — `roleManagesCenter` đọc đúng chỗ đó.
+  //
+  // ⚠️ KHÔNG thay bằng `actor.visibleCenterIds` (một mình hay AND với `passesScope`):
+  // cả hai vế đều nở theo vai KIÊM NHIỆM (kế toán cơ sở CS2, hay HO_MARKETING neo tại HO)
+  // ⇒ mở cổng GHI ở cơ sở người này chỉ được XEM. Lý lẽ đầy đủ + hai kịch bản đo được:
+  // khối chú thích đầu `lib/auth/managed-centers.ts`.
   const isSuper = hasRole(session.user, "SUPER_ADMIN");
-  if (!isSuper && hasRole(session.user, "CENTER_MANAGER") && centerId !== session.user.centerId) {
+  if (
+    !isSuper &&
+    hasRole(session.user, "CENTER_MANAGER") &&
+    !roleManagesCenter(actor, "CENTER_MANAGER", centerId)
+  ) {
     return { ok: false, error: "Cơ sở không thuộc phạm vi của bạn" };
   }
 
@@ -51,7 +68,8 @@ export async function saveCenterChecklist(input: unknown): Promise<Result> {
   for (const k of ALL_CHECKLIST_KEYS) flags[k] = parsed.data.flags[k] === true;
 
   // Cách ly cơ sở (A0-04): CenterDayChecklist ∈ SCOPED_MODELS → ghi qua scopedDb.
-  const actor = await resolveActor(session.user.id);
+  // ⚠️ scopedDb chỉ tự lọc đường ĐỌC (luật cứng #3) — cổng GHI ở trên phải tự chốt,
+  // không trông vào `upsert` chặn hộ.
   const sdb = scopedDb(actor);
 
   const date = new Date(`${parsed.data.date}T00:00:00`);

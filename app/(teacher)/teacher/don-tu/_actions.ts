@@ -1,11 +1,13 @@
 // app/(teacher)/teacher/don-tu/_actions.ts — Đơn từ GV.
-// submitWorkRequest: GV gửi đơn (PENDING). reviewWorkRequest: CENTER_MANAGER cơ sở
-// duyệt/từ chối (UI quản lý ở admin — action sẵn sàng). WorkRequest ∉ SCOPED_MODELS
-// → scopedDb pass-through; own-scope qua requesterId, review-scope qua centerId.
+// submitWorkRequest: GV gửi đơn (PENDING). reviewWorkRequest: CENTER_MANAGER duyệt/từ
+// chối đơn của các cơ sở MÌNH ĐANG QUẢN LÝ (UI ở /admin/don-tu). WorkRequest ∉
+// SCOPED_MODELS → scopedDb pass-through; own-scope qua requesterId, review-scope qua
+// `roleManagesCenter(actor, "CENTER_MANAGER", …)` — xem chú thích tại chỗ kiểm.
 "use server";
 
 import { auth } from "@/lib/auth";
 import { resolveActor } from "@/lib/auth/actor";
+import { roleManagesCenter } from "@/lib/auth/managed-centers";
 import { scopedDb } from "@/lib/db-scope";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
@@ -103,7 +105,8 @@ const reviewSchema = z.object({
 });
 
 /**
- * CENTER_MANAGER duyệt/từ chối đơn cùng cơ sở (SUPER_ADMIN: mọi cơ sở).
+ * CENTER_MANAGER duyệt/từ chối đơn của cơ sở MÌNH ĐANG QUẢN LÝ — có thể là nhiều cơ sở
+ * (SUPER_ADMIN: mọi cơ sở).
  *
  * BGĐ 31/07 — DUYỆT CÓ HIỆU LỰC THẬT: đơn nghỉ dạy/dạy thay được duyệt sẽ cập nhật
  * luôn ClassSession (huỷ buổi / gán GV dạy thay) qua lib/work-request-apply.ts.
@@ -142,7 +145,28 @@ export async function reviewWorkRequest(input: unknown): Promise<ReviewResult> {
     },
   });
   if (!req) return { ok: false, error: "Không tìm thấy đơn" };
-  if (!isSuper && req.centerId !== (session.user.centerId ?? null)) {
+  // ── A-01-6 · bất biến L-A6 (26/08/2026) ────────────────────────────────────────
+  // Trước đây: `req.centerId !== (session.user.centerId ?? null)` — so với ĐÚNG MỘT cơ
+  // sở neo trên JWT. Quản lý giữ hai cơ sở XEM được đơn của cơ sở thứ hai (trang
+  // /admin/don-tu liệt kê theo cùng một biến) nhưng bấm Duyệt thì "Đơn thuộc cơ sở khác".
+  //
+  // Nay đo bằng tập cơ sở người này đang giữ CHÍNH vai `CENTER_MANAGER` — suy từ
+  // `PermEntry.roleCode` + `PermEntry.centerScope`, tức từ đúng dòng `UserOrgRole` đẻ ra
+  // quyền. Vai đúng ở đây là `CENTER_MANAGER` vì cổng vai ngay trên gác bằng
+  // `hasRole(session.user, "CENTER_MANAGER")` (enum `Role` v1) và bảng ánh xạ
+  // `lib/auth/legacy-role-map.ts:24` đưa nó về RoleDef cùng tên.
+  //
+  // ⚠️ KHÔNG dùng `actor.visibleCenterIds` (và cũng không AND thêm nó): vế đó nở theo vai
+  // KIÊM NHIỆM — QLCS@CS1 kiêm kế toán/marketing sẽ duyệt được đơn của cơ sở họ chỉ có
+  // quyền XEM. Lý lẽ đầy đủ: khối chú thích đầu `lib/auth/managed-centers.ts`.
+  //
+  // ⚠️ Đây là cổng GHI nên phải TỰ kiểm: `WorkRequest` ∈ `SCOPE_EXEMPT` (lib/db-scope.ts)
+  // ⇒ `sdb.workRequest.findUnique` KHÔNG lọc cơ sở hộ. Test ghim điều đó bằng client giả
+  // không lọc gì (`./_actions.test.ts`).
+  //
+  // Đơn chưa gắn cơ sở (`centerId` null) nay TỪ CHỐI với quản lý (fail-closed, chỉ
+  // SUPER_ADMIN xử được) — trước đây quản lý cũng `centerId` null thì lọt.
+  if (!isSuper && !roleManagesCenter(actor, "CENTER_MANAGER", req.centerId)) {
     return { ok: false, error: "Đơn thuộc cơ sở khác" };
   }
   if (req.status !== "PENDING")

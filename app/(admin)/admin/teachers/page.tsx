@@ -2,6 +2,7 @@ import Link from "next/link";
 import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { resolveActor } from "@/lib/auth/actor";
+import { centerWhereManagedByRole } from "@/lib/auth/managed-centers";
 import { scopedDb } from "@/lib/db-scope";
 import { hasRole } from "@/lib/auth/permissions";
 import { checkPermission } from "@/lib/auth/check-permission";
@@ -27,12 +28,24 @@ export default async function TeachersPage({ searchParams }: SearchParams) {
   const session = await auth();
   if (!session?.user) redirect("/login");
 
-  // CENTER_MANAGER chỉ xem GV trong cơ sở mình.
-  const centerScope =
-    hasRole(session.user, "CENTER_MANAGER") ? session.user.centerId : null;
+  // CENTER_MANAGER chỉ xem GV trong các cơ sở MÌNH ĐANG QUẢN LÝ.
+  //
+  // ── A-01-6d (26/08/2026) ────────────────────────────────────────────────────────
+  // Đợt A-01-6 đã chuyển trang chi tiết (`./[id]/page.tsx`) và cả ba cổng ghi
+  // (`./_actions.ts` → `requireTeacherManager`) sang `roleManagesCenter`, nhưng DANH SÁCH
+  // vẫn lọc bằng `session.user.centerId` — một cơ sở neo chụp lúc đăng nhập. Hệ quả: QLCS
+  // giữ CS1+CS2 không thấy GV của CS2 kể cả khi gõ tên vào ô tìm kiếm (`q` chỉ AND thêm
+  // vào cùng `where`), chỉ mở được hồ sơ nếu tự gõ URL — lúc đó lại sửa/gán lớp bình
+  // thường. Quyền có thật nhưng không có lối đi nào từ giao diện.
+  //
+  // `centerWhereManagedByRole` gọi đúng hàm mà cổng ghi dùng, nên hai bên không trôi lệch.
+  const actor = await resolveActor(session.user.id);
+  const isCM = hasRole(session.user, "CENTER_MANAGER");
+  // Giá trị truyền vào `checkPermission` KHÔNG đổi: biểu thức cũ
+  // `centerScope ?? session.user.centerId ?? null` luôn rút gọn về đúng vế này.
   if (
     !(await checkPermission("employees:view-all", {
-      centerId: centerScope ?? session.user.centerId ?? null,
+      centerId: session.user.centerId ?? null,
     }))
   ) {
     redirect("/dashboard");
@@ -44,7 +57,10 @@ export default async function TeachersPage({ searchParams }: SearchParams) {
   const where: Prisma.UserWhereInput = {
     isActive: true,
     deletedAt: null,
-    ...(centerScope ? { centerId: centerScope } : {}),
+    // QLCS chưa được neo vai ở đâu → `IN []` = không GV nào, KHÔNG phải "bỏ lọc thấy hết"
+    // (hành vi cũ của `centerScope ? … : {}` khi `User.centerId` null). Fail-closed, khớp
+    // `requireTeacherManager`.
+    ...(isCM ? centerWhereManagedByRole(actor, "CENTER_MANAGER") : {}),
     // P1-b: là GV nếu CÓ TEACHER ở roles[] HOẶC role chính = TEACHER (user cũ chưa
     // sync roles[]) HOẶC đã có hồ sơ giáo viên → không sót GV nào.
     AND: [
@@ -83,7 +99,7 @@ export default async function TeachersPage({ searchParams }: SearchParams) {
 
   // Cách ly cơ sở (A0-04): User exempt (pass-through) — migrate cho sạch whitelist;
   // scope cơ sở đã đi qua where.centerId (CM) ở trên.
-  const sdb = scopedDb(await resolveActor(session.user.id));
+  const sdb = scopedDb(actor);
 
   try {
     staff = await sdb.user.findMany({

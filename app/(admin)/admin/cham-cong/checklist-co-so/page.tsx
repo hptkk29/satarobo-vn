@@ -5,6 +5,7 @@ import { auth } from "@/lib/auth";
 import { hasRole } from "@/lib/auth/permissions";
 import { checkPermission } from "@/lib/auth/check-permission";
 import { resolveActor } from "@/lib/auth/actor";
+import { centerIdsManagedByRole } from "@/lib/auth/managed-centers";
 import { scopedDb } from "@/lib/db-scope";
 import { ALL_CHECKLIST_KEYS } from "@/lib/center-checklist";
 import { CenterChecklistForm } from "./_components/checklist-form";
@@ -38,17 +39,36 @@ export default async function CenterChecklistPage({ searchParams }: Props) {
       ? sp.date
       : `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
 
-  const centers = isSuper
-    ? await sdb.center.findMany({ where: { isActive: true }, orderBy: { displayOrder: "asc" }, select: { id: true, name: true } })
-    : isCM && session.user.centerId
-      ? await sdb.center.findMany({ where: { id: session.user.centerId }, select: { id: true, name: true } })
-      : await sdb.center.findMany({ where: { isActive: true }, orderBy: { displayOrder: "asc" }, select: { id: true, name: true } });
+  // A-01-6b (26/08/2026) — QLCS thấy đúng những cơ sở MÌNH ĐANG GIỮ VAI, không phải một
+  // cơ sở neo (`session.user.centerId`, ảnh chụp lúc đăng nhập). Trang cũ ghim cứng cơ sở
+  // neo và ẩn ô chọn ⇒ QLCS hai cơ sở KHÔNG có đường nào mở checklist cơ sở thứ hai, dù
+  // cổng GHI (`_actions.ts`) đã cho phép. Nguồn đo: dòng `UserOrgRole` sinh ra vai
+  // CENTER_MANAGER — KHÔNG dùng `visibleCenterIds` (nở theo vai kiêm nhiệm, xem đầu
+  // `lib/auth/managed-centers.ts`).
+  const managed = centerIdsManagedByRole(actor, "CENTER_MANAGER");
+  // Fallback cơ sở neo khi CHƯA có dòng `UserOrgRole` nào (dữ liệu desync: JWT còn vai
+  // QLCS mà DB thiếu dòng neo vai) — giữ NGUYÊN trang một-cơ-sở như hôm nay thay vì đẩy
+  // người dùng vào màn "Chưa có cơ sở".
+  const cmCenterIds: string[] | null =
+    !isCM || isSuper || managed === "ALL"
+      ? null
+      : managed.length > 0
+        ? managed
+        : session.user.centerId
+          ? [session.user.centerId]
+          : null;
 
-  // CM cố định cơ sở mình; còn lại chọn (mặc định cơ sở đầu).
-  const centerId = isCM && session.user.centerId ? session.user.centerId : (sp.centerId || centers[0]?.id || "");
+  const centers = cmCenterIds
+    ? await sdb.center.findMany({ where: { id: { in: cmCenterIds } }, orderBy: { displayOrder: "asc" }, select: { id: true, name: true } })
+    : await sdb.center.findMany({ where: { isActive: true }, orderBy: { displayOrder: "asc" }, select: { id: true, name: true } });
+
+  // QLCS chỉ chọn được trong các cơ sở mình quản lý (mặc định cơ sở đầu); còn lại chọn tự do.
+  const centerId = cmCenterIds
+    ? (sp.centerId && cmCenterIds.includes(sp.centerId) ? sp.centerId : centers[0]?.id ?? "")
+    : (sp.centerId || centers[0]?.id || "");
   const canEdit =
     isSuper ||
-    (isCM && centerId === session.user.centerId) ||
+    (cmCenterIds !== null && centerId !== "" && cmCenterIds.includes(centerId)) ||
     (await checkPermission("hr_attendance:view", { centerId: centerId || null }));
 
   const date = new Date(`${dateStr}T00:00:00`);
@@ -77,7 +97,8 @@ export default async function CenterChecklistPage({ searchParams }: Props) {
           <span className="mb-1 block text-xs text-muted-foreground">Ngày</span>
           <input type="date" name="date" defaultValue={dateStr} className="rounded-lg border border-border px-3 py-1.5 text-sm" />
         </label>
-        {!isCM && centers.length > 1 && (
+        {/* QLCS hai cơ sở cũng cần ô chọn — trước đây `!isCM` ẩn tuyệt đối (A-01-6b). */}
+        {centers.length > 1 && (
           <label className="block">
             <span className="mb-1 block text-xs text-muted-foreground">Cơ sở</span>
             <select name="centerId" defaultValue={centerId} className="rounded-lg border border-border px-3 py-1.5 text-sm">

@@ -41,6 +41,7 @@ import { generateAssignmentsFromTemplates } from "@/lib/lms/assignment";
 import { publishEvent } from "@/lib/events/publish";
 import { createRefundRequest } from "@/lib/finance/refund";
 import { resolveActor, type Actor } from "@/lib/auth/actor";
+import { actionCoversCenter, roleManagesCenter } from "@/lib/auth/managed-centers";
 import { passesScope, scopedDb } from "@/lib/db-scope";
 import { formatDateVN } from "@/lib/format/date";
 import { syncConversationMembership } from "@/lib/chat/sync-membership";
@@ -52,14 +53,58 @@ type ActionResult = { error?: string; warning?: string };
 // GHI đối xứng với ĐỌC (vá 24/07): scope per-model qua passesScope — role HO chỉ
 // cross-center khi CÓ quyền classes:* (Toại TRAINING@HO không còn → hết tạo/chuyển
 // lớp CS2). Lớp HO (centerId null) đòi scope ALL. KHÔNG dùng cờ isHoLevel trần.
-function actorCanUseCenter(actor: Actor, centerId: string | null): boolean {
-  return passesScope("Class", { centerId }, actor);
+//
+// ── A-01-6d · bất biến L-A6 (26/08/2026) — áp cho CẢ FILE, không riêng cổng duyệt ──
+// Bản 26/08 sáng chỉ vá `requireApprover`. Mọi cổng GHI khác của file vẫn đo bằng
+// `passesScope("Class", …)` MỘT MÌNH — đúng phép đo mà chính khối chú thích của
+// `requireApprover` tuyên bố là hỏng: `getModelVisibleCenterIds` gom theo TIỀN TỐ model
+// nên `classes:view-all` của một vai KIÊM NHIỆM chỉ-đọc (kế toán cơ sở @CS2, HO_MARKETING
+// @HO) làm nó nở, và một dòng `UserPermissionGrant` ALLOW khớp tiền tố còn bật thẳng
+// "ALL" (lib/db-scope.ts:248-253).
+//
+// Đo được, cùng fixture với ./_actions.test.ts: QLCS@CS1 kiêm CENTER_ACCOUNTANT@CS2 bị
+// `approveClass("cl-9")` chặn, nhưng `cancelClassAction("cl-9")` NGAY SAU ĐÓ vẫn chạy —
+// lớp CS2 → CANCELLED, mọi ghi danh còn sống → WITHDREW, buổi tương lai → CANCELLED,
+// DomainEvent `class.cancelled` + hoàn tiền, do người chỉ có quyền XEM ở CS2 thực hiện.
+//
+// Phép đo thêm là `actionCoversCenter(actor, action, centerId)`: suy từ ĐÚNG dòng
+// `UserOrgRole` mang CHÍNH quyền mà cổng thô vừa kiểm (khớp đúng chuỗi action, không gom
+// tiền tố). Trục ACTION chứ không phải trục `roleCode` như `requireApprover`, vì các cổng
+// dưới đây gác bằng `checkPermission(<action>)` chứ không phải bằng danh sách vai — đổi
+// quyền trong seed thì cổng cơ sở đổi theo, không lệch âm thầm.
+//
+// ⚠️ CỐ Ý là phép GIAO: vế `passesScope` GIỮ NGUYÊN làm TRẦN (luật 24/07 "cross-center chỉ
+// khi có classes:* scope ALL" là quyết định của chủ dự án). Vế mới chỉ SIẾT, không nới.
+//
+// `action = null` = đường ĐỌC thuần (không có cổng thô nào để đo theo) → giữ y luật cũ.
+function classCenterWritable(
+  actor: Actor,
+  centerId: string | null,
+  action: Action | null,
+): boolean {
+  if (!passesScope("Class", { centerId }, actor)) return false;
+  if (action === null || actor.isSuperAdmin) return true;
+  return actionCoversCenter(actor, action, centerId);
 }
-/** Lớp `classId` có thuộc tầm nhìn cơ sở actor không (đọc centerId rồi passesScope). */
-async function classInScope(actor: Actor, classId: string): Promise<boolean> {
+
+/** Cơ sở ĐÍCH của một lệnh tạo/chuyển lớp có nằm trong phạm vi GHI của actor không. */
+function actorCanUseCenter(actor: Actor, centerId: string | null, action: Action): boolean {
+  return classCenterWritable(actor, centerId, action);
+}
+/**
+ * Lớp `classId` có thuộc phạm vi của actor không (đọc centerId rồi đo).
+ *
+ * `action` là quyền mà cổng thô của chỗ gọi vừa kiểm; truyền `null` CHỈ khi chỗ gọi không
+ * có cổng thô nào (đường đọc thuần) — đừng truyền `null` cho tiện ở một đường ghi.
+ */
+async function classInScope(
+  actor: Actor,
+  classId: string,
+  action: Action | null,
+): Promise<boolean> {
   const sdb = scopedDb(actor);
   const cls = await sdb.class.findUnique({ where: { id: classId }, select: { centerId: true } });
-  return !!cls && passesScope("Class", cls, actor);
+  return !!cls && classCenterWritable(actor, cls.centerId, action);
 }
 /**
  * R2-RBAC-3 — GV chính/trợ giảng phải thuộc CÙNG cơ sở với lớp (cách ly CS1↔CS2).
@@ -94,17 +139,22 @@ async function assertTeachersInCenter(
   );
 }
 
-async function requireClassWrite(action: "create" | "update" | "delete") {
+/**
+ * Quyền THÔ của từng đường ghi lớp. Tách ra hằng số vì cổng CƠ SỞ
+ * (`classCenterWritable`) phải đo theo ĐÚNG quyền mà cổng thô vừa kiểm — hai chỗ đọc
+ * cùng một bảng thì đổi seed/đổi quyền không làm chúng lệch nhau (A-01-6d).
+ */
+const CLASS_WRITE_ACTION = {
+  create: "classes:create",
+  update: "classes:edit",
+  delete: "classes:delete",
+} as const satisfies Record<"create" | "update" | "delete", Action>;
+
+async function requireClassWrite(action: keyof typeof CLASS_WRITE_ACTION) {
   const session = await auth();
   if (!session?.user) redirect("/login");
 
-  const actionMap: Record<typeof action, Action> = {
-    create: "classes:create",
-    update: "classes:edit",
-    delete: "classes:delete",
-  };
-
-  if (!(await checkPermission(actionMap[action]))) {
+  if (!(await checkPermission(CLASS_WRITE_ACTION[action]))) {
     redirect("/dashboard?error=unauthorized");
   }
   return session;
@@ -413,7 +463,7 @@ export async function createClass(formData: FormData): Promise<ActionResult> {
   const { centerId, orgUnitId } = await resolveClassOrg(data, sdb);
 
   // Cách ly cơ sở: chỉ tạo lớp cho cơ sở trong tầm nhìn actor.
-  if (!actorCanUseCenter(actor, centerId)) {
+  if (!actorCanUseCenter(actor, centerId, CLASS_WRITE_ACTION.create)) {
     return { error: "Không có quyền tạo lớp cho cơ sở này" };
   }
   const hoErr = await rejectHeadOfficeCenter(centerId);
@@ -661,10 +711,10 @@ export async function updateClass(
   const { centerId, orgUnitId } = await resolveClassOrg(input, sdb);
 
   // Cách ly cơ sở: lớp HIỆN TẠI + cơ sở ĐÍCH (nếu đổi) đều phải trong tầm nhìn actor.
-  if (!passesScope("Class", { centerId: before.centerId }, actor)) {
+  if (!classCenterWritable(actor, before.centerId, CLASS_WRITE_ACTION.update)) {
     return { error: "Không tìm thấy lớp" };
   }
-  if (!actorCanUseCenter(actor, centerId)) {
+  if (!actorCanUseCenter(actor, centerId, CLASS_WRITE_ACTION.update)) {
     return { error: "Không có quyền chuyển lớp sang cơ sở này" };
   }
   // Không chuyển lớp về Hội sở (cùng luật với lúc tạo — xem rejectHeadOfficeCenter).
@@ -870,7 +920,7 @@ export async function deleteClass(id: string): Promise<ActionResult> {
   if (!before) return { error: "Không thể xoá lớp này" };
 
   // Cách ly cơ sở: chỉ xoá lớp trong tầm nhìn actor (chống IDOR).
-  if (!passesScope("Class", { centerId: before.centerId }, actor)) {
+  if (!classCenterWritable(actor, before.centerId, CLASS_WRITE_ACTION.delete)) {
     return { error: "Không thể xoá lớp này" };
   }
 
@@ -908,6 +958,8 @@ export async function deleteClass(id: string): Promise<ActionResult> {
 type WfResult = { ok: true } | { ok: false; error: string };
 
 const SUBMIT_ROLES = ["SUPER_ADMIN", "CENTER_MANAGER", "SALES_CSM"] as const;
+/** `SUBMIT_ROLES` dịch sang RoleDef (RBAC v2) — SUPER_ADMIN đi nhánh `isSuperAdmin` riêng. */
+const SUBMIT_ROLE_CODES = ["CENTER_MANAGER", "CENTER_SALES_CSM"] as const;
 const APPROVE_ROLES = ["SUPER_ADMIN", "CENTER_MANAGER"] as const;
 
 /** Sale/quản lý gửi lớp đi duyệt (PLANNED/RECRUITING → PENDING_APPROVAL). */
@@ -926,8 +978,18 @@ export async function submitClassForApproval(classId: string): Promise<WfResult>
   });
   if (!cls) return { ok: false, error: "Lớp không tồn tại" };
 
-  // Cách ly cơ sở: chỉ gửi duyệt lớp trong tầm nhìn actor (chống IDOR).
-  if (!passesScope("Class", { centerId: cls.centerId }, actor)) {
+  // Cách ly cơ sở: chỉ gửi duyệt lớp trong phạm vi actor (chống IDOR).
+  //
+  // A-01-6d — cổng này KHÔNG gác bằng `checkPermission(<action>)` mà bằng danh sách VAI
+  // (`SUBMIT_ROLES`), nên trục đo đúng ở đây là `roleCode` chứ không phải action: cơ sở
+  // của lớp phải nằm trong tập cơ sở mà người này đang giữ MỘT TRONG các vai được phép gửi
+  // duyệt. `LEGACY_TO_ROLEDEF` (lib/auth/legacy-role-map.ts:24-25) ánh xạ
+  // CENTER_MANAGER → `CENTER_MANAGER`, SALES_CSM → `CENTER_SALES_CSM`; SUPER_ADMIN xử ở
+  // nhánh `isSuperAdmin`. `passesScope` giữ nguyên làm TRẦN, vế mới chỉ SIẾT.
+  const inScope =
+    actor.isSuperAdmin ||
+    SUBMIT_ROLE_CODES.some((code) => roleManagesCenter(actor, code, cls.centerId));
+  if (!passesScope("Class", { centerId: cls.centerId }, actor) || !inScope) {
     return { ok: false, error: "Lớp không tồn tại" };
   }
 
@@ -947,6 +1009,37 @@ export async function submitClassForApproval(classId: string): Promise<WfResult>
   return { ok: true };
 }
 
+/**
+ * Cổng GHI dùng chung của workflow duyệt lớp — `approveClass` (PENDING_APPROVAL → ACTIVE,
+ * kéo theo sinh buổi + tạo nhóm chat) và `rejectClass` (→ RECRUITING).
+ *
+ * ── A-01-6 · bất biến L-A6 (26/08/2026) ────────────────────────────────────────
+ * Nhánh QLCS trước đây là `cls.centerId !== session.user.centerId`, tức so với ĐÚNG MỘT
+ * cơ sở neo — ảnh chụp lúc đăng nhập (`lib/auth.ts`). Hậu quả đo được: quản lý giữ 2 cơ sở
+ * XEM được lớp ở cơ sở thứ hai (A-01 đã mở đường đọc) và GỬI DUYỆT được
+ * (`submitClassForApproval` đi qua `passesScope`), nhưng lớp nằm mãi ở "Chờ duyệt" vì
+ * không ai bấm được nút nào.
+ *
+ * ⚠️ KHÔNG thay bằng `visibleCenterIds` (AND `passesScope`): cả hai vế đều nở theo vai
+ * KIÊM NHIỆM nên phép AND không cắt gì — QLCS@CS1 kiêm CENTER_ACCOUNTANT@CS2 (hoặc kiêm
+ * MARKETING ⇒ HO_MARKETING@HO) sẽ duyệt được lớp của cơ sở họ chỉ có quyền XEM. Lý lẽ
+ * đầy đủ + hai kịch bản đo được: khối chú thích đầu `lib/auth/managed-centers.ts`.
+ *
+ * Điều kiện HÔM NAY đo đúng thứ cần đo: cơ sở của lớp phải nằm trong tập cơ sở mà người
+ * này đang giữ CHÍNH vai `CENTER_MANAGER` (`roleManagesCenter`) — suy từ `PermEntry.roleCode`
+ * + `PermEntry.centerScope`, tức từ đúng dòng `UserOrgRole` đẻ ra quyền. Vai `CENTER_MANAGER`
+ * là vai đúng ở đây vì `APPROVE_ROLES` chỉ có SUPER_ADMIN + CENTER_MANAGER, và
+ * `LEGACY_TO_ROLEDEF` ánh xạ CENTER_MANAGER (v1) → RoleDef `CENTER_MANAGER`. Giáo vụ
+ * (`CENTER_CLASS_MANAGER`) KHÔNG có `classes:edit` nên không nằm trong cổng này.
+ *
+ * ⚠️ Hệ quả cố ý: lớp `centerId = null` nay TỪ CHỐI với QLCS (`roleManagesCenter`
+ * fail-closed) — trước đây lọt khi `User.centerId` cũng null. Lớp tại Hội sở vốn đã bị cấm
+ * từ lúc tạo/sửa (`rejectHeadOfficeCenter`, chốt 04/08); SUPER_ADMIN vẫn duyệt được.
+ *
+ * ⚠️ `scopedDb` chỉ che đường ĐỌC (lib/db-scope.ts đầu file) — đây là cổng của đường GHI
+ * nên phải tự kiểm, KHÔNG được trông vào `sdb.class.findFirst` lọc hộ. Test ghim điều này
+ * bằng cách thay `scopedDb` bằng client giả không lọc gì (`./_actions.test.ts`).
+ */
 async function requireApprover(classId: string) {
   const session = await auth();
   if (!session?.user) return { ok: false as const, error: "Chưa đăng nhập" };
@@ -960,9 +1053,9 @@ async function requireApprover(classId: string) {
     select: { status: true, centerId: true },
   });
   if (!cls) return { ok: false as const, error: "Lớp không tồn tại" };
-  // CENTER_MANAGER (không kèm SUPER_ADMIN) chỉ duyệt cơ sở mình.
+  // CENTER_MANAGER (không kèm SUPER_ADMIN) chỉ duyệt các cơ sở mình ĐANG GIỮ vai QLCS.
   const isSuper = hasAnyRole(session.user, ["SUPER_ADMIN"]);
-  if (!isSuper && cls.centerId !== session.user.centerId) {
+  if (!isSuper && !roleManagesCenter(actor, "CENTER_MANAGER", cls.centerId)) {
     return { ok: false as const, error: "Lớp không thuộc cơ sở của bạn" };
   }
   return { ok: true as const, session, cls, sdb };
@@ -1025,7 +1118,8 @@ export async function generateSessionsAction(
   if (!(await checkPermission("classes:edit"))) return { ok: false, error: "Không có quyền" };
   // Cách ly cơ sở: chỉ sinh buổi cho lớp trong tầm nhìn actor (chống IDOR).
   const actor = await resolveActor(session.user.id);
-  if (!(await classInScope(actor, classId))) return { ok: false, error: "Lớp không tồn tại" };
+  if (!(await classInScope(actor, classId, CLASS_WRITE_ACTION.update)))
+    return { ok: false, error: "Lớp không tồn tại" };
   const res = await generateClassSessions(classId, { onlyIfEmpty: true });
   if (!res.ok) return { ok: false, error: res.error ?? "Không sinh được buổi học" };
   revalidatePath(`/classes/${classId}`);
@@ -1060,7 +1154,8 @@ export async function resyncClassSessionsAction(
   if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
   if (!(await checkPermission("classes:edit"))) return { ok: false, error: "Không có quyền" };
   const actor = await resolveActor(session.user.id);
-  if (!(await classInScope(actor, classId))) return { ok: false, error: "Lớp không tồn tại" };
+  if (!(await classInScope(actor, classId, CLASS_WRITE_ACTION.update)))
+    return { ok: false, error: "Lớp không tồn tại" };
 
   const { actorId, actorName } = getAuditActor(session);
   const res = await resyncClassSessions({
@@ -1091,7 +1186,9 @@ export async function auditClassSessionsAction(classId: string): Promise<
   const session = await auth();
   if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
   const actor = await resolveActor(session.user.id);
-  if (!(await classInScope(actor, classId))) return { ok: false, error: "Lớp không tồn tại" };
+  // Đọc thuần (soát dãy buổi cho banner) — không có cổng thô nào để đo theo ⇒ `null`.
+  if (!(await classInScope(actor, classId, null)))
+    return { ok: false, error: "Lớp không tồn tại" };
   const audit = await auditClassSessions(classId);
   if (!audit) return { ok: false, error: "Lớp không tồn tại" };
   return {
@@ -1303,7 +1400,8 @@ export async function applyClassReschedule(classId: string): Promise<WfResult> {
   if (!(await checkPermission("classes:edit"))) return { ok: false, error: "Không có quyền" };
   // Cách ly cơ sở: chỉ dời buổi cho lớp trong tầm nhìn actor (chống IDOR).
   const actor = await resolveActor(session.user.id);
-  if (!(await classInScope(actor, classId))) return { ok: false, error: "Lớp không tồn tại" };
+  if (!(await classInScope(actor, classId, CLASS_WRITE_ACTION.update)))
+    return { ok: false, error: "Lớp không tồn tại" };
   const sdb = scopedDb(actor);
   const res = await computeFutureReschedule(classId, actor);
   if (!res.ok) return res;
@@ -1405,7 +1503,7 @@ export async function cancelClassAction(
   if (!cls) return { ok: false, error: "Lớp không tồn tại" };
 
   // Cách ly cơ sở: chỉ hủy lớp trong tầm nhìn actor (chống IDOR cascade liên cơ sở).
-  if (!passesScope("Class", { centerId: cls.centerId }, actor)) {
+  if (!classCenterWritable(actor, cls.centerId, CLASS_WRITE_ACTION.update)) {
     return { ok: false, error: "Lớp không tồn tại" };
   }
 

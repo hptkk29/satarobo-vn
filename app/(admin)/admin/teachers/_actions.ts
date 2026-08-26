@@ -2,6 +2,7 @@
 
 import { auth } from "@/lib/auth";
 import { resolveActor } from "@/lib/auth/actor";
+import { roleManagesCenter } from "@/lib/auth/managed-centers";
 import { scopedDb } from "@/lib/db-scope";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
@@ -18,10 +19,40 @@ type Result = { ok: true } | { ok: false; error: string };
 // Gác quyền quản lý GV: SUPER_ADMIN/HR toàn quyền; CENTER_MANAGER chỉ trong cơ sở mình.
 // Cách ly cơ sở (A0-04): Class ∈ SCOPED_MODELS → đọc qua scopedDb (trả kèm sdb);
 // TeacherProfile/TeacherReview/User không scope — cách ly qua gate employees:edit.
+//
+// ── A-01-6 · bất biến L-A6 (26/08/2026) ──────────────────────────────────────────
+// Nhánh QLCS trước đây là `target.centerId === session.user.centerId`, tức so với ĐÚNG
+// MỘT cơ sở neo trong JWT (ảnh chụp lúc đăng nhập). Quản lý giữ 2 cơ sở XEM được hồ sơ
+// GV ở cơ sở thứ hai (A-01 đã mở đường đọc) nhưng bấm Lưu thì "Giáo viên không thuộc cơ
+// sở của bạn" — cùng loại lỗi đã vá ở buổi học (`canManageSessionClass`) và học viên
+// (`canAssessStudent`).
+//
+// Phép đo hôm nay: cơ sở của GV phải nằm trong tập cơ sở người này đang giữ CHÍNH vai
+// `CENTER_MANAGER` (`roleManagesCenter` — suy từ `PermEntry.roleCode` + `centerScope`,
+// tức từ đúng dòng `UserOrgRole` đẻ ra quyền).
+//   · KHÔNG dùng `actor.visibleCenterIds`: đó là tầm nhìn ĐỌC gộp của MỌI vai — kiêm một
+//     vai Hội sở là nở ra toàn hệ thống.
+//   · KHÔNG dùng `passesScope`: nó khớp theo TIỀN TỐ model nên `employees:view-all` của
+//     vai kiêm nhiệm cũng làm nở. Hai vế cùng nở ⇒ AND không cắt gì. Lý lẽ + hai kịch bản
+//     đo được: khối chú thích đầu `lib/auth/managed-centers.ts`.
+//
+// ⚠️ VÌ SAO roleCode là `CENTER_MANAGER` chứ không phải CENTER_HR/CENTER_CLASS_MANAGER:
+//   · nhánh này CHỈ chạy khi người dùng giữ vai legacy `CENTER_MANAGER`, mà bảng ánh xạ
+//     `LEGACY_TO_ROLEDEF` (lib/auth/legacy-role-map.ts:24) cho đúng RoleDef `CENTER_MANAGER`;
+//   · CENTER_HR giữ `employees:edit` scope **CENTER** (prisma/seed-roles.ts:197) nên
+//     `checkPermission` ở trên đã tự cắt đúng cơ sở cho họ — không cần (và không được)
+//     nới nhánh này theo vai đó;
+//   · CENTER_CLASS_MANAGER KHÔNG có `employees:edit` (seed-roles.ts:569-610) ⇒ không bao
+//     giờ đi tới nhánh này.
+//
+// ⚠️ `scopedDb` chỉ che đường ĐỌC — đây là cổng của đường GHI nên phải tự kiểm, KHÔNG
+// trông vào `sdb.user.findUnique` lọc hộ (User còn là model EXEMPT, không lọc gì cả).
+// Test ghim điều đó bằng client giả không lọc (`./_actions.test.ts`).
 async function requireTeacherManager(targetUserId: string) {
   const session = await auth();
   if (!session?.user) return { ok: false as const, error: "Chưa đăng nhập" };
-  const sdb = scopedDb(await resolveActor(session.user.id));
+  const actor = await resolveActor(session.user.id);
+  const sdb = scopedDb(actor);
 
   // employees:edit có cả tầng GLOBAL (HO_HR) và CENTER (CENTER_HR) — truyền
   // centerId của GV đích để v2 đánh giá đúng nhánh CENTER.
@@ -33,11 +64,15 @@ async function requireTeacherManager(targetUserId: string) {
     return { ok: false as const, error: "Không có quyền quản lý giáo viên" };
   }
   if (hasRole(session.user, "CENTER_MANAGER")) {
-    if (!target || target.centerId !== session.user.centerId) {
+    // `target` null / GV chưa gắn cơ sở → `roleManagesCenter` trả false (fail-closed).
+    // Bằng hành vi cũ, TRỪ đúng một ca suy biến: QLCS chưa gắn cơ sở xem GV cũng chưa
+    // gắn cơ sở — luật cũ (`null !== null` = false) CHO qua, nay TỪ CHỐI. Đây là siết,
+    // không phải nới, và khớp cổng học viên (`canAssessStudent`).
+    if (!roleManagesCenter(actor, "CENTER_MANAGER", target?.centerId)) {
       return { ok: false as const, error: "Giáo viên không thuộc cơ sở của bạn" };
     }
   }
-  return { ok: true as const, session, sdb };
+  return { ok: true as const, session, sdb, actor };
 }
 
 const profileSchema = z.object({
@@ -150,7 +185,14 @@ export async function assignClassToTeacher(input: unknown): Promise<Result> {
     select: { id: true, centerId: true },
   });
   if (!cls) return { ok: false, error: "Lớp không tồn tại" };
-  if (hasRole(gate.session.user, "CENTER_MANAGER") && cls.centerId !== gate.session.user.centerId) {
+  // L-A6 (26/08) — cơ sở của LỚP phải là cơ sở người này đang giữ vai QLCS, không phải
+  // cơ sở neo trong JWT. Cùng lý lẽ (và cùng lý do chọn roleCode `CENTER_MANAGER`) như
+  // `requireTeacherManager` ở đầu file: vai QLCS là vai DUY NHẤT đi tới nhánh này —
+  // CENTER_CLASS_MANAGER không có `employees:edit` nên bị chặn từ cổng trên.
+  if (
+    hasRole(gate.session.user, "CENTER_MANAGER") &&
+    !roleManagesCenter(gate.actor, "CENTER_MANAGER", cls.centerId)
+  ) {
     return { ok: false, error: "Lớp không thuộc cơ sở của bạn" };
   }
 
@@ -240,7 +282,13 @@ export async function unassignClassFromTeacher(input: unknown): Promise<Result> 
     select: { centerId: true, teacherId: true, assistantId: true },
   });
   if (!cls) return { ok: false, error: "Lớp không tồn tại" };
-  if (hasRole(gate.session.user, "CENTER_MANAGER") && cls.centerId !== gate.session.user.centerId) {
+  // L-A6 (26/08) — như cổng gán lớp ở trên: đo bằng vai QLCS đang giữ, không bằng cơ sở
+  // neo trong JWT. Đường GỠ phải theo ĐÚNG đường GÁN, nếu không sẽ có lớp gán được mà
+  // không gỡ được (kẹt một chiều).
+  if (
+    hasRole(gate.session.user, "CENTER_MANAGER") &&
+    !roleManagesCenter(gate.actor, "CENTER_MANAGER", cls.centerId)
+  ) {
     return { ok: false, error: "Lớp không thuộc cơ sở của bạn" };
   }
 

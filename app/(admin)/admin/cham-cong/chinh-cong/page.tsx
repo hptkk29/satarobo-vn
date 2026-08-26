@@ -4,6 +4,7 @@ import { auth } from "@/lib/auth";
 import { hasRole } from "@/lib/auth/permissions";
 import { checkPermission } from "@/lib/auth/check-permission";
 import { resolveActor } from "@/lib/auth/actor";
+import { centerWhereManagedByRole } from "@/lib/auth/managed-centers";
 import { scopedDb } from "@/lib/db-scope";
 import { canAdjustTimesheet } from "@/lib/attendance/adjust";
 import { getSetting } from "@/lib/settings/service";
@@ -19,23 +20,35 @@ export default async function ChinhCongPage() {
 
   const isSuper = hasRole(session.user, "SUPER_ADMIN");
   const isCM = hasRole(session.user, "CENTER_MANAGER");
-  const centerScope = isCM && !isSuper ? session.user.centerId : null;
 
+  // Giá trị truyền vào `checkPermission` KHÔNG đổi: biểu thức cũ
+  // `centerScope ?? session.user.centerId ?? null` luôn rút gọn về đúng vế này.
   if (
     !(await checkPermission("hr_attendance:adjust", {
-      centerId: centerScope ?? session.user.centerId ?? null,
+      centerId: session.user.centerId ?? null,
     }))
   ) {
     redirect("/dashboard");
   }
 
   // Cách ly cơ sở (A0-04): TimesheetAdjustmentRequest ∈ SCOPED_MODELS → đọc qua scopedDb.
-  const sdb = scopedDb(await resolveActor(session.user.id));
+  const actor = await resolveActor(session.user.id);
+  const sdb = scopedDb(actor);
 
+  // ── A-01-6d (26/08/2026) — DANH SÁCH phải đo cùng thước với cổng DUYỆT ────────────
+  // `reviewAdjustmentRequest` (./_actions.ts) đã chuyển sang
+  // `roleManagesCenter(actor, "CENTER_MANAGER", req.centerId)`, còn trang này — trang DUY
+  // NHẤT gọi nó — vẫn lọc `session.user.centerId`, một cơ sở neo chụp lúc đăng nhập. QLCS
+  // giữ CS1+CS2 không thấy yêu cầu của CS2 ⇒ nó nằm PENDING vô thời hạn dù server đã sẵn
+  // sàng cho duyệt.
+  //
+  // ⚠️ GIỮ NGUYÊN việc yêu cầu chưa gắn cơ sở (`centerId` null) không hiện ở đây: hành vi
+  // cũ đã vậy (`centerId: "cs-1"` loại hết dòng null). Cổng duyệt cố ý không chặn nhóm đó
+  // (vế `req.centerId &&`) nhưng đó là chuyện của cổng, không phải lý do nới danh sách.
   const rows = await sdb.timesheetAdjustmentRequest.findMany({
     where: {
       status: "PENDING",
-      ...(centerScope ? { centerId: centerScope } : {}),
+      ...(isCM && !isSuper ? centerWhereManagedByRole(actor, "CENTER_MANAGER") : {}),
     },
     orderBy: { createdAt: "asc" },
     take: 200,

@@ -1,11 +1,13 @@
 // app/(teacher)/teacher/hoan-thanh/_actions.ts — Đề xuất hoàn thành khoá (site GV).
 // proposeCourseCompletion: GV đề xuất (own-class) → CourseCompletionRequest PENDING.
-// reviewCourseCompletion: CENTER_MANAGER cơ sở duyệt → tạo CourseCompletion (UI quản
-// lý ở admin — action sẵn sàng). GV KHÔNG tự xác nhận hoàn thành (completions:manage).
+// reviewCourseCompletion: CENTER_MANAGER duyệt đề xuất của các cơ sở MÌNH ĐANG QUẢN LÝ
+// → tạo CourseCompletion (UI quản lý ở admin — action sẵn sàng). GV KHÔNG tự xác nhận
+// hoàn thành (completions:manage). Review-scope qua `roleManagesCenter` — xem tại chỗ kiểm.
 "use server";
 
 import { auth } from "@/lib/auth";
 import { resolveActor } from "@/lib/auth/actor";
+import { roleManagesCenter } from "@/lib/auth/managed-centers";
 import { scopedDb } from "@/lib/db-scope";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
@@ -104,7 +106,10 @@ const reviewSchema = z.object({
   note: z.string().max(1000).optional().nullable(),
 });
 
-/** CENTER_MANAGER duyệt đề xuất hoàn thành cùng cơ sở → tạo CourseCompletion. */
+/**
+ * CENTER_MANAGER duyệt đề xuất hoàn thành của cơ sở MÌNH ĐANG QUẢN LÝ — có thể là nhiều
+ * cơ sở (SUPER_ADMIN: mọi cơ sở) → tạo CourseCompletion.
+ */
 export async function reviewCourseCompletion(input: unknown): Promise<Result> {
   const session = await auth();
   if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
@@ -128,7 +133,29 @@ export async function reviewCourseCompletion(input: unknown): Promise<Result> {
     select: { status: true, centerId: true, studentId: true, courseId: true },
   });
   if (!req) return { ok: false, error: "Không tìm thấy đề xuất" };
-  if (!isSuper && req.centerId !== (session.user.centerId ?? null)) {
+  // ── A-01-6 · bất biến L-A6 (26/08/2026) ────────────────────────────────────────
+  // Trước đây: `req.centerId !== (session.user.centerId ?? null)` — so với ĐÚNG MỘT cơ
+  // sở neo trên JWT ⇒ quản lý giữ hai cơ sở không duyệt nổi đề xuất của cơ sở thứ hai.
+  //
+  // Nay đo bằng tập cơ sở người này đang giữ CHÍNH vai `CENTER_MANAGER`
+  // (`PermEntry.roleCode` + `PermEntry.centerScope`, tức đúng dòng `UserOrgRole` đẻ ra
+  // quyền). Vai đúng ở đây là `CENTER_MANAGER` theo HAI đường độc lập cùng chỉ về nó:
+  // cổng vai ngay trên gác `hasRole(session.user, "CENTER_MANAGER")` (→ RoleDef cùng tên,
+  // `lib/auth/legacy-role-map.ts:24`), và `completions:manage` — quyền nghiệp vụ của việc
+  // này — trong RBAC v2 CHỈ khai ở RoleDef `CENTER_MANAGER` (`prisma/seed-roles.ts:474`;
+  // TEACHER bị siết có chủ đích, CENTER_CLASS_MANAGER không có).
+  //
+  // ⚠️ KHÔNG dùng `actor.visibleCenterIds` (và không AND thêm nó): vế đó nở theo vai KIÊM
+  // NHIỆM ⇒ QLCS@CS1 kiêm kế toán/marketing cấp được CHỨNG CHỈ cho học viên cơ sở họ chỉ
+  // có quyền XEM. Lý lẽ đầy đủ: khối chú thích đầu `lib/auth/managed-centers.ts`.
+  //
+  // ⚠️ Cổng GHI phải TỰ kiểm: `CourseCompletionRequest` ∈ `SCOPE_EXEMPT` (lib/db-scope.ts)
+  // ⇒ `findUnique` ở trên KHÔNG lọc cơ sở hộ; và nhánh APPROVED bên dưới gọi
+  // `completeCourse` (sinh CourseCompletion + mã chứng chỉ) TRƯỚC khi ghi status.
+  //
+  // Đề xuất chưa gắn cơ sở (`centerId` null — lớp chưa gắn Center) nay TỪ CHỐI với quản
+  // lý (fail-closed, chỉ SUPER_ADMIN xử được).
+  if (!isSuper && !roleManagesCenter(actor, "CENTER_MANAGER", req.centerId)) {
     return { ok: false, error: "Đề xuất thuộc cơ sở khác" };
   }
   if (req.status !== "PENDING")

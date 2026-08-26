@@ -3,6 +3,7 @@ import { ClipboardList } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { hasRole } from "@/lib/auth/permissions";
 import { resolveActor } from "@/lib/auth/actor";
+import { centerWhereManagedByRole } from "@/lib/auth/managed-centers";
 import { scopedDb } from "@/lib/db-scope";
 import { formatDateVN } from "@/lib/format/date";
 import {
@@ -43,12 +44,27 @@ export default async function WorkRequestsAdminPage({
     status === "APPROVED" || status === "REJECTED" ? status : "PENDING";
 
   // WorkRequest ∉ SCOPED_MODELS → scopedDb pass-through; cách ly cơ sở làm TAY
-  // (SUPER_ADMIN thấy hết, quản lý chỉ thấy cơ sở mình) — khớp guard của action.
-  const sdb = scopedDb(await resolveActor(session.user.id));
+  // (SUPER_ADMIN thấy hết, quản lý chỉ thấy các cơ sở MÌNH ĐANG QUẢN LÝ).
+  //
+  // ── A-01-6d (26/08/2026) ────────────────────────────────────────────────────────
+  // Trước đây lọc `centerId: session.user.centerId ?? null` — MỘT cơ sở neo chụp lúc đăng
+  // nhập, đúng biến mà `reviewWorkRequest` vừa BỎ khi chuyển sang `roleManagesCenter`.
+  // Đây là trang DUY NHẤT gọi action đó, nên hai thước lệch nhau là bản vá kia không có
+  // đường nào chạm tới: đơn của cơ sở thứ hai KHÔNG BAO GIỜ hiện ⇒ không ai bấm Duyệt ⇒
+  // buổi đáng lẽ bị huỷ / gán GV dạy thay (lib/work-request-apply.ts) vẫn chạy như thường.
+  // Chiều ngược lại cũng hỏng: vai neo @CS2 mà JWT còn `centerId = "cs-1"` thì danh sách
+  // hiện đơn CS1, bấm Duyệt lại nhận "Đơn thuộc cơ sở khác".
+  //
+  // Nay dùng CHUNG một phép đo với action (`centerWhereManagedByRole` gọi thẳng
+  // `centerIdsManagedByRole` — cùng hàm mà `roleManagesCenter` dùng). Đơn chưa gắn cơ sở
+  // (`centerId` null) không hiện với quản lý: khớp `roleManagesCenter` fail-closed, họ
+  // duyệt cũng không được.
+  const actor = await resolveActor(session.user.id);
+  const sdb = scopedDb(actor);
   const requests = await sdb.workRequest.findMany({
     where: {
       status: statusFilter,
-      ...(isSuper ? {} : { centerId: session.user.centerId ?? null }),
+      ...(isSuper ? {} : centerWhereManagedByRole(actor, "CENTER_MANAGER")),
     },
     orderBy: { createdAt: "desc" },
     take: 100,

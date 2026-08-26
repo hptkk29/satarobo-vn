@@ -12,6 +12,7 @@ import { db } from "@/lib/db";
 import { hasRole } from "@/lib/auth/permissions";
 import { getFreshGateUser } from "@/lib/auth/fresh-gate-user";
 import { resolveActor } from "@/lib/auth/actor";
+import { roleManagesCenter } from "@/lib/auth/managed-centers";
 import { getSessionRosterStudentIds } from "@/lib/attendance/roster";
 import {
   getSessionEvalState,
@@ -24,9 +25,29 @@ import {
 type Result<T> = { ok: true; data: T } | { ok: false; error: string };
 
 /**
- * Gate ĐIỀN phiếu buổi: GV chính/trợ giảng của lớp, CENTER_MANAGER cùng cơ sở,
- * hoặc SUPER_ADMIN/TRAINING. Mirror canManageSessionClass (LMS-2) nhưng cho phép
- * thêm TRAINING (Đào tạo có thể điền/sửa hộ).
+ * Gate ĐIỀN phiếu buổi: GV chính/trợ giảng của lớp, CENTER_MANAGER trong phạm vi cơ sở
+ * MÌNH QUẢN LÝ, hoặc SUPER_ADMIN/TRAINING. Mirror canManageSessionClass (LMS-2) nhưng
+ * cho phép thêm TRAINING (Đào tạo có thể điền/sửa hộ).
+ *
+ * ── A-01-6 · bất biến L-A6 (26/08/2026) ───────────────────────────────────────
+ * Trước: `cls.centerId === u.centerId` — so với ĐÚNG MỘT cơ sở neo (`User.centerId`,
+ * ảnh chụp lúc đăng nhập). Quản lý giữ 2 cơ sở XEM được buổi ở cơ sở thứ hai (A-01 đã
+ * mở đường đọc) nhưng không điền nổi phiếu đánh giá ở đó.
+ *
+ * Hôm nay: cơ sở của lớp phải nằm trong tập cơ sở người này đang giữ CHÍNH vai
+ * `CENTER_MANAGER` (`roleManagesCenter` — suy từ `PermEntry.roleCode` + `centerScope`,
+ * tức từ đúng dòng `UserOrgRole` đẻ ra quyền). KHÔNG dùng `actor.visibleCenterIds` và
+ * KHÔNG dùng `passesScope`: cả hai đều nở theo vai KIÊM NHIỆM (kế toán cơ sở khác mang
+ * `classes:view-all`; vai Hội sở cho `centerScope: "ALL"`) nên phép AND của chúng không
+ * cắt được gì — lý lẽ đầy đủ ở khối chú thích đầu `lib/auth/managed-centers.ts`.
+ *
+ * ⚠️ Đây là cổng của đường GHI (`saveSessionEvalAction` gọi thẳng nó) và file này đọc
+ * bằng `db` TRẦN — không có `scopedDb` đứng trước lọc hộ, nên điều kiện dưới đây là lớp
+ * cách ly cơ sở DUY NHẤT. Test ghim bằng client giả không lọc gì (./session-eval-actions.test.ts).
+ *
+ * ⚠️ Nhánh QLCS đặt SAU, dạng OR: GV dạy lớp ở cơ sở khác vẫn qua bằng nhánh TEACHER
+ * (giữ nguyên hành vi cho người kiêm cả hai vai), và SUPER_ADMIN/TRAINING không phải
+ * hỏi actor một lần nào.
  */
 async function gateFill(
   sessionId: string,
@@ -45,11 +66,14 @@ async function gateFill(
   // Vai + cơ sở TỪ DB, không từ JWT (xem lib/auth/fresh-gate-user.ts).
   const u = { id: session.user.id, ...((await getFreshGateUser(session.user.id)) ?? session.user) };
   const cls = sess.class;
-  const allowed =
+  let allowed =
     hasRole(u, "SUPER_ADMIN") ||
     hasRole(u, "TRAINING") ||
-    (hasRole(u, "CENTER_MANAGER") && !!cls.centerId && cls.centerId === u.centerId) ||
     (hasRole(u, "TEACHER") && (cls.teacherId === u.id || cls.assistantId === u.id));
+  if (!allowed && hasRole(u, "CENTER_MANAGER")) {
+    const actor = await resolveActor(session.user.id);
+    allowed = roleManagesCenter(actor, "CENTER_MANAGER", cls.centerId);
+  }
 
   if (!allowed) return { ok: false, error: "Không có quyền điền phiếu buổi học này" };
   return { ok: true, classCenterId: cls.centerId, userId: u.id };
@@ -132,8 +156,14 @@ export async function saveSessionEvalAction(input: unknown): Promise<Result<{ sa
 // ─── FL4 (R4) — phiếu SESSION_EVAL cho buổi LỚP TRẢI NGHIỆM (TrialClassSession) ──
 
 /**
- * Gate ĐIỀN phiếu buổi trải nghiệm: GV phụ trách/trợ giảng lớp trải nghiệm,
- * CENTER_MANAGER cùng cơ sở, hoặc SUPER_ADMIN/TRAINING. Mirror gateFill.
+ * Gate ĐIỀN phiếu buổi trải nghiệm: GV phụ trách/trợ giảng lớp trải nghiệm (hoặc GV dạy
+ * đúng buổi đó), CENTER_MANAGER trong phạm vi cơ sở MÌNH QUẢN LÝ, hoặc SUPER_ADMIN/TRAINING.
+ *
+ * A-01-6 · bất biến L-A6 (26/08/2026) — cùng một luật với `gateFill` ở trên, chỉ đổi
+ * nguồn `centerId` (lớp trải nghiệm). Vì sao cổng NÀY cũng phải sửa chứ không để lại:
+ * hai cổng nuôi CÙNG một màn hình phiếu buổi, nên vá nửa vời sẽ ra cảnh quản lý điền
+ * được phiếu lớp chính ở cơ sở thứ hai nhưng lớp trải nghiệm cùng cơ sở đó thì không —
+ * hỏng đúng kiểu người dùng đi được nửa đường rồi mới gặp tường.
  */
 async function gateTrialFill(
   trialSessionId: string,
@@ -155,12 +185,15 @@ async function gateTrialFill(
   // Vai + cơ sở TỪ DB, không từ JWT (xem lib/auth/fresh-gate-user.ts).
   const u = { id: session.user.id, ...((await getFreshGateUser(session.user.id)) ?? session.user) };
   const cls = sess.trialClass;
-  const allowed =
+  let allowed =
     hasRole(u, "SUPER_ADMIN") ||
     hasRole(u, "TRAINING") ||
-    (hasRole(u, "CENTER_MANAGER") && !!cls.centerId && cls.centerId === u.centerId) ||
     (hasRole(u, "TEACHER") &&
       (cls.teacherId === u.id || cls.assistantId === u.id || sess.teacherId === u.id));
+  if (!allowed && hasRole(u, "CENTER_MANAGER")) {
+    const actor = await resolveActor(session.user.id);
+    allowed = roleManagesCenter(actor, "CENTER_MANAGER", cls.centerId);
+  }
 
   if (!allowed) return { ok: false, error: "Không có quyền điền phiếu buổi học thử này" };
   return { ok: true, trialClassId: sess.trialClassId };

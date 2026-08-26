@@ -5,6 +5,7 @@ import { auth } from "@/lib/auth";
 import { scopedDb } from "@/lib/db-scope";
 import { resolveActor } from "@/lib/auth/actor";
 import { hasRole } from "@/lib/auth/permissions";
+import { roleManagesCenter } from "@/lib/auth/managed-centers";
 import { checkPermission } from "@/lib/auth/check-permission";
 import { TeacherProfileForm } from "./_components/profile-form";
 import { ClassAssignmentSection } from "./_components/class-assignment";
@@ -62,7 +63,16 @@ export default async function TeacherProfilePage({ params, searchParams }: Props
   const overloadHours = await getSetting("teacher.overloadHoursPerWeek");
   const me = session.user;
   const isOwn = me.id === id;
-  const cmInScope = hasRole(me, "CENTER_MANAGER") && teacher.centerId === me.centerId;
+  // A-01-6 · bất biến L-A6 (26/08/2026) — vế QLCS trước đây chép tay `teacher.centerId ===
+  // me.centerId`, tức so với MỘT cơ sở neo trong JWT. Ba cổng GHI ở `../_actions.ts` đã
+  // chuyển sang "cơ sở đang GIỮ vai QLCS"; nếu gate UI giữ luật cũ thì với quản lý 2 cơ
+  // sở, server CHO nhưng nút Lưu / gán lớp / chấm điểm KHÔNG BAO GIỜ HIỆN ở cơ sở thứ
+  // hai — fix đúng mà không nghiệm thu được bằng mắt.
+  // Gọi CHUNG một hàm với server (`roleManagesCenter`) thay vì chép luật lần thứ hai; và
+  // KHÔNG dùng `actor.visibleCenterIds` (tầm nhìn ĐỌC gộp của mọi vai — kiêm nhiệm là nở
+  // ra cơ sở chỉ được xem). Xem `lib/auth/managed-centers.ts`.
+  const cmInScope =
+    hasRole(me, "CENTER_MANAGER") && roleManagesCenter(actor, "CENTER_MANAGER", teacher.centerId);
   // Xem: SUPER_ADMIN/HR (employees:view-all & không phải CM), CM cùng cơ sở, hoặc GV xem chính mình.
   const canViewByRole =
     (await checkPermission("employees:view-all", { centerId: teacher.centerId })) &&

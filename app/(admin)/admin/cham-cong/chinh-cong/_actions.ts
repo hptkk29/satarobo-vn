@@ -7,6 +7,7 @@ import { hasRole } from "@/lib/auth/permissions";
 import { checkPermission } from "@/lib/auth/check-permission";
 import { getAuditActor } from "@/lib/audit/log";
 import { resolveActor } from "@/lib/auth/actor";
+import { roleManagesCenter } from "@/lib/auth/managed-centers";
 import { scopedDb } from "@/lib/db-scope";
 import { canAdjustTimesheet, combineVNDateTime } from "@/lib/attendance/adjust";
 import { getSetting } from "@/lib/settings/service";
@@ -139,7 +140,10 @@ export async function reviewAdjustmentRequest(input: unknown): Promise<Result> {
   const p = parsed.data;
 
   // sdb.findUnique tự null-filter yêu cầu ngoài tầm nhìn cơ sở (chống IDOR duyệt chéo).
-  const sdb = scopedDb(await resolveActor(session.user.id));
+  // ⚠️ Đó là lớp ĐỌC (luật cứng #3): nó nở theo MỌI vai kiêm nhiệm, nên không thay được
+  // cổng GHI bên dưới — duyệt yêu cầu là hành vi ghi (áp giờ + đổi trạng thái).
+  const actor = await resolveActor(session.user.id);
+  const sdb = scopedDb(actor);
   const req = await sdb.timesheetAdjustmentRequest.findUnique({ where: { id: p.id } });
   if (!req) return { ok: false, error: "Không tìm thấy yêu cầu" };
   if (!(await checkPermission("hr_attendance:adjust", { centerId: req.centerId }))) {
@@ -149,8 +153,20 @@ export async function reviewAdjustmentRequest(input: unknown): Promise<Result> {
 
   const isSuper = hasRole(session.user, "SUPER_ADMIN");
   const isCM = hasRole(session.user, "CENTER_MANAGER");
-  // CM chỉ duyệt yêu cầu thuộc cơ sở mình.
-  if (isCM && !isSuper && req.centerId && req.centerId !== session.user.centerId) {
+  // QLCS chỉ duyệt yêu cầu thuộc cơ sở MÌNH ĐANG QUẢN LÝ.
+  //
+  // A-01-6b (26/08/2026): vế phải cũ là `session.user.centerId` — một cơ sở neo chụp lúc
+  // đăng nhập ⇒ QLCS hai cơ sở không duyệt được yêu cầu của cơ sở thứ hai. Đo lại bằng
+  // chính dòng `UserOrgRole` sinh ra vai CENTER_MANAGER.
+  //
+  // ⚠️ `hr_attendance:adjust` seed GLOBAL cho QLCS (prisma/seed-roles.ts) nên
+  // `checkPermission` ở trên KHÔNG cắt theo cơ sở — cách ly cơ sở của cổng này nằm HẲN ở
+  // dòng dưới. Vì thế cũng KHÔNG được thay bằng `actor.visibleCenterIds`/`passesScope`:
+  // cả hai nở theo vai kiêm nhiệm (xem đầu `lib/auth/managed-centers.ts`).
+  //
+  // Giữ nguyên vế `req.centerId &&`: yêu cầu CHƯA gắn cơ sở (nhân sự Hội sở gửi lên) vốn
+  // không bị chặn ở đây — siết nó lại là đổi hành vi ngoài phạm vi bản vá này.
+  if (isCM && !isSuper && req.centerId && !roleManagesCenter(actor, "CENTER_MANAGER", req.centerId)) {
     return { ok: false, error: "Yêu cầu thuộc cơ sở khác" };
   }
 
@@ -219,7 +235,10 @@ export async function adjustTimesheetDirect(input: unknown): Promise<Result> {
   const p = parsed.data;
   if (!p.checkIn && !p.checkOut) return { ok: false, error: "Nhập ít nhất 1 giờ vào/ra" };
 
-  const sdb = scopedDb(await resolveActor(session.user.id));
+  // User KHÔNG thuộc SCOPED_MODELS → `sdb.user` là pass-through: dòng dưới KHÔNG lọc cơ
+  // sở hộ ai. Cách ly nằm ở cổng GHI phía sau (luật cứng #3).
+  const actor = await resolveActor(session.user.id);
+  const sdb = scopedDb(actor);
   const target = await sdb.user.findUnique({ where: { id: p.userId }, select: { centerId: true } });
   if (!target) return { ok: false, error: "Nhân viên không tồn tại" };
 
@@ -229,7 +248,14 @@ export async function adjustTimesheetDirect(input: unknown): Promise<Result> {
 
   const isSuper = hasRole(session.user, "SUPER_ADMIN");
   const isCM = hasRole(session.user, "CENTER_MANAGER");
-  if (isCM && !isSuper && target.centerId !== session.user.centerId) {
+  // QLCS chỉ chỉnh công nhân viên của cơ sở MÌNH ĐANG QUẢN LÝ (A-01-6b, 26/08/2026 —
+  // cùng lý lẽ với `reviewAdjustmentRequest` ở trên; `hr_attendance:adjust` seed GLOBAL
+  // nên `checkPermission` không cắt theo cơ sở).
+  //
+  // Nhân viên CHƯA gắn cơ sở (`centerId = null`) → TỪ CHỐI: hôm nay đã từ chối rồi (vế
+  // `null !== "cs-1"`), chỉ khác đúng ca hiếm "QLCS cũng không có cơ sở neo" — nay
+  // fail-closed theo đúng hợp đồng của `roleManagesCenter`.
+  if (isCM && !isSuper && !roleManagesCenter(actor, "CENTER_MANAGER", target.centerId)) {
     return { ok: false, error: "Nhân viên thuộc cơ sở khác" };
   }
 

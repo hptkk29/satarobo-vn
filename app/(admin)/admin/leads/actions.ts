@@ -11,6 +11,7 @@ import { phoneVn } from '@/lib/validators/phone'
 import type { Prisma } from '@prisma/client'
 import { logLeadAudit, getAuditActor } from '@/lib/audit/log'
 import { resolveActor } from '@/lib/auth/actor'
+import { roleManagesCenter } from '@/lib/auth/managed-centers'
 import { passesScope, scopedDb } from '@/lib/db-scope'
 import { getLeadPaymentSummary } from '@/lib/payments/summary'
 import { autoAssignLead, reassignOpenLeads } from '@/lib/lead/assign'
@@ -818,7 +819,30 @@ export async function assignLeadToSaleAction(
 
 const ASSIGN_MODES = ['ROUND_ROBIN', 'CLOSE_RATE', 'MANUAL'] as const
 
-/** Quản lý cơ sở đặt chế độ chia cho cơ sở mình; SUPER_ADMIN đặt mọi cơ sở. */
+/**
+ * Quản lý cơ sở đặt chế độ chia cho CÁC CƠ SỞ MÌNH QUẢN LÝ; SUPER_ADMIN đặt mọi cơ sở.
+ *
+ * ── A-01-6 · bất biến L-A6 (26/08/2026) ────────────────────────────────────────
+ * Đây là cổng GHI, và là cổng cách ly cơ sở DUY NHẤT của đường ghi này:
+ *   · `db.leadAssignmentConfig.upsert` đi `db` TRẦN (file nằm trong allowlist loại B),
+ *     mà `LeadAssignmentConfig` lại là SCOPE_EXEMPT (`lib/db-scope.ts`) ⇒ kể cả đi qua
+ *     `scopedDb` cũng pass-through. `scopedDb` chỉ che đường ĐỌC — không trông vào nó.
+ *   · Cổng ngoài `leads:assign` là GLOBAL với CENTER_MANAGER (`prisma/seed-roles.ts`)
+ *     ⇒ `can()` v2 khớp MỌI `target.centerId` (`lib/auth/can.ts` — nhánh GLOBAL).
+ *
+ * Điều kiện cũ là `session.user.centerId !== centerId`, tức so với ĐÚNG MỘT cơ sở neo
+ * (ảnh chụp lúc đăng nhập). Quản lý giữ 2 cơ sở đổi được chế độ chia của cơ sở neo mà
+ * không đổi được của cơ sở thứ hai họ cũng đang quản lý.
+ *
+ * Phép đo hôm nay: cơ sở đích phải nằm trong tập cơ sở người này đang giữ CHÍNH vai
+ * `CENTER_MANAGER` (`roleManagesCenter` — suy từ `PermEntry.roleCode` + `centerScope`,
+ * tức từ đúng dòng `UserOrgRole` đẻ ra quyền).
+ * ⚠️ KHÔNG dùng `visibleCenterIds`/`passesScope`: cả hai nở theo vai KIÊM NHIỆM (QLCS@CS1
+ * kiêm kế toán@CS2, hoặc kiêm một vai Hội sở ⇒ `isHoLevel` ⇒ mọi cơ sở), nên AND chúng
+ * lại vẫn không cắt gì. Lý lẽ đầy đủ: khối chú thích đầu `lib/auth/managed-centers.ts`.
+ * Nới CHỈ MỘT CHIỀU cho vai QLCS — các vai khác không đi qua nhánh này, hành vi y nguyên.
+ * Test ghim: `./actions.test.ts` ([L-A6], client ghi giả không lọc gì).
+ */
 export async function setCenterAssignModeAction(
   centerId: string,
   mode: string,
@@ -831,10 +855,13 @@ export async function setCenterAssignModeAction(
     return { ok: false, error: 'Chế độ không hợp lệ' }
   }
 
-  // CENTER_MANAGER (không kèm SUPER_ADMIN) chỉ đặt cơ sở mình.
+  // CENTER_MANAGER (không kèm SUPER_ADMIN) chỉ đặt các cơ sở mình đang quản lý.
   const isSuper = hasRole(session.user, 'SUPER_ADMIN')
-  if (!isSuper && hasRole(session.user, 'CENTER_MANAGER') && session.user.centerId !== centerId) {
-    return { ok: false, error: 'Chỉ đặt được cơ sở của bạn' }
+  if (!isSuper && hasRole(session.user, 'CENTER_MANAGER')) {
+    const actor = await resolveActor(session.user.id)
+    if (!roleManagesCenter(actor, 'CENTER_MANAGER', centerId)) {
+      return { ok: false, error: 'Chỉ đặt được cơ sở bạn quản lý' }
+    }
   }
 
   await db.leadAssignmentConfig.upsert({
