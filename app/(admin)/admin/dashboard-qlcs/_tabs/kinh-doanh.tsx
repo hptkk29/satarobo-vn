@@ -4,6 +4,7 @@ import type { ScopeFilters } from "@/lib/reports/scope-filters";
 import { getConvertedLeadRows } from "@/lib/reports/converted-leads";
 import { getLostLeadRows } from "@/lib/reports/lost-leads";
 import { loadStaleLeadThresholdsByCenter } from "@/lib/lead/stale-lead-config";
+import { qlcsFilterParams } from "@/lib/dashboard/qlcs-tabs";
 import { ChoDuLieu } from "../_components/cho-du-lieu";
 import { BangLeadChuyenDoi } from "./_bang-lead-chuyen-doi";
 import { BangLeadRot } from "./_bang-lead-rot";
@@ -12,7 +13,7 @@ import { BangLeadRot } from "./_bang-lead-rot";
  * Tab Kinh doanh — khu vực C (C-02 khối chỉ số lead · **C-03 bảng lead đã chuyển đổi** ·
  * C-04 xuất Excel · **C-05 bảng lead rớt**).
  *
- * C-03 và C-05 đã nối số liệu thật; C-02/C-04 vẫn chờ nên phần dưới màn giữ khối
+ * C-03, C-04 và C-05 đã chạy trên dữ liệu thật; C-02 vẫn chờ nên phần dưới màn giữ khối
  * `ChoDuLieu` — cố ý KHÔNG hiện thẻ "Tổng lead: 0", vì một thẻ 0 trông y hệt kết quả đo
  * thật.
  *
@@ -59,13 +60,17 @@ export async function TabKinhDoanh({
   // Hai ngưỡng cảnh báo là `centerOverridable` (quyết định 12(a)) ⇒ lấy theo TỪNG cơ sở
   // rồi áp cho đúng phiếu của cơ sở đó. Lấy một bộ chung cho cả bảng là cùng một phiếu
   // đổi màu tuỳ người xem đang mở một cơ sở hay nhiều cơ sở.
-  const [nguong, coQuyenPii, coQuyenTien] = await Promise.all([
+  const [nguong, coQuyenPii, coQuyenTien, coQuyenXuat] = await Promise.all([
     loadStaleLeadThresholdsByCenter(filters.centerIds),
     canViewLeadPii(),
     // Vào được tab Kinh doanh KHÔNG đồng nghĩa xem được tiền — cùng luật với tab Tài
     // chính ngay bên cạnh. Thiếu quyền thì hai cột tiền của C-03 không được dựng, và
     // đường đọc `Payment` cũng không chạy lần nào.
     checkPermission("payments:view"),
+    // C-04 / A-03 — quyền MANG DỮ LIỆU RA NGOÀI, tách khỏi quyền xem bảng. Ở đây chỉ để
+    // quyết định có dựng nút hay không; route xuất tự gác lại cả hai cửa, vì giấu nút
+    // không phải là kiểm soát truy cập.
+    checkPermission("leads:export"),
   ]);
 
   const bcChuyenDoi = await getConvertedLeadRows(actor, filters, {
@@ -88,6 +93,20 @@ export async function TabKinhDoanh({
 
   const centerNameById = new Map(visibleCenters.map((c) => [c.id, c.name]));
 
+  // C-04 — link xuất dựng từ CHÍNH bộ lọc đã giải (`qlcsFilterParams`, dùng chung với
+  // link chuyển tab), không phải từ chuỗi truy vấn thô: chuyền chuỗi thô sang là ngày
+  // tương lai bị kẹp / cơ sở ngoài phạm vi bị loại sẽ "sống lại" trong tệp, và tệp tải
+  // về khác thứ đang hiển thị trên màn.
+  const exportHref = coQuyenXuat
+    ? `/api/admin/dashboard-qlcs/lead-chuyen-doi-export?${qlcsFilterParams({
+        centerIds: filters.centerIds,
+        isAllCenters: filters.isAllCenters,
+        dateFrom: dateFromStr,
+        dateTo: dateToStr,
+        split: filters.groupByCenter,
+      }).toString()}`
+    : null;
+
   return (
     <div className="space-y-5">
       <BangLeadChuyenDoi
@@ -95,6 +114,7 @@ export async function TabKinhDoanh({
         centerNameById={centerNameById}
         dateFromStr={dateFromStr}
         dateToStr={dateToStr}
+        exportHref={exportHref}
       />
 
       <BangLeadRot
@@ -107,22 +127,22 @@ export async function TabKinhDoanh({
       />
 
       <ChoDuLieu
-        maSpec="C-02 · C-04"
-        tieuDe="Khối chỉ số lead và nút xuất Excel: chưa nối vào màn"
+        maSpec="C-02"
+        tieuDe="Khối chỉ số lead: chưa nối vào màn"
         giaiThich={
-          "Hai bảng làm việc của khu vực C (C-03 lead đã chuyển đổi, C-05 lead rớt) đã " +
-          "chạy trên dữ liệu thật. Phần còn lại là khối ba con số ở đầu tab và nút xuất " +
-          "tệp — cả hai đều cần thứ chưa có, không phải chỉ cần ghép giao diện."
+          "Ba bảng/nút làm việc của khu vực C (C-03 lead đã chuyển đổi, C-04 xuất Excel, " +
+          "C-05 lead rớt) đã chạy trên dữ liệu thật. Phần còn lại là khối ba con số ở đầu " +
+          "tab — nó cần thứ chưa có, không phải chỉ cần ghép giao diện."
         }
         daCo={[
           "Chỉ tiêu lead theo tháng × cơ sở (C-01) — bảng LeadTarget + màn /bao-cao/muc-tieu-lead",
           "Doanh thu thực thu quy về từng con — lib/reports/revenue-by-child.ts",
           "Mốc chốt + giá trị hợp đồng theo từng con (G-06) — LeadChild.closedAt / contractValue",
           "Bảng C-03 đủ 9 cột, đếm theo học sinh, kèm khối đối soát với tab Tài chính",
+          "C-04 xuất Excel bảng C-03 theo đúng bộ lọc đang áp dụng, gác bằng quyền leads:export (A-03)",
         ]}
         chuaCo={[
           "C-02 tổng lead · tỷ lệ đạt chỉ tiêu · tỷ lệ chốt, theo khoảng ngày đang lọc",
-          "C-04 xuất Excel bảng C-03 — chặn bởi quyền xuất lead của A-03 (chưa có quyền gán được)",
         ]}
       />
     </div>

@@ -11,6 +11,7 @@ import {
   scopeFilterCacheKey,
   scopeCenterWhere,
   scopeDateWhere,
+  parseScopeFilterSearchParams,
   type ScopeFilterSearchParams,
 } from "@/lib/reports/scope-filters";
 
@@ -280,5 +281,59 @@ describe("[A-02][RT-2] scopeCenterWhere / scopeDateWhere", () => {
     const w = scopeDateWhere(build({}).filters);
     expect(w.gte.toISOString()).toBe("2026-07-31T17:00:00.000Z");
     expect(w.lte.toISOString()).toBe("2026-08-25T16:59:59.999Z");
+  });
+});
+
+// ───────── Đọc bộ lọc từ URLSearchParams (đường ROUTE, vd xuất Excel C-04) ─────────
+
+describe("[A-02] parseScopeFilterSearchParams — route giải lại đúng bộ lọc của màn hình", () => {
+  it("GOM ĐỦ mọi ?center= lặp lại — đây là chỗ dễ mất cơ sở nhất", () => {
+    // `URLSearchParams.get()` chỉ trả giá trị ĐẦU. Route dùng nhầm `get` thì tệp xuất ra
+    // chỉ có cơ sở thứ nhất, không lỗi, không cảnh báo — người dùng chỉ phát hiện khi
+    // ngồi đối chiếu tay với bảng trên màn.
+    const sp = parseScopeFilterSearchParams(
+      new URLSearchParams("center=cs1&center=cs2&center=cs3"),
+    );
+    expect(sp.center).toEqual(["cs1", "cs2", "cs3"]);
+  });
+
+  it("vắng ?center= ⇒ mảng rỗng, tức 'toàn bộ phạm vi' đúng như khi vắng mặt trên trang", () => {
+    const sp = parseScopeFilterSearchParams(new URLSearchParams("dateFrom=2026-08-01"));
+    expect(sp.center).toEqual([]);
+    expect(buildScopeFilters({ visibleCenterIds: VISIBLE_2, sp, now: NOW }).filters).toMatchObject({
+      centerIds: ["cs1", "cs2"],
+      isAllCenters: true,
+    });
+  });
+
+  it("chuỗi truy vấn do chính trang phát ra quay ngược lại cho ra ĐÚNG bộ lọc cũ", () => {
+    // Đây là hợp đồng thật của C-04: link xuất được dựng bằng `qlcsFilterParams` từ bộ
+    // lọc ĐÃ GIẢI, rồi route giải lại. Hai đầu lệch nhau là tệp khác màn hình.
+    const goc = build({ center: ["cs2"], dateFrom: "2026-08-03", dateTo: "2026-08-09" });
+    const lai = buildScopeFilters({
+      visibleCenterIds: VISIBLE_2,
+      sp: parseScopeFilterSearchParams(
+        new URLSearchParams("center=cs2&dateFrom=2026-08-03&dateTo=2026-08-09"),
+      ),
+      now: NOW,
+    });
+    expect(lai.filters).toEqual(goc.filters);
+  });
+
+  it("cơ sở ngoài phạm vi gõ tay vào URL vẫn bị loại — nút xuất không phải cửa sau", () => {
+    const lai = buildScopeFilters({
+      visibleCenterIds: VISIBLE_2,
+      sp: parseScopeFilterSearchParams(new URLSearchParams("center=cs1&center=cs3")),
+      now: NOW,
+    });
+    expect(lai.filters.centerIds).toEqual(["cs1"]);
+    expect(lai.droppedCenterCount).toBe(1);
+  });
+
+  it("tham số vắng mặt trả undefined chứ không phải chuỗi rỗng (chuỗi rỗng là ngày rác)", () => {
+    const sp = parseScopeFilterSearchParams(new URLSearchParams(""));
+    expect(sp.dateFrom).toBeUndefined();
+    expect(sp.dateTo).toBeUndefined();
+    expect(sp.split).toBeUndefined();
   });
 });

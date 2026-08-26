@@ -23,17 +23,24 @@ import {
  * hiện: bỏ nó là tổng bảng này thấp hơn tab Tài chính trên cùng màn hình mà không ai
  * giải thích được. `PhanTrangBang` chỉ cắt `<tbody>` nên bốn dòng này luôn hiện ở mọi
  * trang, kể cả trang cuối.
+ *
+ * C-04 — nút xuất Excel (`exportHref`) mang NGUYÊN bộ lọc đang áp dụng sang route xuất,
+ * nên tệp tải về đúng bằng thứ đang nhìn. `null` = tài khoản không có quyền xuất
+ * (`leads:export`, A-03) ⇒ không dựng nút; quyền che tiền/PII do route tự chấm lại, ở
+ * đây không đoán hộ.
  */
 export function BangLeadChuyenDoi({
   bc,
   centerNameById,
   dateFromStr,
   dateToStr,
+  exportHref,
 }: {
   bc: ConvertedLeadReport;
   centerNameById: Map<string, string>;
   dateFromStr: string;
   dateToStr: string;
+  exportHref: string | null;
 }) {
   const coTien = bc.revenue !== null;
   // 9 cột spec; bỏ 2 cột tiền khi người xem không có `payments:view`.
@@ -41,11 +48,25 @@ export function BangLeadChuyenDoi({
 
   return (
     <section className="rounded-xl border border-border bg-card p-4">
-      <div className="flex flex-wrap items-baseline justify-between gap-2">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <h2 className="text-sm font-semibold text-foreground">Lead đã chuyển đổi</h2>
-        <span className="rounded-full border border-border px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
-          C-03
-        </span>
+        <div className="flex items-center gap-2">
+          {exportHref && bc.rows.length > 0 ? (
+            // <a> thuần, KHÔNG <Link>: đích là một tệp đính kèm chứ không phải một
+            // trang — cho router của Next đi trước rồi mới nhận Content-Disposition là
+            // thêm một lần chuyển trang thừa.
+            <a
+              href={exportHref}
+              className="rounded-md border border-border px-3 py-1.5 text-xs font-medium text-foreground hover:bg-muted"
+              title="Tải bảng này về dạng .xlsx, đúng bộ lọc đang áp dụng. Lượt tải được ghi nhật ký."
+            >
+              Xuất Excel
+            </a>
+          ) : null}
+          <span className="rounded-full border border-border px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
+            C-03
+          </span>
+        </div>
       </div>
 
       {/* Ba câu bắt buộc nói ra, vì không nói thì người xem sẽ tự suy ra điều sai:

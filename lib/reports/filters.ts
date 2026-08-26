@@ -17,6 +17,7 @@ export {
   buildScopeFilters,
   resolveScopeCenters,
   resolveScopeDayRange,
+  parseScopeFilterSearchParams,
   visibleCentersForActor,
   scopeCenterWhere,
   scopeDateWhere,
