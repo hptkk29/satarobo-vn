@@ -1094,21 +1094,75 @@ export async function updateLeadFields(
 
 // ─── Module CRM & Lead PHẦN 2 — gán tay + auto-chia + cấu hình chế độ ─────────
 
-/** Auto-chia 1 lead theo cơ sở → chế độ (tôn trọng khoá khi đã tương tác). */
+/**
+ * Auto-chia 1 lead theo cơ sở → chế độ (tôn trọng khoá khi đã tương tác).
+ *
+ * ⚠️ S-2b (25/08/2026) — HẾT BÁO THÀNH CÔNG GIẢ. Bản cũ vứt bỏ toàn bộ kết quả
+ * của `autoAssignNewLead` (`skipped`, `assignedToId`, `mode`) và luôn trả
+ * `{ ok: true }`, nên nút "Chia lại lead" lần nào bấm cũng bắn toast xanh "Đã
+ * chia lại lead theo cấu hình cơ sở" — kể cả 5 đường KHÔNG LÀM GÌ của tầng dưới.
+ *
+ * Đường thường gặp nhất là tệ nhất: `autoAssignNewLead` **bỏ qua lead đã có người
+ * phụ trách**, mà nút thì nằm trên trang chi tiết lead — nơi lead gần như luôn đã
+ * được phân công. Nghĩa là cái nút tên "Chia LẠI" về bản chất không bao giờ chia
+ * lại được, nhưng quản lý bấm xong tin là đã đổi người.
+ *
+ * KHÔNG đổi luật chia ở đây: khoá-khi-đã-tương-tác và bỏ-fallback-xuyên-cơ-sở là
+ * quyết định có chủ đích của Đợt D, đổi chúng là việc của chủ dự án. Việc của
+ * action chỉ là **nói đúng chuyện đã xảy ra**: `ok: true` chỉ khi thật sự ghi
+ * được người nhận mới, còn lại trả lý do cụ thể kèm chỗ phải làm tiếp.
+ */
 export async function autoAssignNewLeadAction(
   leadId: string,
-): Promise<{ ok: boolean; error?: string }> {
+): Promise<{ ok: true; assignedToId: string } | { ok: false; error: string }> {
   const session = await auth()
   if (!session?.user) return { ok: false, error: 'Chưa đăng nhập' }
   if (!(await checkPermission('leads:assign'))) return { ok: false, error: 'Không có quyền' }
 
   const { actorId, actorName } = getAuditActor(session)
   const res = await autoAssignNewLead(leadId, { actorId, actorName })
-  if (!res.ok) return { ok: false, error: res.error }
+  if (!res.ok) return { ok: false, error: res.error ?? 'Không chia được lead' }
+
+  // Tầng dưới trả `ok: true` cho cả những lần nó CỐ Ý không làm gì. Dịch từng
+  // đường đó thành một câu người bấm hiểu được, thay vì nuốt hết thành màu xanh.
+  if (res.skipped) {
+    return res.assignedToId
+      ? {
+          ok: false,
+          error:
+            'Lead đã có người phụ trách — nút này chỉ chia lead CHƯA phân công. ' +
+            'Muốn đổi người, dùng ô "Gán tay" hoặc "Chuyển cơ sở" bên cạnh.',
+        }
+      : {
+          ok: false,
+          error:
+            'Lead đã có tương tác của tư vấn viên nên hệ thống khoá tự chia lại. ' +
+            'Muốn đổi người, dùng ô "Gán tay".',
+        }
+  }
+
+  if (!res.assignedToId) {
+    if (!res.centerId) {
+      return { ok: false, error: 'Lead chưa thuộc cơ sở nào — chọn cơ sở trước khi chia.' }
+    }
+    if (res.mode === 'MANUAL') {
+      return {
+        ok: false,
+        error:
+          'Cơ sở đang đặt chế độ "Gán tay" nên hệ thống không tự chia. ' +
+          'Chọn người ở ô "Gán tay".',
+      }
+    }
+    return {
+      ok: false,
+      error:
+        'Cơ sở chưa có tư vấn viên đang hoạt động để nhận lead — lead vẫn ở trạng thái chưa phân công.',
+    }
+  }
 
   revalidatePath('/leads')
   revalidatePath(`/leads/${leadId}`)
-  return { ok: true }
+  return { ok: true, assignedToId: res.assignedToId }
 }
 
 /** Quản lý gán tay 1 lead cho 1 sale cụ thể. */

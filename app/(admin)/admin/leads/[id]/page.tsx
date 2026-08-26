@@ -363,7 +363,12 @@ export default async function LeadDetailPage({ params }: Props) {
               currentSaleId={lead.assignedToId}
             />
           )}
-          {canAssign && <ReassignButton leadId={lead.id} />}
+          {canAssign && (
+            <ReassignButton
+              leadId={lead.id}
+              daCoNguoiPhuTrach={Boolean(lead.assignedToId)}
+            />
+          )}
         </div>
       </div>
 
