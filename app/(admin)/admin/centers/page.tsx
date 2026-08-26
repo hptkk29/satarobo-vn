@@ -83,7 +83,7 @@ export default async function CentersAdminPage() {
       </div>
 
       <div className="overflow-hidden rounded-xl border border-border bg-card">
-        <PhanTrangBang>
+        <PhanTrangBang cuonNgang>
           <table className="w-full">
             <thead className="border-b border-border bg-muted text-left">
               <tr>

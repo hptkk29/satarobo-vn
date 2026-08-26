@@ -71,8 +71,7 @@ export function ClassFeedbackPanel({ data }: { data: ClassSessionFeedbackData })
           )}
         </p>
         <div className="overflow-hidden rounded-xl border border-border bg-card">
-          <div className="overflow-x-auto">
-          <PhanTrangBang tenDonVi="buổi" khoaGhiNho="lop-nhan-xet-buoi" className="p-3">
+          <PhanTrangBang cuonNgang tenDonVi="buổi" khoaGhiNho="lop-nhan-xet-buoi" className="p-3">
           <table className="w-full min-w-[34rem] text-sm">
             <thead>
               <tr className="border-b border-border text-left text-xs uppercase tracking-wide text-muted-foreground">
@@ -114,7 +113,6 @@ export function ClassFeedbackPanel({ data }: { data: ClassSessionFeedbackData })
             </tbody>
           </table>
           </PhanTrangBang>
-          </div>
         </div>
       </section>
 

@@ -234,62 +234,60 @@ export default async function CohortReportPage({ searchParams }: SearchParams) {
             Chi tiết theo cohort
           </h2>
         </div>
-        <div className="overflow-x-auto">
-          <PhanTrangBang>
-            <table className="w-full min-w-[640px] text-sm">
-              <thead className="text-left text-xs text-muted-foreground">
+        <PhanTrangBang cuonNgang>
+          <table className="w-full min-w-[640px] text-sm">
+            <thead className="text-left text-xs text-muted-foreground">
+              <tr>
+                <th className="px-4 py-2">Kỳ bắt đầu</th>
+                <th className="px-4 py-2 text-right">Ghi danh</th>
+                <th className="px-4 py-2 text-right">Tiến độ TB</th>
+                <th className="px-4 py-2 text-right">Hoàn thành</th>
+                <th className="px-4 py-2 text-right">Đang học</th>
+                <th className="px-4 py-2 text-right">Rút</th>
+              </tr>
+            </thead>
+            <tbody>
+              {report.rows.length === 0 ? (
                 <tr>
-                  <th className="px-4 py-2">Kỳ bắt đầu</th>
-                  <th className="px-4 py-2 text-right">Ghi danh</th>
-                  <th className="px-4 py-2 text-right">Tiến độ TB</th>
-                  <th className="px-4 py-2 text-right">Hoàn thành</th>
-                  <th className="px-4 py-2 text-right">Đang học</th>
-                  <th className="px-4 py-2 text-right">Rút</th>
+                  <td
+                    colSpan={6}
+                    className="px-4 py-6 text-center text-muted-foreground"
+                  >
+                    Không có ghi danh trong phạm vi cơ sở.
+                  </td>
                 </tr>
-              </thead>
-              <tbody>
-                {report.rows.length === 0 ? (
-                  <tr>
-                    <td
-                      colSpan={6}
-                      className="px-4 py-6 text-center text-muted-foreground"
-                    >
-                      Không có ghi danh trong phạm vi cơ sở.
+              ) : (
+                report.rows.map((r) => (
+                  <tr key={r.cohort} className="border-t">
+                    <td className="px-4 py-2 font-medium">{r.cohort}</td>
+                    <td className="px-4 py-2 text-right">{num(r.total)}</td>
+                    <td className="px-4 py-2 text-right font-semibold">
+                      {r.avgProgress}%
+                    </td>
+                    <td className="px-4 py-2 text-right text-state-success-ink">
+                      {num(r.completed)}{" "}
+                      <span className="text-xs text-muted-foreground">
+                        ({r.completionRate}%)
+                      </span>
+                    </td>
+                    <td className="px-4 py-2 text-right text-primary">
+                      {num(r.studying)}{" "}
+                      <span className="text-xs text-muted-foreground">
+                        ({r.studyingRate}%)
+                      </span>
+                    </td>
+                    <td className="px-4 py-2 text-right text-state-danger-ink">
+                      {num(r.withdrew)}{" "}
+                      <span className="text-xs text-muted-foreground">
+                        ({r.withdrewRate}%)
+                      </span>
                     </td>
                   </tr>
-                ) : (
-                  report.rows.map((r) => (
-                    <tr key={r.cohort} className="border-t">
-                      <td className="px-4 py-2 font-medium">{r.cohort}</td>
-                      <td className="px-4 py-2 text-right">{num(r.total)}</td>
-                      <td className="px-4 py-2 text-right font-semibold">
-                        {r.avgProgress}%
-                      </td>
-                      <td className="px-4 py-2 text-right text-state-success-ink">
-                        {num(r.completed)}{" "}
-                        <span className="text-xs text-muted-foreground">
-                          ({r.completionRate}%)
-                        </span>
-                      </td>
-                      <td className="px-4 py-2 text-right text-primary">
-                        {num(r.studying)}{" "}
-                        <span className="text-xs text-muted-foreground">
-                          ({r.studyingRate}%)
-                        </span>
-                      </td>
-                      <td className="px-4 py-2 text-right text-state-danger-ink">
-                        {num(r.withdrew)}{" "}
-                        <span className="text-xs text-muted-foreground">
-                          ({r.withdrewRate}%)
-                        </span>
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </PhanTrangBang>
-        </div>
+                ))
+              )}
+            </tbody>
+          </table>
+        </PhanTrangBang>
       </section>
     </div>
   );

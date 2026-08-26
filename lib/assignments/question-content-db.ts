@@ -23,13 +23,30 @@ import {
 /* ------------------------------- Zod (server) ------------------------------ */
 
 const idSchema = z.string().min(1).max(64);
+
+/**
+ * ⚠️ TRẦN ĐỘ DÀI XUẤT KHẨU — mọi bên GHI vào `contentJson` phải dùng đúng hai số
+ * này, không được tự đặt số của mình.
+ *
+ * Vì sao phải xuất: kho câu hỏi e-learning từng cho `stem` tới 4000 và mỗi lựa chọn
+ * tới 1000, trong khi khuôn ĐỌC ở đây cắt ở 2000/500. Người soạn gõ một đề bài dài
+ * — hoàn toàn hợp lệ theo màn soạn, không có gì đỏ — là đẻ ra một câu mà đường thi
+ * KHÔNG ĐỌC ĐƯỢC. Câu đó rơi vào nhánh "chờ người chấm", kéo mọi lượt của mọi người
+ * trên đề đó treo lại. Hai con số nằm ở hai tệp thì chúng sẽ trôi khỏi nhau; nằm ở
+ * một chỗ thì không.
+ */
+export const TRAN_NOI_DUNG_CAU = 2000;
+export const TRAN_LUA_CHON = 500;
+
 const questionText = z
   .string()
   .trim()
   .min(1, "Chưa nhập nội dung câu hỏi")
-  .max(2000, "Nội dung câu hỏi tối đa 2000 ký tự");
+  .max(TRAN_NOI_DUNG_CAU, `Nội dung câu hỏi tối đa ${TRAN_NOI_DUNG_CAU} ký tự`);
 // Ô đáp án cho phép chuỗi rỗng (cleanQuestion sẽ bỏ) — chỉ chặn quá dài.
-const optionText = z.string().max(500, "Đáp án tối đa 500 ký tự");
+const optionText = z
+  .string()
+  .max(TRAN_LUA_CHON, `Đáp án tối đa ${TRAN_LUA_CHON} ký tự`);
 const pairText = z.string().max(300, "Nội dung mỗi vế tối đa 300 ký tự");
 
 export const contentQuestionSchema = z.discriminatedUnion("type", [

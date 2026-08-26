@@ -19,7 +19,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useMemo } from "react";
-import { CalendarDays, LayoutList, LogOut, UserPlus } from "lucide-react";
+import { BookOpen, CalendarDays, LayoutList, LogOut, UserPlus, Users } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { PAGE_GATES } from "@/lib/auth/page-gates";
 import { cn } from "@/lib/utils";
@@ -35,7 +35,19 @@ type NavItem = {
 const NAV: NavItem[] = [
   // Trang chủ luôn hiện — layout đã gác ai vào được site này rồi.
   { label: "Bảng việc", href: "/sale", icon: LayoutList },
+  {
+    label: "Khách của tôi",
+    href: "/sale/khach-cua-toi",
+    icon: Users,
+    perm: PAGE_GATES["/sale/khach-cua-toi"],
+  },
   { label: "Lớp trải nghiệm", href: "/sale/trial", icon: CalendarDays, perm: PAGE_GATES["/sale/trial"] },
+  {
+    label: "Tra cứu",
+    href: "/sale/tra-cuu",
+    icon: BookOpen,
+    perm: PAGE_GATES["/sale/tra-cuu"],
+  },
   {
     label: "Nhập khách hàng",
     href: "/sale/nhap-khach-hang",

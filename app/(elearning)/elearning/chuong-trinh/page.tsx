@@ -120,7 +120,7 @@ export default async function Page() {
               Chưa có chương trình nào. Lập một chương trình ở khối trên trước.
             </p>
           ) : (
-            <PhanTrangBang tenDonVi="chương trình" soDongMacDinh={20}>
+            <PhanTrangBang cuonNgang tenDonVi="chương trình" soDongMacDinh={20}>
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-border text-left">
@@ -176,7 +176,7 @@ export default async function Page() {
         {phieu.length === 0 ? (
           <p className="text-sm text-muted-foreground">Chưa có phiếu nhu cầu nào.</p>
         ) : (
-          <PhanTrangBang tenDonVi="phiếu" soDongMacDinh={20}>
+          <PhanTrangBang cuonNgang tenDonVi="phiếu" soDongMacDinh={20}>
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b border-border text-left">
@@ -216,10 +216,25 @@ export default async function Page() {
         )}
       </section>
 
+      {/* Lối vào cho hai màn soạn. Trang không có lối vào thì chỉ người viết nó
+          biết đường tới — khu e-learning không có thanh điều hướng chung, nên mỗi
+          màn mới phải được một màn cũ dẫn tới. */}
       <p className="text-xs text-muted-foreground">
         Soạn nội dung khoá ở{" "}
         <Link href="/elearning/soan-khoa" className="underline">
           màn soạn khoá
+        </Link>
+        , câu hỏi cho đề thi ở{" "}
+        <Link href="/elearning/kho-cau-hoi" className="underline">
+          kho câu hỏi
+        </Link>
+        , đề thi ở{" "}
+        <Link href="/elearning/de-thi" className="underline">
+          màn đề thi
+        </Link>
+        , và khung chấm bài tập ở{" "}
+        <Link href="/elearning/khung-cham" className="underline">
+          màn khung chấm
         </Link>
         .
       </p>

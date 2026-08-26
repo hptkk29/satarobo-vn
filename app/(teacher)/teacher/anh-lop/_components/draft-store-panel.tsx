@@ -1,6 +1,12 @@
 // app/(teacher)/teacher/anh-lop/_components/draft-store-panel.tsx — KHO ẢNH (DRAFT).
 //
-// Khu "Kho ảnh — chưa gửi phụ huynh" trong album lớp: grid ảnh DRAFT multi-select
+// 25/08 — GIỮ LẠI CÓ CHỦ ĐÍCH dù giáo viên không còn tạo ảnh DRAFT nữa (tải lên là vào
+// thẳng hàng duyệt). Kho vẫn nhận hai nguồn: ảnh TỒN từ luồng cũ (dev/test/prod đều
+// đang có) và ảnh do Marketing / Giáo vụ góp — họ chỉ có `media:upload-draft` nên
+// KHÔNG đẩy thẳng vào hàng duyệt được (chốt 11/08). Đây là đường DUY NHẤT để những
+// ảnh đó rời kho, xoá component này là chúng kẹt lại vĩnh viễn.
+//
+// Khu "Kho ảnh cũ — chưa gửi phụ huynh" trong album lớp: grid ảnh DRAFT multi-select
 // (checkbox) + panel hành động: chip chọn học viên (disable HS chưa consent — cùng
 // UX UploadPhotoDialog), checkbox "Ảnh chung cả lớp", nút "Gửi cho phụ huynh"
 // (publishClassMediaAction — GV → PENDING chờ duyệt, QL → APPROVED luôn) + "Xoá
@@ -147,12 +153,14 @@ export function DraftStorePanel({
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
           <h2 className="text-sm font-bold text-foreground">
-            Kho ảnh — chưa gửi phụ huynh ({drafts.length})
+            Kho ảnh cũ — chưa gửi phụ huynh ({drafts.length})
           </h2>
           <p className="text-xs text-muted-foreground">
-            Chọn ảnh, gắn học viên (hoặc đánh dấu ảnh chung cả lớp) rồi bấm “Gửi
-            cho phụ huynh”. Ảnh trong kho phụ huynh KHÔNG nhìn thấy. Kho gồm ảnh
-            bạn tải lên và ảnh do marketing / giáo vụ góp cho lớp.
+            Ảnh còn tồn trong kho: ảnh tải lên trước đây và ảnh do marketing /
+            giáo vụ góp cho lớp. Chọn ảnh, gắn học viên (hoặc đánh dấu ảnh chung
+            cả lớp) rồi bấm “Gửi cho phụ huynh”. Ảnh trong kho phụ huynh KHÔNG
+            nhìn thấy. Ảnh bạn đăng mới không vào đây nữa — nó sang thẳng hàng
+            chờ quản lý cơ sở duyệt.
           </p>
         </div>
         <button

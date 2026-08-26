@@ -602,6 +602,12 @@ export async function POST(req: NextRequest) {
               },
             },
           });
+          // C-07 (vết người đọc) KHÔNG gọi riêng ở đây nữa: `setLeadStatus` phía
+          // trên đã gọi nó bên trong. Gọi thêm lần nữa là đếm đôi một sự việc —
+          // hai dòng "Lịch sử thay đổi" và hai dòng timeline cho cùng lượt gộp.
+          // Mối lo gốc của C-07 (mốc chỉ nằm trong `content` của một dòng NOTE,
+          // không lọc được, không có `oldValues`) vẫn được xử — chỉ là xử ở cửa
+          // chung thay vì ở đây.
           await Promise.all(
             m.childUpdates.map((cu) => {
               const before = existing?.children.find((ch) => ch.id === cu.childId);

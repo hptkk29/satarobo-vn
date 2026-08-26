@@ -42,6 +42,7 @@ import {
   MessageCircle,
   MessageSquarePlus,
   MessagesSquare,
+  Megaphone,
   Network,
   Newspaper,
   NotebookPen,
@@ -57,6 +58,7 @@ import {
   ShoppingBag,
   SlidersHorizontal,
   Star,
+  Target,
   type LucideIcon,
   Undo2,
   UserCog,
@@ -101,6 +103,10 @@ const NAV_GROUPS: NavGroup[] = [
     label: "Tổng quan",
     items: [
       { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard }, // luôn hiện
+      // A-02 — dashboard QLCS 4 tab. Mục RIÊNG, không thay "Dashboard" ở trên: trang đó
+      // là màn tiếp đất chung của cả 9 vai. Đọc thẳng bảng gate ⇒ menu và cổng trang
+      // không thể lệch nhau (bất biến của lib/auth/page-gates.test.ts).
+      { label: "Dashboard QLCS", href: "/dashboard-qlcs", icon: Gauge, perm: [...PAGE_GATES["/dashboard-qlcs"]] },
       { label: "CRM", href: "/crm", icon: BarChart3, perm: ["leads:view-all"] },
     ],
   },
@@ -342,7 +348,12 @@ const NAV_GROUPS: NavGroup[] = [
       { label: "Hiệu suất giáo viên", href: "/bao-cao/hieu-suat-gv", icon: GraduationCap, perm: [...PAGE_GATES["/bao-cao/hieu-suat-gv"]] },
       { label: "Cohort tiến độ", href: "/bao-cao/cohort", icon: Users, perm: [...PAGE_GATES["/bao-cao/cohort"]] },
       { label: "Churn / rời bỏ", href: "/bao-cao/churn", icon: BarChart3, perm: ["enrollments:view-all"] },
-      { label: "Doanh thu vs mục tiêu", href: "/bao-cao/doanh-thu", icon: Coins, perm: ["payments:manage"] },
+      // B-01: đọc thẳng bảng gate — menu và cổng trang không thể lệch nhau.
+      { label: "Doanh thu vs mục tiêu", href: "/bao-cao/doanh-thu", icon: Coins, perm: [...PAGE_GATES["/bao-cao/doanh-thu"]] },
+      // C-01: màn đặt chỉ tiêu lead (số học sinh) theo tháng × cơ sở.
+      { label: "Chỉ tiêu lead", href: "/bao-cao/muc-tieu-lead", icon: Target, perm: [...PAGE_GATES["/bao-cao/muc-tieu-lead"]] },
+      // D-02: màn đặt chỉ tiêu ngân sách quảng cáo (VNĐ) theo tháng × cơ sở.
+      { label: "Chỉ tiêu ngân sách QC", href: "/bao-cao/ngan-sach-quang-cao", icon: Megaphone, perm: [...PAGE_GATES["/bao-cao/ngan-sach-quang-cao"]] },
       // US-16 AC4 — đo pilot chat (kích hoạt TK + đọc thông báo đầu ≤48h) theo từng lớp.
       // `chat:admin` khớp ĐÚNG gate của trang (chỉ SUPER_ADMIN) — không mượn PAGE_GATES vì
       // route này cố ý không khai ở đó.

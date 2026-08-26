@@ -244,134 +244,132 @@ export default async function EnrollmentsAdminPage({ searchParams }: SearchParam
       </form>
 
       <div className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
-        <div className="overflow-x-auto">
-          <PhanTrangBang>
-            <table className="min-w-full divide-y divide-border">
-              <thead className="bg-muted">
+        <PhanTrangBang cuonNgang>
+          <table className="min-w-full divide-y divide-border">
+            <thead className="bg-muted">
+              <tr>
+                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  Học viên
+                </th>
+                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  Lớp / Cơ sở
+                </th>
+                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  Trạng thái
+                </th>
+                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  Ngày đăng ký
+                </th>
+                <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  Hành động
+                </th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-border">
+              {enrollments.length === 0 ? (
                 <tr>
-                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                    Học viên
-                  </th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                    Lớp / Cơ sở
-                  </th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                    Trạng thái
-                  </th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                    Ngày đăng ký
-                  </th>
-                  <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                    Hành động
-                  </th>
+                  <td colSpan={5} className="px-4 py-12 text-center text-sm text-muted-foreground">
+                    Chưa có đăng ký nào khớp bộ lọc.{" "}
+                    <Link href="/enrollments/new" className="text-primary hover:underline">
+                      Tạo đăng ký mới →
+                    </Link>
+                  </td>
                 </tr>
-              </thead>
-              <tbody className="divide-y divide-border">
-                {enrollments.length === 0 ? (
-                  <tr>
-                    <td colSpan={5} className="px-4 py-12 text-center text-sm text-muted-foreground">
-                      Chưa có đăng ký nào khớp bộ lọc.{" "}
-                      <Link href="/enrollments/new" className="text-primary hover:underline">
-                        Tạo đăng ký mới →
-                      </Link>
-                    </td>
-                  </tr>
-                ) : (
-                  enrollments.map((e) => {
-                    const statusInfo =
-                      STATUS_INFO[e.status] ?? {
-                        label: e.status,
-                        color: "bg-muted text-muted-foreground",
-                      };
-                    const rawPhone = e.student.parentPhone ?? e.student.phone;
-                    // Hiện đầy đủ = có quyền PII VÀ không bị DENY cấp trường (TS-02).
-                    const parentPhone =
-                      rawPhone && (!canViewPii || phoneMasked)
-                        ? maskPhone(rawPhone)
-                        : rawPhone;
-                    return (
-                      <tr key={e.id} className="hover:bg-muted/60">
-                        <td className="px-4 py-3">
-                          <div className="flex items-center gap-3">
-                            {e.student.avatarUrl ? (
-                              <img
-                                src={e.student.avatarUrl}
-                                alt={e.student.name}
-                                className="h-9 w-9 rounded-full border border-border object-cover"
-                              />
-                            ) : (
-                              <div className="flex h-9 w-9 items-center justify-center rounded-full bg-muted text-xs font-bold text-muted-foreground">
-                                {e.student.name.charAt(0).toUpperCase()}
-                              </div>
-                            )}
-                            <div>
-                              <div className="font-medium text-foreground">{e.student.name}</div>
-                              {parentPhone && (
-                                <div className="text-xs text-muted-foreground tabular-nums">{parentPhone}</div>
-                              )}
+              ) : (
+                enrollments.map((e) => {
+                  const statusInfo =
+                    STATUS_INFO[e.status] ?? {
+                      label: e.status,
+                      color: "bg-muted text-muted-foreground",
+                    };
+                  const rawPhone = e.student.parentPhone ?? e.student.phone;
+                  // Hiện đầy đủ = có quyền PII VÀ không bị DENY cấp trường (TS-02).
+                  const parentPhone =
+                    rawPhone && (!canViewPii || phoneMasked)
+                      ? maskPhone(rawPhone)
+                      : rawPhone;
+                  return (
+                    <tr key={e.id} className="hover:bg-muted/60">
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-3">
+                          {e.student.avatarUrl ? (
+                            <img
+                              src={e.student.avatarUrl}
+                              alt={e.student.name}
+                              className="h-9 w-9 rounded-full border border-border object-cover"
+                            />
+                          ) : (
+                            <div className="flex h-9 w-9 items-center justify-center rounded-full bg-muted text-xs font-bold text-muted-foreground">
+                              {e.student.name.charAt(0).toUpperCase()}
                             </div>
+                          )}
+                          <div>
+                            <div className="font-medium text-foreground">{e.student.name}</div>
+                            {parentPhone && (
+                              <div className="text-xs text-muted-foreground tabular-nums">{parentPhone}</div>
+                            )}
                           </div>
-                        </td>
-                        <td className="px-4 py-3 text-sm text-muted-foreground">
-                          <div className="font-medium text-foreground">{e.class.name}</div>
-                          <div className="text-xs text-muted-foreground">
-                            {e.class.classCode ? `${e.class.classCode} · ` : ""}
-                            {e.class.center?.name ?? "—"}
-                          </div>
-                        </td>
-                        <td className="px-4 py-3">
-                          <span
-                            className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold ${statusInfo.color}`}
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 text-sm text-muted-foreground">
+                        <div className="font-medium text-foreground">{e.class.name}</div>
+                        <div className="text-xs text-muted-foreground">
+                          {e.class.classCode ? `${e.class.classCode} · ` : ""}
+                          {e.class.center?.name ?? "—"}
+                        </div>
+                      </td>
+                      <td className="px-4 py-3">
+                        <span
+                          className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold ${statusInfo.color}`}
+                        >
+                          {statusInfo.label}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-sm tabular-nums text-muted-foreground">
+                        {formatDate(e.enrolledAt)}
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        <div className="inline-flex items-center justify-end gap-2">
+                          {/* F5 — nút CHỈ hiện đúng khi server sẽ cho qua: người xem là
+                              sale được gán CỦA CHÍNH ghi danh này, phụ huynh đã có tài
+                              khoản, và ghi danh còn hiệu lực. Điều kiện phải TRÙNG KHÍT
+                              `findSaleAssignedEnrollmentIds` (lib/chat/dm.ts) — hiện nút
+                              rộng hơn server là đẩy người dùng vào PERMISSION_DENIED. */}
+                          {e.saleId === session.user.id &&
+                            e.student.parentUserId &&
+                            (ENROLLMENT_ACTIVE_STATUSES as readonly string[]).includes(e.status) && (
+                              <OpenDmButton
+                                peerUserId={e.student.parentUserId}
+                                kind="SALE_PARENT"
+                                // ⚠️ `/admin/tin-nhan` chứ KHÔNG phải `/tin-nhan` (đường
+                                // sidebar dùng). Đo trên test 10/08: bấm từ
+                                // `/admin/enrollments`, Server Action trả ok kèm
+                                // conversationId nhưng `router.push("/tin-nhan?c=…")`
+                                // KHÔNG điều hướng — URL đứng nguyên, người dùng thấy nút
+                                // như chết. Trang này nằm dưới `/admin/**` nên đi thẳng
+                                // đường đã có tiền tố, không nhờ tới lớp rewrite clean-URL
+                                // của proxy.
+                                hrefTemplate="/admin/tin-nhan?c=:id"
+                                label="Nhắn riêng"
+                              />
+                            )}
+                          <Link
+                            href={`/enrollments/${e.id}/edit`}
+                            className="inline-flex items-center gap-1 rounded-md border border-border px-2.5 py-1 text-xs font-semibold text-foreground hover:bg-muted"
                           >
-                            {statusInfo.label}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3 text-sm tabular-nums text-muted-foreground">
-                          {formatDate(e.enrolledAt)}
-                        </td>
-                        <td className="px-4 py-3 text-right">
-                          <div className="inline-flex items-center justify-end gap-2">
-                            {/* F5 — nút CHỈ hiện đúng khi server sẽ cho qua: người xem là
-                                sale được gán CỦA CHÍNH ghi danh này, phụ huynh đã có tài
-                                khoản, và ghi danh còn hiệu lực. Điều kiện phải TRÙNG KHÍT
-                                `findSaleAssignedEnrollmentIds` (lib/chat/dm.ts) — hiện nút
-                                rộng hơn server là đẩy người dùng vào PERMISSION_DENIED. */}
-                            {e.saleId === session.user.id &&
-                              e.student.parentUserId &&
-                              (ENROLLMENT_ACTIVE_STATUSES as readonly string[]).includes(e.status) && (
-                                <OpenDmButton
-                                  peerUserId={e.student.parentUserId}
-                                  kind="SALE_PARENT"
-                                  // ⚠️ `/admin/tin-nhan` chứ KHÔNG phải `/tin-nhan` (đường
-                                  // sidebar dùng). Đo trên test 10/08: bấm từ
-                                  // `/admin/enrollments`, Server Action trả ok kèm
-                                  // conversationId nhưng `router.push("/tin-nhan?c=…")`
-                                  // KHÔNG điều hướng — URL đứng nguyên, người dùng thấy nút
-                                  // như chết. Trang này nằm dưới `/admin/**` nên đi thẳng
-                                  // đường đã có tiền tố, không nhờ tới lớp rewrite clean-URL
-                                  // của proxy.
-                                  hrefTemplate="/admin/tin-nhan?c=:id"
-                                  label="Nhắn riêng"
-                                />
-                              )}
-                            <Link
-                              href={`/enrollments/${e.id}/edit`}
-                              className="inline-flex items-center gap-1 rounded-md border border-border px-2.5 py-1 text-xs font-semibold text-foreground hover:bg-muted"
-                            >
-                              <Pencil className="h-3.5 w-3.5" />
-                              Sửa
-                            </Link>
-                            {canDelete && <DeleteEnrollmentButton id={e.id} />}
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })
-                )}
-              </tbody>
-            </table>
-          </PhanTrangBang>
-        </div>
+                            <Pencil className="h-3.5 w-3.5" />
+                            Sửa
+                          </Link>
+                          {canDelete && <DeleteEnrollmentButton id={e.id} />}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </PhanTrangBang>
       </div>
     </div>
   );

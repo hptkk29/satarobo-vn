@@ -59,7 +59,7 @@ export default async function EmailTemplatesPage() {
             {EMAIL_TRIGGER_LABEL[trigger]}
           </h2>
           <div className="border rounded overflow-hidden">
-            <PhanTrangBang>
+            <PhanTrangBang cuonNgang>
               <table className="w-full text-sm">
                 <thead className="bg-muted border-b">
                   <tr>

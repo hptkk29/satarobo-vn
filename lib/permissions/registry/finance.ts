@@ -31,6 +31,14 @@ export const financeModule: ModuleDecl = {
       description: "Break-glass xem đầy đủ CCCD + địa chỉ PH (reason + audit).",
     },
 
+    // --- Mục tiêu doanh thu (B-01) ---
+    {
+      key: "revenue_targets:manage",
+      action: "manage",
+      description:
+        "Đặt/sửa mục tiêu doanh thu theo tháng × cơ sở. TÁCH khỏi payments:manage (mở/huỷ/hoàn tiền) để Quản lý cơ sở dùng được mà không chạm sổ tiền.",
+    },
+
     // --- Installments / Discounts ---
     {
       key: "installments:approve",

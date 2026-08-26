@@ -74,6 +74,17 @@ export type Action =
   | "leads:delete"
   | "leads:export"
   | "leads:import" // Task #07 — import danh sách "khách đã đăng ký" từ Excel (Lead REGISTERED + LeadChild)
+  // C-01 — đặt/sửa chỉ tiêu SỐ HỌC SINH theo tháng × cơ sở (bảng LeadTarget).
+  // Key RIÊNG theo chốt kỹ thuật 24/08/2026 (OQ-C5) — KHÔNG dùng lại `leads:assign-config`,
+  // vì key đó đang gác màn "Cấu hình chia lead tự động": cấp cho QLCS để họ gõ một con số
+  // là mở kèm một năng lực khác hẳn mà không ai định trao.
+  | "lead_targets:manage"
+  // D-02 — đặt/sửa chỉ tiêu NGÂN SÁCH QUẢNG CÁO theo tháng × cơ sở (bảng AdsBudgetTarget).
+  // Key RIÊNG, đúng tiền lệ `revenue_targets:manage` (B-01) + `lead_targets:manage` (C-01).
+  // KHÔNG mượn `leads:view-all` (key đang gác /admin/marketing/funnel — mượn là mở màn ĐẶT
+  // chỉ tiêu cho QLCS lẫn Sale), và KHÔNG lan thêm call-site cho `canEditAds`
+  // (lib/crm/ads-insights.ts so roleCode bằng tay — vi phạm luật Nền Hệ thống #1).
+  | "ads_budget_targets:manage"
   // #11 T2 (OI-4) — xem PII lead: SĐT/email/tên PH-HS/ghi chú tư vấn.
   // ⚠️ MARKETING **CÓ** quyền này (user chốt 21/07, ĐẢO quyết định "che PII cho
   // MARKETING" ngày 10-20/07 — lý do đầy đủ ở ma trận bên dưới). Comment cũ ghi
@@ -262,6 +273,18 @@ export type Action =
   // #05 — break-glass: xem đầy đủ PII (bỏ mask) trong audit viewer, kèm reason + log riêng.
   | "audit-logs:view-pii"
 
+  // --- Dashboard QLCS 4 tab (A-02) ---
+  // Cổng VÀO màn `/dashboard-qlcs`. Key RIÊNG theo chốt kỹ thuật 24/08/2026 (E/OQ-4),
+  // vì mọi key sẵn có đều sai một trong hai kiểu:
+  //  • `chat:read` (ứng viên đầu cho tab E) seed scope CENTER/ASSIGNED ⇒ gate cấp trang
+  //    gọi KHÔNG target luôn trả false trên prod (v2) trong khi local (v1) vẫn xanh —
+  //    đúng loại "chạy máy tôi thì được". Bất biến này có test: page-gates.test.ts.
+  //  • `payments:*` / `leads:*` gác được đúng MỘT tab, mượn làm cổng chung là hoặc khoá
+  //    cửa của người chỉ cần tab kia, hoặc mở kèm năng lực không ai định trao.
+  // Cách ly cơ sở KHÔNG đến từ đây — nó đến từ `resolveScopeFilters()` (giao
+  // visibleCenterIds × cơ sở chọn trong URL) + `scopedDb` ở từng hàm số liệu.
+  | "dashboard:view"
+
   // --- Settings / system (NEW) ---
   | "settings:view"
   | "settings:edit"
@@ -276,6 +299,7 @@ export type Action =
   | "payments:record" // R7-04 — Sale ghi nhận khoản
   | "payments:confirm" // R7-04 — Kế toán xác nhận (tách nhiệm vụ)
   | "payments:view-pii" // #15 (câu 32) — break-glass xem đầy đủ CCCD PH + địa chỉ (reason + audit)
+  | "revenue_targets:manage" // B-01 — đặt mục tiêu doanh thu tháng × cơ sở (KHÔNG phải quyền thao tác tiền)
   | "installments:approve" // FIX lead→payment→enroll (C4) — duyệt kế hoạch trả góp 2 đợt
   | "discounts:approve" // BGĐ 31/07 — duyệt giảm giá nhập tay (kèm giải trình)
   | "orders:view"
@@ -387,6 +411,25 @@ export const PERMISSIONS: Record<Action, Role[]> = {
   // user 07/07/2026 (Sale là người giữ danh sách đăng ký thật — câu 33 phiếu Sale).
   // v2: đã seed CENTER scope cho CENTER_SALES_CSM trong seed-roles.ts cùng ngày.
   "leads:import": ["SUPER_ADMIN", "CENTER_MANAGER", "SALES_CSM"],
+  // C-01 — chỉ tiêu lead theo tháng × cơ sở. Chỉ QLCS + Admin (chốt 24/08/2026, OQ-C5).
+  // Sale KHÔNG có: chỉ tiêu là thứ người ta bị đo, không phải thứ tự đặt cho mình.
+  // Cách ly cơ sở KHÔNG đến từ đây — `LeadTarget` ∈ SCOPE_EXEMPT nên `scopedDb` là
+  // pass-through; luật "chỉ cơ sở mình quản" ép TAY trong action bằng
+  // `checkRevenueTargetScope` (lib/reports/revenue-target-scope.ts, có test).
+  "lead_targets:manage": ["SUPER_ADMIN", "CENTER_MANAGER"],
+  // D-02 — chỉ tiêu ngân sách quảng cáo theo tháng × cơ sở. Marketing + Admin.
+  //
+  // ⚠️ KHÁC C-01 ở đúng một vai: **KHÔNG có CENTER_MANAGER**. PRD CDB-dashboard §D.4
+  // chia đôi rành mạch — Marketing ĐẶT chỉ tiêu ngân sách, QLCS XEM chi phí + CPL + CPA
+  // của riêng cơ sở mình. Tiền quảng cáo tiêu từ tài khoản ads của Hội sở, QLCS không
+  // cầm ví đó; cho họ tự khai chỉ tiêu là để D-03 ("% thực tế / chỉ tiêu") tự chấm điểm
+  // mình. Nới thêm vai sau này là một dòng seed; thu lại vai đã cấp thì phải đi hỏi
+  // từng người xem ai đã đặt số gì — nên mặc định đi hướng đóng.
+  //
+  // Cách ly cơ sở KHÔNG đến từ đây — `AdsBudgetTarget` ∈ SCOPE_EXEMPT nên `scopedDb` là
+  // pass-through; luật "chỉ cơ sở mình quản" ép TAY trong action bằng
+  // `checkRevenueTargetScope` (lib/reports/revenue-target-scope.ts, có test).
+  "ads_budget_targets:manage": ["SUPER_ADMIN", "MARKETING"],
 
   // --- Trial classes (Phase T1.4) ---
   // TRAINING phải có `trials:view`, nếu không thì cấp `trials:assign-teacher` cho họ
@@ -642,6 +685,20 @@ export const PERMISSIONS: Record<Action, Role[]> = {
   "audit-logs:view": ["SUPER_ADMIN"],
   "audit-logs:view-pii": ["SUPER_ADMIN"],
 
+  // --- Dashboard QLCS 4 tab (A-02) ---
+  // Chốt 24/08/2026: `SUPER_ADMIN` + `CENTER_MANAGER` + vai Hội sở.
+  // Enum `Role` của v1 không có tầng HO/CENTER, nên hai vai HO đại diện được ở đây là
+  // ACCOUNTANT (→ HO_ACCOUNTANT) và MARKETING (→ HO_MARKETING) — đúng ánh xạ
+  // LEGACY_TO_V2 của rbac-parity.test.ts. `HO_HR` chỉ tồn tại ở v2 nên được seed thẳng
+  // trong prisma/seed-roles.ts; KHÔNG thêm "HR" vào đây, vì HR ở v1 ánh xạ sang
+  // **CENTER_HR** (nhân sự CƠ SỞ) — thêm là parity đòi cấp cho cả vai cấp cơ sở đó.
+  // `HO_SALE` cố ý KHÔNG có: vai đó là "phiếu mình nhập" (RoleDef ghi rõ), cho họ màn
+  // tổng quan toàn cơ sở là ngược hẳn phạm vi vai. Mở thêm sau = một dòng seed.
+  //
+  // ⚠️ Vào được TRANG ≠ xem được mọi tab. Gate từng tab (B → payments:view ·
+  // C → leads:view-all · D/E → dashboard:view — chốt 24/08) đi kèm nội dung tab.
+  "dashboard:view": ["SUPER_ADMIN", "CENTER_MANAGER", "ACCOUNTANT", "MARKETING"],
+
   // --- Settings / system ---
   "settings:view": ["SUPER_ADMIN"],
   "settings:edit": ["SUPER_ADMIN"],
@@ -659,6 +716,14 @@ export const PERMISSIONS: Record<Action, Role[]> = {
   // ≥10 ký tự + audit) chỉ cho kế toán + admin. v2: HO_ACCOUNTANT GLOBAL,
   // CENTER_ACCOUNTANT CENTER (prisma/seed-roles.ts). KHÔNG mở cho CENTER_MANAGER.
   "payments:view-pii": ["SUPER_ADMIN", "ACCOUNTANT"],
+  // B-01 — đặt mục tiêu doanh thu theo tháng × cơ sở. Key RIÊNG, KHÔNG mượn
+  // `payments:manage`: quyền đó là mở/huỷ/hoàn tiền + cấu hình phương thức thanh toán +
+  // hoa hồng toàn hệ, cố ý không nằm ở Quản lý cơ sở (#09, giữ nguyên sau đảo 03/08).
+  // Cũng KHÔNG mượn `payments:view` — đó là quyền ĐỌC đối soát, mượn nó để GHI thì mọi
+  // vai chỉ-đọc về sau tự nhiên ghi được. Cách ly cơ sở KHÔNG đến từ đây: `RevenueTarget`
+  // ∈ SCOPE_EXEMPT nên scopedDb pass-through — luật "chỉ cơ sở mình quản" ép TAY trong
+  // action qua `checkRevenueTargetScope` (lib/reports/revenue-target-scope.ts).
+  "revenue_targets:manage": ["SUPER_ADMIN", "CENTER_MANAGER", "ACCOUNTANT"],
   // C4 — duyệt kế hoạch trả góp 2 đợt: chỉ quản lý cơ sở + admin (audit + reason bắt buộc khi từ chối).
   // #09 (09/07): v2 chuyển quyền này sang HO_ACCOUNTANT (de-xuat-scope §3.3 "tiền tập
   // trung"). `lib/orders/installments.ts` gate bằng matrix v1 (không theo cờ) làm lớp

@@ -217,139 +217,137 @@ export default async function QuestionsPage({ searchParams }: SearchParams) {
       </form>
 
       <div className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
-        <div className="overflow-x-auto">
-          <PhanTrangBang>
-            <table className="min-w-full divide-y divide-border">
-              <thead className="bg-muted">
+        <PhanTrangBang cuonNgang>
+          <table className="min-w-full divide-y divide-border">
+            <thead className="bg-muted">
+              <tr>
+                <th className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  Loại
+                </th>
+                <th className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  Độ khó
+                </th>
+                <th className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  Câu hỏi
+                </th>
+                <th className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  Bài học
+                </th>
+                <th className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  Tags
+                </th>
+                <th className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  Soạn
+                </th>
+                <th className="px-3 py-3 text-right text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  Hành động
+                </th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-border">
+              {questions.length === 0 ? (
                 <tr>
-                  <th className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                    Loại
-                  </th>
-                  <th className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                    Độ khó
-                  </th>
-                  <th className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                    Câu hỏi
-                  </th>
-                  <th className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                    Bài học
-                  </th>
-                  <th className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                    Tags
-                  </th>
-                  <th className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                    Soạn
-                  </th>
-                  <th className="px-3 py-3 text-right text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                    Hành động
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border">
-                {questions.length === 0 ? (
-                  <tr>
-                    <td
-                      colSpan={7}
-                      className="px-4 py-12 text-center text-sm text-muted-foreground"
+                  <td
+                    colSpan={7}
+                    className="px-4 py-12 text-center text-sm text-muted-foreground"
+                  >
+                    Chưa có câu hỏi nào khớp bộ lọc.{" "}
+                    <Link
+                      href="/questions/new"
+                      className="text-primary hover:underline"
                     >
-                      Chưa có câu hỏi nào khớp bộ lọc.{" "}
-                      <Link
-                        href="/questions/new"
-                        className="text-primary hover:underline"
-                      >
-                        Tạo mới →
-                      </Link>
-                    </td>
-                  </tr>
-                ) : (
-                  questions.map((q) => {
-                    const typeInfo = TYPE_INFO[q.type];
-                    const diffInfo = DIFFICULTY_INFO[q.difficulty];
-                    return (
-                      <tr key={q.id} className="hover:bg-muted/60">
-                        <td className="px-3 py-3">
-                          <span
-                            className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold ${typeInfo.color}`}
-                          >
-                            {typeInfo.label}
-                          </span>
-                        </td>
-                        <td className="px-3 py-3">
-                          <span
-                            className={`inline-flex rounded-full px-2 py-0.5 text-xs font-semibold ${diffInfo.color}`}
-                          >
-                            {diffInfo.label}
-                          </span>
-                        </td>
-                        <td className="px-3 py-3 max-w-md">
-                          <div className="text-sm text-foreground line-clamp-2">
-                            {q.text}
+                      Tạo mới →
+                    </Link>
+                  </td>
+                </tr>
+              ) : (
+                questions.map((q) => {
+                  const typeInfo = TYPE_INFO[q.type];
+                  const diffInfo = DIFFICULTY_INFO[q.difficulty];
+                  return (
+                    <tr key={q.id} className="hover:bg-muted/60">
+                      <td className="px-3 py-3">
+                        <span
+                          className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold ${typeInfo.color}`}
+                        >
+                          {typeInfo.label}
+                        </span>
+                      </td>
+                      <td className="px-3 py-3">
+                        <span
+                          className={`inline-flex rounded-full px-2 py-0.5 text-xs font-semibold ${diffInfo.color}`}
+                        >
+                          {diffInfo.label}
+                        </span>
+                      </td>
+                      <td className="px-3 py-3 max-w-md">
+                        <div className="text-sm text-foreground line-clamp-2">
+                          {q.text}
+                        </div>
+                        {q.questionCode && (
+                          <div className="text-xs text-muted-foreground tabular-nums">
+                            {q.questionCode}
                           </div>
-                          {q.questionCode && (
-                            <div className="text-xs text-muted-foreground tabular-nums">
-                              {q.questionCode}
+                        )}
+                      </td>
+                      <td className="px-3 py-3 text-xs text-muted-foreground max-w-[180px]">
+                        {q.lesson ? (
+                          <>
+                            <div className="font-medium">
+                              {q.lesson.curriculum.name}
                             </div>
+                            <div className="text-muted-foreground">
+                              Bài {q.lesson.order}: {q.lesson.title}
+                            </div>
+                          </>
+                        ) : q.curriculum ? (
+                          <>
+                            <div className="font-medium">
+                              {q.curriculum.course.name}
+                            </div>
+                            <div className="text-muted-foreground">
+                              {q.curriculum.name}
+                            </div>
+                          </>
+                        ) : (
+                          <span className="text-muted-foreground">—</span>
+                        )}
+                      </td>
+                      <td className="px-3 py-3">
+                        <div className="flex flex-wrap gap-1">
+                          {q.tags.slice(0, 4).map((t) => (
+                            <span
+                              key={t}
+                              className="inline-flex rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground"
+                            >
+                              {t}
+                            </span>
+                          ))}
+                          {q.tags.length > 4 && (
+                            <span className="text-xs text-muted-foreground">
+                              +{q.tags.length - 4}
+                            </span>
                           )}
-                        </td>
-                        <td className="px-3 py-3 text-xs text-muted-foreground max-w-[180px]">
-                          {q.lesson ? (
-                            <>
-                              <div className="font-medium">
-                                {q.lesson.curriculum.name}
-                              </div>
-                              <div className="text-muted-foreground">
-                                Bài {q.lesson.order}: {q.lesson.title}
-                              </div>
-                            </>
-                          ) : q.curriculum ? (
-                            <>
-                              <div className="font-medium">
-                                {q.curriculum.course.name}
-                              </div>
-                              <div className="text-muted-foreground">
-                                {q.curriculum.name}
-                              </div>
-                            </>
-                          ) : (
-                            <span className="text-muted-foreground">—</span>
-                          )}
-                        </td>
-                        <td className="px-3 py-3">
-                          <div className="flex flex-wrap gap-1">
-                            {q.tags.slice(0, 4).map((t) => (
-                              <span
-                                key={t}
-                                className="inline-flex rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground"
-                              >
-                                {t}
-                              </span>
-                            ))}
-                            {q.tags.length > 4 && (
-                              <span className="text-xs text-muted-foreground">
-                                +{q.tags.length - 4}
-                              </span>
-                            )}
-                          </div>
-                        </td>
-                        <td className="px-3 py-3 text-xs text-muted-foreground">
-                          {q.author?.fullName ?? "—"}
-                        </td>
-                        <td className="px-3 py-3 text-right">
-                          <Link
-                            href={`/questions/${q.id}/edit`}
-                            className="inline-flex items-center gap-1 rounded-md border border-border px-2.5 py-1 text-xs font-semibold text-foreground hover:bg-muted"
-                          >
-                            Sửa
-                          </Link>
-                        </td>
-                      </tr>
-                    );
-                  })
-                )}
-              </tbody>
-            </table>
-          </PhanTrangBang>
-        </div>
+                        </div>
+                      </td>
+                      <td className="px-3 py-3 text-xs text-muted-foreground">
+                        {q.author?.fullName ?? "—"}
+                      </td>
+                      <td className="px-3 py-3 text-right">
+                        <Link
+                          href={`/questions/${q.id}/edit`}
+                          className="inline-flex items-center gap-1 rounded-md border border-border px-2.5 py-1 text-xs font-semibold text-foreground hover:bg-muted"
+                        >
+                          Sửa
+                        </Link>
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </PhanTrangBang>
       </div>
     </div>
   );

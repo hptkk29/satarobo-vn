@@ -154,7 +154,7 @@ export default async function RoomsAdminPage({ searchParams }: SearchParams) {
       </form>
 
       <div className="overflow-hidden rounded-xl border border-border bg-card">
-        <PhanTrangBang>
+        <PhanTrangBang cuonNgang>
           <table className="w-full">
             <thead className="border-b border-border bg-muted text-left">
               <tr>

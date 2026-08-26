@@ -10,6 +10,9 @@ import { splitLeadNote } from '@/lib/lead/note-view'
 import { canViewLeadPii } from '@/lib/auth/check-permission'
 import { LeadsTable } from './_components/leads-table'
 import type { LeadRow } from './_components/leads-table'
+import { ColumnPicker } from './_components/column-picker'
+import { LEAD_TABLE_COLUMNS, LEAD_TABLE_KEY } from '@/lib/tables/lead-columns'
+import { resolveColumnLayout } from '@/lib/tables/column-preference'
 import { LeadsKanban, type KanbanLead } from './_components/leads-kanban'
 import { ALL_LEAD_STATUSES } from '@/lib/leads/status'
 import type { LeadStatus, Prisma } from '@prisma/client'
@@ -18,6 +21,12 @@ import { getNonEnrollableCenterIds } from '@/lib/enrollment-flow'
 import { docSoDong } from '@/lib/ui/phan-trang'
 
 const KANBAN_LIMIT = 500
+
+/** G-04 — bóc đúng phần màn chọn cột cần (khoá/nhãn/nhóm/cờ PII). Không đẩy cả
+ *  `defaultOrder`/`defaultVisible` xuống client: đó là chuyện của tầng ghép. */
+function toPickerColumn(c: (typeof LEAD_TABLE_COLUMNS)[number]) {
+  return { key: c.key, label: c.label, group: c.group, pii: c.pii }
+}
 
 type SP = {
   page?: string
@@ -292,6 +301,22 @@ export default async function LeadsPage({
 
   const canUpdate = (await checkPermission('leads:edit'))
   const canDelete = (await checkPermission('leads:delete'))
+  // G-03/A-03 — quyền XUẤT tách khỏi quyền XEM. Trước 26/08 nút xuất hiện cho mọi
+  // người đọc được danh sách, và đường /api cũng chỉ gác bằng `leads:view-all` ⇒
+  // `leads:export` là khoá chết. Giấu nút chỉ là chuyện giao diện: route tự gác lại.
+  const canExport = (await checkPermission('leads:export'))
+
+  // G-04 — tuỳ chọn cột THEO TỪNG NGƯỜI. Đọc khoá cứng theo `session.user.id`; bảng
+  // UserTablePreference không mang centerId nên `scopedDb` là pass-through (cố ý —
+  // sở thích cá nhân không phải dữ liệu theo đơn vị, xem chú thích ở schema).
+  //
+  // ⚠️ Che PII KHÔNG phụ thuộc cấu hình này: dữ liệu đã qua `maskLeadPiiFields` ngay
+  // dưới đây, nên bật cột SĐT/email lên mà thiếu `leads:view-pii` thì vẫn ra bản che.
+  const columnPref = await sdb.userTablePreference.findUnique({
+    where: { userId_tableKey: { userId: session.user.id, tableKey: LEAD_TABLE_KEY } },
+    select: { columns: true },
+  })
+  const columnLayout = resolveColumnLayout(LEAD_TABLE_COLUMNS, columnPref?.columns)
 
   const leads: LeadRow[] = rawLeads.map((raw) => {
     // #11 T2 — mask PII (tên PH/SĐT/email/tên con/note) trước khi build payload client.
@@ -346,8 +371,17 @@ export default async function LeadsPage({
         canUpdate={canUpdate}
         canDelete={canDelete}
         currentStatus={statusFilter}
-        currentQ={q}
         currentUserId={session.user.id}
+        canExport={canExport}
+        columns={columnLayout.visible.map((c) => ({ key: c.key, label: c.label }))}
+        columnPicker={
+          <ColumnPicker
+            tableKey={LEAD_TABLE_KEY}
+            visible={columnLayout.visible.map(toPickerColumn)}
+            hidden={columnLayout.hidden.map(toPickerColumn)}
+            piiMasked={!canViewPii}
+          />
+        }
       />
     </div>
   )

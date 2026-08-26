@@ -7,7 +7,8 @@ import { writeAudit, type AuditActor } from "@/lib/audit/audit-log";
 import { publishEvent } from "@/lib/events/publish";
 import { issueReceipt } from "@/lib/finance/receipt";
 import { allocateByWeight } from "@/lib/finance/allocate";
-import { recordLeadStatusChange } from "@/lib/leads/set-status";
+import { recordLeadStatusLedger } from "@/lib/leads/set-status";
+import { recordLeadStatusChange } from "@/lib/lead/status-trail-write";
 
 type Tx = Prisma.TransactionClient;
 
@@ -155,8 +156,13 @@ export async function maybeAdvanceLeadToRegistered(
     data: { status: "DA_DANG_KY" },
   });
   if (upd.count === 0) return false;
-  // GĐ1 — `updateMany` ở trên là lượt claim atomic, giữ nguyên; chỉ nối thêm sổ.
-  await recordLeadStatusChange({
+  // HAI SỔ (xem ghi chú đầu `lib/leads/set-status.ts`):
+  //  1. sổ ĐẾM phễu — `updateMany` ở trên là lượt claim atomic, giữ nguyên, chỉ nối sổ;
+  //  2. vết NGƯỜI ĐỌC — C-07: trước đây chỗ này CHỈ tạo `LeadActivity`, không có dòng
+  //     `AuditLog` nào ⇒ mốc "tiền vào → Đã đăng ký" biến mất khỏi mục "Lịch sử thay
+  //     đổi" của trang chi tiết lead (thứ QLCS xem), trong khi đường đổi tay thì có.
+  // Giá trị trạng thái là bộ 10 của GĐ5, KHÔNG phải AWAITING_DECISION/REGISTERED cũ.
+  await recordLeadStatusLedger({
     tx,
     leadId: params.leadId,
     from: "CHO_QUYET_DINH",
@@ -165,15 +171,14 @@ export async function maybeAdvanceLeadToRegistered(
     actorId: params.actor.id,
     actorName: params.actor.name ?? null,
   });
-  await tx.leadActivity.create({
-    data: {
-      leadId: params.leadId,
-      actorId: params.actor.id,
-      actorName: params.actor.name ?? "Hệ thống",
-      type: "STATUS_CHANGE",
-      content: "Tự động: Chờ quyết định → Đã đăng ký (đã ghi nhận thanh toán)",
-      metadata: { from: "CHO_QUYET_DINH", to: "DA_DANG_KY", auto: true },
-    },
+  await recordLeadStatusChange({
+    tx,
+    leadId: params.leadId,
+    actorId: params.actor.id,
+    actorName: params.actor.name ?? "Hệ thống",
+    from: "CHO_QUYET_DINH",
+    to: "DA_DANG_KY",
+    source: "PAYMENT",
   });
   return true;
 }

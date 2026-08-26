@@ -27,6 +27,7 @@ const GROUP_LABEL: Record<string, string> = {
   finance: "Tài chính",
   enrollment: "Ghi danh / bảo lưu",
   chat: "Tin nhắn (chat)",
+  media: "Duyệt ảnh/video buổi học",
 };
 
 function toText(v: unknown): string {

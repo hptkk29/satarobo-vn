@@ -1,7 +1,8 @@
 import { redirect } from "next/navigation";
 import { safeCache } from "@/lib/cache/safe-cache";
 import { auth } from "@/lib/auth";
-import { checkPermission } from "@/lib/auth/check-permission";
+import { checkAnyPermission, checkPermission } from "@/lib/auth/check-permission";
+import { PAGE_GATES } from "@/lib/auth/page-gates";
 import { resolveActor, type Actor } from "@/lib/auth/actor";
 import { scopedDb } from "@/lib/db-scope";
 import { CACHE_TAGS } from "@/lib/cache/tags";
@@ -20,6 +21,7 @@ import {
   type PaymentRecord,
   type RevenueTargetRow,
 } from "@/lib/reports/revenue-target";
+import { WHERE_THUC_THU, SELECT_THUC_THU, butToanThucThu } from "@/lib/finance/thuc-thu";
 import { LineChart } from "@/components/charts/line-chart";
 import { BarChart } from "@/components/charts/bar-chart";
 import { RevenueTargetForm } from "./_components/revenue-target-form";
@@ -60,16 +62,18 @@ type SearchParams = {
 async function computeRevenueRows(actor: Actor, filters: ReportFilters) {
   const sdb = scopedDb(actor);
   const dateWhere = reportDateWhere(filters);
-  // Doanh thu THỰC = Σ Payment(accountantStatus=CONFIRMED, deletedAt:null) trong phạm vi.
+  // B-02 · quyết định B3 (24/08/2026) — doanh thu THỰC = THỰC THU (lib/finance/thuc-thu):
+  // Σ Payment kế toán đã xác nhận, ĐÃ trừ bút toán hoàn (âm) và ĐÃ thay bản gốc bằng bản
+  // điều chỉnh. Trước đây lọc cứng `accountantStatus: "CONFIRMED"` ⇒ hoàn tiền không bao
+  // giờ trừ ra và điều chỉnh giảm vẫn giữ số cũ ⇒ báo cáo phồng, phồng im lặng.
   const [payments, targetRows] = await Promise.all([
     sdb.payment.findMany({
       where: {
-        accountantStatus: "CONFIRMED",
-        deletedAt: null,
+        ...WHERE_THUC_THU,
         ...(filters.centerId ? { centerId: filters.centerId } : {}),
         ...(dateWhere ? { paidDate: dateWhere } : {}),
       },
-      select: { amount: true, centerId: true, paidDate: true },
+      select: { ...SELECT_THUC_THU, centerId: true, paidDate: true },
       take: 50_000,
     }),
     // RevenueTarget không scoped → tra theo đúng centerId đã chọn (null = toàn hệ thống).
@@ -79,7 +83,9 @@ async function computeRevenueRows(actor: Actor, filters: ReportFilters) {
     }),
   ]);
 
-  const paymentRecords: PaymentRecord[] = payments.map((p) => ({
+  // Lớp chắn: `WHERE_THUC_THU` đã loại bản gốc bị thay thế ở tầng SQL, hàm thuần lọc lại
+  // đúng luật đó ở tầng ứng dụng (chạy hai lần không đổi kết quả — có test).
+  const paymentRecords: PaymentRecord[] = butToanThucThu(payments).map((p) => ({
     amount: p.amount,
     centerId: p.centerId,
     paidDate: p.paidDate,
@@ -96,9 +102,12 @@ async function computeRevenueRows(actor: Actor, filters: ReportFilters) {
 export default async function RevenueTargetReportPage({ searchParams }: SearchParams) {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  if (!(await checkPermission("payments:manage"))) {
+  if (!(await checkAnyPermission(PAGE_GATES["/bao-cao/doanh-thu"]))) {
     redirect("/dashboard?error=unauthorized");
   }
+  // B-01: vào được TRANG (đọc báo cáo) không có nghĩa là đặt được mục tiêu. Ô nhập chỉ
+  // hiện cho người thật sự có quyền ghi — server vẫn kiểm lại trong action.
+  const canSetTarget = await checkPermission("revenue_targets:manage");
 
   const actor = await resolveActor(session.user.id);
   const sp = await searchParams;
@@ -153,17 +162,19 @@ export default async function RevenueTargetReportPage({ searchParams }: SearchPa
       </div>
 
       {/* Đặt / sửa mục tiêu */}
-      <Card title="Đặt / sửa mục tiêu doanh thu">
-        <RevenueTargetForm
-          centers={fc.visibleCenters}
-          canSetGlobal={fc.isGlobalAllowed}
-          defaultCenterId={fc.selection}
-          defaultPeriod={currentPeriod}
-        />
-        <p className="mt-2 text-xs text-muted-foreground">
-          Mục tiêu lưu theo (cơ sở, kỳ). Đặt lại cùng cơ sở + kỳ sẽ ghi đè giá trị cũ.
-        </p>
-      </Card>
+      {canSetTarget ? (
+        <Card title="Đặt / sửa mục tiêu doanh thu">
+          <RevenueTargetForm
+            centers={fc.visibleCenters}
+            canSetGlobal={fc.isGlobalAllowed}
+            defaultCenterId={fc.selection}
+            defaultPeriod={currentPeriod}
+          />
+          <p className="mt-2 text-xs text-muted-foreground">
+            Mục tiêu lưu theo (cơ sở, kỳ). Đặt lại cùng cơ sở + kỳ sẽ ghi đè giá trị cũ.
+          </p>
+        </Card>
+      ) : null}
 
       {/* Biểu đồ thực vs mục tiêu theo kỳ */}
       <Card title="Doanh thu thực vs mục tiêu theo kỳ">
@@ -197,53 +208,51 @@ export default async function RevenueTargetReportPage({ searchParams }: SearchPa
 
       {/* Bảng chi tiết */}
       <Card title="Chi tiết theo kỳ">
-        <div className="overflow-x-auto">
-          <PhanTrangBang>
-            <table className="w-full text-sm">
-              <thead className="text-left text-xs text-muted-foreground">
-                <tr>
-                  <th className="px-3 py-2">Kỳ</th>
-                  <th className="px-3 py-2 text-right">Doanh thu thực</th>
-                  <th className="px-3 py-2 text-right">Mục tiêu</th>
-                  <th className="px-3 py-2 text-right">Chênh lệch</th>
-                  <th className="px-3 py-2 text-right">% đạt</th>
-                  <th className="px-3 py-2 text-center">Trạng thái</th>
+        <PhanTrangBang cuonNgang>
+          <table className="w-full text-sm">
+            <thead className="text-left text-xs text-muted-foreground">
+              <tr>
+                <th className="px-3 py-2">Kỳ</th>
+                <th className="px-3 py-2 text-right">Doanh thu thực</th>
+                <th className="px-3 py-2 text-right">Mục tiêu</th>
+                <th className="px-3 py-2 text-right">Chênh lệch</th>
+                <th className="px-3 py-2 text-right">% đạt</th>
+                <th className="px-3 py-2 text-center">Trạng thái</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((r) => (
+                <tr key={r.period} className="border-t">
+                  <td className="px-3 py-2">{r.period}</td>
+                  <td className="px-3 py-2 text-right">{vnd(r.actual)}</td>
+                  <td className="px-3 py-2 text-right">
+                    {r.target === null ? "—" : vnd(r.target)}
+                  </td>
+                  <td className="px-3 py-2 text-right">
+                    {r.variance === null ? "—" : vnd(r.variance)}
+                  </td>
+                  <td className="px-3 py-2 text-right font-medium">{pct(r.achievedRate)}</td>
+                  <td className="px-3 py-2 text-center">
+                    {r.target === null ? (
+                      <span className="text-muted-foreground">Chưa đặt</span>
+                    ) : r.reached ? (
+                      <span className="text-state-success-ink">Đạt</span>
+                    ) : (
+                      <span className="text-primary">Chưa đạt</span>
+                    )}
+                  </td>
                 </tr>
-              </thead>
-              <tbody>
-                {rows.map((r) => (
-                  <tr key={r.period} className="border-t">
-                    <td className="px-3 py-2">{r.period}</td>
-                    <td className="px-3 py-2 text-right">{vnd(r.actual)}</td>
-                    <td className="px-3 py-2 text-right">
-                      {r.target === null ? "—" : vnd(r.target)}
-                    </td>
-                    <td className="px-3 py-2 text-right">
-                      {r.variance === null ? "—" : vnd(r.variance)}
-                    </td>
-                    <td className="px-3 py-2 text-right font-medium">{pct(r.achievedRate)}</td>
-                    <td className="px-3 py-2 text-center">
-                      {r.target === null ? (
-                        <span className="text-muted-foreground">Chưa đặt</span>
-                      ) : r.reached ? (
-                        <span className="text-state-success-ink">Đạt</span>
-                      ) : (
-                        <span className="text-primary">Chưa đạt</span>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-                {rows.length === 0 ? (
-                  <tr>
-                    <td className="px-3 py-4 text-center text-muted-foreground" colSpan={6}>
-                      Chưa có doanh thu hay mục tiêu trong phạm vi này.
-                    </td>
-                  </tr>
-                ) : null}
-              </tbody>
-            </table>
-          </PhanTrangBang>
-        </div>
+              ))}
+              {rows.length === 0 ? (
+                <tr>
+                  <td className="px-3 py-4 text-center text-muted-foreground" colSpan={6}>
+                    Chưa có doanh thu hay mục tiêu trong phạm vi này.
+                  </td>
+                </tr>
+              ) : null}
+            </tbody>
+          </table>
+        </PhanTrangBang>
       </Card>
     </div>
   );

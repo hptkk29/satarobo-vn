@@ -5,6 +5,7 @@
 import { db } from "@/lib/db";
 import { writeAudit, type AuditActor } from "@/lib/audit/audit-log";
 import { publishEvent } from "@/lib/events/publish";
+import { recordLeadStatusChange } from "@/lib/lead/status-trail-write";
 import { nextInvoiceCode } from "@/lib/finance/invoice-code";
 import { canonicalPhone, phoneVariants } from "@/lib/phone";
 import { syncConversationMembership } from "@/lib/chat/sync-membership";
@@ -171,6 +172,15 @@ export async function convertLeadToEnrollment(actor: AuditActor, input: ConvertL
       oldValues: { status: lead.status },
       newValues: { status: "ENROLLED", studentId: student.id, orderCode: order.code },
       reason: input.reason, orgUnitId: lead.centerId, tx,
+    });
+    // C-07 — dòng audit trên đã có, nhưng lượt chốt KHÔNG để lại mốc nào trên
+    // DÒNG THỜI GIAN của lead: Sale mở hồ sơ thấy phễu dừng ở bước trước rồi im.
+    // `auditAlreadyWritten` để không đẻ dòng nhật ký thứ hai cho cùng sự việc
+    // (dòng trên thuộc module `enrollment` và mang mã đơn/mã học viên).
+    await recordLeadStatusChange({
+      tx, leadId: lead.id, actorId: actor.id, actorName: actor.name,
+      from: lead.status, to: "ENROLLED", source: "CONVERT", reason: input.reason,
+      auditAlreadyWritten: true,
     });
 
     // US-03 chat — HV vào lớp (enrollment mặc định ACTIVE) → PH vào nhóm lớp, cùng tx.

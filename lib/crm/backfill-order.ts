@@ -47,6 +47,14 @@ export async function createBackfillOrderPaymentInTx(
     actor: AuditActor;
     lead: { id: string; centerId: string | null; parentName: string; phone: string; email: string | null };
     paid: BackfillPaymentInput;
+    /**
+     * N-2 · quyết định B4 — con mà khoản tiền này thuộc về. `null` = KHÔNG quy được:
+     * lượt chốt nhiều học viên đẻ ra MỘT đơn backfill chung, không có cách chia nào
+     * đúng. Để `null` rồi cho báo cáo hiện dòng "chưa quy được về con" còn hơn gán bừa
+     * cho đứa đầu danh sách — sai đó âm thầm vì tổng vẫn khớp.
+     * Chỗ gọi suy bằng `inferLeadChildIdForConvert` (`lib/orders/lead-child-link.ts`).
+     */
+    leadChildId?: string | null;
   },
 ): Promise<{ created: boolean; paymentId: string | null }> {
   const { actor, lead, paid } = params;
@@ -73,6 +81,7 @@ export async function createBackfillOrderPaymentInTx(
       customerPhone: lead.phone,
       customerEmail: lead.email,
       leadId: lead.id,
+      leadChildId: params.leadChildId ?? null,
       centerId: lead.centerId,
       subtotal,
       discountAmount,

@@ -692,20 +692,9 @@ export async function updateBookingLopTrialAction(
           actorName,
           reason: `Buổi hẹn học thử chuyển sang "${TRIAL_STATUS_LABEL[parsed.data.status]}"`,
         });
-        // Dòng thời gian người đọc (LeadActivity) là thứ KHÁC sổ trạng thái: sổ để
-        // máy đếm phễu, dòng này để Sale đọc. Chỉ ghi khi có đổi thật.
-        if (doi.changed) {
-          await tx.leadActivity.create({
-            data: {
-              leadId: booking.leadId,
-              actorId,
-              actorName,
-              type: "STATUS_CHANGE",
-              content: `Chuyển trạng thái: ${leadStatusLabel(doi.from)} → ${leadStatusLabel(doi.to)} (từ buổi học thử)`,
-              metadata: { from: doi.from, to: doi.to, via: "trial" },
-            },
-          });
-        }
+        // KHÔNG tự tạo `LeadActivity` ở đây nữa (luật N-4: chỉ `lib/lead/activity-write.ts`
+        // được tạo, có test quét nguồn ghim). `setLeadStatus` gọi sang cửa đó rồi —
+        // ghi thêm là hai dòng timeline cho cùng một lượt đổi.
       }
     }
   });

@@ -6,7 +6,7 @@
 // (chốt 21/08): Điểm danh · Nhận xét · Tải ảnh · Hoàn tất buổi. Trước đó người dùng
 // phải nhớ đường sang ba màn khác nhau rồi mới quay lại đây xem đã đủ chưa.
 //
-// Cột "Tiêu đề buổi" lấy từ GIÁO TRÌNH của lớp (deriveSessionTitle: kế hoạch buổi ghim
+// Cột "Buổi học" lấy từ GIÁO TRÌNH của lớp (deriveSessionLabel: kế hoạch buổi ghim
 // cho lớp → tên bài của giáo án → chủ đề gõ tay), không phải chuỗi nhập tay ở cấp buổi.
 //
 // Thứ tự + phân bậc tính SẴN Ở SERVER (lib/lms/attendance-queue). Ở đây chỉ lọc và vẽ —
@@ -36,14 +36,15 @@ import { StatusPill, type PillTone } from "@/components/admin/ui/status-pill";
 import { EmptyState } from "@/components/admin/ui/states";
 import { adminTd, adminTh, adminTr } from "@/components/admin/ui/table";
 import { PhanTrangBang } from "@/components/ui/phan-trang-bang";
-import { sessionNumberLabel } from "@/lib/lms/session-order";
 import {
   ATTENDANCE_QUEUE_LABEL,
   type AttendanceQueuePhase,
 } from "@/lib/lms/attendance-queue";
 // Hộp thoại tải ảnh/video DÙNG LẠI của site GV — nó vốn đã gọi action admin
-// (app/(admin)/admin/media/actions) và mang đủ luật consent C6.2/C6.3. Chép lại 579
-// dòng sang đây là đẻ ra bản thứ hai của luật đó, sớm muộn cũng lệch nhau.
+// (app/(admin)/admin/media/actions) và mang đủ luật consent C6.2/C6.3. Chép lại sang
+// đây là đẻ ra bản thứ hai của luật đó, sớm muộn cũng lệch nhau.
+// 25/08: hộp thoại đó nay BẮT BUỘC chọn buổi và ảnh đi thẳng vào hàng chờ duyệt (không
+// còn kho, không còn "đăng ngay 1 ảnh"). Nút theo dòng đã truyền sẵn buổi của dòng đó.
 import { UploadPhotoDialog } from "@/app/(teacher)/teacher/anh-lop/_components/upload-photo-dialog";
 import { completeAttendanceSessionAction } from "../_actions";
 import { cn } from "@/lib/utils";
@@ -51,10 +52,17 @@ import { cn } from "@/lib/utils";
 export interface AttendanceListRow {
   id: string;
   classId: string;
-  /** Buổi thứ mấy của lớp (null = không tra được). */
+  /**
+   * Buổi thứ mấy của lớp (null = không tra được). Chỉ dùng để XẾP THỨ TỰ ở server —
+   * phần hiển thị đã nằm trong `sessionLabel`.
+   */
   number: number | null;
-  /** Tiêu đề buổi từ giáo trình lớp. Rỗng = lớp chưa ghim giáo trình. */
-  title: string;
+  /**
+   * Nhãn buổi đầy đủ: `"Buổi 3 - HP1 - Bàn Tay Ma Thuật"`. Server dựng sẵn
+   * (deriveSessionLabel); khoá không chia học phần thì tự rút còn `"Buổi 3 - <tên bài>"`,
+   * lớp chưa ghim giáo trình thì còn `"Buổi 3"`.
+   */
+  sessionLabel: string;
   /** Đã format theo giờ VN ở server — client không tự format kẻo lệch hydrate. */
   dateLabel: string;
   timeLabel: string;
@@ -204,10 +212,9 @@ export function AttendanceList({
     return rows.filter((r) => {
       if (phase !== ALL && r.phase !== phase) return false;
       if (!q) return true;
+      // `sessionLabel` đã chứa cả "Buổi N" lẫn tên bài lẫn học phần ⇒ một khoá tìm là đủ.
       return (
-        r.title.toLowerCase().includes(q) ||
-        r.dateLabel.toLowerCase().includes(q) ||
-        sessionNumberLabel(r.number).toLowerCase().includes(q)
+        r.sessionLabel.toLowerCase().includes(q) || r.dateLabel.toLowerCase().includes(q)
       );
     });
   }, [rows, query, phase]);
@@ -262,7 +269,8 @@ export function AttendanceList({
               ))}
             </SelectContent>
           </Select>
-          {/* Tải ảnh cho CẢ LỚP (chưa gắn buổi) — nút theo buổi nằm ở từng dòng. */}
+          {/* Tải ảnh cho lớp — buổi chọn TRONG hộp thoại (bắt buộc từ 25/08). Nút ở từng
+              dòng tiện hơn vì đã chọn sẵn buổi của dòng đó. */}
           <UploadPhotoDialog classId={classId} />
         </div>
       </div>
@@ -299,113 +307,101 @@ export function AttendanceList({
         />
       ) : (
         <div className="overflow-hidden rounded-xl border border-border bg-card">
-          <div className="overflow-x-auto">
-            <PhanTrangBang tenDonVi="buổi học">
-              <table className="w-full min-w-[1080px] border-collapse text-left">
-                <thead>
-                  <tr className="border-b border-border bg-muted/40">
-                    <th scope="col" className={adminTh}>
-                      Buổi
-                    </th>
-                    <th scope="col" className={adminTh}>
-                      Tiêu đề buổi
-                    </th>
-                    <th scope="col" className={adminTh}>
-                      Ngày
-                    </th>
-                    <th scope="col" className={adminTh}>
-                      Có mặt
-                    </th>
-                    <th scope="col" className={adminTh}>
-                      Tình trạng
-                    </th>
-                    <th scope="col" className={cn(adminTh, "text-right")}>
-                      Việc của buổi
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filtered.map((r) => (
-                    <tr key={r.id} className={adminTr}>
-                      <td className={cn(adminTd, "font-semibold tabular-nums")}>
-                        {sessionNumberLabel(r.number)}
-                      </td>
-                      <td className={cn(adminTd, "max-w-[22rem]")}>
-                        <span className="block truncate font-semibold text-foreground">
-                          {r.title || (
-                            <span className="font-normal text-muted-foreground">
-                              (giáo trình chưa đặt tên buổi)
-                            </span>
-                          )}
+          <PhanTrangBang cuonNgang tenDonVi="buổi học">
+            <table className="w-full min-w-[960px] border-collapse text-left">
+              <thead>
+                <tr className="border-b border-border bg-muted/40">
+                  <th scope="col" className={adminTh}>
+                    Buổi học
+                  </th>
+                  <th scope="col" className={adminTh}>
+                    Ngày
+                  </th>
+                  <th scope="col" className={adminTh}>
+                    Có mặt
+                  </th>
+                  <th scope="col" className={adminTh}>
+                    Tình trạng
+                  </th>
+                  <th scope="col" className={cn(adminTh, "text-right")}>
+                    Việc của buổi
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {filtered.map((r) => (
+                  <tr key={r.id} className={adminTr}>
+                    <td className={cn(adminTd, "max-w-[26rem]")}>
+                      <span className="block truncate font-semibold text-foreground">
+                        {r.sessionLabel}
+                      </span>
+                      {r.timeLabel && (
+                        <span className="block text-xs text-muted-foreground">
+                          {r.timeLabel}
                         </span>
-                        {r.timeLabel && (
-                          <span className="block text-xs text-muted-foreground">
-                            {r.timeLabel}
-                          </span>
+                      )}
+                    </td>
+                    <td className={adminTd}>{r.dateLabel}</td>
+                    <td className={cn(adminTd, "font-semibold tabular-nums")}>
+                      {r.marked > 0 ? `${r.attended}/${r.roster}` : "—"}
+                    </td>
+                    <td className={cn(adminTd, "whitespace-normal")}>
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <StatusPill tone={PHASE_TONE[r.phase]}>
+                          {ATTENDANCE_QUEUE_LABEL[r.phase]}
+                        </StatusPill>
+                        {showsWorkChips(r.phase) && (
+                          <>
+                            <WorkChip
+                              done={r.attendanceDone}
+                              label={`Điểm danh ${r.marked}/${r.roster}`}
+                              icon={ClipboardCheck}
+                            />
+                            <WorkChip
+                              done={r.feedbackDone}
+                              label="Nhận xét"
+                              icon={MessageSquare}
+                            />
+                            <WorkChip
+                              done={r.photoDone}
+                              label={`Ảnh/video ${r.photoCovered}/${r.attended}`}
+                              icon={Camera}
+                            />
+                          </>
                         )}
-                      </td>
-                      <td className={adminTd}>{r.dateLabel}</td>
-                      <td className={cn(adminTd, "font-semibold tabular-nums")}>
-                        {r.marked > 0 ? `${r.attended}/${r.roster}` : "—"}
-                      </td>
-                      <td className={cn(adminTd, "whitespace-normal")}>
-                        <div className="flex flex-wrap items-center gap-1.5">
-                          <StatusPill tone={PHASE_TONE[r.phase]}>
-                            {ATTENDANCE_QUEUE_LABEL[r.phase]}
-                          </StatusPill>
-                          {showsWorkChips(r.phase) && (
-                            <>
-                              <WorkChip
-                                done={r.attendanceDone}
-                                label={`Điểm danh ${r.marked}/${r.roster}`}
-                                icon={ClipboardCheck}
-                              />
-                              <WorkChip
-                                done={r.feedbackDone}
-                                label="Nhận xét"
-                                icon={MessageSquare}
-                              />
-                              <WorkChip
-                                done={r.photoDone}
-                                label={`Ảnh/video ${r.photoCovered}/${r.attended}`}
-                                icon={Camera}
-                              />
-                            </>
-                          )}
-                        </div>
-                      </td>
-                      <td className={cn(adminTd, "whitespace-normal")}>
-                        <div className="flex flex-wrap items-center justify-end gap-1.5">
-                          <Button size="sm" variant="outline" asChild>
-                            <Link
-                              href={`/attendance?classId=${classId}&sessionId=${r.id}`}
-                            >
-                              <ClipboardCheck className="h-3.5 w-3.5" aria-hidden />
-                              Điểm danh
-                            </Link>
-                          </Button>
-                          <Button size="sm" variant="outline" asChild>
-                            <Link href={`/sessions/${r.id}`}>
-                              <MessageSquare className="h-3.5 w-3.5" aria-hidden />
-                              Nhận xét
-                            </Link>
-                          </Button>
-                          <UploadPhotoDialog
-                            classId={classId}
-                            initialSessionId={r.id}
-                            compact
-                          />
-                          {canComplete && (
-                            <CompleteButton row={r} onDone={() => router.refresh()} />
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </PhanTrangBang>
-          </div>
+                      </div>
+                    </td>
+                    <td className={cn(adminTd, "whitespace-normal")}>
+                      <div className="flex flex-wrap items-center justify-end gap-1.5">
+                        <Button size="sm" variant="outline" asChild>
+                          <Link
+                            href={`/attendance?classId=${classId}&sessionId=${r.id}`}
+                          >
+                            <ClipboardCheck className="h-3.5 w-3.5" aria-hidden />
+                            Điểm danh
+                          </Link>
+                        </Button>
+                        <Button size="sm" variant="outline" asChild>
+                          <Link href={`/sessions/${r.id}`}>
+                            <MessageSquare className="h-3.5 w-3.5" aria-hidden />
+                            Nhận xét
+                          </Link>
+                        </Button>
+                        <UploadPhotoDialog
+                          classId={classId}
+                          initialSessionId={r.id}
+                          compact
+                        />
+                        {canComplete && (
+                          <CompleteButton row={r} onDone={() => router.refresh()} />
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </PhanTrangBang>
         </div>
       )}
 

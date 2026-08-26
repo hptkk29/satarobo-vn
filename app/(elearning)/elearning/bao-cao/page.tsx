@@ -80,6 +80,18 @@ export default async function Page({
     <div className="mx-auto max-w-6xl px-4 py-6">
       <h1 className="text-2xl font-bold">Báo cáo tuân thủ hạn chót</h1>
 
+      {/* Lối vào R2. Trang nào không có lối vào thì chỉ người viết nó biết đường
+          tới — và một báo cáo giám sát không ai mở là một báo cáo không tồn tại.
+          Chỉ hiện cho người có quyền: R2 chứa dữ liệu hành vi từng cá nhân. */}
+      {can(actor, "elearning:video-analytics:view") ? (
+        <Link
+          href="/elearning/bao-cao/video"
+          className="mt-2 inline-block text-sm text-primary underline"
+        >
+          Xem chi tiết xem video và cờ nghi ngờ →
+        </Link>
+      ) : null}
+
       {cacLuot.length === 0 ? (
         <p className="mt-4 text-sm text-muted-foreground">
           Chưa có lượt giao nào đang chạy.
@@ -140,7 +152,7 @@ export default async function Page({
           </div>
 
           <div className="mt-2">
-            <PhanTrangBang tenDonVi="người" soDongMacDinh={25}>
+            <PhanTrangBang cuonNgang tenDonVi="người" soDongMacDinh={25}>
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-border text-left">

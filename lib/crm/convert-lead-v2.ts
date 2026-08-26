@@ -4,17 +4,28 @@
 import { db } from "@/lib/db";
 import { writeAudit, type AuditActor } from "@/lib/audit/audit-log";
 import { publishEvent } from "@/lib/events/publish";
+import { recordLeadStatusChange } from "@/lib/lead/status-trail-write";
 import { genStudentCodeV2 } from "@/lib/codegen";
 import { computeEnrollmentPrice } from "@/lib/finance/pricing";
 import { linkRecordedPaymentsToEnrollments } from "@/lib/finance/payment";
 import { findParentMatch, findExistingStudent } from "@/lib/crm/dedupe";
 import { canonicalPhone } from "@/lib/phone";
-import { recordLeadStatusChange } from "@/lib/leads/set-status";
+import { recordLeadStatusLedger } from "@/lib/leads/set-status";
 import {
   createBackfillOrderPaymentInTx,
   type BackfillPaymentInput,
 } from "@/lib/crm/backfill-order";
+import { inferLeadChildIdForConvert } from "@/lib/orders/lead-child-link";
+import { CLOSED_CHILD_STATUS, resolveClosedLeadChildIds } from "@/lib/lead/close-mark";
+import { decideLeadLostFields } from "@/lib/lead/lost-status";
 import { syncConversationMembership } from "@/lib/chat/sync-membership";
+import {
+  ensureCommissionStatement,
+  findAttendedTrialForLeadChild,
+  recordTrialTeacherCommission,
+  type AttendedTrial,
+  type CommissionStatementRef,
+} from "@/lib/crm/trial-teacher-commission";
 import type { CourseDiscountType } from "@prisma/client";
 
 export type ConvertV2Result =
@@ -162,7 +173,34 @@ export async function convertLeadV2(actor: AuditActor, input: ConvertV2Input): P
     return { ok: false, error: { code: "PARENT_CONFLICT", message: "Email và SĐT khớp 2 hồ sơ khác nhau — cần Admin xử lý" } };
   }
 
+  // ── Chuẩn bị phần HOA HỒNG TRƯỚC transaction (25/08) ───────────────────────────
+  //
+  // Hai việc dưới đây CỐ Ý nằm ngoài `db.$transaction`:
+  //   • tra "con đã học thử ở lớp nào" — thuần ĐỌC, không cần atomic;
+  //   • dựng `CommissionStatement` của kỳ — `upsert` của Prisma trên model nhiều unique
+  //     biên dịch thành đọc-rồi-ghi, nên hai lượt convert song song vào lần đầu tiên của
+  //     tháng có thể đâm P2002. Ném bên trong transaction là RỔ CẢ LƯỢT CONVERT (mất
+  //     lead claim, phụ huynh, học viên, ghi danh, đơn học phí) — đã dựng lại được lỗi
+  //     này trên Postgres thật. Ở ngoài thì P2002 chỉ có nghĩa "người khác vừa tạo
+  //     trước", bắt và đọc lại là xong.
+  //
+  // Một mốc thời gian DUY NHẤT cho cả lượt convert: nhiều học viên trong cùng một lượt
+  // phải rơi vào CÙNG kỳ hoa hồng, kể cả khi transaction chạy vắt qua nửa đêm.
+  const now = new Date();
+  const attendedTrials = new Map<string, AttendedTrial>();
+  for (const s of input.students) {
+    if (!s.leadChildId || attendedTrials.has(s.leadChildId)) continue;
+    const t = await findAttendedTrialForLeadChild(db, s.leadChildId);
+    if (t) attendedTrials.set(s.leadChildId, t);
+  }
+  const needsCommission = [...attendedTrials.values()].some((t) => t.teacherUserId);
+  let commissionStatement: CommissionStatementRef | null = null;
+  if (needsCommission) {
+    commissionStatement = await ensureCommissionStatement(now);
+  }
+
   const result = await db.$transaction(async (tx) => {
+
     // CLAIM atomic chống race (2 Sale song song): chỉ 1 lượt chuyển khỏi status chưa-kết-thúc.
     // GĐ5 — KHOÁ CHỐNG ĐUA nay bám `convertedAt IS NULL` thay vì bám STATUS.
     //
@@ -190,7 +228,7 @@ export async function convertLeadV2(actor: AuditActor, input: ConvertV2Input): P
     if (claim.count === 0) throw new Error("ALREADY_CONVERTED");
     // GĐ1 — giữ nguyên `updateMany` làm lượt claim atomic (hai Sale bấm cùng lúc thì
     // chỉ một lượt thắng), chỉ nối thêm sổ. `from` là trạng thái đọc TRƯỚC claim.
-    await recordLeadStatusChange({
+    await recordLeadStatusLedger({
       tx,
       leadId: lead.id,
       from: lead.status,
@@ -218,6 +256,11 @@ export async function convertLeadV2(actor: AuditActor, input: ConvertV2Input): P
           email: input.parentEmail,
         },
         paid: input.backfillPayment,
+        // N-2 · quyết định B4 — quy đơn backfill về đúng con, KHI VÀ CHỈ KHI lượt chốt
+        // này có đúng một học viên gắn `LeadChild`. Chốt 2 con cùng lượt vẫn là MỘT đơn
+        // chung ⇒ để `null` và báo cáo hiện "chưa quy được về con"; muốn tách doanh thu
+        // thì phải tách thành 2 đơn, đúng như B4 đã lường.
+        leadChildId: inferLeadChildIdForConvert(input.students),
       });
     }
 
@@ -330,6 +373,71 @@ export async function convertLeadV2(actor: AuditActor, input: ConvertV2Input): P
       });
       enrollmentIds.push(enrollment.id);
 
+      // ── Học thử → nhập học: đóng sổ trải nghiệm + hoa hồng GV dạy Trial (25/08) ──
+      //
+      // Trước đây convert KHÔNG hề đụng tới các bảng Trial: sau khi con nhập học,
+      // `LeadTrialHistory.outcome` vẫn nằm nguyên ở "PENDING" — nghĩa là cột đó chưa
+      // bao giờ mang giá trị nào khác, dù `lib/trial/sale-roster.ts` đã đọc
+      // `outcome === "ENROLLED"` để bật cờ "đã nhập học". Cờ ấy vì thế luôn tắt.
+      //
+      // Nay đóng sổ NGAY TRONG transaction convert (cùng chỗ tạo Enrollment) để không
+      // có khe hở "đã ghi danh nhưng sổ trải nghiệm chưa biết".
+      const trial = s.leadChildId ? (attendedTrials.get(s.leadChildId) ?? null) : null;
+      if (trial) {
+        // Đóng sổ ĐÚNG lớp trải nghiệm con đã học, và chỉ dòng còn PENDING.
+        //
+        // Bản đầu lọc mỗi `leadChildId` — hai lỗi trong một: (1) nó đè cả dòng đã mang
+        // "LOST" của lần học thử trước (nhánh LOST ở updateLeadStatus có lọc PENDING,
+        // nhánh này thì không ⇒ hai đường bất đối xứng, và lịch sử "đã từng rớt" biến
+        // mất); (2) nó bật "ENROLLED" cho MỌI lớp trải nghiệm con từng vào, kể cả lớp ở
+        // cơ sở khác — mà site GV in nhãn "Đã nhập học · +1% HH" theo cặp
+        // (leadChildId, trialClassId), nên giáo viên KHÔNG được trả đồng nào vẫn thấy
+        // hệ thống hứa trả 1%. Đó là cãi nhau về lương, không phải lỗi hiển thị.
+        await tx.leadTrialHistory.updateMany({
+          where: {
+            leadChildId: s.leadChildId!,
+            trialClassId: trial.trialClassId,
+            outcome: "PENDING",
+          },
+          data: { outcome: "ENROLLED" },
+        });
+
+        // +1% học phí cho GV đã dạy buổi trải nghiệm. Bỏ qua khi lớp chưa gán GV hoặc
+        // học phí 0 — hoa hồng KHÔNG được phép làm hỏng việc ghi danh (xem đầu
+        // lib/crm/trial-teacher-commission.ts).
+        if (trial.teacherUserId && commissionStatement) {
+          const res = await recordTrialTeacherCommission(tx, {
+            statement: commissionStatement,
+            teacherUserId: trial.teacherUserId,
+            enrollmentId: enrollment.id,
+            finalPrice: price.finalPrice,
+            leadId: lead.id,
+            note: `Trial → nhập học: ${s.name} · ${trial.trialClassName}`,
+          });
+          // Kỳ đã chốt sổ ⇒ không ghi được dòng nào. KHÔNG được im lặng: giáo viên mất
+          // tiền mà không ai biết, và không có job đối soát nào cho tầng này. Để lại
+          // dấu vết ở AuditLog để kế toán mở lại kỳ rồi bù tay.
+          if (res && !res.ok) {
+            await writeAudit({
+              actor,
+              module: "commission",
+              entityType: "Enrollment",
+              entityId: enrollment.id,
+              action: "TRIAL_TEACHER_COMMISSION_SKIPPED",
+              newValues: {
+                reason: res.reason,
+                period: res.period,
+                amount: res.amount,
+                recipientId: trial.teacherUserId,
+                trialClassId: trial.trialClassId,
+              },
+              orgUnitId: lead.centerId,
+              tx,
+            });
+          }
+        }
+      }
+
       // Consent ảnh per học viên + audit người tick (AC5).
       // ⚠️ KHÔNG lật consent đã THU HỒI: học viên dedupe (dùng lại hồ sơ cũ) có thể
       // mang REVOKED do phụ huynh rút — tick ở form convert/bulk không phải là lời
@@ -370,6 +478,46 @@ export async function convertLeadV2(actor: AuditActor, input: ConvertV2Input): P
       actor,
     });
 
+    // ── G-06 · MỐC CHỐT theo TỪNG CON (26/08/2026) ────────────────────────────────
+    //
+    // Trước đợt này, chốt ghi danh KHÔNG đụng gì tới `LeadChild`: con đã vào học vẫn
+    // nằm ở trạng thái cũ (hoặc NULL với phiếu cũ) và không có mốc chốt nào. Hệ quả:
+    // C-03 ("Lead đã chuyển đổi") không có cột **thời gian chốt** để tính, còn C-02
+    // (tỷ lệ thành công) thì đếm mẫu số bằng số con mà tử số luôn bằng 0.
+    //
+    // Ghi Ở ĐÂY, trong CÙNG transaction tạo Enrollment — không phải một lượt cập nhật
+    // rời sau commit. Rời nhau là đẻ ra khe "đã ghi danh nhưng chưa có mốc chốt", và
+    // khe đó không có job nào đối soát: nó chỉ hiện ra dưới dạng một con số báo cáo
+    // thấp hơn thực tế.
+    //
+    // ⚠️ Quy theo CON, và quy được BAO NHIÊU CON THÌ GHI BẤY NHIÊU — khác hẳn luật của
+    // ĐƠN HÀNG ngay bên trên (`inferLeadChildIdForConvert`: 2 con ⇒ `null`). Tiền của
+    // một đơn chung không chia được cho hai đứa, nhưng sự kiện "đứa này đã thành học
+    // viên" thì không mập mờ chút nào. Xem `lib/lead/close-mark.ts`.
+    //
+    // `updateMany` + `leadId: lead.id`: chặn ca chỗ gọi truyền `leadChildId` của phiếu
+    // KHÁC (bulk-convert nhận dữ liệu từ file). Con lạ thì không khớp `where` nên
+    // không có gì bị ghi — không ném, không đổ cả lượt chốt vì một mã sai.
+    const closedChildIds = resolveClosedLeadChildIds(input.students);
+    if (closedChildIds.length > 0) {
+      await tx.leadChild.updateMany({
+        where: { id: { in: closedChildIds }, leadId: lead.id },
+        // `now` là mốc DUY NHẤT của cả lượt convert (dựng trước transaction) — hai con
+        // chốt cùng lượt phải mang cùng một mốc, kể cả khi transaction vắt qua nửa đêm.
+        data: { status: CLOSED_CHILD_STATUS, closedAt: now },
+      });
+
+      // Con từng bị đánh dấu RỚT nay quay lại và vào học: `Lead.lostNote`/`lostAt`
+      // (cấp phụ huynh — quyết định B5) có thể đã hết chỗ bám. Đi qua ĐÚNG hàm quyết
+      // định của C-06 thay vì tự xoá: nó chỉ xoá khi KHÔNG CÒN con nào rớt, vì xoá vô
+      // điều kiện là xoá mất lý do rớt của ĐỨA CÒN LẠI và không có đường dựng lại.
+      const lostChildCount = await tx.leadChild.count({
+        where: { leadId: lead.id, status: "LOST" },
+      });
+      const patch = decideLeadLostFields({ intent: "unmark", lostChildCount, now });
+      if (patch) await tx.lead.update({ where: { id: lead.id }, data: patch });
+    }
+
     await writeAudit({
       actor,
       module: "enrollment",
@@ -385,6 +533,21 @@ export async function convertLeadV2(actor: AuditActor, input: ConvertV2Input): P
           : undefined,
       orgUnitId: lead.centerId,
       tx,
+    });
+    // C-07 — bù mốc trên DÒNG THỜI GIAN của lead (dòng audit ngay trên đã có).
+    // `auditAlreadyWritten`: dòng đó thuộc module `enrollment`, mang thêm mã học
+    // viên + lý do backfill và đang bị e2e ghim — ghi thêm là đếm đôi một sự việc.
+    await recordLeadStatusChange({
+      tx,
+      leadId: lead.id,
+      actorId: actor.id,
+      actorName: actor.name,
+      from: lead.status,
+      // "DA_DANG_KY" chứ không "ENROLLED": GĐ5 gộp ENROLLED vào DA_DANG_KY. Mốc
+      // "đã chốt" từ nay đọc bằng `convertedAt` (vừa set ở lượt claim phía trên).
+      to: "DA_DANG_KY",
+      source: "CONVERT",
+      auditAlreadyWritten: true,
     });
 
     // US-03 chat — HV vào lớp qua convert (kể cả bulk-convert + import lead) → PH vào

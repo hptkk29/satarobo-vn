@@ -149,126 +149,124 @@ export default async function AuditListPage({ searchParams }: SearchParams) {
       </form>
 
       <div className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
-        <div className="overflow-x-auto">
-          <PhanTrangBang>
-            <table className="min-w-full divide-y divide-border">
-              <thead className="bg-muted">
+        <PhanTrangBang cuonNgang>
+          <table className="min-w-full divide-y divide-border">
+            <thead className="bg-muted">
+              <tr>
+                <th className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  Mã phiếu
+                </th>
+                <th className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  Cơ sở
+                </th>
+                <th className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  Trạng thái
+                </th>
+                <th className="px-3 py-3 text-center text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  Dòng
+                </th>
+                <th className="px-3 py-3 text-center text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  Đã điều chỉnh
+                </th>
+                <th className="px-3 py-3 text-center text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  +/−
+                </th>
+                <th className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  Người làm
+                </th>
+                <th className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  Thời gian
+                </th>
+                <th className="px-3 py-3 text-right text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  Hành động
+                </th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-border">
+              {audits.length === 0 ? (
                 <tr>
-                  <th className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                    Mã phiếu
-                  </th>
-                  <th className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                    Cơ sở
-                  </th>
-                  <th className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                    Trạng thái
-                  </th>
-                  <th className="px-3 py-3 text-center text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                    Dòng
-                  </th>
-                  <th className="px-3 py-3 text-center text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                    Đã điều chỉnh
-                  </th>
-                  <th className="px-3 py-3 text-center text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                    +/−
-                  </th>
-                  <th className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                    Người làm
-                  </th>
-                  <th className="px-3 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                    Thời gian
-                  </th>
-                  <th className="px-3 py-3 text-right text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                    Hành động
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border">
-                {audits.length === 0 ? (
-                  <tr>
-                    <td
-                      colSpan={9}
-                      className="px-4 py-12 text-center text-sm text-muted-foreground"
+                  <td
+                    colSpan={9}
+                    className="px-4 py-12 text-center text-sm text-muted-foreground"
+                  >
+                    Chưa có phiếu kiểm kê nào khớp bộ lọc.{" "}
+                    <Link
+                      href="/inventory/audit/new"
+                      className="text-primary hover:underline"
                     >
-                      Chưa có phiếu kiểm kê nào khớp bộ lọc.{" "}
-                      <Link
-                        href="/inventory/audit/new"
-                        className="text-primary hover:underline"
-                      >
-                        Tạo mới →
-                      </Link>
-                    </td>
-                  </tr>
-                ) : (
-                  audits.map((a) => {
-                    const statusInfo = STATUS_INFO[a.status];
-                    const isDraft = a.status === "DRAFT";
-                    return (
-                      <tr key={a.id} className="hover:bg-muted/60">
-                        <td className="px-3 py-3 font-mono text-xs text-foreground tabular-nums">
-                          {a.auditCode ?? a.id.slice(0, 8) + "…"}
-                        </td>
-                        <td className="px-3 py-3 text-sm text-foreground">
-                          {a.center.name}
-                        </td>
-                        <td className="px-3 py-3">
-                          <span
-                            className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold ${statusInfo.color}`}
-                          >
-                            {statusInfo.label}
+                      Tạo mới →
+                    </Link>
+                  </td>
+                </tr>
+              ) : (
+                audits.map((a) => {
+                  const statusInfo = STATUS_INFO[a.status];
+                  const isDraft = a.status === "DRAFT";
+                  return (
+                    <tr key={a.id} className="hover:bg-muted/60">
+                      <td className="px-3 py-3 font-mono text-xs text-foreground tabular-nums">
+                        {a.auditCode ?? a.id.slice(0, 8) + "…"}
+                      </td>
+                      <td className="px-3 py-3 text-sm text-foreground">
+                        {a.center.name}
+                      </td>
+                      <td className="px-3 py-3">
+                        <span
+                          className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold ${statusInfo.color}`}
+                        >
+                          {statusInfo.label}
+                        </span>
+                      </td>
+                      <td className="px-3 py-3 text-center text-sm tabular-nums text-foreground">
+                        {a._count.items}
+                      </td>
+                      <td className="px-3 py-3 text-center text-sm tabular-nums font-semibold text-foreground">
+                        {a.totalAdjusted}
+                      </td>
+                      <td className="px-3 py-3 text-center text-xs tabular-nums">
+                        {a.totalIncreases > 0 && (
+                          <span className="text-state-success-ink">
+                            +{a.totalIncreases}
                           </span>
-                        </td>
-                        <td className="px-3 py-3 text-center text-sm tabular-nums text-foreground">
-                          {a._count.items}
-                        </td>
-                        <td className="px-3 py-3 text-center text-sm tabular-nums font-semibold text-foreground">
-                          {a.totalAdjusted}
-                        </td>
-                        <td className="px-3 py-3 text-center text-xs tabular-nums">
-                          {a.totalIncreases > 0 && (
-                            <span className="text-state-success-ink">
-                              +{a.totalIncreases}
-                            </span>
-                          )}
-                          {a.totalIncreases > 0 && a.totalDecreases > 0 && " / "}
-                          {a.totalDecreases > 0 && (
-                            <span className="text-state-danger-ink">
-                              -{a.totalDecreases}
-                            </span>
-                          )}
-                          {a.totalIncreases === 0 && a.totalDecreases === 0 && "—"}
-                        </td>
-                        <td className="px-3 py-3 text-xs text-muted-foreground">
-                          {a.performedBy?.fullName ?? "—"}
-                        </td>
-                        <td className="px-3 py-3 text-xs tabular-nums text-muted-foreground">
-                          {fmtDateTime(a.performedAt ?? a.createdAt)}
-                        </td>
-                        <td className="px-3 py-3 text-right">
-                          {isDraft ? (
-                            <Link
-                              href={`/inventory/audit/${a.id}/edit`}
-                              className="inline-flex items-center gap-1 rounded-md border border-state-warning px-2.5 py-1 text-xs font-semibold text-state-warning-ink hover:bg-state-warning-soft"
-                            >
-                              Tiếp tục →
-                            </Link>
-                          ) : (
-                            <Link
-                              href={`/inventory/audit/${a.id}`}
-                              className="inline-flex items-center gap-1 rounded-md border border-border px-2.5 py-1 text-xs font-semibold text-foreground hover:bg-muted"
-                            >
-                              Xem
-                            </Link>
-                          )}
-                        </td>
-                      </tr>
-                    );
-                  })
-                )}
-              </tbody>
-            </table>
-          </PhanTrangBang>
-        </div>
+                        )}
+                        {a.totalIncreases > 0 && a.totalDecreases > 0 && " / "}
+                        {a.totalDecreases > 0 && (
+                          <span className="text-state-danger-ink">
+                            -{a.totalDecreases}
+                          </span>
+                        )}
+                        {a.totalIncreases === 0 && a.totalDecreases === 0 && "—"}
+                      </td>
+                      <td className="px-3 py-3 text-xs text-muted-foreground">
+                        {a.performedBy?.fullName ?? "—"}
+                      </td>
+                      <td className="px-3 py-3 text-xs tabular-nums text-muted-foreground">
+                        {fmtDateTime(a.performedAt ?? a.createdAt)}
+                      </td>
+                      <td className="px-3 py-3 text-right">
+                        {isDraft ? (
+                          <Link
+                            href={`/inventory/audit/${a.id}/edit`}
+                            className="inline-flex items-center gap-1 rounded-md border border-state-warning px-2.5 py-1 text-xs font-semibold text-state-warning-ink hover:bg-state-warning-soft"
+                          >
+                            Tiếp tục →
+                          </Link>
+                        ) : (
+                          <Link
+                            href={`/inventory/audit/${a.id}`}
+                            className="inline-flex items-center gap-1 rounded-md border border-border px-2.5 py-1 text-xs font-semibold text-foreground hover:bg-muted"
+                          >
+                            Xem
+                          </Link>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </PhanTrangBang>
       </div>
     </div>
   );

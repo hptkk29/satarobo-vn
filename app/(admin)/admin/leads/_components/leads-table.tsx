@@ -192,6 +192,128 @@ function DeleteCell({ lead, onDeleted }: { lead: LeadRow; onDeleted: () => void 
   )
 }
 
+/** G-04 — một ô của bảng, chọn theo KHOÁ CỘT trong danh mục
+ *  (`lib/tables/lead-columns.ts`). Thêm cột mới = thêm 1 dòng ở danh mục + 1 `case`
+ *  ở đây; test `lead-columns.test.ts` đỏ nếu thiếu một trong hai.
+ *
+ *  ⚠️ Mọi giá trị ở đây đã đi qua che PII Ở SERVER (`maskLeadPiiFields` trong
+ *  page.tsx) TRƯỚC khi xuống client. Đừng thêm ô nào đọc dữ liệu từ nguồn khác. */
+function LeadCell({
+  col,
+  lead,
+  canUpdate,
+  currentUserId,
+}: {
+  col: string
+  lead: LeadRow
+  canUpdate: boolean
+  currentUserId: string
+}) {
+  switch (col) {
+    case 'parentName':
+      return (
+        <td className="px-4 py-3">
+          <div className="flex items-center gap-1.5">
+            <span className="font-medium text-foreground">{lead.parentName}</span>
+            <SharedBadge lead={lead} currentUserId={currentUserId} />
+          </div>
+          {lead.childName && (
+            <div className="text-xs text-muted-foreground">
+              Con: {lead.childName}
+              {lead.childAge ? ` · ${lead.childAge} tuổi` : ''}
+            </div>
+          )}
+        </td>
+      )
+    case 'phone':
+      return <td className="px-4 py-3 text-sm tabular-nums text-foreground">{lead.phone}</td>
+    case 'course':
+      return (
+        <td className="px-4 py-3 max-w-[200px]">
+          <span className="block truncate text-sm text-muted-foreground" title={lead.courseName ?? ''}>
+            {lead.courseName ?? '—'}
+          </span>
+          {lead.source && (
+            <span className="block truncate text-xs text-muted-foreground" title={lead.source}>
+              {shortSource(lead.source)}
+            </span>
+          )}
+        </td>
+      )
+    case 'status':
+      return (
+        <td className="px-4 py-3">
+          <StatusCell lead={lead} canUpdate={canUpdate} />
+        </td>
+      )
+    case 'center':
+      return <td className="px-4 py-3 text-sm text-muted-foreground">{lead.center?.name ?? '—'}</td>
+    case 'assignedTo':
+      return (
+        <td className="px-4 py-3 text-sm">
+          {lead.assignedTo?.name ? (
+            <span className="text-foreground">{lead.assignedTo.name}</span>
+          ) : (
+            <span className="font-medium text-state-warning-ink">Chưa phân công</span>
+          )}
+        </td>
+      )
+    case 'createdAt':
+      return (
+        <td className="px-4 py-3 text-sm text-muted-foreground tabular-nums">
+          {formatDate(lead.createdAt)}
+        </td>
+      )
+    case 'childName':
+      return <td className="px-4 py-3 text-sm text-foreground">{lead.childName ?? '—'}</td>
+    case 'childAge':
+      return (
+        <td className="px-4 py-3 text-sm tabular-nums text-muted-foreground">
+          {lead.childAge ?? '—'}
+        </td>
+      )
+    case 'email':
+      return (
+        <td className="px-4 py-3 max-w-[200px]">
+          <span className="block truncate text-sm text-muted-foreground" title={lead.email ?? ''}>
+            {lead.email ?? '—'}
+          </span>
+        </td>
+      )
+    case 'source':
+      return (
+        <td className="px-4 py-3 max-w-[180px]">
+          <span className="block truncate text-sm text-muted-foreground" title={lead.source ?? ''}>
+            {lead.source ? shortSource(lead.source) : '—'}
+          </span>
+        </td>
+      )
+    case 'note':
+      return (
+        <td className="px-4 py-3 max-w-[240px]">
+          <span className="block truncate text-sm text-muted-foreground" title={lead.note ?? ''}>
+            {lead.note ?? '—'}
+          </span>
+        </td>
+      )
+    case 'utmCampaign':
+      return (
+        <td className="px-4 py-3 max-w-[180px]">
+          <span
+            className="block truncate text-sm text-muted-foreground"
+            title={lead.utmCampaign ?? ''}
+          >
+            {lead.utmCampaign ?? '—'}
+          </span>
+        </td>
+      )
+    default:
+      // Khoá lạc không bao giờ tới được đây (server đã lọc theo danh mục), nhưng
+      // trả về ô rỗng vẫn tốt hơn là làm lệch số ô so với số <th>.
+      return <td className="px-4 py-3" />
+  }
+}
+
 function DetailItem({ label, value }: { label: string; value: React.ReactNode }) {
   return (
     <div>
@@ -368,8 +490,10 @@ export function LeadsTable({
   canUpdate,
   canDelete,
   currentStatus,
-  currentQ,
   currentUserId,
+  canExport,
+  columns,
+  columnPicker,
 }: {
   leads: LeadRow[]
   total: number
@@ -378,8 +502,14 @@ export function LeadsTable({
   canUpdate: boolean
   canDelete: boolean
   currentStatus?: string
-  currentQ?: string
   currentUserId: string
+  /** G-03 — `leads:export`. Quyền RIÊNG, tách khỏi quyền xem danh sách. */
+  canExport: boolean
+  /** G-04 — cột đang hiện, ĐÚNG thứ tự. Server đã ghép cấu hình của người này với
+   *  danh mục `lib/tables/lead-columns.ts`; bảng không tự quyết định gì. */
+  columns: { key: string; label: string }[]
+  /** Nút "Tuỳ chọn cột" (Server Component dựng sẵn, đặt cạnh thanh lọc). */
+  columnPicker?: React.ReactNode
 }) {
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -407,6 +537,16 @@ export function LeadsTable({
     router.push(`/leads?${params.toString()}`)
   }
 
+  // G-03 — link xuất mang THEO CẢ bộ lọc đang hiện trên màn (cơ sở, sale, nguồn,
+  // khoảng ngày…), không chỉ trạng thái + từ khoá như bản CSV cũ. Trước đây bấm nút
+  // sau khi lọc "CS1, tháng 8" vẫn ra tệp của mọi cơ sở mọi thời kỳ — không sai
+  // quyền (scopedDb vẫn chặn), nhưng là một tệp KHÁC thứ người dùng đang nhìn.
+  // Bỏ `page`/`size`/`view`: đó là chuyện phân trang trên màn, tệp xuất trọn bộ lọc.
+  const exportParams = new URLSearchParams(searchParams.toString())
+  for (const k of ['page', 'size', 'view']) exportParams.delete(k)
+  const exportQuery = exportParams.toString()
+  const exportHref = `/api/admin/leads/export${exportQuery ? `?${exportQuery}` : ''}`
+
   return (
     <div className="space-y-4">
       {/* Filters — tìm kiếm dùng chung ô "Tìm" ở thanh lọc phía trên (tránh 2 ô trùng nhau). */}
@@ -424,16 +564,25 @@ export function LeadsTable({
                     ))}
         </select>
 
-        {/* Export CSV */}
-        <a
-          href={`/api/admin/leads/export${currentStatus ? `?status=${currentStatus}` : ''}${currentQ ? `${currentStatus ? '&' : '?'}q=${encodeURIComponent(currentQ)}` : ''}`}
-          download
-          className="ml-auto inline-flex items-center gap-2 rounded-lg border border-border bg-card px-3 py-2 text-sm font-semibold text-muted-foreground hover:bg-muted hover:text-foreground"
-          title="Xuất CSV"
-        >
-          <Download className="h-4 w-4" />
-          <span className="hidden sm:inline">Xuất CSV</span>
-        </a>
+        {/* G-04 — tuỳ chọn cột (theo từng người). Đứng cạnh thanh lọc, trước nút xuất
+            file: file xuất CỐ Ý dùng bộ cột cố định, không chạy theo tuỳ chọn này. */}
+        <div className="ml-auto flex items-center gap-2">
+          {columnPicker}
+
+          {/* G-03 — xuất Excel. Nút bị giấu khi thiếu `leads:export`, nhưng đường
+              /api vẫn tự gác lại: giấu nút KHÔNG phải kiểm soát truy cập. */}
+          {canExport && (
+            <a
+              href={exportHref}
+              download
+              className="inline-flex items-center gap-2 rounded-lg border border-border bg-card px-3 py-2 text-sm font-semibold text-muted-foreground hover:bg-muted hover:text-foreground"
+              title="Xuất Excel danh sách lead đang lọc"
+            >
+              <Download className="h-4 w-4" />
+              <span className="hidden sm:inline">Xuất Excel</span>
+            </a>
+          )}
+        </div>
       </div>
 
       {/* Table */}
@@ -442,27 +591,16 @@ export function LeadsTable({
           <table className="min-w-full divide-y divide-border">
             <thead className="bg-muted">
               <tr>
-                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  Phụ huynh / học sinh
-                </th>
-                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  Số điện thoại
-                </th>
-                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  Khóa quan tâm
-                </th>
-                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  Trạng thái
-                </th>
-                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  Cơ sở
-                </th>
-                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  Sale phụ trách
-                </th>
-                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  Ngày đăng ký
-                </th>
+                {/* Nhãn cột đến từ danh mục (lib/tables/lead-columns.ts) — chép tay ở
+                    đây là hai nơi trôi lệch ngay lần thêm trường tiếp theo. */}
+                {columns.map((c) => (
+                  <th
+                    key={c.key}
+                    className="whitespace-nowrap px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground"
+                  >
+                    {c.label}
+                  </th>
+                ))}
                 {showActions && (
                   <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                     Hành động
@@ -474,7 +612,7 @@ export function LeadsTable({
               {leads.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={showActions ? 8 : 7}
+                    colSpan={columns.length + (showActions ? 1 : 0)}
                     className="px-4 py-12 text-center text-sm text-muted-foreground"
                   >
                     Chưa có lead nào
@@ -487,47 +625,15 @@ export function LeadsTable({
                     onClick={() => setSelectedLead(lead)}
                     className="cursor-pointer hover:bg-muted/60"
                   >
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-1.5">
-                        <span className="font-medium text-foreground">{lead.parentName}</span>
-                        <SharedBadge lead={lead} currentUserId={currentUserId} />
-                      </div>
-                      {lead.childName && (
-                        <div className="text-xs text-muted-foreground">
-                          Con: {lead.childName}
-                          {lead.childAge ? ` · ${lead.childAge} tuổi` : ''}
-                        </div>
-                      )}
-                    </td>
-                    <td className="px-4 py-3 text-sm tabular-nums text-foreground">
-                      {lead.phone}
-                    </td>
-                    <td className="px-4 py-3 max-w-[200px]">
-                      <span className="block truncate text-sm text-muted-foreground" title={lead.courseName ?? ''}>
-                        {lead.courseName ?? '—'}
-                      </span>
-                      {lead.source && (
-                        <span className="block truncate text-xs text-muted-foreground" title={lead.source}>
-                          {shortSource(lead.source)}
-                        </span>
-                      )}
-                    </td>
-                    <td className="px-4 py-3">
-                      <StatusCell lead={lead} canUpdate={canUpdate} />
-                    </td>
-                    <td className="px-4 py-3 text-sm text-muted-foreground">
-                      {lead.center?.name ?? '—'}
-                    </td>
-                    <td className="px-4 py-3 text-sm">
-                      {lead.assignedTo?.name ? (
-                        <span className="text-foreground">{lead.assignedTo.name}</span>
-                      ) : (
-                        <span className="font-medium text-state-warning-ink">Chưa phân công</span>
-                      )}
-                    </td>
-                    <td className="px-4 py-3 text-sm text-muted-foreground tabular-nums">
-                      {formatDate(lead.createdAt)}
-                    </td>
+                    {columns.map((c) => (
+                      <LeadCell
+                        key={c.key}
+                        col={c.key}
+                        lead={lead}
+                        canUpdate={canUpdate}
+                        currentUserId={currentUserId}
+                      />
+                    ))}
                     {showActions && (
                       <td
                         className="px-4 py-3 text-right"

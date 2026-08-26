@@ -63,6 +63,20 @@ export function ClassList({ rows }: { rows: ClassRow[] }) {
   const [query, setQuery] = useState("");
   const [course, setCourse] = useState(ALL);
   const [status, setStatus] = useState(ALL);
+  const [showCompleted, setShowCompleted] = useState(false);
+
+  const completedCount = useMemo(
+    () => rows.filter((r) => r.status === "COMPLETED").length,
+    [rows],
+  );
+
+  // Cổng "đã hoàn thành" chạy TRƯỚC mọi bộ lọc khác: GV dạy vài khoá là lớp cũ
+  // đông hơn lớp đang dạy, để lẫn vào thì lớp còn buổi cần điểm danh bị đẩy
+  // xuống cuối bảng.
+  const openRows = useMemo(
+    () => (showCompleted ? rows : rows.filter((r) => r.status !== "COMPLETED")),
+    [rows, showCompleted],
+  );
 
   // Options lọc suy từ chính dữ liệu (khoá học + trạng thái đang có).
   const courseOptions = useMemo<SelectFilter["options"]>(() => {
@@ -75,8 +89,11 @@ export function ClassList({ rows }: { rows: ClassRow[] }) {
     ];
   }, [rows]);
 
+  // Suy từ `openRows` chứ không phải `rows`: nếu vẫn đọc `rows` thì dropdown còn
+  // option "Hoàn thành" trong khi ô tick đang ẩn đúng nhóm đó ⇒ chọn vào là bảng
+  // rỗng mà không có gì giải thích.
   const statusOptions = useMemo<SelectFilter["options"]>(() => {
-    const present = [...new Set(rows.map((r) => r.status))];
+    const present = [...new Set(openRows.map((r) => r.status))];
     const ordered = Object.keys(CLASS_STATUS_LABEL).filter((s) =>
       present.includes(s),
     );
@@ -84,11 +101,20 @@ export function ClassList({ rows }: { rows: ClassRow[] }) {
       { value: ALL, label: "Mọi trạng thái" },
       ...ordered.map((s) => ({ value: s, label: CLASS_STATUS_LABEL[s]! })),
     ];
-  }, [rows]);
+  }, [openRows]);
+
+  // Bỏ tick trong khi đang lọc status=COMPLETED: giá trị đó vừa biến mất khỏi
+  // options nên trigger của Base UI Select hiện nhãn RỖNG (nó tra label theo
+  // options) và bảng trắng — trả về "Mọi trạng thái" để hai điều khiển không chọi
+  // nhau.
+  function toggleShowCompleted(next: boolean) {
+    setShowCompleted(next);
+    if (!next && status === "COMPLETED") setStatus(ALL);
+  }
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    return rows.filter((r) => {
+    return openRows.filter((r) => {
       if (course !== ALL && r.course !== course) return false;
       if (status !== ALL && r.status !== status) return false;
       if (!q) return true;
@@ -98,7 +124,7 @@ export function ClassList({ rows }: { rows: ClassRow[] }) {
         r.course.toLowerCase().includes(q)
       );
     });
-  }, [rows, query, course, status]);
+  }, [openRows, query, course, status]);
 
   return (
     <>
@@ -110,109 +136,127 @@ export function ClassList({ rows }: { rows: ClassRow[] }) {
           { value: course, onChange: setCourse, options: courseOptions },
           { value: status, onChange: setStatus, options: statusOptions },
         ]}
+        // Dùng slot `actions` sẵn có thay vì thêm prop cho ListToolbar — 9 màn
+        // khác của site GV cũng dựng trên component này, đổi chữ ký là đụng cả 9.
+        // GV chưa dạy xong lớp nào thì ô tick không ẩn được gì ⇒ không render.
+        actions={
+          completedCount > 0 ? (
+            <label className="flex cursor-pointer items-center gap-2 text-sm font-medium whitespace-nowrap text-muted-foreground">
+              <input
+                type="checkbox"
+                checked={showCompleted}
+                onChange={(e) => toggleShowCompleted(e.target.checked)}
+                className="h-4 w-4 rounded border-input text-primary-ink focus:ring-primary"
+              />
+              Hiện lớp đã hoàn thành ({completedCount})
+            </label>
+          ) : undefined
+        }
       />
 
       <div className="t-card overflow-hidden">
-        <div className="overflow-x-auto">
-          <PhanTrangBang>
-            <table className="min-w-[880px] w-full border-collapse text-left text-sm">
-              <thead>
-                <tr className="border-b border-border bg-muted/50 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
-                  <th scope="col" className="px-4 py-3">
-                    Lớp
-                  </th>
-                  <th scope="col" className="px-4 py-3">
-                    Khoá học
-                  </th>
-                  <th scope="col" className="px-4 py-3">
-                    Lịch học
-                  </th>
-                  <th scope="col" className="px-4 py-3">
-                    Sĩ số
-                  </th>
-                  <th scope="col" className="px-4 py-3">
-                    Cần xử lý
-                  </th>
-                  <th scope="col" className="px-4 py-3">
-                    Trạng thái
-                  </th>
-                  <th scope="col" className="px-4 py-3 text-right">
-                    <span className="sr-only">Mở lớp</span>
-                  </th>
+        <PhanTrangBang cuonNgang>
+          <table className="min-w-[880px] w-full border-collapse text-left text-sm">
+            <thead>
+              <tr className="border-b border-border bg-muted/50 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+                <th scope="col" className="px-4 py-3">
+                  Lớp
+                </th>
+                <th scope="col" className="px-4 py-3">
+                  Khoá học
+                </th>
+                <th scope="col" className="px-4 py-3">
+                  Lịch học
+                </th>
+                <th scope="col" className="px-4 py-3">
+                  Sĩ số
+                </th>
+                <th scope="col" className="px-4 py-3">
+                  Cần xử lý
+                </th>
+                <th scope="col" className="px-4 py-3">
+                  Trạng thái
+                </th>
+                <th scope="col" className="px-4 py-3 text-right">
+                  <span className="sr-only">Mở lớp</span>
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.length === 0 ? (
+                <tr>
+                  <td
+                    colSpan={7}
+                    className="px-5 py-10 text-center text-sm text-muted-foreground"
+                  >
+                    {/* Nói rõ phần đang bị cổng "hoàn thành" chặn, kẻo GV vừa
+                        lọc xong thấy bảng trắng lại tưởng mất lớp. */}
+                    {!showCompleted && completedCount > 0
+                      ? `Không có lớp khớp bộ lọc — ${completedCount} lớp đã hoàn thành đang ẩn.`
+                      : "Không có lớp khớp bộ lọc."}
+                  </td>
                 </tr>
-              </thead>
-              <tbody>
-                {filtered.length === 0 ? (
-                  <tr>
-                    <td
-                      colSpan={7}
-                      className="px-5 py-10 text-center text-sm text-muted-foreground"
-                    >
-                      Không có lớp khớp bộ lọc.
+              ) : (
+                filtered.map((r) => (
+                  <tr
+                    key={r.id}
+                    className="border-b border-border/60 transition-colors last:border-0 hover:bg-muted/50"
+                  >
+                    <td className="px-4 py-3.5">
+                      <Link
+                        href={`?classId=${r.id}`}
+                        className="rounded-sm font-semibold text-foreground outline-none hover:text-primary-ink-hover hover:underline focus-visible:ring-2 focus-visible:ring-ring"
+                      >
+                        {r.name}
+                      </Link>
+                      {(r.code || r.center) && (
+                        <p className="text-xs text-muted-foreground">
+                          {[r.code, r.center].filter(Boolean).join(" · ")}
+                        </p>
+                      )}
+                    </td>
+                    {/* KHÔNG whitespace-nowrap: tên khoá dài ("Combo — Full Lộ Trình
+                        Luyện Thi") là ô đẩy bảng lên 1108px, vượt khung 958px của
+                        laptop 1280 ⇒ phải cuộn ngang mới thấy cột Trạng thái. */}
+                    <td className="min-w-[9rem] px-4 py-3.5 text-foreground">
+                      {r.course}
+                    </td>
+                    <td className="px-4 py-3.5 whitespace-nowrap text-muted-foreground">
+                      {r.schedule || "—"}
+                    </td>
+                    <td className="px-4 py-3.5 whitespace-nowrap text-foreground">
+                      {r.enrolled}/{r.capacity}
+                    </td>
+                    <td className="px-4 py-3.5 whitespace-nowrap">
+                      {r.pending > 0 ? (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-state-warning-soft px-2.5 py-1 text-xs font-semibold text-state-warning-ink">
+                          <ClipboardCheck className="h-3.5 w-3.5" aria-hidden />
+                          {r.pending} điểm danh
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-state-success-soft px-2.5 py-1 text-xs font-semibold text-state-success-ink">
+                          <CheckCircle2 className="h-3.5 w-3.5" aria-hidden />
+                          Hoàn tất
+                        </span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3.5 whitespace-nowrap">
+                      <ClassStatusPill status={r.status} />
+                    </td>
+                    <td className="px-4 py-3.5 text-right whitespace-nowrap">
+                      <Link
+                        href={`?classId=${r.id}`}
+                        className="inline-flex items-center gap-1 rounded-sm text-sm font-semibold text-primary-ink outline-none hover:text-primary-ink-hover focus-visible:ring-2 focus-visible:ring-ring"
+                      >
+                        Mở lớp <ArrowRight className="h-4 w-4" aria-hidden />
+                      </Link>
                     </td>
                   </tr>
-                ) : (
-                  filtered.map((r) => (
-                    <tr
-                      key={r.id}
-                      className="border-b border-border/60 transition-colors last:border-0 hover:bg-muted/50"
-                    >
-                      <td className="px-4 py-3.5">
-                        <Link
-                          href={`?classId=${r.id}`}
-                          className="rounded-sm font-semibold text-foreground outline-none hover:text-primary-ink-hover hover:underline focus-visible:ring-2 focus-visible:ring-ring"
-                        >
-                          {r.name}
-                        </Link>
-                        {(r.code || r.center) && (
-                          <p className="text-xs text-muted-foreground">
-                            {[r.code, r.center].filter(Boolean).join(" · ")}
-                          </p>
-                        )}
-                      </td>
-                      {/* KHÔNG whitespace-nowrap: tên khoá dài ("Combo — Full Lộ Trình
-                          Luyện Thi") là ô đẩy bảng lên 1108px, vượt khung 958px của
-                          laptop 1280 ⇒ phải cuộn ngang mới thấy cột Trạng thái. */}
-                      <td className="min-w-[9rem] px-4 py-3.5 text-foreground">
-                        {r.course}
-                      </td>
-                      <td className="px-4 py-3.5 whitespace-nowrap text-muted-foreground">
-                        {r.schedule || "—"}
-                      </td>
-                      <td className="px-4 py-3.5 whitespace-nowrap text-foreground">
-                        {r.enrolled}/{r.capacity}
-                      </td>
-                      <td className="px-4 py-3.5 whitespace-nowrap">
-                        {r.pending > 0 ? (
-                          <span className="inline-flex items-center gap-1 rounded-full bg-state-warning-soft px-2.5 py-1 text-xs font-semibold text-state-warning-ink">
-                            <ClipboardCheck className="h-3.5 w-3.5" aria-hidden />
-                            {r.pending} điểm danh
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center gap-1 rounded-full bg-state-success-soft px-2.5 py-1 text-xs font-semibold text-state-success-ink">
-                            <CheckCircle2 className="h-3.5 w-3.5" aria-hidden />
-                            Hoàn tất
-                          </span>
-                        )}
-                      </td>
-                      <td className="px-4 py-3.5 whitespace-nowrap">
-                        <ClassStatusPill status={r.status} />
-                      </td>
-                      <td className="px-4 py-3.5 text-right whitespace-nowrap">
-                        <Link
-                          href={`?classId=${r.id}`}
-                          className="inline-flex items-center gap-1 rounded-sm text-sm font-semibold text-primary-ink outline-none hover:text-primary-ink-hover focus-visible:ring-2 focus-visible:ring-ring"
-                        >
-                          Mở lớp <ArrowRight className="h-4 w-4" aria-hidden />
-                        </Link>
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </PhanTrangBang>
-        </div>
+                ))
+              )}
+            </tbody>
+          </table>
+        </PhanTrangBang>
       </div>
     </>
   );

@@ -18,11 +18,31 @@ import { OrderKindSelect } from "./_components/order-kind-select";
 import { LeadPaymentCard } from "../_components/lead-payment-card";
 import { getLeadPaymentSummary } from "@/lib/payments/summary";
 import { maskFreeText, maskPersonName, maskLeadPiiFields } from "@/lib/lead/pii";
+import {
+  LEAD_CHILD_CLASS_FIND_ARGS,
+  leadChildClassOptions,
+} from "@/lib/lead/child-class-options";
+import { formatVnAddress } from "@/lib/address/vn-address";
 import { canSeeLead, leadSharingEnabled } from "@/lib/lead/sharing";
 import { canViewLeadPii } from "@/lib/auth/check-permission";
 import { ShareToggle } from "./_components/share-toggle";
 import { formatDateVN } from "@/lib/format/date";
 import { hasSystemLines, splitLeadNote } from "@/lib/lead/note-view";
+import {
+  canViewLeadAuditHistory,
+  getLeadAuditHistory,
+  getLeadStatusHistory,
+  maskLeadAuditValues,
+} from "@/lib/lead/audit-history";
+import { LeadAuditHistory } from "./_components/lead-audit-history";
+import { LeadStatusTrail } from "./_components/lead-status-trail";
+
+/** G-01 — nhãn tiếng Việt cho `Gender`. Khoá "" để phiếu chưa khai trả về null. */
+const GIOI_TINH_PH_NHAN: Record<string, string> = {
+  MALE: "Nam",
+  FEMALE: "Nữ",
+  OTHER: "Khác",
+};
 
 export const metadata = { title: "Chi tiết Lead | Admin" };
 export const dynamic = "force-dynamic";
@@ -120,6 +140,10 @@ export default async function LeadDetailPage({ params }: Props) {
       email: lead.email,
       childName: lead.childName,
       note: lead.note,
+      // G-01 — ngày sinh PH là PII: đi qua ĐÚNG tầng che này, không đọc thẳng
+      // `lead.parentDob` ở phần vẽ bên dưới. Non-holder nhận null ⇒ giá trị
+      // không xuống client qua RSC payload, không chỉ bị giấu ở giao diện.
+      parentDob: lead.parentDob,
     },
     canViewPii,
   );
@@ -178,7 +202,7 @@ export default async function LeadDetailPage({ params }: Props) {
   const paymentSummary = await getLeadPaymentSummary(sdb, lead.id);
 
   // R7-01 — options cho khối quản lý con (khoá quan tâm / cơ sở quan tâm).
-  const [childCenters, childCourses, expectedProducts] = await Promise.all([
+  const [childCenters, childCourses, expectedProducts, childClassRows] = await Promise.all([
     sdb.center.findMany({
       where: { isActive: true },
       orderBy: { displayOrder: "asc" },
@@ -196,8 +220,14 @@ export default async function LeadDetailPage({ params }: Props) {
       take: 200,
       select: { id: true, sku: true, name: true },
     }),
+    // G-01 — lớp cho ô "Lớp tại trung tâm" của từng con. Truy vấn KHÔNG lọc
+    // `status`: danh sách này vừa để chọn vừa để TRA TÊN, mà lớp đã kết thúc thì
+    // vẫn phải hiện được tên (xem lib/lead/child-class-options.ts).
+    sdb.class.findMany(LEAD_CHILD_CLASS_FIND_ARGS),
   ]);
+  const childClasses = leadChildClassOptions(childClassRows);
   // Lead ĐÃ MẤT (hoặc không có quyền sửa / chỉ xem nhờ "dùng chung") → con read-only.
+  // "DA_MAT" chứ không "LOST": GĐ5 rút enum LeadStatus còn 10 giá trị tiếng Việt.
   const childrenReadOnly = !canTransfer || status === "DA_MAT" || isSharedViewer;
 
   // R7-02 — lớp trải nghiệm đang mở (cùng cơ sở lead) để xếp con vào.
@@ -241,6 +271,26 @@ export default async function LeadDetailPage({ params }: Props) {
       })
     : [];
   const sessionById = new Map(scheduledSessions.map((s) => [s.id, s]));
+
+  // V-6 · G-02 — "Lịch sử thay đổi": vết sửa 3 ô định danh (Tên PH · SĐT PH ·
+  // Tên HS) phải ĐỌC ĐƯỢC bởi người có thẩm quyền, chứ không chỉ nằm im trong
+  // bảng AuditLog sau quyền `audit-logs:view` mà mỗi SUPER_ADMIN có.
+  //
+  // ⚠️ Đây là màn HẸP, KHÔNG phải cửa vào nhật ký chung: `getLeadAuditHistory`
+  // lọc CỨNG `entityType: "Lead"` + `entityId` của đúng lead đang mở, không nhận
+  // bộ lọc nào từ URL. AuditLog không thuộc SCOPED_MODELS nên `sdb` không lọc hộ
+  // — cách ly đã xong ở trên (lead đọc qua scopedDb + canSeeLead), và mở rộng
+  // truy vấn ở đây là mở nhật ký toàn hệ, kể cả module ngoài lead.
+  const canViewAudit = await checkPermission("audit-logs:view");
+  const showAuditHistory = canViewLeadAuditHistory({
+    canViewAllLeads: canViewAll,
+    canViewAuditLogs: canViewAudit,
+  });
+  const auditRows = showAuditHistory ? await getLeadAuditHistory(sdb, lead.id) : [];
+  // C-07 — "Mốc trạng thái" đọc truy vấn RIÊNG chứ không lọc lại `auditRows`:
+  // lead bị sửa nhiều thì 50 dòng gần nhất toàn lượt sửa hồ sơ, mốc phễu rơi hết
+  // ra ngoài — đúng lúc cần soi thì bảng trống.
+  const statusRows = showAuditHistory ? await getLeadStatusHistory(sdb, lead.id) : [];
 
   return (
     <div className="max-w-6xl p-6">
@@ -372,6 +422,42 @@ export default async function LeadDetailPage({ params }: Props) {
             value={`${lead.affiliate.name} (${lead.affiliate.code})`}
           />
         )}
+        {/* ─── G-01 (26/08/2026) — 5 ô mới ở cấp phụ huynh ────────────────────
+            Giới tính/ngày sinh ở đây là CỦA PHỤ HUYNH. Của từng con nằm trong
+            khối "Con của phụ huynh" bên dưới. */}
+        <Info label="Giới tính PH" value={GIOI_TINH_PH_NHAN[lead.parentGender ?? ""] ?? null} />
+        <Info
+          label="Ngày sinh PH"
+          // PII — lấy từ bản ĐÃ mask (`piiLead`), không đọc `lead.parentDob`.
+          // Không có quyền ⇒ `piiLead.parentDob` là null ⇒ ô hiện "—", đúng như
+          // ngày sinh của con (đã giấu hẳn từ trước).
+          value={piiLead.parentDob ? formatDateVN(piiLead.parentDob) : null}
+        />
+        {/* Địa chỉ KHÔNG phải PII (dữ liệu địa bàn để lọc/xuất) — trước G-01 nó
+            bị nhét vào `note` nên bị che lây theo `note`, đó chính là nợ N-1. Ba
+            mẩu gộp thành một dòng đọc được; trống hết thì ẩn hẳn ô. */}
+        <Info
+          label="Địa chỉ"
+          value={formatVnAddress({
+            addressLine: lead.addressLine,
+            ward: lead.ward,
+            city: lead.city,
+          })}
+        />
+        {/* ─── G-06 (26/08/2026) — mã campaign + ngày hẹn kế tiếp ──────────────
+            Không phải PII (không chỉ đích danh ai) ⇒ hiện nguyên cho mọi vai đọc
+            được phiếu; Marketing cần đúng hai thứ này để đo CPL/CPA mà vai đó
+            KHÔNG có `leads:view-pii`. Mã campaign theo quy ước SR.QD.232 — cùng
+            khuôn với tên campaign bên Meta (lib/ads/campaign-code.ts). */}
+        <Info label="Mã campaign" value={lead.campaignName} />
+        <Info
+          label="ID quảng cáo (Meta)"
+          value={[lead.campaignId, lead.adsetId, lead.adId].filter(Boolean).join(" / ") || null}
+        />
+        <Info
+          label="Hẹn liên hệ kế tiếp"
+          value={lead.nextFollowUpAt ? formatDateVN(lead.nextFollowUpAt) : null}
+        />
         <Info label="Sale phụ trách" value={lead.assignedTo?.name ?? "Chưa gán"} />
         <Info
           label="Ngày tạo"
@@ -420,8 +506,17 @@ export default async function LeadDetailPage({ params }: Props) {
             gradeLevel: c.gradeLevel,
             interestedCourseId: c.interestedCourseId,
             interestedCenterId: c.interestedCenterId,
+            classId: c.classId,
             note: canViewPii ? c.note : maskFreeText(c.note),
+            // G-06 — giá trị hợp đồng ĐÃ KÝ + mốc chốt. KHÔNG đi qua cổng PII:
+            // `sensitiveFields` của `leads:view-pii` là tên/SĐT/email/ngày sinh/ghi
+            // chú tư vấn — con số hợp đồng và một cái mốc thời gian không nằm trong
+            // đó, và Marketing (vai không có PII) cần đúng hai thứ này để đo CPA.
+            contractValue: c.contractValue,
+            closedAt: c.closedAt ? c.closedAt.toISOString() : null,
             trialStatus: c.trialStatus,
+            // C-06 — trạng thái phễu riêng của con (null = phiếu cũ, chưa phân loại).
+            status: c.status,
             trialHistory: c.trialHistory
               .filter((h) => h.attendedCount > 0)
               .map((h) => ({
@@ -434,9 +529,14 @@ export default async function LeadDetailPage({ params }: Props) {
           }))}
           centers={childCenters}
           courses={childCourses}
+          classes={childClasses}
           readOnly={childrenReadOnly}
           legacyChildName={piiLead.childName}
           legacyChildAge={lead.childAge}
+          // C-06 — lý do rớt là văn bản do Sale gõ ⇒ che theo đúng cổng PII của trang,
+          // y như `note` của con ngay trên.
+          lostNote={canViewPii ? lead.lostNote : maskFreeText(lead.lostNote)}
+          lostAt={lead.lostAt ? lead.lostAt.toISOString() : null}
         />
       </div>
 
@@ -554,6 +654,34 @@ export default async function LeadDetailPage({ params }: Props) {
             ))}
           </ul>
         </div>
+      )}
+
+      {/* C-07 — "Mốc trạng thái": ai đổi · lúc nào · TỪ trạng thái nào. Đặt TRƯỚC
+          mục "Lịch sử thay đổi" vì đây là thứ QLCS mở trang để soi; mục kia trộn
+          mọi lượt sửa hồ sơ nên mốc phễu chìm mất trong đó. */}
+      {showAuditHistory && (
+        <LeadStatusTrail
+          piiMasked={!canViewPii}
+          rows={statusRows.map((r) => ({
+            ...r,
+            oldValues: maskLeadAuditValues(r.oldValues, canViewPii),
+            newValues: maskLeadAuditValues(r.newValues, canViewPii),
+          }))}
+        />
+      )}
+
+      {/* V-6 · G-02 — vết sửa hồ sơ. Che PII bằng CÙNG cổng `canViewPii` của
+          trang: nội dung vết chứa nguyên văn tên PH/tên HS/SĐT, bày ra không che
+          là mở lại đúng cái cửa #11 T2 vừa đóng, chỉ khác đường đi. */}
+      {showAuditHistory && (
+        <LeadAuditHistory
+          piiMasked={!canViewPii}
+          rows={auditRows.map((r) => ({
+            ...r,
+            oldValues: maskLeadAuditValues(r.oldValues, canViewPii),
+            newValues: maskLeadAuditValues(r.newValues, canViewPii),
+          }))}
+        />
       )}
 
       <LeadActivityPanel

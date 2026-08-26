@@ -46,11 +46,33 @@ describe("[site Sale] thanh điều hướng ≡ cổng trang", () => {
   it("mọi route /sale/* trong PAGE_GATES đều có mặt trên nav (không có màn mồ côi)", () => {
     // Màn dựng xong mà không có lối vào thì với người dùng nó không tồn tại —
     // đúng tình trạng của /sale/trial suốt từ 22/08 tới 23/08.
+    //
+    // Ngoại lệ phải khai TƯỜNG MINH kèm lý do, không nới thành "bỏ qua route
+    // động": một trang động vẫn có thể cần mục menu (vd danh sách rồi lọc).
+    const VAO_TU_NOI_KHAC: Record<string, string> = {
+      "/sale/chot-don":
+        "luôn gắn với MỘT khách cụ thể → vào từ trang khách. Mục menu trần sẽ dẫn tới câu hỏi 'đơn cho ai?' mà không trả lời được.",
+    };
     const src = boChuThich(doc(NAV));
     const thieu = Object.keys(PAGE_GATES)
       .filter((h) => h.startsWith("/sale/"))
+      .filter((h) => !(h in VAO_TU_NOI_KHAC))
       .filter((h) => !src.includes(`href: "${h}"`));
     expect(thieu, `Route có gate nhưng không có lối vào trên nav:\n  - ${thieu.join("\n  - ")}\n`).toEqual([]);
+    for (const [h, lyDo] of Object.entries(VAO_TU_NOI_KHAC)) {
+      expect(lyDo.trim().length, `${h} thiếu lý do`).toBeGreaterThan(20);
+    }
+  });
+
+  it("route vào-từ-nơi-khác vẫn phải có ai đó dẫn tới — không được mồ côi thật", () => {
+    // Khai ngoại lệ mà rồi không trang nào link tới thì vẫn là màn chết, chỉ là
+    // chết có giấy phép.
+    const detail = fs.readFileSync(
+      path.join(ROOT, "app/(sale)/sale/khach-cua-toi/_components/order-panel.tsx"),
+      "utf8",
+    );
+    expect(detail).toContain("/sale/chot-don/");
+    expect(detail).toContain("/sale/ghi-danh/");
   });
 
   it("có nút đăng xuất", () => {

@@ -1,12 +1,13 @@
 # Quy ước nền — module đào tạo nội bộ (e-learning)
 
-> **Đọc file này TRƯỚC KHI MỞ PR đụng module e-learning.** Mười sáu quy ước dưới đây.
-> Quy ước **1–4, 12, 13, 16** được **máy cưỡng chế** (ESLint / Vitest / CI); **5–11, 14, 15**
+> **Đọc file này TRƯỚC KHI MỞ PR đụng module e-learning.** Hai mươi sáu quy ước dưới đây.
+> Quy ước **1–4, 12, 13, 16, 21, 24** được **máy cưỡng chế** (ESLint / Vitest / CI); phần còn lại
 > thì không — chúng chỉ sống nếu người ta đọc chỗ này. Đó là lý do chúng nằm ở một chỗ chứ
 > không rải rác trong các ticket dùng.
 >
 > 1–9 thuộc ticket nền EL-07; **10–12 qua EL-05**, **13–14 qua EL-06**, **15–16 qua EL-08**
-> (23/08/2026).
+> (23/08/2026); **17–19 qua EL-10 và EL-12**, **20–23 qua vòng rà đối kháng EL-10**,
+> **24–26 qua EL-13** (25/08/2026).
 
 Nguồn: `02-KE-HOACH-THUC-HIEN-Elearning-v1.4.md` — ticket EL-07, quyết định QĐ-CDA-02b (biện pháp
 1, 3, 4) và QĐ-CDA-13 (BP-1, BP-2).
@@ -266,7 +267,200 @@ LƯU**. Thử ngược để chắc: chèn đúng con bug vào rồi xem case c�
 
 ---
 
-## Ràng buộc kèm theo, không thuộc mười chín quy ước nhưng dễ quên
+## Bốn quy ước bổ sung — chốt qua vòng rà đối kháng EL-10 (25/08/2026)
+
+### 20. Cổng CHẶN và đường THOẢ MÃN cổng phải về cùng một PR
+
+Một cổng kiểm tra chỉ được bật khi đã tồn tại đường để người dùng đi qua nó. Cổng về trước,
+cửa về sau ⇒ hệ **kẹt cứng**, và người ở giữa không có lối nào ngoài việc phá cổng.
+
+**Đã vấp:** EL-10 kéo sớm cổng C10 (`kiemPhuDe` chặn xuất bản khoá bắt buộc thiếu phụ đề, ở
+cả `GUI_DUYET`/`DUYET`/`XUAT_BAN`), trong khi đường **đính** phụ đề nằm ở cột IN của EL-11 và
+chưa dựng: `khoaMedia` chỉ được gọi với `loai: "master"`, `kiemChuanNopPhuDe` có **0 lời gọi**
+ngoài test, màn soạn không có ô nhận `.vtt`. Kết quả: **mọi khoá `MANDATORY*` có bài video
+không xuất bản được, và không sửa được từ giao diện.** Hai lối thoát duy nhất đều sai — hạ
+chương trình xuống `OPTIONAL` (mất tính bắt buộc) hoặc bỏ bài video khỏi dàn bài (mất nội dung
+cần dạy).
+
+Nguy hiểm thật không nằm ở chỗ kẹt. Nó nằm ở chỗ **cách vá rẻ nhất trông thấy được là gỡ
+cổng** — một dòng, biên dịch xanh; nếu cổng đó không có test cấp action thì CI không cản, và
+người review đọc diff chỉ thấy "gỡ một khối đang chặn việc". Một lần lọt là hỏng vĩnh viễn:
+bổ sung phụ đề hồi tố cho khoá đã phát là việc không ai làm nổi.
+
+**Cách áp dụng:** trước khi thêm bất kỳ điều kiện chặn nào (xuất bản, giao bài, cấp chứng
+nhận, nộp bài thi), trả lời hai câu — *đường nào tạo ra dữ liệu thoả mãn điều kiện này, và nó
+đã có chưa?* Nếu chưa: dựng nốt đường đó trong cùng PR, hoặc **để cổng sau một cờ** và bật khi
+đường về. Không có trạng thái thứ ba.
+
+### 21. Route handler phải có ít nhất một case GỌI THẬT handler
+
+Test đọc mã nguồn bằng `readFileSync` + `toContain` chứng minh **có viết**, không chứng minh
+**có chạy**, và nó mù hoàn toàn với lớp lỗi tốn kém nhất của một route: **phép NỐI** giữa kết
+quả tính toán và header/thân phản hồi.
+
+**Đã vấp:** cả ba route của EL-10 chỉ được canh bằng so chuỗi. Ba đột biến đã chạy thật, cả ba
+**sống sót toàn bộ 47 case**: xoá dòng gán `Content-Range` ở nhánh 206 · đổi `Content-Length`
+từ `kq.contentLength` sang `coTep` · xin R2 một cửa sổ byte khác cửa sổ đã hứa trong header.
+Đột biến đầu trả **206 không có `Content-Range`** — trình phát huỷ tải, khung đen, mà chỉ số
+T1 ("tỉ lệ 5xx của route Range") đọc **0% lỗi** vì 206 không phải 5xx.
+
+⛔ **Không viện lý do "route cần DB/R2/phiên đăng nhập nên không test được"** — kho này đã làm
+đúng việc đó bốn lần: `app/api/chat/{unread,attachment-url,realtime-token}/route.test.ts` và
+`app/api/elearning/media/[...khoa]/route.test.ts`. Khuôn: `vi.mock` + `import { GET } from
+"./route"` + `await GET(req(), ctx())`. `vitest.config.ts` đã gom `app/**/*.test.{ts,tsx}`,
+đặt test cạnh route là chạy.
+
+**Cách áp dụng:** mỗi route mới kèm một tệp `route.test.ts` cạnh nó, tối thiểu canh trên
+**phản hồi thật**: mã trạng thái đường thành công, mã trạng thái một đường bị chặn, và **giá
+trị đúng của mọi header mang con số**. Guard so chuỗi giữ lại cho thứ mà chỉ nguồn mới nói
+được (vd "route KHÔNG chứa `transformToByteArray`") — không dùng nó thay cho phép nối.
+
+### 22. Ô kết quả nằm trong `try/catch` phải khởi tạo bằng trạng thái "CHƯA CHẠY"
+
+Quy ước 14 nói *"số đếm của việc chưa chạy được là `null`, không phải `0`"*. Đúng, nhưng chưa
+đủ: cái quyết định con số cuối cùng là **giá trị KHỞI TẠO**, vì mọi việc nền đều bọc
+`try/catch` — hàm ném thì phép gán không chạy, và ô giữ nguyên thứ đã điền lúc dựng object.
+
+**Đã vấp:** `cron-dem.ts` khởi tạo `taiDo: { daHuy: 0, conGiu: 0 }`. Khi việc dọn lượt tải dở
+ném (thực tế nhất: token R2 thiếu quyền `ListMultipartUploads` — quyền riêng, khác Put/Get, và
+bucket e-learning là bucket mới), lỗi rơi vào `ket.loi` còn báo cáo trả `daHuy: 0, conGiu: 0`
+— đọc đúng thành *"đã quét, không có rác"*. Route trả `ok(...)` ⇒ HTTP 200 ⇒ giám sát cron
+**xanh**, đêm nào cũng xanh, trong khi rác chồng lên mãi.
+
+Mỉa mai: **cùng một object literal đã làm đúng hai lần** — `chungNhan: { chuaLamDuoc: … }` và
+`examAttempt: null` — rồi phá luật ở ô thứ ba.
+
+**Cách áp dụng:** khởi tạo mọi ô kết quả bằng dạng *chưa chạy* (`{ chuaLamDuoc: "chưa chạy" }`
+hoặc `null`), để **thành công là thứ phải ghi đè vào**, không phải thất bại là thứ phải nhớ
+dọn. Và câu khẳng định canh nó phải **phân biệt được hai hình dạng**:
+`expect("daHuy" in r.x || "chuaLamDuoc" in r.x)` trên một kiểu union đúng bằng hợp của hai
+dạng đó là một **hằng đúng** — nó xanh kể cả khi hàm ném hoàn toàn.
+
+### 23. Kết quả máy chủ đọc ra phải được RÀNG BUỘC vào lượt ghi
+
+Một endpoint đọc dữ liệu thật (byte của tệp, kết quả chấm, số đo) rồi `return ok({…})` mà
+không ghi, không ký, không cấp vé, thì kết quả đó chỉ là **khuyến nghị**. Lượt ghi sau đó
+không có cách nào biết nó đã chạy, và nhận lại chính con số mà client gửi lên.
+
+**Đã vấp:** `xac-minh` đọc header mp4 từ R2, chạy đủ `kiemCodec` + `kiemChuanNopVideo` bằng con
+số **đọc từ byte** — rồi trả JSON và thôi. Đường lưu bài nhận `durationSec` như một con số
+client khai chỉ bị chặn trong `[5, 900]`, và để `codec` là `.optional()` với cổng gác
+`if (input.codec)` — **bỏ trống trường đó là tắt cổng, im lặng**. Ba dòng chú thích ngay trên
+lại tuyên bố *"Chốt codec ở ĐÂY… đây là chỗ duy nhất mà tệp và bản ghi gắn với nhau."*
+
+Đây **không phải lỗ hổng leo thang quyền** — người đi đường này vốn được sửa chính bài đó. Nó
+hỏng ở đường **không cố ý**: bất kỳ call-site mới nào (nhập hàng loạt, lưu lại tiêu đề, một
+trình soạn khác) đều đi lọt, vì mặc định là *"không kiểm"*.
+
+⛔ **Trường đầu vào của một cổng kiểm KHÔNG được `.optional()`.** Luật này đã có sẵn trong kho,
+ở `media-rules.ts`: *"để optional thì một đường gọi mới quên truyền vẫn biên dịch xanh, và
+trần … im lặng không áp cho đúng đường đó. Không đo được thì phải nói ra bằng `null`."*
+
+**Cách áp dụng:** hai lối, chọn một — (a) endpoint đọc trả kèm **vé HMAC hạn ngắn** mang các
+con số đã đo (khuôn có sẵn: `lib/elearning/media-ticket.ts`, chỉ đổi tiền tố), và lượt ghi
+nhận vé làm trường **bắt buộc**, lấy số **từ vé**; hoặc (b) lượt ghi **tự đo lại** ngay tại
+chỗ. Không có lối thứ ba là "tin con số client gửi kèm".
+
+---
+
+## Ba quy ước bổ sung — chốt qua EL-13 (25/08/2026)
+
+### 24. Khoá quyền là CHUỖI TỰ DO — sai thì không có gì đỏ
+
+`permission: "elearning:report:view"` trong một `ActionConfig`. Khoá đó không tồn
+tại trong `ROLE_SEED`. Typecheck xanh (kiểu là `string`), lint xanh, build xanh.
+Hậu quả: `can()` luôn trả `false`, tính năng im lặng không dùng được với **mọi**
+vai — kể cả SUPER_ADMIN. Chỉ lộ khi có người thật ngồi thử, và câu họ báo là
+*"bấm không ăn gì"*.
+
+**Cách áp dụng:** đã có guard trong `tests/elearning/permissions.test.ts` quét mọi
+`permission:` trong `lib/elearning/**` và đối chiếu `ROLE_SEED`. Module mới phải
+có guard tương đương — hoặc mở rộng guard này ra thư mục của mình. Guard chỉ soi
+dòng **khai** quyền, không soi mọi chuỗi trong tệp: chú thích hay nhắc tên khoá
+cũ, bắt cả chúng là báo động giả.
+
+### 25. Tính năng ghi CÁO BUỘC thì bộ test phải hỏi NGƯỢC
+
+Mọi bộ test khác trong module hỏi *"có chặn/bắt đúng thứ phải bắt không"*. Với cờ
+nghi ngờ, phần lớn case phải hỏi *"có gắn NHẦM không"*.
+
+Vì hậu quả bất đối xứng: bỏ sót một người đối phó là mất một lượt học hình thức;
+gắn cờ nhầm một người học thật là cáo buộc về hành vi người lao động, có tên người
+xử, có hồ sơ, và người bị gắn phải đi khiếu nại để gỡ. Một bên là lãng phí, bên
+kia là tổn hại.
+
+**Cách áp dụng:** ở loại tính năng này, ngưỡng để RỘNG và mỗi luật chỉ bắt thứ gần
+như bất khả thi khi làm thật. Viết case cho từng dạng người dùng ĐÚNG LUẬT trông
+giống kẻ gian: dùng hết quyền được cấp (xem đúng trần tốc độ), làm nhiều lần một
+việc tốt (tua lùi xem lại), hạ tầng kém (mạng chậm), mẫu dữ liệu quá nhỏ.
+
+Và mọi đường ghi cáo buộc phải có **đường nói lại** dựng cùng lúc, không hẹn ticket
+sau — cùng lý do khiến `evidenceJson` phải đóng băng con số: hai bên phải nhìn
+cùng một thứ.
+
+### 26. Hạn của người phải tính bằng NGÀY LÀM VIỆC
+
+Khiếu nại gửi chiều thứ Sáu, cộng 5 ngày lịch ra thứ Tư ⇒ người xử chỉ có 3 ngày
+làm việc thật, và mỗi lần rơi vào cuối tuần lại ra một con số khác. Họ trễ hạn vì
+**cách tính**, không phải vì chậm.
+
+**Cách áp dụng:** hạn ràng buộc MÁY (dọn dữ liệu, hết hiệu lực vé) tính bằng ngày
+lịch; hạn ràng buộc NGƯỜI tính bằng ngày làm việc. Ngày lễ thì đừng đoán — repo
+chưa có bảng lịch nghỉ, và chế một danh sách lễ không ai duyệt là dựng nguồn sự
+thật thứ hai.
+
+---
+## Bốn quy ước bổ sung — chốt qua EL-12 cue (25/08/2026)
+
+### 27. Cổng chặn GIỮA CHỪNG phải ghi nhận phần TRƯỚC mốc, không thoát sớm
+
+Câu hỏi chèn giữa video chặn ở giây 110. Bản đầu thoát sớm ngay khi cue bung, nên
+`maxPositionSec` đứng yên ở 100 — và nhịp MANG CÂU TRẢ LỜI bắt đầu ở 115 rồi bị
+**chính cổng chặn-tua** từ chối. Mọi cue chặn khoá cứng bài học, với thông báo
+*"khoá này không cho tua tới"* chẳng liên quan gì tới việc người học vừa làm.
+
+Kèm theo: đoạn từ nhịp trước tới mốc bay mất vĩnh viễn, và thân phản hồi trả
+`coveredSec: 0` làm thanh tiến độ tụt về 0%.
+
+**Cách áp dụng:** cổng chặn ở GIỮA một khoảng thì phải **cắt khoảng tại mốc**, ghi
+nhận phần trước mốc, rồi mới chặn. Và kiểm xem cổng khác có đứng trên con số mình
+vừa để đứng yên không — các cổng đọc chung một mốc thì cổng này đóng băng nó là
+cổng kia hiểu sai.
+
+### 28. Đừng để client SUY RA thứ server đã biết
+
+Server biết câu hỏi thuộc loại `multiple`, nhưng thân phản hồi không mang loại, nên
+trình phát suy bằng `luaChon.length > 2`. Câu MỘT-đáp-án có 3 lựa chọn trở lên biến
+thành ô tích nhiều: người học tích hai ý, và câu họ trả lời đúng bị chấm sai.
+
+**Cách áp dụng:** thà thêm một trường vào hợp đồng còn hơn để client đoán. Mỗi phép
+suy ở client là một bản sao thứ hai của luật, và bản sao đó không có test nào canh.
+(Lọc đáp án đúng ra khỏi phản hồi là ĐÚNG — nhưng lọc đáp án khác với giấu loại câu.)
+
+### 29. Mock lỗi thư viện phải giống lỗi THẬT
+
+Code dò `String(e).includes("P2002")`; test mock ném `new Error("... P2002")` nên
+xanh. Prisma thật để mã ở **`e.code`** và lời nhắn KHÔNG chứa chuỗi đó — nhánh ấy
+chưa bao giờ chạy ngoài đời, và người dùng nhận màn hình 500.
+
+**Cách áp dụng:** mock lỗi phải mang đúng hình dạng thư viện sinh ra (mã ở đâu, lời
+nhắn thế nào). Không chắc thì ép lỗi thật một lần trên DB local rồi in ra xem. Test
+giả lập sai thì nó chỉ kiểm chính bản giả lập đó.
+
+### 30. Chỉ số vào mảng ĐÃ LỌC không phải chỉ số vào mảng gốc
+
+Màn soạn gửi `options` đã bỏ ô trống, kèm `correctIndex` đếm theo mảng **chưa** lọc.
+Tích ô 4 rồi xoá trắng ô 2 ⇒ 3 lựa chọn với `correctIndex: 3`, trỏ RA NGOÀI mảng.
+Zod kiểm từng trường một nên không bắt được, và câu hỏi ấy **không đáp án nào đúng
+được** — với một cổng chặn thì đó là khoá cứng vĩnh viễn.
+
+**Cách áp dụng:** lọc TRƯỚC, rồi ánh xạ chỉ số sang mảng đã lọc. Và ở đâu có hai
+trường phụ thuộc nhau (chỉ số ↔ độ dài mảng) thì phải có **một** phép kiểm chéo —
+Zod kiểm từng trường riêng lẻ sẽ luôn để lọt.
+
+---
+
+## Ràng buộc kèm theo, không thuộc hai mươi sáu quy ước nhưng dễ quên
 
 - **Ngân sách cron: tối đa 2 khe** cho cả module. Bảy mốc nhắc gộp vào **một** cron quét
   (`elearning-reminders`, nhịp 15 phút); việc dọn dữ liệu thô 90 ngày gộp vào cron đêm
@@ -277,6 +471,133 @@ LƯU**. Thử ngược để chắc: chèn đúng con bug vào rồi xem case c�
   trục mới. Nếu P4 cần bật trong cửa sổ đó thì là quyết định chung của hai luồng.
 - **Video đào tạo nội bộ không bao giờ nằm trong bucket gắn `cdn.satarobo.vn`** (bucket công khai).
   Nằm ở đó thì mọi cơ chế chống học đối phó của GĐ2 chỉ là trang trí.
+- **Lượt gọi kho tệp chỉ để hỏi siêu dữ liệu phải dùng `HeadObject`, không phải `GetObject`
+  với `Range: "bytes=0-0"`.** Một phản hồi luồng lấy về mà không đọc hết và không `destroy()`
+  sẽ **giữ một khe socket** trong pool của SDK (mặc định 50 khe, `keepAlive` bật, **không có
+  hạn chờ**) cho tới khi phía kho đóng nối rỗi — một hằng số bên ngoài, không có trong đặc tả,
+  không đo được từ mã. Cách hỏng của nó là **request treo, không phải 5xx**, nên mọi chỉ số
+  đếm 5xx đều mù với nó. Tiền lệ đúng: `app/(admin)/admin/scorm/_actions.ts:205`.
+- **AC ĐO LƯỜNG không đóng được bằng unit test — nó đóng bằng một hiện vật đo có ghi lại.**
+  Tách rõ hai loại khi lập DoD: AC *cấu trúc* (vd "mọi phản hồi là 206 với `Content-Range`
+  đúng") đóng bằng test; AC *đo lường* (vd "p95 tới byte đầu ≤ 3 giây với 8 phiên đồng thời,
+  tỉ lệ lỗi ≤ 1%") đóng bằng một lượt chạy tay trên hệ thật, **có số và có ngày**. Ghi cả hai
+  vào ticket, đừng để loại thứ hai đội lốt loại thứ nhất rồi coi như xong khi CI xanh.
 - **Cờ `ELEARNING_ENABLED` dùng `=== "true"`**, cố ý ngược khuôn `isTeacherSiteEnabled()` (dùng
   `!== "false"`, mặc định ON vì đã qua kỳ flip). Chép nguyên khuôn đó sang sẽ cho cờ **bật sẵn ngay
   khi merge**.
+- **Cột `TrnExam.showAnswerPolicy` đang NGỦ — biết là ngủ, đừng tưởng nó đang chạy.** Cột có trong
+  schema, có mặc định `AFTER_LAST_ATTEMPT`, và `cauHinhTaoDe` ghi nó xuống; nhưng **không có chỗ nào
+  đọc**, và trình soạn đề **không hỏi** người soạn giá trị này. Hiện chưa hại ai vì module chưa có màn
+  xem lại đáp án — không ai được hứa gì cả. Ngày dựng màn đó, việc ĐẦU TIÊN là đọc cột này; dựng xong
+  màn rồi mới nhớ ra thì đã lỡ trả đáp án cho người còn lượt thi. Cùng loại với quy ước 20, chỉ khác
+  chiều: đây là **cửa dựng sẵn chưa có cổng**.
+
+---
+## Hai quy ước bổ sung — chốt qua vòng rà đối kháng EL-14e (25/08/2026)
+
+### 31. Lọc theo TRẠNG THÁI của bản ghi, không theo LOẠI suy ra được
+
+Đường nộp bài CỐ Ý trả `{cham:"TAY"}` cho một câu **trắc nghiệm** mà `contentJson`
+không đọc được — "một bản ghi bẩn không được biến thành điểm 0 của người học". Màn
+chấm tay thì định nghĩa "cần người chấm" là **loại câu tự luận**. Hai định nghĩa
+nghe giống nhau, và chúng KHÔNG trùng nhau.
+
+Hậu quả dây chuyền: câu ấy không bao giờ được hỏi điểm · người chấm bị chặn nếu cố
+cho điểm · phép tính lại biến `null` thành `0` rồi chốt lượt. Và nếu đề **toàn**
+trắc nghiệm thì màn chấm không có ô nào, nút vẫn bật, bấm ra lỗi Zod tiếng Anh —
+`PENDING_GRADE` vẫn **không có lối ra**, đúng thứ PR đó sinh ra để gỡ.
+
+**Cách áp dụng:** khi hỏi "bản ghi này còn chờ ai xử lý không", hỏi **cột trạng
+thái/kết quả** (`score == null`), đừng hỏi một thuộc tính khác rồi suy ra. Loại câu
+là ĐẦU VÀO của quyết định chấm-máy-hay-không; kết quả của quyết định đó nằm ở cột
+điểm. Đọc đầu vào để đoán kết quả là dựng lại phép suy luận **lần thứ hai**, và bản
+thứ hai sẽ lệch — ở đây nó lệch đúng ca mà bản thứ nhất cố ý xử riêng.
+
+### 32. Trần độ dài của bên GHI không được rộng hơn bên ĐỌC
+
+Kho câu hỏi cho `stem` tới 4000 ký tự và mỗi lựa chọn tới 1000; khuôn ĐỌC của đường
+thi cắt ở 2000/500. Người soạn gõ một đề bài dài — **hợp lệ theo màn soạn, không có
+gì đỏ** — là đẻ ra một câu mà đường thi không parse nổi.
+
+Đây là cách chuỗi writer→reader đứt **lần thứ hai** trong cùng một module: lần đầu
+là hai *khuôn* khác nhau, lần này là cùng khuôn nhưng hai *trần* khác nhau. Cột khai
+`Json` nên TypeScript không nối hai bên, và không có gì bắt được.
+
+**Cách áp dụng:** xuất trần từ **một** chỗ (`TRAN_NOI_DUNG_CAU`, `TRAN_LUA_CHON` ở
+`lib/assignments/question-content-db.ts`) và cho mọi bên GHI nhập lại, đừng gõ số.
+Kèm một test chạy đầu ra dài **đúng bằng trần** của bên ghi qua khuôn của bên đọc.
+Hai con số nằm ở hai tệp thì chúng sẽ trôi khỏi nhau.
+- **`prisma migrate diff --from-migrations` KHÔNG dùng thẳng được — nó phun ra cả TRÔI LỆCH có sẵn
+  của repo.** Đo ngày 26/08/2026: lệnh đó sinh ra `DROP INDEX "OrgUnit_path_idx"` cộng **14 khối**
+  `ALTER TABLE ... ALTER COLUMN ... SET DATA TYPE TIMESTAMP(3)` trên các bảng **đang có dữ liệu
+  PROD** (`ClassSessionMedia`, `EvaluationRound`, `HomeworkAssignment`, `ReportCard`, …) — tức hạ
+  `timestamptz(6)` xuống `timestamp(3)` và **vứt múi giờ** của dữ liệu đang chạy. Đó là vi phạm
+  luật cứng #4, và nó nằm sẵn trong đầu ra của một lệnh trông vô hại.
+  **Cách làm đúng:** sinh diff ra tệp tạm, **lọc giữ CHỈ các khối nhắc tên bảng của ticket**, rồi
+  khẳng định lại bằng `grep -E "^(DROP|ALTER TABLE .* (DROP|ALTER))"` phải RỖNG. Migration của
+  EL-13 và EL-14 đã sạch theo cách này (chỉ `CREATE` + `ADD CONSTRAINT` trên bảng của chính chúng)
+  — đối chiếu với chúng khi nghi ngờ. Trôi lệch gốc là nợ có thật của repo, nhưng **vá nó không
+  bao giờ là việc của một ticket tính năng**.
+
+---
+## Hai quy ước bổ sung — chốt qua vòng rà đối kháng EL-15b (26/08/2026)
+
+### 33. Lượt đọc của `NULL_IS_GLOBAL` model KHÔNG dùng làm cổng GHI
+
+`TrnRubric`, `TrnExam`, `TrnQuestion` nằm trong `NULL_IS_GLOBAL_MODELS`, nên
+`injectScope` **cố ý** nới lượt đọc thành `centerId IS NULL OR centerId IN (...)`:
+kho chung phải nhìn thấy được từ mọi cơ sở, nếu không nó tàng hình. Đó là hành vi
+đúng.
+
+Nhưng `scopedDb` **không che đường ghi**. Mượn chính lượt đọc đó làm cổng ghi —
+đúng việc `napKhung`/`napDe` đã làm — biến *"ai cũng ĐỌC được bản ghi chung"* thành
+*"ai cũng GHI được bản ghi chung"*. Đo trên Postgres thật: một actor cấp cơ sở hạ
+`passScore` của đề dùng chung toàn công ty từ 80 xuống **1** và nâng `maxAttempts`
+lên **99** — không lỗi, không cảnh báo, `createdByUserId` vẫn ghi tên người Hội sở.
+Nặng hơn nữa vì **kích hoạt là đóng băng và không có đường đảo lại trong ứng dụng**:
+một lượt sửa nhầm chỉ gỡ được bằng tay trên DB, trong khi mọi cơ sở đã chấm bằng cái
+thước sai đó.
+
+**Cách áp dụng:** mọi đường ghi trên model `NULL_IS_GLOBAL` phải đọc thêm `centerId`
+và gọi `chanGhiBanGhiChung` (`lib/elearning/global-write-guard.ts`). Điều kiện là
+chính khoá quyền của việc đó ở **phạm vi `ALL`**, hoặc SUPER_ADMIN, hoặc per-user
+grant ALLOW — **không đẻ khoá thứ 18**, và **`isHoLevel` một mình KHÔNG đủ** (neo một
+vai bất kỳ tại Hội sở là đủ để cờ đó bật).
+
+Repo đã xử đúng bẫy này từ trước cho `EvaluationRound` bằng `roundCenterInScope`
+(`app/(admin)/admin/evaluations/_actions.ts`), kèm chú thích nói thẳng *"semantics
+NULL_IS_GLOBAL cho ĐỌC → KHÔNG dùng làm guard ghi"*. Bài học thật ở đây không phải
+"thiếu một guard" mà là **đã có tiền lệ đúng trong repo và không ai tra trước khi
+viết cái thứ hai**.
+
+### 34. Đọc-rồi-ghi trên cột `@unique` phải BỎ QUA phạm vi, và vẫn phải bắt `P2002`
+
+`TrnRubric.code` là `@unique` **toàn hệ thống**, nhưng phép kiểm trùng đi qua
+`scopedDb` — người ở CS1 không thấy khung của CS2, nên nó báo "không trùng" rồi
+`create` va thẳng vào khoá. `P2002` **không phải** `ActionError`, nên `runAction` ném
+tiếp ra ngoài: không toast, không lỗi trỏ vào ô mã, chỉ một lỗi 500 câm và một
+`PrismaClientKnownRequestError` trên Sentry không nối được với thao tác nào.
+
+Cùng hình dạng với `@@unique([rubricId, orderIndex])`: đọc `orderIndex` lớn nhất rồi
+mới ghi là một cửa sổ đua, hai tab cùng thêm sẽ va nhau.
+
+**Cách áp dụng:** (a) lượt kiểm trùng dùng `scopedDb(actor, { bypass: true })`, chỉ
+`select` khoá chính, và thông báo **không** tiết lộ bản ghi của ai; (b) **vẫn** bọc
+lượt ghi trong `try/catch` bắt `P2002` — phép kiểm chạy TRƯỚC lượt ghi nên nó không
+đóng được cửa sổ đua; (c) nhận diện bằng `e.code === "P2002"` và `e.meta.target`,
+**không soi chuỗi `message`** (quy ước 29).
+- **Guard dùng `git grep` KHÔNG THẤY tệp chưa `git add` — nên nó xanh ở local rồi đỏ trên CI.**
+  `lib/permissions/registry/elearning.test.ts` quét khoá quyền rải rác bằng `execFileSync("git",
+  ["grep", …])`, và `git grep` chỉ soi tệp **đã theo dõi**. Chạy bộ test đầy đủ TRƯỚC lần `git add`
+  đầu tiên của một tệp mới ⇒ tệp đó vô hình với guard ⇒ xanh. CI checkout mọi thứ đã commit nên nó
+  thấy, và đỏ. Đã xảy ra 26/08/2026 với `lib/elearning/global-write-guard.test.ts`.
+  ⇒ **Với tệp MỚI, chạy lại bộ test SAU khi `git add`** (không cần commit — `git grep` thấy cả
+  vùng staged). Cùng họ với bẫy "test chạm DB skip im lặng": cả hai đều báo xanh cho một phép kiểm
+  chưa từng chạy.
+- **`tests/nen` NHẤP NHÁY sẵn — đo được 1/3 lần đỏ trên mã GỐC.** Ngày 26/08/2026, chạy
+  `tests/nen` ba lần liên tiếp trên nhánh đã `git stash` hết thay đổi: xanh · **đỏ** · xanh
+  (`position-permission.spec.ts` và `work-scope.spec.ts` thay nhau đỏ). Đây là nhấp nháy CÓ SẴN của
+  bộ chạm DB dùng chung một Postgres, **không phải** do PR nào gây ra.
+  ⇒ **Thấy hai tệp đó đỏ thì ĐỪNG vá mù.** Trước hết `git stash` rồi chạy lại 2–3 lượt: nếu bản gốc
+  cũng đỏ thì đó là nhấp nháy, ghi lại và đi tiếp. Nhưng cũng **đừng mặc định là nhấp nháy** — chính
+  cách đo này là thứ phân biệt được, và nó rẻ.

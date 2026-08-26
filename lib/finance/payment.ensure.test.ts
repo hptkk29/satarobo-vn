@@ -24,7 +24,12 @@ type State = {
   statusHistory: unknown[];
   activities: unknown[];
   audits: unknown[];
+  /** N-4 — đồng hồ "hoạt động gần nhất"; `null` = chưa ai chạm. */
+  leadLastActivityAt: Date | null;
 };
+
+/** Mốc `createdAt` mà tx giả trả cho dòng hoạt động — cùng vai `now()` của Postgres. */
+const MOC_TX = new Date("2026-08-25T03:00:00.000Z");
 
 /** Tx giả in-memory — mô phỏng đúng phần ensureOrderPaymentRecorded chạm tới. */
 function fakeTx(state: State): Prisma.TransactionClient {
@@ -61,8 +66,16 @@ function fakeTx(state: State): Prisma.TransactionClient {
         state.leadStatus = "DA_DANG_KY";
         return { count: 1 };
       },
-      // GĐ1 — dời mốc `statusChangedAt`; test chỉ cần nó không nổ.
-      update: async (args: { data: unknown }) => args.data,
+      // Một `lead.update` phục vụ HAI đường ghi cùng lúc:
+      //  • GĐ1 dời mốc `statusChangedAt` (sổ đếm);
+      //  • N-4 bump `Lead.lastActivityAt` (vết người đọc, cùng tx).
+      // Ghi nhận cả hai để test không mù một nửa.
+      update: async (args: { data: { lastActivityAt?: Date } }) => {
+        if (args.data.lastActivityAt !== undefined) {
+          state.leadLastActivityAt = args.data.lastActivityAt ?? null;
+        }
+        return { id: "l1" };
+      },
     },
     // GĐ1 — sổ đổi trạng thái lead.
     leadStatusHistory: {
@@ -74,7 +87,9 @@ function fakeTx(state: State): Prisma.TransactionClient {
     leadActivity: {
       create: async (args: { data: unknown }) => {
         state.activities.push(args.data);
-        return args.data;
+        // Trả `createdAt` như Prisma thật: đường ghi chung lấy đúng mốc này làm
+        // `lastActivityAt` (không lấy đồng hồ tiến trình) — xem `activity-write.ts`.
+        return { id: `a${state.activities.length}`, createdAt: MOC_TX };
       },
     },
     auditLog: {
@@ -94,6 +109,7 @@ const baseState = (): State => ({
   statusHistory: [],
   activities: [],
   audits: [],
+  leadLastActivityAt: null,
 });
 
 describe("ensureOrderPaymentRecorded (K3 — 1 khoản = 1 dòng ledger)", () => {
@@ -160,6 +176,9 @@ describe("ensureOrderPaymentRecorded (K3 — 1 khoản = 1 dòng ledger)", () =>
     await ensureOrderPaymentRecorded(fakeTx(state), { orderId: "o1", soDot: 1, amount: 1, leadId: "l1", actor: { id: "u1" } });
     expect(state.leadStatus).toBe("DA_DANG_KY");
     expect(state.activities).toHaveLength(1);
+    // N-4 — ghi nhận tiền là 1 trong 10 đường trước đây ghi hoạt động mà để
+    // nguyên đồng hồ. Mốc phải bằng đúng `createdAt` của dòng vừa ghi.
+    expect(state.leadLastActivityAt).toEqual(MOC_TX);
 
     const converted = baseState();
     converted.leadStatus = "CONVERTED";

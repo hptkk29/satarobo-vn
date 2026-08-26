@@ -256,7 +256,7 @@ export function AffiliateManager({
         </p>
       ) : (
         <div className="overflow-hidden rounded-xl border border-border bg-card">
-          <PhanTrangBang>
+          <PhanTrangBang cuonNgang>
             <table className="w-full text-sm">
               <thead className="border-b border-border bg-muted text-left text-xs uppercase tracking-wider text-muted-foreground">
                 <tr>

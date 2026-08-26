@@ -32,10 +32,12 @@ import {
   SESSION_MEDIA_SELECT,
   type SessionMediaRow,
   isSessionSettled,
-  sessionNumberLabel,
   sortSessionsForWork,
 } from "@/lib/lms/session-order";
-import { deriveSessionProjectName } from "@/lib/lms/session-project-name";
+import {
+  deriveSessionLabel,
+  deriveSessionProjectName,
+} from "@/lib/lms/session-project-name";
 import {
   normalizeEvalNotes,
   normalizeEvalRatings,
@@ -44,7 +46,7 @@ import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "../../_components/ui/empty-state";
 import { SESSION_STATUS_LABEL } from "../../_components/ui/session-status-pill";
-import { UploadPhotoDialog } from "../../anh-lop/_components/upload-photo-dialog";
+import { PickSessionPhotoDialog } from "../../anh-lop/_components/pick-session-photo-dialog";
 import { StudentEvalDialog } from "./student-eval-dialog";
 import { initialsOf } from "@/lib/ui/initials";
 import { PhanTrangBang } from "@/components/ui/phan-trang-bang";
@@ -146,7 +148,7 @@ export async function HubReviewsTab({
         // R5 21/08 — nguồn TÊN DỰ ÁN tự điền. Ưu tiên customTitle của lớp (bản sao
         // per-lớp, sửa được ở tab Chương trình) rồi mới tới tên bài của giáo trình.
         plan: { select: { customTitle: true } },
-        lesson: { select: { order: true, title: true } },
+        lesson: { select: { order: true, title: true, moduleCode: true } },
         class: { select: { name: true, course: { select: { name: true } } } },
       },
     });
@@ -205,6 +207,13 @@ export async function HubReviewsTab({
       // Ảnh/video của buổi — để biết em nào ĐÃ có, em nào còn thiếu. Luật 21/08: học
       // viên đi học BẮT BUỘC có ảnh/video, nên bảng phải nói được điều đó chứ không chỉ
       // bày ra nút Tải lên.
+      //
+      // 25/08 — vẫn `not REJECTED` chứ KHÔNG siết còn APPROVED, dù hộp "Chọn ảnh" chỉ
+      // mời ảnh đã duyệt. Lý do: từ nay thẻ học viên CHỈ ghi được lên ảnh APPROVED
+      // (toggleMediaStudentTagAction chặn các trạng thái khác) ⇒ với dữ liệu mới hai
+      // cách lọc cho ra y hệt nhau, còn dữ liệu cũ thì ảnh PENDING có sẵn thẻ vẫn nên
+      // tính là "đã có". Siết riêng ở đây sẽ lệch với ba chỗ hỏi CÙNG câu hỏi này
+      // (bảng dưới, teacher/nhan-xet/page.tsx, admin attendance) — lệch mới là bug.
       sdb.classSessionMedia.findMany({
         where: { classSessionId: reviewSessionId, status: { not: "REJECTED" } },
         select: SESSION_MEDIA_SELECT,
@@ -236,7 +245,17 @@ export async function HubReviewsTab({
     }).length;
 
     const courseName = sess.class.course.name;
-    const topic = sess.topic ?? "Buổi học";
+    // 25/08 — tiêu đề buổi ở màn chi tiết dùng CÙNG nhãn với bảng
+    // ("Buổi 7 - HP1 - Bàn Tay Ma Thuật"), thay vì in `topic` thô (gần như luôn null).
+    const sessionLabel =
+      deriveSessionLabel({
+        sessionNumber: sessionNo,
+        planTitle: sess.plan?.customTitle,
+        lessonTitle: sess.lesson?.title,
+        lessonOrder: sess.lesson?.order,
+        moduleCode: sess.lesson?.moduleCode,
+        topic: sess.topic,
+      }) || "Buổi học";
     const dateIso = isoFmt.format(sess.date);
     // R5 — tên dự án của buổi, dùng CHUNG cho mọi học viên của buổi này.
     const projectName = deriveSessionProjectName({
@@ -244,6 +263,7 @@ export async function HubReviewsTab({
       planTitle: sess.plan?.customTitle,
       lessonTitle: sess.lesson?.title,
       lessonOrder: sess.lesson?.order,
+      moduleCode: sess.lesson?.moduleCode,
       topic: sess.topic,
     });
 
@@ -253,8 +273,7 @@ export async function HubReviewsTab({
         <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
           <div>
             <h2 className="text-lg font-bold text-foreground">
-              {sessionNo ? `${sessionNumberLabel(sessionNo)} · ` : ""}
-              {topic}
+              {sessionLabel}
             </h2>
             <p className="text-sm text-muted-foreground">
               {dateIso} · {SESSION_STATUS_LABEL[sess.status] ?? sess.status}
@@ -288,143 +307,144 @@ export async function HubReviewsTab({
           />
         ) : (
           <div className="t-card overflow-hidden">
-            <div className="overflow-x-auto">
-              <PhanTrangBang>
-                <table className="min-w-[560px] w-full border-collapse text-left text-sm">
-                  <thead>
-                    <tr className="border-b border-border bg-muted/50 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
-                      <th scope="col" className="px-5 py-3">
-                        Học viên
-                      </th>
-                      <th scope="col" className="px-5 py-3">
-                        Điểm danh
-                      </th>
-                      <th scope="col" className="px-5 py-3">
-                        Ảnh buổi học
-                      </th>
-                      <th scope="col" className="px-5 py-3 text-right">
-                        Nhận xét
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {roster.map((st) => {
-                      const status = attMap.get(st.id) as
-                        | AttendanceStatus
-                        | undefined;
-                      const evalOk = canEval(st.id);
-                      const fb = fbMap.get(st.id);
-                      const done = Boolean(
-                        fb && (fb.rubric != null || fb.notes != null),
-                      );
-                      return (
-                        <tr
-                          key={st.id}
-                          className={cn(
-                            "border-b border-border/60 last:border-0",
-                            !evalOk && "opacity-60",
-                          )}
-                        >
-                          <td className="px-5 py-3.5">
-                            <div className="flex items-center gap-3">
-                              {st.avatarUrl ? (
-                                <img
-                                  src={st.avatarUrl}
-                                  alt={st.name}
-                                  className="h-10 w-10 shrink-0 rounded-full border border-border object-cover"
-                                />
-                              ) : (
-                                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary-soft text-xs font-semibold text-primary-ink">
-                                  {initialsOf(st.name)}
-                                </span>
-                              )}
-                              <div className="min-w-0">
-                                <p className="truncate font-semibold text-foreground">
-                                  {st.name}
-                                </p>
-                                {st.studentCode && (
-                                  <p className="truncate text-xs text-muted-foreground">
-                                    {st.studentCode}
-                                  </p>
-                                )}
-                              </div>
-                            </div>
-                          </td>
-                          <td className="px-5 py-3.5 whitespace-nowrap">
-                            {status ? (
-                              <span
-                                className={cn(
-                                  "inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold",
-                                  ATT_BADGE[status].cls,
-                                )}
-                              >
-                                {ATT_BADGE[status].label}
-                              </span>
-                            ) : (
-                              <span className="text-muted-foreground">—</span>
-                            )}
-                          </td>
-                          <td className="px-5 py-3.5">
-                            {evalOk ? (
-                              <div className="flex flex-wrap items-center gap-2">
-                                <UploadPhotoDialog
-                                  classId={classId}
-                                  initialSessionId={reviewSessionId}
-                                  initialTagged={[st.id]}
-                                  compact
-                                />
-                                {hasMedia(st.id) ? (
-                                  <span className="inline-flex items-center gap-1 rounded-full bg-state-success-soft px-2 py-0.5 text-xs font-semibold text-state-success-ink">
-                                    <CircleCheck className="h-3.5 w-3.5" aria-hidden />
-                                    Đã có
-                                  </span>
-                                ) : (
-                                  <span className="inline-flex items-center rounded-full border border-dashed border-border px-2 py-0.5 text-xs font-semibold text-muted-foreground">
-                                    Chưa có
-                                  </span>
-                                )}
-                              </div>
-                            ) : (
-                              <span className="text-xs text-muted-foreground">
-                                Vắng — không cần
-                              </span>
-                            )}
-                          </td>
-                          <td className="px-5 py-3.5 text-right">
-                            {evalOk ? (
-                              <StudentEvalDialog
-                                sessionId={reviewSessionId}
-                                studentId={st.id}
-                                studentName={st.name}
-                                courseName={courseName}
-                                sessionTopic={topic}
-                                sessionDate={dateIso}
-                                projectName={projectName}
-                                existing={
-                                  done && fb
-                                    ? {
-                                        projectName: fb.projectName,
-                                        notes: normalizeEvalNotes(fb.notes),
-                                        rubric: normalizeEvalRatings(fb.rubric),
-                                      }
-                                    : null
-                                }
-                                done={done}
-                                pdfHref={`/teacher/nhan-xet/pdf/${reviewSessionId}/${st.id}`}
+            <PhanTrangBang cuonNgang>
+              <table className="min-w-[560px] w-full border-collapse text-left text-sm">
+                <thead>
+                  <tr className="border-b border-border bg-muted/50 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+                    <th scope="col" className="px-5 py-3">
+                      Học viên
+                    </th>
+                    <th scope="col" className="px-5 py-3">
+                      Điểm danh
+                    </th>
+                    <th scope="col" className="px-5 py-3">
+                      Ảnh buổi học
+                    </th>
+                    <th scope="col" className="px-5 py-3 text-right">
+                      Nhận xét
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {roster.map((st) => {
+                    const status = attMap.get(st.id) as
+                      | AttendanceStatus
+                      | undefined;
+                    const evalOk = canEval(st.id);
+                    const fb = fbMap.get(st.id);
+                    const done = Boolean(
+                      fb && (fb.rubric != null || fb.notes != null),
+                    );
+                    return (
+                      <tr
+                        key={st.id}
+                        className={cn(
+                          "border-b border-border/60 last:border-0",
+                          !evalOk && "opacity-60",
+                        )}
+                      >
+                        <td className="px-5 py-3.5">
+                          <div className="flex items-center gap-3">
+                            {st.avatarUrl ? (
+                              <img
+                                src={st.avatarUrl}
+                                alt={st.name}
+                                className="h-10 w-10 shrink-0 rounded-full border border-border object-cover"
                               />
                             ) : (
-                              <span className="text-xs font-medium text-muted-foreground">
-                                Vắng — không nhận xét
+                              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary-soft text-xs font-semibold text-primary-ink">
+                                {initialsOf(st.name)}
                               </span>
                             )}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </PhanTrangBang>
-            </div>
+                            <div className="min-w-0">
+                              <p className="truncate font-semibold text-foreground">
+                                {st.name}
+                              </p>
+                              {st.studentCode && (
+                                <p className="truncate text-xs text-muted-foreground">
+                                  {st.studentCode}
+                                </p>
+                              )}
+                            </div>
+                          </div>
+                        </td>
+                        <td className="px-5 py-3.5 whitespace-nowrap">
+                          {status ? (
+                            <span
+                              className={cn(
+                                "inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold",
+                                ATT_BADGE[status].cls,
+                              )}
+                            >
+                              {ATT_BADGE[status].label}
+                            </span>
+                          ) : (
+                            <span className="text-muted-foreground">—</span>
+                          )}
+                        </td>
+                        <td className="px-5 py-3.5">
+                          {evalOk ? (
+                            <div className="flex flex-wrap items-center gap-2">
+                              {/* 25/08 — "Tải ảnh" → "Chọn ảnh": ảnh của buổi nay tải
+                                  cả loạt ở màn Ảnh lớp và QLCS duyệt từng tấm; ở đây
+                                  giáo viên chỉ chọn tấm nào là của em nào (ghi thẻ). */}
+                              <PickSessionPhotoDialog
+                                classId={classId}
+                                classSessionId={reviewSessionId}
+                                studentId={st.id}
+                                studentName={st.name}
+                              />
+                              {hasMedia(st.id) ? (
+                                <span className="inline-flex items-center gap-1 rounded-full bg-state-success-soft px-2 py-0.5 text-xs font-semibold text-state-success-ink">
+                                  <CircleCheck className="h-3.5 w-3.5" aria-hidden />
+                                  Đã có
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center rounded-full border border-dashed border-border px-2 py-0.5 text-xs font-semibold text-muted-foreground">
+                                  Chưa có
+                                </span>
+                              )}
+                            </div>
+                          ) : (
+                            <span className="text-xs text-muted-foreground">
+                              Vắng — không cần
+                            </span>
+                          )}
+                        </td>
+                        <td className="px-5 py-3.5 text-right">
+                          {evalOk ? (
+                            <StudentEvalDialog
+                              sessionId={reviewSessionId}
+                              studentId={st.id}
+                              studentName={st.name}
+                              courseName={courseName}
+                              sessionTopic={sessionLabel}
+                              sessionDate={dateIso}
+                              projectName={projectName}
+                              existing={
+                                done && fb
+                                  ? {
+                                      projectName: fb.projectName,
+                                      notes: normalizeEvalNotes(fb.notes),
+                                      rubric: normalizeEvalRatings(fb.rubric),
+                                    }
+                                  : null
+                              }
+                              done={done}
+                              pdfHref={`/teacher/nhan-xet/pdf/${reviewSessionId}/${st.id}`}
+                            />
+                          ) : (
+                            <span className="text-xs font-medium text-muted-foreground">
+                              Vắng — không nhận xét
+                            </span>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </PhanTrangBang>
           </div>
         )}
       </div>
@@ -476,6 +496,10 @@ export async function HubReviewsTab({
         topic: true,
         status: true,
         room: { select: { code: true, name: true } },
+        // 25/08 — nguồn NHÃN BUỔI "Buổi 1 - HP1 - Bàn Tay Ma Thuật"
+        // (lib/lms/session-project-name · deriveSessionLabel).
+        plan: { select: { customTitle: true } },
+        lesson: { select: { order: true, title: true, moduleCode: true } },
       },
       // ⚠️ orderBy GIỮ `desc` + `take: 100`: đây là cửa sổ "buổi gần nhất". Đổi sang
       // `asc` là lớp dài bị cắt mất đúng những buổi vừa dạy. Thứ tự HIỂN THỊ do
@@ -582,109 +606,108 @@ export async function HubReviewsTab({
 
   return (
     <div className="t-card overflow-hidden">
-      <div className="overflow-x-auto">
-        <PhanTrangBang>
-          <table className="min-w-[720px] w-full border-collapse text-left text-sm">
-            <thead>
-              <tr className="border-b border-border bg-muted/50 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
-                <th scope="col" className="px-5 py-3">
-                  Buổi
-                </th>
-                <th scope="col" className="px-5 py-3">
-                  Buổi học
-                </th>
-                <th scope="col" className="px-5 py-3">
-                  Ngày · Giờ
-                </th>
-                <th scope="col" className="px-5 py-3">
-                  Đi học
-                </th>
-                <th scope="col" className="px-5 py-3">
-                  Nhận xét
-                </th>
-                <th scope="col" className="px-5 py-3 text-right">
-                  <span className="sr-only">Thao tác</span>
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map(({ s, stat, no }) => {
-                const roomLabel = s.room?.code ?? s.room?.name ?? null;
-                return (
-                  <tr
-                    key={s.id}
-                    className="border-b border-border/60 transition-colors last:border-0 hover:bg-muted/50"
-                  >
-                    <td className="px-5 py-3.5 whitespace-nowrap font-semibold text-foreground tabular-nums">
-                      {sessionNumberLabel(no)}
-                    </td>
-                    <td className="px-5 py-3.5">
-                      <p className="font-semibold text-foreground">
-                        {s.topic ?? "Buổi học"}
+      <PhanTrangBang cuonNgang>
+        <table className="min-w-[720px] w-full border-collapse text-left text-sm">
+          <thead>
+            <tr className="border-b border-border bg-muted/50 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+              <th scope="col" className="px-5 py-3">
+                Buổi học
+              </th>
+              <th scope="col" className="px-5 py-3">
+                Ngày · Giờ
+              </th>
+              <th scope="col" className="px-5 py-3">
+                Đi học
+              </th>
+              <th scope="col" className="px-5 py-3">
+                Nhận xét
+              </th>
+              <th scope="col" className="px-5 py-3 text-right">
+                <span className="sr-only">Thao tác</span>
+              </th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map(({ s, stat, no }) => {
+              const roomLabel = s.room?.code ?? s.room?.name ?? null;
+              return (
+                <tr
+                  key={s.id}
+                  className="border-b border-border/60 transition-colors last:border-0 hover:bg-muted/50"
+                >
+                  <td className="px-5 py-3.5">
+                    <p className="font-semibold text-foreground">
+                      {deriveSessionLabel({
+                        sessionNumber: no,
+                        planTitle: s.plan?.customTitle,
+                        lessonTitle: s.lesson?.title,
+                        lessonOrder: s.lesson?.order,
+                        moduleCode: s.lesson?.moduleCode,
+                        topic: s.topic,
+                      }) || "Buổi học"}
+                    </p>
+                    {roomLabel && (
+                      <p className="text-xs text-muted-foreground">
+                        Phòng {roomLabel}
                       </p>
-                      {roomLabel && (
-                        <p className="text-xs text-muted-foreground">
-                          Phòng {roomLabel}
-                        </p>
-                      )}
-                    </td>
-                    <td className="px-5 py-3.5 whitespace-nowrap">
-                      <p className="text-foreground">{dayFmt.format(s.date)}</p>
-                      {timeLabel && (
-                        <p className="text-xs text-muted-foreground">
-                          {timeLabel}
-                        </p>
-                      )}
-                    </td>
-                    <td className="px-5 py-3.5 whitespace-nowrap font-semibold text-foreground">
-                      {stat.attendanceTaken
-                        ? `${stat.attended}/${rosterCount}`
-                        : "—"}
-                    </td>
-                    <td className="px-5 py-3.5 whitespace-nowrap">
-                      {!stat.attendanceTaken ? (
-                        <Badge
-                          variant="outline"
-                          className="text-muted-foreground"
-                        >
-                          Chưa điểm danh
-                        </Badge>
-                      ) : stat.complete ? (
-                        <Badge
-                          variant="outline"
-                          className="border-state-success-soft bg-state-success-soft text-state-success-ink dark:border-state-success"
-                        >
-                          Đã nhận xét
-                        </Badge>
-                      ) : (
-                        <Badge
-                          variant="outline"
-                          className="border-state-warning-soft bg-state-warning-soft text-state-warning-ink dark:border-state-warning"
-                        >
-                          {stat.reviewed}/{stat.attended} HV
-                        </Badge>
-                      )}
-                    </td>
-                    <td className="px-5 py-3.5 text-right whitespace-nowrap">
-                      <Link
-                        href={`?classId=${classId}&tab=nhan-xet&rvSession=${s.id}`}
-                        className={
-                          stat.complete
-                            ? "inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs font-semibold text-foreground outline-none transition-colors hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring"
-                            : "inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-white outline-none transition-colors hover:bg-primary-darker focus-visible:ring-2 focus-visible:ring-ring"
-                        }
+                    )}
+                  </td>
+                  <td className="px-5 py-3.5 whitespace-nowrap">
+                    <p className="text-foreground">{dayFmt.format(s.date)}</p>
+                    {timeLabel && (
+                      <p className="text-xs text-muted-foreground">
+                        {timeLabel}
+                      </p>
+                    )}
+                  </td>
+                  <td className="px-5 py-3.5 whitespace-nowrap font-semibold text-foreground">
+                    {stat.attendanceTaken
+                      ? `${stat.attended}/${rosterCount}`
+                      : "—"}
+                  </td>
+                  <td className="px-5 py-3.5 whitespace-nowrap">
+                    {!stat.attendanceTaken ? (
+                      <Badge
+                        variant="outline"
+                        className="text-muted-foreground"
                       >
-                        <ClipboardPen className="h-3.5 w-3.5" aria-hidden />
-                        {stat.complete ? "Xem lại" : "Nhận xét"}
-                      </Link>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </PhanTrangBang>
-      </div>
+                        Chưa điểm danh
+                      </Badge>
+                    ) : stat.complete ? (
+                      <Badge
+                        variant="outline"
+                        className="border-state-success-soft bg-state-success-soft text-state-success-ink dark:border-state-success"
+                      >
+                        Đã nhận xét
+                      </Badge>
+                    ) : (
+                      <Badge
+                        variant="outline"
+                        className="border-state-warning-soft bg-state-warning-soft text-state-warning-ink dark:border-state-warning"
+                      >
+                        {stat.reviewed}/{stat.attended} HV
+                      </Badge>
+                    )}
+                  </td>
+                  <td className="px-5 py-3.5 text-right whitespace-nowrap">
+                    <Link
+                      href={`?classId=${classId}&tab=nhan-xet&rvSession=${s.id}`}
+                      className={
+                        stat.complete
+                          ? "inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs font-semibold text-foreground outline-none transition-colors hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring"
+                          : "inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-white outline-none transition-colors hover:bg-primary-darker focus-visible:ring-2 focus-visible:ring-ring"
+                      }
+                    >
+                      <ClipboardPen className="h-3.5 w-3.5" aria-hidden />
+                      {stat.complete ? "Xem lại" : "Nhận xét"}
+                    </Link>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </PhanTrangBang>
     </div>
   );
 }

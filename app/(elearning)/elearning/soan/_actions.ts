@@ -2,6 +2,12 @@
 
 import { z } from "zod";
 import { defineAction } from "@/lib/actions/define";
+import { cauHinhGanKhungVaoBai } from "@/lib/elearning/rubric-authoring";
+import {
+  cauHinhThemCue,
+  cauHinhXoaCue,
+} from "@/lib/elearning/lesson-cue-authoring";
+import { cauHinhGanDeVaoBai } from "@/lib/elearning/exam-authoring";
 import { ActionError } from "@/lib/actions/factory";
 import { computeMinReadSeconds } from "@/lib/elearning/reading";
 import { cauHinhLuuBaiVideo } from "@/lib/elearning/video-lesson";
@@ -79,3 +85,30 @@ export const luuBaiDocAction = defineAction({
  * Cấu hình ở lib (quy ước 10) nên test chạy đúng cái máy chủ chạy.
  */
 export const luuBaiVideoAction = defineAction(cauHinhLuuBaiVideo);
+
+/**
+ * EL-12c — câu hỏi chèn giữa video.
+ *
+ * Cấu hình nằm ở `lib/elearning/lesson-cue-authoring.ts` (quy ước 10): tệp
+ * `"use server"` không nạp được trong vitest, nên để logic ở đây là buộc test phải
+ * chép lại cấu hình — và hai bản chép tay sớm muộn trôi khỏi nhau, với bản được
+ * kiểm không phải bản đang chạy.
+ */
+export const themCueAction = defineAction(cauHinhThemCue);
+export const xoaCueAction = defineAction(cauHinhXoaCue);
+
+/**
+ * EL-14d — gắn đề vào bài kiểm tra.
+ *
+ * Không có đường này thì mở loại bài `QUIZ` là dựng lại bẫy cũ ở hình dạng mới:
+ * người soạn tạo được bài, cổng xuất bản đòi `examId`, và không màn nào đặt được nó.
+ */
+export const ganDeVaoBaiAction = defineAction(cauHinhGanDeVaoBai);
+
+/**
+ * EL-15c — gắn khung chấm vào bài tập.
+ *
+ * ⚠️ Nối vào ĐÂY cùng PR mở loại bài `TASK`: mở loại bài mà người soạn không có
+ * chỗ gắn khung chỉ đổi người bị kẹt, từ người học sang người soạn.
+ */
+export const ganKhungVaoBaiAction = defineAction(cauHinhGanKhungVaoBai);

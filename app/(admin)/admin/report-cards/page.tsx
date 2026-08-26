@@ -131,7 +131,7 @@ export default async function ReportCardsPage({
 
       {rows.length > 0 ? (
         <section className="rounded-xl border border-border bg-card">
-          <PhanTrangBang>
+          <PhanTrangBang cuonNgang>
             <table className="w-full text-sm">
               <thead className="text-left text-xs text-muted-foreground">
                 <tr>

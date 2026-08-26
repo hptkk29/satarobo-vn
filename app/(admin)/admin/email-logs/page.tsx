@@ -155,77 +155,83 @@ export default async function EmailLogsPage({ searchParams }: Props) {
         {totalCount.toLocaleString("vi-VN")} email logs
       </div>
 
+      {/* Vùng cuộn ôm RIÊNG cái bảng: 7 cột, trong đó Subject và email người nhận là chuỗi
+          dài tuỳ nội dung — không có div này thì bảng đẩy rộng cả trang, kéo thanh cuộn
+          ngang của <body> và làm lệch luôn thanh lọc phía trên. Thẻ ngoài giữ
+          `overflow-hidden` để bo góc không bị bảng cắt vuông. */}
       <div className="border rounded overflow-hidden">
-        <table className="w-full text-sm">
-          <thead className="bg-muted border-b">
-            <tr>
-              <th className="text-left px-3 py-2">Thời gian</th>
-              <th className="text-left px-3 py-2">Đến</th>
-              <th className="text-left px-3 py-2">Subject</th>
-              <th className="text-left px-3 py-2">Template</th>
-              <th className="text-left px-3 py-2">Trigger</th>
-              <th className="text-left px-3 py-2">Status</th>
-              <th className="text-left px-3 py-2">Người gửi</th>
-            </tr>
-          </thead>
-          <tbody>
-            {logs.length === 0 && (
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="bg-muted border-b">
               <tr>
-                <td colSpan={7} className="text-center py-8 text-muted-foreground">
-                  Chưa có email log
-                </td>
+                <th className="text-left px-3 py-2">Thời gian</th>
+                <th className="text-left px-3 py-2">Đến</th>
+                <th className="text-left px-3 py-2">Subject</th>
+                <th className="text-left px-3 py-2">Template</th>
+                <th className="text-left px-3 py-2">Trigger</th>
+                <th className="text-left px-3 py-2">Status</th>
+                <th className="text-left px-3 py-2">Người gửi</th>
               </tr>
-            )}
-            {logs.map((log) => (
-              <tr key={log.id} className="border-b hover:bg-muted">
-                <td className="px-3 py-2 text-xs text-muted-foreground">
-                  {log.createdAt.toLocaleString("vi-VN")}
-                </td>
-                <td className="px-3 py-2">
-                  <div className="text-sm">{log.toName ?? "—"}</div>
-                  <div className="text-xs text-muted-foreground font-mono">
-                    {canViewPii ? log.toEmail : maskEmail(log.toEmail)}
-                  </div>
-                </td>
-                <td className="px-3 py-2 text-sm">{log.subject}</td>
-                <td className="px-3 py-2 text-xs">
-                  {log.template ? (
-                    <Link
-                      href={`/email-templates/${log.template.id}/edit`}
-                      className="text-state-info-ink hover:underline"
-                    >
-                      {log.template.name}
-                    </Link>
-                  ) : (
-                    "—"
-                  )}
-                </td>
-                <td className="px-3 py-2 text-xs">{log.triggerType}</td>
-                <td className="px-3 py-2">
-                  <span
-                    className={
-                      "px-2 py-0.5 rounded text-xs " +
-                      EMAIL_LOG_STATUS_COLOR[log.status]
-                    }
-                  >
-                    {EMAIL_LOG_STATUS_LABEL[log.status]}
-                  </span>
-                  {log.failureReason && (
-                    <div
-                      className="text-xs text-state-danger-ink mt-1 max-w-xs truncate"
-                      title={log.failureReason}
-                    >
-                      ⚠ {log.failureReason}
+            </thead>
+            <tbody>
+              {logs.length === 0 && (
+                <tr>
+                  <td colSpan={7} className="text-center py-8 text-muted-foreground">
+                    Chưa có email log
+                  </td>
+                </tr>
+              )}
+              {logs.map((log) => (
+                <tr key={log.id} className="border-b hover:bg-muted">
+                  <td className="px-3 py-2 text-xs text-muted-foreground">
+                    {log.createdAt.toLocaleString("vi-VN")}
+                  </td>
+                  <td className="px-3 py-2">
+                    <div className="text-sm">{log.toName ?? "—"}</div>
+                    <div className="text-xs text-muted-foreground font-mono">
+                      {canViewPii ? log.toEmail : maskEmail(log.toEmail)}
                     </div>
-                  )}
-                </td>
-                <td className="px-3 py-2 text-xs">
-                  {log.triggeredByName ?? "Hệ thống"}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+                  </td>
+                  <td className="px-3 py-2 text-sm">{log.subject}</td>
+                  <td className="px-3 py-2 text-xs">
+                    {log.template ? (
+                      <Link
+                        href={`/email-templates/${log.template.id}/edit`}
+                        className="text-state-info-ink hover:underline"
+                      >
+                        {log.template.name}
+                      </Link>
+                    ) : (
+                      "—"
+                    )}
+                  </td>
+                  <td className="px-3 py-2 text-xs">{log.triggerType}</td>
+                  <td className="px-3 py-2">
+                    <span
+                      className={
+                        "px-2 py-0.5 rounded text-xs " +
+                        EMAIL_LOG_STATUS_COLOR[log.status]
+                      }
+                    >
+                      {EMAIL_LOG_STATUS_LABEL[log.status]}
+                    </span>
+                    {log.failureReason && (
+                      <div
+                        className="text-xs text-state-danger-ink mt-1 max-w-xs truncate"
+                        title={log.failureReason}
+                      >
+                        ⚠ {log.failureReason}
+                      </div>
+                    )}
+                  </td>
+                  <td className="px-3 py-2 text-xs">
+                    {log.triggeredByName ?? "Hệ thống"}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
 
       {totalCount > 0 && (

@@ -5,6 +5,10 @@ import { can } from "@/lib/auth/can";
 import { scopedDb } from "@/lib/db-scope";
 import { LessonEditor } from "../_components/lesson-editor";
 import { VideoUploader } from "../_components/video-uploader";
+import { CueEditor } from "../_components/cue-editor";
+import { QuizLessonEditor } from "../_components/quiz-lesson-editor";
+import { TaskLessonEditor } from "../_components/task-lesson-editor";
+import { cueInlineSchema } from "@/lib/elearning/lesson-cue";
 
 /**
  * EL-04 — TRANG SOẠN MỘT BÀI ĐỌC.
@@ -63,6 +67,15 @@ export default async function Page({
       kind: true,
       contentMd: true,
       videoKey: true,
+      examId: true,
+      // Thiếu trường này thì nhánh `TASK` đọc `undefined` và ô chọn khung luôn
+      // hiện "chưa gắn", kể cả bài đã gắn.
+      rubricId: true,
+      cues: {
+        select: { id: true, atSec: true, blocking: true, inlineJson: true },
+        orderBy: { atSec: "asc" },
+      },
+      _count: { select: { progress: true } },
       durationSec: true,
       module: { select: { title: true, course: { select: { title: true } } } },
     },
@@ -77,9 +90,8 @@ export default async function Page({
   }
   // EL-10 — bài VIDEO có màn riêng: tải tệp, không có trình soạn Markdown.
   //
-  // ⚠️ Mở màn SOẠN cho video KHÔNG có nghĩa là mở màn HỌC. Trang học vẫn chặn
-  // `kind !== READ` cho tới khi EL-11 có trình phát — gỡ chặn sớm là đưa người
-  // học tới một trang trắng.
+  // ⚠️ Mở màn SOẠN cho video KHÔNG có nghĩa là mở màn HỌC — hai chặn RỜI NHAU.
+  // (EL-11 đã mở nhánh VIDEO ở trang học, nên nay cả hai đều mở.)
   if (lesson.kind === "VIDEO") {
     return (
       <div className="mx-auto max-w-3xl px-4 py-6">
@@ -95,10 +107,104 @@ export default async function Page({
             durationSecHienCo={lesson.durationSec}
           />
         </div>
-        <p className="mt-3 text-xs text-muted-foreground">
-          Trình phát video cho người học thuộc ticket EL-11 — tải tệp bây giờ vẫn
-          đúng, người học sẽ xem được khi trình phát xong.
-        </p>
+
+        <div className="mt-8 border-t pt-6">
+          <CueEditor
+            lessonId={lesson.id}
+            durationSec={lesson.durationSec}
+            soNguoiHoc={lesson._count.progress}
+            cues={lesson.cues.map((c) => {
+              // Đọc nội dung câu hỏi để HIỆN TÊN. Câu hỏng khuôn vẫn phải liệt kê
+              // ra được — giấu nó đi là để một bản ghi bẩn nằm mãi mà không ai
+              // xoá nổi, vì không ai thấy nó tồn tại.
+              const q = cueInlineSchema.safeParse(c.inlineJson);
+              return {
+                id: c.id,
+                atSec: c.atSec,
+                blocking: c.blocking,
+                cauHoi: q.success ? q.data.question : "(câu hỏi hỏng — nên xoá)",
+                loai: q.success ? q.data.type : "?",
+              };
+            })}
+          />
+        </div>
+      </div>
+    );
+  }
+
+  // ── Bài KIỂM TRA (EL-14d) — gắn đề ────────────────────────────────────────
+  if (lesson.kind === "QUIZ") {
+    const cacDe = await db.trnExam.findMany({
+      where: { deletedAt: null, isActive: true },
+      select: {
+        id: true,
+        title: true,
+        maxScore: true,
+        passScore: true,
+        _count: { select: { questions: true } },
+      },
+      orderBy: { createdAt: "desc" },
+      take: 200,
+    });
+
+    return (
+      <div className="mx-auto max-w-3xl px-4 py-6">
+        <nav className="mb-3 text-xs text-muted-foreground">
+          {lesson.module.course.title} · {lesson.module.title}
+        </nav>
+        <h1 className="text-xl font-bold">{lesson.title}</h1>
+        <div className="mt-4">
+          <QuizLessonEditor
+            lessonId={lesson.id}
+            examIdHienCo={lesson.examId}
+            cacDe={cacDe.map((d) => ({
+              id: d.id,
+              title: d.title,
+              soCau: d._count.questions,
+              maxScore: d.maxScore,
+              passScore: d.passScore,
+            }))}
+          />
+        </div>
+      </div>
+    );
+  }
+
+  if (lesson.kind === "TASK") {
+    const cacKhung = await db.trnRubric.findMany({
+      where: { deletedAt: null, status: "ACTIVE" },
+      select: {
+        id: true,
+        code: true,
+        title: true,
+        totalPoints: true,
+        passPoints: true,
+        _count: { select: { criteria: true } },
+      },
+      orderBy: { createdAt: "desc" },
+      take: 200,
+    });
+
+    return (
+      <div className="mx-auto max-w-3xl px-4 py-6">
+        <nav className="mb-3 text-xs text-muted-foreground">
+          {lesson.module.course.title} · {lesson.module.title}
+        </nav>
+        <h1 className="text-xl font-bold">{lesson.title}</h1>
+        <div className="mt-4">
+          <TaskLessonEditor
+            lessonId={lesson.id}
+            rubricIdHienCo={lesson.rubricId}
+            cacKhung={cacKhung.map((k) => ({
+              id: k.id,
+              code: k.code,
+              title: k.title,
+              soTieuChi: k._count.criteria,
+              totalPoints: k.totalPoints,
+              passPoints: k.passPoints,
+            }))}
+          />
+        </div>
       </div>
     );
   }

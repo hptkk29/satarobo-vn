@@ -10,7 +10,7 @@
 import fs from "node:fs";
 import { describe, it, expect } from "vitest";
 import type { LeadStatus, Prisma } from "@prisma/client";
-import { setLeadStatus, recordLeadStatusChange } from "./set-status";
+import { setLeadStatus, recordLeadStatusLedger } from "./set-status";
 import { ALL_LEAD_STATUSES, LEAD_DROP_STATUSES } from "./status";
 
 type LeadRow = {
@@ -49,6 +49,12 @@ function fakeTx(lead: LeadRow | null, history: HistoryRow[]): Prisma.Transaction
         return args.data;
       },
     },
+    // Từ 26/08 `setLeadStatus` ghi CẢ vết người đọc (C-07): `AuditLog` +
+    // `LeadActivity`. Hai model này phải có mặt trong tx giả, nếu không mọi bài ở
+    // đây nổ `Cannot read properties of undefined`. Nội dung vết đã có bộ test
+    // riêng (`lib/lead/status-trail.test.ts`) nên ở đây chỉ cần nuốt.
+    auditLog: { create: async (args: unknown) => args },
+    leadActivity: { create: async (args: unknown) => args },
   } as unknown as Prisma.TransactionClient;
 }
 
@@ -210,13 +216,13 @@ describe("LEAD_DROP_STATUSES là MỘT nguồn cho cả cửa ghi lẫn giao di�
   });
 });
 
-describe("recordLeadStatusChange — chỉ ghi sổ cho lượt đã claim ở nơi khác", () => {
+describe("recordLeadStatusLedger — chỉ ghi sổ cho lượt đã claim ở nơi khác", () => {
   it("ghi sổ với from do call-site đưa, không tự đọc lại", async () => {
     // Ở đường tiền/convert, `updateMany` đã đổi status TRƯỚC khi hàm này chạy, nên
     // đọc lại `lead.status` sẽ ra giá trị MỚI. Vì vậy `from` phải do call-site truyền.
     const lead = leadMau({ status: "DA_DANG_KY" });
     const history: HistoryRow[] = [];
-    await recordLeadStatusChange({
+    await recordLeadStatusLedger({
       tx: fakeTx(lead, history),
       leadId: "l1",
       from: "CHO_QUYET_DINH",
@@ -238,7 +244,7 @@ describe("recordLeadStatusChange — chỉ ghi sổ cho lượt đã claim ở n
   // Vẫn giữ hai test vì chúng khoá hai thứ khác nhau: nội dung dòng sổ, và mốc thời gian.
   it("vẫn dời statusChangedAt", async () => {
     const lead = leadMau({ status: "DA_DANG_KY" });
-    await recordLeadStatusChange({
+    await recordLeadStatusLedger({
       tx: fakeTx(lead, []),
       leadId: "l1",
       from: "CHO_QUYET_DINH",

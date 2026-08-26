@@ -51,7 +51,7 @@ export function PrerequisitesManager({
       </div>
 
       <div className="overflow-hidden rounded-xl border border-border bg-card">
-        <PhanTrangBang>
+        <PhanTrangBang cuonNgang>
           <table className="min-w-full divide-y divide-border">
             <thead className="bg-muted">
               <tr>

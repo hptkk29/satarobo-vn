@@ -142,6 +142,13 @@ const BY_PREFIX: Readonly<Record<string, NotiDef>> = {
     group: "action_required", priority: 2, entity: "media",
     recipients: "Người duyệt ảnh lớp", target: "/media",
   },
+  // F-21 — CẢNH BÁO ĐẨY, khác hẳn `media_approval:` ở trên (đó là nhóm việc tồn, chỉ sinh
+  // ra khi chính người đó mở chuông). Khoá dạng `media_review.overdue:<folder>:<ngày VN>`
+  // nên KHÔNG rơi vào phạm vi vòng đồng bộ việc tồn — cố ý, xem `pending-sync.ts`.
+  "media_review.overdue:": {
+    group: "due_date", priority: 1, entity: "media",
+    recipients: "Quản lý cơ sở CÓ ảnh đang treo", target: "/media",
+  },
   "session_incomplete:": {
     group: "action_required", priority: 1, entity: "session",
     recipients: "Giáo viên phụ trách buổi", target: "/sessions",

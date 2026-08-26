@@ -224,32 +224,30 @@ export default async function CrmDashboardPage() {
             Chưa có nhân viên SALES_CSM.
           </p>
         ) : (
-          <div className="overflow-x-auto">
-            <PhanTrangBang>
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-border text-left text-xs uppercase tracking-wide text-muted-foreground">
-                    <th className="py-2 pr-4 font-semibold">Nhân viên</th>
-                    <th className="py-2 pr-4 font-semibold">Lead được giao</th>
-                    <th className="py-2 pr-4 font-semibold">Đã chốt</th>
-                    <th className="py-2 font-semibold">Tỉ lệ chốt</th>
+          <PhanTrangBang cuonNgang>
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-border text-left text-xs uppercase tracking-wide text-muted-foreground">
+                  <th className="py-2 pr-4 font-semibold">Nhân viên</th>
+                  <th className="py-2 pr-4 font-semibold">Lead được giao</th>
+                  <th className="py-2 pr-4 font-semibold">Đã chốt</th>
+                  <th className="py-2 font-semibold">Tỉ lệ chốt</th>
+                </tr>
+              </thead>
+              <tbody>
+                {salesRows.map((r) => (
+                  <tr key={r.id} className="border-b border-border">
+                    <td className="py-2 pr-4 font-medium text-foreground">
+                      {r.name}
+                    </td>
+                    <td className="py-2 pr-4 text-foreground">{r.assigned}</td>
+                    <td className="py-2 pr-4 text-foreground">{r.enrolled}</td>
+                    <td className="py-2 text-foreground">{r.rate.toFixed(1)}%</td>
                   </tr>
-                </thead>
-                <tbody>
-                  {salesRows.map((r) => (
-                    <tr key={r.id} className="border-b border-border">
-                      <td className="py-2 pr-4 font-medium text-foreground">
-                        {r.name}
-                      </td>
-                      <td className="py-2 pr-4 text-foreground">{r.assigned}</td>
-                      <td className="py-2 pr-4 text-foreground">{r.enrolled}</td>
-                      <td className="py-2 text-foreground">{r.rate.toFixed(1)}%</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </PhanTrangBang>
-          </div>
+                ))}
+              </tbody>
+            </table>
+          </PhanTrangBang>
         )}
       </div>
 

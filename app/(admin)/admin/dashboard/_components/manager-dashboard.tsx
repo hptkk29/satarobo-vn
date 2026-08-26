@@ -16,6 +16,7 @@ import type { LeadStatus } from "@prisma/client";
 import { buildRevenueTargetReport, computeAchievement } from "@/lib/reports/revenue-target";
 import { getRevenueTargets } from "@/lib/reports/revenue-target-data";
 import { getDebtRows } from "@/lib/finance/debt";
+import { WHERE_THUC_THU, SELECT_THUC_THU, butToanThucThu } from "@/lib/finance/thuc-thu";
 import { PhanTrangBang } from "@/components/ui/phan-trang-bang";
 
 const vnd = (n: number) => `${n.toLocaleString("vi-VN")}đ`;
@@ -85,10 +86,12 @@ async function getManagerStats(actor: Actor) {
     sdb.lead.groupBy({ by: ["status"], where: ACTIVE_LEAD, _count: { id: true } }),
     // Phễu lead theo TUẦN (8 tuần) — chỉ cần createdAt + status.
     sdb.lead.findMany({ where: { ...ACTIVE_LEAD, createdAt: { gte: eightWeeksAgo } }, select: { createdAt: true, status: true } }),
-    // Doanh thu THỰC = Σ Payment(accountantStatus=CONFIRMED) — 6 tháng gần nhất.
+    // B-02 · quyết định B3 (24/08/2026) — doanh thu THỰC = THỰC THU (lib/finance/thuc-thu):
+    // Σ Payment kế toán đã xác nhận, ĐÃ trừ hoàn và ĐÃ thay bản gốc bằng bản điều chỉnh.
+    // Trước đây lọc cứng CONFIRMED ⇒ hoàn tiền không trừ ra, điều chỉnh giảm giữ số cũ.
     sdb.payment.findMany({
-      where: { accountantStatus: "CONFIRMED", deletedAt: null, paidDate: { gte: sixMonthsAgo } },
-      select: { amount: true, centerId: true, paidDate: true },
+      where: { ...WHERE_THUC_THU, paidDate: { gte: sixMonthsAgo } },
+      select: { ...SELECT_THUC_THU, centerId: true, paidDate: true },
       take: 50_000,
     }),
     getRevenueTargets(actor),
@@ -115,7 +118,11 @@ async function getManagerStats(actor: Actor) {
 
   // câu 16 (a) — doanh thu THỰC vs MỤC TIÊU kỳ hiện tại (ghép qua helper thuần).
   const revenueReport = buildRevenueTargetReport(
-    revenuePayments.map((p) => ({ amount: p.amount, centerId: p.centerId, paidDate: p.paidDate })),
+    butToanThucThu(revenuePayments).map((p) => ({
+      amount: p.amount,
+      centerId: p.centerId,
+      paidDate: p.paidDate,
+    })),
     revenueTargets,
   );
   const currentRevRow = revenueReport.find((r) => r.period === currentPeriod);

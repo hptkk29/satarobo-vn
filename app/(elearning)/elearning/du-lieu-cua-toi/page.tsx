@@ -4,6 +4,7 @@ import { scopedDb } from "@/lib/db-scope";
 import { getPolicyAcceptance } from "@/lib/elearning/policy-acceptance";
 import { PhanTrangBang } from "@/components/ui/phan-trang-bang";
 import { AcceptPolicyButton } from "./_components/accept-policy-button";
+import { AppealFlag } from "./_components/appeal-flag";
 
 /**
  * EL-04 — "DỮ LIỆU CỦA TÔI".
@@ -58,7 +59,7 @@ export default async function Page() {
   const policy = await getPolicyAcceptance(userId);
 
   // Mọi truy vấn dưới đây khoá theo `userId` của phiên. Không nhận tham số nào.
-  const [soLuot, tienDo, soPhien] = await Promise.all([
+  const [soLuot, tienDo, soPhien, cacCo] = await Promise.all([
     db.trnEnrollment.count({ where: { userId } }),
     // KHÔNG cắt `take`: trang này hứa "toàn bộ những gì hệ thống ghi nhận", nên âm
     // thầm chỉ hiện 50 dòng gần nhất là nói sai — và nói sai ở đúng trang thực thi quyền
@@ -77,6 +78,24 @@ export default async function Page() {
       },
     }),
     db.trnVideoSession.count({ where: { userId } }),
+    // EL-13 — cờ nghi ngờ CỦA CHÍNH NGƯỜI NÀY. Đặt ở đây chứ không ở một trang
+    // quản trị riêng: người bị gắn cờ phải thấy nó ở chỗ họ đã được chỉ tới để
+    // xem "hệ thống ghi nhận gì về tôi". Giấu trong một màn khác là để họ phát
+    // hiện khi cửa sổ khiếu nại đã đóng.
+    db.trnWatchFlag.findMany({
+      where: { userId },
+      orderBy: { openedAt: "desc" },
+      select: {
+        id: true,
+        ruleCode: true,
+        status: true,
+        openedAt: true,
+        appealDeadline: true,
+        evidenceJson: true,
+        appealNote: true,
+        decisionNote: true,
+      },
+    }),
   ]);
 
   return (
@@ -115,6 +134,37 @@ export default async function Page() {
         )}
       </Muc>
 
+      {cacCo.length > 0 ? (
+        <Muc title="Ghi nhận bất thường và đường khiếu nại">
+          <p className="mb-3">
+            Hệ thống ghi nhận {cacCo.length} lần số liệu học của bạn nằm ngoài
+            khoảng bình thường. Đây là <strong>ghi nhận máy</strong>, chưa phải kết
+            luận — bạn có quyền nói lại, và số liệu làm căn cứ hiện ngay bên dưới.
+          </p>
+          <div className="space-y-3">
+            {cacCo.map((c) => (
+              <AppealFlag
+                key={c.id}
+                flagId={c.id}
+                ruleCode={c.ruleCode}
+                status={c.status}
+                openedAt={gio(c.openedAt)}
+                appealDeadline={gio(c.appealDeadline)}
+                conNgay={Math.max(
+                  0,
+                  Math.ceil(
+                    (c.appealDeadline.getTime() - Date.now()) / 86_400_000,
+                  ),
+                )}
+                evidence={(c.evidenceJson ?? {}) as Record<string, number>}
+                appealNote={c.appealNote}
+                decisionNote={c.decisionNote}
+              />
+            ))}
+          </div>
+        </Muc>
+      ) : null}
+
       <Muc title="Hệ thống ghi nhận những gì">
         <ul className="list-inside list-disc space-y-1">
           <li>Số giây bạn ở lại trang bài học, và phần trăm bài đã cuộn qua.</li>
@@ -144,7 +194,7 @@ export default async function Page() {
         {tienDo.length === 0 ? (
           <p>Chưa có bài nào được ghi nhận.</p>
         ) : (
-          <PhanTrangBang tenDonVi="bài" khoaGhiNho="el-du-lieu-cua-toi">
+          <PhanTrangBang cuonNgang tenDonVi="bài" khoaGhiNho="el-du-lieu-cua-toi">
             <table className="w-full text-left text-xs">
               <thead className="text-muted-foreground">
                 <tr>

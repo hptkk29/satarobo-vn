@@ -4,6 +4,7 @@ import { findRecentDuplicate, logDuplicateAttempt } from "../dedup";
 import { autoAssignNewLead } from "../auto-assign";
 import { LEAD_KHONG_NHAN_THEM_CON } from "@/lib/leads/status";
 import { autoAssignLead } from "../assign";
+import { recordLeadActivity } from "../activity-write";
 import { getNonEnrollableCenterIds } from "@/lib/enrollment-flow";
 import { buildNote, isSameChildName, matchCenter } from "./normalize";
 import type { MappedLead } from "./types";
@@ -247,16 +248,15 @@ async function attachExtraChild(
         interestedCenterId: centerId,
       },
     });
-    await tx.leadActivity.create({
-      data: {
-        leadId,
-        actorName,
-        type: "NOTE",
-        content:
-          `[Thêm con] Phụ huynh gửi thêm phiếu cho "${child.fullName}"` +
-          `${child.gradeLevel ? ` (${child.gradeLevel})` : ""}` +
-          ` — đã thêm vào hồ sơ này thay vì tạo lead mới.`,
-      },
+    await recordLeadActivity({
+      tx,
+      leadId,
+      actorName,
+      type: "NOTE",
+      content:
+        `[Thêm con] Phụ huynh gửi thêm phiếu cho "${child.fullName}"` +
+        `${child.gradeLevel ? ` (${child.gradeLevel})` : ""}` +
+        ` — đã thêm vào hồ sơ này thay vì tạo lead mới.`,
     });
   });
   return true;
@@ -274,13 +274,17 @@ async function recordIntakeNotes(
 ): Promise<void> {
   const body = buildNote(noteLines, warnings);
   if (!body) return;
-  await db.leadActivity.create({
-    data: {
+  // N-4 — chỗ này trước ghi thẳng `db.…`, ngoài mọi transaction. Bọc lại: dòng
+  // hoạt động và cú bump `lastActivityAt` phải cùng sống hoặc cùng chết, không
+  // để lead có ghi chú mới mà đồng hồ vẫn đứng ở lần chạm cũ.
+  await db.$transaction(async (tx) => {
+    await recordLeadActivity({
+      tx,
       leadId,
       actorName,
       type: "NOTE",
       content: `[Phiếu mới cùng SĐT]\n${body}`,
-    },
+    });
   });
 }
 
@@ -485,13 +489,12 @@ export async function ingestIntakeLead(
       }
 
       if (assignedToId) {
-        await tx.leadActivity.create({
-          data: {
-            leadId: created.id,
-            actorName,
-            type: "NOTE",
-            content: `Gán theo mã nhân viên trên phiếu (${mapped.employeeCode}).`,
-          },
+        await recordLeadActivity({
+          tx,
+          leadId: created.id,
+          actorName,
+          type: "NOTE",
+          content: `Gán theo mã nhân viên trên phiếu (${mapped.employeeCode}).`,
         });
       }
 

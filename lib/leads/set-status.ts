@@ -10,6 +10,37 @@
 // vì mỗi đường vào có ngữ cảnh khác nhau — cửa này chỉ lo ghi cho đúng và đủ.
 import type { LeadStatus, Prisma } from "@prisma/client";
 import { LEAD_DROP_STATUSES } from "@/lib/leads/status";
+import { recordLeadStatusChange as ghiVetNguoiDoc } from "@/lib/lead/status-trail-write";
+import type { LeadStatusTrailSource } from "@/lib/lead/status-trail";
+
+/**
+ * HAI SỔ, MỘT CỬA — vì sao file này gọi sang `lib/lead/status-trail-write`.
+ *
+ * Hai nhánh làm song song cùng dựng "đường ghi duy nhất" cho trạng thái lead, khác cơ chế:
+ *   • C-07 (`status-trail-write`) ghi VẾT NGƯỜI ĐỌC: `AuditLog` + `LeadActivity` +
+ *     bump `Lead.lastActivityAt`. Có màn đọc thật — mục "Lịch sử thay đổi" ở trang
+ *     chi tiết lead, thứ QLCS xem hằng ngày.
+ *   • GĐ1 (file này) ghi SỔ ĐẾM: `LeadStatusHistory` — có cấu trúc (from/to/source/
+ *     centerId/orgUnitId) để tính tỷ lệ chuyển đổi theo BẬC, kể cả lead đã rụng.
+ *
+ * Chúng BÙ nhau, không thay nhau: sổ đếm không hiển thị được cho người đọc, còn
+ * `AuditLog` không đếm phễu được (dữ liệu nằm trong JSON, không index theo bậc).
+ * Nhưng hai "cửa duy nhất" thì không còn cửa nào duy nhất — nên cửa là hàm này, và
+ * nó gọi sang bên kia. ⚠️ Chỗ gọi KHÔNG được tự ghi `LeadActivity` nữa: bên kia ghi rồi.
+ */
+const NGUON_SANG_VET: Record<LeadStatusSource, LeadStatusTrailSource> = {
+  admin: "MANUAL",
+  assign: "ASSIGN",
+  // Chia tự động vẫn là "khi chia/gán lead" dưới mắt người đọc — họ không cần biết
+  // tay hay máy, cột người thực hiện đã nói điều đó.
+  "auto-assign": "ASSIGN",
+  trial: "TRIAL",
+  payment: "PAYMENT",
+  convert: "CONVERT",
+  import: "IMPORT",
+  // Bàn giao là một dạng đổi người phụ trách — cùng nhóm với gán.
+  handover: "ASSIGN",
+};
 
 /** Đường nào đổi trạng thái. Dùng để tách số liệu người làm và máy chạy. */
 export type LeadStatusSource =
@@ -106,6 +137,18 @@ export async function setLeadStatus(
     },
   });
 
+  // Vết cho NGƯỜI ĐỌC (AuditLog + LeadActivity + lastActivityAt) — xem NGUON_SANG_VET.
+  await ghiVetNguoiDoc({
+    tx,
+    leadId,
+    actorId: params.actorId ?? null,
+    actorName: params.actorName ?? "Hệ thống",
+    from,
+    to,
+    source: NGUON_SANG_VET[source],
+    reason: params.reason ?? null,
+  });
+
   return { changed: true, from, to };
 }
 
@@ -117,8 +160,14 @@ export async function setLeadStatus(
  * nhất, nên hai lượt chạy song song thì chỉ một lượt thắng. Thay bằng đọc-rồi-ghi là
  * mở lại đúng cái đua mà `updateMany` sinh ra để chặn (Prisma mặc định READ COMMITTED,
  * transaction KHÔNG cứu được). Vì vậy giữ nguyên cách ghi, chỉ nối thêm sổ.
+ *
+ * ⚠️ KHÁC `setLeadStatus`: hàm này CHỈ ghi sổ đếm, KHÔNG ghi vết người đọc. Hai chỗ
+ * dùng nó (`payment.ts`, `convert-lead-v2.ts`) tự gọi `recordLeadStatusChange` của
+ * `lib/lead/status-trail-write` vì chúng còn kèm ô phụ riêng (mã đơn, mã học viên,
+ * cờ `auditAlreadyWritten`) mà cửa chung không biết. Bỏ một trong hai lời gọi là mất
+ * đúng một nửa dấu vết — nửa nào thì tuỳ chỗ bỏ, và không ai báo.
  */
-export async function recordLeadStatusChange(params: {
+export async function recordLeadStatusLedger(params: {
   tx: Prisma.TransactionClient;
   leadId: string;
   from: LeadStatus | null;

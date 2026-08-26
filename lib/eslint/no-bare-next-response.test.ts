@@ -25,11 +25,15 @@ export async function GET() {
 `;
 
 describe("[EL-07-T10-06] cấm NextResponse.json trần trong route e-learning", () => {
+  // ⚠️ Timeout riêng cho cú gọi ĐẦU TIÊN: nó khởi động cả ESLint (nạp config + plugin).
+  // Chạy một mình hết ~2,3s, nhưng trong bộ đầy đủ (421 tệp song song) thì vượt trần
+  // mặc định 5s và bài này ĐỎ NGẪU NHIÊN — đỏ vì máy bận, không vì code sai. Các bài
+  // sau dùng lại phiên bản đã nạp nên nhanh, không cần nới.
   it("app/api/elearning/** → BÁO LỖI", async () => {
     const ms = await loi("app/api/elearning/khoa-hoc/route.ts", BARE);
     expect(ms.length).toBe(1);
     expect(ms[0]?.message).toContain("lib/api/response");
-  });
+  }, 60_000);
 
   it("app/api/cron/elearning-*/** → BÁO LỖI", async () => {
     const ms = await loi("app/api/cron/elearning-dem/route.ts", BARE);

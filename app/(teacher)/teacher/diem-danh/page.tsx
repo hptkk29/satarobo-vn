@@ -22,8 +22,8 @@ import {
   type SessionMediaRow,
   compareSessionWorkOrder,
   isSessionSettled,
-  sessionNumberLabel,
 } from "@/lib/lms/session-order";
+import { deriveSessionLabel } from "@/lib/lms/session-project-name";
 import type { AttendanceStatus } from "@prisma/client";
 import { PageHeader } from "../_components/ui/page-header";
 import { EmptyState } from "../_components/ui/empty-state";
@@ -125,6 +125,10 @@ export default async function TeacherAttendanceOverviewPage() {
           date: true,
           topic: true,
           status: true,
+          // 25/08 — nguồn NHÃN BUỔI "Buổi 1 - HP1 - Bàn Tay Ma Thuật"
+          // (lib/lms/session-project-name · deriveSessionLabel).
+          plan: { select: { customTitle: true } },
+          lesson: { select: { order: true, title: true, moduleCode: true } },
         },
         orderBy: { date: "desc" },
         take: 300,
@@ -203,10 +207,17 @@ export default async function TeacherAttendanceOverviewPage() {
           id: s.id,
           classId: s.classId,
           className: info?.name ?? "Lớp",
-          sessionNo: sessionNumberLabel(no),
+          sessionLabel:
+            deriveSessionLabel({
+              sessionNumber: no,
+              planTitle: s.plan?.customTitle,
+              lessonTitle: s.lesson?.title,
+              lessonOrder: s.lesson?.order,
+              moduleCode: s.lesson?.moduleCode,
+              topic: s.topic,
+            }) || "Buổi học",
           date: dayFmt.format(s.date),
           time: info?.time ?? "",
-          topic: s.topic ?? "Buổi học",
           done: doneSet.has(s.id),
           present: presentBy.get(s.id) ?? 0,
           roster,

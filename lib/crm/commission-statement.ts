@@ -3,6 +3,7 @@
 import type { CommissionLine, CommissionStatement } from "@prisma/client";
 import { db } from "@/lib/db";
 import { writeAudit, type AuditActor } from "@/lib/audit/audit-log";
+import { TRIAL_TEACHER_TIER } from "@/lib/crm/trial-teacher-commission";
 import type { CommissionLine as ComputedLine } from "@/lib/crm/commission";
 
 export class CommissionStmtError extends Error {
@@ -28,7 +29,13 @@ export async function setStatementLines(
     (await db.commissionStatement.create({ data: { period: input.period } }));
 
   await db.$transaction([
-    db.commissionLine.deleteMany({ where: { statementId: stmt.id } }),
+    // 25/08 — CHỈ dọn 4 tầng Sale. Dòng tier=TRIAL_TEACHER được sinh từng cái một
+    // trong transaction convert (lib/crm/trial-teacher-commission.ts) chứ không phải
+    // tính lại cả kỳ; deleteMany trần sẽ xoá mất hoa hồng GV dạy Trial mỗi lần kế toán
+    // dựng lại bảng kê Sale.
+    db.commissionLine.deleteMany({
+      where: { statementId: stmt.id, tier: { not: TRIAL_TEACHER_TIER } },
+    }),
     db.commissionLine.createMany({
       data: input.lines.map((l) => ({
         statementId: stmt.id,

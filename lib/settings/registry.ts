@@ -28,6 +28,7 @@ export type SettingGroup =
   | "otp"
   | "teacher"
   | "lms"
+  | "media"
   | "storage"
   | "public"
   | "content"
@@ -362,6 +363,35 @@ export const SETTINGS = {
     default: 4,
     centerOverridable: true,
   }),
+  // C-05 — CẢNH BÁO LEAD TREO. Quyết định 12(a) của chủ dự án (24/08/2026): vàng ≥ 2
+  // ngày, đỏ ≥ 7 ngày, **cả hai `centerOverridable`** (nguyên văn: "không hardcode").
+  //
+  // ⚠️ Default ở đây phải BẰNG `STALE_LEAD_WARN_DAYS`/`STALE_LEAD_DANGER_DAYS` của
+  // `lib/lead/stale-lead.ts` — file kia là hằng dùng khi CHƯA đọc được cấu hình (test
+  // thuần, component client), file này là giá trị người vận hành sửa được. Hai chỗ lệch
+  // nhau là bảng và cấu hình nói hai ngưỡng khác nhau; `registry.test.ts` ghim lại.
+  //
+  // ⚠️ KHÁC hẳn `crm.sla.*` ngay dưới: nhóm SLA đo phễu SR.QD.217 tính bằng PHÚT và
+  // đếm từ mốc phễu; hai key này đếm NGÀY từ lần TIẾP CẬN gần nhất
+  // (`lastLeadOutreachAt`, `lib/lead/activity-clock.ts`) — mốc khác, đơn vị khác.
+  "crm.staleLeadWarnDays": def({
+    key: "crm.staleLeadWarnDays",
+    group: "crm",
+    label: "Lead treo — cảnh báo VÀNG khi chưa tiếp cận (ngày)",
+    // min 1: đặt 0 là mọi lead đỏ ngay lúc vừa vào hệ thống ⇒ cột cảnh báo thành nhiễu
+    // trắng và người dùng tắt mắt với nó.
+    schema: z.number().int().min(1).max(365),
+    default: 2, // lib/lead/stale-lead.ts STALE_LEAD_WARN_DAYS
+    centerOverridable: true,
+  }),
+  "crm.staleLeadDangerDays": def({
+    key: "crm.staleLeadDangerDays",
+    group: "crm",
+    label: "Lead treo — cảnh báo ĐỎ khi chưa tiếp cận (ngày)",
+    schema: z.number().int().min(1).max(365),
+    default: 7, // lib/lead/stale-lead.ts STALE_LEAD_DANGER_DAYS
+    centerOverridable: true,
+  }),
   // SLA phễu SR.QD.217 (lib/crm/sla.ts SLA_THRESHOLDS) — ngưỡng tính bằng PHÚT.
   "crm.sla.respondMinutes": def({
     key: "crm.sla.respondMinutes",
@@ -619,6 +649,30 @@ export const SETTINGS = {
     label: "Cho phụ huynh xem điểm tổng quan bài tập/kiểm tra",
     schema: z.boolean(),
     default: false,
+    centerOverridable: true,
+  }),
+  // ── F-20 — hạn duyệt ảnh/video buổi học ────────────────────────────────
+  // Mặc định "10h sáng ngày hôm sau" (spec F-20 + quyết định #7). Hai key rời chứ
+  // không một chuỗi "10:00 D+1": trang cấu hình hiện ô JSON theo schema, số nguyên
+  // validate được biên, chuỗi thì không.
+  // ⚠️ GIỜ VN, không phải UTC — quy đổi nằm ở lib/lms/media-review-deadline.ts.
+  // ⚠️ Hạn ĐÓNG BĂNG lúc folder duyệt sinh ra (F-20-2): đổi hai key này chỉ đổi
+  // các folder MỚI, không viết lại hạn của quá khứ (nếu không báo cáo SLA F-30 sẽ
+  // đổi kết quả của những tháng đã chốt mỗi lần ai đó chỉnh cấu hình).
+  "media.reviewDeadlineHour": def({
+    key: "media.reviewDeadlineHour",
+    group: "media",
+    label: "Giờ hạn duyệt ảnh/video buổi học (giờ VN, 0–23)",
+    schema: z.number().int().min(0).max(23),
+    default: 10, // spec F-20: 10h sáng
+    centerOverridable: true,
+  }),
+  "media.reviewDeadlineOffsetDays": def({
+    key: "media.reviewDeadlineOffsetDays",
+    group: "media",
+    label: "Hạn duyệt ảnh/video sau ngày dạy (số ngày, 0 = trong ngày)",
+    schema: z.number().int().min(0).max(7),
+    default: 1, // spec F-20: "ngày hôm sau"
     centerOverridable: true,
   }),
   "storage.presignTtlSec": def({

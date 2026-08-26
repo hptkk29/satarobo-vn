@@ -9,8 +9,9 @@
 // Data: own-rows theo teacherId qua lib/lms/teacher-schedule (db ở lib, không phải
 // app/(teacher) — né ESLint chặn @/lib/db trần).
 //
-// ⚠️ Câu 46 (chốt với chủ nhiệm): site GV ẨN HẲN phụ huynh cho lớp Trial — chỉ hiện
-// tên HV + năm sinh + khoá quan tâm. Helper đã strip lead.parentName/phone/email.
+// ⚠️ ĐẢO "câu 46" (25/08, chủ dự án): bảng Trial NAY CÓ cột "Phụ huynh" — chỉ TÊN.
+// SĐT/email phụ huynh vẫn không bao giờ ra khỏi server (xem ghi chú dài ở khối
+// getTeacherTrialTable trong lib/lms/teacher-schedule.ts).
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { Ban } from "lucide-react";
@@ -18,19 +19,22 @@ import { auth } from "@/lib/auth";
 import { cn } from "@/lib/utils";
 import { checkPermission } from "@/lib/auth/check-permission";
 import {
-  getTeacherTrialRoster,
+  getTeacherTrialTable,
   getTeacherTrialRubricContext,
+  type TrialTableRow,
 } from "@/lib/lms/teacher-schedule";
 import { PageHeader } from "../_components/ui/page-header";
 import { EmptyState } from "../_components/ui/empty-state";
-import { TrialList, type TrialSlotView } from "./_components/trial-list";
+import { TrialList, type TrialRowView } from "./_components/trial-list";
 import { TrialEvalForm } from "./_components/trial-eval-form";
 import { BackLink } from "../_components/ui/back-link";
 
 export const metadata = { title: "Danh sách Trial | Giáo viên Sata Robo" };
 
 const VN_OFFSET_MS = 7 * 60 * 60 * 1000;
-const DAY_MS = 24 * 60 * 60 * 1000;
+
+/** "từ ngày hiện tại đến hết 7 ngày tiếp theo" (chủ dự án 25/08). */
+const TRIAL_WINDOW_DAYS = 7;
 
 /** Mốc UTC 00:00 của NGÀY hôm nay theo giờ VN — khớp cột @db.Date của Trial. */
 function vnTodayUtc(now = new Date()): Date {
@@ -40,26 +44,15 @@ function vnTodayUtc(now = new Date()): Date {
   );
 }
 
-// @db.Date là UTC 00:00 của ngày lịch VN → format theo UTC ra đúng ngày.
-const dateLabelFmt = new Intl.DateTimeFormat("vi-VN", {
-  weekday: "long",
-  day: "2-digit",
-  month: "2-digit",
-  year: "numeric",
-  timeZone: "UTC",
-});
-// Nhãn NGẮN cho cột "Thời gian" của từng dòng HV ("CN, 05/07") — cùng luật UTC ở
-// trên. Format Ở ĐÂY (server) chứ không ở client: máy GV không chắc chạy +07, và
-// render server ↔ hydrate client lệch nhau là vỡ hydration.
+// Nhãn ngày cho cột "Buổi" ("CN, 05/07"). @db.Date là UTC 00:00 của ngày lịch VN →
+// format theo UTC mới ra đúng ngày. Format Ở ĐÂY (server) chứ không ở client: máy GV
+// không chắc chạy +07, và render server ↔ hydrate client lệch nhau là vỡ hydration.
 const dateShortFmt = new Intl.DateTimeFormat("vi-VN", {
   weekday: "short",
   day: "2-digit",
   month: "2-digit",
   timeZone: "UTC",
 });
-function isoKey(d: Date): string {
-  return d.toISOString().slice(0, 10);
-}
 function capitalize(s: string): string {
   return s.charAt(0).toUpperCase() + s.slice(1);
 }
@@ -88,10 +81,6 @@ export default async function TeacherTrialPage({
     // Buổi đang chấm quyết định CẢ biểu mẫu lẫn PDF — phải nói rõ trên URL, vì
     // `scheduledSessionId` của ca chỉ đổi khi dời lịch (xem ghi chú GĐ4 ở helper).
     const selected = ctx.trialClassSessionId;
-    const pdfHref = selected
-      ? `/teacher/trial/pdf/${ctx.enrollmentId}?sessionId=${selected}`
-      : `/teacher/trial/pdf/${ctx.enrollmentId}`;
-
     return (
       <div className="space-y-4">
         <BackLink href="?" label="Danh sách Trial" />
@@ -157,64 +146,60 @@ export default async function TeacherTrialPage({
                 }
               : null
           }
-          pdfHref={pdfHref}
+          /* 25/08 — chủ dự án gỡ nút "Xuất PDF" khỏi màn Trial của GV
+             (docs/site-giao-vien-2508.md §5). ĐƯỜNG PDF vẫn còn và vẫn nhận
+             `?sessionId=` của GĐ4 — site Sale in phiếu qua đó; chỉ cái nút ở
+             màn giáo viên là bỏ. Vì vậy `pdfHref` bên dưới không còn ai dùng. */
+          pdfHref={null}
         />
       </div>
     );
   }
 
-  // ── (a) Danh sách HV Trial nhóm theo ngày ───────────────────────────────────
+  // ── (a) Hai bảng: "Các suất sắp Trial" (7 ngày tới) + "Đã Trial" ───────────
   const today = vnTodayUtc();
-  const from = new Date(today.getTime() - 30 * DAY_MS);
-  const to = new Date(today.getTime() + 31 * DAY_MS);
-  const roster = await getTeacherTrialRoster(session.user.id, from, to);
+  const table = await getTeacherTrialTable(session.user.id, {
+    today,
+    days: TRIAL_WINDOW_DAYS,
+  });
 
-  // Mốc "hôm nay" cho cột Thời gian: `today` đã là UTC 00:00 của ngày lịch VN, mà
-  // `s.date` (@db.Date) cũng vậy → so bằng số milli là khớp tuyệt đối, không phải
-  // so chuỗi. Tính ở server để client không đụng `new Date()` (lệch hydrate).
-  const todayMs = today.getTime();
+  /** "Hoàng Gia Bảo - 2016" — ghép ở SERVER để client không phải đụng ngày tháng. */
+  function toView(r: TrialTableRow): TrialRowView {
+    return {
+      enrollmentId: r.enrollmentId,
+      sessionId: r.sessionId,
+      dateLabel: r.date ? capitalize(dateShortFmt.format(r.date)) : "",
+      timeLabel: r.startTime && r.endTime ? `${r.startTime}–${r.endTime}` : "",
+      trialClassName: r.trialClassName,
+      studentLabel: r.birthYear ? `${r.studentName} - ${r.birthYear}` : r.studentName,
+      parentName: r.parentName,
+      courseName: r.courseName,
+      status: r.status,
+      evaluated: r.evaluated,
+    };
+  }
 
-  const slots: TrialSlotView[] = roster.slots.map((s) => ({
-    sessionId: s.sessionId,
-    trialClassName: s.trialClassName,
-    dateKey: isoKey(s.date),
-    dateLabel: capitalize(dateLabelFmt.format(s.date)),
-    dateShort: capitalize(dateShortFmt.format(s.date)),
-    dayState:
-      s.date.getTime() === todayMs
-        ? "today"
-        : s.date.getTime() < todayMs
-          ? "past"
-          : "upcoming",
-    timeLabel: `${s.startTime}–${s.endTime}`,
-    status: s.status,
-    students: s.students.map((st) => ({
-      enrollmentId: st.enrollmentId,
-      studentName: st.studentName,
-      birthYear: st.birthYear,
-      courseName: st.courseName,
-      status: st.status,
-      evaluated: st.evaluated,
-    })),
-  }));
+  // HV chưa gắn buổi không có ngày để xếp, nên KHÔNG trộn vào bảng "sắp Trial" (bảng đó
+  // sắp theo ngày). Dồn xuống "Đã Trial" cũng sai — việc chưa xảy ra. Giữ nguyên khối
+  // riêng như trước để không ai tàng hình.
+  const upcoming = table.upcoming.map(toView);
+  const done = table.done.map(toView);
 
   return (
     <div>
       <PageHeader
         title="Học viên Trial"
-        subtitle="Buổi Trial chia theo ngày và khung giờ. Sau buổi, nhập phiếu đánh giá cho từng học viên."
+        subtitle={`Suất Trial trong ${TRIAL_WINDOW_DAYS} ngày tới và các suất đã học. Sau buổi, nhập phiếu đánh giá cho từng học viên.`}
       />
 
-      {/* #2 — HV chưa gắn buổi cụ thể (data cũ): hiển thị riêng để không ai tàng hình. */}
-      {roster.unassigned.length > 0 && (
+      {table.unassigned.length > 0 && (
         <section className="t-card mb-6 overflow-hidden">
           <header className="border-b border-border bg-muted/40 px-5 py-3">
             <h2 className="text-sm font-bold text-foreground">
-              Chưa xếp buổi ({roster.unassigned.length})
+              Chưa xếp buổi ({table.unassigned.length})
             </h2>
-            {/* Khối này CỐ Ý không có cột thời gian như bảng dưới: chưa gắn buổi thì
-                chưa có ngày/giờ để hiện. Nói thẳng ra để GV không tưởng là lỗi thiếu
-                dữ liệu khi thấy chỗ này trống mà bảng dưới thì có. */}
+            {/* Khối này CỐ Ý không có cột thời gian như 2 bảng dưới: chưa gắn buổi thì
+                chưa có ngày/giờ để hiện. Nói thẳng ra để GV không tưởng là lỗi dữ liệu. */}
             <p className="text-xs text-muted-foreground">
               Học viên đã ghi danh lớp Trial của bạn nhưng chưa gắn vào buổi cụ
               thể nên chưa có ngày giờ học — nhờ quản lý xếp buổi, hoặc nhập
@@ -222,7 +207,7 @@ export default async function TeacherTrialPage({
             </p>
           </header>
           <ul className="divide-y divide-border/60">
-            {roster.unassigned.map((st) => (
+            {table.unassigned.map((st) => (
               <li
                 key={st.enrollmentId}
                 className="flex flex-wrap items-center justify-between gap-2 px-5 py-3"
@@ -230,10 +215,11 @@ export default async function TeacherTrialPage({
                 <div>
                   <p className="text-sm font-medium text-foreground">
                     {st.studentName}
+                    {st.birthYear ? ` - ${st.birthYear}` : ""}
                   </p>
                   <p className="text-xs text-muted-foreground">
                     {st.trialClassName}
-                    {st.birthYear ? ` · ${st.birthYear}` : ""}
+                    {st.parentName ? ` · PH: ${st.parentName}` : ""}
                     {st.courseName ? ` · ${st.courseName}` : ""}
                   </p>
                 </div>
@@ -249,7 +235,11 @@ export default async function TeacherTrialPage({
         </section>
       )}
 
-      <TrialList slots={slots} />
+      <TrialList
+        upcoming={upcoming}
+        done={done}
+        windowDays={TRIAL_WINDOW_DAYS}
+      />
     </div>
   );
 }

@@ -10,6 +10,7 @@ import {
   validateSettingValue,
 } from "@/lib/settings/registry";
 import { resolveSettingValue } from "@/lib/settings/resolve";
+import { STALE_LEAD_WARN_DAYS, STALE_LEAD_DANGER_DAYS } from "@/lib/lead/stale-lead";
 
 describe("[R6-A] registry — validate giá trị (US-R6A-1 AC4)", () => {
   it("[R6-A-T2-01] key không có schema → từ chối", () => {
@@ -54,6 +55,59 @@ describe("[R6-A] registry — validate giá trị (US-R6A-1 AC4)", () => {
       const r = d.schema.safeParse(d.default);
       expect(r.success, `default của ${key} phải hợp lệ`).toBe(true);
     }
+  });
+});
+
+describe("[F-20] hạn duyệt ảnh/video trong Cấu hình vận hành", () => {
+  it("[F-20-T30] mặc định đúng spec: 10h sáng, 1 ngày sau buổi dạy", () => {
+    expect(SETTINGS["media.reviewDeadlineHour"].default).toBe(10);
+    expect(SETTINGS["media.reviewDeadlineOffsetDays"].default).toBe(1);
+  });
+
+  it("[F-20-T31] mỗi cơ sở đặt hạn riêng được (centerOverridable)", () => {
+    expect(SETTINGS["media.reviewDeadlineHour"].centerOverridable).toBe(true);
+    expect(SETTINGS["media.reviewDeadlineOffsetDays"].centerOverridable).toBe(true);
+  });
+
+  it("[F-20-T32] nhãn nói rõ GIỜ VN — người sửa cấu hình không phải đoán múi giờ", () => {
+    expect(SETTINGS["media.reviewDeadlineHour"].label).toMatch(/giờ VN/i);
+  });
+
+  it("[F-20-T33] giờ ngoài 0..23 và số ngày ngoài 0..7 → từ chối ngay ở ô cấu hình", () => {
+    expect(validateSettingValue("media.reviewDeadlineHour", 24).ok).toBe(false);
+    expect(validateSettingValue("media.reviewDeadlineHour", -1).ok).toBe(false);
+    expect(validateSettingValue("media.reviewDeadlineHour", 9.5).ok).toBe(false);
+    expect(validateSettingValue("media.reviewDeadlineOffsetDays", 8).ok).toBe(false);
+    expect(validateSettingValue("media.reviewDeadlineOffsetDays", -1).ok).toBe(false);
+    // Biên hợp lệ vẫn phải qua.
+    expect(validateSettingValue("media.reviewDeadlineHour", 0).ok).toBe(true);
+    expect(validateSettingValue("media.reviewDeadlineHour", 23).ok).toBe(true);
+    expect(validateSettingValue("media.reviewDeadlineOffsetDays", 0).ok).toBe(true);
+    expect(validateSettingValue("media.reviewDeadlineOffsetDays", 7).ok).toBe(true);
+  });
+});
+
+describe("[C-05] ngưỡng cảnh báo lead treo nằm trong Cấu hình vận hành", () => {
+  it("[C-05-T01] mặc định ĐÚNG quyết định 12(a) ngày 24/08/2026: vàng 2 ngày · đỏ 7 ngày", () => {
+    expect(SETTINGS["crm.staleLeadWarnDays"].default).toBe(STALE_LEAD_WARN_DAYS);
+    expect(SETTINGS["crm.staleLeadDangerDays"].default).toBe(STALE_LEAD_DANGER_DAYS);
+    expect(SETTINGS["crm.staleLeadWarnDays"].default).toBe(2);
+    expect(SETTINGS["crm.staleLeadDangerDays"].default).toBe(7);
+  });
+
+  it("[C-05-T02] mỗi cơ sở đặt ngưỡng riêng được (quyết định 12(a) ghi rõ centerOverridable)", () => {
+    expect(SETTINGS["crm.staleLeadWarnDays"].centerOverridable).toBe(true);
+    expect(SETTINGS["crm.staleLeadDangerDays"].centerOverridable).toBe(true);
+  });
+
+  it("[C-05-T03] ngưỡng 0 hoặc âm bị chặn ngay ở ô cấu hình", () => {
+    // 0 ngày = mọi lead đều đỏ ngay lúc vừa vào hệ thống ⇒ cột cảnh báo thành nhiễu
+    // trắng và người dùng tắt mắt với nó. Chặn ở đây, không chặn ở chỗ vẽ.
+    expect(validateSettingValue("crm.staleLeadWarnDays", 0).ok).toBe(false);
+    expect(validateSettingValue("crm.staleLeadDangerDays", -1).ok).toBe(false);
+    expect(validateSettingValue("crm.staleLeadWarnDays", 1.5).ok).toBe(false);
+    expect(validateSettingValue("crm.staleLeadWarnDays", 1).ok).toBe(true);
+    expect(validateSettingValue("crm.staleLeadDangerDays", 365).ok).toBe(true);
   });
 });
 

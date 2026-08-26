@@ -612,7 +612,7 @@ function BangNguoi(props: {
       {/* Bọc phân trang: luật nhóm rộng có thể khớp cả trăm người, và một hộp
           cuộn dài vô tận thì không soát được — mà soát chính là việc của khung
           xem trước. Vẫn liệt kê ĐỦ TÊN (luật 5), chỉ chia trang. */}
-      <PhanTrangBang tenDonVi="người" soDongMacDinh={20}>
+      <PhanTrangBang cuonNgang tenDonVi="người" soDongMacDinh={20}>
         <table className="w-full text-sm">
           <tbody>
             {props.ds.map((n) => (
