@@ -6,7 +6,7 @@
 // (chốt 21/08): Điểm danh · Nhận xét · Tải ảnh · Hoàn tất buổi. Trước đó người dùng
 // phải nhớ đường sang ba màn khác nhau rồi mới quay lại đây xem đã đủ chưa.
 //
-// Cột "Tiêu đề buổi" lấy từ GIÁO TRÌNH của lớp (deriveSessionTitle: kế hoạch buổi ghim
+// Cột "Buổi học" lấy từ GIÁO TRÌNH của lớp (deriveSessionLabel: kế hoạch buổi ghim
 // cho lớp → tên bài của giáo án → chủ đề gõ tay), không phải chuỗi nhập tay ở cấp buổi.
 //
 // Thứ tự + phân bậc tính SẴN Ở SERVER (lib/lms/attendance-queue). Ở đây chỉ lọc và vẽ —
@@ -36,7 +36,6 @@ import { StatusPill, type PillTone } from "@/components/admin/ui/status-pill";
 import { EmptyState } from "@/components/admin/ui/states";
 import { adminTd, adminTh, adminTr } from "@/components/admin/ui/table";
 import { PhanTrangBang } from "@/components/ui/phan-trang-bang";
-import { sessionNumberLabel } from "@/lib/lms/session-order";
 import {
   ATTENDANCE_QUEUE_LABEL,
   type AttendanceQueuePhase,
@@ -53,10 +52,17 @@ import { cn } from "@/lib/utils";
 export interface AttendanceListRow {
   id: string;
   classId: string;
-  /** Buổi thứ mấy của lớp (null = không tra được). */
+  /**
+   * Buổi thứ mấy của lớp (null = không tra được). Chỉ dùng để XẾP THỨ TỰ ở server —
+   * phần hiển thị đã nằm trong `sessionLabel`.
+   */
   number: number | null;
-  /** Tiêu đề buổi từ giáo trình lớp. Rỗng = lớp chưa ghim giáo trình. */
-  title: string;
+  /**
+   * Nhãn buổi đầy đủ: `"Buổi 3 - HP1 - Bàn Tay Ma Thuật"`. Server dựng sẵn
+   * (deriveSessionLabel); khoá không chia học phần thì tự rút còn `"Buổi 3 - <tên bài>"`,
+   * lớp chưa ghim giáo trình thì còn `"Buổi 3"`.
+   */
+  sessionLabel: string;
   /** Đã format theo giờ VN ở server — client không tự format kẻo lệch hydrate. */
   dateLabel: string;
   timeLabel: string;
@@ -206,10 +212,9 @@ export function AttendanceList({
     return rows.filter((r) => {
       if (phase !== ALL && r.phase !== phase) return false;
       if (!q) return true;
+      // `sessionLabel` đã chứa cả "Buổi N" lẫn tên bài lẫn học phần ⇒ một khoá tìm là đủ.
       return (
-        r.title.toLowerCase().includes(q) ||
-        r.dateLabel.toLowerCase().includes(q) ||
-        sessionNumberLabel(r.number).toLowerCase().includes(q)
+        r.sessionLabel.toLowerCase().includes(q) || r.dateLabel.toLowerCase().includes(q)
       );
     });
   }, [rows, query, phase]);
@@ -303,14 +308,11 @@ export function AttendanceList({
       ) : (
         <div className="overflow-hidden rounded-xl border border-border bg-card">
           <PhanTrangBang cuonNgang tenDonVi="buổi học">
-            <table className="w-full min-w-[1080px] border-collapse text-left">
+            <table className="w-full min-w-[960px] border-collapse text-left">
               <thead>
                 <tr className="border-b border-border bg-muted/40">
                   <th scope="col" className={adminTh}>
-                    Buổi
-                  </th>
-                  <th scope="col" className={adminTh}>
-                    Tiêu đề buổi
+                    Buổi học
                   </th>
                   <th scope="col" className={adminTh}>
                     Ngày
@@ -329,16 +331,9 @@ export function AttendanceList({
               <tbody>
                 {filtered.map((r) => (
                   <tr key={r.id} className={adminTr}>
-                    <td className={cn(adminTd, "font-semibold tabular-nums")}>
-                      {sessionNumberLabel(r.number)}
-                    </td>
-                    <td className={cn(adminTd, "max-w-[22rem]")}>
+                    <td className={cn(adminTd, "max-w-[26rem]")}>
                       <span className="block truncate font-semibold text-foreground">
-                        {r.title || (
-                          <span className="font-normal text-muted-foreground">
-                            (giáo trình chưa đặt tên buổi)
-                          </span>
-                        )}
+                        {r.sessionLabel}
                       </span>
                       {r.timeLabel && (
                         <span className="block text-xs text-muted-foreground">
