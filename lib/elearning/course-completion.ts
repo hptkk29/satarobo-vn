@@ -9,7 +9,36 @@
  * ⚠️ `COMPLETED` vs `COMPLETED_LATE` xét theo `dueAtOriginal`, KHÔNG theo `dueAt`.
  * `dueAt` gia hạn được; đo đúng-hạn trên nó thì ai được gia hạn cũng thành đúng
  * hạn, và tỉ lệ đúng hạn thành thứ đo được 100% mãi mãi.
+ *
+ * ⚠️ NGOẠI LỆ DUY NHẤT: `slaGraceDays` — số ngày làm việc được MIỄN TRỪ vì NGƯỜI
+ * CHẤM trễ hạn SLA. Nó KHÔNG phải gia hạn: gia hạn là người xử chủ động cho thêm
+ * thời gian, còn đây là trả lại đúng phần người học đã mất vì lỗi của người khác.
+ *
+ * Vì sao phải nới ở ĐÂY chứ không chỉ nới `dueAt`: nới `dueAt` mở lại đường nộp và
+ * chặn `OVERDUE`, nhưng phép so trễ-hay-không ở dưới vẫn đọc `dueAtOriginal` bất
+ * biến. Người bị bỏ quên năm ngày, được nới hạn, học xong đúng hạn mới — VẪN bị
+ * đếm là TRỄ trên báo cáo tuân thủ gửi thẳng quản lý trực tiếp, CÓ GHI TÊN. Kế
+ * hoạch §9.3 luật 2 nói đúng câu đó: "thiếu (b) thì (a) vô nghĩa".
+ *
+ * `dueAtOriginal` vẫn KHÔNG BAO GIỜ bị ghi lại. Miễn trừ là một khoản cộng bên
+ * cạnh, không phải một lần sửa mốc.
  */
+import { congNgayLamViec } from "@/lib/elearning/ngay-lam-viec";
+
+/**
+ * Hạn gốc CỘNG phần miễn trừ, tính bằng NGÀY LÀM VIỆC.
+ *
+ * ⚠️ Ngày làm việc, không phải ngày lịch: người chấm chờ 5 ngày làm việc thì phần
+ * miễn trừ cũng phải là 5 ngày làm việc. Cộng ngày lịch là trả lại THIẾU 2 ngày, và
+ * người học vẫn chịu một phần hậu quả của việc người khác chậm.
+ */
+export function hanCoMienTru(
+  dueAtOriginal: Date | null,
+  slaGraceDays: number,
+): Date | null {
+  if (!dueAtOriginal || slaGraceDays <= 0) return dueAtOriginal;
+  return congNgayLamViec(dueAtOriginal, slaGraceDays);
+}
 
 export type KetQuaCuon = {
   status: "IN_PROGRESS" | "COMPLETED" | "COMPLETED_LATE";
@@ -28,6 +57,13 @@ export function cuonTienDoKhoa(input: {
   /** Hạn GỐC, bất biến — mốc đo đúng hạn. */
   dueAtOriginal: Date | null;
   now: Date;
+  /**
+   * Ngày làm việc được MIỄN TRỪ vì người chấm trễ SLA. Mặc định 0.
+   *
+   * Mặc định 0 để mọi đường gọi cũ giữ NGUYÊN hành vi — thêm tham số này không
+   * được phép đổi một con số nào của những khoá không có bài chấm tay.
+   */
+  slaGraceDays?: number;
 }): KetQuaCuon {
   // Khoá chưa có bài bắt buộc nào thì KHÔNG tự động hoàn thành. Chia cho 0 ra
   // NaN, còn coi là 100% thì mọi người "hoàn thành" một khoá rỗng — và bảng
@@ -67,9 +103,11 @@ export function cuonTienDoKhoa(input: {
   // ngày bị sửa (lỗi, hay ai đó sửa tay trong DB) thì nâng cấp âm thầm là XOÁ
   // một lần nộp trễ đã ghi nhận, và không có gì báo.
   const daTungTre = input.statusHienTai === "COMPLETED_LATE";
+  // Mốc đo = hạn gốc + phần miễn trừ vì người chấm trễ. Không có miễn trừ thì đây
+  // đúng bằng `dueAtOriginal`, y như trước.
+  const mocDo = hanCoMienTru(input.dueAtOriginal, input.slaGraceDays ?? 0);
   const tre =
-    daTungTre ||
-    Boolean(input.dueAtOriginal && input.now.getTime() > input.dueAtOriginal.getTime());
+    daTungTre || Boolean(mocDo && input.now.getTime() > mocDo.getTime());
 
   return {
     status: tre ? "COMPLETED_LATE" : "COMPLETED",

@@ -2,6 +2,7 @@
 
 import { z } from "zod";
 import { defineAction } from "@/lib/actions/define";
+import { cauHinhGanKhungVaoBai } from "@/lib/elearning/rubric-authoring";
 import {
   cauHinhThemCue,
   cauHinhXoaCue,
@@ -103,3 +104,11 @@ export const xoaCueAction = defineAction(cauHinhXoaCue);
  * người soạn tạo được bài, cổng xuất bản đòi `examId`, và không màn nào đặt được nó.
  */
 export const ganDeVaoBaiAction = defineAction(cauHinhGanDeVaoBai);
+
+/**
+ * EL-15c — gắn khung chấm vào bài tập.
+ *
+ * ⚠️ Nối vào ĐÂY cùng PR mở loại bài `TASK`: mở loại bài mà người soạn không có
+ * chỗ gắn khung chỉ đổi người bị kẹt, từ người học sang người soạn.
+ */
+export const ganKhungVaoBaiAction = defineAction(cauHinhGanKhungVaoBai);

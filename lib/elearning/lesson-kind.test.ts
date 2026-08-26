@@ -68,19 +68,27 @@ describe("trình soạn chỉ thấy loại đã mở", () => {
     expect(laLoaiBaiDaMo("VIDEO")).toBe(true);
   });
 
-  it("`QUIZ` ĐÃ MỞ (EL-14d), `TASK` còn đóng chờ EL-15", () => {
-    // `QUIZ` mở ở ĐÚNG PR có đường làm bài, không mở sớm ở PR chỉ dựng được đề.
+  it("`QUIZ` (EL-14d) và `TASK` (EL-15c) ĐÃ MỞ — mỗi cái đúng PR có đủ hai đầu", () => {
+    // `QUIZ` mở ở PR có đường làm bài, không mở sớm ở PR chỉ dựng được đề.
+    // `TASK` mở ở PR có ĐỦ BỐN mảnh: gắn khung · nộp · chấm · BÙ hạn khi chấm trễ.
     expect(laLoaiBaiDaMo("QUIZ")).toBe(true);
-    expect(laLoaiBaiDaMo("TASK")).toBe(false);
-    expect(LOAI_BAI_CHUA_MO.TASK).toContain("EL-15");
+    expect(laLoaiBaiDaMo("TASK")).toBe(true);
+    expect(LOAI_BAI_CHUA_MO.TASK).toBeUndefined();
+  });
+
+  it("🔴 `SCORM` VẪN đóng, và vẫn ghi rõ vì sao", () => {
+    // Danh sách "chưa mở" không được rỗng đi một cách âm thầm: nó là chỗ người
+    // soạn đọc để biết chờ ai.
+    expect(laLoaiBaiDaMo("SCORM")).toBe(false);
+    expect(LOAI_BAI_CHUA_MO.SCORM).toBeTruthy();
   });
 });
 
 describe("câu giải thích cho người học", () => {
   it("nói rõ loại nào và chờ ai", () => {
-    const s = vaySaoChuaMo("TASK");
-    expect(s).toContain("Bài tập");
-    expect(s).toContain("EL-15");
+    const s = vaySaoChuaMo("SCORM");
+    expect(s).toContain("SCORM");
+    expect(s).toContain("chưa mở");
   });
 
   it("loại lạ vẫn ra câu đọc được, không ném", () => {

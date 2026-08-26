@@ -32,11 +32,12 @@ const chiMa = (src: string) =>
     .join("\n");
 
 describe("🔴 cổng và cửa — `QUIZ` mở CÙNG đường làm bài", () => {
-  it("`QUIZ` đã mở, và `TASK` vẫn đóng", () => {
+  it("`QUIZ` đã mở cùng đường làm bài", () => {
     // Ở PR dựng đề (EL-14c) loại này còn khoá, đúng — lúc đó mới có một đầu. Nay
     // đủ hai đầu: dựng đề, gắn đề vào bài, và người học thi được.
     expect(laLoaiBaiDaMo("QUIZ")).toBe(true);
-    expect(LOAI_BAI_CHUA_MO.TASK).toBeTruthy();
+    // `SCORM` vẫn là loại còn đóng, và danh sách đó không được rỗng âm thầm.
+    expect(LOAI_BAI_CHUA_MO.SCORM).toBeTruthy();
   });
 
   it("màn đề nói rõ BƯỚC TIẾP, không để người soạn dừng giữa chừng", () => {

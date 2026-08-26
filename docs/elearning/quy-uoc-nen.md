@@ -594,3 +594,10 @@ lượt ghi trong `try/catch` bắt `P2002` — phép kiểm chạy TRƯỚC lư
   ⇒ **Với tệp MỚI, chạy lại bộ test SAU khi `git add`** (không cần commit — `git grep` thấy cả
   vùng staged). Cùng họ với bẫy "test chạm DB skip im lặng": cả hai đều báo xanh cho một phép kiểm
   chưa từng chạy.
+- **`tests/nen` NHẤP NHÁY sẵn — đo được 1/3 lần đỏ trên mã GỐC.** Ngày 26/08/2026, chạy
+  `tests/nen` ba lần liên tiếp trên nhánh đã `git stash` hết thay đổi: xanh · **đỏ** · xanh
+  (`position-permission.spec.ts` và `work-scope.spec.ts` thay nhau đỏ). Đây là nhấp nháy CÓ SẴN của
+  bộ chạm DB dùng chung một Postgres, **không phải** do PR nào gây ra.
+  ⇒ **Thấy hai tệp đó đỏ thì ĐỪNG vá mù.** Trước hết `git stash` rồi chạy lại 2–3 lượt: nếu bản gốc
+  cũng đỏ thì đó là nhấp nháy, ghi lại và đi tiếp. Nhưng cũng **đừng mặc định là nhấp nháy** — chính
+  cách đo này là thứ phân biệt được, và nó rẻ.

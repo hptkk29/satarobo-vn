@@ -256,15 +256,12 @@ export const cauHinhChamLuotThi: ActionConfig<ChamLuotThiInput, KetQuaCham> = {
         where: { id: luot.enrollmentId },
         select: { courseId: true, status: true },
       });
-      // ⚠️ Lượt ghi danh ĐÃ THU HỒI thì DỪNG ở đây.
-      //
-      // `ghiXongBaiThi` ghi tiến độ rồi cuộn trạng thái khoá, mà phép cuộn KHÔNG có
-      // nhánh `REVOKED`: đủ bài `DONE` là nó trả `COMPLETED`. Chấm một bài của lượt
-      // đã thu hồi sẽ LẬT NGƯỢC `REVOKED` thành `COMPLETED` — người bị rút khỏi khoá
-      // bỗng "hoàn thành" nó, trên báo cáo tuân thủ gửi quản lý trực tiếp.
+      // ⚠️ Guard `REVOKED` nay nằm TRONG `ghiXongBai` (`lesson-done.ts`) — một chỗ
+      // cho mọi loại bài, thay vì mỗi call-site tự nhớ. Giữ lại một bản chép ở đây
+      // là dựng lại đúng cái đã trôi khỏi nhau ba lần.
       //
       // Điểm thì VẪN ghi: họ đã làm bài thật, và xoá công đó đi là một sai lầm khác.
-      if (gd && gd.status !== "REVOKED") {
+      if (gd) {
         try {
           await ghiXongBaiThi(db, {
             enrollmentId: luot.enrollmentId,

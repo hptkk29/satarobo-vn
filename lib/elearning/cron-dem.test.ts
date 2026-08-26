@@ -16,6 +16,18 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 const h = vi.hoisted(() => ({
   thuTu: [] as string[],
   enrollments: [] as unknown[],
+  /** Lượt nộp quá hạn chấm cho việc (0). */
+  luotNop: [] as unknown[],
+  /** `where` mà việc (0) gửi xuống Prisma — kiểm hành vi, không grep chữ. */
+  whereBuSla: null as unknown,
+  /** Lượt ghi danh mà việc (0) tra theo id. */
+  ghiDanhTheoId: new Map<string, unknown>(),
+  updateGhiDanh: vi.fn(
+    async (_a: { where: { id: string }; data: Record<string, unknown> }) => ({}),
+  ),
+  updateLuotNop: vi.fn(
+    async (_a: { where: { id: string }; data: Record<string, unknown> }) => ({}),
+  ),
   donVanThi: vi.fn(async (_a: { where: Record<string, unknown> }) => ({ count: 4 })),
   updateMany: vi.fn(async (_a: { where: { id: { in: string[] } } }) => ({ count: 0 })),
   deleteVideo: vi.fn(async (_a: { where: unknown }) => ({ count: 0 })),
@@ -57,7 +69,11 @@ vi.mock("@/lib/db", () => ({
         h.thuTu.push("qua-han");
         return h.updateMany(a as never);
       },
+      findUnique: vi.fn(async (a: { where: { id: string } }) =>
+        h.ghiDanhTheoId.get(a.where.id) ?? null,
+      ),
     },
+    $transaction: async (fn: (t: unknown) => Promise<unknown>) => fn(txGia),
     trnVideoSession: {
       deleteMany: async (a: unknown) => {
         h.thuTu.push("don");
@@ -66,8 +82,27 @@ vi.mock("@/lib/db", () => ({
     },
     trnLessonProgress: { updateMany: h.updateProgress },
     trnExamAttempt: { updateMany: h.donVanThi },
+    // ⚠️ THIẾU khối này là cả việc (0) NÉM LỖI mỗi lượt chạy, lỗi bị nuốt vào
+    // `ket.loi`, và 14 test vẫn xanh — tức bộ test khẳng định một thứ nó chưa
+    // từng chạy. Đúng họ với bẫy "test chạm DB skip im lặng".
+    trnSubmission: {
+      findMany: vi.fn(async (a: { where: unknown }) => {
+        h.whereBuSla = a?.where ?? null;
+        const r = h.luotNop;
+        h.luotNop = [];
+        h.thuTu.push("bu-sla");
+        return r;
+      }),
+      update: (a: unknown) => h.updateLuotNop(a as never),
+    },
   },
 }));
+
+/** Máy khách trong giao dịch — cùng bộ mock, để việc (0) ghi được. */
+const txGia = {
+  trnEnrollment: { update: (a: unknown) => h.updateGhiDanh(a as never) },
+  trnSubmission: { update: (a: unknown) => h.updateLuotNop(a as never) },
+};
 
 import { runElearningDem } from "@/lib/elearning/cron-dem";
 
@@ -84,6 +119,11 @@ const en = (id: string, o: Record<string, unknown> = {}) => ({
 beforeEach(() => {
   h.thuTu = [];
   h.enrollments = [];
+  h.luotNop = [];
+  h.whereBuSla = null;
+  h.ghiDanhTheoId = new Map();
+  h.updateGhiDanh.mockClear();
+  h.updateLuotNop.mockClear();
   h.updateMany.mockClear();
   h.donVanThi.mockClear();
   h.deleteVideo.mockClear();
@@ -214,5 +254,111 @@ describe("việc 6 — dọn lượt tải nhiều phần bỏ dở", () => {
     // đang tạo bản ghi.
     await runElearningDem(NOW);
     expect(h.thuTu.indexOf("don")).toBeLessThan(h.thuTu.indexOf("thu-lai"));
+  });
+});
+
+describe("🔴 việc (0) — BÙ HẠN vì người chấm trễ", () => {
+  const luot = (o: Record<string, unknown> = {}) => ({
+    id: "s1",
+    enrollmentId: "en1",
+    // Hạn chấm là T2 17/8; NOW là 23/8 ⇒ đã trễ 4 ngày làm việc.
+    dueGradeAt: new Date("2026-08-17T00:00:00.000Z"),
+    gradedAt: null,
+    slaBuNgayLam: 0,
+    ...o,
+  });
+
+  const ghiDanh = (o: Record<string, unknown> = {}) => ({
+    id: "en1",
+    dueAt: new Date("2026-08-20T00:00:00.000Z"),
+    slaGraceDays: 0,
+    status: "OVERDUE",
+    ...o,
+  });
+
+  it("🔴 CHẠY TRƯỚC việc quét quá hạn — thứ tự là ràng buộc THẬT", async () => {
+    // Chạy sau thì chính đêm đó lượt vừa được bù VẪN bị đánh quá hạn và phát sự
+    // kiện, rồi lần lật thứ hai IM LẶNG vì `dedupeKey` — người học nhận đúng một
+    // thông báo "bạn đã quá hạn" cho cái hạn hệ thống vừa tự nới, và không bao giờ
+    // nhận đính chính.
+    h.enrollments = [en("a")];
+    await runElearningDem(NOW);
+    expect(h.thuTu).toContain("bu-sla");
+    expect(h.thuTu).toContain("qua-han");
+    expect(h.thuTu.indexOf("bu-sla")).toBeLessThan(h.thuTu.indexOf("qua-han"));
+  });
+
+  it("nới `dueAt`, cộng `slaGraceDays`, và kéo OVERDUE về ĐANG HỌC", async () => {
+    h.luotNop = [luot()];
+    h.ghiDanhTheoId.set("en1", ghiDanh());
+    const r = await runElearningDem(NOW);
+    expect(r.buSla.daBu).toBe(1);
+    const arg = h.updateGhiDanh.mock.calls[0]![0] as unknown as {
+      data: { slaGraceDays: number; status?: string; dueAt: Date };
+    };
+    expect(arg.data.slaGraceDays).toBe(4);
+    expect(arg.data.status).toBe("IN_PROGRESS");
+    expect(arg.data.dueAt.getTime()).toBeGreaterThan(
+      new Date("2026-08-20T00:00:00.000Z").getTime(),
+    );
+  });
+
+  it("🔴 ghi SỔ trong CÙNG giao dịch — nếu không thì đêm sau bù lại", async () => {
+    h.luotNop = [luot()];
+    h.ghiDanhTheoId.set("en1", ghiDanh());
+    await runElearningDem(NOW);
+    const arg = h.updateLuotNop.mock.calls[0]![0] as unknown as {
+      data: { slaBuNgayLam: number };
+    };
+    expect(arg.data.slaBuNgayLam).toBe(4);
+  });
+
+  it("SỔ đã đủ ⇒ KHÔNG bù thêm", async () => {
+    h.luotNop = [luot({ slaBuNgayLam: 4 })];
+    h.ghiDanhTheoId.set("en1", ghiDanh());
+    const r = await runElearningDem(NOW);
+    expect(r.buSla.daBu).toBe(0);
+    expect(h.updateGhiDanh).not.toHaveBeenCalled();
+  });
+
+  it("🔴 lượt ghi danh ĐÃ THU HỒI ⇒ không bù", async () => {
+    // Nới hạn cho người đã bị rút khỏi khoá là vô nghĩa, và `dueAt` của họ không
+    // còn ai đọc.
+    h.luotNop = [luot()];
+    h.ghiDanhTheoId.set("en1", ghiDanh({ status: "REVOKED" }));
+    const r = await runElearningDem(NOW);
+    expect(r.buSla.daBu).toBe(0);
+    expect(h.updateGhiDanh).not.toHaveBeenCalled();
+  });
+
+  it("🔴 chỉ quét nhóm ĐANG CHỜ CHẤM", async () => {
+    // Quét cả nhóm đã chấm là một cửa sổ KHÔNG BAO GIỜ VƠI: lượt đã chấm vẫn thoả
+    // `dueGradeAt < now` mãi mãi, và 500 dòng cũ sẽ chiếm chỗ của lượt vừa trễ.
+    // Nhóm đã chấm nay chốt ngay lúc chấm (`task-grading.ts`).
+    //
+    // Kiểm trên ĐỐI SỐ THẬT gửi xuống Prisma, không grep mã nguồn: soi chữ thì
+    // chính chú thích giải thích luật cũng làm test đỏ (quy ước 19).
+    await runElearningDem(NOW);
+    expect(h.whereBuSla).toEqual({
+      dueGradeAt: { lt: NOW },
+      status: "SUBMITTED",
+      enrollmentId: { not: null },
+    });
+  });
+
+  it("🔴 KHÔNG nuốt lỗi im lặng — việc (0) hỏng thì `loi` phải có dòng", async () => {
+    // Chính bộ test này từng khẳng định mọi thứ xanh trong khi việc (0) ném lỗi
+    // mỗi lượt chạy vì mock thiếu `trnSubmission`.
+    h.luotNop = [luot()];
+    h.ghiDanhTheoId.set("en1", ghiDanh());
+    h.updateGhiDanh.mockRejectedValueOnce(new Error("mất kết nối"));
+    const r = await runElearningDem(NOW);
+    expect(r.loi.some((l) => l.viec === "buSla")).toBe(true);
+  });
+
+  it("không có lượt nào quá hạn chấm ⇒ không ghi gì, không lỗi", async () => {
+    const r = await runElearningDem(NOW);
+    expect(r.buSla).toEqual({ daXet: 0, daBu: 0, conSot: 0 });
+    expect(r.loi.some((l) => l.viec === "buSla")).toBe(false);
   });
 });
