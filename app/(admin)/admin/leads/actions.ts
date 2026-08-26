@@ -233,14 +233,23 @@ export async function updateLeadStatus(
       parsed.data === 'TRIAL_SCHEDULED' &&
       before.status !== 'TRIAL_SCHEDULED'
     ) {
-      await recordLeadActivity({
-        tx,
-        leadId,
-        actorId,
-        actorName,
-        type: 'NOTE',
-        content:
-          '[Trải nghiệm] Lead đã hẹn học thử — vào "Lớp trải nghiệm" xếp con vào buổi cụ thể để giáo viên thấy trên lịch dạy.',
+      // Ghi dòng hoạt động + reset đồng hồ SLA idle trong CÙNG transaction — cùng
+      // nếp với `addLeadActivity`/`addLeadTask` ở file này. (Trên nhánh `test` chỗ
+      // này gọi `recordLeadActivity` của lib/lead/activity-write.ts; helper đó đi
+      // cùng luồng QLCS, chưa có ở đây, nên viết thẳng hai bước nó làm.)
+      await tx.leadActivity.create({
+        data: {
+          leadId,
+          actorId,
+          actorName,
+          type: 'NOTE',
+          content:
+            '[Trải nghiệm] Lead đã hẹn học thử — vào "Lớp trải nghiệm" xếp con vào buổi cụ thể để giáo viên thấy trên lịch dạy.',
+        },
+      })
+      await tx.lead.update({
+        where: { id: leadId },
+        data: { lastActivityAt: new Date() },
       })
     }
   })
