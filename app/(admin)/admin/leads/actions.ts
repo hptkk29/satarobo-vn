@@ -54,10 +54,18 @@ const statusSchema = z.enum(LEAD_STATUS_VALUES)
 
 // ─── #11 T1 (câu 10 BGĐ, Kiệt ký spec 10/07) — lead "dùng chung" ────────────
 /**
- * Q2: lead chia sẻ → người khác chỉ XEM + GHI CHÚ (addLeadActivity). Mọi mutator
- * (status/fields/note/loại đơn/task) đòi OWNER (assignee) hoặc actor view-all
- * (QL/Admin). KHÔNG export ('use server': export async = public endpoint).
- * Cũng vá luôn lỗ pre-existing: Sale A gọi action với leadId của Sale B cùng cơ sở.
+ * Mọi mutator (status/fields/note/loại đơn/task/nhật ký) đòi OWNER (assignee)
+ * hoặc actor view-all (QL/Admin). KHÔNG export ('use server': export async =
+ * public endpoint). Cũng vá lỗ pre-existing: Sale A gọi action với leadId của
+ * Sale B cùng cơ sở.
+ *
+ * ~~Q2: lead chia sẻ → người khác chỉ XEM + GHI CHÚ (addLeadActivity).~~
+ * [ĐẢO — S-6, 27/08/2026] Ngoại lệ "ghi chú" đã gỡ khỏi `addLeadActivity`. Hai
+ * lý do, cái sau mới là cái nặng:
+ *   · chính sách "dùng chung lead" đã TẮT từ Q8 21/08 (lib/lead/sharing.ts),
+ *     nên vế "lead chia sẻ" không còn ai đứng sau;
+ *   · từ S-3, ghi một dòng nhật ký còn ĐÓNG mốc `Lead.firstContactAt` — thứ
+ *     tắt chuông SLA-3 vĩnh viễn. "Chỉ ghi chú" không còn là việc vô hại.
  */
 async function actorMayMutateLead(
   sessionUserId: string,
@@ -379,11 +387,26 @@ export async function addLeadActivity(input: {
 
   const lead = await db.lead.findUnique({
     where: { id: input.leadId },
-    select: { id: true, centerId: true },
+    select: { id: true, assignedToId: true, centerId: true },
   })
   const actor = await resolveActor(session.user.id)
   if (!lead || !passesScope('Lead', lead, actor)) {
     return { ok: false, error: 'Lead không tồn tại' }
+  }
+  // S-6 (27/08/2026) — chốt chủ sở hữu, khớp với `addLeadTask` ngay bên dưới.
+  //
+  // Đây KHÔNG chỉ là "ghi bừa một dòng ghi chú": `recordLeadActivity` bump
+  // `Lead.lastActivityAt` (cột "số ngày chưa tiếp cận lại" của QLCS) và đóng mốc
+  // `Lead.firstContactAt` khi loại là CALL/MESSAGE/EMAIL. Mốc đó chỉ ghi được
+  // MỘT lần và là điều kiện TẮT chuông SLA-3 ("Chưa liên hệ khách > 3 giờ") —
+  // tức đồng nghiệp tắt được đồng hồ SLA trên khách của nhau, im lặng.
+  //
+  // Ngoại lệ cũ "lead dùng chung thì ai cũng ghi chú được" (BGĐ câu 10, 10/07)
+  // đã hết hiệu lực: Q8 21/08 bỏ hẳn chính sách dùng chung (lib/lead/sharing.ts).
+  // Người NHẬP hộ phiếu cũng không qua cửa này — đúng chủ đích: "khách của tôi"
+  // và "tôi phải gọi ai" là hai câu hỏi khác nhau (lib/lead/sale-leads.ts).
+  if (!(await actorMayMutateLead(session.user.id, lead.assignedToId))) {
+    return { ok: false, error: MUTATE_DENIED }
   }
 
   const { actorId, actorName } = getAuditActor(session)
