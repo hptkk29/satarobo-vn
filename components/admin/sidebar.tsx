@@ -133,7 +133,8 @@ const NAV_GROUPS: NavGroup[] = [
       // R1-01 — hội thoại Messenger của Page. Trang có thật từ lâu nhưng CHƯA BAO GIỜ
       // có lối vào: chỉ gõ URL mới tới (rà 11/08).
       { label: "Messenger CRM", href: "/crm/messenger", icon: MessagesSquare, perm: ["leads:view-all", "leads:view-own"] },
-      { label: "Học thử", href: "/trials", icon: FlaskConical, perm: ["trials:view"] },
+      // 26/08 — GỘP hai hệ trial làm một. Mục "Học thử" (hệ V1) đã gỡ; `/trials` nay
+      // chuyển hướng sang đây. Xem app/(admin)/admin/trials/page.tsx.
       { label: "Lớp trải nghiệm", href: "/trial-classes", icon: FlaskConical, perm: ["trials:view"] },
     ],
   },

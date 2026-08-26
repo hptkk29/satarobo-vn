@@ -223,32 +223,25 @@ export async function updateLeadStatus(
       })
     }
 
-    // Phase T1.4 — vào TRIAL_SCHEDULED → tự tạo lịch học thử (nếu chưa có buổi đang mở).
+    // 26/08 — GỘP hai hệ Trial: KHÔNG còn đẻ bản ghi `TrialClass` (V1) nữa.
+    //
+    // Nếp cũ (Phase T1.4) tạo sẵn một lịch học thử "ngày mai cùng giờ" làm chỗ giữ chân.
+    // Cái đó nằm ở hệ V1, mà bảng Trial của site giáo viên chỉ đọc V2 — nên lịch giữ chân
+    // ấy giáo viên KHÔNG BAO GIỜ thấy, và nó còn đẻ ra một ngày giả trong báo cáo.
+    // Nay chỉ ghi việc cần làm vào dòng thời gian; Sale xếp buổi thật ở "Lớp trải nghiệm".
     if (
       parsed.data === 'TRIAL_SCHEDULED' &&
       before.status !== 'TRIAL_SCHEDULED'
     ) {
-      const openTrial = await tx.trialClass.findFirst({
-        where: { leadId, status: { in: ['SCHEDULED', 'CONFIRMED', 'POSTPONED'] } },
-        select: { id: true },
+      await recordLeadActivity({
+        tx,
+        leadId,
+        actorId,
+        actorName,
+        type: 'NOTE',
+        content:
+          '[Trải nghiệm] Lead đã hẹn học thử — vào "Lớp trải nghiệm" xếp con vào buổi cụ thể để giáo viên thấy trên lịch dạy.',
       })
-      if (!openTrial) {
-        // Placeholder: ngày mai cùng giờ — GV/admin chỉnh lại lịch thật sau.
-        const scheduledAt = new Date(Date.now() + 24 * 60 * 60 * 1000)
-        await tx.trialClass.create({
-          data: { leadId, centerId: before.centerId, scheduledAt },
-        })
-        await tx.leadActivity.create({
-          data: {
-            leadId,
-            actorId,
-            actorName,
-            type: 'NOTE',
-            content:
-              '[Học thử] Đã tạo lịch học thử (chờ xếp lịch/giáo viên). Vào mục Học thử để cập nhật.',
-          },
-        })
-      }
     }
   })
 
