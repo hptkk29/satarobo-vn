@@ -36,6 +36,7 @@ const PAGE_DIR_OVERRIDE: Record<string, string> = {
   "/sale/trial": "app/(sale)",
   "/sale/khach-cua-toi": "app/(sale)",
   "/sale/tra-cuu": "app/(sale)",
+  "/sale/hop-thu": "app/(sale)",
 
   "/sale/nhap-khach-hang": "app/(sale)",
 };

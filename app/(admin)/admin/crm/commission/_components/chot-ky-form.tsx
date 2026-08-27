@@ -3,11 +3,16 @@
 // Màn chốt kỳ hoa hồng — vế NGƯỜI DÙNG của chính sách "hoa hồng trên tiền đã thu".
 //
 // Chỗ đáng chú ý nhất không phải cái nút, mà là khối kết quả: nó NÓI RA phần tiền
-// KHÔNG chi được vì tầng chưa có người hưởng (QC 1% và QL TT 2% chưa có nguồn dữ liệu
-// trong kho). Nuốt con số đó đi thì kế toán chốt kỳ xong sẽ tưởng đã trả đủ 8%, trong
-// khi thực tế mới trả 5%.
+// KHÔNG chi được vì tầng chưa có người hưởng. Nuốt con số đó đi thì kế toán chốt kỳ
+// xong sẽ tưởng đã trả đủ 8%, trong khi thực tế mới trả 5%.
+//
+// 27/08/2026 — QC 1% và QL TT 2% ĐÃ có nguồn người hưởng (`/admin/crm/commission/nguoi-huong`).
+// Nên câu chữ ở khối treo phải đổi theo: trước đây nó nói "hệ thống không có dữ liệu,
+// cần BGĐ chốt" — nay dữ liệu có rồi, việc còn lại là ĐI KHAI, và màn hình phải chỉ
+// đúng CƠ SỞ NÀO còn thiếu chứ không chỉ đưa ra một con số tổng.
 
 import { useState, useTransition } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -124,10 +129,32 @@ export function ChotKyForm({
                   </li>
                 ))}
               </ul>
+
+              {ketQua.treoTheoCoSo.length > 0 ? (
+                <>
+                  <p className="mt-2 font-medium">Cơ sở còn thiếu:</p>
+                  <ul className="ml-4 list-disc">
+                    {ketQua.treoTheoCoSo.map((t) => (
+                      <li key={`${t.centerId ?? "none"}|${t.tier}`}>
+                        {t.centerId
+                          ? (ketQua.tenCoSo[t.centerId] ?? t.centerId)
+                          : "Không rõ cơ sở (bút toán không quy được về cơ sở nào)"}{" "}
+                        — {NHAN_TANG[t.tier] ?? t.tier}: <strong>{tien(t.amount)}</strong>
+                      </li>
+                    ))}
+                  </ul>
+                </>
+              ) : null}
+
               <p className="mt-1 text-xs text-muted-foreground">
-                Hệ thống không có dữ liệu chỉ ra ai phụ trách quảng cáo cho từng phiếu, và không có
-                cột nào nối cơ sở với tài khoản quản lý cơ sở đó. Cần Ban giám đốc chốt người hưởng
-                trước khi phần này chi được — hệ thống cố ý KHÔNG tự đoán.
+                Khai người phụ trách tại{" "}
+                <Link href="/crm/commission/nguoi-huong" className="font-medium underline">
+                  Người hưởng hoa hồng theo cơ sở
+                </Link>{" "}
+                rồi <strong>chốt lại kỳ này</strong> — phần treo sẽ chảy vào bảng kê. Hệ thống cố ý
+                KHÔNG tự đoán người hưởng: gán bừa là chuyển tiền thật vào tài khoản sai, và sai
+                theo kiểu con số vẫn &quot;đẹp&quot; nên không ai soi ra. Dòng &quot;không rõ cơ
+                sở&quot; thì phải sửa cơ sở của phiếu thu/đơn hàng trước.
               </p>
             </div>
           ) : null}

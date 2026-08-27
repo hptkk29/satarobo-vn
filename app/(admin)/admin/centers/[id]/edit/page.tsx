@@ -2,6 +2,7 @@ import { notFound, redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { resolveActor } from "@/lib/auth/actor";
 import { scopedDb } from "@/lib/db-scope";
+import { nguoiCoTheGan } from "@/lib/crm/commission-assignee-store";
 import { CenterForm } from "../../_components/center-form";
 
 interface Props {
@@ -19,6 +20,8 @@ export default async function EditCenterPage({ params }: Props) {
   const { id } = await params;
   const center = await sdb.center.findUnique({ where: { id } });
   if (!center) notFound();
+  // 27/08 — danh sách tài khoản cho ô "Tài khoản quản lý cơ sở".
+  const nguoiChon = await nguoiCoTheGan();
 
   return (
     <div>
@@ -26,6 +29,7 @@ export default async function EditCenterPage({ params }: Props) {
         Sửa cơ sở: <span className="font-bold text-primary">{center.name}</span>
       </h1>
       <CenterForm
+        nguoiChon={nguoiChon}
         center={{
           id: center.id,
           name: center.name,
@@ -39,6 +43,7 @@ export default async function EditCenterPage({ params }: Props) {
           googleMapUrl: center.googleMapUrl,
           workingHours: center.workingHours,
           managerName: center.managerName,
+          managerUserId: center.managerUserId,
           logoUrl: center.logoUrl,
           bannerUrl: center.bannerUrl,
           description: center.description,

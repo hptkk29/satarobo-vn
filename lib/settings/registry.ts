@@ -36,6 +36,8 @@ export type SettingGroup =
   | "dashboard"
   | "makeup"
   | "chat"
+  // Hộp thư đa kênh (site Sale) — công tắc GỬI THẬT của từng kênh ngoài.
+  | "inbox"
   | "system";
 
 export interface SettingDef<T = unknown> {
@@ -634,6 +636,33 @@ export const SETTINGS = {
     label: "Trần số ZNS gửi trong một lượt cron (chống hoá đơn bất ngờ)",
     schema: z.number().int().min(1).max(500),
     default: 100,
+    centerOverridable: false,
+  }),
+  // ─── Hộp thư đa kênh: công tắc GỬI THẬT của từng kênh ───────────────────────
+  // Vì sao ở đây chứ không ở env (spec §2.3): công tắc vận hành phải tắt được GẤP
+  // mà không cần deploy. Env chỉ giữ SECRET (luật cứng #9) và cờ 2-phase bật/tắt
+  // cả tính năng (`INBOX_ENABLED` trong lib/flags.ts).
+  //
+  // TẮT mặc định, và "tắt" ở đây KHÔNG có nghĩa là hỏng: adapter chạy chế độ MÔ
+  // PHỎNG — tin vẫn vào hội thoại, mang trạng thái SIMULATED, và giao diện nói
+  // thẳng là khách chưa nhận được gì.
+  //
+  // ⚠️ Cache setting có TTL 300s và `safeUpdateTag` nuốt lỗi ngoài Server Action ⇒
+  // đổi công tắc từ cron/route handler KHÔNG xoá cache. Đừng hứa "tắt trong 5 giây".
+  "inbox.zaloOaLive": def({
+    key: "inbox.zaloOaLive",
+    group: "inbox",
+    label: "Zalo OA: gửi tin THẬT (tắt = mô phỏng, khách không nhận gì)",
+    schema: z.boolean(),
+    default: false,
+    centerOverridable: false,
+  }),
+  "inbox.messengerLive": def({
+    key: "inbox.messengerLive",
+    group: "inbox",
+    label: "Messenger: gửi tin THẬT (tắt = mô phỏng, khách không nhận gì)",
+    schema: z.boolean(),
+    default: false,
     centerOverridable: false,
   }),
   "teacher.overloadHoursPerWeek": def({
