@@ -871,6 +871,65 @@ export const SETTINGS = {
     default: commitments,
     centerOverridable: false,
   }),
+
+  // ─── Trục gọi điện + ghi âm (OmiCall) ────────────────────────────────────
+  // §2.3: thứ cần TẮT GẤP không được nằm trong env (tắt env phải deploy lại).
+  // ⚠️ `revalidate` thật của cache setting là 300s — đừng hứa "tắt trong 5 giây".
+  "calls.live": def({
+    key: "calls.live",
+    group: "crm",
+    label: "Gọi API tổng đài THẬT (tắt = mô phỏng, không gọi nhà cung cấp)",
+    schema: z.boolean(),
+    // TẮT mặc định. Bật lên là chạm nhà cung cấp thật, tức chạm tiền cước và chạm
+    // dữ liệu khách. Trạng thái an toàn luôn là "không gọi".
+    default: false,
+    centerOverridable: false,
+  }),
+  "calls.recordingAnnouncement": def({
+    key: "calls.recordingAnnouncement",
+    group: "crm",
+    label: 'Lời thông báo ghi âm đầu cuộc gọi (rỗng "" = KHÔNG được ghi âm)',
+    schema: z.string(),
+    // PL-2 (Luật 91/2025 + NĐ 15/2020): tổng đài tự động ghi âm PHẢI thông báo rõ
+    // ràng trước khi ghi. Để ở đây vì câu chữ là việc của pháp chế/vận hành, đổi
+    // không cần deploy. RỖNG là trạng thái an toàn: chưa có lời thông báo thì
+    // `quyetDinhGhiAm()` trả `NOT_ANNOUNCED` và không ghi âm.
+    default:
+      "Cuộc gọi này có thể được ghi âm nhằm nâng cao chất lượng phục vụ. " +
+      "Nếu quý khách không đồng ý, vui lòng báo với nhân viên để chúng tôi tắt ghi âm.",
+    centerOverridable: false,
+  }),
+  "calls.recordingRetentionMonths": def({
+    key: "calls.recordingRetentionMonths",
+    group: "crm",
+    label: "Số tháng giữ tệp ghi âm trước khi xoá (0 = không đặt hạn)",
+    schema: z.number().int().min(0).max(60),
+    // OC-20 đề xuất 12 tháng — ❓ CHỜ CHỐT. Câu hỏi LS-3 (giọng nói có phải dữ liệu
+    // sinh trắc học theo NĐ 356/2025 không) chưa có lời đáp; nếu CÓ thì con số này
+    // phải xét lại cùng cả hồ sơ DPIA.
+    default: 12,
+    centerOverridable: false,
+  }),
+  "calls.minTalkSecondsForContacted": def({
+    key: "calls.minTalkSecondsForContacted",
+    group: "crm",
+    label: 'Số giây đàm thoại tối thiểu để tính là "đã liên hệ"',
+    schema: z.number().int().min(0).max(600),
+    // QT-37 — chống bấm gọi rồi cúp ngay để tắt cảnh báo SLA. Mặc định 10 giây
+    // theo đề xuất của BA.
+    default: 10,
+    centerOverridable: false,
+  }),
+  "calls.listenUrlTtlSeconds": def({
+    key: "calls.listenUrlTtlSeconds",
+    group: "crm",
+    label: "Số giây sống của liên kết nghe ghi âm",
+    schema: z.number().int().min(30).max(3600),
+    // OC-17 — chuẩn hiện hành của repo là 600s. Ngắn hơn thì người nghe hết hạn
+    // giữa chừng; dài hơn thì một liên kết bị chuyển tiếp sống quá lâu.
+    default: 600,
+    centerOverridable: false,
+  }),
 } as const;
 
 export type SettingKey = keyof typeof SETTINGS;

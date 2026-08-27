@@ -31,6 +31,10 @@ export default defineConfig({
       // `include` là bộ lọc CỨNG, nên `vitest run tests/inbox` sẽ báo "No test files
       // found" và job CI vẫn XANH dù test viết đúng — hỏng câm đúng loại nguy hiểm nhất.
       "tests/inbox/**/*.{test,spec}.ts",
+      // Trục gọi điện + ghi âm (OmiCall). Cùng lý do phải khai ở đây như 4 dòng
+      // trên: `include` là bộ lọc CỨNG, nên `vitest run tests/goi-dien` sẽ báo
+      // "No test files found" và job CI vẫn XANH dù test viết đúng.
+      "tests/goi-dien/**/*.{test,spec}.ts",
     ],
     coverage: {
       reporter: ["text", "json", "html"],
