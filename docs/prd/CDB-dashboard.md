@@ -28,9 +28,14 @@ Nguồn: `docs/plan/cau-hoi-can-quyet.md` §"Quyết định của chủ dự á
 | **OQ-4** (A) | **Mặc định gộp + công tắc "Tách theo cơ sở"** | 🔴 **Mọi hàm số liệu của B/C/D/E nhận `groupByCenter: boolean` NGAY TỪ BẢN ĐẦU** và trả được cả hai dạng. Viết cứng dạng gộp rồi thêm tách sau = viết lại tầng truy vấn của cả 4 tab. Công tắc dùng chung `searchParams` (`?split=1`), chỉ hiện khi chọn ≥ 2 cơ sở |
 | **OQ-B9** | Range mặc định tab B = **"01 → hôm nay"** | Bốn tab dùng chung một bộ lọc; **không** đặt riêng "tháng trước trọn vẹn" cho B |
 
-⏳ **Còn treo (ảnh hưởng tài liệu này):** OQ-C2, C4, C8, C9; OQ-D3, D4, D5, D7, D8, D9.
+~~⏳ **Còn treo (ảnh hưởng tài liệu này):** OQ-C2, C4, C8, C9; OQ-D3, D4, D5, D7, D8, D9.~~
+**[CẬP NHẬT 27/08/2026 — xem QĐ-3]** ~~Chín trong mười câu đó đã đóng~~ → **TÁM trong mười câu đóng TRỌN
+VẸN** (OQ-C2 · C4 · C8 · C9 · D5 · D7 · D8 · D9). **Còn treo một câu rưỡi:** **OQ-D4** (loại token Meta +
+hạn — chủ dự án xin hướng dẫn lấy token, đang chờ) và **nửa sau của OQ-D3** (đã chốt "nhiều ad account"
+nhưng **chưa có danh sách id**). Cách đếm cũ tính `OQ-D3` vào nhóm đóng, trong khi chính hàng `OQ-D3` ở
+§D.7 để cột Hạn là *"🟠 Nửa sau còn treo — trước khi bật job"*.
 *(Khu vực B **hết câu treo**: OQ-B1/B5/B9 đóng 24/08 · OQ-B2, B3, B4, B6, B7, B8 đóng 26/08 — xem QĐ-2 ngay dưới.
-OQ-C1/C3/C5/C6/C7 và OQ-D1/D2/D6 đóng 24/08.)*
+OQ-C1/C3/C5/C6/C7 và OQ-D1/D2/D6 đóng 24/08. **Khu vực C hết câu treo 27/08** — OQ-C2/C4/C8/C9 đóng, xem QĐ-3.)*
 
 ---
 
@@ -53,6 +58,38 @@ phải tự dựng fixture hai bản `ADJUSTED` cùng một gốc.
 | **OQ-B6** | Chi phí cấp công ty (`centerId = null`) **KHÔNG phân bổ** ở v1, hiện **dòng riêng** | §B.6.2 bẫy B2 giữ nguyên: tổng lợi nhuận các cơ sở **≠** toàn hệ thống — đó là kết quả **cố ý**, phải viết ra UI |
 | **OQ-B7** | Chi phí **phải duyệt** (`status = APPROVED`) mới vào báo cáo; **người nhập không tự duyệt** | Khớp 3 key đã chốt ở OQ-B5. ⚠️ Tách vai chưa đủ — người giữ cả hai vai vẫn tự duyệt được (xem §B.7) |
 | **OQ-B8** | **CÓ** đóng sổ theo tháng (khoá không cho sửa) | Trùng OQ-D7 ⇒ **kéo theo** phần của D. **Additive, làm sau được**, nhưng mọi đường ghi `CostEntry` **và** job D-01 đều phải tôn trọng kỳ khoá |
+
+---
+
+## QĐ-3. Quyết định chủ dự án — 27/08/2026 (khu vực C + D · THẮNG phần thân bài)
+
+Nguồn: `docs/plan/cau-hoi-can-quyet.md` §"Quyết định của chủ dự án — chốt 27/08/2026".
+**Khu vực C đóng hết bốn câu. Khu vực D đóng TRỌN VẸN bốn trên sáu** (D5 · D7 · D8 · D9) — ~~"năm trên sáu"~~,
+cách đếm cũ tính `OQ-D3` là đóng dù chính hàng `OQ-D3` ở **§D.7** ghi *"🟠 Nửa sau còn treo"*. `OQ-D3` đóng **nửa**,
+`OQ-D4` **chưa trả lời**. Chi tiết + hệ quả từng câu ở **§C.7** và **§D.7**.
+
+Bảy trong tám câu **đóng trọn vẹn** ấy theo **đúng đề xuất** của thân bài ⇒ nghĩa không đổi, chỉ chuyển từ *đề xuất* thành *luật*.
+**Một câu đi ngược thân bài: OQ-C9** — chủ dự án chốt **SỬA** 5 màn cũ, tức **đảo Non-Goal 1** của khu vực C.
+
+| Mã | Quyết định | Ảnh hưởng trong PRD này |
+|---|---|---|
+| **OQ-C2** | **KHÔNG loại** `DUPLICATE` khỏi mẫu số C3 — nhưng **hiện số `DUPLICATE` riêng** ngay cạnh, "để không ai nghi ngờ" | §C.6.1 bẫy B5 giữ nguyên. **Việc thêm:** C3 phải trả thêm `duplicateCount` và tab C **phải hiện nó**. Chỉ làm vế "không loại" mà bỏ vế "hiện riêng" là làm hỏng đúng nửa quyết định |
+| **OQ-C4** | "Lần tiếp cận" = `CALL` · `MESSAGE` · `NOTE` · `EMAIL` **và** `actorId IS NOT NULL` | §C.6.5 giữ nguyên. Lý do chủ dự án ghi thẳng: **tính cả `STATUS_CHANGE` thì Sale RESET được đồng hồ mà không gọi khách** ⇒ `STATUS_CHANGE` + `HANDOVER` bị loại là **luật**, không phải mặc định kỹ thuật |
+| **OQ-C8** | Tỷ lệ thành công tính theo **LỨA** | §C.6.3 giữ nguyên: hai vế cùng tập người, **không vượt 100%**. Đổi lại — bẫy B1 §C.6.3 nay là **phần bắt buộc của UI**: lứa tháng gần nhất luôn thấp vì chưa chín, phải ghi nhãn *"tính theo lứa vào hệ thống"* + số của lứa đã đủ N ngày |
+| **OQ-C9** | 🔴 **SỬA 5 màn cũ về công thức chuẩn** (không để nguyên) | **ĐẢO Non-Goal 1 của C.** Số người dùng đang nhìn **sẽ nhảy** ⇒ ba việc bắt buộc, đúng thứ tự: (1) chạy §C.6.9 **đo mức lệch trước**, (2) **thông báo trước** cho người dùng, (3) **ghi ngày đổi** để đối chiếu về sau. Sau khi sửa, hệ thống dùng **một** con số "tỷ lệ chốt" thay vì 6. Chi tiết: **§C.6.13** |
+| **OQ-D3** | **NHIỀU** ad account (không phải một) | ⚠️ **CÒN NỬA CÂU — chưa có DANH SÁCH id cụ thể.** Job D-01 phải **lặp qua danh sách**; `META_AD_ACCOUNT_ID` đổi thành **danh sách** (`META_AD_ACCOUNT_IDS`). 🔴 **CHƯA CODE ĐƯỢC** khâu gọi Meta cho tới khi có danh sách thật — **đừng ghi là "đã đủ thông tin"** |
+| **OQ-D4** | ⏳ **VẪN CHƯA TRẢ LỜI** — chủ dự án xin hướng dẫn cách lấy token lại | **Giữ TREO, đang chờ.** Vẫn là câu chặn cứng của cả nhánh D (`docs/plan/ket-va-cach-go.md` K-12) |
+| **OQ-D5** | **KHÔNG** — vai `MARKETING` cấp cơ sở **không** được sửa mapping D-07, **chỉ HO** | `canEditAds` (`lib/crm/ads-insights.ts:44-49`) **giữ nguyên**, không nới. Lý do chủ dự án ghi thẳng: **gán campaign cho CS1 là LẤY TIỀN KHỎI CS2** |
+| **OQ-D7** | **CÓ** chốt số chi phí quảng cáo theo tháng | Trùng **OQ-B8** (đã chốt 26/08) ⇒ **cùng một cơ chế, không đẻ cơ chế thứ hai**. Cần bảng `AdsSpendLocked` (§D.6.1); **sửa mapping sau khi chốt KHÔNG được đổi số quá khứ** |
+| **OQ-D8** | Chi phí marketing **ngoài Meta** đi qua **bảng chi phí của B** | Nhóm `MARKETING_OFFLINE` của OQ-B4 chính là chỗ đón. **KHÔNG** nhét vào bảng ads — nhét là **lợi nhuận TRỪ HAI LẦN** |
+| **OQ-D9** | `/admin/marketing/funnel` cũ **không sửa**, **treo banner**, **bỏ hẳn** sau khi tab D chạy ổn | Non-Goal 5 giữ nguyên **và có thêm đích kết thúc**. D-00-2 (banner) đổi tư cách: từ "cảnh báo tạm" thành **bước 1 của việc khai tử trang** |
+
+🔴 **Hai chỗ chưa đủ để code — đừng nhầm với "đã xong".**
+
+1. **OQ-D3 nửa sau** — biết là *nhiều*, chưa biết *những cái nào*. Việc code được ngay: đổi hình dạng cấu hình từ
+   một chuỗi thành danh sách, và viết vòng lặp + gộp theo `accountId`. Việc **không** code được: gọi Meta thật,
+   vì không có id để gọi. Người gỡ: Marketing — mở Meta Ads Manager, chép ra danh sách `act_…` đang tiêu tiền.
+2. **OQ-D4** — treo nguyên. Không có nó thì D.5 (bật job) không khởi động được, kể cả khi đã có danh sách id.
 
 ---
 
@@ -88,7 +125,7 @@ Spec (`docs/specs/spec-dashboard-qlcs-duyet-media-lead.md:199`) ghi thứ tự t
 
 | # | Ràng buộc | Bằng chứng |
 |---|---|---|
-| 1 | **C phải xong trước D** vì D2 (CPL) và D3 (CPA) lấy **mẫu số** từ C. `computeCpl(spend, l2)` / `computeCpa(spend, l3)` (`lib/crm/marketing-metrics.ts:26-27`) — không chốt "tổng lead" và "lead chốt" là gì thì CPL/CPA không định nghĩa được. Mẫu số hôm nay là `qualifiedAt IS NOT NULL` / `convertedAt IS NOT NULL` (`lib/crm/funnel-query.ts:13-14`), mà cả hai trường gần như **không có dữ liệu** (§C.2.3) ⇒ CPL/CPA đang chia cho gần-0 | `lib/crm/funnel-query.ts:13-14` · `lib/crm/marketing-metrics.ts:24-31` |
+| 1 | **C phải xong trước D** vì D2 (CPL) và D3 (CPA) lấy **mẫu số** từ C. `computeCpl(spend, l2)` / `computeCpa(spend, l3)` (`lib/crm/marketing-metrics.ts:26-27`) — không chốt "tổng lead" và "lead chốt" là gì thì CPL/CPA không định nghĩa được. Mẫu số hôm nay là `qualifiedAt IS NOT NULL` / `convertedAt IS NOT NULL` (`lib/crm/funnel-query.ts:97-98` — ~~`:13-14`~~, đó là **khối chú thích** về lỗ V-02 `adsInsightDaily`), mà cả hai trường gần như **không có dữ liệu** (§C.2.3) ⇒ CPL/CPA đang chia cho gần-0 | `lib/crm/funnel-query.ts:97-98` · `lib/crm/marketing-metrics.ts:24-31` |
 | 2 | **D phải xong trước B** vì chi phí quảng cáo là **một đầu phí** của B2. Nếu B dựng bảng chi phí trước rồi D lại đẻ bảng ads riêng, cùng một khoản tiền quảng cáo nằm ở hai bảng và B3 (lợi nhuận) trừ hai lần. B2 phải khai ngay từ đầu rằng đầu phí "Quảng cáo" **không nhập tay**, mà đọc từ nguồn của D | spec `:24` (B-03) và `:62` (D-01) cùng nói về tiền chi |
 | 3 | **C phụ thuộc G** (schema lead mới). Chỉ tiêu C-01 đếm theo **học sinh** (`lead_student`), mà `LeadChild` hôm nay **không có** `status` / `closedAt` / `centerId` — đúng SL-08 + SL-09 trong `docs/prd/A-nen-tang.md` §10.3 | `prisma/schema.prisma:1461-1483` — 14 trường, không có ba cột trên |
 | 4 | **Cả ba phụ thuộc A-02.** `resolveScopeFilters()` **CHƯA CÓ** — grep toàn repo = 0 kết quả. Chỉ có `resolveReportFilters` với `centerId` **đơn** (`lib/reports/filters.ts:11`), không phải mảng ⇒ QLCS đa cơ sở (A-01) không diễn đạt được bằng hàm cũ | `lib/reports/filters.ts:9-16,50` |
@@ -187,7 +224,7 @@ Tab Kinh doanh làm ba việc:
 | 3 | `app/(admin)/admin/dashboard/_components/sales-dashboard.tsx:49` | `countByStatus["ENROLLED"]` | lead **của tôi** |
 | 4 | `app/(admin)/admin/dashboard/_components/marketing-hr-dashboards.tsx:50` | `enrolledTotal` | `total` |
 | 5 | `app/(admin)/admin/crm/page.tsx:96` | `enrolledTotal` | `nonDuplicate` — **loại `DUPLICATE`** khỏi mẫu số |
-| 6 | `lib/crm/marketing-metrics.ts:30` `crL2L3` | `convertedAt IS NOT NULL` (`funnel-query.ts:14`) | `qualifiedAt IS NOT NULL` (`:13`) |
+| 6 | `lib/crm/marketing-metrics.ts:30` `crL2L3` | `convertedAt IS NOT NULL` (`funnel-query.ts:98`) | `qualifiedAt IS NOT NULL` (`:97`) |
 | 7 | `lib/lead/assign-strategy.ts:15` `computeCloseRate` | `closed` | `handled` — dùng để **chia lead**, không phải báo cáo |
 | 8 | `lib/reports/trial.ts:196` | `registered` | `attended` — tỷ lệ chuyển đổi **học thử** |
 
@@ -199,7 +236,7 @@ Tab Kinh doanh làm ba việc:
 |---|---|---|
 | **(a)** `status ∈ {ENROLLED, REGISTERED}` | `lib/reports/lead.ts:45` `CONVERTED_STATUSES` | — |
 | **(b)** `status = ENROLLED` | `manager-dashboard.tsx:86` · `sales-dashboard.tsx:49` · `app/(admin)/admin/leads/bao-cao-chuyen/page.tsx:15` (`CLOSED_STATUSES`) | `lib/crm/convert-lead.ts:77` · `lib/crm/convert-lead-v2.ts:170` |
-| **(c)** `convertedAt IS NOT NULL` | `lib/crm/funnel-query.ts:14` (mẫu số ROAS + CPA) | **chỉ** `convert-lead.ts:77` và `convert-lead-v2.ts:170` |
+| **(c)** `convertedAt IS NOT NULL` | `lib/crm/funnel-query.ts:98` (mẫu số ROAS + CPA) | **chỉ** `convert-lead.ts:77` và `convert-lead-v2.ts:170` |
 
 🔴 **Bằng chứng lệch:** `lib/finance/payment.ts:152-155` nâng lead từ `AWAITING_DECISION` → `REGISTERED` bằng `updateMany` mà **không** set `convertedAt`:
 
@@ -233,7 +270,7 @@ await tx.lead.update({
 });
 ```
 
-⇒ **Đừng dựng metric nào của C lên `qualifiedAt` / `handedAt` / `firstContactAt`.** Hệ quả kéo sang D: mẫu số CPL hiện tại (`funnel-query.ts:13`) là `qualifiedAt IS NOT NULL` — tức gần bằng 0.
+⇒ **Đừng dựng metric nào của C lên `qualifiedAt` / `handedAt` / `firstContactAt`.** Hệ quả kéo sang D: mẫu số CPL hiện tại (`funnel-query.ts:97`) là `qualifiedAt IS NOT NULL` — tức gần bằng 0.
 
 ### C.2.5 🔴 `Lead.lastActivityAt` — hai lỗi chồng nhau
 
@@ -322,7 +359,9 @@ await writeAudit({
 
 ### Non-Goals (cố ý không làm trong C)
 
-1. **Không** sửa 8 công thức tỷ lệ chốt cũ ở §C.2.2 — chỉ **thêm** một công thức chuẩn cho tab C và ghi rõ nó khác. Sửa 5 màn cũ là việc riêng, có rủi ro riêng.
+1. ~~**Không** sửa 8 công thức tỷ lệ chốt cũ ở §C.2.2 — chỉ **thêm** một công thức chuẩn cho tab C và ghi rõ nó khác. Sửa 5 màn cũ là việc riêng, có rủi ro riêng.~~
+   🔴 **[ĐẢO 27/08/2026 — OQ-C9]** Chủ dự án chốt **SỬA 5 màn cũ** về công thức chuẩn. Non-Goal này **không còn hiệu lực**. Việc sửa **vẫn nằm sau** khi C3 chạy (bước **C.12**, §C.8) và **vẫn có rủi ro riêng** — chỉ khác là nó đã được nhận vào phạm vi thay vì đẩy ra. Ba việc bắt buộc kèm theo (đo → báo trước → ghi ngày) ở **§C.6.13**.
+   ⚠️ Ba trong 8 công thức của §C.2.2 **vẫn không sửa**: dòng 6 (thuộc trang funnel — OQ-D9 khai tử), dòng 7 (thuật toán chia lead, không phải báo cáo), dòng 8 (tỷ lệ học thử — metric khác). Xem §C.6.13.
 2. **Không** viết migration schema lead — thuộc `docs/prd/G-lead.md` (SL-08 → SL-13). C chỉ **tiêu thụ**.
 3. **Không** đổi cơ chế/quyền export — thuộc A-03 (`docs/prd/A-nen-tang.md` §6.3). C-04 chỉ tham chiếu.
 4. **Không** drop giá trị nào của `LeadStatus` (15 giá trị, `prisma/schema.prisma:37-55`) — SL-14 + luật cứng #4.
@@ -333,7 +372,7 @@ await writeAudit({
 
 | Chỉ số | Hiện tại | Đích | Cách đo |
 |---|---|---|---|
-| Số công thức "tỷ lệ chốt" trong tab dashboard | 5 màn / 5 công thức | **1** | Đọc mã: chỉ `lib/reports/lead-kpi.ts` (mới) được gọi từ tab C |
+| Số công thức "tỷ lệ chốt" trong tab dashboard | 5 màn / 5 công thức | **1** | ~~Đọc mã: chỉ `lib/reports/lead-kpi.ts` (mới) được gọi từ tab C~~ **[SỬA 27/08 — OQ-C9]** Đích nay là **toàn hệ thống**, không chỉ tab C: cả 5 màn của §C.2.2 dòng 1–5 gọi `lib/reports/lead-kpi.ts`. Đo bằng grep: 0 chỗ tự tính `enrolled / total` ngoài file đó (trừ 3 chỗ cố ý giữ — §C.6.13) |
 | Chênh lệch (a) vs (b) vs (c) trên prod | Chưa đo | Đo được, công bố | Chạy truy vấn §C.6.9 trên prod trước khi chốt |
 | "Thời gian chốt" | Không tính được | Có trung vị + p90 | C4 trả `medianDays`, `p90Days`, `avgDays` |
 | `lastActivityAt` phản ánh đủ hoạt động | 3/15 đường ghi | 15/15 | Test: mỗi đường tạo `LeadActivity` → `lastActivityAt` bump |
@@ -524,7 +563,7 @@ export async function countLeadStudents(actor: Actor, f: ScopeFilters): Promise<
 | B2 | **Hiệu năng:** `LeadChild` chỉ có `@@index([leadId])` (`prisma/schema.prisma:1482`). Lọc theo `createdAt` = seq scan | Thêm `@@index([centerId, createdAt])` cùng lúc với SL-08. Additive, an toàn |
 | B3 | `centerId = ANY(NULL::text[])` trả **NULL**, không phải TRUE | Đã xử: `$1::text[] IS NULL OR …` |
 | B4 | 🔴 `db.$queryRaw` **bỏ qua** `scopedDb` — extension chỉ chạy cho query top-level của Prisma Client (`lib/db-scope.ts:4-5`) | Mọi truy vấn SQL thô **phải** tự truyền `effective` đã giao với `getModelVisibleCenterIds`, y như đoạn Prisma ở trên. Và **cấm `$queryRawUnsafe`** (`.claude/rules/prisma-db.md` mục Banned) |
-| B5 | Lead `status = 'DUPLICATE'` (`prisma/schema.prisma:37-55`) vẫn được đếm | **Quyết định:** đếm. Lý do: `DUPLICATE` gán bằng tay, gần như không ai gán (§C.2.3 — 9/15 giá trị chỉ đổi tay). Loại nó ra sẽ tạo mẫu số thứ 6 (`app/(admin)/admin/crm/page.tsx:96` đã loại). Nếu vận hành muốn loại → **OQ-C2** |
+| B5 | Lead `status = 'DUPLICATE'` (`prisma/schema.prisma:37-55`) vẫn được đếm | ✅ **ĐÃ CHỐT 27/08/2026 (OQ-C2): đếm — KHÔNG loại khỏi mẫu số.** Lý do giữ nguyên: `DUPLICATE` gán bằng tay, gần như không ai gán (§C.2.3 — 9/15 giá trị chỉ đổi tay); loại nó ra tạo mẫu số thứ 6. **Nhưng quyết định có vế thứ hai, bắt buộc:** hiện **số lead `DUPLICATE` riêng** ngay cạnh mẫu số — nguyên văn *"để không ai nghi ngờ"*. ⇒ hàm C3 trả thêm `duplicateCount`, tab C hiện thành một dòng phụ dưới ô C3 (*"trong đó trùng: N"*). 🔴 Kéo theo: `app/(admin)/admin/crm/page.tsx` **đang loại** `DUPLICATE` (`:91` — `if (g.status !== "DUPLICATE") nonDuplicate += c;`, dùng ở `:96-97`) ⇒ màn đó nằm trong danh sách 5 màn phải sửa của **OQ-C9** (§C.6.13), và đây là **nguồn thứ ba** làm số của nó nhảy |
 
 ---
 
@@ -656,6 +695,8 @@ export async function getLeadTargetRows(actor: Actor, f: ScopeFilters) {
 **Định nghĩa bằng lời.** Trong số **học sinh vào hệ thống trong kỳ** (mẫu số = C1), bao nhiêu phần trăm **đã chốt** (tử số) — "đã chốt" theo đúng §C.6.0. Đây là tỷ lệ **theo lứa (cohort)**: mẫu số neo vào ngày *vào hệ thống*, tử số **không** giới hạn ngày chốt.
 
 > **Vì sao chọn cohort, không chọn "chốt trong kỳ / vào trong kỳ".** Hai vế của phép chia phải nói về **cùng một tập người**. Công thức "số chốt trong tháng 8 ÷ số lead vào tháng 8" trộn hai tập khác nhau (chốt tháng 8 phần lớn là lead vào tháng 6–7) và có thể **vượt 100%**. Đổi lại, cohort có nhược điểm phải nói ra: **tỷ lệ của tháng gần nhất luôn thấp** vì lứa đó chưa kịp chín (bẫy B1).
+>
+> ✅ **ĐÃ CHỐT 27/08/2026 (OQ-C8): theo LỨA** — đúng lựa chọn trên, với lý do chủ dự án ghi nguyên văn: *"hai vế cùng tập người, không vượt 100%"*. Đây nay là **luật**, không còn là đề xuất. **Hệ quả bắt buộc:** bẫy **B1** dưới đây (lứa chưa chín) chuyển từ "nên có" sang **phần bắt buộc của UI** — nhãn *"tính theo lứa vào hệ thống"* + con số của lứa đã đủ N ngày. Thiếu nó thì tháng đang chạy trông như sụt kinh doanh, và người đọc sẽ kết luận sai ngay tuần đầu.
 
 **Nguồn dữ liệu.**
 
@@ -740,7 +781,7 @@ export async function getSuccessRate(actor: Actor, f: ScopeFilters) {
 | # | Bẫy | Xử lý |
 |---|---|---|
 | B1 | 🔴 **Lứa chưa chín.** Lead vào ngày 30 tháng này gần như chắc chắn chưa chốt ⇒ tỷ lệ tháng hiện tại luôn thấp và **không so được** với tháng trước | Hiện kèm **"tỷ lệ của lứa đã đủ N ngày"** (N = thời gian chốt p90 từ C4). Và ghi nhãn rõ trên ô số: *"tính theo lứa vào hệ thống"* |
-| B2 | 🔴 **Con số này KHÁC 5 màn hình khác** đang chạy (§C.2.2) — người dùng sẽ hỏi ngay hôm đầu | Bắt buộc: đặt tên metric **khác** ("Tỷ lệ thành công theo học sinh") và có tooltip nêu công thức. Hoặc thống nhất cả 5 màn — việc riêng, ngoài phạm vi C (Non-Goal 1) |
+| B2 | 🔴 **Con số này KHÁC 5 màn hình khác** đang chạy (§C.2.2) — người dùng sẽ hỏi ngay hôm đầu | ~~Bắt buộc: đặt tên metric **khác** … Hoặc thống nhất cả 5 màn — việc riêng, ngoài phạm vi C (Non-Goal 1)~~ **[SỬA 27/08 — OQ-C9]** Chủ dự án chọn **thống nhất cả 5 màn** ⇒ bẫy này **có hạn kết thúc**, không sống mãi. Nhưng nó **vẫn đúng trong khoảng giữa**: từ lúc C3 lên (bước C.7) tới lúc sửa xong 5 màn (bước **C.12**), hệ thống có 6 con số. ⇒ **vẫn phải** đặt tên metric khác (*"Tỷ lệ thành công theo học sinh"*) + tooltip nêu công thức, và tháo tên riêng đó **sau** khi C.12 xong. Xem §C.6.13 |
 | B3 | Học sinh `ENROLLED` mà lead cha vẫn còn `lostAt` (dữ liệu bẩn do đổi trạng thái qua lại) | `count(*) FILTER` dùng `status` hiện tại nên không đếm đôi. Query rà (theo B5 — lý do ở cấp `Lead`): `SELECT count(*) FROM "Lead" l WHERE l."lostAt" IS NOT NULL AND NOT EXISTS (SELECT 1 FROM "LeadChild" c WHERE c."leadId" = l.id AND c.status = 'LOST')` |
 | B4 | Hiệu năng: 3 `count` = 3 lượt quét | Với dữ liệu Sata Robo (một trung tâm, 2 cơ sở) không đáng lo. Nếu cần: dùng bản SQL `FILTER` một lượt qua `$queryRaw` (nhớ bẫy B4 của §C.6.1) |
 | B5 | Chỉ số cần thêm | `@@index([centerId, status, closedAt])` trên `LeadChild` sau SL-09 |
@@ -770,7 +811,7 @@ export async function getSuccessRate(actor: Actor, f: ScopeFilters) {
 | Được map vào record | `app/(admin)/admin/bao-cao/lead/page.tsx:79` |
 | Được khai kiểu | `lib/reports/lead.ts:12` (`convertedAt?: Date \| null`) |
 | **Không hàm nào đọc nó** | grep `convertedAt` trong `lib/reports/lead.ts` = **đúng 1 hit, tại dòng khai kiểu :12**. 12 hàm export không hàm nào chạm |
-| **Không có phép trừ nào** trong repo | grep `convertedAt` toàn `lib/` + `app/` cho ra đúng 4 nơi: `funnel-query.ts:14` (`{not: null}`), `sla.ts:113` (`: null`), và 2 nơi ghi (`convert-lead.ts:77`, `convert-lead-v2.ts:170`) |
+| **Không có phép trừ nào** trong repo | grep `convertedAt` toàn `lib/` + `app/` cho ra đúng 4 nơi: `funnel-query.ts:98` (`{not: null}`), `sla.ts:113` (`: null`), và 2 nơi ghi (`convert-lead.ts:77`, `convert-lead-v2.ts:170`) |
 | Đường ghi thiếu | `lib/finance/payment.ts:152-155` đưa lead lên `REGISTERED` **không** set `convertedAt` |
 
 ⇒ **Điều kiện tiên quyết của C4:** (1) chốt §C.6.0; (2) thêm `LeadChild.closedAt` (SL-09); (3) **vá đường ghi** để mọi đường "chốt" set `closedAt` trong cùng transaction. Không có (3) thì C4 sẽ chỉ đo được tập con và **im lặng** bỏ phần còn lại.
@@ -869,7 +910,12 @@ export function summarizeDaysToClose(days: number[]) {
 
 **Định nghĩa bằng lời.** Với **một lead (cấp phụ huynh)**: số ngày trọn vẹn từ **lần tiếp cận gần nhất** đến **bây giờ**. "Lần tiếp cận" = bản ghi `LeadActivity` thuộc nhóm **liên hệ người thật** (`CALL`, `MESSAGE`, `NOTE`, `EMAIL`). Chưa có lần tiếp cận nào ⇒ lấy mốc `Lead.createdAt`.
 
-> **Vì sao loại `STATUS_CHANGE` và `HANDOVER` khỏi định nghĩa.** Hai loại này sinh **tự động** mỗi lần đổi trạng thái (`app/(admin)/admin/leads/actions.ts:183-192`) hoặc bàn giao (`:946`). Nếu tính chúng là "tiếp cận", một Sale chỉ cần bấm đổi trạng thái qua lại là **reset đồng hồ** mà chưa gọi khách lần nào — đúng thứ spec `:54` gọi là *"làm đẹp giả"*. Đây là **quyết định**, không phải mặc định; nếu vận hành muốn khác thì xem **OQ-C4**.
+> **Vì sao loại `STATUS_CHANGE` và `HANDOVER` khỏi định nghĩa.** Hai loại này sinh **tự động** mỗi lần đổi trạng thái (`app/(admin)/admin/leads/actions.ts:183-192`) hoặc bàn giao (`:946`). Nếu tính chúng là "tiếp cận", một Sale chỉ cần bấm đổi trạng thái qua lại là **reset đồng hồ** mà chưa gọi khách lần nào — đúng thứ spec `:54` gọi là *"làm đẹp giả"*. ~~Đây là **quyết định**, không phải mặc định; nếu vận hành muốn khác thì xem **OQ-C4**.~~
+>
+> ✅ **ĐÃ CHỐT 27/08/2026 (OQ-C4): `CALL` · `MESSAGE` · `NOTE` · `EMAIL` **và** `actorId IS NOT NULL`** — đúng định nghĩa trên, kèm **lý do được ghi thành luật**: tính cả `STATUS_CHANGE` thì **Sale RESET được đồng hồ mà không gọi khách**. Từ nay đây không còn là chỗ để bàn lại khi ai đó thấy cột "số ngày chưa tiếp cận" cao quá.
+> **Hai điều kiện, không phải một.** `LeadActivity.actorId` là `String?` (`prisma/schema.prisma:3586`) ⇒ dòng do hệ thống sinh có `actorId = NULL` và **bị loại**, kể cả khi `type` nằm trong bốn loại trên. Bỏ vế `actorId IS NOT NULL` là mở lại đúng cái lỗ vừa bịt, chỉ theo đường khác.
+> ⚠️ **Một phép đo nhỏ còn nợ** (§C.6.9 đã ghi): truy vấn đo prod 26/08 **không lọc `type`**, nên chưa biết bao nhiêu lead **chỉ có** `STATUS_CHANGE`. Với đúng tập lead đó, cột C5 sẽ hiển thị **tuổi lead** chứ không phải khoảng cách tiếp cận. Thêm `AND "type" IN ('CALL','MESSAGE','NOTE','EMAIL') AND "actorId" IS NOT NULL` vào truy vấn đo là biết ngay — chỉ đọc, rẻ, nên chạy **trước** khi bật cảnh báo ngưỡng của C-05.
+> ℹ️ *Đính chính số dòng:* index phục vụ biến thể A là `@@index([leadId, createdAt])` ở **`prisma/schema.prisma:3593`** (model `LeadActivity` bắt đầu `:3582`). Bản trước dẫn `:3538` — dòng đó nằm trong enum `LeadActivityType`, không phải index.
 >
 > Cột này neo ở **cấp phụ huynh**, không cấp con — vì Sale gọi cho **một gia đình**, không gọi riêng từng đứa trẻ (`docs/prd/G-lead.md` §6.3.a, dòng `lastActivityAt`).
 
@@ -877,7 +923,7 @@ export function summarizeDaysToClose(days: number[]) {
 
 | Thứ | Bảng · cột | Trạng thái |
 |---|---|---|
-| Mốc gần nhất — **biến thể A (đúng hôm nay)** | `MAX(LeadActivity.createdAt)` theo `leadId`, lọc `type` (`prisma/schema.prisma:3527-3539`) | **ĐÃ CÓ** — index `[leadId, createdAt]` `:3538` |
+| Mốc gần nhất — **biến thể A (đúng hôm nay)** | `MAX(LeadActivity.createdAt)` theo `leadId`, lọc `type` **và** `actorId IS NOT NULL` — OQ-C4 (model `prisma/schema.prisma:3582-3594`; `actorId` `:3586`) | **ĐÃ CÓ** — index `[leadId, createdAt]` **`:3593`** *(bản trước dẫn `:3538` — dòng đó thuộc enum `LeadActivityType`)* |
 | Mốc gần nhất — **biến thể B (nhanh, cần vá)** | `Lead.lastActivityAt` (`:1401`) | 🔴 **SAI** — 3/15 đường ghi |
 | Mốc dự phòng | `Lead.createdAt` | **ĐÃ CÓ** — cùng cách `isLeadIdle` xử lý (`lib/crm/sla.ts:100`) |
 | Ngưỡng cảnh báo | Cấu hình vận hành — key mới (§C.6.11) | **CHƯA CÓ** |
@@ -1012,7 +1058,7 @@ export async function getStaleLeadRows(actor: Actor, f: ScopeFilters, page: { ta
 |---|---|---|
 | B1 | 🔴 **`lastActivityAt` SAI** — dùng nó ở v1 là làm đẹp giả | Dùng biến thể A cho tới khi N-4 vá xong + backfill xong + có test 15/15 đường ghi |
 | B2 | 🔴 **Vá `sla.ts:132` trước, backfill sau** — backfill bump `updatedAt` toàn bảng, mà rule SLA-4 đang đọc nhầm `updatedAt` | Thứ tự bắt buộc ghi trong runbook |
-| B3 | **`GROUP BY` toàn bảng `LeadActivity` là seq scan.** `MAX(createdAt) GROUP BY leadId` không dùng được index composite hiệu quả khi bảng lớn | `LEFT JOIN LATERAL … LIMIT 1` như trên — dùng đúng `@@index([leadId, createdAt])` (`:3538`) |
+| B3 | **`GROUP BY` toàn bảng `LeadActivity` là seq scan.** `MAX(createdAt) GROUP BY leadId` không dùng được index composite hiệu quả khi bảng lớn | `LEFT JOIN LATERAL … LIMIT 1` như trên — dùng đúng `@@index([leadId, createdAt])` (**`:3593`**) |
 | B4 | **So thời điểm vs so ngày.** `now() - lastAt` cho `0.9` ngày với lần tiếp cận 23:00 hôm qua ⇒ hiện "0 ngày" trong khi vận hành hiểu là "hôm qua" | Trừ **hai NGÀY lịch VN** như SQL trên: `(… AT TIME ZONE 'Asia/Ho_Chi_Minh')::date` |
 | B5 | Bảng "đang chăm" lọc trạng thái bằng danh sách cứng 4 giá trị | Đặt danh sách trong `lib/reports/lead-kpi.ts` (`ACTIVE_LEAD_STATUSES`), không rải chuỗi trong SQL nhiều chỗ. `LeadStatus` có 15 giá trị (`prisma/schema.prisma:37-55`) — SL-14 cấm drop, nên danh sách phải khai đủ |
 | B6 | PII trên bảng | `parentName` / `phone` phải qua `maskLeadPiiFields` ở **server** (`lib/lead/pii.ts:42-51`) trước khi trả xuống client. Bảng này người không có `leads:view-pii` cũng xem được (để soi lead treo), nên **phải** mask |
@@ -1461,19 +1507,69 @@ Dùng ở: C5 (số ngày), B5 (trục ngày), `resolveScopeFilters` (neo hai đ
 
 ---
 
+### C.6.13 — 🔴 **Sửa 5 màn cũ về công thức chuẩn** (OQ-C9 · chốt 27/08/2026 · ĐẢO Non-Goal 1)
+
+Chủ dự án chốt **sửa**, không để nguyên. Mục này ghi **sửa những màn nào**, **vì sao số nhảy**, và **ba việc bắt buộc kèm theo**. Đây là mục duy nhất của khu vực C đụng vào màn hình người dùng **đang dùng hằng ngày**, nên nó có bước riêng trong §C.8 (**C.12**) và **đứng sau** khi C3 đã chạy.
+
+#### (1) Đúng năm màn — dòng 1–5 của §C.2.2
+
+| # | Màn · file | Công thức hôm nay | Sau khi sửa |
+|---|---|---|---|
+| 1 | `lib/reports/lead.ts:273` `leadSummary` | tử `status ∈ {ENROLLED, REGISTERED}` (`CONVERTED_STATUSES` `:45`) ÷ mọi lead trong bộ lọc | Gọi `lib/reports/lead-kpi.ts` (§C.6.0 + §C.6.3) |
+| 2 | `app/(admin)/admin/dashboard/_components/manager-dashboard.tsx:117` | tử `status = ENROLLED` (`:86`) ÷ **mọi** lead chưa xoá, **không lọc kỳ** | nt. — và **bắt đầu lọc kỳ**, đây là màn đổi nhiều nhất |
+| 3 | `.../sales-dashboard.tsx:49` | `countByStatus["ENROLLED"]` ÷ lead **của tôi** | nt., giữ phạm vi "của tôi" bằng bộ lọc, không bằng công thức riêng |
+| 4 | `.../marketing-hr-dashboards.tsx:50` | `enrolledTotal ÷ total` | nt. |
+| 5 | `app/(admin)/admin/crm/page.tsx:96-97` | `enrolledTotal ÷ nonDuplicate` — **loại `DUPLICATE`** ở `:91` | nt. — **thôi loại `DUPLICATE`** theo OQ-C2, và hiện số trùng thành dòng riêng |
+
+#### (2) Ba màn KHÔNG sửa — cố ý, đừng "dọn cho sạch"
+
+| # | Nơi | Vì sao giữ |
+|---|---|---|
+| 6 | `lib/crm/marketing-metrics.ts:30` `crL2L3` (`funnel-query.ts:97-98`) | Thuộc `/admin/marketing/funnel` — **OQ-D9 chốt khai tử cả trang**, không sửa từng công thức trong một trang sắp bỏ. ⇒ trong khoảng giữa, hệ thống còn **2** con số chứ chưa phải 1: chuẩn + cái này. Nó chết cùng trang |
+| 7 | `lib/lead/assign-strategy.ts:15` `computeCloseRate` | **Không phải báo cáo** — là đầu vào của thuật toán **chia lead** (`LeadAssignMode.CLOSE_RATE`, `prisma/schema.prisma`). Sửa nó là **đổi cách chia lead cho Sale**, một thay đổi vận hành hoàn toàn khác, không ai yêu cầu |
+| 8 | `lib/reports/trial.ts:196` | Metric **khác hẳn**: `registered ÷ attended` là tỷ lệ chuyển đổi **học thử**, không phải tỷ lệ chốt lead |
+
+⇒ Câu *"hệ thống còn dùng MỘT con số tỷ lệ chốt thay vì 6"* đúng với **báo cáo tỷ lệ chốt lead** — nhưng **chỉ sau khi trang funnel bị bỏ**. Nói cho đủ, theo đúng hàng số 6 ngay trên và `docs/plan/ket-va-cach-go.md:528`: ~~**1 ngay sau C.12**~~ — **SAI**. **Ngay sau C.12 hệ thống còn 2 con số** (công thức chuẩn + `crL2L3` của trang funnel), và **về hẳn còn 1 vào ngày trang funnel bị bỏ** (OQ-D9). Hai vế "1 ngay sau C.12" và "6 chỉ về 1 khi bỏ trang funnel" chọi nhau; giữ vế sau.
+
+#### (3) 🔴 Số sẽ nhảy vì **BA** lẽ, không phải một
+
+Đây là chỗ dễ báo thiếu nhất khi soạn thông báo cho người dùng:
+
+| Lẽ | Nội dung | Đã đo chưa |
+|---|---|---|
+| **L1 — định nghĩa "đã chốt"** | `{ENROLLED, REGISTERED}` → chỉ `ENROLLED` (QĐ `B2` / OQ-C1) | ✅ **Đã đo prod 26/08** (§C.6.9): 76 → 75, lệch **1 lead ≈ 1,3 %** |
+| **L2 — đơn vị đếm** | Đếm **lead (phụ huynh)** → đếm **học sinh** (`LeadChild`, CHUNG-2). Một phụ huynh 2 con thành 2 dòng | 🔴 **CHƯA ĐO ĐƯỢC** — `LeadChild` chưa tồn tại (SL-08/SL-09 thuộc G.2). Prod đo 26/08: nhiều nhất **2 con/lead** (`cau-hoi-can-quyet.md` OQ-G5) ⇒ mẫu số **phồng lên**, tỷ lệ **tụt** nếu con thứ hai chưa chốt |
+| **L3 — mẫu số `DUPLICATE`** | Chỉ màn 5 (`crm/page.tsx`): thôi loại `DUPLICATE` (OQ-C2) ⇒ mẫu số to hơn, tỷ lệ **tụt** | 🔴 **CHƯA ĐO** — một câu đếm: `SELECT count(*) FROM "Lead" WHERE status='DUPLICATE' AND "deletedAt" IS NULL` |
+
+⚠️ **Việc "chạy §C.6.9 đo mức lệch trước" CHƯA XONG dù §C.6.9 đã chạy 26/08.** Lần chạy đó đo được **L1**, và chỉ L1. **L2 là lẽ nặng nhất** và **không thể đo trước G.2** — không có bảng để đếm. ⇒ **Trình tự bắt buộc:** G.2 migrate xong (có `LeadChild` với `createdAt` chép từ `Lead.createdAt` — giả định G2 §C.6.1) → **chạy lại §C.6.9 mở rộng, đo cả L2 và L3, cho từng màn** → mới báo trước → mới sửa. Đo trước G.2 rồi báo con số 1,3 % là **báo sai**, và sai theo hướng trấn an.
+
+#### (4) Ba việc bắt buộc kèm theo — đúng thứ tự
+
+1. **Đo mức lệch** (L1 ✅ · L2 + L3 sau G.2, xem trên). Kết quả ghi thành **bảng "màn nào đổi từ số nào sang số nào"**, không phải một con số chung — năm màn có năm mẫu số khác nhau nên đổi khác nhau.
+2. **Thông báo TRƯỚC cho người dùng** — trước ngày deploy, không phải trong changelog sau đó. Người nhận: **QLCS · Sale · Marketing · BGĐ** (bốn nhóm đang đọc năm màn này). Nội dung phải nói **ba lẽ**, không chỉ lẽ định nghĩa. ⚠️ **Không hứa trước chiều đổi** — cùng bài học đã ghi ở §B.6.8 cho QĐ `B3`: dự báo "số sẽ tụt" hoá ra **sai chiều**.
+3. **Ghi ngày đổi để đối chiếu về sau** — hai chỗ: (a) một dòng trong `documentation/` theo luật cứng Nền Hệ thống #10; (b) **trên chính màn hình**, tooltip công thức có câu *"công thức áp dụng từ dd/mm/yyyy"*. Thiếu (b) thì ba tháng sau không ai giải thích được vì sao biểu đồ có một bậc thang.
+
+#### (5) Cách sửa — một cửa, không năm bản vá
+
+Cả năm màn gọi **cùng một** hàm của `lib/reports/lead-kpi.ts` (§C.6.0). **Không** sửa tại chỗ từng file bằng cách đổi điều kiện `status` — làm thế là tạo ra năm bản sao mới của cùng một lỗi. Sau C.12, đo bằng grep: không còn chỗ nào tự viết `enrolled / total` ngoài `lead-kpi.ts` (trừ ba chỗ ở mục (2)).
+
+⚠️ **Thứ tự cứng:** C.12 chạy **sau** C.7 (tab C đã lên) và **sau** G.2. Sửa 5 màn trước khi có `LeadChild` là không làm được — không có nguồn cho công thức chuẩn.
+
+---
+
 ## C.7 Open Questions
 
 | # | Câu hỏi | Vì sao chặn | Chủ | Hạn |
 |---|---|---|---|---|
 | ~~**OQ-C1**~~ | ~~"Đã chốt" = `ENROLLED` hay tính cả "đã trả tiền nhưng chưa ghi danh"?~~ | ✅ **ĐÃ CHỐT 24/08/2026 (B2): "lead đã đến bước đăng ký thành công và trở thành học viên"** ⇒ **chỉ `ENROLLED`**. `LeadChildStatus` giữ đúng 6 giá trị của SL-09 — không thêm giá trị enum trên bảng đã có dữ liệu prod. ⚠️ **Vẫn phải chạy §C.6.9 (chỉ đọc) trên prod trước khi bật C3** để biết số nhảy bao nhiêu và báo trước cho người dùng. | — | Đóng |
-| **OQ-C2** | Lead `status = 'DUPLICATE'` có bị loại khỏi mẫu số C3 không? | §C.6.1 bẫy B5 chọn **không loại**. `app/(admin)/admin/crm/page.tsx:96` đang loại ⇒ hai màn cho hai số | Chủ dự án | Trước khi code C3 |
+| ~~**OQ-C2**~~ | ~~Lead `status = 'DUPLICATE'` có bị loại khỏi mẫu số C3 không?~~ | ✅ **ĐÃ CHỐT 27/08/2026: KHÔNG loại khỏi mẫu số — nhưng HIỆN SỐ `DUPLICATE` RIÊNG ngay cạnh** (nguyên văn: *"để không ai nghi ngờ"*). Đúng đề xuất §C.6.1 bẫy B5, **cộng một vế mới**. **Hệ quả khi code:** hàm C3 trả thêm `duplicateCount`; tab C hiện một dòng phụ dưới ô C3 (*"trong đó trùng: N"*). Làm vế "không loại" mà quên vế "hiện riêng" là bỏ mất **lý do** quyết định được chấp nhận. 🔴 **Kéo theo OQ-C9:** `app/(admin)/admin/crm/page.tsx:91` đang loại `DUPLICATE` ⇒ màn đó phải sửa, và đây là **lẽ L3** làm số của nó nhảy (§C.6.13 mục 3). Số lead `DUPLICATE` trên prod **chưa đo** — một câu `count(*)`, đo cùng đợt L2/L3. | — | Đóng |
 | ~~**OQ-C3**~~ | ~~Lý do rớt đặt ở `LeadChild` hay `Lead`?~~ | ✅ **CHỐT 24/08/2026 (câu B5): đặt ở `Lead` (cấp phụ huynh)** ⇒ `Lead.lostNote` + `Lead.lostAt` (đúng SL-10 của `A-nen-tang.md` §10.3); `docs/prd/G-lead.md` §6.3.b đã sửa cho khớp. Trạng thái rớt **vẫn** theo từng con. | — | Đóng |
-| **OQ-C4** | "Lần tiếp cận gần nhất" tính những loại hoạt động nào? | §C.6.5 chọn `CALL/MESSAGE/NOTE/EMAIL` **và** `actorId IS NOT NULL`. Nếu tính cả `STATUS_CHANGE` thì Sale reset được đồng hồ mà không gọi khách | Vận hành | Trước khi code C5 |
+| ~~**OQ-C4**~~ | ~~"Lần tiếp cận gần nhất" tính những loại hoạt động nào?~~ | ✅ **ĐÃ CHỐT 27/08/2026: `CALL` · `MESSAGE` · `NOTE` · `EMAIL` **và** `actorId IS NOT NULL`** — đúng đề xuất §C.6.5. **Lý do được chốt thành luật, ghi kèm để đời sau không bàn lại:** tính cả `STATUS_CHANGE` thì **Sale RESET được đồng hồ mà không gọi khách**. ⇒ `STATUS_CHANGE` + `HANDOVER` bị loại vĩnh viễn khỏi định nghĩa C5. **Hai điều kiện, không phải một:** `LeadActivity.actorId` là `String?` (`prisma/schema.prisma:3586`) nên dòng do hệ thống sinh vẫn bị loại dù đúng `type` — bỏ vế `actorId` là mở lại lỗ vừa bịt theo đường khác. ⚠️ **Nợ một phép đo rẻ:** truy vấn §C.6.9 chạy 26/08 **không lọc `type`** ⇒ chưa biết bao nhiêu lead **chỉ có** `STATUS_CHANGE` (với tập đó, cột C5 hiện **tuổi lead**, không phải khoảng cách tiếp cận). Đo trước khi bật cảnh báo ngưỡng C-05. | — | Đóng |
 | ⚙️ ~~**OQ-C5**~~ | ~~Quyền đặt chỉ tiêu lead dùng key nào?~~ | ✅ **CHỐT KỸ THUẬT 24/08/2026 (Dev): khai key MỚI `lead_targets:manage`** — **KHÔNG** dùng lại `leads:assign-config`. Khuyến nghị cũ dựa trên tiền đề sai: (1) key đó **chưa seed cho vai nào** ở v2 và v1 chỉ `SUPER_ADMIN` (`lib/auth/permissions.ts:360`; `permissions.test.ts:164` khẳng định `CENTER_MANAGER` → false) ⇒ **vẫn phải seed prod**, không tiết kiệm gì; (2) key đó đang gác `/admin/leads/cau-hinh-chia` (`page.tsx:19`) ⇒ cấp cho QLCS là **mở luôn màn cấu hình chia lead tự động**. Gate scope theo tiền lệ `setRevenueTargetAction` (`_actions.ts:43, 62-69`). ⚠️ **Chạy `seed-prod-roles.yml` sau merge lên `main`**. | — | Đóng |
 | ~~**OQ-C6**~~ | ~~Ngưỡng cảnh báo lead treo mặc định là bao nhiêu ngày (cảnh báo / đỏ)?~~ | ✅ **ĐÃ CHỐT 24/08/2026 (12(a)): vàng ≥ 2 ngày · đỏ ≥ 7 ngày.** Vào registry `crm.staleLeadWarnDays = 2`, `crm.staleLeadDangerDays = 7`, cả hai `centerOverridable`. | — | Đóng |
 | ~~**OQ-C7**~~ | ~~Danh mục **lý do rớt** ban đầu gồm những giá trị nào?~~ | ✅ **ĐÃ CHỐT 24/08/2026 (12(b)): KHÔNG có danh mục** — lý do rớt là **ô ghi chú tự do**, bắt buộc nhập. Bảng `LeadLostReason` bỏ khỏi phạm vi; C-06-3 bỏ. Đánh đổi đã chấp nhận: **không có báo cáo "top lý do rớt"**. | — | Đóng |
-| **OQ-C8** | Tỷ lệ thành công tính theo **lứa** (PRD chọn) hay theo **kỳ chốt**? | §C.6.3 chọn lứa vì hai vế phải cùng tập người. Kỳ chốt dễ hiểu hơn với BGĐ nhưng **có thể vượt 100%** | Chủ dự án | Trước khi code C3 |
-| **OQ-C9** | 5 màn hình cũ (§C.2.2) có được sửa về công thức chuẩn không, hay để nguyên? | Non-Goal 1 nói **để nguyên**. Nhưng để nguyên thì cùng lúc có 6 con số "tỷ lệ chốt" trên cùng hệ thống. Nếu sửa: phải thông báo trước cho người dùng, vì số của họ sẽ nhảy | Chủ dự án | Sau khi C3 chạy |
+| ~~**OQ-C8**~~ | ~~Tỷ lệ thành công tính theo **lứa** (PRD chọn) hay theo **kỳ chốt**?~~ | ✅ **ĐÃ CHỐT 27/08/2026: theo LỨA** — đúng đề xuất §C.6.3, với lý do nguyên văn: *"hai vế cùng tập người, không vượt 100%"*. ⇒ mẫu số neo `LeadChild.createdAt`, tử số **không** neo `closedAt`. **Đánh đổi đã chấp nhận và phải viết ra UI:** lứa của tháng đang chạy **luôn thấp** vì chưa kịp chín ⇒ bẫy **B1** §C.6.3 chuyển từ "nên có" thành **bắt buộc**: nhãn *"tính theo lứa vào hệ thống"* + con số của **lứa đã đủ N ngày** (N = p90 từ C4). Thiếu nó thì tháng đang chạy trông như sụt kinh doanh và người đọc kết luận sai ngay tuần đầu. C4 vẫn dùng trục `closedAt` — **khác trục là cố ý**, không phải bất nhất. | — | Đóng |
+| ~~**OQ-C9**~~ | ~~5 màn hình cũ (§C.2.2) có được sửa về công thức chuẩn không, hay để nguyên?~~ | 🔴 ✅ **ĐÃ CHỐT 27/08/2026: SỬA 5 màn cũ về công thức chuẩn** — **ĐẢO Non-Goal 1** (đã gạch ở §C.3). Sau khi sửa, hệ thống dùng **một** con số "tỷ lệ chốt" thay vì 6. **Ba việc bắt buộc, đúng thứ tự — vì số của người dùng SẼ NHẢY:** (1) chạy **§C.6.9 đo mức lệch trước**; (2) **thông báo trước** cho QLCS/Sale/Marketing/BGĐ; (3) **ghi ngày đổi** để đối chiếu về sau (một dòng trong `documentation/` **và** tooltip *"công thức áp dụng từ dd/mm/yyyy"* trên chính màn hình). ⚠️ **Việc (1) CHƯA XONG dù §C.6.9 đã chạy 26/08:** lần đó chỉ đo được **lẽ L1** (định nghĩa "đã chốt" — lệch 1 lead ≈ 1,3 %). Còn **L2** (đổi đơn vị đếm lead → học sinh) và **L3** (thôi loại `DUPLICATE` ở màn CRM) **chưa đo được vì `LeadChild` chưa tồn tại** ⇒ phải đo lại **sau G.2**, cho **từng màn**. Báo con số 1,3 % lúc này là **báo sai theo hướng trấn an**. 📌 Ba màn **không** sửa (funnel · thuật toán chia lead · tỷ lệ học thử) và cách sửa một-cửa: **§C.6.13**. Bước thi công: **C.12** (§C.8), chạy **sau** C.7 và **sau** G.2. | — | Đóng |
 
 ---
 
@@ -1481,7 +1577,7 @@ Dùng ở: C5 (số ngày), B5 (trục ngày), `resolveScopeFilters` (neo hai đ
 
 | Bước | Nội dung | Phụ thuộc | Ghi chú |
 |---|---|---|---|
-| **C.0** | ✅ **OQ-C1, OQ-C3, OQ-C6, OQ-C7 đã chốt 24/08/2026** · ✅ **§C.6.9 ĐÃ CHẠY trên prod 26/08** | — | **Hết điều kiện đo.** Kết quả: lệch định nghĩa **chỉ 1 lead** (76 → 75) ⇒ thông báo cho người dùng là một câu ghi chú. Nhưng cùng phép đo lộ ra việc nặng hơn: `lastActivityAt` **NULL cho toàn bộ 129 lead** ⇒ xem hệ quả ràng buộc lên C.5 và C.8 ở §C.6.9 |
+| **C.0** | ✅ **OQ-C1, OQ-C3, OQ-C6, OQ-C7 đã chốt 24/08/2026** · ✅ **OQ-C2, OQ-C4, OQ-C8, OQ-C9 đã chốt 27/08/2026 (QĐ-3)** · ✅ **§C.6.9 ĐÃ CHẠY trên prod 26/08** | — | 🎉 **Khu vực C HẾT CÂU TREO.** Kết quả đo: lệch định nghĩa **chỉ 1 lead** (76 → 75). ⚠️ **Nhưng "hết điều kiện đo" chỉ đúng cho C1–C5, KHÔNG đúng cho bước C.12 mới**: OQ-C9 đòi đo **thêm** hai lẽ L2/L3 mà §C.6.9 **chưa đo được** (cần `LeadChild`, tức sau G.2) — xem §C.6.13 mục 3. Và cùng phép đo 26/08 lộ ra việc nặng hơn: `lastActivityAt` **NULL cho toàn bộ 129 lead** ⇒ hệ quả ràng buộc lên C.5/C.8 ở §C.6.9 |
 | **C.1** | **A-02** — `resolveScopeFilters` + `ScopeFilters` + `<ScopeFilterBar>` + khoá cache mới | — | Thuộc khu vực A. C **không** khởi động trước bước này (CHUNG-3) |
 | **C.2** | **G.2** — migration SL-08 (`LeadChild.centerId/orgUnitId`) → SL-09 (`LeadChildStatus`, `closedAt`) → SL-10 (**`Lead.lostNote`**/**`Lead.lostAt`** — B5; ~~`lostReasonId`~~ bỏ theo 12(b)) → SL-11 (**chỉ `LeadSource`**) | C.0 | Thuộc khu vực G. Additive toàn bộ |
 | **C.3** | Test đỏ trước: cách ly `LeadChild` theo cơ sở · C1 đếm đúng học sinh · C3 lứa · C4 loại dòng âm | C.2 | Luật cứng Nền Hệ thống #5 |
@@ -1493,6 +1589,8 @@ Dùng ở: C5 (số ngày), B5 (trục ngày), `resolveScopeFilters` (neo hai đ
 | **C.9** | C-06 (đánh dấu rớt bắt buộc lý do) + C-07 (mục "Lịch sử trạng thái" trên trang chi tiết lead) | C.2 | C-07 là **UI thuần** — audit đã có |
 | **C.10** | C-04 xuất Excel | A-03 xong | Quyền + định dạng thuộc khu vực A |
 | **C.11** | Cập nhật `documentation/` + liệt kê file đổi, rồi **DỪNG** | C.4–C.10 | Luật cứng Nền Hệ thống #10 |
+| **C.12** | 🔴 **MỚI 27/08 (OQ-C9)** — sửa **5 màn cũ** về công thức chuẩn (§C.6.13): đo L2+L3 → soạn + gửi thông báo → sửa mã (một cửa `lead-kpi.ts`) → gắn tooltip *"áp dụng từ dd/mm/yyyy"* | **C.7** + **G.2** | Bước **duy nhất** của C đụng màn người dùng đang dùng hằng ngày. ⚠️ Đo **trước**, gửi thông báo **trước** ngày deploy, **không hứa chiều đổi** (bài học §B.6.8). Không chạy trước G.2 — chưa có `LeadChild` thì chưa có công thức chuẩn để chuyển sang |
+| **C.13** | Ghi **ngày đổi công thức** của C.12 vào `documentation/` + tooltip trên màn | C.12 | Việc **(3)** của OQ-C9 — **không** phải ghi chú tuỳ chọn. Thiếu nó thì vài tháng sau không ai giải thích được bậc thang trên biểu đồ |
 
 **Ràng buộc môi trường.** Toàn bộ migration của C đi qua khu vực G và là **additive**. `test.satarobo.vn` và máy local **dùng chung một DB** (`CLAUDE.md`) ⇒ đừng chạy DROP/RENAME trong lúc đang làm việc ở local.
 
@@ -1582,7 +1680,7 @@ Ba hệ quả, cả ba đều là số sai chứ không phải số thiếu:
 
 1. **Không lọc ngày** — `spend` là tổng **mọi ngày từ đầu**, trong khi `l1/l2/l3` cũng không lọc ngày ⇒ CPL/CPA là số "từ khai thiên lập địa", không phải của kỳ.
 2. **Không lọc cơ sở** — `CENTER_MANAGER` của CS1 thấy chi phí quảng cáo **toàn công ty** chia cho lượng lead **riêng CS1** ⇒ CPL của CS1 bị thổi phồng theo đúng tỷ lệ số cơ sở.
-3. Mẫu số CPL là `qualifiedAt IS NOT NULL` (`:13`) mà `qualifiedAt` **gần như không có dữ liệu** (§C.2.4) ⇒ chia cho gần-0.
+3. Mẫu số CPL là `qualifiedAt IS NOT NULL` (`funnel-query.ts:97`) mà `qualifiedAt` **gần như không có dữ liệu** (§C.2.4) ⇒ chia cho gần-0.
 
 Trang này dùng `db` trần (`funnel-query.ts:3`), không qua `scopedDb`, nên `AdsInsightDaily` cũng **không có** cơ chế nào chặn — mà chặn cũng không được: bảng không có cột để chặn.
 
@@ -1668,6 +1766,7 @@ URL đi vào log ứng dụng, breadcrumb Sentry, span tracing, và bất kỳ p
 3. **Không** đồng bộ Google Ads ở v1 — `channel` giữ chỗ nhưng chỉ chạy `facebook`.
 4. **Không** làm attribution lead ↔ ad ở mức từng lead (`Lead.campaignId` thuộc SL-10 của khu vực G). D v1 phân bổ ở mức **chi phí**, không ở mức **lead**.
 5. **Không** sửa `/admin/marketing/funnel` cũ trong đợt này — nhưng **phải** treo cảnh báo trên trang đó (§D.5 P0 `D-00-2`), vì để nguyên là để một màn hình nói sai công khai.
+   ✅ **XÁC NHẬN + BỔ SUNG ĐÍCH 27/08/2026 (OQ-D9):** chủ dự án chốt **đúng Non-Goal này**, và thêm một vế: **bỏ hẳn trang** sau khi tab D chạy ổn. ⇒ `D-00-2` đổi tư cách — từ "cảnh báo tạm" thành **bước 1 của việc khai tử trang**. Hệ quả: công thức `crL2L3` (`lib/crm/marketing-metrics.ts:30`) **không nằm** trong danh sách 5 màn phải sửa của OQ-C9 — nó chết cùng trang, không sửa riêng (§C.6.13 mục 2).
 6. **Không** dùng AI/dự báo ngân sách — `CLAUDE.md` Don'ts: nhu cầu "dự báo/khuyến nghị" làm **rule-based**.
 
 ### Success Metrics
@@ -1688,7 +1787,7 @@ URL đi vào log ứng dụng, breadcrumb Sentry, span tracing, và bất kỳ p
 
 | Vai | Cần gì | Ràng buộc |
 |---|---|---|
-| **Marketing (`MARKETING` / `HO_MARKETING`)** | Đặt chỉ tiêu ngân sách, xem thực chi vs chỉ tiêu, dọn nhóm `CHƯA PHÂN BỔ` | `canEditAds` (`lib/crm/ads-insights.ts:44-49`) hiện chỉ cho `isSuperAdmin` **hoặc** `roleCode === "HO_MARKETING"` — vai `MARKETING` cấp cơ sở **không** sửa được. Giữ nguyên hay nới là **OQ-D5** |
+| **Marketing (`MARKETING` / `HO_MARKETING`)** | Đặt chỉ tiêu ngân sách, xem thực chi vs chỉ tiêu, dọn nhóm `CHƯA PHÂN BỔ` | ✅ **CHỐT 27/08/2026 (OQ-D5): GIỮ NGUYÊN, không nới.** `canEditAds` (`lib/crm/ads-insights.ts:44-49`) chỉ `isSuperAdmin` **hoặc** `roleCode === "HO_MARKETING"` ⇒ vai `MARKETING` cấp cơ sở **XEM được, KHÔNG sửa được** mapping D-07. Lý do chủ dự án: **gán campaign cho CS1 là lấy tiền khỏi CS2**. ⚠️ Đừng nhầm "không sửa mapping" với "không xem chi phí": vai cấp cơ sở vẫn đọc D1/D2/D3 trong **phạm vi của mình** qua `scopedDb` |
 | **QLCS (`CENTER_MANAGER`)** | Chi phí + CPL + CPA **của riêng cơ sở mình** | 🔴 Hôm nay thấy chi phí toàn công ty (§D.2.3). Sửa được điều này chính là lý do D tồn tại |
 | **BGĐ / Chủ dự án** | So CPL/CPA giữa cơ sở; biết bao nhiêu tiền chưa quy được về đâu | D-08 phải hiện, không được giấu |
 | **Người vận hành (Dev)** | Chạy lại job cho một ngày cụ thể mà không hỏng lịch sử | §D.6.2 mục 4 — chạy lại tạo bản ghi mới, không đè |
@@ -1709,7 +1808,7 @@ URL đi vào log ứng dụng, breadcrumb Sentry, span tracing, và bất kỳ p
 | **D-07-2** | 🔴 Là admin, campaign `MULTI` **bắt buộc** khai tỷ lệ phân bổ. | Campaign parse ra mã `MULTI` mà **chưa** có dòng phân bổ trong `AdsCampaignMapping` → toàn bộ chi tiêu của nó vào **`CHƯA PHÂN BỔ`** (không chia đều, không đoán). Tổng tỷ lệ của một campaign phải = **100%** (ràng buộc ở Server Action + test bất biến tổng). |
 | **D-01-4** | 🔴 Là QLCS, dữ liệu chi tiêu phải **lọc được theo cơ sở**. | Bảng snapshot mang **cả** `centerId` lẫn `orgUnitId` (SL-00 của `A-nen-tang.md` §10: `injectScope` chỉ chèn `centerId` — `lib/db-scope.ts:277-279`). Khai vào `SCOPED_MODELS` + `BACKFILL_SPECS` + `getModelPrefixes`. e2e: actor CS1 không thấy chi tiêu CS2. |
 | **D-03-1** | Là Marketing, tôi thấy **Chỉ tiêu · Ngân sách thực tế · % thực tế/chỉ tiêu**. | Chỉ tiêu từ bảng `AdsBudgetTarget` (§D.6.7). Chưa đặt → **"Chưa đặt chỉ tiêu"**, không phải `0%` (cùng luật C2). |
-| **D-04-1** | Là Marketing, tôi thấy **CPL**. | §D.6.9. Mẫu số = **C1** (tổng lead, đếm học sinh — CHUNG-2), **không** phải `qualifiedAt IS NOT NULL` như `funnel-query.ts:13`. |
+| **D-04-1** | Là Marketing, tôi thấy **CPL**. | §D.6.9. Mẫu số = **C1** (tổng lead, đếm học sinh — CHUNG-2), **không** phải `qualifiedAt IS NOT NULL` như `funnel-query.ts:97`. |
 | **D-05-1** | Là Marketing, tôi thấy **CPA**. | §D.6.10. Mẫu số = **C3 tử số** (lead chốt theo §C.6.0). |
 | **D-08-1** | 🔴 Là QLCS, tôi được cảnh báo khi có chi tiêu ở nhóm `CHƯA PHÂN BỔ` trong range đang xem. | §D.6.11. Banner hiện **số tiền** + **số campaign** + link tới màn D-07 để gán. Không có chi tiêu chưa phân bổ → không hiện gì. |
 | **D-00-1** | 🔴 Là dev, tôi có **một** hàm tính chi tiêu theo phạm vi. | `lib/reports/ads-spend.ts`. Tab D **và** mọi chỗ khác dùng chung. `lib/crm/funnel-query.ts:15` là ví dụ điển hình của việc mỗi chỗ tự viết một kiểu. |
@@ -1758,7 +1857,7 @@ Hai việc phải tách ra, đây là quyết định nặng nhất của khu v�
 |---|---|---|
 | Đọc chậm hơn (join + nhân tỷ lệ mỗi lần) | Thấp — vài trăm dòng/tháng ở quy mô Sata Robo (1 tài khoản quảng cáo, 2 cơ sở) | `safeCache` TTL 120s như các trang `/bao-cao/*` |
 | 🔴 **Số lịch sử THAY ĐỔI khi ai đó sửa mapping** | Cao — báo cáo tháng trước có thể khác giữa hai lần mở | `AdsCampaignMapping` mang `effectiveFrom` / `effectiveTo` (khuôn `UserOrgRole`) ⇒ sửa mapping từ hôm nay **không** đụng số quá khứ, muốn sửa quá khứ phải chỉnh `effectiveFrom` một cách có chủ ý + ghi audit |
-| Không có "số đã chốt sổ" | Trung bình | Nếu kế toán cần đóng sổ: thêm bảng `AdsSpendLocked(period, centerId, amount, lockedAt)` ở giai đoạn sau — **additive**, không phá thiết kế này |
+| Không có "số đã chốt sổ" | Trung bình | ~~**Nếu** kế toán cần đóng sổ: thêm bảng…~~ ✅ **HẾT "NẾU" 27/08/2026 (OQ-D7): CÓ chốt sổ theo tháng.** Bảng `AdsSpendLocked(period, centerId, amount, lockedAt)` là **việc phải làm**, không còn là phương án dự phòng — **additive**, không phá thiết kế này. 🔴 **Trùng cơ chế với OQ-B8** (đóng sổ chi phí, chốt 26/08) ⇒ **một cơ chế khoá kỳ dùng chung**, đừng dựng cái thứ hai cho ads. Luật kèm theo: **sửa mapping sau khi chốt KHÔNG được đổi số quá khứ** — kỳ đã khoá thì resolver đọc từ `AdsSpendLocked`, không tính lại từ snapshot × mapping. Và **job D-01 phải tôn trọng kỳ khoá** (đã ghi ở OQ-B8), nếu không số quảng cáo quá khứ vẫn bị ghi đè sau khi chốt |
 
 ### D.6.2 **D-01 · Đặc tả job đồng bộ**
 
@@ -1814,6 +1913,27 @@ await notifyStaff({
 ```
 
 **6. Chống lỗi từng phần.** Một campaign lỗi không được làm hỏng cả lượt: gói mỗi trang kết quả trong `try/catch`, đếm `synced` / `failed`, trả cả hai trong payload của `withCron` (`lib/cron/handler.ts:18`). `failed > 0` → thông báo.
+
+**6b. 🔴 NHIỀU ad account (OQ-D3 — chốt 27/08/2026).** Chủ dự án chốt **nhiều**, không phải một ⇒ job **phải lặp qua danh sách**, và biến môi trường `META_AD_ACCOUNT_ID` (một chuỗi, `lib/crm/ads-insights.ts:85`) đổi thành **danh sách** `META_AD_ACCOUNT_IDS` (ngăn cách bằng dấu phẩy).
+
+```ts
+// lib/ads/sync.ts — vòng ngoài. MỖI tài khoản là một đơn vị chống lỗi RIÊNG:
+// một account hỏng token / bị khoá KHÔNG được làm chết cả lượt (nối tiếp mục 6).
+const accounts = (process.env.META_AD_ACCOUNT_IDS ?? "").split(",").map((s) => s.trim()).filter(Boolean);
+if (accounts.length === 0) throw new AdsError("META_CREDENTIALS_MISSING", "Chưa khai META_AD_ACCOUNT_IDS.");
+for (const acct of accounts) {
+  try { await syncOneAccount(acct, { since, until }); }
+  catch (e) { failedAccounts.push(acct); }        // đếm + báo, KHÔNG ném ra ngoài
+}
+```
+
+⚠️ **Ba việc kéo theo, đừng bỏ sót:**
+
+1. **`accountId` phải nằm trên mỗi dòng snapshot** (§D.6.3 đã có cột) — thiếu nó thì hai account cùng đặt tên campaign trùng nhau sẽ **lẫn vào nhau** khi resolver gộp.
+2. **Khoá `DISTINCT ON` phải kèm `accountId`** — nếu không, hai account có cùng `campaignId` (Meta cấp id riêng theo account nên hiếm, nhưng khoá vẫn phải đúng về nguyên tắc) sẽ **triệt tiêu nhau** lúc đọc.
+3. **Kiểm `currency` + `timezone_name` cho TỪNG account**, không kiểm một cái rồi suy ra cả danh sách — QĐ `B10` (VND + GMT+7) là câu trả lời cho tài khoản **đang dùng**, không phải bảo chứng cho tài khoản thứ hai/thứ ba.
+
+🔴 **CHƯA CODE ĐƯỢC khâu gọi Meta — chưa có danh sách id thật.** Việc **làm được ngay**: đổi hình dạng cấu hình + viết vòng lặp + test bằng fixture 2 account. Việc **không** làm được: gọi thật, vì không có `act_…` nào để gọi. Người gỡ: Marketing mở Meta Ads Manager chép ra danh sách tài khoản đang tiêu tiền. **Đừng ghi mục này là "đã đủ thông tin".**
 
 **7. Gọi Meta — token qua header.**
 
@@ -2106,7 +2226,7 @@ if (total !== 10_000) {
 | B3 | Sửa mapping làm số tháng trước đổi | Đã xử bằng `effectiveFrom/To`. UI phải nói rõ: *"áp dụng từ ngày …"* — mặc định là **hôm nay**, không phải đầu tháng |
 | B4 | Đổi tên campaign trên Meta sau khi đã gán | Mapping neo theo `entityId` (ID Meta), **không** theo tên ⇒ đổi tên không ảnh hưởng. `entityName` chỉ để hiển thị |
 | B5 | Xoá dòng mapping của campaign đã có chi tiêu lịch sử | **Không xoá** — đặt `effectiveTo = hôm qua`. Xoá làm lịch sử rơi về `CHƯA PHÂN BỔ` |
-| B6 | Quyền | `AdsCampaignMapping` là dữ liệu theo đơn vị ⇒ mang `centerId` + `orgUnitId`, khai `SCOPED_MODELS` + `BACKFILL_SPECS`. Nhưng **ghi** chỉ Marketing HO / SUPER_ADMIN (`canEditAds`, `lib/crm/ads-insights.ts:44-49`) — vì gán một campaign cho CS1 là **lấy tiền khỏi** CS2 |
+| B6 | Quyền | ✅ **CHỐT 27/08/2026 (OQ-D5): giữ nguyên, chỉ HO.** `AdsCampaignMapping` là dữ liệu theo đơn vị ⇒ mang `centerId` + `orgUnitId`, khai `SCOPED_MODELS` + `BACKFILL_SPECS`. Nhưng **ghi** chỉ Marketing HO / SUPER_ADMIN (`canEditAds`, `lib/crm/ads-insights.ts:44-49`) — vì gán một campaign cho CS1 là **lấy tiền khỏi** CS2. ⇒ **không** khai key quyền mới cho D-07, **không** nới `canEditAds`; màn D-07 gọi thẳng hàm đó. Vai `MARKETING` cấp cơ sở thấy nút gán thì phải thấy nó **vô hiệu kèm lời giải thích**, không phải bấm rồi mới báo lỗi |
 
 ### D.6.7 Bảng chỉ tiêu ngân sách `AdsBudgetTarget` (D-02)
 
@@ -2256,8 +2376,8 @@ export async function getAdsSpendByCenter(actor: Actor, f: ScopeFilters): Promis
 
 **Giả định.**
 
-- Một tài khoản quảng cáo (`META_AD_ACCOUNT_ID`, `lib/crm/ads-insights.ts:85`). Nhiều tài khoản thì `accountId` đã có sẵn cột, nhưng job phải lặp qua danh sách — chưa làm ở v1.
-- Meta trả `spend` theo **VND**. Nếu tài khoản đặt USD thì mọi con số sai 25.000 lần. Kiểm `currency` của ad account **một lần** khi bật và **chặn job** nếu khác `VND` — thà không có số còn hơn có số sai 25.000 lần.
+- ~~Một tài khoản quảng cáo (`META_AD_ACCOUNT_ID`, `lib/crm/ads-insights.ts:85`)… chưa làm ở v1.~~ ✅ **[SỬA 27/08/2026 — OQ-D3] NHIỀU tài khoản quảng cáo, và điều đó nằm TRONG v1.** `accountId` đã có sẵn cột (§D.6.3); job **phải lặp** qua danh sách (§D.6.2 mục **6b**), khoá `DISTINCT ON` phải kèm `accountId`. ⚠️ **Chưa có danh sách id thật** ⇒ khâu gọi Meta **chưa code được**, chỉ code được hình dạng cấu hình + vòng lặp + test fixture.
+- Meta trả `spend` theo **VND**. Nếu tài khoản đặt USD thì mọi con số sai 25.000 lần. Kiểm `currency` của ad account **một lần** khi bật và **chặn job** nếu khác `VND` — thà không có số còn hơn có số sai 25.000 lần. 🔴 **Với nhiều tài khoản: kiểm TỪNG cái.** QĐ `B10` xác nhận VND + GMT+7 cho tài khoản **đang dùng**, không phải cho mọi tài khoản trong danh sách sắp khai.
 
 **Bẫy.**
 
@@ -2333,7 +2453,7 @@ export function computeCostPerUnit(spend: number, units: number): number | null 
 | # | Bẫy | Xử lý |
 |---|---|---|
 | B1 | 🔴 **`computeCpl` hiện tại trả 0 khi mẫu số = 0** — `lib/crm/marketing-metrics.ts:21` `ratio = (n, d) => d > 0 ? n / d : 0`. "CPL = 0đ" đọc như *quảng cáo miễn phí*, trong khi sự thật là *không có lead* | Hàm mới trả `null`; UI hiện `—`. **Không** tái dùng `computeCpl`/`computeCpa` cũ |
-| B2 | 🔴 Mẫu số hiện tại là `qualifiedAt IS NOT NULL` (`funnel-query.ts:13`) — trường **gần như rỗng** (§C.2.4) | D2 dùng **C1**. Ghi vào tài liệu rằng con số này **khác** CPL trên `/admin/marketing/funnel` |
+| B2 | 🔴 Mẫu số hiện tại là `qualifiedAt IS NOT NULL` (`funnel-query.ts:97`) — trường **gần như rỗng** (§C.2.4) | D2 dùng **C1**. Ghi vào tài liệu rằng con số này **khác** CPL trên `/admin/marketing/funnel` |
 | B3 | Chi phí `CHƯA PHÂN BỔ` có vào CPL không? | **Không** vào CPL của cơ sở nào. Hiện thêm một dòng "CPL toàn hệ thống (gồm cả chưa phân bổ)" để người đọc thấy khoảng cách |
 | B4 | Lệch trục ngày giữa hai vế | Ghi trong tooltip. **Không** tự quy đổi múi giờ ad account |
 
@@ -2431,13 +2551,13 @@ HAVING sum(spend) > 0;
 |---|---|---|---|---|
 | ~~**OQ-D1**~~ | ~~`SR.QD.232` đã ban hành cho team Marketing chưa? Ngày áp dụng?~~ | ✅ **ĐÃ CHỐT 24/08/2026 (B9): đã ban hành, ngày áp dụng 23/08/2026.** ⇒ D-01 chỉ cưỡng chế quy ước đặt tên từ 23/08/2026; campaign/ad chạy **trước** mốc đó rơi vào `CHƯA PHÂN BỔ` và sửa bằng gán tay (D-07) — đã biết trước, không phải lỗi. | — | Đóng |
 | ~~**OQ-D2**~~ | ~~Ad account Meta đặt **tiền tệ** gì và **múi giờ** gì?~~ | ✅ **ĐÃ CHỐT 24/08/2026 (B10): VND + GMT+7 (Asia/Ho_Chi_Minh).** ⇒ **không** cần lớp quy đổi tiền tệ; `statDate` khớp trục ngày của B5. Vẫn giữ bước đọc `account_currency` + `timezone_name` trong lần chạy job đầu tiên để xác nhận bằng dữ liệu trả về. | — | Đóng |
-| **OQ-D3** | Có bao nhiêu ad account? Một hay nhiều? | `syncMetaAds` hiện đọc **một** `META_AD_ACCOUNT_ID` (`ads-insights.ts:85`). Nhiều tài khoản thì job phải lặp | Marketing | Trước khi code job |
-| **OQ-D4** | 🔴 Token Meta là loại gì (Page / System User / long-lived User) và hết hạn bao lâu? | Quyết định có cần `meta-token-refresh` không, và refresh kiểu gì. **Không** có cơ chế nào hôm nay (`vercel.json` chỉ có `zalo-token-refresh` `:40-43`) ⇒ token hết hạn là job chết im | Dev + Marketing | Trước khi bật job |
-| **OQ-D5** | Vai `MARKETING` cấp cơ sở có được sửa mapping D-07 không? | `canEditAds` (`lib/crm/ads-insights.ts:44-49`) hiện chỉ `isSuperAdmin` **hoặc** `HO_MARKETING`. Gán campaign cho CS1 là **lấy tiền khỏi** CS2 ⇒ PRD nghiêng về **giữ nguyên** (chỉ HO) | Chủ dự án | Trước khi code D-07 |
+| 🟠 ~~**OQ-D3**~~ | ~~Có bao nhiêu ad account? Một hay nhiều?~~ | ✅ **ĐÃ CHỐT 27/08/2026: NHIỀU** (không phải một). ⇒ (1) job D-01 **phải LẶP qua danh sách** — §D.6.2 mục **6b**; (2) `META_AD_ACCOUNT_ID` (`lib/crm/ads-insights.ts:85`) **đổi thành DANH SÁCH** `META_AD_ACCOUNT_IDS`; (3) `accountId` phải có trên mỗi dòng snapshot và **nằm trong khoá `DISTINCT ON`**; (4) kiểm `currency`/`timezone_name` **cho từng tài khoản**, không suy từ QĐ `B10`. ⚠️ **CÒN NỬA CÂU — CHƯA CÓ DANH SÁCH ID CỤ THỂ** ⇒ **CHƯA CODE ĐƯỢC** khâu gọi Meta; chỉ code được hình dạng cấu hình + vòng lặp + test fixture 2 account. **Đừng ghi mục này là "đã đủ thông tin".** Người gỡ: Marketing mở Meta Ads Manager chép danh sách `act_…` đang tiêu tiền. | Marketing | 🟠 **Nửa sau còn treo** — trước khi bật job |
+| **OQ-D4** | 🔴 Token Meta là loại gì (Page / System User / long-lived User) và hết hạn bao lâu? | ⏳ **VẪN CHƯA TRẢ LỜI (tính đến 27/08/2026)** — chủ dự án **xin hướng dẫn cách lấy token lại**, nên câu này **đang chờ**, không phải đã chốt ngầm. Nội dung chưa đổi: quyết định có cần `meta-token-refresh` không, và refresh kiểu gì; **không** có cơ chế nào hôm nay (`vercel.json` chỉ có `zalo-token-refresh` `:40-43`) ⇒ token hết hạn là **job chết im**. 📌 Các bước hướng dẫn đã soạn sẵn ở `docs/plan/ket-va-cach-go.md` **K-12** (khuyến nghị mạnh: **System User token** — không gắn với một người, hạn dài hơn). | Dev + Marketing | 🔴 **Treo** — trước khi bật job |
+| ~~**OQ-D5**~~ | ~~Vai `MARKETING` cấp cơ sở có được sửa mapping D-07 không?~~ | ✅ **ĐÃ CHỐT 27/08/2026: KHÔNG — chỉ HO.** `canEditAds` (`lib/crm/ads-insights.ts:44-49`) **giữ nguyên** (`isSuperAdmin` hoặc `HO_MARKETING`), **không nới**, **không đẻ key quyền mới** cho D-07. Lý do chủ dự án ghi thẳng: **gán campaign cho CS1 là LẤY TIỀN KHỎI CS2**. Hệ quả UI: vai `MARKETING` cấp cơ sở vẫn **xem** được D1/D2/D3 trong phạm vi của mình (qua `scopedDb`), nhưng nút gán ở D-07 phải **vô hiệu kèm lời giải thích** — không để bấm rồi mới báo lỗi. | — | Đóng |
 | ⚙️ ~~**OQ-D6**~~ | ~~Đơn vị chi tiết nhất là campaign hay ad set?~~ | ✅ **CHỐT KỸ THUẬT 24/08/2026 (Dev): `level=adset`.** Chi tiết hơn thì gộp lên campaign lúc đọc luôn được; ngược lại phải **gọi lại toàn bộ lịch sử**. Lưu `campaignId` **và** `adsetId` trên cùng dòng để gộp không cần join. | — | Đóng |
-| **OQ-D7** | Có cần "chốt sổ" chi phí quảng cáo theo tháng không? | Nếu có, sửa mapping sau khi chốt **không** được đổi số quá khứ ⇒ cần bảng `AdsSpendLocked` (§D.6.1). Additive, làm sau được | Kế toán | Trước khi B đóng sổ |
-| **OQ-D8** | Chi phí marketing **ngoài Meta** (tờ rơi, sự kiện, KOL) đi đường nào? | PRD đề xuất: đi qua **bảng chi phí của B** (§B.6.2), **không** nhét vào bảng ads — nếu không B3 trừ hai lần | Chủ dự án | Trước khi code B2 |
-| **OQ-D9** | `/admin/marketing/funnel` cũ: sửa hay bỏ? | Non-Goal 5 chọn **không sửa, treo banner**. Nhưng để lâu thì có hai trang nói hai số | Chủ dự án | Sau khi tab D chạy |
+| ~~**OQ-D7**~~ | ~~Có cần "chốt sổ" chi phí quảng cáo theo tháng không?~~ | ✅ **ĐÃ CHỐT 27/08/2026: CÓ** — chốt số chi phí quảng cáo theo tháng. **Trùng `OQ-B8`** (đã chốt 26/08) ⇒ **một cơ chế khoá kỳ dùng chung cho cả B và D**, không dựng cái thứ hai cho ads. Cần bảng `AdsSpendLocked(period, centerId, amount, lockedAt)` (§D.6.1) — **additive**, không phá thiết kế "ghi thô + phân bổ lúc đọc". 🔴 **Luật cứng đi kèm: sửa mapping sau khi chốt KHÔNG được đổi số quá khứ** — kỳ đã khoá thì resolver đọc từ `AdsSpendLocked`, **không** tính lại từ snapshot × mapping; và **job D-01 phải tôn trọng kỳ khoá**, nếu không số quá khứ vẫn bị ghi đè sau khi chốt. 📌 Key quyền **khoá/mở kỳ** vẫn chưa chốt (ghi ở OQ-B8) — **đừng** mặc định gộp vào `costs:approve`. | — | Đóng |
+| ~~**OQ-D8**~~ | ~~Chi phí marketing **ngoài Meta** (tờ rơi, sự kiện, KOL) đi đường nào?~~ | ✅ **ĐÃ CHỐT 27/08/2026: đi qua BẢNG CHI PHÍ CỦA B** (`CostEntry`, §B.6.2) — đúng đề xuất. **KHÔNG** nhét vào bảng ads: nhét là **lợi nhuận TRỪ HAI LẦN** (B2 cộng cả `CostEntry` lẫn D1). Nhóm đón sẵn đã có: **`MARKETING_OFFLINE`** trong sáu nhóm của `OQ-B4` (chốt 26/08) ⇒ câu này **không sinh schema mới**. 🔴 Mặt gương của bẫy trừ-hai-lần: nhóm **`ADS`** của `CostEntry` chỉ dành cho quảng cáo **không** đi qua job D-01 — phải ghi thẳng trên template `mau-chi-phi-v2.xlsx` và trên màn nhập (B.8 bước **B.11**). Hai câu này là hai nửa của cùng một cái bẫy. | — | Đóng |
+| ~~**OQ-D9**~~ | ~~`/admin/marketing/funnel` cũ: sửa hay bỏ?~~ | ✅ **ĐÃ CHỐT 27/08/2026: KHÔNG SỬA · TREO BANNER · BỎ HẲN sau khi tab D chạy ổn.** Non-Goal 5 giữ nguyên **và có thêm đích kết thúc** — trả lời đúng nỗi lo "để lâu thì hai trang nói hai số": nó **không** để lâu. ⇒ `D-00-2` (banner) đổi tư cách: từ *cảnh báo tạm* thành **bước 1 của việc khai tử trang**. **Hệ quả sang C:** công thức `crL2L3` (`lib/crm/marketing-metrics.ts:30`) **không** nằm trong 5 màn phải sửa của **OQ-C9** — nó chết cùng trang, không sửa riêng (§C.6.13 mục 2). ⚠️ **"Chạy ổn" chưa có tiêu chí** — chốt khi tab D lên: đề nghị *"D1 có số ≥ 30 ngày liên tục và `CHƯA PHÂN BỔ` < 5 %"*, để việc bỏ trang không phụ thuộc cảm tính. | — | Đóng (mốc bỏ trang: sau tab D) |
 
 ---
 
@@ -2445,17 +2565,19 @@ HAVING sum(spend) > 0;
 
 | Bước | Nội dung | Phụ thuộc | Ghi chú |
 |---|---|---|---|
-| **D.0** | ✅ OQ-D1, OQ-D2, **OQ-D6** **đã chốt 24/08** (ban hành 23/08 · VND + GMT+7 · `level=adset` — xem D.7 dòng OQ-D6) · 🔴 còn **OQ-D4** (loại token Meta + hạn) | — | OQ-D4 quyết định có cần cron `meta-token-refresh`; token hết hạn = job chết im |
+| **D.0** | ✅ OQ-D1, OQ-D2, **OQ-D6** chốt 24/08 · ✅ **OQ-D3, OQ-D5, OQ-D7, OQ-D8, OQ-D9 chốt 27/08 (QĐ-3)** · 🔴 còn **OQ-D4** (loại token Meta + hạn) · 🟠 còn **nửa sau OQ-D3** (danh sách ad account id) | — | **Hai thứ còn thiếu, hai loại khác nhau.** **OQ-D4** = quyết định chưa có (chủ dự án đang xin hướng dẫn lấy token) ⇒ chặn **D.5**. **Nửa sau OQ-D3** = dữ liệu chưa có (danh sách `act_…`) ⇒ chặn khâu **gọi Meta thật**, **không** chặn D.2/D.3/D.4 (parser, schema, vòng lặp, test fixture vẫn làm được) |
 | **D.1** | Ban hành `SR.QD.232` cho Marketing, có ngày áp dụng | D.0 | **Việc ngoài code.** Spec `:216` |
 | **D.2** | Test đỏ trước: parser 18 ca (§D.6.5) · thứ tự ưu tiên D-07 · `DISTINCT ON` không cộng trùng · bất biến tổng khi chia tỷ lệ | D.0 | Luật cứng Nền Hệ thống #5 |
 | **D.3** | Migration additive: `AdsSpendSnapshot` + `AdsCampaignMapping` + `AdsBudgetTarget` + 2 enum. Khai `SCOPE_EXEMPT` / `SCOPED_MODELS` / `BACKFILL_SPECS` cùng lúc | D.2 | **Additive toàn bộ.** KHÔNG đụng `AdsInsightDaily` / `MarketingCostPeriod` |
 | **D.4** | `lib/ads/campaign-code.ts` (parser) + `lib/ads/meta-client.ts` (token qua **header**) | D.2 | 🔴 Vá lỗ hổng token (`ads-insights.ts:93`) ngay ở bước này |
-| **D.5** | Job D-01: `lib/ads/sync.ts` + `app/api/cron/ads-sync/route.ts` + mục thứ 24 trong `vercel.json` | D.3 + D.4 | Kèm cơ chế tự tố cáo (§D.6.2 mục 5) |
+| **D.5** | Job D-01: `lib/ads/sync.ts` (**vòng lặp nhiều ad account** — §D.6.2 mục 6b) + `app/api/cron/ads-sync/route.ts` + mục thứ 24 trong `vercel.json` | D.3 + D.4 · 🔴 **OQ-D4** · 🟠 **danh sách id (OQ-D3)** | Kèm cơ chế tự tố cáo (§D.6.2 mục 5). ⚠️ Vòng lặp + test fixture 2 account làm được **trước** khi có danh sách thật; khâu **gọi Meta** thì không |
 | **D.6** | Màn D-07 (gán mapping, tab "Chưa phân bổ") | D.3 | Ràng buộc tổng tỷ lệ = 100% |
 | **D.7** | `lib/reports/ads-spend.ts` (resolver) + D1 | D.5 + D.6 | Cửa **duy nhất** đọc snapshot |
 | **D.8** | D-02/D-03 (chỉ tiêu + % thực tế/chỉ tiêu) · D2 (CPL) · D3 (CPA) | D.7 + **C.7** | 🔴 CPL/CPA **không** chạy trước khi C1/C3 chốt |
-| **D.9** | D-08 cảnh báo chưa phân bổ + banner trên `/admin/marketing/funnel` (D-00-2) | D.7 | Banner là một dòng JSX — làm sớm được |
+| **D.9** | D-08 cảnh báo chưa phân bổ + banner trên `/admin/marketing/funnel` (D-00-2) | D.7 | Banner là một dòng JSX — làm sớm được. **[27/08 — OQ-D9]** Banner nay là **bước 1 của việc khai tử trang**, không phải cảnh báo sống mãi |
 | **D.10** | Cập nhật `documentation/` + liệt kê file đổi, rồi **DỪNG** | D.3–D.9 | Luật cứng Nền Hệ thống #10 |
+| **D.11** | 🔴 **MỚI 27/08 (OQ-D7)** — `AdsSpendLocked` + cổng "kỳ đã khoá chưa" cho resolver **và** job D-01 | D.7 · **B.8 (cơ chế khoá kỳ của OQ-B8)** | **Additive, làm sau được** — nhưng **dùng chung** cơ chế khoá kỳ với B, không dựng cái thứ hai. Kỳ đã khoá ⇒ đọc từ `AdsSpendLocked`, **không** tính lại từ snapshot × mapping |
+| **D.12** | 🟡 **MỚI 27/08 (OQ-D9)** — **bỏ hẳn** `/admin/marketing/funnel` sau khi tab D chạy ổn | D.8 + D.9 | Tiêu chí "chạy ổn" **chưa chốt** — đề nghị *D1 có số ≥ 30 ngày liên tục và `CHƯA PHÂN BỔ` < 5 %*. Bỏ trang này cũng là chỗ công thức `crL2L3` biến mất (§C.6.13 mục 2) |
 
 **Ràng buộc môi trường.**
 
@@ -2801,7 +2923,7 @@ Khi actor là SUPER_ADMIN / HO-level (`scope === "ALL"`), hàm lấy **chỉ** d
 |---|---|---|
 | **B-03-6** | Chi phí phân bổ theo tỷ lệ cho nhiều cơ sở. | Dùng lại `allocateByWeight` (`lib/finance/allocate.ts`, dùng ở `lib/finance/payment.ts:213`) — đừng viết phép chia thứ ba (`AdsCampaignMapping` là thứ hai). |
 | **B-02-5** | Doanh thu tách theo **khoá học / sản phẩm**. | Cần đi qua `Order.items` (`OrderItem`) — chưa nối vào `Payment`. |
-| **B-06-1** | Đóng sổ theo tháng (khoá không cho sửa). | Trùng OQ-D7. Additive. |
+| **B-06-1** | Đóng sổ theo tháng (khoá không cho sửa). | ✅ **Chốt CÓ**: OQ-B8 (26/08) + OQ-D7 (27/08) — **một cơ chế khoá kỳ dùng chung cho B và D**. Additive. |
 
 ---
 

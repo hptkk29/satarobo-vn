@@ -125,10 +125,68 @@ Nguồn: `docs/plan/cau-hoi-can-quyet.md` §"Quyết định của chủ dự á
    tự up ảnh thay GV là ảnh `APPROVED` ngay, không qua bước duyệt nào (`actions.ts:337, :345`). Vì vậy
    báo cáo **BẮT BUỘC tách nhãn "tự duyệt" khỏi "đã duyệt"** — không tách thì con số SLA **tự khen**, và
    càng bị đo thì đường tắt càng được dùng. Đây là điều kiện đi kèm của quyết định, không phải gợi ý.
-3. ⏳ **Trần thời lượng video (`OQ-F4` của PRD) VẪN TREO** và 26/08 còn khó hơn: yêu cầu "video thuyết
-   trình" (12 video × 10–15 phút mỗi buổi 12/24/36/48) ⇒ **3 tiếng** video mỗi buổi trong khi Story 14
-   bắt xem hết, **~2,7 GB** mỗi buổi, và nén WebCodecs một video 15 phút trên laptop cũ mất hàng chục
-   phút. Chi tiết + ba hướng xử: `docs/prd/F-media.md` §0b.2. **Chưa chọn hướng nào ⇒ chưa bật video.**
+3. ~~⏳ **Trần thời lượng video (`OQ-F4` của PRD) VẪN TREO**~~ — ✅ **ĐÃ CHỐT 27/08/2026: HƯỚNG (a)** (xem §0c).
+   Yêu cầu "video thuyết trình" (12 video × 10–15 phút mỗi buổi 12/24/36/48) ⇒ **3 tiếng** video mỗi buổi
+   trong khi Story 14 bắt xem hết, **~2,7 GB** mỗi buổi, và nén WebCodecs một video 15 phút trên laptop cũ
+   mất hàng chục phút — **ba con số đó là LÝ DO chọn hướng (a)**, tách riêng loại "video thuyết trình":
+   không áp F-18, duyệt theo lô/xác suất, đường upload khác. Chi tiết `docs/prd/F-media.md` §0c.1.
+   ⏳ **Vẫn chưa bật video**, nhưng nay vì thiếu **hai tham số** (`OQ-F4a` trần thời lượng video *thường* ·
+   `OQ-F4b` "duyệt theo lô" là thao tác gì), không phải vì bí đường.
+
+---
+
+## 0c. Quyết định chủ dự án — 27/08/2026 (đợt 3, THẮNG cả §0b)
+
+Nguồn: trả lời của chủ dự án ngày **27/08/2026** cho 19 câu còn lại của bộ PRD.
+⚠️ Mã dưới đây là mã **CỦA FILE NÀY** (backlog) trừ chỗ ghi rõ "của PRD" — xem bảng ánh xạ ở §Open Questions.
+
+| Mã (backlog) | Quyết định | Story phải sửa |
+|---|---|---|
+| ~~**OQ-F7**~~ | ✅ **Đợt 1 ra mắt CHỈ ẢNH**, video ở đợt 2. **Nguyên văn nói thêm: *"nhưng cũng rất cần video sớm"*** | **Story 9** (video vào kho) và **Story 5** (nén) xuống đợt 2 — nhưng đợt 2 phải **SÁT** đợt 1. Câu chữ thông báo cho GV phải nói rõ "đợt 1 chưa có video", không để GV tưởng mất tính năng. 🔴 Xem điều 1 dưới — làm nhanh video là **HAI** phần việc khác nhau |
+| ~~**OQ-F8**~~ | ✅ **Người ký lệnh xoá theo retention: *Kiệt HOẶC Phúc* — `OQ-F8a` = MỘT TRONG HAI. Kiệt đã ký** | **Story 18** pha 2 mở khoá được, bước duyệt là **MỘT chữ ký** (bỏ mặc định tạm "cả hai"). ⚠️ Vẫn **chỉ chạy khi có chữ ký cho CHÍNH lần chạy đó** |
+| ~~**OQ-F9**~~ | ✅ **100% phụ huynh đã ký · `OQ-F9a` = văn bản KHÔNG có điều khoản rút lại** | Gỡ ẩn số quy mô cho **Story 1** và **Story 18**. 🔴 **Câu đóng nhưng rủi ro KHÔNG đóng**: thiếu điều khoản rút lại là lỗ hổng **của văn bản** ⇒ **B3 + B4 vẫn ĐỎ**, việc của **pháp chế** |
+| *(PRD)* ~~**OQ-F4**~~ | ✅ **HƯỚNG (a): tách riêng loại "video thuyết trình"** — không áp F-18 (xem hết) · duyệt **theo lô/xác suất** · **đường upload khác**, không nén client-side | **Story 14** (xem hết video) có **ngoại lệ**; **Story 17** (SLA) **cấm trộn** hai loại; `kind` của SL-04 phải khai **BA** loại. ⏳ Còn `OQ-F4a` + `OQ-F4b` của PRD. Chi tiết: `docs/prd/F-media.md` §0c.1 |
+
+**Ba điều phải nói thẳng, không được để chìm trong bảng:**
+
+1. 🔴 **OQ-F7 — "chỉ ảnh đợt 1" và "rất cần video sớm" là hai lực kéo ngược nhau, phải xử bằng lịch chứ
+   không bằng lời hứa.** Đợt 2 **phải sát đợt 1**, nếu không thì "đợt 2" thành "quý sau" — đúng cái bẫy
+   E5 đã ghi. Và phải nói rõ với người xếp lịch: **làm nhanh video là HAI phần việc khác nhau, đừng gộp
+   thành một dòng backlog**:
+   - **(i) video thường** — nén **client-side WebCodecs** (`OQ-F1`, §0b) + tầng validate 2 mức ở server.
+     Chặn bởi **Bước 0 = đo với 5–7 GV thật**, và bởi `OQ-F4a` (trần thời lượng) của PRD.
+   - **(ii) video thuyết trình** — **KHÔNG** nén client-side, **đường upload khác chưa có tên**, duyệt
+     theo lô/xác suất. Chặn bởi `OQ-F4b` của PRD.
+     ⇒ Ước lượng Story 5/9 theo **một** đường là ước lượng sai. Xong (i) **không** có nghĩa là buổi
+     12/24/36/48 dùng được.
+2. 🔴 **OQ-F8 — có tên người ký không có nghĩa là pha 2 chạy được.** Story 18 pha 2 **chỉ được chạy khi
+   có chữ ký thật** cho lần chạy đó (luật cứng #4: người vận hành chạy tay, dry-run trước). Có tên mà
+   không có chữ ký thì pha 1 vẫn là báo cáo không ai đọc — đúng nỗi lo ban đầu của câu hỏi.
+   ✅ **`OQ-F8a` chốt chiều 27/08/2026: MỘT TRONG HAI — và Kiệt đã ký.** Bước duyệt của pha 2 là **một**
+   chữ ký, không phải hai ⇒ **bỏ** mặc định tạm "cả hai" đặt buổi sáng cùng ngày. Một người vắng thì
+   người kia ký được — đó chính là thứ "một trong hai" mua được. 🔴 **Nhưng chữ ký hôm nay KHÔNG phải
+   giấy phép cho mọi lần chạy về sau:** mỗi lần chạy pha 2 vẫn phải gắn với báo cáo dry-run của **chính
+   lần đó**. Bản ghi trách nhiệm lưu **ai** ký cho **lần chạy nào**; không có ô "đã duyệt sẵn".
+3. 🔴 **OQ-F9 — đóng cả hai nửa 27/08, nhưng rủi ro pháp lý KHÔNG đóng theo.** Hai việc phải làm,
+   cả hai đều kiểm được:
+   - **(a) Đối chiếu giấy với DB.** 100% là con số **trên giấy**; thứ chặn/mở việc gắn thẻ là dòng
+     `StudentConsent` type `CLASS_MEDIA` status `GRANTED` **trong DB** (`lib/lms/media-consent.ts:132`
+     — C6.3 chỉ tag được HS đã GRANTED). Hai con số này **không tự khớp nhau**. Lệch về phía DB thiếu ⇒
+     GV bị chặn tag dù PH đã ký; lệch về phía DB thừa ⇒ đang phát ảnh dựa trên một dòng dữ liệu không
+     có giấy đỡ. Đếm một lần, trước Story 1.
+   - **(b) ✅ `OQ-F9a` có câu trả lời chiều 27/08 — và câu trả lời là: văn bản KHÔNG có điều khoản rút
+     lại.** Đây là ca hiếm mà **có câu trả lời làm rủi ro rõ hơn chứ không nhỏ đi**, nên đừng chuyển ô
+     nào sang xanh vì nó hết dấu ⏳.
+     Trong **mã**, đường rút đã có và đã chạy: `revokeMediaConsent` (`lib/lms/media-consent.ts:83`) và
+     C6.4 làm media của em đó **ẩn ngay** khỏi portal (`:144-151`). Nghĩa là hệ thống đang **cho phụ
+     huynh nhiều hơn** những gì giấy tờ hứa. **Giữ nguyên đường đó** — đừng gỡ code để "khớp văn bản";
+     hướng sửa đúng là sửa văn bản, không phải thu hẹp phần mềm.
+     Hai chỗ hở còn nguyên, cả hai đều **ngoài tầm code**: **(1)** ẩn khỏi portal **KHÁC** thu hồi ảnh
+     đã phát tán — ảnh PH khác đã tải về máy, đã chuyển tiếp thì không đường mã nào lấy lại được;
+     **(2)** nếu quy định về dữ liệu cá nhân của trẻ đòi consent **phải rút được** bất kể giấy viết gì,
+     thì **thiếu điều khoản chính là lỗ hổng**, không phải sự im lặng vô hại. Văn bản phải nói rõ phạm
+     vi rút lại **có giới hạn** (B4 của Go/No-Go) và phải có người nhận yêu cầu rút (B3, B7).
+     ⇒ **B3 và B4 vẫn ĐỎ**, và việc thuộc **pháp chế**, không thuộc Dev.
 
 ---
 
@@ -255,8 +313,13 @@ có** `ffmpeg`/`ffprobe`/`mediainfo` (chính phần *Why* trên đã khai `sharp
 một **phụ thuộc MỚI chưa ai chọn**, chi phí hạ tầng **≠ 0**, phải chọn và nói tên **trước Bước 1**.
 
 **Ngưỡng**: độ phân giải trần **1280×720** · bitrate **~2 Mbps (~15 MB/phút)** · dung lượng trần **suy
-ra** từ hai số đó + biên **20%** (cố ý không đặt con số rời thứ ba). **Thời lượng tối đa: ⏳ CHƯA CHỐT** —
-`OQ-F4` của PRD, xem `docs/prd/F-media.md` §0b.2.
+ra** từ hai số đó + biên **20%** (cố ý không đặt con số rời thứ ba). **Thời lượng tối đa: ⏳ VẪN CHƯA CÓ SỐ** —
+`OQ-F4a` của PRD (nửa câu tách ra 27/08/2026), xem `docs/prd/F-media.md` §0c.1.
+
+🔴 **27/08/2026 — story này CHỈ CÒN ÁP CHO VIDEO THƯỜNG.** `OQ-F4` của PRD chốt **hướng (a)**: **video
+thuyết trình** (buổi 12/24/36/48 — 12 video × 10–15 phút) **KHÔNG** đi đường nén client-side này, mà đi
+**đường upload khác chưa có tên**. Hệ quả cho ước lượng: Story 5 xong **không** nghĩa là buổi thuyết
+trình dùng được — đó là **phần việc thứ hai**, chặn bởi `OQ-F4b`. Xem §0c điều 1.
 
 **Thứ tự thi công:**
 
@@ -456,8 +519,10 @@ Priority: **P0** | Effort: **L** | Dependencies: Story 4, Story 12
 - [ ] **Biên/lỗi**: đóng tab giữa chừng → tiến độ đã phát được giữ, không mất về 0 (ghi định kỳ, không chỉ ghi lúc kết thúc).
 - [ ] **Biên/lỗi**: video không phát được (codec lạ / transcode `FAILED`) → hiện lý do cụ thể + đường xử lý (báo GV up lại), và **không** khoá vĩnh viễn nút "Duyệt tất cả" của cả folder.
 - [ ] **Biên/lỗi**: folder không có video nào → điều kiện F-18 coi như thoả, nút bật bình thường.
+- [ ] 🔴 **BẮT BUỘC (`OQ-F4` của PRD chốt 27/08/2026 — hướng (a))**: **video thuyết trình KHÔNG áp F-18.** Mệnh đề "mọi video đã phát hết" **không tính** loại này, và mẫu số `m` của header "Đã xem n/m video" **phải trừ** chúng ra — không trừ thì buổi thuyết trình hiện `0/12` vĩnh viễn. Ngoại lệ đọc từ `kind` (SL-04 phải khai **BA** loại), **không** suy bằng tay ở từng màn. Test riêng: folder gồm 2 video thường + 12 video thuyết trình → xem hết **2** cái là nút bật, header hiện `2/2`.
+- [ ] ⏳ **Nhánh video thuyết trình CHƯA hiện thực được**: "duyệt theo lô hoặc theo xác suất" chưa có đặc tả thao tác (`OQ-F4b` của PRD). Không tự chọn thay — cái tự chọn đó **chính là mức kiểm soát còn lại** sau khi đã bỏ F-18.
 
-Priority: **P0** | Effort: **L** | Dependencies: Story 6, Story 12, Story 13
+Priority: **P0** | Effort: **L** | Dependencies: Story 6, Story 12, Story 13, ⏳ **OQ-F4b** *(nhánh thuyết trình)*
 
 ---
 
@@ -517,6 +582,7 @@ Priority: **P0** | Effort: **M** | Dependencies: Story 7
 - [ ] `approvedAt` của `ClassSessionMedia` **không** được dùng làm "thời điểm duyệt" (trường đó ghi cả cho `REJECTED` — `actions.ts:410-414`); dùng `ClassMediaReviewDay.reviewedAt`.
 - [ ] 🔴 **BẮT BUỘC (`OQ-F6` chốt 26/08/2026 — GIỮ NGUYÊN tự-duyệt)**: lớp mà người **có quyền duyệt tự upload** (ảnh vào thẳng `APPROVED` — `actions.ts:337, :345`) phải mang **nhãn phụ "tự duyệt" TÁCH KHỎI "Đã duyệt"**, và báo cáo phải đếm hai nhóm **riêng**. Vì quyết định là giữ đường tắt, SLA F-30 có **đường tắt hợp lệ** (tự up ảnh thay GV); không tách nhãn thì con số **tự khen** và càng bị đo thì đường tắt càng được dùng. Đây là **điều kiện đi kèm của quyết định**, không phải đề xuất.
 - [ ] Tỷ lệ "tự duyệt / tổng folder đã đóng" hiện được trên báo cáo, để theo dõi được xu hướng (T13).
+- [ ] 🔴 **BẮT BUỘC (`OQ-F4` của PRD chốt 27/08/2026 — hướng (a))**: **CẤM TRỘN video thuyết trình với phần còn lại trong một con số.** Loại đó đã **cố ý bỏ** bước xem hết (không áp F-18) ⇒ đếm chung là một tỷ lệ "đã duyệt" đẹp được đỡ bằng loại không phải xem — cùng đúng một cơ chế tự khen như đường tắt "tự duyệt" ở dòng trên. Đếm **hai nhóm riêng**. Đây là **điều kiện đi kèm của quyết định** (cột "Cái mất" của hướng (a)), không phải đề xuất.
 - [ ] **Biên/lỗi**: khoảng ngày rỗng → bảng rỗng có thông báo, không lỗi.
 
 Priority: **P1** | Effort: **M** | Dependencies: Story 7, Story 15, Story 16
@@ -539,6 +605,7 @@ Nhánh "không thuộc học bạ nào" **thôi là nhánh treo**, nhưng vẫn 
 
 **Acceptance**:
 - [ ] Chế độ mặc định là **dry-run**; muốn xoá thật phải có tham số tường minh + người vận hành chạy tay (luật cứng Nền Hệ thống #4).
+- [ ] 🔴 **Pha 2 chỉ chạy khi CÓ CHỮ KÝ** của người phụ trách dữ liệu — ✅ **chốt 27/08/2026: `OQ-F8` = Kiệt hoặc Phúc, `OQ-F8a` = MỘT TRONG HAI, Kiệt đã ký.** Bước duyệt là **một** chữ ký (bỏ mặc định tạm "cả hai"). 🔴 **Ô này vẫn CHƯA tick được:** chữ ký phải gắn với **lần chạy cụ thể** — kèm mốc thời gian + số dòng của báo cáo dry-run đã duyệt — chứ không phải một lần ký cho mọi lần chạy về sau. Chữ ký của Kiệt hôm nay xác lập **ai được ký**, không xác lập **lần chạy nào đã được duyệt**.
 - [ ] Báo cáo dry-run liệt kê: số media đủ điều kiện, số bị giữ lại vì học bạ chưa xuất (kèm `reportCardId`), số không thuộc học bạ nào, tổng dung lượng sẽ giải phóng.
 - [ ] Media thuộc học bạ **chưa xuất** → không bao giờ bị xoá; có test riêng.
 - [ ] Media thuộc học bạ `RECALLED` → không bị xoá; có test riêng.
@@ -548,7 +615,7 @@ Nhánh "không thuộc học bạ nào" **thôi là nhánh treo**, nhưng vẫn 
 - [ ] **Biên/lỗi**: job bị ngắt giữa chừng → chạy lại không xoá trùng, không bỏ sót; idempotent theo `mediaId`.
 - [ ] Con số của mỗi lần chạy được **lưu vào DB** (không lặp lại lỗi `console.warn` của `retention.ts:48` — con số hiện không lưu ở đâu).
 
-Priority: **P1** | Effort: **L** | Dependencies: Story 4, Story 8
+Priority: **P1** | Effort: **L** | Dependencies: Story 4, Story 8, ~~OQ-F8~~ *(người ký — đóng 27/08)*
 
 ---
 
@@ -610,7 +677,7 @@ Priority: **P1** | Effort: **L** | Dependencies: Story 4, Story 8
 
 | Story | Vì sao chưa phải must |
 |---|---|
-| **Story 9** — video vào kho | Có thể ra mắt F **chỉ với ảnh** ở đợt 1, video ở đợt 2 (nhưng phải nói rõ với BGĐ, không để tưởng là có) |
+| **Story 9** — video vào kho | ✅ **CHỐT 27/08/2026 (`OQ-F7`): đợt 1 CHỈ ẢNH**, video ở đợt 2 — vẫn phải nói rõ với BGĐ và GV, không để tưởng là có. 🔴 Kèm nguyên văn *"nhưng cũng rất cần video sớm"* ⇒ đợt 2 phải **SÁT** đợt 1; và video là **HAI** phần việc (thường / thuyết trình), đừng ước lượng như một — §0c điều 1 |
 | **Story 17** — báo cáo SLA | Số liệu quản trị; QLCS vẫn duyệt được mà không có bảng này |
 | **Story 18** — retention 12 tháng | Nghĩa vụ có hạn định, không chặn ngày ra mắt — nhưng **không được lùi quá 1 quý** |
 
@@ -706,8 +773,9 @@ prisma/schema.prisma
 > | `OQ-F2/F5/F6/F7/F8/F9` | ân hạn · ảnh bị từ chối · tự duyệt · thứ tự ảnh/video · người ký lệnh xoá · consent | *(PRD không có — chỉ ở đây)* |
 >
 > ⇒ Bốn câu **chỉ có ở file này** (`OQ-F4`, `OQ-F5`, `OQ-F6`, `OQ-F9`) là những câu dễ bị bỏ quên nhất,
-> vì người đọc PRD không thấy chúng. **Ba trong bốn câu đó đã chốt 26/08/2026** (`OQ-F4`, `OQ-F5`,
-> `OQ-F6`); còn lại `OQ-F9` (consent) — xem §0b.
+> vì người đọc PRD không thấy chúng. **Ba câu chốt 26/08/2026** (`OQ-F4`, `OQ-F5`, `OQ-F6`); câu thứ tư
+> `OQ-F9` (consent) chốt **đủ cả hai nửa 27/08/2026** — 100% PH đã ký, và `OQ-F9a`: văn bản **không có**
+> điều khoản rút lại. 🔴 Nửa sau đóng **câu hỏi** chứ không đóng **rủi ro** — B3/B4 vẫn đỏ. Xem §0c.
 
 | # | Câu hỏi | Vì sao chặn | Chủ | Hạn |
 |---|---|---|---|---|
@@ -717,9 +785,11 @@ prisma/schema.prisma
 | ~~**OQ-F4**~~ | ~~Ảnh **không thuộc học bạ nào** áp chính sách lưu trữ nào?~~ | ✅ **ĐÃ CHỐT 26/08/2026: giữ 3 THÁNG rồi áp vòng đời xoá.** Hệ quả: hai mốc `retentionDueAt` — **12 tháng** cho ảnh gắn học bạ, **3 tháng** cho ảnh không gắn. Đóng luôn T14 (kho phình vô hạn). Xoá vẫn đi qua ân hạn 30 ngày của Story 4, và fail-safe *“không xác định được thì GIỮ”* giữ nguyên. | — | Đóng |
 | ~~**OQ-F5**~~ | ~~Ảnh **đã bị QLCS từ chối** có xoá khỏi R2 **ngay** không, hay cũng vào ân hạn?~~ | ✅ **ĐÃ CHỐT 26/08/2026: VÀO ÂN HẠN** (thùng rác ảnh), **không** xoá ngay ⇒ **sửa câu chữ F-15** cho khớp. 🔴 **Đánh đổi đã biết:** ảnh bị từ chối thường là ảnh **có vấn đề** (lộ mặt trẻ chưa có consent) — giữ thêm 30 ngày trên storage là **rủi ro có thật**; đổi lại là có **đường khiếu nại** khi bấm nhầm "X lớn" (T2). Kèm điều kiện: thùng rác chỉ admin/QLCS xem được, purge chạy đúng hạn. | — | Đóng |
 | ~~**OQ-F6**~~ | ~~Người **có quyền duyệt tự upload** thì ảnh vào thẳng `APPROVED`. Giữ nguyên hay bắt qua duyệt?~~ | ✅ **ĐÃ CHỐT 26/08/2026: GIỮ NGUYÊN.** 🔴 **Điều kiện đi kèm, bắt buộc:** SLA F-30 từ đây có **đường tắt hợp lệ** (tự up ảnh thay GV) ⇒ báo cáo **phải tách nhãn "tự duyệt" khỏi "đã duyệt"** và đếm hai nhóm riêng (Story 17). Không tách thì con số SLA **tự khen**, và càng bị đo thì đường tắt càng được dùng. | — | Đóng |
-| **OQ-F7** | Đợt 1 ra mắt **chỉ ảnh** rồi video ở đợt 2, hay chờ đủ cả hai? | Quyết định thứ tự Story 5/9 và câu chữ thông báo cho GV | Chủ dự án | Trước khi bắt đầu Story 11 |
-| **OQ-F8** | Ai là **người phụ trách dữ liệu** ký duyệt lệnh xoá theo retention (Story 18 pha 2)? | Không có người ký thì pha 2 không bao giờ chạy được, và pha 1 thành báo cáo không ai đọc | Chủ dự án | Trước Story 18 |
-| **OQ-F9** | Có văn bản đồng ý sử dụng hình ảnh (`StudentConsent` type `CLASS_MEDIA`) ký với **bao nhiêu %** phụ huynh hiện tại? Có điều khoản về **rút lại** không? | Rút consent không thu hồi được ảnh đã phát tán — cần biết quy mô trước khi mở rộng kho | Chủ dự án + Pháp chế | Trước Story 1 |
+| ~~**OQ-F7**~~ | ~~Đợt 1 ra mắt **chỉ ảnh** rồi video ở đợt 2, hay chờ đủ cả hai?~~ | ✅ **ĐÃ CHỐT 27/08/2026: đợt 1 CHỈ ẢNH**, video ở đợt 2. 🔴 **Kèm nguyên văn: *"nhưng cũng rất cần video sớm"*** ⇒ đợt 2 phải **SÁT** đợt 1, không được trôi thành "quý sau" (bẫy E5). ⚠️ **Làm nhanh video là HAI phần việc khác nhau — đừng gộp thành một dòng backlog:** (i) video **thường** = nén client-side WebCodecs + validate 2 mức, chặn bởi Bước 0 và `OQ-F4a` của PRD; (ii) video **thuyết trình** = **không** nén client-side, **đường upload khác chưa có tên**, chặn bởi `OQ-F4b` của PRD. Xong (i) **không** nghĩa là buổi 12/24/36/48 dùng được. Chi tiết §0c điều 1. | — | Đóng |
+| ~~**OQ-F8**~~ | ~~Ai là **người phụ trách dữ liệu** ký duyệt lệnh xoá theo retention (Story 18 pha 2)?~~ | ✅ **ĐÃ CHỐT 27/08/2026: *Kiệt hoặc Phúc*.** 🔴 **Có tên ≠ pha 2 chạy được:** pha 2 **chỉ chạy khi có CHỮ KÝ thật cho lần chạy đó** (luật cứng #4 — dry-run trước, người vận hành chạy tay). Có tên mà không có chữ ký thì pha 1 vẫn là báo cáo không ai đọc. Chi tiết §0c điều 2. | — | Đóng |
+| ~~**OQ-F8a**~~ *(nửa câu tách ra 27/08/2026)* | ~~"Kiệt **+** Phúc" = cần **CẢ HAI** chữ ký hay **MỘT TRONG HAI**?~~ | ✅ **ĐÃ CHỐT chiều 27/08/2026: MỘT TRONG HAI — và Kiệt đã ký.** Bước duyệt của Story 18 pha 2 là **một** chữ ký ⇒ **bỏ** mặc định tạm "cả hai" đặt buổi sáng cùng ngày; một người vắng thì người kia ký được. ⚠️ **Chữ ký hôm nay không phải giấy phép vĩnh viễn** — mỗi lần chạy pha 2 vẫn phải gắn với báo cáo dry-run của **chính lần đó**, và bản ghi trách nhiệm lưu *ai ký cho lần nào*. | — | Đóng |
+| ~~**OQ-F9**~~ *(nửa đầu)* | ~~Văn bản đồng ý sử dụng hình ảnh ký với **bao nhiêu %** phụ huynh hiện tại?~~ | ✅ **ĐÃ CHỐT 27/08/2026: 100%.** Ẩn số **quy mô** đóng. 🔴 **Việc kéo theo, phải làm trước Story 1:** đối chiếu con số **trên giấy** với số dòng `StudentConsent` type `CLASS_MEDIA` status `GRANTED` **trong DB** — đó mới là thứ chặn/mở việc gắn thẻ (`lib/lms/media-consent.ts:132`, C6.3). Hai con số **không tự khớp nhau**: DB thiếu ⇒ GV bị chặn tag dù PH đã ký; DB thừa ⇒ đang phát ảnh dựa trên dữ liệu không có giấy đỡ. | — | Đóng (nửa đầu) |
+| ~~**OQ-F9a**~~ *(nửa câu tách ra 27/08/2026 — phần NẶNG hơn)* | ~~Văn bản đồng ý có điều khoản về **RÚT LẠI** không, và rút lại tới đâu?~~ | ✅ **ĐÃ TRẢ LỜI chiều 27/08/2026: KHÔNG có điều khoản rút lại.** 🔴 **Câu đóng, rủi ro KHÔNG đóng** — đây là ca hiếm mà có câu trả lời làm rủi ro **rõ hơn** chứ không nhỏ đi. Trong **mã**, đường rút vẫn có và vẫn chạy: `revokeMediaConsent` (`lib/lms/media-consent.ts:83`), C6.4 ẩn ngay media của em đó khỏi portal (`:144-151`) ⇒ hệ thống **cho PH nhiều hơn giấy hứa**; **giữ nguyên đường đó**, hướng sửa đúng là sửa **văn bản** chứ không thu hẹp phần mềm. Hai chỗ hở ngoài tầm code: **(1)** ẩn khỏi portal ≠ **thu hồi** ảnh PH khác đã tải; **(2)** nếu quy định đòi consent **phải rút được** bất kể giấy viết gì thì **thiếu điều khoản chính là lỗ hổng**. ⇒ **B3 + B4 của Go/No-Go vẫn ĐỎ**, việc của **pháp chế**. | Pháp chế | Trước Story 1 |
 
 ---
 ---
@@ -758,7 +828,7 @@ Phân bố theo hai nhóm được yêu cầu đào sâu:
 | **T1** | **Bucket công khai**: ảnh trẻ em — kể cả ảnh **CHƯA DUYỆT** — tải được vô danh qua `https://cdn.satarobo.vn/<key>` (`.env.example:91-92`). Ra mắt F là đổ thêm ảnh và video vào lỗ này. Bật cờ `MEDIA_SIGNED_URL` **không cứu được** vì `signedMediaUrl` ký trên chính bucket công khai (`lib/storage/signed-url.ts:38`) | **Chắc chắn** (đang xảy ra) | **Thảm hoạ** — vi phạm bảo vệ dữ liệu trẻ em, không thể "sửa sau" vì file đã có thể bị lưu | Story 1: bucket riêng fail-closed sao chép `lib/storage/chat-storage.ts:48-66`. Nghiệm thu bằng **curl không cookie** vào 5 key ngẫu nhiên (2 PENDING, 3 APPROVED) → phải 403/404. Di trú object cũ có dry-run trước | Dev BE (hạ tầng) | **T-21** (phải xong trước mọi story F khác) |
 | **T2** | **Duyệt nhầm bấm X hàng loạt, không hoàn tác được**: F-15 đặt "X lớn" ngay trong luồng vuốt nhanh, F-03 nối thẳng vào xoá R2. QLCS duyệt 40 ảnh cuối ngày, bấm nhầm vài tấm → mất vĩnh viễn. Ảnh buổi học đã qua **không tái tạo được** | **Cao** | **Nặng** — mất ký ức của học viên, PH khiếu nại, không có gì để đưa lại | Story 4 (soft `DELETED` + `purgeAfterAt` + thùng rác) **là điều kiện bắt buộc** của Story 13. Story 13: popup xác nhận không có đường tắt, không phím tắt từ chối, toast "Hoàn tác" ≥ 10s. Nghiệm thu bằng test người thật: ≥ 3 QLCS × 20 lượt vuốt, **0** lần bấm nhầm không hoàn tác được | Dev FE + QLCS CS1 (nghiệm thu) | **T-7** |
 | **T3** | **Xoá row DB và xoá R2 lệch pha**: xoá row trước rồi R2 lỗi → object mồ côi sống vĩnh viễn trên CDN công khai (đúng lỗ T1); xoá R2 trước rồi DB lỗi → row trỏ file không tồn tại, PH thấy ô hỏng. Hiện **không đường nào chạm R2** (`actions.ts:440`, `media-publish.ts:308`) nên khi nối vào là đường mới hoàn toàn, chưa từng chạy | **Cao** | **Nặng** | Story 4: thứ tự cứng **R2 trước, DB sau**; R2 lỗi → giữ nguyên row ở `DELETED`, lùi `purgeAfterAt`, thử lại lần sau. Test giả lập R2 trả 500 (bắt buộc, không phải tuỳ chọn). Job đối soát tuần: liệt kê object không có row + row không có object, **không tự xoá** | Dev BE | **T-7** |
-| **T4** | **Job retention xoá nhầm vì điều kiện "học bạ đã xuất" hiện KHÔNG trả lời được**: 4 route xuất PDF học bạ không ghi mốc nào. Nếu hiện thực F-05 với một điều kiện đoán (vd `publishedAt != null`) thì hoặc xoá cả ảnh của học bạ chưa xuất, hoặc không xoá gì và tưởng là đã tuân thủ | **Trung bình–cao** | **Thảm hoạ** — xoá hàng loạt ảnh trẻ em theo lô, không hoàn tác | Story 8 **trước** Story 18, không đảo thứ tự. Mặc định fail-safe: không xác định được → **GIỮ**. Job mặc định dry-run; xoá thật cần tham số tường minh + người vận hành chạy tay (luật cứng #4) + có người ký (OQ-F8) | Dev BE + người phụ trách dữ liệu | **T-0** (không xoá thật trước khi có chữ ký) |
+| **T4** | **Job retention xoá nhầm vì điều kiện "học bạ đã xuất" hiện KHÔNG trả lời được**: 4 route xuất PDF học bạ không ghi mốc nào. Nếu hiện thực F-05 với một điều kiện đoán (vd `publishedAt != null`) thì hoặc xoá cả ảnh của học bạ chưa xuất, hoặc không xoá gì và tưởng là đã tuân thủ | **Trung bình–cao** | **Thảm hoạ** — xoá hàng loạt ảnh trẻ em theo lô, không hoàn tác | Story 8 **trước** Story 18, không đảo thứ tự. Mặc định fail-safe: không xác định được → **GIỮ**. Job mặc định dry-run; xoá thật cần tham số tường minh + người vận hành chạy tay (luật cứng #4) + có người ký — ✅ **chốt 27/08/2026: `OQ-F8` = Kiệt hoặc Phúc; `OQ-F8a` = MỘT TRONG HAI**, chữ ký vẫn phải gắn với **từng lần chạy** | Dev BE + (Kiệt **hoặc** Phúc) | **T-0** (không xoá thật trước khi có chữ ký cho chính lần đó) |
 | **T5** | **Không có backup R2 và không có thùng rác**: hôm nay không có snapshot, không có versioning bucket, không có bảng vết xoá. Mọi cơ chế cứu ở T2/T3/T4 đều đứng trên giả định "còn cái gì đó để khôi phục" | **Chắc chắn** (đang xảy ra) | **Thảm hoạ** — một lệnh sai là hết | Bật **object versioning** hoặc lifecycle giữ bản cũ trên bucket mới (Story 1); Story 4 dựng thùng rác + `purgeAfterAt`. Diễn tập khôi phục 1 ảnh đã xoá, có biên bản, **trước** T-0 | Dev BE (hạ tầng) | **T-14** |
 | **T6** | **Trần 100 dòng làm ảnh cũ biến mất khỏi trang duyệt rồi bị coi là "đã xử lý"**: `page.tsx:45, :51 take: 100`, phẳng, không phân trang. Với F-16 (lớp chỉ xong khi MỌI media đã xử lý), ảnh vô hình = lớp không bao giờ đóng — hoặc tệ hơn, đếm "đã xong" theo cái nhìn thấy được và bỏ qua phần khuất | **Cao** | **Nặng** — vừa mất kiểm soát nội dung, vừa làm SLA F-30 sai một cách có hệ thống | Story 11/12: đếm bằng truy vấn gom nhóm, không nạp toàn bộ; lưới phân trang cuộn hết. Test dựng lớp có **500** media rồi kiểm số đếm folder = số ô thực tế | Dev BE + QA | **T-7** |
 | **T7** | **Object key sinh từ tên file người dùng làm lộ tên học sinh trên URL vĩnh viễn**: `app/api/admin/upload-url/route.ts:109-119` slug hoá tên file gốc. `be-an-lop-3a.jpg` → key chứa tên trẻ. Hàm dựng key an toàn `buildMediaObjectKey` (`lib/lms/media-key.ts:8`) là **mã chết**, call-site duy nhất là test | **Cao** (phụ thuộc thói quen đặt tên của GV) | **Nặng** — PII trẻ em nằm trên URL, còn lại kể cả sau khi đổi bucket nếu không đổi key | Story 1: luồng media lớp dùng key **vô danh** (`class-media/<classSessionId>/<mediaId>.<ext>`) — chính là `buildMediaObjectKey` đang chết; đưa nó vào chạy thật. Bổ sung test `keyContainsName` (`media-key.ts:18`) chạy trên dữ liệu mẫu. Di trú key cũ nằm trong dry-run của Story 1 | Dev BE | **T-21** (cùng Story 1) |
@@ -821,12 +891,14 @@ Với 12 lớp/ngày × 20-40 ảnh, đây là 15-30 phút mỗi tối, mỗi ng
 
 > *Câu mở đầu:* "Em muốn hỏi thẳng anh/chị QLCS: nếu mỗi tối phải xem hết 200-400 tấm và ký xác nhận, việc này nằm ở đâu trong ngày làm việc của anh/chị? Nếu câu trả lời là 'chen vào lúc nào rảnh' thì em nghĩ ta nên thiết kế lại, chứ không nên ship rồi mới biết."
 
-**E3 — Chúng ta chưa biết bao nhiêu phụ huynh đã thực sự ký văn bản đồng ý dùng hình ảnh, và văn bản đó có điều khoản rút lại chưa.**
+**E3 — ~~Chúng ta chưa biết bao nhiêu phụ huynh đã thực sự ký văn bản đồng ý dùng hình ảnh~~ — ✅ 100% (chốt 27/08/2026). Nhưng văn bản đó **có điều khoản rút lại chưa** thì vẫn chưa ai trả lời.**
 Hệ thống có `StudentConsent` và chặn tag khi chưa GRANTED — nhưng đó là dữ liệu trong DB, không phải giấy tờ. Nếu một PH khiếu nại và yêu cầu xuất trình văn bản, ai cầm?
+**Cập nhật 27/08/2026 (đủ cả hai nửa):** **100% PH đã ký** (`OQ-F9`), và **văn bản KHÔNG có điều khoản rút lại** (`OQ-F9a`). 🔴 Nửa sau **không làm con voi nhỏ đi — nó làm con voi hiện rõ**: thiếu điều khoản rút lại nghĩa là nếu quy định đòi consent phải rút được, ta **không có giấy đỡ cho việc rút**, trong khi phần mềm vẫn cho rút (`revokeMediaConsent`). Chênh lệch giấy ↔ phần mềm này thuộc **pháp chế**, và **B3 + B4 vẫn ĐỎ**. Ngoài ra câu "100%" mở ra một việc kiểm, phải làm chứ đừng tin: **đối chiếu 100% trên giấy với số dòng `StudentConsent` `CLASS_MEDIA` `GRANTED` trong DB** — DB mới là thứ chặn/mở việc gắn thẻ (`lib/lms/media-consent.ts:132`). Lệch hai chiều đều xấu: DB thiếu ⇒ GV bị chặn oan; DB thừa ⇒ đang phát ảnh không có giấy đỡ.
 
 > *Câu mở đầu:* "Có ai đang giữ bộ văn bản đồng ý dùng hình ảnh bản giấy/PDF không ạ? Em hỏi vì Story 18 sẽ tự động xoá ảnh theo hạn, và trước khi tự động hoá bất cứ gì em muốn biết cơ sở pháp lý của việc **giữ** là gì."
 
-**E4 — Job xoá tự động ảnh trẻ em cần một người ký. Chưa ai muốn là người đó.**
+**E4 — ~~Job xoá tự động ảnh trẻ em cần một người ký. Chưa ai muốn là người đó.~~ — ✅ ĐÃ CÓ NGƯỜI 27/08/2026: *Kiệt + Phúc*.**
+**Cập nhật 27/08/2026:** con voi này đã có tên người ký (`OQ-F8`) và đã rõ hình dạng bước duyệt — **`OQ-F8a` = một trong hai, Kiệt đã ký**. Nhưng **có người được ký không phải là lần chạy đã được ký**: pha 2 vẫn chỉ chạy khi có chữ ký gắn với **lần chạy cụ thể**, kèm báo cáo dry-run đã đọc. Con voi thu nhỏ lại chứ chưa biến mất — phần còn lại là **kỷ luật vận hành**, không phải câu hỏi mở.
 F-05 nói "job tự xoá". Trong repo, chính sách hiện hành đi ngược lại: `lib/compliance/retention.ts:5-7` ghi rõ *"KHÔNG tự động xoá (dữ liệu trẻ em — xoá là không thể hoàn tác, cần người xác nhận)"*, và đường xoá thật (`applyStudentErasure`) là **ẩn danh PII**, không hard-delete, chỉ SUPER_ADMIN bấm tay. F-05 đòi đảo nguyên tắc đó. Đây là quyết định của người có thẩm quyền, không phải của người viết mã.
 
 > *Câu mở đầu:* "Spec F-05 nói job tự xoá. Nguyên tắc đang chạy trong hệ thống nói ngược lại và có ghi lý do. Em không định tự chọn — em cần một người ký vào phương án, và em đề xuất pha 1 chỉ liệt kê, pha 2 mới xoá và phải có chữ ký."
@@ -855,15 +927,15 @@ Bật F trên prod chỉ khi **toàn bộ** mục dưới đây có dấu ✅ k�
 - [ ] **A4** Test giả lập R2 lỗi 500 khi purge → **0** row mất mà object còn, **0** object mất mà row còn. Đếm trước/sau khớp.
 - [ ] **A5** Job đối soát object mồ côi chạy được ở chế độ **chỉ liệt kê**, đã chạy 1 lần, kết quả được đọc.
 - [ ] **A6** Trang duyệt hiện **đủ** media của folder: dựng lớp thử 500 media, số đếm folder = số ô lưới. **Không** còn trần 100 dòng im lặng.
-- [ ] **A7** Job retention **chưa** được phép xoá thật: chế độ mặc định là dry-run, và có tên người ký (OQ-F8) cho pha 2.
+- [ ] **A7** Job retention **chưa** được phép xoá thật: chế độ mặc định là dry-run, và có tên người ký cho pha 2 — ✅ **chốt 27/08/2026: `OQ-F8` = Kiệt hoặc Phúc; `OQ-F8a` = MỘT TRONG HAI, Kiệt đã ký**. Ô này **chỉ được tick khi** có **chữ ký thật cho lần chạy cụ thể**, không phải khi có tên trong tài liệu và cũng không phải vì Kiệt đã ký một lần.
 - [ ] **A8** Test người thật nút "X lớn": ≥ 3 QLCS × 20 lượt vuốt → **0** lần từ chối nhầm mà không hoàn tác được.
 
 ### Cổng B — Pháp lý hình ảnh trẻ em (nhóm rủi ro (ii))
 
 - [ ] **B1** Ảnh **chưa duyệt** không có URL nào tải được khi không đăng nhập. Kiểm bằng curl trên 3 media `PENDING`.
 - [ ] **B2** Object key của media lớp **không chứa** tên file người dùng nhập. Kiểm bằng test `keyContainsName` (`lib/lms/media-key.ts:18`) chạy trên 50 media mới nhất.
-- [ ] **B3** Quy trình **rút consent** viết thành văn: rút → media chuyển `DELETED` → purge theo ân hạn → xác nhận bằng văn bản cho PH. Có người chịu trách nhiệm nhận yêu cầu rút.
-- [ ] **B4** Văn bản đồng ý dùng hình ảnh: nói rõ phạm vi sử dụng, thời hạn lưu, quyền rút, và **giới hạn** (bản đã tải trước thời điểm rút không thu hồi được). Pháp chế duyệt.
+- [ ] **B3** Quy trình **rút consent** viết thành văn: rút → media chuyển `DELETED` → purge theo ân hạn → xác nhận bằng văn bản cho PH. Có người chịu trách nhiệm nhận yêu cầu rút. 🔴 **VẪN ĐỎ sau 27/08/2026 — và giờ đỏ vì lý do RÕ HƠN, không phải vì thiếu tin.** `OQ-F9a` đã trả lời: **văn bản KHÔNG có điều khoản rút lại**. Phần **mã đã có sẵn** và vẫn chạy: `revokeMediaConsent` (`lib/lms/media-consent.ts:83`) + C6.4 ẩn ngay media của em đó khỏi portal (`:144-151`) ⇒ phần mềm cho rút, giấy tờ không nói gì. Thứ thiếu là **văn bản và người nhận yêu cầu**, không phải code — và **đừng gỡ code cho khớp giấy**, hướng đúng là bổ sung điều khoản.
+- [ ] **B4** Văn bản đồng ý dùng hình ảnh: nói rõ phạm vi sử dụng, thời hạn lưu, quyền rút, và **giới hạn** (bản đã tải trước thời điểm rút không thu hồi được). Pháp chế duyệt. 🔴 **VẪN ĐỎ sau 27/08/2026.** 100% PH đã ký (`OQ-F9`) — nhưng **ký vào bản chưa có điều khoản rút lại thì 100% không cứu được gì**: ẩn khỏi portal ≠ thu hồi ảnh đã phát tán. Đây là rủi ro pháp lý **còn nguyên**, chờ `OQ-F9a`.
 - [ ] **B5** F-04 đã áp: học viên không dự buổi S không thấy media gắn buổi S. Test ma trận xanh.
 - [ ] **B6** TTL signed URL ≤ 10 phút; test link hết hạn → 403.
 - [ ] **B7** Có người đứng tên nhận và xử lý khiếu nại của PH về hình ảnh, kèm SLA phản hồi.
@@ -878,8 +950,8 @@ Bật F trên prod chỉ khi **toàn bộ** mục dưới đây có dấu ✅ k�
 - [ ] **C5** Migration: dry-run đã chạy, số dòng ảnh hưởng đã đọc, người vận hành chạy tay theo runbook (luật cứng #4).
 - [ ] **C6** GV và QLCS đã được hướng dẫn (không chỉ email — có buổi 30 phút), biết chuyện gì đổi và tại sao.
 - [ ] **C7** Rollback viết sẵn: tắt trang duyệt mới thì luồng ảnh cũ vẫn chạy; có cờ hoặc đường lùi cụ thể, đã thử một lần.
-- [ ] **C8** OQ-F1 … OQ-F9 đã đóng, hoặc đóng có điều kiện với người ký và hạn ghi rõ. **Tình trạng 26/08/2026:** đóng `OQ-F1` · `OQ-F2` · `OQ-F3` · `OQ-F4` · `OQ-F5` · `OQ-F6`; **còn treo** `OQ-F7` (đợt 1 chỉ ảnh?) · `OQ-F8` (người ký lệnh xoá) · `OQ-F9` (consent).
-- [ ] **C9** ⏳ **Trần thời lượng video** (`OQ-F4` của PRD) đã chốt **trước khi bật nhánh video** — hiện **CHƯA**. Yêu cầu "video thuyết trình" (12 × 10–15 phút mỗi buổi) chống lại Story 14 (xem hết), Story 16 (hạn 10h sáng) và chính cách nén client-side. Chưa chốt ⇒ **No-Go cho nhánh video**, nhánh ảnh vẫn đi được.
+- [x] **C8** OQ-F1 … OQ-F9 đã đóng, hoặc đóng có điều kiện với người ký và hạn ghi rõ. **Tình trạng chiều 27/08/2026: đóng ĐỦ cả chín câu và cả hai nửa câu** — `OQ-F1` · `OQ-F2` · `OQ-F3` · `OQ-F4` · `OQ-F5` · `OQ-F6` (26/08) + `OQ-F7` · `OQ-F8` + `OQ-F8a` · `OQ-F9` + `OQ-F9a` (27/08). 🔴 **Tick ô này KHÔNG làm B3/B4 xanh theo.** Ô C8 hỏi *đã có câu trả lời chưa*, còn B3/B4 hỏi *rủi ro đã được che chưa* — hai việc khác nhau, và `OQ-F9a` là ví dụ điển hình: câu trả lời (*không có điều khoản rút lại*) làm rủi ro **rõ hơn** chứ không nhỏ đi. **B3 + B4 vẫn ĐỎ.**
+- [ ] **C9** ⏳ **Trần thời lượng video** — ✅ **`OQ-F4` của PRD đã chốt 27/08/2026: hướng (a)**, tách riêng loại "video thuyết trình" (không áp F-18 · duyệt theo lô/xác suất · đường upload khác). **Nhưng vẫn CHƯA đủ để bật nhánh video**, vì thiếu hai tham số: `OQ-F4a` (trần thời lượng video **thường** — loại **có** áp F-18) và `OQ-F4b` ("duyệt theo lô" là thao tác gì). ⇒ **No-Go cho nhánh video** giữ nguyên; nhánh ảnh vẫn đi được. Kèm 3 việc bắt buộc trước khi bật: `kind` khai **BA** loại (SL-04) · ngoại lệ F-18/F-19 (Story 14) · F-30 **cấm trộn** (Story 17).
 
 **No-Go tự động** nếu bất kỳ điều nào sau đây đúng:
 - Bucket vẫn công khai (A1 đỏ) — **không có ngoại lệ**, kể cả "chỉ bật cho một cơ sở để thử".

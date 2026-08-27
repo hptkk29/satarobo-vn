@@ -35,13 +35,26 @@ khuyến nghị đã ghi trong PRD này**, nghĩa của thân bài không đổi
 | **OQ-3** | **(a) cho P0** (dropdown chỉ liệt kê kênh người xem là participant; mục 1-1 hiện mờ kèm lý do) · **(b) cho P2** (chỉ `SUPER_ADMIN`, màn tra cứu **chỉ-đọc**, `reason` + audit) · **(c) LOẠI**. 🔴 **Tuyệt đối không nới `assertActiveParticipant`** | Chủ dự án |
 
 ✅ **Ba câu chặn cứng đã đóng ⇒ E-02/E-04 code được** (E-01 vốn không bị chúng chặn).
-⚠️ **E-03 thì CHƯA** — nó bị **OQ-7** chặn (xem ngay dưới), không phải bị ba câu này chặn.
+✅ ~~⚠️ **E-03 thì CHƯA** — nó bị **OQ-7** chặn~~ → **OQ-7 ĐÃ CHỐT 27/08/2026 ⇒ E-03 hết chặn.**
 
-⏳ **Còn đúng MỘT câu treo: OQ-7** — *E-03 có lên site giáo viên không?* Chủ dự án chốt "khu vực E làm theo
-đề xuất", **nhưng PRD này KHÔNG đưa khuyến nghị cho OQ-7** ⇒ câu đó **chưa được trả lời**, và **không được
-suy ra** từ câu chốt chung. Nó **không chặn** E-01/E-02/E-04; nó chặn **E-03**, vì là quyết định **phạm vi
-test PII**: nếu **CÓ** lên site GV thì cột SĐT phải **rỗng** với `TEACHER` (`canViewParentContact` loại
-`TEACHER` **có chủ đích** — `lib/auth/permissions.ts:965`, danh sách vai `:957-963`) và bộ test PII rộng thêm một site.
+**Chốt 27/08/2026 — chủ dự án:**
+
+| Mã | Quyết định | Ai chốt |
+|---|---|---|
+| **OQ-7** | **KHÔNG** — **E-03 KHÔNG xuất hiện trên site giáo viên.** E-03 chỉ sống trên admin | Chủ dự án |
+
+**Hệ quả phải làm — ghi rõ để sau này không ai mở lại mà không biết đã trả lời:**
+
+1. **Phạm vi test PII KHÔNG rộng thêm một site.** Không thêm bề mặt `app/(teacher)/**` vào bộ test PII,
+   không thêm ca *"GV mở E-03 không thấy SĐT"*. Bộ test PII của E **giữ nguyên** đúng như đã lập ở §8.2 bước E.1.
+2. **`canViewParentContact` giữ NGUYÊN** — không thêm, không bớt vai. `TEACHER` vẫn nằm ngoài danh sách 4 vai
+   `SUPER_ADMIN · CENTER_MANAGER · ACCOUNTANT · SALES_CSM` (`lib/auth/permissions.ts:957-962`, hàm `:965`),
+   đúng chủ đích chống lộ SĐT toàn lớp đã ghi ngay trên nó (`:955-956`).
+3. ⚠️ Câu chốt này **chỉ nói về E-03**, không phải luật chung *"GV không bao giờ thấy SĐT PH ở đâu cả"*.
+   Sau này ai muốn đưa một bảng có SĐT PH lên `app/(teacher)/**` thì đó là **quyết định mới**, phải hỏi lại —
+   không mượn được câu này.
+
+🎉 **Khu vực E HẾT câu hỏi mở.** OQ-1…OQ-8 đóng hết ⇒ **E-01, E-02, E-03, E-04 đều code được.**
 
 ⚠️ `dashboard:view` là key MỚI ⇒ **chạy `seed-prod-roles.yml` sau khi merge lên `main`**, nếu không
 **không ai vào được dashboard**.
@@ -670,7 +683,7 @@ Bằng chứng file đó tuân thủ: **10 dòng `^export` và cả 10 đều l�
 | ⚙️ ~~**OQ-4**~~ | ~~Quyền cấp trang cho tab E là gì?~~ | ✅ **CHỐT KỸ THUẬT 24/08/2026 (Dev): khai key MỚI `dashboard:view` (scope `GLOBAL`)** gác trang dashboard 4 tab; **từng tab** gate thêm bằng key lĩnh vực sẵn có — **B** → `payments:view` · **C** → `leads:view-all` · **D** → `dashboard:view` · **E** → `dashboard:view` (cột SĐT phụ huynh vẫn qua `canViewParentContact`). ❌ **Không mượn `chat:read`** — scope `CENTER`/`ASSIGNED` nên gọi không target luôn trả `false`: xanh ở local (v1), **khoá cửa trên prod** (v2). 📌 Nợ: `canEditAds` (`lib/crm/ads-insights.ts:44-49`) so `roleCode` bằng tay, trái luật Nền Hệ thống #1 — đưa quyền ads vào registry là việc của D (OQ-D5). ⚠️ Key mới ⇒ **chạy `seed-prod-roles.yml` sau merge**. | — | Đóng |
 | ⚙️ ~~**OQ-5**~~ | ~~Thứ tự suy "giáo viên phụ trách" của một buổi?~~ | ✅ **CHỐT KỸ THUẬT 24/08/2026 (Dev): `substituteTeacherId ?? actualTeacherId ?? class.teacherId`** (`lib/lms/schedule-conflict.ts:109`) — người **thật sự đứng lớp** mới chịu trách nhiệm buổi đó. **Bắt buộc kèm:** đưa thứ tự này vào **một helper dùng chung** (vd `lib/lms/session-teacher.ts`), E-01 gọi helper chứ không tự viết lại — nếu không repo có **thứ tự thứ năm**. Chuyển 4 chỗ cũ (có `hieu-suat-gv/page.tsx:285`) sang helper là **ticket riêng**, không gánh trong E: đổi chúng làm số hiệu suất GV nhảy, phải báo trước. | — | Đóng |
 | ⚙️ ~~**OQ-6**~~ | ~~E-01 trang đích: mở rộng `/admin/attendance` hay dựng trang mới?~~ | ✅ **CHỐT KỸ THUẬT 24/08/2026 (Dev): MỞ RỘNG `/admin/attendance`**, thêm `dateFrom`/`dateTo` vào `searchParams` (hiện chỉ `{sessionId, classId, centerId}` — `page.tsx:67`). Trang đó là **đích của link trong hộp thông báo** (`:9-11`) — đổi đường dẫn là gãy link cũ, và hai trang cùng chức năng sớm muộn lệch nhau. Ràng buộc: thiếu `dateFrom`/`dateTo` ⇒ hành vi **y hệt hôm nay**. | — | Đóng |
-| **OQ-7** | **E-03 có xuất hiện trên site giáo viên không?** Nếu có thì cột SĐT phải rỗng với TEACHER (`canViewParentContact` loại TEACHER có chủ đích — `lib/auth/permissions.ts:965`, danh sách vai `:957-963`). ⏳ **26/08/2026: VẪN CHƯA TRẢ LỜI.** Chủ dự án chốt *"khu vực E làm theo đề xuất"*, **nhưng PRD này không đưa khuyến nghị cho OQ-7** ⇒ **không suy ra được** câu trả lời từ câu chốt chung. Đừng coi là đã chốt. | Quyết định phạm vi test PII: **CÓ** ⇒ cột SĐT phải **rỗng** với `TEACHER` và bộ test PII **rộng thêm một site** (thêm bề mặt `app/(teacher)/**`, thêm ca "GV mở E-03 không thấy SĐT"). **KHÔNG** ⇒ E-03 chỉ sống trên admin, phạm vi test giữ nguyên. Không chặn E-01/E-02/E-04. | Chủ dự án | Trước khi code E-03 |
+| ~~**OQ-7**~~ | ~~**E-03 có xuất hiện trên site giáo viên không?**~~ | ✅ **ĐÃ CHỐT 27/08/2026: KHÔNG — E-03 KHÔNG lên site giáo viên**, chỉ sống trên admin. **Hệ quả:** (1) phạm vi test PII **KHÔNG rộng thêm một site** — không thêm bề mặt `app/(teacher)/**`, không thêm ca "GV mở E-03 không thấy SĐT"; bộ test PII ở §8.2 bước E.1 **giữ nguyên**; (2) `canViewParentContact` **giữ nguyên**, không thêm không bớt vai — `TEACHER` vẫn ngoài danh sách 4 vai `SUPER_ADMIN · CENTER_MANAGER · ACCOUNTANT · SALES_CSM` (`lib/auth/permissions.ts:957-962`, hàm `:965`, chú thích chủ đích `:955-956`); (3) hai cổng quyền của E-03 (§8.2 bước E.4) **vẫn tách nhau** như cũ — câu này chỉ bỏ bớt một bề mặt, không nới cổng nào. ⚠️ Chỉ áp cho **E-03**: muốn đưa bảng có SĐT PH lên `app/(teacher)/**` sau này là **quyết định mới**, phải hỏi lại. | — | Đóng |
 | ⚙️ ~~**OQ-8**~~ | ~~Có chấp nhận thêm index cho `Message(senderId, createdAt)` không?~~ | ✅ **CHỐT KỸ THUẬT 24/08/2026 (Dev): CÓ.** Migration **thêm index**, không đụng cột có dữ liệu ⇒ không vi phạm luật cứng #4, nhưng nằm **trong story E-02**, không tách lẻ. Không có nó thì mỗi lần mở dashboard là một lần **quét toàn bảng `Message`** — bảng lớn nhanh nhất hệ thống. ⚠️ Bảng đang chạy ⇒ dùng `CREATE INDEX CONCURRENTLY` (viết tay trong file migration) để không khoá ghi. | — | Đóng |
 
 ---
@@ -697,7 +710,7 @@ E **không** chặn ai và **không** bị F/G chặn (spec "Thứ tự thi côn
 | **E.1** | Test đỏ trước (luật Nền Hệ thống #5): cách ly cơ sở E-02/E-03 · 403/không-có-cột-SĐT cho vai không được xem · panel E-04 giữ nguyên searchParams · người không phải participant mở panel → thông điệp VI | E.0 | Bộ ma trận quyền chat đặt `tests/chat/`, chạy vitest node + `runAction` (delta E.10) |
 | **E.2** | **E-01** — `countSessionGaps` + gắn vào tab + mở rộng `/admin/attendance` 2 param ngày | A-02, E.1, OQ-5, OQ-6 | Tái dùng `attendance-queue`; **không** sửa `lib/pending-tasks.ts` |
 | **E.3** | **E-02** — mẫu số + tử số + thẻ tỉ lệ | E.1, OQ-1, OQ-2 (+ OQ-8 nếu chọn (A)) | Khuôn `getChatPilotStats`: N truy vấn cố định, phần thuần tách để unit test |
-| **E.4** | **E-03** — bảng + hai cổng quyền tách nhau | E.3, OQ-4, OQ-7 | Payload **không** mang `phone` khi không đạt cổng (b) |
+| **E.4** | **E-03** — bảng + hai cổng quyền tách nhau (**chỉ admin** — OQ-7 chốt 27/08: không lên site GV) | E.3, OQ-4, ~~OQ-7~~ (đóng 27/08) | Payload **không** mang `phone` khi không đạt cổng (b) |
 | **E.5** | **E-04** — `chat-panel.tsx` (client) + `DashboardThreadPanel` (RSC chép từ `ThreadPanel`) + đường mở/đóng bằng searchParams | E.4, OQ-3 | Diff **0 dòng** trong `components/chat/**` (trừ ngoại lệ §6.5.3) |
 | **E.6** | Nghiệm thu tay | E.5 | Xem §8.4 |
 | **E.7** | Cập nhật `documentation/` + `docs/chat-realtime/permissions.md` nếu E-04 đụng ma trận quyền | E.6 | Luật Nền Hệ thống #10 |

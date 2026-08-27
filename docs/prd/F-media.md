@@ -50,6 +50,9 @@ huynh lọc cứng `status = "PUBLISHED"`**: `lib/lms/report-card.ts:220` (danh 
 
 Nguồn: `docs/plan/cau-hoi-can-quyet.md` §"Quyết định của chủ dự án — chốt 26/08/2026".
 
+> ⚠️ **Đọc kèm §0c (27/08/2026) — đợt 3 THẮNG mục này.** Câu `OQ-F4` của PRD, ghi ở đây là "chưa chốt",
+> **đã chốt 27/08 theo hướng (a)**; §0b.2 giữ nguyên phần con số vì đó chính là lý do chọn.
+
 | Mã | Quyết định | Ảnh hưởng trong PRD này |
 |---|---|---|
 | **OQ-F3** *(= `OQ-F1` của backlog)* | Nén video chạy **CLIENT-SIDE bằng WebCodecs** — trình duyệt của GV nén **trước khi** upload | **4 kết cục mới**, cột `transcodeStatus` lưu **3** (kết cục thứ tư `REJECTED` là **mã lỗi**, không có record để ghi); thêm **luật cứng "server không tin client"** — nhưng luật đó có **hai tầng**, tầng codec/độ phân giải/thời lượng đòi **phụ thuộc mới chưa ai chọn**; thêm **Bước 0 = đo trước khi xây**. Chi tiết §0b.1 |
@@ -57,7 +60,7 @@ Nguồn: `docs/plan/cau-hoi-can-quyet.md` §"Quyết định của chủ dự á
 | *(nối tiếp B8 — 24/08)* | Bucket riêng: biến **`R2_CLASS_MEDIA_BUCKET_NAME`**, tên bucket đề xuất **`satarobo-class-media`** | F-01-3 đang ghi **sai** tên biến (`R2_MEDIA_BUCKET_NAME`) — sửa. Chi tiết §0b.4 |
 | **OQ-F2 + OQ-F5** *(mã của **backlog**)* | Mọi lượt xoá đi qua **ÂN HẠN 30 NGÀY** rồi mới purge khỏi R2; **admin + QLCS** khôi phục được. Ảnh **bị từ chối** cũng **vào ân hạn**, **không** xoá ngay | 🔴 **Ngược câu chữ F-03/F-15 của bản 24/08** ⇒ Goal 2, F-03-2, F-15-2, bảng T9/T10 và ô "`DELETED` → bất kỳ" đều phải sửa. Chi tiết §0b.5 |
 | **OQ-F4** *(mã của **backlog** — KHÁC `OQ-F4` của PRD)* | Ảnh **không gắn học bạ nào**: giữ **3 THÁNG** rồi mới áp vòng đời xoá | Retention đổi từ **một** ngưỡng sang **hai**: 12 tháng (có học bạ) / 3 tháng (không). §6.1.5 + key registry phải sửa. Chi tiết §0b.6 |
-| ⏳ **OQ-F4** *(mã của **PRD này**)* | **CHƯA CHỐT.** Yêu cầu "video thuyết trình" mới đưa ra làm ba con số **chống lại** chính quyết định nén client-side và chống F-18/F-20 | §0b.2 — ghi nguyên con số + ba hướng xử, **chưa chọn hướng nào** |
+| ~~⏳ **OQ-F4** *(mã của **PRD này**)*~~ | ~~**CHƯA CHỐT.** Yêu cầu "video thuyết trình" mới đưa ra làm ba con số **chống lại** chính quyết định nén client-side và chống F-18/F-20~~ | ✅ **ĐÃ CHỐT 27/08/2026: hướng (a)** — tách riêng loại "video thuyết trình". §0b.2 giữ lại **con số** (vẫn đúng, chính là lý do chọn); quyết định + 6 hệ quả + **hai nửa câu còn treo** ở **§0c.1** |
 
 ---
 
@@ -145,9 +148,12 @@ dời sang `modules/integration` khi thư mục đó ra đời thật.
 
 ---
 
-### 0b.2 ⏳ OQ-F4 (trần video) — CHƯA CHỐT: số liệu mới chống lại chính §0b.1 và F-18/F-20
+### 0b.2 ~~⏳ OQ-F4 (trần video) — CHƯA CHỐT~~ — ✅ ĐÃ CHỐT 27/08/2026: HƯỚNG (a)
 
-**Đây KHÔNG phải câu đã đóng.** Ghi ra đây để không ai đọc nhầm rằng trần video đã có.
+> ✅ **ĐÃ CHỐT 27/08/2026: hướng (a) — tách riêng loại "video thuyết trình".** Mục này **giữ nguyên**
+> vì ba con số dưới đây **không sai đi**: chúng chính là **lý do** chọn hướng (a). Quyết định đầy đủ,
+> sáu hệ quả bắt buộc và **hai nửa câu còn treo** (`OQ-F4a` trần thời lượng video **thường** · `OQ-F4b`
+> "duyệt theo lô" nghĩa là gì về thao tác) nằm ở **§0c.1** — đọc mục đó trước khi đụng nhánh video.
 
 **Nguyên văn yêu cầu của chủ dự án (26/08/2026):** các buổi **12 / 24 / 36 / 48** là buổi **thuyết
 trình**; phải up **video full từng học viên thuyết trình**, mỗi video **10–15 phút**, **12 video mỗi
@@ -161,16 +167,17 @@ buổi** (sĩ số tối đa).
 | **Dung lượng** | 12 × 15 × ~15 MB/phút ≈ **2,7 GB mỗi buổi**, chưa tính các lớp khác | Trần một file hiện là 500MB; chi phí R2 và rủi ro "kho phình" (T17 của backlog) |
 | **Nén client-side** | Một video **15 phút** nén bằng WebCodecs trên **laptop văn phòng đời cũ** là **hàng chục phút** và **rất dễ sập tab** | Đúng **bẫy (b)** ở §0b.1, ở quy mô lớn hơn nhiều — 12 lượt liên tiếp mỗi buổi |
 
-**Ba hướng xử — CHƯA CHỌN HƯỚNG NÀO:**
+**Ba hướng xử — ✅ ĐÃ CHỌN 27/08/2026: HƯỚNG (a):**
 
 | Hướng | Nội dung | Cái mất |
 |---|---|---|
-| **(a)** | **Tách RIÊNG một loại "video thuyết trình"**: không áp F-18 xem hết; duyệt **theo lô / theo xác suất**; đi **đường upload khác**, không nén client-side | Bước duyệt của loại này yếu hơn hẳn — phải nói rõ trong biên bản, và báo cáo F-30 **không được trộn** hai loại làm một |
-| **(b)** | **Gộp thành MỘT video mỗi buổi** thay vì 12 | Mất khả năng gửi riêng video của từng em cho PH của em đó |
-| **(c)** | **Giữ 12 video nhưng giới hạn 3–5 phút mỗi em** | Không còn là "video full" như yêu cầu |
+| ✅ **(a)** — **ĐÃ CHỌN 27/08/2026** | **Tách RIÊNG một loại "video thuyết trình"**: không áp F-18 xem hết; duyệt **theo lô / theo xác suất**; đi **đường upload khác**, không nén client-side | Bước duyệt của loại này yếu hơn hẳn — phải nói rõ trong biên bản, và báo cáo F-30 **không được trộn** hai loại làm một. 🔴 **"Cái mất" này là ĐIỀU KIỆN ĐI KÈM, không phải ghi chú** — §0c.1 hệ quả (4) |
+| ~~**(b)**~~ **LOẠI** | ~~**Gộp thành MỘT video mỗi buổi** thay vì 12~~ | ~~Mất khả năng gửi riêng video của từng em cho PH của em đó~~ |
+| ~~**(c)**~~ **LOẠI** | ~~**Giữ 12 video nhưng giới hạn 3–5 phút mỗi em**~~ | ~~Không còn là "video full" như yêu cầu~~ |
 
-⚠️ Cho tới khi chọn: **không bật upload video**. Trần tạm (hạ dung lượng + thời lượng ở luồng lớp) vẫn
-là thứ đang giữ chỗ.
+⚠️ **Vẫn chưa bật upload video** — nhưng nay vì thiếu **hai tham số**, không phải vì bí đường: `OQ-F4a`
+(trần thời lượng video **thường**) và `OQ-F4b` ("duyệt theo lô" nghĩa là gì về thao tác) — §0c.1. Trần
+tạm (hạ dung lượng + thời lượng ở luồng lớp) vẫn là thứ đang giữ chỗ.
 
 ---
 
@@ -236,6 +243,111 @@ là **ảnh sinh hoạt lớp biến mất sớm hơn gấp bốn lần**: phả
 hiện bằng cách mở album cũ.
 
 ⚠️ Mọi lượt xoá của job này vẫn **đi qua ân hạn 30 ngày của §0b.5**, không xoá thẳng.
+
+---
+
+## 0c. Quyết định chủ dự án — 27/08/2026 (đợt 3, THẮNG cả §0 và §0b)
+
+Nguồn: trả lời của chủ dự án ngày **27/08/2026** cho 19 câu còn lại của bộ PRD
+(`docs/plan/cau-hoi-can-quyet.md`). Đợt này đóng **hai** câu của khu vực F trong PRD này và **ba** câu
+chỉ nằm ở backlog (`docs/backlog/F-media-stories.md`).
+
+| Mã | Quyết định | Ảnh hưởng trong PRD này |
+|---|---|---|
+| ~~**OQ-F4** *(mã của PRD này)*~~ | ✅ **ĐÃ CHỐT 27/08/2026: HƯỚNG (a)** — **tách riêng loại "video thuyết trình"**: **không** áp F-18 (xem hết) · duyệt **theo lô hoặc theo xác suất** · đi **đường upload KHÁC**, **không** nén client-side | §0b.2 đóng theo hướng (a); (b) và (c) **bị loại**. Kéo theo: SL-04 phải có **loại thứ ba**, F-18/F-19/F-20 phải khai ngoại lệ, F-30 **cấm trộn** hai loại. Chi tiết §0c.1. ⏳ **CÒN HAI nửa câu** — cũng ở §0c.1 |
+| ~~**OQ-F5** *(mã của PRD này)*~~ | ✅ **ĐÃ ĐO trên prod chiều 27/08/2026: `thieu_buoi = 0` · `tong = 7` · `thieu_ca_ngay_chup = 0`** (chủ dự án chạy trong Supabase SQL Editor) | **F.1e hết chặn.** F-04 thêm `classSessionId: { not: null }` được ngay — không backfill, không miễn trừ theo mốc, không ảnh nào rơi khỏi portal. 📌 `tong = 7` ⇒ di sản R2 phải dọn chỉ **7 object**. Chi tiết §0c.2 |
+| *(backlog)* **OQ-F7** | ✅ **ĐÃ CHỐT 27/08/2026: đợt 1 ra mắt CHỈ ẢNH**, video ở đợt 2 — **nhưng chủ dự án nói thêm nguyên văn: *"nhưng cũng rất cần video sớm"*** | PRD không đổi câu chữ nào; đổi **thứ tự thi công** và **cách nói với GV**. Căng thẳng "đợt 2 phải sát đợt 1" ghi ở backlog §0c |
+| *(backlog)* **OQ-F8** | ✅ **ĐÓNG ĐỦ 27/08/2026: người ký là *Kiệt hoặc Phúc* — `OQ-F8a` = MỘT TRONG HAI; Kiệt đã ký** | Mở khoá pha 2 của Story 18 / bước **F.5**, và bước duyệt là **MỘT chữ ký** ⇒ bỏ mặc định tạm "CẢ HAI" đặt buổi sáng cùng ngày. ⚠️ **Có chữ ký ≠ được chạy tuỳ ý:** mỗi lần chạy pha 2 vẫn phải gắn với **báo cáo dry-run của chính lần đó** (luật cứng #4) |
+| *(backlog)* **OQ-F9** | ✅ **ĐÓNG ĐỦ 27/08/2026: 100% phụ huynh đã ký · `OQ-F9a` = văn bản KHÔNG có điều khoản rút lại** | 🔴 **Đóng câu hỏi, KHÔNG đóng rủi ro.** Trong mã đường rút vẫn có và vẫn chạy (`revokeMediaConsent` — `lib/lms/media-consent.ts:83`) ⇒ hệ thống **cho PH nhiều hơn** giấy hứa; **giữ nguyên đường đó**, đừng gỡ để "khớp văn bản". Hở còn nguyên: ẩn khỏi portal ≠ **thu hồi** ảnh PH khác đã tải, và nếu quy định đòi consent **phải rút được** thì thiếu điều khoản là lỗ hổng **của văn bản** ⇒ **B3 + B4 Go/No-Go vẫn ĐỎ**, việc của **pháp chế**. Vẫn giữ việc kiểm: 100% **trên giấy** ≠ số dòng `StudentConsent` `GRANTED` **trong DB** (`docs/plan/ket-va-cach-go.md` K-20) |
+
+---
+
+### 0c.1 OQ-F4 — chốt hướng (a): "video thuyết trình" là MỘT LOẠI RIÊNG
+
+✅ **ĐÃ CHỐT 27/08/2026: hướng (a) của §0b.2.** Ba con số đã tính ở §0b.2 (3 tiếng video mỗi buổi mỗi
+lớp · ~2,7 GB mỗi buổi · nén WebCodecs một video 15 phút trên laptop văn phòng đời cũ mất hàng chục phút
+và dễ sập tab) **là lý do chọn**, không phải thứ bị bỏ qua. Hướng **(b)** (gộp 1 video/buổi) và **(c)**
+(giới hạn 3–5 phút mỗi em) **bị loại**.
+
+**Ba điều đã chốt cho loại này:**
+
+| # | Đã chốt | Nghĩa cụ thể |
+|---|---|---|
+| 1 | **Không áp F-18** | QLCS **không** phải xem hết 3 tiếng mới bấm duyệt được. `MediaWatchProgress` (SL-05) **không** ràng buộc nút duyệt cho loại này |
+| 2 | **Duyệt theo lô hoặc theo xác suất** | Không duyệt từng video một. ⏳ Thao tác cụ thể **chưa đặc tả** — xem nửa câu **OQ-F4b** dưới |
+| 3 | **Đường upload KHÁC, không nén client-side** | Quyết định §0b.1 (WebCodecs ở máy GV) **chỉ còn áp cho video thường** |
+
+**Hệ quả bắt buộc — làm, không phải cân nhắc:**
+
+1. 🔴 **SL-04 phải khai loại thứ ba NGAY, trước khi cột `kind` hạ cánh.** `A-nen-tang.md:739` đang ghi
+   `kind` = `IMAGE` / `VIDEO`; hướng (a) đòi phân biệt được **video thuyết trình** với video thường ở
+   tầng dữ liệu — không có thì mọi ngoại lệ dưới đây phải suy bằng tay ở từng màn. Đây là lúc **rẻ
+   nhất** để thêm: `ClassSessionMedia` hôm nay **chưa có** cột `kind` nào
+   (`prisma/schema.prisma:4556-4581`) ⇒ thêm giá trị thứ ba là **additive trên cột chưa tồn tại**, không
+   vướng luật cứng #4. Để SL-04 hạ cánh với 2 giá trị rồi mới thêm = `ALTER TYPE ADD VALUE` trên bảng
+   **đã có dữ liệu prod**.
+2. 🔴 **F-18 / F-19 phải khai ngoại lệ bằng câu chữ, không để người đọc tự suy.** F-18-1 nói "duyệt tất
+   cả chỉ bật khi **mọi** video đã phát hết" — với loại thuyết trình, mệnh đề "mọi video" **không tính**
+   loại này (§5 đã sửa). F-19-2 ("Đã xem n/m video") cũng phải loại chúng khỏi mẫu số `m`, nếu không
+   header hiện `0/12` vĩnh viễn.
+3. 🔴 **F-20 (hạn 10h sáng hôm sau) không mặc nhiên dùng cho loại này.** Hạn cũ đặt cho việc xem vài
+   chục tấm ảnh; đem đo một việc đã **cố ý bỏ** bước xem hết là đo nhầm thứ. Hoặc đặt hạn riêng cho buổi
+   thuyết trình, hoặc để buổi thuyết trình **ngoài** phép đo — phải chọn một và ghi ra, đừng để mặc định
+   rơi vào hạn cũ.
+4. 🔴 **F-30 CẤM TRỘN hai loại trong một con số.** Đây là **điều kiện đi kèm của chính quyết định**, đúng
+   như cột "Cái mất" của hướng (a) đã ghi: bước duyệt của loại này **yếu hơn hẳn**. Trộn chung = một tỷ
+   lệ "đã duyệt" đẹp được đỡ bằng loại không phải xem. Đếm **hai nhóm riêng**, y như luật tách nhãn "tự
+   duyệt" của `OQ-F6` backlog.
+5. ⚠️ **"Đường upload khác" hiện CHƯA CÓ TÊN — và nó mở lại đúng phần chi phí mà K-5 tưởng đã đóng.**
+   Không nén client-side nghĩa là hoặc file đi thẳng lên R2 ở kích thước gốc, hoặc phải có một đường xử
+   ở phía server. `docs/plan/ket-va-cach-go.md` K-5 kết luận "chi phí hạ tầng bằng 0" — kết luận đó
+   **chỉ đúng cho hướng client-side**, tức từ nay chỉ đúng cho video **thường**. **Phải chọn và nói tên
+   trước Bước 1 của §0b.1**, cùng lúc với việc chọn công cụ đọc metadata cho tầng validate (2). Đây là
+   **việc phải làm**, không phải câu hỏi mở — nhưng không được im lặng bỏ qua.
+6. ⚠️ **Trần dung lượng một file: kiểm lại chứ đừng mặc định là đủ.** `UPLOAD_CONFIG.video` đang **500MB**
+   (`lib/storage/upload-config.ts:53-64`); video 15 phút ở ~15 MB/phút ≈ **225MB** — lọt, nhưng biên
+   mỏng, và **12 lượt liên tiếp mỗi buổi** là chuyện băng thông của GV chứ không phải chuyện trần file.
+
+**⏳ CÒN HAI NỬA CÂU — đừng coi `OQ-F4` là đóng trọn:**
+
+| Mã | Nửa câu còn treo | Vì sao chặn | Chủ | Cần trước |
+|---|---|---|---|---|
+| **OQ-F4a** | **Trần THỜI LƯỢNG của video THƯỜNG** (không phải thuyết trình) vẫn **chưa có số**. Độ phân giải **1280×720** và bitrate **~2 Mbps** đã có (§0b.1), dung lượng suy ra được — **thời lượng thì không** | Video thường là loại **CÓ** áp F-18 (xem hết). Không có trần thời lượng thì đúng loại đó vẫn có thể biến trang duyệt thành việc bất khả thi. Gợi ý cũ 24/08 (60–90 giây/video, ≤ 3 video/buổi) **chưa được ai xác nhận** | Chủ dự án | Trước khi bật nhánh video thường (**F.2d**) |
+| **OQ-F4b** | **"Duyệt theo lô hoặc theo xác suất" nghĩa là gì về THAO TÁC** — một nút duyệt cả 12 video? bốc ngẫu nhiên n video bắt xem? tỷ lệ n bao nhiêu, ai đặt? | Không đặc tả thì Dev tự chọn, mà cái tự chọn đó **chính là mức kiểm soát còn lại** sau khi đã bỏ F-18. Nó cũng quyết định `ClassMediaReviewDay` (SL-06) ghi gì cho buổi thuyết trình | Chủ dự án | Trước khi hiện thực nhánh video thuyết trình |
+
+⚠️ **Cho tới khi OQ-F4a + OQ-F4b có câu trả lời: nhánh video vẫn KHÔNG bật.** Cái đã đổi so với 26/08 là
+**thế bí đã gỡ** — trước đây ba con số chống nhau và không có đường ra; nay có đường ra (tách loại), chỉ
+còn thiếu hai tham số. Nhánh **ảnh** không bị chặn bởi câu nào ở đây.
+
+---
+
+### 0c.2 OQ-F5 — ĐÃ ĐO XONG chiều 27/08: prod sạch, F-04 bật được ngay
+
+✅ **Số đo trên prod** (chủ dự án chạy trong **Supabase SQL Editor** — đường đi được, không cần
+`DATABASE_URL`):
+
+| `thieu_buoi` | `tong` | `thieu_ca_ngay_chup` |
+|---|---|---|
+| **0** | **7** | **0** |
+
+**Kết luận cho F-04:** mọi media trên prod **đều đã gắn buổi** ⇒ thêm `classSessionId: { not: null }` vào
+đường đọc PH (§6.1.4) **không làm tấm nào biến mất**. Không phải backfill theo `takenAt`, không phải miễn
+trừ theo mốc ngày. **F.1e hết chặn.**
+
+📌 **Con số phụ đáng chú ý hơn chính câu hỏi: `tong = 7`.** Toàn bộ kho media trên prod đang có **7 đối
+tượng**. Vậy "di sản ảnh cũ nằm trong bucket dùng chung" (`OQ-F6`, `ket-va-cach-go.md` K-8) là **7
+object**, không phải hàng nghìn ⇒ việc dọn R2 mồ côi nhẹ hơn mọi ước lượng trước, và **tách bucket bây
+giờ là lúc rẻ nhất có thể** — mỗi ngày chờ, di sản lại lớn thêm.
+
+⚠️ **Bài học giữ lại, vì suýt chọn nhầm.** Ngày 26/08 mới có **một** con số — `khop_duoc_theo_ngay = 0` —
+và nó khớp với **cả hai** khả năng trái ngược: (i) không có media mồ côi nào (hết kẹt) hoặc (ii) có nhiều
+nhưng **không cái nào có `takenAt`** (backfill theo ngày chụp bất khả thi, buộc đi đường miễn trừ theo
+mốc). Hai khả năng dẫn tới hai kế hoạch F-04 khác hẳn nhau. Nếu hôm đó suy diễn cho nhanh thì đã dựng cả
+một nhánh miễn trừ không cần tồn tại. **Đo đủ rồi hãy kết luận** — đây là lần thứ hai trong cùng đợt tài
+liệu này mà một cổng đỏ / một số 0 đơn lẻ suýt bị đọc thành kết luận.
+
+**Trạng thái:** `OQ-F5` **ĐÓNG**. PRD F không còn câu nào treo vì thiếu số đo; hai nửa câu còn lại
+(`OQ-F4a` · `OQ-F4b`) treo vì thiếu **quyết định**, và cả hai chỉ chặn nhánh **video**.
 
 ---
 
@@ -438,7 +550,7 @@ Chỉ **báo cáo tiến độ** có bảng vết `ProgressReportLog` (`prisma/s
 | # | User story | Acceptance criteria |
 |---|---|---|
 | **F-01-1** | Là GV, tôi up ảnh/video vào **kho chưa lưu hành**, gắn với **lớp + buổi học + ngày**. | `classSessionId` trở thành **bắt buộc** ở cả hai đường ghi (hiện `optional().nullable()` — `actions.ts:225`, `:468`; `media-publish.ts:29`). Buổi phải thuộc đúng lớp (đã có: `actions.ts:326-330`, `media-publish.ts:60-68`). `takenAt` fallback ngày buổi. Media trong kho **không** hiện portal, **không** vào hàng duyệt. |
-| **F-01-2** | Media mang đủ dấu vết kỹ thuật ngay lúc tạo. | Mỗi row ghi `kind` (`IMAGE`/`VIDEO`), `mimeType`, `sizeBytes`, `durationSec` (video), `centerId` + `orgUnitId` suy từ `Class` (SL-02, SL-04). 🔴 `scopedDb` **không che write** ⇒ mọi `create` phải tự set `centerId`, quên = row vô hình với chính QLCS cơ sở đó. |
+| **F-01-2** | Media mang đủ dấu vết kỹ thuật ngay lúc tạo. | Mỗi row ghi `kind` (**BA loại** từ 27/08/2026: ảnh · video thường · **video thuyết trình** — §0c.1 hệ quả 1), `mimeType`, `sizeBytes`, `durationSec` (video), `centerId` + `orgUnitId` suy từ `Class` (SL-02, SL-04). 🔴 `scopedDb` **không che write** ⇒ mọi `create` phải tự set `centerId`, quên = row vô hình với chính QLCS cơ sở đó. |
 | **F-03-1** | Trạng thái media theo đúng một máy trạng thái, không có đường tắt. | Xem §6.1.1. Chuyển tiếp không nằm trong bảng đó → action từ chối, không im lặng. |
 | **F-03-2** | Từ chối media **cuối cùng là xoá object trên R2** — nhưng qua **ân hạn 30 ngày**, không xoá ngay. | ✅ **OQ-F2/OQ-F5 của backlog, chốt 26/08 (§0b.5)** *(bản 24/08 ghi "không soft-delete" — **sai**, đã đảo)*. Đường từ chối set `status = DELETED` + `deletedAt`/`deletedById`/`deleteReason` + `purgeAfterAt = now + 30 ngày`; **cron purge** mới gọi `DeleteObjectCommand` (mẫu `app/api/admin/upload-delete/route.ts:63-68`). Row **giữ lại** làm vết cho F-30. |
 | **F-03-3** | 🔴 Không ai bỏ qua được bước duyệt. | Gỡ nhánh `autoApprove` ở **cả hai** đường: `actions.ts:337`, `:345`, `:351-353`; `actions.ts:573` + `media-publish.ts:118-119`, `:218`, `:239-241`. Sau đó `APPROVED` chỉ sinh từ `reviewMedia`. e2e: `SUPER_ADMIN` upload → `PENDING`. |
@@ -487,11 +599,11 @@ Chỉ **báo cáo tiến độ** có bảng vết `ProgressReportLog` (`prisma/s
 | **F-15-2** | Nút **X lớn** = từ chối → popup xác nhận → ảnh vào **thùng rác 30 ngày**, hết hạn mới xoá khỏi R2. | Chuyển T9/T10 ở §6.1.1. ✅ **Sửa theo OQ-F5 của backlog (§0b.5)** *(bản 24/08 ghi "xoá khỏi R2" + "không hoàn tác được" — **sai**)*. Popup nêu rõ **khôi phục được trong 30 ngày, sau đó mất hẳn**, và chỉ admin/QLCS mở được thùng rác. |
 | **F-15-3** | Nút X **góc** = thoát về F-12, không đụng dữ liệu. | Hai nút X phải khác nhau rõ ràng về vị trí, kích thước, nhãn `aria-label`. |
 | **F-16-1** | Lớp chỉ "hoàn tất" khi **mọi** media đã `APPROVED` hoặc `DELETED`. | Bất biến: `count(status = PENDING) = 0` cho `(classId, ngày)`. `REJECTED` (di sản) tính như `DELETED` — §6.1.2. `DRAFT` **không** tính vào mẫu số. |
-| **F-17-1** | Video nằm **cùng grid** F-12 và **cùng slide** F-15, không màn riêng. | Một danh sách, phân biệt bằng `kind` (SL-04); phần tử video render `<video>` + badge F-19. |
-| **F-18-1** | "Duyệt tất cả" chỉ bật khi **mọi video trong folder đã phát hết** (`watchedDuration ≥ 95% duration`), theo **user + media**. | Bảng `MediaWatchProgress` (SL-05), unique `[mediaId, userId]`. Thuật toán + cấu trúc: §6.2.4. |
+| **F-17-1** | Video nằm **cùng grid** F-12 và **cùng slide** F-15, không màn riêng. | Một danh sách, phân biệt bằng `kind` (SL-04); phần tử video render `<video>` + badge F-19. ⚠️ **27/08/2026: `kind` có BA loại**, không phải hai — ảnh · video thường · **video thuyết trình** (§0c.1). Vẫn **cùng grid, cùng slide**; khác nhau ở **luật duyệt**, không ở màn hình. |
+| **F-18-1** | "Duyệt tất cả" chỉ bật khi **mọi video trong folder đã phát hết** (`watchedDuration ≥ 95% duration`), theo **user + media**. | Bảng `MediaWatchProgress` (SL-05), unique `[mediaId, userId]`. Thuật toán + cấu trúc: §6.2.4. 🔴 **NGOẠI LỆ chốt 27/08/2026 (§0c.1):** "mọi video" **KHÔNG tính video thuyết trình** — loại đó không áp F-18. Ngoại lệ phải đọc được từ `kind` (SL-04, loại thứ ba), **không** suy bằng tay ở từng màn. |
 | **F-18-2** | **Tua nhanh vượt mốc chưa xem không tính là đã xem.** | Cộng theo **đoạn (segment)**, chỉ cộng khi bước tiến của con trỏ phát khớp bước tiến của đồng hồ thật; nhảy > `WATCH_MAX_JUMP_SEC` → bỏ qua. Unit test: `seek 0 → duration` cho `watchedSec = 0`. |
 | **F-19-1** | Trên grid, mỗi video hiện badge `Đã xem` / `Còn X:XX chưa xem`. | `completedAt != null` → `Đã xem`; ngược lại `durationSec − watchedSec` định dạng `mm:ss`. |
-| **F-19-2** | Header folder hiện **"Đã xem n/m video"**. | `n` = số video có `completedAt != null` của **chính user đang xem**; `m` = số video không-DRAFT, `transcodeStatus != FAILED`, `durationSec != null`. |
+| **F-19-2** | Header folder hiện **"Đã xem n/m video"**. | `n` = số video có `completedAt != null` của **chính user đang xem**; `m` = số video không-DRAFT, `transcodeStatus != FAILED`, `durationSec != null`. 🔴 **Trừ video thuyết trình khỏi mẫu số `m`** (§0c.1) — không trừ thì buổi thuyết trình hiện `0/12` vĩnh viễn và người dùng đọc thành "hệ thống hỏng". |
 
 #### P1
 
@@ -516,7 +628,7 @@ Chỉ **báo cáo tiến độ** có bảng vết `ProgressReportLog` (`prisma/s
 
 | # | User story | Acceptance criteria |
 |---|---|---|
-| **F-20-1** | Hạn duyệt mặc định **10h sáng ngày hôm sau**, admin tự set trong **Cấu hình vận hành**. | Hai key mới trong `lib/settings/registry.ts` (mẫu `:607-614`): `media.reviewDeadlineHour` (int 0..23, default **10**) và `media.reviewDeadlineOffsetDays` (int 0..7, default **1**). `centerOverridable: true`. **Không cần migration** — `/cau-hinh-van-hanh` tự render (`page.tsx:24`). |
+| **F-20-1** | Hạn duyệt mặc định **10h sáng ngày hôm sau**, admin tự set trong **Cấu hình vận hành**. | Hai key mới trong `lib/settings/registry.ts` (mẫu `:607-614`): `media.reviewDeadlineHour` (int 0..23, default **10**) và `media.reviewDeadlineOffsetDays` (int 0..7, default **1**). `centerOverridable: true`. **Không cần migration** — `/cau-hinh-van-hanh` tự render (`page.tsx:24`). ⚠️ **27/08/2026 (§0c.1):** hạn này đặt cho việc xem ảnh; **buổi thuyết trình phải có hạn riêng hoặc nằm ngoài phép đo** — chọn một và ghi ra, đừng để mặc định rơi vào hạn cũ. |
 | **F-20-2** | Deadline của một folder **đóng băng** lúc folder sinh ra. | `ClassMediaReviewDay.deadlineAt` tính **một lần** khi tạo dòng, theo giờ VN. Đổi cấu hình **không** dịch deadline của quá khứ — nếu không, báo cáo F-30 đổi ngược thời gian. |
 | **F-21-1** | Quá deadline mà chưa duyệt hết → thông báo vào hệ notification cho QLCS, **không cần ai mở chuông**. | Job định kỳ quét `ClassMediaReviewDay` quá hạn chưa đóng → `notifyStaff()`. Không có cron media nào hiện tại (§2.7). Phương án lịch: §6.3.2. |
 | **F-21-2** | Thông báo không spam. | `dedupeKey = media_review_overdue:<classId>:<yyyy-mm-dd>` — idempotent theo `@@unique([userId, dedupeKey])` (`schema:4394`). Khai **một dòng mới** trong `lib/notifications/catalog.ts` (nhóm `due_date`), nếu không sẽ `console.warn` + rơi chót panel (`notify.ts:62-67`). **Không** `reopen`. |
@@ -537,7 +649,7 @@ Chỉ **báo cáo tiến độ** có bảng vết `ProgressReportLog` (`prisma/s
 
 | # | User story | Acceptance criteria |
 |---|---|---|
-| **F-30-1** | Bảng SLA với cột: **STT · Tên lớp · Ngày GV up · Trạng thái · Ghi chú**. | Một dòng = một `ClassMediaReviewDay` (SL-06). "Ngày GV up" = `min(ClassSessionMedia.createdAt)` của folder; folder không có media → để trống. |
+| **F-30-1** | Bảng SLA với cột: **STT · Tên lớp · Ngày GV up · Trạng thái · Ghi chú**. | Một dòng = một `ClassMediaReviewDay` (SL-06). "Ngày GV up" = `min(ClassSessionMedia.createdAt)` của folder; folder không có media → để trống. 🔴 **CẤM TRỘN hai loại video (§0c.1 hệ quả 4):** buổi thuyết trình đã **cố ý bỏ** bước xem hết ⇒ đếm chung là một tỷ lệ "đã duyệt" đẹp được đỡ bằng loại không phải xem. Tách **hai nhóm riêng**, đúng như luật tách nhãn "tự duyệt" của `OQ-F6` backlog. |
 | **F-31-1** | Enum trạng thái đúng 4 giá trị: `Chưa duyệt` · `Đã duyệt` · `Phê duyệt trễ` · `Không có ảnh`. | Hàm **thuần** `evaluateMediaSla(row, now)` — mẫu `evaluateSla` (`lib/crm/sla.ts:64-83`). Bảng suy diễn: §6.4.2. |
 | **F-32-1** | Cột Ghi chú theo đúng luật: Trễ → *thời điểm duyệt / deadline cấu hình*; Chưa duyệt & Đã duyệt → **trống**; Không có ảnh → nội dung giải trình F-14. | Xem §6.4.3. |
 | **F-30-2** | Báo cáo cách ly theo cơ sở và lọc theo khoảng ngày. | `ClassMediaReviewDay` mang `centerId` + `orgUnitId` (SL-00/SL-06) và vào `SCOPED_MODELS` + `BACKFILL_SPECS`. |
@@ -706,7 +818,14 @@ Và **thêm một ràng buộc nữa** mà chữ "đúng buổi học đó" hàm
 // Media cũ (trước F) có classSessionId = null ⇒ BIẾN MẤT khỏi portal.
 ```
 
-🔴 **Hệ quả di sản phải chốt trước khi bật (OQ-F5):** mọi media prod đang có `classSessionId = null` sẽ **biến mất khỏi portal** ngay khi thêm điều kiện này. Hai lựa chọn: (a) backfill `classSessionId` theo `takenAt` khớp `ClassSession.date` cùng lớp, phần không khớp thì để `null` và chấp nhận ẩn; (b) miễn trừ media tạo trước một mốc thời gian. Không được bật mù.
+✅ **Hệ quả di sản — ĐÃ ĐO XONG chiều 27/08/2026, không còn phải chọn (OQ-F5).** Đo trên prod:
+`thieu_buoi = 0` / `tong = 7` / `thieu_ca_ngay_chup = 0` ⇒ **không media nào đang `classSessionId = null`**,
+nên bật điều kiện này **không làm tấm nào biến mất khỏi portal**. ~~Hai lựa chọn (a) backfill theo `takenAt`
+/ (b) miễn trừ theo mốc ngày~~ — **cả hai đều không cần dựng**. Điều kiện *"không được bật mù"* vẫn giữ
+nguyên hiệu lực cho tương lai: nếu tới lúc thi công F.1e mà kho đã lớn hơn 7 đối tượng, **đo lại** bằng
+đúng truy vấn ở `docs/plan/ket-va-cach-go.md` K-2 trước khi bật, đừng dựa vào số đo hôm nay.
+
+⏳ **27/08/2026: VẪN CHƯA CÓ SỐ.** Chủ dự án không chạy được phép đo (`DATABASE_URL` prod là biến **Sensitive** trên Vercel; `.env` local trỏ **DEV**). Người chạy được là **người có quyền vào Supabase project PROD** — mở **SQL Editor**, chạy **truy vấn thứ nhất** trong `docs/plan/ket-va-cach-go.md` **K-2**. Với số đo 26/08 (`khop_duoc_theo_ngay = 0`), lựa chọn **(a)** có thể đã chết sẵn — nhưng chưa biết chắc, vì số 0 đó khớp với **cả hai** khả năng trái ngược (§0c.2).
 
 **Với học bạ (F-04-2):** media chỉ gắn được vào học bạ của `Enrollment` E nếu `media.classSessionId ∈ { buổi của lớp mà E ghi danh }`. Vì `ClassSessionMedia.classSessionId` là **cột phẳng, không FK** (`schema:4513`) và `ReportCard.enrollmentId` cũng vậy (`:6270`), truy vấn phải đi **2 bước** — mẫu `lib/lms/report-card.ts:210-224`.
 
@@ -1322,8 +1441,10 @@ Chỉ ghi câu **thực sự chưa trả lời được** từ mã + spec.
 | ~~**OQ-F1**~~ | ~~"Học bạ đã xuất" (F-05) nghĩa là gì?~~ | ✅ **ĐÃ CHỐT 24/08/2026 (B6): "đã gửi đến được cho PH"** — nghĩa **(c)**, cột mới `ReportCard.sentToParentAt`, nhãn UI "Đã gửi đến PH". **Không** thêm giá trị enum (2 đường đọc của PH lọc cứng `status = "PUBLISHED"` — `lib/lms/report-card.ts:220`, `:239`). F-05 dùng `sentToParentAt IS NOT NULL`. Chi tiết §0. | — | Đóng |
 | ~~**OQ-F2**~~ | ~~Giữ **nguyên câu chữ F-10** (cách đọc A) hay mở rộng để folder trống cũng hiện (cách đọc B)?~~ | ✅ **ĐÃ CHỐT 26/08/2026: CÁCH ĐỌC B.** Lịch hiện **mọi ngày có buổi học**, mỗi ngày mang 1 trong 4 trạng thái (`Chưa duyệt` / `Đã duyệt` / `Phê duyệt trễ` / `Không có ảnh`). Hệ quả: F-14 render được, F-31 giữ đủ 4 trạng thái, **câu chữ F-10 trong spec phải sửa cho khớp**. Chi tiết §0b.3 + §6.2.2. | — | Đóng |
 | ~~**OQ-F3**~~ | ~~F-02 (H.264/720p) thực thi bằng gì?~~ | ✅ **ĐÃ CHỐT 26/08/2026: nén CLIENT-SIDE bằng WebCodecs.** `transcodeStatus` = **4** giá trị `DONE_CLIENT` / `PASSTHROUGH` / `SKIPPED_UNSUPPORTED` / `REJECTED`; **server không tin trạng thái client gửi lên** — tự đọc metadata file thật rồi tự ghi. Ngưỡng 1280×720 · ~2 Mbps (~15 MB/phút) · dung lượng trần suy ra + biên 20%. **Bước 0 = đo với 5–7 GV thật trước khi xây**; dưới ~70% chạy được thì quay lại phương án server. Chi tiết §0b.1. ⏳ Thời lượng tối đa **vẫn treo** — xem OQ-F4. | — | Đóng |
-| **OQ-F4** | Trần **thời lượng** video một lần up? *(dung lượng đã suy ra được từ §0b.1: 1280×720 · ~2 Mbps · biên 20%)* | ⏳ **VẪN TREO — và 26/08/2026 còn khó hơn trước.** Yêu cầu mới của chủ dự án (buổi 12/24/36/48 là buổi thuyết trình: **12 video × 10–15 phút** mỗi buổi) sinh ba con số chống lại nhau: **3 tiếng** video/buổi/lớp trong khi F-18 bắt xem hết và F-20 đặt hạn 10h sáng hôm sau · **~2,7 GB/buổi** · một video 15 phút nén WebCodecs trên laptop cũ mất **hàng chục phút** và dễ sập tab. Ba hướng xử (tách riêng loại video thuyết trình / gộp 1 video / giới hạn 3–5 phút mỗi em) ghi ở **§0b.2** — **chưa chọn hướng nào**. | Chủ dự án | Trước khi bật upload video |
-| **OQ-F5** | Media prod đang có `classSessionId = null` xử lý sao khi bật điều kiện F-04? | Thêm `classSessionId: { not: null }` vào đường đọc PH (§6.1.4) làm chúng **biến mất khỏi portal ngay lập tức**. Cần chọn: backfill theo `takenAt` khớp `ClassSession.date`, hay miễn trừ media trước một mốc. Số lượng thực tế chưa đo (cần truy vấn prod). | Chủ dự án + Dev | Trước khi triển khai F-04 |
+| ~~**OQ-F4**~~ | ~~Trần **thời lượng** video một lần up?~~ | ~~⏳ **VẪN TREO — và 26/08/2026 còn khó hơn trước.**~~ Yêu cầu của chủ dự án 26/08 (buổi 12/24/36/48 là buổi thuyết trình: **12 video × 10–15 phút** mỗi buổi) sinh ba con số chống lại nhau: **3 tiếng** video/buổi/lớp trong khi F-18 bắt xem hết và F-20 đặt hạn 10h sáng hôm sau · **~2,7 GB/buổi** · một video 15 phút nén WebCodecs trên laptop cũ mất **hàng chục phút** và dễ sập tab. Ba hướng xử ghi ở **§0b.2**. ✅ **ĐÃ CHỐT 27/08/2026: HƯỚNG (a)** — **tách riêng loại "video thuyết trình"**: **không** áp F-18 (xem hết) · duyệt **theo lô hoặc theo xác suất** · đi **đường upload KHÁC**, **không** nén client-side. Hướng (b) gộp 1 video/buổi và (c) giới hạn 3–5 phút mỗi em: **loại**. Ba con số trên **vẫn đúng** — chúng là **lý do chọn**. Sáu hệ quả bắt buộc (SL-04 thêm **loại thứ ba** · ngoại lệ F-18/F-19 · hạn riêng cho F-20 · **F-30 cấm trộn** · "đường upload khác" chưa có tên · trần dung lượng) ở **§0c.1**. ⏳ **Tách ra hai nửa câu còn treo: `OQ-F4a` + `OQ-F4b` — hai dòng ngay dưới.** | Chủ dự án | ⚠️ **Đóng NỬA** — nửa "loại nào đi đường nào" đã chốt; hai tham số vận hành còn treo ở `OQ-F4a`/`OQ-F4b`. ~~"Đóng"~~: cả bộ tài liệu (`cau-hoi-can-quyet.md` §"Còn treo sau đợt 27/08" · `ket-va-cach-go.md:37`, `:271` · `sprint-plan.md`) đều xếp `OQ-F4` vào nhóm **nửa câu còn treo** — cột này để "Đóng" là chỗ duy nhất nói ngược |
+| ⏳ **OQ-F4a** *(nửa câu tách ra 27/08/2026)* | Trần **thời lượng** video **THƯỜNG** (không phải thuyết trình) là bao nhiêu? | Video thường là loại **CÓ** áp F-18 (xem hết) — không có trần thời lượng thì đúng loại đó vẫn biến trang duyệt thành việc bất khả thi. Độ phân giải 1280×720 + ~2 Mbps đã có, dung lượng suy ra được — **thời lượng thì không**. Gợi ý cũ 24/08 (60–90 giây/video, ≤ 3 video/buổi) **chưa ai xác nhận**. §0c.1. | Chủ dự án | Trước khi bật nhánh video thường (**F.2d**) |
+| ⏳ **OQ-F4b** *(nửa câu tách ra 27/08/2026)* | **"Duyệt theo lô hoặc theo xác suất"** nghĩa là gì về **thao tác**? | Một nút duyệt cả 12 video? Bốc ngẫu nhiên n video bắt xem? Tỷ lệ n bao nhiêu, ai đặt? Không đặc tả thì Dev tự chọn — mà cái tự chọn đó **chính là mức kiểm soát còn lại** sau khi đã bỏ F-18; nó cũng quyết định `ClassMediaReviewDay` (SL-06) ghi gì cho buổi thuyết trình. §0c.1. | Chủ dự án | Trước khi hiện thực nhánh video thuyết trình |
+| ~~**OQ-F5**~~ | ~~Media prod đang có `classSessionId = null` xử lý sao khi bật điều kiện F-04?~~ | ✅ **ĐÓNG chiều 27/08/2026 bằng SỐ ĐO trên prod: `thieu_buoi = 0` · `tong = 7` · `thieu_ca_ngay_chup = 0`.** Không media nào mồ côi buổi ⇒ thêm `classSessionId: { not: null }` vào đường đọc PH (§6.1.4) **không làm tấm nào biến mất**; không backfill, không miễn trừ theo mốc. **F.1e hết chặn.** 📌 `tong = 7` ⇒ di sản R2 cần dọn chỉ 7 đối tượng — tách bucket bây giờ là lúc rẻ nhất. ⚠️ Nếu tới lúc thi công F.1e kho đã lớn hơn, **đo lại** bằng truy vấn K-2 chứ đừng dùng lại số hôm nay. Chi tiết §0c.2 | — | ✅ Xong |
 | ⚙️ ~~**OQ-F6**~~ | ~~Dọn object R2 mồ côi lịch sử — làm trong F hay tách?~~ | ✅ **CHỐT KỸ THUẬT 24/08/2026 (Dev): TÁCH thành story riêng**, chạy **ngay sau khi F đóng**. Lý do: đây là **rà kho lịch sử**, khác bản chất với vòng đời media mà F đặc tả — nhét chung là trộn hai loại rủi ro vào một lần chạy. Story riêng: liệt kê → đối chiếu DB → báo cáo → xoá; **dry-run mặc định**, người vận hành chạy tay (luật cứng #4), giữ log từng object. Đừng để sang quý sau: mỗi ngày trôi là thêm object mồ côi mới. | — | Đóng |
 | ~~**OQ-F7**~~ | ~~Media lớp chuyển sang bucket riêng (F-01-3) trong đợt F hay để sau?~~ | ✅ **ĐÃ CHỐT 24/08/2026 (B8): tách NGAY trong đợt F.** Việc phải làm kèm: nới `isOwnStorageUrl` (`actions.ts:150-156`) để nhận **2** bucket; media cũ ở lại bucket công khai (di sản — dọn theo OQ-F6); khoá **trước SL-02** vì ảnh hưởng object key. | — | Đóng |
 | ⚙️ ~~**OQ-F8**~~ | ~~Cảnh báo F-21 gộp vào cron sẵn có hay thêm entry thứ 24?~~ | ✅ **CHỐT KỸ THUẬT 24/08/2026 (Dev): THÊM ENTRY RIÊNG.** Nỗi lo trần cron **đã đo, không có thật**: `vercel.json` đang khai **23** cron, gói Pro cho **40**. Tách riêng vì gộp hai job khác mục đích vào một khe làm chúng **chết chung**, không tắt riêng được, log lẫn lộn. (Nếu dự án không ở gói Pro thì trần khác — deploy thử là biết, Vercel từ chối build khi vượt.) | — | Đóng |
@@ -1342,7 +1463,7 @@ Theo `docs/prd/A-nen-tang.md` §10.5 mục 2, thứ tự khoá bắt buộc **SL
 | **SL-01** | `UserOrgRole.source` (`AUTO`/`MANUAL`) | Gián tiếp — nghiệm thu F cho QLCS đa cơ sở đứng trên cấu hình đó | ADDITIVE |
 | **SL-02** | `ClassSessionMedia` + `MediaStudentTag` thêm `centerId`/`orgUnitId`, vào `SCOPED_MODELS` + `BACKFILL_SPECS`, index `[centerId, status]` | **§6.2.1, §6.2.3** — điều kiện cần của cả F.2 và F.4 | ADDITIVE |
 | **SL-03** | `MediaStatus += DELETED` (đặt **CUỐI**) + `deletedAt`/`deletedById`/`deleteReason` | **§6.1.1** T9/T10, **§6.1.2**, F-16, F-30 | ADDITIVE |
-| **SL-04** | `kind`, `mimeType`, `sizeBytes`, `durationSec`, `transcodeStatus` | **F-02, F-17, F-18, F-19** — không có thì không phân biệt nổi ảnh với video | ADDITIVE |
+| **SL-04** | `kind`, `mimeType`, `sizeBytes`, `durationSec`, `transcodeStatus` | **F-02, F-17, F-18, F-19** — không có thì không phân biệt nổi ảnh với video. 🔴 **27/08/2026: `kind` phải khai BA loại ngay từ đầu** (ảnh · video thường · **video thuyết trình** — §0c.1 hệ quả 1). Cột chưa tồn tại (`prisma/schema.prisma:4556-4581`) ⇒ thêm bây giờ là **additive trên cột chưa có**; để hạ cánh 2 giá trị rồi mới thêm = `ALTER TYPE ADD VALUE` trên bảng **đã có dữ liệu prod** | ADDITIVE |
 | **SL-05** | Bảng mới `MediaWatchProgress` | **§6.2.4** — F-13 phụ thuộc trực tiếp | BẢNG MỚI |
 | **SL-06** | Bảng mới `ClassMediaReviewDay` | **F-13, F-14, F-20, F-30…F-32** — không có thì không dựng nổi bảng SLA | BẢNG MỚI |
 | **SL-07** | Liên kết `ClassSessionMedia` ↔ `ReportCard` + `retentionDueAt` | **§6.1.5** F-05 | ADDITIVE |
@@ -1354,16 +1475,16 @@ Theo `docs/prd/A-nen-tang.md` §10.5 mục 2, thứ tự khoá bắt buộc **SL
 
 | Bước | Nội dung | Phụ thuộc | Ghi chú |
 |---|---|---|---|
-| **F.0** | ✅ OQ-F1/F2/F3/F6/F7/F8 **đã đóng** (24 + 26/08) · khoá SL-00 → SL-07 + `MediaRetentionLog` · viết vào `documentation/` | — | Luật cứng #3/#4; sai SL-00 thì 3 bảng mới phải làm lại. ⏳ **CÒN HAI câu treo, không phải một:** **OQ-F4** (trần thời lượng video) — không chặn F.0/F.1, chỉ chặn **F.2d**; **OQ-F5** (media prod `classSessionId = null` xử sao) — chặn **F.1e**, và phép đo prod 26/08 **CHƯA ĐỦ** (`docs/plan/ket-va-cach-go.md` K-2) |
+| **F.0** | ✅ OQ-F1/F2/F3/**F4**/**F5**/F6/F7/F8/**F9** **đã đóng** (24 + 26 + **27**/08, kể cả đợt bổ sung buổi chiều) · khoá SL-00 → SL-07 + `MediaRetentionLog` · viết vào `documentation/` | — | Luật cứng #3/#4; sai SL-00 thì 3 bảng mới phải làm lại. 🔴 **SL-04 phải khai `kind` BA loại ngay ở bước này** (§0c.1 hệ quả 1) — đây là lúc rẻ nhất, cột chưa tồn tại. ⏳ **CÒN treo đúng hai nửa câu của OQ-F4** (`OQ-F4a` trần thời lượng video thường · `OQ-F4b` "duyệt theo lô" là thao tác gì) — **chỉ chặn nhánh video** (F.2d), không chặn F.0 |
 | **F.1a** | **Test đỏ trước** (luật cứng #5): unit máy trạng thái · unit `mergeSegments`/`isWatchComplete` · unit `evaluateMediaSla` · e2e cách ly cơ sở media · e2e "không ai bỏ qua bước duyệt" | F.0 | Chưa có test đỏ thì chưa được viết Server Action |
 | **F.1b** | §6.1.3 — gỡ `autoApprove` ở cả hai đường ghi; chặn `APPROVED↔REJECTED` ở server | F.1a | Đổi hành vi thấy được ngay; báo trước cho QLCS |
 | **F.1c** | Soft-delete + `purgeAfterAt` cho T6/T9/T10 · màn Thùng rác + khôi phục (T9b) · **cron purge** (T12) xoá R2 thật sau 30 ngày; `DELETED` thay `REJECTED` | F.1b, SL-03 | ✅ Theo §0b.5. 🔴 **Cron purge** mới là chỗ xoá cứng không hoàn tác được — dry-run trước, và **diễn tập khôi phục 1 ảnh** trước khi bật |
 | **F.1d** | F-01: bắt buộc `classSessionId`; ghi `centerId`/`orgUnitId`/`kind`/… lúc create | SL-02, SL-04 | |
-| **F.1e** | F-04: thêm điều kiện `classSessionId` vào 2 đường đọc portal + backfill/miễn trừ theo OQ-F5 | F.1d | 🔴 Bật mù = ảnh biến mất khỏi portal của PH |
+| **F.1e** | F-04: thêm điều kiện `classSessionId` vào 2 đường đọc portal. ✅ **Không còn phần backfill/miễn trừ** — đo prod 27/08 ra `thieu_buoi = 0` | F.1d | 🟢 Hết rủi ro "ảnh biến mất khỏi portal" **theo số đo hôm nay**. ⚠️ Kho lớn hơn 7 đối tượng thì **đo lại K-2** trước khi bật, đừng bật mù |
 | **F.2a** | `ClassMediaReviewDay` + upsert ở T2/T4/T7 + `computeReviewDeadline` | SL-06, F.1b | Sinh dữ liệu cho F.3 và F.4 |
 | **F.2b** | Trang duyệt mới: cây ngày (§6.2.2) → folder lớp (§6.2.3) → grid F-12 | F.2a, SL-02 | Bỏ trần 200 lớp / 100 ảnh của màn cũ |
 | **F.2c** | F-15 lightbox + phím mũi tên; F-13 duyệt cả folder; F-14 "không có ảnh" | F.2b | |
-| **F.2d** | F-17/F-18/F-19: video chung luồng + `MediaWatchProgress` + badge tiến độ | F.2c, SL-04, SL-05, ~~OQ-F3~~ *(đóng)*, ⏳ **OQ-F4 (còn treo)** | Khoá `playbackRate = 1`. 🔴 **Không bật nhánh video trước khi OQ-F4 chốt** — §0b.2 |
+| **F.2d** | F-17/F-18/F-19: video chung luồng + `MediaWatchProgress` + badge tiến độ. **TÁCH LÀM HAI NHÁNH** (§0c.1): video **thường** (áp F-18) và video **thuyết trình** (không áp F-18, duyệt theo lô/xác suất, đường upload khác) | F.2c, SL-04 *(3 loại `kind`)*, SL-05, ~~OQ-F3~~ *(đóng)*, ~~OQ-F4~~ *(đóng 27/08 — hướng a)*, ⏳ **OQ-F4a** *(nhánh thường)*, ⏳ **OQ-F4b** *(nhánh thuyết trình)* | Khoá `playbackRate = 1`. 🔴 **Không bật nhánh video thường trước khi OQ-F4a chốt**; **không** hiện thực nhánh thuyết trình trước khi **OQ-F4b** chốt — §0c.1. Kèm: ngoại lệ F-18/F-19, hạn riêng F-20, F-30 cấm trộn |
 | **F.2e** | Sửa `lib/pending-tasks.ts:202-233` sang `scopedDb` | F.2a | P1 |
 | **F.3** | F-20 hai key registry + F-21 job cảnh báo + dòng mới trong `catalog.ts` | F.2a, OQ-F8 | Không đổi hệ thông báo, chỉ thêm khoá |
 | **F.4** | F-30…F-32: hàm build thuần + bảng + test | F.2a | Xuất file đi cùng quyết định A-03/OQ-6 |
