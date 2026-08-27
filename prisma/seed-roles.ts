@@ -47,6 +47,15 @@ export const ROLE_SEED: RoleSeed[] = [
       // trong can() v2 nên dòng này KHÔNG đổi hành vi; khai cho khớp v1 + rõ ý, và để
       // ma trận nói được "ai đặt được chỉ tiêu toàn hệ thống" mà không phải suy từ bypass.
       { action: "lead_targets:manage", scopeType: "GLOBAL" },
+      // Trục gọi điện (OmiCall). SUPER_ADMIN đã bypass toàn bộ quyền trong can() v2
+      // nên 6 dòng này KHÔNG đổi hành vi; khai để ma trận nói được ai nghe được ghi
+      // âm và ai gán được cuộc gọi mồ côi, mà không phải suy từ bypass.
+      { action: "calls:make", scopeType: "GLOBAL" },
+      { action: "calls:view-own", scopeType: "GLOBAL" },
+      { action: "calls:view-all", scopeType: "GLOBAL" },
+      { action: "calls:listen-recording", scopeType: "GLOBAL" },
+      { action: "calls:export", scopeType: "GLOBAL" },
+      { action: "calls:assign", scopeType: "GLOBAL" },
       // D-02 — chỉ tiêu ngân sách quảng cáo theo tháng × cơ sở. Cùng lý do dòng trên:
       // SUPER_ADMIN đã bypass trong can() v2 nên dòng này KHÔNG đổi hành vi, khai để
       // ma trận nói được "ai đặt được chỉ tiêu toàn hệ thống" mà không phải suy từ bypass.
@@ -509,6 +518,19 @@ export const ROLE_SEED: RoleSeed[] = [
       // target với scope CENTER ⇒ seed CENTER là khoá cửa chính của chính vai này trên
       // prod trong khi local (v1) vẫn xanh. Cách ly cơ sở nằm ở `resolveScopeFilters()`.
       { action: "dashboard:view", scopeType: "GLOBAL" },
+      // ── Trục gọi điện (OmiCall) ──
+      // Tất cả GLOBAL theo đúng luật R1 đầu file: cách ly cơ sở đến từ `scopedDb`
+      // (`CallLog` ∈ SCOPED_MODELS), KHÔNG từ scopeType. Đặt CENTER ở đây là khoá
+      // cửa của chính vai này trên prod mỗi khi call-site gọi trần.
+      // ⚠️ Đổi ở đây CHƯA có hiệu lực trên prod: phải chạy workflow seed-prod-roles.yml
+      // sau khi merge vào main, nếu không prod vẫn giữ quyền cũ trong DB.
+      { action: "calls:make", scopeType: "GLOBAL" },
+      { action: "calls:view-own", scopeType: "GLOBAL" },
+      { action: "calls:view-all", scopeType: "GLOBAL" },
+      // 🔴 BM-2 — nghe lại ghi âm là key RIÊNG, mỗi lượt nghe ghi audit (QT-36).
+      { action: "calls:listen-recording", scopeType: "GLOBAL" },
+      { action: "calls:export", scopeType: "GLOBAL" },
+      { action: "calls:assign", scopeType: "GLOBAL" },
       // ── Lead ──
       { action: "leads:view-all", scopeType: "GLOBAL" },
       // ⚠️ Đợt E (22/08/2026) — `leads:view-pii` ĐÃ GỠ khỏi vai này theo Q9 chủ dự
@@ -747,6 +769,14 @@ export const ROLE_SEED: RoleSeed[] = [
     // dùng chung trong team — xem mapping-proposal.md §3, không khớp 6 scopeType.
     code: "CENTER_SALES_CSM", name: "Tư vấn & CSKH cơ sở",
     perms: [
+      // ── Trục gọi điện (OmiCall) ── ĐÚNG HAI key.
+      // 🔴 KHÔNG có `calls:listen-recording` (BM-2 · ma trận BA `:1380` ghi ❌ cho
+      // Sale). Nghe lại ghi âm là quyền của người quản lý, không phải quyền mặc định
+      // của người bán. Và đừng "chặn" bằng grant DENY: `can()` v2 là ALLOW-wins
+      // thuần, nhánh DENY KHÔNG TỒN TẠI nên grant đó bị bỏ qua IM LẶNG.
+      // KHÔNG có `calls:view-all` — Sale xem cuộc gọi của mình (lọc ở truy vấn).
+      { action: "calls:make", scopeType: "GLOBAL" },
+      { action: "calls:view-own", scopeType: "GLOBAL" },
       { action: "leads:view-own", scopeType: "GLOBAL" },
       // #11 T2 — như CENTER_MANAGER: Sale trực tiếp gọi khách phải thấy SĐT.
       { action: "leads:view-pii", scopeType: "GLOBAL" },
