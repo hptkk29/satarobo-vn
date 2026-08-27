@@ -134,7 +134,7 @@ cho bước này.**
 |---|---|
 | Biến `SALE_SITE_ENABLED` | ✅ đã thêm — ⚠️ **CHƯA TRIỂN KHAI LẠI, nên chưa có hiệu lực** |
 | Khoá nhánh `main` + `test` | ✅ đã bật |
-| Nạp lại bảng quyền môi trường thật (`seed-prod-roles.yml`) | ⬜ **phải chạy mỗi lần đưa lên nhánh chính** — trợ lý có nhiệm vụ nhắc |
+| Nạp lại bảng quyền môi trường thật (`seed-prod-roles.yml`) | ⬜ **phải chạy mỗi lần đưa lên nhánh chính** — trợ lý có nhiệm vụ nhắc. 27/08 có thêm khoá mới `commission_periods:manage` xếp vào đợt này (mục 9) |
 
 ---
 
@@ -150,7 +150,7 @@ cho bước này.**
 | 6 | **Triển khai lại** để `SALE_SITE_ENABLED` có hiệu lực | mục 6 | người vận hành |
 | 7 | Đọc mã nhúng MISA lấy giá trị `AllowURL` đúng | mục 5 | **Kiệt** (quản trị MISA) |
 | 8 | Đòi văn bản OmiCall (5 mục) + xác nhận gói Zalo OA | mục 4 | chủ dự án |
-| 9 | Duyệt **trần chi phí/tháng** cho Zalo · cước gọi · chấm điểm | mục 4 | chủ dự án + kế toán |
+| 9 | ~~Duyệt **trần chi phí/tháng** cho Zalo · cước gọi · chấm điểm~~ ✅ **ĐÃ CHỐT 27/08** (mục 8) | mục 4 | chủ dự án + kế toán |
 | 10 | Ký phụ lục xác nhận địa chỉ trang nhập khách | câu 7 | chủ dự án |
 
 ---
@@ -175,3 +175,53 @@ cho bước này.**
 ### 8.9 Hạ tầng
 
 `SALE_SITE_ENABLED` — ✅ **đã triển khai lại 27/08**, biến đã có hiệu lực trên môi trường thử.
+## 9. Trần chi phí tháng — chi tiết hiện thực (từ quyết định §8.4)
+
+| Trục | Trần/tháng | Khoá cấu hình |
+|---|---:|---|
+| Tin nhắn Zalo | **2.000.000đ** | `outbound.zaloMonthlyCapVnd` |
+| Cước gọi điện | **3.000.000đ** | `outbound.callMonthlyCapVnd` |
+| Chấm điểm AI | **1.000.000đ** | `outbound.aiGradingMonthlyCapVnd` |
+| **Tổng** | **6.000.000đ** | *(suy ra, KHÔNG có ô nhập riêng)* |
+
+Hai cơ chế **bắt buộc**, đã hiện thực: **dừng cứng khi chạm trần** (không gọi ra nữa,
+không âm thầm tiếp tục) và **cảnh báo ở mốc 80%** (`outbound.warnAtPercent`).
+
+Nguyên văn chủ dự án: *"Điểm chính không phải con số mà là phải có một con số trước khi
+bật lời gọi ra ngoài."* Vì vậy cả bốn con số nằm ở **màn Cấu hình vận hành** (nhóm Tài
+chính), **không** ở biến môi trường — tháng sau điều chỉnh theo thực tế mà không phải
+triển khai lại.
+
+> ⚠️ **Tổng KHÔNG có ô nhập riêng.** Muốn đổi tổng thì đổi ba con số thành phần. Khai
+> tổng bên cạnh các phần là dựng hai nguồn sự thật rồi để chúng trôi khỏi nhau — đúng
+> cái bẫy `COMMISSION_TIERS` đã có sẵn trong kho.
+
+> ⚠️ **Đơn giá tin Zalo (`outbound.znsUnitCostVnd`, mặc định 400đ) là ƯỚC TÍNH.** Zalo
+> không trả về giá từng tin, và giá thật khác nhau theo mẫu (học phí 700đ · xác thực
+> 400đ · gửi theo UID rẻ hơn SĐT). **Việc vận hành hằng tháng:** lấy hoá đơn Zalo chia
+> cho `chargeCount` của kỳ (bảng `OutboundSpendCounter`) rồi chỉnh lại ô này. Không
+> chỉnh thì trần vẫn chặn, chỉ là chặn sớm hoặc muộn hơn thực tế.
+
+---
+
+## 10. VIỆC PHẢI CHẠY TAY SAU KHI GỘP (nhánh `feat/tran-chi-phi-va-siet-quyen`)
+
+> Xếp theo thứ tự. Cả hai việc **không tự chạy**, và **quên thì không có gì báo lỗi** —
+> hệ thống chạy tiếp bằng trạng thái cũ một cách im lặng.
+
+| # | Việc | Lệnh / nơi bấm | Quên thì sao |
+|:--:|---|---|---|
+| 1 | **Chạy migration** `20260827150000_tran_chi_phi_goi_ra` | tự chạy khi gộp vào `test` (`migrate-test.yml`) và vào `main` (`deploy.yml`) | Bảng `OutboundSpendCounter` không tồn tại ⇒ cổng ngân sách fail-closed ⇒ **mọi tin Zalo bị từ chối** với mã `OUTBOUND_BUDGET_UNAVAILABLE`. Ồn ào, dễ thấy — nhưng là sự cố thật. |
+
+> ⚠️ **Thứ tự của việc #1 là thứ tự QUAN TRỌNG DUY NHẤT của đợt này.** Migration
+> phải xong TRƯỚC khi mã mới nhận lưu lượng thật. Nếu Vercel triển khai xong trước
+> khi `deploy.yml` chạy `prisma migrate deploy`, thì trong cửa sổ đó **mọi tin Zalo
+> (kể cả mã đăng nhập của phụ huynh) bị từ chối** — đúng như thiết kế fail-closed,
+> nhưng vẫn là gián đoạn thật. Migration thuần thêm bảng mới nên **chạy trước lúc
+> nào cũng an toàn**; nếu lo, chạy tay `prisma migrate deploy` ngay khi gộp.
+> Màn *Tích hợp ngoài* thì không sao — khối báo cáo ngân sách cố ý fail-open, thiếu
+> bảng thì hiện 0 chứ không làm sập trang.
+| 2 | **Nạp lại bảng quyền** — chạy workflow `seed-prod-roles.yml` | Actions → `seed-prod-roles.yml` → Run | Quyền mới `commission_periods:manage` chưa có trên môi trường thật ⇒ RBAC v2 (đang bật ở prod) trả **false cho mọi người**, kể cả kế toán Hội sở ⇒ **không ai chốt được kỳ hoa hồng**, và không có thông báo nào giải thích. Đây là kiểu hỏng câm. |
+
+Việc #2 là **cùng đợt** với mọi thay đổi bảng quyền khác đang chờ — chạy **một lần cho
+tất cả**, không chạy riêng cho ticket này.

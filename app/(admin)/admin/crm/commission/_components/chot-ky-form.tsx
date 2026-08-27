@@ -38,7 +38,13 @@ function kyThangTruoc(): string {
 
 const tien = (n: number) => `${n.toLocaleString("vi-VN")}đ`;
 
-export function ChotKyForm() {
+export function ChotKyForm({
+  // 27/08/2026 — `commission_periods:manage`, tính ở Server Component cha. Đây là
+  // client nên prop này CHỈ để không vẽ ô nhập bấm không được; cổng thật ở Server Action.
+  canChotKy,
+}: {
+  canChotKy: boolean;
+}) {
   const router = useRouter();
   const [period, setPeriod] = useState(kyThangTruoc());
   const [ketQua, setKetQua] = useState<KetQuaChotKy | null>(null);
@@ -71,20 +77,28 @@ export function ChotKyForm() {
         chưa duyệt là an toàn — hệ thống ghi đè cả kỳ, không cộng dồn.
       </p>
 
-      <div className="flex flex-wrap items-end gap-2">
-        <label className="text-sm">
-          <span className="mb-1 block font-medium">Kỳ (tháng)</span>
-          <Input
-            type="month"
-            value={period}
-            onChange={(e) => setPeriod(e.target.value)}
-            className="w-44"
-          />
-        </label>
-        <Button onClick={chot} disabled={pending || !/^\d{4}-\d{2}$/.test(period)}>
-          {pending ? "Đang tính…" : "Chốt kỳ"}
-        </Button>
-      </div>
+      {canChotKy ? (
+        <div className="flex flex-wrap items-end gap-2">
+          <label className="text-sm">
+            <span className="mb-1 block font-medium">Kỳ (tháng)</span>
+            <Input
+              type="month"
+              value={period}
+              onChange={(e) => setPeriod(e.target.value)}
+              className="w-44"
+            />
+          </label>
+          <Button onClick={chot} disabled={pending || !/^\d{4}-\d{2}$/.test(period)}>
+            {pending ? "Đang tính…" : "Chốt kỳ"}
+          </Button>
+        </div>
+      ) : (
+        <p className="rounded-md bg-muted/50 p-2 text-sm text-muted-foreground">
+          Bạn xem được bảng hoa hồng nhưng không chốt/duyệt kỳ được — kỳ hoa hồng là kỳ
+          của TOÀN CÔNG TY, chỉ kế toán Hội sở và quản trị hệ thống chốt được. Cần chốt
+          kỳ thì báo kế toán Hội sở.
+        </p>
+      )}
 
       {ketQua ? (
         <div className="mt-4 space-y-2 rounded-md bg-muted/50 p-3 text-sm">

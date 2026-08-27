@@ -309,6 +309,7 @@ export type Action =
   | "payments:confirm" // R7-04 — Kế toán xác nhận (tách nhiệm vụ)
   | "payments:view-pii" // #15 (câu 32) — break-glass xem đầy đủ CCCD PH + địa chỉ (reason + audit)
   | "revenue_targets:manage" // B-01 — đặt mục tiêu doanh thu tháng × cơ sở (KHÔNG phải quyền thao tác tiền)
+  | "commission_periods:manage" // 27/08 — CHỐT/DUYỆT/MỞ LẠI kỳ hoa hồng (việc toàn hệ, tách khỏi payments:manage)
   // 27/08 — khai "QC nào / quản lý nào phụ trách cơ sở nào" cho hoa hồng QC 1% + QL TT 2%.
   // Key RIÊNG, KHÔNG mượn `payments:manage`: quyền đó là của KẾ TOÁN (mở/huỷ/hoàn tiền,
   // duyệt bảng kê). Người TRẢ tiền không nên đồng thời là người chỉ định AI ĐƯỢC NHẬN —
@@ -771,6 +772,19 @@ export const PERMISSIONS: Record<Action, Role[]> = {
   // ∈ SCOPE_EXEMPT nên scopedDb pass-through — luật "chỉ cơ sở mình quản" ép TAY trong
   // action qua `checkRevenueTargetScope` (lib/reports/revenue-target-scope.ts).
   "revenue_targets:manage": ["SUPER_ADMIN", "CENTER_MANAGER", "ACCOUNTANT"],
+  // 27/08/2026 — CHỐT / DUYỆT / MỞ LẠI kỳ hoa hồng. Key RIÊNG, tách khỏi
+  // `payments:manage` vì bảng kê hoa hồng là bảng KỲ TOÀN HỆ THỐNG
+  // (`CommissionStatement.period` @unique, KHÔNG có `centerId`) ⇒ đường GHI không có
+  // gì cắt theo cơ sở, mà `payments:manage` thì cả `CENTER_ACCOUNTANT` cũng đang giữ
+  // ở scope GLOBAL. Hệ quả trước khi tách: kế toán MỘT cơ sở bấm chốt được kỳ hoa
+  // hồng của CẢ CÔNG TY.
+  // Không gỡ `payments:manage` của kế toán cơ sở (họ còn thu/chi hằng ngày), cũng
+  // không hạ nó xuống scope CENTER (mọi call-site gọi trần ⇒ `can()` v2 trả false ⇒
+  // mất sạch quyền tiền). Tiền lệ tách key: `revenue_targets:manage` (B-01),
+  // `ads_budget_targets:manage` (D-02).
+  // v2: seed CHỈ cho HO_ACCOUNTANT (prisma/seed-roles.ts) — legacy `ACCOUNTANT` ánh
+  // xạ sang HO_ACCOUNTANT, nên hai tầng khớp nhau.
+  "commission_periods:manage": ["SUPER_ADMIN", "ACCOUNTANT"],
   // 27/08 — CHỈ SUPER_ADMIN. Đây là quyết định "ai được nhận 3% doanh thu", chủ dự án
   // tự nhập. Vì chỉ SUPER_ADMIN, key này KHÔNG cần chạy `seed-prod-roles.yml`: v2
   // (`lib/auth/can.ts:52`) cho SUPER_ADMIN đi thẳng, không tra `RoleDef` trong DB.

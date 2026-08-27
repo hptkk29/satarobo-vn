@@ -66,6 +66,11 @@ export const ROLE_SEED: RoleSeed[] = [
       // SUPER_ADMIN đã bypass trong can() v2 nên dòng này KHÔNG đổi hành vi, khai để
       // ma trận nói được "ai đặt được chỉ tiêu toàn hệ thống" mà không phải suy từ bypass.
       { action: "ads_budget_targets:manage", scopeType: "GLOBAL" },
+      // 27/08/2026 — chốt/duyệt/mở lại kỳ hoa hồng nay là quyền RIÊNG (trước đi nhờ
+      // `payments:manage`, mà key đó kế toán CƠ SỞ cũng có ở GLOBAL ⇒ chốt được kỳ của
+      // cả công ty). SUPER_ADMIN đã bypass toàn bộ quyền trong can() v2 nên dòng này
+      // KHÔNG đổi hành vi; khai để ma trận nói được ai chốt được kỳ, và để v1 khớp v2.
+      { action: "commission_periods:manage", scopeType: "GLOBAL" },
       // S-5 — XEM sổ lượt chia lead. SUPER_ADMIN đã bypass toàn bộ quyền trong can() v2
       // nên dòng này KHÔNG đổi hành vi; khai để ma trận nói được ai mở được màn kiểm
       // chứng mà không phải suy từ bypass.
@@ -122,6 +127,10 @@ export const ROLE_SEED: RoleSeed[] = [
       // B-01 — trước đây đặt mục tiêu doanh thu đi nhờ `payments:manage`. Tách key
       // riêng để mở cho Quản lý cơ sở; khai lại ở đây để vai này KHÔNG mất việc đang làm.
       { action: "revenue_targets:manage", scopeType: "GLOBAL" },
+      // 27/08/2026 — chốt/duyệt/mở lại kỳ hoa hồng tách thành key riêng. Khai lại ở
+      // đây để kế toán HỘI SỞ KHÔNG mất việc đang làm; `CENTER_ACCOUNTANT` cố ý KHÔNG
+      // có (đó chính là chỗ được siết). GLOBAL vì ba Server Action gọi trần.
+      { action: "commission_periods:manage", scopeType: "GLOBAL" },
       { action: "orders:manage", scopeType: "GLOBAL" },
       // G-A (21/08/2026) — cổng tạo đơn nay kiểm `orders:create`; ai có
       // `orders:manage` phải có kèm để không mất chức năng đang dùng.

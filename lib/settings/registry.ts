@@ -872,6 +872,70 @@ export const SETTINGS = {
     centerOverridable: false,
   }),
 
+  // ─── TRẦN CHI PHÍ THÁNG cho lời gọi ra ngoài (chốt 27/08/2026) ────────────
+  // Zalo 2tr · cước gọi 3tr · chấm điểm AI 1tr = 6tr/tháng. Chạm trần là DỪNG CỨNG
+  // (`lib/ngan-sach-goi-ra/`), cảnh báo ở mốc 80%.
+  //
+  // Ba con số nằm ở ĐÂY chứ không ở env vì đó là cả yêu cầu: "phải có một con số
+  // trước khi bật lời gọi ra ngoài", và con số đó tháng sau phải điều chỉnh được theo
+  // thực tế mà không triển khai lại. Env đổi là phải deploy; ô này đổi có hiệu lực
+  // trong ≤300s (TTL cache cấu hình) và có audit + lý do bắt buộc.
+  //
+  // KHÔNG có ô "tổng 6 triệu": tổng SUY RA từ ba trục (`tongTran()`). Khai tổng riêng
+  // bên cạnh các phần là công thức tạo hai nguồn sự thật rồi để chúng trôi khỏi nhau —
+  // đúng cái bẫy `COMMISSION_TIERS` đã dựng sẵn trong kho này.
+  //
+  // TRẦN = 0 nghĩa là TẮT trục đó (không phải "không giới hạn").
+  "outbound.zaloMonthlyCapVnd": def({
+    key: "outbound.zaloMonthlyCapVnd",
+    group: "finance",
+    label: "Trần chi phí tin nhắn Zalo mỗi tháng (đ) — 0 = tắt gửi Zalo",
+    schema: z.number().int().min(0).max(500_000_000),
+    default: 2_000_000,
+    // Trần là chính sách tiền của công ty, không phải tham số vận hành của từng cơ sở.
+    centerOverridable: false,
+  }),
+  "outbound.callMonthlyCapVnd": def({
+    key: "outbound.callMonthlyCapVnd",
+    group: "finance",
+    label: "Trần cước gọi điện mỗi tháng (đ) — 0 = tắt gọi ra",
+    schema: z.number().int().min(0).max(500_000_000),
+    default: 3_000_000,
+    centerOverridable: false,
+  }),
+  "outbound.aiGradingMonthlyCapVnd": def({
+    key: "outbound.aiGradingMonthlyCapVnd",
+    group: "finance",
+    label: "Trần chi phí chấm điểm AI mỗi tháng (đ) — 0 = tắt chấm điểm AI",
+    schema: z.number().int().min(0).max(500_000_000),
+    default: 1_000_000,
+    centerOverridable: false,
+  }),
+  "outbound.warnAtPercent": def({
+    key: "outbound.warnAtPercent",
+    group: "finance",
+    label: "Cảnh báo khi ngân sách một trục dùng tới (%) — mặc định 80",
+    // Chặn dưới 50%: đặt quá thấp thì cảnh báo kêu suốt và sẽ bị bỏ qua. Chặn trên
+    // 99%: cảnh báo ở 100% là báo tang, không phải cảnh báo.
+    schema: z.number().int().min(50).max(99),
+    default: 80,
+    centerOverridable: false,
+  }),
+  "outbound.znsUnitCostVnd": def({
+    key: "outbound.znsUnitCostVnd",
+    group: "finance",
+    label: "Đơn giá ƯỚC TÍNH một tin ZNS (đ) — dùng để trừ vào trần Zalo",
+    // ⚠️ ĐÂY LÀ ƯỚC TÍNH, KHÔNG PHẢI HOÁ ĐƠN. Giá thật khác nhau theo mẫu và theo
+    // cách gửi (đo trên chính kho này: học phí 616258 = 700đ/SĐT · 490đ/UID; xác thực
+    // 616128 và tài khoản 616899 = 400đ/280đ; `lib/observability/slo.ts` lại đang
+    // dùng 300đ). Zalo KHÔNG trả về giá theo từng tin, nên không có cách nào biết
+    // đúng ngoài đối chiếu hoá đơn cuối tháng.
+    // 400đ = mẫu hay dùng nhất. Cách vận hành đúng: cuối tháng lấy hoá đơn Zalo chia
+    // cho `chargeCount` của kỳ (bảng OutboundSpendCounter) rồi chỉnh ô này.
+    schema: z.number().int().min(0).max(100_000),
+    default: 400,
+    centerOverridable: false,
+  }),
   // ─── Trục gọi điện + ghi âm (OmiCall) ────────────────────────────────────
   // §2.3: thứ cần TẮT GẤP không được nằm trong env (tắt env phải deploy lại).
   // ⚠️ `revalidate` thật của cache setting là 300s — đừng hứa "tắt trong 5 giây".
