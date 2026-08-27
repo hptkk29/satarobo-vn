@@ -98,6 +98,14 @@ export type ConvertV2Input = {
    * guard PAYMENT_REQUIRED coi như thoả.
    */
   backfillPayment?: BackfillPaymentInput | null;
+  /**
+   * 27/08 — GIẢI TRÌNH ƯU ĐÃI (miễn phí / học bổng / giảm giá) do người chốt gõ ở
+   * form convert. KHÔNG phải cổng quyền: guard tiền vẫn là `evaluatePaymentGuard`
+   * (tổng sau ưu đãi = 0 ⇒ qua). Field này chỉ để lý do đi vào `AuditLog.reason` —
+   * "ai cho em này miễn phí, vì cái gì" phải tra được, vì tiền biến mất khỏi công
+   * nợ ngay tại đây. Rỗng/không truyền ⇒ giữ nguyên hành vi cũ.
+   */
+  discountReason?: string | null;
 };
 
 export async function convertLeadV2(actor: AuditActor, input: ConvertV2Input): Promise<ConvertV2Result> {
@@ -150,6 +158,10 @@ export async function convertLeadV2(actor: AuditActor, input: ConvertV2Input): P
     return { ok: false, error: { code: "PAYMENT_REQUIRED", message: "Cần ghi nhận khoản thanh toán trước khi chốt" } };
   }
   const scholarshipFull = guard.ok ? guard.scholarshipFull : false;
+  // Lý do ưu đãi chỉ có nghĩa khi CÓ ưu đãi thật (Σ discountAmount > 0) — không để
+  // chuỗi rác của caller bám vào audit của lead chốt giá đầy đủ.
+  const totalDiscountAmount = prices.reduce((sum, p) => sum + p.discountAmount, 0);
+  const discountReason = totalDiscountAmount > 0 ? input.discountReason?.trim() || null : null;
 
   // 3) Dedupe parent (3 nhánh). Conflict → tạo ConvertConflict + khoá convert (AC3).
   const parentMatch = await findParentMatch({ email: input.parentEmail, phone: input.parentPhone });
@@ -447,12 +459,21 @@ export async function convertLeadV2(actor: AuditActor, input: ConvertV2Input): P
       entityId: lead.id,
       action: "STATUS_CHANGE",
       oldValues: { status: lead.status },
-      newValues: { status: "ENROLLED", studentIds, scholarshipFull, backfillNoPayment },
+      newValues: {
+        status: "ENROLLED",
+        studentIds,
+        scholarshipFull,
+        backfillNoPayment,
+        totalDiscountAmount,
+        totalFinalPrice,
+      },
       reason: scholarshipFull
-        ? "SCHOLARSHIP_FULL"
+        ? `SCHOLARSHIP_FULL${discountReason ? `: ${discountReason}` : ""}`
         : backfillNoPayment
           ? input.allowNoPayment!.reason.trim()
-          : undefined,
+          : discountReason
+            ? `DISCOUNT: ${discountReason}`
+            : undefined,
       orgUnitId: lead.centerId,
       tx,
     });

@@ -10,12 +10,16 @@ import { checkPermission } from '@/lib/auth/check-permission'
 import { getAuditActor } from '@/lib/audit/log'
 import { isConvertV2Enabled } from '@/lib/flags'
 import { convertLeadV2, computeInstallmentSplit, type ConvertV2Student } from '@/lib/crm/convert-lead-v2'
+import { computeEnrollmentPrice } from '@/lib/finance/pricing'
 import { recordInstallmentPlan, requestInstallmentApproval } from '@/lib/orders/installments'
 import { phoneVn } from '@/lib/validators/phone'
 
 // ─── R7-05 — wiring Convert v2 vào Server Action (UI → service đã có) ──────────
 // KHÔNG nhân đôi logic convert: chỉ chuẩn hoá input từ form → gọi convertLeadV2.
-// Giá (listPrice) đọc LẠI từ DB theo classId (không tin client). C6 — bỏ ưu đãi.
+// Giá (listPrice) đọc LẠI từ DB theo classId (không tin client).
+// ⚠️ 27/08 — ĐẢO "C6 — bỏ ưu đãi": form nay gửi được ưu đãi/miễn phí từng em. Lý do
+// đảo: bỏ ưu đãi khiến tổng phải thu luôn > 0 ⇒ lead miễn phí toàn phần kẹt cứng ở
+// guard PAYMENT_REQUIRED, không có đường nào chốt (khoản 0đ cũng không ghi nhận được).
 
 const studentSchema = z.object({
   leadChildId: z.string().trim().optional().nullable(),
@@ -23,6 +27,19 @@ const studentSchema = z.object({
   dob: z.string().trim().optional().or(z.literal('')),
   classId: z.string().trim().min(1, 'Chọn lớp cho học viên'),
   consentMedia: z.boolean().optional(),
+  // 27/08 — ƯU ĐÃI TỪNG EM. Trước đây form cố định `discount: null` ⇒ tổng phải thu
+  // LUÔN > 0 ⇒ lead miễn phí toàn phần không bao giờ qua nổi guard PAYMENT_REQUIRED
+  // (mà khoản 0đ cũng không ghi nhận được — `payments/_actions.ts` chặn amount > 0).
+  // Nhánh học bổng toàn phần vốn đã có trong `evaluatePaymentGuard`, chỉ thiếu đường
+  // từ UI xuống. `value` là % với PERCENT/SCHOLARSHIP, là VNĐ với AMOUNT/PROGRAM —
+  // `computeEnrollmentPrice` tự kẹp (≤ 100% và ≤ giá gốc), server KHÔNG tin giá client.
+  discount: z
+    .object({
+      type: z.enum(['PERCENT', 'AMOUNT', 'SCHOLARSHIP', 'PROGRAM']),
+      value: z.number().int().nonnegative(),
+    })
+    .nullable()
+    .optional(),
 })
 
 // FL2-01 — kế hoạch học phí: 1 đợt (đóng đủ) hoặc 2 đợt (đợt 1 đã thu + đợt 2 hẹn ngày).
@@ -71,6 +88,9 @@ const convertSchema = z.object({
   parentCity: z.string().trim().max(120).optional().or(z.literal('')),
   students: z.array(studentSchema).min(1, 'Cần ít nhất 1 học viên'),
   installment: installmentSchema,
+  // Bắt buộc khi có ưu đãi (kiểm dưới, sau khi biết ưu đãi có ăn tiền thật không).
+  // Đi vào `AuditLog.reason` của bản ghi STATUS_CHANGE lead → tra được về sau.
+  discountReason: z.string().trim().max(300).optional().or(z.literal('')),
 })
 
 export type SubmitConvertV2Result =
@@ -120,8 +140,8 @@ export async function submitConvertV2(
     return { ok: false, error: 'Chỉ chuyển được lead của bạn' }
   }
 
-  // Đọc giá thật từ lớp ở DB (không tin client gửi giá lên). C6 — bỏ ưu đãi: enrollment
-  // lưu finalPrice = listPrice, discountAmount = 0 (convertLeadV2 với discount=null).
+  // Đọc giá thật từ lớp ở DB (không tin client gửi giá lên). Client chỉ được gửi LOẠI
+  // + MỨC ưu đãi; giá gốc và phép trừ đều làm ở server (`computeEnrollmentPrice`).
   const classIds = [...new Set(d.students.map((s) => s.classId))]
   const classes = await sdb.class.findMany({
     where: { id: { in: classIds }, deletedAt: null },
@@ -130,19 +150,36 @@ export async function submitConvertV2(
   const classMap = new Map(classes.map((c) => [c.id, c]))
 
   const students: ConvertV2Student[] = []
+  let totalDiscountAmount = 0
   for (const s of d.students) {
     const cls = classMap.get(s.classId)
     if (!cls) return { ok: false, error: `Lớp không tồn tại cho học viên "${s.name}"` }
+    const listPrice = cls.course?.price ?? 0
+    // Ưu đãi 0 (hoặc không chọn) coi như KHÔNG có ưu đãi — để `Enrollment.discountType`
+    // không bị đóng dấu "PERCENT 0%" gây nhiễu báo cáo.
+    const discount = s.discount && s.discount.value > 0 ? s.discount : null
+    // Tính lại bằng ĐÚNG hàm mà convertLeadV2 dùng — chỉ để biết ưu đãi có ăn tiền thật
+    // không (bắt lý do). Giá ghi vào DB vẫn do convertLeadV2 tự tính, không truyền sang.
+    totalDiscountAmount += computeEnrollmentPrice({ listPrice, discount }).discountAmount
     students.push({
       leadChildId: s.leadChildId || null,
       name: s.name,
       dob: s.dob ? new Date(s.dob) : null,
       courseId: cls.courseId,
       classId: s.classId,
-      listPrice: cls.course?.price ?? 0,
-      discount: null,
+      listPrice,
+      discount,
       consentMedia: s.consentMedia === true,
     })
+  }
+
+  // Ưu đãi làm học phí bốc hơi khỏi công nợ ⇒ phải có người chịu trách nhiệm bằng chữ.
+  const discountReason = d.discountReason?.trim() || ''
+  if (totalDiscountAmount > 0 && discountReason.length < 10) {
+    return {
+      ok: false,
+      error: 'Có ưu đãi/miễn phí thì phải ghi lý do (tối thiểu 10 ký tự) — lý do được lưu vào nhật ký',
+    }
   }
 
   // Idempotency key ổn định theo payload (chống double-submit / 2 sale song song).
@@ -159,6 +196,9 @@ export async function submitConvertV2(
       name: s.name.trim().toLowerCase(),
       classId: s.classId,
       courseId: s.courseId,
+      // 27/08 — ƯU ĐÃI VÀO KHOÁ. Không có nó thì: chốt hụt vì thiếu lý do → sửa ưu đãi
+      // → bấm lại ⇒ khoá y hệt ⇒ idempotency trả kết quả CŨ (giá cũ) mà báo thành công.
+      discount: s.discount ? `${s.discount.type}:${s.discount.value}` : null,
     })),
   })
   const idempotencyKey = `convert:${leadId}:${createHash('sha256')
@@ -181,6 +221,7 @@ export async function submitConvertV2(
       parentCity: d.parentCity || null,
       students,
       idempotencyKey,
+      discountReason: discountReason || null,
     },
   )
 
