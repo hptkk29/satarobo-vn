@@ -4,7 +4,7 @@ import { useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { approveStatementAction, reopenStatementAction } from "../actions";
+import { approveStatementAction, reopenStatementAction, chotKyHoaHongAction } from "../actions";
 
 export function StatementActions({ period, status }: { period: string; status: string }) {
   const router = useRouter();
@@ -31,13 +31,29 @@ export function StatementActions({ period, status }: { period: string; status: s
         Export Excel
       </a>
       {status !== "APPROVED" ? (
-        <Button
-          size="sm"
-          disabled={pending}
-          onClick={() => run(() => approveStatementAction(period, "Duyệt qua UI"), "Đã duyệt")}
-        >
-          Duyệt
-        </Button>
+        <>
+          {/* Tính lại kỳ chưa duyệt từ sổ tiền — ghi đè cả kỳ nên bấm nhiều lần vô hại. */}
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={pending}
+            onClick={() =>
+              run(
+                () => chotKyHoaHongAction(period, `Chốt lại kỳ ${period} qua UI`),
+                "Đã tính lại kỳ",
+              )
+            }
+          >
+            Tính lại
+          </Button>
+          <Button
+            size="sm"
+            disabled={pending}
+            onClick={() => run(() => approveStatementAction(period, "Duyệt qua UI"), "Đã duyệt")}
+          >
+            Duyệt
+          </Button>
+        </>
       ) : (
         <Button
           size="sm"

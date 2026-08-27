@@ -12,59 +12,23 @@
 // tại chỗ: chính sách lead độc quyền (Q8, 22/08) đổi được bằng env
 // `LEAD_SHARING_ENABLED`, và nếu chỗ này gõ tay thì bật lại chính sách cũ sẽ chỉ
 // đúng ở trang admin còn trang này thì không.
+//
+// S-8 (27/08/2026) — hai mệnh đề đó nay ở `lib/lead/ownership.ts`, KHÔNG còn
+// được định nghĩa ở file này. Lý do: trang quản trị và ô tìm toàn hệ thống cũng
+// cần đúng mệnh đề ấy, mà bắt chúng import từ một module tên "sale-leads" thì
+// hoặc là kỳ, hoặc là họ chép tay — và chép tay chính là cách bản thứ ba ra đời
+// với hai vế thay vì ba. Xem đầu `ownership.ts`.
 import "server-only";
 import type { LeadStatus, Prisma } from "@prisma/client";
 import { scopedDb } from "@/lib/db-scope";
 import type { Actor } from "@/lib/auth/actor";
-import { leadSharedOrClause } from "@/lib/lead/sharing";
+import { leadOwnershipWhere } from "@/lib/lead/ownership";
 import { phoneSearchTerm } from "@/lib/phone";
 import { maskLeadPiiFields } from "@/lib/lead/pii";
 import { LEAD_KHONG_NHAN_THEM_CON } from "@/lib/leads/status";
 
 /** Trạng thái coi là ĐÃ ĐÓNG — mặc định không hiện trong danh sách việc đang làm. */
 export const TRANG_THAI_DA_DONG: LeadStatus[] = [...LEAD_KHONG_NHAN_THEM_CON];
-
-/**
- * Mệnh đề "lead này có phải KHÁCH CỦA TÔI không" — bản dùng cho việc ĐỌC.
- *
- * Ba vế, đúng bằng bộ vế mà `/admin/leads` dùng cho người chỉ có `leads:view-own`
- * (xem khối `scopeToSelf` ở trang đó — test S-4 đọc thẳng nguồn để khoá):
- *
- *   1. `assignedToId` — phiếu được GIAO cho tôi. Sale cơ sở sống bằng vế này.
- *   2. `createdById`  — phiếu chính TÔI NHẬP. **S-4 (27/08/2026)**: thiếu vế này
- *      thì Sale Hội sở thấy site Sale trắng trơn, vì phiếu họ nhập TỰ CHIA về
- *      Sale cơ sở (chốt 04/08 "lead không bao giờ về Hội sở") nên họ không bao
- *      giờ là assignee. Trang admin đã có vế này từ 23/08; site Sale thì quên.
- *   3. nhánh "dùng chung" — RỖNG theo mặc định (`leadSharedOrClause()`), chỉ
- *      quay lại khi ai đó bật `LEAD_SHARING_ENABLED`.
- *
- * ⚠️ Nới ở đây KHÔNG nới cách ly cơ sở, và đó là chỗ dễ tưởng nhầm. Cả cụm này
- * đi vào `where` như MỘT vế, còn `scopedDb` bọc thêm `AND [ …, centerId IN
- * visibleCenterIds ]` ở ngoài ⇒ Sale CS1 nhập một phiếu rồi phiếu đó chuyển sang
- * CS2 thì họ vẫn KHÔNG đọc được. Test `[S-4] nới 'người nhập' KHÔNG được nới
- * cách ly cơ sở` khoá đúng hình dạng đó.
- */
-export function leadOwnershipWhere(userId: string): Prisma.LeadWhereInput {
-  return {
-    OR: [{ assignedToId: userId }, { createdById: userId }, ...leadSharedOrClause()],
-  };
-}
-
-/**
- * Mệnh đề "lead này có phải TRÁCH NHIỆM của tôi không" — HẸP hơn vế trên.
- *
- * Cố ý KHÔNG có `createdById`. Hai câu hỏi khác nhau và trộn vào nhau là sai:
- *   · "khách của tôi"      → tôi được XEM (nhập hộ cũng là của tôi);
- *   · "tôi phải chạm ai"   → tôi là người phải GỌI ĐIỆN.
- * Phiếu Sale Hội sở nhập được chia cho Sale cơ sở; người phải gọi là Sale cơ sở.
- * Đổ SLA của họ lên bảng việc Hội sở là đếm đôi `soKhachDangMo` trên hai màn và
- * bày ra việc mà người xem không bấm được.
- *
- * Đây đúng bằng `leadOwnershipWhere` TRƯỚC S-4 ⇒ bảng việc không đổi hành vi.
- */
-export function leadPhuTrachWhere(userId: string): Prisma.LeadWhereInput {
-  return { OR: [{ assignedToId: userId }, ...leadSharedOrClause()] };
-}
 
 export type SaleLeadRow = {
   id: string;
