@@ -35,6 +35,8 @@ const h = vi.hoisted(() => {
     status: string;
     deletedAt: Date | null;
     centerId: string | null;
+    /** Ghi kép theo `centerId` (luật cứng Nền Hệ thống #3) — optional để factory khỏi khai. */
+    orgUnitId?: string | null;
   };
   type EnrollmentRow = {
     id: string;
@@ -59,6 +61,10 @@ const h = vi.hoisted(() => {
     leads: [] as LeadRow[],
     enrollments: [] as EnrollmentRow[],
     users: [] as UserRow[],
+    /** `Center` đang hoạt động — nguồn của bước (1) "chia đều giữa các cơ sở vận hành". */
+    centers: [] as { id: string }[],
+    /** Cây OrgUnit tối giản: đủ cho `getNonEnrollableCenterIds` + `orgUnitIdForCenter`. */
+    orgUnits: [] as { id: string; type: string; centerId: string | null }[],
     conversations: [] as { id: string; dmKey: string; type: string; status: string }[],
     /** Số activity "của sale" — cửa khoá auto-chia (`hasSaleInteraction`). */
     saleInteractionCount: 0,
@@ -74,6 +80,11 @@ const h = vi.hoisted(() => {
     currentTx: null as unknown,
     inTx: false,
     reconcileArgs: [] as Row[],
+    /**
+     * Chen ngang GIỮA lượt đọc lead (ngoài transaction) và lệnh GHI — khe TOCTOU thật:
+     * `scopedDb` không che đường ghi, và repo có 7 đường đổi chủ lead cùng tồn tại.
+     */
+    beforeLeadWrite: null as null | (() => void),
   };
 
   const asIn = (v: unknown): string[] | null => {
@@ -96,6 +107,17 @@ const h = vi.hoisted(() => {
       }
       if (key === "deletedAt") {
         if (value === null && row.deletedAt !== null) return false;
+        continue;
+      }
+      // Cách ly cơ sở ở đường GHI (`leadWhere`): `Lead` KHÔNG thuộc NULL_IS_GLOBAL_MODELS
+      // nên `centerId = null` KHÔNG khớp `{ in: [...] }` — đúng bằng điều Prisma làm.
+      if (key === "centerId") {
+        if (value === null) {
+          if (row.centerId !== null) return false;
+          continue;
+        }
+        const ids = asIn(value);
+        if (ids && (row.centerId === null || !ids.includes(row.centerId))) return false;
         continue;
       }
     }
@@ -199,6 +221,20 @@ const h = vi.hoisted(() => {
               }
             : null;
         }),
+        // `manualAssignLead` đọc bằng `findFirst` (kèm `deletedAt: null`) — Lead KHÔNG
+        // nằm trong SOFT_DELETE_MODELS (lib/soft-delete.ts) nên base `db` không tự lọc.
+        // Mock lọc THẬT theo `where` để một lượt bỏ quên `deletedAt` là lộ ngay.
+        findFirst: vi.fn(async (args: Row) => {
+          const found = state.leads.find((l) => matchLead(l, (args.where ?? {}) as Row));
+          return found
+            ? {
+                id: found.id,
+                centerId: found.centerId,
+                status: found.status,
+                assignedToId: found.assignedToId,
+              }
+            : null;
+        }),
         groupBy: vi.fn(async () => [] as Row[]),
         update: vi.fn(async (args: Row) => {
           trace("lead.update");
@@ -208,6 +244,7 @@ const h = vi.hoisted(() => {
           return { id: found.id };
         }),
         updateMany: vi.fn(async (args: Row) => {
+          state.beforeLeadWrite?.();
           state.leadUpdateArgs.push(args);
           trace("lead.updateMany");
           const hit = state.leads.filter((l) => matchLead(l, (args.where ?? {}) as Row));
@@ -216,6 +253,8 @@ const h = vi.hoisted(() => {
             if ("assignedToId" in data) l.assignedToId = data.assignedToId as string | null;
             if ("assignedAt" in data) l.assignedAt = data.assignedAt as Date | null;
             if ("status" in data && typeof data.status === "string") l.status = data.status;
+            if ("centerId" in data) l.centerId = data.centerId as string | null;
+            if ("orgUnitId" in data) l.orgUnitId = data.orgUnitId as string | null;
           }
           return { count: hit.length };
         }),
@@ -260,7 +299,20 @@ const h = vi.hoisted(() => {
         }),
       },
       center: {
-        findMany: vi.fn(async () => [] as Row[]),
+        findMany: vi.fn(async () => state.centers.map((c) => ({ id: c.id }))),
+      },
+      // `getNonEnrollableCenterIds` (lib/enrollment-flow) + `orgUnitIdForCenter`
+      // (lib/org/org-service) chạy THẬT — chỉ dữ liệu là giả. Mock cả hai hàm đó sẽ giấu
+      // mất bước ghi kép `centerId → orgUnitId` (luật cứng Nền Hệ thống #3).
+      orgUnit: {
+        findMany: vi.fn(async () =>
+          state.orgUnits.map((o) => ({ type: o.type, centerId: o.centerId, deletedAt: null })),
+        ),
+        findFirst: vi.fn(async (args: Row) => {
+          const where = (args.where ?? {}) as Row;
+          const found = state.orgUnits.find((o) => o.centerId === where.centerId);
+          return found ? { id: found.id } : null;
+        }),
       },
       conversation: {
         findMany: vi.fn(async (args: Row) => {
@@ -366,6 +418,11 @@ beforeEach(() => {
   ];
   s.leads = [lead("l1")];
   s.enrollments = [];
+  s.centers = [{ id: CS1 }, { id: CS2 }];
+  s.orgUnits = [
+    { id: "ou-cs1", type: "CENTER", centerId: CS1 },
+    { id: "ou-cs2", type: "CENTER", centerId: CS2 },
+  ];
   s.conversations = [];
   s.saleInteractionCount = 0;
   s.centerMode = null;
@@ -378,6 +435,7 @@ beforeEach(() => {
   s.currentTx = null;
   s.inTx = false;
   s.reconcileArgs = [];
+  s.beforeLeadWrite = null;
 });
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -387,7 +445,7 @@ beforeEach(() => {
 describe("manualAssignLead", () => {
   it("đặt assignedAt: đồng hồ SLA-3 của sale nhận bắt đầu từ đây", async () => {
     const before = Date.now();
-    const res = await manualAssignLead("l1", NEW_SALE, ACTOR);
+    const res = await manualAssignLead("l1", NEW_SALE, ACTOR, "ALL");
     expect(res.ok).toBe(true);
     expect(h.state.leads[0]?.assignedToId).toBe(NEW_SALE);
     expect(h.state.leads[0]?.assignedAt).toBeInstanceOf(Date);
@@ -395,11 +453,11 @@ describe("manualAssignLead", () => {
   });
 
   it("giữ nguyên NEW→ASSIGNED; status khác thì không đụng", async () => {
-    await manualAssignLead("l1", NEW_SALE, ACTOR);
+    await manualAssignLead("l1", NEW_SALE, ACTOR, "ALL");
     expect(h.state.leads[0]?.status).toBe("ASSIGNED");
 
     h.state.leads = [lead("l2", { status: "CONTACTED" })];
-    await manualAssignLead("l2", NEW_SALE, ACTOR);
+    await manualAssignLead("l2", NEW_SALE, ACTOR, "ALL");
     expect(h.state.leads[0]?.status).toBe("CONTACTED");
   });
 
@@ -408,7 +466,7 @@ describe("manualAssignLead", () => {
     // nhóm mang `Enrollment.saleId` + kênh riêng Sale↔PH.
     h.state.leads = [lead("l1", { assignedToId: OLD_SALE, status: "ENROLLED" })];
     h.state.enrollments = [enrollment("e1", { centerId: CS2 })];
-    const res = await manualAssignLead("l1", NEW_SALE, ACTOR);
+    const res = await manualAssignLead("l1", NEW_SALE, ACTOR, "ALL");
     expect(res.ok).toBe(true);
     expect(res.enrollmentsMoved).toBe(1);
     expect(h.state.enrollments[0]?.saleId).toBe(NEW_SALE);
@@ -421,7 +479,7 @@ describe("manualAssignLead", () => {
       enrollment("e-cs1", { centerId: CS1 }),
       enrollment("e-ho", { centerId: null }), // lớp Hội sở — không ràng buộc cơ sở
     ];
-    const res = await manualAssignLead("l1", NEW_SALE, ACTOR);
+    const res = await manualAssignLead("l1", NEW_SALE, ACTOR, "ALL");
     expect(res.enrollmentsMoved).toBe(2);
     // Quản lý gán tay giữa vận hành: sale cũ CÒN LÀM VIỆC ⇒ ghi danh khác cơ sở ở lại với
     // người đang chăm, không bị gỡ trắng trong một thao tác báo "thành công".
@@ -434,7 +492,7 @@ describe("manualAssignLead", () => {
   it("đường ĐỌC ghi danh chỉ mang ngữ nghĩa SỞ HỮU (luật L1) — PENDING vẫn đổi chủ", async () => {
     h.state.leads = [lead("l1", { assignedToId: OLD_SALE, status: "ENROLLED" })];
     h.state.enrollments = [enrollment("e-pending", { status: "PENDING", parentUserId: null })];
-    const res = await manualAssignLead("l1", NEW_SALE, ACTOR);
+    const res = await manualAssignLead("l1", NEW_SALE, ACTOR, "ALL");
     expect(res.enrollmentsMoved).toBe(1);
   });
 
@@ -449,7 +507,7 @@ describe("manualAssignLead", () => {
         status: "ACTIVE",
       },
     ];
-    const res = await manualAssignLead("l1", NEW_SALE, ACTOR);
+    const res = await manualAssignLead("l1", NEW_SALE, ACTOR, "ALL");
     expect(res.dmArchived).toBe(1);
     expect(h.state.reconcileArgs[0]?.inTx).toBe(false);
   });
@@ -457,7 +515,7 @@ describe("manualAssignLead", () => {
   it("lead CHƯA có chủ ⇒ KHÔNG chạm ghi danh (không nhận vơ ghi danh mồ côi)", async () => {
     h.state.leads = [lead("l1", { assignedToId: null })];
     h.state.enrollments = [enrollment("e-mo-coi", { saleId: null })];
-    await manualAssignLead("l1", NEW_SALE, ACTOR);
+    await manualAssignLead("l1", NEW_SALE, ACTOR, "ALL");
     expect(h.state.trace.filter((t) => t.startsWith("enrollment."))).toEqual([]);
     expect(h.state.enrollments[0]?.saleId).toBeNull();
   });
@@ -467,14 +525,14 @@ describe("manualAssignLead", () => {
     // trong một thao tác mà người dùng tưởng là no-op.
     h.state.leads = [lead("l1", { assignedToId: NEW_SALE, status: "ENROLLED" })];
     h.state.enrollments = [enrollment("e-cs1", { saleId: NEW_SALE, centerId: CS1 })];
-    const res = await manualAssignLead("l1", NEW_SALE, ACTOR);
+    const res = await manualAssignLead("l1", NEW_SALE, ACTOR, "ALL");
     expect(res.ok).toBe(true);
     expect(h.state.trace.filter((t) => t.startsWith("enrollment."))).toEqual([]);
     expect(h.state.enrollments[0]?.saleId).toBe(NEW_SALE);
   });
 
   it("activity 'Gán tay cho X' giữ nguyên câu chữ + cờ system", async () => {
-    await manualAssignLead("l1", NEW_SALE, ACTOR);
+    await manualAssignLead("l1", NEW_SALE, ACTOR, "ALL");
     expect(h.state.activityRows).toHaveLength(1);
     expect(h.state.activityRows[0]).toMatchObject({
       leadId: "l1",
@@ -487,7 +545,7 @@ describe("manualAssignLead", () => {
   it("audit ASSIGN ghi TRONG transaction, không lượt ghi nào lọt ra `db` trần", async () => {
     h.state.leads = [lead("l1", { assignedToId: OLD_SALE })];
     h.state.enrollments = [enrollment("e1")];
-    await manualAssignLead("l1", NEW_SALE, ACTOR);
+    await manualAssignLead("l1", NEW_SALE, ACTOR, "ALL");
     expect(h.state.auditCalls[0]).toMatchObject({
       action: "ASSIGN",
       oldValues: { assignedToId: OLD_SALE },
@@ -498,20 +556,190 @@ describe("manualAssignLead", () => {
   });
 
   it("transaction gánh thêm việc ⇒ nới trần 30s", async () => {
-    await manualAssignLead("l1", NEW_SALE, ACTOR);
+    await manualAssignLead("l1", NEW_SALE, ACTOR, "ALL");
     expect(h.state.txOptions[0]).toMatchObject({ timeout: 30_000, maxWait: 10_000 });
   });
 
   it("giữ nguyên: sale không hợp lệ (không phải SALES_CSM) ⇒ ok:false, không ghi gì", async () => {
-    const res = await manualAssignLead("l1", "teacher-1", ACTOR);
+    const res = await manualAssignLead("l1", "teacher-1", ACTOR, "ALL");
     expect(res).toMatchObject({ ok: false, error: "Sale không hợp lệ" });
     expect(h.state.txOptions).toEqual([]);
   });
 
   it("giữ nguyên: lead không tồn tại ⇒ ok:false, không mở transaction", async () => {
-    const res = await manualAssignLead("khong-co", NEW_SALE, ACTOR);
+    const res = await manualAssignLead("khong-co", NEW_SALE, ACTOR, "ALL");
     expect(res).toMatchObject({ ok: false, error: "Lead không tồn tại" });
     expect(h.state.txOptions).toEqual([]);
+  });
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Cách ly cơ sở (chống IDOR ghi) — cùng khuôn `transferLead`
+  // (app/(admin)/admin/leads/actions.ts). Cổng quyền `leads:assign` KHÔNG cắt được
+  // việc này: quyền đó seed `scopeType: "GLOBAL"` cho CENTER_MANAGER
+  // (prisma/seed-roles.ts) ⇒ `can()` v2 khớp MỌI target.centerId. Ô chọn sale ở trang
+  // chi tiết đã lọc đúng (`app/(admin)/admin/leads/[id]/page.tsx`) nhưng đó là UI —
+  // Server Action là endpoint công khai, POST tay đi vòng hết.
+  // `visibleCenterIds` là THAM SỐ BẮT BUỘC (không mặc định "ALL"): hàm chỉ có 1 caller
+  // sản xuất, để typecheck bắt caller tương lai quên truyền thay vì im lặng fail-open.
+  // ─────────────────────────────────────────────────────────────────────────
+
+  it("lead NGOÀI tầm nhìn cơ sở ⇒ từ chối, KHÔNG mở transaction và KHÔNG chạm ghi danh", async () => {
+    // QLCS chỉ thấy CS1; lead nằm ở CS2 (mặc định của factory) và đã convert nên có
+    // `Enrollment.saleId` — thứ quyết định ai còn nhắn riêng được với phụ huynh.
+    h.state.leads = [lead("l1", { assignedToId: OLD_SALE, status: "ENROLLED", centerId: CS2 })];
+    h.state.enrollments = [enrollment("e1", { centerId: CS2 })];
+
+    const res = await manualAssignLead("l1", NEW_SALE, ACTOR, [CS1]);
+
+    expect(res).toMatchObject({ ok: false, error: "Lead không tồn tại" });
+    // Không ghi gì: không transaction, không đụng lead, không đụng ghi danh, không audit.
+    expect(h.state.txOptions).toEqual([]);
+    expect(h.state.trace).toEqual([]);
+    expect(h.state.leads[0]?.assignedToId).toBe(OLD_SALE);
+    expect(h.state.enrollments[0]?.saleId).toBe(OLD_SALE);
+    expect(h.state.auditCalls).toEqual([]);
+    expect(h.state.activityRows).toEqual([]);
+  });
+
+  it("thông điệp lead ngoài tầm nhìn TRÙNG nhánh không-tồn-tại (không lộ lead cơ sở khác)", async () => {
+    const ngoai = await manualAssignLead("l1", NEW_SALE, ACTOR, [CS1]);
+    const khongCo = await manualAssignLead("khong-co", NEW_SALE, ACTOR, [CS1]);
+    expect(ngoai.error).toBe(khongCo.error);
+  });
+
+  it("lead TRONG tầm nhìn cơ sở ⇒ cho qua như thường", async () => {
+    h.state.leads = [lead("l1", { assignedToId: OLD_SALE, status: "ENROLLED", centerId: CS2 })];
+    h.state.enrollments = [enrollment("e1", { centerId: CS2 })];
+
+    const res = await manualAssignLead("l1", NEW_SALE, ACTOR, [CS1, CS2]);
+
+    expect(res.ok).toBe(true);
+    expect(h.state.leads[0]?.assignedToId).toBe(NEW_SALE);
+    expect(res.enrollmentsMoved).toBe(1);
+  });
+
+  it("lead ĐÃ XOÁ MỀM ⇒ từ chối (Lead không thuộc SOFT_DELETE_MODELS, base db không tự lọc)", async () => {
+    h.state.leads = [lead("l1", { deletedAt: new Date() })];
+    const res = await manualAssignLead("l1", NEW_SALE, ACTOR, "ALL");
+    expect(res).toMatchObject({ ok: false, error: "Lead không tồn tại" });
+    expect(h.state.txOptions).toEqual([]);
+  });
+
+  it("sale nhận ĐÃ VÔ HIỆU HOÁ ⇒ từ chối (ô chọn ở trang chi tiết vốn đã lọc isActive)", async () => {
+    // OLD_SALE trong bộ dựng có `isActive: false` — người vừa nghỉ việc. Nhận lead xong
+    // là kéo luôn `Enrollment.saleId` ⇒ giữ kênh riêng với phụ huynh.
+    const res = await manualAssignLead("l1", OLD_SALE, ACTOR, "ALL");
+    expect(res).toMatchObject({ ok: false, error: "Sale không hợp lệ" });
+    expect(h.state.txOptions).toEqual([]);
+  });
+
+  it("sale nhận sai vai (không phải SALES_CSM) ⇒ từ chối kể cả khi cùng cơ sở với lead", async () => {
+    // `teacher-1` cùng CS2 với lead — chỉ cái vai là sai.
+    const res = await manualAssignLead("l1", "teacher-1", ACTOR, [CS2]);
+    expect(res).toMatchObject({ ok: false, error: "Sale không hợp lệ" });
+    expect(h.state.txOptions).toEqual([]);
+    expect(h.state.trace).toEqual([]);
+  });
+
+  it("sale nhận NGOÀI tầm nhìn cơ sở của người bấm ⇒ từ chối", async () => {
+    // Lead CS1 (người bấm thấy), sale nhận ở CS2 (không thấy).
+    h.state.leads = [lead("l1", { centerId: CS1 })];
+    const res = await manualAssignLead("l1", NEW_SALE, ACTOR, [CS1]);
+    expect(res).toMatchObject({ ok: false, error: "Sale nhận không thuộc cơ sở bạn quản lý" });
+    expect(h.state.txOptions).toEqual([]);
+  });
+
+  it("sale nhận KHÁC cơ sở với lead ⇒ từ chối (kể cả người bấm thấy cả hai cơ sở)", async () => {
+    h.state.users.push({
+      id: "sale-cs1",
+      name: "Sale CS1",
+      roles: ["SALES_CSM"],
+      isActive: true,
+      deletedAt: null,
+      centerId: CS1,
+    });
+    h.state.leads = [lead("l1", { centerId: CS2 })];
+    const res = await manualAssignLead("l1", "sale-cs1", ACTOR, [CS1, CS2]);
+    expect(res).toMatchObject({
+      ok: false,
+      error: "Sale phụ trách phải thuộc cùng cơ sở với lead",
+    });
+    expect(h.state.txOptions).toEqual([]);
+  });
+
+  it("lead CHƯA gán cơ sở (centerId null) ⇒ KHÔNG ràng buộc cơ sở của sale", async () => {
+    // Đúng bằng điều ô chọn đang làm: `...(lead.centerId ? { centerId: lead.centerId } : {})`.
+    // Siết thêm ở đây sẽ chặn luồng lead từ web chưa kịp chia cơ sở.
+    h.state.leads = [lead("l1", { centerId: null })];
+    const res = await manualAssignLead("l1", NEW_SALE, ACTOR, "ALL");
+    expect(res.ok).toBe(true);
+    expect(h.state.leads[0]?.assignedToId).toBe(NEW_SALE);
+  });
+
+  it("lead centerId null + người bấm cấp cơ sở ⇒ từ chối (Lead ∉ NULL_IS_GLOBAL_MODELS)", async () => {
+    // Cùng nghĩa với `passesScope`: với model thường, `centerId = null` là CHẶN. Trang
+    // chi tiết cũng 404 vì `scopedDb` inject `centerId IN (...)` — hai tầng khớp nhau.
+    h.state.leads = [lead("l1", { centerId: null })];
+    const res = await manualAssignLead("l1", NEW_SALE, ACTOR, [CS2]);
+    expect(res).toMatchObject({ ok: false, error: "Lead không tồn tại" });
+    expect(h.state.txOptions).toEqual([]);
+  });
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // CỔNG GHI tự mang điều kiện — soi THẲNG đối số `where` của `lead.updateMany`
+  // (khuôn `actions.transfer.test.ts` [T-13]). Ba ca ở trên chỉ chứng minh cổng ĐỌC
+  // chặn; bản trước đó có `leadWhere: { deletedAt: null }` mà KHÔNG test nào đọc tới,
+  // nên xoá cả dòng đó đi thì 32/32 vẫn xanh.
+  // ─────────────────────────────────────────────────────────────────────────
+
+  it("[F6a] lệnh GHI mang `deletedAt: null` (Lead ∉ SOFT_DELETE_MODELS, tx không tự lọc)", async () => {
+    await manualAssignLead("l1", NEW_SALE, ACTOR, "ALL");
+    expect(h.state.leadUpdateArgs).toHaveLength(1);
+    expect(h.state.leadUpdateArgs[0]?.where).toMatchObject({
+      deletedAt: null,
+      id: { in: ["l1"] },
+    });
+  });
+
+  it("[F6b] lệnh GHI mang CẢ cách ly cơ sở khi người bấm ở cấp cơ sở", async () => {
+    // Toàn bộ cách ly cơ sở của bản trước nằm ở lượt đọc NGOÀI transaction ⇒ khe TOCTOU.
+    // `bulkReassignLeads` (lib/lead-handover/service.ts) đã đọc lại TRONG tx với nguyên bộ
+    // `where`; đường này lặp lại điều kiện đó ở chính lệnh ghi.
+    h.state.leads = [lead("l1", { centerId: CS2 })];
+    await manualAssignLead("l1", NEW_SALE, ACTOR, [CS1, CS2]);
+    expect(h.state.leadUpdateArgs[0]?.where).toMatchObject({
+      deletedAt: null,
+      centerId: { in: [CS1, CS2] },
+    });
+  });
+
+  it("[F6b] người bấm thấy MỌI cơ sở ⇒ KHÔNG thêm điều kiện cơ sở nào", async () => {
+    // "ALL" là SUPER_ADMIN/HO. Thêm `centerId IN (…)` ở đây sẽ chặn cả lead chưa gán cơ sở.
+    h.state.leads = [lead("l1", { centerId: null })];
+    await manualAssignLead("l1", NEW_SALE, ACTOR, "ALL");
+    expect(h.state.leadUpdateArgs[0]?.where).not.toHaveProperty("centerId");
+  });
+
+  it("[F6b] TOCTOU: lead bị chuyển sang cơ sở khác giữa lúc đọc và lúc ghi ⇒ KHÔNG ghi", async () => {
+    // Chen ngang đúng khe: `applyLeadReassignment` đọc ghi danh TRƯỚC khi ghi lead, nên
+    // hook ở đó là "một `transferLead` đồng thời vừa commit".
+    h.state.leads = [lead("l1", { assignedToId: OLD_SALE, status: "ENROLLED", centerId: CS2 })];
+    h.state.enrollments = [enrollment("e1", { centerId: CS2 })];
+    h.state.beforeLeadWrite = () => {
+      const row = h.state.leads[0];
+      if (row) row.centerId = CS1; // lead vừa bị chuyển sang cơ sở NGOÀI tầm nhìn
+    };
+
+    await expect(manualAssignLead("l1", NEW_SALE, ACTOR, [CS2])).rejects.toThrow(
+      /không còn tồn tại khi ghi phân công/,
+    );
+    // Lệnh ghi khớp 0 dòng ⇒ lead giữ nguyên chủ cũ.
+    expect(h.state.leads[0]?.assignedToId).toBe(OLD_SALE);
+    // Và `where` của lệnh ghi phải mang chính điều kiện làm nó khớp 0 dòng.
+    expect(h.state.leadUpdateArgs[0]?.where).toMatchObject({ centerId: { in: [CS2] } });
+    // ⚠️ KHÔNG kiểm `Enrollment.saleId` ở đây: `applyLeadReassignment` ghi ghi danh SAU
+    // lệnh ghi lead, nên trên DB thật cú ném này rollback cả hai. Mock không có rollback —
+    // kiểm ở đây là kiểm cái mock, không phải kiểm hàm.
   });
 });
 
@@ -597,5 +825,102 @@ describe("autoAssignNewLead", () => {
   it("KHÔNG đóng kênh DM nào — không có sale cũ thì không có kênh cũ để đóng", async () => {
     await autoAssignNewLead("l1", ACTOR);
     expect(h.reconcileDm).not.toHaveBeenCalled();
+  });
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // [F3] BƯỚC (1) — ĐỊNH CƠ SỞ. Đây là lượt GHI ĐẦU TIÊN của hàm và trước bản này nó
+  // nằm NGOÀI mọi transaction, TRƯỚC nhánh kiểm chế độ: cơ sở MANUAL ⇒ hàm `return`
+  // ngay, không audit, không LeadActivity — mà `Lead.centerId`/`orgUnitId` ĐÃ đổi vĩnh
+  // viễn. Một lead bị định tuyến sang cơ sở khác mà không dòng nhật ký nào giải thích.
+  // ─────────────────────────────────────────────────────────────────────────
+
+  it("[F3] lead chưa có cơ sở ⇒ ghi cơ sở + orgUnitId TRONG transaction, kèm AuditLog", async () => {
+    h.state.leads = [lead("l1", { centerId: null })];
+    const res = await autoAssignNewLead("l1", ACTOR, "ALL");
+    expect(res.ok).toBe(true);
+    expect(h.state.leads[0]?.centerId).toBe(CS1); // pickCenterEvenly: tải bằng nhau → id nhỏ nhất
+    expect(h.state.leads[0]?.orgUnitId).toBe("ou-cs1"); // ghi kép (luật cứng Nền #3)
+    // Lượt ghi cơ sở KHÔNG được lọt ra `db` trần.
+    expect(h.state.trace.filter((t) => t.endsWith("(db)"))).toEqual([]);
+    const centerAudit = h.state.auditCalls.find((c) =>
+      Array.isArray(c.changedFields) && (c.changedFields as string[]).includes("centerId"),
+    );
+    expect(centerAudit).toMatchObject({
+      action: "UPDATE",
+      newValues: { centerId: CS1, orgUnitId: "ou-cs1" },
+    });
+  });
+
+  it("[F3] cơ sở đích ở chế độ MANUAL ⇒ vẫn có AuditLog giải thích vì sao lead đổi cơ sở", async () => {
+    // Đúng ca hỏng: hàm thoát sớm ở nhánh MANUAL nên `logLeadAudit` của lượt phân công
+    // không bao giờ chạy. Nếu lượt ghi cơ sở cũng không audit thì thay đổi này vô hình.
+    h.state.leads = [lead("l1", { centerId: null })];
+    h.state.centerMode = "MANUAL";
+    const res = await autoAssignNewLead("l1", ACTOR, "ALL");
+    expect(res).toMatchObject({ ok: true, assignedToId: null, mode: "MANUAL" });
+    expect(h.state.leads[0]?.centerId).toBe(CS1);
+    expect(h.state.auditCalls).toHaveLength(1);
+    expect(h.state.auditCalls[0]).toMatchObject({
+      action: "UPDATE",
+      oldValues: { centerId: null },
+      newValues: { centerId: CS1 },
+    });
+  });
+
+  it("[F3] lượt ghi cơ sở là compare-and-swap: lead vừa được đường khác gán cơ sở ⇒ không đè", async () => {
+    h.state.leads = [lead("l1", { centerId: null })];
+    h.state.beforeLeadWrite = () => {
+      const row = h.state.leads[0];
+      if (row) row.centerId = CS2; // `transferLead` đồng thời vừa commit
+    };
+    await expect(autoAssignNewLead("l1", ACTOR, "ALL")).rejects.toThrow(/cơ sở/);
+    expect(h.state.leads[0]?.centerId).toBe(CS2);
+    expect(h.state.auditCalls).toEqual([]);
+  });
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // [F1/F3] CÁCH LY CƠ SỞ — cùng khuôn `manualAssignLead`. Cổng `leads:assign` ở tầng
+  // action KHÔNG cắt được: quyền đó seed `scopeType: "GLOBAL"` cho CENTER_MANAGER
+  // ⇒ nhánh GLOBAL của `can()` v2 khớp MỌI target.centerId.
+  // ─────────────────────────────────────────────────────────────────────────
+
+  it("[F1] lead NGOÀI tầm nhìn cơ sở ⇒ từ chối, KHÔNG mở transaction", async () => {
+    h.state.leads = [lead("l1", { centerId: CS2 })];
+    const res = await autoAssignNewLead("l1", ACTOR, [CS1]);
+    expect(res).toMatchObject({ ok: false, error: "Lead không tồn tại" });
+    expect(h.state.txOptions).toEqual([]);
+    expect(h.state.trace).toEqual([]);
+    expect(h.state.leads[0]?.assignedToId).toBeNull();
+  });
+
+  it("[F1] lead ĐÃ XOÁ MỀM ⇒ từ chối (bản cũ dùng findUnique trần nên chia được)", async () => {
+    h.state.leads = [lead("l1", { deletedAt: new Date() })];
+    const res = await autoAssignNewLead("l1", ACTOR, "ALL");
+    expect(res).toMatchObject({ ok: false, error: "Lead không tồn tại" });
+    expect(h.state.txOptions).toEqual([]);
+  });
+
+  it("[F3] lead CHƯA gán cơ sở + người bấm cấp cơ sở ⇒ từ chối TRƯỚC khi định tuyến", async () => {
+    // Ca của phát hiện: QLCS@CS1 POST tay trên lead từ web (centerId null) → bước (1) chia
+    // lead sang CS2. `Lead ∉ NULL_IS_GLOBAL_MODELS` nên chính họ cũng không thấy lead này.
+    h.state.leads = [lead("l1", { centerId: null })];
+    const res = await autoAssignNewLead("l1", ACTOR, [CS1]);
+    expect(res).toMatchObject({ ok: false, error: "Lead không tồn tại" });
+    expect(h.state.leads[0]?.centerId).toBeNull();
+    expect(h.state.trace).toEqual([]);
+  });
+
+  it("[F1] lead TRONG tầm nhìn cơ sở ⇒ chạy như thường", async () => {
+    const res = await autoAssignNewLead("l1", ACTOR, [CS2]);
+    expect(res).toMatchObject({ ok: true, assignedToId: NEW_SALE });
+    expect(h.state.leads[0]?.assignedToId).toBe(NEW_SALE);
+  });
+
+  it("[F1] cổng GHI mang cách ly cơ sở khi người bấm ở cấp cơ sở", async () => {
+    await autoAssignNewLead("l1", ACTOR, [CS2]);
+    expect(h.state.leadUpdateArgs[0]?.where).toMatchObject({
+      deletedAt: null,
+      centerId: { in: [CS2] },
+    });
   });
 });

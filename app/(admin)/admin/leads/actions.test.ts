@@ -39,6 +39,12 @@ const h = vi.hoisted(() => ({
   auth: vi.fn(),
   resolveActor: vi.fn(),
   upsert: vi.fn(),
+  // Ba đường GHI phân công lead. Mock ở BIÊN lib để test soi được ĐÚNG tập cơ sở mà
+  // action tính ra và truyền xuống — thứ mà 32 test tầng lib không thể thấy (chúng nhận
+  // literal "ALL"/[CS1] từ ngoài vào, không dựng `Actor` thật bao giờ).
+  manualAssign: vi.fn(),
+  autoAssignNew: vi.fn(),
+  autoAssign: vi.fn(),
 }));
 
 vi.mock("next/cache", () => ({
@@ -56,10 +62,22 @@ vi.mock("@/lib/auth/actor", async (orig) => {
 });
 // ⚠️ `checkPermission` để NGUYÊN (không mock): cổng ngoài phải được chạy thật, nếu không
 // ca "vai khác không rộng thêm" chỉ đo cái mock của chính mình.
+vi.mock("@/lib/lead/auto-assign", () => ({
+  manualAssignLead: h.manualAssign,
+  autoAssignNewLead: h.autoAssignNew,
+  reassignForCenter: vi.fn(),
+}));
+vi.mock("@/lib/lead/assign", () => ({ autoAssignLead: h.autoAssign }));
 
 import { buildActor } from "@/lib/auth/actor";
-import { passesScope } from "@/lib/db-scope";
-import { setCenterAssignModeAction } from "./actions";
+import { getModelVisibleCenterIds, passesScope } from "@/lib/db-scope";
+import * as leadActions from "./actions";
+import {
+  assignLeadToSaleAction,
+  autoAssignLeadAction,
+  autoAssignNewLeadAction,
+  setCenterAssignModeAction,
+} from "./actions";
 
 // Cây theo hình CHỐT 11/08/2026: HO → REGION → CENTER (lib/org/org-tree.ts).
 // Hai cơ sở của QLCS ở HAI VÙNG khác nhau — fixture mà L-A13 đòi.
@@ -126,6 +144,9 @@ function armUser(
 beforeEach(() => {
   vi.clearAllMocks();
   h.upsert.mockResolvedValue({});
+  h.manualAssign.mockResolvedValue({ ok: true });
+  h.autoAssignNew.mockResolvedValue({ ok: true });
+  h.autoAssign.mockResolvedValue({ ok: true });
   armUser(cmUser, QLCS_HAI_CO_SO());
 });
 
@@ -306,5 +327,136 @@ describe("[L-A6] parity prod — RBAC_V2_ENABLED=true", () => {
       error: "Không có quyền",
     });
     expect(h.upsert).not.toHaveBeenCalled();
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// [L-A6b] Cổng GHI "phân công lead" — TẬP CƠ SỞ mà action tính ra
+//
+// Ba action (`assignLeadToSaleAction` · `autoAssignLeadAction` ·
+// `autoAssignNewLeadAction`) đều dựa vào một tập cơ sở truyền xuống lib để cắt IDOR ghi.
+// Bản trước đo tập đó bằng `getModelVisibleCenterIds("Lead", actor)` — ĐÚNG dụng cụ mà
+// `lib/auth/managed-centers.ts` gọi tên là "lỗ ngược chiều đang vá" cho cổng GHI:
+//   · gom quyền theo TIỀN TỐ model (`leads:`) ⇒ một quyền CHỈ-ĐỌC của VAI KHÁC cũng làm
+//     nó nở ra "ALL" (lib/db-scope.ts:236-241);
+//   · một dòng `UserPermissionGrant` ALLOW khớp tiền tố bật thẳng `hasAll`
+//     (lib/db-scope.ts:248-253).
+// Trục đúng là `centerIdsGrantedByAction(actor, "leads:assign")`: khớp ĐÚNG chuỗi action,
+// suy từ chính dòng `UserOrgRole` đẻ ra quyền.
+//
+// MỖI CA KHẲNG ĐỊNH TRƯỚC rằng phép đo CŨ cho "ALL" — để ca không thể tự xanh.
+// ═══════════════════════════════════════════════════════════════════════════
+
+/** Tập cơ sở mà action vừa truyền xuống `manualAssignLead` (tham số thứ 4). */
+const scopeGivenToManual = () => h.manualAssign.mock.calls[0]?.[3];
+
+describe("[L-A6b] assignLeadToSaleAction — tập cơ sở truyền xuống lib", () => {
+  it("QLCS 2 cơ sở → đúng 2 cơ sở đó", async () => {
+    await expect(assignLeadToSaleAction("l1", "sale-1")).resolves.toMatchObject({ ok: true });
+    expect(h.manualAssign).toHaveBeenCalledTimes(1);
+    expect(scopeGivenToManual()).toEqual(["c1", "c2"]);
+  });
+
+  it("CA THẬT: QLCS@CS1 kiêm HO_MARKETING@HO → CHỈ c1 (không phải mọi cơ sở)", async () => {
+    // `lib/auth/legacy-role-map.ts` LUÔN neo MARKETING → `HO_MARKETING @ HO`, và L-A5 chỉ
+    // cấm CENTER_MANAGER ở HO ⇒ cấu hình này HỢP LỆ. HO_MARKETING mang `leads:view-all`
+    // GLOBAL tại HO ⇒ `PermEntry.centerScope = "ALL"`.
+    const actor = actorOf("u-cm", [
+      row("cs1", "CENTER_MANAGER"),
+      row("ho", "HO_MARKETING", HO_SALE_PERMS),
+    ]);
+    // Ghim: phép đo CŨ cho "ALL" ⇒ cả ba rào trong `manualAssignLead` tắt sạch.
+    expect(getModelVisibleCenterIds("Lead", actor)).toBe("ALL");
+
+    armUser({ ...cmUser, roles: ["CENTER_MANAGER", "MARKETING"] }, actor);
+    await assignLeadToSaleAction("l1", "sale-cs2");
+    expect(scopeGivenToManual()).toEqual(["c1"]);
+  });
+
+  it("CA THẬT: grant per-user ALLOW một quyền `leads:*` chỉ-đọc → KHÔNG nở ra ALL", async () => {
+    const actor = actorOf(
+      "u-cm",
+      [row("cs1", "CENTER_MANAGER"), row("cs2", "CENTER_MANAGER")],
+      [{ action: "leads:view-all", grant: "ALLOW" }],
+    );
+    // Ghim: grant khớp TIỀN TỐ `leads:` bật `hasAll` ⇒ phép đo cũ = "ALL".
+    expect(getModelVisibleCenterIds("Lead", actor)).toBe("ALL");
+
+    armUser(cmUser, actor);
+    await assignLeadToSaleAction("l1", "sale-cs3");
+    expect(scopeGivenToManual()).toEqual(["c1", "c2"]);
+  });
+
+  it("grant per-user ALLOW ĐÚNG `leads:assign` → hiệu lực trong tầm nhìn sẵn có, KHÔNG thành ALL", async () => {
+    // Ranh giới của A-01-6d: grant không phải "được giao quản lý cơ sở".
+    const actor = actorOf(
+      "u-cm",
+      [row("cs1", "CENTER_MANAGER"), row("cs2", "CENTER_MANAGER")],
+      [{ action: "leads:assign", grant: "ALLOW" }],
+    );
+    armUser(cmUser, actor);
+    await assignLeadToSaleAction("l1", "sale-cs3");
+    const scope = scopeGivenToManual();
+    expect(scope).not.toBe("ALL");
+    expect(scope).toEqual(expect.arrayContaining(["c1", "c2"]));
+    expect(scope).not.toContain("c3");
+  });
+
+  it("SUPER_ADMIN → 'ALL' (hành vi không đổi)", async () => {
+    const sa = { id: "u-sa", role: "SUPER_ADMIN", roles: ["SUPER_ADMIN"], centerId: null };
+    armUser(sa, actorOf("u-sa", [row("ho", "SUPER_ADMIN", CM_PERMS)]));
+    await assignLeadToSaleAction("l1", "sale-1");
+    expect(scopeGivenToManual()).toBe("ALL");
+  });
+
+  it("QLCS neo tại VÙNG (REGION) → mọi cơ sở trong vùng, không hơn", async () => {
+    armUser(cmUser, actorOf("u-cm", [row("rg-bac", "CENTER_MANAGER")]));
+    await assignLeadToSaleAction("l1", "sale-1");
+    expect(scopeGivenToManual()).toEqual(["c1"]);
+  });
+
+  it("chưa đăng nhập → TỪ CHỐI trước khi chạm lib", async () => {
+    h.auth.mockResolvedValue(null);
+    await expect(assignLeadToSaleAction("l1", "sale-1")).resolves.toMatchObject({ ok: false });
+    expect(h.manualAssign).not.toHaveBeenCalled();
+  });
+});
+
+describe("[L-A6b] hai đường auto-chia đi CÙNG một tập cơ sở", () => {
+  it("[F1] autoAssignLeadAction truyền tập cơ sở xuống `autoAssignLead`", async () => {
+    // Cùng cổng quyền `leads:assign` không target với `assignLeadToSaleAction`, cùng sức
+    // phá (kéo `Enrollment.saleId` + đóng kênh riêng DM_SALE_PARENT của sale cũ). Rào chỉ
+    // bọc một trong hai thì kẻ bị chặn ở cửa trước đi cửa bên cạnh.
+    await autoAssignLeadAction("l1");
+    expect(h.autoAssign).toHaveBeenCalledTimes(1);
+    expect(h.autoAssign.mock.calls[0]?.[2]).toEqual(["c1", "c2"]);
+  });
+
+  it("[F3] autoAssignNewLeadAction truyền tập cơ sở xuống `autoAssignNewLead`", async () => {
+    await autoAssignNewLeadAction("l1");
+    expect(h.autoAssignNew).toHaveBeenCalledTimes(1);
+    expect(h.autoAssignNew.mock.calls[0]?.[2]).toEqual(["c1", "c2"]);
+  });
+
+  it("kiêm nhiệm HO không nới hai đường này (cùng phép đo với gán tay)", async () => {
+    armUser(
+      { ...cmUser, roles: ["CENTER_MANAGER", "MARKETING"] },
+      actorOf("u-cm", [row("cs1", "CENTER_MANAGER"), row("ho", "HO_MARKETING", HO_SALE_PERMS)]),
+    );
+    await autoAssignLeadAction("l1");
+    await autoAssignNewLeadAction("l1");
+    expect(h.autoAssign.mock.calls[0]?.[2]).toEqual(["c1"]);
+    expect(h.autoAssignNew.mock.calls[0]?.[2]).toEqual(["c1"]);
+  });
+});
+
+describe("[F2] `reassignLeadsFromAction` — endpoint đã GỠ", () => {
+  it("không còn là Server Action nào cả", async () => {
+    // Nó KHÔNG có call-site nào trong repo, nhưng `'use server'` vẫn phát hành nó thành
+    // endpoint công khai: cổng duy nhất là `leads:assign` không target (GLOBAL với
+    // CENTER_MANAGER), rồi gọi thẳng `reassignOpenLeads(userId)` — hàm không kiểm tầm nhìn
+    // cơ sở của người bấm ở bất cứ đâu và chia lại TOÀN BỘ sổ lead đang mở của người bị
+    // chỉ định, kèm `strandedPolicy: "UNASSIGN"`.
+    expect(leadActions).not.toHaveProperty("reassignLeadsFromAction");
   });
 });

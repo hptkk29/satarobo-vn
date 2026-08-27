@@ -6,7 +6,8 @@ import {
   applyLeadReassignment,
   archiveDmOfPreviousSale,
 } from "@/lib/lead/assignment-core";
-import type { LeadStatus, LeadAssignMode } from "@prisma/client";
+import type { LeadStatus, LeadAssignMode, Prisma } from "@prisma/client";
+import type { VisibleCenterIds } from "@/lib/lead-handover/service";
 import {
   pickRoundRobin,
   pickByCloseRate,
@@ -41,6 +42,35 @@ import {
 export const TERMINAL_LEAD_STATUSES: LeadStatus[] = ["ENROLLED", "LOST", "DUPLICATE"];
 
 export type Actor = { actorId: string | null; actorName: string };
+
+/**
+ * Lead có nằm trong tầm nhìn cơ sở của người bấm không — cùng nghĩa với
+ * `passesScope("Lead", …)`: `Lead` KHÔNG thuộc `NULL_IS_GLOBAL_MODELS` nên `centerId = null`
+ * là CHẶN với actor cấp cơ sở (khớp đúng điều `scopedDb` làm ở đường đọc → trang chi tiết
+ * cũng 404). `"ALL"` = SUPER_ADMIN/HO, hoặc call-site HỆ THỐNG không có người bấm.
+ */
+function leadOutOfSight(
+  centerId: string | null,
+  visibleCenterIds: VisibleCenterIds,
+): boolean {
+  if (visibleCenterIds === "ALL") return false;
+  return !centerId || !visibleCenterIds.includes(centerId);
+}
+
+/**
+ * Điều kiện cách ly cơ sở cho ĐƯỜNG GHI (`leadWhere` của `applyLeadReassignment`).
+ *
+ * Cổng ĐỌC ở đầu hàm chỉ chặn được ở thời điểm ĐỌC; giữa lúc đó và lúc ghi là khe TOCTOU
+ * thật — repo có 7 đường đổi chủ lead cùng tồn tại, và `scopedDb` KHÔNG che đường ghi.
+ * `bulkReassignLeads` (lib/lead-handover/service.ts) đã lặp lại nguyên bộ `where` kể cả
+ * cách ly cơ sở ở lệnh ghi; hai đường ở file này làm y như vậy.
+ *
+ * `"ALL"` ⇒ KHÔNG thêm điều kiện nào: thêm `centerId IN (…)` cho SUPER_ADMIN/HO sẽ chặn
+ * luôn lead chưa gán cơ sở (luồng lead từ web).
+ */
+function centerGuardWhere(visibleCenterIds: VisibleCenterIds): Prisma.LeadWhereInput {
+  return visibleCenterIds === "ALL" ? {} : { centerId: { in: visibleCenterIds } };
+}
 
 /**
  * Luật E-bis #2 của module chat: transaction gánh thêm việc phải nới trần (mặc định Prisma
@@ -147,13 +177,37 @@ export type AutoAssignResult = {
  * Chia 1 lead MỚI: (1) định cơ sở (lead có cơ sở → giữ; chưa có → chia đều
  * giữa các cơ sở vận hành đang hoạt động); (2) trong cơ sở theo chế độ. Bỏ qua nếu lead đã được gán hoặc đã có
  * tương tác (khoá auto).
+ *
+ * ── CÁCH LY CƠ SỞ (chống IDOR ghi) ─────────────────────────────────────────────
+ * `visibleCenterIds` MẶC ĐỊNH `"ALL"` — KHÁC `manualAssignLead`, nơi nó là tham số bắt
+ * buộc. Lý do: hàm này còn 4 call-site HỆ THỐNG không có người bấm (webhook
+ * `app/api/leads/route.ts`, import Excel, `lib/lead/intake/ingest.ts`, và bước hậu-tạo của
+ * `createLeadManual`), ở đó không tồn tại "tầm nhìn cơ sở" nào để đo. Server Action nào
+ * gọi hàm này thì PHẢI truyền tập cơ sở tính từ actor.
+ *
+ * Vì sao cổng quyền ở tầng action KHÔNG thay được chỗ này: `leads:assign` seed
+ * `scopeType: "GLOBAL"` cho CENTER_MANAGER (`prisma/seed-roles.ts`) ⇒ nhánh GLOBAL của
+ * `can()` v2 khớp MỌI `target.centerId`.
  */
-export async function autoAssignNewLead(leadId: string, actor: Actor): Promise<AutoAssignResult> {
-  const lead = await db.lead.findUnique({
-    where: { id: leadId },
-    select: { id: true, centerId: true, status: true, assignedToId: true },
+export async function autoAssignNewLead(
+  leadId: string,
+  actor: Actor,
+  /** Tầm nhìn cơ sở của NGƯỜI BẤM — `getModelVisibleCenterIds` KHÔNG dùng được ở cổng ghi;
+   *  tính bằng `centerIdsGrantedByAction(actor, "leads:assign")`. */
+  visibleCenterIds: VisibleCenterIds = "ALL",
+): Promise<AutoAssignResult> {
+  // `findFirst` + `deletedAt: null`: `Lead` KHÔNG nằm trong `SOFT_DELETE_MODELS`
+  // (lib/soft-delete.ts) nên base `db` không tự lọc — bản cũ dùng `findUnique` trần nên
+  // chia được cả lead đã xoá mềm. `orgUnitId` là giá trị CŨ cho nhật ký bước (1).
+  const lead = await db.lead.findFirst({
+    where: { id: leadId, deletedAt: null },
+    select: { id: true, centerId: true, orgUnitId: true, status: true, assignedToId: true },
   });
   if (!lead) return { ok: false, error: "Lead không tồn tại" };
+  // Thông điệp CỐ Ý trùng nhánh không-tồn-tại: đừng lộ ra rằng lead cơ sở khác có thật.
+  if (leadOutOfSight(lead.centerId, visibleCenterIds)) {
+    return { ok: false, error: "Lead không tồn tại" };
+  }
   if (lead.assignedToId) return { ok: true, skipped: true, assignedToId: lead.assignedToId };
   if (await hasSaleInteraction(leadId)) return { ok: true, skipped: true };
 
@@ -176,7 +230,37 @@ export async function autoAssignNewLead(leadId: string, actor: Actor): Promise<A
       if (centerId) {
         // PR-C dual-write: chia về cơ sở → suy orgUnitId tương ứng (giữ cả centerId).
         const orgUnitId = await orgUnitIdForCenter(centerId);
-        await db.lead.update({ where: { id: leadId }, data: { centerId, orgUnitId } });
+        // ⭐ ĐÂY LÀ MỘT LƯỢT GHI THẬT, KHÔNG PHẢI "chuẩn bị dữ liệu".
+        //
+        // Bản cũ ghi bằng `db.lead.update` NGOÀI mọi transaction và TRƯỚC nhánh kiểm chế
+        // độ bên dưới. Cơ sở vừa chọn ở chế độ MANUAL ⇒ hàm `return` ngay, `logLeadAudit`
+        // của lượt phân công không bao giờ chạy — mà `centerId`/`orgUnitId` của lead thì
+        // đã đổi vĩnh viễn. Kết cục: một lead bị định tuyến sang cơ sở khác, KHÔNG dòng
+        // nhật ký nào giải thích, và vì `Lead ∉ NULL_IS_GLOBAL_MODELS` nên chính người vừa
+        // bấm (nếu ở cấp cơ sở) cũng mất lead khỏi danh sách của mình.
+        //
+        // `centerId: null` trong `where` là compare-and-swap: ta vào được nhánh này ĐÚNG
+        // vì lead chưa có cơ sở, nên một `transferLead` chen ngang vừa commit thì lượt ghi
+        // này phải THUA chứ không đè lên quyết định của người vận hành.
+        await db.$transaction(async (tx) => {
+          const res = await tx.lead.updateMany({
+            where: { id: leadId, deletedAt: null, centerId: null },
+            data: { centerId, orgUnitId },
+          });
+          if (res.count === 0) {
+            throw new Error(`Lead ${leadId} đã được đường khác gán cơ sở khi đang chia`);
+          }
+          await logLeadAudit({
+            leadId,
+            action: "UPDATE",
+            actorId: actor.actorId,
+            actorName: actor.actorName,
+            oldValues: { centerId: null, orgUnitId: lead.orgUnitId },
+            newValues: { centerId, orgUnitId },
+            changedFields: ["centerId", "orgUnitId"],
+            tx,
+          });
+        }, ASSIGN_TX_OPTIONS);
       }
     }
   }
@@ -204,6 +288,12 @@ export async function autoAssignNewLead(leadId: string, actor: Actor): Promise<A
     const res = await applyLeadReassignment({
       tx,
       leadIds: [leadId],
+      // Lặp lại ở LỆNH GHI đúng hai điều kiện đã dùng lúc CHỌN (`deletedAt` + cách ly cơ
+      // sở): `scopedDb` không che đường ghi, và giữa lượt đọc ngoài transaction với lượt
+      // ghi là khe TOCTOU thật. Bước (1) ở trên chỉ chạy khi `visibleCenterIds === "ALL"`
+      // (actor cấp cơ sở đã bị chặn ở lead chưa gán cơ sở), nên điều kiện này không bao
+      // giờ tự chặn chính cơ sở mà hàm vừa gán.
+      leadWhere: { deletedAt: null, ...centerGuardWhere(visibleCenterIds) },
       // Luôn null ở đây — hàm đã thoát sớm khi lead có người phụ trách.
       fromUserId: lead.assignedToId,
       toUserId: target,
@@ -264,11 +354,29 @@ export async function reassignForCenter(
  *
  * ⚠️ Hàm KHÔNG lọc status ⇒ chạy được trên lead `ENROLLED`, nên nó phải kéo theo
  * `Enrollment.saleId` (cột quyết định kênh riêng Sale↔PH) — xem khối đầu file.
+ *
+ * ── CÁCH LY CƠ SỞ (chống IDOR ghi) ─────────────────────────────────────────────
+ * `visibleCenterIds` là THAM SỐ BẮT BUỘC, KHÔNG có giá trị mặc định. Lý do không cho
+ * `?? "ALL"` như `bulkReassignLeads`: hàm này chỉ có ĐÚNG MỘT caller sản xuất
+ * (`assignLeadToSaleAction`), nên tham số bắt buộc khiến typecheck bắt được caller
+ * tương lai quên truyền — thay vì im lặng fail-open đúng ở cổng ghi.
+ *
+ * Vì sao cổng quyền ở tầng action KHÔNG thay được chỗ này: `leads:assign` seed
+ * `scopeType: "GLOBAL"` cho CENTER_MANAGER (`prisma/seed-roles.ts`) ⇒ nhánh GLOBAL của
+ * `can()` v2 khớp MỌI `target.centerId`. Và ô chọn sale ở trang chi tiết
+ * (`app/(admin)/admin/leads/[id]/page.tsx`) tuy đã lọc đúng thì cũng chỉ là UI —
+ * Server Action là endpoint công khai, một POST tay đi vòng hết.
+ *
+ * Khuôn lấy nguyên từ `transferLead` (`app/(admin)/admin/leads/actions.ts`): đọc lead
+ * kèm `deletedAt: null` + `centerId`, so tầm nhìn cơ sở, và trả ĐÚNG thông điệp
+ * "Lead không tồn tại" để không lộ sự tồn tại của lead cơ sở khác.
  */
 export async function manualAssignLead(
   leadId: string,
   saleId: string,
   actor: Actor,
+  /** Tầm nhìn cơ sở của NGƯỜI BẤM — tính bằng `getModelVisibleCenterIds("Lead", actor)`. */
+  visibleCenterIds: VisibleCenterIds,
 ): Promise<{
   ok: boolean;
   error?: string;
@@ -282,16 +390,51 @@ export async function manualAssignLead(
   dmArchived?: number;
 }> {
   const [lead, sale] = await Promise.all([
-    db.lead.findUnique({ where: { id: leadId }, select: { id: true, assignedToId: true, status: true } }),
+    // `findFirst` + `deletedAt: null`: `Lead` KHÔNG nằm trong `SOFT_DELETE_MODELS`
+    // (lib/soft-delete.ts) nên base `db` không tự lọc — bản cũ dùng `findUnique` trần nên
+    // gán tay được cho lead đã xoá mềm. `centerId` là dữ kiện BẮT BUỘC của phép so tầm
+    // nhìn ngay dưới; thiếu nó thì cơ sở của lead là `undefined` và guard chặn nhầm cả
+    // người hợp lệ (đúng lớp bug select-hẹp đã quét ra 28 call-site, xem `passesScope`).
+    db.lead.findFirst({
+      where: { id: leadId, deletedAt: null },
+      select: { id: true, assignedToId: true, status: true, centerId: true },
+    }),
     db.user.findFirst({
-      where: { id: saleId, roles: { has: "SALES_CSM" }, deletedAt: null },
+      // `isActive: true` — đồng bộ với `bulkReassignLeads` (lib/lead-handover/service.ts)
+      // và với chính ô chọn ở trang chi tiết lead. Sale vừa bị vô hiệu hoá (nghỉ việc) mà
+      // nhận được lead thì kéo luôn `Enrollment.saleId` ⇒ giữ kênh riêng với phụ huynh.
+      where: { id: saleId, roles: { has: "SALES_CSM" }, isActive: true, deletedAt: null },
       // `centerId` là dữ kiện của luật L2 — so với cơ sở của SALE NHẬN, không phải cơ sở
       // của lead (`Enrollment.centerId` là bản sao cơ sở của LỚP).
       select: { id: true, name: true, centerId: true },
     }),
   ]);
   if (!lead) return { ok: false, error: "Lead không tồn tại" };
+  // Cách ly cơ sở của LEAD NGUỒN — cùng nghĩa với `passesScope("Lead", ...)`: `Lead`
+  // không thuộc `NULL_IS_GLOBAL_MODELS` nên `centerId = null` là CHẶN với actor cấp cơ
+  // sở (khớp đúng điều `scopedDb` làm ở đường đọc → trang chi tiết cũng 404).
+  // Thông điệp CỐ Ý trùng nhánh không-tồn-tại: đừng lộ ra rằng lead cơ sở khác có thật.
+  if (leadOutOfSight(lead.centerId, visibleCenterIds)) {
+    return { ok: false, error: "Lead không tồn tại" };
+  }
   if (!sale) return { ok: false, error: "Sale không hợp lệ" };
+  // Người NHẬN cũng phải nằm trong tầm nhìn của người bấm (khuôn `bulkReassignLeads`):
+  // tầng zod của action chỉ đòi một chuỗi, nên thiếu bộ kiểm này thì một POST tay đẩy
+  // được lead sang sale cơ sở khác.
+  if (
+    visibleCenterIds !== "ALL" &&
+    (!sale.centerId || !visibleCenterIds.includes(sale.centerId))
+  ) {
+    return { ok: false, error: "Sale nhận không thuộc cơ sở bạn quản lý" };
+  }
+  // Sale phụ trách phải cùng cơ sở với lead — đúng bằng bộ lọc của ô chọn ở trang chi
+  // tiết, và cùng khuôn với màn học viên của lớp (`classes/[id]/students/_actions.ts`).
+  // ⚠️ Lead CHƯA gán cơ sở (`centerId = null`) CỐ Ý không ràng buộc: ô chọn cũng bỏ điều
+  // kiện cơ sở trong ca đó (`...(lead.centerId ? { centerId: lead.centerId } : {})`), siết
+  // thêm sẽ chặn luồng lead từ web chưa kịp chia cơ sở. Đổi cơ sở là việc của `transferLead`.
+  if (lead.centerId && sale.centerId !== lead.centerId) {
+    return { ok: false, error: "Sale phụ trách phải thuộc cùng cơ sở với lead" };
+  }
 
   const fromUserId = lead.assignedToId;
   // Gán lại cho CHÍNH người đang phụ trách: kéo X→X vô nghĩa, nhưng luật L2 vẫn chạy ⇒
@@ -303,12 +446,25 @@ export async function manualAssignLead(
       : undefined;
 
   const outcome = await db.$transaction(async (tx) => {
-    // `leadWhere` bỏ trống có chủ đích: bản cũ ghi thẳng theo id (`tx.lead.update`), và
-    // gán tay là hành động có chủ đích của người vận hành — thêm điều kiện ở đây sẽ biến
-    // một cuộc đua thành no-op im lặng mà vẫn báo thành công.
+    // `leadWhere` lặp lại ĐÚNG bộ lọc đã dùng lúc CHỌN — cả `deletedAt` LẪN cách ly cơ
+    // sở, vì `scopedDb` không che đường ghi và `Lead` không thuộc `SOFT_DELETE_MODELS`
+    // (base `db`/`tx` không tự thêm điều kiện nào).
+    //
+    // Vì sao cách ly cơ sở phải có mặt Ở ĐÂY chứ không chỉ ở lượt đọc phía trên: lượt đọc
+    // đó nằm NGOÀI transaction. Giữa nó và lệnh ghi, một `transferLead` đồng thời chuyển
+    // được lead sang cơ sở khác — khi ấy `updateMany` theo id trần vẫn khớp và ghi
+    // `assignedToId` lên một lead nay thuộc cơ sở ngoài tầm nhìn người bấm (sale cơ sở này
+    // đọc được PII của lead cơ sở kia qua `leads:view-own`). Cùng lý lẽ mà
+    // `bulkReassignLeads` (lib/lead-handover/service.ts) đọc lại TRONG tx với nguyên bộ
+    // `where`. Khớp 0 dòng ⇒ `leadsMoved === 0` ⇒ ném ở dưới ⇒ không ghi gì cả.
+    //
+    // ⚠️ KHÔNG thêm `assignedToId` (khác `transferLead`, nơi nó là compare-and-swap có
+    // chủ đích): gán tay là hành động có chủ đích của người vận hành — thêm nó vào đây
+    // biến một cuộc đua thành no-op im lặng mà vẫn báo thành công.
     const res = await applyLeadReassignment({
       tx,
       leadIds: [leadId],
+      leadWhere: { deletedAt: null, ...centerGuardWhere(visibleCenterIds) },
       fromUserId,
       toUserId: saleId,
       toSaleCenterId: sale.centerId,

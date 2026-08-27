@@ -11,14 +11,15 @@ import { phoneVn } from '@/lib/validators/phone'
 import type { Prisma } from '@prisma/client'
 import { logLeadAudit, getAuditActor } from '@/lib/audit/log'
 import { resolveActor } from '@/lib/auth/actor'
-import { roleManagesCenter } from '@/lib/auth/managed-centers'
+import { centerIdsGrantedByAction, roleManagesCenter } from '@/lib/auth/managed-centers'
 import { passesScope, scopedDb } from '@/lib/db-scope'
 import { getLeadPaymentSummary } from '@/lib/payments/summary'
-import { autoAssignLead, reassignOpenLeads } from '@/lib/lead/assign'
+import { autoAssignLead } from '@/lib/lead/assign'
 import { validateTransferTarget } from '@/lib/crm/transfer-validate'
 import { autoAssignNewLead, manualAssignLead, reassignForCenter } from '@/lib/lead/auto-assign'
 import { applyLeadReassignment, archiveDmOfPreviousSale } from '@/lib/lead/assignment-core'
 import type { LeadReassignOutcome } from '@/lib/lead/assignment-core'
+import type { VisibleCenterIds } from '@/lib/lead-handover/service'
 import { centerIdForOrgUnit } from '@/lib/org/org-service'
 import { rejectHeadOffice } from '@/lib/enrollment-flow'
 import { LEAD_STATUS_LABEL, canTransitionLeadStatus } from '@/lib/leads/status'
@@ -56,6 +57,37 @@ async function actorMayMutateLead(
 ): Promise<boolean> {
   if (assignedToId === sessionUserId) return true
   return checkPermission('leads:view-all')
+}
+
+/**
+ * Tập cơ sở mà người bấm THỰC SỰ được PHÂN CÔNG LEAD — dùng chung cho cả ba đường ghi
+ * (`assignLeadToSaleAction` · `autoAssignLeadAction` · `autoAssignNewLeadAction`).
+ *
+ * ── VÌ SAO KHÔNG DÙNG `getModelVisibleCenterIds('Lead', actor)` ─────────────────────
+ * Đó là dụng cụ của đường ĐỌC, và `lib/auth/managed-centers.ts` gọi thẳng tên nó là "lỗ
+ * ngược chiều đang vá" cho cổng GHI — nó NỞ theo hai đường mà cổng ghi không được hưởng
+ * (`lib/db-scope.ts`):
+ *   1. gom quyền theo TIỀN TỐ model (`leads:`) ⇒ một quyền CHỈ-ĐỌC của VAI KHÁC cũng cộng
+ *      vào. Đo được: `roles = [CENTER_MANAGER, MARKETING]` với ô "Đơn vị" = CS1 là cấu
+ *      hình HỢP LỆ (L-A5 chỉ cấm CENTER_MANAGER ở HO), mà `lib/auth/legacy-role-map.ts`
+ *      LUÔN neo MARKETING → `HO_MARKETING @ HO`; HO_MARKETING mang `leads:view-all` GLOBAL
+ *      tại HO ⇒ `centerScope = "ALL"` ⇒ hàm trả "ALL" ⇒ MỌI rào cách ly cơ sở ở tầng lib
+ *      tắt sạch. Cùng người đó bị `setCenterAssignModeAction` TỪ CHỐI ở CS2.
+ *   2. MỘT dòng `UserPermissionGrant` ALLOW khớp tiền tố `leads:` bật thẳng `hasAll`.
+ *
+ * Trục đúng là `centerIdsGrantedByAction(actor, 'leads:assign')`: khớp ĐÚNG chuỗi action
+ * mà cổng thô (`checkPermission`) vừa kiểm, suy từ chính dòng `UserOrgRole` đẻ ra quyền,
+ * và grant per-user chỉ có hiệu lực TRONG tầm nhìn sẵn có chứ không bao giờ thành "ALL".
+ * Tập trả về LUÔN LÀ CON của phép đo cũ ⇒ đây là phép SIẾT, không nới cho ai.
+ *
+ * SUPER_ADMIN → "ALL" y như `can()` v2 thoát sớm (`lib/auth/can.ts`); seed KHÔNG cấp
+ * `leads:assign` cho vai này nên thiếu nhánh đó là khoá nhầm chính quản trị tối cao.
+ * Cùng khuôn `classCenterWritable` (`app/(admin)/admin/classes/_actions.ts`).
+ */
+async function leadAssignCenterScope(userId: string): Promise<VisibleCenterIds> {
+  const actor = await resolveActor(userId)
+  if (actor.isSuperAdmin) return 'ALL'
+  return centerIdsGrantedByAction(actor, 'leads:assign')
 }
 
 const MUTATE_DENIED =
@@ -537,6 +569,11 @@ export async function deleteLead(
  *
  * Trả về CẢ số liệu ghi danh — cùng lý do với {@link assignLeadToSaleAction}: lượt chia
  * nay kéo theo `Enrollment.saleId`, con số đó không được im lặng.
+ *
+ * Cách ly cơ sở đi qua CÙNG một phép đo với {@link assignLeadToSaleAction}
+ * ({@link leadAssignCenterScope}). Hai action này dùng ĐÚNG một cổng quyền
+ * (`leads:assign`, không target) và gây thiệt hại như nhau — rào chỉ một trong hai thì
+ * kẻ bị chặn ở cửa trước đi cửa bên cạnh.
  */
 export async function autoAssignLeadAction(
   leadId: string,
@@ -552,7 +589,11 @@ export async function autoAssignLeadAction(
   if (!(await checkPermission('leads:assign'))) return { ok: false, error: 'Không có quyền' }
 
   const { actorId, actorName } = getAuditActor(session)
-  const res = await autoAssignLead(leadId, { actorId, actorName })
+  const res = await autoAssignLead(
+    leadId,
+    { actorId, actorName },
+    await leadAssignCenterScope(session.user.id),
+  )
   if (!res.ok) return { ok: false, error: res.error }
 
   revalidatePath('/leads')
@@ -565,21 +606,24 @@ export async function autoAssignLeadAction(
   }
 }
 
-export async function reassignLeadsFromAction(
-  userId: string,
-): Promise<{ ok: boolean; reassigned?: number; error?: string }> {
-  const session = await auth()
-  if (!session?.user) return { ok: false, error: 'Chưa đăng nhập' }
-  if (!(await checkPermission('leads:assign'))) return { ok: false, error: 'Không có quyền' }
-
-  const { actorId, actorName } = getAuditActor(session)
-  const res = await reassignOpenLeads(userId, { actorId, actorName })
-  if (!res.ok) return { ok: false, error: res.error }
-
-  revalidatePath('/leads')
-  revalidatePath('/dashboard')
-  return { ok: true, reassigned: res.reassigned }
-}
+// ⛔ `reassignLeadsFromAction` ĐÃ GỠ (27/08/2026) — KHÔNG khôi phục nguyên trạng.
+//
+// Nó là Server Action export từ file `'use server'` nhưng KHÔNG có call-site nào trong
+// repo (không UI, không cron). Không có UI ≠ không có endpoint: Next.js vẫn phát hành nó.
+// Cổng duy nhất là `checkPermission('leads:assign')` KHÔNG target — mà quyền đó seed
+// `scopeType: "GLOBAL"` cho CENTER_MANAGER (`prisma/seed-roles.ts`) ⇒ nhánh GLOBAL của
+// `can()` v2 khớp mọi cơ sở — rồi gọi thẳng `reassignOpenLeads(userId)`, hàm KHÔNG kiểm
+// tầm nhìn cơ sở của người bấm ở bất cứ đâu. Một POST tay với `userId` của sale cơ sở
+// khác chia lại TOÀN BỘ sổ lead đang mở của người đó theo lô 50, `strandedPolicy:
+// "UNASSIGN"` GỠ `Enrollment.saleId` của mọi ghi danh khác cơ sở (phụ huynh mất người phụ
+// trách) và đóng kênh riêng của họ với từng phụ huynh — không có đường hoàn tác vì từng
+// lô đã commit.
+//
+// Đường "chia lại sổ lead khi sale nghỉ" THẬT vẫn sống và không đụng tới: nó nằm ở
+// `toggleUserActive` (`app/(admin)/admin/users/_actions.ts`), gắn với hành động vô hiệu
+// hoá tài khoản chứ không phải một endpoint trần. Cần dựng lại màn "chia lại tay" thì
+// viết action mới CÓ cách ly cơ sở (khuôn `leadAssignCenterScope` ngay trên).
+// Test ghim: `./actions.test.ts` — [F2].
 
 // ─── Module CRM & Lead PHẦN 1 — CRUD lead thủ công ───────────────────────────
 
@@ -695,6 +739,13 @@ export async function createLeadManual(
   }).catch(() => {})
 
   // Auto-chia theo cơ sở → chế độ cơ sở (PHẦN 2).
+  //
+  // CỐ Ý không truyền tầm nhìn cơ sở (mặc định "ALL"), khác `autoAssignNewLeadAction`:
+  // đây là bước hậu-tạo của chính lead vừa được tạo hợp lệ qua cổng `leads:create`, chứ
+  // không phải một lệnh nhắm vào lead có sẵn của người khác. Siết ở đây sẽ khoá nhầm
+  // đường thường: `leads:create` KHÔNG kèm `leads:assign` (Tư vấn & CSKH cơ sở có quyền
+  // đầu, không có quyền sau — `prisma/seed-roles.ts`) ⇒ tập cơ sở rỗng ⇒ mọi lead nhập
+  // tay im lặng không được chia cho ai (lời gọi này `.catch` nuốt cả lỗi lẫn `ok: false`).
   await autoAssignNewLead(lead.id, { actorId, actorName }).catch(() => {})
 
   revalidatePath('/leads')
@@ -801,7 +852,15 @@ export async function updateLeadFields(
 
 // ─── Module CRM & Lead PHẦN 2 — gán tay + auto-chia + cấu hình chế độ ─────────
 
-/** Auto-chia 1 lead theo cơ sở → chế độ (tôn trọng khoá khi đã tương tác). */
+/**
+ * Auto-chia 1 lead theo cơ sở → chế độ (tôn trọng khoá khi đã tương tác).
+ *
+ * Cách ly cơ sở đi qua CÙNG phép đo với hai đường phân công kia
+ * ({@link leadAssignCenterScope}). Riêng ở đây nó còn chặn một lượt ghi mà bản cũ để lọt
+ * hoàn toàn: bước "định cơ sở" của `autoAssignNewLead` ĐỔI `Lead.centerId` — người cấp cơ
+ * sở không được định tuyến một lead họ còn chưa nhìn thấy (lead từ web có `centerId = null`
+ * mà `Lead ∉ NULL_IS_GLOBAL_MODELS`).
+ */
 export async function autoAssignNewLeadAction(
   leadId: string,
 ): Promise<{ ok: boolean; error?: string }> {
@@ -810,7 +869,11 @@ export async function autoAssignNewLeadAction(
   if (!(await checkPermission('leads:assign'))) return { ok: false, error: 'Không có quyền' }
 
   const { actorId, actorName } = getAuditActor(session)
-  const res = await autoAssignNewLead(leadId, { actorId, actorName })
+  const res = await autoAssignNewLead(
+    leadId,
+    { actorId, actorName },
+    await leadAssignCenterScope(session.user.id),
+  )
   if (!res.ok) return { ok: false, error: res.error }
 
   revalidatePath('/leads')
@@ -824,6 +887,23 @@ export async function autoAssignNewLeadAction(
  * Trả về CẢ số liệu ghi danh: lượt gán tay nay kéo theo `Enrollment.saleId` — cột quyết
  * định ai còn nhắn riêng được với phụ huynh — nên `{ ok: true }` trần là để người vận hành
  * không biết ghi danh nào vừa đổi người phụ trách hoặc vừa ở lại với sale cũ.
+ *
+ * ── Cách ly cơ sở (chống IDOR ghi) ────────────────────────────────────────────
+ * Cổng `leads:assign` ở trên KHÔNG cắt được việc này, và ĐỪNG "vá" bằng cách thêm
+ * `{ centerId }` vào `checkPermission`: quyền đó seed `scopeType: "GLOBAL"` cho
+ * CENTER_MANAGER (`prisma/seed-roles.ts`) ⇒ nhánh GLOBAL của `can()` v2 khớp MỌI
+ * `target.centerId` — cùng lý lẽ đã ghi ở `setCenterAssignModeAction` bên dưới.
+ * Ô chọn sale ở trang chi tiết đã lọc đúng cơ sở, nhưng đó là UI: Server Action là
+ * endpoint công khai nên một POST tay đi vòng hết.
+ *
+ * Phép cắt thật nằm ở `visibleCenterIds` truyền xuống `manualAssignLead`: lead nguồn VÀ
+ * sale nhận đều phải nằm trong tầm nhìn cơ sở của người bấm. Tham số đó CỐ Ý bắt buộc bên
+ * lib — bỏ đi "cho gọn" là typecheck đỏ, không phải fail-open im lặng.
+ *
+ * ⚠️ Tập cơ sở đó tính bằng {@link leadAssignCenterScope}, KHÔNG phải
+ * `getModelVisibleCenterIds('Lead', actor)` (thứ mà `ban-giao-lead/_actions.ts` còn dùng):
+ * phép đo kia gom quyền theo TIỀN TỐ model nên một quyền chỉ-đọc của vai KIÊM NHIỆM cũng
+ * làm nó nở ra "ALL" — đọc lý lẽ đầy đủ ở helper.
  */
 export async function assignLeadToSaleAction(
   leadId: string,
@@ -840,7 +920,10 @@ export async function assignLeadToSaleAction(
   if (!(await checkPermission('leads:assign'))) return { ok: false, error: 'Không có quyền' }
 
   const { actorId, actorName } = getAuditActor(session)
-  const res = await manualAssignLead(leadId, saleId, { actorId, actorName })
+  // SUPER_ADMIN → "ALL" (không giới hạn); còn lại = đúng các cơ sở đang GIỮ `leads:assign`.
+  // Vì sao KHÔNG phải `getModelVisibleCenterIds`: xem {@link leadAssignCenterScope}.
+  const visibleCenterIds = await leadAssignCenterScope(session.user.id)
+  const res = await manualAssignLead(leadId, saleId, { actorId, actorName }, visibleCenterIds)
   if (!res.ok) return res
 
   revalidatePath('/leads')
