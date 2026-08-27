@@ -1374,11 +1374,39 @@ model Lead {
   convertedAt      DateTime?  @db.Timestamptz(6)
 
   // R1-04/05 — mốc thời gian phễu SR.QD.217 (L1→L2→L3 + bàn giao + SLA).
-  qualifiedAt         DateTime?         @db.Timestamptz(6) // L2 — có SĐT + note
-  handedAt            DateTime?         @db.Timestamptz(6) // HO bàn giao về CS
-  receivedConfirmedAt DateTime?         @db.Timestamptz(6) // CS xác nhận tiếp nhận
-  assignedAt          DateTime?         @db.Timestamptz(6) // phân Sale
-  firstContactAt      DateTime?         @db.Timestamptz(6) // Sale liên hệ lần đầu
+  //
+  // ⚠️ 27/08/2026 — `handedAt` / `receivedConfirmedAt` / `firstContactAt` KHÔNG CÒN ĐƯỜNG
+  // GHI NÀO. Đường ghi duy nhất từng có là `lib/crm/handover.ts` (handoverLead /
+  // confirmReceived / recordFirstContact) — mã chết, 0 call-site sản phẩm (call-site duy
+  // nhất là spec của chính nó), đã XOÁ 27/08/2026. Cột thì GIỮ NGUYÊN, cố ý: luật cứng
+  // Nền Hệ thống #4 cấm bỏ/đổi cột trên bảng đang có dữ liệu PROD.
+  //   ⇒ Trên PROD 3 cột này LUÔN null. Báo cáo/nghiệm thu thấy cột rỗng thì đó là ĐÚNG
+  //     hiện trạng, KHÔNG phải mất dữ liệu và KHÔNG phải bug cần "vá cho có số".
+  //   ⇒ Chỉ DB có seed mới thấy giá trị (`prisma/seed-lms/crm.ts:196` set firstContactAt)
+  //     — nên local/test KHÔNG chứng minh được gì về hành vi trên prod.
+  //
+  // Bàn giao THẬT không đi qua 3 cột này — và HAI đường bàn giao để lại DẤU VẾT KHÁC NHAU,
+  // đừng gộp làm một khi đi kiểm toán:
+  //   · `transferLead` (app/(admin)/admin/leads/actions.ts — "Chuyển lead", 1 lead) ghi
+  //     `LeadTransfer` + `LeadActivity(type = HANDOVER)` + `assignedAt` + AuditLog.
+  //   · `bulkReassignLeads` (lib/lead-handover/service.ts — màn /admin/ban-giao-lead, cả
+  //     sổ lead của sale nghỉ) ghi `LeadAssignmentHistory` + `assignedAt` + AuditLog, và
+  //     CHỈ THẾ: KHÔNG `LeadTransfer`, KHÔNG `LeadActivity` nào (lý do ghi tại chỗ trong
+  //     service.ts — bật `activity` lên là thay đổi có chủ ý, phải quyết cả cờ
+  //     `metadata.system` vì nó khoá/mở auto-chia lead về sau).
+  //   ⇒ Dòng thời gian của lead KHÔNG hiện gì sau một lượt bàn giao hàng loạt, và báo cáo
+  //     đếm lượt bàn giao bằng cách join `LeadTransfer` sẽ ĐẾM THIẾU toàn bộ nhóm này —
+  //     im lặng, không lỗi nào bật lên. Muốn đếm đủ thì phải hợp cả `LeadAssignmentHistory`.
+  // Muốn 3 cột có dữ liệu thì phải nối ở ĐÓ (quyết định sản phẩm, chưa chốt).
+  //
+  // Người ĐỌC 3 cột: `lib/crm/sla.ts` (cron 15 phút). Vì luôn null nên SLA-1 (sla.ts:73) và
+  // SLA-2 (sla.ts:75) KHÔNG BAO GIỜ bắn, còn SLA-3 (sla.ts:78) bắn SAI cho mọi lead đã
+  // phân công. CHƯA VÁ — đừng nối `handedAt` một mình, làm vậy sẽ đánh thức SLA-2 sai.
+  qualifiedAt         DateTime?         @db.Timestamptz(6) // L2 — có SĐT + note (đường ghi lib/crm/lead-qualify.ts:93 cũng chưa có call-site sản phẩm)
+  handedAt            DateTime?         @db.Timestamptz(6) // HO bàn giao về CS — KHÔNG có đường ghi (xem khối trên)
+  receivedConfirmedAt DateTime?         @db.Timestamptz(6) // CS xác nhận tiếp nhận — KHÔNG có đường ghi (xem khối trên)
+  assignedAt          DateTime?         @db.Timestamptz(6) // phân Sale — CÒN SỐNG, vẫn được ghi (assignment-core / ingest / import Excel)
+  firstContactAt      DateTime?         @db.Timestamptz(6) // Sale liên hệ lần đầu — KHÔNG có đường ghi (xem khối trên)
   commissionSource    CommissionSource? // nguồn để chia hoa hồng
   adminId             String? // Sale Admin xử lý L1→L2
 
