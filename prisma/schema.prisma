@@ -9286,3 +9286,45 @@ model SessionMediaReview {
   @@index([status, deadlineAt])
   @@index([orgUnitId])
 }
+
+// ───────────────────────────────────────────────────────────────────────────
+// TRẦN CHI PHÍ THÁNG cho lời gọi ra ngoài (chốt 27/08/2026).
+// Zalo 2tr · cước gọi 3tr · chấm điểm AI 1tr. Luật + câu lệnh: lib/ngan-sach-goi-ra/.
+// ───────────────────────────────────────────────────────────────────────────
+/// Sổ chi của MỘT trục gọi ra ngoài trong MỘT kỳ tháng. Đúng một dòng / (kỳ × trục).
+///
+/// Bảng này là CÁI CỔNG, không phải cái báo cáo: quyết định "còn tiền để gọi ra
+/// không" nằm trong câu `UPDATE ... WHERE "spentVnd" + chi_phí <= trần` chạy trên
+/// chính dòng này (Postgres khoá dòng ⇒ hai lời gọi cùng lúc lúc sát trần không cùng
+/// lọt). Đừng thay bằng "đếm log rồi so" — đó chính là lỗ mà thiết kế này vá.
+///
+/// CỐ Ý KHÔNG CÓ `orgUnitId`/`centerId`: trần 6 triệu là ngân sách của CÔNG TY, không
+/// phải hạn mức chia cho từng cơ sở. Thêm cột đơn vị vào đây là ngầm hứa một tính
+/// năng "trần theo cơ sở" chưa ai duyệt. (Luật cứng #3 của Nền Hệ thống áp cho bảng
+/// có dữ liệu THEO ĐƠN VỊ — bảng này là dữ liệu toàn hệ thống.)
+model OutboundSpendCounter {
+  /// Kỳ tháng "YYYY-MM" theo LỊCH VN (xem `kyThangVn` — không dùng giờ máy chạy).
+  period String
+  /// "ZALO" | "GOI_DIEN" | "CHAM_DIEM_AI" — khớp `TRUC_CHI_PHI`. Để String thay vì
+  /// enum: thêm trục sau này là thêm cấu hình, không phải chạy migration đổi enum.
+  axis   String
+
+  /// Tổng đã đặt chỗ trong kỳ (đ). Trừ khi đặt chỗ, cộng lại khi hoàn.
+  spentVnd     Int @default(0)
+  /// Số lượt đã trừ tiền — chia hoá đơn thật cho số này ra đơn giá thật.
+  chargeCount  Int @default(0)
+  /// Số lượt BỊ CHẶN vì hết ngân sách — cơ sở để tháng sau quyết nâng hay giữ trần.
+  blockedCount Int @default(0)
+
+  /// Mốc cảnh báo (mặc định 80%) đã phát chưa — NULL nghĩa là chưa. Cột này làm chốt
+  /// chặn "báo đúng một lần mỗi kỳ": chỉ lượt đầu tiên qua mốc mới ghi được vào đây.
+  warnedAt  DateTime? @db.Timestamptz(6)
+  /// Lần đầu chạm trần trong kỳ.
+  blockedAt DateTime? @db.Timestamptz(6)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
+  @@id([period, axis])
+  @@index([period])
+}

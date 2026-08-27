@@ -62,6 +62,12 @@ export const zaloOtpProvider: OtpProvider = {
       params: { otp: code, minutes: minutesValid },
     });
     if (res.ok) return { ok: true, provider: "zalo-zns" };
+    // Trần chi phí tháng (27/08/2026): "hết ngân sách" KHÔNG phải lỗi ZNS. Bọc nó vào
+    // `ZNS_ERROR:` là biến một việc của kế toán/vận hành thành một cuộc truy lỗi mạng
+    // ở màn `/admin/otp-logs`. Giữ nguyên mã + câu giải thích.
+    if (res.error?.startsWith("OUTBOUND_BUDGET_")) {
+      return { ok: false, provider: "zalo-zns", error: res.error };
+    }
     const { key } = classifyZnsError(res.error);
     // Giữ cả key ổn định lẫn chuỗi gốc (có mã số + message Zalo) để otp-logs tra được.
     return { ok: false, provider: "zalo-zns", error: `${key}:${res.error ?? "unknown"}` };

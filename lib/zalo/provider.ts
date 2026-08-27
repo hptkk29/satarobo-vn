@@ -2,6 +2,8 @@ import "server-only";
 import { getValidZaloAccessToken, forceRefreshZaloToken } from "@/lib/zalo/token";
 import { canonicalPhone } from "@/lib/phone";
 import { getSetting } from "@/lib/settings/service";
+import { datChoNganSach, hoanNganSach } from "@/lib/ngan-sach-goi-ra/so-chi";
+import { MA_KHONG_DEM_DUOC } from "@/lib/ngan-sach-goi-ra/chinh-sach";
 
 // =============================================================================
 // Cụm C5 + commit 5 — Zalo OA/ZNS provider.
@@ -111,15 +113,46 @@ export const znsProvider: ZaloProvider = {
     // Gửi ZNS thật cần template đã duyệt.
     if (!input.templateKey) return { ok: false, error: "ZALO_NO_TEMPLATE" };
 
+    // ── TRẦN CHI PHÍ THÁNG (chốt 27/08/2026) ────────────────────────────────
+    // Cổng đặt Ở ĐÂY, không ở `lib/zalo/service.ts`, vì có HAI ngăn xếp cùng tiêu
+    // tiền Zalo và chúng chỉ gặp nhau tại hàm này:
+    //   A) sendZaloNotification → znsProvider.send
+    //   B) requestOtp → zaloOtpProvider.send → znsProvider.send
+    // Gác ở `service.ts` là để toàn bộ tin OTP đi vòng qua cổng.
+    //
+    // Đặt SAU nhánh mô phỏng và SAU kiểm tra mẫu: hai trường hợp đó chắc chắn không
+    // phát sinh phí, trừ tiền cho chúng là để môi trường test ăn hết trần của prod.
+    const giaMotTin = await getSetting("outbound.znsUnitCostVnd").catch(() => null);
+    if (giaMotTin === null) {
+      // Không biết một tin tốn bao nhiêu ⇒ không đếm được ⇒ không gửi. Cùng luật
+      // fail-closed với công tắc live ngay phía trên.
+      return { ok: false, error: `${MA_KHONG_DEM_DUOC}: Không đọc được đơn giá tin ZNS.` };
+    }
+    const datCho = await datChoNganSach({ truc: "ZALO", chiPhiVnd: giaMotTin });
+    if (!datCho.ok) {
+      // KHÔNG trả `ok: true`. Nơi gọi sẽ ghi FAILED + gửi email dự phòng (nếu có),
+      // tức phụ huynh vẫn nhận được thông tin qua kênh khác thay vì im lặng mất tin.
+      return { ok: false, error: `${datCho.ma}: ${datCho.thongDiep}` };
+    }
+
     const accessToken = await getValidZaloAccessToken();
-    if (!accessToken) return { ok: false, error: "ZALO_NOT_CONFIGURED" };
+    if (!accessToken) {
+      await hoanNganSach({ truc: "ZALO", chiPhiVnd: giaMotTin });
+      return { ok: false, error: "ZALO_NOT_CONFIGURED" };
+    }
 
     let result = await postZns(accessToken, input);
     // Token lỗi auth (hiếm — race hết hạn) → refresh + thử lại 1 lần.
+    // Một suất ngân sách phủ cả hai lượt POST: cùng lắm chỉ MỘT tin tới tay khách.
     if (!result.ok && result.authError) {
       const fresh = await forceRefreshZaloToken();
       if (fresh) result = await postZns(fresh, input);
     }
+    // Zalo KHÔNG tính phí tin gửi hỏng (văn bản ZBS 31/07) ⇒ trả lại suất đã đặt.
+    // Thiếu bước này thì một đợt lỗi xác thực hàng loạt ăn sạch trần tháng mà chưa
+    // gửi được tin nào — trần biến thành cầu chì tự nổ.
+    if (!result.ok) await hoanNganSach({ truc: "ZALO", chiPhiVnd: giaMotTin });
+
     return { ok: result.ok, providerMessageId: result.providerMessageId, error: result.error };
   },
 };

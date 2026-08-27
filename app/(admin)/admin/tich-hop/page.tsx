@@ -11,6 +11,8 @@ import { MisaControls } from "./_components/misa-controls";
 import { VietQrConfig, type VietQrCenterRow } from "./_components/vietqr-config";
 import { ZnsTest } from "./_components/zns-test";
 import { PhanTrangBang } from "@/components/ui/phan-trang-bang";
+import { docTinhHinhNganSach } from "@/lib/ngan-sach-goi-ra/so-chi";
+import { dinhDangVnd, kyThangDeDoc } from "@/lib/ngan-sach-goi-ra/chinh-sach";
 
 export const metadata = { title: "Tích hợp | Admin" };
 export const dynamic = "force-dynamic";
@@ -50,6 +52,10 @@ export default async function IntegrationsPage() {
   ]);
   const misaConfigured = isMisaConfigured();
   const misaLive = isMisaLive();
+  // Trần chi phí tháng (27/08/2026). Đặt ở màn này vì đây là nơi người vận hành đã
+  // quen vào xem "các đường ra ngoài đang thế nào". Cảnh báo 80% mà chỉ nằm trong log
+  // server thì thực tế là không có cảnh báo — phải có chỗ người nhìn thấy.
+  const nganSach = await docTinhHinhNganSach();
   // BGĐ 31/07 — tài khoản nhận tiền theo TỪNG CƠ SỞ + 1 dòng cấu hình chung (fallback).
   const centers = await sdb.center.findMany({
     where: { isActive: true },
@@ -75,6 +81,60 @@ export default async function IntegrationsPage() {
         <h1 className="text-xl font-bold text-foreground">Tích hợp ngoài</h1>
         <p className="text-sm text-muted-foreground">Trạng thái các adapter. Khi thiếu credential, hệ thống tự fallback an toàn.</p>
       </div>
+
+      {/* Trần chi phí THÁNG cho lời gọi ra ngoài — chốt 27/08/2026. */}
+      <section className="rounded-xl border border-border bg-card p-4">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h2 className="text-sm font-bold text-foreground">
+            Ngân sách gọi ra ngoài — kỳ {kyThangDeDoc(nganSach.kyThang)}
+          </h2>
+          <span className="text-xs text-muted-foreground">
+            Tổng đã dùng <b className="tabular-nums">{dinhDangVnd(nganSach.tongDaTieuVnd)}đ</b> /{" "}
+            {dinhDangVnd(nganSach.tongTranVnd)}đ
+          </span>
+        </div>
+        <p className="mt-1 text-xs text-muted-foreground">
+          Chạm trần là NGỪNG gọi ra (không âm thầm gửi tiếp). Cảnh báo ở mốc{" "}
+          {nganSach.mocCanhBaoPhanTram}%. Sửa ba con số trần ở màn{" "}
+          <b>Cấu hình vận hành</b> (nhóm Tài chính) — có hiệu lực trong vài phút, không
+          cần triển khai lại. Tổng là số cộng của ba trục, không có ô nhập riêng.
+        </p>
+
+        <div className="mt-3 grid gap-2 sm:grid-cols-3">
+          {nganSach.theoTruc.map((t) => {
+            const trangThai = t.daChamTran
+              ? "bg-state-danger-soft text-state-danger-ink"
+              : t.phanTram >= nganSach.mocCanhBaoPhanTram
+                ? "bg-state-warning-soft text-state-warning-ink"
+                : "bg-state-success-soft text-state-success-ink";
+            return (
+              <div key={t.truc} className="rounded-lg border border-border p-3">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-xs font-semibold text-foreground">{t.nhan}</span>
+                  <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${trangThai}`}>
+                    {t.tranVnd === 0 ? "đang tắt" : `${t.phanTram}%`}
+                  </span>
+                </div>
+                <div className="mt-1 text-sm tabular-nums text-foreground">
+                  {dinhDangVnd(t.daTieuVnd)}đ{" "}
+                  <span className="text-xs text-muted-foreground">
+                    / {dinhDangVnd(t.tranVnd)}đ
+                  </span>
+                </div>
+                <div className="mt-1 text-xs text-muted-foreground">
+                  {t.soLuot} lượt
+                  {t.soLuotBiChan > 0 && (
+                    <span className="text-state-danger-ink">
+                      {" "}
+                      · {t.soLuotBiChan} lượt BỊ CHẶN vì hết ngân sách
+                    </span>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </section>
 
       {/* AUTH-SĐT P4 — soi nhanh backend rate-limit (P0-d): memory = bộ đếm reset
           theo instance serverless, không chặn được brute-force trải đều instance. */}
