@@ -14,6 +14,7 @@ import type { LeadChildStatus, Prisma } from '@prisma/client'
 import { logLeadAudit, getAuditActor } from '@/lib/audit/log'
 import { recordLeadStatusChange } from '@/lib/lead/status-trail-write'
 import { recordLeadActivity } from '@/lib/lead/activity-write'
+import { SYSTEM_ACTIVITY_META } from '@/lib/lead/activity-clock'
 import { resolveActor } from '@/lib/auth/actor'
 import { passesScope, scopedDb } from '@/lib/db-scope'
 import { getLeadPaymentSummary } from '@/lib/payments/summary'
@@ -53,10 +54,18 @@ const statusSchema = z.enum(LEAD_STATUS_VALUES)
 
 // ─── #11 T1 (câu 10 BGĐ, Kiệt ký spec 10/07) — lead "dùng chung" ────────────
 /**
- * Q2: lead chia sẻ → người khác chỉ XEM + GHI CHÚ (addLeadActivity). Mọi mutator
- * (status/fields/note/loại đơn/task) đòi OWNER (assignee) hoặc actor view-all
- * (QL/Admin). KHÔNG export ('use server': export async = public endpoint).
- * Cũng vá luôn lỗ pre-existing: Sale A gọi action với leadId của Sale B cùng cơ sở.
+ * Mọi mutator (status/fields/note/loại đơn/task/nhật ký) đòi OWNER (assignee)
+ * hoặc actor view-all (QL/Admin). KHÔNG export ('use server': export async =
+ * public endpoint). Cũng vá lỗ pre-existing: Sale A gọi action với leadId của
+ * Sale B cùng cơ sở.
+ *
+ * ~~Q2: lead chia sẻ → người khác chỉ XEM + GHI CHÚ (addLeadActivity).~~
+ * [ĐẢO — S-6, 27/08/2026] Ngoại lệ "ghi chú" đã gỡ khỏi `addLeadActivity`. Hai
+ * lý do, cái sau mới là cái nặng:
+ *   · chính sách "dùng chung lead" đã TẮT từ Q8 21/08 (lib/lead/sharing.ts),
+ *     nên vế "lead chia sẻ" không còn ai đứng sau;
+ *   · từ S-3, ghi một dòng nhật ký còn ĐÓNG mốc `Lead.firstContactAt` — thứ
+ *     tắt chuông SLA-3 vĩnh viễn. "Chỉ ghi chú" không còn là việc vô hại.
  */
 async function actorMayMutateLead(
   sessionUserId: string,
@@ -132,6 +141,10 @@ export async function toggleLeadShareAction(
       content: share
         ? 'Bật "dùng chung" — CSKH cùng cơ sở xem được lead này'
         : 'Tắt "dùng chung"',
+      // S-3 — DÒNG MÁY: bật/tắt cờ chia sẻ là việc nội bộ, không phải một lần gọi
+      // phụ huynh. Thiếu dấu này thì cú bật "dùng chung" tự tay đóng mốc "đã liên
+      // hệ lần đầu" và tắt cảnh báo SLA-3 hộ người.
+      metadata: SYSTEM_ACTIVITY_META,
     })
   })
 
@@ -272,6 +285,9 @@ export async function updateLeadStatus(
         type: 'NOTE',
         content:
           '[Trải nghiệm] Lead đã hẹn học thử — vào màn "Lớp Trial" xếp con vào buổi cụ thể để giáo viên thấy trên lịch dạy.',
+        // S-3 — dòng nhắc việc do MÁY sinh kèm lượt đổi trạng thái, không phải vết
+        // của một lần chạm khách.
+        metadata: SYSTEM_ACTIVITY_META,
       })
     }
   })
@@ -377,11 +393,26 @@ export async function addLeadActivity(input: {
 
   const lead = await db.lead.findUnique({
     where: { id: input.leadId },
-    select: { id: true, centerId: true },
+    select: { id: true, assignedToId: true, centerId: true },
   })
   const actor = await resolveActor(session.user.id)
   if (!lead || !passesScope('Lead', lead, actor)) {
     return { ok: false, error: 'Lead không tồn tại' }
+  }
+  // S-6 (27/08/2026) — chốt chủ sở hữu, khớp với `addLeadTask` ngay bên dưới.
+  //
+  // Đây KHÔNG chỉ là "ghi bừa một dòng ghi chú": `recordLeadActivity` bump
+  // `Lead.lastActivityAt` (cột "số ngày chưa tiếp cận lại" của QLCS) và đóng mốc
+  // `Lead.firstContactAt` khi loại là CALL/MESSAGE/EMAIL. Mốc đó chỉ ghi được
+  // MỘT lần và là điều kiện TẮT chuông SLA-3 ("Chưa liên hệ khách > 3 giờ") —
+  // tức đồng nghiệp tắt được đồng hồ SLA trên khách của nhau, im lặng.
+  //
+  // Ngoại lệ cũ "lead dùng chung thì ai cũng ghi chú được" (BGĐ câu 10, 10/07)
+  // đã hết hiệu lực: Q8 21/08 bỏ hẳn chính sách dùng chung (lib/lead/sharing.ts).
+  // Người NHẬP hộ phiếu cũng không qua cửa này — đúng chủ đích: "khách của tôi"
+  // và "tôi phải gọi ai" là hai câu hỏi khác nhau (lib/lead/sale-leads.ts).
+  if (!(await actorMayMutateLead(session.user.id, lead.assignedToId))) {
+    return { ok: false, error: MUTATE_DENIED }
   }
 
   const { actorId, actorName } = getAuditActor(session)
@@ -830,7 +861,10 @@ export async function createLeadManual(
           actorName,
           type: 'NOTE',
           content: 'Tạo lead thủ công',
-          metadata: { system: true },
+          // S-3 — cùng MỘT dấu với mọi dòng máy khác. Đường này ghi lồng trong
+          // `lead.create` nên không qua `recordLeadActivity` được; dấu thì vẫn phải
+          // đúng, không thì lead vừa tạo đã mang mốc "đã liên hệ lần đầu".
+          metadata: SYSTEM_ACTIVITY_META,
         },
       },
     },
@@ -1100,21 +1134,75 @@ export async function updateLeadFields(
 
 // ─── Module CRM & Lead PHẦN 2 — gán tay + auto-chia + cấu hình chế độ ─────────
 
-/** Auto-chia 1 lead theo cơ sở → chế độ (tôn trọng khoá khi đã tương tác). */
+/**
+ * Auto-chia 1 lead theo cơ sở → chế độ (tôn trọng khoá khi đã tương tác).
+ *
+ * ⚠️ S-2b (25/08/2026) — HẾT BÁO THÀNH CÔNG GIẢ. Bản cũ vứt bỏ toàn bộ kết quả
+ * của `autoAssignNewLead` (`skipped`, `assignedToId`, `mode`) và luôn trả
+ * `{ ok: true }`, nên nút "Chia lại lead" lần nào bấm cũng bắn toast xanh "Đã
+ * chia lại lead theo cấu hình cơ sở" — kể cả 5 đường KHÔNG LÀM GÌ của tầng dưới.
+ *
+ * Đường thường gặp nhất là tệ nhất: `autoAssignNewLead` **bỏ qua lead đã có người
+ * phụ trách**, mà nút thì nằm trên trang chi tiết lead — nơi lead gần như luôn đã
+ * được phân công. Nghĩa là cái nút tên "Chia LẠI" về bản chất không bao giờ chia
+ * lại được, nhưng quản lý bấm xong tin là đã đổi người.
+ *
+ * KHÔNG đổi luật chia ở đây: khoá-khi-đã-tương-tác và bỏ-fallback-xuyên-cơ-sở là
+ * quyết định có chủ đích của Đợt D, đổi chúng là việc của chủ dự án. Việc của
+ * action chỉ là **nói đúng chuyện đã xảy ra**: `ok: true` chỉ khi thật sự ghi
+ * được người nhận mới, còn lại trả lý do cụ thể kèm chỗ phải làm tiếp.
+ */
 export async function autoAssignNewLeadAction(
   leadId: string,
-): Promise<{ ok: boolean; error?: string }> {
+): Promise<{ ok: true; assignedToId: string } | { ok: false; error: string }> {
   const session = await auth()
   if (!session?.user) return { ok: false, error: 'Chưa đăng nhập' }
   if (!(await checkPermission('leads:assign'))) return { ok: false, error: 'Không có quyền' }
 
   const { actorId, actorName } = getAuditActor(session)
   const res = await autoAssignNewLead(leadId, { actorId, actorName })
-  if (!res.ok) return { ok: false, error: res.error }
+  if (!res.ok) return { ok: false, error: res.error ?? 'Không chia được lead' }
+
+  // Tầng dưới trả `ok: true` cho cả những lần nó CỐ Ý không làm gì. Dịch từng
+  // đường đó thành một câu người bấm hiểu được, thay vì nuốt hết thành màu xanh.
+  if (res.skipped) {
+    return res.assignedToId
+      ? {
+          ok: false,
+          error:
+            'Lead đã có người phụ trách — nút này chỉ chia lead CHƯA phân công. ' +
+            'Muốn đổi người, dùng ô "Gán tay" hoặc "Chuyển cơ sở" bên cạnh.',
+        }
+      : {
+          ok: false,
+          error:
+            'Lead đã có tương tác của tư vấn viên nên hệ thống khoá tự chia lại. ' +
+            'Muốn đổi người, dùng ô "Gán tay".',
+        }
+  }
+
+  if (!res.assignedToId) {
+    if (!res.centerId) {
+      return { ok: false, error: 'Lead chưa thuộc cơ sở nào — chọn cơ sở trước khi chia.' }
+    }
+    if (res.mode === 'MANUAL') {
+      return {
+        ok: false,
+        error:
+          'Cơ sở đang đặt chế độ "Gán tay" nên hệ thống không tự chia. ' +
+          'Chọn người ở ô "Gán tay".',
+      }
+    }
+    return {
+      ok: false,
+      error:
+        'Cơ sở chưa có tư vấn viên đang hoạt động để nhận lead — lead vẫn ở trạng thái chưa phân công.',
+    }
+  }
 
   revalidatePath('/leads')
   revalidatePath(`/leads/${leadId}`)
-  return { ok: true }
+  return { ok: true, assignedToId: res.assignedToId }
 }
 
 /** Quản lý gán tay 1 lead cho 1 sale cụ thể. */

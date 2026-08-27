@@ -56,6 +56,18 @@ export default async function SaleHomePage() {
     };
   });
 
+  // S-1 — khối "việc đến hạn" cũng in TÊN phụ huynh (`ViecItem.tenKhach` lấy từ
+  // `Lead.parentName`) nhưng trước đây không đi qua tầng che, trong khi khối
+  // "khách cần chạm" ngay dưới nó thì có. Nửa che nửa không trên cùng một trang
+  // là kiểu rò khó thấy nhất — người xem tưởng cả trang đã được che.
+  const cheViec = (ds: ViecItem[]): ViecItem[] =>
+    ds.map((v) => ({
+      ...v,
+      tenKhach: canViewPii ? v.tenKhach : maskPersonName(v.tenKhach),
+    }));
+  const viecQuaHan = cheViec(board.viec.quaHan);
+  const viecHomNay = cheViec(board.viec.homNay);
+
   const tongViec = board.viec.quaHan.length + board.viec.homNay.length;
 
   return (
@@ -101,7 +113,7 @@ export default async function SaleHomePage() {
               <AlertTriangle className="h-4 w-4" /> Quá hạn ({board.viec.quaHan.length})
             </h2>
             <ul>
-              {board.viec.quaHan.map((v) => (
+              {viecQuaHan.map((v) => (
                 <DongViec key={v.id} v={v} />
               ))}
             </ul>
@@ -117,7 +129,7 @@ export default async function SaleHomePage() {
             <p className="text-sm text-muted-foreground">Không có việc nào đến hạn hôm nay.</p>
           ) : (
             <ul>
-              {board.viec.homNay.map((v) => (
+              {viecHomNay.map((v) => (
                 <DongViec key={v.id} v={v} />
               ))}
             </ul>

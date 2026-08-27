@@ -1,7 +1,7 @@
 # Q18d — Vercel Cron KHÔNG chạy trên custom environment → site test không có cron.
 # Workflow này bơm các cron SỐNG CÒN cho UAT: dispatch-events (DomainEvent outbox —
-# thiếu nó mọi side-effect đứng im), email-queue (worker gửi mail), chat-zns-notify và
-# trial-reminder. Danh sách thật nằm ở vòng `for` bên dưới — cron mới thêm vào
+# thiếu nó mọi side-effect đứng im), email-queue (worker gửi mail), chat-zns-notify,
+# trial-reminder và sla-check. Danh sách thật nằm ở vòng `for` bên dưới — cron mới thêm vào
 # vercel.json mà quên khai ở đây thì lần chạy đầu tiên của nó rơi thẳng vào PROD.
 # /api/cron/* được miễn basic-auth trong proxy.ts — route tự verify Bearer CRON_SECRET.
 #
@@ -38,7 +38,16 @@ jobs:
           # bằng dedupeKey `trial.reminder:<mốc>:<ca>:<buổi>`, gọi lại chỉ chạm bản ghi cũ
           # chứ không kêu chuông lần hai. Nhắc là chuông nội bộ cho Sale — KHÔNG gửi gì
           # cho phụ huynh, nên bơm dày cũng không có tin thật nào bay ra ngoài.
-          for p in dispatch-events email-queue chat-zns-notify trial-reminder; do
+          #
+          # sla-check (S-7): thêm 26/08/2026. Cùng lý do như trial-reminder — có trong
+          # vercel.json nhưng Vercel Cron không chạy trên environment `test`, nên ô nghiệm
+          # thu "SLA kêu đúng trên một lead thử" KHÔNG CÓ CÁCH TICK: người nghiệm thu ngồi
+          # đợi một tiếng chuông không bao giờ tới rồi kết luận SLA hỏng. Bơm 5 phút/lần
+          # thay vì 15 như prod là AN TOÀN: `runSlaCheck` ghi StaffNotification qua
+          # `notifyStaff` với dedupeKey `sla:<rule>:<leadId>` và KHÔNG dùng `reopen`, nên
+          # lượt sau chỉ chạm lại bản ghi cũ chứ không dội chuông lần hai. Cảnh báo SLA là
+          # chuông NỘI BỘ cho Sale — không có email/ZNS nào bay ra ngoài.
+          for p in dispatch-events email-queue chat-zns-notify trial-reminder sla-check; do
             code=$(curl -s -o /dev/null -w "%{http_code}" \
               -H "Authorization: Bearer ${{ secrets.TEST_CRON_SECRET }}" \
               "https://test.satarobo.vn/api/cron/$p")

@@ -5,6 +5,7 @@ import { autoAssignNewLead } from "../auto-assign";
 import { LEAD_KHONG_NHAN_THEM_CON } from "@/lib/leads/status";
 import { autoAssignLead } from "../assign";
 import { recordLeadActivity } from "../activity-write";
+import { SYSTEM_ACTIVITY_META } from "../activity-clock";
 import { getNonEnrollableCenterIds } from "@/lib/enrollment-flow";
 import { buildNote, isSameChildName, matchCenter } from "./normalize";
 import type { MappedLead } from "./types";
@@ -257,6 +258,8 @@ async function attachExtraChild(
         `[Thêm con] Phụ huynh gửi thêm phiếu cho "${child.fullName}"` +
         `${child.gradeLevel ? ` (${child.gradeLevel})` : ""}` +
         ` — đã thêm vào hồ sơ này thay vì tạo lead mới.`,
+      // S-3 — phiếu do KHÁCH gửi, chưa ai gọi khách: không đóng dấu đã-liên-hệ.
+      metadata: SYSTEM_ACTIVITY_META,
     });
   });
   return true;
@@ -284,6 +287,8 @@ async function recordIntakeNotes(
       actorName,
       type: "NOTE",
       content: `[Phiếu mới cùng SĐT]\n${body}`,
+      // S-3 — nội dung phiếu khách gửi, không phải một lượt Sale chạm khách.
+      metadata: SYSTEM_ACTIVITY_META,
     });
   });
 }
@@ -495,6 +500,8 @@ export async function ingestIntakeLead(
           actorName,
           type: "NOTE",
           content: `Gán theo mã nhân viên trên phiếu (${mapped.employeeCode}).`,
+          // S-3 — điều phối, không phải một lượt chạm khách.
+          metadata: SYSTEM_ACTIVITY_META,
         });
       }
 

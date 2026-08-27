@@ -15,7 +15,11 @@ import "server-only";
 import type { LeadStatus } from "@prisma/client";
 import type { Actor } from "@/lib/auth/actor";
 import { scopedDb } from "@/lib/db-scope";
-import { leadOwnershipWhere, TRANG_THAI_DA_DONG } from "@/lib/lead/sale-leads";
+import {
+  leadOwnershipWhere,
+  leadPhuTrachWhere,
+  TRANG_THAI_DA_DONG,
+} from "@/lib/lead/sale-leads";
 import {
   evaluateSla,
   loadSlaThresholds,
@@ -148,7 +152,12 @@ export async function getSaleBoard(
       where: {
         deletedAt: null,
         status: { notIn: TRANG_THAI_DA_DONG },
-        AND: [leadOwnershipWhere(userId)],
+        // ⚠️ HẸP hơn "khách của tôi" ở màn danh sách, CÓ CHỦ ĐÍCH (S-4, 27/08).
+        // Bảng này hỏi "tôi phải gọi ai", không hỏi "tôi được xem những ai".
+        // Phiếu Sale Hội sở nhập được chia về Sale cơ sở ⇒ người phải gọi là Sale
+        // cơ sở. Dùng mệnh đề rộng ở đây là bày lên bảng Hội sở hàng trăm việc họ
+        // không bấm được, và `soKhachDangMo` bị đếm đôi trên hai màn.
+        AND: [leadPhuTrachWhere(userId)],
       },
       // Đủ để đánh giá SLA + hiển thị, không lấy thừa.
       select: {

@@ -66,10 +66,20 @@ export function buildClassListWhere(
  * luôn ẩn lead đã xoá mềm (soft-delete không cascade nên buổi cũ vẫn còn);
  * chế độ mặc định ẩn thêm buổi đã xong VÀ lead đã rời phễu;
  * giáo viên thuần chỉ thấy buổi của mình.
+ *
+ * ⚠️ S-1 (26/08/2026) — `canSearchPhone` KHÔNG phải tuỳ chọn trang trí. Ô tìm là
+ * đường rò GIÁN TIẾP: nó không in số ra màn hình, nhưng ai gõ đủ số cũng biết
+ * được số đó là khách nào. Che cột SĐT mà để ô tìm quét cột đó thì việc che chỉ
+ * còn là hình thức. Vai vào được màn này gồm cả Quản lý cơ sở (mất
+ * `leads:view-pii` từ Q9), Giáo viên và Đào tạo — ba vai chưa bao giờ có quyền
+ * xem SĐT lead.
+ *
+ * Mặc định `false` (fail-closed): quên truyền cờ thì mất tính năng tìm, chứ
+ * không mất dữ liệu cá nhân.
  */
 export function buildBookingListWhere(
   status: string | undefined,
-  opts: { ownTeacherId?: string | null; q?: string },
+  opts: { ownTeacherId?: string | null; q?: string; canSearchPhone?: boolean },
 ): Prisma.TrialClassWhereInput {
   const where: Prisma.TrialClassWhereInput = { lead: { deletedAt: null } };
 
@@ -93,7 +103,7 @@ export function buildBookingListWhere(
       ...(where.lead as Prisma.LeadWhereInput),
       OR: [
         { parentName: { contains: term, mode: "insensitive" } },
-        { phone: { contains: term } },
+        ...(opts.canSearchPhone === true ? [{ phone: { contains: term } }] : []),
         { children: { some: { fullName: { contains: term, mode: "insensitive" } } } },
       ],
     };

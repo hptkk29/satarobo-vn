@@ -118,6 +118,13 @@ const inlineAuthzActionGlobs = [
   'app/**/_*actions*.ts', // _eval-actions.ts, _qr-actions.ts, _installment-approval-actions.ts...
   'app/**/_*-core.ts', // _qr-core.ts, _feedback-core.ts — logic THẬT của action tách khỏi "use server"
   'app/**/_actions/**/*.ts', // app/(admin)/admin/_actions/active-role.ts, cron-trigger.ts
+  // S-6 (27/08/2026) — giao diện site Sale sống ở `components/sale/`, ngoài
+  // `app/**`, nên 5 glob trên không với tới. Khai TRƯỚC file action đầu tiên của
+  // thư mục đó: khai sau thì file đầu tiên viết kiểu gì cũng hợp lệ, và không ai
+  // đọc lại nó nữa. Hôm nay chưa khớp file nào — đó là chủ đích, không phải thừa.
+  'components/sale/**/_actions*.ts',
+  'components/sale/**/actions.ts',
+  'components/sale/**/_*actions*.ts',
 ]
 
 export default tseslint.config(
@@ -239,6 +246,36 @@ export default tseslint.config(
   // cơ sở thủng mà không ai báo.
   {
     files: ['app/(sale)/**/*.{ts,tsx}'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            ...adminBlockedImports.patterns,
+            ...clientBlockedImports.patterns,
+            ...dbBlockedImports.patterns,
+          ],
+        },
+      ],
+    },
+  },
+
+  // components/sale/** — giao diện của site Sale sống NGOÀI route group.
+  //
+  // S-6 (27/08/2026) — thư mục này trước đó không nằm trong khối nào: cấu hình
+  // flat gắn luật theo GLOB, không thừa hưởng theo cây, nên `app/(sale)/**` có
+  // luật còn phần giao diện của chính site đó thì không. Ở đúng thư mục ấy
+  // `import { db } from "@/lib/db"` là HỢP LỆ ⇒ cổng cách ly cơ sở thủng mà lint
+  // vẫn xanh.
+  //
+  // Vì sao lấy luật "shadcn THUẦN" chứ không phải luật client hay luật admin:
+  // site Sale là site NGHIỆP VỤ NỘI BỘ (nhân viên tư vấn đăng nhập làm việc),
+  // không phải trang tiếp thị cho khách. Theo .claude/rules/ui-libraries.md thì
+  // Magic UI + Motion là "CLIENT only" (hiệu ứng wow cho marketing) còn Recharts
+  // là "ADMIN only" — site Sale không thuộc trọn bên nào, nên chịu đúng bộ luật
+  // mà `app/(sale)/**` và site giáo viên đang chịu: chặn CẢ HAI, cộng db block.
+  {
+    files: ['components/sale/**/*.{ts,tsx}'],
     rules: {
       'no-restricted-imports': [
         'error',

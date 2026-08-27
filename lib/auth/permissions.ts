@@ -74,6 +74,12 @@ export type Action =
   | "leads:edit-own-intake"
   | "leads:assign"
   | "leads:assign-config" // 03/08 — tách riêng màn "Cấu hình chia lead" khỏi leads:assign
+  // S-5 — XEM sổ lượt chia lead (`/leads/so-luot`). Key ĐỌC riêng, cố ý tách khỏi
+  // `leads:view-all`: sổ lượt là màn kiểm chứng viết CHO tổ Sale (plan/15 §5), mà
+  // `leads:view-all` là quyền quản lý gác ~8 màn khác — nới nó để Sale xem được sổ
+  // là mở kèm cả chùm. Cũng KHÔNG mượn `leads:assign-config` (chỉ SUPER_ADMIN, và
+  // đó là quyền SỬA cách chia — sổ này chỉ đọc).
+  | "leads:rotation-view"
   | "leads:delete"
   | "leads:export"
   | "leads:import" // Task #07 — import danh sách "khách đã đăng ký" từ Excel (Lead REGISTERED + LeadChild)
@@ -413,6 +419,13 @@ export const PERMISSIONS: Record<Action, Role[]> = {
   "leads:change-status": ["SUPER_ADMIN", "SALES_CSM"],
   "leads:assign": ["SUPER_ADMIN", "CENTER_MANAGER"],
   "leads:assign-config": ["SUPER_ADMIN"],
+  // S-5 — XEM sổ lượt chia lead. SALES_CSM có mặt ở đây là CẢ ĐIỂM của ticket:
+  // trước đó màn kiểm chứng gác bằng `leads:view-all` nên chính tổ Sale — người
+  // mà bằng chứng viết cho — là người duy nhất không mở được.
+  // Phạm vi CƠ SỞ do `rotationBoardScope` (lib/lead/rotation.ts) chặn, không do
+  // key này: Sale chỉ thấy sổ của cơ sở mình. Sale Hội sở CỐ Ý không có — phiếu họ
+  // tự nhập không tiêu lượt nên họ không đứng trong vòng luân phiên nào.
+  "leads:rotation-view": ["SUPER_ADMIN", "CENTER_MANAGER", "MARKETING", "SALES_CSM"],
   "leads:delete": ["SUPER_ADMIN", "CENTER_MANAGER"],
   "leads:export": ["SUPER_ADMIN", "CENTER_MANAGER", "MARKETING"],
   // Task #07 — theo pattern students:import. SALES_CSM được cấp theo quyết định

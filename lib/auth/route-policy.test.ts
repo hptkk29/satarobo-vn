@@ -1491,3 +1491,68 @@ describe("EL-01 · AC10. Bất biến cấu trúc khu e-learning", () => {
     ).toBeGreaterThan(branch3);
   });
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Đợt B — CHIỀU RA của site Sale (27/08/2026)
+// ─────────────────────────────────────────────────────────────────────────────
+// Chiều VÀO (`hostKind: "sale"`) đã có từ trước. Thiếu chiều RA thì bật cờ xong site
+// hẹp chỉ là TUỲ CHỌN: tư vấn viên thuần mở admin.satarobo.vn bằng dấu trang cũ vẫn ở
+// nguyên đó với đủ menu admin.
+describe("Đợt B. Sale THUẦN trên admin host → đá sang site Sale", () => {
+  const SALE_ON = { saleSiteEnabled: true } as const;
+  const SALE_OFF = { saleSiteEnabled: false } as const;
+
+  it("cờ ON: Sale thuần vào admin host → chuyển sang host sale", () => {
+    expect(
+      decideRoute({ hostKind: "admin", pathname: "/leads", ...authed("SALES_CSM"), ...SALE_ON }),
+    ).toEqual<RouteDecision>({ type: "redirectHost", host: "sale", path: "/", status: 307 });
+  });
+
+  it("🔴 cờ OFF: KHÔNG đụng gì — hai pha, Sale vẫn làm việc trên admin", () => {
+    // Bỏ điều kiện cờ là đá người dùng sang một site chưa bật, tức chặn họ làm việc.
+    expect(
+      decideRoute({ hostKind: "admin", pathname: "/leads", ...authed("SALES_CSM"), ...SALE_OFF }),
+    ).toEqual<RouteDecision>({ type: "rewrite", path: "/admin/leads" });
+  });
+
+  it("🔴 KIÊM NHIỆM không bị đá — nhốt họ vào site hẹp là lấy mất phần quản lý", () => {
+    expect(
+      decideRoute({
+        hostKind: "admin",
+        pathname: "/leads",
+        role: "CENTER_MANAGER",
+        roles: ["CENTER_MANAGER", "SALES_CSM"],
+        sessionValid: true,
+        ...SALE_ON,
+      }),
+    ).toEqual<RouteDecision>({ type: "rewrite", path: "/admin/leads" });
+  });
+
+  it("vai PARENT đi kèm không phá điều kiện 'thuần'", () => {
+    // `isSaleOnly` cố ý bỏ qua PARENT: nhân viên có con học ở trung tâm vẫn là Sale thuần.
+    expect(
+      decideRoute({
+        hostKind: "admin",
+        pathname: "/leads",
+        role: "SALES_CSM",
+        roles: ["SALES_CSM", "PARENT"],
+        sessionValid: true,
+        ...SALE_ON,
+      }),
+    ).toEqual<RouteDecision>({ type: "redirectHost", host: "sale", path: "/", status: 307 });
+  });
+
+  it("chưa đăng nhập thì không đá — `isSaleOnly` đòi có phiên hợp lệ", () => {
+    const d = decideRoute({ hostKind: "admin", pathname: "/leads", role: null, roles: [], sessionValid: false, ...SALE_ON });
+    expect(d.type).not.toBe("redirectHost");
+  });
+
+  it("vai khác không ảnh hưởng", () => {
+    for (const role of ["CENTER_MANAGER", "HR", "ACCOUNTANT", "MARKETING"] as const) {
+      expect(
+        decideRoute({ hostKind: "admin", pathname: "/leads", ...authed(role), ...SALE_ON }),
+        role,
+      ).toEqual<RouteDecision>({ type: "rewrite", path: "/admin/leads" });
+    }
+  });
+});

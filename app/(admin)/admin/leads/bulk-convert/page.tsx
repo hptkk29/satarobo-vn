@@ -2,7 +2,8 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { ChevronLeft } from "lucide-react";
 import { auth } from "@/lib/auth";
-import { checkPermission } from "@/lib/auth/check-permission";
+import { checkPermission, canViewLeadPii } from "@/lib/auth/check-permission";
+import { maskLeadPiiFields } from "@/lib/lead/pii";
 import { scopedDb } from "@/lib/db-scope";
 import { resolveActor } from "@/lib/auth/actor";
 import { BulkConvertClient } from "./_components/bulk-convert-client";
@@ -28,6 +29,7 @@ export default async function BulkConvertPage() {
   if (!allowed) redirect("/leads");
 
   const sdb = scopedDb(await resolveActor(session.user.id));
+  const canViewPii = await canViewLeadPii();
 
   // GĐ5 — "đã đăng ký mà CHƯA convert" nay cần HAI điều kiện. Trước đây một mình
   // REGISTERED đã đủ vì lượt convert đẩy lead sang ENROLLED; enum mới gộp hai bậc đó
@@ -128,23 +130,32 @@ export default async function BulkConvertPage() {
       </PageHelp>
 
       <BulkConvertClient
-        leads={leads.map((l) => ({
-          id: l.id,
-          parentName: l.parentName,
-          phone: l.phone,
-          email: l.email,
-          centerId: l.centerId,
-          note: l.note,
-          createdAt: l.createdAt.toISOString().slice(0, 10),
-          children: l.children.map((c) => ({
-            id: c.id,
-            fullName: c.fullName,
-            dob: c.dob ? c.dob.toISOString().slice(0, 10) : "",
-            gradeLevel: c.gradeLevel,
-            interestedCourseId: c.interestedCourseId,
-            note: c.note,
-          })),
-        }))}
+        leads={leads.map((raw) => {
+          // S-1 — che ở SERVER trước khi dựng payload client. Cổng vào màn này gồm
+          // Quản lý cơ sở, vai đã mất `leads:view-pii` từ Q9.
+          //
+          // An toàn cho nghiệp vụ: `bulkConvertAction` KHÔNG nhận SĐT từ client —
+          // nó đọc lại phiếu từ DB theo `leadId`. Bản che chỉ để NHÌN và để lọc,
+          // không bao giờ được ghi xuống hồ sơ học viên.
+          const l = maskLeadPiiFields(raw, canViewPii);
+          return {
+            id: l.id,
+            parentName: l.parentName,
+            phone: l.phone,
+            email: l.email,
+            centerId: l.centerId,
+            note: l.note,
+            createdAt: l.createdAt.toISOString().slice(0, 10),
+            children: l.children.map((c) => ({
+              id: c.id,
+              fullName: c.fullName,
+              dob: c.dob ? c.dob.toISOString().slice(0, 10) : "",
+              gradeLevel: c.gradeLevel,
+              interestedCourseId: c.interestedCourseId,
+              note: c.note,
+            })),
+          };
+        })}
         classes={classes.map((c) => ({
           id: c.id,
           label: c.classCode ? `${c.classCode} · ${c.name}` : c.name,

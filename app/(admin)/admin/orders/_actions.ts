@@ -22,6 +22,7 @@ import { ensureOrderPaymentRecorded } from "@/lib/finance/payment";
 import { ensureFullOrderRequest } from "@/lib/payments/payment-request";
 import { getRequestMetadata } from "@/lib/audit/headers";
 import { getAuditActor } from "@/lib/audit/log";
+import { writeAudit } from "@/lib/audit/audit-log";
 import { sendEmailForTrigger } from "@/lib/email/trigger";
 import { notifyOrderByZnsIfNoEmail } from "@/lib/notify/order";
 import { renderTemplate } from "@/lib/email/render";
@@ -343,6 +344,9 @@ export async function createOrderManualAction(input: unknown) {
   }
 
   const { actorId, actorName } = getAuditActor(session);
+  // S-6 — `headers()` chỉ gọi được ngoài transaction; lấy sẵn để cú ghi vết bên
+  // trong tx biết đơn ra đời từ máy nào.
+  const metadata = await getRequestMetadata();
 
   // FIX-C5 — codegen atomic BÊN TRONG tx (`generateOrderCode(tx)`) + retry khi
   // đụng unique-violation (P2002) như backstop. Cả tx re-run khi retry.
@@ -441,6 +445,52 @@ export async function createOrderManualAction(input: unknown) {
         },
       });
     }
+
+    // ─── S-6 (27/08/2026) — VẾT TẠO ĐƠN ────────────────────────────────────
+    // Trước đây lượt tạo đơn KHÔNG để lại dòng nào trong nhật ký hợp nhất: mọi
+    // lượt ĐỔI về sau có vết (`OrderStatusHistory`, duyệt giảm giá, ghi nhận
+    // tiền), riêng cái đầu tiên — nơi ấn định subtotal / giảm giá / tổng — thì
+    // trống. Lúc khách và người bán bất đồng về con số, hệ thống chỉ có giá trị
+    // HIỆN TẠI của đơn, không trả lời được đơn RA ĐỜI với con số nào và do ai.
+    //
+    // TRONG tx, không `.catch()`: đơn tiền mà không có vết thì tranh chấp không
+    // xử được, nên thà không có đơn còn hơn có đơn không vết (cùng lý do
+    // `recordLeadActivity` cấm nuốt lỗi bump đồng hồ).
+    //
+    // `orgUnitId` truyền `centerId` — `writeAudit` tự quy về OrgUnit thật, và tự
+    // suy lại từ chính đơn nếu đơn chưa gắn cơ sở.
+    await writeAudit({
+      actor: { id: actorId, name: actorName },
+      module: "finance",
+      entityType: "Order",
+      entityId: order.id,
+      action: "CREATE",
+      newValues: {
+        code: order.code,
+        type: data.type,
+        status: data.status,
+        subtotal,
+        discountAmount: data.discountAmount,
+        discountPercent: data.discountPercent ?? null,
+        discountApprovalStatus: discountNeedsApproval ? "PENDING_APPROVAL" : null,
+        shippingFee: data.shippingFee,
+        totalAmount,
+        paymentMethodId: data.paymentMethodId,
+        paymentMethodName: pm.name,
+        centerId: data.centerId || null,
+        leadId: data.leadId || null,
+        leadChildId,
+        studentId: data.studentId || null,
+        // Khớp `PII_KEY_RE` của viewer ⇒ tự mask với người không có quyền xem PII.
+        customerPhone: data.customerPhone.trim(),
+        itemCount: data.items.length,
+      },
+      reason: discountNeedsApproval ? (data.discountReason?.trim() ?? undefined) : undefined,
+      orgUnitId: data.centerId || null,
+      ip: metadata.ip ?? null,
+      userAgent: metadata.userAgent ?? null,
+      tx,
+    });
 
       return order;
     }),

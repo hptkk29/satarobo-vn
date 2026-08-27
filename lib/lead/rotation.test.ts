@@ -17,7 +17,13 @@
 // Chủ dự án đã được trình bày đánh đổi đó và giữ nguyên lựa chọn.
 import { describe, it, expect } from "vitest";
 import fs from "node:fs";
-import { pickFairTurn, planFairTurns, seedTurnsForNewcomer, type RotationCandidate } from "./rotation";
+import {
+  pickFairTurn,
+  planFairTurns,
+  rotationBoardScope,
+  seedTurnsForNewcomer,
+  type RotationCandidate,
+} from "./rotation";
 
 const c = (id: string, turns: number, lastTurnAt: Date | null = null): RotationCandidate => ({
   id,
@@ -245,5 +251,45 @@ describe("[Đợt D][SS-LR-06] khoá chống hai lead cùng tiêu một lượt"
     expect(src.indexOf("leadRotationTurn.create")).toBeGreaterThan(tx);
     expect(src.indexOf("planFairTurns(candidates, count)")).toBeGreaterThan(tx);
     expect(src.indexOf("leadRotationTurn.update")).toBeGreaterThan(tx);
+  });
+});
+
+describe("[S-5] rotationBoardScope — sổ lượt mở cho tổ Sale nhưng KHÔNG mở ra ngoài cơ sở", () => {
+  // Màn kiểm chứng sinh ra để dập tin đồn thiên vị, mà người cần thuyết phục
+  // nhất — chính tổ Sale — lại là người duy nhất không mở được (gate cũ:
+  // `leads:view-all`, vai SALES_CSM không có). Mở cửa cho họ mà không mở luôn
+  // sổ của cơ sở khác thì phạm vi phải tính bằng MỘT hàm thuần, test được.
+  it("Sale gắn cơ sở → CHỈ cơ sở đó (không phải toàn hệ)", () => {
+    expect(rotationBoardScope({ superAdmin: false, xemToanBo: false, centerId: "cs1" })).toEqual({
+      kind: "one-center",
+      centerId: "cs1",
+    });
+  });
+
+  it("Sale KHÔNG gắn cơ sở nào → KHÔNG cơ sở nào (đóng, không mở toang)", () => {
+    // Hồ sơ hỏng (thiếu centerId) phải ra bảng rỗng, không được rơi vào nhánh
+    // "không lọc" — đó đúng là cách một màn chỉ-đọc biến thành lỗ xem chéo.
+    expect(rotationBoardScope({ superAdmin: false, xemToanBo: false, centerId: null })).toEqual({
+      kind: "none",
+    });
+  });
+
+  it("Quản lý cơ sở giữ nguyên hành vi cũ: gắn cơ sở → chỉ cơ sở đó", () => {
+    expect(rotationBoardScope({ superAdmin: false, xemToanBo: true, centerId: "cs2" })).toEqual({
+      kind: "one-center",
+      centerId: "cs2",
+    });
+  });
+
+  it("người Hội sở (xem toàn bộ, không gắn cơ sở) → toàn hệ", () => {
+    expect(rotationBoardScope({ superAdmin: false, xemToanBo: true, centerId: null })).toEqual({
+      kind: "all",
+    });
+  });
+
+  it("quản trị tối cao → toàn hệ, kể cả khi hồ sơ có gắn một cơ sở", () => {
+    expect(rotationBoardScope({ superAdmin: true, xemToanBo: true, centerId: "cs1" })).toEqual({
+      kind: "all",
+    });
   });
 });
