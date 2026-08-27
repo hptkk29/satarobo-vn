@@ -7,7 +7,7 @@ import { resolveActor } from "@/lib/auth/actor";
 import { checkPermission, checkPermissionDetail } from "@/lib/auth/check-permission";
 import { canViewLeadPii } from "@/lib/auth/check-permission";
 import { maskLeadPiiFields } from "@/lib/lead/pii";
-import { leadSharedOrClause } from "@/lib/lead/sharing";
+import { leadOwnershipWhere } from "@/lib/lead/ownership";
 import { LEAD_STATUS_LABEL } from "@/lib/leads/status";
 import { phoneSearchTerm } from "@/lib/phone";
 
@@ -63,21 +63,17 @@ export default async function GlobalSearchPage({
           ? sdb.lead.findMany({
               where: {
                 deletedAt: null,
-                // Sale chỉ view-own → giới hạn lead của mình / dùng chung team (bọc AND để
+                // Sale chỉ view-own → giới hạn về "khách của tôi" (bọc AND để
                 // không đè key OR của search bên dưới). Cách ly cơ sở do scopedDb lo.
-                ...(scopeToSelf
-                  ? {
-                      AND: [
-                        {
-                          // Đợt E (22/08) — lead độc quyền, xem lib/lead/sharing.ts.
-                          OR: [
-                            { assignedToId: session.user.id },
-                            ...leadSharedOrClause(),
-                          ],
-                        },
-                      ],
-                    }
-                  : {}),
+                //
+                // S-8 (27/08) — khối này TỪNG CHỈ CÓ HAI VẾ: `assignedToId` +
+                // nhánh dùng chung. Vế "phiếu chính mình nhập" được thêm vào
+                // `/admin/leads` từ 23/08 và vào site Sale ở S-4 (27/08), nhưng ô
+                // tìm thì không ai nhớ. Hệ quả người dùng thấy: Sale Hội sở nhập
+                // một phiếu (phiếu tự chia về Sale cơ sở nên họ không bao giờ là
+                // assignee), gõ đúng tên phụ huynh vào đây thì KHÔNG RA GÌ — mà
+                // cũng phiếu đó mở được từ danh sách. Nay hỏi chung một nguồn.
+                ...(scopeToSelf ? { AND: [leadOwnershipWhere(session.user.id)] } : {}),
                 OR: [
                   { parentName: { contains: q, mode: "insensitive" } },
                   // Lead.phone = SĐT PH — chỉ tìm được khi thấy SĐT thật (NỢ #11).
