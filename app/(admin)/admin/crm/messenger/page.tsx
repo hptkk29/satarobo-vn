@@ -7,6 +7,7 @@ import { scopedDb } from "@/lib/db-scope";
 import { maskPhone, redactContactsInText } from "@/lib/lead/pii";
 import { canViewLeadPii } from "@/lib/auth/check-permission";
 import { Badge } from "@/components/ui/badge";
+import { messengerDangMoPhong } from "@/lib/crm/messenger-send";
 import { ReplyBox } from "./_components/reply-box";
 
 export const dynamic = "force-dynamic";
@@ -39,6 +40,16 @@ export default async function MessengerInboxPage() {
   // liên hệ (`redactContactsInText`), không ẩn hẳn cả câu như `maskFreeText`.
   const canViewPii = await canViewLeadPii();
 
+  // S-2b — mỗi Page có thể ở trạng thái khác nhau (khoá Meta hiện chỉ có cho 1 Page),
+  // nên hỏi theo từng `pageId` chứ không một cờ chung. Hỏi Ở SERVER: chế độ mô phỏng
+  // phụ thuộc env + SystemSetting, client không biết và cũng không được biết.
+  const pageIds = [...new Set(conversations.map((c) => c.pageId))];
+  const moPhongTheoPage = new Map(
+    await Promise.all(
+      pageIds.map(async (p) => [p, await messengerDangMoPhong(p)] as const),
+    ),
+  );
+
   return (
     <div>
       <h1 className="mb-6 flex items-center gap-2 text-3xl font-black text-foreground">
@@ -70,7 +81,7 @@ export default async function MessengerInboxPage() {
                     : redactContactsInText(c.messages[0].text)
                   : <span className="italic text-muted-foreground">(chưa có tin nhắn)</span>}
               </p>
-              <ReplyBox conversationId={c.id} />
+              <ReplyBox conversationId={c.id} moPhong={moPhongTheoPage.get(c.pageId) ?? true} />
             </div>
           ))}
         </div>
