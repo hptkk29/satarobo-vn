@@ -17,6 +17,8 @@
 import { test, expect, type Page } from "@playwright/test";
 import { login } from "../_helpers/auth";
 import {
+  chungNhanCuaLuot,
+  demChungNhan,
   dungVongHoc,
   trangThaiGhiDanh,
   type BoDuLieu,
@@ -221,5 +223,43 @@ test.describe("[EL-VÒNG] người Đào tạo tick buổi ⇒ khoá KHÉP", () 
       const tt = await trangThaiGhiDanh(d.enrollmentId);
       expect(tt?.status).toMatch(/^COMPLETED/);
     }).toPass({ timeout: 30_000 });
+  });
+});
+
+test.describe("[EL-16] khoá khép ⇒ CHỨNG NHẬN có thật", () => {
+  test("🔴 hàng đợi sự kiện chạy xong thì có chứng nhận, và nó là ẢNH CHỤP", async () => {
+    // Ca này nối vào đúng lượt ghi danh mà ca trên vừa đưa về `COMPLETED` (tệp chạy
+    // tuần tự). Nó kiểm ĐƯỜNG NỐI, không kiểm công thức: công thức đã có 43 test
+    // đơn vị, còn hai mắt xích hay đứt là "sự kiện có được phát không" và "handler
+    // có được đăng ký không" — cả hai chỉ lộ khi chạy thật.
+    const cn = await chungNhanCuaLuot(d.enrollmentId);
+
+    expect(cn, "khoá đã hoàn thành mà không có chứng nhận nào").not.toBeNull();
+    expect(cn!.certCode).toMatch(/^SR\.CN\.\d{4}\.\d{5}$/);
+    expect(cn!.verifyToken).toMatch(/^[A-Za-z0-9_-]{32}$/);
+    expect(cn!.status).toBe("VALID");
+
+    // Phải trỏ vào một PHIÊN BẢN đã chốt — không có thì câu "người này đạt nội dung
+    // X" không có nghĩa, và sửa khoá sau đó sẽ đổi hồi tố thứ nó đang chứng cho.
+    expect(cn!.courseVersionId).toBeTruthy();
+
+    // ẢNH CHỤP tên + mã nhân viên, không join sống.
+    expect(cn!.snapFullName).toContain("E2E");
+    expect(cn!.snapEmployeeCode).toBe("E2E_EL_HV");
+
+    // Khoá e2e không gắn chương trình và không có yêu cầu nào ⇒ nhánh (3): vô thời
+    // hạn. `null` ở đây là câu trả lời, không phải ô chưa tính.
+    expect(cn!.validUntil).toBeNull();
+  });
+
+  test("🔴 chạy lại hàng đợi KHÔNG cấp thêm tấm thứ hai", async () => {
+    // `dispatch-events` chạy lại sự kiện khi handler ném lỗi giữa chừng. Chống trùng
+    // bằng `findFirst` rồi mới ghi là không đủ — hai lượt song song cùng vượt qua
+    // được. Chống bằng ràng buộc `@unique` + bắt P2002 mới là chống thật.
+    const truoc = await demChungNhan(d.enrollmentId);
+    await chungNhanCuaLuot(d.enrollmentId);
+    await chungNhanCuaLuot(d.enrollmentId);
+    expect(await demChungNhan(d.enrollmentId)).toBe(truoc);
+    expect(truoc).toBe(1);
   });
 });

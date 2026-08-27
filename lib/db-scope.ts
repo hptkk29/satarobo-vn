@@ -94,6 +94,14 @@ export const SCOPED_MODELS = new Set<string>([
   // lớp học và ghi âm hội thoại phụ huynh (§13.3) — nên coi "chưa biết cơ sở" là
   // "ai cũng thấy" ở đây là rò rỉ, không phải tiện lợi.
   "TrnSubmission",
+  // EL-16 — chứng nhận. ⚠️ KHÔNG vào NULL_IS_GLOBAL_MODELS: một chứng nhận luôn
+  // thuộc cơ sở của người được cấp. NULL ở đây = chưa backfill.
+  //
+  // Và cách ly cơ sở ở bảng này KHÔNG che trang xác minh công khai — trang đó cố ý
+  // đọc ngoài `scopedDb` (không có actor để scope), chỉ trả 5 trường và tra theo
+  // `verifyToken` ngẫu nhiên. Hai đường khác nhau, đừng lẫn: siết bảng không làm
+  // trang kia an toàn hơn, và mở trang kia không nới bảng này.
+  "TrnCertificate",
 ]);
 
 /**
@@ -318,6 +326,7 @@ export function getModelPrefixes(model: string): string[] {
     case "TrnExamAttempt":
     case "TrnRubric":
     case "TrnSubmission":
+    case "TrnCertificate":
       return ["elearning:"];
     default:
       return [];

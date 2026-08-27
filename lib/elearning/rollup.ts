@@ -87,7 +87,26 @@ export async function cuonKhoaSauKhiXongBai(
         isLate: r.isLate,
         lastActivityAt: now,
         // `completedAt` đặt MỘT LẦN, đúng lần đầu đạt.
-        ...(r.vuaHoanThanh ? { completedAt: now } : {}),
+        //
+        // ⚠️ `verifiedAt` đi CÙNG, và đây là một khoản VÁ chứ không phải phần thêm
+        // của EL-16.
+        //
+        // Cột này là "mốc hoàn thành CÓ KIỂM CHỨNG" (BR-004, chú thích ngay trên
+        // cột: *chỉ server ghi*). Nhưng đường hoàn thành THƯỜNG chưa bao giờ đặt nó
+        // — grep toàn kho ra đúng một nơi ghi: `equivalence.ts:155`, tức đường CÔNG
+        // NHẬN TƯƠNG ĐƯƠNG. Hệ quả: người học thật, đọc hết bài, làm hết bài, có
+        // `completedAt` — nhưng `verifiedAt` NULL vĩnh viễn, còn người được công
+        // nhận bằng giấy tờ thì có.
+        //
+        // Nó nằm im vì chưa ai đọc cột này (báo cáo tuân thủ đếm theo `status`).
+        // EL-16 là nơi nó nổ: chứng nhận chỉ cấp khi có `verifiedAt`, nên nếu không
+        // vá thì mọi người học bình thường KHÔNG BAO GIỜ nhận được chứng nhận, và
+        // không có lỗi nào để lần ra.
+        //
+        // Đặt ở đây là đúng chỗ: `cuonTienDoKhoa` chỉ đếm bài `DONE`, mà `DONE` của
+        // bài đọc do server kẹp số giây + phần trăm cuộn rồi mới đặt. Đây CHÍNH là
+        // phép kiểm chứng — không có phép kiểm nào khác đứng sau nữa.
+        ...(r.vuaHoanThanh ? { completedAt: now, verifiedAt: now } : {}),
       },
     });
 

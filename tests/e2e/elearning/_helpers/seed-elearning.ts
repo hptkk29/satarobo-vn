@@ -1,4 +1,10 @@
 import { db } from "../../../../lib/db";
+// ⚠️ Import TĨNH. `await import("@/lib/...")` chết ở bộ nạp của Playwright với
+// "Cannot use import statement outside a module" — nó biên dịch tệp spec chứ không
+// cắm loader cho lượt nạp lúc chạy. Và đi đường DẪN TƯƠNG ĐỐI như dòng `db` ngay
+// trên: bí danh `@/` tsc hiểu, nhưng bộ nạp lúc chạy thì chưa chắc.
+import { ensureHandlersRegistered } from "../../../../lib/events/register";
+import { dispatchPendingEvents } from "../../../../lib/events/dispatcher";
 import {
   assertTestDb,
   seedOrg,
@@ -80,6 +86,7 @@ export async function donDuLieuCu(): Promise<void> {
     await db.trnReminder.deleteMany({
       where: { enrollment: { courseId: { in: ids } } },
     });
+    await db.trnCertificate.deleteMany({ where: { courseId: { in: ids } } });
     await db.trnEnrollment.deleteMany({ where: { courseId: { in: ids } } });
     await db.trnCourseVersionLesson.deleteMany({
       where: { version: { courseId: { in: ids } } },
@@ -372,4 +379,42 @@ export async function dungTaiKhoanNgoaiCong(): Promise<{
   });
 
   return { khongHoSoEmail: KHONG_HO_SO_EMAIL, daNghiEmail: DA_NGHI_EMAIL };
+}
+
+/**
+ * Chạy hàng đợi sự kiện rồi trả về chứng nhận của lượt ghi danh (EL-16).
+ *
+ * ⚠️ Gọi `dispatchPendingEvents` THẬT chứ không gọi thẳng handler: phần dễ hỏng
+ * nhất của đường này không nằm trong handler mà ở chỗ NỐI — sự kiện có được phát
+ * không, handler có được đăng ký không. Gọi thẳng handler là bỏ qua đúng hai mắt
+ * xích đó, và cả hai đều đã từng đứt trong module này.
+ */
+export async function chungNhanCuaLuot(enrollmentId: string) {
+  assertTestDb();
+  ensureHandlersRegistered();
+  // ⚠️ `flagOn: true` TƯỜNG MINH, và kiểm kết quả.
+  //
+  // `dispatchPendingEvents` trả `{ skipped: true }` rồi im nếu cờ tắt. Không ép cờ
+  // và không kiểm thì test xanh vì KHÔNG CÓ GÌ CHẠY — đúng kiểu xanh giả đã để job
+  // `e2e-elearning` chạy hàng tháng mà chưa từng mở một trang nào.
+  const kq = await dispatchPendingEvents({ batchSize: 50, flagOn: true });
+  if ("skipped" in kq && kq.skipped) throw new Error("hàng đợi sự kiện bị bỏ qua");
+  return db.trnCertificate.findUnique({
+    where: { enrollmentId },
+    select: {
+      certCode: true,
+      verifyToken: true,
+      validUntil: true,
+      status: true,
+      snapFullName: true,
+      snapEmployeeCode: true,
+      courseVersionId: true,
+    },
+  });
+}
+
+/** Đếm chứng nhận của một lượt — dùng để kiểm chống trùng. */
+export async function demChungNhan(enrollmentId: string): Promise<number> {
+  assertTestDb();
+  return db.trnCertificate.count({ where: { enrollmentId } });
 }

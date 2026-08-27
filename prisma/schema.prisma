@@ -8914,3 +8914,96 @@ model TrnRubricScore {
   @@unique([submissionId, criterionId])
   @@index([submissionId])
 }
+
+/// EL-16 — CHỨNG NHẬN hoàn thành khoá đào tạo.
+///
+/// Đây là CHỨNG TỪ, không phải huy hiệu trên màn hình: nó phải kiểm chứng được từ
+/// bên ngoài, bởi một người không có tài khoản, bằng điện thoại của họ. Mọi thiết kế
+/// dưới đây bám vào một câu đó.
+enum TrnCertStatus {
+  /// Còn hiệu lực (hoặc vô thời hạn).
+  VALID
+  /// Quá `validUntil`. Trạng thái này do lượt quét/cron suy ra, KHÔNG phải người đặt.
+  EXPIRED
+  /// Bị thu hồi — bắt buộc có lý do và người thu hồi (BR-007).
+  REVOKED
+}
+
+model TrnCertificate {
+  id String @id @default(cuid())
+
+  /// `SR.CN.YYYY.NNNNN` — mã in trên bản PDF, người đọc bằng mắt.
+  certCode String @unique
+
+  /// ⚠️ Chuỗi ngẫu nhiên nhúng trong QR — KHÔNG dùng `id`.
+  ///
+  /// `id` là cuid: đoán được thì thôi, nhưng LIỆT KÊ được. Trang xác minh là trang
+  /// CÔNG KHAI không đăng nhập, nên một id đoán ra là một hồ sơ nhân sự đọc được.
+  /// Đó là IDOR, và nó nằm trên đúng cái trang được thiết kế để ai cũng mở.
+  verifyToken String @unique
+
+  userId String
+
+  /// Trỏ cả khoá LẪN phiên bản khoá.
+  ///
+  /// `courseVersionId` là phần giữ BR-013 đứng: sửa nội dung khoá sau này không được
+  /// làm sai chứng nhận đã phát. Bản PDF nói người này đạt NỘI DUNG NÀO, và "nội dung
+  /// nào" chỉ có nghĩa khi trỏ vào một phiên bản đã chốt.
+  courseId        String
+  courseVersionId String
+  programId       String?
+
+  /// Lượt ghi danh sinh ra chứng nhận này. Một lượt cấp tối đa một chứng nhận
+  /// (`@@unique`), nên vòng tái chứng nhận phải sinh lượt MỚI với `cycle` tăng —
+  /// không được cấp đè lên lượt cũ.
+  enrollmentId String @unique
+
+  issuedAt DateTime @default(now()) @db.Timestamptz(6)
+
+  /// Hạn hiệu lực — `NULL` nghĩa là VÔ THỜI HẠN, không phải "chưa tính".
+  ///
+  /// Suy 3 bước (HỢP ĐỒNG V2 §Z3): (1) lượt thuộc một `TrnRequirement` có chu kỳ ⇒
+  /// `issuedAt + TrnRequirement.validityMonths`; (2) không thuộc yêu cầu nào ⇒
+  /// `TrnProgram.validityMonths`; (3) cả hai NULL ⇒ NULL.
+  validUntil DateTime? @db.Timestamptz(6)
+
+  status TrnCertStatus @default(VALID)
+
+  revokedAt       DateTime? @db.Timestamptz(6)
+  revokedByUserId String?
+  revokeReason    String?
+
+  /// Khoá R2 của bản PDF đã render. NULL = chưa render lần nào.
+  pdfKey String?
+
+  /// ⚠️ ẢNH CHỤP tên và mã nhân viên TẠI NGÀY CẤP.
+  ///
+  /// Đổi tên sau (kết hôn, sửa dấu, đổi mã nhân viên) KHÔNG được làm sai bản PDF đã
+  /// phát ra tay người ta. Join sống sang `User`/`Employee` là hồi tố lặng lẽ trên
+  /// một chứng từ — đúng loại lỗi không ai phát hiện cho tới khi có tranh chấp.
+  snapFullName     String
+  snapEmployeeCode String
+
+  centerId  String?
+  orgUnitId String?
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  /// ⚠️ CỐ Ý KHÔNG CÓ `deletedAt`, khác mọi bảng `Trn*` còn lại.
+  ///
+  /// Chứng nhận là chứng từ đã phát ra tay người ta và đã có người ngoài quét QR để
+  /// kiểm. Nó không được biến mất — kể cả biến mất mềm. Đường gỡ hiệu lực DUY NHẤT
+  /// là THU HỒI: có người thu hồi, có lý do, có ngày, và trang xác minh công khai
+  /// vẫn trả lời (nói "đã thu hồi" thay vì im lặng 404).
+  ///
+  /// Có cột xoá mềm ở đây là mở một đường làm tấm chứng nhận biến thành 404 mà không
+  /// ai chịu trách nhiệm — trong khi bản PDF trong tay người ta thì vẫn còn.
+
+  @@index([userId, status])
+  /// Cron nhắc T-30/T-7 quét theo cột này (§13.4).
+  @@index([validUntil])
+  @@index([courseId, status])
+  @@index([centerId])
+  @@index([orgUnitId])
+}

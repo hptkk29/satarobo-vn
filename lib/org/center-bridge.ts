@@ -353,6 +353,12 @@ export const BACKFILL_SPECS: readonly BackfillSpec[] = [
     vi: "lượt nộp bài tập — luôn thuộc cơ sở của người nộp; NULL = chưa backfill",
   },
   {
+    model: "TrnCertificate",
+    nullMeaning: "BAT_BUOC",
+    scoped: true,
+    vi: "chứng nhận hoàn thành — luôn thuộc cơ sở của người được cấp; NULL = chưa backfill",
+  },
+  {
     model: "TrnWatchFlag",
     nullMeaning: "BAT_BUOC",
     scoped: true,
