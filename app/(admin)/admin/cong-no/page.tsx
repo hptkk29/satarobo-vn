@@ -72,8 +72,10 @@ export default async function CongNoPage({
   const actor = await resolveActor(uid);
   const sdb = scopedDb(actor);
 
-  // ── Debt rows (CHỈ Payment CONFIRMED) — lib getDebtRows. Cast tránh so kiểu
-  // sâu giữa Prisma client mở rộng và DebtScopedDb hẹp của lib. ──
+  // ── Debt rows — lib getDebtRows. "Đã thu" đi qua công thức THỰC THU dùng chung
+  // (`lib/finance/thuc-thu.ts`): khoản hoàn được trừ, bản điều chỉnh thay bản gốc
+  // (HT 27/08/2026). Cast tránh so kiểu sâu giữa Prisma client mở rộng và
+  // DebtScopedDb hẹp của lib. ──
   let rows = await getDebtRows(
     sdb as unknown as Parameters<typeof getDebtRows>[0],
   );
@@ -148,7 +150,7 @@ export default async function CongNoPage({
         <div>
           <h1 className="text-2xl font-bold text-foreground">Công nợ</h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            Nợ học phí (đã xác nhận thu) &amp; phân nhóm tuổi nợ quá hạn
+            Nợ học phí (đã trừ hoàn tiền) &amp; phân nhóm tuổi nợ quá hạn
           </p>
         </div>
       </div>

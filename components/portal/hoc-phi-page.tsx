@@ -7,7 +7,7 @@ import {
   Receipt,
 } from "lucide-react";
 import type { StudentBilling } from "@/lib/portal/billing-student";
-import { PAYMENT_METHOD_LABEL } from "@/lib/portal/billing";
+import { PAYMENT_METHOD_LABEL, LOAI_BUT_TOAN_LABEL } from "@/lib/portal/billing";
 import { PageHero, HeroMetric } from "@/components/portal/page-header";
 import { ChildSwitcher } from "@/components/portal/child-switcher";
 import { hotlinesInline } from "@/lib/locations";
@@ -189,37 +189,55 @@ export function HocPhiPageV2({
               <b className="text-foreground">kế toán đã xác nhận thực thu</b>.
             </li>
             <li>• Phiếu thu tách riêng theo từng con / khóa học.</li>
-            <li>• Công nợ = giá phải đóng − số đã xác nhận.</li>
+            <li>
+              • Khoản đã <b className="text-foreground">hoàn lại</b> cho quý phụ
+              huynh được trừ ra khỏi số &ldquo;Đã thanh toán&rdquo; và hiện thành
+              một dòng riêng trong sổ bên dưới.
+            </li>
+            <li>• Công nợ = giá phải đóng − số đã thanh toán.</li>
           </ul>
         </div>
       </div>
 
       <section className="space-y-3">
         <h2 className="flex items-center gap-2 text-sm font-bold uppercase tracking-wider text-foreground">
-          <Receipt className="size-4 text-primary" /> Phiếu thu đã xác nhận
+          <Receipt className="size-4 text-primary" /> Sổ thu &amp; hoàn tiền
         </h2>
         <div className="rounded-2xl border border-border bg-card divide-y divide-border">
           {data.receipts.length === 0 ? (
             <p className="p-6 text-center text-sm text-muted-foreground">
-              Chưa có phiếu thu nào được xác nhận.
+              Chưa có khoản nào được kế toán xác nhận.
             </p>
           ) : (
             data.receipts.map((r) => (
               <div key={r.id} className="flex items-center gap-3 p-4">
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-bold text-foreground">
-                    Học phí{r.orderCode ? ` · ${r.orderCode}` : ""}
+                    {r.loai === "HOAN" ? "Hoàn tiền" : "Học phí"}
+                    {r.orderCode ? ` · ${r.orderCode}` : ""}
                   </p>
                   <p className="mt-0.5 text-xs font-medium text-muted-foreground">
                     {dmy(r.paidDate)} ·{" "}
                     {PAYMENT_METHOD_LABEL[r.method] ?? r.method}
                   </p>
                 </div>
-                <p className="shrink-0 text-sm font-bold text-foreground">
+                <p
+                  className={
+                    "shrink-0 text-sm font-bold " +
+                    (r.loai === "HOAN" ? "text-caution" : "text-foreground")
+                  }
+                >
                   {vnd(r.amount)}
                 </p>
-                <span className="shrink-0 rounded-md bg-success/10 px-2 py-0.5 text-xs font-bold text-success">
-                  Đã xác nhận
+                <span
+                  className={
+                    "shrink-0 rounded-md px-2 py-0.5 text-xs font-bold " +
+                    (r.loai === "HOAN"
+                      ? "bg-caution/10 text-caution"
+                      : "bg-success/10 text-success")
+                  }
+                >
+                  {LOAI_BUT_TOAN_LABEL[r.loai]}
                 </span>
               </div>
             ))

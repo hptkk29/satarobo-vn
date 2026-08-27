@@ -7,6 +7,7 @@ import type { Prisma, PrismaClient, RefundRequest, RefundTrigger } from "@prisma
 import { db } from "@/lib/db";
 import { writeAudit } from "@/lib/audit/audit-log";
 import type { ScopedDb } from "@/lib/actions/factory";
+import { WHERE_THUC_THU, SELECT_THUC_THU, tinhThucThu } from "@/lib/finance/thuc-thu";
 
 type DbClient = PrismaClient | Prisma.TransactionClient;
 
@@ -28,6 +29,36 @@ export function computeRefund(input: {
   return { unitPrice, proposedAmount };
 }
 
+/**
+ * THUẦN — số tiền CÒN CÓ THỂ hoàn của một ghi danh (HT · 27/08/2026).
+ *
+ * ĐÂY LÀ CHỖ ĐÃ THỦNG. `createRefundRequest` trước đây lấy mẫu số bằng
+ * `Σ amount(Payment CONFIRMED)`, mà `refundPayment()` ghi lần hoàn thành một bản ghi
+ * MỚI mang số ÂM ở trạng thái REFUNDED chứ không sửa bản gốc ⇒ lần hoàn thứ hai đề
+ * xuất trên số GỘP, y như lần một chưa từng xảy ra. Hoàn 9tr, rồi hoàn tiếp 9tr.
+ *
+ * Hai khoản phải trừ, và chỉ trừ MỘT lần mỗi khoản:
+ *   • `daGhiSoHoan` — kế toán đã ghi bút toán âm. Khoản này `thucThu` ĐÃ tự trừ rồi,
+ *     nên KHÔNG trừ thêm ở đây; nó chỉ có mặt để biết phần nào đã ghi sổ.
+ *   • `daDuyetHoan − daGhiSoHoan` — đã duyệt nhưng CHƯA chi. `approveRefund()` chỉ đổi
+ *     trạng thái yêu cầu, nó KHÔNG ghi Payment âm (không có FK nối hai bảng), nên có
+ *     một cửa sổ mà tiền đã hứa trả nhưng sổ chưa biết. Clamp ≥ 0: kế toán hoàn thẳng
+ *     không qua đề xuất thì hiệu số âm, và số âm đó không được cộng ngược lên.
+ *
+ * Kết quả clamp ≥ 0 — không bao giờ đề xuất hoàn trên một mẫu số âm.
+ */
+export function soTienConCoTheHoan(input: {
+  /** `tinhThucThu` của mọi bút toán thuộc ghi danh — đã trừ các lần hoàn ĐÃ ghi sổ. */
+  thucThu: number;
+  /** Σ `approvedAmount` của RefundRequest đã duyệt (APPROVED) hoặc đã chi (PAID). */
+  daDuyetHoan: number;
+  /** Σ |amount| của bút toán REFUNDED đã ghi sổ. */
+  daGhiSoHoan: number;
+}): number {
+  const dangChoChi = Math.max(0, input.daDuyetHoan - input.daGhiSoHoan);
+  return Math.max(0, input.thucThu - dangChoChi);
+}
+
 export class RefundError extends Error {
   readonly code: string;
   constructor(code: string, message: string) {
@@ -39,7 +70,10 @@ export class RefundError extends Error {
 
 /**
  * Tạo yêu cầu hoàn tiền (PENDING) cho 1 ghi danh. Snapshot:
- *   - paidConfirmed = Σ amount(Payment accountantStatus=CONFIRMED, chưa xóa) của ghi danh.
+ *   - paidConfirmed = số CÒN CÓ THỂ HOÀN (`soTienConCoTheHoan`) — thực thu của ghi danh
+ *     trừ phần đã duyệt hoàn mà kế toán chưa chi. Tên cột giữ nguyên vì đây là dữ liệu
+ *     PROD đang có (luật cứng #4: không đổi cột trên bảng đang chạy); ý nghĩa từ
+ *     27/08/2026 là "còn có thể hoàn", KHÔNG còn là "Σ CONFIRMED".
  *   - sessionsTotal  = số ClassSession của lớp (loại CANCELLED).
  *   - sessionsLearned = số ClassSession COMPLETED.
  *   - finalPrice = Enrollment.finalPrice (fallback tuition khi chưa chốt giá).
@@ -76,13 +110,32 @@ export async function createRefundRequest(input: {
   });
   if (existing) return existing;
 
-  // Σ Payment đã xác nhận (CONFIRMED) — loại soft-deleted.
-  const agg = await client.payment.aggregate({
-    where: { enrollmentId, accountantStatus: "CONFIRMED", deletedAt: null },
-    _sum: { amount: true },
+  // HT (27/08/2026) — mẫu số là số CÒN LẠI THẬT, không phải số gộp.
+  // (1) Thực thu của ghi danh, qua đúng công thức dùng chung `lib/finance/thuc-thu.ts`.
+  const butToan = await client.payment.findMany({
+    where: { enrollmentId, ...WHERE_THUC_THU },
+    select: SELECT_THUC_THU,
   });
-  const paidConfirmed = agg._sum.amount ?? 0;
-  // Chưa thu đồng nào → không cần hoàn (tránh tạo yêu cầu 0đ rác).
+  // (2) Đã duyệt hoàn (kể cả đã chi) và (3) đã ghi bút toán âm — xem `soTienConCoTheHoan`.
+  const [daDuyet, daGhiSo] = await Promise.all([
+    client.refundRequest.aggregate({
+      where: { enrollmentId, status: { in: ["APPROVED", "PAID"] } },
+      _sum: { approvedAmount: true },
+    }),
+    client.payment.aggregate({
+      where: { enrollmentId, accountantStatus: "REFUNDED", deletedAt: null },
+      _sum: { amount: true },
+    }),
+  ]);
+
+  const paidConfirmed = soTienConCoTheHoan({
+    thucThu: tinhThucThu(butToan),
+    daDuyetHoan: daDuyet._sum.approvedAmount ?? 0,
+    // Bút toán hoàn mang số ÂM → lấy trị tuyệt đối.
+    daGhiSoHoan: Math.abs(daGhiSo._sum.amount ?? 0),
+  });
+  // Không còn gì để hoàn → không tạo yêu cầu (tránh yêu cầu 0đ rác, và tránh đề xuất
+  // hoàn lần thứ hai trên tiền đã trả lại rồi).
   if (paidConfirmed <= 0) return null;
 
   // Số buổi: tổng (loại huỷ) + đã học (COMPLETED). Tuần tự (an toàn trong tx).
