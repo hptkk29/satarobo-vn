@@ -99,3 +99,11 @@ full.txt
 .impeccable/live/*.png
 # impeccable-ignore-end
 shots-teacher/
+
+# docs/merge-lead — dữ liệu lead cũ nhập tay: 795 SĐT + tên phụ huynh/học viên THẬT.
+# Repo này PUBLIC (github.com/hptkk29/satarobo-vn) ⇒ commit file là công khai PII.
+# Script `import:legacy-leads` đọc bản gốc tại chỗ; không nhân bản CSV ra nơi khác.
+docs/merge-lead/*.csv
+docs/merge-lead/*.xlsx
+docs/merge-lead/*.sql
+docs/merge-lead/*.txt

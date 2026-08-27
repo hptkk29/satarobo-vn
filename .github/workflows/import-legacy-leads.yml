@@ -1,0 +1,172 @@
+name: Nhập lead cũ (795 dòng, 4 sheet sale) — PROD
+
+# =============================================================================
+# Chạy TAY (workflow_dispatch). MẶC ĐỊNH CHỈ XEM — dry-run, không ghi một dòng nào.
+#
+# VÌ SAO CẦN WORKFLOW NÀY thay vì chạy ở máy: `.env`/`.env.local` trên máy dev trỏ
+# DB **DEV** (`postgres.mqvo…`, cũng chính là DB của `test.satarobo.vn`), và biến
+# môi trường prod trên Vercel khai là Sensitive nên `vercel env pull` không lấy
+# được chuỗi kết nối prod. Đây là đường duy nhất có bản in trên dữ liệu THẬT.
+#
+# ─────────────────────────────────────────────────────────────────────────────
+# HAI ĐIỀU KIỆN PHẢI HIỂU TRƯỚC KHI BẤM
+#
+# 1. CSV KHÔNG nằm trong repo — nó mang 795 SĐT + tên phụ huynh/trẻ thật, mà repo
+#    này PUBLIC. File đi vào runner qua secret `LEGACY_LEADS_CSV_B64` (brotli+base64; ô secret thực tế chặt hơn 64 KB nên gzip KHÔNG vừa).
+#    Dựng giá trị secret bằng: `pnpm csv:dong-goi-secret`.
+#
+# 2. Log của Actions trên repo public là **log CÔNG KHAI**. Nên script luôn chạy
+#    với `--che-pii`: dòng chi tiết chỉ in `ma_import` (`LEGACY-0004`), không in
+#    SĐT/tên. Tra ngược bằng file CSV của bạn. Các con số tổng hợp thì in đầy đủ.
+#    ⚠️ ĐỪNG bỏ `--che-pii` ở đây, và đừng thêm bước nào `cat` file CSV.
+#
+# SECRETS: PROD_DIRECT_URL (session pooler :5432 — tránh quirk prepared-statement
+# của transaction pooler) + LEGACY_LEADS_CSV_B64 (và _2/_3 nếu packer phải chia phần).
+# =============================================================================
+
+on:
+  workflow_dispatch:
+    inputs:
+      ghi_that:
+        description: 'Để TRỐNG = dry-run (chỉ đọc). Gõ đúng GHI-THAT-VAO-PROD để ghi thật.'
+        required: false
+        default: ''
+      gioi_han:
+        description: 'Chỉ xử lý N dòng đầu (0 = tất cả 795). Nên chạy thử 20 trước.'
+        required: false
+        default: '0'
+
+concurrency:
+  group: import-legacy-leads
+  cancel-in-progress: false
+
+jobs:
+  nhap:
+    name: Nhập lead cũ (${{ inputs.ghi_that && 'GHI THẬT' || 'dry-run' }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Kiểm secrets (fail sớm, message rõ ràng)
+        run: |
+          missing=0
+          [ -n "${{ secrets.PROD_DIRECT_URL }}" ] || {
+            echo "::error::Thiếu secret PROD_DIRECT_URL"; missing=1; }
+          [ -n "${{ secrets.LEGACY_LEADS_CSV_B64 }}" ] || {
+            echo "::error::Thiếu secret LEGACY_LEADS_CSV_B64 — chạy \`pnpm csv:dong-goi-secret\` rồi dán nội dung file docs/merge-lead/csv-b64-cho-actions.txt vào Settings → Secrets → Actions"; missing=1; }
+          [ "$missing" = 0 ] || exit 1
+
+      # Cùng tinh thần với bước "Chặn trỏ nhầm vào DB PROD" của migrate-test.yml,
+      # nhưng ngược chiều: ở đây phải chắc KHÔNG phải DB test. Nhập nhầm 793 lead
+      # vào DB dev/test là bẩn dữ liệu nghiệm thu và rất khó gỡ (không có unique
+      # index trên phone để dọn theo).
+      - name: Chặn trỏ nhầm vào DB TEST
+        run: |
+          if [ -n "${{ secrets.TEST_DIRECT_URL }}" ] && \
+             [ "${{ secrets.PROD_DIRECT_URL }}" = "${{ secrets.TEST_DIRECT_URL }}" ]; then
+            echo "::error::PROD_DIRECT_URL đang TRÙNG TEST_DIRECT_URL — dừng."
+            exit 1
+          fi
+
+      # Câu thần chú phải gõ ĐÚNG. Gõ sai mà khác rỗng thì DỪNG, không âm thầm rơi
+      # về dry-run: người gõ đang ĐỊNH ghi, im lặng không ghi cũng sai như im lặng ghi.
+      - name: Xác nhận ý định
+        run: |
+          v='${{ inputs.ghi_that }}'
+          if [ -z "$v" ]; then
+            echo "CHE_DO=xem" >> "$GITHUB_ENV"
+            echo "🔍 DRY-RUN — chỉ đọc, không ghi dòng nào."
+          elif [ "$v" = "GHI-THAT-VAO-PROD" ]; then
+            echo "CHE_DO=ghi" >> "$GITHUB_ENV"
+            echo "⚠️ GHI THẬT vào PROD."
+          else
+            echo "::error::Câu xác nhận sai. Gõ đúng GHI-THAT-VAO-PROD hoặc để trống."
+            exit 1
+          fi
+          case '${{ inputs.gioi_han }}' in
+            ''|*[!0-9]*) echo "::error::gioi_han phải là số nguyên ≥ 0."; exit 1 ;;
+          esac
+
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v3
+        with: { version: 11 }
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Generate Prisma client
+        run: pnpm exec prisma generate
+
+      # Giải nén vào RUNNER_TEMP, KHÔNG vào workspace: workspace là thứ có thể bị
+      # bước sau vô tình đóng gói thành artifact (artifact của repo public ai cũng
+      # tải được). Không `cat` nội dung — chỉ đo và băm.
+      - name: Giải mã CSV từ secret
+        env:
+          P1: ${{ secrets.LEGACY_LEADS_CSV_B64 }}
+          P2: ${{ secrets.LEGACY_LEADS_CSV_B64_2 }}
+          P3: ${{ secrets.LEGACY_LEADS_CSV_B64_3 }}
+        run: |
+          set -euo pipefail
+          CSV="$RUNNER_TEMP/staging_leads.csv"
+          B64="$RUNNER_TEMP/b64.txt"
+          # `_2`/`_3` là TUỲ CHỌN — chỉ có khi packer phải chia phần. Nối theo thứ tự.
+          printf '%s%s%s' "$P1" "${P2:-}" "${P3:-}" > "$B64"
+          # Giải nén bằng Node (đã setup ở bước trên) chứ không bằng CLI `brotli`:
+          # runner ubuntu KHÔNG chắc chắn có sẵn binary đó, mà thiếu nó thì lỗi rất tối nghĩa.
+          node -e '
+            const fs = require("fs"), zlib = require("zlib");
+            const b64 = fs.readFileSync(process.argv[1], "utf8").trim();
+            if (!b64) { console.error("::error::Secret rỗng sau khi nối."); process.exit(1); }
+            fs.writeFileSync(process.argv[2], zlib.brotliDecompressSync(Buffer.from(b64, "base64")));
+          ' "$B64" "$CSV"
+          rm -f "$B64"
+          echo "CSV=$CSV" >> "$GITHUB_ENV"
+          echo "Kích thước : $(stat -c%s "$CSV") bytes"
+          echo "Số dòng    : $(wc -l < "$CSV") (kể cả header)"
+          echo "sha256(16) : $(sha256sum "$CSV" | cut -c1-16)   ← phải khớp số mà \`pnpm csv:dong-goi-secret\` in ra"
+
+      # Secret bị cắt/hỏng thường vẫn giải nén ra "một cái gì đó". Không chốt ở đây
+      # thì lỗi chỉ lộ ra dưới dạng "793 dòng bỗng thành 41 dòng" trong bảng kết quả.
+      - name: Kiểm CSV toàn vẹn
+        run: |
+          set -euo pipefail
+          MONG='ma_import,phone_norm,phone_84,ten_ph,ten_con,nguon,khoa_quan_tam,lop_tuoi_goc,trang_thai_hoc_thu,trang_thai_lead,ma_co_so,sale,ngay_nhan_lead,ghi_chu,canh_bao'
+          THAT=$(head -1 "$CSV" | sed 's/^\xEF\xBB\xBF//' | tr -d '\r')
+          if [ "$THAT" != "$MONG" ]; then
+            echo "::error::Header CSV không khớp — secret có thể bị cắt hoặc dán thiếu."
+            exit 1
+          fi
+          N=$(($(wc -l < "$CSV") - 1))
+          echo "Header khớp. $N dòng dữ liệu."
+          [ "$N" -ge 1 ] || { echo "::error::CSV không có dòng dữ liệu nào."; exit 1; }
+
+      # `--che-pii` LUÔN BẬT: log repo public là log công khai. Xem khối chú thích đầu file.
+      - name: Chạy
+        env:
+          DATABASE_URL: ${{ secrets.PROD_DIRECT_URL }}
+          DIRECT_URL: ${{ secrets.PROD_DIRECT_URL }}
+        run: |
+          set -euo pipefail
+          ARGS="--che-pii --file=$CSV --limit=${{ inputs.gioi_han }}"
+          if [ "$CHE_DO" = "ghi" ]; then ARGS="$ARGS --commit"; fi
+          echo "tsx scripts/import-legacy-leads.ts $ARGS"
+          pnpm exec tsx scripts/import-legacy-leads.ts $ARGS
+
+      - name: Xoá CSV khỏi runner
+        if: always()
+        run: rm -f "$RUNNER_TEMP/staging_leads.csv"
+
+      - name: Nhắc bước kiểm sau khi ghi
+        if: env.CHE_DO == 'ghi'
+        run: |
+          echo "### Đã ghi vào PROD — kiểm ngay hai việc" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "1. **Bão thông báo SLA-4.** \`createdAt\` lùi ngày ⇒ mọi lead vừa nhập vi phạm" >> "$GITHUB_STEP_SUMMARY"
+          echo "   \"lead im lặng > 2 ngày\" ngay lập tức. Cron \`/api/cron/sla-check\` chạy mỗi 15 phút" >> "$GITHUB_STEP_SUMMARY"
+          echo "   ⇒ 4 sale sắp nhận ~160–244 thông báo trong app mỗi người (không email, không ZNS)." >> "$GITHUB_STEP_SUMMARY"
+          echo "2. **Chạy lại an toàn.** Dấu \`[LEGACY-xxxx]\` trong \`Lead.note\` là khoá chống trùng —" >> "$GITHUB_STEP_SUMMARY"
+          echo "   đứt giữa chừng thì bấm lại workflow, phần đã vào sẽ bị bỏ qua." >> "$GITHUB_STEP_SUMMARY"
