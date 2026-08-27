@@ -60,6 +60,22 @@ module.exports = {
       to: { path: "^lib/db\\.ts$" },
     },
     {
+      // Spec tích hợp §2.1 PA-1 — adapter nhà cung cấp sống ở `lib/integrations/<vendor>/`
+      // (đúng cách `lib/zalo/` đang tổ chức), và `app/**` KHÔNG gọi thẳng adapter.
+      //
+      // Vì sao 'error' được ngay trong khi rule `modules/*` ở dưới vẫn là no-op: rule này
+      // khớp một cây thư mục CÓ THẬT và hiện có ĐÚNG MỘT adapter, nên nó không thể
+      // false-positive lên mã cũ. Đây là chỗ Doc 15 Q8 ("mọi external call qua
+      // `modules/integration`") được thi hành sớm mà không phải dựng khung `modules/`
+      // giữa lúc gấp — đổi nhà cung cấp thì chỉ sửa một tệp, không sửa khắp route.
+      name: "app-no-direct-vendor-adapter",
+      severity: "error",
+      comment:
+        "app/** KHÔNG import thẳng lib/integrations/<vendor>/provider — đi qua tầng nghiệp vụ (vd lib/calls/*). Đổi nhà cung cấp phải chỉ đụng 1 tệp.",
+      from: { path: "^app/" },
+      to: { path: "^lib/integrations/[^/]+/provider\\.[jt]s$" },
+    },
+    {
       name: "module-no-deep-cross-import",
       severity: "error",
       comment:

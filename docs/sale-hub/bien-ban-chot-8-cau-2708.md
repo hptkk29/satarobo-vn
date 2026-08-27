@@ -155,7 +155,27 @@ cho bước này.**
 
 ---
 
-## 8. Trần chi phí tháng cho lời gọi ra ngoài — CHỐT 27/08
+## 8. Bảy quyết định bổ sung — cùng ngày 27/08, sau khi 5 luồng đầu về
+
+| # | Câu | **QUYẾT ĐỊNH** |
+|:--:|---|---|
+| **8.1** | Ai hưởng QC 1%? | **QC phụ trách cơ sở tại thời điểm kế toán xác nhận thu tiền**, lưu bằng **liên kết tài khoản**, không phải chuỗi tên. ⇒ quan hệ có hiệu lực theo thời gian; đổi người phụ trách KHÔNG viết lại lịch sử hoa hồng đã tính. Chủ dự án sẽ cấp danh sách cơ sở → tài khoản QC. |
+| **8.2** | Ai hưởng Quản lý trung tâm 2%? | Thêm **`managerUserId`** (liên kết tài khoản) vào bảng cơ sở, điền tay một lần cho các cơ sở hiện có, **bắt buộc khi tạo cơ sở mới**. Chuỗi chữ hiện có **giữ nguyên, chỉ để hiển thị**. |
+| **8.3** | Sửa lỗi hoàn tiền không trừ công nợ / cổng phụ huynh? | ✅ **CÓ — ưu tiên cao, tách đợt riêng, KHÔNG gộp vào PR nào khác.** Thứ tự bắt buộc: (1) xuất danh sách mọi ca đã hoàn, đối chiếu số phụ huynh đang thấy với số đúng; (2) mới đổi công thức; (3) thông báo cho phụ huynh bị lệch. Lý do: đây là **đường hoàn dư** — hoàn lần hai tính trên số gộp như thể lần một chưa xảy ra. |
+| **8.4** | Trần chi phí/tháng | **Zalo 2.000.000đ · cước gọi 3.000.000đ · chấm điểm AI 1.000.000đ — tổng 6.000.000đ/tháng.** Kèm **dừng cứng khi chạm trần** + **cảnh báo mốc 80%**. Con số là tạm, điều chỉnh theo thực tế tháng sau ⇒ phải sửa được **không cần triển khai lại**. |
+| **8.5** | 5 ô số bảng điều khiển Sale lọc theo gì? | **Giữ nguyên "được giao cho tôi"**, chỉ **đổi nhãn** thành *"Việc của tôi hôm nay"*. Bảng điều khiển để biết hôm nay gọi ai, không phải để đếm thành tích; xem "khách của tôi" đã có màn danh sách riêng. |
+| **8.6** | Siết quyền chốt kỳ hoa hồng? | ✅ **CÓ.** Kế toán một cơ sở bấm được chốt kỳ cho cả công ty là rủi ro không cần thiết. **Đưa vào cùng đợt nạp lại bảng quyền sắp tới, đừng làm riêng.** |
+| **8.7** | `centerId` hay `orgUnitId`? | **Sửa văn bản trước, di chuyển cơ chế sau.** `CLAUDE.md` luật cứng #3 đang nói ngược hệ thống đang chạy: cách ly cơ sở vẫn đo bằng `centerId`, nên bảng theo đúng luật thì **mất cách ly tự động**. Nay cho phép **giữ cả hai cột**, ghi rõ `centerId` là cột cơ chế đang đọc, `orgUnitId` là hướng đích. Chuyển cơ chế sang `orgUnitId` là **đợt riêng, chưa lên lịch** — không gấp tuần này nhưng đừng để sang tháng. |
+
+### 8.8 Hai câu con của 8.1 mà quyết định chưa phủ
+
+- **Một cơ sở có nhiều QC** thì chia đều hay một người đứng tên? — chủ dự án yêu cầu "chốt luôn quy tắc" nhưng chưa nêu quy tắc. Kỹ thuật tự quyết theo hướng **an toàn về tiền** và ghi rõ lựa chọn; chủ dự án đảo được bất cứ lúc nào.
+- **Cơ sở chưa khai người hưởng** ⇒ tiền **treo, hiện rõ trên màn chốt kỳ, không gán bừa**. Giữ nguyên cơ chế đang có.
+
+### 8.9 Hạ tầng
+
+`SALE_SITE_ENABLED` — ✅ **đã triển khai lại 27/08**, biến đã có hiệu lực trên môi trường thử.
+## 9. Trần chi phí tháng — chi tiết hiện thực (từ quyết định §8.4)
 
 | Trục | Trần/tháng | Khoá cấu hình |
 |---|---:|---|
@@ -184,7 +204,7 @@ triển khai lại.
 
 ---
 
-## 9. VIỆC PHẢI CHẠY TAY SAU KHI GỘP (nhánh `feat/tran-chi-phi-va-siet-quyen`)
+## 10. VIỆC PHẢI CHẠY TAY SAU KHI GỘP (nhánh `feat/tran-chi-phi-va-siet-quyen`)
 
 > Xếp theo thứ tự. Cả hai việc **không tự chạy**, và **quên thì không có gì báo lỗi** —
 > hệ thống chạy tiếp bằng trạng thái cũ một cách im lặng.
