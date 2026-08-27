@@ -41,16 +41,13 @@ type DbClient = PrismaClient | Prisma.TransactionClient;
 /**
  * Kỳ hoa hồng `"YYYY-MM"` theo THÁNG DƯƠNG LỊCH VIỆT NAM của thời điểm ghi danh.
  *
- * Vercel chạy UTC còn máy dev +07, nên `getMonth()` trần sẽ đẩy đơn chốt lúc 23:30
- * ngày 31 (giờ VN) sang kỳ tháng sau khi chạy trên Vercel. Cộng bù +7h TRƯỚC khi
- * đọc tháng là hết lệch — không dùng `toLocaleString` (khác nhau theo ICU của runtime).
+ * ĐỊNH NGHĨA DỜI SANG `commission-thuc-thu.ts` (27/08) — hoa hồng Sale theo tiền đã
+ * thu cần đúng phép chia kỳ này, mà module đó phải THUẦN (không kéo `@/lib/db` vào
+ * chỉ vì một phép tính lịch). Re-export để mọi callsite cũ giữ nguyên, và để KHÔNG
+ * bao giờ có hai định nghĩa "kỳ hoa hồng" lệch nhau trong kho.
  */
-export function commissionPeriodVN(at: Date): string {
-  const vn = new Date(at.getTime() + 7 * 60 * 60 * 1000);
-  const y = vn.getUTCFullYear();
-  const m = String(vn.getUTCMonth() + 1).padStart(2, "0");
-  return `${y}-${m}`;
-}
+export { commissionPeriodVN } from "@/lib/crm/commission-thuc-thu";
+import { commissionPeriodVN } from "@/lib/crm/commission-thuc-thu";
 
 /** Tiền hoa hồng (VND, làm tròn xuống) — 0 khi học phí ≤ 0 (học bổng toàn phần). */
 export function trialTeacherCommissionAmount(finalPrice: number): number {
