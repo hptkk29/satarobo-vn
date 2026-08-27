@@ -1549,7 +1549,7 @@ model Lead {
   /// sót. Đặt default ở DB thì mọi đường ghi — kể cả SQL thô — đều có dòng sổ đầu.
   /// ⚠️ Vẫn để NULLABLE: lead CŨ có trước GĐ1 không suy ngược được mốc đó, và
   /// migration cố ý KHÔNG backfill (xem ghi chú trong 20260825120000).
-  statusChangedAt DateTime? @default(now()) @db.Timestamptz(6)
+  statusChangedAt DateTime?   @default(now()) @db.Timestamptz(6)
   /// Lead rơi khỏi phễu ở BẬC NÀO (trạng thái ngay trước khi sang DANG_NUOI_DUONG
   /// hoặc mất). NULL với toàn bộ lead cũ — không suy ngược được, đừng bịa.
   droppedAtStage  LeadStatus?
@@ -1717,8 +1717,8 @@ model LeadChild {
   /// Nhãn + chú giải dùng chung ở `lib/lead/contract-value.ts`.
   contractValue Int?
 
-  createdAt          DateTime             @default(now()) @db.Timestamptz(6)
-  updatedAt          DateTime             @updatedAt @db.Timestamptz(6)
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
 
   trialEnrollments TrialEnrollment[] // R7-02
   enrollments      Enrollment[] // R7-06 — enrollment chính thức convert từ con này
@@ -6635,11 +6635,11 @@ model TrialEnrollment {
   // `TrialClassV2.teacherId` và `TrialClassSession.teacherId` VẪN GIỮ nguyên vai trò
   // cũ: giáo viên mặc định của lớp/buổi. Hai cột dưới đây là quyết định cho TỪNG CA.
   /// Sale ĐỀ XUẤT (đã bàn trước với giáo viên đó). KHÔNG bắt buộc.
-  gvDeXuatId   String?
+  gvDeXuatId      String?
   /// Đào tạo PHÂN CÔNG. Có giá trị = đã chốt, Sale không sửa được nữa.
-  gvPhanCongId String?
+  gvPhanCongId    String?
   /// Số lần ca này bị dời lịch. Chỉ số chất lượng chốt lịch của Sale.
-  rescheduleCount Int @default(0)
+  rescheduleCount Int     @default(0)
 
   attendances TrialAttendance[]
   reschedules TrialReschedule[]
@@ -9204,7 +9204,7 @@ enum SessionReviewStatus {
 model MediaAsset {
   id String @id @default(cuid())
 
-  centerId String // cách ly cơ sở (scopedDb) — MỌI create PHẢI set, scopedDb không che write
+  centerId  String // cách ly cơ sở (scopedDb) — MỌI create PHẢI set, scopedDb không che write
   // Luật Nền Hệ thống #3: bảng mới mang dữ liệu theo đơn vị phải có `orgUnitId`.
   // Giữ CẢ HAI vì cutover P4 chưa bật ở đâu — enforcement hôm nay vẫn chạy trên centerId.
   orgUnitId String?
@@ -9224,7 +9224,7 @@ model MediaAsset {
   /// dòng sinh ra từ cùng một lần tải lên, để lúc QLCS duyệt ở màn mới thì dòng cũ cũng
   /// đổi trạng thái theo, không phải đoán bằng cách so `fileUrl`.
   /// Phase B (sau khi luồng mới chạy ổn trên prod): gỡ ClassSessionMedia → gỡ cột này.
-  legacyMediaId  String?  @unique
+  legacyMediaId String? @unique
 
   type        MediaType
   /// Khoá vật thể trên R2. KHÔNG lưu URL đầy đủ — bucket/CDN đổi thì mọi dòng chết.
@@ -9262,7 +9262,7 @@ model MediaAsset {
 model SessionMediaReview {
   id String @id @default(cuid())
 
-  classSessionId String @unique
+  classSessionId String   @unique
   centerId       String
   orgUnitId      String?
   sessionDate    DateTime @db.Date
@@ -9287,6 +9287,249 @@ model SessionMediaReview {
   @@index([orgUnitId])
 }
 
+// ═══════════════════════════════════════════════════════════════════════════════
+// HỘP THƯ ĐA KÊNH (Site Sale) — hội thoại với NGƯỜI NGOÀI hệ thống.
+// Spec: satarobo-sale/plan/20-SPEC-TICH-HOP-ZALO-OMICALL-AI.md §3.4 (Q-KT-2).
+//
+// ── VÌ SAO KHÔNG DÙNG LẠI `Conversation`/`Message` (chat nội bộ) ──────────────
+// Đo trên chính schema này, ba rào ở TẦNG KHOÁ chứ không phải ở tầng ý kiến:
+//   1. `ConversationParticipant.userId` là `User.id` NOT NULL. Khách trên Zalo chỉ
+//      có `user_id` phạm vi-một-OA; trên Messenger chỉ có `psid`. Họ KHÔNG có `User`,
+//      và tạo `User` giả cho từng khách là đẻ ra tài khoản đăng nhập được.
+//   2. `Message.@@unique([conversationId, senderId, clientMsgId])` KHÔNG chặn được
+//      gì khi người gửi ở ngoài hệ (`senderId = null`): Postgres coi mọi NULL là
+//      khác nhau ⇒ webhook retry đẻ tin trùng. Idempotency kênh ngoài phải khoá
+//      theo ID TIN CỦA KÊNH.
+//   3. `Conversation.dmKey` = ghép 2 `userId` đã sort, và `@@unique([type,
+//      subjectType, subjectId])` — cả hai vỡ khi một người nhắn qua 2 kênh.
+// Cộng thêm: module chat đang phục vụ GV/PH THẬT trên prod (RLS + Supabase Realtime
+// + `syncConversationMembership` ở ~20 call-site). Thêm một `ConversationType` là
+// kéo cả chuỗi đó vào một việc không liên quan.
+//
+// ── VÌ SAO KHÔNG MỞ RỘNG `MessengerConversation` (PA-B của spec) ──────────────
+// Bảng đó ĐÚNG hình dạng cho MỘT kênh, nhưng sai trục cho hộp thư đa kênh:
+//   • Nó gộp DANH TÍNH + LUỒNG + LIÊN KẾT LEAD vào một dòng. Danh tính phải sống
+//     ĐỘC LẬP: sự kiện `follow` của Zalo sinh ra một danh tính CHƯA có tin nào;
+//     một người có thể vừa có `psid` vừa có `user_id` mà cùng trỏ một `Lead`.
+//   • `@@unique([pageId, psid])` là hình dạng của Meta. Nhét `oa_id` vào cột tên
+//     `pageId` là loại nhập nhằng mà `FacebookPageMapping` (suy `centerId` theo
+//     `pageId`) sẽ mang đi khắp nơi.
+//   • Nó mang cột `phone` — đúng thứ hộp thư này CỐ Ý không có (xem dưới).
+// Bảng cũ giữ nguyên, chỉ đọc, cho tới khi kênh Messenger nối xong thì backfill
+// (hiện 0 dòng trên prod, đo 12/08 — `lib/org/center-bridge.ts` PR_A_MODELS) rồi
+// mới dọn. Nếp 2-phase, không đụng bảng đang chạy.
+//
+// ── 🔴 HỘP THƯ KHÔNG GIỮ MỘT CỘT LIÊN HỆ NÀO ─────────────────────────────────
+// Không `phone`, không `email`. SĐT/email của phụ huynh sống ở `Lead` và chỉ ra
+// khỏi server qua cổng `leads:view-pii` sẵn có (`lib/lead/pii.ts`). Đây là quyết
+// định CHỐNG RÒ có chủ đích: bảng không có cột thì không có gì để quên che.
+//
+// ── ĐƠN VỊ: `orgUnitId`, KHÔNG có `centerId` (luật cứng Nền Hệ thống #3) ──────
+// ⚠️ Hệ quả phải nhớ: `scopedDb` CHỈ lọc `centerId` nên ba bảng này KHÔNG được
+// auto-scope. Tầm nhìn ép TAY bằng `inboxOrgScopeWhere(actor)` (`lib/inbox/scope.ts`),
+// và MỌI truy vấn đi qua `lib/inbox/queries.ts`. Test `lib/inbox/cong-truy-cap.test.ts`
+// đỏ nếu có file nào ngoài `lib/inbox/` chạm thẳng `db.inbox*`.
+// `orgUnitId = NULL` nghĩa là CHƯA NỐI ĐƯỢC ĐƠN VỊ (hội thoại mồ côi) — trạng thái
+// BÌNH THƯỜNG, không phải lỗi: webhook `user_send_text` không kèm SĐT nên tin đầu
+// tiên của một người lạ luôn mồ côi. Nhóm này hiện với MỌI người mở được hộp thư,
+// đúng lý do `BankTransaction` được xếp NULL_CHUA_KHOP: giấu tồn đọng khỏi người
+// phải xử lý nó là cách chắc chắn để nó không bao giờ được xử lý.
+// ═══════════════════════════════════════════════════════════════════════════════
+
+enum InboxChannel {
+  ZALO_OA
+  MESSENGER
+  /// Chat trên website. Chưa có đường vào — khai trước để không phải migrate enum.
+  LIVECHAT
+  /// Nhân viên chép tay hội thoại từ nơi khác vào. Không bao giờ gửi ra được.
+  MANUAL
+}
+
+enum InboxDirection {
+  IN
+  OUT
+}
+
+/// Trạng thái GIAO của một tin đi ra. Chép nguyên nghĩa `ChatZnsStatus` (US-14) —
+/// đó là bản đã đúng trong repo. `SIMULATED` = KHÁCH KHÔNG NHẬN GÌ.
+///
+/// ⚠️ Đừng chép nhánh còn lại (`lib/notify/attendance.ts`) chỉ log cảnh báo rồi vẫn
+/// đánh dấu đã gửi — nó biến số liệu nghiệm thu thành số giả (spec §2.2 AD-4).
+enum InboxDeliveryStatus {
+  /// Đã GIÀNH CHỖ, chưa biết kết quả. Tiến trình chết giữa chừng thì dừng ở đây và
+  /// KHÔNG gửi lại — nghiêng về "thiếu một tin" thay vì "gửi đôi cho khách".
+  PENDING
+  SENT
+  /// Adapter chưa có khoá kết nối, hoặc công tắc live đang tắt. KHÔNG gọi API.
+  SIMULATED
+  /// Thiếu điều kiện gửi (kênh không gửi ra được, ngoài cửa sổ tin…).
+  SKIPPED
+  FAILED
+}
+
+enum InboxConversationStatus {
+  OPEN
+  SNOOZED
+  CLOSED
+}
+
+/// Vì sao một danh tính được nối với `Lead`. Quyết định "được tự nối hay phải người
+/// bấm" nằm ở `lib/inbox/identity.ts`, không nằm ở đây.
+enum InboxIdentityLinkSource {
+  /// Khách bấm "Chia sẻ thông tin" (`user_submit_info`) — đường DUY NHẤT lấy SĐT từ OA.
+  WEBHOOK_PROFILE
+  /// Khớp SĐT với đúng MỘT lead (`phoneVariants`). Nhiều hơn một thì KHÔNG tự nối.
+  PHONE_MATCH
+  MANUAL
+}
+
+/// Một con người trên MỘT kênh. Sống độc lập với hội thoại: có danh tính chưa từng
+/// nhắn (mới bấm "Quan tâm" OA), và có danh tính chưa nối được `Lead` nào.
+model InboxIdentity {
+  id             String       @id @default(cuid())
+  channel        InboxChannel
+  /// Tài khoản BÊN MÌNH nhận tin: `oa_id` của Zalo, `pageId` của Facebook.
+  /// Định danh khách chỉ có nghĩa TRONG phạm vi tài khoản này — nên nó nằm trong khoá.
+  accountId      String
+  /// Định danh khách phía nhà cung cấp: Zalo `user_id`, Messenger `psid`.
+  externalUserId String
+
+  /// Tên hiển thị do nhà cung cấp trả về. KHÔNG phải tên thật đã xác minh — đừng
+  /// dùng nó để đối chiếu danh tính, chỉ để người trực nhận ra ai đang nhắn.
+  displayName String?
+  avatarUrl   String?
+
+  /// NULL = HỘI THOẠI MỒ CÔI. Trạng thái bình thường, không phải lỗi.
+  leadId     String?
+  linkedAt   DateTime?                @db.Timestamptz(6)
+  linkedById String?
+  linkSource InboxIdentityLinkSource?
+
+  /// Zalo OA: khách đã bấm "Quan tâm" chưa. OA KHÔNG nhắn được người chưa quan tâm
+  /// (ràng buộc nền tảng, không sửa bằng code) nên đây là đầu vào chỉ số M-OA-1.
+  isFollowing  Boolean   @default(false)
+  followedAt   DateTime? @db.Timestamptz(6)
+  unfollowedAt DateTime? @db.Timestamptz(6)
+
+  /// ⚠️ `scopedDb` KHÔNG lọc cột này. Xem khối ghi chú đầu mục.
+  orgUnitId String?
+
+  createdAt     DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt     DateTime  @updatedAt @db.Timestamptz(6)
+  deletedAt     DateTime? @db.Timestamptz(6)
+  deletedById   String?
+  deletedReason String?
+
+  conversations InboxConversation[]
+
+  @@unique([channel, accountId, externalUserId])
+  @@index([leadId])
+  @@index([orgUnitId])
+  @@index([channel, leadId])
+}
+
+model InboxConversation {
+  id               String       @id @default(cuid())
+  channel          InboxChannel
+  accountId        String
+  identityId       String
+  /// Luồng phía nhà cung cấp. Zalo OA không có khái niệm "thread" nên đường ghi đặt
+  /// bằng chính `externalUserId`. NOT NULL có chủ đích: cột nullable trong UNIQUE là
+  /// unique giả (mọi NULL khác nhau) nên webhook chạy song song đẻ hai hội thoại.
+  externalThreadId String
+
+  status       InboxConversationStatus @default(OPEN)
+  assigneeId   String?
+  assignedAt   DateTime?               @db.Timestamptz(6)
+  assignedById String?
+
+  lastInboundAt  DateTime? @db.Timestamptz(6)
+  /// ⚠️ CHỈ set khi tin thật sự ĐI ĐƯỢC (`deliveryStatus = SENT`). Một tin mô phỏng
+  /// KHÔNG phải là đã trả lời khách. Đây đúng là chỗ đã cháy một lần ở Messenger:
+  /// `recordOutgoingMessage` set `respondedAt`, nên mỗi lần bấm "Gửi" là TẮT cảnh báo
+  /// chậm phản hồi của một khách chưa ai trả lời (`lib/crm/messenger-send-gate.ts`).
+  lastOutboundAt DateTime? @db.Timestamptz(6)
+  lastMessageAt  DateTime? @db.Timestamptz(6)
+  unreadCount    Int       @default(0)
+
+  /// Khách đã nhắn mà CHƯA có tin nào ĐI ĐƯỢC sau đó. Đây là bộ lọc quan trọng
+  /// nhất của hộp thư, nên nó là CỘT chứ không phải phép so hai mốc thời gian lúc
+  /// đọc: Prisma không so được hai cột trong `where`, mà lọc sau khi lấy về thì
+  /// trần 200 dòng ăn vào tập CHƯA lọc — người dùng mất đúng những hội thoại cũ
+  /// đang bị bỏ quên, tức mất đúng thứ bộ lọc này sinh ra để tìm.
+  ///
+  /// Nguồn sự thật là hàm `tinhChoTraLoi()` (`lib/inbox/view.ts`); cột chỉ là kết
+  /// quả đã lưu của nó, ghi lại ở mọi đường ghi trong `lib/inbox/`.
+  awaitingReply Boolean @default(false)
+
+  orgUnitId String?
+
+  createdAt     DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt     DateTime  @updatedAt @db.Timestamptz(6)
+  deletedAt     DateTime? @db.Timestamptz(6)
+  deletedById   String?
+  deletedReason String?
+
+  identity InboxIdentity  @relation(fields: [identityId], references: [id])
+  messages InboxMessage[]
+
+  @@unique([channel, accountId, externalThreadId])
+  @@index([status, lastMessageAt])
+  @@index([assigneeId, status])
+  @@index([orgUnitId])
+  @@index([identityId])
+  @@index([awaitingReply, lastMessageAt])
+}
+
+model InboxMessage {
+  id             String         @id @default(cuid())
+  conversationId String
+  /// Nhân bản từ hội thoại để khoá chống trùng dưới đây đứng một mình được.
+  channel        InboxChannel
+  direction      InboxDirection
+
+  /// ID tin của NHÀ CUNG CẤP. Đây là khoá chống trùng thật (spec §3.1 A6): webhook
+  /// retry gửi lại đúng id này. NULL hợp lệ ở dòng OUT vừa giành chỗ (chưa gửi nên
+  /// chưa có id) — Postgres cho nhiều NULL cùng tồn tại, đúng ý.
+  channelMessageId String?
+
+  body        String? @db.Text
+  attachments Json?
+
+  /// Người thật đã bấm gửi. NGUỒN ATTRIBUTION DUY NHẤT (spec §3.3 S4).
+  sentByUserId      String?
+  /// Tin OA gửi đi mà KHÔNG qua hệ thống (nhân viên trả lời thẳng trên `oa.zalo.me`).
+  /// Webhook chiều đó chỉ có `sender.id` = id của OA, không định danh được người gõ.
+  /// Tỷ lệ dòng này là chỉ số M-OA-4 — vượt ngưỡng nghĩa là dữ liệu chấm điểm hỏng.
+  sentOutsideSystem Boolean @default(false)
+
+  /// Chỉ có nghĩa với `direction = OUT`.
+  deliveryStatus    InboxDeliveryStatus?
+  providerMessageId String?
+  /// Mã lỗi/mã lý do có cấu trúc (`ZALO_OA_NOT_CONFIGURED`, `LIVE_OFF`…). KHÔNG bao
+  /// giờ chứa giá trị secret.
+  errorCode         String?
+  /// Khoá GIÀNH CHỖ của một lượt gửi (spec §3.3 S3). Do Server Action sinh, chặn
+  /// bấm-hai-lần và chặn hai tab cùng gửi một nội dung.
+  outboundKey       String?
+
+  sentAt        DateTime  @db.Timestamptz(6)
+  createdAt     DateTime  @default(now()) @db.Timestamptz(6)
+  /// Mọi xoá là XOÁ MỀM (luật cứng module chat #3).
+  deletedAt     DateTime? @db.Timestamptz(6)
+  deletedById   String?
+  deletedReason String?
+
+  orgUnitId String?
+
+  conversation InboxConversation @relation(fields: [conversationId], references: [id])
+
+  @@unique([channel, channelMessageId])
+  @@unique([conversationId, outboundKey])
+  @@index([conversationId, sentAt])
+  @@index([deliveryStatus, createdAt])
+  @@index([orgUnitId])
+}
 // ═══════════════════════════════════════════════════════════════════════════
 // TRỤC GỌI ĐIỆN + GHI ÂM (OmiCall) — spec `plan/20-SPEC-TICH-HOP-...` §5.3
 //

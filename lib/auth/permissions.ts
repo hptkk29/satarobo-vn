@@ -361,7 +361,19 @@ export type Action =
   | "elearning:exam:unlock"
   | "elearning:certificate:issue"
   | "elearning:certificate:revoke"
-  | "elearning:report:export";
+  | "elearning:report:export"
+
+  // --- Hộp thư đa kênh (Zalo OA / Messenger) — hội thoại với KHÁCH ngoài hệ ---
+  // ⚠️ CỐ Ý KHÔNG mượn `chat:*`. Hai thứ khác hẳn nhau và trộn là hỏng cả hai:
+  //   • `chat:*` là chat NỘI BỘ giữa người CÓ TÀI KHOẢN (GV ↔ PH), quyền theo
+  //     tư cách thành viên hội thoại, seed scope OWN/ASSIGNED/CENTER.
+  //   • `inbox:*` là hội thoại với người NGOÀI hệ (khách trên Zalo/Facebook),
+  //     phạm vi theo đơn vị, và người trực không phải là "thành viên" của gì cả.
+  // Thêm nữa `chat:read` seed non-GLOBAL nên không dùng làm cổng trang được —
+  // đúng cái bẫy đã suýt khoá cửa /tin-nhan của cả GV lẫn QLCS trên prod.
+  | "inbox:view"
+  | "inbox:reply"
+  | "inbox:assign";
 
 // =============================================================================
 // MATRIX — Mỗi action liệt kê rõ những role được phép.
@@ -807,6 +819,16 @@ export const PERMISSIONS: Record<Action, Role[]> = {
   // /admin/hoi-thoai + khoá hội thoại + tra cứu F-AUDIT — chỉ Admin HO (US-15 AC5).
   "chat:admin": ["SUPER_ADMIN"],
 
+  // --- Hộp thư đa kênh ---
+  // Sale là người trực hộp thư; Quản lý cơ sở theo dõi và gán việc.
+  // MARKETING cố ý KHÔNG có: họ chạy chiến dịch, không trực khách. Cần thì cấp
+  // riêng ở RBAC v2, đừng nới ở đây.
+  "inbox:view": ["SUPER_ADMIN", "CENTER_MANAGER", "SALES_CSM"],
+  "inbox:reply": ["SUPER_ADMIN", "CENTER_MANAGER", "SALES_CSM"],
+  // Gán người phụ trách + nối hội thoại mồ côi vào phiếu khách. Gộp hai việc vào
+  // một quyền vì cả hai đều là "phân loại việc", và tách ra thì màn hàng đợi mồ
+  // côi có người mở được mà không xử lý được gì.
+  "inbox:assign": ["SUPER_ADMIN", "CENTER_MANAGER", "SALES_CSM"],
   // --- Trục gọi điện + ghi âm (OmiCall) ---
   // Ma trận nguồn: `docs/ba-crm-hien-trang-va-misa.md:1380`. Vai v1 tương ứng:
   // SA→SUPER_ADMIN · QLCS→CENTER_MANAGER · Sale→SALES_CSM.

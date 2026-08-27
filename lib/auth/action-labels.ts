@@ -41,6 +41,8 @@ const RESOURCE_LABELS: Record<string, string> = {
   // Phase 5.7 — Vouchers
   // Chat realtime (US-05)
   chat: "Tin nhắn (chat)",
+  // Hộp thư đa kênh — hội thoại với KHÁCH ngoài hệ (khác `chat` nội bộ).
+  inbox: "Hộp thư đa kênh",
   media: "Ảnh lớp học",
 };
 
@@ -52,6 +54,7 @@ const VERB_LABELS: Record<string, string> = {
   "view-personal": "Xem thông tin cá nhân",
   "view-financial": "Xem tài chính",
   "view-own-class": "Xem lớp của mình",
+  reply: "Trả lời",
   create: "Tạo mới",
   edit: "Chỉnh sửa",
   delete: "Xoá",
