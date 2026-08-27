@@ -155,13 +155,48 @@ export async function SalesDashboard({ userId, name, embedded = false }: { userI
     <div className="space-y-6">
       {!embedded && <h1 className="text-2xl font-bold text-foreground">Chào {name || "bạn"} 👋</h1>}
 
-      <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-        <DashStat label="Lead của tôi" value={totalMine} href="/leads" icon={<Users className="h-5 w-5" />} />
-        <DashStat label="Chốt tháng này" value={enrolledMonth} href="/leads" tone="ok" icon={<TrendingUp className="h-5 w-5" />} />
-        <DashStat label="Tỷ lệ chốt" value={`${closeRate}%`} href="/leads" icon={<TrendingUp className="h-5 w-5" />} />
-        <DashStat label="Việc quá hạn" value={overdue.length} href="/leads?view=kanban" tone={overdue.length > 0 ? "danger" : "ok"} icon={<CheckSquare className="h-5 w-5" />} />
-      </div>
+      {/* ═══ Việc của tôi ═══════════════════════════════════════════════════
+          CHỐT 27/08/2026 — LỰA CHỌN CÓ CHỦ ĐÍCH, ĐỪNG "SỬA CHO ĐÚNG":
+          bốn ô này lọc theo `assignedToId = tôi` và PHẢI giữ nguyên như vậy.
 
+          Bảng điều khiển của Sale tồn tại để trả lời "hôm nay tôi gọi ai", không
+          phải để đếm thành tích của cơ sở. Mở bốn ô này ra thành số của cả cơ sở
+          nghe thì "đầy đủ hơn", nhưng nó biến màn hành động thành bảng xếp hạng —
+          và Sale mất đúng cái duy nhất họ cần khi vừa đăng nhập.
+
+          Người sau nhìn "Lead của tôi" trên một bảng điều khiển rất dễ tưởng là
+          thiếu sót. Nó không phải. Muốn xem theo cơ sở thì đã có màn Danh sách
+          khách với bộ lọc riêng. `sales-dashboard.test.ts` canh cả cách lọc lẫn
+          nhãn, nên đổi một trong hai sẽ đỏ chứ không lặng lẽ trôi.
+
+          Nhãn cố ý KHÔNG ghi "hôm nay": chỉ "Việc của tôi quá hạn" mới thật sự là
+          việc trong ngày; ba ô còn lại là tồn kho / tháng này / tỉ lệ luỹ kế. Ghi
+          "hôm nay" lên chúng là thay một nhãn mơ hồ bằng một nhãn sai. */}
+      <section>
+        <h2 className="mb-2 text-sm font-bold uppercase tracking-wider text-muted-foreground">
+          Việc của tôi
+        </h2>
+        <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+          <DashStat label="Khách tôi đang giữ" value={totalMine} href="/leads" icon={<Users className="h-5 w-5" />} />
+          <DashStat label="Tôi chốt trong tháng" value={enrolledMonth} href="/leads" tone="ok" icon={<TrendingUp className="h-5 w-5" />} />
+          <DashStat label="Tỷ lệ chốt của tôi" value={`${closeRate}%`} href="/leads" icon={<TrendingUp className="h-5 w-5" />} />
+          <DashStat label="Việc của tôi quá hạn" value={overdue.length} href="/leads?view=kanban" tone={overdue.length > 0 ? "danger" : "ok"} icon={<CheckSquare className="h-5 w-5" />} />
+        </div>
+        <p className="mt-2 text-xs text-muted-foreground">
+          Bốn ô trên chỉ tính phiếu <b>được giao cho bạn</b> — đây là bảng để biết hôm
+          nay gọi ai, không phải bảng thành tích. Xem theo cơ sở hoặc theo bộ lọc khác
+          thì vào <Link href="/leads" className="underline hover:text-primary">Danh sách khách</Link>.
+        </p>
+      </section>
+
+      {/* ⚠️ KHỐI NÀY NẰM NGOÀI "Việc của tôi" — CÓ CHỦ ĐÍCH.
+          `getNearingEndEnrollments()` gọi KHÔNG tham số ⇒ nó đếm học viên sắp hết
+          khoá của MỌI cơ sở: không lọc theo người được giao, cũng không lọc theo cơ
+          sở của người đang xem (`lib/students/renewal.ts` dùng `db` trần, tham số
+          `centerId` bỏ trống). Nó khác bản chất với bốn ô trên, nên không được đội
+          nhãn "của tôi".
+          Cách lọc của nó chưa sửa (ngoài phạm vi đợt 27/08 — chốt là "giữ nguyên
+          cách lọc, chỉ đổi nhãn"). Đây là việc còn treo, đã báo lại chủ dự án. */}
       {nearingEndCount > 0 && (
         <Link
           href="/students/sap-het-khoa"
