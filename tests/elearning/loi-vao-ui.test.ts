@@ -199,3 +199,52 @@ describe("🔴 e2e của khu phải THẬT SỰ mở trang", () => {
     }
   });
 });
+
+describe("🔴 EL-16 — chứng nhận phải có LỐI VÀO, cả hai phía", () => {
+  it("người HỌC thấy chứng nhận của mình trên màn đề cương", () => {
+    // Chứng nhận cấp TỰ ĐỘNG qua hàng đợi sự kiện. Không hiện ở đâu thì người học
+    // không biết mình đã có, và đường tải PDF thành một cổng không cửa.
+    const de = doc("app/(elearning)/elearning/hoc/[enrollmentId]/page.tsx");
+    expect(chiMa(de)).toContain("/api/elearning/chung-nhan?id=");
+    expect(chiMa(de)).toContain("kh.chungNhan");
+  });
+
+  it("có màn QUẢN LÝ chứng nhận, và nó gọi action thu hồi", () => {
+    // `thuHoiChungNhanAction` đòi quyền `elearning:certificate:revoke`; không màn
+    // nào gọi thì cái quyền ấy chỉ là một dòng trong bảng phân quyền — đúng cảnh
+    // năm action mồ côi của EL-09.
+    expect(co("app/(elearning)/elearning/chung-nhan/page.tsx")).toBe(true);
+    expect(
+      chiMa(doc("app/(elearning)/elearning/chung-nhan/_components/revoke-button.tsx")),
+    ).toContain("thuHoiChungNhanAction");
+  });
+
+  it("thanh điều hướng có mục dẫn tới màn đó", () => {
+    expect(chiMa(doc("app/(elearning)/elearning/layout.tsx"))).toContain(
+      '"/elearning/chung-nhan"',
+    );
+  });
+
+  it("nút thu hồi truyền `reason` ở THAM SỐ THỨ HAI, không nhét vào input", () => {
+    // Schema là `.strict()`; nhét `reason` vào input sẽ bị zod bác ngay — và lỗi ấy
+    // chỉ lộ khi có người bấm thật.
+    expect(
+      chiMa(doc("app/(elearning)/elearning/chung-nhan/_components/revoke-button.tsx")),
+    ).toContain("{ reason: lyDo.trim() }");
+  });
+
+  it("trang xác minh CÔNG KHAI tồn tại và nằm NGOÀI segment gác đăng nhập", () => {
+    // Đặt trong `elearning/` là dựng một trang công khai rồi khoá nó lại: mọi thứ
+    // dưới đó đi qua layout đòi `auth()` + hồ sơ nhân sự.
+    expect(co("app/(elearning)/xac-thuc/[token]/page.tsx")).toBe(true);
+    expect(co("app/(elearning)/elearning/xac-thuc/[token]/page.tsx")).toBe(false);
+  });
+
+  it("trang xác minh KHÔNG cho lập chỉ mục", () => {
+    // Địa chỉ mang token bí mật; để Google lập chỉ mục là biến "chỉ ai cầm QR mới
+    // tra được" thành "tra Google là ra".
+    expect(chiMa(doc("app/(elearning)/xac-thuc/[token]/page.tsx"))).toContain(
+      "index: false",
+    );
+  });
+});

@@ -22,6 +22,7 @@ import { lapLichNhac, lyDoHuy, type Moc } from "@/lib/elearning/reminder-schedul
  */
 
 import { nhacNguoiCham } from "@/lib/elearning/grader-reminder";
+import { chayVongDoiChungNhan, type KetQuaHetHan } from "@/lib/elearning/cron-cert-expiry";
 import { notifyStaff } from "@/lib/notifications/notify";
 import {
   noiDungTheoMoc,
@@ -43,6 +44,8 @@ export type KetQuaNhac = {
    * một hàng đợi tắc mà không ai nhận được nhắc là đúng cái hỏng khó thấy nhất.
    */
   nhacCham: { quaHan: number; daGui: number; thieuNguoiNhan: string | null };
+  /** EL-16 việc (5) — nhắc T-30/T-7, chốt hết hạn, giao lại vòng tái chứng nhận. */
+  chungNhan: KetQuaHetHan;
   loi: string[];
 };
 
@@ -63,6 +66,7 @@ export async function runElearningReminders(now = new Date()): Promise<KetQuaNha
     daGui: 0,
     boQua: 0,
     nhacCham: { quaHan: 0, daGui: 0, thieuNguoiNhan: null },
+    chungNhan: { daNhac: 0, chotHetHan: 0, giaoLai: 0, khongGiaoLaiDuoc: 0, loi: [] },
     loi: [],
   };
 
@@ -233,6 +237,19 @@ export async function runElearningReminders(now = new Date()): Promise<KetQuaNha
     ket.nhacCham = await nhacNguoiCham(now);
   } catch (e) {
     ket.loi.push(`nhacCham: ${(e as Error).message}`);
+  }
+
+  // ── Việc 5: vòng đời HẾT HIỆU LỰC của chứng nhận (EL-16) ──────────────────
+  //
+  // ⚠️ Cũng nằm trong khe cron NÀY. Ngân sách module là đúng 2 khe; đây là việc thứ
+  // năm chia nhau một khe, không phải khe thứ ba.
+  //
+  // ⚠️ Đặt CUỐI cùng và bọc try riêng: ba việc trên phục vụ người đang học và có
+  // mốc T-2 GIỜ — chúng không được chết theo một lỗi của việc chạy hằng ngày này.
+  try {
+    ket.chungNhan = await chayVongDoiChungNhan(now);
+  } catch (e) {
+    ket.loi.push(`chungNhan: ${(e as Error).message}`);
   }
 
   return ket;

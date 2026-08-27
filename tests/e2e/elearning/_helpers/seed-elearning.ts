@@ -5,6 +5,7 @@ import { db } from "../../../../lib/db";
 // trên: bí danh `@/` tsc hiểu, nhưng bộ nạp lúc chạy thì chưa chắc.
 import { ensureHandlersRegistered } from "../../../../lib/events/register";
 import { dispatchPendingEvents } from "../../../../lib/events/dispatcher";
+import { chayVongDoiChungNhan } from "../../../../lib/elearning/cron-cert-expiry";
 import {
   assertTestDb,
   seedOrg,
@@ -440,4 +441,56 @@ export async function chungNhanCuaLuot(enrollmentId: string) {
 export async function demChungNhan(enrollmentId: string): Promise<number> {
   assertTestDb();
   return db.trnCertificate.count({ where: { enrollmentId } });
+}
+
+/** Đẩy hạn hiệu lực của chứng nhận về QUÁ KHỨ — để chạy được vòng hết hạn. */
+export async function datHanChungNhan(
+  enrollmentId: string,
+  validUntil: Date,
+): Promise<void> {
+  assertTestDb();
+  await db.trnCertificate.update({
+    where: { enrollmentId },
+    data: { validUntil, status: "VALID" },
+  });
+}
+
+/** Chạy vòng đời hết hiệu lực (việc 5 của cron nhắc). */
+export async function chayVongHetHan(now: Date) {
+  assertTestDb();
+  return chayVongDoiChungNhan(now);
+}
+
+/** Đếm lượt ghi danh của một người trên một khoá — kiểm chống đẻ lượt trùng. */
+export async function demLuotGhiDanh(
+  userEmail: string,
+  courseSlug: string,
+): Promise<{ tong: number; vongCaoNhat: number }> {
+  assertTestDb();
+  const u = await db.user.findUnique({
+    where: { email: userEmail },
+    select: { id: true },
+  });
+  const k = await db.trnCourse.findUnique({
+    where: { slug: courseSlug },
+    select: { id: true },
+  });
+  if (!u || !k) return { tong: 0, vongCaoNhat: 0 };
+  const ds = await db.trnEnrollment.findMany({
+    where: { userId: u.id, courseId: k.id },
+    select: { cycle: true },
+  });
+  return {
+    tong: ds.length,
+    vongCaoNhat: ds.reduce((m, x) => Math.max(m, x.cycle), 0),
+  };
+}
+
+/** Trạng thái chứng nhận đọc thẳng từ DB. */
+export async function trangThaiChungNhan(enrollmentId: string) {
+  assertTestDb();
+  return db.trnCertificate.findUnique({
+    where: { enrollmentId },
+    select: { status: true, validUntil: true, verifyToken: true },
+  });
 }

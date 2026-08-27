@@ -99,7 +99,11 @@ export type NotiEntityType =
   // EL-06 — lượt ghi danh ĐÀO TẠO NỘI BỘ. Cố ý KHÁC `enrollment` (ghi danh học
   // viên): hai thứ nằm trên hai host khác nhau, nên gộp một giá trị là dựng
   // deep-link về sai site.
-  | "trn_enrollment";
+  | "trn_enrollment"
+  // EL-16 — CHỨNG NHẬN đào tạo nội bộ. Tách khỏi `trn_enrollment` vì vòng đời khác
+  // hẳn: lượt ghi danh đóng lại khi học xong, còn chứng nhận sống tiếp nhiều năm và
+  // có thể bị thu hồi. Gộp chung là mất khả năng thu hồi thông báo đúng nhóm.
+  | "trn_certificate";
 
 // ─── Bảng khai ─────────────────────────────────────────────────────────────────
 
@@ -192,6 +196,13 @@ const BY_PREFIX: Readonly<Record<string, NotiDef>> = {
   "elearning_due:": {
     group: "due_date", priority: 1, entity: "trn_enrollment",
     recipients: "Chính người được giao khoá", target: "host đào tạo nội bộ",
+  },
+  // EL-16 — chứng nhận sắp hết hiệu lực (T-30 / T-7). Khoá gắn với
+  // (chứng nhận × mốc), nên nhịp cron sau gửi lại KHÔNG đẻ thông báo thứ hai —
+  // đó cũng chính là chỗ ghi nhận "đã nhắc mốc này", thay cho một cột riêng.
+  "elearning_cert_expiry:": {
+    group: "due_date", priority: 1, entity: "trn_certificate",
+    recipients: "Chính người được cấp chứng nhận", target: "host đào tạo nội bộ",
   },
 
   // ── Sinh từ sự kiện: lớp & buổi học ──

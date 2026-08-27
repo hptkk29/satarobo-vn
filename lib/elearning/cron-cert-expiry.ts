@@ -1,0 +1,200 @@
+import { db } from "@/lib/db";
+import { notifyStaff } from "@/lib/notifications/notify";
+import { elearningHomeUrl } from "@/lib/auth/hosts";
+import {
+  canGiaoLai,
+  mocCanNhac,
+  noiDungNhacHetHan,
+  soNgayConLai,
+} from "@/lib/elearning/cert-expiry";
+
+/**
+ * EL-16 việc (5) — VÒNG ĐỜI HẾT HIỆU LỰC của chứng nhận.
+ *
+ * ⚠️ Chạy trong khe cron ĐÃ CÓ (`elearning-reminders`). Ngân sách module là đúng 2
+ * khe và đã dùng hết — không xin khe thứ ba (QĐ-CDA-14 điểm 2).
+ *
+ * Ba việc, theo thứ tự:
+ *   1. nhắc T-30 / T-7 trước hạn;
+ *   2. chốt cột `status` sang `EXPIRED` cho bản đã quá hạn;
+ *   3. giao lại khoá cho vòng tái chứng nhận (`cycle` + 1).
+ *
+ * ⚠️ Việc (2) là cập nhật BỘ NHỚ ĐỆM, không phải nguồn sự thật. Trang xác minh công
+ * khai và mọi chỗ hiển thị đi qua `trangThaiHienThi()` — suy từ `validUntil`. Cron
+ * này lỗi, treo, hay chưa đăng ký thì không tấm chứng nhận nào nói dối; chỉ là truy
+ * vấn lọc theo cột `status` sẽ đếm thiếu. Đó là khác biệt cố ý: một trang công khai
+ * không được phụ thuộc vào việc cron đêm nay có chạy hay không.
+ */
+
+const LO = 200;
+const NGAY_MS = 24 * 60 * 60 * 1000;
+
+export type KetQuaHetHan = {
+  daNhac: number;
+  chotHetHan: number;
+  giaoLai: number;
+  /** Không giao lại được vì khoá không còn bản xuất bản nào — nói ra, đừng nuốt. */
+  khongGiaoLaiDuoc: number;
+  loi: string[];
+};
+
+export async function chayVongDoiChungNhan(
+  now = new Date(),
+): Promise<KetQuaHetHan> {
+  const ket: KetQuaHetHan = {
+    daNhac: 0,
+    chotHetHan: 0,
+    giaoLai: 0,
+    khongGiaoLaiDuoc: 0,
+    loi: [],
+  };
+
+  // ── 1. Nhắc T-30 / T-7 ─────────────────────────────────────────────────────
+  try {
+    const sapHet = await db.trnCertificate.findMany({
+      where: {
+        status: "VALID",
+        validUntil: { not: null, gte: now, lte: new Date(now.getTime() + 30 * NGAY_MS) },
+      },
+      select: {
+        id: true,
+        userId: true,
+        courseId: true,
+        validUntil: true,
+        enrollmentId: true,
+      },
+      orderBy: { validUntil: "asc" },
+      take: LO,
+    });
+
+    const tenKhoaCua = new Map(
+      (
+        await db.trnCourse.findMany({
+          where: { id: { in: [...new Set(sapHet.map((c) => c.courseId))] } },
+          select: { id: true, title: true },
+        })
+      ).map((k) => [k.id, k.title]),
+    );
+
+    for (const c of sapHet) {
+      const soNgay = soNgayConLai(c.validUntil!, now);
+      // ⚠️ KHÔNG lưu "đã nhắc mốc nào" ở cột riêng: `notifyStaff` chống trùng bằng
+      // `dedupeKey`, và khoá dưới đây gắn với (chứng nhận × mốc) nên gửi lại nhịp
+      // sau không đẻ thông báo thứ hai. Thêm một cột nữa là thêm một thứ có thể
+      // lệch với sự thật.
+      const moc = mocCanNhac(soNgay, []);
+      if (moc == null) continue;
+
+      const noiDung = noiDungNhacHetHan({
+        moc,
+        tenKhoa: tenKhoaCua.get(c.courseId) ?? "khoá đào tạo",
+        validUntil: c.validUntil!,
+      });
+      const soNguoi = await notifyStaff({
+        userIds: [c.userId],
+        dedupeKey: `elearning_cert_expiry:${c.id}:${moc}`,
+        title: noiDung.title,
+        body: noiDung.body,
+        href: `${elearningHomeUrl().replace(/\/$/, "")}/elearning/hoc/${c.enrollmentId}`,
+        entityId: c.id,
+      });
+      if (soNguoi > 0) ket.daNhac += 1;
+    }
+  } catch (e) {
+    ket.loi.push(`nhac-het-han: ${String(e)}`);
+  }
+
+  // ── 2. Chốt cột status cho bản đã quá hạn ──────────────────────────────────
+  try {
+    const r = await db.trnCertificate.updateMany({
+      where: { status: "VALID", validUntil: { not: null, lt: now } },
+      data: { status: "EXPIRED" },
+    });
+    ket.chotHetHan = r.count;
+  } catch (e) {
+    ket.loi.push(`chot-het-han: ${String(e)}`);
+  }
+
+  // ── 3. Giao lại khoá cho vòng tái chứng nhận ───────────────────────────────
+  try {
+    const daHet = await db.trnCertificate.findMany({
+      where: { status: "EXPIRED", validUntil: { not: null, lt: now } },
+      select: {
+        id: true,
+        userId: true,
+        courseId: true,
+        validUntil: true,
+        revokedAt: true,
+        centerId: true,
+        orgUnitId: true,
+        enrollment: {
+          select: { cycle: true, snapJobTitle: true, snapDepartmentId: true },
+        },
+      },
+      orderBy: { validUntil: "asc" },
+      take: LO,
+    });
+
+    for (const c of daHet) {
+      const vongSau = (c.enrollment.cycle ?? 1) + 1;
+      const daCo = await db.trnEnrollment.count({
+        where: { userId: c.userId, courseId: c.courseId, cycle: { gte: vongSau } },
+      });
+
+      if (
+        !canGiaoLai({
+          validUntil: c.validUntil,
+          now,
+          daCoLuotVongSau: daCo > 0,
+          chungNhanBiThuHoi: c.revokedAt != null,
+        })
+      ) {
+        continue;
+      }
+
+      // Hạn mới: 30 ngày kể từ hôm hết hiệu lực. Cùng con số với mốc nhắc đầu tiên,
+      // nên người đã được nhắc T-30 có đúng khoảng thời gian ấy để làm.
+      const hanMoi = new Date(now.getTime() + 30 * NGAY_MS);
+
+      // ⚠️ `centerId`/`orgUnitId` NOT NULL trên `TrnEnrollment` — phải truyền tường
+      // minh. Quên là lượt mới vô hình với chính người cấp cơ sở của họ.
+      if (!c.centerId || !c.orgUnitId) {
+        ket.khongGiaoLaiDuoc += 1;
+        console.warn("[elearning] không giao lại được: chứng nhận thiếu cột đơn vị", {
+          certId: c.id,
+        });
+        continue;
+      }
+
+      try {
+        await db.trnEnrollment.create({
+          data: {
+            userId: c.userId,
+            courseId: c.courseId,
+            // ⚠️ `cycle` tăng, và lượt là bản ghi MỚI — không mở lại lượt cũ.
+            // `TrnLessonProgress` khoá theo `@@unique([enrollmentId, lessonId])`, nên
+            // lượt mới bắt đầu với bitmap tiến độ RỖNG: người học phải xem lại thật,
+            // không được hệ thống tính hoàn thành ngay. Đây chính là lý do khoá đó
+            // không đặt theo `[userId, lessonId]` (HỢP ĐỒNG V2 §Z2).
+            cycle: vongSau,
+            source: "REQUIREMENT",
+            status: "NOT_STARTED",
+            dueAtOriginal: hanMoi,
+            dueAt: hanMoi,
+            snapJobTitle: c.enrollment.snapJobTitle,
+            snapDepartmentId: c.enrollment.snapDepartmentId,
+            centerId: c.centerId,
+            orgUnitId: c.orgUnitId,
+          },
+        });
+        ket.giaoLai += 1;
+      } catch (e) {
+        ket.loi.push(`giao-lai(${c.id}): ${String(e)}`);
+      }
+    }
+  } catch (e) {
+    ket.loi.push(`giao-lai: ${String(e)}`);
+  }
+
+  return ket;
+}

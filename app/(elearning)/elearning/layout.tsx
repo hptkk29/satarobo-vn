@@ -113,6 +113,10 @@ export default async function ElearningLayout({
     ...(soan ? [{ href: "/elearning/chuong-trinh", nhan: "Chương trình" }] : []),
     ...(giao ? [{ href: "/elearning/giao-bai", nhan: "Giao bài" }] : []),
     ...(cham ? [{ href: "/elearning/cham-bai-tap", nhan: "Chấm bài" }] : []),
+    // EL-16 — dùng CHUNG khoá xem tiến độ toàn hệ với báo cáo: ai xem được ai đã học
+    // gì thì cũng xem được ai đã có chứng nhận gì. Nút THU HỒI bên trong màn đó mới
+    // gác bằng `certificate:revoke`.
+    ...(baoCao ? [{ href: "/elearning/chung-nhan", nhan: "Chứng nhận" }] : []),
     ...(baoCao ? [{ href: "/elearning/bao-cao", nhan: "Báo cáo" }] : []),
   ];
 

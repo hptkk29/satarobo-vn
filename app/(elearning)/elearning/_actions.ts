@@ -10,6 +10,7 @@ import {
   ELEARNING_POLICY_KEY,
 } from "@/lib/elearning/policy-acceptance";
 import { isLessonDone } from "@/lib/elearning/reading";
+import { cauHinhThuHoiChungNhan } from "@/lib/elearning/certificate-revoke";
 import {
   cauHinhKhieuNaiCo,
   cauHinhQuyetCo,
@@ -171,3 +172,11 @@ export const acceptPolicyAction = defineAction({
  */
 export const khieuNaiCoAction = defineAction(cauHinhKhieuNaiCo);
 export const quyetCoAction = defineAction(cauHinhQuyetCo);
+
+/**
+ * EL-16 — thu hồi chứng nhận (BR-007).
+ *
+ * Quyền hẹp `elearning:certificate:revoke` (SUPER_ADMIN + HO_HR) và lý do bắt buộc.
+ * Cấu hình nằm ở `lib/elearning/certificate-revoke.ts` theo quy ước 10.
+ */
+export const thuHoiChungNhanAction = defineAction(cauHinhThuHoiChungNhan);

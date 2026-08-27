@@ -17,8 +17,12 @@
 import { test, expect, type BrowserContext, type Page } from "@playwright/test";
 import { login } from "../_helpers/auth";
 import {
+  chayVongHetHan,
   chungNhanCuaLuot,
+  datHanChungNhan,
   demChungNhan,
+  demLuotGhiDanh,
+  trangThaiChungNhan,
   dungVongHoc,
   trangThaiGhiDanh,
   type BoDuLieu,
@@ -338,5 +342,74 @@ test.describe("[EL-16] chứng nhận ĐẾN TAY người học, và tra cứu �
     await p2.goto("/xac-thuc/khongtontai00000000000000000000");
     await expect(p2.getByText("Không tìm thấy chứng nhận")).toBeVisible();
     await ctx.close();
+  });
+});
+
+test.describe("[EL-16] hết hiệu lực ⇒ chốt EXPIRED và giao lại vòng mới", () => {
+  test("🔴 quá hạn thì chuyển EXPIRED và sinh lượt học vòng 2", async () => {
+    // Đây là vế cuối của TS-34 bước ⑦. Lượt mới phải là bản ghi MỚI với `cycle` tăng
+    // — `TrnLessonProgress` khoá theo `[enrollmentId, lessonId]` nên bitmap tiến độ
+    // bắt đầu lại từ rỗng: người học phải xem lại thật, không được tính hoàn thành
+    // ngay. Mở lại lượt cũ là bỏ qua đúng chuyện đó.
+    const truoc = await demLuotGhiDanh(d.hocVienEmail, `${"e2e_el_"}khoa`);
+    expect(truoc.vongCaoNhat).toBe(1);
+
+    await datHanChungNhan(d.enrollmentId, new Date(Date.now() - 86_400_000));
+    const kq = await chayVongHetHan(new Date());
+
+    expect(kq.loi, `cron báo lỗi: ${kq.loi.join(" | ")}`).toEqual([]);
+    expect(kq.chotHetHan).toBeGreaterThanOrEqual(1);
+    expect(kq.giaoLai).toBeGreaterThanOrEqual(1);
+
+    expect((await trangThaiChungNhan(d.enrollmentId))?.status).toBe("EXPIRED");
+    const sau = await demLuotGhiDanh(d.hocVienEmail, `${"e2e_el_"}khoa`);
+    expect(sau.vongCaoNhat).toBe(2);
+    expect(sau.tong).toBe(truoc.tong + 1);
+  });
+
+  test("🔴 chạy lại KHÔNG đẻ thêm lượt — cron 15 phút/lần", async () => {
+    // Không chặn thì sau một ngày người học mở khu ra thấy gần trăm lượt cùng một
+    // khoá, và mọi báo cáo tuân thủ đếm sai theo.
+    const truoc = await demLuotGhiDanh(d.hocVienEmail, `${"e2e_el_"}khoa`);
+    await chayVongHetHan(new Date());
+    await chayVongHetHan(new Date());
+    expect((await demLuotGhiDanh(d.hocVienEmail, `${"e2e_el_"}khoa`)).tong).toBe(
+      truoc.tong,
+    );
+  });
+
+  test("🔴 trang xác minh công khai đổi câu trả lời NGAY, không chờ cron", async ({
+    browser,
+  }) => {
+    // Trạng thái hiển thị suy từ `validUntil`, không đọc cột `status`. Cột ấy là bộ
+    // nhớ đệm do cron cập nhật; tin nó là để hệ thống nói dối người đi kiểm, ở đúng
+    // trang được dựng để không nói dối.
+    const cn = await trangThaiChungNhan(d.enrollmentId);
+    const ctx = await browser.newContext();
+    const p2 = await ctx.newPage();
+    await p2.goto(`/xac-thuc/${cn!.verifyToken}`);
+    await expect(p2.getByText("Đã hết hiệu lực")).toBeVisible();
+    await ctx.close();
+  });
+});
+
+test.describe("[EL-16] nút THU HỒI gác bằng khoá quyền riêng", () => {
+  test("người Đào tạo thấy màn chứng nhận nhưng KHÔNG có nút thu hồi", async ({
+    page,
+  }) => {
+    // Xem được ai đã có chứng nhận gì là việc của Đào tạo; vô hiệu một chứng từ là
+    // quyết định của Nhân sự Hội sở. `elearning:certificate:revoke` chỉ thuộc
+    // SUPER_ADMIN và HO_HR (`prisma/seed-roles.ts`).
+    await vaoKhu(page, d.daoTaoEmail);
+    await page.goto("/elearning/chung-nhan");
+    await expect(page.getByRole("heading", { name: "Chứng nhận đã cấp" })).toBeVisible();
+    await expect(page.getByText(/^SR\.CN\./).first()).toBeVisible();
+    await expect(page.getByRole("button", { name: "Thu hồi" })).toHaveCount(0);
+  });
+
+  test("người học thuần KHÔNG vào được màn đó", async ({ page }) => {
+    await vaoKhu(page, d.hocVienEmail);
+    await page.goto("/elearning/chung-nhan");
+    await expect(page.getByText("Không có quyền xem")).toBeVisible();
   });
 });

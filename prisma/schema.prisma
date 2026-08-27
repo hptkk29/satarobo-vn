@@ -7980,6 +7980,10 @@ model TrnEnrollment {
   /// EL-04 — tiến độ từng bài của lượt ghi danh này.
   lessonProgress TrnLessonProgress[]
   reminders      TrnReminder[]
+  /// ⚠️ `onDelete: Restrict` ở phía chứng nhận: xoá một lượt ghi danh đã sinh chứng
+  /// nhận là làm mồ côi một chứng từ đã phát ra tay người ta và đã có người ngoài
+  /// quét QR để kiểm. Chặn cứng ở DB, không trông vào việc mã gọi nhớ kiểm.
+  certificate    TrnCertificate?
 
   @@unique([courseId, userId, cycle])
   @@index([userId, status])
@@ -8956,7 +8960,8 @@ model TrnCertificate {
   /// Lượt ghi danh sinh ra chứng nhận này. Một lượt cấp tối đa một chứng nhận
   /// (`@@unique`), nên vòng tái chứng nhận phải sinh lượt MỚI với `cycle` tăng —
   /// không được cấp đè lên lượt cũ.
-  enrollmentId String @unique
+  enrollmentId String        @unique
+  enrollment   TrnEnrollment @relation(fields: [enrollmentId], references: [id], onDelete: Restrict)
 
   issuedAt DateTime @default(now()) @db.Timestamptz(6)
 
