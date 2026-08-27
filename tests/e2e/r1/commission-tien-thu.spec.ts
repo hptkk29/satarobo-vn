@@ -87,11 +87,72 @@ test.describe("[HH-TT] hoa hồng theo tiền đã thu", () => {
     expect(await tienTang(KY_1, "SALE_ADMIN")).toBe(50_000);
     expect(kq.soButToan).toBe(1);
 
-    // QC + QL TT chưa có người hưởng ⇒ KHÔNG sinh dòng, và số tiền treo được BÁO RA.
+    // QC + QL TT của cơ sở này CHƯA khai người hưởng ⇒ KHÔNG sinh dòng, và số tiền
+    // treo được BÁO RA (hành vi giữ nguyên sau 27/08 — xem [HH-TT-8]).
     expect(await tienTang(KY_1, "QC")).toBe(0);
     expect(await tienTang(KY_1, "QL_TT")).toBe(0);
     expect(kq.chuaCoNguoiHuong.QC).toBe(50_000); // 1% × 5tr
     expect(kq.chuaCoNguoiHuong.QL_TT).toBe(100_000); // 2% × 5tr
+  });
+
+  /**
+   * [HH-TT-8] 27/08/2026 — KHAI NGƯỜI HƯỞNG THÌ SỐ TREO PHẢI VỀ 0.
+   *
+   * Đây là tiêu chí nghiệm thu của đợt này: trước đó chỉ 5/8 phần trăm chảy được.
+   * Phần thuần đã có ở `lib/crm/commission-run.test.ts`; ca này phủ đúng khúc CHỈ DB
+   * mới lộ: `chotKyHoaHong` có thật sự ĐỌC bảng phân công và nối được cơ sở của bút
+   * toán với dòng phân công hay không.
+   */
+  test("[HH-TT-8] khai QC + Quản lý TT → hai tầng sinh dòng thật, treo về 0", async () => {
+    const center = await db.center.upsert({
+      where: { slug: "cs-hoa-hong-test" },
+      update: {},
+      create: { name: "CS Hoa Hồng Test", slug: "cs-hoa-hong-test", address: "1 Test", city: "Đà Nẵng" },
+    });
+    const qc = await db.user.upsert({
+      where: { email: "qc-hoahong@test.local" },
+      update: {},
+      create: { name: "QC Test", email: "qc-hoahong@test.local", role: "MARKETING" },
+    });
+    const ql = await db.user.upsert({
+      where: { email: "qltt-hoahong@test.local" },
+      update: {},
+      create: { name: "QL TT Test", email: "qltt-hoahong@test.local", role: "CENTER_MANAGER" },
+    });
+    await db.centerCommissionAssignee.deleteMany({ where: { centerId: center.id } });
+    for (const [role, userId] of [
+      ["QC", qc.id],
+      ["QL_TT", ql.id],
+    ] as const) {
+      await db.centerCommissionAssignee.create({
+        data: {
+          centerId: center.id,
+          role,
+          userId,
+          // Hiệu lực TRƯỚC kỳ đang chốt — người hưởng được soi tại mốc xác nhận thu tiền.
+          effectiveFrom: new Date("2026-01-01T00:00:00+07:00"),
+        },
+      });
+    }
+    await db.order.update({ where: { id: orderId }, data: { centerId: center.id } });
+
+    const p = await thuTien(5_000_000, NGAY_KY_1);
+    await db.payment.update({
+      where: { id: p.id },
+      data: { centerId: center.id, confirmedAt: NGAY_KY_1 },
+    });
+
+    const kq = await chotKyHoaHong(ACC, { period: KY_1 });
+
+    expect(await tienTang(KY_1, "QC")).toBe(50_000); // 1% × 5tr
+    expect(await tienTang(KY_1, "QL_TT")).toBe(100_000); // 2% × 5tr
+    expect(kq.chuaCoNguoiHuong).toEqual({});
+    expect(kq.treoTheoCoSo).toEqual([]);
+    // Σ cả kỳ = ĐÚNG 8% — đây là lần đầu tiên toàn bộ pool chảy được.
+    expect(
+      (await db.commissionLine.findMany({ where: { statement: { period: KY_1 } }, select: { amount: true } }))
+        .reduce((s, r) => s + r.amount, 0),
+    ).toBe(400_000);
   });
 
   test("[HH-TT-2] nhiều đợt cùng kỳ + vắt qua hai tháng", async () => {

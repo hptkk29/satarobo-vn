@@ -309,6 +309,12 @@ export type Action =
   | "payments:confirm" // R7-04 — Kế toán xác nhận (tách nhiệm vụ)
   | "payments:view-pii" // #15 (câu 32) — break-glass xem đầy đủ CCCD PH + địa chỉ (reason + audit)
   | "revenue_targets:manage" // B-01 — đặt mục tiêu doanh thu tháng × cơ sở (KHÔNG phải quyền thao tác tiền)
+  // 27/08 — khai "QC nào / quản lý nào phụ trách cơ sở nào" cho hoa hồng QC 1% + QL TT 2%.
+  // Key RIÊNG, KHÔNG mượn `payments:manage`: quyền đó là của KẾ TOÁN (mở/huỷ/hoàn tiền,
+  // duyệt bảng kê). Người TRẢ tiền không nên đồng thời là người chỉ định AI ĐƯỢC NHẬN —
+  // và cũng không mượn `centers:edit` (sửa địa chỉ/giờ mở cửa), vì nới quyền sửa cơ sở
+  // về sau sẽ vô tình nới luôn quyền chuyển hướng tiền hoa hồng.
+  | "commission-assignee:manage"
   | "installments:approve" // FIX lead→payment→enroll (C4) — duyệt kế hoạch trả góp 2 đợt
   | "discounts:approve" // BGĐ 31/07 — duyệt giảm giá nhập tay (kèm giải trình)
   | "orders:view"
@@ -333,6 +339,14 @@ export type Action =
   | "chat:moderate"
   | "chat:admin"
 
+  // --- Trục gọi điện + ghi âm (OmiCall — ma trận `docs/ba-crm-hien-trang-va-misa.md:1380`) ---
+  | "calls:make"
+  | "calls:view-own"
+  | "calls:view-all"
+  | "calls:listen-recording"
+  | "calls:export"
+  | "calls:assign"
+
   // --- Đào tạo nội bộ (EL-02 — lib/permissions/registry/elearning.ts) ---
   // Key 3 đoạn, khác 2 đoạn của mọi key cũ. Có chủ đích: `resource:verb` không đủ chỗ
   // cho một module 17 quyền trải trên 8 nhóm đối tượng. Test parity (b) trong
@@ -353,7 +367,19 @@ export type Action =
   | "elearning:exam:unlock"
   | "elearning:certificate:issue"
   | "elearning:certificate:revoke"
-  | "elearning:report:export";
+  | "elearning:report:export"
+
+  // --- Hộp thư đa kênh (Zalo OA / Messenger) — hội thoại với KHÁCH ngoài hệ ---
+  // ⚠️ CỐ Ý KHÔNG mượn `chat:*`. Hai thứ khác hẳn nhau và trộn là hỏng cả hai:
+  //   • `chat:*` là chat NỘI BỘ giữa người CÓ TÀI KHOẢN (GV ↔ PH), quyền theo
+  //     tư cách thành viên hội thoại, seed scope OWN/ASSIGNED/CENTER.
+  //   • `inbox:*` là hội thoại với người NGOÀI hệ (khách trên Zalo/Facebook),
+  //     phạm vi theo đơn vị, và người trực không phải là "thành viên" của gì cả.
+  // Thêm nữa `chat:read` seed non-GLOBAL nên không dùng làm cổng trang được —
+  // đúng cái bẫy đã suýt khoá cửa /tin-nhan của cả GV lẫn QLCS trên prod.
+  | "inbox:view"
+  | "inbox:reply"
+  | "inbox:assign";
 
 // =============================================================================
 // MATRIX — Mỗi action liệt kê rõ những role được phép.
@@ -745,6 +771,12 @@ export const PERMISSIONS: Record<Action, Role[]> = {
   // ∈ SCOPE_EXEMPT nên scopedDb pass-through — luật "chỉ cơ sở mình quản" ép TAY trong
   // action qua `checkRevenueTargetScope` (lib/reports/revenue-target-scope.ts).
   "revenue_targets:manage": ["SUPER_ADMIN", "CENTER_MANAGER", "ACCOUNTANT"],
+  // 27/08 — CHỈ SUPER_ADMIN. Đây là quyết định "ai được nhận 3% doanh thu", chủ dự án
+  // tự nhập. Vì chỉ SUPER_ADMIN, key này KHÔNG cần chạy `seed-prod-roles.yml`: v2
+  // (`lib/auth/can.ts:52`) cho SUPER_ADMIN đi thẳng, không tra `RoleDef` trong DB.
+  // ⚠️ Muốn mở cho vai khác thì PHẢI seed v2 — nếu không, người đó qua được gate v1 ở
+  // local mà bị chặn câm trên prod (prod đang enforce v2).
+  "commission-assignee:manage": ["SUPER_ADMIN"],
   // C4 — duyệt kế hoạch trả góp 2 đợt: chỉ quản lý cơ sở + admin (audit + reason bắt buộc khi từ chối).
   // #09 (09/07): v2 chuyển quyền này sang HO_ACCOUNTANT (de-xuat-scope §3.3 "tiền tập
   // trung"). `lib/orders/installments.ts` gate bằng matrix v1 (không theo cờ) làm lớp
@@ -798,6 +830,37 @@ export const PERMISSIONS: Record<Action, Role[]> = {
   "chat:moderate": ["SUPER_ADMIN", "TEACHER"],
   // /admin/hoi-thoai + khoá hội thoại + tra cứu F-AUDIT — chỉ Admin HO (US-15 AC5).
   "chat:admin": ["SUPER_ADMIN"],
+
+  // --- Hộp thư đa kênh ---
+  // Sale là người trực hộp thư; Quản lý cơ sở theo dõi và gán việc.
+  // MARKETING cố ý KHÔNG có: họ chạy chiến dịch, không trực khách. Cần thì cấp
+  // riêng ở RBAC v2, đừng nới ở đây.
+  "inbox:view": ["SUPER_ADMIN", "CENTER_MANAGER", "SALES_CSM"],
+  "inbox:reply": ["SUPER_ADMIN", "CENTER_MANAGER", "SALES_CSM"],
+  // Gán người phụ trách + nối hội thoại mồ côi vào phiếu khách. Gộp hai việc vào
+  // một quyền vì cả hai đều là "phân loại việc", và tách ra thì màn hàng đợi mồ
+  // côi có người mở được mà không xử lý được gì.
+  "inbox:assign": ["SUPER_ADMIN", "CENTER_MANAGER", "SALES_CSM"],
+  // --- Trục gọi điện + ghi âm (OmiCall) ---
+  // Ma trận nguồn: `docs/ba-crm-hien-trang-va-misa.md:1380`. Vai v1 tương ứng:
+  // SA→SUPER_ADMIN · QLCS→CENTER_MANAGER · Sale→SALES_CSM.
+  //
+  // ⚠️ Khai ở đây KHÔNG phải vì bảng này là nguồn sự thật (nguồn là `RoleDef` +
+  // `RolePermission` trong DB, v2 đang enforce trên prod) mà vì một lý do kỹ thuật
+  // dễ quên: `ALL_ACTIONS = Object.keys(PERMISSIONS)` và `buildActor()` LỌC grant
+  // theo đúng tập đó — không khai thì mọi `PermissionGrant` mang key `calls:*` bị
+  // vứt IM LẶNG, không lỗi, không cảnh báo.
+  "calls:make": ["SUPER_ADMIN", "CENTER_MANAGER", "SALES_CSM"],
+  "calls:view-own": ["SUPER_ADMIN", "CENTER_MANAGER", "SALES_CSM"],
+  "calls:view-all": ["SUPER_ADMIN", "CENTER_MANAGER"],
+  // 🔴 BM-2 — TÁCH RIÊNG, KHÔNG mặc định cho Sale. Mỗi lượt nghe ghi audit (QT-36).
+  // Và thiết kế bằng ALLOW: `can()` v2 KHÔNG có nhánh DENY nên một grant DENY bị bỏ
+  // qua IM LẶNG — chặn ai thì gỡ `UserOrgRole`/`RolePermission`, đừng cấp DENY.
+  "calls:listen-recording": ["SUPER_ADMIN", "CENTER_MANAGER"],
+  // Xuất dữ liệu cuộc gọi kèm SĐT phụ huynh ⇒ phải đóng dấu người tải + audit (BM-5).
+  "calls:export": ["SUPER_ADMIN", "CENTER_MANAGER"],
+  // Gán chủ cho cuộc gọi mồ côi (OC-12).
+  "calls:assign": ["SUPER_ADMIN", "CENTER_MANAGER"],
 
   // --- Đào tạo nội bộ (EL-02) ---
   // ⚠️ BẢNG NÀY KHÔNG PHẢI nguồn sự thật của quyền e-learning. Nguồn là `RoleDef` +

@@ -266,7 +266,19 @@ model Center {
   email        String?
   googleMapUrl String? @db.Text
   workingHours String?
+  /// CHUỖI TÊN — chỉ để HIỂN THỊ (trang liên hệ, danh sách cơ sở). GIỮ NGUYÊN theo nếp
+  /// hai pha: thêm `managerUserId` trước, bỏ cột này sau khi ổn định. ĐỪNG dùng nó để
+  /// suy ra người hưởng hoa hồng — nó không nối được tới tài khoản nào.
   managerName  String?
+  /// 27/08/2026 — LIÊN KẾT TÀI KHOẢN quản lý cơ sở. Bắt buộc khi TẠO cơ sở mới (ép ở
+  /// tầng validator, không phải ở DB: cơ sở cũ chưa khai nên cột phải nullable).
+  ///
+  /// Đây là con trỏ "hiện tại" cho vận hành/hiển thị. NGUỒN SỰ THẬT của tiền là sổ
+  /// `CenterCommissionAssignee` (role QL_TT) — hai thứ này được ghi TRONG CÙNG MỘT
+  /// transaction bởi `datQuanLyCoSo()` (lib/crm/commission-assignee-store.ts), và màn
+  /// quản trị hiện cảnh báo nếu chúng lệch nhau.
+  managerUserId String?
+  managerUser   User?   @relation("CenterManagerUser", fields: [managerUserId], references: [id], onDelete: SetNull)
 
   // Phase NHÓM 4 — geofence chấm công QR.
   latitude            Float?
@@ -297,8 +309,12 @@ model Center {
   // Phase 5.6 — Order
   orders Order[]
 
+  // 27/08 — sổ người hưởng hoa hồng theo cơ sở (QC 1% + Quản lý TT 2%).
+  commissionAssignees CenterCommissionAssignee[] @relation("CenterCommissionAssignees")
+
   @@index([isActive])
   @@index([displayOrder])
+  @@index([managerUserId])
 }
 
 // ─── A0-01 — OrgUnit tree (Doc 15 §2.1, OI-1) ───
@@ -895,6 +911,65 @@ model CommissionLine {
   @@index([enrollmentId])
 }
 
+/// 27/08/2026 — HAI VAI HƯỞNG HOA HỒNG GẮN THEO CƠ SỞ.
+/// Tên vai TRÙNG tên tầng trong `COMMISSION_TIERS` (lib/crm/commission.ts) — cố ý,
+/// để engine ánh xạ vai → tầng bằng chính chuỗi đó, không cần bảng tra thứ hai.
+enum CenterCommissionRole {
+  /// Quảng cáo — tầng QC 1%.
+  QC
+  /// Quản lý trung tâm — tầng QL_TT 2%.
+  QL_TT
+}
+
+/// SỔ "AI PHỤ TRÁCH CƠ SỞ NÀO, TỪ KHI NÀO TỚI KHI NÀO" (chủ dự án chốt 27/08/2026).
+///
+/// Vì sao là SỔ chứ không phải một cột "người phụ trách hiện tại": kỳ hoa hồng được
+/// CHỐT LẠI nhiều lần và kỳ cũ có thể REOPEN. Một cột "hiện tại" nghĩa là đổi QC hôm
+/// nay sẽ viết lại hoa hồng của tháng trước cho người mới — người làm việc tháng trước
+/// mất tiền, và không dòng nào báo lỗi. Câu hỏi engine hỏi luôn là "ai phụ trách cơ sở
+/// X TẠI THỜI ĐIỂM kế toán xác nhận thu tiền".
+///
+/// Biên hiệu lực PHẢI MỞ: `effectiveFrom <= t < effectiveTo` (xem lib/crm/commission-assignee.ts).
+///
+/// Một cơ sở có thể có NHIỀU dòng QC cùng hiệu lực ⇒ 1% chia đều (không có khoá chặn
+/// chồng lấn, đó là thiết kế). Vai QL_TT được đường ghi ép còn một người và đồng bộ
+/// với `Center.managerUserId`, nhưng engine vẫn chia đều nếu gặp nhiều — lưới an toàn
+/// chống chi vượt tỉ lệ tầng khi dữ liệu lọt vào bằng đường khác.
+model CenterCommissionAssignee {
+  id String @id @default(cuid())
+
+  /// Cơ sở được phụ trách. NOT NULL — một phân công luôn thuộc đúng một cơ sở.
+  centerId String
+  center   Center @relation("CenterCommissionAssignees", fields: [centerId], references: [id], onDelete: Cascade)
+  /// P1 · US-07 — cột SONG SONG với centerId (ghi kép qua lib/org/dual-write.ts).
+  orgUnitId String?
+
+  role CenterCommissionRole
+
+  /// LIÊN KẾT TÀI KHOẢN, không phải chuỗi tên — đây là điểm khác biệt với `Center.managerName`.
+  /// Restrict: người rời công ty không được kéo theo dấu vết tiền đã chi cho họ.
+  userId String
+  user   User   @relation("CenterCommissionAssignments", fields: [userId], references: [id], onDelete: Restrict)
+
+  effectiveFrom DateTime  @db.Timestamptz(6)
+  /// `null` = đang phụ trách.
+  effectiveTo   DateTime? @db.Timestamptz(6)
+
+  note          String? @db.Text
+  createdById   String?
+  createdByName String?
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  /// Chặn nhập TRÙNG KHÍT một dòng (bấm hai lần). KHÔNG chặn chồng lấn khác mốc —
+  /// chồng lấn là hợp lệ với QC, và engine khử trùng theo userId nên không ai ăn hai suất.
+  @@unique([centerId, role, userId, effectiveFrom])
+  @@index([centerId, role, effectiveFrom])
+  @@index([userId])
+  @@index([orgUnitId])
+}
+
 // R6-F2 — Bản ghi LỆCH giữa can() v1 (matrix) và v2 (DB actor) khi shadow-run.
 // Mục tiêu: report = 0 trong N ngày → an toàn bật RBAC_V2_ENABLED. Chỉ ghi khi LỆCH.
 /// P3 · US-12 — lệch giữa resolver dataScope CŨ (đo centerId) và MỚI (đo orgUnitId).
@@ -1174,6 +1249,10 @@ model User {
 
   /// G-04 — tuỳ chọn cột bảng, theo từng người. Cascade: người nghỉ thì cấu hình đi theo.
   tablePreferences UserTablePreference[] @relation("UserTablePreferences")
+
+  /// 27/08 — hoa hồng theo cơ sở: cơ sở đang trỏ người này làm quản lý + sổ phân công.
+  managedCenters              Center[]                   @relation("CenterManagerUser")
+  centerCommissionAssignments CenterCommissionAssignee[] @relation("CenterCommissionAssignments")
 
   @@index([email])
   @@index([phone])
@@ -1549,7 +1628,7 @@ model Lead {
   /// sót. Đặt default ở DB thì mọi đường ghi — kể cả SQL thô — đều có dòng sổ đầu.
   /// ⚠️ Vẫn để NULLABLE: lead CŨ có trước GĐ1 không suy ngược được mốc đó, và
   /// migration cố ý KHÔNG backfill (xem ghi chú trong 20260825120000).
-  statusChangedAt DateTime? @default(now()) @db.Timestamptz(6)
+  statusChangedAt DateTime?   @default(now()) @db.Timestamptz(6)
   /// Lead rơi khỏi phễu ở BẬC NÀO (trạng thái ngay trước khi sang DANG_NUOI_DUONG
   /// hoặc mất). NULL với toàn bộ lead cũ — không suy ngược được, đừng bịa.
   droppedAtStage  LeadStatus?
@@ -1717,8 +1796,8 @@ model LeadChild {
   /// Nhãn + chú giải dùng chung ở `lib/lead/contract-value.ts`.
   contractValue Int?
 
-  createdAt          DateTime             @default(now()) @db.Timestamptz(6)
-  updatedAt          DateTime             @updatedAt @db.Timestamptz(6)
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
 
   trialEnrollments TrialEnrollment[] // R7-02
   enrollments      Enrollment[] // R7-06 — enrollment chính thức convert từ con này
@@ -6635,11 +6714,11 @@ model TrialEnrollment {
   // `TrialClassV2.teacherId` và `TrialClassSession.teacherId` VẪN GIỮ nguyên vai trò
   // cũ: giáo viên mặc định của lớp/buổi. Hai cột dưới đây là quyết định cho TỪNG CA.
   /// Sale ĐỀ XUẤT (đã bàn trước với giáo viên đó). KHÔNG bắt buộc.
-  gvDeXuatId   String?
+  gvDeXuatId      String?
   /// Đào tạo PHÂN CÔNG. Có giá trị = đã chốt, Sale không sửa được nữa.
-  gvPhanCongId String?
+  gvPhanCongId    String?
   /// Số lần ca này bị dời lịch. Chỉ số chất lượng chốt lịch của Sale.
-  rescheduleCount Int @default(0)
+  rescheduleCount Int     @default(0)
 
   attendances TrialAttendance[]
   reschedules TrialReschedule[]
@@ -9204,7 +9283,7 @@ enum SessionReviewStatus {
 model MediaAsset {
   id String @id @default(cuid())
 
-  centerId String // cách ly cơ sở (scopedDb) — MỌI create PHẢI set, scopedDb không che write
+  centerId  String // cách ly cơ sở (scopedDb) — MỌI create PHẢI set, scopedDb không che write
   // Luật Nền Hệ thống #3: bảng mới mang dữ liệu theo đơn vị phải có `orgUnitId`.
   // Giữ CẢ HAI vì cutover P4 chưa bật ở đâu — enforcement hôm nay vẫn chạy trên centerId.
   orgUnitId String?
@@ -9224,7 +9303,7 @@ model MediaAsset {
   /// dòng sinh ra từ cùng một lần tải lên, để lúc QLCS duyệt ở màn mới thì dòng cũ cũng
   /// đổi trạng thái theo, không phải đoán bằng cách so `fileUrl`.
   /// Phase B (sau khi luồng mới chạy ổn trên prod): gỡ ClassSessionMedia → gỡ cột này.
-  legacyMediaId  String?  @unique
+  legacyMediaId String? @unique
 
   type        MediaType
   /// Khoá vật thể trên R2. KHÔNG lưu URL đầy đủ — bucket/CDN đổi thì mọi dòng chết.
@@ -9262,7 +9341,7 @@ model MediaAsset {
 model SessionMediaReview {
   id String @id @default(cuid())
 
-  classSessionId String @unique
+  classSessionId String   @unique
   centerId       String
   orgUnitId      String?
   sessionDate    DateTime @db.Date
@@ -9285,4 +9364,470 @@ model SessionMediaReview {
   @@index([centerId, sessionDate, status])
   @@index([status, deadlineAt])
   @@index([orgUnitId])
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// HỘP THƯ ĐA KÊNH (Site Sale) — hội thoại với NGƯỜI NGOÀI hệ thống.
+// Spec: satarobo-sale/plan/20-SPEC-TICH-HOP-ZALO-OMICALL-AI.md §3.4 (Q-KT-2).
+//
+// ── VÌ SAO KHÔNG DÙNG LẠI `Conversation`/`Message` (chat nội bộ) ──────────────
+// Đo trên chính schema này, ba rào ở TẦNG KHOÁ chứ không phải ở tầng ý kiến:
+//   1. `ConversationParticipant.userId` là `User.id` NOT NULL. Khách trên Zalo chỉ
+//      có `user_id` phạm vi-một-OA; trên Messenger chỉ có `psid`. Họ KHÔNG có `User`,
+//      và tạo `User` giả cho từng khách là đẻ ra tài khoản đăng nhập được.
+//   2. `Message.@@unique([conversationId, senderId, clientMsgId])` KHÔNG chặn được
+//      gì khi người gửi ở ngoài hệ (`senderId = null`): Postgres coi mọi NULL là
+//      khác nhau ⇒ webhook retry đẻ tin trùng. Idempotency kênh ngoài phải khoá
+//      theo ID TIN CỦA KÊNH.
+//   3. `Conversation.dmKey` = ghép 2 `userId` đã sort, và `@@unique([type,
+//      subjectType, subjectId])` — cả hai vỡ khi một người nhắn qua 2 kênh.
+// Cộng thêm: module chat đang phục vụ GV/PH THẬT trên prod (RLS + Supabase Realtime
+// + `syncConversationMembership` ở ~20 call-site). Thêm một `ConversationType` là
+// kéo cả chuỗi đó vào một việc không liên quan.
+//
+// ── VÌ SAO KHÔNG MỞ RỘNG `MessengerConversation` (PA-B của spec) ──────────────
+// Bảng đó ĐÚNG hình dạng cho MỘT kênh, nhưng sai trục cho hộp thư đa kênh:
+//   • Nó gộp DANH TÍNH + LUỒNG + LIÊN KẾT LEAD vào một dòng. Danh tính phải sống
+//     ĐỘC LẬP: sự kiện `follow` của Zalo sinh ra một danh tính CHƯA có tin nào;
+//     một người có thể vừa có `psid` vừa có `user_id` mà cùng trỏ một `Lead`.
+//   • `@@unique([pageId, psid])` là hình dạng của Meta. Nhét `oa_id` vào cột tên
+//     `pageId` là loại nhập nhằng mà `FacebookPageMapping` (suy `centerId` theo
+//     `pageId`) sẽ mang đi khắp nơi.
+//   • Nó mang cột `phone` — đúng thứ hộp thư này CỐ Ý không có (xem dưới).
+// Bảng cũ giữ nguyên, chỉ đọc, cho tới khi kênh Messenger nối xong thì backfill
+// (hiện 0 dòng trên prod, đo 12/08 — `lib/org/center-bridge.ts` PR_A_MODELS) rồi
+// mới dọn. Nếp 2-phase, không đụng bảng đang chạy.
+//
+// ── 🔴 HỘP THƯ KHÔNG GIỮ MỘT CỘT LIÊN HỆ NÀO ─────────────────────────────────
+// Không `phone`, không `email`. SĐT/email của phụ huynh sống ở `Lead` và chỉ ra
+// khỏi server qua cổng `leads:view-pii` sẵn có (`lib/lead/pii.ts`). Đây là quyết
+// định CHỐNG RÒ có chủ đích: bảng không có cột thì không có gì để quên che.
+//
+// ── ĐƠN VỊ: `orgUnitId`, KHÔNG có `centerId` (luật cứng Nền Hệ thống #3) ──────
+// ⚠️ Hệ quả phải nhớ: `scopedDb` CHỈ lọc `centerId` nên ba bảng này KHÔNG được
+// auto-scope. Tầm nhìn ép TAY bằng `inboxOrgScopeWhere(actor)` (`lib/inbox/scope.ts`),
+// và MỌI truy vấn đi qua `lib/inbox/queries.ts`. Test `lib/inbox/cong-truy-cap.test.ts`
+// đỏ nếu có file nào ngoài `lib/inbox/` chạm thẳng `db.inbox*`.
+// `orgUnitId = NULL` nghĩa là CHƯA NỐI ĐƯỢC ĐƠN VỊ (hội thoại mồ côi) — trạng thái
+// BÌNH THƯỜNG, không phải lỗi: webhook `user_send_text` không kèm SĐT nên tin đầu
+// tiên của một người lạ luôn mồ côi. Nhóm này hiện với MỌI người mở được hộp thư,
+// đúng lý do `BankTransaction` được xếp NULL_CHUA_KHOP: giấu tồn đọng khỏi người
+// phải xử lý nó là cách chắc chắn để nó không bao giờ được xử lý.
+// ═══════════════════════════════════════════════════════════════════════════════
+
+enum InboxChannel {
+  ZALO_OA
+  MESSENGER
+  /// Chat trên website. Chưa có đường vào — khai trước để không phải migrate enum.
+  LIVECHAT
+  /// Nhân viên chép tay hội thoại từ nơi khác vào. Không bao giờ gửi ra được.
+  MANUAL
+}
+
+enum InboxDirection {
+  IN
+  OUT
+}
+
+/// Trạng thái GIAO của một tin đi ra. Chép nguyên nghĩa `ChatZnsStatus` (US-14) —
+/// đó là bản đã đúng trong repo. `SIMULATED` = KHÁCH KHÔNG NHẬN GÌ.
+///
+/// ⚠️ Đừng chép nhánh còn lại (`lib/notify/attendance.ts`) chỉ log cảnh báo rồi vẫn
+/// đánh dấu đã gửi — nó biến số liệu nghiệm thu thành số giả (spec §2.2 AD-4).
+enum InboxDeliveryStatus {
+  /// Đã GIÀNH CHỖ, chưa biết kết quả. Tiến trình chết giữa chừng thì dừng ở đây và
+  /// KHÔNG gửi lại — nghiêng về "thiếu một tin" thay vì "gửi đôi cho khách".
+  PENDING
+  SENT
+  /// Adapter chưa có khoá kết nối, hoặc công tắc live đang tắt. KHÔNG gọi API.
+  SIMULATED
+  /// Thiếu điều kiện gửi (kênh không gửi ra được, ngoài cửa sổ tin…).
+  SKIPPED
+  FAILED
+}
+
+enum InboxConversationStatus {
+  OPEN
+  SNOOZED
+  CLOSED
+}
+
+/// Vì sao một danh tính được nối với `Lead`. Quyết định "được tự nối hay phải người
+/// bấm" nằm ở `lib/inbox/identity.ts`, không nằm ở đây.
+enum InboxIdentityLinkSource {
+  /// Khách bấm "Chia sẻ thông tin" (`user_submit_info`) — đường DUY NHẤT lấy SĐT từ OA.
+  WEBHOOK_PROFILE
+  /// Khớp SĐT với đúng MỘT lead (`phoneVariants`). Nhiều hơn một thì KHÔNG tự nối.
+  PHONE_MATCH
+  MANUAL
+}
+
+/// Một con người trên MỘT kênh. Sống độc lập với hội thoại: có danh tính chưa từng
+/// nhắn (mới bấm "Quan tâm" OA), và có danh tính chưa nối được `Lead` nào.
+model InboxIdentity {
+  id             String       @id @default(cuid())
+  channel        InboxChannel
+  /// Tài khoản BÊN MÌNH nhận tin: `oa_id` của Zalo, `pageId` của Facebook.
+  /// Định danh khách chỉ có nghĩa TRONG phạm vi tài khoản này — nên nó nằm trong khoá.
+  accountId      String
+  /// Định danh khách phía nhà cung cấp: Zalo `user_id`, Messenger `psid`.
+  externalUserId String
+
+  /// Tên hiển thị do nhà cung cấp trả về. KHÔNG phải tên thật đã xác minh — đừng
+  /// dùng nó để đối chiếu danh tính, chỉ để người trực nhận ra ai đang nhắn.
+  displayName String?
+  avatarUrl   String?
+
+  /// NULL = HỘI THOẠI MỒ CÔI. Trạng thái bình thường, không phải lỗi.
+  leadId     String?
+  linkedAt   DateTime?                @db.Timestamptz(6)
+  linkedById String?
+  linkSource InboxIdentityLinkSource?
+
+  /// Zalo OA: khách đã bấm "Quan tâm" chưa. OA KHÔNG nhắn được người chưa quan tâm
+  /// (ràng buộc nền tảng, không sửa bằng code) nên đây là đầu vào chỉ số M-OA-1.
+  isFollowing  Boolean   @default(false)
+  followedAt   DateTime? @db.Timestamptz(6)
+  unfollowedAt DateTime? @db.Timestamptz(6)
+
+  /// ⚠️ `scopedDb` KHÔNG lọc cột này. Xem khối ghi chú đầu mục.
+  orgUnitId String?
+
+  createdAt     DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt     DateTime  @updatedAt @db.Timestamptz(6)
+  deletedAt     DateTime? @db.Timestamptz(6)
+  deletedById   String?
+  deletedReason String?
+
+  conversations InboxConversation[]
+
+  @@unique([channel, accountId, externalUserId])
+  @@index([leadId])
+  @@index([orgUnitId])
+  @@index([channel, leadId])
+}
+
+model InboxConversation {
+  id               String       @id @default(cuid())
+  channel          InboxChannel
+  accountId        String
+  identityId       String
+  /// Luồng phía nhà cung cấp. Zalo OA không có khái niệm "thread" nên đường ghi đặt
+  /// bằng chính `externalUserId`. NOT NULL có chủ đích: cột nullable trong UNIQUE là
+  /// unique giả (mọi NULL khác nhau) nên webhook chạy song song đẻ hai hội thoại.
+  externalThreadId String
+
+  status       InboxConversationStatus @default(OPEN)
+  assigneeId   String?
+  assignedAt   DateTime?               @db.Timestamptz(6)
+  assignedById String?
+
+  lastInboundAt  DateTime? @db.Timestamptz(6)
+  /// ⚠️ CHỈ set khi tin thật sự ĐI ĐƯỢC (`deliveryStatus = SENT`). Một tin mô phỏng
+  /// KHÔNG phải là đã trả lời khách. Đây đúng là chỗ đã cháy một lần ở Messenger:
+  /// `recordOutgoingMessage` set `respondedAt`, nên mỗi lần bấm "Gửi" là TẮT cảnh báo
+  /// chậm phản hồi của một khách chưa ai trả lời (`lib/crm/messenger-send-gate.ts`).
+  lastOutboundAt DateTime? @db.Timestamptz(6)
+  lastMessageAt  DateTime? @db.Timestamptz(6)
+  unreadCount    Int       @default(0)
+
+  /// Khách đã nhắn mà CHƯA có tin nào ĐI ĐƯỢC sau đó. Đây là bộ lọc quan trọng
+  /// nhất của hộp thư, nên nó là CỘT chứ không phải phép so hai mốc thời gian lúc
+  /// đọc: Prisma không so được hai cột trong `where`, mà lọc sau khi lấy về thì
+  /// trần 200 dòng ăn vào tập CHƯA lọc — người dùng mất đúng những hội thoại cũ
+  /// đang bị bỏ quên, tức mất đúng thứ bộ lọc này sinh ra để tìm.
+  ///
+  /// Nguồn sự thật là hàm `tinhChoTraLoi()` (`lib/inbox/view.ts`); cột chỉ là kết
+  /// quả đã lưu của nó, ghi lại ở mọi đường ghi trong `lib/inbox/`.
+  awaitingReply Boolean @default(false)
+
+  orgUnitId String?
+
+  createdAt     DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt     DateTime  @updatedAt @db.Timestamptz(6)
+  deletedAt     DateTime? @db.Timestamptz(6)
+  deletedById   String?
+  deletedReason String?
+
+  identity InboxIdentity  @relation(fields: [identityId], references: [id])
+  messages InboxMessage[]
+
+  @@unique([channel, accountId, externalThreadId])
+  @@index([status, lastMessageAt])
+  @@index([assigneeId, status])
+  @@index([orgUnitId])
+  @@index([identityId])
+  @@index([awaitingReply, lastMessageAt])
+}
+
+model InboxMessage {
+  id             String         @id @default(cuid())
+  conversationId String
+  /// Nhân bản từ hội thoại để khoá chống trùng dưới đây đứng một mình được.
+  channel        InboxChannel
+  direction      InboxDirection
+
+  /// ID tin của NHÀ CUNG CẤP. Đây là khoá chống trùng thật (spec §3.1 A6): webhook
+  /// retry gửi lại đúng id này. NULL hợp lệ ở dòng OUT vừa giành chỗ (chưa gửi nên
+  /// chưa có id) — Postgres cho nhiều NULL cùng tồn tại, đúng ý.
+  channelMessageId String?
+
+  body        String? @db.Text
+  attachments Json?
+
+  /// Người thật đã bấm gửi. NGUỒN ATTRIBUTION DUY NHẤT (spec §3.3 S4).
+  sentByUserId      String?
+  /// Tin OA gửi đi mà KHÔNG qua hệ thống (nhân viên trả lời thẳng trên `oa.zalo.me`).
+  /// Webhook chiều đó chỉ có `sender.id` = id của OA, không định danh được người gõ.
+  /// Tỷ lệ dòng này là chỉ số M-OA-4 — vượt ngưỡng nghĩa là dữ liệu chấm điểm hỏng.
+  sentOutsideSystem Boolean @default(false)
+
+  /// Chỉ có nghĩa với `direction = OUT`.
+  deliveryStatus    InboxDeliveryStatus?
+  providerMessageId String?
+  /// Mã lỗi/mã lý do có cấu trúc (`ZALO_OA_NOT_CONFIGURED`, `LIVE_OFF`…). KHÔNG bao
+  /// giờ chứa giá trị secret.
+  errorCode         String?
+  /// Khoá GIÀNH CHỖ của một lượt gửi (spec §3.3 S3). Do Server Action sinh, chặn
+  /// bấm-hai-lần và chặn hai tab cùng gửi một nội dung.
+  outboundKey       String?
+
+  sentAt        DateTime  @db.Timestamptz(6)
+  createdAt     DateTime  @default(now()) @db.Timestamptz(6)
+  /// Mọi xoá là XOÁ MỀM (luật cứng module chat #3).
+  deletedAt     DateTime? @db.Timestamptz(6)
+  deletedById   String?
+  deletedReason String?
+
+  orgUnitId String?
+
+  conversation InboxConversation @relation(fields: [conversationId], references: [id])
+
+  @@unique([channel, channelMessageId])
+  @@unique([conversationId, outboundKey])
+  @@index([conversationId, sentAt])
+  @@index([deliveryStatus, createdAt])
+  @@index([orgUnitId])
+}
+// ═══════════════════════════════════════════════════════════════════════════
+// TRỤC GỌI ĐIỆN + GHI ÂM (OmiCall) — spec `plan/20-SPEC-TICH-HOP-...` §5.3
+//
+// Mô hình KẾ THỪA NGUYÊN 9 nhóm trường của `docs/ba-crm-hien-trang-va-misa.md:798-810`
+// (định danh · ai gọi · gọi cho ai · số máy · thời gian · kết quả · mục đích ·
+// ghi âm · kiểm soát) + nhóm chi phí. Không thiết kế lại.
+//
+// ⚠️ BA NƠI DỄ LÀM SAI, đã ràng ngay ở tầng schema:
+//  · OC-1 — `@@unique([provider, providerCallId])`. OMI TỰ GHI trong tài liệu là
+//    `transaction_id` "có thể gửi nhiều lần". Không có ràng buộc này thì mỗi lần
+//    gửi lại là một dòng KPI mới.
+//  · OC-3 — cột là `recordingKey` (khoá tệp trong kho RIÊNG), KHÔNG phải URL của
+//    nhà cung cấp. Lưu URL thô là lưu sẵn một đường rò: ai có chuỗi đó là nghe được,
+//    không hạn giờ, không vết.
+//  · OC-4 — `techStatus` (máy móc nói) tách hẳn `outcome` (người bán chọn). Gộp
+//    một cột là mất vĩnh viễn khả năng phân biệt "khách không nghe" với "khách từ chối".
+// ═══════════════════════════════════════════════════════════════════════════
+
+/// Nhà cung cấp tổng đài. Enum chứ không phải chuỗi tự do: khoá chống trùng
+/// `[provider, providerCallId]` chỉ có nghĩa khi tên nhà cung cấp không gõ tay được.
+enum CallProvider {
+  OMICALL
+}
+
+enum CallDirection {
+  OUTBOUND
+  INBOUND
+  /// QT-40 — gọi nội bộ giữa nhân viên: VẪN LƯU (cấm vứt dữ liệu cuộc gọi) nhưng
+  /// KHÔNG vào CRM và KHÔNG tính KPI. Lọc bằng chính giá trị này.
+  INTERNAL
+}
+
+/// TRẠNG THÁI KỸ THUẬT — do tổng đài quyết, người không sửa được.
+/// Thứ tự tiến ghi ở `lib/calls/trang-thai.ts` (OC-2), KHÔNG suy từ thứ tự khai ở đây.
+enum CallTechStatus {
+  INITIATED
+  RINGING
+  ANSWERED
+  NO_ANSWER
+  BUSY
+  FAILED
+}
+
+/// KẾT QUẢ NGHIỆP VỤ — do người bán chọn sau cuộc gọi. KHÁC `CallTechStatus` (OC-4).
+enum CallOutcome {
+  INTERESTED
+  CALL_BACK
+  REFUSED
+  WRONG_NUMBER
+  WRONG_PERSON
+}
+
+/// MỤC ĐÍCH — QT-33. Bắt buộc chọn TRƯỚC khi gọi ra.
+/// `ADVERTISING` kéo theo hai điều kiện cứng (đồng ý marketing thật + không nằm
+/// trong danh sách không gọi). Vi phạm: NĐ 91/2020, phạt 80–100 triệu.
+enum CallPurpose {
+  /// Chăm sóc / xử lý yêu cầu của chính khách — không bị ràng buộc quảng cáo.
+  CARE
+  /// Chào bán, quảng cáo.
+  ADVERTISING
+}
+
+/// PL-2 (Luật 91/2025 + NĐ 15/2020) — đã phát lời thông báo ghi âm chưa.
+enum CallRecordingNotice {
+  /// Chưa phát lời thông báo ⇒ KHÔNG được ghi âm (mặc định fail-closed).
+  NOT_ANNOUNCED
+  /// Đã phát lời thông báo, khách không phản đối ⇒ được ghi âm.
+  ANNOUNCED
+  /// Khách từ chối ⇒ VẪN GỌI ĐƯỢC, chỉ tắt ghi âm.
+  REFUSED
+}
+
+enum CallDncSource {
+  CUSTOMER_REQUEST
+  PROVIDER
+  MANUAL
+}
+
+/// MỘT CUỘC GỌI.
+///
+/// `centerId` NULLABLE — và đây là quyết định phải đọc trước khi "sửa cho đúng
+/// luật cứng". Spec OC-8 đòi cột cơ sở bắt buộc; QT-39 cấm vứt dữ liệu cuộc gọi.
+/// Hai câu đó xung đột đúng ở ca có thật: CDR về từ một máy nhánh chưa ai ánh xạ
+/// (`CallExtension`) thì hệ thống KHÔNG BIẾT cơ sở nào. Bắt NOT NULL ⇒ phải vứt
+/// bản ghi ⇒ vi phạm QT-39. Nên chọn nullable + `needsReview`, y hệt tiền lệ
+/// `BankTransaction` ("tiền về chưa đối khớp"), và khai vào `NULL_IS_GLOBAL_MODELS`
+/// để nhóm chờ-gán KHÔNG tàng hình với chính người phải gán nó.
+model CallLog {
+  id String @id @default(cuid())
+
+  // ── Định danh ────────────────────────────────────────────────────────────
+  provider       CallProvider @default(OMICALL)
+  /// `transaction_id` của nhà cung cấp. OC-1: khoá chống trùng duy nhất.
+  providerCallId String
+
+  // ── Ai gọi ───────────────────────────────────────────────────────────────
+  /// NULL hợp lệ (OC-13): cuộc gọi hệ thống / máy nhánh chưa ánh xạ.
+  userId    String?
+  extension String?
+  /// NULL = CHƯA ĐỐI KHỚP được cơ sở (xem ghi chú của model).
+  centerId  String?
+  /// Luật Nền Hệ thống #3 — bảng mới mang dữ liệu theo đơn vị phải có `orgUnitId`.
+  /// ⚠️ `scopedDb` KHÔNG lọc cột này; nơi gọi phải tự lọc.
+  orgUnitId String?
+
+  // ── Gọi cho ai ───────────────────────────────────────────────────────────
+  /// NULL + `needsReview = true` = hàng đợi "Cuộc gọi mồ côi" (OC-12).
+  leadId    String?
+  studentId String?
+
+  // ── Số máy ───────────────────────────────────────────────────────────────
+  direction  CallDirection
+  fromNumber String
+  toNumber   String
+  /// Số của KHÁCH đã chuẩn hoá `84XXXXXXXXX` (KHÔNG dấu `+` — OC-10). Khoá đối khớp Lead.
+  peerPhone  String?
+  didNumber  String?
+
+  // ── Thời gian ────────────────────────────────────────────────────────────
+  startedAt   DateTime  @db.Timestamptz(6)
+  answeredAt  DateTime? @db.Timestamptz(6)
+  endedAt     DateTime? @db.Timestamptz(6)
+  talkSeconds Int?
+  billSeconds Int?
+
+  // ── Kết quả (OC-4: hai cột, không gộp) ───────────────────────────────────
+  techStatus CallTechStatus @default(INITIATED)
+  /// Bậc của `techStatus` lúc ghi — OC-2 so bậc này để CHẶN LÙI. Đọc/ghi qua
+  /// `lib/calls/trang-thai.ts`, đừng tự gán số.
+  statusRank Int            @default(0)
+  outcome    CallOutcome?
+  note       String?        @db.Text
+
+  // ── Mục đích (QT-33) ─────────────────────────────────────────────────────
+  /// NULL = cuộc gọi ra KHÔNG khai báo mục đích trước (điển hình: Sale bấm gọi
+  /// trên softphone của nhà cung cấp — kế hoạch B1). Không im lặng bỏ qua:
+  /// đường nạp CDR bật `needsReview` với lý do `PURPOSE_NOT_DECLARED`.
+  purpose        CallPurpose?
+  purposeSetById String?
+  purposeSetAt   DateTime?    @db.Timestamptz(6)
+
+  // ── Ghi âm ───────────────────────────────────────────────────────────────
+  hasRecording          Boolean             @default(false)
+  /// OC-3 — KHOÁ TỆP trong kho RIÊNG (`R2_CALL_BUCKET_NAME`). TUYỆT ĐỐI không
+  /// lưu URL của nhà cung cấp vào đây và không bao giờ trả cột này ra trình duyệt.
+  recordingKey          String?
+  recordingBytes        Int?
+  recordingNotice       CallRecordingNotice @default(NOT_ANNOUNCED)
+  /// Hạn xoá dự kiến (đề xuất 12 tháng — `calls.recordingRetentionMonths`).
+  recordingPurgeAfterAt DateTime?           @db.Timestamptz(6)
+
+  // ── Kiểm soát ────────────────────────────────────────────────────────────
+  needsReview      Boolean @default(false)
+  reviewReason     String?
+  /// Thứ tự sự kiện nhà cung cấp gửi — phục vụ đối soát khi sự kiện tới lệch nhịp.
+  providerEventSeq Int     @default(0)
+  /// Bản ghi thô lần cuối nhận được. OC-2: sự kiện bị bỏ qua phần trạng thái thì
+  /// VẪN LƯU VẾT ở đây.
+  rawPayload       Json?
+  duplicateCount   Int     @default(0)
+
+  // ── Chi phí ──────────────────────────────────────────────────────────────
+  /// Cước do nhà cung cấp trả về (nếu có). ⚠️ Bảng giá công khai của OMICall
+  /// KHÔNG có cước viễn thông (TQ-3) — cột này có thể rỗng dài ngày.
+  costAmount Decimal? @db.Decimal(12, 2)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  @@unique([provider, providerCallId])
+  @@index([centerId, startedAt])
+  @@index([leadId, startedAt])
+  @@index([userId, startedAt])
+  @@index([needsReview, startedAt])
+  @@index([peerPhone])
+  @@index([orgUnitId])
+  @@index([hasRecording, recordingPurgeAfterAt])
+}
+
+/// ÁNH XẠ MÁY NHÁNH ↔ NHÂN VIÊN ↔ CƠ SỞ (OC-9, BA mục 14).
+///
+/// BẢNG DỮ LIỆU, không hardcode. Có `effectiveFrom/To` vì một người đổi máy nhánh
+/// là chuyện thường, và CDR CŨ phải vẫn quy về đúng người đã gọi lúc đó — tra theo
+/// thời điểm cuộc gọi, không tra theo "ai đang giữ máy nhánh hôm nay".
+model CallExtension {
+  id        String  @id @default(cuid())
+  extension String
+  userId    String
+  centerId  String
+  orgUnitId String?
+
+  defaultDidNumber String?
+
+  effectiveFrom DateTime  @default(now()) @db.Timestamptz(6)
+  effectiveTo   DateTime? @db.Timestamptz(6)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  @@index([extension, effectiveFrom])
+  @@index([userId])
+  @@index([centerId])
+  @@index([orgUnitId])
+}
+
+/// DANH SÁCH KHÔNG GỌI (nội bộ) — BA mục 15.
+///
+/// CỐ Ý KHÔNG CÓ `centerId`: khách nói "đừng gọi tôi nữa" là nói với công ty, không
+/// nói với một cơ sở. Gắn cơ sở vào đây là mở đường cho cơ sở khác gọi lại đúng người
+/// vừa từ chối.
+model CallDoNotCall {
+  id     String        @id @default(cuid())
+  /// Canonical `84XXXXXXXXX`.
+  phone  String        @unique
+  source CallDncSource @default(CUSTOMER_REQUEST)
+  note   String?       @db.Text
+
+  createdById String?
+  createdAt   DateTime  @default(now()) @db.Timestamptz(6)
+  /// NULL = vô thời hạn.
+  expiresAt   DateTime? @db.Timestamptz(6)
 }
