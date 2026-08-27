@@ -9327,6 +9327,7 @@ model OutboundSpendCounter {
 
   @@id([period, axis])
   @@index([period])
+}
 // ═══════════════════════════════════════════════════════════════════════════
 // TRỤC GỌI ĐIỆN + GHI ÂM (OmiCall) — spec `plan/20-SPEC-TICH-HOP-...` §5.3
 //

@@ -905,6 +905,8 @@ export const SETTINGS = {
     // cho `chargeCount` của kỳ (bảng OutboundSpendCounter) rồi chỉnh ô này.
     schema: z.number().int().min(0).max(100_000),
     default: 400,
+    centerOverridable: false,
+  }),
   // ─── Trục gọi điện + ghi âm (OmiCall) ────────────────────────────────────
   // §2.3: thứ cần TẮT GẤP không được nằm trong env (tắt env phải deploy lại).
   // ⚠️ `revalidate` thật của cache setting là 300s — đừng hứa "tắt trong 5 giây".
