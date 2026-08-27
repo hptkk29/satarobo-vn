@@ -48,6 +48,7 @@ import {
   LayoutList,
   LogOut,
   Menu,
+  MessageSquare,
   UserPlus,
   Users,
   X,
@@ -90,6 +91,15 @@ const NHOM: NavGroup[] = [
         href: "/sale/nhap-khach-hang",
         icon: UserPlus,
         perm: PAGE_GATES["/sale/nhap-khach-hang"],
+      },
+      // Hộp thư đa kênh nằm ở nhóm này chứ không phải CSKH: nó là chỗ TRÒ CHUYỆN
+      // với khách tiềm năng (Zalo/Messenger), cùng việc với "Khách của tôi".
+      // CSKH là chăm khách ĐÃ ghi danh — khác giai đoạn, khác người dùng.
+      {
+        label: "Hộp thư",
+        href: "/sale/hop-thu",
+        icon: MessageSquare,
+        perm: PAGE_GATES["/sale/hop-thu"],
       },
     ],
   },

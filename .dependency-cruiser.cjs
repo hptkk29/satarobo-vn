@@ -61,19 +61,30 @@ module.exports = {
     },
     {
       // Spec tích hợp §2.1 PA-1 — adapter nhà cung cấp sống ở `lib/integrations/<vendor>/`
-      // (đúng cách `lib/zalo/` đang tổ chức), và `app/**` KHÔNG gọi thẳng adapter.
+      // (đúng cách `lib/zalo/` đang tổ chức), và MÀN HÌNH KHÔNG ĐƯỢC GỌI THẲNG NÓ.
       //
-      // Vì sao 'error' được ngay trong khi rule `modules/*` ở dưới vẫn là no-op: rule này
-      // khớp một cây thư mục CÓ THẬT và hiện có ĐÚNG MỘT adapter, nên nó không thể
-      // false-positive lên mã cũ. Đây là chỗ Doc 15 Q8 ("mọi external call qua
-      // `modules/integration`") được thi hành sớm mà không phải dựng khung `modules/`
-      // giữa lúc gấp — đổi nhà cung cấp thì chỉ sửa một tệp, không sửa khắp route.
+      // Gộp 27/08: trục gọi điện và hộp thư đa kênh dựng cùng ngày, mỗi bên tự thêm
+      // một luật y hệt nhau với tên khác. Giữ MỘT luật — vùng chặn lấy bản rộng hơn
+      // (`components/` cũng không được gọi thẳng), mẫu khớp lấy bản chính xác hơn
+      // (neo đuôi tệp, để `provider-types.ts` kiểu mặt tiền công khai không bị chặn oan).
+      //
+      // Vì sao gọi thẳng là hỏng: bỏ qua tầng nghiệp vụ (`lib/inbox/send.ts`,
+      // `lib/calls/*`) tức bỏ giành-chỗ-PENDING (bấm hai lần là khách nhận hai tin)
+      // và bỏ luật "chỉ gửi THÀNH CÔNG mới tính là đã trả lời" (tắt nhầm đồng hồ
+      // chăm sóc). Cả hai đều là lỗi im lặng.
+      //
+      // Vì sao để 'error' ngay trong khi luật `modules/*` bên dưới vẫn là no-op: luật
+      // này khớp một cây thư mục CÓ THẬT, nên nó không thể báo oan lên mã cũ.
+      //
+      // `lib/integrations/registry` và `lib/integrations/types` KHÔNG bị chặn — đó là
+      // mặt tiền công khai (trạng thái kênh, nhãn lý do) mà giao diện cần để nói thật.
       name: "app-no-direct-vendor-adapter",
       severity: "error",
       comment:
-        "app/** KHÔNG import thẳng lib/integrations/<vendor>/provider — đi qua tầng nghiệp vụ (vd lib/calls/*). Đổi nhà cung cấp phải chỉ đụng 1 tệp.",
-      from: { path: "^app/" },
-      to: { path: "^lib/integrations/[^/]+/provider\\.[jt]s$" },
+        "app/** và components/** KHÔNG import thẳng lib/integrations/<vendor>/provider — " +
+        "đi qua tầng nghiệp vụ (lib/inbox/send.ts, lib/calls/*). Đổi nhà cung cấp phải chỉ đụng 1 tệp.",
+      from: { path: "^(app|components)/" },
+      to: { path: "^lib/integrations/[^/]+/provider\.[jt]s$" },
     },
     {
       name: "module-no-deep-cross-import",

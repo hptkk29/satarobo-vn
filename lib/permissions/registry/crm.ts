@@ -46,6 +46,27 @@ export const crmModule: ModuleDecl = {
       description:
         "Sửa phiếu do chính mình nhập, chỉ các ô có trong biểu mẫu nhập khách hàng.",
     },
+    // ── Hộp thư đa kênh (Zalo OA / Messenger) ────────────────────────────────
+    // Prefix `inbox:` khai ĐÚNG ở module này (luật index.ts: mỗi prefix nằm trong
+    // đúng một module). Xếp vào CRM chứ không tách module riêng vì nó là hội thoại
+    // với KHÁCH — cùng họ dữ liệu với lead, và Sale là người dùng chính.
+    {
+      key: "inbox:view",
+      action: "view",
+      description:
+        "Mở hộp thư đa kênh: xem hội thoại của khách trên Zalo OA / Messenger.",
+    },
+    {
+      key: "inbox:reply",
+      action: "reply",
+      description: "Soạn và gửi tin trả lời khách trong hộp thư đa kênh.",
+    },
+    {
+      key: "inbox:assign",
+      action: "assign",
+      description:
+        "Nhận/giao hội thoại cho người phụ trách và nối hội thoại mồ côi vào phiếu khách.",
+    },
     { key: "leads:assign", action: "assign" },
     {
       key: "leads:assign-config",

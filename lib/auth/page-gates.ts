@@ -183,6 +183,25 @@ export const PAGE_GATES = {
    *  là quyền của quản lý, và trang này cố ý chỉ trả lời "khách nào của tôi". */
   "/sale/khach-cua-toi": ["leads:view-own"],
 
+  /**
+   * Hộp thư đa kênh — hội thoại của khách trên Zalo OA / Messenger.
+   *
+   * `inbox:view` là KEY MỚI, cố ý không mượn key sẵn có:
+   *  • `chat:read` seed non-GLOBAL (OWN cho Sale, ASSIGNED cho GV, CENTER cho QLCS)
+   *    nên cổng trang gọi trần sẽ luôn FALSE trên prod — đúng bẫy đã suýt khoá cửa
+   *    /tin-nhan. Và nó là chat NỘI BỘ, khác hẳn hội thoại với khách ngoài hệ.
+   *  • `leads:view-own` thì mở cửa cho đúng người nhưng nói sai việc: hộp thư có
+   *    hội thoại MỒ CÔI chưa gắn lead nào, tức có nội dung nằm ngoài phạm vi "lead
+   *    của tôi". Mượn key đó là để lộ một tập dữ liệu mà cái tên quyền không mô tả.
+   *
+   * ⚠️ Key MỚI ⇒ sau khi merge `test` → `main` PHẢI chạy `seed-prod-roles.yml`,
+   * nếu không người mở trang trên prod bị đá ra, KHÔNG kèm lỗi, và không tái hiện
+   * được ở local (local chạy RBAC v1 tĩnh).
+   * ⚠️ Vào được TRANG ≠ thấy mọi cơ sở: phạm vi do `inboxOrgScopeWhere`
+   * (`lib/inbox/scope.ts`) chặn — `scopedDb` KHÔNG che ba bảng này.
+   */
+  "/sale/hop-thu": ["inbox:view"],
+
   /** Biểu mẫu nhập khách hàng, bản đứng TRÊN site Sale.
    *  Cùng action với bản `/nhap-khach-hang` bên admin — cùng một việc, cùng một
    *  đường ghi (`ingestIntakeLead`), chỉ khác chỗ đứng. Trước 23/08 Sale gõ địa
