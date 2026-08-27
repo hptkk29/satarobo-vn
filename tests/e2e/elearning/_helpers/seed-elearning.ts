@@ -121,12 +121,34 @@ export async function dungVongHoc(): Promise<BoDuLieu> {
   //
   // Đúng một lỗi mà e2e sinh ra để bắt: mọi test đơn vị vẫn xanh vì chúng truyền
   // `db` giả, còn người thật thì mở ra thấy trang trống.
+  // ⚠️ Phải dựng `Center` TRƯỚC. `seedOrgUnits` chỉ TRA `Center` theo mã rồi gắn
+  // (`prisma/seed-orgunit.ts:135`), nó KHÔNG tạo. Trên DB sạch của CI thì không có
+  // `Center` nào ⇒ `OrgUnit("CS1").centerId = null` ⇒ mọi bản ghi seed mang
+  // `centerId: null` ⇒ `scopedDb` lọc sạch và mọi trang hiện rỗng.
+  //
+  // Máy local KHÔNG lộ ra chuyện này: DB test ở đây đã có sẵn `Center` từ những bộ
+  // test khác, nên bộ này xanh tại chỗ và ĐỎ trên CI. Đúng khoảng cách mà một DB
+  // test dùng chung lâu ngày hay giấu đi.
+  await db.center.upsert({
+    where: { code: "CS1" },
+    update: {},
+    create: {
+      code: "CS1",
+      name: "E2E Cơ sở 1",
+      slug: "e2e-cs1",
+      address: "211 Nguyễn Hữu Thọ",
+      city: "Đà Nẵng",
+    },
+  });
+
   await seedOrg(["HO", "CS1"]);
   await seedRoles();
   const cs1 = await db.orgUnit.findUniqueOrThrow({
     where: { code: "CS1" },
     select: { id: true, centerId: true },
   });
+  // Giữ chốt chặn: nó vừa bắt được đúng lỗi trên (CI đỏ, local xanh). Bỏ đi là quay
+  // lại cảnh trang render đẹp mà danh sách rỗng, không lỗi nào để lần ra.
   if (!cs1.centerId) throw new Error("seedOrg không gắn Center cho CS1");
 
   const hocVien = await seedUser({
