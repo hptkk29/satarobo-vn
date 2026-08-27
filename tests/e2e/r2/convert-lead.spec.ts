@@ -18,7 +18,7 @@ async function setup() {
   const course = await db.course.create({ data: { name: "Sata 1", slug: "sata-1-cv" } });
   const klass = await db.class.create({ data: { name: "Lớp A", courseId: course.id, centerId: cs1 } });
   const lead = await db.lead.create({
-    data: { parentName: "Chị Lan", phone: "0901234567", childName: "Bé Bi", centerId: cs1, status: "AWAITING_DECISION" },
+    data: { parentName: "Chị Lan", phone: "0901234567", childName: "Bé Bi", centerId: cs1, status: "CHO_QUYET_DINH" },
   });
   return { cs1, course, klass, lead };
 }
@@ -28,13 +28,13 @@ test.describe("[R2-02] Convert lead (transaction)", () => {
     await resetDb();
   });
 
-  test("[R2-02-C2.1][R2-02-C2.6][R2-04-C4.1] convert đầy đủ → tạo hết, lead ENROLLED, parent PENDING (no password)", async () => {
+  test("[R2-02-C2.1][R2-02-C2.6][R2-04-C4.1] convert đầy đủ → tạo hết, lead DA_DANG_KY, parent PENDING (no password)", async () => {
     const { cs1, course, klass, lead } = await setup();
     const r = await convertLeadToEnrollment(ACTOR, {
       leadId: lead.id, classId: klass.id, courseId: course.id,
       parentEmail: "ph@test.local", amount: 5_000_000, paidAmount: 5_000_000,
     });
-    expect((await db.lead.findUnique({ where: { id: lead.id } }))?.status).toBe("ENROLLED");
+    expect((await db.lead.findUnique({ where: { id: lead.id } }))?.status).toBe("DA_DANG_KY");
     expect(r.student.centerId).toBe(cs1); // C2.6
     expect(r.parent.accountStatus).toBe("PENDING_ACTIVATION"); // C4.1
     expect(r.parent.password).toBeNull(); // C4.1 — không mật khẩu mặc định
@@ -61,7 +61,7 @@ test.describe("[R2-02] Convert lead (transaction)", () => {
 
   test("[R2-05-C5.1] findConvertDuplicates trả lead/student trùng phone (cảnh báo)", async () => {
     const { cs1 } = await setup();
-    await db.lead.create({ data: { parentName: "Trùng", phone: "0907777777", centerId: cs1, status: "NEW" } });
+    await db.lead.create({ data: { parentName: "Trùng", phone: "0907777777", centerId: cs1, status: "MOI" } });
     await db.student.create({ data: { name: "Bé cũ", parentPhone: "0907777777" } });
     const dup = await findConvertDuplicates("0907777777");
     expect(dup.leads.length).toBeGreaterThanOrEqual(1);
@@ -76,7 +76,7 @@ test.describe("[R2-02] Convert lead (transaction)", () => {
   test("[R2-05-C5.1b] findConvertDuplicates khớp CHÉO dạng (DB canonical 84…, tra bằng 0…)", async () => {
     const { cs1 } = await setup();
     // DB lưu canonical — đúng hiện trạng prod sau backfill.
-    await db.lead.create({ data: { parentName: "Trùng-84", phone: "84907777888", centerId: cs1, status: "NEW" } });
+    await db.lead.create({ data: { parentName: "Trùng-84", phone: "84907777888", centerId: cs1, status: "MOI" } });
     await db.student.create({ data: { name: "Bé 84", parentPhone: "84907777888" } });
 
     // Sale gõ dạng nội địa.
@@ -102,7 +102,7 @@ test.describe("[R2-02] Convert lead (transaction)", () => {
     expect(await db.student.count()).toBe(0); // không mồ côi
     expect(await db.order.count()).toBe(0);
     expect(await db.user.count({ where: { email: "ph2@test.local" } })).toBe(0);
-    expect((await db.lead.findUnique({ where: { id: lead.id } }))?.status).toBe("AWAITING_DECISION"); // chưa đổi
+    expect((await db.lead.findUnique({ where: { id: lead.id } }))?.status).toBe("CHO_QUYET_DINH"); // chưa đổi
   });
 
   test("[R2-02-C2.3] event lead.converted phát SAU commit (thành công → có; rollback → không)", async () => {
@@ -116,7 +116,7 @@ test.describe("[R2-02] Convert lead (transaction)", () => {
   test("[R2-03-C3.1] mã hoá đơn chạy tuần tự không trùng (0001, 0002)", async () => {
     const { cs1, course, klass } = await setup();
     const mk = async (i: number) =>
-      db.lead.create({ data: { parentName: `KH${i}`, phone: `090000000${i}`, centerId: cs1, status: "NEW" } });
+      db.lead.create({ data: { parentName: `KH${i}`, phone: `090000000${i}`, centerId: cs1, status: "MOI" } });
     const l1 = await mk(1);
     const l2 = await mk(2);
     const r1 = await convertLeadToEnrollment(ACTOR, { leadId: l1.id, classId: klass.id, courseId: course.id, parentEmail: "a@test.local", amount: 1 });

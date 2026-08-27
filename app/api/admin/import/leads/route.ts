@@ -252,7 +252,7 @@ export async function POST(req: NextRequest) {
             courseId: v.courseId,
             source: v.source,
             note: v.note,
-            status: "NEW",
+            status: "MOI",
             ...(namedChildren.length > 0
               ? {
                   children: {

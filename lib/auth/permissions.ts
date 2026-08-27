@@ -61,6 +61,9 @@ export type Action =
   | "leads:view-own"
   | "leads:create"
   | "leads:edit"
+  // 27/08/2026 — đổi trạng thái lead TÁCH khỏi `leads:edit`: chỉ Sale được đẩy
+  // lead trên phễu. Quản lý cơ sở / Marketing vẫn sửa được hồ sơ, chỉ không đổi bậc.
+  | "leads:change-status"
   // 23/08/2026 — sửa HẸP: chỉ những ô CÓ TRONG biểu mẫu `/nhap-khach-hang`, và
   // chỉ trên phiếu do CHÍNH MÌNH nhập (`Lead.createdById`).
   //
@@ -71,6 +74,12 @@ export type Action =
   | "leads:edit-own-intake"
   | "leads:assign"
   | "leads:assign-config" // 03/08 — tách riêng màn "Cấu hình chia lead" khỏi leads:assign
+  // S-5 — XEM sổ lượt chia lead (`/leads/so-luot`). Key ĐỌC riêng, cố ý tách khỏi
+  // `leads:view-all`: sổ lượt là màn kiểm chứng viết CHO tổ Sale (plan/15 §5), mà
+  // `leads:view-all` là quyền quản lý gác ~8 màn khác — nới nó để Sale xem được sổ
+  // là mở kèm cả chùm. Cũng KHÔNG mượn `leads:assign-config` (chỉ SUPER_ADMIN, và
+  // đó là quyền SỬA cách chia — sổ này chỉ đọc).
+  | "leads:rotation-view"
   | "leads:delete"
   | "leads:export"
   | "leads:import" // Task #07 — import danh sách "khách đã đăng ký" từ Excel (Lead REGISTERED + LeadChild)
@@ -96,6 +105,9 @@ export type Action =
   | "trials:view"
   | "trials:manage"
   | "trials:feedback"
+  // GĐ4 — điểm danh buổi trải nghiệm. TÁCH khỏi `trials:feedback` vì hai việc thuộc
+  // hai vai khác nhau: Sale điểm danh, giáo viên nộp phiếu đánh giá.
+  | "trials:attendance"
   // --- Trial class V2 (R7-02) ---
   | "trials:assign-teacher"
   | "trials:override-capacity"
@@ -400,8 +412,20 @@ export const PERMISSIONS: Record<Action, Role[]> = {
   // phải sót: nơi nào còn enforce v1 thì tính năng này chưa có mặt.
   "leads:edit-own-intake": ["SUPER_ADMIN"],
   "leads:edit": ["SUPER_ADMIN", "CENTER_MANAGER", "SALES_CSM", "MARKETING"],
+  // CHỈ Sale (+ Quản trị hệ thống để còn gỡ kẹt). CỐ Ý KHÔNG có CENTER_MANAGER và
+  // MARKETING — đó chính là thay đổi mà chủ dự án yêu cầu 27/08/2026.
+  // ⚠️ v1 không có vai "Sale Hội sở"; ở v2 HO_SALE cũng KHÔNG được cấp key này
+  // (chốt cũ: Sale Hội sở XEM lead toàn hệ thống, KHÔNG sửa).
+  "leads:change-status": ["SUPER_ADMIN", "SALES_CSM"],
   "leads:assign": ["SUPER_ADMIN", "CENTER_MANAGER"],
   "leads:assign-config": ["SUPER_ADMIN"],
+  // S-5 — XEM sổ lượt chia lead. SALES_CSM có mặt ở đây là CẢ ĐIỂM của ticket:
+  // trước đó màn kiểm chứng gác bằng `leads:view-all` nên chính tổ Sale — người
+  // mà bằng chứng viết cho — là người duy nhất không mở được.
+  // Phạm vi CƠ SỞ do `rotationBoardScope` (lib/lead/rotation.ts) chặn, không do
+  // key này: Sale chỉ thấy sổ của cơ sở mình. Sale Hội sở CỐ Ý không có — phiếu họ
+  // tự nhập không tiêu lượt nên họ không đứng trong vòng luân phiên nào.
+  "leads:rotation-view": ["SUPER_ADMIN", "CENTER_MANAGER", "MARKETING", "SALES_CSM"],
   "leads:delete": ["SUPER_ADMIN", "CENTER_MANAGER"],
   "leads:export": ["SUPER_ADMIN", "CENTER_MANAGER", "MARKETING"],
   // Task #07 — theo pattern students:import. SALES_CSM được cấp theo quyết định
@@ -429,11 +453,25 @@ export const PERMISSIONS: Record<Action, Role[]> = {
   "ads_budget_targets:manage": ["SUPER_ADMIN", "MARKETING"],
 
   // --- Trial classes (Phase T1.4) ---
+  // TRAINING phải có `trials:view`, nếu không thì cấp `trials:assign-teacher` cho họ
+  // là vô nghĩa: cả ba trang của màn Lớp Trial đều gác bằng `trials:view`, nên Đào tạo
+  // bị đá về /dashboard trước khi thấy được nút phân công. GĐ3 và bản 23/08 của main
+  // sửa CÙNG dòng này một cách độc lập — giữ lời giải thích, dòng thì y hệt nhau.
   "trials:view": ["SUPER_ADMIN", "CENTER_MANAGER", "SALES_CSM", "TEACHER", "TRAINING"],
   "trials:manage": ["SUPER_ADMIN", "CENTER_MANAGER", "SALES_CSM"],
+  // GĐ4 (25/08/2026) — tách đôi theo ma trận đặc tả §8.2. Trước GĐ4 cả điểm danh lẫn
+  // nộp phiếu đều dùng chung `trials:feedback`, nên Sale KHÔNG điểm danh được còn
+  // giáo viên thì điểm danh được — ngược hẳn quy trình đã chốt.
   "trials:feedback": ["SUPER_ADMIN", "CENTER_MANAGER", "TEACHER"],
+  "trials:attendance": ["SUPER_ADMIN", "CENTER_MANAGER", "SALES_CSM"],
   // R7-02 — gán GV + override sĩ số chỉ quản lý cơ sở; cấu hình số buổi = Đào tạo/Admin.
-  "trials:assign-teacher": ["SUPER_ADMIN", "CENTER_MANAGER", "TRAINING"],
+  // ⚠️ XUNG ĐỘT ĐÃ GIẢI, ghi lại để không ai "sửa lại cho đúng":
+  // bản 23/08 của main là `[SUPER_ADMIN, CENTER_MANAGER, TRAINING]` (thêm Đào tạo,
+  // GIỮ Quản lý cơ sở). GĐ3 ngày 25/08 — chủ dự án chốt câu 2 — GỠ Quản lý cơ sở:
+  // Sale chỉ ĐỀ XUẤT, Đào tạo mới CHỐT giáo viên. Chốt 25/08 ra SAU nên nó thắng.
+  // Quản lý cơ sở giữ nguyên mọi việc trial còn lại (manage/feedback/attendance/
+  // override-capacity/config). Bản v2 trong seed-roles.ts đã khớp sẵn.
+  "trials:assign-teacher": ["SUPER_ADMIN", "TRAINING"],
   "trials:override-capacity": ["SUPER_ADMIN", "CENTER_MANAGER"],
   // FL W0 (QĐ-T1): cấu hình đào tạo/LMS = TRAINING (Đào tạo). CENTER_MANAGER chỉ xem nội dung LMS.
   "training:manage": ["SUPER_ADMIN", "TRAINING"],

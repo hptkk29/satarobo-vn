@@ -19,6 +19,7 @@ import {
   CalendarCheck,
   CalendarDays,
   CalendarOff,
+  CheckCheck,
   ChevronDown,
   ClipboardCheck,
   ClipboardEdit,
@@ -103,10 +104,11 @@ const NAV_GROUPS: NavGroup[] = [
     label: "Tổng quan",
     items: [
       { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard }, // luôn hiện
-      // A-02 — dashboard QLCS 4 tab. Mục RIÊNG, không thay "Dashboard" ở trên: trang đó
-      // là màn tiếp đất chung của cả 9 vai. Đọc thẳng bảng gate ⇒ menu và cổng trang
-      // không thể lệch nhau (bất biến của lib/auth/page-gates.test.ts).
-      { label: "Dashboard QLCS", href: "/dashboard-qlcs", icon: Gauge, perm: [...PAGE_GATES["/dashboard-qlcs"]] },
+      // 27/08 — GỠ mục "Dashboard QLCS" khỏi menu (chủ dự án chốt). Bốn khối của nó nay
+      // nằm THẲNG trong "Dashboard" cho Quản lý cơ sở + Quản trị hệ thống, không phân tab
+      // nữa: hai vai đó đăng nhập là thấy ngay số của mình, khỏi phải biết có màn thứ hai.
+      // Route /dashboard-qlcs GIỮ NGUYÊN (đường dẫn cũ đã gửi đi, và gate trang vẫn cần)
+      // nên nó nằm trong ALLOWLIST của components/admin/nav-coverage.test.ts.
       { label: "CRM", href: "/crm", icon: BarChart3, perm: ["leads:view-all"] },
     ],
   },
@@ -129,9 +131,12 @@ const NAV_GROUPS: NavGroup[] = [
       { label: "Cấu hình chia lead", href: "/leads/cau-hinh-chia", icon: Settings, perm: ["leads:assign-config"] },
       // Đợt D — sổ lượt luân phiên (chỉ đọc). Đặt cạnh Cấu hình chia lead vì hai
       // trang trả lời hai nửa của cùng một câu hỏi: chia KIỂU GÌ, và đã chia RA SAO.
-      // perm rộng hơn cấu hình (view-all thay vì assign-config): người phải trả lời
+      // perm rộng hơn cấu hình (không phải assign-config): người phải trả lời
       // "sao bạn kia nhiều lead hơn" là Quản lý cơ sở, không phải Super Admin.
-      { label: "Sổ lượt chia lead", href: "/leads/so-luot", icon: ListOrdered, perm: ["leads:view-all"] },
+      // S-5: lấy THẲNG từ PAGE_GATES thay vì gõ lại — mục này vừa phải hiện cho tổ
+      // Sale (key mới `leads:rotation-view`), và gõ tay hai nơi là cách chắc chắn để
+      // menu lại lệch cổng trang lần nữa.
+      { label: "Sổ lượt chia lead", href: "/leads/so-luot", icon: ListOrdered, perm: [...PAGE_GATES["/leads/so-luot"]] },
       { label: "Bàn giao lead", href: "/ban-giao-lead", icon: ArrowLeftRight, perm: ["leads:assign"] },
       { label: "Chuyển lead liên CS", href: "/leads/bao-cao-chuyen", icon: Workflow, perm: ["leads:assign"] },
       // BGĐ 31/07 — nguồn giới thiệu (affiliate): mã + link ?ref= + đối soát.
@@ -139,8 +144,11 @@ const NAV_GROUPS: NavGroup[] = [
       // R1-01 — hội thoại Messenger của Page. Trang có thật từ lâu nhưng CHƯA BAO GIỜ
       // có lối vào: chỉ gõ URL mới tới (rà 11/08).
       { label: "Messenger CRM", href: "/crm/messenger", icon: MessagesSquare, perm: ["leads:view-all", "leads:view-own"] },
-      { label: "Học thử", href: "/trials", icon: FlaskConical, perm: ["trials:view"] },
-      { label: "Lớp trải nghiệm", href: "/trial-classes", icon: FlaskConical, perm: ["trials:view"] },
+      // 26/08 — GỘP hai hệ trial làm MỘT. Hai lối vào cũ ("Học thử" hệ V1 và "Lớp trải
+      // nghiệm" hệ V2) đã gỡ khỏi menu; `/trials` và `/trial-classes` nay đều chuyển
+      // hướng về đây (thông báo cũ trong DB và tài liệu hướng dẫn còn trỏ tới chúng),
+      // nhưng không còn là chỗ để người ta bấm vào và nhập liệu song song nữa.
+      { label: "Lớp Trial", href: "/lop-trial", icon: FlaskConical, perm: ["trials:view"] },
     ],
   },
   {
@@ -176,6 +184,9 @@ const NAV_GROUPS: NavGroup[] = [
       // không có attendance:view — thiếu nó thì họ dùng được trang mà không thấy link.
       { label: "Điểm danh", href: "/attendance", icon: ClipboardCheck, perm: ["attendance:view", "attendance:edit"] },
       { label: "Ảnh lớp học", href: "/media", icon: ImageIcon, perm: [...PAGE_GATES["/media"]] },
+      // MEDIA-REVIEW (26/08) — cổng duyệt ảnh theo NGÀY → LỚP, tách khỏi "Ảnh lớp học"
+      // (thư viện tra cứu). Đặt ngay dưới để hai mục ảnh nằm cạnh nhau.
+      { label: "Duyệt ảnh", href: "/duyet-media", icon: CheckCheck, perm: [...PAGE_GATES["/duyet-media"]] },
       { label: "Học bù", href: "/hoc-bu", icon: RefreshCw, perm: ["parent-requests:manage"] },
       { label: "Cơ sở", href: "/centers", icon: MapPin, perm: ["centers:view"] },
       { label: "Phòng học", href: "/rooms", icon: DoorOpen, perm: ["rooms:view"] },

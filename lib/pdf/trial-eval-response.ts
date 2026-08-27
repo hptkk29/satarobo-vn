@@ -28,6 +28,14 @@ export type TrialEvalPdfContext = {
     updatedAt: Date;
     evaluatedByName: string | null;
   };
+  /**
+   * Hậu tố chèn vào tên file, vd "-Buoi2".
+   *
+   * GĐ4 — một ca nay có NHIỀU phiếu (mỗi buổi một phiếu). Không có hậu tố thì hai
+   * buổi tải về cùng tên và đè lên nhau trong thư mục Tải xuống. Để tuỳ chọn vì site
+   * Sale in phiếu theo ca chứ không theo buổi.
+   */
+  filenameSuffix?: string;
 };
 
 /** Bỏ dấu + ký tự lạ để tên file tải về không vỡ trên Windows/macOS. */
@@ -76,7 +84,9 @@ export async function trialEvalPdfResponse(
     );
   }
 
-  const filename = `PhieuTrial-${safeFilename(ctx.studentName)}.pdf`;
+  const filename = `PhieuTrial-${safeFilename(ctx.studentName)}${
+    ctx.filenameSuffix ? safeFilename(ctx.filenameSuffix) : ""
+  }.pdf`;
   return new NextResponse(new Uint8Array(pdf), {
     status: 200,
     headers: {

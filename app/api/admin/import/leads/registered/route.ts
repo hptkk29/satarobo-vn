@@ -1,6 +1,6 @@
 // Task #07 Việc 1 — POST /api/admin/import/leads/registered
 // Import danh sách "khách ĐÃ ĐĂNG KÝ" (file Excel thật của Sale, 3 sheet theo
-// tháng) → Lead status REGISTERED + LeadChild per học viên.
+// tháng) → Lead status DA_DANG_KY (convertedAt vẫn null) + LeadChild per học viên.
 //
 // - multipart/form-data: file (.xlsx) + mode ("dry-run" | "confirm").
 // - Dry-run BẮT BUỘC trước: trả preview {tổng, hợp lệ, lỗi, sẽ gộp, bỏ qua} —
@@ -21,8 +21,8 @@ import {
 } from "@/lib/db-scope";
 import { revalidatePath } from "next/cache";
 import { getAuditActor } from "@/lib/audit/log";
-import { recordLeadStatusChange } from "@/lib/lead/status-trail-write";
 import type { Prisma } from "@prisma/client";
+import { setLeadStatus } from "@/lib/leads/set-status";
 import { checkPermission } from "@/lib/auth/check-permission";
 import { getNonEnrollableCenterIds } from "@/lib/enrollment-flow";
 import { planRowFee, detectSameStudent } from "@/lib/lead/import-fee-plan";
@@ -497,7 +497,11 @@ export async function POST(req: NextRequest) {
   let mergedLeads = 0;
   try {
     await sdb.$transaction(
-      async (tx) => {
+      async (txRaw) => {
+        // `sdb.$transaction` trả client ĐÃ mở rộng (scopedDb), khác kiểu với
+        // `Prisma.TransactionClient` mà các helper dùng chung nhận. Cùng một ép kiểu
+        // với `lop-trial/_actions.ts` — cùng lý do, cùng chỗ đọc.
+        const tx = txRaw as unknown as Prisma.TransactionClient;
         await inBatches(scopedCreates, async (c) => {
           await tx.lead.create({
             data: {
@@ -508,9 +512,16 @@ export async function POST(req: NextRequest) {
               courseId: c.courseId,
               assignedToId: c.assignedToId,
               assignedAt: c.assignedToId ? new Date() : null,
-              // BGĐ câu 4(1): khách ĐÃ đăng ký → REGISTERED trực tiếp (backfill,
+              // BGĐ câu 4(1): khách ĐÃ đăng ký → DA_DANG_KY trực tiếp (backfill,
               // không đi transition guard C4). Convert → flow convert v2.
-              status: "REGISTERED",
+              // GĐ5 — lead nhập kiểu này CHƯA convert; mốc phân biệt là `convertedAt`
+              // (vẫn null ở đây), không còn là bậc status riêng như REGISTERED cũ.
+              status: "DA_DANG_KY",
+              // `statusChangedAt` KHÔNG set ở đây — `Lead.statusChangedAt` có
+              // `@default(now())`, đóng mốc cho MỌI đường tạo lead thay vì chỗ này
+              // tự lo phần mình. Lead sinh ra ở đây cũng cố ý không có dòng sổ mở
+              // đầu: không đường tạo lead nào khác ghi dòng mở đầu, thêm riêng ở đây
+              // là làm sổ lệch chuẩn giữa các đường vào.
               source: c.source,
               note: c.note,
               children: {
@@ -528,7 +539,7 @@ export async function POST(req: NextRequest) {
                   actorId,
                   actorName,
                   type: "NOTE",
-                  content: `Nhập từ Excel danh sách đăng ký (REGISTERED, ${c.children.length} học viên)`,
+                  content: `Nhập từ Excel danh sách đăng ký (Đã đăng ký, ${c.children.length} học viên)`,
                   metadata: { system: true, import: "registered-excel" },
                 },
               },
@@ -541,10 +552,29 @@ export async function POST(req: NextRequest) {
 
         await inBatches(changedMerges, async (m) => {
           const existing = existingByPhone.get(m.phone);
+          // ⚠️ `status` được TÁCH khỏi `m.set` và đi qua cửa ghi `setLeadStatus`.
+          //
+          // Đây là lượt nâng bậc trên lead ĐANG CÓ (đường gộp), tức một lần đổi trạng
+          // thái thật. Trải nó vào `...m.set` thì cột đổi nhưng sổ `LeadStatusHistory`
+          // trống, `statusChangedAt` đứng im, và nếu sau này bảng gộp có nhánh hạ bậc
+          // thì `droppedAtStage` cũng mất. Nhập tệp là đường đổi trạng thái HÀNG LOẠT
+          // — chỗ khuyết sổ ở đây làm hỏng phễu nhiều lead một lượt chứ không phải một.
+          const { status: bacMoi, ...setKhongStatus } = m.set;
+          if (bacMoi) {
+            await setLeadStatus({
+              tx,
+              leadId: m.leadId,
+              to: bacMoi,
+              source: "import",
+              actorId,
+              actorName,
+              reason: "Gộp từ Excel danh sách đăng ký",
+            });
+          }
           await tx.lead.update({
             where: { id: m.leadId },
             data: {
-              ...m.set,
+              ...setKhongStatus,
               ...(m.noteAppend
                 ? { note: existing?.note ? `${existing.note}\n\n${m.noteAppend}` : m.noteAppend }
                 : {}),
@@ -566,29 +596,18 @@ export async function POST(req: NextRequest) {
                   actorId,
                   actorName,
                   type: "NOTE",
-                  content: `Gộp từ Excel danh sách đăng ký (bổ sung field trống${m.newChildren.length > 0 ? `, +${m.newChildren.length} học viên` : ""}${m.set.status ? ", chuyển REGISTERED" : ""})`,
+                  content: `Gộp từ Excel danh sách đăng ký (bổ sung field trống${m.newChildren.length > 0 ? `, +${m.newChildren.length} học viên` : ""}${m.set.status ? ", chuyển Đã đăng ký" : ""})`,
                   metadata: { system: true, import: "registered-excel", merge: true },
                 },
               },
             },
           });
-          // C-07 — đường GỘP này đẩy lead cũ sang "Đã đăng ký", nhưng vết duy
-          // nhất là mấy chữ "chuyển REGISTERED" nhét trong `content` của một
-          // dòng NOTE: không lọc được, không có `oldValues`, và mục "Lịch sử
-          // thay đổi" thì trống. Ghi mốc như mọi đường đổi trạng thái khác.
-          if (m.set.status && existing && existing.status !== m.set.status) {
-            await recordLeadStatusChange({
-              // `sdb.$transaction` trao client đã bọc extension — cùng lối ép kiểu
-              // đang dùng ở các action khác (`txRaw as unknown as ...`).
-              tx: tx as unknown as Prisma.TransactionClient,
-              leadId: m.leadId,
-              actorId,
-              actorName,
-              from: existing.status,
-              to: m.set.status,
-              source: "IMPORT",
-            });
-          }
+          // C-07 (vết người đọc) KHÔNG gọi riêng ở đây nữa: `setLeadStatus` phía
+          // trên đã gọi nó bên trong. Gọi thêm lần nữa là đếm đôi một sự việc —
+          // hai dòng "Lịch sử thay đổi" và hai dòng timeline cho cùng lượt gộp.
+          // Mối lo gốc của C-07 (mốc chỉ nằm trong `content` của một dòng NOTE,
+          // không lọc được, không có `oldValues`) vẫn được xử — chỉ là xử ở cửa
+          // chung thay vì ở đây.
           await Promise.all(
             m.childUpdates.map((cu) => {
               const before = existing?.children.find((ch) => ch.id === cu.childId);

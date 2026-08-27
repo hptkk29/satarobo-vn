@@ -462,12 +462,12 @@ async function leadFollowup(user: TaskUser, now: Date, cfg: PendingCfg): Promise
   };
 
   const [newLeads, overdueLeads, items] = await Promise.all([
-    db.lead.count({ where: { ...baseWhere, status: "NEW" } }),
+    db.lead.count({ where: { ...baseWhere, status: "MOI" } }),
     db.lead.count({ where: { ...baseWhere, tasks: { some: { status: "OPEN", dueAt: { lt: now } } } } }),
     db.lead.findMany({
       where: {
         ...baseWhere,
-        OR: [{ status: "NEW" }, { tasks: { some: { status: "OPEN", dueAt: { lt: now } } } }],
+        OR: [{ status: "MOI" }, { tasks: { some: { status: "OPEN", dueAt: { lt: now } } } }],
       },
       select: { id: true, parentName: true, status: true },
       orderBy: { createdAt: "asc" },
@@ -486,7 +486,7 @@ async function leadFollowup(user: TaskUser, now: Date, cfg: PendingCfg): Promise
     href: "/leads",
     items: items.map((l) => ({
       id: l.id,
-      label: `${l.parentName}${l.status === "NEW" ? " (mới)" : ""}`,
+      label: `${l.parentName}${l.status === "MOI" ? " (mới)" : ""}`,
       href: `/leads/${l.id}`,
     })),
   };
@@ -671,7 +671,10 @@ async function classNoTeacher(user: TaskUser, now: Date, cfg: PendingCfg): Promi
 }
 
 async function registeredStale(user: TaskUser, now: Date, cfg: PendingCfg): Promise<PendingTaskGroup | null> {
-  // Câu 38 — khách đã "Đã đăng ký" (REGISTERED) nhưng chưa chốt ghi danh quá lâu.
+  // Câu 38 — khách đã "Đã đăng ký" (DA_DANG_KY) nhưng chưa chốt ghi danh quá lâu.
+  // GĐ5 — DA_DANG_KY nay gộp cả ENROLLED cũ, nên tập này KHÔNG còn thuần "chưa chốt":
+  // lead đã convert xong vẫn mang DA_DANG_KY và sẽ lọt vào nhóm tồn đọng. Xem ghi chú
+  // ở `where` bên dưới — đã lọc thêm `convertedAt: null` để giữ đúng nghĩa "câu 38".
   const canAll = cfg.can("leads:view-all");
   const canOwn = cfg.can("leads:view-own");
   if (!canAll && !canOwn) return null;
@@ -683,14 +686,31 @@ async function registeredStale(user: TaskUser, now: Date, cfg: PendingCfg): Prom
   const rows = await db.lead.findMany({
     where: {
       deletedAt: null,
-      status: "REGISTERED",
-      // updatedAt = mốc gần nhất chạm lead (proxy thời gian nằm ở REGISTERED — schema không
-      // có status-history riêng). Quá REGISTERED_STALE_DAYS → nhắc chốt.
-      updatedAt: { lt: staleBefore },
+      status: "DA_DANG_KY",
+      // GĐ5 — lọc thêm `convertedAt: null`: sau khi gộp ENROLLED vào DA_DANG_KY, không
+      // có điều kiện này thì MỌI lead đã chốt ghi danh cũng lên chuông "chưa chốt".
+      convertedAt: null,
+      // GĐ1 — đo bằng MỐC ĐỔI TRẠNG THÁI THẬT (`statusChangedAt`), không còn dùng
+      // `updatedAt` làm proxy. Proxy cũ sai theo hướng nguy hiểm nhất: MỌI thao tác
+      // chạm lead (ghi chú, đổi người phụ trách, gắn nguồn giới thiệu) đều dời
+      // `updatedAt`, nên lead nằm im hai tuần vẫn không bao giờ lên chuông.
+      //
+      // Lead cũ có `statusChangedAt` NULL (chưa đổi trạng thái lần nào kể từ GĐ1) —
+      // rơi về `updatedAt` để không mất trắng nhóm tồn đọng đang có.
+      OR: [
+        { statusChangedAt: { lt: staleBefore } },
+        { statusChangedAt: null, updatedAt: { lt: staleBefore } },
+      ],
       ...(selfOnly ? { assignedToId: user.id } : centerScope ? { centerId: centerScope } : {}),
     },
-    select: { id: true, parentName: true, childName: true, updatedAt: true },
-    orderBy: { updatedAt: "asc" },
+    select: {
+      id: true,
+      parentName: true,
+      childName: true,
+      updatedAt: true,
+      statusChangedAt: true,
+    },
+    orderBy: [{ statusChangedAt: "asc" }, { updatedAt: "asc" }],
     take: 50,
   });
   return {
@@ -698,7 +718,9 @@ async function registeredStale(user: TaskUser, now: Date, cfg: PendingCfg): Prom
     label: "Khách đã đăng ký quá lâu",
     count: rows.length,
     overdueCount: rows.length,
-    href: "/leads?status=REGISTERED",
+    // ⚠️ Khớp với `status: "DA_DANG_KY"` của truy vấn ngay trên. Giá trị enum đã chết
+    // (?status=REGISTERED) bị màn /leads bỏ qua im lặng ⇒ bấm chuông ra CẢ danh sách.
+    href: "/leads?status=DA_DANG_KY",
     items: rows.slice(0, cfg.itemLimit).map((r) => ({
       id: r.id,
       label: `${r.childName ?? r.parentName} — chưa chốt ghi danh`,

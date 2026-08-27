@@ -10,11 +10,14 @@ import { computeEnrollmentPrice } from "@/lib/finance/pricing";
 import { linkRecordedPaymentsToEnrollments } from "@/lib/finance/payment";
 import { findParentMatch, findExistingStudent } from "@/lib/crm/dedupe";
 import { canonicalPhone } from "@/lib/phone";
+import { recordLeadStatusLedger } from "@/lib/leads/set-status";
 import {
   createBackfillOrderPaymentInTx,
   type BackfillPaymentInput,
 } from "@/lib/crm/backfill-order";
 import { inferLeadChildIdForConvert } from "@/lib/orders/lead-child-link";
+import { CLOSED_CHILD_STATUS, resolveClosedLeadChildIds } from "@/lib/lead/close-mark";
+import { decideLeadLostFields } from "@/lib/lead/lost-status";
 import { syncConversationMembership } from "@/lib/chat/sync-membership";
 import {
   ensureCommissionStatement,
@@ -199,13 +202,41 @@ export async function convertLeadV2(actor: AuditActor, input: ConvertV2Input): P
   const result = await db.$transaction(async (tx) => {
 
     // CLAIM atomic chống race (2 Sale song song): chỉ 1 lượt chuyển khỏi status chưa-kết-thúc.
-    // C2 — điều kiện claim đổi từ status=REGISTERED sang status NOT IN (terminal): vẫn chỉ 1
-    // lượt thắng (lượt sau thấy status=ENROLLED ∈ terminal → count 0 → ALREADY_CONVERTED).
+    // GĐ5 — KHOÁ CHỐNG ĐUA nay bám `convertedAt IS NULL` thay vì bám STATUS.
+    //
+    // Vì sao BẮT BUỘC đổi trước khi gộp ENROLLED + REGISTERED: khoá cũ dựa vào việc
+    // ENROLLED nằm trong danh sách terminal, nên lượt convert thứ hai thấy count=0 và
+    // dừng. Gộp hai trạng thái xong thì lead "đã đăng ký" (chưa convert) cũng mang
+    // đúng giá trị đó ⇒ nó sẽ KHÔNG BAO GIỜ convert được nữa. Đây là thứ tự bắt buộc,
+    // không phải tuỳ chọn.
+    //
+    // `convertedAt` là mốc do chính lượt convert ghi, nên nó là khoá đúng nghĩa: một
+    // lead chỉ convert được một lần, bất kể trạng thái đang là gì. Vẫn atomic vì đây
+    // là một lệnh updateMany duy nhất.
     const claim = await tx.lead.updateMany({
-      where: { id: lead.id, status: { notIn: ["ENROLLED", "LOST", "DUPLICATE"] }, deletedAt: null },
-      data: { status: "ENROLLED", convertedById: actor.id, convertedAt: new Date() },
+      where: {
+        id: lead.id,
+        convertedAt: null,
+        // Lead đã mất thì vẫn chặn: chưa convert nhưng cũng không nên convert.
+        // GĐ5 — trước là `notIn: ["LOST", "DUPLICATE"]`; hai giá trị đó nay cùng là
+        // DA_MAT (chống trùng chuyển sang ràng buộc lúc TẠO lead), nên gộp làm một.
+        status: { notIn: ["DA_MAT"] },
+        deletedAt: null,
+      },
+      data: { status: "DA_DANG_KY", convertedById: actor.id, convertedAt: new Date() },
     });
     if (claim.count === 0) throw new Error("ALREADY_CONVERTED");
+    // GĐ1 — giữ nguyên `updateMany` làm lượt claim atomic (hai Sale bấm cùng lúc thì
+    // chỉ một lượt thắng), chỉ nối thêm sổ. `from` là trạng thái đọc TRƯỚC claim.
+    await recordLeadStatusLedger({
+      tx,
+      leadId: lead.id,
+      from: lead.status,
+      to: "DA_DANG_KY",
+      source: "convert",
+      actorId: actor.id,
+      actorName: actor.name ?? null,
+    });
 
     const center = await tx.center.findUnique({ where: { id: lead.centerId! }, select: { code: true } });
     const centerCode = center?.code ?? "CS";
@@ -447,6 +478,46 @@ export async function convertLeadV2(actor: AuditActor, input: ConvertV2Input): P
       actor,
     });
 
+    // ── G-06 · MỐC CHỐT theo TỪNG CON (26/08/2026) ────────────────────────────────
+    //
+    // Trước đợt này, chốt ghi danh KHÔNG đụng gì tới `LeadChild`: con đã vào học vẫn
+    // nằm ở trạng thái cũ (hoặc NULL với phiếu cũ) và không có mốc chốt nào. Hệ quả:
+    // C-03 ("Lead đã chuyển đổi") không có cột **thời gian chốt** để tính, còn C-02
+    // (tỷ lệ thành công) thì đếm mẫu số bằng số con mà tử số luôn bằng 0.
+    //
+    // Ghi Ở ĐÂY, trong CÙNG transaction tạo Enrollment — không phải một lượt cập nhật
+    // rời sau commit. Rời nhau là đẻ ra khe "đã ghi danh nhưng chưa có mốc chốt", và
+    // khe đó không có job nào đối soát: nó chỉ hiện ra dưới dạng một con số báo cáo
+    // thấp hơn thực tế.
+    //
+    // ⚠️ Quy theo CON, và quy được BAO NHIÊU CON THÌ GHI BẤY NHIÊU — khác hẳn luật của
+    // ĐƠN HÀNG ngay bên trên (`inferLeadChildIdForConvert`: 2 con ⇒ `null`). Tiền của
+    // một đơn chung không chia được cho hai đứa, nhưng sự kiện "đứa này đã thành học
+    // viên" thì không mập mờ chút nào. Xem `lib/lead/close-mark.ts`.
+    //
+    // `updateMany` + `leadId: lead.id`: chặn ca chỗ gọi truyền `leadChildId` của phiếu
+    // KHÁC (bulk-convert nhận dữ liệu từ file). Con lạ thì không khớp `where` nên
+    // không có gì bị ghi — không ném, không đổ cả lượt chốt vì một mã sai.
+    const closedChildIds = resolveClosedLeadChildIds(input.students);
+    if (closedChildIds.length > 0) {
+      await tx.leadChild.updateMany({
+        where: { id: { in: closedChildIds }, leadId: lead.id },
+        // `now` là mốc DUY NHẤT của cả lượt convert (dựng trước transaction) — hai con
+        // chốt cùng lượt phải mang cùng một mốc, kể cả khi transaction vắt qua nửa đêm.
+        data: { status: CLOSED_CHILD_STATUS, closedAt: now },
+      });
+
+      // Con từng bị đánh dấu RỚT nay quay lại và vào học: `Lead.lostNote`/`lostAt`
+      // (cấp phụ huynh — quyết định B5) có thể đã hết chỗ bám. Đi qua ĐÚNG hàm quyết
+      // định của C-06 thay vì tự xoá: nó chỉ xoá khi KHÔNG CÒN con nào rớt, vì xoá vô
+      // điều kiện là xoá mất lý do rớt của ĐỨA CÒN LẠI và không có đường dựng lại.
+      const lostChildCount = await tx.leadChild.count({
+        where: { leadId: lead.id, status: "LOST" },
+      });
+      const patch = decideLeadLostFields({ intent: "unmark", lostChildCount, now });
+      if (patch) await tx.lead.update({ where: { id: lead.id }, data: patch });
+    }
+
     await writeAudit({
       actor,
       module: "enrollment",
@@ -472,7 +543,9 @@ export async function convertLeadV2(actor: AuditActor, input: ConvertV2Input): P
       actorId: actor.id,
       actorName: actor.name,
       from: lead.status,
-      to: "ENROLLED",
+      // "DA_DANG_KY" chứ không "ENROLLED": GĐ5 gộp ENROLLED vào DA_DANG_KY. Mốc
+      // "đã chốt" từ nay đọc bằng `convertedAt` (vừa set ở lượt claim phía trên).
+      to: "DA_DANG_KY",
       source: "CONVERT",
       auditAlreadyWritten: true,
     });

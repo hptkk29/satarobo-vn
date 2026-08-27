@@ -1,6 +1,7 @@
 import { db } from "@/lib/db";
 import { logLeadAudit } from "@/lib/audit/log";
 import { assignmentWrite } from "@/lib/lead/assignment";
+import { LEAD_CLOSED_STATUSES } from "@/lib/leads/status";
 import type { Prisma } from "@prisma/client";
 
 // =============================================================================
@@ -9,7 +10,8 @@ import type { Prisma } from "@prisma/client";
 // =============================================================================
 
 // Trạng thái "đã đóng" — khi lọc onlyActive thì loại các lead này.
-const TERMINAL_STATUSES = ["ENROLLED", "LOST", "DUPLICATE"] as const;
+// GĐ0 — lấy từ nguồn duy nhất thay vì chép tay lần thứ ba.
+const TERMINAL_STATUSES = LEAD_CLOSED_STATUSES;
 
 export interface HandoverFilters {
   statuses?: string[]; // lọc theo LeadStatus cụ thể
@@ -47,7 +49,14 @@ function resolveWhere(
     and.push({ utmCampaign: filters.campaign });
   }
   if (filters.onlyActive) {
+    // ⚠️ Hai vế, không phải một. Sau GĐ5 tập đóng chỉ còn `DA_MAT` (cố ý — lead đã
+    // đăng ký mà chưa xếp lớp vẫn là việc đang mở), nên lọc theo status MỘT MÌNH sẽ
+    // lôi cả lead đã convert XONG từ đời nào vào danh sách bàn giao. `convertedAt` do
+    // chính lượt convert ghi ⇒ có mốc = hồ sơ đã khép, không còn gì để bàn giao.
+    // Lưu ý: vế này CHỈ áp cho onlyActive. Ai chủ động tick trạng thái `DA_DANG_KY` ở
+    // `filters.statuses` thì vẫn phải thấy đủ lead đã đăng ký — đó là lựa chọn có ý thức.
     and.push({ status: { notIn: [...TERMINAL_STATUSES] as never } });
+    and.push({ convertedAt: null });
   }
   // Cách ly cơ sở (chống bàn giao chéo CS): chỉ những lead trong tầm nhìn cơ sở
   // của actor. Mảng rỗng → không match lead nào (fail-safe). "ALL" → bỏ qua.

@@ -39,6 +39,10 @@ export const ROLE_SEED: RoleSeed[] = [
       { action: "dashboard:view", scopeType: "GLOBAL" },
       // US-03 — quản nhóm người dùng + grant nhóm (chỉ SUPER_ADMIN, như roles:manage).
       { action: "user-groups:manage", scopeType: "GLOBAL" },
+      // 27/08/2026 — đổi trạng thái lead nay là quyền RIÊNG, chỉ Sale. SUPER_ADMIN đã
+      // bypass toàn bộ quyền trong can() v2 nên dòng này KHÔNG đổi hành vi; khai để ma
+      // trận nói được ai đẩy được lead trên phễu, và để v1 (local/dev) khớp v2.
+      { action: "leads:change-status", scopeType: "GLOBAL" },
       // C-01 — chỉ tiêu lead theo tháng × cơ sở. SUPER_ADMIN đã bypass toàn bộ quyền
       // trong can() v2 nên dòng này KHÔNG đổi hành vi; khai cho khớp v1 + rõ ý, và để
       // ma trận nói được "ai đặt được chỉ tiêu toàn hệ thống" mà không phải suy từ bypass.
@@ -47,6 +51,10 @@ export const ROLE_SEED: RoleSeed[] = [
       // SUPER_ADMIN đã bypass trong can() v2 nên dòng này KHÔNG đổi hành vi, khai để
       // ma trận nói được "ai đặt được chỉ tiêu toàn hệ thống" mà không phải suy từ bypass.
       { action: "ads_budget_targets:manage", scopeType: "GLOBAL" },
+      // S-5 — XEM sổ lượt chia lead. SUPER_ADMIN đã bypass toàn bộ quyền trong can() v2
+      // nên dòng này KHÔNG đổi hành vi; khai để ma trận nói được ai mở được màn kiểm
+      // chứng mà không phải suy từ bypass.
+      { action: "leads:rotation-view", scopeType: "GLOBAL" },
       // #17 (câu 55): học bạ. SUPER_ADMIN đã bypass toàn bộ quyền trong can() v2
       // (lib/auth/can.ts) → 2 dòng này KHÔNG đổi hành vi, thêm cho khớp v1 + rõ ý.
       { action: "report-cards:manage", scopeType: "GLOBAL" },
@@ -250,6 +258,10 @@ export const ROLE_SEED: RoleSeed[] = [
       { action: "dashboard:view", scopeType: "GLOBAL" },
       { action: "leads:view-all", scopeType: "GLOBAL" },
       { action: "leads:view-pii", scopeType: "GLOBAL" },
+      // S-5 — XEM sổ lượt chia lead. Marketing vốn vào được màn này qua
+      // `leads:view-all`; khai key riêng để gate không phụ thuộc quyền quản lý nữa.
+      // Không đổi ai-thấy-gì với vai này, chỉ làm ý định nói ra thành lời.
+      { action: "leads:rotation-view", scopeType: "GLOBAL" },
       { action: "blog:edit", scopeType: "GLOBAL" },
       { action: "employees:view-public", scopeType: "GLOBAL" },
       { action: "honors:view", scopeType: "GLOBAL" },
@@ -429,6 +441,12 @@ export const ROLE_SEED: RoleSeed[] = [
       { action: "elearning:exam:grade", scopeType: "GLOBAL" },
       { action: "elearning:exam:unlock", scopeType: "GLOBAL" },
       { action: "elearning:report:export", scopeType: "GLOBAL" },
+      // ── GĐ3 (chủ dự án chốt câu 2, 25/08/2026) — PHÂN CÔNG GIÁO VIÊN TRẢI NGHIỆM ──
+      // Chốt này KHÔNG thêm dòng nào ở đây: `trials:view` + `trials:assign-teacher`
+      // đã có sẵn trong khối "QUẢN LÝ TOÀN BỘ GIÁO VIÊN" phía trên (bản 23/08 của
+      // main). Phần việc của GĐ3 là GỠ `trials:assign-teacher` khỏi Quản lý cơ sở —
+      // xem chú thích ở vai CENTER_MANAGER. Khai lại ở đây là hai dòng trùng trong
+      // cùng một vai, và người đọc sau sẽ tưởng có hai nguồn cấp khác nhau.
     ],
   },
   {
@@ -513,6 +531,11 @@ export const ROLE_SEED: RoleSeed[] = [
       // ⚠️ Đổi ở đây CHƯA có hiệu lực trên prod: phải chạy workflow seed-prod-roles.yml
       // sau khi merge vào main, nếu không QLCS mở màn ra là TRẮNG, không kèm lỗi.
       { action: "lead_targets:manage", scopeType: "GLOBAL" },
+      // S-5 — XEM sổ lượt chia lead. Quản lý cơ sở vốn vào được qua `leads:view-all`;
+      // khai key riêng để gate không còn buộc vào quyền quản lý. Người phải trả lời
+      // câu "sao bạn kia nhiều lead hơn" chính là vai này, nên họ giữ đường vào.
+      // GLOBAL là bắt buộc (gate gọi TRẦN); phạm vi cơ sở do `rotationBoardScope` lo.
+      { action: "leads:rotation-view", scopeType: "GLOBAL" },
       // ── Học viên · lớp · ghi danh ──
       { action: "students:view-all", scopeType: "GLOBAL" },
       { action: "students:create", scopeType: "GLOBAL" },
@@ -543,8 +566,13 @@ export const ROLE_SEED: RoleSeed[] = [
       // ── Trải nghiệm · phụ huynh · media ──
       { action: "trials:view", scopeType: "GLOBAL" },
       { action: "trials:manage", scopeType: "GLOBAL" },
-      { action: "trials:assign-teacher", scopeType: "GLOBAL" },
+      // GĐ3 (25/08/2026) — `trials:assign-teacher` ĐÃ GỠ khỏi vai này, chuyển sang
+      // Đào tạo theo chốt câu 2. Quản lý cơ sở vẫn giữ trials:manage/feedback/config
+      // và vẫn override được sĩ số; chỉ riêng việc CHỐT giáo viên là của Đào tạo.
       { action: "trials:feedback", scopeType: "GLOBAL" },
+      // GĐ4 — Quản lý cơ sở giữ CẢ HAI (điểm danh lẫn nộp phiếu) để còn trực thay khi
+      // Sale hoặc giáo viên vắng. Vai chuyên trách mới là người làm thường ngày.
+      { action: "trials:attendance", scopeType: "GLOBAL" },
       { action: "trials:override-capacity", scopeType: "GLOBAL" },
       { action: "parent-requests:manage", scopeType: "GLOBAL" },
       { action: "parent-feedback:view", scopeType: "GLOBAL" },
@@ -724,9 +752,23 @@ export const ROLE_SEED: RoleSeed[] = [
       { action: "leads:view-pii", scopeType: "GLOBAL" },
       { action: "leads:create", scopeType: "GLOBAL" },
       { action: "leads:edit", scopeType: "GLOBAL" },
+      // 27/08/2026 — CHỈ Sale được đổi trạng thái lead (chủ dự án chốt). Quản lý cơ sở
+      // và Marketing giữ `leads:edit` nhưng KHÔNG có key này ⇒ sửa hồ sơ được, đẩy bậc
+      // thì không. ⚠️ Đổi ở đây chưa có hiệu lực trên prod cho tới khi chạy
+      // seed-prod-roles.yml; trên dev/test phải chạy tay `pnpm db:seed:roles`.
+      { action: "leads:change-status", scopeType: "GLOBAL" },
       // Task #07 — quyết định user 07/07/2026: Sale được import danh sách "đã đăng
       // ký" (Sale giữ Google Sheet gốc — câu 33). CENTER: import gán vào cơ sở mình.
       { action: "leads:import", scopeType: "GLOBAL" },
+      // S-5 — XEM sổ lượt chia lead, CHỈ ĐỌC. Đây là quyền MỚI của vai này: trước đó
+      // màn kiểm chứng gác bằng `leads:view-all` (vai này cố ý không có) nên chính tổ
+      // Sale không mở được cái màn dựng ra để dập tin đồn thiên vị với họ.
+      // GLOBAL là BẮT BUỘC, không phải nới tay: gate cấp trang gọi `checkAnyPermission`
+      // KHÔNG target, seed CENTER sẽ trả FALSE trên prod trong khi local (v1) vẫn xanh.
+      // Sale vẫn CHỈ thấy sổ cơ sở mình — chặn ở `rotationBoardScope` (lib/lead/rotation.ts).
+      // ⚠️ Đổi ở đây CHƯA có hiệu lực trên prod: phải chạy workflow seed-prod-roles.yml
+      // sau khi merge vào main, nếu không Sale vẫn bị đá ra như cũ.
+      { action: "leads:rotation-view", scopeType: "GLOBAL" },
       { action: "students:create", scopeType: "GLOBAL" },
       { action: "students:view-all", scopeType: "GLOBAL" },
       { action: "students:edit", scopeType: "GLOBAL" },
@@ -741,6 +783,10 @@ export const ROLE_SEED: RoleSeed[] = [
       { action: "honors:view", scopeType: "CENTER" },
       { action: "trials:view", scopeType: "GLOBAL" },
       { action: "trials:manage", scopeType: "GLOBAL" },
+      // GĐ4 (25/08/2026) — Sale ĐIỂM DANH buổi trải nghiệm, đúng ma trận đặc tả §8.2.
+      // Trước GĐ4 việc này gác bằng `trials:feedback` mà vai này không có, nên Sale
+      // không điểm danh được dù quy trình giao cho họ.
+      { action: "trials:attendance", scopeType: "GLOBAL" },
       // ── F5 (Đợt 3, mở phạm vi 10/08/2026): nhắn riêng 1-1 với PHỤ HUYNH MÌNH PHỤ TRÁCH ──
       // Scope **OWN**, giống hệt vai PARENT, và CỐ Ý KHÔNG dùng CENTER: `scopeMatches`
       // cho CENTER chỉ cần `target.centerId` khớp, mà nhóm lớp LUÔN có `centerId` ⇒ cấp

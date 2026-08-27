@@ -148,7 +148,7 @@ export function ColumnPicker({
       </button>
 
       <Dialog open={open} onOpenChange={moDong}>
-        <DialogContent className="max-h-[90vh] max-w-2xl overflow-y-auto">
+        <DialogContent className="max-h-[90vh] w-[min(96vw,72rem)] max-w-[72rem] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Tuỳ chọn cột</DialogTitle>
             <DialogDescription>
@@ -157,7 +157,7 @@ export function ColumnPicker({
             </DialogDescription>
           </DialogHeader>
 
-          <div className="grid gap-5 sm:grid-cols-2">
+          <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)]">
             {/* Đang hiện — kéo thả sắp thứ tự */}
             <section>
               <h3 className="mb-2 text-sm font-bold text-foreground">
@@ -178,7 +178,7 @@ export function ColumnPicker({
                       aria-hidden
                       className="h-4 w-4 shrink-0 cursor-grab text-muted-foreground"
                     />
-                    <span className="min-w-0 flex-1 truncate text-sm text-foreground">
+                    <span className="min-w-0 flex-1 break-words text-sm leading-snug text-foreground">
                       {cot.label}
                       {piiMasked && cot.pii && (
                         <span className="ml-1 text-xs text-muted-foreground">(đã che)</span>
@@ -243,7 +243,7 @@ export function ColumnPicker({
                               className="flex w-full items-center gap-1.5 rounded-lg border border-dashed border-border px-2 py-1.5 text-left text-sm text-muted-foreground hover:bg-muted hover:text-foreground"
                             >
                               <Plus className="h-3.5 w-3.5 shrink-0" />
-                              <span className="min-w-0 flex-1 truncate">
+                              <span className="min-w-0 flex-1 break-words leading-snug">
                                 {cot.label}
                                 {piiMasked && cot.pii && (
                                   <span className="ml-1 text-xs">(đã che)</span>

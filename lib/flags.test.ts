@@ -1,5 +1,11 @@
 import { describe, it, expect, afterEach } from "vitest";
-import { isAuthPhoneProvisioningEnabled, isPaymentLedgerV2Enabled } from "./flags";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import {
+  isAuthPhoneProvisioningEnabled,
+  isPaymentLedgerV2Enabled,
+  isSaleSiteEnabled,
+} from "./flags";
 
 // AUTH-SĐT P5 — cờ ngắt đường TỰ ĐỘNG cấp tài khoản phụ huynh theo SĐT.
 // Doc phase đã từng ghi cờ `AUTH_PHONE_PROVISIONING` ở hàng "Feature flag" và ở
@@ -72,6 +78,44 @@ describe("isPaymentLedgerV2Enabled", () => {
     for (const v of ["", "false"]) {
       process.env[LEDGER_KEY] = v;
       expect(isPaymentLedgerV2Enabled(), `giá trị ${JSON.stringify(v)}`).toBe(false);
+    }
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// S-7 (26/08/2026) — cờ site Sale phải CÓ MẶT trong `.env.example`.
+//
+// `.env.example` là thứ duy nhất người dựng môi trường mới đọc. Cờ không có ở đó
+// thì nó vô hình: không ai biết `sale.satarobo.vn` có công tắc, và cách duy nhất
+// phát hiện là đọc `lib/flags.ts`. Đúng cái đầu file `.env.example` cảnh báo —
+// "THIẾU FEATURE FLAG = tính năng tự tắt trên bản deploy dù localhost vẫn thấy".
+// ─────────────────────────────────────────────────────────────────────────────
+const SALE_KEY = "SALE_SITE_ENABLED";
+const ENV_EXAMPLE = readFileSync(join(process.cwd(), ".env.example"), "utf8");
+
+describe("isSaleSiteEnabled", () => {
+  afterEach(() => {
+    delete process.env[SALE_KEY];
+  });
+
+  it("`.env.example` có khai cờ — người dựng môi trường mới nhìn thấy nó", () => {
+    expect(
+      new RegExp(`^${SALE_KEY}=`, "m").test(ENV_EXAMPLE),
+      "thiếu dòng SALE_SITE_ENABLED trong .env.example",
+    ).toBe(true);
+  });
+
+  it("mặc định TẮT khi không khai env — site Sale không tự mở", () => {
+    delete process.env[SALE_KEY];
+    expect(isSaleSiteEnabled()).toBe(false);
+  });
+
+  it('CHỈ đúng chuỗi "true" mới bật — gõ gần đúng là VẪN TẮT', () => {
+    process.env[SALE_KEY] = "true";
+    expect(isSaleSiteEnabled()).toBe(true);
+    for (const v of ["TRUE", "True", "1", "yes", "on", " true ", "", "false"]) {
+      process.env[SALE_KEY] = v;
+      expect(isSaleSiteEnabled(), `giá trị ${JSON.stringify(v)}`).toBe(false);
     }
   });
 });

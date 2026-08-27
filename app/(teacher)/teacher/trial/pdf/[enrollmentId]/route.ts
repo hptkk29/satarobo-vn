@@ -13,7 +13,7 @@ export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 export async function GET(
-  _req: Request,
+  req: Request,
   { params }: { params: Promise<{ enrollmentId: string }> },
 ) {
   const session = await auth();
@@ -21,8 +21,16 @@ export async function GET(
     return NextResponse.json({ error: "Chưa đăng nhập" }, { status: 401 });
   }
   const { enrollmentId } = await params;
+  // GĐ4 — một ca có nhiều phiếu (mỗi buổi một phiếu). `?sessionId=` chọn buổi cần in;
+  // KHÔNG truyền thì vẫn lấy buổi đang xếp như trước, để link cũ đã gửi đi không vỡ.
+  const sessionId =
+    new URL(req.url).searchParams.get("sessionId")?.trim() || undefined;
 
-  const ctx = await getTeacherTrialRubricContext(session.user.id, enrollmentId);
+  const ctx = await getTeacherTrialRubricContext(
+    session.user.id,
+    enrollmentId,
+    sessionId,
+  );
   if (!ctx) {
     return NextResponse.json(
       { error: "Không tìm thấy học viên trải nghiệm" },
@@ -31,15 +39,21 @@ export async function GET(
   }
   if (!ctx.existing) {
     return NextResponse.json(
-      { error: "Chưa có phiếu đánh giá — hãy lưu phiếu trước khi xuất PDF" },
+      { error: "Buổi này chưa có phiếu đánh giá — hãy lưu phiếu trước khi xuất PDF" },
       { status: 404 },
     );
   }
+
+  // Kèm số buổi vào tên file: một ca nay có nhiều phiếu, cùng tên là đè lên nhau
+  // trong thư mục Tải xuống.
+  const seq =
+    ctx.sessions.find((s) => s.id === ctx.trialClassSessionId)?.seq ?? null;
 
   return trialEvalPdfResponse({
     studentName: ctx.studentName,
     courseName: ctx.courseName,
     trialClassName: ctx.trialClassName,
     existing: ctx.existing,
+    filenameSuffix: seq != null ? `-Buoi${seq}` : undefined,
   });
 }

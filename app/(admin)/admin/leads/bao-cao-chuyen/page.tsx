@@ -2,17 +2,22 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { ArrowLeftRight } from "lucide-react";
 import { auth } from "@/lib/auth";
-import { checkPermission } from "@/lib/auth/check-permission";
+import { checkPermission, canViewLeadPii } from "@/lib/auth/check-permission";
+import { maskLeadPiiFields } from "@/lib/lead/pii";
 import { getModelVisibleCenterIds, scopedDb, logScopeBypass } from "@/lib/db-scope";
 import { resolveActor } from "@/lib/auth/actor";
 import type { Prisma } from "@prisma/client";
 import { formatDateVN } from "@/lib/format/date";
 import { PhanTrangBang } from "@/components/ui/phan-trang-bang";
+import { CONVERTED_STATUSES } from "@/lib/leads/status";
 
 export const metadata = { title: "Báo cáo chuyển lead liên cơ sở | Admin" };
 export const dynamic = "force-dynamic";
 
-const CLOSED_STATUSES = new Set(["ENROLLED"]);
+// "Kết quả = Đã chốt" của lead sau khi chuyển cơ sở.
+// ⚠️ Trước đây là `new Set(["ENROLLED"])` chép tay: Set<string> nên tsc KHÔNG đỏ khi
+// enum đổi ở GĐ5, cột "Đã chốt" cứ đứng 0/N. Dùng thẳng nguồn duy nhất.
+const CLOSED_STATUSES = CONVERTED_STATUSES;
 
 interface Props {
   searchParams: Promise<{ month?: string }>;
@@ -91,7 +96,13 @@ export default async function TransferReportPage({ searchParams }: Props) {
       : Promise.resolve([]),
   ]);
   const centerMap = new Map(centers.map((c) => [c.id, c]));
-  const leadMap = new Map(leads.map((l) => [l.id, l]));
+  // S-1 — cổng vào màn này là `leads:assign` (SUPER_ADMIN + Quản lý cơ sở), mà QL
+  // cơ sở KHÔNG còn `leads:view-pii` từ Q9. Che ngay khi dựng bảng tra, không phải
+  // ở JSX: dữ liệu che ở JSX vẫn đi trọn vẹn xuống trình duyệt trong payload RSC.
+  const canViewPii = await canViewLeadPii();
+  const leadMap = new Map(
+    leads.map((l) => [l.id, maskLeadPiiFields(l, canViewPii)] as const),
+  );
 
   const rows = transfers.map((t) => {
     const lead = leadMap.get(t.leadId);

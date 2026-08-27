@@ -86,6 +86,43 @@ export function planFairTurns(candidates: RotationCandidate[], count: number): s
   return ke;
 }
 
+/** Phạm vi cơ sở của màn sổ lượt: không lọc / đúng một cơ sở / không cơ sở nào. */
+export type RotationBoardScope =
+  | { kind: "all" }
+  | { kind: "one-center"; centerId: string }
+  | { kind: "none" };
+
+/**
+ * Người đang xem sổ lượt được thấy sổ của (những) cơ sở nào. THUẦN.
+ *
+ * S-5: màn kiểm chứng mở cho tổ Sale, nhưng "mở" không có nghĩa là mở toàn hệ.
+ * Sale xem sổ CƠ SỞ MÌNH — vừa đủ để đối chiếu với đồng nghiệp cùng vòng chia,
+ * không hơn. `Center` ∈ SCOPE_EXEMPT nên `scopedDb` pass-through: cách ly cơ sở ở
+ * màn này phải tự tính, và tính ở MỘT hàm thuần thì test được, tản trong JSX thì không.
+ *
+ * @param superAdmin quản trị tối cao — nhìn toàn hệ kể cả khi hồ sơ có gắn cơ sở.
+ * @param xemToanBo  giữ `leads:view-all` (quản lý cơ sở / marketing).
+ * @param centerId   cơ sở gắn với hồ sơ người dùng; `null` = người Hội sở.
+ */
+export function rotationBoardScope({
+  superAdmin,
+  xemToanBo,
+  centerId,
+}: {
+  superAdmin: boolean;
+  xemToanBo: boolean;
+  centerId: string | null | undefined;
+}): RotationBoardScope {
+  if (superAdmin) return { kind: "all" };
+  // Gắn cơ sở nào thì chỉ sổ cơ sở đó — áp cho MỌI vai, kể cả quản lý cơ sở (giữ
+  // nguyên hành vi cũ) lẫn tư vấn viên (mới mở).
+  if (centerId) return { kind: "one-center", centerId };
+  // Không gắn cơ sở: người Hội sở điều phối toàn hệ thì xem toàn hệ. Còn người chỉ
+  // được xem "cơ sở mình" mà lại không có cơ sở nào ⇒ ĐÓNG, không rơi vào nhánh
+  // "không lọc" — đó đúng là cách một màn chỉ-đọc lặng lẽ thành lỗ xem chéo cơ sở.
+  return xemToanBo ? { kind: "all" } : { kind: "none" };
+}
+
 /** Khoá theo đơn vị: hai lead cùng lúc TRONG một cơ sở mới phải xếp hàng. */
 function lockKey(orgUnitId: string): string {
   return `lead_rotation:${orgUnitId}`;

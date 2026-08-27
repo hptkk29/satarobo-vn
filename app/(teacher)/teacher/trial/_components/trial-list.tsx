@@ -17,15 +17,20 @@
 // ⚠️ Không có `new Date()` ở file này: mọi nhãn ngày đã được server format sẵn. Máy
 // giáo viên không chắc chạy +07, và render server ↔ hydrate client lệch là vỡ trang.
 
+import { useMemo, useState } from "react";
 import Link from "next/link";
 import { CalendarClock, ClipboardList } from "lucide-react";
 import type { TrialRowStatus } from "@/lib/lms/teacher-schedule";
 import { EmptyState } from "../../_components/ui/empty-state";
 import { PhanTrangBang } from "@/components/ui/phan-trang-bang";
+import { ListToolbar, type SelectFilter } from "../../_components/ui/list-toolbar";
+import { khopBatKy } from "@/lib/ui/tim-kiem";
 
 /** 1 dòng bảng — server đã format sẵn ngày giờ. */
 export type TrialRowView = {
   enrollmentId: string;
+  /** Buổi đang xếp cho ca — đi kèm trong link chấm phiếu (GĐ4: mỗi buổi một phiếu). */
+  sessionId: string | null;
   /** "CN, 05/07" | "" (chưa xếp buổi). */
   dateLabel: string;
   /** "09:00–10:30" | "". */
@@ -38,6 +43,8 @@ export type TrialRowView = {
   status: TrialRowStatus;
   evaluated: boolean;
 };
+
+const ALL = "ALL";
 
 const STATUS_LABEL: Record<TrialRowStatus, string> = {
   upcoming: "Sắp tới",
@@ -123,7 +130,14 @@ function TrialTable({ rows }: { rows: TrialRowView[] }) {
                 </td>
                 <td className="px-5 py-3.5">
                   <Link
-                    href={`?enrollmentId=${r.enrollmentId}`}
+                    // GĐ4 — kèm `sessionId` của ĐÚNG buổi đang đứng. Thiếu nó thì server
+                    // rơi về buổi đang xếp của ca, và giáo viên chấm buổi 2 lại sửa đè
+                    // phiếu buổi 1 (khoá phiếu là cặp ca × buổi).
+                    href={
+                      r.sessionId
+                        ? `?enrollmentId=${r.enrollmentId}&sessionId=${r.sessionId}`
+                        : `?enrollmentId=${r.enrollmentId}`
+                    }
                     className={
                       r.evaluated
                         ? "inline-flex whitespace-nowrap rounded-lg border border-border px-3 py-1.5 text-xs font-semibold text-foreground hover:bg-muted"
@@ -154,6 +168,35 @@ export function TrialList({
   done: TrialRowView[];
   windowDays: number;
 }) {
+  const [query, setQuery] = useState("");
+  const [status, setStatus] = useState(ALL);
+
+  // Ô lọc trạng thái suy từ DỮ LIỆU ĐANG CÓ, không liệt kê cứng cả 7 nhãn: giáo viên
+  // mới nhận lớp chỉ có "Sắp tới" mà thấy 7 lựa chọn thì 6 cái bấm vào là bảng trắng.
+  const statusOptions = useMemo<SelectFilter["options"]>(() => {
+    const present = new Set([...upcoming, ...done].map((r) => r.status));
+    const ordered = (Object.keys(STATUS_LABEL) as TrialRowStatus[]).filter((s) =>
+      present.has(s),
+    );
+    return [
+      { value: ALL, label: "Mọi trạng thái" },
+      ...ordered.map((s) => ({ value: s, label: STATUS_LABEL[s] })),
+    ];
+  }, [upcoming, done]);
+
+  const lọc = useMemo(() => {
+    const apply = (rows: TrialRowView[]) =>
+      rows.filter((r) => {
+        if (status !== ALL && r.status !== status) return false;
+        // Bỏ dấu khi so (lib/ui/tim-kiem) — gõ "hoang gia bao" phải ra "Hoàng Gia Bảo".
+        return khopBatKy(
+          [r.studentLabel, r.parentName, r.courseName, r.trialClassName, r.dateLabel],
+          query,
+        );
+      });
+    return { up: apply(upcoming), dn: apply(done) };
+  }, [upcoming, done, query, status]);
+
   if (upcoming.length === 0 && done.length === 0) {
     return (
       <EmptyState
@@ -164,38 +207,57 @@ export function TrialList({
     );
   }
 
+  const đangLọc = query.trim().length > 0 || status !== ALL;
+
   return (
     <div className="space-y-6">
+      <ListToolbar
+        query={query}
+        onQuery={setQuery}
+        placeholder="Tìm theo tên học viên, phụ huynh, khoá học..."
+        filters={[{ value: status, onChange: setStatus, options: statusOptions }]}
+      />
+
       {/* Rỗng thì KHÔNG dựng bảng — yêu cầu 25/08: "không có thì không hiển thị". */}
-      {upcoming.length > 0 && (
+      {lọc.up.length > 0 && (
         <section>
           <div className="mb-2 flex flex-wrap items-baseline justify-between gap-2">
             <h2 className="text-sm font-bold text-foreground">
-              Các suất sắp Trial ({upcoming.length})
+              Các suất sắp Trial ({lọc.up.length})
             </h2>
             <p className="text-xs text-muted-foreground">
               Từ hôm nay đến hết {windowDays} ngày tới
             </p>
           </div>
-          <TrialTable rows={upcoming} />
+          <TrialTable rows={lọc.up} />
         </section>
       )}
 
-      {done.length > 0 && (
+      {lọc.dn.length > 0 && (
         <section>
           <div className="mb-2 flex flex-wrap items-baseline justify-between gap-2">
             <h2 className="text-sm font-bold text-foreground">
-              Đã Trial ({done.length})
+              Đã Trial ({lọc.dn.length})
             </h2>
             <p className="text-xs text-muted-foreground">
               Buổi đã diễn ra và các suất đã có kết quả
             </p>
           </div>
-          <TrialTable rows={done} />
+          <TrialTable rows={lọc.dn} />
         </section>
       )}
 
-      {upcoming.length === 0 && (
+      {/* Lọc ra 0 dòng KHÁC với "chưa tới suất nào" — nói đúng cái đang xảy ra, kẻo
+          giáo viên tưởng mất dữ liệu. */}
+      {đangLọc && lọc.up.length === 0 && lọc.dn.length === 0 && (
+        <EmptyState
+          icon={ClipboardList}
+          title="Không có suất nào khớp"
+          description="Thử đổi từ khoá hoặc bỏ bộ lọc trạng thái."
+        />
+      )}
+
+      {!đangLọc && lọc.up.length === 0 && (
         <p className="flex items-center gap-2 text-xs text-muted-foreground">
           <ClipboardList className="h-3.5 w-3.5" aria-hidden />
           Không có suất Trial nào trong {windowDays} ngày tới.

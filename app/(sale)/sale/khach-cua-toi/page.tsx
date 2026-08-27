@@ -10,7 +10,11 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
-import { checkAnyPermission, canViewLeadPii } from "@/lib/auth/check-permission";
+import {
+  checkAnyPermission,
+  canViewLeadPii,
+  checkPermissionDetail,
+} from "@/lib/auth/check-permission";
 import { PAGE_GATES } from "@/lib/auth/page-gates";
 import { resolveActor } from "@/lib/auth/actor";
 import { getMyLeads } from "@/lib/lead/sale-leads";
@@ -43,13 +47,23 @@ export default async function KhachCuaToiPage({
   // Sale vốn có `leads:view-pii`, nhưng quyền có thể bị thu bằng grant cấp người
   // (US-03). Hỏi thật thay vì giả định theo vai.
   const canViewPii = await canViewLeadPii();
+  // S-1 — ô tìm phải gác bằng CHÍNH quyền xem SĐT, cùng điều kiện với hiển thị.
+  // Chép nguyên mẫu đã có ở `/admin/leads` và `/admin/search`: `canViewPii` VÀ
+  // không bị DENY cấp trường `phone` (TS-02). Trước S-1 trang này tính `canViewPii`
+  // để che cột rồi… không truyền gì xuống truy vấn, nên ô tìm vẫn quét cột SĐT.
+  const { fieldMask: leadPiiMask } = await checkPermissionDetail("leads:view-pii");
+  const canSearchPhone = canViewPii && !leadPiiMask.includes("phone");
 
-  const rows = await getMyLeads({
+  // `canhBaoCat` KHÔNG bỏ được: truy vấn cắt ở 200 dòng, mà thanh phân trang của
+  // bảng chỉ đếm số dòng ĐÃ NHẬN nên nó in "/ 200 khách" cho cả người có 237
+  // khách. Cắt câm ở đây là nói dối về số lượng — xem `moTaCatDanhSach`.
+  const { rows, canhBaoCat } = await getMyLeads({
     actor,
     userId: session.user.id,
     status,
     q: q || undefined,
     gomDaDong,
+    canSearchPhone,
   });
 
   const view = rows.map((r) => {
@@ -92,7 +106,12 @@ export default async function KhachCuaToiPage({
         </Link>
       </div>
 
-      <LeadListFilters status={status ?? ""} q={q} gomDaDong={gomDaDong} />
+      <LeadListFilters
+        status={status ?? ""}
+        q={q}
+        gomDaDong={gomDaDong}
+        timDuocSdt={canSearchPhone}
+      />
 
       {view.length === 0 ? (
         <p className="mt-6 rounded-xl border border-dashed border-border p-8 text-center text-sm text-muted-foreground">
@@ -101,7 +120,7 @@ export default async function KhachCuaToiPage({
             : "Bạn chưa có khách nào. Khách được chia tự động khi có lead mới về cơ sở của bạn, hoặc bấm “Nhập khách mới”."}
         </p>
       ) : (
-        <MyLeadTable rows={view} />
+        <MyLeadTable rows={view} canhBaoCat={canhBaoCat} />
       )}
     </div>
   );

@@ -118,17 +118,19 @@ describe("[C-07] leadStatusTrailAudit — vết mang ĐỦ 'từ trạng thái n
 
 describe("[C-07] leadStatusTrailContent — dòng timeline đọc được bằng tiếng Việt", () => {
   it("phiếu: nhãn tiếng Việt cả hai đầu, không phải mã enum trần", () => {
-    const s = leadStatusTrailContent({ from: "NEW", to: "ASSIGNED", source: "ASSIGN" });
+    const s = leadStatusTrailContent({ from: "MOI", to: "DA_LIEN_HE", source: "ASSIGN" });
 
+    // GĐ5 gộp enum 15→10: "ASSIGNED" nay là "MOI", nên cặp cũ (NEW→ASSIGNED) thành
+    // from === to. Đổi sang cặp còn phân biệt được, phần đang kiểm vẫn y nguyên.
     expect(s).toContain("Mới");
-    expect(s).toContain("Đã phân công");
+    expect(s).toContain("Đã liên hệ");
     expect(s).toContain("→");
   });
 
   it("nguồn tự động được nói ra; đổi tay thì không thêm chữ thừa", () => {
-    expect(leadStatusTrailContent({ from: "AWAITING_DECISION", to: "REGISTERED", source: "PAYMENT" }))
+    expect(leadStatusTrailContent({ from: "CHO_QUYET_DINH", to: "DA_DANG_KY", source: "PAYMENT" }))
       .toContain(LEAD_STATUS_TRAIL_SOURCE_LABEL.PAYMENT);
-    expect(leadStatusTrailContent({ from: "NEW", to: "CONTACTED", source: "MANUAL" }))
+    expect(leadStatusTrailContent({ from: "MOI", to: "DA_LIEN_HE", source: "MANUAL" }))
       .not.toContain(LEAD_STATUS_TRAIL_SOURCE_LABEL.ASSIGN);
   });
 
@@ -146,9 +148,9 @@ describe("[C-07] leadStatusTrailContent — dòng timeline đọc được bằn
   });
 
   it("trạng thái đầu chưa biết (lead vừa tạo) vẫn ra câu đọc được", () => {
-    const s = leadStatusTrailContent({ from: null, to: "ASSIGNED", source: "ASSIGN" });
+    const s = leadStatusTrailContent({ from: null, to: "DA_LIEN_HE", source: "ASSIGN" });
 
-    expect(s).toContain("Đã phân công");
+    expect(s).toContain("Đã liên hệ");
     expect(s).not.toContain("null");
   });
 });
@@ -202,7 +204,7 @@ describe("[C-07] isLeadStatusTrailRow — nhặt đúng dòng đổi trạng th�
   it("dòng convert (module enrollment, action 'STATUS_CHANGE' trần) → vẫn nhận", () => {
     expect(
       isLeadStatusTrailRow(
-        dong({ action: "STATUS_CHANGE", oldValues: { status: "REGISTERED" }, newValues: { status: "ENROLLED", orderCode: "DH1" } }),
+        dong({ action: "STATUS_CHANGE", oldValues: { status: "CHO_QUYET_DINH" }, newValues: { status: "DA_DANG_KY", orderCode: "DH1" } }),
       ),
     ).toBe(true);
   });
@@ -235,8 +237,8 @@ describe("[C-07] selectLeadStatusTrail — bảng mốc: ai · lúc nào · từ
       action: "lead.status_change",
       changedFields: ["status"],
       reason: null,
-      oldValues: { status: "AWAITING_DECISION" },
-      newValues: { status: "REGISTERED", statusSource: "PAYMENT" },
+      oldValues: { status: "CHO_QUYET_DINH" },
+      newValues: { status: "DA_DANG_KY", statusSource: "PAYMENT" },
     },
     {
       id: "a2",
@@ -271,8 +273,8 @@ describe("[C-07] selectLeadStatusTrail — bảng mốc: ai · lúc nào · từ
 
     expect(moi.actorName).toBe("Hệ thống");
     expect(moi.createdAt).toBe("2026-08-25T03:00:00.000Z");
-    expect(moi.from).toBe("AWAITING_DECISION");
-    expect(moi.to).toBe("REGISTERED");
+    expect(moi.from).toBe("CHO_QUYET_DINH");
+    expect(moi.to).toBe("DA_DANG_KY");
     expect(moi.fromLabel).toBe("Chờ quyết định");
     expect(moi.toLabel).toBe("Đã đăng ký");
     expect(moi.sourceLabel).toBe(LEAD_STATUS_TRAIL_SOURCE_LABEL.PAYMENT);
@@ -537,7 +539,7 @@ describe("[C-07] getLeadStatusHistory — mốc phễu không bị lượt sửa
 
 describe("[C-07] nhãn hiển thị — không bày mã enum ra cho người dùng", () => {
   it("ô trạng thái phiếu/con ra tiếng Việt, ô khác giữ nguyên cách cũ", () => {
-    expect(formatLeadAuditFieldValue("status", "AWAITING_DECISION")).toBe("Chờ quyết định");
+    expect(formatLeadAuditFieldValue("status", "CHO_QUYET_DINH")).toBe("Chờ quyết định");
     expect(formatLeadAuditFieldValue("childStatus", "LOST")).toBe("Rớt");
     expect(formatLeadAuditFieldValue("source", "Facebook")).toBe("Facebook");
     expect(formatLeadAuditFieldValue("status", null)).toBe("—");
@@ -561,7 +563,9 @@ const boChuThich = (s: string) =>
 describe("[C-07] chốt chặn nguồn — không còn đường đổi trạng thái nào ghi kiểu riêng", () => {
   const DUONG_DOI_TRANG_THAI = [
     "app/(admin)/admin/leads/actions.ts", // đổi tay + đánh dấu rớt theo con (C-06)
-    "app/(admin)/admin/trials/actions.ts", // kết quả buổi học thử → trạng thái phiếu
+    // "app/(admin)/admin/trials/actions.ts" — GỠ 26/08: màn học thử cũ đã bị xoá ở
+    // GĐ6a, thay bằng "Lớp Trial". Đường tương đương nay là `lop-trial/_actions.ts`.
+    "app/(admin)/admin/lop-trial/_actions.ts",
     "lib/finance/payment.ts", // ghi nhận tiền → Đã đăng ký
     "lib/trial/service.ts", // điểm danh học thử → Đang học thử / Chờ quyết định
     "lib/lead/assign.ts", // ĐƯỜNG TỰ CHIA (1)
@@ -573,8 +577,25 @@ describe("[C-07] chốt chặn nguồn — không còn đường đổi trạng 
     "app/api/admin/import/leads/registered/route.ts",
   ];
 
-  it.each(DUONG_DOI_TRANG_THAI)("%s đi qua `recordLeadStatusChange`", (p) => {
-    expect(boChuThich(doc(p))).toContain("recordLeadStatusChange");
+  /**
+   * HAI CỬA HỢP LỆ, KHÔNG PHẢI MỘT (gộp nhánh 26/08).
+   *
+   * `setLeadStatus` (`lib/leads/set-status.ts`) là cửa ghi TRẠNG THÁI của GĐ1; bên
+   * trong nó gọi thẳng `recordLeadStatusChange` nên đường nào đi qua nó là đã có vết.
+   * Bắt buộc phải thấy đúng chữ `recordLeadStatusChange` ở từng tệp là ép mọi đường
+   * phải gọi TAY — tức là bỏ luôn cửa ghi trạng thái, quay về 8 chỗ mỗi chỗ một kiểu.
+   *
+   * ⚠️ Vẫn là test ĐỎ ĐƯỢC: tệp nào không nhắc tới cửa nào trong hai cửa thì vẫn là
+   * đường đổi trạng thái không để lại vết — đúng thứ bài này sinh ra để chặn.
+   */
+  const CUA_GHI_VET = ["recordLeadStatusChange", "setLeadStatus"];
+
+  it.each(DUONG_DOI_TRANG_THAI)("%s đi qua một trong hai cửa ghi vết", (p) => {
+    const than = boChuThich(doc(p));
+    expect(
+      CUA_GHI_VET.some((c) => than.includes(c)),
+      `${p} đổi trạng thái mà không qua cửa nào — vết sẽ trống`,
+    ).toBe(true);
   });
 
   it("trang chi tiết lead có bày mục 'Mốc trạng thái' và nạp bằng truy vấn riêng", () => {

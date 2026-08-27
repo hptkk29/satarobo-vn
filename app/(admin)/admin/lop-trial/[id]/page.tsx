@@ -1,0 +1,232 @@
+// app/(admin)/admin/lop-trial/[id]/page.tsx — GĐ2. Chi tiết một lớp trải nghiệm.
+import Link from "next/link";
+import { notFound, redirect } from "next/navigation";
+import { ChevronLeft } from "lucide-react";
+import { auth } from "@/lib/auth";
+import { checkPermission, canViewLeadPii } from "@/lib/auth/check-permission";
+import { resolveActor } from "@/lib/auth/actor";
+import { getAssignableTeachers } from "@/lib/teachers/assignable";
+import { getSetting } from "@/lib/settings/service";
+import { TrialSessionEvalFill } from "@/app/(admin)/admin/evaluations/_components/trial-session-eval-fill";
+import { layChiTietLop } from "../_lib/queries";
+import { TeacherAssignSelect } from "../_components/teacher-assign-select";
+import { AddSessionForm } from "../_components/add-session-form";
+import { EnrollPanel } from "../_components/enroll-panel";
+import { RosterList } from "../_components/roster-list";
+import { AttendanceBoard } from "../_components/attendance-board";
+import { CancelClassButton } from "../_components/cancel-class-button";
+
+export const dynamic = "force-dynamic";
+
+const NHAN_TRANG_THAI: Record<string, string> = {
+  OPEN: "Đang mở",
+  RUNNING: "Đang chạy",
+  COMPLETED: "Đã xong",
+  CANCELLED: "Đã huỷ",
+};
+const MAU_TRANG_THAI: Record<string, string> = {
+  OPEN: "bg-emerald-100 text-emerald-700",
+  RUNNING: "bg-blue-100 text-blue-700",
+  COMPLETED: "bg-gray-200 text-gray-600",
+  CANCELLED: "bg-red-100 text-red-700",
+};
+
+export default async function ChiTietLopTrialPage({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}) {
+  const session = await auth();
+  if (!session?.user) redirect("/login");
+  if (!(await checkPermission("trials:view"))) redirect("/dashboard");
+
+  const { id } = await params;
+  const actor = await resolveActor(session.user.id);
+  // S-1 — danh sách học viên của lớp in kèm tên phụ huynh + SĐT lấy từ `Lead`.
+  // `trials:view` mở cho cả Giáo viên và Đào tạo, hai vai không có `leads:view-pii`.
+  const canViewPii = await canViewLeadPii();
+  const cls = await layChiTietLop(actor, id, canViewPii);
+  // layChiTietLop đã lọc theo scopedDb → ngoài cơ sở là 404, không phải "cấm truy cập".
+  if (!cls) notFound();
+
+  const [canAssignTeacher, isManager, canFeedback, canAttendance] = await Promise.all([
+    checkPermission("trials:assign-teacher", { centerId: cls.centerId }),
+    checkPermission("trials:manage", { centerId: cls.centerId }),
+    checkPermission("trials:feedback", { centerId: cls.centerId }),
+    checkPermission("trials:attendance", { centerId: cls.centerId }),
+  ]);
+  // GĐ4 — hai việc, hai quyền, hai vai:
+  //   điểm danh  = Sale phụ trách khách  (`trials:attendance`)
+  //   phiếu đánh giá = giáo viên dạy buổi (`trials:feedback`)
+  // Trước GĐ4 cả hai dùng chung một cờ nên ai điểm danh được thì cũng chấm được và
+  // ngược lại — ngược hẳn quy trình đã chốt.
+  const canDiemDanh = canAttendance;
+  // Giáo viên thuần chỉ chấm lớp mình; người quản lý chấm mọi lớp trong tầm nhìn.
+  //
+  // ⚠️ GĐ3 — `cls.teacherId` (giáo viên MẶC ĐỊNH của lớp) KHÔNG còn là nguồn duy nhất:
+  // Đào tạo phân công theo TỪNG CA qua `TrialEnrollment.gvPhanCongId`. Chỉ so
+  // `cls.teacherId` thì giáo viên được phân công thật sự bị cấm nộp phiếu, còn giáo
+  // viên mặc định của lớp lại nộp được cho ca đã giao người khác — ngược ma trận §8.2.
+  const laGvPhanCongCa = cls.enrollments.some(
+    (e) => e.gvPhanCongId === session.user.id,
+  );
+  const canDanhGia =
+    canFeedback &&
+    (isManager || cls.teacherId === session.user.id || laGvPhanCongCa);
+
+  // ⚠️ Danh sách GV phải nạp cho MỌI người xem, không chỉ người có quyền gán.
+  //
+  // Bản cũ trả mảng rỗng khi thiếu `trials:assign-teacher`, mà chính mảng đó là nơi
+  // tra TÊN giáo viên đang phụ trách — nên sau khi GĐ3 gỡ quyền khỏi Quản lý cơ sở,
+  // Sale/QLCS/GV đều thấy mọi lớp là "Chưa gán" kể cả lớp đã có giáo viên.
+  // Đọc tên không phải là quyền ghi; quyền chỉ quyết định có render <select> hay không.
+  //
+  // MỘT danh sách dùng chung cho cả ba ô (gán lớp · thêm buổi · phân công từng ca).
+  // Trước đây tách hai danh sách theo quyền, và ô "Thêm buổi học" ăn phải danh sách
+  // rỗng khi GĐ3 gỡ `trials:assign-teacher` khỏi Quản lý cơ sở → QLCS không xếp được
+  // giáo viên cho buổi ad-hoc. Base list giống hệt nhau (cùng cơ sở), chỉ khác
+  // `includeIds`, nên gộp là hết cả lớp bug đó.
+  const teachers = await getAssignableTeachers({
+    centerIds: [cls.centerId],
+    includeIds: [
+      cls.teacherId,
+      ...cls.enrollments.flatMap((e) => [e.gvDeXuatId, e.gvPhanCongId]),
+    ],
+  });
+  const teacherOptions = teachers.map((t) => ({ id: t.id, name: t.name ?? "(không tên)" }));
+
+  const activeUsed = cls.enrollments.filter((e) => e.status === "ACTIVE").length;
+  const full = activeUsed >= cls.capacity;
+  const daKetThuc = cls.status === "COMPLETED" || cls.status === "CANCELLED";
+
+  // Phiếu đánh giá buổi học dùng LẠI component của màn Đánh giá — cố ý không fork:
+  // fork là đẻ ra hai nguồn sự thật cho cùng một phiếu.
+  const evalStudents = cls.enrollments
+    .filter((e) => e.status === "ACTIVE" || e.status === "COMPLETED")
+    .map((e) => ({
+      studentId: e.leadChildId ?? e.id,
+      name: e.childName,
+      present: true,
+    }));
+  const evalSessions = cls.sessions.map((s) => ({ id: s.id, label: `Buổi ${s.seq}` }));
+
+  return (
+    <div className="space-y-5">
+      <Link
+        href="/lop-trial"
+        className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
+      >
+        <ChevronLeft className="h-4 w-4" /> Quay lại danh sách
+      </Link>
+
+      {/* Header */}
+      <div className="flex flex-wrap items-start justify-between gap-3 border-b border-border pb-4">
+        <div>
+          <div className="flex flex-wrap items-center gap-2">
+            <h2 className="text-lg font-bold text-foreground">{cls.name}</h2>
+            <span
+              className={`rounded-full px-2 py-0.5 text-xs font-medium ${
+                MAU_TRANG_THAI[cls.status] ?? "bg-gray-100 text-gray-600"
+              }`}
+            >
+              {NHAN_TRANG_THAI[cls.status] ?? cls.status}
+            </span>
+          </div>
+          <p className="mt-1 font-mono text-xs text-muted-foreground">{cls.code}</p>
+          <p className="mt-1 text-sm text-muted-foreground">
+            {cls.startTime}–{cls.endTime} · Sĩ số{" "}
+            <span className={full ? "font-semibold text-red-600" : "font-semibold"}>
+              {activeUsed}/{cls.capacity}
+            </span>{" "}
+            · {cls.sessionCount} buổi
+            {cls.configName ? ` (${cls.configName})` : ""}
+          </p>
+        </div>
+        {isManager && !daKetThuc && <CancelClassButton trialClassId={cls.id} />}
+      </div>
+
+      {full && (
+        <p className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800">
+          Lớp đã đủ sĩ số. Xếp thêm học viên cần quyền vượt sĩ số.
+        </p>
+      )}
+
+      <section className="rounded-xl border border-border bg-card p-4">
+        <TeacherAssignSelect
+          trialClassId={cls.id}
+          teacherId={cls.teacherId}
+          teachers={teacherOptions}
+          canAssign={canAssignTeacher}
+        />
+      </section>
+
+      {isManager && (
+        <section className="rounded-xl border border-border bg-card p-4">
+          <h3 className="mb-3 text-sm font-semibold text-foreground">Thêm buổi học</h3>
+          <AddSessionForm
+            trialClassId={cls.id}
+            teachers={teacherOptions}
+            defaultStartTime={cls.startTime}
+            defaultEndTime={cls.endTime}
+          />
+        </section>
+      )}
+
+      {cls.sessions.length === 0 && (
+        <p className="rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800">
+          Lớp chưa có buổi nào. Phải thêm buổi trước, vì chưa có buổi thì không xếp được
+          học viên và giáo viên cũng không thấy gì để điểm danh.
+        </p>
+      )}
+
+      <section className="rounded-xl border border-border bg-card p-4">
+        <h3 className="mb-3 text-sm font-semibold text-foreground">Học viên</h3>
+        <EnrollPanel
+          trialClassId={cls.id}
+          sessions={cls.sessions}
+          canManage={isManager}
+          canOverride={await checkPermission("trials:override-capacity", {
+            centerId: cls.centerId,
+          })}
+          full={full}
+          // Trần số buổi học thử đọc ở cấp GLOBAL — khớp NGUYÊN chỗ server action
+          // kiểm (lop-trial/_actions.ts). Ô nhập chặn khác server là đẩy người dùng
+          // vào cảnh gõ hợp lệ ở client rồi bị từ chối ở server.
+          maxSessions={await getSetting("crm.trialMaxSessions")}
+        />
+        <div className="mt-3">
+          <RosterList
+            trialClassId={cls.id}
+            enrollments={cls.enrollments}
+            sessions={cls.sessions}
+            teachers={teacherOptions}
+            canManage={isManager}
+            canAssignTeacher={canAssignTeacher}
+          />
+        </div>
+      </section>
+
+      <section className="rounded-xl border border-border bg-card p-4">
+        <h3 className="mb-3 text-sm font-semibold text-foreground">Buổi học &amp; điểm danh</h3>
+        <AttendanceBoard
+          sessions={cls.sessions}
+          enrollments={cls.enrollments}
+          canMark={canDiemDanh}
+        />
+      </section>
+
+      {evalSessions.length > 0 && evalStudents.length > 0 && (
+        <section className="rounded-xl border border-border bg-card p-4">
+          <h3 className="mb-3 text-sm font-semibold text-foreground">
+            Phiếu đánh giá buổi học
+          </h3>
+          <TrialSessionEvalFill
+            trialSessions={evalSessions}
+            students={evalStudents}
+            canEdit={canDanhGia}
+          />
+        </section>
+      )}
+    </div>
+  );
+}

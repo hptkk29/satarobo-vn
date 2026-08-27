@@ -22,6 +22,8 @@ export const SCOPED_MODELS = new Set<string>([
   "Payment", // R7-04 — khoản thanh toán theo cơ sở
   "TrialClassV2", // R7-02 — lớp trải nghiệm theo cơ sở
   "LeadTrialHistory", // FL-R2 — lịch sử học thử theo cơ sở
+  "LeadStatusHistory", // GĐ1 — sổ đổi trạng thái lead theo cơ sở
+  "TrialReschedule", // GĐ3 — nhật ký dời lịch ca trải nghiệm theo cơ sở
   // FL3-02 (W5f phase B) — centerId backfilled (denormalized từ class). Flip EXEMPT→SCOPED.
   // ⚠️ DEPLOY-GATE: chỉ an toàn sau khi backfill Enrollment/ClassSession.centerId = 100%
   // (centerId null sẽ bị inject `centerId IN [...]` → ẨN NHẦM record). Xem e2e cách ly.
@@ -102,6 +104,14 @@ export const SCOPED_MODELS = new Set<string>([
   // `verifyToken` ngẫu nhiên. Hai đường khác nhau, đừng lẫn: siết bảng không làm
   // trang kia an toàn hơn, và mở trang kia không nới bảng này.
   "TrnCertificate",
+  // MEDIA-REVIEW (26/08) — ảnh/video buổi học + kết luận duyệt của từng buổi.
+  // Cả hai `BAT_BUOC` mang centerId: một tấm ảnh / một kết luận LUÔN thuộc đúng một cơ
+  // sở. KHÔNG vào NULL_IS_GLOBAL_MODELS — coi "chưa biết cơ sở" là "ai cũng thấy" ở đây
+  // là để ảnh học viên cơ sở này lọt sang QLCS cơ sở kia.
+  // ⚠️ scopedDb KHÔNG che WRITE: mọi `create` phải tự set `centerId`, quên là dòng vô
+  // hình với chính QLCS cơ sở đó (tức ảnh không bao giờ được duyệt).
+  "MediaAsset",
+  "SessionMediaReview",
 ]);
 
 /**
@@ -276,6 +286,14 @@ export function getModelPrefixes(model: string): string[] {
       // Dữ liệu LEAD (lịch sử học thử của lead) — KHÔNG phải dữ liệu đào tạo. Thiếu map
       // → fallback ALL → Đào tạo/HO nhìn thấy lead cơ sở khác. Bám đúng `leads:`.
       return ["leads:"];
+    case "LeadStatusHistory":
+      // Cùng lý do: sổ đổi trạng thái là dữ liệu lead. Thiếu map thì báo cáo tỷ lệ
+      // chuyển đổi rò số liệu lead cơ sở khác cho bất kỳ ai có một vai Hội sở.
+      return ["leads:"];
+    case "TrialReschedule":
+      // Nhật ký dời lịch ca trải nghiệm — dữ liệu học thử, bám `trials:` (và `leads:`
+      // vì nó gắn với khách của Sale). Thiếu map là rơi về fallback ALL.
+      return ["trials:", "leads:"];
     case "ClassSession":
       // Buổi học gắn lớp → map cả action sessions: lẫn classes: (ai quản lý lớp ở cơ sở
       // nào thì thấy buổi cơ sở đó). GV có classes:view-own/sessions:view → scope cơ sở mình.
@@ -328,6 +346,13 @@ export function getModelPrefixes(model: string): string[] {
     case "TrnSubmission":
     case "TrnCertificate":
       return ["elearning:"];
+    // MEDIA-REVIEW (26/08) — ảnh buổi học + kết luận duyệt. Thiếu nhánh này thì
+    // `getModelPrefixes` trả rỗng và tầm nhìn rơi về `isHoLevel` DIỆN RỘNG: bất kỳ ai
+    // có MỘT vai neo tại Hội sở — kể cả vai chẳng liên quan — đọc được ảnh học viên của
+    // MỌI cơ sở. Đây là ảnh trẻ em, không phải số liệu.
+    case "MediaAsset":
+    case "SessionMediaReview":
+      return ["media:"];
     default:
       return [];
   }

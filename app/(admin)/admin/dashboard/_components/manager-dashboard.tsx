@@ -2,6 +2,8 @@ import Link from "next/link";
 import { safeCache } from "@/lib/cache/safe-cache";
 import { Users, UserPlus, BookOpen, FileText, TrendingUp, Target, FlaskConical, GraduationCap, Wallet } from "lucide-react";
 import { scopedDb } from "@/lib/db-scope";
+import { checkPermission, canViewLeadPii } from "@/lib/auth/check-permission";
+import { maskLeadPiiFields } from "@/lib/lead/pii";
 import type { Actor } from "@/lib/auth/actor";
 import { CACHE_TAGS } from "@/lib/cache/tags";
 import { actorScopeKey } from "@/lib/cache/scope-key";
@@ -11,6 +13,8 @@ import { DataTableShell } from "@/components/design-system/admin/data-table-shel
 import { LineChart } from "@/components/charts/line-chart";
 import { BarChart } from "@/components/charts/bar-chart";
 import { groupByWeek, monthKeyVN, type LeadReportRecord } from "@/lib/reports/lead";
+import { LEAD_STATUS_LABEL, LEAD_STATUS_VARIANT } from "@/lib/leads/status";
+import type { LeadStatus } from "@prisma/client";
 import { buildRevenueTargetReport, computeAchievement } from "@/lib/reports/revenue-target";
 import { getRevenueTargets } from "@/lib/reports/revenue-target-data";
 import { getDebtRows } from "@/lib/finance/debt";
@@ -18,7 +22,6 @@ import { WHERE_THUC_THU, SELECT_THUC_THU, butToanThucThu } from "@/lib/finance/t
 import { PhanTrangBang } from "@/components/ui/phan-trang-bang";
 
 const vnd = (n: number) => `${n.toLocaleString("vi-VN")}đ`;
-const TRIAL_ACTIVE_STATUSES = ["SCHEDULED", "CONFIRMED", "POSTPONED"] as const;
 
 // Đợt 3C #4 / 3B — Dashboard QUẢN LÝ + SUPER_ADMIN (tổng quan tuyển sinh + vận hành).
 // BỐ CỤC GỌN (commit 1): KPI → biểu đồ → hoạt động gần đây. Các thẻ "việc tồn đọng"
@@ -28,18 +31,11 @@ const TRIAL_ACTIVE_STATUSES = ["SCHEDULED", "CONFIRMED", "POSTPONED"] as const;
 // trong lib/pending-tasks.ts trả null nên nhóm việc đó không còn sinh ra nữa.
 // centerScope: != null → giới hạn cơ sở (CENTER_MANAGER không kèm SUPER_ADMIN).
 
-const STATUS_VARIANT: Record<string, "success" | "warning" | "error" | "info" | "neutral"> = {
-  NEW: "info", ASSIGNED: "info", CONTACTED: "warning", NO_ANSWER: "warning",
-  CONSULTING: "info", TRIAL_SCHEDULED: "info", TRIAL_ATTENDED: "info",
-  AWAITING_DECISION: "warning", DEMO_SCHEDULED: "info", ENROLLED: "success",
-  NURTURING: "warning", LOST: "error", DUPLICATE: "neutral",
-};
-const STATUS_LABELS: Record<string, string> = {
-  NEW: "Mới", ASSIGNED: "Đã phân công", CONTACTED: "Đã liên hệ", NO_ANSWER: "Không nghe máy",
-  CONSULTING: "Đang tư vấn", TRIAL_SCHEDULED: "Đã hẹn học thử", TRIAL_ATTENDED: "Đã học thử",
-  AWAITING_DECISION: "Chờ quyết định", DEMO_SCHEDULED: "Đã hẹn demo", ENROLLED: "Đã đăng ký",
-  NURTURING: "Đang nuôi", LOST: "Đã mất", DUPLICATE: "Trùng lặp",
-};
+// GĐ0 — hai bảng chép tay đã gỡ, lấy từ nguồn duy nhất @/lib/leads/status.
+// Bản chép cũ thiếu TRIAL_IN_PROGRESS và REGISTERED (khai Record<string,string> nên
+// TypeScript không bắt được) ⇒ hai trạng thái đó hiện raw enum ra dashboard. Nó còn
+// gọi ENROLLED là "Đã đăng ký" trong khi REGISTERED mới là "Đã đăng ký"; nay đúng
+// theo nguồn: ENROLLED = "Đã ghi danh".
 const ACTIVE_LEAD: { deletedAt: null } = { deletedAt: null };
 
 function lastNDaysData(leads: { createdAt: Date }[], days = 14) {
@@ -79,12 +75,12 @@ async function getManagerStats(actor: Actor) {
   const [
     totalLeads, newLeadsThisMonth, newLeadsLastMonth, enrolledLeads, totalStudents,
     totalPosts, leadsLast14Days, leadsByStatus, leadsForWeekly, revenuePayments,
-    revenueTargets, trialsLegacyToday, trialV2Classes, sessionsToday, debtRows,
+    revenueTargets, trialV2Classes, sessionsToday, debtRows,
   ] = await Promise.all([
     sdb.lead.count({ where: ACTIVE_LEAD }),
     sdb.lead.count({ where: { ...ACTIVE_LEAD, createdAt: { gte: monthStart } } }),
     sdb.lead.count({ where: { ...ACTIVE_LEAD, createdAt: { gte: lastMonth, lt: monthStart } } }),
-    sdb.lead.count({ where: { ...ACTIVE_LEAD, status: "ENROLLED" } }),
+    sdb.lead.count({ where: { ...ACTIVE_LEAD, status: "DA_DANG_KY" } }),
     sdb.student.count({ where: { deletedAt: null } }),
     sdb.news.count({ where: { isPublished: true } }),
     sdb.lead.findMany({ where: { ...ACTIVE_LEAD, createdAt: { gte: fourteenDaysAgo } }, select: { createdAt: true } }),
@@ -100,9 +96,10 @@ async function getManagerStats(actor: Actor) {
       take: 50_000,
     }),
     getRevenueTargets(actor),
-    // Hẹn học thử HÔM NAY — TrialClass (cũ, có scheduledAt).
-    sdb.trialClass.count({ where: { scheduledAt: { gte: dayStart, lt: dayEnd }, status: { in: [...TRIAL_ACTIVE_STATUSES] } } }),
-    // + TrialClassV2 (R7): TrialClassSession không scoped → cách ly qua parent TrialClassV2 (SCOPED).
+    // Hẹn trải nghiệm HÔM NAY — CHỈ V2.
+    // 26/08: bỏ nhánh đếm `TrialClass` (V1). Dữ liệu V1 đã được gộp sang V2
+    // (scripts/gop-trial-v1-sang-v2.ts) nên đếm cả hai là đếm ĐÔI cùng một cuộc hẹn.
+    // TrialClassSession không scoped → cách ly qua parent TrialClassV2 (SCOPED).
     sdb.trialClassV2.findMany({
       where: { sessions: { some: { date: { gte: dayStart, lt: dayEnd }, status: "SCHEDULED" } } },
       select: { sessions: { where: { date: { gte: dayStart, lt: dayEnd }, status: "SCHEDULED" }, select: { id: true } } },
@@ -119,7 +116,7 @@ async function getManagerStats(actor: Actor) {
   const monthDelta = newLeadsLastMonth > 0 ? ((newLeadsThisMonth - newLeadsLastMonth) / newLeadsLastMonth) * 100 : 0;
   const conversionRate = totalLeads > 0 ? ((enrolledLeads / totalLeads) * 100).toFixed(1) : "0";
   const dailyLeadsChart = lastNDaysData(leadsLast14Days);
-  const statusBars = leadsByStatus.map((s) => ({ status: STATUS_LABELS[s.status] ?? s.status, count: s._count.id })).sort((a, b) => b.count - a.count);
+  const statusBars = leadsByStatus.map((s) => ({ status: LEAD_STATUS_LABEL[s.status as LeadStatus] ?? s.status, count: s._count.id })).sort((a, b) => b.count - a.count);
 
   // câu 16 (a) — doanh thu THỰC vs MỤC TIÊU kỳ hiện tại (ghép qua helper thuần).
   const revenueReport = buildRevenueTargetReport(
@@ -135,8 +132,8 @@ async function getManagerStats(actor: Actor) {
   const revenueTarget = currentRevRow?.target ?? null;
   const revenueAchieved = (currentRevRow ?? computeAchievement(revenueActual, revenueTarget)).achievedRate;
 
-  // câu 16 (c) — hẹn học thử hôm nay (TrialClass cũ + buổi TrialClassV2 hôm nay).
-  const trialsToday = trialsLegacyToday + trialV2Classes.reduce((s, c) => s + c.sessions.length, 0);
+  // câu 16 (c) — buổi trải nghiệm hôm nay. 26/08: chỉ đếm V2 (hệ V1 đã gộp sang V2).
+  const trialsToday = trialV2Classes.reduce((s, c) => s + c.sessions.length, 0);
 
   // câu 16 (d) — số GV đứng lớp hôm nay (distinct theo GV thực).
   const teacherSet = new Set<string>();
@@ -181,18 +178,46 @@ export async function ManagerDashboard({
   const now = new Date();
   const endOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59);
 
+  // S-1 (26/08/2026) — HAI cổng khác nhau, đừng gộp:
+  //
+  //  • `xemDuocLead` = có được nhìn DANH SÁCH phiếu không. Panel này là panel MẶC
+  //    ĐỊNH của `/admin/dashboard`: vai nào không khớp bảng panel (Đào tạo, và bất
+  //    kỳ vai mới nào) đều rơi vào đây. Đào tạo chưa từng có `leads:view-all` /
+  //    `leads:view-own`, nhưng vẫn đọc được tên phụ huynh + gần trọn SĐT của 8
+  //    phiếu mới nhất. Không có `where` nào chặn được chuyện đó — chỉ có việc
+  //    KHÔNG TRUY VẤN.
+  //  • `canViewPii` = có được nhìn SĐT/tên thật không (Q9 gỡ của Quản lý cơ sở).
+  //
+  // Quản lý cơ sở qua cổng 1 nhưng trượt cổng 2 ⇒ vẫn thấy bảng, số đã che.
+  const [xemDuocLead, canViewPii] = await Promise.all([
+    (async () =>
+      (await checkPermission("leads:view-all")) || (await checkPermission("leads:view-own")))(),
+    canViewLeadPii(),
+  ]);
+
   // Live (KHÔNG cache): leads mới nhất (hiển thị, có Date) + việc CỦA TÔI hôm nay
   // (theo userId — cache theo scope sẽ lẫn task người khác nên GIỮ live).
   const sdb = scopedDb(actor);
-  const [recentLeads, myTasksToday] = await Promise.all([
-    sdb.lead.findMany({ where: ACTIVE_LEAD, take: 8, orderBy: { createdAt: "desc" }, select: { id: true, parentName: true, phone: true, status: true, createdAt: true } }),
+  const [recentLeadsRaw, myTasksTodayRaw] = await Promise.all([
+    xemDuocLead
+      ? sdb.lead.findMany({ where: ACTIVE_LEAD, take: 8, orderBy: { createdAt: "desc" }, select: { id: true, parentName: true, phone: true, status: true, createdAt: true } })
+      : Promise.resolve([]),
     sdb.leadTask.findMany({
       where: { assignedToId: userId, status: "OPEN", dueAt: { lte: endOfToday } },
-      include: { lead: { select: { id: true, parentName: true, phone: true } } },
+      // `phone` KHÔNG được select: khu "việc của tôi" chỉ in tên, mà cột không lấy
+      // về thì không có đường nào rò qua payload RSC.
+      include: { lead: { select: { id: true, parentName: true } } },
       orderBy: { dueAt: "asc" },
       take: 20,
     }),
   ]);
+
+  // Che ở SERVER, một lần, ngay sau khi đọc — mọi chỗ dùng bên dưới ăn theo.
+  const recentLeads = recentLeadsRaw.map((l) => maskLeadPiiFields(l, canViewPii));
+  const myTasksToday = myTasksTodayRaw.map((t) => ({
+    ...t,
+    lead: { ...t.lead, ...maskLeadPiiFields({ parentName: t.lead.parentName }, canViewPii) },
+  }));
 
   // REQ-04: cache số liệu tổng hợp theo scope (KPI + biểu đồ, đều primitive → serialize
   // an toàn). TTL 60s. actorScopeKey chống leak cross-cơ-sở. `now` tính trong hàm cache.
@@ -323,7 +348,10 @@ export async function ManagerDashboard({
         />
       </div>
 
-      {/* (3) Hoạt động gần đây */}
+      {/* (3) Hoạt động gần đây — CHỈ cho người có quyền xem lead. Vai không có
+          quyền (vd Đào tạo) rơi vào panel này thì khối dưới đây không tồn tại,
+          không phải "rỗng": dữ liệu cũng không được truy vấn ở trên. */}
+      {xemDuocLead && (
       <div>
         <div className="flex items-center justify-between mb-3">
           <h2 className="font-semibold text-foreground">Leads mới nhất</h2>
@@ -344,9 +372,14 @@ export async function ManagerDashboard({
                 {recentLeads.map((lead) => (
                   <tr key={lead.id} className="hover:bg-muted transition-colors">
                     <td className="px-4 py-3 font-medium text-foreground">{lead.parentName}</td>
-                    <td className="px-4 py-3 font-mono text-xs text-foreground">{lead.phone.replace(/(\d{4})(\d{3})(\d+)/, "$1xxx$3")}</td>
+                    {/* Giá trị đã che ở SERVER (maskLeadPiiFields). ĐỪNG thêm mặt
+                        nạ tại chỗ ở đây lần nữa: bản cũ tự chế
+                        `.replace(/(\d{4})(\d{3})(\d+)/, "$1xxx$3")` giữ 4 số đầu,
+                        tức lộ NHIỀU HƠN mặt nạ chuẩn (3 đầu + 3 cuối) — và không
+                        ai biết vì nó trông cũng có dấu x. */}
+                    <td className="px-4 py-3 font-mono text-xs text-foreground">{lead.phone}</td>
                     <td className="px-4 py-3">
-                      <StatusBadge variant={STATUS_VARIANT[lead.status] ?? "neutral"}>{STATUS_LABELS[lead.status] ?? lead.status}</StatusBadge>
+                      <StatusBadge variant={LEAD_STATUS_VARIANT[lead.status as LeadStatus] ?? "neutral"}>{LEAD_STATUS_LABEL[lead.status as LeadStatus] ?? lead.status}</StatusBadge>
                     </td>
                     <td className="px-4 py-3 text-right text-xs text-muted-foreground">
                       {new Date(lead.createdAt).toLocaleString("vi-VN", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}
@@ -361,6 +394,7 @@ export async function ManagerDashboard({
           </PhanTrangBang>
         </DataTableShell>
       </div>
+      )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
         <div className="bg-card border border-border rounded-xl p-4 flex items-center gap-3">

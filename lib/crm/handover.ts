@@ -65,7 +65,17 @@ export async function assignSale(input: { actor: AuditActor; leadId: string; sal
   return updated;
 }
 
-/** C5.3 — Sale liên hệ lần đầu (chỉ set 1 lần). */
+/**
+ * C5.3 — Sale liên hệ lần đầu (chỉ set 1 lần).
+ *
+ * ⚠️ S-3 — ĐỪNG GỌI HÀM NÀY TỪ MÃ CHẠY THẬT. Từ 27/08/2026 `firstContactAt` do
+ * `recordLeadActivity` (`lib/lead/activity-write.ts`) đóng, trong cùng
+ * transaction với dòng `LeadActivity` sinh ra nó. Hàm này đóng mốc mà KHÔNG để
+ * lại dòng hoạt động nào ⇒ lead hiện "đã liên hệ" nhưng dòng thời gian trống
+ * trơn, không ai tra được ai gọi, gọi khi nào. Nó còn sống chỉ vì
+ * `tests/e2e/r1/handover.spec.ts` (R1-05) đang gọi; người gọi duy nhất trong
+ * `app/`/`lib/` là KHÔNG AI — và chính chỗ trống đó là bệnh S-3 phải chữa.
+ */
 export async function recordFirstContact(input: { actor: AuditActor; leadId: string }): Promise<Lead> {
   const lead = await getLead(input.leadId);
   if (lead.firstContactAt) return lead;

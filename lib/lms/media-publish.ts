@@ -52,12 +52,13 @@ export async function createDraftMediaBatch(
 
   const cls = await db.class.findFirst({
     where: { id: input.classId, deletedAt: null },
-    select: { id: true, centerId: true },
+    select: { id: true, centerId: true, orgUnitId: true },
   });
   if (!cls) return fail("CLASS_NOT_FOUND", "Không tìm thấy lớp");
 
   let takenAt = input.takenAt ?? null;
   let classSessionId: string | null = null;
+  let sessionDate: Date | null = null;
   if (input.classSessionId) {
     const ses = await db.classSession.findFirst({
       where: { id: input.classSessionId, classId: input.classId },
@@ -65,6 +66,7 @@ export async function createDraftMediaBatch(
     });
     if (!ses) return fail("SESSION_WRONG_CLASS", "Buổi học không thuộc lớp này");
     classSessionId = ses.id;
+    sessionDate = ses.date;
     if (!takenAt) takenAt = ses.date;
   }
 
@@ -86,6 +88,35 @@ export async function createDraftMediaBatch(
         select: { id: true },
       });
       created.push(row.id);
+
+      // MEDIA-REVIEW (26/08) — dòng SONG SINH trong hàng chờ duyệt kiểu mới.
+      //
+      // Chỉ tạo khi ảnh có gắn buổi: hàng duyệt xếp theo NGÀY → LỚP, ảnh không biết
+      // thuộc buổi nào thì không có chỗ đứng trong cây và sẽ nằm lại vô thời hạn.
+      // Ảnh không gắn buổi vẫn vào kho cũ như trước — không mất gì.
+      //
+      // ⚠️ centerId lấy từ `cls` đã đọc ở trên, KHÔNG từ input: scopedDb không che
+      // write, đặt sai là dòng vô hình với chính QLCS phải duyệt nó.
+      // `uploadedById` bắt buộc ở bảng mới: hàng duyệt phải trả lời được "hỏi ai khi
+      // ảnh có vấn đề". Lô không rõ người tải (đường cũ cho phép null) ở lại kho cũ.
+      const nguoiTai = input.uploadedById ?? actor.id;
+      if (classSessionId && sessionDate && cls.centerId && nguoiTai) {
+        await tx.mediaAsset.create({
+          data: {
+            centerId: cls.centerId,
+            orgUnitId: cls.orgUnitId,
+            classId: input.classId,
+            classSessionId,
+            sessionDate,
+            legacyMediaId: row.id,
+            uploadedById: nguoiTai,
+            uploadedByName: input.uploadedByName,
+            type: "IMAGE",
+            r2Key: f.fileUrl,
+            status: "PENDING",
+          },
+        });
+      }
     }
     // 1 audit cho cả lô (không spam N record) — ids nằm trong newValues để truy vết.
     await writeAudit({

@@ -55,7 +55,7 @@ async function makeSale(slug: string, orgCode: string): Promise<string> {
 
 async function makeLead(cId: string, phone: string): Promise<string> {
   const l = await db.lead.create({
-    data: { parentName: "PH Rotation", phone, centerId: cId, status: "NEW" },
+    data: { parentName: "PH Rotation", phone, centerId: cId, status: "MOI" },
     select: { id: true },
   });
   return l.id;

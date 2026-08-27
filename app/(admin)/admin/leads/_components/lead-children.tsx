@@ -17,6 +17,13 @@ import {
   type CourseOptGroup,
   type TeachableCourse,
 } from "@/lib/courses/grouped";
+import {
+  CONTRACT_VALUE_HINT,
+  CONTRACT_VALUE_LABEL,
+  CONTRACT_VALUE_MAX,
+} from "@/lib/lead/contract-value";
+import { formatVndPlain } from "@/lib/format/money";
+import { MoneyInput } from "@/components/ui/money-input";
 
 export type Option = { id: string; name: string };
 
@@ -31,7 +38,11 @@ export type ChildDraft = {
   gradeLevel: string;
   interestedCourseId: string;
   interestedCenterId: string;
+  /** G-01 — lớp đang học TẠI trung tâm (Class.id). "" = chưa xếp lớp. */
+  classId: string;
   note: string;
+  /** G-06 — giá trị hợp đồng ĐÃ KÝ (VND, chuỗi trong nháp). "" = chưa nhập. */
+  contractValue: string;
 };
 
 export type ChildView = {
@@ -44,7 +55,16 @@ export type ChildView = {
   gradeLevel: string | null;
   interestedCourseId: string | null;
   interestedCenterId: string | null;
+  /** G-01 — lớp đang học TẠI trung tâm (Class.id). null = chưa xếp lớp. */
+  classId: string | null;
   note: string | null;
+  /**
+   * G-06 — giá trị hợp đồng ĐÃ KÝ (VND). 🔴 KHÔNG phải tiền đã thu; doanh thu lấy
+   * từ khoản thanh toán đã xác nhận (quyết định B3). null = chưa nhập, KHÁC số 0.
+   */
+  contractValue: number | null;
+  /** G-06 — mốc chốt (ISO). Máy ghi ở đường chốt ghi danh, người không sửa tay. */
+  closedAt?: string | null;
   trialStatus: string;
   /** C-06 — trạng thái phễu của riêng con này. null = phiếu cũ, chưa ai phân loại. */
   status?: string | null;
@@ -76,7 +96,9 @@ export const emptyChild: ChildDraft = {
   gradeLevel: "",
   interestedCourseId: "",
   interestedCenterId: "",
+  classId: "",
   note: "",
+  contractValue: "",
 };
 
 const GENDERS = ["Nam", "Nữ", "Khác"];
@@ -102,7 +124,11 @@ export function childDraftToPayload(d: ChildDraft): Record<string, unknown> {
     gradeLevel: d.gradeLevel.trim() || undefined,
     interestedCourseId: d.interestedCourseId || undefined,
     interestedCenterId: d.interestedCenterId || undefined,
+    classId: d.classId || undefined,
     note: d.note.trim() || undefined,
+    // G-06 — gửi chuỗi thô; validator (`parseContractValue`) tự bóc dấu phân cách.
+    // `undefined` khi để trống ⇒ giữ nguyên giá trị cũ thay vì xoá trắng.
+    contractValue: d.contractValue.trim() || undefined,
   };
 }
 
@@ -116,7 +142,11 @@ function viewToDraft(c: ChildView): ChildDraft {
     gradeLevel: c.gradeLevel ?? "",
     interestedCourseId: c.interestedCourseId ?? "",
     interestedCenterId: c.interestedCenterId ?? "",
+    classId: c.classId ?? "",
     note: c.note ?? "",
+    // `!= null` chứ không `||`: hợp đồng 0 đồng (học bổng toàn phần) là giá trị
+    // thật, `||` sẽ hiện ô trống và lượt lưu kế tiếp xoá mất con số 0 đó.
+    contractValue: c.contractValue != null ? String(c.contractValue) : "",
   };
 }
 
@@ -126,11 +156,18 @@ export function ChildFields({
   onChange,
   centers,
   courseGroups,
+  classes = [],
 }: {
   value: ChildDraft;
   onChange: (patch: Partial<ChildDraft>) => void;
   centers: Option[];
   courseGroups: CourseOptGroup[];
+  /**
+   * G-01 — lớp đang mở của trung tâm, để chọn "Lớp tại trung tâm". Danh sách đã
+   * qua `scopedDb` ở page nên chỉ có lớp trong tầm nhìn cơ sở của actor.
+   * Mặc định rỗng: ô tự ẩn thay vì vẽ một select không có lựa chọn nào.
+   */
+  classes?: Option[];
 }) {
   return (
     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -228,6 +265,47 @@ export function ChildFields({
           ))}
         </select>
       </label>
+      {/* G-01 — LỚP ĐANG HỌC tại trung tâm. Ẩn khi không truyền danh sách lớp:
+          một <select> chỉ có mục "— Chưa xếp lớp —" chỉ tổ làm người dùng tưởng
+          trung tâm không còn lớp nào. */}
+      {classes.length > 0 && (
+        <label className="block sm:col-span-2">
+          <span className="mb-1 block text-xs font-medium text-muted-foreground">
+            Lớp tại trung tâm
+          </span>
+          <select
+            value={value.classId}
+            onChange={(e) => onChange({ classId: e.target.value })}
+            className={inputCls}
+          >
+            <option value="">— Chưa xếp lớp —</option>
+            {classes.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
+      {/* G-06 — GIÁ TRỊ HỢP ĐỒNG ĐÃ KÝ. Nhãn + chú giải lấy từ
+          lib/lead/contract-value.ts để không màn nào tự gọi nó là "doanh thu":
+          cộng cột này vào báo cáo doanh thu là làm tổng phồng đúng bằng phần
+          khách chưa đóng, mà con số vẫn trông hợp lý nên không ai phát hiện. */}
+      <label className="block sm:col-span-2">
+        <span className="mb-1 block text-xs font-medium text-muted-foreground">
+          {CONTRACT_VALUE_LABEL}
+        </span>
+        <MoneyInput
+          name={`contractValue-${value.fullName || "moi"}`}
+          value={value.contractValue}
+          onValueChange={(n) => onChange({ contractValue: n == null ? "" : String(n) })}
+          max={CONTRACT_VALUE_MAX}
+          className={inputCls}
+        />
+        <span className="mt-1 block text-[11px] leading-snug text-muted-foreground">
+          {CONTRACT_VALUE_HINT}
+        </span>
+      </label>
       <label className="block sm:col-span-2">
         <span className="mb-1 block text-xs font-medium text-muted-foreground">Ghi chú</span>
         <textarea
@@ -254,6 +332,7 @@ export function LeadChildrenManager({
   childrenList,
   centers,
   courses,
+  classes = [],
   readOnly = false,
   legacyChildName,
   legacyChildAge,
@@ -264,6 +343,8 @@ export function LeadChildrenManager({
   childrenList: ChildView[];
   centers: Option[];
   courses: TeachableCourse[];
+  /** G-01 — lớp đang mở (đã lọc theo cơ sở của actor ở page). */
+  classes?: Option[];
   readOnly?: boolean;
   legacyChildName?: string | null;
   legacyChildAge?: number | null;
@@ -278,6 +359,10 @@ export function LeadChildrenManager({
     id ? courses.find((c) => c.id === id)?.name ?? null : null;
   const centerName = (id: string | null) =>
     id ? centers.find((c) => c.id === id)?.name ?? null : null;
+  // G-01 — `classId` không ràng FK cứng (như `interestedCenterId`), nên lớp đã xoá
+  // để lại một mã mồ côi. Trả null ⇒ dòng tóm tắt bỏ qua, không in mã cuid ra màn.
+  const className = (id: string | null) =>
+    id ? classes.find((c) => c.id === id)?.name ?? null : null;
 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
@@ -452,6 +537,7 @@ export function LeadChildrenManager({
                 onChange={patch}
                 centers={centers}
                 courseGroups={courseGroups}
+                classes={classes}
               />
               <EditorButtons isPending={isPending} onSave={save} onCancel={cancel} />
             </li>
@@ -500,10 +586,36 @@ export function LeadChildrenManager({
                     c.schoolName,
                     courseName(c.interestedCourseId),
                     centerName(c.interestedCenterId),
+                    // G-01 — nói rõ đây là lớp ĐANG HỌC, kẻo lẫn với "cơ sở quan tâm"
+                    // đứng ngay trước nó trong cùng một dòng.
+                    className(c.classId) ? `Lớp: ${className(c.classId)}` : null,
                   ]
                     .filter(Boolean)
                     .join(" · ") || "—"}
                 </div>
+                {/* G-06 — giá trị hợp đồng + mốc chốt. Nhãn phải NÓI RÕ "đã ký":
+                    con số này là cam kết của Sale, KHÔNG phải tiền đã vào — doanh
+                    thu thật nằm ở tab Tài chính, tính từ khoản đã xác nhận. */}
+                {(c.contractValue != null || c.closedAt) && (
+                  <div className="mt-1 flex flex-wrap items-center gap-x-3 text-xs">
+                    {c.contractValue != null && (
+                      <span className="text-muted-foreground">
+                        {CONTRACT_VALUE_LABEL}:{" "}
+                        <span className="font-semibold text-foreground">
+                          {formatVndPlain(c.contractValue)}
+                        </span>
+                      </span>
+                    )}
+                    {c.closedAt && (
+                      <span className="text-muted-foreground">
+                        Chốt:{" "}
+                        {new Date(c.closedAt).toLocaleDateString("vi-VN", {
+                          timeZone: "Asia/Ho_Chi_Minh",
+                        })}
+                      </span>
+                    )}
+                  </div>
+                )}
                 {c.note && <p className="mt-1 text-xs text-muted-foreground">{c.note}</p>}
                 {c.trialHistory && c.trialHistory.length > 0 && (
                   <div className="mt-1 space-y-0.5">
@@ -597,6 +709,7 @@ export function LeadChildrenManager({
             onChange={patch}
             centers={centers}
             courseGroups={courseGroups}
+            classes={classes}
           />
           <EditorButtons isPending={isPending} onSave={save} onCancel={cancel} />
         </div>

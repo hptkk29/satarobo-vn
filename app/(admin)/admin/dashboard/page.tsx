@@ -16,6 +16,8 @@ import { SalesDashboard } from "./_components/sales-dashboard";
 import { AccountantDashboard } from "./_components/accountant-dashboard";
 import { MarketingDashboard, HrDashboard } from "./_components/marketing-hr-dashboards";
 import { PendingTasksSection } from "./_components/pending-tasks-section";
+import { BangDieuKhienQlcs } from "../dashboard-qlcs/_components/bang-dieu-khien-qlcs";
+import type { ScopeFilterSearchParams } from "@/lib/reports/scope-filters";
 
 // Đợt 3B/3C — Dashboard GỘP (union): hiển thị panel của TẤT CẢ vai trò user giữ.
 // Thứ tự: Quản lý → Giáo viên → Tư vấn → Kế toán → Marketing → Nhân sự.
@@ -42,7 +44,13 @@ const PANEL_KEY_BY_ROLE: Record<string, string> = {
   CENTER_HR: "hr",
 };
 
-export default async function DashboardPage() {
+export default async function DashboardPage({
+  searchParams,
+}: {
+  // 27/08 — khối QLCS mount ngay tại đây nên trang phải chuyển tiếp bộ lọc phạm vi
+  // (cơ sở / khoảng ngày) của nó. Vai khác không gửi tham số nào thì object rỗng.
+  searchParams: Promise<ScopeFilterSearchParams>;
+}) {
   const session = await auth();
   if (!session?.user) redirect("/login");
 
@@ -58,12 +66,23 @@ export default async function DashboardPage() {
   // gom ở khu "Cần xử lý" (center-scoped); panel quản lý là KPI/biểu đồ tổng quan.
   const isManager = hasAnyRole(session.user, ["SUPER_ADMIN", "CENTER_MANAGER"]);
 
+  const sp = await searchParams;
+
   const panels: { key: string; label: string; node: React.ReactNode }[] = [];
   if (isManager) {
+    // 27/08/2026 — chủ dự án chốt: Quản lý cơ sở + Quản trị hệ thống đăng nhập là thấy
+    // THẲNG bốn khối của dashboard QLCS, không phân tab, không phải đi tìm màn thứ hai.
+    // Mục menu "Dashboard QLCS" đã gỡ; route /dashboard-qlcs giữ lại cho đường dẫn cũ.
+    //
+    // ⚠️ KHỐI NÀY THAY panel "Quản lý & Tổng quan" cũ (`ManagerDashboard`), không xếp
+    // thêm bên cạnh: hai khối cùng trả lời "cơ sở đang chạy thế nào" mà số lại lấy theo
+    // hai đường khác nhau (panel cũ tính theo actor, khối QLCS tính theo bộ lọc phạm vi)
+    // ⇒ để cạnh nhau là hai con số lệch nhau trên cùng một màn, không ai biết tin cái nào.
+    // `ManagerDashboard` vẫn còn nguyên và vẫn là panel dự phòng ở nhánh "không khớp vai".
     panels.push({
       key: "manager",
-      label: "Quản lý & Tổng quan",
-      node: <ManagerDashboard userId={userId} name={name} actor={actor} embedded />,
+      label: "Quản lý cơ sở",
+      node: <BangDieuKhienQlcs userId={userId} searchParams={sp} basePath="/dashboard" />,
     });
   }
   if (hasRole(session.user, "TEACHER")) {

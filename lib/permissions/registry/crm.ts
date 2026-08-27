@@ -12,11 +12,34 @@ export const crmModule: ModuleDecl = {
       key: "leads:view-pii",
       action: "view-pii",
       // #11 T2 (OI-4) — khớp ĐỦ bộ field maskLeadPiiFields đang gate (lib/lead/pii.ts).
-      sensitiveFields: ["parentName", "phone", "email", "childName", "note"],
-      description: "Xem PII lead (tên PH-HS/SĐT/email/ghi chú tư vấn) không che.",
+      // G-01 (26/08/2026) thêm `parentDob`; C-05 thêm `lostNote` (lý do rớt — ô ghi
+      // chú tự do, cùng hạng "nội dung tư vấn" với `note`). Địa chỉ
+      // (city/ward/addressLine) CỐ Ý không vào đây: dữ liệu địa bàn để lọc/xuất,
+      // không phải danh tính.
+      sensitiveFields: [
+        "parentName",
+        "phone",
+        "email",
+        "childName",
+        "note",
+        "parentDob",
+        "lostNote",
+      ],
+      description:
+        "Xem PII lead (tên PH-HS/SĐT/email/ngày sinh PH/ghi chú tư vấn/lý do rớt) không che.",
     },
     { key: "leads:create", action: "create" },
     { key: "leads:edit", action: "edit" },
+    {
+      key: "leads:change-status",
+      action: "change-status",
+      // 27/08/2026 — chủ dự án chốt: CHỈ Sale được đổi trạng thái lead. Tách khỏi
+      // `leads:edit` vì quyền đó còn gác ~10 việc khác (sửa ô hồ sơ, ghi chú, gán
+      // lại, xoá…) mà Quản lý cơ sở và Marketing VẪN cần. Gộp chung là hoặc khoá
+      // nhầm cả chuỗi, hoặc mở nhầm cái vừa bị cấm.
+      description:
+        "Đổi trạng thái lead trên phễu (kéo thẻ Kanban / chọn ở bảng). Chỉ Sale.",
+    },
     {
       key: "leads:edit-own-intake",
       action: "edit-own-intake",
@@ -30,6 +53,15 @@ export const crmModule: ModuleDecl = {
       // LeadAssignmentConfig là dữ liệu THEO CƠ SỞ (centerId @unique) — CM chỉ đặt
       // được cơ sở mình (leads/actions.ts setCenterAssignModeAction) ⇒ scopable.
       description: "Cấu hình quy tắc chia lead tự động (theo cơ sở).",
+    },
+    {
+      key: "leads:rotation-view",
+      action: "rotation-view",
+      // S-5 — CHỈ ĐỌC sổ lượt luân phiên (`LeadRotationTurn`). Tách khỏi
+      // `leads:view-all` để mở được cho tổ Sale mà không mở kèm ~8 màn quản lý
+      // khác; tách khỏi `leads:assign-config` vì đó là quyền SỬA cách chia.
+      // Cách ly cơ sở nằm ở `rotationBoardScope`, không ở scopeType.
+      description: "Xem sổ lượt chia lead (chỉ đọc, theo cơ sở của mình).",
     },
     { key: "leads:delete", action: "delete" },
     { key: "leads:export", action: "export" },
@@ -68,6 +100,12 @@ export const crmModule: ModuleDecl = {
       key: "trials:feedback",
       action: "feedback",
       description: "GV ghi nhận xét buổi trải nghiệm.",
+    },
+    {
+      key: "trials:attendance",
+      action: "attendance",
+      description:
+        "Sale điểm danh buổi trải nghiệm. Tách khỏi trials:feedback vì điểm danh là việc của Sale phụ trách khách, nộp phiếu đánh giá là việc của giáo viên.",
     },
     { key: "trials:assign-teacher", action: "assign-teacher" },
     {

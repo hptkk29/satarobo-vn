@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { displayProjectName } from "@/lib/lms/session-project-name";
 import {
   MessageSquareText,
   Search,
@@ -320,7 +321,7 @@ export function NhanXetPageV2({
               {sel.projectName && (
                 <p className="pt-2 text-sm text-muted-foreground">
                   <span className="font-bold text-foreground">Dự án:</span>{" "}
-                  {sel.projectName}
+                  {displayProjectName(sel.projectName)}
                 </p>
               )}
 

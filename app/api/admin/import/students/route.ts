@@ -383,7 +383,7 @@ export async function POST(req: NextRequest) {
   if (renamedAny) {
     // Import đổi tên HV đang có → CRM cũng vừa đổi theo (sync-name).
     revalidatePath("/leads");
-    revalidatePath("/trial-classes");
+    revalidatePath("/lop-trial");
   }
 
   return NextResponse.json({ success, errors });

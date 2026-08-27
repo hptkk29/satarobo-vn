@@ -44,6 +44,7 @@ import {
   buildSessionNumberMap,
   sessionNumberLabel,
 } from "@/lib/lms/session-order";
+import { resolveDisplayProjectName } from "@/lib/lms/session-project-name";
 import { cn } from "@/lib/utils";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -509,6 +510,8 @@ async function ReviewsTab({
           classId: true,
           date: true,
           topic: true,
+          plan: { select: { customTitle: true } },
+          lesson: { select: { order: true, title: true, moduleCode: true } },
           class: { select: { name: true } },
         },
       },
@@ -557,7 +560,21 @@ async function ReviewsTab({
                 <p className="text-sm text-muted-foreground">
                   {dayFmt.format(f.classSession.date)}
                   {multiClass ? ` · ${f.classSession.class.name}` : ""}
-                  {f.projectName ? ` · ${f.projectName}` : ""}
+                  {/* 26/08 — tên dự án suy từ BUỔI, không in bản sao đông cứng trên phiếu. */}
+                  {(() => {
+                    const duAn = resolveDisplayProjectName(
+                      {
+                        sessionNumber: sessionNumberOf.get(f.classSession.id) ?? null,
+                        planTitle: f.classSession.plan?.customTitle,
+                        lessonTitle: f.classSession.lesson?.title,
+                        lessonOrder: f.classSession.lesson?.order,
+                        moduleCode: f.classSession.lesson?.moduleCode,
+                        topic: f.classSession.topic,
+                      },
+                      f.projectName,
+                    );
+                    return duAn ? ` · ${duAn}` : "";
+                  })()}
                 </p>
               </div>
               {hasPdfContent && (

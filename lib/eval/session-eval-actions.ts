@@ -189,12 +189,27 @@ async function gateTrialFill(
   // Vai + cơ sở TỪ DB, không từ JWT (xem lib/auth/fresh-gate-user.ts).
   const u = { id: session.user.id, ...((await getFreshGateUser(session.user.id)) ?? session.user) };
   const cls = sess.trialClass;
-  const allowed =
+
+  const allowedByRole =
     hasRole(u, "SUPER_ADMIN") ||
     hasRole(u, "TRAINING") ||
     (hasRole(u, "CENTER_MANAGER") && !!cls.centerId && cls.centerId === u.centerId) ||
     (hasRole(u, "TEACHER") &&
       (cls.teacherId === u.id || cls.assistantId === u.id || sess.teacherId === u.id));
+
+  // GĐ3 — giáo viên được Đào tạo PHÂN CÔNG cho một ca của lớp này.
+  //
+  // ⚠️ Các nhánh trên chỉ nhìn giáo viên của LỚP/BUỔI. Từ GĐ3 phân công đi theo TỪNG CA
+  // (`TrialEnrollment.gvPhanCongId`), nên người thật sự dạy ca lại bị chặn nộp phiếu.
+  // Kiểm ở cấp LỚP (không phải cấp buổi) cho khớp guard danh sách học viên bên dưới —
+  // guard đó cũng đối chiếu roster của cả lớp trải nghiệm. Chỉ truy vấn khi các nhánh
+  // rẻ đã trượt.
+  const allowed =
+    allowedByRole ||
+    (hasRole(u, "TEACHER") &&
+      (await db.trialEnrollment.count({
+        where: { trialClassId: sess.trialClassId, gvPhanCongId: u.id },
+      })) > 0);
 
   if (!allowed) return { ok: false, error: "Không có quyền điền phiếu buổi học thử này" };
   return { ok: true, trialClassId: sess.trialClassId };
@@ -271,6 +286,6 @@ export async function saveTrialSessionEvalAction(input: unknown): Promise<Result
   );
   if (!res.ok) return { ok: false, error: res.error };
 
-  revalidatePath("/trial-classes");
+  revalidatePath("/lop-trial");
   return { ok: true, data: { saved: res.saved } };
 }

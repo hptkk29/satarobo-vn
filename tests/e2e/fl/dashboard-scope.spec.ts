@@ -127,14 +127,22 @@ test.describe("[#10] Dashboard đa vai trò — cách ly cơ sở panel Quản l
       // Mục tiêu doanh thu kỳ hiện tại (RevenueTarget — SCOPE_EXEMPT, scope TAY).
       await db.revenueTarget.create({ data: { centerId: ctr, period, targetAmount: 10_000_000 } });
 
-      // 2 lead mới (phễu tuần) + 1 lead REGISTERED tồn quá lâu (registered_stale).
-      await db.lead.create({ data: { parentName: `PH1-${tag}`, phone: "0911111111", centerId: ctr, status: "NEW", createdAt: now } });
-      await db.lead.create({ data: { parentName: `PH2-${tag}`, phone: "0922222222", centerId: ctr, status: "NEW", createdAt: now } });
+      // 2 lead mới (phễu tuần) + 1 lead DA_DANG_KY tồn quá lâu (registered_stale).
+      await db.lead.create({ data: { parentName: `PH1-${tag}`, phone: "0911111111", centerId: ctr, status: "MOI", createdAt: now } });
+      await db.lead.create({ data: { parentName: `PH2-${tag}`, phone: "0922222222", centerId: ctr, status: "MOI", createdAt: now } });
       const reg = await db.lead.create({
-        data: { parentName: `PH-REG-${tag}`, phone: "0933333333", childName: `Con-${tag}`, centerId: ctr, status: "REGISTERED", createdAt: fiveDaysAgo },
+        data: { parentName: `PH-REG-${tag}`, phone: "0933333333", childName: `Con-${tag}`, centerId: ctr, status: "DA_DANG_KY", createdAt: fiveDaysAgo },
       });
-      // updatedAt @updatedAt tự set now → backdate để vượt ngưỡng REGISTERED_STALE_DAYS.
-      await db.$executeRaw`UPDATE "Lead" SET "updatedAt" = ${fiveDaysAgo} WHERE id = ${reg.id}`;
+      // Backdate CẢ HAI cột, và `statusChangedAt` mới là cột quyết định.
+      //
+      // ⚠️ `updatedAt` là `@updatedAt` (Prisma tự set now), còn `statusChangedAt` là
+      // `@default(now())` — nên lead vừa tạo KHÔNG BAO GIỜ có `statusChangedAt = NULL`.
+      // `registeredStale` đọc:
+      //     OR: [ statusChangedAt < mốc , (statusChangedAt IS NULL AND updatedAt < mốc) ]
+      // Nhánh dự phòng `IS NULL` viết cho lead CŨ có sẵn trên prod, không cứu được lead
+      // seed ra ở đây. Backdate mỗi `updatedAt` ⇒ cả hai nhánh cùng trượt ⇒ nhóm đếm 0,
+      // và triệu chứng trông y hệt "không có việc tồn đọng nào" chứ không giống lỗi.
+      await db.$executeRaw`UPDATE "Lead" SET "updatedAt" = ${fiveDaysAgo}, "statusChangedAt" = ${fiveDaysAgo} WHERE id = ${reg.id}`;
 
       // Yêu cầu phụ huynh PENDING (pending parent_request).
       await db.parentRequest.create({

@@ -111,6 +111,27 @@ export const PAGE_GATES = {
   /** Tracking lead. Gác bằng leads:view-all từ đầu; sidebar khai nhầm site-content:view. */
   "/marketing": ["leads:view-all"],
 
+  /**
+   * S-5 — SỔ LƯỢT CHIA LEAD (chỉ đọc). Màn kiểm chứng dựng ra để dập tin đồn thiên
+   * vị khi chia lead; đặc tả gốc đòi "màn hình cho **cả tổ sale** nhìn thấy"
+   * (plan/15 §5). Nhưng nó gác bằng `leads:view-all` — quyền QUẢN LÝ mà Sale cố ý
+   * không có — nên người duy nhất không mở được là người mà bằng chứng viết cho.
+   *
+   * Vá bằng key ĐỌC riêng `leads:rotation-view` ĐỨNG CẠNH `leads:view-all`, không
+   * thay thế:
+   *  • không nới `leads:view-all` cho Sale — quyền đó gác ~8 màn quản lý khác;
+   *  • giữ `leads:view-all` trong ô này để Quản lý cơ sở/Marketing KHÔNG mất màn
+   *    trong khoảng giữa "merge vào main" và "bấm chạy seed-prod-roles.yml" (RBAC v2
+   *    enforce trên prod đọc quyền từ DB) — trắng màn không kèm lỗi, không tái hiện
+   *    được ở local vì local chạy v1 tĩnh.
+   *
+   * ⚠️ Key MỚI ⇒ sau khi merge `test` → `main` PHẢI chạy `seed-prod-roles.yml`, nếu
+   * không Sale trên prod vẫn bị đá ra đúng như trước khi vá.
+   * ⚠️ Vào được TRANG ≠ xem được mọi cơ sở: phạm vi do `rotationBoardScope`
+   * (lib/lead/rotation.ts) chặn — Sale chỉ thấy sổ cơ sở mình.
+   */
+  "/leads/so-luot": ["leads:view-all", "leads:rotation-view"],
+
   /** G-D (21/08/2026) — nhập nhanh khách hàng, bản CÓ ĐĂNG NHẬP thay cho biểu mẫu
    *  công khai `sale.satarobo.vn`. Ai nhập được lead thì vào được: marketing,
    *  sale-admin, Sale cơ sở. `leads:create` là GLOBAL ở cả 3 RoleDef giữ nó nên
@@ -125,6 +146,11 @@ export const PAGE_GATES = {
   /** Thư viện media buổi học. Menu cũ khai thiếu `media:upload` (cùng người giữ ở v1
    *  nên chưa ai đau) — khai đủ để menu ≡ gate. */
   "/media": ["media:view", "media:upload"],
+
+  /** Cổng duyệt ảnh/video buổi học (MEDIA-REVIEW, 26/08). CHỈ `media:approve` — đây là
+   *  màn RA QUYẾT ĐỊNH, không phải thư viện: người chỉ có `media:view` vào được thì sẽ
+   *  thấy nút "Duyệt tất cả" mà bấm vào là bị Server Action từ chối. */
+  "/duyet-media": ["media:approve"],
 
   // ── Site Sale (sale.satarobo.vn) ────────────────────────────────────────
   // Khai ở ĐÂY chứ không để mỗi trang tự gõ action: thanh điều hướng của site

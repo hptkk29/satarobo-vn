@@ -74,9 +74,13 @@ export default async function SaleChotDonPage({
           // Thông tin người mua lấy sẵn từ hồ sơ khách — gõ lại là chỗ sinh sai
           // lệch giữa đơn và lead, và sai số điện thoại thì mọi tin nhắn xác nhận
           // đi lạc.
-          defaultCustomerName={lead.parentName ?? ""}
-          defaultCustomerPhone={lead.phone ?? ""}
-          defaultCustomerEmail={lead.email ?? ""}
+          // S-1 — `lead` ở đây ĐÃ che theo `canViewPii` (getMyLeadDetail). Điền bản
+          // che vào ô ghi là tạo ra đơn mang tên "Nguyễn T. L." — `customerName`
+          // không có validator nào chặn (chỉ `customerPhone` có `phoneVn`). Thiếu
+          // quyền thì để trống: form chặn ngay, hỏng sớm và thấy được.
+          defaultCustomerName={canViewPii ? (lead.parentName ?? "") : ""}
+          defaultCustomerPhone={canViewPii ? (lead.phone ?? "") : ""}
+          defaultCustomerEmail={canViewPii ? (lead.email ?? "") : ""}
           paymentMethods={form.paymentMethods}
           courses={form.courses}
           products={products}

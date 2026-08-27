@@ -61,7 +61,7 @@ test.describe("[BULK] Chốt hàng loạt lead đã đăng ký", () => {
     childNames: string[],
   ) {
     const lead = await db.lead.create({
-      data: { parentName: "PH Bulk", phone, status: "REGISTERED", centerId },
+      data: { parentName: "PH Bulk", phone, status: "DA_DANG_KY", centerId },
     });
     const children = [];
     for (const name of childNames) {
@@ -106,9 +106,12 @@ test.describe("[BULK] Chốt hàng loạt lead đã đăng ký", () => {
     expect(res.studentIds).toHaveLength(2);
     expect(res.enrollmentIds).toHaveLength(2);
 
-    // Lead đã ENROLLED.
+    // Lead đã CHỐT. GĐ5 gộp ENROLLED vào DA_DANG_KY, mà lead ở đây được gieo sẵn
+    // DA_DANG_KY ⇒ riêng status không còn chứng minh được điều gì. Mốc "đã chốt"
+    // thật nằm ở `convertedAt` (chỉ chính lượt convert ghi), nên phải soi thêm nó.
     const leadAfter = await db.lead.findUniqueOrThrow({ where: { id: lead.id } });
-    expect(leadAfter.status).toBe("ENROLLED");
+    expect(leadAfter.status).toBe("DA_DANG_KY");
+    expect(leadAfter.convertedAt).not.toBeNull();
 
     // TK phụ huynh: khoá SĐT canonical, chờ kích hoạt.
     const parent = await db.user.findUnique({ where: { phone: "84905000001" } });
@@ -178,7 +181,9 @@ test.describe("[BULK] Chốt hàng loạt lead đã đăng ký", () => {
     expect(first.ok).toBe(true);
 
     const second = await convertOneLeadBackfill(actor, input);
-    // Lượt 2: lead đã ENROLLED → chặn ngay từ guard trạng thái (không đụng DB ghi).
+    // Lượt 2: lead đã có `convertedAt` → chặn ngay từ guard (không đụng DB ghi).
+    // GĐ5 đổi mốc chặn từ status ENROLLED sang `convertedAt` vì status "đã chốt" và
+    // "đã đăng ký" nay là CÙNG một giá trị DA_DANG_KY.
     expect(second.ok).toBe(false);
     expect(second.code).toBe("ALREADY_CONVERTED");
 
@@ -205,7 +210,7 @@ test.describe("[BULK] Chốt hàng loạt lead đã đăng ký", () => {
     expect(res.ok).toBe(false);
     expect(res.code).toBe("PHONE_INVALID");
     expect(await db.student.count()).toBe(0);
-    expect((await db.lead.findUniqueOrThrow({ where: { id: lead.id } })).status).toBe("REGISTERED");
+    expect((await db.lead.findUniqueOrThrow({ where: { id: lead.id } })).status).toBe("DA_DANG_KY");
   });
 
   test("[BULK-05] lớp khác cơ sở với lead → CLASS_WRONG_CENTER (chặn ghi danh chéo cơ sở)", async () => {
@@ -301,11 +306,11 @@ test.describe("[BULK] Chốt hàng loạt lead đã đăng ký", () => {
       }),
     ).rejects.toThrow();
 
-    // Rollback SẠCH: không tiền ma, không học viên mồ côi, lead còn nguyên REGISTERED.
+    // Rollback SẠCH: không tiền ma, không học viên mồ côi, lead còn nguyên DA_DANG_KY.
     expect(await db.order.count()).toBe(0);
     expect(await db.payment.count()).toBe(0);
     expect(await db.student.count()).toBe(0);
-    expect((await db.lead.findUniqueOrThrow({ where: { id: lead.id } })).status).toBe("REGISTERED");
+    expect((await db.lead.findUniqueOrThrow({ where: { id: lead.id } })).status).toBe("DA_DANG_KY");
   });
 
   test("[BULK-09] lead gắn HỘI SỞ → LEAD_HEAD_OFFICE, KHÔNG tạo học viên nào", async () => {
@@ -458,7 +463,7 @@ test.describe("[BULK] Chốt hàng loạt lead đã đăng ký", () => {
     expect(res.ok).toBe(false);
     expect(res.code).toBe("COURSE_NO_PRICE");
     expect(await db.enrollment.count()).toBe(0);
-    expect((await db.lead.findUniqueOrThrow({ where: { id: lead.id } })).status).toBe("REGISTERED");
+    expect((await db.lead.findUniqueOrThrow({ where: { id: lead.id } })).status).toBe("DA_DANG_KY");
   });
 
   test("[BULK-09] consent ảnh đã THU HỒI của học viên dedupe KHÔNG bị lật lại khi chốt", async () => {

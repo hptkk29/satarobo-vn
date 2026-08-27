@@ -74,7 +74,7 @@ describe("[bảng việc] loLuatCuaSale — chỉ hai luật người phụ trá
   const cachDay = (h: number) => new Date(now.getTime() - h * 3_600_000);
 
   const nen = {
-    status: "ASSIGNED" as const,
+    status: "MOI" as const,
     qualifiedAt: null,
     handedAt: null,
     receivedConfirmedAt: null,
@@ -116,7 +116,7 @@ describe("[bảng việc] loLuatCuaSale — chỉ hai luật người phụ trá
     // đúng theo trạng thái nên không kế thừa lỗi đó.
     const daMat = {
       ...nen,
-      status: "LOST" as const,
+      status: "DA_MAT" as const,
       assignedAt: cachDay(200),
       firstContactAt: cachDay(190),
       lastActivityAt: cachDay(100),
@@ -124,7 +124,7 @@ describe("[bảng việc] loLuatCuaSale — chỉ hai luật người phụ trá
     expect(loLuatCuaSale(daMat, now, SLA_THRESHOLDS)).toEqual([]);
     // Đối chứng: cùng dữ liệu nhưng còn đang chăm thì PHẢI báo.
     expect(
-      loLuatCuaSale({ ...daMat, status: "ASSIGNED" as const }, now, SLA_THRESHOLDS),
+      loLuatCuaSale({ ...daMat, status: "MOI" as const }, now, SLA_THRESHOLDS),
     ).toContain("SLA-4");
   });
 
@@ -148,6 +148,28 @@ describe("[bảng việc] chốt chặn nguồn", () => {
     expect(s).toContain("scopedDb(actor)");
     expect(s).toContain("leadOwnershipWhere(userId)");
     expect(s).not.toMatch(/from\s+["']@\/lib\/db["']/);
+  });
+
+  it("[S-4] khối SLA lọc theo NGƯỜI PHỤ TRÁCH, không theo người nhập", () => {
+    // S-4 nới "khách của tôi" sang cả phiếu mình nhập — đúng cho DANH SÁCH, sai
+    // cho BẢNG VIỆC. Phiếu Sale Hội sở nhập được chia cho Sale cơ sở; người phải
+    // gọi điện là Sale cơ sở. Đổ SLA của họ lên bảng của Hội sở là (a) đếm đôi
+    // `soKhachDangMo` trên hai màn, (b) bày việc mà người xem không bấm được.
+    const s = boChuThich(src());
+    const i = s.indexOf("sdb.lead.findMany");
+    expect(i).toBeGreaterThan(-1);
+    expect(s.slice(i, i + 400)).toContain("leadPhuTrachWhere(userId)");
+    expect(s.slice(i, i + 400)).not.toContain("leadOwnershipWhere(userId)");
+  });
+
+  it("[S-4] khối việc follow-up VẪN dùng mệnh đề rộng — việc giao cho tôi thì phải hiện", () => {
+    // Ngược lại với khối trên: `LeadTask` đã lọc `assignedToId: userId` trên
+    // CHÍNH cái việc, nên mệnh đề lead chỉ còn là hàng rào cách ly. Siết nó lại
+    // là giấu mất việc đã giao đích danh cho người đang xem.
+    const s = boChuThich(src());
+    const i = s.indexOf("leadTask.findMany");
+    expect(i).toBeGreaterThan(-1);
+    expect(s.slice(i, i + 400)).toContain("leadOwnershipWhere(userId)");
   });
 
   it("truy vấn LeadTask lọc qua quan hệ lead — model đó KHÔNG được scopedDb tự lọc", () => {

@@ -43,6 +43,9 @@ const KHOA_DANG_CHAY: ReadonlyArray<[key: string, file: string]> = [
   ["parent_request.reminder:pr1", "lib/portal/parent-request-notify.ts"],
   ["attendance.edited:s1", "lib/notify/attendance.ts"],
   ["birthday:g1", "lib/students/birthday-notify.ts"],
+  // GĐ6 — nhắc Sale trước buổi trải nghiệm (2 mốc: 1 ngày và 2 giờ).
+  ["trial.reminder:1-ngay:e1:s1", "app/api/cron/trial-reminder/route.ts"],
+  ["trial.reminder:2-gio:e1:s1", "app/api/cron/trial-reminder/route.ts"],
 ];
 
 describe("catalog — phủ hết nguồn sinh đang chạy", () => {

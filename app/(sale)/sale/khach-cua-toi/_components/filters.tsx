@@ -10,10 +10,15 @@ export function LeadListFilters({
   status,
   q,
   gomDaDong,
+  // S-1 — ô tìm không quét cột SĐT khi người xem không có quyền xem SĐT. Nói
+  // thẳng trong placeholder, không thì người dùng gõ số rồi tưởng hệ thống mất dữ
+  // liệu khách.
+  timDuocSdt = false,
 }: {
   status: string;
   q: string;
   gomDaDong: boolean;
+  timDuocSdt?: boolean;
 }) {
   const router = useRouter();
   const sp = useSearchParams();
@@ -40,7 +45,11 @@ export function LeadListFilters({
       <input
         name="q"
         defaultValue={q}
-        placeholder="Tìm tên phụ huynh, tên con, số điện thoại…"
+        placeholder={
+          timDuocSdt
+            ? "Tìm tên phụ huynh, tên con, số điện thoại…"
+            : "Tìm tên phụ huynh hoặc tên con…"
+        }
         className="h-9 min-w-[16rem] flex-1 rounded-lg border border-border bg-background px-3 text-sm"
       />
       <select

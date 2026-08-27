@@ -266,8 +266,17 @@ export async function getSaleTrialRubricContext(
       )?.name ?? null)
     : null;
 
-  const existing = await sdb.trialRubricEval.findUnique({
+  // ⚠️ `findFirst` chứ không `findUnique`: GĐ4 đổi khoá duy nhất của phiếu từ
+  // `trialEnrollmentId` sang cặp (ca, buổi) — một ca nay có NHIỀU phiếu, mỗi buổi
+  // một phiếu. Tra theo `trialEnrollmentId` một mình không còn là khoá duy nhất.
+  //
+  // Lấy phiếu MỚI NHẤT vì Sale in phiếu để chốt với phụ huynh, và cái họ cần là
+  // đánh giá gần nhất. Nợ có khai: màn Sale chưa có ô CHỌN buổi như site giáo viên
+  // (`?sessionId=`) — thêm được thì nên thêm, nhưng chọn mặc định sai còn tệ hơn
+  // không cho chọn, nên bản này chốt "mới nhất" thay vì "buổi đang xếp".
+  const existing = await sdb.trialRubricEval.findFirst({
     where: { trialEnrollmentId: enrollmentId },
+    orderBy: { updatedAt: "desc" },
     select: {
       scores: true,
       totalScore: true,

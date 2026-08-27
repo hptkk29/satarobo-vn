@@ -7,10 +7,13 @@ import { Loader2, X, Download, Trash2, CheckCircle2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { updateLeadNote, updateLeadStatus, deleteLead } from '../actions'
 import {
+  LEAD_DROP_STATUSES,
   LEAD_STATUS_LABEL as STATUS_LABELS,
   LEAD_STATUS_BADGE as STATUS_COLORS,
   KANBAN_COLUMNS,
 } from '@/lib/leads/status'
+import type { LeadStatus } from '@prisma/client'
+import { LyDoRotDialog } from './ly-do-rot-dialog'
 import { Badge } from '@/components/ui/badge'
 import { ChonSoDong } from '@/components/ui/chon-so-dong'
 import { DieuHuongTrang } from '@/components/ui/dieu-huong-trang'
@@ -74,14 +77,30 @@ function formatDate(iso: string): string {
 
 function StatusCell({
   lead,
-  canUpdate,
+  canChangeStatus,
 }: {
   lead: LeadRow
-  canUpdate: boolean
+  /** 27/08 — `leads:change-status`, KHÔNG phải `leads:edit`: chỉ Sale đẩy được lead
+   *  trên phễu. Không có quyền thì ô này chỉ là NHÃN, không phải nút. */
+  canChangeStatus: boolean
 }) {
   const [pending, startTransition] = useTransition()
+  /** Bậc rơi đang chờ lý do. `null` = không có gì đang chờ. */
+  const [choLyDo, setChoLyDo] = useState<LeadStatus | null>(null)
 
-  if (!canUpdate) {
+  function doiTrangThai(next: LeadStatus, lyDo?: string) {
+    startTransition(async () => {
+      const res = await updateLeadStatus(lead.id, next, lyDo)
+      if (!res.ok) {
+        // Guard pipeline (R7-01) chặn có lý do — nói rõ lý do cho sale.
+        toast.error(res.error ?? 'Không đổi được trạng thái')
+      } else {
+        setChoLyDo(null)
+      }
+    })
+  }
+
+  if (!canChangeStatus) {
     return (
       <span
         className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold ${STATUS_COLORS[lead.status as keyof typeof STATUS_COLORS] ?? 'bg-muted text-muted-foreground'}`}
@@ -93,6 +112,13 @@ function StatusCell({
 
   return (
     <div className="relative flex items-center gap-1.5">
+      <LyDoRotDialog
+        status={choLyDo}
+        tenLead={lead.parentName}
+        dangGui={pending}
+        onHuy={() => setChoLyDo(null)}
+        onXacNhan={(lyDo) => choLyDo && doiTrangThai(choLyDo, lyDo)}
+      />
       {pending && <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />}
       <select
         // `value` chứ không phải `defaultValue`: khi server TỪ CHỐI chuyển trạng thái,
@@ -103,14 +129,13 @@ function StatusCell({
         disabled={pending}
         onClick={e => e.stopPropagation()}
         onChange={e => {
-          const next = e.target.value
-          startTransition(async () => {
-            const res = await updateLeadStatus(lead.id, next)
-            if (!res.ok) {
-              // Guard pipeline (R7-01) chặn có lý do — nói rõ lý do cho sale.
-              toast.error(res.error ?? 'Không đổi được trạng thái')
-            }
-          })
+          const next = e.target.value as LeadStatus
+          // Bậc rơi phải kèm lý do — hỏi trước, ghi sau (server cũng kiểm lại).
+          if (LEAD_DROP_STATUSES.includes(next)) {
+            setChoLyDo(next)
+            return
+          }
+          doiTrangThai(next)
         }}
         className={`rounded-full border-0 py-0.5 pl-2.5 pr-6 text-xs font-semibold focus:ring-2 focus:ring-primary/20 ${STATUS_COLORS[lead.status as keyof typeof STATUS_COLORS] ?? 'bg-muted text-muted-foreground'}`}
       >
@@ -178,12 +203,14 @@ function DeleteCell({ lead, onDeleted }: { lead: LeadRow; onDeleted: () => void 
 function LeadCell({
   col,
   lead,
-  canUpdate,
+  canChangeStatus,
   currentUserId,
 }: {
   col: string
   lead: LeadRow
-  canUpdate: boolean
+  /** 27/08 — ô trạng thái nay gác bằng `leads:change-status` (chỉ Sale). Ô này KHÔNG
+   *  còn nhận `canUpdate`: sửa hồ sơ lead là việc khác, làm ở màn chi tiết. */
+  canChangeStatus: boolean
   currentUserId: string
 }) {
   switch (col) {
@@ -220,7 +247,7 @@ function LeadCell({
     case 'status':
       return (
         <td className="px-4 py-3">
-          <StatusCell lead={lead} canUpdate={canUpdate} />
+          <StatusCell lead={lead} canChangeStatus={canChangeStatus} />
         </td>
       )
     case 'center':
@@ -303,20 +330,51 @@ function DetailItem({ label, value }: { label: string; value: React.ReactNode })
 function LeadDrawer({
   lead,
   canUpdate,
+  canChangeStatus,
   onClose,
 }: {
   lead: LeadRow | null
   canUpdate: boolean
+  canChangeStatus: boolean
   onClose: () => void
 }) {
   const [note, setNote] = useState(lead?.note ?? '')
-  const [status, setStatus] = useState(lead?.status ?? 'NEW')
+  // 'MOI' chứ không phải 'NEW': GĐ5 rút enum còn 10 giá trị tiếng Việt. Ô này khai
+  // kiểu `string` nên tsc không đỏ — giá trị chết nằm im ở đây từ đợt gộp enum.
+  const [status, setStatus] = useState<LeadStatus>((lead?.status as LeadStatus) ?? 'MOI')
   const [pending, startTransition] = useTransition()
+  /** Bậc rơi đang chờ lý do trước khi Lưu. `null` = không có gì đang chờ. */
+  const [choLyDo, setChoLyDo] = useState<LeadStatus | null>(null)
+
+  function luu(lyDo?: string) {
+    if (!lead) return
+    startTransition(async () => {
+      if (status !== lead.status) {
+        const res = await updateLeadStatus(lead.id, status, lyDo)
+        if (!res.ok) {
+          // Trước đây kết quả bị NUỐT: server từ chối thì ngăn vẫn đóng như thành
+          // công, ô trạng thái vẫn hiện giá trị mới, DB không đổi gì.
+          toast.error(res.error ?? 'Không đổi được trạng thái')
+          return
+        }
+      }
+      await updateLeadNote(lead.id, note)
+      setChoLyDo(null)
+      toast.success('Đã lưu')
+    })
+  }
 
   if (!lead) return null
 
   return (
     <div className="fixed inset-0 z-50">
+      <LyDoRotDialog
+        status={choLyDo}
+        tenLead={lead.parentName}
+        dangGui={pending}
+        onHuy={() => setChoLyDo(null)}
+        onXacNhan={(lyDo) => luu(lyDo)}
+      />
       <button
         type="button"
         aria-label="Đóng chi tiết lead"
@@ -356,8 +414,8 @@ function LeadDrawer({
                 <dd className="mt-1">
                   <select
                     value={status}
-                    onChange={e => setStatus(e.target.value)}
-                    disabled={!canUpdate || pending}
+                    onChange={e => setStatus(e.target.value as LeadStatus)}
+                    disabled={!canChangeStatus || pending}
                     className="rounded-lg border border-border px-3 py-2 text-sm focus:border-primary-purple focus:outline-none focus:ring-2 focus:ring-primary-purple/20 disabled:bg-muted"
                   >
                     {KANBAN_COLUMNS.map((value) => (
@@ -402,10 +460,12 @@ function LeadDrawer({
                 type="button"
                 disabled={pending}
                 onClick={() => {
-                  startTransition(async () => {
-                    if (status !== lead.status) await updateLeadStatus(lead.id, status)
-                    await updateLeadNote(lead.id, note)
-                  })
+                  // Bậc rơi phải kèm lý do — hỏi trước khi ghi (server kiểm lại).
+                  if (status !== lead.status && LEAD_DROP_STATUSES.includes(status)) {
+                    setChoLyDo(status)
+                    return
+                  }
+                  luu()
                 }}
                 className="mt-3 rounded-lg bg-primary-purple px-4 py-2 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-60"
               >
@@ -434,10 +494,11 @@ export function LeadsTable({
   page,
   pageSize,
   canUpdate,
+  canChangeStatus,
   canDelete,
   currentStatus,
-  currentQ,
   currentUserId,
+  canExport,
   columns,
   columnPicker,
 }: {
@@ -446,10 +507,14 @@ export function LeadsTable({
   page: number
   pageSize: number
   canUpdate: boolean
+  /** 27/08 — quyền RIÊNG `leads:change-status` (chỉ Sale). Tách khỏi canUpdate
+   *  vì Quản lý cơ sở/Marketing vẫn sửa hồ sơ lead, chỉ không đẩy bậc phễu. */
+  canChangeStatus: boolean
   canDelete: boolean
   currentStatus?: string
-  currentQ?: string
   currentUserId: string
+  /** G-03 — `leads:export`. Quyền RIÊNG, tách khỏi quyền xem danh sách. */
+  canExport: boolean
   /** G-04 — cột đang hiện, ĐÚNG thứ tự. Server đã ghép cấu hình của người này với
    *  danh mục `lib/tables/lead-columns.ts`; bảng không tự quyết định gì. */
   columns: { key: string; label: string }[]
@@ -482,6 +547,16 @@ export function LeadsTable({
     router.push(`/leads?${params.toString()}`)
   }
 
+  // G-03 — link xuất mang THEO CẢ bộ lọc đang hiện trên màn (cơ sở, sale, nguồn,
+  // khoảng ngày…), không chỉ trạng thái + từ khoá như bản CSV cũ. Trước đây bấm nút
+  // sau khi lọc "CS1, tháng 8" vẫn ra tệp của mọi cơ sở mọi thời kỳ — không sai
+  // quyền (scopedDb vẫn chặn), nhưng là một tệp KHÁC thứ người dùng đang nhìn.
+  // Bỏ `page`/`size`/`view`: đó là chuyện phân trang trên màn, tệp xuất trọn bộ lọc.
+  const exportParams = new URLSearchParams(searchParams.toString())
+  for (const k of ['page', 'size', 'view']) exportParams.delete(k)
+  const exportQuery = exportParams.toString()
+  const exportHref = `/api/admin/leads/export${exportQuery ? `?${exportQuery}` : ''}`
+
   return (
     <div className="space-y-4">
       {/* Filters — tìm kiếm dùng chung ô "Tìm" ở thanh lọc phía trên (tránh 2 ô trùng nhau). */}
@@ -504,16 +579,19 @@ export function LeadsTable({
         <div className="ml-auto flex items-center gap-2">
           {columnPicker}
 
-          {/* Export CSV */}
-          <a
-            href={`/api/admin/leads/export${currentStatus ? `?status=${currentStatus}` : ''}${currentQ ? `${currentStatus ? '&' : '?'}q=${encodeURIComponent(currentQ)}` : ''}`}
-            download
-            className="inline-flex items-center gap-2 rounded-lg border border-border bg-card px-3 py-2 text-sm font-semibold text-muted-foreground hover:bg-muted hover:text-foreground"
-            title="Xuất CSV"
-          >
-            <Download className="h-4 w-4" />
-            <span className="hidden sm:inline">Xuất CSV</span>
-          </a>
+          {/* G-03 — xuất Excel. Nút bị giấu khi thiếu `leads:export`, nhưng đường
+              /api vẫn tự gác lại: giấu nút KHÔNG phải kiểm soát truy cập. */}
+          {canExport && (
+            <a
+              href={exportHref}
+              download
+              className="inline-flex items-center gap-2 rounded-lg border border-border bg-card px-3 py-2 text-sm font-semibold text-muted-foreground hover:bg-muted hover:text-foreground"
+              title="Xuất Excel danh sách lead đang lọc"
+            >
+              <Download className="h-4 w-4" />
+              <span className="hidden sm:inline">Xuất Excel</span>
+            </a>
+          )}
         </div>
       </div>
 
@@ -562,7 +640,7 @@ export function LeadsTable({
                         key={c.key}
                         col={c.key}
                         lead={lead}
-                        canUpdate={canUpdate}
+                        canChangeStatus={canChangeStatus}
                         currentUserId={currentUserId}
                       />
                     ))}
@@ -616,6 +694,7 @@ export function LeadsTable({
         key={selectedLead?.id ?? 'empty'}
         lead={selectedLead}
         canUpdate={canUpdate}
+        canChangeStatus={canChangeStatus}
         onClose={() => setSelectedLead(null)}
       />
     </div>

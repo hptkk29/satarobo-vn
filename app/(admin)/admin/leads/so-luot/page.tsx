@@ -7,16 +7,25 @@
 //
 // Trang CHỈ ĐỌC. Không có nút sửa sổ: sổ lượt sửa được thì nó không còn là bằng
 // chứng. Muốn đổi cách chia thì vào Cấu hình chia lead.
+//
+// S-5 (25/08/2026) — mở cho TỔ SALE. Bản đầu gác bằng `leads:view-all`, mà đó là
+// quyền quản lý; sale giữ `leads:view-own`. Nên màn dựng ra để dập tin đồn thiên
+// vị lại đóng đúng với người cần thuyết phục nhất — vô dụng đúng ở chỗ nó sinh ra
+// để có ích. Nay gate là `leads:view-all` ∨ `leads:rotation-view` (key ĐỌC riêng),
+// và phạm vi tính bằng `rotationBoardScope`: sale chỉ thấy sổ CƠ SỞ MÌNH.
+// Vẫn không có đường ghi nào ở đây — `lead-rotation-view.test.ts` quét thư mục để
+// giữ điều đó cho cả file thêm sau này.
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { ListOrdered } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { hasRole } from "@/lib/auth/permissions";
-import { checkPermission } from "@/lib/auth/check-permission";
+import { checkPermission, checkAnyPermission } from "@/lib/auth/check-permission";
+import { PAGE_GATES } from "@/lib/auth/page-gates";
 import { resolveActor } from "@/lib/auth/actor";
 import { scopedDb } from "@/lib/db-scope";
 import { orgUnitIdForCenter } from "@/lib/org/org-service";
-import { getRotationBoard } from "@/lib/lead/rotation";
+import { getRotationBoard, rotationBoardScope } from "@/lib/lead/rotation";
 import { formatDateVN } from "@/lib/format/date";
 import { PageHelp } from "@/components/admin/ui/page-help";
 
@@ -26,25 +35,36 @@ export const dynamic = "force-dynamic";
 export default async function LeadRotationBoardPage() {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  // Ai xem được toàn bộ lead của cơ sở thì xem được sổ lượt của cơ sở đó — đây
-  // là bản giải thích cho chính những lead ấy, không phải dữ liệu mới.
-  if (!(await checkPermission("leads:view-all"))) redirect("/leads");
+  // S-5 — TỔ SALE PHẢI VÀO ĐƯỢC. Trước đây gác bằng `leads:view-all`, tức người
+  // duy nhất không mở được màn kiểm chứng lại là người mà nó viết cho: sale không
+  // giữ quyền quản lý đó. Nay `PAGE_GATES["/leads/so-luot"]` = view-all ∨
+  // `leads:rotation-view` (key ĐỌC riêng, cấp cho SALES_CSM).
+  if (!(await checkAnyPermission(PAGE_GATES["/leads/so-luot"]))) redirect("/leads");
 
+  // Mở CỬA không có nghĩa mở TOÀN HỆ. Sale xem sổ của cơ sở mình — vừa đủ để đối
+  // chiếu với đồng nghiệp cùng vòng chia. Quyết định phạm vi nằm ở một hàm thuần
+  // (`rotationBoardScope`) nên test được; `Center` ∈ SCOPE_EXEMPT nên `scopedDb`
+  // pass-through và cách ly cơ sở ở màn này phải tự tính.
   const isSuper = hasRole(session.user, "SUPER_ADMIN");
-  const isCM = hasRole(session.user, "CENTER_MANAGER") && !isSuper;
+  const phamVi = rotationBoardScope({
+    superAdmin: isSuper,
+    xemToanBo: await checkPermission("leads:view-all"),
+    centerId: session.user.centerId,
+  });
 
   const actor = await resolveActor(session.user.id);
   const sdb = scopedDb(actor);
-  // Center là SCOPE_EXEMPT (hạ tầng) ⇒ sdb pass-through; lọc theo cơ sở của QL
-  // bằng tay, giống trang Cấu hình chia lead ngay bên cạnh.
-  const centers = await sdb.center.findMany({
-    where: {
-      isActive: true,
-      ...(isCM && session.user.centerId ? { id: session.user.centerId } : {}),
-    },
-    orderBy: { displayOrder: "asc" },
-    select: { id: true, name: true },
-  });
+  const centers =
+    phamVi.kind === "none"
+      ? []
+      : await sdb.center.findMany({
+          where: {
+            isActive: true,
+            ...(phamVi.kind === "one-center" ? { id: phamVi.centerId } : {}),
+          },
+          orderBy: { displayOrder: "asc" },
+          select: { id: true, name: true },
+        });
 
   const boards = await Promise.all(
     centers.map(async (c) => {
@@ -99,6 +119,15 @@ export default async function LeadRotationBoardPage() {
       </PageHelp>
 
       <div className="mt-4 space-y-5">
+        {/* Hồ sơ không gắn cơ sở nào mà cũng không xem toàn hệ ⇒ phạm vi rỗng.
+            Nói ra thay vì trả trang trắng: trắng thì người dùng tưởng sổ chưa có
+            dữ liệu và đi hỏi nhầm chỗ, trong khi việc cần làm là gắn cơ sở. */}
+        {centers.length === 0 ? (
+          <p className="rounded-xl border border-dashed border-border p-8 text-center text-sm text-muted-foreground">
+            Tài khoản của bạn chưa gắn với cơ sở nào nên chưa có sổ lượt để xem.
+            Nhờ quản lý cơ sở gắn cơ sở cho tài khoản này.
+          </p>
+        ) : null}
         {boards.map(({ center, orgUnitId, rows }) => {
           // Chênh lệch đo trên VỊ TRÍ trong vòng (`turns`) — đó mới là thứ có bất
           // biến "không quá 1". Số lead THẬT (`turns - seedTurns`) lệch nhiều là

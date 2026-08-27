@@ -7,11 +7,13 @@ import type { LeadStatus } from "@prisma/client";
 import { toast } from "sonner";
 import {
   KANBAN_COLUMNS,
+  LEAD_DROP_STATUSES,
   LEAD_STATUS_LABEL,
   LEAD_STATUS_ACCENT,
 } from "@/lib/leads/status";
 import { Badge } from "@/components/ui/badge";
 import { updateLeadStatus, autoAssignLeadAction } from "../actions";
+import { LyDoRotDialog } from "./ly-do-rot-dialog";
 
 export type KanbanLead = {
   id: string;
@@ -82,10 +84,16 @@ export function LeadsKanban({
     setItems(leads);
   }, [leads]);
 
-  /** FL2-01 — chuyển sang ENROLLED = chốt deal → ĐIỀU HƯỚNG vào trang chi tiết lead
-   *  (convert v2 đa con + học phí 1/2 đợt), KHÔNG mở popup close-deal cũ. */
+  /** FL2-01 — thả vào cột "Đã đăng ký" = chốt deal → ĐIỀU HƯỚNG vào trang chi tiết lead
+   *  (convert v2 đa con + học phí 1/2 đợt), KHÔNG mở popup close-deal cũ.
+   *
+   *  GĐ5 — trước đây bàn cờ có HAI cột cuối: thả vào REGISTERED chỉ đổi trạng thái, thả
+   *  vào ENROLLED mới điều hướng. Enum mới gộp chúng thành DA_DANG_KY nên chỉ còn MỘT
+   *  cột, và cột đó mang nghĩa "chốt". Hệ quả cần biết: người CÓ quyền chốt deal không
+   *  còn đường kéo-thả để chỉ ghi nhận "đã đăng ký" — họ đi qua màn chuyển đổi, nơi có
+   *  cổng kiểm tiền. Người KHÔNG có quyền chốt vẫn kéo đổi trạng thái như cũ. */
   function requestMove(leadId: string, to: LeadStatus) {
-    if (to === "ENROLLED" && canCloseDeal) {
+    if (to === "DA_DANG_KY" && canCloseDeal) {
       router.push(`/leads/${leadId}`);
       return;
     }
@@ -104,10 +112,26 @@ export function LeadsKanban({
     });
   }
 
+  /** Bậc rơi đang chờ người dùng ghi lý do. `null` = không có gì đang chờ. */
+  const [choLyDo, setChoLyDo] = useState<{ leadId: string; to: LeadStatus } | null>(
+    null,
+  );
+
   function move(leadId: string, to: LeadStatus) {
     const lead = items.find((l) => l.id === leadId);
     if (!lead || lead.status === to) return;
 
+    // Bậc rơi phải có lý do. Hỏi TRƯỚC khi cập nhật lạc quan — đổi màu thẻ rồi mới
+    // hỏi thì người bấm Huỷ thấy thẻ đã nằm ở cột mới trong khi DB không đổi gì.
+    if (LEAD_DROP_STATUSES.includes(to)) {
+      setChoLyDo({ leadId, to });
+      return;
+    }
+    ganhKetQua(leadId, to);
+  }
+
+  /** Phần ghi thật — dùng chung cho đường thường và đường qua hộp thoại lý do. */
+  function ganhKetQua(leadId: string, to: LeadStatus, lyDo?: string) {
     // Optimistic update
     const prev = items;
     setItems((cur) =>
@@ -115,11 +139,12 @@ export function LeadsKanban({
     );
 
     startTransition(async () => {
-      const res = await updateLeadStatus(leadId, to);
+      const res = await updateLeadStatus(leadId, to, lyDo);
       if (!res.ok) {
         setItems(prev); // rollback
         toast.error(res.error ?? "Không đổi được trạng thái");
       } else {
+        setChoLyDo(null);
         toast.success(`Đã chuyển sang "${LEAD_STATUS_LABEL[to]}"`);
         router.refresh();
       }
@@ -130,6 +155,13 @@ export function LeadsKanban({
 
   return (
     <div className="-mx-4 overflow-x-auto px-4 pb-4 sm:mx-0 sm:px-0">
+      <LyDoRotDialog
+        status={choLyDo?.to ?? null}
+        tenLead={items.find((l) => l.id === choLyDo?.leadId)?.parentName ?? null}
+        dangGui={isPending}
+        onHuy={() => setChoLyDo(null)}
+        onXacNhan={(lyDo) => choLyDo && ganhKetQua(choLyDo.leadId, choLyDo.to, lyDo)}
+      />
       <div className="flex min-w-max gap-3">
         {KANBAN_COLUMNS.map((col) => {
           const colLeads = byStatus(col);

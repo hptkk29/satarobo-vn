@@ -62,3 +62,47 @@ describe("đăng ký cron", () => {
     }
   });
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// S-7 (26/08/2026) — cron nào PHẢI được bơm trên môi trường `test`.
+//
+// Vercel Cron KHÔNG chạy trên custom environment ⇒ `test.satarobo.vn` không có
+// một cron nào tự chạy. `cron-pump-test.yml` là thứ duy nhất gọi chúng ở đó.
+// Cron có trong `vercel.json` mà không có trong danh sách bơm thì **lần chạy
+// thật đầu tiên của nó là trên PROD** — không có lưới nghiệm thu nào.
+//
+// Test này KHÔNG đòi bơm cả 26 cron (phần lớn là việc đêm, bơm 5 phút/lần là phí
+// và làm nhiễu). Nó chốt đúng tập cron mà **ô nghiệm thu của người** phụ thuộc:
+//   • sla-check — ô "SLA kêu đúng trên một lead thử". Không bơm thì người nghiệm
+//     thu ngồi đợi một tiếng chuông không bao giờ tới, rồi kết luận SLA hỏng.
+// ─────────────────────────────────────────────────────────────────────────────
+const YML = readFileSync(
+  join(ROOT, ".github", "workflows", "cron-pump-test.yml"),
+  "utf8",
+);
+
+/** Tên cron trong vòng `for p in a b c; do` của workflow bơm. */
+const duocBom: string[] = (() => {
+  const m = YML.match(/for\s+p\s+in\s+([^;]+);\s*do/);
+  return m ? m[1].trim().split(/\s+/) : [];
+})();
+
+describe("bơm cron trên môi trường test", () => {
+  it("đọc được danh sách bơm (khuôn `for p in …; do` chưa bị đổi)", () => {
+    expect(duocBom.length).toBeGreaterThan(0);
+  });
+
+  it("mọi tên trong danh sách bơm đều là route CÓ THẬT", () => {
+    // Gõ sai tên = curl ăn 404 mỗi 5 phút; workflow báo đỏ nhưng chẳng ai đọc.
+    const co = new Set(routeCoThat);
+    const sai = duocBom.filter((n) => !co.has(n));
+    expect(sai, `bơm vào hư không: ${sai.join(", ")}`).toEqual([]);
+  });
+
+  it("sla-check được bơm — nếu không, ô nghiệm thu SLA không có cách tick", () => {
+    expect(
+      duocBom,
+      "thêm sla-check vào vòng `for p in …` của .github/workflows/cron-pump-test.yml",
+    ).toContain("sla-check");
+  });
+});

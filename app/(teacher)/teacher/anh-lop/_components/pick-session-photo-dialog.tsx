@@ -18,7 +18,7 @@
 import { useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { AlertTriangle, Check, Images, Loader2 } from "lucide-react";
+import { AlertTriangle, Check, Images, Loader2, Maximize2, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
@@ -55,6 +55,8 @@ export function PickSessionPhotoDialog({
   const [canTag, setCanTag] = useState(true);
   const [consentGranted, setConsentGranted] = useState(true);
   const [items, setItems] = useState<SessionPhotoPickerItem[]>([]);
+  /** Ảnh đang xem lớn — null = không mở lớp phủ. */
+  const [zoom, setZoom] = useState<SessionPhotoPickerItem | null>(null);
   // Chỉ refresh trang khi thực sự có thay đổi — cột "Đã có / Chưa có" tính ở server,
   // mà refresh mỗi lần đóng hộp thoại thì bảng nhấp nháy cả khi giáo viên chỉ mở ra xem.
   const [dirty, setDirty] = useState(false);
@@ -189,7 +191,7 @@ export function PickSessionPhotoDialog({
                     disabled={pending || (!m.tagged && !consentGranted)}
                     onClick={() => toggle(m)}
                     className={cn(
-                      "relative overflow-hidden rounded-lg border-2 text-left transition-colors disabled:opacity-50",
+                      "group relative overflow-hidden rounded-lg border-2 text-left transition-colors disabled:opacity-50",
                       m.tagged
                         ? "border-primary"
                         : "border-transparent hover:border-border",
@@ -200,6 +202,29 @@ export function PickSessionPhotoDialog({
                       alt={m.caption ?? "Ảnh buổi học"}
                       className="aspect-square w-full object-cover"
                     />
+                    {/* Phóng to (26/08 — chủ dự án): ảnh ô vuông 1/4 màn hình không đủ
+                        để nhận ra em nào trong khung, mà gắn nhầm thẻ là gửi ảnh của
+                        con nhà này cho phụ huynh nhà khác. Là <span> chứ KHÔNG phải
+                        <button>: nút này nằm TRONG nút chọn ảnh, lồng button vào button
+                        là HTML không hợp lệ và trình duyệt tự gỡ ra. */}
+                    <span
+                      role="button"
+                      tabIndex={0}
+                      aria-label="Phóng to xem ảnh"
+                      onClick={(e) => {
+                        e.stopPropagation(); // đừng gắn/bỏ thẻ khi người ta chỉ muốn xem
+                        setZoom(m);
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key !== "Enter" && e.key !== " ") return;
+                        e.preventDefault();
+                        e.stopPropagation();
+                        setZoom(m);
+                      }}
+                      className="absolute right-1 top-1 flex h-6 w-6 cursor-pointer items-center justify-center rounded-md bg-black/55 text-white opacity-0 transition-opacity focus-visible:opacity-100 group-hover:opacity-100 hover:bg-black/75"
+                    >
+                      <Maximize2 className="h-3.5 w-3.5" aria-hidden />
+                    </span>
                     {m.tagged && (
                       <span className="absolute left-1 top-1 flex h-5 w-5 items-center justify-center rounded-full bg-primary text-white">
                         <Check className="h-3.5 w-3.5" aria-hidden />
@@ -219,6 +244,68 @@ export function PickSessionPhotoDialog({
           )}
         </DialogContent>
       </Dialog>
+
+      {/* Xem ảnh lớn. Lớp phủ RIÊNG thay vì Dialog thứ hai: Dialog lồng Dialog thì lớp
+          dưới bị khoá tiêu điểm, đóng cái trên là đóng luôn cả hộp chọn ảnh — giáo viên
+          phải mở lại từ đầu cho mỗi tấm muốn xem. */}
+      {zoom && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="Xem ảnh lớn"
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-black/85 p-4"
+          onClick={() => setZoom(null)}
+        >
+          <button
+            type="button"
+            aria-label="Đóng xem ảnh"
+            onClick={() => setZoom(null)}
+            className="absolute right-4 top-4 flex h-10 w-10 items-center justify-center rounded-full bg-white/15 text-white hover:bg-white/25"
+          >
+            <X className="h-5 w-5" aria-hidden />
+          </button>
+
+          {/* Bấm vào chính tấm ảnh KHÔNG đóng — người ta hay bấm để nhìn kỹ hơn. */}
+          <figure
+            className="flex max-h-full max-w-3xl flex-col items-center gap-3"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <img
+              src={zoom.url}
+              alt={zoom.caption ?? "Ảnh buổi học"}
+              className="max-h-[70vh] w-auto max-w-full rounded-lg object-contain"
+            />
+            <figcaption className="flex flex-col items-center gap-2 text-center">
+              {zoom.caption && (
+                <span className="text-sm text-white/85">{zoom.caption}</span>
+              )}
+              <button
+                type="button"
+                disabled={pending || (!zoom.tagged && !consentGranted)}
+                onClick={() => {
+                  toggle(zoom);
+                  setZoom(null);
+                }}
+                className={cn(
+                  "inline-flex items-center gap-1.5 rounded-lg px-4 py-2 text-sm font-semibold disabled:opacity-50",
+                  zoom.tagged
+                    ? "bg-white/15 text-white hover:bg-white/25"
+                    : "bg-primary text-primary-foreground hover:opacity-90",
+                )}
+              >
+                {zoom.tagged ? (
+                  <>Bỏ ảnh này khỏi {studentName}</>
+                ) : (
+                  <>
+                    <Check className="h-4 w-4" aria-hidden /> Chọn ảnh này cho{" "}
+                    {studentName}
+                  </>
+                )}
+              </button>
+            </figcaption>
+          </figure>
+        </div>
+      )}
     </>
   );
 }

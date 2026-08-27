@@ -7,6 +7,7 @@ import { writeAudit, type AuditActor } from "@/lib/audit/audit-log";
 import { publishEvent } from "@/lib/events/publish";
 import { issueReceipt } from "@/lib/finance/receipt";
 import { allocateByWeight } from "@/lib/finance/allocate";
+import { recordLeadStatusLedger } from "@/lib/leads/set-status";
 import { recordLeadStatusChange } from "@/lib/lead/status-trail-write";
 
 type Tx = Prisma.TransactionClient;
@@ -142,8 +143,8 @@ export async function ensureOrderPaymentRecorded(
 }
 
 /**
- * S3 — auto-advance lead AWAITING_DECISION → REGISTERED khi đã ghi nhận thanh toán.
- * updateMany có guard (status=AWAITING_DECISION) → idempotent, không lùi/đụng status khác.
+ * S3 — auto-advance lead CHO_QUYET_DINH → DA_DANG_KY khi đã ghi nhận thanh toán.
+ * updateMany có guard (status=CHO_QUYET_DINH) → idempotent, không lùi/đụng status khác.
  * Trả true nếu vừa nâng cấp (để call-site biết có đổi).
  */
 export async function maybeAdvanceLeadToRegistered(
@@ -151,21 +152,32 @@ export async function maybeAdvanceLeadToRegistered(
   params: { leadId: string; actor: EnsurePaymentActor },
 ): Promise<boolean> {
   const upd = await tx.lead.updateMany({
-    where: { id: params.leadId, status: "AWAITING_DECISION", deletedAt: null },
-    data: { status: "REGISTERED" },
+    where: { id: params.leadId, status: "CHO_QUYET_DINH", deletedAt: null },
+    data: { status: "DA_DANG_KY" },
   });
   if (upd.count === 0) return false;
-  // C-07 — trước đây chỗ này CHỈ tạo `LeadActivity`, không có dòng `AuditLog`
-  // nào ⇒ mốc "tiền vào → Đã đăng ký" biến mất khỏi mục "Lịch sử thay đổi" của
-  // trang chi tiết lead (thứ QLCS được xem), trong khi đường đổi tay thì có.
-  // Nay đi chung một đường ghi với mọi lượt đổi trạng thái khác.
+  // HAI SỔ (xem ghi chú đầu `lib/leads/set-status.ts`):
+  //  1. sổ ĐẾM phễu — `updateMany` ở trên là lượt claim atomic, giữ nguyên, chỉ nối sổ;
+  //  2. vết NGƯỜI ĐỌC — C-07: trước đây chỗ này CHỈ tạo `LeadActivity`, không có dòng
+  //     `AuditLog` nào ⇒ mốc "tiền vào → Đã đăng ký" biến mất khỏi mục "Lịch sử thay
+  //     đổi" của trang chi tiết lead (thứ QLCS xem), trong khi đường đổi tay thì có.
+  // Giá trị trạng thái là bộ 10 của GĐ5, KHÔNG phải AWAITING_DECISION/REGISTERED cũ.
+  await recordLeadStatusLedger({
+    tx,
+    leadId: params.leadId,
+    from: "CHO_QUYET_DINH",
+    to: "DA_DANG_KY",
+    source: "payment",
+    actorId: params.actor.id,
+    actorName: params.actor.name ?? null,
+  });
   await recordLeadStatusChange({
     tx,
     leadId: params.leadId,
     actorId: params.actor.id,
     actorName: params.actor.name ?? "Hệ thống",
-    from: "AWAITING_DECISION",
-    to: "REGISTERED",
+    from: "CHO_QUYET_DINH",
+    to: "DA_DANG_KY",
     source: "PAYMENT",
   });
   return true;

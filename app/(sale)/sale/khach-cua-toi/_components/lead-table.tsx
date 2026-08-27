@@ -28,9 +28,30 @@ function daNguoi(lastActivityAt: string | null, createdAt: string): boolean {
   return Date.now() - moc > NGAY_NGUOI * 86400_000;
 }
 
-export function MyLeadTable({ rows }: { rows: MyLeadRow[] }) {
+export function MyLeadTable({
+  rows,
+  canhBaoCat,
+}: {
+  rows: MyLeadRow[];
+  /**
+   * Câu "còn N khách chưa hiện" khi truy vấn chạm trần 200 dòng; `null` = không cắt.
+   *
+   * PHẢI bày ra. `<PhanTrangBang>` cắt trang ở TẦNG HIỂN THỊ nên nó chỉ đếm được
+   * số dòng đã nhận: thanh dưới bảng in "/ 200 khách" cho cả người có 237 khách.
+   * Không có dòng này thì con số đó là một lời nói dối im lặng.
+   */
+  canhBaoCat: string | null;
+}) {
   return (
     <div className="mt-4">
+      {canhBaoCat ? (
+        <p
+          role="status"
+          className="mb-3 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm text-amber-700 dark:text-amber-400"
+        >
+          {canhBaoCat}
+        </p>
+      ) : null}
       <PhanTrangBang tenDonVi="khách" khoaGhiNho="sale-khach-cua-toi">
         <table className="w-full text-sm">
           <thead>

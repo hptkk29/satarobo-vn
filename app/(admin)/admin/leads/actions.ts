@@ -9,10 +9,12 @@ import { revalidatePath } from 'next/cache'
 import { z } from 'zod'
 import { phoneVn } from '@/lib/validators/phone'
 import { phoneVariants } from '@/lib/phone'
+import { Gender } from '@prisma/client'
 import type { LeadChildStatus, Prisma } from '@prisma/client'
 import { logLeadAudit, getAuditActor } from '@/lib/audit/log'
 import { recordLeadStatusChange } from '@/lib/lead/status-trail-write'
 import { recordLeadActivity } from '@/lib/lead/activity-write'
+import { SYSTEM_ACTIVITY_META } from '@/lib/lead/activity-clock'
 import { resolveActor } from '@/lib/auth/actor'
 import { passesScope, scopedDb } from '@/lib/db-scope'
 import { getLeadPaymentSummary } from '@/lib/payments/summary'
@@ -25,7 +27,13 @@ import { centerIdForOrgUnit } from '@/lib/org/org-service'
 import { rejectHeadOffice } from '@/lib/enrollment-flow'
 import { normalizeFacebookUrl } from '@/lib/lead/intake/normalize'
 import { mergeLeadNote } from '@/lib/lead/note-view'
-import { LEAD_STATUS_LABEL, canTransitionLeadStatus } from '@/lib/leads/status'
+import {
+  LEAD_DROP_STATUSES,
+  LEAD_STATUS_LABEL,
+  LEAD_STATUS_VALUES,
+  canTransitionLeadStatus,
+} from '@/lib/leads/status'
+import { setLeadStatus } from '@/lib/leads/set-status'
 import { leadChildSchema } from '@/lib/validators/lead'
 import {
   decideLeadLostFields,
@@ -33,35 +41,31 @@ import {
   unmarkChildLostSchema,
 } from '@/lib/lead/lost-status'
 import { syncLeadChildNameToStudents } from '@/lib/students/sync-name'
+import { checkCampaignNameForLead } from '@/lib/ads/campaign-code'
+import { loadKnownCenterCodes } from '@/lib/ads/center-codes'
 import {
   getPriorHistoryByPhone,
   summarizePriorHistory,
 } from '@/lib/students/prior-history'
 
-const statusSchema = z.enum([
-  'NEW',
-  'ASSIGNED',
-  'CONTACTED',
-  'NO_ANSWER',
-  'CONSULTING',
-  'TRIAL_SCHEDULED',
-  'TRIAL_ATTENDED',
-  'TRIAL_IN_PROGRESS',
-  'AWAITING_DECISION',
-  'REGISTERED',
-  'ENROLLED',
-  'NURTURING',
-  'LOST',
-  'DUPLICATE',
-  'DEMO_SCHEDULED',
-])
+// GĐ0 — tuple lấy từ nguồn duy nhất @/lib/leads/status (trước đây chép tay 15 chuỗi
+// ở đây và một bản nữa trong lib/validators/lead.ts, hai bản lệch thứ tự nhau).
+const statusSchema = z.enum(LEAD_STATUS_VALUES)
 
 // ─── #11 T1 (câu 10 BGĐ, Kiệt ký spec 10/07) — lead "dùng chung" ────────────
 /**
- * Q2: lead chia sẻ → người khác chỉ XEM + GHI CHÚ (addLeadActivity). Mọi mutator
- * (status/fields/note/loại đơn/task) đòi OWNER (assignee) hoặc actor view-all
- * (QL/Admin). KHÔNG export ('use server': export async = public endpoint).
- * Cũng vá luôn lỗ pre-existing: Sale A gọi action với leadId của Sale B cùng cơ sở.
+ * Mọi mutator (status/fields/note/loại đơn/task/nhật ký) đòi OWNER (assignee)
+ * hoặc actor view-all (QL/Admin). KHÔNG export ('use server': export async =
+ * public endpoint). Cũng vá lỗ pre-existing: Sale A gọi action với leadId của
+ * Sale B cùng cơ sở.
+ *
+ * ~~Q2: lead chia sẻ → người khác chỉ XEM + GHI CHÚ (addLeadActivity).~~
+ * [ĐẢO — S-6, 27/08/2026] Ngoại lệ "ghi chú" đã gỡ khỏi `addLeadActivity`. Hai
+ * lý do, cái sau mới là cái nặng:
+ *   · chính sách "dùng chung lead" đã TẮT từ Q8 21/08 (lib/lead/sharing.ts),
+ *     nên vế "lead chia sẻ" không còn ai đứng sau;
+ *   · từ S-3, ghi một dòng nhật ký còn ĐÓNG mốc `Lead.firstContactAt` — thứ
+ *     tắt chuông SLA-3 vĩnh viễn. "Chỉ ghi chú" không còn là việc vô hại.
  */
 async function actorMayMutateLead(
   sessionUserId: string,
@@ -137,6 +141,10 @@ export async function toggleLeadShareAction(
       content: share
         ? 'Bật "dùng chung" — CSKH cùng cơ sở xem được lead này'
         : 'Tắt "dùng chung"',
+      // S-3 — DÒNG MÁY: bật/tắt cờ chia sẻ là việc nội bộ, không phải một lần gọi
+      // phụ huynh. Thiếu dấu này thì cú bật "dùng chung" tự tay đóng mốc "đã liên
+      // hệ lần đầu" và tắt cảnh báo SLA-3 hộ người.
+      metadata: SYSTEM_ACTIVITY_META,
     })
   })
 
@@ -145,16 +153,44 @@ export async function toggleLeadShareAction(
   return { ok: true }
 }
 
+/**
+ * Đổi trạng thái lead bằng TAY (kéo thẻ Kanban / chọn ở bảng).
+ *
+ * `reason` BẮT BUỘC khi chuyển vào một bậc rơi (`LEAD_DROP_STATUSES`). Ép ở đây chứ
+ * không ở `setLeadStatus` vì phần lớn đường vào cửa ghi là MÁY chạy (điểm danh học
+ * thử, webhook tiền, nhập tệp) — không có ai để hỏi. Chỉ đường người bấm mới hỏi được,
+ * và nếu không hỏi thì `Lead.dropReason` vĩnh viễn NULL: báo cáo biết lead rụng ở bậc
+ * nào nhưng không bao giờ biết vì sao, tức là biết một nửa thì không hành động được.
+ */
 export async function updateLeadStatus(
   leadId: string,
   rawStatus: string,
+  reason?: string,
 ): Promise<{ ok: boolean; error?: string }> {
   const session = await auth()
   if (!session?.user) return { ok: false, error: 'Chua dang nhap' }
-  if (!(await checkPermission('leads:edit'))) return { ok: false, error: 'Khong co quyen' }
+  // 27/08/2026 — gác bằng `leads:change-status`, KHÔNG phải `leads:edit`. Chủ dự án chốt
+  // chỉ Sale được đẩy lead trên phễu; Quản lý cơ sở và Marketing vẫn sửa hồ sơ lead bình
+  // thường (những đường đó vẫn gác `leads:edit`). Đây là ENDPOINT — ẩn nút ở bảng/Kanban
+  // là tiện nghi cho người dùng, không phải hàng rào: POST thẳng vào action vẫn phải chặn.
+  if (!(await checkPermission('leads:change-status'))) {
+    return { ok: false, error: 'Chỉ Tư vấn viên (Sale) được đổi trạng thái lead' }
+  }
 
   const parsed = statusSchema.safeParse(rawStatus)
   if (!parsed.success) return { ok: false, error: 'Trang thai khong hop le' }
+
+  // Cắt cả khoảng trắng: "   " không phải là một lý do.
+  const lyDo = reason?.trim() || null
+  if (LEAD_DROP_STATUSES.includes(parsed.data) && (lyDo === null || lyDo.length < 3)) {
+    return {
+      ok: false,
+      error: `Cần ghi lý do khi chuyển sang "${LEAD_STATUS_LABEL[parsed.data]}"`,
+    }
+  }
+  if (lyDo !== null && lyDo.length > 500) {
+    return { ok: false, error: 'Lý do quá dài (tối đa 500 ký tự)' }
+  }
 
   const before = await db.lead.findUnique({
     where: { id: leadId },
@@ -184,9 +220,18 @@ export async function updateLeadStatus(
   const { actorId, actorName } = getAuditActor(session)
 
   await db.$transaction(async (tx) => {
-    await tx.lead.update({
-      where: { id: leadId },
-      data: { status: parsed.data },
+    // GĐ1 — đi qua cửa chung: ngoài việc đổi cột, nó ghi LeadStatusHistory và dời
+    // `statusChangedAt` (mốc mà nhắc việc đọc, thay cho `updatedAt` vốn bị mọi thao
+    // tác chạm lead dời đi). `LeadActivity` bên dưới vẫn giữ — đó là dòng thời gian
+    // cho người đọc, khác mục đích với sổ trạng thái dùng để tính tỷ lệ chuyển đổi.
+    await setLeadStatus({
+      tx,
+      leadId,
+      to: parsed.data,
+      source: 'admin',
+      actorId,
+      actorName,
+      reason: lyDo,
     })
 
     // C-07 — vết đổi trạng thái đi qua ĐÚNG MỘT đường cho mọi lối đổi (tay, tự
@@ -212,44 +257,45 @@ export async function updateLeadStatus(
     //
     // Chỉ đụng dòng đang PENDING: con đã nhập học khoá khác rồi thì lead mất không xoá
     // được thành tích đó.
-    if (parsed.data === 'LOST' && before.status !== 'LOST') {
+    // 'DA_MAT' chứ không 'LOST': GĐ5 rút enum LeadStatus còn 10 giá trị tiếng Việt
+    // (LOST và DUPLICATE gộp làm một). `LeadTrialHistory.outcome` là enum KHÁC, giá
+    // trị 'LOST' của nó không đổi — đừng đổi theo.
+    if (parsed.data === 'DA_MAT' && before.status !== 'DA_MAT') {
       await tx.leadTrialHistory.updateMany({
         where: { leadChild: { leadId }, outcome: 'PENDING' },
         data: { outcome: 'LOST' },
       })
     }
 
-    // Phase T1.4 — vào TRIAL_SCHEDULED → tự tạo lịch học thử (nếu chưa có buổi đang mở).
+    // 26/08 — GỘP hai hệ Trial: KHÔNG còn đẻ bản ghi `TrialClass` (V1) nữa.
+    //
+    // Nếp cũ (Phase T1.4) tạo sẵn một lịch học thử "ngày mai cùng giờ" làm chỗ giữ chân.
+    // Cái đó nằm ở hệ V1, mà bảng Trial của site giáo viên chỉ đọc V2 — nên lịch giữ chân
+    // ấy giáo viên KHÔNG BAO GIỜ thấy, và nó còn đẻ ra một ngày giả trong báo cáo.
+    // Nay chỉ ghi việc cần làm vào dòng thời gian; Sale xếp buổi thật ở màn "Lớp Trial".
     if (
-      parsed.data === 'TRIAL_SCHEDULED' &&
-      before.status !== 'TRIAL_SCHEDULED'
+      parsed.data === 'DA_HEN_HOC_THU' &&
+      before.status !== 'DA_HEN_HOC_THU'
     ) {
-      const openTrial = await tx.trialClass.findFirst({
-        where: { leadId, status: { in: ['SCHEDULED', 'CONFIRMED', 'POSTPONED'] } },
-        select: { id: true },
+      await recordLeadActivity({
+        tx,
+        leadId,
+        actorId,
+        actorName,
+        type: 'NOTE',
+        content:
+          '[Trải nghiệm] Lead đã hẹn học thử — vào màn "Lớp Trial" xếp con vào buổi cụ thể để giáo viên thấy trên lịch dạy.',
+        // S-3 — dòng nhắc việc do MÁY sinh kèm lượt đổi trạng thái, không phải vết
+        // của một lần chạm khách.
+        metadata: SYSTEM_ACTIVITY_META,
       })
-      if (!openTrial) {
-        // Placeholder: ngày mai cùng giờ — GV/admin chỉnh lại lịch thật sau.
-        const scheduledAt = new Date(Date.now() + 24 * 60 * 60 * 1000)
-        await tx.trialClass.create({
-          data: { leadId, centerId: before.centerId, scheduledAt },
-        })
-        await recordLeadActivity({
-          tx,
-          leadId,
-          actorId,
-          actorName,
-          type: 'NOTE',
-          content:
-            '[Học thử] Đã tạo lịch học thử (chờ xếp lịch/giáo viên). Vào mục Học thử để cập nhật.',
-        })
-      }
     }
   })
 
   revalidatePath('/leads')
   revalidatePath(`/leads/${leadId}`)
-  revalidatePath('/trials')
+  // /trials nay chỉ là chuyển hướng — revalidate màn THẬT (26/08, gộp hai hệ trial).
+  revalidatePath('/lop-trial/lich-hen')
   revalidatePath('/dashboard')
   return { ok: true }
 }
@@ -347,11 +393,26 @@ export async function addLeadActivity(input: {
 
   const lead = await db.lead.findUnique({
     where: { id: input.leadId },
-    select: { id: true, centerId: true },
+    select: { id: true, assignedToId: true, centerId: true },
   })
   const actor = await resolveActor(session.user.id)
   if (!lead || !passesScope('Lead', lead, actor)) {
     return { ok: false, error: 'Lead không tồn tại' }
+  }
+  // S-6 (27/08/2026) — chốt chủ sở hữu, khớp với `addLeadTask` ngay bên dưới.
+  //
+  // Đây KHÔNG chỉ là "ghi bừa một dòng ghi chú": `recordLeadActivity` bump
+  // `Lead.lastActivityAt` (cột "số ngày chưa tiếp cận lại" của QLCS) và đóng mốc
+  // `Lead.firstContactAt` khi loại là CALL/MESSAGE/EMAIL. Mốc đó chỉ ghi được
+  // MỘT lần và là điều kiện TẮT chuông SLA-3 ("Chưa liên hệ khách > 3 giờ") —
+  // tức đồng nghiệp tắt được đồng hồ SLA trên khách của nhau, im lặng.
+  //
+  // Ngoại lệ cũ "lead dùng chung thì ai cũng ghi chú được" (BGĐ câu 10, 10/07)
+  // đã hết hiệu lực: Q8 21/08 bỏ hẳn chính sách dùng chung (lib/lead/sharing.ts).
+  // Người NHẬP hộ phiếu cũng không qua cửa này — đúng chủ đích: "khách của tôi"
+  // và "tôi phải gọi ai" là hai câu hỏi khác nhau (lib/lead/sale-leads.ts).
+  if (!(await actorMayMutateLead(session.user.id, lead.assignedToId))) {
+    return { ok: false, error: MUTATE_DENIED }
   }
 
   const { actorId, actorName } = getAuditActor(session)
@@ -626,7 +687,61 @@ const manualLeadSchema = z.object({
     .optional()
     .or(z.literal(''))
     .transform((v) => (v ? (normalizeFacebookUrl(v).url ?? '') : v)),
+
+  // ─── G-01 (26/08/2026) — 5 ô còn thiếu ở CẤP PHỤ HUYNH ───────────────────
+  //
+  // ⚠️ Cả 5 phải giữ được `undefined` khi người gọi KHÔNG gửi khoá, vì
+  // `updateLeadFields` phân biệt "không đụng" (bỏ qua) với "xoá trắng" (ghi
+  // null) đúng bằng phép `!== undefined`. Đó là lý do KHÔNG dùng
+  // `.transform(v => v ?? null)` ở đây: transform chạy cả khi khoá vắng mặt và
+  // biến `undefined` thành `null`, tức mọi lượt sửa một ô sẽ ĐÈ TRẮNG bốn ô kia.
+  parentGender: z.nativeEnum(Gender).optional().or(z.literal('')),
+  // Ngày sinh: nhận chuỗi 'yyyy-mm-dd' từ ô <input type="date">. Chặn tương lai —
+  // ngày sinh ở mai sau chỉ có thể là gõ nhầm, và nó lặng lẽ làm hỏng mọi phép
+  // tính tuổi về sau. `.refine` (không phải `.max(new Date())`) để mốc "bây giờ"
+  // tính lúc PHÂN TÍCH chứ không phải lúc nạp module.
+  parentDob: z
+    .union([z.literal(''), z.coerce.date()])
+    .optional()
+    .refine((v) => !(v instanceof Date) || v <= new Date(), {
+      message: 'Ngày sinh phụ huynh không được ở tương lai',
+    }),
+  // Địa chỉ 3 ô — lưu TÊN, danh mục 2 cấp 2025 (xem lib/address/vn-address.ts).
+  city: z.string().trim().max(100).optional().or(z.literal('')),
+  ward: z.string().trim().max(100).optional().or(z.literal('')),
+  addressLine: z.string().trim().max(255).optional().or(z.literal('')),
+
+  // ─── G-06 (26/08/2026) — mã campaign + ngày hẹn kế tiếp, cấp PHỤ HUYNH ────
+  //
+  // Cùng luật `undefined` với khối G-01 ngay trên: khoá VẮNG MẶT = "không đụng",
+  // chuỗi RỖNG = "xoá trắng về null". Đừng thêm `.transform(v => v ?? null)`.
+  //
+  // `campaignName` KHÔNG kiểm khuôn ở đây: khuôn SR.QD.232 cần danh mục mã cơ sở
+  // (đọc DB), mà zod schema phải giữ THUẦN. Kiểm bằng `checkCampaignNameForLead`
+  // trong chính Server Action — cùng một hàm khuôn của D-06, không có bản thứ hai.
+  campaignName: z.string().trim().max(255).optional().or(z.literal('')),
+  campaignId: z.string().trim().max(64).optional().or(z.literal('')),
+  adsetId: z.string().trim().max(64).optional().or(z.literal('')),
+  adId: z.string().trim().max(64).optional().or(z.literal('')),
+  // Ngày hẹn liên hệ lại. Cố ý KHÔNG chặn ngày quá khứ: Sale mở phiếu cũ ra sửa ô
+  // khác vẫn phải lưu được, và một cái hẹn đã lỡ chính là thứ C-05 cần nhìn thấy.
+  nextFollowUpAt: z.union([z.literal(''), z.coerce.date()]).optional(),
 })
+
+/**
+ * G-06 — kiểm ô "mã campaign" của phiếu bằng CHÍNH khuôn của D-06.
+ *
+ * Danh mục mã cơ sở đọc từ DB (`Center.code`) và CHỈ đọc khi người dùng thực sự gõ gì
+ * đó — mở cơ sở mới là thêm dữ liệu, không sửa mã, nên không được chôn danh sách vào
+ * đây. Không gõ gì ⇒ `null`, không tốn câu truy vấn nào.
+ */
+async function checkLeadCampaignName(
+  raw: string | undefined,
+): Promise<{ ok: true; value: string | null } | { ok: false; message: string }> {
+  if (!raw || !raw.trim()) return { ok: true, value: null }
+  const codes = await loadKnownCenterCodes()
+  return checkCampaignNameForLead(raw, codes)
+}
 
 /** Tạo 1 lead thủ công (thu ở sự kiện/trung tâm). Chống trùng theo SĐT. */
 export async function createLeadManual(
@@ -697,6 +812,11 @@ export async function createLeadManual(
   const hoErr = await rejectHeadOffice('lead', { orgUnitId, centerId })
   if (hoErr) return { ok: false, error: hoErr }
 
+  // G-06 — mã campaign đi qua ĐÚNG khuôn SR.QD.232 của D-06, không có luật thứ hai.
+  const campaignCheck = await checkLeadCampaignName(d.campaignName)
+  if (!campaignCheck.ok) return { ok: false, error: campaignCheck.message }
+  const campaignName = campaignCheck.value
+
   const lead = await db.lead.create({
     data: {
       parentName: d.parentName,
@@ -715,7 +835,23 @@ export async function createLeadManual(
       // bốc hơi — không lỗi, không nhật ký. Với lead Messenger-first (chưa có
       // SĐT) đây là thứ duy nhất nối lead ↔ hội thoại, mất là không dựng lại được.
       facebookUrl: d.facebookUrl || null,
-      status: 'NEW',
+      // G-01 — 5 ô mới. `|| null` chứ không `?? null`: chuỗi rỗng (người dùng mở
+      // ô ra rồi bỏ trống) phải thành NULL, không thành ''. Chuỗi rỗng làm hỏng
+      // mọi phép `if (lead.city)` và mọi truy vấn `city: { not: null }` — trong
+      // đó có đúng câu dùng để đo "địa chỉ đã ra khỏi `note` chưa".
+      parentGender: d.parentGender || null,
+      parentDob: d.parentDob || null,
+      city: d.city || null,
+      ward: d.ward || null,
+      addressLine: d.addressLine || null,
+      // G-06 — mã campaign (đã kiểm khuôn SR.QD.232 ở trên) + ngày hẹn kế tiếp.
+      campaignName,
+      campaignId: d.campaignId || null,
+      adsetId: d.adsetId || null,
+      adId: d.adId || null,
+      nextFollowUpAt: d.nextFollowUpAt || null,
+      // 'MOI' chứ không phải 'NEW': GĐ5 rút enum LeadStatus còn 10 giá trị tiếng Việt.
+      status: 'MOI',
       // NGƯỜI NHẬP (23/08) — cùng nghĩa với biểu mẫu /nhap-khach-hang. Đường
       // nhập tay này cũng phải ghi, không thì "phiếu tôi nhập" thủng một nửa.
       createdById: session.user.id,
@@ -725,7 +861,10 @@ export async function createLeadManual(
           actorName,
           type: 'NOTE',
           content: 'Tạo lead thủ công',
-          metadata: { system: true },
+          // S-3 — cùng MỘT dấu với mọi dòng máy khác. Đường này ghi lồng trong
+          // `lead.create` nên không qua `recordLeadActivity` được; dấu thì vẫn phải
+          // đúng, không thì lead vừa tạo đã mang mốc "đã liên hệ lần đầu".
+          metadata: SYSTEM_ACTIVITY_META,
         },
       },
     },
@@ -748,6 +887,13 @@ export async function createLeadManual(
       // Đường SỬA đã ghi ô này vào nhật ký; đường TẠO bỏ trống thì lịch sử một
       // lead có link Facebook bắt đầu bằng khoảng trắng — không truy được ai điền.
       facebookUrl: d.facebookUrl || null,
+      // G-01 — địa chỉ vào nhật ký (dữ liệu địa bàn, không phải PII). Ngày sinh và
+      // giới tính PH thì KHÔNG: `parentDob` là PII, và nhật ký kiểm toán được đọc
+      // ở màn lịch sử với một cổng quyền khác cổng `leads:view-pii` — chép giá trị
+      // thô vào đây là mở một cửa sau cho đúng thứ tầng che đang giấu.
+      city: d.city || null,
+      ward: d.ward || null,
+      addressLine: d.addressLine || null,
     },
   }).catch(() => {})
 
@@ -823,6 +969,23 @@ export async function updateLeadFields(
       source: true,
       note: true,
       facebookUrl: true,
+      // G-01 — 5 ô mới PHẢI có mặt ở `select` hẹp này. Thiếu một ô thì phép
+      // so-lệch bên dưới thấy `undefined !== <giá trị mới>` ở MỌI lượt lưu, tức
+      // nhật ký kiểm toán đẻ ra một dòng "đã đổi địa chỉ" cho cả những lần không
+      // ai đụng vào ô đó — và một nhật ký hay bịa thì không làm chứng được nữa.
+      parentGender: true,
+      parentDob: true,
+      city: true,
+      ward: true,
+      addressLine: true,
+      // G-06 — 5 ô mới, cùng lý do với khối G-01 ngay trên: thiếu ở `select` hẹp
+      // này thì phép so-lệch thấy `undefined !== <giá trị>` ở MỌI lượt lưu và nhật
+      // ký kiểm toán bịa ra một dòng "đã đổi mã campaign" cho cả lần không ai đụng.
+      campaignName: true,
+      campaignId: true,
+      adsetId: true,
+      adId: true,
+      nextFollowUpAt: true,
       assignedToId: true,
       createdById: true,
     },
@@ -877,6 +1040,15 @@ export async function updateLeadFields(
     if (hoErr) return { ok: false, error: hoErr }
   }
 
+  // G-06 — mã campaign đi qua ĐÚNG khuôn SR.QD.232 của D-06 (không luật thứ hai).
+  // Chỉ kiểm khi khoá CÓ MẶT: lượt sửa ô khác không được vấp lỗi vì ô này.
+  let campaignName: string | null | undefined
+  if (d.campaignName !== undefined) {
+    const c = await checkLeadCampaignName(d.campaignName)
+    if (!c.ok) return { ok: false, error: c.message }
+    campaignName = c.value
+  }
+
   const updateData = {
     ...(d.parentName !== undefined ? { parentName: d.parentName } : {}),
     ...(d.phone !== undefined ? { phone: d.phone } : {}),
@@ -891,10 +1063,32 @@ export async function updateLeadFields(
     // 23/08 — ô "Link Facebook" CÓ trong biểu mẫu nhập khách nhưng action này
     // chưa bao giờ ghi được: sửa xong là mất im lặng. Thêm cho cả hai đường.
     ...(d.facebookUrl !== undefined ? { facebookUrl: d.facebookUrl || null } : {}),
+    // G-01 — 5 ô mới. `!== undefined` phân biệt "không gửi khoá" (giữ nguyên) với
+    // "gửi khoá rỗng" (xoá trắng về null): không có ô nào bị kẹt giá trị sai vĩnh
+    // viễn, và cũng không ô nào bị đè trắng vì một lượt sửa ô khác.
+    ...(d.parentGender !== undefined ? { parentGender: d.parentGender || null } : {}),
+    ...(d.parentDob !== undefined ? { parentDob: d.parentDob || null } : {}),
+    ...(d.city !== undefined ? { city: d.city || null } : {}),
+    ...(d.ward !== undefined ? { ward: d.ward || null } : {}),
+    ...(d.addressLine !== undefined ? { addressLine: d.addressLine || null } : {}),
+    // G-06 — 5 ô mới, cùng luật `!== undefined` với khối G-01.
+    ...(d.campaignName !== undefined ? { campaignName: campaignName ?? null } : {}),
+    ...(d.campaignId !== undefined ? { campaignId: d.campaignId || null } : {}),
+    ...(d.adsetId !== undefined ? { adsetId: d.adsetId || null } : {}),
+    ...(d.adId !== undefined ? { adId: d.adId || null } : {}),
+    ...(d.nextFollowUpAt !== undefined ? { nextFollowUpAt: d.nextFollowUpAt || null } : {}),
   }
   // P2-1: ghi nhật ký kiểm toán — chỉ field thực sự đổi.
-  const changedFields = (Object.keys(updateData) as (keyof typeof updateData)[]).filter(
-    (k) => (before as Record<string, unknown>)[k] !== (updateData as Record<string, unknown>)[k],
+  //
+  // G-01 — `Date` phải so theo MỐC THỜI GIAN, không theo tham chiếu. Từ khi có
+  // `parentDob`, `updateData` mang đối tượng `Date` do zod dựng, còn `before`
+  // mang `Date` do Prisma dựng: `!==` luôn đúng kể cả hai bên cùng một ngày, nên
+  // mỗi lần bấm Lưu lại đẻ một bản ghi kiểm toán rỗng ruột (giá trị cũ = giá trị
+  // mới). Nhật ký hay bịa thì không ai còn tin nó khi cần truy trách nhiệm.
+  const khacNhau = (a: unknown, b: unknown): boolean =>
+    a instanceof Date && b instanceof Date ? a.getTime() !== b.getTime() : a !== b
+  const changedFields = (Object.keys(updateData) as (keyof typeof updateData)[]).filter((k) =>
+    khacNhau((before as Record<string, unknown>)[k], (updateData as Record<string, unknown>)[k]),
   )
   const { actorId, actorName } = getAuditActor(session)
   const pick = (obj: Record<string, unknown>) =>
@@ -940,21 +1134,75 @@ export async function updateLeadFields(
 
 // ─── Module CRM & Lead PHẦN 2 — gán tay + auto-chia + cấu hình chế độ ─────────
 
-/** Auto-chia 1 lead theo cơ sở → chế độ (tôn trọng khoá khi đã tương tác). */
+/**
+ * Auto-chia 1 lead theo cơ sở → chế độ (tôn trọng khoá khi đã tương tác).
+ *
+ * ⚠️ S-2b (25/08/2026) — HẾT BÁO THÀNH CÔNG GIẢ. Bản cũ vứt bỏ toàn bộ kết quả
+ * của `autoAssignNewLead` (`skipped`, `assignedToId`, `mode`) và luôn trả
+ * `{ ok: true }`, nên nút "Chia lại lead" lần nào bấm cũng bắn toast xanh "Đã
+ * chia lại lead theo cấu hình cơ sở" — kể cả 5 đường KHÔNG LÀM GÌ của tầng dưới.
+ *
+ * Đường thường gặp nhất là tệ nhất: `autoAssignNewLead` **bỏ qua lead đã có người
+ * phụ trách**, mà nút thì nằm trên trang chi tiết lead — nơi lead gần như luôn đã
+ * được phân công. Nghĩa là cái nút tên "Chia LẠI" về bản chất không bao giờ chia
+ * lại được, nhưng quản lý bấm xong tin là đã đổi người.
+ *
+ * KHÔNG đổi luật chia ở đây: khoá-khi-đã-tương-tác và bỏ-fallback-xuyên-cơ-sở là
+ * quyết định có chủ đích của Đợt D, đổi chúng là việc của chủ dự án. Việc của
+ * action chỉ là **nói đúng chuyện đã xảy ra**: `ok: true` chỉ khi thật sự ghi
+ * được người nhận mới, còn lại trả lý do cụ thể kèm chỗ phải làm tiếp.
+ */
 export async function autoAssignNewLeadAction(
   leadId: string,
-): Promise<{ ok: boolean; error?: string }> {
+): Promise<{ ok: true; assignedToId: string } | { ok: false; error: string }> {
   const session = await auth()
   if (!session?.user) return { ok: false, error: 'Chưa đăng nhập' }
   if (!(await checkPermission('leads:assign'))) return { ok: false, error: 'Không có quyền' }
 
   const { actorId, actorName } = getAuditActor(session)
   const res = await autoAssignNewLead(leadId, { actorId, actorName })
-  if (!res.ok) return { ok: false, error: res.error }
+  if (!res.ok) return { ok: false, error: res.error ?? 'Không chia được lead' }
+
+  // Tầng dưới trả `ok: true` cho cả những lần nó CỐ Ý không làm gì. Dịch từng
+  // đường đó thành một câu người bấm hiểu được, thay vì nuốt hết thành màu xanh.
+  if (res.skipped) {
+    return res.assignedToId
+      ? {
+          ok: false,
+          error:
+            'Lead đã có người phụ trách — nút này chỉ chia lead CHƯA phân công. ' +
+            'Muốn đổi người, dùng ô "Gán tay" hoặc "Chuyển cơ sở" bên cạnh.',
+        }
+      : {
+          ok: false,
+          error:
+            'Lead đã có tương tác của tư vấn viên nên hệ thống khoá tự chia lại. ' +
+            'Muốn đổi người, dùng ô "Gán tay".',
+        }
+  }
+
+  if (!res.assignedToId) {
+    if (!res.centerId) {
+      return { ok: false, error: 'Lead chưa thuộc cơ sở nào — chọn cơ sở trước khi chia.' }
+    }
+    if (res.mode === 'MANUAL') {
+      return {
+        ok: false,
+        error:
+          'Cơ sở đang đặt chế độ "Gán tay" nên hệ thống không tự chia. ' +
+          'Chọn người ở ô "Gán tay".',
+      }
+    }
+    return {
+      ok: false,
+      error:
+        'Cơ sở chưa có tư vấn viên đang hoạt động để nhận lead — lead vẫn ở trạng thái chưa phân công.',
+    }
+  }
 
   revalidatePath('/leads')
   revalidatePath(`/leads/${leadId}`)
-  return { ok: true }
+  return { ok: true, assignedToId: res.assignedToId }
 }
 
 /** Quản lý gán tay 1 lead cho 1 sale cụ thể. */
@@ -1126,7 +1374,10 @@ export async function transferLead(
         // phải có cửa sổ SLA riêng, không thừa hưởng đồng hồ của người trước.
         ...assignmentWrite(toSaleId),
         handoverNote: d.handoverNote,
-        ...(lead.status === 'NEW' && toSaleId ? { status: 'ASSIGNED' as const } : {}),
+        // GĐ5 — ĐÃ GỠ nhánh tự đẩy MOI → ASSIGNED khi bàn giao. "Đã phân công" nay đọc
+        // từ assignedToId/assignedAt (do assignmentWrite ở trên ghi), không phải một bậc
+        // phễu, nên dịch thẳng theo bảng ánh xạ sẽ thành `MOI → MOI` — một phép gán rỗng
+        // gây hiểu nhầm là còn logic. Trạng thái phễu giữ nguyên qua lượt bàn giao.
       },
     })
 
@@ -1193,7 +1444,9 @@ function leadChildData(parsed: unknown) {
     gradeLevel?: string | null
     interestedCourseId?: string | null
     interestedCenterId?: string | null
+    classId?: string | null
     note?: string | null
+    contractValue?: number | null
   }
   return {
     fullName: d.fullName,
@@ -1204,7 +1457,14 @@ function leadChildData(parsed: unknown) {
     gradeLevel: d.gradeLevel || null,
     interestedCourseId: d.interestedCourseId || null,
     interestedCenterId: d.interestedCenterId || null,
+    // G-01 — LỚP ĐANG HỌC tại trung tâm. Khác `interestedCenterId` (cơ sở QUAN
+    // TÂM, chưa học) và khác `Enrollment` (chỉ có sau khi convert).
+    classId: d.classId || null,
     note: d.note || null,
+    // G-06 — GIÁ TRỊ HỢP ĐỒNG ĐÃ KÝ, không phải tiền đã thu (xem
+    // lib/lead/contract-value.ts). `?? null` chứ KHÔNG `|| null`: số 0 là giá trị
+    // thật (học bổng toàn phần) và `||` sẽ biến nó thành "chưa nhập".
+    contractValue: d.contractValue ?? null,
   }
 }
 

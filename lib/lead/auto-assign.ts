@@ -2,9 +2,10 @@ import { db } from "@/lib/db";
 import { logLeadAudit } from "@/lib/audit/log";
 import { recordLeadStatusChange } from "@/lib/lead/status-trail-write";
 import { recordLeadActivity } from "@/lib/lead/activity-write";
+import { SYSTEM_ACTIVITY_META } from "@/lib/lead/activity-clock";
 import { orgUnitIdForCenter } from "@/lib/org/org-service";
 import { getNonEnrollableCenterIds } from "@/lib/enrollment-flow";
-import type { LeadStatus, Prisma, LeadAssignMode } from "@prisma/client";
+import type { Prisma, LeadAssignMode } from "@prisma/client";
 import {
   pickByCloseRate,
   pickCenterEvenly,
@@ -13,14 +14,34 @@ import {
 import { takeRotationTurn } from "@/lib/lead/rotation";
 import { canManualAssign } from "@/lib/lead/assign-guard";
 import { assignmentWrite } from "@/lib/lead/assignment";
+import { LEAD_CLOSED_STATUSES } from "@/lib/leads/status";
 
 // Module CRM & Lead PHẦN 2 — chia lead tự động (cơ sở → chế độ) + khoá khi đã tương tác.
 
-export const TERMINAL_LEAD_STATUSES: LeadStatus[] = ["ENROLLED", "LOST", "DUPLICATE"];
+// GĐ0 — định nghĩa chuyển về @/lib/leads/status. Giữ tên cũ vì lib/lead/intake/ingest.ts
+// đang import từ đây.
+/** @deprecated Tên cũ. Dùng `LEAD_CLOSED_STATUSES` từ `@/lib/leads/status`. */
+export const TERMINAL_LEAD_STATUSES = LEAD_CLOSED_STATUSES;
+
+/**
+ * Điều kiện "lead còn là VIỆC ĐANG MỞ của Sale" — dùng cho MỌI phép ĐẾM TẢI.
+ *
+ * ⚠️ Hai vế, thiếu vế nào cũng sai:
+ *   • `status notIn LEAD_CLOSED_STATUSES` — sau GĐ5 tập này chỉ còn `DA_MAT`, CỐ Ý:
+ *     lead đã đăng ký mà chưa xếp lớp thì vẫn là việc Sale phải làm.
+ *   • `convertedAt: null` — nhưng lead đã convert XONG (đã thành học viên) cũng mang
+ *     `DA_DANG_KY`, nên nếu chỉ lọc theo status thì nó tính là tải mở VĨNH VIỄN. Hệ
+ *     quả thật: Sale làm lâu năm bị coi là quá tải và ngừng nhận lead mới. `convertedAt`
+ *     do chính lượt convert ghi (xem ghi chú enum LeadStatus trong schema.prisma) nên
+ *     nó là dấu "đã xong thật", không phải suy từ trạng thái.
+ */
+const LEAD_DANG_MO = {
+  deletedAt: null,
+  status: { notIn: TERMINAL_LEAD_STATUSES },
+  convertedAt: null,
+} satisfies Prisma.LeadWhereInput;
 
 export type Actor = { actorId: string | null; actorName: string };
-
-const SYSTEM_META = { system: true } as Prisma.InputJsonValue;
 
 /**
  * Lead "đã có tương tác" của sale (gọi/nhắn/email/bàn giao hoặc ghi chú KHÔNG
@@ -69,7 +90,7 @@ export async function getSaleStats(centerId: string | null): Promise<SaleStat[]>
   const [openCounts, handledGroups] = await Promise.all([
     db.lead.groupBy({
       by: ["assignedToId"],
-      where: { assignedToId: { in: ids }, deletedAt: null, status: { notIn: TERMINAL_LEAD_STATUSES } },
+      where: { assignedToId: { in: ids }, ...LEAD_DANG_MO },
       _count: { id: true },
     }),
     db.lead.groupBy({
@@ -77,7 +98,10 @@ export async function getSaleStats(centerId: string | null): Promise<SaleStat[]>
       where: {
         assignedToId: { in: ids },
         deletedAt: null,
-        status: { in: ["ENROLLED", "LOST"] },
+        // GĐ5 — ENROLLED gộp vào DA_DANG_KY, LOST thành DA_MAT. Lưu ý phạm vi
+        // "đã xử lý" RỘNG hơn bản cũ: lead mới ghi nhận tiền (REGISTERED cũ) nay
+        // cũng tính, vì enum không còn tách "đã đăng ký" với "đã vào lớp".
+        status: { in: ["DA_DANG_KY", "DA_MAT"] },
         updatedAt: { gte: since },
       },
       _count: { id: true },
@@ -90,7 +114,7 @@ export async function getSaleStats(centerId: string | null): Promise<SaleStat[]>
   for (const g of handledGroups) {
     if (!g.assignedToId) continue;
     handledMap.set(g.assignedToId, (handledMap.get(g.assignedToId) ?? 0) + g._count.id);
-    if (g.status === "ENROLLED") {
+    if (g.status === "DA_DANG_KY") {
       closedMap.set(g.assignedToId, (closedMap.get(g.assignedToId) ?? 0) + g._count.id);
     }
   }
@@ -107,7 +131,7 @@ export async function getSaleStats(centerId: string | null): Promise<SaleStat[]>
 async function getCenterLoads(centerIds: string[]) {
   const counts = await db.lead.groupBy({
     by: ["centerId"],
-    where: { centerId: { in: centerIds }, deletedAt: null, status: { notIn: TERMINAL_LEAD_STATUSES } },
+    where: { centerId: { in: centerIds }, ...LEAD_DANG_MO },
     _count: { id: true },
   });
   const map = new Map(counts.map((c) => [c.centerId, c._count.id]));
@@ -212,13 +236,19 @@ export async function autoAssignNewLead(leadId: string, actor: Actor): Promise<A
   await db.$transaction(async (tx) => {
     await tx.lead.update({
       where: { id: leadId },
-      data: {
-        // Đợt A — `assignmentWrite` ghi kèm `assignedAt`; thiếu mốc thì SLA-2/SLA-3
-        // không bao giờ kêu (đo prod 21/08: 33 lead có vết chia, chỉ 1 có mốc).
-        ...assignmentWrite(target),
-        ...(lead.status === "NEW" ? { status: "ASSIGNED" as LeadStatus } : {}),
-      },
+      // Đợt A — `assignmentWrite` ghi kèm `assignedAt`; thiếu mốc thì SLA-2/SLA-3
+      // không bao giờ kêu (đo prod 21/08: 33 lead có vết chia, chỉ 1 có mốc).
+      data: assignmentWrite(target),
     });
+    // GĐ5 — ĐÃ GỠ lượt đổi trạng thái NEW→ASSIGNED ở đây.
+    //
+    // Cả hai giá trị cũ nay cùng ánh xạ về MOI, nên giữ nguyên khối này sẽ thành
+    // `if (status === "MOI") setLeadStatus(to: "MOI")` — một vòng đọc DB trong
+    // transaction chỉ để `setLeadStatus` trả về KHONG_DOI. Mốc "đã phân công"
+    // không mất: `assignmentWrite(target)` ngay trên đã ghi assignedToId +
+    // assignedAt, và dòng audit ASSIGN bên dưới vẫn vào sổ như cũ. Cái mất là
+    // dòng LeadStatusHistory MOI→MOI — thứ không còn nghĩa gì sau khi "đã phân
+    // công" thôi làm một bậc phễu.
     await logLeadAudit({
       leadId,
       action: "ASSIGN",
@@ -236,12 +266,12 @@ export async function autoAssignNewLead(leadId: string, actor: Actor): Promise<A
       actorName: actor.actorName,
       type: "NOTE",
       content: `Tự động chia cho ${targetUser?.name ?? target} (${mode === "CLOSE_RATE" ? "tỷ lệ chốt" : "luân phiên"})`,
-      metadata: SYSTEM_META,
+      metadata: SYSTEM_ACTIVITY_META,
     });
     // C-07 — ĐƯỜNG TỰ CHIA lật `MỚI → ĐÃ PHÂN CÔNG` ngay ở `tx.lead.update` trên,
     // nhưng vết duy nhất của nó (`ASSIGN`) chỉ mang `assignedToId` ⇒ mốc đầu tiên
     // của phễu không nằm ở bảng nào. Điều kiện phải TRÙNG KHÍT với dòng lật trên.
-    if (lead.status === "NEW") {
+    if (lead.status === "MOI") {
       await recordLeadStatusChange({
         tx,
         leadId,
@@ -332,10 +362,10 @@ export async function manualAssignLead(
   await db.$transaction(async (tx) => {
     await tx.lead.update({
       where: { id: leadId },
-      data: {
-        ...assignmentWrite(saleId), // Đợt A — kèm mốc phân công
-        ...(lead.status === "NEW" ? { status: "ASSIGNED" as LeadStatus } : {}),
-      },
+      // GĐ5 — bỏ nhánh `NEW → ASSIGNED`: hai giá trị đó nay cùng là MOI nên lệnh
+      // ghi trở thành MOI→MOI. `assignmentWrite` vẫn ghi assignedToId+assignedAt,
+      // và đó mới là chỗ đọc ra "lead này đã phân cho ai, lúc nào".
+      data: assignmentWrite(saleId), // Đợt A — kèm mốc phân công
     });
     await logLeadAudit({
       leadId,
@@ -354,11 +384,11 @@ export async function manualAssignLead(
       actorName: actor.actorName,
       type: "NOTE",
       content: `Gán tay cho ${sale.name ?? saleId}`,
-      metadata: SYSTEM_META,
+      metadata: SYSTEM_ACTIVITY_META,
     });
     // C-07 — cùng lý do như đường tự chia: gán tay cũng lật trạng thái mà không
     // để lại mốc nào. Điều kiện trùng khít với dòng lật ở `tx.lead.update`.
-    if (lead.status === "NEW") {
+    if (lead.status === "MOI") {
       await recordLeadStatusChange({
         tx,
         leadId,

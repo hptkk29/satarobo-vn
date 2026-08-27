@@ -10,6 +10,7 @@ import {
 } from "../../_components/ui/list-toolbar";
 import { EmptyState } from "../../_components/ui/empty-state";
 import { PhanTrangBang } from "@/components/ui/phan-trang-bang";
+import { khopBatKy } from "@/lib/ui/tim-kiem";
 
 /** Một hàng lớp — plain data từ server (đã cách ly cơ sở qua scopedDb). */
 export interface ClassRow {
@@ -113,16 +114,11 @@ export function ClassList({ rows }: { rows: ClassRow[] }) {
   }
 
   const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
     return openRows.filter((r) => {
       if (course !== ALL && r.course !== course) return false;
       if (status !== ALL && r.status !== status) return false;
-      if (!q) return true;
-      return (
-        r.name.toLowerCase().includes(q) ||
-        (r.code?.toLowerCase().includes(q) ?? false) ||
-        r.course.toLowerCase().includes(q)
-      );
+      // BỎ DẤU khi so (lib/ui/tim-kiem) — gõ không dấu là cách gõ mặc định.
+      return khopBatKy([r.name, r.code, r.course], query);
     });
   }, [openRows, query, course, status]);
 

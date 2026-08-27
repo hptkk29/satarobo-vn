@@ -6,21 +6,30 @@ import { scopedDb } from "@/lib/db-scope";
 import { resolveActor } from "@/lib/auth/actor";
 import { HandoverForm } from "./_components/handover-form";
 import { PageHelp } from "@/components/admin/ui/page-help";
+import type { LeadStatus } from "@prisma/client";
+import { ALL_LEAD_STATUSES, LEAD_CLOSED_STATUSES } from "@/lib/leads/status";
 
 export const metadata = { title: "Bàn giao lead | Admin" };
 export const dynamic = "force-dynamic";
 
-const LEAD_STATUSES = [
-  "NEW",
-  "ASSIGNED",
-  "CONTACTED",
-  "NO_ANSWER",
-  "CONSULTING",
-  "TRIAL_SCHEDULED",
-  "TRIAL_ATTENDED",
-  "AWAITING_DECISION",
-  "NURTURING",
-];
+// Trạng thái được phép lọc khi bàn giao. Khai kiểu LeadStatus[] có chủ ý: prop nhận
+// string[] nên trước đây mảng này KHÔNG được kiểm kiểu — đổi tên enum ở GĐ5 không làm
+// tsc đỏ một dòng nào, màn hình chỉ lặng lẽ hiện các ô lọc ra 0 lead.
+//
+// GĐ5 — 9 giá trị cũ gộp còn 7: NEW+ASSIGNED → MOI ("đã phân công" nay đọc từ
+// assignedToId), CONTACTED+NO_ANSWER → DA_LIEN_HE ("không nghe máy" là thuộc tính của
+// LẦN GỌI, không phải của lead).
+//
+// Suy từ ALL_LEAD_STATUSES trừ đi DA_MAT thay vì gõ tay: thêm giá trị enum mới về sau
+// sẽ TỰ có mặt ở đây. Trước đó danh sách gõ tay thiếu DANG_HOC_THU và DA_DANG_KY, nên
+// sale nghỉ việc bàn giao xong vẫn còn ôm nguyên nhóm lead đang học thử / đã đăng ký
+// (DA_DANG_KY chưa convert vẫn là việc đang mở — xem LEAD_CLOSED_STATUSES).
+//
+// Chỉ loại DA_MAT: lead đã mất không cần chuyển cho ai. Bộ lọc "chỉ lead chưa đóng"
+// của form cũng dùng đúng tập LEAD_CLOSED_STATUSES đó ở lib/lead-handover/service.ts.
+const LEAD_STATUSES: LeadStatus[] = ALL_LEAD_STATUSES.filter(
+  (s) => !LEAD_CLOSED_STATUSES.includes(s),
+);
 
 export default async function HandoverPage() {
   const session = await auth();

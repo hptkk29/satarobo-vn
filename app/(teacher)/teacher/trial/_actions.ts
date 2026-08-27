@@ -25,6 +25,9 @@ import {
 
 const schema = z.object({
   enrollmentId: z.string().min(1),
+  /** GĐ4 — buổi được chấm. Bỏ trống = buổi đang xếp cho ca (hành vi cũ).
+   * Helper kiểm buổi thuộc đúng lớp của ca nên giá trị này KHÔNG được tin thẳng. */
+  sessionId: z.string().min(1).optional(),
   scores: z.record(z.string(), z.number()),
   generalComment: z.string().trim().max(4000).optional().nullable(),
   orientation: z.string().trim().max(4000).optional().nullable(),
@@ -36,6 +39,7 @@ type SaveResult =
 
 export async function saveTrialRubricAction(input: {
   enrollmentId: string;
+  sessionId?: string;
   scores: Record<string, number>;
   generalComment?: string | null;
   orientation?: string | null;
@@ -50,14 +54,20 @@ export async function saveTrialRubricAction(input: {
       error: parsed.error.issues[0]?.message ?? "Dữ liệu không hợp lệ",
     };
   }
-  const { enrollmentId, scores } = parsed.data;
+  const { enrollmentId, sessionId, scores } = parsed.data;
 
   if (!(await checkPermission("trials:feedback"))) {
     return { ok: false, error: "Không có quyền nhập phiếu Trial" };
   }
 
-  // Guard sở hữu + lấy buổi được xếp (null nếu không phải HV của GV).
-  const ctx = await getTeacherTrialRubricContext(session.user.id, enrollmentId);
+  // Guard sở hữu + CHỐT buổi được chấm (null nếu không phải HV của GV, hoặc `sessionId`
+  // không thuộc lớp của ca). Từ đây chỉ dùng `ctx.trialClassSessionId` — KHÔNG dùng
+  // `sessionId` thô của client.
+  const ctx = await getTeacherTrialRubricContext(
+    session.user.id,
+    enrollmentId,
+    sessionId,
+  );
   if (!ctx)
     return {
       ok: false,
@@ -84,9 +94,27 @@ export async function saveTrialRubricAction(input: {
   const sdb = scopedDb(actor);
   const evaluatedByName = session.user.name ?? session.user.email ?? null;
 
+  // GĐ4 — mỗi BUỔI một phiếu. Trước GĐ4 upsert khoá theo `trialEnrollmentId` nên chấm
+  // buổi 2 GHI ĐÈ IM LẶNG phiếu buổi 1 và dời luôn con trỏ buổi; phần đã mất trước
+  // ngày này không khôi phục được, đây chỉ chặn mất thêm.
+  //
+  // Ca chưa gắn buổi (`trialClassSessionId` null) thì KHÔNG cho lưu: khoá kép cho phép
+  // nhiều NULL nên lưu vào đó là đẻ phiếu trùng không ai gỡ được.
+  if (!ctx.trialClassSessionId) {
+    return {
+      ok: false,
+      error: "Chưa chọn buổi để chấm — chọn buổi ở đầu phiếu rồi lưu lại",
+    };
+  }
+
   try {
     await sdb.trialRubricEval.upsert({
-      where: { trialEnrollmentId: enrollmentId },
+      where: {
+        trialEnrollmentId_trialClassSessionId: {
+          trialEnrollmentId: enrollmentId,
+          trialClassSessionId: ctx.trialClassSessionId,
+        },
+      },
       create: {
         trialEnrollmentId: enrollmentId,
         trialClassSessionId: ctx.trialClassSessionId,

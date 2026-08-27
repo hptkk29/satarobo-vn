@@ -28,7 +28,6 @@ import {
   type ExistingLead,
   type SheetAoA,
 } from "../../../lib/lead/import-registered";
-import { filterOpenTrialClasses } from "../../../lib/trials/assign";
 
 const SA: RbacActor = { id: "seed-sa", name: "SA", role: "SUPER_ADMIN" };
 
@@ -116,7 +115,7 @@ async function writeCreates(creates: LeadCreatePlan[]): Promise<void> {
         centerId: c.centerId,
         orgUnitId: c.orgUnitId,
         courseId: c.courseId,
-        status: "REGISTERED",
+        status: "DA_DANG_KY",
       },
     });
   }
@@ -224,12 +223,5 @@ test.describe("[#07-ISO] Import 'đã đăng ký' + xếp trải nghiệm — c�
     });
     expect(visible2.map((c) => c.id)).toEqual([tcCs2.id]);
     expect(await scopedDb(saleCs2).trialClassV2.findUnique({ where: { id: tcCs1.id } })).toBeNull();
-
-    // Helper thuần filterOpenTrialClasses (FL2-04) — buộc theo id đã seed: CS1 chỉ giữ lớp CS1.
-    const picked = filterOpenTrialClasses(
-      [{ id: tcCs1.id, centerId: cs1 }, { id: tcCs2.id, centerId: cs2 }],
-      cs1,
-    );
-    expect(picked.map((c) => c.id)).toEqual([tcCs1.id]);
   });
 });

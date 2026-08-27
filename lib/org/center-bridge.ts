@@ -43,6 +43,19 @@ export type BackfillSpec = {
  * 28 bảng còn lại đã có cột từ migration `20260615083728_pr_a_add_orgunitid` (15/06).
  */
 export const BACKFILL_SPECS: readonly BackfillSpec[] = [
+  // ── MEDIA-REVIEW (26/08): sinh ra đã có CẢ HAI cột, không cần backfill ──────
+  {
+    model: "MediaAsset",
+    nullMeaning: "BAT_BUOC",
+    scoped: true,
+    vi: "ảnh/video buổi học — suy từ classSession.centerId; NULL = lỗi đường ghi",
+  },
+  {
+    model: "SessionMediaReview",
+    nullMeaning: "BAT_BUOC",
+    scoped: true,
+    vi: "kết luận duyệt media của buổi — suy từ classSession.centerId",
+  },
   // ── Vận hành lõi: centerId suy từ lớp/học viên, luôn phải có ────────────────
   {
     model: "Enrollment",
@@ -91,6 +104,23 @@ export const BACKFILL_SPECS: readonly BackfillSpec[] = [
     nullMeaning: "BAT_BUOC",
     scoped: true,
     vi: "lịch sử học thử — trialClass.centerId",
+  },
+  {
+    // GĐ1 — sổ đổi trạng thái lead. NULL được phép: lead chưa gán cơ sở (lead quảng
+    // cáo mới về, chưa ai chia) vẫn phải ghi được lịch sử. Chép centerId của lead tại
+    // thời điểm đổi, không suy lại lúc đọc.
+    model: "LeadStatusHistory",
+    nullMeaning: "NULL_CHUA_KHOP",
+    scoped: true,
+    vi: "sổ đổi trạng thái lead — chép lead.centerId lúc đổi",
+  },
+  {
+    // GĐ3 — nhật ký dời lịch ca trải nghiệm. Chép centerId của LỚP tại thời điểm dời;
+    // lớp luôn có cơ sở nên NULL ở đây là dữ liệu thiếu, không phải nghĩa riêng.
+    model: "TrialReschedule",
+    nullMeaning: "BAT_BUOC",
+    scoped: true,
+    vi: "nhật ký dời lịch — chép trialClass.centerId lúc dời",
   },
   {
     model: "ConversationMessage",

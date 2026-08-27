@@ -3,7 +3,8 @@ import { redirect } from "next/navigation";
 import { ChevronLeft } from "lucide-react";
 import { provinces } from "vietnam-address-data";
 import { auth } from "@/lib/auth";
-import { checkPermission } from "@/lib/auth/check-permission";
+import { checkPermission, canViewLeadPii } from "@/lib/auth/check-permission";
+import { maskLeadPiiFields } from "@/lib/lead/pii";
 import { resolveActor } from "@/lib/auth/actor";
 import { scopedDb } from "@/lib/db-scope";
 import { loadCreateOrderFormData } from "../_actions";
@@ -67,6 +68,20 @@ export default async function NewOrderPage({
     }
   }
 
+  // S-1 (26/08/2026) — `orders:create` KHÔNG kéo theo quyền đọc liên hệ khách.
+  // Vai giữ nó: SUPER_ADMIN, Quản lý cơ sở (mất `leads:view-pii` từ Q9), **Kế
+  // toán** (chưa bao giờ có), Sale (có). Trước S-1, mở
+  // `/orders/new?leadId=…` là đọc được nguyên tên + SĐT của phiếu.
+  const canViewPii = await canViewLeadPii();
+  const piiLead = lead ? maskLeadPiiFields(lead, canViewPii) : null;
+  // Ô điền sẵn: thiếu quyền thì để TRỐNG, KHÔNG điền bản che. `customerPhone` có
+  // lưới đỡ (`phoneVn` từ chối chuỗi đã đục) nhưng `customerName` thì không —
+  // điền sẵn tên che là mời người dùng bấm Lưu và tạo đơn mang tên "Nguyễn T. L.".
+  const khachDienSan =
+    lead && canViewPii
+      ? { name: lead.parentName, phone: lead.phone, email: lead.email ?? "" }
+      : undefined;
+
   return (
     <div className="max-w-4xl">
       <Link
@@ -81,10 +96,19 @@ export default async function NewOrderPage({
         Tạo đơn hàng thủ công
       </h1>
       <p className="mb-6 text-sm text-muted-foreground">
-        {lead
-          ? `Đơn gắn với lead "${lead.parentName}" — sau khi ghi nhận thanh toán sẽ đủ điều kiện chốt (convert).`
+        {piiLead
+          ? `Đơn gắn với lead "${piiLead.parentName}" — sau khi ghi nhận thanh toán sẽ đủ điều kiện chốt (convert).`
           : "Dùng cho khách walk-in tại trung tâm hoặc nhập tay đơn đã thoả thuận offline."}
       </p>
+
+      {lead && !canViewPii && (
+        <p className="mb-6 rounded-xl border border-amber-500/40 bg-card p-4 text-sm text-muted-foreground">
+          <strong className="text-amber-600 dark:text-amber-500">
+            Bạn không có quyền xem liên hệ của khách
+          </strong>
+          {" — "}ô Tên và SĐT người mua để trống, xin khách đọc rồi nhập tay.
+        </p>
+      )}
 
       <OrderCreateForm
         paymentMethods={data.paymentMethods}
@@ -94,11 +118,7 @@ export default async function NewOrderPage({
         provinces={provinces.map((p) => ({ value: p.id, label: p.name }))}
         leadId={lead?.id ?? null}
         leadChildren={leadChildren}
-        defaultCustomer={
-          lead
-            ? { name: lead.parentName, phone: lead.phone, email: lead.email ?? "" }
-            : undefined
-        }
+        defaultCustomer={khachDienSan}
         defaultCenterId={lead?.centerId ?? null}
       />
     </div>

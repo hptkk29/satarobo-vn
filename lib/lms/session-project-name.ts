@@ -75,12 +75,22 @@ function stripSessionNumberPrefix(s: string): string {
   return s.replace(/^buổi\s+\d+\s*[—–\-:.]\s*/i, "").trim();
 }
 
-/** `clean()` + coi ô trống `"Buổi N"` như chuỗi rỗng + cắt tiền tố `"Buổi N —"` thừa. */
-function meaningful(s: string | null | undefined): string {
+/**
+ * `clean()` + coi ô trống `"Buổi N"` như chuỗi rỗng + cắt tiền tố `"Buổi N —"` thừa.
+ *
+ * Export vì cổng phụ huynh cũng phải làm y hệt: `lib/portal/{feedback,photos,schedule}.ts`
+ * tự ghép `"Buổi N: <tên bài>"` (portal V2 cắt lại tiền tố đó để in số buổi ở huy hiệu
+ * riêng), nên nếu tên bài đã mang sẵn `"Buổi 7 — "` thì phụ huynh đọc ra
+ * `"Buổi 7: Buổi 7 — Vòng lặp và điều kiện"`.
+ */
+export function meaningfulSessionTitle(s: string | null | undefined): string {
   const t = clean(s);
   if (isBlankSessionTitle(t)) return "";
   return stripSessionNumberPrefix(t);
 }
+
+/** Bí danh nội bộ cho gọn — cùng một hàm. */
+const meaningful = meaningfulSessionTitle;
 
 /**
  * TIÊU ĐỀ BUỔI lấy từ giáo trình của lớp — chuỗi TRẦN, không có tiền tố "Dự án N".
@@ -163,4 +173,58 @@ export function deriveSessionLabel(src: SessionProjectSource): string {
   if (title) parts.push(title);
 
   return parts.join(" - ");
+}
+
+/**
+ * TÊN DỰ ÁN ĐỂ HIỂN THỊ — cắt tiền tố `"Dự án N:"` khỏi giá trị ĐÃ LƯU.
+ *
+ * Vì sao (26/08): mọi màn in tên dự án đều đã có nhãn `"Dự án:"` đứng trước, mà
+ * `StudentSessionFeedback.projectName` của phiếu cũ lại lưu sẵn cả tiền tố ⇒ phụ huynh
+ * đọc ra `"Dự án: Dự án 3: Robot tránh vật cản"`.
+ *
+ * Tệ hơn: con số trong tiền tố là số buổi TẠI THỜI ĐIỂM LƯU, nên phiếu của **Buổi 2**
+ * vẫn đề **"Dự án 3"** — hai con số chọi nhau ngay trên một thẻ. Không sửa được dữ liệu
+ * đã lưu (phiếu là bản ghi tại thời điểm gửi, xem ghi chú đầu file), nhưng cắt tiền tố
+ * lúc HIỂN THỊ thì vừa hết lặp nhãn vừa hết con số nói dối.
+ *
+ * Chỉ cắt khi có dấu ngăn ngay sau số — `"Dự án cuối khoá"` là tên bài thật, giữ nguyên.
+ */
+export function displayProjectName(saved: string | null | undefined): string {
+  const t = clean(saved);
+  if (!t) return "";
+  return t.replace(/^dự\s*án\s+\d+\s*[:\-–—.]\s*/i, "").trim() || t;
+}
+
+/**
+ * TÊN DỰ ÁN ĐỂ HIỂN THỊ trên phiếu nhận xét đã lưu (portal PH · admin · PDF · site GV).
+ *
+ * ⚠️ Ưu tiên tên suy từ BUỔI HỌC, không phải giá trị đã lưu trên phiếu.
+ *
+ * Vì sao (26/08 — lỗi NT-09 lần 3): `StudentSessionFeedback.projectName` là bản sao ĐÔNG
+ * CỨNG ghi lúc giáo viên bấm lưu, và nó **theo từng học viên**. Đo trên dữ liệu thật của
+ * lớp CS1.LAPTRI.006 buổi 8 ("Buổi 8 — Tay gắp cơ khí"): năm học viên trong CÙNG một buổi
+ * mang năm "dự án" khác nhau — *Xe dò vạch · Cánh tay gắp · Robot tránh vật cản · Xe điều
+ * khiển từ xa · Xe vượt địa hình* — không cái nào dính đến bài học của buổi. Phụ huynh mở
+ * báo cáo ra đọc được "Buổi 8: Tay gắp cơ khí" ở tiêu đề nhưng "Dự án: Robot tránh vật
+ * cản" ngay dưới.
+ *
+ * Cả lớp học chung một bài thì cả lớp làm chung một dự án ⇒ tên dự án là thuộc tính của
+ * BUỔI, suy ra từ giáo trình, giống hệt cách `deriveSessionLabel` dựng nhãn buổi. Ô nhập
+ * ở phiếu giáo viên đã ghi giá trị suy sẵn này từ 25/08, nhưng phiếu CŨ vẫn giữ giá trị
+ * cũ — sửa ở chỗ ĐỌC thì mọi phiếu cũ tự đúng, không cần migration đụng dữ liệu prod.
+ *
+ * Chỉ lùi về giá trị đã lưu khi buổi KHÔNG suy được tên (chưa gắn giáo án): lúc đó thứ
+ * giáo viên gõ tay vẫn hơn `DEFAULT_PROJECT_NAME` trống rỗng.
+ */
+export function resolveDisplayProjectName(
+  src: SessionProjectSource,
+  saved: string | null | undefined,
+): string {
+  const fromSession = deriveSessionTitle(src);
+  if (fromSession) return fromSession;
+
+  const fromSaved = displayProjectName(saved);
+  if (fromSaved) return fromSaved;
+
+  return deriveSessionProjectName(src);
 }
