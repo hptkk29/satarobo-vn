@@ -50,6 +50,14 @@ export const SCOPED_MODELS = new Set<string>([
   // khỏi người đối soát chính là làm mất đúng thứ họ cần xử lý.
   "BankTransaction",
 
+  // TRỤC GỌI ĐIỆN (OmiCall) — một cuộc gọi thuộc cơ sở của người gọi. `centerId`
+  // NULL ở đây nghĩa là "CHƯA đối khớp được cơ sở" (máy nhánh chưa ánh xạ, số lạ
+  // gọi vào) — cùng ngữ nghĩa `BankTransaction`, nên xem cả NULL_IS_GLOBAL_MODELS.
+  // ⚠️ `CallExtension` (ánh xạ máy nhánh) CỐ Ý ở SCOPE_EXEMPT, không ở đây: scope nó
+  // theo cơ sở thì CDR của máy nhánh CS2 về mà người xử lý ở CS1 không tra nổi chủ
+  // máy nhánh ⇒ không gán được cuộc gọi. `CallDoNotCall` không có cột cơ sở nào.
+  "CallLog",
+
   // EL-03 — đào tạo nội bộ. ĐÚnG 4 model mang cột đơn vị; 8 bảng còn lại của module là
   // bảng CON (scope theo bảng cha) hoặc ngoại lệ nhịp ghi cao (TrnVideoSession).
   // ⚠️ Ba trong bốn model này có NULL = TOÀN CÔNG TY ⇒ xem NULL_IS_GLOBAL_MODELS ngay dưới.
@@ -125,6 +133,14 @@ export const NULL_IS_GLOBAL_MODELS = new Set<string>([
   // Khớp xong thì centerId được điền, từ đó bị scope bình thường.
   "BankTransaction",
 
+  // Trục gọi điện — `centerId = NULL` là "cuộc gọi CHƯA đối khớp được cơ sở", và đó
+  // CHÍNH LÀ hàng đợi "Cuộc gọi mồ côi" (OC-12) mà Quản lý phải nhìn thấy để gán tay.
+  // Ẩn nhóm này khỏi chính người phải xử lý nó là làm mất đúng thứ họ cần — y hệt bài
+  // học `BankTransaction`. Gán xong thì `centerId` được điền và bị scope bình thường.
+  // ⚠️ Đổi dòng này thành "ẩn" là im lặng phá QT-39 ("cấm loại bỏ dữ liệu cuộc gọi"):
+  // bản ghi vẫn còn trong DB nhưng không ai thấy, tức bị vứt trên thực tế.
+  "CallLog",
+
   // EL-03 — chương trình / khoá / yêu cầu đào tạo dùng chung toàn công ty thì KHÔNG gắn cơ sở nào.
   // Đây là nghiệp vụ bình thường của module chứ không phải dữ liệu thiếu: khoá "An toàn thông tin"
   // áp cho cả công ty, không thuộc CS1 hay CS2.
@@ -157,6 +173,12 @@ export const SCOPE_EXEMPT = new Set<string>([
   "LeadAssignmentConfig", // config, centerId null = quy tắc toàn hệ thống
   "SataCoinRule", // config, centerId null = áp mọi cơ sở
   "FacebookPageMapping", // mapping Page→center (cấu hình hạ tầng, không phải dữ liệu nghiệp vụ)
+  // Ánh xạ máy nhánh → nhân viên → cơ sở (OC-9). Cùng loại với FacebookPageMapping:
+  // hạ tầng, không phải dữ liệu nghiệp vụ. Scope nó theo cơ sở là tự bắn chân —
+  // CDR của máy nhánh CS2 về, người trực đối soát ở CS1 sẽ không tra nổi chủ máy
+  // nhánh nên không gán được cuộc gọi cho ai. Cách ly nằm ở dữ liệu (`CallLog`),
+  // không ở bảng tra cứu.
+  "CallExtension",
   "WorkShiftConfig", // R6-B2 — cấu hình ca per-center, centerId null = mặc định toàn hệ thống
   // LMS-16 — RevenueTarget là config mục tiêu KPI; centerId null = mục tiêu toàn hệ
   // thống; scope tay qua getRevenueTargets. (Trước đây khai báo lặp 2 lần — đã dọn.)
@@ -314,6 +336,12 @@ export function getModelPrefixes(model: string): string[] {
       return ["notifications:"];
     case "SataCoinTransaction":
       return ["satacoin:"];
+    // Trục gọi điện. Thiếu nhánh này thì `getModelPrefixes` trả mảng rỗng và tầm
+    // nhìn rơi về `isHoLevel` DIỆN RỘNG: bất kỳ ai có MỘT vai neo tại Hội sở — kể cả
+    // vai chẳng liên quan gì tới bán hàng — nghe được ghi âm và đọc được SĐT phụ
+    // huynh của MỌI cơ sở. Đúng lỗi #04 đã mắc với `Attendance`.
+    case "CallLog":
+      return ["calls:"];
     case "Survey":
     case "SurveyResponse":
       return ["parent-feedback:", "khao-sat:"];

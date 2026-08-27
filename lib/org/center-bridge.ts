@@ -43,6 +43,24 @@ export type BackfillSpec = {
  * 28 bảng còn lại đã có cột từ migration `20260615083728_pr_a_add_orgunitid` (15/06).
  */
 export const BACKFILL_SPECS: readonly BackfillSpec[] = [
+  // ── TRỤC GỌI ĐIỆN (27/08): sinh ra đã có CẢ HAI cột, không cần backfill ─────
+  {
+    model: "CallLog",
+    // NULL = "chưa đối khớp được cơ sở" (máy nhánh chưa ánh xạ, số lạ gọi vào),
+    // KHÔNG phải "áp dụng toàn hệ thống". Đây là hàng đợi cuộc gọi mồ côi (OC-12):
+    // giữ NULL, đếm riêng để nhìn thấy tồn đọng, và gán tay khi có người xử lý.
+    nullMeaning: "NULL_CHUA_KHOP",
+    scoped: true,
+    vi: "cuộc gọi — suy từ CallExtension.centerId, hoặc từ cơ sở của Lead đối khớp",
+  },
+  {
+    model: "CallExtension",
+    nullMeaning: "BAT_BUOC",
+    // Bảng ÁNH XẠ hạ tầng ⇒ nằm ở SCOPE_EXEMPT, không ở SCOPED_MODELS (xem lý do
+    // dài ở lib/db-scope.ts). Nhưng vẫn phải khai ở đây vì nó mang cả hai cột.
+    scoped: false,
+    vi: "ánh xạ máy nhánh → nhân viên → cơ sở; một máy nhánh luôn thuộc một cơ sở",
+  },
   // ── MEDIA-REVIEW (26/08): sinh ra đã có CẢ HAI cột, không cần backfill ──────
   {
     model: "MediaAsset",

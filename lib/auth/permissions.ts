@@ -333,6 +333,14 @@ export type Action =
   | "chat:moderate"
   | "chat:admin"
 
+  // --- Trục gọi điện + ghi âm (OmiCall — ma trận `docs/ba-crm-hien-trang-va-misa.md:1380`) ---
+  | "calls:make"
+  | "calls:view-own"
+  | "calls:view-all"
+  | "calls:listen-recording"
+  | "calls:export"
+  | "calls:assign"
+
   // --- Đào tạo nội bộ (EL-02 — lib/permissions/registry/elearning.ts) ---
   // Key 3 đoạn, khác 2 đoạn của mọi key cũ. Có chủ đích: `resource:verb` không đủ chỗ
   // cho một module 17 quyền trải trên 8 nhóm đối tượng. Test parity (b) trong
@@ -798,6 +806,27 @@ export const PERMISSIONS: Record<Action, Role[]> = {
   "chat:moderate": ["SUPER_ADMIN", "TEACHER"],
   // /admin/hoi-thoai + khoá hội thoại + tra cứu F-AUDIT — chỉ Admin HO (US-15 AC5).
   "chat:admin": ["SUPER_ADMIN"],
+
+  // --- Trục gọi điện + ghi âm (OmiCall) ---
+  // Ma trận nguồn: `docs/ba-crm-hien-trang-va-misa.md:1380`. Vai v1 tương ứng:
+  // SA→SUPER_ADMIN · QLCS→CENTER_MANAGER · Sale→SALES_CSM.
+  //
+  // ⚠️ Khai ở đây KHÔNG phải vì bảng này là nguồn sự thật (nguồn là `RoleDef` +
+  // `RolePermission` trong DB, v2 đang enforce trên prod) mà vì một lý do kỹ thuật
+  // dễ quên: `ALL_ACTIONS = Object.keys(PERMISSIONS)` và `buildActor()` LỌC grant
+  // theo đúng tập đó — không khai thì mọi `PermissionGrant` mang key `calls:*` bị
+  // vứt IM LẶNG, không lỗi, không cảnh báo.
+  "calls:make": ["SUPER_ADMIN", "CENTER_MANAGER", "SALES_CSM"],
+  "calls:view-own": ["SUPER_ADMIN", "CENTER_MANAGER", "SALES_CSM"],
+  "calls:view-all": ["SUPER_ADMIN", "CENTER_MANAGER"],
+  // 🔴 BM-2 — TÁCH RIÊNG, KHÔNG mặc định cho Sale. Mỗi lượt nghe ghi audit (QT-36).
+  // Và thiết kế bằng ALLOW: `can()` v2 KHÔNG có nhánh DENY nên một grant DENY bị bỏ
+  // qua IM LẶNG — chặn ai thì gỡ `UserOrgRole`/`RolePermission`, đừng cấp DENY.
+  "calls:listen-recording": ["SUPER_ADMIN", "CENTER_MANAGER"],
+  // Xuất dữ liệu cuộc gọi kèm SĐT phụ huynh ⇒ phải đóng dấu người tải + audit (BM-5).
+  "calls:export": ["SUPER_ADMIN", "CENTER_MANAGER"],
+  // Gán chủ cho cuộc gọi mồ côi (OC-12).
+  "calls:assign": ["SUPER_ADMIN", "CENTER_MANAGER"],
 
   // --- Đào tạo nội bộ (EL-02) ---
   // ⚠️ BẢNG NÀY KHÔNG PHẢI nguồn sự thật của quyền e-learning. Nguồn là `RoleDef` +

@@ -26,6 +26,11 @@ const ALLOWLIST: Record<string, string> = {
     "/dashboard cho Quản lý cơ sở + Quản trị hệ thống (không phân tab), nên hai vai cần " +
     "nó thấy nội dung ngay khi đăng nhập, không phải qua menu. Route giữ lại vì đường dẫn " +
     "cũ đã gửi đi và PAGE_GATES vẫn gác nó. Gỡ hẳn route khi không còn liên kết nào trỏ tới.",
+  "/_spike/omicall":
+    "🧪 TRANG THỬ (spike) CH-4 — đo xem SDK web OmiCall có nhúng được vào React 19 hay " +
+    "không, TRƯỚC khi cam kết bất kỳ mốc lịch nào cho trục gọi điện. CỐ Ý không có mục " +
+    "menu: nó không phải tính năng, chỉ người chạy spike mở bằng URL. PHẢI XOÁ cả thư " +
+    "mục app/(admin)/admin/_spike/ lẫn dòng này sau khi có kết luận (spec §5.2).",
   "/charts-test": "màn thử wrapper Recharts, chỉ dev dùng",
   "/design-system-preview": "bảng màu/typography, chỉ dev dùng",
   "/design-system-preview-v2": "bảng màu/typography bản 2, chỉ dev dùng",

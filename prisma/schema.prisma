@@ -9267,3 +9267,226 @@ model SessionMediaReview {
   @@index([status, deadlineAt])
   @@index([orgUnitId])
 }
+
+// ═══════════════════════════════════════════════════════════════════════════
+// TRỤC GỌI ĐIỆN + GHI ÂM (OmiCall) — spec `plan/20-SPEC-TICH-HOP-...` §5.3
+//
+// Mô hình KẾ THỪA NGUYÊN 9 nhóm trường của `docs/ba-crm-hien-trang-va-misa.md:798-810`
+// (định danh · ai gọi · gọi cho ai · số máy · thời gian · kết quả · mục đích ·
+// ghi âm · kiểm soát) + nhóm chi phí. Không thiết kế lại.
+//
+// ⚠️ BA NƠI DỄ LÀM SAI, đã ràng ngay ở tầng schema:
+//  · OC-1 — `@@unique([provider, providerCallId])`. OMI TỰ GHI trong tài liệu là
+//    `transaction_id` "có thể gửi nhiều lần". Không có ràng buộc này thì mỗi lần
+//    gửi lại là một dòng KPI mới.
+//  · OC-3 — cột là `recordingKey` (khoá tệp trong kho RIÊNG), KHÔNG phải URL của
+//    nhà cung cấp. Lưu URL thô là lưu sẵn một đường rò: ai có chuỗi đó là nghe được,
+//    không hạn giờ, không vết.
+//  · OC-4 — `techStatus` (máy móc nói) tách hẳn `outcome` (người bán chọn). Gộp
+//    một cột là mất vĩnh viễn khả năng phân biệt "khách không nghe" với "khách từ chối".
+// ═══════════════════════════════════════════════════════════════════════════
+
+/// Nhà cung cấp tổng đài. Enum chứ không phải chuỗi tự do: khoá chống trùng
+/// `[provider, providerCallId]` chỉ có nghĩa khi tên nhà cung cấp không gõ tay được.
+enum CallProvider {
+  OMICALL
+}
+
+enum CallDirection {
+  OUTBOUND
+  INBOUND
+  /// QT-40 — gọi nội bộ giữa nhân viên: VẪN LƯU (cấm vứt dữ liệu cuộc gọi) nhưng
+  /// KHÔNG vào CRM và KHÔNG tính KPI. Lọc bằng chính giá trị này.
+  INTERNAL
+}
+
+/// TRẠNG THÁI KỸ THUẬT — do tổng đài quyết, người không sửa được.
+/// Thứ tự tiến ghi ở `lib/calls/trang-thai.ts` (OC-2), KHÔNG suy từ thứ tự khai ở đây.
+enum CallTechStatus {
+  INITIATED
+  RINGING
+  ANSWERED
+  NO_ANSWER
+  BUSY
+  FAILED
+}
+
+/// KẾT QUẢ NGHIỆP VỤ — do người bán chọn sau cuộc gọi. KHÁC `CallTechStatus` (OC-4).
+enum CallOutcome {
+  INTERESTED
+  CALL_BACK
+  REFUSED
+  WRONG_NUMBER
+  WRONG_PERSON
+}
+
+/// MỤC ĐÍCH — QT-33. Bắt buộc chọn TRƯỚC khi gọi ra.
+/// `ADVERTISING` kéo theo hai điều kiện cứng (đồng ý marketing thật + không nằm
+/// trong danh sách không gọi). Vi phạm: NĐ 91/2020, phạt 80–100 triệu.
+enum CallPurpose {
+  /// Chăm sóc / xử lý yêu cầu của chính khách — không bị ràng buộc quảng cáo.
+  CARE
+  /// Chào bán, quảng cáo.
+  ADVERTISING
+}
+
+/// PL-2 (Luật 91/2025 + NĐ 15/2020) — đã phát lời thông báo ghi âm chưa.
+enum CallRecordingNotice {
+  /// Chưa phát lời thông báo ⇒ KHÔNG được ghi âm (mặc định fail-closed).
+  NOT_ANNOUNCED
+  /// Đã phát lời thông báo, khách không phản đối ⇒ được ghi âm.
+  ANNOUNCED
+  /// Khách từ chối ⇒ VẪN GỌI ĐƯỢC, chỉ tắt ghi âm.
+  REFUSED
+}
+
+enum CallDncSource {
+  CUSTOMER_REQUEST
+  PROVIDER
+  MANUAL
+}
+
+/// MỘT CUỘC GỌI.
+///
+/// `centerId` NULLABLE — và đây là quyết định phải đọc trước khi "sửa cho đúng
+/// luật cứng". Spec OC-8 đòi cột cơ sở bắt buộc; QT-39 cấm vứt dữ liệu cuộc gọi.
+/// Hai câu đó xung đột đúng ở ca có thật: CDR về từ một máy nhánh chưa ai ánh xạ
+/// (`CallExtension`) thì hệ thống KHÔNG BIẾT cơ sở nào. Bắt NOT NULL ⇒ phải vứt
+/// bản ghi ⇒ vi phạm QT-39. Nên chọn nullable + `needsReview`, y hệt tiền lệ
+/// `BankTransaction` ("tiền về chưa đối khớp"), và khai vào `NULL_IS_GLOBAL_MODELS`
+/// để nhóm chờ-gán KHÔNG tàng hình với chính người phải gán nó.
+model CallLog {
+  id String @id @default(cuid())
+
+  // ── Định danh ────────────────────────────────────────────────────────────
+  provider       CallProvider @default(OMICALL)
+  /// `transaction_id` của nhà cung cấp. OC-1: khoá chống trùng duy nhất.
+  providerCallId String
+
+  // ── Ai gọi ───────────────────────────────────────────────────────────────
+  /// NULL hợp lệ (OC-13): cuộc gọi hệ thống / máy nhánh chưa ánh xạ.
+  userId    String?
+  extension String?
+  /// NULL = CHƯA ĐỐI KHỚP được cơ sở (xem ghi chú của model).
+  centerId  String?
+  /// Luật Nền Hệ thống #3 — bảng mới mang dữ liệu theo đơn vị phải có `orgUnitId`.
+  /// ⚠️ `scopedDb` KHÔNG lọc cột này; nơi gọi phải tự lọc.
+  orgUnitId String?
+
+  // ── Gọi cho ai ───────────────────────────────────────────────────────────
+  /// NULL + `needsReview = true` = hàng đợi "Cuộc gọi mồ côi" (OC-12).
+  leadId    String?
+  studentId String?
+
+  // ── Số máy ───────────────────────────────────────────────────────────────
+  direction  CallDirection
+  fromNumber String
+  toNumber   String
+  /// Số của KHÁCH đã chuẩn hoá `84XXXXXXXXX` (KHÔNG dấu `+` — OC-10). Khoá đối khớp Lead.
+  peerPhone  String?
+  didNumber  String?
+
+  // ── Thời gian ────────────────────────────────────────────────────────────
+  startedAt   DateTime  @db.Timestamptz(6)
+  answeredAt  DateTime? @db.Timestamptz(6)
+  endedAt     DateTime? @db.Timestamptz(6)
+  talkSeconds Int?
+  billSeconds Int?
+
+  // ── Kết quả (OC-4: hai cột, không gộp) ───────────────────────────────────
+  techStatus CallTechStatus @default(INITIATED)
+  /// Bậc của `techStatus` lúc ghi — OC-2 so bậc này để CHẶN LÙI. Đọc/ghi qua
+  /// `lib/calls/trang-thai.ts`, đừng tự gán số.
+  statusRank Int            @default(0)
+  outcome    CallOutcome?
+  note       String?        @db.Text
+
+  // ── Mục đích (QT-33) ─────────────────────────────────────────────────────
+  /// NULL = cuộc gọi ra KHÔNG khai báo mục đích trước (điển hình: Sale bấm gọi
+  /// trên softphone của nhà cung cấp — kế hoạch B1). Không im lặng bỏ qua:
+  /// đường nạp CDR bật `needsReview` với lý do `PURPOSE_NOT_DECLARED`.
+  purpose        CallPurpose?
+  purposeSetById String?
+  purposeSetAt   DateTime?    @db.Timestamptz(6)
+
+  // ── Ghi âm ───────────────────────────────────────────────────────────────
+  hasRecording          Boolean             @default(false)
+  /// OC-3 — KHOÁ TỆP trong kho RIÊNG (`R2_CALL_BUCKET_NAME`). TUYỆT ĐỐI không
+  /// lưu URL của nhà cung cấp vào đây và không bao giờ trả cột này ra trình duyệt.
+  recordingKey          String?
+  recordingBytes        Int?
+  recordingNotice       CallRecordingNotice @default(NOT_ANNOUNCED)
+  /// Hạn xoá dự kiến (đề xuất 12 tháng — `calls.recordingRetentionMonths`).
+  recordingPurgeAfterAt DateTime?           @db.Timestamptz(6)
+
+  // ── Kiểm soát ────────────────────────────────────────────────────────────
+  needsReview      Boolean @default(false)
+  reviewReason     String?
+  /// Thứ tự sự kiện nhà cung cấp gửi — phục vụ đối soát khi sự kiện tới lệch nhịp.
+  providerEventSeq Int     @default(0)
+  /// Bản ghi thô lần cuối nhận được. OC-2: sự kiện bị bỏ qua phần trạng thái thì
+  /// VẪN LƯU VẾT ở đây.
+  rawPayload       Json?
+  duplicateCount   Int     @default(0)
+
+  // ── Chi phí ──────────────────────────────────────────────────────────────
+  /// Cước do nhà cung cấp trả về (nếu có). ⚠️ Bảng giá công khai của OMICall
+  /// KHÔNG có cước viễn thông (TQ-3) — cột này có thể rỗng dài ngày.
+  costAmount Decimal? @db.Decimal(12, 2)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  @@unique([provider, providerCallId])
+  @@index([centerId, startedAt])
+  @@index([leadId, startedAt])
+  @@index([userId, startedAt])
+  @@index([needsReview, startedAt])
+  @@index([peerPhone])
+  @@index([orgUnitId])
+  @@index([hasRecording, recordingPurgeAfterAt])
+}
+
+/// ÁNH XẠ MÁY NHÁNH ↔ NHÂN VIÊN ↔ CƠ SỞ (OC-9, BA mục 14).
+///
+/// BẢNG DỮ LIỆU, không hardcode. Có `effectiveFrom/To` vì một người đổi máy nhánh
+/// là chuyện thường, và CDR CŨ phải vẫn quy về đúng người đã gọi lúc đó — tra theo
+/// thời điểm cuộc gọi, không tra theo "ai đang giữ máy nhánh hôm nay".
+model CallExtension {
+  id        String  @id @default(cuid())
+  extension String
+  userId    String
+  centerId  String
+  orgUnitId String?
+
+  defaultDidNumber String?
+
+  effectiveFrom DateTime  @default(now()) @db.Timestamptz(6)
+  effectiveTo   DateTime? @db.Timestamptz(6)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  @@index([extension, effectiveFrom])
+  @@index([userId])
+  @@index([centerId])
+  @@index([orgUnitId])
+}
+
+/// DANH SÁCH KHÔNG GỌI (nội bộ) — BA mục 15.
+///
+/// CỐ Ý KHÔNG CÓ `centerId`: khách nói "đừng gọi tôi nữa" là nói với công ty, không
+/// nói với một cơ sở. Gắn cơ sở vào đây là mở đường cho cơ sở khác gọi lại đúng người
+/// vừa từ chối.
+model CallDoNotCall {
+  id     String        @id @default(cuid())
+  /// Canonical `84XXXXXXXXX`.
+  phone  String        @unique
+  source CallDncSource @default(CUSTOMER_REQUEST)
+  note   String?       @db.Text
+
+  createdById String?
+  createdAt   DateTime  @default(now()) @db.Timestamptz(6)
+  /// NULL = vô thời hạn.
+  expiresAt   DateTime? @db.Timestamptz(6)
+}
