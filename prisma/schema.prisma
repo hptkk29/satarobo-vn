@@ -8979,6 +8979,21 @@ model TrnCertificate {
   revokeReason    String?
 
   /// Khoá R2 của bản PDF đã render. NULL = chưa render lần nào.
+  /// Mốc ĐÃ XỬ LÝ xong khâu tái chứng nhận cho bản này.
+  ///
+  /// ⚠️ Cột này tồn tại để CỬA SỔ QUÉT CỦA CRON DRAIN ĐƯỢC, và đó không phải chuyện
+  /// lý thuyết — đúng lỗi này đã xảy ra một lần ở EL-15d.
+  ///
+  /// Không có nó thì nhánh "giao lại vòng mới" quét `status = EXPIRED` với
+  /// `take: 200` sắp theo hạn cũ nhất. Chứng nhận hết hạn thì `EXPIRED` VĨNH VIỄN,
+  /// nên sau khi tích đủ 200 bản đã xử lý xong, chúng chiếm trọn mỗi lượt quét và
+  /// bản vừa hết hạn KHÔNG BAO GIỜ tới lượt. Im lặng: cron vẫn chạy, vẫn báo 0 lỗi,
+  /// chỉ là không ai được giao lại khoá nữa.
+  ///
+  /// Đặt cả khi KHÔNG giao lại (đã có lượt vòng sau, hoặc thiếu cột đơn vị) — mục
+  /// đích là "đã xét xong", không phải "đã tạo lượt".
+  recertAssignedAt DateTime? @db.Timestamptz(6)
+
   pdfKey String?
 
   /// ⚠️ ẢNH CHỤP tên và mã nhân viên TẠI NGÀY CẤP.
@@ -9008,6 +9023,8 @@ model TrnCertificate {
   @@index([userId, status])
   /// Cron nhắc T-30/T-7 quét theo cột này (§13.4).
   @@index([validUntil])
+  /// Cửa sổ quét của nhánh giao lại — lọc thẳng trên cột, không quét rồi bỏ.
+  @@index([status, recertAssignedAt])
   @@index([courseId, status])
   @@index([centerId])
   @@index([orgUnitId])

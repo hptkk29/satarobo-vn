@@ -118,7 +118,18 @@ export async function chayVongDoiChungNhan(
   // ── 3. Giao lại khoá cho vòng tái chứng nhận ───────────────────────────────
   try {
     const daHet = await db.trnCertificate.findMany({
-      where: { status: "EXPIRED", validUntil: { not: null, lt: now } },
+      // ⚠️ `recertAssignedAt: null` là thứ làm cửa sổ quét DRAIN ĐƯỢC.
+      //
+      // Không có nó thì `status = EXPIRED` đúng vĩnh viễn: sau khi tích đủ `LO` bản
+      // đã xử lý xong, chúng chiếm trọn mỗi lượt quét và bản vừa hết hạn KHÔNG BAO
+      // GIỜ tới lượt. Cron vẫn chạy, vẫn báo 0 lỗi, chỉ là không ai được giao lại
+      // khoá nữa. Đúng lỗi đã xảy ra một lần ở EL-15d (cửa sổ bù SLA không bao giờ
+      // rút) — không dựng lại nó ở đây.
+      where: {
+        status: "EXPIRED",
+        recertAssignedAt: null,
+        validUntil: { not: null, lt: now },
+      },
       select: {
         id: true,
         userId: true,
@@ -149,6 +160,13 @@ export async function chayVongDoiChungNhan(
           chungNhanBiThuHoi: c.revokedAt != null,
         })
       ) {
+        // ĐÁNH DẤU ĐÃ XÉT, không chỉ `continue`. Bản này đã có câu trả lời cuối
+        // ("đã có lượt vòng sau" / "đã thu hồi"), nên nó phải rời khỏi cửa sổ quét —
+        // để lại là dựng đúng cái kẹt mà cột này sinh ra để tránh.
+        await db.trnCertificate.update({
+          where: { id: c.id },
+          data: { recertAssignedAt: now },
+        });
         continue;
       }
 
@@ -162,6 +180,13 @@ export async function chayVongDoiChungNhan(
         ket.khongGiaoLaiDuoc += 1;
         console.warn("[elearning] không giao lại được: chứng nhận thiếu cột đơn vị", {
           certId: c.id,
+        });
+        // Cũng đánh dấu: bản này KHÔNG tự khỏi, và để nó nằm lại trong cửa sổ quét
+        // thì mỗi nhịp cron lại ghi một dòng cảnh báo giống hệt, đến khi log thành
+        // vô dụng. Con số `khongGiaoLaiDuoc` là chỗ báo, không phải log lặp.
+        await db.trnCertificate.update({
+          where: { id: c.id },
+          data: { recertAssignedAt: now },
         });
         continue;
       }
@@ -186,6 +211,10 @@ export async function chayVongDoiChungNhan(
             centerId: c.centerId,
             orgUnitId: c.orgUnitId,
           },
+        });
+        await db.trnCertificate.update({
+          where: { id: c.id },
+          data: { recertAssignedAt: now },
         });
         ket.giaoLai += 1;
       } catch (e) {

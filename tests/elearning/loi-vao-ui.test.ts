@@ -248,3 +248,47 @@ describe("🔴 EL-16 — chứng nhận phải có LỐI VÀO, cả hai phía", 
     );
   });
 });
+
+describe("🔴 EL-16 — ba lỗ tự rà ra, mỗi lỗ một chốt", () => {
+  it("cửa sổ quét của nhánh giao lại phải DRAIN — lọc `recertAssignedAt`", () => {
+    // `status = EXPIRED` đúng vĩnh viễn. Không lọc thì sau khi tích đủ `LO` bản đã
+    // xử lý xong, chúng chiếm trọn mỗi lượt quét và bản vừa hết hạn KHÔNG BAO GIỜ
+    // tới lượt — cron vẫn chạy, vẫn báo 0 lỗi. Đúng lỗi đã xảy ra ở EL-15d.
+    const cron = chiMa(doc("lib/elearning/cron-cert-expiry.ts"));
+    expect(cron).toContain("recertAssignedAt: null");
+    // Và phải đánh dấu cả nhánh KHÔNG giao lại, nếu không chúng nằm lại mãi.
+    expect(
+      (cron.match(/recertAssignedAt: now/g) ?? []).length,
+      "phải đánh dấu ở cả ba nhánh: giao lại, đã có lượt vòng sau, thiếu cột đơn vị",
+    ).toBeGreaterThanOrEqual(3);
+  });
+
+  it("số hiệu chứng nhận suy từ số LỚN NHẤT, không từ `count()`", () => {
+    // Số hiệu chứng từ phải liên tục — kiểm toán hỏi "số 42 đâu" là câu hỏi thật.
+    // `count()` cộng biến vòng lặp tạo lỗ mỗi lần đụng độ.
+    const h = chiMa(doc("lib/elearning/_handlers/issue-certificate.ts"));
+    expect(h).toContain('orderBy: { certCode: "desc" }');
+    expect(h).not.toContain("const soTrongNam = await db.trnCertificate.count(");
+  });
+
+  it("khoá `certificate:issue` KHÔNG còn mồ côi, và có màn gọi", () => {
+    expect(chiMa(doc("lib/elearning/certificate-issue-manual.ts"))).toContain(
+      '"elearning:certificate:issue"',
+    );
+    expect(
+      chiMa(doc("app/(elearning)/elearning/chung-nhan/_components/issue-button.tsx")),
+    ).toContain("capChungNhanTayAction");
+    // Và màn phải LIỆT KÊ được lượt chưa cấp, nếu không nút ấy không có chỗ bấm.
+    expect(chiMa(doc("app/(elearning)/elearning/chung-nhan/page.tsx"))).toContain(
+      "certificate: { is: null }",
+    );
+  });
+
+  it("cấp tay ĐÓNG DẤU verifiedAt theo `completedAt`, không theo hôm nay", () => {
+    // Lấy hôm nay làm mốc là đẩy hạn tái chứng nhận đi xa thêm đúng khoảng thời gian
+    // hệ thống chậm trễ.
+    const m = chiMa(doc("lib/elearning/certificate-issue-manual.ts"));
+    expect(m).toContain("verifiedAt: gd.completedAt");
+    expect(m).not.toContain("verifiedAt: new Date()");
+  });
+});

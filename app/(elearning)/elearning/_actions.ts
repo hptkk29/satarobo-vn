@@ -11,6 +11,7 @@ import {
 } from "@/lib/elearning/policy-acceptance";
 import { isLessonDone } from "@/lib/elearning/reading";
 import { cauHinhThuHoiChungNhan } from "@/lib/elearning/certificate-revoke";
+import { cauHinhCapChungNhanTay } from "@/lib/elearning/certificate-issue-manual";
 import {
   cauHinhKhieuNaiCo,
   cauHinhQuyetCo,
@@ -180,3 +181,12 @@ export const quyetCoAction = defineAction(cauHinhQuyetCo);
  * Cấu hình nằm ở `lib/elearning/certificate-revoke.ts` theo quy ước 10.
  */
 export const thuHoiChungNhanAction = defineAction(cauHinhThuHoiChungNhan);
+
+/**
+ * EL-16 — cấp chứng nhận BẰNG TAY cho lượt đã hoàn thành mà chưa có.
+ *
+ * Đường cho lượt hoàn thành TRƯỚC khi EL-16 lên chạy (sự kiện của chúng đã chạy
+ * xong, `verifiedAt` còn NULL). Không bỏ qua điều kiện nào — chỉ chạy lại đúng phép
+ * cấp tự động.
+ */
+export const capChungNhanTayAction = defineAction(cauHinhCapChungNhanTay);

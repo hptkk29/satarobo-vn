@@ -6,6 +6,7 @@ import { scopedDb } from "@/lib/db-scope";
 import { PhanTrangBang } from "@/components/ui/phan-trang-bang";
 import { cauTrangThai, trangThaiHienThi } from "@/lib/elearning/certificate";
 import { RevokeButton } from "./_components/revoke-button";
+import { IssueButton } from "./_components/issue-button";
 
 /**
  * EL-16 — DANH SÁCH CHỨNG NHẬN đã cấp, và nơi thu hồi.
@@ -50,6 +51,7 @@ export default async function Page() {
   }
 
   const duocThuHoi = can(actor, "elearning:certificate:revoke");
+  const duocCap = can(actor, "elearning:certificate:issue");
   const db = scopedDb(actor);
   const now = new Date();
 
@@ -79,6 +81,53 @@ export default async function Page() {
     ).map((k) => [k.id, k.title]),
   );
 
+  // ⚠️ Lượt ĐÃ HOÀN THÀNH mà CHƯA có chứng nhận — chỗ bấm của nút cấp tay.
+  //
+  // Không liệt kê thì nút cấp tay không có nơi nào để bấm, và khoá quyền
+  // `certificate:issue` lại thành một dòng chết. Nhóm này KHÔNG rỗng trên thực tế:
+  // mọi lượt hoàn thành TRƯỚC khi EL-16 lên chạy đều rơi vào đây — sự kiện của
+  // chúng đã chạy xong từ lâu và `verifiedAt` còn NULL.
+  const chuaCap = duocCap
+    ? await db.trnEnrollment.findMany({
+        where: {
+          status: { in: ["COMPLETED", "COMPLETED_LATE"] },
+          revokedAt: null,
+          certificate: { is: null },
+        },
+        select: {
+          id: true,
+          userId: true,
+          courseId: true,
+          completedAt: true,
+          verifiedAt: true,
+        },
+        orderBy: { completedAt: "desc" },
+        take: 50,
+      })
+    : [];
+
+  const tenNguoi = new Map(
+    chuaCap.length === 0
+      ? []
+      : (
+          await db.user.findMany({
+            where: { id: { in: [...new Set(chuaCap.map((e) => e.userId))] } },
+            select: { id: true, name: true },
+          })
+        ).map((u) => [u.id, u.name ?? "(không rõ tên)"] as const),
+  );
+
+  const tenKhoaChuaCap = new Map(
+    chuaCap.length === 0
+      ? []
+      : (
+          await db.trnCourse.findMany({
+            where: { id: { in: [...new Set(chuaCap.map((e) => e.courseId))] } },
+            select: { id: true, title: true },
+          })
+        ).map((k) => [k.id, k.title] as const),
+  );
+
   const ngay = (d: Date) => d.toLocaleDateString("vi-VN");
 
   return (
@@ -98,6 +147,40 @@ export default async function Page() {
           Trạng thái dưới đây suy từ hạn hiệu lực, không đọc từ cột đã lưu.
         </p>
       </div>
+
+      {chuaCap.length > 0 ? (
+        <section className="rounded-md border border-amber-200 bg-amber-50 p-3">
+          <h2 className="text-sm font-semibold text-amber-900">
+            {chuaCap.length} lượt đã hoàn thành nhưng chưa có chứng nhận
+          </h2>
+          <p className="mt-1 text-xs text-amber-900">
+            Thường là lượt hoàn thành trước khi khâu cấp tự động lên chạy. Cấp tay
+            vẫn đi qua đủ điều kiện và vẫn tự suy hạn hiệu lực.
+          </p>
+          <ul className="mt-2 space-y-2">
+            {chuaCap.map((e) => (
+              <li key={e.id} className="text-xs">
+                <span className="font-medium">{tenNguoi.get(e.userId)}</span>
+                {" · "}
+                {tenKhoaChuaCap.get(e.courseId) ?? "(khoá đã gỡ)"}
+                {e.completedAt ? ` · xong ${ngay(e.completedAt)}` : ""}
+                {e.verifiedAt == null ? (
+                  <span className="ml-1 text-amber-800">
+                    (lượt cũ, chưa có mốc kiểm chứng — cấp tay sẽ đóng dấu theo ngày
+                    hoàn thành)
+                  </span>
+                ) : null}
+                <div className="mt-1">
+                  <IssueButton
+                    enrollmentId={e.id}
+                    tenNguoi={tenNguoi.get(e.userId) ?? "người này"}
+                  />
+                </div>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
 
       {ds.length === 0 ? (
         <p className="rounded-md bg-muted px-3 py-2 text-sm">
