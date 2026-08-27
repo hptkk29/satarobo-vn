@@ -9,7 +9,7 @@
 import "server-only";
 import type { Actor } from "@/lib/auth/actor";
 import { scopedDb } from "@/lib/db-scope";
-import { leadOwnershipWhere } from "@/lib/lead/sale-leads";
+import { leadOwnershipWhere } from "@/lib/lead/ownership";
 
 export type SaleOrderRow = {
   id: string;

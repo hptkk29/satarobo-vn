@@ -15,11 +15,8 @@ import "server-only";
 import type { LeadStatus } from "@prisma/client";
 import type { Actor } from "@/lib/auth/actor";
 import { scopedDb } from "@/lib/db-scope";
-import {
-  leadOwnershipWhere,
-  leadPhuTrachWhere,
-  TRANG_THAI_DA_DONG,
-} from "@/lib/lead/sale-leads";
+import { leadOwnershipWhere, leadPhuTrachWhere } from "@/lib/lead/ownership";
+import { TRANG_THAI_DA_DONG } from "@/lib/lead/sale-leads";
 import {
   evaluateSla,
   loadSlaThresholds,

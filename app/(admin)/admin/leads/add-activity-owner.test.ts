@@ -1,23 +1,30 @@
 // @vitest-environment node
 /**
- * S-6 (b) — ghi nhật ký khách phải đòi CHỦ SỞ HỮU, đúng như việc follow-up.
+ * S-9 (27/08/2026) — ghi chú KHÔNG bị cấm, nhưng chỉ chủ phiếu và cấp quản lý
+ * mới làm mới được đồng hồ chăm sóc.
  *
- * `addLeadActivity` và `addLeadTask` là một cặp anh em: cùng màn hình, cùng cổng
- * quyền `leads:edit`, cùng `passesScope('Lead')`. Nhưng chỉ `addLeadTask` gọi
- * `actorMayMutateLead(...)`. Lỗ hổng KHÔNG dừng ở "ghi bừa một dòng ghi chú":
+ * ĐẢO CHIỀU CÓ CHỦ ĐÍCH so với S-6 (đợt 1, cùng ngày). Lần đó lỗ hổng "đồng
+ * nghiệp tắt hộ đồng hồ SLA" được bịt bằng cách CẤM LUÔN `addLeadActivity` với
+ * người không phụ trách. Cách đó đóng được lỗ, nhưng đóng cả một việc hợp lệ:
+ * người trực máy nhận cuộc gọi nhỡ, Sale Hội sở vừa nhập phiếu, đồng nghiệp
+ * ngồi cạnh nghe máy hộ — họ vẫn cần ghi lại điều khách vừa nói. Ghi lại một
+ * câu nói thì không nguy hiểm.
  *
- *   · `recordLeadActivity` (đường ghi DUY NHẤT) bump `Lead.lastActivityAt`
- *     ⇒ cột "số ngày chưa tiếp cận lại" của QLCS bị đồng nghiệp reset hộ;
- *   · và đóng luôn mốc `Lead.firstContactAt` khi loại là CALL/MESSAGE/EMAIL
- *     ⇒ **chuông SLA-3 ("Chưa liên hệ khách > 3 giờ") tắt vĩnh viễn** trên khách
- *     của người khác — điều kiện tắt là `firstContactAt != null` và mốc này chỉ
- *     ghi được MỘT lần (`updateMany where firstContactAt: null`).
+ * Thứ nguy hiểm là HỆ QUẢ ĐI KÈM mà không ai nhìn thấy — `recordLeadActivity`
+ * (đường ghi DUY NHẤT) làm hai việc nữa:
  *
- * Tức là một người có thể tắt đồng hồ SLA trên khách của đồng nghiệp, im lặng,
- * không ai thấy — đúng loại hỏng mà chỉ test mới bắt được.
+ *   · bump `Lead.lastActivityAt` ⇒ cột "số ngày chưa tiếp cận lại" của QLCS bị
+ *     đồng nghiệp reset hộ, và chuông SLA-4 im;
+ *   · đóng mốc `Lead.firstContactAt` khi loại là CALL/MESSAGE/EMAIL/NOTE
+ *     ⇒ **chuông SLA-3 ("Chưa liên hệ khách > 3 giờ") tắt VĨNH VIỄN** — điều
+ *     kiện tắt là `firstContactAt != null`, và mốc chỉ ghi được MỘT lần
+ *     (`updateMany where firstContactAt: null`), không có đường undo.
+ *
+ * Nên luật đúng là tách hai thứ đó: dòng nhật ký cứ lưu, đồng hồ thì không.
  *
  * Không mock `recordLeadActivity`: cho nó chạy thật trên tx giả, để test khẳng
- * định được cả HAI cú ghi phụ (lastActivityAt + firstContactAt) không xảy ra.
+ * định được cả hai cú ghi phụ (lastActivityAt + firstContactAt) có/không xảy ra
+ * — chứ không chỉ khẳng định "đã truyền đúng cờ".
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -88,11 +95,11 @@ import { addLeadActivity, addLeadTask } from "./actions";
 const KHACH_CUA_NGUOI_KHAC = { id: "lead-1", centerId: "cs1", assignedToId: "u-sale-b" };
 const MOC_TX = new Date("2026-08-27T03:00:00.000Z");
 
-/** Quyền của một Sale thường: sửa được lead, nhưng KHÔNG nhìn toàn cơ sở. */
+/** Sale thường: sửa được lead, KHÔNG điều phối, KHÔNG nhìn toàn cơ sở. */
 function quyenSaleThuong() {
   h.checkPermission.mockImplementation(async (action: string) => action === "leads:edit");
 }
-/** Quyền của quản lý cơ sở: có cả `leads:view-all`. */
+/** Quản lý cơ sở: có thêm `leads:assign` (điều phối lead) + `leads:view-all`. */
 function quyenQuanLy() {
   h.checkPermission.mockResolvedValue(true);
 }
@@ -117,74 +124,140 @@ beforeEach(() => {
   );
 });
 
-describe("[S-6b] addLeadActivity — chốt chủ sở hữu", () => {
-  it("đồng nghiệp cùng cơ sở (không phụ trách, không leads:view-all) → TỪ CHỐI", async () => {
+// ─────────────────────────────────────────────────────────────────────────────
+describe("[S-9] người lạ ghi chú — ghi chú LƯU, đồng hồ KHÔNG đổi", () => {
+  it("đồng nghiệp cùng cơ sở ghi được một dòng nhật ký", async () => {
     const res = await addLeadActivity({ leadId: "lead-1", type: "CALL", content: "Gọi thử" });
-
-    expect(res.ok).toBe(false);
-    expect(res.error).toMatch(/người phụ trách/i);
-    expect(h.transaction).not.toHaveBeenCalled();
-  });
-
-  it("bị từ chối thì KHÔNG dòng nhật ký nào, KHÔNG bump lastActivityAt", async () => {
-    await addLeadActivity({ leadId: "lead-1", type: "CALL", content: "Gọi thử" });
-
-    expect(h.activityCreate).not.toHaveBeenCalled();
-    expect(h.leadUpdate).not.toHaveBeenCalled();
-  });
-
-  it("bị từ chối thì KHÔNG đóng mốc firstContactAt (chuông SLA-3 vẫn kêu)", async () => {
-    await addLeadActivity({ leadId: "lead-1", type: "MESSAGE", content: "Nhắn thử" });
-
-    // `updateMany where { firstContactAt: null }` là cú đóng mốc duy nhất.
-    expect(h.leadUpdateMany).not.toHaveBeenCalled();
-  });
-
-  it("chính người phụ trách ghi → CHO, và mốc liên hệ đầu được đóng", async () => {
-    h.leadFindUnique.mockResolvedValue({ ...KHACH_CUA_NGUOI_KHAC, assignedToId: "u-sale-a" });
-
-    const res = await addLeadActivity({ leadId: "lead-1", type: "CALL", content: "Đã gọi" });
 
     expect(res.ok).toBe(true);
     expect(h.activityCreate).toHaveBeenCalledTimes(1);
+    expect(h.activityCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ leadId: "lead-1", content: "Gọi thử" }),
+      }),
+    );
+  });
+
+  it("…nhưng KHÔNG bump lastActivityAt (cột 'chưa tiếp cận lại' giữ nguyên)", async () => {
+    await addLeadActivity({ leadId: "lead-1", type: "CALL", content: "Gọi thử" });
+
+    expect(h.leadUpdate).not.toHaveBeenCalled();
+  });
+
+  it("…và KHÔNG đóng mốc firstContactAt (chuông SLA-3 vẫn kêu)", async () => {
+    await addLeadActivity({ leadId: "lead-1", type: "MESSAGE", content: "Nhắn thử" });
+
+    // `updateMany where { firstContactAt: null }` là cú đóng mốc DUY NHẤT.
+    expect(h.leadUpdateMany).not.toHaveBeenCalled();
+  });
+
+  it("nói thẳng cho người ghi biết đồng hồ không đổi — không im lặng thành công một nửa", async () => {
+    // Báo "Đã ghi nhận" xong mà mốc SLA không đổi thì người ghi tưởng đã xử lý
+    // xong phiếu. Một dòng chữ ở đây rẻ hơn nhiều so với một khách bị bỏ quên.
+    const res = await addLeadActivity({ leadId: "lead-1", type: "CALL", content: "Gọi thử" });
+
+    expect(res.dongHoKhongDoi).toBe(true);
+  });
+});
+
+describe("[S-9] chủ phiếu ghi chú — đồng hồ được làm mới", () => {
+  beforeEach(() => {
+    h.leadFindUnique.mockResolvedValue({ ...KHACH_CUA_NGUOI_KHAC, assignedToId: "u-sale-a" });
+  });
+
+  it("bump lastActivityAt đúng mốc transaction của dòng vừa ghi", async () => {
+    const res = await addLeadActivity({ leadId: "lead-1", type: "CALL", content: "Đã gọi" });
+
+    expect(res.ok).toBe(true);
     expect(h.leadUpdate).toHaveBeenCalledWith(
       expect.objectContaining({ data: { lastActivityAt: MOC_TX } }),
     );
+  });
+
+  it("đóng mốc 'liên hệ lần đầu' — và chỉ khi mốc còn trống", async () => {
+    await addLeadActivity({ leadId: "lead-1", type: "CALL", content: "Đã gọi" });
+
     expect(h.leadUpdateMany).toHaveBeenCalledWith(
       expect.objectContaining({ where: { id: "lead-1", firstContactAt: null } }),
     );
   });
 
-  it("quản lý có leads:view-all ghi hộ → CHO (điều phối vẫn chạy)", async () => {
+  it("không gắn cờ 'đồng hồ không đổi'", async () => {
+    const res = await addLeadActivity({ leadId: "lead-1", type: "CALL", content: "Đã gọi" });
+    expect(res.dongHoKhongDoi).toBeUndefined();
+  });
+});
+
+describe("[S-9] cấp quản lý ghi hộ — đồng hồ ĐƯỢC làm mới", () => {
+  it("người có quyền điều phối lead làm mới được đồng hồ trên phiếu người khác", async () => {
     quyenQuanLy();
 
     const res = await addLeadActivity({ leadId: "lead-1", type: "NOTE", content: "QL ghi chú" });
 
     expect(res.ok).toBe(true);
-    expect(h.activityCreate).toHaveBeenCalledTimes(1);
+    expect(h.leadUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({ data: { lastActivityAt: MOC_TX } }),
+    );
+    expect(res.dongHoKhongDoi).toBeUndefined();
   });
 
-  it("thiếu leads:edit → vẫn chặn ở cổng quyền trước (không đổi hành vi cũ)", async () => {
+  it("hỏi ĐÚNG quyền điều phối, kèm cơ sở của phiếu", async () => {
+    // Hỏi `leads:assign` chứ không phải `leads:view-all`: quyền ĐỌC đó đang cấp
+    // cho cả Marketing, lấy nó làm cửa tắt đồng hồ là để Marketing tắt SLA của
+    // Sale. Và phải kèm `centerId` để scope CENTER của RBAC v2 xét đúng cơ sở.
+    quyenQuanLy();
+    await addLeadActivity({ leadId: "lead-1", type: "NOTE", content: "QL ghi chú" });
+
+    expect(h.checkPermission).toHaveBeenCalledWith("leads:assign", { centerId: "cs1" });
+  });
+});
+
+describe("[S-9] phiếu CHƯA GIAO cho ai", () => {
+  it("Sale thường không đóng hộ mốc liên hệ đầu của phiếu vô chủ", async () => {
+    // Phiếu chưa có người phụ trách thì không ai là chủ đồng hồ. Cho người đầu
+    // tiên đi ngang qua đóng mốc là tắt chuông của phiếu chưa ai gọi.
+    h.leadFindUnique.mockResolvedValue({ ...KHACH_CUA_NGUOI_KHAC, assignedToId: null });
+
+    const res = await addLeadActivity({ leadId: "lead-1", type: "CALL", content: "Gọi thử" });
+
+    expect(res.ok).toBe(true);
+    expect(h.activityCreate).toHaveBeenCalledTimes(1);
+    expect(h.leadUpdateMany).not.toHaveBeenCalled();
+  });
+});
+
+describe("[S-9] các cổng cũ KHÔNG bị nới theo", () => {
+  it("thiếu leads:edit → vẫn chặn ở cổng quyền trước, không ghi được gì", async () => {
     h.checkPermission.mockResolvedValue(false);
 
     const res = await addLeadActivity({ leadId: "lead-1", type: "CALL", content: "x" });
 
     expect(res.ok).toBe(false);
     expect(res.error).toBe("Không có quyền");
+    expect(h.transaction).not.toHaveBeenCalled();
   });
-});
 
-describe("[S-6b] cặp anh em phải trả lời GIỐNG NHAU trên cùng một khách", () => {
-  it("addLeadTask từ chối thì addLeadActivity cũng phải từ chối, cùng câu chữ", async () => {
+  it("lead ngoài tầm nhìn cơ sở → 'không tồn tại', không ghi được gì", async () => {
+    h.passesScope.mockReturnValue(false);
+
+    const res = await addLeadActivity({ leadId: "lead-1", type: "CALL", content: "x" });
+
+    expect(res.ok).toBe(false);
+    expect(res.error).toBe("Lead không tồn tại");
+    expect(h.transaction).not.toHaveBeenCalled();
+  });
+
+  it("TẠO VIỆC follow-up vẫn đòi chủ sở hữu — nới ghi chú không nới việc", async () => {
+    // Một dòng ghi chú là lời kể; một việc follow-up là GIAO VIỆC cho người
+    // khác và nó cũng bump `lastActivityAt`. Hai thứ khác nhau, giữ khác nhau.
     const task = await addLeadTask({
       leadId: "lead-1",
       title: "Gọi lại",
       dueAt: "2026-09-01T02:00:00.000Z",
     });
-    const act = await addLeadActivity({ leadId: "lead-1", type: "CALL", content: "Gọi thử" });
 
     expect(task.ok).toBe(false);
-    expect(act.ok).toBe(false);
-    expect(act.error).toBe(task.error);
+    expect(task.error).toMatch(/người phụ trách/i);
+    expect(h.taskCreate).not.toHaveBeenCalled();
   });
 });
