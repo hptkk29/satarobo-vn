@@ -131,14 +131,26 @@ export default async function Page({
                             {b.title}
                           </Link>
                         ) : (
-                          // Loại bài chưa mở thì KHÔNG dựng link: bấm vào chỉ để
-                          // nhận một câu từ chối là bắt người học đi một vòng vô ích.
-                          <span className="text-muted-foreground">{b.title}</span>
+                          // Không dựng link thì phải NÓI VÌ SAO ngay tại đây.
+                          // Một dòng chữ xám không bấm được, không kèm lý do, đọc
+                          // ra thành "bạn chưa được phép" — trong khi sự thật là
+                          // bài này giảng viên điểm danh hộ.
+                          <span className="text-muted-foreground">
+                            {b.title}
+                            {b.viSaoKhongMo ? (
+                              <span className="ml-2 text-xs">
+                                ({b.viSaoKhongMo})
+                              </span>
+                            ) : null}
+                          </span>
                         )}
                         <span className="ml-2 text-xs text-muted-foreground">
                           {b.nhanLoai}
                           {b.batBuoc ? " · bắt buộc" : " · tuỳ chọn"}
-                          {b.moDuoc ? "" : " · chưa mở"}
+                          {/* KHÔNG dán nhãn "chưa mở" ở đây nữa: lý do đã nằm
+                              ngay cạnh tên bài, và với buổi trực tiếp thì "chưa
+                              mở" là SAI — bài đó mở bình thường, chỉ là giảng
+                              viên điểm danh hộ. Hai câu đá nhau trên cùng dòng. */}
                         </span>
                       </span>
                       <span

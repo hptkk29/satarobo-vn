@@ -1,5 +1,10 @@
 import type { ScopedDb } from "@/lib/actions/factory";
-import { laLoaiBaiDaMo, NHAN_LOAI_BAI } from "@/lib/elearning/lesson-kind";
+import {
+  coManChoNguoiHoc,
+  NHAN_LOAI_BAI,
+  vaySaoChuaMo,
+  VI_SAO_KHONG_CO_MAN,
+} from "@/lib/elearning/lesson-kind";
 
 /**
  * EL-04 — ĐỀ CƯƠNG MỘT KHOÁ cho người học.
@@ -22,6 +27,8 @@ export type BaiTrongDeCuong = {
   batBuoc: boolean;
   /** `true` = loại bài này đã có đường đi thật. */
   moDuoc: boolean;
+  /** Câu giải thích khi không dựng link — `null` khi mở được. */
+  viSaoKhongMo: string | null;
   trangThai: "CHUA_HOC" | "DANG_HOC" | "XONG";
 };
 
@@ -126,9 +133,14 @@ export async function napDeCuongKhoa(
         kind: b.kind,
         nhanLoai: NHAN_LOAI_BAI[b.kind] ?? b.kind,
         batBuoc,
-        // Loại bài chưa mở thì KHÔNG dựng link — bấm vào chỉ để nhận "loại bài này
-        // chưa mở" là bắt người học đi một vòng để gặp một câu từ chối.
-        moDuoc: laLoaiBaiDaMo(b.kind),
+        // Dựng link theo "NGƯỜI HỌC có gì để mở", KHÔNG theo "module hỗ trợ loại
+        // này". Hai thứ khác nhau ở `LIVE_SESSION`: module xử lý đủ, nhưng phần xử
+        // lý nằm ở phía giảng viên điểm danh — người học bấm vào chỉ nhận một câu
+        // từ chối, đúng cái vòng vô ích dòng này sinh ra để tránh.
+        moDuoc: coManChoNguoiHoc(b.kind),
+        viSaoKhongMo: coManChoNguoiHoc(b.kind)
+          ? null
+          : (VI_SAO_KHONG_CO_MAN[b.kind] ?? vaySaoChuaMo(b.kind)),
         trangThai,
       };
     }),

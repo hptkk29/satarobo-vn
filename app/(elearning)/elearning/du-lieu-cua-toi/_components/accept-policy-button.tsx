@@ -1,6 +1,8 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { toast } from "sonner";
 import { acceptPolicyAction } from "../../_actions";
 
@@ -13,14 +15,30 @@ import { acceptPolicyAction } from "../../_actions";
  * ra để giữ.
  */
 export function AcceptPolicyButton({ version }: { version: string }) {
+  const router = useRouter();
   const [dangGui, chuyen] = useTransition();
   const [xong, setXong] = useState(false);
 
   if (xong) {
+    // ⚠️ KHÔNG bảo người dùng "tải lại trang". Bản trước dừng ở đúng câu đó, và vì
+    // không `refresh()` nên đoạn văn phía trên — do máy chủ dựng — vẫn còn nguyên
+    // câu "Bạn chưa xác nhận bản nào". Màn hình tự cãi nhau: một dòng nói chưa, dòng
+    // ngay dưới nói rồi. E2E chụp được đúng cảnh đó.
+    //
+    // Và họ tới đây vì bị CHẶN giữa chừng khi đang học, nên phải trả họ về chỗ học,
+    // đừng để họ tự tìm đường lần thứ hai.
     return (
-      <p className="text-sm font-medium text-state-success-ink">
-        ✓ Đã xác nhận. Tải lại trang để xem mốc thời gian.
-      </p>
+      <div className="space-y-2">
+        <p className="text-sm font-medium text-state-success-ink">
+          ✓ Đã xác nhận. Bạn học tiếp được rồi.
+        </p>
+        <Link
+          href="/elearning"
+          className="inline-block rounded-lg border border-border px-3 py-1.5 text-sm"
+        >
+          Về khoá của tôi
+        </Link>
+      </div>
     );
   }
 
@@ -39,6 +57,9 @@ export function AcceptPolicyButton({ version }: { version: string }) {
             const r = await acceptPolicyAction({});
             if (r.ok) {
               setXong(true);
+              // Dựng lại phần máy chủ: đoạn "Bạn chưa xác nhận bản nào" ở trên là
+              // RSC, không tự đổi theo state của nút này.
+              router.refresh();
               toast.success("Đã xác nhận chính sách theo dõi học tập");
             } else {
               toast.error(r.error.message);

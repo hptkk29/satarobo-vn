@@ -16,6 +16,8 @@ import {
   laLoaiBaiDaMo,
   loaiBaiChoTrinhSoan,
   vaySaoChuaMo,
+  coManChoNguoiHoc,
+  VI_SAO_KHONG_CO_MAN,
 } from "@/lib/elearning/lesson-kind";
 
 const MOI_LOAI = (
@@ -93,5 +95,47 @@ describe("câu giải thích cho người học", () => {
 
   it("loại lạ vẫn ra câu đọc được, không ném", () => {
     expect(vaySaoChuaMo("LOAI_KHONG_CO")).toContain("chưa mở");
+  });
+});
+
+/**
+ * 🔴 "Module xử lý được loại này" ≠ "người HỌC có gì để mở".
+ *
+ * Hai khái niệm này từng là một, và cái giá đã trả: đề cương khoá dựng link cho
+ * `LIVE_SESSION` theo `laLoaiBaiDaMo()`, người học bấm vào rồi nhận đúng một câu
+ * "không có nội dung để xem ở đây" — trong khi dòng bình luận ngay chỗ dựng link nói
+ * rõ là để tránh chuyện đó. E2E `vong-hoc.spec.ts` bắt được; 6009 test đơn vị thì
+ * không, vì chúng kiểm hàm chứ không kiểm việc bấm vào rồi tới đâu.
+ */
+describe("loại nào có màn cho NGƯỜI HỌC", () => {
+  it("mọi loại đã mở phải khai rõ: có màn, hoặc có lý do vì sao không", () => {
+    // Đây là cái bẫy thật sự: thêm một loại bài mới, nhớ khai vào `LOAI_BAI_DA_MO`
+    // (vì trình soạn cần), rồi quên khai ở đây ⇒ đề cương lặng lẽ dựng thêm một link
+    // dẫn vào ngõ cụt. Ca này đỏ ngay lúc đó.
+    for (const k of LOAI_BAI_DA_MO) {
+      const coMan = coManChoNguoiHoc(k);
+      const coLyDo = k in VI_SAO_KHONG_CO_MAN;
+      expect(coMan !== coLyDo, `${k}: cóMàn=${coMan} cóLýDo=${coLyDo}`).toBe(true);
+    }
+  });
+
+  it("LIVE_SESSION: module xử lý ĐỦ, nhưng người học không có gì để mở", () => {
+    expect((LOAI_BAI_DA_MO as readonly string[]).includes("LIVE_SESSION")).toBe(true);
+    expect(coManChoNguoiHoc("LIVE_SESSION")).toBe(false);
+    // Lý do phải nói ai làm thay, không phải "chưa hỗ trợ" — người học đọc câu đó
+    // trên đề cương và cần biết mình KHÔNG phải làm gì cả.
+    expect(VI_SAO_KHONG_CO_MAN.LIVE_SESSION).toContain("giảng viên");
+  });
+
+  it("bài ĐỌC / VIDEO / KIỂM TRA / BÀI TẬP thì người học mở được", () => {
+    for (const k of ["READ", "VIDEO", "QUIZ", "TASK"]) {
+      expect(coManChoNguoiHoc(k), k).toBe(true);
+    }
+  });
+
+  it("loại CHƯA mở thì đương nhiên không có màn cho người học", () => {
+    for (const k of Object.keys(LOAI_BAI_CHUA_MO)) {
+      expect(coManChoNguoiHoc(k), k).toBe(false);
+    }
   });
 });

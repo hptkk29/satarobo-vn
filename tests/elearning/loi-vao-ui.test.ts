@@ -149,3 +149,53 @@ describe("🔴 cron nhắc phải GỬI THẬT, không chỉ ghi sổ", () => {
     expect(chiMa(cron)).toContain('kenh.length > 0 ? "SENT" : "PENDING"');
   });
 });
+
+describe("🔴 lời TỪ CHỐI phải kèm ĐƯỜNG ĐI", () => {
+  const bai = doc("app/(elearning)/elearning/hoc/[enrollmentId]/[lessonId]/page.tsx");
+
+  it("cổng đồng ý dẫn thẳng tới chỗ xác nhận", () => {
+    // Bản trước: "Vào mục Dữ liệu của tôi để… rồi xác nhận" — và trang chỉ có đúng
+    // một nút về trang chủ. Người mới được giao khoá bị chặn ở MỌI bài, đọc một câu
+    // bảo đi đâu đó, rồi tự đi tìm; thanh điều hướng của người học thuần cũng không
+    // có mục ấy. E2E `vong-hoc.spec.ts` chết ngay ca đầu vì chuyện này.
+    expect(chiMa(bai)).toContain('href: "/elearning/du-lieu-cua-toi"');
+  });
+
+  it("bài buổi trực tiếp dẫn về đề cương — nơi thấy mình đã được điểm danh chưa", () => {
+    expect(chiMa(bai)).toContain("Về đề cương khoá");
+  });
+});
+
+describe("🔴 xác nhận xong thì màn hình phải THÔI nói là chưa", () => {
+  const nut = doc(
+    "app/(elearning)/elearning/du-lieu-cua-toi/_components/accept-policy-button.tsx",
+  );
+
+  it("gọi `router.refresh()` sau khi xác nhận", () => {
+    // Không refresh thì đoạn văn phía trên — do máy chủ dựng — vẫn giữ nguyên câu
+    // "Bạn chưa xác nhận bản nào", ngay trên dòng "✓ Đã xác nhận". Màn hình tự cãi
+    // nhau, và người dùng được bảo tự tải lại trang.
+    expect(chiMa(nut)).toContain("router.refresh()");
+  });
+
+  it("KHÔNG còn bắt người dùng tự tải lại trang", () => {
+    expect(nut).not.toContain("Tải lại trang để xem mốc thời gian");
+  });
+});
+
+describe("🔴 e2e của khu phải THẬT SỰ mở trang", () => {
+  it("không còn `test.fixme` trong bộ e2e e-learning", () => {
+    // Hai spec duy nhất của khu (`employee-gate`, `host-routing`) từng đều là
+    // `fixme`: job CI `e2e-elearning` chạy mỗi lần, XANH mỗi lần, và chưa từng mở
+    // một trang e-learning nào. Một job xanh không kiểm gì tệ hơn không có job, vì
+    // nó phát ra tín hiệu an toàn.
+    for (const f of [
+      "tests/e2e/elearning/employee-gate.spec.ts",
+      "tests/e2e/elearning/host-routing.spec.ts",
+      "tests/e2e/elearning/vong-hoc.spec.ts",
+    ]) {
+      expect(co(f), f).toBe(true);
+      expect(chiMa(doc(f)), f).not.toContain("test.fixme");
+    }
+  });
+});
