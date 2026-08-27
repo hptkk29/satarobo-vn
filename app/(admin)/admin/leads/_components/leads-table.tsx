@@ -77,10 +77,12 @@ function formatDate(iso: string): string {
 
 function StatusCell({
   lead,
-  canUpdate,
+  canChangeStatus,
 }: {
   lead: LeadRow
-  canUpdate: boolean
+  /** 27/08 — `leads:change-status`, KHÔNG phải `leads:edit`: chỉ Sale đẩy được lead
+   *  trên phễu. Không có quyền thì ô này chỉ là NHÃN, không phải nút. */
+  canChangeStatus: boolean
 }) {
   const [pending, startTransition] = useTransition()
   /** Bậc rơi đang chờ lý do. `null` = không có gì đang chờ. */
@@ -98,7 +100,7 @@ function StatusCell({
     })
   }
 
-  if (!canUpdate) {
+  if (!canChangeStatus) {
     return (
       <span
         className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-semibold ${STATUS_COLORS[lead.status as keyof typeof STATUS_COLORS] ?? 'bg-muted text-muted-foreground'}`}
@@ -204,10 +206,12 @@ function DetailItem({ label, value }: { label: string; value: React.ReactNode })
 function LeadDrawer({
   lead,
   canUpdate,
+  canChangeStatus,
   onClose,
 }: {
   lead: LeadRow | null
   canUpdate: boolean
+  canChangeStatus: boolean
   onClose: () => void
 }) {
   const [note, setNote] = useState(lead?.note ?? '')
@@ -287,7 +291,7 @@ function LeadDrawer({
                   <select
                     value={status}
                     onChange={e => setStatus(e.target.value as LeadStatus)}
-                    disabled={!canUpdate || pending}
+                    disabled={!canChangeStatus || pending}
                     className="rounded-lg border border-border px-3 py-2 text-sm focus:border-primary-purple focus:outline-none focus:ring-2 focus:ring-primary-purple/20 disabled:bg-muted"
                   >
                     {KANBAN_COLUMNS.map((value) => (
@@ -366,6 +370,7 @@ export function LeadsTable({
   page,
   pageSize,
   canUpdate,
+  canChangeStatus,
   canDelete,
   currentStatus,
   currentQ,
@@ -376,6 +381,9 @@ export function LeadsTable({
   page: number
   pageSize: number
   canUpdate: boolean
+  /** 27/08 — quyền RIÊNG `leads:change-status` (chỉ Sale). Tách khỏi canUpdate
+   *  vì Quản lý cơ sở/Marketing vẫn sửa hồ sơ lead, chỉ không đẩy bậc phễu. */
+  canChangeStatus: boolean
   canDelete: boolean
   currentStatus?: string
   currentQ?: string
@@ -513,7 +521,7 @@ export function LeadsTable({
                       )}
                     </td>
                     <td className="px-4 py-3">
-                      <StatusCell lead={lead} canUpdate={canUpdate} />
+                      <StatusCell lead={lead} canChangeStatus={canChangeStatus} />
                     </td>
                     <td className="px-4 py-3 text-sm text-muted-foreground">
                       {lead.center?.name ?? '—'}
@@ -578,6 +586,7 @@ export function LeadsTable({
         key={selectedLead?.id ?? 'empty'}
         lead={selectedLead}
         canUpdate={canUpdate}
+        canChangeStatus={canChangeStatus}
         onClose={() => setSelectedLead(null)}
       />
     </div>
