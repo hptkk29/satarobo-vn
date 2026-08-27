@@ -244,9 +244,31 @@ Không thuộc phần vận hành, ghi ở đây để bàn giao gọn:
 1. Thêm `R2_CLASS_MEDIA_BUCKET_NAME` vào `.env.example` kèm chú thích cảnh báo, theo đúng khuôn khối
    `R2_CHAT_BUCKET_NAME` (`.env.example:100-111`).
 2. Viết `getClassMediaBucket()` theo khuôn `getChatBucket()` (`lib/storage/chat-storage.ts:48-56`):
-   đọc thẳng `process.env`, **fail closed** khi trống, **từ chối** nếu trùng `R2_BUCKET_NAME`.
-   Tuyệt đối **không** fallback về `getR2Bucket()` — im lặng rơi về bucket công khai chính là lỗ hổng
-   đang vá.
+   đọc thẳng `process.env`, **fail closed** khi trống. Tuyệt đối **không** fallback về `getR2Bucket()`
+   — im lặng rơi về bucket công khai chính là lỗ hổng đang vá.
+
+   🔴 **MỘT CHỖ PHẢI SỬA KHÁC KHUÔN CHAT — đừng chép nguyên xi.** `getChatBucket()` từ chối khi
+   bucket **trùng `R2_BUCKET_NAME`**. Chép y hệt thì **môi trường `test` luôn 503**, vì chủ dự án đã
+   chốt (26/08/2026) là test **dùng lại bucket cũ của test** ⇒ ở đó
+   `R2_CLASS_MEDIA_BUCKET_NAME` = `R2_BUCKET_NAME` = `satarobo-test`.
+
+   Điều kiện đúng phải bám **lý do** của luật chứ không bám câu chữ: chặn khi trùng
+   `R2_BUCKET_NAME` **VÀ** `R2_PUBLIC_URL` có giá trị — tức chỉ chặn khi việc trùng thật sự nghĩa là
+   **phơi công khai**. Đo được: ở môi trường `test`, `R2_PUBLIC_URL` **rỗng** ⇒ `satarobo-test`
+   không phát qua tên miền công khai ⇒ trùng ở đó vô hại. Ở production `R2_PUBLIC_URL` có giá trị
+   ⇒ luật vẫn chặn đúng như mong muốn.
+
+   ```ts
+   // Sai (chép khuôn chat): test luôn 503
+   if (bucket === process.env.R2_BUCKET_NAME) throw new ...
+
+   // Đúng: chỉ chặn khi trùng bucket ĐANG PHÁT CÔNG KHAI
+   const publicUrl = (process.env.R2_PUBLIC_URL ?? "").trim();
+   if (publicUrl && bucket === (process.env.R2_BUCKET_NAME ?? "").trim()) throw new ...
+   ```
+
+   ⚠️ Vẫn **fail closed** đúng chiều: hôm nào ai đó gắn custom domain cho `satarobo-test` thì
+   `R2_PUBLIC_URL` có giá trị và luật lập tức chặn lại — không cần ai nhớ sửa code.
 3. Nới `isOwnStorageUrl` (`actions.ts:150-156`) để nhận **hai** bucket — hôm nay nó so với **một**
    `getR2PublicUrl()`.
 4. Thêm chế độ `media` vào `scripts/apply-r2-cors.ts` (hiện chỉ có `chat`, còn lại phải dùng
