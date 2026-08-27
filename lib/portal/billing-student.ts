@@ -1,10 +1,15 @@
 import "server-only";
 import { db } from "@/lib/db";
 import { getParentConfirmedPayments, type ConfirmedPaymentRow } from "@/lib/portal/billing";
+import { tinhThucThu } from "@/lib/finance/thuc-thu";
+import { computeEnrollmentDebt } from "@/lib/finance/debt";
 
 // Portal v2 — học phí & công nợ của 1 con đang chọn (per-child).
-// Quy ước AC1: chỉ tính Payment accountantStatus=CONFIRMED (giống getParentBilling).
-// PENDING/REJECTED chỉ ĐẾM làm chỉ dấu trạng thái (D5/G.6) — KHÔNG lộ số tiền.
+// Quy ước AC1: PENDING/REJECTED chỉ ĐẾM làm chỉ dấu trạng thái (D5/G.6) — KHÔNG lộ số tiền.
+// HT (27/08/2026): "đã thanh toán" đi qua `tinhThucThu` và công nợ qua
+// `computeEnrollmentDebt` — CÙNG công thức với `getParentBilling` và bảng công nợ admin.
+// Hai màn này phải cho cùng một số, nếu không phụ huynh thấy hai con số khác nhau cho
+// cùng một khoản tiền tuỳ chỗ họ bấm vào.
 
 /** Công nợ theo TỪNG ghi danh (con học nhiều khóa → mỗi khóa một dòng, không gộp nhãn). */
 export type StudentBillingRow = {
@@ -41,10 +46,15 @@ export async function getStudentBilling(studentId: string): Promise<StudentBilli
       id: true,
       finalPrice: true,
       tuition: true,
+      status: true,
       class: { select: { classCode: true } },
       course: { select: { name: true } },
       // FIX-C3: nested include không auto-scope → tự lọc payment đã xóa mềm.
-      payments: { where: { deletedAt: null }, select: { accountantStatus: true, amount: true } },
+      // `id` + `adjustmentOfId` BẮT BUỘC cho `tinhThucThu` (bản gốc bị điều chỉnh thay thế).
+      payments: {
+        where: { deletedAt: null },
+        select: { id: true, accountantStatus: true, amount: true, adjustmentOfId: true },
+      },
     },
   });
 
@@ -54,7 +64,8 @@ export async function getStudentBilling(studentId: string): Promise<StudentBilli
   let rejectedCount = 0;
   const rows: StudentBillingRow[] = enrollments.map((e) => {
     const finalPrice = e.finalPrice ?? e.tuition ?? 0;
-    const rowPaid = e.payments.filter((p) => p.accountantStatus === "CONFIRMED").reduce((s, p) => s + p.amount, 0);
+    const butToan = e.payments;
+    const rowPaid = tinhThucThu(butToan);
     tuition += finalPrice;
     paid += rowPaid;
     pendingCount += e.payments.filter((p) => p.accountantStatus === "PENDING").length;
@@ -65,7 +76,7 @@ export async function getStudentBilling(studentId: string): Promise<StudentBilli
       className: e.class?.classCode ?? null,
       finalPrice,
       paid: rowPaid,
-      outstanding: Math.max(0, finalPrice - rowPaid),
+      outstanding: Math.max(0, computeEnrollmentDebt(finalPrice, butToan, e.status)),
     };
   });
   // Tổng công nợ = Σ clamp TỪNG DÒNG (khớp getParentBilling lib/portal/billing.ts):

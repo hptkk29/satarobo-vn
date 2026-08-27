@@ -4,6 +4,7 @@ import { getChildren } from "@/lib/portal/session";
 import { getStudentAttendanceSummaries } from "@/lib/portal/learning";
 import { getParentNotificationCount } from "@/lib/portal/notifications";
 import { computeEnrollmentDebt } from "@/lib/finance/debt";
+import { WHERE_THUC_THU, SELECT_THUC_THU } from "@/lib/finance/thuc-thu";
 import type { AttendanceSummary } from "@/lib/attendance/summary";
 
 // =============================================================================
@@ -54,10 +55,11 @@ export async function getParentDashboard(parentUserId: string): Promise<ParentDa
         select: {
           finalPrice: true,
           tuition: true,
-          payments: {
-            where: { accountantStatus: "CONFIRMED", deletedAt: null }, // FIX-C3
-            select: { amount: true },
-          },
+          status: true,
+          // HT (27/08/2026) — công nợ đọc qua công thức thực thu dùng chung: khoản hoàn
+          // được trừ, bản điều chỉnh thay bản gốc. FIX-C3 (`deletedAt: null`) đã nằm sẵn
+          // trong `WHERE_THUC_THU`.
+          payments: { where: WHERE_THUC_THU, select: SELECT_THUC_THU },
         },
       }),
       // Ngày đến hạn gần nhất từ đợt thanh toán CHƯA trả của các đơn của con.
@@ -79,7 +81,7 @@ export async function getParentDashboard(parentUserId: string): Promise<ParentDa
   const totalDebt = enrollments.reduce((sum, e) => {
     const finalPrice = e.finalPrice ?? e.tuition ?? null;
     if (finalPrice == null) return sum; // ghi danh chưa chốt giá → bỏ qua
-    const debt = computeEnrollmentDebt(finalPrice, e.payments);
+    const debt = computeEnrollmentDebt(finalPrice, e.payments, e.status);
     return debt > 0 ? sum + debt : sum; // chỉ cộng phần còn nợ (đóng thừa không trừ)
   }, 0);
 
@@ -185,10 +187,9 @@ export async function getParentChildrenOverview(
           select: {
             finalPrice: true,
             tuition: true,
-            payments: {
-              where: { accountantStatus: "CONFIRMED", deletedAt: null }, // FIX-C3
-              select: { amount: true },
-            },
+            status: true,
+            // HT (27/08/2026) — xem chú thích ở getParentDashboard.
+            payments: { where: WHERE_THUC_THU, select: SELECT_THUC_THU },
           },
         }),
         db.enrollment.findFirst({
@@ -228,7 +229,7 @@ export async function getParentChildrenOverview(
       const debt = enrollments.reduce((sum, e) => {
         const finalPrice = e.finalPrice ?? e.tuition ?? null;
         if (finalPrice == null) return sum;
-        const d = computeEnrollmentDebt(finalPrice, e.payments);
+        const d = computeEnrollmentDebt(finalPrice, e.payments, e.status);
         return d > 0 ? sum + d : sum;
       }, 0);
 
