@@ -27,6 +27,12 @@ name: Nhập lead cũ (795 dòng, 4 sheet sale) — PROD
 on:
   workflow_dispatch:
     inputs:
+      viec:
+        description: 'nhap = nhập lead (mặc định) · kiem-tra = soi lại sau khi nhập, CHỈ ĐỌC'
+        required: false
+        default: 'nhap'
+        type: choice
+        options: ['nhap', 'kiem-tra']
       ghi_that:
         description: 'Để TRỐNG = dry-run (chỉ đọc). Gõ đúng GHI-THAT-VAO-PROD để ghi thật.'
         required: false
@@ -42,7 +48,7 @@ concurrency:
 
 jobs:
   nhap:
-    name: Nhập lead cũ (${{ inputs.ghi_that && 'GHI THẬT' || 'dry-run' }})
+    name: ${{ inputs.viec == 'kiem-tra' && 'Kiểm tra lead cũ (chỉ đọc)' || (inputs.ghi_that && 'Nhập lead cũ — GHI THẬT' || 'Nhập lead cũ — dry-run') }}
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
@@ -151,17 +157,23 @@ jobs:
           DIRECT_URL: ${{ secrets.PROD_DIRECT_URL }}
         run: |
           set -euo pipefail
-          ARGS="--che-pii --file=$CSV --limit=${{ inputs.gioi_han }}"
-          if [ "$CHE_DO" = "ghi" ]; then ARGS="$ARGS --commit"; fi
-          echo "tsx scripts/import-legacy-leads.ts $ARGS"
-          pnpm exec tsx scripts/import-legacy-leads.ts $ARGS
+          if [ "${{ inputs.viec }}" = "kiem-tra" ]; then
+            # Soi lại sau khi nhập. CHỈ ĐỌC — không nhận `--commit` dù gõ câu xác nhận.
+            echo "tsx scripts/kiem-tra-lead-cu.ts --che-pii --file=$CSV"
+            pnpm exec tsx scripts/kiem-tra-lead-cu.ts --che-pii --file="$CSV"
+          else
+            ARGS="--che-pii --file=$CSV --limit=${{ inputs.gioi_han }}"
+            if [ "$CHE_DO" = "ghi" ]; then ARGS="$ARGS --commit"; fi
+            echo "tsx scripts/import-legacy-leads.ts $ARGS"
+            pnpm exec tsx scripts/import-legacy-leads.ts $ARGS
+          fi
 
       - name: Xoá CSV khỏi runner
         if: always()
         run: rm -f "$RUNNER_TEMP/staging_leads.csv"
 
       - name: Nhắc bước kiểm sau khi ghi
-        if: env.CHE_DO == 'ghi'
+        if: env.CHE_DO == 'ghi' && inputs.viec != 'kiem-tra'
         run: |
           echo "### Đã ghi vào PROD — kiểm ngay hai việc" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
