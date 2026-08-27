@@ -155,6 +155,15 @@ export const BACKFILL_SPECS: readonly BackfillSpec[] = [
 
   // ── Tiền: mọi dòng đều thuộc một cơ sở, và đây là nhóm sai một dòng là lệch sổ ─
   {
+    // 27/08 — sổ người hưởng hoa hồng theo cơ sở (QC 1% + Quản lý TT 2%). Sinh ra đã
+    // có CẢ HAI cột và bảng RỖNG lúc migration ⇒ không có bước backfill; `orgUnitId`
+    // do lib/org/dual-write.ts điền ở mọi đường ghi.
+    model: "CenterCommissionAssignee",
+    nullMeaning: "BAT_BUOC",
+    scoped: true,
+    vi: "phân công QC/Quản lý TT theo cơ sở — centerId NOT NULL ở schema",
+  },
+  {
     model: "Payment",
     nullMeaning: "BAT_BUOC",
     scoped: true,

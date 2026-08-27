@@ -266,7 +266,19 @@ model Center {
   email        String?
   googleMapUrl String? @db.Text
   workingHours String?
+  /// CHUỖI TÊN — chỉ để HIỂN THỊ (trang liên hệ, danh sách cơ sở). GIỮ NGUYÊN theo nếp
+  /// hai pha: thêm `managerUserId` trước, bỏ cột này sau khi ổn định. ĐỪNG dùng nó để
+  /// suy ra người hưởng hoa hồng — nó không nối được tới tài khoản nào.
   managerName  String?
+  /// 27/08/2026 — LIÊN KẾT TÀI KHOẢN quản lý cơ sở. Bắt buộc khi TẠO cơ sở mới (ép ở
+  /// tầng validator, không phải ở DB: cơ sở cũ chưa khai nên cột phải nullable).
+  ///
+  /// Đây là con trỏ "hiện tại" cho vận hành/hiển thị. NGUỒN SỰ THẬT của tiền là sổ
+  /// `CenterCommissionAssignee` (role QL_TT) — hai thứ này được ghi TRONG CÙNG MỘT
+  /// transaction bởi `datQuanLyCoSo()` (lib/crm/commission-assignee-store.ts), và màn
+  /// quản trị hiện cảnh báo nếu chúng lệch nhau.
+  managerUserId String?
+  managerUser   User?   @relation("CenterManagerUser", fields: [managerUserId], references: [id], onDelete: SetNull)
 
   // Phase NHÓM 4 — geofence chấm công QR.
   latitude            Float?
@@ -297,8 +309,12 @@ model Center {
   // Phase 5.6 — Order
   orders Order[]
 
+  // 27/08 — sổ người hưởng hoa hồng theo cơ sở (QC 1% + Quản lý TT 2%).
+  commissionAssignees CenterCommissionAssignee[] @relation("CenterCommissionAssignees")
+
   @@index([isActive])
   @@index([displayOrder])
+  @@index([managerUserId])
 }
 
 // ─── A0-01 — OrgUnit tree (Doc 15 §2.1, OI-1) ───
@@ -895,6 +911,65 @@ model CommissionLine {
   @@index([enrollmentId])
 }
 
+/// 27/08/2026 — HAI VAI HƯỞNG HOA HỒNG GẮN THEO CƠ SỞ.
+/// Tên vai TRÙNG tên tầng trong `COMMISSION_TIERS` (lib/crm/commission.ts) — cố ý,
+/// để engine ánh xạ vai → tầng bằng chính chuỗi đó, không cần bảng tra thứ hai.
+enum CenterCommissionRole {
+  /// Quảng cáo — tầng QC 1%.
+  QC
+  /// Quản lý trung tâm — tầng QL_TT 2%.
+  QL_TT
+}
+
+/// SỔ "AI PHỤ TRÁCH CƠ SỞ NÀO, TỪ KHI NÀO TỚI KHI NÀO" (chủ dự án chốt 27/08/2026).
+///
+/// Vì sao là SỔ chứ không phải một cột "người phụ trách hiện tại": kỳ hoa hồng được
+/// CHỐT LẠI nhiều lần và kỳ cũ có thể REOPEN. Một cột "hiện tại" nghĩa là đổi QC hôm
+/// nay sẽ viết lại hoa hồng của tháng trước cho người mới — người làm việc tháng trước
+/// mất tiền, và không dòng nào báo lỗi. Câu hỏi engine hỏi luôn là "ai phụ trách cơ sở
+/// X TẠI THỜI ĐIỂM kế toán xác nhận thu tiền".
+///
+/// Biên hiệu lực PHẢI MỞ: `effectiveFrom <= t < effectiveTo` (xem lib/crm/commission-assignee.ts).
+///
+/// Một cơ sở có thể có NHIỀU dòng QC cùng hiệu lực ⇒ 1% chia đều (không có khoá chặn
+/// chồng lấn, đó là thiết kế). Vai QL_TT được đường ghi ép còn một người và đồng bộ
+/// với `Center.managerUserId`, nhưng engine vẫn chia đều nếu gặp nhiều — lưới an toàn
+/// chống chi vượt tỉ lệ tầng khi dữ liệu lọt vào bằng đường khác.
+model CenterCommissionAssignee {
+  id String @id @default(cuid())
+
+  /// Cơ sở được phụ trách. NOT NULL — một phân công luôn thuộc đúng một cơ sở.
+  centerId String
+  center   Center @relation("CenterCommissionAssignees", fields: [centerId], references: [id], onDelete: Cascade)
+  /// P1 · US-07 — cột SONG SONG với centerId (ghi kép qua lib/org/dual-write.ts).
+  orgUnitId String?
+
+  role CenterCommissionRole
+
+  /// LIÊN KẾT TÀI KHOẢN, không phải chuỗi tên — đây là điểm khác biệt với `Center.managerName`.
+  /// Restrict: người rời công ty không được kéo theo dấu vết tiền đã chi cho họ.
+  userId String
+  user   User   @relation("CenterCommissionAssignments", fields: [userId], references: [id], onDelete: Restrict)
+
+  effectiveFrom DateTime  @db.Timestamptz(6)
+  /// `null` = đang phụ trách.
+  effectiveTo   DateTime? @db.Timestamptz(6)
+
+  note          String? @db.Text
+  createdById   String?
+  createdByName String?
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
+
+  /// Chặn nhập TRÙNG KHÍT một dòng (bấm hai lần). KHÔNG chặn chồng lấn khác mốc —
+  /// chồng lấn là hợp lệ với QC, và engine khử trùng theo userId nên không ai ăn hai suất.
+  @@unique([centerId, role, userId, effectiveFrom])
+  @@index([centerId, role, effectiveFrom])
+  @@index([userId])
+  @@index([orgUnitId])
+}
+
 // R6-F2 — Bản ghi LỆCH giữa can() v1 (matrix) và v2 (DB actor) khi shadow-run.
 // Mục tiêu: report = 0 trong N ngày → an toàn bật RBAC_V2_ENABLED. Chỉ ghi khi LỆCH.
 /// P3 · US-12 — lệch giữa resolver dataScope CŨ (đo centerId) và MỚI (đo orgUnitId).
@@ -1174,6 +1249,10 @@ model User {
 
   /// G-04 — tuỳ chọn cột bảng, theo từng người. Cascade: người nghỉ thì cấu hình đi theo.
   tablePreferences UserTablePreference[] @relation("UserTablePreferences")
+
+  /// 27/08 — hoa hồng theo cơ sở: cơ sở đang trỏ người này làm quản lý + sổ phân công.
+  managedCenters              Center[]                   @relation("CenterManagerUser")
+  centerCommissionAssignments CenterCommissionAssignee[] @relation("CenterCommissionAssignments")
 
   @@index([email])
   @@index([phone])

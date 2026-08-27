@@ -112,6 +112,14 @@ export const SCOPED_MODELS = new Set<string>([
   // hình với chính QLCS cơ sở đó (tức ảnh không bao giờ được duyệt).
   "MediaAsset",
   "SessionMediaReview",
+  // 27/08 — sổ "ai phụ trách cơ sở nào" cho hoa hồng QC 1% + Quản lý TT 2%.
+  // `centerId` NOT NULL: một phân công LUÔN thuộc đúng một cơ sở ⇒ KHÔNG vào
+  // NULL_IS_GLOBAL_MODELS. Đây là dữ liệu ai-nhận-tiền, coi "chưa biết cơ sở" thành
+  // "ai cũng thấy" là để người cơ sở này đọc bảng lương hoa hồng của cơ sở kia.
+  // ⚠️ Engine chốt kỳ (`lib/crm/commission-run.ts`) đọc bảng này qua `db` TRẦN, cố ý:
+  // chốt kỳ là việc TOÀN HỆ (`CommissionStatement.period` @unique, không có centerId),
+  // lọc theo tầm nhìn của người bấm nút sẽ đẻ ra bảng kê thiếu dòng cho cơ sở khác.
+  "CenterCommissionAssignee",
 ]);
 
 /**
@@ -372,6 +380,13 @@ export function getModelPrefixes(model: string): string[] {
     case "MediaAsset":
     case "SessionMediaReview":
       return ["media:"];
+    // 27/08 — phân công người hưởng hoa hồng theo cơ sở. Thiếu nhánh này thì
+    // `getModelPrefixes` trả rỗng và tầm nhìn rơi về `isHoLevel` DIỆN RỘNG: bất kỳ ai
+    // có MỘT vai neo tại Hội sở — kể cả vai chẳng liên quan tiền — đọc được ai đang ăn
+    // hoa hồng ở MỌI cơ sở. Đúng lỗi đã mắc với `Attendance` (#04) và đã có test chặn.
+    // Bám `payments:` (đây là dữ liệu tiền) + `centers:` (đơn vị đo là cơ sở).
+    case "CenterCommissionAssignee":
+      return ["payments:", "centers:"];
     default:
       return [];
   }
