@@ -116,8 +116,23 @@ prisma/
    component, hay query. Vi phạm lint `no-inline-authz` = build fail.
 2. Trước P4, `can()` fallback về logic centerId hiện hành. Không được xoá
    đường cũ, không được đổi hành vi đường cũ.
-3. Mọi bảng mới có dữ liệu theo đơn vị BẮT BUỘC có cột `orgUnitId`
-   (không thêm `centerId` mới). Bảng cũ: ghi kép cả hai cột cho tới P4.
+3. Mọi bảng mới có dữ liệu theo đơn vị BẮT BUỘC có cột `orgUnitId`.
+   **ĐÍNH CHÍNH 27/08/2026 — bỏ vế "không thêm `centerId` mới":** vế đó nói ngược
+   với hệ thống đang chạy. Cách ly cơ sở (`scopedDb` + `SCOPED_MODELS`) **vẫn đo
+   bằng `centerId`** cho tới P4, nên bảng chỉ có `orgUnitId` **không được cách ly
+   tự động** — người viết phải tự bịt bằng tay ở từng nơi gọi, và quên một chỗ là
+   rò dữ liệu giữa các cơ sở. Ba đợt trong ba ngày đã vấp đúng chỗ này và mỗi đợt
+   gỡ một kiểu (bảng kho ảnh 26/08 giữ cả hai cột; trục gọi điện 27/08 dùng cột
+   cho phép trống + hàng đợi chờ gán; hộp thư đa kênh 27/08 bịt ba lớp bằng tay).
+   **Luật nay:** bảng mới mang dữ liệu theo cơ sở thì **giữ CẢ HAI cột** —
+   `centerId` là cột cơ chế cách ly đang thật sự đọc, `orgUnitId` là hướng đích —
+   và phải khai đủ **ba** chỗ: `SCOPED_MODELS`, `getModelPrefixes()`
+   (`lib/db-scope.ts`), và `BACKFILL_SPECS` (`lib/org/center-bridge.ts`). Khai
+   thiếu `getModelPrefixes()` là tầm nhìn rơi về diện rộng — đúng lỗi từng mắc với
+   bảng điểm danh. Bảng KHÔNG mang dữ liệu theo cơ sở thì chỉ `orgUnitId`, không
+   cần gì thêm.
+   Chuyển cơ chế cách ly sang đọc `orgUnitId` là **một đợt riêng**, chưa lên lịch.
+   Chừng nào chưa làm xong đợt đó thì luật này giữ nguyên.
 4. Không tự ý sinh migration đổi/bỏ cột trên bảng đang có dữ liệu PROD.
    Migration chỉ nằm trong story được giao, có dry-run, và Dev chạy tay trên PROD.
 5. Test AUTO-CI của story (xem 04-TestScenarios) viết TRƯỚC phần hiện thực.
