@@ -39,6 +39,10 @@ export const ROLE_SEED: RoleSeed[] = [
       { action: "dashboard:view", scopeType: "GLOBAL" },
       // US-03 — quản nhóm người dùng + grant nhóm (chỉ SUPER_ADMIN, như roles:manage).
       { action: "user-groups:manage", scopeType: "GLOBAL" },
+      // 27/08/2026 — đổi trạng thái lead nay là quyền RIÊNG, chỉ Sale. SUPER_ADMIN đã
+      // bypass toàn bộ quyền trong can() v2 nên dòng này KHÔNG đổi hành vi; khai để ma
+      // trận nói được ai đẩy được lead trên phễu, và để v1 (local/dev) khớp v2.
+      { action: "leads:change-status", scopeType: "GLOBAL" },
       // C-01 — chỉ tiêu lead theo tháng × cơ sở. SUPER_ADMIN đã bypass toàn bộ quyền
       // trong can() v2 nên dòng này KHÔNG đổi hành vi; khai cho khớp v1 + rõ ý, và để
       // ma trận nói được "ai đặt được chỉ tiêu toàn hệ thống" mà không phải suy từ bypass.
@@ -735,6 +739,11 @@ export const ROLE_SEED: RoleSeed[] = [
       { action: "leads:view-pii", scopeType: "GLOBAL" },
       { action: "leads:create", scopeType: "GLOBAL" },
       { action: "leads:edit", scopeType: "GLOBAL" },
+      // 27/08/2026 — CHỈ Sale được đổi trạng thái lead (chủ dự án chốt). Quản lý cơ sở
+      // và Marketing giữ `leads:edit` nhưng KHÔNG có key này ⇒ sửa hồ sơ được, đẩy bậc
+      // thì không. ⚠️ Đổi ở đây chưa có hiệu lực trên prod cho tới khi chạy
+      // seed-prod-roles.yml; trên dev/test phải chạy tay `pnpm db:seed:roles`.
+      { action: "leads:change-status", scopeType: "GLOBAL" },
       // Task #07 — quyết định user 07/07/2026: Sale được import danh sách "đã đăng
       // ký" (Sale giữ Google Sheet gốc — câu 33). CENTER: import gán vào cơ sở mình.
       { action: "leads:import", scopeType: "GLOBAL" },

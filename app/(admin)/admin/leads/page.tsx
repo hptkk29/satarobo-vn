@@ -226,7 +226,9 @@ export default async function LeadsPage({
     const kanbanTotal =
       rawLeads.length < KANBAN_LIMIT ? rawLeads.length : await sdb.lead.count({ where })
 
-    const canUpdate = (await checkPermission('leads:edit'))
+    // Kanban CHỈ làm một việc: kéo thẻ = đổi trạng thái ⇒ gác bằng quyền đổi trạng
+    // thái, không phải `leads:edit`. Không có quyền thì thẻ vẫn xem được, chỉ không kéo.
+    const canUpdate = (await checkPermission('leads:change-status'))
     const kanbanLeads: KanbanLead[] = rawLeads.map((raw) => {
       // #11 T2 — mask PII (tên PH/SĐT/tên con) trước khi build payload client.
       const l = maskLeadPiiFields(raw, canViewPii)
@@ -300,6 +302,9 @@ export default async function LeadsPage({
   ])
 
   const canUpdate = (await checkPermission('leads:edit'))
+  // 27/08 — chỉ Sale đẩy được lead trên phễu (chủ dự án chốt). Tách hẳn khỏi
+  // canUpdate: Quản lý cơ sở / Marketing vẫn sửa hồ sơ + ghi chú như cũ.
+  const canChangeStatus = (await checkPermission('leads:change-status'))
   const canDelete = (await checkPermission('leads:delete'))
   // G-03/A-03 — quyền XUẤT tách khỏi quyền XEM. Trước 26/08 nút xuất hiện cho mọi
   // người đọc được danh sách, và đường /api cũng chỉ gác bằng `leads:view-all` ⇒
@@ -369,6 +374,7 @@ export default async function LeadsPage({
         page={page}
         pageSize={soDong}
         canUpdate={canUpdate}
+        canChangeStatus={canChangeStatus}
         canDelete={canDelete}
         currentStatus={statusFilter}
         currentUserId={session.user.id}

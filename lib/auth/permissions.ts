@@ -61,6 +61,9 @@ export type Action =
   | "leads:view-own"
   | "leads:create"
   | "leads:edit"
+  // 27/08/2026 — đổi trạng thái lead TÁCH khỏi `leads:edit`: chỉ Sale được đẩy
+  // lead trên phễu. Quản lý cơ sở / Marketing vẫn sửa được hồ sơ, chỉ không đổi bậc.
+  | "leads:change-status"
   // 23/08/2026 — sửa HẸP: chỉ những ô CÓ TRONG biểu mẫu `/nhap-khach-hang`, và
   // chỉ trên phiếu do CHÍNH MÌNH nhập (`Lead.createdById`).
   //
@@ -403,6 +406,11 @@ export const PERMISSIONS: Record<Action, Role[]> = {
   // phải sót: nơi nào còn enforce v1 thì tính năng này chưa có mặt.
   "leads:edit-own-intake": ["SUPER_ADMIN"],
   "leads:edit": ["SUPER_ADMIN", "CENTER_MANAGER", "SALES_CSM", "MARKETING"],
+  // CHỈ Sale (+ Quản trị hệ thống để còn gỡ kẹt). CỐ Ý KHÔNG có CENTER_MANAGER và
+  // MARKETING — đó chính là thay đổi mà chủ dự án yêu cầu 27/08/2026.
+  // ⚠️ v1 không có vai "Sale Hội sở"; ở v2 HO_SALE cũng KHÔNG được cấp key này
+  // (chốt cũ: Sale Hội sở XEM lead toàn hệ thống, KHÔNG sửa).
+  "leads:change-status": ["SUPER_ADMIN", "SALES_CSM"],
   "leads:assign": ["SUPER_ADMIN", "CENTER_MANAGER"],
   "leads:assign-config": ["SUPER_ADMIN"],
   "leads:delete": ["SUPER_ADMIN", "CENTER_MANAGER"],

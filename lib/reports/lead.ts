@@ -19,6 +19,8 @@ export type LeadReportRecord = {
   droppedAtStage?: string | null;
   /** Lý do rụng do người bấm ghi (`Lead.dropReason`). */
   dropReason?: string | null;
+  /** Sale đang phụ trách (`Lead.assignedToId`). null = chưa chia cho ai. */
+  assignedToId?: string | null;
 };
 
 const pad = (n: number) => String(n).padStart(2, "0");
@@ -192,6 +194,64 @@ export function groupByCenter(
   );
 }
 
+export type SaleStat = {
+  key: string;
+  saleLabel: string;
+  centerLabel: string;
+  total: number;
+  converted: number;
+  conversionRate: number;
+};
+
+const CHUA_CHIA = "Chưa chia cho ai";
+
+/**
+ * Tỷ lệ chốt của TỪNG SALE, tách theo cơ sở.
+ *
+ * Vì sao khoá là `centerId::assignedToId` chứ không chỉ `assignedToId`: một người có thể
+ * ôm lead ở hai cơ sở (Sale Hội sở, hoặc người vừa chuyển cơ sở). Gộp lại thành một dòng
+ * thì Quản lý cơ sở A thấy tỷ lệ đã pha lẫn lead của cơ sở B — con số đó không dùng để
+ * đánh giá ai được.
+ *
+ * Lead CHƯA chia cho ai vẫn được đếm thành một dòng riêng, KHÔNG bỏ đi: đó thường là
+ * phần hở lớn nhất của phễu, bỏ khỏi bảng là giấu đúng chỗ cần nhìn. THUẦN.
+ */
+export function groupBySale(
+  records: LeadReportRecord[],
+  centerNames?: Record<string, string>,
+  saleNames?: Record<string, string>,
+): SaleStat[] {
+  const m = new Map<string, { total: number; converted: number; sale: string; center: string }>();
+  for (const r of records) {
+    const saleId = r.assignedToId ?? "";
+    const centerId = r.centerId ?? "";
+    const key = `${centerId}::${saleId}`;
+    const cur =
+      m.get(key) ??
+      {
+        total: 0,
+        converted: 0,
+        sale: saleId ? (saleNames?.[saleId] ?? saleId) : CHUA_CHIA,
+        center: centerId ? (centerNames?.[centerId] ?? centerId) : UNKNOWN_LABEL,
+      };
+    cur.total += 1;
+    if (isConverted(r)) cur.converted += 1;
+    m.set(key, cur);
+  }
+  return [...m.entries()]
+    .map(([key, v]) => ({
+      key,
+      saleLabel: v.sale,
+      centerLabel: v.center,
+      total: v.total,
+      converted: v.converted,
+      conversionRate: ratio(v.converted, v.total),
+    }))
+    // Sắp theo SỐ CHỐT giảm dần rồi mới tới tổng: bảng này để nhìn ai đang chốt được,
+    // và tỷ lệ 100% trên 1 lead không đáng đứng trên 40% trên 50 lead.
+    .sort((a, b) => b.converted - a.converted || b.total - a.total);
+}
+
 export type MonthStat = { month: string; total: number; converted: number };
 
 /** Nhóm theo tháng tạo lead (giờ VN), sắp xếp tăng dần. THUẦN. */
@@ -343,6 +403,8 @@ export type LeadReport = {
   bySource: GroupStat[];
   byCommissionSource: GroupStat[];
   byCenter: GroupStat[];
+  /** Tỷ lệ chốt của từng sale, tách theo cơ sở. */
+  bySale: SaleStat[];
   byMonth: MonthStat[];
   byDropStage: DropStageStat[];
 };
@@ -351,6 +413,7 @@ export type LeadReport = {
 export function buildLeadReport(
   records: LeadReportRecord[],
   centerNames?: Record<string, string>,
+  saleNames?: Record<string, string>,
 ): LeadReport {
   const funnel = buildFunnel(records);
   return {
@@ -361,6 +424,7 @@ export function buildLeadReport(
     bySource: groupBySource(records),
     byCommissionSource: groupByCommissionSource(records),
     byCenter: groupByCenter(records, centerNames),
+    bySale: groupBySale(records, centerNames, saleNames),
     byMonth: groupByMonth(records),
     byDropStage: groupByDropStage(records),
   };

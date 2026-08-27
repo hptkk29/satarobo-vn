@@ -156,7 +156,13 @@ export async function updateLeadStatus(
 ): Promise<{ ok: boolean; error?: string }> {
   const session = await auth()
   if (!session?.user) return { ok: false, error: 'Chua dang nhap' }
-  if (!(await checkPermission('leads:edit'))) return { ok: false, error: 'Khong co quyen' }
+  // 27/08/2026 — gác bằng `leads:change-status`, KHÔNG phải `leads:edit`. Chủ dự án chốt
+  // chỉ Sale được đẩy lead trên phễu; Quản lý cơ sở và Marketing vẫn sửa hồ sơ lead bình
+  // thường (những đường đó vẫn gác `leads:edit`). Đây là ENDPOINT — ẩn nút ở bảng/Kanban
+  // là tiện nghi cho người dùng, không phải hàng rào: POST thẳng vào action vẫn phải chặn.
+  if (!(await checkPermission('leads:change-status'))) {
+    return { ok: false, error: 'Chỉ Tư vấn viên (Sale) được đổi trạng thái lead' }
+  }
 
   const parsed = statusSchema.safeParse(rawStatus)
   if (!parsed.success) return { ok: false, error: 'Trang thai khong hop le' }
