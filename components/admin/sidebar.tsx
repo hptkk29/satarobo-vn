@@ -293,6 +293,15 @@ const NAV_GROUPS: NavGroup[] = [
       { label: "Hoàn tiền", href: "/hoan-tien", icon: Undo2, perm: ["payments:manage"] },
       { label: "Phương thức TT", href: "/payment-methods", icon: CreditCard, perm: ["payments:manage"] },
       { label: "Hoa hồng", href: "/crm/commission", icon: Coins, perm: ["payments:manage"] },
+      // 27/08 — khai QC / quản lý phụ trách cơ sở (nguồn hoa hồng QC 1% + QL TT 2%).
+      // Quyền RIÊNG, không phải `payments:manage`: kế toán duyệt và chi, nhưng người
+      // chỉ định AI ĐƯỢC NHẬN là chủ dự án (chỉ SUPER_ADMIN).
+      {
+        label: "Người hưởng hoa hồng",
+        href: "/crm/commission/nguoi-huong",
+        icon: Coins,
+        perm: ["commission-assignee:manage"],
+      },
     ],
   },
   {

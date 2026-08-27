@@ -8,6 +8,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import type { Prisma } from "@prisma/client";
 import { z } from "zod";
+import { datQuanLyCoSo, PhanCongError } from "@/lib/crm/commission-assignee-store";
 
 type ActionResult = { error?: string };
 
@@ -29,6 +30,11 @@ const centerSchema = z.object({
   googleMapUrl: z.string().trim().optional(),
   workingHours: z.string().trim().optional(),
   managerName: z.string().trim().optional(),
+  // 27/08 — LIÊN KẾT TÀI KHOẢN quản lý cơ sở (nguồn hoa hồng QL TT 2%).
+  // Optional ở schema chung vì cơ sở CŨ chưa khai; bắt buộc khi TẠO — xem
+  // `centerCreateSchema` ngay dưới. Cột này KHÔNG đi qua `toData()`: nó chỉ được ghi
+  // bởi `datQuanLyCoSo()` để cột và sổ phân công không bao giờ lệch nhau.
+  managerUserId: z.string().trim().optional(),
   logoUrl: z.string().trim().optional(),
   bannerUrl: z.string().trim().optional(),
   description: z.string().trim().optional(),
@@ -38,6 +44,20 @@ const centerSchema = z.object({
   latitude: z.number().min(-90).max(90).nullable(),
   longitude: z.number().min(-180).max(180).nullable(),
   allowedRadiusMeters: z.number().int().min(10).max(5000).nullable(),
+});
+
+/**
+ * Tạo cơ sở mới BẮT BUỘC có tài khoản quản lý (chủ dự án chốt 27/08/2026).
+ *
+ * Ép ở tầng validator chứ không phải NOT NULL ở DB: 3 cơ sở đang chạy trên PROD chưa
+ * khai, nên NOT NULL sẽ chặn deploy. Sửa cơ sở CŨ vẫn cho để trống — bắt điền mới sửa
+ * được địa chỉ là chặn việc chẳng liên quan.
+ */
+const centerCreateSchema = centerSchema.extend({
+  managerUserId: z
+    .string()
+    .trim()
+    .min(1, "Phải chọn tài khoản quản lý cơ sở — nếu không, 2% hoa hồng của cơ sở này treo mỗi kỳ"),
 });
 
 function emptyToUndefined(value: FormDataEntryValue | null): string | undefined {
@@ -98,6 +118,7 @@ function readForm(formData: FormData) {
     googleMapUrl: emptyToUndefined(formData.get("googleMapUrl")),
     workingHours: emptyToUndefined(formData.get("workingHours")),
     managerName: emptyToUndefined(formData.get("managerName")),
+    managerUserId: emptyToUndefined(formData.get("managerUserId")),
     logoUrl: emptyToUndefined(formData.get("logoUrl")),
     bannerUrl: emptyToUndefined(formData.get("bannerUrl")),
     description: emptyToUndefined(formData.get("description")),
@@ -109,6 +130,13 @@ function readForm(formData: FormData) {
   };
 }
 
+/**
+ * ⚠️ CỐ Ý KHÔNG CÓ `managerUserId` Ở ĐÂY. Cột đó là bản sao "hiện tại" của sổ
+ * `CenterCommissionAssignee(QL_TT)`, và hoa hồng 2% đi theo SỔ. Cho form ghi thẳng cột
+ * là mở đường cho hai nguồn lệch nhau: hồ sơ cơ sở nói người A, tiền chảy về người B,
+ * và không gì báo lỗi. Đường ghi duy nhất là `datQuanLyCoSo()` (ghi cả hai trong một
+ * transaction).
+ */
 function toData(c: z.infer<typeof centerSchema>): Prisma.CenterCreateInput {
   return {
     name: c.name,
@@ -134,15 +162,16 @@ function toData(c: z.infer<typeof centerSchema>): Prisma.CenterCreateInput {
 }
 
 export async function createCenter(formData: FormData): Promise<ActionResult> {
-  const { sdb } = await requireOrgAdmin();
+  const { user, sdb } = await requireOrgAdmin();
 
-  const parsed = centerSchema.safeParse(readForm(formData));
+  const parsed = centerCreateSchema.safeParse(readForm(formData));
   if (!parsed.success) {
     return { error: parsed.error.issues[0]?.message ?? "Dữ liệu không hợp lệ" };
   }
 
+  let created: { id: string };
   try {
-    await sdb.center.create({ data: toData(parsed.data) });
+    created = await sdb.center.create({ data: toData(parsed.data), select: { id: true } });
   } catch (err) {
     if (err instanceof Error && err.message.includes("Unique constraint")) {
       return { error: "Slug đã tồn tại — chọn slug khác" };
@@ -150,14 +179,39 @@ export async function createCenter(formData: FormData): Promise<ActionResult> {
     return { error: "Lỗi cơ sở dữ liệu — không tạo được cơ sở" };
   }
 
+  // Cơ sở đã tồn tại rồi; nếu bước này hỏng thì cơ sở nằm đó KHÔNG có quản lý — trạng
+  // thái đó HIỆN RÕ ("Chưa khai: Quản lý TT 2%") ở màn người hưởng, không âm thầm.
+  const loi = await datQuanLy(user, created.id, parsed.data.managerUserId);
   revalidatePath("/centers");
   revalidatePath("/lien-he");
+  if (loi) return { error: loi };
   // Thành công → trả {} để client toast + điều hướng (QA 20/07 — không redirect âm thầm).
   return {};
 }
 
+/** Đặt/đổi quản lý cơ sở qua ĐÚNG một đường ghi. Trả về câu lỗi cho UI, hoặc null. */
+async function datQuanLy(
+  user: { id: string; name?: string | null; email?: string | null },
+  centerId: string,
+  managerUserId: string | undefined,
+): Promise<string | null> {
+  if (!managerUserId) return null;
+  try {
+    await datQuanLyCoSo(
+      { id: user.id, name: user.name ?? user.email ?? user.id },
+      { centerId, userId: managerUserId },
+    );
+    return null;
+  } catch (e) {
+    if (e instanceof PhanCongError) {
+      return `Đã lưu hồ sơ cơ sở, nhưng KHÔNG gán được tài khoản quản lý: ${e.message}`;
+    }
+    return "Đã lưu hồ sơ cơ sở, nhưng không gán được tài khoản quản lý — thử lại ở màn Người hưởng hoa hồng theo cơ sở.";
+  }
+}
+
 export async function updateCenter(id: string, formData: FormData): Promise<ActionResult> {
-  const { sdb } = await requireOrgAdmin();
+  const { user, sdb } = await requireOrgAdmin();
 
   const parsed = centerSchema.safeParse(readForm(formData));
   if (!parsed.success) {
@@ -173,9 +227,15 @@ export async function updateCenter(id: string, formData: FormData): Promise<Acti
     return { error: "Cơ sở không tồn tại hoặc lỗi cơ sở dữ liệu" };
   }
 
+  // `datQuanLyCoSo` tự bỏ qua khi không đổi người ⇒ bấm Lưu địa chỉ không đẻ dòng sổ.
+  // Để trống ô này KHÔNG gỡ quản lý hiện tại: gỡ là việc tường minh, làm ở màn người
+  // hưởng bằng nút "Kết thúc" (có ngày hiệu lực), không phải hệ quả phụ của một lần lưu.
+  const loi = await datQuanLy(user, id, parsed.data.managerUserId);
+
   revalidatePath("/centers");
   revalidatePath(`/centers/${id}/edit`);
   revalidatePath("/lien-he");
+  if (loi) return { error: loi };
   return {};
 }
 

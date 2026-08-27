@@ -31,8 +31,10 @@ function thu(id: string, amount: number, ngay: string, patch: Partial<ButToanHoa
     amount,
     paidDate: d,
     rateDate: d,
+    assigneeDate: d,
     refundOfPaymentId: null,
     leadId: "lead-1",
+    centerId: "cs-1",
     isRenewal: false,
     recipients: NGUOI,
     ...patch,
@@ -56,8 +58,11 @@ function hoan(
     amount: -Math.abs(soTien),
     paidDate: new Date(ngayHoan),
     rateDate: new Date(goc.ngay),
+    // NGƯỜI HƯỞNG cũng đi theo khoản gốc (như tỉ lệ): thu hồi phải đòi đúng người đã nhận.
+    assigneeDate: new Date(goc.ngay),
     refundOfPaymentId: goc.id,
     leadId: "lead-1",
+    centerId: "cs-1",
     isRenewal: false,
     recipients: NGUOI,
     ...patch,
@@ -349,5 +354,80 @@ describe("luật nghiệp vụ giữ nguyên từ engine cũ", () => {
         ratesAt: quaTran,
       }),
     ).toThrow(/8%/);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// [CA-8] 27/08/2026 — MỘT CƠ SỞ NHIỀU QC. Quy tắc đã chốt: CHIA ĐỀU, tổng tầng
+// không đổi. Đây là chỗ dễ vỡ trần 8% trong TIỀN THẬT nhất, vì `validateRates`
+// chỉ canh CẤU HÌNH tỉ lệ chứ không đếm số dòng đã chi.
+describe("[CA-8] nhiều QC phụ trách một cơ sở — chia đều, TỔNG tầng không đổi", () => {
+  const NHIEU_QC = { ...NGUOI, QC: ["u-qc-a", "u-qc-b"] };
+
+  it("hai QC → hai dòng, mỗi dòng nửa của 1%", () => {
+    const lines = tinhHoaHongTheoKy({
+      period: "2026-09",
+      butToan: [thu("p1", 10_000_000, "2026-09-05T09:00:00+07:00", { recipients: NHIEU_QC })],
+      ratesAt: rateMacDinh,
+    });
+    const qc = lines.filter((l) => l.tier === "QC");
+    expect(qc.map((l) => [l.recipientId, l.amount])).toEqual([
+      ["u-qc-a", 50_000],
+      ["u-qc-b", 50_000],
+    ]);
+  });
+
+  it("Σ CẢ KỲ vẫn ĐÚNG 8% dù tầng QC bị chia cho 3 người", () => {
+    const lines = tinhHoaHongTheoKy({
+      period: "2026-09",
+      butToan: [
+        thu("p1", 100_000_000, "2026-09-05T09:00:00+07:00", {
+          recipients: { ...NGUOI, QC: ["a", "b", "c"] },
+        }),
+      ],
+      ratesAt: rateMacDinh,
+    });
+    expect(lines.reduce((s, l) => s + l.amount, 0)).toBe(8_000_000);
+  });
+
+  it("hoàn sạch → từng phần đã chia bị thu hồi đúng bằng phần đã trả, Σ về 0", () => {
+    const lines = tinhHoaHongTheoKy({
+      period: "2026-09",
+      butToan: [
+        thu("p1", 10_000_001, "2026-09-05T09:00:00+07:00", { recipients: NHIEU_QC }),
+        hoan("r1", 10_000_001, "2026-09-20T09:00:00+07:00", { id: "p1", ngay: "2026-09-05T09:00:00+07:00" }, {
+          recipients: NHIEU_QC,
+        }),
+      ],
+      ratesAt: rateMacDinh,
+    });
+    expect(lines.reduce((s, l) => s + l.amount, 0)).toBe(0);
+  });
+
+  it("đổi QC giữa kỳ → mỗi bút toán về đúng người phụ trách lúc xác nhận", () => {
+    // Không phải "người đang phụ trách cuối kỳ ăn cả tháng": mốc gán nằm trên TỪNG
+    // bút toán (`assigneeDate`), nên hai lần thu trong cùng tháng có thể về hai người.
+    const lines = tinhHoaHongTheoKy({
+      period: "2026-09",
+      butToan: [
+        thu("p1", 10_000_000, "2026-09-05T09:00:00+07:00", { recipients: { QC: "u-cu" } }),
+        thu("p2", 10_000_000, "2026-09-25T09:00:00+07:00", { recipients: { QC: "u-moi" } }),
+      ],
+      ratesAt: rateMacDinh,
+    });
+    expect(lines.map((l) => [l.recipientId, l.amount])).toEqual([
+      ["u-cu", 100_000],
+      ["u-moi", 100_000],
+    ]);
+  });
+
+  it("chạy lại kỳ với nhiều người hưởng vẫn TRÙNG KHÍT (thứ tự tất định)", () => {
+    const chay = (r: string[]) =>
+      tinhHoaHongTheoKy({
+        period: "2026-09",
+        butToan: [thu("p1", 10_000_000, "2026-09-05T09:00:00+07:00", { recipients: { QC: r } })],
+        ratesAt: rateMacDinh,
+      });
+    expect(chay(["u-b", "u-a"])).toEqual(chay(["u-a", "u-b"]));
   });
 });

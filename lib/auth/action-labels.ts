@@ -38,6 +38,8 @@ const RESOURCE_LABELS: Record<string, string> = {
   // Phase 5.6 — Financial
   payments: "Phương thức thanh toán",
   orders: "Đơn hàng",
+  // 27/08 — khai QC / quản lý phụ trách cơ sở (người hưởng hoa hồng QC 1% + QL TT 2%).
+  "commission-assignee": "Người hưởng hoa hồng theo cơ sở",
   // Phase 5.7 — Vouchers
   // Chat realtime (US-05)
   chat: "Tin nhắn (chat)",

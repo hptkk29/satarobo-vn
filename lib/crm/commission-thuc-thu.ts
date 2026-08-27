@@ -43,6 +43,7 @@ import {
   COMMISSION_TIERS,
   computeCommission,
   computeClawback,
+  type CommissionRecipients,
   type CommissionTier,
 } from "@/lib/crm/commission";
 
@@ -103,14 +104,32 @@ export type ButToanHoaHong = {
   paidDate: Date;
   /** Quyết định TỈ LỆ. Bút toán hoàn mang ngày của khoản GỐC (xem đầu file). */
   rateDate: Date;
+  /**
+   * Quyết định NGƯỜI HƯỞNG của hai tầng gắn theo cơ sở (QC, QL_TT) — 27/08/2026.
+   *
+   * Chủ dự án chốt: "QC phụ trách cơ sở TẠI THỜI ĐIỂM KẾ TOÁN XÁC NHẬN THU TIỀN"
+   * ⇒ `Payment.confirmedAt` (lùi về `paidDate` với dòng cũ chưa có mốc xác nhận).
+   * Bút toán HOÀN mang mốc của khoản GỐC — cùng lý do với `rateDate`: đòi lại tiền
+   * của người ĐÃ NHẬN, không đòi người vừa mới nhận việc.
+   */
+  assigneeDate: Date;
   /** `Payment.id` của khoản gốc bị hoàn — `null` với bút toán thu bình thường. */
   refundOfPaymentId: string | null;
   /** Lead nguồn: gom dòng theo phễu + truy ngược. `null` = đơn không gắn lead. */
   leadId: string | null;
+  /**
+   * Cơ sở của bút toán — đơn vị đo của hai tầng QC/QL_TT, và là khoá để báo
+   * "cơ sở nào chưa khai người hưởng". `null` = không quy được về cơ sở nào.
+   */
+  centerId: string | null;
   /** Ghi danh tái tục → KHÔNG hưởng 4 tầng (C10.3). */
   isRenewal: boolean;
-  /** Người hưởng từng tầng. Tầng thiếu người → KHÔNG sinh dòng cho tầng đó. */
-  recipients: Partial<Record<CommissionTier, string>>;
+  /**
+   * Người hưởng từng tầng. Tầng thiếu người (undefined hoặc mảng rỗng) → KHÔNG sinh
+   * dòng cho tầng đó. Một tầng có NHIỀU người (nhiều QC cùng phụ trách một cơ sở) →
+   * chia đều, tổng tầng không đổi.
+   */
+  recipients: CommissionRecipients;
 };
 
 /** Một dòng bảng kê — khớp cột của `CommissionLine`. */
