@@ -31,6 +31,9 @@
  *  6. CHỈ `create`. Không `update`, không `delete`, không `upsert`. Không dòng nào
  *     đang có trên PROD bị sửa.
  *
+ *  7. `assignedAt` = `createdAt` (chốt 27/08/2026). Đây là sheet của CHÍNH sale đó
+ *     nên "lead ra đời" và "lead được giao" là cùng một sự kiện — `ngay_nhan_lead`.
+ *
  * ─────────────────────────────────────────────────────────────────────────────
  * VÌ SAO IMPORT `db` TỪ `@/lib/db` CHỨ KHÔNG `new PrismaClient()`
  *
@@ -448,6 +451,11 @@ async function main() {
       continue;
     }
 
+    // MỘT mốc thời gian cho cả `createdAt` lẫn `assignedAt`. Đây là sheet của
+    // CHÍNH sale đó, nên "lead ra đời" và "lead được giao cho sale" là cùng một
+    // sự kiện — `ngay_nhan_lead`. Tính sẵn để hai cột không lệch nhau vài mili-giây.
+    const moc = b.createdAt ?? new Date();
+
     try {
       // Ghi LỒNG: Prisma bọc Lead + LeadChild trong MỘT transaction ngầm, một lượt
       // đi-về. Không cần `$transaction` tương tác (vốn có timeout riêng và giữ
@@ -471,7 +479,16 @@ async function main() {
           note: b.note,
           // `createdAt` lùi về ngày sale nhận lead. `updatedAt` có `@updatedAt` nên
           // Prisma tự điền — KHÔNG gán tay.
-          ...(b.createdAt ? { createdAt: b.createdAt } : {}),
+          createdAt: moc,
+          // `assignedAt` PHẢI đi cùng `assignedToId` — `lib/lead/assignment.ts` tồn tại
+          // đúng để "không ai quên assignedAt", và route import sẵn có của repo
+          // (`app/api/admin/import/leads/registered/route.ts:508`) cũng set. Bỏ trống thì
+          // 708 lead mang người phụ trách mà không có mốc phân công: SLA-3 không bao giờ
+          // chạy và mọi báo cáo độ trễ phân công sai vĩnh viễn.
+          // ⚠️ Hệ quả đã lường trước và chủ dự án đã chốt (27/08/2026): SLA-3 kêu thêm
+          // một lượt nữa cho mỗi lead. Thông báo trong app, không email/ZNS, mỗi lead
+          // một lần nhờ dedupeKey.
+          assignedAt: moc,
           ...(b.row.ten_con
             ? {
                 children: {
