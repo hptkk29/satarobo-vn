@@ -42,6 +42,12 @@ export const ROLE_SEED: RoleSeed[] = [
       // 27/08/2026 — đổi trạng thái lead nay là quyền RIÊNG, chỉ Sale. SUPER_ADMIN đã
       // bypass toàn bộ quyền trong can() v2 nên dòng này KHÔNG đổi hành vi; khai để ma
       // trận nói được ai đẩy được lead trên phễu, và để v1 (local/dev) khớp v2.
+      // Hộp thư đa kênh. SUPER_ADMIN đã bypass toàn bộ quyền trong can() v2 nên ba
+      // dòng này KHÔNG đổi hành vi; khai để ma trận nói được ai trực được hộp thư,
+      // và để v1 (local/dev) khớp v2.
+      { action: "inbox:view", scopeType: "GLOBAL" },
+      { action: "inbox:reply", scopeType: "GLOBAL" },
+      { action: "inbox:assign", scopeType: "GLOBAL" },
       { action: "leads:change-status", scopeType: "GLOBAL" },
       // C-01 — chỉ tiêu lead theo tháng × cơ sở. SUPER_ADMIN đã bypass toàn bộ quyền
       // trong can() v2 nên dòng này KHÔNG đổi hành vi; khai cho khớp v1 + rõ ý, và để
@@ -574,6 +580,13 @@ export const ROLE_SEED: RoleSeed[] = [
       // Sale hoặc giáo viên vắng. Vai chuyên trách mới là người làm thường ngày.
       { action: "trials:attendance", scopeType: "GLOBAL" },
       { action: "trials:override-capacity", scopeType: "GLOBAL" },
+      // ── Hộp thư đa kênh: QL cơ sở theo dõi + giao việc, và trả lời khi cần ──
+      // GLOBAL bắt buộc (cổng trang gọi trần). Cách ly cơ sở do
+      // `inboxOrgScopeWhere` lo, KHÔNG do scope quyền và KHÔNG do `scopedDb`
+      // (ba bảng Inbox* mang `orgUnitId`, `scopedDb` chỉ lọc `centerId`).
+      { action: "inbox:view", scopeType: "GLOBAL" },
+      { action: "inbox:reply", scopeType: "GLOBAL" },
+      { action: "inbox:assign", scopeType: "GLOBAL" },
       { action: "parent-requests:manage", scopeType: "GLOBAL" },
       { action: "parent-feedback:view", scopeType: "GLOBAL" },
       { action: "media:view", scopeType: "GLOBAL" },
@@ -794,6 +807,19 @@ export const ROLE_SEED: RoleSeed[] = [
       // ở mọi ô nhóm lớp). Với OWN thì `openDmTargetOf`/`sendTargetOf` gán
       // `createdById = actor.userId` nên chỉ khớp khi Sale là THÀNH VIÊN hội thoại; chốt
       // chặn thật là quan hệ phân công (`Enrollment.saleId`) kiểm trong handler.
+      // ── Hộp thư đa kênh (Zalo OA / Messenger) ─────────────────────────────
+      // GLOBAL là BẮT BUỘC, không phải nới tay: `inbox:view` là cổng trang
+      // `/sale/hop-thu`, mà cổng trang gọi `checkAnyPermission` KHÔNG có target ⇒
+      // seed CENTER/OWN sẽ trả FALSE trên prod (RBAC v2) trong khi local (v1
+      // tĩnh) vẫn xanh. Đúng bẫy "chạy máy tôi thì được".
+      // Cách ly cơ sở KHÔNG do scope của quyền lo, và cũng KHÔNG do `scopedDb`
+      // lo (ba bảng Inbox* mang `orgUnitId`, `scopedDb` chỉ lọc `centerId`) —
+      // nó do `inboxOrgScopeWhere` trong `lib/inbox/scope.ts`.
+      // ⚠️ Sửa ở đây CHƯA có hiệu lực trên prod cho tới khi chạy workflow
+      // `seed-prod-roles.yml`; dev/test chạy tay `pnpm db:seed:roles`.
+      { action: "inbox:view", scopeType: "GLOBAL" },
+      { action: "inbox:reply", scopeType: "GLOBAL" },
+      { action: "inbox:assign", scopeType: "GLOBAL" },
       { action: "chat:read", scopeType: "OWN" },
       { action: "chat:send", scopeType: "OWN" },
       { action: "parent-requests:manage", scopeType: "GLOBAL" },

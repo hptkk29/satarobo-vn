@@ -19,7 +19,15 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useMemo } from "react";
-import { BookOpen, CalendarDays, LayoutList, LogOut, UserPlus, Users } from "lucide-react";
+import {
+  BookOpen,
+  CalendarDays,
+  LayoutList,
+  LogOut,
+  MessageSquare,
+  UserPlus,
+  Users,
+} from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { PAGE_GATES } from "@/lib/auth/page-gates";
 import { cn } from "@/lib/utils";
@@ -40,6 +48,12 @@ const NAV: NavItem[] = [
     href: "/sale/khach-cua-toi",
     icon: Users,
     perm: PAGE_GATES["/sale/khach-cua-toi"],
+  },
+  {
+    label: "Hộp thư",
+    href: "/sale/hop-thu",
+    icon: MessageSquare,
+    perm: PAGE_GATES["/sale/hop-thu"],
   },
   { label: "Lớp trải nghiệm", href: "/sale/trial", icon: CalendarDays, perm: PAGE_GATES["/sale/trial"] },
   {

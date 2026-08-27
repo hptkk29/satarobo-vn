@@ -60,6 +60,25 @@ module.exports = {
       to: { path: "^lib/db\\.ts$" },
     },
     {
+      // Spec tích hợp §2.1 phương án PA-1: adapter nhà cung cấp sống ở
+      // `lib/integrations/<vendor>/`, và MÀN HÌNH KHÔNG ĐƯỢC GỌI THẲNG NÓ.
+      //
+      // Vì sao: gọi thẳng `provider.send()` từ một Server Action là bỏ qua toàn bộ
+      // tầng `lib/inbox/send.ts` — tức bỏ giành-chỗ-PENDING (gửi đôi cho khách khi
+      // bấm hai lần) và bỏ luật "chỉ `SENT` mới tính là đã trả lời" (tắt nhầm đồng
+      // hồ SLA). Cả hai đều là lỗi im lặng.
+      //
+      // `lib/integrations/registry` và `lib/integrations/types` KHÔNG bị chặn: đó là
+      // mặt tiền công khai (trạng thái kênh, nhãn lý do) mà giao diện cần để nói thật.
+      name: "app-khong-goi-thang-adapter",
+      severity: "error",
+      comment:
+        "app/** và components/** phải đi qua lib/inbox/send.ts, không import thẳng " +
+        "lib/integrations/<vendor>/provider.",
+      from: { path: "^(app|components)/" },
+      to: { path: "^lib/integrations/[^/]+/provider" },
+    },
+    {
       name: "module-no-deep-cross-import",
       severity: "error",
       comment:
