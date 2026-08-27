@@ -830,9 +830,28 @@ model MessengerMessage {
   externalEventId String?               @unique // idempotency webhook (R1-02 C2.4)
   sentAt          DateTime              @db.Timestamptz(6)
   createdAt       DateTime              @default(now()) @db.Timestamptz(6)
+
+  // ── S-2b (27/08/2026) — SỔ ĐỐI SOÁT LƯỢT GỬI RA META. Chỉ THÊM cột, nullable,
+  // không đụng cột cũ: tin ĐẾN và mọi tin cũ trước đợt này để NULL, đọc ra đúng nghĩa
+  // "không có thông tin", không phải "đã gửi thành công".
+  /// PENDING | SENT | SIMULATED | FAILED (lib/crm/messenger-send.ts). NULL = tin ĐẾN / tin cũ.
+  /// PENDING nằm lại = tiến trình chết giữa chừng, KHÔNG rõ tin có tới khách không.
+  /// SIMULATED = đã ghi sổ nhưng KHÔNG gọi Meta ⇒ KHÁCH KHÔNG NHẬN GÌ (tiền lệ ZNS).
+  sendStatus      String?
+  /// `mid` Meta trả về khi gửi thật — bằng chứng duy nhất tin đã đi.
+  providerMessageId String?
+  /// Mã lỗi Meta dạng `code` hoặc `code/subcode` (vd `10/2018278` = ngoài cửa sổ 24h).
+  errorCode       String?
+  /// Nguyên văn lời Meta, ĐÃ lọc secret (lib/crm/meta-messenger-provider.ts).
+  errorMessage    String?               @db.Text
+  /// Người thật bấm gửi (User.id, ref phẳng). Nguồn attribution duy nhất cho tin OUT.
+  sentByUserId    String?
+
   conversation    MessengerConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
 
   @@index([conversationId, sentAt])
+  /// Đối soát: "còn lượt gửi nào kẹt PENDING / hỏng FAILED không".
+  @@index([sendStatus, sentAt])
 }
 
 // R1-10 — Bảng hoa hồng theo kỳ (SR.QD.217, tiền). DRAFT→APPROVED→REOPENED.
