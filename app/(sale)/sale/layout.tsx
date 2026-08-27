@@ -25,6 +25,11 @@ import { scopedDb } from "@/lib/db-scope";
 import { grantedMenuActions } from "@/lib/auth/menu-permissions";
 import { isRbacV2Enabled } from "@/lib/flags";
 import { SaleNav } from "@/components/sale/sale-nav";
+// S-10 (27/08/2026) — token màu riêng của site Sale (tím #7C3AED, QĐ-2). Class
+// `sale-root` dưới đây được gắn từ 23/08 nhưng KHÔNG file nào định nghĩa nó, nên
+// site âm thầm mượn cam `:root` của trang public suốt bốn ngày. Thiếu dòng import
+// này là quay lại đúng tình trạng đó, và không có gì báo.
+import "./sale.css";
 
 export const dynamic = "force-dynamic";
 
@@ -101,11 +106,16 @@ export default async function SaleLayout({
 
   return (
     <div className="sale-root min-h-screen bg-background text-foreground">
+      {/* S-10 — điều hướng nay là SIDEBAR DỌC 8 nhóm (tài liệu yêu cầu §5):
+          cố định trái từ md trở lên, ngăn kéo ở màn hẹp. `md:pl-64` chừa đúng
+          bề rộng thanh bên; dưới md thanh bên trượt ra ngoài nên không chừa. */}
       <SaleNav
         granted={granted}
         userLabel={session.user.name ?? session.user.email ?? ""}
       />
-      <main className="mx-auto max-w-5xl px-6 py-8">{children}</main>
+      <main className="md:pl-64">
+        <div className="mx-auto max-w-5xl px-6 py-8">{children}</div>
+      </main>
     </div>
   );
 }
