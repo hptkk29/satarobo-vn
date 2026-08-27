@@ -309,6 +309,7 @@ export type Action =
   | "payments:confirm" // R7-04 — Kế toán xác nhận (tách nhiệm vụ)
   | "payments:view-pii" // #15 (câu 32) — break-glass xem đầy đủ CCCD PH + địa chỉ (reason + audit)
   | "revenue_targets:manage" // B-01 — đặt mục tiêu doanh thu tháng × cơ sở (KHÔNG phải quyền thao tác tiền)
+  | "commission_periods:manage" // 27/08 — CHỐT/DUYỆT/MỞ LẠI kỳ hoa hồng (việc toàn hệ, tách khỏi payments:manage)
   | "installments:approve" // FIX lead→payment→enroll (C4) — duyệt kế hoạch trả góp 2 đợt
   | "discounts:approve" // BGĐ 31/07 — duyệt giảm giá nhập tay (kèm giải trình)
   | "orders:view"
@@ -745,6 +746,19 @@ export const PERMISSIONS: Record<Action, Role[]> = {
   // ∈ SCOPE_EXEMPT nên scopedDb pass-through — luật "chỉ cơ sở mình quản" ép TAY trong
   // action qua `checkRevenueTargetScope` (lib/reports/revenue-target-scope.ts).
   "revenue_targets:manage": ["SUPER_ADMIN", "CENTER_MANAGER", "ACCOUNTANT"],
+  // 27/08/2026 — CHỐT / DUYỆT / MỞ LẠI kỳ hoa hồng. Key RIÊNG, tách khỏi
+  // `payments:manage` vì bảng kê hoa hồng là bảng KỲ TOÀN HỆ THỐNG
+  // (`CommissionStatement.period` @unique, KHÔNG có `centerId`) ⇒ đường GHI không có
+  // gì cắt theo cơ sở, mà `payments:manage` thì cả `CENTER_ACCOUNTANT` cũng đang giữ
+  // ở scope GLOBAL. Hệ quả trước khi tách: kế toán MỘT cơ sở bấm chốt được kỳ hoa
+  // hồng của CẢ CÔNG TY.
+  // Không gỡ `payments:manage` của kế toán cơ sở (họ còn thu/chi hằng ngày), cũng
+  // không hạ nó xuống scope CENTER (mọi call-site gọi trần ⇒ `can()` v2 trả false ⇒
+  // mất sạch quyền tiền). Tiền lệ tách key: `revenue_targets:manage` (B-01),
+  // `ads_budget_targets:manage` (D-02).
+  // v2: seed CHỈ cho HO_ACCOUNTANT (prisma/seed-roles.ts) — legacy `ACCOUNTANT` ánh
+  // xạ sang HO_ACCOUNTANT, nên hai tầng khớp nhau.
+  "commission_periods:manage": ["SUPER_ADMIN", "ACCOUNTANT"],
   // C4 — duyệt kế hoạch trả góp 2 đợt: chỉ quản lý cơ sở + admin (audit + reason bắt buộc khi từ chối).
   // #09 (09/07): v2 chuyển quyền này sang HO_ACCOUNTANT (de-xuat-scope §3.3 "tiền tập
   // trung"). `lib/orders/installments.ts` gate bằng matrix v1 (không theo cờ) làm lớp
