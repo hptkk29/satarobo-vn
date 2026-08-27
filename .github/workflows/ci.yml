@@ -554,6 +554,74 @@ jobs:
           path: playwright-report/
           retention-days: 7
 
+  e2e-r1:
+    name: E2E Phase R1 (Playwright service-level + Postgres local)
+    runs-on: ubuntu-latest
+    # Bộ r1 giữ test tầng-DB của HOA HỒNG và MESSENGER. Trước 27/08 nó KHÔNG có job
+    # nào gọi — script `test:e2e:r1` tồn tại từ lâu mà CI chưa bao giờ chạy, nên mọi
+    # test tầng-DB của hai mảng đó xanh giả suốt. Đây là job bù chỗ đó.
+    timeout-minutes: 20
+    needs: quality
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: ci
+          POSTGRES_PASSWORD: ci
+          POSTGRES_DB: ci_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      DATABASE_URL: postgresql://ci:ci@localhost:5432/ci_test
+      DIRECT_URL: postgresql://ci:ci@localhost:5432/ci_test
+      NEXTAUTH_SECRET: "ci-build-only-secret-do-not-use-in-prod-32chars"
+      NEXTAUTH_URL: "http://localhost:3100"
+      NEXT_PUBLIC_APP_URL: "http://localhost:3100"
+      BASE_URL: "http://localhost:3100"
+      # Cả 3 spec CRM đều service-level (gọi thẳng hàm trong lib/) → bỏ webServer.
+      CRM_SKIP_WEBSERVER: "1"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v3
+        with: { version: 11 }
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Generate Prisma client
+        run: pnpm exec prisma generate
+
+      # KHÔNG cài trình duyệt, theo đúng nếp job crm/r7 (bước cài apt từng treo 19 phút
+      # và giết cả job).
+      # ⚠️ ĐÁNH ĐỔI NÓI RÕ: bộ r1 có ĐÚNG MỘT spec cần trình duyệt — `crm-ui.spec.ts`
+      # (describe "CRM UI"). Job này CỐ Ý bỏ nó qua bằng `--grep-invert`, nên spec đó
+      # VẪN chưa có cổng gác. Muốn phủ nốt thì phải cài chromium + dựng webServer.
+      # Thêm spec dùng trình duyệt vào r1 mà không sửa job này = nó cũng bị bỏ qua.
+
+      - name: Run Phase R1 e2e (bỏ qua spec cần trình duyệt)
+        run: R1_SKIP_WEBSERVER=1 pnpm exec playwright test -c playwright.r1.config.ts --grep-invert "CRM UI"
+
+      - name: Upload R1 Playwright report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report-r1
+          path: playwright-report/
+          retention-days: 7
+
   e2e-fl:
     name: E2E Phase FL (Playwright service-level + Postgres local)
     runs-on: ubuntu-latest
