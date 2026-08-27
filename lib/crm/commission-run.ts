@@ -132,10 +132,21 @@ export function mapButToanHoaHong(
     // về đơn rồi tới phiếu khách. `Payment.centerId` là cột `BAT_BUOC` nhưng dòng cũ
     // vẫn có NULL — bỏ hai bước lùi là hàng loạt bút toán cũ mất cơ sở và treo oan.
     const centerId = r.centerId ?? r.order?.centerId ?? r.order?.lead?.centerId ?? null;
-    // Mốc XÁC NHẬN quyết định ai đang phụ trách. Bút toán hoàn soi mốc của khoản GỐC:
-    // thu hồi phải đòi đúng người ĐÃ NHẬN tiền, không đòi người vừa nhận việc tuần trước.
-    const assigneeDate = laHoan
-      ? (r.adjustmentOf?.confirmedAt ?? r.adjustmentOf?.paidDate ?? r.confirmedAt ?? r.paidDate)
+    // Mốc XÁC NHẬN quyết định ai đang phụ trách.
+    //
+    // ⚠️ MỌI bút toán CÓ KHOẢN GỐC đều soi mốc của khoản GỐC, không riêng khoản hoàn.
+    // Bản ĐIỀU CHỈNH cũng vậy, và đây là chỗ suýt sai: `adjustPayment()` chép `paidDate`
+    // của gốc (nên bản điều chỉnh ở lại KỲ gốc và ăn TỈ LỆ gốc) nhưng đặt
+    // `confirmedAt = now` — tức mốc bấm nút sửa. Lấy mốc đó thì kế toán sửa số tháng 9
+    // cho một khoản thu tháng 7 sẽ đẩy hoa hồng QC của tháng 7 sang người mới nhận việc
+    // tháng 8, trong khi kỳ và tỉ lệ vẫn là của tháng 7. Ba thứ phải cùng đi theo gốc.
+    //
+    // Giới hạn đã biết: chuỗi điều chỉnh nhiều lần (A ← B ← C) chỉ lùi được MỘT bậc,
+    // nên C soi mốc của B chứ không phải A. Chấp nhận — vẫn đúng hơn hẳn "lúc bấm nút",
+    // và chuỗi 3 bậc chưa từng xuất hiện trên sổ.
+    const goc = r.adjustmentOf;
+    const assigneeDate = goc
+      ? (goc.confirmedAt ?? goc.paidDate)
       : (r.confirmedAt ?? r.paidDate);
     return {
       paymentId: r.id,

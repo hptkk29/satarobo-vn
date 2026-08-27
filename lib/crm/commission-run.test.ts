@@ -211,6 +211,27 @@ describe("mapButToanHoaHong — MỐC XÁC NHẬN quyết định ai hưởng", 
     expect(bt!.recipients.QC).toEqual(["u-cu"]);
   });
 
+  it("bản ĐIỀU CHỈNH soi mốc của khoản GỐC, KHÔNG phải lúc kế toán bấm nút sửa", () => {
+    // `adjustPayment()` chép `paidDate` của gốc (⇒ ở lại KỲ gốc, ăn TỈ LỆ gốc) nhưng
+    // đặt `confirmedAt = now`. Soi mốc "now" thì kế toán sửa số tháng 8 cho khoản thu
+    // tháng 7 sẽ đẩy hoa hồng QC sang người mới — kỳ và tỉ lệ một đằng, người một nẻo.
+    const rows = [
+      hang({
+        id: "a1",
+        amount: 4_000_000,
+        accountantStatus: "ADJUSTED",
+        adjustmentOfId: "p1",
+        paidDate: T7,
+        confirmedAt: new Date("2026-08-20T09:00:00+07:00"), // lúc bấm nút sửa
+        adjustmentOf: { paidDate: T7, confirmedAt: T7 },
+      }),
+    ];
+    const phanCong = [pc({ userId: "u-cu", effectiveTo: T8 }), pc({ userId: "u-moi", effectiveFrom: T8 })];
+    const [bt] = mapButToanHoaHong(rows, phanCong);
+    expect(bt!.assigneeDate).toEqual(T7);
+    expect(bt!.recipients.QC).toEqual(["u-cu"]);
+  });
+
   it("bút toán HOÀN đòi lại từ người ĐÃ NHẬN, không phải người mới nhận việc", () => {
     // Cùng logic với `rateDate`: kỳ đi theo ngày hoàn, còn NGƯỜI đi theo khoản gốc.
     // Lấy nhầm ở đây là trừ lương một người chưa từng được trả đồng nào.
