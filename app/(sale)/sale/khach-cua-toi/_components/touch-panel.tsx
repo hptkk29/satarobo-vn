@@ -68,7 +68,17 @@ export function LeadTouchPanel({
       const r = await addLeadActivity({ leadId, type, content });
       if (r.ok) {
         setContent("");
-        toast.success("Đã ghi nhận");
+        // S-9 — phiếu do mình NHẬP nhưng người khác phụ trách vẫn nằm trong
+        // "khách của tôi", nên màn này gặp ca đó thường xuyên. Nói thẳng ra để
+        // người ghi không tưởng mình vừa tắt được chuông nhắc.
+        if (r.dongHoKhongDoi) {
+          toast.success("Đã ghi nhận", {
+            description:
+              "Bạn không phụ trách khách này nên đồng hồ nhắc chăm sóc giữ nguyên — người phụ trách vẫn được nhắc.",
+          });
+        } else {
+          toast.success("Đã ghi nhận");
+        }
         router.refresh();
       } else {
         toast.error(r.error ?? "Không ghi được");

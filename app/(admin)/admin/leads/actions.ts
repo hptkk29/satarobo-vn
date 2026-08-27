@@ -15,6 +15,7 @@ import { logLeadAudit, getAuditActor } from '@/lib/audit/log'
 import { recordLeadStatusChange } from '@/lib/lead/status-trail-write'
 import { recordLeadActivity } from '@/lib/lead/activity-write'
 import { SYSTEM_ACTIVITY_META } from '@/lib/lead/activity-clock'
+import { QUYEN_DIEU_PHOI_LEAD, duocLamMoiDongHoChamSoc } from '@/lib/lead/sla-clock'
 import { resolveActor } from '@/lib/auth/actor'
 import { passesScope, scopedDb } from '@/lib/db-scope'
 import { getLeadPaymentSummary } from '@/lib/payments/summary'
@@ -60,12 +61,16 @@ const statusSchema = z.enum(LEAD_STATUS_VALUES)
  * Sale B cùng cơ sở.
  *
  * ~~Q2: lead chia sẻ → người khác chỉ XEM + GHI CHÚ (addLeadActivity).~~
- * [ĐẢO — S-6, 27/08/2026] Ngoại lệ "ghi chú" đã gỡ khỏi `addLeadActivity`. Hai
- * lý do, cái sau mới là cái nặng:
- *   · chính sách "dùng chung lead" đã TẮT từ Q8 21/08 (lib/lead/sharing.ts),
- *     nên vế "lead chia sẻ" không còn ai đứng sau;
- *   · từ S-3, ghi một dòng nhật ký còn ĐÓNG mốc `Lead.firstContactAt` — thứ
- *     tắt chuông SLA-3 vĩnh viễn. "Chỉ ghi chú" không còn là việc vô hại.
+ * ~~[ĐẢO — S-6, 27/08/2026] Ngoại lệ "ghi chú" đã gỡ khỏi `addLeadActivity`.~~
+ *
+ * [ĐẢO LẦN HAI — S-9, 27/08/2026, chốt của chủ dự án] `addLeadActivity` KHÔNG
+ * còn đi qua cổng này. Ghi chú được phép; thứ bị chốt là ĐỒNG HỒ CHĂM SÓC —
+ * ghi chú của người không phụ trách vẫn lưu nhưng không làm mới mốc SLA
+ * (`duocLamMoiDongHoChamSoc`, lib/lead/sla-clock.ts). S-6 đã bịt đúng lỗ nhưng
+ * bịt bằng cái chốt to quá: cấm cả việc ghi lại điều khách vừa nói.
+ *
+ * Cổng này vẫn giữ nguyên cho các mutator CÒN LẠI (status/fields/note/loại
+ * đơn/task/hoàn tất việc) — chúng SỬA phiếu chứ không kể lại một cuộc gọi.
  */
 async function actorMayMutateLead(
   sessionUserId: string,
@@ -381,7 +386,11 @@ export async function addLeadActivity(input: {
   // LD4 — metadata JSON tuỳ theo loại (CALL/MESSAGE/EMAIL/NOTE). Optional →
   // backward compatible: caller cũ chỉ truyền { leadId, type, content } vẫn chạy.
   metadata?: Prisma.InputJsonValue | null
-}): Promise<{ ok: boolean; error?: string }> {
+  // S-9 — `dongHoKhongDoi` chỉ có mặt khi ghi chú ĐÃ LƯU nhưng mốc SLA không
+  // đổi (người ghi không phụ trách phiếu và không có quyền điều phối). Để tầng
+  // giao diện nói ra được, thay vì báo "Đã ghi nhận" trơn rồi người ghi tưởng
+  // mình vừa xử lý xong phiếu.
+}): Promise<{ ok: boolean; error?: string; dongHoKhongDoi?: true }> {
   const session = await auth()
   if (!session?.user) return { ok: false, error: 'Chưa đăng nhập' }
   if (!(await checkPermission('leads:edit'))) return { ok: false, error: 'Không có quyền' }
@@ -399,21 +408,26 @@ export async function addLeadActivity(input: {
   if (!lead || !passesScope('Lead', lead, actor)) {
     return { ok: false, error: 'Lead không tồn tại' }
   }
-  // S-6 (27/08/2026) — chốt chủ sở hữu, khớp với `addLeadTask` ngay bên dưới.
+  // S-9 (27/08/2026) — GHI CHÚ KHÔNG BỊ CẤM; thứ bị chốt là ĐỒNG HỒ.
   //
-  // Đây KHÔNG chỉ là "ghi bừa một dòng ghi chú": `recordLeadActivity` bump
-  // `Lead.lastActivityAt` (cột "số ngày chưa tiếp cận lại" của QLCS) và đóng mốc
-  // `Lead.firstContactAt` khi loại là CALL/MESSAGE/EMAIL. Mốc đó chỉ ghi được
-  // MỘT lần và là điều kiện TẮT chuông SLA-3 ("Chưa liên hệ khách > 3 giờ") —
-  // tức đồng nghiệp tắt được đồng hồ SLA trên khách của nhau, im lặng.
+  // Đảo chiều có chủ đích so với S-6 (đợt 1, cùng ngày): lần đó lỗ hổng "đồng
+  // nghiệp tắt hộ đồng hồ SLA" được bịt bằng cách chặn luôn hàm này với người
+  // không phụ trách. Cách ấy đóng được lỗ nhưng đóng cả một việc hợp lệ —
+  // người trực máy, người nghe hộ cuộc gọi nhỡ, Sale Hội sở vừa nhập phiếu.
   //
-  // Ngoại lệ cũ "lead dùng chung thì ai cũng ghi chú được" (BGĐ câu 10, 10/07)
-  // đã hết hiệu lực: Q8 21/08 bỏ hẳn chính sách dùng chung (lib/lead/sharing.ts).
-  // Người NHẬP hộ phiếu cũng không qua cửa này — đúng chủ đích: "khách của tôi"
-  // và "tôi phải gọi ai" là hai câu hỏi khác nhau (lib/lead/sale-leads.ts).
-  if (!(await actorMayMutateLead(session.user.id, lead.assignedToId))) {
-    return { ok: false, error: MUTATE_DENIED }
-  }
+  // Cái nguy hiểm không phải dòng chữ họ ghi, mà là hai cú ghi phụ đi kèm trong
+  // `recordLeadActivity`: bump `Lead.lastActivityAt` (tắt SLA-4 + cột "số ngày
+  // chưa tiếp cận lại") và đóng `Lead.firstContactAt` (tắt SLA-3 VĨNH VIỄN —
+  // mốc chỉ ghi một lần, không có đường undo). Nên nay tách hẳn hai thứ.
+  //
+  // Quyết định nằm ở `duocLamMoiDongHoChamSoc`, KHÔNG gõ điều kiện tại chỗ; và
+  // "cấp quản lý" hỏi `leads:assign` (điều phối lead) chứ không phải
+  // `leads:view-all` — quyền đọc đó đang cấp cho cả Marketing.
+  const lamMoiDongHo = duocLamMoiDongHoChamSoc({
+    userId: session.user.id,
+    assignedToId: lead.assignedToId,
+    coQuyenDieuPhoi: await checkPermission(QUYEN_DIEU_PHOI_LEAD, { centerId: lead.centerId }),
+  })
 
   const { actorId, actorName } = getAuditActor(session)
   // AC4 — ghi hoạt động + reset đồng hồ SLA idle (lastActivityAt) trong 1 tx.
@@ -429,11 +443,12 @@ export async function addLeadActivity(input: {
       type: parsedType.data,
       content,
       metadata: input.metadata ?? null,
+      lamMoiDongHo,
     })
   })
 
   revalidatePath(`/leads/${input.leadId}`)
-  return { ok: true }
+  return lamMoiDongHo ? { ok: true } : { ok: true, dongHoKhongDoi: true }
 }
 
 export async function addLeadTask(input: {

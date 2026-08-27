@@ -532,3 +532,93 @@ describe("[S-3] mọi dòng hoạt động do MÁY ghi đều mang dấu `SYSTEM
     expect(isSystemWrittenActivity(SYSTEM_ACTIVITY_META)).toBe(true);
   });
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// S-9 (27/08/2026) — cờ `lamMoiDongHo`: tách DÒNG NHẬT KÝ khỏi ĐỒNG HỒ SLA.
+//
+// Chốt của chủ dự án: người không phụ trách phiếu vẫn ghi chú được, chỉ là ghi
+// chú của họ không làm mới mốc SLA. Nên hàm này phải làm được đúng một việc rất
+// dễ làm sai: LƯU dòng, mà KHÔNG chạm hai cột đồng hồ.
+// ─────────────────────────────────────────────────────────────────────────────
+describe("[S-9] lamMoiDongHo=false — dòng nhật ký LƯU, đồng hồ đứng im", () => {
+  let m: ReturnType<typeof taoMock>;
+  const MOC = new Date("2026-08-27T03:00:00.000Z");
+
+  beforeEach(() => {
+    m = taoMock();
+    m.create.mockResolvedValue({ id: "act-9", createdAt: MOC });
+    m.update.mockResolvedValue({ id: "lead-1" });
+    m.updateMany.mockResolvedValue({ count: 1 });
+  });
+
+  const ghi = (lamMoiDongHo?: boolean) =>
+    recordLeadActivity({
+      tx: m.tx,
+      leadId: "lead-1",
+      actorId: "u-nguoi-la",
+      actorName: "Đồng nghiệp",
+      type: "CALL",
+      content: "Nghe máy hộ: phụ huynh hỏi lịch khai giảng",
+      ...(lamMoiDongHo === undefined ? {} : { lamMoiDongHo }),
+    });
+
+  it("dòng hoạt động vẫn được tạo, đầy đủ nội dung", async () => {
+    const row = await ghi(false);
+
+    expect(m.create).toHaveBeenCalledTimes(1);
+    expect(m.create.mock.calls[0][0].data).toMatchObject({
+      leadId: "lead-1",
+      content: "Nghe máy hộ: phụ huynh hỏi lịch khai giảng",
+    });
+    expect(row.id).toBe("act-9");
+  });
+
+  it("KHÔNG bump `lastActivityAt` (SLA-4 + cột 'chưa tiếp cận lại' giữ nguyên)", async () => {
+    await ghi(false);
+    expect(m.update).not.toHaveBeenCalled();
+  });
+
+  it("KHÔNG đóng `firstContactAt` — chuông SLA-3 còn kêu", async () => {
+    // Mốc này chỉ ghi được MỘT lần và không có đường undo, nên đóng nhầm là mất
+    // hẳn cảnh báo của phiếu đó, vĩnh viễn.
+    await ghi(false);
+    expect(m.updateMany).not.toHaveBeenCalled();
+  });
+
+  it("mặc định (không truyền cờ) vẫn làm mới đồng hồ — mọi đường ghi cũ không đổi", async () => {
+    await ghi(undefined);
+    expect(m.update).toHaveBeenCalledTimes(1);
+    expect(m.updateMany).toHaveBeenCalledTimes(1);
+  });
+
+  it("truyền `true` tường minh cũng vậy", async () => {
+    await ghi(true);
+    expect(m.update).toHaveBeenCalledTimes(1);
+    expect(m.updateMany).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("[S-9] chỉ đường ghi chú của người-không-phụ-trách mới tắt đồng hồ", () => {
+  it("KHÔNG đường ghi nào khác truyền `lamMoiDongHo`", () => {
+    // Cờ này nguy hiểm theo chiều ngược lại: truyền `false` ở một đường chạm
+    // khách THẬT là làm phiếu treo mãi trong danh sách "chưa tiếp cận" mà không
+    // báo gì. Giữ danh sách chỗ dùng ngắn và tường minh.
+    const boChuThich = (s: string) =>
+      s.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
+    const duocPhep = new Set([path.join("app", "(admin)", "admin", "leads", "actions.ts")]);
+    const pham: string[] = [];
+    const di = (thuMuc: string) => {
+      for (const m of fs.readdirSync(thuMuc, { withFileTypes: true })) {
+        if (m.name.startsWith(".") || m.name === "node_modules") continue;
+        const p = path.join(thuMuc, m.name);
+        if (m.isDirectory()) di(p);
+        else if (/\.tsx?$/.test(m.name) && !/\.test\.tsx?$/.test(m.name)) {
+          if (p === path.join("lib", "lead", "activity-write.ts")) continue;
+          if (boChuThich(fs.readFileSync(p, "utf8")).includes("lamMoiDongHo")) pham.push(p);
+        }
+      }
+    };
+    for (const goc of ["app", "lib", "components"]) di(goc);
+    expect(pham.filter((p) => !duocPhep.has(path.normalize(p)))).toEqual([]);
+  });
+});
