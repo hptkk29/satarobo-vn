@@ -7,13 +7,11 @@
 // và không có màn nào báo, chỉ có hai danh sách nói hai câu khác nhau.
 import { describe, it, expect, afterEach } from "vitest";
 import fs from "node:fs";
-import {
-  buildMyLeadsWhere,
-  leadOwnershipWhere,
-  leadPhuTrachWhere,
-  moTaCatDanhSach,
-  TRANG_THAI_DA_DONG,
-} from "./sale-leads";
+import { buildMyLeadsWhere, moTaCatDanhSach, TRANG_THAI_DA_DONG } from "./sale-leads";
+// S-8 — hai mệnh đề sở hữu đã dời sang `./ownership` (nguồn duy nhất cho cả
+// trang quản trị, ô tìm và site Sale). Hình dạng của chúng được khoá ở
+// `lib/lead/ownership.test.ts`; ở đây chỉ dùng để dựng `where` thật.
+import { leadOwnershipWhere } from "./ownership";
 import { injectScope } from "@/lib/db-scope";
 import { buildActor } from "@/lib/auth/actor";
 import type { OrgUnitNode } from "@/lib/org/types";
@@ -22,30 +20,6 @@ const cuEnv = process.env.LEAD_SHARING_ENABLED;
 afterEach(() => {
   if (cuEnv === undefined) delete process.env.LEAD_SHARING_ENABLED;
   else process.env.LEAD_SHARING_ENABLED = cuEnv;
-});
-
-describe("[site Sale] leadOwnershipWhere — 'khách của tôi' là gì", () => {
-  it("mặc định (lead độc quyền): lead mình phụ trách HOẶC phiếu chính mình nhập", () => {
-    delete process.env.LEAD_SHARING_ENABLED;
-    expect(leadOwnershipWhere("u1")).toEqual({
-      OR: [{ assignedToId: "u1" }, { createdById: "u1" }],
-    });
-  });
-
-  it("bật lại chia sẻ bằng env → nhánh dùng chung quay lại, KHÔNG phải sửa file này", () => {
-    process.env.LEAD_SHARING_ENABLED = "true";
-    expect(leadOwnershipWhere("u1")).toEqual({
-      OR: [{ assignedToId: "u1" }, { createdById: "u1" }, { isSharedWithTeam: true }],
-    });
-  });
-
-  it("luôn có nhánh assignedToId — chủ lead không bao giờ mất khách của mình", () => {
-    for (const v of ["true", "false", undefined]) {
-      if (v === undefined) delete process.env.LEAD_SHARING_ENABLED;
-      else process.env.LEAD_SHARING_ENABLED = v;
-      expect(leadOwnershipWhere("u9").OR).toContainEqual({ assignedToId: "u9" });
-    }
-  });
 });
 
 describe("[site Sale] trạng thái đã đóng", () => {
@@ -75,8 +49,9 @@ describe("[site Sale] chốt chặn nguồn — truy vấn khách của tôi", (
     const soLanTruyVan = (s.match(/sdb\.lead\.find/g) ?? []).length;
     const soLanSoHuu = (s.match(/leadOwnershipWhere\(/g) ?? []).length;
     expect(soLanTruyVan).toBeGreaterThan(0);
-    // -1 vì chính định nghĩa hàm cũng khớp chuỗi đó.
-    expect(soLanSoHuu - 1).toBeGreaterThanOrEqual(soLanTruyVan);
+    // S-8 — không còn `-1`: định nghĩa hàm đã dời sang `lib/lead/ownership.ts`,
+    // nên mọi lần khớp trong file này đều là một CHỖ DÙNG thật.
+    expect(soLanSoHuu).toBeGreaterThanOrEqual(soLanTruyVan);
   });
 
   it("che PII ở SERVER, không để client tự che", () => {
@@ -102,55 +77,23 @@ describe("[site Sale] chốt chặn nguồn — truy vấn khách của tôi", (
 // TỰ CHIA về Sale cơ sở (chốt 04/08 "lead không bao giờ về Hội sở") ⇒ họ không
 // bao giờ là assignee ⇒ mọi màn của site Sale rỗng trắng, không một dòng.
 // ─────────────────────────────────────────────────────────────────────────────
+// S-8 (27/08/2026) — cách khoá đã ĐỔI, và đổi vì cách cũ chưa đủ. Trước đây
+// test này đọc chuỗi trong nguồn `/admin/leads` để so với mệnh đề của site Sale;
+// nó bắt được lệch giữa ĐÚNG HAI màn ấy, nhưng không thấy màn thứ ba
+// (`/admin/search`) đang chạy bản 2 vế. Nay chỉ còn MỘT định nghĩa
+// (`lib/lead/ownership.ts`) và test khoá là "không màn nào tự dựng lấy" —
+// xem `lib/lead/ownership.test.ts`. Ở đây chỉ giữ phần thuộc về site Sale.
 describe("[S-4] 'khách của tôi' ở site Sale phải khớp khu quản trị", () => {
   it("gồm vế NGƯỜI NHẬP — thiếu nó thì Sale Hội sở không thấy phiếu nào", () => {
     delete process.env.LEAD_SHARING_ENABLED;
     expect(leadOwnershipWhere("u-ho").OR).toContainEqual({ createdById: "u-ho" });
   });
 
-  it("khớp ĐÚNG bộ vế mà /admin/leads dùng cho người chỉ có view-own", () => {
-    // Đọc thẳng nguồn trang admin: hai màn lệch nhau là chuyện đã xảy ra một
-    // lần rồi (chính là S-4), và không có gì báo ngoài việc người dùng thấy
-    // trắng. Khoá bằng nguồn để lần sau ai sửa một bên thì bên kia đỏ.
+  it("dùng CHUNG hàm với khu quản trị, không tự dựng lại", () => {
+    const s = fs.readFileSync("lib/lead/sale-leads.ts", "utf8");
+    expect(s).toMatch(/import\s*\{[^}]*leadOwnershipWhere[^}]*\}\s*from\s*"@\/lib\/lead\/ownership"/);
     const admin = fs.readFileSync("app/(admin)/admin/leads/page.tsx", "utf8");
-    // Neo vào CHỖ DÙNG trong `where` (`...(scopeToSelf ? …`), không phải dòng
-    // khai báo biến ở đầu trang.
-    const i = admin.indexOf("...(scopeToSelf");
-    expect(i).toBeGreaterThan(-1);
-    const khoi = admin.slice(i, i + 1600);
-    expect(khoi).toContain("assignedToId: session.user.id");
-    expect(khoi).toContain("createdById: session.user.id");
-    expect(khoi).toContain("leadSharedOrClause()");
-
-    // …và site Sale có đúng ba vế đó, không thừa không thiếu.
-    process.env.LEAD_SHARING_ENABLED = "true";
-    expect(leadOwnershipWhere("u1").OR).toEqual([
-      { assignedToId: "u1" },
-      { createdById: "u1" },
-      { isSharedWithTeam: true },
-    ]);
-  });
-
-  it("KHÔNG nới sang lead của người khác — chỉ thêm đúng vế 'chính mình nhập'", () => {
-    delete process.env.LEAD_SHARING_ENABLED;
-    const or = leadOwnershipWhere("u1").OR as Record<string, unknown>[];
-    // Mọi vế đều phải neo vào chính `u1`. Một vế không nhắc tới `u1` (vd
-    // `centerId`, `assignedToId: { not: null }`) là mở toang danh sách.
-    for (const ve of or) expect(Object.values(ve)).toContain("u1");
-  });
-});
-
-describe("[S-4] trách nhiệm SLA vẫn là của NGƯỜI PHỤ TRÁCH, không phải người nhập", () => {
-  it("leadPhuTrachWhere KHÔNG có vế người nhập", () => {
-    delete process.env.LEAD_SHARING_ENABLED;
-    expect(leadPhuTrachWhere("u1")).toEqual({ OR: [{ assignedToId: "u1" }] });
-  });
-
-  it("giữ nguyên nhánh dùng chung như mệnh đề sở hữu cũ — bảng việc không đổi hành vi", () => {
-    process.env.LEAD_SHARING_ENABLED = "true";
-    expect(leadPhuTrachWhere("u1")).toEqual({
-      OR: [{ assignedToId: "u1" }, { isSharedWithTeam: true }],
-    });
+    expect(admin).toContain("leadOwnershipWhere(session.user.id)");
   });
 });
 

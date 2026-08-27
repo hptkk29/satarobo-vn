@@ -548,6 +548,18 @@ export const SETTINGS = {
     default: false,
     centerOverridable: false,
   }),
+  // S-2b (27/08/2026) — công tắc gửi tin Messenger ra khách. Ở registry chứ không ở
+  // env để tắt gấp được mà không cần deploy (spec §2.3). TẮT mặc định: bật lên là mọi
+  // lượt "Trả lời" đi THẬT tới phụ huynh. Tắt ⇒ tin vẫn ghi sổ nhưng mang trạng thái
+  // `SIMULATED` và giao diện nói thẳng "khách KHÔNG nhận" — không bao giờ báo suông.
+  "messenger.sendLive": def({
+    key: "messenger.sendLive",
+    group: "crm",
+    label: "Gửi tin Messenger THẬT ra khách (tắt = mô phỏng, không gọi Meta)",
+    schema: z.boolean(),
+    default: false,
+    centerOverridable: false,
+  }),
   "zalo.znsLive": def({
     key: "zalo.znsLive",
     group: "otp",

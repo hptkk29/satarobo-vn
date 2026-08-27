@@ -61,6 +61,22 @@ export type RecordLeadActivityInput = {
   type: LeadActivityType;
   content: string;
   metadata?: Prisma.InputJsonValue | null;
+  /**
+   * S-9 (27/08/2026) — lượt ghi này có được LÀM MỚI ĐỒNG HỒ CHĂM SÓC không.
+   * Mặc định `true`: mọi đường ghi cũ giữ nguyên hành vi, không phải sửa gì.
+   *
+   * Đặt `false` thì dòng hoạt động VẪN LƯU, chỉ hai cú ghi phụ không xảy ra:
+   * bump `lastActivityAt` (tắt SLA-4 + cột "số ngày chưa tiếp cận lại") và đóng
+   * `firstContactAt` (tắt SLA-3 **vĩnh viễn** — mốc chỉ ghi một lần).
+   *
+   * ⚠️ Đây là cờ NGUY HIỂM theo chiều ngược lại: truyền `false` ở một đường
+   * chạm khách THẬT là làm phiếu treo mãi trong danh sách "chưa tiếp cận". Chỉ
+   * dùng khi người ghi KHÔNG phải chủ phiếu và không có quyền điều phối — quyết
+   * định đó nằm ở `duocLamMoiDongHoChamSoc` (`lib/lead/sla-clock.ts`), đừng tự
+   * suy điều kiện tại chỗ gọi. Test `[S-9] chỉ đường ghi chú của người-không-
+   * phụ-trách mới tắt đồng hồ` khoá danh sách chỗ được phép truyền cờ này.
+   */
+  lamMoiDongHo?: boolean;
 };
 
 export async function recordLeadActivity(
@@ -78,6 +94,11 @@ export async function recordLeadActivity(
     },
     select: { id: true, createdAt: true },
   });
+
+  // S-9 — dòng nhật ký ở trên đã lưu xong và KHÔNG bị ảnh hưởng bởi cờ này.
+  // Thoát sớm sau khi ghi, không thoát trước: "không được tắt đồng hồ" khác hẳn
+  // "không được ghi chú", và gộp hai thứ là đúng cái đã phải đảo ở S-9.
+  if (input.lamMoiDongHo === false) return row;
 
   await input.tx.lead.update({
     where: { id: input.leadId },

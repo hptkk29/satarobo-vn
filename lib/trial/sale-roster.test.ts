@@ -106,10 +106,13 @@ describe("[S-7] nhãn hoa hồng cạnh 'Đã nhập học'", () => {
     expect(nhanHoaHongSale(false)).toBeNull();
   });
 
-  it("đã nhập học → 'chưa tính', KHÔNG in phần trăm và KHÔNG in số tiền", () => {
+  it("đã nhập học → 'chốt cuối kỳ', KHÔNG in phần trăm và KHÔNG in số tiền", () => {
+    // 27/08 — nhãn đổi từ "chưa tính" sang "chốt cuối kỳ": hoa hồng Sale nay CÓ được
+    // sinh thật (`commission-run.ts`), nhưng tính trên TIỀN ĐÃ THU và chỉ chốt khi kế
+    // toán chốt kỳ, nên in "+4%" cạnh trạng thái nhập học vẫn là gợi ý sai.
     const n = nhanHoaHongSale(true);
     expect(n).not.toBeNull();
-    expect(n!.nhan).toContain("chưa tính");
+    expect(n!.nhan).toContain("chốt cuối kỳ");
     // Không một chữ số nào trong nhãn: có số là người đọc tin đó là tiền/tỉ lệ thật.
     expect(n!.nhan).not.toMatch(/\d/);
     expect(n!.nhan).not.toContain("%");
@@ -148,10 +151,14 @@ describe("[S-7] nhãn phải ở module THUẦN — không kéo Prisma xuống t
   });
 });
 
-describe("[S-7] canh gác: ngày nào Sale có hoa hồng thật thì nhãn phải đổi", () => {
-  it("`setStatementLines` vẫn CHƯA được gọi từ sản phẩm (chỉ test gọi)", () => {
-    // Ngày ai đó nối job chốt kỳ (US-E4-3), test này đỏ và chỉ thẳng chỗ phải sửa
-    // — thay vì để site Sale in "chưa tính" vĩnh viễn trong khi tiền đã có sổ.
+describe("[S-7] canh gác: đường sinh hoa hồng Sale phải có ĐÚNG MỘT cửa", () => {
+  // 27/08/2026 — canh gác này ĐÃ ĐỔI CHIỀU. Trước đó nó khẳng định
+  // `setStatementLines` chưa được gọi từ sản phẩm (bảng kê kỳ nào cũng rỗng) và hẹn
+  // "ngày ai đó nối job chốt kỳ thì test này đỏ". Hôm nay job đó được nối
+  // (`lib/crm/commission-run.ts`, hoa hồng trên tiền đã thu), nên canh gác giữ nguyên
+  // mục đích — khoá số cửa ghi dòng hoa hồng — nhưng đổi thành: đúng MỘT cửa, và
+  // phải là cửa đã biết. Thêm cửa thứ hai là mở đường cộng đôi tiền thật.
+  it("`setStatementLines` chỉ được gọi từ `lib/crm/commission-run.ts`", () => {
     const goc = join(process.cwd());
     const files: string[] = [];
     const quet = (d: string) => {
@@ -173,13 +180,18 @@ describe("[S-7] canh gác: ngày nào Sale có hoa hồng thật thì nhãn ph�
         /* thư mục không có thì thôi */
       }
     }
-    const goiTu = files.filter((f) => {
-      if (f.endsWith(join("lib", "crm", "commission-statement.ts"))) return false; // nơi ĐỊNH NGHĨA
-      return /\bsetStatementLines\s*\(/.test(readFileSync(f, "utf8"));
-    });
+    const goiTu = files
+      .filter((f) => {
+        if (f.endsWith(join("lib", "crm", "commission-statement.ts"))) return false; // nơi ĐỊNH NGHĨA
+        return /\bsetStatementLines\s*\(/.test(readFileSync(f, "utf8"));
+      })
+      .map((f) => f.slice(goc.length + 1).replace(/\\/g, "/"));
+
     expect(
       goiTu,
-      "Sale ĐÃ có nơi sinh dòng hoa hồng — sửa nhanHoaHongSale() ở lib/trial/sale-commission-label.ts để in số thật",
-    ).toEqual([]);
+      "Chỉ `lib/crm/commission-run.ts` được ghi dòng hoa hồng 4 tầng Sale. Có cửa thứ " +
+        "hai nghĩa là hai đường cùng ghi một kỳ — `setStatementLines` XOÁ rồi GHI cả " +
+        "kỳ, nên cửa sau sẽ xoá mất dòng của cửa trước (hoặc ngược lại) tuỳ thứ tự chạy.",
+    ).toEqual(["lib/crm/commission-run.ts"]);
   });
 });

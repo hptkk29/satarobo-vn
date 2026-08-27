@@ -14,6 +14,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { StatementActions } from "./_components/statement-actions";
+import { ChotKyForm } from "./_components/chot-ky-form";
 import { PhanTrangBang } from "@/components/ui/phan-trang-bang";
 
 export const dynamic = "force-dynamic";
@@ -56,6 +57,7 @@ export default async function CommissionPage() {
         <Coins className="h-7 w-7 text-primary" />
         Bảng hoa hồng theo kỳ
       </h1>
+      <ChotKyForm />
       <div className="rounded-lg border">
         <PhanTrangBang>
           <Table>
