@@ -59,7 +59,7 @@ export type RouteDecision =
   | { type: "redirectPath"; path: string; callbackUrl?: string; reason?: string }
   | {
       type: "redirectHost";
-      host: "admin" | "portal" | "public" | "teacher" | "elearning";
+      host: "admin" | "portal" | "public" | "sale" | "teacher" | "elearning";
       path: string;
       status: 307 | 308;
     };
@@ -828,6 +828,23 @@ export function decideRoute(input: RouteInput): RouteDecision {
     // admin (CM...) KHÔNG bị đá (isTeacherOnly=false). infra path đã `next` ở trên.
     if (teacherSiteOn && isTeacherOnly) {
       return { type: "redirectHost", host: "teacher", path: "/", status: 307 };
+    }
+
+    // Đợt B — CHIỀU RA của site Sale, soi chiếu luật GV ngay trên.
+    //
+    // Thiếu nhánh này thì bật cờ xong site hẹp chỉ là TUỲ CHỌN: tư vấn viên thuần mở
+    // admin.satarobo.vn bằng dấu trang cũ vẫn ở nguyên đó với đủ menu admin, và cái
+    // "hẹp" của site Sale không còn là ràng buộc nào cả.
+    //
+    // Kiêm nhiệm KHÔNG bị đá (`isSaleOnly` đòi vai nhân sự DUY NHẤT là SALES_CSM) —
+    // nhốt một người vừa quản lý cơ sở vừa bán hàng vào site hẹp là lấy mất phần
+    // quản lý của họ.
+    //
+    // ⚠️ `AUTH_COOKIE_DOMAIN` đang để trống (cookie host-only) ⇒ người bị đá sang
+    // host sale phải ĐĂNG NHẬP THÊM MỘT LẦN. Đã chấp nhận ở `lib/flags.ts`, nhưng
+    // phải báo trước cho tổ Sale, không thì họ tưởng mất tài khoản.
+    if (saleSiteOn && isSaleOnly) {
+      return { type: "redirectHost", host: "sale", path: "/", status: 307 };
     }
 
     if (pathname === "/") {

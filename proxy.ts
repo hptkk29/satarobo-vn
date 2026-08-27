@@ -33,10 +33,16 @@ function detectHost(host: string): HostKind {
   return "unknown"; // localhost, preview deployments
 }
 
+// ⚠️ Đây là BẢNG TRA TÊN HOST, KHÔNG phải luật host×role. Luật vẫn nằm trọn ở
+// `decideRoute()` và vẫn unit-test được — đúng tinh thần CLAUDE.md #3. Thêm một
+// host vào đây là mảnh (2) của bộ ba mà đầu `route-policy.ts` đã mô tả cho site GV
+// (detectHost · HOST_BY_KIND · union+rule); thiếu nó thì `decideRoute` không diễn
+// đạt nổi chiều RA, và ép qua typecheck sẽ cho `url.host = undefined`.
 const HOST_BY_KIND = {
   admin: ADMIN_HOST,
   portal: PORTAL_HOST,
   public: PUBLIC_HOST,
+  sale: SALE_HOST,
   teacher: TEACHER_HOST,
   elearning: ELEARNING_HOST,
 } as const;
