@@ -91,6 +91,29 @@ export default async function Page({
         </p>
       ) : null}
 
+      {kh.chungNhan ? (
+        // ⚠️ Chứng nhận cấp TỰ ĐỘNG qua hàng đợi sự kiện. Không hiện ở đây thì người
+        // học không có cách nào biết mình đã có, và đường tải PDF thành một cổng
+        // không cửa.
+        <div className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-3 text-sm text-emerald-900">
+          <p className="font-medium">Bạn đã có chứng nhận hoàn thành khoá này.</p>
+          <p className="mt-1 text-xs">
+            Số hiệu <span className="font-mono">{kh.chungNhan.certCode}</span>
+            {kh.chungNhan.validUntil
+              ? ` · có hiệu lực đến ${kh.chungNhan.validUntil.toLocaleDateString("vi-VN")}`
+              : " · không thời hạn"}
+          </p>
+          <a
+            href={`/api/elearning/chung-nhan?id=${kh.chungNhan.id}`}
+            target="_blank"
+            rel="noopener"
+            className="mt-2 inline-block rounded-md border border-emerald-300 bg-background px-3 py-1.5 text-xs font-medium"
+          >
+            Tải bản PDF (có mã QR tra cứu)
+          </a>
+        </div>
+      ) : null}
+
       {kh.slaGraceDays > 0 ? (
         // ⚠️ Nói cho người học biết hạn của họ ĐÃ được nới, và vì sao. Không nói thì
         // họ thấy một cái hạn khác với hạn ban đầu và tưởng hệ thống tính sai.

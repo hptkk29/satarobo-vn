@@ -1,0 +1,124 @@
+import type { Metadata } from "next";
+import { traChungNhan } from "@/lib/elearning/certificate-verify";
+
+/**
+ * EL-16 — TRANG XÁC MINH CHỨNG NHẬN. Công khai, không đăng nhập.
+ *
+ * ⚠️ Vị trí tệp là một phần của thiết kế: nó nằm ở `app/(elearning)/xac-thuc/`, tức
+ * cùng nhóm route nhưng NGOÀI segment `elearning/`. Mọi thứ dưới `elearning/` đi qua
+ * layout gác `auth()` + hồ sơ nhân sự; đặt trang này vào đó là dựng một trang công
+ * khai rồi khoá nó lại. `decideRoute()` trả `next` cho `/xac-thuc/*` chứ không
+ * rewrite, đúng vì lý do này.
+ *
+ * Người đọc trang này là người NGOÀI: một phụ huynh, một đoàn kiểm tra, một nhà
+ * tuyển dụng. Họ không biết Sata Robo dùng phần mềm gì, và họ chỉ cần một câu trả
+ * lời. Vì vậy trang không có thanh điều hướng, không có lối vào hệ thống, và không
+ * mời họ đăng nhập.
+ */
+
+export const dynamic = "force-dynamic";
+
+export const metadata: Metadata = {
+  title: "Xác minh chứng nhận đào tạo — Sata Robo",
+  // ⚠️ `noindex` bắt buộc. Địa chỉ mang một token bí mật; để công cụ tìm kiếm lập
+  // chỉ mục là biến "chỉ ai cầm QR mới tra được" thành "tra Google là ra".
+  robots: { index: false, follow: false },
+};
+
+const MAU: Record<string, string> = {
+  VALID: "bg-emerald-50 text-emerald-900 border-emerald-200",
+  EXPIRED: "bg-amber-50 text-amber-900 border-amber-200",
+  REVOKED: "bg-rose-50 text-rose-900 border-rose-200",
+};
+
+function Khung({ children }: { children: React.ReactNode }) {
+  return (
+    <main className="mx-auto flex min-h-screen max-w-lg flex-col justify-center px-6 py-12">
+      {children}
+      <p className="mt-8 text-center text-xs text-muted-foreground">
+        Công ty Cổ phần Công nghệ Giáo dục Sata Robo
+      </p>
+    </main>
+  );
+}
+
+export default async function Page({
+  params,
+}: {
+  params: Promise<{ token: string }>;
+}) {
+  const { token } = await params;
+  const kq = await traChungNhan(token);
+
+  if (!kq) {
+    return (
+      <Khung>
+        <h1 className="text-xl font-bold">Không tìm thấy chứng nhận</h1>
+        <p className="mt-3 text-sm text-muted-foreground">
+          Mã tra cứu không đúng hoặc đã bị thay đổi. Kiểm tra lại mã QR trên bản
+          chứng nhận, hoặc liên hệ phòng Đào tạo của Sata Robo.
+        </p>
+        {/*
+          ⚠️ Câu chữ CỐ Ý không phân biệt "token sai" với "chứng nhận không tồn tại".
+          Phân biệt ra là dựng một cái máy dò: người thử token biết được cái nào tồn
+          tại. Ở một trang công khai, đó là toàn bộ giá trị của việc token ngẫu nhiên.
+        */}
+      </Khung>
+    );
+  }
+
+  const ngay = (d: Date) =>
+    d.toLocaleDateString("vi-VN", { day: "2-digit", month: "2-digit", year: "numeric" });
+
+  return (
+    <Khung>
+      <h1 className="text-xl font-bold">Chứng nhận đào tạo nội bộ</h1>
+
+      <div
+        className={`mt-4 rounded-lg border px-4 py-3 text-sm font-medium ${
+          MAU[kq.trangThai] ?? MAU.VALID
+        }`}
+      >
+        {kq.cauTrangThai}
+      </div>
+
+      {kq.trangThai === "REVOKED" ? (
+        <p className="mt-3 rounded-md bg-muted px-3 py-2 text-xs">
+          {/*
+            Bản PDF đã in ra vẫn còn trong tay người ta và trông vẫn hợp lệ. Trang này
+            là nguồn sự thật — phải nói thẳng ra, nếu không người tra cứu sẽ tin tờ
+            giấy và nghĩ trang web hỏng.
+          */}
+          Bản in hoặc tệp PDF đã phát trước đó không còn giá trị. Trang tra cứu này là
+          nguồn thông tin đúng.
+        </p>
+      ) : null}
+
+      <dl className="mt-6 space-y-3 text-sm">
+        {/* ĐÚNG 5 trường + mã chứng nhận. Không phòng ban, không điểm, không lịch sử
+            học, không danh sách khoá khác. Thêm một dòng ở đây là nới quyền cho cả
+            internet, không phải cho một vai nào cả. */}
+        <div>
+          <dt className="text-xs text-muted-foreground">Họ và tên</dt>
+          <dd className="font-medium">{kq.hoTen}</dd>
+        </div>
+        <div>
+          <dt className="text-xs text-muted-foreground">Mã nhân viên</dt>
+          <dd className="font-medium">{kq.maNhanVien}</dd>
+        </div>
+        <div>
+          <dt className="text-xs text-muted-foreground">Khoá đào tạo</dt>
+          <dd className="font-medium">{kq.tenKhoa}</dd>
+        </div>
+        <div>
+          <dt className="text-xs text-muted-foreground">Ngày cấp</dt>
+          <dd className="font-medium">{ngay(kq.ngayCap)}</dd>
+        </div>
+        <div>
+          <dt className="text-xs text-muted-foreground">Số hiệu</dt>
+          <dd className="font-mono text-xs">{kq.maChungNhan}</dd>
+        </div>
+      </dl>
+    </Khung>
+  );
+}

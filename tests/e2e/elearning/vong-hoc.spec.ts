@@ -14,7 +14,7 @@
  * thật, trình duyệt thật, bấm từ trang chủ tới khi khoá chuyển sang hoàn thành. Đó
  * là thứ duy nhất phân biệt "mã chạy đúng" với "dùng được".
  */
-import { test, expect, type Page } from "@playwright/test";
+import { test, expect, type BrowserContext, type Page } from "@playwright/test";
 import { login } from "../_helpers/auth";
 import {
   chungNhanCuaLuot,
@@ -40,12 +40,39 @@ test.describe.configure({ mode: "serial" });
 
 let d: BoDuLieu;
 
-test.beforeAll(async () => {
+/**
+ * Cookie phiên của hai tài khoản, lấy MỘT lần rồi dùng lại.
+ *
+ * ⚠️ KHÔNG đăng nhập lại ở mỗi ca. `lib/auth.ts:131` chặn 10 lượt đăng nhập / phút /
+ * IP (SEC-H01, chống dò mật khẩu) — đó là hành vi ĐÚNG của sản phẩm, không phải thứ
+ * để nới ra cho test chạy. Spec này có gần chục ca, cộng thêm lượt thử lại của chế
+ * độ CI, nên đăng nhập từng ca là tự đâm vào cái chốt ấy: một ca đỏ vì bị chặn, rồi
+ * kéo theo cả nhóm tuần tự.
+ *
+ * Đã đỏ đúng như vậy một lần, và nó đỏ ở `auth.ts` chứ không ở ca gây ra — mất công
+ * lần ngược.
+ */
+const cookieCua = new Map<string, Awaited<ReturnType<BrowserContext["cookies"]>>>();
+
+test.beforeAll(async ({ browser }) => {
   d = await dungVongHoc();
+
+  for (const email of [d.hocVienEmail, d.daoTaoEmail]) {
+    const ctx = await browser.newContext();
+    const p = await ctx.newPage();
+    await login(p, { email, callbackUrl: "/elearning" });
+    await expect(p).toHaveURL(/\/elearning/);
+    cookieCua.set(email, await ctx.cookies());
+    await ctx.close();
+  }
 });
 
 async function vaoKhu(page: Page, email: string) {
-  await login(page, { email, callbackUrl: "/elearning" });
+  const ck = cookieCua.get(email);
+  if (!ck) throw new Error(`chưa có phiên cho ${email}`);
+  await page.context().clearCookies();
+  await page.context().addCookies(ck);
+  await page.goto("/elearning");
   await expect(page).toHaveURL(/\/elearning/);
 }
 
@@ -200,7 +227,6 @@ test.describe("[EL-VÒNG] người Đào tạo tick buổi ⇒ khoá KHÉP", () 
     await expect(page.getByText("đã xong").first()).toBeVisible();
 
     // (2) Người Đào tạo tick "đã dự" cho buổi trực tiếp.
-    await page.context().clearCookies();
     await vaoKhu(page, d.daoTaoEmail);
     await page.goto(`/elearning/soan/${d.baiBuoiId}`);
     await expect(page.getByText("Điểm danh buổi trực tiếp")).toBeVisible();
@@ -261,5 +287,56 @@ test.describe("[EL-16] khoá khép ⇒ CHỨNG NHẬN có thật", () => {
     await chungNhanCuaLuot(d.enrollmentId);
     expect(await demChungNhan(d.enrollmentId)).toBe(truoc);
     expect(truoc).toBe(1);
+  });
+});
+
+test.describe("[EL-16] chứng nhận ĐẾN TAY người học, và tra cứu được từ ngoài", () => {
+  test("🔴 màn đề cương hiện chứng nhận và tải được bản PDF", async ({ page }) => {
+    // Chứng nhận cấp TỰ ĐỘNG qua hàng đợi sự kiện. Không hiện ở màn nào thì người
+    // học không biết mình đã có, và đường tải PDF thành một cổng không cửa — đúng
+    // lỗi đã lặp lại tám lần trong module này.
+    await vaoKhu(page, d.hocVienEmail);
+    await page.goto(`/elearning/hoc/${d.enrollmentId}`);
+    await expect(page.getByText("Bạn đã có chứng nhận hoàn thành khoá này")).toBeVisible();
+
+    const cn = await chungNhanCuaLuot(d.enrollmentId);
+    const res = await page.request.get(`/api/elearning/chung-nhan?id=${cn!.id}`);
+    expect(res.status()).toBe(200);
+    expect(res.headers()["content-type"]).toContain("application/pdf");
+    // Tệp có nội dung thật, không phải 0 byte.
+    expect((await res.body()).byteLength).toBeGreaterThan(5_000);
+  });
+
+  test("🔴 trang xác minh mở được KHÔNG cần đăng nhập", async ({ browser }) => {
+    // Đây là lý do tồn tại của cả tấm chứng nhận: người NGOÀI công ty quét QR bằng
+    // điện thoại của họ. Bắt đăng nhập là biến nó thành thứ nội bộ tự xem nhau.
+    const cn = await chungNhanCuaLuot(d.enrollmentId);
+    const ctx = await browser.newContext(); // ngữ cảnh SẠCH — không cookie nào
+    const p2 = await ctx.newPage();
+    await p2.goto(`/xac-thuc/${cn!.verifyToken}`);
+
+    await expect(p2).not.toHaveURL(/\/login/);
+    await expect(p2.getByText("Chứng nhận đào tạo nội bộ")).toBeVisible();
+    await expect(p2.getByText(cn!.certCode)).toBeVisible();
+    await expect(p2.getByText("Còn hiệu lực")).toBeVisible();
+
+    // ⚠️ Và KHÔNG rò gì thêm. Trang này công khai với cả internet: mỗi dòng thừa là
+    // nới quyền cho mọi người, không phải cho một vai nào.
+    const chu = (await p2.textContent("body")) ?? "";
+    for (const cam of ["Đào tạo", "@satarobo.vn", "Chấm bài", "Báo cáo"]) {
+      expect(chu, `trang xác minh rò "${cam}"`).not.toContain(cam);
+    }
+    await ctx.close();
+  });
+
+  test("🔴 token sai KHÔNG nói cái nào có thật", async ({ browser }) => {
+    // Phân biệt "token sai" với "không tồn tại" là dựng một cái máy dò: người thử
+    // token biết được cái nào có thật. Ở trang công khai, đó là toàn bộ giá trị của
+    // việc token ngẫu nhiên.
+    const ctx = await browser.newContext();
+    const p2 = await ctx.newPage();
+    await p2.goto("/xac-thuc/khongtontai00000000000000000000");
+    await expect(p2.getByText("Không tìm thấy chứng nhận")).toBeVisible();
+    await ctx.close();
   });
 });

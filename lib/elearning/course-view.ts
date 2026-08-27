@@ -46,6 +46,15 @@ export type DeCuongKhoa = {
   progressPercent: number;
   /** Số ngày làm việc được miễn trừ vì người chấm trễ — hiện để người học yên tâm. */
   slaGraceDays: number;
+  /**
+   * Chứng nhận của lượt này — `null` khi chưa cấp.
+   *
+   * ⚠️ Có mặt ở ĐÂY là cố ý. Chứng nhận được cấp tự động qua hàng đợi sự kiện, nên
+   * nếu màn hình không hiện nó thì người học không có cách nào biết mình đã có, và
+   * đường tải PDF vừa dựng xong thành một cổng không cửa — đúng cái lỗi đã lặp lại
+   * tám lần trong module này.
+   */
+  chungNhan: { id: string; certCode: string; validUntil: Date | null } | null;
   soBaiXong: number;
   soBaiBatBuoc: number;
   chuong: ChuongTrongDeCuong[];
@@ -146,7 +155,13 @@ export async function napDeCuongKhoa(
     }),
   }));
 
+  const chungNhan = await db.trnCertificate.findFirst({
+    where: { enrollmentId: gd.id },
+    select: { id: true, certCode: true, validUntil: true },
+  });
+
   return {
+    chungNhan,
     enrollmentId: gd.id,
     tenKhoa: khoa.title,
     status: gd.status,

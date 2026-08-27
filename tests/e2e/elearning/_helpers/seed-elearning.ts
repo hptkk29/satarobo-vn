@@ -424,6 +424,7 @@ export async function chungNhanCuaLuot(enrollmentId: string) {
   return db.trnCertificate.findUnique({
     where: { enrollmentId },
     select: {
+      id: true,
       certCode: true,
       verifyToken: true,
       validUntil: true,
