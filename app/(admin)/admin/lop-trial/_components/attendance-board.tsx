@@ -28,6 +28,11 @@ type DraftRow = { status: TrialAttendanceMark | null; note: string };
 // Hàm đếm nằm ở ../_lib/attendance để test được mà không phải nạp cả cây next-auth
 // (component này kéo theo ../_actions → @/lib/auth, vitest không nạp nổi).
 import { demSoEmChuaDanhDau } from "../_lib/attendance";
+import {
+  duongDanPdfPhieu,
+  nhanNutPhieu,
+  LOI_CHUA_DANH_GIA,
+} from "../_lib/phieu-danh-gia";
 
 /** Ngày buổi học lưu ở cột `@db.Date` = UTC-midnight của ngày VN. */
 function ngayVn(iso: string): string {
@@ -37,6 +42,52 @@ function ngayVn(iso: string): string {
     month: "2-digit",
     year: "numeric",
   });
+}
+
+/**
+ * Nút lấy phiếu đánh giá của MỘT em ở MỘT buổi — đặt ngay trước ô ghi chú.
+ *
+ * Thay cho khối "Phiếu đánh giá buổi học" (hệ SESSION_EVAL) đã gỡ khỏi màn này: khối
+ * đó đọc một kho KHÁC với kho giáo viên thật sự chấm (`TrialRubricEval` từ site giáo
+ * viên), nên Sale mở ra luôn thấy trống dù đã có phiếu.
+ *
+ * Đã chấm thì là thẻ <a> mở file thật, KHÔNG phải nút bấm rồi mới điều hướng: người
+ * dùng bấm giữa chừng vẫn mở được tab mới, và không tốn một vòng gọi server chỉ để
+ * biết một điều màn hình đã biết sẵn.
+ */
+function NutPhieu({
+  enrollmentId,
+  sessionId,
+  daDanhGia,
+}: {
+  enrollmentId: string;
+  sessionId: string;
+  daDanhGia: boolean;
+}) {
+  const nhan = nhanNutPhieu(daDanhGia);
+  const lop =
+    "rounded-md px-2.5 py-1 text-xs font-semibold ring-1 ring-border whitespace-nowrap";
+  if (!daDanhGia) {
+    return (
+      <button
+        type="button"
+        onClick={() => toast.error(LOI_CHUA_DANH_GIA)}
+        className={`${lop} bg-card text-muted-foreground hover:bg-muted`}
+      >
+        {nhan}
+      </button>
+    );
+  }
+  return (
+    <a
+      href={duongDanPdfPhieu(enrollmentId, sessionId)}
+      target="_blank"
+      rel="noopener noreferrer"
+      className={`${lop} bg-card text-primary hover:bg-primary-soft`}
+    >
+      {nhan}
+    </a>
+  );
 }
 
 export function AttendanceBoard({
@@ -252,9 +303,16 @@ export function AttendanceBoard({
                     className="flex flex-wrap items-center justify-between gap-2 py-2"
                   >
                     <span className="text-foreground">{e.childName}</span>
-                    <span className="text-xs text-muted-foreground">
-                      {a ? (a.status === "PRESENT" ? "Có mặt" : "Vắng") : "Chưa điểm danh"}
-                      {a?.note ? ` · ${a.note}` : ""}
+                    <span className="flex items-center gap-2 text-xs text-muted-foreground">
+                      <span>
+                        {a ? (a.status === "PRESENT" ? "Có mặt" : "Vắng") : "Chưa điểm danh"}
+                        {a?.note ? ` · ${a.note}` : ""}
+                      </span>
+                      <NutPhieu
+                        enrollmentId={e.id}
+                        sessionId={selectedSession.id}
+                        daDanhGia={Boolean(selectedSession.danhGia[e.id])}
+                      />
                     </span>
                   </li>
                 );
@@ -300,6 +358,11 @@ export function AttendanceBoard({
                         Vắng
                       </button>
                     </div>
+                    <NutPhieu
+                      enrollmentId={e.id}
+                      sessionId={selectedSession.id}
+                      daDanhGia={Boolean(selectedSession.danhGia[e.id])}
+                    />
                     <input
                       type="text"
                       value={row.note}

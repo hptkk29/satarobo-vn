@@ -226,6 +226,14 @@ export async function getSaleTrialRoster(
 export async function getSaleTrialRubricContext(
   actor: Actor,
   enrollmentId: string,
+  /**
+   * Lấy phiếu của ĐÚNG buổi này. Bỏ trống = phiếu mới nhất (hành vi cũ của site Sale).
+   *
+   * 27/08 — màn Lớp Trial in phiếu ngay trên dòng điểm danh, mà dòng đó thuộc về một
+   * BUỔI cụ thể. Ở đó "mới nhất" là sai: bấm ở buổi 1 mà ra phiếu buổi 2 thì phụ huynh
+   * nhận nhầm bản đánh giá, và không có dấu hiệu nào để ai đó nhận ra.
+   */
+  trialClassSessionId?: string,
 ): Promise<{
   studentName: string;
   courseName: string | null;
@@ -275,7 +283,10 @@ export async function getSaleTrialRubricContext(
   // (`?sessionId=`) — thêm được thì nên thêm, nhưng chọn mặc định sai còn tệ hơn
   // không cho chọn, nên bản này chốt "mới nhất" thay vì "buổi đang xếp".
   const existing = await sdb.trialRubricEval.findFirst({
-    where: { trialEnrollmentId: enrollmentId },
+    where: {
+      trialEnrollmentId: enrollmentId,
+      ...(trialClassSessionId ? { trialClassSessionId } : {}),
+    },
     orderBy: { updatedAt: "desc" },
     select: {
       scores: true,

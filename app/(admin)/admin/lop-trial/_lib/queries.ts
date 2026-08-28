@@ -162,6 +162,29 @@ export async function layChiTietLop(
   });
   if (!cls) return null;
 
+  // Phiếu rubric đã chấm, gom theo (buổi × ca) — nguồn cho nút "Xuất PDF" trên dòng
+  // điểm danh. Chỉ lấy hai cột khoá: ở đây chỉ cần biết CÓ hay KHÔNG, nội dung phiếu
+  // do route PDF đọc lại khi người dùng bấm.
+  //
+  // `trialRubricEval` không thuộc SCOPED_MODELS (bảng không có centerId) nên `sdb` chỉ
+  // pass-through — cách ly cơ sở ở đây đến từ chỗ khác: `enrollmentIds` lấy từ chính
+  // lớp vừa qua `sdb.trialClassV2.findUnique`, tức đã lọc theo tầm nhìn của actor.
+  const enrollmentIds = cls.enrollments.map((e) => e.id);
+  const phieuDaCham = enrollmentIds.length
+    ? await sdb.trialRubricEval.findMany({
+        where: { trialEnrollmentId: { in: enrollmentIds } },
+        select: { trialEnrollmentId: true, trialClassSessionId: true },
+      })
+    : [];
+  const phieuTheoBuoi = new Map<string, Record<string, true>>();
+  for (const p of phieuDaCham) {
+    // Phiếu KHÔNG gắn buổi là dữ liệu trước GĐ4 — bỏ qua thay vì gán bừa vào một buổi.
+    if (!p.trialClassSessionId) continue;
+    const m = phieuTheoBuoi.get(p.trialClassSessionId) ?? {};
+    m[p.trialEnrollmentId] = true;
+    phieuTheoBuoi.set(p.trialClassSessionId, m);
+  }
+
   return {
     id: cls.id,
     code: cls.code,
@@ -187,6 +210,7 @@ export async function layChiTietLop(
           { status: a.status as "PRESENT" | "ABSENT", note: a.note },
         ]),
       ),
+      danhGia: phieuTheoBuoi.get(s.id) ?? {},
     })),
     enrollments: cls.enrollments.map((e) => {
       const che = maskLeadPiiFields(
