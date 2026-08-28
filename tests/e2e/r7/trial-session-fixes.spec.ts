@@ -77,18 +77,15 @@ test.describe("[TRIAL] Book lịch học thử: thêm buổi → auto-gán → G
     return { lead, child };
   }
 
-  /** Lớp trải nghiệm slot tái sử dụng (KHÔNG startDate → KHÔNG tự sinh buổi). */
-  async function seedTrialClass(centerId: string, teacherId: string | null, actorId: string) {
-    const res = await createTrialClass({
-      name: `Lớp trải nghiệm ${uniq()}`,
-      centerId,
-      startTime: "18:00",
-      endTime: "19:30",
-      capacity: 8,
-      teacherId,
-      sessionCount: 2,
-      actorId,
-    });
+  /**
+   * Lớp trải nghiệm slot tái sử dụng. 28/08 — `createTrialClass` chỉ còn nhận cơ sở +
+   * khoá; tên tự sinh, và giờ/phòng/GV/sĩ số nay là thuộc tính của TỪNG BUỔI.
+   *
+   * `teacherId` giữ trong chữ ký helper cho các ca bên dưới đọc dễ, nhưng KHÔNG truyền
+   * xuống lớp nữa — buổi tự mang giáo viên của nó (`addTrialSession`).
+   */
+  async function seedTrialClass(centerId: string, _teacherId: string | null, actorId: string) {
+    const res = await createTrialClass({ centerId, actorId });
     expect(res.ok).toBe(true);
     return res.trialClassId!;
   }
@@ -108,7 +105,10 @@ test.describe("[TRIAL] Book lịch học thử: thêm buổi → auto-gán → G
       date,
       startTime: "18:00",
       endTime: "19:30",
-      actorId: sale.id, // teacherId bỏ trống → mặc định GV phụ trách lớp
+      // 28/08 — lớp KHÔNG còn giáo viên cấp lớp nên không còn gì để "kế thừa";
+      // giáo viên nay chọn ngay khi thêm buổi.
+      teacherId: teacher.id,
+      actorId: sale.id,
     });
     expect(res.ok).toBe(true);
     expect(res.sessionId).toBeTruthy();
@@ -159,10 +159,12 @@ test.describe("[TRIAL] Book lịch học thử: thêm buổi → auto-gán → G
     // Thêm hai buổi SAU khi đã xếp người: ghi danh cũ KHÔNG bị gán vào buổi nào — em đó
     // học cả hai, và roster phải trả về em ở CẢ HAI buổi (khoá ở TRIAL-06).
     const far = await addTrialSession({
-      trialClassId: classId, date: plusDays(3), startTime: "18:00", endTime: "19:30", actorId: sale.id,
+      trialClassId: classId, date: plusDays(3), startTime: "18:00", endTime: "19:30",
+      teacherId: teacher.id, actorId: sale.id,
     });
     const near = await addTrialSession({
-      trialClassId: classId, date: plusDays(1), startTime: "18:00", endTime: "19:30", actorId: sale.id,
+      trialClassId: classId, date: plusDays(1), startTime: "18:00", endTime: "19:30",
+      teacherId: teacher.id, actorId: sale.id,
     });
     expect(far.ok && near.ok).toBe(true);
     expect(
@@ -203,7 +205,9 @@ test.describe("[TRIAL] Book lịch học thử: thêm buổi → auto-gán → G
     const classId = await seedTrialClass(center.id, teacher.id, sale.id);
 
     const added = await addTrialSession({
-      trialClassId: classId, date: plusDays(1), startTime: "18:00", endTime: "19:30", actorId: sale.id,
+      trialClassId: classId, date: plusDays(1), startTime: "18:00", endTime: "19:30",
+      // 28/08 — lớp KHÔNG còn giáo viên cấp lớp, nên buổi phải tự mang GV của nó.
+      teacherId: teacher.id, actorId: sale.id,
     });
     expect(added.ok).toBe(true);
 
@@ -231,9 +235,12 @@ test.describe("[TRIAL] Book lịch học thử: thêm buổi → auto-gán → G
     // Lớp A: GV chính = teacher; 1 buổi KHÔNG gán GV riêng (teacherId null) —
     // trước fix: hiện ở roster (/teacher/trial) nhưng MẤT ở lịch (/teacher/lich).
     const classA = await seedTrialClass(center.id, teacher.id, sale.id);
+    // 28/08 — buổi KHÔNG gán giáo viên nay thật sự không thuộc lịch của ai: lớp đã hết
+    // cột giáo viên để "kế thừa". Ý của ca này là hai đường đọc trả về CÙNG tập buổi,
+    // nên gán thẳng GV cho buổi.
     const sesNull = await addTrialSession({
       trialClassId: classA, date: plusDays(1), startTime: "18:00", endTime: "19:30",
-      teacherId: null, actorId: sale.id,
+      teacherId: teacher.id, actorId: sale.id,
     });
     expect(sesNull.ok).toBe(true);
 
@@ -290,9 +297,16 @@ test.describe("[TRIAL] Book lịch học thử: thêm buổi → auto-gán → G
     const classId = await seedTrialClass(center.id, teacher.id, sale.id);
     const { child } = await seedLeadChild(center.id, "Bé Data Cũ");
 
-    // Mô phỏng data cũ (enroll trước khi có auto-gán): ghi danh thẳng, không buổi.
+    // Ghi danh KHÔNG gắn buổi. 28/08 đây là MẶC ĐỊNH (học cả lớp), không còn là "data
+    // cũ"; lớp lại chưa có buổi nào nên em phải rơi vào nhóm "Chưa xếp buổi".
+    // `gvPhanCongId` là đường duy nhất nối em này với giáo viên, vì lớp không còn GV.
     await db.trialEnrollment.create({
-      data: { trialClassId: classId, leadChildId: child.id, addedById: sale.id },
+      data: {
+        trialClassId: classId,
+        leadChildId: child.id,
+        addedById: sale.id,
+        gvPhanCongId: teacher.id,
+      },
     });
 
     const roster = await getTeacherTrialRoster(teacher.id, FROM(), TO());

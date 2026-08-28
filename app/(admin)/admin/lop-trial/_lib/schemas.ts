@@ -53,30 +53,21 @@ export const configSchema = z.object({
     .max(60, "Số buổi quá lớn"),
 });
 
-export const createClassSchema = z
-  .object({
-    name: z.string().trim().min(1, "Tên lớp bắt buộc").max(160),
-    centerId: z.string().trim().min(1, "Chọn cơ sở"),
-    roomId: z.string().trim().min(1).nullable().optional(),
-    teacherId: z.string().trim().min(1).nullable().optional(),
-    // QĐ-R2-1: lớp là slot tái sử dụng → KHÔNG có ngày khai giảng, số buổi nhập thẳng.
-    sessionCount: z.coerce
-      .number()
-      .int("Số buổi phải là số nguyên")
-      .min(1, "Số buổi phải ≥ 1")
-      .max(20, "Số buổi quá lớn"),
-    startTime: z.string().regex(HHMM, "Giờ bắt đầu không hợp lệ"),
-    endTime: z.string().regex(HHMM, "Giờ kết thúc không hợp lệ"),
-    capacity: z.coerce
-      .number()
-      .int("Sĩ số phải là số nguyên")
-      .min(1, "Sĩ số phải ≥ 1")
-      .max(100, "Sĩ số quá lớn"),
-  })
-  .refine((d) => d.endTime > d.startTime, {
-    message: "Giờ kết thúc phải sau giờ bắt đầu",
-    path: ["endTime"],
-  });
+/**
+ * Tạo lớp trải nghiệm — 28/08: chỉ còn CƠ SỞ + KHOÁ TRẢI NGHIỆM.
+ *
+ * Tên lớp KHÔNG nhận từ client: server tự sinh theo quy ước `Cơ sở_Lớp trial số`
+ * (`tenLopTrial` trong `lib/trial/lop-moi.ts`). Cho client gửi tên là mời hai lớp trùng
+ * tên và mời người sửa tay lệch khỏi quy ước.
+ *
+ * Giờ / phòng / giáo viên / sĩ số ĐÃ RỜI khỏi đây — chúng là thuộc tính của TỪNG BUỔI.
+ * `sessionCount` cũng bỏ: số buổi nay là số buổi ĐÃ THÊM, không phải một con số khai
+ * trước rồi không ai đối chiếu.
+ */
+export const createClassSchema = z.object({
+  centerId: z.string().trim().min(1, "Chọn cơ sở"),
+  courseId: z.string().trim().min(1).nullable().optional(),
+});
 
 export const addSessionSchema = z
   .object({

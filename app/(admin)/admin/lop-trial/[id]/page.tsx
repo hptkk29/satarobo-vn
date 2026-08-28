@@ -7,8 +7,7 @@ import { checkPermission } from "@/lib/auth/check-permission";
 import { resolveActor } from "@/lib/auth/actor";
 import { getAssignableTeachers } from "@/lib/teachers/assignable";
 import { getSetting } from "@/lib/settings/service";
-import { layChiTietLop } from "../_lib/queries";
-import { TeacherAssignSelect } from "../_components/teacher-assign-select";
+import { layChiTietLop, layLichBanGiaoVien, layPhongTheoCoSo } from "../_lib/queries";
 import { AddSessionForm } from "../_components/add-session-form";
 import { EnrollPanel } from "../_components/enroll-panel";
 import { RosterList } from "../_components/roster-list";
@@ -74,14 +73,27 @@ export default async function ChiTietLopTrialPage({
   const teachers = await getAssignableTeachers({
     centerIds: [cls.centerId],
     includeIds: [
-      cls.teacherId,
+      // 28/08 — KHÔNG còn `cls.teacherId`: giáo viên đặt ở TỪNG BUỔI. Vẫn phải giữ
+      // người đang gán ở buổi và ở từng ca, nếu không họ rớt khỏi danh sách (đổi cơ sở,
+      // nghỉ việc) và `<select>` hiện TRỐNG trong khi tên vẫn in ở thẻ bên cạnh.
+      ...cls.sessions.map((se) => se.teacherId),
       ...cls.enrollments.flatMap((e) => [e.gvDeXuatId, e.gvPhanCongId]),
     ],
   });
   const teacherOptions = teachers.map((t) => ({ id: t.id, name: t.name ?? "(không tên)" }));
 
+  // 28/08 — dữ liệu cho ô "Giáo viên" và "Phòng" của form THÊM BUỔI.
+  // `busyByTeacher` chỉ để ĐÁNH DẤU, không lọc (chốt 28/08): ca làm nay cố định nên
+  // không còn bảng đăng ký ca để tra "ai đi làm hôm đó"; thứ tra được và thật sự hữu
+  // ích là "ai đang vướng buổi khác đúng khung giờ này".
+  const [roomOptions, busyByTeacher] = await Promise.all([
+    layPhongTheoCoSo(actor, cls.centerId),
+    layLichBanGiaoVien(actor, cls.centerId),
+  ]);
+
   const activeUsed = cls.enrollments.filter((e) => e.status === "ACTIVE").length;
-  const full = activeUsed >= cls.capacity;
+  // 28/08 — `capacity === null` là KHÔNG giới hạn sĩ số, không phải sức chứa 0.
+  const full = cls.capacity !== null && activeUsed >= cls.capacity;
   const daKetThuc = cls.status === "COMPLETED" || cls.status === "CANCELLED";
 
   // 27/08 — khối "Phiếu đánh giá buổi học" (hệ SESSION_EVAL) ĐÃ GỠ khỏi màn này.
@@ -118,13 +130,15 @@ export default async function ChiTietLopTrialPage({
             </span>
           </div>
           <p className="mt-1 font-mono text-xs text-muted-foreground">{cls.code}</p>
+          {/* 28/08 — KHÔNG in giờ ở đây nữa: giờ là thuộc tính của TỪNG BUỔI, mỗi
+              buổi có thể khác nhau. In một khung giờ cấp lớp là nói sai về lớp. */}
           <p className="mt-1 text-sm text-muted-foreground">
-            {cls.startTime}–{cls.endTime} · Sĩ số{" "}
+            Sĩ số{" "}
             <span className={full ? "font-semibold text-red-600" : "font-semibold"}>
-              {activeUsed}/{cls.capacity}
+              {activeUsed}
+              {cls.capacity === null ? "" : `/${cls.capacity}`}
             </span>{" "}
-            · {cls.sessionCount} buổi
-            {cls.configName ? ` (${cls.configName})` : ""}
+            · {cls.sessions.length} buổi
           </p>
         </div>
         {isManager && !daKetThuc && <CancelClassButton trialClassId={cls.id} />}
@@ -136,14 +150,10 @@ export default async function ChiTietLopTrialPage({
         </p>
       )}
 
-      <section className="rounded-xl border border-border bg-card p-4">
-        <TeacherAssignSelect
-          trialClassId={cls.id}
-          teacherId={cls.teacherId}
-          teachers={teacherOptions}
-          canAssign={canAssignTeacher}
-        />
-      </section>
+      {/* 28/08 — GỠ khối "Giáo viên phụ trách" ở CẤP LỚP.
+          Giáo viên nay chọn khi THÊM BUỔI: một lớp trải nghiệm là slot tái sử dụng,
+          hai buổi khác ngày hoàn toàn có thể do hai người dạy. Giữ một ô GV cấp lớp
+          bên cạnh ô GV cấp buổi là hai nguồn sự thật cho cùng một câu hỏi "ai dạy". */}
 
       {isManager && (
         <section className="rounded-xl border border-border bg-card p-4">
@@ -151,8 +161,10 @@ export default async function ChiTietLopTrialPage({
           <AddSessionForm
             trialClassId={cls.id}
             teachers={teacherOptions}
-            defaultStartTime={cls.startTime}
-            defaultEndTime={cls.endTime}
+            rooms={roomOptions}
+            busyByTeacher={busyByTeacher}
+            defaultStartTime={cls.startTime ?? "18:00"}
+            defaultEndTime={cls.endTime ?? "19:30"}
           />
         </section>
       )}

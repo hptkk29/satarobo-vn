@@ -6261,10 +6261,20 @@ model TrialClassV2 {
   // FL-R2 (QĐ-R2-1): slot tái sử dụng → startDate nullable (lớp không gắn ngày bắt đầu
   // cố định; buổi tạo ad-hoc theo giờ/giảng viên). Lớp cũ giữ nguyên startDate.
   startDate    DateTime?           @db.Date
-  startTime    String
-  endTime      String
-  capacity     Int
+  /// ⚠️ 28/08 — GIỜ / SĨ SỐ / GIÁO VIÊN Ở CẤP LỚP ĐÃ THÔI DÙNG. Ba thứ đó nay đặt ở
+  /// TỪNG BUỔI (`TrialClassSession.startTime/endTime/roomId/teacherId`), vì một lớp
+  /// trải nghiệm là slot tái sử dụng: mỗi buổi có thể khác giờ, khác phòng, khác người
+  /// dạy. Cột giữ lại ở pha A để lớp cũ không mất số liệu và để lùi được — pha B mới
+  /// drop. Đường ghi MỚI phải để `null`; đường đọc phải chịu được `null`.
+  startTime    String?
+  endTime      String?
+  /// `null` = KHÔNG giới hạn sĩ số (mặc định từ 28/08). `isOverCapacity` hiểu null là
+  /// không bao giờ vượt — đừng "vá" bằng cách coi null là 0.
+  capacity     Int?
   teacherId    String?
+  /// Khoá trải nghiệm của lớp (= "khoá quan tâm" của khách). Cột TRẦN, không FK —
+  /// cùng nếp với `LeadChild.interestedCourseId`.
+  courseId     String?
   assistantId  String?
   status       TrialClassV2Status  @default(OPEN)
   configId     String?

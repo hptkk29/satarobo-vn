@@ -25,9 +25,11 @@ export type ClassRow = {
   code: string;
   name: string;
   status: TrialClassStatusV2;
-  startTime: string;
-  endTime: string;
-  capacity: number;
+  /** 28/08 — giờ ở CẤP LỚP đã thôi dùng; giờ thật nằm ở từng buổi. `null` = lớp mới. */
+  startTime: string | null;
+  endTime: string | null;
+  /** `null` = KHÔNG giới hạn sĩ số (mặc định từ 28/08). */
+  capacity: number | null;
   /** Số ghi danh còn ACTIVE — mẫu số hiển thị "n/capacity". */
   activeUsed: number;
   sessionCount: number;
@@ -56,6 +58,8 @@ export type SessionRow = {
   startTime: string;
   endTime: string;
   status: TrialSessionStatusV2;
+  /** 28/08 — giáo viên dạy BUỔI NÀY. Lớp không còn cột giáo viên; đây là nguồn duy nhất. */
+  teacherId: string | null;
   /** trialEnrollmentId → điểm danh đã lưu. Không có khoá = chưa điểm danh em đó. */
   attendance: Record<string, { status: TrialAttendanceMark; note: string | null }>;
   /**

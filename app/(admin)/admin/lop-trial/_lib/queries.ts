@@ -83,21 +83,24 @@ export async function layCauHinh(actor: Actor): Promise<ProgramConfig> {
 /** Cơ sở + phòng để đổ vào form tạo lớp. */
 export async function layLuaChonTaoLop(
   actor: Actor,
-): Promise<{ centers: Option[]; rooms: RoomOption[] }> {
+): Promise<{ centers: (Option & { code: string | null })[]; courses: Option[] }> {
   const sdb = scopedDb(actor);
-  const [centers, rooms] = await Promise.all([
+  const [centers, courses] = await Promise.all([
     sdb.center.findMany({
+      where: { isActive: true },
+      // 28/08 — thêm `code` để form xem trước được tên lớp sẽ sinh ("CS1_Lớp trial …").
+      select: { id: true, name: true, code: true },
+      orderBy: { name: "asc" },
+    }),
+    // Khoá trải nghiệm = khoá quan tâm. `Course` không thuộc SCOPED_MODELS (danh mục
+    // dùng chung toàn hệ) nên `sdb` chỉ pass-through.
+    sdb.course.findMany({
       where: { isActive: true },
       select: { id: true, name: true },
       orderBy: { name: "asc" },
     }),
-    sdb.room.findMany({
-      where: { status: "ACTIVE" },
-      select: { id: true, name: true, centerId: true },
-      orderBy: { displayOrder: "asc" },
-    }),
   ]);
-  return { centers, rooms };
+  return { centers, courses };
 }
 
 export type ChiTietLop = {
@@ -106,15 +109,95 @@ export type ChiTietLop = {
   name: string;
   status: TrialClassStatusV2;
   centerId: string;
-  startTime: string;
-  endTime: string;
-  capacity: number;
+  /** 28/08 — giờ/sĩ số ở CẤP LỚP đã thôi dùng; giờ thật nằm ở từng buổi. */
+  startTime: string | null;
+  endTime: string | null;
+  /** `null` = không giới hạn sĩ số. */
+  capacity: number | null;
   sessionCount: number;
   configName: string | null;
   teacherId: string | null;
   sessions: SessionRow[];
   enrollments: EnrollmentRow[];
 };
+
+/** Một buổi ĐÃ CHIẾM chỗ của giáo viên — đủ để client tự đối chiếu khung giờ. */
+export type BuoiBan = {
+  /** "YYYY-MM-DD" theo ngày VN, khớp giá trị của `<input type="date">`. */
+  date: string;
+  startTime: string;
+  endTime: string;
+  /** Hiện trong chú thích cảnh báo, vd "Lớp trải nghiệm 12". */
+  label: string;
+};
+
+/**
+ * Lịch đã kín của từng giáo viên trong một cơ sở — nguồn cho việc ĐÁNH DẤU (không lọc)
+ * giáo viên khi thêm buổi.
+ *
+ * Chủ dự án 28/08: "ca làm là cố định nên không phải đăng ký nữa, hiện tất cả nhưng
+ * đánh dấu". Nên đây KHÔNG phải bộ lọc: mọi giáo viên của cơ sở vẫn chọn được, chỉ
+ * kèm cảnh báo ai đang vướng buổi khác. Lọc cứng là tự khoá mình những hôm phải xếp
+ * gấp.
+ *
+ * ⚠️ GIỚI HẠN ĐÃ BIẾT: chỉ tính buổi LỚP TRẢI NGHIỆM. Buổi lớp chính (`ClassSession`)
+ * không có cột `startTime`/`endTime` riêng — giờ nằm trong `date` và người dạy phải suy
+ * qua `lib/lms/session-teacher.ts` (có dạy thay). Ghép vào đây là một đợt riêng; ghi ra
+ * để không ai tưởng cảnh báo này đã phủ hết lịch của giáo viên.
+ */
+export async function layLichBanGiaoVien(
+  actor: Actor,
+  centerId: string,
+): Promise<Record<string, BuoiBan[]>> {
+  const sdb = scopedDb(actor);
+  const homQua = new Date(vnTodayUtc().getTime() - 24 * 3_600_000);
+  const rows = await sdb.trialClassSession.findMany({
+    where: {
+      status: "SCHEDULED",
+      teacherId: { not: null },
+      date: { gte: homQua },
+      trialClass: { centerId, status: { not: "CANCELLED" } },
+    },
+    select: {
+      teacherId: true,
+      date: true,
+      startTime: true,
+      endTime: true,
+      trialClass: { select: { name: true } },
+    },
+    orderBy: { date: "asc" },
+    take: 500,
+  });
+
+  const out: Record<string, BuoiBan[]> = {};
+  for (const r of rows) {
+    if (!r.teacherId) continue;
+    (out[r.teacherId] ??= []).push({
+      // Cột `@db.Date` là UTC-midnight của ngày VN → cắt 10 ký tự đầu là ra đúng
+      // "YYYY-MM-DD" mà `<input type="date">` dùng. Đừng đổi múi giờ ở đây.
+      date: r.date.toISOString().slice(0, 10),
+      startTime: r.startTime,
+      endTime: r.endTime,
+      label: r.trialClass.name,
+    });
+  }
+  return out;
+}
+
+/** Phòng học ĐANG DÙNG của một cơ sở. `Room.centerId` là NOT NULL nên không có phòng
+ *  dùng chung — đừng thêm nhánh `centerId: null`, nó không bao giờ khớp dòng nào. */
+export async function layPhongTheoCoSo(
+  actor: Actor,
+  centerId: string,
+): Promise<RoomOption[]> {
+  const sdb = scopedDb(actor);
+  const rooms = await sdb.room.findMany({
+    where: { status: "ACTIVE", centerId },
+    select: { id: true, name: true, centerId: true },
+    orderBy: { displayOrder: "asc" },
+  });
+  return rooms;
+}
 
 /** Chi tiết một lớp. Trả null nếu ngoài tầm nhìn của actor (chống IDOR). */
 export async function layChiTietLop(
@@ -192,6 +275,7 @@ export async function layChiTietLop(
       startTime: s.startTime,
       endTime: s.endTime,
       status: s.status as SessionRow["status"],
+      teacherId: s.teacherId,
       attendance: Object.fromEntries(
         s.attendances.map((a) => [
           a.trialEnrollmentId,

@@ -8,6 +8,7 @@
 import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { notifyStaff } from "@/lib/notifications/notify";
+import { tenLopTrial } from "@/lib/trial/lop-moi";
 import { teacherCenterAssignmentError } from "@/lib/teachers/center-filter";
 import { nextSeq, yy } from "@/lib/codegen";
 import { publishEvent } from "@/lib/events/publish";
@@ -45,8 +46,19 @@ export function buildTrialSessionDates(startDate: Date, count: number, holidays:
   return out;
 }
 
-/** Quyết định vượt sĩ số (PURE): tại/quá sức chứa + KHÔNG override. */
-export function isOverCapacity(activeCount: number, capacity: number, allowOverride: boolean): boolean {
+/**
+ * Quyết định vượt sĩ số (PURE): tại/quá sức chứa + KHÔNG override.
+ *
+ * `capacity === null` = lớp KHÔNG giới hạn sĩ số (mặc định từ 28/08, khi trường sĩ số
+ * rời khỏi form tạo lớp). Coi null là 0 thì lớp mới tạo chặn ngay học viên đầu tiên và
+ * báo "Vượt sĩ số" — người dùng không có cách nào đoán ra nguyên nhân.
+ */
+export function isOverCapacity(
+  activeCount: number,
+  capacity: number | null,
+  allowOverride: boolean,
+): boolean {
+  if (capacity === null) return false;
   return !allowOverride && activeCount >= capacity;
 }
 
@@ -67,24 +79,6 @@ function sanitizeCenter(code: string): string {
   return code.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 8) || "CS";
 }
 
-/** Mở rộng các khoảng Holiday (date..endDate) thành Date[] (1 phần tử / ngày). */
-function expandHolidayDates(rows: { date: Date; endDate: Date | null }[]): Date[] {
-  const out: Date[] = [];
-  for (const h of rows) {
-    const start = new Date(h.date.getFullYear(), h.date.getMonth(), h.date.getDate());
-    const end = h.endDate
-      ? new Date(h.endDate.getFullYear(), h.endDate.getMonth(), h.endDate.getDate())
-      : start;
-    const cur = new Date(start);
-    let guard = 0;
-    while (cur <= end && guard < 400) {
-      guard++;
-      out.push(new Date(cur));
-      cur.setDate(cur.getDate() + 1);
-    }
-  }
-  return out;
-}
 
 async function actorName(actorId: string | null | undefined, client: DbClient = db): Promise<string> {
   if (!actorId) return "system";
@@ -152,44 +146,23 @@ export async function setTrialProgramConfig(params: {
 
 // ─── Lớp ─────────────────────────────────────────────────────────────────────
 
+/**
+ * Tạo lớp trải nghiệm. 28/08 — chỉ còn CƠ SỞ + KHOÁ; tên tự sinh, giờ/phòng/GV/sĩ số
+ * chuyển xuống từng buổi.
+ */
 export async function createTrialClass(params: {
-  name: string;
   centerId: string;
-  roomId?: string | null;
+  /** Khoá trải nghiệm (= khoá quan tâm của khách). */
+  courseId?: string | null;
   // FL-R2 (QĐ-R2-1): slot tái sử dụng — startDate tuỳ chọn (null = không gắn ngày cố định).
   startDate?: Date | null;
-  startTime: string;
-  endTime: string;
-  capacity: number;
-  teacherId?: string | null;
-  // Số buổi nhập trực tiếp khi tạo (không phụ thuộc TrialProgramConfig ngoài).
-  sessionCount: number;
   configId?: string | null;
   actorId: string;
 }): Promise<{ ok: boolean; error?: string; trialClassId?: string }> {
-  if (!params.name?.trim()) return { ok: false, error: "Tên lớp là bắt buộc" };
-  if (!Number.isInteger(params.capacity) || params.capacity < 1) {
-    return { ok: false, error: "Sĩ số phải là số nguyên ≥ 1" };
-  }
-  if (!Number.isInteger(params.sessionCount) || params.sessionCount < 1) {
-    return { ok: false, error: "Số buổi phải là số nguyên ≥ 1" };
-  }
-
-  // R2-RBAC-3 — GV (nếu gán) phải CÙNG cơ sở lớp trải nghiệm (cách ly CS1↔CS2;
-  // backstop server cho lọc client ở form). teacher centerId NULL/khác → chặn.
-  if (params.teacherId) {
-    const t = await db.user.findUnique({
-      where: { id: params.teacherId },
-      select: { centerId: true },
-    });
-    const err = teacherCenterAssignmentError(params.centerId, [
-      { id: params.teacherId, centerId: t?.centerId },
-    ]);
-    if (err) return { ok: false, error: err };
-  }
-
   try {
-    const sessionCount = params.sessionCount;
+    // Số buổi khai trước KHÔNG còn ý nghĩa: buổi thêm tay từng cái ở màn chi tiết, và
+    // cột hiển thị nay đếm buổi CÓ THẬT. Giữ 0 để cột cũ không nói dối.
+    const sessionCount = 0;
     const trialClassId = await db.$transaction(async (tx) => {
       // mã cơ sở cho code.
       const center = await tx.center.findUnique({
@@ -204,43 +177,30 @@ export async function createTrialClass(params: {
       const trialClass = await tx.trialClassV2.create({
         data: {
           code,
-          name: params.name.trim(),
+          // Tên theo quy ước `Cơ sở_Lớp trial số`, dùng CHÍNH số thứ tự đã cấp cho
+          // `code` — hai thứ đi cùng một bộ đếm nên không bao giờ lệch nhau.
+          name: tenLopTrial(cc, seq),
           centerId: params.centerId,
-          roomId: params.roomId ?? null,
+          courseId: params.courseId ?? null,
           startDate: params.startDate ?? null,
-          startTime: params.startTime,
-          endTime: params.endTime,
-          capacity: params.capacity,
-          teacherId: params.teacherId ?? null,
+          // 28/08 — giờ/sĩ số/GV/phòng để null: chúng là thuộc tính của TỪNG BUỔI.
+          startTime: null,
+          endTime: null,
+          capacity: null,
+          teacherId: null,
+          roomId: null,
           configId: params.configId ?? null,
           sessionCount,
         },
         select: { id: true },
       });
 
-      // FL-R2 (QĐ-R2-1): slot tái sử dụng — KHÔNG auto-gen buổi cohort. Chỉ sinh buổi theo
-      // lịch khi CÓ ngày bắt đầu cố định (giữ tương thích đường gọi cũ/lớp có lịch).
-      if (params.startDate) {
-        const holidayRows = await tx.holiday.findMany({
-          where: { OR: [{ centerId: params.centerId }, { centerId: null }] },
-          select: { date: true, endDate: true },
-        });
-        const holidays = expandHolidayDates(holidayRows);
-        const dates = buildTrialSessionDates(params.startDate, sessionCount, holidays);
-        if (dates.length > 0) {
-          await tx.trialClassSession.createMany({
-            data: dates.map((d, idx) => ({
-              trialClassId: trialClass.id,
-              seq: idx + 1,
-              date: d,
-              startTime: params.startTime,
-              endTime: params.endTime,
-              roomId: params.roomId ?? null,
-              teacherId: params.teacherId ?? null,
-            })),
-          });
-        }
-      }
+      // 28/08 — GỠ nhánh tự sinh buổi theo `startDate`.
+      //
+      // Nhánh đó cần giờ/phòng/GV ở CẤP LỚP để rót xuống từng buổi, mà ba thứ ấy nay
+      // không còn tồn tại ở cấp lớp. Giữ lại thì buổi sinh ra trắng giờ — tệ hơn là
+      // không sinh, vì một buổi không giờ vẫn hiện trên lịch giáo viên.
+      // Lớp trải nghiệm vốn là slot tái sử dụng: buổi thêm tay ở màn chi tiết.
       return trialClass.id;
     });
     return { ok: true, trialClassId };
@@ -477,7 +437,9 @@ export async function enrollLeadChild(params: {
         { tx, dedupeKey: `trial.assigned:${enrollment.id}` },
       );
       // AC4 — ghi audit khi override sĩ số (xếp vượt capacity bằng quyền override).
-      if (allowOverride && activeCount >= cls.capacity) {
+      // `capacity === null` = lớp không giới hạn ⇒ KHÔNG có gì để "vượt", nên cũng
+      // không ghi audit override. Ghi bừa là đẻ ra vết vi phạm cho một luật không tồn tại.
+      if (allowOverride && cls.capacity !== null && activeCount >= cls.capacity) {
         await writeAudit({
           actor: { id: params.addedById, name: await actorName(params.addedById, tx) },
           module: "trial",
