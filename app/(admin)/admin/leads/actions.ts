@@ -25,6 +25,7 @@ import { rejectHeadOffice } from '@/lib/enrollment-flow'
 import { LEAD_STATUS_LABEL, canTransitionLeadStatus } from '@/lib/leads/status'
 import { leadChildSchema } from '@/lib/validators/lead'
 import { syncLeadChildNameToStudents } from '@/lib/students/sync-name'
+import { recordLeadActivity } from '@/lib/lead/record-activity'
 
 const statusSchema = z.enum([
   'NEW',
@@ -141,16 +142,14 @@ export async function toggleLeadShareAction(
       changedFields: ['isSharedWithTeam'],
       tx,
     })
-    await tx.leadActivity.create({
-      data: {
-        leadId,
-        actorId,
-        actorName,
-        type: 'NOTE',
-        content: share
-          ? 'Bật "dùng chung" — CSKH cùng cơ sở xem được lead này'
-          : 'Tắt "dùng chung"',
-      },
+    await recordLeadActivity(tx, {
+      leadId,
+      actorId,
+      actorName,
+      type: 'NOTE',
+      content: share
+        ? 'Bật "dùng chung" — CSKH cùng cơ sở xem được lead này'
+        : 'Tắt "dùng chung"',
     })
   })
 
@@ -215,15 +214,15 @@ export async function updateLeadStatus(
     })
 
     // Phase T1.2 — tự sinh activity timeline cho mỗi lần đổi status.
-    await tx.leadActivity.create({
-      data: {
-        leadId,
-        actorId,
-        actorName,
-        type: 'STATUS_CHANGE',
-        content: `Chuyển trạng thái: ${before.status} → ${parsed.data}`,
-        metadata: { from: before.status, to: parsed.data },
-      },
+    // STATUS_CHANGE ⇒ recordLeadActivity CỐ Ý không bump `lastActivityAt` (OQ-C4):
+    // đổi trạng thái không phải là đã liên hệ khách.
+    await recordLeadActivity(tx, {
+      leadId,
+      actorId,
+      actorName,
+      type: 'STATUS_CHANGE',
+      content: `Chuyển trạng thái: ${before.status} → ${parsed.data}`,
+      metadata: { from: before.status, to: parsed.data },
     })
 
     // Phase T1.4 — vào TRIAL_SCHEDULED → tự tạo lịch học thử (nếu chưa có buổi đang mở).
@@ -241,15 +240,13 @@ export async function updateLeadStatus(
         await tx.trialClass.create({
           data: { leadId, centerId: before.centerId, scheduledAt },
         })
-        await tx.leadActivity.create({
-          data: {
-            leadId,
-            actorId,
-            actorName,
-            type: 'NOTE',
-            content:
-              '[Học thử] Đã tạo lịch học thử (chờ xếp lịch/giáo viên). Vào mục Học thử để cập nhật.',
-          },
+        await recordLeadActivity(tx, {
+          leadId,
+          actorId,
+          actorName,
+          type: 'NOTE',
+          content:
+            '[Học thử] Đã tạo lịch học thử (chờ xếp lịch/giáo viên). Vào mục Học thử để cập nhật.',
         })
       }
     }
@@ -365,20 +362,17 @@ export async function addLeadActivity(input: {
   const { actorId, actorName } = getAuditActor(session)
   // AC4 — ghi hoạt động + reset đồng hồ SLA idle (lastActivityAt) trong 1 tx.
   await db.$transaction(async (tx) => {
-    await tx.leadActivity.create({
-      data: {
-        leadId: input.leadId,
-        actorId,
-        actorName,
-        type: parsedType.data,
-        content,
-        // Chỉ set khi caller có truyền metadata → tránh ghi đè null không cần.
-        ...(input.metadata != null ? { metadata: input.metadata } : {}),
-      },
-    })
-    await tx.lead.update({
-      where: { id: input.leadId },
-      data: { lastActivityAt: new Date() },
+    // Helper tự bump `lastActivityAt` khi (và CHỈ khi) đây là tiếp cận người thật —
+    // nên KHÔNG còn `tx.lead.update` bằng tay ở đây. Trước 28/08 chỗ này là 1 trong
+    // đúng 3 nơi nhớ bump, 12 nơi còn lại thì quên.
+    await recordLeadActivity(tx, {
+      leadId: input.leadId,
+      actorId,
+      actorName,
+      type: parsedType.data,
+      content,
+      // Chỉ set khi caller có truyền metadata → tránh ghi đè null không cần.
+      ...(input.metadata != null ? { metadata: input.metadata } : {}),
     })
   })
 

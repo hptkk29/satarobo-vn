@@ -7,6 +7,7 @@ import { writeAudit, type AuditActor } from "@/lib/audit/audit-log";
 import { publishEvent } from "@/lib/events/publish";
 import { issueReceipt } from "@/lib/finance/receipt";
 import { allocateByWeight } from "@/lib/finance/allocate";
+import { recordLeadActivity } from "@/lib/lead/record-activity";
 
 type Tx = Prisma.TransactionClient;
 
@@ -154,15 +155,15 @@ export async function maybeAdvanceLeadToRegistered(
     data: { status: "REGISTERED" },
   });
   if (upd.count === 0) return false;
-  await tx.leadActivity.create({
-    data: {
-      leadId: params.leadId,
-      actorId: params.actor.id,
-      actorName: params.actor.name ?? "Hệ thống",
-      type: "STATUS_CHANGE",
-      content: "Tự động: Chờ quyết định → Đã đăng ký (đã ghi nhận thanh toán)",
-      metadata: { from: "AWAITING_DECISION", to: "REGISTERED", auto: true },
-    },
+  // STATUS_CHANGE tự động ⇒ KHÔNG bump đồng hồ tiếp cận. Đúng ý: tiền về không
+  // có nghĩa là ai đó vừa gọi cho phụ huynh.
+  await recordLeadActivity(tx, {
+    leadId: params.leadId,
+    actorId: params.actor.id,
+    actorName: params.actor.name ?? "Hệ thống",
+    type: "STATUS_CHANGE",
+    content: "Tự động: Chờ quyết định → Đã đăng ký (đã ghi nhận thanh toán)",
+    metadata: { from: "AWAITING_DECISION", to: "REGISTERED", auto: true },
   });
   return true;
 }

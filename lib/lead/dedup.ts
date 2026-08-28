@@ -1,6 +1,7 @@
 import { db } from "@/lib/db";
 import { getSetting } from "@/lib/settings/service";
 import { phoneVariants } from "@/lib/phone";
+import { recordLeadActivity } from "@/lib/lead/record-activity";
 
 // =============================================================================
 // LEAD DEDUP — chống trùng SĐT trong cửa sổ cấu hình được (Phase T1.3)
@@ -37,15 +38,16 @@ export async function logDuplicateAttempt(
     await tx.leadDuplicate.create({
       data: { primaryLeadId, duplicatePhone: phone, source },
     });
-    await tx.leadActivity.create({
-      data: {
-        leadId: primaryLeadId,
-        actorName: "Hệ thống (web)",
-        type: "NOTE",
-        content: `[Trùng SĐT] Có submit mới cùng SĐT ${phone}${
-          source ? ` từ nguồn "${source}"` : ""
-        } — đã chặn tạo lead trùng.`,
-      },
+    // `actorId: null` = hệ thống sinh ⇒ KHÔNG bump đồng hồ tiếp cận, dù type là NOTE.
+    // Khách tự gửi form lại không phải là Sale đã liên hệ.
+    await recordLeadActivity(tx, {
+      leadId: primaryLeadId,
+      actorId: null,
+      actorName: "Hệ thống (web)",
+      type: "NOTE",
+      content: `[Trùng SĐT] Có submit mới cùng SĐT ${phone}${
+        source ? ` từ nguồn "${source}"` : ""
+      } — đã chặn tạo lead trùng.`,
     });
   });
 }

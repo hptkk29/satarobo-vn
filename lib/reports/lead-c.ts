@@ -548,9 +548,18 @@ export async function getStaleLeads(
 /**
  * Mốc TIẾP CẬN gần nhất của từng lead — §C.6.5 biến thể A.
  *
- * Hai điều kiện, không phải một (OQ-C4): loại `STATUS_CHANGE`/`HANDOVER` **và** đòi
- * `actorId != null`. `LeadActivity.actorId` là `String?` nên dòng do hệ thống sinh có
- * `actorId = NULL` — bỏ vế thứ hai là mở lại đúng cái lỗ vừa bịt, chỉ theo đường khác.
+ * BA điều kiện, không phải một:
+ *  1. `type ∈ {CALL, MESSAGE, NOTE, EMAIL}` — loại `STATUS_CHANGE`/`HANDOVER` (OQ-C4);
+ *  2. `actorId != null` — dòng do hệ thống sinh mang `actorId` rỗng;
+ *  3. 🔴 `metadata.system != true` — **điều kiện PRD không nêu, thêm sau khi đo mã**.
+ *
+ * Vì sao cần điều kiện 3. Đường bàn giao lead hàng loạt (`lib/lead/assignment-core.ts`)
+ * ghi `createMany` với `type` mặc định **`NOTE`** và `actorId` là **người thật** đang
+ * bấm bàn giao — tức nó lọt qua cả hai điều kiện đầu. Hệ quả nếu bỏ điều kiện 3: mỗi
+ * lần chuyển sale, đồng hồ "chưa tiếp cận lại" của **cả trăm lead về 0 cùng lúc** và
+ * bảng lead treo sạch bong — đúng thứ "làm đẹp giả" mà OQ-C4 muốn chặn, chỉ đi bằng
+ * cửa khác. Những dòng đó tự đánh dấu bằng `metadata.system = true`; cờ đó đặt SAU cùng
+ * trong object nên caller không đè được.
  */
 async function loadLastContactAt(leadIds: string[]): Promise<Map<string, Date>> {
   const uniq = [...new Set(leadIds)];
@@ -561,6 +570,7 @@ async function loadLastContactAt(leadIds: string[]): Promise<Map<string, Date>> 
       leadId: { in: uniq },
       type: { in: [...CONTACT_ACTIVITY_TYPES] },
       actorId: { not: null },
+      NOT: { metadata: { path: ["system"], equals: true } },
     },
     _max: { createdAt: true },
   });

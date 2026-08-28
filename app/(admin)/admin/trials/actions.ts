@@ -14,6 +14,7 @@ import {
 } from "@/lib/validators/trial";
 import { teacherCenterAssignmentError } from "@/lib/teachers/center-filter";
 import { notifyTrialTeacherAssigned } from "@/lib/trial/service";
+import { recordLeadActivity } from "@/lib/lead/record-activity";
 import type { LeadStatus, Prisma, TrialClassStatus } from "@prisma/client";
 
 // Cách ly cơ sở (chống IDOR ghi): TrialClass (V1) ∈ SCOPED_MODELS → đọc qua scopedDb
@@ -128,15 +129,13 @@ export async function updateTrialAction(
           where: { id: trial.leadId },
           data: { status: leadNextStatus },
         });
-        await tx.leadActivity.create({
-          data: {
-            leadId: trial.leadId,
-            actorId,
-            actorName,
-            type: "STATUS_CHANGE",
-            content: `Chuyển trạng thái: ${lead.status} → ${leadNextStatus} (từ buổi học thử)`,
-            metadata: { from: lead.status, to: leadNextStatus, via: "trial" },
-          },
+        await recordLeadActivity(tx, {
+          leadId: trial.leadId,
+          actorId,
+          actorName,
+          type: "STATUS_CHANGE",
+          content: `Chuyển trạng thái: ${lead.status} → ${leadNextStatus} (từ buổi học thử)`,
+          metadata: { from: lead.status, to: leadNextStatus, via: "trial" },
         });
       }
     }

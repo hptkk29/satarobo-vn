@@ -129,7 +129,15 @@ export async function runSlaCheck(now = new Date()): Promise<{ violations: numbe
         receivedConfirmedAt: lead.receivedConfirmedAt,
         assignedAt: lead.assignedAt,
         firstContactAt: lead.firstContactAt,
-        lastActivityAt: lead.updatedAt,
+        // 🔴 C-05-4 (28/08) — TRƯỚC ĐÂY truyền `lead.updatedAt`, và đó là bug im lặng:
+        // `updatedAt` mang `@updatedAt` nên nó nhảy về HIỆN TẠI mỗi lần bất kỳ cột nào
+        // của lead bị chạm — kể cả cron tự sửa, kể cả đổi cơ sở. Hệ quả: SLA-4 ("lead
+        // im lặng quá lâu") gần như KHÔNG BAO GIỜ nổ, và bảng cảnh báo trông sạch bong.
+        // Cột đúng là `lastActivityAt`. ⚠️ Bản thân cột đó cũng đang thiếu (12/15 đường
+        // ghi LeadActivity không bump) — vì thế `?? lead.updatedAt` giữ lại làm mốc dự
+        // phòng: fail về hành vi CŨ thay vì bắn hàng loạt cảnh báo cho lead chưa backfill.
+        // Gỡ dự phòng này sau khi N-4 vá xong VÀ đã backfill.
+        lastActivityAt: lead.lastActivityAt ?? lead.updatedAt,
       },
       now,
       thresholds,

@@ -3,6 +3,7 @@ import { canonicalPhone } from "@/lib/phone";
 import { findRecentDuplicate, logDuplicateAttempt } from "../dedup";
 import { autoAssignNewLead, TERMINAL_LEAD_STATUSES } from "../auto-assign";
 import { autoAssignLead } from "../assign";
+import { recordLeadActivity } from "../record-activity";
 import { getNonEnrollableCenterIds } from "@/lib/enrollment-flow";
 import { buildNote, isSameChildName, matchCenter } from "./normalize";
 import type { MappedLead } from "./types";
@@ -200,16 +201,17 @@ async function attachExtraChild(
         interestedCenterId: centerId,
       },
     });
-    await tx.leadActivity.create({
-      data: {
-        leadId,
-        actorName,
-        type: "NOTE",
-        content:
-          `[Thêm con] Phụ huynh gửi thêm phiếu cho "${child.fullName}"` +
-          `${child.gradeLevel ? ` (${child.gradeLevel})` : ""}` +
-          ` — đã thêm vào hồ sơ này thay vì tạo lead mới.`,
-      },
+    // `actorId: null` = hệ thống sinh ⇒ KHÔNG bump đồng hồ tiếp cận (OQ-C4): phụ huynh
+    // tự gửi thêm phiếu không có nghĩa là Sale đã liên hệ.
+    await recordLeadActivity(tx, {
+      leadId,
+      actorId: null,
+      actorName,
+      type: "NOTE",
+      content:
+        `[Thêm con] Phụ huynh gửi thêm phiếu cho "${child.fullName}"` +
+        `${child.gradeLevel ? ` (${child.gradeLevel})` : ""}` +
+        ` — đã thêm vào hồ sơ này thay vì tạo lead mới.`,
     });
   });
   return true;
@@ -227,13 +229,16 @@ async function recordIntakeNotes(
 ): Promise<void> {
   const body = buildNote(noteLines, warnings);
   if (!body) return;
-  await db.leadActivity.create({
-    data: {
-      leadId,
-      actorName,
-      type: "NOTE",
-      content: `[Phiếu mới cùng SĐT]\n${body}`,
-    },
+  // ⚠️ Chỗ DUY NHẤT của N-4 không nằm trong transaction — hàm này được gọi ngoài tx.
+  // `db` cũng thoả `Prisma.TransactionClient` ở phần API dùng tới, nên vẫn đi chung một
+  // cửa; đừng "sửa cho nhất quán" bằng cách bọc transaction riêng, ghi chú lead không
+  // đáng để giữ một transaction mở.
+  await recordLeadActivity(db, {
+    leadId,
+    actorId: null, // hệ thống ghi từ phiếu — không bump đồng hồ tiếp cận
+    actorName,
+    type: "NOTE",
+    content: `[Phiếu mới cùng SĐT]\n${body}`,
   });
 }
 
@@ -377,13 +382,12 @@ export async function ingestIntakeLead(
       }
 
       if (assignedToId) {
-        await tx.leadActivity.create({
-          data: {
-            leadId: created.id,
-            actorName,
-            type: "NOTE",
-            content: `Gán theo mã nhân viên trên phiếu (${mapped.employeeCode}).`,
-          },
+        await recordLeadActivity(tx, {
+          leadId: created.id,
+          actorId: null, // hệ thống gán theo mã NV trên phiếu — không phải tiếp cận
+          actorName,
+          type: "NOTE",
+          content: `Gán theo mã nhân viên trên phiếu (${mapped.employeeCode}).`,
         });
       }
 

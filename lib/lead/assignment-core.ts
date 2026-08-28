@@ -364,6 +364,15 @@ export async function applyLeadReassignment(
       // auto-chia vĩnh viễn (`hasSaleInteraction`).
       metadata: { ...(activity.metadata ?? {}), system: true } as Prisma.InputJsonValue,
     }));
+    // 🔴 CỐ Ý dùng `createMany` và CỐ Ý **không** đi qua `recordLeadActivity` (N-4):
+    // đây là bàn giao HÀNG LOẠT — một lượt chuyển sale có thể sinh hàng trăm dòng cho
+    // hàng trăm lead khác nhau. Nếu bump `lastActivityAt` ở đây thì **đồng hồ "chưa
+    // tiếp cận lại" của cả trăm lead về 0 cùng lúc**, và bảng lead treo sạch bong ngay
+    // sau mỗi lần đổi người phụ trách. Đổi sale không phải là đã gọi khách.
+    //
+    // Cờ `metadata.system = true` ở trên là thứ đánh dấu nhóm dòng này; đường ĐỌC của
+    // C5 (`loadLastContactAt` trong `lib/reports/lead-c.ts`) loại chúng theo đúng cờ đó.
+    // Hai bên phải khớp nhau — sửa một bên mà quên bên kia là cột C5 sai câm.
     const res = await tx.leadActivity.createMany({ data: rows });
     outcome.activitiesCreated = res.count;
   }
