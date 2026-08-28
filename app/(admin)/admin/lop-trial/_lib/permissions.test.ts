@@ -48,11 +48,6 @@ const CONG_QUYEN: Record<string, Action> = {
   // viên (`trials:feedback`). Dùng chung một khoá là đảo ngược quy trình đã chốt.
   markLopTrialAttendanceAction: "trials:attendance",
   completeLopTrialSessionAction: "trials:attendance",
-  updateBookingLopTrialAction: "trials:manage",
-  deleteBookingLopTrialAction: "trials:manage",
-  rescheduleLopTrialAction: "trials:manage",
-  proposeLopTrialTeacherAction: "trials:manage",
-  assignLopTrialCaseTeacherAction: "trials:assign-teacher",
 };
 
 /** Tên mọi hàm `export async function` trong file action. */

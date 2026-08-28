@@ -495,27 +495,32 @@ export function AttendanceBoard({
                 GV: {tenGvBuoi(selectedSession.teacherId) ?? "chưa có"}
               </span>
             </span>
-            {canManage && selectedSession.status === "SCHEDULED" && (
-              <button
-                type="button"
-                onClick={() => setMoSuaBuoi((v) => !v)}
-                disabled={pending}
-                className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs font-semibold text-foreground hover:bg-muted disabled:opacity-50"
-              >
-                <Pencil className="h-3.5 w-3.5" />
-                {moSuaBuoi ? "Đóng" : "Sửa buổi học"}
-              </button>
-            )}
-            {canMark && selectedSession.status !== "COMPLETED" && (
-              <button
-                type="button"
-                onClick={onCompleteSession}
-                disabled={pending}
-                className="inline-flex items-center gap-1.5 rounded-lg border border-state-success px-3 py-1.5 text-xs font-semibold text-state-success-ink hover:bg-state-success-soft disabled:opacity-50"
-              >
-                <CheckCircle2 className="h-3.5 w-3.5" /> Hoàn tất buổi
-              </button>
-            )}
+            {/* Hai nút thao tác của buổi đứng CẠNH NHAU ở mép phải. `justify-between`
+                của hàng cha đẩy mỗi con ra một góc, nên phải bọc chúng lại — nếu không
+                "Sửa buổi học" bị hất vào giữa, đọc như một phần của dòng thông tin. */}
+            <div className="flex flex-wrap items-center gap-2">
+              {canManage && selectedSession.status === "SCHEDULED" && (
+                <button
+                  type="button"
+                  onClick={() => setMoSuaBuoi((v) => !v)}
+                  disabled={pending}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs font-semibold text-foreground hover:bg-muted disabled:opacity-50"
+                >
+                  <Pencil className="h-3.5 w-3.5" />
+                  {moSuaBuoi ? "Đóng" : "Sửa buổi học"}
+                </button>
+              )}
+              {canMark && selectedSession.status !== "COMPLETED" && (
+                <button
+                  type="button"
+                  onClick={onCompleteSession}
+                  disabled={pending}
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-state-success px-3 py-1.5 text-xs font-semibold text-state-success-ink hover:bg-state-success-soft disabled:opacity-50"
+                >
+                  <CheckCircle2 className="h-3.5 w-3.5" /> Hoàn tất buổi
+                </button>
+              )}
+            </div>
           </div>
 
           {moSuaBuoi && selectedSession.status === "SCHEDULED" && (

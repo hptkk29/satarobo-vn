@@ -160,14 +160,6 @@ jobs:
       # PHẢI chạy SAU `db:seed:uat`: script bám vào lead ĐÃ CÓ CƠ SỞ, không tự tạo lead.
       # DB chưa có lead nào thì nó in "chưa có lead" rồi thoát 0 — không đỏ, nhưng cũng
       # không nạp được gì.
-      - name: Seed lịch hẹn học thử
-        if: ${{ inputs.bo_du_lieu_uat || inputs.chi_lich_hen }}
-        run: pnpm exec tsx prisma/seed-uat-lich-hen.ts
-        env:
-          UAT_SEED: "1"
-          DATABASE_URL: "${{ secrets.TEST_DIRECT_URL }}"
-          DIRECT_URL: "${{ secrets.TEST_DIRECT_URL }}"
-
       - name: Tóm tắt
         run: |
           echo "### Đã nạp dữ liệu vào DB test" >> $GITHUB_STEP_SUMMARY

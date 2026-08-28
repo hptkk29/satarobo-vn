@@ -186,7 +186,6 @@ export default async function ChiTietLopTrialPage({
         <h3 className="mb-3 text-sm font-semibold text-foreground">Học viên</h3>
         <EnrollPanel
           trialClassId={cls.id}
-          sessions={cls.sessions}
           canManage={isManager}
           canOverride={await checkPermission("trials:override-capacity", {
             centerId: cls.centerId,
