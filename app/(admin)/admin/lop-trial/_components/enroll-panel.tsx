@@ -5,7 +5,7 @@
 // Khối "Thêm học viên" của trang chi tiết lớp trải nghiệm: tìm lead cùng cơ sở rồi
 // xếp con vào lớp. Chép hành vi từ màn `trial-classes` cũ, đổi sang action `*LopTrial`.
 
-import { useMemo, useState, useTransition } from "react";
+import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Search, UserPlus } from "lucide-react";
@@ -13,31 +13,17 @@ import {
   enrollLeadChildLopTrialAction,
   searchLopTrialCandidatesAction,
 } from "../_actions";
-import type { Candidate, SessionRow } from "../_lib/types";
+import type { Candidate } from "../_lib/types";
 
-/**
- * `date` là mốc UTC-midnight của NGÀY VN (cột `@db.Date`). Format theo múi giờ máy
- * người dùng sẽ lùi một ngày ở mọi múi giờ âm — nên ép `timeZone: "UTC"`.
- */
-function ngayVn(iso: string): string {
-  return new Date(iso).toLocaleDateString("vi-VN", {
-    timeZone: "UTC",
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-  });
-}
 
 export function EnrollPanel({
   trialClassId,
-  sessions,
   canManage,
   canOverride,
   full,
   maxSessions,
 }: {
   trialClassId: string;
-  sessions: SessionRow[];
   canManage: boolean;
   canOverride: boolean;
   full: boolean;
@@ -58,13 +44,6 @@ export function EnrollPanel({
   // Nhập RIÊNG từng ứng viên: số buổi học thử là thoả thuận với từng phụ huynh,
   // không phải thuộc tính của lớp. Chuỗi rỗng = để server lấy mặc định của lớp.
   const [soBuoi, setSoBuoi] = useState<Record<string, string>>({});
-  const [buoiChon, setBuoiChon] = useState<Record<string, string>>({});
-
-  // Chỉ buổi chưa học mới xếp được người vào.
-  const buoiSapToi = useMemo(
-    () => sessions.filter((s) => s.status === "SCHEDULED"),
-    [sessions],
-  );
 
   if (!canManage) return null;
 
@@ -98,7 +77,9 @@ export function EnrollPanel({
       }
       totalSessions = n;
     }
-    const sessionId = buoiChon[leadChildId] || null;
+    // 28/08 — KHÔNG gửi buổi nữa: thêm học viên vào lớp là em học TOÀN BỘ buổi, kể cả
+    // buổi tạo SAU. Đây chính là chỗ còn sót khi màn lead đã bỏ ô chọn buổi — hệ quả đã
+    // thấy trên test: em bị ghim vào buổi 1, còn buổi 2 báo "chưa có học viên để điểm danh".
 
     startTransition(async () => {
       const res = await enrollLeadChildLopTrialAction({
@@ -106,7 +87,6 @@ export function EnrollPanel({
         leadChildId,
         allowOverride,
         totalSessions,
-        sessionId,
       });
       if (res.ok) {
         toast.success("Đã xếp học viên vào lớp");
@@ -211,22 +191,6 @@ export function EnrollPanel({
                       className="w-20 rounded-md border border-border px-2 py-1 text-xs disabled:opacity-50"
                     />
                   </label>
-
-                  <select
-                    value={buoiChon[c.leadChildId] ?? ""}
-                    onChange={(e) =>
-                      setBuoiChon((p) => ({ ...p, [c.leadChildId]: e.target.value }))
-                    }
-                    disabled={pending}
-                    className="rounded-md border border-border px-2 py-1 text-xs disabled:opacity-50"
-                  >
-                    <option value="">— buổi gần nhất —</option>
-                    {buoiSapToi.map((s) => (
-                      <option key={s.id} value={s.id}>
-                        {`Buổi ${s.seq} · ${ngayVn(s.date)} ${s.startTime}–${s.endTime}`}
-                      </option>
-                    ))}
-                  </select>
 
                   <button
                     type="button"

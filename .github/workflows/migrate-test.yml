@@ -38,18 +38,13 @@ on:
   # không ai đọc.
   workflow_dispatch:
     inputs:
-      seed_lich_hen:
-        description: 'Nạp dữ liệu tab "Lịch hẹn học thử" (60 dòng, chỉ thêm/cập nhật)'
-        type: boolean
-        required: false
-        default: false
       doi_thang_phieu:
         description: 'Quy đổi phiếu trải nghiệm đã chấm từ thang 8.0 sang 10.0'
         type: boolean
         required: false
         default: false
       chi_xem_truoc:
-        description: 'Chỉ XEM TRƯỚC hai việc trên, không ghi gì'
+        description: 'Chỉ XEM TRƯỚC việc trên, không ghi gì'
         type: boolean
         required: false
         default: true
@@ -139,23 +134,6 @@ jobs:
       # `DATABASE_URL` = `TEST_DIRECT_URL` (session pooler :5432) cho cả hai: PrismaClient
       # trần chạy qua transaction pooler :6543 sẽ đâm `42P05 prepared statement "s0"
       # already exists`. Đã vấp ba lần, đừng "dọn cho gọn" thành TEST_DATABASE_URL.
-
-      - name: Xem trước — nạp lịch hẹn học thử
-        if: ${{ github.event_name == 'workflow_dispatch' && inputs.seed_lich_hen && inputs.chi_xem_truoc }}
-        run: pnpm exec tsx prisma/seed-uat-lich-hen.ts
-        env:
-          UAT_SEED: "1"
-          UAT_HEN_DRY: "1"
-          DATABASE_URL: ${{ secrets.TEST_DIRECT_URL }}
-          DIRECT_URL: ${{ secrets.TEST_DIRECT_URL }}
-
-      - name: Nạp lịch hẹn học thử (GHI THẬT)
-        if: ${{ github.event_name == 'workflow_dispatch' && inputs.seed_lich_hen && !inputs.chi_xem_truoc }}
-        run: pnpm exec tsx prisma/seed-uat-lich-hen.ts
-        env:
-          UAT_SEED: "1"
-          DATABASE_URL: ${{ secrets.TEST_DIRECT_URL }}
-          DIRECT_URL: ${{ secrets.TEST_DIRECT_URL }}
 
       - name: Xem trước — quy đổi phiếu 8.0 → 10.0
         if: ${{ github.event_name == 'workflow_dispatch' && inputs.doi_thang_phieu && inputs.chi_xem_truoc }}

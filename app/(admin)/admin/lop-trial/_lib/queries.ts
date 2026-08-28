@@ -301,7 +301,7 @@ export async function layChiTietLop(
   };
 }
 
-/** Danh sách buổi hẹn học thử (V1) + dữ liệu cho các ô sửa. */
+// 28/08 — `layDanhSachHen` ĐÃ GỠ cùng tab "Lịch hẹn học thử".
 export async function layDanhSachHen(
   actor: Actor,
   status: string | undefined,

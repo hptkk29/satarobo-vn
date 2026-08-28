@@ -285,7 +285,8 @@ export async function updateLeadStatus(
 
   revalidatePath('/leads')
   revalidatePath(`/leads/${leadId}`)
-  revalidatePath('/trials')
+  // 28/08 — tab "Lịch hẹn học thử" đã gỡ khỏi hệ thống; màn còn lại là danh sách lớp.
+  revalidatePath('/lop-trial')
   revalidatePath('/dashboard')
   return { ok: true }
 }

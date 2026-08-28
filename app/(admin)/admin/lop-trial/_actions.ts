@@ -11,17 +11,10 @@
 // Hậu tố `LopTrial` trong tên hàm là có chủ đích: suốt giai đoạn chạy song song,
 // log và audit sẽ có hai bộ action làm việc giống nhau — trùng tên là nguồn nhầm lẫn.
 import { revalidatePath } from "next/cache";
-import type { LeadStatus, Prisma, TrialClassStatus } from "@prisma/client";
-import { checkPermission } from "@/lib/auth/check-permission";
+import { checkPermission, canViewLeadPii } from "@/lib/auth/check-permission";
 import { scopedDb } from "@/lib/db-scope";
-import { getAuditActor } from "@/lib/audit/log";
-import { writeAudit } from "@/lib/audit/audit-log";
-import { publishEvent } from "@/lib/events/publish";
 import { teacherCenterAssignmentError } from "@/lib/teachers/center-filter";
-import { roomCenterAssignmentError } from "@/lib/rooms/center-filter";
 import { leadStatusLabel } from "@/lib/leads/status";
-import { TRIAL_STATUS_LABEL } from "@/lib/trials/status";
-import { setLeadStatus } from "@/lib/leads/set-status";
 import { phoneSearchTerm } from "@/lib/phone";
 import {
   setTrialProgramConfig,
@@ -33,15 +26,10 @@ import {
   completeTrialSession,
   cancelTrialClass,
   notifyTrialTeacherAssigned,
-  rescheduleTrialEnrollment,
-  proposeTrialTeacher,
-  assignTrialCaseTeacher,
 } from "@/lib/trial/service";
-import { baoDaoTaoChoPhanCong } from "@/lib/trial/notify-training";
 import { getSetting } from "@/lib/settings/service";
 import {
   actorCanUseCenter,
-  loadScopedBooking,
   loadScopedTrialClass,
   loadScopedTrialSession,
   requireActor,
@@ -53,8 +41,6 @@ import {
   attendanceSchema,
   configSchema,
   createClassSchema,
-  parseVnInput,
-  updateBookingSchema,
 } from "./_lib/schemas";
 import { ngayVnSangUtc } from "./_lib/filters";
 import type { ActionResult, Candidate } from "./_lib/types";
@@ -97,12 +83,6 @@ function lamMoi(trialClassId?: string): void {
   if (trialClassId) revalidatePath(`/lop-trial/${trialClassId}`);
 }
 
-function lamMoiHen(leadId?: string): void {
-  revalidatePath("/lop-trial/lich-hen");
-  if (leadId) revalidatePath(`/leads/${leadId}`);
-  revalidatePath("/leads");
-  revalidatePath("/dashboard");
-}
 
 // ═══════════════════════════════════════════════════════════════════════════
 // 1) Cấu hình số buổi
@@ -692,403 +672,18 @@ export async function completeLopTrialSessionAction(
 // ═══════════════════════════════════════════════════════════════════════════
 // 11) Cập nhật buổi hẹn học thử (mặt phẳng V1)
 // ═══════════════════════════════════════════════════════════════════════════
-
-/** Trạng thái buổi hẹn → trạng thái lead. Chỉ "tiến", không "lùi". */
-const HEN_SANG_LEAD: Partial<Record<TrialClassStatus, LeadStatus>> = {
-  // Khoá là TrialClassStatus (KHÔNG đổi), giá trị là LeadStatus (đã đổi ở GĐ5).
-  ATTENDED: "DA_HOC_THU",
-  REJECTED: "DA_MAT",
-};
-
-/**
- * Cập nhật buổi hẹn học thử V1.
- *
- * ⚠️ `classId` ("lớp chính thức") nhận vào nhưng KHÔNG được ghi — có chủ đích.
- * Màn cũ đã gỡ ô này từ FL2-04 và cố tình ghi lại giá trị cũ (`classId: item.classId`)
- * chứ không cho sửa: xếp con vào lớp là việc của luồng ghi danh, nơi có cổng học phí
- * và cổng sĩ số. Bản gộp dựng lại ô chọn mà KHÔNG mang theo hai cổng đó, nên bất kỳ ai
- * xếp được lịch cũng gán được con vào lớp chính thức bất kỳ trong tầm nhìn — chưa nộp
- * đồng nào vẫn vào lớp. Giữ trường trong Zod (client cũ còn gửi lên) nhưng bỏ qua giá
- * trị là cách hẹp nhất để đóng, không phá hợp đồng đang chạy.
- */
-export async function updateBookingLopTrialAction(
-  trialId: string,
-  input: unknown,
-): Promise<{ ok: boolean; error?: string }> {
-  const ctx = await requireActor();
-  if (!ctx) return { ok: false, error: CHUA_DANG_NHAP };
-  if (!(await checkPermission("trials:manage"))) {
-    return { ok: false, error: "Không có quyền xếp lịch học thử" };
-  }
-
-  const parsed = updateBookingSchema.safeParse(input);
-  if (!parsed.success) {
-    return { ok: false, error: parsed.error.issues[0]?.message ?? "Dữ liệu không hợp lệ" };
-  }
-
-  const booking = await loadScopedBooking(ctx.actor, trialId);
-  if (!booking) return { ok: false, error: "Buổi học thử không tồn tại" };
-
-  const sdb = scopedDb(ctx.actor);
-
-  if (parsed.data.teacherId && parsed.data.teacherId !== booking.teacherId) {
-    const t = await sdb.user.findUnique({
-      where: { id: parsed.data.teacherId },
-      select: { centerId: true },
-    });
-    const err = teacherCenterAssignmentError(booking.centerId, [
-      { id: parsed.data.teacherId, centerId: t?.centerId },
-    ]);
-    if (err) return { ok: false, error: err };
-  }
-
-  // Phòng: lọc ở client là TIỆN NGHI, không phải rào. `roomId` đi thẳng từ client
-  // nên POST tay gán được phòng của cơ sở KHÁC vào buổi hẹn — lịch phòng cơ sở kia
-  // mọc thêm một buổi lạ mà không ai ở đó gây ra. Rào ở đây khớp NGUYÊN quy tắc
-  // client (`roomOptions` trong booking-list.tsx): phòng dùng chung (`centerId` null)
-  // và buổi chưa gán cơ sở đều cho qua, phòng đang được gán sẵn cũng cho qua để lượt
-  // lưu không đá văng dữ liệu cũ.
-  if (parsed.data.roomId && parsed.data.roomId !== booking.roomId) {
-    const phong = await sdb.room.findUnique({
-      where: { id: parsed.data.roomId },
-      select: { centerId: true },
-    });
-    const err = roomCenterAssignmentError(booking.centerId, phong);
-    if (err) return { ok: false, error: err };
-  }
-
-  // Khác màn cũ ĐÚNG một chỗ: giờ được quy đổi từ chuỗi ĐỒNG HỒ VN ở server, thay vì
-  // nhận ISO do client dựng bằng `new Date(...)` của máy người dùng. Máy đặt múi giờ
-  // khác +07 trước đây hiện sai giờ rồi lưu đè sai luôn.
-  const newAt = parseVnInput(parsed.data.scheduledAtVn);
-  if (!newAt) return { ok: false, error: "Thời gian không hợp lệ" };
-
-  const { actorId, actorName } = getAuditActor(ctx.session);
-  const becameAttended =
-    parsed.data.status === "ATTENDED" && booking.status !== "ATTENDED";
-  const leadNextStatus = HEN_SANG_LEAD[parsed.data.status];
-  const scheduleChanged = booking.scheduledAt?.getTime() !== newAt.getTime();
-
-  await sdb.$transaction(async (txRaw) => {
-    const tx = txRaw as unknown as Prisma.TransactionClient;
-    await tx.trialClass.update({
-      where: { id: trialId },
-      data: {
-        scheduledAt: newAt,
-        status: parsed.data.status,
-        teacherId: parsed.data.teacherId,
-        roomId: parsed.data.roomId,
-        // ⚠️ CỐ Ý KHÔNG ghi `classId` — xem chú thích ở đầu hàm.
-        notes: parsed.data.notes,
-        ...(becameAttended && { attendedAt: new Date() }),
-      },
-    });
-
-    // dedupeKey kèm GIỜ MỚI: đổi lịch thật thì phát tin mới, bấm lại cùng giờ thì không.
-    if (scheduleChanged) {
-      await publishEvent(
-        "trial.schedule_changed",
-        {
-          trialId,
-          leadId: booking.leadId,
-          fromAt: booking.scheduledAt?.toISOString() ?? null,
-          toAt: newAt.toISOString(),
-        },
-        { tx, dedupeKey: `trial.schedule_changed:${trialId}:${newAt.getTime()}` },
-      );
-    }
-
-    if (leadNextStatus && parsed.data.status !== booking.status) {
-      const lead = await tx.lead.findUnique({
-        where: { id: booking.leadId },
-        select: { status: true },
-      });
-      // Không đè lead đã đăng ký — buổi hẹn không được kéo lùi kết quả đã chốt.
-      // GĐ5 — chốt chặn nay RỘNG HƠN bản cũ: trước đây chỉ chặn ENROLLED, còn lead
-      // REGISTERED (đã nộp tiền, chưa convert) vẫn bị buổi hẹn kéo về "đã học thử".
-      // Hai bậc đó nay là một, nên lead đã nộp tiền cũng được che — đúng ý câu chú
-      // thích gốc "không kéo lùi kết quả đã chốt".
-      if (lead && lead.status !== "DA_DANG_KY") {
-        // ⚠️ Đi qua CỬA GHI `setLeadStatus`, không `tx.lead.update` thẳng.
-        //
-        // Bản trước ghi thẳng cột `status` nên lượt đổi này KHÔNG có dòng nào trong
-        // `LeadStatusHistory` — đúng cái khuyết mà GĐ1 dựng sổ để bịt, và bịt hụt
-        // ngay ở màn có lưu lượng cao nhất. Kèm theo đó là mất `statusChangedAt`
-        // (cron nhắc "đăng ký quá lâu" đọc cột này) và mất `droppedAtStage` khi
-        // buổi hẹn bị REJECTED → lead sang DA_MAT mà không ai biết nó rụng ở bậc nào.
-        //
-        // Cửa tự lo phần idempotent (`lead.status === leadNextStatus` thì không ghi
-        // gì), nên vế `!== leadNextStatus` của rào cũ bỏ được.
-        const doi = await setLeadStatus({
-          tx,
-          leadId: booking.leadId,
-          to: leadNextStatus,
-          source: "trial",
-          actorId,
-          actorName,
-          reason: `Buổi hẹn học thử chuyển sang "${TRIAL_STATUS_LABEL[parsed.data.status]}"`,
-        });
-        // Dòng thời gian người đọc (LeadActivity) là thứ KHÁC sổ trạng thái: sổ để
-        // máy đếm phễu, dòng này để Sale đọc. Chỉ ghi khi có đổi thật.
-        if (doi.changed) {
-          await tx.leadActivity.create({
-            data: {
-              leadId: booking.leadId,
-              actorId,
-              actorName,
-              type: "STATUS_CHANGE",
-              content: `Chuyển trạng thái: ${leadStatusLabel(doi.from)} → ${leadStatusLabel(doi.to)} (từ buổi học thử)`,
-              metadata: { from: doi.from, to: doi.to, via: "trial" },
-            },
-          });
-        }
-      }
-    }
-  });
-
-  // Ngoài transaction: gửi thông báo không được phép làm rollback việc ghi sổ.
-  if (
-    parsed.data.teacherId &&
-    parsed.data.teacherId !== booking.teacherId &&
-    parsed.data.teacherId !== ctx.session.user.id
-  ) {
-    await notifyTrialTeacherAssigned({
-      teacherId: parsed.data.teacherId,
-      title: "Bạn được phân công buổi học thử",
-      body: `Bạn phụ trách buổi học thử lúc ${newAt.toLocaleString("vi-VN", { timeZone: "Asia/Ho_Chi_Minh" })}.`,
-      dedupeKey: `trial-v1.assigned:${trialId}`,
-      href: "/lop-trial/lich-hen",
-      entityId: trialId,
-    });
-  }
-
-  lamMoiHen(booking.leadId);
-  return { ok: true };
-}
-
+// ĐÃ GỠ 28/08/2026 — ba action không còn đường gọi nào
 // ═══════════════════════════════════════════════════════════════════════════
-// 12) Xoá buổi hẹn học thử
-// ═══════════════════════════════════════════════════════════════════════════
-
-export async function deleteBookingLopTrialAction(
-  trialId: string,
-): Promise<{ ok: boolean; error?: string }> {
-  const ctx = await requireActor();
-  if (!ctx) return { ok: false, error: CHUA_DANG_NHAP };
-  if (!(await checkPermission("trials:manage"))) {
-    return { ok: false, error: "Không có quyền xoá buổi học thử" };
-  }
-
-  const booking = await loadScopedBooking(ctx.actor, trialId);
-  if (!booking) return { ok: false, error: "Buổi học thử không tồn tại" };
-
-  // Buổi đã phát sinh kết quả thật thì không xoá cứng — giữ vết để báo cáo còn đúng.
-  if (
-    booking.status === "ATTENDED" ||
-    booking.status === "ENROLLED" ||
-    booking.hasFeedback
-  ) {
-    return {
-      ok: false,
-      error:
-        "Buổi học thử đã phát sinh kết quả (đã học/đã chốt/có nhận xét) — không thể xoá. Hãy đổi trạng thái thay vì xoá.",
-    };
-  }
-
-  const { actorId, actorName } = getAuditActor(ctx.session);
-  const sdb = scopedDb(ctx.actor);
-
-  await sdb.$transaction(async (txRaw) => {
-    const tx = txRaw as unknown as Prisma.TransactionClient;
-    await tx.trialClass.delete({ where: { id: trialId } });
-    await writeAudit({
-      actor: { id: actorId, name: actorName },
-      module: "trials",
-      entityType: "TrialClass",
-      entityId: trialId,
-      action: "DELETE",
-      oldValues: {
-        leadId: booking.leadId,
-        status: booking.status,
-        scheduledAt: booking.scheduledAt?.toISOString() ?? null,
-      },
-      orgUnitId: booking.centerId,
-      tx,
-    });
-  });
-
-  lamMoiHen(booking.leadId);
-  return { ok: true };
-}
-
-// ═══════════════════════════════════════════════════════════════════════════
-// 13) Dời lịch một ca trải nghiệm  (GĐ3 — chốt câu 1)
-// ═══════════════════════════════════════════════════════════════════════════
-
-export async function rescheduleLopTrialAction(input: {
-  trialEnrollmentId: string;
-  toSessionId: string;
-  reason?: string | null;
-}): Promise<ActionResult> {
-  const ctx = await requireActor();
-  if (!ctx) return { ok: false, error: CHUA_DANG_NHAP };
-  // Dời lịch là việc của Sale phụ trách khách — cùng cổng với xếp lịch.
-  if (!(await checkPermission("trials:manage"))) {
-    return { ok: false, error: "Không có quyền dời lịch" };
-  }
-  if (!input.trialEnrollmentId || !input.toSessionId) {
-    return { ok: false, error: "Thiếu ca hoặc buổi cần dời sang" };
-  }
-
-  // Chống IDOR: nạp ca qua scopedDb rồi soi lớp của nó.
-  const sdb = scopedDb(ctx.actor);
-  const enr = await sdb.trialEnrollment.findUnique({
-    where: { id: input.trialEnrollmentId },
-    select: {
-      id: true,
-      trialClassId: true,
-      leadChild: { select: { fullName: true } },
-    },
-  });
-  if (!enr) return { ok: false, error: "Không tìm thấy ca trải nghiệm" };
-  const cls = await loadScopedTrialClass(ctx.actor, enr.trialClassId);
-  if (!cls) return { ok: false, error: KHONG_THAY_LOP };
-
-  const res = await rescheduleTrialEnrollment({
-    trialEnrollmentId: input.trialEnrollmentId,
-    toSessionId: input.toSessionId,
-    reason: input.reason ?? null,
-    actorId: ctx.session.user.id,
-  });
-  if (!res.ok) return { ok: false, error: res.error ?? "Dời lịch thất bại" };
-
-  // Mô tả buổi mới cho nội dung thông báo — đọc SAU khi dời để chắc chắn đúng buổi.
-  const ses = await sdb.trialClassSession.findUnique({
-    where: { id: input.toSessionId },
-    select: { seq: true, date: true, startTime: true },
-  });
-  const moTaBuoi = ses
-    ? `Buổi ${ses.seq} · ${ses.date.toLocaleDateString("vi-VN", { timeZone: "UTC" })} ${ses.startTime}`
-    : null;
-  const tenBe = enr.leadChild?.fullName ?? "học viên";
-
-  // Báo giáo viên vừa bị gỡ phân công. Ngoài transaction: chuông hỏng không được
-  // làm hỏng việc dời lịch.
-  if (res.gvBiGoId && res.gvBiGoId !== ctx.session.user.id) {
-    await notifyTrialTeacherAssigned({
-      teacherId: res.gvBiGoId,
-      title: "Ca trải nghiệm bạn phụ trách đã dời lịch",
-      body: `Ca của ${tenBe} (lớp ${cls.name}) đã dời sang ${moTaBuoi ?? "buổi khác"}. Bạn không còn được phân công ca này; Đào tạo sẽ phân công lại.`,
-      // dedupeKey kèm buổi MỚI: mỗi lần dời thật là một tin mới, bấm lại cùng buổi thì không.
-      dedupeKey: `trial-case.rescheduled:${input.trialEnrollmentId}:${input.toSessionId}`,
-      entityId: input.trialEnrollmentId,
-    });
-  }
-
-  // Ca mất phân công ⇒ quay lại hàng chờ của Đào tạo.
-  await baoDaoTaoChoPhanCong({
-    trialEnrollmentId: input.trialEnrollmentId,
-    centerId: cls.centerId,
-    childName: tenBe,
-    className: cls.name,
-    moTaBuoi,
-    laDoiLich: true,
-  });
-
-  lamMoi(enr.trialClassId);
-  return { ok: true };
-}
-
-// ═══════════════════════════════════════════════════════════════════════════
-// 14) Sale ĐỀ XUẤT giáo viên cho một ca  (GĐ3 — chốt câu 1)
-// ═══════════════════════════════════════════════════════════════════════════
-
-export async function proposeLopTrialTeacherAction(input: {
-  trialEnrollmentId: string;
-  gvDeXuatId: string | null;
-}): Promise<ActionResult> {
-  const ctx = await requireActor();
-  if (!ctx) return { ok: false, error: CHUA_DANG_NHAP };
-  if (!(await checkPermission("trials:manage"))) {
-    return { ok: false, error: "Không có quyền đề xuất giáo viên" };
-  }
-
-  const sdb = scopedDb(ctx.actor);
-  const enr = await sdb.trialEnrollment.findUnique({
-    where: { id: input.trialEnrollmentId },
-    select: { id: true, trialClassId: true, leadChild: { select: { fullName: true } } },
-  });
-  if (!enr) return { ok: false, error: "Không tìm thấy ca trải nghiệm" };
-  const cls = await loadScopedTrialClass(ctx.actor, enr.trialClassId);
-  if (!cls) return { ok: false, error: KHONG_THAY_LOP };
-
-  const res = await proposeTrialTeacher({
-    trialEnrollmentId: input.trialEnrollmentId,
-    gvDeXuatId: input.gvDeXuatId,
-    actorId: ctx.session.user.id,
-  });
-  if (!res.ok) return { ok: false, error: res.error ?? "Đề xuất thất bại" };
-
-  // Có đề xuất mới ⇒ nhắc Đào tạo vào duyệt.
-  if (input.gvDeXuatId) {
-    await baoDaoTaoChoPhanCong({
-      trialEnrollmentId: input.trialEnrollmentId,
-      centerId: cls.centerId,
-      childName: enr.leadChild?.fullName ?? "học viên",
-      className: cls.name,
-    });
-  }
-
-  lamMoi(enr.trialClassId);
-  return { ok: true };
-}
-
-// ═══════════════════════════════════════════════════════════════════════════
-// 15) Đào tạo PHÂN CÔNG giáo viên cho một ca  (GĐ3 — chốt câu 1 & 2)
-// ═══════════════════════════════════════════════════════════════════════════
-
-export async function assignLopTrialCaseTeacherAction(input: {
-  trialEnrollmentId: string;
-  gvPhanCongId: string | null;
-}): Promise<ActionResult> {
-  const ctx = await requireActor();
-  if (!ctx) return { ok: false, error: CHUA_DANG_NHAP };
-  // Chốt câu 2: CHỈ bộ phận Đào tạo. Sale có trials:manage nhưng KHÔNG có quyền này.
-  if (!(await checkPermission("trials:assign-teacher"))) {
-    return { ok: false, error: "Chỉ bộ phận Đào tạo được phân công giáo viên" };
-  }
-
-  const sdb = scopedDb(ctx.actor);
-  const enr = await sdb.trialEnrollment.findUnique({
-    where: { id: input.trialEnrollmentId },
-    select: { id: true, trialClassId: true, leadChild: { select: { fullName: true } } },
-  });
-  if (!enr) return { ok: false, error: "Không tìm thấy ca trải nghiệm" };
-  const cls = await loadScopedTrialClass(ctx.actor, enr.trialClassId);
-  if (!cls) return { ok: false, error: KHONG_THAY_LOP };
-
-  const res = await assignTrialCaseTeacher({
-    trialEnrollmentId: input.trialEnrollmentId,
-    gvPhanCongId: input.gvPhanCongId,
-    actorId: ctx.session.user.id,
-  });
-  if (!res.ok) return { ok: false, error: res.error ?? "Phân công thất bại" };
-
-  // Không báo khi: gỡ phân công, giữ nguyên người cũ, hoặc tự gán mình.
-  if (
-    input.gvPhanCongId &&
-    res.daDoi &&
-    input.gvPhanCongId !== ctx.session.user.id
-  ) {
-    await notifyTrialTeacherAssigned({
-      teacherId: input.gvPhanCongId,
-      title: "Bạn được phân công một ca trải nghiệm",
-      body: `Bạn phụ trách ca trải nghiệm của ${enr.leadChild?.fullName ?? "học viên"} tại lớp ${cls.name}.`,
-      dedupeKey: `trial-case.assigned:${input.trialEnrollmentId}:${input.gvPhanCongId}`,
-      entityId: input.trialEnrollmentId,
-    });
-  }
-
-  lamMoi(enr.trialClassId);
-  return { ok: true };
-}
+//
+//   · rescheduleLopTrialAction        — dời lịch theo TỪNG HỌC VIÊN
+//   · proposeLopTrialTeacherAction    — Sale ĐỀ XUẤT giáo viên cho một ca
+//   · assignLopTrialCaseTeacherAction — Đào tạo PHÂN CÔNG giáo viên cho một ca
+//
+// Chủ dự án 28/08 gỡ cả ba khỏi giao diện: học viên vào lớp là học TOÀN BỘ buổi (nên
+// không còn "dời một em sang buổi khác"), và giáo viên đặt ở TỪNG BUỔI (nên không còn
+// đề xuất/phân công theo ca). Server Action không còn ai gọi mà vẫn export là một
+// endpoint sống — ai biết tên hàm vẫn POST được và sửa được dữ liệu qua đường đã bỏ.
+//
+// Cột `gvDeXuatId` / `gvPhanCongId` và bảng `TrialReschedule` GIỮ NGUYÊN trong DB (nếp
+// 2 pha): dữ liệu cũ còn đọc được, và `gvPhanCongId` vẫn là một trong ba đường nối học
+// viên ↔ giáo viên ở roster site GV.
