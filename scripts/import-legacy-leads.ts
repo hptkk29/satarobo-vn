@@ -107,11 +107,11 @@ const COURSE_MAP: Record<string, string> = {
 
 /** `trang_thai_lead` trong CSV → enum `LeadStatus`. Kiểu Prisma ⇒ gõ sai là lỗi BIÊN DỊCH. */
 const STATUS_MAP: Record<string, LeadStatus> = {
-  "Đã đăng ký": LeadStatus.REGISTERED,
-  "Đã học thử": LeadStatus.TRIAL_ATTENDED,
-  "Đã hẹn học thử": LeadStatus.TRIAL_SCHEDULED,
-  "Đang nuôi dưỡng": LeadStatus.NURTURING,
-  "Đã mất": LeadStatus.LOST,
+  "Đã đăng ký": LeadStatus.DA_DANG_KY,
+  "Đã học thử": LeadStatus.DA_HOC_THU,
+  "Đã hẹn học thử": LeadStatus.DA_HEN_HOC_THU,
+  "Đang nuôi dưỡng": LeadStatus.DANG_NUOI_DUONG,
+  "Đã mất": LeadStatus.DA_MAT,
 };
 
 /** Giá trị THẬT của enum `LeadChildTrialStatus`: NONE | SCHEDULED | IN_PROGRESS | ATTENDED.
@@ -213,7 +213,7 @@ function docFile() {
       centerId: CENTER_MAP[r.ma_co_so] ?? null,
       ownerId: SALE_MAP[r.sale] ?? null,
       courseId: suyKhoaHoc(r.khoa_quan_tam),
-      status: STATUS_MAP[r.trang_thai_lead] ?? LeadStatus.NURTURING,
+      status: STATUS_MAP[r.trang_thai_lead] ?? LeadStatus.DANG_NUOI_DUONG,
       createdAt: parseNgay(r.ngay_nhan_lead),
       note:
         `[${r.ma_import}] Nguồn gốc: ${r.nguon || "không rõ"}` +

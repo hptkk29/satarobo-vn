@@ -13,6 +13,7 @@ import { hasRole } from "@/lib/auth/permissions";
 import { getFreshGateUser } from "@/lib/auth/fresh-gate-user";
 import { resolveActor } from "@/lib/auth/actor";
 import { passesScope } from "@/lib/db-scope";
+import { checkPermission } from "@/lib/auth/check-permission";
 import { getSessionRosterStudentIds } from "@/lib/attendance/roster";
 import {
   getSessionEvalState,

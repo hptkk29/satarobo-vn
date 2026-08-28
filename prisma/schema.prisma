@@ -1454,10 +1454,17 @@ model Lead {
   /// sót. Đặt default ở DB thì mọi đường ghi — kể cả SQL thô — đều có dòng sổ đầu.
   /// ⚠️ Vẫn để NULLABLE: lead CŨ có trước GĐ1 không suy ngược được mốc đó, và
   /// migration cố ý KHÔNG backfill (xem ghi chú trong 20260825120000).
-  statusChangedAt DateTime? @default(now()) @db.Timestamptz(6)
+  statusChangedAt DateTime?   @default(now()) @db.Timestamptz(6)
   /// Lead rơi khỏi phễu ở BẬC NÀO (trạng thái ngay trước khi sang DANG_NUOI_DUONG
   /// hoặc mất). NULL với toàn bộ lead cũ — không suy ngược được, đừng bịa.
   droppedAtStage  LeadStatus?
+  /// LÝ DO RỚT ở cấp PHỤ HUYNH — ô ghi chú TỰ DO, không danh mục.
+  ///
+  /// Trạng thái rớt thì theo TỪNG CON (`LeadChild.status = LOST`) — hai tầng khác nhau,
+  /// cố ý. Hệ quả đã biết: hai con rớt vì hai lý do khác nhau ⇒ lượt ghi sau ĐÈ lượt
+  /// trước; lý do của từng con tra ở `AuditLog` + `LeadActivity`.
+  lostNote        String?     @db.Text
+  lostAt          DateTime?   @db.Timestamptz(6)
   /// 27/08/2026 — cột `dropReason` ĐÃ GỠ. Lý do rơi nay dùng chung `lostNote`/`lostAt`
   /// ở trên: hai cột cùng trả lời "vì sao phiếu này rụng", mà `lostNote` đã là một
   /// tính năng chạy thật (đánh dấu rớt theo TỪNG CON, bảng "Lead rớt" ở dashboard
@@ -6342,27 +6349,27 @@ model TrialClassSession {
 
 /// R7-02 — ghi danh 1 LeadChild vào 1 lớp trải nghiệm. Partial-unique 1 lớp ACTIVE/con (migration).
 model TrialEnrollment {
-  id                 String                @id @default(cuid())
-  trialClassId       String
-  trialClass         TrialClassV2          @relation(fields: [trialClassId], references: [id], onDelete: Cascade)
-  leadChildId        String
-  leadChild          LeadChild             @relation(fields: [leadChildId], references: [id], onDelete: Cascade)
-  status             TrialEnrollmentStatus @default(ACTIVE)
-  summaryNote        String?               @db.Text // nhận xét tổng kết học thử
+  id                       String                @id @default(cuid())
+  trialClassId             String
+  trialClass               TrialClassV2          @relation(fields: [trialClassId], references: [id], onDelete: Cascade)
+  leadChildId              String
+  leadChild                LeadChild             @relation(fields: [leadChildId], references: [id], onDelete: Cascade)
+  status                   TrialEnrollmentStatus @default(ACTIVE)
+  summaryNote              String?               @db.Text // nhận xét tổng kết học thử
   // LD3(b) — buổi (TrialClassSession) cụ thể được chọn khi xếp con vào lớp. Scalar nullable
   // (validation "buổi thuộc lớp" đã làm ở action boundary — không cần relation, giữ blast radius nhỏ).
-  scheduledSessionId String?
+  scheduledSessionId       String?
   // Site GV 25/08 — DỜI LỊCH học thử. Trước đó `scheduledSessionId` ghi ĐÚNG MỘT LẦN lúc
   // xếp con vào lớp rồi bất biến: không admin/GV/Sale nào đổi được buổi, nên bảng trial
   // của giáo viên không có cách nào biết suất nào "bị dời lịch".
   // Nay `rescheduleTrialEnrollment` đổi buổi và GHI LẠI buổi cũ ở đây (buổi gần nhất —
   // dời nhiều lần thì chỉ giữ lần cuối; lịch sử đầy đủ nằm ở DomainEvent + AuditLog).
   rescheduledFromSessionId String?
-  rescheduledAt            DateTime? @db.Timestamptz(6)
-  rescheduleReason         String?   @db.Text
-  addedById          String?
-  createdAt          DateTime              @default(now()) @db.Timestamptz(6)
-  updatedAt          DateTime              @updatedAt @db.Timestamptz(6)
+  rescheduledAt            DateTime?             @db.Timestamptz(6)
+  rescheduleReason         String?               @db.Text
+  addedById                String?
+  createdAt                DateTime              @default(now()) @db.Timestamptz(6)
+  updatedAt                DateTime              @updatedAt @db.Timestamptz(6)
 
   // ─── GĐ3 — hai ô giáo viên, tách theo VAI người ghi ────────────────────────
   //
@@ -6374,11 +6381,11 @@ model TrialEnrollment {
   // `TrialClassV2.teacherId` và `TrialClassSession.teacherId` VẪN GIỮ nguyên vai trò
   // cũ: giáo viên mặc định của lớp/buổi. Hai cột dưới đây là quyết định cho TỪNG CA.
   /// Sale ĐỀ XUẤT (đã bàn trước với giáo viên đó). KHÔNG bắt buộc.
-  gvDeXuatId   String?
+  gvDeXuatId      String?
   /// Đào tạo PHÂN CÔNG. Có giá trị = đã chốt, Sale không sửa được nữa.
-  gvPhanCongId String?
+  gvPhanCongId    String?
   /// Số lần ca này bị dời lịch. Chỉ số chất lượng chốt lịch của Sale.
-  rescheduleCount Int @default(0)
+  rescheduleCount Int     @default(0)
 
   attendances TrialAttendance[]
   reschedules TrialReschedule[]
@@ -8328,7 +8335,7 @@ enum SessionReviewStatus {
 model MediaAsset {
   id String @id @default(cuid())
 
-  centerId String // cách ly cơ sở (scopedDb) — MỌI create PHẢI set, scopedDb không che write
+  centerId  String // cách ly cơ sở (scopedDb) — MỌI create PHẢI set, scopedDb không che write
   // Luật Nền Hệ thống #3: bảng mới mang dữ liệu theo đơn vị phải có `orgUnitId`.
   // Giữ CẢ HAI vì cutover P4 chưa bật ở đâu — enforcement hôm nay vẫn chạy trên centerId.
   orgUnitId String?
@@ -8348,7 +8355,7 @@ model MediaAsset {
   /// dòng sinh ra từ cùng một lần tải lên, để lúc QLCS duyệt ở màn mới thì dòng cũ cũng
   /// đổi trạng thái theo, không phải đoán bằng cách so `fileUrl`.
   /// Phase B (sau khi luồng mới chạy ổn trên prod): gỡ ClassSessionMedia → gỡ cột này.
-  legacyMediaId  String?  @unique
+  legacyMediaId String? @unique
 
   type        MediaType
   /// Khoá vật thể trên R2. KHÔNG lưu URL đầy đủ — bucket/CDN đổi thì mọi dòng chết.
@@ -8386,7 +8393,7 @@ model MediaAsset {
 model SessionMediaReview {
   id String @id @default(cuid())
 
-  classSessionId String @unique
+  classSessionId String   @unique
   centerId       String
   orgUnitId      String?
   sessionDate    DateTime @db.Date

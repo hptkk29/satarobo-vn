@@ -245,7 +245,7 @@ export async function updateLeadStatus(
     //
     // Chỉ đụng dòng đang PENDING: con đã nhập học khoá khác rồi thì lead mất không xoá
     // được thành tích đó.
-    if (parsed.data === 'LOST' && before.status !== 'LOST') {
+    if (parsed.data === 'DA_MAT' && before.status !== 'DA_MAT') {
       await tx.leadTrialHistory.updateMany({
         where: { leadChild: { leadId }, outcome: 'PENDING' },
         data: { outcome: 'LOST' },
