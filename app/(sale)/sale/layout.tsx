@@ -24,7 +24,7 @@ import { resolveActor } from "@/lib/auth/actor";
 import { scopedDb } from "@/lib/db-scope";
 import { grantedMenuActions } from "@/lib/auth/menu-permissions";
 import { isRbacV2Enabled } from "@/lib/flags";
-import { SaleNav } from "@/components/sale/sale-nav";
+import { SaleShell } from "@/components/sale/shell/sale-shell";
 // S-10 (27/08/2026) — token màu riêng của site Sale (tím #7C3AED, QĐ-2). Class
 // `sale-root` dưới đây được gắn từ 23/08 nhưng KHÔNG file nào định nghĩa nó, nên
 // site âm thầm mượn cam `:root` của trang public suốt bốn ngày. Thiếu dòng import
@@ -137,22 +137,18 @@ export default async function SaleLayout({
   });
 
   return (
-    <div className="sale-root min-h-screen bg-background text-foreground">
-      {/* S-10 — điều hướng nay là SIDEBAR DỌC 8 nhóm (tài liệu yêu cầu §5):
-          cố định trái từ md trở lên, ngăn kéo ở màn hẹp. `md:pl-64` chừa đúng
-          bề rộng thanh bên; dưới md thanh bên trượt ra ngoài nên không chừa. */}
-      <SaleNav
+    // 28/08 — khung site nay theo hình dáng site giáo viên: thanh bên cố định +
+    // THANH ĐẦU TRANG dính đỉnh. Trước đó site Sale không có thanh đầu trang nào
+    // trên desktop, nên không có chỗ nào đặt menu người dùng và tên người đăng
+    // nhập phải nhét xuống chân thanh bên.
+    // Bố cục, trần bề rộng và các bậc đệm nằm trọn trong `<SaleShell>`.
+    <div className="sale-root flex min-h-screen bg-background text-foreground">
+      <SaleShell
         granted={granted}
         userLabel={session.user.name ?? session.user.email ?? ""}
-      />
-      {/* Bề rộng: `max-w-5xl` (64rem) là thước của trang ĐỌC, không phải của màn
-          làm việc có bảng. Trên màn 1440px nó để trống gần một phần ba bên phải
-          trong khi bảng khách phải cuộn ngang. PRODUCT.md §nguyên tắc 1: "mật độ
-          thắng khoảng trắng — người dùng ngồi 8 tiếng và cần thấy nhiều dòng cùng
-          lúc". Vẫn giữ trần để dòng chữ không dài quá tầm mắt trên màn siêu rộng. */}
-      <main className="md:pl-64">
-        <div className="mx-auto max-w-[88rem] px-6 py-7">{children}</div>
-      </main>
+      >
+        {children}
+      </SaleShell>
     </div>
   );
 }

@@ -1,17 +1,15 @@
 "use client";
 
-// components/sale/sale-nav.tsx — thanh điều hướng site Sale.
+// components/sale/sale-nav.tsx — RUỘT thanh bên site Sale (logo · nhóm · chân).
 //
 // Vì sao có file này: trước 23/08 site Sale chỉ có một header gồm hai dòng chữ và
 // KHÔNG một liên kết nào — kể cả tới `/sale/trial` đang chạy được. Muốn vào phải
 // gõ tay URL, và không có nút đăng xuất. Một màn hình dựng xong mà không có lối
 // vào thì với người dùng nó không tồn tại.
 //
-// ⚠️ Theo khuôn `components/admin/sidebar.tsx` (CÓ lọc quyền), KHÔNG theo
-// `sidebar-nav` của site giáo viên — khuôn đó vẽ mọi mục cho mọi người, đúng với
-// site GV vì ở đó chỉ có một vai, nhưng ở đây thì đẻ dead-link ngay khi Sale có
-// hai hạng quyền khác nhau.
-//
+// ⚠️ LỌC QUYỀN LÀ THỨ KHÔNG ĐƯỢC BỎ khi mượn hình dáng của site giáo viên.
+// `sidebar-nav` bên đó vẽ mọi mục cho mọi người — đúng với site GV vì ở đó chỉ có
+// một vai, nhưng ở đây thì đẻ dead-link ngay khi Sale có hai hạng quyền khác nhau.
 // `perm` của mỗi mục lấy THẲNG từ `PAGE_GATES` chứ không gõ lại: menu và cổng
 // trang phải là cùng một danh sách, nếu không sẽ tái sinh đúng hai lớp lỗi mà
 // `lib/auth/page-gates.ts` sinh ra để diệt (menu hiện mà trang đá ra; hoặc menu
@@ -39,23 +37,38 @@
 // dẫn tới câu hỏi "đơn cho ai?" mà không trả lời được. Ngoại lệ này được khai
 // tường minh kèm lý do trong `sale-nav.test.ts`.
 // ─────────────────────────────────────────────────────────────────────────────
+//
+// ─────────────────────────────────────────────────────────────────────────────
+// 28/08/2026 — MƯỢN HÌNH DÁNG THANH BÊN CỦA SITE GIÁO VIÊN.
+//
+// Chốt của chủ dự án: "lấy thiết kế giống, không lấy màu, không lấy nội dung".
+// Nên file này nay theo đúng khuôn `app/(teacher)/teacher/_components/sidebar*`:
+// hàng logo cao 4rem ở đỉnh · vùng nhóm CUỘN được ở giữa · dải chân cố định ·
+// nhóm GẬP ĐƯỢC bằng nút có mũi tên. Hình học từng con số nằm ở `.s-nav-*` trong
+// `sale.css`, khớp `.t-nav-*` bên GV.
+//
+// GIỮ NGUYÊN của Sale: bộ token TÍM, 8 nhóm và các mục của chính site này, lọc
+// quyền, và chân "Cá nhân" mang tên người + lối đăng xuất.
+// KHÔNG mượn: màu cam, mục menu của GV, badge tin nhắn, nút Sáng/Tối (site này
+// chỉ có chế độ Sáng — xem đầu `sale.css`).
+// ─────────────────────────────────────────────────────────────────────────────
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useMemo, useState } from "react";
 import {
   BookOpen,
   CalendarDays,
+  ChevronDown,
   LayoutList,
   LogOut,
-  Menu,
   MessageSquare,
   UserPlus,
   Users,
-  X,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { PAGE_GATES } from "@/lib/auth/page-gates";
 import { cn } from "@/lib/utils";
+import { SaleLogo } from "@/components/sale/shell/sale-logo";
 
 type NavItem = {
   label: string;
@@ -142,16 +155,88 @@ function dangDung(href: string, pathname: string): boolean {
   return href === "/sale" ? pathname === "/sale" : pathname.startsWith(href);
 }
 
+/**
+ * Một nhóm gập được. Mặc định MỞ — gập là để người dùng tự dọn cho gọn, không
+ * phải để giấu mục khỏi họ ngay lần đầu vào.
+ */
+function KhoiNhom({
+  nhom,
+  muc,
+  pathname,
+  onNavigate,
+}: {
+  nhom: string;
+  muc: NavItem[];
+  pathname: string;
+  onNavigate?: () => void;
+}) {
+  const [mo, setMo] = useState(true);
+
+  return (
+    <div>
+      <button
+        type="button"
+        onClick={() => setMo((v) => !v)}
+        aria-expanded={mo}
+        className="s-section-label flex w-full items-center justify-between"
+      >
+        <span>{nhom}</span>
+        <ChevronDown
+          className={cn("h-3.5 w-3.5 transition-transform", mo ? "rotate-0" : "-rotate-90")}
+          aria-hidden
+        />
+      </button>
+
+      {mo ? (
+        <ul className="space-y-0.5">
+          {muc.map((it) => {
+            const active = dangDung(it.href, pathname);
+            const Icon = it.icon;
+            return (
+              <li key={it.href}>
+                <Link
+                  href={it.href}
+                  onClick={onNavigate}
+                  aria-current={active ? "page" : undefined}
+                  className={cn("s-nav-link", active && "s-nav-link-active")}
+                >
+                  <Icon
+                    className={cn(
+                      "h-[18px] w-[18px] shrink-0",
+                      active ? "text-[color:var(--primary-ink)]" : "text-muted-foreground",
+                    )}
+                    strokeWidth={2}
+                    aria-hidden
+                  />
+                  {/* `min-w-0 flex-1 truncate`: nhãn tiếng Việt dài phải bị CẮT
+                      chứ không đẩy nội dung tràn ra ngoài khung 16rem. */}
+                  <span className="min-w-0 flex-1 truncate">{it.label}</span>
+                </Link>
+              </li>
+            );
+          })}
+        </ul>
+      ) : null}
+    </div>
+  );
+}
+
+/**
+ * Ruột thanh bên — dùng chung cho bản cố định (desktop) và ngăn kéo (mobile),
+ * đúng cách site GV làm: MỘT ruột vẽ ở hai nơi, không nhân bản hai bản đi lệch.
+ */
 export function SaleNav({
   granted,
   userLabel,
+  onNavigate,
 }: {
   /** Danh sách action user thực sự có — layout tính bằng cùng hàm mà cổng trang dùng. */
   granted: readonly string[];
   userLabel: string;
+  /** Ngăn kéo mobile truyền vào để tự đóng sau khi bấm một mục. */
+  onNavigate?: () => void;
 }) {
   const pathname = usePathname();
-  const [moNgang, setMoNgang] = useState(false);
   const grantedSet = useMemo(() => new Set(granted), [granted]);
 
   // Lọc theo quyền TRƯỚC, bỏ nhóm rỗng SAU. Làm ngược lại thì một nhóm mà người
@@ -165,102 +250,40 @@ export function SaleNav({
     [grantedSet],
   );
 
-  const than = (
-    <>
-      <div className="flex-1 space-y-5 overflow-y-auto px-3 py-4">
-        {nhomHien.map((g) => (
-          <div key={g.nhom}>
-            <p className="px-3 pb-1.5 text-[0.6875rem] font-semibold uppercase tracking-wider text-muted-foreground">
-              {g.nhom}
-            </p>
-            <div className="space-y-0.5">
-              {g.muc.map((it) => {
-                const active = dangDung(it.href, pathname);
-                const Icon = it.icon;
-                return (
-                  <Link
-                    key={it.href}
-                    href={it.href}
-                    onClick={() => setMoNgang(false)}
-                    aria-current={active ? "page" : undefined}
-                    className={cn(
-                      "flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
-                      active
-                        ? "bg-primary/10 text-primary"
-                        : "text-muted-foreground hover:bg-accent hover:text-foreground",
-                    )}
-                  >
-                    <Icon className="h-4 w-4 shrink-0" />
-                    {it.label}
-                  </Link>
-                );
-              })}
-            </div>
-          </div>
-        ))}
+  return (
+    <div className="flex h-full flex-col bg-[color:var(--surface-chrome)]">
+      {/* Hàng logo cao đúng 4rem — bằng thanh đầu trang, để hai bên thẳng hàng
+          nhau ở đường chân trời trên cùng. */}
+      <div className="flex h-16 shrink-0 items-center px-5">
+        <SaleLogo />
       </div>
 
-      {/* Nhóm "Cá nhân" của tài liệu — hôm nay mới có lối ra. */}
-      <div className="border-t border-border px-3 py-3">
-        <p className="px-3 pb-1.5 text-[0.6875rem] font-semibold uppercase tracking-wider text-muted-foreground">
-          Cá nhân
-        </p>
-        <p className="truncate px-3 pb-1.5 text-sm text-foreground">{userLabel}</p>
+      <div className="min-h-0 flex-1 overflow-y-auto">
+        <nav aria-label="Điều hướng tư vấn tuyển sinh" className="space-y-1 px-3 pb-6">
+          {nhomHien.map((g) => (
+            <KhoiNhom
+              key={g.nhom}
+              nhom={g.nhom}
+              muc={g.muc}
+              pathname={pathname}
+              onNavigate={onNavigate}
+            />
+          ))}
+        </nav>
+      </div>
+
+      {/* Nhóm "Cá nhân" của tài liệu. Giữ ở thanh bên chứ không dời hết lên menu
+          người dùng: lối ra phải THẤY ĐƯỢC mà không cần mở thêm một lớp nào. */}
+      <div className="shrink-0 border-t border-border px-3 py-3">
+        <p className="s-section-label pt-1">Cá nhân</p>
+        <p className="truncate px-3 pb-1 text-sm text-foreground">{userLabel}</p>
         {/* `/dang-xuat` là trang công khai có chủ đích: nó tồn tại để dọn cookie
             của một phiên đã chết, mà phiên đó theo định nghĩa là không hợp lệ. */}
-        <Link
-          href="/dang-xuat"
-          className="flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-        >
-          <LogOut className="h-4 w-4 shrink-0" />
-          Đăng xuất
+        <Link href="/dang-xuat" onClick={onNavigate} className="s-nav-link">
+          <LogOut className="h-[18px] w-[18px] shrink-0" strokeWidth={2} aria-hidden />
+          <span className="min-w-0 flex-1 truncate">Đăng xuất</span>
         </Link>
       </div>
-    </>
-  );
-
-  return (
-    <>
-      {/* Thanh trên cùng — chỉ ở màn hẹp, mở/đóng ngăn kéo. */}
-      <header className="sticky top-0 z-30 flex items-center gap-3 border-b border-border bg-[color:var(--surface-chrome)] px-4 py-3 md:hidden">
-        <button
-          type="button"
-          onClick={() => setMoNgang((v) => !v)}
-          aria-expanded={moNgang}
-          aria-label={moNgang ? "Đóng menu" : "Mở menu"}
-          className="rounded-lg border border-border p-1.5 text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-        >
-          {moNgang ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
-        </button>
-        <span className="text-sm font-semibold">Sata Robo · Tư vấn tuyển sinh</span>
-      </header>
-
-      {/* Nền mờ của ngăn kéo. Bấm ra ngoài là đóng — không bẫy người dùng. */}
-      {moNgang ? (
-        <button
-          type="button"
-          aria-label="Đóng menu"
-          onClick={() => setMoNgang(false)}
-          className="fixed inset-0 z-30 bg-foreground/20 md:hidden"
-        />
-      ) : null}
-
-      <aside
-        className={cn(
-          // Tầng nền THỨ HAI: chìm hơn thẻ dữ liệu một bậc để mắt đọc thanh bên là
-          // "khung máy" chứ không phải nội dung. `operate.md` gọi đây là lớp trung
-          // tính riêng cho chrome; thiếu nó thì thanh bên và bảng cùng một mặt
-          // phẳng và trang trông phẳng lì.
-          "fixed inset-y-0 left-0 z-40 flex w-64 flex-col border-r border-border bg-[color:var(--surface-chrome)] transition-transform duration-200 md:translate-x-0",
-          moNgang ? "translate-x-0" : "-translate-x-full",
-        )}
-      >
-        <div className="hidden border-b border-border px-6 py-4 md:block">
-          <p className="text-sm font-semibold leading-tight">Sata Robo</p>
-          <p className="text-xs text-muted-foreground">Tư vấn tuyển sinh</p>
-        </div>
-        {than}
-      </aside>
-    </>
+    </div>
   );
 }

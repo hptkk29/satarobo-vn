@@ -187,3 +187,58 @@
     padding-bottom: 0.875rem;
   }
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   KHUNG SITE (28/08/2026) — mượn HÌNH DÁNG của site giáo viên, giữ MÀU của Sale.
+
+   Chủ dự án chốt: "lấy thiết kế giống, không lấy màu, không lấy nội dung".
+   Nên hình học ở đây khớp `app/(teacher)/teacher/teacher.css` §t-nav-* từng con
+   số (bo 0.75rem · đệm 0.5/0.75rem · cỡ chữ 15px · nhãn nhóm 11px in hoa), còn
+   màu lấy từ token tím của chính site này. Đổi màu ở đây KHÔNG được đụng sang
+   site GV và ngược lại — hai bộ token, hai gốc scope.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.sale-root .s-nav-link {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  border-radius: 0.75rem;
+  padding: 0.5rem 0.75rem;
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--muted-foreground);
+  transition:
+    background-color 150ms ease,
+    color 150ms ease;
+}
+.sale-root .s-nav-link:hover {
+  background: var(--muted);
+  color: var(--foreground);
+}
+
+/* Mục đang đứng = nền tím nhạt + chữ tím đậm. Tím ở đây mang nghĩa "vị trí hiện
+   tại", cùng ngôn ngữ với nút hành động — KHÔNG mượn màu ngữ nghĩa nào.
+   `--primary-ink` chứ không `--primary`: chữ phải đọc được TRÊN NỀN TINT, và
+   trên nền tint 10% thì `#7C3AED` chỉ còn 4,94:1 (sát ngưỡng) trong khi
+   `#6D28D9` được 6,15:1. Số đo ghi ở đầu file này. */
+.sale-root .s-nav-link-active,
+.sale-root .s-nav-link-active:hover {
+  background: var(--primary-soft);
+  color: var(--primary-ink);
+}
+
+.sale-root .s-section-label {
+  padding: 1rem 0.75rem 0.25rem;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted-foreground);
+}
+
+/* Vòng tròn chữ cái đầu trên thanh đầu trang. Site GV dùng gradient CAM; đây là
+   dải TÍM tương ứng. Chữ trắng đè lên nên cả dải phải đủ tối — chặn đầu sáng ở
+   `#7C3AED` (trắng 5,70:1) thay vì một tím tươi hơn sẽ tụt dưới ngưỡng. */
+.sale-root .s-brand-gradient {
+  background-image: linear-gradient(135deg, var(--primary-darker) 0%, var(--primary) 100%);
+}
