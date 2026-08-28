@@ -56,12 +56,42 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useMemo, useState } from "react";
 import {
+  ArrowLeftRight,
   BookOpen,
+  Cake,
+  CalendarClock,
   CalendarDays,
+  CalendarRange,
   ChevronDown,
+  ClipboardList,
+  Clock,
+  CreditCard,
+  FileClock,
+  FileText,
+  Filter,
+  Fingerprint,
+  GraduationCap,
+  HeartHandshake,
+  Hourglass,
+  Image as ImageIcon,
+  Inbox,
+  Layers,
+  LayoutDashboard,
   LayoutList,
   LogOut,
+  Mail,
+  MessageCircle,
   MessageSquare,
+  Network,
+  Percent,
+  Repeat,
+  RotateCcw,
+  School,
+  Share2,
+  ShoppingCart,
+  Table2,
+  User,
+  UserCog,
   UserPlus,
   Users,
 } from "lucide-react";
@@ -87,8 +117,17 @@ type NavGroup = {
 const NHOM: NavGroup[] = [
   {
     nhom: "Tổng quan",
-    // Trang chủ luôn hiện — layout đã gác ai vào được site này rồi.
-    muc: [{ label: "Bảng việc hôm nay", href: "/sale", icon: LayoutList }],
+    muc: [
+      // Trang chủ luôn hiện — layout đã gác ai vào được site này rồi.
+      { label: "Bảng việc hôm nay", href: "/sale", icon: LayoutList },
+      {
+        label: "Dashboard",
+        href: "/sale/dashboard",
+        icon: LayoutDashboard,
+        perm: PAGE_GATES["/sale/dashboard"],
+      },
+      { label: "CRM", href: "/sale/crm", icon: Network, perm: PAGE_GATES["/sale/crm"] },
+    ],
   },
   {
     nhom: "Lead & Tư vấn",
@@ -99,11 +138,36 @@ const NHOM: NavGroup[] = [
         icon: Users,
         perm: PAGE_GATES["/sale/khach-cua-toi"],
       },
+      { label: "Leads", href: "/sale/leads", icon: Filter, perm: PAGE_GATES["/sale/leads"] },
       {
         label: "Nhập khách hàng",
         href: "/sale/nhap-khach-hang",
         icon: UserPlus,
         perm: PAGE_GATES["/sale/nhap-khach-hang"],
+      },
+      {
+        label: "Chốt hàng loạt",
+        href: "/sale/chot-hang-loat",
+        icon: Layers,
+        perm: PAGE_GATES["/sale/chot-hang-loat"],
+      },
+      {
+        label: "Bàn giao lead",
+        href: "/sale/ban-giao-lead",
+        icon: Share2,
+        perm: PAGE_GATES["/sale/ban-giao-lead"],
+      },
+      {
+        label: "Chuyển lead liên cơ sở",
+        href: "/sale/chuyen-lead-lien-cs",
+        icon: ArrowLeftRight,
+        perm: PAGE_GATES["/sale/chuyen-lead-lien-cs"],
+      },
+      {
+        label: "Messenger CRM",
+        href: "/sale/messenger",
+        icon: MessageCircle,
+        perm: PAGE_GATES["/sale/messenger"],
       },
       // Hộp thư đa kênh nằm ở nhóm này chứ không phải CSKH: nó là chỗ TRÒ CHUYỆN
       // với khách tiềm năng (Zalo/Messenger), cùng việc với "Khách của tôi".
@@ -119,19 +183,177 @@ const NHOM: NavGroup[] = [
   {
     nhom: "Học thử / Trải nghiệm",
     muc: [
+      // Đổi tên 28/08 theo chủ dự án: "Lớp trải nghiệm" → "Lớp Trial". Đường dẫn
+      // giữ nguyên `/sale/trial` — đổi đường là gãy dấu trang của người đang dùng.
       {
-        label: "Lớp trải nghiệm",
+        label: "Lớp Trial",
         href: "/sale/trial",
         icon: CalendarDays,
         perm: PAGE_GATES["/sale/trial"],
       },
     ],
   },
-  // Chốt đơn + ghi danh đã chạy nhưng luôn gắn với MỘT khách → vào từ trang
-  // khách, không có mục menu trần. Xem ghi chú đầu file.
-  { nhom: "Ghi danh & Thu phí", muc: [] },
-  { nhom: "Chăm sóc & Tái tục (CSKH)", muc: [] },
-  { nhom: "Kinh doanh của tôi", muc: [] },
+  {
+    nhom: "Ghi danh & Thu phí",
+    muc: [
+      {
+        label: "Đăng ký học",
+        href: "/sale/dang-ky-hoc",
+        icon: ClipboardList,
+        perm: PAGE_GATES["/sale/dang-ky-hoc"],
+      },
+      {
+        label: "Chuyển lớp / cơ sở",
+        href: "/sale/chuyen-lop",
+        icon: Repeat,
+        perm: PAGE_GATES["/sale/chuyen-lop"],
+      },
+      {
+        label: "Đơn hàng",
+        href: "/sale/don-hang",
+        icon: ShoppingCart,
+        perm: PAGE_GATES["/sale/don-hang"],
+      },
+      {
+        label: "Thanh toán",
+        href: "/sale/thanh-toan",
+        icon: CreditCard,
+        perm: PAGE_GATES["/sale/thanh-toan"],
+      },
+    ],
+  },
+  // NHÓM MỚI 28/08 — tài liệu yêu cầu FINAL 16/07 không có nhóm nào chứa được
+  // tám mục này. Chủ dự án chốt "thêm các mục tôi nói nhưng không cần cập nhật
+  // tài liệu", nên nhóm mới nằm ở mã và tài liệu giữ nguyên 8 nhóm gốc.
+  {
+    nhom: "Học viên & Lớp học",
+    muc: [
+      {
+        label: "Học viên",
+        href: "/sale/hoc-vien",
+        icon: GraduationCap,
+        perm: PAGE_GATES["/sale/hoc-vien"],
+      },
+      {
+        label: "Tài khoản phụ huynh",
+        href: "/sale/tai-khoan-ph",
+        icon: UserCog,
+        perm: PAGE_GATES["/sale/tai-khoan-ph"],
+      },
+      {
+        label: "Sắp hết khoá",
+        href: "/sale/sap-het-khoa",
+        icon: Hourglass,
+        perm: PAGE_GATES["/sale/sap-het-khoa"],
+      },
+      {
+        label: "Học bạ",
+        href: "/sale/hoc-ba",
+        icon: FileText,
+        perm: PAGE_GATES["/sale/hoc-ba"],
+      },
+      {
+        label: "Lớp học",
+        href: "/sale/lop-hoc",
+        icon: School,
+        perm: PAGE_GATES["/sale/lop-hoc"],
+      },
+      {
+        label: "Buổi học",
+        href: "/sale/buoi-hoc",
+        icon: CalendarClock,
+        perm: PAGE_GATES["/sale/buoi-hoc"],
+      },
+      {
+        label: "Ảnh lớp học",
+        href: "/sale/anh-lop-hoc",
+        icon: ImageIcon,
+        perm: PAGE_GATES["/sale/anh-lop-hoc"],
+      },
+      {
+        label: "Học bù",
+        href: "/sale/hoc-bu",
+        icon: RotateCcw,
+        perm: PAGE_GATES["/sale/hoc-bu"],
+      },
+    ],
+  },
+  {
+    nhom: "Chăm sóc & Tái tục (CSKH)",
+    muc: [
+      {
+        label: "Tin nhắn",
+        href: "/sale/tin-nhan",
+        icon: Mail,
+        perm: PAGE_GATES["/sale/tin-nhan"],
+      },
+      {
+        label: "Yêu cầu phụ huynh",
+        href: "/sale/yeu-cau-ph",
+        icon: Inbox,
+        perm: PAGE_GATES["/sale/yeu-cau-ph"],
+      },
+      {
+        label: "Chăm sóc học viên",
+        href: "/sale/cham-soc-hv",
+        icon: HeartHandshake,
+        perm: PAGE_GATES["/sale/cham-soc-hv"],
+      },
+      {
+        label: "Sinh nhật học viên",
+        href: "/sale/sinh-nhat",
+        icon: Cake,
+        perm: PAGE_GATES["/sale/sinh-nhat"],
+      },
+    ],
+  },
+  // NHÓM MỚI 28/08 — cùng lý do với "Học viên & Lớp học".
+  {
+    nhom: "Chấm công",
+    muc: [
+      {
+        label: "Chấm công",
+        href: "/sale/cham-cong",
+        icon: Clock,
+        perm: PAGE_GATES["/sale/cham-cong"],
+      },
+      {
+        label: "Điểm danh vào ca",
+        href: "/sale/cham-cong/checkin",
+        icon: Fingerprint,
+        perm: PAGE_GATES["/sale/cham-cong/checkin"],
+      },
+      {
+        label: "Lịch ca của tôi",
+        href: "/sale/cham-cong/lich-ca",
+        icon: CalendarRange,
+        perm: PAGE_GATES["/sale/cham-cong/lich-ca"],
+      },
+      {
+        label: "Yêu cầu chỉnh công",
+        href: "/sale/cham-cong/yeu-cau-cong",
+        icon: FileClock,
+        perm: PAGE_GATES["/sale/cham-cong/yeu-cau-cong"],
+      },
+      {
+        label: "Tổng hợp công ca",
+        href: "/sale/cham-cong/tong-hop",
+        icon: Table2,
+        perm: PAGE_GATES["/sale/cham-cong/tong-hop"],
+      },
+    ],
+  },
+  {
+    nhom: "Kinh doanh của tôi",
+    muc: [
+      {
+        label: "Hoa hồng",
+        href: "/sale/hoa-hong",
+        icon: Percent,
+        perm: PAGE_GATES["/sale/hoa-hong"],
+      },
+    ],
+  },
   {
     nhom: "Danh mục & Tra cứu",
     muc: [
@@ -143,10 +365,13 @@ const NHOM: NavGroup[] = [
       },
     ],
   },
-  // Tài liệu xếp "đăng xuất" vào nhóm Cá nhân (qua UserMenu). Chưa có
-  // `/sale/ho-so` nên nhóm này hiện chỉ có lối ra — nhưng phải có: thiếu nó thì
-  // người dùng kẹt trong site và phải xoá cookie bằng tay.
-  { nhom: "Cá nhân", muc: [] },
+  // Tài liệu xếp "đăng xuất" vào nhóm Cá nhân (qua UserMenu). Lối ra vẽ riêng ở
+  // chân thanh bên, không nằm trong mảng này — nó phải thấy được cả khi người
+  // dùng không có quyền với mục nào.
+  {
+    nhom: "Cá nhân",
+    muc: [{ label: "Hồ sơ của tôi", href: "/sale/ho-so", icon: User }],
+  },
 ];
 
 /** `/sale` chỉ sáng khi đúng nó — nếu không thì mọi trang con đều làm trang chủ
@@ -274,9 +499,12 @@ export function SaleNav({
 
       {/* Nhóm "Cá nhân" của tài liệu. Giữ ở thanh bên chứ không dời hết lên menu
           người dùng: lối ra phải THẤY ĐƯỢC mà không cần mở thêm một lớp nào. */}
+      {/* Dải chân KHÔNG lặp lại nhãn "Cá nhân" — nhóm cùng tên đã nằm trong danh
+          sách trên (chứa "Hồ sơ của tôi"). Hai nhãn giống hệt nhau trên cùng một
+          thanh bên làm người dùng tưởng mình nhìn nhầm, và làm bài kiểm
+          `getByText` gãy vì có hai kết quả. */}
       <div className="shrink-0 border-t border-border px-3 py-3">
-        <p className="s-section-label pt-1">Cá nhân</p>
-        <p className="truncate px-3 pb-1 text-sm text-foreground">{userLabel}</p>
+        <p className="truncate px-3 pb-1 pt-1 text-sm text-foreground">{userLabel}</p>
         {/* `/dang-xuat` là trang công khai có chủ đích: nó tồn tại để dọn cookie
             của một phiên đã chết, mà phiên đó theo định nghĩa là không hợp lệ. */}
         <Link href="/dang-xuat" onClick={onNavigate} className="s-nav-link">

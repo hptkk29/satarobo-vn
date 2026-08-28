@@ -84,7 +84,7 @@ describe("[S-10] SaleNav vẽ ra màn hình", () => {
 
     const dangDung = screen.getAllByRole("link").filter((a) => a.getAttribute("aria-current"));
     expect(dangDung).toHaveLength(1);
-    expect(dangDung[0].textContent).toContain("Lớp trải nghiệm");
+    expect(dangDung[0].textContent).toContain("Lớp Trial");
     pathname = "/sale";
   });
 
