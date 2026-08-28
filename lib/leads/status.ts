@@ -170,7 +170,7 @@ export const LEAD_PIPELINE_EXIT_STATUSES: LeadStatus[] = [
 
 /**
  * Lead RỚT KHỎI PHỄU — vào một trong hai bậc này thì `setLeadStatus` ghi lại BẬC
- * TRƯỚC ĐÓ vào `Lead.droppedAtStage` và kèm `Lead.dropReason`.
+ * TRƯỚC ĐÓ vào `Lead.droppedAtStage` và kèm lý do ở `Lead.lostNote`.
  *
  * ⚠️ Đây là tập DUY NHẤT ép người dùng nhập LÝ DO. Vì sao ép: `droppedAtStage` một
  * mình chỉ trả lời "rụng ở bậc nào", không trả lời "vì sao" — mà báo cáo cần cả hai

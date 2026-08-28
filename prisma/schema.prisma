@@ -1632,9 +1632,11 @@ model Lead {
   /// Lead rơi khỏi phễu ở BẬC NÀO (trạng thái ngay trước khi sang DANG_NUOI_DUONG
   /// hoặc mất). NULL với toàn bộ lead cũ — không suy ngược được, đừng bịa.
   droppedAtStage  LeadStatus?
-  /// Lý do rơi, nhập tay. Bảng danh mục `LyDoRot` là việc của giai đoạn sau; ở GĐ1
-  /// chỉ mở chỗ chứa để không phải đổi cột lần hai.
-  dropReason      String?
+  /// 27/08/2026 — cột `dropReason` ĐÃ GỠ. Lý do rơi nay dùng chung `lostNote`/`lostAt`
+  /// ở trên: hai cột cùng trả lời "vì sao phiếu này rụng", mà `lostNote` đã là một
+  /// tính năng chạy thật (đánh dấu rớt theo TỪNG CON, bảng "Lead rớt" ở dashboard
+  /// QLCS, nhãn trong lịch sử) còn `dropReason` chỉ có đúng một người đọc.
+  /// `droppedAtStage` giữ nguyên — nó trả lời câu KHÁC: rụng ở BẬC nào.
 
   statusHistory LeadStatusHistory[]
 
@@ -1687,7 +1689,8 @@ model LeadStatusHistory {
   /// "convert" | "import" | "handover". Dùng để tách số liệu do người làm và do máy chạy.
   source String
 
-  /// Lý do (khi rơi khỏi phễu). Chép sang `Lead.dropReason` ở cùng giao dịch.
+  /// Lý do (khi rơi khỏi phễu). Chép sang `Lead.lostNote` ở cùng giao dịch — nhưng
+  /// CHỈ khi lượt này thật sự mang lý do, xem `lib/leads/set-status.ts`.
   reason String?
 
   centerId  String? // cách ly cơ sở (scopedDb)

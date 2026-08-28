@@ -17,10 +17,13 @@ export type LeadReportRecord = {
   convertedAt?: Date | null;
   /** Bậc lead ĐANG Ở NGAY TRƯỚC khi rụng (`Lead.droppedAtStage`). */
   droppedAtStage?: string | null;
-  /** Lý do rụng do người bấm ghi (`Lead.dropReason`). */
-  dropReason?: string | null;
+  /** Lý do rụng do người bấm ghi (`Lead.lostNote`). */
+  lostNote?: string | null;
   /** Sale đang phụ trách (`Lead.assignedToId`). null = chưa chia cho ai. */
   assignedToId?: string | null;
+  /** Khoá nối sang sổ `LeadStatusHistory`. Thiếu id = lead không bao giờ khớp được
+   *  dòng sổ nào ⇒ `buildFunnelReached` xử như lead chưa có sổ. */
+  id?: string;
 };
 
 const pad = (n: number) => String(n).padStart(2, "0");
@@ -141,6 +144,71 @@ export function buildFunnel(records: LeadReportRecord[]): FunnelStep[] {
     label: statusLabel(status),
     count: records.filter((r) => rankOf(r.status) >= i).length,
   }));
+}
+
+/** Một dòng sổ `LeadStatusHistory` rút gọn còn đúng phần phễu cần. */
+export type LeadLedgerRow = { leadId: string; toStatus: string };
+
+/**
+ * Phễu "ĐÃ TỪNG TỚI": đếm lead theo bậc CAO NHẤT nó từng chạm, đọc từ sổ GĐ1.
+ *
+ * ⚠️ Vì sao cần hàm thứ hai thay vì sửa `buildFunnel`: hai hàm trả lời hai câu khác
+ * nhau và cả hai đều có người cần. `buildFunnel` = "ĐANG ở bậc nào" (ảnh chụp hiện
+ * tại, dùng để biết tồn đọng ở đâu). Hàm này = "ĐÃ TỪNG tới bậc nào" (dùng để tính tỷ
+ * lệ chuyển đổi). Gộp làm một là mất một trong hai.
+ *
+ * Bệnh nó chữa: `buildFunnel` đếm bằng trạng thái hiện tại, nên lead từng lên tới
+ * "Đã học thử" rồi rớt (`DA_MAT`, rank -1) biến mất khỏi MỌI bậc — kể cả bậc nó đã đi
+ * qua thật. Hệ quả nặng hơn con số phễu là MẪU SỐ: `funnelConversionRates` mất luôn
+ * phần rụng ⇒ tỷ lệ chuyển đổi bị thổi lên và trông rất đẹp.
+ *
+ * CÔNG THỨC: bậc của lead = max(rank trạng thái hiện tại, rank mọi `toStatus` trong sổ).
+ * Một công thức phủ cả hai trường hợp, không cần nhánh `if`:
+ *   · lead CÓ sổ    → sổ kéo bậc lên đúng chỗ cao nhất nó từng tới;
+ *   · lead KHÔNG sổ → max chỉ còn trạng thái hiện tại = ĐÚNG BẰNG cách tính cũ.
+ *
+ * Trường hợp thứ hai không phải chuyện hiếm: sổ **cố ý không backfill** (migration
+ * 20260825120000 — suy ngược lịch sử là bịa), nên toàn bộ lead trước 25/08/2026 đi
+ * đường đó. Đọc thuần từ sổ là phễu tụt về gần 0 cho mọi dữ liệu cũ; `ledgerCoverage`
+ * cho con số để ghi chú thích cái mốc đó lên giao diện.
+ *
+ * `toStatus` lạ (enum đổi tên như GĐ5) rơi vào `?? -1` nên bị `Math.max` bỏ qua —
+ * KHÔNG kéo lead tụt bậc.
+ */
+export function buildFunnelReached(
+  records: LeadReportRecord[],
+  ledger: LeadLedgerRow[],
+): FunnelStep[] {
+  const capNhat = new Map<string, number>();
+  for (const row of ledger) {
+    const r = rankOf(row.toStatus);
+    const cu = capNhat.get(row.leadId);
+    if (cu === undefined || r > cu) capNhat.set(row.leadId, r);
+  }
+  const bac = records.map((rec) => {
+    const tuSo = rec.id !== undefined ? capNhat.get(rec.id) : undefined;
+    return Math.max(rankOf(rec.status), tuSo ?? -1);
+  });
+  return FUNNEL_ORDER.map((status, i) => ({
+    status,
+    label: statusLabel(status),
+    count: bac.filter((b) => b >= i).length,
+  }));
+}
+
+/**
+ * Bao nhiêu lead trong kỳ có sổ, bao nhiêu chưa — để giao diện nói thẳng phần nào của
+ * phễu suy từ sổ, phần nào vẫn là ảnh chụp trạng thái hiện tại. Không có con số này
+ * thì hai nguồn trộn vào nhau mà người đọc không biết.
+ */
+export function ledgerCoverage(
+  records: LeadReportRecord[],
+  ledger: LeadLedgerRow[],
+): { coSo: number; khongCoSo: number } {
+  const coDong = new Set(ledger.map((r) => r.leadId));
+  let coSo = 0;
+  for (const rec of records) if (rec.id !== undefined && coDong.has(rec.id)) coSo++;
+  return { coSo, khongCoSo: records.length - coSo };
 }
 
 export type FunnelConversion = { fromLabel: string; toLabel: string; rate: number };
@@ -358,11 +426,16 @@ export type DropStageStat = {
 };
 
 /**
- * "Lead rụng ở BẬC NÀO, và vì sao" — người đọc duy nhất của `Lead.droppedAtStage`
- * và `Lead.dropReason`.
+ * "Lead rụng ở BẬC NÀO, và vì sao" — người đọc duy nhất của `Lead.droppedAtStage`,
+ * đọc lý do ở `Lead.lostNote`.
  *
- * ⚠️ Hai cột đó ra đời ở GĐ1 (migration 20260825120000) và tới 26/08 KHÔNG màn nào,
- * báo cáo nào đọc — ghi vào rồi bỏ đó. Hàm này là chỗ dùng chúng.
+ * ⚠️ `droppedAtStage` ra đời ở GĐ1 (migration 20260825120000) và tới 26/08 KHÔNG màn
+ * nào, báo cáo nào đọc — ghi vào rồi bỏ đó. Hàm này là chỗ dùng nó.
+ *
+ * 27/08 — lý do rụng đọc ở `lostNote` (cột dùng chung với đường đánh dấu rớt theo
+ * TỪNG CON), không còn `dropReason`. Hệ quả cố ý: một phiếu có hai con rớt vì hai lý
+ * do thì ở đây chỉ thấy lý do ghi SAU CÙNG — lý do từng con tra ở dòng thời gian và
+ * AuditLog, đúng như đánh đổi đã chấp nhận ở C-06.
  *
  * Chỉ đếm lead THẬT SỰ có bậc rụng: `droppedAtStage` chỉ được ghi khi lead vào
  * `LEAD_DROP_STATUSES`, nên lead còn trong phễu không lọt vào đây.
@@ -375,7 +448,7 @@ export function groupByDropStage(records: LeadReportRecord[]): DropStageStat[] {
     const o =
       theoBac.get(bac) ?? { count: 0, lyDo: new Map<string, number>(), thieu: 0 };
     o.count++;
-    const ly = r.dropReason?.trim();
+    const ly = r.lostNote?.trim();
     if (ly) o.lyDo.set(ly, (o.lyDo.get(ly) ?? 0) + 1);
     else o.thieu++;
     theoBac.set(bac, o);
@@ -398,8 +471,14 @@ export function groupByDropStage(records: LeadReportRecord[]): DropStageStat[] {
 export type LeadReport = {
   summary: LeadReportSummary;
   statusCounts: StatusCount[];
+  /** "ĐANG ở bậc nào" — ảnh chụp trạng thái hiện tại. */
   funnel: FunnelStep[];
+  /** "ĐÃ TỪNG tới bậc nào" — suy từ sổ GĐ1; bằng `funnel` khi chưa có dòng sổ nào. */
+  funnelReached: FunnelStep[];
+  /** Tính trên `funnelReached`: mẫu số phải gồm cả lead đã rụng, nếu không tỷ lệ bị thổi. */
   funnelConversion: FunnelConversion[];
+  /** Bao nhiêu lead trong kỳ có sổ / chưa có — để ghi chú thích mốc 25/08 lên giao diện. */
+  ledgerCoverage: { coSo: number; khongCoSo: number };
   bySource: GroupStat[];
   byCommissionSource: GroupStat[];
   byCenter: GroupStat[];
@@ -414,13 +493,21 @@ export function buildLeadReport(
   records: LeadReportRecord[],
   centerNames?: Record<string, string>,
   saleNames?: Record<string, string>,
+  /** Dòng sổ `LeadStatusHistory` của đúng tập lead này. Bỏ trống = hành vi cũ y nguyên. */
+  ledger: LeadLedgerRow[] = [],
 ): LeadReport {
   const funnel = buildFunnel(records);
+  const funnelReached = buildFunnelReached(records, ledger);
   return {
     summary: leadSummary(records),
     statusCounts: countByStatus(records),
     funnel,
-    funnelConversion: funnelConversionRates(funnel),
+    funnelReached,
+    // Tỷ lệ chuyển đổi đọc phễu "đã từng tới", KHÔNG phải phễu "đang ở": lead rụng
+    // giữa chừng phải nằm trong MẪU SỐ của bậc nó đã đi qua. Bỏ nó ra khỏi cả tử lẫn
+    // mẫu là tỷ lệ tự đẹp lên đúng bằng phần rụng — sai theo hướng không ai muốn kiểm.
+    funnelConversion: funnelConversionRates(funnelReached),
+    ledgerCoverage: ledgerCoverage(records, ledger),
     bySource: groupBySource(records),
     byCommissionSource: groupByCommissionSource(records),
     byCenter: groupByCenter(records, centerNames),
