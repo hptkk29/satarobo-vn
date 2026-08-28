@@ -89,7 +89,11 @@ export default async function KhachCuaToiPage({
   });
 
   return (
-    <KhungDuLieu>
+    // Bề rộng theo NỘI DUNG, không theo trần của trang. Bảng này có bốn cột;
+    // kéo nó ra hết 88rem tạo một khoảng trống ~600px giữa "Việc sắp tới" và cột
+    // ngày — mắt phải nhảy qua một vùng trắng để nối hai đầu của cùng một dòng.
+    // Trần của trang vẫn rộng cho những màn thật sự cần (hộp thư, tra cứu).
+    <KhungDuLieu className="max-w-[76rem]">
       <KhungDuLieu.Dau
         ten="Khách của tôi"
         mo={

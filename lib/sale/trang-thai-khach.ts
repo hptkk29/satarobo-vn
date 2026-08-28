@@ -84,4 +84,4 @@ export function toneDoNguoi(lanChamGanNhat: string | null): "warning" | "danger"
 }
 
 /** Câu giải thích cho người dùng, dùng chung giữa bảng và ô chú giải. */
-export const CHU_GIAI_DO_NGUOI = `Chưa liên hệ hoặc quá ${NGAY_RAT_NGUOI} ngày không chạm: đỏ. Quá ${NGAY_NGUOI} ngày: vàng.`;
+export const CHU_GIAI_DO_NGUOI = `Bảng xếp theo lần chạm gần nhất — cuối danh sách là người lâu nhất chưa được liên hệ. Chỉ nhóm CHƯA CHẠM LẦN NÀO được tô đỏ.`;

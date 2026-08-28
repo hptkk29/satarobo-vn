@@ -56,12 +56,44 @@ export default async function SaleLayout({
   if (!session?.user) redirect("/login");
 
   // 2 pha: cờ OFF → site Sale chưa mở. Mọi người tiếp tục làm việc như hôm nay.
+  //
+  // ⚠️ ĐÍCH LÀ `/admin/dashboard`, KHÔNG PHẢI `/dashboard` (sửa 28/08/2026).
+  //    `/dashboard` chỉ có nghĩa TRÊN TÊN MIỀN ADMIN, nơi proxy viết lại nó thành
+  //    `/admin/dashboard`. `redirect()` ở đây giữ nguyên host đang đứng, nên trên
+  //    host Sale — và trên MỌI host "không xác định" như `localhost` hay
+  //    `test.satarobo.vn`, nơi cả bốn khu dùng chung một tên miền — người dùng
+  //    rơi vào **404 trắng trơn** và tưởng cả site hỏng.
+  //    `/admin/dashboard` chạy được ở cả hai: host lạ thì khớp thẳng route, host
+  //    admin thì `decideRoute` cắt tiền tố rồi đưa về đúng `STAFF_HOME`.
   if (!isSaleSiteEnabled()) {
-    redirect(hasStaffRole(session.user) ? "/dashboard" : "/portal");
+    redirect(hasStaffRole(session.user) ? "/admin/dashboard" : "/portal");
   }
 
+  // Có tài khoản nhưng site này không dành cho họ. KHÔNG đá đi im lặng: đá đi là
+  // người dùng chỉ thấy mình bật ra khỏi một đường dẫn vừa bấm mà không hiểu vì
+  // sao, và nếu đích đá không tồn tại trên host đó thì thành 404.
+  // PRODUCT.md: "không có quyền" là trạng thái màn hình HẠNG NHẤT của hệ này —
+  // phân quyền theo module × cơ sở nên người dùng gặp nó hằng ngày.
   if (!isSaleOnly(session.user)) {
-    redirect(hasStaffRole(session.user) ? "/dashboard" : "/portal");
+    return (
+      <div className="sale-root flex min-h-screen items-center justify-center bg-background px-6 text-foreground">
+        <div className="max-w-md text-center">
+          <h1 className="text-xl font-semibold tracking-tight">
+            Khu tư vấn tuyển sinh không dành cho tài khoản này
+          </h1>
+          <p className="mt-2 text-sm text-muted-foreground">
+            Khu này chỉ mở cho tài khoản chuyên trách tư vấn tuyển sinh. Tài khoản của
+            bạn vẫn làm việc bình thường ở khu quản trị.
+          </p>
+          <a
+            href={hasStaffRole(session.user) ? "/admin/dashboard" : "/portal"}
+            className="mt-5 inline-flex h-9 items-center rounded-lg bg-[color:var(--primary)] px-4 text-sm font-medium text-[color:var(--primary-foreground)] transition-colors hover:bg-[color:var(--primary-dark)]"
+          >
+            Về nơi làm việc của tôi
+          </a>
+        </div>
+      </div>
+    );
   }
 
   // Liveness (phòng thủ nhiều lớp như admin/teacher layout): vô hiệu hoá tài

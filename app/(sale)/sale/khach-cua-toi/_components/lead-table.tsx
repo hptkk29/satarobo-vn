@@ -40,11 +40,26 @@ export type MyLeadRow = {
   viecSapToi: { title: string; dueAt: string } | null;
 };
 
-/** Lớp chữ cho ba mức nguội. `null` ⇒ không thêm lớp nào — im lặng là mặc định. */
+/**
+ * Độ nguội của một dòng CÓ NGÀY chạm: diễn đạt bằng ĐỘ ĐẬM, không bằng màu.
+ *
+ * ⚠️ Đây là bản sửa lần hai trong cùng đợt, và lý do đáng ghi lại.
+ * Bản gốc tô vàng mọi dòng quá 3 ngày ⇒ cả bảng vàng khè. Bản sửa thứ nhất đổi
+ * sang đỏ cho mức nặng ⇒ soi trên dữ liệu thật thì **8 trên 11 dòng đỏ**. Cùng
+ * một lỗi, chỉ đổi màu: cột nào cũng kêu thì không dòng nào nổi lên.
+ *
+ * Quan điểm chốt: **thứ tự sắp xếp ĐÃ mang tin "cũ hay mới"** — bảng xếp theo
+ * lần chạm gần nhất, người lâu nhất nằm cuối. Màu không cần lặp lại điều đó.
+ * Màu để dành cho thứ thứ tự KHÔNG nói được: **chưa chạm lần nào** — nhóm không
+ * có ngày để mà xếp, và là nhóm duy nhất một cuộc gọi hôm nay còn cứu được.
+ */
 const LOP_DO_NGUOI: Record<"warning" | "danger", string> = {
-  warning: "text-[color:var(--state-warning)]",
-  danger: "text-[color:var(--state-danger)] font-medium",
+  warning: "text-foreground",
+  danger: "font-medium text-foreground",
 };
+
+/** Nhóm chưa chạm lần nào — chỗ DUY NHẤT trong cột này được dùng màu. */
+const LOP_CHUA_LIEN_HE = "font-medium text-[color:var(--state-danger)]";
 
 export function MyLeadTable({
   rows,
@@ -142,7 +157,7 @@ export function MyLeadTable({
                     ) : (
                       // Khách chưa chạm lần nào là nhóm dễ rơi nhất — nói thẳng
                       // ra chứ đừng để một ô trống.
-                      <span className={LOP_DO_NGUOI.danger}>chưa liên hệ</span>
+                      <span className={LOP_CHUA_LIEN_HE}>chưa liên hệ</span>
                     )}
                   </td>
                 </tr>

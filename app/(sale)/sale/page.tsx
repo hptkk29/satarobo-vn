@@ -173,7 +173,11 @@ export default async function SaleHomePage() {
                         {k.phone}
                       </span>
                     ) : null}
-                    <div className="text-xs text-[color:var(--state-warning)]">
+                    {/* Lý do vì sao khách nằm trong danh sách này: để MUTED, không tô cảnh
+                        báo. Tiêu đề khối đã nói cả 38 người đây đều cần chạm — tô
+                        cảnh báo từng dòng là lặp lại một tin đã biết, và biến màu
+                        cảnh báo thành nền của khối. */}
+                    <div className="text-xs text-muted-foreground">
                       {k.vi.join(" · ")}
                     </div>
                   </div>

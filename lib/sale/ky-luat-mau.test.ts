@@ -78,8 +78,8 @@ describe("[S-UI-4] mật độ bảng nằm ở CSS, không rải vào từng m�
   it("`.bang-sale` ép nowrap trên CẢ th VÀ td", () => {
     // Đây là thứ duy nhất chặn chiều cao dòng nhảy loạn khi một nhãn xuống hai
     // dòng — lỗi đã đo được ở admin: 65–71px và không đều nhau.
-    const th = /\.bang-sale thead th\s*\{[^}]*white-space:\s*nowrap/s.test(css);
-    const td = /\.bang-sale tbody td\s*\{[^}]*white-space:\s*nowrap/s.test(css);
+    const th = /\.bang-sale thead th\s*\{[^}]*white-space:\s*nowrap/.test(css);
+    const td = /\.bang-sale tbody td\s*\{[^}]*white-space:\s*nowrap/.test(css);
     expect(th, "thiếu nowrap trên th").toBe(true);
     expect(td, "thiếu nowrap trên td").toBe(true);
   });
