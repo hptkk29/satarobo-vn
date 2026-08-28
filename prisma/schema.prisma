@@ -54,6 +54,19 @@ enum LeadStatus {
   REGISTERED // đã đăng ký (đã có khoản Sale ghi nhận, chưa convert)
 }
 
+/// SL-09 (G.2) — trạng thái PHỄU của TỪNG CON. CỐ Ý KHÔNG tái dùng `LeadStatus`
+/// (15 giá trị, cấp phụ huynh): khác đơn vị đếm và khác nghĩa. Đúng 6 giá trị —
+/// thêm giá trị thứ 7 là đổi mẫu số của C1/C3 mà không ai thấy.
+/// ⚠️ `REGISTERED` CỐ Ý KHÔNG có (QĐ B2 24/08): "đã chốt" = trở thành học viên.
+enum LeadChildStatus {
+  NEW
+  CONSULTING
+  TRIAL_SCHEDULED
+  TRIAL_ATTENDED
+  ENROLLED
+  LOST
+}
+
 /// R7-01 — trạng thái học thử của từng con trong 1 lead (LeadChild).
 enum LeadChildTrialStatus {
   NONE
@@ -1423,6 +1436,13 @@ model Lead {
   expectedCourseId  String?
   expectedProductId String?
 
+  // ── SL-10 (G.2 · QĐ 12(b) + B5) — lý do rớt là Ô GHI CHÚ TỰ DO, KHÔNG danh mục,
+  // và đặt ở CẤP PHỤ HUYNH. Trạng thái rớt thì ở `LeadChild.status` (SL-09).
+  // ⚠️ Hệ quả đã biết và đã chấp nhận: PH có 2 con, con thứ hai rớt sau sẽ GHI ĐÈ
+  // ghi chú của con trước. Bỏ danh mục cũng có nghĩa là mất báo cáo "top lý do rớt".
+  lostNote String?   @db.Text
+  lostAt   DateTime? @db.Timestamptz(6)
+
   deletedAt DateTime? @db.Timestamptz(6)
   createdAt DateTime  @default(now()) @db.Timestamptz(6)
   updatedAt DateTime  @updatedAt @db.Timestamptz(6)
@@ -1527,14 +1547,36 @@ model LeadChild {
   interestedCenterId String? // tham chiếu Center
   note               String?              @db.Text
   trialStatus        LeadChildTrialStatus @default(NONE)
-  createdAt          DateTime             @default(now()) @db.Timestamptz(6)
-  updatedAt          DateTime             @updatedAt @db.Timestamptz(6)
+
+  // ── SL-08 (G.2) — cách ly cơ sở. Trước đây `LeadChild` KHÔNG có cột phạm vi nào,
+  // scopedDb không auto-scope được, cách ly chỉ gián tiếp qua `Lead` cha ⇒ ai quên
+  // join `Lead` là rò chéo cơ sở ở đúng bảng sinh doanh thu.
+  // centerId = NULL ⇒ CHƯA GÁN CƠ SỞ (nghĩa mặc định) — KHÔNG phải "toàn hệ thống".
+  centerId  String?
+  orgUnitId String? // ghi kép tới hết P4 — lib/org/dual-write.ts tự set khi có centerId
+
+  // ── SL-09 (G.2) — phễu theo TỪNG CON. `trialStatus` ở trên là học thử, KHÔNG phải chốt.
+  status        LeadChildStatus @default(NEW)
+  /// Mốc CHỐT của con này. C.6.0: "đã chốt" = status ENROLLED **VÀ** closedAt != null.
+  /// Hai vế cùng lúc, cùng transaction — tách ra là C3 và C4 đếm hai tập khác nhau.
+  closedAt      DateTime?       @db.Timestamptz(6)
+  /// Giá trị hợp đồng ước tính của riêng con này (VND, số nguyên như Payment.amount).
+  /// KHÔNG phải nguồn số doanh thu — nguồn số là `Payment` CONFIRMED (QĐ B3).
+  contractValue Int?
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @db.Timestamptz(6)
 
   trialEnrollments TrialEnrollment[] // R7-02
   enrollments      Enrollment[] // R7-06 — enrollment chính thức convert từ con này
   trialHistory     LeadTrialHistory[] // FL-R2 — lịch sử đã từng học thử
+  orders           Order[] // SL-09b — một đơn ↔ một con
 
   @@index([leadId])
+  // C1 lọc theo (cơ sở × ngày tạo); không có index này là seq scan cả bảng.
+  @@index([centerId, createdAt])
+  @@index([status])
+  @@index([orgUnitId])
 }
 
 model Note {
@@ -3742,6 +3784,13 @@ model Order {
   leadId String?
   lead   Lead?   @relation("LeadOrders", fields: [leadId], references: [id])
 
+  /// SL-09b (QĐ B4 24/08) — quy đơn về ĐÚNG MỘT con. Một PH hai con thì `leadId`
+  /// không đủ để biết tiền của đứa nào. NULL = "chưa quy được về con": đơn cũ chỉ
+  /// backfill tự động khi lead có ĐÚNG 1 con; số còn lại báo cáo phải HIỆN RIÊNG,
+  /// không được im lặng bỏ qua (C-03 có dòng "chưa quy được về con").
+  leadChildId String?
+  leadChild   LeadChild? @relation(fields: [leadChildId], references: [id])
+
   centerId  String?
   orgUnitId String? // PR-A: OrgUnit.id (song song centerId, scopedDb flip ở PR-D)
   center    Center? @relation(fields: [centerId], references: [id])
@@ -3815,6 +3864,7 @@ model Order {
   @@index([createdAt])
   @@index([customerPhone])
   @@index([orgUnitId])
+  @@index([leadChildId]) // SL-09b — C-03 quy doanh số về từng con
   // IDX-4: cron order-debt-reminder (getOverdueOrders: status=PENDING + createdAt<cutoff
   // ORDER createdAt) + admin order lists filter status. status+createdAt phục vụ filter+sort.
   @@index([status, createdAt])
@@ -6788,4 +6838,110 @@ model OrgUnitDriftItem {
 
   @@index([runId])
   @@index([model])
+}
+
+// ════════════════════════════════════════════════════════════════════════════════
+// C-01 · B-03 · B-05 — chỉ tiêu lead + sổ chi phí
+// (docs/prd/CDB-dashboard.md §C.6.10 và §B.6.2)
+// ════════════════════════════════════════════════════════════════════════════════
+
+/// C-01 — chỉ tiêu SỐ HỌC SINH theo tháng × cơ sở. Song sinh với `RevenueTarget`.
+///
+/// `centerId = NULL` ⇒ chỉ tiêu **TOÀN HỆ THỐNG**, KHÔNG phải "chưa gán".
+/// ⚠️ Vì thế bảng này khai `SCOPE_EXEMPT`, KHÔNG khai `SCOPED_MODELS`: `injectScope`
+/// chèn `centerId IN (...)` trần (`lib/db-scope.ts:277-279`) sẽ **ẩn mất** dòng toàn
+/// hệ thống với mọi người không phải SUPER_ADMIN.
+model LeadTarget {
+  id        String  @id @default(cuid())
+  centerId  String?
+  /// Luật cứng Nền Hệ thống #3 (bảng mới mang orgUnitId). Ở bảng NGOÀI scope, cột này
+  /// chỉ để ghi kép/đối soát chứ không phải cột lọc.
+  orgUnitId String?
+
+  period      String // "YYYY-MM" theo LỊCH VN — cùng quy ước RevenueTarget.period
+  targetCount Int // SỐ HỌC SINH (CHUNG-2), không phải số phụ huynh
+  note        String?
+  createdById String?
+  createdAt   DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt   DateTime @updatedAt @db.Timestamptz(6)
+
+  /// ⚠️ Postgres coi NULL là DISTINCT ⇒ `upsert` KHÔNG match nhánh toàn hệ thống.
+  /// Đường ghi phải `findFirst` + create/update tay (khuôn: `bao-cao/doanh-thu/_actions.ts`).
+  @@unique([centerId, period])
+  @@index([period])
+  @@index([orgUnitId])
+}
+
+/// B-03/B-05 — DANH MỤC đầu phí. Cấu hình được, KHÔNG phải enum Postgres (đổi enum =
+/// migration, trái tinh thần "admin tự set" — cùng lý do với `LeadSource`).
+/// KHÔNG mang centerId/orgUnitId: danh mục dùng chung toàn hệ thống ⇒ `SCOPE_EXEMPT`.
+model CostCategory {
+  id    String @id @default(cuid())
+  code  String @unique // "ADS" | "RENT" | "SALARY" | "UTILITY" | "MARKETING_OFFLINE" | "OTHER"
+  label String
+
+  /// true = đầu phí do HỆ THỐNG ghi (vd `ADS` đọc từ D1) ⇒ CẤM nhập tay/import.
+  /// 🔴 Không có cờ này thì kế toán nhập tay hoá đơn Meta và B3 trừ **hai lần**.
+  isSystemFed  Boolean  @default(false)
+  isActive     Boolean  @default(true)
+  displayOrder Int      @default(0)
+  createdAt    DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt    DateTime @updatedAt @db.Timestamptz(6)
+
+  entries CostEntry[]
+
+  @@index([isActive, displayOrder])
+}
+
+enum CostEntryStatus {
+  DRAFT // vừa nhập/import — KHÔNG vào báo cáo
+  APPROVED // đã duyệt — CHỈ trạng thái này vào B2/B3/B4
+  VOID // huỷ (không xoá cứng — giữ vết)
+}
+
+enum CostEntrySource {
+  MANUAL // nhập tay trên màn
+  IMPORT // từ file mẫu B-05
+  ADS_SYNC // dự phòng — v1 KHÔNG dùng: chi phí quảng cáo đọc thẳng từ D1
+}
+
+/// B-03 — MỘT KHOẢN CHI. Trục thời gian là `spentDate` (ngày PHÁT SINH), không phải
+/// ngày nhập liệu — đối xứng với `Payment.paidDate` của B1.
+model CostEntry {
+  id String @id @default(cuid())
+
+  /// 🔴 `centerId = NULL` ở bảng này có NGHĨA RIÊNG: chi phí **cấp công ty** (thuê văn
+  /// phòng hội sở, lương HO) — KHÁC nghĩa "chưa gán" của phần lớn bảng khác. Vì thế
+  /// bảng khai CẢ `SCOPED_MODELS` LẪN `NULL_IS_GLOBAL_MODELS`; quên vế thứ hai là
+  /// `injectScope` ẩn sạch chi phí công ty khỏi mọi người trừ SUPER_ADMIN.
+  centerId  String?
+  orgUnitId String?
+
+  categoryId String
+  category   CostCategory @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+
+  spentDate   DateTime @db.Date // ngày phát sinh — trục của B2/B3/B4
+  amount      Int // VND, số NGUYÊN (như Payment.amount)
+  vendor      String?
+  note        String?  @db.Text
+  evidenceUrl String? // ảnh/PDF hoá đơn trên R2
+
+  status CostEntryStatus @default(DRAFT)
+  source CostEntrySource @default(MANUAL)
+
+  /// Chống import trùng: sinh từ (spentDate, categoryId, centerId, amount, vendor).
+  /// Lần import thứ hai cùng khoá bị BỎ QUA, không tạo bản ghi thứ hai.
+  dedupeKey String? @unique
+
+  createdById  String?
+  approvedById String?
+  approvedAt   DateTime? @db.Timestamptz(6)
+  createdAt    DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt    DateTime  @updatedAt @db.Timestamptz(6)
+  deletedAt    DateTime? @db.Timestamptz(6)
+
+  @@index([centerId, spentDate])
+  @@index([status, spentDate])
+  @@index([categoryId])
+  @@index([orgUnitId])
 }

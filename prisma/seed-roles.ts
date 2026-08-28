@@ -80,6 +80,11 @@ export const ROLE_SEED: RoleSeed[] = [
     perms: [
       { action: "payments:manage", scopeType: "GLOBAL" },
       { action: "payments:view", scopeType: "GLOBAL" },
+      // B-03/B-05 (28/08) — sổ chi. GLOBAL theo R1 (call-site gọi trần); cách ly cơ sở
+      // do scopedDb gác vì CostEntry ∈ SCOPED_MODELS.
+      { action: "costs:view", scopeType: "GLOBAL" },
+      { action: "costs:manage", scopeType: "GLOBAL" },
+      { action: "costs:approve", scopeType: "GLOBAL" },
       { action: "orders:manage", scopeType: "GLOBAL" },
       { action: "payroll:view", scopeType: "GLOBAL" },
       { action: "payroll:edit", scopeType: "GLOBAL" },
@@ -501,6 +506,14 @@ export const ROLE_SEED: RoleSeed[] = [
       // `payments:view` mở Công nợ + Biến động số dư ở chế độ đọc; mọi thao tác tiền
       // (sửa/hoàn/cấu hình) vẫn đòi payments:manage / payments:confirm mà vai này KHÔNG có.
       { action: "payments:view", scopeType: "GLOBAL" },
+      // B-03 (28/08) — QLCS ĐỌC được Chi phí/Lợi nhuận/Dòng tiền của cơ sở mình (tab
+      // Tài chính) nhưng KHÔNG nhập và KHÔNG duyệt: `costs:manage`/`costs:approve` cố
+      // ý ở lại kế toán (QĐ-B5 "người nhập không tự duyệt"). Đừng thêm cho gọn.
+      { action: "costs:view", scopeType: "GLOBAL" },
+      // C-01 (28/08) — đặt chỉ tiêu SỐ HỌC SINH theo tháng cho cơ sở mình. Dòng chỉ
+      // tiêu TOÀN HỆ THỐNG (centerId = null) chặn riêng trong Server Action, không
+      // chặn ở đây — cùng khuôn với setRevenueTargetAction.
+      { action: "lead_targets:manage", scopeType: "GLOBAL" },
       // Giữ Học bạ hiển thị: màn đó gác [curriculum:view | students:view-own-class],
       // mà curriculum:view vừa bị gỡ theo yêu cầu "chặn phần LMS".
       { action: "students:view-own-class", scopeType: "GLOBAL" },
@@ -776,6 +789,14 @@ export const ROLE_SEED: RoleSeed[] = [
     perms: [
       { action: "payments:manage", scopeType: "GLOBAL" },
       { action: "payments:view", scopeType: "GLOBAL" },
+      // B-03/B-05 (28/08) — sổ chi của CƠ SỞ MÌNH. GLOBAL ở đây không có nghĩa "toàn
+      // hệ thống": cách ly do scopedDb gác (CostEntry ∈ SCOPED_MODELS), đúng luật R1
+      // đầu file. ⚠️ Kế toán cơ sở KHÔNG thấy chi phí cấp công ty (centerId = null)?
+      // CÓ — CostEntry ∈ NULL_IS_GLOBAL_MODELS nên dòng công ty hiện cho mọi người;
+      // đó là chủ đích, vì B2/B3 của cơ sở phải cộng đủ để không báo lãi ảo.
+      { action: "costs:view", scopeType: "GLOBAL" },
+      { action: "costs:manage", scopeType: "GLOBAL" },
+      { action: "costs:approve", scopeType: "GLOBAL" },
       { action: "payments:record", scopeType: "GLOBAL" },
       { action: "payments:confirm", scopeType: "GLOBAL" },
       // #15 (câu 32) — break-glass xem đầy đủ CCCD PH + địa chỉ (chỉ cơ sở mình).

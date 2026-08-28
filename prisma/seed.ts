@@ -9,6 +9,7 @@ import { seedDepartments } from "./seed-departments";
 import { seedOrgUnits } from "./seed-orgunit";
 import { seedRoles } from "./seed-roles";
 import { seedWorkingHours } from "./seed-working-hours";
+import { seedCostCategories } from "./seed-cost-categories";
 
 const db = new PrismaClient();
 
@@ -443,6 +444,9 @@ PHÙ HỢP CHO:
 
   // ─── Giờ làm việc mặc định toàn hệ thống (Q-C 19/08) ────────────────────────
   await seedWorkingHours(db);
+
+  // ─── Danh mục đầu phí B-03/B-05 (28/08) — ADS mang isSystemFed ⇒ cấm nhập tay ──
+  await seedCostCategories(db);
 
   console.log("\n🎉 Seed hoàn tất!");
   console.log("─".repeat(50));

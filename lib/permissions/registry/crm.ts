@@ -32,6 +32,14 @@ export const crmModule: ModuleDecl = {
       action: "import",
       description: "Import danh sách khách đã đăng ký từ Excel.",
     },
+    {
+      // C-01 (QĐ-C5 24/08) — key MỚI, cố ý KHÔNG tái dùng `leads:assign-config`: key đó
+      // đang gác màn cấu hình CHIA lead, gộp vào là ai đặt chỉ tiêu cũng sửa được quy
+      // tắc chia lead. LeadTarget theo cơ sở (centerId) nên scopable như assign-config.
+      key: "lead_targets:manage",
+      action: "manage",
+      description: "Đặt chỉ tiêu SỐ HỌC SINH theo tháng × cơ sở (C-01).",
+    },
 
     // --- Trials (lớp trải nghiệm) ---
     { key: "trials:view", action: "view" },

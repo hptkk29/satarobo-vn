@@ -271,6 +271,18 @@ export type Action =
   | "orders:manage"
   | "orders:view-pii" // che SĐT/email/địa chỉ khách trên đơn hàng — vai CRM/kế toán mới xem đầy đủ
 
+  // --- B-03/B-05 (QĐ-B5 24/08) — SỔ CHI. Ba key TÁCH BIỆT, cố ý không mượn "payments:*":
+  // xem được sổ THU không đương nhiên xem được sổ CHI (lương, thuê mặt bằng).
+  // 🔴 Người nhập KHÔNG tự duyệt được — vì thế "manage" và "approve" là hai key khác nhau.
+  | "costs:view"
+  | "costs:manage"
+  | "costs:approve"
+
+  // --- C-01 (QĐ-C5 24/08) — chỉ tiêu LEAD theo tháng × cơ sở. Key MỚI, cố ý KHÔNG tái
+  // dùng "leads:assign-config": key đó đang gác màn cấu hình CHIA LEAD, gộp vào là ai
+  // đặt chỉ tiêu cũng sửa được quy tắc chia lead.
+  | "lead_targets:manage"
+
   // --- Phase 5.7 — Vouchers ---
 
   // --- Phase 5.10 — Products (sales/rental catalog) ---
@@ -644,6 +656,19 @@ export const PERMISSIONS: Record<Action, Role[]> = {
   "orders:manage": ["SUPER_ADMIN", "CENTER_MANAGER", "ACCOUNTANT"],
   // Xem đầy đủ liên hệ khách trên đơn (CRM + kế toán); vai khác thấy bản che.
   "orders:view-pii": ["SUPER_ADMIN", "CENTER_MANAGER", "SALES_CSM", "ACCOUNTANT"],
+
+  // B-03/B-05 — sổ chi. Xem: quản lý cơ sở + kế toán (QLCS cần B2/B3/B4 của cơ sở mình).
+  // Nhập/sửa: kế toán. Duyệt: kế toán + admin — 🔴 CỐ Ý không cho SALES_CSM và không
+  // gộp "manage" với "approve": QĐ-B5 nói rõ *người nhập không tự duyệt*.
+  // ⚠️ CENTER_MANAGER có "view" mà KHÔNG có "manage"/"approve" là có chủ đích, đừng
+  // "dọn cho gọn" — QLCS đọc được chi phí cơ sở mình nhưng không tự ghi thêm khoản chi.
+  "costs:view": ["SUPER_ADMIN", "CENTER_MANAGER", "ACCOUNTANT"],
+  "costs:manage": ["SUPER_ADMIN", "ACCOUNTANT"],
+  "costs:approve": ["SUPER_ADMIN", "ACCOUNTANT"],
+
+  // C-01 — đặt chỉ tiêu lead. Cùng tập vai với đặt mục tiêu doanh thu (RevenueTarget):
+  // quản lý cơ sở đặt cho cơ sở mình, HO/admin đặt cả dòng toàn hệ thống.
+  "lead_targets:manage": ["SUPER_ADMIN", "CENTER_MANAGER"],
 
   // --- Phase 5.7 — Vouchers ---
 

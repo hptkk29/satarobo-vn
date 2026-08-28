@@ -252,6 +252,26 @@ export const BACKFILL_SPECS: readonly BackfillSpec[] = [
     scoped: true,
     vi: "giao dịch SataCoin — 3 dòng, 0 NULL; gắn học viên của cơ sở",
   },
+
+  // ── G.2 + B.8 (28/08/2026) — ba bảng mới của khu vực C và B ─────────────────
+  {
+    model: "LeadChild",
+    nullMeaning: "BAT_BUOC",
+    scoped: true,
+    vi: "con của lead — SL-08, centerId backfill từ Lead cha; NULL = lead chưa gán cơ sở",
+  },
+  {
+    model: "CostEntry",
+    nullMeaning: "NULL_TOAN_HE_THONG",
+    scoped: true,
+    vi: "khoản chi — NULL = chi phí CẤP CÔNG TY (thuê VP hội sở, lương HO), không phân bổ ở v1",
+  },
+  {
+    model: "LeadTarget",
+    nullMeaning: "NULL_TOAN_HE_THONG",
+    scoped: false,
+    vi: "chỉ tiêu lead cấp toàn hệ thống — song sinh RevenueTarget",
+  },
 ] as const;
 
 /** Model → spec, tra nhanh. */

@@ -47,6 +47,16 @@ export const SCOPED_MODELS = new Set<string>([
   // (tiền vừa về, chưa biết của đơn nào) → xem NULL_IS_GLOBAL_MODELS. Ẩn nhóm này
   // khỏi người đối soát chính là làm mất đúng thứ họ cần xử lý.
   "BankTransaction",
+  // SL-08 (G.2) — LeadChild là ĐƠN VỊ ĐẾM của C1/C3 và là nơi quy doanh số theo học
+  // sinh. Trước SL-08 nó không có cột phạm vi nào ⇒ cách ly chỉ gián tiếp qua Lead cha,
+  // ai quên join là rò chéo cơ sở ở đúng bảng tiền. centerId đã backfill từ Lead cha
+  // trong cùng migration nên bật SCOPED ngay là an toàn.
+  // ⚠️ centerId NULL ở đây = CHƯA GÁN CƠ SỞ (nghĩa mặc định) — KHÔNG khai NULL_IS_GLOBAL:
+  // lead chưa gán cơ sở không được hiện cho mọi cơ sở.
+  "LeadChild",
+  // B.8 — sổ chi phí. Tiền ⇒ cách ly cơ sở bắt buộc.
+  // ⚠️ centerId NULL ở đây có NGHĨA RIÊNG ("chi phí cấp công ty") → xem NULL_IS_GLOBAL_MODELS.
+  "CostEntry",
 ]);
 
 /**
@@ -67,6 +77,11 @@ export const NULL_IS_GLOBAL_MODELS = new Set<string>([
   // cơ sở nào", và đó CHÍNH LÀ nhóm cần mọi người đối soát nhìn thấy để xử lý.
   // Khớp xong thì centerId được điền, từ đó bị scope bình thường.
   "BankTransaction",
+  // B.8 — CostEntry.centerId NULL = chi phí CẤP CÔNG TY (thuê văn phòng HO, lương HO),
+  // KHÔNG phải "chưa gán". Quên khai ở đây là injectScope chèn `centerId IN [...]` trần
+  // và ẩn sạch chi phí công ty khỏi mọi người trừ SUPER_ADMIN ⇒ B2 báo thiếu, B3 báo
+  // lãi cao hơn thực tế — sai theo hướng dễ chịu, tức khó bị phát hiện nhất.
+  "CostEntry",
 ]);
 
 // FIX-C3 (B1) — soft-delete đã chuyển lên TẦNG base `db` (lib/soft-delete.ts + lib/db.ts)
@@ -123,6 +138,14 @@ export const SCOPE_EXEMPT = new Set<string>([
   // khỏi chính người trong cuộc. Cách ly cho màn admin: filter TAY theo
   // getVisibleCenterIds(actor) (US-15).
   "Conversation",
+  // C.6.10 — LeadTarget: centerId NULL = chỉ tiêu TOÀN HỆ THỐNG. Cùng lý do (và cùng
+  // khuôn đọc) với RevenueTarget ngay trên: inject `centerId IN [...]` sẽ ẩn mất dòng
+  // toàn hệ thống. Cách ly nằm ở gate quyền của đường ghi (lead_targets:manage) và ở
+  // phép lọc tay khi đọc.
+  "LeadTarget",
+  // B.8 — CostCategory là DANH MỤC đầu phí dùng chung toàn hệ thống, không mang
+  // centerId/orgUnitId. Liệt kê ở đây để introspection không báo "miss model".
+  "CostCategory",
 ]);
 
 function bypassesScope(actor: Actor): boolean {
@@ -213,6 +236,14 @@ export function getModelPrefixes(model: string): string[] {
     case "Survey":
     case "SurveyResponse":
       return ["parent-feedback:", "khao-sat:"];
+    // SL-08 — con của lead đi theo đúng tầm nhìn của lead cha. Cho prefix khác (vd
+    // "students:") là hai bảng cùng một phễu lại có hai tầm nhìn khác nhau.
+    case "LeadChild":
+      return ["leads:"];
+    // B.8 — sổ chi phí có họ quyền RIÊNG (costs:view/manage/approve), cố ý KHÔNG mượn
+    // "payments:": người xem được sổ thu không đương nhiên được xem sổ chi.
+    case "CostEntry":
+      return ["costs:"];
     default:
       return [];
   }
