@@ -357,6 +357,31 @@ export const SETTINGS = {
   //
   // Dữ liệu cũ vượt trần KHÔNG bị đụng: trần chỉ kiểm lúc GHI MỚI. Siết rồi mà đi sửa
   // ngược dữ liệu đang chạy là đổi nghiệp vụ sau lưng người dùng.
+  // ── Trần tổng hoa hồng ──────────────────────────────────────────────────────
+  //
+  // 27/08/2026 — chủ dự án chốt NỚI 8% → 9% **và** thôi hardcode: quản trị hệ thống tự
+  // sửa ở màn Cấu hình vận hành, không phải sửa code rồi chờ deploy.
+  //
+  // Trần này phủ Σ 4 tầng Sale (QC · Sale Admin · Sale · QL TT) — đang đúng 8,00% — CỘNG
+  // tầng `TRIAL_TEACHER` (+1% GV dạy Trial). Trước 27/08 tầng GV chạy NGOÀI mọi ràng
+  // buộc vì trần cũ đã bão hoà; nay cả hai nằm dưới một con số đo được.
+  //
+  // ⚠️ KHÔNG `centerOverridable`: đây là chính sách tiền của toàn hệ thống. Cho cơ sở tự
+  // nới trần là mỗi cơ sở một mức chi hoa hồng, và kế toán không còn một con số để đối.
+  //
+  // ⚠️ Hạ trần xuống DƯỚI tổng tỉ lệ đang hiệu lực KHÔNG xoá dòng hoa hồng đã sinh —
+  // nó chỉ chặn lần lưu cấu hình tỉ lệ tiếp theo. Muốn giảm chi thật thì phải hạ tỉ lệ
+  // từng tầng, không phải hạ trần.
+  "crm.commissionMaxTotalRate": def({
+    key: "crm.commissionMaxTotalRate",
+    group: "crm",
+    label: "Trần tổng tỉ lệ hoa hồng (gồm cả tầng GV dạy Trial)",
+    // Chặn dưới 8% = tổng 4 tầng Sale hiện hành: đặt thấp hơn là mọi lần lưu cấu hình
+    // tỉ lệ đều ném RATE_EXCEEDS_CAP, tức khoá luôn màn cấu hình hoa hồng.
+    schema: z.number().min(0.08).max(0.2),
+    default: 0.09,
+    centerOverridable: false,
+  }),
   "crm.trialMaxSessions": def({
     key: "crm.trialMaxSessions",
     group: "crm",

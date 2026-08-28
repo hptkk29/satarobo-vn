@@ -345,15 +345,28 @@ describe("luật nghiệp vụ giữ nguyên từ engine cũ", () => {
     expect(lines.reduce((s, l) => s + l.amount, 0)).toBe(8_000_000);
   });
 
-  it("tỉ lệ vượt trần 8% → NÉM, không âm thầm trả quá", () => {
-    const quaTran = () => ({ ...DEFAULT_RATES, SALE: 0.05 }); // Σ = 9%
+  // 27/08/2026 — trần mặc định nới 8% → 9%, nên ca thử phải vượt QUA 9% mới ném.
+  // Σ = 10% (SALE 4% → 6%).
+  it("tỉ lệ vượt trần → NÉM, không âm thầm trả quá", () => {
+    const quaTran = () => ({ ...DEFAULT_RATES, SALE: 0.06 }); // Σ = 10% > trần 9%
     expect(() =>
       tinhHoaHongTheoKy({
         period: "2026-09",
         butToan: [thu("p1", 10_000_000, "2026-09-05T09:00:00+07:00")],
         ratesAt: quaTran,
       }),
-    ).toThrow(/8%/);
+    ).toThrow(/vượt trần/);
+  });
+
+  // Ca biên đáng giữ: Σ = 9% ĐÚNG BẰNG trần mới ⇒ KHÔNG được ném. Trước 27/08 ca này ném.
+  it("Σ đúng bằng trần 9% → vẫn tính bình thường", () => {
+    const vuaKhit = () => ({ ...DEFAULT_RATES, SALE: 0.05 }); // Σ = 9%
+    const lines = tinhHoaHongTheoKy({
+      period: "2026-09",
+      butToan: [thu("p1", 100_000_000, "2026-09-05T09:00:00+07:00")],
+      ratesAt: vuaKhit,
+    });
+    expect(lines.reduce((s, l) => s + l.amount, 0)).toBe(9_000_000);
   });
 });
 
