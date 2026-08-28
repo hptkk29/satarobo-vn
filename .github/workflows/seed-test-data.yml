@@ -1,0 +1,153 @@
+name: Seed dữ liệu TEST (nạp lại từ đầu)
+
+# =============================================================================
+# NẠP DỮ LIỆU NGHIỆP VỤ CHO DB CỦA MÔI TRƯỜNG `test`.
+#
+# ── Vì sao cần một workflow riêng cho việc này ────────────────────────────────
+# DB dev/test đã bị xoá sạch BỐN lần trong sáu ngày (23/08 ba lần, 26/08 một lần
+# — lần cuối do `prisma migrate diff --shadow-database-url` trỏ nhầm Supabase).
+# Mỗi lần dựng lại, người trực phải tự nhớ đúng thứ tự bảy bước seed và tự cầm
+# chuỗi kết nối. Thứ tự sai thì seed sau không tìm thấy dữ liệu seed trước tạo ra,
+# và lỗi hiện ra dưới dạng "màn trắng" chứ không phải thông báo rõ ràng.
+#
+# Workflow này biến việc đó thành một nút bấm, và quan trọng hơn: **không ai phải
+# cầm chuỗi kết nối DB test nữa** — nó đọc từ secret, giống migrate-test.yml.
+#
+# ── Chạy khi nào ──────────────────────────────────────────────────────────────
+#   · vừa dựng DB test mới (đổi Supabase project)
+#   · DB test bị xoá / bị reset
+#   · muốn làm mới bộ dữ liệu nghiệm thu
+#
+# CHẠY TAY, KHÔNG tự chạy theo push: đây là ghi dữ liệu diện rộng, phải có người
+# bấm và người đó chịu trách nhiệm.
+#
+# ── Điều kiện tiên quyết ──────────────────────────────────────────────────────
+# Chạy `Migrate TEST DB` TRƯỚC (nó tạo bảng + seed registry quyền + seed vai).
+# DB chưa có bảng thì workflow này đỏ ngay bước đầu.
+#
+# ── An toàn ───────────────────────────────────────────────────────────────────
+#   · dispatch-only + phải gõ đúng chuỗi xác nhận
+#   · chặn `TEST_DIRECT_URL` trùng `PROD_DIRECT_URL` (cùng lưới với migrate-test)
+#   · mọi bước seed đều CHỈ THÊM/CẬP NHẬT (upsert), không có câu xoá nào
+#   · dùng TEST_DIRECT_URL (session pooler :5432) cho mọi bước — PrismaClient trần
+#     chạy qua transaction pooler :6543 sẽ đâm `42P05 prepared statement "s0" already exists`
+# =============================================================================
+
+on:
+  workflow_dispatch:
+    inputs:
+      xac_nhan:
+        description: 'Gõ đúng chữ SEED-TEST để xác nhận nạp dữ liệu vào DB test'
+        required: true
+        default: ''
+      bo_du_lieu_uat:
+        description: 'Nạp cả bộ dữ liệu UAT (lead/học viên/lớp/ảnh/trial)? Bỏ chọn = chỉ nạp nền.'
+        type: boolean
+        required: false
+        default: true
+
+concurrency:
+  group: seed-test-data
+  cancel-in-progress: false
+
+jobs:
+  seed:
+    name: Seed dữ liệu vào DB test
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Xác nhận chủ ý
+        run: |
+          if [ "${{ inputs.xac_nhan }}" != "SEED-TEST" ]; then
+            echo "::error::Chưa xác nhận. Gõ đúng SEED-TEST vào ô xác nhận rồi chạy lại."
+            exit 1
+          fi
+
+      - name: Kiểm tra secrets test
+        run: |
+          missing=0
+          [ -n "${{ secrets.TEST_DIRECT_URL }}" ] || { echo "::error::Thiếu secret TEST_DIRECT_URL (session pooler :5432)"; missing=1; }
+          exit $missing
+
+      # Cùng lưới với migrate-test.yml: cấu hình nhầm nguy hiểm nhất là trỏ secret
+      # TEST vào chính DB PROD — ở đây hậu quả còn nặng hơn migrate, vì workflow này
+      # ĐỔ DỮ LIỆU GIẢ (100 lead, 250 học viên UAT) vào chỗ đó.
+      - name: Chặn trỏ nhầm vào DB PROD
+        run: |
+          if [ -n "${{ secrets.PROD_DIRECT_URL }}" ] && [ "${{ secrets.TEST_DIRECT_URL }}" = "${{ secrets.PROD_DIRECT_URL }}" ]; then
+            echo "::error::TEST_DIRECT_URL trùng PROD_DIRECT_URL — đây là DB PRODUCTION. Dừng."
+            exit 1
+          fi
+
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v3
+        with: { version: 11 }
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Generate Prisma client
+        run: pnpm exec prisma generate
+
+      # ── Nền: cây đơn vị → phòng ban → dữ liệu gốc ────────────────────────────
+      # THỨ TỰ BẮT BUỘC. `seed-uat` gọi `layCoSo()` và ném ngay nếu chưa có CS1/CS2,
+      # còn `seed.ts` cần phòng ban để dựng hồ sơ nhân sự.
+      - name: Seed cây đơn vị (HO → REGION → CS1/CS2)
+        run: pnpm db:seed:orgunit
+        env: { DATABASE_URL: "${{ secrets.TEST_DIRECT_URL }}", DIRECT_URL: "${{ secrets.TEST_DIRECT_URL }}" }
+
+      - name: Seed phòng ban
+        run: pnpm db:seed:departments
+        env: { DATABASE_URL: "${{ secrets.TEST_DIRECT_URL }}", DIRECT_URL: "${{ secrets.TEST_DIRECT_URL }}" }
+
+      - name: Seed dữ liệu gốc (khoá học, nội dung web, tài khoản CEO)
+        run: pnpm db:seed
+        env: { DATABASE_URL: "${{ secrets.TEST_DIRECT_URL }}", DIRECT_URL: "${{ secrets.TEST_DIRECT_URL }}" }
+
+      # ── Bộ UAT: 12 tài khoản uat.* + dữ liệu nghiệp vụ ──────────────────────
+      - name: Seed bộ UAT (12 tài khoản + lead/học viên/lớp)
+        if: ${{ inputs.bo_du_lieu_uat }}
+        run: pnpm db:seed:uat
+        env:
+          UAT_SEED: "1"
+          DATABASE_URL: "${{ secrets.TEST_DIRECT_URL }}"
+          DIRECT_URL: "${{ secrets.TEST_DIRECT_URL }}"
+
+      - name: Seed ảnh chờ duyệt
+        if: ${{ inputs.bo_du_lieu_uat }}
+        run: pnpm exec tsx prisma/seed-uat-media-review.ts
+        env:
+          UAT_SEED: "1"
+          DATABASE_URL: "${{ secrets.TEST_DIRECT_URL }}"
+          DIRECT_URL: "${{ secrets.TEST_DIRECT_URL }}"
+
+      - name: Backfill kho ảnh (MediaAsset)
+        if: ${{ inputs.bo_du_lieu_uat }}
+        run: pnpm exec tsx scripts/backfill-media-assets.ts
+        env: { DATABASE_URL: "${{ secrets.TEST_DIRECT_URL }}", DIRECT_URL: "${{ secrets.TEST_DIRECT_URL }}" }
+
+      # Lớp trial: buổi + điểm danh + phiếu đánh giá + dời lịch. Không có bước này
+      # thì màn Lớp Trial mở ra có danh sách lớp nhưng bên trong rỗng — không bấm
+      # được gì để nghiệm thu.
+      - name: Seed dữ liệu lớp trial
+        if: ${{ inputs.bo_du_lieu_uat }}
+        run: pnpm exec tsx prisma/seed-uat-trial.ts
+        env:
+          UAT_SEED: "1"
+          DATABASE_URL: "${{ secrets.TEST_DIRECT_URL }}"
+          DIRECT_URL: "${{ secrets.TEST_DIRECT_URL }}"
+
+      # PHẢI chạy SAU seed trial: nó phân loại ca theo người đưa vào lớp, mà ca thì
+      # bước trên vừa tạo. Chạy trước là không có gì để phân loại.
+      - name: Backfill giáo viên học thử (phương án B)
+        if: ${{ inputs.bo_du_lieu_uat }}
+        run: pnpm exec tsx scripts/backfill-gv-trial-phuong-an-b.ts
+        env: { DATABASE_URL: "${{ secrets.TEST_DIRECT_URL }}", DIRECT_URL: "${{ secrets.TEST_DIRECT_URL }}" }
+
+      - name: Tóm tắt
+        run: |
+          echo "### Đã nạp dữ liệu vào DB test" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Xem số dòng từng bảng ở log các bước trên." >> $GITHUB_STEP_SUMMARY
+          echo "Bước tiếp theo: **redeploy Vercel environment \`test\`** để bản đang chạy nối vào DB này." >> $GITHUB_STEP_SUMMARY
