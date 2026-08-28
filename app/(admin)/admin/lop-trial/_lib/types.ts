@@ -58,6 +58,14 @@ export type SessionRow = {
   status: TrialSessionStatusV2;
   /** trialEnrollmentId → điểm danh đã lưu. Không có khoá = chưa điểm danh em đó. */
   attendance: Record<string, { status: TrialAttendanceMark; note: string | null }>;
+  /**
+   * trialEnrollmentId → giáo viên ĐÃ chấm phiếu rubric cho em đó Ở BUỔI NÀY.
+   * Không có khoá = chưa chấm.
+   *
+   * Theo TỪNG BUỔI chứ không theo ca: GĐ4 khoá phiếu bằng cặp (ca, buổi) nên một ca có
+   * nhiều phiếu. Gộp về mức ca là dòng buổi 1 sáng nút "Xuất PDF" nhờ phiếu của buổi 2.
+   */
+  danhGia: Record<string, true>;
 };
 
 /** Một học viên trong lớp trải nghiệm (một "ca" trải nghiệm). */

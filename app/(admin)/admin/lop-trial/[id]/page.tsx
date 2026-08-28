@@ -7,7 +7,6 @@ import { checkPermission } from "@/lib/auth/check-permission";
 import { resolveActor } from "@/lib/auth/actor";
 import { getAssignableTeachers } from "@/lib/teachers/assignable";
 import { getSetting } from "@/lib/settings/service";
-import { TrialSessionEvalFill } from "@/app/(admin)/admin/evaluations/_components/trial-session-eval-fill";
 import { layChiTietLop } from "../_lib/queries";
 import { TeacherAssignSelect } from "../_components/teacher-assign-select";
 import { AddSessionForm } from "../_components/add-session-form";
@@ -46,30 +45,19 @@ export default async function ChiTietLopTrialPage({
   // layChiTietLop đã lọc theo scopedDb → ngoài cơ sở là 404, không phải "cấm truy cập".
   if (!cls) notFound();
 
-  const [canAssignTeacher, isManager, canFeedback, canAttendance] = await Promise.all([
+  const [canAssignTeacher, isManager, canAttendance] = await Promise.all([
     checkPermission("trials:assign-teacher", { centerId: cls.centerId }),
     checkPermission("trials:manage", { centerId: cls.centerId }),
-    checkPermission("trials:feedback", { centerId: cls.centerId }),
     checkPermission("trials:attendance", { centerId: cls.centerId }),
   ]);
-  // GĐ4 — hai việc, hai quyền, hai vai:
-  //   điểm danh  = Sale phụ trách khách  (`trials:attendance`)
-  //   phiếu đánh giá = giáo viên dạy buổi (`trials:feedback`)
-  // Trước GĐ4 cả hai dùng chung một cờ nên ai điểm danh được thì cũng chấm được và
-  // ngược lại — ngược hẳn quy trình đã chốt.
-  const canDiemDanh = canAttendance;
-  // Giáo viên thuần chỉ chấm lớp mình; người quản lý chấm mọi lớp trong tầm nhìn.
+  // GĐ4 — điểm danh là việc của Sale phụ trách khách (`trials:attendance`), tách khỏi
+  // `trials:feedback` của giáo viên. Trước GĐ4 hai việc dùng chung một cờ nên ai điểm
+  // danh được thì cũng chấm được và ngược lại — ngược hẳn quy trình đã chốt.
   //
-  // ⚠️ GĐ3 — `cls.teacherId` (giáo viên MẶC ĐỊNH của lớp) KHÔNG còn là nguồn duy nhất:
-  // Đào tạo phân công theo TỪNG CA qua `TrialEnrollment.gvPhanCongId`. Chỉ so
-  // `cls.teacherId` thì giáo viên được phân công thật sự bị cấm nộp phiếu, còn giáo
-  // viên mặc định của lớp lại nộp được cho ca đã giao người khác — ngược ma trận §8.2.
-  const laGvPhanCongCa = cls.enrollments.some(
-    (e) => e.gvPhanCongId === session.user.id,
-  );
-  const canDanhGia =
-    canFeedback &&
-    (isManager || cls.teacherId === session.user.id || laGvPhanCongCa);
+  // 27/08 — màn này KHÔNG còn đường chấm phiếu (khối SESSION_EVAL đã gỡ), nên
+  // `trials:feedback` không còn phải kiểm ở đây. Việc chấm nằm trọn ở site giáo viên;
+  // màn này chỉ ĐỌC phiếu đã chấm, và quyền đọc là `trials:view` — đã gác ở đầu hàm.
+  const canDiemDanh = canAttendance;
 
   // ⚠️ Danh sách GV phải nạp cho MỌI người xem, không chỉ người có quyền gán.
   //
@@ -96,16 +84,16 @@ export default async function ChiTietLopTrialPage({
   const full = activeUsed >= cls.capacity;
   const daKetThuc = cls.status === "COMPLETED" || cls.status === "CANCELLED";
 
-  // Phiếu đánh giá buổi học dùng LẠI component của màn Đánh giá — cố ý không fork:
-  // fork là đẻ ra hai nguồn sự thật cho cùng một phiếu.
-  const evalStudents = cls.enrollments
-    .filter((e) => e.status === "ACTIVE" || e.status === "COMPLETED")
-    .map((e) => ({
-      studentId: e.leadChildId ?? e.id,
-      name: e.childName,
-      present: true,
-    }));
-  const evalSessions = cls.sessions.map((s) => ({ id: s.id, label: `Buổi ${s.seq}` }));
+  // 27/08 — khối "Phiếu đánh giá buổi học" (hệ SESSION_EVAL) ĐÃ GỠ khỏi màn này.
+  //
+  // Nó là CỬA THỨ HAI cho cùng một việc, và là cửa sai: giáo viên thật sự chấm bằng
+  // phiếu rubric ở site giáo viên (`TrialRubricEval`), còn khối kia đọc kho
+  // `EvalResponse`. Hai kho khác nhau nên Sale mở khối kia ra luôn thấy trống dù giáo
+  // viên đã chấm xong — đúng lỗi người dùng báo.
+  //
+  // Thay bằng: mỗi dòng điểm danh có nút lấy phiếu (xem `_components/attendance-board`).
+  // Component `TrialSessionEvalFill` KHÔNG xoá — site giáo viên còn dùng
+  // (`lib/lms/teacher-schedule.ts`).
 
   return (
     <div className="space-y-5">
@@ -212,18 +200,6 @@ export default async function ChiTietLopTrialPage({
         />
       </section>
 
-      {evalSessions.length > 0 && evalStudents.length > 0 && (
-        <section className="rounded-xl border border-border bg-card p-4">
-          <h3 className="mb-3 text-sm font-semibold text-foreground">
-            Phiếu đánh giá buổi học
-          </h3>
-          <TrialSessionEvalFill
-            trialSessions={evalSessions}
-            students={evalStudents}
-            canEdit={canDanhGia}
-          />
-        </section>
-      )}
     </div>
   );
 }
