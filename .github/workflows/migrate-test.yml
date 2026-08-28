@@ -26,7 +26,33 @@ name: Migrate TEST DB (Supabase dev)
 on:
   push:
     branches: [test]
-  workflow_dispatch: {} # migrate tay khi cần
+  # Bấm tay: ngoài migrate, còn hai việc DỮ LIỆU chỉ chạy khi tick ô tương ứng.
+  #
+  # Vì sao nhét vào ĐÂY chứ không để ở `seed-test-data.yml`: file kia mới chỉ nằm trên
+  # nhánh `test`, mà GitHub chỉ ĐĂNG KÝ workflow_dispatch từ NHÁNH MẶC ĐỊNH — nên nó
+  # chưa bấm được (`gh workflow run` trả 404). File này đã đăng ký từ lâu.
+  #
+  # Vì sao phải qua workflow chứ không chạy ở máy: chuỗi kết nối DB test nằm trong
+  # secret `TEST_DIRECT_URL`. `.env` ở máy dev trỏ một Supabase project KHÁC (đã đo
+  # 27/08: cùng mã lớp TRIAL-CS1-033 nhưng khác học viên) — chạy ở máy là ghi vào DB
+  # không ai đọc.
+  workflow_dispatch:
+    inputs:
+      seed_lich_hen:
+        description: 'Nạp dữ liệu tab "Lịch hẹn học thử" (60 dòng, chỉ thêm/cập nhật)'
+        type: boolean
+        required: false
+        default: false
+      doi_thang_phieu:
+        description: 'Quy đổi phiếu trải nghiệm đã chấm từ thang 8.0 sang 10.0'
+        type: boolean
+        required: false
+        default: false
+      chi_xem_truoc:
+        description: 'Chỉ XEM TRƯỚC hai việc trên, không ghi gì'
+        type: boolean
+        required: false
+        default: true
 
 concurrency:
   group: migrate-test
@@ -100,6 +126,47 @@ jobs:
       # việc có người chịu trách nhiệm bấm, không phải hệ quả phụ của một lượt merge.
       - name: Seed RoleDef + RolePermission
         run: pnpm db:seed:roles
+        env:
+          DATABASE_URL: ${{ secrets.TEST_DIRECT_URL }}
+          DIRECT_URL: ${{ secrets.TEST_DIRECT_URL }}
+
+      # ── Hai việc DỮ LIỆU, chỉ chạy khi bấm tay và tick ô ───────────────────
+      #
+      # KHÔNG chạy theo push. Cả hai đều idempotent, nhưng chúng ghi DỮ LIỆU NGHIỆP VỤ
+      # chứ không phải cấu hình: chạy tự động mỗi lượt merge là đổ dữ liệu mẫu vào môi
+      # trường người khác đang nghiệm thu, và ghi đè thao tác họ vừa làm.
+      #
+      # `DATABASE_URL` = `TEST_DIRECT_URL` (session pooler :5432) cho cả hai: PrismaClient
+      # trần chạy qua transaction pooler :6543 sẽ đâm `42P05 prepared statement "s0"
+      # already exists`. Đã vấp ba lần, đừng "dọn cho gọn" thành TEST_DATABASE_URL.
+
+      - name: Xem trước — nạp lịch hẹn học thử
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.seed_lich_hen && inputs.chi_xem_truoc }}
+        run: pnpm exec tsx prisma/seed-uat-lich-hen.ts
+        env:
+          UAT_SEED: "1"
+          UAT_HEN_DRY: "1"
+          DATABASE_URL: ${{ secrets.TEST_DIRECT_URL }}
+          DIRECT_URL: ${{ secrets.TEST_DIRECT_URL }}
+
+      - name: Nạp lịch hẹn học thử (GHI THẬT)
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.seed_lich_hen && !inputs.chi_xem_truoc }}
+        run: pnpm exec tsx prisma/seed-uat-lich-hen.ts
+        env:
+          UAT_SEED: "1"
+          DATABASE_URL: ${{ secrets.TEST_DIRECT_URL }}
+          DIRECT_URL: ${{ secrets.TEST_DIRECT_URL }}
+
+      - name: Xem trước — quy đổi phiếu 8.0 → 10.0
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.doi_thang_phieu && inputs.chi_xem_truoc }}
+        run: pnpm exec tsx scripts/rescale-trial-rubric-10.ts --dry-run
+        env:
+          DATABASE_URL: ${{ secrets.TEST_DIRECT_URL }}
+          DIRECT_URL: ${{ secrets.TEST_DIRECT_URL }}
+
+      - name: Quy đổi phiếu 8.0 → 10.0 (GHI THẬT)
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.doi_thang_phieu && !inputs.chi_xem_truoc }}
+        run: pnpm exec tsx scripts/rescale-trial-rubric-10.ts
         env:
           DATABASE_URL: ${{ secrets.TEST_DIRECT_URL }}
           DIRECT_URL: ${{ secrets.TEST_DIRECT_URL }}
