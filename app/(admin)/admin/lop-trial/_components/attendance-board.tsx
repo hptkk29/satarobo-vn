@@ -8,13 +8,17 @@
 import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { CheckCircle2 } from "lucide-react";
+import { CheckCircle2, Pencil } from "lucide-react";
 import {
   markLopTrialAttendanceAction,
   completeLopTrialSessionAction,
+  updateLopTrialSessionAction,
+  cancelLopTrialSessionAction,
 } from "../_actions";
 import type {
   EnrollmentRow,
+  Option,
+  RoomOption,
   SessionRow,
   TrialAttendanceMark,
 } from "../_lib/types";
@@ -90,14 +94,202 @@ function NutPhieu({
   );
 }
 
+/**
+ * Sửa hoặc huỷ MỘT buổi. Cả hai đường đều BẮT BUỘC ghi lý do, và chính lý do đó là nội
+ * dung thông báo đẩy sang giáo viên (chốt 28/08). Không có ô lý do thì giáo viên nhận
+ * một tin "buổi đã đổi" trống rỗng rồi phải đi hỏi lại từng người.
+ */
+function SuaBuoiForm({
+  session,
+  teachers,
+  rooms,
+  onXong,
+}: {
+  session: SessionRow;
+  teachers: Option[];
+  rooms: RoomOption[];
+  onXong: () => void;
+}) {
+  const router = useRouter();
+  const [pending, startTransition] = useTransition();
+
+  // `date` của buổi là UTC-midnight của NGÀY VN → cắt 10 ký tự đầu ra đúng giá trị mà
+  // `<input type="date">` cần. Đừng đổi múi giờ ở đây, sẽ lùi một ngày.
+  const [date, setDate] = useState(session.date.slice(0, 10));
+  const [startTime, setStartTime] = useState(session.startTime);
+  const [endTime, setEndTime] = useState(session.endTime);
+  const [roomId, setRoomId] = useState(session.roomId ?? "");
+  const [teacherId, setTeacherId] = useState(session.teacherId ?? "");
+  const [lyDo, setLyDo] = useState("");
+  const [choHuy, setChoHuy] = useState(false);
+
+  function luu() {
+    startTransition(async () => {
+      const res = await updateLopTrialSessionAction({
+        sessionId: session.id,
+        date,
+        startTime,
+        endTime,
+        roomId: roomId || null,
+        teacherId: teacherId || null,
+        reason: lyDo.trim(),
+      });
+      if (res.ok) {
+        toast.success("Đã lưu buổi học và báo giáo viên");
+        onXong();
+        router.refresh();
+        return;
+      }
+      toast.error(res.error);
+    });
+  }
+
+  function huy() {
+    startTransition(async () => {
+      const res = await cancelLopTrialSessionAction({
+        sessionId: session.id,
+        reason: lyDo.trim(),
+      });
+      if (res.ok) {
+        toast.success("Đã huỷ buổi và báo giáo viên");
+        onXong();
+        router.refresh();
+        return;
+      }
+      toast.error(res.error);
+    });
+  }
+
+  return (
+    <div className="mb-3 rounded-lg border border-border bg-muted/40 p-3">
+      <div className="flex flex-wrap items-end gap-2">
+        <label className="flex flex-col gap-1 text-xs text-muted-foreground">
+          Ngày
+          <input
+            type="date"
+            value={date}
+            onChange={(e) => setDate(e.target.value)}
+            disabled={pending}
+            className="rounded-md border border-border bg-card px-2 py-1.5 text-sm text-foreground disabled:opacity-50"
+          />
+        </label>
+        <label className="flex flex-col gap-1 text-xs text-muted-foreground">
+          Giờ bắt đầu
+          <input
+            type="time"
+            value={startTime}
+            onChange={(e) => setStartTime(e.target.value)}
+            disabled={pending}
+            className="rounded-md border border-border bg-card px-2 py-1.5 text-sm text-foreground disabled:opacity-50"
+          />
+        </label>
+        <label className="flex flex-col gap-1 text-xs text-muted-foreground">
+          Giờ kết thúc
+          <input
+            type="time"
+            value={endTime}
+            onChange={(e) => setEndTime(e.target.value)}
+            disabled={pending}
+            className="rounded-md border border-border bg-card px-2 py-1.5 text-sm text-foreground disabled:opacity-50"
+          />
+        </label>
+        <label className="flex flex-col gap-1 text-xs text-muted-foreground">
+          Phòng
+          <select
+            value={roomId}
+            onChange={(e) => setRoomId(e.target.value)}
+            disabled={pending}
+            className="rounded-md border border-border bg-card px-2 py-1.5 text-sm text-foreground disabled:opacity-50"
+          >
+            <option value="">— chưa xếp phòng —</option>
+            {rooms.map((r) => (
+              <option key={r.id} value={r.id}>
+                {r.name}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="flex flex-col gap-1 text-xs text-muted-foreground">
+          Giáo viên
+          <select
+            value={teacherId}
+            onChange={(e) => setTeacherId(e.target.value)}
+            disabled={pending}
+            className="rounded-md border border-border bg-card px-2 py-1.5 text-sm text-foreground disabled:opacity-50"
+          >
+            <option value="">— chưa xếp giáo viên —</option>
+            {teachers.map((t) => (
+              <option key={t.id} value={t.id}>
+                {t.name}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
+
+      <label className="mt-2 flex flex-col gap-1 text-xs text-muted-foreground">
+        Lý do dời / huỷ *
+        <input
+          type="text"
+          value={lyDo}
+          onChange={(e) => setLyDo(e.target.value)}
+          disabled={pending}
+          placeholder="Vd: phụ huynh báo bận, xin dời sang thứ 5…"
+          className="rounded-md border border-border bg-card px-2 py-1.5 text-sm text-foreground disabled:opacity-50"
+        />
+        <span>Nội dung này được gửi thẳng cho giáo viên.</span>
+      </label>
+
+      <div className="mt-2 flex flex-wrap items-center gap-2">
+        <button
+          type="button"
+          onClick={luu}
+          disabled={pending}
+          className="rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-white hover:bg-primary-dark disabled:opacity-50"
+        >
+          {pending ? "Đang lưu…" : "Lưu & báo giáo viên"}
+        </button>
+        {/* Huỷ đi hai nhịp: một cú bấm nhầm là buổi biến khỏi lịch giáo viên. */}
+        <button
+          type="button"
+          onClick={() => (choHuy ? huy() : setChoHuy(true))}
+          disabled={pending}
+          className={`rounded-lg border px-3 py-1.5 text-xs font-semibold disabled:opacity-50 ${
+            choHuy
+              ? "border-state-danger bg-state-danger-soft text-state-danger-ink"
+              : "border-border text-muted-foreground hover:bg-muted"
+          }`}
+        >
+          {choHuy ? "Bấm lần nữa để huỷ buổi" : "Huỷ buổi"}
+        </button>
+        <button
+          type="button"
+          onClick={onXong}
+          disabled={pending}
+          className="text-xs text-muted-foreground hover:underline disabled:opacity-50"
+        >
+          Đóng
+        </button>
+      </div>
+    </div>
+  );
+}
+
 export function AttendanceBoard({
   sessions,
   enrollments,
   canMark,
+  canManage,
+  teachers,
+  rooms,
 }: {
   sessions: SessionRow[];
   enrollments: EnrollmentRow[];
   canMark: boolean;
+  /** Sửa / huỷ buổi là việc quản lý, KHÁC quyền điểm danh (GĐ4 tách hai cổng). */
+  canManage: boolean;
+  teachers: Option[];
+  rooms: RoomOption[];
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -133,6 +325,18 @@ export function AttendanceBoard({
   // đang dở ở buổi kia.
   const [draft, setDraft] = useState<Record<string, DraftRow>>({});
   const sessionKey = selectedSessionId;
+  const [moSuaBuoi, setMoSuaBuoi] = useState(false);
+
+  const tenGv = useMemo(
+    () => new Map(teachers.map((t) => [t.id, t.name])),
+    [teachers],
+  );
+  /** Tên GV của một buổi. GV đã rời danh sách vẫn phải hiện là "có người", không im
+   *  lặng thành "chưa có giáo viên" — xem cùng lý do ở `includeIds` của trang. */
+  function tenGvBuoi(id: string | null): string | null {
+    if (!id) return null;
+    return tenGv.get(id) ?? "(không rõ)";
+  }
 
   /** Bản đồ hiển thị của buổi đang chọn: nháp đè lên giá trị đã lưu ở DB. */
   const duNgChoBuoi = useMemo(() => {
@@ -267,6 +471,14 @@ export function AttendanceBoard({
               {s.status === "COMPLETED" && (
                 <span className="ml-1 text-state-success-ink">✓</span>
               )}
+              {s.status === "CANCELLED" && (
+                <span className="ml-1 text-state-danger-ink">đã huỷ</span>
+              )}
+              {/* Giáo viên hiện NGAY trên chip: người xếp lịch nhìn một lượt là biết
+                  buổi nào chưa có ai dạy, không phải bấm từng buổi để dò. */}
+              <span className="ml-1 font-normal opacity-70">
+                · {tenGvBuoi(s.teacherId) ?? "chưa có GV"}
+              </span>
             </button>
           );
         })}
@@ -278,7 +490,22 @@ export function AttendanceBoard({
             <span>
               Buổi {selectedSession.seq} · {ngayVn(selectedSession.date)} ·{" "}
               {selectedSession.startTime}–{selectedSession.endTime}
+              {" · "}
+              <span className="font-medium text-foreground">
+                GV: {tenGvBuoi(selectedSession.teacherId) ?? "chưa có"}
+              </span>
             </span>
+            {canManage && selectedSession.status === "SCHEDULED" && (
+              <button
+                type="button"
+                onClick={() => setMoSuaBuoi((v) => !v)}
+                disabled={pending}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-xs font-semibold text-foreground hover:bg-muted disabled:opacity-50"
+              >
+                <Pencil className="h-3.5 w-3.5" />
+                {moSuaBuoi ? "Đóng" : "Sửa buổi học"}
+              </button>
+            )}
             {canMark && selectedSession.status !== "COMPLETED" && (
               <button
                 type="button"
@@ -290,6 +517,16 @@ export function AttendanceBoard({
               </button>
             )}
           </div>
+
+          {moSuaBuoi && selectedSession.status === "SCHEDULED" && (
+            <SuaBuoiForm
+              key={selectedSession.id}
+              session={selectedSession}
+              teachers={teachers}
+              rooms={rooms}
+              onXong={() => setMoSuaBuoi(false)}
+            />
+          )}
 
           {markable.length === 0 ? (
             <p className="text-sm text-muted-foreground">Chưa có học viên để điểm danh.</p>

@@ -48,6 +48,8 @@ import {
 } from "./_lib/guards";
 import {
   addSessionSchema,
+  updateSessionSchema,
+  cancelSessionSchema,
   attendanceSchema,
   configSchema,
   createClassSchema,
@@ -209,6 +211,146 @@ export async function addLopTrialSessionAction(
 
   lamMoi(data.trialClassId);
   return { ok: true, sessionId: res.sessionId };
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// 3b) Sửa / huỷ một buổi — kèm LÝ DO, và lý do đó đi thẳng sang giáo viên
+// ═══════════════════════════════════════════════════════════════════════════
+
+/** Nhãn ngày VN cho nội dung thông báo (cột `@db.Date` = UTC-midnight ngày VN). */
+function nhanNgayVn(d: Date): string {
+  return d.toLocaleDateString("vi-VN", {
+    timeZone: "UTC",
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  });
+}
+
+/**
+ * Sửa buổi: ngày · giờ · phòng · giáo viên.
+ *
+ * Chủ dự án 28/08: "nếu sửa lịch học của buổi thì cần xác nhận và ghi chú là dời lịch
+ * … lấy chính ghi chú này đẩy qua thông báo cho giáo viên".
+ *
+ * Ai được báo: giáo viên MỚI (buổi của bạn đổi / bạn nhận buổi này) VÀ giáo viên CŨ nếu
+ * bị thay người. Bỏ sót người cũ là họ vẫn giữ buổi đó trong đầu và có thể tới lớp.
+ */
+export async function updateLopTrialSessionAction(
+  input: unknown,
+): Promise<ActionResult> {
+  const ctx = await requireActor();
+  if (!ctx) return { ok: false, error: CHUA_DANG_NHAP };
+  if (!(await checkPermission("trials:manage"))) {
+    return { ok: false, error: "Không có quyền sửa buổi trải nghiệm" };
+  }
+
+  const parsed = updateSessionSchema.safeParse(input);
+  if (!parsed.success) {
+    return { ok: false, error: parsed.error.issues[0]?.message ?? "Dữ liệu không hợp lệ" };
+  }
+  const data = parsed.data;
+
+  const ses = await loadScopedTrialSession(ctx.actor, data.sessionId);
+  if (!ses) return { ok: false, error: "Không tìm thấy buổi học" };
+  if (ses.status === "CANCELLED") {
+    return { ok: false, error: "Buổi đã huỷ — không sửa được nữa" };
+  }
+
+  const date = ngayVnSangUtc(data.date);
+  if (!date) return { ok: false, error: "Ngày buổi học không hợp lệ" };
+
+  const gvMoi = data.teacherId === undefined ? ses.teacherId : data.teacherId;
+  const doiLich =
+    date.getTime() !== ses.date.getTime() ||
+    data.startTime !== ses.startTime ||
+    data.endTime !== ses.endTime;
+
+  const sdb = scopedDb(ctx.actor);
+  // ⚠️ update KHÔNG được scopedDb che — an toàn nhờ `loadScopedTrialSession` ở trên.
+  await sdb.trialClassSession.update({
+    where: { id: data.sessionId },
+    data: {
+      date,
+      startTime: data.startTime,
+      endTime: data.endTime,
+      roomId: data.roomId === undefined ? ses.roomId : data.roomId,
+      teacherId: gvMoi,
+    },
+  });
+
+  const moTa = `Buổi ${ses.seq} · ${nhanNgayVn(date)} ${data.startTime}–${data.endTime}`;
+  // Người CŨ bị thay: báo là buổi không còn của họ nữa.
+  if (ses.teacherId && ses.teacherId !== gvMoi) {
+    await notifyTrialTeacherAssigned({
+      teacherId: ses.teacherId,
+      title: "Bạn không còn phụ trách một buổi trải nghiệm",
+      body: `${moTa} đã chuyển cho người khác. Lý do: ${data.reason}`,
+      // Mốc thời gian trong khoá: một buổi có thể đổi nhiều lần, khử trùng theo id
+      // buổi thôi thì lần đổi thứ hai bị nuốt.
+      dedupeKey: `trial-session.moved-out:${data.sessionId}:${Date.now()}`,
+      entityId: data.sessionId,
+    });
+  }
+  if (gvMoi) {
+    await notifyTrialTeacherAssigned({
+      teacherId: gvMoi,
+      title: doiLich ? "Buổi trải nghiệm đã dời lịch" : "Buổi trải nghiệm vừa được sửa",
+      body: `${moTa}. Lý do: ${data.reason}`,
+      dedupeKey: `trial-session.updated:${data.sessionId}:${Date.now()}`,
+      entityId: data.sessionId,
+    });
+  }
+
+  lamMoi(ses.trialClassId);
+  return { ok: true };
+}
+
+/**
+ * Huỷ một buổi. Buổi CANCELLED biến khỏi lịch giáo viên ngay: mọi truy vấn lịch/roster
+ * đều lọc `status: { not: "CANCELLED" }` (`lib/lms/teacher-schedule.ts`).
+ *
+ * KHÔNG xoá dòng: điểm danh và phiếu đã chấm của buổi đó vẫn phải tra lại được.
+ */
+export async function cancelLopTrialSessionAction(
+  input: unknown,
+): Promise<ActionResult> {
+  const ctx = await requireActor();
+  if (!ctx) return { ok: false, error: CHUA_DANG_NHAP };
+  if (!(await checkPermission("trials:manage"))) {
+    return { ok: false, error: "Không có quyền huỷ buổi trải nghiệm" };
+  }
+
+  const parsed = cancelSessionSchema.safeParse(input);
+  if (!parsed.success) {
+    return { ok: false, error: parsed.error.issues[0]?.message ?? "Dữ liệu không hợp lệ" };
+  }
+  const data = parsed.data;
+
+  const ses = await loadScopedTrialSession(ctx.actor, data.sessionId);
+  if (!ses) return { ok: false, error: "Không tìm thấy buổi học" };
+  if (ses.status === "CANCELLED") return { ok: true }; // idempotent
+
+  const sdb = scopedDb(ctx.actor);
+  await sdb.trialClassSession.update({
+    where: { id: data.sessionId },
+    data: { status: "CANCELLED" },
+  });
+
+  if (ses.teacherId) {
+    await notifyTrialTeacherAssigned({
+      teacherId: ses.teacherId,
+      title: "Buổi trải nghiệm đã bị huỷ",
+      body:
+        `Buổi ${ses.seq} · ${nhanNgayVn(ses.date)} ${ses.startTime}–${ses.endTime} đã huỷ ` +
+        `và đã gỡ khỏi lịch dạy của bạn. Lý do: ${data.reason}`,
+      dedupeKey: `trial-session.cancelled:${data.sessionId}`,
+      entityId: data.sessionId,
+    });
+  }
+
+  lamMoi(ses.trialClassId);
+  return { ok: true };
 }
 
 // ═══════════════════════════════════════════════════════════════════════════

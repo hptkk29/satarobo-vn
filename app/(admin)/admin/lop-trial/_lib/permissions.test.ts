@@ -32,6 +32,12 @@ const CONG_QUYEN: Record<string, Action> = {
   saveTrialConfigLopTrialAction: "trials:config",
   createLopTrialClassAction: "trials:manage",
   addLopTrialSessionAction: "trials:manage",
+  // 28/08 — sửa / huỷ MỘT buổi. Cùng cổng `trials:manage` với thêm buổi: ba thao tác
+  // này là một việc (xếp lịch lớp), tách cổng chỉ đẻ ra ma trận không ai nhớ nổi.
+  // KHÔNG dùng `trials:attendance`: điểm danh là việc của Sale, còn đổi lịch/huỷ buổi
+  // đụng tới lịch dạy của giáo viên.
+  updateLopTrialSessionAction: "trials:manage",
+  cancelLopTrialSessionAction: "trials:manage",
   enrollLeadChildLopTrialAction: "trials:manage",
   searchLopTrialCandidatesAction: "trials:manage",
   unenrollLeadChildLopTrialAction: "trials:manage",

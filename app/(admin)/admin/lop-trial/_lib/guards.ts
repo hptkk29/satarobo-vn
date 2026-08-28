@@ -52,7 +52,20 @@ export type ScopedSession = {
   id: string;
   trialClassId: string;
   centerId: string;
+  /**
+   * ⚠️ 28/08 — giáo viên ở CẤP LỚP đã thôi dùng (đặt ở từng buổi). Trường này giữ lại
+   * cho dữ liệu cũ; đường mới phải đọc `teacherId` của chính BUỔI ngay dưới.
+   */
   classTeacherId: string | null;
+  // 28/08 — thêm chính các cột của BUỔI: sửa/huỷ buổi cần biết giá trị TRƯỚC khi đổi
+  // để so ra "có dời lịch không" và để báo đúng người vừa bị thay.
+  seq: number;
+  date: Date;
+  startTime: string;
+  endTime: string;
+  roomId: string | null;
+  teacherId: string | null;
+  status: "SCHEDULED" | "COMPLETED" | "CANCELLED";
 };
 
 /**
@@ -69,6 +82,13 @@ export async function loadScopedTrialSession(
     select: {
       id: true,
       trialClassId: true,
+      seq: true,
+      date: true,
+      startTime: true,
+      endTime: true,
+      roomId: true,
+      teacherId: true,
+      status: true,
       trialClass: { select: { centerId: true, teacherId: true } },
     },
   });
@@ -79,6 +99,13 @@ export async function loadScopedTrialSession(
     trialClassId: ses.trialClassId,
     centerId: ses.trialClass.centerId,
     classTeacherId: ses.trialClass.teacherId,
+    seq: ses.seq,
+    date: ses.date,
+    startTime: ses.startTime,
+    endTime: ses.endTime,
+    roomId: ses.roomId,
+    teacherId: ses.teacherId,
+    status: ses.status,
   };
 }
 
