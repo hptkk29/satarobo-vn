@@ -400,8 +400,9 @@ export const ROLE_SEED: RoleSeed[] = [
       // /lop-trial/[id] để bấm nút (trang gác bằng trials:view).
       // scopeType GLOBAL là BẮT BUỘC: hai call-site gọi trần không kèm target, mà
       // scope CENTER thiếu target.centerId thì `can()` trả false (luật R1, có test khoá).
-      { action: "trials:view", scopeType: "GLOBAL" },
-      { action: "trials:assign-teacher", scopeType: "GLOBAL" },
+      //
+      // ⚠️ Hai dòng quyền tương ứng KHAI Ở KHỐI TRÊN (mục 23/08 "Đào tạo quản lý toàn
+      // bộ giáo viên") — khai lại ở đây là TRÙNG, và test EL-02/T10-08 bắt đúng lỗi đó.
     ],
   },
   {

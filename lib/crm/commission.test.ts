@@ -55,51 +55,38 @@ describe("[R1-10] commission engine", () => {
 // ─────────────────────────────────────────────────────────────────────────────
 // GĐ6 (25/08/2026) — tầng giáo viên, trần 9%, và tham số đợt cho mục 9.2.
 // ─────────────────────────────────────────────────────────────────────────────
-describe("[GĐ6] tầng giáo viên + trần 9%", () => {
-  it("GIAO_VIEN nằm trong danh sách tầng và mặc định 1%", () => {
-    expect(COMMISSION_TIERS).toContain("GIAO_VIEN");
-    expect(DEFAULT_RATES.GIAO_VIEN).toBeCloseTo(0.01, 6);
+describe("[GĐ6] trần tổng 9%", () => {
+  it("pool Sale KHÔNG chứa tầng giáo viên — tầng đó tính trên từng ghi danh", () => {
+    // Xem `lib/crm/trial-teacher-commission.ts`. Nhét chung mảng là cộng nhầm cơ sở
+    // tính: pool Sale tính trên doanh thu kỳ, tầng GV tính trên từng ghi danh.
+    expect(COMMISSION_TIERS).not.toContain("GIAO_VIEN" as never);
   });
 
-  it("tổng tỉ lệ mặc định đúng 9% — nới trần theo chốt câu 7 (phương án A)", () => {
+  it("Σ pool Sale đúng 8%, trần tổng nới lên 9% (chốt câu 7 — phương án A)", () => {
     const tong = COMMISSION_TIERS.reduce((s, t) => s + DEFAULT_RATES[t], 0);
-    expect(tong).toBeCloseTo(0.09, 6);
+    expect(tong).toBeCloseTo(0.08, 6);
     expect(MAX_TOTAL_RATE).toBeCloseTo(0.09, 6);
-    // Mức mặc định phải VỪA CHẠM trần, không vượt — nếu không thì lưu cấu hình
-    // mặc định cũng bị chính validateRates từ chối.
+    // Mức mặc định phải nằm DƯỚI trần — nếu không thì lưu cấu hình mặc định cũng bị
+    // chính validateRates từ chối.
     expect(() => validateRates()).not.toThrow();
   });
 
-  it("vượt 9% vẫn bị chặn, và thông điệp nêu ĐÚNG con số trần", () => {
+  it("vượt trần vẫn bị chặn, và thông điệp nêu ĐÚNG con số trần", () => {
     try {
-      validateRates({ SALE: 0.05 }); // 0.01+0.01+0.05+0.02+0.01 = 10%
+      validateRates({ SALE: 0.06 }); // 0.01+0.01+0.06+0.02 = 10%
       throw new Error("đáng lẽ phải ném lỗi");
     } catch (e) {
       expect(e).toBeInstanceOf(CommissionError);
       // Trước GĐ6 chuỗi viết cứng "8%", nới trần mà quên sửa là báo sai cho người dùng.
-      expect((e as CommissionError).message).toContain("9%");
+      expect((e as CommissionError).message).toContain("9.00%");
     }
   });
 
-  it("sinh dòng cho giáo viên khi có người nhận", () => {
-    const lines = computeCommission({
-      revenue: 10_000_000,
-      isRenewal: false,
-      recipients: { SALE: "s1", GIAO_VIEN: "gv1" },
-    });
-    const gv = lines.find((l) => l.tier === "GIAO_VIEN");
-    expect(gv).toBeDefined();
-    expect(gv?.amount).toBe(100_000);
-    expect(gv?.recipientId).toBe("gv1");
-  });
-
-  it("không có người nhận thì KHÔNG sinh dòng giáo viên", () => {
-    const lines = computeCommission({
-      revenue: 10_000_000,
-      isRenewal: false,
-      recipients: { SALE: "s1" },
-    });
-    expect(lines.some((l) => l.tier === "GIAO_VIEN")).toBe(false);
+  it("trần truyền từ cấu hình vận hành thắng hằng mặc định", () => {
+    // `crm.commissionMaxTotalRate` — người vận hành hạ trần thì đường ghi phải chặn
+    // theo số MỚI, không phải theo hằng trong code.
+    expect(() => validateRates({ SALE: 0.04 }, 0.05)).toThrow(CommissionError);
+    expect(() => validateRates({ SALE: 0.04 }, 0.09)).not.toThrow();
   });
 });
 

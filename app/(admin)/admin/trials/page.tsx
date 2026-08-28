@@ -11,5 +11,6 @@
 import { redirect } from "next/navigation";
 
 export default function TrialsRedirectPage() {
-  redirect("/lop-trial/lich-hen");
+  // 28/08 — tab "Lịch hẹn học thử" đã gỡ khỏi hệ thống; đích còn lại là danh sách lớp.
+  redirect("/lop-trial");
 }

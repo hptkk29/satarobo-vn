@@ -21,11 +21,6 @@ const ADMIN_DIR = path.join(ROOT, "app", "(admin)", "admin");
 
 /** Route được phép không có mục menu — mỗi dòng phải nêu lý do. */
 const ALLOWLIST: Record<string, string> = {
-  "/dashboard-qlcs":
-    "27/08/2026 — chủ dự án chốt GỠ mục menu: bốn khối của màn này nay hiện THẲNG trong " +
-    "/dashboard cho Quản lý cơ sở + Quản trị hệ thống (không phân tab), nên hai vai cần " +
-    "nó thấy nội dung ngay khi đăng nhập, không phải qua menu. Route giữ lại vì đường dẫn " +
-    "cũ đã gửi đi và PAGE_GATES vẫn gác nó. Gỡ hẳn route khi không còn liên kết nào trỏ tới.",
   "/charts-test": "màn thử wrapper Recharts, chỉ dev dùng",
   "/design-system-preview": "bảng màu/typography, chỉ dev dùng",
   "/design-system-preview-v2": "bảng màu/typography bản 2, chỉ dev dùng",
@@ -33,7 +28,7 @@ const ALLOWLIST: Record<string, string> = {
   "/parent-requests/bao-vang":
     "stub chuyển hướng sang /parent-requests (giữ cho link cũ không vỡ)",
   "/trials":
-    "GĐ6 — stub chuyển hướng sang /lop-trial/lich-hen. Màn gộp vào Lớp Trial; route " +
+    "GĐ6 — stub chuyển hướng sang /lop-trial. Màn gộp vào Lớp Trial; route " +
     "giữ lại vì thông báo CŨ trong DB mang href \"/trials\" và không sửa hồi tố được, " +
     "còn tài liệu hướng dẫn sinh tự động cũng trỏ tới đó. Gỡ khi đo được là không còn " +
     "thông báo nào trỏ tới, đừng gỡ theo lịch.",

@@ -2,26 +2,21 @@
 // QC 1% · Sale Admin 1% · Sale 4% · QL TT 2% (Σ 8%). Tách tính toán khỏi DB/UI để
 // test phủ cao (C10.1–C10.5). Persistence (DRAFT→APPROVED) + "của tôi" = phần DB sau.
 
-export type CommissionTier = "QC" | "SALE_ADMIN" | "SALE" | "QL_TT" | "GIAO_VIEN";
+export type CommissionTier = "QC" | "SALE_ADMIN" | "SALE" | "QL_TT";
 
-export const COMMISSION_TIERS: CommissionTier[] = [
-  "QC",
-  "SALE_ADMIN",
-  "SALE",
-  "QL_TT",
-  // GĐ6 (chủ dự án chốt câu 7, 25/08/2026) — thêm tầng GIÁO VIÊN 1% theo SR.QD.210.
-  // Cột `CommissionLine.tier` trong DB là String chứ không phải enum, nên thêm tầng
-  // KHÔNG cần migration đổi kiểu.
-  "GIAO_VIEN",
-];
+// ⚠️ KHÔNG có tầng GIAO_VIEN ở đây. GĐ6 từng thêm nó vào pool, nhưng bản chốt tách
+// hẳn ra `lib/crm/trial-teacher-commission.ts`: pool 4 tầng Sale tính trên DOANH THU
+// KỲ, còn hoa hồng giáo viên dạy Trial tính trên TỪNG GHI DANH — hai cơ sở tính khác
+// nhau, nhét chung một mảng là sai ngay ở phép cộng. Trần tổng (9%) vẫn phủ cả hai:
+// `setCommissionRate` cộng tầng TRIAL_TEACHER vào trước khi so trần.
+export const COMMISSION_TIERS: CommissionTier[] = ["QC", "SALE_ADMIN", "SALE", "QL_TT"];
 
-/** % mặc định mỗi tầng (Σ = 9% sau khi thêm tầng giáo viên). */
+/** % mặc định mỗi tầng của pool Sale (Σ = 8%; +1% tầng GV dạy Trial = trần 9%). */
 export const DEFAULT_RATES: Record<CommissionTier, number> = {
   QC: 0.01,
   SALE_ADMIN: 0.01,
   SALE: 0.04,
   QL_TT: 0.02,
-  GIAO_VIEN: 0.01,
 };
 
 /**
