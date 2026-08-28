@@ -12,6 +12,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { AlertTriangle, CalendarClock, PhoneOff } from "lucide-react";
+import { DaiSoLieu } from "@/components/sale/ui/dai-so-lieu";
 import { auth } from "@/lib/auth";
 import { resolveActor } from "@/lib/auth/actor";
 import { canViewLeadPii } from "@/lib/auth/check-permission";
@@ -72,44 +73,47 @@ export default async function SaleHomePage() {
 
   return (
     <div>
-      <h1 className="text-2xl font-bold text-foreground">Bảng việc hôm nay</h1>
+      <h1 className="text-xl font-semibold tracking-tight text-foreground">Bảng việc hôm nay</h1>
       <p className="mt-1 text-sm text-muted-foreground">
         {tongViec === 0 && canCham.length === 0
           ? "Không có việc nào đến hạn và không khách nào đang chờ."
           : `${tongViec} việc đến hạn · ${canCham.length} khách đang chờ được chạm.`}
       </p>
 
-      <dl className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <div className="rounded-xl border border-border bg-card p-3">
-          <dt className="text-xs text-muted-foreground">Quá hạn</dt>
-          <dd className="text-2xl font-bold tabular-nums text-amber-600 dark:text-amber-500">
-            {board.viec.quaHan.length}
-          </dd>
-        </div>
-        <div className="rounded-xl border border-border bg-card p-3">
-          <dt className="text-xs text-muted-foreground">Đến hạn hôm nay</dt>
-          <dd className="text-2xl font-bold tabular-nums text-foreground">
-            {board.viec.homNay.length}
-          </dd>
-        </div>
-        <div className="rounded-xl border border-border bg-card p-3">
-          <dt className="text-xs text-muted-foreground">Khách đang tư vấn</dt>
-          <dd className="text-2xl font-bold tabular-nums text-foreground">
-            {board.soKhachDangMo}
-          </dd>
-        </div>
-        <div className="rounded-xl border border-border bg-card p-3">
-          <dt className="text-xs text-muted-foreground">Chưa liên hệ lần nào</dt>
-          <dd className="text-2xl font-bold tabular-nums text-foreground">
-            {board.soChuaLienHe}
-          </dd>
-        </div>
-      </dl>
+      {/* Ba trong bốn ô dẫn thẳng tới chỗ xử lý con số đó. Ô "Quá hạn" không có
+          đường đi riêng vì danh sách của nó nằm ngay bên dưới, trong tầm mắt. */}
+      <div className="mt-4">
+        <DaiSoLieu
+          o={[
+            {
+              nhan: "Quá hạn",
+              soLuong: board.viec.quaHan.length,
+              mucChuY: "danger",
+            },
+            {
+              nhan: "Đến hạn hôm nay",
+              soLuong: board.viec.homNay.length,
+              mucChuY: "warning",
+            },
+            {
+              nhan: "Khách đang tư vấn",
+              soLuong: board.soKhachDangMo,
+              href: "/sale/khach-cua-toi",
+            },
+            {
+              nhan: "Chưa liên hệ lần nào",
+              soLuong: board.soChuaLienHe,
+              href: "/sale/khach-cua-toi?status=MOI",
+              mucChuY: "danger",
+            },
+          ]}
+        />
+      </div>
 
       <div className="mt-5 space-y-4">
         {board.viec.quaHan.length > 0 ? (
-          <section className="rounded-xl border border-amber-500/40 bg-card p-4">
-            <h2 className="mb-1 flex items-center gap-2 text-sm font-semibold text-amber-600 dark:text-amber-500">
+          <section className="rounded-xl border border-[color:var(--state-danger)]/35 bg-card p-4 shadow-[var(--bong-the)]">
+            <h2 className="mb-1 flex items-center gap-2 text-sm font-semibold text-[color:var(--state-danger)]">
               <AlertTriangle className="h-4 w-4" /> Quá hạn ({board.viec.quaHan.length})
             </h2>
             <ul>
@@ -120,7 +124,7 @@ export default async function SaleHomePage() {
           </section>
         ) : null}
 
-        <section className="rounded-xl border border-border bg-card p-4">
+        <section className="rounded-xl border border-border bg-card p-4 shadow-[var(--bong-the)]">
           <h2 className="mb-1 flex items-center gap-2 text-sm font-semibold">
             <CalendarClock className="h-4 w-4 text-primary" /> Đến hạn hôm nay (
             {board.viec.homNay.length})
@@ -136,7 +140,7 @@ export default async function SaleHomePage() {
           )}
         </section>
 
-        <section className="rounded-xl border border-border bg-card p-4">
+        <section className="rounded-xl border border-border bg-card p-4 shadow-[var(--bong-the)]">
           <h2 className="mb-1 flex items-center gap-2 text-sm font-semibold">
             <PhoneOff className="h-4 w-4 text-primary" /> Khách cần chạm ({canCham.length})
           </h2>
@@ -169,7 +173,7 @@ export default async function SaleHomePage() {
                         {k.phone}
                       </span>
                     ) : null}
-                    <div className="text-xs text-amber-600 dark:text-amber-500">
+                    <div className="text-xs text-[color:var(--state-warning)]">
                       {k.vi.join(" · ")}
                     </div>
                   </div>

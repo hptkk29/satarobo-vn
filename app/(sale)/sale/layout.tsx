@@ -113,8 +113,13 @@ export default async function SaleLayout({
         granted={granted}
         userLabel={session.user.name ?? session.user.email ?? ""}
       />
+      {/* Bề rộng: `max-w-5xl` (64rem) là thước của trang ĐỌC, không phải của màn
+          làm việc có bảng. Trên màn 1440px nó để trống gần một phần ba bên phải
+          trong khi bảng khách phải cuộn ngang. PRODUCT.md §nguyên tắc 1: "mật độ
+          thắng khoảng trắng — người dùng ngồi 8 tiếng và cần thấy nhiều dòng cùng
+          lúc". Vẫn giữ trần để dòng chữ không dài quá tầm mắt trên màn siêu rộng. */}
       <main className="md:pl-64">
-        <div className="mx-auto max-w-5xl px-6 py-8">{children}</div>
+        <div className="mx-auto max-w-[88rem] px-6 py-7">{children}</div>
       </main>
     </div>
   );

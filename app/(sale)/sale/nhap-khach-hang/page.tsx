@@ -37,7 +37,7 @@ export default async function SaleNhapKhachHangPage() {
   return (
     <div>
       <div className="mb-5">
-        <h1 className="text-2xl font-bold text-foreground">Nhập khách hàng</h1>
+        <h1 className="text-xl font-semibold tracking-tight text-foreground">Nhập khách hàng</h1>
         <p className="mt-1 text-sm text-muted-foreground">
           Nhập nhanh khách thu được từ quảng cáo, sự kiện, hoặc tư vấn trực tiếp.
           Hệ thống tự kiểm tra trùng số điện thoại và tự giao cho tư vấn viên theo

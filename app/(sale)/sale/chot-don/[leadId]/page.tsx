@@ -59,7 +59,7 @@ export default async function SaleChotDonPage({
         <ChevronLeft className="h-4 w-4" /> Quay lại khách
       </Link>
 
-      <h1 className="text-2xl font-bold text-foreground">Tạo đơn</h1>
+      <h1 className="text-xl font-semibold tracking-tight text-foreground">Tạo đơn</h1>
       <p className="mt-1 text-sm text-muted-foreground">
         Cho khách <strong className="text-foreground">{lead.parentName || "(chưa có tên)"}</strong>
         {lead.phone ? ` · ${lead.phone}` : ""}

@@ -98,3 +98,92 @@
 .sale-root ::selection {
   background: rgba(124, 58, 237, 0.22);
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   ĐỢT THIẾT KẾ LẠI 28/08/2026 — bề mặt, chiều sâu, mật độ.
+
+   Vì sao thêm ở đây chứ không rải class vào từng màn: mật độ bảng là thứ ai
+   cũng quên khi viết bảng MỚI. Đặt luật trong CSS thì bảng mới tự đúng; đặt
+   trong component thì phải nhớ import đúng component.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.sale-root {
+  /* TẦNG NỀN THỨ HAI cho phần "khung máy" (thanh bên, thanh lọc, chân bảng).
+     `operate.md` đòi một lớp trung tính riêng cho chrome: mắt phải phân biệt
+     được "công cụ" với "dữ liệu" mà không cần đọc chữ. Chìm hơn thẻ một bậc và
+     ngả tím rất nhẹ để nó thuộc về cùng thế giới màu. */
+  --surface-chim: hsl(250 26% 96.5%);
+  --surface-chrome: hsl(250 24% 98.4%);
+
+  /* Bóng có OFFSET và blur mềm — chiều sâu thật. Quầng sáng zero-offset bao
+     quanh thẻ là trang trí, không phải chiều sâu, và làm mọi thẻ trông như
+     đang được chọn. */
+  --bong-the: 0 1px 2px rgba(46, 26, 87, 0.05), 0 8px 20px -14px rgba(46, 26, 87, 0.28);
+}
+
+/* ── BẢNG DỮ LIỆU ───────────────────────────────────────────────────────────
+   Số đo lấy nguyên DESIGN.md §2 (chốt 11/08): dòng 44px, ô `px-5 py-3.5`, đầu
+   cột chữ nhỏ in hoa. `white-space: nowrap` trên CẢ `th` VÀ `td` là thứ duy
+   nhất chặn chiều cao dòng nhảy loạn — lỗi đã đo được ở admin: 65–71px và
+   không đều nhau, vì một nhãn xuống hai dòng kéo cả hàng cao lên. */
+.sale-root .bang-sale {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+}
+
+.sale-root .bang-sale thead th {
+  padding: 0.625rem 1.25rem;
+  text-align: left;
+  white-space: nowrap;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted-foreground);
+  background: var(--surface-chim);
+  border-bottom: 1px solid var(--border);
+}
+
+.sale-root .bang-sale tbody td {
+  padding: 0.6875rem 1.25rem; /* 44px kể cả viền, với line-height mặc định */
+  white-space: nowrap;
+  vertical-align: middle;
+  border-bottom: 1px solid color-mix(in oklab, var(--border) 55%, transparent);
+}
+
+.sale-root .bang-sale tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+/* Vệt di chuột: phản hồi hàng đang trỏ tới. Không kẻ sọc ngựa vằn — với dòng
+   44px thì sọc làm bảng ồn hơn là dễ đọc. */
+.sale-root .bang-sale tbody tr {
+  transition: background-color 140ms ease-out;
+}
+.sale-root .bang-sale tbody tr:hover {
+  background: var(--surface-chim);
+}
+
+/* Ô chứa số/tiền/ngày: canh phải + chữ số đều bề ngang để cột thẳng hàng. */
+.sale-root .bang-sale .o-so {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Ô CHO PHÉP xuống dòng — dùng có chủ đích cho cột mô tả dài, và chỉ cột đó.
+   Kèm trần bề rộng, không thì một ghi chú dài kéo cả bảng giãn ra. */
+.sale-root .bang-sale .o-dai {
+  white-space: normal;
+  max-width: 22rem;
+}
+
+/* ── VÙNG BẤM ───────────────────────────────────────────────────────────────
+   PRODUCT.md: vùng chạm ≥ 44px trên đường dùng điện thoại. Tên khách trong
+   bảng là đường bấm chính của tư vấn viên khi đang cầm máy. */
+@media (pointer: coarse) {
+  .sale-root .bang-sale tbody td {
+    padding-top: 0.875rem;
+    padding-bottom: 0.875rem;
+  }
+}

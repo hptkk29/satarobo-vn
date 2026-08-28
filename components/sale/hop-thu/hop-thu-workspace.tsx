@@ -70,7 +70,7 @@ export function HopThuWorkspace({
       {canhBaoCat ? (
         <p
           role="status"
-          className="rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200"
+          className="rounded-lg border border-[color:var(--state-warning)]/35 bg-[color:var(--state-warning-soft)] px-3 py-2 text-sm text-[color:var(--state-warning)]"
         >
           {canhBaoCat}
         </p>
@@ -94,7 +94,7 @@ export function HopThuWorkspace({
 /** Băng nói thật khi chưa kênh nào có khoá kết nối — trạng thái hôm nay. */
 function BangChuaNoiKenh({ tinhTrang }: { tinhTrang: TinhTrangKenh[] }) {
   return (
-    <div className="flex gap-3 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200">
+    <div className="flex gap-3 rounded-lg border border-[color:var(--state-warning)]/35 bg-[color:var(--state-warning-soft)] p-3 text-sm text-[color:var(--state-warning)]">
       <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
       <div className="space-y-1">
         <p className="font-medium">Chưa kênh nào được nối.</p>
@@ -248,7 +248,7 @@ function DanhSachHoiThoai({
               </div>
               <div className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
                 {r.chuaTraLoi ? (
-                  <span className="rounded bg-amber-100 px-1.5 py-0.5 font-medium text-amber-900 dark:bg-amber-950 dark:text-amber-200">
+                  <span className="rounded bg-[color:var(--state-warning-soft)] px-1.5 py-0.5 font-medium text-[color:var(--state-warning)]">
                     Chưa trả lời
                   </span>
                 ) : null}
@@ -426,18 +426,18 @@ function NhanGiao({ tin }: { tin: TinNhanView }) {
   }
   switch (tin.deliveryStatus) {
     case "SENT":
-      return <span className="text-emerald-700 dark:text-emerald-400">Đã gửi tới khách</span>;
+      return <span className="text-[color:var(--state-success)]">Đã gửi tới khách</span>;
     case "PENDING":
       return <span>Đang gửi…</span>;
     case "SIMULATED":
       return (
-        <span className="rounded bg-amber-100 px-1 py-0.5 font-medium text-amber-900 dark:bg-amber-950 dark:text-amber-200">
+        <span className="rounded bg-[color:var(--state-warning-soft)] px-1 py-0.5 font-medium text-[color:var(--state-warning)]">
           CHƯA gửi — chế độ mô phỏng
         </span>
       );
     case "SKIPPED":
       return (
-        <span className="rounded bg-amber-100 px-1 py-0.5 font-medium text-amber-900 dark:bg-amber-950 dark:text-amber-200">
+        <span className="rounded bg-[color:var(--state-warning-soft)] px-1 py-0.5 font-medium text-[color:var(--state-warning)]">
           CHƯA gửi{tin.errorCode ? ` (${tin.errorCode})` : ""}
         </span>
       );
@@ -490,7 +490,7 @@ function OSoanTraLoi({
   return (
     <div className="space-y-2 border-t border-border p-3">
       {!kenhDaNoi ? (
-        <p className="flex gap-2 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200">
+        <p className="flex gap-2 rounded-lg border border-[color:var(--state-warning)]/35 bg-[color:var(--state-warning-soft)] px-3 py-2 text-xs text-[color:var(--state-warning)]">
           <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
           <span>
             Kênh này <strong>chưa nối</strong>. Tin sẽ được lưu vào hội thoại để giữ vết,

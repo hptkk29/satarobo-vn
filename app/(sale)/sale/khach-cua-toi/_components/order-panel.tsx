@@ -131,7 +131,7 @@ export function SaleOrderPanel({
               <dd
                 className={
                   conThieu > 0
-                    ? "tabular-nums font-semibold text-amber-600 dark:text-amber-500"
+                    ? "tabular-nums font-semibold text-[color:var(--state-warning)]"
                     : "tabular-nums text-foreground"
                 }
               >
@@ -157,7 +157,7 @@ export function SaleOrderPanel({
                     <div className="text-right text-sm">
                       <div className="tabular-nums text-foreground">{formatVndPlain(o.totalAmount)}</div>
                       {thieu > 0 ? (
-                        <div className="text-xs tabular-nums text-amber-600 dark:text-amber-500">
+                        <div className="text-xs tabular-nums text-[color:var(--state-warning)]">
                           còn {formatVndPlain(thieu)}
                         </div>
                       ) : (

@@ -53,7 +53,7 @@ export default async function SaleTraCuuPage() {
 
   return (
     <div>
-      <h1 className="text-2xl font-bold text-foreground">Tra cứu</h1>
+      <h1 className="text-xl font-semibold tracking-tight text-foreground">Tra cứu</h1>
       <p className="mt-1 text-sm text-muted-foreground">
         Bảng giá và lớp đang mở. Trang chỉ để xem — sửa giá hay mở lớp là việc của
         Đào tạo và Quản lý cơ sở.
@@ -61,7 +61,7 @@ export default async function SaleTraCuuPage() {
 
       <div className="mt-5 space-y-4">
         {xemKhoaHoc ? (
-          <section className="rounded-xl border border-border bg-card p-4">
+          <section className="rounded-xl border border-border bg-card p-4 shadow-[var(--bong-the)]">
             <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold">
               <BookOpen className="h-4 w-4 text-primary" /> Khoá học ({dm.khoaHoc.length})
             </h2>
@@ -83,7 +83,7 @@ export default async function SaleTraCuuPage() {
         ) : null}
 
         {xemHocCu ? (
-          <section className="rounded-xl border border-border bg-card p-4">
+          <section className="rounded-xl border border-border bg-card p-4 shadow-[var(--bong-the)]">
             <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold">
               <Boxes className="h-4 w-4 text-primary" /> Học cụ ({dm.hocCu.length})
             </h2>
@@ -116,7 +116,7 @@ export default async function SaleTraCuuPage() {
         ) : null}
 
         {xemLop ? (
-          <section className="rounded-xl border border-border bg-card p-4">
+          <section className="rounded-xl border border-border bg-card p-4 shadow-[var(--bong-the)]">
             <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold">
               <School className="h-4 w-4 text-primary" /> Lớp đang mở ({dm.lop.length})
             </h2>

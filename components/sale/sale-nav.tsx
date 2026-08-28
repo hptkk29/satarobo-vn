@@ -222,7 +222,7 @@ export function SaleNav({
   return (
     <>
       {/* Thanh trên cùng — chỉ ở màn hẹp, mở/đóng ngăn kéo. */}
-      <header className="sticky top-0 z-30 flex items-center gap-3 border-b border-border bg-card px-4 py-3 md:hidden">
+      <header className="sticky top-0 z-30 flex items-center gap-3 border-b border-border bg-[color:var(--surface-chrome)] px-4 py-3 md:hidden">
         <button
           type="button"
           onClick={() => setMoNgang((v) => !v)}
@@ -247,7 +247,11 @@ export function SaleNav({
 
       <aside
         className={cn(
-          "fixed inset-y-0 left-0 z-40 flex w-64 flex-col border-r border-border bg-card transition-transform duration-200 md:translate-x-0",
+          // Tầng nền THỨ HAI: chìm hơn thẻ dữ liệu một bậc để mắt đọc thanh bên là
+          // "khung máy" chứ không phải nội dung. `operate.md` gọi đây là lớp trung
+          // tính riêng cho chrome; thiếu nó thì thanh bên và bảng cùng một mặt
+          // phẳng và trang trông phẳng lì.
+          "fixed inset-y-0 left-0 z-40 flex w-64 flex-col border-r border-border bg-[color:var(--surface-chrome)] transition-transform duration-200 md:translate-x-0",
           moNgang ? "translate-x-0" : "-translate-x-full",
         )}
       >
