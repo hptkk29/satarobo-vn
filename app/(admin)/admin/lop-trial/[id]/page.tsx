@@ -71,10 +71,23 @@ export default async function ChiTietLopTrialPage({
   // MỘT danh sách dùng chung cho cả ba ô (gán lớp · thêm buổi · phân công từng ca).
   // Trước đây tách hai danh sách theo quyền, và ô "Thêm buổi học" ăn phải danh sách
   // rỗng khi GĐ3 gỡ `trials:assign-teacher` khỏi Quản lý cơ sở → QLCS không xếp được
-  // giáo viên cho buổi ad-hoc. Base list giống hệt nhau (cùng cơ sở), chỉ khác
-  // `includeIds`, nên gộp là hết cả lớp bug đó.
+  // giáo viên cho buổi ad-hoc. Base list giống hệt nhau, chỉ khác `includeIds`, nên
+  // gộp là hết cả lớp bug đó.
+  //
+  // 28/08 — BỎ LỌC THEO CƠ SỞ (chủ dự án chốt: "hiển thị tất cả giáo viên để gán
+  // luôn, không cần rule nào nữa cả").
+  //
+  // Đây là chỗ sót của đợt đổi chính sách 06/08: từ hôm đó GV là NGUỒN LỰC CHUNG,
+  // điều đi theo lịch chứ không thuộc một cơ sở cố định — `filterTeachersByCenter`
+  // (lib/teachers/center-filter.ts) đã thành no-op và guard ghi cũng đã chấp nhận GV
+  // khác cơ sở ([TRIAL-05]). Nhưng riêng màn này vẫn lọc NGAY Ở TRUY VẤN bằng
+  // `centerIds`, nên cửa GHI mở mà cửa CHỌN vẫn đóng: bốn màn Lớp học đều gọi
+  // `getAssignableTeachers({})` không kèm cơ sở, chỉ mình nó kèm.
+  //
+  // Hệ quả đo được trên prod: lớp CS2 chỉ hiện đúng một người, lớp CS1 KHÔNG hiện ai —
+  // vì bộ lọc đọc `User.centerId`, mà cột đó trống hoặc trỏ Hội sở ở phần lớn tài
+  // khoản giáo viên. Người vận hành không xếp nổi giáo viên cho buổi trải nghiệm nào.
   const teachers = await getAssignableTeachers({
-    centerIds: [cls.centerId],
     includeIds: [
       // 28/08 — KHÔNG còn `cls.teacherId`: giáo viên đặt ở TỪNG BUỔI. Vẫn phải giữ
       // người đang gán ở buổi và ở từng ca, nếu không họ rớt khỏi danh sách (đổi cơ sở,
