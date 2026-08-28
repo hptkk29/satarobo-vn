@@ -113,7 +113,7 @@ async function main() {
 
   // Người thao tác để ghi vào `markedById` / `evaluatedById` — lấy tài khoản UAT.
   const uat = await db.user.findMany({
-    where: { email: { in: ["uat.sale1@satarobo.vn", "uat.sale2@satarobo.vn", "uat.giaovien@satarobo.vn", "uat.daotao@satarobo.vn"] } },
+    where: { email: { in: ["uat.sale1@satarobo.vn", "uat.sale2@satarobo.vn", "uat.giaovien@satarobo.vn", "uat.daotao@satarobo.vn", "uat.giamdoc@satarobo.vn"] } },
     select: { id: true, email: true, name: true },
   });
   const byEmail = Object.fromEntries(uat.map((u) => [u.email, u]));
@@ -190,9 +190,27 @@ async function main() {
               scheduledSessionId: buoiIds[0]!.id,
               gvDeXuatId,
               gvPhanCongId,
-              addedById: byEmail["uat.sale1@satarobo.vn"]?.id ?? null,
+              // 27/08 — PHƯƠNG ÁN B: người đưa ca vào lớp quyết định ca đó là "đã phân
+              // công" hay mới "đề xuất". Nhóm A phải do người CÓ QUYỀN DUYỆT đưa vào,
+              // nếu không `scripts/backfill-gv-trial-phuong-an-b.ts` sẽ hạ nó xuống đề
+              // xuất ngay lượt chạy sau — seed và backfill đá nhau, số liệu nghiệm thu
+              // đổi mỗi lần chạy.
+              addedById:
+                (nhom === "A"
+                  ? byEmail["uat.giamdoc@satarobo.vn"]?.id
+                  : byEmail["uat.sale1@satarobo.vn"]?.id) ?? null,
             },
-            update: { gvDeXuatId, gvPhanCongId },
+            // Sửa cả trên dòng đã tồn tại: seed cũ ghi `addedById` = Sale cho MỌI nhóm,
+            // nên chạy lại phải kéo nhóm A về đúng người duyệt, không thì backfill
+            // phương án B lại hạ nó xuống đề xuất.
+            update: {
+              gvDeXuatId,
+              gvPhanCongId,
+              addedById:
+                (nhom === "A"
+                  ? byEmail["uat.giamdoc@satarobo.vn"]?.id
+                  : byEmail["uat.sale1@satarobo.vn"]?.id) ?? null,
+            },
           });
         }
         soCa++;

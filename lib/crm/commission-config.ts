@@ -6,10 +6,11 @@
 import { db } from "@/lib/db";
 import type { Actor } from "@/lib/auth/actor";
 import { writeAudit } from "@/lib/audit/audit-log";
+import { getSetting } from "@/lib/settings/service";
+import { TRIAL_TEACHER_RATE } from "@/lib/crm/trial-teacher-commission";
 import {
   COMMISSION_TIERS,
   DEFAULT_RATES,
-  MAX_TOTAL_RATE,
   CommissionError,
   computeCommission,
   type CommissionTier,
@@ -82,15 +83,26 @@ export async function setCommissionRate(
     select: { tier: true, rate: true, effectiveFrom: true, effectiveTo: true },
   });
 
-  // Trần: tổng rate tại effectiveFrom sau khi thay tier này ≤ 8%.
+  // Trần: tổng rate tại effectiveFrom sau khi thay tier này, CỘNG tầng GV dạy Trial,
+  // phải ≤ trần đang cấu hình.
+  //
+  // 27/08/2026 — hai đổi thay ở đây, cả hai đều đảo luật cũ:
+  //  1. Trần đọc từ `crm.commissionMaxTotalRate` (quản trị hệ thống sửa được), không
+  //     còn là hằng `MAX_TOTAL_RATE` phải sửa code mới đổi được.
+  //  2. Tầng `TRIAL_TEACHER` nay **được tính vào** tổng. Trước đó nó cố ý nằm ngoài mọi
+  //     ràng buộc vì trần 8% đã bão hoà bởi 4 tầng Sale — nghĩa là 1% GV chi ra mà không
+  //     con số nào ràng. Nới lên 9% chính là để kéo nó vào trong.
+  const maxTotalRate = await getSetting("crm.commissionMaxTotalRate");
   const othersTotal = COMMISSION_TIERS.filter((t) => t !== params.tier).reduce(
     (s, t) => s + pickEffectiveRates(rows, params.effectiveFrom)[t],
     0,
   );
-  if (othersTotal + params.rate > MAX_TOTAL_RATE + 1e-9) {
+  const tongGomGV = othersTotal + params.rate + TRIAL_TEACHER_RATE;
+  if (tongGomGV > maxTotalRate + 1e-9) {
     return fail(
       "RATE_EXCEEDS_CAP",
-      `Tổng tỉ lệ ${((othersTotal + params.rate) * 100).toFixed(2)}% vượt trần 8%.`,
+      `Tổng tỉ lệ ${(tongGomGV * 100).toFixed(2)}% (đã gồm ${(TRIAL_TEACHER_RATE * 100).toFixed(2)}% GV dạy Trial) ` +
+        `vượt trần ${(maxTotalRate * 100).toFixed(2)}%. Sửa trần ở Cấu hình vận hành nếu đây là chủ ý.`,
     );
   }
 
