@@ -3,6 +3,8 @@ import { describe, it, expect } from "vitest";
 import {
   buildLeadReport,
   buildFunnel,
+  buildFunnelReached,
+  ledgerCoverage,
   funnelConversionRates,
   countByStatus,
   groupBySource,
@@ -14,6 +16,7 @@ import {
   leadSummary,
   monthKeyVN,
   type LeadReportRecord,
+  type LeadLedgerRow,
 } from "@/lib/reports/lead";
 
 const d = (s: string) => new Date(s);
@@ -243,5 +246,79 @@ describe("groupByDropStage — lead rụng ở bậc nào, vì sao", () => {
     ]);
     expect(r[0].missingReason).toBe(2);
     expect(r[0].topReasons).toEqual([{ reason: "đã chọn nơi khác", count: 1 }]);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// buildFunnelReached — phễu "ĐÃ TỪNG TỚI", đọc từ sổ `LeadStatusHistory` (GĐ1).
+//
+// Bệnh mà nó chữa: `buildFunnel` đếm bằng trạng thái HIỆN TẠI, nên lead từng lên tới
+// "Đã học thử" rồi rớt (`DA_MAT`, rank -1) biến mất khỏi MỌI bậc — kể cả những bậc nó
+// đã thật sự đi qua. Nặng hơn con số phễu là mẫu số: `funnelConversionRates` mất luôn
+// phần rụng ⇒ tỷ lệ chuyển đổi bị thổi lên và trông rất đẹp.
+describe("[GĐ1] buildFunnelReached — lead đã rụng vẫn phải đếm ở bậc nó từng đi qua", () => {
+  it("lead rớt nhưng sổ ghi từng tới DA_HOC_THU → đếm tới bậc 4, không quá", () => {
+    const recs: LeadReportRecord[] = [
+      { id: "l1", status: "DA_MAT", source: null, centerId: "c1", commissionSource: null, createdAt: d("2026-08-26T03:00:00Z") },
+    ];
+    const so: LeadLedgerRow[] = [
+      { leadId: "l1", toStatus: "DA_LIEN_HE" },
+      { leadId: "l1", toStatus: "DA_HOC_THU" },
+      { leadId: "l1", toStatus: "DA_MAT" },
+    ];
+    const f = buildFunnelReached(recs, so);
+    expect(f.map((x) => x.count)).toEqual([1, 1, 1, 1, 1, 0, 0]);
+    // Đối chứng: cách cũ vứt lead này khỏi mọi bậc.
+    expect(buildFunnel(recs).map((x) => x.count)).toEqual([0, 0, 0, 0, 0, 0, 0]);
+  });
+
+  it("lead KHÔNG có dòng sổ nào → rơi về trạng thái hiện tại, không hồi quy", () => {
+    // Sổ CỐ Ý không backfill (migration 20260825120000), nên toàn bộ lead trước 25/08
+    // đi đường này. Kết quả phải TRÙNG KHÍT cách tính cũ, nếu không là đổi số báo cáo
+    // của quá khứ mà không ai yêu cầu.
+    expect(buildFunnelReached(records, []).map((x) => x.count)).toEqual(
+      buildFunnel(records).map((x) => x.count),
+    );
+  });
+
+  it("sổ ghi bậc THẤP hơn trạng thái hiện tại → lấy bậc cao nhất, không tụt", () => {
+    const recs: LeadReportRecord[] = [
+      { id: "l1", status: "DA_DANG_KY", source: null, centerId: null, commissionSource: null, createdAt: d("2026-08-26T03:00:00Z") },
+    ];
+    const f = buildFunnelReached(recs, [{ leadId: "l1", toStatus: "DA_LIEN_HE" }]);
+    expect(f.map((x) => x.count)).toEqual([1, 1, 1, 1, 1, 1, 1]);
+  });
+
+  it("bất biến: mỗi bậc KHÔNG BAO GIỜ nhỏ hơn cách đếm cũ", () => {
+    // "Đã từng tới" là tập cha của "đang ở". Bậc nào tụt xuống nghĩa là hàm đã đánh
+    // rơi lead — lớp lỗi nguy hiểm nhất ở đây vì biểu đồ vẫn vẽ ra số trông bình thường.
+    const recs: LeadReportRecord[] = records.map((r, i) => ({ ...r, id: `l${i}` }));
+    const so: LeadLedgerRow[] = [
+      { leadId: "l9", toStatus: "DA_HEN_HOC_THU" },
+      { leadId: "l0", toStatus: "MOI" },
+    ];
+    const moi = buildFunnelReached(recs, so).map((x) => x.count);
+    const cu = buildFunnel(recs).map((x) => x.count);
+    moi.forEach((n, i) => expect(n, `bậc ${i}`).toBeGreaterThanOrEqual(cu[i]));
+  });
+
+  it("dòng sổ mang status lạ (enum đổi tên) bị bỏ qua, KHÔNG kéo lead tụt bậc", () => {
+    const recs: LeadReportRecord[] = [
+      { id: "l1", status: "DA_HOC_THU", source: null, centerId: null, commissionSource: null, createdAt: d("2026-08-26T03:00:00Z") },
+    ];
+    const f = buildFunnelReached(recs, [{ leadId: "l1", toStatus: "TRIAL_ATTENDED_CU" }]);
+    expect(f.map((x) => x.count)).toEqual([1, 1, 1, 1, 1, 0, 0]);
+  });
+
+  it("ledgerCoverage đếm được bao nhiêu lead có sổ — số để ghi chú thích mốc 25/08", () => {
+    const recs: LeadReportRecord[] = [
+      { id: "l1", status: "MOI", source: null, centerId: null, commissionSource: null, createdAt: d("2026-08-26T03:00:00Z") },
+      { id: "l2", status: "MOI", source: null, centerId: null, commissionSource: null, createdAt: d("2026-08-26T03:00:00Z") },
+      { status: "MOI", source: null, centerId: null, commissionSource: null, createdAt: d("2026-05-01T03:00:00Z") },
+    ];
+    expect(ledgerCoverage(recs, [{ leadId: "l1", toStatus: "DA_LIEN_HE" }])).toEqual({
+      coSo: 1,
+      khongCoSo: 2,
+    });
   });
 });
