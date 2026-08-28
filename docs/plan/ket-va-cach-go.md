@@ -597,7 +597,13 @@ Token hết hạn ⇒ **job chết im**, không ai biết cho tới khi ai đó 
 
 **Ai gỡ:** người quản trị Meta Business (Trưởng Marketing) + Dev.
 
-**Gỡ thế nào:**
+> 📘 **HƯỚNG DẪN TỪNG BƯỚC: [`docs/runbook-token-meta.md`](../runbook-token-meta.md)**
+> Đường đi trong Meta Business Settings, lệnh `curl` kiểm trước khi dán lên Vercel, bảng đọc
+> lỗi, và bẫy `act_` (mã tự ghép tiền tố nên env phải chứa CHỈ phần số).
+> ⚠️ Hướng dẫn này đã gửi trong chat **hai lần và trôi mất cả hai** — vì thế nó nằm trong
+> repo. Đừng chép lại vào chat lần thứ ba, gửi link file này.
+
+**Gỡ thế nào (bản tóm tắt — chi tiết ở runbook trên):**
 1. Vào Meta Business Settings → xem token đang dùng thuộc loại nào: **Page token** / **System User
    token** / **long-lived User token**.
 2. Khuyến nghị mạnh: chuyển sang **System User token** — nó **không gắn với một người**, nên nhân sự
