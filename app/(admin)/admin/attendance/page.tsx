@@ -57,13 +57,26 @@ import {
   buildSessionAttendanceRows,
   type AttendanceRosterRow,
 } from "@/lib/attendance/roster";
-import { vnEndOfDay } from "@/lib/time/vn";
+import { parseVnYmd, vnEndOfDay, vnYmd } from "@/lib/time/vn";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Điểm danh | Admin" };
 
 interface SearchParams {
-  searchParams: Promise<{ sessionId?: string; classId?: string; centerId?: string }>;
+  searchParams: Promise<{
+    sessionId?: string;
+    classId?: string;
+    centerId?: string;
+    /**
+     * E-01 / OQ-6 — khoảng ngày, để tab "Tương tác KH" trỏ sang đây mà không đổi
+     * đường dẫn. CỐ Ý mở rộng trang này thay vì dựng trang thứ hai: nó đã là đích của
+     * thông báo và của nút ở /admin/sessions, đổi đường dẫn là gãy link cũ đang nằm
+     * trong hộp thông báo của người dùng.
+     * Thiếu cả hai ⇒ hành vi y hệt trước đây.
+     */
+    dateFrom?: string;
+    dateTo?: string;
+  }>;
 }
 
 const TZ = "Asia/Ho_Chi_Minh";
@@ -103,6 +116,18 @@ export default async function AttendanceAdminPage({ searchParams }: SearchParams
   const sessionId = sp.sessionId?.trim();
   const classFilter = sp.classId?.trim();
   const centerFilter = sp.centerId?.trim();
+  // Khoảng ngày (E-01). Sai định dạng ⇒ `null` ⇒ bỏ qua, KHÔNG báo lỗi: đây là bộ lọc
+  // phụ trên một màn vận hành, chặn cứng vì một tham số URL rác là hại hơn lợi.
+  const rangeFrom = sp.dateFrom ? parseVnYmd(sp.dateFrom.trim()) : null;
+  const rangeTo = sp.dateTo ? parseVnYmd(sp.dateTo.trim()) : null;
+  const rangeToEnd = rangeTo ? vnEndOfDay(rangeTo) : null;
+  const sessionDateWhere =
+    rangeFrom || rangeToEnd
+      ? {
+          ...(rangeFrom ? { gte: rangeFrom } : {}),
+          ...(rangeToEnd ? { lte: rangeToEnd } : {}),
+        }
+      : undefined;
 
   // LMS-1 / W1-1 — owner-scope: GV chỉ thấy lớp mình dạy/trợ giảng; CENTER_MANAGER
   // theo cơ sở; SUPER_ADMIN toàn bộ (cùng quy tắc canManageSessionClass).
@@ -238,7 +263,9 @@ export default async function AttendanceAdminPage({ searchParams }: SearchParams
     // Cả lớp một lượt: số buổi tính trên TOÀN BỘ buổi (buildSessionNumberMap đòi vậy,
     // và ở đây "toàn bộ" cũng chính là danh sách đang bày).
     const sessions = await sdb.classSession.findMany({
-      where: { classId: cls.id },
+      // ⚠️ Bộ lọc ngày CHỈ áp khi người dùng truyền vào. Áp mặc định là đổi hành vi của
+      // một màn đang chạy, và số buổi của lớp sẽ khác đi mà không ai bấm gì.
+      where: { classId: cls.id, ...(sessionDateWhere ? { date: sessionDateWhere } : {}) },
       orderBy: { date: "asc" },
       select: {
         id: true,
@@ -503,12 +530,20 @@ export default async function AttendanceAdminPage({ searchParams }: SearchParams
     ? await Promise.all([
         sdb.classSession.groupBy({
           by: ["classId"],
-          where: { classId: { in: classIds }, status: { not: "CANCELLED" } },
+          where: {
+            classId: { in: classIds },
+            status: { not: "CANCELLED" },
+            ...(sessionDateWhere ? { date: sessionDateWhere } : {}),
+          },
           _count: { _all: true },
         }),
         sdb.classSession.groupBy({
           by: ["classId"],
-          where: { classId: { in: classIds }, status: "COMPLETED" },
+          where: {
+            classId: { in: classIds },
+            status: "COMPLETED",
+            ...(sessionDateWhere ? { date: sessionDateWhere } : {}),
+          },
           _count: { _all: true },
         }),
         sdb.classSession.groupBy({
@@ -516,7 +551,15 @@ export default async function AttendanceAdminPage({ searchParams }: SearchParams
           where: {
             classId: { in: classIds },
             status: { not: "CANCELLED" },
-            date: { lte: todayEnd },
+            // "Đã diễn ra" = tới hôm nay. Có lọc ngày thì lấy mốc SỚM HƠN trong hai
+            // cái: buổi của tương lai không thể coi là đã diễn ra dù người dùng chọn
+            // range tới cuối năm.
+            date: rangeToEnd
+              ? {
+                  ...(rangeFrom ? { gte: rangeFrom } : {}),
+                  lte: rangeToEnd.getTime() < todayEnd.getTime() ? rangeToEnd : todayEnd,
+                }
+              : { ...(rangeFrom ? { gte: rangeFrom } : {}), lte: todayEnd },
           },
           _count: { _all: true },
         }),
@@ -563,6 +606,20 @@ export default async function AttendanceAdminPage({ searchParams }: SearchParams
           Chọn lớp để mở danh sách buổi. Một buổi chỉ tính là hoàn tất khi đã điểm danh
           đủ lớp, nhận xét đủ học viên đi học và có ảnh/video trong kho.
         </p>
+        {sessionDateWhere ? (
+          // Nói rõ đang lọc theo khoảng ngày. Không nói thì người dùng thấy số buổi ít
+          // hơn trí nhớ của họ và kết luận là mất dữ liệu.
+          <p className="mt-2 rounded-md border border-border bg-muted px-3 py-2 text-sm">
+            Đang lọc theo khoảng ngày{" "}
+            <strong>
+              {rangeFrom ? vnYmd(rangeFrom) : "…"} → {rangeTo ? vnYmd(rangeTo) : "…"}
+            </strong>{" "}
+            — số buổi bên dưới chỉ tính trong khoảng này.{" "}
+            <Link href="/admin/attendance" className="font-medium text-primary hover:underline">
+              Bỏ lọc
+            </Link>
+          </p>
+        ) : null}
       </div>
 
       {classRows.length === 0 ? (

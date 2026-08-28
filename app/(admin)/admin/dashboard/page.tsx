@@ -26,6 +26,8 @@ import { TabTaiChinh } from "./_tabs/tai-chinh";
 import { TabKinhDoanh } from "./_tabs/kinh-doanh";
 import { TabChiPhiMarketing } from "./_tabs/chi-phi-marketing";
 import { TabTuongTacKh } from "./_tabs/tuong-tac-kh";
+import { ChatPanel, CHAT_PARAM } from "@/components/admin/tuong-tac/chat-panel";
+import { DashboardThreadPanel } from "@/components/admin/tuong-tac/dashboard-thread-panel";
 
 const DASHBOARD_PATH = "/admin/dashboard";
 
@@ -40,7 +42,11 @@ const SCOPE_TABS = [
 type ScopeTabKey = (typeof SCOPE_TABS)[number]["key"];
 
 /** Bộ lọc phạm vi (A-02) + tab đang mở. `tab` KHÔNG thuộc bộ lọc nên resolver không biết nó. */
-type DashboardSearchParams = ScopeFilterSearchParams & { tab?: string | string[] };
+type DashboardSearchParams = ScopeFilterSearchParams & {
+  tab?: string | string[];
+  /** E-04 — id hội thoại đang mở trong panel. Vắng = panel đóng. */
+  chat?: string | string[];
+};
 
 /**
  * Link chuyển tab GIỮ NGUYÊN mọi tham số lọc đang có (A-02-3: đổi tab không mất bộ lọc).
@@ -165,6 +171,23 @@ export default async function DashboardPage({
   // chỉ có 1 cơ sở (L-A12). KHÔNG tự đọc `sp.center` ở đây — hai bộ parse lệch nhau là
   // hỏng câm. `actor` đã resolve ở trên, dùng lại chứ không gọi lần hai.
   const scope = await resolveScopeFilters(actor, sp);
+
+  // ── E-04 — panel chat mở theo URL ───────────────────────────────────────────
+  // Querystring hiện tại ĐÃ BỎ khoá `chat`, dùng để dựng link "Mở hội thoại" (thêm lại
+  // đúng một khoá) và để panel biết đóng thì quay về đâu.
+  const chatParams = new URLSearchParams();
+  for (const [key, value] of Object.entries(sp)) {
+    if (key === CHAT_PARAM || value === undefined) continue;
+    if (Array.isArray(value)) for (const v of value) chatParams.append(key, v);
+    else chatParams.set(key, value);
+  }
+  const currentQuery = chatParams.toString();
+  const openChatId = Array.isArray(sp.chat) ? sp.chat[0] : sp.chat;
+  // Chỉ dựng panel khi thực sự mở. Render sẵn lúc đóng nghĩa là chạy đủ 7 truy vấn của
+  // luồng chat mỗi lần ai đó vào dashboard.
+  const stayHref = openChatId
+    ? `${DASHBOARD_PATH}?${currentQuery ? `${currentQuery}&` : ""}${CHAT_PARAM}=${encodeURIComponent(openChatId)}`
+    : DASHBOARD_PATH;
   // `key` = bộ lọc ĐANG ÁP DỤNG: điều hướng xong thì bar remount và nhận lựa chọn mới,
   // khỏi cần useEffect đồng bộ state ngược từ props.
   const scopeBarKey = `${scope.selection.join(",")}|${scope.dateFromStr}|${scope.dateToStr}|${scope.filters.groupByCenter}`;
@@ -246,8 +269,24 @@ export default async function DashboardPage({
         {activeTab === "tai-chinh" && <TabTaiChinh actor={actor} filters={scope.filters} />}
         {activeTab === "kinh-doanh" && <TabKinhDoanh actor={actor} filters={scope.filters} />}
         {activeTab === "chi-phi-marketing" && <TabChiPhiMarketing filters={scope.filters} />}
-        {activeTab === "tuong-tac-kh" && <TabTuongTacKh filters={scope.filters} />}
+        {activeTab === "tuong-tac-kh" && (
+          <TabTuongTacKh
+            actor={actor}
+            filters={scope.filters}
+            user={session.user}
+            currentQuery={currentQuery}
+          />
+        )}
       </section>
+
+      {/* E-04 — hội thoại mở NGAY TRONG dashboard. Nội dung do RSC dựng và truyền
+          xuống làm `children` của wrapper client; đó là cách duy nhất để `ChatThread`
+          nhận đủ dữ liệu mà không phải sinh Server Action mới. */}
+      {openChatId ? (
+        <ChatPanel>
+          <DashboardThreadPanel userId={userId} conversationId={openChatId} stayHref={stayHref} />
+        </ChatPanel>
+      ) : null}
     </div>
   );
 }
