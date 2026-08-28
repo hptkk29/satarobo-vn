@@ -36,6 +36,10 @@ export const ROLE_SEED: RoleSeed[] = [
       { action: "roles:assign", scopeType: "GLOBAL" },
       // US-03 — quản nhóm người dùng + grant nhóm (chỉ SUPER_ADMIN, như roles:manage).
       { action: "user-groups:manage", scopeType: "GLOBAL" },
+      // 27/08/2026 — đổi trạng thái lead nay là quyền RIÊNG, chỉ Sale. SUPER_ADMIN đã
+      // bypass toàn bộ quyền trong can() v2 nên dòng này KHÔNG đổi hành vi; khai để ma
+      // trận nói được ai đẩy được lead trên phễu, và để v1 (local/dev) khớp v2.
+      { action: "leads:change-status", scopeType: "GLOBAL" },
       // #17 (câu 55): học bạ. SUPER_ADMIN đã bypass toàn bộ quyền trong can() v2
       // (lib/auth/can.ts) → 2 dòng này KHÔNG đổi hành vi, thêm cho khớp v1 + rõ ý.
       { action: "report-cards:manage", scopeType: "GLOBAL" },
@@ -390,6 +394,15 @@ export const ROLE_SEED: RoleSeed[] = [
       { action: "elearning:exam:grade", scopeType: "GLOBAL" },
       { action: "elearning:exam:unlock", scopeType: "GLOBAL" },
       { action: "elearning:report:export", scopeType: "GLOBAL" },
+      // ── GĐ3 (chủ dự án chốt câu 2, 25/08/2026) — PHÂN CÔNG GIÁO VIÊN TRẢI NGHIỆM ──
+      // Chuyển từ Quản lý cơ sở sang Đào tạo: Sale chỉ ĐỀ XUẤT, Đào tạo mới chốt.
+      // `trials:view` đi kèm bắt buộc — thiếu nó thì Đào tạo không vào nổi trang
+      // /lop-trial/[id] để bấm nút (trang gác bằng trials:view).
+      // scopeType GLOBAL là BẮT BUỘC: hai call-site gọi trần không kèm target, mà
+      // scope CENTER thiếu target.centerId thì `can()` trả false (luật R1, có test khoá).
+      //
+      // ⚠️ Hai dòng quyền tương ứng KHAI Ở KHỐI TRÊN (mục 23/08 "Đào tạo quản lý toàn
+      // bộ giáo viên") — khai lại ở đây là TRÙNG, và test EL-02/T10-08 bắt đúng lỗi đó.
     ],
   },
   {
@@ -490,8 +503,13 @@ export const ROLE_SEED: RoleSeed[] = [
       // ── Trải nghiệm · phụ huynh · media ──
       { action: "trials:view", scopeType: "GLOBAL" },
       { action: "trials:manage", scopeType: "GLOBAL" },
-      { action: "trials:assign-teacher", scopeType: "GLOBAL" },
+      // GĐ3 (25/08/2026) — `trials:assign-teacher` ĐÃ GỠ khỏi vai này, chuyển sang
+      // Đào tạo theo chốt câu 2. Quản lý cơ sở vẫn giữ trials:manage/feedback/config
+      // và vẫn override được sĩ số; chỉ riêng việc CHỐT giáo viên là của Đào tạo.
       { action: "trials:feedback", scopeType: "GLOBAL" },
+      // GĐ4 — Quản lý cơ sở giữ CẢ HAI (điểm danh lẫn nộp phiếu) để còn trực thay khi
+      // Sale hoặc giáo viên vắng. Vai chuyên trách mới là người làm thường ngày.
+      { action: "trials:attendance", scopeType: "GLOBAL" },
       { action: "trials:override-capacity", scopeType: "GLOBAL" },
       { action: "parent-requests:manage", scopeType: "GLOBAL" },
       { action: "parent-feedback:view", scopeType: "GLOBAL" },
@@ -666,6 +684,11 @@ export const ROLE_SEED: RoleSeed[] = [
       { action: "leads:view-pii", scopeType: "GLOBAL" },
       { action: "leads:create", scopeType: "GLOBAL" },
       { action: "leads:edit", scopeType: "GLOBAL" },
+      // 27/08/2026 — CHỈ Sale được đổi trạng thái lead (chủ dự án chốt). Quản lý cơ sở
+      // và Marketing giữ `leads:edit` nhưng KHÔNG có key này ⇒ sửa hồ sơ được, đẩy bậc
+      // thì không. ⚠️ Đổi ở đây chưa có hiệu lực trên prod cho tới khi chạy
+      // seed-prod-roles.yml; trên dev/test phải chạy tay `pnpm db:seed:roles`.
+      { action: "leads:change-status", scopeType: "GLOBAL" },
       // Task #07 — quyết định user 07/07/2026: Sale được import danh sách "đã đăng
       // ký" (Sale giữ Google Sheet gốc — câu 33). CENTER: import gán vào cơ sở mình.
       { action: "leads:import", scopeType: "GLOBAL" },
@@ -683,6 +706,10 @@ export const ROLE_SEED: RoleSeed[] = [
       { action: "honors:view", scopeType: "CENTER" },
       { action: "trials:view", scopeType: "GLOBAL" },
       { action: "trials:manage", scopeType: "GLOBAL" },
+      // GĐ4 (25/08/2026) — Sale ĐIỂM DANH buổi trải nghiệm, đúng ma trận đặc tả §8.2.
+      // Trước GĐ4 việc này gác bằng `trials:feedback` mà vai này không có, nên Sale
+      // không điểm danh được dù quy trình giao cho họ.
+      { action: "trials:attendance", scopeType: "GLOBAL" },
       // ── F5 (Đợt 3, mở phạm vi 10/08/2026): nhắn riêng 1-1 với PHỤ HUYNH MÌNH PHỤ TRÁCH ──
       // Scope **OWN**, giống hệt vai PARENT, và CỐ Ý KHÔNG dùng CENTER: `scopeMatches`
       // cho CENTER chỉ cần `target.centerId` khớp, mà nhóm lớp LUÔN có `centerId` ⇒ cấp

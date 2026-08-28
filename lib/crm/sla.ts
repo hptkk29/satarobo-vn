@@ -86,17 +86,21 @@ export function evaluateSla(
 // =============================================================================
 
 /**
- * Lead "idle" khi đang ở NEW/ASSIGNED và `lastActivityAt` cách `now` quá `idleHours` giờ.
+ * Lead "idle" khi đang ở MOI và `lastActivityAt` cách `now` quá `idleHours` giờ.
  * THUẦN. lastActivityAt = null → NOT idle (UI/cron sẽ set lastActivityAt).
+ *
+ * GĐ5 — trước đây điều kiện là NEW **hoặc** ASSIGNED. Hai giá trị đó nay cùng là MOI:
+ * "đã phân công" không còn là một bậc phễu mà là thuộc tính `Lead.assignedToId`. Rule
+ * idle vì thế KHÔNG đổi phạm vi — vẫn đúng tập lead cũ, chỉ viết bằng một giá trị.
  */
 export function isLeadIdle(
   input: { status: LeadStatus; lastActivityAt: Date | null; createdAt?: Date | null },
   now: Date,
   idleHours: number,
 ): boolean {
-  if (input.status !== "NEW" && input.status !== "ASSIGNED") return false;
+  if (input.status !== "MOI") return false;
   // R7-01 fix (G3): lead mới chưa có hoạt động → mốc tham chiếu = createdAt, để rule
-  // idle vẫn bắt được lead NEW bị bỏ quên (lastActivityAt chỉ set khi có LeadActivity).
+  // idle vẫn bắt được lead MOI bị bỏ quên (lastActivityAt chỉ set khi có LeadActivity).
   const ref = input.lastActivityAt ?? input.createdAt ?? null;
   if (ref == null) return false;
   return now.getTime() - ref.getTime() > idleHours * 3_600_000;

@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import { LeadChildTrialStatus } from '@prisma/client'
 import { phoneVn } from '@/lib/validators/phone'
+import { LEAD_STATUS_VALUES } from '@/lib/leads/status'
 
 // AUTH-SĐT P1 — regex riêng đã bị gỡ; nguồn duy nhất là `PHONE_VN_RE` trong
 // `lib/phone.ts`. Re-export để call-site cũ còn import được.
@@ -61,25 +62,8 @@ export const leadCreateSchema = z.object({
 })
 
 export const leadUpdateSchema = leadCreateSchema.partial().extend({
-  status: z
-    .enum([
-      'NEW',
-      'ASSIGNED',
-      'CONTACTED',
-      'NO_ANSWER',
-      'CONSULTING',
-      'TRIAL_SCHEDULED',
-      'TRIAL_ATTENDED',
-      'AWAITING_DECISION',
-      'ENROLLED',
-      'NURTURING',
-      'LOST',
-      'DUPLICATE',
-      'DEMO_SCHEDULED',
-      'TRIAL_IN_PROGRESS',
-      'REGISTERED',
-    ])
-    .optional(),
+  // GĐ0 — tuple lấy từ nguồn duy nhất; thêm/bớt giá trị enum không phải sửa ở đây nữa.
+  status: z.enum(LEAD_STATUS_VALUES).optional(),
   assignedToId: z.string().min(1).optional(),
 })
 

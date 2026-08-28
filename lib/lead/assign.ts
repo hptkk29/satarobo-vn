@@ -3,18 +3,33 @@ import { logLeadAudit } from "@/lib/audit/log";
 import { assignmentWrite } from "@/lib/lead/assignment";
 import { takeRotationTurn, takeRotationTurns } from "@/lib/lead/rotation";
 import { orgUnitIdForCenter } from "@/lib/org/org-service";
-import type { LeadStatus, Prisma } from "@prisma/client";
+import { LEAD_CLOSED_STATUSES } from "@/lib/leads/status";
+import type { Prisma } from "@prisma/client";
 
 // =============================================================================
 // LEAD AUTO-ASSIGN — round-robin theo cơ sở (Phase T1.3)
 // =============================================================================
 
 // Lead "đang mở" = chưa kết thúc → tính tải cho round-robin.
-export const TERMINAL_LEAD_STATUSES: LeadStatus[] = [
-  "ENROLLED",
-  "LOST",
-  "DUPLICATE",
-];
+// GĐ0 — định nghĩa chuyển về @/lib/leads/status (trước đó cùng danh sách này nằm ở
+// 5 file rời: 4 bản giống nhau và 1 bản có thêm REGISTERED, không ai biết vì sao lệch).
+/** @deprecated Tên cũ. Dùng `LEAD_CLOSED_STATUSES` từ `@/lib/leads/status`. */
+export const TERMINAL_LEAD_STATUSES = LEAD_CLOSED_STATUSES;
+
+/**
+ * Điều kiện "lead còn là VIỆC ĐANG MỞ của Sale" (bản sao của cùng luật ở
+ * `lib/lead/auto-assign.ts` — hai đường chia độc lập, sửa một bên nhớ sửa bên kia).
+ *
+ * ⚠️ `status notIn LEAD_CLOSED_STATUSES` MỘT MÌNH LÀ THIẾU: sau GĐ5 tập đóng chỉ còn
+ * `DA_MAT`, nên lead đã convert xong (đã thành học viên) vẫn mang `DA_DANG_KY` và bị
+ * đếm là tải mở VĨNH VIỄN ⇒ Sale lâu năm bị coi là quá tải, ngừng nhận lead mới.
+ * `convertedAt` do chính lượt convert ghi nên nó mới là dấu "đã xong thật".
+ */
+const LEAD_DANG_MO = {
+  deletedAt: null,
+  status: { notIn: TERMINAL_LEAD_STATUSES },
+  convertedAt: null,
+} satisfies Prisma.LeadWhereInput;
 
 export type AssigneeLoad = { id: string; openCount: number };
 export type Actor = { actorId: string | null; actorName: string };
@@ -80,8 +95,7 @@ export async function getSalesLoad(
     by: ["assignedToId"],
     where: {
       assignedToId: { in: sales.map((s) => s.id) },
-      deletedAt: null,
-      status: { notIn: TERMINAL_LEAD_STATUSES },
+      ...LEAD_DANG_MO,
     },
     _count: { id: true },
   });
@@ -132,11 +146,15 @@ export async function autoAssignLead(
   await db.$transaction(async (tx) => {
     await tx.lead.update({
       where: { id: leadId },
-      data: {
-        ...assignmentWrite(target), // Đợt A — kèm mốc phân công (đường cũ, 3 webhook)
-        ...(lead.status === "NEW" ? { status: "ASSIGNED" as LeadStatus } : {}),
-      },
+      data: assignmentWrite(target), // Đợt A — kèm mốc phân công (đường cũ, 3 webhook)
     });
+    // GĐ5 — ĐÃ GỠ lượt đổi trạng thái NEW→ASSIGNED ở đây.
+    //
+    // Điều kiện cũ ("chỉ đổi từ NEW, không kéo ngược lead đã liên hệ về Đã phân
+    // công") nay tự thoả: NEW và ASSIGNED cùng ánh xạ về MOI, nên lệnh ghi chỉ có
+    // thể là MOI→MOI và `setLeadStatus` sẽ trả KHONG_DOI. `assignmentWrite(target)`
+    // ngay trên vẫn ghi assignedToId + assignedAt — đó mới là nơi đọc ra việc phân
+    // công — và dòng audit ASSIGN bên dưới vẫn vào sổ.
     await logLeadAudit({
       leadId,
       action: "ASSIGN",
@@ -176,12 +194,10 @@ export async function reassignOpenLeads(
     select: { centerId: true },
   });
 
+  // Chỉ kéo theo lead CÒN VIỆC. Lead đã convert xong không cần người mới tiếp quản —
+  // ném chúng sang sale khác chỉ làm phồng sổ lượt và làm loãng bảng hiệu suất.
   const openLeads = await db.lead.findMany({
-    where: {
-      assignedToId: userId,
-      deletedAt: null,
-      status: { notIn: TERMINAL_LEAD_STATUSES },
-    },
+    where: { assignedToId: userId, ...LEAD_DANG_MO },
     select: { id: true },
   });
   if (openLeads.length === 0) return { ok: true, reassigned: 0 };

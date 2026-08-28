@@ -27,6 +27,14 @@ const ALLOWLIST: Record<string, string> = {
   "/r2-test": "màn thử upload R2, chỉ dev dùng",
   "/parent-requests/bao-vang":
     "stub chuyển hướng sang /parent-requests (giữ cho link cũ không vỡ)",
+  "/trials":
+    "GĐ6 — stub chuyển hướng sang /lop-trial. Màn gộp vào Lớp Trial; route " +
+    "giữ lại vì thông báo CŨ trong DB mang href \"/trials\" và không sửa hồi tố được, " +
+    "còn tài liệu hướng dẫn sinh tự động cũng trỏ tới đó. Gỡ khi đo được là không còn " +
+    "thông báo nào trỏ tới, đừng gỡ theo lịch.",
+  "/trial-classes":
+    "GĐ6 — stub chuyển hướng sang /lop-trial. Cùng lý do với /trials; bản /trial-classes/[id] " +
+    "còn giữ nguyên id khi chuyển để thông báo cũ không rơi về danh sách.",
   "/search": "vào bằng ô tìm kiếm trên topbar (<form action=\"/search\">), không phải mục menu",
   "/thong-bao":
     "CỐ Ý không lên sidebar — ràng buộc cốt lõi của PRD hệ thông báo: chuông ở topbar là điểm " +

@@ -106,7 +106,7 @@ export async function convertOneLeadBackfill(
     // `note` — import ghi CCCD PH + Địa chỉ vào đây (Lead không có cột riêng cho 2
     // trường này). Đọc lại để chốt hàng loạt mang chúng sang hồ sơ phụ huynh, thay
     // vì để nằm chết trong note (chốt 05/08: nhập vào là phải gộp sang HV luôn).
-    select: { id: true, status: true, centerId: true, parentName: true, phone: true, email: true, note: true, deletedAt: true },
+    select: { id: true, status: true, centerId: true, parentName: true, phone: true, email: true, note: true, deletedAt: true, convertedAt: true },
   });
   if (!lead || lead.deletedAt) return fail("LEAD_NOT_FOUND", "Không tìm thấy lead");
   const leadContact = contactFromLeadNote(lead.note);
@@ -122,9 +122,15 @@ export async function convertOneLeadBackfill(
       "Lead đang gắn Hội sở — Hội sở không nhận học viên. Chuyển lead về đúng cơ sở dạy học (CS1/CS2) rồi chốt lại",
     );
   }
-  if (lead.status === "ENROLLED") return fail("ALREADY_CONVERTED", "Lead đã được chốt trước đó");
-  if (lead.status === "LOST" || lead.status === "DUPLICATE") {
-    return fail("LEAD_TERMINAL", `Lead ở trạng thái ${lead.status} — không chốt được`);
+  // GĐ5 — "đã chốt" đo bằng `convertedAt`, KHÔNG đo bằng status. Chính màn này nhập
+  // Excel lead ĐÃ ĐĂNG KÝ rồi mới chốt hàng loạt; sau khi ENROLLED gộp vào DA_DANG_KY
+  // thì khoá theo status sẽ loại sạch đúng những dòng cần chốt. `convertedAt` là mốc
+  // do lượt convert ghi nên phân biệt được "đã đăng ký" với "đã chốt".
+  if (lead.convertedAt) return fail("ALREADY_CONVERTED", "Lead đã được chốt trước đó");
+  // GĐ5 — LOST và DUPLICATE nay cùng là DA_MAT nên hai nhánh gộp làm một; thông báo
+  // không interpolate status nữa vì chỉ còn đúng một giá trị rơi vào đây.
+  if (lead.status === "DA_MAT") {
+    return fail("LEAD_TERMINAL", "Lead ở trạng thái Đã mất — không chốt được");
   }
 
   // SĐT phải canonical hoá được (số di động VN) — đây là khoá đăng nhập của TK phụ huynh.

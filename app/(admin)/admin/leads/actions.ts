@@ -23,7 +23,13 @@ import { centerIdForOrgUnit } from '@/lib/org/org-service'
 import { rejectHeadOffice } from '@/lib/enrollment-flow'
 import { normalizeFacebookUrl } from '@/lib/lead/intake/normalize'
 import { mergeLeadNote } from '@/lib/lead/note-view'
-import { LEAD_STATUS_LABEL, canTransitionLeadStatus } from '@/lib/leads/status'
+import {
+  LEAD_DROP_STATUSES,
+  LEAD_STATUS_LABEL,
+  LEAD_STATUS_VALUES,
+  canTransitionLeadStatus,
+} from '@/lib/leads/status'
+import { setLeadStatus } from '@/lib/leads/set-status'
 import { leadChildSchema } from '@/lib/validators/lead'
 import { syncLeadChildNameToStudents } from '@/lib/students/sync-name'
 import {
@@ -31,23 +37,9 @@ import {
   summarizePriorHistory,
 } from '@/lib/students/prior-history'
 
-const statusSchema = z.enum([
-  'NEW',
-  'ASSIGNED',
-  'CONTACTED',
-  'NO_ANSWER',
-  'CONSULTING',
-  'TRIAL_SCHEDULED',
-  'TRIAL_ATTENDED',
-  'TRIAL_IN_PROGRESS',
-  'AWAITING_DECISION',
-  'REGISTERED',
-  'ENROLLED',
-  'NURTURING',
-  'LOST',
-  'DUPLICATE',
-  'DEMO_SCHEDULED',
-])
+// GĐ0 — tuple lấy từ nguồn duy nhất @/lib/leads/status (trước đây chép tay 15 chuỗi
+// ở đây và một bản nữa trong lib/validators/lead.ts, hai bản lệch thứ tự nhau).
+const statusSchema = z.enum(LEAD_STATUS_VALUES)
 
 // ─── #11 T1 (câu 10 BGĐ, Kiệt ký spec 10/07) — lead "dùng chung" ────────────
 /**
@@ -139,16 +131,44 @@ export async function toggleLeadShareAction(
   return { ok: true }
 }
 
+/**
+ * Đổi trạng thái lead bằng TAY (kéo thẻ Kanban / chọn ở bảng).
+ *
+ * `reason` BẮT BUỘC khi chuyển vào một bậc rơi (`LEAD_DROP_STATUSES`). Ép ở đây chứ
+ * không ở `setLeadStatus` vì phần lớn đường vào cửa ghi là MÁY chạy (điểm danh học
+ * thử, webhook tiền, nhập tệp) — không có ai để hỏi. Chỉ đường người bấm mới hỏi được,
+ * và nếu không hỏi thì `Lead.lostNote` vĩnh viễn NULL: báo cáo biết lead rụng ở bậc
+ * nào nhưng không bao giờ biết vì sao, tức là biết một nửa thì không hành động được.
+ */
 export async function updateLeadStatus(
   leadId: string,
   rawStatus: string,
+  reason?: string,
 ): Promise<{ ok: boolean; error?: string }> {
   const session = await auth()
   if (!session?.user) return { ok: false, error: 'Chua dang nhap' }
-  if (!(await checkPermission('leads:edit'))) return { ok: false, error: 'Khong co quyen' }
+  // 27/08/2026 — gác bằng `leads:change-status`, KHÔNG phải `leads:edit`. Chủ dự án chốt
+  // chỉ Sale được đẩy lead trên phễu; Quản lý cơ sở và Marketing vẫn sửa hồ sơ lead bình
+  // thường (những đường đó vẫn gác `leads:edit`). Đây là ENDPOINT — ẩn nút ở bảng/Kanban
+  // là tiện nghi cho người dùng, không phải hàng rào: POST thẳng vào action vẫn phải chặn.
+  if (!(await checkPermission('leads:change-status'))) {
+    return { ok: false, error: 'Chỉ Tư vấn viên (Sale) được đổi trạng thái lead' }
+  }
 
   const parsed = statusSchema.safeParse(rawStatus)
   if (!parsed.success) return { ok: false, error: 'Trang thai khong hop le' }
+
+  // Cắt cả khoảng trắng: "   " không phải là một lý do.
+  const lyDo = reason?.trim() || null
+  if (LEAD_DROP_STATUSES.includes(parsed.data) && (lyDo === null || lyDo.length < 3)) {
+    return {
+      ok: false,
+      error: `Cần ghi lý do khi chuyển sang "${LEAD_STATUS_LABEL[parsed.data]}"`,
+    }
+  }
+  if (lyDo !== null && lyDo.length > 500) {
+    return { ok: false, error: 'Lý do quá dài (tối đa 500 ký tự)' }
+  }
 
   const before = await db.lead.findUnique({
     where: { id: leadId },
@@ -178,9 +198,18 @@ export async function updateLeadStatus(
   const { actorId, actorName } = getAuditActor(session)
 
   await db.$transaction(async (tx) => {
-    await tx.lead.update({
-      where: { id: leadId },
-      data: { status: parsed.data },
+    // GĐ1 — đi qua cửa chung: ngoài việc đổi cột, nó ghi LeadStatusHistory và dời
+    // `statusChangedAt` (mốc mà nhắc việc đọc, thay cho `updatedAt` vốn bị mọi thao
+    // tác chạm lead dời đi). `LeadActivity` bên dưới vẫn giữ — đó là dòng thời gian
+    // cho người đọc, khác mục đích với sổ trạng thái dùng để tính tỷ lệ chuyển đổi.
+    await setLeadStatus({
+      tx,
+      leadId,
+      to: parsed.data,
+      source: 'admin',
+      actorId,
+      actorName,
+      reason: lyDo,
     })
 
     await logLeadAudit({
@@ -216,7 +245,7 @@ export async function updateLeadStatus(
     //
     // Chỉ đụng dòng đang PENDING: con đã nhập học khoá khác rồi thì lead mất không xoá
     // được thành tích đó.
-    if (parsed.data === 'LOST' && before.status !== 'LOST') {
+    if (parsed.data === 'DA_MAT' && before.status !== 'DA_MAT') {
       await tx.leadTrialHistory.updateMany({
         where: { leadChild: { leadId }, outcome: 'PENDING' },
         data: { outcome: 'LOST' },
@@ -230,8 +259,8 @@ export async function updateLeadStatus(
     // ấy giáo viên KHÔNG BAO GIỜ thấy, và nó còn đẻ ra một ngày giả trong báo cáo.
     // Nay chỉ ghi việc cần làm vào dòng thời gian; Sale xếp buổi thật ở "Lớp trải nghiệm".
     if (
-      parsed.data === 'TRIAL_SCHEDULED' &&
-      before.status !== 'TRIAL_SCHEDULED'
+      parsed.data === 'DA_HEN_HOC_THU' &&
+      before.status !== 'DA_HEN_HOC_THU'
     ) {
       // Ghi dòng hoạt động + reset đồng hồ SLA idle trong CÙNG transaction — cùng
       // nếp với `addLeadActivity`/`addLeadTask` ở file này. (Trên nhánh `test` chỗ
@@ -256,7 +285,8 @@ export async function updateLeadStatus(
 
   revalidatePath('/leads')
   revalidatePath(`/leads/${leadId}`)
-  revalidatePath('/trials')
+  // 28/08 — tab "Lịch hẹn học thử" đã gỡ khỏi hệ thống; màn còn lại là danh sách lớp.
+  revalidatePath('/lop-trial')
   revalidatePath('/dashboard')
   return { ok: true }
 }
@@ -719,7 +749,7 @@ export async function createLeadManual(
       courseId: d.courseId || null,
       source: d.source || 'Nhập tay',
       note: d.note || null,
-      status: 'NEW',
+      status: 'MOI',
       // NGƯỜI NHẬP (23/08) — cùng nghĩa với biểu mẫu /nhap-khach-hang. Đường
       // nhập tay này cũng phải ghi, không thì "phiếu tôi nhập" thủng một nửa.
       createdById: session.user.id,
@@ -1107,7 +1137,10 @@ export async function transferLead(
         // phải có cửa sổ SLA riêng, không thừa hưởng đồng hồ của người trước.
         ...assignmentWrite(toSaleId),
         handoverNote: d.handoverNote,
-        ...(lead.status === 'NEW' && toSaleId ? { status: 'ASSIGNED' as const } : {}),
+        // GĐ5 — ĐÃ GỠ nhánh tự đẩy MOI → ASSIGNED khi bàn giao. "Đã phân công" nay đọc
+        // từ assignedToId/assignedAt (do assignmentWrite ở trên ghi), không phải một bậc
+        // phễu, nên dịch thẳng theo bảng ánh xạ sẽ thành `MOI → MOI` — một phép gán rỗng
+        // gây hiểu nhầm là còn logic. Trạng thái phễu giữ nguyên qua lượt bàn giao.
       },
     })
 

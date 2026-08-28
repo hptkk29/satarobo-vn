@@ -4,7 +4,9 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { FlaskConical } from "lucide-react";
-import { enrollLeadChildAction } from "../../../trial-classes/_actions";
+// GĐ6 — trỏ sang lớp action của màn "Lớp Trial". Đây là điểm bám CỨNG duy nhất từ
+// ngoài vào thư mục màn cũ; quên dòng này khi gỡ màn cũ là build ĐỎ.
+import { enrollLeadChildLopTrialAction } from "../../../lop-trial/_actions";
 
 type TrialSession = {
   id: string;
@@ -17,9 +19,10 @@ type Child = {
   id: string;
   fullName: string;
   // LD3(a) — lớp trải nghiệm ĐANG học (ACTIVE) của con, null nếu chưa xếp.
-  // session: buổi đã chọn (scheduledSessionId), null nếu chưa chọn buổi.
   currentTrial: {
+    classId: string;
     className: string;
+    /** Buổi đang được xếp riêng. `null` = học TOÀN BỘ buổi của lớp (mặc định từ 28/08). */
     session?: { seq: number; date: string; startTime: string; endTime: string } | null;
   } | null;
 };
@@ -27,9 +30,13 @@ type TrialClass = {
   id: string;
   name: string;
   code: string;
-  capacity: number;
+  /** `null` = KHÔNG giới hạn sĩ số (từ 28/08) — hiện "n" thay vì "n/cap". */
+  capacity: number | null;
   used: number;
-  // LD3(b) — các buổi (SCHEDULED) để chọn ngày/giờ khi xếp.
+  /**
+   * ĐÃ THÔI DÙNG để chọn buổi (28/08 — xếp con là học CẢ LỚP). Giữ lại vì trang lead
+   * vẫn truyền xuống và số buổi là thông tin người dùng muốn thấy trước khi chọn lớp.
+   */
   sessions: TrialSession[];
 };
 
@@ -59,10 +66,13 @@ export function TrialEnrollWidget({
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
-  // chọn lớp theo từng con
-  const [picked, setPicked] = useState<Record<string, string>>({});
-  // LD3(b) — chọn buổi (ngày/giờ) theo từng con
-  const [pickedSession, setPickedSession] = useState<Record<string, string>>({});
+  // Chọn lớp theo từng con. Khởi tạo SẴN bằng lớp con đang học: mở khối ra là thấy
+  // ngay con đang ở lớp nào, và thao tác mặc định thành "sửa" chứ không phải "xếp mới".
+  const [picked, setPicked] = useState<Record<string, string>>(() =>
+    Object.fromEntries(
+      children.filter((c) => c.currentTrial).map((c) => [c.id, c.currentTrial!.classId]),
+    ),
+  );
 
   function enroll(childId: string, allowOverride: boolean) {
     const trialClassId = picked[childId];
@@ -70,13 +80,14 @@ export function TrialEnrollWidget({
       toast.error("Chọn lớp trải nghiệm trước");
       return;
     }
-    const sessionId = pickedSession[childId] || undefined;
     startTransition(async () => {
-      const res = await enrollLeadChildAction({
+      // KHÔNG gửi `sessionId`: xếp con vào lớp là con học TOÀN BỘ buổi của lớp đó
+      // (chốt 28/08). Chọn riêng một buổi vẫn làm được, nhưng ở màn chi tiết lớp —
+      // đó là thao tác của người xếp lịch, không phải của người vừa nhận khách.
+      const res = await enrollLeadChildLopTrialAction({
         trialClassId,
         leadChildId: childId,
         allowOverride,
-        sessionId,
       });
       if (res.ok) {
         toast.success("Đã xếp con vào lớp trải nghiệm");
@@ -113,8 +124,7 @@ export function TrialEnrollWidget({
       ) : (
         <ul className="space-y-3">
           {children.map((c) => {
-            const classSessions =
-              openClasses.find((cl) => cl.id === picked[c.id])?.sessions ?? [];
+            const daXep = c.currentTrial !== null;
             return (
               <li
                 key={c.id}
@@ -125,12 +135,13 @@ export function TrialEnrollWidget({
                   {c.currentTrial ? (
                     <span className="font-medium text-state-info-ink">
                       {c.fullName} đang học thử lớp {c.currentTrial.className}
-                      {c.currentTrial.session && (
-                        <span className="font-normal text-muted-foreground">
-                          {" "}
-                          · buổi đã chọn: {fmtSession(c.currentTrial.session)}
-                        </span>
-                      )}
+                      <span className="font-normal text-muted-foreground">
+                        {" "}
+                        ·{" "}
+                        {c.currentTrial.session
+                          ? `xếp riêng ${fmtSession(c.currentTrial.session)}`
+                          : "học toàn bộ buổi của lớp"}
+                      </span>
                     </span>
                   ) : (
                     <span className="text-muted-foreground">
@@ -144,49 +155,36 @@ export function TrialEnrollWidget({
                   </span>
                   <select
                     value={picked[c.id] ?? ""}
-                    onChange={(e) => {
-                      const v = e.target.value;
-                      setPicked((p) => ({ ...p, [c.id]: v }));
-                      // đổi lớp → reset buổi đã chọn
-                      setPickedSession((p) => ({ ...p, [c.id]: "" }));
-                    }}
+                    onChange={(e) =>
+                      setPicked((p) => ({ ...p, [c.id]: e.target.value }))
+                    }
                     disabled={pending}
                     className="min-w-[12rem] flex-1 rounded-md border border-border px-2 py-1.5 text-sm disabled:opacity-50"
                   >
                     <option value="">— chọn lớp —</option>
+                    {/* Lớp con ĐANG học có thể đã đầy hoặc đã đóng nên không nằm trong
+                        `openClasses`; thiếu dòng này thì <select> không khớp value và
+                        hiện TRỐNG, trông như con chưa được xếp lớp nào. */}
+                    {c.currentTrial &&
+                      !openClasses.some((cl) => cl.id === c.currentTrial!.classId) && (
+                        <option value={c.currentTrial.classId}>
+                          {c.currentTrial.className} (đang học)
+                        </option>
+                      )}
                     {openClasses.map((cl) => (
                       <option key={cl.id} value={cl.id}>
-                        {cl.name} ({cl.used}/{cl.capacity})
-                      </option>
-                    ))}
-                  </select>
-                  {/* LD3(b) — chọn buổi (ngày/giờ); tuỳ chọn */}
-                  <select
-                    value={pickedSession[c.id] ?? ""}
-                    onChange={(e) =>
-                      setPickedSession((p) => ({ ...p, [c.id]: e.target.value }))
-                    }
-                    disabled={pending || !picked[c.id] || classSessions.length === 0}
-                    className="min-w-[12rem] flex-1 rounded-md border border-border px-2 py-1.5 text-sm disabled:opacity-50"
-                  >
-                    <option value="">
-                      {picked[c.id] && classSessions.length === 0
-                        ? "— lớp chưa có buổi (thêm buổi trước) —"
-                        : "— chọn buổi (mặc định: buổi gần nhất) —"}
-                    </option>
-                    {classSessions.map((s) => (
-                      <option key={s.id} value={s.id}>
-                        {fmtSession(s)}
+                        {cl.name} ({cl.used}
+                        {cl.capacity === null ? "" : `/${cl.capacity}`})
                       </option>
                     ))}
                   </select>
                   <button
                     type="button"
                     onClick={() => enroll(c.id, false)}
-                    disabled={pending}
+                    disabled={pending || !picked[c.id]}
                     className="rounded-lg bg-primary px-3 py-1.5 text-sm font-semibold text-white hover:bg-primary-dark disabled:opacity-50"
                   >
-                    Xếp vào lớp
+                    {daXep ? "Sửa lớp" : "Xếp vào lớp"}
                   </button>
                 </div>
               </li>

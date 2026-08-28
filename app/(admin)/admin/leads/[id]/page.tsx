@@ -6,7 +6,6 @@ import { checkPermission } from "@/lib/auth/check-permission";
 import { scopedDb } from "@/lib/db-scope";
 import { resolveActor } from "@/lib/auth/actor";
 import { LEAD_STATUS_LABEL, LEAD_STATUS_BADGE } from "@/lib/leads/status";
-import { TRIAL_STATUS_LABEL, TRIAL_STATUS_BADGE } from "@/lib/trials/status";
 import type { LeadStatus } from "@prisma/client";
 import { LeadActivityPanel } from "./_components/lead-activity-panel";
 import { ReassignButton } from "./_components/reassign-button";
@@ -163,8 +162,13 @@ export default async function LeadDetailPage({ params }: Props) {
         }),
       ])
     : [[], []];
-  const dealClosable =
-    canCloseDeal && status !== "ENROLLED" && status !== "LOST" && status !== "DUPLICATE";
+  // GĐ5 — điều kiện "chưa chốt" nay đọc `convertedAt`, KHÔNG đọc status. Bản cũ dùng
+  // `status !== "ENROLLED"` vì ENROLLED là bậc riêng sau REGISTERED; enum mới gộp hai
+  // bậc đó thành DA_DANG_KY, nên nếu dịch thẳng thành `status !== "DA_DANG_KY"` thì
+  // lead vừa nộp tiền (trước đây là REGISTERED) sẽ mất luôn nút Chuyển đổi — tức là
+  // chặn đúng bước tiếp theo của quy trình. `convertedAt` do chính lượt convert ghi nên
+  // là mốc "đã chốt" chính xác, khớp ghi chú enum trong schema.
+  const dealClosable = canCloseDeal && lead.convertedAt === null && status !== "DA_MAT";
 
   // E2-LEAD (item 2) — tóm tắt thanh toán (đã nộp / tổng phải thu / còn thiếu).
   const paymentSummary = await getLeadPaymentSummary(sdb, lead.id);
@@ -189,8 +193,8 @@ export default async function LeadDetailPage({ params }: Props) {
       select: { id: true, sku: true, name: true },
     }),
   ]);
-  // Lead LOST (hoặc không có quyền sửa / chỉ xem nhờ "dùng chung") → con read-only.
-  const childrenReadOnly = !canTransfer || status === "LOST" || isSharedViewer;
+  // Lead ĐÃ MẤT (hoặc không có quyền sửa / chỉ xem nhờ "dùng chung") → con read-only.
+  const childrenReadOnly = !canTransfer || status === "DA_MAT" || isSharedViewer;
 
   // R7-02 — lớp trải nghiệm đang mở (cùng cơ sở lead) để xếp con vào.
   const canTrialManage = (await checkPermission("trials:manage", { centerId: lead.centerId }));
@@ -237,7 +241,7 @@ export default async function LeadDetailPage({ params }: Props) {
   return (
     <div className="max-w-6xl p-6">
       <Link
-        href="/leads?view=kanban"
+        href="/leads?view=table"
         className="mb-4 inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
       >
         <ChevronLeft className="h-4 w-4" /> Quay lại danh sách
@@ -446,6 +450,9 @@ export default async function LeadDetailPage({ params }: Props) {
                 fullName: canViewPii ? c.fullName : maskPersonName(c.fullName),
                 currentTrial: enr?.trialClass
                   ? {
+                      // 28/08 — cần `classId` để ô chọn lớp mở ra đã hiện SẴN lớp con
+                      // đang học, thay vì "— chọn lớp —" như thể chưa xếp gì.
+                      classId: enr.trialClass.id,
                       className: enr.trialClass.name,
                       session: sess
                         ? {
@@ -502,51 +509,10 @@ export default async function LeadDetailPage({ params }: Props) {
         </div>
       )}
 
-      {/* Học thử (Phase T1.4) */}
-      {lead.trialClasses.length > 0 && (
-        <div className="mb-6 rounded-xl border border-border bg-card p-4">
-          <div className="mb-3 flex items-center justify-between">
-            <h2 className="text-sm font-semibold text-foreground">Buổi học thử</h2>
-            <Link href="/trials" className="text-xs font-medium text-primary hover:underline">
-              Quản lý ở mục Học thử →
-            </Link>
-          </div>
-          <ul className="space-y-2">
-            {lead.trialClasses.map((t) => (
-              <li
-                key={t.id}
-                className="flex flex-wrap items-center justify-between gap-2 rounded-lg bg-muted px-3 py-2 text-sm"
-              >
-                <div className="flex flex-wrap items-center gap-2">
-                  <span
-                    className={`rounded-full px-2 py-0.5 text-xs font-semibold ${TRIAL_STATUS_BADGE[t.status]}`}
-                  >
-                    {TRIAL_STATUS_LABEL[t.status]}
-                  </span>
-                  <span className="text-foreground">
-                    {t.scheduledAt.toLocaleString("vi-VN", {
-                      day: "2-digit",
-                      month: "2-digit",
-                      hour: "2-digit",
-                      minute: "2-digit",
-                    })}
-                  </span>
-                  {t.teacher?.name && (
-                    <span className="text-muted-foreground">· GV: {t.teacher.name}</span>
-                  )}
-                </div>
-                {t.feedback ? (
-                  <span className="text-xs font-medium text-state-info-ink">
-                    Đã có nhận xét
-                  </span>
-                ) : (
-                  <span className="text-xs text-muted-foreground">Chưa nhận xét</span>
-                )}
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
+      {/* 28/08 — GỠ khối "Buổi học thử" (hệ V1, `TrialClass`).
+          Tính năng lịch hẹn học thử đã bị gỡ khỏi hệ thống: không còn màn nào quản lý
+          nó, nên in một danh sách chỉ-đọc ở đây là chỉ đường tới một cánh cửa đã khoá.
+          Bảng `TrialClass` giữ trong DB theo nếp 2 pha, chưa drop. */}
 
       <LeadActivityPanel
         leadId={lead.id}

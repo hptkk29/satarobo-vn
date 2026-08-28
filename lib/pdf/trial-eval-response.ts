@@ -16,8 +16,6 @@ import { TrialEvalPdf } from "@/lib/pdf/trial-eval";
 
 export type TrialEvalPdfContext = {
   studentName: string;
-  courseName: string | null;
-  trialClassName: string;
   existing: {
     /** criterionId → điểm. Prisma trả `JsonValue`, ép ở biên vào cho gọn. */
     scores: Record<string, number>;
@@ -56,8 +54,6 @@ export async function trialEvalPdfResponse(
         createElement(TrialEvalPdf, {
           data: {
             studentName: ctx.studentName,
-            courseName: ctx.courseName,
-            trialClassName: ctx.trialClassName,
             scores: ctx.existing.scores,
             totalScore: ctx.existing.totalScore,
             rank: ctx.existing.rank,

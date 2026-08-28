@@ -5,39 +5,11 @@ import { PAGE_GATES } from '@/lib/auth/page-gates'
 import { scopedDb } from '@/lib/db-scope'
 import { resolveActor } from '@/lib/auth/actor'
 import { CONVERTED_STATUSES } from '@/lib/reports/lead'
-
-const STATUS_LABELS: Record<string, string> = {
-  NEW: 'Lead mới',
-  ASSIGNED: 'Đã phân công',
-  CONTACTED: 'Đã liên hệ',
-  NO_ANSWER: 'Không nghe máy',
-  CONSULTING: 'Đang tư vấn',
-  TRIAL_SCHEDULED: 'Đã hẹn học thử',
-  TRIAL_ATTENDED: 'Đã học thử',
-  AWAITING_DECISION: 'Chờ quyết định',
-  DEMO_SCHEDULED: 'Đã hẹn demo',
-  REGISTERED: 'Đã đăng ký',
-  ENROLLED: 'Đã ghi danh',
-  NURTURING: 'Đang nuôi',
-  LOST: 'Đã mất',
-  DUPLICATE: 'Trùng lặp',
-}
-
-const STATUS_COLORS: Record<string, string> = {
-  NEW: 'bg-state-info',
-  ASSIGNED: 'bg-state-info',
-  CONTACTED: 'bg-state-warning',
-  NO_ANSWER: 'bg-state-warning',
-  CONSULTING: 'bg-state-info',
-  TRIAL_SCHEDULED: 'bg-primary',
-  TRIAL_ATTENDED: 'bg-primary',
-  AWAITING_DECISION: 'bg-primary',
-  DEMO_SCHEDULED: 'bg-primary',
-  ENROLLED: 'bg-state-success',
-  NURTURING: 'bg-primary',
-  LOST: 'bg-gray-400',
-  DUPLICATE: 'bg-gray-300',
-}
+// GĐ0 — nhãn + màu trạng thái lead lấy từ nguồn duy nhất @/lib/leads/status.
+// Hai bảng chép tay trước đó thiếu TRIAL_IN_PROGRESS (và màu thiếu cả REGISTERED)
+// nên hai trạng thái này hiện ra biểu đồ dưới dạng raw enum + màu xám mặc định.
+import { LEAD_STATUS_LABEL, LEAD_STATUS_DOT } from '@/lib/leads/status'
+import type { LeadStatus } from '@prisma/client'
 
 function pct(part: number, total: number) {
   if (total === 0) return '0%'
@@ -131,14 +103,14 @@ export default async function MarketingPage() {
           {leadsByStatus.map((row) => (
             <div key={row.status}>
               <div className="mb-1 flex items-center justify-between text-sm">
-                <span className="font-medium text-foreground">{STATUS_LABELS[row.status] ?? row.status}</span>
+                <span className="font-medium text-foreground">{LEAD_STATUS_LABEL[row.status as LeadStatus] ?? row.status}</span>
                 <span className="tabular-nums text-muted-foreground">
                   {row._count._all} ({pct(row._count._all, totalLeads)})
                 </span>
               </div>
               <div className="h-2.5 w-full rounded-full bg-muted">
                 <div
-                  className={`h-2.5 rounded-full ${STATUS_COLORS[row.status] ?? 'bg-gray-400'}`}
+                  className={`h-2.5 rounded-full ${LEAD_STATUS_DOT[row.status as LeadStatus] ?? 'bg-gray-400'}`}
                   style={{ width: pct(row._count._all, totalLeads) }}
                 />
               </div>

@@ -61,6 +61,9 @@ export type Action =
   | "leads:view-own"
   | "leads:create"
   | "leads:edit"
+  // 27/08/2026 — đổi trạng thái lead TÁCH khỏi `leads:edit`: chỉ Sale được đẩy
+  // lead trên phễu. Quản lý cơ sở / Marketing vẫn sửa được hồ sơ, chỉ không đổi bậc.
+  | "leads:change-status"
   // 23/08/2026 — sửa HẸP: chỉ những ô CÓ TRONG biểu mẫu `/nhap-khach-hang`, và
   // chỉ trên phiếu do CHÍNH MÌNH nhập (`Lead.createdById`).
   //
@@ -85,6 +88,9 @@ export type Action =
   | "trials:view"
   | "trials:manage"
   | "trials:feedback"
+  // GĐ4 — điểm danh buổi trải nghiệm. TÁCH khỏi `trials:feedback` vì hai việc thuộc
+  // hai vai khác nhau: Sale điểm danh, giáo viên nộp phiếu đánh giá.
+  | "trials:attendance"
   // --- Trial class V2 (R7-02) ---
   | "trials:assign-teacher"
   | "trials:override-capacity"
@@ -376,6 +382,11 @@ export const PERMISSIONS: Record<Action, Role[]> = {
   // phải sót: nơi nào còn enforce v1 thì tính năng này chưa có mặt.
   "leads:edit-own-intake": ["SUPER_ADMIN"],
   "leads:edit": ["SUPER_ADMIN", "CENTER_MANAGER", "SALES_CSM", "MARKETING"],
+  // CHỈ Sale (+ Quản trị hệ thống để còn gỡ kẹt). CỐ Ý KHÔNG có CENTER_MANAGER và
+  // MARKETING — đó chính là thay đổi mà chủ dự án yêu cầu 27/08/2026.
+  // ⚠️ v1 không có vai "Sale Hội sở"; ở v2 HO_SALE cũng KHÔNG được cấp key này
+  // (chốt cũ: Sale Hội sở XEM lead toàn hệ thống, KHÔNG sửa).
+  "leads:change-status": ["SUPER_ADMIN", "SALES_CSM"],
   "leads:assign": ["SUPER_ADMIN", "CENTER_MANAGER"],
   "leads:assign-config": ["SUPER_ADMIN"],
   "leads:delete": ["SUPER_ADMIN", "CENTER_MANAGER"],
@@ -386,11 +397,21 @@ export const PERMISSIONS: Record<Action, Role[]> = {
   "leads:import": ["SUPER_ADMIN", "CENTER_MANAGER", "SALES_CSM"],
 
   // --- Trial classes (Phase T1.4) ---
+  // GĐ3 — TRAINING phải có `trials:view`, nếu không thì cấp `trials:assign-teacher`
+  // cho họ là vô nghĩa: cả ba trang của màn Lớp Trial đều gác bằng `trials:view`, nên
+  // Đào tạo bị đá về /dashboard trước khi thấy được nút phân công. Seed v2 đã có, đây
+  // là bản v1 — mà local/dev/CI chạy v1 (lib/flags.ts:8 mặc định OFF).
   "trials:view": ["SUPER_ADMIN", "CENTER_MANAGER", "SALES_CSM", "TEACHER", "TRAINING"],
   "trials:manage": ["SUPER_ADMIN", "CENTER_MANAGER", "SALES_CSM"],
+  // GĐ4 (25/08/2026) — tách đôi theo ma trận đặc tả §8.2. Trước GĐ4 cả điểm danh lẫn
+  // nộp phiếu đều dùng chung `trials:feedback`, nên Sale KHÔNG điểm danh được còn
+  // giáo viên thì điểm danh được — ngược hẳn quy trình đã chốt.
   "trials:feedback": ["SUPER_ADMIN", "CENTER_MANAGER", "TEACHER"],
+  "trials:attendance": ["SUPER_ADMIN", "CENTER_MANAGER", "SALES_CSM"],
   // R7-02 — gán GV + override sĩ số chỉ quản lý cơ sở; cấu hình số buổi = Đào tạo/Admin.
-  "trials:assign-teacher": ["SUPER_ADMIN", "CENTER_MANAGER", "TRAINING"],
+  // GĐ3 (chủ dự án chốt câu 2, 25/08/2026): CHỐT giáo viên là việc của Đào tạo.
+  // Sale chỉ ĐỀ XUẤT; Quản lý cơ sở giữ mọi việc trial còn lại.
+  "trials:assign-teacher": ["SUPER_ADMIN", "TRAINING"],
   "trials:override-capacity": ["SUPER_ADMIN", "CENTER_MANAGER"],
   // FL W0 (QĐ-T1): cấu hình đào tạo/LMS = TRAINING (Đào tạo). CENTER_MANAGER chỉ xem nội dung LMS.
   "training:manage": ["SUPER_ADMIN", "TRAINING"],

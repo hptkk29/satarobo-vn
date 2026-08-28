@@ -9,6 +9,7 @@ import { computeEnrollmentPrice } from "@/lib/finance/pricing";
 import { linkRecordedPaymentsToEnrollments } from "@/lib/finance/payment";
 import { findParentMatch, findExistingStudent } from "@/lib/crm/dedupe";
 import { canonicalPhone } from "@/lib/phone";
+import { recordLeadStatusChange } from "@/lib/leads/set-status";
 import {
   createBackfillOrderPaymentInTx,
   type BackfillPaymentInput,
@@ -209,13 +210,41 @@ export async function convertLeadV2(actor: AuditActor, input: ConvertV2Input): P
   const result = await db.$transaction(async (tx) => {
 
     // CLAIM atomic chống race (2 Sale song song): chỉ 1 lượt chuyển khỏi status chưa-kết-thúc.
-    // C2 — điều kiện claim đổi từ status=REGISTERED sang status NOT IN (terminal): vẫn chỉ 1
-    // lượt thắng (lượt sau thấy status=ENROLLED ∈ terminal → count 0 → ALREADY_CONVERTED).
+    // GĐ5 — KHOÁ CHỐNG ĐUA nay bám `convertedAt IS NULL` thay vì bám STATUS.
+    //
+    // Vì sao BẮT BUỘC đổi trước khi gộp ENROLLED + REGISTERED: khoá cũ dựa vào việc
+    // ENROLLED nằm trong danh sách terminal, nên lượt convert thứ hai thấy count=0 và
+    // dừng. Gộp hai trạng thái xong thì lead "đã đăng ký" (chưa convert) cũng mang
+    // đúng giá trị đó ⇒ nó sẽ KHÔNG BAO GIỜ convert được nữa. Đây là thứ tự bắt buộc,
+    // không phải tuỳ chọn.
+    //
+    // `convertedAt` là mốc do chính lượt convert ghi, nên nó là khoá đúng nghĩa: một
+    // lead chỉ convert được một lần, bất kể trạng thái đang là gì. Vẫn atomic vì đây
+    // là một lệnh updateMany duy nhất.
     const claim = await tx.lead.updateMany({
-      where: { id: lead.id, status: { notIn: ["ENROLLED", "LOST", "DUPLICATE"] }, deletedAt: null },
-      data: { status: "ENROLLED", convertedById: actor.id, convertedAt: new Date() },
+      where: {
+        id: lead.id,
+        convertedAt: null,
+        // Lead đã mất thì vẫn chặn: chưa convert nhưng cũng không nên convert.
+        // GĐ5 — trước là `notIn: ["LOST", "DUPLICATE"]`; hai giá trị đó nay cùng là
+        // DA_MAT (chống trùng chuyển sang ràng buộc lúc TẠO lead), nên gộp làm một.
+        status: { notIn: ["DA_MAT"] },
+        deletedAt: null,
+      },
+      data: { status: "DA_DANG_KY", convertedById: actor.id, convertedAt: new Date() },
     });
     if (claim.count === 0) throw new Error("ALREADY_CONVERTED");
+    // GĐ1 — giữ nguyên `updateMany` làm lượt claim atomic (hai Sale bấm cùng lúc thì
+    // chỉ một lượt thắng), chỉ nối thêm sổ. `from` là trạng thái đọc TRƯỚC claim.
+    await recordLeadStatusChange({
+      tx,
+      leadId: lead.id,
+      from: lead.status,
+      to: "DA_DANG_KY",
+      source: "convert",
+      actorId: actor.id,
+      actorName: actor.name ?? null,
+    });
 
     const center = await tx.center.findUnique({ where: { id: lead.centerId! }, select: { code: true } });
     const centerCode = center?.code ?? "CS";

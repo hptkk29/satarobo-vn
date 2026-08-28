@@ -92,7 +92,7 @@ test.describe("[R7-05] Convert v2", () => {
     else process.env.CONVERT_V2_ENABLED = prev;
   });
 
-  // ── End-to-end (seed Lead REGISTERED + payment RECORDED + course/class) ────
+  // ── End-to-end (seed Lead DA_DANG_KY + payment RECORDED + course/class) ────
   // Helper seed cục bộ (KHÔNG đụng tests/e2e/_helpers/seed.ts — tránh xung đột).
   let seq = 0;
   const uniq = () => `${Date.now().toString(36)}-${seq++}`;
@@ -115,7 +115,7 @@ test.describe("[R7-05] Convert v2", () => {
 
   async function seedRegisteredLead(centerId: string, phone: string) {
     return db.lead.create({
-      data: { parentName: "PH Lead", phone, status: "REGISTERED", centerId },
+      data: { parentName: "PH Lead", phone, status: "DA_DANG_KY", centerId },
     });
   }
 
@@ -146,15 +146,15 @@ test.describe("[R7-05] Convert v2", () => {
     return order;
   }
 
-  /** Lead ở AWAITING_DECISION (chưa REGISTERED) — chứng minh S4 bỏ chặn status. */
+  /** Lead ở CHO_QUYET_DINH (chưa DA_DANG_KY) — chứng minh S4 bỏ chặn status. */
   async function seedAwaitingLead(centerId: string, phone: string) {
     return db.lead.create({
-      data: { parentName: "PH Lead", phone, status: "AWAITING_DECISION", centerId },
+      data: { parentName: "PH Lead", phone, status: "CHO_QUYET_DINH", centerId },
     });
   }
 
-  // ── S1 — ensureOrderPaymentRecorded idempotent + auto REGISTERED ──────────
-  test("[SPINE-S1] ghi Payment idempotent (orderId+soDot) + auto AWAITING_DECISION→REGISTERED", async () => {
+  // ── S1 — ensureOrderPaymentRecorded idempotent + auto DA_DANG_KY ──────────
+  test("[SPINE-S1] ghi Payment idempotent (orderId+soDot) + auto CHO_QUYET_DINH→DA_DANG_KY", async () => {
     const center = await seedCenter();
     const lead = await seedAwaitingLead(center.id, "0900000020");
     const order = await db.order.create({
@@ -201,13 +201,13 @@ test.describe("[R7-05] Convert v2", () => {
     // Payment.centerId không null (suy từ order).
     const pay = await db.payment.findFirst({ where: { orderId: order.id }, select: { centerId: true } });
     expect(pay?.centerId).toBe(center.id);
-    // Lead tự lên REGISTERED.
+    // Lead tự lên DA_DANG_KY.
     const after = await db.lead.findUnique({ where: { id: lead.id }, select: { status: true } });
-    expect(after?.status).toBe("REGISTERED");
+    expect(after?.status).toBe("DA_DANG_KY");
   });
 
-  // ── S4 — convert từ status chưa-kết-thúc (KHÔNG cần REGISTERED), giữ cổng tiền ──
-  test("[SPINE-S4] convert từ AWAITING_DECISION có Payment RECORDED → OK (bỏ chặn status)", async () => {
+  // ── S4 — convert từ status chưa-kết-thúc (KHÔNG cần DA_DANG_KY), giữ cổng tiền ──
+  test("[SPINE-S4] convert từ CHO_QUYET_DINH có Payment RECORDED → OK (bỏ chặn status)", async () => {
     const center = await seedCenter();
     const { course, cls } = await seedCourseClass(center.id);
     const lead = await seedAwaitingLead(center.id, "0900000021");
@@ -233,7 +233,7 @@ test.describe("[R7-05] Convert v2", () => {
     if (!res.ok) return;
     expect(await db.enrollment.count()).toBe(1);
     const after = await db.lead.findUnique({ where: { id: lead.id }, select: { status: true } });
-    expect(after?.status).toBe("ENROLLED");
+    expect(after?.status).toBe("DA_DANG_KY");
     // C5 — CCCD + địa chỉ ghi vào tài khoản phụ huynh.
     const parent = await db.user.findUnique({ where: { email: "ph-s4@test.com" }, select: { cccd: true, city: true } });
     expect(parent?.cccd).toBe("012345678901");
@@ -269,12 +269,12 @@ test.describe("[R7-05] Convert v2", () => {
       }),
     ).rejects.toThrow();
 
-    // KHÔNG có student/enrollment/idempotency nào sót lại; lead vẫn REGISTERED.
+    // KHÔNG có student/enrollment/idempotency nào sót lại; lead vẫn DA_DANG_KY.
     expect(await db.student.count()).toBe(0);
     expect(await db.enrollment.count()).toBe(0);
     expect(await db.idempotencyKey.count()).toBe(0);
     const after = await db.lead.findUnique({ where: { id: lead.id }, select: { status: true } });
-    expect(after?.status).toBe("REGISTERED");
+    expect(after?.status).toBe("DA_DANG_KY");
   });
 
   // ── AC2 / C5 — double-submit (cùng key) + 2 Sale song song → 1 bộ record ──
@@ -370,9 +370,9 @@ test.describe("[R7-05] Convert v2", () => {
     expect(conflict?.parentAId).toBe(parentA.id);
     expect(conflict?.parentBId).toBe(parentB.id);
 
-    // Convert bị KHOÁ: lead vẫn REGISTERED, không tạo student mới (chỉ còn "Con cũ").
+    // Convert bị KHOÁ: lead vẫn DA_DANG_KY, không tạo student mới (chỉ còn "Con cũ").
     const after = await db.lead.findUnique({ where: { id: lead.id }, select: { status: true } });
-    expect(after?.status).toBe("REGISTERED");
+    expect(after?.status).toBe("DA_DANG_KY");
     expect(await db.student.count()).toBe(1);
   });
 

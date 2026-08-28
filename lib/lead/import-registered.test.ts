@@ -266,7 +266,7 @@ describe("planRegisteredImport — create/merge + idempotent", () => {
       id: "lead-1",
       parentName: "PH Cũ",
       phone: "84905000001",
-      status: "CONSULTING",
+      status: "DANG_TU_VAN",
       note: "Ghi chú cũ",
       centerId: null,
       orgUnitId: null,
@@ -279,7 +279,7 @@ describe("planRegisteredImport — create/merge + idempotent", () => {
     const plan = planRegisteredImport(parsed, ctx);
     const m = plan.merges.find((x) => x.phone === "84905000001");
     expect(m?.changed).toBe(true);
-    expect(m?.set.status).toBe("REGISTERED");
+    expect(m?.set.status).toBe("DA_DANG_KY");
     expect(m?.set.centerId).toBe("co-so-hoang-dieu");
     expect(m?.set.assignedToId).toBeUndefined(); // giữ Sale cũ (câu 34: giữ record cũ)
     expect(m?.noteAppend).toContain(IMPORT_NOTE_MARKER);
@@ -300,7 +300,7 @@ describe("planRegisteredImport — create/merge + idempotent", () => {
       id: "lead-1",
       parentName: c1.parentName,
       phone: c1.phone,
-      status: "REGISTERED",
+      status: "DA_DANG_KY",
       note: c1.note,
       centerId: c1.centerId,
       orgUnitId: c1.orgUnitId,
@@ -330,7 +330,7 @@ describe("planRegisteredImport — create/merge + idempotent", () => {
       id: "lead-4",
       parentName: "PH Bốn",
       phone: "84905000004",
-      status: "ENROLLED",
+      status: "DA_DANG_KY",
       note: null,
       centerId: "co-so-nguyen-huu-tho",
       orgUnitId: "org-cs1",

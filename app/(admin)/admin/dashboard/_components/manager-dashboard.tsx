@@ -11,6 +11,8 @@ import { DataTableShell } from "@/components/design-system/admin/data-table-shel
 import { LineChart } from "@/components/charts/line-chart";
 import { BarChart } from "@/components/charts/bar-chart";
 import { groupByWeek, monthKeyVN, type LeadReportRecord } from "@/lib/reports/lead";
+import { LEAD_STATUS_LABEL, LEAD_STATUS_VARIANT } from "@/lib/leads/status";
+import type { LeadStatus } from "@prisma/client";
 import { buildRevenueTargetReport, computeAchievement } from "@/lib/reports/revenue-target";
 import { getRevenueTargets } from "@/lib/reports/revenue-target-data";
 import { getDebtRows } from "@/lib/finance/debt";
@@ -26,18 +28,11 @@ const vnd = (n: number) => `${n.toLocaleString("vi-VN")}đ`;
 // trong lib/pending-tasks.ts trả null nên nhóm việc đó không còn sinh ra nữa.
 // centerScope: != null → giới hạn cơ sở (CENTER_MANAGER không kèm SUPER_ADMIN).
 
-const STATUS_VARIANT: Record<string, "success" | "warning" | "error" | "info" | "neutral"> = {
-  NEW: "info", ASSIGNED: "info", CONTACTED: "warning", NO_ANSWER: "warning",
-  CONSULTING: "info", TRIAL_SCHEDULED: "info", TRIAL_ATTENDED: "info",
-  AWAITING_DECISION: "warning", DEMO_SCHEDULED: "info", ENROLLED: "success",
-  NURTURING: "warning", LOST: "error", DUPLICATE: "neutral",
-};
-const STATUS_LABELS: Record<string, string> = {
-  NEW: "Mới", ASSIGNED: "Đã phân công", CONTACTED: "Đã liên hệ", NO_ANSWER: "Không nghe máy",
-  CONSULTING: "Đang tư vấn", TRIAL_SCHEDULED: "Đã hẹn học thử", TRIAL_ATTENDED: "Đã học thử",
-  AWAITING_DECISION: "Chờ quyết định", DEMO_SCHEDULED: "Đã hẹn demo", ENROLLED: "Đã đăng ký",
-  NURTURING: "Đang nuôi", LOST: "Đã mất", DUPLICATE: "Trùng lặp",
-};
+// GĐ0 — hai bảng chép tay đã gỡ, lấy từ nguồn duy nhất @/lib/leads/status.
+// Bản chép cũ thiếu TRIAL_IN_PROGRESS và REGISTERED (khai Record<string,string> nên
+// TypeScript không bắt được) ⇒ hai trạng thái đó hiện raw enum ra dashboard. Nó còn
+// gọi ENROLLED là "Đã đăng ký" trong khi REGISTERED mới là "Đã đăng ký"; nay đúng
+// theo nguồn: ENROLLED = "Đã ghi danh".
 const ACTIVE_LEAD: { deletedAt: null } = { deletedAt: null };
 
 function lastNDaysData(leads: { createdAt: Date }[], days = 14) {
@@ -82,7 +77,7 @@ async function getManagerStats(actor: Actor) {
     sdb.lead.count({ where: ACTIVE_LEAD }),
     sdb.lead.count({ where: { ...ACTIVE_LEAD, createdAt: { gte: monthStart } } }),
     sdb.lead.count({ where: { ...ACTIVE_LEAD, createdAt: { gte: lastMonth, lt: monthStart } } }),
-    sdb.lead.count({ where: { ...ACTIVE_LEAD, status: "ENROLLED" } }),
+    sdb.lead.count({ where: { ...ACTIVE_LEAD, status: "DA_DANG_KY" } }),
     sdb.student.count({ where: { deletedAt: null } }),
     sdb.news.count({ where: { isPublished: true } }),
     sdb.lead.findMany({ where: { ...ACTIVE_LEAD, createdAt: { gte: fourteenDaysAgo } }, select: { createdAt: true } }),
@@ -116,7 +111,7 @@ async function getManagerStats(actor: Actor) {
   const monthDelta = newLeadsLastMonth > 0 ? ((newLeadsThisMonth - newLeadsLastMonth) / newLeadsLastMonth) * 100 : 0;
   const conversionRate = totalLeads > 0 ? ((enrolledLeads / totalLeads) * 100).toFixed(1) : "0";
   const dailyLeadsChart = lastNDaysData(leadsLast14Days);
-  const statusBars = leadsByStatus.map((s) => ({ status: STATUS_LABELS[s.status] ?? s.status, count: s._count.id })).sort((a, b) => b.count - a.count);
+  const statusBars = leadsByStatus.map((s) => ({ status: LEAD_STATUS_LABEL[s.status as LeadStatus] ?? s.status, count: s._count.id })).sort((a, b) => b.count - a.count);
 
   // câu 16 (a) — doanh thu THỰC vs MỤC TIÊU kỳ hiện tại (ghép qua helper thuần).
   const revenueReport = buildRevenueTargetReport(
@@ -339,7 +334,7 @@ export async function ManagerDashboard({
                     <td className="px-4 py-3 font-medium text-foreground">{lead.parentName}</td>
                     <td className="px-4 py-3 font-mono text-xs text-foreground">{lead.phone.replace(/(\d{4})(\d{3})(\d+)/, "$1xxx$3")}</td>
                     <td className="px-4 py-3">
-                      <StatusBadge variant={STATUS_VARIANT[lead.status] ?? "neutral"}>{STATUS_LABELS[lead.status] ?? lead.status}</StatusBadge>
+                      <StatusBadge variant={LEAD_STATUS_VARIANT[lead.status as LeadStatus] ?? "neutral"}>{LEAD_STATUS_LABEL[lead.status as LeadStatus] ?? lead.status}</StatusBadge>
                     </td>
                     <td className="px-4 py-3 text-right text-xs text-muted-foreground">
                       {new Date(lead.createdAt).toLocaleString("vi-VN", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}

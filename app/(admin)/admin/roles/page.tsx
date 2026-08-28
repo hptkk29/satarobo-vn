@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import Link from "next/link";
 import { ShieldCheck } from "lucide-react";
 import { checkPermission } from "@/lib/auth/check-permission";
 import { listRoles } from "@/lib/auth/rbac-service";
@@ -53,7 +54,11 @@ export default async function RolesAdminPage() {
             <TableBody>
               {roles.map((r) => (
                 <TableRow key={r.id}>
-                  <TableCell className="font-mono font-semibold">{r.code}</TableCell>
+                  <TableCell className="font-mono font-semibold">
+                    <Link href={`/roles/${r.id}`} className="text-primary hover:underline">
+                      {r.code}
+                    </Link>
+                  </TableCell>
                   <TableCell>{r.name}</TableCell>
                   <TableCell>
                     {r.isSystem ? (

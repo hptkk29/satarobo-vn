@@ -831,7 +831,7 @@ export interface LeadMergePlan {
     orgUnitId: string;
     courseId: string;
     assignedToId: string;
-    status: "REGISTERED";
+    status: "DA_DANG_KY";
   }>;
   noteAppend: string | null; // null nếu note import đã có sẵn (idempotent)
   newChildren: ChildCreatePlan[];
@@ -948,8 +948,13 @@ function buildChildNote(c: ParsedRegisteredChild): string {
   return `${IMPORT_NOTE_MARKER} ${parts.join(" · ") || "Không có thông tin thêm"}`;
 }
 
-/** Trạng thái KHÔNG nâng lên REGISTERED khi gộp (đã ngang/hơn hoặc là bản trùng). */
-const NO_UPGRADE_STATUSES = new Set(["REGISTERED", "ENROLLED", "DUPLICATE"]);
+/**
+ * Trạng thái KHÔNG nâng lên "Đã đăng ký" khi gộp (đã ngang/hơn, hoặc lead đã mất).
+ *
+ * GĐ5 — trước đây là ba giá trị REGISTERED/ENROLLED/DUPLICATE. Sau khi gộp enum thì
+ * hai cái đầu cùng thành DA_DANG_KY và DUPLICATE thành DA_MAT, nên còn đúng hai.
+ */
+const NO_UPGRADE_STATUSES = new Set(["DA_DANG_KY", "DA_MAT"]);
 
 export function planRegisteredImport(
   parsed: ParsedRegistered,
@@ -1030,7 +1035,7 @@ export function planRegisteredImport(
     if (!existing.orgUnitId && orgUnitId) set.orgUnitId = orgUnitId;
     if (!existing.courseId && leadCourseId) set.courseId = leadCourseId;
     if (!existing.assignedToId && salesUser) set.assignedToId = salesUser.id;
-    if (!NO_UPGRADE_STATUSES.has(existing.status)) set.status = "REGISTERED";
+    if (!NO_UPGRADE_STATUSES.has(existing.status)) set.status = "DA_DANG_KY";
 
     const noteAppend = existing.note?.includes(leadNote) ? null : leadNote;
 

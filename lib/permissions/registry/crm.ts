@@ -18,6 +18,16 @@ export const crmModule: ModuleDecl = {
     { key: "leads:create", action: "create" },
     { key: "leads:edit", action: "edit" },
     {
+      key: "leads:change-status",
+      action: "change-status",
+      // 27/08/2026 — chủ dự án chốt: CHỈ Sale được đổi trạng thái lead. Tách khỏi
+      // `leads:edit` vì quyền đó còn gác ~10 việc khác (sửa ô hồ sơ, ghi chú, gán
+      // lại, xoá…) mà Quản lý cơ sở và Marketing VẪN cần. Gộp chung là hoặc khoá
+      // nhầm cả chuỗi, hoặc mở nhầm cái vừa bị cấm.
+      description:
+        "Đổi trạng thái lead trên phễu (kéo thẻ Kanban / chọn ở bảng). Chỉ Sale.",
+    },
+    {
       key: "leads:edit-own-intake",
       action: "edit-own-intake",
       description:
@@ -46,6 +56,12 @@ export const crmModule: ModuleDecl = {
       key: "trials:feedback",
       action: "feedback",
       description: "GV ghi nhận xét buổi trải nghiệm.",
+    },
+    {
+      key: "trials:attendance",
+      action: "attendance",
+      description:
+        "Sale điểm danh buổi trải nghiệm. Tách khỏi trials:feedback vì điểm danh là việc của Sale phụ trách khách, nộp phiếu đánh giá là việc của giáo viên.",
     },
     { key: "trials:assign-teacher", action: "assign-teacher" },
     {

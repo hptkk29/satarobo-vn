@@ -18,6 +18,10 @@ type State = {
   payments: PaymentRow[];
   leadStatus: string;
   leadCenterId: string | null;
+  /** GĐ1 — sổ trạng thái chép cột này của lead, không tra ngược từ centerId. */
+  leadOrgUnitId: string | null;
+  /** GĐ1 — các dòng LeadStatusHistory đã ghi. */
+  statusHistory: unknown[];
   activities: unknown[];
   audits: unknown[];
 };
@@ -47,11 +51,24 @@ function fakeTx(state: State): Prisma.TransactionClient {
       },
     },
     lead: {
-      findUnique: async () => ({ centerId: state.leadCenterId }),
+      findUnique: async () => ({
+        centerId: state.leadCenterId,
+        // GĐ1 — `recordLeadStatusChange` đọc thêm orgUnitId để ghi kép.
+        orgUnitId: state.leadOrgUnitId,
+      }),
       updateMany: async (args: { where: { status: string } }) => {
         if (state.leadStatus !== args.where.status) return { count: 0 };
-        state.leadStatus = "REGISTERED";
+        state.leadStatus = "DA_DANG_KY";
         return { count: 1 };
+      },
+      // GĐ1 — dời mốc `statusChangedAt`; test chỉ cần nó không nổ.
+      update: async (args: { data: unknown }) => args.data,
+    },
+    // GĐ1 — sổ đổi trạng thái lead.
+    leadStatusHistory: {
+      create: async (args: { data: unknown }) => {
+        state.statusHistory.push(args.data);
+        return args.data;
       },
     },
     leadActivity: {
@@ -71,8 +88,10 @@ function fakeTx(state: State): Prisma.TransactionClient {
 
 const baseState = (): State => ({
   payments: [],
-  leadStatus: "AWAITING_DECISION",
+  leadStatus: "CHO_QUYET_DINH",
   leadCenterId: "center-lead",
+  leadOrgUnitId: "ou-lead",
+  statusHistory: [],
   activities: [],
   audits: [],
 });
@@ -139,7 +158,7 @@ describe("ensureOrderPaymentRecorded (K3 — 1 khoản = 1 dòng ledger)", () =>
   it("[PH-2] ghi nhận tiền → lead AWAITING_DECISION tự lên REGISTERED + có activity; status khác giữ nguyên", async () => {
     const state = baseState();
     await ensureOrderPaymentRecorded(fakeTx(state), { orderId: "o1", soDot: 1, amount: 1, leadId: "l1", actor: { id: "u1" } });
-    expect(state.leadStatus).toBe("REGISTERED");
+    expect(state.leadStatus).toBe("DA_DANG_KY");
     expect(state.activities).toHaveLength(1);
 
     const converted = baseState();

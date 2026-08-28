@@ -12,6 +12,8 @@ import { db } from "@/lib/db";
 import { hasRole } from "@/lib/auth/permissions";
 import { getFreshGateUser } from "@/lib/auth/fresh-gate-user";
 import { resolveActor } from "@/lib/auth/actor";
+import { passesScope } from "@/lib/db-scope";
+import { checkPermission } from "@/lib/auth/check-permission";
 import { getSessionRosterStudentIds } from "@/lib/attendance/roster";
 import {
   getSessionEvalState,
@@ -155,14 +157,75 @@ async function gateTrialFill(
   // Vai + cơ sở TỪ DB, không từ JWT (xem lib/auth/fresh-gate-user.ts).
   const u = { id: session.user.id, ...((await getFreshGateUser(session.user.id)) ?? session.user) };
   const cls = sess.trialClass;
-  const allowed =
+
+  const allowedByRole =
     hasRole(u, "SUPER_ADMIN") ||
     hasRole(u, "TRAINING") ||
     (hasRole(u, "CENTER_MANAGER") && !!cls.centerId && cls.centerId === u.centerId) ||
     (hasRole(u, "TEACHER") &&
       (cls.teacherId === u.id || cls.assistantId === u.id || sess.teacherId === u.id));
 
+  // GĐ3 — giáo viên được Đào tạo PHÂN CÔNG cho một ca của lớp này.
+  //
+  // ⚠️ Các nhánh trên chỉ nhìn giáo viên của LỚP/BUỔI. Từ GĐ3 phân công đi theo TỪNG CA
+  // (`TrialEnrollment.gvPhanCongId`), nên người thật sự dạy ca lại bị chặn nộp phiếu.
+  // Kiểm ở cấp LỚP (không phải cấp buổi) cho khớp guard danh sách học viên bên dưới —
+  // guard đó cũng đối chiếu roster của cả lớp trải nghiệm. Chỉ truy vấn khi các nhánh
+  // rẻ đã trượt.
+  const allowed =
+    allowedByRole ||
+    (hasRole(u, "TEACHER") &&
+      (await db.trialEnrollment.count({
+        where: { trialClassId: sess.trialClassId, gvPhanCongId: u.id },
+      })) > 0);
+
   if (!allowed) return { ok: false, error: "Không có quyền điền phiếu buổi học thử này" };
+  return { ok: true, trialClassId: sess.trialClassId };
+}
+
+/**
+ * Gate ĐỌC phiếu buổi trải nghiệm — TÁCH khỏi `gateTrialFill` (27/08/2026).
+ *
+ * Lỗi đã báo: giáo viên chấm xong, Sale mở màn Lớp Trial ra KHÔNG thấy phiếu. Đường
+ * đọc dùng chung cổng với đường ghi, mà cổng ghi chỉ liệt kê SUPER_ADMIN · TRAINING ·
+ * CENTER_MANAGER cùng cơ sở · TEACHER của lớp/buổi/ca. `CENTER_SALES_CSM` không nằm
+ * trong đó nên bấm mở phiếu chỉ nhận "Không có quyền điền phiếu buổi học thử này".
+ *
+ * Sale PHẢI đọc được: kết quả đánh giá là căn cứ để chốt với phụ huynh — đó là lý do
+ * cả màn tồn tại. Sale vẫn KHÔNG chấm được: `saveTrialSessionEvalAction` giữ nguyên
+ * `gateTrialFill`. Đúng lớp lỗi GĐ4 đã sửa một lần cho điểm danh, lần này lọt ở đường
+ * đọc.
+ *
+ * Gác bằng QUYỀN chứ không liệt kê vai (luật cứng #1): `trials:view` — đúng quyền mà
+ * trang lớp trải nghiệm đã dùng để mở màn, nên ai vào được màn thì đọc được phiếu của
+ * chính lớp đang mở. Kèm `passesScope` để cách ly cơ sở, vì `trials:view` seed ở
+ * scope GLOBAL và bản thân nó không giới hạn cơ sở nào.
+ */
+async function gateTrialRead(
+  trialSessionId: string,
+): Promise<{ ok: true; trialClassId: string } | { ok: false; error: string }> {
+  const session = await auth();
+  if (!session?.user) return { ok: false, error: "Chưa đăng nhập" };
+
+  const sess = await db.trialClassSession.findUnique({
+    where: { id: trialSessionId },
+    select: {
+      trialClassId: true,
+      trialClass: { select: { centerId: true } },
+    },
+  });
+  if (!sess) return { ok: false, error: "Buổi học trải nghiệm không tồn tại" };
+
+  const centerId = sess.trialClass?.centerId ?? null;
+  const actor = await resolveActor(session.user.id);
+  // Cách ly cơ sở TRƯỚC khi báo thiếu quyền: lớp ngoài tầm nhìn thì trả lời y như lớp
+  // không tồn tại, không xác nhận gián tiếp là nó có thật.
+  if (!passesScope("TrialClassV2", { centerId }, actor)) {
+    return { ok: false, error: "Buổi học trải nghiệm không tồn tại" };
+  }
+  if (!(await checkPermission("trials:view", { centerId }))) {
+    return { ok: false, error: "Không có quyền xem phiếu buổi học thử này" };
+  }
   return { ok: true, trialClassId: sess.trialClassId };
 }
 
@@ -170,7 +233,7 @@ async function gateTrialFill(
 export async function loadTrialSessionEvalAction(
   trialSessionId: string,
 ): Promise<Result<SessionEvalState>> {
-  const g = await gateTrialFill(trialSessionId);
+  const g = await gateTrialRead(trialSessionId);
   if (!g.ok) return g;
   const state = await getTrialSessionEvalState(trialSessionId);
   return { ok: true, data: state };
@@ -237,6 +300,6 @@ export async function saveTrialSessionEvalAction(input: unknown): Promise<Result
   );
   if (!res.ok) return { ok: false, error: res.error };
 
-  revalidatePath("/trial-classes");
+  revalidatePath("/lop-trial");
   return { ok: true, data: { saved: res.saved } };
 }

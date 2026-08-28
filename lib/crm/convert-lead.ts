@@ -67,14 +67,20 @@ export async function convertLeadToEnrollment(actor: AuditActor, input: ConvertL
   const result = await db.$transaction(async (tx) => {
     const lead = await tx.lead.findUnique({ where: { id: input.leadId } });
     if (!lead || lead.deletedAt) throw new ConvertError("LEAD_NOT_FOUND", "Không tìm thấy lead.");
-    if (lead.status === "ENROLLED") throw new ConvertError("ALREADY_ENROLLED", "Lead đã được chốt.");
+    // GĐ5 — CHẶN TRÙNG bám `convertedAt`, KHÔNG bám status nữa. Sau khi gộp ENROLLED
+    // vào DA_DANG_KY, một lead mới chỉ "đã đăng ký" (đã ghi nhận tiền, chưa xếp lớp)
+    // cũng mang giá trị đó — khoá theo status sẽ chặn đúng cái nó phải cho qua.
+    // `convertedAt` chỉ do chính lượt convert ghi nên nó mới là dấu "đã chốt" thật.
+    if (lead.convertedAt) throw new ConvertError("ALREADY_ENROLLED", "Lead đã được chốt.");
     if (!lead.centerId) throw new ConvertError("LEAD_NO_CENTER", "Lead chưa thuộc cơ sở nào — bàn giao trước.");
 
-    // R6-G2 — CLAIM atomic chống race: 2 convert song song chỉ 1 bộ. updateMany có điều
-    // kiện status!=ENROLLED khoá hàng lead; lượt thua thấy count=0 → ALREADY_ENROLLED.
+    // R6-G2 — CLAIM atomic chống race: 2 convert song song chỉ 1 bộ.
+    // GĐ5 — bám `convertedAt IS NULL` thay vì bám status, cùng lý do như bản v2:
+    // sau khi gộp ENROLLED + REGISTERED thì khoá theo status sẽ chặn nhầm lead mới
+    // chỉ "đã đăng ký". Xem ghi chú đầy đủ ở lib/crm/convert-lead-v2.ts.
     const claim = await tx.lead.updateMany({
-      where: { id: lead.id, status: { not: "ENROLLED" }, deletedAt: null },
-      data: { status: "ENROLLED", convertedById: actor.id, convertedAt: now },
+      where: { id: lead.id, convertedAt: null, deletedAt: null },
+      data: { status: "DA_DANG_KY", convertedById: actor.id, convertedAt: now },
     });
     if (claim.count === 0) throw new ConvertError("ALREADY_ENROLLED", "Lead đã được chốt.");
 

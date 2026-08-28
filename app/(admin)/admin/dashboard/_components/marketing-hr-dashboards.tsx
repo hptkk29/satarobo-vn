@@ -28,7 +28,7 @@ async function getMarketingStats(actor: Actor) {
     }),
     sdb.lead.count({ where: { deletedAt: null, createdAt: { gte: weekStart } } }),
     sdb.lead.count({ where: { deletedAt: null } }),
-    sdb.lead.count({ where: { deletedAt: null, status: "ENROLLED" } }),
+    sdb.lead.count({ where: { deletedAt: null, status: "DA_DANG_KY" } }),
   ]);
   return {
     bySource: bySource.map((s) => ({ source: s.source, count: s._count._all })),

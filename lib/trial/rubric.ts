@@ -1,4 +1,15 @@
-// lib/trial/rubric.ts — Bộ tiêu chí đánh giá buổi TRẢI NGHIỆM SataRobo (thang 8.0).
+// lib/trial/rubric.ts — Bộ tiêu chí đánh giá buổi TRẢI NGHIỆM SataRobo (thang 10.0).
+//
+// ⚠️ 27/08/2026 — ĐỔI THANG 8.0 → 10.0 (chủ dự án yêu cầu). Điểm chia lại cho tổng
+// đúng 10, và ngưỡng xếp loại đổi theo (8 / 6 / 4 thay cho 6.5 / 5 / 3.5).
+//
+// Chọn bộ số 2.0 / 1.0 / 2.0 cho ba nhóm thay vì nhân 1.25 lên bộ cũ: nhân thẳng ra
+// 1.875 và 0.9375, tức mức giữa thành 0.94 — phiếu in cho phụ huynh mà đầy số lẻ ba
+// chữ số thì không ai đọc. Bộ mới giữ mọi điểm là bội của 0.5.
+//
+// Đánh đổi ĐÃ BIẾT: nhóm "Thao tác máy tính" từ 2/8 = 25% xuống 2/10 = 20% tổng điểm,
+// hai nhóm kia nhích lên. Trọng số tương đối giữa tiêu chí "mềm" và tiêu chí thao tác
+// đổi từ 1,5:1 thành 2:1. Muốn giữ nguyên đúng tỉ lệ cũ thì phải chấp nhận số lẻ.
 //
 // Cấu trúc CỐ ĐỊNH (không drive bằng DB) — dùng chung form (client) + PDF (server)
 // + action lưu. 3 nhóm × 2 tiêu chí; điểm mỗi tiêu chí chọn 1 trong 3 mức. Port từ
@@ -29,8 +40,8 @@ export const RUBRIC: RubricSection[] = [
         id: "focus",
         label: "A. Mức độ tập trung",
         levels: [
-          { points: 1.5, title: "Tập trung cao", desc: "Lắng nghe GV giảng" },
-          { points: 0.75, title: "Tập trung khá", desc: "Chỉ tập trung 1 khoảng thời gian" },
+          { points: 2, title: "Tập trung cao", desc: "Lắng nghe GV giảng" },
+          { points: 1, title: "Tập trung khá", desc: "Chỉ tập trung 1 khoảng thời gian" },
           { points: 0, title: "Tập trung thấp", desc: "Dễ bị xao nhãng trong giờ học" },
         ],
       },
@@ -38,8 +49,8 @@ export const RUBRIC: RubricSection[] = [
         id: "interact",
         label: "B. Khả năng tương tác",
         levels: [
-          { points: 1.5, title: "Mạnh dạn tương tác", desc: "Tích cực trao đổi với GV" },
-          { points: 0.75, title: "Có tương tác nhưng còn ít", desc: "Có sự ngại ngùng" },
+          { points: 2, title: "Mạnh dạn tương tác", desc: "Tích cực trao đổi với GV" },
+          { points: 1, title: "Có tương tác nhưng còn ít", desc: "Có sự ngại ngùng" },
           { points: 0, title: "Thụ động", desc: "GV hỏi gì trả lời đó" },
         ],
       },
@@ -77,8 +88,8 @@ export const RUBRIC: RubricSection[] = [
         id: "absorb",
         label: "A. Tiếp thu và vận dụng kiến thức",
         levels: [
-          { points: 1.5, title: "Tiếp thu tốt", desc: "Vận dụng được kiến thức đã học" },
-          { points: 0.75, title: "Tiếp thu khá", desc: "Khi vận dụng còn quên một số kiến thức" },
+          { points: 2, title: "Tiếp thu tốt", desc: "Vận dụng được kiến thức đã học" },
+          { points: 1, title: "Tiếp thu khá", desc: "Khi vận dụng còn quên một số kiến thức" },
           { points: 0, title: "Tiếp thu chậm", desc: "Cần giảng bài lại thường xuyên" },
         ],
       },
@@ -86,8 +97,8 @@ export const RUBRIC: RubricSection[] = [
         id: "logic",
         label: "B. Tư duy logic",
         levels: [
-          { points: 1.5, title: "Suy luận vấn đề tốt", desc: "Các vấn đề liên kết chặt chẽ với nhau" },
-          { points: 0.75, title: "Suy luận ra vấn đề", desc: "Nhưng chưa có tính liên kết chặt chẽ" },
+          { points: 2, title: "Suy luận vấn đề tốt", desc: "Các vấn đề liên kết chặt chẽ với nhau" },
+          { points: 1, title: "Suy luận ra vấn đề", desc: "Nhưng chưa có tính liên kết chặt chẽ" },
           { points: 0, title: "Chưa nhận biết vấn đề", desc: "Cần gợi ý" },
         ],
       },
@@ -95,7 +106,7 @@ export const RUBRIC: RubricSection[] = [
   },
 ];
 
-export const RUBRIC_MAX = 8;
+export const RUBRIC_MAX = 10;
 
 /** Danh sách phẳng 6 tiêu chí (thứ tự cố định) — dùng khi lặp/validate. */
 export const RUBRIC_CRITERIA: RubricCriterion[] = RUBRIC.flatMap((s) => s.criteria);
@@ -118,18 +129,24 @@ export function computeTotal(scores: Record<string, number>): number {
   return Math.round(sum * 100) / 100;
 }
 
-/** 8.0 → "8.0", 0.75 → "0.75" (khớp hiển thị mock). */
+/** 10.0 → "10.0", 0.5 → "0.5". */
 export function fmtScore(n: number): string {
   return n % 1 === 0 ? n.toFixed(1) : n.toFixed(2).replace(/0$/, "");
 }
 
 export type RubricRank = "Tốt" | "Khá" | "Trung bình" | "Cần cố gắng";
 
-/** Xếp loại + tone theo tổng điểm (ngưỡng khớp mock TeachUI). */
+/**
+ * Xếp loại + tone theo tổng điểm, thang 10.0.
+ *
+ * Ngưỡng cũ trên thang 8 là 6.5 / 5 / 3.5 — tức 81,25% / 62,5% / 43,75%. Bộ mới lấy
+ * 8 / 6 / 4 (80% / 60% / 40%): số tròn, và rơi ĐÚNG vào các tổng đạt được (mọi điểm
+ * đều bội của 0.5) nên không có vùng chết ngay sát ngưỡng.
+ */
 export function rankOf(total: number): { label: RubricRank; tone: "green" | "blue" | "amber" | "red" } {
-  if (total >= 6.5) return { label: "Tốt", tone: "green" };
-  if (total >= 5) return { label: "Khá", tone: "blue" };
-  if (total >= 3.5) return { label: "Trung bình", tone: "amber" };
+  if (total >= 8) return { label: "Tốt", tone: "green" };
+  if (total >= 6) return { label: "Khá", tone: "blue" };
+  if (total >= 4) return { label: "Trung bình", tone: "amber" };
   return { label: "Cần cố gắng", tone: "red" };
 }
 

@@ -82,10 +82,14 @@ export function teacherHref(href: string | null): string | null {
       // seg[1] ở đây là màn con của admin ("lich-ca"), KHÔNG phải id → bỏ.
       return withParams("/teacher/bang-cong", null, query);
 
+    // GĐ6 — "lop-trial" là màn gộp mới. GIỮ hai case cũ: thông báo đã gửi trong quá
+    // khứ vẫn nằm trong DB với href cũ, bỏ đi là chuông giáo viên trả null và thông
+    // báo thành text chết.
+    case "lop-trial":
     case "trials":
     case "trial-classes":
-      // Id ở đường admin là TrialClass, còn /teacher/trial khoá theo enrollmentId —
-      // khác loại, mang sang là sai. Về danh sách Trial.
+      // Id ở đường admin là lớp/ca trải nghiệm, còn /teacher/trial khoá theo
+      // enrollmentId — khác loại, mang sang là sai. Về danh sách Trial.
       return withParams("/teacher/trial", null, query);
 
     default:

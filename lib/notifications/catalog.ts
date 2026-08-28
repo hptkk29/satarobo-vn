@@ -174,9 +174,12 @@ const BY_PREFIX: Readonly<Record<string, NotiDef>> = {
     group: "action_required", priority: 1, entity: "class",
     recipients: "Quản lý cơ sở / Đào tạo", target: "/sessions",
   },
+  // ⚠️ `status=` phải là giá trị LeadStatus CÒN SỐNG: màn /leads bỏ qua giá trị lạ
+  // KHÔNG báo lỗi, nên link cũ (?status=REGISTERED) mở ra TOÀN BỘ danh sách lead —
+  // trông như bộ lọc chạy đúng mà thật ra không lọc gì.
   "registered_stale:": {
     group: "action_required", priority: 2, entity: "lead",
-    recipients: "Tư vấn viên phụ trách lead", target: "/leads?status=REGISTERED",
+    recipients: "Tư vấn viên phụ trách lead", target: "/leads?status=DA_DANG_KY",
   },
   "report_card_milestone:": {
     group: "due_date", priority: 2, entity: "report_card",
@@ -235,17 +238,39 @@ const BY_PREFIX: Readonly<Record<string, NotiDef>> = {
   },
   "trial-v1.assigned:": {
     group: "new_task", priority: 2, entity: "trial",
-    recipients: "Giáo viên được phân buổi học thử", target: "/trials",
+    recipients: "Giáo viên được phân buổi học thử", target: "/lop-trial/lich-hen",
   },
   "trial-class.assigned:": {
     group: "new_task", priority: 2, entity: "trial",
-    recipients: "Giáo viên được phân lớp học thử", target: "/trials",
+    recipients: "Giáo viên được phân lớp học thử", target: "/lop-trial",
   },
   // Buổi ad-hoc thêm tay vào lớp trải nghiệm (addTrialSession) — GV được gán buổi đó.
   // Cùng mức với hai loại trên: là ca dạy vừa rơi vào lịch của mình, không phải tin để biết.
   "trial-session.assigned:": {
     group: "new_task", priority: 2, entity: "trial",
-    recipients: "Giáo viên được phân buổi trải nghiệm", target: "/trials",
+    recipients: "Giáo viên được phân buổi trải nghiệm", target: "/lop-trial",
+  },
+  // ── GĐ3 — luồng giáo viên theo TỪNG CA (không phải theo lớp) ────────────────
+  "trial-case.assigned:": {
+    group: "new_task", priority: 2, entity: "trial",
+    recipients: "Giáo viên được Đào tạo phân công một ca trải nghiệm", target: "/lop-trial",
+  },
+  // Lịch bị dời ⇒ giáo viên MẤT ca đang cầm. Ưu tiên cao hơn tin "được phân công":
+  // biết muộn là tới lớp thừa hoặc bỏ trống ca đã hẹn với phụ huynh.
+  "trial-case.rescheduled:": {
+    group: "new_task", priority: 3, entity: "trial",
+    recipients: "Giáo viên vừa bị gỡ phân công do dời lịch", target: "/lop-trial",
+  },
+  "trial.cho-phan-cong:": {
+    group: "new_task", priority: 2, entity: "trial",
+    recipients: "Bộ phận Đào tạo (ca trải nghiệm chưa có giáo viên)", target: "/lop-trial",
+  },
+  // GĐ6 — nhắc Sale trước buổi để Sale tự nhắn phụ huynh qua Zalo cá nhân. Hệ thống
+  // KHÔNG gửi tin tự động cho phụ huynh; đây là chốt nghiệp vụ, không phải giới hạn
+  // kỹ thuật. Xếp nhóm "due_date" vì đây là việc CÓ HẠN, không phải việc mới rơi xuống.
+  "trial.reminder:": {
+    group: "due_date", priority: 2, entity: "trial",
+    recipients: "Sale phụ trách lead (không có thì admin lead)", target: "/leads/<leadId>",
   },
   // Vi phạm SLA chăm lead — theo PRD đây là "đã trễ", không phải "việc mới".
   "sla:": {

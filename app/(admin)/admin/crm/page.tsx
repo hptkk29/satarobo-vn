@@ -9,28 +9,19 @@ import type { LeadStatus } from "@prisma/client";
 import { StatCardAdmin } from "@/components/design-system/admin/stat-card-admin";
 import { FunnelChart } from "@/components/charts/funnel-chart";
 import { BarChart } from "@/components/charts/bar-chart";
-import { LEAD_STATUS_LABEL } from "@/lib/leads/status";
+import {
+  LEAD_STATUS_LABEL,
+  LEAD_CLOSED_STATUSES,
+  LEAD_FUNNEL_STAGES,
+} from "@/lib/leads/status";
 import { PhanTrangBang } from "@/components/ui/phan-trang-bang";
 
 export const metadata = { title: "CRM Dashboard | Admin" };
 export const dynamic = "force-dynamic";
 
-const TERMINAL: LeadStatus[] = ["ENROLLED", "LOST", "DUPLICATE"];
-
-// Gom status thành các bậc phễu chuyển đổi.
-const FUNNEL_STAGES: { name: string; statuses: LeadStatus[] }[] = [
-  { name: "Lead mới", statuses: ["NEW", "ASSIGNED"] },
-  {
-    name: "Đã liên hệ",
-    statuses: ["CONTACTED", "CONSULTING", "NO_ANSWER", "NURTURING"],
-  },
-  {
-    name: "Học thử",
-    statuses: ["TRIAL_SCHEDULED", "TRIAL_ATTENDED", "DEMO_SCHEDULED"],
-  },
-  { name: "Chờ quyết định", statuses: ["AWAITING_DECISION"] },
-  { name: "Đã chốt", statuses: ["ENROLLED"] },
-];
+// GĐ0 — hằng phễu chuyển về @/lib/leads/status. Bản chép cũ bỏ sót TRIAL_IN_PROGRESS
+// và REGISTERED nên cột "Học thử" và "Đã chốt" đếm thiếu; nay đã đủ.
+const FUNNEL_STAGES = LEAD_FUNNEL_STAGES;
 
 export default async function CrmDashboardPage() {
   const session = await auth();
@@ -46,8 +37,16 @@ export default async function CrmDashboardPage() {
   const now = new Date();
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
 
-  const [byStatus, bySource, byAssigned, enrolledByAssigned, sales, monthTotal, monthEnrolled] =
-    await Promise.all([
+  const [
+    byStatus,
+    bySource,
+    byAssigned,
+    enrolledByAssigned,
+    sales,
+    monthTotal,
+    monthEnrolled,
+    open,
+  ] = await Promise.all([
       sdb.lead.groupBy({
         by: ["status"],
         where: { deletedAt: null },
@@ -65,7 +64,7 @@ export default async function CrmDashboardPage() {
       }),
       sdb.lead.groupBy({
         by: ["assignedToId"],
-        where: { deletedAt: null, assignedToId: { not: null }, status: "ENROLLED" },
+        where: { deletedAt: null, assignedToId: { not: null }, status: "DA_DANG_KY" },
         _count: { _all: true },
       }),
       sdb.user.findMany({
@@ -75,26 +74,40 @@ export default async function CrmDashboardPage() {
       }),
       sdb.lead.count({ where: { deletedAt: null, createdAt: { gte: monthStart } } }),
       sdb.lead.count({
-        where: { deletedAt: null, status: "ENROLLED", updatedAt: { gte: monthStart } },
+        where: { deletedAt: null, status: "DA_DANG_KY", updatedAt: { gte: monthStart } },
+      }),
+      // "Đang xử lý" — phải ĐẾM RIÊNG, không cộng dồn từ `byStatus` được.
+      //
+      // ⚠️ Sau GĐ5, `LEAD_CLOSED_STATUSES` chỉ còn `DA_MAT` (cố ý: lead đã đăng ký mà
+      // chưa xếp lớp vẫn là việc đang mở). Nhưng lead đã convert XONG cũng mang
+      // `DA_DANG_KY`, nên gộp theo status thì mọi hồ sơ đã khép từ đời nào vẫn nằm mãi
+      // trong ô này — con số chỉ có tăng, không bao giờ giảm. `convertedAt` là mốc do
+      // chính lượt convert ghi, tách được hai nhóm đó; groupBy theo status thì không.
+      sdb.lead.count({
+        where: {
+          deletedAt: null,
+          status: { notIn: LEAD_CLOSED_STATUSES },
+          convertedAt: null,
+        },
       }),
     ]);
 
   const statusCount = new Map<string, number>();
   let total = 0;
-  let nonDuplicate = 0;
-  let open = 0;
   let enrolledTotal = 0;
   for (const g of byStatus) {
     const c = g._count._all;
     statusCount.set(g.status, c);
     total += c;
-    if (g.status !== "DUPLICATE") nonDuplicate += c;
-    if (!TERMINAL.includes(g.status)) open += c;
-    if (g.status === "ENROLLED") enrolledTotal += c;
+    if (g.status === "DA_DANG_KY") enrolledTotal += c;
   }
 
-  const conversion =
-    nonDuplicate > 0 ? (enrolledTotal / nonDuplicate) * 100 : 0;
+  // GĐ5 — mẫu số nay là TOÀN BỘ lead. Trước đây phải trừ nhóm DUPLICATE ra khỏi mẫu
+  // để tỉ lệ chuyển đổi không bị lead trùng làm loãng; enum mới không còn giá trị đó
+  // vì việc chống trùng đã dời lên ràng buộc lúc TẠO lead, nên không còn nhóm nào để
+  // trừ. Không được thay bằng "trừ DA_MAT": lead mất là kết quả tư vấn thật, phải nằm
+  // trong mẫu số, khác hẳn bản ghi trùng vốn không phải một khách hàng riêng.
+  const conversion = total > 0 ? (enrolledTotal / total) * 100 : 0;
 
   const funnelData = FUNNEL_STAGES.map((stage) => ({
     name: stage.name,

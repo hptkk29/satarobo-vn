@@ -8,10 +8,15 @@
 import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { notifyStaff } from "@/lib/notifications/notify";
+import { tenLopTrial } from "@/lib/trial/lop-moi";
 import { teacherCenterAssignmentError } from "@/lib/teachers/center-filter";
 import { nextSeq, yy } from "@/lib/codegen";
 import { publishEvent } from "@/lib/events/publish";
 import { writeAudit } from "@/lib/audit/audit-log";
+import { LEAD_PIPELINE_EXIT_STATUSES } from "@/lib/leads/status";
+import { setLeadStatus } from "@/lib/leads/set-status";
+import { danhGiaDoiLich, saleDuocDeXuat } from "@/lib/trial/reschedule-rules";
+import { getSetting } from "@/lib/settings/service";
 
 // ─── PURE helpers (deterministic — KHÔNG new Date() ở top) ─────────────────────
 
@@ -41,8 +46,19 @@ export function buildTrialSessionDates(startDate: Date, count: number, holidays:
   return out;
 }
 
-/** Quyết định vượt sĩ số (PURE): tại/quá sức chứa + KHÔNG override. */
-export function isOverCapacity(activeCount: number, capacity: number, allowOverride: boolean): boolean {
+/**
+ * Quyết định vượt sĩ số (PURE): tại/quá sức chứa + KHÔNG override.
+ *
+ * `capacity === null` = lớp KHÔNG giới hạn sĩ số (mặc định từ 28/08, khi trường sĩ số
+ * rời khỏi form tạo lớp). Coi null là 0 thì lớp mới tạo chặn ngay học viên đầu tiên và
+ * báo "Vượt sĩ số" — người dùng không có cách nào đoán ra nguyên nhân.
+ */
+export function isOverCapacity(
+  activeCount: number,
+  capacity: number | null,
+  allowOverride: boolean,
+): boolean {
+  if (capacity === null) return false;
   return !allowOverride && activeCount >= capacity;
 }
 
@@ -63,24 +79,6 @@ function sanitizeCenter(code: string): string {
   return code.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 8) || "CS";
 }
 
-/** Mở rộng các khoảng Holiday (date..endDate) thành Date[] (1 phần tử / ngày). */
-function expandHolidayDates(rows: { date: Date; endDate: Date | null }[]): Date[] {
-  const out: Date[] = [];
-  for (const h of rows) {
-    const start = new Date(h.date.getFullYear(), h.date.getMonth(), h.date.getDate());
-    const end = h.endDate
-      ? new Date(h.endDate.getFullYear(), h.endDate.getMonth(), h.endDate.getDate())
-      : start;
-    const cur = new Date(start);
-    let guard = 0;
-    while (cur <= end && guard < 400) {
-      guard++;
-      out.push(new Date(cur));
-      cur.setDate(cur.getDate() + 1);
-    }
-  }
-  return out;
-}
 
 async function actorName(actorId: string | null | undefined, client: DbClient = db): Promise<string> {
   if (!actorId) return "system";
@@ -148,44 +146,23 @@ export async function setTrialProgramConfig(params: {
 
 // ─── Lớp ─────────────────────────────────────────────────────────────────────
 
+/**
+ * Tạo lớp trải nghiệm. 28/08 — chỉ còn CƠ SỞ + KHOÁ; tên tự sinh, giờ/phòng/GV/sĩ số
+ * chuyển xuống từng buổi.
+ */
 export async function createTrialClass(params: {
-  name: string;
   centerId: string;
-  roomId?: string | null;
+  /** Khoá trải nghiệm (= khoá quan tâm của khách). */
+  courseId?: string | null;
   // FL-R2 (QĐ-R2-1): slot tái sử dụng — startDate tuỳ chọn (null = không gắn ngày cố định).
   startDate?: Date | null;
-  startTime: string;
-  endTime: string;
-  capacity: number;
-  teacherId?: string | null;
-  // Số buổi nhập trực tiếp khi tạo (không phụ thuộc TrialProgramConfig ngoài).
-  sessionCount: number;
   configId?: string | null;
   actorId: string;
 }): Promise<{ ok: boolean; error?: string; trialClassId?: string }> {
-  if (!params.name?.trim()) return { ok: false, error: "Tên lớp là bắt buộc" };
-  if (!Number.isInteger(params.capacity) || params.capacity < 1) {
-    return { ok: false, error: "Sĩ số phải là số nguyên ≥ 1" };
-  }
-  if (!Number.isInteger(params.sessionCount) || params.sessionCount < 1) {
-    return { ok: false, error: "Số buổi phải là số nguyên ≥ 1" };
-  }
-
-  // R2-RBAC-3 — GV (nếu gán) phải CÙNG cơ sở lớp trải nghiệm (cách ly CS1↔CS2;
-  // backstop server cho lọc client ở form). teacher centerId NULL/khác → chặn.
-  if (params.teacherId) {
-    const t = await db.user.findUnique({
-      where: { id: params.teacherId },
-      select: { centerId: true },
-    });
-    const err = teacherCenterAssignmentError(params.centerId, [
-      { id: params.teacherId, centerId: t?.centerId },
-    ]);
-    if (err) return { ok: false, error: err };
-  }
-
   try {
-    const sessionCount = params.sessionCount;
+    // Số buổi khai trước KHÔNG còn ý nghĩa: buổi thêm tay từng cái ở màn chi tiết, và
+    // cột hiển thị nay đếm buổi CÓ THẬT. Giữ 0 để cột cũ không nói dối.
+    const sessionCount = 0;
     const trialClassId = await db.$transaction(async (tx) => {
       // mã cơ sở cho code.
       const center = await tx.center.findUnique({
@@ -200,43 +177,30 @@ export async function createTrialClass(params: {
       const trialClass = await tx.trialClassV2.create({
         data: {
           code,
-          name: params.name.trim(),
+          // Tên theo quy ước `Cơ sở_Lớp trial số`, dùng CHÍNH số thứ tự đã cấp cho
+          // `code` — hai thứ đi cùng một bộ đếm nên không bao giờ lệch nhau.
+          name: tenLopTrial(cc, seq),
           centerId: params.centerId,
-          roomId: params.roomId ?? null,
+          courseId: params.courseId ?? null,
           startDate: params.startDate ?? null,
-          startTime: params.startTime,
-          endTime: params.endTime,
-          capacity: params.capacity,
-          teacherId: params.teacherId ?? null,
+          // 28/08 — giờ/sĩ số/GV/phòng để null: chúng là thuộc tính của TỪNG BUỔI.
+          startTime: null,
+          endTime: null,
+          capacity: null,
+          teacherId: null,
+          roomId: null,
           configId: params.configId ?? null,
           sessionCount,
         },
         select: { id: true },
       });
 
-      // FL-R2 (QĐ-R2-1): slot tái sử dụng — KHÔNG auto-gen buổi cohort. Chỉ sinh buổi theo
-      // lịch khi CÓ ngày bắt đầu cố định (giữ tương thích đường gọi cũ/lớp có lịch).
-      if (params.startDate) {
-        const holidayRows = await tx.holiday.findMany({
-          where: { OR: [{ centerId: params.centerId }, { centerId: null }] },
-          select: { date: true, endDate: true },
-        });
-        const holidays = expandHolidayDates(holidayRows);
-        const dates = buildTrialSessionDates(params.startDate, sessionCount, holidays);
-        if (dates.length > 0) {
-          await tx.trialClassSession.createMany({
-            data: dates.map((d, idx) => ({
-              trialClassId: trialClass.id,
-              seq: idx + 1,
-              date: d,
-              startTime: params.startTime,
-              endTime: params.endTime,
-              roomId: params.roomId ?? null,
-              teacherId: params.teacherId ?? null,
-            })),
-          });
-        }
-      }
+      // 28/08 — GỠ nhánh tự sinh buổi theo `startDate`.
+      //
+      // Nhánh đó cần giờ/phòng/GV ở CẤP LỚP để rót xuống từng buổi, mà ba thứ ấy nay
+      // không còn tồn tại ở cấp lớp. Giữ lại thì buổi sinh ra trắng giờ — tệ hơn là
+      // không sinh, vì một buổi không giờ vẫn hiện trên lịch giáo viên.
+      // Lớp trải nghiệm vốn là slot tái sử dụng: buổi thêm tay ở màn chi tiết.
       return trialClass.id;
     });
     return { ok: true, trialClassId };
@@ -263,9 +227,12 @@ export async function notifyTrialTeacherAssigned(params: {
   // `href` phải viết theo đường ADMIN clean-URL: chuông admin push thẳng, chuông site GV
   // đổi qua `teacherHref()`. Mặc định cũ "/teacher/trial" sai cả hai đầu — trên host admin
   // bị route-policy 308 sang public rồi 404, còn `teacherHref` không nhận diện được nên
-  // trả null (thông báo thành text chết). "/trials" là màn admin có thật và teacherHref
-  // map đúng sang "/trial" của site GV.
-  const href = params.href ?? "/trials";
+  // trả null (thông báo thành text chết). "/lop-trial" là màn admin có thật và
+  // teacherHref map đúng sang "/trial" của site GV.
+  //
+  // ⚠️ GĐ6 — thông báo CŨ trong DB vẫn mang href "/trials". Đó là lý do route cũ được
+  // giữ dưới dạng chuyển hướng thay vì xoá, và `teacherHref` vẫn nhận diện case cũ.
+  const href = params.href ?? "/lop-trial";
   try {
     await notifyStaff({
       userIds: [params.teacherId],
@@ -392,8 +359,19 @@ export async function enrollLeadChild(params: {
         return { ok: false, overCapacity: true, error: "Vượt sĩ số" };
       }
 
-      // #2 — chốt buổi cho ghi danh NGAY khi tạo (GV chỉ thấy HV qua scheduledSessionId).
-      let scheduledSessionId: string | null = params.sessionId ?? null;
+      // Buổi của ghi danh. `null` = học TOÀN BỘ buổi của lớp — đây là MẶC ĐỊNH từ
+      // 28/08 (chủ dự án: "add vào là add toàn bộ buổi của lớp trải nghiệm đó").
+      //
+      // ⚠️ ĐẢO nếp #2. Bản cũ AUTO-GÁN buổi gần nhất khi không truyền `sessionId`, với
+      // lý do ghi rõ: "GV chỉ thấy HV qua scheduledSessionId — enroll không buổi = HV
+      // tàng hình". Lý do đó nay KHÔNG còn đúng: roster giáo viên đã xếp ghi danh
+      // `scheduledSessionId = null` vào MỌI buổi của lớp (xem `lib/lms/teacher-schedule.ts`),
+      // và bảng điểm danh vốn đã hiểu null là "hiện ở mọi buổi". Gỡ auto-gán mà KHÔNG
+      // sửa roster trước là dựng lại đúng lỗi tàng hình đó — hai thay đổi đi cùng một
+      // commit là có chủ đích.
+      //
+      // Xếp riêng một buổi vẫn làm được: truyền `sessionId` (màn chi tiết lớp, dời lịch).
+      const scheduledSessionId: string | null = params.sessionId ?? null;
       if (scheduledSessionId) {
         // Buổi truyền vào phải thuộc đúng lớp đang xếp (chống chọn buổi lớp khác).
         const ses = await tx.trialClassSession.findUnique({
@@ -402,29 +380,6 @@ export async function enrollLeadChild(params: {
         });
         if (!ses || ses.trialClassId !== params.trialClassId) {
           return { ok: false, error: "Buổi học không thuộc lớp đã chọn" };
-        }
-      } else {
-        // Auto-gán buổi SCHEDULED gần nhất: ưu tiên buổi SẮP TỚI (ngày ≥ hôm nay VN),
-        // hết buổi tương lai → buổi SCHEDULED mới nhất. Không có buổi nào → lỗi rõ.
-        const today = vnTodayUtc();
-        const upcoming = await tx.trialClassSession.findFirst({
-          where: { trialClassId: params.trialClassId, status: "SCHEDULED", date: { gte: today } },
-          orderBy: [{ date: "asc" }, { seq: "asc" }],
-          select: { id: true },
-        });
-        const fallback = upcoming
-          ? null
-          : await tx.trialClassSession.findFirst({
-              where: { trialClassId: params.trialClassId, status: "SCHEDULED" },
-              orderBy: [{ date: "desc" }, { seq: "desc" }],
-              select: { id: true },
-            });
-        scheduledSessionId = upcoming?.id ?? fallback?.id ?? null;
-        if (!scheduledSessionId) {
-          return {
-            ok: false,
-            error: "Lớp trải nghiệm chưa có buổi học — thêm buổi trước khi xếp học viên",
-          };
         }
       }
 
@@ -442,10 +397,18 @@ export async function enrollLeadChild(params: {
       });
       // FL-R2 (item 6) — mở/ghi lịch sử học thử per-lead (giữ kể cả khi rời pipeline).
       // totalSessions chốt tại lúc gán; nếu đã có history (lead quay lại) → giữ count cũ.
-      const totalSessions =
+      //
+      // ⚠️ TRẦN ÁP Ở ĐÂY, không chỉ ở tầng action.
+      // Chủ dự án chốt trần 4 buổi (đổi được qua cấu hình `crm.trialMaxSessions`).
+      // Tầng action chỉ kiểm khi người dùng GÕ SỐ vào ô; bỏ trống ô — thao tác THƯỜNG
+      // NHẤT — thì rơi xuống `cls.sessionCount`, mà số buổi của lớp cho phép tới 20.
+      // Không kẹp ở đây thì chốt câu 5 không có hiệu lực trên luồng chính.
+      const tranBuoi = await getSetting("crm.trialMaxSessions");
+      const soBuoiMongMuon =
         params.totalSessions && params.totalSessions > 0
           ? params.totalSessions
           : cls.sessionCount;
+      const totalSessions = Math.min(soBuoiMongMuon, tranBuoi);
       await tx.leadTrialHistory.upsert({
         where: {
           leadChildId_trialClassId: {
@@ -474,7 +437,9 @@ export async function enrollLeadChild(params: {
         { tx, dedupeKey: `trial.assigned:${enrollment.id}` },
       );
       // AC4 — ghi audit khi override sĩ số (xếp vượt capacity bằng quyền override).
-      if (allowOverride && activeCount >= cls.capacity) {
+      // `capacity === null` = lớp không giới hạn ⇒ KHÔNG có gì để "vượt", nên cũng
+      // không ghi audit override. Ghi bừa là đẻ ra vết vi phạm cho một luật không tồn tại.
+      if (allowOverride && cls.capacity !== null && activeCount >= cls.capacity) {
         await writeAudit({
           actor: { id: params.addedById, name: await actorName(params.addedById, tx) },
           module: "trial",
@@ -547,7 +512,12 @@ export async function cancelTrialClass(params: {
  *  - Auto-Kanban per-lead: có con đang học → "Đang học thử"; MỌI con đủ buổi & chưa chốt
  *    → "Chờ quyết định" (AWAITING_DECISION) NGAY (TBD-2). KHÔNG đụng lead đã chốt/rời pipeline.
  */
-async function syncTrialProgress(tx: Prisma.TransactionClient, trialEnrollmentId: string): Promise<void> {
+async function syncTrialProgress(
+  tx: Prisma.TransactionClient,
+  trialEnrollmentId: string,
+  // GĐ1 — ai gây ra lượt đổi trạng thái này; ghi vào sổ để phân biệt người làm với máy chạy.
+  actorId: string | null = null,
+): Promise<void> {
   const enr = await tx.trialEnrollment.findUnique({
     where: { id: trialEnrollmentId },
     select: {
@@ -617,8 +587,10 @@ async function syncTrialProgress(tx: Prisma.TransactionClient, trialEnrollmentId
   const lead = await tx.lead.findUnique({ where: { id: leadId }, select: { status: true } });
   if (!lead) return;
   // KHÔNG động vào lead đã chốt / rời pipeline (sale tự quản từ đây).
-  const TERMINAL = ["REGISTERED", "ENROLLED", "LOST", "DUPLICATE"];
-  if (TERMINAL.includes(lead.status)) return;
+  // GĐ0 — đây là chỗ DUY NHẤT dùng tập "rời phễu" (có thêm DA_DANG_KY so với tập
+  // "đã đóng" của round-robin/bàn giao). Trước GĐ0 hai tập nằm ở 5 file rời và không
+  // ai biết vì sao chúng lệch nhau; nay khác biệt được đặt tên và có test khoá.
+  if (LEAD_PIPELINE_EXIT_STATUSES.includes(lead.status)) return;
 
   // mọi con (đang/đã học thử) của lead này đã đủ buổi?
   const siblings = await tx.trialEnrollment.findMany({
@@ -628,22 +600,40 @@ async function syncTrialProgress(tx: Prisma.TransactionClient, trialEnrollmentId
   const allAttended =
     siblings.length > 0 && siblings.every((s) => s.leadChild.trialStatus === "ATTENDED");
 
+  // GĐ1 — hai đường này trước đây đổi trạng thái lead mà KHÔNG để lại vết nào, dù
+  // đây là đường có lưu lượng cao nhất (mỗi lượt điểm danh đều chạy qua). Nay đi
+  // chung cửa `setLeadStatus`: sổ ghi đủ, và hàm tự bỏ qua khi trạng thái không đổi
+  // nên gọi lại nhiều lần không đẻ dòng rác.
   if (allAttended) {
-    if (lead.status !== "AWAITING_DECISION") {
-      await tx.lead.update({ where: { id: leadId }, data: { status: "AWAITING_DECISION" } });
+    const res = await setLeadStatus({
+      tx,
+      leadId,
+      to: "CHO_QUYET_DINH",
+      source: "trial",
+      actorId,
+    });
+    if (res.changed) {
       await publishEvent(
         "lead.awaitingDecision",
         { leadId },
         { tx, dedupeKey: `lead.awaitingDecision:${leadId}` },
       );
     }
-  } else if (attendedCount >= 1 && lead.status === "TRIAL_SCHEDULED") {
-    await tx.lead.update({ where: { id: leadId }, data: { status: "TRIAL_IN_PROGRESS" } });
-    await publishEvent(
-      "lead.trialInProgress",
-      { leadId },
-      { tx, dedupeKey: `lead.trialInProgress:${leadId}` },
-    );
+  } else if (attendedCount >= 1 && lead.status === "DA_HEN_HOC_THU") {
+    const res = await setLeadStatus({
+      tx,
+      leadId,
+      to: "DANG_HOC_THU",
+      source: "trial",
+      actorId,
+    });
+    if (res.changed) {
+      await publishEvent(
+        "lead.trialInProgress",
+        { leadId },
+        { tx, dedupeKey: `lead.trialInProgress:${leadId}` },
+      );
+    }
   }
 }
 
@@ -655,6 +645,29 @@ export async function markAttendance(params: {
   actorId: string;
 }): Promise<{ ok: boolean; error?: string }> {
   try {
+    // ⚠️ CHỐNG IDOR — kiểm CA và BUỔI thuộc CÙNG MỘT LỚP trước khi ghi.
+    //
+    // Action gọi vào đây chỉ scope được `trialSessionId` (qua `loadScopedTrialSession`),
+    // còn `trialEnrollmentId` đi thẳng từ client. Không kiểm thì POST tay ghi được điểm
+    // danh cho ca của lớp/cơ sở KHÁC — và tệ hơn, `syncTrialProgress` bên dưới sẽ đổi
+    // luôn trạng thái lead bên đó. Lỗ này có từ màn cũ, không phải hồi quy của đợt này.
+    const [ses, enr] = await Promise.all([
+      db.trialClassSession.findUnique({
+        where: { id: params.trialSessionId },
+        select: { trialClassId: true },
+      }),
+      db.trialEnrollment.findUnique({
+        where: { id: params.trialEnrollmentId },
+        select: { trialClassId: true },
+      }),
+    ]);
+    if (!ses || !enr) return { ok: false, error: "Không tìm thấy buổi hoặc ca trải nghiệm" };
+    if (ses.trialClassId !== enr.trialClassId) {
+      // Gộp một thông điệp cho cả hai ca (không tồn tại / khác lớp) — nói rõ hơn là
+      // biến thông báo lỗi thành kênh dò id.
+      return { ok: false, error: "Học viên không thuộc lớp của buổi này" };
+    }
+
     await db.$transaction(async (tx) => {
       await tx.trialAttendance.upsert({
         where: {
@@ -668,14 +681,18 @@ export async function markAttendance(params: {
           trialEnrollmentId: params.trialEnrollmentId,
           status: params.status,
           note: params.note ?? null,
+          // GĐ4 — ghi AI điểm danh. Từ GĐ4 việc này chuyển từ giáo viên sang Sale, nên
+          // không lưu người thao tác là mất luôn khả năng quy trách nhiệm khi có tranh cãi.
+          markedById: params.actorId,
         },
         update: {
           status: params.status,
           note: params.note ?? null,
+          markedById: params.actorId,
         },
       });
       // ghi lịch sử + auto-Kanban (idempotent — tính lại từ số buổi PRESENT).
-      await syncTrialProgress(tx, params.trialEnrollmentId);
+      await syncTrialProgress(tx, params.trialEnrollmentId, params.actorId ?? null);
     });
     return { ok: true };
   } catch (e) {
@@ -763,120 +780,181 @@ export async function unenrollLeadChild(params: {
   }
 }
 
-// ─── Dời lịch học thử ────────────────────────────────────────────────────────────
+// ─── GĐ3 — DỜI LỊCH một ca trải nghiệm ────────────────────────────────────────
 
 /**
- * Site GV 25/08 — DỜI 1 học viên trải nghiệm sang buổi khác.
+ * Dời một ca trải nghiệm sang buổi khác.
  *
- * Vì sao tới giờ mới có: `TrialEnrollment.scheduledSessionId` được ghi ĐÚNG MỘT LẦN ở
- * `enrollLeadChild` rồi bất biến — không admin/Sale/GV nào đổi được buổi. Muốn dời lịch,
- * cách duy nhất trước đây là gỡ con ra (WITHDRAWN, mất dấu) rồi xếp lại. Vì thế bảng
- * Trial của site GV không có cách nào biết suất nào "bị dời lịch".
+ * Luồng đã chốt với chủ dự án (25/08/2026): phụ huynh vắng hoặc xin dời → Sale bấm
+ * "Dời lịch", chọn buổi mới → **giáo viên đang phụ trách ca đó MẤT PHÂN CÔNG**, Sale
+ * đề xuất lại nếu muốn (không bắt buộc), và giáo viên được BÁO là lịch đã dời.
  *
- * Ghi lại buổi CŨ vào `rescheduledFromSessionId` — đó là thứ site GV đọc để in trạng
- * thái. Dời nhiều lần chỉ giữ lần gần nhất; chuỗi đầy đủ nằm ở DomainEvent + AuditLog.
+ * Ba điều dễ làm sai, đã xử ở đây:
  *
- * Buổi mới BẮT BUỘC thuộc CÙNG lớp trải nghiệm (chống chọn nhầm buổi lớp khác — cùng
- * luật với `enrollLeadChild`). Muốn chuyển sang lớp Trial khác thì gỡ + xếp lại, vì
- * sĩ số và `LeadTrialHistory` gắn theo lớp.
+ * 1. **Không xoá bản ghi điểm danh của buổi cũ.** Bé vắng ở buổi cũ chính là lý do
+ *    phải dời; xoá đi là mất luôn bằng chứng và `attendedCount` sẽ tính sai.
+ * 2. **Không đụng giáo viên của LỚP hay của BUỔI.** Chỉ ca này mất phân công; lớp có
+ *    nhiều bé, gỡ ở cấp lớp là gỡ nhầm của người khác.
+ * 3. **Ghi vết vào `TrialReschedule` dù trên màn bé đó biến mất khỏi buổi cũ.** Tỷ lệ
+ *    dời lịch là chỉ số chất lượng chốt lịch của Sale, xoá thẳng là mất hẳn.
  */
 export async function rescheduleTrialEnrollment(params: {
-  enrollmentId: string;
+  trialEnrollmentId: string;
   toSessionId: string;
-  reason: string;
-  actorId: string;
-}): Promise<{ ok: boolean; error?: string }> {
+  reason?: string | null;
+  actorId: string | null;
+}): Promise<{ ok: boolean; error?: string; gvBiGoId?: string | null }> {
   try {
     return await db.$transaction(async (tx) => {
       const enr = await tx.trialEnrollment.findUnique({
-        where: { id: params.enrollmentId },
+        where: { id: params.trialEnrollmentId },
         select: {
           id: true,
           status: true,
           trialClassId: true,
           leadChildId: true,
           scheduledSessionId: true,
-          leadChild: { select: { leadId: true, fullName: true } },
+          gvPhanCongId: true,
+          rescheduleCount: true,
+          trialClass: { select: { centerId: true, orgUnitId: true, name: true } },
         },
       });
-      if (!enr) return { ok: false, error: "Không tìm thấy ghi danh trải nghiệm" };
-      if (enr.status === "WITHDRAWN") {
-        return { ok: false, error: "Học viên đã rút khỏi lớp trải nghiệm — xếp lại thay vì dời" };
-      }
-      if (enr.scheduledSessionId === params.toSessionId) {
-        return { ok: false, error: "Học viên đang ở đúng buổi này" };
-      }
+      if (!enr) return { ok: false, error: "Không tìm thấy ca trải nghiệm" };
 
-      const to = await tx.trialClassSession.findUnique({
+      // Buổi mới phải thuộc ĐÚNG lớp đó và chưa diễn ra. Kiểm ở server chứ không chỉ
+      // ở UI: action nhận id thẳng từ client.
+      const ses = await tx.trialClassSession.findUnique({
         where: { id: params.toSessionId },
-        select: { id: true, trialClassId: true, status: true, date: true, startTime: true },
+        select: { id: true, trialClassId: true, status: true },
       });
-      if (!to || to.trialClassId !== enr.trialClassId) {
-        return { ok: false, error: "Buổi học không thuộc lớp trải nghiệm của học viên" };
-      }
-      if (to.status === "CANCELLED") {
-        return { ok: false, error: "Buổi học đã huỷ — chọn buổi khác" };
-      }
 
-      const from = enr.scheduledSessionId
-        ? await tx.trialClassSession.findUnique({
-            where: { id: enr.scheduledSessionId },
-            select: { date: true, startTime: true },
-          })
-        : null;
+      // Toàn bộ phần quyết định nằm ở hàm thuần (có test phủ đủ nhánh) — ở đây chỉ
+      // nạp dữ liệu rồi hỏi. Hai bản logic là hai cơ hội lệch nhau.
+      const luat = danhGiaDoiLich({
+        caStatus: enr.status,
+        caTrialClassId: enr.trialClassId,
+        caSessionId: enr.scheduledSessionId,
+        buoiMoi: ses
+          ? { id: ses.id, trialClassId: ses.trialClassId, status: ses.status }
+          : null,
+      });
+      if (!luat.ok) return { ok: false, error: luat.error };
 
-      const movedAt = new Date();
+      const gvBiGoId = enr.gvPhanCongId;
+
       await tx.trialEnrollment.update({
         where: { id: enr.id },
         data: {
-          scheduledSessionId: to.id,
-          rescheduledFromSessionId: enr.scheduledSessionId,
-          rescheduledAt: movedAt,
-          rescheduleReason: params.reason,
+          scheduledSessionId: params.toSessionId,
+          // Mất phân công. Xoá luôn đề xuất cũ để Sale đề xuất lại từ đầu — giữ đề
+          // xuất cũ thì Đào tạo dễ tưởng Sale đã cân nhắc cho lịch MỚI.
+          gvPhanCongId: null,
+          gvDeXuatId: null,
+          rescheduleCount: enr.rescheduleCount + 1,
         },
       });
 
-      // Cùng tên sự kiện với đường V1 (`app/(admin)/admin/trials/actions.ts`) để Sale phụ
-      // trách nhận đúng một loại thông báo "Đổi lịch học thử", bất kể lịch nằm ở hệ nào.
-      await publishEvent(
-        "trial.schedule_changed",
-        {
-          trialId: enr.id,
-          leadId: enr.leadChild.leadId,
-          fromAt: from?.date?.toISOString() ?? null,
-          toAt: to.date.toISOString(),
+      await tx.trialReschedule.create({
+        data: {
+          trialEnrollmentId: enr.id,
+          fromSessionId: enr.scheduledSessionId,
+          toSessionId: params.toSessionId,
+          gvBiGoId,
+          reason: params.reason?.trim() || null,
+          changedById: params.actorId,
+          changedByName: await actorName(params.actorId, tx),
+          centerId: enr.trialClass.centerId,
+          orgUnitId: enr.trialClass.orgUnitId,
         },
-        // dedupeKey phải mang MỐC DỜI, không chỉ buổi đích. Khoá theo đích thì dãy
-        // A→B→A→B sinh trùng khoá ở lần thứ ba; `DomainEvent.dedupeKey` là @unique nên
-        // publishEvent ăn P2002 — mà lỗi đó nổ TRONG transaction này, Postgres huỷ cả
-        // transaction, cú `trialEnrollment.update` ngay trên bị rollback và quản lý nhận
-        // một thông báo lỗi khó hiểu cho một thao tác hoàn toàn hợp lệ. Nói cách khác:
-        // học viên vĩnh viễn không dời về được buổi đã từng ở.
-        { tx, dedupeKey: `trial.schedule_changed:${enr.id}:${to.id}:${movedAt.getTime()}` },
-      );
+      });
 
       await writeAudit({
         actor: { id: params.actorId, name: await actorName(params.actorId, tx) },
         module: "trial",
         entityType: "TrialEnrollment",
         entityId: enr.id,
-        action: "RESCHEDULE",
-        oldValues: {
-          scheduledSessionId: enr.scheduledSessionId,
-          at: from ? `${from.date.toISOString().slice(0, 10)} ${from.startTime}` : null,
-        },
-        newValues: {
-          scheduledSessionId: to.id,
-          at: `${to.date.toISOString().slice(0, 10)} ${to.startTime}`,
-          reason: params.reason,
-          leadChildId: enr.leadChildId,
-        },
+        action: "UPDATE",
+        oldValues: { scheduledSessionId: enr.scheduledSessionId, gvPhanCongId: gvBiGoId },
+        newValues: { scheduledSessionId: params.toSessionId, gvPhanCongId: null },
+        orgUnitId: enr.trialClass.centerId,
         tx,
       });
 
-      return { ok: true };
+      return { ok: true, gvBiGoId };
     });
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : "Lỗi dời lịch học thử" };
+    return { ok: false, error: e instanceof Error ? e.message : "Lỗi dời lịch" };
   }
+}
+
+/**
+ * Người được ĐỀ XUẤT hoặc PHÂN CÔNG cho một ca phải THẬT SỰ là giáo viên đang hoạt động.
+ *
+ * ⚠️ Trước bản vá này, hai hàm dưới chỉ `findUnique` kiểm TỒN TẠI, nên gọi thẳng action
+ * gán được tài khoản phụ huynh hoặc kế toán làm giáo viên của ca. Đường gán ở cấp LỚP
+ * vốn đã kiểm (`teacherCenterAssignmentError`), chỉ đường theo CA là hở.
+ *
+ * Tính cả người giữ TEACHER ở vị trí PHỤ (`roles[]`), giống mọi nơi khác trong repo —
+ * quản lý cơ sở kiêm dạy là ca có thật.
+ */
+async function laGiaoVienHopLe(userId: string): Promise<boolean> {
+  const u = await db.user.findUnique({
+    where: { id: userId },
+    select: { isActive: true, deletedAt: true, role: true, roles: true },
+  });
+  if (!u || !u.isActive || u.deletedAt) return false;
+  return u.role === "TEACHER" || u.roles.includes("TEACHER");
+}
+
+const KHONG_PHAI_GV = "Người được chọn không phải giáo viên đang hoạt động" as const;
+
+/**
+ * Sale ĐỀ XUẤT giáo viên cho một ca. Chỉ ghi được khi Đào tạo CHƯA chốt — sau khi
+ * `gvPhanCongId` có giá trị thì Sale không sửa nữa (chốt câu 1).
+ */
+export async function proposeTrialTeacher(params: {
+  trialEnrollmentId: string;
+  gvDeXuatId: string | null;
+  actorId: string | null;
+}): Promise<{ ok: boolean; error?: string }> {
+  const enr = await db.trialEnrollment.findUnique({
+    where: { id: params.trialEnrollmentId },
+    select: { id: true, status: true, gvPhanCongId: true },
+  });
+  if (!enr) return { ok: false, error: "Không tìm thấy ca trải nghiệm" };
+  const luat = saleDuocDeXuat({ status: enr.status, gvPhanCongId: enr.gvPhanCongId });
+  if (!luat.ok) return { ok: false, error: luat.error };
+  if (params.gvDeXuatId && !(await laGiaoVienHopLe(params.gvDeXuatId))) {
+    return { ok: false, error: KHONG_PHAI_GV };
+  }
+  await db.trialEnrollment.update({
+    where: { id: enr.id },
+    data: { gvDeXuatId: params.gvDeXuatId },
+  });
+  return { ok: true };
+}
+
+/**
+ * Đào tạo PHÂN CÔNG giáo viên cho một ca (duyệt đề xuất của Sale hoặc chỉ định người
+ * khác). Ghi đè được, vì đây là quyền quyết định cuối.
+ */
+export async function assignTrialCaseTeacher(params: {
+  trialEnrollmentId: string;
+  gvPhanCongId: string | null;
+  actorId: string | null;
+}): Promise<{ ok: boolean; error?: string; daDoi?: boolean }> {
+  const enr = await db.trialEnrollment.findUnique({
+    where: { id: params.trialEnrollmentId },
+    select: { id: true, status: true, gvPhanCongId: true },
+  });
+  if (!enr) return { ok: false, error: "Không tìm thấy ca trải nghiệm" };
+  if (enr.status !== "ACTIVE") return { ok: false, error: "Ca này đã kết thúc" };
+  if (params.gvPhanCongId && !(await laGiaoVienHopLe(params.gvPhanCongId))) {
+    return { ok: false, error: KHONG_PHAI_GV };
+  }
+  await db.trialEnrollment.update({
+    where: { id: enr.id },
+    data: { gvPhanCongId: params.gvPhanCongId },
+  });
+  return { ok: true, daDoi: enr.gvPhanCongId !== params.gvPhanCongId };
 }

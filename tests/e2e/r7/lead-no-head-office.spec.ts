@@ -66,7 +66,7 @@ test.describe("[HO-LEAD] Hội sở không nhận lead", () => {
     const landed = new Set<string | null>();
     for (let i = 0; i < 6; i++) {
       const lead = await db.lead.create({
-        data: { parentName: `PH ${i}`, phone: `090${uniq()}`.slice(0, 11), source: "web", status: "NEW" },
+        data: { parentName: `PH ${i}`, phone: `090${uniq()}`.slice(0, 11), source: "web", status: "MOI" },
       });
       const res = await autoAssignNewLead(lead.id, actorStub);
       expect(res.ok).toBe(true);
@@ -83,7 +83,7 @@ test.describe("[HO-LEAD] Hội sở không nhận lead", () => {
     // không âm thầm chuyển cơ sở dưới chân họ.
     const { ho } = await seedTree();
     const lead = await db.lead.create({
-      data: { parentName: "PH cũ", phone: `0912${uniq()}`.slice(0, 11), source: "web", status: "NEW", centerId: ho },
+      data: { parentName: "PH cũ", phone: `0912${uniq()}`.slice(0, 11), source: "web", status: "MOI", centerId: ho },
     });
 
     await autoAssignNewLead(lead.id, actorStub);

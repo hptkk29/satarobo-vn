@@ -357,9 +357,12 @@ export async function updateStudent(id: string, formData: FormData): Promise<Act
   if (syncedLeadIds.length > 0) {
     revalidatePath("/leads");
     for (const leadId of syncedLeadIds) revalidatePath(`/leads/${leadId}`);
-    // Màn học thử/lớp trải nghiệm đọc LeadChild.fullName.
-    revalidatePath("/trial-classes");
-    revalidatePath("/hoc-thu");
+    // Màn Lớp Trial đọc LeadChild.fullName.
+    // GĐ6 — gỡ luôn `revalidatePath("/hoc-thu")`: route đó KHÔNG TỒN TẠI, là rác của
+    // một lần đổi tên trước. revalidatePath sai đường là no-op câm, không lỗi build,
+    // không lỗi chạy — nên nó nằm đây bao lâu cũng không ai phát hiện.
+    revalidatePath("/lop-trial");
+    revalidatePath("/lop-trial/lich-hen");
   }
   redirect("/students");
 }
