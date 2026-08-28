@@ -11,7 +11,8 @@ import { CONVERTED_STATUSES } from "@/lib/leads/status";
 export type TrialClassRec = {
   id: string;
   centerId: string;
-  capacity: number;
+  /** `null` = lớp KHÔNG giới hạn sĩ số (từ 28/08). Cộng dồn coi như 0 — xem `totalCapacity`. */
+  capacity: number | null;
   status: string;
   sessionCount: number;
 };

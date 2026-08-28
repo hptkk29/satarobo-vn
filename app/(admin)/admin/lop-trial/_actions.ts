@@ -157,16 +157,10 @@ export async function createLopTrialClassAction(
 
   const res = await createTrialClass({
     centerId: data.centerId,
-    name: data.name,
+    courseId: data.courseId ?? null,
     configId: null,
-    roomId: data.roomId ?? null,
-    teacherId: data.teacherId ?? null,
     // QĐ-R2-1 — lớp là slot tái sử dụng, KHÔNG gắn ngày khai giảng. Buổi tạo ad-hoc.
     startDate: null,
-    sessionCount: data.sessionCount,
-    startTime: data.startTime,
-    endTime: data.endTime,
-    capacity: data.capacity,
     actorId: ctx.session.user.id,
   });
   if (!res?.ok) return { ok: false, error: res?.error ?? "Tạo lớp thất bại" };

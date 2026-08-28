@@ -5,9 +5,7 @@ import { ChevronLeft } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { checkPermission } from "@/lib/auth/check-permission";
 import { resolveActor } from "@/lib/auth/actor";
-import { getAssignableTeachers } from "@/lib/teachers/assignable";
-import { getSetting } from "@/lib/settings/service";
-import { layCauHinh, layLuaChonTaoLop } from "../_lib/queries";
+import { layLuaChonTaoLop } from "../_lib/queries";
 import { CreateForm } from "../_components/create-form";
 
 export const dynamic = "force-dynamic";
@@ -19,19 +17,9 @@ export default async function TaoLopTrialPage() {
   if (!(await checkPermission("trials:manage"))) redirect("/lop-trial");
 
   const actor = await resolveActor(session.user.id);
-  const [{ centers, rooms }, teachers, config, maxSessions] = await Promise.all([
-    layLuaChonTaoLop(actor),
-    // Lúc tạo lớp chưa biết cơ sở nào được chọn nên nạp toàn bộ GV khả dụng; ràng buộc
-    // thật nằm ở server action. Đây là hành vi của màn cũ, giữ nguyên để nghiệm thu
-    // không lệch — lệch với trang chi tiết (lọc theo cơ sở) là nợ đã biết, xử lý riêng.
-    getAssignableTeachers({}),
-    // Số buổi mặc định LẤY TỪ CẤU HÌNH chương trình, không hardcode ở form: hardcode là
-    // cách giá trị mặc định lặng lẽ đi ngược chốt nghiệp vụ sau mỗi lần đổi cấu hình.
-    layCauHinh(actor),
-    // Trần đọc ở cấp GLOBAL (không truyền orgUnitId) vì cơ sở còn chưa được chọn khi
-    // form mở ra. Cơ sở có override thấp hơn thì server action vẫn là chốt chặn cuối.
-    getSetting("crm.trialMaxSessions"),
-  ]);
+  // 28/08 — form chỉ còn CƠ SỞ + KHOÁ. Không nạp giáo viên/phòng/cấu hình số buổi nữa:
+  // ba thứ đó chuyển xuống khối "Thêm buổi học" ở trang chi tiết lớp.
+  const { centers, courses } = await layLuaChonTaoLop(actor);
 
   return (
     <div className="space-y-4">
@@ -48,13 +36,7 @@ export default async function TaoLopTrialPage() {
         thêm buổi, vì lớp chưa có buổi thì không xếp được học viên.
       </p>
 
-      <CreateForm
-        centers={centers}
-        rooms={rooms}
-        teachers={teachers.map((t) => ({ id: t.id, name: t.name ?? "(không tên)" }))}
-        defaultSessionCount={config?.sessionCount ?? maxSessions}
-        maxSessions={maxSessions}
-      />
+      <CreateForm centers={centers} courses={courses} />
     </div>
   );
 }

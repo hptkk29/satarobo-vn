@@ -30,7 +30,8 @@ type TrialClass = {
   id: string;
   name: string;
   code: string;
-  capacity: number;
+  /** `null` = KHÔNG giới hạn sĩ số (từ 28/08) — hiện "n" thay vì "n/cap". */
+  capacity: number | null;
   used: number;
   /**
    * ĐÃ THÔI DÙNG để chọn buổi (28/08 — xếp con là học CẢ LỚP). Giữ lại vì trang lead
@@ -172,7 +173,8 @@ export function TrialEnrollWidget({
                       )}
                     {openClasses.map((cl) => (
                       <option key={cl.id} value={cl.id}>
-                        {cl.name} ({cl.used}/{cl.capacity})
+                        {cl.name} ({cl.used}
+                        {cl.capacity === null ? "" : `/${cl.capacity}`})
                       </option>
                     ))}
                   </select>

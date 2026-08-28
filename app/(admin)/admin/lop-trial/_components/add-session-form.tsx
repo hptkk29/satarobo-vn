@@ -6,22 +6,33 @@
 // sinh buổi lúc tạo lớp: chưa thêm buổi ở đây thì không xếp được học viên và giáo
 // viên cũng không thấy gì trong lịch.
 
-import { useState, useTransition } from "react";
+import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { CalendarPlus } from "lucide-react";
 
 import { addLopTrialSessionAction } from "../_actions";
-import type { Option } from "../_lib/types";
+import { trungKhungGio } from "@/lib/trial/lop-moi";
+import type { BuoiBan } from "../_lib/queries";
+import type { Option, RoomOption } from "../_lib/types";
 
 export function AddSessionForm({
   trialClassId,
   teachers,
+  rooms,
+  busyByTeacher,
   defaultStartTime,
   defaultEndTime,
 }: {
   trialClassId: string;
   teachers: Option[];
+  rooms: RoomOption[];
+  /**
+   * teacherId → các buổi người đó đã nhận. Dùng để ĐÁNH DẤU, KHÔNG lọc (chốt 28/08:
+   * "hiện tất cả nhưng đánh dấu"). Lọc cứng là những hôm phải xếp gấp thì không còn
+   * ai để chọn.
+   */
+  busyByTeacher: Record<string, BuoiBan[]>;
   defaultStartTime: string;
   defaultEndTime: string;
 }) {
@@ -33,6 +44,28 @@ export function AddSessionForm({
   const [endTime, setEndTime] = useState(defaultEndTime);
   /** "" = không chọn → buổi kế thừa GV phụ trách lớp (xem `onSubmit`). */
   const [teacherId, setTeacherId] = useState("");
+  const [roomId, setRoomId] = useState("");
+
+  /**
+   * Buổi đang vướng của từng giáo viên, tính lại mỗi khi đổi ngày/giờ.
+   *
+   * Chỉ tính khi đã có ĐỦ ngày + hai mốc giờ: thiếu một trong ba thì mọi so sánh đều
+   * vô nghĩa, và hiện cảnh báo dựa trên giờ mặc định là nói sai về một buổi người dùng
+   * chưa đặt xong.
+   */
+  const trungTheoGv = useMemo(() => {
+    const out: Record<string, BuoiBan> = {};
+    if (!date || !startTime || !endTime) return out;
+    for (const [gv, buoi] of Object.entries(busyByTeacher)) {
+      const cham = buoi.find(
+        (b) => b.date === date && trungKhungGio(b, { startTime, endTime }),
+      );
+      if (cham) out[gv] = cham;
+    }
+    return out;
+  }, [busyByTeacher, date, startTime, endTime]);
+
+  const gvDangChonBiTrung = teacherId ? trungTheoGv[teacherId] : undefined;
 
   function onSubmit() {
     if (!date) {
@@ -49,6 +82,7 @@ export function AddSessionForm({
         // nhau: undefined = kế thừa GV của lớp, null = cố ý để buổi không có GV.
         // Gửi nhầm null là buổi ra đời trắng giáo viên mà không ai báo lỗi.
         teacherId: teacherId || undefined,
+        roomId: roomId || undefined,
       });
       if (res.ok) {
         toast.success("Đã thêm buổi");
@@ -104,6 +138,24 @@ export function AddSessionForm({
         </label>
 
         <label className="flex flex-col gap-1 text-xs text-muted-foreground">
+          Phòng
+          <select
+            value={roomId}
+            onChange={(e) => setRoomId(e.target.value)}
+            disabled={pending}
+            className="rounded-lg border border-border bg-card px-2 py-1.5 text-sm text-foreground disabled:opacity-50"
+          >
+            <option value="">— chưa xếp phòng —</option>
+            {rooms.map((r) => (
+              <option key={r.id} value={r.id}>
+                {r.name}
+                {r.centerId === null ? " (dùng chung)" : ""}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <label className="flex flex-col gap-1 text-xs text-muted-foreground">
           Giáo viên
           <select
             value={teacherId}
@@ -111,10 +163,11 @@ export function AddSessionForm({
             disabled={pending}
             className="rounded-lg border border-border bg-card px-2 py-1.5 text-sm text-foreground disabled:opacity-50"
           >
-            <option value="">— theo giáo viên của lớp —</option>
+            <option value="">— chưa xếp giáo viên —</option>
             {teachers.map((t) => (
               <option key={t.id} value={t.id}>
                 {t.name}
+                {trungTheoGv[t.id] ? " · ĐANG BẬN" : ""}
               </option>
             ))}
           </select>
@@ -129,6 +182,22 @@ export function AddSessionForm({
           {pending ? "Đang thêm…" : "Thêm buổi"}
         </button>
       </div>
+
+      {/* Cảnh báo, KHÔNG chặn: người xếp lịch có thể biết điều mà hệ thống không biết
+          (đổi buổi bên kia, dạy ghép…). Chặn cứng ở đây là bắt họ đi đường vòng. */}
+      {gvDangChonBiTrung && (
+        <p className="mt-2 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">
+          Giáo viên này đã có buổi <strong>{gvDangChonBiTrung.label}</strong>{" "}
+          {gvDangChonBiTrung.startTime}–{gvDangChonBiTrung.endTime} cùng ngày. Vẫn thêm
+          được nếu bạn đã sắp xếp khác.
+        </p>
+      )}
+
+      {/* Giới hạn đã biết, nói ra để không ai tin nhầm là đã phủ hết lịch. */}
+      <p className="mt-2 text-[11px] text-muted-foreground">
+        Dấu &quot;đang bận&quot; chỉ đối chiếu buổi của <strong>lớp trải nghiệm</strong>;
+        chưa tính buổi lớp chính.
+      </p>
     </div>
   );
 }

@@ -245,9 +245,20 @@ export async function getTeacherTrialRoster(
       scheduledSessionId: null,
       status: { in: ["ACTIVE", "COMPLETED"] },
       // GĐ3 — thêm nhánh "được phân công theo ca", cùng lý do như ở truy vấn buổi.
+      //
+      // 28/08 — thêm nhánh THỨ BA: lớp có BUỔI do người này dạy. Từ khi giáo viên rời
+      // khỏi cấp lớp (chọn ở từng buổi), nhánh `trialClass.teacherId` gần như luôn rỗng
+      // với lớp mới ⇒ ghi danh "học cả lớp" không nối được về giáo viên nào, và em đó
+      // biến mất khỏi lịch dạy dù buổi vẫn là của họ.
       OR: [
         { trialClass: { teacherId, status: { not: "CANCELLED" } } },
         { gvPhanCongId: teacherId, trialClass: { status: { not: "CANCELLED" } } },
+        {
+          trialClass: {
+            status: { not: "CANCELLED" },
+            sessions: { some: { teacherId, status: { not: "CANCELLED" } } },
+          },
+        },
       ],
     },
     select: {

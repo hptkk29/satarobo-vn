@@ -63,7 +63,6 @@ export function ClassTable({
               <tr>
                 <th className="px-4 py-3 font-semibold">Lớp</th>
                 <th className="px-4 py-3 font-semibold">Buổi kế tiếp</th>
-                <th className="px-4 py-3 font-semibold">Giờ</th>
                 <th className="px-4 py-3 font-semibold">Sĩ số</th>
                 <th className="px-4 py-3 font-semibold">Số buổi</th>
                 <th className="px-4 py-3 font-semibold">Trạng thái</th>
@@ -74,7 +73,7 @@ export function ClassTable({
               {rows.length === 0 && (
                 <tr>
                   <td
-                    colSpan={7}
+                    colSpan={6}
                     className="px-4 py-8 text-center text-muted-foreground"
                   >
                     Chưa có lớp trải nghiệm nào.
@@ -82,7 +81,10 @@ export function ClassTable({
                 </tr>
               )}
               {rows.map((r) => {
-                const full = r.activeUsed >= r.capacity;
+                // 28/08 — `capacity === null` là lớp KHÔNG giới hạn sĩ số, không
+                // phải lớp sức chứa 0. So `>= null` trong JS ra `false` một cách tình
+                // cờ đúng, nhưng dựa vào đó là để bẫy lại cho người sau.
+                const full = r.capacity !== null && r.activeUsed >= r.capacity;
                 const dongRoi = TRANG_THAI_DA_DONG.has(r.status);
                 return (
                   <tr key={r.id} className="hover:bg-muted">
@@ -108,9 +110,6 @@ export function ClassTable({
                         </span>
                       )}
                     </td>
-                    <td className="whitespace-nowrap px-4 py-3 text-foreground">
-                      {r.startTime}–{r.endTime}
-                    </td>
                     <td className="whitespace-nowrap px-4 py-3">
                       <span
                         className={
@@ -119,7 +118,8 @@ export function ClassTable({
                             : "text-foreground"
                         }
                       >
-                        {r.activeUsed}/{r.capacity}
+                        {r.activeUsed}
+                        {r.capacity === null ? "" : `/${r.capacity}`}
                       </span>
                     </td>
                     <td className="whitespace-nowrap px-4 py-3 text-foreground">
