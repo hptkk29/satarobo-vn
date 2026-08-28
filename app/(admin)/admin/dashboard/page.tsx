@@ -243,7 +243,7 @@ export default async function DashboardPage({
           })}
         </nav>
 
-        {activeTab === "tai-chinh" && <TabTaiChinh filters={scope.filters} />}
+        {activeTab === "tai-chinh" && <TabTaiChinh actor={actor} filters={scope.filters} />}
         {activeTab === "kinh-doanh" && <TabKinhDoanh actor={actor} filters={scope.filters} />}
         {activeTab === "chi-phi-marketing" && <TabChiPhiMarketing filters={scope.filters} />}
         {activeTab === "tuong-tac-kh" && <TabTuongTacKh filters={scope.filters} />}

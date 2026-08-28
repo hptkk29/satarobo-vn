@@ -111,6 +111,9 @@ export const ADMIN_ROUTE_SEGMENTS: ReadonlySet<string> = new Set<string>([
   "cham-cong",
   "cham-soc-hv",
   "charts-test",
+  // B-03/B-05 — sổ chi phí (nhập tay + duyệt + import). Quên khai ở đây là trang tồn
+  // tại nhưng host-routing không nhận ra nó là trang admin.
+  "chi-phi",
   "chuyen-lop",
   "class-groups",
   "classes",

@@ -259,6 +259,9 @@ const NAV_GROUPS: NavGroup[] = [
       { label: "Công nợ", href: "/cong-no", icon: Wallet, perm: ["payments:manage", "payments:view"] },
       // Đối soát tiền về từ SePay — nơi kiểm "máy đã tự xác nhận đúng chưa".
       { label: "Biến động số dư", href: "/bien-dong-so-du", icon: Wallet, perm: ["payments:manage", "payments:view"] },
+      // B-03/B-05 — SỔ CHI. Cố ý gác bằng `costs:*` chứ không mượn `payments:*`: xem
+      // được sổ THU không đương nhiên xem được sổ CHI (lương, thuê mặt bằng).
+      { label: "Sổ chi phí", href: "/chi-phi", icon: Wallet, perm: ["costs:view"] },
       { label: "Hoàn tiền", href: "/hoan-tien", icon: Undo2, perm: ["payments:manage"] },
       { label: "Phương thức TT", href: "/payment-methods", icon: CreditCard, perm: ["payments:manage"] },
       { label: "Hoa hồng", href: "/crm/commission", icon: Coins, perm: ["payments:manage"] },
