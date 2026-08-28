@@ -17,8 +17,8 @@ export type LeadReportRecord = {
   convertedAt?: Date | null;
   /** Bậc lead ĐANG Ở NGAY TRƯỚC khi rụng (`Lead.droppedAtStage`). */
   droppedAtStage?: string | null;
-  /** Lý do rụng do người bấm ghi (`Lead.dropReason`). */
-  dropReason?: string | null;
+  /** Lý do rụng do người bấm ghi (`Lead.lostNote`). */
+  lostNote?: string | null;
   /** Sale đang phụ trách (`Lead.assignedToId`). null = chưa chia cho ai. */
   assignedToId?: string | null;
 };
@@ -358,11 +358,16 @@ export type DropStageStat = {
 };
 
 /**
- * "Lead rụng ở BẬC NÀO, và vì sao" — người đọc duy nhất của `Lead.droppedAtStage`
- * và `Lead.dropReason`.
+ * "Lead rụng ở BẬC NÀO, và vì sao" — người đọc duy nhất của `Lead.droppedAtStage`,
+ * đọc lý do ở `Lead.lostNote`.
  *
- * ⚠️ Hai cột đó ra đời ở GĐ1 (migration 20260825120000) và tới 26/08 KHÔNG màn nào,
- * báo cáo nào đọc — ghi vào rồi bỏ đó. Hàm này là chỗ dùng chúng.
+ * ⚠️ `droppedAtStage` ra đời ở GĐ1 (migration 20260825120000) và tới 26/08 KHÔNG màn
+ * nào, báo cáo nào đọc — ghi vào rồi bỏ đó. Hàm này là chỗ dùng nó.
+ *
+ * 27/08 — lý do rụng đọc ở `lostNote` (cột dùng chung với đường đánh dấu rớt theo
+ * TỪNG CON), không còn `dropReason`. Hệ quả cố ý: một phiếu có hai con rớt vì hai lý
+ * do thì ở đây chỉ thấy lý do ghi SAU CÙNG — lý do từng con tra ở dòng thời gian và
+ * AuditLog, đúng như đánh đổi đã chấp nhận ở C-06.
  *
  * Chỉ đếm lead THẬT SỰ có bậc rụng: `droppedAtStage` chỉ được ghi khi lead vào
  * `LEAD_DROP_STATUSES`, nên lead còn trong phễu không lọt vào đây.
@@ -375,7 +380,7 @@ export function groupByDropStage(records: LeadReportRecord[]): DropStageStat[] {
     const o =
       theoBac.get(bac) ?? { count: 0, lyDo: new Map<string, number>(), thieu: 0 };
     o.count++;
-    const ly = r.dropReason?.trim();
+    const ly = r.lostNote?.trim();
     if (ly) o.lyDo.set(ly, (o.lyDo.get(ly) ?? 0) + 1);
     else o.thieu++;
     theoBac.set(bac, o);

@@ -111,6 +111,15 @@ export async function setLeadStatus(
 
   const now = new Date();
   const roi = LEAD_DROP_STATUSES.includes(to);
+  // Lý do rớt: CHỈ ghi khi lượt này thật sự mang lý do.
+  //
+  // 27/08 — gộp hai cột lý do rớt về `Lead.lostNote` (bỏ `Lead.dropReason`). Bản cũ
+  // ghi `dropReason: params.reason ?? null`, tức lượt không kèm lý do thì xoá trắng
+  // cột. Với `dropReason` việc đó vô hại vì không ai khác ghi vào đó. `lostNote` thì
+  // KHÁC: `markLeadChildLostAction` dùng chính cột này để giữ lý do rớt của TỪNG CON.
+  // Bê nguyên nếp cũ sang là mỗi lượt đổi trạng thái không kèm lý do — điểm danh học
+  // thử, nhập tệp, cron — sẽ xoá lý do những đứa con đã đánh dấu trước đó.
+  const lyDoRoi = roi ? (params.reason?.trim() || null) : null;
 
   await tx.lead.update({
     where: { id: leadId },
@@ -119,7 +128,8 @@ export async function setLeadStatus(
       statusChangedAt: now,
       // Chỉ ghi bậc rơi khi ĐANG rơi. Lead quay lại phễu thì giữ nguyên bậc rơi cũ
       // để còn đếm được "đã từng rơi ở đâu"; xoá đi là mất số liệu cứu lead.
-      ...(roi ? { droppedAtStage: from, dropReason: params.reason ?? null } : {}),
+      ...(roi ? { droppedAtStage: from } : {}),
+      ...(lyDoRoi ? { lostNote: lyDoRoi, lostAt: now } : {}),
     },
   });
 

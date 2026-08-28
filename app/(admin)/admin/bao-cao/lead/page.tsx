@@ -64,7 +64,7 @@ async function computeLeadReport(actor: Actor, filters: ReportFilters) {
         convertedAt: true,
         // Sổ rụng (GĐ1) — nguồn cho khối "Lead rụng ở bậc nào" bên dưới.
         droppedAtStage: true,
-        dropReason: true,
+        lostNote: true,
         // Tỷ lệ chốt theo từng sale (27/08). Chỉ lấy id ở đây; tên tra sau, một lượt.
         assignedToId: true,
       },
@@ -92,7 +92,7 @@ async function computeLeadReport(actor: Actor, filters: ReportFilters) {
     createdAt: r.createdAt,
     convertedAt: r.convertedAt,
     droppedAtStage: r.droppedAtStage,
-    dropReason: r.dropReason,
+    lostNote: r.lostNote,
     assignedToId: r.assignedToId,
   }));
   return buildLeadReport(records, centerNames, saleNames);
@@ -312,7 +312,7 @@ export default async function LeadReportPage({
         </PhanTrangBang>
       </Card>
 
-      {/* Rụng ở bậc nào — người đọc DUY NHẤT của Lead.droppedAtStage + dropReason.
+      {/* Rụng ở bậc nào — người đọc DUY NHẤT của Lead.droppedAtStage + lostNote.
           Hai cột đó có từ GĐ1 nhưng tới 26/08 không màn nào đọc. */}
       <Card title="Lead rụng ở bậc nào">
         {report.byDropStage.length === 0 ? (
