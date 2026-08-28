@@ -103,6 +103,16 @@ async function main(): Promise<void> {
     return;
   }
 
+  // Cột `orgUnitId` chạy SONG SONG `centerId` (luật cứng #3). Bình thường
+  // `lib/org/dual-write.ts` cắm trong `lib/db.ts` tự điền hộ, NHƯNG script này dùng
+  // `new PrismaClient()` trần nên KHÔNG đi qua hook đó — phải tự tra và tự set, đúng
+  // cảnh báo "đường ghi không qua nó là việc của cron đối soát đêm".
+  const orgUnits = await db.orgUnit.findMany({
+    where: { centerId: { not: null } },
+    select: { id: true, centerId: true },
+  });
+  const orgUnitTheoCs = new Map(orgUnits.map((o) => [o.centerId!, o.id]));
+
   // Phòng và giáo viên theo cơ sở, để gán cho MỘT PHẦN các hẹn.
   const [rooms, teachers] = await Promise.all([
     db.room.findMany({ select: { id: true, centerId: true } }),
@@ -150,11 +160,18 @@ async function main(): Promise<void> {
       where: { id },
       // KHÔNG đụng `classId`: cột đó là kết quả của thao tác "xếp con vào lớp trải
       // nghiệm" trên màn, seed gán bừa là xoá mất đúng việc cần nghiệm thu.
-      update: { scheduledAt, status, roomId, teacherId },
+      update: {
+        scheduledAt,
+        status,
+        roomId,
+        teacherId,
+        orgUnitId: orgUnitTheoCs.get(lead.centerId!) ?? null,
+      },
       create: {
         id,
         leadId: lead.id,
         centerId: lead.centerId,
+        orgUnitId: orgUnitTheoCs.get(lead.centerId!) ?? null,
         scheduledAt,
         status,
         roomId,
