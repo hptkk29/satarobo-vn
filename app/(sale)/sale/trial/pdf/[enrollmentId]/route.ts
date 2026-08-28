@@ -49,8 +49,6 @@ export async function GET(
 
   return trialEvalPdfResponse({
     studentName: ctx.studentName,
-    courseName: ctx.courseName,
-    trialClassName: ctx.trialClassName,
     existing: {
       ...ctx.existing,
       // Prisma trả `JsonValue`; hình dạng thật là criterionId → điểm, do

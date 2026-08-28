@@ -170,8 +170,8 @@ const s = StyleSheet.create({
 
 export interface TrialEvalPdfData {
   studentName: string;
-  courseName: string | null;
-  trialClassName: string;
+  // `courseName` / `trialClassName` ĐÃ GỠ 27/08 — phiếu không in hai ô đó nữa. Giữ lại
+  // trong kiểu này là mời người sau truyền vào rồi tưởng nó hiện lên.
   scores: Record<string, number>;
   totalScore: number;
   rank: string;
@@ -234,10 +234,10 @@ export function TrialEvalPdf({ data }: { data: TrialEvalPdfData }) {
           <Text style={s.titleSub}>Kết quả buổi học trải nghiệm</Text>
         </View>
 
+        {/* 27/08 — chủ dự án chốt bỏ "Khoá học quan tâm" và "Lớp trải nghiệm";
+            phiếu chỉ còn TÊN học sinh và NGÀY đánh giá. */}
         <View style={s.infoGrid}>
           <InfoCell label="Họ và tên học sinh" value={data.studentName} />
-          <InfoCell label="Khoá học quan tâm" value={data.courseName ?? "—"} />
-          <InfoCell label="Lớp trải nghiệm" value={data.trialClassName} />
           <InfoCell label="Ngày đánh giá" value={data.dateLabel} />
         </View>
 
