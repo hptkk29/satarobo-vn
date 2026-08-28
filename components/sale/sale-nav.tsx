@@ -24,12 +24,11 @@
 // `[S-10] nav khai đủ 8 nhóm, ĐÚNG TÊN và ĐÚNG THỨ TỰ` đọc thẳng tài liệu đó và
 // so từng chữ, nên tài liệu đổi thì file này đỏ.
 //
-// ⚠️ SỰ THẬT PHẢI NÓI RA: tài liệu khai 28 tab, hôm nay repo mới có 5 trang vào
-// được từ menu. Nên 3 trong 8 nhóm (Ghi danh & Thu phí · Chăm sóc & Tái tục ·
-// Kinh doanh của tôi) đang RỖNG và KHÔNG được vẽ ra. Khai sẵn nhóm rỗng là có
-// chủ đích — nó là bản đồ để người dựng trang sau bỏ tab vào đúng chỗ thay vì
-// đẻ nhóm thứ chín. Nhưng VẼ một nhãn nhóm rồi bên dưới trống không thì người
-// dùng tưởng mình thiếu quyền, nên nhóm rỗng bị lọc trước khi render.
+// ⚠️ CẬP NHẬT 28/08: ba nhóm từng rỗng (Ghi danh & Thu phí · Chăm sóc & Tái tục ·
+// Kinh doanh của tôi) NAY ĐÃ CÓ MỤC — đợt đưa 32 màn của khu quản trị về đây lấp
+// chúng. Cơ chế "nhóm rỗng bị lọc trước khi render" VẪN GIỮ, và vẫn cần: nhóm nào
+// mà người dùng không có quyền với mục nào cũng biến mất theo. Vẽ một nhãn nhóm
+// rồi bên dưới trống không thì người dùng tưởng mình thiếu quyền.
 //
 // ⚠️ "Ghi danh & Thu phí" rỗng KHÔNG có nghĩa là chưa làm được việc đó:
 // `/sale/chot-don/[leadId]` và `/sale/ghi-danh/[leadId]` đã chạy, chỉ là chúng
@@ -74,7 +73,6 @@ import {
   HeartHandshake,
   Hourglass,
   Image as ImageIcon,
-  Inbox,
   Layers,
   LayoutDashboard,
   LayoutList,
@@ -287,12 +285,15 @@ const NHOM: NavGroup[] = [
         icon: Mail,
         perm: PAGE_GATES["/sale/tin-nhan"],
       },
-      {
-        label: "Yêu cầu phụ huynh",
-        href: "/sale/yeu-cau-ph",
-        icon: Inbox,
-        perm: PAGE_GATES["/sale/yeu-cau-ph"],
-      },
+      // "Yêu cầu phụ huynh" GỠ KHỎI SITE SALE (chủ dự án chốt 28/08).
+      // Lý do kỹ thuật đằng sau: bộ thẻ lọc loại/trạng thái của màn đó sinh liên
+      // kết bằng `buildHref()` trỏ về `/parent-requests?...`, tức đường của khu
+      // quản trị. Trên host Sale nó thành `/sale/parent-requests` — không tồn tại
+      // ⇒ **toàn bộ thẻ lọc chết**. Muốn giữ thì phải hoặc đặt tên đường Sale trùng
+      // `parent-requests`, hoặc sửa trang gốc nhận tham số đường-cơ-sở như khung
+      // chat đã làm; cả hai đụng trang dùng chung với admin. Gỡ là lựa chọn của
+      // chủ dự án. Cổng `/sale/yeu-cau-ph` và tệp trang cũng đã gỡ theo — để lại
+      // một trong ba mảnh là đẻ màn mồ côi mà bài kiểm nav sẽ bắt.
       {
         label: "Chăm sóc học viên",
         href: "/sale/cham-soc-hv",

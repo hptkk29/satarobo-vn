@@ -218,7 +218,6 @@ export const PAGE_GATES = {
   "/sale/anh-lop-hoc": ["media:view", "media:upload"],
   "/sale/hoc-bu": ["parent-requests:manage"],
   "/sale/tin-nhan": ["parent-requests:manage"],
-  "/sale/yeu-cau-ph": ["parent-requests:manage"],
   "/sale/cham-soc-hv": ["parent-requests:manage"],
   "/sale/sinh-nhat": ["students:view-all"],
   // ⚠️ NĂM MÀN CHẤM CÔNG GÁC BẰNG `:checkin`, KHÔNG PHẢI `:view` — đừng "sửa cho
