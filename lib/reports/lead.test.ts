@@ -182,12 +182,12 @@ describe("[R7-17] buildLeadReport tổng hợp", () => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// groupByDropStage — người đọc đầu tiên của Lead.droppedAtStage / dropReason.
+// groupByDropStage — người đọc đầu tiên của Lead.droppedAtStage; lý do đọc ở Lead.lostNote.
 // ─────────────────────────────────────────────────────────────────────────────
 describe("groupByDropStage — lead rụng ở bậc nào, vì sao", () => {
   const rec = (
     droppedAtStage: string | null,
-    dropReason: string | null,
+    lostNote: string | null,
   ): LeadReportRecord => ({
     status: droppedAtStage ? "DA_MAT" : "MOI",
     source: null,
@@ -196,7 +196,7 @@ describe("groupByDropStage — lead rụng ở bậc nào, vì sao", () => {
     createdAt: new Date("2026-08-01T00:00:00Z"),
     convertedAt: null,
     droppedAtStage,
-    dropReason,
+    lostNote,
   });
 
   it("bỏ qua lead CÒN trong phễu (droppedAtStage null)", () => {

@@ -137,7 +137,7 @@ export async function toggleLeadShareAction(
  * `reason` BẮT BUỘC khi chuyển vào một bậc rơi (`LEAD_DROP_STATUSES`). Ép ở đây chứ
  * không ở `setLeadStatus` vì phần lớn đường vào cửa ghi là MÁY chạy (điểm danh học
  * thử, webhook tiền, nhập tệp) — không có ai để hỏi. Chỉ đường người bấm mới hỏi được,
- * và nếu không hỏi thì `Lead.dropReason` vĩnh viễn NULL: báo cáo biết lead rụng ở bậc
+ * và nếu không hỏi thì `Lead.lostNote` vĩnh viễn NULL: báo cáo biết lead rụng ở bậc
  * nào nhưng không bao giờ biết vì sao, tức là biết một nửa thì không hành động được.
  */
 export async function updateLeadStatus(
