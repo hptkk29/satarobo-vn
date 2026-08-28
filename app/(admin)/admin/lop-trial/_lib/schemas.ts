@@ -125,3 +125,32 @@ export const updateBookingSchema = z.object({
 });
 
 export type UpdateBookingInput = z.infer<typeof updateBookingSchema>;
+
+/**
+ * SỬA một buổi đã tạo (28/08/2026): ngày · giờ · phòng · giáo viên.
+ *
+ * `reason` BẮT BUỘC — chủ dự án: "nếu sửa lịch học của buổi thì cần xác nhận và ghi
+ * chú là dời lịch". Lý do không phải để lưu trữ cho đẹp: nó là NỘI DUNG thông báo đẩy
+ * sang giáo viên. Cho phép bỏ trống thì giáo viên nhận một tin "buổi đã đổi" trống
+ * rỗng và phải đi hỏi lại từng người.
+ */
+export const updateSessionSchema = z
+  .object({
+    sessionId: z.string().trim().min(1, "Thiếu buổi học"),
+    date: z.string().regex(YMD, "Ngày buổi học không hợp lệ"),
+    startTime: z.string().regex(HHMM, "Giờ bắt đầu không hợp lệ"),
+    endTime: z.string().regex(HHMM, "Giờ kết thúc không hợp lệ"),
+    roomId: z.string().trim().min(1).nullable().optional(),
+    teacherId: z.string().trim().min(1).nullable().optional(),
+    reason: z.string().trim().min(3, "Ghi rõ lý do dời lịch (ít nhất 3 ký tự)").max(500),
+  })
+  .refine((d) => d.endTime > d.startTime, {
+    message: "Giờ kết thúc phải sau giờ bắt đầu",
+    path: ["endTime"],
+  });
+
+/** HUỶ một buổi. Lý do bắt buộc, và đi thẳng vào thông báo gửi giáo viên. */
+export const cancelSessionSchema = z.object({
+  sessionId: z.string().trim().min(1, "Thiếu buổi học"),
+  reason: z.string().trim().min(3, "Ghi rõ lý do huỷ buổi (ít nhất 3 ký tự)").max(500),
+});

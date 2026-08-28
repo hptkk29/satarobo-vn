@@ -47,8 +47,11 @@ export default async function ChiTietLopTrialPage({
   // layChiTietLop đã lọc theo scopedDb → ngoài cơ sở là 404, không phải "cấm truy cập".
   if (!cls) notFound();
 
-  const [canAssignTeacher, isManager, canAttendance] = await Promise.all([
-    checkPermission("trials:assign-teacher", { centerId: cls.centerId }),
+  // 28/08 — KHÔNG còn kiểm `trials:assign-teacher` ở màn này: ô "Đề xuất GV" và
+  // "Phân công (Đào tạo)" theo từng học viên đã gỡ. Giáo viên nay đặt ở TỪNG BUỔI, và
+  // sửa buổi là quyền quản lý (`trials:manage`). Quyền `trials:assign-teacher` vẫn còn
+  // trong ma trận cho các đường khác — chỉ màn này thôi dùng.
+  const [isManager, canAttendance] = await Promise.all([
     checkPermission("trials:manage", { centerId: cls.centerId }),
     checkPermission("trials:attendance", { centerId: cls.centerId }),
   ]);
@@ -198,10 +201,7 @@ export default async function ChiTietLopTrialPage({
           <RosterList
             trialClassId={cls.id}
             enrollments={cls.enrollments}
-            sessions={cls.sessions}
-            teachers={teacherOptions}
             canManage={isManager}
-            canAssignTeacher={canAssignTeacher}
           />
         </div>
       </section>
@@ -212,6 +212,9 @@ export default async function ChiTietLopTrialPage({
           sessions={cls.sessions}
           enrollments={cls.enrollments}
           canMark={canDiemDanh}
+          canManage={isManager}
+          teachers={teacherOptions}
+          rooms={roomOptions}
         />
       </section>
 

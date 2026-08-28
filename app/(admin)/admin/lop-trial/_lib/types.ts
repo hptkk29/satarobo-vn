@@ -60,6 +60,8 @@ export type SessionRow = {
   status: TrialSessionStatusV2;
   /** 28/08 — giáo viên dạy BUỔI NÀY. Lớp không còn cột giáo viên; đây là nguồn duy nhất. */
   teacherId: string | null;
+  /** Phòng của BUỔI NÀY. */
+  roomId: string | null;
   /** trialEnrollmentId → điểm danh đã lưu. Không có khoá = chưa điểm danh em đó. */
   attendance: Record<string, { status: TrialAttendanceMark; note: string | null }>;
   /**

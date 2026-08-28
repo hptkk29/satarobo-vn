@@ -288,6 +288,7 @@ export async function layChiTietLop(
       endTime: s.endTime,
       status: s.status as SessionRow["status"],
       teacherId: s.teacherId,
+      roomId: s.roomId,
       attendance: Object.fromEntries(
         s.attendances.map((a) => [
           a.trialEnrollmentId,
