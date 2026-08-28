@@ -1,0 +1,73 @@
+name: Quy đổi thang phiếu trải nghiệm 8.0 → 10.0 (PROD)
+
+# =============================================================================
+# Chạy TAY (workflow_dispatch) — `scripts/rescale-trial-rubric-10.ts` lên PROD.
+#
+# VÌ SAO CẦN. `RUBRIC_MAX` đổi 8 → 10 (đợt 28/08). Phiếu PDF in
+# "totalScore / RUBRIC_MAX" và xếp loại tính lại LÚC HIỂN THỊ, nên phiếu chấm TRƯỚC
+# lần đổi sai theo hai hướng cùng lúc: em đạt tuyệt đối in ra "8.0 / 10.0", và ngưỡng
+# mới (8/6/4) đọc con số cũ thành xếp loại thấp hơn thực tế. Không có lỗi nào nổ —
+# chỉ là phụ huynh cầm tờ phiếu nói sai về con mình.
+#
+# MẶC ĐỊNH LÀ XEM TRƯỚC. `chi_xem_truoc = true` ⇒ script chạy `--dry-run`, KHÔNG ghi
+# một dòng nào (đã đọc mã: nhánh `if (DRY) continue;` đứng TRƯỚC lệnh update). Bỏ tick
+# mới ghi thật.
+#
+# IDEMPOTENT: chỉ đổi giá trị TRÙNG KHỚP một mức của thang CŨ. Chạy lại lần hai không
+# còn gì để đổi — điểm đã ở thang mới, không nằm trong thang cũ.
+#
+# SECRETS (đã khai cho deploy.yml): PROD_DIRECT_URL — session pooler :5432. BẮT BUỘC
+# dùng bản DIRECT: PrismaClient trần đi qua transaction pooler :6543 sẽ đâm
+# `42P05 prepared statement "s0" already exists`.
+# =============================================================================
+
+on:
+  workflow_dispatch:
+    inputs:
+      chi_xem_truoc:
+        description: 'Chỉ XEM TRƯỚC (--dry-run), không ghi gì'
+        type: boolean
+        default: true
+
+concurrency:
+  group: rescale-trial-rubric-prod
+  cancel-in-progress: false
+
+jobs:
+  rescale:
+    name: Quy đổi thang phiếu (Supabase prod)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Kiểm tra secret prod (fail sớm)
+        run: |
+          [ -n "${{ secrets.PROD_DIRECT_URL }}" ] || { echo "::error::Thiếu secret PROD_DIRECT_URL"; exit 1; }
+
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v3
+        with: { version: 11 }
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Generate Prisma client
+        run: pnpm exec prisma generate
+
+      - name: Xem trước — KHÔNG ghi
+        if: ${{ inputs.chi_xem_truoc }}
+        run: pnpm exec tsx scripts/rescale-trial-rubric-10.ts --dry-run
+        env:
+          DATABASE_URL: ${{ secrets.PROD_DIRECT_URL }}
+          DIRECT_URL: ${{ secrets.PROD_DIRECT_URL }}
+
+      - name: Quy đổi THẬT
+        if: ${{ !inputs.chi_xem_truoc }}
+        run: pnpm exec tsx scripts/rescale-trial-rubric-10.ts
+        env:
+          DATABASE_URL: ${{ secrets.PROD_DIRECT_URL }}
+          DIRECT_URL: ${{ secrets.PROD_DIRECT_URL }}
