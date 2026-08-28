@@ -86,3 +86,20 @@ jobs:
         env:
           DATABASE_URL: ${{ secrets.TEST_DIRECT_URL }}
           DIRECT_URL: ${{ secrets.TEST_DIRECT_URL }}
+
+      # 27/08/2026 — SEED VAI, bước này TRƯỚC ĐÂY KHÔNG CÓ.
+      #
+      # Hệ quả của việc thiếu nó, đã đo: quyền mới khai trong `prisma/seed-roles.ts` lên
+      # `test` cùng code nhưng KHÔNG có trong DB, nên trên môi trường bật RBAC v2 thì
+      # tính năng vừa làm xong hiện ra như "không có quyền" — trông y hệt lỗi chức năng,
+      # và người nghiệm thu không có cách nào đoán ra nguyên nhân nằm ở một bước seed.
+      # Đo 24/08: dev/test tụt lại 14 RoleDef so với 15 của prod vì đúng chỗ này.
+      #
+      # Idempotent (upsert theo code) nên chạy mỗi lượt push là an toàn.
+      # ⚠️ PROD vẫn phải bấm tay `seed-prod-roles.yml` — cố ý, đổi quyền trên prod là
+      # việc có người chịu trách nhiệm bấm, không phải hệ quả phụ của một lượt merge.
+      - name: Seed RoleDef + RolePermission
+        run: pnpm db:seed:roles
+        env:
+          DATABASE_URL: ${{ secrets.TEST_DIRECT_URL }}
+          DIRECT_URL: ${{ secrets.TEST_DIRECT_URL }}
