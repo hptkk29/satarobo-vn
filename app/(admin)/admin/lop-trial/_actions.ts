@@ -11,7 +11,7 @@
 // Hậu tố `LopTrial` trong tên hàm là có chủ đích: suốt giai đoạn chạy song song,
 // log và audit sẽ có hai bộ action làm việc giống nhau — trùng tên là nguồn nhầm lẫn.
 import { revalidatePath } from "next/cache";
-import { checkPermission, canViewLeadPii } from "@/lib/auth/check-permission";
+import { checkPermission } from "@/lib/auth/check-permission";
 import { scopedDb } from "@/lib/db-scope";
 import { teacherCenterAssignmentError } from "@/lib/teachers/center-filter";
 import { leadStatusLabel } from "@/lib/leads/status";
