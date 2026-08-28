@@ -559,6 +559,9 @@ export default async function LeadDetailPage({ params }: Props) {
                 fullName: canViewPii ? c.fullName : maskPersonName(c.fullName),
                 currentTrial: enr?.trialClass
                   ? {
+                      // 28/08 — cần `classId` để ô chọn lớp mở ra đã hiện SẴN lớp con
+                      // đang học, thay vì "— chọn lớp —" như thể chưa xếp gì.
+                      classId: enr.trialClass.id,
                       className: enr.trialClass.name,
                       session: sess
                         ? {

@@ -399,8 +399,19 @@ export async function enrollLeadChild(params: {
         return { ok: false, overCapacity: true, error: "Vượt sĩ số" };
       }
 
-      // #2 — chốt buổi cho ghi danh NGAY khi tạo (GV chỉ thấy HV qua scheduledSessionId).
-      let scheduledSessionId: string | null = params.sessionId ?? null;
+      // Buổi của ghi danh. `null` = học TOÀN BỘ buổi của lớp — đây là MẶC ĐỊNH từ
+      // 28/08 (chủ dự án: "add vào là add toàn bộ buổi của lớp trải nghiệm đó").
+      //
+      // ⚠️ ĐẢO nếp #2. Bản cũ AUTO-GÁN buổi gần nhất khi không truyền `sessionId`, với
+      // lý do ghi rõ: "GV chỉ thấy HV qua scheduledSessionId — enroll không buổi = HV
+      // tàng hình". Lý do đó nay KHÔNG còn đúng: roster giáo viên đã xếp ghi danh
+      // `scheduledSessionId = null` vào MỌI buổi của lớp (xem `lib/lms/teacher-schedule.ts`),
+      // và bảng điểm danh vốn đã hiểu null là "hiện ở mọi buổi". Gỡ auto-gán mà KHÔNG
+      // sửa roster trước là dựng lại đúng lỗi tàng hình đó — hai thay đổi đi cùng một
+      // commit là có chủ đích.
+      //
+      // Xếp riêng một buổi vẫn làm được: truyền `sessionId` (màn chi tiết lớp, dời lịch).
+      const scheduledSessionId: string | null = params.sessionId ?? null;
       if (scheduledSessionId) {
         // Buổi truyền vào phải thuộc đúng lớp đang xếp (chống chọn buổi lớp khác).
         const ses = await tx.trialClassSession.findUnique({
@@ -409,29 +420,6 @@ export async function enrollLeadChild(params: {
         });
         if (!ses || ses.trialClassId !== params.trialClassId) {
           return { ok: false, error: "Buổi học không thuộc lớp đã chọn" };
-        }
-      } else {
-        // Auto-gán buổi SCHEDULED gần nhất: ưu tiên buổi SẮP TỚI (ngày ≥ hôm nay VN),
-        // hết buổi tương lai → buổi SCHEDULED mới nhất. Không có buổi nào → lỗi rõ.
-        const today = vnTodayUtc();
-        const upcoming = await tx.trialClassSession.findFirst({
-          where: { trialClassId: params.trialClassId, status: "SCHEDULED", date: { gte: today } },
-          orderBy: [{ date: "asc" }, { seq: "asc" }],
-          select: { id: true },
-        });
-        const fallback = upcoming
-          ? null
-          : await tx.trialClassSession.findFirst({
-              where: { trialClassId: params.trialClassId, status: "SCHEDULED" },
-              orderBy: [{ date: "desc" }, { seq: "desc" }],
-              select: { id: true },
-            });
-        scheduledSessionId = upcoming?.id ?? fallback?.id ?? null;
-        if (!scheduledSessionId) {
-          return {
-            ok: false,
-            error: "Lớp trải nghiệm chưa có buổi học — thêm buổi trước khi xếp học viên",
-          };
         }
       }
 

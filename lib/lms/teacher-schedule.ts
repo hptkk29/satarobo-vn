@@ -212,6 +212,8 @@ export async function getTeacherTrialRoster(
       startTime: true,
       endTime: true,
       status: true,
+      // 28/08 — dùng để rải ghi danh "học cả lớp" vào từng buổi (xem bySession bên dưới).
+      trialClassId: true,
       trialClass: { select: { name: true } },
     },
     orderBy: [{ date: "asc" }, { startTime: "asc" }],
@@ -252,6 +254,8 @@ export async function getTeacherTrialRoster(
       id: true,
       scheduledSessionId: true,
       status: true,
+      // 28/08 — cần id LỚP để rải ghi danh "học cả lớp" vào từng buổi bên dưới.
+      trialClassId: true,
       trialClass: { select: { name: true } },
       leadChild: {
         select: { fullName: true, dob: true, ageYears: true, interestedCourseId: true },
@@ -318,6 +322,30 @@ export async function getTeacherTrialRoster(
     bySession.set(e.scheduledSessionId, arr);
   }
 
+  // 28/08 — ghi danh KHÔNG gắn buổi nghĩa là học TOÀN BỘ buổi của lớp, nên rải em đó
+  // vào MỌI buổi của chính lớp ấy trong khoảng đang xem.
+  //
+  // ⚠️ Đây là nửa còn lại của việc gỡ auto-gán buổi ở `lib/trial/service.ts`. Thiếu nó
+  // thì mọi ghi danh mới rơi hết vào nhóm "Chưa xếp buổi" và không em nào hiện trong
+  // buổi giáo viên sắp dạy — đúng lỗi tàng hình mà nếp auto-gán cũ sinh ra để tránh.
+  const buoiTheoLop = new Map<string, string[]>();
+  for (const ses of sessions) {
+    const arr = buoiTheoLop.get(ses.trialClassId) ?? [];
+    arr.push(ses.id);
+    buoiTheoLop.set(ses.trialClassId, arr);
+  }
+  const daRai = new Set<string>();
+  for (const e of unassignedRows) {
+    const ids = buoiTheoLop.get(e.trialClassId);
+    if (!ids?.length) continue; // lớp không có buổi nào trong khoảng → để ở nhóm dưới
+    daRai.add(e.id);
+    for (const sid of ids) {
+      const arr = bySession.get(sid) ?? [];
+      arr.push(toStudent(e, sid));
+      bySession.set(sid, arr);
+    }
+  }
+
   return {
     slots: sessions.map((s) => ({
       sessionId: s.id,
@@ -328,10 +356,14 @@ export async function getTeacherTrialRoster(
       status: s.status,
       students: bySession.get(s.id) ?? [],
     })),
-    unassigned: unassignedRows.map((e) => ({
-      ...toStudent(e, null),
-      trialClassName: e.trialClass.name,
-    })),
+    // Chỉ còn ghi danh mà lớp KHÔNG có buổi nào trong khoảng đang xem. Em đã được rải
+    // vào các buổi ở trên mà vẫn liệt kê lại ở đây là đếm đôi trên cùng một màn.
+    unassigned: unassignedRows
+      .filter((e) => !daRai.has(e.id))
+      .map((e) => ({
+        ...toStudent(e, null),
+        trialClassName: e.trialClass.name,
+      })),
   };
 }
 
