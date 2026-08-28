@@ -102,6 +102,28 @@ export function vnDateOnly(d: Date): Date {
   return new Date(Date.UTC(p.year, p.month, p.day));
 }
 
+/**
+ * Số NGÀY LỊCH VN giữa hai thời điểm — trừ hai **ngày**, không trừ hai **thời điểm**.
+ *
+ * Dùng cho C5 ("số ngày chưa tiếp cận lại"). Tiếp cận lúc 23:00 hôm qua thì hôm nay
+ * phải là **1 ngày**, không phải 0 — `(to - from) / 86400000` cho ra 0 và làm cột cảnh
+ * báo lead treo trông sạch hơn thực tế đúng một ngày, tức sai theo hướng trấn an.
+ *
+ * ⚠️ Đặt ở đây chứ KHÔNG ở `lib/reports/date-vn.ts` như PRD §C.6.12 phác: PRD viết
+ * trước đợt V-17 gom mọi quy ước giờ VN về file này. Dựng file thứ hai với hằng số
+ * `VN_OFFSET_MS` riêng chính là cái V-17 vừa dọn xong.
+ */
+export function daysBetweenVN(from: Date, to: Date): number {
+  const dayIndex = (d: Date) => Math.floor((d.getTime() + OFFSET_MS) / 86_400_000);
+  return dayIndex(to) - dayIndex(from);
+}
+
+/** Khoá tháng "YYYY-MM" theo LỊCH VN — cùng quy ước `RevenueTarget.period`/`LeadTarget.period`. */
+export function vnMonthKey(d: Date): string {
+  const p = vnParts(d);
+  return `${p.year}-${String(p.month + 1).padStart(2, "0")}`;
+}
+
 /** Parse "YYYY-MM-DD" (từ `<input type="date">`) thành 00:00 giờ VN. Sai định dạng → null. */
 export function parseVnYmd(value: string): Date | null {
   const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value.trim());

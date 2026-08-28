@@ -394,6 +394,28 @@ export const SETTINGS = {
     default: 24, // QĐ-O: 24h không hoạt động
     centerOverridable: true,
   }),
+  // ── C-05 (§C.6.11, QĐ 12(a) 24/08) — ngưỡng cột "số ngày chưa tiếp cận lại".
+  // ⚠️ ĐỪNG gộp với `sla.leadIdleHours` ngay trên, dù nghe giống nhau:
+  //   • `sla.leadIdleHours` — đơn vị GIỜ, chỉ áp cho 2 trạng thái NEW/ASSIGNED, dùng để
+  //     BẮN THÔNG BÁO (`isLeadIdle` trong `lib/crm/sla.ts`);
+  //   • hai key dưới — đơn vị NGÀY, áp cho MỌI lead đang chăm, dùng để TÔ MÀU CỘT.
+  // Gộp lại thì một trong hai sẽ sai, và sai theo kiểu không ai để ý.
+  "crm.staleLeadWarnDays": def({
+    key: "crm.staleLeadWarnDays",
+    group: "crm",
+    label: "C-05: cảnh báo VÀNG khi lead quá N ngày chưa tiếp cận lại",
+    schema: z.number().int().min(1).max(365),
+    default: 2, // QĐ 12(a) 24/08
+    centerOverridable: true, // mỗi cơ sở có nhịp chăm khác nhau
+  }),
+  "crm.staleLeadDangerDays": def({
+    key: "crm.staleLeadDangerDays",
+    group: "crm",
+    label: "C-05: cảnh báo ĐỎ khi lead quá N ngày chưa tiếp cận lại",
+    schema: z.number().int().min(1).max(365),
+    default: 7, // QĐ 12(a) 24/08
+    centerOverridable: true,
+  }),
   "shift.geofenceRadiusMeters": def({
     key: "shift.geofenceRadiusMeters",
     group: "shift",

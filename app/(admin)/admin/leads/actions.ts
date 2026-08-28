@@ -1430,3 +1430,94 @@ export async function deleteLeadChild(
   revalidatePath('/leads')
   return { ok: true }
 }
+
+// ─── C-06 (§C.6.8) — đánh dấu RỚT ở cấp CON, lý do ghi ở cấp PHỤ HUYNH ────────
+/**
+ * ✅ QĐ 12(b) 24/08: KHÔNG có danh mục lý do rớt. Ghi chú tự do và BẮT BUỘC.
+ * Hệ quả đã chấp nhận: không còn báo cáo "top lý do rớt" — cột này chỉ đọc từng dòng.
+ */
+const markChildLostSchema = z.object({
+  leadChildId: z.string().min(1),
+  lostNote: z.string().trim().min(1, 'Bắt buộc nhập lý do rớt').max(2000),
+})
+
+/**
+ * Đánh dấu MỘT con của lead là rớt.
+ *
+ * 🔴 HÀM RIÊNG, cố ý KHÔNG sửa `updateLeadStatus`: hàm đó đổi trạng thái ở **cấp lead**
+ * (phụ huynh) với chữ ký `(leadId, rawStatus)`. C-06 đổi ở **cấp con** và bắt buộc thêm
+ * lý do. Nhồi vào hàm cũ là làm hai nghiệp vụ khác nhau dùng chung một đường ghi.
+ *
+ * ⚠️ Trạng thái rớt ở CON (`LeadChild.status`), lý do ở CHA (`Lead.lostNote`) — B5
+ * 24/08. Hệ quả phải nói ra: phụ huynh có hai con, con thứ hai rớt sau sẽ **ghi đè**
+ * ghi chú của con trước. Đó là cái giá đã biết của việc đặt lý do ở cấp phụ huynh.
+ */
+export async function markLeadChildLostAction(
+  input: unknown,
+): Promise<{ ok: boolean; error?: string }> {
+  const session = await auth()
+  if (!session?.user) return { ok: false, error: 'Chưa đăng nhập' }
+  if (!(await checkPermission('leads:edit'))) return { ok: false, error: 'Không có quyền' }
+
+  const parsed = markChildLostSchema.safeParse(input)
+  if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message }
+
+  const actor = await resolveActor(session.user.id)
+  const sdb = scopedDb(actor)
+
+  // `scopedDb` KHÔNG che WRITE (chỉ auto-scope 7 method ĐỌC) ⇒ đọc qua sdb rồi vẫn
+  // phải tự `passesScope` trước khi update. Bỏ bước này là QLCS CS1 sửa được con của CS2.
+  const child = await sdb.leadChild.findFirst({
+    where: { id: parsed.data.leadChildId },
+    select: {
+      id: true,
+      status: true,
+      leadId: true,
+      fullName: true,
+      lead: { select: { id: true, assignedToId: true, centerId: true } },
+    },
+  })
+  if (!child || !passesScope('Lead', { centerId: child.lead?.centerId ?? null }, actor)) {
+    return { ok: false, error: 'Không tìm thấy con của lead' }
+  }
+  if (!(await actorMayMutateLead(session.user.id, child.lead?.assignedToId ?? null))) {
+    return { ok: false, error: MUTATE_DENIED }
+  }
+  if (child.status === 'ENROLLED') {
+    // Con đã chốt rồi thì không "rớt" được — đảo chiều đó làm C3 mất tử số mà không
+    // ai biết. Muốn sửa nhầm thì đi đường sửa trạng thái tường minh, không đi cửa này.
+    return { ok: false, error: 'Học sinh đã chốt — không đánh dấu rớt được' }
+  }
+
+  const now = new Date()
+  await db.$transaction(async (tx) => {
+    await tx.leadChild.update({
+      where: { id: child.id },
+      data: { status: 'LOST', closedAt: null },
+    })
+    await tx.lead.update({
+      where: { id: child.leadId },
+      data: { lostNote: parsed.data.lostNote, lostAt: now },
+    })
+  })
+
+  const { actorId, actorName } = getAuditActor(session)
+  await logLeadAudit({
+    leadId: child.leadId,
+    action: 'UPDATE',
+    actorId,
+    actorName,
+    newValues: {
+      leadChildId: child.id,
+      childName: child.fullName,
+      childStatus: 'LOST',
+      lostNote: parsed.data.lostNote,
+    },
+    changedFields: ['children', 'lostNote', 'lostAt'],
+  }).catch(() => {})
+
+  revalidatePath(`/leads/${child.leadId}`)
+  revalidatePath('/leads')
+  revalidatePath('/admin/dashboard')
+  return { ok: true }
+}

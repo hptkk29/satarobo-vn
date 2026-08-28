@@ -330,6 +330,29 @@ export async function convertLeadV2(actor: AuditActor, input: ConvertV2Input): P
       }
     }
 
+    // §C.6.0 điều kiện 1 (SL-09) — chốt Ở CẤP CON, TRONG CÙNG TRANSACTION.
+    //
+    // 🔴 Đây là đường ghi DUY NHẤT đưa `LeadChild` lên ENROLLED, và nó phải set CẢ HAI
+    // (`status` + `closedAt`) cùng lúc. Tách ra là C3 đếm được một tập còn C4 trừ được
+    // một tập khác — hai con số cạnh nhau trên cùng màn, không con nào báo lỗi.
+    //
+    // ⚠️ CỐ Ý không đụng `lib/finance/payment.ts`: đường thanh toán chỉ đưa **Lead** lên
+    // `REGISTERED` (đã trả tiền, chưa thành học viên) và theo QĐ B2 24/08 thì
+    // `REGISTERED` KHÔNG tính là "đã chốt". Cho nó set `closedAt` là đổi định nghĩa
+    // "đã chốt" bằng cửa sau.
+    //
+    // `updateMany` + `closedAt: null` (thay vì `update` theo id) để lượt convert thứ
+    // hai của cùng một con không dịch mốc chốt về sau — mốc chốt là lần ĐẦU.
+    const closedChildIds = [
+      ...new Set(input.students.map((s) => s.leadChildId).filter((x): x is string => !!x)),
+    ];
+    if (closedChildIds.length > 0) {
+      await tx.leadChild.updateMany({
+        where: { id: { in: closedChildIds }, leadId: lead.id, closedAt: null },
+        data: { status: "ENROLLED", closedAt: new Date() },
+      });
+    }
+
     // FIN-01 (Q1=A) — mắt xích còn thiếu: sau khi tạo Enrollment(s), GẮN (và CHIA khi nhiều
     // ghi danh) các khoản RECORDED của đơn vào ghi danh → confirmPayment sinh Receipt được →
     // getDebtRows phản ánh. Nhiều ghi danh: chia theo finalPrice (bất biến tổng). KHÔNG

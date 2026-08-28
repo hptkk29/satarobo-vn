@@ -18,6 +18,9 @@ import { FunnelChart } from "@/components/charts/funnel-chart";
 import { BarChart } from "@/components/charts/bar-chart";
 import { LineChart } from "@/components/charts/line-chart";
 import { PhanTrangBang } from "@/components/ui/phan-trang-bang";
+import { LeadTargetForm } from "./_components/lead-target-form";
+
+import { vnMonthKey } from "@/lib/time/vn";
 
 export const metadata = { title: "Báo cáo Lead | Admin" };
 export const dynamic = "force-dynamic";
@@ -107,6 +110,11 @@ export default async function LeadReportPage({
     { tags: [CACHE_TAGS.report], revalidate: 120 },
   )();
 
+  // Dùng checkPermission (KHÔNG gọi thẳng can() v2): nó đi qua cờ RBAC_V2_ENABLED +
+  // shadow-compare, nên gate ở đây khớp đúng thứ Server Action sẽ kiểm. Gọi thẳng v2 là
+  // local (chạy v1) hiện form mà prod ẩn, hoặc ngược lại — lệch câm giữa hai môi trường.
+  const canSetTarget = await checkPermission("lead_targets:manage");
+
   return (
     <div className="space-y-5 p-4">
       <div>
@@ -124,6 +132,26 @@ export default async function LeadReportPage({
         dateTo={fc.dateToStr}
         allowAll={fc.isGlobalAllowed}
       />
+
+      {/* C-01 (§C.6.10) — đặt chỉ tiêu SỐ HỌC SINH theo tháng × cơ sở.
+          Gate hiển thị ở đây chỉ để khỏi hiện form vô dụng; Server Action VẪN tự kiểm
+          quyền và phạm vi cơ sở — gate UI không bao giờ là chốt chặn. */}
+      {canSetTarget ? (
+        <Card title="Chỉ tiêu lead theo tháng">
+          <p className="mb-3 text-xs text-muted-foreground">
+            Chỉ tiêu tính theo <strong>số học sinh</strong>, không phải số phụ huynh. Con số
+            này là mẫu số của ô &ldquo;Tỷ lệ đạt mục tiêu&rdquo; ở tab Kinh doanh trên
+            dashboard. Chưa đặt chỉ tiêu thì ô đó hiện &ldquo;Chưa đặt mục tiêu&rdquo;, không
+            hiện 0%.
+          </p>
+          <LeadTargetForm
+            centers={fc.visibleCenters}
+            canSetGlobal={fc.isGlobalAllowed}
+            defaultCenterId={fc.selection}
+            defaultPeriod={vnMonthKey(new Date())}
+          />
+        </Card>
+      ) : null}
 
       {/* Thẻ số liệu tổng quan */}
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
