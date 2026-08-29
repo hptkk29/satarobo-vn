@@ -610,15 +610,19 @@ export const PERMISSIONS: Record<Action, Role[]> = {
   "teaching-materials:view-own-class": ["SUPER_ADMIN", "TRAINING", "TEACHER"],
 
   // --- Centers / Rooms / Holidays ---
+  // 29/08/2026 — SALES_CSM ĐÃ GỠ khỏi 3 dòng `centers:view` / `holidays:view` /
+  // `kits:view` (chủ dự án chốt: ẩn "Cơ sở" · "Lịch nghỉ" · "Học cụ" khỏi sidebar
+  // Sale). Gỡ ở CẢ v1 lẫn v2 (`prisma/seed-roles.ts`, vai `CENTER_SALES_CSM`) để
+  // local/dev không nói khác prod.
   "centers:view": [
-    "SUPER_ADMIN", "CENTER_MANAGER", "HR", "SALES_CSM", "TEACHER", "MARKETING", "ACCOUNTANT",
+    "SUPER_ADMIN", "CENTER_MANAGER", "HR", "TEACHER", "MARKETING", "ACCOUNTANT",
   ],
   "centers:edit": ["SUPER_ADMIN"],
   // FL W0-NAV-2 hygiene: SALES_CSM bỏ Phòng học (module dư).
   "rooms:view": ["SUPER_ADMIN", "CENTER_MANAGER", "TEACHER"],
   "rooms:edit": ["SUPER_ADMIN", "CENTER_MANAGER"],
   "holidays:view": [
-    "SUPER_ADMIN", "CENTER_MANAGER", "HR", "SALES_CSM", "TEACHER", "MARKETING", "ACCOUNTANT",
+    "SUPER_ADMIN", "CENTER_MANAGER", "HR", "TEACHER", "MARKETING", "ACCOUNTANT",
   ],
   "holidays:edit": ["SUPER_ADMIN", "CENTER_MANAGER"],
 
@@ -630,7 +634,7 @@ export const PERMISSIONS: Record<Action, Role[]> = {
 
   // --- ZMRoboKit ---
   "kits:view": [
-    "SUPER_ADMIN", "CENTER_MANAGER", "SALES_CSM", "MARKETING",
+    "SUPER_ADMIN", "CENTER_MANAGER", "MARKETING",
   ],
   "kits:edit": ["SUPER_ADMIN", "CENTER_MANAGER", "MARKETING"],
 
