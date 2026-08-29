@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useTransition, useState, useEffect } from 'react'
-import { Loader2, X, Download, Trash2, CheckCircle2 } from 'lucide-react'
+import { Loader2, X, Download, Trash2, CheckCircle2, ArrowDown } from 'lucide-react'
 import { toast } from 'sonner'
 import { updateLeadNote, updateLeadStatus, deleteLead } from '../actions'
 import {
@@ -38,6 +38,8 @@ export type LeadRow = {
   userAgent: string | null
   consentMarketing: boolean
   createdAt: string
+  /** Lần nhập gần nhất; null với lead cũ chưa có mốc. */
+  lastInboundAt: string | null
   center: { name: string } | null
   courseName: string | null
   assignedTo: { name: string | null } | null
@@ -364,6 +366,39 @@ function LeadDrawer({
   )
 }
 
+/**
+ * Đầu cột BẤM ĐƯỢC để đổi thứ tự.
+ *
+ * Giữ nguyên mọi tham số đang có trên URL (bộ lọc, từ khoá, cỡ trang) và CHỈ đặt lại
+ * `sort` + `page=1`: đổi cách sắp mà vẫn ở trang 5 là nhìn vào giữa bảng, tưởng dữ
+ * liệu nhảy lung tung.
+ */
+function ThSap({
+  nhan,
+  khoa,
+  dangSap,
+}: {
+  nhan: string
+  khoa: 'moi_nhat' | 'nhap_lai'
+  dangSap: 'moi_nhat' | 'nhap_lai'
+}) {
+  const searchParams = useSearchParams()
+  const u = new URLSearchParams(searchParams.toString())
+  u.set('sort', khoa)
+  u.set('page', '1')
+  const dang = dangSap === khoa
+  return (
+    <Link
+      href={`/leads?${u.toString()}`}
+      className={`inline-flex items-center gap-1 hover:text-foreground ${dang ? 'text-foreground' : ''}`}
+      title={dang ? 'Đang sắp theo cột này' : `Sắp theo ${nhan.toLowerCase()}`}
+    >
+      {nhan}
+      {dang && <ArrowDown className="h-3 w-3" aria-hidden />}
+    </Link>
+  )
+}
+
 export function LeadsTable({
   leads,
   total,
@@ -371,6 +406,7 @@ export function LeadsTable({
   pageSize,
   canUpdate,
   canChangeStatus,
+  sapXep,
   canDelete,
   currentStatus,
   currentQ,
@@ -384,6 +420,8 @@ export function LeadsTable({
   /** 27/08 — quyền RIÊNG `leads:change-status` (chỉ Sale). Tách khỏi canUpdate
    *  vì Quản lý cơ sở/Marketing vẫn sửa hồ sơ lead, chỉ không đẩy bậc phễu. */
   canChangeStatus: boolean
+  /** Cột đang được sắp xếp — để tô đậm đầu cột tương ứng. */
+  sapXep: 'moi_nhat' | 'nhap_lai'
   canDelete: boolean
   currentStatus?: string
   currentQ?: string
@@ -469,7 +507,10 @@ export function LeadsTable({
                   Sale phụ trách
                 </th>
                 <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  Ngày đăng ký
+                  <ThSap nhan="Ngày đăng ký" khoa="moi_nhat" dangSap={sapXep} />
+                </th>
+                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  <ThSap nhan="Lần nhập gần nhất" khoa="nhap_lai" dangSap={sapXep} />
                 </th>
                 {showActions && (
                   <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide text-muted-foreground">
@@ -535,6 +576,23 @@ export function LeadsTable({
                     </td>
                     <td className="px-4 py-3 text-sm text-muted-foreground tabular-nums">
                       {formatDate(lead.createdAt)}
+                    </td>
+                    <td className="px-4 py-3 text-sm tabular-nums">
+                      {lead.lastInboundAt ? (
+                        <span
+                          className={
+                            // Nhập lại SAU ngày tạo = khách chủ động quay lại. Đó là
+                            // tín hiệu nóng nhất trên bảng này, đừng để nó chìm.
+                            lead.lastInboundAt > lead.createdAt
+                              ? 'font-semibold text-state-success-ink'
+                              : 'text-muted-foreground'
+                          }
+                        >
+                          {formatDate(lead.lastInboundAt)}
+                        </span>
+                      ) : (
+                        <span className="text-muted-foreground">—</span>
+                      )}
                     </td>
                     {showActions && (
                       <td

@@ -30,6 +30,8 @@ type SP = {
   source?: string
   dateFrom?: string
   dateTo?: string
+  /** 29/08 — 'moi_nhat' (mặc định) | 'nhap_lai' (theo lần nhập gần nhất). */
+  sort?: string
 }
 
 export const metadata = { title: 'Leads | Admin' }
@@ -277,6 +279,21 @@ export default async function LeadsPage({
   }
 
   // ── Table view ──
+  // 29/08 — SẮP XẾP theo LẦN NHẬP GẦN NHẤT.
+  //
+  // Vì sao đáng có: khách gọi lại / điền form lần nữa thì hệ thống KHÔNG đẻ lead mới
+  // (trùng SĐT), nó nâng `lastInboundAt`. Sắp theo `createdAt` thì phiếu vừa nóng lại
+  // nằm lẫn dưới đáy cùng phiếu nguội ba tháng — Sale không có cách nào biết để gọi trước.
+  //
+  // `nulls: "last"` bắt buộc: lead có TRƯỚC 29/08 mang `lastInboundAt` do migration
+  // backfill = `createdAt`, nhưng lead tạo bằng đường SQL thô thì vẫn null. Không khai
+  // thì Postgres xếp NULL lên đầu ở chiều `desc` — đúng nhóm cũ nhất lại nằm trên cùng.
+  const sapXep = params.sort === 'nhap_lai' ? 'nhap_lai' : 'moi_nhat'
+  const thuTuLead: Prisma.LeadOrderByWithRelationInput =
+    sapXep === 'nhap_lai'
+      ? { lastInboundAt: { sort: 'desc', nulls: 'last' } }
+      : { createdAt: 'desc' }
+
   const [rawLeads, total] = await Promise.all([
     sdb.lead.findMany({
       where,
@@ -285,7 +302,7 @@ export default async function LeadsPage({
         course: { select: { name: true } },
         assignedTo: { select: { name: true } },
       },
-      orderBy: { createdAt: 'desc' },
+      orderBy: thuTuLead,
       skip: (page - 1) * soDong,
       take: soDong,
     }),
@@ -323,6 +340,7 @@ export default async function LeadsPage({
       userAgent: lead.userAgent,
       consentMarketing: lead.consentMarketing,
       createdAt: lead.createdAt.toISOString(),
+      lastInboundAt: lead.lastInboundAt?.toISOString() ?? null,
       center: lead.center,
       courseName: lead.course?.name ?? null,
       assignedTo: lead.assignedTo,
@@ -350,6 +368,7 @@ export default async function LeadsPage({
         pageSize={soDong}
         canUpdate={canUpdate}
         canChangeStatus={canChangeStatus}
+        sapXep={sapXep}
         canDelete={canDelete}
         currentStatus={statusFilter}
         currentQ={q}

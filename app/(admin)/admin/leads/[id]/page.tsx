@@ -373,6 +373,21 @@ export default async function LeadDetailPage({ params }: Props) {
           label="Ngày tạo"
           value={formatDateVN(lead.createdAt)}
         />
+        {/* 29/08 — LẦN NHẬP GẦN NHẤT.
+            Khách gọi lại / điền form lần nữa thì hệ thống KHÔNG đẻ lead mới (trùng
+            SĐT), nó nâng mốc này và ghi một dòng nguồn DUPLICATE vào sổ chia lead.
+            Không hiện ra thì phiếu vừa nóng lại trông y hệt phiếu nguội ba tháng.
+            `inboundCount > 1` mới nói thêm số lần — bằng 1 thì con số đó là nhiễu. */}
+        <Info
+          label="Lần nhập gần nhất"
+          value={
+            lead.lastInboundAt
+              ? `${formatDateVN(lead.lastInboundAt)}${
+                  lead.inboundCount > 1 ? ` · ${lead.inboundCount} lần` : ""
+                }`
+              : "—"
+          }
+        />
         <Info label="Ghi chú" value={humanNote} />
         {/* Dấu vết máy ghi — chỉ quản lý/quản trị (`leads:view-all`) đọc. */}
         {canViewAll && hasSystemLines(noteView) && (
