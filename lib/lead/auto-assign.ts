@@ -1,4 +1,5 @@
 import { db } from "@/lib/db";
+import { layPoolDangBat, orgUnitIdCuaCoSo } from "./pool";
 import { logLeadAudit } from "@/lib/audit/log";
 import { orgUnitIdForCenter } from "@/lib/org/org-service";
 import { getNonEnrollableCenterIds } from "@/lib/enrollment-flow";
@@ -68,14 +69,33 @@ export async function getCenterMode(centerId: string): Promise<LeadAssignMode> {
   return cfg?.mode ?? "ROUND_ROBIN";
 }
 
-/** Thống kê sale active trong cơ sở: tải hiện tại + chốt/đã xử lý 30 ngày gần nhất. */
+/**
+ * Thống kê sale ĐANG NHẬN LEAD trong cơ sở: tải hiện tại + chốt/đã xử lý 30 ngày.
+ *
+ * ⚠️ 29/08/2026 — TẬP ỨNG VIÊN nay lấy từ `layPoolDangBat()` (lib/lead/pool.ts), là
+ * NƠI DUY NHẤT định nghĩa "ai đang nhận lead". Trước đây hàm này tự dựng tập bằng
+ * `role SALES_CSM + isActive + centerId`, tức có HAI định nghĩa pool trong repo — và
+ * hệ quả là người vận hành tắt một người ở màn quản lý mà nhánh CLOSE_RATE vẫn chia
+ * cho họ, không lỗi nào nổ.
+ *
+ * `centerId = null` giữ đường cũ: không có cơ sở thì không suy được đơn vị, mà không
+ * có đơn vị thì không có pool để hỏi.
+ */
 export async function getSaleStats(centerId: string | null): Promise<SaleStat[]> {
-  const sales = await db.user.findMany({
-    where: { roles: { has: "SALES_CSM" }, isActive: true, deletedAt: null, ...(centerId ? { centerId } : {}) },
-    select: { id: true },
-  });
-  if (sales.length === 0) return [];
-  const ids = sales.map((s) => s.id);
+  let ids: string[];
+  if (centerId) {
+    const orgUnitId = await orgUnitIdCuaCoSo(centerId);
+    if (!orgUnitId) return [];
+    ids = (await layPoolDangBat(orgUnitId, centerId)).map((m) => m.userId);
+  } else {
+    ids = (
+      await db.user.findMany({
+        where: { roles: { has: "SALES_CSM" }, isActive: true, deletedAt: null },
+        select: { id: true },
+      })
+    ).map((u) => u.id);
+  }
+  if (ids.length === 0) return [];
 
   const since = new Date();
   since.setDate(since.getDate() - 30);
@@ -112,11 +132,11 @@ export async function getSaleStats(centerId: string | null): Promise<SaleStat[]>
     }
   }
 
-  return sales.map((s) => ({
-    id: s.id,
-    openCount: openMap.get(s.id) ?? 0,
-    closed: closedMap.get(s.id) ?? 0,
-    handled: handledMap.get(s.id) ?? 0,
+  return ids.map((id) => ({
+    id,
+    openCount: openMap.get(id) ?? 0,
+    closed: closedMap.get(id) ?? 0,
+    handled: handledMap.get(id) ?? 0,
   }));
 }
 

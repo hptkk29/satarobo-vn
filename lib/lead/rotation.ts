@@ -17,6 +17,7 @@
 // Bảng dùng `orgUnitId` chứ không `centerId` (luật cứng Nền Hệ thống #3: bảng mới
 // có dữ liệu theo đơn vị thì dùng orgUnitId).
 import { db } from "@/lib/db";
+import type { Prisma } from "@prisma/client";
 
 /** Một ứng viên trong vòng luân phiên. KHÔNG có trường nào về tải — cố ý. */
 export type RotationCandidate = {
@@ -127,9 +128,34 @@ export async function takeRotationTurns(
   now: Date = new Date(),
 ): Promise<string[]> {
   if (candidateIds.length === 0 || count <= 0) return [];
+  return db.$transaction((tx) => takeRotationTurnsTx(tx, orgUnitId, candidateIds, count, now), {
+    maxWait: 5_000,
+    timeout: 15_000,
+  });
+}
 
-  return db.$transaction(
-    async (tx) => {
+/**
+ * BẢN CHẠY TRONG TRANSACTION SẴN CÓ — dùng khi việc chia lượt chỉ là một bước của
+ * một giao dịch lớn hơn (tạo lead + ghi sổ + ghi nhật ký, xem `assign-lead.ts`).
+ *
+ * Vẫn tự giành khoá: `pg_advisory_xact_lock` ĐỆM ĐƯỢC trong cùng một transaction
+ * (giành hai lần cùng khoá không tự chẹn mình), và khoá nhả lúc COMMIT. Nhờ vậy
+ * caller giành trước hay không giành đều đúng.
+ *
+ * ⚠️ KHOÁ PHẢI CÙNG KHOÁ với `takeRotationTurns` (`lead_rotation:<orgUnitId>`).
+ * Đặt tên khoá khác là hai đường ghi cùng một bộ đếm mà không loại trừ nhau —
+ * đúng thứ mà toàn bộ cơ chế này sinh ra để tránh.
+ */
+export async function takeRotationTurnsTx(
+  tx: Prisma.TransactionClient,
+  orgUnitId: string,
+  candidateIds: string[],
+  count: number,
+  now: Date = new Date(),
+): Promise<string[]> {
+  if (candidateIds.length === 0 || count <= 0) return [];
+  {
+    {
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${lockKey(orgUnitId)}))`;
 
       // ĐỌC LẠI SAU KHI GIÀNH KHOÁ — đọc trước khoá thì khoá vô nghĩa.
@@ -185,9 +211,8 @@ export async function takeRotationTurns(
         });
       }
       return ke;
-    },
-    { maxWait: 5_000, timeout: 15_000 },
-  );
+    }
+  }
 }
 
 /**
