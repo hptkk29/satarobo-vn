@@ -1,6 +1,7 @@
 "use server";
 
 import bcrypt from "bcryptjs";
+import { revalidatePath } from "next/cache";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db";
 import { passwordResetSchema } from "@/lib/validators/user";
@@ -50,6 +51,12 @@ export async function changeOwnPasswordAction(input: {
       tx,
     });
   });
+
+  // Cờ `mustChangePassword` là thứ MỌI layout gác cửa đọc (admin · giáo viên · sale),
+  // nên đổi nó là đổi kết quả của mọi cây layout — dọn cache toàn bộ, không dọn một
+  // đường. Đây cũng là thứ vô hiệu hoá Router Cache phía client, xem ghi chú ở
+  // change-form.tsx.
+  revalidatePath("/", "layout");
 
   return { ok: true };
 }
