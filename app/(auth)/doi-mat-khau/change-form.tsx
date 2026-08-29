@@ -1,12 +1,10 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { changeOwnPasswordAction } from "./_actions";
 
 export function ChangePasswordForm() {
-  const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -24,8 +22,20 @@ export function ChangePasswordForm() {
       const res = await changeOwnPasswordAction({ newPassword, confirmPassword });
       if (res.ok) {
         toast.success("Đã đổi mật khẩu — chào mừng bạn!");
-        router.push("/dashboard");
-        router.refresh();
+        // TẢI LẠI TRANG, không `router.push`. Bản cũ push rồi refresh và người dùng
+        // kẹt lại đây, phải tự F5 mới vào được khu làm việc.
+        //
+        // Vì sao: lúc đăng nhập bằng mật khẩu tạm, client ĐÃ điều hướng tới
+        // `/dashboard` một lần và bị layout admin đá về đây (cờ `mustChangePassword`).
+        // Router Cache của Next giữ lại kết quả đó cho URL `/dashboard`. Đổi mật khẩu
+        // xong, `router.push("/dashboard")` ăn đúng bản đã nhớ ⇒ bật ngược về trang
+        // này; `router.refresh()` gọi SAU nên đã muộn. F5 xoá Router Cache nên tay thì
+        // được — đúng triệu chứng người dùng báo.
+        //
+        // Cũng là cách `portal/ho-so` làm sau khi đổi mật khẩu: cờ vừa đổi là thứ mọi
+        // layout gác cửa đọc, nên nạp lại nguyên trang vừa chắc vừa đúng nghĩa —
+        // sidebar, danh sách vai, quyền đều dựng lại từ đầu.
+        window.location.assign("/dashboard");
       } else {
         toast.error(res.error ?? "Lỗi đổi mật khẩu");
       }
