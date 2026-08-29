@@ -74,6 +74,10 @@ export async function createInternalLeadAction(
     // NGƯỜI NHẬP — khác người CHĂM. Phiếu vẫn tự chia về Sale cơ sở như cũ;
     // cột này để chính người nhập theo được phiếu của mình (chủ dự án 23/08).
     createdByUserId: session.user.id,
+    // 29/08 — ĐƯỜNG VÀO "FORM": sale nhập phiếu cho ĐÚNG cơ sở của mình thì phiếu
+    // về tay chính họ và KHÔNG tiêu lượt (ca 1 của ma trận). Chọn cơ sở khác, hoặc
+    // người nhập không phải sale (Marketing/Sale Hội sở/QLCS) → chia tự động.
+    entryPoint: "FORM",
     ipAddress: h.get("x-forwarded-for")?.split(",")[0]?.trim() ?? null,
     userAgent: h.get("user-agent"),
     // Giữ NGUYÊN chuỗi cũ dù trang đã dời sang admin host: đây là nhãn nhận

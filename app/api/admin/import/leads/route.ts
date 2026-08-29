@@ -13,6 +13,7 @@ import { getAuditActor } from "@/lib/audit/log";
 import { parseLeadImportRow, resolveDefaultCenterId } from "@/lib/lead/import";
 import { normalizeVi } from "@/lib/lead/import-registered";
 import { autoAssignNewLead } from "@/lib/lead/auto-assign";
+import { chiaChoLead } from "@/lib/lead/assign-lead";
 import { checkPermission } from "@/lib/auth/check-permission";
 import { orgUnitIdForCenter } from "@/lib/org/org-service";
 
@@ -345,11 +346,37 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // Auto-chia từng lead vừa tạo (theo cơ sở → chế độ cơ sở).
+  // ── CHIA LEAD CHO CẢ LÔ ─────────────────────────────────────────────────────
+  //
+  // 29/08/2026 — đi qua `chiaChoLead` (ma trận + sổ chia lead), entryPoint `IMPORT`.
+  // File nhập hiện KHÔNG có cột sale, nên mọi dòng rơi vào nhánh AUTO — đúng dòng 6
+  // của ma trận. Khai `IMPORT` từ bây giờ để ngày thêm cột sale chỉ phải truyền
+  // `explicitOwnerId`, không phải sửa lại chỗ này.
+  //
+  // ⚠️ KHÔNG bọc cả lô vào MỘT transaction dù đặc tả viết vậy. Mục đích thật của câu
+  // đó là "một khoá cho cả lô, chia đúng thứ tự dòng, không xen kẽ với lead nhập tay"
+  // — và điều đó đã đạt: `chiaChoLead` giành đúng một khoá theo đơn vị, các lượt
+  // xếp hàng theo thứ tự vòng lặp. Bọc chung transaction thì đổi lại một thứ ĐẮT
+  // HƠN NHIỀU: dòng thứ 250 hỏng là rollback cả 300 dòng đã đúng, trong khi nếp
+  // đang chạy (và người vận hành đang trông đợi) là "hỏng dòng nào bỏ dòng đó".
   for (const id of createdIds) {
-    await autoAssignNewLead(id, { actorId, actorName }).catch((err) =>
-      console.error("[import/leads] auto-assign error:", err),
-    );
+    const lead = await sdb.lead.findUnique({
+      where: { id },
+      select: { centerId: true },
+    });
+    if (!lead?.centerId) {
+      // Chưa biết cơ sở thì chưa có pool nào để hỏi — đường cũ còn biết CHỌN cơ sở.
+      await autoAssignNewLead(id, { actorId, actorName }).catch((err) =>
+        console.error("[import/leads] auto-assign error:", err),
+      );
+      continue;
+    }
+    await chiaChoLead(id, {
+      targetCenterId: lead.centerId,
+      createdById: actorId,
+      entryPoint: "IMPORT",
+      explicitOwnerId: null,
+    }).catch((err) => console.error("[import/leads] chia lead:", err));
   }
 
   if (mergedLeads > 0) {
