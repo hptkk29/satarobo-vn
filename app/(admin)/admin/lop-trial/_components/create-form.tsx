@@ -26,7 +26,8 @@ export function CreateForm({
 }: {
   /** `code` để xem trước tên lớp sẽ sinh ra; thiếu thì rơi về `name`. */
   centers: (Option & { code?: string | null })[];
-  courses: Option[];
+  /** `slug` là phần MÃ KHOÁ trong tên lớp (`CS2-sata4-…`), không phải `name`. */
+  courses: (Option & { slug?: string | null })[];
 }): JSX.Element {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -35,9 +36,12 @@ export function CreateForm({
   const [courseId, setCourseId] = useState("");
 
   const center = centers.find((c) => c.id === centerId);
-  // Chỉ XEM TRƯỚC phần mã cơ sở: số thứ tự do server cấp trong transaction (cùng bộ
-  // đếm với mã lớp), client đoán số là chắc chắn có lúc đoán sai.
-  const xemTruocTen = center ? tenLopTrial(center.code ?? center.name, 0) : "";
+  const course = courses.find((c) => c.id === courseId);
+  // Chỉ XEM TRƯỚC phần mã cơ sở + mã khoá: số thứ tự do server cấp trong transaction
+  // (cùng bộ đếm với mã lớp), client đoán số là chắc chắn có lúc đoán sai.
+  const xemTruocTen = center
+    ? tenLopTrial(center.code ?? center.name, course?.slug ?? null, 0)
+    : "";
 
   function onSubmit(e: React.FormEvent) {
     e.preventDefault();

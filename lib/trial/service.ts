@@ -170,6 +170,15 @@ export async function createTrialClass(params: {
         select: { code: true },
       });
       const cc = sanitizeCenter(center?.code ?? params.centerId);
+      // 29/08 — tên lớp mang cả MÃ KHOÁ QUAN TÂM (`CS2-sata4-Lớp trial 3`). Đọc `slug`
+      // chứ không `name`: `name` là câu tiếng Việt có dấu ("Sata 4 — Lập trình khối"),
+      // nhét vào tên lớp thì vừa dài vừa mang ký tự lạ đi thẳng vào phiếu gửi phụ huynh.
+      const khoa = params.courseId
+        ? await tx.course.findUnique({
+            where: { id: params.courseId },
+            select: { slug: true },
+          })
+        : null;
       const y = yy();
       const seq = await nextSeq(`TRIAL:${cc}:${y}`, tx);
       const code = `TRIAL-${cc}-${y}-${String(seq).padStart(3, "0")}`;
@@ -177,9 +186,9 @@ export async function createTrialClass(params: {
       const trialClass = await tx.trialClassV2.create({
         data: {
           code,
-          // Tên theo quy ước `Cơ sở_Lớp trial số`, dùng CHÍNH số thứ tự đã cấp cho
-          // `code` — hai thứ đi cùng một bộ đếm nên không bao giờ lệch nhau.
-          name: tenLopTrial(cc, seq),
+          // Tên theo quy ước `Cơ sở-Khoá-Lớp trial số`, dùng CHÍNH số thứ tự đã cấp
+          // cho `code` — hai thứ đi cùng một bộ đếm nên không bao giờ lệch nhau.
+          name: tenLopTrial(cc, khoa?.slug ?? null, seq),
           centerId: params.centerId,
           courseId: params.courseId ?? null,
           startDate: params.startDate ?? null,

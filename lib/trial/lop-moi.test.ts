@@ -21,22 +21,31 @@ describe("[28/08] sĩ số null = KHÔNG giới hạn", () => {
   });
 });
 
-describe("[28/08] tên lớp tự sinh theo quy ước Cơ sở_Lớp trial số", () => {
-  it("ghép mã cơ sở với số thứ tự", () => {
-    expect(tenLopTrial("CS1", 5)).toBe("CS1_Lớp trial 5");
-    expect(tenLopTrial("CS2", 31)).toBe("CS2_Lớp trial 31");
+describe("[29/08] tên lớp tự sinh theo quy ước Cơ sở-Khoá-Lớp trial số", () => {
+  it("ghép mã cơ sở + mã khoá + số thứ tự", () => {
+    expect(tenLopTrial("CS2", "sata-4", 3)).toBe("CS2-sata4-Lớp trial 3");
+    expect(tenLopTrial("CS1", "combo-1-2", 31)).toBe("CS1-combo12-Lớp trial 31");
+  });
+
+  it("mã cơ sở VIẾT HOA, mã khoá viết thường — đọc ra là phân biệt được ngay hai phần", () => {
+    expect(tenLopTrial("cs1", "SATA-2", 2)).toBe("CS1-sata2-Lớp trial 2");
   });
 
   it("mã cơ sở được chuẩn hoá: bỏ dấu, bỏ ký tự lạ, viết hoa", () => {
     // Mã cơ sở do người nhập, đã gặp cả "cs1", "Cơ sở 1", "CS-1". Tên lớp lọt ký tự lạ
     // sẽ đi thẳng vào phiếu gửi phụ huynh.
-    expect(tenLopTrial("cs1", 2)).toBe("CS1_Lớp trial 2");
-    expect(tenLopTrial("Cơ sở 1", 2)).toBe("COSO1_Lớp trial 2");
-    expect(tenLopTrial("CS-1", 2)).toBe("CS1_Lớp trial 2");
+    expect(tenLopTrial("Cơ sở 1", "sata-1", 2)).toBe("COSO1-sata1-Lớp trial 2");
+    expect(tenLopTrial("CS-1", "sata-1", 2)).toBe("CS1-sata1-Lớp trial 2");
+  });
+
+  it("KHÔNG có khoá thì bỏ hẳn đoạn giữa, không để hai gạch liền", () => {
+    // Khoá là tuỳ chọn khi tạo lớp — `CS2--Lớp trial 3` là tên hỏng, không phải tên thiếu.
+    expect(tenLopTrial("CS2", null, 3)).toBe("CS2-Lớp trial 3");
+    expect(tenLopTrial("CS2", "", 3)).toBe("CS2-Lớp trial 3");
   });
 
   it("thiếu mã cơ sở vẫn ra tên đọc được, không ra chuỗi cụt", () => {
-    expect(tenLopTrial("", 3)).toBe("CS_Lớp trial 3");
+    expect(tenLopTrial("", null, 3)).toBe("CS-Lớp trial 3");
   });
 });
 

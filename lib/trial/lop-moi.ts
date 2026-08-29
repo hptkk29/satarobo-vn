@@ -1,4 +1,5 @@
-// lib/trial/lop-moi.ts — luật THUẦN cho lớp trải nghiệm kiểu mới (28/08/2026).
+// lib/trial/lop-moi.ts — luật THUẦN cho lớp trải nghiệm kiểu mới (28/08/2026,
+// tên lớp đổi quy ước 29/08 — thêm mã khoá quan tâm).
 //
 // Chủ dự án 28/08: lớp chỉ còn "tên lớp (tự sinh) · cơ sở · khoá trải nghiệm"; giờ,
 // phòng, giáo viên chuyển xuống TỪNG BUỔI. Hai luật mới sinh ra từ đó nằm ở đây, tách
@@ -16,16 +17,39 @@ function chuanHoaMaCoSo(raw: string): string {
   return khongDau.replace(/[^A-Za-z0-9]/g, "").toUpperCase();
 }
 
+/** Mã khoá cho tên lớp: giữ chữ-số của slug, viết THƯỜNG. "sata-4" → "sata4". */
+function chuanHoaMaKhoa(raw: string | null | undefined): string {
+  if (!raw) return "";
+  return raw
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .replace(/đ/g, "d")
+    .replace(/[^A-Za-z0-9]/g, "")
+    .toLowerCase();
+}
+
 /**
- * Tên lớp theo quy ước 28/08: `Cơ sở_Lớp trial số`.
+ * Tên lớp theo quy ước 29/08: `Cơ sở-Khoá quan tâm-Lớp trial số` — vd `CS2-sata4-Lớp trial 3`.
  *
- * Mã cơ sở do người nhập nên đã gặp đủ kiểu ("cs1", "Cơ sở 1", "CS-1"); chuẩn hoá ở
- * đây vì tên lớp đi thẳng vào phiếu gửi phụ huynh. Mã rỗng vẫn ra tên đọc được ("CS_…")
- * thay vì một chuỗi cụt bắt đầu bằng dấu gạch dưới.
+ * (Quy ước 28/08 là `CS2_Lớp trial 3`, không có khoá. Đổi vì một cơ sở chạy song song
+ * nhiều khoá trải nghiệm; thiếu mã khoá thì nhìn danh sách lớp không biết lớp nào của
+ * khoá nào, phải mở từng lớp ra xem.)
+ *
+ * Mã cơ sở do người nhập nên đã gặp đủ kiểu ("cs1", "Cơ sở 1", "CS-1") — chuẩn hoá ở
+ * đây vì tên lớp đi thẳng vào phiếu gửi phụ huynh. Mã rỗng vẫn ra tên đọc được ("CS-…")
+ * thay vì một chuỗi cụt bắt đầu bằng dấu gạch.
+ *
+ * `maKhoa` rỗng (lớp không gắn khoá — khoá là tuỳ chọn khi tạo) thì BỎ HẲN đoạn giữa
+ * thay vì để lại hai gạch liền: `CS2-Lớp trial 3`.
  */
-export function tenLopTrial(maCoSo: string, so: number): string {
-  const ma = chuanHoaMaCoSo(maCoSo) || "CS";
-  return `${ma}_Lớp trial ${so}`;
+export function tenLopTrial(
+  maCoSo: string,
+  maKhoa: string | null | undefined,
+  so: number,
+): string {
+  const cs = chuanHoaMaCoSo(maCoSo) || "CS";
+  const kh = chuanHoaMaKhoa(maKhoa);
+  return kh ? `${cs}-${kh}-Lớp trial ${so}` : `${cs}-Lớp trial ${so}`;
 }
 
 export type KhungGio = { startTime: string; endTime: string };
