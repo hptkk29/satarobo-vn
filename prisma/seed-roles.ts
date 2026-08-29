@@ -723,9 +723,16 @@ export const ROLE_SEED: RoleSeed[] = [
       { action: "hr_attendance:checkin", scopeType: "GLOBAL" },
       { action: "blog:view", scopeType: "CENTER" },
       { action: "course-packages:view", scopeType: "CENTER" },
-      { action: "centers:view", scopeType: "CENTER" },
-      { action: "holidays:view", scopeType: "CENTER" },
-      { action: "kits:view", scopeType: "CENTER" },
+      // 29/08/2026 — GỠ `centers:view` · `holidays:view` · `kits:view` khỏi Sale cơ sở
+      // (chủ dự án chốt): ba mục "Cơ sở" · "Lịch nghỉ" · "Học cụ" là màn quản trị/kho,
+      // không phải việc của người tư vấn. Sidebar đọc CÙNG hàm quyết định với cổng
+      // trang (lib/auth/menu-permissions.ts) nên gỡ quyền là mục biến mất VÀ trang
+      // cũng khoá — không đẻ ra "menu nói dối" theo chiều nào.
+      //
+      // Cách ly cơ sở của Sale KHÔNG dựa vào `centers:view`: nó đến từ
+      // `actor.visibleCenterIds` (suy từ `UserOrgRole`) + `scopedDb`. Đã soát: trong
+      // toàn repo `centers:view` chỉ có 2 nơi đọc — /centers và
+      // /centers/[id]/gio-lam-viec — cả hai đều là màn đang muốn giấu.
       { action: "payments:record", scopeType: "GLOBAL" },
       { action: "orders:view", scopeType: "GLOBAL" },
       // G-A (biên bản chốt 4 cổng, 21/08/2026) — mở trục chốt đơn cho Sale:
