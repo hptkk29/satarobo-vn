@@ -1410,6 +1410,19 @@ model Lead {
   expectedCourseId  String?
   expectedProductId String?
 
+  /// ─── Chia lead (29/08/2026) ──────────────────────────────────────────────
+  /// Đường nào đưa lead này tới chủ của nó. Null = lead có TRƯỚC ngày đổi, không
+  /// suy ngược được — đừng đoán.
+  assignmentSource LeadAssignSource?
+  /// Người THAO TÁC gán (quản lý giao tay). Null khi máy chia.
+  assignedById     String?
+  /// LẦN NHẬP GẦN NHẤT. Khác `createdAt`: khách gọi lại/điền form lại thì không
+  /// đẻ lead mới (trùng SĐT), nhưng mốc này nhảy — nếu không, phiếu nóng trông
+  /// y hệt phiếu nguội ba tháng.
+  lastInboundAt    DateTime?         @db.Timestamptz(6)
+  /// Đã vào hệ thống bao nhiêu lần (kể cả các lần bị chặn vì trùng).
+  inboundCount     Int               @default(1)
+
   deletedAt DateTime? @db.Timestamptz(6)
   createdAt DateTime  @default(now()) @db.Timestamptz(6)
   updatedAt DateTime  @updatedAt @db.Timestamptz(6)
@@ -3653,22 +3666,103 @@ model LeadAssignmentConfig {
 // Dòng của người đã rời vòng được GIỮ LẠI: họ quay lại thì vào đúng chỗ cũ,
 // không làm lại từ 0 rồi nhận dồn.
 model LeadRotationTurn {
-  id         String    @id @default(cuid())
-  orgUnitId  String
-  userId     String
+  id           String    @id @default(cuid())
+  orgUnitId    String
+  userId       String
   /// Vị trí trong vòng. CHỈ TĂNG — không có đường về 0.
-  turns      Int       @default(0)
+  turns        Int       @default(0)
   /// Khởi điểm lúc VÀO vòng (0 nếu có mặt từ đầu; = mức thấp nhất của vòng nếu
   /// vào sau). Số lead thật sự đã nhận qua vòng chia = `turns - seedTurns`.
   /// Không có cột này thì bảng bằng chứng nói sai về đúng người dễ bị soi nhất.
-  seedTurns  Int       @default(0)
+  seedTurns    Int       @default(0)
   /// Lần gần nhất tới lượt; null = chưa bao giờ. Dùng để phá hoà cho công bằng.
-  lastTurnAt DateTime? @db.Timestamptz(6)
-  createdAt  DateTime  @default(now()) @db.Timestamptz(6)
-  updatedAt  DateTime  @updatedAt @db.Timestamptz(6)
+  lastTurnAt   DateTime? @db.Timestamptz(6)
+  /// 29/08/2026 — CÓ NHẬN LEAD KHÔNG. Đây là tư cách thành viên pool, và nó nằm
+  /// CHUNG HÀNG với bộ đếm có chủ đích (xem khối ghi chú bên dưới model này).
+  ///
+  /// Trước ngày này "pool" là điều kiện ngầm — `role SALES_CSM + isActive + thuộc
+  /// đơn vị` — nên không tắt được một người mà không khoá cả tài khoản của họ.
+  isActive     Boolean   @default(true)
+  pausedAt     DateTime? @db.Timestamptz(6)
+  /// Bắt buộc ở đường ghi khi tắt: tắt là lấy lead khỏi tay người ta.
+  pausedReason String?
+  createdAt    DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt    DateTime  @updatedAt @db.Timestamptz(6)
 
   @@unique([orgUnitId, userId])
+  @@index([orgUnitId, isActive, turns])
   @@index([orgUnitId])
+}
+
+// ─── Chia lead tự động (29/08/2026) ─────────────────────────────────────────
+//
+// `LeadRotationTurn` ở trên vừa là BỘ ĐẾM LƯỢT vừa là TƯ CÁCH THÀNH VIÊN pool —
+// cố ý một bảng. Hai thứ đó cùng khoá `(orgUnitId, userId)`, cùng được đọc/ghi
+// trong một transaction dưới cùng một advisory lock, và luật "bật lại thì seed
+// turns = MIN(pool đang bật)" là một thao tác ĐỌC isActive rồi GHI turns nguyên
+// tử. Chung một hàng thì đó là MỘT `UPDATE`; tách hai bảng thì đó là hai bảng
+// phải khoá đúng thứ tự — và sáu tháng nữa sẽ có người khoá sai thứ tự.
+//
+// Hai bảng dưới thì KHÁC: chúng là NHẬT KÝ, không phải trạng thái. Chia tách là
+// đúng — trạng thái đọc mỗi lần chia, nhật ký chỉ ghi rồi đọc khi cần tra.
+
+/// Đường nào đưa lead tới chủ của nó. Chỉ `AUTO` tiêu lượt của vòng.
+enum LeadAssignSource {
+  AUTO /// máy chia theo vòng luân phiên (hoặc tỷ lệ chốt)
+  SELF /// sale tự nhập phiếu cho ĐÚNG cơ sở của mình
+  MANAGER /// quản lý giao tay / đổi chủ
+  IMPORT /// nhập Excel, dòng có sẵn tên sale hợp lệ
+  AFFILIATE /// landing page có mã NV, người đó là sale ĐÚNG cơ sở khách chọn
+  DUPLICATE /// trùng SĐT — giữ nguyên chủ cũ, không đụng bộ đếm
+}
+
+/// SỔ CHIA LEAD — mỗi lượt đưa lead tới một người là một dòng ở đây.
+///
+/// Vì sao tách khỏi `LeadAuditLog`/`LeadAssignmentHistory` đang có: hai bảng đó
+/// trả lời "lead này từng đổi chủ thế nào". Bảng này trả lời câu khác — "vòng
+/// chia có công bằng không" — nên nó phải mang `consumedTurn` + `poolSnapshot`,
+/// hai thứ vô nghĩa với lịch sử đổi chủ. Ghi cả lượt KHÔNG tiêu lượt: đó chính
+/// là chỗ giải thích vì sao "tổng lead đang giữ" cao hơn "lượt đã nhận".
+model LeadAssignmentLog {
+  id             String           @id @default(cuid())
+  leadId         String?
+  /// Luật cứng Nền Hệ thống #3: bảng MỚI dùng `orgUnitId`, không thêm `centerId`.
+  orgUnitId      String
+  assignedToId   String?
+  createdById    String?
+  source         LeadAssignSource
+  consumedTurn   Boolean
+  /// `turns` của người nhận NGAY SAU lượt này. Null khi không tiêu lượt.
+  turnCountAfter Int?
+  /// Ảnh chụp pool lúc chia: `[{userId, turns, isActive}]`. Không có nó thì một
+  /// tháng sau không ai dựng lại được "vì sao lượt đó rơi vào người này".
+  poolSnapshot   Json?
+  note           String?
+  createdAt      DateTime         @default(now()) @db.Timestamptz(6)
+
+  @@index([orgUnitId, createdAt])
+  @@index([assignedToId, createdAt])
+  @@index([leadId])
+}
+
+/// Nhật ký THAY ĐỔI POOL — ai bật/tắt/thêm ai, vì sao.
+///
+/// `reason` để nullable ở tầng DB nhưng đường ghi BẮT BUỘC có với `DEACTIVATE`
+/// và `MANUAL_ADJUST`: hai thao tác đó lấy lead khỏi tay người ta.
+model LeadAssignmentPoolEvent {
+  id        String   @id @default(cuid())
+  orgUnitId String
+  userId    String
+  /// ADD | ACTIVATE | DEACTIVATE | SEED | RESET_UNIT | MANUAL_ADJUST | TRANSFER
+  action    String
+  fromValue Json?
+  toValue   Json?
+  reason    String?
+  actorId   String
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+
+  @@index([orgUnitId, createdAt])
+  @@index([userId, createdAt])
 }
 
 // Module CRM & Lead PHẦN 3/4 — log chuyển lead (sale/cơ sở) + bàn giao.
