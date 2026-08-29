@@ -21,6 +21,9 @@ const ADMIN_DIR = path.join(ROOT, "app", "(admin)", "admin");
 
 /** Route được phép không có mục menu — mỗi dòng phải nêu lý do. */
 const ALLOWLIST: Record<string, string> = {
+  "/leads/so-luot":
+    "29/08 — stub chuyển hướng sang /quan-ly-chia-lead (sổ lượt nay là một cột của " +
+    "tab Cấu hình pool). Giữ route vì dấu trang và link trong thông báo đã gửi còn trỏ tới.",
   "/charts-test": "màn thử wrapper Recharts, chỉ dev dùng",
   "/design-system-preview": "bảng màu/typography, chỉ dev dùng",
   "/design-system-preview-v2": "bảng màu/typography bản 2, chỉ dev dùng",

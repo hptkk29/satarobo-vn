@@ -126,7 +126,7 @@ const NAV_GROUPS: NavGroup[] = [
       // trang trả lời hai nửa của cùng một câu hỏi: chia KIỂU GÌ, và đã chia RA SAO.
       // perm rộng hơn cấu hình (view-all thay vì assign-config): người phải trả lời
       // "sao bạn kia nhiều lead hơn" là Quản lý cơ sở, không phải Super Admin.
-      { label: "Sổ lượt chia lead", href: "/leads/so-luot", icon: ListOrdered, perm: ["leads:view-all"] },
+      { label: "Quản lý chia lead", href: "/quan-ly-chia-lead", icon: ListOrdered, perm: ["lead_pool:manage"] },
       { label: "Bàn giao lead", href: "/ban-giao-lead", icon: ArrowLeftRight, perm: ["leads:assign"] },
       { label: "Chuyển lead liên CS", href: "/leads/bao-cao-chuyen", icon: Workflow, perm: ["leads:assign"] },
       // BGĐ 31/07 — nguồn giới thiệu (affiliate): mã + link ?ref= + đối soát.

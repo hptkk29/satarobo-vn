@@ -40,6 +40,9 @@ export const ROLE_SEED: RoleSeed[] = [
       // bypass toàn bộ quyền trong can() v2 nên dòng này KHÔNG đổi hành vi; khai để ma
       // trận nói được ai đẩy được lead trên phễu, và để v1 (local/dev) khớp v2.
       { action: "leads:change-status", scopeType: "GLOBAL" },
+      // 29/08 — màn "Quản lý chia lead". GLOBAL vì là cổng TRANG; cách ly cơ sở do
+      // truy vấn gác (`visibleCenterIds`), không do scope của quyền.
+      { action: "lead_pool:manage", scopeType: "GLOBAL" },
       // #17 (câu 55): học bạ. SUPER_ADMIN đã bypass toàn bộ quyền trong can() v2
       // (lib/auth/can.ts) → 2 dòng này KHÔNG đổi hành vi, thêm cho khớp v1 + rõ ý.
       { action: "report-cards:manage", scopeType: "GLOBAL" },
@@ -471,6 +474,8 @@ export const ROLE_SEED: RoleSeed[] = [
       { action: "leads:create", scopeType: "GLOBAL" },
       { action: "leads:edit", scopeType: "GLOBAL" },
       { action: "leads:assign", scopeType: "GLOBAL" },
+      // 29/08 — điều hành vòng chia lead của CƠ SỞ MÌNH (bật/tắt người nhận lead).
+      { action: "lead_pool:manage", scopeType: "GLOBAL" },
       { action: "leads:import", scopeType: "GLOBAL" },
       { action: "leads:export", scopeType: "GLOBAL" },
       // ── Học viên · lớp · ghi danh ──

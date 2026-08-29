@@ -74,6 +74,7 @@ export type Action =
   | "leads:edit-own-intake"
   | "leads:assign"
   | "leads:assign-config" // 03/08 — tách riêng màn "Cấu hình chia lead" khỏi leads:assign
+  | "lead_pool:manage" // 29/08 — màn "Quản lý chia lead": ai đang nhận lead
   | "leads:delete"
   | "leads:export"
   | "leads:import" // Task #07 — import danh sách "khách đã đăng ký" từ Excel (Lead REGISTERED + LeadChild)
@@ -389,6 +390,9 @@ export const PERMISSIONS: Record<Action, Role[]> = {
   "leads:change-status": ["SUPER_ADMIN", "SALES_CSM"],
   "leads:assign": ["SUPER_ADMIN", "CENTER_MANAGER"],
   "leads:assign-config": ["SUPER_ADMIN"],
+  // Quản lý cơ sở điều hành được vòng chia của CƠ SỞ MÌNH (chủ dự án 29/08). Cách ly
+  // cơ sở KHÔNG nằm ở đây mà ở truy vấn — xem ghi chú trong registry.
+  "lead_pool:manage": ["SUPER_ADMIN", "CENTER_MANAGER"],
   "leads:delete": ["SUPER_ADMIN", "CENTER_MANAGER"],
   "leads:export": ["SUPER_ADMIN", "CENTER_MANAGER", "MARKETING"],
   // Task #07 — theo pattern students:import. SALES_CSM được cấp theo quyết định

@@ -91,6 +91,9 @@ export const PAGE_GATES = {
 
   /** Cảnh báo rủi ro HV. GV KHÔNG vào: trang không có lọc theo lớp, cho GV vào là
    *  mở toàn cơ sở — đúng thứ câu 19 cấm. */
+  /** Quản lý chia lead (29/08) — Quản trị + Quản lý cơ sở; QLCS chỉ thấy cơ sở mình. */
+  "/quan-ly-chia-lead": ["lead_pool:manage"],
+
   "/canh-bao-rui-ro": ["parent-requests:manage"],
 
   /** Ghi chú chăm sóc HV. Cùng lý do /canh-bao-rui-ro. Sale vào bằng chính

@@ -28,8 +28,10 @@ const MIEN_TRU: Record<string, string> = {
   "app/(teacher)/teacher/huong-dan/_components/guide-markdown.tsx": "bảng trong tài liệu hướng dẫn",
   "app/(public)/khoa-hoc/page.tsx": "bảng SO SÁNH hai khoá học — nội dung cố định, không phải danh sách",
   "app/(public)/hoc-cu/page.tsx": "bảng so sánh gói học cụ — nội dung cố định",
-  "app/(admin)/admin/leads/so-luot/page.tsx":
-    "một bảng = MỘT cơ sở, số dòng = số tư vấn viên từng nhận lead ở cơ sở đó (thực tế 2). Phân trang một bảng 2 dòng là thêm thanh điều khiển vô nghĩa, mà đây lại đúng là bảng cần nhìn HẾT một lượt để tin là công bằng",
+  "app/(admin)/admin/quan-ly-chia-lead/_components/pool-table.tsx":
+    "một bảng = MỘT cơ sở, số dòng = số sale của cơ sở đó (thực tế 2–5). Phân trang ở đây là thêm thanh điều khiển vô nghĩa, mà đây lại đúng là bảng cần nhìn HẾT một lượt để tin là công bằng — cắt trang là giấu mất người đang bị tắt",
+  "app/(admin)/admin/quan-ly-chia-lead/_components/so-chia.tsx":
+    "ĐÃ có phân trang, nhưng PHÍA SERVER (skip/take + link Trước/Sau) chứ không bọc `PhanTrangBang` — sổ chia lead chỉ có thêm không bao giờ bớt, cắt trang trong trình duyệt là phải tải cả sổ về trước",
   "components/legacy-laptrinhrobot/InternalAwards.tsx":
     "bảng giải thưởng trên landing cũ — danh sách chốt cứng trong code, không đọc từ DB",
   "app/(sale)/sale/trial/_components/trial-list.tsx":
