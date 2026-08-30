@@ -8,6 +8,7 @@ import { resolveActor } from "@/lib/auth/actor";
 import { LEAD_STATUS_LABEL, LEAD_STATUS_BADGE } from "@/lib/leads/status";
 import type { LeadStatus } from "@prisma/client";
 import { LeadActivityPanel } from "./_components/lead-activity-panel";
+import { LeadStatusSelect } from "../_components/status-select";
 import { ReassignButton } from "./_components/reassign-button";
 import { AssignSelect } from "./_components/assign-select";
 import { TransferDialog } from "./_components/transfer-dialog";
@@ -152,6 +153,11 @@ export default async function LeadDetailPage({ params }: Props) {
 
   // PHẦN 3 — chuyển lead: sale tự chuyển (cần leads:edit). Mọi cơ sở + mọi sale.
   const canTransfer = (await checkPermission("leads:edit", { centerId: lead.centerId }));
+  // 27/08 — quyền RIÊNG, chỉ Sale đẩy được lead trên phễu. KHÁC `leads:edit`: Quản lý
+  // cơ sở / Marketing vẫn sửa hồ sơ + ghi chú, chỉ không đổi bậc.
+  const canChangeStatus = await checkPermission("leads:change-status", {
+    centerId: lead.centerId,
+  });
   const [transferCenters, transferSales] = canTransfer
     ? await Promise.all([
         sdb.center.findMany({ where: { isActive: true }, orderBy: { displayOrder: "asc" }, select: { id: true, name: true } }),
@@ -284,6 +290,19 @@ export default async function LeadDetailPage({ params }: Props) {
               sharedAt={lead.sharedAt ? lead.sharedAt.toISOString() : null}
             />
           )}
+          {/* 30/08 — ĐỔI TRẠNG THÁI chuyển về đây, cạnh nút Sửa (chủ dự án chốt).
+              Bảng danh sách nay chỉ hiển thị nhãn: đổi bậc phễu là quyết định cần
+              nhìn cả hồ sơ, làm được ngay trên một dòng bảng thì dễ bấm nhầm — mà
+              bấm nhầm ở đây là lead rơi khỏi phễu.
+              Shared-viewer chỉ xem + ghi chú nên không có ô này. */}
+          {!isSharedViewer && (
+            <LeadStatusSelect
+              leadId={lead.id}
+              status={lead.status}
+              parentName={piiLead.parentName}
+              canChangeStatus={canChangeStatus}
+            />
+          )}
           {/* #11 T1 Q2 — shared-viewer: ẩn nút sửa/chuyển (chỉ xem + ghi chú) */}
           {canTransfer && !isSharedViewer && (
             <Link
@@ -324,8 +343,14 @@ export default async function LeadDetailPage({ params }: Props) {
         </div>
       )}
 
+      {/* 30/08 — hồ sơ khách và khối hoạt động ĐỨNG NGANG HÀNG (chủ dự án chốt).
+          Trước đó khối "Ghi nhanh hoạt động / Lịch sử tương tác" nằm tận cuối trang,
+          dưới bốn khối khác — người trực lead phải cuộn qua toàn bộ hồ sơ mới tới chỗ
+          ghi lại việc mình vừa làm, mà đó lại là thao tác lặp nhiều lần nhất ở màn này.
+          `items-start` để hai cột không bị kéo cao bằng nhau. */}
+      <div className="mb-6 grid items-start gap-4 lg:grid-cols-2">
       {/* Info grid */}
-      <dl className="mb-6 grid grid-cols-2 gap-4 rounded-xl border border-border bg-card p-4 sm:grid-cols-4">
+      <dl className="grid grid-cols-2 gap-4 rounded-xl border border-border bg-card p-4">
         <Info label="Tên con" value={piiLead.childName} />
         <Info label="Tuổi" value={lead.childAge?.toString() ?? null} />
         {/* 24/08 — KHÔNG fallback sang `source` nữa. "Nguồn" (Facebook, walk-in…)
@@ -401,6 +426,22 @@ export default async function LeadDetailPage({ params }: Props) {
           </div>
         )}
       </dl>
+
+      <LeadActivityPanel
+        leadId={lead.id}
+        activities={lead.activities.map((a) => ({
+          id: a.id,
+          type: a.type,
+          // #11 T2 — nội dung tư vấn là PII (Q7): non-holder → mask content + BỎ
+          // metadata (JSON chứa notes/recipient... raw) NGAY Ở SERVER; panel gặp
+          // metadata null sẽ tự fallback render `content` (đã mask).
+          content: canViewPii ? a.content : (maskFreeText(a.content) ?? ""),
+          metadata: canViewPii ? a.metadata : null,
+          actorName: a.actorName,
+          createdAt: a.createdAt.toISOString(),
+        }))}
+      />
+      </div>
 
       {/* LD1/G2 — loại đơn dự kiến (Khoá học / Sản phẩm) + item cụ thể theo loại */}
       <div className="mb-6">
@@ -529,20 +570,6 @@ export default async function LeadDetailPage({ params }: Props) {
           nó, nên in một danh sách chỉ-đọc ở đây là chỉ đường tới một cánh cửa đã khoá.
           Bảng `TrialClass` giữ trong DB theo nếp 2 pha, chưa drop. */}
 
-      <LeadActivityPanel
-        leadId={lead.id}
-        activities={lead.activities.map((a) => ({
-          id: a.id,
-          type: a.type,
-          // #11 T2 — nội dung tư vấn là PII (Q7): non-holder → mask content + BỎ
-          // metadata (JSON chứa notes/recipient... raw) NGAY Ở SERVER; panel gặp
-          // metadata null sẽ tự fallback render `content` (đã mask).
-          content: canViewPii ? a.content : (maskFreeText(a.content) ?? ""),
-          metadata: canViewPii ? a.metadata : null,
-          actorName: a.actorName,
-          createdAt: a.createdAt.toISOString(),
-        }))}
-      />
     </div>
   );
 }

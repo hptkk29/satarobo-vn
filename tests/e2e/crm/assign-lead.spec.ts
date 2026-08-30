@@ -479,4 +479,29 @@ test.describe("[CHIA-LEAD] engine chia lead — Postgres thật", () => {
     const sau = [...(await soLuot(ou1)).values()].reduce((a, b) => a + b, 0);
     expect(sau).toBe(truoc);
   });
+  test("[IT-17] chia xong thì BÁO cho sale nhận lead, bấm chuông vào thẳng trang chi tiết", async () => {
+    // Trước 30/08 không có đường nào báo: sale chỉ biết mình có lead mới khi tự mở
+    // danh sách ra xem. Lead nóng nhất là lead vừa để lại số, mà đúng lúc đó thì
+    // không ai được đánh động.
+    const r = await nhap(cs1);
+    expect(r.assignedToId).toBeTruthy();
+
+    const tb = await db.staffNotification.findFirst({
+      where: { userId: r.assignedToId!, dedupeKey: `lead.moi:${r.leadId}` },
+      select: { title: true, href: true, entityId: true },
+    });
+    expect(tb, "sale không nhận được thông báo lead mới").not.toBeNull();
+    // href trỏ THẲNG trang chi tiết, không phải danh sách: bấm chuông là đọc được
+    // ngay số điện thoại và ghi được hoạt động, không phải đi tìm.
+    expect(tb!.href).toBe(`/leads/${r.leadId}`);
+    expect(tb!.entityId).toBe(r.leadId);
+  });
+
+  test("[IT-18] sale TỰ NHẬP phiếu của mình thì KHÔNG báo — không đánh chuông việc mình vừa làm", async () => {
+    const r = await nhap(cs1, { entryPoint: "FORM", createdById: sales[0] });
+    expect(r.assignedToId).toBe(sales[0]);
+    expect(
+      await db.staffNotification.count({ where: { dedupeKey: `lead.moi:${r.leadId}` } }),
+    ).toBe(0);
+  });
 });

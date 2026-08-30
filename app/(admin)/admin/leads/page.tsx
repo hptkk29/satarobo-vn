@@ -309,10 +309,9 @@ export default async function LeadsPage({
     sdb.lead.count({ where }),
   ])
 
-  const canUpdate = (await checkPermission('leads:edit'))
-  // 27/08 — chỉ Sale đẩy được lead trên phễu (chủ dự án chốt). Tách hẳn khỏi
-  // canUpdate: Quản lý cơ sở / Marketing vẫn sửa hồ sơ + ghi chú như cũ.
-  const canChangeStatus = (await checkPermission('leads:change-status'))
+  // 30/08 — bảng KHÔNG còn sửa gì tại chỗ (ngăn kéo đã gỡ, ô trạng thái thành nhãn),
+  // nên `leads:edit` / `leads:change-status` không còn cần ở đây. Hai quyền đó nay hỏi
+  // ở TRANG CHI TIẾT, đúng nơi thao tác thật xảy ra.
   const canDelete = (await checkPermission('leads:delete'))
 
   const leads: LeadRow[] = rawLeads.map((raw) => {
@@ -366,8 +365,6 @@ export default async function LeadsPage({
         total={total}
         page={page}
         pageSize={soDong}
-        canUpdate={canUpdate}
-        canChangeStatus={canChangeStatus}
         sapXep={sapXep}
         canDelete={canDelete}
         currentStatus={statusFilter}
