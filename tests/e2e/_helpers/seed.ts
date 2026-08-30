@@ -21,6 +21,26 @@ export function assertTestDb(): void {
   const url = process.env.DATABASE_URL ?? "";
   const isLocal = /(@|\/\/)(localhost|127\.0\.0\.1)[:/]/.test(url);
   const looksTest = /satarobo_test|ci_test/.test(url);
+
+  // 30/08/2026 — CHẶN CỨNG THEO TÊN DB, không chỉ theo host.
+  //
+  // Vì sao thêm: `resetDb()` TRUNCATE sạch mọi bảng, và vế `isLocal` ở trên cho qua
+  // MỌI database trên máy — kể cả cái mà dev server đang phục vụ. Đã xảy ra thật: chạy
+  // bộ test trong lúc chủ dự án đang xem localhost là xoá trắng 16 tài khoản UAT ngay
+  // dưới chân họ, và triệu chứng ném ra lại là "sai mật khẩu" chứ không phải "mất dữ
+  // liệu" — mất công dò.
+  //
+  // Nay: chỉ đúng `satarobo_test` / `ci_test` mới cho reset. DB của localhost
+  // (`satarobo_local`) và mọi tên khác bị TỪ CHỐI, dù nằm trên 127.0.0.1.
+  if (isLocal && !looksTest) {
+    const ten = url.split("/").pop()?.split("?")[0] ?? "<không đọc được>";
+    throw new Error(
+      `[test] TỪ CHỐI xoá dữ liệu: DATABASE_URL trỏ database "${ten}", không phải ` +
+        `"satarobo_test". Bộ test chỉ được reset DB test riêng của nó — DB của dev ` +
+        `server (satarobo_local) không bao giờ được đụng tới.`,
+    );
+  }
+
   if (!isLocal && !looksTest) {
     const host = (() => {
       try {

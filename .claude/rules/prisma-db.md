@@ -43,6 +43,37 @@ Direct connection `db.<ref>.supabase.co:5432` chỉ có **IPv6 AAAA record** —
 - **Trước khi test:** apply schema lên DB test: `prisma migrate deploy` (hoặc `db push`) với env test, rồi seed helper.
 - **`resetDb()`** trong `tests/e2e/_helpers/seed.ts` reset/truncate **programmatic qua Prisma client** (đọc `TEST_DATABASE_URL`/`.env.test`) — không gọi shell, nên hook destructive không chặn. Helper PHẢI assert URL là `127.0.0.1`/`localhost` trước khi reset (fail-safe chống trỏ nhầm prod).
 
+## BA database trên máy — đừng trộn (30/08/2026)
+
+| DB | Ai dùng | Có được TRUNCATE không |
+|---|---|---|
+| `satarobo_test` | bộ test (`resetDb()`) | **CÓ** — đó là việc của nó |
+| `satarobo_local` | **dev server localhost** | **KHÔNG BAO GIỜ** |
+| `satarobo_dev` | tra cứu tay | KHÔNG |
+
+Vì sao tách: trước 30/08 dev server và bộ test **dùng chung** `satarobo_test`. Chạy
+test trong lúc chủ dự án đang xem localhost là `TRUNCATE` sạch mọi bảng ngay dưới chân
+họ — 16 tài khoản UAT biến mất, và triệu chứng ném ra là **"sai mật khẩu"** chứ không
+phải "mất dữ liệu", nên mất công dò mới ra.
+
+`assertTestDb()` nay chặn **theo TÊN database**, không chỉ theo host: vế "là localhost"
+cho qua mọi DB trên máy, kể cả DB đang phục vụ dev server. Chỉ `satarobo_test` /
+`ci_test` mới reset được.
+
+**Chạy dev server:**
+
+```bash
+DATABASE_URL='postgresql://postgres:postgres@127.0.0.1:5432/satarobo_local' DIRECT_URL="$DATABASE_URL" pnpm dev -p 3000
+```
+
+Dựng lại `satarobo_local` từ đầu (createdb → migrate → seed nền → org → vai → UAT):
+
+```bash
+createdb -U postgres -h 127.0.0.1 satarobo_local
+# rồi với DATABASE_URL/DIRECT_URL trỏ satarobo_local:
+pnpm exec prisma migrate deploy && pnpm db:seed && pnpm db:seed:orgunit   && pnpm db:seed:roles && UAT_SEED=1 pnpm db:seed:uat
+```
+
 ## Reset DB — chỉ cho phép trên DB test (local)
 
 - `pnpm db:reset` / `prisma migrate reset` trần → **hook `block-destructive.sh` CHẶN** (bảo vệ prod).
