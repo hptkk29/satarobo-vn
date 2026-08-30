@@ -14,6 +14,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { updateLeadStatus, autoAssignLeadAction } from "../actions";
 import { LyDoRotDialog } from "./ly-do-rot-dialog";
+import { formatPhoneVN, telHrefVN } from "@/lib/phone";
 
 export type KanbanLead = {
   id: string;
@@ -230,10 +231,10 @@ export function LeadsKanban({
                       </div>
                     </div>
                     <a
-                      href={`tel:${lead.phone}`}
+                      href={telHrefVN(lead.phone)}
                       className="text-sm font-medium text-primary"
                     >
-                      {lead.phone}
+                      {formatPhoneVN(lead.phone)}
                     </a>
                     <div className="mt-1 space-y-0.5 text-xs text-muted-foreground">
                       {lead.courseName && <div>Khoá: {lead.courseName}</div>}

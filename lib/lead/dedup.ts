@@ -1,6 +1,6 @@
 import { db } from "@/lib/db";
 import { getSetting } from "@/lib/settings/service";
-import { phoneVariants } from "@/lib/phone";
+import { formatPhoneVN, phoneVariants } from "@/lib/phone";
 
 // =============================================================================
 // LEAD DEDUP — chống trùng SĐT trong cửa sổ cấu hình được (Phase T1.3)
@@ -42,7 +42,7 @@ export async function logDuplicateAttempt(
         leadId: primaryLeadId,
         actorName: "Hệ thống (web)",
         type: "NOTE",
-        content: `[Trùng SĐT] Có submit mới cùng SĐT ${phone}${
+        content: `[Trùng SĐT] Có submit mới cùng SĐT ${formatPhoneVN(phone)}${
           source ? ` từ nguồn "${source}"` : ""
         } — đã chặn tạo lead trùng.`,
       },

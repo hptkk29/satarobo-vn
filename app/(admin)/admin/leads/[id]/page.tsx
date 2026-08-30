@@ -5,7 +5,6 @@ import { auth } from "@/lib/auth";
 import { checkPermission } from "@/lib/auth/check-permission";
 import { scopedDb } from "@/lib/db-scope";
 import { resolveActor } from "@/lib/auth/actor";
-import { LEAD_STATUS_LABEL, LEAD_STATUS_BADGE } from "@/lib/leads/status";
 import type { LeadStatus } from "@prisma/client";
 import { LeadActivityPanel } from "./_components/lead-activity-panel";
 import { LeadStatusSelect } from "../_components/status-select";
@@ -14,9 +13,13 @@ import { AssignSelect } from "./_components/assign-select";
 import { TransferDialog } from "./_components/transfer-dialog";
 import { LeadChildrenManager } from "../_components/lead-children";
 import { TrialEnrollWidget } from "./_components/trial-enroll-widget";
-import { OrderKindSelect } from "./_components/order-kind-select";
 import { LeadPaymentCard } from "../_components/lead-payment-card";
 import { getLeadPaymentSummary } from "@/lib/payments/summary";
+// 30/08 — SĐT HIỂN THỊ dạng `0987654321`, không phải `84987654321`. Dạng `84…` là
+// quy ước LƯU TRỮ (QĐ-4, để so khớp và gửi ZNS); người Việt đọc/đọc-cho-nhau bằng số
+// 0 đầu, và sale hay chép từ màn hình ra để gọi. `formatPhoneVN` trả nguyên chuỗi khi
+// không chuẩn hoá được, nên giá trị đã bị che PII vẫn hiện đúng bản che.
+import { formatPhoneVN, telHrefVN } from "@/lib/phone";
 import { maskFreeText, maskPersonName, maskLeadPiiFields } from "@/lib/lead/pii";
 import { canSeeLead, leadSharingEnabled } from "@/lib/lead/sharing";
 import { canViewLeadPii } from "@/lib/auth/check-permission";
@@ -180,7 +183,9 @@ export default async function LeadDetailPage({ params }: Props) {
   const paymentSummary = await getLeadPaymentSummary(sdb, lead.id);
 
   // R7-01 — options cho khối quản lý con (khoá quan tâm / cơ sở quan tâm).
-  const [childCenters, childCourses, expectedProducts] = await Promise.all([
+  // 30/08 — bỏ truy vấn `product` (chỉ phục vụ ô "Loại đơn dự kiến" đã gỡ): một
+  // vòng DB mỗi lượt mở lead, cho một danh sách không ai còn nhìn.
+  const [childCenters, childCourses] = await Promise.all([
     sdb.center.findMany({
       where: { isActive: true },
       orderBy: { displayOrder: "asc" },
@@ -190,13 +195,6 @@ export default async function LeadDetailPage({ params }: Props) {
       where: { isActive: true, isTeachable: true },
       orderBy: { name: "asc" },
       select: { id: true, name: true, category: true, code: true },
-    }),
-    // G2 — sản phẩm dự kiến (loại đơn = Sản phẩm): chỉ KIT_ROBOT/SENSOR đang bán.
-    sdb.product.findMany({
-      where: { status: "ACTIVE", category: { in: ["KIT_ROBOT", "SENSOR"] } },
-      orderBy: { name: "asc" },
-      take: 200,
-      select: { id: true, sku: true, name: true },
     }),
   ]);
   // Lead ĐÃ MẤT (hoặc không có quyền sửa / chỉ xem nhờ "dùng chung") → con read-only.
@@ -256,24 +254,18 @@ export default async function LeadDetailPage({ params }: Props) {
       {/* Header */}
       <div className="mb-6 flex flex-wrap items-start justify-between gap-3 border-b border-border pb-4">
         <div>
-          <div className="flex flex-wrap items-center gap-2">
-            <h1 className="text-2xl font-bold text-foreground">
-              {piiLead.parentName}
-            </h1>
-            <span
-              className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${LEAD_STATUS_BADGE[status]}`}
-            >
-              {LEAD_STATUS_LABEL[status]}
-            </span>
-          </div>
+          {/* 30/08 — GỠ nhãn trạng thái ở tiêu đề. Ô ĐỔI trạng thái nay đứng ngay
+              bên phải cùng hàng; để thêm một nhãn chỉ-đọc nữa là hai chỗ nói cùng
+              một điều, và lúc đổi thì hai chỗ đó lệch nhau trong khoảnh khắc. */}
+          <h1 className="text-2xl font-bold text-foreground">{piiLead.parentName}</h1>
           <div className="mt-1 text-sm text-muted-foreground">
             {/* #11 T2 — non-holder: hiện SĐT mask + BỎ link tel: (href sẽ lộ số thật) */}
             {canViewPii ? (
-              <a href={`tel:${lead.phone}`} className="font-medium text-primary">
-                {piiLead.phone}
+              <a href={telHrefVN(lead.phone)} className="font-medium text-primary">
+                {formatPhoneVN(piiLead.phone)}
               </a>
             ) : (
-              <span className="font-medium text-primary">{piiLead.phone}</span>
+              <span className="font-medium text-primary">{formatPhoneVN(piiLead.phone)}</span>
             )}
             {piiLead.email && <span> · {piiLead.email}</span>}
           </div>
@@ -343,12 +335,19 @@ export default async function LeadDetailPage({ params }: Props) {
         </div>
       )}
 
-      {/* 30/08 — hồ sơ khách và khối hoạt động ĐỨNG NGANG HÀNG (chủ dự án chốt).
-          Trước đó khối "Ghi nhanh hoạt động / Lịch sử tương tác" nằm tận cuối trang,
-          dưới bốn khối khác — người trực lead phải cuộn qua toàn bộ hồ sơ mới tới chỗ
-          ghi lại việc mình vừa làm, mà đó lại là thao tác lặp nhiều lần nhất ở màn này.
-          `items-start` để hai cột không bị kéo cao bằng nhau. */}
+      {/* ─── BỐ CỤC HAI CỘT (chủ dự án chốt 30/08/2026) ────────────────────────
+          CỘT TRÁI  — hồ sơ: thông tin khách · con của phụ huynh · đơn & thanh toán.
+          CỘT PHẢI  — ghi nhanh hoạt động + lịch sử tương tác.
+
+          Vì sao tách vậy: cột trái là thứ ĐỌC (tra cứu, thỉnh thoảng sửa), cột phải là
+          thứ GHI và người trực lead lặp lại nhiều lần nhất trong một cuộc gọi. Trước
+          đợt này khối ghi nằm tận cuối trang, dưới bốn khối hồ sơ — mỗi lần muốn ghi
+          một dòng phải cuộn qua toàn bộ hồ sơ.
+
+          `items-start` để hai cột không bị kéo cao bằng nhau; `lg:` mới chia đôi —
+          màn hẹp vẫn xếp dọc theo đúng thứ tự đọc. */}
       <div className="mb-6 grid items-start gap-4 lg:grid-cols-2">
+        <div className="space-y-4">
       {/* Info grid */}
       <dl className="grid grid-cols-2 gap-4 rounded-xl border border-border bg-card p-4">
         <Info label="Tên con" value={piiLead.childName} />
@@ -394,8 +393,11 @@ export default async function LeadDetailPage({ params }: Props) {
           />
         )}
         <Info label="Sale phụ trách" value={lead.assignedTo?.name ?? "Chưa gán"} />
+        {/* 30/08 — GỌI CÙNG TÊN với cột trên bảng danh sách ("Ngày nhận lead"). Hai
+            màn gọi cùng một mốc bằng hai tên là cách nhanh nhất để người dùng tưởng
+            đó là hai mốc khác nhau. */}
         <Info
-          label="Ngày tạo"
+          label="Ngày nhận lead"
           value={formatDateVN(lead.createdAt)}
         />
         {/* 29/08 — LẦN NHẬP GẦN NHẤT.
@@ -426,35 +428,6 @@ export default async function LeadDetailPage({ params }: Props) {
           </div>
         )}
       </dl>
-
-      <LeadActivityPanel
-        leadId={lead.id}
-        activities={lead.activities.map((a) => ({
-          id: a.id,
-          type: a.type,
-          // #11 T2 — nội dung tư vấn là PII (Q7): non-holder → mask content + BỎ
-          // metadata (JSON chứa notes/recipient... raw) NGAY Ở SERVER; panel gặp
-          // metadata null sẽ tự fallback render `content` (đã mask).
-          content: canViewPii ? a.content : (maskFreeText(a.content) ?? ""),
-          metadata: canViewPii ? a.metadata : null,
-          actorName: a.actorName,
-          createdAt: a.createdAt.toISOString(),
-        }))}
-      />
-      </div>
-
-      {/* LD1/G2 — loại đơn dự kiến (Khoá học / Sản phẩm) + item cụ thể theo loại */}
-      <div className="mb-6">
-        <OrderKindSelect
-          leadId={lead.id}
-          current={lead.orderKind}
-          currentCourseId={lead.expectedCourseId}
-          currentProductId={lead.expectedProductId}
-          courses={childCourses.map((c) => ({ id: c.id, name: c.name, code: c.code }))}
-          products={expectedProducts}
-          readOnly={!canTransfer || isSharedViewer}
-        />
-      </div>
 
       {/* R7-01 — danh sách con (LeadChild) + field phẳng cũ read-only */}
       <div className="mb-6">
@@ -564,6 +537,29 @@ export default async function LeadDetailPage({ params }: Props) {
           </Link>
         </div>
       )}
+
+        </div>
+
+        {/* CỘT PHẢI — chỗ GHI. `lg:sticky` để khi cuộn đọc hồ sơ dài, ô ghi nhanh
+            vẫn nằm trong tầm mắt: không dính thì mỗi lần ghi một dòng lại phải cuộn
+            ngược lên đầu trang. */}
+        <div className="lg:sticky lg:top-4">
+          <LeadActivityPanel
+            leadId={lead.id}
+            activities={lead.activities.map((a) => ({
+              id: a.id,
+              type: a.type,
+              // #11 T2 — nội dung tư vấn là PII (Q7): non-holder → mask content + BỎ
+              // metadata (JSON chứa notes/recipient... raw) NGAY Ở SERVER; panel gặp
+              // metadata null sẽ tự fallback render `content` (đã mask).
+              content: canViewPii ? a.content : (maskFreeText(a.content) ?? ""),
+              metadata: canViewPii ? a.metadata : null,
+              actorName: a.actorName,
+              createdAt: a.createdAt.toISOString(),
+            }))}
+          />
+        </div>
+      </div>
 
       {/* 28/08 — GỠ khối "Buổi học thử" (hệ V1, `TrialClass`).
           Tính năng lịch hẹn học thử đã bị gỡ khỏi hệ thống: không còn màn nào quản lý

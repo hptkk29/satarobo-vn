@@ -17,10 +17,11 @@ export type LeadColumn = {
 };
 
 /**
- * Thứ tự ở đây là thứ tự cột trên bảng — người dùng chọn HIỆN/ẨN, không đổi thứ tự.
+ * Thứ tự ở đây là thứ tự MẶC ĐỊNH. Từ 30/08/2026 người dùng đổi được cả HIỆN/ẨN lẫn
+ * THỨ TỰ (chủ dự án chốt), lưu trong `localStorage` — mỗi người một bộ.
  *
- * Cho đổi thứ tự nghe hay nhưng đắt: phải lưu mảng thứ tự, phải xử lý cột mới chèn vào
- * đâu, và hai người mô tả "cột thứ ba" cho nhau sẽ nói về hai cột khác nhau.
+ * Hệ quả phải nhớ: ĐỪNG mô tả cột theo VỊ TRÍ ("cột thứ ba") trong tài liệu hay lời
+ * nhắn — hai người đang xem hai thứ tự khác nhau. Gọi theo TÊN cột.
  */
 export const LEAD_COLUMNS: readonly LeadColumn[] = [
   { key: "parentName", label: "Phụ huynh / học sinh", macDinh: true, batBuoc: true },
@@ -57,15 +58,47 @@ export function cotMacDinh(): string[] {
 /**
  * Làm sạch danh sách cột đọc từ trình duyệt.
  *
- * Ba việc, việc nào thiếu cũng vỡ bảng: bỏ khoá lạ (cột đã xoá khỏi mã nguồn), luôn
- * kèm cột bắt buộc, và giữ ĐÚNG thứ tự của danh mục chứ không phải thứ tự người dùng
- * bấm. Rỗng hoặc hỏng thì rơi về bộ mặc định — thà thấy bộ mặc định còn hơn bảng trắng.
+ * Ba việc, thiếu việc nào cũng vỡ bảng:
+ *   · bỏ khoá lạ (cột đã xoá khỏi mã nguồn) — nếu không, bảng cố render một `case`
+ *     không tồn tại và ra ô trống mãi mãi;
+ *   · luôn kèm cột BẮT BUỘC, kể cả khi người dùng bỏ nó đi;
+ *   · GIỮ ĐÚNG THỨ TỰ NGƯỜI DÙNG ĐÃ CHỌN (30/08 — chủ dự án chốt cho sắp xếp).
+ *
+ * ⚠️ Đảo chốt 30/08 sáng ("thứ tự cố định theo danh mục"). Lý do cũ — "hai người mô
+ * tả 'cột thứ ba' sẽ nói về hai cột khác nhau" — vẫn đúng, nhưng đổi lại người dùng
+ * được xếp bảng theo cách họ làm việc. Hệ quả phải nhớ: ĐỪNG mô tả cột theo VỊ TRÍ
+ * trong tài liệu hay lời nhắn, chỉ gọi theo TÊN.
+ *
+ * Rỗng hoặc hỏng thì rơi về bộ mặc định — thà thấy bộ mặc định còn hơn bảng trắng.
  */
 export function chuanHoaCot(raw: unknown): string[] {
+  const hopLe = new Set(LEAD_COLUMN_KEYS);
   const batBuoc = LEAD_COLUMNS.filter((c) => c.batBuoc).map((c) => c.key);
   if (!Array.isArray(raw)) return cotMacDinh();
-  const chon = new Set(raw.filter((x): x is string => typeof x === "string"));
-  for (const k of batBuoc) chon.add(k);
-  const ra = LEAD_COLUMN_KEYS.filter((k) => chon.has(k));
+
+  // Giữ thứ tự người dùng, khử trùng, bỏ khoá lạ.
+  const ra: string[] = [];
+  for (const x of raw) {
+    if (typeof x === "string" && hopLe.has(x) && !ra.includes(x)) ra.push(x);
+  }
+  // Cột bắt buộc thiếu thì chèn lên ĐẦU: nó là cột định danh, nằm giữa bảng thì
+  // người đọc không biết mỗi dòng nói về ai cho tới khi cuộn tới nó.
+  for (const k of batBuoc) if (!ra.includes(k)) ra.unshift(k);
+
   return ra.length > batBuoc.length ? ra : cotMacDinh();
+}
+
+/**
+ * Dời một cột lên/xuống MỘT bậc. Trả về danh sách mới (không sửa mảng gốc).
+ *
+ * Dùng nút lên/xuống chứ không kéo-thả: kéo-thả cần thư viện, cần xử lý bàn phím
+ * riêng cho người không dùng chuột, và ở một hộp 14 dòng thì hai cái nút là đủ.
+ */
+export function doiChoCot(cot: string[], key: string, huong: -1 | 1): string[] {
+  const i = cot.indexOf(key);
+  const j = i + huong;
+  if (i === -1 || j < 0 || j >= cot.length) return cot;
+  const ra = [...cot];
+  [ra[i], ra[j]] = [ra[j], ra[i]];
+  return ra;
 }

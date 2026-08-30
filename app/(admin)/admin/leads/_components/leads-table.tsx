@@ -3,12 +3,21 @@
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useTransition, useState, useEffect } from 'react'
-import { Loader2, Download, Trash2, CheckCircle2, ArrowDown, Columns3 } from 'lucide-react'
+import {
+  Loader2,
+  Download,
+  Trash2,
+  ArrowDown,
+  Columns3,
+  ChevronUp,
+  ChevronDown,
+} from 'lucide-react'
 import {
   LEAD_COLUMNS,
   LEAD_COLUMNS_STORAGE_KEY,
   chuanHoaCot,
   cotMacDinh,
+  doiChoCot,
 } from '@/lib/tables/lead-columns'
 import { deleteLead } from '../actions'
 import {
@@ -16,6 +25,7 @@ import {
   LEAD_STATUS_BADGE as STATUS_COLORS,
   KANBAN_COLUMNS,
 } from '@/lib/leads/status'
+import { formatPhoneVN } from '@/lib/phone'
 import { Badge } from '@/components/ui/badge'
 import { ChonSoDong } from '@/components/ui/chon-so-dong'
 import { DieuHuongTrang } from '@/components/ui/dieu-huong-trang'
@@ -196,7 +206,18 @@ function LeadCell({
       return (
         <td className="px-4 py-3">
           <div className="flex items-center gap-1.5">
-            <span className="font-medium text-foreground">{lead.parentName}</span>
+            {/* 30/08 — LINK THẬT, không phải chữ thường. Cột "Hành động" (nơi có nút
+                "Xem chi tiết lead") đã gỡ, nên nếu ô này chỉ là <span> thì đường vào
+                trang chi tiết chỉ còn `onClick` trên <tr>: người dùng bàn phím không
+                tới được, và không ai mở được lead ở tab mới (chuột giữa / Ctrl+click)
+                — thao tác mà sale làm suốt để so vài lead một lúc. */}
+            <Link
+              href={`/leads/${lead.id}`}
+              onClick={e => e.stopPropagation()}
+              className="font-medium text-foreground hover:text-primary hover:underline"
+            >
+              {lead.parentName}
+            </Link>
             <SharedBadge lead={lead} currentUserId={currentUserId} />
           </div>
           {lead.childName && (
@@ -208,7 +229,13 @@ function LeadCell({
         </td>
       )
     case 'phone':
-      return <td className="px-4 py-3 text-sm tabular-nums text-foreground">{lead.phone}</td>
+      // 30/08 — hiện `0987654321`, không phải `84987654321`: `84…` là quy ước LƯU
+      // TRỮ, còn đây là số sale chép ra để gọi.
+      return (
+        <td className="px-4 py-3 text-sm tabular-nums text-foreground">
+          {formatPhoneVN(lead.phone)}
+        </td>
+      )
     case 'course':
       return (
         <td className="px-4 py-3 max-w-[200px]">
@@ -355,22 +382,41 @@ export function LeadsTable({
     }
   }, [])
 
-  function doiCot(key: string, hien: boolean) {
-    setCot(prev => {
-      const moi = chuanHoaCot(hien ? [...prev, key] : prev.filter(k => k !== key))
-      try {
-        window.localStorage.setItem(LEAD_COLUMNS_STORAGE_KEY, JSON.stringify(moi))
-      } catch {
-        // Không lưu được thì vẫn đổi trong phiên này — mất khi tải lại, không sao.
-      }
-      return moi
-    })
+  /**
+   * Ghi lựa chọn xuống trình duyệt. Không lưu được (chặn site data / hết dung lượng)
+   * thì vẫn đổi trong phiên này — mất khi tải lại, chứ không làm hỏng thao tác.
+   */
+  function luuCot(moi: string[]): string[] {
+    try {
+      window.localStorage.setItem(LEAD_COLUMNS_STORAGE_KEY, JSON.stringify(moi))
+    } catch {
+      /* xem chú thích trên */
+    }
+    return moi
   }
 
-  const cotHien = LEAD_COLUMNS.filter(c => cot.includes(c.key))
+  function doiCot(key: string, hien: boolean) {
+    // Bật thêm thì cột mới vào CUỐI bảng — chèn giữa là xô lệch bố cục người dùng
+    // vừa tự xếp; muốn nó lên trước thì có nút dời chỗ.
+    setCot(prev => luuCot(chuanHoaCot(hien ? [...prev, key] : prev.filter(k => k !== key))))
+  }
+
+  function doiThuTu(key: string, huong: -1 | 1) {
+    setCot(prev => luuCot(chuanHoaCot(doiChoCot(prev, key, huong))))
+  }
+
+  // Thứ tự CỦA NGƯỜI DÙNG (30/08), không phải thứ tự danh mục — `cot` đã qua
+  // `chuanHoaCot` nên không còn khoá lạ; `filter` chỉ để TypeScript yên tâm.
+  const cotHien = cot
+    .map(k => LEAD_COLUMNS.find(c => c.key === k))
+    .filter((c): c is (typeof LEAD_COLUMNS)[number] => !!c)
+  const cotAn = LEAD_COLUMNS.filter(c => !cot.includes(c.key))
   const totalPages = Math.ceil(total / pageSize)
-  // Nút "Xem chi tiết lead" hiện cho mọi role xem được lead → luôn render cột thao tác.
-  const showActions = true
+  // 30/08 — GỠ nút "Xem chi tiết lead" (chủ dự án chốt): bấm dòng đã vào thẳng trang
+  // chi tiết, nút kia chỉ lặp lại cùng một việc và ăn một cột ngang.
+  // Cột "Hành động" vì thế chỉ còn lý do tồn tại khi người dùng XOÁ được lead — role
+  // không xoá được thì không thấy cột nào cả.
+  const showActions = canDelete
 
   const navigate = (updates: Record<string, string | undefined>) => {
     const params = new URLSearchParams(searchParams.toString())
@@ -438,33 +484,67 @@ export function LeadsTable({
                 className="fixed inset-0 z-40 cursor-default"
               />
               <div className="absolute right-0 z-50 mt-1 w-64 rounded-xl border border-border bg-card p-2 shadow-lg">
-                {LEAD_COLUMNS.map(c => (
-                  <label
+                {/* Cột ĐANG HIỆN — theo đúng thứ tự trên bảng, kèm nút dời chỗ. */}
+                {cotHien.map((c, i) => (
+                  <div
                     key={c.key}
-                    className={`flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm ${
-                      c.batBuoc ? 'opacity-50' : 'cursor-pointer hover:bg-muted'
-                    }`}
+                    className="flex items-center gap-1 rounded-lg px-2 py-1 text-sm hover:bg-muted"
                   >
                     <input
                       type="checkbox"
-                      checked={cot.includes(c.key)}
+                      checked
                       disabled={c.batBuoc}
-                      onChange={e => doiCot(c.key, e.target.checked)}
+                      onChange={() => doiCot(c.key, false)}
+                      aria-label={`Ẩn cột ${c.label}`}
                     />
-                    <span className="text-foreground">{c.label}</span>
+                    <span className="flex-1 truncate text-foreground" title={c.label}>
+                      {c.label}
+                    </span>
+                    <button
+                      type="button"
+                      disabled={i === 0}
+                      onClick={() => doiThuTu(c.key, -1)}
+                      aria-label={`Đưa cột ${c.label} lên trước`}
+                      className="rounded p-0.5 text-muted-foreground hover:bg-card disabled:opacity-30"
+                    >
+                      <ChevronUp className="h-3.5 w-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      disabled={i === cotHien.length - 1}
+                      onClick={() => doiThuTu(c.key, 1)}
+                      aria-label={`Đưa cột ${c.label} xuống sau`}
+                      className="rounded p-0.5 text-muted-foreground hover:bg-card disabled:opacity-30"
+                    >
+                      <ChevronDown className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                ))}
+
+                {/* Cột đang ẨN — không có nút dời chỗ vì chúng chưa ở trên bảng.
+                    Bật lên thì cột vào cuối, rồi dời bằng nút mũi tên ở nhóm trên. */}
+                {cotAn.length > 0 && (
+                  <p className="mt-2 px-2 text-xs font-semibold uppercase text-muted-foreground">
+                    Đang ẩn
+                  </p>
+                )}
+                {cotAn.map(c => (
+                  <label
+                    key={c.key}
+                    className="flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1.5 text-sm hover:bg-muted"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={false}
+                      onChange={() => doiCot(c.key, true)}
+                      aria-label={`Hiện cột ${c.label}`}
+                    />
+                    <span className="text-muted-foreground">{c.label}</span>
                   </label>
                 ))}
                 <button
                   type="button"
-                  onClick={() => {
-                    const md = cotMacDinh()
-                    setCot(md)
-                    try {
-                      window.localStorage.setItem(LEAD_COLUMNS_STORAGE_KEY, JSON.stringify(md))
-                    } catch {
-                      /* không lưu được thì thôi */
-                    }
-                  }}
+                  onClick={() => setCot(luuCot(cotMacDinh()))}
                   className="mt-1 w-full rounded-lg border border-border px-2 py-1.5 text-xs font-medium text-muted-foreground hover:bg-muted"
                 >
                   Về mặc định
@@ -537,22 +617,7 @@ export function LeadsTable({
                         onClick={e => e.stopPropagation()}
                       >
                         <div className="flex items-center justify-end gap-2">
-                          {/* FL2-01 — điều hướng vào trang chi tiết lead; hiện cho MỌI
-                              trạng thái (kể cả đã ghi danh) và mọi role xem được lead. */}
-                          <Link
-                            href={`/leads/${lead.id}`}
-                            onClick={(e) => e.stopPropagation()}
-                            className="inline-flex items-center gap-1 rounded-md bg-primary-soft px-2 py-1 text-xs font-semibold text-primary hover:bg-primary-soft-hover"
-                          >
-                            <CheckCircle2 className="h-3.5 w-3.5" />
-                            Xem chi tiết lead
-                          </Link>
-                          {canDelete && (
-                            <DeleteCell
-                              lead={lead}
-                              onDeleted={() => router.refresh()}
-                            />
-                          )}
+                          <DeleteCell lead={lead} onDeleted={() => router.refresh()} />
                         </div>
                       </td>
                     )}

@@ -8,7 +8,7 @@
 import { describe, it, expect } from "vitest";
 import fs from "node:fs";
 import path from "node:path";
-import { LEAD_COLUMNS, cotMacDinh, chuanHoaCot } from "./lead-columns";
+import { LEAD_COLUMNS, cotMacDinh, chuanHoaCot, doiChoCot } from "./lead-columns";
 
 const NGUON = path.join(
   process.cwd(),
@@ -50,10 +50,30 @@ describe("danh mục cột bảng Lead", () => {
     expect(chuanHoaCot(["cot_khong_ton_tai"])).toEqual(cotMacDinh());
   });
 
-  it("giữ ĐÚNG thứ tự của danh mục, không phải thứ tự người dùng bấm", () => {
-    // Người dùng bấm ngược thứ tự thì bảng vẫn phải xếp cột như danh mục — nếu không,
-    // hai người mô tả "cột thứ ba" cho nhau sẽ nói về hai cột khác nhau.
+  it("GIỮ NGUYÊN thứ tự người dùng đã chọn (đảo chốt 30/08 — cho phép sắp xếp)", () => {
+    // Kể cả cột BẮT BUỘC cũng được dời: "bắt buộc" nghĩa là không TẮT được, không
+    // phải là bị ghim ở cột đầu. Ghim nó lại thì người dùng dời được 13 cột và cột
+    // thứ 14 tự nhảy về chỗ cũ — trông như nút hỏng.
     const nguoc = [...LEAD_COLUMNS].map((c) => c.key).reverse();
-    expect(chuanHoaCot(nguoc)).toEqual(LEAD_COLUMNS.map((c) => c.key));
+    expect(chuanHoaCot(nguoc)).toEqual(nguoc);
+  });
+
+  it("cột BẮT BUỘC thiếu thì chèn lên ĐẦU, không phải giữa bảng", () => {
+    // Nó là cột định danh; nằm giữa thì người đọc không biết mỗi dòng nói về ai cho
+    // tới khi cuộn tới nó.
+    const ra = chuanHoaCot(["phone", "status", "center"]);
+    expect(ra[0]).toBe("parentName");
+  });
+
+  it("doiChoCot dời một bậc, và KHÔNG rơi ra ngoài mảng", () => {
+    const c = ["a", "b", "c"];
+    expect(doiChoCot(c, "b", -1)).toEqual(["b", "a", "c"]);
+    expect(doiChoCot(c, "b", 1)).toEqual(["a", "c", "b"]);
+    // Đầu/cuối mảng và khoá lạ → trả nguyên trạng, không ném.
+    expect(doiChoCot(c, "a", -1)).toEqual(c);
+    expect(doiChoCot(c, "c", 1)).toEqual(c);
+    expect(doiChoCot(c, "z", 1)).toEqual(c);
+    // Không sửa mảng gốc.
+    expect(c).toEqual(["a", "b", "c"]);
   });
 });

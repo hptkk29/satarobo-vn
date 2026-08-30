@@ -10,6 +10,7 @@ import { LEAD_STATUS_LABEL } from '@/lib/leads/status'
 import { getLeadPaymentSummary } from '@/lib/payments/summary'
 import { LeadPaymentCard } from '../../_components/lead-payment-card'
 import { ConvertForm } from './convert-form'
+import { formatPhoneVN } from "@/lib/phone";
 
 export const metadata = { title: 'Chuyển đổi | Admin' }
 export const dynamic = 'force-dynamic'
@@ -122,7 +123,7 @@ export default async function ConvertV2Page({ params }: Props) {
       <div className="mb-6 border-b border-border pb-4">
         <h1 className="text-2xl font-bold text-foreground">Chuyển đổi</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          {lead.parentName} · {lead.phone}
+          {lead.parentName} · {formatPhoneVN(lead.phone)}
           {lead.email ? ` · ${lead.email}` : ''} · Trạng thái:{' '}
           <span className="font-medium">{LEAD_STATUS_LABEL[lead.status] ?? lead.status}</span>
         </p>
@@ -141,7 +142,7 @@ export default async function ConvertV2Page({ params }: Props) {
         leadId={lead.id}
         defaultParentName={lead.parentName}
         defaultParentEmail={lead.email ?? ''}
-        defaultParentPhone={lead.phone}
+        defaultParentPhone={formatPhoneVN(lead.phone)}
         prefillStudents={prefillStudents}
         classes={classOptions}
         order={courseOrder}
