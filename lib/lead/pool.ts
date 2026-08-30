@@ -36,20 +36,21 @@ export type ThanhVienPool = {
 };
 
 /**
- * Tra `orgUnitId` của một cơ sở theo cầu nối `OrgUnit.code = Center.code`.
+ * Tra `orgUnitId` của một cơ sở — MỘT truy vấn, không phải hai.
  *
- * Tách ra để pool và đường chia dùng chung một cách suy; xem
- * `lib/org/center-bridge.ts` về vì sao khớp theo `code` chứ không theo `centerId`
- * (đơn vị Hội sở CẤM mang `centerId` — luật V7).
+ * ⚠️ 30/08 — bản đầu đi vòng qua `Center.code` rồi tra `OrgUnit.code`: hai lượt hỏi DB
+ * cho MỖI lead được chia. Trên CI bộ R7 phình từ 7 phút lên 25 phút và bị cắt giữa
+ * chừng. `OrgUnit.centerId` là cột @unique có sẵn (ánh xạ 1-1, chỉ type=CENTER mang
+ * giá trị) nên hỏi thẳng là đủ — đây cũng đúng hàm `orgUnitIdForCenter` mà đường chia
+ * cũ vẫn dùng, chỉ là tôi đã vô tình dựng bản thứ hai.
+ *
+ * CỐ Ý KHÔNG đệm ở cấp module: bộ test dựng lại DB nhiều lần trong CÙNG một tiến
+ * trình, nên một id nhớ sai sống qua `resetDb()` sẽ làm hỏng các ca sau theo kiểu
+ * rất khó truy. Một truy vấn có index là đủ rẻ.
  */
 export async function orgUnitIdCuaCoSo(centerId: string, dbc: Db = db): Promise<string | null> {
-  const center = await dbc.center.findUnique({
-    where: { id: centerId },
-    select: { code: true },
-  });
-  if (!center?.code) return null;
   const unit = await dbc.orgUnit.findFirst({
-    where: { code: center.code, deletedAt: null },
+    where: { centerId, deletedAt: null },
     select: { id: true },
   });
   return unit?.id ?? null;

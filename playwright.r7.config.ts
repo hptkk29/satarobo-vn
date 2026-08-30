@@ -19,7 +19,16 @@ export default defineConfig({
   workers: 1,
   // Playwright tự dừng TRƯỚC trần job (30) ⇒ nó còn kịp in tóm tắt và ghi báo cáo.
   // Không có dòng này thì GitHub giết tiến trình giữa chừng, không tóm tắt, không artifact.
-  globalTimeout: 25 * 60_000,
+  //
+  // 30/08/2026 — nới 25 → 28 phút. Bộ này phình thật, không phải runner chậm: mỗi lượt
+  // TẠO LEAD nay đi qua `chiaChoLead` (transaction + advisory lock + sổ chia), mà R7
+  // tạo lead ở rất nhiều ca. Lượt chạy 99195914814 đo được **339 xanh / 0 đỏ rồi bị
+  // cắt ở đúng 1500s** — tức không có ca nào hỏng, chỉ hết giờ, và cái ✘ duy nhất in
+  // ra là ca đang chạy dở lúc bị cắt (đọc nhầm thành lỗi thật rất dễ).
+  //
+  // Vẫn để dưới trần job 30 phút. Nếu còn chạm trần nữa thì cắt bộ R7 làm hai job chứ
+  // ĐỪNG nới tiếp: nới mãi là mất luôn tín hiệu "bộ test đang chậm dần".
+  globalTimeout: 28 * 60_000,
   // `list` CẢ Ở CI. Reporter cũ (html + github) không in gì trong lúc chạy, nên một lần
   // chạy XANH cũng im lặng 12 phút — và im lặng đó bị đọc nhầm thành "job treo", tốn
   // một vòng điều tra. Có `list` thì nhìn log biết đang ở test nào.

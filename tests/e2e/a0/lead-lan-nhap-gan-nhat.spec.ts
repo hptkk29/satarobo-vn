@@ -15,6 +15,27 @@ import { resetDb, seedOrg, seedRoles, seedUser } from "../_helpers/seed";
 import { login } from "../_helpers/auth";
 import { testEmail } from "../_helpers/fixtures";
 import { assignUserOrgRole, type RbacActor } from "../../../lib/auth/rbac-service";
+import { LEAD_COLUMNS_STORAGE_KEY, cotMacDinh } from "../../../lib/tables/lead-columns";
+
+/**
+ * Bật cột "Lần nhập gần nhất" TRƯỚC khi mở trang.
+ *
+ * 30/08 — cột này nay MẶC ĐỊNH ẨN (chủ dự án chốt), lựa chọn lưu ở `localStorage`.
+ * Không bật trước thì spec đi tìm một đầu cột không tồn tại — đúng lỗi CI bắt được
+ * ngay lượt đầu sau khi đổi mặc định.
+ */
+async function batCotNhapLai(page: import("@playwright/test").Page): Promise<void> {
+  await page.addInitScript(
+    ([khoa, cot]) => {
+      try {
+        window.localStorage.setItem(khoa as string, JSON.stringify(cot));
+      } catch {
+        /* trình duyệt chặn site data — ca này sẽ đỏ, và đỏ đúng */
+      }
+    },
+    [LEAD_COLUMNS_STORAGE_KEY, [...cotMacDinh(), "lastInboundAt"]] as const,
+  );
+}
 
 const SA: RbacActor = { id: "seed-sa", name: "SA", role: "SUPER_ADMIN" };
 
@@ -72,6 +93,7 @@ test.describe("[LNGN] Lần nhập gần nhất", () => {
     });
 
     await adminThat("lngn-admin");
+    await batCotNhapLai(page);
     await login(page, { email: testEmail("lngn-admin"), callbackUrl: "/admin/leads" });
 
     await page.goto("/admin/leads?view=table&sort=nhap_lai");
@@ -102,6 +124,7 @@ test.describe("[LNGN] Lần nhập gần nhất", () => {
     });
 
     await adminThat("lngn-admin2");
+    await batCotNhapLai(page);
     await login(page, { email: testEmail("lngn-admin2"), callbackUrl: "/admin/leads" });
     await page.goto("/admin/leads?view=table");
     await expect(page.getByRole("link", { name: /Lần nhập gần nhất/ })).toBeVisible({
