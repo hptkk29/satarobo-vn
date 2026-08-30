@@ -3,7 +3,13 @@
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useTransition, useState, useEffect } from 'react'
-import { Loader2, X, Download, Trash2, CheckCircle2, ArrowDown } from 'lucide-react'
+import { Loader2, X, Download, Trash2, CheckCircle2, ArrowDown, Columns3 } from 'lucide-react'
+import {
+  LEAD_COLUMNS,
+  LEAD_COLUMNS_STORAGE_KEY,
+  chuanHoaCot,
+  cotMacDinh,
+} from '@/lib/tables/lead-columns'
 import { toast } from 'sonner'
 import { updateLeadNote, updateLeadStatus, deleteLead } from '../actions'
 import {
@@ -68,12 +74,20 @@ function shortSource(source: string | null): string {
   return parts.slice(0, 2).join(' · ')
 }
 
-function formatDate(iso: string): string {
-  return new Date(iso).toLocaleDateString('vi-VN', {
+/**
+ * Ngày KÈM GIỜ (30/08) — dùng cho cột "Ngày nhận lead".
+ *
+ * Ngày không thôi là chưa đủ: ngày cao điểm có hàng chục phiếu, mà thứ Sale cần biết
+ * là ai vào TRƯỚC — gọi theo thứ tự đó mới đúng cam kết phản hồi.
+ */
+function formatDateTime(iso: string): string {
+  return new Date(iso).toLocaleString('vi-VN', {
     timeZone: 'Asia/Ho_Chi_Minh',
     day: '2-digit',
     month: '2-digit',
     year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
   })
 }
 
@@ -399,6 +413,145 @@ function ThSap({
   )
 }
 
+/**
+ * Một Ô của bảng, chọn theo KHOÁ CỘT trong danh mục (`lib/tables/lead-columns.ts`).
+ *
+ * ⚠️ Mọi giá trị ở đây đã đi qua che PII Ở SERVER (`maskLeadPiiFields` trong page.tsx)
+ * TRƯỚC khi xuống client. Đừng thêm ô nào đọc dữ liệu từ nguồn khác.
+ */
+function LeadCell({
+  col,
+  lead,
+  canChangeStatus,
+  currentUserId,
+}: {
+  col: string
+  lead: LeadRow
+  canChangeStatus: boolean
+  currentUserId: string
+}) {
+  switch (col) {
+    case 'parentName':
+      return (
+        <td className="px-4 py-3">
+          <div className="flex items-center gap-1.5">
+            <span className="font-medium text-foreground">{lead.parentName}</span>
+            <SharedBadge lead={lead} currentUserId={currentUserId} />
+          </div>
+          {lead.childName && (
+            <div className="text-xs text-muted-foreground">
+              Con: {lead.childName}
+              {lead.childAge ? ` · ${lead.childAge} tuổi` : ''}
+            </div>
+          )}
+        </td>
+      )
+    case 'phone':
+      return <td className="px-4 py-3 text-sm tabular-nums text-foreground">{lead.phone}</td>
+    case 'course':
+      return (
+        <td className="px-4 py-3 max-w-[200px]">
+          <span className="block truncate text-sm text-muted-foreground" title={lead.courseName ?? ''}>
+            {lead.courseName ?? '—'}
+          </span>
+          {lead.source && (
+            <span className="block truncate text-xs text-muted-foreground" title={lead.source}>
+              {shortSource(lead.source)}
+            </span>
+          )}
+        </td>
+      )
+    case 'status':
+      return (
+        <td className="px-4 py-3">
+          <StatusCell lead={lead} canChangeStatus={canChangeStatus} />
+        </td>
+      )
+    case 'center':
+      return <td className="px-4 py-3 text-sm text-muted-foreground">{lead.center?.name ?? '—'}</td>
+    case 'assignedTo':
+      return (
+        <td className="px-4 py-3 text-sm">
+          {lead.assignedTo?.name ? (
+            <span className="text-foreground">{lead.assignedTo.name}</span>
+          ) : (
+            <span className="font-medium text-state-warning-ink">Chưa phân công</span>
+          )}
+        </td>
+      )
+    case 'createdAt':
+      return (
+        <td className="px-4 py-3 whitespace-nowrap text-sm text-muted-foreground tabular-nums">
+          {formatDateTime(lead.createdAt)}
+        </td>
+      )
+    case 'lastInboundAt':
+      return (
+        <td className="px-4 py-3 whitespace-nowrap text-sm tabular-nums">
+          {lead.lastInboundAt ? (
+            <span
+              className={
+                // Nhập lại SAU ngày tạo = khách chủ động quay lại. Tín hiệu nóng nhất
+                // trên bảng này, đừng để nó chìm.
+                lead.lastInboundAt > lead.createdAt
+                  ? 'font-semibold text-state-success-ink'
+                  : 'text-muted-foreground'
+              }
+            >
+              {formatDateTime(lead.lastInboundAt)}
+            </span>
+          ) : (
+            <span className="text-muted-foreground">—</span>
+          )}
+        </td>
+      )
+    case 'childName':
+      return <td className="px-4 py-3 text-sm text-foreground">{lead.childName ?? '—'}</td>
+    case 'childAge':
+      return (
+        <td className="px-4 py-3 text-sm tabular-nums text-muted-foreground">
+          {lead.childAge ?? '—'}
+        </td>
+      )
+    case 'email':
+      return (
+        <td className="px-4 py-3 max-w-[200px]">
+          <span className="block truncate text-sm text-muted-foreground" title={lead.email ?? ''}>
+            {lead.email ?? '—'}
+          </span>
+        </td>
+      )
+    case 'source':
+      return (
+        <td className="px-4 py-3 max-w-[180px]">
+          <span className="block truncate text-sm text-muted-foreground" title={lead.source ?? ''}>
+            {lead.source ? shortSource(lead.source) : '—'}
+          </span>
+        </td>
+      )
+    case 'note':
+      return (
+        <td className="px-4 py-3 max-w-[240px]">
+          <span className="block truncate text-sm text-muted-foreground" title={lead.note ?? ''}>
+            {lead.note ?? '—'}
+          </span>
+        </td>
+      )
+    case 'utmCampaign':
+      return (
+        <td className="px-4 py-3 max-w-[180px]">
+          <span className="block truncate text-sm text-muted-foreground" title={lead.utmCampaign ?? ''}>
+            {lead.utmCampaign ?? '—'}
+          </span>
+        </td>
+      )
+    default:
+      // Khoá lạ không bao giờ tới được đây (`chuanHoaCot` đã lọc), nhưng trả ô rỗng
+      // vẫn tốt hơn làm lệch số ô so với số <th>.
+      return <td className="px-4 py-3" />
+  }
+}
+
 export function LeadsTable({
   leads,
   total,
@@ -430,6 +583,37 @@ export function LeadsTable({
   const router = useRouter()
   const searchParams = useSearchParams()
   const [selectedLead, setSelectedLead] = useState<LeadRow | null>(null)
+  // CỘT HIỂN THỊ — mỗi người một bộ, lưu trong trình duyệt của chính họ.
+  //
+  // KHÔNG lưu ở DB/URL có chủ đích: đây là tiện nghi cá nhân, không phải dữ liệu cần
+  // chia sẻ hay khôi phục. Khởi tạo bằng bộ MẶC ĐỊNH rồi mới đọc localStorage trong
+  // `useEffect` — đọc thẳng lúc render là hydrate lệch (server không có localStorage).
+  const [cot, setCot] = useState<string[]>(() => cotMacDinh())
+  const [moChonCot, setMoChonCot] = useState(false)
+
+  useEffect(() => {
+    try {
+      const raw = window.localStorage.getItem(LEAD_COLUMNS_STORAGE_KEY)
+      if (raw) setCot(chuanHoaCot(JSON.parse(raw)))
+    } catch {
+      // Trình duyệt chặn site data / JSON hỏng → giữ bộ mặc định. Bảng phải chạy được
+      // kể cả khi không đọc được gì.
+    }
+  }, [])
+
+  function doiCot(key: string, hien: boolean) {
+    setCot(prev => {
+      const moi = chuanHoaCot(hien ? [...prev, key] : prev.filter(k => k !== key))
+      try {
+        window.localStorage.setItem(LEAD_COLUMNS_STORAGE_KEY, JSON.stringify(moi))
+      } catch {
+        // Không lưu được thì vẫn đổi trong phiên này — mất khi tải lại, không sao.
+      }
+      return moi
+    })
+  }
+
+  const cotHien = LEAD_COLUMNS.filter(c => cot.includes(c.key))
   const totalPages = Math.ceil(total / pageSize)
   // Nút "Xem chi tiết lead" hiện cho mọi role xem được lead → luôn render cột thao tác.
   const showActions = true
@@ -480,6 +664,61 @@ export function LeadsTable({
           <Download className="h-4 w-4" />
           <span className="hidden sm:inline">Xuất CSV</span>
         </a>
+        {/* CHỌN CỘT — 30/08. Đặt cạnh nút xuất vì cùng nhóm "điều khiển bảng". */}
+        <div className="relative">
+          <button
+            type="button"
+            onClick={() => setMoChonCot(v => !v)}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-2 text-sm font-medium text-foreground hover:bg-muted"
+          >
+            <Columns3 className="h-4 w-4" /> Cột hiển thị
+          </button>
+          {moChonCot && (
+            <>
+              {/* Nền bắt click-ra-ngoài. Không dùng thư viện popover cho một hộp
+                  chọn ở màn quản trị. */}
+              <button
+                type="button"
+                aria-label="Đóng"
+                onClick={() => setMoChonCot(false)}
+                className="fixed inset-0 z-40 cursor-default"
+              />
+              <div className="absolute right-0 z-50 mt-1 w-64 rounded-xl border border-border bg-card p-2 shadow-lg">
+                {LEAD_COLUMNS.map(c => (
+                  <label
+                    key={c.key}
+                    className={`flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm ${
+                      c.batBuoc ? 'opacity-50' : 'cursor-pointer hover:bg-muted'
+                    }`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={cot.includes(c.key)}
+                      disabled={c.batBuoc}
+                      onChange={e => doiCot(c.key, e.target.checked)}
+                    />
+                    <span className="text-foreground">{c.label}</span>
+                  </label>
+                ))}
+                <button
+                  type="button"
+                  onClick={() => {
+                    const md = cotMacDinh()
+                    setCot(md)
+                    try {
+                      window.localStorage.setItem(LEAD_COLUMNS_STORAGE_KEY, JSON.stringify(md))
+                    } catch {
+                      /* không lưu được thì thôi */
+                    }
+                  }}
+                  className="mt-1 w-full rounded-lg border border-border px-2 py-1.5 text-xs font-medium text-muted-foreground hover:bg-muted"
+                >
+                  Về mặc định
+                </button>
+              </div>
+            </>
+          )}
+        </div>
       </div>
 
       {/* Table */}
@@ -488,30 +727,21 @@ export function LeadsTable({
           <table className="min-w-full divide-y divide-border">
             <thead className="bg-muted">
               <tr>
-                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  Phụ huynh / học sinh
-                </th>
-                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  Số điện thoại
-                </th>
-                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  Khóa quan tâm
-                </th>
-                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  Trạng thái
-                </th>
-                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  Cơ sở
-                </th>
-                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  Sale phụ trách
-                </th>
-                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  <ThSap nhan="Ngày đăng ký" khoa="moi_nhat" dangSap={sapXep} />
-                </th>
-                <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                  <ThSap nhan="Lần nhập gần nhất" khoa="nhap_lai" dangSap={sapXep} />
-                </th>
+                {cotHien.map(c => (
+                  <th
+                    key={c.key}
+                    className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-muted-foreground"
+                  >
+                    {/* Hai cột mốc thời gian bấm được để đổi thứ tự; còn lại là nhãn thường. */}
+                    {c.key === 'createdAt' ? (
+                      <ThSap nhan={c.label} khoa="moi_nhat" dangSap={sapXep} />
+                    ) : c.key === 'lastInboundAt' ? (
+                      <ThSap nhan={c.label} khoa="nhap_lai" dangSap={sapXep} />
+                    ) : (
+                      c.label
+                    )}
+                  </th>
+                ))}
                 {showActions && (
                   <th className="px-4 py-3 text-right text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                     Hành động
@@ -523,7 +753,7 @@ export function LeadsTable({
               {leads.length === 0 ? (
                 <tr>
                   <td
-                    colSpan={showActions ? 8 : 7}
+                    colSpan={cotHien.length + (showActions ? 1 : 0)}
                     className="px-4 py-12 text-center text-sm text-muted-foreground"
                   >
                     Chưa có lead nào
@@ -536,64 +766,15 @@ export function LeadsTable({
                     onClick={() => setSelectedLead(lead)}
                     className="cursor-pointer hover:bg-muted/60"
                   >
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-1.5">
-                        <span className="font-medium text-foreground">{lead.parentName}</span>
-                        <SharedBadge lead={lead} currentUserId={currentUserId} />
-                      </div>
-                      {lead.childName && (
-                        <div className="text-xs text-muted-foreground">
-                          Con: {lead.childName}
-                          {lead.childAge ? ` · ${lead.childAge} tuổi` : ''}
-                        </div>
-                      )}
-                    </td>
-                    <td className="px-4 py-3 text-sm tabular-nums text-foreground">
-                      {lead.phone}
-                    </td>
-                    <td className="px-4 py-3 max-w-[200px]">
-                      <span className="block truncate text-sm text-muted-foreground" title={lead.courseName ?? ''}>
-                        {lead.courseName ?? '—'}
-                      </span>
-                      {lead.source && (
-                        <span className="block truncate text-xs text-muted-foreground" title={lead.source}>
-                          {shortSource(lead.source)}
-                        </span>
-                      )}
-                    </td>
-                    <td className="px-4 py-3">
-                      <StatusCell lead={lead} canChangeStatus={canChangeStatus} />
-                    </td>
-                    <td className="px-4 py-3 text-sm text-muted-foreground">
-                      {lead.center?.name ?? '—'}
-                    </td>
-                    <td className="px-4 py-3 text-sm">
-                      {lead.assignedTo?.name ? (
-                        <span className="text-foreground">{lead.assignedTo.name}</span>
-                      ) : (
-                        <span className="font-medium text-state-warning-ink">Chưa phân công</span>
-                      )}
-                    </td>
-                    <td className="px-4 py-3 text-sm text-muted-foreground tabular-nums">
-                      {formatDate(lead.createdAt)}
-                    </td>
-                    <td className="px-4 py-3 text-sm tabular-nums">
-                      {lead.lastInboundAt ? (
-                        <span
-                          className={
-                            // Nhập lại SAU ngày tạo = khách chủ động quay lại. Đó là
-                            // tín hiệu nóng nhất trên bảng này, đừng để nó chìm.
-                            lead.lastInboundAt > lead.createdAt
-                              ? 'font-semibold text-state-success-ink'
-                              : 'text-muted-foreground'
-                          }
-                        >
-                          {formatDate(lead.lastInboundAt)}
-                        </span>
-                      ) : (
-                        <span className="text-muted-foreground">—</span>
-                      )}
-                    </td>
+                    {cotHien.map(c => (
+                      <LeadCell
+                        key={c.key}
+                        col={c.key}
+                        lead={lead}
+                        canChangeStatus={canChangeStatus}
+                        currentUserId={currentUserId}
+                      />
+                    ))}
                     {showActions && (
                       <td
                         className="px-4 py-3 text-right"

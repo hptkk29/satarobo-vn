@@ -364,19 +364,21 @@ export const PERMISSIONS: Record<Action, Role[]> = {
   // (lib/auth/can.ts) — nếu thiếu, shadow-compare đẻ lệch v1=false/v2=true mỗi lần
   // admin chạm trang này. Behavior-neutral: call-site chỉ thu hẹp khi `!viewAll && viewOwn`.
   "leads:view-own": ["SUPER_ADMIN", "SALES_CSM"],
-  // #11 T2 — Q9: Sale/QL cơ sở (trực tiếp CSKH) ĐƯỢC xem PII lead.
-  // 21/07 (user chốt): MARKETING XEM ĐƯỢC tên + SĐT lead (làm outreach/chiến dịch cần liên
-  // hệ) → thêm MARKETING (ĐẢO quyết định "che PII cho MARKETING" của a+b 20/07). Lưu ý:
-  // canViewLeadPii bao cả email (email-logs) + ghi chú tư vấn (lead detail) → MARKETING thấy
-  // luôn các mục này. Cách ly cơ sở vẫn do scopedDb.
-  // ⚠️ Đợt E (22/08/2026) — chủ dự án chốt Q9: **Quản lý cơ sở KHÔNG thấy SĐT lead**.
-  // ĐẢO chính quyết định #11 T2 (Kiệt ký 10/07) từng cấp quyền này cho CENTER_MANAGER.
-  // QL vẫn xem được DANH SÁCH lead (leads:view-all) — chỉ SĐT/email/tên/ghi chú bị
-  // che ở tầng dữ liệu (lib/lead/pii.ts), và tìm-theo-SĐT bị tắt theo (nếu còn tìm
-  // được thì che chỉ là hình thức: dò từng số cũng ra khách).
-  // Marketing GIỮ quyền — chủ dự án trả lời "không" khi được hỏi có che luôn không.
-  // Khoá bằng test: lib/auth/lead-pii-policy.test.ts. Sửa đây phải sửa seed-roles.ts.
-  "leads:view-pii": ["SUPER_ADMIN", "SALES_CSM", "MARKETING"],
+  // AI XEM ĐƯỢC SĐT / EMAIL / TÊN / GHI CHÚ TƯ VẤN CỦA LEAD.
+  //
+  // 30/08/2026 — QUẢN LÝ CƠ SỞ ĐƯỢC XEM LẠI (chủ dự án chốt). Đây là lần ĐẢO THỨ HAI
+  // của cùng một câu hỏi, ghi cả ba mốc để lần sau không ai phải đoán:
+  //   · 10/07 (#11 T2, Q9) — CENTER_MANAGER CÓ quyền;
+  //   · 22/08 (Đợt E, Q9)  — GỠ: "Quản lý cơ sở KHÔNG thấy SĐT lead";
+  //   · 30/08              — TRẢ LẠI. Quyết định ký SAU thắng.
+  //
+  // Hệ quả đi kèm, đừng gỡ riêng lẻ: `canSearchPhone` ở /admin/leads bật theo chính
+  // quyền này (che mà vẫn tìm được theo số thì che chỉ là hình thức — dò từng số cũng
+  // ra khách). Cách ly cơ sở vẫn do `scopedDb`, không do quyền này.
+  //
+  // MARKETING giữ quyền từ 21/07 (làm outreach cần liên hệ) — không đụng.
+  // Khoá bằng test: lib/auth/lead-pii-policy.test.ts. Sửa đây PHẢI sửa seed-roles.ts.
+  "leads:view-pii": ["SUPER_ADMIN", "CENTER_MANAGER", "SALES_CSM", "MARKETING"],
   "leads:create": ["SUPER_ADMIN", "CENTER_MANAGER", "SALES_CSM", "MARKETING"],
   // v1 KHÔNG có vai "Sale Hội sở" (nó chỉ tồn tại ở RBAC v2, gán tay ở
   // /admin/users/[id]/org-roles). Để trống ngoài SUPER_ADMIN là ĐÚNG, không

@@ -14,8 +14,11 @@ import { PAGE_GATES } from "@/lib/auth/page-gates";
 import { resolveActor } from "@/lib/auth/actor";
 import { scopedDb } from "@/lib/db-scope";
 import { PageHelp } from "@/components/admin/ui/page-help";
-import { layBangPool } from "@/lib/lead/pool-board";
+import { layBangPool, layCoSoTheoKhuVuc } from "@/lib/lead/pool-board";
 import { orgUnitIdCuaCoSo } from "@/lib/lead/pool";
+import { getCenterMode } from "@/lib/lead/auto-assign";
+import { CenterPicker } from "./_components/center-picker";
+import { ModePicker } from "./_components/mode-picker";
 import { PoolTable } from "./_components/pool-table";
 import { SoChiaLead } from "./_components/so-chia";
 
@@ -67,6 +70,9 @@ export default async function QuanLyChiaLeadPage({ searchParams }: { searchParam
   const centerId = centers.find((c) => c.id === sp.co_so)?.id ?? centers[0].id;
   const tab = sp.tab === "so-chia" ? "so-chia" : "pool";
   const laQuanTri = await checkPermission("leads:assign-config");
+  // 30/08 — ô chọn chế độ dời từ màn `/leads/cau-hinh-chia` (đã xoá) về đây.
+  const cheDo = await getCenterMode(centerId);
+  const coSoKhuVuc = await layCoSoTheoKhuVuc(centers.map((c) => c.id));
 
   const rows = await layBangPool(centerId);
   const trongBang = new Set(rows.map((r) => r.userId));
@@ -109,22 +115,11 @@ export default async function QuanLyChiaLeadPage({ searchParams }: { searchParam
         </p>
       </PageHelp>
 
-      {nhieuCoSo && centers.length > 1 && (
-        <div className="flex flex-wrap gap-2">
-          {centers.map((c) => (
-            <Link
-              key={c.id}
-              href={`/quan-ly-chia-lead?co_so=${c.id}&tab=${tab}`}
-              className={`rounded-lg px-3 py-1.5 text-sm font-medium ${
-                c.id === centerId
-                  ? "bg-primary text-primary-foreground"
-                  : "border border-border text-muted-foreground hover:bg-muted"
-              }`}
-            >
-              {c.name}
-            </Link>
-          ))}
-        </div>
+      {/* 30/08 — ô chọn HAI TẦNG (khu vực → cơ sở) thay dãy nút phẳng: dãy nút đẹp với
+          hai cơ sở, nhưng mười lăm cơ sở thì nó tràn hai dòng và phải đọc hết mới tìm
+          ra chỗ mình. QLCS chỉ có một cơ sở nên không hiện gì. */}
+      {centers.length > 1 && (
+        <CenterPicker centers={coSoKhuVuc} centerId={centerId} tab={tab} />
       )}
 
       <div className="flex gap-2 border-b border-border">
@@ -147,12 +142,15 @@ export default async function QuanLyChiaLeadPage({ searchParams }: { searchParam
       </div>
 
       {tab === "pool" ? (
-        <PoolTable
-          centerId={centerId}
-          rows={rows}
-          chuaCoTrongPool={chuaCoTrongPool}
-          laQuanTri={laQuanTri}
-        />
+        <div className="space-y-4">
+          <ModePicker centerId={centerId} mode={cheDo} canEdit={laQuanTri} />
+            <PoolTable
+            centerId={centerId}
+            rows={rows}
+            chuaCoTrongPool={chuaCoTrongPool}
+            laQuanTri={laQuanTri}
+          />
+        </div>
       ) : (
         <SoChiaLead
           orgUnitIds={orgUnitIds}

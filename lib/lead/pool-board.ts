@@ -119,6 +119,48 @@ export async function layBangPool(centerId: string): Promise<DongPool[]> {
   });
 }
 
+export type CoSoTheoKhuVuc = {
+  id: string;
+  name: string;
+  /** Khu vực (OrgUnit type REGION) chứa cơ sở này; null = chưa gắn khu vực nào. */
+  khuVucId: string | null;
+  khuVucTen: string | null;
+};
+
+/**
+ * Cơ sở kèm KHU VỰC — cho ô chọn hai tầng ở màn Quản lý chia lead.
+ *
+ * Cây tổ chức là HO → REGION → CENTER (chốt 11/08), nên khu vực là CHA của node cơ sở.
+ * Cơ sở chưa gắn khu vực (hoặc cha không phải REGION) vẫn PHẢI trả về — gom vào nhóm
+ * "Chưa gắn khu vực" ở UI. Lọc bỏ là người vận hành mất hẳn đường vào cơ sở đó mà
+ * không có lỗi nào báo.
+ */
+export async function layCoSoTheoKhuVuc(centerIds: string[]): Promise<CoSoTheoKhuVuc[]> {
+  if (centerIds.length === 0) return [];
+  const centers = await db.center.findMany({
+    where: { id: { in: centerIds } },
+    select: { id: true, name: true, code: true, displayOrder: true },
+    orderBy: { displayOrder: "asc" },
+  });
+  // Nối Center → OrgUnit theo `code` (cầu nối chuẩn — xem lib/org/center-bridge.ts),
+  // rồi lấy CHA nếu cha là REGION.
+  const units = await db.orgUnit.findMany({
+    where: { code: { in: centers.map((c) => c.code).filter(Boolean) as string[] }, deletedAt: null },
+    select: { code: true, parent: { select: { id: true, name: true, type: true } } },
+  });
+  const chaTheoCode = new Map(units.map((u) => [u.code, u.parent]));
+  return centers.map((c) => {
+    const cha = c.code ? chaTheoCode.get(c.code) : null;
+    const laKhuVuc = cha?.type === "REGION";
+    return {
+      id: c.id,
+      name: c.name,
+      khuVucId: laKhuVuc ? cha!.id : null,
+      khuVucTen: laKhuVuc ? cha!.name : null,
+    };
+  });
+}
+
 export type DongSoChia = {
   id: string;
   createdAt: Date;

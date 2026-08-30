@@ -121,8 +121,7 @@ const NAV_GROUPS: NavGroup[] = [
       // để leads:import (Sale có leads:import nhưng KHÔNG có view-all → trang tự
       // redirect; đặt view-all ở đây để không hiện link chết cho Sale).
       { label: "Chốt hàng loạt", href: "/leads/bulk-convert", icon: Workflow, perm: ["leads:view-all"] },
-      { label: "Cấu hình chia lead", href: "/leads/cau-hinh-chia", icon: Settings, perm: ["leads:assign-config"] },
-      // Đợt D — sổ lượt luân phiên (chỉ đọc). Đặt cạnh Cấu hình chia lead vì hai
+      // 30/08 — gộp: hai màn cũ (Cấu hình chia lead · Sổ lượt) đã xoá, thay bằng
       // trang trả lời hai nửa của cùng một câu hỏi: chia KIỂU GÌ, và đã chia RA SAO.
       // perm rộng hơn cấu hình (view-all thay vì assign-config): người phải trả lời
       // "sao bạn kia nhiều lead hơn" là Quản lý cơ sở, không phải Super Admin.

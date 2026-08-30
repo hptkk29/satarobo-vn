@@ -22,8 +22,10 @@ const ADMIN_DIR = path.join(ROOT, "app", "(admin)", "admin");
 /** Route được phép không có mục menu — mỗi dòng phải nêu lý do. */
 const ALLOWLIST: Record<string, string> = {
   "/leads/so-luot":
-    "29/08 — stub chuyển hướng sang /quan-ly-chia-lead (sổ lượt nay là một cột của " +
-    "tab Cấu hình pool). Giữ route vì dấu trang và link trong thông báo đã gửi còn trỏ tới.",
+    "30/08 — stub chuyển hướng sang /quan-ly-chia-lead. Giữ route vì /leads/[id] là " +
+    "route động bên cạnh: xoá hẳn thì đường dẫn cũ rơi vào [id] và đi tra một lead " +
+    "có id \"so-luot\".",
+  "/leads/cau-hinh-chia": "30/08 — stub chuyển hướng sang /quan-ly-chia-lead. Cùng lý do với /leads/so-luot.",
   "/quan-ly-chia-lead/lich-su":
     "màn con của Quản lý chia lead — vào từ link trong tab Cấu hình pool. Không đặt " +
     "mục sidebar riêng: đây là chỗ tra khi có tranh cãi, không phải việc hằng ngày.",

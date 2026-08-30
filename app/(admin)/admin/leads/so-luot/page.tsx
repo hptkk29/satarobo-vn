@@ -1,10 +1,11 @@
-// Sổ lượt chia lead — ĐÃ GỘP vào màn "Quản lý chia lead" (29/08/2026).
+// Sổ lượt chia lead — MÀN ĐÃ XOÁ (30/08/2026), gộp vào /quan-ly-chia-lead.
 //
-// Bảng cũ chỉ đọc, chỉ có đúng cột "ai đã tới lượt bao nhiêu lần" — nay là cột
-// "Lượt đã nhận" của tab Cấu hình pool, đứng cạnh thứ người xem luôn hỏi tiếp:
-// tổng lead đang giữ, lần chia gần nhất, và nút bật/tắt.
+// Giữ lại ĐÚNG một dòng chuyển hướng, không phải vì tiếc màn cũ mà vì hai lý do cụ thể:
 //
-// Giữ route để đường dẫn cũ (dấu trang, link trong thông báo đã gửi) không vỡ.
+//  1. `/leads/[id]` là route động ngay bên cạnh. Xoá hẳn thư mục này thì `/leads/so-luot`
+//     rơi vào `[id]` và hệ thống đi tra một lead có id "so-luot" — người bấm dấu trang cũ
+//     nhận một trang lỗi khó hiểu thay vì được dẫn tới chỗ đúng.
+//  2. Link cũ còn nằm trong thông báo đã gửi, không sửa hồi tố được.
 import { redirect } from "next/navigation";
 
 export default function SoLuotRedirectPage() {
