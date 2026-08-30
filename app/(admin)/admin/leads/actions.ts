@@ -230,7 +230,10 @@ export async function updateLeadStatus(
         actorId,
         actorName,
         type: 'STATUS_CHANGE',
-        content: `Chuyển trạng thái: ${before.status} → ${parsed.data}`,
+        // 30/08 — NHÃN TIẾNG VIỆT, không phải mã enum. Dòng này hiện thẳng trong
+        // "Lịch sử tương tác" mà sale đọc hằng ngày; in `MOI → DA_LIEN_HE` là bắt
+        // người dùng học bảng mã của lập trình viên.
+        content: `Chuyển trạng thái: ${LEAD_STATUS_LABEL[before.status] ?? before.status} → ${LEAD_STATUS_LABEL[parsed.data] ?? parsed.data}`,
         metadata: { from: before.status, to: parsed.data },
       },
     })
@@ -291,75 +294,11 @@ export async function updateLeadStatus(
   return { ok: true }
 }
 
-// ─── LD1/G2 — Loại đơn dự kiến (OrderKind) + sản phẩm/khoá dự kiến trên lead detail ──
-
-const expectedOrderSchema = z.object({
-  kind: z.enum(['COURSE', 'PRODUCT']),
-  // null/undefined = chỉ chọn loại đơn, chưa chọn item cụ thể (hoặc reset khi đổi loại).
-  itemId: z.string().min(1).nullish(),
-})
-
-/**
- * Đặt loại đơn dự kiến (Khoá học / Sản phẩm) + item cụ thể (khoá/sản phẩm) cho lead.
- * - kind=COURSE → expectedCourseId = item (course teachable+active), expectedProductId=null.
- * - kind=PRODUCT → expectedProductId = item (product ACTIVE KIT_ROBOT/SENSOR), expectedCourseId=null.
- * - itemId rỗng (đổi loại đơn) → xoá cả 2 expected id.
- * Dùng để gợi ý nguồn item khi tạo đơn. Giữ tên cũ để tương thích component.
- */
-export async function updateLeadOrderKind(
-  leadId: string,
-  kind: string,
-  itemId?: string | null,
-): Promise<{ ok: boolean; error?: string }> {
-  const session = await auth()
-  if (!session?.user) return { ok: false, error: 'Chưa đăng nhập' }
-  if (!(await checkPermission('leads:edit'))) return { ok: false, error: 'Không có quyền' }
-
-  const parsed = expectedOrderSchema.safeParse({ kind, itemId: itemId ?? null })
-  if (!parsed.success) return { ok: false, error: 'Dữ liệu loại đơn không hợp lệ' }
-  const { kind: k, itemId: id } = parsed.data
-
-  const before = await db.lead.findUnique({
-    where: { id: leadId },
-    select: { centerId: true, assignedToId: true },
-  })
-  const actor = await resolveActor(session.user.id)
-  if (!before || !passesScope('Lead', before, actor)) {
-    return { ok: false, error: 'Lead không tồn tại' }
-  }
-  if (!(await actorMayMutateLead(session.user.id, before.assignedToId))) {
-    return { ok: false, error: MUTATE_DENIED }
-  }
-
-  // Validate item khớp loại đơn (nếu có chọn item).
-  let expectedCourseId: string | null = null
-  let expectedProductId: string | null = null
-  if (id) {
-    if (k === 'COURSE') {
-      const c = await db.course.findFirst({
-        where: { id, isActive: true, isTeachable: true },
-        select: { id: true },
-      })
-      if (!c) return { ok: false, error: 'Khoá học không hợp lệ' }
-      expectedCourseId = id
-    } else {
-      const p = await db.product.findFirst({
-        where: { id, status: 'ACTIVE', category: { in: ['KIT_ROBOT', 'SENSOR'] } },
-        select: { id: true },
-      })
-      if (!p) return { ok: false, error: 'Sản phẩm không hợp lệ' }
-      expectedProductId = id
-    }
-  }
-
-  await db.lead.update({
-    where: { id: leadId },
-    data: { orderKind: k, expectedCourseId, expectedProductId },
-  })
-
-  revalidatePath(`/leads/${leadId}`)
-  return { ok: true }
-}
+// 30/08/2026 — GỠ "Loại đơn dự kiến" (chủ dự án chốt).
+// `Lead.orderKind` / `expectedCourseId` / `expectedProductId` chỉ có MỘT nơi ghi (ô
+// này) và KHÔNG nơi nào đọc — kể cả màn tạo đơn, nơi nó lẽ ra dùng để gợi ý. Ô này
+// bắt người trực lead khai một thứ không đi tới đâu.
+// Ba cột vẫn nằm trong DB: không drop cột đang có dữ liệu PROD (luật cứng #4).
 
 // ─── Phase T1.2 — Activity + Task ────────────────────────────────────────────
 

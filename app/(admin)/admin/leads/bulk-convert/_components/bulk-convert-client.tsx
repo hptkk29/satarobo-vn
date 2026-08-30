@@ -11,6 +11,7 @@ import { bulkConvertLeadsAction } from '../_actions'
 import { MoneyInput } from "@/components/ui/money-input";
 import { HelpHint } from "@/components/admin/ui/help-hint";
 import { PhanTrangBang } from "@/components/ui/phan-trang-bang";
+import { formatPhoneVN } from "@/lib/phone";
 
 type ChildInfo = {
   id: string
@@ -647,7 +648,7 @@ function LeadCell({ lead, centerLabel }: { lead: LeadInfo; centerLabel: string }
         {lead.parentName}
       </Link>
       <div className="text-xs text-muted-foreground">
-        {lead.phone} · {centerLabel}
+        {formatPhoneVN(lead.phone)} · {centerLabel}
       </div>
       <div className="text-xs text-muted-foreground">Đăng ký: {lead.createdAt}</div>
     </div>

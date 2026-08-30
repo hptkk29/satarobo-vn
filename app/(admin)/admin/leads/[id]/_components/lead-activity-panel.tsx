@@ -13,7 +13,8 @@ import {
   ChevronRight,
 } from "lucide-react";
 import { toast } from "sonner";
-import type { Prisma } from "@prisma/client";
+import type { Prisma, LeadStatus } from "@prisma/client";
+import { LEAD_STATUS_LABEL } from "@/lib/leads/status";
 import { addLeadActivity } from "../../actions";
 
 type Activity = {
@@ -123,6 +124,26 @@ function ActivityBody({ activity }: { activity: Activity }) {
           <p className="whitespace-pre-line">{metaStr(meta.body)}</p>
         </div>
       );
+    }
+    if (activity.type === "STATUS_CHANGE") {
+      // Dòng CŨ trên PROD đã ghi sẵn chuỗi `MOI → DA_LIEN_HE` vào `content`. Không
+      // sửa hồi tố được dữ liệu, nhưng `metadata` có `from`/`to` nên dịch được LÚC
+      // ĐỌC — người dùng thấy tiếng Việt kể cả với dòng ghi trước ngày vá.
+      const tu = metaStr(meta.from);
+      const den = metaStr(meta.to);
+      if (tu || den) {
+        const nhan = (m: string) => LEAD_STATUS_LABEL[m as LeadStatus] ?? m;
+        return (
+          <p className="mt-0.5 text-sm text-foreground">
+            {tu ? nhan(tu) : "—"} <span className="text-muted-foreground">→</span> {den ? nhan(den) : "—"}
+            {meta.auto === true && (
+              <span className="ml-1.5 rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">
+                tự động
+              </span>
+            )}
+          </p>
+        );
+      }
     }
     if (activity.type === "NOTE" && metaStr(meta.text)) {
       return (
