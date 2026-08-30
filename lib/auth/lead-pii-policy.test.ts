@@ -20,12 +20,12 @@ const v2 = (code: string) =>
   new Set((ROLE_SEED.find((r) => r.code === code)?.perms ?? []).map((p) => p.action));
 
 describe("[Đợt E] Q9 — Quản lý cơ sở không thấy SĐT lead", () => {
-  it("v1 matrix: CENTER_MANAGER KHÔNG có leads:view-pii", () => {
-    expect(PERMISSIONS["leads:view-pii"]).not.toContain("CENTER_MANAGER");
+  it("v1 matrix: CENTER_MANAGER CÓ leads:view-pii (đảo 30/08, xem ghi chú permissions.ts)", () => {
+    expect(PERMISSIONS["leads:view-pii"]).toContain("CENTER_MANAGER");
   });
 
-  it("v2 seed: CENTER_MANAGER KHÔNG có leads:view-pii", () => {
-    expect(v2("CENTER_MANAGER").has("leads:view-pii")).toBe(false);
+  it("v2 seed: CENTER_MANAGER CÓ leads:view-pii — hai bộ quyền phải nói cùng một câu", () => {
+    expect(v2("CENTER_MANAGER").has("leads:view-pii")).toBe(true);
   });
 
   it("QL cơ sở VẪN thấy danh sách lead — chỉ che PII, không chặn công việc", () => {

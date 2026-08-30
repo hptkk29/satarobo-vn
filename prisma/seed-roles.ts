@@ -40,6 +40,9 @@ export const ROLE_SEED: RoleSeed[] = [
       // bypass toàn bộ quyền trong can() v2 nên dòng này KHÔNG đổi hành vi; khai để ma
       // trận nói được ai đẩy được lead trên phễu, và để v1 (local/dev) khớp v2.
       { action: "leads:change-status", scopeType: "GLOBAL" },
+      // 29/08 — màn "Quản lý chia lead". GLOBAL vì là cổng TRANG; cách ly cơ sở do
+      // truy vấn gác (`visibleCenterIds`), không do scope của quyền.
+      { action: "lead_pool:manage", scopeType: "GLOBAL" },
       // #17 (câu 55): học bạ. SUPER_ADMIN đã bypass toàn bộ quyền trong can() v2
       // (lib/auth/can.ts) → 2 dòng này KHÔNG đổi hành vi, thêm cho khớp v1 + rõ ý.
       { action: "report-cards:manage", scopeType: "GLOBAL" },
@@ -462,15 +465,15 @@ export const ROLE_SEED: RoleSeed[] = [
     perms: [
       // ── Lead ──
       { action: "leads:view-all", scopeType: "GLOBAL" },
-      // ⚠️ Đợt E (22/08/2026) — `leads:view-pii` ĐÃ GỠ khỏi vai này theo Q9 chủ dự
-      // án chốt 21/08: Quản lý cơ sở KHÔNG thấy SĐT lead. Đảo #11 T2 (Kiệt ký
-      // 10/07) từng cấp quyền này. Giữ nguyên leads:view-all — QL vẫn điều hành
-      // được, chỉ không đọc được số. Khoá bằng lib/auth/lead-pii-policy.test.ts.
-      // ⚠️ Đổi ở đây CHƯA có hiệu lực trên prod: phải chạy workflow seed-prod-roles.yml
-      // sau khi merge vào main, nếu không prod vẫn giữ quyền cũ trong DB.
+      // 30/08/2026 — `leads:view-pii` TRẢ LẠI cho vai này (chủ dự án chốt), đảo lần
+      // gỡ 22/08 (Đợt E · Q9). Xem ghi chú dài ở lib/auth/permissions.ts để có đủ ba
+      // mốc của câu hỏi này; hai bộ quyền v1/v2 phải khai giống nhau.
+      { action: "leads:view-pii", scopeType: "GLOBAL" },
       { action: "leads:create", scopeType: "GLOBAL" },
       { action: "leads:edit", scopeType: "GLOBAL" },
       { action: "leads:assign", scopeType: "GLOBAL" },
+      // 29/08 — điều hành vòng chia lead của CƠ SỞ MÌNH (bật/tắt người nhận lead).
+      { action: "lead_pool:manage", scopeType: "GLOBAL" },
       { action: "leads:import", scopeType: "GLOBAL" },
       { action: "leads:export", scopeType: "GLOBAL" },
       // ── Học viên · lớp · ghi danh ──

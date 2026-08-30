@@ -41,6 +41,16 @@ export const crmModule: ModuleDecl = {
       // được cơ sở mình (leads/actions.ts setCenterAssignModeAction) ⇒ scopable.
       description: "Cấu hình quy tắc chia lead tự động (theo cơ sở).",
     },
+    {
+      key: "lead_pool:manage",
+      action: "manage",
+      // Màn "Quản lý chia lead": bật/tắt người trong pool, thêm sale vào pool.
+      // GLOBAL vì nó là cổng TRANG (`PAGE_GATES` bắt buộc GLOBAL — rbac-scope.test);
+      // cách ly cơ sở do `visibleCenterIds` + `scopedDb` gác ở từng truy vấn, đúng
+      // nếp của mọi màn theo cơ sở khác. KHÁC `leads:assign-config` (chỉ Quản trị):
+      // đó là đổi CHẾ ĐỘ chia, còn đây là điều hành người trong vòng.
+      description: "Quản lý danh sách sale nhận lead tự động (theo cơ sở).",
+    },
     { key: "leads:delete", action: "delete" },
     { key: "leads:export", action: "export" },
     {

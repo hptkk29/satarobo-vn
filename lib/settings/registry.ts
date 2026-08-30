@@ -671,18 +671,6 @@ export const SETTINGS = {
     centerOverridable: false,
   }),
   // ── Nhận lead từ nguồn ngoài (form Sale, quatang) ───────────────────────
-  // Đặt ở SystemSetting chứ KHÔNG ở env: theo QĐ-3 (16/08) MISA sẽ bị bỏ hẳn
-  // sau khi lead chảy về ổn định. Ngày đó chỉ cần tắt 1 nút, không phải deploy.
-  // Tắt = ngừng gửi bản sao sang MISA; Lead trong DB ta không đổi gì.
-  "intake.mirrorMisa": def({
-    key: "intake.mirrorMisa",
-    group: "crm",
-    label:
-      "Gửi kèm bản sao phiếu nhập của Sale sang MISA (giai đoạn chuyển tiếp — tắt khi bỏ MISA)",
-    schema: z.boolean(),
-    default: true, // app/api/public/lead-intake/sale-form/route.ts
-    centerOverridable: false,
-  }),
   "intake.saleFormRateLimitMax": def({
     key: "intake.saleFormRateLimitMax",
     group: "crm",

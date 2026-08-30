@@ -4,6 +4,8 @@ import { findRecentDuplicate, logDuplicateAttempt } from "../dedup";
 import { autoAssignNewLead } from "../auto-assign";
 import { LEAD_KHONG_NHAN_THEM_CON } from "@/lib/leads/status";
 import { autoAssignLead } from "../assign";
+import { chiaChoLead, ghiNhanNhapLai } from "../assign-lead";
+import type { LeadEntryPoint } from "../assign-resolve";
 import { getNonEnrollableCenterIds } from "@/lib/enrollment-flow";
 import { buildNote, isSameChildName, matchCenter } from "./normalize";
 import type { MappedLead } from "./types";
@@ -39,6 +41,20 @@ export type IntakeContext = {
   createdByUserId?: string | null;
   /** Cơ sở đã biết sẵn (lời gọi cũ truyền thẳng id) — thắng `centerHint`. */
   centerId?: string | null;
+  /**
+   * ĐƯỜNG VÀO — quyết định dòng nào của ma trận chia lead được áp (29/08/2026).
+   *
+   * Bỏ trống ⇒ `"LANDING"`, đúng nghĩa "phiếu từ ngoài vào, không rõ người nhập":
+   * đó là mặc định AN TOÀN vì nó luôn rơi về chia tự động, không bao giờ tự gán
+   * cho ai. Đặt nhầm thành `"FORM"` mới là thứ nguy hiểm — phiếu sẽ về tay người
+   * nhập mà không qua vòng.
+   */
+  entryPoint?: LeadEntryPoint;
+  /**
+   * Chủ lead CHỈ ĐỊNH SẴN — cột sale trong file Excel. Caller phải tra ra tài
+   * khoản thật; không khớp thì để trống, KHÔNG đoán.
+   */
+  explicitOwnerId?: string | null;
   /** `Lead.eventId` dựng sẵn bởi caller; nếu bỏ trống sẽ suy từ `externalId`. */
   eventId?: string | null;
   utmSource?: string | null;
@@ -429,6 +445,15 @@ export async function ingestIntakeLead(
       // Không ghi lại thì mọi cảnh báo (mã NV sai, cơ sở lạ, thiếu tên PH) cũng
       // bốc hơi — đúng kiểu nuốt lỗi im lặng mà luật cứng #6 cấm.
       await recordIntakeNotes(dup.id, dupNoteLines, warnings, actorName);
+      // 29/08 — nâng mốc LẦN NHẬP GẦN NHẤT + ghi sổ + báo người đang giữ lead.
+      // Không có bước này thì phiếu khách vừa gọi lại trông y hệt phiếu nguội ba
+      // tháng, và Sale không có cách nào biết để gọi trước.
+      await ghiNhanNhapLai({
+        leadId: dup.id,
+        centerId,
+        source: ctx.source,
+        createdById: ctx.createdByUserId ?? null,
+      }).catch((err) => console.error(`[intake:${ctx.source}] ghi nhận nhập lại:`, err));
       return { ok: true, leadId: dup.id, duplicate: true, childAdded, warnings };
     }
 
@@ -449,11 +474,15 @@ export async function ingestIntakeLead(
           email: mapped.email ?? undefined,
           childName: mapped.child?.fullName ?? mapped.childName ?? undefined,
           centerId: centerId ?? undefined,
-          assignedToId: assignedToId ?? undefined,
-          // GĐ5 — chỉ còn ghi MỐC phân công. Trạng thái ASSIGNED cũ nay là MOI, mà
-          // MOI đã là mặc định của cột nên đặt lại chẳng khác gì; việc "lead này có
-          // người nhận" đọc từ assignedToId + assignedAt.
-          ...(assignedToId ? { assignedAt: new Date() } : {}),
+          // 29/08 — KHÔNG gán chủ ở đây nữa khi đã biết cơ sở: `chiaChoLead` bên
+          // dưới mới là cửa quyết chủ, và nó áp thêm vế CƠ SỞ mà chỗ này không có
+          // (mã NV của sale CS1 trên phiếu khách chọn CS2 vốn vẫn gán về CS1).
+          // Đường không-biết-cơ-sở vẫn giữ nếp cũ để `autoAssignNewLead` tự thoát.
+          ...(centerId && !ctx.legacyWebhook
+            ? {}
+            : assignedToId
+              ? { assignedToId, assignedAt: new Date() }
+              : {}),
           // Nguồn marketing do người nhập khai thắng kênh kỹ thuật (xem
           // `MappedLead.leadSource`); bỏ trống thì giữ nguyên hành vi cũ.
           source: mapped.leadSource ?? ctx.source,
@@ -468,6 +497,8 @@ export async function ingestIntakeLead(
           referrer: ctx.referrer ?? undefined,
           utmSource: ctx.utmSource ?? undefined,
           utmCampaign: ctx.utmCampaign ?? undefined,
+          // Mốc lần nhập ĐẦU TIÊN; các lần sau do `ghiNhanNhapLai` nâng.
+          lastInboundAt: new Date(),
         },
         select: { id: true },
       });
@@ -498,15 +529,45 @@ export async function ingestIntakeLead(
       return created;
     });
 
-    // Đã có người phụ trách thì hàm này tự thoát — gọi vô hại, giữ 1 đường duy nhất.
+    // ── CHIA CHỦ ────────────────────────────────────────────────────────────
+    //
     // Await chứ không fire-and-forget: serverless có thể kill tiến trình ngay sau
     // khi response đi, lead sẽ nằm không ai nhận (đã burn ở `/api/leads`).
-    const assign = ctx.legacyWebhook
-      ? autoAssignLead(lead.id, { actorId: null, actorName })
-      : autoAssignNewLead(lead.id, { actorId: null, actorName });
-    await assign.catch((err) =>
-      console.error(`[intake:${ctx.source}] auto-assign error:`, err),
-    );
+    //
+    // 29/08/2026 — đi qua `chiaChoLead` (ma trận quyết định + sổ chia lead) khi
+    // ĐÃ BIẾT CƠ SỞ. Chưa biết cơ sở thì vẫn dùng đường cũ: `autoAssignNewLead`
+    // còn làm thêm một việc mà cửa mới không làm — CHỌN CƠ SỞ (`pickCenterEvenly`)
+    // — và bỏ nó đi là mọi phiếu không khai cơ sở nằm im mãi mãi.
+    //
+    // Ba webhook cũ (`legacyWebhook`) giữ nguyên đường cũ trong đợt này: chúng
+    // không mang `entryPoint`, và đổi hành vi của chúng không nằm trong bước 5.
+    if (!ctx.legacyWebhook && centerId) {
+      // Mã NV trên phiếu = người giới thiệu. Đưa vào `aff` chứ không `explicitOwnerId`
+      // để ma trận áp ĐỦ ba vế của ca affiliate — trong đó có vế CƠ SỞ: người CS1
+      // phát link mà khách chọn CS2 thì lead thuộc pool CS2, không về tay họ.
+      const aff =
+        owner.assignedToId
+          ? {
+              userId: owner.assignedToId,
+              centerId: owner.fallbackCenterId,
+              isSale: true as const,
+            }
+          : null;
+      await chiaChoLead(lead.id, {
+        targetCenterId: centerId,
+        createdById: ctx.createdByUserId ?? null,
+        entryPoint: ctx.entryPoint ?? "LANDING",
+        explicitOwnerId: ctx.explicitOwnerId ?? null,
+        aff,
+      }).catch((err) => console.error(`[intake:${ctx.source}] chia lead:`, err));
+    } else {
+      const assign = ctx.legacyWebhook
+        ? autoAssignLead(lead.id, { actorId: null, actorName })
+        : autoAssignNewLead(lead.id, { actorId: null, actorName });
+      await assign.catch((err) =>
+        console.error(`[intake:${ctx.source}] auto-assign error:`, err),
+      );
+    }
 
     return { ok: true, leadId: lead.id, duplicate: false, warnings };
   } catch (err) {

@@ -83,12 +83,15 @@ export async function layCauHinh(actor: Actor): Promise<ProgramConfig> {
 /** Cơ sở + phòng để đổ vào form tạo lớp. */
 export async function layLuaChonTaoLop(
   actor: Actor,
-): Promise<{ centers: (Option & { code: string | null })[]; courses: Option[] }> {
+): Promise<{
+  centers: (Option & { code: string | null })[];
+  courses: (Option & { slug: string })[];
+}> {
   const sdb = scopedDb(actor);
   const [centers, courses] = await Promise.all([
     sdb.center.findMany({
       where: { isActive: true },
-      // 28/08 — thêm `code` để form xem trước được tên lớp sẽ sinh ("CS1_Lớp trial …").
+      // 28/08 — thêm `code` để form xem trước được tên lớp sẽ sinh ("CS2-sata4-Lớp trial …").
       select: { id: true, name: true, code: true },
       orderBy: { name: "asc" },
     }),
@@ -96,7 +99,8 @@ export async function layLuaChonTaoLop(
     // dùng chung toàn hệ) nên `sdb` chỉ pass-through.
     sdb.course.findMany({
       where: { isActive: true },
-      select: { id: true, name: true },
+      // 29/08 — `slug` là phần MÃ KHOÁ trong tên lớp; form cần nó để xem trước.
+      select: { id: true, name: true, slug: true },
       orderBy: { name: "asc" },
     }),
   ]);
