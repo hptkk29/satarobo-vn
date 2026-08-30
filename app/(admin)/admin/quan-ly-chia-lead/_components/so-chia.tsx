@@ -6,6 +6,7 @@
 // Mặc định 30 ngày gần nhất. Không mặc định "tất cả": bảng này lớn nhanh, và người
 // mở nó gần như luôn đang tra một việc vừa xảy ra.
 import Link from "next/link";
+import { Download } from "lucide-react";
 import { laySoChia } from "@/lib/lead/pool-board";
 
 const MOI_TRANG = 25;
@@ -132,6 +133,21 @@ export async function SoChiaLead({
         >
           Lọc
         </button>
+        {/* Xuất theo ĐÚNG bộ lọc đang xem — route tự dựng lại tập cơ sở từ tầm nhìn
+            của actor, không tin `orgUnitId` gửi lên. */}
+        <a
+          href={`/api/admin/crm/so-chia-lead-export?${new URLSearchParams({
+            co_so: centerId,
+            ...(sp.tu ? { tu: sp.tu } : {}),
+            ...(sp.den ? { den: sp.den } : {}),
+            ...(sp.sale ? { sale: sp.sale } : {}),
+            ...(sp.nguon ? { nguon: sp.nguon } : {}),
+            ...(sp.tieu_luot ? { tieu_luot: sp.tieu_luot } : {}),
+          }).toString()}`}
+          className="inline-flex items-center gap-1.5 rounded-lg border border-border px-4 py-2 text-sm font-medium text-foreground hover:bg-muted"
+        >
+          <Download className="h-4 w-4" /> Xuất Excel
+        </a>
       </form>
 
       <div className="overflow-x-auto rounded-xl border border-border bg-card">

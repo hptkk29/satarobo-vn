@@ -4,9 +4,11 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { MoreHorizontal, UserPlus } from "lucide-react";
+import Link from "next/link";
+import { History, MoreHorizontal, UserPlus } from "lucide-react";
 import type { DongPool } from "@/lib/lead/pool-board";
 import {
+  datLaiLuotAction,
   themSaleVaoPoolAction,
   tatNhanLeadAction,
   batNhanLeadAction,
@@ -44,6 +46,8 @@ export function PoolTable({ centerId, rows, chuaCoTrongPool, laQuanTri }: Props)
   const [soLuot, setSoLuot] = useState("");
   const [lyDoChinh, setLyDoChinh] = useState("");
   const [themId, setThemId] = useState("");
+  const [moDatLai, setMoDatLai] = useState(false);
+  const [lyDoDatLai, setLyDoDatLai] = useState("");
 
   // MIN của vòng đang bật — hiện trong hộp xác nhận để người bấm biết trước hậu quả.
   const min = rows.filter((r) => r.dangNhan).reduce((m, r) => Math.min(m, r.viTriVong), Infinity);
@@ -169,6 +173,25 @@ export function PoolTable({ centerId, rows, chuaCoTrongPool, laQuanTri }: Props)
         </table>
       </div>
 
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <Link
+          href={`/quan-ly-chia-lead/lich-su?co_so=${centerId}`}
+          className="inline-flex items-center gap-1.5 text-sm font-medium text-primary hover:underline"
+        >
+          <History className="h-4 w-4" /> Lịch sử thay đổi pool
+        </Link>
+        {laQuanTri && (
+          <button
+            type="button"
+            disabled={pending}
+            onClick={() => setMoDatLai(true)}
+            className="rounded-lg border border-border px-3 py-1.5 text-sm font-medium text-foreground hover:bg-muted disabled:opacity-50"
+          >
+            Đặt lại lượt toàn cơ sở
+          </button>
+        )}
+      </div>
+
       {/* ⚠️ GIỮ NGUYÊN VĂN — đây là câu trả lời cho khiếu nại hay gặp nhất về bảng này. */}
       <p className="rounded-xl border border-border bg-muted/40 p-4 text-sm text-muted-foreground">
         Cột <strong>Lượt đã nhận</strong> chỉ đếm lead do hệ thống chia tự động. Lead do
@@ -234,6 +257,47 @@ export function PoolTable({ centerId, rows, chuaCoTrongPool, laQuanTri }: Props)
             className="w-full rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground disabled:opacity-50"
           >
             Bật lại
+          </button>
+        </Hop>
+      )}
+
+      {/* Đặt lại lượt toàn cơ sở — chỉ Quản trị. Về MIN, KHÔNG về 0. */}
+      {moDatLai && laQuanTri && (
+        <Hop
+          tieuDe="Đặt lại lượt toàn cơ sở"
+          moTa={`Mọi người đang nhận lead sẽ về mức ${minHienThi} — mức THẤP NHẤT hiện tại, không phải 0. Số lead mỗi người đã nhận vẫn giữ nguyên.`}
+          onDong={() => {
+            setMoDatLai(false);
+            setLyDoDatLai("");
+          }}
+        >
+          <label className="block">
+            <span className="mb-1 block text-xs font-medium text-muted-foreground">
+              Lý do (bắt buộc)
+            </span>
+            <input
+              autoFocus
+              value={lyDoDatLai}
+              onChange={(e) => setLyDoDatLai(e.target.value)}
+              placeholder="San lại đầu kỳ, sự cố chia lệch…"
+              className={oCls}
+            />
+          </label>
+          <button
+            type="button"
+            disabled={!lyDoDatLai.trim() || pending}
+            onClick={() =>
+              chay(
+                () => datLaiLuotAction({ centerId, reason: lyDoDatLai }),
+                () => {
+                  setMoDatLai(false);
+                  setLyDoDatLai("");
+                },
+              )
+            }
+            className="w-full rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground disabled:opacity-50"
+          >
+            Đặt lại lượt
           </button>
         </Hop>
       )}
