@@ -178,7 +178,10 @@ export function LeadActivityPanel({
   const [noteContent, setNoteContent] = useState("");
 
   // LD5 — lịch sử mặc định đóng (chỉ render khi mở).
-  const [historyOpen, setHistoryOpen] = useState(false);
+  // 30/08 — MỞ SẴN (chủ dự án chốt). Khối này nay đứng ngay cạnh hồ sơ khách, và
+  // thứ người trực lead cần thấy đầu tiên là "đã ai gọi chưa, gọi lúc nào" — đóng lại
+  // thì phải bấm thêm một lần cho mọi lượt mở lead.
+  const [historyOpen, setHistoryOpen] = useState(true);
 
   function resetForm() {
     setCallCaller("");
