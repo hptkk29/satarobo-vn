@@ -157,6 +157,8 @@ export async function convertLeadToEnrollment(actor: AuditActor, input: ConvertL
         customerName: lead.parentName,
         customerPhone: lead.phone,
         centerId: lead.centerId,
+        // Người tạo đơn = người bấm chốt lead (cột danh sách /admin/orders).
+        createdById: actor.id ?? null,
         subtotal: input.amount,
         totalAmount: input.amount,
         status: paid ? "CONFIRMED" : "PENDING_PAYMENT",

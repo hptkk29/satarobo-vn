@@ -4014,6 +4014,18 @@ model Order {
   paidAt        DateTime? @db.Timestamptz(6)
 
   // Confirmation by staff
+  // 31/08/2026 — NGƯỜI TẠO ĐƠN (cột danh sách /admin/orders).
+  //
+  // Cột TRẦN, KHÔNG quan hệ Prisma — theo đúng lối của `confirmedByUserId` ngay dưới,
+  // `Payment.recordedById`, `installmentRequestedById`…: xoá/vô hiệu một nhân sự không
+  // được kéo theo hay chặn đơn hàng. Tra tên bằng một query `user.findMany` ở tầng đọc
+  // (khuôn mẫu: `queryPayments` trong admin/payments/_actions.ts).
+  //
+  // ⚠️ Đơn TẠO TRƯỚC ngày này để NULL vĩnh viễn: không có nguồn nào suy ngược ra người
+  // tạo (AuditLog chưa từng ghi sự kiện tạo đơn — đo trên DB: chỉ có DISCOUNT_APPROVED).
+  // Danh sách hiển thị "—" cho nhóm đó, KHÔNG đoán bừa.
+  createdById String?
+
   confirmedByUserId String?
   confirmedAt       DateTime? @db.Timestamptz(6)
 

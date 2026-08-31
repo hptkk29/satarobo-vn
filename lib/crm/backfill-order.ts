@@ -74,6 +74,8 @@ export async function createBackfillOrderPaymentInTx(
       customerEmail: lead.email,
       leadId: lead.id,
       centerId: lead.centerId,
+      // Người tạo đơn = người nhập khoản tiền đã thu (cột danh sách /admin/orders).
+      createdById: actor.id ?? null,
       subtotal,
       discountAmount,
       totalAmount,

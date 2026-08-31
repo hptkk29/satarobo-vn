@@ -156,10 +156,33 @@ export async function queryOrders(
   });
 
   const hasMore = rows.length > PAGE_SIZE;
-  const items = hasMore ? rows.slice(0, PAGE_SIZE) : rows;
-  const last = items[items.length - 1];
+  const rawItems = hasMore ? rows.slice(0, PAGE_SIZE) : rows;
+  const last = rawItems[rawItems.length - 1];
   const nextCursor =
     hasMore && last ? encodeCursor(last.createdAt, last.id) : null;
+
+  // "Người tạo đơn" — `Order.createdById` là String THUẦN (không quan hệ Prisma, cùng
+  // lối với `confirmedByUserId` / `Payment.recordedById`) → tra tên bằng MỘT query User.
+  // Khuôn mẫu chép từ `queryPayments` (admin/payments/_actions.ts).
+  // User ∈ SCOPE_EXEMPT nên đọc toàn cục OK — và cần vậy: đơn của cơ sở mình có thể do
+  // người Hội sở tạo, scope theo cơ sở sẽ làm mất tên chính người đó.
+  const creatorIds = [
+    ...new Set(rawItems.map((r) => r.createdById).filter((v): v is string => !!v)),
+  ];
+  const creators = creatorIds.length
+    ? await sdb.user.findMany({
+        where: { id: { in: creatorIds } },
+        select: { id: true, name: true },
+      })
+    : [];
+  const creatorNameById = new Map(creators.map((u) => [u.id, u.name]));
+
+  const items = rawItems.map((o) => ({
+    ...o,
+    // null = đơn tạo TRƯỚC 31/08/2026 (chưa có cột) hoặc người tạo đã bị xoá. Màn hình
+    // in "—"; cố ý KHÔNG đoán bừa từ nguồn khác.
+    createdByName: o.createdById ? (creatorNameById.get(o.createdById) ?? null) : null,
+  }));
 
   return { items, nextCursor };
 }
@@ -354,6 +377,10 @@ export async function createOrderManualAction(input: unknown) {
         studentId: data.studentId || null,
         leadId: data.leadId || null,
         centerId: data.centerId || null,
+        // Người tạo đơn — cột danh sách /admin/orders. Lấy từ phiên, KHÔNG nhận từ
+        // client: đây là thứ dùng để quy trách nhiệm, để client gửi lên là tự mở đường
+        // ghi tên người khác vào đơn của mình.
+        createdById: session.user.id ?? null,
         paymentMethodId: data.paymentMethodId,
         subtotal,
         discountAmount: data.discountAmount,

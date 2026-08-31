@@ -202,6 +202,7 @@ export function OrdersListClient() {
                 <TableHead className="text-right">Số tiền (VND)</TableHead>
                 <TableHead>Phương thức</TableHead>
                 <TableHead>Trạng thái</TableHead>
+                <TableHead>Người tạo</TableHead>
                 <TableHead>Tạo lúc</TableHead>
                 <TableHead className="text-right">Chi tiết</TableHead>
               </TableRow>
@@ -210,7 +211,7 @@ export function OrdersListClient() {
               {items.length === 0 && !isPending ? (
                 <TableRow>
                   <TableCell
-                    colSpan={8}
+                    colSpan={9}
                     className="py-8 text-center text-muted-foreground"
                   >
                     Chưa có đơn hàng
@@ -260,6 +261,13 @@ export function OrdersListClient() {
                           );
                         })()}
                       </div>
+                    </TableCell>
+                    <TableCell className="text-sm text-foreground">
+                      {/* "—" = đơn tạo TRƯỚC 31/08/2026 (chưa có cột `createdById`), hoặc
+                          người tạo đã bị xoá khỏi hệ thống. Cố ý không đoán từ nguồn khác. */}
+                      {o.createdByName ?? (
+                        <span className="text-muted-foreground">—</span>
+                      )}
                     </TableCell>
                     <TableCell className="text-xs tabular-nums text-muted-foreground">
                       {formatDateTime(o.createdAt)}
