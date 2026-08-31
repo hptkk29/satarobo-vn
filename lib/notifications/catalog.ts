@@ -150,6 +150,12 @@ const BY_PREFIX: Readonly<Record<string, NotiDef>> = {
     group: "action_required", priority: 1, entity: "center",
     recipients: "Quản lý cơ sở", target: "/cham-cong/checklist-co-so",
   },
+  // 30/08 — LEAD MỚI VỀ TAY BẠN. `priority: 1` như `lead_followup`: lead mới là thứ
+  // phải gọi trong ngày, để chung nhóm "chờ xử lý" với việc follow-up.
+  "lead.moi:": {
+    group: "action_required", priority: 1, entity: "lead",
+    recipients: "Tư vấn viên vừa được chia lead", target: "/leads",
+  },
   "lead_followup:": {
     group: "action_required", priority: 1, entity: "lead",
     recipients: "Tư vấn viên phụ trách lead", target: "/leads",

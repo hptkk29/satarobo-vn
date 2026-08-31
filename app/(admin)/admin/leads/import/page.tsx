@@ -6,6 +6,7 @@ import { ChevronLeft } from "lucide-react";
 import { ExcelImporter, type ImportResult } from "@/components/admin/ExcelImporter";
 import { parseLeadImportRow, normalizePhone, LEAD_IMPORT_COLUMNS } from "@/lib/lead/import";
 import { leadStatusLabel } from "@/lib/leads/status";
+import { formatPhoneVN } from "@/lib/phone";
 
 interface LeadImportRow {
   [key: string]: string | number | null | undefined;
@@ -60,7 +61,7 @@ export default function ImportLeadsPage() {
             if (m) {
               map.set(
                 excelNos[i],
-                `SĐT ${m.phone} ĐÃ CÓ trong CRM: PH "${m.parentName}"` +
+                `SĐT ${formatPhoneVN(m.phone)} ĐÃ CÓ trong CRM: PH "${m.parentName}"` +
                   ` — con: ${m.childName?.trim() || "(chưa ghi tên con)"}` +
                   ` — trạng thái: ${leadStatusLabel(m.status)}.` +
                   ` Con ở dòng này sẽ được THÊM vào lead đó (không tạo lead trùng số).` +

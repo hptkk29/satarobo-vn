@@ -28,6 +28,7 @@ import "server-only";
 import { db } from "@/lib/db";
 import { canonicalPhone, phoneVariants } from "@/lib/phone";
 import { resolveAssignment, type LeadEntryPoint, type AffiliateActor } from "./assign-resolve";
+import type { LeadAssignSource } from "@prisma/client";
 import { layPoolDangBat, anhChupPool, orgUnitIdCuaCoSo } from "./pool";
 import { takeRotationTurnsTx } from "./rotation";
 import { notifyStaff } from "@/lib/notifications/notify";
@@ -162,6 +163,13 @@ export async function chiaChoLead(
           assignmentSource: quyet.source,
         },
       });
+      const l = await db.lead.findUnique({ where: { id: leadId }, select: { parentName: true } });
+      await baoSaleCoLeadMoi({
+        ownerId: quyet.ownerId,
+        leadId,
+        parentName: l?.parentName ?? "(không tên)",
+        source: quyet.source,
+      });
       return { ok: true, assignedToId: quyet.ownerId, consumedTurn: false };
     }
     console.warn(
@@ -234,7 +242,7 @@ export async function chiaChoLead(
         },
       });
 
-      return { ownerId, consumedTurn, poolRong };
+      return { ownerId, consumedTurn, poolRong, source: quyet.source };
     },
     { maxWait: 5_000, timeout: 15_000 },
   );
@@ -242,9 +250,51 @@ export async function chiaChoLead(
   if (ketQua.poolRong) {
     const l = await db.lead.findUnique({ where: { id: leadId }, select: { parentName: true } });
     await baoPoolRong(input.targetCenterId, leadId, l?.parentName ?? "(không tên)");
+  } else if (ketQua.ownerId) {
+    const l = await db.lead.findUnique({ where: { id: leadId }, select: { parentName: true } });
+    await baoSaleCoLeadMoi({
+      ownerId: ketQua.ownerId,
+      leadId,
+      parentName: l?.parentName ?? "(không tên)",
+      source: ketQua.source,
+    });
   }
 
   return { ok: true, assignedToId: ketQua.ownerId, consumedTurn: ketQua.consumedTurn };
+}
+
+/**
+ * BÁO CHO SALE VỪA ĐƯỢC CHIA LEAD.
+ *
+ * Trước 30/08 không có đường nào báo: sale chỉ biết mình có lead mới khi tự mở danh
+ * sách ra xem. Lead nóng nhất là lead vừa để lại số, mà đúng lúc đó thì không ai
+ * được đánh động — cam kết phản hồi trôi vì một cái chuông không kêu.
+ *
+ * `href` trỏ THẲNG trang chi tiết lead (chủ dự án chốt), không phải danh sách: bấm
+ * chuông là đọc được ngay số điện thoại và ghi được hoạt động, không phải đi tìm.
+ *
+ * Gửi NGOÀI transaction và nuốt lỗi: chuông hỏng thì lead vẫn phải được chia. Ngược
+ * lại — để lỗi mạng của một cái chuông cuốn theo cả lượt chia — mới là hỏng nặng.
+ */
+async function baoSaleCoLeadMoi(params: {
+  ownerId: string;
+  leadId: string;
+  parentName: string;
+  /** Nguồn gán. `DUPLICATE` không bao giờ tới đây — lead trùng không đổi chủ. */
+  source: LeadAssignSource;
+}): Promise<void> {
+  // Sale TỰ NHẬP phiếu của mình thì không cần chuông báo chính việc mình vừa làm.
+  if (params.source === "SELF") return;
+  await notifyStaff({
+    userIds: [params.ownerId],
+    // Một lead chia đúng một lần ⇒ khoá theo lead là đủ, và chặn được lượt gán lại
+    // cùng người không đẻ chuông thứ hai.
+    dedupeKey: `lead.moi:${params.leadId}`,
+    title: "Bạn có lead mới",
+    body: `Lead "${params.parentName}" vừa được chia cho bạn. Gọi sớm giúp tăng tỉ lệ chốt.`,
+    href: `/leads/${params.leadId}`,
+    entityId: params.leadId,
+  }).catch((err) => console.error("[assign-lead] không gửi được thông báo lead mới:", err));
 }
 
 /**

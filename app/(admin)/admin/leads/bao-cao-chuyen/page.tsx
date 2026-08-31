@@ -9,6 +9,7 @@ import type { Prisma } from "@prisma/client";
 import { formatDateVN } from "@/lib/format/date";
 import { PhanTrangBang } from "@/components/ui/phan-trang-bang";
 import { CONVERTED_STATUSES } from "@/lib/leads/status";
+import { formatPhoneVN } from "@/lib/phone";
 
 export const metadata = { title: "Báo cáo chuyển lead liên cơ sở | Admin" };
 export const dynamic = "force-dynamic";
@@ -181,7 +182,7 @@ export default async function TransferReportPage({ searchParams }: Props) {
                       <Link href={`/leads/${r.leadId}`} className="font-medium text-primary hover:underline">
                         {r.parentName}
                       </Link>
-                      <span className="block text-xs text-muted-foreground">{r.phone}</span>
+                      <span className="block text-xs text-muted-foreground">{formatPhoneVN(r.phone)}</span>
                     </td>
                     <td className="px-3 py-2 whitespace-nowrap font-semibold text-foreground">
                       {r.from} → {r.to}
