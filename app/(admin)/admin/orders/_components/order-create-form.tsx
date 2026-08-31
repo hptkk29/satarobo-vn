@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition, useMemo } from "react";
+import { useState, useTransition, useMemo, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
@@ -19,6 +19,10 @@ import {
 } from "@/components/ui/select";
 import { Combobox, type ComboboxOption } from "@/components/ui/combobox";
 import { HelpHint } from "@/components/admin/ui/help-hint";
+import {
+  methodAllowsOrderType,
+  methodServesCenter,
+} from "@/lib/payments/method-scope";
 import { createOrderManualAction } from "../_actions";
 
 type Course = {
@@ -39,6 +43,8 @@ type PM = {
   id: string;
   code: string;
   name: string;
+  /** null = phương thức DÙNG CHUNG mọi cơ sở. */
+  centerId: string | null;
   canBuyCourse: boolean;
   canBuyPackage: boolean;
   canBuyExam: boolean;
@@ -60,6 +66,7 @@ export function OrderCreateForm({
   leadId = null,
   defaultCustomer,
   defaultCenterId,
+  lockCenter = false,
 }: {
   paymentMethods: PM[];
   courses: Course[];
@@ -72,6 +79,17 @@ export function OrderCreateForm({
   leadId?: string | null;
   defaultCustomer?: { name?: string; phone?: string; email?: string };
   defaultCenterId?: string | null;
+  /**
+   * KHOÁ ô "Trung tâm" — bật cho người KHÔNG có `orders:manage` (Sale cơ sở).
+   *
+   * ⚠️ Đây là sửa một chỗ NÓI DỐI, không phải thêm ràng buộc mới. Cổng server
+   * `createOrderManualAction` vốn đã ép `data.centerId = guard.enforcedCenterId` (cơ sở
+   * của lead) cho nhánh không có `orders:manage` — nghĩa là Sale đổi ô này thì giá trị
+   * họ chọn bị VỨT IM LẶNG. Đơn vẫn tạo ra, nhưng ở cơ sở khác cái họ vừa chọn, và cả
+   * danh sách phương thức thanh toán họ vừa cân nhắc cũng thành sai. Khoá ô lại để màn
+   * hình nói đúng thứ hệ thống sẽ làm.
+   */
+  lockCenter?: boolean;
 }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -111,13 +129,36 @@ export function OrderCreateForm({
   const [customerNote, setCustomerNote] = useState("");
   const [internalNote, setInternalNote] = useState("");
 
+  // Hai chiều lọc, dùng CHUNG luật với Server Action (lib/payments/method-scope.ts):
+  // loại đơn (cờ canBuy*) và CƠ SỞ. Lệch luật giữa dropdown và cổng server là người
+  // dùng chọn được một thứ rồi bấm Lưu mới bị từ chối.
+  const orderCenterId = centerId === NO_CENTER ? null : centerId;
   const availablePMs = useMemo(() => {
-    return paymentMethods.filter((pm) => {
-      if (orderType === "COURSE") return pm.canBuyCourse;
-      if (orderType === "PRODUCT") return pm.canBuyProduct;
-      return false;
-    });
-  }, [paymentMethods, orderType]);
+    return paymentMethods.filter(
+      (pm) =>
+        methodServesCenter(pm, orderCenterId) && methodAllowsOrderType(pm, orderType),
+    );
+  }, [paymentMethods, orderType, orderCenterId]);
+
+  // Đổi cơ sở / loại đơn mà giữ nguyên lựa chọn cũ là để lại một `paymentMethodId`
+  // KHÔNG còn hợp lệ trong state — trigger vẫn hiện tên phương thức cũ (Base UI in value
+  // thô), người dùng tưởng vẫn ổn, tới lúc Lưu mới ăn từ chối. Xoá ngay khi nó rớt khỏi
+  // danh sách. `useEffect` ở đây là ĐỒNG BỘ STATE THEO STATE, không phải fetch dữ liệu —
+  // không phạm luật "không useEffect để fetch".
+  useEffect(() => {
+    if (paymentMethodId && !availablePMs.some((pm) => pm.id === paymentMethodId)) {
+      setPaymentMethodId("");
+      return;
+    }
+    // TỰ NHẬN phương thức của cơ sở đang chọn khi chỉ có ĐÚNG MỘT lựa chọn hợp lệ
+    // (chốt 31/08/2026: "đơn ở cơ sở nào thì tự nhận pttt ở cs đó"). Đây là ca thường
+    // gặp nhất — cơ sở khai một phương thức chuyển khoản riêng, còn lại là dùng chung
+    // vốn hay bị tắt. Nhiều hơn một thì vẫn để người dùng chọn: đoán hộ chỗ tiền đi
+    // đường nào là việc không nên tự làm.
+    if (!paymentMethodId && availablePMs.length === 1) {
+      setPaymentMethodId(availablePMs[0]!.id);
+    }
+  }, [availablePMs, paymentMethodId]);
 
   // Base UI <Select.Value> hiển thị value THÔ (mã/ID) → phải truyền `items` (map
   // value→nhãn) cho trigger hiện đúng tiếng Việt (item 3 — fix Radix→Base UI regression).
@@ -130,7 +171,7 @@ export function OrderCreateForm({
     () => Object.fromEntries(availablePMs.map((pm) => [pm.id, pm.name])),
     [availablePMs],
   );
-  const centerItems = useMemo(
+  const centerItems: Record<string, string> = useMemo(
     () => ({ [NO_CENTER]: "— Không gán —", ...Object.fromEntries(centers.map((c) => [c.id, c.name])) }),
     [centers],
   );
@@ -272,7 +313,13 @@ export function OrderCreateForm({
         <h2 className="text-sm font-bold uppercase tracking-wider text-muted-foreground">
           Thông tin đơn
         </h2>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+        {/* 4 ô: Loại đơn · Trạng thái · Trung tâm · Phương thức TT.
+            "Trung tâm" DỜI LÊN ĐÂY (trước ở khối Khách hàng, tức DƯỚI ô Phương thức):
+            nó quyết định danh sách phương thức, nên để sau là người dùng chọn phương
+            thức xong, kéo xuống đổi cơ sở, và lựa chọn vừa chọn bị bỏ mà không hiểu vì
+            sao. Cơ sở cũng vốn là thông tin của ĐƠN (doanh thu/công nợ tính về nó),
+            không phải thông tin của khách. */}
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <div className="space-y-1.5">
             <Label>
               Loại đơn *
@@ -328,10 +375,59 @@ export function OrderCreateForm({
           </div>
           <div className="space-y-1.5">
             <Label>
+              Trung tâm
+              <HelpHint>
+                {lockCenter ? (
+                  <span className="block normal-case tracking-normal">
+                    Cơ sở của đơn lấy theo cơ sở của khách bạn đang chốt, không đổi được.
+                    Nó quyết định danh sách Phương thức TT bên cạnh và tài khoản ngân hàng
+                    mà mã QR trỏ vào. Cần đổi cơ sở thì chuyển cơ sở cho khách trước.
+                  </span>
+                ) : (
+                  <span className="block normal-case tracking-normal">
+                    Cơ sở đứng tên đơn này — doanh thu và công nợ tính về cơ sở đó, và
+                    người của cơ sở khác sẽ không thấy đơn. Cơ sở cũng quyết định danh
+                    sách Phương thức TT bên cạnh và tài khoản ngân hàng mà mã QR trỏ vào,
+                    nên chọn cơ sở TRƯỚC. Chỉ để trống khi đơn thật sự không thuộc cơ sở
+                    nào.
+                  </span>
+                )}
+              </HelpHint>
+            </Label>
+            {lockCenter ? (
+              // Ô TĨNH thay vì <Select disabled>: giá trị vẫn phải đọc được rõ ràng, và
+              // `centerId` đã nằm trong state nên submit không đổi gì.
+              <div className="flex h-9 items-center rounded-lg border border-border bg-muted px-3 text-sm text-muted-foreground">
+                {centerItems[centerId] ?? "— Không gán —"}
+              </div>
+            ) : (
+              <Select
+                items={centerItems}
+                value={centerId}
+                onValueChange={(v) => setCenterId(v ?? NO_CENTER)}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={NO_CENTER}>— Không gán —</SelectItem>
+                  {centers.map((c) => (
+                    <SelectItem key={c.id} value={c.id}>
+                      {c.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+          </div>
+          <div className="space-y-1.5">
+            <Label>
               Phương thức TT *
               <HelpHint>
-                Cách phụ huynh trả tiền cho đơn này. Danh sách chỉ hiện những hình thức
-                được phép dùng cho loại đơn đang chọn, nên đổi loại đơn là phải chọn lại.
+                Cách phụ huynh trả tiền cho đơn này. Danh sách lọc theo HAI thứ: loại
+                đơn đang chọn, và CƠ SỞ bên trái — mỗi cơ sở chỉ dùng phương thức của
+                mình cộng các phương thức dùng chung, không thấy phương thức của cơ sở
+                khác. Đổi loại đơn hoặc đổi cơ sở thì lựa chọn cũ tự bỏ, phải chọn lại.
               </HelpHint>
             </Label>
             <Select
@@ -350,6 +446,15 @@ export function OrderCreateForm({
                 ))}
               </SelectContent>
             </Select>
+            {availablePMs.length === 0 && (
+              // Danh sách rỗng mà không nói gì thì người dùng ngồi bấm mãi không ra.
+              // Ca thật: cơ sở chỉ có phương thức riêng loại "Chuyển khoản" nhưng đang
+              // tạo đơn Sản phẩm, hoặc mọi phương thức của cơ sở đã bị tắt.
+              <p className="text-xs text-state-warning-ink">
+                Cơ sở đang chọn chưa có phương thức thanh toán nào dùng được cho loại đơn
+                này. Khai thêm ở trang Cơ sở → mục Thanh toán.
+              </p>
+            )}
           </div>
         </div>
       </section>
@@ -412,29 +517,6 @@ export function OrderCreateForm({
               inputMode="numeric"
               placeholder="9 hoặc 12 chữ số"
             />
-          </div>
-          <div className="space-y-1.5">
-            <Label>
-              Trung tâm
-              <HelpHint>
-                Cơ sở đứng tên đơn này — doanh thu và công nợ tính về cơ sở đó, và
-                người của cơ sở khác sẽ không thấy đơn. Chỉ để trống khi đơn thật sự
-                không thuộc cơ sở nào.
-              </HelpHint>
-            </Label>
-            <Select items={centerItems} value={centerId} onValueChange={(v) => setCenterId(v ?? NO_CENTER)}>
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value={NO_CENTER}>— Không gán —</SelectItem>
-                {centers.map((c) => (
-                  <SelectItem key={c.id} value={c.id}>
-                    {c.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
           </div>
           <div className="space-y-1.5 sm:col-span-2">
             <Label>Địa chỉ (số nhà, đường)</Label>

@@ -35,7 +35,14 @@ const TYPE_LABEL: Record<PaymentMethodType, string> = {
   WALLET: "Ví điện tử",
 };
 
-export function PaymentMethodsTable({ methods }: { methods: PaymentMethod[] }) {
+export function PaymentMethodsTable({
+  methods,
+  centerNames,
+}: {
+  methods: PaymentMethod[];
+  /** id cơ sở → tên, để cột "Cơ sở" khỏi in ra cuid. */
+  centerNames: Record<string, string>;
+}) {
   const [isPending, startTransition] = useTransition();
   const [confirmTarget, setConfirmTarget] = useState<PaymentMethod | null>(
     null,
@@ -67,6 +74,7 @@ export function PaymentMethodsTable({ methods }: { methods: PaymentMethod[] }) {
                 <TableHead>Mã</TableHead>
                 <TableHead>Tên</TableHead>
                 <TableHead>Loại</TableHead>
+                <TableHead>Cơ sở</TableHead>
                 <TableHead>Cho phép</TableHead>
                 <TableHead>Trạng thái</TableHead>
                 <TableHead className="text-right">Thao tác</TableHead>
@@ -76,7 +84,7 @@ export function PaymentMethodsTable({ methods }: { methods: PaymentMethod[] }) {
               {methods.length === 0 ? (
                 <TableRow>
                   <TableCell
-                    colSpan={7}
+                    colSpan={8}
                     className="py-8 text-center text-muted-foreground"
                   >
                     Chưa có phương thức nào
@@ -107,6 +115,18 @@ export function PaymentMethodsTable({ methods }: { methods: PaymentMethod[] }) {
                         <Badge variant="outline">
                           {TYPE_LABEL[pm.type] ?? pm.type}
                         </Badge>
+                      </TableCell>
+                      <TableCell className="text-xs">
+                        {/* Cột này là câu trả lời trực quan cho "ai nhìn thấy phương
+                            thức nào": dòng "Dùng chung" hiện ở mọi cơ sở, dòng có tên
+                            cơ sở CHỈ hiện ở cơ sở đó. */}
+                        {pm.centerId ? (
+                          <span className="font-medium text-foreground">
+                            {centerNames[pm.centerId] ?? pm.centerId}
+                          </span>
+                        ) : (
+                          <span className="text-muted-foreground">Dùng chung</span>
+                        )}
                       </TableCell>
                       <TableCell className="text-xs text-muted-foreground">
                         {flags || "—"}

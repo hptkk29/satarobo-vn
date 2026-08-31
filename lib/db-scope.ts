@@ -81,6 +81,11 @@ export const SCOPED_MODELS = new Set<string>([
   // hinh voi chinh QLCS co so do (tuc anh khong bao gio duoc duyet).
   "MediaAsset",
   "SessionMediaReview",
+  // 30/08/2026 — danh mục phương thức thanh toán nay thuộc cơ sở. `centerId = NULL`
+  // = phương thức DÙNG CHUNG ⇒ PHẢI khai kèm ở NULL_IS_GLOBAL_MODELS ngay dưới, nếu
+  // không tiền mặt/cổng online tàng hình với người cấp cơ sở và form tạo đơn hiện
+  // danh sách rỗng. Prefix action khai ở `getModelPrefixes` (["payments:"]).
+  "PaymentMethod",
 ]);
 
 /**
@@ -94,6 +99,9 @@ export const SCOPED_MODELS = new Set<string>([
  * PHẢI bị chặn, không được biến thành "ai cũng thấy".
  */
 export const NULL_IS_GLOBAL_MODELS = new Set<string>([
+  // 30/08/2026 — phương thức thanh toán KHÔNG gắn cơ sở = dùng chung mọi cơ sở
+  // (tiền mặt, VNPAY…). Đây là 4 dòng seed gốc và mọi dòng có trước đợt này.
+  "PaymentMethod",
   "Survey", // khảo sát chung (không gắn cơ sở)
   "SurveyResponse", // phản hồi của khảo sát chung
   "EvaluationRound", // vòng đánh giá scope SYSTEM / TEACHER_EVAL
@@ -191,12 +199,28 @@ export function getModelPrefixes(model: string): string[] {
       return ["orders:"];
     // 03/08 — sổ thu theo đợt + phân bổ + giao dịch tiền về + tiền thừa: cùng
     // họ "tiền", nên tầm nhìn cơ sở đi theo quyền payments:* như Payment.
+    //
+    // 30/08 — `PaymentMethod` (danh mục phương thức) nhập cụm này.
+    // ⚠️ ĐO TRƯỚC KHI GỠ NÓ RA. Có một hiểu nhầm rất dễ mắc: `payments:*` được seed
+    // `scopeType: "GLOBAL"` cho cả vai CẤP CƠ SỞ (CENTER_MANAGER, CENTER_ACCOUNTANT,
+    // CENTER_SALES_CSM trong prisma/seed-roles.ts), nên trông như khai prefix ở đây sẽ
+    // cho họ `centerScope: "ALL"` và phá cách ly theo cơ sở. KHÔNG PHẢI: `centerScope`
+    // suy từ NƠI NEO VAI (HO/ROOT → "ALL"), không phải từ `scopeType` — lib/auth/actor.ts:50-56.
+    // Đo thật với vai neo tại CS1: cả ba vai đều ra `centerScope: [CS1]`, đúng cách ly.
+    //
+    // Và khai prefix TỐT HƠN bỏ trống: bỏ trống thì model rơi về nhánh
+    // `isHoLevel ? "ALL" : visibleCenterIds`, nghĩa là ai có MỘT vai neo tại Hội sở —
+    // kể cả vai chẳng liên quan tiền nong — đọc được danh mục MỌI cơ sở. Đúng lỗi #04
+    // đã mắc với `Attendance`. Bất biến này khoá ở `[PTTT-09]`
+    // (tests/e2e/r7/payment-method-per-center.spec.ts) và ở test "mọi SCOPED_MODEL phải
+    // có prefix" trong lib/db-scope-function.test.ts.
     case "Payment":
     case "PaymentRequest":
     case "PaymentAllocation":
     case "QrSession":
     case "BankTransaction":
     case "CreditBalance":
+    case "PaymentMethod":
       return ["payments:"];
     case "Student":
     case "StudentCareTask":

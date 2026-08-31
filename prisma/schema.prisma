@@ -282,6 +282,10 @@ model Center {
   // Phase 5.6 — Order
   orders Order[]
 
+  // 30/08/2026 — phương thức thanh toán RIÊNG của cơ sở (dòng centerId = null là
+  // phương thức dùng chung, không thuộc cơ sở nào).
+  paymentMethods PaymentMethod[]
+
   @@index([isActive])
   @@index([displayOrder])
 }
@@ -3907,7 +3911,15 @@ model PaymentMethod {
   canBuyProduct Boolean @default(false) // Sprint 5.10
   canDeposit    Boolean @default(false) // wallet topup — reserved
 
-  // Bank account info (BANK_TRANSFER only)
+  // ─── Tài khoản nhận tiền (chỉ BANK_TRANSFER) ─────────────────────────────
+  // ⚠️ 31/08/2026 — 4 cột này TỪNG là dữ liệu chết (không đường tiền nào đọc), nay là
+  // NGUỒN SỰ THẬT DUY NHẤT: mã QR gửi phụ huynh dựng từ đây. Kho cũ
+  // `IntegrationConfig` khoá `VIETQR:<centerId>` đã NGỪNG là nơi khai (màn /admin/tich-hop
+  // gỡ khối đó) và chỉ còn là đường LÙI cho dữ liệu cũ — xem lib/payments/vietqr.ts.
+  //
+  // Vì tài khoản gắn vào PHƯƠNG THỨC (không phải vào cơ sở), một cơ sở có thể khai nhiều
+  // tài khoản bằng cách tạo nhiều phương thức chuyển khoản (vd Vietcombank + MB).
+  bankBin           String? // mã ngân hàng 6 số chuẩn VietQR (970415 = Vietinbank)
   bankName          String?
   bankBranch        String?
   bankAccountNumber String?
@@ -3919,6 +3931,31 @@ model PaymentMethod {
   displayOrder Int     @default(0)
   isActive     Boolean @default(true)
 
+  // ─── Thanh toán theo cơ sở (30/08/2026) ──────────────────────────────────
+  // `centerId = NULL` nghĩa là PHƯƠNG THỨC DÙNG CHUNG cho mọi cơ sở (tiền mặt,
+  // cổng online…), KHÔNG phải "chưa gán". Đây là lý do PaymentMethod phải khai ở
+  // CẢ HAI nơi trong lib/db-scope.ts: `SCOPED_MODELS` (để cách ly) và
+  // `NULL_IS_GLOBAL_MODELS` (để dòng dùng chung không bị `centerId IN (...)` ẩn mất
+  // khỏi chính người cấp cơ sở — bỏ sót là form tạo đơn hiện danh sách RỖNG).
+  //
+  // ⚠️ `code` VẪN @unique TOÀN CỤC — cố ý không đổi sang @@unique([code, centerId]):
+  //   (a) đổi khoá unique là ALTER trên bảng đang có dữ liệu prod (luật cứng #4),
+  //   (b) 5 chỗ đang gọi `where: { code }` (3 file seed + 2 chỗ trong _actions) sẽ
+  //       vỡ typecheck, và
+  //   (c) Postgres coi NULL là khác nhau nên ("BANK_TRANSFER", NULL) vẫn chèn được
+  //       hai lần ⇒ khoá ghép KHÔNG chặn được đúng ca cần chặn.
+  // Quy ước thay thế: phương thức riêng của cơ sở đặt mã có hậu tố cơ sở
+  // (`BANK_CS1`, `BANK_CS2` — đúng thứ prisma/seed-uat/01-nen.ts đã làm sẵn).
+  centerId String?
+  // Restrict (KHÔNG phải SetNull mặc định của Prisma cho quan hệ optional): xoá cơ sở
+  // mà để null lại là biến phương thức RIÊNG của cơ sở đó thành DÙNG CHUNG — tài khoản
+  // ngân hàng của một cơ sở đã đóng bỗng hiện ra cho mọi cơ sở còn lại.
+  center   Center? @relation(fields: [centerId], references: [id], onDelete: Restrict)
+
+  // P1 · US-07 — cột SONG SONG với centerId (ghi kép tới hết P4). Tự điền qua
+  // lib/org/dual-write.ts nhờ khai PaymentMethod trong BACKFILL_SPECS.
+  orgUnitId String?
+
   createdAt DateTime @default(now()) @db.Timestamptz(6)
   updatedAt DateTime @updatedAt @db.Timestamptz(6)
 
@@ -3929,6 +3966,8 @@ model PaymentMethod {
 
   @@index([code])
   @@index([isActive, displayOrder])
+  @@index([centerId, isActive, displayOrder])
+  @@index([orgUnitId])
 }
 
 model Order {

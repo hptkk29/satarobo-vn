@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
-import { getParentBilling, PAYMENT_METHOD_LABEL } from "@/lib/portal/billing";
+import { getParentBilling, getPaymentMethodLabels } from "@/lib/portal/billing";
 import { hotlinesInline } from "@/lib/locations";
 import { isPortalV2Enabled } from "@/lib/flags";
 import { requireActiveStudent } from "@/lib/portal/session";
@@ -44,6 +44,10 @@ export default async function HocPhiPage() {
   const session = await auth();
   if (!session?.user || session.user.role !== "PARENT") redirect("/login");
 
+  // Bảng nhãn phương thức: danh mục DB đè bảng cứng. Cần cho CẢ HAI đường vẽ (v1 và
+  // v2) — cờ PORTAL_V2_ENABLED mặc định OFF nên v1 vẫn là thứ phụ huynh đang thấy.
+  const methodLabels = await getPaymentMethodLabels();
+
   // Portal v2 — trang Học phí & công nợ giống SataUI (per-child).
   if (isPortalV2Enabled()) {
     const { ctx, studentId } = await requireActiveStudent();
@@ -54,6 +58,7 @@ export default async function HocPhiPage() {
         activeId={ctx.activeStudent?.id ?? null}
         studentName={ctx.activeStudent?.name ?? "con"}
         data={data}
+        methodLabels={methodLabels}
       />
     );
   }
@@ -206,7 +211,7 @@ export default async function HocPhiPage() {
                   </p>
                   <p className="text-xs text-neutral-600">
                     {r.studentName ? `${r.studentName} · ` : ""}
-                    {PAYMENT_METHOD_LABEL[r.method] ?? r.method} ·{" "}
+                    {methodLabels[r.method] ?? r.method} ·{" "}
                     {r.confirmedAt
                       ? fmtDate(r.confirmedAt)
                       : fmtDate(r.paidDate)}

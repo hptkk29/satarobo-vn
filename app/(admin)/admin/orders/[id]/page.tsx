@@ -10,7 +10,7 @@ import { OrderDetailClient } from "../_components/order-detail-client";
 import { SendEmailModal } from "../_components/send-email-modal";
 import { ORDER_STATUS_LABEL, ORDER_TYPE_LABEL, deriveInstallmentBadge } from "@/lib/orders/status";
 import {
-  getPaymentConfig,
+  resolveOrderPaymentConfig,
   transferContentForOrder,
   transferPhonePart,
   buildVietQrImageUrl,
@@ -132,12 +132,17 @@ export default async function OrderDetailPage({ params }: Props) {
   });
 
   // Commit 4 — thanh toán 2 đợt + QR.
-  // BGĐ 31/07 — QR lấy tài khoản NHẬN TIỀN THEO CƠ SỞ của đơn (fallback cấu hình chung).
+  // BGĐ 31/07 — QR lấy tài khoản NHẬN TIỀN theo đơn. 31/08/2026: nguồn đổi từ "theo cơ
+  // sở" sang "theo PHƯƠNG THỨC đã chọn trên đơn" (lùi dần về phương thức chuyển khoản
+  // của cơ sở → dùng chung → kho VietQR cũ). Xem resolveOrderPaymentConfig.
   //
   // 20/08 — nội dung CK là `HoTenCon_SdtPH_TenKhoa` (không còn mã đơn). Tính MỘT LẦN
   // ở đây rồi truyền xuống cả khối QR mức đơn lẫn bảng phiếu thu theo đợt: ba chỗ in
   // ra phải là cùng một chuỗi, lệch nhau là sale đọc một đằng QR mã một nẻo.
-  const payCfg = await getPaymentConfig(order.centerId);
+  const payCfg = await resolveOrderPaymentConfig({
+    centerId: order.centerId,
+    paymentMethodId: order.paymentMethodId,
+  });
   // Bản ĐẦY ĐỦ — thứ duy nhất được nhúng vào ảnh QR.
   //
   // ⚠️ Trần ký tự lấy TỪ `VIETQR_ADDINFO_MAX` (lib/payments/vietqr.ts), KHÔNG khai
@@ -220,13 +225,20 @@ export default async function OrderDetailPage({ params }: Props) {
     : [];
 
   // G4 (3c) — danh sách phương thức để đổi PTTT (chỉ cần khi có quyền sửa).
+  // 30/08/2026 — lọc theo CƠ SỞ CỦA ĐƠN ngay tại nguồn: ở đây đã có `order.centerId`
+  // nên không cần đẩy cả danh mục xuống client rồi lọc lại. Phương thức dùng chung
+  // (centerId null) luôn nằm trong danh sách — bỏ chúng đi là đơn nào cũng mất tiền mặt.
   const paymentMethods = canManage
     ? await sdb.paymentMethod.findMany({
-        where: { isActive: true },
+        where: {
+          isActive: true,
+          OR: [{ centerId: null }, { centerId: order.centerId }],
+        },
         orderBy: { displayOrder: "asc" },
         select: {
           id: true,
           name: true,
+          centerId: true,
           canBuyCourse: true,
           canBuyPackage: true,
           canBuyExam: true,

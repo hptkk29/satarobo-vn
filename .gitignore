@@ -30,6 +30,8 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 appdev.log
+# log của dev server chạy tay ở worktree (pnpm exec next dev --webpack > dev-local.log)
+dev-local.log
 *.dev.log
 
 # env files — chặn TẤT CẢ biến thể (.env.vercel, .env.bak, .env.cs2…),

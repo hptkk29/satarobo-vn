@@ -91,6 +91,9 @@ export default async function NewOrderPage({
             : undefined
         }
         defaultCenterId={lead?.centerId ?? null}
+        // Sale (không có `orders:manage`) KHÔNG đổi được cơ sở: cổng server đã ép theo
+        // cơ sở của lead, nên để ô mở là cho họ chọn một thứ sẽ bị vứt im lặng.
+        lockCenter={!canManageAll}
       />
     </div>
   );

@@ -62,9 +62,12 @@ export async function getParentOrders(parentUserId: string): Promise<OrderRow[]>
 // =============================================================================
 
 /**
- * Nhãn tiếng Việt cho Payment.method (DB lưu mã thô: METHOD_OPTIONS admin +
- * "auto" từ lib/finance/payment.ts). UI portal B2C dùng
- * `PAYMENT_METHOD_LABEL[method] ?? method` — method lạ fallback nguyên văn.
+ * Nhãn DỰ PHÒNG cho `Payment.method` (DB lưu mã thô + "auto" từ lib/finance/payment.ts).
+ *
+ * ⚠️ Từ 30/08/2026 đây KHÔNG còn là danh sách đầy đủ. Danh mục phương thức nay nằm trong
+ * DB và mỗi cơ sở có thể có phương thức riêng với mã riêng ("BANK_CS1"…), nên bảng cứng
+ * này không thể biết hết. Dùng `getPaymentMethodLabels()` bên dưới để có bảng ĐẦY ĐỦ;
+ * bảng cứng chỉ đỡ cho mã đã ngừng dùng và cho "auto".
  */
 export const PAYMENT_METHOD_LABEL: Record<string, string> = {
   CASH: "Tiền mặt",
@@ -74,6 +77,29 @@ export const PAYMENT_METHOD_LABEL: Record<string, string> = {
   COD: "COD",
   auto: "Tự động",
 };
+
+/**
+ * Bảng mã → nhãn ĐẦY ĐỦ cho trang Học phí của phụ huynh: danh mục DB đè lên bảng cứng.
+ *
+ * VÌ SAO CẦN: phụ huynh của CS1 đóng tiền bằng phương thức "BANK_CS1"; không có bảng này
+ * thì trang Học phí in ra đúng chữ "BANK_CS1" — một mã nội bộ, phụ huynh không hiểu.
+ *
+ * ⚠️ Cố ý đọc `db` TRẦN, không qua `scopedDb`: actor PARENT không đứng ở đâu trong cây
+ * OrgUnit nên không có `visibleCenterIds` (xem RELATIONSHIP_ROLE_CODES trong
+ * lib/auth/actor.ts) — scope ở đây sẽ trả rỗng và mọi nhãn rơi về mã trần. An toàn vì
+ * thứ lấy ra chỉ là (mã, tên) của danh mục, KHÔNG có số tài khoản nào: tài khoản ngân
+ * hàng nằm ở IntegrationConfig, không ở bảng này. Và mỗi phụ huynh chỉ nhìn thấy nhãn
+ * của những khoản thu CỦA CHÍNH HỌ — đường lọc khoản thu không đổi.
+ */
+export async function getPaymentMethodLabels(): Promise<Record<string, string>> {
+  const rows = await db.paymentMethod.findMany({
+    select: { code: true, name: true },
+  });
+  return {
+    ...PAYMENT_METHOD_LABEL,
+    ...Object.fromEntries(rows.map((r) => [r.code, r.name])),
+  };
+}
 
 export type ConfirmedPaymentRow = {
   id: string;

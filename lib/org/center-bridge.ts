@@ -43,6 +43,17 @@ export type BackfillSpec = {
  * 28 bảng còn lại đã có cột từ migration `20260615083728_pr_a_add_orgunitid` (15/06).
  */
 export const BACKFILL_SPECS: readonly BackfillSpec[] = [
+  // ── Thanh toán theo cơ sở (30/08): sinh ra đã có CẢ HAI cột, không backfill ─
+  {
+    model: "PaymentMethod",
+    // NULL = phương thức DÙNG CHUNG mọi cơ sở (tiền mặt, VNPAY…), KHÔNG phải "chưa
+    // gán". Đối soát đêm PHẢI giữ nguyên null ở đây — "điền cho đủ" là biến một
+    // phương thức toàn hệ thống thành của riêng một cơ sở, tức các cơ sở còn lại mất
+    // luôn cách thu tiền đó.
+    nullMeaning: "NULL_TOAN_HE_THONG",
+    scoped: true,
+    vi: "danh mục phương thức thanh toán — NULL = dùng chung mọi cơ sở",
+  },
   // ── MEDIA-REVIEW (26/08): sinh ra đã có CẢ HAI cột, không cần backfill ──────
   {
     model: "MediaAsset",

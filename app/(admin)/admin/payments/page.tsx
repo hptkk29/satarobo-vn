@@ -2,7 +2,11 @@ import { redirect } from "next/navigation";
 import { CreditCard } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { checkPermission } from "@/lib/auth/check-permission";
-import { queryPayments, loadOrderOptions } from "./_actions";
+import {
+  queryPayments,
+  loadOrderOptions,
+  loadPaymentMethodOptions,
+} from "./_actions";
 import { PaymentsClient } from "./_components/payments-client";
 
 export const metadata = { title: "Thanh toán | Admin" };
@@ -35,9 +39,12 @@ export default async function PaymentsPage() {
     redirect("/dashboard?error=unauthorized");
   }
 
-  const [rows, orders] = await Promise.all([
+  const [rows, orders, methods] = await Promise.all([
     queryPayments({}),
     loadOrderOptions(),
+    // 30/08/2026 — danh mục phương thức đọc từ DB thay cho danh sách hardcode trong
+    // payments-client.tsx, để phương thức riêng của từng cơ sở hiện ra ở đúng cơ sở đó.
+    loadPaymentMethodOptions(),
   ]);
 
   return (
@@ -57,6 +64,7 @@ export default async function PaymentsPage() {
       <PaymentsClient
         initialRows={rows}
         orders={orders}
+        methods={methods}
         canConfirm={canConfirm}
         canRecord={canRecord}
         canViewPii={canViewPii}

@@ -8,6 +8,11 @@ import { checkPermission, assertPermission } from "@/lib/auth/check-permission";
 import { PermissionError } from "@/lib/auth/can";
 import { resolveActor } from "@/lib/auth/actor";
 import { scopedDb, passesScope } from "@/lib/db-scope";
+import {
+  METHOD_WRONG_CENTER_ERROR,
+  methodServesCenter,
+} from "@/lib/payments/method-scope";
+import { lookupMethodCenterByCode } from "@/lib/payments/method-lookup";
 import { maskNationalId, maskAddress } from "@/lib/finance/pii-mask";
 import { breakGlassSchema } from "@/lib/validators/audit";
 import { writeAudit } from "@/lib/audit/audit-log";
@@ -69,7 +74,17 @@ const recordSchema = z.object({
 const adjustSchema = z.object({
   paymentId: z.string().min(1),
   amount: z.coerce.number().int().positive("Số tiền phải > 0"),
-  method: z.string().trim().optional().nullable(),
+  // ⚠️ 30/08/2026 — `method` ĐÃ GỠ khỏi đây, có chủ đích.
+  //
+  // Nó là một ô GHI MỞ mà không giao diện nào dùng: `payments-client.tsx:747` chỉ gửi
+  // paymentId/amount/reason/expectedUpdatedAt. Nhưng Server Action là endpoint HTTP
+  // riêng — ai gọi thẳng vẫn đặt được `method: "BANK_CS2"` và `adjustPayment` ghi
+  // nguyên chuỗi đó vào bút toán ADJUSTED mới (lib/finance/payment.ts:558
+  // `method: params.method ?? original.method`), KHÔNG qua cổng cơ sở nào. Tức đây là
+  // đường ghi `Payment.method` thứ hai, và nó lách trọn cổng vừa dựng ở
+  // `recordPaymentAction`. Bỏ hẳn rẻ hơn và chặt hơn dựng cổng thứ hai: bút toán điều
+  // chỉnh nay luôn KẾ THỪA phương thức của khoản gốc (`params.method` = undefined →
+  // `?? original.method`), đúng hành vi mà giao diện vẫn đang có.
   note: z.string().max(1000).optional().nullable(),
   reason: z.string().trim().min(5, "Lý do tối thiểu 5 ký tự"),
   // FIX-H9 — optimistic lock: Payment.updatedAt (ISO) client đã thấy.
@@ -281,6 +296,32 @@ export async function revealPaymentsPii(
 }
 
 /** Đơn hàng gần đây trong scope — dùng cho select của form ghi nhận khoản. */
+/**
+ * Danh mục phương thức thanh toán để màn Ghi nhận khoản thu chọn.
+ *
+ * ⚠️ Trước 30/08/2026 danh sách này HARDCODE 5 dòng trong payments-client.tsx
+ * (`METHOD_OPTIONS`) — nên phương thức riêng của cơ sở khai ở /payment-methods không bao
+ * giờ hiện ra ở đây, và ngược lại người của cơ sở này thấy đủ 5 dòng của mọi cơ sở.
+ *
+ * Nay đọc từ DB qua scopedDb (PaymentMethod ∈ SCOPED_MODELS ∩ NULL_IS_GLOBAL_MODELS) ⇒
+ * người cấp cơ sở chỉ thấy phương thức của cơ sở mình + phương thức dùng chung. Client
+ * lọc thêm một lượt theo cơ sở của ĐƠN đang chọn.
+ */
+export async function loadPaymentMethodOptions() {
+  const session = await requireRecord();
+  const sdb = scopedDb(await resolveActor(session.user.id));
+  // ⚠️ KHÔNG lọc `isActive` ở đây, có chủ đích. Danh sách này phục vụ HAI câu hỏi khác
+  // nhau trong payments-client.tsx: (a) dropdown CHỌN phương thức — chỉ dòng đang bật,
+  // client tự lọc; (b) bảng NHÃN dịch `Payment.method` của mọi khoản thu CŨ. Lọc ở tầng
+  // truy vấn là đúng cho (a) nhưng hỏng (b): tắt một phương thức riêng của cơ sở thì mọi
+  // khoản thu cũ ghi bằng mã đó rơi khỏi bảng nhãn và cột Phương thức in ra mã trần
+  // ("BANK_CS1") trước mắt kế toán.
+  return sdb.paymentMethod.findMany({
+    orderBy: [{ displayOrder: "asc" }, { name: "asc" }],
+    select: { id: true, code: true, name: true, centerId: true, isActive: true },
+  });
+}
+
 export async function loadOrderOptions() {
   const session = await requireRecord();
   const sdb = scopedDb(await resolveActor(session.user.id));
@@ -322,6 +363,24 @@ export async function recordPaymentAction(input: unknown) {
   });
   if (!order || !passesScope("Order", order, actor)) {
     return { ok: false as const, error: "Không tìm thấy đơn hàng" };
+  }
+
+  // ⚠️ CỔNG SERVER cho luật "cơ sở nào dùng phương thức của cơ sở đó" ở màn ghi nhận
+  // khoản thu. `Payment.method` là CHUỖI TỰ DO ở DB, nên không có ràng buộc nào khác
+  // chặn việc ghi mã phương thức của cơ sở khác vào sổ thu của cơ sở này — mà đó chính
+  // là con số kế toán mang đi đối chiếu với sao kê ngân hàng.
+  //
+  // Chỉ kiểm khi mã KHỚP một dòng trong danh mục: `Payment.method` còn mang dữ liệu cũ
+  // dạng nhãn thô ("auto", "COD"…) từ trước khi có danh mục — chặn cứng mọi chuỗi lạ là
+  // khoá luôn đường ghi nhận cho những khoản hợp lệ đã tồn tại.
+  //
+  // ⚠️ Tra qua `lookupMethodCenterByCode` (KHÔNG scope), TUYỆT ĐỐI không qua `sdb`:
+  // dùng `sdb` thì đúng mã cần chặn — mã của cơ sở khác — bị scope lọc mất, trả null,
+  // và cổng đọc null thành "mã lạ, cho qua" ⇒ cổng mở toang đúng lúc phải đóng.
+  // Xem ghi chú đầy đủ ở lib/payments/method-lookup.ts.
+  const pm = await lookupMethodCenterByCode(data.method);
+  if (pm.found && !methodServesCenter(pm, order.centerId)) {
+    return { ok: false as const, error: METHOD_WRONG_CENTER_ERROR };
   }
 
   const res = await recordPayment({
@@ -440,7 +499,8 @@ export async function adjustPaymentAction(input: unknown) {
     paymentId: data.paymentId,
     confirmedById: scope.uid,
     amount: data.amount,
-    method: trimOrNull(data.method) ?? undefined,
+    // `method` cố ý KHÔNG truyền — xem ghi chú ở adjustSchema. adjustPayment sẽ giữ
+    // nguyên phương thức của khoản gốc.
     note: trimOrNull(data.note),
     reason: data.reason.trim(),
     expectedUpdatedAt: data.expectedUpdatedAt || undefined,

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useFormStatus } from "react-dom";
 import { toast } from "sonner";
+import { Plus } from "lucide-react";
 import { ImageUploader } from "@/components/admin/ImageUploader";
 import { HelpHint } from "@/components/admin/ui/help-hint";
 import { createCenter, updateCenter } from "../_actions";
@@ -32,7 +33,39 @@ export type CenterFormValue = {
   allowedRadiusMeters: number | null;
 };
 
-export function CenterForm({ center }: { center?: CenterFormValue }) {
+/** Một phương thức thanh toán của cơ sở, phẳng hoá cho mục "Thanh toán". */
+export type CenterPaymentMethodRow = {
+  id: string;
+  code: string;
+  name: string;
+  typeLabel: string;
+  isActive: boolean;
+  /** Tóm tắt tài khoản nhận tiền — null nếu không phải chuyển khoản / chưa khai đủ. */
+  bank: string | null;
+};
+
+export type CenterPaymentView = {
+  methods: CenterPaymentMethodRow[];
+  /** Số phương thức DÙNG CHUNG đang bật — cơ sở nào cũng chọn được. */
+  sharedCount: number;
+  /** `payments:manage` — thiếu thì chỉ XEM, không hiện nút tạo/sửa. */
+  canManage: boolean;
+};
+
+export function CenterForm({
+  center,
+  payment,
+}: {
+  center?: CenterFormValue;
+  /**
+   * Mục "Thanh toán". `null` = người xem không có quyền (RSC quyết định) ⇒ không vẽ gì.
+   *
+   * ⚠️ Chỉ HIỂN THỊ + link, KHÔNG có nút Lưu riêng — nhờ vậy mục này nằm được BÊN TRONG
+   * thẻ <form> của cơ sở (HTML cấm <form> lồng <form>). Việc khai tài khoản nhận tiền đã
+   * chuyển hẳn sang form Phương thức thanh toán (chốt 31/08/2026).
+   */
+  payment?: CenterPaymentView | null;
+}) {
   const router = useRouter();
   const isEdit = Boolean(center);
   const [error, setError] = useState<string | null>(null);
@@ -159,6 +192,85 @@ export function CenterForm({ center }: { center?: CenterFormValue }) {
           placeholder="Mô tả ngắn về chi nhánh, điểm nổi bật..."
         />
       </Section>
+
+      {isEdit && payment && (
+        <Section
+          title="Thanh toán"
+          hint={
+            <>
+              Cơ sở nào thu tiền về tài khoản của cơ sở đó. Phương thức gắn cơ sở này CHỈ
+              hiện khi tạo đơn cho cơ sở này — cơ sở khác không thấy. Tài khoản nhận tiền
+              khai ngay trong từng phương thức chuyển khoản.
+            </>
+          }
+        >
+          {payment.methods.length === 0 ? (
+            <p className="text-sm text-muted-foreground">
+              Cơ sở này chưa có phương thức riêng — đang dùng {payment.sharedCount} phương
+              thức dùng chung.
+            </p>
+          ) : (
+            <ul className="divide-y divide-border rounded-lg border border-border">
+              {payment.methods.map((m) => (
+                <li key={m.id} className="flex flex-wrap items-center gap-x-3 gap-y-1 p-3">
+                  <span className="min-w-0 flex-1">
+                    <span className="font-semibold text-foreground">{m.name}</span>{" "}
+                    <span className="font-mono text-xs text-muted-foreground">
+                      {m.code}
+                    </span>
+                    <span className="block text-xs text-muted-foreground">
+                      {m.typeLabel}
+                      {m.bank ? ` · ${m.bank}` : ""}
+                    </span>
+                  </span>
+                  <span
+                    className={`shrink-0 rounded-full px-2.5 py-0.5 text-xs font-semibold ${
+                      m.isActive
+                        ? "bg-state-success-soft text-state-success-ink"
+                        : "bg-muted text-muted-foreground"
+                    }`}
+                  >
+                    {m.isActive ? "Hoạt động" : "Tắt"}
+                  </span>
+                  {payment.canManage && (
+                    <Link
+                      href={`/payment-methods/${m.id}/edit`}
+                      className="shrink-0 text-sm font-semibold text-primary underline-offset-2 hover:underline"
+                    >
+                      Sửa
+                    </Link>
+                  )}
+                </li>
+              ))}
+            </ul>
+          )}
+
+          {payment.methods.length > 0 && (
+            <p className="text-xs text-muted-foreground">
+              Cộng thêm {payment.sharedCount} phương thức dùng chung cho mọi cơ sở.
+            </p>
+          )}
+
+          {payment.canManage && (
+            <div className="flex flex-wrap items-center gap-3">
+              {/* Nút TẠO đi kèm ?centerId= để form chọn sẵn đúng cơ sở này. */}
+              <Link
+                href={`/payment-methods/new?centerId=${encodeURIComponent(center!.id)}`}
+                className="inline-flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white hover:bg-primary-dark"
+              >
+                <Plus className="h-4 w-4" />
+                Tạo phương thức thanh toán
+              </Link>
+              <Link
+                href={`/payment-methods?centerId=${encodeURIComponent(center!.id)}`}
+                className="text-sm font-semibold text-primary underline-offset-2 hover:underline"
+              >
+                Xem toàn bộ danh mục →
+              </Link>
+            </div>
+          )}
+        </Section>
+      )}
 
       <Section title="Hình ảnh">
         <Grid cols={2}>

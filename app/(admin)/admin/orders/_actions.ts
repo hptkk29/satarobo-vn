@@ -8,6 +8,11 @@ import { checkPermission } from "@/lib/auth/check-permission";
 import { resolveActor } from "@/lib/auth/actor";
 import { scopedDb, passesScope } from "@/lib/db-scope";
 import {
+  METHOD_WRONG_CENTER_ERROR,
+  methodAllowsOrderType,
+  methodServesCenter,
+} from "@/lib/payments/method-scope";
+import {
   orderCreateManualSchema,
   orderStatusChangeSchema,
 } from "@/lib/validators/order";
@@ -227,13 +232,15 @@ export async function createOrderManualAction(input: unknown) {
     return { ok: false as const, error: "Nhập giải trình giảm giá" };
   }
 
-  // PaymentMethod/Product là catalog toàn cục (không scoped) — scopedDb pass-through.
+  // 30/08/2026 — PaymentMethod ∈ SCOPED_MODELS: câu này nay TỰ LỌC theo tầm nhìn cơ sở
+  // của người tạo đơn.
   const pm = await sdb.paymentMethod.findUnique({
     where: { id: data.paymentMethodId },
     select: {
       id: true,
       name: true,
       isActive: true,
+      centerId: true,
       canBuyCourse: true,
       canBuyPackage: true,
       canBuyExam: true,
@@ -251,14 +258,17 @@ export async function createOrderManualAction(input: unknown) {
       error: "Phương thức thanh toán đã bị vô hiệu hoá",
     };
 
-  const allowedMap: Record<OrderType, boolean> = {
-    COURSE: pm.canBuyCourse,
-    PACKAGE: pm.canBuyPackage,
-    EXAM: pm.canBuyExam,
-    PRODUCT: pm.canBuyProduct,
-    COMBO: false,
-  };
-  if (!allowedMap[data.type]) {
+  // ⚠️ CỔNG SERVER cho luật "cơ sở nào dùng ngân hàng của cơ sở đó".
+  // Dropdown ở form đã lọc rồi, nhưng lọc client KHÔNG phải lớp bảo vệ: mỗi Server
+  // Action là một endpoint HTTP riêng, gọi thẳng với id phương thức của cơ sở khác vẫn
+  // tới được đây. Hệ quả nếu thiếu: đơn của CS2 mang phương thức của CS1 ⇒ mã QR dựng
+  // theo `order.centerId` nên vẫn trỏ tài khoản CS2, còn sổ sách ghi phương thức CS1 —
+  // hai bên lệch nhau đúng ở chỗ đối soát tiền.
+  if (!methodServesCenter(pm, data.centerId || null)) {
+    return { ok: false as const, error: METHOD_WRONG_CENTER_ERROR };
+  }
+
+  if (!methodAllowsOrderType(pm, data.type)) {
     return {
       ok: false as const,
       error: `Phương thức này không hỗ trợ loại đơn "${data.type}"`,
@@ -713,6 +723,7 @@ export async function updateOrderPaymentMethodAction(
     select: {
       id: true,
       isActive: true,
+      centerId: true,
       canBuyCourse: true,
       canBuyPackage: true,
       canBuyExam: true,
@@ -725,14 +736,13 @@ export async function updateOrderPaymentMethodAction(
   if (!pm.isActive) {
     return { ok: false as const, error: "Phương thức thanh toán đã bị vô hiệu hoá" };
   }
-  const allowedMap: Record<OrderType, boolean> = {
-    COURSE: pm.canBuyCourse,
-    PACKAGE: pm.canBuyPackage,
-    EXAM: pm.canBuyExam,
-    PRODUCT: pm.canBuyProduct,
-    COMBO: false,
-  };
-  if (!allowedMap[order.type]) {
+  // ĐƯỜNG GHI THỨ HAI của cùng một luật. Thiếu vế này thì cách né rất rẻ: tạo đơn đúng
+  // phương thức rồi bấm "đổi phương thức" sang phương thức của cơ sở khác.
+  // `order.centerId` đã có sẵn trong câu đọc ngay trên, không tốn thêm truy vấn nào.
+  if (!methodServesCenter(pm, order.centerId)) {
+    return { ok: false as const, error: METHOD_WRONG_CENTER_ERROR };
+  }
+  if (!methodAllowsOrderType(pm, order.type)) {
     return {
       ok: false as const,
       error: `Phương thức này không hỗ trợ loại đơn "${order.type}"`,
@@ -759,6 +769,11 @@ export async function loadCreateOrderFormData() {
   const sdb = scopedDb(await resolveActor(session.user.id));
 
   const [paymentMethods, courses, products, centers] = await Promise.all([
+    // Nạp CẢ phương thức của mọi cơ sở trong tầm nhìn (scopedDb đã lọc) + phương thức
+    // dùng chung, rồi để client lọc lại theo cơ sở ĐANG CHỌN trên form. Cố ý không nạp
+    // lại qua server action mỗi lần đổi cơ sở: hàm này chạy MỘT LẦN ở RSC trước khi
+    // người dùng chọn gì, và thứ lọt xuống client chỉ là tên + cờ của phương thức —
+    // không có số tài khoản nào (tài khoản nằm ở kho VietQR, không ở bảng này).
     sdb.paymentMethod.findMany({
       where: { isActive: true },
       orderBy: { displayOrder: "asc" },
@@ -767,6 +782,7 @@ export async function loadCreateOrderFormData() {
         code: true,
         name: true,
         type: true,
+        centerId: true,
         canBuyCourse: true,
         canBuyPackage: true,
         canBuyExam: true,

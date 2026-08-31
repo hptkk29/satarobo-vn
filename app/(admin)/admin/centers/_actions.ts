@@ -196,6 +196,10 @@ export async function deleteCenter(id: string): Promise<ActionResult> {
             classes: true,
             students: true,
             employees: true,
+            // 30/08/2026 — phương thức thanh toán RIÊNG của cơ sở. FK là RESTRICT ở tầng
+            // DB, nên thiếu dòng này thì xoá cơ sở chỉ còn phương thức treo sẽ ném lỗi
+            // Prisma và người dùng nhận câu "Không thể xoá cơ sở này" không nói vì sao.
+            paymentMethods: true,
           },
         },
       },
@@ -204,10 +208,11 @@ export async function deleteCenter(id: string): Promise<ActionResult> {
 
   if (counts) {
     const c = counts._count;
-    const total = c.users + c.leads + c.classes + c.students + c.employees;
+    const total =
+      c.users + c.leads + c.classes + c.students + c.employees + c.paymentMethods;
     if (total > 0) {
       return {
-        error: `Không thể xoá — cơ sở đang liên kết: ${c.users} user, ${c.leads} lead, ${c.classes} lớp, ${c.students} HV, ${c.employees} nhân sự. Vui lòng chuyển liên kết trước.`,
+        error: `Không thể xoá — cơ sở đang liên kết: ${c.users} user, ${c.leads} lead, ${c.classes} lớp, ${c.students} HV, ${c.employees} nhân sự, ${c.paymentMethods} phương thức thanh toán. Vui lòng chuyển liên kết trước.`,
       };
     }
   }

@@ -17,6 +17,15 @@ Font.register({
   ],
 });
 
+/**
+ * Nhãn DỰ PHÒNG cho `Payment.method`.
+ *
+ * ⚠️ 30/08/2026 — KHÔNG còn là danh sách đầy đủ. Danh mục phương thức nay nằm trong DB và
+ * mỗi cơ sở có thể có mã riêng ("BANK_CS1"), nên bảng cứng này không thể biết hết. Tờ
+ * phiếu thu này ĐƯA TẬN TAY PHỤ HUYNH, nên in ra mã nội bộ là lỗi nhìn thấy được ở ngoài
+ * công ty — vì vậy route gọi phải truyền `methodLabel` đã tra từ DB xuống; bảng này chỉ
+ * đỡ cho mã cũ đã ngừng dùng và cho các nhãn do đường ghi tự động sinh.
+ */
 const METHOD_LABEL: Record<string, string> = {
   CASH: "Tiền mặt",
   BANK_TRANSFER: "Chuyển khoản",
@@ -24,6 +33,9 @@ const METHOD_LABEL: Record<string, string> = {
   TINGEE: "Tingee",
   COD: "COD",
   auto: "Ghi nhận tự động",
+  backfill: "Ghi nhận bù sổ",
+  sepay: "Chuyển khoản (SePay)",
+  payos: "Chuyển khoản (payOS)",
 };
 
 export type ReceiptPdfData = {
@@ -37,6 +49,8 @@ export type ReceiptPdfData = {
   courseName: string | null;
   amount: number;
   method: string;
+  /** Nhãn đã tra từ danh mục DB. Thiếu thì lùi về bảng cứng rồi về chính mã. */
+  methodLabel?: string | null;
   paidDate: string; // dd/mm/yyyy
   collectedByName: string | null;
   orderCode: string | null;
@@ -73,7 +87,8 @@ const s = StyleSheet.create({
 });
 
 export function ReceiptPdf({ data }: { data: ReceiptPdfData }) {
-  const methodLabel = METHOD_LABEL[data.method] ?? data.method;
+  const methodLabel =
+    data.methodLabel?.trim() || METHOD_LABEL[data.method] || data.method;
   return (
     <Document>
       <Page size="A5" orientation="landscape" style={s.page}>

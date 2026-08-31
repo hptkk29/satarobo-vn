@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState, useTransition, useMemo } from "react";
 import { useRouter } from "next/navigation";
-import { Loader2 } from "lucide-react";
+import { Loader2, Landmark } from "lucide-react";
 import { toast } from "sonner";
 import type { PaymentMethod, PaymentMethodType } from "@prisma/client";
 import { Button } from "@/components/ui/button";
@@ -18,6 +18,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import type { CenterPaymentOption } from "@/lib/payments/method-scope";
 import {
   createPaymentMethodAction,
   updatePaymentMethodAction,
@@ -47,17 +48,50 @@ const FLAG_DEFINITIONS: Array<{ name: FlagKey; label: string }> = [
   { name: "canDeposit", label: "Nạp ví (reserved)" },
 ];
 
-export function PaymentMethodForm({ method }: { method?: PaymentMethod }) {
+/** Mục "dùng chung" trong <Select>: Radix/base-ui cấm value rỗng nên phải có sentinel. */
+const SHARED = "__SHARED__";
+
+export function PaymentMethodForm({
+  method,
+  centers,
+  defaultCenterId,
+}: {
+  method?: PaymentMethod;
+  /** Cơ sở trong tầm nhìn của người đang thao tác (đã lọc ở RSC). */
+  centers: CenterPaymentOption[];
+  /** Chọn sẵn cơ sở khi vào từ trang Cơ sở (`?centerId=`). */
+  defaultCenterId?: string | null;
+}) {
   const router = useRouter();
   const isEdit = !!method;
   const [isPending, startTransition] = useTransition();
   const [type, setType] = useState<PaymentMethodType>(
     method?.type ?? "CASH",
   );
+  const [centerId, setCenterId] = useState<string>(
+    method?.centerId ?? defaultCenterId ?? SHARED,
+  );
   const [errors, setErrors] = useState<Record<string, string>>({});
 
   const showBankFields = type === "BANK_TRANSFER";
   const showGatewayFields = type === "VNPAY" || type === "TINGEE";
+  const selectedCenter =
+    centerId === SHARED ? null : (centers.find((c) => c.id === centerId) ?? null);
+
+  // ⚠️ `<Select>` của repo dựng trên base-ui, KHÔNG phải Radix: `<SelectValue>` in ra
+  // GIÁ TRỊ THÔ chứ không tự tra nhãn từ `<SelectItem>` con. Thiếu map `items` là ô "Cơ
+  // sở áp dụng" hiện id cơ sở ("co-so-nguyen-huu-tho") thay vì tên, và ô "Loại" hiện
+  // "BANK_TRANSFER" thay vì "Chuyển khoản ngân hàng".
+  const centerItems = useMemo(
+    () => ({
+      [SHARED]: "Dùng chung (mọi cơ sở)",
+      ...Object.fromEntries(centers.map((c) => [c.id, c.name])),
+    }),
+    [centers],
+  );
+  const typeItems = Object.fromEntries(
+    TYPE_OPTIONS.map((o) => [o.value, o.label]),
+  ) as Record<string, string>;
 
   const initialGateway = method?.gatewayConfig
     ? JSON.stringify(method.gatewayConfig, null, 2)
@@ -68,6 +102,14 @@ export function PaymentMethodForm({ method }: { method?: PaymentMethod }) {
     setErrors({});
     const formData = new FormData(e.currentTarget);
     formData.set("type", type);
+    // <Select> của shadcn không phải input thật ⇒ giá trị không tự vào FormData.
+    formData.set("centerId", centerId === SHARED ? "" : centerId);
+    // ⚠️ Ô "Mã" ở chế độ SỬA là readOnly (không phải disabled) nên vẫn vào FormData.
+    // Vẫn set lại tường minh ở đây làm lưới thứ hai: bug cũ là ô để `disabled={isEdit}`,
+    // mà control disabled KHÔNG nằm trong entry list của FormData theo đặc tả HTML ⇒
+    // `code` về server là chuỗi rỗng ⇒ Zod `code.min(1)` trượt ⇒ MỌI lần bấm Lưu ở màn
+    // sửa đều trả "Dữ liệu không hợp lệ", không cách nào sửa được phương thức nào.
+    if (isEdit && method) formData.set("code", method.code);
 
     startTransition(async () => {
       const result = isEdit
@@ -113,8 +155,10 @@ export function PaymentMethodForm({ method }: { method?: PaymentMethod }) {
               id="code"
               name="code"
               defaultValue={method?.code ?? ""}
-              placeholder="VD: CASH, BANK_TRANSFER"
-              disabled={isEdit}
+              placeholder="VD: CASH, BANK_CS1"
+              readOnly={isEdit}
+              aria-readonly={isEdit}
+              className={isEdit ? "bg-muted text-muted-foreground" : undefined}
               required
             />
             {errors.code && (
@@ -140,6 +184,7 @@ export function PaymentMethodForm({ method }: { method?: PaymentMethod }) {
         <div className="space-y-1.5">
           <Label>Loại *</Label>
           <Select
+            items={typeItems}
             value={type}
             onValueChange={(v) => setType(v as PaymentMethodType)}
           >
@@ -154,6 +199,40 @@ export function PaymentMethodForm({ method }: { method?: PaymentMethod }) {
               ))}
             </SelectContent>
           </Select>
+        </div>
+
+        <div className="space-y-1.5">
+          <Label>
+            Cơ sở áp dụng *
+            <HelpHint>
+              <span className="block normal-case tracking-normal">
+                Chọn một cơ sở thì phương thức này CHỈ hiện ở đơn của cơ sở đó — cơ sở
+                khác không nhìn thấy và không chọn được. Chọn &ldquo;Dùng chung&rdquo;
+                thì mọi cơ sở đều dùng được (hợp với tiền mặt, cổng online). Tài khoản
+                nhận tiền của mỗi cơ sở khai ở trang Cơ sở, không phải ở đây.
+              </span>
+            </HelpHint>
+          </Label>
+          <Select
+            items={centerItems}
+            value={centerId}
+            onValueChange={(v) => setCenterId(v ?? SHARED)}
+          >
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={SHARED}>Dùng chung (mọi cơ sở)</SelectItem>
+              {centers.map((c) => (
+                <SelectItem key={c.id} value={c.id}>
+                  {c.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          {errors.centerId && (
+            <p className="text-xs text-state-danger-ink">{errors.centerId}</p>
+          )}
         </div>
 
         <div className="space-y-1.5">
@@ -204,29 +283,36 @@ export function PaymentMethodForm({ method }: { method?: PaymentMethod }) {
         </div>
       </section>
 
-      {/* Bank info */}
+      {/* Tài khoản nhận tiền — NGUỒN DỰNG MÃ QR (31/08/2026) */}
       {showBankFields && (
-        <section className="space-y-4 rounded-xl border-l-4 border-state-info border-y border-r border-border bg-state-info-soft/20 p-5">
-          <h2 className="text-sm font-bold uppercase tracking-wider text-state-info-ink">
-            Thông tin tài khoản ngân hàng
+        <section className="space-y-4 rounded-xl border-y border-r border-l-4 border-border border-l-state-info bg-state-info-soft/20 p-5">
+          <h2 className="flex items-center gap-1.5 text-sm font-bold uppercase tracking-wider text-state-info-ink">
+            <Landmark className="h-4 w-4" />
+            Tài khoản nhận tiền
+            <HelpHint>
+              <span className="block normal-case tracking-normal">
+                Đây là tài khoản mã QR trỏ vào. Đơn hàng chọn phương thức này thì phụ huynh
+                quét QR ra đúng tài khoản này. Mã ngân hàng (BIN) 6 chữ số theo chuẩn
+                VietQR — Vietinbank 970415, Vietcombank 970436, MB 970422, Techcombank
+                970407, ACB 970416, BIDV 970418.
+              </span>
+            </HelpHint>
           </h2>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
             <div className="space-y-1.5">
-              <Label htmlFor="bankName">Tên ngân hàng</Label>
+              <Label htmlFor="bankBin">Mã ngân hàng (BIN) *</Label>
               <Input
-                id="bankName"
-                name="bankName"
-                defaultValue={method?.bankName ?? ""}
-                placeholder="VD: Vietcombank"
+                id="bankBin"
+                name="bankBin"
+                defaultValue={method?.bankBin ?? ""}
+                placeholder="970415"
+                inputMode="numeric"
+                maxLength={6}
               />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="bankBranch">Chi nhánh</Label>
-              <Input
-                id="bankBranch"
-                name="bankBranch"
-                defaultValue={method?.bankBranch ?? ""}
-              />
+              {errors.bankBin && (
+                <p className="text-xs text-state-danger-ink">{errors.bankBin}</p>
+              )}
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="bankAccountNumber">Số tài khoản *</Label>
@@ -234,6 +320,8 @@ export function PaymentMethodForm({ method }: { method?: PaymentMethod }) {
                 id="bankAccountNumber"
                 name="bankAccountNumber"
                 defaultValue={method?.bankAccountNumber ?? ""}
+                placeholder="0123456789"
+                inputMode="numeric"
               />
               {errors.bankAccountNumber && (
                 <p className="text-xs text-state-danger-ink">
@@ -247,6 +335,7 @@ export function PaymentMethodForm({ method }: { method?: PaymentMethod }) {
                 id="bankAccountName"
                 name="bankAccountName"
                 defaultValue={method?.bankAccountName ?? ""}
+                placeholder="CT CP CN GD SATA ROBO"
               />
               {errors.bankAccountName && (
                 <p className="text-xs text-state-danger-ink">
@@ -255,6 +344,45 @@ export function PaymentMethodForm({ method }: { method?: PaymentMethod }) {
               )}
             </div>
           </div>
+
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div className="space-y-1.5">
+              <Label htmlFor="bankName">
+                Tên ngân hàng
+                <HelpHint>Chỉ để người trong công ty đọc cho dễ — mã QR không dùng.</HelpHint>
+              </Label>
+              <Input
+                id="bankName"
+                name="bankName"
+                defaultValue={method?.bankName ?? ""}
+                placeholder="Vietinbank"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="bankBranch">Chi nhánh</Label>
+              <Input
+                id="bankBranch"
+                name="bankBranch"
+                defaultValue={method?.bankBranch ?? ""}
+                placeholder="Đà Nẵng"
+              />
+            </div>
+          </div>
+
+          <p className="text-xs text-muted-foreground">
+            {selectedCenter ? (
+              <>
+                Mọi đơn của <strong>{selectedCenter.name}</strong> chọn phương thức này sẽ
+                nhận tiền về tài khoản trên.
+              </>
+            ) : (
+              <>
+                Phương thức <strong>dùng chung</strong>: mọi cơ sở đều chọn được và tiền
+                đều về tài khoản trên. Muốn mỗi cơ sở một tài khoản thì tạo phương thức
+                riêng cho từng cơ sở.
+              </>
+            )}
+          </p>
         </section>
       )}
 

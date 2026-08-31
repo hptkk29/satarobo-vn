@@ -5,6 +5,7 @@ import { auth } from "@/lib/auth";
 import { checkPermission } from "@/lib/auth/check-permission";
 import { resolveActor } from "@/lib/auth/actor";
 import { scopedDb } from "@/lib/db-scope";
+import { loadCenterPaymentOptions } from "@/lib/payments/center-options";
 import { PaymentMethodForm } from "../../_components/payment-method-form";
 
 export const metadata = { title: "Sửa phương thức thanh toán | Admin" };
@@ -17,15 +18,21 @@ interface Props {
 export default async function EditPaymentMethodPage({ params }: Props) {
   const session = await auth();
   if (!session?.user) redirect("/login");
-  // PaymentMethod là entity toàn cục (không có centerId) — không có target để truyền.
+  // Gate mức màn hình gọi trần; quyền đụng ĐÚNG dòng này do scopedDb (đọc) +
+  // passesScope trong _actions.ts (ghi) lo — xem ghi chú ở requirePaymentsManage.
   if (!(await checkPermission("payments:manage"))) {
     redirect("/dashboard?error=unauthorized");
   }
 
   const { id } = await params;
-  // PaymentMethod là catalog toàn cục (không scoped) — scopedDb pass-through.
-  const sdb = scopedDb(await resolveActor(session.user.id));
-  const method = await sdb.paymentMethod.findUnique({ where: { id } });
+  // 30/08/2026 — PaymentMethod ∈ SCOPED_MODELS: câu này nay TỰ LỌC theo cơ sở. Phương
+  // thức của cơ sở khác ra null ⇒ notFound(), không còn mở được bằng cách đoán id.
+  const actor = await resolveActor(session.user.id);
+  const sdb = scopedDb(actor);
+  const [method, centers] = await Promise.all([
+    sdb.paymentMethod.findUnique({ where: { id } }),
+    loadCenterPaymentOptions(actor),
+  ]);
   if (!method) notFound();
 
   return (
@@ -41,7 +48,7 @@ export default async function EditPaymentMethodPage({ params }: Props) {
       <h1 className="mb-1 text-2xl font-bold text-foreground">{method.name}</h1>
       <p className="mb-6 font-mono text-sm text-muted-foreground">{method.code}</p>
 
-      <PaymentMethodForm method={method} />
+      <PaymentMethodForm method={method} centers={centers} />
     </div>
   );
 }

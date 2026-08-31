@@ -42,11 +42,17 @@ import {
 import type { QrSessionView } from "../_qr-core";
 import { ORDER_STATUS_LABEL } from "@/lib/orders/status";
 import { PhanTrangBang } from "@/components/ui/phan-trang-bang";
+import {
+  methodAllowsOrderType,
+  methodServesCenter,
+} from "@/lib/payments/method-scope";
 
 // G4 — phương thức thanh toán có thể sửa (chỉ khi đơn chưa xác nhận); cần khả năng theo loại đơn.
 type PaymentMethodOption = {
   id: string;
   name: string;
+  /** null = dùng chung mọi cơ sở. RSC đã lọc theo cơ sở của đơn; giữ cột để lọc lại. */
+  centerId: string | null;
   canBuyCourse: boolean;
   canBuyPackage: boolean;
   canBuyExam: boolean;
@@ -188,20 +194,16 @@ export function OrderDetailClient({
   // G4 — chỉ cho sửa phương thức khi đơn còn DRAFT/PENDING_PAYMENT (khớp guard server).
   const canEditPaymentMethod =
     canManage && (order.status === "DRAFT" || order.status === "PENDING_PAYMENT");
-  const pmAllowedForType = (pm: PaymentMethodOption): boolean => {
-    switch (order.type) {
-      case "COURSE":
-        return pm.canBuyCourse;
-      case "PACKAGE":
-        return pm.canBuyPackage;
-      case "EXAM":
-        return pm.canBuyExam;
-      case "PRODUCT":
-        return pm.canBuyProduct;
-      default:
-        return false;
-    }
-  };
+  // Luật chọn phương thức nay ở MỘT chỗ (lib/payments/method-scope.ts) — dùng chung với
+  // cổng server `updateOrderPaymentMethodAction`, nên dropdown không thể lệch với thứ
+  // server chấp nhận. Lọc cả cơ sở dù RSC đã lọc: rẻ, và là lưới nếu ai đó đổi câu query.
+  const pmUsable = (pm: PaymentMethodOption): boolean =>
+    methodServesCenter(pm, order.centerId) && methodAllowsOrderType(pm, order.type);
+  const usablePMs = paymentMethods.filter(pmUsable);
+  // ⚠️ `<Select>` dựng trên base-ui: `<SelectValue>` in GIÁ TRỊ THÔ, không tra nhãn từ
+  // `<SelectItem>` con. Ở đây value là PaymentMethod.id (cuid), nên thiếu map `items` là
+  // ô hiện ra một chuỗi cuid thay vì tên phương thức.
+  const pmItems = Object.fromEntries(usablePMs.map((pm) => [pm.id, pm.name]));
 
   // FIX-H9 — updatedAt client đã thấy; gửi kèm mọi lần ghi để phát hiện sửa đồng thời.
   const seenUpdatedAt = new Date(order.updatedAt).toISOString();
@@ -447,18 +449,32 @@ export function OrderDetailClient({
             <span className="text-muted-foreground">Phương thức: </span>
             {pmEditing ? (
               <div className="mt-1 flex flex-wrap items-center gap-2">
-                <Select value={pmValue} onValueChange={(v) => setPmValue(v ?? "")}>
+                <Select
+                  items={pmItems}
+                  value={pmValue}
+                  onValueChange={(v) => setPmValue(v ?? "")}
+                >
                   <SelectTrigger className="w-full sm:w-72">
                     <SelectValue placeholder="Chọn phương thức" />
                   </SelectTrigger>
                   <SelectContent>
-                    {paymentMethods.filter(pmAllowedForType).map((pm) => (
+                    {usablePMs.map((pm) => (
                       <SelectItem key={pm.id} value={pm.id}>
                         {pm.name}
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
+                {usablePMs.length === 0 && (
+                  // Danh sách rỗng mà im lặng thì người dùng bấm mãi không hiểu. Ca thật:
+                  // cơ sở của đơn chưa có phương thức nào hợp loại đơn này, hoặc phương
+                  // thức riêng của cơ sở đã bị tắt.
+                  <p className="w-full text-xs text-state-warning-ink">
+                    Cơ sở của đơn này chưa có phương thức thanh toán nào dùng được cho
+                    loại đơn &ldquo;{order.type}&rdquo;. Khai thêm ở trang Cơ sở → mục
+                    Thanh toán.
+                  </p>
+                )}
                 <Button
                   size="sm"
                   onClick={handleSavePaymentMethod}

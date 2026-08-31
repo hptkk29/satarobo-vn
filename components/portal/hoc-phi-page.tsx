@@ -7,7 +7,7 @@ import {
   Receipt,
 } from "lucide-react";
 import type { StudentBilling } from "@/lib/portal/billing-student";
-import { PAYMENT_METHOD_LABEL } from "@/lib/portal/billing";
+
 import { PageHero, HeroMetric } from "@/components/portal/page-header";
 import { ChildSwitcher } from "@/components/portal/child-switcher";
 import { hotlinesInline } from "@/lib/locations";
@@ -46,11 +46,19 @@ export function HocPhiPageV2({
   activeId,
   studentName,
   data,
+  methodLabels,
 }: {
   kids: { id: string; name: string }[];
   activeId: string | null;
   studentName: string;
   data: StudentBilling;
+  /**
+   * Mã phương thức → nhãn tiếng Việt, dựng ở RSC bằng `getPaymentMethodLabels()`.
+   * Truyền qua props chứ không import bảng cứng: từ 30/08/2026 mỗi cơ sở có thể có
+   * phương thức riêng (mã "BANK_CS1"…) mà bảng cứng không biết ⇒ phụ huynh sẽ đọc thấy
+   * mã nội bộ thay vì tên phương thức.
+   */
+  methodLabels: Record<string, string>;
 }) {
   const dleft = daysLeft(data.nextDueDate);
   return (
@@ -212,7 +220,7 @@ export function HocPhiPageV2({
                   </p>
                   <p className="mt-0.5 text-xs font-medium text-muted-foreground">
                     {dmy(r.paidDate)} ·{" "}
-                    {PAYMENT_METHOD_LABEL[r.method] ?? r.method}
+                    {methodLabels[r.method] ?? r.method}
                   </p>
                 </div>
                 <p className="shrink-0 text-sm font-bold text-foreground">
