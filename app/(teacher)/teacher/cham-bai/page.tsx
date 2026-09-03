@@ -22,7 +22,7 @@ import { auth } from "@/lib/auth";
 import { resolveActor } from "@/lib/auth/actor";
 import { checkPermission } from "@/lib/auth/check-permission";
 import { scopedDb } from "@/lib/db-scope";
-import { ENROLLMENT_ACTIVE_STATUS_LIST } from "@/lib/enrollment-status";
+import { rosterWhere } from "@/lib/enrollment-scope";
 import { PageHeader } from "../_components/ui/page-header";
 import { EmptyState } from "../_components/ui/empty-state";
 import { GradeForm } from "./_components/grade-form";
@@ -193,8 +193,14 @@ export default async function TeacherAssignmentsPage({
         class: {
           select: {
             name: true,
+            // "ket-khoa" chứ KHÔNG phải "dang-hoc": bài tập là bản ghi của QUÁ KHỨ.
+            // Lọc theo ghi danh đang hoạt động thì lớp đã kết khoá (mọi em COMPLETED)
+            // cho roster RỖNG ⇒ tiêu đề in "Đã nộp 2/0" và bảng ra empty state "Lớp
+            // chưa có học viên đang học" trong khi bài nộp vẫn còn chờ chấm và server
+            // action vẫn cho phép chấm — giáo viên không mở được bài nào
+            // (QA vòng 1, BUG-025). Ba tầng lọc đi qua rosterWhere, đừng viết tay.
             enrollments: {
-              where: { status: { in: ENROLLMENT_ACTIVE_STATUS_LIST } },
+              where: rosterWhere("ket-khoa"),
               select: { student: { select: { id: true, name: true } } }, // câu 46: chỉ tên HV
               orderBy: { student: { name: "asc" } },
             },
@@ -371,12 +377,12 @@ export default async function TeacherAssignmentsPage({
           where: { id: { in: classIds } },
           select: {
             id: true,
+            // Mẫu số cột "Đã nộp" phải CÙNG MỘT TẬP với roster của màn chi tiết
+            // (rosterWhere("ket-khoa")), nếu không thì danh sách in "2/0" còn màn chi
+            // tiết lại liệt kê 2 em — hai con số chọi nhau cho cùng một bài
+            // (QA vòng 1, BUG-025).
             _count: {
-              select: {
-                enrollments: {
-                  where: { status: { in: ENROLLMENT_ACTIVE_STATUS_LIST } },
-                },
-              },
+              select: { enrollments: { where: rosterWhere("ket-khoa") } },
             },
           },
         })

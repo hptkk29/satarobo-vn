@@ -15,6 +15,7 @@ import { useMemo, useState } from "react";
 import Link from "next/link";
 import { ChevronRight, GraduationCap } from "lucide-react";
 import { ENROLLMENT_STATUS } from "@/lib/labels/registry";
+import { inRosterScope } from "@/lib/enrollment-scope";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -52,6 +53,17 @@ export interface StudentRow {
 const ALL = "ALL";
 const NHOM = "NHOM";
 const PHANG = "PHANG";
+const DANG_HOC = "DANG_HOC";
+
+// Mặc định "Đang học" — khớp tài liệu hướng dẫn (mục "hoc-vien" gọi tiêu đề khối là
+// "sĩ số" và cột Lớp là "các lớp em đang học") và khớp con số ở Tổng quan. Trước đây
+// trang đổ MỌI ghi danh nên đếm 103 em còn Tổng quan đếm 81 (QA vòng 1, BUG-024).
+// Vẫn giữ "Tất cả trạng thái" để không lặp lại bug "học viên tàng hình" 21/08: em đã
+// nghỉ phải TÌM RA ĐƯỢC, chỉ là không nằm trong sĩ số mặc định.
+const STATUS_OPTIONS = [
+  { value: DANG_HOC, label: "Đang học" },
+  { value: ALL, label: "Tất cả trạng thái" },
+];
 
 // Mặc định NHÓM: GV mở màn này gần như luôn nghĩ theo lớp. "Danh sách phẳng" giữ lại
 // cho việc tra một em cụ thể (mỗi HV đúng một dòng, không lặp ở nhiều khối).
@@ -73,6 +85,7 @@ interface DongBang {
 export function StudentList({ rows }: { rows: StudentRow[] }) {
   const [query, setQuery] = useState("");
   const [cls, setCls] = useState(ALL);
+  const [tt, setTt] = useState(DANG_HOC);
   const [view, setView] = useState(NHOM);
 
   const classOptions = useMemo<SelectFilter["options"]>(() => {
@@ -90,6 +103,20 @@ export function StudentList({ rows }: { rows: StudentRow[] }) {
     return rows
       .filter((r) => {
         if (cls !== ALL && !r.classes.some((c) => c.name === cls)) return false;
+        // Lọc trạng thái ở TẦNG NÀY nữa, không chỉ trong `groups` bên dưới: `groups`
+        // dựng TỪ `filtered`, nên lọc một tầng thôi thì dòng đếm đầu trang vẫn cộng
+        // em đó trong khi không khối nào có dòng — đẻ ra đúng loại lệch mà vé này
+        // đang tố. Xét theo `c.status` của TỪNG lớp chứ KHÔNG dùng `r.status`: cái
+        // đó là trạng thái gộp đã "ưu tiên active", nên em nghỉ lớp A mà còn học lớp
+        // B sẽ lọt qua và hiện ở khối lớp A.
+        if (tt !== ALL) {
+          const scoped = r.classes.some(
+            (c) =>
+              (cls === ALL || c.name === cls) &&
+              inRosterScope({ status: c.status }, "dang-hoc"),
+          );
+          if (!scoped) return false;
+        }
         if (!q) return true;
         return (
           r.name.toLowerCase().includes(q) ||
@@ -99,7 +126,7 @@ export function StudentList({ rows }: { rows: StudentRow[] }) {
       // Sắp theo tên ở ĐÂY chứ không tin thứ tự server: truy vấn sắp theo tên TRONG
       // TỪNG LỚP, gộp nhiều lớp lại thì thứ tự tổng thành "lớp nào gặp trước".
       .sort((a, b) => a.name.localeCompare(b.name, "vi"));
-  }, [rows, query, cls]);
+  }, [rows, query, cls, tt]);
 
   const flatRows = useMemo<DongBang[]>(
     () =>
@@ -127,6 +154,8 @@ export function StudentList({ rows }: { rows: StudentRow[] }) {
         // Đã lọc về đúng một lớp → chỉ dựng khối đó. Không thì HV học thêm lớp khác
         // sẽ kéo theo một khối lạ mà người dùng vừa lọc bỏ.
         if (cls !== ALL && c.name !== cls) continue;
+        // Tầng thứ hai của bộ lọc trạng thái — xem chú thích ở `filtered`.
+        if (tt !== ALL && !inRosterScope({ status: c.status }, "dang-hoc")) continue;
         const g = byClass.get(c.id) ?? { name: c.name, rows: [] };
         g.rows.push({
           id: r.id,
@@ -141,7 +170,7 @@ export function StudentList({ rows }: { rows: StudentRow[] }) {
     return [...byClass.entries()]
       .map(([id, g]) => ({ id, name: g.name, rows: g.rows }))
       .sort((a, b) => a.name.localeCompare(b.name, "vi"));
-  }, [filtered, cls]);
+  }, [filtered, cls, tt]);
 
   const soLuotGhiDanh = groups.reduce((n, g) => n + g.rows.length, 0);
 
@@ -153,6 +182,7 @@ export function StudentList({ rows }: { rows: StudentRow[] }) {
         placeholder="Tìm theo tên hoặc mã học viên..."
         filters={[
           { value: cls, onChange: setCls, options: classOptions },
+          { value: tt, onChange: setTt, options: STATUS_OPTIONS },
           // Chế độ xem đi chung thanh công cụ (không phải "bộ lọc" đúng nghĩa) để
           // khỏi đẻ thêm một hàng điều khiển nữa — ở 375px mỗi hàng là một màn cuộn.
           { value: view, onChange: setView, options: VIEW_OPTIONS },

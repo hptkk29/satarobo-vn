@@ -319,7 +319,7 @@ export default async function TeacherHomePage() {
         <StatCard
           icon={Users}
           value={totalStudents}
-          label="Tổng học viên"
+          label="Học viên đang học"
           tone="blue"
         />
         <StatCard

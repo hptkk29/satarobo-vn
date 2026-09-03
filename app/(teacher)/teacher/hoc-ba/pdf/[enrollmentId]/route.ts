@@ -8,6 +8,7 @@ import { renderToBuffer, type DocumentProps } from "@react-pdf/renderer";
 import { auth } from "@/lib/auth";
 import { resolveActor } from "@/lib/auth/actor";
 import { scopedDb } from "@/lib/db-scope";
+import { rosterWhere } from "@/lib/enrollment-scope";
 import { getPublishedReportCardForStudent } from "@/lib/lms/report-card";
 import { withFreshFonts } from "@/lib/pdf/brand";
 import { ReportCardPdf } from "@/lib/pdf/report-card";
@@ -42,8 +43,10 @@ export async function GET(
     ? await sdb.class.findMany({
         where: { id: { in: classIds } },
         select: {
+          // Guard cũ chỉ hỏi "ghi danh này có thuộc lớp mình không" — ghi danh đã gỡ
+          // mềm hoặc HV đã xoá khỏi hệ thống vẫn xuất được PDF học bạ mang tên em.
           enrollments: {
-            where: { id: enrollmentId },
+            where: { id: enrollmentId, ...rosterWhere("lich-su") },
             select: { studentId: true },
           },
         },

@@ -19,7 +19,7 @@ import {
   buildSessionNumberMap,
   sessionNumberLabel,
 } from "@/lib/lms/session-order";
-import { ENROLLMENT_ACTIVE_STATUS_LIST } from "@/lib/enrollment-status";
+import { rosterWhere } from "@/lib/enrollment-scope";
 import { EmptyState } from "../_components/ui/empty-state";
 import { PageHeader } from "../_components/ui/page-header";
 import { SessionStatusPill } from "../_components/ui/session-status-pill";
@@ -384,9 +384,10 @@ export default async function TeacherClassesPage({
           center: { select: { name: true } },
           _count: {
             select: {
-              enrollments: {
-                where: { status: { in: ENROLLMENT_ACTIVE_STATUS_LIST } },
-              },
+              // Sĩ số = đang học. rosterWhere thêm deletedAt + student.deletedAt vốn
+              // thiếu ở đây, nên HV đã gỡ mềm thôi cộng vào sĩ số (QA vòng 1, BUG-012:
+              // danh sách lớp 11, trang Học viên 12 cho cùng lớp CS1.09).
+              enrollments: { where: rosterWhere("dang-hoc") },
             },
           },
         },
