@@ -22,6 +22,7 @@ import {
   ClipboardCheck,
   ClipboardPen,
   Clock,
+  FlaskConical,
   NotebookPen,
   School,
   Users,
@@ -36,6 +37,9 @@ import {
   sessionsMissingAttendance,
 } from "@/lib/lms/attendance-pending";
 import { summarizeSessionFeedback } from "@/lib/lms/session-feedback-roster";
+import { getTeacherTrialTable } from "@/lib/lms/teacher-schedule";
+import { demChoDanhGia } from "@/lib/lms/trial-row-status";
+import { vnDateOnly } from "@/lib/time/vn";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { SuccessBanner } from "./_components/ui/empty-state";
@@ -163,7 +167,7 @@ export default async function TeacherHomePage() {
   // Attendance + feedback gom 1 lượt cho các buổi trên; open assignments đếm riêng.
   // (cùng pattern /nhan-xet: fetch tách rồi tổng hợp in-memory — tránh nested
   // include phức tạp qua scopedDb). Assignment lọc theo classId ∈ assignedClassIds.
-  const [attRows, fbRows, openAssignments] = await Promise.all([
+  const [attRows, fbRows, openAssignments, trialTable] = await Promise.all([
     sessionIds.length
       ? sdb.attendance.findMany({
           where: { sessionId: { in: sessionIds } },
@@ -181,6 +185,12 @@ export default async function TeacherHomePage() {
           where: { classId: { in: classIds }, status: "PUBLISHED" },
         })
       : Promise.resolve(0),
+    // Suất trải nghiệm — CÙNG lời gọi mà /teacher/trial dùng (cùng cửa sổ 7 ngày tới +
+    // 90 ngày lịch sử), để ô đếm và bảng không thể nói ngược nhau.
+    //
+    // KHÔNG qua scopedDb: `TrialClassSession` ∉ SCOPED_MODELS, hàm tự giới hạn own-rows
+    // theo teacherId (buổi mình dạy HOẬC lớp mình phụ trách).
+    getTeacherTrialTable(session.user.id, { today: vnDateOnly(now) }),
   ]);
 
   const attBySession = new Map<
@@ -228,6 +238,16 @@ export default async function TeacherHomePage() {
     }).map((s) => s.id),
   );
   const needAttendance = sessions.filter((s) => missingIds.has(s.id));
+  // Ô thứ năm: suất trải nghiệm đã dạy mà chưa nhập phiếu.
+  //
+  // Trước 03/09 trang chủ đếm đúng 4 việc và KHÔNG việc nào là Trial ⇒ giáo viên còn
+  // phiếu treo vẫn thấy bảng sạch, không có dấu hiệu nào để biết phải vào /teacher/trial.
+  // Trial có mặt ở /teacher/lich, nhưng đó là LỊCH chứ không phải VIỆC.
+  const trialRows = [...trialTable.upcoming, ...trialTable.done];
+  const trialChoDanhGia = demChoDanhGia(trialRows);
+  // Chỉ bày ô khi giáo viên THẬT SỰ có dạy trải nghiệm: phần lớn giáo viên không
+  // đứng ca Trial nào, thêm một ô "0" vĩnh viễn là làm loãng ba ô còn lại.
+  const coTrial = trialRows.length > 0;
   // "Chưa nhận xét" = buổi đã điểm danh, có HV đi học, nhận xét chưa đủ.
   const needEvaluation = sessions.filter((s) => {
     const st = statOf(s);
@@ -332,7 +352,12 @@ export default async function TeacherHomePage() {
       )}
 
       {/* Stat tổng quan */}
-      <div className="mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div
+        className={cn(
+          "mb-6 grid grid-cols-1 gap-4 sm:grid-cols-2",
+          coTrial ? "lg:grid-cols-5" : "lg:grid-cols-4",
+        )}
+      >
         <StatCard
           icon={School}
           value={classIds.length}
@@ -357,6 +382,20 @@ export default async function TeacherHomePage() {
           label="Buổi chưa nhận xét"
           tone={needEvaluation.length ? "amber" : "green"}
         />
+        {coTrial && (
+          // Bọc <Link>: bốn ô trên chỉ là số đếm của thứ đã có danh sách ngay bên dưới,
+          // còn Trial thì không — không có lối bấm thì ô này báo có việc mà không chỉ
+          // được đi đâu làm.
+          <Link href="/teacher/trial" className="block">
+            <StatCard
+              icon={FlaskConical}
+              value={trialChoDanhGia}
+              label="Trial chờ đánh giá"
+              tone={trialChoDanhGia ? "amber" : "green"}
+              hint={`${trialRows.length} suất trải nghiệm của bạn`}
+            />
+          </Link>
+        )}
       </div>
 
       {/* Lớp dạy hôm nay */}
