@@ -6,6 +6,7 @@ import type {
   OrderStatus,
   ParentRequestStatus,
   CommissionStatus,
+  SubmissionStatus,
 } from "@prisma/client";
 
 export type LabelEntry = { label: string; color: string };
@@ -69,3 +70,17 @@ const COMMISSION_STATUS_MAP: Record<CommissionStatus, LabelEntry> = {
   REOPENED: { label: "Mở lại", color: "amber" },
 };
 export const COMMISSION_STATUS = makeLabelRegistry<CommissionStatus>(COMMISSION_STATUS_MAP);
+
+
+// ── AssignmentSubmission ──────────────────────────────────────────────────────
+// QA site GV vòng 1 (BUG-010): repo đang có BA bảng nhãn chép tay cho enum này, lệch
+// nhau. Bản trong hồ sơ học viên rút còn đúng hai nhãn ("Đã nộp"/"Chưa nộp") nên bài
+// NỘP MUỘN đọc ra y hệt bài nộp đúng hạn, và bài ĐÃ CHẤM không phân biệt được với bài
+// đang chờ chấm — ô Điểm để trống thì không rõ là chưa chấm hay chấm 0 điểm.
+const SUBMISSION_STATUS_MAP: Record<SubmissionStatus, LabelEntry> = {
+  NOT_SUBMITTED: { label: "Chưa nộp", color: "amber" },
+  SUBMITTED: { label: "Đã nộp", color: "blue" },
+  LATE: { label: "Nộp muộn", color: "amber" },
+  GRADED: { label: "Đã chấm", color: "green" },
+};
+export const SUBMISSION_STATUS = makeLabelRegistry<SubmissionStatus>(SUBMISSION_STATUS_MAP);
