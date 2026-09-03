@@ -171,17 +171,6 @@ export function LeadsKanban({
         onHuy={() => setChoLyDo(null)}
         onXacNhan={(lyDo) => choLyDo && ganhKetQua(choLyDo.leadId, choLyDo.to, lyDo)}
       />
-      {/* Ô chọn số thẻ mỗi cột — cùng cơ chế `?size=` với bảng, nên đổi ở đây rồi bấm
-          sang chế độ Bảng là giữ nguyên lựa chọn. */}
-      <div className="mb-2 flex justify-end">
-        <ChonSoDong
-          soDong={soTheMoiCot}
-          macDinh={SO_THE_MOI_COT_MAC_DINH}
-          nhan="Mỗi cột"
-          tenDonVi="thẻ"
-        />
-      </div>
-
       <div className="flex min-w-max gap-3">
         {KANBAN_COLUMNS.map((col) => {
           const colLeads = byStatus(col);
@@ -329,6 +318,21 @@ export function LeadsKanban({
             </div>
           );
         })}
+      </div>
+
+      {/* Ô chọn số thẻ mỗi cột — ĐẶT DƯỚI CÙNG (chủ dự án chốt 28/08), giống chỗ đứng
+          của thanh phân trang ở chế độ Bảng: người dùng cuộn hết cột rồi mới nảy ra nhu
+          cầu xem thêm, lúc đó nút nằm ngay dưới tay.
+          Cùng cơ chế `?size=` với bảng, nên đổi ở đây rồi bấm sang Bảng là giữ nguyên.
+          ⚠️ `sticky left-0` là bắt buộc: khối cha cuộn NGANG (10 cột), không ghim thì
+          ở cột thứ 7 ô chọn nằm ngoài màn hình và không ai tìm ra nó. */}
+      <div className="sticky left-0 mt-3 flex justify-end">
+        <ChonSoDong
+          soDong={soTheMoiCot}
+          macDinh={SO_THE_MOI_COT_MAC_DINH}
+          nhan="Mỗi cột"
+          tenDonVi="thẻ"
+        />
       </div>
     </div>
   );
