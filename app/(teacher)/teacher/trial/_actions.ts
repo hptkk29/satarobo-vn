@@ -1,6 +1,6 @@
 // app/(teacher)/teacher/trial/_actions.ts — Site GV (L6): lưu phiếu đánh giá Trial.
 //
-// Rubric thang 8.0 (lib/trial/rubric.ts). BẢO MẬT:
+// Rubric thang 10.0 (lib/trial/rubric.ts — đổi từ 8.0 ngày 27/08/2026). BẢO MẬT:
 //   (1) checkPermission("trials:feedback") — TEACHER có sẵn.
 //   (2) getTeacherTrialRubricContext trả null nếu KHÔNG phải HV trải nghiệm của GV
 //       (guard own-teacher qua trialClass.teacherId/assistantId/session.teacherId).
