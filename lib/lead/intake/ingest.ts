@@ -239,8 +239,8 @@ async function attachExtraChild(
   centerId: string | null,
   actorName: string,
 ): Promise<boolean> {
-  const child = mapped.child;
-  if (!child) return false;
+  const dsCon = mapped.children ?? [];
+  if (dsCon.length === 0) return false;
 
   const [existingChildren, lead] = await Promise.all([
     db.leadChild.findMany({ where: { leadId }, select: { fullName: true } }),
@@ -251,18 +251,31 @@ async function attachExtraChild(
     ...existingChildren.map((c) => c.fullName),
     lead?.childName ?? null,
   ];
-  if (known.some((name) => isSameChildName(name, child.fullName))) return false;
+  // Lọc ra những em CHƯA có trong hồ sơ. Khử trùng cả trong chính phiếu này —
+  // phiếu gõ hai dòng cùng tên thì không được đẻ hai `LeadChild`.
+  const conMoi: typeof dsCon = [];
+  for (const c of dsCon) {
+    const daBiet = [...known, ...conMoi.map((x) => x.fullName)];
+    if (daBiet.some((name) => isSameChildName(name, c.fullName))) continue;
+    conMoi.push(c);
+  }
+  if (conMoi.length === 0) return false;
+
+  const child = conMoi[0];
 
   await db.$transaction(async (tx) => {
-    await tx.leadChild.create({
-      data: {
-        leadId,
-        fullName: child.fullName,
-        schoolName: child.schoolName ?? null,
-        gradeLevel: child.gradeLevel ?? null,
-        interestedCenterId: centerId,
-      },
-    });
+    for (const c of conMoi) {
+      await tx.leadChild.create({
+        data: {
+          leadId,
+          fullName: c.fullName,
+          schoolName: c.schoolName ?? null,
+          gradeLevel: c.gradeLevel ?? null,
+          interestedCenterId: centerId,
+          interestedCourseId: c.interestedCourseId ?? null,
+        },
+      });
+    }
     await tx.leadActivity.create({
       data: {
         leadId,
@@ -472,7 +485,17 @@ export async function ingestIntakeLead(
           parentName,
           phone,
           email: mapped.email ?? undefined,
-          childName: mapped.child?.fullName ?? mapped.childName ?? undefined,
+          // Cột phẳng cũ chỉ đựng được MỘT tên ⇒ lấy em đầu tiên. Bản ghi đầy đủ
+          // của từng em nằm ở `LeadChild` bên dưới.
+          childName: mapped.children?.[0]?.fullName ?? mapped.childName ?? undefined,
+          // `Lead.courseId` = khoá của em ĐẦU TIÊN có khai khoá. Cùng luật với
+          // `syncLeadCourseFromChildren` ở màn quản trị — cột này là bản sao
+          // phẳng để lọc/hiển thị, nguồn thật là `LeadChild.interestedCourseId`.
+          // Không nhân bản luật sang đây bằng cách gọi action bên `app/`: sai
+          // chiều phụ thuộc, và action đó còn kiểm quyền của người đăng nhập.
+          courseId:
+            mapped.children?.find((c) => c.interestedCourseId)?.interestedCourseId ??
+            undefined,
           centerId: centerId ?? undefined,
           // 29/08 — KHÔNG gán chủ ở đây nữa khi đã biết cơ sở: `chiaChoLead` bên
           // dưới mới là cửa quyết chủ, và nó áp thêm vế CƠ SỞ mà chỗ này không có
@@ -503,14 +526,15 @@ export async function ingestIntakeLead(
         select: { id: true },
       });
 
-      if (mapped.child) {
+      for (const con of mapped.children ?? []) {
         await tx.leadChild.create({
           data: {
             leadId: created.id,
-            fullName: mapped.child.fullName,
-            schoolName: mapped.child.schoolName ?? null,
-            gradeLevel: mapped.child.gradeLevel ?? null,
+            fullName: con.fullName,
+            schoolName: con.schoolName ?? null,
+            gradeLevel: con.gradeLevel ?? null,
             interestedCenterId: centerId,
+            interestedCourseId: con.interestedCourseId ?? null,
           },
         });
       }

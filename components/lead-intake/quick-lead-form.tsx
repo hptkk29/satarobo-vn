@@ -7,6 +7,13 @@ import { NGUON_LEAD } from "@/lib/lead/intake/nguon-lead";
 import { createInternalLeadAction } from "@/lib/lead/intake/quick-form-action";
 
 type CenterOption = { code: string; name: string };
+type CourseOption = { id: string; name: string };
+
+/** Một dòng con trên biểu mẫu. `key` chỉ để React nhận diện, không gửi lên server. */
+type ConRow = { key: string; fullName: string; courseId: string };
+
+let seqCon = 0;
+const conMoi = (): ConRow => ({ key: `con-${++seqCon}`, fullName: "", courseId: "" });
 
 type Entered = { id?: string; label: string; note: string };
 
@@ -20,7 +27,6 @@ type Entered = { id?: string; label: string; note: string };
 const EMPTY = {
   parentName: "",
   phone: "",
-  childName: "",
   source: "",
   facebookUrl: "",
   centerCode: "",
@@ -35,8 +41,18 @@ const EMPTY = {
  * con trỏ nhảy về ô đầu để gõ phiếu kế tiếp. Danh sách phiếu vừa nhập hiện ngay
  * bên cạnh để đối chiếu, kèm liên kết mở khách vừa tạo.
  */
-export function QuickLeadForm({ centers }: { centers: CenterOption[] }) {
+export function QuickLeadForm({
+  centers,
+  courses,
+}: {
+  centers: CenterOption[];
+  courses: CourseOption[];
+}) {
   const [form, setForm] = useState(EMPTY);
+  // 03/09 — NHIỀU CON, mỗi em một khoá quan tâm. Luôn có sẵn MỘT dòng: phiếu
+  // nào cũng có ít nhất một bé, bắt bấm "Thêm con" cho ca thường gặp nhất là
+  // thêm một cú bấm vào mọi phiếu.
+  const [children, setChildren] = useState<ConRow[]>(() => [conMoi()]);
   const [entered, setEntered] = useState<Entered[]>([]);
   const [pending, startTransition] = useTransition();
   const firstRef = useRef<HTMLInputElement>(null);
@@ -46,14 +62,21 @@ export function QuickLeadForm({ centers }: { centers: CenterOption[] }) {
 
   // Không ô nào bắt buộc — chỉ chặn đúng ca bấm Lưu trên biểu mẫu trắng (server
   // kiểm lại bằng `hasAnyContent`; đây chỉ để nút không im lặng nuốt cú bấm).
-  const isBlank = Object.values(form).every((v) => v.trim() === "");
+  const isBlank =
+    Object.values(form).every((v) => v.trim() === "") &&
+    children.every((c) => c.fullName.trim() === "");
 
   function submit() {
     startTransition(async () => {
       const res = await createInternalLeadAction({
         parentName: form.parentName || null,
         phone: form.phone || null,
-        childName: form.childName || null,
+        // Dòng trống vẫn gửi — mapper là chỗ DUY NHẤT lọc (bỏ dòng không tên +
+        // khử trùng tên). Lọc thêm ở client là hai nơi cùng giữ một luật.
+        children: children.map((c) => ({
+          fullName: c.fullName || null,
+          courseId: c.courseId || null,
+        })),
         source: form.source || null,
         facebookUrl: form.facebookUrl || null,
         centerCode: form.centerCode || null,
@@ -67,7 +90,7 @@ export function QuickLeadForm({ centers }: { centers: CenterOption[] }) {
 
       const label =
         form.parentName ||
-        form.childName ||
+        children.find((c) => c.fullName.trim())?.fullName ||
         form.phone ||
         form.facebookUrl ||
         "Khách mới";
@@ -95,6 +118,7 @@ export function QuickLeadForm({ centers }: { centers: CenterOption[] }) {
         ...prev,
       ]);
       setForm(EMPTY);
+      setChildren([conMoi()]);
       firstRef.current?.focus();
     });
   }
@@ -144,18 +168,84 @@ export function QuickLeadForm({ centers }: { centers: CenterOption[] }) {
             />
           </div>
 
-          <div>
-            <label className={labelClass} htmlFor="childName">
-              Tên con
-            </label>
-            <input
-              id="childName"
-              className={inputClass}
-              value={form.childName}
-              onChange={(e) => set("childName")(e.target.value)}
-              placeholder="Nguyễn Minh Khoa"
-              autoComplete="off"
-            />
+          {/* ── CON CỦA PHỤ HUYNH ────────────────────────────────────────────
+              03/09/2026 — thay ô "Tên con" đơn lẻ. Phiếu thật hay có 2 em; trước
+              đợt này em thứ hai phải gõ thành phiếu riêng rồi bị chính cơ chế
+              chống trùng SĐT gộp lại, tức là mất.
+
+              `sm:col-span-2` để khối này chiếm trọn hàng — hai ô con nằm cạnh
+              nhau trong một nửa cột thì tên bé và tên khoá đều cụt. */}
+          <div className="sm:col-span-2">
+            <div className="mb-1 flex items-center justify-between">
+              <span className={labelClass}>Con của phụ huynh</span>
+              {children.length > 1 && (
+                <span className="text-xs text-muted-foreground">{children.length} bé</span>
+              )}
+            </div>
+            <div className="space-y-2">
+              {children.map((c, i) => (
+                <div key={c.key} className="flex items-start gap-2">
+                  <input
+                    className={inputClass}
+                    value={c.fullName}
+                    onChange={(e) =>
+                      setChildren((rows) =>
+                        rows.map((r) =>
+                          r.key === c.key ? { ...r, fullName: e.target.value } : r,
+                        ),
+                      )
+                    }
+                    placeholder={i === 0 ? "Nguyễn Minh Khoa" : "Tên bé thứ " + (i + 1)}
+                    autoComplete="off"
+                    aria-label={`Tên bé thứ ${i + 1}`}
+                  />
+                  {/* Khoá quan tâm của RIÊNG em này — màn Chuyển đổi dùng đúng
+                      trường này để lọc ô "Lớp đăng ký". Để trống thì ô đó rơi về
+                      "hiện đủ mọi lớp". */}
+                  <select
+                    className={inputClass}
+                    value={c.courseId}
+                    onChange={(e) =>
+                      setChildren((rows) =>
+                        rows.map((r) =>
+                          r.key === c.key ? { ...r, courseId: e.target.value } : r,
+                        ),
+                      )
+                    }
+                    aria-label={`Khoá quan tâm của bé thứ ${i + 1}`}
+                  >
+                    <option value="">— Khoá quan tâm —</option>
+                    {courses.map((k) => (
+                      <option key={k.id} value={k.id}>
+                        {k.name}
+                      </option>
+                    ))}
+                  </select>
+                  {/* Nút xoá chỉ hiện từ dòng thứ hai: xoá dòng cuối cùng là để
+                      lại một khối trống không có ô nào để gõ. */}
+                  {children.length > 1 && (
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setChildren((rows) => rows.filter((r) => r.key !== c.key))
+                      }
+                      aria-label={`Bỏ bé thứ ${i + 1}`}
+                      className="shrink-0 rounded-lg border border-border px-2 py-2 text-sm text-muted-foreground hover:bg-muted"
+                    >
+                      ✕
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+            <button
+              type="button"
+              onClick={() => setChildren((rows) => [...rows, conMoi()])}
+              disabled={children.length >= 10}
+              className="mt-2 rounded-lg border border-dashed border-border px-2.5 py-1.5 text-xs font-medium text-muted-foreground hover:bg-muted disabled:opacity-50"
+            >
+              + Thêm con
+            </button>
           </div>
 
           <div>

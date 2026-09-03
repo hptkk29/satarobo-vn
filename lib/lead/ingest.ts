@@ -55,7 +55,7 @@ export async function ingestLead(input: IngestLeadInput): Promise<IngestResult> 
       email: input.email?.trim() || null,
       centerHint: null,
       // Cố ý null — xem docblock đầu file (giữ nguyên hành vi cũ, không đẻ LeadChild).
-      child: null,
+      children: [],
       childName: input.childName?.trim() || null,
       employeeCode: null,
       noteLines: input.note ? [input.note] : [],

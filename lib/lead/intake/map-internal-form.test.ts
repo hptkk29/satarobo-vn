@@ -69,7 +69,7 @@ describe("mapInternalForm — SĐT", () => {
     expect(l.warnings.join(" ")).toContain("không đọc được");
     // Phần còn lại của phiếu vẫn nguyên vẹn.
     expect(l.parentName).toBe("Chị Hương");
-    expect(l.child?.fullName).toBe("Bé Minh");
+    expect(l.children?.[0]?.fullName).toBe("Bé Minh");
   });
 });
 
@@ -83,7 +83,7 @@ describe("mapInternalForm — tên phụ huynh", () => {
   it("thiếu cả tên PH lẫn tên bé → vẫn lưu (không ô nào bắt buộc)", () => {
     const l = lead({ ...BASE, parentName: null, childName: null });
     expect(l.parentName).toBe("Phụ huynh (chưa rõ tên)");
-    expect(l.child).toBeNull();
+    expect(l.children).toEqual([]);
     expect(l.warnings.join(" ")).toContain("tên bé");
   });
 });
@@ -134,7 +134,7 @@ describe("mapInternalForm — cơ sở, ghi chú, consent", () => {
   it("bộ ô mới KHÔNG còn email/trường/lớp — con chỉ mang tên", () => {
     const l = lead(BASE);
     expect(l.email).toBeNull();
-    expect(l.child).toEqual({ fullName: "Bé Minh" });
+    expect(l.children).toEqual([{ fullName: "Bé Minh", interestedCourseId: null }]);
   });
 
   it("consent giữ true (nhân viên nhập hộ, không có ô tick) + không có externalId", () => {

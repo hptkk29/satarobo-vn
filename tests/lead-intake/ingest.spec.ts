@@ -69,7 +69,7 @@ function lead(over: Partial<MappedLead> = {}): MappedLead {
     phone: PHONE.basic,
     email: null,
     centerHint: { kind: "code", value: CODE_A },
-    child: null,
+    children: [],
     employeeCode: null,
     noteLines: [],
     externalId: null,
@@ -275,7 +275,7 @@ describe.skipIf(!RUN)("Lead intake · tầng DB thật", () => {
     const r = await ingestIntakeLead(
       lead({
         phone: PHONE.basic,
-        child: { fullName: "Bé An", schoolName: "TH Phù Đổng", gradeLevel: "Lớp 3" },
+        children: [{ fullName: "Bé An", schoolName: "TH Phù Đổng", gradeLevel: "Lớp 3" }],
       }),
       { source: "sale-form" },
     );
@@ -309,13 +309,13 @@ describe.skipIf(!RUN)("Lead intake · tầng DB thật", () => {
   // ── QĐ-D1: ca có thật trong dữ liệu quatang (1 PH, 2 con, cách nhau 2 phút) ──
   it("trùng SĐT nhưng KHÁC con ⇒ gắn thêm LeadChild vào lead cũ, KHÔNG đẻ lead mới", async () => {
     const first = await ingestIntakeLead(
-      lead({ phone: PHONE.twoChildren, child: { fullName: "Bé Một", gradeLevel: "Lớp 3" } }),
+      lead({ phone: PHONE.twoChildren, children: [{ fullName: "Bé Một", gradeLevel: "Lớp 3" }] }),
       { source: "quatang" },
     );
     expect(first.ok).toBe(true);
 
     const second = await ingestIntakeLead(
-      lead({ phone: PHONE.twoChildren, child: { fullName: "Bé Hai", gradeLevel: "Lớp 8" } }),
+      lead({ phone: PHONE.twoChildren, children: [{ fullName: "Bé Hai", gradeLevel: "Lớp 8" }] }),
       { source: "quatang" },
     );
 
@@ -345,12 +345,12 @@ describe.skipIf(!RUN)("Lead intake · tầng DB thật", () => {
 
   it("trùng SĐT + CÙNG tên con ⇒ không thêm LeadChild (chống bấm gửi 2 lần)", async () => {
     const first = await ingestIntakeLead(
-      lead({ phone: PHONE.sameChild, child: { fullName: "Bé Trùng" } }),
+      lead({ phone: PHONE.sameChild, children: [{ fullName: "Bé Trùng" }] }),
       { source: "sale-form" },
     );
     // Khác dấu/hoa-thường vẫn phải coi là cùng một đứa.
     const second = await ingestIntakeLead(
-      lead({ phone: PHONE.sameChild, child: { fullName: "bé trùng" } }),
+      lead({ phone: PHONE.sameChild, children: [{ fullName: "bé trùng" }] }),
       { source: "sale-form" },
     );
 
@@ -507,14 +507,14 @@ describe.skipIf(!RUN)("Lead intake · tầng DB thật", () => {
 
   it("trùng SĐT ⇒ cảnh báo KHÔNG bị nuốt, phải xuất hiện trên lead cũ", async () => {
     const first = await ingestIntakeLead(
-      lead({ phone: PHONE.dupWarnings, child: { fullName: "Bé Đầu" } }),
+      lead({ phone: PHONE.dupWarnings, children: [{ fullName: "Bé Đầu" }] }),
       { source: "sale-form" },
     );
 
     await ingestIntakeLead(
       lead({
         phone: PHONE.dupWarnings,
-        child: { fullName: "Bé Sau" },
+        children: [{ fullName: "Bé Sau" }],
         employeeCode: `${P}MA_SAI`,
         noteLines: ["Tỉnh/TP: Đà Nẵng"],
       }),
@@ -541,7 +541,7 @@ describe.skipIf(!RUN)("Lead intake · tầng DB thật", () => {
   //   đã đăng ký. Chọn hộ — người đổi tên enum không đủ căn cứ để quyết.
   it("hồ sơ cũ ĐÃ ĐÓNG (DA_DANG_KY) ⇒ tạo lead MỚI, không chôn con thứ hai vào hồ sơ đóng", async () => {
     const first = await ingestIntakeLead(
-      lead({ phone: PHONE.closedLead, child: { fullName: "Bé Anh Cả" } }),
+      lead({ phone: PHONE.closedLead, children: [{ fullName: "Bé Anh Cả" }] }),
       { source: "sale-form" },
     );
     await db.lead.update({
@@ -550,7 +550,7 @@ describe.skipIf(!RUN)("Lead intake · tầng DB thật", () => {
     });
 
     const second = await ingestIntakeLead(
-      lead({ phone: PHONE.closedLead, child: { fullName: "Bé Em Út" } }),
+      lead({ phone: PHONE.closedLead, children: [{ fullName: "Bé Em Út" }] }),
       { source: "sale-form" },
     );
 
