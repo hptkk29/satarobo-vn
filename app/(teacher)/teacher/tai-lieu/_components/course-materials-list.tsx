@@ -104,7 +104,15 @@ export function CourseMaterialsList({ rows }: { rows: CourseMaterialRow[] }) {
                             className={`h-2.5 w-2.5 shrink-0 rounded-full ${DOTS[i % DOTS.length]}`}
                             aria-hidden
                           />
-                          <div className="min-w-0">
+                          {/* `truncate` (nowrap + overflow hidden + ellipsis) chỉ hoạt
+                              động khi phần tử BỊ RÀNG BUỘC bề rộng. `min-w-0` một mình
+                              không đủ: ô bảng ở table-layout:auto nở vừa nội dung nên
+                              scrollWidth === clientWidth (đo được 1704px) và ellipsis
+                              không bao giờ kích hoạt — bảng phình 2119px trong khung
+                              883px. Trần phải đặt ở KHỐI BÊN TRONG ô, vì max-width trên
+                              <td> là hành vi undefined và Chrome bỏ qua (QA vòng 1,
+                              BUG-034). */}
+                          <div className="min-w-0 max-w-[28rem]">
                             <Link
                               href={`?courseId=${r.id}`}
                               className="rounded-sm font-semibold text-foreground outline-none hover:text-primary-ink-hover focus-visible:ring-2 focus-visible:ring-ring"
@@ -112,7 +120,10 @@ export function CourseMaterialsList({ rows }: { rows: CourseMaterialRow[] }) {
                               {r.name}
                             </Link>
                             {r.description && (
-                              <p className="truncate text-xs text-muted-foreground">
+                              <p
+                                className="truncate text-xs text-muted-foreground"
+                                title={r.description}
+                              >
                                 {r.description}
                               </p>
                             )}

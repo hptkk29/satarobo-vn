@@ -259,7 +259,12 @@ function HocBaTab({ rows }: { rows: ReportCardRow[] }) {
                     key={r.enrollmentId}
                     className="border-b border-border/60 transition-colors last:border-0 hover:bg-muted/50"
                   >
-                    <td className="px-4 py-3">
+                    {/* Sàn bề rộng cho hai cột TEXT TỰ DO. Không có sàn thì bốn cột
+                        nowrap phía sau (Mốc buổi 177px, Thao tác 237px…) giành hết chỗ
+                        và cột Khoá học bị bóp còn 84px — mỗi dòng xuống 165px vì tên
+                        khoá vỡ mỗi dòng một từ (QA vòng 1, BUG-026). Đặt trên <td>
+                        được vì đây là min-width; max-width thì <td> bỏ qua. */}
+                    <td className="min-w-[12rem] px-4 py-3">
                       <div className="flex items-center gap-3">
                         <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary-soft text-xs font-semibold text-primary-ink">
                           {initialsOf(r.studentName)}
@@ -276,7 +281,7 @@ function HocBaTab({ rows }: { rows: ReportCardRow[] }) {
                         </div>
                       </div>
                     </td>
-                    <td className="px-4 py-3">
+                    <td className="min-w-[11rem] px-4 py-3">
                       <p className="text-foreground">{r.courseName}</p>
                       <p className="text-xs text-muted-foreground">
                         {r.className}
