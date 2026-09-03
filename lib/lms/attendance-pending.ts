@@ -19,10 +19,11 @@
 // admin, và ở đó "có bản ghi chưa" đúng là câu hỏi cần hỏi (nó quyết định fallback
 // "hiện toàn bộ lớp" của phiếu nhận xét). Hai câu hỏi khác nhau, giữ hai hàm.
 //
-// ⚠️ KHÔNG import `@/lib/db` — cổng DB đã đóng cho app/(teacher). Hàm nạp dữ liệu ở
-// đây NHẬN client qua tham số.
+// PURE (không DB, không "use server") — nhận rows đã đọc sẵn, trả kết luận. Truy vấn
+// nằm ở call-site vì hai lý do: cổng DB đã đóng cho app/(teacher) nên file này không
+// được import `@/lib/db`, và kiểu generic của Prisma không khớp được với một chữ ký
+// client viết tay.
 import { attendanceCoversRoster } from "@/lib/lms/session-order";
-import { rosterWhere } from "@/lib/enrollment-scope";
 
 /** Một buổi, rút gọn đúng phần cần để hỏi "còn nợ điểm danh không". */
 export type PendingSessionInput = {
@@ -91,59 +92,31 @@ export function sessionAttendanceState(args: {
 }
 
 /**
- * Truy vấn sĩ số theo lớp, ĐÚNG ba tầng lọc.
+ * Gom sĩ số theo lớp từ kết quả `class.findMany`.
  *
- * ⚠️ Đọc qua quan hệ `class` chứ KHÔNG phải `enrollment.findMany`: `Enrollment` nằm
- * trong `SCOPED_MODELS`, `injectScope` sẽ chèn `centerId IN (...)` trần ⇒ ghi danh
- * `centerId = null` biến mất IM LẶNG. Các file hiện tại cố ý đọc qua `class` vì lý do
- * này (có chú thích ở hoan-thanh/page.tsx và hoc-vien/page.tsx) — đừng "gọn hoá".
+ * ⚠️ Truy vấn nguồn PHẢI đọc qua quan hệ `class` với `where: rosterWhere("dang-hoc")`,
+ * KHÔNG phải `enrollment.findMany`: `Enrollment` nằm trong `SCOPED_MODELS`, injectScope
+ * sẽ chèn `centerId IN (...)` trần ⇒ ghi danh `centerId = null` biến mất IM LẶNG. Các
+ * file hiện tại cố ý đọc qua `class` vì lý do này — đừng "gọn hoá".
  *
- * @param xdb client đã scope sẵn (scopedDb / withMakeupException) — truyền vào, không tự import.
+ * Hàm giữ dạng THUẦN (nhận rows, không nhận client): kiểu generic của Prisma không
+ * khớp được với một chữ ký client viết tay, và cổng DB cấm import @/lib/db ở đây.
  */
-export async function loadRosterByClass(
-  xdb: {
-    class: {
-      findMany: (args: unknown) => Promise<
-        { id: string; enrollments: { studentId: string }[] }[]
-      >;
-    };
-  },
-  classIds: string[],
-): Promise<Map<string, Set<string>>> {
+export function groupRosterByClass(
+  rows: { id: string; enrollments: { studentId: string }[] }[],
+): Map<string, Set<string>> {
   const out = new Map<string, Set<string>>();
-  if (classIds.length === 0) return out;
-  const rows = await xdb.class.findMany({
-    where: { id: { in: classIds } },
-    select: {
-      id: true,
-      enrollments: { where: rosterWhere("dang-hoc"), select: { studentId: true } },
-    },
-  });
   for (const c of rows) {
     out.set(c.id, new Set(c.enrollments.map((e) => e.studentId)));
   }
   return out;
 }
 
-/**
- * Gom bản ghi điểm danh theo buổi.
- *
- * @param xdb client đã scope sẵn — truyền vào, không tự import.
- */
-export async function loadMarkedBySession(
-  xdb: {
-    attendance: {
-      findMany: (args: unknown) => Promise<{ sessionId: string; studentId: string }[]>;
-    };
-  },
-  sessionIds: string[],
-): Promise<Map<string, Set<string>>> {
+/** Gom bản ghi điểm danh theo buổi từ kết quả `attendance.findMany`. */
+export function groupMarkedBySession(
+  rows: { sessionId: string; studentId: string }[],
+): Map<string, Set<string>> {
   const out = new Map<string, Set<string>>();
-  if (sessionIds.length === 0) return out;
-  const rows = await xdb.attendance.findMany({
-    where: { sessionId: { in: sessionIds } },
-    select: { sessionId: true, studentId: true },
-  });
   for (const r of rows) {
     const set = out.get(r.sessionId) ?? new Set<string>();
     set.add(r.studentId);
