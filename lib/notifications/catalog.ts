@@ -238,6 +238,13 @@ const BY_PREFIX: Readonly<Record<string, NotiDef>> = {
     // luận loại này gãy trên site giáo viên rồi đi sửa nhầm chỗ.
     recipients: "Tư vấn viên phụ trách lead (không có thì admin lead)", target: "/leads/<leadId>",
   },
+  // 03/09 — giáo viên chấm xong phiếu rubric ⇒ Sale có căn cứ chốt với phụ huynh.
+  // Việc MỚI rơi xuống chứ không phải tin để biết, nên xếp "new_task" như trial.assigned.
+  "trial.evaluated:": {
+    group: "new_task", priority: 2, entity: "trial",
+    // Là SALE, không phải giáo viên: người chấm chính là giáo viên nên báo lại là vô nghĩa.
+    recipients: "Tư vấn viên phụ trách lead (không có thì admin lead)", target: "/lop-trial/<trialClassId>",
+  },
   "trial.schedule_changed:": {
     group: "system", priority: 2, entity: "trial",
     // Cũng là SALE (lib/_handlers/trial-schedule-notif.ts), không phải giáo viên.

@@ -15,6 +15,7 @@ import { auth } from "@/lib/auth";
 import { resolveActor } from "@/lib/auth/actor";
 import { checkPermission } from "@/lib/auth/check-permission";
 import { scopedDb } from "@/lib/db-scope";
+import { publishEvent } from "@/lib/events/publish";
 import { getTeacherTrialRubricContext } from "@/lib/lms/teacher-schedule";
 import {
   RUBRIC_CRITERION_IDS,
@@ -140,6 +141,32 @@ export async function saveTrialRubricAction(input: {
   } catch (err) {
     console.error("[saveTrialRubricAction]", err);
     return { ok: false, error: "Lỗi cơ sở dữ liệu — không lưu được phiếu" };
+  }
+
+  // 03/09 — BÁO SALE. Trước bản này chấm xong là HẾT: không sự kiện, không thông báo.
+  // Sale phải tự đi tìm phiếu, mà cửa hay dùng (`/sale/trial`) lại chỉ nhìn buổi tương
+  // lai trong khi phiếu bao giờ cũng thuộc buổi đã qua ⇒ phiếu chấm xong không ai biết
+  // đường lấy. Handler: `lib/_handlers/trial-eval-notif.ts`.
+  //
+  // NGOÀI transaction (hàm này vốn không có tx) và nuốt lỗi: phiếu ĐÃ lưu rồi, chuông
+  // hỏng không được biến thành "không lưu được phiếu" trước mắt giáo viên.
+  try {
+    await publishEvent(
+      "trial.evaluated",
+      {
+        trialEnrollmentId: enrollmentId,
+        trialClassSessionId: ctx.trialClassSessionId,
+        totalScore,
+        rank,
+      },
+      {
+        // Chấm LẠI cùng một buổi không đáng một tin nữa — Sale biết là có phiếu rồi.
+        // Buổi thứ hai của cùng một ca thì có: khóa mang cả hai vế.
+        dedupeKey: `trial.evaluated:${enrollmentId}:${ctx.trialClassSessionId}`,
+      },
+    );
+  } catch (err) {
+    console.error("[saveTrialRubricAction] publish trial.evaluated", err);
   }
 
   revalidatePath("/trial");
