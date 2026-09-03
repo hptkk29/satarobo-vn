@@ -9,6 +9,7 @@ import { leadSharedOrClause, leadSharingEnabled } from '@/lib/lead/sharing'
 import { splitLeadNote } from '@/lib/lead/note-view'
 import { canViewLeadPii } from '@/lib/auth/check-permission'
 import { LeadsTable } from './_components/leads-table'
+import { LeadsRefreshButton } from './_components/refresh-button'
 import type { LeadRow } from './_components/leads-table'
 import { LeadsKanban, type KanbanLead } from './_components/leads-kanban'
 import { ALL_LEAD_STATUSES } from '@/lib/leads/status'
@@ -418,6 +419,10 @@ function Header({
             : 'Chưa có lead nào'}
         </p>
       </div>
+      {/* 31/08/2026 — nạp lại NGAY TRÊN TRANG để thấy lead mới, khỏi F5 (F5 mất vị trí
+          cuộn + đóng mọi thứ đang mở). Đặt cạnh cụm chuyển Bảng/Kanban vì cùng nhóm
+          "điều khiển khung nhìn". */}
+      <LeadsRefreshButton />
       <div className="inline-flex overflow-hidden rounded-lg border border-border">
         <Link
           href={qs('table')}
