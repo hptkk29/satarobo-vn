@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
+import { nhanNgayVN } from "../../_components/ui/o-ngay";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import {
@@ -188,7 +189,8 @@ export function DonTuClient({
         />
       ) : (
         <div className="t-card overflow-hidden">
-          <PhanTrangBang cuonNgang>
+          <PhanTrangBang cuonNgang
+          khoaGhiNho="gv-don-tu">
             <table className="min-w-[770px] w-full border-collapse text-left text-sm">
               <thead>
                 <tr className="border-b border-border bg-muted/50 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
@@ -458,6 +460,7 @@ function RequestForm({
                 onChange={(e) => setFromDate(e.target.value)}
                 className={inputCls}
               />
+              <DocNgay value={fromDate} />
             </Field>
             {kind === "SUB_TEACH" && (
               <Field label="Người dạy thay (tuỳ chọn)">
@@ -516,6 +519,7 @@ function RequestForm({
                 onChange={(e) => setFromDate(e.target.value)}
                 className={inputCls}
               />
+              <DocNgay value={fromDate} />
             </Field>
             {kind === "LATE_EARLY" && (
               <Field label="Hình thức">
@@ -582,6 +586,7 @@ function RequestForm({
                 onChange={(e) => setFromDate(e.target.value)}
                 className={inputCls}
               />
+              <DocNgay value={fromDate} />
             </Field>
             <Field label="Đến ngày">
               <input
@@ -590,6 +595,7 @@ function RequestForm({
                 onChange={(e) => setToDate(e.target.value)}
                 className={inputCls}
               />
+              <DocNgay value={toDate} />
             </Field>
             {kind === "BUSINESS_TRIP" && (
               <Field label="Nơi đến">
@@ -625,6 +631,22 @@ function RequestForm({
         </div>
       </div>
     </div>
+  );
+}
+
+/**
+ * Đọc lại ngày đã chọn theo dd/mm/yyyy.
+ *
+ * `<input type="date">` hiển thị theo locale của TRÌNH DUYỆT — máy đặt tiếng Anh ra
+ * "08/28/2026" kèm gợi ý "mm/dd/yyyy" giữa một ứng dụng toàn tiếng Việt. Với đơn từ
+ * thì sai ngày là sai công, nên in thẳng ngày đã chọn theo cách người dùng đọc
+ * (QA vòng 1, BUG-035).
+ */
+function DocNgay({ value }: { value: string }) {
+  return (
+    <p className="mt-1 text-xs text-muted-foreground">
+      {value ? `Ngày đã chọn: ${nhanNgayVN(value)}` : "Chưa chọn ngày"}
+    </p>
   );
 }
 

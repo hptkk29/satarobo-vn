@@ -81,7 +81,8 @@ function TrialTable({ rows }: { rows: TrialRowView[] }) {
     <div className="t-card overflow-hidden">
       {/* Thanh phân trang nằm NGOÀI vùng cuộn ngang: để trong thì cuộn sang phải là
           nút chuyển trang trôi mất khỏi màn. */}
-      <PhanTrangBang cuonNgang tenDonVi="suất Trial">
+      <PhanTrangBang cuonNgang tenDonVi="suất Trial"
+          khoaGhiNho="gv-trial">
         <table className="w-full min-w-[820px] border-collapse text-left text-sm">
           <thead>
             <tr className="border-b border-border bg-muted/50 text-xs font-semibold tracking-wide text-muted-foreground uppercase">

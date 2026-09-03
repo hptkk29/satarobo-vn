@@ -60,6 +60,9 @@ const DANG_HOC = "DANG_HOC";
 // trang đổ MỌI ghi danh nên đếm 103 em còn Tổng quan đếm 81 (QA vòng 1, BUG-024).
 // Vẫn giữ "Tất cả trạng thái" để không lặp lại bug "học viên tàng hình" 21/08: em đã
 // nghỉ phải TÌM RA ĐƯỢC, chỉ là không nằm trong sĩ số mặc định.
+/** Số khối lớp dựng ngay lần đầu; phần còn lại mở bằng nút "Xem thêm". */
+const SO_KHOI_DAU = 8;
+
 const STATUS_OPTIONS = [
   { value: DANG_HOC, label: "Đang học" },
   { value: ALL, label: "Tất cả trạng thái" },
@@ -98,6 +101,11 @@ export function StudentList({ rows }: { rows: StudentRow[] }) {
   const [query, setQuery] = useState("");
   const [cls, setCls] = useState(ALL);
   const [tt, setTt] = useState(DANG_HOC);
+  // Chế độ nhóm dựng MỘT BẢNG cho MỖI lớp. Giáo viên dạy nhiều lớp thì đó là 37 bảng
+  // và 4.194 phần tử DOM đổ ra trong một lần render, không phân trang, không ảo hoá
+  // (QA vòng 1, RISK-001). Mở dần theo khối: người ta gần như luôn tìm MỘT lớp, và
+  // ô lọc lớp ngay trên đầu đã đưa họ tới đó nhanh hơn cuộn.
+  const [soKhoi, setSoKhoi] = useState(SO_KHOI_DAU);
   const [view, setView] = useState(NHOM);
 
   const classOptions = useMemo<SelectFilter["options"]>(() => {
@@ -223,7 +231,7 @@ export function StudentList({ rows }: { rows: StudentRow[] }) {
               ? ` · ${soLuotGhiDanh} lượt ghi danh`
               : ""}
           </p>
-          {groups.map((g) => (
+          {groups.slice(0, soKhoi).map((g) => (
             <section key={g.id} className="space-y-2">
               <h2 className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5 text-sm font-semibold text-foreground">
                 {g.name}
@@ -234,6 +242,16 @@ export function StudentList({ rows }: { rows: StudentRow[] }) {
               <StudentTable rows={g.rows} showClass={false} />
             </section>
           ))}
+          {groups.length > soKhoi && (
+            <button
+              type="button"
+              onClick={() => setSoKhoi((n) => n + SO_KHOI_DAU)}
+              className="w-full rounded-lg border border-dashed border-border py-3 text-sm font-semibold text-muted-foreground outline-none hover:border-primary hover:text-primary-ink focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              Xem thêm {Math.min(SO_KHOI_DAU, groups.length - soKhoi)} lớp nữa
+              {" · "}còn {groups.length - soKhoi}
+            </button>
+          )}
         </div>
       ) : (
         <StudentTable rows={flatRows} showClass phanTrang />
@@ -345,7 +363,8 @@ function StudentTable({
           `min-w-[520px]`/`[640px]` rộng hơn khung 343px, thiếu nó là cả trang trôi ngang.) */}
       <div className="overflow-x-auto">
         {phanTrang ? (
-          <PhanTrangBang tenDonVi="học viên">{table}</PhanTrangBang>
+          <PhanTrangBang tenDonVi="học viên"
+          khoaGhiNho="gv-hoc-vien">{table}</PhanTrangBang>
         ) : (
           table
         )}

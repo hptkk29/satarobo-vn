@@ -266,7 +266,8 @@ export function AttendancePanel({
           `overflow-x-auto` — thứ duy nhất từng tạo vùng cắt — nên hàng tiêu đề `bg-muted/50`
           thò góc vuông ra ngoài viền bo. Không tái lập thanh cuộn ở ngoài. */}
       <div className="overflow-hidden rounded-lg border border-border bg-card">
-        <PhanTrangBang cuonNgang tenDonVi="học viên">
+        <PhanTrangBang cuonNgang tenDonVi="học viên"
+          khoaGhiNho="gv-diem-danh-buoi">
           <Table>
             <TableHeader>
               <TableRow className="bg-muted/50 hover:bg-muted/50">

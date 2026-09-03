@@ -61,7 +61,8 @@ export function CourseMaterialsList({ rows }: { rows: CourseMaterialRow[] }) {
         />
       ) : (
         <div className="t-card overflow-hidden">
-          <PhanTrangBang cuonNgang>
+          <PhanTrangBang cuonNgang
+          khoaGhiNho="gv-tai-lieu-khoa">
             <table className="min-w-[660px] w-full border-collapse text-left text-sm">
               <thead>
                 <tr className="border-b border-border bg-muted/50 text-xs font-semibold tracking-wide text-muted-foreground uppercase">

@@ -84,7 +84,8 @@ export function CompletionTable({
       />
 
       <section className="t-card overflow-hidden">
-        <PhanTrangBang cuonNgang>
+        <PhanTrangBang cuonNgang
+          khoaGhiNho="gv-hoan-thanh">
           <table className="min-w-[660px] w-full text-left text-sm">
             <thead>
               <tr className="border-b border-border bg-muted/50 text-xs font-semibold uppercase tracking-wide text-muted-foreground">

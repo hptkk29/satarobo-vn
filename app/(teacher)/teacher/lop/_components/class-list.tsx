@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import Link from "next/link";
 import { ArrowRight, CheckCircle2, ClipboardCheck } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -11,6 +11,7 @@ import {
 import { EmptyState } from "../../_components/ui/empty-state";
 import { PhanTrangBang } from "@/components/ui/phan-trang-bang";
 import { khopBatKy } from "@/lib/ui/tim-kiem";
+import { useLocTrenUrl } from "../../_components/ui/use-loc-tren-url";
 
 /** Một hàng lớp — plain data từ server (đã cách ly cơ sở qua scopedDb). */
 export interface ClassRow {
@@ -67,23 +68,33 @@ export function ClassStatusPill({ status }: { status: string }) {
 
 const ALL = "ALL";
 
+// Giá trị mặc định của ô Trạng thái: MỌI LỚP TRỪ đã hoàn thành.
+//
+// Chủ dự án chốt 03/09 (quyết định #4) theo đề xuất IMP-003 của QA: gộp "Hoàn thành"
+// vào chính dropdown và BỎ ô tick rời. Ô tick cũ đẻ ba lỗi cùng lúc — nhãn "Mọi trạng
+// thái" chỉ lọc trên 38/50 lớp (BUG-005), bỏ tick tự đá bộ lọc về mặc định mà không
+// báo (BUG-006), và danh sách option đổi theo ô tick nên "Hoàn thành" lúc có lúc không
+// (BUG-007). Một điều khiển thì cả ba biến mất.
+//
+// Vẫn GIỮ ý định của chốt 25/08 — lớp đã hoàn thành không nằm trong mặc định — nhưng
+// bằng một giá trị có TÊN THẬT thay vì một cái tick ẩn: giáo viên dạy vài khoá thì lớp
+// cũ đông hơn lớp đang dạy, để lẫn vào là lớp còn buổi cần điểm danh bị đẩy xuống đáy.
+const DANG_PHU_TRACH = "DANG_PHU_TRACH";
+
 export function ClassList({ rows }: { rows: ClassRow[] }) {
-  const [query, setQuery] = useState("");
-  const [course, setCourse] = useState(ALL);
-  const [status, setStatus] = useState(ALL);
-  const [showCompleted, setShowCompleted] = useState(false);
+  // Bộ lọc sống trên URL: gửi link được, F5 không mất (BUG-019).
+  const loc = useLocTrenUrl({
+    q: "",
+    khoa: ALL,
+    trangThai: DANG_PHU_TRACH,
+  });
+  const query = loc.gia_tri.q;
+  const course = loc.gia_tri.khoa;
+  const status = loc.gia_tri.trangThai;
 
   const completedCount = useMemo(
     () => rows.filter((r) => r.status === "COMPLETED").length,
     [rows],
-  );
-
-  // Cổng "đã hoàn thành" chạy TRƯỚC mọi bộ lọc khác: GV dạy vài khoá là lớp cũ
-  // đông hơn lớp đang dạy, để lẫn vào thì lớp còn buổi cần điểm danh bị đẩy
-  // xuống cuối bảng.
-  const openRows = useMemo(
-    () => (showCompleted ? rows : rows.filter((r) => r.status !== "COMPLETED")),
-    [rows, showCompleted],
   );
 
   // Options lọc suy từ chính dữ liệu (khoá học + trạng thái đang có).
@@ -97,68 +108,70 @@ export function ClassList({ rows }: { rows: ClassRow[] }) {
     ];
   }, [rows]);
 
-  // Suy từ `openRows` chứ không phải `rows`: nếu vẫn đọc `rows` thì dropdown còn
-  // option "Hoàn thành" trong khi ô tick đang ẩn đúng nhóm đó ⇒ chọn vào là bảng
-  // rỗng mà không có gì giải thích.
+  // Suy từ TOÀN BỘ `rows` — danh sách option KHÔNG được đổi theo lựa chọn hiện tại,
+  // nếu không thì giá trị đang chọn có thể biến mất khỏi options và trigger của Base UI
+  // Select hiện nhãn RỖNG (nó tra nhãn theo options).
   const statusOptions = useMemo<SelectFilter["options"]>(() => {
-    const present = [...new Set(openRows.map((r) => r.status))];
+    const present = [...new Set(rows.map((r) => r.status))];
     const ordered = Object.keys(CLASS_STATUS_LABEL).filter((s) =>
       present.includes(s),
     );
     return [
-      { value: ALL, label: "Mọi trạng thái" },
+      { value: DANG_PHU_TRACH, label: "Đang phụ trách" },
       ...ordered.map((s) => ({ value: s, label: CLASS_STATUS_LABEL[s]! })),
+      { value: ALL, label: "Tất cả trạng thái" },
     ];
-  }, [openRows]);
-
-  // Bỏ tick trong khi đang lọc status=COMPLETED: giá trị đó vừa biến mất khỏi
-  // options nên trigger của Base UI Select hiện nhãn RỖNG (nó tra label theo
-  // options) và bảng trắng — trả về "Mọi trạng thái" để hai điều khiển không chọi
-  // nhau.
-  function toggleShowCompleted(next: boolean) {
-    setShowCompleted(next);
-    if (!next && status === "COMPLETED") setStatus(ALL);
-  }
+  }, [rows]);
 
   const filtered = useMemo(() => {
-    return openRows.filter((r) => {
+    return rows.filter((r) => {
       if (course !== ALL && r.course !== course) return false;
-      if (status !== ALL && r.status !== status) return false;
+      if (status === DANG_PHU_TRACH) {
+        if (r.status === "COMPLETED") return false;
+      } else if (status !== ALL && r.status !== status) {
+        return false;
+      }
       // BỎ DẤU khi so (lib/ui/tim-kiem) — gõ không dấu là cách gõ mặc định.
       return khopBatKy([r.name, r.code, r.course], query);
     });
-  }, [openRows, query, course, status]);
+  }, [rows, query, course, status]);
 
   return (
     <>
       <ListToolbar
         query={query}
-        onQuery={setQuery}
+        onQuery={(v) => loc.dat("q", v)}
         placeholder="Tìm theo tên lớp, mã lớp, khoá học..."
         filters={[
-          { value: course, onChange: setCourse, options: courseOptions },
-          { value: status, onChange: setStatus, options: statusOptions },
+          {
+            value: course,
+            onChange: (v) => loc.dat("khoa", v),
+            options: courseOptions,
+          },
+          {
+            value: status,
+            onChange: (v) => loc.dat("trangThai", v),
+            options: statusOptions,
+          },
         ]}
-        // Dùng slot `actions` sẵn có thay vì thêm prop cho ListToolbar — 9 màn
-        // khác của site GV cũng dựng trên component này, đổi chữ ký là đụng cả 9.
-        // GV chưa dạy xong lớp nào thì ô tick không ẩn được gì ⇒ không render.
+        // Nút xoá bộ lọc chỉ hiện khi CÓ gì để xoá (BUG-015: người dùng lọc tới bảng
+        // trắng rồi không có đường về).
         actions={
-          completedCount > 0 ? (
-            <label className="flex cursor-pointer items-center gap-2 text-sm font-medium whitespace-nowrap text-muted-foreground">
-              <input
-                type="checkbox"
-                checked={showCompleted}
-                onChange={(e) => toggleShowCompleted(e.target.checked)}
-                className="h-4 w-4 rounded border-input text-primary-ink focus:ring-primary"
-              />
-              Hiện lớp đã hoàn thành ({completedCount})
-            </label>
+          loc.dang_loc ? (
+            <button
+              type="button"
+              onClick={loc.xoa_het}
+              className="rounded-md px-2.5 py-1.5 text-sm font-medium whitespace-nowrap text-muted-foreground underline-offset-4 outline-none hover:text-foreground hover:underline focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              Xoá bộ lọc
+            </button>
           ) : undefined
         }
       />
 
       <div className="t-card overflow-hidden">
-        <PhanTrangBang cuonNgang>
+        <PhanTrangBang cuonNgang
+          khoaGhiNho="gv-danh-sach-lop">
           <table className="min-w-[880px] w-full border-collapse text-left text-sm">
             <thead>
               <tr className="border-b border-border bg-muted/50 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
@@ -192,10 +205,12 @@ export function ClassList({ rows }: { rows: ClassRow[] }) {
                     colSpan={7}
                     className="px-5 py-10 text-center text-sm text-muted-foreground"
                   >
-                    {/* Nói rõ phần đang bị cổng "hoàn thành" chặn, kẻo GV vừa
-                        lọc xong thấy bảng trắng lại tưởng mất lớp. */}
-                    {!showCompleted && completedCount > 0
-                      ? `Không có lớp khớp bộ lọc — ${completedCount} lớp đã hoàn thành đang ẩn.`
+                    {/* Chỉ nhắc phần đang bị ẩn khi nó THẬT SỰ liên quan tới bộ lọc
+                        hiện tại. Bản cũ in câu "N lớp đã hoàn thành đang ẩn" kể cả khi
+                        người dùng đang lọc "Đã huỷ" — một câu không dính dáng gì tới
+                        thứ họ vừa chọn (QA vòng 1, BUG-015). */}
+                    {status === DANG_PHU_TRACH && completedCount > 0
+                      ? `Không có lớp khớp bộ lọc — ${completedCount} lớp đã hoàn thành nằm ngoài "Đang phụ trách".`
                       : "Không có lớp khớp bộ lọc."}
                   </td>
                 </tr>
