@@ -64,3 +64,28 @@ export function diffHours(a?: string | null, b?: string | null): number | null {
   const v = (h2 * 60 + m2 - (h1 * 60 + m1)) / 60;
   return v > 0 ? Number(v.toFixed(1)) : null;
 }
+
+/**
+ * Kiểm khoảng ngày của đơn — dùng ở SERVER, không phải chỉ ở form.
+ *
+ * QA site GV vòng 1 (NV-005) đo được trên UAT những đơn vô nghĩa: "Đi muộn / Về sớm"
+ * kéo 27 ngày, và đơn có ngày gửi SAU ngày bắt đầu. Truy ra thì đó là dữ liệu seed —
+ * `isRangeKind` đã ép `to = from` cho các loại một-ngày nên form không tạo ra được.
+ * Nhưng vẫn còn một lỗ THẬT: không chỗ nào kiểm `to >= from` cho loại CÓ khoảng, nên
+ * một lời gọi thẳng vào Server Action với `toDate` lùi trước `fromDate` vẫn ghi được.
+ *
+ * Trả `null` khi hợp lệ, hoặc câu lỗi tiếng Việt để hiện thẳng cho người dùng.
+ */
+export function kiemKhoangNgayDon(
+  kind: WorkRequestKindV,
+  from: Date | null,
+  to: Date | null,
+): string | null {
+  if (!from || Number.isNaN(from.getTime())) return "Chọn ngày cho đơn này.";
+  if (!isRangeKind(kind)) return null;
+  if (!to || Number.isNaN(to.getTime())) return "Chọn ngày kết thúc.";
+  if (to.getTime() < from.getTime()) {
+    return "Ngày kết thúc không được trước ngày bắt đầu.";
+  }
+  return null;
+}

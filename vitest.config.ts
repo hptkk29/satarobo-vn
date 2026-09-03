@@ -35,6 +35,11 @@ export default defineConfig({
       // trên: `include` là bộ lọc CỨNG, nên `vitest run tests/goi-dien` sẽ báo
       // "No test files found" và job CI vẫn XANH dù test viết đúng.
       "tests/goi-dien/**/*.{test,spec}.ts",
+      // Seed UAT — bộ rải buổi học theo thứ (prisma/seed-uat/lich.ts). Cùng lý do
+      // phải khai ở đây như các dòng trên: `include` là bộ lọc CỨNG, không khai thì
+      // `vitest run prisma/seed-uat` báo "No test files found" và CI vẫn XANH dù
+      // test viết đúng — hỏng câm đúng loại nguy hiểm nhất.
+      "prisma/seed-uat/**/*.{test,spec}.ts",
     ],
     coverage: {
       reporter: ["text", "json", "html"],

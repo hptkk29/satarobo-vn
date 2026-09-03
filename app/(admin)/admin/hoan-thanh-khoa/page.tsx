@@ -249,9 +249,7 @@ export default async function CompletionPage({ searchParams }: PageProps) {
             thành khoá” của site giáo viên sẽ hiện ở đây.
           </p>
         ) : (
-          <PhanTrangBang cuonNgang>
-            <ReviewTable rows={reqRows} />
-          </PhanTrangBang>
+          <ReviewTable rows={reqRows} />
         )}
       </div>
 
