@@ -72,12 +72,13 @@ function tallySessions(rows: { status: string; _count: { _all: number } }[]) {
 export default async function TeacherCompletionsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ classId?: string }>;
+  // `q` / `trangThai`: bộ lọc lưới lớp, đọc Ở SERVER (xem use-loc-tren-url.ts).
+  searchParams: Promise<{ classId?: string; q?: string; trangThai?: string }>;
 }) {
   const session = await auth();
   if (!session?.user) return null; // layout đã gate — guard cho type-narrow
 
-  const { classId } = await searchParams;
+  const { classId, q: spQ, trangThai: spTrangThai } = await searchParams;
   const actor = await resolveActor(session.user.id);
   const sdb = scopedDb(actor);
   const classIds = [...actor.assignedClassIds];
@@ -314,6 +315,7 @@ export default async function TeacherCompletionsPage({
         />
       ) : (
         <CompletionClassGrid
+          banDauLoc={{ q: spQ, trangThai: spTrangThai }}
           rows={classes.map((c) => {
             const p = tallySessions(sessionsByClass.get(c.id) ?? []);
             return {

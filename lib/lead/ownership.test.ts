@@ -113,7 +113,14 @@ describe("[S-8] 'khách của tôi' — hình dạng mệnh đề", () => {
 // ─────────────────────────────────────────────────────────────────────────────
 // Đây là phần đắt nhất của file: khoá "chỉ có MỘT bản".
 // ─────────────────────────────────────────────────────────────────────────────
-describe("[S-8] chỉ MỘT nơi định nghĩa 'khách của tôi'", () => {
+// ⚠️ Hai nhóm dưới đây QUÉT CẢ CÂY THƯ MỤC nguồn (app + lib + components) nên chậm
+// theo kích thước repo, không theo logic. Với mặc định 5000ms của vitest chúng ĐỎ VÌ
+// HẾT GIỜ trong bộ đầy đủ (đo 03/09: 6666ms) trong khi chạy lẻ vẫn xanh — đúng loại
+// đỏ giả làm người ta đi soi nhầm chỗ. Đã nhớ kết quả duyệt cây ở `nguonRepo()`, nhưng
+// một lượt duyệt vẫn có thể vượt 5s khi repo lớn thêm, nên chốt luôn hạn giờ.
+const HAN_QUET_CAY = 30_000;
+
+describe("[S-8] chỉ MỘT nơi định nghĩa 'khách của tôi'", { timeout: HAN_QUET_CAY }, () => {
   it("chỉ `lib/lead/ownership.ts` được dựng mệnh đề dùng-chung — dấu vân tay của bản chép tay", () => {
     // `leadSharedOrClause()` chỉ có một công dụng: ghép vào mảng OR của mệnh đề
     // sở hữu. File nào gọi nó = file đó đang tự dựng lấy mệnh đề "của tôi".
@@ -137,7 +144,7 @@ describe("[S-8] chỉ MỘT nơi định nghĩa 'khách của tôi'", () => {
 // ─────────────────────────────────────────────────────────────────────────────
 // Mỗi màn "chỉ xem khách của mình" phải HỎI hàm chung, không tự trả lời.
 // ─────────────────────────────────────────────────────────────────────────────
-describe("[S-8] mọi màn thu hẹp về 'của tôi' đều đi qua hàm chung", () => {
+describe("[S-8] mọi màn thu hẹp về 'của tôi' đều đi qua hàm chung", { timeout: HAN_QUET_CAY }, () => {
   const MAN = [
     ["danh sách lead khu quản trị", path.join("app", "(admin)", "admin", "leads", "page.tsx")],
     ["ô tìm toàn hệ thống", path.join("app", "(admin)", "admin", "search", "page.tsx")],

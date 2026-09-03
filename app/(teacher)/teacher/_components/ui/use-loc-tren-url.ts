@@ -7,16 +7,29 @@
 // gửi link cho đồng nghiệp được, F5 là mất sạch. Trong khi các màn khác của chính site
 // này đã làm đúng với `?classId=…&tab=…`.
 //
-// ⚠️ Dùng `history.replaceState`, KHÔNG dùng `router.replace`. `router.replace` bắt
-// Next nạp lại RSC payload sau MỖI phím gõ trong ô tìm kiếm — màn Học viên đang đổ 273
-// dòng thì đó là một lượt truy vấn cho mỗi ký tự. Đánh đổi có ý thức: URL chia sẻ được
-// và sống sót qua F5, nhưng Back/Forward KHÔNG lần ngược từng bước lọc (replaceState
-// không tạo mục lịch sử). Người dùng cần "quay lại" là quay lại TRANG trước, không phải
-// bộ lọc trước — đó mới là thứ họ trông đợi.
+// ⚠️ GIÁ TRỊ BAN ĐẦU ĐẾN TỪ SERVER, KHÔNG ĐỌC URL TRONG useEffect.
+//
+// Bản đầu (03/09) đọc `window.location.search` trong một effect chạy lúc gắn rồi
+// `setGiaTri`. Đo trên trình duyệt thì hỏng một nửa: `?trangThai=COMPLETED` áp đúng
+// nhưng `?trangThai=ALL` bị bỏ qua — phân trang ra 2 trang (38 lớp) thay vì 3 (50 lớp).
+// Dấu vết cho thấy effect CÓ chạy và tính đúng, nên giá trị bị ghi đè ngay sau đó: một
+// cuộc đua giữa effect này và lượt khởi tạo của ô Select (Base UI phát `onValueChange`
+// khi hoà giải `value` lúc hydrate, và handler đó gọi ngược `dat()` với giá trị cũ).
+//
+// Cách chữa là bỏ hẳn cuộc đua: Server Component đọc `searchParams` rồi truyền xuống
+// làm prop, hook nhận qua `banDau` và dùng nó ngay ở lượt render ĐẦU TIÊN. Server và
+// client vì thế render cùng một giá trị — không còn trạng thái nào đổi sau hydrate, và
+// cũng không còn lệch hydrate.
+//
+// ⚠️ Đường GHI vẫn dùng `history.replaceState`, KHÔNG dùng `router.replace`:
+// `router.replace` bắt Next nạp lại RSC payload sau MỖI phím gõ trong ô tìm kiếm — màn
+// Học viên đang đổ 273 dòng thì đó là một lượt truy vấn cho mỗi ký tự. Đánh đổi có ý
+// thức: URL chia sẻ được và sống sót qua F5, nhưng Back/Forward KHÔNG lần ngược từng
+// bước lọc (replaceState không tạo mục lịch sử).
 //
 // ⚠️ GIỮ NGUYÊN tham số lạ trên URL. Trang hồ sơ học viên dùng `?s=…&ptab=…&classId=…`;
 // một hook lọc mà ghi đè cả query string sẽ đá bay ngữ cảnh của màn khác.
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 
 export type LocTrenUrl<K extends string> = {
   gia_tri: Record<K, string>;
@@ -28,34 +41,41 @@ export type LocTrenUrl<K extends string> = {
 };
 
 /**
+ * Gộp giá trị đọc từ `searchParams` với mặc định.
+ *
+ * Tách hàm THUẦN để test được và để Server Component gọi lại nếu cần: tham số thiếu,
+ * rỗng, hay `undefined` đều phải rơi về mặc định chứ không thành chuỗi rỗng.
+ */
+export function gopLocBanDau<K extends string>(
+  macDinh: Record<K, string>,
+  banDau?: Partial<Record<K, string | undefined>>,
+): Record<K, string> {
+  const ra = { ...macDinh };
+  if (!banDau) return ra;
+  for (const k of Object.keys(macDinh) as K[]) {
+    const v = banDau[k];
+    if (typeof v === "string" && v !== "") ra[k] = v;
+  }
+  return ra;
+}
+
+/**
  * @param macDinh giá trị mặc định của từng khoá. Khoá đang mang giá trị mặc định thì
  *   KHÔNG xuất hiện trên URL — URL sạch, và "không có tham số" luôn nghĩa là "mặc định".
+ * @param banDau giá trị Server Component đọc được từ `searchParams`. Bỏ trống thì màn
+ *   đó KHÔNG deep-link được — đừng bỏ trống rồi trông đợi URL có tác dụng, đó đúng là
+ *   lỗi của bản đầu.
  */
 export function useLocTrenUrl<K extends string>(
   macDinh: Record<K, string>,
+  banDau?: Partial<Record<K, string | undefined>>,
 ): LocTrenUrl<K> {
   const khoas = useMemo(() => Object.keys(macDinh) as K[], [macDinh]);
 
-  // Đọc URL MỘT LẦN lúc dựng: server render không có `window`, nên khởi tạo bằng mặc
-  // định rồi đồng bộ trong effect — tránh lệch hydrate.
-  const [giaTri, setGiaTri] = useState<Record<K, string>>(macDinh);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const q = new URLSearchParams(window.location.search);
-    const tu_url = { ...macDinh };
-    let co = false;
-    for (const k of khoas) {
-      const v = q.get(k);
-      if (v != null && v !== "") {
-        tu_url[k] = v;
-        co = true;
-      }
-    }
-    if (co) setGiaTri(tu_url);
-    // Chỉ chạy một lần lúc gắn: sau đó URL do chính hook này ghi.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  // Lazy init: giá trị đúng có NGAY ở lượt render đầu, cả trên server lẫn client.
+  const [giaTri, setGiaTri] = useState<Record<K, string>>(() =>
+    gopLocBanDau(macDinh, banDau),
+  );
 
   const ghiUrl = useCallback(
     (next: Record<K, string>) => {
@@ -79,11 +99,16 @@ export function useLocTrenUrl<K extends string>(
     (patch: Partial<Record<K, string>>) => {
       setGiaTri((cu) => {
         const next = { ...cu, ...patch } as Record<K, string>;
+        // Ô Select có thể phát lại ĐÚNG giá trị đang có lúc hydrate. Ghi URL trong ca
+        // đó vừa thừa vừa từng là một nửa nguyên nhân của lỗi cũ, nên bỏ qua khi không
+        // có gì đổi.
+        const doi = khoas.some((k) => next[k] !== cu[k]);
+        if (!doi) return cu;
         ghiUrl(next);
         return next;
       });
     },
-    [ghiUrl],
+    [ghiUrl, khoas],
   );
 
   const dat = useCallback(

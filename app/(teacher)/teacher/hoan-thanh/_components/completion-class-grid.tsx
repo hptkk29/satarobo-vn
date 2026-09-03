@@ -45,8 +45,15 @@ const STATUS_LABEL: Record<string, string> = {
   CANCELLED: "Đã huỷ",
 };
 
-export function CompletionClassGrid({ rows }: { rows: CompletionClassCard[] }) {
-  const loc = useLocTrenUrl({ q: "", trangThai: DANG_PHU_TRACH });
+export function CompletionClassGrid({
+  rows,
+  banDauLoc,
+}: {
+  rows: CompletionClassCard[];
+  /** Bộ lọc đọc từ `searchParams` Ở SERVER — thiếu nó là deep-link không chạy. */
+  banDauLoc?: { q?: string; trangThai?: string };
+}) {
+  const loc = useLocTrenUrl({ q: "", trangThai: DANG_PHU_TRACH }, banDauLoc);
   const query = loc.gia_tri.q;
   const status = loc.gia_tri.trangThai;
 

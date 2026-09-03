@@ -96,6 +96,11 @@ export default async function TeacherClassesPage({
     classId?: string;
     sessionId?: string;
     tab?: string;
+    // Bộ lọc của danh sách lớp — đọc Ở SERVER để ClassList có giá trị đúng ngay
+    // lượt render đầu (xem chú thích đầu use-loc-tren-url.ts).
+    q?: string;
+    khoa?: string;
+    trangThai?: string;
     rvSession?: string; // Nhận xét deep — buổi cần nhận xét
     asgId?: string; // Bài tập deep — bài cần xem chi tiết
     subId?: string; // Bài tập deep — bài nộp cần chấm
@@ -104,7 +109,7 @@ export default async function TeacherClassesPage({
   const session = await auth();
   if (!session?.user) return null; // layout đã gate
 
-  const { classId, sessionId, tab, rvSession, asgId, subId } =
+  const { classId, sessionId, tab, rvSession, asgId, subId, q, khoa, trangThai} =
     await searchParams;
   const actor = await resolveActor(session.user.id);
   const xdb = withMakeupException(actor);
@@ -476,7 +481,11 @@ export default async function TeacherClassesPage({
         title="Lớp học của tôi"
         subtitle="Các lớp bạn đang phụ trách. Bấm vào một lớp để điểm danh, nhận xét, giao bài và xem học viên."
       />
-      {rows.length === 0 ? <ClassListEmpty /> : <ClassList rows={rows} />}
+      {rows.length === 0 ? (
+        <ClassListEmpty />
+      ) : (
+        <ClassList rows={rows} banDauLoc={{ q, khoa, trangThai }} />
+      )}
     </div>
   );
 }
