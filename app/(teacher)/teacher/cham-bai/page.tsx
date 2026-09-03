@@ -43,6 +43,10 @@ const submitFmt = new Intl.DateTimeFormat("vi-VN", {
   weekday: "short",
   day: "2-digit",
   month: "2-digit",
+  // NĂM là bắt buộc: bài nộp có thể thuộc lớp khoá trước, mà "20:00 Thứ 5, 27/08"
+  // không nói được năm nào — giáo viên chấm bù cuối khoá đọc ra một mốc mơ hồ
+  // (QA vòng 1, BUG-020).
+  year: "numeric",
   hour: "2-digit",
   minute: "2-digit",
   timeZone: "Asia/Ho_Chi_Minh",

@@ -307,7 +307,8 @@ export async function HubReviewsTab({
           />
         ) : (
           <div className="t-card overflow-hidden">
-            <PhanTrangBang cuonNgang>
+            <PhanTrangBang cuonNgang
+          khoaGhiNho="gv-lop-nhan-xet-buoi">
               <table className="min-w-[560px] w-full border-collapse text-left text-sm">
                 <thead>
                   <tr className="border-b border-border bg-muted/50 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
@@ -605,7 +606,8 @@ export async function HubReviewsTab({
 
   return (
     <div className="t-card overflow-hidden">
-      <PhanTrangBang cuonNgang>
+      <PhanTrangBang cuonNgang
+          khoaGhiNho="gv-lop-nhan-xet-hocvien">
         <table className="min-w-[720px] w-full border-collapse text-left text-sm">
           <thead>
             <tr className="border-b border-border bg-muted/50 text-xs font-semibold tracking-wide text-muted-foreground uppercase">

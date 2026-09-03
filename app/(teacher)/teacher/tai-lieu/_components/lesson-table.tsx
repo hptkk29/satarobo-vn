@@ -87,7 +87,8 @@ export function LessonTable({
         />
       ) : (
         <div className="t-card overflow-hidden">
-          <PhanTrangBang cuonNgang tenDonVi="buổi">
+          <PhanTrangBang cuonNgang tenDonVi="buổi"
+          khoaGhiNho="gv-tai-lieu-bai">
           <table className="min-w-[880px] w-full border-collapse text-left text-sm">
             <thead>
               <tr className="border-b border-border bg-muted/40 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
