@@ -22,7 +22,7 @@ import {
 import type { AttendanceStatus } from "@prisma/client";
 import type { Actor } from "@/lib/auth/actor";
 import { scopedDb } from "@/lib/db-scope";
-import { ENROLLMENT_ACTIVE_STATUS_LIST } from "@/lib/enrollment-status";
+import { rosterWhere } from "@/lib/enrollment-scope";
 import { summarizeSessionFeedback } from "@/lib/lms/session-feedback-roster";
 import {
   attendanceCoversRoster,
@@ -183,7 +183,7 @@ export async function HubReviewsTab({
         where: { id: classId },
         select: {
           enrollments: {
-            where: { status: { in: ENROLLMENT_ACTIVE_STATUS_LIST } },
+            where: rosterWhere("dang-hoc"),
             select: {
               student: {
                 select: {
@@ -459,21 +459,20 @@ export async function HubReviewsTab({
       endTime: true,
       _count: {
         select: {
-          enrollments: {
-            where: { status: { in: ENROLLMENT_ACTIVE_STATUS_LIST } },
-          },
+          enrollments: { where: rosterWhere("dang-hoc") },
         },
       },
       // Danh sách studentId của sĩ số — dùng cho "điểm danh xong chưa"
-      // (attendanceCoversRoster). Lọc deletedAt ở CẢ enrollment lẫn student; `_count`
-      // ngay trên KHÔNG lọc và giữ nguyên vì nó là mẫu số của cột "Đi học X/Y" đã có
-      // từ trước.
+      // (attendanceCoversRoster).
+      //
+      // `_count` ngay trên nay dùng CHUNG rosterWhere với chỗ này. Trước đây hai truy
+      // vấn cách nhau 9 dòng trong CÙNG file lại lọc khác nhau (`_count` chỉ lọc
+      // status, chỗ này lọc đủ ba tầng) ⇒ mẫu số "Đi học X/Y" và mẫu số của
+      // attendanceCoversRoster đếm hai tập khác nhau, và một buổi có thể vừa hiện
+      // "12/12" vừa không bao giờ được coi là điểm danh xong. Chủ dự án chốt 03/09:
+      // đổi cả con số cho khớp, không chỉ đổi chữ.
       enrollments: {
-        where: {
-          status: { in: ENROLLMENT_ACTIVE_STATUS_LIST },
-          deletedAt: null,
-          student: { deletedAt: null },
-        },
+        where: rosterWhere("dang-hoc"),
         select: { studentId: true },
       },
     },

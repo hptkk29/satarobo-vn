@@ -20,7 +20,7 @@ import { auth } from "@/lib/auth";
 import { resolveActor } from "@/lib/auth/actor";
 import { checkPermission } from "@/lib/auth/check-permission";
 import { scopedDb } from "@/lib/db-scope";
-import { ENROLLMENT_ACTIVE_STATUS_LIST } from "@/lib/enrollment-status";
+import { rosterWhere } from "@/lib/enrollment-scope";
 import { templateToAssignmentData } from "@/lib/assignments/template";
 import { resolveTemplateDup, publishDraftAssignment } from "@/lib/assignments/publish-draft";
 import { realDueAt } from "@/lib/lms/assignment-window";
@@ -151,8 +151,11 @@ export async function assignTemplateAction(input: {
       id: true,
       name: true,
       courseId: true,
+      // GIAO BÀI giữ "dang-hoc": bài mới chỉ giao cho em còn đang học. rosterWhere
+      // thêm hai tầng lọc vốn thiếu ở đây (deletedAt + student.deletedAt) nên em đã
+      // gỡ mềm khỏi lớp không còn bị giao bài.
       enrollments: {
-        where: { status: { in: ENROLLMENT_ACTIVE_STATUS_LIST } },
+        where: rosterWhere("dang-hoc"),
         select: { studentId: true },
       },
     },
@@ -438,8 +441,11 @@ export async function gradeBatchAction(input: {
       totalPoints: true,
       class: {
         select: {
+          // CHẤM BÀI dùng "ket-khoa", KHỚP roster của màn chi tiết (page.tsx). Để
+          // "dang-hoc" ở đây thì lớp đã kết khoá cho danh sách rỗng và lệnh chấm hàng
+          // loạt lặng lẽ bỏ qua mọi em — giao diện báo thành công, không điểm nào vào.
           enrollments: {
-            where: { status: { in: ENROLLMENT_ACTIVE_STATUS_LIST } },
+            where: rosterWhere("ket-khoa"),
             select: { studentId: true },
           },
         },

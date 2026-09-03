@@ -30,6 +30,7 @@ import type { AttendanceStatus } from "@prisma/client";
 import { auth } from "@/lib/auth";
 import { resolveActor } from "@/lib/auth/actor";
 import { scopedDb } from "@/lib/db-scope";
+import { rosterWhere } from "@/lib/enrollment-scope";
 import { attendanceSummaryForEnrollments } from "@/lib/attendance/summary";
 import { getCourseCriteria } from "@/lib/lms/report-card";
 import { ENROLLMENT_ACTIVE_STATUS_LIST } from "@/lib/enrollment-status";
@@ -157,8 +158,13 @@ export default async function TeacherStudentProfilePage({
             id: true,
             name: true,
             course: { select: { name: true } },
+            // HỒ SƠ dùng "lich-su": người dùng cần thấy cả lớp em đã hoàn thành và
+            // đã nghỉ. Nhưng vẫn loại PENDING/CANCELLED/TRANSFERRED và HV đã xoá mềm —
+            // trước đây chỉ lọc deletedAt của ghi danh nên ghi danh "Chờ xác nhận" vẫn
+            // hiện thẻ lớp kèm "0/11 buổi" ở tab Học bạ trong khi tab Điểm danh không
+            // có dòng nào (QA vòng 1, BUG-014).
             enrollments: {
-              where: { studentId, deletedAt: null },
+              where: { studentId, ...rosterWhere("lich-su") },
               select: {
                 id: true,
                 courseId: true,
@@ -300,8 +306,12 @@ export default async function TeacherStudentProfilePage({
         select: {
           id: true,
           name: true,
+          // DANH SÁCH đọc "lich-su" rồi để client lọc theo ô "Trạng thái" (mặc định
+          // Đang học). Trước đây chỉ có `deletedAt: null` nên trang đếm 103 em còn
+          // Tổng quan đếm 81 — cùng tập lớp, hai con số (QA vòng 1, BUG-024). Thêm
+          // student.deletedAt: HV đã xoá khỏi hệ thống không được hiện tên.
           enrollments: {
-            where: { deletedAt: null },
+            where: rosterWhere("lich-su"),
             // Câu 46: CHỈ tên + mã HV — KHÔNG contact PH.
             select: {
               status: true,
