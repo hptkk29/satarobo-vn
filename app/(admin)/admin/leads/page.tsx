@@ -462,8 +462,15 @@ function Header({
               Chốt hàng loạt
             </Link>
           )}
+          {/* 03/09/2026 — trỏ sang "Nhập khách hàng" thay vì `/leads/new` (chủ dự án chốt).
+              Không chỉ là đổi chỗ: `/nhap-khach-hang` đi qua đường nhận lead chung
+              (`ingestIntakeLead`) nên có sẵn CHỐNG TRÙNG SĐT và TỰ CHIA cho sale theo
+              vòng — hai thứ `/leads/new` không có, nên lead gõ tay ở đó nằm im không ai
+              nhận, và gõ trùng số thì đẻ phiếu thứ hai.
+              Cùng một quyền `leads:create` gác cả nút này lẫn trang đích
+              (`PAGE_GATES["/nhap-khach-hang"]`) ⇒ ai thấy nút là mở được trang. */}
           <Link
-            href="/leads/new"
+            href="/nhap-khach-hang"
             className="rounded-lg bg-primary px-3 py-1.5 text-sm font-semibold text-white hover:opacity-90"
           >
             + Thêm lead
