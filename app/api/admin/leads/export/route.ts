@@ -1,3 +1,5 @@
+import * as XLSX from 'xlsx'
+import { buildLeadsWorkbook } from '@/lib/export/leads-xlsx'
 import { requireLiveSession } from '@/lib/auth/live-session'
 import { checkPermission, canViewLeadPii } from '@/lib/auth/check-permission'
 import { resolveActor } from '@/lib/auth/actor'
@@ -14,19 +16,17 @@ import { phoneSearchTerm } from '@/lib/phone'
 
 const VALID_STATUSES: LeadStatus[] = ALL_LEAD_STATUSES
 
-function escapeCsv(value: string | null | undefined): string {
-  if (value == null) return ''
-  const str = String(value)
-  if (str.includes(',') || str.includes('"') || str.includes('\n')) {
-    return `"${str.replace(/"/g, '""')}"`
-  }
-  return str
-}
-
 export async function GET(req: NextRequest) {
   const session = await requireLiveSession()
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  if (!(await checkPermission('leads:view-all'))) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  // ⚠️ 31/08/2026 — cổng đổi `leads:view-all` → `leads:export`.
+  //
+  // Hai quyền này KHÁC nhau và trước đây dùng nhầm: `leads:view-all` là "xem được lead
+  // của người khác", còn xuất cả danh sách khách hàng ra một file mang đi được là việc
+  // riêng — permission `leads:export` vốn đã có nhưng route này chưa từng dùng.
+  // Chốt của chủ dự án: chỉ Quản lý cơ sở + Quản trị tối cao (đã gỡ MARKETING khỏi
+  // `leads:export` ở cả v1 `lib/auth/permissions.ts` lẫn v2 `prisma/seed-roles.ts`).
+  if (!(await checkPermission('leads:export'))) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
   const { searchParams } = req.nextUrl
   const statusParam = searchParams.get('status') as LeadStatus | null
@@ -101,14 +101,22 @@ export async function GET(req: NextRequest) {
     lead.assignedTo?.name ?? '',
     canViewPii ? (lead.note ?? '') : (maskFreeText(lead.note) ?? ''),
     lead.createdAt.toLocaleDateString('vi-VN'),
-  ].map(escapeCsv).join(','))
+  ])
 
   const now = new Date()
   const { actorId, actorName } = getAuditActor(session)
   // SEC-M05: watermark dòng cuối (truy vết) + audit EXPORT.
   const watermark = exportWatermark(actorName, actorId, leads.length, now)
-  const csv = [headers.join(','), ...rows, '', escapeCsv(watermark)].join('\r\n')
-  const bom = '﻿' // UTF-8 BOM for Excel
+  // 31/08/2026 — xuất XLSX thay cho CSV. Việc dựng workbook (và phần dễ sai nhất: ép
+  // cột SĐT thành CHUỖI để Excel không nuốt số 0 đầu) tách sang `lib/export/leads-xlsx`
+  // để test được — route này cần session + permission nên Vitest không gọi thẳng vào đây.
+  const wb = buildLeadsWorkbook({
+    headers,
+    rows,
+    watermark,
+    phoneColumnIndex: headers.indexOf('SĐT'),
+  })
+  const buf = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' }) as Buffer
 
   const date = now.toISOString().slice(0, 10)
 
@@ -126,10 +134,11 @@ export async function GET(req: NextRequest) {
     },
   })
 
-  return new NextResponse(bom + csv, {
+  return new NextResponse(new Uint8Array(buf), {
     headers: {
-      'Content-Type': 'text/csv; charset=utf-8',
-      'Content-Disposition': `attachment; filename="leads-${date}.csv"`,
+      'Content-Type':
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'Content-Disposition': `attachment; filename="leads-${date}.xlsx"`,
     },
   })
 }

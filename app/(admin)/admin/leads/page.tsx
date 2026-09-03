@@ -368,6 +368,7 @@ export default async function LeadsPage({
         pageSize={soDong}
         sapXep={sapXep}
         canDelete={canDelete}
+        canExport={await checkPermission('leads:export')}
         currentStatus={statusFilter}
         currentQ={q}
         currentUserId={session.user.id}
@@ -419,10 +420,11 @@ function Header({
             : 'Chưa có lead nào'}
         </p>
       </div>
-      {/* 31/08/2026 — nạp lại NGAY TRÊN TRANG để thấy lead mới, khỏi F5 (F5 mất vị trí
-          cuộn + đóng mọi thứ đang mở). Đặt cạnh cụm chuyển Bảng/Kanban vì cùng nhóm
-          "điều khiển khung nhìn". */}
-      <LeadsRefreshButton />
+      {/* 31/08/2026 — nạp lại NGAY TRÊN TRANG để thấy lead mới, khỏi F5. CHỈ vẽ ở
+          Kanban: chế độ Bảng đã có nút này trong hàng công cụ của bảng (cạnh "Cột hiển
+          thị" — chốt của chủ dự án), mà Kanban thì không có hàng công cụ đó. Vẽ cả hai
+          chỗ là màn Bảng mọc hai nút giống hệt nhau. */}
+      {view === 'kanban' && <LeadsRefreshButton />}
       <div className="inline-flex overflow-hidden rounded-lg border border-border">
         <Link
           href={qs('table')}

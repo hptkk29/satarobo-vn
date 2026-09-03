@@ -396,7 +396,10 @@ export const PERMISSIONS: Record<Action, Role[]> = {
   // cơ sở KHÔNG nằm ở đây mà ở truy vấn — xem ghi chú trong registry.
   "lead_pool:manage": ["SUPER_ADMIN", "CENTER_MANAGER"],
   "leads:delete": ["SUPER_ADMIN", "CENTER_MANAGER"],
-  "leads:export": ["SUPER_ADMIN", "CENTER_MANAGER", "MARKETING"],
+  // 31/08/2026 — GỠ MARKETING. Chủ dự án chốt: chỉ Quản lý cơ sở + Quản trị tối cao
+  // được xuất danh sách lead ra file mang đi được. (Route /api/admin/leads/export cũng
+  // đổi cổng sang ĐÚNG quyền này — trước đó nó gác nhầm bằng `leads:view-all`.)
+  "leads:export": ["SUPER_ADMIN", "CENTER_MANAGER"],
   // Task #07 — theo pattern students:import. SALES_CSM được cấp theo quyết định
   // user 07/07/2026 (Sale là người giữ danh sách đăng ký thật — câu 33 phiếu Sale).
   // v2: đã seed CENTER scope cho CENTER_SALES_CSM trong seed-roles.ts cùng ngày.

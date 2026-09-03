@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useTransition } from 'react'
+import { useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { RefreshCw } from 'lucide-react'
 
@@ -17,43 +17,28 @@ import { RefreshCw } from 'lucide-react'
  * ⚠️ `useTransition` là thứ cho biết lượt refresh ĐÃ XONG: `router.refresh()` trả về
  * `void` ngay lập tức (nó không phải Promise), nên `await` nó là vô nghĩa — không có nó
  * thì vòng xoay tắt trước khi dữ liệu về, người dùng tưởng đã xong trong khi chưa.
+ *
+ * ⚠️ Nút này nằm ở HAI chỗ khác nhau tuỳ khung nhìn, có chủ đích: chế độ Bảng đặt trong
+ * hàng công cụ của bảng (cạnh "Cột hiển thị") theo chốt 31/08; chế độ Kanban không có
+ * hàng công cụ đó nên đặt ở đầu trang. Mỗi khung nhìn hiện ĐÚNG MỘT nút.
  */
-export function LeadsRefreshButton() {
+export function LeadsRefreshButton({ className }: { className?: string }) {
   const router = useRouter()
   const [pending, startTransition] = useTransition()
-  // null = chưa bấm lần nào. Chỉ hiện SAU khi bấm nên không có chuyện giờ máy chủ khác
-  // giờ trình duyệt gây lệch hydrate (server render một đằng, client vẽ lại một nẻo).
-  const [lastAt, setLastAt] = useState<string | null>(null)
 
   return (
-    <div className="flex items-center gap-2">
-      <button
-        type="button"
-        onClick={() =>
-          startTransition(() => {
-            router.refresh()
-            // Giờ VN tường minh: máy chủ chạy UTC nhưng chuỗi này dựng ở TRÌNH DUYỆT,
-            // và người dùng đọc nó theo giờ Việt Nam.
-            setLastAt(
-              new Date().toLocaleTimeString('vi-VN', {
-                hour: '2-digit',
-                minute: '2-digit',
-                second: '2-digit',
-                timeZone: 'Asia/Ho_Chi_Minh',
-              }),
-            )
-          })
-        }
-        disabled={pending}
-        title="Nạp lại danh sách để thấy lead mới, không cần F5"
-        className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-card px-3 py-1.5 text-sm font-medium text-foreground hover:bg-muted disabled:opacity-50"
-      >
-        <RefreshCw className={`h-4 w-4 ${pending ? 'animate-spin' : ''}`} />
-        {pending ? 'Đang tải…' : 'Làm mới'}
-      </button>
-      {lastAt && !pending && (
-        <span className="text-xs text-muted-foreground">Cập nhật {lastAt}</span>
-      )}
-    </div>
+    <button
+      type="button"
+      onClick={() => startTransition(() => router.refresh())}
+      disabled={pending}
+      title="Nạp lại danh sách để thấy lead mới, không cần F5"
+      className={
+        className ??
+        'inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-2 text-sm font-medium text-foreground hover:bg-muted disabled:opacity-50'
+      }
+    >
+      <RefreshCw className={`h-4 w-4 ${pending ? 'animate-spin' : ''}`} />
+      {pending ? 'Đang tải…' : 'Làm mới'}
+    </button>
   )
 }

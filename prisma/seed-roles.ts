@@ -236,7 +236,10 @@ export const ROLE_SEED: RoleSeed[] = [
       { action: "jobs:view", scopeType: "GLOBAL" },
       { action: "leads:create", scopeType: "GLOBAL" },
       { action: "leads:edit", scopeType: "GLOBAL" },
-      { action: "leads:export", scopeType: "GLOBAL" },
+      // 31/08/2026 — GỠ `leads:export` khỏi Marketing Hội sở. Chủ dự án chốt chỉ QLCS
+      // + Quản trị tối cao được xuất danh sách lead. Seed xoá-rồi-tạo-lại theo từng vai
+      // (seed-roles.ts:941) nên gỡ dòng này là quyền BIẾN MẤT trên prod sau khi chạy
+      // `seed-prod-roles.yml` — nhớ chạy tay, seed vai không tự chạy theo deploy.
       { action: "notifications:manage", scopeType: "GLOBAL" },
       { action: "parent-feedback:view", scopeType: "GLOBAL" },
       { action: "hr_attendance:checkin", scopeType: "GLOBAL" },

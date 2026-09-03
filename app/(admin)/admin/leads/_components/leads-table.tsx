@@ -29,6 +29,7 @@ import { formatPhoneVN } from '@/lib/phone'
 import { Badge } from '@/components/ui/badge'
 import { ChonSoDong } from '@/components/ui/chon-so-dong'
 import { DieuHuongTrang } from '@/components/ui/dieu-huong-trang'
+import { LeadsRefreshButton } from './refresh-button'
 
 export type LeadRow = {
   id: string
@@ -347,6 +348,7 @@ export function LeadsTable({
   pageSize,
   sapXep,
   canDelete,
+  canExport,
   currentStatus,
   currentQ,
   currentUserId,
@@ -358,6 +360,13 @@ export function LeadsTable({
   /** Cột đang được sắp xếp — để tô đậm đầu cột tương ứng. */
   sapXep: 'moi_nhat' | 'nhap_lai'
   canDelete: boolean
+  /**
+   * `leads:export` — chỉ Quản lý cơ sở + Quản trị tối cao (chốt 31/08/2026).
+   * Thiếu thì KHÔNG vẽ nút. Đây chỉ là lớp giao diện: route
+   * `/api/admin/leads/export` tự gác lại bằng cùng permission, vì URL đó gõ tay vào
+   * trình duyệt là tải được file — giấu nút không phải là chặn.
+   */
+  canExport: boolean
   currentStatus?: string
   currentQ?: string
   currentUserId: string
@@ -454,16 +463,22 @@ export function LeadsTable({
           ))}
         </select>
 
-        {/* Export CSV */}
-        <a
-          href={`/api/admin/leads/export${currentStatus ? `?status=${currentStatus}` : ''}${currentQ ? `${currentStatus ? '&' : '?'}q=${encodeURIComponent(currentQ)}` : ''}`}
-          download
-          className="ml-auto inline-flex items-center gap-2 rounded-lg border border-border bg-card px-3 py-2 text-sm font-semibold text-muted-foreground hover:bg-muted hover:text-foreground"
-          title="Xuất CSV"
-        >
-          <Download className="h-4 w-4" />
-          <span className="hidden sm:inline">Xuất CSV</span>
-        </a>
+        {/* XUẤT EXCEL — 31/08. Đổi từ CSV: CSV mở bằng Excel hay vỡ tiếng Việt và nuốt
+            số 0 đầu của SĐT. Chỉ hiện với người có `leads:export` (QLCS + Quản trị tối cao). */}
+        {canExport && (
+          <a
+            href={`/api/admin/leads/export${currentStatus ? `?status=${currentStatus}` : ''}${currentQ ? `${currentStatus ? '&' : '?'}q=${encodeURIComponent(currentQ)}` : ''}`}
+            download
+            className="ml-auto inline-flex items-center gap-2 rounded-lg border border-border bg-card px-3 py-2 text-sm font-semibold text-muted-foreground hover:bg-muted hover:text-foreground"
+            title="Xuất Excel"
+          >
+            <Download className="h-4 w-4" />
+            <span className="hidden sm:inline">Xuất Excel</span>
+          </a>
+        )}
+        {/* LÀM MỚI — 31/08. Cùng nhóm "điều khiển bảng" với Xuất Excel / Cột hiển thị.
+            `ml-auto` ở đây để cụm vẫn dạt phải khi người dùng KHÔNG có nút Xuất. */}
+        <LeadsRefreshButton className={`${canExport ? '' : 'ml-auto '}inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-2 text-sm font-medium text-foreground hover:bg-muted disabled:opacity-50`} />
         {/* CHỌN CỘT — 30/08. Đặt cạnh nút xuất vì cùng nhóm "điều khiển bảng". */}
         <div className="relative">
           <button
