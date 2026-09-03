@@ -34,7 +34,7 @@ import { rosterWhere } from "@/lib/enrollment-scope";
 import { attendanceSummaryForEnrollments } from "@/lib/attendance/summary";
 import { getCourseCriteria } from "@/lib/lms/report-card";
 import { ENROLLMENT_ACTIVE_STATUS_LIST } from "@/lib/enrollment-status";
-import { ENROLLMENT_STATUS } from "@/lib/labels/registry";
+import { ENROLLMENT_STATUS, SUBMISSION_STATUS } from "@/lib/labels/registry";
 import {
   EVAL_OVERALL_LABEL,
   evalNotesProse,
@@ -43,9 +43,16 @@ import {
 import { feedbackHasContent } from "@/lib/lms/feedback-content";
 import {
   buildSessionNumberMap,
-  sessionNumberLabel,
 } from "@/lib/lms/session-order";
-import { resolveDisplayProjectName } from "@/lib/lms/session-project-name";
+import {
+  deriveSessionLabel,
+  resolveDisplayProjectName,
+} from "@/lib/lms/session-project-name";
+import {
+  STUDENT_ATTENDANCE_CELL_LABEL,
+  studentAttendanceCell,
+} from "@/lib/lms/student-attendance-cell";
+import { vnEndOfDay } from "@/lib/time/vn";
 import { cn } from "@/lib/utils";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -202,6 +209,11 @@ export default async function TeacherStudentProfilePage({
 
     const student = enrollments[0].student;
     const enrolledClassIds = [...new Set(enrollments.map((e) => e.classId))];
+    // Trạng thái ghi danh theo TỪNG lớp — ô điểm danh cần nó để phân biệt "giáo viên
+    // còn nợ chấm" với "em không còn học lớp này lúc đó" (BUG-001).
+    const enrollmentStatusByClass = new Map(
+      enrollments.map((e) => [e.classId, e.status]),
+    );
     const multiClass = enrolledClassIds.length > 1;
     const activeTab = parseProfileTab(ptab);
     const birthYear = student.dateOfBirth
@@ -265,6 +277,7 @@ export default async function TeacherStudentProfilePage({
             studentId={studentId}
             classIds={enrolledClassIds}
             multiClass={multiClass}
+            enrollmentStatusByClass={enrollmentStatusByClass}
           />
         )}
         {activeTab === "nhan-xet" && (
@@ -426,24 +439,39 @@ async function AttendanceTab({
   studentId,
   classIds,
   multiClass,
+  enrollmentStatusByClass,
 }: {
   sdb: Sdb;
   studentId: string;
   classIds: string[];
   multiClass: boolean;
+  enrollmentStatusByClass: Map<string, string>;
 }) {
   const sessions = await sdb.classSession.findMany({
     where: { classId: { in: classIds } },
     select: {
       id: true,
+      classId: true,
       date: true,
       topic: true,
       status: true,
+      // Nguồn NHÃN BUỔI — thiếu hai quan hệ này thì deriveSessionLabel chỉ còn `topic`
+      // thô và in ra "Buổi 10" trần.
+      plan: { select: { customTitle: true } },
+      lesson: { select: { order: true, title: true, moduleCode: true } },
       class: { select: { name: true } },
       attendances: { where: { studentId }, select: { status: true } },
     },
     orderBy: { date: "asc" },
   });
+  // `vnEndOfDay` (23:59:59.999 hôm nay, giờ VN) — KHÔNG tự dựng Date: Vercel chạy UTC
+  // còn máy dev +07. Repo còn 4 bản `vnTodayEnd` viết tay ở nơi khác trả 00:00 NGÀY
+  // MAI; gộp chúng lại là ticket riêng vì lệch đúng một mili giây ở mốc biên và một
+  // trong bốn chỗ là cổng GHI ở server.
+  const todayEndMs = vnEndOfDay(new Date()).getTime();
+  const sessionNo = buildSessionNumberMap(
+    sessions.map((s) => ({ id: s.id, classId: s.classId, date: s.date })),
+  );
   if (sessions.length === 0) {
     return (
       <EmptyState icon={CalendarCheck} title="Lớp chưa có buổi học nào." />
@@ -454,6 +482,13 @@ async function AttendanceTab({
       <ul className="divide-y divide-border">
         {sessions.map((s) => {
           const att = s.attendances[0]?.status as AttendanceStatus | undefined;
+          const cell = studentAttendanceCell({
+            attendanceStatus: att ?? null,
+            sessionStatus: s.status,
+            sessionDateMs: s.date.getTime(),
+            todayEndMs,
+            enrollmentStatus: enrollmentStatusByClass.get(s.classId) ?? null,
+          });
           return (
             <li key={s.id} className="flex items-center gap-4 px-5 py-3.5">
               <div className="w-24 shrink-0 text-sm font-semibold text-muted-foreground">
@@ -461,7 +496,17 @@ async function AttendanceTab({
               </div>
               <div className="min-w-0 flex-1">
                 <p className="truncate font-medium text-foreground">
-                  {s.topic ?? "Buổi học"}
+                  {/* deriveSessionLabel ghép "Buổi N - HP1 - Tên bài" và tự BỎ QUA
+                      `topic` khi nó chỉ là ô trống "Buổi N" — đừng ghép chuỗi tay,
+                      đó là nguồn của "Buổi 10 · Buổi 10". */}
+                  {deriveSessionLabel({
+                    sessionNumber: sessionNo.get(s.id) ?? null,
+                    planTitle: s.plan?.customTitle,
+                    lessonTitle: s.lesson?.title,
+                    lessonOrder: s.lesson?.order,
+                    moduleCode: s.lesson?.moduleCode,
+                    topic: s.topic,
+                  }) || "Buổi học"}
                 </p>
                 {multiClass && (
                   <p className="truncate text-xs text-muted-foreground">
@@ -469,22 +514,27 @@ async function AttendanceTab({
                   </p>
                 )}
               </div>
-              {att ? (
+              {cell.kind === "MARKED" ? (
                 <span
                   className={cn(
                     "inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold",
-                    ATT_BADGE[att].cls,
+                    ATT_BADGE[cell.status].cls,
                   )}
                 >
-                  {ATT_BADGE[att].label}
-                </span>
-              ) : s.status === "CANCELLED" ? (
-                <span className="inline-flex items-center rounded-full bg-muted px-2.5 py-1 text-xs font-semibold text-muted-foreground">
-                  Đã huỷ
+                  {ATT_BADGE[cell.status].label}
                 </span>
               ) : (
-                <span className="inline-flex items-center rounded-full bg-muted px-2.5 py-1 text-xs font-semibold text-muted-foreground">
-                  Chưa diễn ra
+                <span
+                  className={cn(
+                    "inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold",
+                    // "Chưa điểm danh" là VIỆC CÒN NỢ nên tô hổ phách để nhìn ra ngay;
+                    // ba ca còn lại là thông tin trung tính.
+                    cell.kind === "NOT_MARKED"
+                      ? "bg-state-warning-soft text-state-warning-ink"
+                      : "bg-muted text-muted-foreground",
+                  )}
+                >
+                  {STUDENT_ATTENDANCE_CELL_LABEL[cell.kind]}
                 </span>
               )}
             </li>
@@ -565,10 +615,19 @@ async function ReviewsTab({
             <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
               <div className="min-w-0">
                 <p className="font-semibold text-foreground">
-                  {sessionNumberOf.has(f.classSession.id)
-                    ? `${sessionNumberLabel(sessionNumberOf.get(f.classSession.id))} · `
-                    : ""}
-                  {f.classSession.topic ?? "Buổi học"}
+                  {/* Trước đây ghép TAY `sessionNumberLabel(...)` + `topic` thô. Với
+                      giáo trình Sata, `topic` chính là chuỗi "Buổi 10" ⇒ 16/16 thẻ in
+                      "Buổi 10 · Buổi 10" (QA vòng 1, BUG-008). deriveSessionLabel đã
+                      xử đúng: nó in số buổi MỘT lần và bỏ qua `topic` khi topic chỉ là
+                      ô trống "Buổi N" (meaningfulSessionTitle). */}
+                  {deriveSessionLabel({
+                    sessionNumber: sessionNumberOf.get(f.classSession.id) ?? null,
+                    planTitle: f.classSession.plan?.customTitle,
+                    lessonTitle: f.classSession.lesson?.title,
+                    lessonOrder: f.classSession.lesson?.order,
+                    moduleCode: f.classSession.lesson?.moduleCode,
+                    topic: f.classSession.topic,
+                  }) || "Buổi học"}
                 </p>
                 <p className="text-sm text-muted-foreground">
                   {dayFmt.format(f.classSession.date)}
@@ -652,13 +711,18 @@ async function AssignmentsTab({
   const subs = await sdb.assignmentSubmission.findMany({
     where: { studentId, assignment: { classId: { in: classIds } } },
     select: {
+      id: true,
       status: true,
       score: true,
       assignment: {
         select: {
+          id: true,
           title: true,
           dueAt: true,
           totalPoints: true,
+          // Hai dòng cùng tên bài ở hai lớp khác nhau trước đây không phân biệt được
+          // (QA vòng 1, BUG-010).
+          class: { select: { name: true } },
           _count: { select: { questions: true } },
         },
       },
@@ -684,6 +748,9 @@ async function AssignmentsTab({
                 Nội dung
               </th>
               <th scope="col" className="px-5 py-3">
+                Lớp
+              </th>
+              <th scope="col" className="px-5 py-3">
                 Hình thức
               </th>
               <th scope="col" className="px-5 py-3">
@@ -694,6 +761,9 @@ async function AssignmentsTab({
               </th>
               <th scope="col" className="px-5 py-3">
                 Điểm
+              </th>
+              <th scope="col" className="px-5 py-3 text-right">
+                Thao tác
               </th>
             </tr>
           </thead>
@@ -710,8 +780,11 @@ async function AssignmentsTab({
                   key={i}
                   className="border-b border-border/60 transition-colors last:border-0 hover:bg-muted/50"
                 >
-                  <td className="px-5 py-3.5 font-semibold text-foreground">
+                  <td className="min-w-[14rem] px-5 py-3.5 font-semibold text-foreground">
                     {s.assignment.title}
+                  </td>
+                  <td className="min-w-[9rem] px-5 py-3.5 text-muted-foreground">
+                    {s.assignment.class.name}
                   </td>
                   <td className="px-5 py-3.5">
                     <Badge
@@ -729,18 +802,43 @@ async function AssignmentsTab({
                     {due}
                   </td>
                   <td className="px-5 py-3.5 whitespace-nowrap">
-                    {submitted ? (
-                      <span className="inline-flex items-center gap-1.5 font-medium text-state-success-ink">
-                        <CircleCheck className="h-4 w-4" aria-hidden /> Đã nộp
-                      </span>
-                    ) : (
-                      <span className="text-state-warning-ink">Chưa nộp</span>
-                    )}
+                    {/* Nhãn đi qua registry dùng chung: bản chép tay cũ chỉ có hai
+                        nhãn nên "Nộp muộn" đọc ra y hệt nộp đúng hạn, và "Đã chấm"
+                        không phân biệt được với đang chờ chấm. */}
+                    <span
+                      className={cn(
+                        "inline-flex items-center gap-1.5 font-medium",
+                        s.status === "GRADED"
+                          ? "text-state-success-ink"
+                          : s.status === "NOT_SUBMITTED"
+                            ? "text-state-warning-ink"
+                            : "text-foreground",
+                      )}
+                    >
+                      {s.status === "GRADED" && (
+                        <CircleCheck className="h-4 w-4" aria-hidden />
+                      )}
+                      {SUBMISSION_STATUS.label(s.status)}
+                    </span>
                   </td>
                   <td className="px-5 py-3.5 whitespace-nowrap font-semibold text-foreground">
                     {s.score != null
                       ? `${s.score}/${s.assignment.totalPoints}`
                       : "—"}
+                  </td>
+                  <td className="px-5 py-3.5 text-right whitespace-nowrap">
+                    {/* Trước đây 0/6 dòng có link — từ hồ sơ học viên không có đường
+                        nào mở bài em đã làm, dù luồng đó chạy đúng ở cấp lớp. */}
+                    {submitted ? (
+                      <Link
+                        href={`/teacher/cham-bai?submissionId=${s.id}`}
+                        className="rounded-sm text-sm font-semibold text-primary-ink outline-none hover:text-primary-ink-hover hover:underline focus-visible:ring-2 focus-visible:ring-ring"
+                      >
+                        Xem bài đã làm
+                      </Link>
+                    ) : (
+                      <span className="text-sm text-muted-foreground">—</span>
+                    )}
                   </td>
                 </tr>
               );
