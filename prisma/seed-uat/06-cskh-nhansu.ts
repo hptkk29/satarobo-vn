@@ -323,8 +323,15 @@ export async function seedCskhNhanSu(coSo: CoSo[], uat: Uat) {
       reviewedById: st === "PENDING" ? null : uat.giamdoc.id,
       reviewedByName: st === "PENDING" ? null : (uat.giamdoc.name ?? "Quản lý cơ sở"),
       reviewedAt: st === "PENDING" ? null : ngay(-int(rng, 1, 10)),
-      // Đơn phải được GỬI TRƯỚC ngày xin (hoặc đúng ngày với đơn chỉnh công hồi tố).
-      createdAt: ngay(tuNgay - int(rng, 0, 7)),
+      // Đơn phải được GỬI TRƯỚC ngày xin — TỐI THIỂU 1 ngày, không phải 0.
+      //
+      // ⚠️ `fromDate`/`toDate` là cột `@db.Date` còn `createdAt` là `timestamptz`.
+      // `ngay()` trả 00:00 giờ VN = 17:00 UTC hôm trước, nên Prisma ghi vào cột Date
+      // lấy phần ngày THEO UTC và ra sớm hơn ngày VN một ngày. Để lệch 0 ngày thì
+      // `createdAt` (giữ mốc VN) đọc ra muộn hơn `fromDate` (đã lùi) đúng một ngày —
+      // và bảng đơn từ hiện "ngày gửi sau ngày bắt đầu". Đo được 8/60 dòng sau lượt
+      // seed đầu tiên ngày 03/09.
+      createdAt: ngay(tuNgay - int(rng, 1, 7)),
     });
   }
   const nDon = await taoThieu(
