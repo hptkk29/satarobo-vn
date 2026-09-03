@@ -257,6 +257,13 @@ const BY_PREFIX: Readonly<Record<string, NotiDef>> = {
     group: "new_task", priority: 2, entity: "trial",
     recipients: "Giáo viên được phân lớp học thử", target: "/lop-trial",
   },
+  // 03/09 — có EM vừa được xếp vào ca của GV (enrollLeadChild). Khác ba loại "assigned"
+  // còn lại: chúng báo việc được giao LỚP/BUỔI/CA, loại này báo SIĨ SỐ của ca đổi.
+  // Lớp trải nghiệm là slot tái sử dụng nên hai việc cách nhau hàng tuần.
+  "trial-enroll.assigned:": {
+    group: "new_task", priority: 2, entity: "trial",
+    recipients: "Giáo viên dạy buổi (không có thì GV chính của lớp)", target: "/lop-trial",
+  },
   // Buổi ad-hoc thêm tay vào lớp trải nghiệm (addTrialSession) — GV được gán buổi đó.
   // Cùng mức với hai loại trên: là ca dạy vừa rơi vào lịch của mình, không phải tin để biết.
   "trial-session.assigned:": {
