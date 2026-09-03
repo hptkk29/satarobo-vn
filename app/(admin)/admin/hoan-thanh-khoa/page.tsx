@@ -13,6 +13,14 @@ import { CompletionForm } from "./_components/completion-form";
 import { BulkCompleteByClass } from "./_components/bulk-complete-by-class";
 import { PageHelp } from "@/components/admin/ui/page-help";
 import { PhanTrangBang } from "@/components/ui/phan-trang-bang";
+import { ReviewTable, type RequestRow } from "./_components/review-table";
+
+const reqDateFmt = new Intl.DateTimeFormat("vi-VN", {
+  day: "2-digit",
+  month: "2-digit",
+  year: "numeric",
+  timeZone: "Asia/Ho_Chi_Minh",
+});
 
 export const metadata = { title: "Hoàn thành khoá | Admin" };
 export const dynamic = "force-dynamic";
@@ -73,6 +81,53 @@ export default async function CompletionPage({ searchParams }: PageProps) {
 
   // nextCourseId không có relation riêng → map tên từ danh sách khoá đã nạp.
   const courseName = new Map(courses.map((c) => [c.id, c.name]));
+
+  // ĐỀ XUẤT CHỜ DUYỆT do giáo viên gửi (QA site GV vòng 1, BUG-028 — trước 03/09 không
+  // màn nào đọc bảng này nên đề xuất nằm PENDING vĩnh viễn).
+  // `CourseCompletionRequest` có `centerId` ⇒ thuộc SCOPED_MODELS, sdb tự lọc cơ sở.
+  // Bảng không có quan hệ tới Student/Course (chỉ giữ id trần) nên tên đọc rời rồi ghép.
+  const pendingRequests = await sdb.courseCompletionRequest.findMany({
+    where: { status: "PENDING" },
+    orderBy: { createdAt: "asc" }, // chờ lâu nhất lên trước
+    take: 200,
+    select: {
+      id: true,
+      note: true,
+      createdAt: true,
+      enrollmentId: true,
+      studentId: true,
+      courseId: true,
+    },
+  });
+  const [reqStudents, reqEnrollments] = await Promise.all([
+    pendingRequests.length
+      ? sdb.student.findMany({
+          where: {
+            id: { in: [...new Set(pendingRequests.map((r) => r.studentId))] },
+          },
+          select: { id: true, name: true, studentCode: true },
+        })
+      : Promise.resolve([]),
+    pendingRequests.length
+      ? sdb.enrollment.findMany({
+          where: { id: { in: pendingRequests.map((r) => r.enrollmentId) } },
+          select: { id: true, class: { select: { name: true } } },
+        })
+      : Promise.resolve([]),
+  ]);
+  const reqStudentById = new Map(reqStudents.map((s) => [s.id, s]));
+  const reqClassByEnrollment = new Map(
+    reqEnrollments.map((e) => [e.id, e.class?.name ?? null]),
+  );
+  const reqRows: RequestRow[] = pendingRequests.map((r) => ({
+    id: r.id,
+    studentName: reqStudentById.get(r.studentId)?.name ?? "(không rõ học viên)",
+    studentCode: reqStudentById.get(r.studentId)?.studentCode ?? null,
+    courseName: courseName.get(r.courseId) ?? "(không rõ khoá)",
+    className: reqClassByEnrollment.get(r.enrollmentId) ?? null,
+    note: r.note,
+    createdAtLabel: reqDateFmt.format(r.createdAt),
+  }));
 
   // Danh sách lớp cho bộ chọn bulk (Class ∈ SCOPED_MODELS → sdb auto-scope cơ sở).
   const classes = await sdb.class.findMany({
@@ -174,6 +229,31 @@ export default async function CompletionPage({ searchParams }: PageProps) {
           email chúc mừng.
         </p>
       </PageHelp>
+
+      {/* Đặt TRÊN hai form bên dưới: đây là việc người khác đang chờ mình xử lý, còn
+          hai form kia là việc tự khởi xướng. */}
+      <div className="rounded-xl border border-border bg-card">
+        <div className="flex items-center justify-between border-b px-4 py-2">
+          <span className="text-sm font-semibold text-foreground">
+            Đề xuất chờ duyệt
+          </span>
+          {reqRows.length > 0 && (
+            <span className="rounded-full bg-state-warning-soft px-2 py-0.5 text-xs font-semibold text-state-warning-ink">
+              {reqRows.length}
+            </span>
+          )}
+        </div>
+        {reqRows.length === 0 ? (
+          <p className="px-4 py-6 text-center text-sm text-muted-foreground">
+            Không có đề xuất nào đang chờ. Đề xuất do giáo viên gửi từ màn “Hoàn
+            thành khoá” của site giáo viên sẽ hiện ở đây.
+          </p>
+        ) : (
+          <PhanTrangBang cuonNgang>
+            <ReviewTable rows={reqRows} />
+          </PhanTrangBang>
+        )}
+      </div>
 
       <CompletionForm students={students} />
 
