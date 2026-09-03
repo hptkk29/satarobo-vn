@@ -5,6 +5,7 @@ import { auth } from '@/lib/auth'
 import { checkPermission } from '@/lib/auth/check-permission'
 import { scopedDb } from '@/lib/db-scope'
 import { resolveActor } from '@/lib/auth/actor'
+import { canGrantFullScholarship } from '@/lib/crm/scholarship'
 import { isConvertV2Enabled } from '@/lib/flags'
 import { LEAD_STATUS_LABEL } from '@/lib/leads/status'
 import { getLeadPaymentSummary } from '@/lib/payments/summary'
@@ -32,7 +33,8 @@ export default async function ConvertV2Page({ params }: Props) {
     (await checkPermission('students:create')) && (await checkPermission('enrollments:create'))
   if (!canConvert) redirect(`/leads/${id}`)
 
-  const sdb = scopedDb(await resolveActor(session.user.id))
+  const actor = await resolveActor(session.user.id)
+  const sdb = scopedDb(actor)
   const lead = await sdb.lead.findFirst({
     where: { id, deletedAt: null },
     select: {
@@ -139,6 +141,10 @@ export default async function ConvertV2Page({ params }: Props) {
       </div>
 
       <ConvertForm
+        // Ô "Miễn phí học bổng toàn phần" CHỈ hiện với Quản trị tối cao (chốt 31/08/2026).
+        // Đây là lớp giao diện; cổng thật ở `submitConvertV2` — Server Action là endpoint
+        // HTTP riêng nên giấu ô không phải là chặn.
+        canGrantScholarship={canGrantFullScholarship(actor)}
         leadId={lead.id}
         defaultParentName={lead.parentName}
         defaultParentEmail={lead.email ?? ''}

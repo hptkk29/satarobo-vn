@@ -17,19 +17,17 @@ type ClassOpt = {
 }
 
 /**
- * 27/08 — ƯU ĐÃI khi chốt. `NONE` = giá đầy đủ (mặc định, y như trước).
- * `FREE` là lối tắt của SCHOLARSHIP 100% — đúng ca "miễn phí học phí toàn phần" mà
- * trước đây không chốt nổi: tổng sau ưu đãi = 0 ⇒ guard tiền tự thoả, khỏi phải bịa
- * một khoản thu để lách (khoản 0đ thì hệ thống chặn, khoản khống thì sai sổ).
+ * ⚠️ 31/08/2026 — GỠ khung "Ưu đãi học phí" khỏi màn chốt.
+ *
+ * Trước đó mỗi em có một ô chọn NONE/FREE/PERCENT/AMOUNT + ô nhập mức + ô lý do, và
+ * KHÔNG vai nào bị chặn: ai chốt được lead là giảm học phí bao nhiêu tuỳ ý. Chủ dự án
+ * chốt bỏ hẳn giảm theo %/số tiền ở đây, chỉ giữ MỘT ô tick "miễn phí học bổng toàn
+ * phần" và chỉ Quản trị tối cao mới thấy.
+ *
+ * Ô tick vẫn là lối tắt của SCHOLARSHIP 100% — đúng ca mà trước đây không chốt nổi:
+ * tổng sau ưu đãi = 0 ⇒ guard tiền tự thoả, khỏi phải bịa một khoản thu để lách (khoản
+ * 0đ thì hệ thống chặn, khoản khống thì sai sổ).
  */
-type DiscountKind = 'NONE' | 'FREE' | 'PERCENT' | 'AMOUNT'
-
-const DISCOUNT_LABEL: Record<DiscountKind, string> = {
-  NONE: 'Không — đóng đủ học phí',
-  FREE: 'Miễn phí toàn phần (học bổng 100%)',
-  PERCENT: 'Giảm theo %',
-  AMOUNT: 'Giảm số tiền (VNĐ)',
-}
 
 type StudentRow = {
   key: string
@@ -38,29 +36,8 @@ type StudentRow = {
   dob: string
   classId: string
   consentMedia: boolean
-  discountKind: DiscountKind
-  /** Mức giảm dạng chuỗi (ô nhập). % với PERCENT, VNĐ với AMOUNT. Bỏ qua khi NONE/FREE. */
-  discountValue: string
-}
-
-/** Payload ưu đãi gửi server. Server tự kẹp (≤100%, ≤ giá gốc) — đây chỉ là ý định. */
-function toDiscountPayload(
-  row: StudentRow,
-): { type: 'PERCENT' | 'AMOUNT' | 'SCHOLARSHIP'; value: number } | null {
-  if (row.discountKind === 'FREE') return { type: 'SCHOLARSHIP', value: 100 }
-  const v = Math.max(0, Number.parseInt(row.discountValue || '0', 10) || 0)
-  if (v <= 0) return null
-  if (row.discountKind === 'PERCENT') return { type: 'PERCENT', value: Math.min(v, 100) }
-  if (row.discountKind === 'AMOUNT') return { type: 'AMOUNT', value: v }
-  return null
-}
-
-/** Số tiền giảm ước tính để hiện trên form — server vẫn là nơi tính giá thật. */
-function estimateDiscountAmount(row: StudentRow, listPrice: number): number {
-  const d = toDiscountPayload(row)
-  if (!d) return 0
-  if (d.type === 'AMOUNT') return Math.min(d.value, listPrice)
-  return Math.min(Math.round((listPrice * Math.min(d.value, 100)) / 100), listPrice)
+  /** Miễn phí học bổng toàn phần. Chỉ Quản trị tối cao thấy ô này (`canGrantScholarship`). */
+  scholarship: boolean
 }
 
 const inputCls =
@@ -78,8 +55,15 @@ export function ConvertForm({
   prefillStudents,
   classes,
   order,
+  canGrantScholarship,
 }: {
   leadId: string
+  /**
+   * Người đang chốt có phải Quản trị tối cao không (chốt 31/08/2026).
+   * `false` ⇒ KHÔNG vẽ ô "Miễn phí học bổng toàn phần". Đây chỉ là lớp giao diện —
+   * cổng thật nằm ở `submitConvertV2` (Server Action là endpoint HTTP riêng).
+   */
+  canGrantScholarship: boolean
   defaultParentName: string
   defaultParentEmail: string
   defaultParentPhone: string
@@ -116,7 +100,6 @@ export function ConvertForm({
   const dot2Num = Math.max(0, orderTotal - dot1Num)
 
   // Lý do ưu đãi — BẮT BUỘC khi có giảm (server chặn lại lần nữa, đây chỉ là chặn sớm).
-  const [discountReason, setDiscountReason] = useState('')
 
   const [students, setStudents] = useState<StudentRow[]>(() =>
     (prefillStudents.length ? prefillStudents : [{ leadChildId: null, name: '', dob: '', courseId: '' }]).map(
@@ -130,8 +113,7 @@ export function ConvertForm({
           dob: s.dob,
           classId: cls?.id ?? '',
           consentMedia: false,
-          discountKind: 'NONE' as DiscountKind,
-          discountValue: '',
+          scholarship: false,
         }
       },
     ),
@@ -139,7 +121,12 @@ export function ConvertForm({
 
   const priceOf = (classId: string) => classes.find((c) => c.id === classId)?.listPrice ?? 0
   const sumListPrice = students.reduce((n, r) => n + priceOf(r.classId), 0)
-  const sumDiscount = students.reduce((n, r) => n + estimateDiscountAmount(r, priceOf(r.classId)), 0)
+  // Học bổng toàn phần = giảm ĐÚNG BẰNG giá lớp của em đó. Không còn %/số tiền nên
+  // không cần hàm ước tính riêng nữa.
+  const sumDiscount = students.reduce(
+    (n, r) => n + (r.scholarship ? priceOf(r.classId) : 0),
+    0,
+  )
   const sumFinal = Math.max(0, sumListPrice - sumDiscount)
   const hasDiscount = sumDiscount > 0
   // Miễn phí toàn phần: tổng sau ưu đãi = 0 ⇒ guard tiền tự thoả, không cần khoản thu.
@@ -159,8 +146,7 @@ export function ConvertForm({
         dob: '',
         classId: '',
         consentMedia: false,
-        discountKind: 'NONE',
-        discountValue: '',
+        scholarship: false,
       },
     ])
   }
@@ -183,20 +169,6 @@ export function ConvertForm({
       toast.error('Chọn 2 đợt thì cần ngày hẹn đóng đợt 2')
       return
     }
-    if (
-      students.some(
-        (s) =>
-          (s.discountKind === 'PERCENT' || s.discountKind === 'AMOUNT') &&
-          !(Number.parseInt(s.discountValue || '0', 10) > 0),
-      )
-    ) {
-      toast.error('Đã chọn giảm giá thì phải nhập mức giảm lớn hơn 0')
-      return
-    }
-    if (hasDiscount && discountReason.trim().length < 10) {
-      toast.error('Có ưu đãi/miễn phí thì phải ghi lý do (tối thiểu 10 ký tự)')
-      return
-    }
     setConflict(null)
     startTransition(async () => {
       const res = await submitConvertV2(leadId, {
@@ -213,9 +185,8 @@ export function ConvertForm({
           dob: s.dob || '',
           classId: s.classId,
           consentMedia: s.consentMedia,
-          discount: toDiscountPayload(s),
+          scholarship: s.scholarship,
         })),
-        discountReason: discountReason.trim(),
         // FL2-01 — chỉ gửi khi có đơn để chia; server đọc lại tổng từ Order.
         installment: hasOrder
           ? { plan: installPlan, dot1Amount: dot1Num, dot2DueDate: installPlan === 'TWO' ? dot2DueDate : '' }
@@ -241,8 +212,13 @@ export function ConvertForm({
         return
       }
       if (res.code === 'PAYMENT_REQUIRED') {
+        // 31/08 — khối "Ưu đãi học phí" đã gỡ, nên câu hướng dẫn cũ (chỉ người dùng tới
+        // một khối không còn tồn tại) phải đổi. Hai đường ra khác nhau theo vai, nói
+        // đúng đường của người đang đọc.
         toast.error(
-          'Chưa đủ điều kiện chốt: cần ghi nhận thanh toán trước. Nếu em này được miễn/giảm học phí, chọn mức ưu đãi ở khối "Ưu đãi học phí" của em đó rồi chốt lại.',
+          canGrantScholarship
+            ? 'Chưa đủ điều kiện chốt: cần ghi nhận thanh toán trước. Nếu em này được cấp học bổng toàn phần, tick ô "Miễn phí học bổng toàn phần" của em đó rồi chốt lại.'
+            : 'Chưa đủ điều kiện chốt: cần ghi nhận thanh toán trước. Nếu em này được miễn học phí, nhờ Quản trị tối cao cấp học bổng toàn phần.',
         )
         return
       }
@@ -390,91 +366,36 @@ export function ConvertForm({
                   </select>
                 </label>
               </div>
-              {/* 27/08 — ƯU ĐÃI HỌC PHÍ của riêng em này. Mặc định "Không" ⇒ hành vi y
-                  hệt trước. Chọn "Miễn phí toàn phần" là đường chính thức cho ca học
-                  bổng 100%: học phí về 0, khỏi cần ghi nhận khoản thu để qua cổng. */}
-              <div className="mt-3 rounded-lg border border-border bg-muted/40 p-3">
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <label className="block">
-                    <span className="mb-1 block text-xs font-medium text-muted-foreground">
-                      Ưu đãi học phí
-                      <HelpHint>
-                        Áp cho riêng em này. Chọn &ldquo;Miễn phí toàn phần&rdquo; khi
-                        trung tâm cấp học bổng 100% — học phí của em về 0đ và không cần
-                        ghi nhận khoản thu nào để chốt. Mọi mức giảm đều BẮT BUỘC ghi lý
-                        do ở ô bên dưới và được lưu vào nhật ký.
-                      </HelpHint>
-                    </span>
-                    <select
-                      value={s.discountKind}
-                      onChange={(e) =>
-                        patch(s.key, { discountKind: e.target.value as DiscountKind, discountValue: '' })
-                      }
-                      className={inputCls}
-                    >
-                      {(Object.keys(DISCOUNT_LABEL) as DiscountKind[]).map((k) => (
-                        <option key={k} value={k}>
-                          {DISCOUNT_LABEL[k]}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-
-                  {(s.discountKind === 'PERCENT' || s.discountKind === 'AMOUNT') && (
-                    <label className="block">
-                      <span className="mb-1 block text-xs font-medium text-muted-foreground">
-                        {s.discountKind === 'PERCENT' ? 'Giảm (%) *' : 'Giảm (VNĐ) *'}
-                      </span>
-                      {s.discountKind === 'PERCENT' ? (
-                        <input
-                          type="number"
-                          min={1}
-                          max={100}
-                          value={s.discountValue}
-                          onChange={(e) => patch(s.key, { discountValue: e.target.value })}
-                          placeholder="VD: 30"
-                          className={inputCls}
-                        />
-                      ) : (
-                        <MoneyInput
-                          name={`discount-${s.key}`}
-                          min={0}
-                          max={priceOf(s.classId) || undefined}
-                          value={s.discountValue}
-                          onValueChange={(v) =>
-                            patch(s.key, { discountValue: v === null ? '' : String(v) })
-                          }
-                          placeholder="0"
-                          suffix={null}
-                          className={inputCls}
-                        />
-                      )}
-                    </label>
-                  )}
-                </div>
-
-                {s.classId && (
-                  <p className="mt-2 text-xs text-muted-foreground">
-                    Học phí lớp: <strong>{priceOf(s.classId).toLocaleString('vi-VN')}đ</strong>
-                    {estimateDiscountAmount(s, priceOf(s.classId)) > 0 && (
+              {/* ⚠️ 31/08/2026 — khung "Ưu đãi học phí" ĐÃ GỠ (ô chọn %/số tiền + ô lý do).
+                  Còn lại ĐÚNG một ô tick học bổng toàn phần, và chỉ Quản trị tối cao
+                  thấy. Vai khác không render gì ⇒ `s.scholarship` giữ nguyên `false`,
+                  payload gửi lên y hệt trước khi có tính năng này. */}
+              {canGrantScholarship && (
+                <label className="mt-3 flex items-start gap-2 rounded-lg border border-state-warning bg-state-warning-soft p-3 text-sm text-state-warning-ink">
+                  <input
+                    type="checkbox"
+                    checked={s.scholarship}
+                    onChange={(e) => patch(s.key, { scholarship: e.target.checked })}
+                    className="mt-0.5 h-4 w-4 rounded border-border"
+                  />
+                  <span>
+                    <strong>Miễn phí học bổng toàn phần</strong> — học phí của em này về 0đ.
+                    {s.classId && (
                       <>
-                        {' · '}giảm{' '}
-                        <strong className="text-state-warning-ink">
-                          {estimateDiscountAmount(s, priceOf(s.classId)).toLocaleString('vi-VN')}đ
-                        </strong>
-                        {' · '}còn phải thu{' '}
-                        <strong className="text-state-success-ink">
-                          {Math.max(
-                            0,
-                            priceOf(s.classId) - estimateDiscountAmount(s, priceOf(s.classId)),
-                          ).toLocaleString('vi-VN')}
-                          đ
-                        </strong>
+                        {' '}Giá lớp{' '}
+                        <strong>{priceOf(s.classId).toLocaleString('vi-VN')}đ</strong>
+                        {s.scholarship && ' → 0đ'}.
                       </>
                     )}
-                  </p>
-                )}
-              </div>
+                    {s.scholarship && (
+                      <span className="mt-1 block text-xs">
+                        Chốt được ngay, không cần ghi nhận thanh toán. Tên bạn và thời điểm
+                        cấp được lưu vào nhật ký.
+                      </span>
+                    )}
+                  </span>
+                </label>
+              )}
 
               <label className="mt-3 flex items-start gap-2 text-sm text-foreground">
                 <input
@@ -507,39 +428,15 @@ export function ConvertForm({
         </p>
       )}
 
-      {/* 27/08 — Tổng sau ưu đãi + giải trình. Chỉ hiện khi thực sự có giảm, để lead
-          chốt giá đầy đủ không phải nhìn thêm ô nào so với trước. */}
-      {hasDiscount && (
-        <div className="rounded-xl border border-state-warning bg-state-warning-soft p-4">
-          <h2 className="text-sm font-semibold text-state-warning-ink">Ưu đãi học phí</h2>
-          <p className="mt-1 text-sm text-state-warning-ink">
-            Tổng theo giá lớp <strong>{sumListPrice.toLocaleString('vi-VN')}đ</strong> · giảm{' '}
-            <strong>{sumDiscount.toLocaleString('vi-VN')}đ</strong> · còn phải thu{' '}
-            <strong>{sumFinal.toLocaleString('vi-VN')}đ</strong>
-          </p>
-          {allFree && (
-            <p className="mt-1 text-sm font-medium text-state-success-ink">
-              ✓ Miễn phí toàn phần — chốt được ngay, không cần ghi nhận thanh toán.
-            </p>
-          )}
-          <label className="mt-3 block">
-            <span className="mb-1 block text-xs font-medium text-state-warning-ink">
-              Lý do ưu đãi * (tối thiểu 10 ký tự)
-              <HelpHint>
-                Ghi rõ ai duyệt và vì sao (VD: &ldquo;Học bổng con em nhân viên — chị Vân
-                duyệt 26/08&rdquo;). Lý do này lưu vào nhật ký cùng người chốt; kế toán và
-                BGĐ đối soát khoản học phí biến mất là tra vào đây.
-              </HelpHint>
-            </span>
-            <textarea
-              value={discountReason}
-              onChange={(e) => setDiscountReason(e.target.value)}
-              rows={2}
-              placeholder="VD: Học bổng toàn phần cho con em nhân viên — Giám đốc duyệt ngày 26/08/2026"
-              className={inputCls}
-            />
-          </label>
-        </div>
+      {/* ⚠️ 31/08/2026 — khung "Ưu đãi học phí" (tổng + ô lý do) ĐÃ GỠ theo chốt của chủ
+          dự án. Lý do ghi nhật ký nay do SERVER tự dựng kèm tên người cấp, không còn ô
+          để gõ. Giữ lại đúng MỘT dòng xác nhận khi toàn bộ học viên được miễn phí: đó là
+          thông tin quyết định việc bấm Chốt (không cần ghi nhận thanh toán), bỏ đi thì
+          người chốt không biết vì sao mình qua được cổng tiền. */}
+      {allFree && (
+        <p className="rounded-lg border border-state-success bg-state-success-soft px-3 py-2 text-sm font-medium text-state-success-ink">
+          ✓ Miễn phí học bổng toàn phần — chốt được ngay, không cần ghi nhận thanh toán.
+        </p>
       )}
 
       {/* FL2-01 — Học phí: 1 đợt (full) hoặc 2 đợt (đợt 1 đã thu + đợt 2 hẹn ngày). */}

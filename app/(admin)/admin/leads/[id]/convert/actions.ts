@@ -11,6 +11,11 @@ import { getAuditActor } from '@/lib/audit/log'
 import { isConvertV2Enabled } from '@/lib/flags'
 import { convertLeadV2, computeInstallmentSplit, type ConvertV2Student } from '@/lib/crm/convert-lead-v2'
 import { computeEnrollmentPrice } from '@/lib/finance/pricing'
+import {
+  canGrantFullScholarship,
+  scholarshipAuditReason,
+  SCHOLARSHIP_FORBIDDEN,
+} from '@/lib/crm/scholarship'
 import { recordInstallmentPlan, requestInstallmentApproval } from '@/lib/orders/installments'
 import { phoneVn } from '@/lib/validators/phone'
 
@@ -27,19 +32,17 @@ const studentSchema = z.object({
   dob: z.string().trim().optional().or(z.literal('')),
   classId: z.string().trim().min(1, 'Chọn lớp cho học viên'),
   consentMedia: z.boolean().optional(),
-  // 27/08 — ƯU ĐÃI TỪNG EM. Trước đây form cố định `discount: null` ⇒ tổng phải thu
-  // LUÔN > 0 ⇒ lead miễn phí toàn phần không bao giờ qua nổi guard PAYMENT_REQUIRED
-  // (mà khoản 0đ cũng không ghi nhận được — `payments/_actions.ts` chặn amount > 0).
-  // Nhánh học bổng toàn phần vốn đã có trong `evaluatePaymentGuard`, chỉ thiếu đường
-  // từ UI xuống. `value` là % với PERCENT/SCHOLARSHIP, là VNĐ với AMOUNT/PROGRAM —
-  // `computeEnrollmentPrice` tự kẹp (≤ 100% và ≤ giá gốc), server KHÔNG tin giá client.
-  discount: z
-    .object({
-      type: z.enum(['PERCENT', 'AMOUNT', 'SCHOLARSHIP', 'PROGRAM']),
-      value: z.number().int().nonnegative(),
-    })
-    .nullable()
-    .optional(),
+  // ⚠️ 31/08/2026 — THU HẸP còn ĐÚNG "học bổng toàn phần", và chỉ SUPER_ADMIN dùng được.
+  //
+  // Trước đó ô này nhận PERCENT / AMOUNT / PROGRAM với mức tuỳ ý, không vai nào bị chặn:
+  // bất kỳ ai chốt được lead là giảm được học phí bao nhiêu tuỳ thích. Chủ dự án chốt
+  // 31/08 gỡ hẳn khung "Ưu đãi học phí" khỏi màn chốt và chỉ giữ MỘT ô tick miễn phí
+  // toàn phần cho quản trị.
+  //
+  // Thu hẹp ngay ở SCHEMA (không chỉ giấu ô trên giao diện): Server Action là endpoint
+  // HTTP riêng, giấu ô mà vẫn nhận `PERCENT: 90` thì cổng chưa đóng. Vai được phép kiểm
+  // ở thân hàm — schema không biết người gọi là ai.
+  scholarship: z.boolean().optional(),
 })
 
 // FL2-01 — kế hoạch học phí: 1 đợt (đóng đủ) hoặc 2 đợt (đợt 1 đã thu + đợt 2 hẹn ngày).
@@ -90,7 +93,10 @@ const convertSchema = z.object({
   installment: installmentSchema,
   // Bắt buộc khi có ưu đãi (kiểm dưới, sau khi biết ưu đãi có ăn tiền thật không).
   // Đi vào `AuditLog.reason` của bản ghi STATUS_CHANGE lead → tra được về sau.
-  discountReason: z.string().trim().max(300).optional().or(z.literal('')),
+  // `discountReason` ĐÃ GỠ khỏi đầu vào: form không còn ô nhập (chốt 31/08 — "chỉ cần
+  // ô tick"). Lý do ghi vào nhật ký nay do SERVER tự dựng, kèm tên người cấp — xem dưới.
+  // Trách nhiệm không mất đi: cổng vai SUPER_ADMIN + nhật ký có tên là hai lớp thay cho
+  // một ô chữ mà người cấp tự gõ.
 })
 
 export type SubmitConvertV2Result =
@@ -128,7 +134,23 @@ export async function submitConvertV2(
   }
   const d = parsed.data
 
-  const sdb = scopedDb(await resolveActor(session.user.id))
+  const actor = await resolveActor(session.user.id)
+  const sdb = scopedDb(actor)
+
+  // ⚠️ CỔNG VAI cho học bổng toàn phần (chốt 31/08/2026): CHỈ SUPER_ADMIN.
+  //
+  // Giấu ô tick trên giao diện KHÔNG phải lớp bảo vệ — Server Action là endpoint HTTP
+  // riêng, gọi thẳng với `scholarship: true` vẫn tới được đây. Học bổng toàn phần làm
+  // học phí của một em bốc hơi khỏi công nợ và cho lead đi thẳng qua guard
+  // PAYMENT_REQUIRED mà không cần một đồng nào ghi nhận — nên nó phải là cổng cứng.
+  //
+  // Hỏi `actor.isSuperAdmin` chứ không `checkPermission`: repo không có action nào cho
+  // việc này, và đẻ một permission mới bắt buộc phải chạy tay `seed-prod-roles.yml` sau
+  // khi merge — quên là màn chốt lead trắng với mọi vai trên prod.
+  const wantsScholarship = d.students.some((s) => s.scholarship === true)
+  if (wantsScholarship && !canGrantFullScholarship(actor)) {
+    return { ok: false, error: SCHOLARSHIP_FORBIDDEN }
+  }
 
   // Scope: lead phải tồn tại; SALE (chỉ view-own) chỉ chuyển lead của mình.
   const lead = await sdb.lead.findFirst({
@@ -155,9 +177,12 @@ export async function submitConvertV2(
     const cls = classMap.get(s.classId)
     if (!cls) return { ok: false, error: `Lớp không tồn tại cho học viên "${s.name}"` }
     const listPrice = cls.course?.price ?? 0
-    // Ưu đãi 0 (hoặc không chọn) coi như KHÔNG có ưu đãi — để `Enrollment.discountType`
-    // không bị đóng dấu "PERCENT 0%" gây nhiễu báo cáo.
-    const discount = s.discount && s.discount.value > 0 ? s.discount : null
+    // Ô tick → học bổng 100%. `computeEnrollmentPrice` xử lý SCHOLARSHIP như PERCENT
+    // (kẹp 0..100) nên học phí về đúng 0đ. Không tick → KHÔNG ưu đãi, để
+    // `Enrollment.discountType` không bị đóng dấu "PERCENT 0%" gây nhiễu báo cáo.
+    const discount: { type: 'SCHOLARSHIP'; value: number } | null = s.scholarship
+      ? { type: 'SCHOLARSHIP', value: 100 }
+      : null
     // Tính lại bằng ĐÚNG hàm mà convertLeadV2 dùng — chỉ để biết ưu đãi có ăn tiền thật
     // không (bắt lý do). Giá ghi vào DB vẫn do convertLeadV2 tự tính, không truyền sang.
     totalDiscountAmount += computeEnrollmentPrice({ listPrice, discount }).discountAmount
@@ -173,14 +198,12 @@ export async function submitConvertV2(
     })
   }
 
-  // Ưu đãi làm học phí bốc hơi khỏi công nợ ⇒ phải có người chịu trách nhiệm bằng chữ.
-  const discountReason = d.discountReason?.trim() || ''
-  if (totalDiscountAmount > 0 && discountReason.length < 10) {
-    return {
-      ok: false,
-      error: 'Có ưu đãi/miễn phí thì phải ghi lý do (tối thiểu 10 ký tự) — lý do được lưu vào nhật ký',
-    }
-  }
+  // Học phí bốc hơi khỏi công nợ ⇒ nhật ký phải trả lời được "ai cho". Trước 31/08 câu
+  // trả lời là một ô chữ người dùng tự gõ; nay ô đó đã gỡ nên SERVER tự dựng, và tên
+  // lấy từ phiên đăng nhập chứ không nhận từ client.
+  const { actorId, actorName } = getAuditActor(session)
+  const discountReason =
+    totalDiscountAmount > 0 ? scholarshipAuditReason(actorName, new Date()) : ''
 
   // Idempotency key ổn định theo payload (chống double-submit / 2 sale song song).
   const fingerprint = JSON.stringify({
@@ -206,7 +229,6 @@ export async function submitConvertV2(
     .digest('hex')
     .slice(0, 16)}`
 
-  const { actorId, actorName } = getAuditActor(session)
   const res = await convertLeadV2(
     { id: actorId, name: actorName },
     {
