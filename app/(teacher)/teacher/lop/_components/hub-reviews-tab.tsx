@@ -608,7 +608,9 @@ export async function HubReviewsTab({
     <div className="t-card overflow-hidden">
       <PhanTrangBang cuonNgang
           khoaGhiNho="gv-lop-nhan-xet-hocvien">
-        <table className="min-w-[720px] w-full border-collapse text-left text-sm">
+        {/* 820 chứ không phải 720: tách cột Nhận xét thành Tiến độ + Trạng thái là
+            thêm một cột, giữ min-w cũ thì các cột text bị bóp lại — đúng lỗi Đ2. */}
+        <table className="min-w-[820px] w-full border-collapse text-left text-sm">
           <thead>
             <tr className="border-b border-border bg-muted/50 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
               <th scope="col" className="px-5 py-3">
@@ -620,8 +622,15 @@ export async function HubReviewsTab({
               <th scope="col" className="px-5 py-3">
                 Đi học
               </th>
+              {/* TÁCH đôi: cột cũ trộn ba loại giá trị khác nghĩa nhau trong một ô —
+                  tiến độ ("4/6 HV"), trạng thái hoàn tất ("Đã nhận xét"), và trạng thái
+                  CHẶN ("Chưa điểm danh"). Người đọc không sắp xếp hay quét được một cột
+                  như thế (QA vòng 1, BUG-030). */}
               <th scope="col" className="px-5 py-3">
-                Nhận xét
+                Tiến độ
+              </th>
+              <th scope="col" className="px-5 py-3">
+                Trạng thái
               </th>
               <th scope="col" className="px-5 py-3 text-right">
                 <span className="sr-only">Thao tác</span>
@@ -666,6 +675,16 @@ export async function HubReviewsTab({
                       ? `${stat.attended}/${rosterCount}`
                       : "—"}
                   </td>
+                  {/* Cột TIẾN ĐỘ: luôn là một tỉ lệ, kể cả khi đã xong — quét dọc cột
+                      là thấy ngay còn nợ bao nhiêu em, không phải đọc badge. */}
+                  <td className="px-5 py-3.5 whitespace-nowrap font-semibold text-foreground">
+                    {stat.attendanceTaken ? (
+                      `${stat.reviewed}/${stat.attended} HV`
+                    ) : (
+                      <span className="font-normal text-muted-foreground">—</span>
+                    )}
+                  </td>
+                  {/* Cột TRẠNG THÁI: chỉ nói buổi đang ở đâu trong quy trình. */}
                   <td className="px-5 py-3.5 whitespace-nowrap">
                     {!stat.attendanceTaken ? (
                       <Badge
@@ -686,7 +705,7 @@ export async function HubReviewsTab({
                         variant="outline"
                         className="border-state-warning-soft bg-state-warning-soft text-state-warning-ink dark:border-state-warning"
                       >
-                        {stat.reviewed}/{stat.attended} HV
+                        Còn thiếu
                       </Badge>
                     )}
                   </td>

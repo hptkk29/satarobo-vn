@@ -167,7 +167,7 @@ export async function HubSessionsTab({
     );
   }
   // "Xong" = điểm danh PHỦ ĐỦ sĩ số. Trước đây chỉ cần một bản ghi bất kỳ — buổi có
-  // đúng một phiếu xin nghỉ đã duyệt liền hiện pill xanh kèm "Có mặt 0/12".
+  // đúng một phiếu xin nghỉ đã duyệt liền hiện pill xanh kèm "Đi học 0/12".
   const doneSet = new Set(
     sessions
       .filter(
@@ -294,7 +294,8 @@ export async function HubSessionsTab({
                     {done ? (
                       <span className="inline-flex items-center gap-1 rounded-full bg-state-success-soft px-2.5 py-1 text-xs font-semibold text-state-success-ink">
                         <CircleCheck className="h-3.5 w-3.5" aria-hidden />
-                        Có mặt {present}/{rosterCount}
+                        {/* "Đi học": tử số gồm cả Đi muộn — xem BUG-017. */}
+                        Đi học {present}/{rosterCount}
                       </span>
                     ) : !canMark ? (
                       <span className="inline-flex items-center rounded-full bg-muted px-2.5 py-1 text-xs font-semibold text-muted-foreground">

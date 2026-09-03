@@ -98,8 +98,12 @@ export function AttendanceOverview({ rows }: { rows: AttendanceRow[] }) {
                   <th scope="col" className="px-5 py-3">
                     Ngày
                   </th>
+                  {/* "Đi học" chứ không phải "Có mặt": ô này cộng CẢ "Đi muộn", nên
+                      gọi là "Có mặt" thì con số không khớp nghĩa của chữ — giáo viên
+                      đọc ra 9/11 rồi mở buổi lên thấy 8 có mặt + 1 đi muộn (QA vòng 1,
+                      BUG-017). Chủ dự án chốt 03/09: đổi cả chữ lẫn số. */}
                   <th scope="col" className="px-5 py-3">
-                    Có mặt
+                    Đi học
                   </th>
                   <th scope="col" className="px-5 py-3">
                     Điểm danh

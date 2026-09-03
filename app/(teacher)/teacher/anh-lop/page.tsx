@@ -28,8 +28,7 @@
 // (ranh giới thật). Class/ClassSession đọc qua withMakeupException như lop/page.tsx
 // (GV dạy bù liên cơ sở vẫn thấy đúng lớp/buổi mình phụ trách).
 // ⚠️ Câu 46: tag chỉ hiện TÊN học viên — KHÔNG SĐT/email/tên phụ huynh trong payload.
-import Link from "next/link";
-import { Calendar, ChevronRight, Images } from "lucide-react";
+import { Calendar, Images } from "lucide-react";
 import type { MediaStatus } from "@prisma/client";
 import { auth } from "@/lib/auth";
 import { resolveActor } from "@/lib/auth/actor";
@@ -42,6 +41,7 @@ import { ENROLLMENT_ACTIVE_STATUS_LIST } from "@/lib/enrollment-status";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { PageHeader } from "../_components/ui/page-header";
+import { ClassAlbumGrid } from "./_components/class-album-grid";
 import { EmptyState } from "../_components/ui/empty-state";
 import { UploadPhotoDialog } from "./_components/upload-photo-dialog";
 import {
@@ -98,13 +98,6 @@ const MEDIA_STATUS: Record<MediaStatus, { label: string; cls: string }> = {
 // Cover gradient album (port visual mock media/page.tsx `album.cover`) — xoay vòng theo
 // lớp. Đây là dải màu PHÂN LOẠI (mỗi lớp một sắc để nhận ra nhanh), cố ý tách khỏi
 // token thương hiệu — thêm/bớt ở đây không ảnh hưởng nhận diện.
-const COVERS = [
-  "from-orange-400 to-orange-600",
-  "from-sky-400 to-blue-600",
-  "from-emerald-400 to-teal-600",
-  "from-amber-400 to-orange-600",
-  "from-cyan-400 to-sky-600",
-];
 
 /** 1 ảnh trong album — payload đã lọc theo câu 46 (tag chỉ TÊN học viên). */
 type MediaView = {
@@ -126,12 +119,13 @@ type AlbumGroup = {
 export default async function TeacherClassPhotosPage({
   searchParams,
 }: {
-  searchParams: Promise<{ classId?: string }>;
+  // `q` / `loc`: bộ lọc lưới album, đọc Ở SERVER (xem use-loc-tren-url.ts).
+  searchParams: Promise<{ classId?: string; q?: string; loc?: string }>;
 }) {
   const session = await auth();
   if (!session?.user) return null; // layout đã gate — guard cho type-narrow
 
-  const { classId } = await searchParams;
+  const { classId, q: spQ, loc: spLoc } = await searchParams;
   const actor = await resolveActor(session.user.id);
   const xdb = withMakeupException(actor);
   const classIds = [...actor.assignedClassIds];
@@ -375,6 +369,30 @@ export default async function TeacherClassPhotosPage({
     statByClass.set(s.classId, cur);
   }
 
+  // ẢNH BÌA: một ảnh ĐÃ DUYỆT mới nhất cho mỗi lớp.
+  //
+  // Chỉ lấy APPROVED — thẻ ngoài cùng là nơi ai đi ngang cũng thấy, không phải chỗ bày
+  // ảnh còn chờ quản lý cơ sở duyệt. Một truy vấn cho mọi lớp rồi ký URL theo LÔ
+  // (`resolveMediaUrls` gọi song song), nên không phải N+1.
+  const coverRows = classIds.length
+    ? await xdb.classSessionMedia.findMany({
+        where: { classId: { in: classIds }, status: "APPROVED" },
+        select: { classId: true, fileUrl: true, createdAt: true },
+        orderBy: { createdAt: "desc" },
+      })
+    : [];
+  const coverByClass = new Map<string, string>();
+  for (const r of coverRows) {
+    if (!coverByClass.has(r.classId)) coverByClass.set(r.classId, r.fileUrl);
+  }
+  const coverIds = [...coverByClass.keys()];
+  const coverSigned = await resolveMediaUrls(
+    coverIds.map((id) => coverByClass.get(id)!),
+  );
+  const coverUrlByClass = new Map(
+    coverIds.map((id, i) => [id, coverSigned[i] ?? null]),
+  );
+
   return (
     <div className="space-y-4">
       <PageHeader
@@ -384,67 +402,26 @@ export default async function TeacherClassPhotosPage({
       {classes.length === 0 ? (
         <EmptyBox text="Bạn chưa được phân công lớp nào." />
       ) : (
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {classes.map((c, i) => {
+        <ClassAlbumGrid
+          banDauLoc={{ q: spQ, loc: spLoc }}
+          rows={classes.map((c) => {
             const st = statByClass.get(c.id) ?? {
               total: 0,
               pending: 0,
               draft: 0,
               latest: null,
             };
-            return (
-              // href CHỈ-query (giữ path hiện tại): chạy đúng cả trên host giaovien
-              // (clean URL /anh-lop) LẪN localhost/preview (path thật /teacher/anh-lop).
-              <Link key={c.id} href={`?classId=${c.id}`} className="block">
-                <div className="t-card t-card-hover h-full overflow-hidden">
-                  <div
-                    className={cn(
-                      "h-28 bg-gradient-to-br",
-                      COVERS[i % COVERS.length],
-                    )}
-                  />
-                  <div className="p-4">
-                    <div className="flex items-center justify-between">
-                      <h2 className="font-semibold text-foreground">
-                        {c.name}
-                      </h2>
-                      <ChevronRight
-                        className="h-4 w-4 shrink-0 text-muted-foreground"
-                        aria-hidden
-                      />
-                    </div>
-                    <div className="mt-2 flex items-center justify-between text-sm text-muted-foreground">
-                      <span className="flex items-center gap-1.5">
-                        <Images className="h-4 w-4" aria-hidden />
-                        {st.total} ảnh
-                      </span>
-                      {st.latest && (
-                        <span className="flex items-center gap-1.5">
-                          <Calendar className="h-4 w-4" aria-hidden />
-                          {shortFmt.format(st.latest)}
-                        </span>
-                      )}
-                    </div>
-                    {(st.pending > 0 || st.draft > 0) && (
-                      <div className="mt-2 flex flex-wrap gap-1.5">
-                        {st.pending > 0 && (
-                          <span className="inline-block rounded-full bg-state-warning-soft px-2 py-0.5 text-[11px] font-semibold text-state-warning-ink">
-                            {st.pending} chờ duyệt
-                          </span>
-                        )}
-                        {st.draft > 0 && (
-                          <span className="inline-block rounded-full bg-state-info-soft px-2 py-0.5 text-[11px] font-semibold text-state-info-ink">
-                            {st.draft} trong kho
-                          </span>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </Link>
-            );
+            return {
+              id: c.id,
+              name: c.name,
+              total: st.total,
+              pending: st.pending,
+              draft: st.draft,
+              latestLabel: st.latest ? shortFmt.format(st.latest) : null,
+              coverUrl: coverUrlByClass.get(c.id) ?? null,
+            };
           })}
-        </div>
+        />
       )}
     </div>
   );

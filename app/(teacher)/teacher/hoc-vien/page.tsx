@@ -31,6 +31,7 @@ import { auth } from "@/lib/auth";
 import { resolveActor } from "@/lib/auth/actor";
 import { scopedDb } from "@/lib/db-scope";
 import { rosterWhere } from "@/lib/enrollment-scope";
+import { REPORT_CARD_STATUS_LABEL } from "@/lib/lms/report-card-core";
 import { attendanceSummaryForEnrollments } from "@/lib/attendance/summary";
 import { getCourseCriteria } from "@/lib/lms/report-card";
 import { ENROLLMENT_ACTIVE_STATUS_LIST } from "@/lib/enrollment-status";
@@ -90,19 +91,33 @@ const LEVEL_LABEL: Record<number, string> = {
   4: "4 · Tốt",
 };
 
+// CHỮ lấy từ bảng dùng chung, chỉ MÀU giữ riêng ở đây.
+//
+// Bản chép tay cũ gọi `PUBLISHED` là "Đã duyệt" trong khi /teacher/hoc-ba gọi cùng
+// trạng thái đó là "Đã phát hành" — hai màn, hai chữ, một trạng thái. QA vòng 1 đọc ra
+// thành nghi vấn NV-003: tưởng badge "Đã duyệt" trên thẻ Học bạ nói về việc duyệt
+// HOÀN THÀNH KHOÁ (một quy trình khác hẳn), rồi báo hai module không đồng bộ trạng
+// thái. Thực ra chỉ là chép tay lệch chữ. `DRAFT` và `RECALLED` cũng lệch y vậy.
+const REPORT_STATUS_CLS: Record<string, string> = {
+  DRAFT: "bg-muted text-muted-foreground",
+  PENDING_REVIEW: "bg-state-warning-soft text-state-warning-ink",
+  PUBLISHED: "bg-state-success-soft text-state-success-ink",
+  RECALLED: "bg-state-danger-soft text-state-danger-ink",
+};
+
 const REPORT_STATUS: Record<string, { label: string; cls: string }> = {
-  DRAFT: { label: "Học bạ nháp", cls: "bg-muted text-muted-foreground" },
+  DRAFT: { label: REPORT_CARD_STATUS_LABEL.DRAFT, cls: REPORT_STATUS_CLS.DRAFT! },
   PENDING_REVIEW: {
-    label: "Chờ duyệt",
-    cls: "bg-state-warning-soft text-state-warning-ink",
+    label: REPORT_CARD_STATUS_LABEL.PENDING_REVIEW,
+    cls: REPORT_STATUS_CLS.PENDING_REVIEW!,
   },
   PUBLISHED: {
-    label: "Đã duyệt",
-    cls: "bg-state-success-soft text-state-success-ink",
+    label: REPORT_CARD_STATUS_LABEL.PUBLISHED,
+    cls: REPORT_STATUS_CLS.PUBLISHED!,
   },
   RECALLED: {
-    label: "Thu hồi",
-    cls: "bg-state-danger-soft text-state-danger-ink",
+    label: REPORT_CARD_STATUS_LABEL.RECALLED,
+    cls: REPORT_STATUS_CLS.RECALLED!,
   },
 };
 
@@ -257,9 +272,17 @@ export default async function TeacherStudentProfilePage({
               <h1 className="text-2xl font-bold text-foreground">
                 {student.name}
               </h1>
-              <Badge variant="outline">
-                {ENROLLMENT_STATUS.label(enrollments[0].status)}
-              </Badge>
+              {/* MỌI trạng thái ghi danh, không phải mỗi cái đầu tiên.
+                  Bản cũ in `enrollments[0].status` từ một truy vấn KHÔNG `orderBy`,
+                  nên em có 5 ghi danh ở 5 trạng thái khác nhau chỉ hiện đúng một badge,
+                  và badge nào thì tuỳ thứ tự Postgres trả về (QA vòng 1, BUG-018).
+                  Khi đang lọc theo một lớp thì chỉ còn trạng thái của lớp đó — đúng
+                  ngữ cảnh người dùng vừa bấm vào. */}
+              {[...new Set(enrollments.map((e) => e.status))].map((st) => (
+                <Badge key={st} variant="outline">
+                  {ENROLLMENT_STATUS.label(st)}
+                </Badge>
+              ))}
             </div>
             <p className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-foreground">
               <span>
