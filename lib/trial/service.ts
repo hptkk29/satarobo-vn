@@ -88,63 +88,15 @@ async function actorName(actorId: string | null | undefined, client: DbClient = 
 
 // ─── Config ────────────────────────────────────────────────────────────────────
 
-/** Cấu hình lớp trải nghiệm đang ÁP DỤNG (active). */
-export async function getActiveTrialConfig(): Promise<{ id: string; sessionCount: number } | null> {
-  const cfg = await db.trialProgramConfig.findFirst({
-    where: { active: true },
-    orderBy: { updatedAt: "desc" },
-    select: { id: true, sessionCount: true },
-  });
-  return cfg;
-}
-
-/** Tạo/cập nhật + kích hoạt cấu hình (deactivate các config khác) + audit. */
-export async function setTrialProgramConfig(params: {
-  name: string;
-  sessionCount: number;
-  actorId: string;
-}): Promise<{ ok: boolean; error?: string }> {
-  const name = params.name?.trim();
-  if (!name) return { ok: false, error: "Tên cấu hình là bắt buộc" };
-  if (!Number.isInteger(params.sessionCount) || params.sessionCount < 1) {
-    return { ok: false, error: "Số buổi phải là số nguyên ≥ 1" };
-  }
-
-  try {
-    const aName = await actorName(params.actorId);
-    await db.$transaction(async (tx) => {
-      const existing = await tx.trialProgramConfig.findFirst({ where: { name } });
-      // tắt mọi config khác (chỉ 1 active tại 1 thời điểm)
-      await tx.trialProgramConfig.updateMany({
-        where: existing ? { id: { not: existing.id } } : {},
-        data: { active: false },
-      });
-      const saved = existing
-        ? await tx.trialProgramConfig.update({
-            where: { id: existing.id },
-            data: { sessionCount: params.sessionCount, active: true, updatedById: params.actorId },
-          })
-        : await tx.trialProgramConfig.create({
-            data: { name, sessionCount: params.sessionCount, active: true, updatedById: params.actorId },
-          });
-      await writeAudit({
-        actor: { id: params.actorId, name: aName },
-        module: "trial",
-        entityType: "TrialProgramConfig",
-        entityId: saved.id,
-        action: existing ? "UPDATE" : "CREATE",
-        oldValues: existing ? { sessionCount: existing.sessionCount, active: existing.active } : null,
-        newValues: { name, sessionCount: params.sessionCount, active: true },
-        tx,
-      });
-    });
-    return { ok: true };
-  } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : "Lỗi lưu cấu hình" };
-  }
-}
-
-// ─── Lớp ─────────────────────────────────────────────────────────────────────
+// 28/08/2026 — GỠ `getActiveTrialConfig` + `setTrialProgramConfig`.
+//
+// Khối "Cấu hình số buổi (mặc định)" ở màn Lớp Trial đã bỏ theo chốt của chủ dự án: form
+// tạo lớp nhập thẳng số buổi nào cũng được, nên một con số mặc định cấp hệ thống chỉ còn
+// là ô người dùng phải đọc rồi bỏ qua. Hai hàm này không còn ai gọi.
+//
+// ⚠️ Bảng `TrialProgramConfig` và cột `TrialClassV2.configId` GIỮ NGUYÊN — bỏ cột trên
+// bảng đang có dữ liệu prod là việc của một đợt drop riêng (luật cứng #4, nếp 2 pha).
+// `createTrialClass` vẫn nhận `configId`, màn tạo lớp truyền `null`.
 
 /**
  * Tạo lớp trải nghiệm. 28/08 — chỉ còn CƠ SỞ + KHOÁ; tên tự sinh, giờ/phòng/GV/sĩ số

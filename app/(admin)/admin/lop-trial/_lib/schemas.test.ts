@@ -10,7 +10,6 @@ import {
   createClassSchema,
   addSessionSchema,
   updateBookingSchema,
-  configSchema,
   attendanceSchema,
 } from "./schemas";
 
@@ -154,14 +153,10 @@ describe("zod cập nhật buổi hẹn", () => {
   });
 });
 
-describe("zod cấu hình và điểm danh", () => {
-  it("cấu hình: số buổi phải nguyên trong 1..60", () => {
-    expect(configSchema.safeParse({ name: "Chuẩn", sessionCount: 4 }).success).toBe(true);
-    expect(configSchema.safeParse({ name: "Chuẩn", sessionCount: 0 }).success).toBe(false);
-    expect(configSchema.safeParse({ name: "Chuẩn", sessionCount: 61 }).success).toBe(false);
-    expect(configSchema.safeParse({ name: "", sessionCount: 4 }).success).toBe(false);
-  });
-
+// 28/08/2026 — bỏ ca kiểm `configSchema`: khối "Cấu hình số buổi (mặc định)" đã gỡ khỏi
+// màn Lớp Trial, schema theo đó cũng gỡ. Trần số buổi nay nằm ở tham số vận hành
+// `crm.trialMaxSessions`, không phải ở một bản ghi cấu hình.
+describe("zod điểm danh", () => {
   it("điểm danh: danh sách rỗng bị chặn", () => {
     const r = attendanceSchema.safeParse({ trialSessionId: "b1", records: [] });
     expect(r.success).toBe(false);

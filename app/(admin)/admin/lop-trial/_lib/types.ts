@@ -42,13 +42,6 @@ export type ClassRow = {
   nextSessionDate: string | null;
 };
 
-/** Cấu hình số buổi đang hiệu lực. */
-export type ProgramConfig = {
-  id: string;
-  name: string;
-  sessionCount: number;
-} | null;
-
 /** Một buổi của lớp, kèm bản đồ điểm danh đã lưu. */
 export type SessionRow = {
   id: string;
