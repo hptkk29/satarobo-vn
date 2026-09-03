@@ -13,13 +13,18 @@ import { CalendarX2 } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { resolveActor } from "@/lib/auth/actor";
 import { withMakeupException } from "@/lib/db-scope";
+import {
+  countMissingAttendanceByClass,
+  groupMarkedBySession,
+  groupRosterByClass,
+} from "@/lib/lms/attendance-pending";
+import { rosterWhere } from "@/lib/enrollment-scope";
 import { isSessionOwnedByTeacher } from "@/lib/lms/session-ownership";
 import { buildSessionAttendanceRows } from "@/lib/attendance/roster";
 import {
   buildSessionNumberMap,
   sessionNumberLabel,
 } from "@/lib/lms/session-order";
-import { rosterWhere } from "@/lib/enrollment-scope";
 import { EmptyState } from "../_components/ui/empty-state";
 import { PageHeader } from "../_components/ui/page-header";
 import { SessionStatusPill } from "../_components/ui/session-status-pill";
@@ -395,8 +400,16 @@ export default async function TeacherClassesPage({
       })
     : [];
 
-  // Cột "Cần xử lý": đếm buổi (60 ngày gần, đã tới hết hôm nay, chưa hủy) chưa có
-  // bản ghi điểm danh — theo từng lớp. Cùng tín hiệu "chưa điểm danh" với dashboard.
+  // Cột "Cần xử lý": đếm buổi (60 ngày gần, đã tới hết hôm nay, chưa hủy) CÒN NỢ
+  // điểm danh — theo từng lớp. Cùng tín hiệu với dashboard vì cùng gọi một hàm.
+  //
+  // ⚠️ "Còn nợ" = điểm danh chưa PHỦ ĐỦ sĩ số, KHÔNG phải "chưa có bản ghi nào".
+  // Bản cũ chỉ hỏi buổi có tồn tại dòng Attendance nào không, nên:
+  //   • buổi chấm thiếu người vẫn báo "Hoàn tất" và giáo viên không có đường nào
+  //     biết mình còn nợ (QA vòng 1, BUG-002);
+  //   • nguy hiểm hơn và đang chạy trên PROD: duyệt phiếu xin nghỉ của phụ huynh
+  //     ghi ĐÚNG MỘT dòng Attendance ⇒ buổi rơi khỏi danh sách việc ngay lập tức,
+  //     kèm pill xanh "Có mặt 0/12".
   const todayEnd = vnTodayEnd();
   const pendFrom = new Date(todayEnd.getTime() - 60 * 24 * 60 * 60 * 1000);
   const pendSessions = classIds.length
@@ -409,22 +422,39 @@ export default async function TeacherClassesPage({
         select: { id: true, classId: true },
       })
     : [];
-  const attendedSet = new Set(
+  const [attRows, rosterRows] = await Promise.all([
     pendSessions.length
-      ? (
-          await xdb.attendance.findMany({
-            where: { sessionId: { in: pendSessions.map((s) => s.id) } },
-            select: { sessionId: true },
-          })
-        ).map((a) => a.sessionId)
-      : [],
+      ? xdb.attendance.findMany({
+          where: { sessionId: { in: pendSessions.map((s) => s.id) } },
+          select: { sessionId: true, studentId: true },
+        })
+      : Promise.resolve([]),
+    classIds.length
+      ? xdb.class.findMany({
+          where: { id: { in: classIds } },
+          select: {
+            id: true,
+            enrollments: {
+              where: rosterWhere("dang-hoc"),
+              select: { studentId: true },
+            },
+          },
+        })
+      : Promise.resolve([]),
+  ]);
+  const rosterByClass = groupRosterByClass(rosterRows);
+  const pendingByClass = countMissingAttendanceByClass({
+    sessions: pendSessions,
+    markedBySession: groupMarkedBySession(attRows),
+    rosterByClass,
+  });
+  // Lớp có việc điểm danh để làm = có sĩ số VÀ có buổi đã tới ngày trong cửa sổ.
+  // Không có việc thì cột để trống, chứ không khoe "Hoàn tất" (BUG-016).
+  const classesWithWork = new Set(
+    pendSessions
+      .filter((s) => (rosterByClass.get(s.classId)?.size ?? 0) > 0)
+      .map((s) => s.classId),
   );
-  const pendingByClass = new Map<string, number>();
-  for (const s of pendSessions) {
-    if (!attendedSet.has(s.id)) {
-      pendingByClass.set(s.classId, (pendingByClass.get(s.classId) ?? 0) + 1);
-    }
-  }
 
   const rows: ClassRow[] = rawClasses.map((c) => ({
     id: c.id,
@@ -437,6 +467,7 @@ export default async function TeacherClassesPage({
     capacity: c.maxStudents,
     status: c.status,
     pending: pendingByClass.get(c.id) ?? 0,
+    hasAttendanceWork: classesWithWork.has(c.id),
   }));
 
   return (

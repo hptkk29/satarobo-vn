@@ -29,7 +29,12 @@ import {
 import { auth } from "@/lib/auth";
 import { resolveActor } from "@/lib/auth/actor";
 import { scopedDb } from "@/lib/db-scope";
-import { ENROLLMENT_ACTIVE_STATUS_LIST } from "@/lib/enrollment-status";
+import { rosterWhere } from "@/lib/enrollment-scope";
+import {
+  groupMarkedBySession,
+  groupRosterByClass,
+  sessionsMissingAttendance,
+} from "@/lib/lms/attendance-pending";
 import { summarizeSessionFeedback } from "@/lib/lms/session-feedback-roster";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
@@ -141,11 +146,11 @@ export default async function TeacherHomePage() {
     ? await sdb.class.findMany({
         where: { id: { in: classIds } },
         select: {
+          // `id` để dựng rosterByClass cho phép đếm "buổi chưa điểm danh" bên dưới —
+          // hai ô trên cùng một dashboard phải đọc CÙNG một sĩ số.
+          id: true,
           enrollments: {
-            where: {
-              deletedAt: null,
-              status: { in: ENROLLMENT_ACTIVE_STATUS_LIST },
-            },
+            where: rosterWhere("dang-hoc"),
             select: { studentId: true },
           },
         },
@@ -204,8 +209,25 @@ export default async function TeacherHomePage() {
   const todaySessions = sessions.filter(
     (s) => s.date >= todayStart && s.date < todayEnd,
   );
-  // "Chưa điểm danh" = buổi (trong cửa sổ, đã tới ngày) chưa có bản ghi điểm danh.
-  const needAttendance = sessions.filter((s) => !statOf(s).attendanceTaken);
+  // "Chưa điểm danh" = buổi (trong cửa sổ, đã tới ngày) điểm danh chưa PHỦ ĐỦ sĩ số.
+  //
+  // ⚠️ KHÔNG dùng `statOf(s).attendanceTaken` ("có ≥1 dòng Attendance"): buổi chấm
+  // thiếu người, và buổi chỉ có đúng một dòng do duyệt phiếu xin nghỉ của phụ huynh,
+  // đều biến mất khỏi ô này — giáo viên không còn đường nào biết mình còn nợ điểm
+  // danh (QA vòng 1, BUG-029; cùng gốc với cột "Cần xử lý" ở /teacher/lop, nay hai
+  // nơi gọi CHUNG một hàm nên không thể nói ngược nhau nữa).
+  const rosterByClass = groupRosterByClass(rosters);
+  const markedBySession = groupMarkedBySession(
+    attRows.map((a) => ({ sessionId: a.sessionId, studentId: a.studentId })),
+  );
+  const missingIds = new Set(
+    sessionsMissingAttendance({
+      sessions: sessions.map((s) => ({ id: s.id, classId: s.classId })),
+      markedBySession,
+      rosterByClass,
+    }).map((s) => s.id),
+  );
+  const needAttendance = sessions.filter((s) => missingIds.has(s.id));
   // "Chưa nhận xét" = buổi đã điểm danh, có HV đi học, nhận xét chưa đủ.
   const needEvaluation = sessions.filter((s) => {
     const st = statOf(s);
@@ -217,7 +239,8 @@ export default async function TeacherHomePage() {
   const vnMidnightMs = todayStart.getTime();
   const nowMs = now.getTime();
   const reminder = todaySessions
-    .filter((s) => !statOf(s).attendanceTaken && s.class.startTime)
+    // Cùng tiêu chí với ô đếm: buổi mới chấm được nửa lớp thì VẪN nhắc.
+    .filter((s) => missingIds.has(s.id) && s.class.startTime)
     .map((s) => ({
       s,
       minutes: minutesUntil(s.class.startTime!, vnMidnightMs, nowMs),
@@ -352,7 +375,10 @@ export default async function TeacherHomePage() {
         ) : (
           <ul className="divide-y divide-border">
             {todaySessions.map((s) => {
-              const done = statOf(s).attendanceTaken;
+              // "Xong" ở đây phải cùng nghĩa với ô đếm phía trên, nếu không thì
+              // dashboard vừa báo "1 buổi chưa điểm danh" vừa gắn dấu xong cho đúng
+              // buổi đó.
+              const done = !missingIds.has(s.id);
               return (
                 <li key={s.id}>
                   <Link

@@ -11,7 +11,8 @@
 import { auth } from "@/lib/auth";
 import { resolveActor } from "@/lib/auth/actor";
 import { withMakeupException } from "@/lib/db-scope";
-import { ENROLLMENT_ACTIVE_STATUS_LIST } from "@/lib/enrollment-status";
+import { rosterWhere } from "@/lib/enrollment-scope";
+import { sessionAttendanceState } from "@/lib/lms/attendance-pending";
 import { summarizeSessionFeedback } from "@/lib/lms/session-feedback-roster";
 import {
   attendanceCoversRoster,
@@ -78,22 +79,14 @@ export default async function TeacherAttendanceOverviewPage() {
           name: true,
           startTime: true,
           endTime: true,
-          _count: {
-            select: {
-              enrollments: {
-                where: { status: { in: ENROLLMENT_ACTIVE_STATUS_LIST } },
-              },
-            },
-          },
-          // Sĩ số theo DANH SÁCH studentId — cần cho attendanceCoversRoster. Lọc
-          // deletedAt ở cả enrollment lẫn student; `_count` ngay trên KHÔNG lọc và giữ
-          // nguyên vì nó là mẫu số của cột "Có mặt X/Y" đã có từ trước.
+          // `_count` và danh sách bên dưới nay dùng CHUNG rosterWhere. Trước đây
+          // `_count` cố ý không lọc deletedAt để giữ mẫu số "Có mặt X/Y" như cũ —
+          // hệ quả là mẫu số của cột hiển thị và mẫu số của attendanceCoversRoster
+          // đếm hai tập khác nhau. Chủ dự án chốt 03/09: đổi cả con số cho khớp.
+          _count: { select: { enrollments: { where: rosterWhere("dang-hoc") } } },
+          // Sĩ số theo DANH SÁCH studentId — cần cho attendanceCoversRoster.
           enrollments: {
-            where: {
-              status: { in: ENROLLMENT_ACTIVE_STATUS_LIST },
-              deletedAt: null,
-              student: { deletedAt: null },
-            },
+            where: rosterWhere("dang-hoc"),
             select: { studentId: true },
           },
         },
@@ -167,17 +160,47 @@ export default async function TeacherAttendanceOverviewPage() {
   ]);
 
   const numberOf = buildSessionNumberMap(allSessions);
-  const doneSet = new Set<string>();
   const presentBy = new Map<string, number>();
   const attBySession = new Map<string, { studentId: string; status: string }[]>();
+  const markedBySession = new Map<string, Set<string>>();
   for (const a of att) {
-    doneSet.add(a.sessionId);
-    if (ATTENDED.includes(a.status))
-      presentBy.set(a.sessionId, (presentBy.get(a.sessionId) ?? 0) + 1);
+    const marked = markedBySession.get(a.sessionId) ?? new Set<string>();
+    marked.add(a.studentId);
+    markedBySession.set(a.sessionId, marked);
     const list = attBySession.get(a.sessionId) ?? [];
     list.push({ studentId: a.studentId, status: a.status });
     attBySession.set(a.sessionId, list);
   }
+  const sessionClassId = new Map(allSessions.map((s) => [s.id, s.classId]));
+  // Tử số "Đi học X/Y" chỉ đếm em CÓ TRONG SĨ SỐ của lớp. Trước đây cộng mọi bản ghi
+  // nên học viên HỌC BÙ từ lớp khác làm X vượt quá Y (chủ dự án chốt 03/09: đổi cả
+  // con số, không chỉ đổi chữ).
+  for (const [sessionId, rows] of attBySession) {
+    const classId = sessionClassId.get(sessionId);
+    const roster = classId ? clsInfo.get(classId)?.rosterIds : undefined;
+    const inRoster = roster ? new Set(roster) : null;
+    const n = rows.filter(
+      (r) =>
+        ATTENDED.includes(r.status as AttendanceStatus) &&
+        (!inRoster || inRoster.has(r.studentId)),
+    ).length;
+    presentBy.set(sessionId, n);
+  }
+  // "Đã xong" = điểm danh PHỦ ĐỦ sĩ số, không phải "có ≥1 bản ghi" — xem
+  // lib/lms/attendance-pending.
+  const doneSet = new Set(
+    allSessions
+      .filter((s) => {
+        const roster = clsInfo.get(s.classId)?.rosterIds ?? [];
+        return (
+          sessionAttendanceState({
+            markedStudentIds: markedBySession.get(s.id) ?? new Set<string>(),
+            rosterStudentIds: roster,
+          }) === "DU"
+        );
+      })
+      .map((s) => s.id),
+  );
   const fbBySession = new Map<string, string[]>();
   for (const f of fbRows) {
     const list = fbBySession.get(f.classSessionId) ?? [];

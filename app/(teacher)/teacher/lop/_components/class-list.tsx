@@ -25,6 +25,13 @@ export interface ClassRow {
   status: string;
   /** Số buổi (đã tới ngày) chưa điểm danh — cột "Cần xử lý". */
   pending: number;
+  /**
+   * Lớp có việc điểm danh để làm hay không — sĩ số > 0 VÀ có buổi đã tới ngày.
+   * Tách khỏi `pending` để phân biệt "đã làm xong" với "không có gì để làm": lớp
+   * Dự kiến sĩ số 0/16 chưa khai giảng từng hiện badge xanh "Hoàn tất", trùng nghĩa
+   * với badge trạng thái lớp ngay cột bên cạnh (QA vòng 1, BUG-016).
+   */
+  hasAttendanceWork: boolean;
 }
 
 const CLASS_STATUS_LABEL: Record<string, string> = {
@@ -224,7 +231,9 @@ export function ClassList({ rows }: { rows: ClassRow[] }) {
                       {r.enrolled}/{r.capacity}
                     </td>
                     <td className="px-4 py-3.5 whitespace-nowrap">
-                      {r.pending > 0 ? (
+                      {!r.hasAttendanceWork ? (
+                        <span className="text-xs text-muted-foreground">—</span>
+                      ) : r.pending > 0 ? (
                         <span className="inline-flex items-center gap-1 rounded-full bg-state-warning-soft px-2.5 py-1 text-xs font-semibold text-state-warning-ink">
                           <ClipboardCheck className="h-3.5 w-3.5" aria-hidden />
                           {r.pending} điểm danh
