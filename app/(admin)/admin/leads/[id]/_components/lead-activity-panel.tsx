@@ -296,7 +296,12 @@ export function LeadActivityPanel({
 
   return (
     // LD6 — bỏ cột "Việc cần làm" → bố cục 1 cột (trước đây lg:grid-cols-3).
-    <div className="space-y-4">
+    //
+    // `@container/panel`: khối này được dùng ở HAI bề ngang rất khác nhau — cột phải
+    // 3/10 (~310px) trên desktop, và trọn bề ngang trang khi xếp dọc trên máy hẹp.
+    // Bên trong phải đo theo BỀ NGANG CỦA CHÍNH NÓ; hỏi bề ngang cửa sổ thì lúc nào
+    // cũng sai một trong hai ca.
+    <div className="@container/panel space-y-4">
       {/* LD4 — Ghi nhanh hoạt động theo từng loại */}
       <div className="rounded-xl border border-border bg-card p-4">
         <h3 className="mb-3 text-sm font-bold text-foreground">Ghi nhanh hoạt động</h3>
@@ -320,7 +325,17 @@ export function LeadActivityPanel({
         <div className="mt-3 space-y-2">
           {actType === "CALL" && (
             <>
-              <div className="grid gap-2 sm:grid-cols-2">
+              {/* Đo theo CONTAINER, không theo cửa sổ. Khối này sống ở hai bề ngang
+                  rất khác nhau: cột 3/10 (~310–390px) trên desktop, và trọn bề ngang
+                  trang khi xếp dọc. Bản cũ dùng `sm:` (cửa sổ 640px) nên ở 1440px nó
+                  vẫn ép 2 cột vào 310px — mỗi ô ~150px và placeholder cụt thành
+                  "Thời lượng (ph".
+
+                  Ngưỡng `@md` = 448px chứ không phải `@sm` = 384px: container đo cả
+                  `p-4` của thẻ (32px), nên 384px chỉ còn 352px lòng thẻ ⇒ mỗi ô 174px
+                  và placeholder LẠI cụt. Đã đo đúng ca đó ở màn 1920 (cột phải 389px).
+                  Cần mỗi ô ≥200px ⇒ lòng thẻ ≥410px ⇒ container ≥442px. */}
+              <div className="grid gap-2 @md/panel:grid-cols-2">
                 <input
                   value={callCaller}
                   onChange={(e) => setCallCaller(e.target.value)}

@@ -243,7 +243,11 @@ export default async function LeadDetailPage({ params }: Props) {
   const sessionById = new Map(scheduledSessions.map((s) => [s.id, s]));
 
   return (
-    <div className="max-w-6xl p-6">
+    // `max-w-6xl` (1152px) là nếp chung của các trang admin, giữ nguyên tới 2xl.
+    // Nới thêm ở màn ≥1536px: trên monitor 1920 thì bản cũ bỏ trống ~40% bề ngang
+    // trong khi cột phải chỉ được 314px — mà đây là màn người trực lead mở cả ngày.
+    // Không nới vô hạn: quá rộng thì dòng chữ dài quá tầm đọc và mắt phải quét ngang.
+    <div className="max-w-6xl p-6 2xl:max-w-[1400px]">
       <Link
         href="/leads?view=table"
         className="mb-4 inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
@@ -350,21 +354,30 @@ export default async function LeadDetailPage({ params }: Props) {
           so le nhau và bảng mất nhịp. Cột phải thì ngược lại: nó là một ô nhập hẹp
           cộng một danh sách dòng ngắn, cho nó nửa màn hình là bỏ trống nửa màn hình.
 
-          `items-start` để hai cột không bị kéo cao bằng nhau; `lg:` mới chia cột —
-          màn hẹp vẫn xếp dọc theo đúng thứ tự đọc (hồ sơ trước, ô ghi sau). */}
-      <div className="mb-6 grid items-start gap-6 lg:grid-cols-10">
-        <div className="space-y-5 lg:col-span-7">
+          CHIA CỘT TỪ `xl` (1280px), KHÔNG PHẢI `lg`. Đo thật trên dev server: ở
+          1024px khung nội dung chỉ còn 720px (thanh bên admin ăn ~300px), 3/10 của
+          nó là **185px** — hẹp hơn cả một ô nhập, cột phải thành một dải không dùng
+          được. Ở 1280px cột phải được 262px, ở 1440px được 310px. Dưới `xl` thì xếp
+          dọc: một cột rộng vẫn hơn hai cột không cột nào dùng được.
+
+          `items-start` để hai cột không bị kéo cao bằng nhau. */}
+      <div className="mb-6 grid items-start gap-6 xl:grid-cols-10">
+        {/* `@container`: các khối bên trong đo theo BỀ NGANG CỘT NÀY, không theo bề
+            ngang cửa sổ. Bắt buộc ở admin — thanh bên chiếm ~300px nên `sm:`/`lg:`
+            (vốn hỏi cửa sổ) luôn nói dối về chỗ thật sự còn lại. */}
+        <div className="@container space-y-5 xl:col-span-7">
       {/* Khối THÔNG TIN KHÁCH HÀNG.
           · Có `h2` như mọi khối anh em ("Con của phụ huynh", "Thanh toán", "Ghi nhanh
             hoạt động"). Trước đợt này nó là khối DUY NHẤT không tên — mở trang ra là
             một mảng chữ trôi nổi, không nói mình là nhóm gì.
-          · MỘT cột trên mobile. Hai cột ở 390px cho mỗi ô ~150px: "Trụ sở chính -
-            Nguyễn Hữu Thọ" xuống 2 dòng, "16:14 30/08/2026" xuống 2 dòng, nhãn "LẦN
-            NHẬP GẦN NHẤT" cũng xuống 2 dòng — các ô cao so le và khối mất nhịp.
+          · Hai cột CHỈ KHI CỘT NÀY đủ rộng (`@xl` = 576px), không phải khi cửa sổ đủ
+            rộng. Bản trước dùng `sm:` (hỏi cửa sổ) nên ở 768px và 1024px vẫn bung 2
+            cột trong khi cột chỉ rộng 416–463px: mỗi ô ~210px, "Trụ sở chính -
+            Nguyễn Hữu Thọ" và "16:14 30/08/2026" đều xuống 2 dòng, các ô cao so le.
             Tiếng Việt dài là mặc định ở hệ này, không phải ca biên. */}
       <section className="rounded-xl border border-border bg-card p-4">
       <h2 className="mb-3 text-sm font-semibold text-foreground">Thông tin khách hàng</h2>
-      <dl className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+      <dl className="grid grid-cols-1 gap-4 @xl:grid-cols-2">
         <Info label="Tên con" value={piiLead.childName} />
         <Info label="Tuổi" value={lead.childAge?.toString() ?? null} />
         {/* 24/08 — KHÔNG fallback sang `source` nữa. "Nguồn" (Facebook, walk-in…)
@@ -431,12 +444,12 @@ export default async function LeadDetailPage({ params }: Props) {
           }
         />
         {/* Chữ tự do — cho trọn bề ngang, không nhốt vào nửa cột như các ô một dòng. */}
-        <div className="sm:col-span-2">
+        <div className="@xl:col-span-2">
           <Info label="Ghi chú" value={humanNote} />
         </div>
         {/* Dấu vết máy ghi — chỉ quản lý/quản trị (`leads:view-all`) đọc. */}
         {canViewAll && hasSystemLines(noteView) && (
-          <div className="sm:col-span-2">
+          <div className="@xl:col-span-2">
             <dt className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
               Nhật ký phiếu (chỉ quản trị)
             </dt>
@@ -559,10 +572,11 @@ export default async function LeadDetailPage({ params }: Props) {
 
         </div>
 
-        {/* CỘT PHẢI (3/10) — chỗ GHI. `lg:sticky` để khi cuộn đọc hồ sơ dài, ô ghi
+        {/* CỘT PHẢI (3/10) — chỗ GHI. `xl:sticky` để khi cuộn đọc hồ sơ dài, ô ghi
             nhanh vẫn nằm trong tầm mắt: không dính thì mỗi lần ghi một dòng lại phải
-            cuộn ngược lên đầu trang. */}
-        <div className="lg:sticky lg:top-4 lg:col-span-3">
+            cuộn ngược lên đầu trang. Chỉ dính khi ĐÃ chia cột — lúc xếp dọc mà dính
+            thì nó đè lên phần hồ sơ ngay dưới. */}
+        <div className="@container xl:sticky xl:top-4 xl:col-span-3">
           <LeadActivityPanel
             leadId={lead.id}
             activities={lead.activities.map((a) => ({
