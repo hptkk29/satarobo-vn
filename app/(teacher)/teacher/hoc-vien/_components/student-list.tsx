@@ -80,6 +80,18 @@ interface DongBang {
   /** Chuỗi lớp cho cột "Lớp"; null khi bảng nằm trong một khối lớp (tiêu đề khối đã nói). */
   classesLabel: string | null;
   status: string;
+  /**
+   * Lớp đang đứng khi bấm vào — đi kèm vào URL hồ sơ để hồ sơ mở ra ĐÚNG lớp đó.
+   * `null` ở chế độ danh sách phẳng (một dòng đại diện nhiều lớp, không có lớp nào
+   * là "đang đứng"). Thiếu tham số này là hồ sơ trộn mọi lớp vào một dòng thời gian
+   * (QA vòng 1, BUG-003).
+   */
+  classId: string | null;
+}
+
+/** URL hồ sơ, mang theo lớp đang đứng nếu có. */
+function hoSoHref(r: DongBang): string {
+  return r.classId ? `?s=${r.id}&classId=${r.classId}` : `?s=${r.id}`;
 }
 
 export function StudentList({ rows }: { rows: StudentRow[] }) {
@@ -136,6 +148,8 @@ export function StudentList({ rows }: { rows: StudentRow[] }) {
         studentCode: r.studentCode,
         classesLabel: r.classes.map((c) => c.name).join(" · "),
         status: r.status,
+        // Danh sách phẳng: một dòng đại diện nhiều lớp nên không có lớp "đang đứng".
+        classId: null,
       })),
     [filtered],
   );
@@ -163,6 +177,7 @@ export function StudentList({ rows }: { rows: StudentRow[] }) {
           studentCode: r.studentCode,
           classesLabel: null,
           status: c.status, // trạng thái trong CHÍNH lớp này
+          classId: c.id,
         });
         byClass.set(c.id, g);
       }
@@ -286,7 +301,7 @@ function StudentTable({
                 {/* Link THẬT trên tên (không phải onClick trên <tr>): giữ Tab/Enter,
                     chuột giữa mở tab mới, và trình đọc màn hình đọc ra "liên kết". */}
                 <Link
-                  href={`?s=${r.id}`}
+                  href={hoSoHref(r)}
                   className="rounded-sm font-medium text-foreground outline-none hover:text-primary-ink-hover focus-visible:ring-2 focus-visible:ring-ring"
                 >
                   {r.name}
@@ -308,7 +323,7 @@ function StudentTable({
               {/* aria-label kèm tên: không có nó thì màn hình đọc ra 30 liên kết
                   "Xem hồ sơ" giống hệt nhau, không phân biệt được của ai. */}
               <Link
-                href={`?s=${r.id}`}
+                href={hoSoHref(r)}
                 aria-label={`Xem hồ sơ ${r.name}`}
                 className="inline-flex items-center gap-1 rounded-md bg-primary-soft px-3 py-1.5 text-xs font-semibold text-primary-ink outline-none transition-colors hover:bg-primary-soft-hover focus-visible:ring-2 focus-visible:ring-ring"
               >

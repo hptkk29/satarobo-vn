@@ -36,6 +36,10 @@ import { getCourseCriteria } from "@/lib/lms/report-card";
 import { ENROLLMENT_ACTIVE_STATUS_LIST } from "@/lib/enrollment-status";
 import { ENROLLMENT_STATUS, SUBMISSION_STATUS } from "@/lib/labels/registry";
 import {
+  profileTabHref,
+  resolveProfileScope,
+} from "@/lib/teacher/profile-scope";
+import {
   EVAL_OVERALL_LABEL,
   evalNotesProse,
   normalizeEvalNotes,
@@ -143,12 +147,12 @@ function parseProfileTab(raw: string | undefined): ProfileTab {
 export default async function TeacherStudentProfilePage({
   searchParams,
 }: {
-  searchParams: Promise<{ s?: string; ptab?: string }>;
+  searchParams: Promise<{ s?: string; ptab?: string; classId?: string }>;
 }) {
   const session = await auth();
   if (!session?.user) return null; // layout đã gate — guard cho type-narrow
 
-  const { s: studentId, ptab } = await searchParams;
+  const { s: studentId, ptab, classId: rawClassId } = await searchParams;
   const actor = await resolveActor(session.user.id);
   const sdb = scopedDb(actor);
   const classIds = [...actor.assignedClassIds];
@@ -216,6 +220,17 @@ export default async function TeacherStudentProfilePage({
     );
     const multiClass = enrolledClassIds.length > 1;
     const activeTab = parseProfileTab(ptab);
+    // BUG-003 — hồ sơ phải biết đang xem lớp nào. `rawClassId` đến từ URL nên đi qua
+    // resolveProfileScope: lớp lạ bị HẠ CẤP về "xem tất cả", không bao giờ dùng thẳng.
+    const scope = resolveProfileScope(
+      enrollments.map((e) => ({
+        classId: e.classId,
+        className: e.class.name,
+        courseName: e.course.name,
+      })),
+      rawClassId,
+    );
+    const tabClassIds = scope.classIds;
     const birthYear = student.dateOfBirth
       ? student.dateOfBirth.getUTCFullYear()
       : null;
@@ -269,14 +284,58 @@ export default async function TeacherStudentProfilePage({
           </div>
         </div>
 
-        <ProfileTabBar studentId={studentId} active={activeTab} />
+        <ProfileTabBar
+          studentId={studentId}
+          active={activeTab}
+          activeClassId={scope.activeClassId}
+        />
+
+        {/* Chip chọn lớp — chỉ hiện khi em học nhiều hơn một lớp của giáo viên này.
+            Một lớp thì không có gì để chọn, thêm chip chỉ tốn một hàng ở 375px. */}
+        {scope.chips.length > 1 && (
+          <div className="flex flex-wrap gap-2 py-3">
+            <Link
+              href={profileTabHref({
+                studentId,
+                tab: activeTab,
+                activeClassId: null,
+              })}
+              className={cn(
+                "rounded-full border px-3 py-1 text-xs font-semibold transition-colors",
+                scope.activeClassId === null
+                  ? "border-primary bg-primary-soft text-primary-ink"
+                  : "border-border text-muted-foreground hover:text-foreground",
+              )}
+            >
+              Tất cả lớp
+            </Link>
+            {scope.chips.map((c) => (
+              <Link
+                key={c.classId}
+                href={profileTabHref({
+                  studentId,
+                  tab: activeTab,
+                  activeClassId: c.classId,
+                })}
+                className={cn(
+                  "rounded-full border px-3 py-1 text-xs font-semibold transition-colors",
+                  scope.activeClassId === c.classId
+                    ? "border-primary bg-primary-soft text-primary-ink"
+                    : "border-border text-muted-foreground hover:text-foreground",
+                )}
+              >
+                {c.courseName} · {c.className}
+              </Link>
+            ))}
+          </div>
+        )}
 
         {activeTab === "diem-danh" && (
           <AttendanceTab
             sdb={sdb}
             studentId={studentId}
-            classIds={enrolledClassIds}
-            multiClass={multiClass}
+            classIds={tabClassIds}
+            multiClass={multiClass && scope.activeClassId === null}
             enrollmentStatusByClass={enrollmentStatusByClass}
           />
         )}
@@ -284,15 +343,15 @@ export default async function TeacherStudentProfilePage({
           <ReviewsTab
             sdb={sdb}
             studentId={studentId}
-            classIds={enrolledClassIds}
-            multiClass={multiClass}
+            classIds={tabClassIds}
+            multiClass={multiClass && scope.activeClassId === null}
           />
         )}
         {activeTab === "bai-tap" && (
           <AssignmentsTab
             sdb={sdb}
             studentId={studentId}
-            classIds={enrolledClassIds}
+            classIds={tabClassIds}
           />
         )}
         {activeTab === "hoc-ba" && (
@@ -395,9 +454,11 @@ type Sdb = ReturnType<typeof scopedDb>;
 function ProfileTabBar({
   studentId,
   active,
+  activeClassId,
 }: {
   studentId: string;
   active: ProfileTab;
+  activeClassId: string | null;
 }) {
   return (
     <div className="overflow-x-auto">
@@ -411,7 +472,13 @@ function ProfileTabBar({
           return (
             <Link
               key={t.key}
-              href={`?s=${studentId}&ptab=${t.key}`}
+              // href chỉ-query: mọi tham số ngữ cảnh phải ghép LẠI ở đây, nếu không
+              // đổi tab là mất lớp đang lọc.
+              href={profileTabHref({
+                studentId,
+                tab: t.key,
+                activeClassId,
+              })}
               aria-current={on ? "page" : undefined}
               className={cn(
                 "inline-flex shrink-0 items-center gap-2 border-b-2 px-4 py-2.5 text-sm font-medium outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring",

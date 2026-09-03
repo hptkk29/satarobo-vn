@@ -2,7 +2,10 @@
 //
 // Roster lớp: avatar initials + tên + mã HV / Năm sinh / Trạng thái ghi danh.
 // ⚠️ Câu 46: reference TeachUI có cột "Phụ huynh" (parentName + phone) — BỎ HẲN ở
-// site GV; chỉ hiện định danh học tập của HV. Tên → hồ sơ /teacher/hoc-vien?s=…
+// site GV; chỉ hiện định danh học tập của HV. Tên → hồ sơ
+// /teacher/hoc-vien?s=…&classId=… — KÈM classId của chính lớp đang mở, nếu không hồ
+// sơ bung ra mọi lớp em đó học và giáo viên mất ngữ cảnh vừa bấm từ đâu ra
+// (QA vòng 1, BUG-003).
 //
 // Đọc roster QUA quan hệ class (đã guard assignedClassIds ở caller) thay vì query
 // Enrollment trực tiếp: enrollment dev có centerId=null → scopedDb lọc mất khi truy
@@ -108,7 +111,7 @@ export async function HubStudentsTab({
                         )}
                         <div className="min-w-0">
                           <Link
-                            href={`/teacher/hoc-vien?s=${st.id}`}
+                            href={`/teacher/hoc-vien?s=${st.id}&classId=${classId}`}
                             className="font-semibold text-foreground outline-none hover:text-primary-ink-hover focus-visible:ring-2 focus-visible:ring-ring"
                           >
                             {st.name}
