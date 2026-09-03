@@ -17,7 +17,6 @@ import { teacherCenterAssignmentError } from "@/lib/teachers/center-filter";
 import { leadStatusLabel } from "@/lib/leads/status";
 import { phoneSearchTerm } from "@/lib/phone";
 import {
-  setTrialProgramConfig,
   createTrialClass,
   addTrialSession,
   enrollLeadChild,
@@ -39,7 +38,6 @@ import {
   updateSessionSchema,
   cancelSessionSchema,
   attendanceSchema,
-  configSchema,
   createClassSchema,
 } from "./_lib/schemas";
 import { ngayVnSangUtc } from "./_lib/filters";
@@ -83,35 +81,6 @@ function lamMoi(trialClassId?: string): void {
   if (trialClassId) revalidatePath(`/lop-trial/${trialClassId}`);
 }
 
-
-// ═══════════════════════════════════════════════════════════════════════════
-// 1) Cấu hình số buổi
-// ═══════════════════════════════════════════════════════════════════════════
-
-export async function saveTrialConfigLopTrialAction(
-  input: unknown,
-): Promise<ActionResult> {
-  const ctx = await requireActor();
-  if (!ctx) return { ok: false, error: CHUA_DANG_NHAP };
-  if (!(await checkPermission("trials:config"))) {
-    return { ok: false, error: "Không có quyền cấu hình số buổi" };
-  }
-
-  const parsed = configSchema.safeParse(input);
-  if (!parsed.success) {
-    return { ok: false, error: parsed.error.issues[0]?.message ?? "Dữ liệu không hợp lệ" };
-  }
-
-  const res = await setTrialProgramConfig({
-    name: parsed.data.name,
-    sessionCount: parsed.data.sessionCount,
-    actorId: ctx.session.user.id,
-  });
-  if (!res?.ok) return { ok: false, error: res?.error ?? "Lưu cấu hình thất bại" };
-
-  lamMoi();
-  return { ok: true };
-}
 
 // ═══════════════════════════════════════════════════════════════════════════
 // 2) Tạo lớp

@@ -29,7 +29,6 @@ const SRC = readFileSync(
  * luôn xanh dù cổng bị đổi sai, tức là không kiểm gì cả.
  */
 const CONG_QUYEN: Record<string, Action> = {
-  saveTrialConfigLopTrialAction: "trials:config",
   createLopTrialClassAction: "trials:manage",
   addLopTrialSessionAction: "trials:manage",
   // 28/08 — sửa / huỷ MỘT buổi. Cùng cổng `trials:manage` với thêm buổi: ba thao tác
