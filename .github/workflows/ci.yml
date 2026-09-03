@@ -406,8 +406,23 @@ jobs:
           retention-days: 7
 
   e2e-r7:
-    name: E2E Phase R7 (Playwright service-level + Postgres local)
+    name: E2E Phase R7 ${{ matrix.shard }}/2 (Playwright service-level + Postgres local)
     runs-on: ubuntu-latest
+    # 03/09/2026 — CẮT LÀM HAI SHARD thay vì nới trần lần thứ ba.
+    #
+    # Lượt chạy 100568411670: **277 xanh / 0 đỏ**, rồi bị cắt ở đúng 28,0 phút —
+    # "1 interrupted, 83 did not run". Đây là lần thứ hai bộ này chạm trần, và chú
+    # thích trong `playwright.r7.config.ts` đã dặn sẵn: chạm nữa thì cắt bộ, ĐỪNG
+    # nới tiếp, vì nới mãi là mất luôn tín hiệu "bộ test đang chậm dần".
+    #
+    # Chia được vì mỗi job trong ma trận có container Postgres RIÊNG — hai shard
+    # không dùng chung `ci_test` nên `resetDb()` của shard này không xoá dữ liệu
+    # của shard kia. `workers: 1` giữ nguyên trong từng shard vì các spec vẫn dùng
+    # chung một DB bên trong shard đó.
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2]
     # 344 test tuần tự (workers=1) — suờn lớn nhất trong các job e2e. Đo được: cùng 344
     # test, cùng 0 lỗi, bước chạy dao động 4,5 phút → 12,5 phút chỉ vì tốc độ runner
     # (job 96766997067 vs 96715795093). Thêm retries=2: 2 test đỏ đẩy 4,5 → 9,2 phút.
@@ -478,7 +493,12 @@ jobs:
       - name: Run Phase R7 e2e
         # playwright.r7.config.ts: globalSetup (tái dùng a0) chạy prisma migrate deploy
         # lên Postgres local; .env.test vắng ở CI → giữ env CI ở trên (localhost ci_test).
-        run: pnpm test:e2e:r7
+        # Gọi THẲNG playwright, không qua `pnpm test:e2e:r7 -- --shard=…`: đường
+        # `--` của pnpm nuốt mất cờ, playwright đọc "--shard=1/2" thành BIỂU THỨC
+        # LỌC TÊN FILE và báo "No tests found" — job xanh giả vì chạy 0 test.
+        # (Đã thử tay ở local trước khi chốt: gọi thẳng ra 184 + 179 = 363 test,
+        # khớp đúng tổng 363 của lượt chạy bị cắt.)
+        run: pnpm exec playwright test -c playwright.r7.config.ts --shard=${{ matrix.shard }}/2
 
       - name: Upload R7 Playwright report
         # `always()` chứ không `failure()`: job bị GitHub giết vì hết trần mang trạng thái
@@ -487,7 +507,9 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: playwright-report-r7
+          # Tên phải kèm shard: hai job cùng tên artifact là lỗi cứng ở
+          # upload-artifact@v4 (không còn gộp như v3).
+          name: playwright-report-r7-shard${{ matrix.shard }}
           path: playwright-report/
           retention-days: 7
 
