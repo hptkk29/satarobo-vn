@@ -25,7 +25,7 @@ import { GraduationCap, Lock, Users } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { resolveActor } from "@/lib/auth/actor";
 import { scopedDb } from "@/lib/db-scope";
-import { ENROLLMENT_ACTIVE_STATUS_LIST } from "@/lib/enrollment-status";
+import { rosterWhere } from "@/lib/enrollment-scope";
 import {
   computeAttendanceSummary,
   type AttendanceSummaryItem,
@@ -112,11 +112,12 @@ export default async function TeacherCompletionsPage({
         .findUnique({
           where: { id: classId },
           select: {
+            // "ket-khoa" — module này SINH RA để quản lý em đã kết khoá, mà lọc
+            // "đang học" lại loại đúng nhóm đó: 11 lớp đã kết thúc trên UAT đều hiện
+            // "0 học viên" kèm "Lớp chưa có học viên đang học", trong khi trang Học
+            // viên liệt kê 10 em (QA vòng 1, BUG-021).
             enrollments: {
-              where: {
-                deletedAt: null,
-                status: { in: ENROLLMENT_ACTIVE_STATUS_LIST },
-              },
+              where: rosterWhere("ket-khoa"),
               select: {
                 id: true,
                 studentId: true,
@@ -235,10 +236,18 @@ export default async function TeacherCompletionsPage({
           </CardContent>
         </Card>
 
+        {/* Chủ dự án chốt 03/09 (quyết định #1): mẫu số chuyên cần là TỔNG BUỔI CỦA
+            KHOÁ, giữ nguyên như học bạ và cổng phụ huynh. Màn này trước đó dùng "số
+            buổi đã COMPLETED" nên cùng một em ra "7/7" ở đây và "7/11" ở học bạ
+            (QA vòng 1, BUG-023). `heldSessions` chỉ dùng để CẢNH BÁO lúc đề xuất. */}
         {enrollments.length === 0 ? (
-          <EmptyState icon={Users} title="Lớp chưa có học viên đang học." />
+          <EmptyState icon={Users} title="Lớp chưa có học viên nào." />
         ) : (
-          <CompletionTable rows={rows} completedSessions={progress.completed} />
+          <CompletionTable
+            rows={rows}
+            completedSessions={progress.total}
+            heldSessions={progress.completed}
+          />
         )}
       </div>
     );
@@ -266,16 +275,9 @@ export default async function TeacherCompletionsPage({
         where: { id: { in: classIds } },
         select: {
           id: true,
-          _count: {
-            select: {
-              enrollments: {
-                where: {
-                  deletedAt: null,
-                  status: { in: ENROLLMENT_ACTIVE_STATUS_LIST },
-                },
-              },
-            },
-          },
+          // Cùng phạm vi với bảng chi tiết — nếu không thì thẻ lớp ghi "0 học viên"
+          // còn bấm vào lại ra 10 dòng.
+          _count: { select: { enrollments: { where: rosterWhere("ket-khoa") } } },
         },
       })
     : [];
