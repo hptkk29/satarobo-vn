@@ -81,13 +81,19 @@ const ALL = "ALL";
 // cũ đông hơn lớp đang dạy, để lẫn vào là lớp còn buổi cần điểm danh bị đẩy xuống đáy.
 const DANG_PHU_TRACH = "DANG_PHU_TRACH";
 
-export function ClassList({ rows }: { rows: ClassRow[] }) {
+export function ClassList({
+  rows,
+  banDauLoc,
+}: {
+  rows: ClassRow[];
+  /** Bộ lọc đọc từ `searchParams` Ở SERVER — thiếu nó là deep-link không chạy. */
+  banDauLoc?: { q?: string; khoa?: string; trangThai?: string };
+}) {
   // Bộ lọc sống trên URL: gửi link được, F5 không mất (BUG-019).
-  const loc = useLocTrenUrl({
-    q: "",
-    khoa: ALL,
-    trangThai: DANG_PHU_TRACH,
-  });
+  const loc = useLocTrenUrl(
+    { q: "", khoa: ALL, trangThai: DANG_PHU_TRACH },
+    banDauLoc,
+  );
   const query = loc.gia_tri.q;
   const course = loc.gia_tri.khoa;
   const status = loc.gia_tri.trangThai;
