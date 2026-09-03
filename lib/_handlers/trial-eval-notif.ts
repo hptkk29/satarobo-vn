@@ -22,6 +22,7 @@
 import { db } from "@/lib/db";
 import { on, type DomainEventLite } from "@/lib/events/registry";
 import { notifyStaff } from "@/lib/notifications/notify";
+import { RUBRIC_MAX, fmtScore } from "@/lib/trial/rubric";
 
 const str = (v: unknown): string => (v == null ? "" : String(v));
 
@@ -55,12 +56,15 @@ export async function onTrialEvaluated(event: DomainEventLite): Promise<void> {
   const rank = str(event.payload.rank);
   // Điểm/xếp loại in thẳng vào tin: phần lớn lượt chốt chỉ cần con số này, không
   // phải mở phiếu. Thiếu dữ liệu thì bỏ mệnh đề chứ không in "undefined".
+  //
+  // ⚠️ Thang điểm LẤY TỪ NGUỒN (`RUBRIC_MAX`), tuyệt đối không gõ tay: rúbric đã đổi
+  // từ thang 8.0 sang 10.0 ngày 27/08/2026, và vài chú thích trong repo còn ghi "thang
+  // 8.0". Bản đầu của hàm này chép theo chú thích cũ nên bắn ra tin "Điểm 10/8" —
+  // đo được ngay lần chạy thử đầu tiên 03/09.
   const veDiem =
-    typeof diem === "number" && rank
-      ? ` Điểm ${diem}/8 — ${rank}.`
-      : typeof diem === "number"
-        ? ` Điểm ${diem}/8.`
-        : "";
+    typeof diem === "number"
+      ? ` Điểm ${fmtScore(diem)}/${fmtScore(RUBRIC_MAX)}${rank ? ` — ${rank}` : ""}.`
+      : "";
 
   await notifyStaff({
     userIds: [userId],
