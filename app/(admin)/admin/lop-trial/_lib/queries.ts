@@ -13,7 +13,6 @@ import type {
   ClassRow,
   EnrollmentRow,
   Option,
-  ProgramConfig,
   RoomOption,
   SessionRow,
   TrialClassStatusV2,
@@ -67,17 +66,6 @@ export async function layDanhSachLop(
       nextSessionDate: next ? next.date.toISOString().slice(0, 10) : null,
     };
   });
-}
-
-/** Cấu hình số buổi đang hiệu lực (bản mới nhất). */
-export async function layCauHinh(actor: Actor): Promise<ProgramConfig> {
-  const sdb = scopedDb(actor);
-  const cfg = await sdb.trialProgramConfig.findFirst({
-    where: { active: true },
-    orderBy: { updatedAt: "desc" },
-    select: { id: true, name: true, sessionCount: true },
-  });
-  return cfg ?? null;
 }
 
 /** Cơ sở + phòng để đổ vào form tạo lớp. */

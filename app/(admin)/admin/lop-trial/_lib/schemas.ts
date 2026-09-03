@@ -44,15 +44,6 @@ export function parseVnInput(value: string): Date | null {
 
 // ─── Mặt phẳng V2 ────────────────────────────────────────────────────────────
 
-export const configSchema = z.object({
-  name: z.string().trim().min(1, "Tên cấu hình bắt buộc").max(120),
-  sessionCount: z.coerce
-    .number()
-    .int("Số buổi phải là số nguyên")
-    .min(1, "Số buổi phải ≥ 1")
-    .max(60, "Số buổi quá lớn"),
-});
-
 /**
  * Tạo lớp trải nghiệm — 28/08: chỉ còn CƠ SỞ + KHOÁ TRẢI NGHIỆM.
  *
