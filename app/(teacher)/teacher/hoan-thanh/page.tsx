@@ -20,7 +20,6 @@
 // đọc qua sdb pass-through; own-class đã gác bằng assignedClassIds + courseId suy từ lớp
 // (không tin client) — giống admin hoan-thanh-khoa/_actions.ts.
 // ⚠️ Câu 46: payload chỉ TÊN học viên — KHÔNG SĐT/email/tên phụ huynh.
-import Link from "next/link";
 import { GraduationCap, Lock, Users } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { resolveActor } from "@/lib/auth/actor";
@@ -35,7 +34,7 @@ import type {
   MakeupStatusValue,
   SessionStatusValue,
 } from "@/lib/labels";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { EmptyState } from "../_components/ui/empty-state";
 import { PageHeader } from "../_components/ui/page-header";
 import {
@@ -43,6 +42,7 @@ import {
   type CompletionTableRow,
 } from "./_components/completion-table";
 import { BackLink } from "../_components/ui/back-link";
+import { CompletionClassGrid } from "./_components/completion-class-grid";
 
 export const metadata = { title: "Hoàn thành khoá | Giáo viên Sata Robo" };
 
@@ -257,7 +257,12 @@ export default async function TeacherCompletionsPage({
   const classes = classIds.length
     ? await sdb.class.findMany({
         where: { id: { in: classIds } },
-        select: { id: true, name: true, course: { select: { name: true } } },
+        select: {
+          id: true,
+          name: true,
+          status: true, // để lọc bỏ lớp đã huỷ / chưa khai giảng khỏi lưới
+          course: { select: { name: true } },
+        },
         orderBy: { name: "asc" },
       })
     : [];
@@ -299,7 +304,7 @@ export default async function TeacherCompletionsPage({
     <div>
       <PageHeader
         title="Hoàn thành khoá"
-        subtitle="Tiến độ khoá học và trạng thái hoàn thành của học viên các lớp bạn phụ trách — chỉ xem; xác nhận hoàn thành do trung tâm thao tác trên trang quản trị."
+        subtitle="Tiến độ khoá học của các lớp bạn phụ trách. Bạn ĐỀ XUẤT hoàn thành cho từng học viên; trung tâm duyệt và cấp chứng chỉ trên trang quản trị."
       />
 
       {classes.length === 0 ? (
@@ -308,37 +313,20 @@ export default async function TeacherCompletionsPage({
           title="Bạn chưa được phân công lớp nào."
         />
       ) : (
-        <div className="grid gap-3 sm:grid-cols-2">
-          {classes.map((c) => {
+        <CompletionClassGrid
+          rows={classes.map((c) => {
             const p = tallySessions(sessionsByClass.get(c.id) ?? []);
-            return (
-              // href CHỈ-query (giữ path hiện tại): chạy đúng cả trên host giaovien
-              // (clean URL /hoan-thanh) LẪN localhost/preview (path /teacher/hoan-thanh).
-              <Link key={c.id} href={`?classId=${c.id}`} className="block">
-                <Card className="t-card-hover h-full">
-                  <CardHeader className="pb-2">
-                    <CardTitle className="text-base">{c.name}</CardTitle>
-                    <p className="text-xs text-muted-foreground">
-                      {c.course.name}
-                    </p>
-                  </CardHeader>
-                  <CardContent className="space-y-2 pt-0">
-                    <div className="flex items-center justify-between text-xs text-muted-foreground">
-                      <span>
-                        {p.completed}/{p.total} buổi ·{" "}
-                        {studentCountByClass.get(c.id) ?? 0} học viên
-                      </span>
-                      <span className="font-medium text-foreground">
-                        {p.pct}%
-                      </span>
-                    </div>
-                    <ProgressBar pct={p.pct} />
-                  </CardContent>
-                </Card>
-              </Link>
-            );
+            return {
+              id: c.id,
+              name: c.name,
+              courseName: c.course.name,
+              status: c.status,
+              completedSessions: p.completed,
+              totalSessions: p.total,
+              studentCount: studentCountByClass.get(c.id) ?? 0,
+            };
           })}
-        </div>
+        />
       )}
     </div>
   );
