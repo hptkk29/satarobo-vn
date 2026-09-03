@@ -40,8 +40,24 @@ const doc = (p: string) => fs.readFileSync(p, "utf8");
 const boChuThich = (s: string) =>
   s.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
 
-/** Mọi file nguồn của repo (bỏ test, bỏ thư mục sinh ra). */
+/**
+ * Mọi file nguồn của repo (bỏ test, bỏ thư mục sinh ra).
+ *
+ * NHỚ KẾT QUẢ giữa các `it` trong cùng file test: bốn ca dưới đây đều gọi hàm này, mà
+ * mỗi lượt là một lần duyệt đệ quy `app` + `lib` + `components`. Chạy lẻ thì nhanh,
+ * nhưng trong bộ đầy đủ (378 file test chạy song song) một lượt duyệt vượt quá 5000ms
+ * mặc định của vitest và ca test ĐỎ VÌ HẾT GIỜ — không phải vì mã sai. Đã tái hiện
+ * 03/09/2026: chạy lẻ 15/15 xanh, chạy cùng cả bộ thì đỏ ở ca cuối.
+ */
+let _nguonRepoCache: string[] | null = null;
+
 function nguonRepo(): string[] {
+  if (_nguonRepoCache) return _nguonRepoCache;
+  _nguonRepoCache = nguonRepoQuet();
+  return _nguonRepoCache;
+}
+
+function nguonRepoQuet(): string[] {
   const bo = new Set([
     "node_modules",
     ".next",
