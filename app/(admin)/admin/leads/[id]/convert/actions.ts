@@ -9,14 +9,13 @@ import { resolveActor } from '@/lib/auth/actor'
 import { checkPermission } from '@/lib/auth/check-permission'
 import { getAuditActor } from '@/lib/audit/log'
 import { isConvertV2Enabled } from '@/lib/flags'
-import { convertLeadV2, computeInstallmentSplit, type ConvertV2Student } from '@/lib/crm/convert-lead-v2'
+import { convertLeadV2, type ConvertV2Student } from '@/lib/crm/convert-lead-v2'
 import { computeEnrollmentPrice } from '@/lib/finance/pricing'
 import {
   canGrantFullScholarship,
   scholarshipAuditReason,
   SCHOLARSHIP_FORBIDDEN,
 } from '@/lib/crm/scholarship'
-import { recordInstallmentPlan, requestInstallmentApproval } from '@/lib/orders/installments'
 import { phoneVn } from '@/lib/validators/phone'
 
 // ─── R7-05 — wiring Convert v2 vào Server Action (UI → service đã có) ──────────
@@ -44,17 +43,6 @@ const studentSchema = z.object({
   // ở thân hàm — schema không biết người gọi là ai.
   scholarship: z.boolean().optional(),
 })
-
-// FL2-01 — kế hoạch học phí: 1 đợt (đóng đủ) hoặc 2 đợt (đợt 1 đã thu + đợt 2 hẹn ngày).
-// Số tiền/tổng đọc LẠI từ Order ở server (không tin client) — client chỉ gửi dự định.
-const installmentSchema = z
-  .object({
-    plan: z.enum(['FULL', 'TWO']),
-    dot1Amount: z.number().int().nonnegative().optional(),
-    dot2DueDate: z.string().trim().optional().or(z.literal('')),
-  })
-  .optional()
-  .nullable()
 
 const convertSchema = z.object({
   parentName: z.string().trim().min(2, 'Tên phụ huynh tối thiểu 2 ký tự').max(120),
@@ -90,7 +78,6 @@ const convertSchema = z.object({
   parentWard: z.string().trim().max(120).optional().or(z.literal('')),
   parentCity: z.string().trim().max(120).optional().or(z.literal('')),
   students: z.array(studentSchema).min(1, 'Cần ít nhất 1 học viên'),
-  installment: installmentSchema,
   // Bắt buộc khi có ưu đãi (kiểm dưới, sau khi biết ưu đãi có ăn tiền thật không).
   // Đi vào `AuditLog.reason` của bản ghi STATUS_CHANGE lead → tra được về sau.
   // `discountReason` ĐÃ GỠ khỏi đầu vào: form không còn ô nhập (chốt 31/08 — "chỉ cần
@@ -105,11 +92,6 @@ export type SubmitConvertV2Result =
       studentIds: string[]
       enrollmentIds: string[]
       deduped: boolean
-      /** FL2-01 — đã ghi kế hoạch 2 đợt vào Order chưa (cảnh báo nếu không áp được). */
-      installmentApplied?: boolean
-      installmentWarning?: string
-      /** C4 — kế hoạch 2 đợt đã gửi quản lý cơ sở duyệt (PENDING_APPROVAL). */
-      installmentPendingApproval?: boolean
     }
   | { ok: false; code?: string; error: string }
 
@@ -251,49 +233,16 @@ export async function submitConvertV2(
     return { ok: false, code: res.error.code, error: res.error.message }
   }
 
-  // FL2-01 — chọn 2 đợt → NỐI recordInstallmentPlan (tái dùng lib sẵn có). Áp lên Order
-  // gắn lead (tạo trước convert ở /orders/new?leadId=...). Tổng đọc từ Order; dot2 =
-  // total - dot1 (computeInstallmentSplit) nên luôn khớp ràng buộc của lib. Thất bại ở
-  // bước này KHÔNG đảo convert đã commit — chỉ trả cảnh báo để Sale ghi nhận thủ công.
-  let installmentApplied: boolean | undefined
-  let installmentWarning: string | undefined
-  let installmentPendingApproval: boolean | undefined
-  if (d.installment?.plan === 'TWO') {
-    const order = await sdb.order.findFirst({
-      where: { leadId, type: 'COURSE' },
-      orderBy: { createdAt: 'desc' },
-      select: { id: true, totalAmount: true },
-    })
-    if (!order || order.totalAmount <= 0) {
-      installmentApplied = false
-      installmentWarning = 'Chưa có đơn hàng học phí để chia 2 đợt — ghi nhận đợt 2 thủ công ở đơn hàng.'
-    } else if (!d.installment.dot2DueDate) {
-      installmentApplied = false
-      installmentWarning = 'Thiếu ngày hẹn đóng đợt 2 — chưa ghi được kế hoạch 2 đợt.'
-    } else {
-      const { dot1, dot2 } = computeInstallmentSplit(order.totalAmount, d.installment.dot1Amount ?? 0)
-      const plan = await recordInstallmentPlan({
-        orderId: order.id,
-        dot1Amount: dot1,
-        dot2Amount: dot2,
-        dot2DueDate: new Date(d.installment.dot2DueDate),
-        actorId,
-      })
-      installmentApplied = plan.ok
-      if (!plan.ok) installmentWarning = plan.error
-      // C4 — có đợt 2 thực sự (dot2>0) → gửi quản lý cơ sở duyệt (PENDING_APPROVAL).
-      // Convert đã commit; đợt 2 chỉ "kích hoạt" ghi Payment sau khi được duyệt.
-      if (plan.ok && dot2 > 0) {
-        const approval = await requestInstallmentApproval({
-          orderId: order.id,
-          actor: { id: actorId ?? session.user.id, name: actorName },
-        })
-        installmentPendingApproval = approval.ok
-        if (!approval.ok && !installmentWarning) installmentWarning = approval.error
-      }
-    }
-    revalidatePath('/orders')
-  }
+  // ⚠️ 31/08/2026 — NHÁNH "chia 2 đợt" ĐÃ GỠ khỏi màn chốt.
+  //
+  // Chốt của chủ dự án: học phí chốt ở TRANG ĐƠN HÀNG, không hỏi lại ở đây. Gỡ cả ở
+  // server chứ không chỉ giấu ô: để lại một đường ghi mà không giao diện nào gọi là để
+  // dành một cửa ghi kế hoạch đợt THỨ HAI — đúng kiểu hai màn ghi đè nhau rồi không ai
+  // biết bản nào thắng.
+  //
+  // Năng lực KHÔNG mất: `recordInstallmentPlan` (orders/_actions.ts:959) và
+  // `requestInstallmentApproval` (orders/_components/_installment-request-actions.ts)
+  // vẫn là đường chính thức, nay là đường DUY NHẤT.
 
   revalidatePath('/leads')
   revalidatePath(`/leads/${leadId}`)
@@ -306,8 +255,5 @@ export async function submitConvertV2(
     studentIds: res.studentIds,
     enrollmentIds: res.enrollmentIds,
     deduped: res.deduped,
-    installmentApplied,
-    installmentWarning,
-    installmentPendingApproval,
   }
 }

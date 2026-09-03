@@ -4,7 +4,6 @@ import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { Plus, Trash2, AlertTriangle } from 'lucide-react'
 import { toast } from 'sonner'
-import { MoneyInput } from '@/components/ui/money-input'
 import { HelpHint } from '@/components/admin/ui/help-hint'
 import { submitConvertV2 } from './actions'
 
@@ -54,7 +53,6 @@ export function ConvertForm({
   defaultParentPhone,
   prefillStudents,
   classes,
-  order,
   canGrantScholarship,
 }: {
   leadId: string
@@ -75,7 +73,6 @@ export function ConvertForm({
   }[]
   classes: ClassOpt[]
   /** FL2-01 — đơn hàng học phí gắn lead (để chia 1/2 đợt). null = chưa có đơn. */
-  order: { id: string; totalAmount: number } | null
 }) {
   const router = useRouter()
   const [pending, startTransition] = useTransition()
@@ -91,13 +88,6 @@ export function ConvertForm({
   const [parentCity, setParentCity] = useState('')
 
   // FL2-01 — kế hoạch học phí. Chỉ áp dụng khi có Order với tổng > 0.
-  const hasOrder = !!order && order.totalAmount > 0
-  const orderTotal = order?.totalAmount ?? 0
-  const [installPlan, setInstallPlan] = useState<'FULL' | 'TWO'>('FULL')
-  const [dot1Amount, setDot1Amount] = useState('')
-  const [dot2DueDate, setDot2DueDate] = useState('')
-  const dot1Num = Math.min(Math.max(0, Number.parseInt(dot1Amount || '0', 10) || 0), orderTotal)
-  const dot2Num = Math.max(0, orderTotal - dot1Num)
 
   // Lý do ưu đãi — BẮT BUỘC khi có giảm (server chặn lại lần nữa, đây chỉ là chặn sớm).
 
@@ -165,10 +155,6 @@ export function ConvertForm({
       toast.error('Mỗi học viên cần tên + lớp')
       return
     }
-    if (hasOrder && installPlan === 'TWO' && !dot2DueDate) {
-      toast.error('Chọn 2 đợt thì cần ngày hẹn đóng đợt 2')
-      return
-    }
     setConflict(null)
     startTransition(async () => {
       const res = await submitConvertV2(leadId, {
@@ -187,20 +173,12 @@ export function ConvertForm({
           consentMedia: s.consentMedia,
           scholarship: s.scholarship,
         })),
-        // FL2-01 — chỉ gửi khi có đơn để chia; server đọc lại tổng từ Order.
-        installment: hasOrder
-          ? { plan: installPlan, dot1Amount: dot1Num, dot2DueDate: installPlan === 'TWO' ? dot2DueDate : '' }
-          : null,
       })
       if (res.ok) {
         toast.success(
           `Đã chuyển đổi: ${res.studentIds.length} học viên · ${res.enrollmentIds.length} đăng ký` +
             (res.deduped ? ' (đã xử lý trùng / idempotent)' : ''),
         )
-        if (res.installmentWarning) toast.warning(res.installmentWarning)
-        else if (res.installmentPendingApproval)
-          toast.info('Kế hoạch 2 đợt đã gửi — chờ quản lý cơ sở duyệt')
-        else if (res.installmentApplied) toast.success('Đã ghi kế hoạch học phí 2 đợt')
         router.push(`/leads/${leadId}`)
         router.refresh()
         return
@@ -439,108 +417,12 @@ export function ConvertForm({
         </p>
       )}
 
-      {/* FL2-01 — Học phí: 1 đợt (full) hoặc 2 đợt (đợt 1 đã thu + đợt 2 hẹn ngày). */}
-      {hasOrder && (
-        <div className="rounded-xl border border-border bg-card p-4">
-          <h2 className="mb-1 text-sm font-semibold text-foreground">
-            Học phí
-            <HelpHint className="ml-1">
-              Tổng lấy từ đơn hàng đã tạo cho lead này, không sửa được ở đây — muốn đổi
-              thì sửa đơn hàng rồi quay lại. Chọn &ldquo;đóng đủ 1 đợt&rdquo; khi phụ
-              huynh đóng hết ngay; chọn &ldquo;2 đợt&rdquo; khi còn nợ lại một phần.
-            </HelpHint>
-          </h2>
-          <p className="mb-3 text-xs text-muted-foreground">
-            Tổng đơn hàng: <strong>{orderTotal.toLocaleString('vi-VN')}đ</strong>
-          </p>
-          <div className="flex flex-wrap gap-4">
-            <label className="flex items-center gap-2 text-sm text-foreground">
-              <input
-                type="radio"
-                name="install-plan"
-                checked={installPlan === 'FULL'}
-                onChange={() => setInstallPlan('FULL')}
-                className="h-4 w-4"
-              />
-              Đóng đủ 1 đợt
-            </label>
-            <label className="flex items-center gap-2 text-sm text-foreground">
-              <input
-                type="radio"
-                name="install-plan"
-                checked={installPlan === 'TWO'}
-                onChange={() => setInstallPlan('TWO')}
-                className="h-4 w-4"
-              />
-              Chia 2 đợt
-            </label>
-          </div>
-
-          {installPlan === 'TWO' && (
-            <div className="mt-3 grid gap-3 sm:grid-cols-3">
-              <label className="block">
-                <span className="mb-1 block text-xs font-medium text-muted-foreground">
-                  Đợt 1 — đã thu (VNĐ)
-                  <HelpHint>
-                    Số tiền phụ huynh ĐÃ đóng thật tại thời điểm chốt, không phải số dự
-                    kiến. Không được lớn hơn tổng đơn; phần còn lại tự thành đợt 2.
-                  </HelpHint>
-                </span>
-                {/* Ô tiền: gõ 10000000 → hiện 10.000.000. Vẫn giữ state dạng chuỗi để
-                    phép kẹp dot1Num (parseInt + clamp theo tổng đơn) không đổi. */}
-                <MoneyInput
-                  name="dot1Amount"
-                  min={0}
-                  max={orderTotal}
-                  value={dot1Amount}
-                  onValueChange={(v) => setDot1Amount(v === null ? '' : String(v))}
-                  placeholder="0"
-                  // suffix={null}: nhãn đã ghi "(VNĐ)", và `inputCls` mang px-3 nên nó ghi
-                  // đè phần lề phải mà MoneyInput chừa cho hậu tố ⇒ hậu tố đè lên chữ số.
-                  suffix={null}
-                  className={inputCls}
-                />
-              </label>
-              <label className="block">
-                <span className="mb-1 block text-xs font-medium text-muted-foreground">
-                  Đợt 2 — còn lại
-                  <HelpHint>
-                    Tự tính = tổng đơn − đợt 1, không gõ tay được. Đây chính là khoản
-                    công nợ hệ thống sẽ nhắc phụ huynh trước hạn.
-                  </HelpHint>
-                </span>
-                <input
-                  value={`${dot2Num.toLocaleString('vi-VN')}đ`}
-                  readOnly
-                  className={`${inputCls} bg-muted text-muted-foreground`}
-                />
-              </label>
-              <label className="block">
-                <span className="mb-1 block text-xs font-medium text-muted-foreground">
-                  Đợt 2 — ngày hẹn đóng *
-                  <HelpHint>
-                    Ngày phụ huynh hẹn đóng nốt. Hệ thống nhắc công nợ dựa vào ngày này,
-                    nên phải là ngày đã thống nhất với phụ huynh chứ không đặt đại.
-                  </HelpHint>
-                </span>
-                <input
-                  type="date"
-                  value={dot2DueDate}
-                  onChange={(e) => setDot2DueDate(e.target.value)}
-                  className={inputCls}
-                />
-              </label>
-            </div>
-          )}
-
-          {/* C4 — kế hoạch 2 đợt cần quản lý cơ sở duyệt trước khi đợt 2 được tính tiền. */}
-          {installPlan === 'TWO' && (
-            <p className="mt-3 inline-flex items-center gap-1.5 rounded-lg bg-state-warning-soft px-2.5 py-1.5 text-xs font-medium text-state-warning-ink">
-              <AlertTriangle className="h-3.5 w-3.5" /> Chờ quản lý cơ sở duyệt
-            </p>
-          )}
-        </div>
-      )}
+      {/* ⚠️ 31/08/2026 — khối "Học phí" (1 đợt / 2 đợt + số tiền đợt 1 + hạn đợt 2) ĐÃ GỠ.
+          Chốt của chủ dự án: học phí đã chốt ở TRANG ĐƠN HÀNG rồi, để lại đây là hỏi
+          cùng một câu ở hai chỗ. Năng lực không mất: `recordInstallmentPlan` và
+          `requestInstallmentApproval` vẫn chạy từ /orders (orders/_actions.ts:959 và
+          order-detail-client.tsx) — đó nay là NƠI DUY NHẤT khai kế hoạch đợt, nên không
+          còn chuyện hai màn ghi đè nhau. */}
 
       <div className="flex gap-2 border-t border-border pt-4">
         <button

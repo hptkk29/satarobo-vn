@@ -62,13 +62,9 @@ export default async function ConvertV2Page({ params }: Props) {
   // Tóm tắt thanh toán (đã nộp / tổng phải thu / còn thiếu) + điều kiện chốt.
   const paymentSummary = await getLeadPaymentSummary(sdb, lead.id)
 
-  // FL2-01 — đơn hàng học phí gắn lead (tạo trước ở /orders/new?leadId=...) để chia
-  // 1/2 đợt khi convert. Lấy đơn COURSE mới nhất của lead.
-  const courseOrder = await sdb.order.findFirst({
-    where: { leadId: lead.id, type: 'COURSE' },
-    orderBy: { createdAt: 'desc' },
-    select: { id: true, totalAmount: true },
-  })
+  // ⚠️ 31/08/2026 — truy vấn `courseOrder` ĐÃ GỠ cùng khối "Học phí" của form: nó chỉ
+  // phục vụ ô chia 1/2 đợt, mà việc đó nay chốt ở trang đơn hàng. Giữ lại là một câu
+  // query chạy mỗi lần mở trang cho một prop không ai đọc.
 
   // Lớp đang mở (ưu tiên cùng cơ sở lead) + giá khoá để snapshot.
   const classes = await sdb.class.findMany({
@@ -151,7 +147,6 @@ export default async function ConvertV2Page({ params }: Props) {
         defaultParentPhone={formatPhoneVN(lead.phone)}
         prefillStudents={prefillStudents}
         classes={classOptions}
-        order={courseOrder}
       />
     </div>
   )
