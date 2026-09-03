@@ -38,15 +38,31 @@ export function docSoDong(raw: string | string[] | undefined): number {
  *
  * Mức chọn dùng chung `MUC_SO_DONG` với bảng (10/20/50/100), chỉ khác GIÁ TRỊ MẶC ĐỊNH.
  */
-export const SO_THE_MOI_COT_MAC_DINH = 10;
+export const SO_THE_MOI_COT_MAC_DINH = 5;
 
 /**
- * Đọc `?size=` cho Kanban. Dùng CHUNG tham số với bảng — đổi số ở chế độ này rồi bấm
- * sang chế độ kia thì giữ nguyên lựa chọn, không phải đặt lại.
+ * Mức chọn RIÊNG của Kanban — có thêm mức 5, KHÁC `MUC_SO_DONG` của bảng.
  *
- * Chặt tay như `docSoDong`: chỉ nhận đúng 4 mức, mọi thứ khác về mặc định.
+ * Vì sao không nhét 5 vào `MUC_SO_DONG` dùng chung: `MUC_SO_DONG[0]` đang được ba
+ * component phân trang dùng làm NGƯỠNG hiện thanh phân trang (`tong > MUC_SO_DONG[0]`).
+ * Thêm 5 vào đầu mảng là mọi bảng trong hệ đổi ngưỡng từ 10 xuống 5 — thanh phân trang
+ * mọc ra ở những bảng 6 dòng vốn đang gọn. Đổi Kanban thì đổi mỗi Kanban.
+ */
+export const MUC_THE_MOI_COT = [5, 10, 20, 50, 100] as const;
+
+/**
+ * Đọc `?size=` cho Kanban. Dùng CHUNG tham số với bảng, nên bốn mức 10/20/50/100 giữ
+ * nguyên khi bấm qua lại giữa hai chế độ.
+ *
+ * ⚠️ Mức 5 chỉ Kanban hiểu. Chọn 5 ở Kanban rồi bấm sang Bảng thì bảng về mặc định 20
+ * (`docSoDong` không nhận 5) — chấp nhận có chủ đích: bảng không có mục 5 trong ô chọn,
+ * cho nó nhận 5 là ô chọn hiện giá trị không có trong danh sách.
+ *
+ * Chặt tay như `docSoDong`: chỉ nhận đúng 5 mức, mọi thứ khác về mặc định.
  */
 export function docSoTheMoiCot(raw: string | string[] | undefined): number {
   const n = Number(Array.isArray(raw) ? raw[0] : raw);
-  return MUC_SO_DONG.includes(n as (typeof MUC_SO_DONG)[number]) ? n : SO_THE_MOI_COT_MAC_DINH;
+  return MUC_THE_MOI_COT.includes(n as (typeof MUC_THE_MOI_COT)[number])
+    ? n
+    : SO_THE_MOI_COT_MAC_DINH;
 }

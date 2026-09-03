@@ -8,20 +8,36 @@ import {
   docSoDong,
   docSoTheMoiCot,
   MUC_SO_DONG,
+  MUC_THE_MOI_COT,
   SO_DONG_MAC_DINH,
   SO_THE_MOI_COT_MAC_DINH,
 } from "./phan-trang";
 
 describe("số thẻ mỗi cột Kanban", () => {
-  it("mặc định 10 — KHÁC mặc định 20 của bảng", () => {
-    expect(SO_THE_MOI_COT_MAC_DINH).toBe(10);
-    expect(docSoTheMoiCot(undefined)).toBe(10);
+  it("mặc định 5 — KHÁC mặc định 20 của bảng", () => {
+    expect(SO_THE_MOI_COT_MAC_DINH).toBe(5);
+    expect(docSoTheMoiCot(undefined)).toBe(5);
     expect(docSoDong(undefined)).toBe(SO_DONG_MAC_DINH);
     expect(SO_THE_MOI_COT_MAC_DINH).not.toBe(SO_DONG_MAC_DINH);
   });
 
-  it("nhận đúng 4 mức dùng chung với bảng", () => {
-    for (const n of MUC_SO_DONG) expect(docSoTheMoiCot(String(n))).toBe(n);
+  it("nhận đủ 5 mức 5/10/20/50/100", () => {
+    expect([...MUC_THE_MOI_COT]).toEqual([5, 10, 20, 50, 100]);
+    for (const n of MUC_THE_MOI_COT) expect(docSoTheMoiCot(String(n))).toBe(n);
+  });
+
+  it("mặc định PHẢI nằm trong danh sách mức — nếu không ô chọn hiện giá trị không có mục", () => {
+    expect([...MUC_THE_MOI_COT]).toContain(SO_THE_MOI_COT_MAC_DINH);
+    expect([...MUC_SO_DONG]).toContain(SO_DONG_MAC_DINH);
+  });
+
+  // Ngưỡng hiện thanh phân trang của MỌI bảng đọc `MUC_SO_DONG[0]`. Nhét mức 5 vào
+  // danh sách dùng chung là đổi ngưỡng đó từ 10 xuống 5 trên toàn hệ — đúng thứ test
+  // này chặn.
+  it("mức 5 KHÔNG lọt vào danh sách của bảng", () => {
+    expect([...MUC_SO_DONG]).not.toContain(5);
+    expect(MUC_SO_DONG[0]).toBe(10);
+    expect(docSoDong("5")).toBe(SO_DONG_MAC_DINH);
   });
 
   it("giá trị lạ / gõ tay trên URL → về mặc định, không thành take khổng lồ", () => {

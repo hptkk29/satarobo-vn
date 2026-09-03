@@ -15,7 +15,7 @@ import { Badge } from "@/components/ui/badge";
 import { updateLeadStatus, autoAssignLeadAction } from "../actions";
 import { LyDoRotDialog } from "./ly-do-rot-dialog";
 import { ChonSoDong } from "@/components/ui/chon-so-dong";
-import { SO_THE_MOI_COT_MAC_DINH } from "@/lib/ui/phan-trang";
+import { MUC_THE_MOI_COT, SO_THE_MOI_COT_MAC_DINH } from "@/lib/ui/phan-trang";
 
 export type KanbanLead = {
   id: string;
@@ -330,6 +330,7 @@ export function LeadsKanban({
         <ChonSoDong
           soDong={soTheMoiCot}
           macDinh={SO_THE_MOI_COT_MAC_DINH}
+          muc={MUC_THE_MOI_COT}
           nhan="Mỗi cột"
           tenDonVi="thẻ"
         />
