@@ -283,6 +283,15 @@ export async function addTrialSession(params: {
 
 // ─── Ghi danh ─────────────────────────────────────────────────────────────────
 
+/** Gói dữ kiện cho tin "có em mới trong ca của bạn" — xem #GV-MỚI bên dưới. */
+type TinBaoGvCaMoi = {
+  teacherId: string;
+  childName: string;
+  className: string;
+  enrollmentId: string;
+  moTaBuoi: string;
+};
+
 export async function enrollLeadChild(params: {
   trialClassId: string;
   leadChildId: string;
@@ -297,10 +306,27 @@ export async function enrollLeadChild(params: {
 }): Promise<{ ok: boolean; error?: string; overCapacity?: boolean }> {
   const allowOverride = params.allowOverride ?? false;
   try {
-    return await db.$transaction(async (tx) => {
+    // #GV-MỚI — gói tin báo giáo viên ĐI thẳng qua giá trị trả về của transaction, không
+    // qua biến ngoài: TypeScript không theo được phép gán bên trong callback nên biến
+    // đó luôn bị thu về `null`. GỬI thì sau khi commit — gửi trong tx là chuông hỏng
+    // kéo theo rollback cả lượt xếp lớp.
+    const { tin, ...ket } = await db.$transaction(async (tx): Promise<{
+      ok: boolean;
+      error?: string;
+      overCapacity?: boolean;
+      tin?: TinBaoGvCaMoi;
+    }> => {
       const cls = await tx.trialClassV2.findUnique({
         where: { id: params.trialClassId },
-        select: { id: true, capacity: true, centerId: true, sessionCount: true },
+        // `name` + `teacherId`: dựng nội dung tin báo giáo viên ở cuối hàm (xem khối #GV-MỚI).
+        select: {
+          id: true,
+          name: true,
+          capacity: true,
+          centerId: true,
+          sessionCount: true,
+          teacherId: true,
+        },
       });
       if (!cls) return { ok: false, error: "Lớp trải nghiệm không tồn tại" };
 
@@ -343,10 +369,39 @@ export async function enrollLeadChild(params: {
           scheduledSessionId,
         },
       });
-      await tx.leadChild.update({
+      const child = await tx.leadChild.update({
         where: { id: params.leadChildId },
         data: { trialStatus: "SCHEDULED" },
+        select: { fullName: true },
       });
+
+      // #GV-MỚI (03/09/2026) — BÁO GIÁO VIÊN có em vừa rơi vào ca của mình.
+      //
+      // Trước bản này, xếp con vào lớp chỉ phát `trial.assigned` — mà tin đó gửi cho
+      // SALE phụ trách lead, không phải giáo viên. Lớp trải nghiệm là **slot tái sử
+      // dụng**: giáo viên được gán từ lâu, con mới được xếp vào sau ⇒ câu hỏi "có em
+      // nào vào ca của tôi chưa" không có tin nào trả lời, giáo viên phải tự mở
+      // /teacher/trial mà xem.
+      //
+      // Người nhận lấy từ BUỔI trước, lớp sau: buổi có thể đã đổi sang người khác dạy
+      // (`assignTeacher` chỉ lan xuống buổi SCHEDULED, buổi đã xong giữ GV cũ).
+      const buoi = await tx.trialClassSession.findUnique({
+        where: { id: scheduledSessionId },
+        select: { teacherId: true, date: true, startTime: true, endTime: true },
+      });
+      const gvId = buoi?.teacherId ?? cls.teacherId ?? null;
+      // Không tự báo mình: giáo viên vừa tự xếp con vào ca của chính mình thì biết rồi.
+      const tin: TinBaoGvCaMoi | undefined =
+        gvId && gvId !== params.addedById && buoi
+          ? {
+              teacherId: gvId,
+              childName: child.fullName,
+              className: cls.name,
+              enrollmentId: enrollment.id,
+              // `date` là @db.Date (nửa đêm UTC của ngày VN) ⇒ format PHẢI ép timeZone UTC.
+              moTaBuoi: `${buoi.date.toLocaleDateString("vi-VN", { timeZone: "UTC" })} ${buoi.startTime}–${buoi.endTime}`,
+            }
+          : undefined;
       // FL-R2 (item 6) — mở/ghi lịch sử học thử per-lead (giữ kể cả khi rời pipeline).
       // totalSessions chốt tại lúc gán; nếu đã có history (lead quay lại) → giữ count cũ.
       //
@@ -402,8 +457,20 @@ export async function enrollLeadChild(params: {
           tx,
         });
       }
-      return { ok: true };
+      return { ok: true, tin };
     });
+
+    // Ngoài transaction — xem #GV-MỚI. `notifyTrialTeacherAssigned` tự nuốt lỗi.
+    if (ket.ok && tin) {
+      await notifyTrialTeacherAssigned({
+        teacherId: tin.teacherId,
+        title: "Có học viên mới trong ca trải nghiệm của bạn",
+        body: `${tin.childName} vừa được xếp vào lớp ${tin.className} · buổi ${tin.moTaBuoi}.`,
+        dedupeKey: `trial-enroll.assigned:${tin.enrollmentId}`,
+        entityId: tin.enrollmentId,
+      });
+    }
+    return ket;
   } catch (e) {
     // Partial-unique: con đang ACTIVE ở lớp khác (AC3).
     if (e instanceof Prisma.PrismaClientKnownRequestError && e.code === "P2002") {

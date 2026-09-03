@@ -25,6 +25,7 @@ const KHOA_DANG_CHAY: ReadonlyArray<[key: string, file: string]> = [
   ["trial-v1.assigned:t1", "app/(admin)/admin/trials/actions.ts"],
   ["trial-class.assigned:tc1", "app/(admin)/admin/trial-classes/_actions.ts"],
   ["trial-session.assigned:ts1", "lib/trial/service.ts"],
+  ["trial-enroll.assigned:te1", "lib/trial/service.ts"],
   ["conversation.message_posted:m1", "lib/_handlers/conversation-notif.ts"],
   ["reserve.expired:r1:2026-08-19", "app/api/cron/reserve-expiry/route.ts"],
   ["reserve-expiry:r1", "lib/students/reserve-expiry.ts"],
