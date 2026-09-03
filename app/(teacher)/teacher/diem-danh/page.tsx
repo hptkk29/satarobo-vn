@@ -80,7 +80,7 @@ export default async function TeacherAttendanceOverviewPage() {
           startTime: true,
           endTime: true,
           // `_count` và danh sách bên dưới nay dùng CHUNG rosterWhere. Trước đây
-          // `_count` cố ý không lọc deletedAt để giữ mẫu số "Có mặt X/Y" như cũ —
+          // `_count` cố ý không lọc deletedAt để giữ mẫu số "Đi học X/Y" như cũ —
           // hệ quả là mẫu số của cột hiển thị và mẫu số của attendanceCoversRoster
           // đếm hai tập khác nhau. Chủ dự án chốt 03/09: đổi cả con số cho khớp.
           _count: { select: { enrollments: { where: rosterWhere("dang-hoc") } } },
