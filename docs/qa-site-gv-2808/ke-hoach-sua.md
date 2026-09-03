@@ -615,3 +615,75 @@ _Tổng: 111 vấn đề phụ được ghi nhận, 5 ở mức HIGH trở lên.
 | 5 | Cột "Chuyển sang" và các cột rỗng | **Theo QA (IMP-021)** — ẩn cột chưa có dữ liệu | Ẩn `Chuyển sang`/`Kết quả` (Hoàn thành khoá) và `Khoá học` (Trial). Cột SCORM (Tài liệu) **chờ 2 phép đo** trước khi ẩn — xem mục Hoãn. |
 
 **Đổi so với bản kế hoạch gốc:** #3 và #4 đều chọn phương án rộng hơn khuyến nghị, nên Đ9 phải kéo thêm việc sửa tài liệu, và phát sinh một đợt phụ chạm `app/(admin)/admin/attendance/`.
+
+---
+
+## Tình trạng thực hiện (03/09/2026)
+
+Toàn bộ 10 đợt đã làm, 13 commit trên nhánh `fix/site-gv-qa-2808` (cắt từ `origin/test`).
+
+| Đợt | Commit | Trạng thái |
+|---|---|---|
+| Đ1 nền lib | `141cea7e` | xong |
+| Đ2 CSS + bảng | `76abcbc3` | xong |
+| Đ3 phạm vi ghi danh | `05f6c8f4` | xong |
+| Đ4 phủ đủ sĩ số | `d769dec2` | xong |
+| Đ5 UserOrgRole | `cabea27f` | xong |
+| labels (commit riêng) | `238cdba6` | xong |
+| Đ6 nhãn buổi + PDF | `7f9ee816` | xong |
+| Đ7 ngữ cảnh lớp | `4acbec3b` | xong |
+| Đ8 Hoàn thành khoá + màn duyệt | `777d9914` | xong |
+| flake ownership (commit riêng) | — | xong |
+| Đ9 URL/phân trang/form | `c5fa01bc` | xong |
+| BUG-022 lưới lớp | `aa336b9f` | xong |
+| Đ10 seed UAT | `04640434` | xong |
+
+**Cổng nghiệm thu:** `pnpm typecheck` sạch · `pnpm lint` sạch (1 cảnh báo có sẵn ở
+`lib/elearning/mark-lesson-read.test.ts`, không liên quan) · `pnpm vitest run`
+**471 file / 7050 test xanh** · `pnpm build` exit 0.
+
+### Việc của người vận hành sau khi merge
+
+1. **Seed lại UAT** — `taoThieu` CHỈ TẠO dòng thiếu theo id cố định, nên sửa mã seed
+   KHÔNG cập nhật dữ liệu đã có; chạy lại sẽ báo "0 dòng tạo mới" rồi tưởng xong.
+   Phải xoá dữ liệu theo tiền tố `uat-` rồi seed lại. ⚠️ DB của môi trường `test`
+   CHÍNH LÀ DB dev — đừng TRUNCATE.
+   **Phải làm TRƯỚC khi mời QA nghiệm thu lại Đ3/Đ4**, kẻo bản vá đúng bị chấm là hỏng.
+2. **Chạy lại `scripts/elearning-import-guides.ts`** — tài liệu hướng dẫn có bản sao
+   thứ hai trong module E-learning theo di trú MỘT CHIỀU. Sửa file TS chỉ đổi trang
+   hướng dẫn của site giáo viên; bản giáo viên đọc trong E-learning vẫn dạy ô tick cũ.
+3. **Dựng nhóm chat cho lớp UAT** nếu muốn mở khoá phần Tin nhắn mà QA bị chặn.
+
+### Chưa làm, có lý do
+
+- **`/admin/attendance` chưa áp quyết định #3.** Admin mắc y hệt lỗi mẫu số/tử số và
+  có chú thích nói là chủ đích. Chốt "đổi cả con số" đòi phải đổi đồng thời, nếu không
+  quản lý và giáo viên đọc hai con số khác nhau cho cùng một buổi. Nằm ngoài
+  `app/(teacher)` nên tách commit và cần nghiệm thu ở màn quản lý.
+- **Cột "Khoá học" ở bảng Trial KHÔNG ẩn**, ngược quyết định #5. Đo lại thì cột đã nối
+  API đúng (`leadChild.interestedCourseId` → `teacher-schedule.ts:306`); nó rỗng vì
+  lead trong seed UAT không có khoá quan tâm. Tiền đề "chưa nối API" của IMP-021 sai
+  cho cột này, và ẩn đi là xoá thông tin thật trên prod. Cột `Chuyển sang`/`Kết quả`
+  thì đúng là cột chết → đã ẩn.
+- **Cột SCORM ở Tài liệu chưa ẩn** — cần 2 phép đo trên môi trường test trước (số gói
+  SCORM đang publish, và giá trị `SCORM_ENABLED`).
+- **BUG-032** — chưa có nguyên văn từ QA.
+- **Không thêm enum `CANCELLED`** để GV tự rút đề xuất: cần migration trên bảng có dữ
+  liệu prod, mà nhu cầu đã được đáp ứng bằng đường trung tâm Từ chối.
+
+### Báo động giả phát hiện khi vá
+
+- **BUG-020 nửa sau** — nhãn "Nộp muộn" ĐÃ CÓ SẴN ở `grade-form.tsx:188`. Chỉ thiếu năm.
+- **NV-005** — `isRangeKind` đã ép `to = from` cho loại một-ngày, nên đơn "Đi muộn" kéo
+  27 ngày KHÔNG tạo được từ ứng dụng. Là dữ liệu seed. (Nhưng việc soi nó lôi ra một lỗ
+  thật: không chỗ nào kiểm `to >= from` cho loại CÓ khoảng — đã vá ở server.)
+
+### Đã đo trên trình duyệt
+
+`max-width` trên `<td>` ở `table-layout:auto`: Chrome báo `computed max-width: 120px`
+nhưng ô vẫn rộng **171px** — bỏ qua đúng như CSS 2.1 §17.5.2. Đặt trần trên khối bên
+trong ô thì ra đúng **120px**. Đây là kỹ thuật dùng cho cả 4 bảng ở Đ2.
+
+**Chưa đo được trên site thật** (cần tài khoản giáo viên UAT để đăng nhập): bề rộng 4
+bảng sau khi vá, cột 3 trạng thái ở danh sách lớp, chip chọn lớp ở hồ sơ, và tiêu đề
+tab của PDF phiếu nhận xét.
