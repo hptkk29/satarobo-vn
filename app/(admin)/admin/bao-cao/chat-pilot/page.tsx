@@ -21,7 +21,7 @@ import { BarChart3 } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { resolveActor } from "@/lib/auth/actor";
 import { checkPermission } from "@/lib/auth/check-permission";
-import { scopedDb } from "@/lib/db-scope";
+import { getCenterOptions } from "@/lib/org/center-options";
 import {
   getChatPilotStats,
   pct,
@@ -86,17 +86,12 @@ export default async function ChatPilotReportPage({
 
   const sp = await searchParams;
   const actor = await resolveActor(session.user.id);
-  // Center ∈ SCOPE_EXEMPT (danh mục tổ chức) → sdb pass-through; đi qua scopedDb vì đây là
-  // app/(admin) và cổng `@/lib/db` trần đã đóng (ESLint). Cách ly THẬT của bảng số nằm ở
-  // `getChatPilotStats` (lọc tay theo getVisibleCenterIds).
-  const sdb = scopedDb(actor);
 
   const [centers, rows] = await Promise.all([
-    sdb.center.findMany({
-      where: { isActive: true },
-      select: { id: true, name: true },
-      orderBy: { name: "asc" },
-    }),
+    // Bản cũ `center.findMany({ isActive: true })` bày cả Hội sở (không dạy học, không
+    // lớp nào) lẫn dòng Center mồ côi, và KHÔNG cắt theo tầm nhìn của người xem — ô lọc
+    // rộng hơn bảng số bên dưới. Helper lo cả ba việc đó.
+    getCenterOptions(actor),
     getChatPilotStats(actor, { centerId: sp.center || null }),
   ]);
 

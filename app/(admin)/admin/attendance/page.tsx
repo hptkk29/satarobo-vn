@@ -29,6 +29,7 @@ import { hasRole } from "@/lib/auth/permissions";
 import { checkPermission } from "@/lib/auth/check-permission";
 import { resolveActor } from "@/lib/auth/actor";
 import { scopedDb } from "@/lib/db-scope";
+import { getCenterOptions } from "@/lib/org/center-options";
 import { ENROLLMENT_ACTIVE_STATUS_LIST } from "@/lib/enrollment-status";
 import { FEEDBACK_ATTENDED_STATUSES } from "@/lib/lms/session-feedback-roster";
 import {
@@ -439,20 +440,10 @@ export default async function AttendanceAdminPage({ searchParams }: SearchParams
   // đúng nhóm chủ dự án nêu (admin, đào tạo, hội sở). Suy từ cây tổ chức chứ không
   // liệt kê tên vai: mở cơ sở mới là thêm dữ liệu, không sửa code.
   const seesManyCenters = actor.isSuperAdmin || actor.isHoLevel || actor.visibleCenterIds.length > 1;
-  const centers = seesManyCenters
-    ? await sdb.center.findMany({
-        // Center ∈ SCOPE_EXEMPT (ranh giới tenant, không tự lọc theo chính nó) nên
-        // PHẢI tự chặn theo tầm nhìn actor — nếu không, quản lý CS1 thấy tên CS2.
-        where: {
-          isActive: true,
-          ...(actor.isSuperAdmin || actor.isHoLevel
-            ? {}
-            : { id: { in: actor.visibleCenterIds } }),
-        },
-        orderBy: { displayOrder: "asc" },
-        select: { id: true, name: true },
-      })
-    : [];
+  // Danh sách cơ sở đi qua helper chung: bản tự viết cũ vẫn bày Hội sở (không dạy
+  // học, chọn ra 0 lớp) và các dòng Center mồ côi của bộ test. Helper đã bỏ hai thứ
+  // đó + cơ sở đã tắt, và vẫn cắt theo tầm nhìn actor như đoạn cũ.
+  const centers = seesManyCenters ? await getCenterOptions(actor) : [];
 
   // Chỉ có quyền xem lớp CỦA MÌNH (giáo viên) → chặn thêm theo GV chính/trợ giảng.
   // Cùng luật với /admin/classes: chỉ siết khi có view-own mà KHÔNG có view-all — ai
