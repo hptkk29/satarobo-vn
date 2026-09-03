@@ -18,6 +18,7 @@ import { autoAssignLead, reassignOpenLeads } from '@/lib/lead/assign'
 import { leadSharingEnabled } from '@/lib/lead/sharing'
 import { validateTransferTarget } from '@/lib/crm/transfer-validate'
 import { autoAssignNewLead, manualAssignLead, reassignForCenter } from '@/lib/lead/auto-assign'
+import { chiaChoLead } from '@/lib/lead/assign-lead'
 import { assignmentWrite } from '@/lib/lead/assignment'
 import { centerIdForOrgUnit } from '@/lib/org/org-service'
 import { rejectHeadOffice } from '@/lib/enrollment-flow'
@@ -905,6 +906,55 @@ export async function autoAssignNewLeadAction(
   revalidatePath('/leads')
   revalidatePath(`/leads/${leadId}`)
   return { ok: true }
+}
+
+/**
+ * CHIA LẠI một lead ĐÃ CÓ theo cấu hình cơ sở — nút "Chia lại lead".
+ *
+ * ⚠️ KHÔNG dùng `autoAssignNewLead` cho việc này. Hàm đó dành cho lead MỚI và cố ý
+ * bỏ qua lead đã có chủ (`auto-assign.ts:174` — `if (lead.assignedToId) return
+ * { ok: true, skipped: true }`). Nút cũ gọi đúng vào đó rồi coi `ok: true` là
+ * thành công, nên báo "Đã chia lại lead theo cấu hình cơ sở" trong khi lead không
+ * đổi tay — đúng lỗi chủ dự án gặp 03/09/2026.
+ *
+ * Đường đúng là `chiaChoLead`: cửa duy nhất tiêu lượt của vòng, có ghi
+ * `LeadAssignmentLog` nên lượt chia lại hiện ra trong sổ chia.
+ */
+export async function chiaLaiLeadAction(
+  leadId: string,
+): Promise<{ ok: boolean; error?: string; assignedToId?: string | null }> {
+  const session = await auth()
+  if (!session?.user) return { ok: false, error: 'Chưa đăng nhập' }
+  if (!(await checkPermission('leads:assign'))) return { ok: false, error: 'Không có quyền' }
+
+  const actor = await resolveActor(session.user.id)
+  const lead = await db.lead.findUnique({
+    where: { id: leadId },
+    select: { centerId: true, assignedToId: true },
+  })
+  if (!lead || !passesScope('Lead', lead, actor)) {
+    return { ok: false, error: 'Lead không tồn tại' }
+  }
+  // Không có cơ sở thì không có vòng chia nào để rút — nói thẳng thay vì im lặng
+  // không đổi gì rồi báo thành công (đúng kiểu hỏng vừa phải vá).
+  if (!lead.centerId) {
+    return { ok: false, error: 'Lead chưa gắn cơ sở — chọn cơ sở trước khi chia lại' }
+  }
+
+  const res = await chiaChoLead(leadId, {
+    targetCenterId: lead.centerId,
+    createdById: session.user.id,
+    entryPoint: 'RESHUFFLE',
+  })
+  if (!res.ok) return { ok: false, error: res.error ?? 'Không chia lại được' }
+  if (!res.assignedToId) {
+    return { ok: false, error: 'Cơ sở này chưa có sale nào đang bật trong vòng chia' }
+  }
+
+  revalidatePath('/leads')
+  revalidatePath(`/leads/${leadId}`)
+  revalidatePath('/quan-ly-chia-lead')
+  return { ok: true, assignedToId: res.assignedToId }
 }
 
 /** Quản lý gán tay 1 lead cho 1 sale cụ thể. */

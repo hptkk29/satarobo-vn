@@ -19,7 +19,7 @@
 // ═══════════════════════════════════════════════════════════════════════════════
 
 /** Lead vào hệ thống bằng đường nào. */
-export type LeadEntryPoint = "FORM" | "IMPORT" | "LANDING" | "MANAGER";
+export type LeadEntryPoint = "FORM" | "IMPORT" | "LANDING" | "MANAGER" | "RESHUFFLE";
 
 /** Người mà mã affiliate trên landing page tra ra được. `null` = không có/mã sai. */
 export type AffiliateActor = {
@@ -106,6 +106,17 @@ export function resolveAssignment(input: ResolveAssignmentInput): AssignmentDeci
   }
 
   switch (input.entryPoint) {
+    // ── CHIA LẠI theo cấu hình cơ sở (nút "Chia lại lead", 03/09/2026) ───────
+    // LUÔN về vòng chia, kể cả khi lead đã có chủ và kể cả khi người bấm là sale
+    // của chính cơ sở đó. Đây là điểm khác biệt với `FORM`: ở đó "sale đúng cơ sở
+    // tự nhập" được giữ phiếu của mình (ca [1]), còn ở đây quản lý đang CỐ Ý yêu
+    // cầu rút thăm lại — giữ nguyên chủ cũ thì nút không làm gì cả, đúng lỗi đã
+    // gặp: báo "đã chia lại" mà lead không đổi tay.
+    //
+    // Mã aff cũng bị bỏ qua vì cùng lý do như `FORM`.
+    case "RESHUFFLE":
+      return AUTO;
+
     // ── [4] Quản lý giao tay / đổi chủ ───────────────────────────────────────
     case "MANAGER": {
       if (!input.explicitOwnerId) {

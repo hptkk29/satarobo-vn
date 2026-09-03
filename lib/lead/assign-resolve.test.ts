@@ -239,3 +239,71 @@ describe("[CHIA-LEAD] thứ tự ưu tiên và các mép", () => {
     expect(d).toEqual({ kind: "AUTO", source: "AUTO", consumedTurn: true });
   });
 });
+
+describe("RESHUFFLE — nút \"Chia lại lead\" (03/09/2026)", () => {
+  // Lỗi đã gặp: nút gọi `autoAssignNewLead`, hàm đó bỏ qua lead đã có chủ và trả
+  // `ok: true` kèm `skipped`, nên giao diện báo "đã chia lại" mà lead không đổi tay.
+  // Nhánh này sinh ra để LUÔN về vòng chia, không có ngoại lệ nào.
+
+  it("luôn về VÒNG CHIA, kể cả khi người bấm là sale ĐÚNG cơ sở", () => {
+    // Khác hẳn `FORM`: ở đó sale đúng cơ sở tự nhập thì được giữ phiếu (ca [1]).
+    // Nếu RESHUFFLE cũng xử vậy thì quản lý là sale bấm nút sẽ tự gán cho chính
+    // mình — và nút "chia lại" thành nút "cướp lead".
+    expect(
+      resolveAssignment({
+        targetCenterId: CS1,
+        createdById: SALE_CS1,
+        createdByCenterId: CS1,
+        createdByIsSale: true,
+        entryPoint: "RESHUFFLE",
+        explicitOwnerId: null,
+        aff: null,
+        duplicateOf: null,
+      }),
+    ).toEqual({ kind: "AUTO", source: "AUTO", consumedTurn: true });
+  });
+
+  it("bỏ qua mã giới thiệu — không ép được lead về tay mình bằng ?ref=", () => {
+    expect(
+      resolveAssignment({
+        targetCenterId: CS1,
+        createdById: MKT,
+        createdByCenterId: CS1,
+        createdByIsSale: false,
+        entryPoint: "RESHUFFLE",
+        explicitOwnerId: null,
+        aff: { userId: SALE_CS1, isSale: true, centerId: CS1 },
+        duplicateOf: null,
+      }).kind,
+    ).toBe("AUTO");
+  });
+
+  it("bỏ qua cả người nhận chỉ định — chia lại nghĩa là RÚT THĂM LẠI", () => {
+    expect(
+      resolveAssignment({
+        targetCenterId: CS1,
+        createdById: MKT,
+        createdByCenterId: CS1,
+        createdByIsSale: false,
+        entryPoint: "RESHUFFLE",
+        explicitOwnerId: SALE_CS2,
+        aff: null,
+        duplicateOf: null,
+      }).kind,
+    ).toBe("AUTO");
+  });
+
+  it("TIÊU LƯỢT — nếu không thì chia lại nhiều lần là dồn lead miễn phí cho một người", () => {
+    const r = resolveAssignment({
+      targetCenterId: CS1,
+      createdById: null,
+      createdByCenterId: null,
+      createdByIsSale: false,
+      entryPoint: "RESHUFFLE",
+      explicitOwnerId: null,
+      aff: null,
+      duplicateOf: null,
+    });
+    expect(r.consumedTurn).toBe(true);
+  });
+});

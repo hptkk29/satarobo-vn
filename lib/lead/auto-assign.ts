@@ -9,7 +9,7 @@ import {
   pickCenterEvenly,
   type SaleStat,
 } from "@/lib/lead/assign-strategy";
-import { takeRotationTurn } from "@/lib/lead/rotation";
+import { congMotLuot, takeRotationTurn } from "@/lib/lead/rotation";
 import { canManualAssign } from "@/lib/lead/assign-guard";
 import { assignmentWrite } from "@/lib/lead/assignment";
 import { LEAD_CLOSED_STATUSES } from "@/lib/leads/status";
@@ -359,6 +359,18 @@ export async function manualAssignLead(
   });
   if (!guard.ok) return { ok: false, error: guard.error };
 
+  // 03/09 — GÁN TAY CŨNG TIÊU LƯỢT (chủ dự án chốt).
+  //
+  // Trước đợt này đường gán tay đổi chủ lead mà KHÔNG đụng sổ lượt, nên người vừa
+  // được giao tay 5 lead vẫn đứng nguyên vị trí trong vòng và lượt tự động kế tiếp
+  // lại rơi vào chính họ. Sổ lượt sinh ra để nói "ai đã nhận bao nhiêu"; một trong
+  // hai đường giao lead không ghi vào đó thì con số ấy sai theo đúng hướng dễ gây
+  // tranh cãi nhất.
+  //
+  // Suy đơn vị NGOÀI transaction: `orgUnitIdForCenter` là một lượt đọc riêng, để
+  // trong transaction chỉ tổ giữ khoá lâu hơn cần thiết.
+  const orgUnitId = lead.centerId ? await orgUnitIdForCenter(lead.centerId) : null;
+
   await db.$transaction(async (tx) => {
     await tx.lead.update({
       where: { id: leadId },
@@ -367,6 +379,25 @@ export async function manualAssignLead(
       // và đó mới là chỗ đọc ra "lead này đã phân cho ai, lúc nào".
       data: assignmentWrite(saleId), // Đợt A — kèm mốc phân công
     });
+
+    // Cơ sở chưa gắn vào cây tổ chức ⇒ không có sổ lượt để ghi. Vẫn gán bình thường
+    // (đó là hành vi đang chạy đúng ở mọi cơ sở như vậy), chỉ là không đếm được.
+    if (orgUnitId) {
+      const turnCountAfter = await congMotLuot(tx, orgUnitId, saleId);
+      // Ghi vào SỔ CHIA để lượt giao tay hiện ra cùng chỗ với lượt máy chia —
+      // nếu không, sổ đếm thiếu đúng những lần quản lý can thiệp.
+      await tx.leadAssignmentLog.create({
+        data: {
+          leadId,
+          orgUnitId,
+          assignedToId: saleId,
+          createdById: actor.actorId,
+          source: "MANAGER",
+          consumedTurn: true,
+          turnCountAfter,
+        },
+      });
+    }
     await logLeadAudit({
       leadId,
       action: "ASSIGN",
