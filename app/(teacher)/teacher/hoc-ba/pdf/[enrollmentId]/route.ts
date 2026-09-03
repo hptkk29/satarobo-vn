@@ -55,8 +55,20 @@ export async function GET(
   const studentId =
     clsWithEnr.flatMap((c) => c.enrollments)[0]?.studentId ?? null;
   if (!studentId) {
+    // Hai ca rất khác nhau nhưng trước đây in CÙNG một câu, nên sự cố thiếu
+    // UserOrgRole (prod 07/08) đọc ra y hệt lỗi IDOR và dev đi soi nhầm hướng:
+    //   • classIds rỗng   → tài khoản chưa được phân lớp nào, HOẶC actor tự mâu
+    //     thuẫn (có lớp nhưng visibleCenterIds rỗng ⇒ scopedDb lọc sạch). Xem
+    //     cảnh báo "[actor] Phạm vi tự mâu thuẫn" trong log.
+    //   • có lớp nhưng không khớp ghi danh → đúng nghĩa "không phải lớp của bạn".
+    const noClasses = classIds.length === 0;
     return NextResponse.json(
-      { error: "Học bạ không thuộc lớp bạn phụ trách" },
+      {
+        error: noClasses
+          ? "Tài khoản của bạn chưa được phân lớp nào — liên hệ quản lý cơ sở để được gán lớp."
+          : "Học bạ không thuộc lớp bạn phụ trách",
+        code: noClasses ? "NO_ASSIGNED_CLASS" : "NOT_YOUR_CLASS",
+      },
       { status: 404 },
     );
   }
