@@ -25,3 +25,28 @@ export function docSoDong(raw: string | string[] | undefined): number {
   const n = Number(Array.isArray(raw) ? raw[0] : raw);
   return MUC_SO_DONG.includes(n as (typeof MUC_SO_DONG)[number]) ? n : SO_DONG_MAC_DINH;
 }
+
+// ─── Kanban lead ──────────────────────────────────────────────────────────────
+
+/**
+ * Số thẻ hiển thị TỐI ĐA trong MỘT cột Kanban.
+ *
+ * Vì sao mặc định 10 mà không phải 20 như bảng: cột Kanban xếp DỌC và có 10 cột nằm
+ * ngang. Một cột 50 thẻ đẩy trang dài ra tới mức muốn xem cột kế bên phải cuộn dọc về
+ * đầu rồi cuộn ngang — đúng cái làm người dùng bỏ chế độ Kanban. Mười thẻ là vừa một
+ * màn hình, và người cần xem sâu hơn thì có ô chọn ngay trên đầu.
+ *
+ * Mức chọn dùng chung `MUC_SO_DONG` với bảng (10/20/50/100), chỉ khác GIÁ TRỊ MẶC ĐỊNH.
+ */
+export const SO_THE_MOI_COT_MAC_DINH = 10;
+
+/**
+ * Đọc `?size=` cho Kanban. Dùng CHUNG tham số với bảng — đổi số ở chế độ này rồi bấm
+ * sang chế độ kia thì giữ nguyên lựa chọn, không phải đặt lại.
+ *
+ * Chặt tay như `docSoDong`: chỉ nhận đúng 4 mức, mọi thứ khác về mặc định.
+ */
+export function docSoTheMoiCot(raw: string | string[] | undefined): number {
+  const n = Number(Array.isArray(raw) ? raw[0] : raw);
+  return MUC_SO_DONG.includes(n as (typeof MUC_SO_DONG)[number]) ? n : SO_THE_MOI_COT_MAC_DINH;
+}

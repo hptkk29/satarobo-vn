@@ -548,12 +548,14 @@ export const ROLE_SEED: RoleSeed[] = [
       { action: "calls:assign", scopeType: "GLOBAL" },
       // ── Lead ──
       { action: "leads:view-all", scopeType: "GLOBAL" },
-      // ⚠️ Đợt E (22/08/2026) — `leads:view-pii` ĐÃ GỠ khỏi vai này theo Q9 chủ dự
-      // án chốt 21/08: Quản lý cơ sở KHÔNG thấy SĐT lead. Đảo #11 T2 (Kiệt ký
-      // 10/07) từng cấp quyền này. Giữ nguyên leads:view-all — QL vẫn điều hành
-      // được, chỉ không đọc được số. Khoá bằng lib/auth/lead-pii-policy.test.ts.
+      // `leads:view-pii` — ĐẢO LẦN HAI, chủ dự án chốt (bản trên `main` từ 30/08/2026):
+      //   · 10/07 (#11 T2, Q9) — CENTER_MANAGER CÓ quyền;
+      //   · 22/08 (Đợt E, Q9)  — GỠ: "Quản lý cơ sở KHÔNG thấy SĐT lead";
+      //   · 30/08              — TRẢ LẠI. Quyết định ký SAU thắng.
+      // Hai bộ quyền v1/v2 phải khai giống nhau — xem ghi chú dài ở lib/auth/permissions.ts.
       // ⚠️ Đổi ở đây CHƯA có hiệu lực trên prod: phải chạy workflow seed-prod-roles.yml
       // sau khi merge vào main, nếu không prod vẫn giữ quyền cũ trong DB.
+      { action: "leads:view-pii", scopeType: "GLOBAL" },
       { action: "leads:create", scopeType: "GLOBAL" },
       { action: "leads:edit", scopeType: "GLOBAL" },
       { action: "leads:assign", scopeType: "GLOBAL" },

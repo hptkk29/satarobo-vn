@@ -19,7 +19,7 @@ import { ALL_LEAD_STATUSES } from '@/lib/leads/status'
 import type { LeadStatus, Prisma } from '@prisma/client'
 import { phoneSearchTerm } from '@/lib/phone'
 import { getNonEnrollableCenterIds } from '@/lib/enrollment-flow'
-import { docSoDong } from '@/lib/ui/phan-trang'
+import { docSoDong, docSoTheMoiCot } from '@/lib/ui/phan-trang'
 
 const KANBAN_LIMIT = 500
 
@@ -263,6 +263,8 @@ export default async function LeadsPage({
         />
         <LeadsKanban
           leads={kanbanLeads}
+          // Cùng tham số `?size=` với bảng, chỉ khác giá trị mặc định (10 thẻ/cột).
+          soTheMoiCot={docSoTheMoiCot(params.size)}
           canUpdate={canUpdate}
           canCloseDeal={canCloseDeal}
           canAssign={canAssign}

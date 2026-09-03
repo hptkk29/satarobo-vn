@@ -7,6 +7,11 @@
 // **chỗ gọi**. Q9 (22/08) gỡ quyền xem SĐT của Quản lý cơ sở, nhưng gỡ quyền chỉ
 // có tác dụng ở những màn CHỊU HỎI quyền đó.
 //
+// ⚠️ 28/08/2026 — quyền của Quản lý cơ sở ĐÃ TRẢ LẠI, nên phần (a)/(b)/(c) dưới đây
+// KHÔNG còn kiểm "che cho QLCS" nữa. Chúng vẫn đáng giữ nguyên: cái chúng khoá là
+// *mọi màn phải đi qua `maskLeadPiiFields` thay vì in thẳng `lead.phone`* — đúng hay
+// sai với từng vai là chuyện của bảng VAI ngay dưới, đổi ở đó một chỗ là xong.
+//
 // Ba loại rò được khoá ở đây:
 //   (a) màn in thẳng `lead.phone` ra JSX, hoặc tự chế mặt nạ riêng;
 //   (b) vai không có quyền lead vẫn rơi vào bảng "Leads mới nhất" của dashboard;
@@ -50,7 +55,12 @@ function nguon(duongDan: string): string {
 // tương ứng trong matrix tĩnh — đó là đúng, không phải sót.
 const VAI = [
   { ten: "SUPER_ADMIN", v1: "SUPER_ADMIN", v2: "SUPER_ADMIN", thayySdt: true },
-  { ten: "Quản lý cơ sở", v1: "CENTER_MANAGER", v2: "CENTER_MANAGER", thayySdt: false },
+  // 28/08/2026 — ĐẢO LẦN HAI: Quản lý cơ sở XEM LẠI ĐƯỢC SĐT (chủ dự án chốt; bản này
+  // đã chạy trên `main` từ 30/08). Ba mốc của cùng một câu hỏi: 10/07 CÓ → 22/08 GỠ →
+  // 28/08 TRẢ LẠI. Quyết định ký sau thắng. Đổi dòng này PHẢI đổi cùng lúc
+  // `lib/auth/permissions.ts` + `prisma/seed-roles.ts`, nếu không hai tầng RBAC nói
+  // hai câu khác nhau và local xanh trong khi prod che.
+  { ten: "Quản lý cơ sở", v1: "CENTER_MANAGER", v2: "CENTER_MANAGER", thayySdt: true },
   { ten: "Sale cơ sở", v1: "SALES_CSM", v2: "CENTER_SALES_CSM", thayySdt: true },
   { ten: "Sale Hội sở", v1: null, v2: "HO_SALE", thayySdt: true },
   { ten: "Đào tạo", v1: "TRAINING", v2: "TRAINING", thayySdt: false },

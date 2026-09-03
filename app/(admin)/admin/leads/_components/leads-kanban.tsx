@@ -14,6 +14,8 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { updateLeadStatus, autoAssignLeadAction } from "../actions";
 import { LyDoRotDialog } from "./ly-do-rot-dialog";
+import { ChonSoDong } from "@/components/ui/chon-so-dong";
+import { SO_THE_MOI_COT_MAC_DINH } from "@/lib/ui/phan-trang";
 
 export type KanbanLead = {
   id: string;
@@ -65,12 +67,19 @@ export function LeadsKanban({
   canCloseDeal = false,
   canAssign = false,
   currentUserId,
+  soTheMoiCot = SO_THE_MOI_COT_MAC_DINH,
 }: {
   leads: KanbanLead[];
   canUpdate: boolean;
   canCloseDeal?: boolean;
   canAssign?: boolean;
   currentUserId: string;
+  /**
+   * Số thẻ hiển thị tối đa MỖI CỘT. Cắt ở tầng HIỂN THỊ, không phải ở truy vấn:
+   * con số trên phù hiệu mỗi cột vẫn là TỔNG THẬT của cột đó, nếu không thì người
+   * dùng đọc "12" rồi đếm được 10 thẻ và không biết mình đang thiếu gì.
+   */
+  soTheMoiCot?: number;
 }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -162,9 +171,22 @@ export function LeadsKanban({
         onHuy={() => setChoLyDo(null)}
         onXacNhan={(lyDo) => choLyDo && ganhKetQua(choLyDo.leadId, choLyDo.to, lyDo)}
       />
+      {/* Ô chọn số thẻ mỗi cột — cùng cơ chế `?size=` với bảng, nên đổi ở đây rồi bấm
+          sang chế độ Bảng là giữ nguyên lựa chọn. */}
+      <div className="mb-2 flex justify-end">
+        <ChonSoDong
+          soDong={soTheMoiCot}
+          macDinh={SO_THE_MOI_COT_MAC_DINH}
+          nhan="Mỗi cột"
+          tenDonVi="thẻ"
+        />
+      </div>
+
       <div className="flex min-w-max gap-3">
         {KANBAN_COLUMNS.map((col) => {
           const colLeads = byStatus(col);
+          const hienThi = colLeads.slice(0, soTheMoiCot);
+          const conLai = colLeads.length - hienThi.length;
           return (
             <div
               key={col}
@@ -199,7 +221,7 @@ export function LeadsKanban({
                     Trống
                   </p>
                 )}
-                {colLeads.map((lead) => (
+                {hienThi.map((lead) => (
                   <div
                     key={lead.id}
                     draggable={canUpdate}
@@ -296,6 +318,13 @@ export function LeadsKanban({
                     )}
                   </div>
                 ))}
+                {conLai > 0 && (
+                  // Nói thẳng còn bao nhiêu thẻ chưa hiện. Không có dòng này thì phù hiệu
+                  // đếm 37 mà cột chỉ có 10 thẻ, và người dùng tưởng dữ liệu bị mất.
+                  <p className="px-2 py-2 text-center text-xs text-muted-foreground">
+                    còn {conLai} thẻ nữa — tăng &quot;Mỗi cột&quot; ở trên để xem thêm
+                  </p>
+                )}
               </div>
             </div>
           );
