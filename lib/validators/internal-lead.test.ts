@@ -22,7 +22,46 @@ describe("internalLeadSchema — không ô nào bắt buộc", () => {
       facebookUrl: null,
       centerCode: null,
       note: null,
+      // 03/09 — khoá `children` LUÔN có mặt (mặc định `[]`), kể cả khi client bỏ
+      // hẳn khoá đó. Nhờ vậy `mapInternalForm` không phải kiểm `undefined` ở
+      // mọi chỗ đọc, và nguồn cũ chỉ gửi `childName` vẫn parse được.
+      children: [],
     });
+  });
+
+  it("children: bỏ hẳn khoá vẫn ra [] — nguồn cũ không gửi mảng vẫn parse được", () => {
+    expect(parse({ parentName: "A" }).children).toEqual([]);
+  });
+
+  it("children: giữ nguyên dòng người dùng gõ, kể cả dòng trống (mapper mới lọc)", () => {
+    // Schema KHÔNG lọc dòng trống: việc đó thuộc `mapInternalForm`, nơi có luật
+    // "bỏ dòng không tên + khử trùng tên". Tách vậy để schema chỉ làm một việc.
+    const d = parse({
+      children: [
+        { fullName: "Bé Một", courseId: "course-1" },
+        { fullName: "  ", courseId: null },
+      ],
+    });
+    expect(d.children).toEqual([
+      { fullName: "Bé Một", courseId: "course-1" },
+      { fullName: null, courseId: null },
+    ]);
+  });
+
+  it("children: quá 10 em → TỪ CHỐI (chặn payload rác)", () => {
+    const many = Array.from({ length: 11 }, (_, i) => ({ fullName: `Bé ${i}` }));
+    expect(internalLeadSchema.safeParse({ children: many }).success).toBe(false);
+  });
+
+  it("hasAnyContent: phiếu CHỈ có tên con vẫn tính là có nội dung", () => {
+    // Ca rất thật: gõ tên hai em trước, tên phụ huynh sau. Thiếu vế này thì phiếu
+    // bị chặn với lời báo "Phiếu trống" — vô lý ngay trước mắt người vừa gõ.
+    const d = parse({ children: [{ fullName: "Bé Một" }] });
+    expect(hasAnyContent(d)).toBe(true);
+  });
+
+  it("hasAnyContent: phiếu trắng + dòng con trống → vẫn là phiếu trống", () => {
+    expect(hasAnyContent(parse({ children: [{ fullName: "   " }] }))).toBe(false);
   });
 
   it("chuỗi rỗng / khoảng trắng → null, không ghi chuỗi rỗng xuống DB", () => {

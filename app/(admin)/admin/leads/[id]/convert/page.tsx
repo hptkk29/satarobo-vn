@@ -92,12 +92,35 @@ export default async function ConvertV2Page({ params }: Props) {
     listPrice: c.course?.price ?? 0,
   }))
 
+  // Tên khoá quan tâm của từng em. Phải tra RIÊNG vì `LeadChild.interestedCourseId`
+  // là tham chiếu lỏng, không có FK sang `Course` (xem schema.prisma:1606).
+  //
+  // Không lấy tên từ `classOptions` được: đúng ca cần nói tên nhất là ca khoá đó
+  // KHÔNG có lớp nào đang mở — lúc ấy `classOptions` rỗng khoá đó và câu báo sẽ
+  // trống chỗ tên khoá.
+  const khoaQuanTamIds = [
+    ...new Set(lead.children.map((c) => c.interestedCourseId).filter(Boolean) as string[]),
+  ]
+  const tenKhoaById = new Map(
+    khoaQuanTamIds.length
+      ? (
+          await sdb.course.findMany({
+            where: { id: { in: khoaQuanTamIds } },
+            select: { id: true, name: true },
+          })
+        ).map((c) => [c.id, c.name])
+      : [],
+  )
+
   const prefillStudents = (lead.children.length > 0
     ? lead.children.map((c) => ({
         leadChildId: c.id,
         name: c.fullName,
         dob: c.dob ? c.dob.toISOString().slice(0, 10) : '',
         courseId: c.interestedCourseId ?? '',
+        courseName: c.interestedCourseId
+          ? (tenKhoaById.get(c.interestedCourseId) ?? '(khoá đã xoá)')
+          : '',
       }))
     : [
         {
@@ -105,6 +128,7 @@ export default async function ConvertV2Page({ params }: Props) {
           name: lead.childName ?? '',
           dob: '',
           courseId: '',
+          courseName: '',
         },
       ]
   )

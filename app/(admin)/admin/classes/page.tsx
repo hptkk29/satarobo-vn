@@ -8,6 +8,7 @@ import { checkPermission } from '@/lib/auth/check-permission'
 import { ClassStatus, type Prisma } from '@prisma/client'
 import { ENROLLMENT_ACTIVE_STATUS_LIST } from '@/lib/enrollment-status'
 import { getAssignableTeachers } from '@/lib/teachers/assignable'
+import { getCenterOptions, type CenterOption } from '@/lib/org/center-options'
 import { ClassDeleteButton } from './_components/class-delete-button'
 import { ClassFilters } from './_components/class-filters'
 import { PhanTrangBang } from "@/components/ui/phan-trang-bang";
@@ -156,13 +157,9 @@ export default async function ClassesPage({ searchParams }: SearchParams) {
         },
       })
       .catch(() => []),
-    scopedDb(actor).center
-      .findMany({
-        where: { isActive: true },
-        orderBy: { displayOrder: 'asc' },
-        select: { id: true, name: true },
-      })
-      .catch(() => [] as Array<{ id: string; name: string }>),
+    // 03/09 — ô lọc cơ sở đi qua helper chung: bản cũ bày cả Hội sở (không dạy lớp),
+    // các dòng Center mồ côi của bộ test, và không cắt theo tầm nhìn người dùng.
+    getCenterOptions(actor).catch(() => [] as CenterOption[]),
     scopedDb(actor).course
       .findMany({
         where: { isActive: true },

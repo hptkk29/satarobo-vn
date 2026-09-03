@@ -5,6 +5,7 @@ import { auth } from "@/lib/auth";
 import { checkPermission, checkPermissionDetail } from "@/lib/auth/check-permission";
 import { scopedDb } from "@/lib/db-scope";
 import { resolveActor } from "@/lib/auth/actor";
+import { getCenterOptions } from "@/lib/org/center-options";
 import { EnrollmentStatus, type Prisma } from "@prisma/client";
 import { DeleteEnrollmentButton } from "./_components/delete-enrollment-button";
 import { formatDateVN } from "@/lib/format/date";
@@ -155,11 +156,9 @@ export default async function EnrollmentsAdminPage({ searchParams }: SearchParam
       select: { id: true, name: true, classCode: true },
       take: 200,
     }),
-    sdb.center.findMany({
-      where: { isActive: true },
-      orderBy: { displayOrder: "asc" },
-      select: { id: true, name: true },
-    }),
+    // Ô lọc cơ sở: bản cũ (`center.findMany`) bày cả Hội sở, cả dòng Center mồ côi
+    // (ITLI_*) và không cắt theo tầm nhìn actor → chọn ra bảng rỗng. Helper lo cả 3.
+    getCenterOptions(actor),
   ]);
 
   return (

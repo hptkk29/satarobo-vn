@@ -33,6 +33,17 @@ type StudentRow = {
   leadChildId: string | null
   name: string
   dob: string
+  /**
+   * Khoá QUAN TÂM của em này (`LeadChild.interestedCourseId`). Rỗng = phiếu chưa
+   * ghi khoá nào, hoặc em được thêm tay ở màn này.
+   *
+   * Giữ trong hàng vì ô "Lớp đăng ký" lọc THEO TỪNG EM: hai em cùng một phiếu có
+   * thể quan tâm hai khoá khác nhau, nên không có một danh sách lớp chung nào đúng
+   * cho cả bảng.
+   */
+  courseId: string
+  /** Tên khoá quan tâm — chỉ để hiện trong câu báo khi khoá đó chưa có lớp nào. */
+  courseName: string
   classId: string
   consentMedia: boolean
   /** Miễn phí học bổng toàn phần. Chỉ Quản trị tối cao thấy ô này (`canGrantScholarship`). */
@@ -70,6 +81,7 @@ export function ConvertForm({
     name: string
     dob: string
     courseId: string
+    courseName: string
   }[]
   classes: ClassOpt[]
   /** FL2-01 — đơn hàng học phí gắn lead (để chia 1/2 đợt). null = chưa có đơn. */
@@ -92,7 +104,7 @@ export function ConvertForm({
   // Lý do ưu đãi — BẮT BUỘC khi có giảm (server chặn lại lần nữa, đây chỉ là chặn sớm).
 
   const [students, setStudents] = useState<StudentRow[]>(() =>
-    (prefillStudents.length ? prefillStudents : [{ leadChildId: null, name: '', dob: '', courseId: '' }]).map(
+    (prefillStudents.length ? prefillStudents : [{ leadChildId: null, name: '', dob: '', courseId: '', courseName: '' }]).map(
       (s) => {
         // Prefill class: nếu con có khoá quan tâm, chọn lớp đầu tiên của khoá đó.
         const cls = s.courseId ? classes.find((c) => c.courseId === s.courseId) : undefined
@@ -101,6 +113,8 @@ export function ConvertForm({
           leadChildId: s.leadChildId,
           name: s.name,
           dob: s.dob,
+          courseId: s.courseId,
+          courseName: s.courseName,
           classId: cls?.id ?? '',
           consentMedia: false,
           scholarship: false,
@@ -108,6 +122,21 @@ export function ConvertForm({
       },
     ),
   )
+
+  /**
+   * LỚP ĐƯỢC CHỌN CHO MỘT EM — chỉ lớp thuộc KHOÁ QUAN TÂM của em đó
+   * (chủ dự án chốt 03/09/2026).
+   *
+   * Trước đợt này ô lớp liệt kê MỌI lớp đang mở tại cơ sở, trong khi phần điền sẵn
+   * đã tự chọn lớp đúng khoá — nên chỉ cần lỡ tay đổi ô là ghi danh em vào một khoá
+   * khác hẳn khoá phụ huynh hỏi, và học phí lấy theo giá lớp mới. Sai kiểu đó không
+   * báo lỗi ở đâu cả: nó thành công nợ đúng số tiền của một khoá không ai đặt.
+   *
+   * Em CHƯA có khoá quan tâm (phiếu không ghi, hoặc em thêm tay ở màn này) thì hiện
+   * đủ mọi lớp — lọc về rỗng ở đây là chặn luôn việc chốt mà không nói vì sao.
+   */
+  const lopChoEm = (courseId: string) =>
+    courseId ? classes.filter((c) => c.courseId === courseId) : classes
 
   const priceOf = (classId: string) => classes.find((c) => c.id === classId)?.listPrice ?? 0
   const sumListPrice = students.reduce((n, r) => n + priceOf(r.classId), 0)
@@ -134,6 +163,10 @@ export function ConvertForm({
         leadChildId: null,
         name: '',
         dob: '',
+        // Em thêm tay ở màn này không có khoá quan tâm trên phiếu ⇒ để trống, và
+        // ô lớp sẽ hiện đủ mọi lớp đang mở (xem `lopChoEm`).
+        courseId: '',
+        courseName: '',
         classId: '',
         consentMedia: false,
         scholarship: false,
@@ -325,23 +358,34 @@ export function ConvertForm({
                   <span className="mb-1 block text-xs font-medium text-muted-foreground">
                     Lớp đăng ký *
                     <HelpHint>
-                      Danh sách chỉ có lớp đang mở tại cơ sở của lead. Chốt xong bé vào
-                      thẳng lớp này và học phí của lớp thành công nợ của phụ huynh — đổi
-                      lớp sau phải làm ở màn Lớp học.
+                      {s.courseId
+                        ? "Chỉ hiện lớp thuộc KHOÁ QUAN TÂM ghi trên phiếu của em này. Chốt xong bé vào thẳng lớp này và học phí của lớp thành công nợ của phụ huynh — đổi lớp sau phải làm ở màn Lớp học."
+                        : "Phiếu chưa ghi khoá quan tâm cho em này nên danh sách hiện đủ lớp đang mở tại cơ sở. Chốt xong bé vào thẳng lớp này và học phí của lớp thành công nợ của phụ huynh."}
                     </HelpHint>
                   </span>
                   <select
                     value={s.classId}
                     onChange={(e) => patch(s.key, { classId: e.target.value })}
                     className={inputCls}
+                    disabled={lopChoEm(s.courseId).length === 0}
                   >
                     <option value="">— Chọn lớp —</option>
-                    {classes.map((c) => (
+                    {lopChoEm(s.courseId).map((c) => (
                       <option key={c.id} value={c.id}>
                         {c.label} · {c.courseName} ({c.listPrice.toLocaleString('vi-VN')}đ)
                       </option>
                     ))}
                   </select>
+                  {/* Ô rỗng mà không nói gì là chỗ người dùng đọc thành "hệ thống hỏng".
+                      Chỉ hiện khi CÓ lớp ở cơ sở nhưng không lớp nào đúng khoá — ca
+                      "chưa có lớp nào cả" đã có dòng cảnh báo chung ở cuối form. */}
+                  {s.courseId && classes.length > 0 && lopChoEm(s.courseId).length === 0 && (
+                    <span className="mt-1 block text-xs text-state-warning-ink">
+                      Cơ sở này chưa mở lớp nào thuộc khoá{" "}
+                      <strong>{s.courseName}</strong> — mở lớp ở mục Lớp học, hoặc
+                      sửa khoá quan tâm của em trên phiếu lead.
+                    </span>
+                  )}
                 </label>
               </div>
               {/* ⚠️ 31/08/2026 — khung "Ưu đãi học phí" ĐÃ GỠ (ô chọn %/số tiền + ô lý do).

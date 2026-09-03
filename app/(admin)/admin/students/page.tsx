@@ -19,6 +19,7 @@ import { canViewLeadPii } from "@/lib/auth/check-permission";
 import { maskPhone } from "@/lib/utils";
 import { StudentStatus, type Prisma } from "@prisma/client";
 import { phoneSearchTerm } from "@/lib/phone";
+import { getCenterOptions } from "@/lib/org/center-options";
 import {
   buildLifecycleWhere,
   postFilterFrequentlyAbsent,
@@ -181,7 +182,30 @@ export default async function StudentsPage({ searchParams }: SearchParams) {
         : []),
     ];
   }
-  if (centerId) baseFilters.preferredCenterId = centerId;
+  // 03/09 — LỌC THEO ĐÚNG THỨ CỘT ĐANG HIỂN THỊ.
+  //
+  // Bản cũ: `baseFilters.preferredCenterId = centerId`. Nhưng cột "Cơ sở" in ra
+  // `preferredCenter?.name ?? center?.name` (xem dưới) — hai trường KHÁC NHAU.
+  // Đo DB 03/09: 250/250 học viên có `preferredCenterId = NULL` và `centerId` có
+  // giá trị, vì đường tạo học viên chính (chốt lead — `lib/crm/convert-lead.ts:130`
+  // và `convert-lead-v2.ts:341`) chỉ set `centerId`. Hệ quả đã dựng lại được trên
+  // trình duyệt: chọn BẤT KỲ cơ sở nào cũng ra **0 học viên**, kể cả hai cơ sở
+  // đang giữ 125 em mỗi nơi — trong khi cột vẫn in đúng tên cơ sở.
+  //
+  // Điều kiện dưới đây phản chiếu ĐÚNG biểu thức hiển thị: ưu tiên "đơn vị mong
+  // muốn", không có thì mới xét cơ sở đang học. Sửa kiểu này không cần đổi dữ
+  // liệu và không phụ thuộc việc backfill có chạy hay chưa.
+  if (centerId) {
+    baseFilters.AND = [
+      ...(Array.isArray(baseFilters.AND) ? baseFilters.AND : baseFilters.AND ? [baseFilters.AND] : []),
+      {
+        OR: [
+          { preferredCenterId: centerId },
+          { preferredCenterId: null, centerId },
+        ],
+      },
+    ];
+  }
   if (grade != null) baseFilters.currentGrade = grade;
   // Status filter only meaningful on "all" view — other views encode status implicitly.
   if (view === "all" && statusParam) baseFilters.status = statusParam;
@@ -247,11 +271,11 @@ export default async function StudentsPage({ searchParams }: SearchParams) {
 
   const totalPages = Math.max(1, Math.ceil(totalCount / soDong));
 
-  const centers = await sdb.center.findMany({
-    where: { isActive: true },
-    orderBy: { name: "asc" },
-    select: { id: true, name: true },
-  });
+  // 03/09 — qua helper dùng chung. Bản cũ `sdb.center.findMany({isActive:true})`
+  // bày ra CẢ 6 dòng `Center`: kèm "Hội sở" (không dạy học ⇒ lựa chọn không bao
+  // giờ đúng) và 3 dòng mồ côi `ITLI_*` (cặn bộ test). `sdb` không đỡ được vì
+  // `Center` thuộc `SCOPE_EXEMPT`, không phải `SCOPED_MODELS`.
+  const centers = await getCenterOptions(actor);
 
   // URL helper preserving filters across tab/page transitions
   function urlFor(

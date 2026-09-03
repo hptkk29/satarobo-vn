@@ -98,11 +98,19 @@ test("tạo Ngày nghỉ", async ({ page }) => {
 
 // ── 6. Lead ──────────────────────────────────────────────────────────────────
 test("tạo Lead", async ({ page }) => {
-  await page.goto("/leads/new");
-  await page.getByLabel(/Tên phụ huynh/).fill(`QA Phụ Huynh ${STAMP}`);
-  await page.getByLabel(/SĐT/).fill(`09${STAMP}0`);
+  // 03/09/2026 — `/leads/new` ĐÃ GỠ (chỉ còn `redirect()` sang đây). Biểu mẫu
+  // thật là `/nhap-khach-hang`: nó đi qua đường nhận lead chung nên có chống
+  // trùng SĐT + tự chia, hai thứ màn cũ không có.
+  await page.goto("/nhap-khach-hang");
+  await page.getByLabel("Tên phụ huynh").fill(`QA Phụ Huynh ${STAMP}`);
+  await page.getByLabel("SĐT phụ huynh").fill(`09${STAMP}0`);
+  await page.getByLabel("Tên bé thứ 1").fill(`QA Bé ${STAMP}`);
 
-  await page.getByRole("button", { name: "Tạo lead" }).click();
-  await expect(page).toHaveURL(/\/leads(\/|\?|$)/, { timeout: 120_000 });
+  // Biểu mẫu này Ở LẠI TRANG sau khi lưu (gõ phiếu tiếp) — KHÔNG điều hướng.
+  // Dấu hiệu thành công là thông báo + phiếu hiện trong danh sách "vừa nhập".
+  await page.getByRole("button", { name: /Lưu và nhập phiếu tiếp/ }).click();
+  await expect(page.getByText(`QA Phụ Huynh ${STAMP}`).first()).toBeVisible({
+    timeout: 120_000,
+  });
   await page.screenshot({ path: `test-results/manual-06-lead.png`, fullPage: true });
 });

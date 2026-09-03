@@ -216,6 +216,67 @@ export async function takeRotationTurnsTx(
 }
 
 /**
+ * CỘNG MỘT LƯỢT cho một người ĐÃ ĐƯỢC CHỌN SẴN — dùng khi quản lý gán tay.
+ *
+ * Khác `takeRotationTurnsTx` ở chỗ: hàm kia CHỌN người rồi tiêu lượt, hàm này chỉ
+ * tiêu lượt cho người mà nơi gọi đã chỉ đích danh.
+ *
+ * ─── Vì sao gán tay cũng phải tiêu lượt (chủ dự án chốt 03/09/2026) ──────────
+ * Trước đợt này `manualAssignLead` đổi chủ lead mà KHÔNG đụng sổ lượt. Hệ quả:
+ * người vừa được giao tay 5 lead vẫn đứng nguyên vị trí trong vòng, nên lượt chia
+ * tự động kế tiếp lại rơi vào chính họ — càng giao tay nhiều càng nhận thêm. Sổ
+ * lượt sinh ra để nói "ai đã nhận bao nhiêu", mà một trong hai đường giao lead
+ * không ghi vào đó thì con số ấy sai theo đúng hướng gây tranh cãi nhất.
+ *
+ * ⚠️ CÙNG KHOÁ với `takeRotationTurnsTx` (`lead_rotation:<orgUnitId>`). Khoá khác
+ * là hai đường ghi cùng một bộ đếm mà không loại trừ nhau.
+ *
+ * Người chưa có dòng thì GHI DANH TRƯỚC ở khởi điểm hiện tại của vòng (y hệt
+ * đường tự động) rồi mới cộng — nếu không, người mới được giao tay sẽ khởi điểm 0
+ * và hút sạch mọi lượt tự động sau đó.
+ *
+ * @returns số lượt SAU khi cộng, hoặc `null` nếu không ghi được.
+ */
+export async function congMotLuot(
+  tx: Prisma.TransactionClient,
+  orgUnitId: string,
+  userId: string,
+  now: Date = new Date(),
+): Promise<number | null> {
+  await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${lockKey(orgUnitId)}))`;
+
+  const rows = await tx.leadRotationTurn.findMany({
+    where: { orgUnitId },
+    select: { userId: true, turns: true, lastTurnAt: true },
+  });
+  const daCo = rows.find((r) => r.userId === userId);
+
+  if (!daCo) {
+    const khoiDiem = seedTurnsForNewcomer(
+      rows.map((r) => ({ id: r.userId, turns: r.turns, lastTurnAt: r.lastTurnAt })),
+    );
+    const moi = await tx.leadRotationTurn.create({
+      data: {
+        orgUnitId,
+        userId,
+        turns: khoiDiem + 1,
+        seedTurns: khoiDiem,
+        lastTurnAt: now,
+      },
+      select: { turns: true },
+    });
+    return moi.turns;
+  }
+
+  const sau = await tx.leadRotationTurn.update({
+    where: { orgUnitId_userId: { orgUnitId, userId } },
+    data: { turns: { increment: 1 }, lastTurnAt: now },
+    select: { turns: true },
+  });
+  return sau.turns;
+}
+
+/**
  * Bảng theo dõi công khai.
  *
  * Trả CẢ `turns` (vị trí trong vòng) lẫn `seedTurns` (khởi điểm lúc vào vòng),
