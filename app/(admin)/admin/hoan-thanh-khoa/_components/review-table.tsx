@@ -16,6 +16,7 @@ import { useRouter } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { PhanTrangBang } from "@/components/ui/phan-trang-bang";
 import { reviewCourseCompletion } from "../_actions";
 
 export interface RequestRow {
@@ -30,7 +31,12 @@ export interface RequestRow {
 
 export function ReviewTable({ rows }: { rows: RequestRow[] }) {
   return (
-    <table className="w-full text-sm">
+    // Phân trang bọc NGAY TRONG component để bảng tự chứa — bọc ở nơi gọi thì file
+    // này lọt lưới bang-coverage, và màn khác dùng lại sẽ quên bọc.
+    // ⚠️ PhanTrangBang chỉ nhận ĐÚNG MỘT <table> một <tbody>; chèn thêm div vào giữa
+    // là phân trang TẮT IM LẶNG (fail-safe trả bảng nguyên trạng, không báo lỗi).
+    <PhanTrangBang cuonNgang tenDonVi="đề xuất" khoaGhiNho="ad-duyet-hoan-thanh">
+      <table className="w-full min-w-[720px] text-sm">
       <thead className="text-left text-xs text-muted-foreground">
         <tr>
           <th className="px-4 py-2">Học viên</th>
@@ -67,7 +73,8 @@ export function ReviewTable({ rows }: { rows: RequestRow[] }) {
           </tr>
         ))}
       </tbody>
-    </table>
+      </table>
+    </PhanTrangBang>
   );
 }
 

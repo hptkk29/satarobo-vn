@@ -20,6 +20,8 @@ import {
   taoThieu, tenNguoi, uid, MOI_CO_SO,
   type CoId, type CoSo, type Uat,
 } from "./_common";
+import { rosterStatuses } from "../../lib/enrollment-scope";
+import { raiTheoThu } from "./lich";
 import type { Prisma } from "@prisma/client";
 
 const TRUONG = ["TH Nguyễn Văn Trỗi", "TH Phan Thanh", "TH Hoàng Văn Thụ", "TH Lê Lai",
@@ -209,6 +211,9 @@ export async function seedHocVu(
         teacherId: cs.key === "CS1" ? uat.giaovien.id : null,
         roomId: null,
         schedule: slot.label,
+        // Khai THỨ HỌC thật. Thiếu cột này thì không màn nào đối chiếu được nhãn lớp
+        // ("T7 sáng") với ngày buổi học, và lệch nằm im (QA vòng 1, BUG-033).
+        scheduleDays: slot.days,
         startTime: slot.gio,
         endTime: slot.het,
         startDate: ngay(batDau),
@@ -311,10 +316,12 @@ export async function seedHocVu(
   for (const lop of lopInfo) {
     if (!["ACTIVE", "COMPLETED"].includes(lop.status)) continue;
     const lessons = nen.lessonIds[lop.courseId] ?? [];
+    // Rải buổi ĐÚNG THỨ của lớp. Bản cũ cộng cứng 7 ngày một và bỏ qua `slot.days`,
+    // trong khi TÊN lớp lại ghép từ `slot.label` — nên lớp "T7 sáng" có 14 buổi rơi
+    // vào thứ Tư và 0 buổi vào thứ Bảy (QA vòng 1, BUG-033).
+    const ngayBuoi = raiTheoThu(lop.batDau, lop.slot.days, lop.soBuoi);
     for (let s = 0; s < lop.soBuoi; s++) {
-      // Mỗi tuần 1 buổi tính từ ngày khai giảng (bám `slot.days` là việc của
-      // resyncClassSessions ở ứng dụng thật; ở đây chỉ cần dãy ngày hợp lý).
-      const lech = lop.batDau + s * 7;
+      const lech = ngayBuoi[s] ?? lop.batDau + s * 7;
       const quaKhu = lech < 0;
       const id = uid("buoi", lop.cs.code, lop.id.slice(-3), s + 1);
       buois.push({
@@ -348,8 +355,19 @@ export async function seedHocVu(
 
   for (const b of buoiInfo) {
     if (!b.quaKhu) continue;
-    const roster = (rosterTheoLop.get(b.lop.id) ?? [])
-      .filter((r) => ["STUDYING", "ACTIVE", "COMPLETED", "PAUSED"].includes(r.status));
+    // ⚠️ ĐỪNG chép tay danh sách status ở đây. Bản cũ là
+    //     ["STUDYING", "ACTIVE", "COMPLETED", "PAUSED"]
+    // — THIẾU "CONFIRMED", mà chính vòng sinh ghi danh phía trên lại tạo CONFIRMED ở
+    // khoảng 10% mỗi lớp. Hệ quả trên UAT: cứ mỗi lớp có vài em KHÔNG BAO GIỜ có bản
+    // ghi điểm danh nào, nên màn điểm danh luôn ở trạng thái "còn thiếu người" và
+    // KHÔNG THỂ lưu (ràng buộc phải chấm đủ cả lớp). QA vòng 1 đọc ra thành BUG-004
+    // "trạng thái dữ liệu này không tạo được qua giao diện" — đúng, vì nó do seed đẻ
+    // ra chứ không phải do ứng dụng.
+    // `ket-khoa` = đang học + đã hoàn thành, khớp đúng tập cần có bản ghi điểm danh.
+    const rosterOk = new Set<string>(rosterStatuses("ket-khoa"));
+    const roster = (rosterTheoLop.get(b.lop.id) ?? []).filter((r) =>
+      rosterOk.has(r.status),
+    );
     for (const [j, r] of roster.entries()) {
       const rr = rng();
       const st: Prisma.AttendanceCreateManyInput["status"] =
