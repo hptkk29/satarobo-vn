@@ -24,7 +24,7 @@ import { maskFreeText, maskPersonName, maskLeadPiiFields } from "@/lib/lead/pii"
 import { canSeeLead, leadSharingEnabled } from "@/lib/lead/sharing";
 import { canViewLeadPii } from "@/lib/auth/check-permission";
 import { ShareToggle } from "./_components/share-toggle";
-import { formatDateVN } from "@/lib/format/date";
+import { formatDateTimeVNZoned } from "@/lib/format/date";
 import { hasSystemLines, splitLeadNote } from "@/lib/lead/note-view";
 
 export const metadata = { title: "Chi tiết Lead | Admin" };
@@ -299,7 +299,7 @@ export default async function LeadDetailPage({ params }: Props) {
           {canTransfer && !isSharedViewer && (
             <Link
               href={`/leads/${lead.id}/edit`}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-2 text-sm font-medium text-foreground hover:bg-muted"
+              className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-lg border border-border px-3 py-2 text-sm font-medium text-foreground hover:bg-muted"
             >
               Sửa
             </Link>
@@ -335,21 +335,36 @@ export default async function LeadDetailPage({ params }: Props) {
         </div>
       )}
 
-      {/* ─── BỐ CỤC HAI CỘT (chủ dự án chốt 30/08/2026) ────────────────────────
-          CỘT TRÁI  — hồ sơ: thông tin khách · con của phụ huynh · đơn & thanh toán.
-          CỘT PHẢI  — ghi nhanh hoạt động + lịch sử tương tác.
+      {/* ─── BỐ CỤC 7:3 (chủ dự án chốt 30/08/2026) ────────────────────────────
+          CỘT TRÁI (7) — hồ sơ: thông tin khách · con của phụ huynh · đơn & thanh toán.
+          CỘT PHẢI (3) — ghi nhanh hoạt động + lịch sử tương tác.
 
           Vì sao tách vậy: cột trái là thứ ĐỌC (tra cứu, thỉnh thoảng sửa), cột phải là
           thứ GHI và người trực lead lặp lại nhiều lần nhất trong một cuộc gọi. Trước
           đợt này khối ghi nằm tận cuối trang, dưới bốn khối hồ sơ — mỗi lần muốn ghi
           một dòng phải cuộn qua toàn bộ hồ sơ.
 
-          `items-start` để hai cột không bị kéo cao bằng nhau; `lg:` mới chia đôi —
-          màn hẹp vẫn xếp dọc theo đúng thứ tự đọc. */}
-      <div className="mb-6 grid items-start gap-4 lg:grid-cols-2">
-        <div className="space-y-4">
-      {/* Info grid */}
-      <dl className="grid grid-cols-2 gap-4 rounded-xl border border-border bg-card p-4">
+          Vì sao 7:3 chứ không 1:1 (đảo bố cục chia đôi sáng 30/08): chia đôi làm mỗi ô
+          trong bảng thông tin chỉ còn ~1/4 bề ngang trang, mà giá trị ở đây là tiếng
+          Việt DÀI — "Trụ sở chính - Nguyễn Hữu Thọ" xuống 2–3 dòng, chiều cao các ô
+          so le nhau và bảng mất nhịp. Cột phải thì ngược lại: nó là một ô nhập hẹp
+          cộng một danh sách dòng ngắn, cho nó nửa màn hình là bỏ trống nửa màn hình.
+
+          `items-start` để hai cột không bị kéo cao bằng nhau; `lg:` mới chia cột —
+          màn hẹp vẫn xếp dọc theo đúng thứ tự đọc (hồ sơ trước, ô ghi sau). */}
+      <div className="mb-6 grid items-start gap-6 lg:grid-cols-10">
+        <div className="space-y-5 lg:col-span-7">
+      {/* Khối THÔNG TIN KHÁCH HÀNG.
+          · Có `h2` như mọi khối anh em ("Con của phụ huynh", "Thanh toán", "Ghi nhanh
+            hoạt động"). Trước đợt này nó là khối DUY NHẤT không tên — mở trang ra là
+            một mảng chữ trôi nổi, không nói mình là nhóm gì.
+          · MỘT cột trên mobile. Hai cột ở 390px cho mỗi ô ~150px: "Trụ sở chính -
+            Nguyễn Hữu Thọ" xuống 2 dòng, "16:14 30/08/2026" xuống 2 dòng, nhãn "LẦN
+            NHẬP GẦN NHẤT" cũng xuống 2 dòng — các ô cao so le và khối mất nhịp.
+            Tiếng Việt dài là mặc định ở hệ này, không phải ca biên. */}
+      <section className="rounded-xl border border-border bg-card p-4">
+      <h2 className="mb-3 text-sm font-semibold text-foreground">Thông tin khách hàng</h2>
+      <dl className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <Info label="Tên con" value={piiLead.childName} />
         <Info label="Tuổi" value={lead.childAge?.toString() ?? null} />
         {/* 24/08 — KHÔNG fallback sang `source` nữa. "Nguồn" (Facebook, walk-in…)
@@ -398,7 +413,7 @@ export default async function LeadDetailPage({ params }: Props) {
             đó là hai mốc khác nhau. */}
         <Info
           label="Ngày nhận lead"
-          value={formatDateVN(lead.createdAt)}
+          value={formatDateTimeVNZoned(lead.createdAt)}
         />
         {/* 29/08 — LẦN NHẬP GẦN NHẤT.
             Khách gọi lại / điền form lần nữa thì hệ thống KHÔNG đẻ lead mới (trùng
@@ -409,16 +424,19 @@ export default async function LeadDetailPage({ params }: Props) {
           label="Lần nhập gần nhất"
           value={
             lead.lastInboundAt
-              ? `${formatDateVN(lead.lastInboundAt)}${
+              ? `${formatDateTimeVNZoned(lead.lastInboundAt)}${
                   lead.inboundCount > 1 ? ` · ${lead.inboundCount} lần` : ""
                 }`
               : "—"
           }
         />
-        <Info label="Ghi chú" value={humanNote} />
+        {/* Chữ tự do — cho trọn bề ngang, không nhốt vào nửa cột như các ô một dòng. */}
+        <div className="sm:col-span-2">
+          <Info label="Ghi chú" value={humanNote} />
+        </div>
         {/* Dấu vết máy ghi — chỉ quản lý/quản trị (`leads:view-all`) đọc. */}
         {canViewAll && hasSystemLines(noteView) && (
-          <div className="col-span-2 sm:col-span-4">
+          <div className="sm:col-span-2">
             <dt className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
               Nhật ký phiếu (chỉ quản trị)
             </dt>
@@ -428,9 +446,10 @@ export default async function LeadDetailPage({ params }: Props) {
           </div>
         )}
       </dl>
+      </section>
 
       {/* R7-01 — danh sách con (LeadChild) + field phẳng cũ read-only */}
-      <div className="mb-6">
+      <div>
         <LeadChildrenManager
           leadId={lead.id}
           childrenList={lead.children.map((c) => ({
@@ -467,7 +486,7 @@ export default async function LeadDetailPage({ params }: Props) {
 
       {/* R7-02 — xếp con vào lớp trải nghiệm (shared-viewer: ẩn — chỉ xem + ghi chú) */}
       {canTrialManage && !isSharedViewer && lead.children.length > 0 && (
-        <div className="mb-6">
+        <div>
           <TrialEnrollWidget
             children={lead.children.map((c) => {
               const enr = c.trialEnrollments[0];
@@ -516,7 +535,7 @@ export default async function LeadDetailPage({ params }: Props) {
 
       {/* E2-LEAD (item 2) — khối thanh toán: đã nộp / tổng phải thu / còn thiếu + điều kiện chốt. */}
       {(paymentSummary.hasOrder || dealClosable) && (
-        <div className="mb-6">
+        <div>
           <LeadPaymentCard
             leadId={lead.id}
             summary={paymentSummary}
@@ -528,7 +547,7 @@ export default async function LeadDetailPage({ params }: Props) {
       {/* Chốt deal — R7 (quyết định): Convert v2 là entry point DUY NHẤT
           (per-child, guard payment CONFIRMED, dedupe, consent). Bỏ flow gộp lead cũ. */}
       {dealClosable && !isSharedViewer && (
-        <div className="mb-6">
+        <div>
           <Link
             href={`/leads/${lead.id}/convert`}
             className="inline-flex items-center gap-1.5 rounded-lg bg-state-success-ink px-3 py-2 text-sm font-semibold text-white hover:bg-state-success-ink-hover"
@@ -540,10 +559,10 @@ export default async function LeadDetailPage({ params }: Props) {
 
         </div>
 
-        {/* CỘT PHẢI — chỗ GHI. `lg:sticky` để khi cuộn đọc hồ sơ dài, ô ghi nhanh
-            vẫn nằm trong tầm mắt: không dính thì mỗi lần ghi một dòng lại phải cuộn
-            ngược lên đầu trang. */}
-        <div className="lg:sticky lg:top-4">
+        {/* CỘT PHẢI (3/10) — chỗ GHI. `lg:sticky` để khi cuộn đọc hồ sơ dài, ô ghi
+            nhanh vẫn nằm trong tầm mắt: không dính thì mỗi lần ghi một dòng lại phải
+            cuộn ngược lên đầu trang. */}
+        <div className="lg:sticky lg:top-4 lg:col-span-3">
           <LeadActivityPanel
             leadId={lead.id}
             activities={lead.activities.map((a) => ({

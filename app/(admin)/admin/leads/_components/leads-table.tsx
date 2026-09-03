@@ -26,6 +26,7 @@ import {
   KANBAN_COLUMNS,
 } from '@/lib/leads/status'
 import { formatPhoneVN } from '@/lib/phone'
+import { formatDateTimeVNZoned } from '@/lib/format/date'
 import { Badge } from '@/components/ui/badge'
 import { ChonSoDong } from '@/components/ui/chon-so-dong'
 import { DieuHuongTrang } from '@/components/ui/dieu-huong-trang'
@@ -86,17 +87,6 @@ function shortSource(source: string | null): string {
  * Ngày không thôi là chưa đủ: ngày cao điểm có hàng chục phiếu, mà thứ Sale cần biết
  * là ai vào TRƯỚC — gọi theo thứ tự đó mới đúng cam kết phản hồi.
  */
-function formatDateTime(iso: string): string {
-  return new Date(iso).toLocaleString('vi-VN', {
-    timeZone: 'Asia/Ho_Chi_Minh',
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  })
-}
-
 /**
  * Ô trạng thái trên BẢNG — chỉ là NHÃN, không sửa được (chốt 30/08/2026).
  *
@@ -232,7 +222,16 @@ function LeadCell({
       // 30/08 — hiện `0987654321`, không phải `84987654321`: `84…` là quy ước LƯU
       // TRỮ, còn đây là số sale chép ra để gọi.
       return (
-        <td className="px-4 py-3 text-sm tabular-nums text-foreground">
+        <td
+          // 30/08 — Ô NÀY KHÔNG ĐIỀU HƯỚNG (chủ dự án chốt). Cả dòng là vùng bấm để
+          // mở lead, nên bôi đen số để chép sẽ tính là một cú bấm dòng và văng sang
+          // trang khác giữa chừng — chép SĐT lại là việc sale làm nhiều nhất trên
+          // bảng này. `stopPropagation` cắt sự kiện trước khi nó nổi lên <tr>;
+          // `cursor-text` + `select-all` nói cho người dùng biết đây là chữ để lấy,
+          // và một cú bấm là chọn trọn số, không phải kéo cho khéo.
+          onClick={e => e.stopPropagation()}
+          className="cursor-text select-all px-4 py-3 text-sm tabular-nums text-foreground"
+        >
           {formatPhoneVN(lead.phone)}
         </td>
       )
@@ -270,7 +269,7 @@ function LeadCell({
     case 'createdAt':
       return (
         <td className="px-4 py-3 whitespace-nowrap text-sm text-muted-foreground tabular-nums">
-          {formatDateTime(lead.createdAt)}
+          {formatDateTimeVNZoned(lead.createdAt)}
         </td>
       )
     case 'lastInboundAt':
@@ -286,7 +285,7 @@ function LeadCell({
                   : 'text-muted-foreground'
               }
             >
-              {formatDateTime(lead.lastInboundAt)}
+              {formatDateTimeVNZoned(lead.lastInboundAt)}
             </span>
           ) : (
             <span className="text-muted-foreground">—</span>
