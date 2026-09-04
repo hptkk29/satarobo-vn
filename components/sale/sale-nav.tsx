@@ -262,6 +262,16 @@ const NHOM: NavGroup[] = [
         icon: CalendarClock,
         perm: PAGE_GATES["/sale/buoi-hoc"],
       },
+      // Nhãn "Lịch dạy" — KHỚP tiêu đề màn, không lấy nhãn "Lịch tổng" của thanh
+      // bên khu quản trị. Bản admin tự nó đã lệch: menu gọi "Lịch tổng", tiêu đề
+      // trang ghi "Lịch dạy". Chép nguyên cái lệch đó sang đây là để người dùng
+      // bấm một chữ rồi thấy một chữ khác.
+      {
+        label: "Lịch dạy",
+        href: "/sale/lich",
+        icon: CalendarDays,
+        perm: PAGE_GATES["/sale/lich"],
+      },
       {
         label: "Ảnh lớp học",
         href: "/sale/anh-lop-hoc",

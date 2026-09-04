@@ -65,10 +65,11 @@ export default async function SaleCalendarPage({
   const session = await auth();
   if (!session?.user) redirect("/login?callbackUrl=%2Fsale%2Flich");
 
-  // Tên mục "Lịch tổng" là tên chủ dự án dùng khi giao việc; tiêu đề màn giữ
-  // "Lịch dạy" theo đúng bản admin. Hai tên cho một màn là chuyện phải chốt —
-  // đã báo lại chứ không tự chọn hộ.
-  const chan = await chanNeuThieuQuyen("/sale/lich", "Lịch tổng");
+  // CHỐT 04/09: một tên duy nhất — "Lịch dạy" — ở cả mục menu, tiêu đề màn, và
+  // câu từ chối quyền. Bản admin tự nó lệch (thanh bên gọi "Lịch tổng", tiêu đề
+  // trang ghi "Lịch dạy"); chép nguyên cái lệch đó sang đây là để người dùng bấm
+  // một chữ rồi thấy một chữ khác.
+  const chan = await chanNeuThieuQuyen("/sale/lich", "Lịch dạy");
   if (chan) return chan;
 
   const sp = await searchParams;

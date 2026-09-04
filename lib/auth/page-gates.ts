@@ -214,6 +214,9 @@ export const PAGE_GATES = {
   // đảo quyết định CÓ DẤU VẾT, chứ không phải một dòng mã lặng lẽ.
   "/sale/hoc-ba": ["curriculum:view", "students:view-own-class"],
   "/sale/lop-hoc": ["classes:view-all", "classes:view-own"],
+  // Lịch tổng — khớp `checkAnyPermission` của bản admin. Ba action đều GLOBAL ở
+  // mọi RoleDef giữ chúng (bất biến gọi-trần của `page-gates.test.ts`).
+  "/sale/lich": ["sessions:view", "classes:view-all", "classes:view-own"],
   "/sale/buoi-hoc": ["sessions:view"],
   "/sale/anh-lop-hoc": ["media:view", "media:upload"],
   "/sale/hoc-bu": ["parent-requests:manage"],

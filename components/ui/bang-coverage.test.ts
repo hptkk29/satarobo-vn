@@ -20,6 +20,16 @@ const GOC = ["app", "components"];
 
 /** File có `<table>` mà CỐ Ý không phân trang — mỗi dòng phải nêu lý do. */
 const MIEN_TRU: Record<string, string> = {
+  // Màn Học viên site Sale phân trang Ở MÁY CHỦ (`skip`/`take`), y như bản admin —
+  // bọc thêm `<PhanTrangBang>` (cắt ở tầng hiển thị) là phân trang HAI LẦN.
+  // Bộ chuyển trang có thật và nằm ngay dưới bảng, chỉ khác TỆP: nó ở dải chân của
+  // `KhungDuLieu` trong `app/(sale)/sale/hoc-vien/page.tsx` (`<DieuHuongTrangLink>`
+  // + `<ChonSoDong>` + "Trang x/y"). Phép dò của bài kiểm này soi trong CÙNG một
+  // tệp, nên không thấy được khi bảng và dải chân tách thành hai thành phần.
+  // ⚠️ Sửa màn đó mà bỏ dải chân thì bài kiểm này KHÔNG bắt được — đây là chỗ mù
+  //    của phép dò, không phải chỗ được miễn phân trang.
+  "app/(sale)/sale/hoc-vien/_components/bang-hoc-vien.tsx":
+    "phân trang ở máy chủ; bộ chuyển trang nằm ở dải chân KhungDuLieu trong page.tsx",
   "components/ui/table.tsx":
     "primitive shadcn — mọi nơi GỌI nó đã bọc rồi, bọc thêm ở đây là hai thanh điều khiển chồng nhau",
   "app/(admin)/admin/design-system-preview/client.tsx": "màn xem thử design system, chỉ dev dùng",
