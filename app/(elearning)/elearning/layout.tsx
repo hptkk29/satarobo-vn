@@ -117,6 +117,12 @@ export default async function ElearningLayout({
     ...(quanLyChuongTrinh
       ? [{ href: "/elearning/muc-danh-gia", nhan: "Mức đánh giá" }]
       : []),
+    // EL-18 — cỗ máy tự động hoá. Hiện cho cả người chỉ xem báo cáo: nhật ký thi hành
+    // là chỗ trả lời "vì sao người này được giao khoá đó", và người đọc báo cáo cần
+    // tới được nó. Nút bật/tắt bên trong mới gác bằng `program:manage`.
+    ...(quanLyChuongTrinh || baoCao
+      ? [{ href: "/elearning/tu-dong-hoa", nhan: "Tự động hoá" }]
+      : []),
     ...(giao ? [{ href: "/elearning/giao-bai", nhan: "Giao bài" }] : []),
     ...(cham ? [{ href: "/elearning/cham-bai-tap", nhan: "Chấm bài" }] : []),
     // EL-16 — dùng CHUNG khoá xem tiến độ toàn hệ với báo cáo: ai xem được ai đã học

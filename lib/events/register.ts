@@ -3,6 +3,7 @@
 import { registerPingDemo } from "@/lib/events/_demo/ping-handlers";
 import { registerElearningNotifyHandlers } from "@/lib/elearning/_handlers/notify";
 import { registerElearningCertificateHandlers } from "@/lib/elearning/_handlers/issue-certificate";
+import { registerElearningAutomationHandlers } from "@/lib/elearning/_handlers/automation-run";
 import { registerLeadConvertedHandlers } from "@/lib/crm/_handlers/lead-converted";
 import { registerR7NotificationHandlers } from "@/lib/_handlers/r7-notifications";
 import { registerR7LifecycleHandlers } from "@/lib/_handlers/r7-lifecycle";
@@ -43,5 +44,6 @@ export function ensureHandlersRegistered(): void {
   registerParentRequestHandlers(); // #08 — parent_request.created → báo Sale + Quản lý cơ sở
   registerChatParticipantRemovedHandlers(); // US-07/F-KICK — chat.participant_removed → đá client ra khỏi kênh realtime
   registerElearningNotifyHandlers();
-  registerElearningCertificateHandlers(); // EL-06 — giao bài / quá hạn / hoàn thành → in-app + email (KHÔNG ZNS)
+  registerElearningCertificateHandlers();
+  registerElearningAutomationHandlers(); // EL-06 — giao bài / quá hạn / hoàn thành → in-app + email (KHÔNG ZNS)
 }

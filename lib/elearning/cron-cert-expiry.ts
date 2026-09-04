@@ -1,4 +1,5 @@
 import { db } from "@/lib/db";
+import { publishEvent } from "@/lib/events/publish";
 import { notifyStaff } from "@/lib/notifications/notify";
 import { elearningHomeUrl } from "@/lib/auth/hosts";
 import {
@@ -106,11 +107,30 @@ export async function chayVongDoiChungNhan(
 
   // ── 2. Chốt cột status cho bản đã quá hạn ──────────────────────────────────
   try {
-    const r = await db.trnCertificate.updateMany({
+    // Đọc TRƯỚC khi cập nhật: sau `updateMany` thì không còn cách nào biết những
+    // dòng nào vừa đổi, mà cỗ máy tự động hoá (EL-18) cần đúng danh sách ấy.
+    const vuaHet = await db.trnCertificate.findMany({
       where: { status: "VALID", validUntil: { not: null, lt: now } },
+      select: { id: true, userId: true, courseId: true },
+      take: LO,
+    });
+
+    const r = await db.trnCertificate.updateMany({
+      where: { id: { in: vuaHet.map((c) => c.id) } },
       data: { status: "EXPIRED" },
     });
     ket.chotHetHan = r.count;
+
+    // ⚠️ PHÁT sự kiện, nếu không thì kích hoạt `CHUNG_NHAN_HET_HAN` của cỗ máy luật
+    // là một luật CHẾT: người vận hành khai được luật, bật được nó, và nó không bao
+    // giờ chạy — không lỗi nào, chỉ là im lặng.
+    for (const c of vuaHet) {
+      await publishEvent(
+        "elearning.certificate.expired",
+        { certificateId: c.id, userId: c.userId, courseId: c.courseId },
+        { dedupeKey: `el.cert.exp:${c.id}` },
+      );
+    }
   } catch (e) {
     ket.loi.push(`chot-het-han: ${String(e)}`);
   }

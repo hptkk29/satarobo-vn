@@ -421,3 +421,67 @@ describe("🔴 EL-21 — mức gắn đánh giá có cửa, và KHÔNG mở kho�
     expect(p).toContain("không leo thang kỷ luật");
   });
 });
+
+describe("🔴 EL-18 — cỗ máy tự động hoá phải NỐI ĐỦ, không có luật chết", () => {
+  it("bốn kích hoạt đều CÓ NGUỒN PHÁT sự kiện", () => {
+    // Một kích hoạt không ai phát sự kiện cho là một luật CHẾT: người vận hành khai
+    // được, bật được, và nó không bao giờ chạy — không lỗi nào, chỉ im lặng.
+    const h = chiMa(doc("lib/elearning/_handlers/automation-run.ts"));
+    for (const ev of [
+      "elearning.enrollment.completed",
+      "elearning.certificate.expired",
+      "elearning.requirement.applied",
+      "elearning.employee.new",
+    ]) {
+      expect(h, ev).toContain(ev);
+    }
+    // …và mỗi sự kiện có một nơi PHÁT nó ra.
+    expect(chiMa(doc("lib/elearning/rollup.ts"))).toContain(
+      "elearning.enrollment.completed",
+    );
+    expect(chiMa(doc("lib/elearning/cron-cert-expiry.ts"))).toContain(
+      "elearning.certificate.expired",
+    );
+    expect(chiMa(doc("lib/elearning/requirement-authoring.ts"))).toContain(
+      "elearning.requirement.applied",
+    );
+    expect(chiMa(doc("lib/elearning/cron-nhan-su-moi.ts"))).toContain(
+      "elearning.employee.new",
+    );
+  });
+
+  it("handler ĐƯỢC ĐĂNG KÝ — không thì cả cỗ máy nằm im", () => {
+    expect(chiMa(doc("lib/events/register.ts"))).toContain(
+      "registerElearningAutomationHandlers()",
+    );
+  });
+
+  it("quét nhân sự mới nằm trong khe cron ĐÃ CÓ, không xin khe thứ ba", () => {
+    // Ngân sách module là đúng 2 khe (`vercel.json` giữ 25 tổng).
+    expect(chiMa(doc("lib/elearning/cron-dem.ts"))).toContain("quetNhanSuMoi");
+  });
+
+  it("màn tồn tại, gọi action bật/tắt, và nối vào thanh điều hướng", () => {
+    expect(co("app/(elearning)/elearning/tu-dong-hoa/page.tsx")).toBe(true);
+    expect(
+      chiMa(doc("app/(elearning)/elearning/tu-dong-hoa/_components/rule-toggle.tsx")),
+    ).toContain("batTatLuatAction");
+    expect(chiMa(doc("app/(elearning)/elearning/layout.tsx"))).toContain(
+      '"/elearning/tu-dong-hoa"',
+    );
+  });
+
+  it("luật LUÔN tạo ở trạng thái TẮT, bất kể người khai gửi gì", () => {
+    // Không để một luật vừa gõ xong đã bắt đầu giao việc cho cả công ty ngay trong
+    // request tạo nó.
+    const a = chiMa(doc("lib/elearning/automation-authoring.ts"));
+    expect(a).toContain("enabled: false");
+  });
+
+  it("nhật ký ghi CẢ những lần bỏ qua", () => {
+    // Một cỗ máy chỉ ghi lúc nó làm gì đó không giải thích được vì sao nó KHÔNG làm.
+    const h = chiMa(doc("lib/elearning/_handlers/automation-run.ts"));
+    expect(h).toContain('outcome: "SKIPPED"');
+    expect(h).toContain('outcome: "FAILED"');
+  });
+});

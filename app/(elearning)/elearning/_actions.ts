@@ -18,6 +18,11 @@ import {
 } from "@/lib/elearning/requirement-authoring";
 import { cauHinhDatMucGanDanhGia } from "@/lib/elearning/eval-link";
 import {
+  cauHinhKhaiLuat,
+  cauHinhBatTatLuat,
+  cauHinhSoanLoTrinh,
+} from "@/lib/elearning/automation-authoring";
+import {
   cauHinhKhieuNaiCo,
   cauHinhQuyetCo,
 } from "@/lib/elearning/watch-flag-appeal";
@@ -213,3 +218,13 @@ export const dongYeuCauAction = defineAction(cauHinhDongYeuCau);
  * hai chữ ký trong chính bản ghi (Nhân sự + Đào tạo), không ở một khoá mới.
  */
 export const datMucGanDanhGiaAction = defineAction(cauHinhDatMucGanDanhGia);
+
+/**
+ * EL-18 — cỗ máy tự động hoá: khai luật, bật/tắt, và soạn lộ trình.
+ *
+ * Luật LUÔN khai ra ở trạng thái TẮT: bật là hành động riêng có lý do riêng, không để
+ * một luật vừa gõ xong đã bắt đầu giao việc cho cả công ty ngay trong request tạo nó.
+ */
+export const khaiLuatAction = defineAction(cauHinhKhaiLuat);
+export const batTatLuatAction = defineAction(cauHinhBatTatLuat);
+export const soanLoTrinhAction = defineAction(cauHinhSoanLoTrinh);

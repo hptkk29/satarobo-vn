@@ -1,4 +1,8 @@
 import { db } from "@/lib/db";
+import {
+  quetNhanSuMoi,
+  type KetQuaNhanSuMoi,
+} from "@/lib/elearning/cron-nhan-su-moi";
 import { chotCoHetHan } from "@/lib/elearning/watch-flag-close";
 import { quetMoCo } from "@/lib/elearning/watch-flag-scan";
 import { publishEvent } from "@/lib/events/publish";
@@ -59,6 +63,8 @@ export type KetQuaDem = {
   /** EL-13 việc (7) — cờ nghi ngờ: quét mở, rồi chốt cờ hết cửa sổ khiếu nại. */
   moCo: { daXet: number; daMo: number; thieuNguoiXu: number };
   chotCo: { daChot: number; boQua: number };
+  /** EL-18 — quét nhân sự mới để cỗ máy luật giao khoá nhập môn. */
+  nhanSuMoi: KetQuaNhanSuMoi;
   loi: { viec: string; message: string }[];
 };
 
@@ -84,6 +90,7 @@ export async function runElearningDem(now = new Date()): Promise<KetQuaDem> {
     moCo: { daXet: 0, daMo: 0, thieuNguoiXu: 0 },
     chotCo: { daChot: 0, boQua: 0 },
     taiDo: { daHuy: 0, conGiu: 0 },
+    nhanSuMoi: { daXet: 0, daPhat: 0, thieuNgayVaoLam: 0, loi: [] },
     loi: [],
   };
 
@@ -328,6 +335,21 @@ export async function runElearningDem(now = new Date()): Promise<KetQuaDem> {
     ket.thuLai = r;
   } catch (e) {
     ket.loi.push({ viec: "thu-lai-hang-doi", message: String(e) });
+  }
+
+  // ── Việc 8 (EL-18): QUÉT NHÂN SỰ MỚI ────────────────────────────────────────
+  //
+  // ⚠️ Nằm trong khe cron NÀY, không xin khe thứ ba — ngân sách module là đúng 2 khe.
+  //
+  // ⚠️ Đặt CUỐI và bọc try riêng: bảy việc trên phục vụ người đang học và có việc
+  // đụng tới hạn của họ; chúng không được chết theo một lỗi của việc này.
+  //
+  // ⚠️ Cron chỉ PHÁT sự kiện, không giao bài. Cỗ máy luật mới là nơi quyết định giao
+  // gì và ghi nhật ký thi hành — để cron tự giao là chép cỗ máy ấy ra chỗ thứ hai.
+  try {
+    ket.nhanSuMoi = await quetNhanSuMoi(now);
+  } catch (e) {
+    ket.loi.push({ viec: "nhan-su-moi", message: (e as Error).message });
   }
 
   return ket;

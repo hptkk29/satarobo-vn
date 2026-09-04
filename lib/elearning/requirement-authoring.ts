@@ -2,6 +2,12 @@ import { z } from "zod";
 import type { ActionConfig } from "@/lib/actions/factory";
 import { ActionError } from "@/lib/actions/factory";
 import { trnRequirementCreateSchema } from "@/lib/validators/elearning";
+import { khopYeuCau } from "@/lib/elearning/requirement-match";
+import { publishEvent } from "@/lib/events/publish";
+import type { ScopedDb } from "@/lib/actions/factory";
+
+/** Trần số người phát sự kiện trong MỘT lần khai — xem `phatChoNguoiKhop`. */
+const TRAN_PHAT = 500;
 
 /**
  * EL-17 — KHAI và ĐÓNG yêu cầu đào tạo (`TrnRequirement`).
@@ -139,16 +145,103 @@ export const cauHinhKhaiYeuCau: ActionConfig<
       select: { id: true },
     });
 
+    // ⚠️ PHÁT sự kiện cho TỪNG NGƯỜI mà yêu cầu này áp — đây là nửa "auto-enroll"
+    // của EL-18, và không có nó thì kích hoạt `YEU_CAU_MOI_AP_DUNG` là một luật CHẾT:
+    // khai được, bật được, không bao giờ chạy.
+    //
+    // Đi qua sự kiện chứ không giao thẳng ở đây: giao bài là việc của cỗ máy luật
+    // (nó biết luật nào đang bật, hạn bao nhiêu, và ghi nhật ký thi hành). Nhét vào
+    // đây là chép cỗ máy ấy ra chỗ thứ hai.
+    const daPhat = await phatChoNguoiKhop(db, yc.id, input, actor.userId);
+
     return {
       entityId: yc.id,
       // Cảnh báo phạm vi tính ở TẦNG MÀN HÌNH (nó cần đếm người, mà phép đếm ấy đi
       // qua `scopedDb` của người đang xem). Ở đây trả `null` và để màn hình lấp —
       // action không đoán hộ.
-      data: { requirementId: yc.id, canhBao: null },
+      data: { requirementId: yc.id, canhBao: null, soNguoiApDung: daPhat },
       paths: ["/elearning/yeu-cau", "/elearning/ma-tran"],
     };
   },
 };
+
+/**
+ * Phát `elearning.requirement.applied` cho mọi người mà yêu cầu vừa khai áp tới.
+ *
+ * ⚠️ Có TRẦN (`TRAN_PHAT`). Ở quy mô 15 người thì trần không bao giờ chạm tới, nhưng
+ * một yêu cầu `ALL_STAFF` ở quy mô vài nghìn sẽ sinh vài nghìn sự kiện trong một
+ * request — và request ấy là một người đang ngồi đợi biểu mẫu phản hồi. Chạm trần thì
+ * NÓI RA (trả về số đã phát), không lặng lẽ cắt.
+ */
+async function phatChoNguoiKhop(
+  db: ScopedDb,
+  requirementId: string,
+  input: { scopeKind: string; departmentId?: string | null; orgUnitId?: string | null },
+  boiUserId: string,
+): Promise<number> {
+  const nhanSu = await db.employee.findMany({
+    where: { isActive: true, status: "ACTIVE", userAccount: { is: {} } },
+    select: {
+      departmentId: true,
+      orgUnitId: true,
+      userAccount: { select: { id: true } },
+    },
+    take: TRAN_PHAT,
+  });
+
+  const idDonVi = [
+    ...new Set(
+      [...nhanSu.map((n) => n.orgUnitId), input.orgUnitId ?? null].filter(
+        (v): v is string => v != null,
+      ),
+    ),
+  ];
+  const pathCua = new Map(
+    idDonVi.length === 0
+      ? []
+      : (
+          await db.orgUnit.findMany({
+            where: { id: { in: idDonVi } },
+            select: { id: true, path: true },
+          })
+        ).map((r) => [r.id, r.path] as const),
+  );
+
+  const yeuCau = [
+    {
+      id: requirementId,
+      scopeKind: input.scopeKind,
+      positionId: null,
+      departmentId: input.departmentId ?? null,
+      levelTag: null,
+      orgUnitPath: input.orgUnitId ? (pathCua.get(input.orgUnitId) ?? null) : null,
+      validityMonths: null,
+    },
+  ];
+
+  let so = 0;
+  for (const n of nhanSu) {
+    const userId = n.userAccount?.id;
+    if (!userId) continue;
+    const kq = khopYeuCau(
+      {
+        userId,
+        departmentId: n.departmentId,
+        orgUnitPath: n.orgUnitId ? (pathCua.get(n.orgUnitId) ?? null) : null,
+        positionId: null,
+      },
+      yeuCau,
+    );
+    if (kq.apDung.length === 0) continue;
+    await publishEvent(
+      "elearning.requirement.applied",
+      { requirementId, userId, boiUserId },
+      { dedupeKey: `el.req.applied:${requirementId}:${userId}` },
+    );
+    so += 1;
+  }
+  return so;
+}
 
 export const cauHinhDongYeuCau: ActionConfig<
   DongYeuCauInput,

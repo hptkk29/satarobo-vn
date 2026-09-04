@@ -9382,3 +9382,168 @@ model SessionMediaReview {
   @@index([status, deadlineAt])
   @@index([orgUnitId])
 }
+
+/// EL-18 — KÍCH HOẠT của một luật tự động hoá.
+///
+/// ⚠️ Danh sách ĐÓNG và viết thẳng ra, không có "điều kiện tuỳ ý bằng biểu thức".
+/// Một cỗ máy luật cho phép viết biểu thức tự do là một ngôn ngữ lập trình thứ hai
+/// nằm trong DB: không ai review được, không test được, và nó chạy với quyền của hệ
+/// thống trên hồ sơ đào tạo của người thật.
+enum TrnAutoTrigger {
+  /// Nhân sự mới — đo bằng `Employee.joinedAt` trong N ngày.
+  NHAN_SU_MOI
+  /// Một lượt ghi danh vừa hoàn thành có kiểm chứng.
+  KHOA_HOAN_THANH
+  /// Một chứng nhận vừa hết hiệu lực.
+  CHUNG_NHAN_HET_HAN
+  /// Một yêu cầu đào tạo mới được khai và áp cho người này.
+  YEU_CAU_MOI_AP_DUNG
+}
+
+/// EL-18 — HÀNH ĐỘNG của một luật.
+///
+/// ⚠️ CỐ Ý KHÔNG CÓ hành động mang tính chế tài — không "gắn cờ hồ sơ nhân sự",
+/// không "trừ điểm đánh giá", không "báo kỷ luật". QĐ-CDA-06 chốt module chạy chế độ
+/// CHỈ BÁO CÁO, và câu chốt là "không leo thang kỷ luật, KHÔNG cờ đỏ hồ sơ nhân sự ở
+/// BẤT KỲ giá trị cấu hình nào".
+///
+/// Đó là lý do enum này thiếu chúng chứ không phải là chúng bị tắt bằng một cờ: một
+/// cờ tắt được thì cũng bật được, còn một giá trị không tồn tại trong enum thì phải
+/// đi qua migration + review mới có.
+enum TrnAutoAction {
+  /// Giao một khoá.
+  GIAO_KHOA
+  /// Giao trọn một lộ trình (nhiều khoá, có thứ tự).
+  GIAO_LO_TRINH
+  /// Gửi nhắc — không tạo nghĩa vụ mới.
+  GUI_NHAC
+}
+
+enum TrnAutoOutcome {
+  /// Đã thi hành.
+  APPLIED
+  /// Điều kiện không khớp, hoặc đã làm rồi — không phải lỗi.
+  SKIPPED
+  /// Có lỗi khi thi hành. Ghi lại để người vận hành lần ra.
+  FAILED
+}
+
+/// EL-18 — LUẬT TỰ ĐỘNG HOÁ: kích hoạt → điều kiện → hành động.
+model TrnAutomationRule {
+  id    String @id @default(cuid())
+  code  String @unique
+  title String
+
+  trigger TrnAutoTrigger
+  action  TrnAutoAction
+
+  /// Điều kiện, dạng có CẤU TRÚC (không phải biểu thức tự do).
+  /// Khoá được phép do `lib/elearning/automation.ts` định nghĩa và kiểm bằng zod.
+  conditionJson Json @default("{}")
+
+  /// Tham số của hành động: `courseId` cho GIAO_KHOA, `pathId` cho GIAO_LO_TRINH…
+  actionJson Json @default("{}")
+
+  /// Tắt/bật. ⚠️ Tắt KHÔNG xoá nhật ký đã ghi — lịch sử thi hành phải còn.
+  enabled Boolean @default(false)
+
+  /// Số ngày kể từ khi kích hoạt tới hạn của khoá được giao.
+  dueDays Int @default(30)
+
+  centerId  String?
+  orgUnitId String?
+
+  createdById String?
+  createdAt   DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt   DateTime  @updatedAt @db.Timestamptz(6)
+  deletedAt   DateTime? @db.Timestamptz(6)
+
+  logs TrnAutomationLog[]
+
+  @@index([trigger, enabled])
+  @@index([centerId])
+  @@index([orgUnitId])
+}
+
+/// EL-18 — NHẬT KÝ THI HÀNH.
+///
+/// ⚠️ `dedupeKey @unique` là cơ chế chống chạy hai lần, KHÔNG phải một phép kiểm
+/// trong mã. Cỗ máy chạy trên DomainEvent, mà hàng đợi chạy lại sự kiện khi handler
+/// ném lỗi giữa chừng — chống trùng bằng "tra rồi mới ghi" thì hai lượt song song
+/// cùng vượt qua được, và người ta bị giao cùng một khoá hai lần.
+model TrnAutomationLog {
+  id     String @id @default(cuid())
+  ruleId String
+
+  /// Người bị/được luật này tác động.
+  subjectUserId String
+
+  /// Khoá chống trùng: `<ruleId>:<subjectUserId>:<mốc nghiệp vụ>`.
+  dedupeKey String @unique
+
+  outcome TrnAutoOutcome
+
+  /// Câu tiếng Việt nói cụ thể đã làm gì hoặc vì sao bỏ qua — người vận hành đọc.
+  detail String @db.Text
+
+  centerId  String?
+  orgUnitId String?
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+
+  rule TrnAutomationRule @relation(fields: [ruleId], references: [id], onDelete: Cascade)
+
+  @@index([ruleId, createdAt])
+  @@index([subjectUserId])
+  @@index([outcome, createdAt])
+  @@index([centerId])
+  @@index([orgUnitId])
+}
+
+/// EL-18 — LỘ TRÌNH HỌC: nhiều khoá, có thứ tự.
+model TrnLearningPath {
+  id    String @id @default(cuid())
+  code  String @unique
+  title String
+
+  /// Mô tả cho người học: vì sao lộ trình này tồn tại.
+  description String? @db.Text
+
+  /// Bước sau chỉ mở khi bước trước xong. `false` ⇒ giao hết một lượt.
+  sequential Boolean @default(true)
+
+  status String @default("DRAFT")
+
+  centerId  String?
+  orgUnitId String?
+
+  createdById String?
+  createdAt   DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt   DateTime  @updatedAt @db.Timestamptz(6)
+  deletedAt   DateTime? @db.Timestamptz(6)
+
+  steps TrnLearningPathStep[]
+
+  @@index([status])
+  @@index([centerId])
+  @@index([orgUnitId])
+}
+
+/// EL-18 — một BƯỚC của lộ trình. Bảng con ⇒ không mang cột đơn vị (scope theo cha).
+model TrnLearningPathStep {
+  id       String @id @default(cuid())
+  pathId   String
+  courseId String
+
+  orderIndex Int @default(0)
+
+  /// Số ngày cho bước này, kể từ khi bước được mở.
+  dueDays Int @default(30)
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+
+  path TrnLearningPath @relation(fields: [pathId], references: [id], onDelete: Cascade)
+
+  @@unique([pathId, courseId])
+  @@index([pathId, orderIndex])
+}
