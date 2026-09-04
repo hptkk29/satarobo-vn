@@ -24,6 +24,7 @@ import type {
   HolidayType,
 } from "@prisma/client";
 import { db } from "@/lib/db";
+import { chonBuoiDaiDien } from "@/lib/lms/trial-representative-session";
 import { getModelVisibleCenterIds } from "@/lib/db-scope";
 import {
   isSettledTrialRow,
@@ -221,6 +222,7 @@ export async function getTeacherTrialRoster(
   });
 
   const sessionIds = sessions.map((s) => s.id);
+
   // HV xếp vào từng buổi (scheduledSessionId). Câu 46: leadChild only — KHÔNG lead.*.
   const enrollments = sessionIds.length
     ? await db.trialEnrollment.findMany({
@@ -642,10 +644,19 @@ export type TrialTableRow = {
   parentName: string | null;
   courseName: string | null;
   trialClassName: string;
-  /** null = chưa xếp buổi. @db.Date → UTC 00:00 của ngày VN. */
-  date: Date | null;
-  startTime: string | null;
-  endTime: string | null;
+  /** @db.Date → UTC 00:00 của ngày VN. LUÔN có: dòng không suy được buổi thì bị bỏ. */
+  date: Date;
+  startTime: string;
+  endTime: string;
+  /**
+   * Buổi dòng này trỏ tới — phải chở lên link mở phiếu. Thiếu nó thì
+   * `getTeacherTrialRubricContext` mất hai nhánh sở hữu cuối và trả null ⇒ giáo viên bấm
+   * vào ra "Buổi Trial không thuộc bạn phụ trách"; mà qua được thì `trialClassSessionId`
+   * null cũng bị chặn lúc LƯU.
+   */
+  sessionId: string;
+  /** `scheduledSessionId = null` — em học CẢ LỚP, không chốt riêng buổi nào (chốt 28/08). */
+  hocCaLop: boolean;
   status: TrialRowStatus;
   evaluated: boolean;
 };
@@ -667,8 +678,14 @@ export type TrialTableResult = {
  * `today` là mốc UTC 00:00 của NGÀY VN (trang truyền vào — server tính, client không
  * đụng `new Date()` để khỏi lệch hydrate). `days` = số ngày nhìn tới, mặc định 7.
  *
- * Own-rows y như `getTeacherTrialRoster`: buổi GV trực tiếp dạy HOẶC lớp Trial mà GV là
- * GV chính. Không đi qua scopedDb vì `TrialClassSession` ∉ SCOPED_MODELS (xem đầu file).
+ * Own-rows BA nhánh, y như `getTeacherTrialRoster`: buổi GV trực tiếp dạy, HOẶC lớp Trial
+ * mà GV là GV chính, HOẶC lớp có ca Đào tạo phân công đích danh (`gvPhanCongId`).
+ * Không đi qua scopedDb vì `TrialClassSession` ∉ SCOPED_MODELS (xem đầu file).
+ *
+ * ⚠️ 04/09 — trước bản vá này câu truy vấn buổi chỉ có HAI nhánh đầu, trong khi docblock
+ * đã khai "y như getTeacherTrialRoster". Từ GĐ3 Đào tạo phân công theo TỪNG CA, nên giáo
+ * viên được phân công trong lớp của người khác thấy 0 buổi ⇒ bảng rỗng KỂ CẢ khi ghi danh
+ * đã gắn buổi. Đó là lỗi thứ hai, độc lập với lỗi `scheduledSessionId = null` bên dưới.
  */
 export async function getTeacherTrialTable(
   teacherId: string,
@@ -686,7 +703,13 @@ export async function getTeacherTrialTable(
     where: {
       status: { not: "CANCELLED" },
       date: { gte: historyFrom, lt: upcomingTo },
-      OR: [{ teacherId }, { trialClass: { teacherId } }],
+      OR: [
+        { teacherId },
+        { trialClass: { teacherId } },
+        // Nhánh 3 (GĐ3) kéo về CẢ LỚP, nên bên dưới phải lọc lại theo TỪNG ghi danh —
+        // lấy sạch lớp là bày cả ca đã giao cho giáo viên khác.
+        { trialClass: { enrollments: { some: { gvPhanCongId: teacherId } } } },
+      ],
     },
     select: {
       id: true,
@@ -694,17 +717,42 @@ export async function getTeacherTrialTable(
       startTime: true,
       endTime: true,
       status: true,
-      trialClass: { select: { name: true } },
+      teacherId: true,
+      trialClassId: true,
+      trialClass: { select: { name: true, teacherId: true } },
     },
     orderBy: [{ date: "asc" }, { startTime: "asc" }],
     take: 400,
   });
 
   const sessionIds = sessions.map((s) => s.id);
+
+  // Buổi GV sở hữu TRỰC TIẾP (dạy buổi đó) hoặc qua vai GV chính của lớp. Nhánh 3 cố ý
+  // KHÔNG vào đây: nó kéo cả lớp về, dùng nó để suy "lớp của tôi" là bày luôn ca của
+  // giáo viên khác trong cùng lớp rồi bấm vào báo "không thuộc bạn phụ trách".
+  const buoiThuocGv = sessions.filter(
+    (s) => s.teacherId === teacherId || s.trialClass.teacherId === teacherId,
+  );
+  const idBuoiThuocGv = buoiThuocGv.map((s) => s.id);
+  const lopThuocGv = [...new Set(buoiThuocGv.map((s) => s.trialClassId))];
+  const moiLop = [...new Set(sessions.map((s) => s.trialClassId))];
+  const gomTheoLop = (ds: typeof sessions) => {
+    const m = new Map<string, typeof sessions>();
+    for (const s of ds) {
+      const arr = m.get(s.trialClassId);
+      if (arr) arr.push(s);
+      else m.set(s.trialClassId, [s]);
+    }
+    return m;
+  };
+  const buoiLopCuaGv = gomTheoLop(buoiThuocGv);
+  const buoiLopBatKy = gomTheoLop(sessions);
+
   const enrollmentSelect = {
     id: true,
     scheduledSessionId: true,
     rescheduledFromSessionId: true,
+    gvPhanCongId: true,
     status: true,
     trialClassId: true,
     leadChildId: true,
@@ -727,11 +775,25 @@ export async function getTeacherTrialTable(
   // nhớ dọn `LeadTrialHistory.outcome` — đường ghi thì còn thêm mãi, đường đọc chỉ có đây.
   const aliveLead = { leadChild: { lead: { deletedAt: null } } } as const;
 
-  // CHỈ ghi danh ĐÃ GẮN BUỔI. Ghi danh chưa xếp buổi không còn được bày ở site GV
-  // (chủ dự án 26/08) nên cũng không truy vấn nữa — bớt một round-trip mỗi lần mở trang.
+  // ⚠️ 04/09 — ĐẢO câu "CHỈ ghi danh ĐÃ GẮN BUỔI" (26/08). Chốt 26/08 cấm bày dòng KHÔNG
+  // CÓ NGÀY GIỜ, không cấm bày em học cả lớp; mà từ 28/08 gỡ auto-gán buổi thì ghi danh
+  // tạo qua giao diện admin LUÔN mang `scheduledSessionId = null`. Lọc `in: [...]` không
+  // bao giờ khớp null ⇒ bảng rỗng sạch, giáo viên không có suất nào để nhập phiếu.
+  // Nay nhận cả ba diện, rồi suy buổi đại diện; suy không ra thì BỎ dòng (giữ chốt 26/08).
   const all = sessionIds.length
     ? await db.trialEnrollment.findMany({
-        where: { scheduledSessionId: { in: sessionIds }, ...aliveLead },
+        where: {
+          ...aliveLead,
+          OR: [
+            // (a) xếp riêng một buổi, và buổi đó là buổi của GV.
+            { scheduledSessionId: { in: idBuoiThuocGv } },
+            // (b) học CẢ LỚP trong lớp của GV — ca THƯỜNG GẶP NHẤT: cả hai màn xếp chỗ
+            //     bên admin đều không truyền sessionId.
+            { scheduledSessionId: null, trialClassId: { in: lopThuocGv } },
+            // (c) Đào tạo phân công đích danh GV cho ca này (GĐ3) — lọc THEO CA.
+            { gvPhanCongId: teacherId, trialClassId: { in: moiLop } },
+          ],
+        },
         select: enrollmentSelect,
         orderBy: { leadChild: { fullName: "asc" } },
       })
@@ -749,7 +811,7 @@ export async function getTeacherTrialTable(
       : Promise.resolve([] as { id: string; name: string }[]),
     db.trialRubricEval.findMany({
       where: { trialEnrollmentId: { in: all.map((e) => e.id) } },
-      select: { trialEnrollmentId: true },
+      select: { trialEnrollmentId: true, trialClassSessionId: true },
     }),
     // Kết cục học thử (ENROLLED / LOST / PENDING) — 1 dòng / con × lớp.
     db.leadTrialHistory.findMany({
@@ -762,18 +824,41 @@ export async function getTeacherTrialTable(
   ]);
 
   const courseName = new Map(courses.map((c) => [c.id, c.name]));
-  const evaluatedSet = new Set(evals.map((r) => r.trialEnrollmentId));
+  // Khoá CẶP (ca, buổi), không phải theo ca. Ghi danh học cả lớp cần N phiếu; khoá theo
+  // ca thì chấm xong buổi 1 là cả ca hoá "đã đánh giá" vĩnh viễn, nút đổi thành "Xem
+  // phiếu" và giáo viên không bao giờ được nhắc chấm buổi 2..N. `TrialRubricEval` vốn
+  // đã `@@unique([trialEnrollmentId, trialClassSessionId])` — bảng chỉ đang đọc sai.
+  const evaluatedPairs = new Set(
+    evals.map((r) => evalPairKey(r.trialEnrollmentId, r.trialClassSessionId)),
+  );
   const outcomeOf = new Map(
     histories.map((h) => [`${h.leadChildId}:${h.trialClassId}`, h.outcome]),
   );
   const sessionById = new Map(sessions.map((s) => [s.id, s]));
   const nowYear = new Date(todayMs).getUTCFullYear();
 
-  function toRow(e: (typeof all)[number]): TrialTableRow {
-    const ses = e.scheduledSessionId ? (sessionById.get(e.scheduledSessionId) ?? null) : null;
-    const evaluated = evaluatedSet.has(e.id);
+  /** null = không suy được buổi cho ghi danh này ⇒ BỎ dòng (xem ghi chú trong hàm). */
+  function toRow(e: (typeof all)[number]): TrialTableRow | null {
+    const xepRieng = e.scheduledSessionId
+      ? (sessionById.get(e.scheduledSessionId) ?? null)
+      : null;
+    // Em học CẢ LỚP: suy buổi đại diện từ CHÍNH lịch của giáo viên, nên buổi chọn ra chắc
+    // chắn qua được cổng sở hữu của `getTeacherTrialRubricContext`. Riêng ca Đào tạo phân
+    // công đích danh thì nhánh `gvPhanCongId` gánh cổng đó, nên buổi nào của lớp cũng được
+    // — và phải mở rộng như vậy, vì lớp đó có thể không có buổi nào mang tên giáo viên này.
+    const phanCongDichDanh = e.gvPhanCongId === teacherId;
+    const ungVien =
+      (phanCongDichDanh ? buoiLopBatKy : buoiLopCuaGv).get(e.trialClassId) ?? [];
+    const ses = xepRieng ?? chonBuoiDaiDien(ungVien, todayMs);
+    // Lớp không có buổi nào trong cửa sổ ⇒ không có ngày giờ để in. Chốt 26/08 cấm bày
+    // dòng trống ngày ở site GV, nên BỎ hẳn thay vì in ra một dòng giáo viên không làm gì
+    // được. Ca đó là việc của quản lý ở /admin/lop-trial.
+    if (!ses) return null;
+    const evaluated = evaluatedPairs.has(evalPairKey(e.id, ses.id));
     return {
       enrollmentId: e.id,
+      sessionId: ses.id,
+      hocCaLop: e.scheduledSessionId === null,
       studentName: e.leadChild.fullName,
       birthYear:
         e.leadChild.dob?.getUTCFullYear() ??
@@ -782,18 +867,18 @@ export async function getTeacherTrialTable(
       courseName: e.leadChild.interestedCourseId
         ? (courseName.get(e.leadChild.interestedCourseId) ?? null)
         : null,
-      trialClassName: ses?.trialClass.name ?? e.trialClass.name,
-      date: ses?.date ?? null,
-      startTime: ses?.startTime ?? null,
-      endTime: ses?.endTime ?? null,
+      trialClassName: ses.trialClass.name,
+      date: ses.date,
+      startTime: ses.startTime,
+      endTime: ses.endTime,
       evaluated,
       status: trialRowStatus({
         enrollmentStatus: e.status,
         outcome: outcomeOf.get(`${e.leadChildId}:${e.trialClassId}`) ?? null,
         evaluated,
         rescheduled: e.rescheduledFromSessionId != null,
-        sessionDate: ses?.date ?? null,
-        sessionStatus: ses?.status ?? null,
+        sessionDate: ses.date,
+        sessionStatus: ses.status,
         todayMs,
       }),
     };
@@ -803,24 +888,25 @@ export async function getTeacherTrialTable(
   const done: TrialTableRow[] = [];
   for (const e of all) {
     const row = toRow(e);
+    if (!row) continue;
     // Suất đã có kết cục (nhập học / rớt / rút) rơi xuống bảng dưới dù buổi còn ở tương
     // lai — với giáo viên thì việc đã xong, không còn là "suất sắp Trial".
     const settled = isSettledTrialRow(row.status);
-    const inWindow = row.date != null && row.date.getTime() >= todayMs;
+    const inWindow = row.date.getTime() >= todayMs;
     if (inWindow && !settled) upcoming.push(row);
     else done.push(row);
   }
 
   upcoming.sort(
     (a, b) =>
-      (a.date?.getTime() ?? 0) - (b.date?.getTime() ?? 0) ||
-      (a.startTime ?? "").localeCompare(b.startTime ?? "") ||
+      a.date.getTime() - b.date.getTime() ||
+      a.startTime.localeCompare(b.startTime) ||
       a.studentName.localeCompare(b.studentName, "vi"),
   );
   done.sort(
     (a, b) =>
-      (b.date?.getTime() ?? 0) - (a.date?.getTime() ?? 0) ||
-      (b.startTime ?? "").localeCompare(a.startTime ?? "") ||
+      b.date.getTime() - a.date.getTime() ||
+      b.startTime.localeCompare(a.startTime) ||
       a.studentName.localeCompare(b.studentName, "vi"),
   );
 

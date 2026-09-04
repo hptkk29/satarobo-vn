@@ -143,8 +143,22 @@ Thay lưới thẻ theo ngày bằng:
 - **"Các suất sắp Trial"** — hôm nay → hết 7 ngày tới, xếp theo ngày tăng dần. **Không có
   suất nào thì không hiện bảng.**
 - **"Đã Trial"** — dưới cùng, cùng bộ cột, mới nhất trước.
-- Khối "Chưa xếp buổi" giữ nguyên (HV chưa gắn buổi thì không có ngày để xếp; bỏ đi là họ
-  tàng hình).
+- ~~Khối "Chưa xếp buổi" giữ nguyên~~ **[ĐÃ GỠ 26/08, rồi ĐẢO CÁCH GIẢI 04/09]**
+  Chủ dự án cho gỡ khối này 26/08. Nhưng 28/08 lại gỡ auto-gán buổi, nên từ đó **mọi**
+  ghi danh tạo qua giao diện admin mang `scheduledSessionId = null` — và bảng thì lọc
+  `scheduledSessionId: { in: [...] }`, mà `in` không bao giờ khớp null. Giao nhau của hai
+  quyết định đúng-riêng-lẻ: **bảng Trial của giáo viên rỗng sạch**, không ai nhập được
+  phiếu nào (báo 04/09).
+
+  Cách giải hiện tại giữ ĐÚNG tinh thần chốt 26/08 — *không bày dòng không có ngày giờ* —
+  mà không làm giáo viên tàng hình: em học cả lớp được suy một **buổi đại diện** từ chính
+  lịch của giáo viên (`lib/lms/trial-representative-session.ts`: buổi gần nhất chưa qua,
+  không còn thì buổi cuối đã qua). Lớp không có buổi nào trong cửa sổ ⇒ **bỏ dòng**, đúng
+  như 26/08 muốn. Dòng có gắn hậu tố `· học cả lớp` để không đọc nhầm thành lịch chốt.
+
+  ⚠️ Buổi đại diện chỉ để xếp bảng và nhét vào link mở phiếu. **Không ghi ngược vào**
+  `TrialEnrollment.scheduledSessionId` — cột đó nay nghĩa là "xếp RIÊNG một buổi", ghi vào
+  là đảo ngầm chốt 28/08 và làm bảng điểm danh thôi hiểu "em học mọi buổi".
 
 Cột: `Buổi` · `Học viên` (`Hoàng Gia Bảo - 2016`) · `Phụ huynh` · `Khoá học` · `Đánh giá`
 (chỉ Nhập/Xem phiếu — **đã gỡ nút Xuất PDF**) · `Trạng thái`.
