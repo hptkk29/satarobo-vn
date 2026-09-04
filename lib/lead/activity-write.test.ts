@@ -598,6 +598,16 @@ describe("[S-9] lamMoiDongHo=false — dòng nhật ký LƯU, đồng hồ đứ
   });
 });
 
+/**
+ * Hạn giờ RIÊNG cho ca quét cây nguồn bên dưới.
+ *
+ * Chạy lẻ thì ca này mất ~2,5s, nhưng trong bộ đầy đủ (475 file test chạy song song)
+ * một lượt duyệt đệ quy `app` + `lib` + `components` vượt 5000ms mặc định của vitest
+ * và ca test ĐỬe VÌ HẾT GIỜ — không phải vì mã sai. Đo được 04/09/2026: chạy lẻ 48/48
+ * xanh, chạy cùng cả bộ thì đỏ. Cùng lớp flake đã vá ở `lib/lead/ownership.test.ts`.
+ */
+const HAN_QUET_CAY = 30_000;
+
 describe("[S-9] chỉ đường ghi chú của người-không-phụ-trách mới tắt đồng hồ", () => {
   it("KHÔNG đường ghi nào khác truyền `lamMoiDongHo`", () => {
     // Cờ này nguy hiểm theo chiều ngược lại: truyền `false` ở một đường chạm
@@ -620,5 +630,5 @@ describe("[S-9] chỉ đường ghi chú của người-không-phụ-trách mớ
     };
     for (const goc of ["app", "lib", "components"]) di(goc);
     expect(pham.filter((p) => !duocPhep.has(path.normalize(p)))).toEqual([]);
-  });
+  }, HAN_QUET_CAY);
 });
