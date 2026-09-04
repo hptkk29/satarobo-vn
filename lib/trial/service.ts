@@ -429,11 +429,15 @@ export async function enrollLeadChild(params: {
               childName: child.fullName,
               className: cls.name,
               enrollmentId: enrollment.id,
+              // MỆNH ĐỀ ĐẦY ĐỦ, không phải mảnh để nơi gọi ghép thêm chữ "buổi" vào trước:
+              // hai nhánh dưới đây mở đầu khác nhau ("buổi …" vs "toàn bộ buổi …"). Bản
+              // trước để nơi gọi ghép cứng `buổi ${…}` nên đường học-cả-lớp bắn ra
+              // "· buổi toàn bộ buổi, bắt đầu …" — đo được ở lượt nghiệm thu 04/09.
+              //
               // `date` là @db.Date (nửa đêm UTC của ngày VN) ⇒ format PHẢI ép timeZone UTC.
-              // Không ghim buổi thì nói rõ là học cả lớp, kèm buổi gặp đầu tiên nếu có.
-              moTaBuoi: buoi
-                ? `${scheduledSessionId ? "" : "toàn bộ buổi, bắt đầu "}${buoi.date.toLocaleDateString("vi-VN", { timeZone: "UTC" })} ${buoi.startTime}–${buoi.endTime}`
-                : "toàn bộ buổi của lớp",
+              moTaBuoi: !buoi
+                ? "học toàn bộ buổi của lớp"
+                : `${scheduledSessionId ? "buổi " : "học toàn bộ buổi, bắt đầu "}${buoi.date.toLocaleDateString("vi-VN", { timeZone: "UTC" })} ${buoi.startTime}–${buoi.endTime}`,
             }
           : undefined;
       // FL-R2 (item 6) — mở/ghi lịch sử học thử per-lead (giữ kể cả khi rời pipeline).
@@ -499,7 +503,9 @@ export async function enrollLeadChild(params: {
       await notifyTrialTeacherAssigned({
         teacherId: tin.teacherId,
         title: "Có học viên mới trong ca trải nghiệm của bạn",
-        body: `${tin.childName} vừa được xếp vào lớp ${tin.className} · buổi ${tin.moTaBuoi}.`,
+        // `moTaBuoi` là MỆNH ĐỀ ĐẦY ĐỦ (tự mang chữ "buổi" / "toàn bộ buổi") — ĐỪNG
+        // ghép thêm tiền tố nào ở đây, xem chú thích tại chỗ dựng nó.
+        body: `${tin.childName} vừa được xếp vào lớp ${tin.className} · ${tin.moTaBuoi}.`,
         dedupeKey: `trial-enroll.assigned:${tin.enrollmentId}`,
         entityId: tin.enrollmentId,
       });
