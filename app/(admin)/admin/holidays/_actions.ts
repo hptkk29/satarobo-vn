@@ -9,7 +9,7 @@ import { z } from "zod";
 import { applyHolidayShift } from "@/lib/holidays/apply";
 import { centerIdForOrgUnit } from "@/lib/org/org-service";
 import { resolveActor, type Actor } from "@/lib/auth/actor";
-import { scopedDb, passesScope } from "@/lib/db-scope";
+import { getModelVisibleCenterIds, passesScope, scopedDb } from "@/lib/db-scope";
 
 type ActionResult = { error?: string };
 
@@ -19,7 +19,26 @@ type ActionResult = { error?: string };
 // GHI đối xứng với ĐỌC (vá 24/07): scope per-model qua passesScope — ngày nghỉ TOÀN HỆ
 // THỐNG (centerId null) đòi scope ALL (role HO có quyền holidays:/centers:), không còn
 // mở cho mọi role @HO; center-level chỉ nhắm cơ sở trong scope.
+/**
+ * CÓ ĐƯỢC TẠO/SỬA/XOÁ ngày nghỉ ở phạm vi này không — luật GHI, chặt hơn luật ĐỌC.
+ *
+ * ⚠️ 04/09/2026 — KHÔNG dùng thẳng `passesScope` nữa. `Holiday` nay nằm trong
+ * `NULL_IS_GLOBAL_MODELS` để người cấp cơ sở ĐỌC được ngày nghỉ toàn hệ thống
+ * (Tết, lễ — 4/6 ngày nghỉ thật, và là những ngày sinh ra lịch buổi học). Nhưng
+ * `passesScope` là luật ĐỌC: sau thay đổi đó nó trả `true` cho `centerId = null`,
+ * và hàm này vốn gọi thẳng nó ⇒ quản lý một cơ sở sẽ TẠO/XOÁ được ngày nghỉ áp
+ * cho MỌI cơ sở. Đó là nới quyền, không phải sửa lỗi.
+ *
+ * Luật ghi cho phạm vi "toàn hệ thống": đòi quyền ngày nghỉ ở phạm vi ALL — đúng
+ * bằng hành vi `passesScope` VỐN CÓ trước khi `Holiday` vào `NULL_IS_GLOBAL_MODELS`.
+ *
+ * ⚠️ KHÔNG dùng `actor.isHoLevel` làm điều kiện. Cờ đó chỉ nói "có một vai nào đó
+ * neo tại Hội sở", không nói người này được làm gì: một quản lý cơ sở kiêm vai đào
+ * tạo ở Hội sở vẫn bật cờ. Lấy cờ làm quyền bao trùm đúng là lỗi mà
+ * `lib/db-scope-function.test.ts` sinh ra để chặn (ca "Toại").
+ */
 function actorCanUseCenterTarget(actor: Actor, centerId: string | null): boolean {
+  if (centerId === null) return getModelVisibleCenterIds("Holiday", actor) === "ALL";
   return passesScope("Holiday", { centerId }, actor);
 }
 
@@ -201,7 +220,7 @@ export async function updateHoliday(
   const actor = await resolveActor(user.id);
   const sdb = scopedDb(actor);
   const existing = await sdb.holiday.findUnique({ where: { id }, select: { centerId: true } });
-  if (!existing || !passesScope("Holiday", existing, actor)) {
+  if (!existing || !actorCanUseCenterTarget(actor, existing.centerId)) {
     return { error: "Ngày nghỉ không tồn tại" };
   }
   if (!actorCanUseCenterTarget(actor, centerId)) {
@@ -238,7 +257,7 @@ export async function deleteHoliday(id: string): Promise<ActionResult> {
   const actor = await resolveActor(user.id);
   const sdb = scopedDb(actor);
   const existing = await sdb.holiday.findUnique({ where: { id }, select: { centerId: true } });
-  if (!existing || !passesScope("Holiday", existing, actor)) {
+  if (!existing || !actorCanUseCenterTarget(actor, existing.centerId)) {
     return { error: "Ngày nghỉ không tồn tại" };
   }
   try {

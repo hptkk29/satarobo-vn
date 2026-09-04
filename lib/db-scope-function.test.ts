@@ -111,9 +111,29 @@ describe("passesScope — guard GHI theo scope per-model (tạo/chuyển cơ s�
       expect(passesScope(m, { centerId: CS2 }, toai), `${m} CS2 phải bị chặn`).toBe(false);
       expect(passesScope(m, { centerId: CS1 }, toai), `${m} CS1 phải qua`).toBe(true);
     }
-    // Ngày nghỉ TOÀN HỆ THỐNG / NV HO (centerId null) — cần scope ALL, Toại không có.
-    expect(passesScope("Holiday", { centerId: null }, toai)).toBe(false);
+    // NV HO (centerId null) — cần scope ALL, Toại không có.
     expect(passesScope("Employee", { centerId: null }, toai)).toBe(false);
+  });
+
+  it("NGÀY NGHỈ toàn hệ thống: ĐỌC được, nhưng GHI thì không (đảo 04/09/2026)", () => {
+    // `Holiday` nay ∈ NULL_IS_GLOBAL_MODELS: `centerId = null` nghĩa là Tết/lễ áp
+    // cho MỌI cơ sở, không phải "chưa gán". Trước đổi này người cấp cơ sở KHÔNG
+    // BAO GIỜ thấy 4/6 ngày nghỉ thật — đúng những ngày sinh ra lịch buổi học.
+    expect(passesScope("Holiday", { centerId: null }, toai)).toBe(true);
+
+    // ⚠️ NHƯNG `passesScope` là luật ĐỌC. Luật GHI chặt hơn và nằm ở
+    // `app/(admin)/admin/holidays/_actions.ts` (`actorCanUseCenterTarget`): phạm vi
+    // "toàn hệ thống" chỉ Hội sở / quản trị hệ thống được tạo–sửa–xoá.
+    //
+    // Vì sao tách: guard ghi cũ gọi THẲNG `passesScope`, nên nếu không tách thì
+    // đúng thay đổi trên biến quản lý một cơ sở thành người xoá được ngày nghỉ áp
+    // cho mọi cơ sở. Đó là nới quyền, không phải sửa lỗi.
+    //
+    // Luật ghi hỏi PHẠM VI QUYỀN, không hỏi cờ `isHoLevel`: Toại BẬT cờ đó (kiêm
+    // vai đào tạo ở Hội sở) mà vẫn chỉ được quản CS1 — lấy cờ làm quyền bao trùm
+    // đúng là lỗi cả file test này sinh ra để chặn.
+    expect(toai.isHoLevel).toBe(true);
+    expect(getModelVisibleCenterIds("Holiday", toai)).not.toBe("ALL");
   });
 
   it("duyệt học bạ CS2 GIỮ NGUYÊN (ReportCard = ALL — câu 55)", () => {

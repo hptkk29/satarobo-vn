@@ -102,6 +102,15 @@ export const NULL_IS_GLOBAL_MODELS = new Set<string>([
   // 30/08/2026 — phương thức thanh toán KHÔNG gắn cơ sở = dùng chung mọi cơ sở
   // (tiền mặt, VNPAY…). Đây là 4 dòng seed gốc và mọi dòng có trước đợt này.
   "PaymentMethod",
+  // 04/09/2026 — NGÀY NGHỈ TOÀN HỆ THỐNG. `Holiday.centerId = NULL` nghĩa là Tết /
+  // lễ áp cho MỌI cơ sở, không phải "chưa gán".
+  //
+  // Thiếu dòng này thì `scopedDb` inject `centerId IN (...)` trần và người cấp cơ
+  // sở KHÔNG BAO GIỜ thấy ngày nghỉ chung. Đo trên dữ liệu thật: 4/6 ngày nghỉ là
+  // toàn hệ thống — tức đa số, và đúng những ngày sinh ra lịch buổi học. Màn
+  // `/holidays` còn có bộ lọc "Toàn hệ thống" đặt `where.centerId = null`, giao
+  // với `centerId IN [CS1]` thành điều kiện KHÔNG BAO GIỜ đúng ⇒ bảng trắng.
+  "Holiday",
   "Survey", // khảo sát chung (không gắn cơ sở)
   "SurveyResponse", // phản hồi của khảo sát chung
   "EvaluationRound", // vòng đánh giá scope SYSTEM / TEACHER_EVAL
