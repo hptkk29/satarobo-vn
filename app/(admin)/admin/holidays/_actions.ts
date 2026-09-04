@@ -9,7 +9,7 @@ import { z } from "zod";
 import { applyHolidayShift } from "@/lib/holidays/apply";
 import { centerIdForOrgUnit } from "@/lib/org/org-service";
 import { resolveActor, type Actor } from "@/lib/auth/actor";
-import { getModelVisibleCenterIds, passesScope, scopedDb } from "@/lib/db-scope";
+import { passesScope, scopedDb } from "@/lib/db-scope";
 
 type ActionResult = { error?: string };
 
@@ -29,16 +29,29 @@ type ActionResult = { error?: string };
  * và hàm này vốn gọi thẳng nó ⇒ quản lý một cơ sở sẽ TẠO/XOÁ được ngày nghỉ áp
  * cho MỌI cơ sở. Đó là nới quyền, không phải sửa lỗi.
  *
- * Luật ghi cho phạm vi "toàn hệ thống": đòi quyền ngày nghỉ ở phạm vi ALL — đúng
- * bằng hành vi `passesScope` VỐN CÓ trước khi `Holiday` vào `NULL_IS_GLOBAL_MODELS`.
+ * Luật ghi cho phạm vi "toàn hệ thống": CHỈ quản trị hệ thống.
  *
- * ⚠️ KHÔNG dùng `actor.isHoLevel` làm điều kiện. Cờ đó chỉ nói "có một vai nào đó
- * neo tại Hội sở", không nói người này được làm gì: một quản lý cơ sở kiêm vai đào
- * tạo ở Hội sở vẫn bật cờ. Lấy cờ làm quyền bao trùm đúng là lỗi mà
- * `lib/db-scope-function.test.ts` sinh ra để chặn (ca "Toại").
+ * Khớp đúng seed — `holidays:edit` chỉ cấp cho `SUPER_ADMIN`
+ * (`prisma/seed-roles.ts`, ghi chú tại khối CENTER_MANAGER). Và giữ nguyên hành vi
+ * đang chạy: cổng vào màn này (`requireAdmin`) chỉ cho SUPER_ADMIN + CENTER_MANAGER,
+ * mà CENTER_MANAGER chỉ có `holidays:view` phạm vi CENTER ⇒ trước nay cũng chỉ
+ * SUPER_ADMIN tạo được ngày nghỉ toàn hệ thống.
+ *
+ * ⚠️ Vì sao KHÔNG viết `getModelVisibleCenterIds("Holiday", actor) === "ALL"`
+ * (bản đầu của tôi): hàm đó gộp mọi quyền cùng tiền tố `holidays:`/`centers:`, nên
+ * một vai chỉ có `holidays:VIEW` phạm vi GLOBAL cũng ra "ALL" — tức quyền ĐỌC được
+ * đọc thành quyền GHI. Tệ hơn, khi vai KHÔNG có quyền `holidays:` nào thì hàm rơi
+ * về nhánh dự phòng `isHoLevel ? "ALL" : …`, biến "có một vai neo tại Hội sở"
+ * thành quyền sửa lịch nghỉ toàn hệ thống. Hôm nay hai ca đó chưa với tới được
+ * action vì `requireAdmin` chặn, nhưng đó là hàng rào ở NƠI KHÁC — chỉ cần seed đổi
+ * một dòng là thủng, và thủng im lặng.
+ *
+ * ⚠️ Cũng KHÔNG dùng `actor.isHoLevel`: cờ đó chỉ nói "có một vai nào đó neo tại
+ * Hội sở", không nói người này được làm gì — đúng lỗi mà
+ * `lib/db-scope-function.test.ts` sinh ra để chặn.
  */
 function actorCanUseCenterTarget(actor: Actor, centerId: string | null): boolean {
-  if (centerId === null) return getModelVisibleCenterIds("Holiday", actor) === "ALL";
+  if (centerId === null) return actor.isSuperAdmin;
   return passesScope("Holiday", { centerId }, actor);
 }
 
