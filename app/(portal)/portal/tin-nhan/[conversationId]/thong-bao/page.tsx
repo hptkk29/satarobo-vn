@@ -97,6 +97,7 @@ export default async function PortalConversationAnnouncementsPage({
       {page.hasMore && page.nextCursor && (
         <Link
           href={`/portal/tin-nhan/${conversationId}/thong-bao?cursor=${encodeURIComponent(page.nextCursor)}`}
+          scroll={false}
           className="flex min-h-[44px] items-center justify-center rounded-xl border border-border bg-card text-sm font-semibold text-foreground transition-colors hover:bg-muted"
         >
           Xem thông báo cũ hơn

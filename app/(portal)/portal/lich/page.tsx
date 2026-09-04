@@ -38,12 +38,14 @@ export default async function PortalCalendarPage({
         <div className="flex justify-end gap-1">
           <Link
             href={`/portal/lich?y=${prev.year}&m=${prev.month0}`}
+            scroll={false}
             className="grid size-7 place-items-center rounded-lg border border-border text-muted-foreground hover:bg-muted"
           >
             ‹
           </Link>
           <Link
             href={`/portal/lich?y=${next.year}&m=${next.month0}`}
+            scroll={false}
             className="grid size-7 place-items-center rounded-lg border border-border text-muted-foreground hover:bg-muted"
           >
             ›
@@ -66,12 +68,14 @@ export default async function PortalCalendarPage({
         <div className="flex gap-2 text-sm">
           <Link
             href={`/portal/lich?y=${prev.year}&m=${prev.month0}`}
+            scroll={false}
             className="rounded border px-2 py-1"
           >
             ←
           </Link>
           <Link
             href={`/portal/lich?y=${next.year}&m=${next.month0}`}
+            scroll={false}
             className="rounded border px-2 py-1"
           >
             →
